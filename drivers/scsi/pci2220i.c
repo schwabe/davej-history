@@ -373,7 +373,7 @@ static int AtapiWaitDrq (PADAPTER2220I padapter, int msec)
 static int HardReset (PADAPTER2220I padapter, POUR_DEVICE pdev, UCHAR spigot)
 	{
 	DEB (printk ("\npci2220i:RESET  spigot = %X  devices = %d, %d", spigot, pdev->deviceID[0], pdev->deviceID[1]));
-	udelay (100000);										// just wait 100 mSec to let drives flush	
+	mdelay (100);										// just wait 100 mSec to let drives flush	
 	SelectSpigot (padapter, spigot | SEL_IRQ_OFF);
 	
 	outb_p (0x0E, padapter->regAltStat);					// reset the suvivor
@@ -2953,7 +2953,7 @@ int Pci2220i_Release (struct Scsi_Host *pshost)
 		{
 		padapter->reconOn = FALSE;						// shut down the hot reconstruct
 		if ( padapter->reconPhase )
-			udelay (300000);
+			mdelay (300);
 		if ( padapter->reconTimer.data )				// is the timer running?
 			{
 			del_timer (&padapter->reconTimer);

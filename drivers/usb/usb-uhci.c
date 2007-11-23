@@ -2822,7 +2822,7 @@ _static int __init start_uhci (struct pci_dev *dev)
 	return -1;
 }
 
-int __init uhci_init (void)
+static int __init uhci_init (void)
 {
 	int retval = -ENODEV;
 	struct pci_dev *dev = NULL;

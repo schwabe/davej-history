@@ -347,7 +347,7 @@ EXPORT_SYMBOL(schedule_timeout);
 EXPORT_SYMBOL(jiffies);
 EXPORT_SYMBOL(xtime);
 EXPORT_SYMBOL(do_gettimeofday);
-EXPORT_SYMBOL(loops_per_sec);
+EXPORT_SYMBOL(loops_per_jiffy);
 EXPORT_SYMBOL(kstat);
 EXPORT_SYMBOL(pidhash); 
 

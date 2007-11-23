@@ -60,12 +60,6 @@ int usb_init(void)
 	usb_hub_init();
 
 #ifndef CONFIG_USB_MODULE
-#ifdef CONFIG_USB_UHCI
-	uhci_init();
-#endif
-#ifdef CONFIG_USB_UHCI_ALT
-	uhci_init();
-#endif
 #ifdef CONFIG_USB_OHCI
 	ohci_hcd_init(); 
 #endif

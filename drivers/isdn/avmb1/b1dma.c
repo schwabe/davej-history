@@ -230,14 +230,14 @@ void b1dma_reset(avmcard *card)
 	restore_flags(flags);
 
 	b1dmaoutmeml(card->mbase+AMCC_MCSR, 0);
-	udelay(10 * 1000);
+	mdelay(10);
 	b1dmaoutmeml(card->mbase+AMCC_MCSR, 0x0f000000); /* reset all */
-	udelay(10 * 1000);
+	mdelay(10);
 	b1dmaoutmeml(card->mbase+AMCC_MCSR, 0);
 	if (card->cardtype == avm_t1pci)
-		udelay(42 * 1000);
+		mdelay(42);
 	else
-		udelay(10 * 1000);
+		mdelay(10);
 }
 
 /* ------------------------------------------------------------- */
@@ -245,11 +245,11 @@ void b1dma_reset(avmcard *card)
 int b1dma_detect(avmcard *card)
 {
 	b1dmaoutmeml(card->mbase+AMCC_MCSR, 0);
-	udelay(10 * 1000);
+	mdelay(10);
 	b1dmaoutmeml(card->mbase+AMCC_MCSR, 0x0f000000); /* reset all */
-	udelay(10 * 1000);
+	mdelay(10);
 	b1dmaoutmeml(card->mbase+AMCC_MCSR, 0);
-	udelay(42 * 1000);
+	mdelay(42);
 
 	b1dmaoutmeml(card->mbase+AMCC_RXLEN, 0);
 	b1dmaoutmeml(card->mbase+AMCC_TXLEN, 0);

@@ -373,7 +373,7 @@ static int c4_detect(avmcard *card)
 		return 8;
 	if (c4_poke(card, DC21285_ARMCSR_BASE+DRAM_TIMING, 0)) return 9;
 
-        udelay(1000);
+        mdelay(1);
 
 	if (c4_peek(card, DC21285_DRAM_A0MR, &dummy)) return 10;
 	if (c4_peek(card, DC21285_DRAM_A1MR, &dummy)) return 11;
@@ -385,7 +385,7 @@ static int c4_detect(avmcard *card)
 	if (c4_poke(card, DC21285_DRAM_A2MR+CAS_OFFSET, 0)) return 16;
 	if (c4_poke(card, DC21285_DRAM_A3MR+CAS_OFFSET, 0)) return 17;
 
-        udelay(1000);
+        mdelay(1);
 
 	if (c4_poke(card, DC21285_ARMCSR_BASE+DRAM_TIMING, DRAM_TIMING_DEF))
 		return 18;
@@ -863,7 +863,7 @@ static int c4_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	c4outmeml(card->mbase+MBOX_UP_LEN, 0);
 	c4outmeml(card->mbase+MBOX_DOWN_LEN, 0);
 	c4outmeml(card->mbase+DOORBELL, DBELL_INIT);
-	udelay(1000);
+	mdelay(1);
 	c4outmeml(card->mbase+DOORBELL,
 			DBELL_UP_HOST | DBELL_DOWN_HOST | DBELL_RESET_HOST);
 

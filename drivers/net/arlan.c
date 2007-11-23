@@ -1346,7 +1346,7 @@ static int arlan_open(struct device *dev)
 	priv->timer.function = &arlan_registration_timer;	/* timer handler */
 
 	arlan_command(dev, ARLAN_COMMAND_POWERUP | ARLAN_COMMAND_LONG_WAIT_NOW);
-	udelay(200000);
+	mdelay(200);
 	dev->tbusy = 0;
 	dev->start = 1;
 	add_timer(&priv->timer);

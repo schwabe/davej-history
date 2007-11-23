@@ -160,9 +160,9 @@ sizeof(nop_cmd) = 8;
 /**************************************************************************/
 
 /* different DELAYs */
-#define DELAY(x) __delay((loops_per_sec>>5)*(x));
-#define DELAY_16(); { __delay( (loops_per_sec>>16)+1 ); }
-#define DELAY_18(); { __delay( (loops_per_sec>>18)+1 ); }
+#define DELAY(x) mdelay(32 * x);
+#define DELAY_16(); { udelay(16); }
+#define DELAY_18(); { udelay(4); }
 
 /* wait for command with timeout: */
 #define WAIT_4_SCB_CMD() \

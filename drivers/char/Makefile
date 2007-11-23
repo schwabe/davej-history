@@ -203,7 +203,7 @@ endif
 obj-$(CONFIG_SX) += sx.o generic_serial.o
 
 ifeq ($(CONFIG_RIO),y)
-L_OBJS += rio/rio.o generic_serial.o
+O_OBJS += rio/rio.o generic_serial.o
 SUB_DIRS += rio
 MOD_SUB_DIRS += rio
 else

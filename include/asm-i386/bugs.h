@@ -330,7 +330,7 @@ __initfunc(static void check_cx686_slop(void))
 		if (ccr5 & 2) { /* possible wrong calibration done */
 			printk(KERN_INFO "Recalibrating delay loop with SLOP bit reset\n");
 			calibrate_delay();
-			boot_cpu_data.loops_per_sec = loops_per_sec;
+			boot_cpu_data.loops_per_jiffy = loops_per_jiffy;
 		}
 	}
 }

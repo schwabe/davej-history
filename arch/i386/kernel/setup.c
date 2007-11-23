@@ -914,7 +914,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 	char *p = NULL;
 	extern void mcheck_init(void);
 
-	c->loops_per_sec = loops_per_sec;
+	c->loops_per_jiffy = loops_per_jiffy;
 	c->x86_cache_size = -1;
 
 	get_cpu_vendor(c);
@@ -1257,8 +1257,8 @@ int get_cpuinfo(char * buffer)
 			if ( c->x86_capability & (1 << i) )
 				p += sprintf(p, " %s", x86_cap_flags[i]);
 		p += sprintf(p, "\nbogomips\t: %lu.%02lu\n\n",
-			     (c->loops_per_sec+2500)/500000,
-			     ((c->loops_per_sec+2500)/5000) % 100);
+			     (c->loops_per_jiffy+2500)/(500000/HZ),
+			     ((c->loops_per_jiffy+2500)/(5000/HZ)) % 100);
 	}
 	return p - buffer;
 }

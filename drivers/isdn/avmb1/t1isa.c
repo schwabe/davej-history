@@ -135,7 +135,7 @@ static int t1_detectandinit(unsigned int base, unsigned irq, int cardnr)
 	cli();
 	/* board reset */
 	t1outp(base, T1_RESETBOARD, 0xf);
-	udelay(100 * 1000);
+	mdelay(100);
 	dummy = t1inp(base, T1_FASTLINK+T1_OUTSTAT); /* first read */
 
 	/* write config */
@@ -147,18 +147,18 @@ static int t1_detectandinit(unsigned int base, unsigned irq, int cardnr)
 	t1outp(base, ((base >> 4)) & 0x3, cregs[7]);
 	restore_flags(flags);
 
-	udelay(100 * 1000);
+	mdelay(100);
 	t1outp(base, T1_FASTLINK+T1_RESETLINK, 0);
 	t1outp(base, T1_SLOWLINK+T1_RESETLINK, 0);
-	udelay(10 * 1000);
+	mdelay(10);
 	t1outp(base, T1_FASTLINK+T1_RESETLINK, 1);
 	t1outp(base, T1_SLOWLINK+T1_RESETLINK, 1);
-	udelay(100 * 1000);
+	mdelay(100);
 	t1outp(base, T1_FASTLINK+T1_RESETLINK, 0);
 	t1outp(base, T1_SLOWLINK+T1_RESETLINK, 0);
-	udelay(10 * 1000);
+	mdelay(10);
 	t1outp(base, T1_FASTLINK+T1_ANALYSE, 0);
-	udelay(5 * 1000);
+	mdelay(5);
 	t1outp(base, T1_SLOWLINK+T1_ANALYSE, 0);
 
 	if (t1inp(base, T1_FASTLINK+T1_OUTSTAT) != 0x1) /* tx empty */

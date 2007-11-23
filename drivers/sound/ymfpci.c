@@ -1486,7 +1486,7 @@ static unsigned int ymf_poll(struct file *file, struct poll_table_struct *wait)
 				mask |= POLLOUT | POLLWRNORM;
 		}
 	}
-	spin_unlock_irqrestore(&state->card->lock, flags);
+	spin_unlock_irqrestore(&state->unit->reg_lock, flags);
 
 	return mask;
 }

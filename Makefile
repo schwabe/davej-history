@@ -1,14 +1,14 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 18
-EXTRAVERSION = pre12
+EXTRAVERSION = pre13
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
 .EXPORT_ALL_VARIABLES:
 
 CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
-	  else if [ -x /bin/bash ]; then echo /bin/bash; \
+	  else if [ -x /bin/bash ]; then echo /bin/bash2; \
 	  else echo sh; fi ; fi)
 TOPDIR	:= $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
 
@@ -22,9 +22,10 @@ CROSS_COMPILE 	=
 
 AS	=$(CROSS_COMPILE)as
 LD	=$(CROSS_COMPILE)ld
-CC	=$(CROSS_COMPILE)$(shell if [ -n "`which gcc272 2>/dev/null`" ]; then echo "`which gcc272`";\
-	else  if [ -n "`which kgcc 2>/dev/null`" ]; then echo "`which kgcc`"; else\
-	echo "cc"; fi ; fi)  -D__KERNEL__ -I$(HPATH) 
+CC	=$(shell if [ -n "$(CROSS_COMPILE)" ]; then echo $(CROSS_COMPILE)cc; else \
+	which gcc272 2>/dev/null || which kgcc 2>/dev/null || echo cc; fi) \
+	-D__KERNEL__ -I$(HPATH)
+#CC	=$(CROSS_COMPILE)cc -D__KERNEL__ -I$(HPATH)
 CPP	=$(CC) -E
 AR	=$(CROSS_COMPILE)ar
 NM	=$(CROSS_COMPILE)nm

@@ -1596,12 +1596,12 @@ void __init smp_boot_cpus(void)
 		for(i=0;i<32;i++)
 		{
 			if (cpu_online_map&(1<<i))
-				bogosum+=cpu_data[i].loops_per_sec;
+				bogosum+=cpu_data[i].loops_per_jiffy;
 		}
 		printk(KERN_INFO "Total of %d processors activated (%lu.%02lu BogoMIPS).\n",
 			cpucount+1,
-			(bogosum+2500)/500000,
-			((bogosum+2500)/5000)%100);
+			(bogosum+2500)/(500000/HZ),
+			((bogosum+2500)/(5000/HZ))%100);
 		SMP_PRINTK(("Before bogocount - setting activated=1.\n"));
 		smp_activated=1;
 		smp_num_cpus=cpucount+1;
@@ -1853,7 +1853,7 @@ void smp_flush_tlb(void)
 		 * guessed from the TSC calibration.
 		 */
 
-		stuck = 50000000 + cpu_data[cpu].loops_per_sec/2;
+		stuck = 50000000 + cpu_data[cpu].loops_per_jiffy*(HZ/2);
 		while (smp_invalidate_needed) {
 			/*
 			 * Take care of "crossing" invalidates

@@ -759,7 +759,7 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_VT
 	{ "kbd-reset", kbd_reset_setup },
 #endif
-#ifdef CONFIG_PSMOUSE
+#if defined(CONFIG_PSMOUSE) && defined (CONFIG_VT)
 	{ "psaux-reconnect", aux_reconnect_setup },
 #endif
 #ifdef CONFIG_BUGi386
@@ -1186,9 +1186,9 @@ static int __init checksetup(char *line)
 
 /* this should be approx 2 Bo*oMips to start (note initial shift), and will
    still work even if initially too large, it will just take slightly longer */
-unsigned long loops_per_sec = (1<<12);
+unsigned long loops_per_jiffy = (1<<12);
 
-/* This is the number of bits of precision for the loops_per_second.  Each
+/* This is the number of bits of precision for the loops_per_jiffy.  Each
    bit takes on average 1.5/HZ seconds.  This (like the original) is a little
    better than 1% */
 #define LPS_PREC 8
@@ -1198,42 +1198,40 @@ void __init calibrate_delay(void)
 	unsigned long ticks, loopbit;
 	int lps_precision = LPS_PREC;
 
-	loops_per_sec = (1<<12);
+	loops_per_jiffy = (1<<12);
 
 	printk("Calibrating delay loop... ");
-	while (loops_per_sec <<= 1) {
+	while (loops_per_jiffy <<= 1) {
 		/* wait for "start of" clock tick */
 		ticks = jiffies;
 		while (ticks == jiffies)
 			/* nothing */;
 		/* Go .. */
 		ticks = jiffies;
-		__delay(loops_per_sec);
+		__delay(loops_per_jiffy);
 		ticks = jiffies - ticks;
 		if (ticks)
 			break;
 	}
 
-/* Do a binary approximation to get loops_per_second set to equal one clock
+/* Do a binary approximation to get loops_per_jiffy set to equal one clock
    (up to lps_precision bits) */
-	loops_per_sec >>= 1;
-	loopbit = loops_per_sec;
+	loops_per_jiffy >>= 1;
+	loopbit = loops_per_jiffy;
 	while ( lps_precision-- && (loopbit >>= 1) ) {
-		loops_per_sec |= loopbit;
+		loops_per_jiffy |= loopbit;
 		ticks = jiffies;
 		while (ticks == jiffies);
 		ticks = jiffies;
-		__delay(loops_per_sec);
+		__delay(loops_per_jiffy);
 		if (jiffies != ticks)	/* longer than 1 tick */
-			loops_per_sec &= ~loopbit;
+			loops_per_jiffy &= ~loopbit;
 	}
 
-/* finally, adjust loops per second in terms of seconds instead of clocks */	
-	loops_per_sec *= HZ;
 /* Round the value and print it */	
 	printk("%lu.%02lu BogoMIPS\n",
-		(loops_per_sec+2500)/500000,
-		((loops_per_sec+2500)/5000) % 100);
+		(loops_per_jiffy+2500)/(500000/HZ),
+		((loops_per_jiffy+2500)/(5000/HZ)) % 100);
 }
 
 /*

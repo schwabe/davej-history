@@ -347,13 +347,13 @@ static inline unsigned int b1_rd_reg(unsigned int base,
 static inline void b1_reset(unsigned int base)
 {
 	b1outp(base, B1_RESET, 0);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
+	mdelay(55 * 2);	/* 2 TIC's */
 
 	b1outp(base, B1_RESET, 1);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
+	mdelay(55 * 2);	/* 2 TIC's */
 
 	b1outp(base, B1_RESET, 0);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
+	mdelay(55 * 2);	/* 2 TIC's */
 }
 
 static inline unsigned char b1_disable_irq(unsigned int base)
