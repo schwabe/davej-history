@@ -459,7 +459,7 @@ int eepro100_init(struct device *dev)
 			irq = pdev->irq;
 		}
 		/* Remove I/O space marker in bit 0. */
-		ioaddr &= ~3;
+		ioaddr &= ~3UL;
 		if (speedo_debug > 2)
 			printk("Found Intel i82557 PCI Speedo at I/O %#lx, IRQ %d.\n",
 				   ioaddr, irq);
@@ -685,7 +685,7 @@ static void speedo_found1(struct device *dev, long ioaddr, int irq,
 static int read_eeprom(long ioaddr, int location, int addr_len)
 {
 	unsigned short retval = 0;
-	int ee_addr = ioaddr + SCBeeprom;
+	long ee_addr = ioaddr + SCBeeprom;
 	int read_cmd = location | EE_READ_CMD;
 	int i;
 
@@ -802,8 +802,8 @@ speedo_open(struct device *dev)
 		u16 *setup_frm = (u16 *)&(sp->tx_ring[0].tx_desc_addr);
 
 		/* Avoid a bug(?!) here by marking the command already completed. */
-		sp->tx_ring[0].status = ((CmdSuspend | CmdIASetup) << 16) | 0xa000;
-		sp->tx_ring[0].link = virt_to_bus(&(sp->tx_ring[1]));
+		sp->tx_ring[0].status = cpu_to_le32(((CmdSuspend | CmdIASetup) << 16) | 0xa000);
+		sp->tx_ring[0].link = cpu_to_le32(virt_to_bus(&(sp->tx_ring[1])));
 		*setup_frm++ = eaddrs[0];
 		*setup_frm++ = eaddrs[1];
 		*setup_frm++ = eaddrs[2];
@@ -917,22 +917,22 @@ speedo_init_rx_ring(struct device *dev)
 		sp->rx_ringp[i] = rxf;
 		skb_reserve(skb, sizeof(struct RxFD));
 		if (last_rxf)
-			last_rxf->link = virt_to_bus(rxf);
+			last_rxf->link = cpu_to_le32(virt_to_bus(rxf));
 		last_rxf = rxf;
-		rxf->status = 0x00000001; 			/* '1' is flag value only. */
+		rxf->status = cpu_to_le32(0x00000001); 			/* '1' is flag value only. */
 		rxf->link = 0;						/* None yet. */
 		/* This field unused by i82557, we use it as a consistency check. */
 #ifdef final_version
 		rxf->rx_buf_addr = 0xffffffff;
 #else
-		rxf->rx_buf_addr = virt_to_bus(skb->tail);
+		rxf->rx_buf_addr = cpu_to_le32(virt_to_bus(skb->tail));
 #endif
 		rxf->count = 0;
-		rxf->size = PKT_BUF_SZ;
+		rxf->size = cpu_to_le16(PKT_BUF_SZ);
 	}
 	sp->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
 	/* Mark the last entry as end-of-list. */
-	last_rxf->status = 0xC0000002; 			/* '2' is flag value only. */
+	last_rxf->status = cpu_to_le32(0xC0000002); 			/* '2' is flag value only. */
 	sp->last_rxf = last_rxf;
 }
 
@@ -945,7 +945,7 @@ static void speedo_tx_timeout(struct device *dev)
 		   " %4.4x at %d/%d command %8.8x.\n",
 		   dev->name, inw(ioaddr + SCBStatus), inw(ioaddr + SCBCmd),
 		   sp->dirty_tx, sp->cur_tx,
-		   sp->tx_ring[sp->dirty_tx % TX_RING_SIZE].status);
+		   le32_to_cpu(sp->tx_ring[sp->dirty_tx % TX_RING_SIZE].status));
 	if ((inw(ioaddr + SCBStatus) & 0x00C0) != 0x0080) {
 		printk(KERN_WARNING "%s: Trying to restart the transmitter...\n",
 			   dev->name);
@@ -1010,21 +1010,21 @@ speedo_start_xmit(struct sk_buff *skb, struct device *dev)
 		sp->tx_skbuff[entry] = skb;
 		/* Todo: be a little more clever about setting the interrupt bit. */
 		sp->tx_ring[entry].status =
-			(CmdSuspend | CmdTx | CmdTxFlex) << 16;
+			cpu_to_le32((CmdSuspend | CmdTx | CmdTxFlex) << 16);
 		sp->tx_ring[entry].link =
-		  virt_to_bus(&sp->tx_ring[sp->cur_tx % TX_RING_SIZE]);
+		  cpu_to_le32(virt_to_bus(&sp->tx_ring[sp->cur_tx % TX_RING_SIZE]));
 		sp->tx_ring[entry].tx_desc_addr =
-		  virt_to_bus(&sp->tx_ring[entry].tx_buf_addr0);
+		  cpu_to_le32(virt_to_bus(&sp->tx_ring[entry].tx_buf_addr0));
 		/* The data region is always in one buffer descriptor, Tx FIFO
 		   threshold of 256. */
-		sp->tx_ring[entry].count = 0x01208000;
-		sp->tx_ring[entry].tx_buf_addr0 = virt_to_bus(skb->data);
-		sp->tx_ring[entry].tx_buf_size0 = skb->len;
+		sp->tx_ring[entry].count = cpu_to_le32(0x01208000);
+		sp->tx_ring[entry].tx_buf_addr0 = cpu_to_le32(virt_to_bus(skb->data));
+		sp->tx_ring[entry].tx_buf_size0 = cpu_to_le32(skb->len);
 		/* Todo: perhaps leave the interrupt bit set if the Tx queue is more
 		   than half full.  Argument against: we should be receiving packets
 		   and scavenging the queue.  Argument for: if so, it shouldn't
 		   matter. */
-		sp->last_cmd->command &= ~(CmdSuspend | CmdIntr);
+		sp->last_cmd->command &= cpu_to_le16(~(CmdSuspend | CmdIntr));
 		sp->last_cmd = (struct descriptor *)&sp->tx_ring[entry];
 
 		/* Trigger the command unit resume. */
@@ -1102,7 +1102,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 			while (sp->cur_tx - dirty_tx > 0) {
 				int entry = dirty_tx % TX_RING_SIZE;
-				int status = sp->tx_ring[entry].status;
+				int status = le32_to_cpu(sp->tx_ring[entry].status);
 
 				if (speedo_debug > 5)
 					printk(KERN_DEBUG " scavenge candidate %d status %4.4x.\n",
@@ -1115,7 +1115,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					sp->stats.tx_bytes += sp->tx_skbuff[entry]->len; /* Count transmitted bytes */
 					dev_free_skb(sp->tx_skbuff[entry]);
 					sp->tx_skbuff[entry] = 0;
-				} else if ((sp->tx_ring[entry].status&0x70000) == CmdNOp << 16)
+				} else if ((status&0x70000) == CmdNOp << 16)
 					sp->mc_setup_busy = 0;
 				dirty_tx++;
 			}
@@ -1170,13 +1170,13 @@ speedo_rx(struct device *dev)
 		printk(KERN_DEBUG " In speedo_rx().\n");
 	/* If we own the next entry, it's a new packet. Send it up. */
 	while (sp->rx_ringp[entry] != NULL &&
-		   (status = sp->rx_ringp[entry]->status) & RxComplete) {
+		   (status = le32_to_cpu(sp->rx_ringp[entry]->status)) & RxComplete) {
 
 		if (--rx_work_limit < 0)
 			break;
 		if (speedo_debug > 4)
 			printk(KERN_DEBUG "  speedo_rx() status %8.8x len %d.\n", status,
-				   sp->rx_ringp[entry]->count & 0x3fff);
+				   le16_to_cpu(sp->rx_ringp[entry]->count) & 0x3fff);
 		if ((status & (RxErrTooBig|RxOK)) != RxOK) {
 			if (status & RxErrTooBig)
 				printk(KERN_ERR "%s: Ethernet frame overran the Rx buffer, "
@@ -1189,7 +1189,7 @@ speedo_rx(struct device *dev)
 					   dev->name, status);
 			}
 		} else {
-			int pkt_len = sp->rx_ringp[entry]->count & 0x3fff;
+			int pkt_len = le16_to_cpu(sp->rx_ringp[entry]->count) & 0x3fff;
 			struct sk_buff *skb;
 
 			/* Check if the packet is long enough to just accept without
@@ -1202,12 +1202,12 @@ speedo_rx(struct device *dev)
 #if 1 || USE_IP_CSUM
 				/* Packet is in one chunk -- we can copy + cksum. */
 				eth_copy_and_sum(skb,
-								 bus_to_virt(sp->rx_ringp[entry]->rx_buf_addr),
+								 bus_to_virt(le32_to_cpu(sp->rx_ringp[entry]->rx_buf_addr)),
 								 pkt_len, 0);
 				skb_put(skb, pkt_len);
 #else
 				memcpy(skb_put(skb, pkt_len),
-					   bus_to_virt(sp->rx_ringp[entry]->rx_buf_addr), pkt_len);
+					   bus_to_virt(le32_to_cpu(sp->rx_ringp[entry]->rx_buf_addr)), pkt_len);
 #endif
 			} else {
 				void *temp;
@@ -1220,11 +1220,11 @@ speedo_rx(struct device *dev)
 				}
 				sp->rx_skbuff[entry] = NULL;
 				temp = skb_put(skb, pkt_len);
-				if (bus_to_virt(sp->rx_ringp[entry]->rx_buf_addr) != temp)
+				if (bus_to_virt(le32_to_cpu(sp->rx_ringp[entry]->rx_buf_addr)) != temp)
 					printk(KERN_ERR "%s: Rx consistency error -- the skbuff "
 						   "addresses do not match in speedo_rx: %p vs. %p "
 						   "/ %p.\n", dev->name,
-						   bus_to_virt(sp->rx_ringp[entry]->rx_buf_addr),
+						   bus_to_virt(le32_to_cpu(sp->rx_ringp[entry]->rx_buf_addr)),
 						   skb->head, temp);
 				sp->rx_ringp[entry] = NULL;
 			}
@@ -1252,16 +1252,16 @@ speedo_rx(struct device *dev)
 			rxf = sp->rx_ringp[entry] = (struct RxFD *)skb->tail;
 			skb->dev = dev;
 			skb_reserve(skb, sizeof(struct RxFD));
-			rxf->rx_buf_addr = virt_to_bus(skb->tail);
+			rxf->rx_buf_addr = cpu_to_le32(virt_to_bus(skb->tail));
 		} else {
 			rxf = sp->rx_ringp[entry];
 		}
-		rxf->status = 0xC0000001; 	/* '1' for driver use only. */
+		rxf->status = cpu_to_le32(0xC0000001); 	/* '1' for driver use only. */
 		rxf->link = 0;			/* None yet. */
 		rxf->count = 0;
-		rxf->size = PKT_BUF_SZ;
-		sp->last_rxf->link = virt_to_bus(rxf);
-		sp->last_rxf->status &= ~0xC0000000;
+		rxf->size = cpu_to_le16(PKT_BUF_SZ);
+		sp->last_rxf->link = cpu_to_le32(virt_to_bus(rxf));
+		sp->last_rxf->status &= cpu_to_le32(~0xC0000000);
 		sp->last_rxf = rxf;
 	}
 
@@ -1321,7 +1321,7 @@ speedo_close(struct device *dev)
 
 		for (i = 0; i < RX_RING_SIZE; i++)
 			printk(KERN_DEBUG "  Rx ring entry %d  %8.8x.\n",
-				   i, (int)sp->rx_ringp[i]->status);
+				   i, (int)le32_to_cpu(sp->rx_ringp[i]->status));
 
 		for (i = 0; i < 5; i++)
 			printk(KERN_DEBUG "  PHY index %d register %d is %4.4x.\n",
@@ -1353,18 +1353,18 @@ speedo_get_stats(struct device *dev)
 	struct speedo_private *sp = (struct speedo_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 
-	if (sp->lstats.done_marker == 0xA007) {	/* Previous dump finished */
-		sp->stats.tx_aborted_errors += sp->lstats.tx_coll16_errs;
-		sp->stats.tx_window_errors += sp->lstats.tx_late_colls;
-		sp->stats.tx_fifo_errors += sp->lstats.tx_underruns;
-		sp->stats.tx_fifo_errors += sp->lstats.tx_lost_carrier;
-		/*sp->stats.tx_deferred += sp->lstats.tx_deferred;*/
-		sp->stats.collisions += sp->lstats.tx_total_colls;
-		sp->stats.rx_crc_errors += sp->lstats.rx_crc_errs;
-		sp->stats.rx_frame_errors += sp->lstats.rx_align_errs;
-		sp->stats.rx_over_errors += sp->lstats.rx_resource_errs;
-		sp->stats.rx_fifo_errors += sp->lstats.rx_overrun_errs;
-		sp->stats.rx_length_errors += sp->lstats.rx_runt_errs;
+	if (le32_to_cpu(sp->lstats.done_marker) == 0xA007) {	/* Previous dump finished */
+		sp->stats.tx_aborted_errors += le32_to_cpu(sp->lstats.tx_coll16_errs);
+		sp->stats.tx_window_errors += le32_to_cpu(sp->lstats.tx_late_colls);
+		sp->stats.tx_fifo_errors += le32_to_cpu(sp->lstats.tx_underruns);
+		sp->stats.tx_fifo_errors += le32_to_cpu(sp->lstats.tx_lost_carrier);
+		/*sp->stats.tx_deferred += le32_to_cpu(sp->lstats.tx_deferred);*/
+		sp->stats.collisions += le32_to_cpu(sp->lstats.tx_total_colls);
+		sp->stats.rx_crc_errors += le32_to_cpu(sp->lstats.rx_crc_errs);
+		sp->stats.rx_frame_errors += le32_to_cpu(sp->lstats.rx_align_errs);
+		sp->stats.rx_over_errors += le32_to_cpu(sp->lstats.rx_resource_errs);
+		sp->stats.rx_fifo_errors += le32_to_cpu(sp->lstats.rx_overrun_errs);
+		sp->stats.rx_length_errors += le32_to_cpu(sp->lstats.rx_runt_errs);
 		sp->lstats.done_marker = 0x0000;
 		if (dev->start) {
 			wait_for_cmd_done(ioaddr + SCBCmd);
@@ -1440,9 +1440,9 @@ set_rx_mode(struct device *dev)
 		sp->last_cmd = (struct descriptor *)&sp->tx_ring[entry];
 
 		sp->tx_skbuff[entry] = 0;			/* Redundant. */
-		sp->tx_ring[entry].status = (CmdSuspend | CmdConfigure) << 16;
+		sp->tx_ring[entry].status = cpu_to_le32((CmdSuspend | CmdConfigure) << 16);
 		sp->tx_ring[entry].link =
-			virt_to_bus(&sp->tx_ring[(entry + 1) % TX_RING_SIZE]);
+			cpu_to_le32(virt_to_bus(&sp->tx_ring[(entry + 1) % TX_RING_SIZE]));
 		config_cmd_data = (void *)&sp->tx_ring[entry].tx_desc_addr;
 		/* Construct a full CmdConfig frame. */
 		memcpy(config_cmd_data, i82558_config_cmd, sizeof(i82558_config_cmd));
@@ -1457,7 +1457,7 @@ set_rx_mode(struct device *dev)
 			config_cmd_data[8] = 0;
 		}
 		/* Trigger the command unit resume. */
-		last_cmd->command &= ~CmdSuspend;
+		last_cmd->command &= cpu_to_le16(~CmdSuspend);
 
 		wait_for_cmd_done(ioaddr + SCBCmd);
 		outw(CU_RESUME, ioaddr + SCBCmd);
@@ -1477,12 +1477,12 @@ set_rx_mode(struct device *dev)
 		sp->last_cmd = (struct descriptor *)&sp->tx_ring[entry];
 
 		sp->tx_skbuff[entry] = 0;
-		sp->tx_ring[entry].status = (CmdSuspend | CmdMulticastList) << 16;
+		sp->tx_ring[entry].status = cpu_to_le32((CmdSuspend | CmdMulticastList) << 16);
 		sp->tx_ring[entry].link =
-			virt_to_bus(&sp->tx_ring[(entry + 1) % TX_RING_SIZE]);
+			cpu_to_le32(virt_to_bus(&sp->tx_ring[(entry + 1) % TX_RING_SIZE]));
 		sp->tx_ring[entry].tx_desc_addr = 0; /* Really MC list count. */
 		setup_params = (u16 *)&sp->tx_ring[entry].tx_desc_addr;
-		*setup_params++ = dev->mc_count*6;
+		*setup_params++ = cpu_to_le16(dev->mc_count*6);
 		/* Fill in the multicast addresses. */
 		for (i = 0, mclist = dev->mc_list; i < dev->mc_count;
 			 i++, mclist = mclist->next) {
@@ -1492,7 +1492,7 @@ set_rx_mode(struct device *dev)
 			*setup_params++ = *eaddrs++;
 		}
 
-		last_cmd->command &= ~CmdSuspend;
+		last_cmd->command &= cpu_to_le16(~CmdSuspend);
 
 		/* Immediately trigger the command unit resume. */
 		wait_for_cmd_done(ioaddr + SCBCmd);
@@ -1533,10 +1533,10 @@ set_rx_mode(struct device *dev)
 				   "%d bytes.\n",
 				   dev->name, sp->mc_setup_frm, sp->mc_setup_frm_len);
 		mc_setup_frm->status = 0;
-		mc_setup_frm->command = CmdSuspend | CmdIntr | CmdMulticastList;
+		mc_setup_frm->command = cpu_to_le16(CmdSuspend | CmdIntr | CmdMulticastList);
 		/* Link set below. */
 		setup_params = (u16 *)&mc_setup_frm->params;
-		*setup_params++ = dev->mc_count*6;
+		*setup_params++ = cpu_to_le16(dev->mc_count*6);
 		/* Fill in the multicast addresses. */
 		for (i = 0, mclist = dev->mc_list; i < dev->mc_count;
 			 i++, mclist = mclist->next) {
@@ -1556,14 +1556,14 @@ set_rx_mode(struct device *dev)
 
 		/* Change the command to a NoOp, pointing to the CmdMulti command. */
 		sp->tx_skbuff[entry] = 0;
-		sp->tx_ring[entry].status = CmdNOp << 16;
-		sp->tx_ring[entry].link = virt_to_bus(mc_setup_frm);
+		sp->tx_ring[entry].status = cpu_to_le32(CmdNOp << 16);
+		sp->tx_ring[entry].link = cpu_to_le32(virt_to_bus(mc_setup_frm));
 
 		/* Set the link in the setup frame. */
 		mc_setup_frm->link =
-			virt_to_bus(&(sp->tx_ring[(entry+1) % TX_RING_SIZE]));
+			cpu_to_le32(virt_to_bus(&(sp->tx_ring[(entry+1) % TX_RING_SIZE])));
 
-		last_cmd->command &= ~CmdSuspend;
+		last_cmd->command &= cpu_to_le16(~CmdSuspend);
 
 		/* Immediately trigger the command unit resume. */
 		wait_for_cmd_done(ioaddr + SCBCmd);

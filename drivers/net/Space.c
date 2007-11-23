@@ -139,6 +139,9 @@ extern int rr_hippi_probe(struct device *);
 /* Fibre Channel adapters */
 extern int iph5526_probe(struct device *dev);
 
+/* SBNI adapters */
+extern int sbni_probe(struct device *);
+
 struct devprobe
 {
 	int (*probe)(struct device *dev);
@@ -853,6 +856,29 @@ static struct device tr0_dev = {
 #   undef       NEXT_DEV
 #   define      NEXT_DEV        (&fc0_dev)
 #endif
+
+
+#ifdef CONFIG_SBNI
+	static struct device sbni7_dev =
+		{"sbni7", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sbni_probe};
+	static struct device sbni6_dev =
+		{"sbni6", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni7_dev, sbni_probe};
+	static struct device sbni5_dev =
+		{"sbni5", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni6_dev, sbni_probe};
+	static struct device sbni4_dev =
+		{"sbni4", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni5_dev, sbni_probe};
+	static struct device sbni3_dev =
+		{"sbni3", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni4_dev, sbni_probe};
+	static struct device sbni2_dev =
+		{"sbni2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni3_dev, sbni_probe};
+	static struct device sbni1_dev =
+		{"sbni1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni2_dev, sbni_probe};
+	static struct device sbni0_dev =
+		{"sbni0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni1_dev, sbni_probe};
+
+#undef	NEXT_DEV
+#define	NEXT_DEV	(&sbni0_dev)
+#endif 
 	
 	
 #ifdef CONFIG_NET_SB1000

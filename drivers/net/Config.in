@@ -298,3 +298,4 @@ if [ "$CONFIG_LAPB" = "y" -o "$CONFIG_LAPB" = "m" ]; then
     dep_tristate 'X.25 async driver' CONFIG_X25_ASY $CONFIG_LAPB
 fi
 fi
+tristate 'SBNI12-xx support' CONFIG_SBNI

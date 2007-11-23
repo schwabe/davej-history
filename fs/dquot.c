@@ -97,6 +97,9 @@ static struct dqstats dqstats;
 static struct wait_queue *dquot_wait = (struct wait_queue *)NULL,
                          *update_wait = (struct wait_queue *)NULL;
 
+void dqput(struct dquot *);
+static struct dquot *dqduplicate(struct dquot *);
+
 static inline char is_enabled(struct vfsmount *vfsmnt, short type)
 {
 	switch (type) {
@@ -390,7 +393,7 @@ restart:
 
 int sync_dquots(kdev_t dev, short type)
 {
-	struct dquot *dquot, *next;
+	struct dquot *dquot, *next, *ddquot;
 	int need_restart;
 
 restart:
@@ -407,9 +410,11 @@ restart:
 		if (!(dquot->dq_flags & (DQ_LOCKED | DQ_MOD)))
 			continue;
 
-		wait_on_dquot(dquot);
-		if (dquot->dq_flags & DQ_MOD)
-			write_dquot(dquot);
+		if ((ddquot = dqduplicate(dquot)) == NODQUOT)
+			continue;
+		if (ddquot->dq_flags & DQ_MOD)
+			write_dquot(ddquot);
+		dqput(ddquot);
 		/* Set the flag for another pass. */
 		need_restart = 1;
 	}
@@ -424,6 +429,7 @@ restart:
 	return(0);
 }
 
+/* NOTE: If you change this function please check whether dqput_blocks() works right... */
 void dqput(struct dquot *dquot)
 {
 	if (!dquot)
@@ -688,6 +694,16 @@ restart:
 	}
 }
 
+/* Return 0 if dqput() won't block (note that 1 doesn't necessarily mean blocking) */
+static inline int dqput_blocks(struct dquot *dquot)
+{
+	if (dquot->dq_flags & DQ_LOCKED)
+		return 1;
+	if (dquot->dq_count == 1)
+		return 1;
+	return 0;
+}
+
 static int reset_inode_dquot_ptrs(struct inode *inode, short type)
 {
 	struct dquot *dquot = inode->i_dquot[type];
@@ -701,13 +717,16 @@ static int reset_inode_dquot_ptrs(struct inode *inode, short type)
 	}
 	inode->i_flags &= ~S_QUOTA;
 put_it:
-	if (dquot != NODQUOT) {
-		spin_unlock(&inode_lock);	/* We may block so drop the lock... */
-		dqput(dquot);
-		spin_lock(&inode_lock);		/* And capture lock again */
-		/* we may have blocked ... */
-		return 1;
-	}
+	if (dquot != NODQUOT)
+		if (dqput_blocks(dquot)) {
+			spin_unlock(&inode_lock);	/* We may block so drop the lock... */
+			dqput(dquot);
+			spin_lock(&inode_lock);		/* And capture lock again */
+			/* we may have blocked ... */
+			return 1;
+		}
+		else
+			dqput(dquot);	/* dqput() won't block so we can hold locks... */
 	return 0;
 }
 

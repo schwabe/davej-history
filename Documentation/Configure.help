@@ -5515,6 +5515,18 @@ CONFIG_RCPCI
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
   
+SBNI Leased Line Adapters
+CONFIG_SBNI
+  This is a driver for ISA SBNI12-xx cards that is a low cost
+  alternative to leased line modems. Say Y if you want to insert
+  driver into kernel or say M to compile driver as a module. 
+  
+  You can find more information and last versions of drivers and 
+  utilities at http://www.granch.ru. If you have any question you
+  can mail to sbni@granch.ru.
+  
+  Say N if unsure.
+  
 WAN Drivers
 CONFIG_WAN_DRIVERS
   Say Y to this option if your Linux box contains a WAN card and you

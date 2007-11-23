@@ -52,6 +52,7 @@
 #include <asm/smp.h>
 #include <asm/cobalt.h>
 #include <asm/msr.h>
+#include <asm/dma.h>
 
 /*
  * Machine setup..
@@ -631,6 +632,16 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 			c->x86_model = (dir1 & 0x20) ? 1 : 2;
 			c->x86_capability&=~X86_FEATURE_TSC;
 		}
+#ifdef CONFIG_PCI
+                /* It isnt really a PCI quirk directly, but the cure is the
+       	           same. The MediaGX has deep magic SMM stuff that handles the
+                   SB emulation. It thows away the fifo on disable_dma() which
+                   is wrong and ruins the audio. */
+
+		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bug.\n");
+                isa_dma_bridge_buggy = 1;
+                  	                                                                     	        
+#endif
 		break;
 
         case 5: /* 6x86MX/M II */

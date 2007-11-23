@@ -1147,6 +1147,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SBNI),y)
+L_OBJS += sbni.o
+else
+  ifeq ($(CONFIG_SBNI),m)
+  M_OBJS += sbni.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 clean:

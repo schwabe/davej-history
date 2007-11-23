@@ -20,7 +20,7 @@
  *        Recognize that DMA0 is valid DMA channel -- 13-Jul-98
  *  Modified by Chris Faulhaber	<jedgar@fxp.org>
  *        Added module command-line options
- *        18-Jul-99
+ *        19-Jul-99
  */
 
 #include <linux/module.h>
@@ -964,11 +964,30 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
     tpnt->proc_dir = &proc_scsi_aha1542;
 
 #ifdef MODULE
-    bases[0] = 4;
-    bases[1] = aha1542[0];
-    bases[2] = aha1542[1];
-    bases[3] = aha1542[2];
-    bases[4] = aha1542[3];
+    bases[0]        = aha1542[0];              
+    setup_buson[0]  = aha1542[1];              
+    setup_busoff[0] = aha1542[2];              
+    {                                          
+      int atbt = -1;                           
+      switch (aha1542[3]) {                    
+        case 5:                                
+            atbt = 0x00;                       
+            break;                             
+        case 6:                                
+            atbt = 0x04;                       
+            break;                             
+        case 7:                                
+            atbt = 0x01;                       
+            break;                             
+        case 8:                                
+            atbt = 0x02;                       
+            break;                             
+        case 10:                               
+            atbt = 0x03;                       
+            break;                             
+      };                                       
+    setup_dmaspeed[0] = atbt;                  
+    }
 #endif
 
     for(indx = 0; indx < sizeof(bases)/sizeof(bases[0]); indx++)
