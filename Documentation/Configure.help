@@ -1747,6 +1747,15 @@ CONFIG_SCSI_AM53C974
   available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO, is for you.
 
+GDT SCSI Disk Array Controller support
+CONFIG_SCSI_GDTH
+  This is a driver for all SCSI Disk Array Controllers (EISA/ISA/PCI) 
+  manufactured by ICP vortex. It is documented in the kernel source in
+  drivers/scsi/gdth.c and drivers/scsi/gdth.h. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile 
+  it as a module, say M here and read Documentation/modules.txt. 	
+
 IOMEGA Parallel Port ZIP drive SCSI support
 CONFIG_SCSI_PPA
   This driver supports the parallel port version of IOMEGA's ZIP drive
@@ -3828,8 +3837,8 @@ CONFIG_ISDN_AUDIO
   (mgetty+sendfax by gert@greenie.muc.de with an extension, available
   with the ISDN utility package for example), you will be able
   to use your Linux box as an ISDN-answering machine. Of course, this
-  must be supported by the lowlevel driver also. Currently, the Teles
-  driver is the only voice-supporting one. See
+  must be supported by the lowlevel driver also. Currently HiSax 
+  driver is the only voice-supporting drivers. See
   Documentation/isdn/README.audio for more information.
 
 ICN 2B and 4B support
@@ -3842,14 +3851,89 @@ CONFIG_ISDN_DRV_ICN
   separately.  See Documentation/isdn/README and README.icn for more
   information.
 
-Teles, NICCY1016PC, Creatix support
-CONFIG_ISDN_DRV_TELES
-  This enables support for the Teles ISDN-cards S0-16.0, S0-16.3, S0-8
-  and many compatibles. By default, the driver is configured to
-  support a 16.0-type using EDSS1-protocol. See
-  Documentation/isdn/README on how to configure it using 16.3, a
-  different D-channel protocol, or non-standard irq/port/shmem
-  settings.
+HiSax SiemensChipSet driver support
+CONFIG_ISDN_DRV_HISAX
+  This driver replaces the old Teles driver. It supports the Siemens
+  chipset in a more general way. This chipset is used on various
+  ISDN-cards (like AVM A1, Elsa ISDN cards, Teles S0-16.0,
+  Teles S0-16.3, Teles S0-8, Teles/Creatix PnP, ITK micro ix1 and 
+  many compatibles). It's a complete rewrite of the original Teles 
+  driver.
+  See Documentation/isdn/README.HiSax for further informations on
+  using this driver.
+
+HiSax Support for Teles 16.0/8.0
+CONFIG_HISAX_16_0
+  This enables HiSax support for the Teles ISDN-cards S0-16.0,
+  S0-8 and many compatibles.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for Teles 16.3 or PNP or PCMCIA
+CONFIG_HISAX_16_3
+  This enables HiSax support for the Teles ISDN-cards S0-16.3
+  the Teles/Creatix PnP and the Teles PCMCIA.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for AVM A1 (Fritz)
+CONFIG_HISAX_AVM_A1
+  This enables HiSax support for the AVM A1 (aka "Fritz").
+  See Documentation/isdn/README.HiSax on how to configure it
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for Elsa ISA cards
+CONFIG_HISAX_ELSA_PCC
+  This enables HiSax support for the Elsa Mircolink cards and
+  for the Elsa Quickstep series cards for the ISA bus.
+  You don't have to select "HiSax Support for Elsa PCMCIA card"
+  at the same time.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for Elsa PCMCIA card
+CONFIG_HISAX_ELSA_PCMCIA
+  This enables HiSax support for the Elsa PCMCIA card.
+  You don't have to select "HiSax Support for Elsa ISA cards" at
+  the same time.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for ITK ix1-micro Revision 2
+CONFIG_HISAX_IX1MICROR2
+  This enables HiSax support for the ITK ix1-micro Revision 2 card.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for EURO/DSS1
+CONFIG_HISAX_EURO
+  You should choose your D-channel protocol your local
+  telephone service provider uses here by saying Y or N.
+  NOTE: This is mutually exclusive with HiSax Support for
+  german 1TR6 and US/NI-1 if you have only one ISDN card
+  installed.
+
+HiSax Support for US/NI-1
+CONFIG_HISAX_NI1
+  You should choose your D-channel protocol your local
+  telephone service provider uses here by saying Y or N.
+  NOTE: This is mutually exclusive with HiSax Support for
+  german 1TR6 and EURO/DSS1 if you have only one ISDN card
+  installed. (not working yet, under developement)
+
+HiSax Support for german 1TR6
+CONFIG_HISAX_1TR6
+  You should choose your D-channel protocol your local
+  telephone service provider uses here by saying Y or N.
+  NOTE: This is mutually exclusive with HiSax Support for
+  EURO/DSS1 and US/NI-1 if you have only one ISDN card
+  installed.
 
 PCBIT-D support
 CONFIG_ISDN_DRV_PCBIT
@@ -3859,6 +3943,21 @@ CONFIG_ISDN_DRV_PCBIT
   using a utility which is distributed separately.  See
   Documentation/isdn/README and Documentation/isdn/README.pcbit for
   more information.
+
+Spellcaster support (EXPERIMENTAL)
+CONFIG_ISDN_DRV_SC
+  This enables support for the Spellcaster BRI boards. This driver
+  currently builds in a modularized version only.
+  See Documentation/isdn/README.sc and http://www.spellcast.com
+  for more information.
+
+AVM-B1 with CAPI2.0 support
+CONFIG_ISDN_DRV_AVMB1
+  This enables support for the AVM B1 card and also adds a CAPI2.0
+  interface for this card. For running this card, additional firmware
+  is necessary, which has to be downloaded into the card using a
+  utility which is distributed separately.
+  See Documentation/isdn/README.avmb1 for more information.
 
 Support for AP1000 multicomputer
 CONFIG_AP1000

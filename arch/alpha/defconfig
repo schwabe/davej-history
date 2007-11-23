@@ -169,6 +169,7 @@ CONFIG_DE4X5=y
 # ISDN subsystem
 #
 # CONFIG_ISDN is not set
+CONFIG_HISAX_EURO=y
 
 #
 # CD-ROM drivers (not for SCSI or IDE/ATAPI drives)

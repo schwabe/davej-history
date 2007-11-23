@@ -22,8 +22,8 @@
 #include <linux/isdnif.h>
 #include "pcbit.h"
 
-int mem[MAX_PCBIT_CARDS] = {0, };
-int irq[MAX_PCBIT_CARDS] = {0, };
+static int mem[MAX_PCBIT_CARDS] = {0, };
+static int irq[MAX_PCBIT_CARDS] = {0, };
 
 int num_boards;
 struct pcbit_dev * dev_pcbit[MAX_PCBIT_CARDS] = {0, 0, 0, 0};
@@ -35,6 +35,10 @@ extern void pcbit_terminate(int board);
 extern int pcbit_init_dev(int board, int mem_base, int irq);
 
 #ifdef MODULE
+#if (LINUX_VERSION_CODE > 0x020111)
+MODULE_PARM(mem, "1-" __MODULE_STRING(MAX_PCBIT_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_PCBIT_CARDS) "i");
+#endif
 #define pcbit_init init_module
 #endif
 
@@ -83,7 +87,11 @@ int pcbit_init(void)
 	}
 
 	/* No symbols to export, hide all symbols */
+#if (LINUX_VERSION_CODE < 0x020111)
 	register_symtab(NULL);
+#else
+	EXPORT_NO_SYMBOLS;
+#endif
 
 	return 0;
 }

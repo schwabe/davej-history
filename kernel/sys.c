@@ -34,6 +34,7 @@
 int C_A_D = 1;
 
 extern void adjust_clock(void);
+extern void gdth_halt(void);
 
 asmlinkage int sys_ni_syscall(void)
 {
@@ -186,9 +187,12 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 		return -EPERM;
 	if (magic != 0xfee1dead || magic_too != 672274793)
 		return -EINVAL;
-	if (flag == 0x01234567)
+	if (flag == 0x01234567) {
+#ifdef CONFIG_SCSI_GDTH
+		gdth_halt();
+#endif
 		hard_reset_now();
-	else if (flag == 0x89ABCDEF)
+	} else if (flag == 0x89ABCDEF)
 		C_A_D = 1;
 	else if (!flag)
 		C_A_D = 0;
@@ -211,9 +215,12 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
  */
 void ctrl_alt_del(void)
 {
-	if (C_A_D)
+	if (C_A_D) {
+#ifdef CONFIG_SCSI_GDTH
+		gdth_halt();
+#endif
 		hard_reset_now();
-	else
+	} else
 		kill_proc(1, SIGINT, 1);
 }
 	

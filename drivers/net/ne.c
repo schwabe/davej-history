@@ -24,6 +24,7 @@
     Paul Gortmaker	: multiple card support for module users.
     Paul Gortmaker	: Support for PCI ne2k clones, similar to lance.c
     Paul Gortmaker	: Allow users with bad cards to avoid full probe.
+    Paul Gortmaker	: PCI probe changes, more PCI cards supported.
 
 */
 
@@ -61,11 +62,20 @@ static const char *version =
 /* Do we have a non std. amount of memory? (in units of 256 byte pages) */
 /* #define PACKETBUF_MEMSIZE	0x40 */
 
-/* ---- No user-serviceable parts below ---- */
-
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int netcard_portlist[] =
 { 0x300, 0x280, 0x320, 0x340, 0x360, 0};
+
+#ifdef CONFIG_PCI
+/* Ack! People are making PCI ne2000 clones! Oh the horror, the horror... */
+static struct { unsigned short vendor, dev_id;}
+pci_clone_list[] = {
+	{PCI_VENDOR_ID_REALTEK,		PCI_DEVICE_ID_REALTEK_8029},
+	{PCI_VENDOR_ID_WINBOND2,	PCI_DEVICE_ID_WINBOND2_89C940},
+	{PCI_VENDOR_ID_COMPEX,		PCI_DEVICE_ID_COMPEX_RL2000},
+	{0,}
+};
+#endif
 
 #ifdef SUPPORT_NE_BAD_CLONES
 /* A list of bad clones that we none-the-less recognize. */
@@ -80,9 +90,13 @@ bad_clone_list[] = {
     {"4-DIM8","4-DIM16", {0x00,0x00,0x4d,}},  /* Outlaw 4-Dimension cards. */
     {"Con-Intl_8", "Con-Intl_16", {0x00, 0x00, 0x24}}, /* Connect Int'nl */
     {"ET-100","ET-200", {0x00, 0x45, 0x54}}, /* YANG and YA clone */
+    {"COMPEX","COMPEX16",{0x00,0x80,0x48}}, /* Broken ISA Compex cards */
+    {"E-LAN100", "E-LAN200", {0x00, 0x00, 0x5d}}, /* Broken ne1000 clones */
     {0,}
 };
 #endif
+
+/* ---- No user-serviceable parts below ---- */
 
 #define NE_BASE	 (dev->base_addr)
 #define NE_CMD	 	0x00
@@ -99,6 +113,7 @@ bad_clone_list[] = {
 static unsigned char pci_irq_line = 0;
 
 int ne_probe(struct device *dev);
+static int ne_probe_pci(struct device *dev);
 static int ne_probe1(struct device *dev, int ioaddr);
 
 static int ne_open(struct device *dev);
@@ -154,42 +169,13 @@ int ne_probe(struct device *dev)
     else if (base_addr != 0)	/* Don't probe at all. */
 	return ENXIO;
 
+#ifdef CONFIG_PCI
     /* Then look for any installed PCI clones */
-#if defined(CONFIG_PCI)
-    if (pcibios_present()) {
-	int pci_index;
-	for (pci_index = 0; pci_index < 8; pci_index++) {
-		unsigned char pci_bus, pci_device_fn;
-		unsigned int pci_ioaddr;
+    if (pcibios_present() && (ne_probe_pci(dev) == 0))
+  return 0;
+#endif
 
-		/* Currently only Realtek are making PCI ne2k clones. */
-		if (pcibios_find_device (PCI_VENDOR_ID_REALTEK,
-				PCI_DEVICE_ID_REALTEK_8029, pci_index,
-				&pci_bus, &pci_device_fn) != 0)
-			break;	/* OK, now try to probe for std. ISA card */
-		pcibios_read_config_byte(pci_bus, pci_device_fn,
-				PCI_INTERRUPT_LINE, &pci_irq_line);
-		pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_BASE_ADDRESS_0, &pci_ioaddr);
-		/* Strip the I/O address out of the returned value */
-		pci_ioaddr &= PCI_BASE_ADDRESS_IO_MASK;
-		/* Avoid already found cards from previous ne_probe() calls */
-		if (check_region(pci_ioaddr, NE_IO_EXTENT)) {
-			pci_irq_line=0;
-			continue;
-		}
-		printk("ne.c: PCI BIOS reports ne2000 clone at i/o %#x, irq %d.\n",
-				pci_ioaddr, pci_irq_line);
-		if (ne_probe1(dev, pci_ioaddr) != 0) {	/* Shouldn't happen. */
-			printk(KERN_ERR "ne.c: Probe of PCI card at %#x failed.\n", pci_ioaddr);
-			break;	/* Hrmm, try to probe for ISA card... */
-		}
-		pci_irq_line = 0;
-		return 0;
-	}
-    }
-#endif  /* defined(CONFIG_PCI) */
-
+#ifndef MODULE
     /* Last resort. The semi-risky ISA auto-probe. */
     for (i = 0; netcard_portlist[i]; i++) {
 	int ioaddr = netcard_portlist[i];
@@ -198,10 +184,52 @@ int ne_probe(struct device *dev)
 	if (ne_probe1(dev, ioaddr) == 0)
 	    return 0;
     }
+#endif
 
     return ENODEV;
 }
 #endif
+
+#ifdef CONFIG_PCI
+static int ne_probe_pci(struct device *dev)
+{
+	int i;
+
+	for (i = 0; pci_clone_list[i].vendor != 0; i++) {
+		unsigned char pci_bus, pci_device_fn;
+		unsigned int pci_ioaddr;
+		int pci_index;
+		
+		for (pci_index = 0; pci_index < 8; pci_index++) {
+			if (pcibios_find_device (pci_clone_list[i].vendor,
+					pci_clone_list[i].dev_id, pci_index,
+					&pci_bus, &pci_device_fn) != 0)
+				break;	/* No more of these type of cards */
+			pcibios_read_config_dword(pci_bus, pci_device_fn,
+					PCI_BASE_ADDRESS_0, &pci_ioaddr);
+			/* Strip the I/O address out of the returned value */
+			pci_ioaddr &= PCI_BASE_ADDRESS_IO_MASK;
+			/* Avoid already found cards from previous calls */
+			if (check_region(pci_ioaddr, NE_IO_EXTENT))
+				continue;
+			pcibios_read_config_byte(pci_bus, pci_device_fn,
+					PCI_INTERRUPT_LINE, &pci_irq_line);
+			break;	/* Beauty -- got a valid card. */
+		}
+		if (pci_irq_line == 0) continue;	/* Try next PCI ID */
+		printk("ne.c: PCI BIOS reports NE 2000 clone at i/o %#x, irq %d.\n",
+				pci_ioaddr, pci_irq_line);
+		if (ne_probe1(dev, pci_ioaddr) != 0) {	/* Shouldn't happen. */
+			printk(KERN_ERR "ne.c: Probe of PCI card at %#x failed.\n", pci_ioaddr);
+			pci_irq_line = 0;
+			return -ENXIO;
+		}
+		pci_irq_line = 0;
+		return 0;
+	}
+	return -ENODEV;
+}
+#endif  /* CONFIG_PCI */
 
 static int ne_probe1(struct device *dev, int ioaddr)
 {
@@ -310,8 +338,8 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	for (i = 0; i < 16; i++)
 		SA_prom[i] = SA_prom[i+i];
     
-    if (pci_irq_line)
-	wordlength = 2;		/* Catch broken cards mentioned above. */
+    if (pci_irq_line || ioaddr >= 0x400)
+	wordlength = 2;		/* Catch broken PCI cards mentioned above. */
 
     if (wordlength == 2) {
 	/* We must set the 8390 for word mode. */
@@ -361,9 +389,8 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
     }
 
-    if (pci_irq_line) {
+    if (pci_irq_line)
 	dev->irq = pci_irq_line;
-    }
 
     if (dev->irq < 2) {
 	autoirq_setup(0);
@@ -713,17 +740,17 @@ init_module(void)
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
 		dev->init = ne_probe;
-		if (io[this_dev] == 0)  {
-			if (this_dev != 0) break; /* only complain once */
-			printk(KERN_NOTICE "ne.c: Module autoprobing not allowed. Append \"io=0xNNN\" value(s).\n");
-			return -EPERM;
+		if (register_netdev(dev) == 0) {
+			found++;
+			continue;
 		}
-		if (register_netdev(dev) != 0) {
-			printk(KERN_WARNING "ne.c: No NE*000 card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) return 0;	/* Got at least one. */
-			return -ENXIO;
-		}
-		found++;
+		if (found != 0) 	/* Got at least one. */
+			return 0;
+		if (io[this_dev] != 0)
+			printk(KERN_WARNING "ne.c: No NE*000 card found at i/o = %#x\n", io[this_dev]);
+		else
+			printk(KERN_NOTICE "ne.c: No PCI cards found. Use \"io=0xNNN\" value(s) for ISA cards.\n");
+		return -ENXIO;
 	}
 
 	return 0;

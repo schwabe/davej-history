@@ -119,6 +119,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( BUSLOGIC,	BUSLOGIC_MULTIMASTER,    "MultiMaster"),
 	DEVICE( BUSLOGIC,	BUSLOGIC_FLASHPOINT,     "FlashPoint"),
 	DEVICE( OAK,		OAK_OTI107,	"OTI107"),
+	DEVICE( WINBOND2,	WINBOND2_89C940,"NE2000-PCI"),
 	DEVICE( PROMISE,	PROMISE_5300,	"DC5030"),
 	DEVICE( N9,		N9_I128,	"Imagine 128"),
 	DEVICE( N9,		N9_I128_2,	"Imagine 128v2"),
@@ -199,6 +200,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ZEITNET,	ZEITNET_1225,	"1225"),
 	DEVICE( SPECIALIX,	SPECIALIX_XIO,	"XIO/SIO host"),
 	DEVICE( SPECIALIX,	SPECIALIX_RIO,	"RIO host"),
+	DEVICE( COMPEX,		COMPEX_RL2000,	"ReadyLink 2000"),
 	DEVICE( RP,             RP8OCTA,        "RocketPort 8 Oct"),
 	DEVICE( RP,             RP8INTF,        "RocketPort 8 Intf"),
 	DEVICE( RP,             RP16INTF,       "RocketPort 16 Intf"),
@@ -482,6 +484,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_SGS:		return "SGS Thomson";
 	      case PCI_VENDOR_ID_BUSLOGIC:	return "BusLogic";
 	      case PCI_VENDOR_ID_OAK: 		return "OAK";
+	      case PCI_VENDOR_ID_WINBOND2:	return "Winbond";
 	      case PCI_VENDOR_ID_PROMISE:	return "Promise Technology";
 	      case PCI_VENDOR_ID_N9:		return "Number Nine";
 	      case PCI_VENDOR_ID_UMC:		return "UMC";
@@ -520,6 +523,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_TOSHIBA:	return "Toshiba";
 	      case PCI_VENDOR_ID_ZEITNET:	return "ZeitNet";
 	      case PCI_VENDOR_ID_SPECIALIX:	return "Specialix";
+	      case PCI_VENDOR_ID_COMPEX:	return "Compex";
 	      case PCI_VENDOR_ID_RP:		return "Comtrol";
 	      case PCI_VENDOR_ID_CYCLADES:	return "Cyclades";
 	      case PCI_VENDOR_ID_SYMPHONY:	return "Symphony";

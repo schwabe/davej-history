@@ -124,6 +124,7 @@ CONFIG_EL3=y
 # ISDN subsystem
 #
 # CONFIG_ISDN is not set
+CONFIG_HISAX_EURO=y
 
 #
 # CD-ROM drivers (not for SCSI or IDE/ATAPI drives)

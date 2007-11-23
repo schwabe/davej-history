@@ -169,6 +169,10 @@
 #include "ide-scsi.h"
 #endif
 
+#ifdef CONFIG_SCSI_GDTH
+#include "gdth.h"
+#endif
+
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
@@ -306,6 +310,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_SUNESP
     SCSI_SPARC_ESP,
+#endif
+#ifdef CONFIG_SCSI_GDTH
+    GDTH,
 #endif
 #ifdef CONFIG_BLK_DEV_IDESCSI
     IDESCSI,

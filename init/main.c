@@ -89,6 +89,7 @@ extern void generic_NCR5380_setup(char *str, int *intr);
 extern void generic_NCR53C400_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
 extern void aha1542_setup(char *str, int *ints);
+extern void gdth_setup(char *str, int *ints);
 extern void aic7xxx_setup(char *str, int *ints);
 extern void AM53C974_setup(char *str, int *ints);
 extern void BusLogic_Setup(char *str, int *ints);
@@ -147,8 +148,11 @@ static void no_initrd(char *s,int *ints);
 #ifdef CONFIG_ISDN_DRV_ICN
 extern void icn_setup(char *str, int *ints);
 #endif
-#ifdef CONFIG_ISDN_DRV_TELES
-extern void teles_setup(char *str, int *ints);
+#ifdef CONFIG_ISDN_DRV_HISAX
+extern void HiSax_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_ISDN_DRV_PCBIT
+extern void pcbit_setup(char *str, int *ints);
 #endif
 
 #ifdef CONFIG_ATARIMOUSE
@@ -165,9 +169,6 @@ extern void gvp11_setup (char *str, int *ints);
 
 #ifdef CONFIG_DIGI
 extern void pcxx_setup(char *str, int *ints);
-#endif
-#ifdef CONFIG_ISDN_DRV_PCBIT
-extern void pcbit_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_RISCOM8
 extern void riscom8_setup(char *str, int *ints);
@@ -318,6 +319,9 @@ struct {
 #ifdef CONFIG_SCSI_AHA1542
 	{ "aha1542=", aha1542_setup},
 #endif
+#ifdef CONFIG_SCSI_GDTH
+	{ "gdth=", gdth_setup},
+#endif
 #ifdef CONFIG_SCSI_AIC7XXX
 	{ "aic7xxx=", aic7xxx_setup},
 #endif
@@ -393,8 +397,9 @@ struct {
 #ifdef CONFIG_ISDN_DRV_ICN
 	{ "icn=", icn_setup },
 #endif
-#ifdef CONFIG_ISDN_DRV_TELES
-	{ "teles=", teles_setup },
+#ifdef CONFIG_ISDN_DRV_HISAX
+       { "hisax=", HiSax_setup },
+       { "HiSax=", HiSax_setup },
 #endif
 #ifdef CONFIG_ISDN_DRV_PCBIT
 	{ "pcbit=", pcbit_setup },
