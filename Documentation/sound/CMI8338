@@ -1,0 +1,24 @@
+Audio driver for CM8338/CM8738 chips by Chen-Li Tien
+
+Steps to build cmpci driver
+
+1. Backup the Config.in and Makefile in the sound driver directory
+	(/usr/src/linux/driver/sound).
+
+2. Extract the tar file by tar xvzf source.tar.gz in the above directory.
+
+3. Change directory to /usr/src/linux
+
+4. Config cm8338 driver by 'make menuconfig' or 'make config' command.
+
+5. Please select Sound Card (CONFIG_SOUND=m) support and CMPCI driver (CONFIG_SOUND_CMPCI=m) as modules. Resident mode not tested.
+
+6. Compile the kernel if necessary.
+
+7. Compile the modules by 'make modules'.
+
+8. Install the modules by 'make modules_install'
+
+9. Before first time to run the driver, create module dependency by 'depmod -a'
+
+10. To install the driver, enter 'modprobe cmpci'.

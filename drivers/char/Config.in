@@ -134,6 +134,10 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   if [ "$CONFIG_RADIO_GEMTEK" = "y" ]; then
     hex '  GemTek i/o port (0x20c, 0x30c, 0x24c or 0x34c)' CONFIG_RADIO_GEMTEK_PORT 34c
   fi
+  dep_tristate 'Trust FM Radio' CONFIG_RADIO_TRUST $CONFIG_VIDEO_DEV
+  if [ "$CONFIG_RADIO_TRUST" = "y" ]; then
+    hex '  Trust FM Radio I/O port (0x350 or 0x358)' CONFIG_RADIO_TRUST_PORT 350
+  fi
   if [ "$CONFIG_PCI" != "n" ]; then
     dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
   fi

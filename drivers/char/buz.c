@@ -2901,7 +2901,6 @@ static int zoran_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 		{
 			struct zoran_status bs;
 			int norm, input, status;
-			unsigned long timeout;
 
 			if (zr->codec_mode != BUZ_MODE_IDLE) {
 				return -EINVAL;
@@ -3317,7 +3316,6 @@ static int find_zr36057(void)
 	unsigned char latency;
 	struct zoran *zr;
 	struct pci_dev *dev = NULL;
-	int result;
 
 	zoran_num = 0;
 

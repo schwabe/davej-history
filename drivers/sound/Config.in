@@ -9,9 +9,14 @@
 
 # Prompt user for primary drivers.
 
-if [ "$CONFIG_VISWS" = "y" ]; then
-    dep_tristate 'SGI Visual Workstation Sound' CONFIG_SOUND_VWSND $CONFIG_SOUND
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  dep_tristate 'Support for C-Media PCI audio chips (Experimental)' CONFIG_SOUND_CMPCI $CONFIG_SOUND
+  if [ "$CONFIG_SOUND_CMPCI" = "y" -o "$CONFIG_SOUND_CMPCI" = "m" ]; then
+     bool 'Enable legacy FM' CONFIG_SOUND_CMPCI_FM
+     bool 'Enable legacy MPU-401' CONFIG_SOUND_CMPCI_MIDI
+  fi
 fi
+
 dep_tristate 'Ensoniq AudioPCI (ES1370)' CONFIG_SOUND_ES1370 $CONFIG_SOUND
 if [ "$CONFIG_SOUND_ES1370" = "y" ]; then
    bool 'Joystick support at boot time' CONFIG_SOUND_ES1370_JOYPORT_BOOT
@@ -28,6 +33,10 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 fi
 
 dep_tristate 'S3 SonicVibes' CONFIG_SOUND_SONICVIBES $CONFIG_SOUND
+
+if [ "$CONFIG_VISWS" = "y" ]; then
+    dep_tristate 'SGI Visual Workstation Sound' CONFIG_SOUND_VWSND $CONFIG_SOUND
+fi
 
 dep_tristate 'Support for Turtle Beach MultiSound Classic, Tahiti, Monterey' CONFIG_SOUND_MSNDCLAS $CONFIG_SOUND
 if [ "$CONFIG_SOUND_MSNDCLAS" = "y" -o "$CONFIG_SOUND_MSNDCLAS" = "m" ]; then
@@ -78,6 +87,7 @@ fi
 if [ "$CONFIG_SOUND_MSNDPIN" = "y" -o "$CONFIG_SOUND_MSNDCLAS" = "y" ]; then
    int 'MSND buffer size (kB)' CONFIG_MSND_FIFOSIZE 128
 fi
+
 
 dep_tristate 'OSS sound modules' CONFIG_SOUND_OSS $CONFIG_SOUND
 
@@ -182,6 +192,8 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       fi
   fi
   
+  dep_tristate 'VIA 82C686 Audio Codec' CONFIG_SOUND_VIA82CXXX $CONFIG_SOUND_OSS
+
   dep_tristate 'Support for OPTi MAD16 and/or Mozart based cards' CONFIG_SOUND_MAD16 $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_MAD16" = "y" -o "$CONFIG_SOUND_MAD16" = "m" ]; then
     bool 'Support MIDI in older MAD16 based cards (requires SB)' CONFIG_MAD16_OLDCARD

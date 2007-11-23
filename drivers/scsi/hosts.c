@@ -131,6 +131,10 @@
 #include "aic7xxx.h"
 #endif
 
+#ifdef CONFIG_SCSI_IPS
+#include "ips.h"
+#endif
+
 #ifdef CONFIG_SCSI_BUSLOGIC
 #include "BusLogic.h"
 #endif
@@ -467,6 +471,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_AIC7XXX
     AIC7XXX,
+#endif
+#ifdef CONFIG_SCSI_IPS
+    IPS,
 #endif
 #ifdef CONFIG_SCSI_FD_MCS
    FD_MCS,

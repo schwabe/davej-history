@@ -81,6 +81,9 @@ extern int typhoon_init(struct video_init *);
 #ifdef CONFIG_RADIO_CADET
 extern int cadet_init(struct video_init *);
 #endif
+#ifdef CONFIG_RADIO_TRUST
+extern int trust_init(struct video_init *);
+#endif
 #ifdef CONFIG_VIDEO_PMS
 extern int init_pms_cards(struct video_init *);
 #endif
@@ -134,6 +137,9 @@ static struct video_init video_init_list[]={
 #endif
 #ifdef CONFIG_VIDEO_ZORAN
 	{"zoran", init_zoran_cards},
+#endif	
+#ifdef CONFIG_RADIO_TRUST
+	{"Trust", trust_init}, 
 #endif	
 	{"end", NULL}
 };

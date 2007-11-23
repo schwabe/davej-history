@@ -388,6 +388,12 @@ M:	langa2@kph.uni-mainz.de
 W:	http://www.uni-mainz.de/~langm000/linux.html
 S:	Maintained
 
+IBM ServeRAID RAID DRIVER
+P:      Keith Mitchell
+M:      ipslinux@us.ibm.com
+W:      http://www.developer.ibm.com/welcome/netfinity/serveraid_beta.html
+S:      Supported 
+
 IDE DRIVER [GENERAL]
 P:	Andre Hedrick
 M:	hedrick@astro.dyer.vanderbilt.edu
@@ -839,6 +845,11 @@ P:	Gordon Chaffee
 M:	chaffee@cs.berkeley.edu
 L:	linux-kernel@vger.rutgers.edu
 W:	http://bmrc.berkeley.edu/people/chaffee
+S:	Maintained
+
+VIA 82Cxxx AUDIO DRIVER
+P:	Jeff Garzik
+M:	jgarzik@pobox.com
 S:	Maintained
 
 VIDEO FOR LINUX

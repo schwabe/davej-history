@@ -346,6 +346,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_IPS),y)
+L_OBJS += ips.o
+else
+  ifeq ($(CONFIG_SCSI_IPS),m)
+  M_OBJS += ips.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_DC390T),y)
 L_OBJS += tmscsim.o
 else
