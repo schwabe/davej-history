@@ -866,7 +866,7 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 		retval = search_binary_handler(&bprm,regs);
 
 	if(current->dumpable == 2)
-		current->dumapble = 0;
+		current->dumpable = 0;
 		
 	if (retval >= 0)
 		/* execve success */

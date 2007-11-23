@@ -259,7 +259,7 @@ struct task_struct {
 	int pdeath_signal;  /*  The signal sent when the parent dies  */
 	/* ??? */
 	unsigned long personality;
-	int dumpable:2;
+	unsigned int dumpable:2;
 	int did_exec:1;
 	pid_t pid;
 	pid_t pgrp;

@@ -60,3 +60,4 @@ extern int init_nls_cp936(void);
 extern int init_nls_cp949(void);
 extern int init_nls_cp950(void);
 extern int init_nls_koi8_r(void);
+extern int init_nls_koi8_ru(void);

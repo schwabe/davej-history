@@ -322,7 +322,8 @@ irq_prio_ebsa110:
 
 		.macro	restore_user_regs
 		ldr	r0, [sp, #S_PSR]		@ Get calling cpsr
-		msr	cpsr_c, #I_BIT | MODE_SVC	@ disable IRQs
+		mov	r1, #I_BIT | MODE_SVC		@ disable IRQs
+		msr	cpsr_c, r1
 		msr	spsr, r0			@ save in spsr_svc
 		ldmia	sp, {r0 - lr}^			@ Get calling r0 - lr
 		mov	r0, r0

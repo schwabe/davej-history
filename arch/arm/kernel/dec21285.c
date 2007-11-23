@@ -169,9 +169,14 @@ __initfunc(void pcibios_fixup(void))
 __initfunc(void pcibios_init(void))
 {
 	unsigned int mem_size = (unsigned int)high_memory - PAGE_OFFSET;
+	unsigned int mem_mask;
 	unsigned long cntl;
 
-	*CSR_SDRAMBASEMASK    = (mem_size - 1) & 0x0ffc0000;
+	for (mem_mask = 0x00100000; mem_mask < 0x10000000; mem_mask <<= 1)
+		if (mem_mask >= mem_size)
+			break;		
+
+	*CSR_SDRAMBASEMASK    = (mem_mask - 1) & 0x0ffc0000;
 	*CSR_SDRAMBASEOFFSET  = 0;
 	*CSR_ROMBASEMASK      = 0x80000000;
 	*CSR_CSRBASEMASK      = 0;
@@ -224,7 +229,7 @@ __initfunc(void pcibios_init(void))
 	*CSR_PCISDRAMBASE     = virt_to_bus((void *)PAGE_OFFSET);
 	*CSR_PCIROMBASE       = 0;
 	*CSR_PCICMD           = PCI_COMMAND_IO | PCI_COMMAND_MEMORY |
-				PCI_COMMAND_MASTER | PCI_COMMAND_FAST_BACK |
+				PCI_COMMAND_MASTER |
 				PCI_COMMAND_INVALIDATE | PCI_COMMAND_PARITY |
 				(1 << 31) | (1 << 29) | (1 << 28) | (1 << 24);
 #endif

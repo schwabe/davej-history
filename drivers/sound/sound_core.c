@@ -414,6 +414,9 @@ int soundcore_init(void)
 #ifdef CONFIG_SOUND_MAESTRO
 	init_maestro();
 #endif
+#ifdef CONFIG_SOUND_MAESTRO3
+    init_maestro3();
+#endif
 #ifdef CONFIG_SOUND_TRIDENT
 	init_trident();
 #endif

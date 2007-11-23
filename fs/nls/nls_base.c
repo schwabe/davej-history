@@ -529,6 +529,9 @@ int __init init_nls(void)
 #ifdef CONFIG_NLS_KOI8_R
 	init_nls_koi8_r();
 #endif
+#ifdef CONFIG_NLS_KOI8_RU
+	init_nls_koi8_ru();
+#endif
 	return 0;
 }
 

@@ -32,13 +32,25 @@ typedef unsigned long mm_segment_t;		/* domain register	*/
 #include <asm/arch/processor.h>
 #include <asm/proc/processor.h>
 
+struct debug_info {
+	int				nsaved;
+	struct {
+		unsigned long		address;
+		unsigned long		insn;
+	} bp[2];
+};
+
 struct thread_struct {
-	unsigned long			address;	  /* Address of fault	*/
-	unsigned long			trap_no;	  /* Trap number	*/
-	unsigned long			error_code;	  /* Error code of trap	*/
-	union fp_state			fpstate;	  /* FPE save state	*/
-	unsigned long			debug[NR_DEBUGS]; /* Debug/ptrace	*/
-	struct context_save_struct	*save;		  /* context save	*/
+							/* fault info	  */
+	unsigned long			address;
+	unsigned long			trap_no;
+	unsigned long			error_code;
+							/* floating point */
+	union fp_state			fpstate;
+							/* debugging	  */
+	struct debug_info		debug;
+							/* context info	  */
+	struct context_save_struct	*save;
 	unsigned long			memmap;		  /* page tables	*/
 	EXTRA_THREAD_STRUCT
 };
@@ -62,7 +74,7 @@ struct thread_struct {
  */
 extern __inline__ unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	return t->save ? t->save->pc & ~PCMASK : 0;
+	return t->save ? pc_pointer(t->save->pc) : 0;
 }
 
 extern __inline__ unsigned long get_css_fp(struct thread_struct *t)

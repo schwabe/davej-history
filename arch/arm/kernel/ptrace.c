@@ -16,6 +16,9 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 
+
+#define REG_PC	15
+#define REG_PSR	16
 /*
  * does not yet catch signals sent when the child dies.
  * in exit.c or in signal.c.
@@ -25,11 +28,12 @@
  * Breakpoint SWI instruction: SWI &9F0001
  */
 #define BREAKINST	0xef9f0001
-#define PTRACE_GETREGS		12
-#define PTRACE_SETREGS		13
-#define PTRACE_GETFPREGS	14
-#define PTRACE_SETFPREGS	15
 
+/*
+ * Get the address of the live pt_regs for the specified task.
+ * These are saved onto the top kernel stack when the process
+ * is not running.
+ */
 static inline struct pt_regs *
 get_user_regs(struct task_struct *task)
 {
@@ -299,38 +303,42 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 	return 0;
 }
 
+#define write_tsk_long(chld, addr, val) write_long((chld), (addr), (val))
+#define read_tsk_long(chld, addr, val)  read_long((chld), (addr), (val))
+
 /*
  * Get value of register `rn' (in the instruction)
  */
-static unsigned long ptrace_getrn (struct task_struct *child, unsigned long insn)
+static unsigned long
+ptrace_getrn(struct task_struct *child, unsigned long insn)
 {
 	unsigned int reg = (insn >> 16) & 15;
 	unsigned long val;
 
+	val = get_stack_long(child, reg);
 	if (reg == 15)
-		val = pc_pointer (get_stack_long (child, reg));
-	else
-		val = get_stack_long (child, reg);
+		val = pc_pointer(val + 8);
 
-printk ("r%02d=%08lX ", reg, val);
+
 	return val;
 }
 
 /*
  * Get value of operand 2 (in an ALU instruction)
  */
-static unsigned long ptrace_getaluop2 (struct task_struct *child, unsigned long insn)
+static unsigned long
+ptrace_getaluop2(struct task_struct *child, unsigned long insn)
 {
 	unsigned long val;
 	int shift;
 	int type;
 
-printk ("op2=");
+
 	if (insn & 1 << 25) {
 		val = insn & 255;
 		shift = (insn >> 8) & 15;
 		type = 3;
-printk ("(imm)");
+
 	} else {
 		val = get_stack_long (child, insn & 15);
 
@@ -340,9 +348,9 @@ printk ("(imm)");
 			shift = (insn >> 7) & 31;
 
 		type = (insn >> 5) & 3;
-printk ("(r%02ld)", insn & 15);
+
 	}
-printk ("sh%dx%d", type, shift);
+
 	switch (type) {
 	case 0:	val <<= shift;	break;
 	case 1:	val >>= shift;	break;
@@ -350,27 +358,28 @@ printk ("sh%dx%d", type, shift);
 		val = (((signed long)val) >> shift);
 		break;
 	case 3:
-		__asm__ __volatile__("mov %0, %0, ror %1" : "=r" (val) : "0" (val), "r" (shift));
+		val = (val >> shift) | (val << (32 - shift));
 		break;
 	}
-printk ("=%08lX ", val);
+
 	return val;
 }
 
 /*
  * Get value of operand 2 (in a LDR instruction)
  */
-static unsigned long ptrace_getldrop2 (struct task_struct *child, unsigned long insn)
+static unsigned long
+ptrace_getldrop2(struct task_struct *child, unsigned long insn)
 {
 	unsigned long val;
 	int shift;
 	int type;
 
-	val = get_stack_long (child, insn & 15);
+	val = get_stack_long(child, insn & 15);
 	shift = (insn >> 7) & 31;
 	type = (insn >> 5) & 3;
 
-printk ("op2=r%02ldsh%dx%d", insn & 15, shift, type);
+
 	switch (type) {
 	case 0:	val <<= shift;	break;
 	case 1:	val >>= shift;	break;
@@ -378,115 +387,88 @@ printk ("op2=r%02ldsh%dx%d", insn & 15, shift, type);
 		val = (((signed long)val) >> shift);
 		break;
 	case 3:
-		__asm__ __volatile__("mov %0, %0, ror %1" : "=r" (val) : "0" (val), "r" (shift));
+		val = (val >> shift) | (val << (32 - shift));
 		break;
 	}
-printk ("=%08lX ", val);
+
 	return val;
 }
-#undef pc_pointer
-#define pc_pointer(x) ((x) & 0x03fffffc)
-int ptrace_set_bpt (struct task_struct *child)
+
+static unsigned long
+get_branch_address(struct task_struct *child, unsigned long pc, unsigned long insn)
 {
-	unsigned long insn, pc, alt;
-	int i, nsaved = 0, res;
+	unsigned long alt = 0;
 
-	pc = pc_pointer (get_stack_long (child, 15/*REG_PC*/));
-
-	res = read_long (child, pc, &insn);
-	if (res < 0)
-		return res;
-
-	child->tss.debug[nsaved++] = alt = pc + 4;
-printk ("ptrace_set_bpt: insn=%08lX pc=%08lX ", insn, pc);
-	switch (insn & 0x0e100000) {
+	switch (insn & 0x0e000000) {
 	case 0x00000000:
-	case 0x00100000:
-	case 0x02000000:
-	case 0x02100000: /* data processing */
-		printk ("data ");
-		switch (insn & 0x01e0f000) {
-		case 0x0000f000:
-			alt = ptrace_getrn(child, insn) & ptrace_getaluop2(child, insn);
+	case 0x02000000: {
+		/*
+		 * data processing
+		 */
+		long aluop1, aluop2, ccbit;
+
+		if ((insn & 0xf000) != 0xf000)
 			break;
-		case 0x0020f000:
-			alt = ptrace_getrn(child, insn) ^ ptrace_getaluop2(child, insn);
-			break;
-		case 0x0040f000:
-			alt = ptrace_getrn(child, insn) - ptrace_getaluop2(child, insn);
-			break;
-		case 0x0060f000:
-			alt = ptrace_getaluop2(child, insn) - ptrace_getrn(child, insn);
-			break;
-		case 0x0080f000:
-			alt = ptrace_getrn(child, insn) + ptrace_getaluop2(child, insn);
-			break;
-		case 0x00a0f000:
-			alt = ptrace_getrn(child, insn) + ptrace_getaluop2(child, insn) +
-				(get_stack_long (child, 16/*REG_PSR*/) & CC_C_BIT ? 1 : 0);
-			break;
-		case 0x00c0f000:
-			alt = ptrace_getrn(child, insn) - ptrace_getaluop2(child, insn) +
-				(get_stack_long (child, 16/*REG_PSR*/) & CC_C_BIT ? 1 : 0);
-			break;
-		case 0x00e0f000:
-			alt = ptrace_getaluop2(child, insn) - ptrace_getrn(child, insn) +
-				(get_stack_long (child, 16/*REG_PSR*/) & CC_C_BIT ? 1 : 0);
-			break;
-		case 0x0180f000:
-			alt = ptrace_getrn(child, insn) | ptrace_getaluop2(child, insn);
-			break;
-		case 0x01a0f000:
-			alt = ptrace_getaluop2(child, insn);
-			break;
-		case 0x01c0f000:
-			alt = ptrace_getrn(child, insn) & ~ptrace_getaluop2(child, insn);
-			break;
-		case 0x01e0f000:
-			alt = ~ptrace_getaluop2(child, insn);
-			break;
+
+
+
+		aluop1 = ptrace_getrn(child, insn);
+		aluop2 = ptrace_getaluop2(child, insn);
+		ccbit  = get_stack_long(child, REG_PSR) & CC_C_BIT ? 1 : 0;
+
+		switch (insn & 0x01e00000) {
+		case 0x00000000: alt = aluop1 & aluop2;		break;
+		case 0x00200000: alt = aluop1 ^ aluop2;		break;
+		case 0x00400000: alt = aluop1 - aluop2;		break;
+		case 0x00600000: alt = aluop2 - aluop1;		break;
+		case 0x00800000: alt = aluop1 + aluop2;		break;
+		case 0x00a00000: alt = aluop1 + aluop2 + ccbit;	break;
+		case 0x00c00000: alt = aluop1 - aluop2 + ccbit;	break;
+		case 0x00e00000: alt = aluop2 - aluop1 + ccbit;	break;
+		case 0x01800000: alt = aluop1 | aluop2;		break;
+		case 0x01a00000: alt = aluop2;			break;
+		case 0x01c00000: alt = aluop1 & ~aluop2;	break;
+		case 0x01e00000: alt = ~aluop2;			break;
 		}
 		break;
+	}
 
-	case 0x04100000: /* ldr */
-		if ((insn & 0xf000) == 0xf000) {
-printk ("ldr ");
-			alt = ptrace_getrn(child, insn);
-			if (insn & 1 << 24) {
-				if (insn & 1 << 23)
-					alt += ptrace_getldrop2 (child, insn);
-				else
-					alt -= ptrace_getldrop2 (child, insn);
-			}
-			if (read_long (child, alt, &alt) < 0)
-				alt = pc + 4; /* not valid */
-			else
-				alt = pc_pointer (alt);
-		}
-		break;
-
-	case 0x06100000: /* ldr imm */
-		if ((insn & 0xf000) == 0xf000) {
-printk ("ldrimm ");
-			alt = ptrace_getrn(child, insn);
-			if (insn & 1 << 24) {
-				if (insn & 1 << 23)
-					alt += insn & 0xfff;
-				else
-					alt -= insn & 0xfff;
-			}
-			if (read_long (child, alt, &alt) < 0)
-				alt = pc + 4; /* not valid */
-			else
-				alt = pc_pointer (alt);
-		}
-		break;
-
-	case 0x08100000: /* ldm */
-		if (insn & (1 << 15)) {
+	case 0x04000000:
+	case 0x06000000:
+		/*
+		 * ldr
+		 */
+		if ((insn & 0x0010f000) == 0x0010f000) {
 			unsigned long base;
-			int nr_regs;
-printk ("ldm ");
+
+			base = ptrace_getrn(child, insn);
+			if (insn & 1 << 24) {
+				long aluop2;
+
+				if (insn & 0x02000000)
+					aluop2 = ptrace_getldrop2(child, insn);
+				else
+					aluop2 = insn & 0xfff;
+
+				if (insn & 1 << 23)
+					base += aluop2;
+				else
+					base -= aluop2;
+			}
+
+			if (read_tsk_long(child, base, &alt) == 0)
+				alt = pc_pointer(alt);
+		}
+		break;
+
+	case 0x08000000:
+		/*
+		 * ldm
+		 */
+		if ((insn & 0x00108000) == 0x00108000) {
+			unsigned long base;
+			unsigned int nr_regs;
+
 
 			if (insn & (1 << 23)) {
 				nr_regs = insn & 65535;
@@ -506,23 +488,23 @@ printk ("ldm ");
 					nr_regs = 0;
 			}
 
-			base = ptrace_getrn (child, insn);
+			base = ptrace_getrn(child, insn);
 
-			if (read_long (child, base + nr_regs, &alt) < 0)
-				alt = pc + 4; /* not valid */
-			else
-				alt = pc_pointer (alt);
+			if (read_tsk_long(child, base + nr_regs, &alt) == 0)
+				alt = pc_pointer(alt);
 			break;
 		}
 		break;
 
-	case 0x0a000000:
-	case 0x0a100000: { /* bl or b */
+	case 0x0a000000: {
+		/*
+		 * bl or b
+		 */
 		signed long displ;
-printk ("b/bl ");
+
 		/* It's a branch/branch link: instead of trying to
 		 * figure out whether the branch will be taken or not,
-		 * we'll put a breakpoint at either location.  This is
+		 * we'll put a breakpoint at both locations.  This is
 		 * simpler, more reliable, and probably not a whole lot
 		 * slower than the alternative approach of emulating the
 		 * branch.
@@ -737,44 +719,103 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 					ret = 0;
 				}
 			}
-			goto out;
+			break;
 		}
 
+		/*
+		 * Get the child FPU state.
+		 */
 		case PTRACE_GETFPREGS: 
-			/* Get the child FPU state. */
-			ret = 0;
-			if (copy_to_user((void *)data, &child->tss.fpstate,
-					 sizeof(struct user_fp)))
-				ret = -EFAULT;
-			goto out;
-		
-		case PTRACE_SETFPREGS:
-			/* Set the child FPU state. */
-			ret = 0;
-			if (copy_from_user(&child->tss.fpstate, (void *)data,
-					   sizeof(struct user_fp)))
-				ret = -EFAULT;
-			goto out;
-
-		case PTRACE_DETACH:				/* detach a process that was attached. */
 			ret = -EIO;
-			if ((unsigned long) data > _NSIG)
-				goto out;
-			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
-			wake_up_process (child);
-			child->exit_code = data;
-			REMOVE_LINKS(child);
-			child->p_pptr = child->p_opptr;
-			SET_LINKS(child);
-			/* make sure single-step breakpoint is gone. */
-			ptrace_cancel_bpt (child);
-			ret = 0;
-			goto out;
+			if (!access_ok(VERIFY_WRITE, (void *)data, sizeof(struct user_fp)))
+				break;
+
+			/* we should check child->used_math here */
+			ret = __copy_to_user((void *)data, &child->tss.fpstate,
+					     sizeof(struct user_fp)) ? -EFAULT : 0;
+			break;
+
+		/*
+		 * Set the child FPU state.
+		 */
+		case PTRACE_SETFPREGS:
+			ret = -EIO;
+			if (!access_ok(VERIFY_READ, (void *)data, sizeof(struct user_fp)))
+				break;
+
+			child->used_math = 1;
+			ret = __copy_from_user(&child->tss.fpstate, (void *)data,
+					   sizeof(struct user_fp)) ? -EFAULT : 0;
+			break;
 
 		default:
 			ret = -EIO;
-			goto out;
+			break;
 	}
+
+	return ret;
+}
+
+asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
+{
+	struct task_struct *child;
+	int ret;
+
+	lock_kernel();
+	ret = -EPERM;
+	if (request == PTRACE_TRACEME) {
+		/* are we already being traced? */
+		if (current->flags & PF_PTRACED)
+			goto out;
+		/* set the ptrace bit in the process flags. */
+		current->flags |= PF_PTRACED;
+		ret = 0;
+		goto out;
+	}
+	ret = -ESRCH;
+	if (!(child = find_task_by_pid(pid)))
+		goto out;
+
+	ret = -EPERM;
+	if (pid == 1)		/* you may not mess with init */
+		goto out;
+
+	if (request == PTRACE_ATTACH) {
+		if (child == current)
+			goto out;
+		if ((!child->dumpable ||
+		    (current->uid != child->euid) ||
+		    (current->uid != child->suid) ||
+		    (current->uid != child->uid) ||
+	 	    (current->gid != child->egid) ||
+	 	    (current->gid != child->sgid) ||
+	 	    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
+			goto out;
+		/* the same process cannot be attached many times */
+		if (child->flags & PF_PTRACED)
+			goto out;
+		child->flags |= PF_PTRACED;
+
+		if (child->p_pptr != current) {
+			REMOVE_LINKS(child);
+			child->p_pptr = current;
+			SET_LINKS(child);
+		}
+
+		send_sig(SIGSTOP, child, 1);
+		ret = 0;
+		goto out;
+	}
+	ret = -ESRCH;
+	if (!(child->flags & PF_PTRACED))
+		goto out;
+	if (child->state != TASK_STOPPED && request != PTRACE_KILL)
+		goto out;
+	if (child->p_pptr != current)
+		goto out;
+
+	ret = do_ptrace(request, child, addr, data);
+
 out:
 	unlock_kernel();
 	return ret;

@@ -9326,6 +9326,14 @@ CONFIG_NLS_KOI8_R
   input/output character sets. Say Y here for the preferred Russian
   character set.
 
+nls koi8-ru
+CONFIG_NLS_KOI8_RU
+  If you want to display filenames with native language characters
+  from the Microsoft fat filesystem family or from JOLIET CDROMs
+  correctly on the screen, you need to include the appropriate
+  input/output character sets. Say Y here for the preferred Russian
+  character set.
+
 Virtual terminal
 CONFIG_VT
   If you say Y here, you will get support for terminal devices with
@@ -11449,7 +11457,15 @@ ESS Maestro sound chipsets
 CONFIG_SOUND_MAESTRO
   Say Y or M if you have a sound system driven by ESS's Maestro line
   of PCI sound chips.  These include the Maestro 1, Maestro 2, and
-  Maestro 2E.  See Documentation/sound/Maestro for more details.
+  Maestro 2E, but _does not_ include the Maestro 3 and Allegro 
+  line of chips.  See Documentation/sound/Maestro for more details
+  on the 1/2/2e line.
+
+ESS Maestro3/Allegro sound chipsets
+CONFIG_SOUND_MAESTRO3
+  Say Y or M if you have a sound system driven by ESS's Maestro3 line
+  of PCI sound chips.  This includes the Allegro sound chip that is
+  a lighter version of the Maestro3.
 
 Are you using a crosscompiler
 CONFIG_CROSSCOMPILE

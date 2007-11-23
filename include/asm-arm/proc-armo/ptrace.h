@@ -63,12 +63,6 @@ struct pt_regs {
 #define condition_codes(regs) \
 	((regs)->ARM_pc & (CC_V_BIT|CC_C_BIT|CC_Z_BIT|CC_N_BIT))
 
-#define pc_pointer(v) \
-	((v) & 0x03fffffc)
-
-#define instruction_pointer(regs) \
-	(pc_pointer((regs)->ARM_pc))
-
 /* Are the current registers suitable for user mode?
  * (used to maintain security in signal handlers)
  */

@@ -35,6 +35,7 @@ if [ "$CONFIG_SOUND_ES1371" = "y" ]; then
 fi
 
 dep_tristate 'ESS Maestro' CONFIG_SOUND_MAESTRO $CONFIG_SOUND
+dep_tristate 'ESS Maestro3' CONFIG_SOUND_MAESTRO3 $CONFIG_SOUND
 dep_tristate 'ESS Solo1' CONFIG_SOUND_ESSSOLO1 $CONFIG_SOUND
 
 dep_tristate 'Intel ICH (810, 820, 440MX...)' CONFIG_SOUND_ICH $CONFIG_SOUND

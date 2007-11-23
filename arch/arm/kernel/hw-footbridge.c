@@ -205,7 +205,8 @@ report_pci_dev_error(void)
 
 		pci_read_config_word(dev, PCI_STATUS, &status);
 		if (status & 0xf900) {
-			printk(KERN_DEBUG "PCI: [%04X:%04X] status = %X\n",
+			printk(KERN_DEBUG "PCI: %02x:%02x.%d [%04X:%04X] status = 0x%04X\n",
+				dev->bus->number, PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn),
 				dev->vendor, dev->device, status);
 
 			pci_write_config_word(dev, PCI_STATUS, status & 0xf900);

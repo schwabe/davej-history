@@ -2789,7 +2789,7 @@ static int __init trident_install(struct pci_dev *pci_dev, struct pci_audio_info
 	u16 w;
 	unsigned long iobase;
 	struct trident_card *card;
-
+	unsigned long flags;
 
 	iobase = pci_dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
 	if (check_region(iobase, 256)) {
@@ -2882,10 +2882,17 @@ static int __init trident_install(struct pci_dev *pci_dev, struct pci_audio_info
 		
 			/* reset command */
 			while (inb(card->iobase + ALI_MPUR1) & 0x40);
+			
+			/* After the out the chip goes into irq jammed on
+			   mode. We have to keep irqs off until it shuts up 
+			   again */
+			save_flags(flags);
+			cli();
 			outb(0xff, card->iobase + ALI_MPUR1);
 			while (inb(card->iobase + ALI_MPUR1) & 0x80);
 			while ((inb(card->iobase + ALI_MPUR0) != 0xfe) && (inb(card->iobase+ALI_MPUR1) != 0x10)) 
 				while (inb(card->iobase + ALI_MPUR1) & 0x80);
+			restore_flags(flags);
 			
 			midi->ird = midi->iwr = midi->icnt = 0;
 		}

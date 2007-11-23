@@ -539,6 +539,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs, int syscall)
 				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa.sa_flags & SA_NOCLDSTOP))
 					notify_parent(current, SIGCHLD);
 				schedule();
+				single_stepping |= ptrace_cancel_bpt(current);
 				continue;
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:

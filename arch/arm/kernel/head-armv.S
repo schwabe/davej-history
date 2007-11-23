@@ -388,6 +388,7 @@ __arch_types_start:
 __arch_types_end:
 
 #ifdef CONFIG_DEBUG_LL
+		.text
 /*
  * Some debugging routines (useful if you've got MM problems and
  * printk isn't working).  For DEBUGGING ONLY!!!  Do not leave
@@ -441,6 +442,10 @@ __arch_types_end:
 		.endm
 
 #elif defined(CONFIG_HOST_FOOTBRIDGE) || defined(CONFIG_ADDIN_FOOTBRIDGE)
+
+#include <asm/dec21285.h>
+#include <asm/hardware.h>
+
 #ifndef CONFIG_DEBUG_DC21285_PORT
 	/* For NetWinder debugging */
 		.macro	addruart,rx

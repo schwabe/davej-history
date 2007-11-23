@@ -342,6 +342,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_NLS_KOI8_RU),y)
+NLS += nls_koi8-ru.o
+else
+  ifeq ($(CONFIG_NLS_KOI8_RU),m)
+  M_OBJS += nls_koi8-ru.o
+  endif
+endif
+
 O_TARGET = nls.o
 OX_OBJS  = $(NLS)
 

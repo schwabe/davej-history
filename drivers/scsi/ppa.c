@@ -31,6 +31,7 @@ typedef struct {
     Scsi_Cmnd *cur_cmd;		/* Current queued command       */
     struct tq_struct ppa_tq;	/* Polling interupt stuff       */
     unsigned long jstart;	/* Jiffies at start             */
+    unsigned long recon_tmo;    /* How many usecs to wait for reconnection (6th bit) */
     unsigned int failed:1;	/* Failure flag                 */
     unsigned int p_busy:1;	/* Parport sharing busy flag    */
 } ppa_struct;
@@ -43,6 +44,7 @@ typedef struct {
 	cur_cmd:	NULL,		\
 	ppa_tq:		{0, 0, ppa_interrupt, NULL},	\
 	jstart:		0,		\
+	recon_tmo:      PPA_RECON_TMO,	\
 	failed:		0,		\
 	p_busy:		0		\
 }
@@ -236,6 +238,12 @@ static inline int ppa_proc_write(int hostno, char *buffer, int length)
 	ppa_hosts[hostno].mode = x;
 	return length;
     }
+    if ((length > 10) && (strncmp(buffer, "recon_tmo=", 10) == 0)) {
+	x = simple_strtoul(buffer + 10, NULL, 0);
+	ppa_hosts[hostno].recon_tmo = x;
+        printk("ppa: recon_tmo set to %ld\n", x);
+	return length;
+    }
     printk("ppa /proc: invalid variable\n");
     return (-EINVAL);
 }
@@ -256,6 +264,9 @@ int ppa_proc_info(char *buffer, char **start, off_t offset,
     len += sprintf(buffer + len, "Version : %s\n", PPA_VERSION);
     len += sprintf(buffer + len, "Parport : %s\n", ppa_hosts[i].dev->port->name);
     len += sprintf(buffer + len, "Mode    : %s\n", PPA_MODE_STRING[ppa_hosts[i].mode]);
+#if PPA_DEBUG > 0
+    len += sprintf(buffer + len, "recon_tmo : %lu\n", ppa_hosts[i].recon_tmo);
+#endif
 
     /* Request for beyond end of buffer */
     if (offset > length)
@@ -299,12 +310,11 @@ static unsigned char ppa_wait(int host_no)
     unsigned char r;
 
     k = PPA_SPIN_TMO;
-    do {
-	r = r_str(ppb);
-	k--;
-	udelay(1);
+    /* Wait for bit 6 and 7 - PJC */
+    for (r = r_str (ppb); ((r & 0xc0)!=0xc0) && (k); k--) {
+	    udelay (1);
+	    r = r_str (ppb);
     }
-    while (!(r & 0x80) && (k));
 
     /*
      * return some status information.
@@ -545,6 +555,7 @@ static int ppa_select(int host_no, int target)
     k = PPA_SELECT_TMO;
     do {
 	k--;
+	udelay(1);
     } while ((r_str(ppb) & 0x40) && (k));
     if (!k)
 	return 0;
@@ -558,6 +569,7 @@ static int ppa_select(int host_no, int target)
     k = PPA_SELECT_TMO;
     do {
 	k--;
+	udelay(1);
     }
     while (!(r_str(ppb) & 0x40) && (k));
     if (!k)
@@ -667,12 +679,36 @@ static int ppa_completion(Scsi_Cmnd * cmd)
 	if (time_after(jiffies, start_jiffies + 1))
 	    return 0;
 
-	if (((r & 0xc0) != 0xc0) || (cmd->SCp.this_residual <= 0)) {
+	if ((cmd->SCp.this_residual <= 0)) {
 	    ppa_fail(host_no, DID_ERROR);
 	    return -1;		/* ERROR_RETURN */
 	}
-	/* determine if we should use burst I/O */ fast = (bulk && (cmd->SCp.this_residual >= PPA_BURST_SIZE))
-	    ? PPA_BURST_SIZE : 1;
+
+	/* On some hardware we have SCSI disconnected (6th bit low)
+	 * for about 100usecs. It is too expensive to wait a 
+	 * tick on every loop so we busy wait for no more than
+	 * 500usecs to give the drive a chance first. We do not 
+	 * change things for "normal" hardware since generally 
+	 * the 6th bit is always high.
+	 * This makes the CPU load higher on some hardware 
+	 * but otherwise we can not get more then 50K/secs 
+	 * on this problem hardware.
+	 */
+	if ((r & 0xc0) != 0xc0) {
+	   /* Wait for reconnection should be no more than 
+	    * jiffy/2 = 5ms = 5000 loops
+	    */
+	   unsigned long k = ppa_hosts[host_no].recon_tmo; 
+	   for (; k && ((r = (r_str(ppb) & 0xf0)) & 0xc0) != 0xc0; k--)
+	     udelay(1);
+
+	   if(!k) 
+	     return 0;
+	}	   
+
+	/* determine if we should use burst I/O */ 
+	fast = (bulk && (cmd->SCp.this_residual >= PPA_BURST_SIZE)) 
+	     ? PPA_BURST_SIZE : 1;
 
 	if (r == (unsigned char) 0xc0)
 	    status = ppa_out(host_no, cmd->SCp.ptr, fast);

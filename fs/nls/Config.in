@@ -47,5 +47,6 @@ if [ "$CONFIG_NLS" = "y" ]; then
   tristate 'NLS ISO 8859-14 (Latin 8; Celtic)'      CONFIG_NLS_ISO8859_14
   tristate 'NLS ISO 8859-15 (Latin 9; Western European Languages with Euro)' CONFIG_NLS_ISO8859_15
   tristate 'NLS KOI8-R (Russian)'                   CONFIG_NLS_KOI8_R
+  tristate 'NLS KOI8-RU (Belorussia, Ukraine)'      CONFIG_NLS_KOI8_RU
   endmenu
 fi

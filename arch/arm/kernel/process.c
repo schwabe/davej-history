@@ -228,10 +228,8 @@ void exit_thread(void)
 
 void flush_thread(void)
 {
-	int i;
-
-	for (i = 0; i < NR_DEBUGS; i++)
-		current->tss.debug[i] = 0;
+	memset(&current->tss.debug, 0, sizeof(struct debug_info));
+	memset(&current->tss.fpstate, 0, sizeof(union fp_state));
 	current->used_math = 0;
 	current->flags &= ~PF_USEDFPU;
 }
@@ -263,12 +261,10 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
  */
 int dump_fpu (struct pt_regs *regs, struct user_fp *fp)
 {
-	int fpvalid = 0;
-
 	if (current->used_math)
-		memcpy (fp, &current->tss.fpstate.soft, sizeof (fp));
+		memcpy (fp, &current->tss.fpstate.soft, sizeof (*fp));
 
-	return fpvalid;
+	return current->used_math;
 }
 
 /*
@@ -276,18 +272,20 @@ int dump_fpu (struct pt_regs *regs, struct user_fp *fp)
  */
 void dump_thread(struct pt_regs * regs, struct user * dump)
 {
-	int i;
-
+	struct task_struct *tsk = current;
 	dump->magic = CMAGIC;
-	dump->start_code = current->mm->start_code;
+	dump->start_code = tsk->mm->start_code;
 	dump->start_stack = regs->ARM_sp & ~(PAGE_SIZE - 1);
 
-	dump->u_tsize = (current->mm->end_code - current->mm->start_code) >> PAGE_SHIFT;
-	dump->u_dsize = (current->mm->brk - current->mm->start_data + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	dump->u_tsize = (tsk->mm->end_code - tsk->mm->start_code) >> PAGE_SHIFT;
+	dump->u_dsize = (tsk->mm->brk - tsk->mm->start_data + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	dump->u_ssize = 0;
 
-	for (i = 0; i < NR_DEBUGS; i++)
-		dump->u_debugreg[i] = current->tss.debug[i];  
+	dump->u_debugreg[0] = tsk->tss.debug.bp[0].address;
+	dump->u_debugreg[1] = tsk->tss.debug.bp[1].address;
+	dump->u_debugreg[2] = tsk->tss.debug.bp[0].insn;
+	dump->u_debugreg[3] = tsk->tss.debug.bp[1].insn;
+	dump->u_debugreg[4] = tsk->tss.debug.nsaved;
 
 	if (dump->start_stack < 0x04000000)
 		dump->u_ssize = (0x04000000 - dump->start_stack) >> PAGE_SHIFT;
@@ -310,14 +308,19 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 	pid_t __ret;
 
 	__asm__ __volatile__(
-	"mov	r0, %1		@ kernel_thread sys_clone\n"
+	"orr	r0, %1, %2	@ kernel_thread\n"
 "	mov	r1, #0\n"
 	__syscall(clone)"\n"
-"	mov	%0, r0"
+"	movs	%0, r0
+	bne	1f
+	mov	fp, r0
+	mov	r0, %4
+	mov	lr, pc
+	mov	pc, %3
+	b	sys_exit
+1:	"
         : "=r" (__ret)
-        : "Ir" (flags | CLONE_VM) : "r0", "r1");
-	if (__ret == 0)
-		sys_exit((fn)(arg));
+        : "Ir" (flags), "I" (CLONE_VM), "r" (fn), "r" (arg): "r0", "r1", "lr");
 	return __ret;
 }
 
