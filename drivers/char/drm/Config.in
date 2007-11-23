@@ -5,6 +5,8 @@
 # Direct Rendering Infrastructure (DRI) in XFree86 4.x.
 #
 
+mainmenu_option next_comment
+comment 'Direct Rendering Manager (XFree86 DRI support)'
 tristate 'Direct Rendering Manager (XFree86 DRI support)' CONFIG_DRM
 if [ "$CONFIG_DRM" != "n" ]; then
     tristate '  3dfx Banshee/Voodoo3+' CONFIG_DRM_TDFX
@@ -13,3 +15,4 @@ if [ "$CONFIG_DRM" != "n" ]; then
     dep_tristate '  Intel I810' CONFIG_DRM_I810 $CONFIG_AGP
     dep_tristate '  Matrox g200/g400' CONFIG_DRM_MGA $CONFIG_AGP
 fi
+endmenu

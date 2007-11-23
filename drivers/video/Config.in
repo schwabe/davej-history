@@ -6,23 +6,23 @@ if [ "$CONFIG_FB" = "y" ]; then
   define_bool CONFIG_DUMMY_CONSOLE y
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_PCI" = "y" ]; then
-      tristate 'Permedia2 support (experimental)' CONFIG_FB_PM2
+      tristate '  Permedia2 support (experimental)' CONFIG_FB_PM2
       if [ "$CONFIG_FB_PM2" = "y" ]; then
         if [ "$CONFIG_PCI" = "y" ]; then
-          bool '  enable FIFO disconnect feature' CONFIG_FB_PM2_FIFO_DISCONNECT
-          bool '  generic Permedia2 PCI board support' CONFIG_FB_PM2_PCI
+          bool '    enable FIFO disconnect feature' CONFIG_FB_PM2_FIFO_DISCONNECT
+          bool '    generic Permedia2 PCI board support' CONFIG_FB_PM2_PCI
         fi
         if [ "$CONFIG_AMIGA" = "y" ]; then
-          bool '  Phase5 CVisionPPC/BVisionPPC support' CONFIG_FB_PM2_CVPPC
+          bool '    Phase5 CVisionPPC/BVisionPPC support' CONFIG_FB_PM2_CVPPC
         fi
       fi
     fi
   fi
   if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-    bool 'Acorn VIDC support' CONFIG_FB_ACORN
+    bool '  Acorn VIDC support' CONFIG_FB_ACORN
   fi
   if [ "$CONFIG_ARCH_NETWINDER" = "y" ]; then
-    tristate 'Cyber2000 support' CONFIG_FB_CYBER2000
+    tristate '  Cyber2000 support' CONFIG_FB_CYBER2000
   fi
   if [ "$CONFIG_APOLLO" = "y" ]; then
     define_bool CONFIG_FB_APOLLO y
@@ -31,124 +31,124 @@ if [ "$CONFIG_FB" = "y" ]; then
     define_bool CONFIG_FB_Q40 y
   fi
   if [ "$CONFIG_AMIGA" = "y" ]; then
-    bool 'Amiga native chipset support' CONFIG_FB_AMIGA
+    bool '  Amiga native chipset support' CONFIG_FB_AMIGA
     if [ "$CONFIG_FB_AMIGA" != "n" ]; then
-      bool 'Amiga OCS chipset support' CONFIG_FB_AMIGA_OCS
-      bool 'Amiga ECS chipset support' CONFIG_FB_AMIGA_ECS
-      bool 'Amiga AGA chipset support' CONFIG_FB_AMIGA_AGA
+      bool '  Amiga OCS chipset support' CONFIG_FB_AMIGA_OCS
+      bool '  Amiga ECS chipset support' CONFIG_FB_AMIGA_ECS
+      bool '  Amiga AGA chipset support' CONFIG_FB_AMIGA_AGA
     fi
   fi
   if [ "$CONFIG_ZORRO" = "y" ]; then
-    tristate 'Amiga CyberVision support' CONFIG_FB_CYBER
+    tristate '  Amiga CyberVision support' CONFIG_FB_CYBER
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      bool 'Amiga CyberVision3D support (experimental)' CONFIG_FB_VIRGE
-      tristate 'Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
-      tristate 'Amiga CLgen driver' CONFIG_FB_CLGEN
-      bool 'Amiga FrameMaster II/Rainbow II support (experimental)' CONFIG_FB_FM2
+      bool '  Amiga CyberVision3D support (experimental)' CONFIG_FB_VIRGE
+      tristate '  Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
+      tristate '  Amiga CLgen driver' CONFIG_FB_CLGEN
+      bool '  Amiga FrameMaster II/Rainbow II support (experimental)' CONFIG_FB_FM2
     fi
   fi
   if [ "$CONFIG_ATARI" = "y" ]; then
-    bool 'Atari native chipset support' CONFIG_FB_ATARI
+    bool '  Atari native chipset support' CONFIG_FB_ATARI
   fi
   if [ "$CONFIG_ATARI" = "y" -o "$CONFIG_PCI" = "y" ]; then
-    tristate 'ATI Mach64 display support' CONFIG_FB_ATY
+    tristate '  ATI Mach64 display support' CONFIG_FB_ATY
   fi
   if [ "$CONFIG_PPC" = "y" ]; then
-    bool 'Open Firmware frame buffer device support' CONFIG_FB_OF
+    bool '  Open Firmware frame buffer device support' CONFIG_FB_OF
     if [ "$CONFIG_FB_OF" = "y" ]; then
-      bool 'Apple "control" display support' CONFIG_FB_CONTROL
-      bool 'Apple "platinum" display support' CONFIG_FB_PLATINUM
-      bool 'Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
-      bool 'IMS Twin Turbo display support' CONFIG_FB_IMSTT
-      bool 'Chips 65550 display support' CONFIG_FB_CT65550
-      bool 'S3 Trio display support' CONFIG_FB_S3TRIO
-      bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
+      bool '    Apple "control" display support' CONFIG_FB_CONTROL
+      bool '    Apple "platinum" display support' CONFIG_FB_PLATINUM
+      bool '    Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
+      bool '    IMS Twin Turbo display support' CONFIG_FB_IMSTT
+      bool '    Chips 65550 display support' CONFIG_FB_CT65550
+      bool '    S3 Trio display support' CONFIG_FB_S3TRIO
+      bool '    Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
     fi
   fi
   if [ "$CONFIG_MAC" = "y" ]; then
-    bool 'Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
-#    bool 'Apple DAFB display support' CONFIG_FB_DAFB
+    bool '  Apple "valkyrie" display support' CONFIG_FB_VALKYRIE
+#    bool '  Apple DAFB display support' CONFIG_FB_DAFB
     define_bool CONFIG_FB_MAC y
   fi
   if [ "$CONFIG_HP300" = "y" ]; then
     define_bool CONFIG_FB_HP300 y
   fi
   if [ "$ARCH" = "alpha" ]; then
-    tristate 'TGA framebuffer support' CONFIG_FB_TGA
+    tristate '  TGA framebuffer support' CONFIG_FB_TGA
   fi
   if [ "$ARCH" = "i386" ]; then
-    bool 'VESA VGA graphics console' CONFIG_FB_VESA
-    bool 'VGA 16-color graphics console' CONFIG_FB_VGA16
+    bool '  VESA VGA graphics console' CONFIG_FB_VESA
+    bool '  VGA 16-color graphics console' CONFIG_FB_VGA16
     define_bool CONFIG_VIDEO_SELECT y
   fi
   if [ "$CONFIG_VISWS" = "y" ]; then
-    tristate 'SGI Visual Workstation framebuffer support' CONFIG_FB_SGIVW
+    tristate '  SGI Visual Workstation framebuffer support' CONFIG_FB_SGIVW
     define_bool CONFIG_BUS_I2C y
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     if [ "$CONFIG_PCI" = "y" -a "$ARCH" != "sparc" -a "$ARCH" != "sparc64" ]; then
-      tristate 'Matrox acceleration' CONFIG_FB_MATROX
+      tristate '  Matrox acceleration' CONFIG_FB_MATROX
       if  [ "$CONFIG_FB_MATROX" != "n" ]; then
-        bool '  Millennium I/II support' CONFIG_FB_MATROX_MILLENIUM
-        bool '  Mystique support' CONFIG_FB_MATROX_MYSTIQUE
-        bool '  G100/G200 support' CONFIG_FB_MATROX_G100
-        bool '  Multihead support' CONFIG_FB_MATROX_MULTIHEAD
+        bool '    Millennium I/II support' CONFIG_FB_MATROX_MILLENIUM
+        bool '    Mystique support' CONFIG_FB_MATROX_MYSTIQUE
+        bool '    G100/G200 support' CONFIG_FB_MATROX_G100
+        bool '    Multihead support' CONFIG_FB_MATROX_MULTIHEAD
       fi
-      tristate 'ATI Rage128 display support' CONFIG_FB_ATY128
+      tristate '  ATI Rage128 display support' CONFIG_FB_ATY128
     fi
   fi
   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
     bool 'SBUS and UPA framebuffers' CONFIG_FB_SBUS
     if [ "$CONFIG_FB_SBUS" != "n" ]; then
       if [ "$ARCH" = "sparc64" ]; then
-	bool '  Creator/Creator3D support' CONFIG_FB_CREATOR
+	bool '    Creator/Creator3D support' CONFIG_FB_CREATOR
       fi
-      bool '  CGsix (GX,TurboGX) support' CONFIG_FB_CGSIX
-      bool '  BWtwo support' CONFIG_FB_BWTWO
-      bool '  CGthree support' CONFIG_FB_CGTHREE
+      bool '    CGsix (GX,TurboGX) support' CONFIG_FB_CGSIX
+      bool '    BWtwo support' CONFIG_FB_BWTWO
+      bool '    CGthree support' CONFIG_FB_CGTHREE
       if [ "$ARCH" = "sparc" ]; then
-        bool '  TCX (SS4/SS5 only) support' CONFIG_FB_TCX
-	bool '  CGfourteen (SX) support' CONFIG_FB_CGFOURTEEN
+        bool '    TCX (SS4/SS5 only) support' CONFIG_FB_TCX
+	bool '    CGfourteen (SX) support' CONFIG_FB_CGFOURTEEN
       fi
-      bool '  Leo (ZX) support' CONFIG_FB_LEO
+      bool '    Leo (ZX) support' CONFIG_FB_LEO
     fi
   fi
   if [ "$ARCH" = "sparc" ]; then
     if [ "$CONFIG_PCI" = "y" ]; then
-      bool 'PCI framebuffers' CONFIG_FB_PCI
+      bool '  PCI framebuffers' CONFIG_FB_PCI
       if [ "$CONFIG_FB_PCI" != "n" ]; then
-        bool '  IGA 168x display support' CONFIG_FB_IGA
+        bool '    IGA 168x display support' CONFIG_FB_IGA
       fi
     fi
   fi
   if [ "$ARCH" = "sparc64" ]; then
     if [ "$CONFIG_PCI" != "n" ]; then
-      bool 'PCI framebuffers' CONFIG_FB_PCI
+      bool '  PCI framebuffers' CONFIG_FB_PCI
       if [ "$CONFIG_FB_PCI" != "n" ]; then
-        bool '  ATI Mach64 display support' CONFIG_FB_ATY
+        bool '    ATI Mach64 display support' CONFIG_FB_ATY
       fi
     fi
   fi
-  tristate 'Virtual Frame Buffer support (ONLY FOR TESTING!)' CONFIG_FB_VIRTUAL
+  tristate '  Virtual Frame Buffer support (ONLY FOR TESTING!)' CONFIG_FB_VIRTUAL
 
-  bool 'Advanced low level driver options' CONFIG_FBCON_ADVANCED
+  bool '  Advanced low level driver options' CONFIG_FBCON_ADVANCED
   if [ "$CONFIG_FBCON_ADVANCED" = "y" ]; then
-    tristate 'Monochrome support' CONFIG_FBCON_MFB
-    tristate '2 bpp packed pixels support' CONFIG_FBCON_CFB2
-    tristate '4 bpp packed pixels support' CONFIG_FBCON_CFB4
-    tristate '8 bpp packed pixels support' CONFIG_FBCON_CFB8
-    tristate '16 bpp packed pixels support' CONFIG_FBCON_CFB16
-    tristate '24 bpp packed pixels support' CONFIG_FBCON_CFB24
-    tristate '32 bpp packed pixels support' CONFIG_FBCON_CFB32
-    tristate 'Amiga bitplanes support' CONFIG_FBCON_AFB
-    tristate 'Amiga interleaved bitplanes support' CONFIG_FBCON_ILBM
-    tristate 'Atari interleaved bitplanes (2 planes) support' CONFIG_FBCON_IPLAN2P2
-    tristate 'Atari interleaved bitplanes (4 planes) support' CONFIG_FBCON_IPLAN2P4
-    tristate 'Atari interleaved bitplanes (8 planes) support' CONFIG_FBCON_IPLAN2P8
-#   tristate 'Atari interleaved bitplanes (16 planes) support' CONFIG_FBCON_IPLAN2P16
-    tristate 'Mac variable bpp packed pixels support' CONFIG_FBCON_MAC
-    bool 'VGA 16-color planar support' CONFIG_FBCON_VGA_PLANES
-    tristate 'VGA characters/attributes support' CONFIG_FBCON_VGA
+    tristate '    Monochrome support' CONFIG_FBCON_MFB
+    tristate '    2 bpp packed pixels support' CONFIG_FBCON_CFB2
+    tristate '    4 bpp packed pixels support' CONFIG_FBCON_CFB4
+    tristate '    8 bpp packed pixels support' CONFIG_FBCON_CFB8
+    tristate '    16 bpp packed pixels support' CONFIG_FBCON_CFB16
+    tristate '    24 bpp packed pixels support' CONFIG_FBCON_CFB24
+    tristate '    32 bpp packed pixels support' CONFIG_FBCON_CFB32
+    tristate '    Amiga bitplanes support' CONFIG_FBCON_AFB
+    tristate '    Amiga interleaved bitplanes support' CONFIG_FBCON_ILBM
+    tristate '    Atari interleaved bitplanes (2 planes) support' CONFIG_FBCON_IPLAN2P2
+    tristate '    Atari interleaved bitplanes (4 planes) support' CONFIG_FBCON_IPLAN2P4
+    tristate '    Atari interleaved bitplanes (8 planes) support' CONFIG_FBCON_IPLAN2P8
+#   tristate '    Atari interleaved bitplanes (16 planes) support' CONFIG_FBCON_IPLAN2P16
+    tristate '    Mac variable bpp packed pixels support' CONFIG_FBCON_MAC
+        bool '    VGA 16-color planar support' CONFIG_FBCON_VGA_PLANES
+    tristate '    VGA characters/attributes support' CONFIG_FBCON_VGA
   else
     # Guess what we need
     if [ "$CONFIG_FB_ACORN" = "y" -o "$CONFIG_FB_AMIGA" = "y" -o \
@@ -304,34 +304,34 @@ if [ "$CONFIG_FB" = "y" ]; then
       fi
     fi
   fi
-  bool 'Support only 8 pixels wide fonts' CONFIG_FBCON_FONTWIDTH8_ONLY
+  bool '  Support only 8 pixels wide fonts' CONFIG_FBCON_FONTWIDTH8_ONLY
   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
-    bool 'Sparc console 8x16 font' CONFIG_FONT_SUN8x16
+    bool '  Sparc console 8x16 font' CONFIG_FONT_SUN8x16
     if [ "$CONFIG_FBCON_FONTWIDTH8_ONLY" = "n" ]; then
-      bool 'Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
+      bool '  Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
     fi
-    bool 'Select other fonts' CONFIG_FBCON_FONTS
+    bool '  Select other fonts' CONFIG_FBCON_FONTS
     if [ "$CONFIG_FBCON_FONTS" = "y" ]; then
-      bool '  VGA 8x8 font' CONFIG_FONT_8x8
-      bool '  VGA 8x16 font' CONFIG_FONT_8x16
+      bool '    VGA 8x8 font' CONFIG_FONT_8x8
+      bool '    VGA 8x16 font' CONFIG_FONT_8x16
       if [ "$CONFIG_FBCON_FONTWIDTH8_ONLY" = "n" ]; then
-        bool '  Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
+        bool '    Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
       fi
-      bool '  Pearl (old m68k) console 8x8 font' CONFIG_FONT_PEARL_8x8
-      bool '  Acorn console 8x8 font' CONFIG_FONT_ACORN_8x8
+      bool '    Pearl (old m68k) console 8x8 font' CONFIG_FONT_PEARL_8x8
+      bool '    Acorn console 8x8 font' CONFIG_FONT_ACORN_8x8
     fi
   else
-    bool 'Select compiled-in fonts' CONFIG_FBCON_FONTS
+    bool '  Select compiled-in fonts' CONFIG_FBCON_FONTS
     if [ "$CONFIG_FBCON_FONTS" = "y" ]; then
-      bool '  VGA 8x8 font' CONFIG_FONT_8x8
-      bool '  VGA 8x16 font' CONFIG_FONT_8x16
-      bool '  Sparc console 8x16 font' CONFIG_FONT_SUN8x16
+      bool '    VGA 8x8 font' CONFIG_FONT_8x8
+      bool '    VGA 8x16 font' CONFIG_FONT_8x16
+      bool '    Sparc console 8x16 font' CONFIG_FONT_SUN8x16
       if [ "$CONFIG_FBCON_FONTWIDTH8_ONLY" = "n" ]; then
-        bool '  Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
-        bool '  Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
+        bool '    Sparc console 12x22 font (not supported by all drivers)' CONFIG_FONT_SUN12x22
+        bool '    Mac console 6x11 font (not supported by all drivers)' CONFIG_FONT_6x11
       fi
-      bool '  Pearl (old m68k) console 8x8 font' CONFIG_FONT_PEARL_8x8
-      bool '  Acorn console 8x8 font' CONFIG_FONT_ACORN_8x8
+      bool '    Pearl (old m68k) console 8x8 font' CONFIG_FONT_PEARL_8x8
+      bool '    Acorn console 8x8 font' CONFIG_FONT_ACORN_8x8
     else
       define_bool CONFIG_FONT_8x8 y
       define_bool CONFIG_FONT_8x16 y

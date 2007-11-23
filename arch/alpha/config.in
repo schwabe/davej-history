@@ -202,21 +202,26 @@ bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
-tristate 'Kernel support for a.out (ECOFF) binaries' CONFIG_BINFMT_AOUT
+
+mainmenu_option next_comment
+comment 'Executable file formats'
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_BINFMT_ELF" != "n" ]; then
-  bool '   ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
+  bool '  ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
 fi
+tristate 'Kernel support for a.out (ECOFF) binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 fi
 tristate 'Kernel support for Linux/Intel ELF binaries' CONFIG_BINFMT_EM86
+endmenu
+
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
   dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
   if [ "$CONFIG_PARPORT_PC" != "n" ]; then
-    bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
+    bool '    Support foreign hardware' CONFIG_PARPORT_OTHER
   fi
 fi
 endmenu
@@ -229,15 +234,7 @@ if [ "$CONFIG_NET" = "y" ]; then
   source net/Config.in
 fi
 
-mainmenu_option next_comment
-comment 'SCSI support'
-
-tristate 'SCSI support' CONFIG_SCSI
-
-if [ "$CONFIG_SCSI" != "n" ]; then
-  source drivers/scsi/Config.in
-fi
-endmenu
+source drivers/scsi/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
   mainmenu_option next_comment
@@ -273,7 +270,6 @@ fi
 endmenu
 
 source drivers/char/Config.in
-source drivers/usb/Config.in
 source fs/Config.in
 
 if [ "$CONFIG_VT" = "y" ]; then
@@ -288,14 +284,9 @@ if [ "$CONFIG_VT" = "y" ]; then
   endmenu
 fi
 
-mainmenu_option next_comment
-comment 'Sound'
+source drivers/sound/Config.in
 
-tristate 'Sound card support' CONFIG_SOUND
-if [ "$CONFIG_SOUND" != "n" ]; then
-  source drivers/sound/Config.in
-fi
-endmenu
+source drivers/usb/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

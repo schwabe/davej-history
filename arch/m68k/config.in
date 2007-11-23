@@ -82,12 +82,16 @@ bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
-tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
+
+mainmenu_option next_comment
+comment 'Executable file formats'
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_BINFMT_ELF" != "n" ]; then
-  bool '   ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
+  bool '  ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
 fi
+tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+endmenu
 
 if [ "$CONFIG_AMIGA" = "y" ]; then
   bool 'Amiga Zorro (AutoConfig) bus support' CONFIG_ZORRO
@@ -442,6 +446,8 @@ fi
 
 endmenu
 
+source fs/Config.in
+
 mainmenu_option next_comment
 comment 'Sound support'
 
@@ -450,8 +456,6 @@ if [ "$CONFIG_SOUND" != "n" ]; then
   dep_tristate 'Amiga or Atari DMA sound support' CONFIG_DMASOUND $CONFIG_SOUND
 fi
 endmenu
-
-source fs/Config.in
 
 if [ "$CONFIG_VME" = "n" ]; then
   mainmenu_option next_comment

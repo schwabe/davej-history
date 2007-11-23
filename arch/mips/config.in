@@ -10,6 +10,15 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+  bool 'Kernel module loader' CONFIG_KMOD
+fi
+endmenu
+
+mainmenu_option next_comment
 comment 'Machine selection'
 bool 'Support for Acer PICA 1 chipset' CONFIG_ACER_PICA_61
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -77,19 +86,25 @@ else
   bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
 fi
 
-define_bool CONFIG_ELF_KERNEL y
 
 if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
   define_bool CONFIG_BINFMT_IRIX y
   define_bool CONFIG_FORWARD_KEYBOARD y
 fi
-define_bool CONFIG_BINFMT_AOUT n
-define_bool CONFIG_BINFMT_ELF y
-bool 'ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
+
+mainmenu_option next_comment
+comment 'Executable file formats'
+define_bool CONFIG_ELF_KERNEL y
+tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+if [ "$CONFIG_BINFMT_ELF" != "n" ]; then
+  bool '  ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
+fi
+tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 fi
+endmenu
 
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
@@ -101,19 +116,9 @@ if [ "$CONFIG_SGI" != "y" -a "$CONFIG_DECSTATION" != "y" -a "$CONFIG_BAGET_MIPS"
 fi
 endmenu
 
-mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Enable loadable module support' CONFIG_MODULES
-if [ "$CONFIG_MODULES" = "y" ]; then
-  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-  bool 'Kernel module loader' CONFIG_KMOD
-fi
-
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'Support for frame buffer devices (EXPERIMENTAL)' CONFIG_FB
 fi
-
-endmenu
 
 if [ "$CONFIG_DECSTATION" = "y" ]; then
 	mainmenu_option next_comment
@@ -258,9 +263,9 @@ else
   endmenu
 fi
 
-# source drivers/usb/Config.in
-
 source fs/Config.in
+
+# source drivers/usb/Config.in
 
 if [ "$CONFIG_VT" = "y" ]; then
   mainmenu_option next_comment
@@ -281,14 +286,7 @@ if [ "$CONFIG_VT" = "y" ]; then
 fi
 
 if [ "$CONFIG_DECSTATION" != "y" ]; then
-  mainmenu_option next_comment
-  comment 'Sound'
-
-  tristate 'Sound card support' CONFIG_SOUND
-  if [ "$CONFIG_SOUND" != "n" ]; then
   source drivers/sound/Config.in
-  fi
-  endmenu
 fi
 
 if [ "$CONFIG_SGI" = "y" ]; then

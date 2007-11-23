@@ -67,17 +67,22 @@ bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 
 # only elf supported, a.out is not -- Cort
-define_bool CONFIG_BINFMT_ELF y
+mainmenu_option next_comment
+comment 'Executable file formats'
 define_bool CONFIG_KERNEL_ELF y
-bool 'ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
+tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+if [ "$CONFIG_BINFMT_ELF" != "n" ]; then
+  bool '  ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
+fi
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
+endmenu
 
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
-  dep_tristate '   PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
+  dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
   if [ "$CONFIG_PARPORT_PC" != "n" ]; then
-    bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
+    bool '    Support foreign hardware' CONFIG_PARPORT_OTHER
   fi
 fi
 
@@ -126,13 +131,7 @@ if [ "$CONFIG_NET" = "y" ]; then
   source net/Config.in
 fi
 
-mainmenu_option next_comment
-comment 'SCSI support'
-tristate 'SCSI support' CONFIG_SCSI
-if [ "$CONFIG_SCSI" != "n" ]; then
-  source drivers/scsi/Config.in
-fi
-endmenu
+source drivers/scsi/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
   mainmenu_option next_comment
@@ -175,6 +174,9 @@ source drivers/video/Config.in
 endmenu
 
 source drivers/char/Config.in
+
+source fs/Config.in
+
 source drivers/usb/Config.in
 
 mainmenu_option next_comment
@@ -208,8 +210,6 @@ if [ "$CONFIG_SOUND" != "n" ]; then
 fi
 
 endmenu
-
-source fs/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

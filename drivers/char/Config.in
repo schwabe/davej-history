@@ -12,50 +12,58 @@ tristate 'Standard/generic (dumb) serial support' CONFIG_SERIAL
 if [ "$CONFIG_SERIAL" = "y" ]; then
    bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
 fi
+
+mainmenu_option next_comment
+comment 'Extended dumb serial driver options'
 bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED
 if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
-   bool '   Support more than 4 serial ports' CONFIG_SERIAL_MANY_PORTS
-   bool '   Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ
-   bool '   Autodetect IRQ on standard ports (unsafe)' CONFIG_SERIAL_DETECT_IRQ
-   bool '   Support special multiport boards' CONFIG_SERIAL_MULTIPORT
-   bool '   Support the Bell Technologies HUB6 card' CONFIG_HUB6
+   bool '  Support more than 4 serial ports' CONFIG_SERIAL_MANY_PORTS
+   bool '  Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ
+   bool '  Autodetect IRQ on standard ports (unsafe)' CONFIG_SERIAL_DETECT_IRQ
+   bool '  Support special multiport boards' CONFIG_SERIAL_MULTIPORT
+   bool '  Support the Bell Technologies HUB6 card' CONFIG_HUB6
 fi
+endmenu
+
+mainmenu_option next_comment
+comment 'Non-standard serial port support'
 bool 'Non-standard serial port support' CONFIG_SERIAL_NONSTANDARD
 if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
-   tristate 'Computone IntelliPort Plus serial support' CONFIG_COMPUTONE
-   tristate 'Comtrol Rocketport support' CONFIG_ROCKETPORT
-   tristate 'Cyclades async mux support' CONFIG_CYCLADES
+   tristate '  Computone IntelliPort Plus serial support' CONFIG_COMPUTONE
+   tristate '  Comtrol Rocketport support' CONFIG_ROCKETPORT
+   tristate '  Cyclades async mux support' CONFIG_CYCLADES
    if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_CYCLADES" != "n" ]; then
-      bool '  Cyclades-Z interrupt mode operation (EXPERIMENTAL)' CONFIG_CYZ_INTR
+      bool '    Cyclades-Z interrupt mode operation (EXPERIMENTAL)' CONFIG_CYZ_INTR
    fi
-   tristate 'Digiboard Intelligent Async Support' CONFIG_DIGIEPCA
+   tristate '  Digiboard Intelligent Async Support' CONFIG_DIGIEPCA
    if [ "$CONFIG_DIGIEPCA" = "n" ]; then
-      tristate 'Digiboard PC/Xx Support' CONFIG_DIGI
+      tristate '  Digiboard PC/Xx Support' CONFIG_DIGI
    fi
-   tristate 'Hayes ESP serial port support' CONFIG_ESPSERIAL
-   tristate 'Moxa Intellio support' CONFIG_MOXA_INTELLIO
-   tristate 'Moxa SmartIO support' CONFIG_MOXA_SMARTIO
+   tristate '  Hayes ESP serial port support' CONFIG_ESPSERIAL
+   tristate '  Moxa Intellio support' CONFIG_MOXA_INTELLIO
+   tristate '  Moxa SmartIO support' CONFIG_MOXA_SMARTIO
    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-	dep_tristate 'Multi-Tech multiport card support' CONFIG_ISI m
+	dep_tristate '  Multi-Tech multiport card support' CONFIG_ISI m
    fi
-   tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
-   tristate 'Specialix IO8+ card support' CONFIG_SPECIALIX
+   tristate '  SDL RISCom/8 card support' CONFIG_RISCOM8
+   tristate '  Specialix IO8+ card support' CONFIG_SPECIALIX
    if [ "$CONFIG_SPECIALIX" != "n" ]; then
-     bool 'Specialix DTR/RTS pin is RTS' CONFIG_SPECIALIX_RTSCTS
+     bool '    Specialix DTR/RTS pin is RTS' CONFIG_SPECIALIX_RTSCTS
    fi 
-   tristate 'Specialix SX (and SI) card support' CONFIG_SX
-   tristate 'Specialix RIO system support' CONFIG_RIO
+   tristate '  Specialix SX (and SI) card support' CONFIG_SX
+   tristate '  Specialix RIO system support' CONFIG_RIO
    if [ "$CONFIG_RIO" != "n" ]; then
-     bool 'Support really old RIO/PCI cards' CONFIG_RIO_OLDPCI
+     bool '    Support really old RIO/PCI cards' CONFIG_RIO_OLDPCI
    fi
-   bool 'Stallion multiport serial support' CONFIG_STALDRV
+   bool '  Stallion multiport serial support' CONFIG_STALDRV
    if [ "$CONFIG_STALDRV" = "y" ]; then
-     tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION
-     tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
+     tristate '    Stallion EasyIO or EC8/32 support' CONFIG_STALLION
+     tristate '    Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
    fi
-   tristate 'Microgate SyncLink card support' CONFIG_SYNCLINK
-   tristate 'HDLC line discipline support' CONFIG_N_HDLC
+   tristate '  Microgate SyncLink card support' CONFIG_SYNCLINK
+   tristate '  HDLC line discipline support' CONFIG_N_HDLC
 fi
+endmenu
 bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
 	int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
@@ -66,19 +74,19 @@ if [ "$CONFIG_PARPORT" = "y" -o "$CONFIG_PARPORT" = "m" ]; then
     bool '  Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
   fi
 fi
-     
+
+mainmenu_option next_comment
+comment 'Mice'
 bool 'Mouse Support (not serial mice)' CONFIG_MOUSE
 if [ "$CONFIG_MOUSE" = "y" ]; then
-	mainmenu_option next_comment
-	comment 'Mice'
-	tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE
-	tristate 'Logitech busmouse support' CONFIG_BUSMOUSE
-	tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE
-	bool 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
-	tristate 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
-	tristate 'PC110 digitizer pad support' CONFIG_PC110_PAD
-	endmenu
+   tristate '  ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE
+   tristate '  Logitech busmouse support' CONFIG_BUSMOUSE
+   tristate '  Microsoft busmouse support' CONFIG_MS_BUSMOUSE
+   bool '  PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
+   tristate '  C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE
+   tristate '  PC110 digitizer pad support' CONFIG_PC110_PAD
 fi
+endmenu
 
 source drivers/char/joystick/Config.in
 
@@ -94,29 +102,29 @@ if [ "$CONFIG_QIC02_TAPE" != "n" ]; then
   fi
 fi
 
+mainmenu_option next_comment
+comment 'Watchdog Cards'
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
-  mainmenu_option next_comment
-  comment 'Watchdog Cards'
-  bool '   Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
-  tristate '   Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
-  tristate '   Advantech SBC Watchdog Timer' CONFIG_ADVANTECH_WDT
-  tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
-  tristate '   Intel i810 TCO timer / Watchdog' CONFIG_I810_TCO
-  tristate '   Mixcom Watchdog' CONFIG_MIXCOMWD 
-  tristate '   SBC-60XX Watchdog Timer' CONFIG_60XX_WDT
-  tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
-  tristate '   WDT ISA Watchdog timer' CONFIG_WDT
+  bool '  Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
+  tristate '  Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
+  tristate '  Advantech SBC Watchdog Timer' CONFIG_ADVANTECH_WDT
+  tristate '  Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
+  tristate '  Intel i810 TCO timer / Watchdog' CONFIG_I810_TCO
+  tristate '  Mixcom Watchdog' CONFIG_MIXCOMWD 
+  tristate '  SBC-60XX Watchdog Timer' CONFIG_60XX_WDT
+  tristate '  Software Watchdog' CONFIG_SOFT_WATCHDOG
+  tristate '  WDT ISA Watchdog timer' CONFIG_WDT
   if [ "$CONFIG_WDT" != "n" ]; then
-     bool '       WDT501 features' CONFIG_WDT_501
+     bool '    WDT501 features' CONFIG_WDT_501
      if [ "$CONFIG_WDT_501" = "y" ]; then
-         bool '       Fan Tachometer' CONFIG_WDT_501_FAN
+         bool '      Fan Tachometer' CONFIG_WDT_501_FAN
      fi
   fi
-  tristate '   WDT PCI Watchdog timer' CONFIG_WDTPCI
-  tristate '   ZF MachZ Watchdog' CONFIG_MACHZ_WDT
-  endmenu
+  tristate '  WDT PCI Watchdog timer' CONFIG_WDTPCI
+  tristate '  ZF MachZ Watchdog' CONFIG_MACHZ_WDT
 fi
+endmenu
 
 
 tristate '/dev/nvram support' CONFIG_NVRAM
@@ -129,6 +137,8 @@ if [ "$CONFIG_PCI" = "y" ]; then
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   mainmenu_option next_comment
+   comment 'AGP support (/dev/agpgart)'
    tristate '/dev/agpgart (AGP Support) (EXPERIMENTAL)' CONFIG_AGP
    if [ "$CONFIG_AGP" != "n" ]; then
       bool '   Intel 440LX/BX/GX and I815/820 support' CONFIG_AGP_INTEL
@@ -139,6 +149,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool '   ALI M1541 support' CONFIG_AGP_ALI
       bool '   Serverworks LE/HE support' CONFIG_AGP_SWORKS
    fi
+   endmenu
    source drivers/char/drm/Config.in
 fi
       
@@ -147,80 +158,80 @@ comment 'Video For Linux'
 
 tristate 'Video For Linux' CONFIG_VIDEO_DEV
 if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
-  dep_tristate 'AIMSlab RadioTrack (aka RadioReveal) support' CONFIG_RADIO_RTRACK $CONFIG_VIDEO_DEV
+  dep_tristate '  AIMSlab RadioTrack (aka RadioReveal) support' CONFIG_RADIO_RTRACK $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_RTRACK" = "y" ]; then
-    hex '  RadioTrack i/o port (0x20f or 0x30f)' CONFIG_RADIO_RTRACK_PORT 20f
+    hex '    RadioTrack i/o port (0x20f or 0x30f)' CONFIG_RADIO_RTRACK_PORT 20f
   fi
-  dep_tristate 'AIMSlab RadioTrack II support' CONFIG_RADIO_RTRACK2 $CONFIG_VIDEO_DEV
+  dep_tristate '  AIMSlab RadioTrack II support' CONFIG_RADIO_RTRACK2 $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_RTRACK2" = "y" ]; then
-    hex '  RadioTrack II i/o port (0x20c or 0x30c)' CONFIG_RADIO_RTRACK2_PORT 30c
+    hex '    RadioTrack II i/o port (0x20c or 0x30c)' CONFIG_RADIO_RTRACK2_PORT 30c
   fi
-  dep_tristate 'Aztech/Packard Bell Radio' CONFIG_RADIO_AZTECH $CONFIG_VIDEO_DEV
+  dep_tristate '  Aztech/Packard Bell Radio' CONFIG_RADIO_AZTECH $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_AZTECH" = "y" ]; then
-    hex '  Aztech/Packard Bell I/O port (0x350 or 0x358)' CONFIG_RADIO_AZTECH_PORT 350
+    hex '    Aztech/Packard Bell I/O port (0x350 or 0x358)' CONFIG_RADIO_AZTECH_PORT 350
   fi
-  dep_tristate 'ADS Cadet AM/FM Tuner' CONFIG_RADIO_CADET $CONFIG_VIDEO_DEV
-  dep_tristate 'GemTek Radio Card support' CONFIG_RADIO_GEMTEK $CONFIG_VIDEO_DEV
+  dep_tristate '  ADS Cadet AM/FM Tuner' CONFIG_RADIO_CADET $CONFIG_VIDEO_DEV
+  dep_tristate '  GemTek Radio Card support' CONFIG_RADIO_GEMTEK $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_GEMTEK" = "y" ]; then
-    hex '  GemTek i/o port (0x20c, 0x24c, 0x248, 0x30c, or 0x34c)' CONFIG_RADIO_GEMTEK_PORT 34c
+    hex '    GemTek i/o port (0x20c, 0x24c, 0x248, 0x30c, or 0x34c)' CONFIG_RADIO_GEMTEK_PORT 34c
   fi
-  dep_tristate 'Maestro on board radio' CONFIG_RADIO_MAESTRO $CONFIG_VIDEO_DEV
-  dep_tristate 'Miro PCM20 Radio' CONFIG_RADIO_MIROPCM20 $CONFIG_VIDEO_DEV
-  dep_tristate 'Trust FM Radio' CONFIG_RADIO_TRUST $CONFIG_VIDEO_DEV
+  dep_tristate '  Maestro on board radio' CONFIG_RADIO_MAESTRO $CONFIG_VIDEO_DEV
+  dep_tristate '  Miro PCM20 Radio' CONFIG_RADIO_MIROPCM20 $CONFIG_VIDEO_DEV
+  dep_tristate '  Trust FM Radio' CONFIG_RADIO_TRUST $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_TRUST" = "y" ]; then
-    hex '  Trust FM Radio I/O port (0x350 or 0x358)' CONFIG_RADIO_TRUST_PORT 350
+    hex '    Trust FM Radio I/O port (0x350 or 0x358)' CONFIG_RADIO_TRUST_PORT 350
   fi
   if [ "$CONFIG_PCI" = "y" ]; then
-    dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
+    dep_tristate '  BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
     if [ "$CONFIG_VIDEO_BT848" != "n" ]; then
-      comment '  MSP3400 sound decoder support is in the section "additional'
-      comment '  low level sound drivers". You may need to enable it there.'
+      comment '    MSP3400 sound decoder support is in the section "additional'
+      comment '    low level sound drivers". You may need to enable it there.'
     fi
   fi
   if [ "$CONFIG_PARPORT" = "y" -o "$CONFIG_PARPORT" = "m" ]; then
-    dep_tristate 'Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
-    dep_tristate 'Colour QuickCam Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
+    dep_tristate '  Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
+    dep_tristate '  Colour QuickCam Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    dep_tristate 'CPiA Video For Linux' CONFIG_VIDEO_CPIA $CONFIG_VIDEO_DEV
+    dep_tristate '  CPiA Video For Linux' CONFIG_VIDEO_CPIA $CONFIG_VIDEO_DEV
     if [ "$CONFIG_VIDEO_CPIA" != "n" ]; then
-      dep_tristate '  CPiA Parallel Port Lowlevel Support' CONFIG_VIDEO_CPIA_PP $CONFIG_VIDEO_CPIA $CONFIG_PARPORT
+      dep_tristate '    CPiA Parallel Port Lowlevel Support' CONFIG_VIDEO_CPIA_PP $CONFIG_VIDEO_CPIA $CONFIG_PARPORT
       if [ "$CONFIG_USB" = "y" -o "$CONFIG_USB" = "m" ]; then
-        dep_tristate '  CPiA USB Lowlevel Support' CONFIG_VIDEO_CPIA_USB $CONFIG_VIDEO_CPIA $CONFIG_USB
+        dep_tristate '    CPiA USB Lowlevel Support' CONFIG_VIDEO_CPIA_USB $CONFIG_VIDEO_CPIA $CONFIG_USB
       fi
     fi
   fi
-  dep_tristate 'Mediavision Pro Movie Studio Video For Linux' CONFIG_VIDEO_PMS $CONFIG_VIDEO_DEV
+  dep_tristate '  Mediavision Pro Movie Studio Video For Linux' CONFIG_VIDEO_PMS $CONFIG_VIDEO_DEV
   if [ "$CONFIG_POWERMAC" = "y" ]; then
-    dep_tristate 'PlanB Video-In on PowerMac' CONFIG_VIDEO_PLANB $CONFIG_VIDEO_DEV
+    dep_tristate '  PlanB Video-In on PowerMac' CONFIG_VIDEO_PLANB $CONFIG_VIDEO_DEV
   fi
-  dep_tristate 'SAA5249 Teletext processor' CONFIG_VIDEO_SAA5249 $CONFIG_VIDEO_DEV
-  dep_tristate 'SF16FMI Radio' CONFIG_RADIO_SF16FMI $CONFIG_VIDEO_DEV
+  dep_tristate '  SAA5249 Teletext processor' CONFIG_VIDEO_SAA5249 $CONFIG_VIDEO_DEV
+  dep_tristate '  SF16FMI Radio' CONFIG_RADIO_SF16FMI $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_SF16FMI" = "y" ]; then
-    hex '  SF16FMI I/O port (0x284 or 0x384)' CONFIG_RADIO_SF16FMI_PORT 284
+    hex '    SF16FMI I/O port (0x284 or 0x384)' CONFIG_RADIO_SF16FMI_PORT 284
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     if [ "$CONFIG_SGI" = "y" ]; then
-      dep_tristate 'SGI Vino Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_VINO $CONFIG_VIDEO_DEV
+      dep_tristate '  SGI Vino Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_VINO $CONFIG_VIDEO_DEV
     fi
   fi
-  dep_tristate 'Typhoon Radio (a.k.a. EcoRadio)' CONFIG_RADIO_TYPHOON $CONFIG_VIDEO_DEV
+  dep_tristate '  Typhoon Radio (a.k.a. EcoRadio)' CONFIG_RADIO_TYPHOON $CONFIG_VIDEO_DEV
   if [ "$CONFIG_PROC_FS" = "y" ]; then
       if [ "$CONFIG_RADIO_TYPHOON" != "n" ]; then
-	bool '  Support for /proc/radio-typhoon' CONFIG_RADIO_TYPHOON_PROC_FS
+	bool '    Support for /proc/radio-typhoon' CONFIG_RADIO_TYPHOON_PROC_FS
       fi
   fi
   if [ "$CONFIG_RADIO_TYPHOON" = "y" ]; then
-    hex '  Typhoon I/O port (0x316 or 0x336)' CONFIG_RADIO_TYPHOON_PORT 316
-    int '  Typhoon frequency set when muting the device (kHz)' CONFIG_RADIO_TYPHOON_MUTEFREQ 87500
+    hex '    Typhoon I/O port (0x316 or 0x336)' CONFIG_RADIO_TYPHOON_PORT 316
+    int '    Typhoon frequency set when muting the device (kHz)' CONFIG_RADIO_TYPHOON_MUTEFREQ 87500
   fi
-  dep_tristate 'Zoltrix Radio' CONFIG_RADIO_ZOLTRIX $CONFIG_VIDEO_DEV
+  dep_tristate '  Zoltrix Radio' CONFIG_RADIO_ZOLTRIX $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_ZOLTRIX" = "y" ]; then
-    hex '  ZOLTRIX I/O port (0x20c or 0x30c)' CONFIG_RADIO_ZOLTRIX_PORT 20c
+    hex '    ZOLTRIX I/O port (0x20c or 0x30c)' CONFIG_RADIO_ZOLTRIX_PORT 20c
   fi
-  dep_tristate 'Zoran ZR36057/36060 support' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV
-  dep_tristate ' Include support for Iomega Buz' CONFIG_VIDEO_BUZ $CONFIG_VIDEO_ZORAN
-  #dep_tristate '  Include support for LML33' CONFIG_VIDEO_LML33 $CONFIG_VIDEO_ZORAN
+  dep_tristate '  Zoran ZR36057/36060 support' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV
+  dep_tristate '    Include support for Iomega Buz' CONFIG_VIDEO_BUZ $CONFIG_VIDEO_ZORAN
+  #dep_tristate '    Include support for LML33' CONFIG_VIDEO_LML33 $CONFIG_VIDEO_ZORAN
 fi
 
 endmenu

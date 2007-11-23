@@ -12,6 +12,15 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 endmenu
 
 mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+  bool 'Kernel module loader' CONFIG_KMOD
+fi
+endmenu
+
+mainmenu_option next_comment
 comment 'Processor type and features'
 choice 'Processor family' \
 	"386				CONFIG_M386	\
@@ -39,26 +48,17 @@ tristate '/dev/cpu/microcode - Intel IA32 CPU microcode support' CONFIG_MICROCOD
 tristate '/dev/cpu/*/msr - Model-specific register support' CONFIG_X86_MSR
 tristate '/dev/cpu/*/cpuid - CPU information support' CONFIG_X86_CPUID
 
-choice 'Maximum Physical Memory' \
-	"1GB		CONFIG_1GB \
-	 2GB		CONFIG_2GB" 1GB
-
 bool 'Math emulation' CONFIG_MATH_EMULATION
 bool 'MTRR (Memory Type Range Register) support' CONFIG_MTRR
 bool 'Symmetric multi-processing support' CONFIG_SMP
 endmenu
 
 mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Enable loadable module support' CONFIG_MODULES
-if [ "$CONFIG_MODULES" = "y" ]; then
-  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-  bool 'Kernel module loader' CONFIG_KMOD
-fi
-endmenu
-
-mainmenu_option next_comment
 comment 'General setup'
+
+choice 'Maximum Physical Memory' \
+	"1GB		CONFIG_1GB \
+	 2GB		CONFIG_2GB" 1GB
 
 bool 'Networking support' CONFIG_NET
 bool 'PCI support' CONFIG_PCI
@@ -94,24 +94,22 @@ fi
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
-tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
+
+mainmenu_option next_comment
+comment 'Executable file formats'
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_BINFMT_ELF" != "n" ]; then
-  bool '   ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
+  bool '  ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
 fi
+tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 fi
+endmenu
 
-tristate 'Parallel port support' CONFIG_PARPORT
-if [ "$CONFIG_PARPORT" != "n" ]; then
-  dep_tristate '   PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
-  if [ "$CONFIG_PARPORT_PC" != "n" ]; then
-    bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
-  fi
-fi
-
+mainmenu_option next_comment
+comment 'Power Management support'
 bool 'Advanced Power Management BIOS support' CONFIG_APM
 if [ "$CONFIG_APM" != "n" ]; then
   bool '   Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
@@ -122,8 +120,21 @@ if [ "$CONFIG_APM" != "n" ]; then
   bool '   Allow interrupts during APM BIOS calls' CONFIG_APM_ALLOW_INTS
   bool '   Use real mode APM BIOS call to power off' CONFIG_APM_REAL_MODE_POWER_OFF
 fi
+endmenu
+
 tristate 'Toshiba Laptop support' CONFIG_TOSHIBA
 
+endmenu
+
+mainmenu_option next_comment
+comment 'Parallel port support'
+tristate 'Parallel port support' CONFIG_PARPORT
+if [ "$CONFIG_PARPORT" != "n" ]; then
+  dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
+  if [ "$CONFIG_PARPORT_PC" != "n" ]; then
+    bool '    Support foreign hardware' CONFIG_PARPORT_OTHER
+  fi
+fi
 endmenu
 
 source drivers/pnp/Config.in
@@ -147,15 +158,8 @@ fi
 
 source drivers/telephony/Config.in
 
-mainmenu_option next_comment
-comment 'SCSI support'
+source drivers/scsi/Config.in
 
-tristate 'SCSI support' CONFIG_SCSI
-
-if [ "$CONFIG_SCSI" != "n" ]; then
-  source drivers/scsi/Config.in
-fi
-endmenu
 
 source drivers/i2o/Config.in
 
@@ -184,8 +188,6 @@ endmenu
 
 source drivers/char/Config.in
 
-source drivers/usb/Config.in
-
 source fs/Config.in
 
 if [ "$CONFIG_VT" = "y" ]; then
@@ -201,14 +203,9 @@ if [ "$CONFIG_VT" = "y" ]; then
   endmenu
 fi
 
-mainmenu_option next_comment
-comment 'Sound'
+source drivers/sound/Config.in
 
-tristate 'Sound card support' CONFIG_SOUND
-if [ "$CONFIG_SOUND" != "n" ]; then
-  source drivers/sound/Config.in
-fi
-endmenu
+source drivers/usb/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

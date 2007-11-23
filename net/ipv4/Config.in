@@ -6,13 +6,13 @@ bool 'IP: advanced router' CONFIG_IP_ADVANCED_ROUTER
 if [ "$CONFIG_IP_ADVANCED_ROUTER" = "y" ]; then
   define_bool CONFIG_RTNETLINK y	
   define_bool CONFIG_NETLINK y
-  bool 'IP: policy routing' CONFIG_IP_MULTIPLE_TABLES
-  bool 'IP: equal cost multipath' CONFIG_IP_ROUTE_MULTIPATH
-  bool 'IP: use TOS value as routing key' CONFIG_IP_ROUTE_TOS
-  bool 'IP: verbose route monitoring' CONFIG_IP_ROUTE_VERBOSE
-  bool 'IP: large routing tables' CONFIG_IP_ROUTE_LARGE_TABLES
+  bool '  IP: policy routing' CONFIG_IP_MULTIPLE_TABLES
+  bool '  IP: equal cost multipath' CONFIG_IP_ROUTE_MULTIPATH
+  bool '  IP: use TOS value as routing key' CONFIG_IP_ROUTE_TOS
+  bool '  IP: verbose route monitoring' CONFIG_IP_ROUTE_VERBOSE
+  bool '  IP: large routing tables' CONFIG_IP_ROUTE_LARGE_TABLES
   if [ "$CONFIG_IP_MULTIPLE_TABLES" = "y" ]; then
-    bool 'IP: fast network address translation' CONFIG_IP_ROUTE_NAT
+    bool '    IP: fast network address translation' CONFIG_IP_ROUTE_NAT
   fi
 fi
 bool 'IP: kernel-level configuration support' CONFIG_IP_PNP
@@ -27,13 +27,13 @@ if [ "$CONFIG_FIREWALL" = "y" ]; then
   bool 'IP: firewalling' CONFIG_IP_FIREWALL
   if [ "$CONFIG_IP_FIREWALL" = "y" ]; then
     if [ "$CONFIG_NETLINK" = "y" ]; then
-	bool 'IP: firewall packet netlink device' CONFIG_IP_FIREWALL_NETLINK
+	bool '  IP: firewall packet netlink device' CONFIG_IP_FIREWALL_NETLINK
 	if [ "$CONFIG_IP_FIREWALL_NETLINK" = "y" ]; then
 	    define_bool CONFIG_NETLINK_DEV y
 	fi
     fi
     if [ "$CONFIG_IP_MULTIPLE_TABLES" = "y" ]; then
-	bool 'IP: use FWMARK value as routing key' CONFIG_IP_ROUTE_FWMARK
+	bool '  IP: use FWMARK value as routing key' CONFIG_IP_ROUTE_FWMARK
     fi
   fi
 fi

@@ -8,12 +8,12 @@ bool 'Amateur Radio support' CONFIG_HAMRADIO
 if [ "$CONFIG_HAMRADIO" != "n" ] ; then
   if [ "$CONFIG_NET" != "n" ] ; then
     comment 'Packet Radio protocols'
-    tristate 'Amateur Radio AX.25 Level 2 protocol' CONFIG_AX25
+    tristate '  Amateur Radio AX.25 Level 2 protocol' CONFIG_AX25
     if [ "$CONFIG_AX25" != "n" ]; then
-      bool '   AX.25 DAMA Slave support' CONFIG_AX25_DAMA_SLAVE
-#     bool '   AX.25 DAMA Master support' CONFIG_AX25_DAMA_MASTER
-      dep_tristate '   Amateur Radio NET/ROM protocol' CONFIG_NETROM $CONFIG_AX25
-      dep_tristate '   Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
+      bool '    AX.25 DAMA Slave support' CONFIG_AX25_DAMA_SLAVE
+#     bool '    AX.25 DAMA Master support' CONFIG_AX25_DAMA_MASTER
+      dep_tristate '    Amateur Radio NET/ROM protocol' CONFIG_NETROM $CONFIG_AX25
+      dep_tristate '    Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
     fi
 
     if [ "$CONFIG_AX25" != "n" ]; then

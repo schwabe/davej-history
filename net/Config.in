@@ -20,7 +20,7 @@ if [ "$CONFIG_INET" = "y" ]; then
     tristate 'The IPv6 protocol (EXPERIMENTAL)' CONFIG_IPV6
 #   bool 'The IPv6 protocol (EXPERIMENTAL)' CONFIG_IPV6
     if [ "$CONFIG_IPV6" != "n" ]; then
-	    source net/ipv6/Config.in
+      source net/ipv6/Config.in
     fi
   fi
 fi

@@ -60,14 +60,18 @@ bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
-bool 'Kernel support for Linux/Sparc 32bit binary compatibility' CONFIG_SPARC32_COMPAT
+
+mainmenu_option next_comment
+comment 'Executable file formats'
+
 tristate 'Kernel support for 64-bit ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_BINFMT_ELF" != "n" ]; then
-  bool '   ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
+  bool '  ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
 fi
+bool 'Kernel support for Linux/Sparc 32bit binary compatibility' CONFIG_SPARC32_COMPAT
 if [ "$CONFIG_SPARC32_COMPAT" != "n" ]; then
-  tristate 'Kernel support for 32-bit ELF binaries' CONFIG_BINFMT_ELF32
-  bool 'Kernel support for 32-bit (ie. SunOS) a.out binaries' CONFIG_BINFMT_AOUT32
+  tristate '  Kernel support for 32-bit ELF binaries' CONFIG_BINFMT_ELF32
+  bool '  Kernel support for 32-bit (ie. SunOS) a.out binaries' CONFIG_BINFMT_AOUT32
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
@@ -77,6 +81,7 @@ bool 'SunOS binary emulation' CONFIG_SUNOS_EMUL
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Solaris binary emulation' CONFIG_SOLARIS_EMUL
 fi
+endmenu
 
 if [ "$CONFIG_PCI" = "y" ]; then
   tristate 'Parallel port support' CONFIG_PARPORT
