@@ -121,9 +121,10 @@ void rose_write_internal(struct sock *sk, int frametype)
 	unsigned char  lci1, lci2;
 	char buffer[100];
 	int len, faclen = 0;
+	int ax25_header_len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 1;
 
-	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + ROSE_MIN_LEN + 1;
-
+	len = ax25_header_len + ROSE_MIN_LEN;
+	
 	switch (frametype) {
 		case ROSE_CALL_REQUEST:
 			len   += 1 + ROSE_ADDR_LEN + ROSE_ADDR_LEN;
@@ -131,9 +132,26 @@ void rose_write_internal(struct sock *sk, int frametype)
 			len   += faclen;
 			break;
 		case ROSE_CALL_ACCEPTED:
-		case ROSE_CLEAR_REQUEST:
 		case ROSE_RESET_REQUEST:
 			len   += 2;
+			break;
+		case ROSE_CLEAR_REQUEST:
+			len   += 3;
+			/* facilities */
+			faclen = 3 + 2 + AX25_ADDR_LEN + 3 + ROSE_ADDR_LEN;
+			dptr = buffer;
+			*dptr++ = faclen-1;	/* Facilities length */
+			*dptr++ = 0;
+			*dptr++ = FAC_NATIONAL;
+			*dptr++ = FAC_NATIONAL_FAIL_CALL;
+			*dptr++ = AX25_ADDR_LEN;
+			memcpy(dptr, &rose_callsign, AX25_ADDR_LEN);
+			dptr += AX25_ADDR_LEN;
+			*dptr++ = FAC_NATIONAL_FAIL_ADD;
+			*dptr++ = ROSE_ADDR_LEN + 1;
+			*dptr++ = ROSE_ADDR_LEN * 2;
+			memcpy(dptr, &sk->protinfo.rose->source_addr, ROSE_ADDR_LEN);
+			len   += faclen;
 			break;
 	}
 
@@ -143,9 +161,9 @@ void rose_write_internal(struct sock *sk, int frametype)
 	/*
 	 *	Space for AX.25 header and PID.
 	 */
-	skb_reserve(skb, AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 1);
+	skb_reserve(skb, ax25_header_len);
 	
-	dptr = skb_put(skb, skb_tailroom(skb));
+	dptr = skb_put(skb, len - ax25_header_len);
 
 	lci1 = (sk->protinfo.rose->lci >> 8) & 0x0F;
 	lci2 = (sk->protinfo.rose->lci >> 0) & 0xFF;
@@ -179,6 +197,9 @@ void rose_write_internal(struct sock *sk, int frametype)
 			*dptr++ = frametype;
 			*dptr++ = sk->protinfo.rose->cause;
 			*dptr++ = sk->protinfo.rose->diagnostic;
+			*dptr++ = 0x00;		/* Address length */
+			memcpy(dptr, buffer, faclen);
+			dptr   += faclen;
 			break;
 
 		case ROSE_RESET_REQUEST:

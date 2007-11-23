@@ -211,7 +211,8 @@ S:     Supported
 CONFIGURE, MENUCONFIG, XCONFIG
 P:	Michael Elizabeth Chastain
 M:	mec@shout.net
-L:	linux-kbuild@torque.net
+L:	kbuild-devel@lists.sourceforge.net
+W:	http://kbuild.sourceforge.net
 S:	Maintained
 
 CONFIGURE.HELP

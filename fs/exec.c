@@ -520,6 +520,8 @@ int flush_old_exec(struct linux_binprm * bprm)
 	bprm->dumpable = 0;
 	if (current->euid == current->uid && current->egid == current->gid)
 		bprm->dumpable = !bprm->priv_change;
+	else
+		current->dumpable = 0;
 	name = bprm->filename;
 	for (i=0; (ch = *(name++)) != '\0';) {
 		if (ch == '/')
@@ -533,8 +535,10 @@ int flush_old_exec(struct linux_binprm * bprm)
 	flush_thread();
 
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid ||
-	    permission(bprm->dentry->d_inode, MAY_READ))
+	    permission(bprm->dentry->d_inode, MAY_READ)) {
 		bprm->dumpable = 0;
+		current->dumpable = 0;
+	}
 
 	current->self_exec_id++;
 
@@ -649,6 +653,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 
 	bprm->priv_change = id_change || cap_raised;
 	if (bprm->priv_change) {
+		current->dumpable = 0;
 		/* We can't suid-execute if we're sharing parts of the executable */
 		/* or if we're being traced (or if suid execs are not allowed)    */
 		/* (current->mm->count > 1 is ok, as we'll get a new mm anyway)   */
@@ -705,8 +710,10 @@ void compute_creds(struct linux_binprm *bprm)
         current->suid = current->euid = current->fsuid = bprm->e_uid;
         current->sgid = current->egid = current->fsgid = bprm->e_gid;
         if (current->euid != current->uid || current->egid != current->gid ||
-	    !cap_issubset(new_permitted, current->cap_permitted))
-                bprm->dumpable = 0;
+	    !cap_issubset(new_permitted, current->cap_permitted)) {
+		bprm->dumpable = 0;
+		current->dumpable = 0;
+	}
 
         current->keep_capabilities = 0;
 }

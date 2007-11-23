@@ -1257,7 +1257,7 @@ kmem_cache_grow(kmem_cache_t * cachep, int flags)
 	/* A series of memory allocations for a new slab.
 	 * Neither the cache-chain semaphore, or cache-lock, are
 	 * held, but the incrementing c_growing prevents this
-	 * this cache from being reaped or shrunk.
+	 * cache from being reaped or shrunk.
 	 * Note: The cache could be selected in for reaping in
 	 * kmem_cache_reap(), but when the final test is made the
 	 * growing value will be seen.

@@ -778,6 +778,12 @@ CONFIG_WARPENGINE_SCSI
   Support for MacroSystem Development's WarpEngine Amiga SCSI-2 controller.
   Info at <http://www.lysator.liu.se/amiga/ar/guide/ar310.guide?FEATURE5>.
 
+Builtin PowerMac IDE support
+CONFIG_BLK_DEV_IDE_PMAC
+  This driver provides support for the built-in IDE controller on most
+  of the recent Apple Power Macintoshes and PowerBooks.
+  If unsure, say Y.
+
 PowerMac IDE DMA support
 CONFIG_BLK_DEV_IDEDMA_PMAC
   This option allows the driver for the built-in IDE controller on
@@ -1710,6 +1716,27 @@ CONFIG_SGI_SERIAL
   If you want to use your SGI's built-in serial ports under Linux,
   answer Y.
 
+SGI Newport Graphics support
+CONFIG_SGI_NEWPORT_GFX
+  If you have an SGI machine and you want to compile the graphics
+  drivers, say Y here. This will include the code for the
+  /dev/graphics and /dev/gfx drivers into the kernel for supporting
+  virtualized access to your graphics hardware.
+
+SGI Newport Console support
+CONFIG_SGI_NEWPORT_CONSOLE
+  Say Y here if you want the console on the Newport aka XL graphics
+  card of your Indy.  Most people say Y here.
+
+SGI DS1286 RTC support
+CONFIG_SGI_DS1286
+  If you say Y here and create a character special file /dev/rtc with
+  major number 10 and minor number 135 using mknod ("man mknod"), you
+  will get access to the real time clock built into your computer.
+  Every SGI has such a clock built in. It reports status information
+  via the file /proc/rtc and its behaviour is set by various ioctls on
+  /dev/rtc.
+
 SGI graphics support
 CONFIG_SGI_GRAPHICS
   If you have an SGI machine and you want to compile the graphics
@@ -2028,6 +2055,15 @@ CONFIG_SOLARIS_EMUL
   The module will be called solaris.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+SUN SME environment monitoring
+CONFIG_ENVCTRL
+  Kernel support for temperature and fan monitoring on Sun SME machines.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called envctrl.o. If you want to compile it as a
+  module, say M here and read <file:Documentation/modules.txt>.
+
 Processor family
 CONFIG_M386
   This is the processor type of your CPU. This information is used for
@@ -2041,19 +2077,46 @@ CONFIG_M386
   a i486).
 
   Here are the settings recommended for greatest speed:
-   - "386" for the AMD/Cyrix/Intel 386DX/DXL/SL/SLC/SX, Cyrix/TI
-     486DLC/DLC2 and UMC 486SX-S. Only "386" kernels will run on a 386
-     class machine.
-   - "486" for the AMD/Cyrix/IBM/Intel DX4 or 486DX/DX2/SL/SX/SX2,
-     AMD/Cyrix 5x86, NexGen Nx586 and UMC U5D or U5S.
-   - "586" for generic Pentium CPUs, possibly lacking the TSC 
-     (time stamp counter) register.
-   - "Pentium" for the Intel Pentium/Pentium MMX, AMD K5, K6 and 
-     K6-3D, as well as the Cyrix/VIA CyrixIII
-   - "PPro" for the Cyrix/IBM/National Semiconductor 6x86MX, MII and
-     Intel Pentium II/Pentium Pro.
+
+  "386" Select this for the AMD/Cyrix/Intel 386DX/DXL/SL/SLC/SX,
+        Cyrix/TI, 486DLC/DLC2 and UMC 486SX-S. Only "386" kernels
+        will run on a 386 class machine.
+
+  "486/Cx486"  Select this for a x486 processor, ether Intel or one
+        of the compatible processors from AMD, Cyrix, IBM, or Intel.
+        Includes DX, DX2, and DX4 variants.
+        Also SL/SLC/SLC2/SLC3/SX/SX2, NexGen Nx586 and UMC U5D or U5S.
+
+  "586/K5/5x86/6x86"  Select this for an x586 or x686 processor such
+        as the AMD K5, the Intel  5x86 or 6x86, or the Intel 6x86MX.
+        This choice does not assume the RDTSC (time stamp counter)
+        instruction.
+
+  "Pentium/K6/TSC/CyrixIII"  Select this for a Pentium Classic,
+        Pentium MMX, AMD K5, K5 and K6-3D, as well as the Cyrix/VIA,
+        CyrixIII with the RDTSC (Read Time Stamp Counter) instruction.
+
+  "PPro/6X86MX" Select this for the Cyrix/IBM/National Semiconductor
+        6x86MX/MII and Intel Pentium II/Pentium Pro.
 
   If you don't know what to do, choose "386".
+
+486
+CONFIG_M486
+  Select this for a x486 processor, ether Intel or one of the compatible
+  processors from AMD, Cyrix, IBM, or Intel.  Includes DX, DX2, and DX4
+  variants; also SL/SLC/SLC2/SLC3/SX/SX2 and UMC U5D or U5S.
+
+586/K5/5x86/6x86/6x86MX
+CONFIG_M586
+  Select this for an x586 or x686 processor such as the AMD K5, the Intel
+  5x86 or 6x86, or the Intel 6x86MX.  This choice does not assume the
+  RDTSC instruction.
+
+Pentium Classic
+CONFIG_M586TSC
+  Select this for a Pentium Classic processor with the RDTSC (Read Time Stamp
+  Counter) instruction for benchmarking.
 
 VGA text console
 CONFIG_VGA_CONSOLE
@@ -2120,6 +2183,26 @@ CONFIG_FB_ACORN
   This is the frame buffer device driver for the Acorn VIDC graphics
   chipset.
 
+Permedia2 support
+CONFIG_FB_PM2
+  This is the frame buffer device driver for the Permedia2 AGP frame buffer
+  card from ASK, aka `Graphic Blaster Exxtreme'.  There is a product page
+  at <http://www.ask.com.hk/product/Permedia%202/permedia2.htm>.
+
+Enable FIFO disconnect feature
+CONFIG_FB_PM2_FIFO_DISCONNECT
+  Support the Permedia2 FIFOI disconnect feature (see CONFIG_FB_PM2).
+
+Generic Permedia2 PCI board support
+CONFIG_FB_PM2_PCI
+  Say Y to enable support for Permedia2 AGP frame buffer card from 3Dlabs
+  (aka `Graphic Blaster Exxtreme') on the PCI bus.
+
+Phase5 CVisionPPC/BVisionPPC support
+CONFIG_FB_PM2_CVPPC
+  Say Y to enable support for the Amiga Phase 5 CVisionPPC BVisionPPC
+  framebuffer cards.  Phase 5 is no longer with us, alas.
+
 Apollo frame buffer device
 CONFIG_FB_APOLLO
   This is the frame buffer device driver for the monochrome graphics
@@ -2159,6 +2242,13 @@ CONFIG_FB_CYBER
   kernel. Please note that this driver DOES NOT support the
   Cybervision 64 3D card, as they use incompatible video chips.
 
+CyberPro 20x0 support
+CONFIG_FB_CYBER2000
+  This enables support for the Integraphics CyberPro 20x0 and 5000
+  VGA chips used in the Rebel.com Netwinder and other machines.
+  Say Y if you have a NetWinder or a graphics card containing this
+  device, otherwise say N.
+
 Amiga CyberVision3D support (EXPERIMENTAL)
 CONFIG_FB_VIRGE
   This enables support for the Cybervision 64/3D graphics card from
@@ -2197,6 +2287,11 @@ Atari native chipset support
 CONFIG_FB_ATARI
   This is the frame buffer device driver for the builtin graphics
   chipset found in Ataris.
+
+Amiga FrameMaster II/Rainbow II support
+CONFIG_FB_FM2
+  This is the frame buffer device driver for the Amiga FrameMaster
+  card from BSC (exhibited 1992 but not shipped as a CBM product).
 
 Open Firmware frame buffer device support 
 CONFIG_FB_OF
@@ -2270,10 +2365,78 @@ CONFIG_FB_VESA
   You will get a boot time penguin logo at no additional cost. Please
   read Documentation/fb/vesafb.txt. If unsure, say Y.
 
+VGA 16-color planar support
+CONFIG_FBCON_VGA_PLANES
+  This low level frame buffer console driver enable the kernel to use
+  the 16-color planar modes of the old VGA cards where the bits of
+  each pixel are separated into 4 planes.
+
+  Only answer Y here if you have a (very old) VGA card that isn't VESA
+  2 compatible.
+
 VGA 16-color graphics console
 CONFIG_FB_VGA16
   This is the frame buffer device driver for VGA 16 color graphic
   cards. Say Y if you have such a card.
+
+Select other compiled-in fonts
+CONFIG_FBCON_FONTS
+  Say Y here if you would like to use fonts other than the default
+  your frame buffer console usually use.
+
+  Note that the answer to this question won't directly affect the
+  kernel: saying N will just cause the configurator to skip all
+  the questions about foreign fonts.
+
+  If unsure, say N (the default choices are safe).
+
+VGA 8x16 font
+CONFIG_FONT_8x16
+  This is the "high resolution" font for the VGA frame buffer (the one
+  provided by the VGA text console 80x25 mode.
+
+  If unsure, say Y.
+
+Support only 8 pixels wide fonts
+CONFIG_FBCON_FONTWIDTH8_ONLY
+  Answer Y here will make the kernel provide only the 8x8 fonts (these
+  are the less readable).
+
+  If unsure, say N.
+
+Sparc console 8x16 font
+CONFIG_FONT_SUN8x16
+  This is the high resolution console font for Sun machines. Say Y.
+
+Sparc console 12x22 font (not supported by all drivers)
+CONFIG_FONT_SUN12x22
+  This is the high resolution console font for Sun machines with very
+  big letters (like the letters used in the SPARC PROM). If the
+  standard font is unreadable for you, say Y, otherwise say N.
+
+VGA 8x8 font
+CONFIG_FONT_8x8
+  This is the "high resolution" font for the VGA frame buffer (the one
+  provided by the text console 80x50 (and higher) modes).
+
+  Note that this is a poor quality font. The VGA 8x16 font is quite a
+  lot more readable.
+
+  Given the resolution provided by the frame buffer device, answer N
+  here is safe.
+
+Mac console 6x11 font (not supported by all drivers)
+CONFIG_FONT_6x11
+  Small console font with Macintosh-style high-half glyphs.  Some Mac
+  framebuffer drivers don't support this one at all.
+
+Pearl (old m68k) console 8x8 font
+CONFIG_FONT_PEARL_8x8
+  Small console font with PC-style control-character and high-half glyphs.
+
+Acorn console 8x8 font
+CONFIG_FONT_ACORN_8x8
+  Small console font with PC-style control characters and high-half glyphs.
 
 Backward compatibility mode for Xpmac
 CONFIG_FB_COMPAT_XPMAC
@@ -2376,10 +2539,30 @@ CGthree support
 CONFIG_FB_CGTHREE
   This is the frame buffer device driver for the CGthree frame buffer.
 
+CGfourteen (SX) support
+CONFIG_FB_CGFOURTEEN
+  This is the frame buffer device driver for the CGfourteen frame buffer
+  on Desktop SPARCsystems with the SX graphics option.
+
+Leo (ZX) support
+CONFIG_FB_LEO
+  This is the frame buffer device driver for the SBUS-based Sun ZX (leo)
+  frame buffer cards.
+
+IGA 168x display support
+CONFIG_FB_IGA
+  This is the framebuffer device for the INTERGRAPHICS 1680 and
+  successor frame buffer cards.
+
 TCX (SS4/SS5 only) support
 CONFIG_FB_TCX
   This is the frame buffer device driver for the TCX 24/8bit frame
   buffer.
+
+IMS Twin Turbo display support
+CONFIG_FB_IMSTT
+  The IMS Twin Turbo is a PCI-based frame buffer card bundled with many
+  Macintosh and compatible computers.
 
 Virtual Frame Buffer support (ONLY FOR TESTING!)
 CONFIG_FB_VIRTUAL
@@ -3681,12 +3864,12 @@ CONFIG_SCC_DELAY
   working properly; please read Documentation/networking/z8530drv.txt
   for details. If unsure, say N.
 
-#support for TRX that feedback the tx signal to rx
-#CONFIG_SCC_TRXECHO
-###
-### Don't know what's going on here.
-###
-#
+Support for TRX that feedback the tx signal to rx
+CONFIG_SCC_TRXECHO
+  Some transmitters feed the transmitted signal back to the receive line.
+  Say Y here to foil this by explicitly disabling the receiver during
+  data transmission.  If in doubt, say Y.
+
 YAM driver for AX.25
 CONFIG_YAM
   Support for the YAM modem on serial port. If you want to compile this
@@ -4159,6 +4342,17 @@ CONFIG_SCSI_LOGGING
   problems. If you say Y here your kernel will be somewhat larger, but
   there should be no noticeable performance impact as long as you have
   logging turned off.
+
+SGI WD93C93 SCSI Driver
+CONFIG_SCSI_SGIWD93
+  Say Y here to support the on-board WD93C93 SCSI controller found (a) on
+  the Indigo2 and other MIPS-based SGI machines, and (b) on ARCS ARM-based
+  machines.
+
+DEC NCR53C94 SCSI Driver
+CONFIG_SCSI_DECNCR
+  Say Y here to support the NCR53C94 SCSI controller chips on IOASIC
+  based TURBOchannel DECstations and TURBOchannel PMAZ-A cards.
 
 AdvanSys SCSI support
 CONFIG_SCSI_ADVANSYS
@@ -5249,9 +5443,34 @@ CONFIG_FC4_SOC
   Optic ports, each of which can be connected to a disk array. Only
   the SBus incarnation of the adapter is supported at the moment.
 
+Sun SOC+ (aka SOCAL)
+CONFIG_FC4_SOCAL
+  Serial Optical Channel Plus is an interface card with up to two
+  Fibre Optic ports. This card supports FC Arbitrated Loop (usually
+  A5000 or internal FC disks in E[3-6]000 machines through the
+  Interface Board). You'll probably need the microcode from the
+  Solaris driver to make it work.
+
+  This support is also available as a module called socal.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>.
+
 SparcSTORAGE Array 100 and 200 series
 CONFIG_SCSI_PLUTO
   If you never bought a disk array made by Sun, go with N. 
+
+Sun Enterprise Network Array (A5000 and EX500)
+CONFIG_SCSI_FCAL
+  This driver drives FC-AL disks connected through a Fibre Channel
+  card using the drivers/fc4 layer (currently only SOCAL). The most
+  common is either A5000 array or internal disks in E[3-6]000
+  machines.
+
+  This support is also available as a module called fcal.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>. If unsure, say N.
 
 AcornSCSI support
 CONFIG_SCSI_ACORNSCSI_3
@@ -5274,6 +5493,16 @@ CONFIG_SCSI_ACORNSCSI_SYNC
 
   In general, this improves performance; however some SCSI devices
   don't implement it properly, so the safe answer is N.
+
+ARXE SCSI support
+CONFIG_SCSI_ARXESCSI
+  Around 1991, Arxe Systems Limited released a high density floppy
+  disc interface for the Acorn Archimedes range, to allow the use of
+  HD discs from the then new A5000 on earlier models. This interface
+  was either sold on its own or with an integral SCSI controller.
+  Technical details on this NCR53c94-based device are available at
+  <http://www.cryton.demon.co.uk/acornbits/scsi_arxe.html>
+  Say Y here to compile in support for the SCSI controller.
 
 Oak SCSI support
 CONFIG_SCSI_OAK1
@@ -5357,6 +5586,26 @@ CONFIG_DUMMY
   called dummy.o. If you want to use more than one dummy device at a
   time, you need to compile this driver as a module. Instead of
   'dummy', the devices will then be called 'dummy0', 'dummy1' etc.
+
+Bonding driver support
+CONFIG_BONDING
+  Say 'Y' or 'M' if you wish to be able to 'bond' multiple Ethernet
+  Channels together. This is called 'Etherchannel' by Cisco,
+  'Trunking' by Sun, and 'Bonding' in Linux.
+
+  If you have two Ethernet connections to some other computer, you can
+  make them behave like one double speed connection using this driver.
+  Naturally, this has to be supported at the other end as well, either
+  with a similar Bonding Linux driver, a Cisco 5500 switch or a
+  SunTrunking SunSoft driver.
+
+  This is similar to the EQL driver, but it merges Ethernet segments
+  instead of serial lines.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read <file:Documentation/modules.txt>. The module will be
+  called bonding.o.
 
 SLIP (serial line) support
 CONFIG_SLIP
@@ -5953,27 +6202,70 @@ CONFIG_NET_CLS
   scheduled to be sent out over a network device be classified in some
   way. If you say Y here, you will get a choice of several different
   packet classifiers with the following questions. 
-#
-# Routing tables based classifier
-# CONFIG_NET_CLS_ROUTE
-#
-# Firewall based classifier
-# CONFIG_NET_CLS_FW
-#
-# U32 classifier
-# CONFIG_NET_CLS_U32
-#
-# Special RSVP classifier
-# CONFIG_NET_CLS_RSVP
-#
-# Special RSVP classifier for IPv6
-# CONFIG_NET_CLS_RSVP6
-#
-# Ingres traffic policing
-# CONFIG_NET_CLS_POLICE
-###
-### Some expert please fill these in
-###
+
+Traffic policing (needed for in/egress)
+CONFIG_NET_CLS_POLICE
+   Say Y to support traffic policing (bandwidth limits).  Needed for ingress
+   and egress rate limiting.
+
+Routing tables based classifier
+CONFIG_NET_CLS_ROUTE4
+  If you say Y here, you will be able to classify outgoing packets
+  according to the route table entry they matched. If unsure, say Y.
+
+  This code is also available as a module called cls_route.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>.
+
+Firewall based classifier
+CONFIG_NET_CLS_FW
+  If you say Y here, you will be able to classify outgoing packets
+  according to firewall criteria you specified.
+
+  This code is also available as a module called cls_fw.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>.
+
+U32 classifier
+CONFIG_NET_CLS_U32
+  If you say Y here, you will be able to classify outgoing packets
+  according to their destination address. If unsure, say Y.
+
+  This code is also available as a module called cls_u32.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>
+
+Special RSVP classifier
+CONFIG_NET_CLS_RSVP
+  The Resource Reservation Protocol (RSVP) permits end systems to
+  request a minimum and maximum data flow rate for a connection; this
+  is important for real time data such as streaming sound or video.
+
+  Say Y here if you want to be able to classify outgoing packets based
+  on their RSVP requests.
+
+  This code is also available as a module called cls_rsvp.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>
+
+Special RSVP classifier for IPv6
+CONFIG_NET_CLS_RSVP6
+  The Resource Reservation Protocol (RSVP) permits end systems to
+  request a minimum and maximum data flow rate for a connection; this
+  is important for real time data such as streaming sound or video.
+
+  Say Y here if you want to be able to classify outgoing packets based
+  on their RSVP requests and you are using the new Internet Protocol
+  IPv6 as opposed to the older and more common IPv4.
+
+  This code is also available as a module called cls_rsvp6.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>
 
 Network code profiler
 CONFIG_NET_PROFILE
@@ -6035,6 +6327,26 @@ CONFIG_LANMEDIA
   inserted in and removed from the running kernel whenever you want).
   The module will be called lmc.o. For general information about
   modules read Documentation/modules.txt.
+
+Fibre Channel driver support
+CONFIG_NET_FC
+  Fibre Channel is a high speed serial protocol mainly used to connect
+  large storage devices to the computer; it is compatible with and
+  intended to replace SCSI.
+
+  If you intend to use Fibre Channel, you need to have a Fibre channel
+  adaptor card in your computer; say Y here and to the driver for your
+  adaptor below. You also should have said Y to "SCSI support" and
+  "SCSI generic support".
+
+Interphase 5526 Tachyon chipset based adaptor support
+CONFIG_IPHASE5526
+  Say Y here if you have a Fibre Channel adaptor of this kind.
+
+  The driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called iph5526.o. For general information about
+  modules read <file:Documentation/modules.txt>.
 
 Red Creek Hardware VPN (EXPERIMENTAL)
 CONFIG_RCPCI
@@ -6643,6 +6955,15 @@ CONFIG_SK98LIN
   say M here and read Documentation/modules.txt. This is recommended.
   The module will be called sk98lin.o.
 
+MyriCOM Gigabit Ethernet support
+CONFIG_MYRI_SBUS
+  This driver supports MyriCOM Sbus gigabit Ethernet cards.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read <file:Documentation/modules.txt>. This is recommended.
+  The module will be called myri_sbus.o.
+
 AMD LANCE and PCnet (AT1500 and NE2100) support
 CONFIG_LANCE
   If you have a network (Ethernet) card of this type, say Y and read
@@ -6758,6 +7079,18 @@ CONFIG_EL3
   say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
   3c509.o. 
+
+3c515 ISA Fast EtherLink
+CONFIG_3C515
+  If you have a 3Com ISA EtherLink XL "Corkscrew" 3c515 Fast Ethernet
+  network card, say Y and read the Ethernet-HOWTO, available from
+  <http://www.linuxdoc.org/docs.html#howto>.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read <file:Documentation/modules.txt> as well as
+  <file:Documentation/networking/net-modules.txt>. The module will be called
+  3c515.o.
 
 3c590 series (592/595/597) "Vortex" support
 CONFIG_VORTEX
@@ -6998,6 +7331,18 @@ CONFIG_EEXPRESS
   say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt. The module will be called
   eexpress.o.
+
+Packet Engines Hamachi GNIC-II support
+CONFIG_HAMACHI
+  If you have a Gigabit Ethernet card of this type, say Y and read
+  the Ethernet-HOWTO, available from
+  <http://www.linuxdoc.org/docs.html#howto>.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read <file:Documentation/modules.txt> as well as
+  <file:Documentation/networking/net-modules.txt>. The module will be called
+  hamachi.o.
 
 HP PCLAN+ (27247B and 27252A) support
 CONFIG_HPLAN_PLUS
@@ -7324,6 +7669,12 @@ CONFIG_EPIC100
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+DEC LANCE Ethernet controller support
+CONFIG_DECLANCE
+  This driver is for the series of Ethernet controllers produced by
+  DEC (now Compaq) based on the AMD Lance chipset, including the
+  DEPCA series.  (This chipset is better known via the NE2100 cards.)
+
 SGI Seeq ethernet controller support
 CONFIG_SGISEEQ
   Say Y here if you have an Seeq based Ethernet network card. This is
@@ -7472,6 +7823,51 @@ CONFIG_SKTR
   Also read the file linux/Documentation/networking/sktr.txt or check
   the Linux-SNA WWW site for the latest information at
   http://samba.anu.edu.au/linux-sna/documents/drivers/SysKonnect/
+
+Sun Happy Meal 10/100baseT support
+CONFIG_HAPPYMEAL
+  This driver supports the "hme" interface present on most Ultra
+  systems and as an option on older Sbus systems. This driver supports
+  both PCI and Sbus devices. This driver also supports the "qfe" quad
+  100baseT device available in both PCI and Sbus configurations.
+
+  This support is also available as a module called sunhme.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>.
+
+Sun Lance support
+CONFIG_SUNLANCE
+  This driver supports the "le" interface present on all 32-bit Sparc
+  systems, on some older Ultra systems and as an Sbus option.  These
+  cards are based on the AMD Lance chipset, which is better known
+  via the NE2100 cards.
+
+  This support is also available as a module called sunlance.o ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>.
+
+Sun BigMAC 10/100baseT support
+CONFIG_SUNBMAC
+  This driver supports the "be" interface available as an Sbus option.
+  This is Sun's older 100baseT Ethernet device.
+
+  This support is also available as a module called sunbmac.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>.
+
+Sun QuadEthernet support
+CONFIG_SUNQE
+  This driver supports the "qe" 10baseT Ethernet device, available as
+  an Sbus option. Note that this is not the same as Quad FastEthernet
+  "qfe" which is supported by the Happy Meal driver instead.
+
+  This support is also available as a module called sunqe.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>.
 
 Traffic Shaper (EXPERIMENTAL)
 CONFIG_SHAPER
@@ -7729,6 +8125,22 @@ CONFIG_SBPCD2
   the parameters for the second, third and fourth interface card into
   linux/include/linux/sbpcd.h before compiling the new kernel. Read
   the file Documentation/cdrom/sbpcd.
+
+Matsushita/Panasonic, ... third CD-ROM controller support
+CONFIG_SBPCD3
+  Say Y here only if you have three CD-ROM controller cards of this type
+  (usually only if you have more than six drives). You should enter
+  the parameters for the second, third and fourth interface card into
+  include/linux/sbpcd.h before compiling the new kernel. Read
+  the file <file:Documentation/cdrom/sbpcd>.
+
+Matsushita/Panasonic, ... fourth CD-ROM controller support
+CONFIG_SBPCD4
+  Say Y here only if you have four CD-ROM controller cards of this type
+  (usually only if you have more than eight drives). You should enter
+  the parameters for the second, third and fourth interface card into
+  include/linux/sbpcd.h before compiling the new kernel. Read
+  the file <file:Documentation/cdrom/sbpcd>.
 
 Aztech/Orchid/Okano/Wearnes/TXC/CyDROM CDROM support
 CONFIG_AZTCD
@@ -8000,6 +8412,20 @@ CONFIG_USB_WACOM
   The module will be called wacom.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+Use input layer for ADB devices
+CONFIG_INPUT_ADBHID
+  Say Y here if you want to have ADB (Apple Desktop Bus) HID devices
+  such as keyboards, mice, joysticks, or graphic tablets handled by the
+  input layer.  If you say Y here, make sure to say Y to the
+  corresponding drivers "Keyboard support" (CONFIG_INPUT_KEYBDEV),
+  "Mouse Support" (CONFIG_INPUT_MOUSEDEV) and "Event interface support"
+  (CONFIG_INPUT_EVDEV) as well.
+
+  If you say N here, you still have the option of using the old ADB
+  keyboard and mouse drivers.
+
+  If unsure, say Y.
+
 Logitech WingMan Force joystick support
 CONFIG_USB_WMFORCE
   Say Y here if you want to use the Logitech WingMan Force with Linux
@@ -8144,6 +8570,17 @@ CONFIG_USB_SERIAL_VISOR
   The module will be called visor.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+USB Belkin and Paracom Single Port Serial Driver
+CONFIG_USB_SERIAL_BELKIN
+  Say Y here if you want to use a Belkin USB Serial single port
+  adaptor (F5U103 is one of the model numbers) or the Peracom single
+  port USB to serial adapter.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called belkin_sa.o.  If you want to compile it as
+  a module, say M here and read <file:Documentation/modules.txt>.
+
 USB FTDI Single Port Serial Driver
 CONFIG_USB_SERIAL_FTDI_SIO
   Say Y here if you want to use a FTDI SIO single port USB to serial
@@ -8203,6 +8640,10 @@ USB Keyspan USA-19W Firmware
 CONFIG_USB_SERIAL_KEYSPAN_USA19W
   Say Y here to include firmware for the USA-19W converter.
 
+USB Keyspan USA-49W Firmware
+CONFIG_USB_SERIAL_KEYSPAN_USA49W
+  Say Y here to include firmware for the USA-49W converter.
+
 USB ZyXEL omni.net LCD Plus Driver
 CONFIG_USB_SERIAL_OMNINET
   Say Y here if you want to use a ZyXEL omni.net LCD ISDN TA.
@@ -8236,6 +8677,45 @@ CONFIG_USB_SERIAL_EMPEG
   inserted in and removed from the running kernel whenever you want).
   The module will be called empeg.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+USB MCT Single Port Serial Driver
+CONFIG_USB_SERIAL_MCT_U232
+  Say Y here if you want to use a USB Serial single port adapter from
+  Magic Control Technology Corp. (U232 is one of the model numbers).
+
+  This driver also works with Sitecom U232-P25 and D-Link DU-H3SP USB
+  BAY devices.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called mct_u232.o.  If you want to compile it as
+  a module, say M here and read <file:Documentation/modules.txt>.
+
+USB Edgeport Serial Driver
+CONFIG_USB_SERIAL_EDGEPORT
+  Say Y here if you want to use any of the following devices from
+  Inside Out Networks (Digi):
+       Edgeport/4
+       Rapidport/4
+       Edgeport/4t
+       Edgeport/2
+       Edgeport/4i
+       Edgeport/2i
+       Edgeport/421
+       Edgeport/21
+       Edgeport/8
+       Edgeport/8 Dual
+       Edgeport/2D8
+       Edgeport/4D8
+       Edgeport/8i
+       Edgeport/2 DIN
+       Edgeport/4 DIN
+       Edgeport/16 Dual
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called io_edgeport.o.  If you want to compile it
+  as a module, say M here and read <file:Documentation/modules.txt>.
 
 USB Serial Converter verbose debug
 CONFIG_USB_SERIAL_DEBUG
@@ -8769,6 +9249,20 @@ CONFIG_NFS_FS
   ftp://metalab.unc.edu/pub/Linux/system/boot/ethernet/ .
 
   If you don't know what all this is about, say N.
+
+Provide NFS over TCP server support DEVELOPER ONLY
+CONFIG_NFSD_TCP
+  If you are a developer and want to work on fixing problems with
+  NFS server over TCP support, say Y here.  If unsure, say N.
+
+  Some problems can be found by looking for FIXME in net/sunrpc/svcsock.c
+
+Provide NFSv3 client support
+CONFIG_NFS_V3
+  Say Y here if you want your NFS client to be able to speak the newer
+  version 3 of the NFS protocol.
+
+  If unsure, say N.
 
 Root file system on NFS
 CONFIG_ROOT_NFS
@@ -9827,6 +10321,21 @@ CONFIG_RISCOM8
   Also it's possible to say M here and compile this driver as kernel
   loadable module; the module will be called riscom8.o.
 
+Computone IntelliPort Plus serial support
+CONFIG_COMPUTONE
+  This driver supports the entire family of Intelliport II/Plus
+  controllers with the exception of the MicroChannel controllers and
+  products previous to the Intelliport II. These are multiport cards,
+  which give you many serial ports. You would need something like this
+  to connect more than two modems to your Linux box, for instance in
+  order to become a dial-in server. If you have a card like that, say
+  Y here and read <file:Documentation/computone.txt>.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read <file:Documentation/modules.txt>. You will get two
+  modules called ip2.o and ip2main.o.
+
 Specialix IO8+ card support
 CONFIG_SPECIALIX
   This is a driver for the Specialix IO8+ multiport card (both the
@@ -9977,6 +10486,24 @@ CONFIG_ESPSERIAL
   and removed from the running kernel whenever you want), say M here
   and read Documentation/modules.txt. The module will be called esp.o.
   If unsure, say N.
+
+Moxa Intellio support
+CONFIG_MOXA_INTELLIO
+  Say Y here if you have a Moxa Intellio multiport serial card.
+
+  This driver can also be built as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called moxa.o. If you want to do that, say M
+  here.
+
+Moxa SmartIO support
+CONFIG_MOXA_SMARTIO
+  Say Y here if you have a Moxa SmartIO multiport serial card.
+
+  This driver can also be built as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called mxser.o. If you want to do that, say M
+  here.
 
 Multi-Tech multiport card support
 CONFIG_ISI
@@ -10351,6 +10878,18 @@ CONFIG_FT_NORMAL_DEBUG
   Please read Documentation/ftape.txt for a short description
   how to control the amount of debugging output.
 
+Excessive
+CONFIG_FT_FULL_DEBUG
+  Extremely verbose output for driver debugging purposes.
+
+Reduced
+CONFIG_FT_NO_TRACE
+  Reduced tape driver debugging output.
+
+None
+CONFIG_FT_NO_TRACE_AT_ALL
+  Suppress all debugging output from the tape drive.
+
 The floppy drive controller for ftape
 CONFIG_FT_STD_FDC
   Only change this setting if you have a special controller. If you
@@ -10521,6 +11060,12 @@ Matrox g200/g400
 CONFIG_DRM_MGA
   Choose M here if you have a Matrox g200/g400 AGP graphics card.
 
+Creator/Creator3D/Elite3D
+CONFIG_DRM_FFB
+  Choose this option if you have one of Sun's Creator3D-based graphics
+  and frame buffer cards.  Product page at
+  <http://www.sun.com/desktop/products/Graphics/creator3d.html>.
+
 MTRR control and configuration
 CONFIG_MTRR
   On Intel P6 family processors (Pentium Pro, Pentium II and later)
@@ -10576,6 +11121,22 @@ CONFIG_DTLK
   module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. The module will be called dtlk.o.
+
+Intel Random Number Generator support
+CONFIG_INTEL_RNG
+  This driver provides kernel-side support for the Random Number
+  Generator hardware found on Intel i8xx-based motherboards.
+
+  Both a character driver, used to read() entropy data, and a timer
+  function which automatically adds entropy directly into the
+  kernel pool, are exported by this driver.
+
+  To compile this driver as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read <file:Documentation/modules.txt>. The module will be called
+  i810_rng.o.
+
+  If unsure, say N.
 
 Advanced Power Management
 CONFIG_APM
@@ -10757,6 +11318,20 @@ CONFIG_WDT
   say M here and read Documentation/modules.txt. The module will be
   called wdt.o.
 
+WDT PCI Watchdog timer
+CONFIG_WDTPCI
+  If you have a PCI WDT500/501 watchdog board, say Y here,
+  otherwise N. It is not possible to probe for this board, which means
+  that you have to inform the kernel about the IO port and IRQ using
+  the "wdt=" kernel option (try "man bootparam" or see the
+  documentation of your boot loader (lilo or loadlin) about how to
+  pass options to the kernel at boot time).
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read <file:Documentation/modules.txt>. The module will be
+  called wdt_pci.o.
+
 WDT501 features
 CONFIG_WDT_501
   Saying Y here and creating a character special file /dev/temperature
@@ -10813,6 +11388,12 @@ CONFIG_ACQUIRE_WDT
   module, say M here and read Documentation/modules.txt. Most people
   will say N.
 
+Advantech SBC Watchdog Timer
+CONFIG_ADVANTECH_WDT
+  If you are configuring a Linux kernel for the Advantech single-board
+  computer, say `Y' here to support its built-in watchdog timer feature.
+  See the help for CONFIG_WATCHDOG for discussion.
+
 SBC-60XX Watchdog Timer
 CONFIG_60XX_WDT
  This driver can be used with the watchdog timer found on some
@@ -10824,6 +11405,19 @@ CONFIG_60XX_WDT
 
  You can compile this driver directly into the kernel, or use
  it as a module.  The module will be called sbc60xxwdt.o.
+
+Mixcom Watchdog
+CONFIG_MIXCOMWD
+  This is a driver for the Mixcom hardware watchdog cards. This
+  watchdog simply watches your kernel to make sure it doesn't freeze,
+  and if it does, it reboots your computer after a certain amount of
+  time.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module is called mixcomwd.o. If you want to compile it as a
+  module, say M here and read <file:Documentation/modules.txt>. Most people
+  will say N.
 
 ZF MachZ Watchdog
 CONFIG_MACHZ_WDT
@@ -11244,6 +11838,11 @@ CONFIG_SOUND_PAS
   some other card made by Media Vision or Logitech since they are not
   PAS16 compatible.
 
+Enable PAS16 joystick port
+CONFIG_PAS_JOYSTICK
+  Say Y here to enable the Pro Audio Spectrum 16's auxiliary joystick
+  port.
+
 100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support
 CONFIG_SOUND_SB
   Answer Y if you have an original Sound Blaster card made by Creative
@@ -11264,12 +11863,26 @@ CONFIG_SOUND_SB
   You can say M here to compile this driver as a module; the module is
   called sb.o.
 
-#Loopback MIDI device support
-#CONFIG_SOUND_VMIDI
-###
-### somebody please fill this in.
-###
-#
+Crystal Sound CS4281
+CONFIG_SOUND_CS4281
+  Picture and feature list at <http://www.pcbroker.com/crystal4281.html>.
+
+VIDC 16-bit sound
+CONFIG_SOUND_VIDC
+  16-bit support for the VIDC onboard sound hardware found on Acorn machines.
+
+Loopback MIDI device support
+CONFIG_SOUND_VMIDI
+
+Yamaha YMF7xx PCI audio (native mode)
+CONFIG_SOUND_YMFPCI
+  Support for Yamaha cards including the YMF711, YMF715, YMF718, YMF719,
+  YMF724, Waveforce 192XG, and Waveforce 192 Digital.
+
+Yamaha PCI legacy ports support
+CONFIG_SOUND_YMFPCI_LEGACY
+  Support for YMF7xx PCI cards emulating an MP401.
+
 Gravis Ultrasound support
 CONFIG_SOUND_GUS
   Say Y here for any type of Gravis Ultrasound card, including
@@ -11461,6 +12074,18 @@ CONFIG_SOUND_MSNDCLAS
   See Documentation/sound/MultiSound for important information about
   this driver.
 
+MSND Classic I/O
+CONFIG_MSNDCLAS_IO
+  I/O port address for the MultiSound Classic and related cards.
+
+MSND Classic IRQ
+CONFIG_MSNDCLAS_IRQ
+  Interrupt Request line for the MultiSound Classic and related cards.
+
+MSND Classic memory address
+CONFIG_MSNDCLAS_MEM
+  Memory-mapped I/O base address for the MultiSound Classic and related cards.
+
 Full pathname of MSNDINIT.BIN firmware file
 CONFIG_MSNDCLAS_INIT_FILE
   The MultiSound cards have two firmware files which are required for
@@ -11480,6 +12105,51 @@ CONFIG_SOUND_MSNDPIN
   Say M here if you have a Turtle Beach MultiSound Pinnacle or Fiji.
   See Documentation/sound/MultiSound for important information about
   this driver.
+
+MSND Pinnacle IDE I/O 0
+CONFIG_MSNDPIN_IDE_IO0
+  CD-ROM drive 0 memory-mapped I/O base address for the MultiSound Pinnacle
+  and Fiji sound cards.
+
+MSND Pinnacle IDE I/O 1
+CONFIG_MSNDPIN_IDE_IO1
+  CD-ROM drive 1 memory-mapped I/O base address for the MultiSound Pinnacle
+  and Fiji sound cards.
+
+MSND Pinnacle IDE IRQ
+CONFIG_MSNDPIN_IDE_IRQ
+  Interrupt request number for the IDE CD-ROM interface on the
+  MultiSound Pinnacle and Fiji sound cards.
+
+MSND Pinnacle I/O
+CONFIG_MSNDPIN_IO
+  Memory-mapped I/O base address for the primary synthesizer on
+  MultiSound Pinnacle and Fiji sound cards.
+
+MSND Pinnacle MPU I/O
+CONFIG_MSNDPIN_MPU_IO
+  Memory-mapped I/O base address for the Kurzweil daughterboard
+  synthesizer on MultiSound Pinnacle and Fiji sound cards.
+
+MSND Pinnacle MPU IRQ
+CONFIG_MSNDPIN_MPU_IRQ
+  Iinterrupt request number for the Kurzweil daughterboard
+  synthesizer on MultiSound Pinnacle and Fiji sound cards.
+
+MSND Pinnacle IRQ
+CONFIG_MSNDPIN_IRQ
+  Interrupt request line for the primary synthesizer on MultiSound
+  Pinnacle and Fiji sound cards.
+
+MSND Pinnacle joystick I/O
+CONFIG_MSNDPIN_JOYSTICK_IO
+  Memory-mapped I/O base address for the joystick port on MultiSound Pinnacle
+  and Fiji sound cards.
+
+MSND Pinnacle memory
+CONFIG_MSNDPIN_MEM
+  Memory-mapped I/O base address for the primary synthesizer on
+  MultiSound Pinnacle and Fiji sound cards.
 
 Full pathname of PNDSPINI.BIN firmware file
 CONFIG_MSNDPIN_INIT_FILE
@@ -11675,6 +12345,17 @@ CONFIG_SC6600_CDROM
   This is used to activate the the CDROM interface of the Audio Excel
   DSP 16 card. Enter: 0 for Sony, 1 for Panasonic, 2 for IDE, 4 for no
   CDROM present.
+
+SC-6600 CD-ROM Interface I/O Address
+CONFIG_SC6600_CDROMBASE
+  Base I/O port address for the CD-ROM interface of the Audio Excel
+  DSP 16 card.
+
+C-Media PCI (CMI8338/8378)
+CONFIG_SOUND_CMPCI
+  Say Y or M if you have a PCI sound card using the CMI8338
+  or the CMI8378 chip.set.  Data on this chip is available at
+  <http://www.cmedia.com.tw/doc8338.htm>.
 
 Audio Excel DSP 16 (MPU401 emulation)
 CONFIG_AEDSP16_MPU401
@@ -11882,6 +12563,15 @@ Use VJ-compression with synchronous PPP
 CONFIG_ISDN_PPP_VJ
   This enables Van Jacobson header compression for synchronous PPP.
   Say Y if the other end of the connection supports it.
+
+Support BSD compression
+CONFIG_ISDN_PPP_BSDCOMP
+  Support for the BSD-Compress compression method for PPP, which uses
+  the LZW compression method to compress each PPP packet before it is
+  sent over the wire. The machine at the other end of the PPP link
+  (usually your ISP) has to support the BSD-Compress compression
+  method as well for this to be useful. Even if they don't support it,
+  it is safe to say Y here.
 
 Support audio via ISDN
 CONFIG_ISDN_AUDIO
@@ -12261,6 +12951,12 @@ CONFIG_ISDN_CAPI
   Interface), a standard making it easy for programs to access ISDN
   hardware, see http://www.capi.org/
 
+CAPI2.0 /dev/capi20 support
+CONFIG_ISDN_CAPI_CAPI20
+  This option will provide the CAPI 2.0 interface to userspace
+  applications via /dev/capi20. Applications should use the standardized
+  libcapi20 to access this functionality. You should say Y/M here.
+
 CAPI2.0 Middleware support
 CONFIG_ISDN_CAPI_MIDDLEWARE
   This option enables CAPI2.0 Middleware support
@@ -12268,6 +12964,13 @@ CONFIG_ISDN_CAPI_MIDDLEWARE
 CAPI2.0 filesystem support
 CONFIG_ISDN_CAPIFS
   This option enables CAPI CAPI2.0 filesystem support 
+
+CAPI2.0 capidrv interface support
+CONFIG_ISDN_CAPI_CAPIDRV
+  This option provides the glue code to hook up CAPI driven cards to
+  the legacy isdn4linux link layer. If you have a card which is supported
+  by a CAPI driver, but still want to use old features like ippp
+  interfaces or ttyI emulation, say Y/M here.
 
 AVM B1 ISA support
 CONFIG_ISDN_DRV_AVMB1_B1ISA
@@ -12323,6 +13026,17 @@ CONFIG_AP1000
   WWW, you need to have access to a machine on the Internet that has a
   program like lynx or netscape) or mail to hackers@cafe.anu.edu.au
 
+Hypercope HYSDN cards (Champ, Ergo, Metro) support (module)
+CONFIG_HYSDN
+  Say Y here if you have one of Hypercope's active PCI ISDN cards
+  Champ, Ergo and Metro. You will then get a module called hysdn.o.
+  Please read the file <file:Documentation/isdn/README.hysdn> for more
+  information.
+
+HYSDN CAPI 2.0 support
+CONFIG_HYSDN_CAPI
+  Say Y here if you like to use Hypercope's CAPI 2.0 interface
+
 Support for Sun4 architecture
 CONFIG_SUN4
   Say Y here if, and only if, your machine is a Sun4. Note that
@@ -12334,6 +13048,23 @@ CONFIG_SCSI_SUNESP
   This is the driver for the Sun ESP SCSI host adapter. The ESP
   chipset is present in most SPARC-based computers.
 
+PTI Qlogic, ISP Driver
+CONFIG_SCSI_QLOGICPTI
+  This driver supports SBUS SCSI controllers from PTI or QLogic. These
+  controllers are known under Solaris as qpti and in the openprom as
+  PTI,ptisp or QLGC,isp. Note that PCI QLogic SCSI controllers are
+  driven by a different driver.
+
+  This support is also available as a module called qlogicpti.o ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>.
+
+Sun PROM console
+CONFIG_PROM_CONSOLE
+  Say Y to build a console driver for Sun machines that uses the terminal
+  emulation built into their console PROMS.
+
 SPARC /dev/openprom compatibility driver
 CONFIG_SUN_OPENPROMIO
   This driver provides user programs with an interface to the SPARC
@@ -12344,6 +13075,41 @@ CONFIG_SUN_OPENPROMIO
   inserted in and removed from the running kernel whenever you want),
   say M and read Documentation/modules.txt. If unsure, say Y.
 
+Openprom tree appears in /proc/openprom
+CONFIG_SUN_OPENPROMFS
+  If you say Y, the OpenPROM device tree will be available as a
+  virtual file system, which you can mount to /proc/openprom by "mount
+  -t openpromfs none /proc/openprom".
+
+  If you want to compile the /proc/openprom support as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want), say M here and read <file:Documentation/modules.txt>.
+  The module will be called openpromfs.o. If unsure, say M.
+
+Kernel support for Linux/Sparc 32bit binary compatibility
+CONFIG_SPARC32_COMPAT
+  This allows you to run 32-bit binaries on your Ultra.
+  Everybody wants this; say Y.
+
+Kernel support for 32-bit ELF binaries
+CONFIG_BINFMT_ELF32
+  This allows you to run 32-bit Linux/ELF binaries on your Ultra.
+  Everybody wants this; say Y.
+
+Kernel support for 32-bit (ie. SunOS) a.out binaries
+CONFIG_BINFMT_AOUT32
+  This allows you to run 32-bit a.out format binaries on your Ultra.
+  If you want to run SunOS binaries (see SunOS binary emulation below)
+  or other a.out binaries, say Y. If unsure, say N.
+
+SunOS binary emulation
+CONFIG_SUNOS_EMUL
+  This allows you to run most SunOS binaries. If you want to do this,
+  say Y here and place appropriate files in /usr/gnemul/sunos. See
+  <http://www.ultralinux.org/faq.html>for more information. If you want
+  to run SunOS binaries on an Ultra you must also say Y to "Kernel
+  support for 32-bit a.out binaries" above.
+
 Mostek real time clock support
 CONFIG_SUN_MOSTEK_RTC
   The Mostek RTC chip is used on all knows Sun computers except
@@ -12352,12 +13118,69 @@ CONFIG_SUN_MOSTEK_RTC
 
   Say Y here unless you are building a special purpose kernel.
 
-#
-#Siemens SAB82532 serial support
-#CONFIG_SAB82532
-###
-### Please someone fill these in.
-###
+OBP Flash Device support
+CONFIG_OBP_FLASH
+  The OpenBoot PROM on Ultra systems is flashable. If you want to be
+  able to upgrade the OBP firmware, say Y here.
+
+Siemens SAB82532 serial support
+CONFIG_SAB82532
+  This driver supports the serial ports on newer (PCI) Ultra systems.
+  Say Y if you want to be able to use your serial ports.
+
+Videopix Frame Grabber
+CONFIG_SUN_VIDEOPIX
+  Say Y here to support the Videopix Frame Grabber from Sun
+  Microsystems, commonly found on SPARCstations.  This card, which is
+  based on the Phillips SAA9051, can handle NTSC and PAL/SECAM and
+  SVIDEO signals.
+
+Sun bidirectional parallel port support
+CONFIG_SUN_BPP
+  Say Y here to support Sun's obsolete variant of IEEE1284
+  bidirectional parallel port protocol as /dev/bppX.  Can be built on
+  x86 machines.
+
+Aurora Multiboard 1600se
+CONFIG_SUN_AURORA
+  The Aurora Multiboard is a multi-port high-speed serial controller.
+  If you have one of these, say Y.
+
+Audio support
+CONFIG_SPARCAUDIO
+  This driver provides support for the build-in sound devices on most
+  Sun machines. If you want to be able to use this, select this option
+  and one or more of the lowlevel drivers below. See
+  <http://www.dementia.org/~shadow/sparcaudio.html>for more
+  information.
+
+AMD7930 Lowlevel Driver
+CONFIG_SPARCAUDIO_AMD7930
+  This driver supports the AMD 7930 chip found on sun4c, 4/6xx, and
+  SparcClassic systems.
+
+CS4231 Lowlevel Driver
+CONFIG_SPARCAUDIO_CS4231
+  This driver supports the Crystal Semiconductor CS4231 chip found on
+  the SS4, SS5, and Ultras.
+
+DBRI Lowlevel Driver
+CONFIG_SPARCAUDIO_DBRI
+  This driver supports the DBRI audio interface found on the SS10,
+  SS20, Sparcbook 3, and Voyager systems.
+
+Dummy Lowlevel Driver
+CONFIG_SPARCAUDIO_DUMMY
+  This is a pseudo-driver used for debugging and testing the
+  sparcaudio subsystem. Say N unless you want to work on this
+  subsystem.
+
+/proc/hardware support
+CONFIG_PROC_HARDWARE
+  Say Y here to support the /proc/hardware file, which gives you
+  access to information about the machine you're running on,
+  including the model, CPU, MMU, clock speed, BogoMIPS rating,
+  and memory size.
 
 #
 # m68k-specific kernel options
@@ -12368,6 +13191,16 @@ CONFIG_AMIGA
   This option enables support for the Amiga series of computers. If
   you plan to use this kernel on an Amiga, say Y here and browse the
   material available in Documentation/m68k; otherwise say N.
+
+A4000T SCSI support
+CONFIG_A4000T_SCSI
+  Support for the NCR53C710 SCSI controller on the Amiga 4000T.
+
+A4091 SCSI support
+CONFIG_A4091_SCSI
+  Support for the NCR53C710 chip on the Amiga 4091 Z3 SCSI2 controller
+  (1993).  Very obscure -- the 4091 was part of an Amiga 4000 upgrade plan
+  at the time the Amiga business was sold to DKB.
 
 Atari support
 CONFIG_ATARI
@@ -12396,6 +13229,49 @@ CONFIG_HP300
   workstations. Support for these machines is still very experimental.
   If you plan to try to use the kernel on such a machine say Y here.
   Everybody else says N.
+
+Q40/Q60 support
+CONFIG_Q40
+  The Q40 is a Motorola 68040-based successor to the Sinclair QL
+  manufactured in Germany.  There is an official Q40 home page at
+  <http://www.q40.de/>.  This option enables support for the Q40 and Q60.
+  Select your CPU below.  For 68LC060 don't forget to enable FPU emulation.
+
+Sun 3 support
+CONFIG_SUN3
+  This option enables support for the Sun 3 series of workstations.
+  Currently, only the Sun 3/80 is supported within the Sun 3x family.
+  You will also want to enable 68030 support.  General Linux
+  information on the Sun 3x series (now discontinued) is at
+  <http://www.angelfire.com/ca2/tech68k/sun3.html>.
+
+  If you don't want to compile a kernel for a Sun 3, say N.
+
+Sun 3X support
+CONFIG_SUN3X
+  This option enables support for the Sun 3x series of workstations.
+  Be warned that this support is very experimental. You will also want
+  to say Y to 68020 support and N to the other processors below.
+  General Linux information on the Sun 3x series (now discontinued)
+  is at <http://www.angelfire.com/ca2/tech68k/sun3.html>.
+
+  If you don't want to compile a kernel for a Sun 3x, say N.
+
+Sun3x builtin serial support
+CONFIG_SUN3X_ZS
+  ZS refers to a type of asynchronous serial port built in to the Sun3
+  and Sun3x workstations; if you have a Sun 3, you probably have
+  these.  Say 'Y' to support ZS ports directly.  This option must be
+  enabled in order to support the
+  keyboard and mouse ports.
+
+Sun keyboard support
+CONFIG_SUN_KEYBOARD
+  Say Y here to support the keyboard found on Sun 3 and 3x workstations.
+  It can also be used support Sun Type-5 keyboards through an adaptor.
+  See <http://www.suse.cz/development/input/adapters.html> and
+  <http://sourceforge.net/projects/linuxconsole/> for details on the
+  latter.
 
 68020 support
 CONFIG_M68020
@@ -12447,6 +13323,25 @@ CONFIG_FPU_EMU_EXTRAPREC
   it here. The emulator will then only calculate with a 64 bit
   mantissa and round slightly incorrect.
 
+Advanced configuration options
+CONFIG_ADVANCED
+  This gives you access to some advanced options for the CPU. The
+  defaults should be fine for most users, but these options may make
+  it possible for you to improve performance somewhat if you know what
+  you are doing.
+
+  Note that the answer to this question won't directly affect the
+  kernel: saying N will just cause the configurator to skip all
+  the questions about these options.
+
+  Most users should say N to this question.
+
+Use one physical chunk of memory only
+CONFIG_SINGLE_MEMORY_CHUNK
+  Ignore all but the first contiguous chunk of physical memory for VM
+  purposes.  This will save a few bytes kernel size and may speed up
+  some operations.  Say N if not sure.
+
 Advanced processor options
 CONFIG_ADVANCED_CPU
   This gives you access to some advanced options for the CPU. The
@@ -12483,6 +13378,11 @@ Amiga 1200/600 PCMCIA support
 CONFIG_AMIGA_PCMCIA
   Include support in the kernel for pcmcia on Amiga 1200 and Amiga 600.
   If you intend to use pcmcia cards say Y; otherwise say N.
+
+Hisoft Whippet PCMCIA serial support
+CONFIG_WHIPPET_SERIAL
+  HiSoft has a web page at <http://www.hisoft.co.uk/>, but there
+  is no listing for the Whippet in their Amiga section.
 
 Amiga GSP (TMS340x0) support
 CONFIG_AMIGA_GSP
@@ -12522,6 +13422,11 @@ CONFIG_STRAM_SWAP
   for device driver modules (e.g. floppy, ACSI, SLM printer, DMA
   sound). The probability that such allocations at module load time
   fail is drastically reduced.
+
+ST-RAM statistics in /proc
+CONFIG_STRAM_PROC
+   Say Y here to report ST-RAM usage statistics in /proc/stram.  See the
+   help for CONFIG_STRAM_SWAP for discussion of ST-RAM and its uses.
 
 Atari ACSI support
 CONFIG_ATARI_ACSI
@@ -12621,6 +13526,12 @@ CONFIG_FASTLANE_SCSI
   If you have the Phase5 Fastlane Z3 SCSI controller, or plan to use
   one in the near future, say Y to this question. Otherwise, say N.
 
+BSC Oktagon SCSI support
+CONFIG_OKTAGON_SCSI
+  If you have the BSC Oktagon SCSI disk controller for the Amiga, say Y to
+  this question.  If you're in doubt about whether you have one, see the
+  picture at <http://amiga.multigraph.com/photos/oktagon.html>.
+
 Atari native SCSI support
 CONFIG_ATARI_SCSI
   If you have an Atari with built-in NCR5380 SCSI controller (TT,
@@ -12640,6 +13551,12 @@ CONFIG_ATARI_SCSI_TOSHIBA_DELAY
   accommodate some flaky Toshiba CD-ROM drives. Say Y if you intend to
   use a Toshiba CD-ROM drive; otherwise, the option is not needed and
   would impact performance a bit, so say N.
+
+Reset SCSI-devices at boottime
+CONFIG_ATARI_SCSI_RESET_BOOT
+  Reset the devices on your Atari whenever it boots.  This makes the boot
+  process fractionally longer but may assist recovery from errors that
+  leave the devices with SCSI operations partway completed.
 
 Hades SCSI DMA emulator (EXPERIMENTAL)
 CONFIG_TT_DMA_EMUL
@@ -12703,6 +13620,11 @@ CONFIG_HYDRA
   want). The module is called hydra.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
+Sun3x ESP SCSI driver
+CONFIG_SUN3X_ESP
+  The ESP was an on-board SCSI controller used on Sun 3/80
+  machines.  Say Y here to compile in support for it.
+
 Pcmcia NE2000 compatible support
 CONFIG_APNE
   If you have a pcmcia ne2000 compatible adapter, say Y.  Otherwise,
@@ -12748,6 +13670,25 @@ CONFIG_MACSONIC
   800, 900, and 950 models, all Centris 650, most Centris 610, and all
   LC475/476 models.  It is also found in the DuoDock Plus and DuoDock
   II, as well as many NuBus, LC-PDS, and comm-slot cards. 
+
+Macintosh NS8390 based Ethernet support
+CONFIG_MAC8390
+  If you want to include a driver to support Nubus or LC-PDS
+  Ethernet cards using an NS8390 chipset or its equivalent, say Y
+  and read the Ethernet-HOWTO, available from
+  <http://www.linuxdoc.org/docs.html#howto>.
+
+Macintosh CS89x0 based Ethernet support
+CONFIG_MAC89x0
+  Support for CS89x0 chipset based Ethernet cards.  If you have a Nubus
+  or LC-PDS network (Ethernet) card of this type, say Y and read the
+  Ethernet-HOWTO, available from <http://www.linuxdoc.org/docs.html#howto>.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read <file:Documentation/modules.txt> as well as
+  <file:Documentation/networking/net-modules.txt>.  This module will be
+  called mac89x0.o.
 
 Macintosh (AV) onboard MACE ethernet
 CONFIG_MACMACE
@@ -12845,6 +13786,11 @@ CONFIG_ATARI_DSP56K
   If you want to compile it as a module, say M here and read
   Documentation/modules.txt.
 
+Support for early boot text console
+CONFIG_BOOTX_TEXT
+  Say Y here to see progress messages from the boot firmware in text mode.
+  Requires either BootX or Open Firmware.
+
 Amiga builtin serial support
 CONFIG_AMIGA_BUILTIN_SERIAL
   If you want to use your Amiga's built-in serial port in Linux,
@@ -12859,6 +13805,16 @@ GVP IO-Extender support
 CONFIG_GVPIOEXT
   If you want to use a GVP IO-Extender serial card in Linux, say Y.
   Otherwise, say N.
+
+GVP IO-Extender parallel printer support
+CONFIG_GVPIOEXT_LP
+  Say Y to enable driving a printer from the parallel port on your
+  GVP IO-Extender card, N otherwise
+
+GVP IO-Extender PLIP support
+CONFIG_GVPIOEXT_PLIP
+  Say Y to enable doing IP over the parallel port on your  GVP IO-Extender
+  card, N otherwise
 
 Multiface Card III serial support
 CONFIG_MULTIFACE_III_TTY
@@ -12927,6 +13883,99 @@ CONFIG_PMAC
   embedded MBX boards from Motorola. Currently, a single kernel binary
   only supports one type or the other. However, there is very early
   work on support for CHRP, PReP and PowerMac's from a single binary.
+
+# Choice: ppc6xxtype
+Machine Type
+CONFIG_ALL_PPC
+  Linux currently supports several different kinds of PowerPC-based
+  machines: Apple Power Macintoshes and clones (such as the Motorola
+  Starmax series), PReP (PowerPC Reference Platform) machines such as
+  the Motorola PowerStack, CHRP (Common Hardware Reference Platform),
+  the embedded MBX boards from Motorola and many others. Currently,
+  the default option is to build a kernel which works on the first
+  three.  Support for other machines is currently incomplete.
+
+  Select PowerMac/PReP/MTX/CHRP if configuring for any of the above.
+
+  Select Gemini if configuring for a Synergy Microsystems' Gemini series
+  Single Board Computer.
+  More information is available at:
+  <http://www.synergymicro.com/PressRel/97_10_15.html>
+
+  Select APUS if configuring for a PowerUP Amiga.
+  More information is available at:
+  <http://linux-apus.sourceforge.net>
+
+Gemini
+CONFIG_GEMINI
+  Select Gemini if configuring for a Synergy Microsystems' Gemini series
+  Single Board Computer.
+  More information is available at:
+  <http://www.synergymicro.com/PressRel/97_10_15.html>
+
+Apus
+CONFIG_APUS
+  Select APUS if configuring for a PowerUP Amiga.
+  More information is available at:
+  <http://linux-apus.sourceforge.net>
+
+Power management support for PowerBooks
+CONFIG_PMAC_PBOOK
+  This provides support for putting a PowerBook to sleep; it also
+  enables media bay support.  Power management works on the
+  PB2400/3400/3500, Wallstreet, Lombard, and Bronze PowerBook G3. You
+  must get the power management daemon, pmud, to make it work and you
+  must have the /dev/pmu device (see the pmud README).
+
+  Get pmud from <ftp://ftp.samba.org/pub/ppclinux/pmud/>.
+
+  If you have a PowerBook, you should say Y.
+
+  You may also want to compile the dma sound driver as a module and
+  have it autoloaded. The act of removing the module shuts down the
+  sound hardware for more power savings.
+
+MBX
+CONFIG_MBX
+  MBX is a line of Motorola single-board computer based around the MPC821
+  and MPC860 processors, and intended for embedded-controller applications.
+  Say Y here to support these boards directly.
+
+AltiVec support
+CONFIG_ALTIVEC
+  Say Y here to compile in support for Motorola AltiVec boards.  The
+  AltiVec board is baced on the MPC7400 embedded version of the PowerPC
+  and adds a SIMD vector-processing unit.  Product information at
+  <http://www.motorola.com/SPS/PowerPC/AltiVec/>.
+
+ADB raw keycode support
+CONFIG_MAC_ADBKEYCODES
+  This provides support for sending raw ADB keycodes to console
+  devices.  This is the default up to 2.4.0, but in future this may be
+  phased out in favor of generic Linux keycodes. If you say Y here, you
+  can dynamically switch via the
+      /proc/sys/dev/mac_hid/keyboard_sends_linux_keycodes
+  sysctl and with the "keyboard_sends_linux_keycodes=" kernel argument.
+
+  If unsure, say Y here.
+
+Mouse button 2+3 emulation support
+CONFIG_MAC_EMUMOUSEBTN
+  This provides generic support for emulating the 2nd and 3rd mouse
+  button with keypresses. If you say Y here, the emulation is still
+  disabled by default. The emulation is controlled by these sysctl entries:
+      /proc/sys/dev/mac_hid/mouse_button_emulation
+      /proc/sys/dev/mac_hid/mouse_button2_keycode
+      /proc/sys/dev/mac_hid/mouse_button3_keycode
+
+Enhanced Real Time Clock Support (/dev/rtc)
+CONFIG_PPC_RTC
+  If you say Y here and create a character special file /dev/rtc with
+  major number 10 and minor number 135 using mknod ("man mknod"), you
+  will get access to the real time clock (or hardware clock) built
+  into your computer.
+
+  If unsure, say Y here.
 
 Support for Open Firmware device tree in /proc
 CONFIG_PROC_DEVICETREE
@@ -13006,6 +14055,16 @@ CONFIG_GMAC
   which can be inserted in and removed from the running kernel
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
+
+Symbios 53c885 (Synergy Ethernet) support
+CONFIG_NCR885E
+  This is and Ethernet driver for the dual-function NCR 53C885
+  SCSI/Ethernet controller.
+
+  This driver is also available as a module called ncr885e.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>.
 
 Video For Linux
 CONFIG_VIDEO_DEV
@@ -13293,6 +14352,22 @@ CONFIG_VIDEO_BT848
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
 
+SGI Vino Video For Linux
+CONFIG_VIDEO_VINO
+  Say Y here to build in support for the Vino video input system found on
+  SGI Indy machines.
+
+Zoran ZR36057/36060 Video For Linux
+CONFIG_VIDEO_ZORAN
+  Say Y here to include support for video cards based on the the Zoran
+  ZR36057/36060 encoder/decoder chip (including the Iomega Buz and the
+  Miro DC10 and DC30 video capture cards).
+
+Include support for Iomega Buz
+CONFIG_VIDEO_BUZ
+  Say Y here to include support for the Iomega Buz video card.  There is
+  a Buz/Linux homepage at <http://www.lysator.liu.se/~gz/buz/>.
+
 SAA5249 Teletext processor
 CONFIG_VIDEO_SAA5249
   Support for I2C bus based teletext using the SAA5249 chip. At the
@@ -13340,6 +14415,32 @@ CONFIG_VIDEO_PLANB
 #
 # ARM options
 #
+# Choice: armtype
+A5000
+CONFIG_ARCH_A5K
+  Say Y here to to support the Acorn A5000.  Linux can support the internal
+  IDE disk and CD-ROM interface, serial and parallel port, and the floppy
+  drive.  Note that on some A5000s the floppy is plugged into the wrong
+  socket on the motherboard.
+
+EBSA-110
+CONFIG_ARCH_EBSA110
+  This is an evaluation board for the StrongARM processor available
+  from Digital. It has limited hardware on-board, including an onboard
+  Ethernet interface, two PCMCIA sockets, two serial ports and a
+  parallel port.
+
+RiscPC
+CONFIG_ARCH_RPC
+  On the Acorn Risc-PC, Linux can support the internal IDE disk and
+  CD-ROM interface, serial and parallel port, and the floppy drive.
+
+2MB physical memory
+CONFIG_PAGESIZE_16
+  Say Y here if your Archimedes or A5000 system has only 2MB of
+  memory, otherwise say N.  The resulting kernel will not run on a
+  machine with 4MB of memory.
+
 CPU Optimization
 CONFIG_CPU_ARM2
   This selects the processor type of your CPU. This is only used to
@@ -13368,6 +14469,16 @@ CONFIG_ARCH_EBSA285
 Include support for the NetWinder
 CONFIG_ARCH_NETWINDER
   Say Y here if you intend to run this kernel on the NetWinder.
+
+Support StrongARM SA-110 processor
+CONFIG_CPU_SA110
+  The Intel StrongARM(R) SA-110 is a 32-bit microprocessor and
+  is available at five speeds ranging from 100 MHz to 233 MHz.
+  More information is available at
+  <http://developer.intel.com/design/strong/sa110.htm>
+
+  Say Y if you want support for the SA-110 processor.
+  Otherwise, say N.
 
 Math emulation
 CONFIG_NWFPE
@@ -13423,6 +14534,29 @@ CONFIG_DEBUG_INFO
   addr2line to debug the kernel. It has no impact on the in-memory
   footprint of the running kernel but it can increase the amount of
   time and disk space needed for compilation. If in doubt say N.
+
+Kernel low-level debugging functions
+CONFIG_DEBUG_LL
+  Say Y here to include definitions of printascii, printchar, printhex
+  in the kernel.  This is helpful if you are debugging code that
+  executes before the console is initialized.
+
+Kernel low-level debugging messages via footbridge serial port
+CONFIG_DEBUG_DC21285_PORT
+  Say Y here if you want the low-level print routines to direct their
+  output to the serial port in the DC21285 (Footbridge). Saying N
+  will cause the debug messages to appear on the first 16550
+  serial port.
+
+Include kgdb kernel debugger
+CONFIG_KGDB
+  Include in-kernel hooks for kgdb, the Linux kernel source level debugger.
+  This project has a web page at <http://kgdb.sourceforge.net/>.
+
+Include xmon kernel debugger
+CONFIG_XMON
+   Include in-kernel hooks for the xmon kernel monitor/debugger supported
+   by the PPC port.
 
 Split initialisation functions into discardable section
 CONFIG_TEXT_SECTIONS
@@ -13521,6 +14655,11 @@ CONFIG_IRDA
   This support is also available as a module. If you want to compile
   it as a module, say M here and read Documentation/modules.txt. The
   module will be called 
+
+Ultra (connectionless) protocol
+CONFIG_IRDA_ULTRA
+  Say Y here to support the connectionless Ultra IRDA protocol, also
+  called IrOBEX.
 
 IrDA protocol options
 CONFIG_IRDA_OPTIONS
@@ -13649,6 +14788,24 @@ CONFIG_TOSHIBA_FIR
   read Documentation/modules.txt. This chipset is used by the Toshiba
   Libretto 100CT, and many more laptops.
 
+SMC IrCC
+CONFIG_SMC_IRCC_FIR
+  Say Y here if you want to build support for the SMC Infrared
+  Communications Controller. It is used in the Fujitsu Lifebook 635t
+  and Sony PCG-505TX. If you want to compile it as a module, say M
+  here and read <file:Documentation/modules.txt>. The module will be called
+  smc-ircc.o.
+
+Serial dongle support
+CONFIG_DONGLE
+  Say Y here if you have an infrared device that connects to your
+  computer's serial port. These devices are called dongles. Then say Y
+  or M to the driver for your particular dongle below.
+
+  Note that the answer to this question won't directly affect the
+  kernel: saying N will just cause the configurator to skip all
+  the questions about serial dongles.
+
 ESI JetEye PC Dongle
 CONFIG_ESI_DONGLE
   Say Y here if you want to build support for the Extended Systems
@@ -13695,8 +14852,8 @@ CONFIG_LITELINK_DONGLE
   by IrTTY. To activate support for Parallax dongles you will have to
   start irattach like this "irattach -d litelink".
 
-Old Belking dongle
-CONFIG_OLD_BELKING_DONGLE
+Old Belkin dongle
+CONFIG_OLD_BELKIN_DONGLE
   Say Y here if you want to build support for the old Belkin SmartBeam
   dongle. If you want to compile it as a module, say M here and read
   Documentation/modules.txt. The Belkin SmartBeam dongle (F5F500) come 
@@ -13713,6 +14870,13 @@ CONFIG_VME
   board.  Boards currently supported include Motorola boards MVME162,
   MVME166, MVME167, MVME172, and MVME177.  BVME4000 and BVME6000
   boards from BVM Ltd are also supported.
+
+MVME147 support
+CONFIG_MVME147
+  Say Y to include support for early Motorola VME boards.  This will
+  build a kernel which can run on MVME147 single-board computers.  If
+  you select this option you will have to select the appropriate
+  drivers for SCSI, Ethernet and serial ports later on.
 
 MVME162, 166 and 167 support
 CONFIG_MVME16x
@@ -13741,6 +14905,23 @@ CONFIG_060_WRITETHROUGH
   drivers on 68060 based systems where the 68060 bus snooping signal
   is hardwired on.  The 53c710 SCSI driver is known to suffer from
   this problem.
+
+WD33C93 SCSI driver for MVME147
+CONFIG_MVME147_SCSI
+  Support for the on-board SCSI controller on the Motorola MVME147
+  single-board computer.
+
+SCC support for MVME147 serial ports
+CONFIG_MVME147_SCC
+  This is the driver for the serial ports on the Motorola MVME147
+  boards.  Everyone using one of these boards should say Y here.
+
+MVME147 (Lance) Ethernet support
+CONFIG_MVME147_NET
+  Support for the on-board Ethernet interface on the Motorola MVME147
+  single-board computer.  Say Y here to include the
+  driver for this chip in your kernel.   If you want to compile it as
+  a module, say M here and read <file:Documentation/modules.txt>.
 
 NCR53C710 SCSI driver for MVME16x
 CONFIG_MVME16x_SCSI
@@ -13799,6 +14980,13 @@ CONFIG_ARCH_S390
   s390-compiler released by IBM (based on gcc-2.95.1) before.
 
 Merge some code into the kernel to make the image IPLable
+CONFIG_IPL
+  If you want to use the produced kernel to IPL directly from a
+  device, you have to merge a bootsector specific to the device
+  into the first bytes of the kernel. You will have to select the
+  IPL device.
+
+Merge some code into the kernel to make the image IPLable
 CONFIG_IPLABLE
   If you want to use the produced kernel to IPL directly from a
   device, you have to merge a bootsector specific to the device
@@ -13854,6 +15042,62 @@ FBA devices
 CONFIG_DASD_FBA
   FBA devices are e.g. the Vitual disk in storage under VM/ESA and others.
 
+Support for 3215 line mode terminal
+CONFIG_3215
+  Include support for IBM 3215 line-mode terminals.  Can't be used
+  if 3270 console support is chosen.
+
+Support for console on 3215 line mode terminal
+CONFIG_3215_CONSOLE
+  Include support for using an IBM 3215 line-mode terminal as the Linux
+  system console.  Can't be used if 3270 console support is chosen.
+
+Support for HWC line mode terminal
+CONFIG_HWC
+  Include support for IBM HWC line-mode terminals.
+
+Console on HWC line mode terminal
+CONFIG_HWC_CONSOLE
+  Include support for using an IBM HWC line-mode terminal as the Linux
+  system console.
+
+CTC device support
+CONFIG_CTC
+  Select this option if you want to use channel-to-channel networking
+  on IBM S/390 or zSeries. This device driver supports real CTC
+  coupling using ESCON. It also supports virtual CTCs when running
+  under VM. It will use the channel device configuration if this is
+  available.  This option is also available as a module which will be
+  called ctc.o.  If you do not know what it is, it's safe to say "Y".
+
+XPRAM disk support
+CONFIG_BLK_DEV_XPRAM
+  Select this option if you want to use your expanded storage on S/390
+  or zSeries as a disk.  This is useful as a _fast_ swap device if you
+  want to access more than 2G of memory when running in 31 bit mode.
+  This option is also available as a module which will be called
+  xpram.o.  If unsure, say "N".
+
+Fast IRQ handling
+CONFIG_FAST_IRQ
+  Select this option in order to get the interrupts processed faster
+  on your S/390 or zSeries machine.  If selected, after an interrupt
+  is processed, the channel subsystem will be asked for other pending
+  interrupts which will also be processed before leaving the interrupt
+  context.  This speeds up the I/O a lot. Say "Y".
+
+IUCV device support (VM only)
+CONFIG_IUCV
+  Select this option if you want to use inter-user communication
+  vehicle networking under VM or VIF.  This option is also available
+  as a module which will be called iucv.o. If unsure, say "Y".
+
+Show crashed user process info
+CONFIG_PROCESS_DEBUG
+  Say Y to print all process fault locations to the console.  This is
+  a debugging option; you probably do not want to set it unless you
+  are an S390 port maintainer.
+
 Diag access to CMS formatted minidisk
 CONFIG_DASD_MDSK
   By using this access method you can acess any disk supported by VM/ESA.
@@ -13875,6 +15119,18 @@ CONFIG_BLK_CPQ_CISS_DA
    See "linux/Documentation/cciss.txt" for the current list of
    boards supported by this driver, and for further information
    on the use of this driver.
+
+Linux telephony support
+CONFIG_PHONE
+  Say Y here if you have a telephony card, which for example allows
+  you to use a regular phone for voice-over-IP applications.
+
+  Note: this has nothing to do with modems. You do not need to say Y
+  here in order to be able to use a modem under Linux.
+
+  This support is also available as a module. If you want to compile
+  it as a module, say M here and read <file:Documentation/modules.txt>. The
+  module will be called phonedev.o.
 
 QuickNet Internet LineJack/PhoneJack support
 CONFIG_PHONE_IXJ
@@ -13926,6 +15182,14 @@ CONFIG_VIDEO_CPIA_PP
   Creative Webcam II. If you have the parallel port version of one
   of these cameras, say Y here, otherwise say N. It is also available
   as a module (cpia_pp.o).
+
+CPiA USB Lowlevel Support
+CONFIG_VIDEO_CPIA_USB
+  This is the lowlevel USB support for cameras based on Vision's CPiA
+  (Colour Processor Interface ASIC), such as the Creative Webcam II.
+  If you have the USB version of one of these cameras, say Y here,
+  otherwise say N. This will not work with the Creative Webcam III.
+  It is also available as a module (cpia_usb.o).
 
 CPiA Parallel Port DMA Support
 CONFIG_VIDEO_CPIA_PP_DMA

@@ -21,6 +21,9 @@
  *					Implemented idle timer.
  *					Added use count to neighbour.
  *                      Tomi(OH2BNS)    Fixed rose_getname().
+ *
+ *	ROSE 0.63	Jean-Paul(F6FBB) Fixed wrong length of L3 packets
+ *					Added CLEAR_REQUEST facilities
  */
 
 #include <linux/config.h>
@@ -1503,7 +1506,7 @@ __initfunc(void rose_proto_init(struct net_proto *pro))
 
 	sock_register(&rose_family_ops);
 	register_netdevice_notifier(&rose_dev_notifier);
-	printk(KERN_INFO "F6FBB/G4KLX ROSE for Linux. Version 0.62 for AX25.037 Linux 2.1\n");
+	printk(KERN_INFO "F6FBB/G4KLX ROSE for Linux. Version 0.63 for AX25.037 Linux 2.2\n");
 
 	ax25_protocol_register(AX25_P_ROSE, rose_route_frame);
 	ax25_linkfail_register(rose_link_failed);

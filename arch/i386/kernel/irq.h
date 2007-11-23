@@ -85,6 +85,7 @@ extern int irq_vector[NR_IRQS];
 extern void init_IRQ_SMP(void);
 extern int handle_IRQ_event(unsigned int, struct pt_regs *, struct irqaction *);
 extern int setup_x86_irq(unsigned int, struct irqaction *);
+extern void release_x86_irqs(struct task_struct *);
 
 /*
  * Various low-level irq details needed by irq.c, process.c,

@@ -148,6 +148,7 @@ an MMIO register read.
 #include <linux/rtnetlink.h>
 #include <linux/delay.h>
 #include <asm/io.h>
+#include <linux/smp_lock.h>
 
 
 #define RTL8139_VERSION "0.9.14-2.2"
@@ -187,7 +188,7 @@ an MMIO register read.
 #endif
 
 #define dev_kfree_skb_irq(a)	dev_kfree_skb(a)
-#define netif_wake_queue(dev)	clear_bit(0, &dev->tbusy)
+#define netif_wake_queue(dev)	do { clear_bit(0, &dev->tbusy); mark_bh(NET_BH); } while(0)
 #define netif_stop_queue(dev)	set_bit(0, &dev->tbusy)
 
 static inline void netif_start_queue(struct device *dev)

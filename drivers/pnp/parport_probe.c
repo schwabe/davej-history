@@ -55,7 +55,7 @@ static long read_polled(struct parport *port, char *buf,
 	unsigned int count = 0;
 	unsigned char z=0;
 	unsigned char Byte=0;
-	unsigned long igiveupat=jiffies+5*HZ;
+	unsigned long igiveupat=jiffies+9*HZ;
 
 	for (i=0; time_before(jiffies, igiveupat); i++) {
 	       /* if(current->need_resched) schedule(); */
