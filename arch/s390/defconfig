@@ -34,6 +34,7 @@ CONFIG_SYSVIPC=y
 # CONFIG_BSD_PROCESS_ACCT is not set
 CONFIG_SYSCTL=y
 CONFIG_BINFMT_ELF=y
+# CONFIG_BINFMT_ELF_AOUT is not set
 
 #
 # S/390 block device drivers

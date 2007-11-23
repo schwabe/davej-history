@@ -9,6 +9,7 @@
  * Copyright 1993, 1994: Eric Youngdale (ericy@cais.com).
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/fs.h>
@@ -50,7 +51,9 @@ extern int dump_fpu (elf_fpregset_t *);
 static struct linux_binfmt irix_format = {
 	module:		THIS_MODULE,
 	load_binary:	load_irix_binary,
+#ifdef CONFIG_BINFMT_ELF_AOUT
 	load_shlib:	load_irix_library,
+#endif
 	core_dump:	irix_core_dump,
 	min_coredump:	PAGE_SIZE,
 };
@@ -817,6 +820,7 @@ out_phdata:
 	return retval;
 }
 
+#ifdef CONFIG_BINFMT_ELF_AOUT
 /* This is really simpleminded and specialized - we are loading an
  * a.out library that is given an ELF header.
  */
@@ -915,6 +919,7 @@ static int load_irix_library(struct file *file)
 	kfree(elf_phdata);
 	return 0;
 }
+#endif
 
 /* Called through irix_syssgi() to map an elf image given an FD,
  * a phdr ptr USER_PHDRP in userspace, and a count CNT telling how many

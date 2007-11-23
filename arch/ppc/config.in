@@ -69,6 +69,7 @@ bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 # only elf supported, a.out is not -- Cort
 define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_KERNEL_ELF y
+bool 'ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 

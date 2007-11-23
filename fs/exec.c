@@ -170,6 +170,7 @@ out:
  */
 asmlinkage int sys_uselib(const char * library)
 {
+#if defined(CONFIG_BINFMT_AOUT) || defined(CONFIG_BINFMT_ELF_AOUT)
 	int retval;
 	struct file * file;
 	struct linux_binfmt * fmt;
@@ -207,6 +208,9 @@ out_fput:
 out:
 	unlock_kernel();
   	return retval;
+#else
+	return -ENOSYS;
+#endif
 }
 
 /*

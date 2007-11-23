@@ -248,41 +248,41 @@ extern void reboot_setup(char *str, int *ints);
 extern void video_setup(char *str, int *ints);
 #ifdef CONFIG_CDU31A
 extern void cdu31a_setup(char *str, int *ints);
-#endif CONFIG_CDU31A
+#endif /* CONFIG_CDU31A */
 #ifdef CONFIG_BLK_DEV_PS2
 extern void ed_setup(char *str, int *ints);
 extern void tp720_setup(char *str, int *ints);
-#endif CONFIG_BLK_DEV_PS2
+#endif /* CONFIG_BLK_DEV_PS2 */
 #ifdef CONFIG_MCD
 extern void mcd_setup(char *str, int *ints);
-#endif CONFIG_MCD
+#endif /* CONFIG_MCD */
 #ifdef CONFIG_MCDX
 extern void mcdx_setup(char *str, int *ints);
-#endif CONFIG_MCDX
+#endif /* CONFIG_MCDX */
 #ifdef CONFIG_SBPCD
 extern void sbpcd_setup(char *str, int *ints);
-#endif CONFIG_SBPCD
+#endif /* CONFIG_SBPCD */
 #ifdef CONFIG_AZTCD
 extern void aztcd_setup(char *str, int *ints);
-#endif CONFIG_AZTCD
+#endif /* CONFIG_AZTCD */
 #ifdef CONFIG_CDU535
 extern void sonycd535_setup(char *str, int *ints);
-#endif CONFIG_CDU535
+#endif /* CONFIG_CDU535 */
 #ifdef CONFIG_GSCD
 extern void gscd_setup(char *str, int *ints);
-#endif CONFIG_GSCD
+#endif /* CONFIG_GSCD */
 #ifdef CONFIG_CM206
 extern void cm206_setup(char *str, int *ints);
-#endif CONFIG_CM206
+#endif /* CONFIG_CM206 */
 #ifdef CONFIG_OPTCD
 extern void optcd_setup(char *str, int *ints);
-#endif CONFIG_OPTCD
+#endif /* CONFIG_OPTCD */
 #ifdef CONFIG_SJCD
 extern void sjcd_setup(char *str, int *ints);
-#endif CONFIG_SJCD
+#endif /* CONFIG_SJCD */
 #ifdef CONFIG_ISP16_CDI
 extern void isp16_setup(char *str, int *ints);
-#endif CONFIG_ISP16_CDI
+#endif /* CONFIG_ISP16_CDI */
 #ifdef CONFIG_BLK_DEV_RAM
 static void ramdisk_start_setup(char *str, int *ints);
 static void load_ramdisk(char *str, int *ints);
@@ -291,7 +291,7 @@ static void ramdisk_size(char *str, int *ints);
 #ifdef CONFIG_BLK_DEV_INITRD
 static void no_initrd(char *s,int *ints);
 #endif
-#endif CONFIG_BLK_DEV_RAM
+#endif /* CONFIG_BLK_DEV_RAM */
 #ifdef CONFIG_ISDN_DRV_ICN
 extern void icn_setup(char *str, int *ints);
 #endif
@@ -460,172 +460,189 @@ static void __init profile_setup(char *str, int *ints)
 		prof_shift = 2;
 }
 
-
 static struct dev_name_struct {
 	const char *name;
 	const int num;
 } root_dev_names[] __initdata = {
-	{ "nfs",     0x00ff },
-	{ "loop",    0x0700 },
-	{ "hda",     0x0300 },
-	{ "hdb",     0x0340 },
-	{ "hdc",     0x1600 },
-	{ "hdd",     0x1640 },
-	{ "hde",     0x2100 },
-	{ "hdf",     0x2140 },
-	{ "hdg",     0x2200 },
-	{ "hdh",     0x2240 },
-	{ "hdi",     0x3800 },
-	{ "hdj",     0x3840 },
-	{ "hdk",     0x3900 },
-	{ "hdl",     0x3940 },
-	{ "sda",     0x0800 },
-	{ "sdb",     0x0810 },
-	{ "sdc",     0x0820 },
-	{ "sdd",     0x0830 },
-	{ "sde",     0x0840 },
-	{ "sdf",     0x0850 },
-	{ "sdg",     0x0860 },
-	{ "sdh",     0x0870 },
-	{ "sdi",     0x0880 },
-	{ "sdj",     0x0890 },
-	{ "sdk",     0x08a0 },
-	{ "sdl",     0x08b0 },
-	{ "sdm",     0x08c0 },
-	{ "sdn",     0x08d0 },
-	{ "sdo",     0x08e0 },
-	{ "sdp",     0x08f0 },
-	{ "rd/c0d0p",0x3000 },
-	{ "rd/c0d1p",0x3008 },
-	{ "rd/c0d2p",0x3010 },
-	{ "rd/c0d3p",0x3018 },
-	{ "rd/c0d4p",0x3020 },
-	{ "rd/c0d5p",0x3028 },
-	{ "rd/c0d6p",0x3030 },
-	{ "rd/c0d7p",0x3038 },
-	{ "rd/c0d8p",0x3040 },
-	{ "rd/c0d9p",0x3048 },
-	{ "rd/c0d10p",0x3050 },
-	{ "rd/c0d11p",0x3058 },
-	{ "rd/c0d12p",0x3060 },
-	{ "rd/c0d13p",0x3068 },
-	{ "rd/c0d14p",0x3070 },
-	{ "rd/c0d15p",0x3078 },
-	{ "ida/c0d0p",0x4800 },
-	{ "ida/c0d1p",0x4810 },
-	{ "ida/c0d2p",0x4820 },
-	{ "ida/c0d3p",0x4830 },
-	{ "ida/c0d4p",0x4840 },
-	{ "ida/c0d5p",0x4850 },
-	{ "ida/c0d6p",0x4860 },
-	{ "ida/c0d7p",0x4870 },
-	{ "ida/c0d8p",0x4880 },
-	{ "ida/c0d9p",0x4890 },
+	{ "nfs",       0x00ff },
+	{ "loop",      0x0700 },
+	{ "hda",       0x0300 },
+	{ "hdb",       0x0340 },
+	{ "hdc",       0x1600 },
+	{ "hdd",       0x1640 },
+	{ "hde",       0x2100 },
+	{ "hdf",       0x2140 },
+	{ "hdg",       0x2200 },
+	{ "hdh",       0x2240 },
+	{ "hdi",       0x3800 },
+	{ "hdj",       0x3840 },
+	{ "hdk",       0x3900 },
+	{ "hdl",       0x3940 },
+	{ "sda",       0x0800 },
+	{ "sdb",       0x0810 },
+	{ "sdc",       0x0820 },
+	{ "sdd",       0x0830 },
+	{ "sde",       0x0840 },
+	{ "sdf",       0x0850 },
+	{ "sdg",       0x0860 },
+	{ "sdh",       0x0870 },
+	{ "sdi",       0x0880 },
+	{ "sdj",       0x0890 },
+	{ "sdk",       0x08a0 },
+	{ "sdl",       0x08b0 },
+	{ "sdm",       0x08c0 },
+	{ "sdn",       0x08d0 },
+	{ "sdo",       0x08e0 },
+	{ "sdp",       0x08f0 },
+	{ "rd/c0d0p",  0x3000 },
+	{ "rd/c0d1p",  0x3008 },
+	{ "rd/c0d2p",  0x3010 },
+	{ "rd/c0d3p",  0x3018 },
+	{ "rd/c0d4p",  0x3020 },
+	{ "rd/c0d5p",  0x3028 },
+	{ "rd/c0d6p",  0x3030 },
+	{ "rd/c0d7p",  0x3038 },
+	{ "rd/c0d8p",  0x3040 },
+	{ "rd/c0d9p",  0x3048 },
+	{ "rd/c0d10p", 0x3050 },
+	{ "rd/c0d11p", 0x3058 },
+	{ "rd/c0d12p", 0x3060 },
+	{ "rd/c0d13p", 0x3068 },
+	{ "rd/c0d14p", 0x3070 },
+	{ "rd/c0d15p", 0x3078 },
+	{ "ida/c0d0p", 0x4800 },
+	{ "ida/c0d1p", 0x4810 },
+	{ "ida/c0d2p", 0x4820 },
+	{ "ida/c0d3p", 0x4830 },
+	{ "ida/c0d4p", 0x4840 },
+	{ "ida/c0d5p", 0x4850 },
+	{ "ida/c0d6p", 0x4860 },
+	{ "ida/c0d7p", 0x4870 },
+	{ "ida/c0d8p", 0x4880 },
+	{ "ida/c0d9p", 0x4890 },
 	{ "ida/c0d10p",0x48A0 },
 	{ "ida/c0d11p",0x48B0 },
 	{ "ida/c0d12p",0x48C0 },
 	{ "ida/c0d13p",0x48D0 },
 	{ "ida/c0d14p",0x48E0 },
 	{ "ida/c0d15p",0x48F0 },
-	{ "ada",     0x1c00 },
-	{ "adb",     0x1c10 },
-	{ "adc",     0x1c20 },
-	{ "add",     0x1c30 },
-	{ "ade",     0x1c40 },
-	{ "fd",      0x0200 },
-	{ "md",      0x0900 },	     
-	{ "xda",     0x0d00 },
-	{ "xdb",     0x0d40 },
-	{ "ram",     0x0100 },
-	{ "scd",     0x0b00 },
-	{ "mcd",     0x1700 },
-	{ "cdu535",  0x1800 },
-	{ "sonycd",  0x1800 },
-	{ "aztcd",   0x1d00 },
-	{ "cm206cd", 0x2000 },
-	{ "gscd",    0x1000 },
-	{ "sbpcd",   0x1900 },
-	{ "eda",     0x2400 },
-	{ "edb",     0x2440 },
-	{ "pda",	0x2d00 },
-	{ "pdb",	0x2d10 },
-	{ "pdc",	0x2d20 },
-	{ "pdd",	0x2d30 },
-	{ "pcd",	0x2e00 },
-	{ "pf",		0x2f00 },
+	{ "ada",       0x1c00 },
+	{ "adb",       0x1c10 },
+	{ "adc",       0x1c20 },
+	{ "add",       0x1c30 },
+	{ "ade",       0x1c40 },
+	{ "fd",        0x0200 },
+	{ "md",        0x0900 },	     
+	{ "xda",       0x0d00 },
+	{ "xdb",       0x0d40 },
+	{ "ram",       0x0100 },
+	{ "scd",       0x0b00 },
+	{ "mcd",       0x1700 },
+	{ "cdu535",    0x1800 },
+	{ "sonycd",    0x1800 },
+	{ "aztcd",     0x1d00 },
+	{ "cm206cd",   0x2000 },
+	{ "gscd",      0x1000 },
+	{ "sbpcd",     0x1900 },
+	{ "eda",       0x2400 },
+	{ "edb",       0x2440 },
+	{ "pda",       0x2d00 },
+	{ "pdb",       0x2d10 },
+	{ "pdc",       0x2d20 },
+	{ "pdd",       0x2d30 },
+	{ "pcd",       0x2e00 },
+	{ "pf",	       0x2f00 },
 	{ "apblock", APBLOCK_MAJOR << 8},
 	{ "ddv", DDV_MAJOR << 8},
 #ifdef CONFIG_MDISK
-        { "mnda", (MDISK_MAJOR << MINORBITS)},
-        { "mndb", (MDISK_MAJOR << MINORBITS) + 1},
-        { "mndc", (MDISK_MAJOR << MINORBITS) + 2},
-        { "mndd", (MDISK_MAJOR << MINORBITS) + 3},
-        { "mnde", (MDISK_MAJOR << MINORBITS) + 4},
-        { "mndf", (MDISK_MAJOR << MINORBITS) + 5},
-        { "mndg", (MDISK_MAJOR << MINORBITS) + 6},
-        { "mndh", (MDISK_MAJOR << MINORBITS) + 7},
+	{ "mnda", (MDISK_MAJOR << MINORBITS)},
+	{ "mndb", (MDISK_MAJOR << MINORBITS) + 1},
+	{ "mndc", (MDISK_MAJOR << MINORBITS) + 2},
+	{ "mndd", (MDISK_MAJOR << MINORBITS) + 3},
+	{ "mnde", (MDISK_MAJOR << MINORBITS) + 4},
+	{ "mndf", (MDISK_MAJOR << MINORBITS) + 5},
+	{ "mndg", (MDISK_MAJOR << MINORBITS) + 6},
+	{ "mndh", (MDISK_MAJOR << MINORBITS) + 7},
 #endif
 #ifdef CONFIG_DASD
-       { "dasda", (DASD_MAJOR << MINORBITS) },
-       { "dasdb", (DASD_MAJOR << MINORBITS) + (1 << 2) },
-       { "dasdc", (DASD_MAJOR << MINORBITS) + (2 << 2) },
-       { "dasdd", (DASD_MAJOR << MINORBITS) + (3 << 2) },
-       { "dasde", (DASD_MAJOR << MINORBITS) + (4 << 2) },
-       { "dasdf", (DASD_MAJOR << MINORBITS) + (5 << 2) },
-       { "dasdg", (DASD_MAJOR << MINORBITS) + (6 << 2) },
-       { "dasdh", (DASD_MAJOR << MINORBITS) + (7 << 2) },
-       { "dasdi", (DASD_MAJOR << MINORBITS) + (8 << 2) },
-       { "dasdj", (DASD_MAJOR << MINORBITS) + (9 << 2) },
-       { "dasdk", (DASD_MAJOR << MINORBITS) + (10 << 2) },
-       { "dasdl", (DASD_MAJOR << MINORBITS) + (11 << 2) },
-       { "dasdm", (DASD_MAJOR << MINORBITS) + (12 << 2) },
-       { "dasdn", (DASD_MAJOR << MINORBITS) + (13 << 2) },
-       { "dasdo", (DASD_MAJOR << MINORBITS) + (14 << 2) },
-       { "dasdp", (DASD_MAJOR << MINORBITS) + (15 << 2) },
-       { "dasdq", (DASD_MAJOR << MINORBITS) + (16 << 2) },
-       { "dasdr", (DASD_MAJOR << MINORBITS) + (17 << 2) },
-       { "dasds", (DASD_MAJOR << MINORBITS) + (18 << 2) },
-       { "dasdt", (DASD_MAJOR << MINORBITS) + (19 << 2) },
-       { "dasdu", (DASD_MAJOR << MINORBITS) + (20 << 2) },
-       { "dasdv", (DASD_MAJOR << MINORBITS) + (21 << 2) },
-       { "dasdw", (DASD_MAJOR << MINORBITS) + (22 << 2) },
-       { "dasdx", (DASD_MAJOR << MINORBITS) + (23 << 2) },
-       { "dasdy", (DASD_MAJOR << MINORBITS) + (24 << 2) },
-       { "dasdz", (DASD_MAJOR << MINORBITS) + (25 << 2) },
+	{ "dasda", (DASD_MAJOR << MINORBITS) },
+	{ "dasdb", (DASD_MAJOR << MINORBITS) + (1 << 2) },
+	{ "dasdc", (DASD_MAJOR << MINORBITS) + (2 << 2) },
+	{ "dasdd", (DASD_MAJOR << MINORBITS) + (3 << 2) },
+	{ "dasde", (DASD_MAJOR << MINORBITS) + (4 << 2) },
+	{ "dasdf", (DASD_MAJOR << MINORBITS) + (5 << 2) },
+	{ "dasdg", (DASD_MAJOR << MINORBITS) + (6 << 2) },
+	{ "dasdh", (DASD_MAJOR << MINORBITS) + (7 << 2) },
+	{ "dasdi", (DASD_MAJOR << MINORBITS) + (8 << 2) },
+	{ "dasdj", (DASD_MAJOR << MINORBITS) + (9 << 2) },
+	{ "dasdk", (DASD_MAJOR << MINORBITS) + (10 << 2) },
+	{ "dasdl", (DASD_MAJOR << MINORBITS) + (11 << 2) },
+	{ "dasdm", (DASD_MAJOR << MINORBITS) + (12 << 2) },
+	{ "dasdn", (DASD_MAJOR << MINORBITS) + (13 << 2) },
+	{ "dasdo", (DASD_MAJOR << MINORBITS) + (14 << 2) },
+	{ "dasdp", (DASD_MAJOR << MINORBITS) + (15 << 2) },
+	{ "dasdq", (DASD_MAJOR << MINORBITS) + (16 << 2) },
+	{ "dasdr", (DASD_MAJOR << MINORBITS) + (17 << 2) },
+	{ "dasds", (DASD_MAJOR << MINORBITS) + (18 << 2) },
+	{ "dasdt", (DASD_MAJOR << MINORBITS) + (19 << 2) },
+	{ "dasdu", (DASD_MAJOR << MINORBITS) + (20 << 2) },
+	{ "dasdv", (DASD_MAJOR << MINORBITS) + (21 << 2) },
+	{ "dasdw", (DASD_MAJOR << MINORBITS) + (22 << 2) },
+	{ "dasdx", (DASD_MAJOR << MINORBITS) + (23 << 2) },
+	{ "dasdy", (DASD_MAJOR << MINORBITS) + (24 << 2) },
+	{ "dasdz", (DASD_MAJOR << MINORBITS) + (25 << 2) },
 #endif
 #ifdef CONFIG_BLK_DEV_XPRAM
-       { "xpram0", (XPRAM_MAJOR << MINORBITS) },
-       { "xpram1", (XPRAM_MAJOR << MINORBITS) + 1 },
-       { "xpram2", (XPRAM_MAJOR << MINORBITS) + 2 },
-       { "xpram3", (XPRAM_MAJOR << MINORBITS) + 3 },
-       { "xpram4", (XPRAM_MAJOR << MINORBITS) + 4 },
-       { "xpram5", (XPRAM_MAJOR << MINORBITS) + 5 },
-       { "xpram6", (XPRAM_MAJOR << MINORBITS) + 6 },
-       { "xpram7", (XPRAM_MAJOR << MINORBITS) + 7 },
-       { "xpram8", (XPRAM_MAJOR << MINORBITS) + 8 },
-       { "xpram9", (XPRAM_MAJOR << MINORBITS) + 9 },
-       { "xpram10", (XPRAM_MAJOR << MINORBITS) + 10 },
-       { "xpram11", (XPRAM_MAJOR << MINORBITS) + 11 },
-       { "xpram12", (XPRAM_MAJOR << MINORBITS) + 12 },
-       { "xpram13", (XPRAM_MAJOR << MINORBITS) + 13 },
-       { "xpram14", (XPRAM_MAJOR << MINORBITS) + 14 },
-       { "xpram15", (XPRAM_MAJOR << MINORBITS) + 15 },
-       { "xpram16", (XPRAM_MAJOR << MINORBITS) + 16 },
-       { "xpram17", (XPRAM_MAJOR << MINORBITS) + 17 },
-       { "xpram18", (XPRAM_MAJOR << MINORBITS) + 18 },
-       { "xpram19", (XPRAM_MAJOR << MINORBITS) + 19 },
-       { "xpram20", (XPRAM_MAJOR << MINORBITS) + 20 },
-       { "xpram21", (XPRAM_MAJOR << MINORBITS) + 21 },
-       { "xpram22", (XPRAM_MAJOR << MINORBITS) + 22 },
-       { "xpram23", (XPRAM_MAJOR << MINORBITS) + 23 },
-       { "xpram24", (XPRAM_MAJOR << MINORBITS) + 24 },
-       { "xpram25", (XPRAM_MAJOR << MINORBITS) + 25 },
-       { "xpram26", (XPRAM_MAJOR << MINORBITS) + 26 },
-       { "xpram27", (XPRAM_MAJOR << MINORBITS) + 27 },
-       { "xpram28", (XPRAM_MAJOR << MINORBITS) + 28 },
-       { "xpram29", (XPRAM_MAJOR << MINORBITS) + 29 },
-       { "xpram30", (XPRAM_MAJOR << MINORBITS) + 30 },
-       { "xpram31", (XPRAM_MAJOR << MINORBITS) + 31 },
+	{ "xpram0", (XPRAM_MAJOR << MINORBITS) },
+	{ "xpram1", (XPRAM_MAJOR << MINORBITS) + 1 },
+	{ "xpram2", (XPRAM_MAJOR << MINORBITS) + 2 },
+	{ "xpram3", (XPRAM_MAJOR << MINORBITS) + 3 },
+	{ "xpram4", (XPRAM_MAJOR << MINORBITS) + 4 },
+	{ "xpram5", (XPRAM_MAJOR << MINORBITS) + 5 },
+	{ "xpram6", (XPRAM_MAJOR << MINORBITS) + 6 },
+	{ "xpram7", (XPRAM_MAJOR << MINORBITS) + 7 },
+	{ "xpram8", (XPRAM_MAJOR << MINORBITS) + 8 },
+	{ "xpram9", (XPRAM_MAJOR << MINORBITS) + 9 },
+	{ "xpram10", (XPRAM_MAJOR << MINORBITS) + 10 },
+	{ "xpram11", (XPRAM_MAJOR << MINORBITS) + 11 },
+	{ "xpram12", (XPRAM_MAJOR << MINORBITS) + 12 },
+	{ "xpram13", (XPRAM_MAJOR << MINORBITS) + 13 },
+	{ "xpram14", (XPRAM_MAJOR << MINORBITS) + 14 },
+	{ "xpram15", (XPRAM_MAJOR << MINORBITS) + 15 },
+	{ "xpram16", (XPRAM_MAJOR << MINORBITS) + 16 },
+	{ "xpram17", (XPRAM_MAJOR << MINORBITS) + 17 },
+	{ "xpram18", (XPRAM_MAJOR << MINORBITS) + 18 },
+	{ "xpram19", (XPRAM_MAJOR << MINORBITS) + 19 },
+	{ "xpram20", (XPRAM_MAJOR << MINORBITS) + 20 },
+	{ "xpram21", (XPRAM_MAJOR << MINORBITS) + 21 },
+	{ "xpram22", (XPRAM_MAJOR << MINORBITS) + 22 },
+	{ "xpram23", (XPRAM_MAJOR << MINORBITS) + 23 },
+	{ "xpram24", (XPRAM_MAJOR << MINORBITS) + 24 },
+	{ "xpram25", (XPRAM_MAJOR << MINORBITS) + 25 },
+	{ "xpram26", (XPRAM_MAJOR << MINORBITS) + 26 },
+	{ "xpram27", (XPRAM_MAJOR << MINORBITS) + 27 },
+	{ "xpram28", (XPRAM_MAJOR << MINORBITS) + 28 },
+	{ "xpram29", (XPRAM_MAJOR << MINORBITS) + 29 },
+	{ "xpram30", (XPRAM_MAJOR << MINORBITS) + 30 },
+	{ "xpram31", (XPRAM_MAJOR << MINORBITS) + 31 },
+#endif
+#if defined(CONFIG_BLK_CPQ_CISS_DA) || defined(CONFIG_BLK_CPQ_CISS_DA_MODULE)
+	{ "cciss/c0d0p", 0x6800 },
+	{ "cciss/c0d1p", 0x6810 },
+	{ "cciss/c0d2p", 0x6820 },
+	{ "cciss/c0d3p", 0x6830 },
+	{ "cciss/c0d4p", 0x6840 },
+	{ "cciss/c0d5p", 0x6850 },
+	{ "cciss/c0d6p", 0x6860 },
+	{ "cciss/c0d7p", 0x6870 },
+	{ "cciss/c0d8p", 0x6880 },
+	{ "cciss/c0d9p", 0x6890 },
+	{ "cciss/c0d10p",0x68A0 },
+	{ "cciss/c0d11p",0x68B0 },
+	{ "cciss/c0d12p",0x68C0 },
+	{ "cciss/c0d13p",0x68D0 },
+	{ "cciss/c0d14p",0x68E0 },
+	{ "cciss/c0d15p",0x68F0 },
 #endif
 	{ NULL, 0 }
 };
@@ -660,7 +677,6 @@ static void __init root_dev_setup(char *line, int *num)
  * an array of ints and chopped off the string), the second table contains
  * the few exceptions which obey their own syntax rules.
  */
-
 struct kernel_param {
 	const char *str;
 	void (*setup_func)(char *, int *);
@@ -681,8 +697,8 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "noapic", ioapic_setup },
 	{ "pirq=", ioapic_pirq_setup },
 #endif
+#endif /* __SMP__ */
 
-#endif
 #ifdef CONFIG_BLK_DEV_RAM
 	{ "ramdisk_start=", ramdisk_start_setup },
 	{ "load_ramdisk=", load_ramdisk },
@@ -692,13 +708,13 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_BLK_DEV_INITRD
 	{ "noinitrd", no_initrd },
 #endif
-#endif
+#endif /* CONFIG_BLK_DEV_RAM */
 
 #ifdef CONFIG_CTC
-        { "ctc=", ctc_setup } ,
+	{ "ctc=", ctc_setup } ,
 #endif
 #ifdef CONFIG_IUCV
-        { "iucv=", iucv_setup } ,
+	{ "iucv=", iucv_setup } ,
 #endif
 
 #ifdef CONFIG_FB
@@ -745,10 +761,10 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "decnet=", decnet_setup },
 #endif
 #ifdef CONFIG_PRINTER
-        { "lp=", lp_setup },
+	{ "lp=", lp_setup },
 #endif
 #ifdef CONFIG_VIDEO_CPIA_PP
-        { "cpia_pp=", cpia_pp_setup },
+	{ "cpia_pp=", cpia_pp_setup },
 #endif
 #ifdef CONFIG_JOY_AMIGA
 	{ "js_am=", js_am_setup },
@@ -849,7 +865,7 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "u14-34f=", u14_34f_setup},
 #endif
 #ifdef CONFIG_SCSI_AM53C974
-        { "AM53C974=", AM53C974_setup},
+	{ "AM53C974=", AM53C974_setup},
 #endif
 #ifdef CONFIG_SCSI_NCR53C406A
 	{ "ncr53c406a=", NCR53c406a_setup},
@@ -867,13 +883,13 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "wd7000=", wd7000_setup},
 #endif
 #ifdef CONFIG_SCSI_IBMMCA
-        { "ibmmcascsi=", ibmmca_scsi_setup },
+	{ "ibmmcascsi=", ibmmca_scsi_setup },
 #endif
 #ifdef CONFIG_SCSI_FD_MCS
 	{ "fd_mcs=", fd_mcs_setup },
 #endif
 #if defined(CONFIG_SCSI_DC390T) && ! defined(CONFIG_SCSI_DC390T_NOGENSUPP)
-        { "tmscsim=", dc390_setup },
+	{ "tmscsim=", dc390_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
@@ -889,37 +905,37 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_CDU31A
 	{ "cdu31a=", cdu31a_setup },
-#endif CONFIG_CDU31A
+#endif /* CONFIG_CDU31A */
 #ifdef CONFIG_MCD
 	{ "mcd=", mcd_setup },
-#endif CONFIG_MCD
+#endif /* CONFIG_MCD */
 #ifdef CONFIG_MCDX
 	{ "mcdx=", mcdx_setup },
-#endif CONFIG_MCDX
+#endif /* CONFIG_MCDX */
 #ifdef CONFIG_SBPCD
 	{ "sbpcd=", sbpcd_setup },
-#endif CONFIG_SBPCD
+#endif /* CONFIG_SBPCD */
 #ifdef CONFIG_AZTCD
 	{ "aztcd=", aztcd_setup },
-#endif CONFIG_AZTCD
+#endif /* CONFIG_AZTCD */
 #ifdef CONFIG_CDU535
 	{ "sonycd535=", sonycd535_setup },
-#endif CONFIG_CDU535
+#endif /* CONFIG_CDU535 */
 #ifdef CONFIG_GSCD
 	{ "gscd=", gscd_setup },
-#endif CONFIG_GSCD
+#endif /* CONFIG_GSCD */
 #ifdef CONFIG_CM206
 	{ "cm206=", cm206_setup },
-#endif CONFIG_CM206
+#endif /* CONFIG_CM206 */
 #ifdef CONFIG_OPTCD
 	{ "optcd=", optcd_setup },
-#endif CONFIG_OPTCD
+#endif /* CONFIG_OPTCD */
 #ifdef CONFIG_SJCD
 	{ "sjcd=", sjcd_setup },
-#endif CONFIG_SJCD
+#endif /* CONFIG_SJCD */
 #ifdef CONFIG_ISP16_CDI
 	{ "isp16=", isp16_setup },
-#endif CONFIG_ISP16_CDI
+#endif /* CONFIG_ISP16_CDI */
 #ifdef CONFIG_SOUND_OSS
 	{ "sound=", sound_setup },
 #endif
@@ -927,8 +943,8 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "icn=", icn_setup },
 #endif
 #ifdef CONFIG_ISDN_DRV_HISAX
-       { "hisax=", HiSax_setup },
-       { "HiSax=", HiSax_setup },
+	{ "hisax=", HiSax_setup },
+	{ "HiSax=", HiSax_setup },
 #endif
 #ifdef CONFIG_ISDN_DRV_PCBIT
 	{ "pcbit=", pcbit_setup },
@@ -949,7 +965,7 @@ static struct kernel_param cooked_params[] __initdata = {
 	    || defined(CONFIG_A4091_SCSI) || defined(CONFIG_MVME16x_SCSI) \
 	    || defined(CONFIG_BVME6000_SCSI) \
 	    || defined(CONFIG_BLZ603EPLUS_SCSI)
-        { "53c7xx=", ncr53c7xx_setup },
+	{ "53c7xx=", ncr53c7xx_setup },
 #endif
 #if defined(CONFIG_SCSI_SIM710)
 	{ "sim710=", sim710_setup },
@@ -1049,10 +1065,10 @@ static struct kernel_param raw_params[] __initdata = {
 	{ "pf.", pf_setup },
 #endif
 #ifdef CONFIG_PARIDE_PT
-        { "pt.", pt_setup },
+	{ "pt.", pt_setup },
 #endif
 #ifdef CONFIG_PARIDE_PG
-        { "pg.", pg_setup },
+	{ "pg.", pg_setup },
 #endif
 #ifdef CONFIG_N2
 	{ "n2=", n2_setup },
@@ -1064,14 +1080,14 @@ static struct kernel_param raw_params[] __initdata = {
 	{ "condev=", con3215_setup },
 #endif
 #ifdef CONFIG_MDISK
-        { "mdisk=", mdisk_setup },
+	{ "mdisk=", mdisk_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_XPRAM
-        { "xpram_parts=", xpram_setup },
+	{ "xpram_parts=", xpram_setup },
 #endif
 #ifdef CONFIG_ARCH_S390
-        { "vmhalt=", vmhalt_setup },
-        { "vmpoff=", vmpoff_setup },
+	{ "vmhalt=", vmhalt_setup },
+	{ "vmpoff=", vmpoff_setup },
 #endif
 	{ 0, 0 }
 };
@@ -1080,20 +1096,20 @@ static struct kernel_param raw_params[] __initdata = {
 #ifdef CONFIG_BLK_DEV_RAM
 static void __init ramdisk_start_setup(char *str, int *ints)
 {
-   if (ints[0] > 0 && ints[1] >= 0)
-      rd_image_start = ints[1];
+	if (ints[0] > 0 && ints[1] >= 0)
+		rd_image_start = ints[1];
 }
 
 static void __init load_ramdisk(char *str, int *ints)
 {
-   if (ints[0] > 0 && ints[1] >= 0)
-      rd_doload = ints[1] & 3;
+	if (ints[0] > 0 && ints[1] >= 0)
+		rd_doload = ints[1] & 3;
 }
 
 static void __init prompt_ramdisk(char *str, int *ints)
 {
-   if (ints[0] > 0 && ints[1] >= 0)
-      rd_prompt = ints[1] & 1;
+	if (ints[0] > 0 && ints[1] >= 0)
+		rd_prompt = ints[1] & 1;
 }
 
 static void __init ramdisk_size(char *str, int *ints)
@@ -1205,7 +1221,7 @@ void __init calibrate_delay(void)
 static void __init parse_options(char *line)
 {
 	char *next;
-        char *quote;
+	char *quote;
 	int args, envs;
 
 	if (!*line)
@@ -1215,24 +1231,24 @@ static void __init parse_options(char *line)
 	next = line;
 	while ((line = next) != NULL) {
 		/* On S/390 we want to be able to pass an options that
-                 * contains blanks. For example vmhalt="IPL CMS". 
-                 * To allow that I added code that prevents blanks in
-                 * quotes to be recognized as delimiter. -- Martin
-                 */
-                quote = strchr(line,'"');
-                next = strchr(line, ' ');
-                while (next != NULL && quote != NULL && quote < next) {
-                        /* we found a left quote before the next blank
-                         * now we have to find the matching right quote
-                         */
-                        next = strchr(quote+1, '"');
-                        if (next != NULL) {
-                                quote = strchr(next+1, '"');
-                                next = strchr(next+1, ' ');
-                        }
-                }
-                if (next != NULL)
-                        *next++ = 0;
+		 * contains blanks. For example vmhalt="IPL CMS". 
+		 * To allow that I added code that prevents blanks in
+		 * quotes to be recognized as delimiter. -- Martin
+		 */
+		quote = strchr(line,'"');
+		next = strchr(line, ' ');
+		while (next != NULL && quote != NULL && quote < next) {
+			/* we found a left quote before the next blank
+			 * now we have to find the matching right quote
+			 */
+			next = strchr(quote+1, '"');
+			if (next != NULL) {
+				quote = strchr(next+1, '"');
+				next = strchr(next+1, ' ');
+			}
+		}
+		if (next != NULL)
+			*next++ = 0;
 		/*
 		 * check for kernel options first..
 		 */
@@ -1265,7 +1281,7 @@ static void __init parse_options(char *line)
 		}
 		if (checksetup(line))
 			continue;
-		
+
 		/*
 		 * Then check if it's an environment variable or
 		 * an option.
@@ -1292,7 +1308,6 @@ extern void setup_arch(char **, unsigned long *, unsigned long *);
 /*
  *	Uniprocessor idle thread
  */
- 
 int cpu_idle(void *unused)
 {
 	for(;;)
@@ -1306,7 +1321,6 @@ int cpu_idle(void *unused)
 /*
  *	Multiprocessor idle thread is in arch/...
  */
- 
 extern int cpu_idle(void * unused);
 
 /* Called by boot processor to activate the rest. */
@@ -1325,10 +1339,10 @@ extern void initialize_secondary(void);
 /*
  *	Activate the first processor.
  */
- 
 asmlinkage void __init start_kernel(void)
 {
 	char * command_line;
+	extern char saved_command_line[];
 
 #ifdef __SMP__
 	static int boot_cpu = 1;
@@ -1340,13 +1354,14 @@ asmlinkage void __init start_kernel(void)
 
 /*
  * Interrupts are still disabled. Do necessary setups, then
- * enable them
+ * enable them.
  */
 	printk(linux_banner);
 	setup_arch(&command_line, &memory_start, &memory_end);
+	printk("Kernel command line: %s\n", saved_command_line);
 	memory_start = paging_init(memory_start,memory_end);
 	trap_init();
-        memory_start = init_IRQ( memory_start );
+	memory_start = init_IRQ( memory_start );
 	sched_init();
 	time_init();
 	parse_options(command_line);
@@ -1382,7 +1397,7 @@ asmlinkage void __init start_kernel(void)
 	mem_init(memory_start,memory_end);
 	kmem_cache_sizes_init();
 #ifdef CONFIG_3215_CONSOLE
-        con3215_activate();
+	con3215_activate();
 #endif
 #ifdef CONFIG_PROC_FS
 	proc_root_init();
@@ -1409,14 +1424,14 @@ asmlinkage void __init start_kernel(void)
 	printk("POSIX conformance testing by UNIFIX\n");
 
 	/* 
-	 *	We count on the initial thread going ok 
-	 *	Like idlers init is an unlocked kernel thread, which will
-	 *	make syscalls (and thus be locked).
+	 * We count on the initial thread going ok.
+	 * Like idlers init is an unlocked kernel thread, which will
+	 * make syscalls (and thus be locked).
 	 */
 	smp_init();
 	kernel_thread(init, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	current->need_resched = 1;
- 	cpu_idle(NULL);
+	cpu_idle(NULL);
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD
@@ -1446,7 +1461,7 @@ static void __init do_initcalls(void)
 	initcall_t *call;
 
 	call = &__initcall_start;
-	
+
 	while (call < &__initcall_end)
 	{
 		(*call)();
@@ -1540,13 +1555,12 @@ static void __init do_basic_setup(void)
 #if CONFIG_AP1000
 	/* Start the async paging daemon. */
 	{
-	  extern int asyncd(void *);	 
-	  kernel_thread(asyncd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+		extern int asyncd(void *);	 
+		kernel_thread(asyncd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	}
 #endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
-
 	real_root_dev = ROOT_DEV;
 	real_root_mountflags = root_mountflags;
 	if (initrd_start && mount_initrd) root_mountflags &= ~MS_RDONLY;
@@ -1563,14 +1577,13 @@ static void __init do_basic_setup(void)
 	binfmt_setup();
 
 	/* the functions marked initcall  */
-	
 	do_initcalls();
 
 	/* .. filesystems .. */
 	filesystem_setup();
 
 #ifdef CONFIG_IRDA
-	irda_device_init(); /* Must be done after protocol initialization */
+	irda_device_init();	/* Must be done after protocol initialization */
 #endif
 
 #ifdef CONFIG_MICROCODE
@@ -1619,14 +1632,13 @@ static int init(void * unused)
 
 	(void) dup(0);
 	(void) dup(0);
-	
+
 	/*
 	 * We try each of these until one succeeds.
 	 *
 	 * The Bourne shell can be used instead of init if we are 
 	 * trying to recover a really broken machine.
 	 */
-
 	if (execute_command)
 		execve(execute_command,argv_init,envp_init);
 	execve("/sbin/init",argv_init,envp_init);

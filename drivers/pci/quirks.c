@@ -211,6 +211,11 @@ __initfunc(static void quirk_vialatency(struct pci_dev *dev, int arg))
  * crashes when we use 100% memory bandwidth)
  *
  * VIA 8363 chipset:
+ * VIA 8363 rev 0x81/0x84 (KL133/KM133) Northbridges:
+ * - bits 6, 7 at offset 0x55 need to be turned off
+ *	(clearing bit 5 on those Northbridges seems
+ *	to trigger a bug in its integrated ProSavage video card, which
+ *	causes screen corruption. We only clear bits 6 and 7 for that chipset).
  * VIA 8363,8622,8361 Northbridges:
  *  - bits  5, 6, 7 at offset 0x55 need to be turned off
  * VIA 8367 (KT266x) Northbridges:
@@ -221,15 +226,22 @@ __initfunc(static void pci_fixup_via_athlon_bug(struct pci_dev *d, int arg))
 {
  	u8 v;
 	int where = 0x55;
+	u8 revision;
+	int mask = 0x1f;
 
+	pci_read_config_byte(d, PCI_REVISION_ID, &revision);
 	if (d->device == PCI_DEVICE_ID_VIA_8367_0) {
 	        where = 0x95; /* the memory write queue timer register is 
                                 different for the kt266x's: 0x95 not 0x55 */
+	} else if (d->device == PCI_DEVICE_ID_VIA_8363_0) {
+		if ( revision == 0x81 || revision == 0x84 )	/* KL133/KM133 */
+			mask = 0x3f;
 	}
 	pci_read_config_byte(d, where, &v);
-	if (v & 0xe0) {
-		printk("Trying to stomp on Athlon bug...\n");
-		v &= 0x1f; /* clear bits 5, 6, 7 */
+	if (v & ~mask) {
+		printk("Disabling VIA memory write queue (PCI ID %04x, rev %02x): [%02x] %02x & %02x -> %02x\n",
+			d->device, revision, where, v, mask, v & mask);
+		v &= mask;
 		pci_write_config_byte(d, where, v);
 	}
 }
@@ -253,6 +265,7 @@ static struct quirk_name quirk_names[] __initdata = {
 	{ quirk_passive_release,"Passive release enable" },
 	{ quirk_isa_dma_hangs,	"Work around ISA DMA hangs" },
 	{ pci_fixup_via_athlon_bug, "Athlon/VIA fixup" },
+	{ quirk_vialatency, "VIA southbridge workaround" },
 };
 
 

@@ -85,6 +85,7 @@ if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
 fi
 define_bool CONFIG_BINFMT_AOUT n
 define_bool CONFIG_BINFMT_ELF y
+bool 'ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA

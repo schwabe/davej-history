@@ -69,45 +69,45 @@ enum
 /* CTL_KERN names: */
 enum
 {
-	KERN_OSTYPE=1,		/* string: system version */
-	KERN_OSRELEASE=2,	/* string: system release */
-	KERN_OSREV=3,		/* int: system revision */
-	KERN_VERSION=4,		/* string: compile time info */
-	KERN_SECUREMASK=5,	/* struct: maximum rights mask */
-	KERN_PROF=6,		/* table: profiling information */
+	KERN_OSTYPE=1,			/* string: system version */
+	KERN_OSRELEASE=2,		/* string: system release */
+	KERN_OSREV=3,			/* int: system revision */
+	KERN_VERSION=4,			/* string: compile time info */
+	KERN_SECUREMASK=5,		/* struct: maximum rights mask */
+	KERN_PROF=6,			/* table: profiling information */
 	KERN_NODENAME=7,
 	KERN_DOMAINNAME=8,
 
-	KERN_CAP_BSET=14,	/* int: capability bounding set */
-	KERN_PANIC=15,		/* int: panic timeout */
-	KERN_REALROOTDEV=16,	/* real root device to mount after initrd */
+	KERN_CAP_BSET=14,		/* int: capability bounding set */
+	KERN_PANIC=15,			/* int: panic timeout */
+	KERN_REALROOTDEV=16,		/* real root device to mount after initrd */
 
-	KERN_JAVA_INTERPRETER=19, /* path to Java(tm) interpreter */
-	KERN_JAVA_APPLETVIEWER=20, /* path to Java(tm) appletviewer */
-	KERN_SPARC_REBOOT=21,	/* reboot command on Sparc */
-	KERN_CTLALTDEL=22,	/* int: allow ctl-alt-del to reboot */
-	KERN_PRINTK=23,		/* struct: control printk logging parameters */
-	KERN_NAMETRANS=24,	/* Name translation */
-	KERN_PPC_HTABRECLAIM=25, /* turn htab reclaimation on/off on PPC */
-	KERN_PPC_ZEROPAGED=26,	/* turn idle page zeroing on/off on PPC */
-	KERN_PPC_POWERSAVE_NAP=27, /* use nap mode for power saving */
+	KERN_JAVA_INTERPRETER=19,	/* path to Java(tm) interpreter */
+	KERN_JAVA_APPLETVIEWER=20,	/* path to Java(tm) appletviewer */
+	KERN_SPARC_REBOOT=21,		/* reboot command on Sparc */
+	KERN_CTLALTDEL=22,		/* int: allow ctl-alt-del to reboot */
+	KERN_PRINTK=23,			/* struct: control printk logging parameters */
+	KERN_NAMETRANS=24,		/* Name translation */
+	KERN_PPC_HTABRECLAIM=25,	/* turn htab reclaimation on/off on PPC */
+	KERN_PPC_ZEROPAGED=26,		/* turn idle page zeroing on/off on PPC */
+	KERN_PPC_POWERSAVE_NAP=27,	/* use nap mode for power saving */
 	KERN_MODPROBE=28,
 	KERN_SG_BIG_BUFF=29,
-	KERN_ACCT=30,		/* BSD process accounting parameters */
-	KERN_PPC_L2CR=31,	/* l2cr register on PPC */
+	KERN_ACCT=30,			/* BSD process accounting parameters */
+	KERN_PPC_L2CR=31,		/* l2cr register on PPC */
 
-	KERN_RTSIGNR=32,	/* Number of rt sigs queued */
-	KERN_RTSIGMAX=33,	/* Max queuable */
+	KERN_RTSIGNR=32,		/* Number of rt sigs queued */
+	KERN_RTSIGMAX=33,		/* Max queuable */
 	
-	KERN_SHMMAX=34,         /* int: Maximum shared memory segment */
-	KERN_MSGMAX=35,         /* int: Maximum size of a messege */
-	KERN_MSGMNB=36,         /* int: Maximum message queue size */
-	KERN_MSGPOOL=37,         /* int: Maximum system message pool size */
-	KERN_SYSRQ=38,		/* int: Sysreq enable */
-	KERN_SHMALL=41,		/* int: maximum size of shared memory */
-	KERN_SPARC_STOP_A=44,	/* int: Sparc Stop-A enable */
-	KERN_HOTPLUG=49,	/* string: path to hotplug policy agent */
-	KERN_IEEE_EMULATION_WARNINGS=50 /* int: unimplemented ieee instructions */
+	KERN_SHMMAX=34,			/* int: Maximum shared memory segment */
+	KERN_MSGMAX=35,			/* int: Maximum size of a messege */
+	KERN_MSGMNB=36,			/* int: Maximum message queue size */
+	KERN_MSGPOOL=37,		/* int: Maximum system message pool size */
+	KERN_SYSRQ=38,			/* int: Sysreq enable */
+	KERN_SHMALL=41,			/* int: maximum size of shared memory */
+	KERN_SPARC_STOP_A=44,		/* int: Sparc Stop-A enable */
+	KERN_HOTPLUG=49,		/* string: path to hotplug policy agent */
+	KERN_IEEE_EMULATION_WARNINGS=50	/* int: unimplemented ieee instructions */
 };
 
 

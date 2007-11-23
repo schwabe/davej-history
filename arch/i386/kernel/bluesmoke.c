@@ -6,6 +6,8 @@
 #include <asm/processor.h> 
 #include <asm/msr.h>
 
+static int mce_disabled = 0;
+
 /*
  *	Machine Check Handler For PII/PIII
  */
@@ -129,6 +131,9 @@ void __init intel_mcheck_init(struct cpuinfo_x86 *c)
 	
 	if(c->x86 == 5)
 	{
+		/* Default P5 to off as its often misconnected */
+		if(mce_disabled != -1)
+			return;
 		machine_check_vector = pentium_machine_check;
 		wmb();
 		/* Read registers before enabling */
@@ -207,7 +212,6 @@ static void __init winchip_mcheck_init(struct cpuinfo_x86 *c)
  */
 
 
-static int mce_disabled = 0;
 
 void __init mcheck_init(struct cpuinfo_x86 *c)
 {
@@ -237,4 +241,12 @@ static int __init mcheck_disable(char *str, int *unused)
 	mce_disabled = 1;
 	return 0;
 }
+
+static int __init mcheck_enable(char *str)
+{
+	mce_disabled = -1;
+	return 0;
+}
+
 __setup("nomce", mcheck_disable);
+__setup("mce", mcheck_enable);

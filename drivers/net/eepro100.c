@@ -183,6 +183,9 @@ MODULE_PARM(multicast_filter_limit, "i");
 #ifndef PCI_DEVICE_ID_INTEL_ID2449
 #define PCI_DEVICE_ID_INTEL_ID2449 0x2449
 #endif
+#ifndef PCI_DEVICE_ID_INTEL_82820FW_4
+#define PCI_DEVICE_ID_INTEL_82820FW_4 0x2449
+#endif
 
 /* The total I/O port extent of the board.
    The registers beyond 0x18 only exist on the i82558. */
@@ -348,6 +351,10 @@ struct pci_id_info {
 	},
 	{ "Intel PCI EtherExpress Pro100 82562EM",
 	  PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ID2449,
+	  0
+	},
+	{ "Intel Corporation 82820 Onboard 10/100",
+	  PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82820FW_4,
 	  0
 	},
 	{0,}						/* 0 terminated list. */

@@ -1949,6 +1949,12 @@ CONFIG_BINFMT_ELF
   called binfmt_elf.o. Saying M or N here is dangerous because some
   crucial programs on your system might be in ELF format.
 
+ELF binaries with a.out format interpreters or a.out libraries
+CONFIG_BINFMT_ELF_AOUT
+  The kernel may support ELF executables which use an a.out format
+  interpreter (dynamic linker) and/or a.out shared libraries, in
+  addition to the usual ELF-ELF setups. You shouldn't need this.
+
 Kernel support for A.OUT binaries
 CONFIG_BINFMT_AOUT
   A.out (Assembler.OUTput) is a set of formats for libraries and
@@ -1962,13 +1968,11 @@ CONFIG_BINFMT_AOUT
   warrant removing support. However its removal is a good idea if you
   wish to ensure that absolutely none of your programs will use this
   older executable format. If you don't know what to answer at this
-  point then answer Y. If someone told you "You need a kernel with
+  point then answer N. If someone told you "You need a kernel with
   QMAGIC support" then you'll have to say Y here. You may answer M to
   compile a.out support as a module and later load the module when you
   want to use a program or library in a.out format. The module will be
-  called binfmt_aout.o. Saying M or N here is dangerous though,
-  because some crucial programs on your system might still be in A.OUT
-  format.
+  called binfmt_aout.o.
 
 Kernel support for JAVA binaries (obsolete)
 CONFIG_BINFMT_JAVA

@@ -562,7 +562,7 @@ S:	Maintained
 
 KERNEL  (2.2.XX TREE)
 P:	Marc-Christian Petersen
-M:	m.c.p@wolk-project.de
+M:	m.c.p@kernel.linux-systeme.com
 L:	linux-kernel@vger.kernel.org
 W:	http://www.kernel.org/pub/linux/kernel/people/mcp/
 S:	Maintained
@@ -1173,7 +1173,7 @@ S:	Maintained
 
 LINUX 2.2 FIXES
 P:	Marc-Christian Petersen
-M:	m.c.p@wolk-project.de
+M:	m.c.p@kernel.linux-systeme.com
 S:	Maintained
 
 THE REST

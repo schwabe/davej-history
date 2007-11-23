@@ -256,7 +256,7 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 				tcp_set_state(sk, TCP_CLOSE);
 				sk->shutdown = SHUTDOWN_MASK;
 				if (!sk->dead)
-					sk->state_change(sk);
+					sk->error_report(sk);
 			} else {
 				tp->probes_out++;
 				tp->pending = TIME_KEEPOPEN;

@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
-SUBLEVEL = 26
-EXTRAVERSION = 
+SUBLEVEL = 27
+EXTRAVERSION = -pre1
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -440,14 +440,15 @@ sums:
 	find . -type f -print | sort | xargs sum > .SUMS
 
 dep-files: scripts/mkdep archdep include/linux/version.h new-genksyms
-	scripts/mkdep init/*.c > .depend
-	scripts/mkdep `find $(FINDHPATH) -follow -name \*.h ! -name modversions.h -print` > .hdepend
+	rm -f .depend .hdepend
 #	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep ;done
 # let this be made through the fastdep rule in Rules.make
 	$(MAKE) $(patsubst %,_sfdep_%,$(SUBDIRS)) _FASTDEP_ALL_SUB_DIRS="$(SUBDIRS)"
 ifdef CONFIG_MODVERSIONS
 	$(MAKE) update-modverfile
 endif
+	scripts/mkdep `find $(FINDHPATH) -follow -name \*.h ! -name modversions.h -print` > .hdepend
+	scripts/mkdep init/*.c > .depend
 
 MODVERFILE :=
 

@@ -62,6 +62,9 @@ bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 bool 'Kernel support for Linux/Sparc 32bit binary compatibility' CONFIG_SPARC32_COMPAT
 tristate 'Kernel support for 64-bit ELF binaries' CONFIG_BINFMT_ELF
+if [ "$CONFIG_BINFMT_ELF" != "n" ]; then
+  bool '   ELF binaries with a.out format interpreters or a.out libraries' CONFIG_BINFMT_ELF_AOUT
+fi
 if [ "$CONFIG_SPARC32_COMPAT" != "n" ]; then
   tristate 'Kernel support for 32-bit ELF binaries' CONFIG_BINFMT_ELF32
   bool 'Kernel support for 32-bit (ie. SunOS) a.out binaries' CONFIG_BINFMT_AOUT32

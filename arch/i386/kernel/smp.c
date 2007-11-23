@@ -737,12 +737,6 @@ void __init enable_local_APIC(void)
 {
 	unsigned long value;
 
- 	value = apic_read(APIC_SPIV);
- 	value |= (1<<8);		/* Enable APIC (bit==1) */
- 	value &= ~(1<<9);		/* Enable focus processor (bit==0) */
-	value |= 0xff;			/* Set spurious IRQ vector to 0xff */
- 	apic_write(APIC_SPIV,value);
-
 	/*
 	 * Set Task Priority to 'accept all'
 	 */
@@ -761,6 +755,12 @@ void __init enable_local_APIC(void)
  	value = apic_read(APIC_DFR);
 	value |= SET_APIC_DFR(0xf);
  	apic_write(APIC_DFR, value);
+
+	value = apic_read(APIC_SPIV);
+	value |= (1<<8);		/* Enable APIC (bit==1) */
+	value &= ~(1<<9);		/* Enable focus processor (bit==0) */
+	value |= 0xff;			/* Set spurious IRQ vector to 0xff */
+	apic_write(APIC_SPIV,value);
 
 	udelay(100);			/* B safe */
 }
@@ -810,7 +810,6 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 	return memory_start;
 }
 
-#ifdef CONFIG_X86_TSC
 /*
  * TSC synchronization.
  *
@@ -1010,8 +1009,6 @@ static void __init synchronize_tsc_ap (void)
 }
 #undef NR_LOOPS
 
-#endif
-
 extern void calibrate_delay(void);
 
 void __init smp_callin(void)
@@ -1098,12 +1095,11 @@ void __init smp_callin(void)
 	 */
 	set_bit(cpuid, (unsigned long *)&cpu_callin_map[0]);
 
-#ifdef CONFIG_X86_TSC
 	/*
 	 *	Synchronize the TSC with the BP
 	 */
- 	synchronize_tsc_ap ();
-#endif
+	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC)
+		synchronize_tsc_ap ();
 }
 
 int cpucount = 0;
@@ -1640,13 +1636,11 @@ void __init smp_boot_cpus(void)
 
 smp_done:
 
-#ifdef CONFIG_X86_TSC
 	/*
 	 * Synchronize the TSC with the AP
 	 */
-	if (cpucount)
+	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC && cpucount)
 	 	synchronize_tsc_bp();
-#endif
 }
 
 /*

@@ -823,7 +823,7 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 				 */
 				if (skb_tailroom(skb) > 0 &&
 				    (mss_now - copy) > 0 &&
-				    tp->snd_nxt < TCP_SKB_CB(skb)->end_seq) {
+				    before(tp->snd_nxt, TCP_SKB_CB(skb)->end_seq)) {
 					int last_byte_was_odd = (copy % 4);
 
 					/* 

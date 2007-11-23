@@ -365,13 +365,16 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 {
 	struct sk_buff *n;
 	unsigned long offset;
-	int headroom = skb_headroom(skb);
+	int delta = newheadroom - skb_headroom(skb);
+
+	if (delta <= 0)
+		delta = 0;
 
 	/*
 	 *	Allocate the copy buffer
 	 */
  	 
-	n=alloc_skb(skb->truesize+newheadroom-headroom, GFP_ATOMIC);
+	n=alloc_skb(skb->truesize + delta, GFP_ATOMIC);
 	if(n==NULL)
 		return NULL;
 

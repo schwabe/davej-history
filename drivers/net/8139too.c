@@ -151,6 +151,7 @@ an MMIO register read.
 #include <linux/rtnetlink.h>
 #include <linux/delay.h>
 #include <asm/io.h>
+#include <asm/semaphore.h>
 #include <asm/uaccess.h>
 
 #define RTL8139_DRIVER_NAME   DRV_NAME " Fast Ethernet driver " DRV_VERSION
@@ -725,6 +726,7 @@ struct rtl8139_private {
 	struct semaphore thr_exited;
 	u32 rx_config;
 	struct rtl_extra_stats xstats;
+	struct semaphore mdio_sem;
 };
 
 #define RTL8139_AUTHOR "Jeff Garzik <jgarzik@mandrakesoft.com>"
@@ -1101,6 +1103,7 @@ static int rtl8139_init_one (struct pci_dev *pdev, const struct pci_device_id *e
 	spin_lock_init (&tp->lock);
 	init_waitqueue_head (&tp->thr_wait);
 	init_MUTEX_LOCKED (&tp->thr_exited);
+	init_MUTEX (&tp->mdio_sem);
 
 	if (rtl8139_device_count == 0) {
 		printk (KERN_INFO "%s: " RTL8139_DRIVER_NAME " " RTL8139_AUTHOR "\n", dev->name);
@@ -1743,7 +1746,6 @@ static int rtl8139_thread (void *data)
 	current->comm[sizeof(current->comm) - 1] = '\0';
 
 	while (1) {
-		rtl8139_thread_iter (dev, tp, tp->mmio_addr);
 		timeout = next_tick;
 		do {
 			timeout = interruptible_sleep_on_timeout (&tp->thr_wait, timeout);
@@ -1752,8 +1754,10 @@ static int rtl8139_thread (void *data)
 		if (signal_pending (current))
 			break;
 
-		rtnl_lock ();
-		rtnl_unlock ();
+		if (down_interruptible (&tp->mdio_sem))
+			break;
+		rtl8139_thread_iter (dev, tp, tp->mmio_addr);
+		up (&tp->mdio_sem);
 	}
 
 	up (&tp->thr_exited);
@@ -2259,10 +2263,10 @@ static int rtl8139_close (struct device *dev)
 	if (tp->thr_pid >= 0) {
 		ret = kill_proc (tp->thr_pid, SIGTERM, 1);
 		if (ret) {
-			printk (KERN_ERR "%s: unable to signal thread\n", dev->name);
-			return ret;
+			printk (KERN_ERR "%s: unable to signal thread: %d\n", dev->name, ret);
+		} else {
+			down (&tp->thr_exited);
 		}
-		down (&tp->thr_exited);
 	}
 
 	DPRINTK ("%s: Shutting down ethercard, status was 0x%4.4x.\n",
@@ -2345,7 +2349,7 @@ static int netdev_ioctl (struct device *dev, struct ifreq *rq, int cmd)
 {
 	struct rtl8139_private *tp = dev->priv;
 	struct mii_ioctl_data *data = (struct mii_ioctl_data *)&rq->ifr_data;
-	int rc = 0;
+	int rc;
 	int phy = tp->phys[0] & 0x3f;
 
 	DPRINTK ("ENTER\n");
@@ -2366,14 +2370,17 @@ static int netdev_ioctl (struct device *dev, struct ifreq *rq, int cmd)
 
 	case SIOCGMIIREG:	/* Read the specified MII register. */
 	case SIOCDEVPRIVATE+1:	/* binary compat, remove in 2.5 */
+		if (down_interruptible (&tp->mdio_sem))
+			goto err_out;
 		data->val_out = mdio_read (dev, data->phy_id, data->reg_num);
+		up (&tp->mdio_sem);
 		break;
 
 	case SIOCSMIIREG:	/* Write the specified MII register */
 	case SIOCDEVPRIVATE+2:	/* binary compat, remove in 2.5 */
 		if (!capable (CAP_NET_ADMIN)) {
 			rc = -EPERM;
-			break;
+			goto err_out;
 		}
 
 		if (data->phy_id == phy) {
@@ -2388,14 +2395,20 @@ static int netdev_ioctl (struct device *dev, struct ifreq *rq, int cmd)
 			case 4: /* tp->advertising = value; */ break;
 			}
 		}
+		if (down_interruptible (&tp->mdio_sem))
+			goto err_out;
 		mdio_write(dev, data->phy_id, data->reg_num, data->val_in);
+		up (&tp->mdio_sem);
 		break;
 
 	default:
 		rc = -EOPNOTSUPP;
-		break;
+		goto err_out;
 	}
 
+ 	rc = 0;
+ 
+ err_out:
 	DPRINTK ("EXIT, returning %d\n", rc);
 	return rc;
 }
