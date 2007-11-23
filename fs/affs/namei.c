@@ -247,7 +247,7 @@ affs_unlink(struct inode *dir, struct dentry *dentry)
 	
 	inode->i_nlink = retval;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_inode_dirty(inode);
 	d_delete(dentry);
 	mark_inode_dirty(dir);
@@ -285,7 +285,7 @@ affs_create(struct inode *dir, struct dentry *dentry, int mode)
 	inode->u.affs_i.i_protect = mode_to_prot(inode->i_mode);
 	d_instantiate(dentry,inode);
 	mark_inode_dirty(inode);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_inode_dirty(dir);
 out:
 	return error;
@@ -319,7 +319,7 @@ affs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	inode->u.affs_i.i_protect = mode_to_prot(inode->i_mode);
 	d_instantiate(dentry,inode);
 	mark_inode_dirty(inode);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_inode_dirty(dir);
 out:
 	return error;
@@ -372,7 +372,7 @@ affs_rmdir(struct inode *dir, struct dentry *dentry)
 	inode->i_nlink = retval;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	retval         = 0;
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_inode_dirty(dir);
 	mark_inode_dirty(inode);
 	d_delete(dentry);
@@ -450,7 +450,7 @@ affs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	if (error)
 		goto out_release;
 	d_instantiate(dentry,inode);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_inode_dirty(dir);
 
 out:
@@ -504,7 +504,7 @@ affs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 	if (error)
 		inode->i_nlink = 0;
 	else {
-		dir->i_version = ++event;
+		dir->i_version = ++global_event;
 		mark_inode_dirty(dir);
 		mark_inode_dirty(oldinode);
 		oldinode->i_count++;
@@ -579,8 +579,8 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	new_dir->i_ctime   = new_dir->i_mtime = old_dir->i_ctime
 			   = old_dir->i_mtime = CURRENT_TIME;
-	new_dir->i_version = ++event;
-	old_dir->i_version = ++event;
+	new_dir->i_version = ++global_event;
+	old_dir->i_version = ++global_event;
 	retval             = 0;
 	mark_inode_dirty(new_dir);
 	mark_inode_dirty(old_dir);

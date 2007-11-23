@@ -517,7 +517,7 @@ static int do_msdos_rename(struct inode *old_dir, char *old_name,
 		if (error)
 			goto out;
 	}
-	new_dir->i_version = ++event;
+	new_dir->i_version = ++global_event;
 
 	/* There we go */
 
@@ -532,7 +532,7 @@ static int do_msdos_rename(struct inode *old_dir, char *old_name,
 	else
 		MSDOS_I(old_inode)->i_attrs &= ~ATTR_HIDDEN;
 	mark_inode_dirty(old_inode);
-	old_dir->i_version = ++event;
+	old_dir->i_version = ++global_event;
 	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(old_dir);
 	if (new_inode) {
@@ -569,7 +569,7 @@ degenerate_case:
 	else
 		MSDOS_I(old_inode)->i_attrs &= ~ATTR_HIDDEN;
 	mark_inode_dirty(old_inode);
-	old_dir->i_version = ++event;
+	old_dir->i_version = ++global_event;
 	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(old_dir);
 	return 0;

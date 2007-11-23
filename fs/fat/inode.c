@@ -370,7 +370,7 @@ static void fat_read_root(struct inode *inode)
 	MSDOS_I(inode)->i_fat_inode = inode;
 	inode->i_uid = MSDOS_SB(sb)->options.fs_uid;
 	inode->i_gid = MSDOS_SB(sb)->options.fs_gid;
-	inode->i_version = ++event;
+	inode->i_version = ++global_event;
 	MSDOS_I(inode)->i_last_pos = 0;
 	inode->i_mode = (S_IRWXUGO & ~MSDOS_SB(sb)->options.fs_umask) | S_IFDIR;
 	inode->i_op = MSDOS_SB(sb)->dir_ops;
@@ -759,7 +759,7 @@ static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 	MSDOS_I(inode)->i_fat_inode = inode;
 	inode->i_uid = MSDOS_SB(sb)->options.fs_uid;
 	inode->i_gid = MSDOS_SB(sb)->options.fs_gid;
-	inode->i_version = ++event;
+	inode->i_version = ++global_event;
 	if ((de->attr & ATTR_DIR) && !IS_FREE(de->name)) {
 		MSDOS_I(inode)->i_last_pos = 0;
 		inode->i_mode = MSDOS_MKMODE(de->attr,S_IRWXUGO &

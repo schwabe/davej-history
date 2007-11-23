@@ -473,9 +473,12 @@ static int nfs_lookup_revalidate(struct dentry * dentry, int flags)
 out_valid:
 	return 1;
 out_bad:
-	d_drop(dentry);
 	if (!list_empty(&dentry->d_subdirs))
 		shrink_dcache_parent(dentry);
+	/* If we have submounts, don't unhash ! */
+	if (have_submounts(dentry))
+		goto out_valid;
+	d_drop(dentry);
 	if (dentry->d_parent->d_inode)
 		nfs_invalidate_dircache(dentry->d_parent->d_inode);
 	if (inode && S_ISDIR(inode->i_mode))

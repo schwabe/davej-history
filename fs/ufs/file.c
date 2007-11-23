@@ -111,7 +111,7 @@ static long long ufs_file_lseek(
 		if (offset != file->f_pos) {
 			file->f_pos = offset;
 			file->f_reada = 0;
-			file->f_version = ++event;
+			file->f_version = ++global_event;
 		}
 		retval = offset;
 	}

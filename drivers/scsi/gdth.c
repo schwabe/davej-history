@@ -20,9 +20,32 @@
  * along with this kernel; if not, write to the Free Software           *
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.            *
  *                                                                      *
- * Tested with Linux 1.2.13, ..., 2.2.4                                 *
+ * Tested with Linux 1.2.13, ..., 2.2.12                                *
  *                                                                      *
  * $Log: gdth.c,v $
+ * Revision 1.30  1999/11/02 13:42:39  achim
+ * ARRAY_DRV_LIST2 implemented
+ * Now 255 log. and 100 host drives supported
+ *
+ * Revision 1.29  1999/10/05 13:28:47  achim
+ * GDT_CLUST_RESET added
+ *
+ * Revision 1.28  1999/08/12 13:44:54  achim
+ * MOUNTALL removed
+ * Cluster drives -> removeable drives
+ *
+ * Revision 1.27  1999/06/22 07:22:38  achim
+ * Small changes
+ *
+ * Revision 1.26  1999/06/10 16:09:12  achim
+ * Cluster Host Drive support: Bugfixes
+ *
+ * Revision 1.25  1999/06/01 16:03:56  achim
+ * gdth_init_pci(): Manipulate config. space to start RP controller
+ *
+ * Revision 1.24  1999/05/26 11:53:06  achim
+ * Cluster Host Drive support added
+ *
  * Revision 1.23  1999/03/26 09:12:31  achim
  * Default value for hdr_channel set to 0
  *
@@ -120,7 +143,7 @@
  * Initial revision
  *
  ************************************************************************/
-#ident "$Id: gdth.c,v 1.23 1999/03/26 09:12:31 achim Exp $" 
+#ident "$Id: gdth.c,v 1.30 1999/11/02 13:42:39 achim Exp $" 
 
 /* All GDT Disk Array Controllers are fully supported by this driver.
  * This includes the PCI/EISA/ISA SCSI Disk Array Controllers and the
@@ -581,18 +604,18 @@ static void gdth_eval_mapping(ulong32 size, int *cyls, int *heads, int *secs)
 {
     *cyls = size /HEADS/SECS;
     if (*cyls <= MAXCYLS) {
-	*heads = HEADS;
-	*secs = SECS;
-    } else {                            		/* too high for 64*32 */
-	*cyls = size /MEDHEADS/MEDSECS;
-	if (*cyls <= MAXCYLS) {
-	    *heads = MEDHEADS;
-	    *secs = MEDSECS;
-	} else {                        		/* too high for 127*63 */
-	    *cyls = size /BIGHEADS/BIGSECS;
-	    *heads = BIGHEADS;
-	    *secs = BIGSECS;
-	}
+        *heads = HEADS;
+        *secs = SECS;
+    } else {                                        /* too high for 64*32 */
+        *cyls = size /MEDHEADS/MEDSECS;
+        if (*cyls <= MAXCYLS) {
+            *heads = MEDHEADS;
+            *secs = MEDSECS;
+        } else {                                    /* too high for 127*63 */
+            *cyls = size /BIGHEADS/BIGSECS;
+            *heads = BIGHEADS;
+            *secs = BIGSECS;
+        }
     }
 }
 
@@ -686,7 +709,7 @@ __initfunc (static int gdth_search_pci(gdth_pci_str *pcistr))
             }
             TRACE2(("Controller found at %d/%d, irq %d, dpmem 0x%x\n",
                     pcistr[cnt].bus, PCI_SLOT(pcistr[cnt].device_fn), 
-                    pcistr[cnt].irq, pcistr[cnt].dpmem));
+                    pcistr[cnt].irq, (int)pcistr[cnt].dpmem));
             cnt++;
         }       
 #else   
@@ -981,7 +1004,11 @@ __initfunc (static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha))
     register gdt6m_dpram_str *dp6m_ptr;
     ulong32 retries;
     unchar prot_ver;
+    ushort command;
     int i, found = FALSE;
+#if LINUX_VERSION_CODE < 0x2015C
+    int rom_addr;
+#endif
 
     TRACE(("gdth_init_pci()\n"));
 
@@ -1137,6 +1164,36 @@ __initfunc (static int gdth_init_pci(gdth_pci_str *pcistr,gdth_ha_str *ha))
             return 0;
         }
 
+        /* manipulate config. space to enable DPMEM, start RP controller */
+#if LINUX_VERSION_CODE >= 0x2015C
+        pci_read_config_word(pcistr->pdev, PCI_COMMAND, &command);
+        command |= 6;
+        pci_write_config_word(pcistr->pdev, PCI_COMMAND, command);
+        if (pcistr->pdev->rom_address == 1UL)
+            pcistr->pdev->rom_address = 0UL;
+        i = 0xFEFF0001UL;
+        pci_write_config_dword(pcistr->pdev, PCI_ROM_ADDRESS, i);
+        gdth_delay(1);
+        pci_write_config_dword(pcistr->pdev, PCI_ROM_ADDRESS,
+                               pcistr->pdev->rom_address);
+#else
+        pcibios_read_config_word(pcistr->bus, pcistr->device_fn,
+                                 PCI_COMMAND, &command);
+        command |= 6;
+        pcibios_write_config_word(pcistr->bus, pcistr->device_fn, 
+                                  PCI_COMMAND, command);
+        pcibios_read_config_dword(pcistr->bus, pcistr->device_fn,
+                                  PCI_ROM_ADDRESS, &rom_addr);
+        if (rom_addr == 1UL)
+            rom_addr = 0UL;
+        i = 0xFEFF0001UL;
+        pcibios_write_config_dword(pcistr->bus, pcistr->device_fn,
+                                   PCI_ROM_ADDRESS, i);
+        gdth_delay(1);
+        pcibios_write_config_dword(pcistr->bus, pcistr->device_fn,
+                                   PCI_ROM_ADDRESS, rom_addr);
+#endif
+	
         /* check and reset interface area */
         dp6m_ptr = (gdt6m_dpram_str *)ha->brd;
         gdth_writel(DPMEM_MAGIC, &dp6m_ptr->u);
@@ -1585,7 +1642,8 @@ __initfunc (static int gdth_search_drives(int hanum))
     gdth_drlist_str *drl;
     gdth_iochan_str *ioc;
     gdth_raw_iochan_str *iocr;
-    gdth_arraylist_str *alst;
+    gdth_arcdl_str *alst;
+    gdth_alist_str *alst2;
         
     TRACE(("gdth_search_drives() hanum %d\n",hanum));
     ha = HADATA(gdth_ctr_tab[hanum]);
@@ -1605,19 +1663,6 @@ __initfunc (static int gdth_search_drives(int hanum))
         return 0;
     }
     TRACE2(("gdth_search_drives(): CACHESERVICE initialized\n"));
-    cdev_cnt = (ushort)ha->info;
-
-    /* mount all cache devices */
-    gdth_internal_cmd(hanum,CACHESERVICE,GDT_MOUNT,0xffff,1,0);
-    TRACE2(("gdth_search_drives(): mountall CACHESERVICE OK\n"));
-
-    /* initialize cache service after mountall */
-    if (!gdth_internal_cmd(hanum,CACHESERVICE,GDT_INIT,LINUX_OS,0,0)) {
-        printk("GDT: Initialization error cache service (code %d)\n",
-               ha->status);
-        return 0;
-    }
-    TRACE2(("gdth_search_drives() CACHES. init. after mountall\n"));
     cdev_cnt = (ushort)ha->info;
 
     /* detect number of buses - try new IOCTL */
@@ -1747,22 +1792,37 @@ __initfunc (static int gdth_search_drives(int hanum))
                                   INVALID_CHANNEL,drv_cnt * sizeof(ulong32))) {
                 for (j = 0; j < drv_cnt; ++j) {
                     drv_no = ((ulong32 *)ha->pscratch)[j];
-                    if (drv_no < MAX_HDRIVES) {
+                    if (drv_no < MAX_LDRIVES) {
                         ha->hdr[drv_no].is_logdrv = TRUE;
                         TRACE2(("Drive %d is log. drive\n",drv_no));
                     }
                 }
             }
+	    alst = (gdth_arcdl_str *)ha->pscratch;
+	    alst->entries_avail = MAX_LDRIVES;
+	    alst->first_entry = 0;
+	    alst->list_offset = GDTOFFSOF(gdth_arcdl_str, list[0]);
             if (gdth_internal_cmd(hanum,CACHESERVICE,GDT_IOCTL,
-                                  ARRAY_DRV_LIST | LA_CTRL_PATTERN,
-                                  0, 35 * sizeof(gdth_arraylist_str))) {
+                                  ARRAY_DRV_LIST2 | LA_CTRL_PATTERN, 
+                                  INVALID_CHANNEL, sizeof(gdth_arcdl_str) +
+				  (alst->entries_avail-1) * sizeof(gdth_alist_str))) { 
+                for (j = 0; j < alst->entries_init; ++j) {
+                    ha->hdr[j].is_arraydrv = alst->list[j].is_arrayd;
+                    ha->hdr[j].is_master = alst->list[j].is_master;
+                    ha->hdr[j].is_parity = alst->list[j].is_parity;
+                    ha->hdr[j].is_hotfix = alst->list[j].is_hotfix;
+                    ha->hdr[j].master_no = alst->list[j].cd_handle;
+                }
+	    } else if (gdth_internal_cmd(hanum,CACHESERVICE,GDT_IOCTL,
+					 ARRAY_DRV_LIST | LA_CTRL_PATTERN,
+					 0, 35 * sizeof(gdth_alist_str))) {
                 for (j = 0; j < 35; ++j) {
-                    alst = &((gdth_arraylist_str *)ha->pscratch)[j];
-                    ha->hdr[j].is_arraydrv = alst->is_arrayd;
-                    ha->hdr[j].is_master = alst->is_master;
-                    ha->hdr[j].is_parity = alst->is_parity;
-                    ha->hdr[j].is_hotfix = alst->is_hotfix;
-                    ha->hdr[j].master_no = alst->cd_handle;
+                    alst2 = &((gdth_alist_str *)ha->pscratch)[j];
+                    ha->hdr[j].is_arraydrv = alst2->is_arrayd;
+                    ha->hdr[j].is_master = alst2->is_master;
+                    ha->hdr[j].is_parity = alst2->is_parity;
+                    ha->hdr[j].is_hotfix = alst2->is_hotfix;
+                    ha->hdr[j].master_no = alst2->cd_handle;
                 }
             }
         }
@@ -1825,17 +1885,13 @@ __initfunc (static int gdth_search_drives(int hanum))
     for (i=0; i<cdev_cnt && i<MAX_HDRIVES; ++i) {
         TRACE(("gdth_search_drives() cachedev. %d\n",i));
         if (gdth_internal_cmd(hanum,CACHESERVICE,GDT_INFO,i,0,0)) {
-            /* static relation between host drive number and Bus/ID */
-            TRACE(("gdth_search_dr() drive %d mapped to bus/id %d/%d\n",
-                   i,ha->bus_cnt,i));
-
             ha->hdr[i].present = TRUE;
             ha->hdr[i].size = ha->info;
 
             /* evaluate mapping (sectors per head, heads per cylinder) */
             ha->hdr[i].size &= ~SECS32;
             if (ha->info2 == 0) {
-		gdth_eval_mapping(ha->hdr[i].size,&drv_cyls,&drv_hds,&drv_secs);
+                gdth_eval_mapping(ha->hdr[i].size,&drv_cyls,&drv_hds,&drv_secs);
             } else {
                 drv_hds = ha->info2 & 0xff;
                 drv_secs = (ha->info2 >> 8) & 0xff;
@@ -1851,10 +1907,30 @@ __initfunc (static int gdth_search_drives(int hanum))
             /* get informations about device */
             if (gdth_internal_cmd(hanum,CACHESERVICE,GDT_DEVTYPE,i,
                                   0,0)) {
-                TRACE(("gdth_search_dr() cache drive %d devtype %d\n",
+                TRACE2(("gdth_search_dr() cache drive %d devtype %d\n",
                        i,ha->info));
                 ha->hdr[i].devtype = (ushort)ha->info;
             }
+
+            /* cluster info */
+            if (gdth_internal_cmd(hanum,CACHESERVICE,GDT_CLUST_INFO,i,
+                                  0,0)) {
+                TRACE2(("gdth_search_dr() cache drive %d cluster info %d\n",
+                       i,ha->info));
+                ha->hdr[i].cluster_type = (unchar)ha->info;
+            } else {
+                ha->hdr[i].cluster_type = 0;
+            }           
+
+            /* R/W attributes */
+            if (gdth_internal_cmd(hanum,CACHESERVICE,GDT_RW_ATTRIBS,i,
+                                  0,0)) {
+                TRACE2(("gdth_search_dr() cache drive %d r/w attrib. %d\n",
+                       i,ha->info));
+                ha->hdr[i].rw_attribs = (unchar)ha->info;
+            } else {
+                ha->hdr[i].rw_attribs = 0;
+            }           
         }
     }
 
@@ -1969,11 +2045,11 @@ static void gdth_next(int hanum)
         }
 
 #if LINUX_VERSION_CODE >= 0x010300
-        if (nscp->done != gdth_scsi_done) 
+        if (nscp->done != gdth_scsi_done || nscp->cmnd[0] != 0xff) 
 #endif
         {
         if (nscp->SCp.phase == -1) {
-            nscp->SCp.phase = SCSIRAWSERVICE;           /* default: raw svc. */ 
+            nscp->SCp.phase = CACHESERVICE;           /* default: cache svc. */ 
             if (nscp->cmnd[0] == TEST_UNIT_READY) {
                 TRACE2(("TEST_UNIT_READY Bus %d Id %d LUN %d\n", 
                         b, t, nscp->lun));
@@ -1987,7 +2063,8 @@ static void gdth_next(int hanum)
                     if (b == 0 && ((t == 0 && nscp->lun == 1) ||
                          (t == 1 && nscp->lun == 0))) {
                         nscp->SCp.Status = GDT_SCAN_START;
-                        nscp->SCp.phase |= ((ha->scan_mode & 0x10 ? 1:0) << 8);
+                        nscp->SCp.phase = ((ha->scan_mode & 0x10 ? 1:0) << 8) 
+                            | SCSIRAWSERVICE;
                         ha->scan_mode = 0x12;
                         TRACE2(("Scan mode: 0x%x (SCAN_START)\n", 
                                 ha->scan_mode));
@@ -1997,6 +2074,7 @@ static void gdth_next(int hanum)
                     }                   
                 } else if (ha->scan_mode == 0x12) {
                     if (b == ha->bus_cnt && t == ha->tid_cnt-1) {
+                        nscp->SCp.phase = SCSIRAWSERVICE;
                         nscp->SCp.Status = GDT_SCAN_END;
                         ha->scan_mode &= 0x10;
                         TRACE2(("Scan mode: 0x%x (SCAN_END)\n", 
@@ -2004,19 +2082,55 @@ static void gdth_next(int hanum)
                     }
                 }
             }
+            if (b == ha->virt_bus && nscp->cmnd[0] != INQUIRY &&
+                nscp->cmnd[0] != READ_CAPACITY && nscp->cmnd[0] != MODE_SENSE &&
+                (ha->hdr[t].cluster_type & CLUSTER_DRIVE)) {
+                if (!(ha->hdr[t].cluster_type & CLUSTER_MOUNTED)) {
+                    /* cluster drive NOT MOUNTED */
+                    if (!(ha->hdr[t].cluster_type & CLUSTER_RESERVED)) {
+                        /* cluster drive NOT RESERVED */
+                        nscp->SCp.Status = GDT_MOUNT;
+                    } else {
+                        /* cluster drive RESERVED (on the other node) */
+                        nscp->SCp.Status = GDT_CLUST_INFO;
+                    }
+                } else {
+                    if (!(ha->hdr[t].cluster_type & CLUSTER_RESERVED)) {
+                        /* cluster drive MOUNTED and not RESERVED */
+                        nscp->SCp.Status = GDT_CLUST_INFO;
+                    }
+                }
+            }
         }
         }
 
         if (nscp->SCp.Status != -1) {
-            if ((nscp->SCp.phase & 0xff) == SCSIRAWSERVICE) {
+            if ((nscp->SCp.phase & 0xff) == CACHESERVICE) {
+                if (!(cmd_index=gdth_fill_cache_cmd(hanum,nscp,t)))
+                    this_cmd = FALSE;
+                next_cmd = FALSE;
+            } else if ((nscp->SCp.phase & 0xff) == SCSIRAWSERVICE) {
                 if (!(cmd_index=gdth_fill_raw_cmd(hanum,nscp,BUS_L2P(ha,b))))
                     this_cmd = FALSE;
                 next_cmd = FALSE;
+            } else {
+                memset((char*)nscp->sense_buffer,0,16);
+                nscp->sense_buffer[0] = 0x70;
+                nscp->sense_buffer[2] = NOT_READY;
+                nscp->result = (DID_OK << 16) | (CHECK_CONDITION << 1);
+                if (!nscp->SCp.have_data_in)
+                    nscp->SCp.have_data_in++;
+                else {
+                    GDTH_UNLOCK_HA(ha,flags);
+                    /* io_request_lock already active ! */
+                    nscp->scsi_done(nscp);
+                    GDTH_LOCK_HA(ha,flags);
+                }
             }
         } else
 
 #if LINUX_VERSION_CODE >= 0x010300
-        if (nscp->done == gdth_scsi_done) {
+        if (nscp->done == gdth_scsi_done && nscp->cmnd[0] == 0xff) {
             if (!(cmd_index=gdth_special_cmd(hanum,nscp)))
                 this_cmd = FALSE;
             next_cmd = FALSE;
@@ -2078,6 +2192,14 @@ static void gdth_next(int hanum)
                     if (!(cmd_index=gdth_fill_cache_cmd(hanum,nscp,t)))
                         this_cmd = FALSE;
                 }
+                break;
+                
+              case RESERVE:
+              case RELEASE:
+                TRACE2(("cache cmd %s\n",nscp->cmnd[0] == RESERVE ?
+                        "RESERVE" : "RELEASE"));
+                if (!(cmd_index=gdth_fill_cache_cmd(hanum,nscp,t)))
+                    this_cmd = FALSE;
                 break;
                 
               case READ_6:
@@ -2184,7 +2306,10 @@ static int gdth_internal_cache_cmd(int hanum,Scsi_Cmnd *scp)
         inq.type_qual = (ha->hdr[t].devtype&4) ? TYPE_ROM:TYPE_DISK;
         /* you can here set all disks to removable, if you want to do
            a flush using the ALLOW_MEDIUM_REMOVAL command */
-        inq.modif_rmb = ha->hdr[t].devtype&1 ? 0x80:0x00;
+        inq.modif_rmb = 0x00;
+        if ((ha->hdr[t].devtype & 1) ||
+            (ha->hdr[t].cluster_type & CLUSTER_DRIVE))
+            inq.modif_rmb = 0x80;
         inq.version   = 2;
         inq.resp_aenc = 2;
         inq.add_length= 32;
@@ -2243,7 +2368,7 @@ static int gdth_fill_cache_cmd(int hanum,Scsi_Cmnd *scp,ushort hdrive)
     register gdth_cmd_str *cmdp;
     struct scatterlist *sl;
     ushort i;
-    int cmd_index;
+    int cmd_index, read_write;
 
     ha = HADATA(gdth_ctr_tab[hanum]);
     cmdp = ha->pccb;
@@ -2265,31 +2390,38 @@ static int gdth_fill_cache_cmd(int hanum,Scsi_Cmnd *scp,ushort hdrive)
         gdth_set_sema0(hanum);
 
     /* fill command */
-    if (scp->cmnd[0]==ALLOW_MEDIUM_REMOVAL) {
+    read_write = FALSE;
+    if (scp->SCp.Status != -1) 
+        cmdp->OpCode = scp->SCp.Status;         /* special cache cmd. */
+    else if (scp->cmnd[0] == RESERVE) 
+        cmdp->OpCode = GDT_RESERVE_DRV;
+    else if (scp->cmnd[0] == RELEASE)
+        cmdp->OpCode = GDT_RELEASE_DRV;
+    else if (scp->cmnd[0] == ALLOW_MEDIUM_REMOVAL) {
         if (scp->cmnd[4] & 1)                   /* prevent ? */
-            cmdp->OpCode      = GDT_MOUNT;
+            cmdp->OpCode = GDT_MOUNT;
         else if (scp->cmnd[3] & 1)              /* removable drive ? */
-            cmdp->OpCode      = GDT_UNMOUNT;
+            cmdp->OpCode = GDT_UNMOUNT;
         else
-            cmdp->OpCode      = GDT_FLUSH;
+            cmdp->OpCode = GDT_FLUSH;
+    } else if (scp->cmnd[0] == WRITE_6 || scp->cmnd[0] == WRITE_10) {
+        read_write = TRUE;
+        if (gdth_write_through || ((ha->hdr[hdrive].rw_attribs & 1) && 
+                                   (ha->cache_feat & GDT_WR_THROUGH)))
+            cmdp->OpCode = GDT_WRITE_THR;
+        else
+            cmdp->OpCode = GDT_WRITE;
     } else {
-        if (scp->cmnd[0]==WRITE_6 || scp->cmnd[0]==WRITE_10) {
-            if (gdth_write_through)
-                cmdp->OpCode  = GDT_WRITE_THR;
-            else
-                cmdp->OpCode  = GDT_WRITE;
-        } else {
-            cmdp->OpCode      = GDT_READ;
-        }
+        read_write = TRUE;
+        cmdp->OpCode = GDT_READ;
     }
+    
+    cmdp->BoardNode        = LOCALBOARD;
+    cmdp->u.cache.DeviceNo = hdrive;
+    cmdp->u.cache.BlockNo  = 1;
+    cmdp->u.cache.sg_canz  = 0;
 
-    cmdp->BoardNode           = LOCALBOARD;
-    cmdp->u.cache.DeviceNo    = hdrive;
-
-    if (scp->cmnd[0]==ALLOW_MEDIUM_REMOVAL) {
-        cmdp->u.cache.BlockNo = 1;
-        cmdp->u.cache.sg_canz = 0;
-    } else {
+    if (read_write) {
         if (scp->cmd_len != 6) {
             cmdp->u.cache.BlockNo = ntohl(*(ulong32*)&scp->cmnd[2]);
             cmdp->u.cache.BlockCnt= (ulong32)ntohs(*(ushort*)&scp->cmnd[7]);
@@ -2942,37 +3074,92 @@ static int gdth_sync_event(int hanum,int service,unchar index,Scsi_Cmnd *scp)
         }
         /* cache or raw service */
         if (ha->status == S_OK) {
-            scp->SCp.Message = S_OK;
+            scp->SCp.Message = (int)(ha->info<<16|S_OK);
             if (scp->SCp.Status != -1) {
                 TRACE2(("gdth_sync_event(): special cmd 0x%x OK\n",
                         scp->SCp.Status));
-                scp->SCp.Status = -1;
-                scp->SCp.this_residual = HIGH_PRI;
-                return 2;
+                /* special commands GDT_CLUST_INFO/GDT_MOUNT ? */
+                if (scp->SCp.Status == GDT_CLUST_INFO) {
+                    ha->hdr[scp->target].cluster_type = (unchar)ha->info;
+                    if (!(ha->hdr[scp->target].cluster_type & 
+                        CLUSTER_MOUNTED)) {
+                        /* NOT MOUNTED -> MOUNT */
+                        if (!(ha->hdr[scp->target].cluster_type & 
+                            CLUSTER_RESERVED)) {
+                            /* cluster drive NOT RESERVED */
+                            scp->SCp.Status = GDT_MOUNT;
+                        } else {
+                            /* cluster drive RESERVED (on the other node) */
+                            scp->SCp.Status = GDT_MOUNT;
+                            scp->SCp.phase = -2;      /* reservation conflict */
+                        }
+                    } else {
+                        scp->SCp.Status = -1;
+                    }
+                    /* retry */
+                    scp->SCp.this_residual = HIGH_PRI;
+                    return 2;
+                } else if (scp->SCp.Status == GDT_MOUNT) {
+                    ha->hdr[scp->target].cluster_type |= CLUSTER_MOUNTED;
+                    scp->SCp.Status = -1;
+                    /* return UNIT_ATTENTION */
+                    memset((char*)scp->sense_buffer,0,16);
+                    scp->sense_buffer[0] = 0x70;
+                    scp->sense_buffer[2] = UNIT_ATTENTION;
+                    scp->result = (DID_OK << 16) | (CHECK_CONDITION << 1);
+                } else {
+                    scp->SCp.Status = -1;
+                    /* retry */
+                    scp->SCp.this_residual = HIGH_PRI;
+                    return 2;
+                }
+            } else {
+                /* RESERVE/RELEASE ? */
+                if (scp->cmnd[0] == RESERVE) {
+                    ha->hdr[scp->target].cluster_type |= CLUSTER_RESERVED;
+                } else if (scp->cmnd[0] == RELEASE) {
+                    ha->hdr[scp->target].cluster_type &= ~CLUSTER_RESERVED;
+                }           
+                scp->result = DID_OK << 16;
             }
-            scp->result = DID_OK << 16;
         } else if (ha->status == S_BSY) {
             TRACE2(("Controller busy -> retry !\n"));
-            scp->SCp.Message = S_BSY;
+            scp->SCp.Message = (int)(ha->info<<16|S_BSY);
+            if (scp->SCp.Status == GDT_MOUNT)
+                scp->SCp.Status = GDT_CLUST_INFO;
+            /* retry */
             return 2;
         } else {
             scp->SCp.Message = (int)((ha->info<<16)|ha->status);
+            memset((char*)scp->sense_buffer,0,16);
+            scp->sense_buffer[0] = 0x70;
+            scp->sense_buffer[2] = NOT_READY;
+
             if (scp->SCp.Status != -1) {
                 TRACE2(("gdth_sync_event(): special cmd 0x%x error 0x%x\n",
                         scp->SCp.Status, ha->status));
-                scp->SCp.Status = -1;
-                scp->SCp.this_residual = HIGH_PRI;
-                return 2;
-            }
-            if (service == CACHESERVICE) {
-                memset((char*)scp->sense_buffer,0,16);
-                scp->sense_buffer[0] = 0x70;
-                scp->sense_buffer[2] = NOT_READY;
+                if (scp->SCp.Status == GDT_SCAN_START ||
+                    scp->SCp.Status == GDT_SCAN_END) {
+                    scp->SCp.Status = -1;
+                    /* retry */
+                    scp->SCp.this_residual = HIGH_PRI;
+                    return 2;
+                }
                 scp->result = (DID_OK << 16) | (CHECK_CONDITION << 1);
-
+            } else if (scp->cmnd[0] == RESERVE ||
+                       scp->cmnd[0] == RELEASE) {
+                scp->result = (DID_OK << 16) | (CHECK_CONDITION << 1);
+            } else if (service == CACHESERVICE) {
+		if (ha->status == S_CACHE_UNKNOWN &&
+		    (ha->hdr[scp->target].cluster_type & 
+		     CLUSTER_RESERVE_STATE) == CLUSTER_RESERVE_STATE) {
+		    /* bus reset -> force GDT_CLUST_INFO */
+		    ha->hdr[scp->target].cluster_type &= ~CLUSTER_RESERVED;
+		}
+                scp->result = (DID_OK << 16) | (CHECK_CONDITION << 1);
 #if LINUX_VERSION_CODE >= 0x010300
                 if (scp->done != gdth_scsi_done)
-#endif 
+#endif  
                 {
                     dvr.size = sizeof(dvr.eu.sync);
                     dvr.eu.sync.ionode  = hanum;
@@ -3754,24 +3941,46 @@ int gdth_eh_bus_reset(Scsi_Cmnd *scp)
     TRACE2(("gdth_eh_bus_reset()\n"));
     hanum = NUMDATA(scp->host)->hanum;
     ha    = HADATA(gdth_ctr_tab[hanum]);
-    if (scp->channel == ha->virt_bus)
-        return FAILED;
 
+    /* clear command tab */
     GDTH_LOCK_HA(ha, flags);
-    for (i = 0; i < MAXID; ++i)
-        ha->raw[BUS_L2P(ha,scp->channel)].io_cnt[i] = 0;
     for (i = 0; i < GDTH_MAXCMDS; ++i) {
         cmnd = ha->cmd_tab[i].cmnd;
         if (!SPECIAL_SCP(cmnd) && cmnd->channel == scp->channel)
             ha->cmd_tab[i].cmnd = UNUSED_CMND;
     }
-    gdth_polling = TRUE;
-    while (gdth_test_busy(hanum))
-        gdth_delay(0);
-    gdth_internal_cmd(hanum, SCSIRAWSERVICE, GDT_RESET_BUS,
-                      BUS_L2P(ha,scp->channel), 0, 0);
-    gdth_polling = FALSE;
     GDTH_UNLOCK_HA(ha, flags);
+
+    if (scp->channel == ha->virt_bus) {
+        /* host drives */
+        for (i = 0; i < MAX_HDRIVES; ++i) {
+            if (ha->hdr[i].present && 
+                (ha->hdr[i].cluster_type & CLUSTER_RESERVED) 
+                == CLUSTER_RESERVED) { 
+                GDTH_LOCK_HA(ha, flags);
+                gdth_polling = TRUE;
+                while (gdth_test_busy(hanum))
+                    gdth_delay(0);
+                if (gdth_internal_cmd(hanum, CACHESERVICE, 
+                                      GDT_CLUST_RESET, i, 0, 0))
+                    ha->hdr[i].cluster_type &= ~CLUSTER_RESERVED;
+                gdth_polling = FALSE;
+                GDTH_UNLOCK_HA(ha, flags);
+            }
+        }
+    } else {
+        /* raw devices */
+        GDTH_LOCK_HA(ha, flags);
+        for (i = 0; i < MAXID; ++i)
+            ha->raw[BUS_L2P(ha,scp->channel)].io_cnt[i] = 0;
+        gdth_polling = TRUE;
+        while (gdth_test_busy(hanum))
+            gdth_delay(0);
+        gdth_internal_cmd(hanum, SCSIRAWSERVICE, GDT_RESET_BUS,
+                          BUS_L2P(ha,scp->channel), 0, 0);
+        gdth_polling = FALSE;
+        GDTH_UNLOCK_HA(ha, flags);
+    }
     return SUCCESS;
 }
 
@@ -3800,12 +4009,12 @@ int gdth_bios_param(Disk *disk,int dev,int *ip)
 
     if (disk->device->channel != ha->virt_bus || ha->hdr[t].heads == 0) {
         /* raw device or host drive without mapping information */
-	TRACE2(("Evaluate mapping\n"));
-	gdth_eval_mapping(disk->capacity,&ip[2],&ip[0],&ip[1]);
+        TRACE2(("Evaluate mapping\n"));
+        gdth_eval_mapping(disk->capacity,&ip[2],&ip[0],&ip[1]);
     } else {
-	ip[0] = ha->hdr[t].heads;
-	ip[1] = ha->hdr[t].secs;
-	ip[2] = disk->capacity / ip[0] / ip[1];
+        ip[0] = ha->hdr[t].heads;
+        ip[1] = ha->hdr[t].secs;
+        ip[2] = disk->capacity / ip[0] / ip[1];
     }
 
     TRACE2(("gdth_bios_param(): %d heads, %d secs, %d cyls\n",
@@ -3869,18 +4078,16 @@ static void gdth_flush(int hanum)
     Scsi_Cmnd       scp;
     Scsi_Device     sdev;
     gdth_cmd_str    gdtcmd;
+    char            cmnd[12];   
 
     TRACE2(("gdth_flush() hanum %d\n",hanum));
     ha = HADATA(gdth_ctr_tab[hanum]);
     memset(&sdev,0,sizeof(Scsi_Device));
     memset(&scp, 0,sizeof(Scsi_Cmnd));
-    sdev.host = gdth_ctr_tab[hanum];
-    sdev.id = sdev.host->this_id;
-    scp.cmd_len = 12;
-    scp.host = gdth_ctr_tab[hanum];
-    scp.target = sdev.host->this_id;
+    memset(cmnd, 0xff, 12);
+    sdev.host = scp.host = gdth_ctr_tab[hanum];
+    sdev.id = scp.target = sdev.host->this_id;
     scp.device = &sdev;
-    scp.use_sg = 0;
 
     for (i = 0; i < MAX_HDRIVES; ++i) {
         if (ha->hdr[i].present) {
@@ -3891,7 +4098,7 @@ static void gdth_flush(int hanum)
             gdtcmd.u.cache.BlockNo = 1;
             gdtcmd.u.cache.sg_canz = 0;
             TRACE2(("gdth_flush(): flush ha %d drive %d\n", hanum, i));
-            gdth_do_cmd(&scp, &gdtcmd, 30);
+            gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
         }
     }
 }
@@ -3908,10 +4115,11 @@ void gdth_halt(void)
     Scsi_Cmnd       scp;
     Scsi_Device     sdev;
     gdth_cmd_str    gdtcmd;
+    char            cmnd[12];
 #endif
 
 #if LINUX_VERSION_CODE >= 0x020100
-    TRACE2(("gdth_halt() event %d\n",event));
+    TRACE2(("gdth_halt() event %d\n",(int)event));
     if (event != SYS_RESTART && event != SYS_HALT && event != SYS_POWER_OFF)
         return NOTIFY_DONE;
 #else
@@ -3930,19 +4138,16 @@ void gdth_halt(void)
         /* controller reset */
         memset(&sdev,0,sizeof(Scsi_Device));
         memset(&scp, 0,sizeof(Scsi_Cmnd));
-        sdev.host = gdth_ctr_tab[hanum];
-        sdev.id = sdev.host->this_id;
-        scp.cmd_len = 12;
-        scp.host = gdth_ctr_tab[hanum];
-        scp.target = sdev.host->this_id;
+        memset(cmnd, 0xff, 12);
+        sdev.host = scp.host = gdth_ctr_tab[hanum];
+        sdev.id = scp.target = sdev.host->this_id;
         scp.device = &sdev;
-        scp.use_sg = 0;
 
         gdtcmd.BoardNode = LOCALBOARD;
         gdtcmd.Service = CACHESERVICE;
         gdtcmd.OpCode = GDT_RESET;
         TRACE2(("gdth_halt(): reset controller %d\n", hanum));
-        gdth_do_cmd(&scp, &gdtcmd, 10);
+        gdth_do_cmd(&scp, &gdtcmd, cmnd, 10);
 #endif
     }
     printk("Done.\n");

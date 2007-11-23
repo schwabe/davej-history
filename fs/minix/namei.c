@@ -194,7 +194,7 @@ static int minix_add_entry(struct inode * dir,
 			mark_inode_dirty(dir);
 			for (i = 0; i < info->s_namelen ; i++)
 				de->name[i] = (i < namelen) ? name[i] : 0;
-			dir->i_version = ++event;
+			dir->i_version = ++global_event;
 			mark_buffer_dirty(bh, 1);
 			*res_dir = de;
 			break;
@@ -415,7 +415,7 @@ int minix_rmdir(struct inode * dir, struct dentry *dentry)
 	if (inode->i_nlink != 2)
 		printk("empty directory has nlink!=2 (%d)\n",inode->i_nlink);
 	de->inode = 0;
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	inode->i_nlink=0;
 	mark_inode_dirty(inode);
@@ -449,7 +449,7 @@ int minix_unlink(struct inode * dir, struct dentry *dentry)
 		inode->i_nlink=1;
 	}
 	de->inode = 0;
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(dir);
@@ -601,10 +601,10 @@ int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
 	new_de->inode = old_inode->i_ino;
 	old_de->inode = 0;
 	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
-	old_dir->i_version = ++event;
+	old_dir->i_version = ++global_event;
 	mark_inode_dirty(old_dir);
 	new_dir->i_ctime = new_dir->i_mtime = CURRENT_TIME;
-	new_dir->i_version = ++event;
+	new_dir->i_version = ++global_event;
 	mark_inode_dirty(new_dir);
 	if (new_inode) {
 		new_inode->i_nlink--;

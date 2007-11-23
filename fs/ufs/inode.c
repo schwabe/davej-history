@@ -509,7 +509,7 @@ void ufs_read_inode (struct inode * inode)
 	inode->i_mtime = SWAB32(ufs_inode->ui_mtime.tv_sec);
 	inode->i_blocks = SWAB32(ufs_inode->ui_blocks);
 	inode->i_blksize = PAGE_SIZE;   /* This is the optimal IO size (for stat) */
-	inode->i_version = ++event;
+	inode->i_version = ++global_event;
 
 	inode->u.ufs_i.i_flags = SWAB32(ufs_inode->ui_flags);
 	inode->u.ufs_i.i_gen = SWAB32(ufs_inode->ui_gen);

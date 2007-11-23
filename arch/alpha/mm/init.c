@@ -211,7 +211,11 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 		if (cluster->usage & 3)
 			continue;
 		pfn = cluster->start_pfn;
+		if (pfn >= MAP_NR(end_mem)) /* if we overrode mem size */
+			continue;
 		nr = cluster->numpages;
+		if ((pfn + nr) > MAP_NR(end_mem)) /* if override in cluster */
+			nr = MAP_NR(end_mem) - pfn;
 
 		while (nr--)
 			clear_bit(PG_reserved, &mem_map[pfn++].flags);
@@ -221,7 +225,7 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 	   the last slot of the L1 page table.  */
 	memset((void *) ZERO_PAGE(0), 0, PAGE_SIZE);
 	memset(swapper_pg_dir, 0, PAGE_SIZE);
-	newptbr = ((unsigned long) swapper_pg_dir - PAGE_OFFSET) >> PAGE_SHIFT;
+	newptbr = MAP_NR(swapper_pg_dir);
 	pgd_val(swapper_pg_dir[1023]) =
 		(newptbr << 32) | pgprot_val(PAGE_KERNEL);
 
@@ -328,8 +332,8 @@ mem_init(unsigned long start_mem, unsigned long end_mem)
 		kill_page(tmp);
 		free_page(tmp);
 	}
-	tmp = nr_free_pages << PAGE_SHIFT;
-	printk("Memory: %luk available\n", tmp >> 10);
+	tmp = nr_free_pages << (PAGE_SHIFT - 10);
+	printk("Memory: %luk available\n", tmp);
 	return;
 }
 
@@ -358,7 +362,7 @@ si_meminfo(struct sysinfo *val)
 	i = max_mapnr;
 	val->totalram = 0;
 	val->sharedram = 0;
-	val->freeram = nr_free_pages << PAGE_SHIFT;
+	val->freeram = ((unsigned long)nr_free_pages) << PAGE_SHIFT;
 	val->bufferram = buffermem;
 	while (i-- > 0)  {
 		if (PageReserved(mem_map+i))

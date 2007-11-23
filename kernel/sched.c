@@ -78,7 +78,7 @@ long time_reftime = 0;		/* time at last adjustment (s) */
 long time_adjust = 0;
 long time_adjust_step = 0;
 
-unsigned long event = 0;
+unsigned long global_event = 0;
 
 extern int do_setitimer(int, struct itimerval *, struct itimerval *);
 unsigned int * prof_buffer = NULL;

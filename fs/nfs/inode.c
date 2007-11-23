@@ -772,7 +772,7 @@ _nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 		fh = (u32 *) &fhandle;
 		dfprintk(PAGECACHE, "            %08x%08x%08x%08x%08x%08x%08x%08x\n",
 			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
-		if (!IS_ROOT(dentry))
+		if (!IS_ROOT(dentry) && !have_submounts(dentry))
 			d_drop(dentry);
 		goto out;
 	}

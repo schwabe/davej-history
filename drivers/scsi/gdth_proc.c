@@ -1,9 +1,8 @@
 /* gdth_proc.c 
- * $Id: gdth_proc.c,v 1.13 1999/03/22 16:12:53 achim Exp $
+ * $Id: gdth_proc.c,v 1.16 1999/11/02 13:44:11 achim Exp $
  */
 
 #include "gdth_ioctl.h"
-#include <linux/version.h>
 
 int gdth_proc_info(char *buffer,char **start,off_t offset,int length,   
                    int hostno,int inout)
@@ -41,13 +40,9 @@ static int gdth_set_info(char *buffer,int length,int vh,int hanum,int busnum)
 
     memset(&sdev,0,sizeof(Scsi_Device));
     memset(&scp, 0,sizeof(Scsi_Cmnd));
-    sdev.host = gdth_ctr_vtab[vh];
-    sdev.id = sdev.host->this_id;
-    scp.cmd_len = 12;
-    scp.host = gdth_ctr_vtab[vh];
-    scp.target = sdev.host->this_id;
+    sdev.host = scp.host = gdth_ctr_vtab[vh];
+    sdev.id = scp.target = sdev.host->this_id;
     scp.device = &sdev;
-    scp.use_sg = 0;
 
     if (length >= 4) {
         if (strncmp(buffer,"gdth",4) == 0) {
@@ -73,6 +68,7 @@ static int gdth_set_asc_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
     gdth_ha_str     *ha;
     gdth_cmd_str    gdtcmd;
     gdth_cpar_str   *pcpar;
+    char            cmnd[12];
 
     TRACE2(("gdth_set_asc_info() ha %d\n",hanum));
     ha = HADATA(gdth_ctr_tab[hanum]);
@@ -80,6 +76,7 @@ static int gdth_set_asc_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
     drive = -1;
     wb_mode = 0;
     found = FALSE;
+    memset(cmnd, 0xff, 12);
 
     if (length >= 5 && strncmp(buffer,"flush",5)==0) {
         buffer += 6;
@@ -106,7 +103,7 @@ static int gdth_set_asc_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
                 gdtcmd.u.cache.DeviceNo = i;
                 gdtcmd.u.cache.BlockNo = 1;
                 gdtcmd.u.cache.sg_canz = 0;
-                gdth_do_cmd(&scp, &gdtcmd, 30);
+                gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
             }
         }
         if (!found)
@@ -159,7 +156,7 @@ static int gdth_set_asc_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
         gdtcmd.u.ioctl.subfunc = CACHE_CONFIG;
         gdtcmd.u.ioctl.channel = INVALID_CHANNEL;
         pcpar->write_back = wb_mode==1 ? 0:1;
-        gdth_do_cmd(&scp, &gdtcmd, 30);
+        gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
         gdth_ioctl_free(hanum);
         printk("Done.\n");
         return(orig_length);
@@ -180,6 +177,8 @@ static int gdth_set_bin_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
     ulong32         *ppadd, add_size;
     ulong32         *ppadd2, add_size2;
     ulong           flags;
+    char            cmnd[12];   
+    gdth_cmd_str    gdtcmd;
 
     TRACE2(("gdth_set_bin_info() ha %d\n",hanum));
     ha = HADATA(gdth_ctr_tab[hanum]);
@@ -188,6 +187,7 @@ static int gdth_set_bin_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
     pcmd = NULL;
     ppadd = ppadd2 = NULL;
     add_size = add_size2 = 0;
+    memset(cmnd, 0xff, 12);
 
     if (length < GDTOFFSOF(gdth_iowr_str,iu))
         return(-EINVAL);
@@ -242,7 +242,7 @@ static int gdth_set_bin_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
             *ppadd2 = virt_to_bus(piord->iu.general.data+add_size);
         }
         /* do IOCTL */
-        gdth_do_cmd(&scp, pcmd, piowr->timeout);
+        gdth_do_cmd(&scp, pcmd, cmnd, piowr->timeout);
         piord->status = (ulong32)scp.SCp.Message;
         break;
 
@@ -363,10 +363,10 @@ static int gdth_set_bin_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
                 pevt->event_data.size = sizeof(pevt->event_data.eu.async);
                 gdth_log_event(&pevt->event_data, NULL);
             }
-	    GDTH_LOCK_HA(ha, flags);
+            GDTH_LOCK_HA(ha, flags);
             gdth_store_event(ha, pevt->event_source, pevt->event_idx,
                              &pevt->event_data);
-	    GDTH_UNLOCK_HA(ha, flags);
+            GDTH_UNLOCK_HA(ha, flags);
         } else if (piowr->iu.event.erase == 0xfe) {
             gdth_clear_events();
         } else if (piowr->iu.event.erase == 0) {
@@ -380,6 +380,58 @@ static int gdth_set_bin_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
         }
         piord->size = sizeof(gdth_iord_str);
         piord->status = S_OK;
+        break;
+
+      case GDTIOCTL_SCSI:
+        if (!gdth_ioctl_alloc( hanum, sizeof(gdth_iord_str) ))
+            return(-EBUSY);
+        piord = (gdth_iord_str *)ha->pscratch;
+        piord->size = sizeof(gdth_iord_str);
+        scp.target = scp.device->id = piowr->iu.scsi.target;
+        scp.channel = scp.device->channel = piowr->iu.scsi.bus;
+        memcpy(cmnd, piowr->iu.scsi.cmd, 12);
+        scp.cmd_len = piowr->iu.scsi.cmd_len;
+        gdth_do_cmd(&scp, pcmd, cmnd, piowr->timeout);
+        piord->status = (ulong32)scp.result;
+        break;
+
+      case GDTIOCTL_RESET_BUS:
+        if (!gdth_ioctl_alloc( hanum, sizeof(gdth_iord_str) ))
+            return(-EBUSY);
+        piord = (gdth_iord_str *)ha->pscratch;
+        piord->size = sizeof(gdth_iord_str);
+        scp.channel = scp.device->channel = piowr->iu.scsi.bus;
+        piord->status = (ulong32)gdth_eh_bus_reset( &scp );
+        break;
+
+      case GDTIOCTL_HDRLIST:
+        if (!gdth_ioctl_alloc( hanum, sizeof(gdth_iord_str) ))
+            return(-EBUSY);
+        piord = (gdth_iord_str *)ha->pscratch;
+        piord->size = sizeof(gdth_iord_str);
+        piord->status = S_OK;
+        for (i = 0; i < MAX_HDRIVES; ++i) {
+            if (ha->hdr[i].present) {
+                piord->iu.hdr_list[i].bus = ha->virt_bus;
+                piord->iu.hdr_list[i].target = i;
+                piord->iu.hdr_list[i].lun = 0;
+                piord->iu.hdr_list[i].cluster_type = ha->hdr[i].cluster_type;
+                if (ha->hdr[i].cluster_type & CLUSTER_DRIVE) {
+                    gdtcmd.BoardNode = LOCALBOARD;
+                    gdtcmd.Service = CACHESERVICE;
+                    gdtcmd.OpCode = GDT_CLUST_INFO;
+                    gdtcmd.u.cache.DeviceNo = i;
+                    gdtcmd.u.cache.BlockNo = 0;
+                    gdtcmd.u.cache.sg_canz = 0;
+                    gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
+                    if ((scp.SCp.Message & 0xffff) == S_OK)
+                        piord->iu.hdr_list[i].cluster_type = 
+                            (unchar)(scp.SCp.Message>>16);
+		}
+            } else {
+                piord->iu.hdr_list[i].bus = 0xff;
+            }
+        }
         break;
 
       default:
@@ -404,6 +456,7 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
     gdth_evt_str estr;
     Scsi_Cmnd scp;
     Scsi_Device sdev;
+    char cmnd[12];
     char hrec[161];
     struct timeval tv;
 
@@ -420,13 +473,10 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
 
     memset(&sdev,0,sizeof(Scsi_Device));
     memset(&scp, 0,sizeof(Scsi_Cmnd));
-    sdev.host = gdth_ctr_vtab[vh];
-    sdev.id = sdev.host->this_id;
-    scp.cmd_len = 12;
-    scp.host = gdth_ctr_vtab[vh];
-    scp.target = sdev.host->this_id;
+    memset(cmnd, 0xff, 12);
+    sdev.host = scp.host = gdth_ctr_vtab[vh];
+    sdev.id = scp.target = sdev.host->this_id;
     scp.device = &sdev;
-    scp.use_sg = 0;
 
     /* look for buffer ID in length */
     if (id > 1) {
@@ -514,7 +564,7 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
             /* 2. about physical devices */
             size = sprintf(buffer+len,"\nPhysical Devices:");
             len += size;  pos = begin + len;
-	    flag = FALSE;
+            flag = FALSE;
             
             if (!gdth_ioctl_alloc(hanum, GDTH_SCRATCH))
                 goto stop_output;
@@ -536,8 +586,8 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                     sizeof(pds->list[0]);
                 if (pds->entries > cnt)
                     pds->entries = cnt;
-                gdth_do_cmd(&scp, &gdtcmd, 30);
-                if (scp.SCp.Message != S_OK) 
+                gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
+                if ((scp.SCp.Message & 0xffff) != S_OK) 
                     pds->count = 0;
                 TRACE2(("pdr_statistics() entries %d status %d\n",
                         pds->count, scp.SCp.Message));
@@ -556,8 +606,8 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                     gdtcmd.u.ioctl.subfunc = SCSI_DR_INFO | L_CTRL_PATTERN;
                     gdtcmd.u.ioctl.channel = 
                         ha->raw[i].address | ha->raw[i].id_list[j];
-                    gdth_do_cmd(&scp, &gdtcmd, 30);
-                    if (scp.SCp.Message == S_OK) {
+                    gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
+                    if ((scp.SCp.Message & 0xffff) == S_OK) {
                         strncpy(hrec,pdi->vendor,8);
                         strncpy(hrec+8,pdi->product,16);
                         strncpy(hrec+24,pdi->revision,4);
@@ -566,7 +616,7 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                                        "\n Chn/ID/LUN:   \t%c/%02d/%d    \tName:          \t%s\n",
                                        'A'+i,pdi->target_id,pdi->lun,hrec);
                         len += size;  pos = begin + len;
-			flag = TRUE;
+                        flag = TRUE;
                         pdi->no_ldrive &= 0xffff;
                         if (pdi->no_ldrive == 0xffff)
                             strcpy(hrec,"--");
@@ -607,8 +657,8 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                         gdtcmd.u.ioctl.channel = 
                             ha->raw[i].address | ha->raw[i].id_list[j];
                         pdef->sddc_type = 0x08;
-                        gdth_do_cmd(&scp, &gdtcmd, 30);
-                        if (scp.SCp.Message == S_OK) {
+                        gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
+                        if ((scp.SCp.Message & 0xffff) == S_OK) {
                             size = sprintf(buffer+len,
                                            " Grown Defects:\t%d\n",
                                            pdef->sddc_cnt);
@@ -619,10 +669,10 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
             }
             gdth_ioctl_free(hanum);
 
-	    if (!flag) {
-		size = sprintf(buffer+len, "\n --\n");
-		len += size;  pos = begin + len;
-	    }
+            if (!flag) {
+                size = sprintf(buffer+len, "\n --\n");
+                len += size;  pos = begin + len;
+            }
             if (pos < offset) {
                 len = 0;
                 begin = pos;
@@ -633,11 +683,11 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
             /* 3. about logical drives */
             size = sprintf(buffer+len,"\nLogical Drives:");
             len += size;  pos = begin + len;
-	    flag = FALSE;
+            flag = FALSE;
 
             if (!gdth_ioctl_alloc(hanum, GDTH_SCRATCH))
                 goto stop_output;
-            for (i = 0; i < MAX_HDRIVES; ++i) {
+            for (i = 0; i < MAX_LDRIVES; ++i) {
                 if (!ha->hdr[i].is_logdrv)
                     continue;
                 drv_no = i;
@@ -654,8 +704,8 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                     gdtcmd.u.ioctl.param_size = sizeof(gdth_cdrinfo_str);
                     gdtcmd.u.ioctl.subfunc = CACHE_DRV_INFO;
                     gdtcmd.u.ioctl.channel = drv_no;
-                    gdth_do_cmd(&scp, &gdtcmd, 30);
-                    if (scp.SCp.Message != S_OK)
+                    gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
+                    if ((scp.SCp.Message & 0xffff) != S_OK)
                         break;
                     pcdi->ld_dtype >>= 16;
                     j++;
@@ -675,7 +725,7 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                                        "\n Number:       \t%-2d        \tStatus:        \t%s\n",
                                        drv_no, hrec);
                         len += size;  pos = begin + len;
-			flag = TRUE;
+                        flag = TRUE;
                         no_mdrv = pcdi->cd_ldcnt;
                         if (no_mdrv > 1 || pcdi->ld_slave != -1) {
                             is_mirr = TRUE;
@@ -720,10 +770,10 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
             }       
             gdth_ioctl_free(hanum);
         
-	    if (!flag) {
-		size = sprintf(buffer+len, "\n --\n");
-		len += size;  pos = begin + len;
-	    }	
+            if (!flag) {
+                size = sprintf(buffer+len, "\n --\n");
+                len += size;  pos = begin + len;
+            }   
             if (pos < offset) {
                 len = 0;
                 begin = pos;
@@ -734,11 +784,11 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
             /* 4. about array drives */
             size = sprintf(buffer+len,"\nArray Drives:");
             len += size;  pos = begin + len;
-	    flag = FALSE;
+            flag = FALSE;
 
             if (!gdth_ioctl_alloc(hanum, GDTH_SCRATCH))
                 goto stop_output;
-            for (i = 0; i < MAX_HDRIVES; ++i) {
+            for (i = 0; i < MAX_LDRIVES; ++i) {
                 if (!(ha->hdr[i].is_arraydrv && ha->hdr[i].is_master))
                     continue;
                 /* 4.a array drive info */
@@ -751,8 +801,8 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                 gdtcmd.u.ioctl.param_size = sizeof(gdth_arrayinf_str);
                 gdtcmd.u.ioctl.subfunc = ARRAY_INFO | LA_CTRL_PATTERN;
                 gdtcmd.u.ioctl.channel = i;
-                gdth_do_cmd(&scp, &gdtcmd, 30);
-                if (scp.SCp.Message == S_OK) {
+                gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
+                if ((scp.SCp.Message & 0xffff) == S_OK) {
                     if (pai->ai_state == 0)
                         strcpy(hrec, "idle");
                     else if (pai->ai_state == 2)
@@ -792,10 +842,10 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
             }
             gdth_ioctl_free(hanum);
         
-	    if (!flag) {
-		size = sprintf(buffer+len, "\n --\n");
-		len += size;  pos = begin + len;
-	    }
+            if (!flag) {
+                size = sprintf(buffer+len, "\n --\n");
+                len += size;  pos = begin + len;
+            }
             if (pos < offset) {
                 len = 0;
                 begin = pos;
@@ -806,11 +856,11 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
             /* 5. about host drives */
             size = sprintf(buffer+len,"\nHost Drives:");
             len += size;  pos = begin + len;
-	    flag = FALSE;
+            flag = FALSE;
 
             if (!gdth_ioctl_alloc(hanum, GDTH_SCRATCH))
                 goto stop_output;
-            for (i = 0; i < MAX_HDRIVES; ++i) {
+            for (i = 0; i < MAX_LDRIVES; ++i) {
                 if (!ha->hdr[i].is_logdrv || 
                     (ha->hdr[i].is_arraydrv && !ha->hdr[i].is_master))
                     continue;
@@ -826,15 +876,15 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                 gdtcmd.u.ioctl.channel = i;
                 phg->entries = MAX_HDRIVES;
                 phg->offset = GDTOFFSOF(gdth_hget_str, entry[0]); 
-                gdth_do_cmd(&scp, &gdtcmd, 30);
-                if (scp.SCp.Message != S_OK) {
+                gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
+                if ((scp.SCp.Message & 0xffff) != S_OK) {
                     ha->hdr[i].ldr_no = i;
                     ha->hdr[i].rw_attribs = 0;
                     ha->hdr[i].start_sec = 0;
                 } else {
                     for (j = 0; j < phg->entries; ++j) {
                         k = phg->entry[j].host_drive;
-                        if (k >= MAX_HDRIVES)
+                        if (k >= MAX_LDRIVES)
                             continue;
                         ha->hdr[k].ldr_no = phg->entry[j].log_drive;
                         ha->hdr[k].rw_attribs = phg->entry[j].rw_attribs;
@@ -854,7 +904,7 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                                "\n Number:       \t%-2d        \tArr/Log. Drive:\t%d\n",
                                i, ha->hdr[i].ldr_no);
                 len += size;  pos = begin + len;
-		flag = TRUE;
+                flag = TRUE;
 
                 size = sprintf(buffer+len,
                                " Capacity [MB]:\t%-6d    \tStart Sector:  \t%d\n",
@@ -862,10 +912,10 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                 len += size;  pos = begin + len;
             }
         
-	    if (!flag) {
-		size = sprintf(buffer+len, "\n --\n");
-		len += size;  pos = begin + len;
-	    }
+            if (!flag) {
+                size = sprintf(buffer+len, "\n --\n");
+                len += size;  pos = begin + len;
+            }
             if (pos < offset) {
                 len = 0;
                 begin = pos;
@@ -887,7 +937,7 @@ static int gdth_get_info(char *buffer,char **start,off_t offset,
                 gdth_log_event(&estr.event_data, hrec);
                 do_gettimeofday(&tv);
                 sec = (int)(tv.tv_sec - estr.first_stamp);
-		if (sec < 0) sec = 0;
+                if (sec < 0) sec = 0;
                 size = sprintf(buffer+len," date- %02d:%02d:%02d\t%s\n",
                                sec/3600, sec%3600/60, sec%60, hrec);
                 len += size;  pos = begin + len;
@@ -929,19 +979,24 @@ stop_output:
     return(len);
 }
 
-static void gdth_do_cmd(Scsi_Cmnd *scp,gdth_cmd_str *gdtcmd,int timeout)
+static void gdth_do_cmd(Scsi_Cmnd *scp, gdth_cmd_str *gdtcmd, 
+                        char *cmnd, int timeout)
 {
-    char cmnd[12];
     struct semaphore sem = MUTEX_LOCKED;
+    unsigned bufflen;
 
     TRACE2(("gdth_do_cmd()\n"));
-    memset(cmnd, 0, 12);
+    if (gdtcmd != NULL) { 
+        scp->SCp.this_residual = IOCTL_PRI;
+        bufflen = sizeof(gdth_cmd_str);
+    } else {
+        scp->SCp.this_residual = DEFAULT_PRI;
+        bufflen = 0;
+    }
     scp->request.rq_status = RQ_SCSI_BUSY;
     scp->request.sem = &sem;
-    scp->SCp.this_residual = IOCTL_PRI;
     GDTH_LOCK_SCSI_DOCMD();
-    scsi_do_cmd(scp, cmnd, gdtcmd, sizeof(gdth_cmd_str), 
-                gdth_scsi_done, timeout*HZ, 1);
+    scsi_do_cmd(scp, cmnd, gdtcmd, bufflen, gdth_scsi_done, timeout*HZ, 1);
     GDTH_UNLOCK_SCSI_DOCMD();
     down(&sem);
 }

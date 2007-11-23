@@ -2655,7 +2655,7 @@ static int brg_rx(struct sk_buff *skb, int port)
 	 */
 	if(clone) {
 	  struct sk_buff *skb2 = skb;
-	  skb = skb_clone(skb2, GFP_KERNEL);
+	  skb = skb_clone(skb2, GFP_ATOMIC);
 	  if (skb == NULL) {
 	    return(0);
 	  }

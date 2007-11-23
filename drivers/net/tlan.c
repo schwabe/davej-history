@@ -32,6 +32,8 @@
  *	Alan Cox	<alan@redhat.com>:	Fixed the out of memory
  *						handling.
  *
+ *	Torben Mathiasen <torben.mathiasen@compaq.com> New Maintainer!
+ *
  ********************************************************************/
 
 

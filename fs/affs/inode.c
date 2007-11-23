@@ -379,13 +379,13 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 						FILE_END(link_bh->b_data,link)->link_chain;
 		FILE_END(link_bh->b_data,link)->link_chain   = cpu_to_be32(inode->i_ino);
 		affs_fix_checksum(AFFS_I2BSIZE(link),link_bh->b_data,5);
-		link->i_version = ++event;
+		link->i_version = ++global_event;
 		mark_inode_dirty(link);
 		mark_buffer_dirty(link_bh,1);
 	}
 	affs_fix_checksum(AFFS_I2BSIZE(inode),inode_bh->b_data,5);
 	affs_fix_checksum(AFFS_I2BSIZE(dir),dir_bh->b_data,5);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	dir->i_mtime   = dir->i_atime = dir->i_ctime = CURRENT_TIME;
 	unlock_super(inode->i_sb);
 

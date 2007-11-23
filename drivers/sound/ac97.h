@@ -10,7 +10,7 @@
 #include "sound_config.h"
 #include "sound_calls.h"
 
-#define  AC97_RESET              0x0000      //  */
+#define  AC97_RESET              0x0000      //
 #define  AC97_MASTER_VOL_STEREO  0x0002      // Line Out
 #define  AC97_HEADPHONE_VOL      0x0004      // 
 #define  AC97_MASTER_VOL_MONO    0x0006      // TAD Output
@@ -32,6 +32,19 @@
 #define  AC97_POWER_CONTROL      0x0026
 
 /* registers 0x0028 - 0x0058 are reserved */
+
+/* AC'97 2.0 */
+#define AC97_EXTENDED_ID	0x0028	/* Extended Audio ID */
+#define AC97_EXTENDED_STATUS	0x002A	/* Extended Audio Status */
+#define AC97_PCM_FRONT_DAC_RATE 0x002C  /* PCM Front DAC Rate */
+#define AC97_PCM_SURR_DAC_RATE  0x002E  /* PCM Surround DAC Rate */
+#define AC97_PCM_LFE_DAC_RATE   0x0030  /* PCM LFE DAC Rate */
+#define AC97_PCM_LR_DAC_RATE	0x0032	/* PCM LR DAC Rate */
+#define AC97_PCM_MIC_ADC_RATE   0x0034  /* PCM MIC ADC Rate */
+#define AC97_CENTER_LFE_MASTER  0x0036  /* Center + LFE Master Volume */
+#define AC97_SURROUND_MASTER    0x0038  /* Surround (Rear) Master Volume */
+#define AC97_RESERVED_3A	0x003A	/* Reserved */
+/* range 0x3c-0x58 - MODEM */
 
 /* AC'97 2.0 */
 #define AC97_EXTENDED_ID	0x0028	/* Extended Audio ID */
@@ -207,6 +220,10 @@ extern int ac97_get_mixer_scaled (struct ac97_hwint *dev, int oss_channel);
 /* Default ioctl. */
 extern int ac97_mixer_ioctl (struct ac97_hwint *dev, unsigned int cmd,
 			     caddr_t arg);
+
+/* Do a complete reset on the AC97 mixer, restoring all mixer registers to
+   the current values.  Normally used after an APM resume event.  */
+extern int ac97_reset (struct ac97_hwint *dev);
 #endif
 
 /*

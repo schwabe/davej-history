@@ -3,7 +3,7 @@
 
 #include <asm/param.h>	/* for HZ */
 
-extern unsigned long event;
+extern unsigned long global_event;
 
 #include <linux/binfmts.h>
 #include <linux/personality.h>

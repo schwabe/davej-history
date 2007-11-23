@@ -330,7 +330,7 @@ static struct buffer_head * ufs_add_entry (struct inode * dir,
 			 */
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			mark_inode_dirty(dir);
-			dir->i_version = ++event;
+			dir->i_version = ++global_event;
 			mark_buffer_dirty(bh, 1);
 			*res_dir = de;
 			*err = 0;
@@ -435,7 +435,7 @@ int ufs_create (struct inode * dir, struct dentry * dentry, int mode)
 	}
 	de->d_ino = SWAB32(inode->i_ino);
 	ufs_set_de_type (de, inode->i_mode);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -485,7 +485,7 @@ int ufs_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 		goto out_no_entry;
 	de->d_ino = SWAB32(inode->i_ino);
 	ufs_set_de_type (de, inode->i_mode);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -559,7 +559,7 @@ int ufs_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 		goto out_no_entry;
 	de->d_ino = SWAB32(inode->i_ino);
 	ufs_set_de_type (de, inode->i_mode);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -672,7 +672,7 @@ int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 		goto end_rmdir;
 
 	retval = ufs_delete_entry (dir, de, bh);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	if (retval)
 		goto end_rmdir;
 	mark_buffer_dirty(bh, 1);
@@ -684,7 +684,7 @@ int ufs_rmdir (struct inode * dir, struct dentry *dentry)
 		ufs_warning (inode->i_sb, "ufs_rmdir",
 			      "empty directory has nlink!=2 (%d)",
 			      inode->i_nlink);
-	inode->i_version = ++event;
+	inode->i_version = ++global_event;
 	inode->i_nlink = 0;
 	inode->i_size = 0;
 	mark_inode_dirty(inode);
@@ -736,7 +736,7 @@ int ufs_unlink(struct inode * dir, struct dentry *dentry)
 	retval = ufs_delete_entry (dir, de, bh);
 	if (retval)
 		goto end_unlink;
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -817,7 +817,7 @@ int ufs_symlink (struct inode * dir, struct dentry * dentry,
 	if (!bh)
 		goto out_no_entry;
 	de->d_ino = SWAB32(inode->i_ino);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -861,7 +861,7 @@ int ufs_link (struct dentry * old_dentry, struct inode * dir,
 		return err;
 
 	de->d_ino = SWAB32(inode->i_ino);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -949,7 +949,7 @@ int ufs_rename (struct inode * old_dir, struct dentry * old_dentry,
 					 &retval);
 	if (!new_bh)
 		goto end_rename;
-	new_dir->i_version = ++event;
+	new_dir->i_version = ++global_event;
 
 	/*
 	 * ok, that's it
@@ -957,7 +957,7 @@ int ufs_rename (struct inode * old_dir, struct dentry * old_dentry,
 	new_de->d_ino = SWAB32(old_inode->i_ino);
 	ufs_delete_entry (old_dir, old_de, old_bh);
 
-	old_dir->i_version = ++event;
+	old_dir->i_version = ++global_event;
 	if (new_inode) {
 		new_inode->i_nlink--;
 		new_inode->i_ctime = CURRENT_TIME;

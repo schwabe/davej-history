@@ -80,7 +80,7 @@ struct file * get_empty_filp(void)
 	new_one:
 		memset(f, 0, sizeof(*f));
 		f->f_count = 1;
-		f->f_version = ++event;
+		f->f_version = ++global_event;
 		f->f_uid = current->fsuid;
 		f->f_gid = current->fsgid;
 		put_inuse(f);

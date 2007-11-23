@@ -842,6 +842,7 @@ static void masq_expire(unsigned long data)
 	 */
 	if (atomic_read(&ms->refcnt) == 1) {
 		kfree_s(ms,sizeof(*ms));
+		sysctl_ip_always_defrag--;
 		MOD_DEC_USE_COUNT;
 		goto masq_expire_out;
 	}

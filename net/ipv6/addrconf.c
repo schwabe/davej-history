@@ -570,6 +570,21 @@ static int ipv6_generate_eui64(u8 *eui, struct device *dev)
 	}
 	return -1;
 }
+
+static int ipv6_inherit_eui64(u8 *eui, struct inet6_dev *idev)
+{
+	int err = -1;
+	struct inet6_ifaddr *ifp;
+
+	for (ifp=idev->addr_list; ifp; ifp=ifp->if_next) {
+		if (ifp->scope == IFA_LINK && !(ifp->flags&(ADDR_STATUS|DAD_STATUS))) {
+			memcpy(eui, ifp->addr.s6_addr+8, 8);
+			err = 0;
+			break;
+		}
+	}
+	return err;
+}
 #endif
 
 /*
@@ -742,7 +757,8 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 #ifdef CONFIG_IPV6_EUI64
 		if (pinfo->prefix_len == 64) {
 			memcpy(&addr, &pinfo->prefix, 8);
-			if (ipv6_generate_eui64(addr.s6_addr + 8, dev))
+			if (ipv6_generate_eui64(addr.s6_addr + 8, dev) &&
+			    ipv6_inherit_eui64(addr.s6_addr + 8, in6_dev))
 				return;
 			goto ok;
 		}
@@ -1374,7 +1390,7 @@ static void addrconf_dad_completed(struct inet6_ifaddr *ifp)
 	 */
 
 	if (ifp->idev->cnf.forwarding == 0 &&
-	    (dev->flags&(IFF_NOARP|IFF_LOOPBACK)) == 0 &&
+	    (dev->flags&IFF_LOOPBACK) == 0 &&
 	    (ipv6_addr_type(&ifp->addr) & IPV6_ADDR_LINKLOCAL)) {
 		struct in6_addr all_routers;
 

@@ -521,7 +521,7 @@ void ext2_read_inode (struct inode * inode)
 	inode->u.ext2_i.i_dtime = le32_to_cpu(raw_inode->i_dtime);
 	inode->i_blksize = PAGE_SIZE;	/* This is the optimal IO size (for stat), not the fs block size */
 	inode->i_blocks = le32_to_cpu(raw_inode->i_blocks);
-	inode->i_version = ++event;
+	inode->i_version = ++global_event;
 	inode->u.ext2_i.i_new_inode = 0;
 	inode->u.ext2_i.i_flags = le32_to_cpu(raw_inode->i_flags);
 	inode->u.ext2_i.i_faddr = le32_to_cpu(raw_inode->i_faddr);

@@ -166,7 +166,7 @@ void adfs_read_inode (struct inode *inode)
 	sb = inode->i_sb;
 	inode->i_uid = sb->u.adfs_sb.s_uid;
 	inode->i_gid = sb->u.adfs_sb.s_gid;
-	inode->i_version = ++event;
+	inode->i_version = ++global_event;
 
 	if (adfs_inode_validate_no (sb, inode->i_ino & 0xffffff00)) {
 		adfs_error (sb, "adfs_read_inode",

@@ -811,8 +811,10 @@ M:	kgb@manjak.knm.org.pl
 S:	Maintained
 
 TLAN NETWORK DRIVER
+P:	Torben Mathiasen
+M:	torben.mathiasen@compaq.com
 L:	tlan@vuser.vu.union.edu
-S:	Orphan
+S:	Maintained
 
 TOKEN-RING NETWORK DRIVER
 P:	Paul Norton

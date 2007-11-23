@@ -1192,6 +1192,14 @@ secure_redirects
    Accept ICMP redirect messages only for gateways, listed in
    default gateway list. Enabled by default.
 
+hidden
+   Hide addresses attached to this device from another devices.
+   Such addresses will never be selected by source address autoselection
+   mechanism, host does not answer broadcast ARP requests for them,
+   does not announce it as source address of ARP requests,	but they
+   are still reachable via IP. This flag is activated only if it is
+   enabled both in specific device section and in "all" section.
+
 shared_media
    If it is not set the kernel does not assume that different subnets
    on this device can communicate directly. Default setting is 'yes'.  

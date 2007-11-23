@@ -10,7 +10,7 @@
  *
  * <achim@vortex.de>
  *
- * $Id: gdth.h,v 1.21 1999/03/26 09:12:24 achim Exp $
+ * $Id: gdth.h,v 1.24 1999/11/02 13:43:49 achim Exp $
  */
 
 #include <linux/version.h>
@@ -29,9 +29,9 @@
 /* defines, macros */
 
 /* driver version */
-#define GDTH_VERSION_STR        "1.14"
+#define GDTH_VERSION_STR        "1.17"
 #define GDTH_VERSION            1
-#define GDTH_SUBVERSION         14
+#define GDTH_SUBVERSION         17
 
 /* protocol version */
 #define PROTOCOL_VERSION        1
@@ -135,7 +135,8 @@
 #define MAXID           127
 #define MAXLUN          8
 #define MAXBUS          6
-#define MAX_HDRIVES     35                      /* max. host drive count */
+#define MAX_HDRIVES     100                     /* max. host drive count */
+#define MAX_LDRIVES     255                     /* max. log. drive count */
 #define MAX_EVENTS      100                     /* event buffer count */
 #define MAX_RES_ARGS    40                      /* device reservation, 
                                                    must be a multiple of 4 */
@@ -173,6 +174,12 @@
 #define IC_QUEUE_BYTES  4
 #define DPMEM_COMMAND_OFFSET    IC_HEADER_BYTES+IC_QUEUE_BYTES*MAXOFFSETS
 
+/* cluster_type constants */
+#define CLUSTER_DRIVE         1
+#define CLUSTER_MOUNTED       2
+#define CLUSTER_RESERVED      4
+#define CLUSTER_RESERVE_STATE (CLUSTER_DRIVE|CLUSTER_MOUNTED|CLUSTER_RESERVED)
+
 /* cache/raw service commands */
 #define GDT_INIT        0                       /* service initialization */
 #define GDT_READ        1                       /* read command */
@@ -189,6 +196,11 @@
 #define GDT_READ_THR    17                      /* read through */
 #define GDT_EXT_INFO    18                      /* extended info */
 #define GDT_RESET       19                      /* controller reset */
+#define GDT_RESERVE_DRV 20                      /* reserve host drive */
+#define GDT_RELEASE_DRV 21                      /* release host drive */
+#define GDT_CLUST_INFO  22                      /* cluster info */
+#define GDT_RW_ATTRIBS  23                      /* R/W attribs (write thru,..)*/
+#define GDT_CLUST_RESET 24                      /* releases the cluster drives*/
 
 /* additional raw service commands */
 #define GDT_RESERVE     14                      /* reserve dev. to raw serv. */
@@ -206,10 +218,11 @@
 #define SCSI_DEF_CNT    0x15                    /* grown/primary defects */
 #define DSK_STATISTICS  0x4b                    /* SCSI disk statistics */
 #define IOCHAN_DESC     0x5d                    /* description of IO channel */
-#define IOCHAN_RAW_DESC 0x5e                    /* description of raw IO channel */
+#define IOCHAN_RAW_DESC 0x5e                    /* description of raw IO chn. */
 #define L_CTRL_PATTERN  0x20000000L             /* SCSI IOCTL mask */
 #define ARRAY_INFO      0x12                    /* array drive info */
 #define ARRAY_DRV_LIST  0x0f                    /* array drive list */
+#define ARRAY_DRV_LIST2 0x34                    /* array drive list (new) */
 #define LA_CTRL_PATTERN 0x10000000L             /* array IOCTL mask */
 #define CACHE_DRV_CNT   0x01                    /* cache drive count */
 #define CACHE_DRV_LIST  0x02                    /* cache drive list */
@@ -235,6 +248,7 @@
 /* service errors */
 #define S_OK            1                       /* no error */
 #define S_BSY           7                       /* controller busy */
+#define S_CACHE_UNKNOWN 12                      /* cache serv.: drive unknown */
 #define S_RAW_SCSI      12                      /* raw serv.: target error */
 #define S_RAW_ILL       0xff                    /* raw serv.: illegal */
 
@@ -300,7 +314,7 @@ typedef struct {
     unchar      revision[4];                    /* revision */
     ulong32     sy_rate;                        /* current rate for sync. tr. */
     ulong32     sy_max_rate;                    /* max. rate for sync. tr. */
-    ulong32     no_ldrive;                      /* belongs to this logical drv.*/
+    ulong32     no_ldrive;                      /* belongs to this log. drv.*/
     ulong32     blkcnt;                         /* number of blocks */
     ushort      blksize;                        /* size of block in bytes */
     unchar      available;                      /* flag: access is available */
@@ -455,7 +469,15 @@ typedef struct {
     unchar      is_parity;                      /* Flag: is parity drive? */
     unchar      is_hotfix;                      /* Flag: is hotfix drive? */
     unchar      res[3];
-} PACKED gdth_arraylist_str;
+} PACKED gdth_alist_str;
+
+typedef struct {
+    ulong32	entries_avail;			/* allocated entries */
+    ulong32	entries_init;			/* returned entries */
+    ulong32	first_entry;			/* first entry number */
+    ulong32	list_offset;			/* offset of following list */
+    gdth_alist_str list[1];			/* list */
+} PACKED gdth_arcdl_str;
 
 /* cache info/config IOCTL */
 typedef struct {
@@ -864,13 +886,15 @@ typedef struct {
         ulong32         size;                   /* capacity */
         unchar          ldr_no;                 /* log. drive no. */
         unchar          rw_attribs;             /* r/w attributes */
+        unchar          cluster_type;           /* cluster properties */
+        unchar          reserved;
         ulong32         start_sec;              /* start sector */
-    } hdr[MAX_HDRIVES];                         /* host drives */
+    } hdr[MAX_LDRIVES];                         /* host drives */
     struct {
         unchar          lock;                   /* channel locked? (hot plug) */
         unchar          pdev_cnt;               /* physical device count */
         unchar          local_no;               /* local channel number */
-	unchar          io_cnt[MAXID];          /* current IO count */
+        unchar          io_cnt[MAXID];          /* current IO count */
         ulong32         address;                /* channel address */
         ulong32         id_list[MAXID];         /* IDs of the phys. devices */
     } raw[MAXBUS];                              /* SCSI channels */

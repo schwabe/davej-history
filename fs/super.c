@@ -983,6 +983,7 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	if (!data)
 		return 0;
 
+#if 0
 	vma = find_vma(current->mm, (unsigned long) data);
 	if (!vma || (unsigned long) data < vma->vm_start)
 		return -EFAULT;
@@ -991,10 +992,13 @@ static int copy_mount_options (const void * data, unsigned long *where)
 	i = vma->vm_end - (unsigned long) data;
 	if (PAGE_SIZE <= (unsigned long) i)
 		i = PAGE_SIZE-1;
-	if (!(page = __get_free_page(GFP_KERNEL))) {
+#else
+	i = PAGE_SIZE;		
+#endif		
+	if (!(page = get_free_page(GFP_KERNEL))) {
 		return -ENOMEM;
 	}
-	if (copy_from_user((void *) page,data,i)) {
+	if (copy_from_user((void *) page,data,i) == i) {
 		free_page(page); 
 		return -EFAULT;
 	}

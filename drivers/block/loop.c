@@ -315,7 +315,7 @@ static int create_missing_block(struct loop_device *lo, int block, int blksize)
 		/* Do what the default llseek() code would have done */
 		file->f_pos = new_offset;
 		file->f_reada = 0;
-		file->f_version = ++event;
+		file->f_version = ++global_event;
 	}
 
 	if (file->f_op->write == NULL) {

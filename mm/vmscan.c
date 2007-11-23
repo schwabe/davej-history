@@ -53,6 +53,7 @@ static int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
 		 * tables to the global page map.
 		 */
 		set_pte(page_table, pte_mkold(pte));
+		flush_tlb_page(vma, address);
 		set_bit(PG_referenced, &page_map->flags);
 		return 0;
 	}
@@ -95,6 +96,7 @@ drop_pte:
 	 * some real work in the future in "shrink_mmap()".
 	 */
 	if (!pte_dirty(pte)) {
+		flush_cache_page(vma, address);
 		pte_clear(page_table);
 		goto drop_pte;
 	}

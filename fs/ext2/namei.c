@@ -301,7 +301,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
 			dir->u.ext2_i.i_flags &= ~EXT2_BTREE_FL;
 			mark_inode_dirty(dir);
-			dir->i_version = ++event;
+			dir->i_version = ++global_event;
 			mark_buffer_dirty(bh, 1);
 			*res_dir = de;
 			*err = 0;
@@ -383,7 +383,7 @@ int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
 				      EXT2_FEATURE_INCOMPAT_FILETYPE))
 		de->file_type = EXT2_FT_REG_FILE;
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -412,7 +412,7 @@ int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	if (!bh)
 		goto out_no_entry;
 	de->inode = cpu_to_le32(inode->i_ino);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &ext2_file_inode_operations;
 		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
@@ -511,7 +511,7 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
 				      EXT2_FEATURE_INCOMPAT_FILETYPE))
 		de->file_type = EXT2_FT_DIR;
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -619,7 +619,7 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 		goto end_rmdir;
 
 	retval = ext2_delete_entry (de, bh);
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	if (retval)
 		goto end_rmdir;
 	mark_buffer_dirty(bh, 1);
@@ -631,7 +631,7 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 		ext2_warning (inode->i_sb, "ext2_rmdir",
 			      "empty directory has nlink!=2 (%d)",
 			      inode->i_nlink);
-	inode->i_version = ++event;
+	inode->i_version = ++global_event;
 	inode->i_nlink = 0;
 	inode->i_size = 0;
 	mark_inode_dirty(inode);
@@ -674,7 +674,7 @@ int ext2_unlink(struct inode * dir, struct dentry *dentry)
 	retval = ext2_delete_entry (de, bh);
 	if (retval)
 		goto end_unlink;
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -747,7 +747,7 @@ int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symnam
 	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
 				      EXT2_FEATURE_INCOMPAT_FILETYPE))
 		de->file_type = EXT2_FT_SYMLINK;
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -800,7 +800,7 @@ int ext2_link (struct dentry * old_dentry,
 		else if (S_ISFIFO(inode->i_mode))  
 			de->file_type = EXT2_FT_FIFO;
 	}
-	dir->i_version = ++event;
+	dir->i_version = ++global_event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -880,7 +880,7 @@ int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 		if (!new_bh)
 			goto end_rename;
 	}
-	new_dir->i_version = ++event;
+	new_dir->i_version = ++global_event;
 
 	/*
 	 * Like most other Unix systems, set the ctime for inodes on a
@@ -899,7 +899,7 @@ int ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 	
 	ext2_delete_entry (old_de, old_bh);
 
-	old_dir->i_version = ++event;
+	old_dir->i_version = ++global_event;
 	if (new_inode) {
 		new_inode->i_nlink--;
 		new_inode->i_ctime = CURRENT_TIME;
