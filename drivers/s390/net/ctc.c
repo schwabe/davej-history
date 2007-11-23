@@ -276,6 +276,8 @@ static int ctc_no_auto = 0;
 typedef struct net_device  net_device;
 #else
 typedef struct device  net_device;
+typedef struct wait_queue* wait_queue_head_t;
+#define init_waitqueue_head(nothing)
 #endif
 
 struct adapterlist{ 

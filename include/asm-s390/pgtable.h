@@ -477,8 +477,9 @@ extern inline pte_t pte_mkyoung(pte_t pte)      { pte_val(pte) |= _PAGE_ACCESSED
 #define mk_pte_phys(physpage, pgprot) \
 ({ pte_t __pte; pte_val(__pte) = physpage + pgprot_val(pgprot); __pte; })
 
+#define _PAGE_CHG_MASK  (PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
-{ pte_val(pte) = (pte_val(pte) & PAGE_MASK) | pgprot_val(newprot); return pte; }
+{ pte_val(pte) = __pte_set_ro( (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot) ); return pte; }
 
 #define pte_page(pte) \
 ((unsigned long) __va(pte_val(pte) & PAGE_MASK))

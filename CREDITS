@@ -1467,11 +1467,19 @@ S: Germany
 
 N: Arnaldo Carvalho de Melo
 E: acme@conectiva.com.br
+E: acme@gnu.org
+W: http://bazar.conectiva.com.br/~acme
+W: http://advogato.org/person/acme
+P: 1024D/9224DF01 D5DF E3BB E3C8 BCBB F8AD  841A B6AB 4681 9224 DF01
 D: wanrouter hacking
-D: cyclades 2X sync card driver (still in early devel stage)
 D: USB hacking
-S: R. Prof. Rubens Elke Braga, 558 - Parolin
-S: 80220-320 Curitiba - Parana
+D: misc Makefile, Config.in, drivers and network stacks fixes
+D: IPX Multithreading for 2.4
+D: Cyclom 2X synchronous card driver
+D: i18n for minicom, net-tools, util-linux, fetchmail, etc
+S: Conectiva S.A.
+S: R. Tocantins, 89 - Cristo Rei
+S: 80050-430 - Curitiba - Paraná
 S: Brazil
 
 N: Michael Meskes

@@ -192,7 +192,7 @@ extern inline int __put_user_asm_1(__u8 x, void *ptr)
 ({                                                              \
         long __pu_err = -EFAULT;                                \
         __typeof__(*(ptr)) *__pu_addr = (ptr);                  \
-        __typeof__(x) __x = (x);                                \
+        __typeof__(*(ptr)) __x = (x);                           \
         if (__access_ok((long)__pu_addr,sizeof(*(ptr)))) {      \
                 __pu_err = 0;                                   \
                 __put_user((__x), (__pu_addr));                 \
@@ -304,7 +304,7 @@ extern int __put_user_bad(void);
 ({                                                              \
         long __gu_err = -EFAULT;                                \
         __typeof__(*(ptr)) *__gu_addr = (ptr);                  \
-        __typeof__(x) __x;                                      \
+        __typeof__(*(ptr)) __x;                                 \
         if (__access_ok((long)__gu_addr,sizeof(*(ptr)))) {      \
                 __gu_err = 0;                                   \
                 __get_user((__x), (__gu_addr));                 \

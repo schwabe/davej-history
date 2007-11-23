@@ -35,6 +35,7 @@
             are the fixes in dasd_format
  * 10/26/00 fixed ITPM PL010261EPA race condition when formatting  
             are the fixes in dasd_do_chanq
+ * 11/21/00 fixed BLKFLSBUF ioctl and dasd_release to flush the buffers
  */
 
 #include <linux/config.h>
@@ -1694,15 +1695,18 @@ dasd_format (dasd_device_t * device, format_data_t * fdata)
                         major_from_devindex (devindex), 
                         devindex << DASD_PARTN_BITS);
         } /* end if discipline->format_device */
-        printk (KERN_WARNING PRINTK_HEADER
-                " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-                " Formatting finished successfully\n",
-                devno, 
-                irq, 
-                device->name, 
-                major_from_devindex (devindex), 
-                devindex << DASD_PARTN_BITS);
-        
+
+        if (!rc) {
+                printk (KERN_WARNING PRINTK_HEADER
+                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                        " Formatting finished successfully\n",
+                        devno, 
+                        irq, 
+                        device->name, 
+                        major_from_devindex (devindex), 
+                        devindex << DASD_PARTN_BITS);
+        }
+
         dasd_set_device_level( device->devinfo.irq,
                                DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
                                device->discipline,
@@ -1757,6 +1761,7 @@ do_dasd_ioctl (struct inode *inp, /* unsigned */ int no, unsigned long data)
 		}
 	case BLKFLSBUF:{
 			rc = fsync_dev (inp->i_rdev);
+			invalidate_buffers(inp->i_rdev);
 			break;
 		}
 	case BLKRAGET:{
@@ -1944,6 +1949,10 @@ dasd_release (struct inode *inp, struct file *filp)
 #ifdef MODULE
 	MOD_DEC_USE_COUNT;
 #endif				/* MODULE */
+	}
+	if ( device->open_count == 0 ) {
+		rc = fsync_dev (inp->i_rdev);
+		invalidate_buffers(inp->i_rdev);
 	}
 	return rc;
 }

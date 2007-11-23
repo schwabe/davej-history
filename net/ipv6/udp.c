@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.40.2.1 1999/06/20 20:14:55 davem Exp $
+ *	$Id: udp.c,v 1.40.2.2 2000/12/08 20:29:33 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -561,8 +561,8 @@ static void udpv6_mcast_deliver(struct udphdr *uh,
 
 	buff = NULL;
 	sk2 = sk;
-	while((sk2 = udp_v6_mcast_next(sk2->next, uh->dest, saddr,
-						  uh->source, daddr, dif))) {
+	while((sk2 = udp_v6_mcast_next(sk2->next, uh->dest, daddr,
+						  uh->source, saddr, dif))) {
 		if (!buff) {
 			buff = skb_clone(skb, GFP_ATOMIC);
 			if (!buff)

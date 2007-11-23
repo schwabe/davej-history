@@ -116,7 +116,7 @@ __initfunc(void con3215_setup(char *str, char *ints))
 {
         int vdev;
 
-        vdev = simple_strtoul(str,&str,10);
+        vdev = simple_strtoul(str,&str,0);
         if (vdev >= 0 && vdev < 65536)
                 raw3215_condevice = vdev;
         return;
@@ -756,6 +756,7 @@ static void raw3215_shutdown(raw3215_info *raw)
                 s390irq_spin_unlock_irqrestore(raw->irq, flags);
 		schedule();
 		s390irq_spin_lock_irqsave(raw->irq, flags);
+		remove_wait_queue(&raw->empty_wait, &wait);
                 current->state = TASK_RUNNING;
 		raw->flags &= ~(RAW3215_ACTIVE | RAW3215_CLOSING);
 	}

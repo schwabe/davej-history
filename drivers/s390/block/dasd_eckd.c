@@ -627,6 +627,7 @@ dasd_eckd_format_device (dasd_device_t *device, format_data_t *fdata)
                                  datasize+rpt*sizeof(eckd_count_t));
         if ( fcp != NULL ) {
                 fcp->device = device;
+                fcp->retries = 2;       /* set retry counter to enable ERP */
                 last_data = fcp->data;
                 DE_data = (DE_eckd_data_t *) last_data;
                 last_data = (void*)(DE_data +1);

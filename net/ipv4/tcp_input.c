@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.164.2.17 2000/09/16 16:32:57 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164.2.18 2000/12/08 20:29:33 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -187,7 +187,7 @@ static __inline__ void tcp_rtt_estimator(struct tcp_opt *tp, __u32 mrtt)
 
 static __inline__ void tcp_set_rto(struct tcp_opt *tp)
 {
-	tp->rto = (tp->srtt >> 3) + tp->mdev;
+	tp->rto = (tp->srtt >> 3) + max(HZ/5, tp->mdev);
 	tp->rto += (tp->rto >> 2) + (tp->rto >> (tp->snd_cwnd-1));
 }
  

@@ -86,9 +86,9 @@ typedef struct _mache {
 #define MCHCHK_STATUS_IN_PROGRESS   0x00000002
 #define MCHCHK_STATUS_WAITING       0x00000004
 
-void        s390_init_machine_check( void );
-void __init s390_do_machine_check  ( void );
-void        s390_do_crw_pending    ( crwe_t *pcrwe );
+void s390_init_machine_check( void );
+void s390_do_machine_check  ( void );
+void s390_do_crw_pending    ( crwe_t *pcrwe );
 
 extern __inline__ int stcrw( __u32 *pcrw )
 {
