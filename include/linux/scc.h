@@ -251,6 +251,7 @@ struct scc_channel {
 
 	struct timer_list tx_t;		/* tx timer for this channel */
 	struct timer_list tx_wdog;	/* tx watchdogs */
+	struct timer_list fs_wdog;	/* failsafe watchdogs */
 };
 
 int scc_init(void);

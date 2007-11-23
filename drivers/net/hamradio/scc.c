@@ -1,7 +1,7 @@
 #define RCS_ID "$Id: scc.c,v 1.75 1998/11/04 15:15:01 jreuter Exp jreuter $"
 
 #define VERSION "3.0"
-#define BANNER  "Z8530 SCC driver version "VERSION".dl1bke (experimental) by DL1BKE\n"
+#define BANNER  "Z8530 SCC driver version "VERSION".dl1bke (experimental) by DL1BKE / patch F6FBB\n"
 
 /*
  * Please use z8530drv-utils-3.0 with this version.
@@ -417,6 +417,7 @@ static inline void scc_txint(struct scc_channel *scc)
 		{
 			scc_tx_done(scc);
 			Outb(scc->ctrl, RES_Tx_P);
+			del_timer(&scc->fs_wdog);	/* Stop failsafe watchdog */
 			return;
 		}
 		
@@ -426,6 +427,7 @@ static inline void scc_txint(struct scc_channel *scc)
 			scc->tx_buff = NULL;
 			scc_tx_done(scc);
 			Outb(scc->ctrl, RES_Tx_P);
+			del_timer(&scc->fs_wdog);	/* Stop failsafe watchdog */
 			return;
 		}
 
@@ -451,6 +453,7 @@ static inline void scc_txint(struct scc_channel *scc)
 		dev_kfree_skb(skb);
 		scc->tx_buff = NULL;
 		scc->stat.tx_state = TXS_NEWFRAME; /* next frame... */
+		mod_timer(&scc->fs_wdog, jiffies + HZ*60);	/* restart failsafe watchdog */
 		return;
 	} 
 	
@@ -823,6 +826,7 @@ static void init_channel(struct scc_channel *scc)
 {
 	del_timer(&scc->tx_t);
 	del_timer(&scc->tx_wdog);
+	del_timer(&scc->fs_wdog);
 
 	disable_irq(scc->irq);
 
@@ -1334,6 +1338,29 @@ static void scc_init_timer(struct scc_channel *scc)
 }
 
 
+/* FailSafe timeout
+ *
+ * Fall into this timeout if a buffer is waiting
+ * and nothing has been sent during 1 minute
+ */
+
+static void t_failsafe(unsigned long channel)
+{
+	struct scc_channel *scc = (struct scc_channel *) channel;
+	
+	del_timer(&scc->fs_wdog);
+
+	/* Kernel message */
+	printk(KERN_ERR "z8530drv: scc port %s failed. Re-init done.\n", scc->dev->name);
+
+	/* Add 1000 to the tx-underrun counter */
+	scc->stat.tx_under += 1000;
+	
+	/* re-initialize the port */
+	scc_net_close(scc->dev);
+	scc_net_open(scc->dev);
+}
+
 /* ******************************************************************** */
 /* *			Set/get L1 parameters			      * */
 /* ******************************************************************** */
@@ -1687,6 +1714,7 @@ static int scc_net_close(struct device *dev)
 
 	del_timer(&scc->tx_t);
 	del_timer(&scc->tx_wdog);
+	del_timer(&scc->fs_wdog);
 
 	restore_flags(flags);
 	
@@ -1726,6 +1754,7 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
 	struct scc_channel *scc = (struct scc_channel *) dev->priv;
 	unsigned long flags;
 	char kisscmd;
+	int nbbuf;
 	
 	if (scc == NULL || scc->magic != SCC_MAGIC || dev->tbusy)
 	{
@@ -1755,8 +1784,9 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
 
 	save_flags(flags);
 	cli();
-	
-	if (skb_queue_len(&scc->tx_queue) > scc->dev->tx_queue_len)
+
+	nbbuf = skb_queue_len(&scc->tx_queue);
+	if (nbbuf > scc->dev->tx_queue_len)
 	{
 		struct sk_buff *skb_del;
 		skb_del = __skb_dequeue(&scc->tx_queue);
@@ -1765,6 +1795,16 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
 	__skb_queue_tail(&scc->tx_queue, skb);
 
 	dev->trans_start = jiffies;
+
+	if (nbbuf == 0)
+	{
+		del_timer(&scc->fs_wdog);
+		/* Arm the failsafe timer for 1 minute */
+		scc->fs_wdog.data = (unsigned long) scc;
+		scc->fs_wdog.function = t_failsafe;
+		scc->fs_wdog.expires = jiffies + HZ*60;
+		add_timer(&scc->fs_wdog);
+	}
 
 	/*
 	 * Start transmission if the trx state is idle or

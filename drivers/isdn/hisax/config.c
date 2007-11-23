@@ -436,7 +436,7 @@ HiSax_mod_inc_use_count(void)
 }
 
 #ifndef MODULE
-static void __init
+void __init
 HiSax_setup(char *str, int *ints)
 {
 	int i, j, argc;

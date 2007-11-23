@@ -1,6 +1,6 @@
 /* -*- linux-c -*-
  * APM BIOS driver for Linux
- * Copyright 1994-2000 Stephen Rothwell (sfr@linuxcare.com)
+ * Copyright 1994-2001 Stephen Rothwell (sfr@canb.auug.org.au)
  *
  * Initial development of this driver was funded by NEC Australia P/L
  *	and NEC Corporation
@@ -23,7 +23,7 @@
  * March 1996, Rik Faith (faith@cs.unc.edu):
  *    Prohibit APM BIOS calls unless apm_enabled.
  *    (Thanks to Ulrich Windl <Ulrich.Windl@rz.uni-regensburg.de>)
- * April 1996, Stephen Rothwell (Stephen.Rothwell@canb.auug.org.au)
+ * April 1996, Stephen Rothwell (sfr@canb.auug.org.au)
  *    Version 1.0 and 1.1
  * May 1996, Version 1.2
  * Feb 1998, Version 1.3
@@ -116,7 +116,7 @@
  *         Make power off under SMP work again.
  *         Fix thinko with initial engaging of BIOS.
  *         Make sure power off only happens on CPU 0
- *         (Paul "Rusty" Russell <rusty@linuxcare.com>).
+ *         (Paul "Rusty" Russell <rusty@rustcorp.com.au>).
  *         Do error notification to user mode if BIOS calls fail.
  *         Move entrypoint offset fix to ...boot/setup.S
  *         where it belongs (Cosmos <gis88564@cis.nctu.edu.tw>).

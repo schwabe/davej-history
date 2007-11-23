@@ -135,9 +135,9 @@ S:	Maintained
 
 APM DRIVER
 P:	Stephen Rothwell
-M:	apm@linuxcare.com.au
+M:	sfr@canb.auug.org.au
 L:	linux-laptop@vger.kernel.org
-W:	http://linuxcare.com.au/apm/
+W:	http://www.canb.auug.org.au/~sfr/
 S:	Supported
 
 APPLETALK NETWORK LAYER
@@ -607,7 +607,7 @@ S:	Maintained
 
 LINUX FOR POWER MACINTOSH
 P:	Paul Mackerras
-M:	paulus@linuxcare.com
+M:	paulus@samba.org
 W:	http://www.linuxppc.org/
 L:	linuxppc-dev@lists.linuxppc.org
 S:	Maintained

@@ -174,7 +174,7 @@
  *      <flynn@isr.uni-stuttgart.de>.
  *    - Added iVina 1200U ID. Thanks to Dyson Lin <dyson@avision.com.tw>.
  *    - Added access time update for the device file courtesy of Paul
- *      Mackerras <paulus@linuxcare.com>.  This allows a user space daemon
+ *      Mackerras <paulus@samba.org>.  This allows a user space daemon
  *      to turn the lamp off for a Umax 1220U scanner after a prescribed
  *      time.
  *    - Fixed HP S20 ID's.  Thanks to Ruud Linders <rlinders@xs4all.nl>.

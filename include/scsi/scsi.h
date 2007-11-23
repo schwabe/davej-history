@@ -208,6 +208,9 @@ struct ccs_modesel_head
 /* Used to get Fibre Channel WWN and port_id from device */
 #define SCSI_IOCTL_FC_TARGET_ADDRESS 0x5387
 
+/* Used to invoke Target Defice Reset for Fibre Channel */
+#define SCSI_IOCTL_FC_TDR 0x5388
+
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.
  * Emacs will notice this stuff at the end of the file and automatically

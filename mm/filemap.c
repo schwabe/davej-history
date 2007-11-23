@@ -254,7 +254,8 @@ void update_vm_cache_conditional(struct inode * inode, unsigned long pos, const 
 		if (page) {
 			char *dest = (char*) (offset + page_address(page));
 
-			if ((unsigned long)dest != source_address) {
+			if ((unsigned long)dest != source_address 
+				|| !segment_eq(get_fs(), KERNEL_DS)) {
 				wait_on_page(page);
 				memcpy(dest, buf, len);
 				flush_dcache_page(page_address(page));

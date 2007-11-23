@@ -6,6 +6,11 @@ Tested in single and dual HBA configuration, 32 and 64bit busses,
 33 and 66MHz.  Only supports FC-AL.
 SEST size 512 Exchanges (simultaneous I/Os) limited by module kmalloc() 
 	max of 128k bytes contiguous.
+
+Ver 1.3.6  Feb  27, 2001
+  Added Target_Device_Reset function for SCSI error handling
+  Fixed problem with not reseting addressing mode after implicit logout
+
 Ver 1.3.4  Sep   7, 2000
   Added Modinfo information
   Fixed problem with statically linking the driver
@@ -212,5 +217,5 @@ is used), logical volumes on the RA4x00 will no longer be visible.
 
 
 Send questions/comments to:
-donald.zimmerman@compaq.com
-dszimmerman@yahoo.com
+Amy Vanzant-Hodge (fibrechannel@compaq.com)
+

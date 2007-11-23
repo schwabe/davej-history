@@ -2901,7 +2901,6 @@ static int i2o_reboot_event(struct notifier_block *n, unsigned long code, void
 
 
 
-#ifdef MODULE
 
 EXPORT_SYMBOL(i2o_install_handler);
 EXPORT_SYMBOL(i2o_remove_handler);
@@ -2936,6 +2935,8 @@ EXPORT_SYMBOL(i2o_post_wait);
 EXPORT_SYMBOL(i2o_issue_params);
 
 EXPORT_SYMBOL(i2o_report_status);
+
+#ifdef MODULE
 
 MODULE_AUTHOR("Red Hat Software");
 MODULE_DESCRIPTION("I2O Core");

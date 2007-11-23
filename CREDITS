@@ -968,13 +968,12 @@ S: Wantage, New Jersey 07461
 S: USA
 
 N: Harald Hoyer
-E: HarryH@Royal.Net
-W: http://hot.spotline.de/
-W: http://home.pages.de/~saturn
+E: harald.hoyer@parzelle.de
+W: http://parzelle.de/
 D: ip_masq_quake
 D: md boot support
-S: Alleenstrasse 27
-S: D-71679 Asperg
+S: Hohe Strasse 30
+S: D-70176 Stuttgart
 S: Germany
 
 N: Kenn Humborg
@@ -1380,12 +1379,8 @@ S: 198 00 Praha 9
 S: Czech Republic
 
 N: Paul Mackerras
-E: paulus@linuxcare.com
+E: paulus@samba.org
 D: Linux port for PCI Power Macintosh
-S: Linuxcare, Inc.
-S: 24 Marcus Clarke Street
-S: Canberra ACT 2601
-S: Australia
 
 N: Pat Mackinlay
 E: pat@it.com.au
@@ -1869,8 +1864,8 @@ S: 7000 Stuttgart 50
 S: Germany
 
 N: Stephen Rothwell
-E: sfr@linuxcare.com.au
-W: http://linuxcare.com.au/sfr
+E: sfr@canb.auug.org.au
+W: http://www.canb.auug.org.au/~sfr
 P: 1024/BD8C7805 CD A4 9D 01 10 6E 7E 3B  91 88 FA D9 C8 40 AA 02
 D: Boot/setup/build work for setup > 2K
 D: Author, APM driver
@@ -2154,7 +2149,7 @@ S: Canada K2L 1S2
 
 N: Andrew Tridgell
 E: tridge@samba.org
-W: http://linuxcare.com.au/tridge/
+W: http://samba.org/tridge/
 D: dosemu, networking, samba
 S: 3 Ballow Crescent
 S: MacGregor A.C.T 2615
