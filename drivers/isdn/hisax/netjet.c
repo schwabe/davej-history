@@ -409,7 +409,6 @@ static void got_frame(struct BCState *bcs, int count) {
 	if (!(skb = dev_alloc_skb(count)))
 		printk(KERN_WARNING "TIGER: receive out of memory\n");
 	else {
-		;
 		memcpy(skb_put(skb, count), bcs->hw.tiger.rcvbuf, count);
 		skb_queue_tail(&bcs->rqueue, skb);
 	}

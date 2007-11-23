@@ -422,7 +422,7 @@ static void dump_packet(const struct iphdr *ip,
 			printk("%d ",f->ipfw.fw_redirpt);
 	}
 
-	printk("%s PROTO=%d %ld.%ld.%ld.%ld:%hu %ld.%ld.%ld.%ld:%hu"
+	printk("%s PROTO=%d %d.%d.%d.%d:%hu %d.%d.%d.%d:%hu"
 	       " L=%hu S=0x%2.2hX I=%hu F=0x%4.4hX T=%hu",
 	       ifname, ip->protocol,
 	       (ntohl(ip->saddr)>>24)&0xFF,
@@ -1542,7 +1542,7 @@ static int dump_rule(char *buffer,
 
 	len=sprintf(buffer,
 		    "%9s "			/* Chain name */
-		    "%08lX/%08lX->%08lX/%08lX "	/* Source & Destination IPs */
+		    "%08X/%08X->%08X/%08X "	/* Source & Destination IPs */
 		    "%.16s "			/* Interface */
 		    "%X %X "			/* fw_flg and fw_invflg fields */
 		    "%u "			/* Protocol */

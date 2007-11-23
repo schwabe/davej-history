@@ -918,7 +918,7 @@ svc_create_socket(struct svc_serv *serv, int protocol, struct sockaddr_in *sin)
 	int		error;
 	int		type;
 
-	dprintk("svc: svc_create_socket(%s, %d, %08lx:%d)\n",
+	dprintk("svc: svc_create_socket(%s, %d, %08x:%d)\n",
 				serv->sv_program->pg_name, protocol,
 				ntohl(sin->sin_addr.s_addr),
 				ntohs(sin->sin_port));

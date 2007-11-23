@@ -9350,7 +9350,7 @@ CONFIG_SOUND
   I'm told that even without a sound card, you can make your computer
   say more than an occasional beep, by programming the PC speaker.
   Kernel patches and supporting utilities to do that are in the pcsp
-  package, available at http://www.imladris.demon.co.uk/pcsp/.
+  package, available at ftp://ftp.infradead.org/pub/pcsp/.
 
 OSS sound modules
 CONFIG_SOUND_OSS
@@ -11739,6 +11739,13 @@ CONFIG_BVME6000_SCSI
   The BVME4000 and BVME6000 boards from BVM Ltd use the NCR53C710
   SCSI controller chip.  Almost everyone using one of these boards
   will want to say Y to this question.
+
+Simple 53c710 SCSI support (Compaq, NCR machines)
+CONFIG_SCSI_SIM710
+  This is a driver for the NCR53C710 chip commonly found in Compaq and
+  NCR machines.  If you are looking for 53C710 support for an Amiga or
+  some 680x0 based VME card then you probably want the other NCR53C710
+  driver.
 
 MVME16x Ethernet support
 CONFIG_MVME16x_NET

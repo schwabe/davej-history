@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.103.2.1 1999/08/19 01:11:15 davem Exp $
+/* $Id: entry.S,v 1.103.2.2 1999/09/22 11:37:37 jj Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -652,6 +652,8 @@ breakpoint_trap:
 	ba,pt		%xcc, rtrap
 	 nop
 
+#if defined(CONFIG_SUNOS_EMUL) || defined(CONFIG_SOLARIS_EMUL) || \
+    defined(CONFIG_SOLARIS_EMUL_MODULE)
 	/* SunOS uses syscall zero as the 'indirect syscall' it looks
 	 * like indir_syscall(scall_num, arg0, arg1, arg2...);  etc.
 	 * This is complete brain damage.
@@ -705,6 +707,7 @@ sunos_getgid:
 	 stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I1]
 	b,pt	%xcc, ret_sys_call
 	 stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
+#endif
 
 	/* SunOS's execv() call only specifies the argv argument, the
 	 * environment settings are the same as the calling processes.

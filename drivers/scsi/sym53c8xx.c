@@ -73,6 +73,7 @@
 **		53C895	  (Wide,   Fast 40,	 on-board rom BIOS)
 **		53C895A	  (Wide,   Fast 40,	 on-board rom BIOS)
 **		53C896	  (Wide,   Fast 40 Dual, on-board rom BIOS)
+**		53C1510D	  (Wide,   Fast 40 Dual, on-board rom BIOS)
 **
 **	Other features:
 **		Memory mapped IO

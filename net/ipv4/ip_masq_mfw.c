@@ -3,7 +3,7 @@
  *
  *	Does (reverse-masq) forwarding based on skb->fwmark value
  *
- *	$Id: ip_masq_mfw.c,v 1.3.2.1 1999/07/02 10:10:03 davem Exp $
+ *	$Id: ip_masq_mfw.c,v 1.3.2.3 1999/09/22 16:33:26 davem Exp $
  *
  * Author:	Juan Jose Ciarlante   <jjciarla@raiz.uncu.edu.ar>
  *		  based on Steven Clarke's portfw

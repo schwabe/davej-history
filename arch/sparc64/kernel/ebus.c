@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.36.2.2 1999/09/07 01:45:57 davem Exp $
+/* $Id: ebus.c,v 1.36.2.3 1999/09/21 15:45:37 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -100,9 +100,13 @@ __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
 
 	for (i = 0; i < dev->num_addrs; i++) {
 		if (regs[i] >= dev->parent->num_addrs) {
+#if 1
+			continue;
+#else
 			prom_printf("UGH: property for %s was %d, need < %d\n",
 				    dev->prom_name, len, dev->parent->num_addrs);
 			panic(__FUNCTION__);
+#endif
 		}
 		dev->base_address[i] = dev->parent->base_address[regs[i]];
 	}

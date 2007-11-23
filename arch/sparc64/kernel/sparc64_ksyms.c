@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.58.2.1 1999/06/28 11:27:57 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.58.2.3 1999/09/22 17:07:00 jj Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -56,8 +56,6 @@ struct poll {
 extern unsigned prom_cpu_nodes[64];
 extern void die_if_kernel(char *str, struct pt_regs *regs);
 extern pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
-extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
-				unsigned long, unsigned long, unsigned long);
 void _sigpause_common (unsigned int set, struct pt_regs *);
 extern void *__bzero(void *, size_t);
 extern void *__bzero_noasi(void *, size_t);
@@ -196,7 +194,6 @@ EXPORT_SYMBOL(insl);
 
 /* Solaris/SunOS binary compatibility */
 EXPORT_SYMBOL(_sigpause_common);
-EXPORT_SYMBOL(sunos_mmap);
 
 /* Should really be in linux/kernel/ksyms.c */
 EXPORT_SYMBOL(dump_thread);
@@ -222,6 +219,7 @@ EXPORT_SYMBOL(prom_node_has_property);
 EXPORT_SYMBOL(prom_setprop);
 EXPORT_SYMBOL(saved_command_line);
 EXPORT_SYMBOL(prom_getname);
+EXPORT_SYMBOL(prom_finddevice);
 EXPORT_SYMBOL(prom_feval);
 EXPORT_SYMBOL(prom_getbool);
 EXPORT_SYMBOL(prom_getstring);

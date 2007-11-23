@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.41 1999/04/16 16:22:27 jj Exp $
+/* $Id: zs.c,v 1.41.2.2 1999/09/21 15:50:45 davem Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -439,6 +439,7 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 {
 	struct tty_struct *tty = info->tty;
 	unsigned char ch, stat;
+	int do_queue_task = 1;
 
 	do {
 		ch = (info->zs_channel->data) & info->parity_mask;
@@ -466,11 +467,13 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 				return;
 			}
 			sunkbd_inchar(ch, regs);
-			return;
+			do_queue_task = 0;
+			goto next_char;
 		}
 		if(info->cons_mouse) {
 			sun_mouse_inbyte(ch);
-			return;
+			do_queue_task = 0;
+			goto next_char;
 		}
 		if(info->is_cons) {
 			if(ch==0) {
@@ -502,6 +505,7 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 		*tty->flip.flag_buf_ptr++ = 0;
 		*tty->flip.char_buf_ptr++ = ch;
 
+	next_char:
 		/* Check if we have another character... */
 		stat = info->zs_channel->control;
 		ZSDELAY();
@@ -512,7 +516,8 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 		stat = read_zsreg(info->zs_channel, R1);
 	} while (!(stat & (PAR_ERR | Rx_OVR | CRC_ERR)));
 
-	queue_task(&tty->flip.tqueue, &tq_timer);
+	if (do_queue_task != 0)
+		queue_task(&tty->flip.tqueue, &tq_timer);
 }
 
 static _INLINE_ void transmit_chars(struct sun_serial *info)
@@ -1844,7 +1849,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.41 $";
+	char *revision = "$Revision: 1.41.2.2 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

@@ -1,11 +1,14 @@
 /*
- * $Id: t1isa.c,v 1.6 1999/09/07 09:02:53 calle Exp $
+ * $Id: t1isa.c,v 1.7 1999/09/15 08:16:03 calle Exp $
  * 
  * Module for AVM T1 HEMA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1isa.c,v $
+ * Revision 1.7  1999/09/15 08:16:03  calle
+ * Implementation of 64Bit extention complete.
+ *
  * Revision 1.6  1999/09/07 09:02:53  calle
  * SETDATA removed. Now inside the kernel the datapart of DATA_B3_REQ and
  * DATA_B3_IND is always directly after the CAPI message. The "Data" member
@@ -63,7 +66,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.6 $";
+static char *revision = "$Revision: 1.7 $";
 
 /* ------------------------------------------------------------- */
 
@@ -188,6 +191,11 @@ static void t1_handle_interrupt(avmcard * card)
 			MsgLen = t1_get_slice(card->port, card->msgbuf);
 			DataB3Len = t1_get_slice(card->port, card->databuf);
 
+			if (MsgLen < 30) { /* not CAPI 64Bit */
+				memset(card->msgbuf+MsgLen, 0, 30-MsgLen);
+				MsgLen = 30;
+				CAPIMSG_SETLEN(card->msgbuf, 30);
+			}
 			if (!(skb = alloc_skb(DataB3Len+MsgLen, GFP_ATOMIC))) {
 				printk(KERN_ERR "t1isa: incoming packet dropped\n");
 			} else {

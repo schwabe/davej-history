@@ -322,7 +322,6 @@ hfcpci_empty_fifo(struct BCState *bcs, bzfifo_type * bz, u_char * bdata, int cou
 	} else if (!(skb = dev_alloc_skb(count - 3)))
 		printk(KERN_WARNING "HFCPCI: receive out of memory\n");
 	else {
-		;
 		total = count;
 		count -= 3;
 		ptr = skb_put(skb, count);
@@ -386,7 +385,6 @@ receive_dmsg(struct IsdnCardState *cs)
 			df->f2 = ((df->f2 + 1) & MAX_D_FRAMES) | (MAX_D_FRAMES + 1);	/* next buffer */
 			df->za[df->f2 & D_FREG_MASK].z2 = (zp->z2 + rcnt) & (D_FIFO_SIZE - 1);
 		} else if ((skb = dev_alloc_skb(rcnt - 3))) {
-			;
 			total = rcnt;
 			rcnt -= 3;
 			ptr = skb_put(skb, rcnt);
@@ -444,7 +442,6 @@ int hfcpci_empty_fifo_trans(struct BCState *bcs, bzfifo_type *bz, u_char *bdata)
   if (!(skb = dev_alloc_skb(fcnt)))
 		printk(KERN_WARNING "HFCPCI: receive out of memory\n");
   else {
-    ;
     ptr = skb_put(skb, fcnt);
     if (*z2r + fcnt <= B_FIFO_SIZE + B_SUB_VAL)
       maxlen = fcnt; /* complete transfer */

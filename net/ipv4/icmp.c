@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.52.2.2 1999/06/20 21:27:39 davem Exp $
+ *	Version: $Id: icmp.c,v 1.52.2.3 1999/09/22 16:33:02 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -955,7 +955,7 @@ static void icmp_address_reply(struct icmphdr *icmph, struct sk_buff *skb, int l
 			return;
 	}
 	if (sysctl_ip_always_defrag == 0 && net_ratelimit())
-		printk(KERN_INFO "Wrong address mask %08lX from %08lX/%s\n",
+		printk(KERN_INFO "Wrong address mask %08X from %08X/%s\n",
 		       ntohl(mask), ntohl(rt->rt_src), dev->name);
 }
 

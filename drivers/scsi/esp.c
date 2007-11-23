@@ -494,10 +494,10 @@ static void esp_reset_dma(struct Sparc_ESP *esp)
 		esp->prev_hme_dmacsr = (DMA_PARITY_OFF|DMA_2CLKS|DMA_SCSI_DISAB|DMA_INT_ENAB);
 		esp->prev_hme_dmacsr &= ~(DMA_ENABLE|DMA_ST_WRITE|DMA_BRST_SZ);
 
-		if(can_do_burst32)
-			esp->prev_hme_dmacsr |= DMA_BRST32;
-		else if(can_do_burst64)
+		if(can_do_burst64)
 			esp->prev_hme_dmacsr |= DMA_BRST64;
+		else if(can_do_burst32)
+			esp->prev_hme_dmacsr |= DMA_BRST32;
 
 		if(can_do_sbus64)
 			esp->prev_hme_dmacsr |= DMA_SCSI_SBUS64;
@@ -610,7 +610,7 @@ static void esp_reset_esp(struct Sparc_ESP *esp, struct Sparc_ESP_regs *eregs)
 	case fas236:
 		/* Fast 236 or HME */
 		eregs->esp_cfg2 = esp->config2;
-		for(i=0; i<8; i++) {
+		for(i=0; i<16; i++) {
 			if(esp->erev == fashme) {
 				unsigned char cfg3;
 
@@ -635,7 +635,7 @@ static void esp_reset_esp(struct Sparc_ESP *esp, struct Sparc_ESP_regs *eregs)
 	case fas100a:
 		/* Fast 100a */
 		eregs->esp_cfg2 = esp->config2;
-		for(i=0; i<8; i++)
+		for(i=0; i<16; i++)
 			esp->config3[i] |= ESP_CONFIG3_FCLOCK;
 		eregs->esp_cfg3 = esp->prev_cfg3 = esp->config3[0];
 		esp->radelay = 32;
@@ -968,7 +968,7 @@ esp_irq_acquired:
 		} else {
 			int target;
 
-			for(target=0; target<8; target++)
+			for(target=0; target<16; target++)
 				esp->config3[target] = 0;
 			eregs->esp_cfg3 = esp->prev_cfg3 = 0;
 			if(ccf > ESP_CCF_F5) {
@@ -1178,7 +1178,7 @@ static int esp_host_info(struct Sparc_ESP *esp, char *ptr, off_t offset, int len
 	info.pos	= 0;
 
 	copy_info(&info, "Sparc ESP Host Adapter:\n");
-	copy_info(&info, "\tPROM node\t\t%08lx\n", (unsigned long) esp->prom_node);
+	copy_info(&info, "\tPROM node\t\t%08x\n", (unsigned int) esp->prom_node);
 	copy_info(&info, "\tPROM name\t\t%s\n", esp->prom_name);
 	copy_info(&info, "\tESP Model\t\t");
 	switch(esp->erev) {
@@ -3587,14 +3587,21 @@ static int check_multibyte_msg(struct Sparc_ESP *esp,
 					bit = ESP_CONFIG3_FAST;
 				else
 					bit = ESP_CONFIG3_FSCSI;
-				if(period < 50)
+				if(period < 50) {
+					/* On FAS366, if using fast-20 synchronous transfers
+					 * we need to make sure the REQ/ACK assert/deassert
+					 * control bits are clear.
+					 */
+					if (esp->erev == fashme)
+						SDptr->sync_max_offset &= ~esp->radelay;
 					esp->config3[SCptr->target] |= bit;
-				else
+				} else {
 					esp->config3[SCptr->target] &= ~bit;
+				}
 				eregs->esp_cfg3 = esp->prev_cfg3 = esp->config3[SCptr->target];
 			}
-			eregs->esp_soff = esp->prev_soff = SDptr->sync_min_period;
-			eregs->esp_stp  = esp->prev_stp  = SDptr->sync_max_offset;
+			eregs->esp_soff = esp->prev_soff = SDptr->sync_max_offset;
+			eregs->esp_stp  = esp->prev_stp  = SDptr->sync_min_period;
 
 			ESPSDTR(("soff=%2x stp=%2x cfg3=%2x\n",
 				SDptr->sync_max_offset,

@@ -43,7 +43,7 @@ static int qnx4_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		bh = bread(inode->i_dev, blknum, QNX4_BLOCK_SIZE);
 		if(bh==NULL)
 		{
-			printk(KERN_ERR "qnx4_readdir: bread failed (%d)\n", blknum);
+			printk(KERN_ERR "qnx4_readdir: bread failed (%ld)\n", blknum);
 			break;
 		}
 		i = (filp->f_pos - (((filp->f_pos >> 6) >> 3) << 9)) & 0x3f;

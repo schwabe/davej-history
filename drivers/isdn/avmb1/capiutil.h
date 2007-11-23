@@ -1,5 +1,5 @@
 /*
- * $Id: capiutil.h,v 1.3 1999/09/07 09:02:53 calle Exp $
+ * $Id: capiutil.h,v 1.4 1999/09/15 08:16:03 calle Exp $
  * 
  * CAPI 2.0 defines & types
  * 
@@ -7,6 +7,9 @@
  * Rewritten for Linux 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: capiutil.h,v $
+ * Revision 1.4  1999/09/15 08:16:03  calle
+ * Implementation of 64Bit extention complete.
+ *
  * Revision 1.3  1999/09/07 09:02:53  calle
  * SETDATA removed. Now inside the kernel the datapart of DATA_B3_REQ and
  * DATA_B3_IND is always directly after the CAPI message. The "Data" member
@@ -48,6 +51,12 @@
 	do { \
 		((__u8 *)m)[2] = (__u16)(applid) & 0xff; \
 		((__u8 *)m)[3] = ((__u16)(applid) >> 8) & 0xff; \
+	} while (0)
+
+#define	CAPIMSG_SETLEN(m, len) \
+	do { \
+		((__u8 *)m)[0] = (__u16)(len) & 0xff; \
+		((__u8 *)m)[1] = ((__u16)(len) >> 8) & 0xff; \
 	} while (0)
 
 /*----- basic-type definitions -----*/

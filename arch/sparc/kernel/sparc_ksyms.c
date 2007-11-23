@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.77.2.1 1999/08/07 10:42:47 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.77.2.3 1999/09/22 17:06:50 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -50,8 +50,6 @@ struct poll {
 
 extern int svr4_getcontext (svr4_ucontext_t *, struct pt_regs *);
 extern int svr4_setcontext (svr4_ucontext_t *, struct pt_regs *);
-extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
-				unsigned long, unsigned long, unsigned long);
 void _sigpause_common (unsigned int set, struct pt_regs *);
 extern void (*__copy_1page)(void *, const void *);
 extern void __memmove(void *, const void *, __kernel_size_t);
@@ -192,7 +190,6 @@ EXPORT_SYMBOL(dma_chain);
 EXPORT_SYMBOL(svr4_setcontext);
 EXPORT_SYMBOL(svr4_getcontext);
 EXPORT_SYMBOL(_sigpause_common);
-EXPORT_SYMBOL(sunos_mmap);
 
 /* Should really be in linux/kernel/ksyms.c */
 EXPORT_SYMBOL(dump_thread);
@@ -211,6 +208,7 @@ EXPORT_SYMBOL(prom_node_has_property);
 EXPORT_SYMBOL(prom_setprop);
 EXPORT_SYMBOL(saved_command_line);
 EXPORT_SYMBOL(prom_apply_obio_ranges);
+EXPORT_SYMBOL(prom_finddevice);
 EXPORT_SYMBOL(prom_getname);
 EXPORT_SYMBOL(prom_feval);
 EXPORT_SYMBOL(prom_getbool);

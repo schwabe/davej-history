@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.187.2.1 1999/08/07 10:42:55 davem Exp $
+/* $Id: srmmu.c,v 1.187.2.2 1999/09/21 11:24:15 anton Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -2060,7 +2060,9 @@ static void srmmu_destroy_context(struct mm_struct *mm)
 		flush_cache_mm(mm);
 		ctxd_set(&srmmu_context_table[mm->context], swapper_pg_dir);
 		flush_tlb_mm(mm);
+		spin_lock(&srmmu_context_spinlock);
 		free_context(mm->context);
+		spin_unlock(&srmmu_context_spinlock);
 		mm->context = NO_CONTEXT;
 	}
 }
@@ -2149,7 +2151,9 @@ static void hypersparc_destroy_context(struct mm_struct *mm)
 		hypersparc_flush_page_to_ram((unsigned long)ctxp);
 
 		flush_tlb_mm(mm);
+		spin_lock(&srmmu_context_spinlock);
 		free_context(mm->context);
+		spin_unlock(&srmmu_context_spinlock);
 		mm->context = NO_CONTEXT;
 	}
 }

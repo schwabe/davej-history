@@ -893,6 +893,8 @@ __initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
 
 	if (c->x86_mask || c->cpuid_level>=0) 
 		printk(" stepping %02x\n", c->x86_mask);
+	else
+		printk("\n");
 
 	if(c->x86_vendor == X86_VENDOR_CENTAUR) {
 		u32 hv,lv;

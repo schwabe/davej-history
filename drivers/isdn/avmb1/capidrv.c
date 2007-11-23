@@ -1,11 +1,14 @@
 /*
- * $Id: capidrv.c,v 1.26 1999/08/06 07:41:16 calle Exp $
+ * $Id: capidrv.c,v 1.27 1999/09/16 15:13:04 calle Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.27  1999/09/16 15:13:04  calle
+ * forgot to change paramter type of contr for lower_callback ...
+ *
  * Revision 1.26  1999/08/06 07:41:16  calle
  * Added the "vbox patch". if (si1 == 1) si2 = 0;
  *
@@ -162,7 +165,7 @@
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.26 $";
+static char *revision = "$Revision: 1.27 $";
 int debugmode = 0;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
@@ -2302,7 +2305,7 @@ static int capidrv_delcontr(__u16 contr)
 }
 
 
-static void lower_callback(unsigned int cmd, __u16 contr, void *data)
+static void lower_callback(unsigned int cmd, __u32 contr, void *data)
 {
 
 	switch (cmd) {

@@ -462,7 +462,6 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 	case L1_MODE_TRANS:
 	case L1_MODE_V32:
 		if ((skb = dev_alloc_skb(ireg->clsb))) {
-			;
 			rcv_mbox(cs, ireg, (u_char *)skb_put(skb, ireg->clsb));
 			skb_queue_tail(&bcs->rqueue, skb);
 			isar_sched_event(bcs, B_RCVBUFREADY);
@@ -496,7 +495,6 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 				} else if (!(skb = dev_alloc_skb(bcs->hw.isar.rcvidx-2))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
-					;
 					memcpy(skb_put(skb, bcs->hw.isar.rcvidx-2),
 						bcs->hw.isar.rcvbuf, bcs->hw.isar.rcvidx-2);
 					skb_queue_tail(&bcs->rqueue, skb);

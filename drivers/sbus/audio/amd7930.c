@@ -102,7 +102,7 @@
 #include <asm/audioio.h>
 #include "amd7930.h"
 
-#if defined (AMD79C30_ISDN) || defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x200ff 
+#if defined (AMD79C30_ISDN) && defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x200ff 
 #include "../../isdn/hisax/hisax.h"
 #include "../../isdn/hisax/isdnl1.h"
 #include "../../isdn/hisax/foreign.h"
@@ -1072,7 +1072,7 @@ static int amd7930_ioctl(struct inode * inode, struct file * file,
  *
  */
 
-#if defined (AMD79C30_ISDN) || defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x200ff 
+#if defined (AMD79C30_ISDN) && defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x200ff 
 static int amd7930_get_irqnum(int dev)
 {
 	struct amd7930_info *info;

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.43.2.1 1999/08/31 18:21:15 davem Exp $
+# $Id: Makefile,v 1.43.2.2 1999/09/22 11:37:40 jj Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -19,8 +19,7 @@ O_TARGET := kernel.o
 O_OBJS   := process.o setup.o cpu.o idprom.o \
 	    traps.o devices.o auxio.o ioport.o \
 	    irq.o ptrace.o time.o sys_sparc.o signal.o \
-	    unaligned.o sys_sunos32.o sunos_ioctl32.o \
-	    central.o psycho.o starfire.o power.o
+	    unaligned.o central.o psycho.o starfire.o power.o
 OX_OBJS  := sparc64_ksyms.o
 
 ifdef CONFIG_PCI
@@ -41,6 +40,14 @@ endif
 
 ifdef CONFIG_BINFMT_AOUT32
   O_OBJS += binfmt_aout32.o
+endif
+
+ifdef CONFIG_SUNOS_EMUL
+  O_OBJS += sys_sunos32.o sunos_ioctl32.o
+else
+  ifdef CONFIG_SOLARIS_EMUL
+    O_OBJS += sys_sunos32.o sunos_ioctl32.o
+  endif
 endif
 
 head.o: head.S ttable.S itlb_base.S dtlb_base.S dtlb_backend.S dtlb_prot.S \

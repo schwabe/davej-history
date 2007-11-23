@@ -169,7 +169,6 @@ put_tei_msg(struct PStack *st, u_char m_id, unsigned int ri, u_char tei)
 		printk(KERN_WARNING "HiSax: No skb for TEI manager\n");
 		return;
 	}
-	;
 	bp = skb_put(skb, 3);
 	bp[0] = (TEI_SAPI << 2);
 	bp[1] = (GROUP_TEI << 1) | 0x1;

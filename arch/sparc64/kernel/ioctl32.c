@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.62.2.3 1999/09/10 05:57:01 davem Exp $
+/* $Id: ioctl32.c,v 1.62.2.4 1999/09/22 17:06:56 jj Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -2136,6 +2136,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case OPROMGETCONS:
 	case OPROMGETFBNAME:
 	case OPROMGETBOOTARGS:
+	case OPROMSETCUR:
+	case OPROMPCI2NODE:
+	case OPROMPATH2NODE:
 
 	/* Socket level stuff */
 	case FIOSETOWN:

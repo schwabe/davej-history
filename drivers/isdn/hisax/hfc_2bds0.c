@@ -267,7 +267,6 @@ static struct sk_buff
 	} else if (!(skb = dev_alloc_skb(count - 3)))
 		printk(KERN_WARNING "HFC: receive out of memory\n");
 	else {
-		;
 		ptr = skb_put(skb, count - 3);
 		idx = 0;
 		cip = HFCB_FIFO | HFCB_FIFO_OUT | HFCB_REC | HFCB_CHANNEL(bcs->channel);
@@ -726,7 +725,6 @@ int receive_dmsg(struct IsdnCardState *cs)
 			while ((idx++ < rcnt) && WaitNoBusy(cs))
 				ReadReg(cs, HFCD_DATA_NODEB, cip);
 		} else if ((skb = dev_alloc_skb(rcnt - 3))) {
-			;
 			ptr = skb_put(skb, rcnt - 3);
 			while (idx < (rcnt - 3)) {
 				cli();

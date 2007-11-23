@@ -2,7 +2,7 @@
  *		IP_MASQ_PORTFW masquerading module
  *
  *
- *	$Id: ip_masq_portfw.c,v 1.3.2.1 1999/07/02 10:10:02 davem Exp $
+ *	$Id: ip_masq_portfw.c,v 1.3.2.2 1999/08/13 18:26:29 davem Exp $
  *
  * Author:	Steven Clarke <steven.clarke@monmouth.demon.co.uk>
  *
@@ -423,14 +423,14 @@ static struct ip_masq * portfw_in_create(const struct sk_buff *skb, const struct
 				raddr, rport,
 				iph->saddr, portp[0],
 				0);
-		ip_masq_listen(ms);
-
 		if (!ms || atomic_read(&mmod_self->mmod_nent) <= 1 
 			/* || ip_masq_nlocks(&portfw_lock) != 1 */ )
 				/*
 				 *	Maybe later...
 				 */
 				goto out;
+
+		ip_masq_listen(ms);
 
 		/*
 		 *	Entry created, lock==1.

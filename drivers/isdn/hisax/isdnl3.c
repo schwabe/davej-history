@@ -260,7 +260,6 @@ l3_alloc_skb(int len)
 		printk(KERN_WARNING "HiSax: No skb for D-channel\n");
 		return (NULL);
 	}
-	;
 	skb_reserve(skb, MAX_HEADER_LEN);
 	return (skb);
 }

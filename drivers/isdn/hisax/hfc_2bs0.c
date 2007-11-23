@@ -222,7 +222,6 @@ hfc_empty_fifo(struct BCState *bcs, int count)
 	if (!(skb = dev_alloc_skb(count - 3)))
 		printk(KERN_WARNING "HFC: receive out of memory\n");
 	else {
-		;
 		ptr = skb_put(skb, count - 3);
 		idx = 0;
 		cip = HFC_CIP | HFC_FIFO_OUT | HFC_REC | HFC_CHANNEL(bcs->channel);

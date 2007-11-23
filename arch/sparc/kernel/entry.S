@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.159 1999/05/08 03:00:03 davem Exp $
+/* $Id: entry.S,v 1.159.2.2 1999/09/22 11:37:29 jj Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -488,10 +488,13 @@ linux_trap_ipi15_sun4d:
 	.globl	bad_instruction
 bad_instruction:
 	sethi	%hi(0xc1f80000), %l4
-	ld	[%l1], %l5
+	ld	[%l1], %l6
 	sethi	%hi(0x81d80000), %l7
-	and	%l5, %l4, %l5
+	and	%l6, %l4, %l5
 	cmp	%l5, %l7
+	sethi	%hi(0x8143c000), %l4
+	be	1f
+	 cmp	%l6, %l4
 	be	1f
 	SAVE_ALL
 
@@ -506,7 +509,7 @@ bad_instruction:
 
 	RESTORE_ALL
 
-1:	/* unimplemented flush - just skip */
+1:	/* unimplemented flush/stbar - just skip */
 	jmpl	%l2, %g0
 	 rett	%l2 + 4
 
@@ -1199,6 +1202,7 @@ C_LABEL(srmmu_fault):
 
 	RESTORE_ALL
 
+#ifdef CONFIG_SUNOS_EMUL
 	/* SunOS uses syscall zero as the 'indirect syscall' it looks
 	 * like indir_syscall(scall_num, arg0, arg1, arg2...);  etc.
 	 * This is complete brain damage.
@@ -1226,6 +1230,7 @@ C_LABEL(sunos_indir):
 	mov	%o5, %o4
 	call	%l6
 	 mov	%l4, %o7
+#endif
 
 	.align	4
 	.globl	C_LABEL(sys_nis_syscall)
@@ -1638,6 +1643,20 @@ solaris_syscall:
 	sub	%l1, 1, %l1
  	b	ret_trap_entry	
 	 st	%l1, [%sp + REGWIN_SZ + PT_NPC]
+
+#ifndef CONFIG_SUNOS_EMUL
+	.align	4
+	.globl	sunos_syscall
+sunos_syscall:
+	SAVE_ALL_HEAD
+	 rd	%wim, %l3
+	wr	%l0, PSR_ET, %psr
+	nop
+	nop
+	mov	%i0, %l5
+	call	C_LABEL(do_sunos_syscall)
+	 add	%sp, REGWIN_SZ, %o0
+#endif
 
 	/* {net, open}bsd system calls enter here... */
 	.align	4

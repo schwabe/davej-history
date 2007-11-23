@@ -1,10 +1,13 @@
-/* $Id: config.c,v 2.36 1999/09/07 05:43:58 werner Exp $
+/* $Id: config.c,v 2.37 1999/09/20 12:11:08 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 2.37  1999/09/20 12:11:08  keil
+ * Fix hang if no protocol was selected
+ *
  * Revision 2.36  1999/09/07 05:43:58  werner
  *
  * Added io as parameter 0 for HFC-PCI cards, if manual selection needed.
@@ -1335,6 +1338,7 @@ HiSax_inithardware(int *busy_flag))
 				kfree((void *) cards[i].cs);
 			cards[i].cs = NULL;
 			HiSax_shiftcards(i);
+			nrcards--;
 		}
 	}
 	return foundcards;

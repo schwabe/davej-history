@@ -1,4 +1,4 @@
-/* $Id: ttable.h,v 1.11.2.1 1999/08/19 01:11:20 davem Exp $ */
+/* $Id: ttable.h,v 1.11.2.2 1999/09/22 11:37:47 jj Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
@@ -107,7 +107,11 @@
 	ba,pt	%xcc, utrap_ill;					\
 	 mov	lvl, %o1;
 
+#ifdef CONFIG_SUNOS_EMUL
 #define SUNOS_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall32, sunos_sys_table)
+#else
+#define SUNOS_SYSCALL_TRAP TRAP(sunos_syscall)
+#endif
 #define	LINUX_32BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall32, sys_call_table32)
 #define LINUX_64BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table64)
 #define GETCC_TRAP TRAP(getcc)

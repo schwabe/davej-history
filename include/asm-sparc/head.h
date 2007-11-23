@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.36 1999/04/20 13:22:42 anton Exp $ */
+/* $Id: head.h,v 1.36.2.1 1999/09/22 11:37:45 jj Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -52,6 +52,12 @@
         sethi %hi(C_LABEL(sunos_sys_table)), %l7; \
         b linux_sparc_syscall; \
         or %l7, %lo(C_LABEL(sunos_sys_table)), %l7;
+
+#define SUNOS_NO_SYSCALL_TRAP \
+        b sunos_syscall; \
+        rd %psr, %l0; \
+        nop; \
+        nop;
 
 /* Software trap for Slowaris system calls. */
 #define SOLARIS_SYSCALL_TRAP \

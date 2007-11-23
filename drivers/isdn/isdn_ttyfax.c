@@ -1,4 +1,4 @@
-/* $Id: isdn_ttyfax.c,v 1.3 1999/08/22 20:26:12 calle Exp $
+/* $Id: isdn_ttyfax.c,v 1.4 1999/09/21 19:00:35 armin Exp $
  * Linux ISDN subsystem, tty_fax AT-command emulator (linklevel).
  *
  * Copyright 1999    by Armin Schindler (mac@melware.de)
@@ -20,6 +20,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ttyfax.c,v $
+ * Revision 1.4  1999/09/21 19:00:35  armin
+ * Extended FCON message with added CPN
+ * can now be activated with Bit 1 of Reg 23.
+ *
  * Revision 1.3  1999/08/22 20:26:12  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -46,7 +50,7 @@
 #include "isdn_ttyfax.h"
 
 
-static char *isdn_tty_fax_revision = "$Revision: 1.3 $";
+static char *isdn_tty_fax_revision = "$Revision: 1.4 $";
 
 #define PARSE_ERROR1 { isdn_tty_fax_modem_result(1, info); return 1; }
 
@@ -98,7 +102,7 @@ static void isdn_tty_fax_modem_result(int code, modem_info * info)
 			break;
 		case 2:	/* +FCON */
 			/* Append CPN, if enabled */
-			if ((m->mdmreg[REG_CPN] & BIT_CPN) &&
+			if ((m->mdmreg[REG_CPN] & BIT_CPNFCON) &&
 				(!(dev->usage[info->isdn_channel] & ISDN_USAGE_OUTGOING))) {
 				sprintf(rs, "/%s", m->cpn);
 				isdn_tty_at_cout(rs, info);

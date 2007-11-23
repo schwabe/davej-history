@@ -2284,7 +2284,7 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 		 *	nor cli()  8)
 		 */
 
-		sprintf(temp,"%s %08lX:%04X %08lX:%04X %04X %08X %6d %6d %7lu",
+		sprintf(temp,"%s %08X:%04X %08X:%04X %04X %08X %6d %6d %7lu",
 			masq_proto_name(ms->protocol),
 			ntohl(ms->saddr), ntohs(ms->sport),
 			ntohl(ms->daddr), ntohs(ms->dport),

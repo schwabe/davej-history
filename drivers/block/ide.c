@@ -1170,13 +1170,13 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, unsigned long *hwgroup_flags
 		bdev->current_request = hwgroup->rq = drive->queue;
 		spin_unlock_irqrestore(&io_request_lock, io_flags);
 
+		spin_unlock_irqrestore(&hwgroup->spinlock, *hwgroup_flags);
 		if (hwif->irq != masked_irq)
 			disable_irq(hwif->irq);
-		spin_unlock_irqrestore(&hwgroup->spinlock, *hwgroup_flags);
 		start_request(drive);
-		spin_lock_irqsave(&hwgroup->spinlock, *hwgroup_flags);
 		if (hwif->irq != masked_irq)
 			enable_irq(hwif->irq);
+		spin_lock_irqsave(&hwgroup->spinlock, *hwgroup_flags);
 	}
 }
 
@@ -1544,7 +1544,6 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	if (action == ide_wait)
 	{
 		down(&sem);	/* wait for it to be serviced */
-		rq->sem = NULL;
 	}
 	restore_flags(flags);	/* all CPUs; overkill? */
 	return rq->errors ? -EIO : 0;	/* return -EIO if errors */

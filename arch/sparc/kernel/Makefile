@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.49 1999/01/02 16:45:37 davem Exp $
+# $Id: Makefile,v 1.49.2.1 1999/09/22 11:37:25 jj Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -19,15 +19,19 @@ O_TARGET := kernel.o
 IRQ_OBJS := irq.o sun4m_irq.o sun4c_irq.o sun4d_irq.o
 O_OBJS   := entry.o wof.o wuf.o etrap.o rtrap.o traps.o ${IRQ_OBJS} \
 	    process.o signal.o ioport.o setup.o idprom.o \
-	    sys_sparc.o sunos_asm.o sparc-stub.o systbls.o sys_sunos.o  \
-	    sunos_ioctl.o time.o windows.o cpu.o devices.o \
-	    sclow.o solaris.o tadpole.o tick14.o ptrace.o sys_solaris.o \
+	    sys_sparc.o sunos_asm.o sparc-stub.o systbls.o  \
+	    time.o windows.o cpu.o devices.o sclow.o solaris.o \
+	    tadpole.o tick14.o ptrace.o sys_solaris.o \
 	    unaligned.o muldiv.o pcic.o
 
 OX_OBJS  := sparc_ksyms.o
 
 ifdef CONFIG_SUN4
 O_OBJS += sun4setup.o
+endif
+
+ifdef CONFIG_SUNOS_EMUL
+O_OBJS += sys_sunos.o sunos_ioctl.o
 endif
 
 ifdef CONFIG_SMP

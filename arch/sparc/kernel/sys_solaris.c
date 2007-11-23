@@ -4,6 +4,7 @@
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -39,3 +40,16 @@ do_solaris_syscall (struct pt_regs *regs)
 	unlock_kernel();
 	return ret;
 }
+
+#ifndef CONFIG_SUNOS_EMUL
+asmlinkage int
+do_sunos_syscall (struct pt_regs *regs)
+{
+	static int cnt = 0;
+	if (++cnt < 10) printk ("SunOS binary emulation not compiled in\n");
+	lock_kernel();
+	force_sig (SIGSEGV, current);
+	unlock_kernel();
+	return 0;
+}
+#endif

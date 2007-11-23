@@ -32,9 +32,13 @@ README for the ISDN-subsystem
 
      de.alt.comm.isdn4linux
 
-  There is also a well maintained FAQ (both english and german) available
-  at ftp.franken.de in /pub/isdn4linux/FAQ/
-  This FAQ is also available at http://www.lrz-muenchen.de/~ui161ab/www/isdn/
+  There is also a well maintained FAQ in English available at
+     http://www.mhessler.de/i4lfaq/
+  It can be viewed online, or downloaded in sgml/text/html format.
+  The FAQ can also be viewed online at
+     http://www.isdn4inux.de/faq/
+  or downloaded from
+     ftp://ftp.isdn4linux.de/pub/isdn4linux/FAQ/
 
   1.1 Technical details
 
@@ -266,6 +270,8 @@ README for the ISDN-subsystem
              23   0         Bit coded register:
                             Bit 0:    0 = Add CPN to RING message off
                                       1 = Add CPN to RING message on
+                            Bit 1:    0 = Add CPN to FCON message off
+                                      1 = Add CPN to FCON message on
 
   Last but not least a (at the moment fairly primitive) device to request
   the line-status (/dev/isdninfo) is made available.

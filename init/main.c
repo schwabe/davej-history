@@ -272,6 +272,7 @@ extern void stram_swap_setup (char *str, int *ints);
 extern void wd33c93_setup (char *str, int *ints);
 extern void gvp11_setup (char *str, int *ints);
 extern void ncr53c7xx_setup (char *str, int *ints);
+extern void sim710_setup (char *str, int *ints);
 #ifdef CONFIG_MAC_SCSI
 extern void mac_scsi_setup (char *str, int *ints);
 #endif
@@ -823,6 +824,9 @@ static struct kernel_param cooked_params[] __initdata = {
 	    || defined(CONFIG_BVME6000_SCSI) \
 	    || defined(CONFIG_BLZ603EPLUS_SCSI)
         { "53c7xx=", ncr53c7xx_setup },
+#endif
+#if defined(CONFIG_SCSI_SIM710)
+	{ "sim710=", sim710_setup },
 #endif
 #if defined(CONFIG_A3000_SCSI) || defined(CONFIG_A2091_SCSI) \
 	    || defined(CONFIG_GVP11_SCSI)

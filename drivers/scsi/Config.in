@@ -75,6 +75,7 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
 fi
 dep_tristate 'NCR53c406a SCSI support' CONFIG_SCSI_NCR53C406A $CONFIG_SCSI
 dep_tristate 'symbios 53c416 SCSI support' CONFIG_SCSI_SYM53C416 $CONFIG_SCSI
+dep_tristate 'Simple 53c710 SCSI support (Compaq, NCR machines)' CONFIG_SCSI_SIM710 $CONFIG_SCSI
 if [ "$CONFIG_PCI" = "y" ]; then
   dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx $CONFIG_SCSI
   if [ "$CONFIG_SCSI_NCR53C7xx" != "n" ]; then

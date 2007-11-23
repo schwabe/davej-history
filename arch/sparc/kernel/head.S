@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.95 1999/04/13 07:40:34 anton Exp $
+/* $Id: head.S,v 1.95.2.2 1999/09/23 09:53:18 anton Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -151,7 +151,11 @@ t_bad6f:BAD_TRAP(0x6f) BAD_TRAP(0x70) BAD_TRAP(0x71) BAD_TRAP(0x72) BAD_TRAP(0x7
 t_bad74:BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
 t_bad79:BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
 t_bad7e:BAD_TRAP(0x7e) BAD_TRAP(0x7f)
+#ifdef CONFIG_SUNOS_EMUL
 t_sunos:SUNOS_SYSCALL_TRAP                  /* SunOS System Call             */
+#else
+t_sunos:SUNOS_NO_SYSCALL_TRAP		    /* No SunOS emulation	     */
+#endif
 t_sbkpt:BREAKPOINT_TRAP                     /* Software Breakpoint/KGDB      */
 t_divz:	BAD_TRAP(0x82)                      /* Divide by zero trap           */
 t_flwin:TRAP_ENTRY(0x83, do_flush_windows)  /* Flush Windows Trap            */
@@ -235,7 +239,11 @@ C_LABEL(trapbase_cpu1):
 	BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
 	BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
 	BAD_TRAP(0x7e) BAD_TRAP(0x7f)
-	SUNOS_SYSCALL_TRAP 
+#ifdef CONFIG_SUNOS_EMUL
+	SUNOS_SYSCALL_TRAP	/* SunOS System Call */
+#else
+	SUNOS_NO_SYSCALL_TRAP	/* No SunOS emulation */
+#endif
 	BREAKPOINT_TRAP
 	BAD_TRAP(0x82)
 	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
@@ -303,7 +311,11 @@ C_LABEL(trapbase_cpu2):
 	BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
 	BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
 	BAD_TRAP(0x7e) BAD_TRAP(0x7f)
-	SUNOS_SYSCALL_TRAP 
+#ifdef CONFIG_SUNOS_EMUL
+	SUNOS_SYSCALL_TRAP	/* SunOS System Call */
+#else
+	SUNOS_NO_SYSCALL_TRAP	/* No SunOS emulation */
+#endif
 	BREAKPOINT_TRAP
 	BAD_TRAP(0x82)
 	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
@@ -371,7 +383,11 @@ C_LABEL(trapbase_cpu3):
 	BAD_TRAP(0x74) BAD_TRAP(0x75) BAD_TRAP(0x76) BAD_TRAP(0x77) BAD_TRAP(0x78)
 	BAD_TRAP(0x79) BAD_TRAP(0x7a) BAD_TRAP(0x7b) BAD_TRAP(0x7c) BAD_TRAP(0x7d)
 	BAD_TRAP(0x7e) BAD_TRAP(0x7f)
-	SUNOS_SYSCALL_TRAP  
+#ifdef CONFIG_SUNOS_EMUL
+	SUNOS_SYSCALL_TRAP	/* SunOS System Call */
+#else
+	SUNOS_NO_SYSCALL_TRAP	/* No SunOS emulation */
+#endif
 	BREAKPOINT_TRAP
 	BAD_TRAP(0x82)
 	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)

@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.67 1999/03/25 00:43:00 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.67.2.1 1999/09/07 02:25:23 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>

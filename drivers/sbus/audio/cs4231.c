@@ -719,13 +719,13 @@ static int cs4231_set_monitor_volume(struct sparcaudio_driver *drv, int value)
   else 
       CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->idr), ((a << 2) | LOOPB_ON));
 
-  if (value == AUDIO_MAX_GAIN) 
-    CS4231_WRITE8(cs4231_chip, &(cs4231_chip->perchip_info.monitor_gain), AUDIO_MAX_GAIN);
+  if (value == AUDIO_MAX_GAIN)
+    cs4231_chip->perchip_info.monitor_gain = AUDIO_MAX_GAIN;
   else 
-    CS4231_WRITE8(cs4231_chip, &(cs4231_chip->perchip_info.monitor_gain),
-                  ((CS4231_MAX_DEV_ATEN - a) * 
-                   (AUDIO_MAX_GAIN + 1) / 
-                   (CS4231_MAX_DEV_ATEN + 1)));
+    cs4231_chip->perchip_info.monitor_gain =
+            ((CS4231_MAX_DEV_ATEN - a) * 
+             (AUDIO_MAX_GAIN + 1) / 
+             (CS4231_MAX_DEV_ATEN + 1));
 
   return 0;
 }
