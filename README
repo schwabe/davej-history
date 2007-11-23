@@ -47,7 +47,12 @@ INSTALLING the kernel:
 		gzip -cd linux-2.0.XX.tar.gz | tar xfv -
 
    to get it all put in place. Replace "XX" with the version number of the
-   latest kernel.
+   latest kernel. If you use GNU tar, 
+
+		cd /usr/src
+		tar -xzvf linux-2.1.XX.tar.gz
+
+   is equivalent.
 
  - You can also upgrade between 2.0.xx releases by patching.  Each
    patch that is released for 2.0.xx contains only bugfixes.  No

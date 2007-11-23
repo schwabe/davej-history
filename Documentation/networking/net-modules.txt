@@ -15,7 +15,7 @@ Wed 2-Aug-95  <matti.aarnio@utu.fi>
 	the less user needs to know, the better.  (There are things that
 	driver developer can use, others should not confuse themselves.)
 
-	In many cases it is highly preferred that insmod:ing is done
+	In many cases it is highly preferred that insmoding is done
 	ONLY with defining an explicit address for the card, AND BY
 	NOT USING AUTO-PROBING!
 

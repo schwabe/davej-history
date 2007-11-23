@@ -58,6 +58,29 @@ CONFIG_EXPERIMENTAL
   you say Y here, you will be offered the choice of using features or
   drivers that are currently considered to be in the alpha-test phase.
 
+Symmetric Multi Processing
+CONFIG_SMP
+  This enables support for systems with more than one CPU.  If you have a
+  system with only one CPU, like most personal computers, say N.  If you
+  have a system with more than one CPU, say Y.
+
+  A non-SMP kernel will run on any machine, but will use only one CPU of
+  a multi-CPU machine.  An SMP kernel will run on many, but not all,
+  single-CPU machines.  On a single-CPU machine, a non-SMP kernel
+  will run faster than an SMP kernel.
+
+  People using multiprocessor machines should also say Y to "Enhanced
+  Real Time Clock Support", below.  The "Advanced Power Management"
+  code will be disabled in an SMP kernel.
+
+  If you don't know what to do here, say N.
+  
+  See also: Documentation/SMP.txt, Documentation/smp.tex,
+  Documentation/smp.txt, and Documentation/IO-APIC.txt.  Also see the
+  SMP-FAQ on the WWW at http://www.irisa.fr/prive/mentre/smp-faq/ (to
+  browse the WWW, you need to have access to a machine on the Internet
+  that has a program like lynx or netscape).
+  
 Kernel math emulation
 CONFIG_MATH_EMULATION
   Linux can emulate a math coprocessor (used for floating point
@@ -1007,6 +1030,7 @@ CONFIG_M386
   the other hand, if you use a compiler before gcc 2.7 (say "gcc -v"
   to find out), then you have to say "386" or "486" here even if
   running on a Pentium or PPro machine.
+
   If you don't know what to do, say "386".
 
 Compile the kernel into the ELF object format
