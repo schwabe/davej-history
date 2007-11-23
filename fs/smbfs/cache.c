@@ -244,7 +244,7 @@ smb_refill_dircache(struct cache_head * cachep, struct dentry *dentry)
 	struct inode * inode = dentry->d_inode;
 	int result;
 
-	VERBOSE(KERN_DEBUG "smb_refill_dircache: cache %s/%s, blocks=%d\n",
+	VERBOSE("smb_refill_dircache: cache %s/%s, blocks=%d\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name, 
 		cachep->pages);
 	/*

@@ -114,6 +114,7 @@ if [ "$CONFIG_APM" != "n" ]; then
   bool '   Allow interrupts during APM BIOS calls' CONFIG_APM_ALLOW_INTS
   bool '   Use real mode APM BIOS call to power off' CONFIG_APM_REAL_MODE_POWER_OFF
 fi
+tristate 'Toshiba Laptop support' CONFIG_TOSHIBA
 
 endmenu
 

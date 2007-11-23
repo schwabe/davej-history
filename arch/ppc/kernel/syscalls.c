@@ -199,6 +199,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len,
 	struct file * file = NULL;
 	int ret = -EBADF;
 
+	down(&current->mm->mmap_sem);
 	lock_kernel();
 	if (!(flags & MAP_ANONYMOUS)) {
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
@@ -209,6 +210,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, size_t len,
 	ret = do_mmap(file, addr, len, prot, flags, offset);
 out:
 	unlock_kernel();
+	up(&current->mm->mmap_sem);
 	return ret;
 }
 

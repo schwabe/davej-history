@@ -157,8 +157,8 @@ typedef struct {
 	u8 N391cnt;
 
 	u8 state;		/* ! */
-	u8 txseq;		/* ! TX sequence number */
-	u8 rxseq;		/* ! RX sequence number */
+	u32 txseq;		/* ! TX sequence number - Cisco uses 4 bytes */
+	u32 rxseq;		/* ! RX sequence number */
 }fr_lmi;			/* ! means used in Cisco HDLC as well */
 
 

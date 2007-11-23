@@ -1,4 +1,4 @@
-TLAN driver for Linux, version 1.2
+TLAN driver for Linux, version 1.3b
 README
 
 

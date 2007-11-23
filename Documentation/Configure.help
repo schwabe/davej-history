@@ -10272,6 +10272,11 @@ CONFIG_SOUND_VWSND
   be able to use its on-board audio.  Read Documentation/sound/visws
   for more info on this driver's capabilities.
 
+Creative EMU10K1 based PCI sound cards
+CONFIG_SOUND_EMU10K1
+  Say Y or M if you have a PCI sound card using the EMU10K1
+  chipset, such as the Creative SBLive! or SB PCI512.
+
 Ensoniq ES1370 based PCI sound cards
 CONFIG_SOUND_ES1370
   Say Y or M if you have a PCI sound card utilizing the Ensoniq

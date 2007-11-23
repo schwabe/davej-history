@@ -861,9 +861,8 @@ ppp_sync_send(struct ppp *ppp, struct sk_buff *skb)
 
 	if (test_and_set_bit(XMITFULL, &ppp->state))
 		return -1;
-	ppp->tpkt = skb;
 
-	data = ppp->tpkt->data;
+	data = skb->data;
 	
 	/*
 	 * LCP packets with code values between 1 (configure-reqest)
@@ -877,14 +876,14 @@ ppp_sync_send(struct ppp *ppp, struct sk_buff *skb)
 	if (PPP_PROTOCOL(data) < 0x8000)
 		ppp->last_xmit = jiffies;
 	++ppp->stats.ppp_opackets;
-	ppp->stats.ppp_ooctects += ppp->tpkt->len;
+	ppp->stats.ppp_ooctects += skb->len;
 
 	if ( !(data[2]) && (ppp->flags & SC_COMP_PROT) ) {
 		/* compress protocol field */
 		data[2] = data[1];
 		data[1] = data[0];
-		skb_pull(ppp->tpkt,1);
-		data = ppp->tpkt->data;
+		skb_pull(skb,1);
+		data = skb->data;
 	}
 	
 	/*
@@ -894,9 +893,10 @@ ppp_sync_send(struct ppp *ppp, struct sk_buff *skb)
 	    && PPP_ADDRESS(data) == PPP_ALLSTATIONS
 	    && PPP_CONTROL(data) == PPP_UI) {
 		/* strip addr and control field */
-		skb_pull(ppp->tpkt,2);
+		skb_pull(skb,2);
 	}
 
+	ppp->tpkt = skb;
 	return ppp_tty_sync_push(ppp);
 }
 

@@ -1,5 +1,6 @@
 #ifndef TLAN_H
 #define TLAN_H
+
 /********************************************************************
  *
  *  Linux ThunderLAN Driver
@@ -23,11 +24,6 @@
 #include <asm/io.h>
 #include <asm/types.h>
 #include <linux/netdevice.h>
-
-#if LINUX_VERSION_CODE <= 0x20100
-#define net_device_stats	enet_statistics
-#endif
-
 
 
 
@@ -190,6 +186,7 @@ typedef struct tlan_private_tag {
 	u8			tlanRev;
 	u8			tlanFullDuplex;
 	char                    devName[8];
+	spinlock_t		lock;
 } TLanPrivateInfo;
 
 
@@ -541,4 +538,5 @@ inline u32 TLan_HashFunc( u8 *a )
 } 
 
 #endif /* I_LIKE_A_FAST_HASH_FUNCTION */
+
 #endif

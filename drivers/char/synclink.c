@@ -1,7 +1,7 @@
 /*
  * linux/drivers/char/synclink.c
  *
- * ==FILEDATE 20000220==
+ * ==FILEDATE 20000705==
  *
  * Device driver for Microgate SyncLink ISA and PCI
  * high speed multiprotocol serial adapters.
@@ -390,7 +390,7 @@ struct mgsl_struct {
 	char netname[10];
 	struct net_device *netdev;
 	struct net_device_stats netstats;
-#if LINUX_VERSION_CODE >= VERSION(2,3,43) 
+#if LINUX_VERSION_CODE >= VERSION(2,2,16) 
 	struct net_device netdevice;
 #endif
 #endif
@@ -965,7 +965,7 @@ MODULE_PARM(dosyncppp,"1-" __MODULE_STRING(MAX_TOTAL_DEVICES) "i");
 #endif
 
 static char *driver_name = "SyncLink serial driver";
-static char *driver_version = "1.18";
+static char *driver_version = "1.19";
 
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
@@ -5964,12 +5964,12 @@ void usc_reset( struct mgsl_struct *info )
 {
 	if ( info->bus_type == MGSL_BUS_TYPE_PCI ) {
 		int i;
-		volatile u32 readval;
+		u32 readval;
 
 		/* Set BIT30 of Misc Control Register */
 		/* (Local Control Register 0x50) to force reset of USC. */
 
-		u32 *MiscCtrl = (u32 *)(info->lcr_base + 0x50);
+		volatile u32 *MiscCtrl = (u32 *)(info->lcr_base + 0x50);
 		u32 *LCR0BRDR = (u32 *)(info->lcr_base + 0x28);
 
 		info->misc_ctrl_value |= BIT30;
@@ -6985,8 +6985,8 @@ BOOLEAN mgsl_dma_test( struct mgsl_struct *info )
 	unsigned int i;
 	char *TmpPtr;
 	BOOLEAN rc = TRUE;
-	volatile unsigned short status;
-	volatile unsigned long EndTime;
+	unsigned short status;
+	unsigned long EndTime;
 	unsigned long flags;
 	MGSL_PARAMS tmp_params;
 
@@ -7357,7 +7357,6 @@ BOOLEAN mgsl_memory_test( struct mgsl_struct *info )
 }	/* End Of mgsl_memory_test() */
 
 
-#pragma optimize( "", off )
 /* mgsl_load_pci_memory()
  * 
  * 	Load a large block of data into the PCI shared memory.
@@ -7420,7 +7419,6 @@ void mgsl_load_pci_memory( char* TargetPtr, const char* SourcePtr,
 	memcpy( TargetPtr, SourcePtr, count % PCI_LOAD_INTERVAL );
 
 }	/* End Of mgsl_load_pci_memory() */
-#pragma optimize( "", on )
 
 void mgsl_trace_block(struct mgsl_struct *info,const char* data, int count, int xmit)
 {
@@ -7575,7 +7573,7 @@ void mgsl_sppp_init(struct mgsl_struct *info)
 
 	sprintf(info->netname,"mgsl%d",info->line);
 
-#if LINUX_VERSION_CODE < VERSION(2,3,43) 
+#if LINUX_VERSION_CODE < VERSION(2,2,16) 
 	info->netdev = &info->pppdev.dev;
 #else
 	info->if_ptr = &info->pppdev;

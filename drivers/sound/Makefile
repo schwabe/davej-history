@@ -10,13 +10,20 @@
 SUB_DIRS	:= 
 MOD_SUB_DIRS	:=
 MOD_IN_SUB_DIRS	:=
-ALL_SUB_DIRS	:= $(SUB_DIRS) lowlevel
+ALL_SUB_DIRS	:= $(SUB_DIRS) lowlevel emu10k1
 
 ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
     SUB_DIRS		+= lowlevel
     MOD_IN_SUB_DIRS	+= lowlevel
 endif
 
+ifeq ($(CONFIG_SOUND_EMU10K1),y)
+    SUB_DIRS		+= emu10k1 
+else
+  ifeq ($(CONFIG_SOUND_EMU10K1),m)
+    MOD_IN_SUB_DIRS	+= emu10k1
+  endif
+endif
 
 
 # All of the (potential) objects that export symbols.
@@ -54,7 +61,7 @@ obj-$(CONFIG_SOUND_CS4232)	+= uart401.o
 obj-$(CONFIG_SOUND_GUS)		+= gus.o ad1848.o
 obj-$(CONFIG_SOUND_MAD16)	+= mad16.o ad1848.o sb.o uart401.o
 obj-$(CONFIG_SOUND_VIA82CXXX)	+= via82cxxx.o sb.o uart401.o 
-obj-$(CONFIG_SOUND_YMPCI)	+= ymf_sb.o sb.o uart401.o ac97_codec.o
+obj-$(CONFIG_SOUND_YMPCI)	+= ymf_sb.o sb.o uart401.o ac97.o
 obj-$(CONFIG_SOUND_MAUI)	+= maui.o mpu401.o
 obj-$(CONFIG_SOUND_MPU401)	+= mpu401.o
 obj-$(CONFIG_SOUND_MSNDCLAS)	+= msnd.o msnd_classic.o
@@ -89,6 +96,11 @@ obj-$(CONFIG_SOUND_ICH)		+= i810_audio.o ac97_codec.o
 obj-$(CONFIG_SOUND_MAESTRO)	+= maestro.o
 obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
 obj-$(CONFIG_SOUND_TRIDENT)     += trident.o ac97_codec.o
+
+ifeq ($(CONFIG_SOUND_EMU10K1),y)
+  obj-y				+= emu10k1/emu10k1.o
+endif
+
 
 # Declare multi-part drivers.
 

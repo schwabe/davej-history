@@ -41,7 +41,7 @@
 #ifndef MODULE
 static int version_printed=0;
 #endif
-static const char* version = "HDLC support routines revision: 1.0-pre10";
+static const char* version = "HDLC support routines revision: 1.0a1";
 
 
 #define CISCO_MULTICAST         0x8f    /* Cisco multicast address */
@@ -182,11 +182,17 @@ static void cisco_netif(hdlc_device *hdlc, struct sk_buff *skb)
 	  
 		case CISCO_KEEPALIVE_REQ:
 			hdlc->lmi.rxseq = ntohl(cisco_data->par1);
-			if (hdlc->lmi.rxseq == hdlc->lmi.txseq) {
+			if (ntohl(cisco_data->par2) == hdlc->lmi.txseq) {
 				hdlc->lmi.last_poll = jiffies;
-				if (!(hdlc->lmi.state & LINK_STATE_RELIABLE))
-					printk(KERN_INFO "%s: Link up\n",
-					       hdlc->name);
+				if (!(hdlc->lmi.state & LINK_STATE_RELIABLE)) {
+					u32 sec, min, hrs, days;
+					sec = ntohl(cisco_data->time)/1000;
+					min = sec / 60; sec -= min * 60;
+					hrs = min / 60; min -= hrs * 60;
+					days = hrs / 24; hrs -= days * 24;
+					printk(KERN_INFO "%s: Link up (peer uptime %ud%uh%um%us)\n",
+					       hdlc->name, days, hrs, min, sec);
+				}
 				hdlc->lmi.state |= LINK_STATE_RELIABLE;
 			}
 
@@ -1025,7 +1031,12 @@ static int hdlc_set_mode(hdlc_device *hdlc, int mode)
 
 		case MODE_PPP:
 			result = hdlc->set_mode ?
-				hdlc->set_mode(hdlc, MODE_HDLC) : 0;
+				hdlc->set_mode(hdlc, MODE_PPP) : 0;
+			break;
+	
+		case MODE_X25:
+			result = hdlc->set_mode ?
+				hdlc->set_mode(hdlc, MODE_X25) : 0;
 			break;
 	
 		case MODE_FR_ANSI:
@@ -1050,6 +1061,8 @@ static int hdlc_set_mode(hdlc_device *hdlc, int mode)
 	hdlc->mode=mode;
 	if (mode_is(hdlc, MODE_PPP))
 		hdlc_to_dev(hdlc)->type=ARPHRD_PPP;
+	if (mode_is(hdlc, MODE_X25))
+		hdlc_to_dev(hdlc)->type=ARPHRD_X25;
 	else if (mode_is(hdlc, MODE_FR))
 		hdlc_to_dev(hdlc)->type=ARPHRD_FRAD;
 	else			/* Conflict - raw HDLC and Cisco */

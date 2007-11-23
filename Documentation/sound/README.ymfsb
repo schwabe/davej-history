@@ -9,7 +9,7 @@ FIRST OF ALL
   about YMF7xx cards.
 
   And this codes heavily based on Jeff Garzik <jgarzik@pobox.com>'s
-  VIA 82Cxxx driver (via82cxxx.c). I also respect him.
+  old VIA 82Cxxx driver (via82cxxx.c). I also respect him.
 
 
 DISCLIMER
@@ -24,59 +24,50 @@ ABOUT THIS DRIVER
 =================
 
   This code enables you to use your YMF724[A-F], YMF740[A-C], YMF744, YMF754
- cards. When enabled, your card acts as "SoundBlaster Pro" compatible card.
- It can only play 22.05kHz / 8bit / Stereo samples, control external MIDI
- port.
- If you want to use your card as recent "16-bit" card, you should wait for
- Alsa (or OSS) driver. Ofcource you can write native PCI driver for your
- cards :)
+ cards as "SoundBlaster Pro" compatible card. It can only play 22.05kHz /
+ 8bit / Stereo samples, control external MIDI port.
+ And it can handle AC'97 mixer of these cards.
+
+  If you want to use your card as recent "16-bit" card, you should use
+ Alsa or OSS/Linux driver. Ofcource you can write native PCI driver for
+ your cards :)
 
 
 INSTALL
 =======
 
-  This codes currently requires YAMAHA's header file: Hwmcode.h and
- 724hwmcode.c
- It can be found at alsa's ftp (or mirror) sites. 
+  First, it requires some sound driver modules in Linux kernel 
+ (soundcore.o , sound.o, sb.o and uart401.o), so you should enable
+ these modules at kernel configuration (please refer some other 
+ documentations for configuration of kernel).
+ And add the following line in /etc/modules.conf:
 
-   ftp://ftp.alsa-project.org/pub/manuals/yamaha/pci/
-
- Hwmcode.h is contained in 754smpls.zip available at above URL.
-
-
-  To compile driver module, extract source archive and place above headers
- in the directory.
- And type 'make'. When it goes well, you will get ymfsb.o. 
- Copy it to /lib/modules/<kernel_version>/misc/ and do 'depmod -a'.
- Before modprobe, insert following line in /etc/modules.conf:
-
-  # /etc/modules.conf
   options sb support=1
+
+ (NOTE: There are no need any configuration of sb modules)
+
+ To compile ymfsb module, type 'make'.
+ And copy it to /lib/modules/(kernel_version)/misc, type 'depmod -a'.
+ 
+  This module also requires /usr/src/linux/drivers/sound/ac97.[ch].
+ If your kernel doesn't have these files, you should upgrade your kernel.
 
 
 USAGE
 =====
 
- # modprobe ymfsb
+ # modprobe ymfsb (options)
 
 
-OPTIONS FOR MODULE
-==================
+OPTIONS FOR YMFSB
+=================
 
   io           : SB base address     (0x220, 0x240, 0x260, 0x280)
   synth_io     : OPL3 base address   (0x388, 0x398, 0x3a0, 0x3a8)
   dma          : DMA number          (0,1,3)
-  master_volume: AC'97 PCM out Vol   (0-100)
   spdif_out    : SPDIF-out flag      (0:disable 1:enable)
 
  These options will change in future...
-
-
-TODO
-====
-
- TOO LOT.
- Ofcource we have not to satisfy such a poor code like this :-<
 
 
 FREQUENCY
@@ -91,10 +82,6 @@ FREQUENCY
  correctly with mpg123, specify the frequency like following:
 
   %  mpg123 -r 21739 foo.mp3
-
- Ofcource it potentially contains sample-rate-conversion, and may destroy
- your sound. But you must remember that this card currently only handle
- samples up to 21.739kHz B-(
 
 
 SPDIF OUT
@@ -125,15 +112,12 @@ COPYING
  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 
-AVAILABILITY
-============
+TODO
+====
+ * support for multiple cards
+   (set the different SB_IO,MPU_IO,OPL_IO for each cards)
 
- The latest version of this driver may be available at:
-
-   http://member.nifty.ne.jp/Breeze/linux/index.html
-
- When the native DS-XG driver is available (from alsa, OSS, or else),
- this code will have to be expired.
+ * support for OPL (dmfm) : There will be no requirements... :-<
 
 
 AUTHOR

@@ -14,6 +14,8 @@
     * OPL3-compatible FM synthesizer
     * MPU-401 compatible "external" MIDI interface
 
+  and AC'97 mixer of these cards.
+
   -------------------------------------------------------------------------
 
   Revision history
@@ -39,6 +41,23 @@
      in 724hwmcode.h.
    * fixed wrong legacy_io setting on YMF744/YMF754 .
 
+   Sat Jun  3 23:44:08 2000   0.0.5
+
+   * correct all return value -1 to appropriate -E* value.
+   * add pci_enable_device() for linux-2.3.x.
+
+   Sat Jun  7 00:17:32 2000   0.1.0
+
+   * Remove SBPro mixer support.
+   * Added AC'97 mixer support and remove option 'master_volume'.
+   * Correct all separated valuables into struct ymf_cards.
+
+   Mon Jun 12 21:36:50 2000   0.1.1
+
+   * Invalid dma setting fixed.
+     -- John A. Boyd Jr. <jaboydjr@netwalk.com>
+
+   * ymfsb only compiled as module: fixed
  */
 
 #include <linux/module.h>
@@ -55,40 +74,39 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 #include "sb.h"
-#include "ac97.h"
-
 #include "724hwmcode.h"
 
+#include "ac97.h"
+
 #undef YMF_DEBUG
-#define SUPPORT_UART401_MIDI 1
 
 /* ---------------------------------------------------------------------- */
 
 #ifndef SOUND_LOCK
-#define SOUND_LOCK do {} while (0)
-#define SOUND_LOCK_END do {} while (0)
+# define SOUND_LOCK do {} while (0)
+# define SOUND_LOCK_END do {} while (0)
 #endif
 
 #ifndef PCI_VENDOR_ID_YAMAHA
-#define PCI_VENDOR_ID_YAMAHA  0x1073
+# define PCI_VENDOR_ID_YAMAHA  0x1073
 #endif
 #ifndef PCI_DEVICE_ID_YMF724
-#define PCI_DEVICE_ID_YMF724  0x0004
+# define PCI_DEVICE_ID_YMF724  0x0004
 #endif
 #ifndef PCI_DEVICE_ID_YMF740
-#define PCI_DEVICE_ID_YMF740  0x000A
+# define PCI_DEVICE_ID_YMF740  0x000A
 #endif
 #ifndef PCI_DEVICE_ID_YMF740C
-#define PCI_DEVICE_ID_YMF740C 0x000C
+# define PCI_DEVICE_ID_YMF740C 0x000C
 #endif
 #ifndef PCI_DEVICE_ID_YMF724F
-#define PCI_DEVICE_ID_YMF724F 0x000D
+# define PCI_DEVICE_ID_YMF724F 0x000D
 #endif
 #ifndef PCI_DEVICE_ID_YMF744
-#define PCI_DEVICE_ID_YMF744  0x0010
+# define PCI_DEVICE_ID_YMF744  0x0010
 #endif
 #ifndef PCI_DEVICE_ID_YMF754
-#define PCI_DEVICE_ID_YMF754  0x0012
+# define PCI_DEVICE_ID_YMF754  0x0012
 #endif
 
 /* ---------------------------------------------------------------------- */
@@ -223,127 +241,97 @@
 
 #define PFX		"ymf_sb: "
 
-#define YMFSB_VERSION	"0.0.4"
+#define YMFSB_VERSION	"0.1.1"
 #define YMFSB_CARD_NAME	"YMF7xx Legacy Audio driver " YMFSB_VERSION
 
-#ifdef SUPPORT_UART401_MIDI
-#if 0
-# define ymf7xxsb_probe_midi probe_uart401
-# define ymf7xxsb_attach_midi attach_uart401
-# define ymf7xxsb_unload_midi unload_uart401
-#else
-# define ymf7xxsb_probe_midi probe_sbmpu
-# define ymf7xxsb_attach_midi attach_sbmpu
-# define ymf7xxsb_unload_midi unload_sbmpu
-#endif
-#endif
+#define ymf7xxsb_probe_midi probe_sbmpu
+#define ymf7xxsb_attach_midi attach_sbmpu
+#define ymf7xxsb_unload_midi unload_sbmpu
 
 /* ---------------------------------------------------------------------- */
 
-static struct address_info	sb_data[MAX_CARDS];
-static struct address_info	opl3_data[MAX_CARDS];
-#ifdef SUPPORT_UART401_MIDI
-static struct address_info	mpu_data[MAX_CARDS];
-#endif
-static unsigned			cards = 0;
-static unsigned short          *ymfbase[MAX_CARDS];
+static struct ymf_card {
+  int                  card;
+  unsigned short      *ymfbase;
+
+  struct address_info sb_data, opl3_data, mpu_data;
+
+  struct ac97_hwint   ac97_dev;
+  int                 mixer_oss_dev;
+} ymf_cards[MAX_CARDS];
+
+static unsigned int cards = 0;
 
 /* ---------------------------------------------------------------------- */
 
 #ifdef MODULE
-#ifdef SUPPORT_UART401_MIDI
-static int mpu_io   = 0;
-#endif
-static int synth_io = 0;
-static int io       = 0;
-static int dma      = 0;
-static int master_vol = -1;
-static int spdif_out = 0;
-#ifdef SUPPORT_UART401_MIDI
+static int mpu_io     = 0;
+static int synth_io   = 0;
+static int io         = 0;
+static int dma        = 0;
+static int spdif_out  = 1;
 MODULE_PARM(mpu_io, "i");
-#endif
 MODULE_PARM(synth_io, "i");
 MODULE_PARM(io,"i");
 MODULE_PARM(dma,"i");
-MODULE_PARM(master_vol,"i");
 MODULE_PARM(spdif_out,"i");
 #else
-#ifdef SUPPORT_UART401_MIDI
 static int mpu_io     = 0x330;
-#endif
 static int synth_io   = 0x388;
 static int io         = 0x220;
 static int dma        = 1;
-static int master_vol = 80;
-static int spdif_out  = 0;
+static int spdif_out  = 1;
 #endif
 
 /* ---------------------------------------------------------------------- */
 
-static int readRegWord( int adr ) {
+static int readRegWord( struct ymf_card *card, int adr ) {
 
-	if (ymfbase[cards]==NULL) return 0;
+	if (card->ymfbase==NULL) return 0;
 
-	return readw(ymfbase[cards]+adr/2);
+	return readw(card->ymfbase+adr/2);
 }
 
-static void writeRegWord( int adr, int val ) {
+static void writeRegWord( struct ymf_card *card, int adr, int val ) {
 
-	if (ymfbase[cards]==NULL) return;
+	if (card->ymfbase==NULL) return;
 
-	writew((unsigned short)(val&0xffff), ymfbase[cards] + adr/2);
+	writew((unsigned short)(val&0xffff), card->ymfbase + adr/2);
 
 	return;
 }
 
-static int readRegDWord( int adr ) {
+static int readRegDWord( struct ymf_card *card, int adr ) {
 
-	if (ymfbase[cards]==NULL) return 0;
+	if (card->ymfbase==NULL) return 0;
 
-	return (readl(ymfbase[cards]+adr/2));
+	return (readl(card->ymfbase+adr/2));
 }
 
-static void writeRegDWord( int adr, int val ) {
+static void writeRegDWord( struct ymf_card *card, int adr, int val ) {
 
-	if (ymfbase[cards]==NULL) return;
+	if (card->ymfbase==NULL) return;
 
-	writel((unsigned int)(val&0xffffffff), ymfbase[cards]+adr/2);
+	writel((unsigned int)(val&0xffffffff), card->ymfbase+adr/2);
 
 	return;
 }
 
 /* ---------------------------------------------------------------------- */
 
-static int checkPrimaryBusy( void )
+static int checkPrimaryBusy( struct ymf_card *card )
 {
 	int timeout=0;
 
 	while ( timeout++ < YMFSB_AC97TIMEOUT )
 	{
-		if ( (readRegWord(YMFSB_PRISTATUSADR) & 0x8000) == 0x0000 )
+		if ( (readRegWord(card, YMFSB_PRISTATUSADR) & 0x8000) == 0x0000 )
 			return 0;
 	}
-	return -1;
+	return -EBUSY;
 }
 
-static int writeAc97( int adr, unsigned short val )
-{
-
-	if ( adr > 0x7f || adr < 0x00 ) return -1;
-
-	if ( checkPrimaryBusy() ) return -1;
-
-#ifdef YMF_DEBUG
-	printk(KERN_INFO PFX "AC97 0x%0x = 0x%0x\n",adr,val);
-#endif
-
-	writeRegWord( YMFSB_AC97CMDADR,  0x0000 | adr );
-	writeRegWord( YMFSB_AC97CMDDATA, val );
-
-	return 0;
-}
-
-static int checkCodec( struct pci_dev *pcidev )
+static int checkCodec( struct ymf_card *card, struct pci_dev *pcidev )
 {
 	u8 tmp8;
 
@@ -357,17 +345,17 @@ static int checkCodec( struct pci_dev *pcidev )
 		mdelay(YMFSB_RESET_DELAY);
 	}
 
-	if ( checkPrimaryBusy() ) return -1;
+	if ( checkPrimaryBusy( card ) ) return -EBUSY;
 
 	return 0;
 }
 
-static int setupLegacyIO( struct pci_dev *pcidev )
+static int setupLegacyIO( struct ymf_card *card, struct pci_dev *pcidev )
 {
 	int v;
 	int sbio=0, mpuio=0, oplio=0,dma=0;
 
-	switch(sb_data[cards].io_base) {
+	switch(card->sb_data.io_base) {
 	case 0x220:
 		sbio = 0;
 		break;
@@ -381,15 +369,14 @@ static int setupLegacyIO( struct pci_dev *pcidev )
 		sbio = 3;
 		break;
 	default:
-		return -1;
+		return -EINVAL;
 		break;
 	}
 #ifdef YMF_DEBUG
-	printk(PFX "set SBPro I/O at 0x%x\n",sb_data[cards].io_base);
+	printk(PFX "set SBPro I/O at 0x%x\n",card->sb_data.io_base);
 #endif
 
-#ifdef SUPPORT_UART401_MIDI
-	switch(mpu_data[cards].io_base) {
+	switch(card->mpu_data.io_base) {
 	case 0x330:
 		mpuio = 0;
 		break;
@@ -406,12 +393,11 @@ static int setupLegacyIO( struct pci_dev *pcidev )
 		mpuio = 0;
 		break;
 	}
-# ifdef YMF_DEBUG
-	printk(PFX "set MPU401 I/O at 0x%x\n",mpu_data[cards].io_base);
-# endif
+#ifdef YMF_DEBUG
+	printk(PFX "set MPU401 I/O at 0x%x\n",card->mpu_data.io_base);
 #endif
 
-	switch(opl3_data[cards].io_base) {
+	switch(card->opl3_data.io_base) {
 	case 0x388:
 		oplio = 0;
 		break;
@@ -425,19 +411,19 @@ static int setupLegacyIO( struct pci_dev *pcidev )
 		oplio = 3;
 		break;
 	default:
-		return -1;
+		return -EINVAL;
 		break;
 	}
 #ifdef YMF_DEBUG
-	printk(PFX "set OPL3 I/O at 0x%x\n",opl3_data[cards].io_base);
+	printk(PFX "set OPL3 I/O at 0x%x\n",card->opl3_data.io_base);
 #endif
 
-	dma = sb_data[cards].dma;
+	dma = card->sb_data.dma;
 #ifdef YMF_DEBUG
-	printk(PFX "set DMA address at 0x%x\n",sb_data[cards].dma);
+	printk(PFX "set DMA address at 0x%x\n",card->sb_data.dma);
 #endif
 
-	v = 0x0000 | ((dma<<6)&0x03) | 0x003f;
+	v = 0x0000 | ((dma&0x03)<<6) | 0x003f;
 	pci_write_config_word(pcidev, YMFSB_PCIR_LEGCTRL, v);
 #ifdef YMF_DEBUG
 	printk(PFX "LEGCTRL: 0x%x\n",v);
@@ -458,16 +444,14 @@ static int setupLegacyIO( struct pci_dev *pcidev )
 	case PCI_DEVICE_ID_YMF754:
 		v = 0x8800;
 		pci_write_config_word(pcidev, YMFSB_PCIR_ELEGCTRL, v);
-		pci_write_config_word(pcidev, YMFSB_PCIR_OPLADR, opl3_data[cards].io_base);
-		pci_write_config_word(pcidev, YMFSB_PCIR_SBADR,  sb_data[cards].io_base);
-#ifdef SUPPORT_UART401_MIDI
-		pci_write_config_word(pcidev, YMFSB_PCIR_MPUADR, mpu_data[cards].io_base);
-#endif
+		pci_write_config_word(pcidev, YMFSB_PCIR_OPLADR, card->opl3_data.io_base);
+		pci_write_config_word(pcidev, YMFSB_PCIR_SBADR,  card->sb_data.io_base);
+		pci_write_config_word(pcidev, YMFSB_PCIR_MPUADR, card->mpu_data.io_base);
 		break;
 
 	default:
 		printk(KERN_ERR PFX "Invalid device ID: %d\n",pcidev->device);
-		return -1;
+		return -EINVAL;
 		break;
 	}
 
@@ -475,56 +459,169 @@ static int setupLegacyIO( struct pci_dev *pcidev )
 }
 
 /* ---------------------------------------------------------------------- */
-
-static void enableDSP( void )
+/* AC'97 stuff */
+static int ymfsb_readAC97Reg( struct ac97_hwint *dev, u8 reg )
 {
-	writeRegDWord( YMFSB_CONFIG, 0x00000001 );
+	struct ymf_card *card = (struct ymf_card *)dev->driver_private;
+	unsigned long flags;
+	int ret;
+
+	if ( reg > 0x7f ) return -EINVAL;
+
+	save_flags(flags);
+	cli();
+	writeRegWord( card, YMFSB_AC97CMDADR, 0x8000 | reg );
+	if ( checkPrimaryBusy( card ) ) {
+		restore_flags(flags);
+		return -EBUSY;
+	}
+	ret = readRegWord( card, YMFSB_AC97CMDDATA );
+	restore_flags(flags);
+
+	return ret;
+}
+
+static int ymfsb_writeAC97Reg( struct ac97_hwint *dev, u8 reg, u16 value )
+{
+	struct ymf_card *card = (struct ymf_card *)dev->driver_private;
+	unsigned long flags;
+
+	if ( reg > 0x7f ) return -EINVAL;
+
+	save_flags(flags);
+	cli();
+	if ( checkPrimaryBusy( card ) ) {
+	  restore_flags(flags);
+	  return -EBUSY;
+	}
+
+	writeRegWord( card, YMFSB_AC97CMDADR, 0x0000 | reg );
+	writeRegWord( card, YMFSB_AC97CMDDATA, value );
+
+	restore_flags(flags);
+	return 0;
+}
+
+struct initialValues
+{
+    unsigned short port;
+    unsigned short value;
+};
+
+static struct initialValues ymfsb_ac97_initial_values[] =
+{
+    { AC97_RESET,             0x0000 },
+    { AC97_MASTER_VOL_STEREO, 0x0000 },
+    { AC97_HEADPHONE_VOL,     0x8000 },
+    { AC97_PCMOUT_VOL,        0x0606 },
+    { AC97_MASTER_VOL_MONO,   0x0000 },
+    { AC97_PCBEEP_VOL,        0x0000 },
+    { AC97_PHONE_VOL,         0x0008 },
+    { AC97_MIC_VOL,           0x8000 },
+    { AC97_LINEIN_VOL,        0x8808 },
+    { AC97_CD_VOL,            0x8808 },
+    { AC97_VIDEO_VOL,         0x8808 },
+    { AC97_AUX_VOL,           0x8808 },
+    { AC97_RECORD_SELECT,     0x0000 },
+    { AC97_RECORD_GAIN,       0x0B0B },
+    { AC97_GENERAL_PURPOSE,   0x0000 },
+    { 0xffff, 0xffff }
+};
+
+static int ymfsb_resetAC97( struct ac97_hwint *dev )
+{
+	int i;
+
+	for ( i=0 ; ymfsb_ac97_initial_values[i].port != 0xffff ; i++ )
+	{
+		ac97_put_register ( dev,
+				    ymfsb_ac97_initial_values[i].port,
+				    ymfsb_ac97_initial_values[i].value );
+	}
+
+	return 0;
+}
+
+static int ymfsb_ac97_mixer_ioctl( int dev, unsigned int cmd, caddr_t arg )
+{
+	int i;
+
+	for ( i=0 ; i < MAX_CARDS ; i++ )
+	{
+		if ( ymf_cards[i].mixer_oss_dev == dev ) break;
+	}
+
+	if ( i < MAX_CARDS )
+		return ac97_mixer_ioctl(&(ymf_cards[i].ac97_dev), cmd, arg);
+	else
+		return -ENODEV;
+}
+
+static struct mixer_operations ymfsb_ac97_mixer_operations = {
+	"YAMAHA",
+	"YAMAHA PCI",
+	ymfsb_ac97_mixer_ioctl
+};
+
+static struct ac97_mixer_value_list ymfsb_ac97_mixer_defaults[] = {
+    { SOUND_MIXER_VOLUME,  { { 85, 85 } } },
+    { SOUND_MIXER_SPEAKER, { { 100 } } },
+    { SOUND_MIXER_PCM,     { { 65, 65 } } },
+    { SOUND_MIXER_CD,      { { 65, 65 } } },
+    { -1,                  {  { 0,  0 } } }
+};
+
+/* ---------------------------------------------------------------------- */
+
+static void enableDSP( struct ymf_card *card )
+{
+	writeRegDWord( card, YMFSB_CONFIG, 0x00000001 );
 	return;
 }
 
-static void disableDSP( void )
+static void disableDSP( struct ymf_card *card )
 {
 	int val;
 	int i;
 
-	val = readRegDWord( YMFSB_CONFIG );
+	val = readRegDWord( card, YMFSB_CONFIG );
 	if ( val ) {
-		writeRegDWord( YMFSB_CONFIG, 0 );
+		writeRegDWord( card, YMFSB_CONFIG, 0 );
 	}
 
 	i=0;
 	while( ++i < YMFSB_WORKBITTIMEOUT ) {
-		val = readRegDWord(YMFSB_STATUS);
+		val = readRegDWord( card, YMFSB_STATUS );
 		if ( (val & 0x00000002) == 0x00000000 ) break;
 	}
 
 	return;
 }
 
-static int setupInstruction( struct pci_dev *pcidev )
+static int setupInstruction( struct ymf_card *card, struct pci_dev *pcidev )
 {
 	int i;
 	int val;
 
-	writeRegDWord( YMFSB_NATIVEDACOUTVOL, 0 ); /* mute dac */
-	disableDSP();
+	writeRegDWord( card, YMFSB_NATIVEDACOUTVOL, 0 ); /* mute dac */
+	disableDSP( card );
 
-	writeRegDWord( YMFSB_MODE, 0x00010000 );
+	writeRegDWord( card, YMFSB_MODE, 0x00010000 );
 
 	/* DS-XG Software Reset */
-	writeRegDWord( YMFSB_MODE,         0x00000000 );
-	writeRegDWord( YMFSB_MAPOFREC,     0x00000000 );
-	writeRegDWord( YMFSB_MAPOFEFFECT,  0x00000000 );
-	writeRegDWord( YMFSB_PLAYCTRLBASE, 0x00000000 );
-	writeRegDWord( YMFSB_RECCTRLBASE,  0x00000000 );
-	writeRegDWord( YMFSB_EFFCTRLBASE,  0x00000000 );
+	writeRegDWord( card, YMFSB_MODE,         0x00000000 );
+	writeRegDWord( card, YMFSB_MAPOFREC,     0x00000000 );
+	writeRegDWord( card, YMFSB_MAPOFEFFECT,  0x00000000 );
+	writeRegDWord( card, YMFSB_PLAYCTRLBASE, 0x00000000 );
+	writeRegDWord( card, YMFSB_RECCTRLBASE,  0x00000000 );
+	writeRegDWord( card, YMFSB_EFFCTRLBASE,  0x00000000 );
 
-	val = readRegWord( YMFSB_GLOBALCTRL );
-	writeRegWord( YMFSB_GLOBALCTRL, (val&~0x0007) );
+	val = readRegWord( card, YMFSB_GLOBALCTRL );
+	writeRegWord( card, YMFSB_GLOBALCTRL, (val&~0x0007) );
 
 	/* setup DSP instruction code */
 	for ( i=0 ; i<YMFSB_DSPLENGTH ; i+=4 ) {
-	  writeRegDWord( YMFSB_DSPINSTRAM+i, DspInst[i>>2] );
+	  writeRegDWord( card, YMFSB_DSPINSTRAM+i, DspInst[i>>2] );
 	}
 
 	switch( pcidev->device ) {
@@ -532,7 +629,7 @@ static int setupInstruction( struct pci_dev *pcidev )
 	case PCI_DEVICE_ID_YMF740:
 		/* setup Control instruction code */
 		for ( i=0 ; i<YMFSB_CTRLLENGTH ; i+=4 ) {
-			writeRegDWord( YMFSB_CTRLINSTRAM+i, CntrlInst[i>>2] );
+			writeRegDWord( card, YMFSB_CTRLINSTRAM+i, CntrlInst[i>>2] );
 		}
 		break;
 
@@ -543,24 +640,25 @@ static int setupInstruction( struct pci_dev *pcidev )
 		/* setup Control instruction code */
 	
 		for ( i=0 ; i<YMFSB_CTRLLENGTH ; i+=4 ) {
-			writeRegDWord( YMFSB_CTRLINSTRAM+i, CntrlInst1E[i>>2] );
+			writeRegDWord( card, YMFSB_CTRLINSTRAM+i, CntrlInst1E[i>>2] );
 		}
 		break;
 
 	default:
-		return -1;
+		return -ENXIO;
 	}
 
-	enableDSP();
+	enableDSP( card );
 
 	return 0;
 }
 
 /* ---------------------------------------------------------------------- */
 
-static int __init ymf7xx_init(struct pci_dev *pcidev)
+static int __init ymf7xx_init( struct ymf_card *card, struct pci_dev *pcidev )
 {
 	unsigned short v;
+	int mixer;
 
 	/* Read hardware information */
 #ifdef YMF_DEBUG
@@ -585,51 +683,50 @@ static int __init ymf7xx_init(struct pci_dev *pcidev)
 #ifdef YMF_DEBUG
 	printk(KERN_INFO PFX "check codec...\n");
 #endif
-	if (checkCodec(pcidev)) return -1;
+	if (checkCodec(card, pcidev)) return -EBUSY;
 
 	/* setup legacy I/O */
 #ifdef YMF_DEBUG
 	printk(KERN_INFO PFX "setup legacy I/O...\n");
 #endif
-	if (setupLegacyIO(pcidev)) return -1;
+	if (setupLegacyIO(card, pcidev)) return -EBUSY;
 	
 	/* setup instruction code */	
 #ifdef YMF_DEBUG
 	printk(KERN_INFO PFX "setup instructions...\n");
 #endif
-	if (setupInstruction(pcidev)) return -1;
+	if (setupInstruction(card, pcidev)) return -EBUSY;
 
 	/* AC'97 setup */	
 #ifdef YMF_DEBUG
 	printk(KERN_INFO PFX "setup AC'97...\n");
 #endif
-	if ( writeAc97(AC97_RESET            ,0x0000) )  /* Reset */
-		return -1;
-	if ( writeAc97(AC97_MASTER_VOL_STEREO,0x0000) )  /* Master Volume */
-		return -1;
+	if ( ac97_init( &card->ac97_dev ) ) return -EBUSY;
 
-	v = 31*(100-master_vol)/100;
-	v = (v<<8 | v)&0x7fff;
-	if ( writeAc97(AC97_PCMOUT_VOL       ,v     ) )  /* PCM out Volume */
-		return -1;
+	mixer = sound_alloc_mixerdev();
+	if ( num_mixers >= MAX_MIXER_DEV ) return -EBUSY;
+	
+	mixer_devs[mixer] = &ymfsb_ac97_mixer_operations;
+	card->mixer_oss_dev = mixer;
+	ac97_set_values( &card->ac97_dev, ymfsb_ac97_mixer_defaults );
 
 #ifdef YMF_DEBUG
 	printk(KERN_INFO PFX "setup Legacy Volume...\n");
 #endif
 	/* Legacy Audio Output Volume L & R ch */
-	writeRegDWord( YMFSB_LEGACYOUTVOL, 0x3fff3fff );
+	writeRegDWord( card, YMFSB_LEGACYOUTVOL, 0x3fff3fff );
 
 #ifdef YMF_DEBUG
 	printk(KERN_INFO PFX "setup SPDIF output control...\n");
 #endif
 	/* SPDIF Output control */
 	v = spdif_out != 0 ? 0x0001 : 0x0000;
-	writeRegWord( YMFSB_SPDIFOUTCTRL, v );
+	writeRegWord( card, YMFSB_SPDIFOUTCTRL, v );
 	/* no copyright protection, 
 	   sample-rate converted,
 	   re-recorded software comercially available (the 1st generation),
 	   original */
-	writeRegWord( YMFSB_SPDIFOUTSTATUS, 0x9a04 );
+	writeRegWord( card, YMFSB_SPDIFOUTSTATUS, 0x9a04 );
 
 	return 0;
 }
@@ -638,6 +735,7 @@ static int __init ymf7xx_init(struct pci_dev *pcidev)
 
 static void __init ymf7xxsb_attach_sb(struct address_info *hw_config)
 {
+	hw_config->driver_use_1 |= SB_NO_MIXER;
 	if(!sb_dsp_init(hw_config))
 		hw_config->slots[0] = -1;
 }
@@ -680,14 +778,21 @@ static int __init ymf7xxsb_install (struct pci_dev *pcidev)
 	char		*devicename = "unknown";
 	int		i;
 	unsigned long   iobase;
+	struct ymf_card *card;
 
-	if ( pcidev->irq == 0 ) return -1;
+	if ( pcidev->irq == 0 ) return -ENODEV;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
+	if ( pci_enable_device(pcidev) ) {
+		printk (KERN_ERR PFX "cannot enable PCI device\n");
+		return -EIO;
+	}
+#endif
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,13)
 	iobase = pcidev->base_address[0]&PCI_BASE_ADDRESS_MEM_MASK;
 #else
 	iobase = pcidev->resource[0].start&PCI_BASE_ADDRESS_MEM_MASK;
 #endif
-	if ( iobase == 0x00000000 ) return -1;
+	if ( iobase == 0x00000000 ) return -ENODEV;
 
 	for ( i=0 ; i<sizeof(devicetable) / sizeof(devicetable[0]); i++ )
 	{
@@ -698,78 +803,80 @@ static int __init ymf7xxsb_install (struct pci_dev *pcidev)
 		}
 	}
 
+	card = &ymf_cards[cards];
+
 	/* remap memory mapped I/O onto kernel virtual memory */
-	if ( (ymfbase[cards] = ioremap_nocache(iobase, YMFSB_REGSIZE)) == 0 )
+	if ( (card->ymfbase = ioremap_nocache(iobase, YMFSB_REGSIZE)) == 0 )
 	{
 		printk(KERN_ERR PFX "ioremap (0x%lx) returns zero\n", iobase);
-		return -1;
+		return -ENODEV;
 	}
 	printk(KERN_INFO PFX "found %s at 0x%lx\n", devicename, iobase);
 #ifdef YMF_DEBUG
-	printk(KERN_INFO PFX "remappling to 0x%p\n", ymfbase[cards]);
+	printk(KERN_INFO PFX "remappling to 0x%p\n", card->ymfbase);
 #endif
 
-	memset (&sb_data[cards], 0, sizeof (struct address_info));
-	memset (&opl3_data[cards], 0, sizeof (struct address_info));
-#ifdef SUPPORT_UART401_MIDI
-	memset (&mpu_data[cards], 0, sizeof (struct address_info));
-#endif
+	memset (&card->sb_data,   0, sizeof (struct address_info));
+	memset (&card->opl3_data, 0, sizeof (struct address_info));
+	memset (&card->mpu_data,  0, sizeof (struct address_info));
+	memset (&card->ac97_dev,  0, sizeof (struct ac97_hwint));
 
-	sb_data[cards].name   = YMFSB_CARD_NAME;
-	opl3_data[cards].name = YMFSB_CARD_NAME;
-#ifdef SUPPORT_UART401_MIDI
-	mpu_data[cards].name  = YMFSB_CARD_NAME;
-#endif
+	card->card = cards;
 
-	sb_data[cards].card_subtype = MDL_YMPCI;
+	card->sb_data.name   = YMFSB_CARD_NAME;
+	card->opl3_data.name = YMFSB_CARD_NAME;
+	card->mpu_data.name  = YMFSB_CARD_NAME;
+
+	card->sb_data.card_subtype = MDL_YMPCI;
 
 	if ( io == 0 ) io      = 0x220;
-	sb_data[cards].io_base = io;
-	sb_data[cards].irq     = pcidev->irq;
-	sb_data[cards].dma     = dma;
+	card->sb_data.io_base = io;
+	card->sb_data.irq     = pcidev->irq;
+	card->sb_data.dma     = dma;
 
 	if ( synth_io == 0 ) synth_io = 0x388;
-	opl3_data[cards].io_base = synth_io;
-	opl3_data[cards].irq     = -1;
+	card->opl3_data.io_base = synth_io;
+	card->opl3_data.irq     = -1;
 
-#ifdef SUPPORT_UART401_MIDI
 	if ( mpu_io == 0 ) mpu_io = 0x330;
-	mpu_data[cards].io_base = mpu_io;
-	mpu_data[cards].irq     = -1;
-#endif
+	card->mpu_data.io_base = mpu_io;
+	card->mpu_data.irq     = -1;
 
-	if ( ymf7xx_init(pcidev) ) {
+	card->ac97_dev.reset_device   = ymfsb_resetAC97;
+	card->ac97_dev.read_reg       = ymfsb_readAC97Reg;
+	card->ac97_dev.write_reg      = ymfsb_writeAC97Reg;
+	card->ac97_dev.driver_private = (void *)card;
+
+	if ( ymf7xx_init(card, pcidev) ) {
 		printk (KERN_ERR PFX
 			"Cannot initialize %s, aborting\n",
 			devicename);
-		return -1;
+		return -ENODEV;
 	}
 
-	/* register legacy SoundBlaster Pro */
-	if (!ymf7xxsb_probe_sb(&sb_data[cards])) {
+	/* regist legacy SoundBlaster Pro */
+	if (!ymf7xxsb_probe_sb(&card->sb_data)) {
 		printk (KERN_ERR PFX
 			"SB probe at 0x%X failed, aborting\n",
 			io);
-		return -1;
+		return -ENODEV;
 	}
-	ymf7xxsb_attach_sb (&sb_data[cards]);
+	ymf7xxsb_attach_sb (&card->sb_data);
 
-#ifdef SUPPORT_UART401_MIDI
-	/* register legacy MIDI */
+	/* regist legacy MIDI */
 	if ( mpu_io > 0 && 0)
 	{
-		if (!ymf7xxsb_probe_midi (&mpu_data[cards])) {
+		if (!ymf7xxsb_probe_midi (&card->mpu_data)) {
 			printk (KERN_ERR PFX
 				"MIDI probe @ 0x%X failed, aborting\n",
 				mpu_io);
-			ymf7xxsb_unload_sb (&sb_data[cards], 0);
-			return -1;
+			ymf7xxsb_unload_sb (&card->sb_data, 0);
+			return -ENODEV;
 		}
-		ymf7xxsb_attach_midi (&mpu_data[cards]);
+		ymf7xxsb_attach_midi (&card->mpu_data);
 	}
-#endif
 
-	/* register legacy OPL3 */
+	/* regist legacy OPL3 */
 
 	cards++;	
 	return 0;
@@ -781,7 +888,7 @@ static int __init probe_ymf7xxsb (void)
 	int i;
 
 	for (i=0 ; i<MAX_CARDS ; i++ )
-		ymfbase[i] = NULL;
+		ymf_cards[i].ymfbase = NULL;
 
 	while ( pcidev == NULL && (
 	       (pcidev = pci_find_device (PCI_VENDOR_ID_YAMAHA,
@@ -796,9 +903,9 @@ static int __init probe_ymf7xxsb (void)
 					  PCI_DEVICE_ID_YMF744, pcidev)) ||
 	       (pcidev = pci_find_device (PCI_VENDOR_ID_YAMAHA,
 					  PCI_DEVICE_ID_YMF754, pcidev)))) {
-		  if (ymf7xxsb_install (pcidev) != 0) {
+		  if (ymf7xxsb_install (pcidev)) {
 			  printk (KERN_ERR PFX "audio init failed\n");
-			  return -1;
+			  return -ENODEV;
 		  }
 
 		  if (cards == MAX_CARDS) {
@@ -815,8 +922,8 @@ static void free_iomaps( void )
 	int i;
 
 	for ( i=0 ; i<MAX_CARDS ; i++ ) {
-		if ( ymfbase[i]!=NULL )
-			iounmap(ymfbase[i]);
+		if ( ymf_cards[i].ymfbase!=NULL )
+			iounmap(ymf_cards[i].ymfbase);
 	}
 
 	return;
@@ -824,15 +931,12 @@ static void free_iomaps( void )
 
 int __init init_ymf7xxsb_module(void)
 {
-	if ( master_vol < 0 ) master_vol  = 50;
-	if ( master_vol > 100 ) master_vol = 100;
-
 	if (!pci_present ()) {
 		printk (KERN_DEBUG PFX "PCI not present, exiting\n");
 		return -ENODEV;
 	}
 
-	if (probe_ymf7xxsb() != 0) {
+	if (probe_ymf7xxsb()) {
 		printk(KERN_ERR PFX "probe failed, aborting\n");
 		/* XXX unload cards registered so far, if any */
 		free_iomaps();
@@ -859,12 +963,10 @@ static void cleanup_ymf7xxsb_module(void)
 	int i;
 	
 	for (i = 0; i < cards; i++) {
-#ifdef SUPPORT_UART401_MIDI
-		ymf7xxsb_unload_sb (&sb_data[i], 0);
-		ymf7xxsb_unload_midi (&mpu_data[i]);
-#else
-		ymf7xxsb_unload_sb (&sb_data[i], 1);
-#endif
+		ymf7xxsb_unload_sb (&(ymf_cards[i].sb_data), 0);
+		ymf7xxsb_unload_midi (&(ymf_cards[i].mpu_data));
+		if ( ymf_cards[i].mixer_oss_dev >= 0 ) 
+			sound_unload_mixerdev( ymf_cards[i].mixer_oss_dev );
 	}
 
 	free_iomaps();

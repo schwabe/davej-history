@@ -1344,6 +1344,15 @@ D: XF86_Mach8
 D: XF86_8514
 D: cfdisk (curses based disk partitioning program)
 
+N: Torben Mathiasen
+E: tmm@image.dk
+E: torben.mathiasen@compaq.com
+D: Maintainer of ThunderLAN driver.
+D: Fixes for TLAN running Full Duplex, and other kernel hacks.
+S: Bremensgade 29, st.th
+S: 2300 Copenhagen S
+S: Denmark
+
 N: Mike McLagan
 E: mike.mclagan@linux.org
 W: http://www.invlogic.com/~mmclagan

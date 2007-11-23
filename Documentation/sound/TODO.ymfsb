@@ -1,7 +1,0 @@
-YMF_SB driver
-
-TODO:
- * support for multiple cards
-   (set the different SB_IO,MPU_IO,OPL_IO for each cards)
-
- * support for OPL (dmfm) : There will be no demand... :-<

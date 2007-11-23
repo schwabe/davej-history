@@ -342,7 +342,7 @@ static void sca_rx_intr(port_t *port)
 	
 #ifdef DEBUG_PKT
 				printk(KERN_DEBUG "%s RX:", port->hdlc.name);
-				for (i=920; i<skb->len; i++)
+				for (i=0; i<skb->len; i++)
 					printk(" %02X", skb->data[i]);
 				printk("\n");
 #endif

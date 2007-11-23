@@ -323,6 +323,13 @@ P:	Andrey V. Savochkin
 M:	saw@saw.sw.com.sg
 S:	Maintained
 
+EMU10K1 SOUND DRIVER
+P:	Rui Sousa       
+M:	rsousa@grad.physics.sunysb.edu  
+L:	emu10k1-devel@opensource.creative.com
+W:	http://opensource.creative.com/
+S:	Maintained
+
 ETHEREXPRESS-16 NETWORK DRIVER
 P:	Philip Blundell
 M:	Philip.Blundell@pobox.com
@@ -878,6 +885,7 @@ TLAN NETWORK DRIVER
 P:	Torben Mathiasen
 M:	torben.mathiasen@compaq.com
 L:	tlan@vuser.vu.union.edu
+W:	http://tlan.kernel.dk
 S:	Maintained
 
 TOKEN-RING NETWORK DRIVER
