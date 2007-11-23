@@ -209,7 +209,7 @@ raid1_make_request (struct md_dev *mddev, int rw, struct buffer_head * bh)
 	PRINTK(("raid1_make_request().\n"));
 
 	while (!( /* FIXME: now we are rather fault tolerant than nice */
-	r1_bh = kmalloc (sizeof (struct raid1_bh), GFP_KERNEL)
+	r1_bh = kmalloc (sizeof (struct raid1_bh), GFP_BUFFER)
 	) )
 	{
 		printk ("raid1_make_request(#1): out of memory\n");
@@ -301,7 +301,7 @@ raid1_make_request (struct md_dev *mddev, int rw, struct buffer_head * bh)
 	 * of this function to grok the difference ;)
 	 */
 		while (!( /* FIXME: now we are rather fault tolerant than nice */
-		mirror_bh[i] = kmalloc (sizeof (struct buffer_head), GFP_KERNEL)
+		mirror_bh[i] = kmalloc (sizeof (struct buffer_head), GFP_BUFFER)
 		) )
 		{
 			printk ("raid1_make_request(#2): out of memory\n");

@@ -18,6 +18,8 @@
  *			 by Andrea Arcangeli
  * Version 1.03		fix for (hwif->chipset == ide_4drives)
  * Version 1.04		fixed buggy treatments of known flash memory cards
+ * 17-OCT-2000 rjohnson@analogic.com Added spin-locks for reading CMOS
+ * chip.
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -386,6 +388,7 @@ static inline byte probe_for_drive (ide_drive_t *drive)
 static void probe_cmos_for_drives (ide_hwif_t *hwif)
 {
 #ifdef __i386__
+	unsigned long flags;
 	extern struct drive_info_struct drive_info;
 	byte cmos_disks, *BIOS = (byte *) &drive_info;
 	int unit;
@@ -394,8 +397,10 @@ static void probe_cmos_for_drives (ide_hwif_t *hwif)
 	if (hwif->chipset == ide_pdc4030 && hwif->channel != 0)
 		return;
 #endif /* CONFIG_BLK_DEV_PDC4030 */
+	spin_lock_irqsave(&rtc_lock, flags);
 	outb_p(0x12,0x70);		/* specify CMOS address 0x12 */
 	cmos_disks = inb_p(0x71);	/* read the data from 0x12 */
+	spin_unlock_irqrestore(&rtc_lock, flags);
 	/* Extract drive geometry from CMOS+BIOS if not already setup */
 	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		ide_drive_t *drive = &hwif->drives[unit];

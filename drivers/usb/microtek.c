@@ -493,7 +493,7 @@ void mts_int_submit_urb (struct urb* transfer,
 
 	res = usb_submit_urb( transfer );
 	if ( res ) {
-		MTS_INT_ERROR( "could not submit URB! Error was %d\n",(int)res );
+		MTS_ERROR( "could not submit URB! Error was %d\n",(int)res );
 		context->srb->result = DID_ERROR << 16;
 		context->state = mts_con_error;
 		mts_transfer_cleanup(transfer);

@@ -296,7 +296,8 @@ struct task_struct {
 	gid_t gid,egid,sgid,fsgid;
 	int ngroups;
 	gid_t	groups[NGROUPS];
-        kernel_cap_t   cap_effective, cap_inheritable, cap_permitted;
+	kernel_cap_t   cap_effective, cap_inheritable, cap_permitted;
+	int keep_capabilities:1;
 	struct user_struct *user;
 /* limits */
 	struct rlimit rlim[RLIM_NLIMITS];
@@ -385,7 +386,8 @@ struct task_struct {
 /* process credentials */					\
 /* uid etc */	0,0,0,0,0,0,0,0,				\
 /* suppl grps*/ 0, {0,},					\
-/* caps */      CAP_INIT_EFF_SET,CAP_INIT_INH_SET,CAP_FULL_SET, \
+/* caps */	CAP_INIT_EFF_SET,CAP_INIT_INH_SET,CAP_FULL_SET, \
+/* keep_caps */	0,						\
 /* user */	NULL,						\
 /* rlimits */   INIT_RLIMITS, \
 /* math */	0, \

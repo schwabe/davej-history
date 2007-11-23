@@ -812,6 +812,14 @@ L:	rtl@rtlinux.org
 W:	www.rtlinux.org
 S:	Maintained
 
+S390
+P:	Martin Schwidefsky
+M:	schwidefsky@de.ibm.com
+M:      linux390@de.ibm.com
+L:	linux-390@vm.marist.edu
+W:	http://oss.software.ibm.com/developerworks/opensource/linux390
+S:	Supported
+
 SBPCD CDROM DRIVER
 P:	Eberhard Moenkeberg
 M:	emoenke@gwdg.de

@@ -386,8 +386,8 @@ int rio_minor (kdev_t device)
 
 int rio_ismodem (kdev_t device)
 {
-  return (MAJOR (device) != RIO_NORMAL_MAJOR0) &&
-         (MAJOR (device) != RIO_NORMAL_MAJOR1);
+  return (MAJOR (device) == RIO_NORMAL_MAJOR0) ||
+         (MAJOR (device) == RIO_NORMAL_MAJOR1);
 }
 
 
@@ -731,20 +731,22 @@ static int rio_fw_ioctl (struct inode *inode, struct file *filp,
 static int rio_ioctl (struct tty_struct * tty, struct file * filp, 
                      unsigned int cmd, unsigned long arg)
 {
-#if 0
   int rc;
-  struct rio_port *port = tty->driver_data;
+  struct Port *PortP;
   int ival;
 
-  /* func_enter2(); */
+  func_enter();
 
+  PortP = (struct Port *)tty->driver_data;
 
   rc  = 0;
   switch (cmd) {
+#if 0
   case TIOCGSOFTCAR:
     rc = Put_user(((tty->termios->c_cflag & CLOCAL) ? 1 : 0),
                   (unsigned int *) arg);
     break;
+#endif
   case TIOCSSOFTCAR:
     if ((rc = verify_area(VERIFY_READ, (void *) arg,
                           sizeof(int))) == 0) {
@@ -757,13 +759,14 @@ static int rio_ioctl (struct tty_struct * tty, struct file * filp,
   case TIOCGSERIAL:
     if ((rc = verify_area(VERIFY_WRITE, (void *) arg,
                           sizeof(struct serial_struct))) == 0)
-      gs_getserial(&port->gs, (struct serial_struct *) arg);
+      gs_getserial(&PortP->gs, (struct serial_struct *) arg);
     break;
   case TIOCSSERIAL:
     if ((rc = verify_area(VERIFY_READ, (void *) arg,
                           sizeof(struct serial_struct))) == 0)
-      rc = gs_setserial(&port->gs, (struct serial_struct *) arg);
+      rc = gs_setserial(&PortP->gs, (struct serial_struct *) arg);
     break;
+#if 0
   case TIOCMGET:
     if ((rc = verify_area(VERIFY_WRITE, (void *) arg,
                           sizeof(unsigned int))) == 0) {
@@ -795,17 +798,13 @@ static int rio_ioctl (struct tty_struct * tty, struct file * filp,
                            ((ival & TIOCM_RTS) ? 1 : 0));
     }
     break;
-
+#endif
   default:
     rc = -ENOIOCTLCMD;
     break;
   }
-  /* func_exit(); */
+  func_exit();
   return rc;
-#else
-  return -ENOIOCTLCMD;
-#endif
-
 }
 
 
@@ -1276,6 +1275,7 @@ int rio_init(void)
       hp->Type  = RIO_PCI;
       hp->Copy  = rio_pcicopy;
       hp->Mode  = RIO_PCI_BOOT_FROM_RAM;
+      hp->HostLock = SPIN_LOCK_UNLOCKED;
 
       rio_dprintk (RIO_DEBUG_PROBE, "Ivec: %x\n", hp->Ivec);
       rio_dprintk (RIO_DEBUG_PROBE, "Mode: %x\n", hp->Mode);
@@ -1331,6 +1331,7 @@ int rio_init(void)
                              * Moreover, the ISA card will work with the 
                              * special PCI copy anyway. -- REW */
     hp->Mode = 0;
+    hp->HostLock = SPIN_LOCK_UNLOCKED;
 
     vpdp = get_VPD_PROM (hp);
     rio_dprintk (RIO_DEBUG_PROBE, "Got VPD ROM\n");

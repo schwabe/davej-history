@@ -220,11 +220,15 @@ static void do_update_one(void *arg)
 			found=1;
 
 			rdmsr(0x8B, val[0], rev);
-			if (microcode[i].rev <= rev) {
+			if (microcode[i].rev < rev) {
 				printk(KERN_ERR 
 					"microcode: CPU%d not 'upgrading' to earlier revision"
 					" %d (current=%d)\n", cpu_num, microcode[i].rev, rev);
-			} else { 
+			} else if (microcode[i].rev == rev) {
+				printk(KERN_ERR
+					"microcode: CPU%d already up-to-date (revision %d)\n",
+						cpu_num, rev);
+			} else {
 				int sum = 0;
 				struct microcode *m = &microcode[i];
 				unsigned int *sump = (unsigned int *)(m+1);

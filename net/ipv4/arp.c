@@ -339,6 +339,22 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 		 dst_ha, dev->dev_addr, NULL);
 }
 
+static int arp_filter(__u32 sip, __u32 tip, struct device *dev)
+{
+	struct rtable *rt;
+	int flag = 0; 
+	//unsigned long now; 
+
+	if (ip_route_output(&rt, sip, tip, 0, 0) < 0) 
+		return 1;
+	if (rt->u.dst.dev != dev) { 
+		net_statistics.ArpFilter++; 
+		flag = 1; 
+	} 
+	ip_rt_put(rt); 
+	return flag; 
+} 
+
 /* OBSOLETE FUNCTIONS */
 
 /*
@@ -689,6 +705,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		if (addr_type == RTN_LOCAL) {
 			n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
 			if (n) {
+				int dont_send = 0; 
 				if (ipv4_devconf.hidden &&
 				    skb->pkt_type != PACKET_HOST) {
 					struct device *dev2;
@@ -698,12 +715,14 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 					    dev2 != dev &&
 					    (in_dev2 = dev2->ip_ptr) != NULL &&
 					    IN_DEV_HIDDEN(in_dev2)) {
-						neigh_release(n);
-						goto out;
-					}
+						dont_send = 1; 
+					}	
 				}
+				if (IN_DEV_ARPFILTER(in_dev))
+					dont_send |= arp_filter(sip,tip,dev); 
 
-				arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr,sha);
+				if (!dont_send) 
+					arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,dev->dev_addr,sha);
 				neigh_release(n);
 			}
 			goto out;

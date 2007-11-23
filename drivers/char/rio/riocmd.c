@@ -38,6 +38,9 @@ static char *_riocmd_c_sccs_ = "@(#)riocmd.c	1.2";
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>
+#include <linux/smp.h>
+#include <linux/interrupt.h>
+#include <asm/ptrace.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/string.h>
@@ -79,7 +82,6 @@ static char *_riocmd_c_sccs_ = "@(#)riocmd.c	1.2";
 #include "route.h"
 #include "control.h"
 #include "cirrus.h"
-
 
 static struct IdentifyRta IdRta;
 static struct KillNeighbour KillUnit;
@@ -622,7 +624,8 @@ RIOGetCmdBlk()
 	struct CmdBlk *CmdBlkP;
 
 	CmdBlkP = (struct CmdBlk *)sysbrk(sizeof(struct CmdBlk));
-	bzero(CmdBlkP, sizeof(struct CmdBlk));
+	if (CmdBlkP)
+		bzero(CmdBlkP, sizeof(struct CmdBlk));
 
 	return CmdBlkP;
 }

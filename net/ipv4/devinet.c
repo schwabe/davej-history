@@ -925,7 +925,7 @@ int devinet_sysctl_forward(ctl_table *ctl, int write, struct file * filp,
 static struct devinet_sysctl_table
 {
 	struct ctl_table_header *sysctl_header;
-	ctl_table devinet_vars[13];
+	ctl_table devinet_vars[14];
 	ctl_table devinet_dev[2];
 	ctl_table devinet_conf_dir[2];
 	ctl_table devinet_proto_dir[2];
@@ -967,6 +967,9 @@ static struct devinet_sysctl_table
          &proc_dointvec},
 	{NET_IPV4_CONF_HIDDEN, "hidden",
          &ipv4_devconf.hidden, sizeof(int), 0644, NULL,
+         &proc_dointvec},
+	{NET_IPV4_CONF_ARPFILTER, "arp_filter",
+         &ipv4_devconf.arp_filter, sizeof(int), 0644, NULL,
          &proc_dointvec},
 	 {0}},
 

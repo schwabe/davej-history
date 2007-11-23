@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.34.2.3 2000/06/21 02:14:45 davem Exp $
+ * Version:	$Id: proc.c,v 1.34.2.4 2000/10/18 17:50:41 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -186,7 +186,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 				if (req->sk)
 					continue;
 				pos += 128;
-				if (pos < offset) 
+				if (pos <= offset) 
 					continue;
 				get__openreq(sp, req, tmpbuf, i); 
 				len += sprintf(buffer+len, "%-127s\n", tmpbuf);
@@ -196,7 +196,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 		}
 		
 		pos += 128;
-		if (pos < offset)
+		if (pos <= offset)
 			goto next;
 		
 		get__sock(sp, tmpbuf, i, format);
@@ -371,6 +371,10 @@ int netstat_get_info(char *buffer, char **start, off_t offset, int length, int d
 		      net_statistics.OutOfWindowIcmps,
 		      net_statistics.LockDroppedIcmps,
 		      net_statistics.SockMallocOOM);
+	len += sprintf(buffer + len, 
+				"IpExt: ArpFilter\n"
+				"IpExt: %lu\n",
+			  net_statistics.ArpFilter); 		
 
 	if (offset >= len)
 	{

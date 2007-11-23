@@ -560,7 +560,8 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 				}
 
 				/*  Set MTRR capability flag if appropriate  */
-				if((boot_cpu_data.x86_model == 9) ||
+				if((boot_cpu_data.x86_model == 13) ||
+				   (boot_cpu_data.x86_model == 9) ||
 				  ((boot_cpu_data.x86_model == 8) && 
 				   (boot_cpu_data.x86_mask >= 8)))
 					c->x86_capability |= X86_FEATURE_MTRR;

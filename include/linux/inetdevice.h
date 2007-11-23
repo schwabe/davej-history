@@ -17,6 +17,7 @@ struct ipv4_devconf
 	int	forwarding;
 	int	mc_forwarding;
 	int	hidden;
+	int	arp_filter; 
 	void	*sysctl;
 };
 
@@ -51,6 +52,9 @@ struct in_device
 	  (ipv4_devconf.accept_redirects && (in_dev)->cnf.accept_redirects)) \
 	 || (!IN_DEV_FORWARD(in_dev) && \
 	  (ipv4_devconf.accept_redirects || (in_dev)->cnf.accept_redirects)))
+
+#define IN_DEV_ARPFILTER(in_dev)	(ipv4_devconf.arp_filter || \
+					 (in_dev)->cnf.arp_filter)
 
 struct in_ifaddr
 {

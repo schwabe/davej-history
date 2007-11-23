@@ -26,6 +26,8 @@ outb_p((addr),RTC_PORT(0)); \
 outb_p((val),RTC_PORT(1)); \
 })
 
+extern spinlock_t rtc_lock;	/* You must hold this lock to use CMOS_* ops */
+
 /**********************************************************************
  * register summary
  **********************************************************************/

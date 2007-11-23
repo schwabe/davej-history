@@ -1468,9 +1468,12 @@ static int grow_buffers(int size)
 #define BUFFER_BUSY_BITS	((1<<BH_Dirty) | (1<<BH_Lock) | (1<<BH_Protected))
 #define buffer_busy(bh)		((bh)->b_count || ((bh)->b_state & BUFFER_BUSY_BITS))
 
-static int sync_page_buffers(struct buffer_head *bh, int wait)
+static int sync_page_buffers(struct page * page, int wait)
 {
+	struct buffer_head * bh = page->buffers;
 	struct buffer_head * tmp = bh;
+
+	page->buffers = NULL;
 
 	do {
 		struct buffer_head *p = tmp;
@@ -1481,6 +1484,8 @@ static int sync_page_buffers(struct buffer_head *bh, int wait)
 		} else if (buffer_dirty(p))
 			ll_rw_block(WRITE, 1, &p);
 	} while (tmp != bh);
+
+	page->buffers = bh;
 
 	do {
 		struct buffer_head *p = tmp;
@@ -1533,7 +1538,7 @@ int try_to_free_buffers(struct page * page_map, int wait)
  busy:
 	too_many = (nr_buffers * bdf_prm.b_un.nfract/100);
 
-	if (!sync_page_buffers(bh, wait)) {
+	if (!sync_page_buffers(page_map, wait)) {
 
 		/* If a high percentage of the buffers are dirty, 
 		 * wake kflushd 

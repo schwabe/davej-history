@@ -1683,9 +1683,18 @@ static int __init i810_ac97_init(struct i810_card *card)
 	struct ac97_codec *codec;
 	u16 eid;
 	int i=0;
+	u32 reg;
 
-
-	outl(6 , card->iobase + GLOB_CNT);
+	reg = inl(card->iobase + GLOB_CNT);
+	
+	if((reg&2)==0)	/* Cold required */
+		reg|=2;
+	else
+		reg|=4;	/* Warm */
+		
+	reg&=~8;	/* ACLink on */
+	outl(reg , card->iobase + GLOB_CNT);
+	
 	while(i<10)
 	{
 		if((inl(card->iobase+GLOB_CNT)&4)==0)

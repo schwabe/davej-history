@@ -30,6 +30,8 @@
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  History
+ *  v0.14.5c Oct 28 2000 Alan Cox
+ *      Merged Ching-Ling Lee's ADC/DAC fix from the newer ALI work
  *  v0.14.5b Sept 17 2000 Eric Brombaugh
  *      Fix hang when trying ALi MIDI init on Trident
  *  v0.14.5 June 3 2000 Ollie Lho
@@ -1166,38 +1168,7 @@ static void trident_update_ptr(struct trident_state *state)
 				__stop_adc(state);
 				dmabuf->error++;
 			}
-			else if (!dmabuf->endcleared) {
-				swptr = dmabuf->swptr;
-				silence = (dmabuf->fmt & TRIDENT_FMT_16BIT ? 0 : 0x80);
-				if (dmabuf->update_flag & ALI_ADDRESS_INT_UPDATE) {
-					/* We must clear end data of 1/2 dmabuf if needed.
-					   According to 1/2 algorithm of Address Engine Interrupt,
-					   check the validation of the data of half dmasize. */
-					half_dmasize = dmabuf->dmasize / 2;
-					if ((diff = hwptr - half_dmasize) < 0 )
-						diff = hwptr;
-					if ((dmabuf->count + diff) < half_dmasize) {
-						//there is invalid data in the end of half buffer
-						if ((clear_cnt = half_dmasize - swptr) < 0)
-							clear_cnt += half_dmasize;
-						//clear the invalid data
-						memset (dmabuf->rawbuf + swptr,
-							silence, clear_cnt);
-
-						dmabuf->endcleared = 1;
-					}
-				} else if (dmabuf->count < (signed) dmabuf->fragsize) {
-					clear_cnt = dmabuf->fragsize;
-					if ((swptr + clear_cnt) > dmabuf->dmasize)
-						clear_cnt = dmabuf->dmasize - swptr;
-					memset (dmabuf->rawbuf + swptr, silence, clear_cnt);
-					dmabuf->endcleared = 1;
-				}
-			}
-			/* trident_update_ptr is called by interrupt handler or by process via
-			   ioctl/poll, we only wake up the waiting process when we have more
-			   than 1/2 buffer of data to process (always true for interrupt handler) */
-			if (dmabuf->count > (signed)dmabuf->dmasize/2)
+			if (dmabuf->count < (signed)dmabuf->dmasize/2)
 				wake_up(&dmabuf->wait);
 		}
 	}
@@ -1217,6 +1188,33 @@ static void trident_update_ptr(struct trident_state *state)
 				   and swptr to sync */
 				__stop_dac(state);
 				dmabuf->error++;
+			}
+			else if (!dmabuf->endcleared) {
+				swptr = dmabuf->swptr;
+				silence = (dmabuf->fmt & TRIDENT_FMT_16BIT ? 0 : 0x80);
+				if (dmabuf->update_flag & ALI_ADDRESS_INT_UPDATE) {
+					/* We must clear end data of 1/2 dmabuf if needed.
+					   According to 1/2 algorithm of Address Engine Interrupt,
+					   check the validation of the data of half dmasize. */
+					half_dmasize = dmabuf->dmasize / 2;
+					if ((diff = hwptr - half_dmasize) < 0 )
+						diff = hwptr;
+					if ((dmabuf->count + diff) < half_dmasize) {
+						//there is invalid data in the end of half buffer
+						if ((clear_cnt = half_dmasize - swptr) < 0)
+							clear_cnt += half_dmasize;
+						//clear the invalid data
+						memset (dmabuf->rawbuf + swptr,
+							silence, clear_cnt);
+						dmabuf->endcleared = 1;
+					}
+				} else if (dmabuf->count < (signed) dmabuf->fragsize) {
+					clear_cnt = dmabuf->fragsize;
+					if ((swptr + clear_cnt) > dmabuf->dmasize)
+						clear_cnt = dmabuf->dmasize - swptr;
+					memset (dmabuf->rawbuf + swptr, silence, clear_cnt);
+					dmabuf->endcleared = 1;
+				}
 			}
 			/* trident_update_ptr is called by interrupt handler or by process via
 			   ioctl/poll, we only wake up the waiting process when we have more

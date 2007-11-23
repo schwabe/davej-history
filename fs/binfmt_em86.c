@@ -73,8 +73,8 @@ static int do_load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 	}
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
-	if (!bprm->p) 
-		return -E2BIG;
+	if ((long)bprm->p < 0)
+		return (long)bprm->p;
 	/*
 	 * OK, now restart the process with the interpreter's inode.
 	 * Note that we use open_namei() as the name is now in kernel

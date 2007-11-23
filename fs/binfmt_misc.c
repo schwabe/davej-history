@@ -214,8 +214,8 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	bprm->argc++;
 	bprm->p = copy_strings(1, &iname_addr, bprm->page, bprm->p, 2);
 	bprm->argc++;
-	retval = -E2BIG;
-	if (!bprm->p)
+	retval = (long)bprm->p;
+	if ((long)bprm->p < 0)
 		goto _ret;
 	bprm->filename = iname;	/* for binfmt_script */
 

@@ -42,7 +42,7 @@ EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(disable_irq_nosync);
 EXPORT_SYMBOL(kernel_thread);
-
+EXPORT_SYMBOL(rtc_lock);
 EXPORT_SYMBOL(init_mm);
 
 EXPORT_SYMBOL_NOVERS(__down_failed);
@@ -121,4 +121,3 @@ EXPORT_SYMBOL(mca_is_adapter_used);
 EXPORT_SYMBOL(screen_info);
 #endif
 
-EXPORT_SYMBOL(rtc_lock);

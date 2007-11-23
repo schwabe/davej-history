@@ -42,10 +42,9 @@
 
 /*
  *	Note that *all* calls to CMOS_READ and CMOS_WRITE are done with
- *	interrupts disabled. Due to the index-port/data-port (0x70/0x71)
- *	design of the RTC, we don't want two different things trying to
- *	get to it at once. (e.g. the periodic 11 min sync from time.c vs.
- *	this driver.)
+ *	the rtc_lock held. Due to the index-port/data-port (0x70/0x71) design 
+ *	of the RTC, we don't want two different things trying to get to it at 
+ *	once. (e.g. the periodic 11 min sync from time.c vs. this driver.)
  */
 
 #include <linux/types.h>
@@ -110,10 +109,7 @@ unsigned long rtc_irq_data = 0;		/* our output to the world	*/
 
 static unsigned long epoch = 1900;	/* year corresponding to 0x00	*/
 
-unsigned char days_in_mo[] = 
-{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-
-extern spinlock_t rtc_lock;
+unsigned char days_in_mo[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
 /*
  *	A very tiny interrupt handler. It runs with SA_INTERRUPT set,

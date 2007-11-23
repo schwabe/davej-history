@@ -56,6 +56,9 @@ static inline void netif_device_attach(struct net_device *dev)
 #define NET_XMIT_CN		2
 
 #define IORESOURCE_IO			1
-#define pci_resource_start(dev, i)	(dev->base_address[i] & ~IORESOURCE_IO)
+#define pci_resource_start(dev,bar) \
+(((dev)->base_address[(bar)] & PCI_BASE_ADDRESS_SPACE) ? \
+ ((dev)->base_address[(bar)] & PCI_BASE_ADDRESS_IO_MASK) : \
+ ((dev)->base_address[(bar)] & PCI_BASE_ADDRESS_MEM_MASK))
 #define pci_resource_flags(dev, i)	(dev->base_address[i] & IORESOURCE_IO)
 

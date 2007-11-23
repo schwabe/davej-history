@@ -94,22 +94,22 @@ void rio_inc_mod_count (void);
    recompile.... */
 #if 1
 #define rio_spin_lock_irqsave(sem, flags) do { \
+	spin_lock_irqsave(sem, flags);\
 	rio_dprintk (RIO_DEBUG_SPINLOCK, "spinlockirqsave: %p %s:%d\n", \
 					sem, __FILE__, __LINE__);\
-        spin_lock_irqsave(sem, flags);\
         } while (0)
 
 #define rio_spin_unlock_irqrestore(sem, flags) do { \
 	rio_dprintk (RIO_DEBUG_SPINLOCK, "spinunlockirqrestore: %p %s:%d\n",\
 					sem, __FILE__, __LINE__);\
-        spin_unlock_irqrestore(sem, flags);\
+	spin_unlock_irqrestore(sem, flags);\
         } while (0)
 
 
 #define rio_spin_lock(sem) do { \
+        spin_lock(sem);\
 	rio_dprintk (RIO_DEBUG_SPINLOCK, "spinlock: %p %s:%d\n",\
 					sem, __FILE__, __LINE__);\
-        spin_lock(sem);\
         } while (0)
 
 #define rio_spin_unlock(sem) do { \

@@ -505,21 +505,25 @@ __EXTERN_INLINE unsigned long irongate_readq(unsigned long addr)
 __EXTERN_INLINE void irongate_writeb(unsigned char b, unsigned long addr)
 {
 	__kernel_stb(b, *(vucp)(XADDR + IRONGATE_MEM));
+	mb();
 }
 
 __EXTERN_INLINE void irongate_writew(unsigned short b, unsigned long addr)
 {
 	__kernel_stw(b, *(vusp)(XADDR + IRONGATE_MEM));
+	mb();
 }
 
 __EXTERN_INLINE void irongate_writel(unsigned int b, unsigned long addr)
 {
 	*(vuip)(XADDR + IRONGATE_MEM) = b;
+	mb();
 }
 
 __EXTERN_INLINE void irongate_writeq(unsigned long b, unsigned long addr)
 {
 	*(vulp)(XADDR + IRONGATE_MEM) = b;
+	mb();
 }
 
 /* Find the DENSE memory area for a given bus address.	*/

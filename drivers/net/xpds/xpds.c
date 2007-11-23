@@ -13,12 +13,8 @@
 #ifndef __KERNEL__
 #define __KERNEL__ 1
 #endif
-#ifndef MODULE
-#define MODULE 1
-#endif
 
 #include <linux/module.h>
-
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/fs.h>
@@ -3767,7 +3763,7 @@ xpds_free_data (void)
 #ifdef MODULE
 int init_module (void)
 #else
-int xpds_init(void)
+int xpdsl_init(void)
 #endif
 {
 	int		i;

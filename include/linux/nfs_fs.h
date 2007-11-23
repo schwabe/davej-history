@@ -34,7 +34,7 @@
 #endif
 
 #define NFS_MAX_FILE_IO_BUFFER_SIZE	32768
-#define NFS_DEF_FILE_IO_BUFFER_SIZE	1024
+#define NFS_DEF_FILE_IO_BUFFER_SIZE	4096
 
 /*
  * The upper limit on timeouts for the exponential backoff algorithm.

@@ -3,11 +3,12 @@
 
 /* ported to the Alpha architecture 02/20/96 (just used the HZ macro) */
 
-#define TR_RETRY_INTERVAL (5*HZ) /* 500 on PC = 5 s */
+#define TR_RETRY_INTERVAL (/*5BMS*/30*HZ) /* seconds * ticks/second */
 #define TR_RESET_INTERVAL (HZ/20) /* 5 on PC = 50 ms */
 #define TR_BUSY_INTERVAL (HZ/5) /* 5 on PC = 200 ms */
 #define TR_SPIN_INTERVAL (3*HZ) /* 3 seconds before init timeout */
-#define TR_RETRIES 6            /* number of open retries */ 
+/*BMS I changed from 6 retries to 30 days of retries. Forever would be OK.  */
+#define TR_RETRIES (30*24*60*60* HZ/TR_RETRY_INTERVAL)
 
 #define TR_ISA 1
 #define TR_MCA 2
@@ -32,8 +33,20 @@
 #define AIP16MBDHB      0X1FAC
 #define AIPFID		0X1FBA
 
+#define ADAPT_PRIVATE 1416	/* Adapter Private Vars  */
+#define ARBLENGTH       28	/* Adapter Request Block */
+#define SSBLENGTH       20	/* System  Status  Block */
+#define SAPLENGTH       64	/* Service Access  Point */
+#define STALENGTH      144	/* Station Control Block */
+#define SRBLENGTH       28	/* System  Request Block */
+#define ASBLENGTH       12	/* Adapter Status  Block */
+#define BLOCKSZ        512
+
 /* Note, 0xA20 == 0x220 since motherboard decodes 10 bits.  I left everything
-   the way my documentation had it, ie: 0x0A20.     */
+   the way my documentation had it, ie: 0x0A20.     
+ * BMS motherboard and TR decode 16 bits. Some sound cards only decode 10 bits,
+   causing a potential conflict with a sound card addressed at 0x220.
+*/
 #define ADAPTINTCNTRL   0x02f0  /* Adapter interrupt control */
 #define ADAPTRESET      0x1     /* Control Adapter reset (add to base) */
 #define ADAPTRESETREL   0x2     /* Release Adapter from reset ( """)  */
@@ -168,7 +181,7 @@
 #define SET_PAGE(x)
 #endif
 
-typedef enum { IN_PROGRESS, SUCCESS, FAILURE, CLOSED } open_state;
+typedef enum { CLOSED, SUCCESS, FAILURE, AUTOREOPEN } open_state;
 
 /* do_tok_int possible values */
 #define FIRST_INT 1
@@ -199,8 +212,8 @@ struct tok_info {
 	/* Additions by Peter De Schrijver */
 	unsigned char page_mask;          /* mask to select RAM page to Map*/
 	unsigned char mapped_ram_size;    /* size of RAM page */
-	__u32 sram;                       /* Shared memory base address */
-	__u32 init_srb;                   /* Initial System Request Block address */
+	__u32 sram_virt;                  /* Shared memory base address */
+	__u32 init_srb;              /* Initial System Request Block address */
 	__u32 srb;                        /* System Request Block address */
 	__u32 ssb;                        /* System Status Block address */
 	__u32 arb;                        /* Adapter Request Block address */

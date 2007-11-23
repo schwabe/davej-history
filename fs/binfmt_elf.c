@@ -594,8 +594,8 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		    bprm->argc++;
 		  }
 		}
-		retval = -E2BIG;
-		if (!bprm->p)
+		retval = (long)bprm->p;
+		if ((long)bprm->p < 0)
 			goto out_free_dentry;
 	}
 
