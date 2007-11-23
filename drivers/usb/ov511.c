@@ -54,8 +54,8 @@
 /*
  * Version Information
  */
-#define DRIVER_VERSION "v1.28"
-#define DRIVER_AUTHOR "Mark McClelland <mwm@i.am> & Bret Wallach & Orion Sky Lawlor <olawlor@acm.org> & Kevin Moore & Charl P. Botha <cpbotha@ieee.org> & Claudio Matsuoka <claudio@conectiva.com>"
+#define DRIVER_VERSION "v1.28a for Linux 2.2"
+#define DRIVER_AUTHOR "Mark McClelland <mark@alpha.dyndns.org> & Bret Wallach & Orion Sky Lawlor <olawlor@acm.org> & Kevin Moore & Charl P. Botha <cpbotha@ieee.org> & Claudio Matsuoka <claudio@conectiva.com>"
 #define DRIVER_DESC "OV511 USB Camera Driver"
 
 #define OV511_I2C_RETRIES 3
@@ -99,9 +99,6 @@ static int aperture = -1;
  * programs that expect RGB data (e.g. gqcam) to work with this driver. */
 static int force_rgb = 0;
 
-/* Number of seconds before inactive buffers are deallocated */
-static int buf_timeout = 5;
-
 /* Number of cameras to stream from simultaneously */
 static int cams = 1;
 
@@ -138,8 +135,6 @@ MODULE_PARM(aperture, "i");
 MODULE_PARM_DESC(aperture, "Read the OV7610/7620 specs");
 MODULE_PARM(force_rgb, "i");
 MODULE_PARM_DESC(force_rgb, "Read RGB instead of BGR");
-MODULE_PARM(buf_timeout, "i");
-MODULE_PARM_DESC(buf_timeout, "Number of seconds before buffer deallocation");
 MODULE_PARM(cams, "i");
 MODULE_PARM_DESC(cams, "Number of simultaneous cameras");
 MODULE_PARM(retry_sync, "i");
@@ -2037,11 +2032,6 @@ static int ov511_alloc(struct usb_ov511 *ov511)
 	PDEBUG(4, "entered");
 	down(&ov511->buf_lock);
 
-	if (ov511->buf_state == BUF_PEND_DEALLOC) {
-		ov511->buf_state = BUF_ALLOCATED;
-		del_timer(&ov511->buf_timer);
-	}
-
 	if (ov511->buf_state == BUF_ALLOCATED)
 		goto out;
 
@@ -2106,42 +2096,11 @@ static void ov511_do_dealloc(struct usb_ov511 *ov511)
 	PDEBUG(4, "leaving");
 }
 
-static void ov511_buf_callback(unsigned long data)
+static void ov511_dealloc(struct usb_ov511 *ov511)
 {
-	struct usb_ov511 *ov511 = (struct usb_ov511 *)data;
 	PDEBUG(4, "entered");
 	down(&ov511->buf_lock);
-
-	if (ov511->buf_state == BUF_PEND_DEALLOC)
-		ov511_do_dealloc(ov511);
-
-	up(&ov511->buf_lock);
-	PDEBUG(4, "leaving");
-}
-
-static void ov511_dealloc(struct usb_ov511 *ov511, int now)
-{
-	struct timer_list *bt = &(ov511->buf_timer);
-	PDEBUG(4, "entered");
-	down(&ov511->buf_lock);
-
-	PDEBUG(4, "deallocating buffer memory %s", now ? "now" : "later");
-
-	if (ov511->buf_state == BUF_PEND_DEALLOC) {
-		ov511->buf_state = BUF_ALLOCATED;
-		del_timer(bt);
-	}
-
-	if (now)
-		ov511_do_dealloc(ov511);
-	else {
-		ov511->buf_state = BUF_PEND_DEALLOC;
-		init_timer(bt);
-		bt->function = ov511_buf_callback;
-		bt->data = (unsigned long)ov511;
-		bt->expires = jiffies + buf_timeout * HZ;
-		add_timer(bt);
-	}
+	ov511_do_dealloc(ov511);
 	up(&ov511->buf_lock);
 	PDEBUG(4, "leaving");
 }
@@ -2173,7 +2132,7 @@ static int ov511_open(struct video_device *dev, int flags)
 
 	err = ov511_init_isoc(ov511);
 	if (err) {
-		ov511_dealloc(ov511, 0);
+		ov511_dealloc(ov511);
 		goto out;
 	}
 
@@ -2200,12 +2159,12 @@ static void ov511_close(struct video_device *dev)
 	ov511_stop_isoc(ov511);
 
 	if (ov511->dev)
-		ov511_dealloc(ov511, 0);
+		ov511_dealloc(ov511);
 
 	up(&ov511->lock);
 
 	if (!ov511->dev) {
-		ov511_dealloc(ov511, 1);
+		ov511_dealloc(ov511);
 		video_unregister_device(&ov511->vdev);
 		kfree(ov511);
 		ov511 = NULL;
@@ -3410,7 +3369,7 @@ ov511_disconnect(struct usb_device *dev, void *ptr)
 
 	/* Free the memory */
 	if (ov511 && !ov511->user) {
-		ov511_dealloc(ov511, 1);
+		ov511_dealloc(ov511);
 		kfree(ov511);
 		ov511 = NULL;
 	}

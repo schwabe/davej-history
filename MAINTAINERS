@@ -1176,6 +1176,11 @@ M:	fuganti@netbank.com.br
 W:	http://cvs.conectiva.com.br/drivers/ZFL-watchdog/
 S:	Maintained
 
+LINUX 2.2 FIXES
+P:	Alan Cox
+M:	alan@lxorguk.ukuu.org.uk
+S:	Maintained
+
 THE REST
 P:	Linus Torvalds
 S:	Buried alive in reporters

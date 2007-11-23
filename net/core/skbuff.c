@@ -136,6 +136,8 @@ struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
 		goto nohead;
 
 	/* Get the DATA. Size must match skb_add_mtu(). */
+	if (size > 131072 - 32)
+		goto nodata;
 	size = ((size + 15) & ~15); 
 	data = kmalloc(size + sizeof(atomic_t), gfp_mask);
 	if (data == NULL)

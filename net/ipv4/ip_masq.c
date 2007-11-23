@@ -2450,7 +2450,7 @@ int ip_masq_uctl(int optname, char * optval , int optlen)
 	struct ip_masq_ctl masq_ctl;
 	int ret = -EINVAL;
 
-	if(optlen>sizeof(masq_ctl))
+	if(optlen < 0 || optlen > sizeof(masq_ctl))
 		return -EINVAL;
 
 	if(copy_from_user(&masq_ctl,optval,optlen))

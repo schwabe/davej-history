@@ -52,12 +52,6 @@
 #include <asm/segment.h>
 #include <linux/mm.h>
 
-#undef put_user
-#undef get_user
-
-#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
-#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
-
 extern inline int copy_from_user(void *to, const void *from, unsigned long n)
 {
         int i = verify_area(VERIFY_READ, from, n);

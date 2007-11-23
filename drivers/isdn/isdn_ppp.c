@@ -678,8 +678,8 @@ isdn_ppp_fill_rq(unsigned char *buf, int len, int proto, int slot)
  *           reports, that there is data
  */
 
-int
-isdn_ppp_read(int min, struct file *file, char *buf, int count)
+ssize_t
+isdn_ppp_read(int min, struct file *file, char *buf, size_t count)
 {
 	struct ippp_struct *is;
 	struct ippp_buf_queue *b;
@@ -721,8 +721,8 @@ isdn_ppp_read(int min, struct file *file, char *buf, int count)
  * ipppd wanna write a packet to the card .. non-blocking
  */
 
-int
-isdn_ppp_write(int min, struct file *file, const char *buf, int count)
+ssize_t
+isdn_ppp_write(int min, struct file *file, const char *buf, size_t count)
 {
 	isdn_net_local *lp;
 	struct ippp_struct *is;
@@ -757,7 +757,7 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 		if ((dev->drv[lp->isdn_device]->flags & DRV_FLAG_RUNNING) &&
 			lp->dialstate == 0 &&
 		    (lp->flags & ISDN_NET_CONNECTED)) {
-			unsigned short hl;
+			unsigned int hl;
 			struct sk_buff *skb;
 			/*
 			 * we need to reserve enought space in front of
@@ -765,11 +765,11 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 			 * 16 bytes, now we are looking what the driver want
 			 */
 			hl = dev->drv[lp->isdn_device]->interface->hl_hdrlen;
+			if (hl > INT_MAX / 2 || count > INT_MAX / 2)
+				return -EINVAL;
 			skb = alloc_skb(hl+count, GFP_ATOMIC);
-			if (!skb) {
-				printk(KERN_WARNING "isdn_ppp_write: out of memory!\n");
-				return count;
-			}
+			if (!skb)
+				return -ENOMEM;
 			skb_reserve(skb, hl);
 			if (copy_from_user(skb_put(skb, count), buf, count))
 			{
@@ -1170,7 +1170,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 #ifdef CONFIG_ISDN_PPP_VJ
 	if (proto == PPP_IP && ipts->pppcfg & SC_COMP_TCP) {	/* ipts here? probably yes, but check this again */
 		struct sk_buff *new_skb;
-	        unsigned short hl;
+	        unsigned int hl;
 		/*
 		 * we need to reserve enought space in front of
 		 * sk_buff. old call to dev_alloc_skb only reserved

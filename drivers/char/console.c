@@ -2101,6 +2101,8 @@ int tioclinux(struct tty_struct *tty, unsigned long arg)
 		return -EINVAL;
 	if (current->tty != tty && !suser())
 		return -EPERM;
+	/* Further code uses __put_user() relying on this get_user() having
+	 * done the address range checking. */
 	if (get_user(type, (char *)arg))
 		return -EFAULT;
 	switch (type)

@@ -219,7 +219,6 @@ enum {
 enum {
 	BUF_NOT_ALLOCATED,
 	BUF_ALLOCATED,
-	BUF_PEND_DEALLOC,	/* ov511->buf_timer is set */
 };
 
 struct usb_device;
@@ -341,7 +340,6 @@ struct usb_ov511 {
 	/* Framebuffer/sbuf management */
 	int buf_state;
 	struct semaphore buf_lock;
-	struct timer_list buf_timer;
 };
 
 struct cam_list {

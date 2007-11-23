@@ -430,10 +430,11 @@ static unsigned int isofs_get_last_session(kdev_t dev)
       /* If a minor device was explicitly opened, set session to the
        * minor number. For instance, if /dev/hdc1 is mounted, session
        * 1 on the CD-ROM is selected. CD_PART_MAX gives access to
-       * a max of 64 sessions on IDE. SCSI drives must still use
-       * the session option to mount.
+       * a max of 64 sessions on IDE. For SCSI drives or loop devices
+       * you must still use the session option to mount.
        */
-      if ((MINOR(dev) % CD_PART_MAX) && (MAJOR(dev) != SCSI_CDROM_MAJOR))
+      if ((MINOR(dev) % CD_PART_MAX) && (MAJOR(dev) != SCSI_CDROM_MAJOR)
+					&& (MAJOR(dev) != LOOP_MAJOR))
 		session = MINOR(dev) % CD_PART_MAX;
       if (session > 0 && session <= CD_PART_MAX) {
 		struct cdrom_tocentry entry;

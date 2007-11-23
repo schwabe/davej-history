@@ -394,8 +394,9 @@ do_unimap_ioctl(int cmd, struct unimapdesc *user_ud,int perm)
 	if (copy_from_user(&tmp, user_ud, sizeof tmp))
 		return -EFAULT;
 	if (tmp.entries) {
-		i = verify_area(VERIFY_WRITE, tmp.entries, 
-						tmp.entry_ct*sizeof(struct unipair));
+		/* tmp.entry_ct is an unsigned short */
+		i = verify_area(VERIFY_WRITE, tmp.entries,
+				(size_t)tmp.entry_ct * sizeof(struct unipair));
 		if (i) return i;
 	}
 	switch (cmd) {

@@ -554,7 +554,8 @@ static int raw_scan(struct super_block *sb, int start, const char *name,
 int fat_parent_ino(struct inode *dir,int locked)
 {
 	static int zero = 0;
-	int error,curr,prev,nr;
+	int error,curr,prev;
+	loff_t nr;
 
 	PRINTK(("fat_parent_ino: Debug 0\n"));
 	if (!S_ISDIR(dir->i_mode)) panic("Non-directory fed to m_p_i");
@@ -585,7 +586,7 @@ int fat_parent_ino(struct inode *dir,int locked)
 			if (!locked) fat_unlock_creation();
 			return error;
 		}
-		PRINTK(("fat_parent_ino: Debug 6 nr=%d\n", nr));
+		PRINTK(("fat_parent_ino: Debug 6 nr=%ld\n", (long)nr));
 	}
 	if (!locked) fat_unlock_creation();
 	return nr;

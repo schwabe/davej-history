@@ -649,7 +649,7 @@ static ssize_t lp_read(struct file * file, char * buf,
 		}
 		if ((i & 1) != 0) {
 			Byte |= (z<<4);
-			if (__put_user (Byte, temp))
+			if (put_user (Byte, temp))
 			{
 				count = -EFAULT;
 				break;

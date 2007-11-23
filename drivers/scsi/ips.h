@@ -105,10 +105,6 @@
       #define PUT_USER                 put_user
    #endif
 
-   #ifndef __PUT_USER
-      #define __PUT_USER               __put_user
-   #endif
-
    #ifndef PUT_USER_RET
       #define PUT_USER_RET             put_user_ret
    #endif

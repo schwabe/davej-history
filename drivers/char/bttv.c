@@ -1610,6 +1610,8 @@ static long bttv_read(struct video_device *v, char *buf, unsigned long count, in
 	struct bttv *btv= (struct bttv *)v;
 	int q,todo;
 	/* BROKEN: RETURNS VBI WHEN IT SHOULD RETURN GRABBED VIDEO FRAME */
+	if (count > INT_MAX)
+		return -EINVAL;
 	todo=count;
 	while (todo && todo>(q=VBIBUF_SIZE-btv->vbip)) 
 	{
@@ -1639,7 +1641,7 @@ static long bttv_read(struct video_device *v, char *buf, unsigned long count, in
 			}
 		}
 	}
-	if (todo) 
+	if (todo > 0 && todo <= VBIBUF_SIZE-btv->vbip)
 	{
 		if(copy_to_user((void *) buf, (void *) btv->vbibuf+btv->vbip, todo))
 			return -EFAULT;
@@ -2457,6 +2459,8 @@ static long vbi_read(struct video_device *v, char *buf, unsigned long count,
 	struct bttv *btv=(struct bttv *)(v-2);
 	int q,todo;
 
+	if (count > INT_MAX)
+		return -EINVAL;
 	todo=count;
 	while (todo && todo>(q=VBIBUF_SIZE-btv->vbip)) 
 	{
@@ -2486,7 +2490,7 @@ static long vbi_read(struct video_device *v, char *buf, unsigned long count,
 			}
 		}
 	}
-	if (todo) 
+	if (todo > 0 && todo <= VBIBUF_SIZE-btv->vbip)
 	{
 		if(copy_to_user((void *) buf, (void *) btv->vbibuf+btv->vbip, todo))
 			return -EFAULT;

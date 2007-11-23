@@ -444,9 +444,9 @@ sun_mouse_read(struct file *file, char *buffer,
 						 sizeof(Firm_event)-sizeof(struct timeval),
 						 -EFAULT);
 				p += sizeof(Firm_event)-sizeof(struct timeval);
-				__put_user_ret(q->time.tv_sec, (u32 *)p, -EFAULT);
+				put_user_ret(q->time.tv_sec, (u32 *)p, -EFAULT);
 				p += sizeof(u32);
-				__put_user_ret(q->time.tv_usec, (u32 *)p, -EFAULT);
+				put_user_ret(q->time.tv_usec, (u32 *)p, -EFAULT);
 				p += sizeof(u32);
 			} else
 #endif	

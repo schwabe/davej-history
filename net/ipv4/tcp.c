@@ -940,6 +940,7 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 				if (!err) 
 					tcp_push_pending_frames(sk, tp);
 				wait_for_tcp_memory(sk, err);
+				err = 0;
 
 				/* If SACK's were formed or PMTU events happened,
 				 * we must find out about it.

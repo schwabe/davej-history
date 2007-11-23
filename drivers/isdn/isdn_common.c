@@ -64,7 +64,7 @@ static isdn_divert_if *divert_if; /* = NULL */
 #endif /* CONFIG_ISDN_DIVERSION */
 
 
-static int isdn_writebuf_stub(int, int, const u_char *, int, int);
+static ssize_t isdn_writebuf_stub(int, int, const u_char *, size_t, int);
 static void set_global_features(void);
 static int isdn_wildmat(char *s, char *p);
 
@@ -1099,9 +1099,11 @@ isdn_write(struct file *file, const char *buf, size_t count, loff_t * off)
 			goto out;
 		}
 		chidx = isdn_minor2chan(minor);
-		while (isdn_writebuf_stub(drvidx, chidx, buf, count, 1) != count)
+		do {
+			retval = isdn_writebuf_stub(drvidx, chidx, buf, count, 1);
+			if (retval == count || retval < 0) break;
 			interruptible_sleep_on(&dev->drv[drvidx]->snd_waitq[chidx]);
-		retval = count;
+		} while (1);
 		goto out;
 	}
 	if (minor <= ISDN_MINOR_CTRLMAX) {
@@ -1874,22 +1876,29 @@ isdn_unexclusive_channel(int di, int ch)
 /*
  *  writebuf replacement for SKB_ABLE drivers
  */
-static int
-isdn_writebuf_stub(int drvidx, int chan, const u_char * buf, int len,
+static ssize_t
+isdn_writebuf_stub(int drvidx, int chan, const u_char * buf, size_t len,
 		   int user)
 {
-	int ret;
-	int hl = dev->drv[drvidx]->interface->hl_hdrlen;
-	struct sk_buff *skb = alloc_skb(hl + len, GFP_ATOMIC);
+	int ret = 0;
+	unsigned int hl;
+	struct sk_buff *skb;
+
+	hl = dev->drv[drvidx]->interface->hl_hdrlen;
+	if (len > INT_MAX / 2 || hl > INT_MAX / 2)
+		return -EINVAL;
+	skb = alloc_skb(hl + len, GFP_ATOMIC);
 
 	if (!skb)
-		return 0;
+		return -ENOMEM;
 	skb_reserve(skb, hl);
 	if (user)
-		copy_from_user(skb_put(skb, len), buf, len);
+		ret = copy_from_user(skb_put(skb, len), buf, len) ? -EFAULT : 0;
 	else
 		memcpy(skb_put(skb, len), buf, len);
-	ret = dev->drv[drvidx]->interface->writebuf_skb(drvidx, chan, 1, skb);
+	if (!ret)
+		ret = dev->drv[drvidx]->interface->writebuf_skb(drvidx,
+		    chan, 1, skb);
 	if (ret <= 0)
 		dev_kfree_skb(skb);
 	if (ret > 0)

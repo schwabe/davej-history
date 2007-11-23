@@ -1998,15 +1998,23 @@ struct ip_rt_acct ip_rt_acct[256];
 static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 			   int length, int *eof, void *data)
 {
-	*start=buffer;
+	*start = buffer;
 
-	if (offset + length > sizeof(ip_rt_acct)) {
+	if (offset < 0 || length < 0)
+		return 0;
+
+	if (offset >= sizeof(ip_rt_acct) || length >= sizeof(ip_rt_acct)) {
+		*eof = 1;
+		return 0;
+	}
+
+	if (offset + length >= sizeof(ip_rt_acct)) {
 		length = sizeof(ip_rt_acct) - offset;
 		*eof = 1;
 	}
 	if (length > 0) {
 		start_bh_atomic();
-		memcpy(buffer, ((u8*)&ip_rt_acct)+offset, length);
+		memcpy(buffer, ((u8*)&ip_rt_acct) + offset, length);
 		end_bh_atomic();
 		return length;
 	}

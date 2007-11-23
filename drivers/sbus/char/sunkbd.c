@@ -1309,9 +1309,9 @@ kbd_read (struct file *f, char *buffer, size_t count, loff_t *ppos)
 			copy_to_user_ret((Firm_event *)p, &kbd_queue [kbd_tail], 
 					 sizeof(Firm_event)-sizeof(struct timeval), -EFAULT);
 			p += sizeof(Firm_event)-sizeof(struct timeval);
-			__put_user_ret(kbd_queue[kbd_tail].time.tv_sec, (u32 *)p, -EFAULT);
+			put_user_ret(kbd_queue[kbd_tail].time.tv_sec, (u32 *)p, -EFAULT);
 			p += sizeof(u32);
-			__put_user_ret(kbd_queue[kbd_tail].time.tv_usec, (u32 *)p, -EFAULT);
+			put_user_ret(kbd_queue[kbd_tail].time.tv_usec, (u32 *)p, -EFAULT);
 			p += sizeof(u32);
 		} else
 #endif

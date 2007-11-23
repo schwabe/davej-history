@@ -68,7 +68,7 @@ static int options_node;
  */
 static int copyin(struct openpromio *info, struct openpromio **opp_p)
 {
-	int bufsize;
+	unsigned int bufsize;
 
 	if (!info || !opp_p)
 		return -EFAULT;

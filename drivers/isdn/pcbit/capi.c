@@ -425,7 +425,7 @@ int capi_decode_conn_ind(struct pcbit_chan * chan,
 #ifdef DEBUG
 		printk(KERN_DEBUG "CPN: Octect 3 %02x\n", skb->data[1]);
 #endif
-		if ((skb->data[1] & 0x80) == 0)
+		if (len >= 2 && (skb->data[1] & 0x80) == 0)
 			count = 2;
 		
 		if (!(info->data.setup.CallingPN = kmalloc(len - count + 1, GFP_ATOMIC)))
@@ -453,7 +453,7 @@ int capi_decode_conn_ind(struct pcbit_chan * chan,
 	if (len > 0) {
 		int count = 1;
 		
-		if ((skb->data[1] & 0x80) == 0)
+		if (len >= 2 && (skb->data[1] & 0x80) == 0)
 			count = 2;
         
 		if (!(info->data.setup.CalledPN = kmalloc(len - count + 1, GFP_ATOMIC)))

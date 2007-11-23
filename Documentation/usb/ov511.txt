@@ -178,16 +178,6 @@ MODULE PARAMETERS:
         programs that expect RGB data (e.g. gqcam) to work with this driver. If
         your colors look VERY wrong, you may want to change this.
 
-  NAME: buf_timeout
-  TYPE: integer
-  DEFAULT: 5 (seconds)
-  DESC: Number of seconds before unused frame buffers are deallocated.
-        Previously, memory was allocated upon open() and deallocated upon
-        close(). Deallocation now occurs only if the driver is closed and this
-        timeout is reached. If you are capturing frames less frequently than
-        the default timeout, increase this. This will not make any difference
-        with programs that capture multiple frames during an open/close cycle.
-
   NAME: cams
   TYPE: integer (1-4 for OV511, 1-31 for OV511+)
   DEFAULT: 1
@@ -242,7 +232,7 @@ TODO:
 
 HOW TO CONTACT ME:
 
-You can email me at mwm@i.am . Please prefix the subject line
+You can email me at mark@alpha.dyndns.org . Please prefix the subject line
 with "OV511: " so that I am certain to notice your message.
 
 CREDITS:

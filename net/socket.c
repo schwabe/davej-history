@@ -1073,11 +1073,19 @@ asmlinkage int sys_setsockopt(int fd, int level, int optname, char *optval, int 
 asmlinkage int sys_getsockopt(int fd, int level, int optname, char *optval, int *optlen)
 {
 	int err;
+	int len;
 	struct socket *sock;
 
 	lock_kernel();
 	if ((sock = sockfd_lookup(fd, &err))!=NULL)
 	{
+		/* XXX: insufficient for SMP, but should be redundant anyway */
+		if (get_user(len, optlen))
+			err = -EFAULT;
+		else
+		if (len < 0)
+			err = -EINVAL;
+		else
 		if (level == SOL_SOCKET)
 			err=sock_getsockopt(sock,level,optname,optval,optlen);
 		else

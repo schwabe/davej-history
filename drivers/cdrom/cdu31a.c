@@ -3027,6 +3027,8 @@ static int scd_dev_ioctl(struct cdrom_device_info *cdi,
          	return 0;
          }
 
+         if (ra.nframes > INT_MAX / CD_FRAMESIZE_RAW)
+		return -EINVAL;
          i=verify_area(VERIFY_WRITE, ra.buf, CD_FRAMESIZE_RAW * ra.nframes);
          if(i<0)
          	return i;

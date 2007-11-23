@@ -283,11 +283,11 @@ static int cg14_ioctl (struct fb_info_sbusfb *fb, unsigned int cmd, unsigned lon
 	case MDI_GET_CFGINFO:
 		mdii = (struct mdi_cfginfo *)arg;
 		put_user_ret(FBTYPE_MDICOLOR, &mdii->mdi_type, -EFAULT);
-		__put_user_ret(fb->type.fb_height, &mdii->mdi_height, -EFAULT);
-		__put_user_ret(fb->type.fb_width, &mdii->mdi_width, -EFAULT);
-		__put_user_ret(fb->s.cg14.mode, &mdii->mdi_mode, -EFAULT);
-		__put_user_ret(72, &mdii->mdi_pixfreq, -EFAULT); /* FIXME */
-		__put_user_ret(fb->s.cg14.ramsize, &mdii->mdi_size, -EFAULT);
+		put_user_ret(fb->type.fb_height, &mdii->mdi_height, -EFAULT);
+		put_user_ret(fb->type.fb_width, &mdii->mdi_width, -EFAULT);
+		put_user_ret(fb->s.cg14.mode, &mdii->mdi_mode, -EFAULT);
+		put_user_ret(72, &mdii->mdi_pixfreq, -EFAULT); /* FIXME */
+		put_user_ret(fb->s.cg14.ramsize, &mdii->mdi_size, -EFAULT);
 		break;
 	case MDI_SET_PIXELMODE:
 		get_user_ret(mode, (int *)arg, -EFAULT);

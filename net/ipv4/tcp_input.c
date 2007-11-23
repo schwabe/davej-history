@@ -296,7 +296,7 @@ static void tcp_reset(struct sock *sk)
 	}
 	sk->shutdown = SHUTDOWN_MASK;
 	if (!sk->dead) 
-		sk->state_change(sk);
+		sk->error_report(sk);
 }
 
 /* This tags the retransmission queue when SACKs arrive. */

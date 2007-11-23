@@ -764,11 +764,14 @@ void d_move(struct dentry * dentry, struct dentry * target)
 /*
  * "buflen" should be PAGE_SIZE or more.
  */
-char * d_path(struct dentry *dentry, char *buffer, int buflen)
+static char * d_path_error(struct dentry *dentry,
+			   char *buffer, int buflen, int *error)
 {
 	char * end = buffer+buflen;
 	char * retval;
 	struct dentry * root = current->fs->root;
+
+	*error = 0;
 
 	*--end = '\0';
 	buflen--;
@@ -794,8 +797,10 @@ char * d_path(struct dentry *dentry, char *buffer, int buflen)
 			break;
 		namelen = dentry->d_name.len;
 		buflen -= namelen + 1;
-		if (buflen < 0)
+		if (buflen < 0) {
+			*error = -ENAMETOOLONG;
 			break;
+		}
 		end -= namelen;
 		memcpy(end, dentry->d_name.name, namelen);
 		*--end = '/';
@@ -803,6 +808,13 @@ char * d_path(struct dentry *dentry, char *buffer, int buflen)
 		dentry = parent;
 	}
 	return retval;
+}
+
+char * d_path(struct dentry *dentry, char *buffer, int buflen)
+{
+	int error;
+
+	return d_path_error(dentry, buffer, buflen, &error);
 }
 
 /*
@@ -835,14 +847,17 @@ asmlinkage int sys_getcwd(char *buf, unsigned long size)
 		error = -ENOMEM;
 		if (page) {
 			unsigned long len;
-			char * cwd = d_path(pwd, page, PAGE_SIZE);
+			char * cwd;
 
-			error = -ERANGE;
-			len = PAGE_SIZE + page - cwd;
-			if (len <= size) {
-				error = len;
-				if (copy_to_user(buf, cwd, len))
-					error = -EFAULT;
+			cwd = d_path_error(pwd, page, PAGE_SIZE, &error);
+			if (!error) {
+				error = -ERANGE;
+				len = PAGE_SIZE + page - cwd;
+				if (len <= size) {
+					error = len;
+					if (copy_to_user(buf, cwd, len))
+						error = -EFAULT;
+				}
 			}
 			free_page((unsigned long) page);
 		}
