@@ -46,6 +46,10 @@ CFLAGS = -O2 -DSTDC_HEADERS -fno-builtin -I$(TOPDIR)/include
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O elf32-powerpc
 
+ifeq ($(CONFIG_SMP),y)
+CFLAGS += -D__SMP__
+endif
+
 OBJECTS += vreset.o kbd.o of1275.o
  ifeq ($(CONFIG_SERIAL_CONSOLE),y)
   OBJECTS += ns16550.o

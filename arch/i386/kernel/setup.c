@@ -14,6 +14,9 @@
  *      Bart Hartgers <bart@etpmod.phys.tue.nl>, May 199.
  *
  *  Intel Mobile Pentium II detection fix. Sean Gilley, June 1999.
+ *
+ *  IDT Winchip tweaks, misc clean ups.
+ *	Dave Jones <dave@powertweak.com>, August 1999
  */
 
 /*
@@ -480,6 +483,19 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 				break;
 			}
 			break;
+		case 6:	/* An Athlon. We can trust the BIOS probably */
+		{
+			
+			u32 ecx, edx, dummy;
+			cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+			printk("L1 I Cache: %dK  L1 D Cache: %dK\n",
+				ecx>>24, edx>>24);
+			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+			printk("L2 Cache: %dK\n", ecx>>16);
+			c->x86_cache_size = ecx>>16;
+			break;
+		}
+		
 	}
 	return r;
 }
@@ -690,8 +706,9 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_INTEL,	6,
 	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II (Klamath)", 
-            NULL, "Pentium II (Deschutes)", "Mobile Pentium II", NULL,
-	    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
+	    NULL, "Pentium II (Deschutes)", "Mobile Pentium II", 
+            "Pentium III (Katmai)", "Pentium III (Coppermine)", NULL, NULL, 
+            NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_AMD,	4,
 	  { NULL, NULL, NULL, "486 DX/2", NULL, NULL, NULL, "486 DX/2-WB",
 	    "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT",
@@ -701,6 +718,11 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    "K5", "K5", NULL, NULL,
 	    "K6", "K6", "K6-2",
 	    "K6-3", NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_AMD,	6,
+	  { "Athlon", "Athlon",
+	    NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_UMC,	4,
 	  { NULL, "U5D", "U5S", NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	    NULL, NULL, NULL, NULL, NULL, NULL }},
@@ -810,7 +832,6 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
                         }
                     }
 		}
-			
 	}
 
 	if (p) {
@@ -860,22 +881,25 @@ __initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
 		printk("%s", c->x86_model_id);
 
 	if (c->x86_mask || c->cpuid_level>=0) 
-		printk(" stepping %02x", c->x86_mask);
+		printk(" stepping %02x\n", c->x86_mask);
 
-	if(c->x86_vendor == X86_VENDOR_CENTAUR)
-	{
+	if(c->x86_vendor == X86_VENDOR_CENTAUR) {
 		u32 hv,lv;
 		rdmsr(0x107, lv, hv);
-		printk("\nCentaur FSR was 0x%X ",lv);
-		lv|=(1<<8);
-		lv|=(1<<7);
+		printk("Centaur FSR was 0x%X ",lv);
+		lv|=(1<<1 | 1<<2 | 1<<7);
 		/* lv|=(1<<6);	- may help too if the board can cope */
-		printk("now 0x%X", lv);
+		printk("now 0x%X\n", lv);
 		wrmsr(0x107, lv, hv);
 		/* Emulate MTRRs using Centaur's MCR. */
-		c->x86_capability |= X86_FEATURE_MTRR;	   	
+		c->x86_capability |= X86_FEATURE_MTRR;
+
+		/* Set 3DNow! on Winchip 2 and above. */
+		if (c->x86_model >=8)
+		    c->x86_capability |= X86_FEATURE_AMD3D;
+
+		c->x86_capability |=X86_FEATURE_CX8;
 	}
-	printk("\n");
 }
 
 /*
@@ -910,7 +934,7 @@ int get_cpuinfo(char * buffer)
 			       c->x86 + '0',
 			       c->x86_model,
 			       c->x86_model_id[0] ? c->x86_model_id : "unknown");
-		
+
 		if (c->x86_mask || c->cpuid_level >= 0)
 			p += sprintf(p, "stepping\t: %d\n", c->x86_mask);
 		else
@@ -926,14 +950,20 @@ int get_cpuinfo(char * buffer)
 			p += sprintf(p, "cache size\t: %d KB\n", c->x86_cache_size);
 		
 		/* Modify the capabilities according to chip type */
-		if (c->x86_vendor == X86_VENDOR_CYRIX) {
+		switch (c->x86_vendor) {
+
+		    case X86_VENDOR_CYRIX:
 			x86_cap_flags[24] = "cxmmx";
-		} else if (c->x86_vendor == X86_VENDOR_AMD) {
-			x86_cap_flags[16] = "fcmov";
-			x86_cap_flags[31] = "3dnow";
+			break;
+
+		    case X86_VENDOR_AMD:
 			if (c->x86 == 5 && c->x86_model == 6)
 				x86_cap_flags[10] = "sep";
-		} else if (c->x86_vendor == X86_VENDOR_INTEL) {
+			x86_cap_flags[16] = "fcmov";
+			x86_cap_flags[31] = "3dnow";
+			break;
+
+		    case X86_VENDOR_INTEL:
 			x86_cap_flags[6] = "pae";
 			x86_cap_flags[9] = "apic";
 			x86_cap_flags[14] = "mca";
@@ -941,6 +971,16 @@ int get_cpuinfo(char * buffer)
 			x86_cap_flags[17] = "pse36";
 			x86_cap_flags[18] = "psn";
 			x86_cap_flags[24] = "osfxsr";
+			break;
+
+		    case X86_VENDOR_CENTAUR:
+			if (c->x86_model >=8)	/* Only Winchip2 and above */
+			    x86_cap_flags[31] = "3dnow";
+			break;
+
+		    default:
+			/* Unknown CPU manufacturer. Transmeta ? :-) */
+			break;
 		}
 
 		sep_bug = c->x86_vendor == X86_VENDOR_INTEL &&

@@ -89,10 +89,9 @@ S:	Maintained
 
 8390 NETWORK DRIVERS [WD80x3/SMC-ELITE, SMC-ULTRA, NE2000, 3C503, etc.]
 P:	Paul Gortmaker
-M:	gpg109@rsphy1.anu.edu.au
+M:	p_gortmaker@yahoo.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
-W:	http://rsphy1.anu.edu.au/~gpg109/ne2000.html
 
 AD1816 SOUND DRIVER
 P:	Thorsten Knabe
@@ -660,7 +659,7 @@ S:	Maintained
 
 REAL TIME CLOCK DRIVER
 P:	Paul Gortmaker
-M:	gpg109@rsphy1.anu.edu.au
+M:	p_gortmaker@yahoo.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

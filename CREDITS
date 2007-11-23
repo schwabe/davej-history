@@ -689,14 +689,11 @@ S: Woodbridge, Connecticut 06525
 S: USA
 
 N: Paul Gortmaker
-E: gpg109@rsphy1.anu.edu.au
-W: http://rsphy1.anu.edu.au/~gpg109
-D: Real Time Clock driver author.
-D: 8390 net driver hacker (ne2000, wd8013, smc-ultra, 3c503, etc.) 
-D: Ethernet-HOWTO and BootPrompt-HOWTO author.
-D: Added many new CONFIG options (modules, ramdisk, generic-serial, etc.)
-D: Implemented 1st "official" kernel thread (moved user bdflush to kflushd)
-D: Various other random hacks, patches and utilities.
+E: p_gortmaker@yahoo.com
+D: Author of RTC driver & several net drivers, Ethernet & BootPrompt Howto.
+D: Made support for modules, ramdisk, generic-serial, etc. optional.
+D: Transformed old user space bdflush into 1st kernel thread - kflushd.
+D: Many other patches, documentation files, mini kernels, utilities, ...
 
 N: John E. Gotts
 E: jgotts@engin.umich.edu
@@ -977,6 +974,16 @@ D: LP driver
 S: 201 Howell Street, Apartment 1C
 S: Chapel Hill, North Carolina 27514-4818
 S: USA
+
+N: Dave Jones
+E: dave@powertweak.com
+W: http://linux.powertweak.com
+D: Centaur/IDT Winchip/Winchip 2 tweaks
+D: Misc clean ups and other random hacking.
+S: 40, Heol Edward Lewis,
+S: Gelligaer, Hengoed,
+S: Mid Glamorgan, CF82 8EJ,
+S: Wales, United Kingdom
 
 N: Bernhard Kaindl
 E: bkaindl@netway.at

@@ -179,13 +179,13 @@ static __inline__ int ip_autofw_add(struct ip_autofw_user * af)
 {
 	struct ip_autofw * newaf;
 	newaf = kmalloc( sizeof(struct ip_autofw), GFP_KERNEL );
-	init_timer(&newaf->timer);
 	if ( newaf == NULL ) 
 	{
 		printk("ip_autofw_add:  malloc said no\n");
 		return( ENOMEM );
 	}
 
+	init_timer(&newaf->timer);
 	MOD_INC_USE_COUNT;
 
 	memcpy(newaf, af, sizeof(struct ip_autofw_user));

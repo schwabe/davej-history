@@ -66,10 +66,10 @@ static unsigned char dont_repeat[128] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,	/* esc...option */
-	0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, /* fn, num lock */
+	0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, /* fn, num lock */
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, /* scroll lock */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, /* R modifiers */
 };
 
 /* Simple translation table for the SysRq keys */
@@ -741,9 +741,12 @@ mackeyb_probe(void)
 		/* Enable full feature set of the keyboard
 		   ->get it to send separate codes for left and right shift,
 		   control, option keys */
+#if 0		/* handler 5 doesn't send separate codes for R modifiers */
 		if (adb_try_handler_change(id, 5))
 			printk("ADB keyboard at %d, handler set to 5\n", id);
-		else if (adb_try_handler_change(id, 3))
+		else
+#endif
+		if (adb_try_handler_change(id, 3))
 			printk("ADB keyboard at %d, handler set to 3\n", id);
 		else
 			printk("ADB keyboard at %d, handler 1\n", id);
@@ -908,13 +911,10 @@ init_turbomouse(int id)
 	
 	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(id));
 
-	adb_request(&req, NULL, ADBREQ_SYNC, 3,
-		ADB_WRITEREG(id,3), 0x20 | id, 4);
-
-	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(id));
+	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(3));
 
 	adb_request(&req, NULL, ADBREQ_SYNC, 9,
-	ADB_WRITEREG(id,2),
+	ADB_WRITEREG(3,2),
 	    0xe7,
 	    0x8c,
 	    0,
@@ -924,10 +924,10 @@ init_turbomouse(int id)
 	    0xff,
 	    0x94);
 
-	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(id));
+	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(3));
 
 	adb_request(&req, NULL, ADBREQ_SYNC, 9,
-	ADB_WRITEREG(id,2),
+	ADB_WRITEREG(3,2),
 	    0xa5,
 	    0x14,
 	    0,
@@ -977,4 +977,3 @@ init_microspeed(int id)
 
 	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(id));
 }
-

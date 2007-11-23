@@ -1042,9 +1042,9 @@ static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			rtl8129_rx(dev);
 
 		if (status & (TxOK | TxErr)) {
-			unsigned int dirty_tx = tp->dirty_tx;
+			unsigned int dirty_tx;
 
-			while (tp->cur_tx - dirty_tx > 0) {
+			for (dirty_tx = tp->dirty_tx; dirty_tx < tp->cur_tx; dirty_tx++) {
 				int entry = dirty_tx % NUM_TX_DESC;
 				int txstatus = inl(ioaddr + TxStatus0 + entry*4);
 
@@ -1091,7 +1091,6 @@ static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					clear_bit(0, (void*)&dev->tbusy);
 					mark_bh(NET_BH);
 				}
-				dirty_tx++;
 			}
 
 #ifndef final_version

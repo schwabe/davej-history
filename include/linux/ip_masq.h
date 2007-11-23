@@ -103,6 +103,26 @@ struct ip_mfw_user {
 
 #define IP_MASQ_MFW_SCHED	0x01
 
+/* 
+ *	VS & schedulers stuff 
+ */
+struct ip_vs_user {
+	/* create the virtual service and attach the scheduler to it */
+	u_int16_t	protocol;
+	u_int32_t	vaddr;		/* virtual address */
+	u_int16_t	vport;
+	/* ... timeouts and other stuff */
+
+	/* scheduler specific options */
+	u_int32_t	daddr;		/* real destination address */
+	u_int16_t	dport;
+	unsigned	masq_flags;
+	unsigned	sched_flags;
+	unsigned	weight;
+	char		data[0];	/* optional scheduler parameters */
+};
+
+
 #define IP_FW_MASQCTL_MAX 256
 #define IP_MASQ_TNAME_MAX  32
 
@@ -115,6 +135,7 @@ struct ip_masq_ctl {
 		struct ip_autofw_user autofw_user;
 		struct ip_mfw_user mfw_user;
 		struct ip_masq_user user;
+		struct ip_vs_user vs_user;
 		unsigned char m_raw[IP_FW_MASQCTL_MAX];
 	} u;
 };
@@ -124,7 +145,10 @@ struct ip_masq_ctl {
 #define IP_MASQ_TARGET_CORE	1
 #define IP_MASQ_TARGET_MOD	2	/* masq_mod is selected by "name" */
 #define IP_MASQ_TARGET_USER	3	
-#define IP_MASQ_TARGET_LAST	4
+#define IP_MASQ_TARGET_VS	4	/* sched_mod is selected by "name" */
+/*  #define IP_MASQ_TARGET_VS_SCHED 5 */
+#define IP_MASQ_TARGET_LAST	5
+
 
 #define IP_MASQ_CMD_NONE	0	/* just peek */
 #define IP_MASQ_CMD_INSERT	1
@@ -136,5 +160,9 @@ struct ip_masq_ctl {
 #define IP_MASQ_CMD_LIST	7	/* actually fake: done via /proc */
 #define IP_MASQ_CMD_ENABLE	8
 #define IP_MASQ_CMD_DISABLE	9
+#define IP_MASQ_CMD_ADD_DEST	10      /* for adding dest in IPVS */
+#define IP_MASQ_CMD_DEL_DEST	11      /* for deleting dest in IPVS */
+#define IP_MASQ_CMD_SET_DEST	12      /* for setting dest in IPVS */
 
 #endif /* _LINUX_IP_MASQ_H */
+

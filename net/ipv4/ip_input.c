@@ -266,6 +266,15 @@ int ip_local_deliver(struct sk_buff *skb)
 		}
 
 		ret = ip_fw_demasquerade(&skb);
+#ifdef CONFIG_IP_MASQUERADE_VS
+		if (ret == -3) {
+			/* packet had been tunneled */
+			return(0);
+		}
+		if (ret == -2) {
+		  	return skb->dst->input(skb);
+		}
+#endif
 		if (ret < 0) {
 			kfree_skb(skb);
 			return 0;

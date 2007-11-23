@@ -37,6 +37,7 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
      tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
    fi
    tristate 'SDL RISCom/8 card support' CONFIG_RISCOM8
+   tristate 'Computone IntelliPort Plus serial support' CONFIG_COMPUTONE
    tristate 'Specialix IO8+ card support' CONFIG_SPECIALIX
    if [ "$CONFIG_SPECIALIX" != "n" ]; then
      bool 'Specialix DTR/RTS pin is RTS' CONFIG_SPECIALIX_RTSCTS
@@ -168,6 +169,9 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   if [ "$CONFIG_RADIO_ZOLTRIX" = "y" ]; then
     hex '  ZOLTRIX I/O port (0x20c or 0x30c)' CONFIG_RADIO_ZOLTRIX_PORT 20c
   fi
+  dep_tristate 'Zoran ZR36057/36060 support' CONFIG_VIDEO_ZORAN $CONFIG_VIDEO_DEV
+  dep_tristate ' Include support for Iomega Buz' CONFIG_VIDEO_BUZ $CONFIG_VIDEO_ZORAN
+  #dep_tristate '  Include support for LML33' CONFIG_VIDEO_LML33 $CONFIG_VIDEO_ZORAN
 fi
 
 endmenu

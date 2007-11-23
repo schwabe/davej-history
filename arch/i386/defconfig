@@ -93,11 +93,20 @@ CONFIG_IDEDMA_AUTO=y
 #
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
-# CONFIG_BLK_DEV_MD is not set
+CONFIG_BLK_DEV_MD=y
+CONFIG_AUTODETECT_RAID=y
+CONFIG_MD_LINEAR=y
+CONFIG_MD_STRIPED=y
+CONFIG_MD_MIRRORING=y
+CONFIG_MD_RAID5=y
+CONFIG_MD_TRANSLUCENT=y
+CONFIG_MD_LVM=y
+CONFIG_MD_BOOT=y
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_XD is not set
 CONFIG_PARIDE_PARPORT=y
 # CONFIG_PARIDE is not set
+# CONFIG_BLK_CPQ_DA is not set
 # CONFIG_BLK_DEV_HD is not set
 
 #
@@ -230,6 +239,7 @@ CONFIG_EEXPRESS_PRO100=y
 # CONFIG_TR is not set
 # CONFIG_HOSTESS_SV11 is not set
 # CONFIG_COSA is not set
+# CONFIG_SEALEVEL_4021 is not set
 # CONFIG_RCPCI is not set
 # CONFIG_WAN_DRIVERS is not set
 # CONFIG_LAPBETHER is not set
@@ -239,6 +249,11 @@ CONFIG_EEXPRESS_PRO100=y
 # Amateur Radio support
 #
 # CONFIG_HAMRADIO is not set
+
+#
+# IrDA subsystem support
+#
+# CONFIG_IRDA is not set
 
 #
 # ISDN subsystem

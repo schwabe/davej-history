@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.54.2.3 1999/07/02 19:58:27 cort Exp $
+ * $Id: prom.c,v 1.54.2.5 1999/07/21 20:28:18 cort Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -261,6 +261,7 @@ prom_print(const char *msg)
  * We enter here early on, when the Open Firmware prom is still
  * handling exceptions and the MMU hash table for us.
  */
+unsigned long promi = 0;
 __init
 void
 prom_init(int r3, int r4, prom_entry pp)
@@ -1296,8 +1297,6 @@ print_properties(struct device_node *np)
 }
 #endif
 
-spinlock_t rtas_lock = SPIN_LOCK_UNLOCKED;
-
 /* this can be called after setup -- Cort */
 __openfirmware
 int
@@ -1328,12 +1327,11 @@ call_rtas(const char *service, int nargs, int nret,
 	for (i = 0; i < nargs; ++i)
 		u.words[i+3] = va_arg(list, unsigned long);
 	va_end(list);
-	
-	s = _disable_interrupts();
-	spin_lock(&rtas_lock);
+
+	save_flags(s);
+	cli();
 	enter_rtas((void *)__pa(&u));
-	spin_unlock(&rtas_lock);
-	_enable_interrupts(s);
+	restore_flags(s);
 	if (nret > 1 && outputs != NULL)
 		for (i = 0; i < nret-1; ++i)
 			outputs[i] = u.words[i+nargs+4];

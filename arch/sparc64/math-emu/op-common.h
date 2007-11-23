@@ -23,15 +23,15 @@ do {									\
     if (_FP_FRAC_ZEROP_##wc(X))						\
       X##_c = FP_CLS_ZERO;						\
     else								\
-      /* a denormalized number */					\
-      __FP_UNPACK_DENORM(fs, wc, X)					\
+      /* A denormalized number.  */					\
+      __FP_UNPACK_DENORM(fs, wc, X);					\
     break;								\
 									\
   case _FP_EXPMAX_##fs:							\
     if (_FP_FRAC_ZEROP_##wc(X))						\
       X##_c = FP_CLS_INF;						\
     else								\
-      /* we don't differentiate between signaling and quiet nans */	\
+      /* We don't differentiate between signaling and quiet nans.  */	\
       X##_c = FP_CLS_NAN;						\
     break;								\
   }									\

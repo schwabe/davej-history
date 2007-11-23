@@ -886,7 +886,7 @@ static int eth16i_check_signature(int ioaddr)
 	creg[0] &= 0x0F;      /* Mask collision cnr */
 	creg[2] &= 0x7F;      /* Mask DCLEN bit */
 
-#ifdef 0
+#if 0
 	/* 
 	   This was removed because the card was sometimes left to state
 	   from which it couldn't be find anymore. If there is need

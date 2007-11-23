@@ -53,6 +53,8 @@
 #define   USBPORTSC_PR		0x0200	/* Port Reset */
 #define   USBPORTSC_SUSP	0x1000	/* Suspend */
 
+#define UHCI_NULL_DATA_SIZE	0x7ff	/* for UHCI controller TD */
+
 struct uhci_qh {
 	unsigned int link;	/* Next queue */
 	unsigned int element;	/* Queue element pointer */
@@ -89,9 +91,22 @@ struct uhci_td {
 	usb_device_irq completed;	/* Completion handler routine */
 	unsigned int *backptr;		/* Where to remove this from.. */
 	void *dev_id;
-	int inuse;			/* Inuse? */
+	int inuse;			/* Inuse? (b0) Remove (b1)*/
 	struct uhci_qh *qh;
+	struct uhci_td *first;
+	struct usb_device *dev;		/* the owning device */
 } __attribute__((aligned(32)));
+
+struct uhci_iso_td {
+	int num;
+	char *data;
+	int maxsze;
+
+	struct uhci_td *td;
+
+	int frame;
+	int endframe;
+};
 
 /*
  * Note the alignment requirements of the entries
@@ -102,7 +117,7 @@ struct uhci_td {
  */
 struct uhci;
 
-#define UHCI_MAXTD 64
+#define UHCI_MAXTD	64
 
 #define UHCI_MAXQH	16
 
@@ -124,9 +139,11 @@ struct uhci_device {
  * The root hub pre-allocated QH's and TD's have
  * some special global uses..
  */
+#if 0
 #define control_td	td		/* Td's 0-30 */
 /* This is only for the root hub's TD list */
 #define tick_td		td[31]
+#endif
 
 /*
  * There are various standard queues. We set up several different
@@ -152,12 +169,12 @@ struct uhci_device {
  * Linus:
  *
  *  generic-iso-QH  ->  dev1-iso-QH  ->  generic-irq-QH  ->  dev1-irq-QH  -> ...
- *       |                       |                  |                   |
- *      End          dev1-iso-TD1          End            dev1-irq-TD1
- *                       |
- *                   dev1-iso-TD2
- *                       |
- *                      ....
+ *       |                  |                  |                   |
+ *      End             dev1-iso-TD1          End            dev1-irq-TD1
+ *                          |
+ *                      dev1-iso-TD2
+ *                          |
+ *                        ....
  *
  * This may vary a bit (the UHCI docs don't explicitly say you can put iso
  * transfers in QH's and all of their pictures don't have that either) but
@@ -211,8 +228,6 @@ struct uhci {
 	/* These are "standard" QH's for the entire bus */
 	struct uhci_qh qh[UHCI_MAXQH];
 #endif
-	struct uhci_device *root_hub;		/* Root hub device descriptor.. */
-
 	struct uhci_framelist *fl;		/* Frame list */
 	struct list_head interrupt_list;	/* List of interrupt-active TD's for this uhci */
 };

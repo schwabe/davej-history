@@ -1,5 +1,5 @@
 /*
- * $Id: irq.c,v 1.105.2.2 1999/06/17 01:16:10 paulus Exp $
+ * $Id: irq.c,v 1.105.2.3 1999/07/22 01:49:41 cort Exp $
  *
  *  arch/ppc/kernel/irq.c
  *
@@ -139,13 +139,16 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 		/* Free */
 		for (p = &irq_desc[irq].action; (action = *p) != NULL; p = &action->next)
 		{
-			/* Found it - now free it */
-			save_flags(flags);
-			cli();
-			*p = action->next;
-			restore_flags(flags);
-			irq_kfree(action);
-			return 0;
+			if (action->dev_id == dev_id)
+			{
+				/* Found it - now free it */
+				save_flags(flags);
+				cli();
+				*p = action->next;
+				restore_flags(flags);
+				irq_kfree(action);
+				return 0;
+			}
 		}
 		return -ENOENT;
 	}

@@ -4,7 +4,7 @@
  *
  * 	Copyright (c) 1994 Pauline Middelink
  *
- *	$Id: ip_masq.c,v 1.34.2.2 1999/08/07 10:56:28 davem Exp $
+ *	$Id: ip_masq.c,v 1.34.2.1 1999/07/02 10:10:00 davem Exp $
  *
  *
  *	See ip_fw.c for original log
@@ -47,7 +47,8 @@
  *	Kai Bankett		:	do not toss other IP protos in proto_doff()
  *	Dan Kegel		:	pointed correct NAT behavior for UDP streams
  *	Julian Anastasov	:	use daddr and dport as hash keys
- *	
+ *	Wensong Zhang		:	Added virtual server support 
+ *	Peter Kese		:	fixed TCP state handling for input-only
  */
 
 #include <linux/config.h>
@@ -80,6 +81,196 @@
 #include <linux/sysctl.h>
 #include <linux/ip_fw.h>
 #include <linux/ip_masq.h>
+
+#ifdef CONFIG_IP_MASQUERADE_VS
+#include <net/ip_vs.h>
+#endif /* CONFIG_IP_MASQUERADE_VS */
+
+#ifdef CONFIG_IP_MASQUERADE_VS
+/*
+ * The following block implements slow timers, most code is stolen
+ * from linux/kernel/sched.c
+ */
+#define SHIFT_BITS 7
+#define TVN_BITS 11
+#define TVR_BITS 7
+#define TVN_SIZE (1 << TVN_BITS)
+#define TVR_SIZE (1 << TVR_BITS)
+#define TVN_MASK (TVN_SIZE - 1)
+#define TVR_MASK (TVR_SIZE - 1)
+
+struct sltimer_vec {
+        int index;
+        struct timer_list *vec[TVN_SIZE];
+};
+
+struct sltimer_vec_root {
+        int index;
+        struct timer_list *vec[TVR_SIZE];
+};
+
+static struct sltimer_vec sltv3 = { 0 };
+static struct sltimer_vec sltv2 = { 0 };
+static struct sltimer_vec_root sltv1 = { 0 };
+
+static struct sltimer_vec * const sltvecs[] = {
+	(struct sltimer_vec *)&sltv1, &sltv2, &sltv3
+};
+
+#define NOOF_SLTVECS (sizeof(sltvecs) / sizeof(sltvecs[0]))
+
+static unsigned long sltimer_jiffies = 0;
+
+static inline void insert_sltimer(struct timer_list *timer,
+				struct timer_list **vec, int idx)
+{
+	if ((timer->next = vec[idx]))
+		vec[idx]->prev = timer;
+	vec[idx] = timer;
+	timer->prev = (struct timer_list *)&vec[idx];
+}
+
+static inline void internal_add_sltimer(struct timer_list *timer)
+{
+	/*
+	 * must be cli-ed when calling this
+	 */
+	unsigned long expires = timer->expires;
+	unsigned long idx = (expires - sltimer_jiffies) >> SHIFT_BITS;
+
+	if (idx < TVR_SIZE) {
+		int i = (expires >> SHIFT_BITS) & TVR_MASK;
+		insert_sltimer(timer, sltv1.vec, i);
+	} else if (idx < 1 << (TVR_BITS + TVN_BITS)) {
+		int i = (expires >> (SHIFT_BITS+TVR_BITS)) & TVN_MASK;
+		insert_sltimer(timer, sltv2.vec, i);
+	} else if ((signed long) idx < 0) {
+		/* can happen if you add a timer with expires == jiffies,
+		 * or you set a timer to go off in the past
+		 */
+		insert_sltimer(timer, sltv1.vec, sltv1.index);
+	} else if (idx <= 0xffffffffUL) {
+		int i = (expires >> (SHIFT_BITS+TVR_BITS+TVN_BITS)) & TVN_MASK;
+		insert_sltimer(timer, sltv3.vec, i);
+	} else {
+		/* Can only get here on architectures with 64-bit jiffies */
+		timer->next = timer->prev = timer;
+	}
+}
+
+rwlock_t  sltimerlist_lock = RW_LOCK_UNLOCKED;
+
+void add_sltimer(struct timer_list *timer)
+{
+	write_lock(&sltimerlist_lock);
+	if (timer->prev)
+		goto bug;
+	internal_add_sltimer(timer);
+out:
+	write_unlock(&sltimerlist_lock);
+	return;
+
+bug:
+	printk("bug: kernel sltimer added twice at %p.\n",
+			__builtin_return_address(0));
+	goto out;
+}
+
+static inline int detach_sltimer(struct timer_list *timer)
+{
+	struct timer_list *prev = timer->prev;
+	if (prev) {
+		struct timer_list *next = timer->next;
+		prev->next = next;
+		if (next)
+			next->prev = prev;
+		return 1;
+	}
+	return 0;
+}
+
+void mod_sltimer(struct timer_list *timer, unsigned long expires)
+{
+	write_lock(&sltimerlist_lock);
+	timer->expires = expires;
+	detach_sltimer(timer);
+	internal_add_sltimer(timer);
+	write_unlock(&sltimerlist_lock);
+}
+
+int del_sltimer(struct timer_list * timer)
+{
+	int ret;
+
+	write_lock(&sltimerlist_lock);
+	ret = detach_sltimer(timer);
+	timer->next = timer->prev = 0;
+	write_unlock(&sltimerlist_lock);
+	return ret;
+}
+
+
+static inline void cascade_sltimers(struct sltimer_vec *tv)
+{
+        /* cascade all the timers from tv up one level */
+        struct timer_list *timer;
+        timer = tv->vec[tv->index];
+        /*
+         * We are removing _all_ timers from the list, so we don't  have to
+         * detach them individually, just clear the list afterwards.
+         */
+        while (timer) {
+                struct timer_list *tmp = timer;
+                timer = timer->next;
+                internal_add_sltimer(tmp);
+        }
+        tv->vec[tv->index] = NULL;
+        tv->index = (tv->index + 1) & TVN_MASK;
+}
+
+static inline void run_sltimer_list(void)
+{
+	write_lock(&sltimerlist_lock);
+	while ((long)(jiffies - sltimer_jiffies) >= 0) {
+		struct timer_list *timer;
+		if (!sltv1.index) {
+			int n = 1;
+			do {
+				cascade_sltimers(sltvecs[n]);
+			} while (sltvecs[n]->index == 1 && ++n < NOOF_SLTVECS);
+		}
+		while ((timer = sltv1.vec[sltv1.index])) {
+			void (*fn)(unsigned long) = timer->function;
+			unsigned long data = timer->data;
+			detach_sltimer(timer);
+			timer->next = timer->prev = NULL;
+			write_unlock(&sltimerlist_lock);
+			fn(data);
+			write_lock(&sltimerlist_lock);
+		}
+		sltimer_jiffies += 1<<SHIFT_BITS; 
+		sltv1.index = (sltv1.index + 1) & TVR_MASK;
+	}
+	write_unlock(&sltimerlist_lock);
+}
+
+static void sltimer_handler(unsigned long data);
+
+struct timer_list       slow_timer = {
+        NULL, NULL,
+        0, 0,
+        sltimer_handler,
+};
+
+#define SLTIMER_PERIOD       1*HZ
+
+void sltimer_handler(unsigned long data)
+{
+        run_sltimer_list();
+        mod_timer(&slow_timer, (jiffies + SLTIMER_PERIOD));
+}
+
+#endif /* CONFIG_IP_MASQUERADE_VS */
 
 int sysctl_ip_masq_debug = 0;
 
@@ -171,27 +362,36 @@ struct masq_tcp_states_t masq_tcp_states [] = {
 /*fin*/	{{mTW, mFW, mSS, mTW, mFW, mTW, mCL, mTW, mLA, mLI }},
 /*ack*/	{{mES, mES, mSS, mSR, mFW, mTW, mCL, mCW, mLA, mES }},
 /*rst*/ {{mCL, mCL, mSS, mCL, mCL, mTW, mCL, mCL, mCL, mCL }},
+
+#ifdef CONFIG_IP_MASQUERADE_VS
+/*	INPUT-ONLY */
+/* 	  mNO, mES, mSS, mSR, mFW, mTW, mCL, mCW, mLA, mLI 	*/
+/*syn*/	{{mES, mES, mES, mSR, mES, mSR, mSR, mSR, mSR, mSR }},
+/*fin*/	{{mCL, mFW, mSS, mTW, mFW, mTW, mCL, mCW, mLA, mLI }},
+/*ack*/	{{mCL, mES, mSS, mSR, mFW, mTW, mCL, mCW, mCL, mLI }},
+/*rst*/ {{mCL, mCL, mCL, mSR, mCL, mCL, mCL, mCL, mLA, mLI }},
+#endif
 };
 
-static __inline__ int masq_tcp_state_idx(struct tcphdr *th, int output) 
+#define MASQ_STATE_INPUT	0
+#define MASQ_STATE_OUTPUT	4
+#define MASQ_STATE_INPUT_ONLY	8
+
+static __inline__ int masq_tcp_state_idx(struct tcphdr *th, int state_off) 
 {
 	/*
-	 *	[0-3]: input states, [4-7]: output.
+	 *	[0-3]: input states, [4-7]: output, [8-11] input only states.
 	 */
-	if (output) 
-		output=4;
-
 	if (th->rst)
-		return output+3;
+		return state_off+3;
 	if (th->syn)
-		return output+0;
+		return state_off+0;
 	if (th->fin)
-		return output+1;
+		return state_off+1;
 	if (th->ack)
-		return output+2;
+		return state_off+2;
 	return -1;
 }
-
 
 
 static int masq_set_state_timeout(struct ip_masq *ms, int state)
@@ -216,14 +416,24 @@ static int masq_set_state_timeout(struct ip_masq *ms, int state)
 	return state;
 }
 
-static int masq_tcp_state(struct ip_masq *ms, int output, struct tcphdr *th)
+static int masq_tcp_state(struct ip_masq *ms, int state_off, struct tcphdr *th)
 {
 	int state_idx;
 	int new_state = IP_MASQ_S_CLOSE;
 
-	if ((state_idx = masq_tcp_state_idx(th, output)) < 0) {
+#ifdef CONFIG_IP_MASQUERADE_VS
+	/* update state offset to INPUT_ONLY if necessary */
+	/* or delete NO_OUTPUT flag if output packet detected */
+	if (ms->flags & IP_MASQ_F_VS_NO_OUTPUT) {
+		if (state_off == MASQ_STATE_OUTPUT)
+			ms->flags &= ~IP_MASQ_F_VS_NO_OUTPUT;
+		else state_off = MASQ_STATE_INPUT_ONLY;
+	} 
+#endif
+
+	if ((state_idx = masq_tcp_state_idx(th, state_off)) < 0) {
 		IP_MASQ_DEBUG(1, "masq_state_idx(%d)=%d!!!\n", 
-			output, state_idx);
+			state_off, state_idx);
 		goto tcp_state_out;
 	}
 
@@ -233,7 +443,7 @@ tcp_state_out:
 	if (new_state!=ms->state)
 		IP_MASQ_DEBUG(1, "%s %s [%c%c%c%c] %08lX:%04X-%08lX:%04X state: %s->%s\n",
 				masq_proto_name(ms->protocol),
-				output? "output" : "input ",
+				(state_off==MASQ_STATE_OUTPUT) ? "output " : "input ",
 				th->syn? 'S' : '.',
 				th->fin? 'F' : '.',
 				th->ack? 'A' : '.',
@@ -242,6 +452,14 @@ tcp_state_out:
 				ntohl(ms->daddr), ntohs(ms->dport),
 				ip_masq_state_name(ms->state),
 				ip_masq_state_name(new_state));
+
+#ifdef CONFIG_IP_MASQUERADE_VS
+	if (th->fin && (ms->state == IP_MASQ_S_ESTABLISHED)
+            && (ms->flags & IP_MASQ_F_VS) && !(ms->flags & IP_MASQ_F_VS_FIN)) {
+		ip_vs_fin_masq(ms);
+	}
+#endif /* CONFIG_IP_MASQUERADE_VS */
+
 	return masq_set_state_timeout(ms, new_state);
 }
 
@@ -249,7 +467,7 @@ tcp_state_out:
 /*
  *	Handle state transitions
  */
-static int masq_set_state(struct ip_masq *ms, int output, struct iphdr *iph, void *tp)
+static int masq_set_state(struct ip_masq *ms, int state_off, struct iphdr *iph, void *tp)
 {
 	switch (iph->protocol) {
 		case IPPROTO_ICMP:
@@ -257,7 +475,7 @@ static int masq_set_state(struct ip_masq *ms, int output, struct iphdr *iph, voi
 		case IPPROTO_UDP:
 			return masq_set_state_timeout(ms, IP_MASQ_S_UDP);
 		case IPPROTO_TCP:
-			return masq_tcp_state(ms, output, tp);
+			return masq_tcp_state(ms, state_off, tp);
 	}
 	return -1;
 }
@@ -356,6 +574,9 @@ atomic_t mport_count = ATOMIC_INIT(0);
 
 EXPORT_SYMBOL(ip_masq_get_debug_level);
 EXPORT_SYMBOL(ip_masq_new);
+#ifdef CONFIG_IP_MASQUERADE_VS
+EXPORT_SYMBOL(ip_masq_new_vs);
+#endif /* CONFIG_IP_MASQUERADE_VS */
 EXPORT_SYMBOL(ip_masq_listen);
 EXPORT_SYMBOL(ip_masq_free_ports);
 EXPORT_SYMBOL(ip_masq_out_get);
@@ -424,9 +645,17 @@ static void __ip_masq_set_expire(struct ip_masq *ms, unsigned long tout)
 {
         if (tout) {
                 ms->timer.expires = jiffies+tout;
+#ifdef CONFIG_IP_MASQUERADE_VS
+                add_sltimer(&ms->timer);
+#else
                 add_timer(&ms->timer);
+#endif
         } else {
+#ifdef CONFIG_IP_MASQUERADE_VS
+                del_sltimer(&ms->timer);
+#else
                 del_timer(&ms->timer);
+#endif
         }
 }
 
@@ -742,6 +971,10 @@ struct ip_masq * ip_masq_out_get(int protocol, __u32 s_addr, __u16 s_port, __u32
 	struct ip_masq *ms;
 
 	read_lock(&__ip_masq_lock);
+#ifdef CONFIG_IP_MASQUERADE_VS
+        ms = ip_vs_out_get(protocol, s_addr, s_port, d_addr, d_port);
+        if (ms == NULL)
+#endif /* CONFIG_IP_MASQUERADE_VS */
 	ms = __ip_masq_out_get(protocol, s_addr, s_port, d_addr, d_port);
 	read_unlock(&__ip_masq_lock);
 
@@ -755,6 +988,10 @@ struct ip_masq * ip_masq_in_get(int protocol, __u32 s_addr, __u16 s_port, __u32 
 	struct ip_masq *ms;
 
 	read_lock(&__ip_masq_lock);
+#ifdef CONFIG_IP_MASQUERADE_VS
+        ms = ip_vs_in_get(protocol, s_addr, s_port, d_addr, d_port);
+        if (ms == NULL)
+#endif /* CONFIG_IP_MASQUERADE_VS */
 	ms =  __ip_masq_in_get(protocol, s_addr, s_port, d_addr, d_port);
 	read_unlock(&__ip_masq_lock);
 
@@ -825,6 +1062,14 @@ static void masq_expire(unsigned long data)
 	if (ms->control) 
 		ip_masq_control_del(ms);
 
+#ifdef CONFIG_IP_MASQUERADE_VS
+        if (ms->flags & IP_MASQ_F_VS) {
+                if (ip_vs_unhash(ms)) {
+                        ip_vs_unbind_masq(ms);
+                }
+        }
+        else
+#endif	/* CONFIG_IP_MASQUERADE_VS */
         if (ip_masq_unhash(ms)) {
 		if (ms->flags&IP_MASQ_F_MPORT) {
 			atomic_dec(&mport_count);
@@ -1061,6 +1306,73 @@ mport_nono:
         return NULL;
 }
 
+
+#ifdef CONFIG_IP_MASQUERADE_VS
+/*
+ *  Create a new masquerade entry for IPVS, all parameters {maddr,
+ *  mport, saddr, sport, daddr, dport, mflags} are known. No need
+ *  to allocate a free mport. And, hash it into the ip_vs_table.
+ *
+ *  Be careful, it can be called from u-space
+ */
+
+struct ip_masq * ip_masq_new_vs(int proto, __u32 maddr, __u16 mport, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned mflags)
+{
+        struct ip_masq *ms;
+        static int n_fails = 0;
+	int prio;
+
+	prio = (mflags&IP_MASQ_F_USER) ? GFP_KERNEL : GFP_ATOMIC;
+
+        ms = (struct ip_masq *) kmalloc(sizeof(struct ip_masq), prio);
+        if (ms == NULL) {
+                if (++n_fails < 5)
+                        IP_VS_ERR("ip_masq_new_vs(proto=%s): no memory available.\n",
+                                  masq_proto_name(proto));
+                return NULL;
+        }
+	MOD_INC_USE_COUNT;
+        memset(ms, 0, sizeof(*ms));
+	init_timer(&ms->timer);
+	ms->timer.data     = (unsigned long)ms;
+	ms->timer.function = masq_expire;
+        ms->protocol	   = proto;
+        ms->saddr    	   = saddr;
+        ms->sport	   = sport;
+        ms->daddr	   = daddr;
+        ms->dport	   = dport;
+        ms->maddr          = maddr;
+        ms->mport          = mport;
+        ms->flags	   = mflags;
+        ms->app_data	   = NULL;
+        ms->control	   = NULL;
+	
+	atomic_set(&ms->n_control,0);
+	atomic_set(&ms->refcnt,0);
+
+        if (mflags & IP_MASQ_F_USER) 	
+                write_lock_bh(&__ip_masq_lock);
+        else 
+                write_lock(&__ip_masq_lock);
+
+        /*
+         *  Hash it in the ip_vs_table
+         */
+        ip_vs_hash(ms);
+
+        if (mflags & IP_MASQ_F_USER) 	
+                write_unlock_bh(&__ip_masq_lock);
+        else 
+                write_unlock(&__ip_masq_lock);
+
+        /*  ip_masq_bind_app(ms); */
+        atomic_inc(&ms->refcnt);
+        masq_set_state_timeout(ms, IP_MASQ_S_NONE);
+        return ms;
+}
+#endif /* CONFIG_IP_MASQUERADE_VS */
+
+
 /*
  *	Get transport protocol data offset, check against size
  *	return:
@@ -1102,6 +1414,7 @@ static __inline__ int proto_doff(unsigned proto, char *th, unsigned size)
 			proto, size);
 	return ret;
 }
+
 
 int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 {
@@ -1357,11 +1670,11 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
   	IP_MASQ_DEBUG(2, "O-routed from %08lX:%04X with masq.addr %08lX\n",
 		ntohl(ms->maddr),ntohs(ms->mport),ntohl(maddr));
 
-	masq_set_state(ms, 1, iph, h.portp);
+	masq_set_state(ms, MASQ_STATE_OUTPUT, iph, h.portp);
 	ip_masq_put(ms);
 
 	return 0;
- }
+}
 
 /*
  *	Restore original addresses and ports in the original IP
@@ -1520,7 +1833,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 		       ntohs(icmp_id(icmph)),
 		       icmph->type);
 
-		masq_set_state(ms, 1, iph, icmph);
+		masq_set_state(ms, MASQ_STATE_OUTPUT, iph, icmph);
 		ip_masq_put(ms);
 
 		return 1;
@@ -1766,7 +2079,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 		       ntohs(icmp_id(icmph)),
 		       icmph->type);
 
-		masq_set_state(ms, 0, iph, icmph);
+		masq_set_state(ms, MASQ_STATE_INPUT, iph, icmph);
 		ip_masq_put(ms);
 
 		return 1;
@@ -1984,13 +2297,19 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 		return(ip_fw_demasq_icmp(skb_p));
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
-		/* 
+	        /*
 		 *	Make sure packet is in the masq range 
 		 *	... or some mod-ule relaxes input range
 		 *	... or there is still some `special' mport opened
 		 */
+#ifdef CONFIG_IP_MASQUERADE_VS
+		ms = ip_masq_in_get_iph(iph);
+		if ((ms == NULL)
+                    && (ip_vs_lookup_service(maddr, h.portp[1], iph->protocol) == NULL)
+#else
 		if ((ntohs(h.portp[1]) < PORT_MASQ_BEGIN
 				|| ntohs(h.portp[1]) > PORT_MASQ_END)
+#endif /* CONFIG_IP_MASQUERADE_VS */
 #ifdef CONFIG_IP_MASQUERADE_MOD
 				&& (ip_masq_mod_in_rule(skb, iph) != 1) 
 #endif
@@ -2032,8 +2351,6 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 		return 0;
 	}
 
-
-
  	IP_MASQ_DEBUG(2, "Incoming %s %08lX:%04X -> %08lX:%04X\n",
  		masq_proto_name(iph->protocol),
  		ntohl(iph->saddr), ntohs(h.portp[0]),
@@ -2042,8 +2359,9 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
  	/*
  	 * reroute to original host:port if found...
          */
-
+#ifndef CONFIG_IP_MASQUERADE_VS
         ms = ip_masq_in_get_iph(iph);
+#endif	
 
 	/*
  	 * 	Give additional modules a chance to create an entry
@@ -2058,10 +2376,19 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 	ip_masq_mod_in_update(skb, iph, ms);
 #endif
 
+#ifdef CONFIG_IP_MASQUERADE_VS
+	if (!ms && (h.th->syn || (iph->protocol!=IPPROTO_TCP))) {
+	        /* 
+		 * Let the virtual server select a real server
+		 * for the incomming connection, and create a
+                 * masquerading entry.
+		 */ 
+		ms = ip_vs_schedule(iph->daddr,h.portp[1],iph->protocol,iph);
+	}
+#endif	/* CONFIG_IP_MASQUERADE_VS */
 
         if (ms != NULL)
         {
-
                 /*
                  *	got reply, so clear flag
                  */
@@ -2110,13 +2437,65 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 
                 }
 		}
+
 		if ((skb=masq_skb_cow(skb_p, &iph, &h.raw)) == NULL) {
 			ip_masq_put(ms);
 			return -1;
 		}
+
+#ifdef CONFIG_IP_MASQUERADE_VS
+		if (IP_MASQ_VS_FWD(ms) != 0) {
+                        int ret = 0;
+                        
+                        /*
+                         *    Return values mean:
+                         *      -1    skb must be released
+                         *      -2    call skb->dst->input(skb) to release skb
+                         *      -3    skb has been released
+                         */
+                        switch (IP_MASQ_VS_FWD(ms)) {
+                          case IP_MASQ_F_VS_TUNNEL:
+                                if (ip_vs_tunnel_xmit(skb_p, ms->saddr) == 0) {
+                                        IP_VS_DBG("tunneling error.\n");
+                                } else {
+                                        IP_VS_DBG("tunneling succeeded.\n");
+                                }
+                                ret = -3;
+                                break;
+                                
+                          case IP_MASQ_F_VS_DROUTE:
+                                dst_release(skb->dst);
+                                skb->dst = NULL;
+                                ip_send_check(iph);
+                                if (ip_route_input(skb, ms->saddr, iph->saddr,
+                                                   iph->tos, skb->dev)) {
+                                        IP_VS_DBG("direct routing error.\n");
+                                        ret = -1;
+                                } else {
+                                        IP_VS_DBG("direct routing succeeded.\n");
+                                        ret = -2;
+                                }
+                                break;
+                                
+                          case IP_MASQ_F_VS_LOCALNODE:
+                                ret = 0;
+                        }
+                        
+                        /*
+                         *    Set state of masq entry
+                         */
+                        masq_set_state (ms, MASQ_STATE_INPUT, iph, h.portp);
+                        ip_masq_put(ms);
+
+                        return ret;
+		}
+ 
+                IP_VS_DBG("masquerading packet...\n");
+#endif	/* CONFIG_IP_MASQUERADE_VS */
+                
                 iph->daddr = ms->saddr;
                 h.portp[1] = ms->sport;
-
+                
 		/*
 		 *	Invalidate csum saving if tunnel has masq helper
 		 */
@@ -2173,11 +2552,11 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 					h.uh->check = 0xFFFF;
 				break;
 		}
-                ip_send_check(iph);
+		ip_send_check(iph);
 
                 IP_MASQ_DEBUG(2, "I-routed to %08lX:%04X\n",ntohl(iph->daddr),ntohs(h.portp[1]));
 
-		masq_set_state (ms, 0, iph, h.portp);
+		masq_set_state (ms, MASQ_STATE_INPUT, iph, h.portp);
 		ip_masq_put(ms);
 
                 return 1;
@@ -2292,7 +2671,6 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 		len += sprintf(buffer+len, "%-127s\n", temp);
 
 		if(len >= length) {
-
 			read_unlock_bh(&__ip_masq_lock);
 			goto done;
 		}
@@ -2300,9 +2678,52 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 	read_unlock_bh(&__ip_masq_lock);
 
 	}
+
+#ifdef CONFIG_IP_MASQUERADE_VS
+        for(idx = 0; idx < IP_VS_TAB_SIZE; idx++) 
+	{
+	/*
+	 *	Lock is actually only need in next loop 
+	 *	we are called from uspace: must stop bh.
+	 */
+	read_lock_bh(&__ip_masq_lock);
+
+	l = &ip_vs_table[idx];
+	for (e=l->next; e!=l; e=e->next) {
+		ms = list_entry(e, struct ip_masq, m_list);
+		pos += 128;
+		if (pos <= offset) {
+			len = 0;
+			continue;
+		}
+
+		/*
+		 *	We have locked the tables, no need to del/add timers
+		 *	nor cli()  8)
+		 */
+
+		sprintf(temp,"%s %08lX:%04X %08lX:%04X %04X %08X %6d %6d %7lu",
+			masq_proto_name(ms->protocol),
+			ntohl(ms->saddr), ntohs(ms->sport),
+			ntohl(ms->daddr), ntohs(ms->dport),
+			ntohs(ms->mport),
+			ms->out_seq.init_seq,
+			ms->out_seq.delta,
+			ms->out_seq.previous_delta,
+			ms->timer.expires-jiffies);
+		len += sprintf(buffer+len, "%-127s\n", temp);
+
+		if(len >= length) {
+			read_unlock_bh(&__ip_masq_lock);
+			goto done;
+		}
+        }
+	read_unlock_bh(&__ip_masq_lock);
+
+	}
+#endif /* CONFIG_IP_MASQUERADE_VS */
+
 done:
-
-
 	begin = len - (pos - offset);
 	*start = buffer + begin;
 	len -= begin;
@@ -2408,6 +2829,11 @@ int ip_masq_uctl(int optname, char * optval , int optlen)
 #ifdef CONFIG_IP_MASQUERADE_MOD
 		case IP_MASQ_TARGET_MOD:
 			ret = ip_masq_mod_ctl(optname, &masq_ctl, optlen);
+			break;
+#endif
+#ifdef CONFIG_IP_MASQUERADE_VS
+	        case IP_MASQ_TARGET_VS:
+			ret = ip_vs_ctl(optname, &masq_ctl, optlen);
 			break;
 #endif
 	}
@@ -2529,7 +2955,7 @@ __initfunc(int ip_masq_init(void))
 		(char *) IPPROTO_ICMP,
 		ip_masq_user_info
 	});
-#endif	
+#endif	/* CONFIG_PROC_FS */
 #ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
 	ip_autofw_init();
 #endif
@@ -2538,6 +2964,11 @@ __initfunc(int ip_masq_init(void))
 #endif
 #ifdef CONFIG_IP_MASQUERADE_MFW
 	ip_mfw_init();
+#endif
+#ifdef CONFIG_IP_MASQUERADE_VS
+        ip_vs_init();
+        slow_timer.expires = jiffies+SLTIMER_PERIOD;
+        add_timer(&slow_timer);
 #endif
         ip_masq_app_init();
 

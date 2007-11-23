@@ -252,8 +252,10 @@ mesh_detect(Scsi_Host_Template *tp)
 			continue;
 		}
 		mesh_host->unique_id = nmeshes;
+#ifndef MODULE
 		note_scsi_host(mesh, mesh_host);
-		
+#endif
+
 		ms = (struct mesh_state *) mesh_host->hostdata;
 		if (ms == 0)
 			panic("no mesh state");
@@ -685,16 +687,15 @@ finish_cmds(void *data)
 	unsigned long flags;
 
 	for (;;) {
-		save_flags(flags);
-		cli();
+		spin_lock_irqsave(&io_request_lock, flags);
 		cmd = ms->completed_q;
 		if (cmd == NULL) {
-			restore_flags(flags);
+			spin_unlock_irqrestore(&io_request_lock, flags);
 			break;
 		}
 		ms->completed_q = (Scsi_Cmnd *) cmd->host_scribble;
-		restore_flags(flags);
 		(*cmd->scsi_done)(cmd);
+		spin_unlock_irqrestore(&io_request_lock, flags);
 	}
 }
 
@@ -762,8 +763,8 @@ start_phase(struct mesh_state *ms)
 	Scsi_Cmnd *cmd = ms->current_req;
 	struct mesh_target *tp = &ms->tgts[ms->conn_tgt];
 
-	dlog(ms, "start_phase err/exc/fc/seq = %.8x",
-	     MKWORD(mr->error, mr->exception, mr->fifo_count, mr->sequence));
+	dlog(ms, "start_phase nmo/exc/fc/seq = %.8x",
+	     MKWORD(ms->n_msgout, mr->exception, mr->fifo_count, mr->sequence));
 	out_8(&mr->interrupt, INT_ERROR | INT_EXCEPTION | INT_CMDDONE);
 	seq = use_active_neg + (ms->n_msgout? SEQ_ATN: 0);
 	switch (ms->msgphase) {
@@ -1057,6 +1058,7 @@ cmd_complete(struct mesh_state *ms)
 			t = 230;		/* wait up to 230us */
 			while ((mr->bus_status0 & BS0_REQ) == 0) {
 				if (--t < 0) {
+					dlog(ms, "impatient for req", ms->n_msgout);
 					ms->msgphase = msg_none;
 					break;
 				}
@@ -1643,7 +1645,7 @@ mesh_done(struct mesh_state *ms, int start_next)
 static void
 mesh_completed(struct mesh_state *ms, Scsi_Cmnd *cmd)
 {
-#if 0
+#if 1
 	if (ms->completed_q == NULL)
 		ms->completed_q = cmd;
 	else

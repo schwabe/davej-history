@@ -33,6 +33,8 @@ static int sis900_debug = 0;
 static int multicast_filter_limit = 128;
 
 #define MAX_UNITS 8             /* More are supported, limit only on options */
+static int speeds[MAX_UNITS] = {100, 100, 100, 100, 100, 100, 100, 100};
+static int full_duplex[MAX_UNITS] = {1, 1, 1, 1, 1, 1, 1, 1};
 
 #define TX_BUF_SIZE     1536
 #define RX_BUF_SIZE     1536
@@ -41,9 +43,9 @@ static int multicast_filter_limit = 128;
 #define RX_DMA_BURST    0
 #define TX_FIFO_THRESH  16
 #define TxDRNT_100      (1536>>5)
-#define TxDRNT_10       16 //(1536>>5)
+#define TxDRNT_10       16 
 #define RxDRNT_100      8
-#define RxDRNT_10       8 //(1536>>5)
+#define RxDRNT_10       8 
 #define TRUE            1
 #define FALSE           0
 
@@ -387,21 +389,23 @@ struct sis900_private {
         EuphLiteDesc rx_buf[NUM_RX_DESC];
         unsigned char *rx_bufs;
         unsigned char *tx_bufs;                 /* Tx bounce buffer region. */
-        char phys[4];                           /* MII device addresses. */
-        int phy_idx;
+        char phys[4];                           /* MII device addresses.    */
+        int phy_idx;                            /* Support Max 4 PHY        */
         u16 pmd_status;
-        unsigned int tx_full;                   /* The Tx queue is full. */
-        u16 full_duplex;        /* FullHalf-duplex. */
-        u16 hunmbps;            /* 10010 Mbps. */
+        unsigned int tx_full;                   /* The Tx queue is full.    */
+	int MediaSpeed;                         /* user force speed         */
+	int MediaDuplex;                        /* user force duplex        */
+        int full_duplex;                        /* Full/Half-duplex.        */
+        int speeds;                             /* 100/10 Mbps.             */
         u16 LinkOn;
         u16 LinkChange;
 };
 
 #ifdef MODULE
 #if LINUX_VERSION_CODE > 0x20115
-MODULE_AUTHOR("Silicon Integrated Systems Corporation");
+MODULE_AUTHOR("Jim Huang <cmhuang@sis.com.tw>");
 MODULE_DESCRIPTION("SiS 900 PCI Fast Ethernet driver");
-MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
+MODULE_PARM(speeds, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(multicast_filter_limit, "i");
 MODULE_PARM(max_interrupt_work, "i");
@@ -425,6 +429,7 @@ static struct enet_statistics *sis900_get_stats(struct device *dev);
 static void set_rx_mode(struct device *dev);
 static void sis900_reset(struct device *dev);
 static u16 elAutoNegotiate(struct device *dev, int phy_id, int *duplex, int *speed);
+static void elSetCapability(struct device *dev, int phy_id, int duplex, int speed);
 static u16 elPMDreadMode(struct device *dev, int phy_id, int *speed, int *duplex);
 static u16 elMIIpollBit(struct device *dev, int phy_id, int location, u16 mask, u16 polarity, u16 *value);
 static void elSetMediaType(struct device *dev, int speed, int duplex);
@@ -544,9 +549,10 @@ static struct device * sis900_probe1(   int pci_bus,
 {
         static int did_version = 0;     /* Already printed version info. */
         struct sis900_private *tp;
-        int     duplex=0;
-        int     speed=0;
-        int i;
+	u16    status;
+        int    duplex = found_cnt < MAX_UNITS ? full_duplex[found_cnt] : 0 ;
+        int    speed  = found_cnt < MAX_UNITS ? speeds[found_cnt] : 0 ;
+        int    phy=0, phy_idx=0, i;
 
         if (did_version++ == 0)
                 printk(KERN_INFO "%s", version);
@@ -588,25 +594,11 @@ static struct device * sis900_probe1(   int pci_bus,
            Doing this in open() would allow detecting external xcvrs later, but
            takes too much time. */
         if (sis_cap_tbl[chip_idx] & HAS_MII_XCVR) {
-                int phy, phy_idx;
                 for (phy = 0, phy_idx = 0;
                         phy < 32 && phy_idx < sizeof(tp->phys); phy++)
                 {
-                        int mii_status = mdio_read(dev, phy, MII_STATUS);
-                        /*
-                        {
-                           int p;
-                           int l;
-                           for (p = 0 ; p < 4 ; p ++) {
-                                for (l=0 ; l<16 ; l++) {
-                                  int status = mdio_read(dev, phy, l);
-                                  status = mdio_read(dev, phy, l);
-                                  printk(KERN_INFO "MII info addr[%d][%d]=%x\n",
-                                        p, l, status);
-                                }
-                           }
-                        }
-                        */
+                        int mii_status ;
+			mii_status = mdio_read(dev, phy, MII_STATUS);
 
                         if (mii_status != 0xffff && mii_status != 0x0000) {
                                 tp->phy_idx = phy_idx;
@@ -620,45 +612,85 @@ static struct device * sis900_probe1(   int pci_bus,
                 }
 
                 if (phy_idx == 0) {
-                        printk(KERN_INFO "%s: No MII transceivers found!",
+                        printk(KERN_INFO "%s: No MII transceivers found!\n",
                                         dev->name);
-                        printk(KERN_INFO "Assuming SYM transceiver.\n");
                         tp->phys[0] = -1;
+			tp->pmd_status = 0;
                 }
         } else {
-                        tp->phys[0] = 32;
+                        tp->phys[0] = -1;
+			tp->pmd_status = 0;
         }
 
-        if (tp->pmd_status > 0) {
-                tp->pmd_status=
-                   elAutoNegotiate(dev, tp->phys[tp->phy_idx], &duplex, &speed);
-                if (tp->pmd_status & MIISTAT_LINK) {
-                        if (duplex == FDX_CAPABLE_FULL_SELECTED)
-                                tp->full_duplex=1;
-                        if (speed == HW_SPEED_100_MBPS)
-                                tp->hunmbps=1;
-                        tp->LinkOn = TRUE;
-                } else {
+        if ((tp->pmd_status > 0) && (phy_idx > 0)) {
+		if (sis900_debug > 1) {
+			printk(KERN_INFO "duplex=%d, speed=%d\n",
+						duplex, speed);
+		}
+		if (!duplex && !speed) {  
+			// auto-config media type
+			// Set full capability
+			if (sis900_debug > 1) {
+				printk(KERN_INFO "Auto Config ...\n");
+			}
+			elSetCapability(dev, tp->phys[tp->phy_idx], 1, 100);
+            		tp->pmd_status=elAutoNegotiate(dev,
+               	    				       tp->phys[tp->phy_idx],
+			                  	       &tp->full_duplex,
+						       &tp->speeds);
+		} else {
+			tp->MediaSpeed = speed;
+			tp->MediaDuplex = duplex;
+			elSetCapability(dev, tp->phys[tp->phy_idx],
+					duplex, speed);
+            		elAutoNegotiate(dev, tp->phys[tp->phy_idx],
+			                &tp->full_duplex,
+					&tp->speeds);
+			status = mdio_read(dev, phy, MII_ANLPAR);
+			if ( !(status & (MII_NWAY_T  | MII_NWAY_T_FDX |
+					 MII_NWAY_TX | MII_NWAY_TX_FDX )))
+			{
+				u16 cmd=0;
+				cmd |= ( speed == 100 ?
+					 MIICNTL_SPEED : 0 );
+				cmd |= ( duplex ? MIICNTL_FDX : 0 );
+        			mdio_write(dev, phy, MII_CONTROL, cmd);
+				elSetMediaType(dev, speed==100 ? 
+						    HW_SPEED_100_MBPS :
+						    HW_SPEED_10_MBPS,
+						    duplex ?
+						    FDX_CAPABLE_FULL_SELECTED:
+						    FDX_CAPABLE_HALF_SELECTED);
+        			elMIIpollBit(dev, phy, MII_STATUS,
+						MIISTAT_LINK, TRUE, &status);
+			} else {
+				status = mdio_read(dev, phy, MII_STATUS);
+			}
+		}
+
+                if (tp->pmd_status & MIISTAT_LINK) 
+               	        tp->LinkOn = TRUE;
+	        else
                         tp->LinkOn = FALSE;
-                }
-                tp->LinkChange = FALSE;
+
+		tp->LinkChange = FALSE;
+	
         }
 
-        /*
-        if (found_cnt < MAX_UNITS  &&  full_duplex[found_cnt] > 0)
-                tp->full_duplex = full_duplex[found_cnt];
-
-        if (tp->full_duplex) {
-                printk(KERN_INFO "%s: Media type is Full Duplex.\n", dev->name);
-        } else {
-                printk(KERN_INFO "%s: Media type is Half Duplex.\n", dev->name);
-        }
-        if (tp->hunmbps) {
-                printk(KERN_INFO "%s: Speed is 100mbps.\n", dev->name);
-        } else {
-                printk(KERN_INFO "%s: Speed is 10mbps.\n", dev->name);
-        }
-        */
+	if (sis900_debug > 1) {
+        	if (tp->full_duplex == FDX_CAPABLE_FULL_SELECTED) {
+                	printk(KERN_INFO "%s: Media type is Full Duplex.\n",
+						dev->name);
+        	} else {
+                	printk(KERN_INFO "%s: Media type is Half Duplex.\n",
+						dev->name);
+        	}
+        	if (tp->speeds == HW_SPEED_100_MBPS) {
+                	printk(KERN_INFO "%s: Speed is 100mbps.\n", dev->name);
+        	} else {
+                	printk(KERN_INFO "%s: Speed is 10mbps.\n", dev->name);
+        	}
+	}
 
         /* The SiS900-specific entries in the device structure. */
         dev->open = &sis900_open;
@@ -857,16 +889,23 @@ sis900_open(struct device *dev)
                 return -EAGAIN;
         }
 
-        MOD_INC_USE_COUNT;
+        MOD_INC_USE_COUNT;      
 
         tp->tx_bufs = kmalloc(TX_BUF_SIZE * NUM_TX_DESC, GFP_KERNEL);
         tp->rx_bufs = kmalloc(RX_BUF_SIZE * NUM_RX_DESC, GFP_KERNEL);
         if (tp->tx_bufs == NULL || tp->rx_bufs == NULL) {
                 if (tp->tx_bufs)
                         kfree(tp->tx_bufs);
-                if (sis900_debug > 0)
-                        printk(KERN_ERR "%s: Couldn't allocate a %d byte receive ring.\n",
+                if (tp->rx_bufs)
+                        kfree(tp->rx_bufs);
+		if (!tp->tx_bufs) {
+	              printk(KERN_ERR "%s: Can't allocate a %d byte TX Bufs.\n",
                                    dev->name, TX_BUF_SIZE * NUM_TX_DESC);
+		}
+		if (!tp->rx_bufs) {
+	              printk(KERN_ERR "%s: Can't allocate a %d byte RX Bufs.\n",
+                                   dev->name, RX_BUF_SIZE * NUM_RX_DESC);
+		}
                 return -ENOMEM;
         }
 
@@ -886,15 +925,6 @@ sis900_open(struct device *dev)
                                         i, inl(ioaddr + rfdr));
                         }
                 }
-                /*
-                for (i=0 ; i<3 ; i++) {
-                        outl((((u32) i) << RFEP_shift), ioaddr + rfcr);
-                        if (sis900_debug > 4) {
-                                printk(KERN_INFO "Read Filter Addr[%d]=%x\n",
-                                        i, inl(ioaddr + rfdr));
-                        }
-                }
-                */
                 outl(rfcrSave, rfcr);
         }
 
@@ -919,31 +949,28 @@ sis900_open(struct device *dev)
 
         /* Must enable Tx/Rx before setting transfer thresholds! */
         /*
-                #define TX_DMA_BURST    0
-                #define RX_DMA_BURST    0
-                #define TX_FIFO_THRESH  16
-                #define TxDRNT_100      (1536>>5)
-                #define TxDRNT_10       (1536>>5)
-                #define RxDRNT_100      (1536>>5)
-                #define RxDRNT_10       (1536>>5)
-        */
-        //outl(RxENA | TxENA, ioaddr + cr);
+         *      #define TX_DMA_BURST    0
+         *      #define RX_DMA_BURST    0
+         *      #define TX_FIFO_THRESH  16
+         *      #define TxDRNT_100      (1536>>5)
+         *      #define TxDRNT_10       (1536>>5)
+         *      #define RxDRNT_100      (1536>>5)
+         *      #define RxDRNT_10       (1536>>5)
+         */
         outl((RX_DMA_BURST<<20) | (RxDRNT_10 << 1), ioaddr+rxcfg);
         outl(TxATP | (TX_DMA_BURST << 20) | (TX_FIFO_THRESH<<8) | TxDRNT_10,
                                                 ioaddr + txcfg);
-        //tp->full_duplex = tp->duplex_lock;
-        if (tp->phys[tp->phy_idx] >= 0  ||
-                        (sis_cap_tbl[tp->chip_id] & HAS_MII_XCVR)) {
-                if (sis900_debug > 1)
-                        if (tp->LinkOn) {
-                          printk(KERN_INFO"%s: Setting %s%s-duplex.\n",
+        if (sis900_debug > 1)
+        	if (tp->LinkOn) {
+        		printk(KERN_INFO"%s: Media Type %s%s-duplex.\n",
                                 dev->name,
-                                tp->hunmbps ? "100mbps " : "10mbps ",
-                                tp->full_duplex ? "full" : "half");
-                        } else {
-                          printk(KERN_INFO"%s: Media Link Off\n", dev->name);
-                        }
-        }
+                                tp->speeds==HW_SPEED_100_MBPS ?
+					"100mbps " : "10mbps ",
+                                tp->full_duplex== FDX_CAPABLE_FULL_SELECTED ?
+					"full" : "half");
+		} else {
+			printk(KERN_INFO"%s: Media Link Off\n", dev->name);
+	}
         set_rx_mode(dev);
 
         dev->tbusy = 0;
@@ -955,7 +982,7 @@ sis900_open(struct device *dev)
         outl(RxENA, ioaddr + cr);
         outl(IE, ioaddr + ier);
 
-        if (sis900_debug > 1)
+        if (sis900_debug > 3)
                 printk(KERN_INFO "%s: sis900_open() ioaddr %#lx IRQ %d \n",
                            dev->name, ioaddr, dev->irq);
 
@@ -974,80 +1001,30 @@ static void sis900_timer(unsigned long data)
 {
         struct device *dev = (struct device *)data;
         struct sis900_private *tp = (struct sis900_private *)dev->priv;
-        long ioaddr = dev->base_addr;
         int next_tick = 0;
-        int duplex, full_duplex=0;
-        int speed, hunmbps=0;
         u16 status;
 
-//      printk(KERN_INFO "%s: SiS900 timer\n", dev->name);
-        elMIIpollBit(dev, tp->phys[tp->phy_idx], MII_STATUS, MIISTAT_LINK, TRUE, &status);
-        if (status & MIISTAT_LINK) {
-//              printk(KERN_INFO "%s: SiS900 timer link\n", dev->name);
-                /*
-                if (!tp->LinkOn) {
-                        printk(KERN_INFO "%s: AutoNegotiate ...\n", dev->name);
-                        tp->LinkChange=TRUE;
-                        tp->pmd_status=
-                          elAutoNegotiate(dev, tp->phys[tp->phy_idx],
-                                                &duplex, &speed);
-                }
-                 else {
-                        printk(KERN_INFO "%s: Link Still On.\n", dev->name);
-                        elPMDreadMode(dev, tp->phys[tp->phy_idx],
-                                                &speed, &duplex);
-                }
-                */
-                elPMDreadMode(dev, tp->phys[tp->phy_idx],
-                                                &speed, &duplex);
-
-
-                if (duplex == FDX_CAPABLE_FULL_SELECTED) full_duplex=1;
-                if (speed == HW_SPEED_100_MBPS) hunmbps=1;
-                if (full_duplex != tp->full_duplex || hunmbps != tp->hunmbps)
-                        tp->LinkChange = TRUE;
-                if (tp->LinkChange) {
-                        tp->full_duplex=full_duplex;
-                        tp->hunmbps=hunmbps;
-                        //elSetMediaType(dev, speed, duplex);
-                        printk(KERN_INFO "%s: Setting %s%s-duplex based on MII "
-                                   "#%d link partner ability.\n",
+        if (!tp->LinkOn) {
+                status = mdio_read(dev, tp->phys[tp->phy_idx], MII_STATUS);
+		if (status & MIISTAT_LINK) {
+                	elPMDreadMode(dev, tp->phys[tp->phy_idx],
+                                        &tp->speeds, &tp->full_duplex);
+			tp->LinkOn = TRUE;
+                        printk(KERN_INFO "%s: Media Link On %s%s-duplex ",
                                    dev->name,
-                                   tp->hunmbps ? "100mbps " : "10mbps ",
-                                   tp->full_duplex ? "full" : "half",
-                                   tp->phys[0]);
-                }
-                tp->LinkOn=TRUE;
-                tp->LinkChange = FALSE;
-        } else {
-                if (tp->LinkOn) {
-                        tp->LinkChange = TRUE;
-                        tp->pmd_status=
-                          elAutoNegotiate(dev, tp->phys[tp->phy_idx],
-                                                &duplex, &speed);
-                        if (tp->pmd_status & MIISTAT_LINK) {
-                                if (duplex == FDX_CAPABLE_FULL_SELECTED)
-                                        tp->full_duplex=1;
-                                if (speed == HW_SPEED_100_MBPS)
-                                        tp->hunmbps=1;
-                        } else {
-                                tp->LinkOn = FALSE;
-                                printk(KERN_INFO "%s: Link Off\n", dev->name);
-                        }
-                }
-//              printk(KERN_INFO "%s: Link Off\n", dev->name);
+                                   tp->speeds == HW_SPEED_100_MBPS ?
+						"100mbps " : "10mbps ",
+                                   tp->full_duplex==FDX_CAPABLE_FULL_SELECTED ?
+						"full" : "half");
+		}
+        } else { // previous link on
+                status = mdio_read(dev, tp->phys[tp->phy_idx], MII_STATUS);
+		if (!(status & MIISTAT_LINK)) {
+			tp->LinkOn = FALSE;
+                        printk(KERN_INFO "%s: Media Link Off\n", dev->name);
+		}
         }
         next_tick = 2*HZ;
-
-        if (sis900_debug > 3) {
-                printk(KERN_INFO "%s:  Other registers are IntMask "
-                                "%4.4x IntStatus %4.4x"
-                                " RxStatus %4.4x.\n",
-                                dev->name,
-                                inw(ioaddr + imr),
-                                inw(ioaddr + isr),
-                                inl(ioaddr + rxcfg));
-        }
 
         if (next_tick) {
                 tp->timer.expires = RUN_AT(next_tick);
@@ -1067,24 +1044,28 @@ static void sis900_tx_timeout(struct device *dev)
 
         /* Disable interrupts by clearing the interrupt mask. */
         outl(0x0000, ioaddr + imr);
+
         /* Emit info to figure out what went wrong. */
-        printk(KERN_INFO "%s: Tx queue start entry %d  dirty entry %d.\n",
-                   dev->name, tp->cur_tx, tp->dirty_tx);
-        for (i = 0; i < NUM_TX_DESC; i++)
-                printk(KERN_INFO "%s:  Tx descriptor %d is %8.8x.%s\n",
-                           dev->name, i, (unsigned int)&tp->tx_buf[i],
-                           i == tp->dirty_tx % NUM_TX_DESC ?
-                           " (queue head)" : "");
-        /*
-        printk(KERN_DEBUG"%s: MII #%d registers are:", dev->name, tp->phys[0]);
-        for (mii_reg = 0; mii_reg < 8; mii_reg++)
-                printk(" %4.4x", mdio_read(dev, tp->phys[0], mii_reg));
-        printk(".\n");
-        */
+	if (sis900_debug > 1) {
+	        printk(KERN_INFO "%s:Tx queue start entry %d dirty entry %d.\n",
+                		   dev->name, tp->cur_tx, tp->dirty_tx);
+        	for (i = 0; i < NUM_TX_DESC; i++) 
+                	printk(KERN_INFO "%s:  Tx descriptor %d is %8.8x.%s\n",
+                        	dev->name, i, (unsigned int)&tp->tx_buf[i],
+                     		i == tp->dirty_tx % NUM_TX_DESC ?
+                      		" (queue head)" : "");
+	}
 
         /* Soft reset the chip. */
+        //outb(RESET, ioaddr + cr);
+        /* Check that the chip has finished the reset. */
+        /*
+        for (i = 1000; i > 0; i--)
+                if ((inb(ioaddr + cr) & RESET) == 0)
+                        break;
+        */
 
-        tp->cur_rx = 0; //??????
+        tp->cur_rx = 0; 
         /* Must enable Tx/Rx before setting transfer thresholds! */
         /*
         set_rx_mode(dev);
@@ -1145,10 +1126,6 @@ sis900_init_ring(struct device *dev)
                 tp->tx_buf[i].buf = &tp->tx_bufs[i*TX_BUF_SIZE];
                 tp->tx_buf[i].bufPhys =
                                 virt_to_bus(&tp->tx_bufs[i*TX_BUF_SIZE]);
-                /*
-                printk(KERN_INFO "tp->tx_buf[%d].bufPhys=%8.8x\n",
-                                i, tp->tx_buf[i].bufPhys);
-                */
         }
 
         /* Tx Descriptor */
@@ -1161,11 +1138,6 @@ sis900_init_ring(struct device *dev)
                 tp->tx_buf[i].physAddr=
                                 virt_to_bus(&(tp->tx_buf[i].plink));
                 tp->tx_buf[i].cmdsts=0;
-
-                /*
-                printk(KERN_INFO "tp->tx_buf[%d].PhysAddr=%8.8x\n",
-                                i, tp->tx_buf[i].physAddr);
-                */
         }
 
         /* Rx Buffer */
@@ -1173,10 +1145,6 @@ sis900_init_ring(struct device *dev)
                 tp->rx_buf[i].buf = &tp->rx_bufs[i*RX_BUF_SIZE];
                 tp->rx_buf[i].bufPhys =
                                 virt_to_bus(&tp->rx_bufs[i*RX_BUF_SIZE]);
-                /*
-                printk(KERN_INFO "tp->rx_buf[%d].bufPhys=%8.8x\n",
-                                i, tp->rx_buf[i].bufPhys);
-                */
         }
 
         /* Rx Descriptor */
@@ -1189,10 +1157,6 @@ sis900_init_ring(struct device *dev)
                 tp->rx_buf[i].physAddr=
                                 virt_to_bus(&(tp->rx_buf[i].plink));
                 tp->rx_buf[i].cmdsts=RX_BUF_SIZE;
-                /*
-                printk(KERN_INFO "tp->tx_buf[%d].PhysAddr=%8.8x\n",
-                                i, tp->tx_buf[i].physAddr);
-                */
         }
 }
 
@@ -1234,6 +1198,7 @@ sis900_start_xmit(struct sk_buff *skb, struct device *dev)
 
         tp->tx_buf[entry].cmdsts=(OWN | skb->len);
 
+        //tp->tx_buf[entry].plink = 0;
         outl(TxENA, ioaddr + cr);
         if (++tp->cur_tx - tp->dirty_tx < NUM_TX_DESC) {/* Typical path */
                 clear_bit(0, (void*)&dev->tbusy);
@@ -1347,11 +1312,6 @@ static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
                                         tp->stats.tx_errors++;
                                         if (txstatus & ABORT) {
                                                 tp->stats.tx_aborted_errors++;
-                                                /*
-                                                outl((TX_DMA_BURST<<8)|
-                                                        0x03000001,
-                                                        ioaddr + TxConfig);
-                                                */
                                         }
                                         if (txstatus & NOCARRIER)
                                                 tp->stats.tx_carrier_errors++;
@@ -1366,27 +1326,21 @@ static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
                                         /* No count for tp->stats.tx_deferred */
 #endif
                                         if (txstatus & UNDERRUN) {
-                                           if (sis900_debug > 1)
+                                           if (sis900_debug > 2)
                                              printk(KERN_INFO "Tx UnderRun\n");
-                                        /* Add 64 to the Tx FIFO threshold. */
-                                        /*
-                                                if (tp->tx_flag <  0x00300000)
-                                                        tp->tx_flag+=0x00020000;
-                                                tp->stats.tx_fifo_errors++;
-                                        */
                                         }
                                         tp->stats.collisions +=
                                                         (txstatus >> 16) & 0xF;
 #if LINUX_VERSION_CODE > 0x20119
                                         tp->stats.tx_bytes += txstatus & DSIZE;
 #endif
-                                        if (sis900_debug > 1)
+                                        if (sis900_debug > 2)
                                            printk(KERN_INFO "Tx Transmit OK\n");
                                         tp->stats.tx_packets++;
                                 }
 
                                 /* Free the original skb. */
-                                if (sis900_debug > 1)
+                                if (sis900_debug > 2)
                                         printk(KERN_INFO "Free original skb\n");
                                 dev_free_skb(tp->tx_skbuff[entry]);
                                 tp->tx_skbuff[entry] = 0;
@@ -1404,15 +1358,16 @@ static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
                         if (tp->tx_full && dirty_tx > tp->cur_tx-NUM_TX_DESC) {
                                 /* The ring is no longer full, clear tbusy. */
-                                //printk(KERN_INFO "Tx Ring NO LONGER Full\n");
+				if (sis900_debug > 3)
+                                   printk(KERN_INFO "Tx Ring NO LONGER Full\n");
                                 tp->tx_full = 0;
                                 dev->tbusy = 0;
                                 mark_bh(NET_BH);
                         }
 
                         tp->dirty_tx = dirty_tx;
-                        if (sis900_debug > 1)
-                                printk(KERN_INFO "TxOK release, tp->cur_tx:%d, tp->dirty:%d\n",
+                        if (sis900_debug > 2)
+                           printk(KERN_INFO "TxOK,tp->cur_tx:%d,tp->dirty:%d\n",
                                                 tp->cur_tx, tp->dirty_tx);
                 } // if (TxOK | TxERR)
 
@@ -1424,25 +1379,18 @@ static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
                         if (status == 0xffffffff)
                                 break;
-
                         if (status & (RxORN | RxERR))
                                 tp->stats.rx_errors++;
 
+
                         if (status & RxORN) {
                                 tp->stats.rx_over_errors++;
-                                /*
-                                tp->cur_rx =
-                                        inw(ioaddr + RxBufAddr) % RX_BUF_LEN;
-                                outw(tp->cur_rx - 16, ioaddr + RxBufPtr);
-                                */
                         }
                 }
                 if (--boguscnt < 0) {
                         printk(KERN_INFO "%s: Too much work at interrupt, "
                                    "IntrStatus=0x%4.4x.\n",
                                    dev->name, status);
-                        /* Clear all interrupt sources. */
-                        //outw(0xffff, ioaddr + IntrStatus);
                         break;
                 }
         } while (1);
@@ -1478,7 +1426,6 @@ static int sis900_rx(struct device *dev)
                 int rx_size = rx_status & DSIZE;
                 rx_size -= CRC_SIZE;
 
-                //printk(KERN_INFO "Rx OWN\n");
                 if (sis900_debug > 4) {
                         int i;
                         printk(KERN_INFO "%s:  sis900_rx, rx status %8.8x,"
@@ -1510,21 +1457,11 @@ static int sis900_rx(struct device *dev)
                         if (rx_status & (RUNT | TOOLONG))
                                 tp->stats.rx_length_errors++;
                         if (rx_status & CRCERR) tp->stats.rx_crc_errors++;
-                        /* Reset the receiver,
-                                based on RealTek recommendation. (Bug?) */
-                        /*
-                        tp->cur_rx = 0;
-                        outl(TxENA, ioaddr + cr);
-                        outl(CmdRxEnb | CmdTxEnb, ioaddr + ChipCmd);
-                        outl((RX_FIFO_THRESH << 13) | (RX_BUF_LEN_IDX << 11) |
-                                 (RX_DMA_BURST<<8), ioaddr + RxConfig);
-                        */
                 } else {
                         /* Malloc up new buffer, compatible with net-2e. */
                         /* Omit the four octet CRC from the length. */
                         struct sk_buff *skb;
 
-                        //printk(KERN_INFO "Rx OK\n");
                         skb = dev_alloc_skb(rx_size + 2);
                         if (skb == NULL) {
                                 printk(KERN_INFO "%s: Memory squeeze,"
@@ -1556,7 +1493,6 @@ static int sis900_rx(struct device *dev)
                                         memset(rx_bufs, 0xcc, 16);
                                 }
                                 */
-                                //printk(KERN_INFO "Frame Wrap....\n");
                         } else {
 #if 0  /* USE_IP_COPYSUM */
                                 eth_copy_and_sum(skb,
@@ -1578,7 +1514,6 @@ static int sis900_rx(struct device *dev)
 
                 cur_rx = ((cur_rx+1) % NUM_RX_DESC);
                 rx_status = tp->rx_buf[cur_rx].cmdsts;
-                //outw(cur_rx - 16, ioaddr + RxBufPtr);
         } // while
         if (sis900_debug > 4)
                 printk(KERN_INFO "%s: Done sis900_rx(), current %4.4x "
@@ -1635,7 +1570,7 @@ static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
         switch(cmd) {
         case SIOCDEVPRIVATE:            /* Get the address of the PHY in use. */
-                data[0] = tp->phys[0] & 0x3f;
+                data[0] = tp->phys[tp->phy_idx];
                 /* Fall Through */
         case SIOCDEVPRIVATE+1:          /* Read the specified MII register. */
                 data[3] = mdio_read(dev, data[0] & 0x1f, data[1] & 0x1f);
@@ -1654,6 +1589,7 @@ static struct enet_statistics *
 sis900_get_stats(struct device *dev)
 {
         struct sis900_private *tp = (struct sis900_private *)dev->priv;
+
         return &tp->stats;
 }
 
@@ -1709,16 +1645,26 @@ static u16 elPMDreadMode(struct device *dev,
                          int *speed,
                          int *duplex)
 {
-        u16 status;
+        u16 status, OurCap;
 
         *speed = HW_SPEED_10_MBPS;
         *duplex = FDX_CAPABLE_HALF_SELECTED;
 
         status = mdio_read(dev, phy_id, MII_ANLPAR);
+        OurCap = mdio_read(dev, phy_id, MII_ANAR);
+	if (sis900_debug > 1) {
+		printk(KERN_INFO "Link Part Status %4X\n", status);
+		printk(KERN_INFO "Our Status %4X\n", OurCap);
+		printk(KERN_INFO "Status Reg %4X\n",
+					mdio_read(dev, phy_id, MII_STATUS));
+	}
+	status &= OurCap;
 
         if ( !( status &
                 (MII_NWAY_T|MII_NWAY_T_FDX | MII_NWAY_TX | MII_NWAY_TX_FDX ))) {
-//              printk(KERN_INFO "%s: Link Partner not detected.\n", dev->name);
+		if (sis900_debug > 1) {
+			printk(KERN_INFO "The other end NOT support NWAY...\n");
+		}
                 while (( status = mdio_read(dev, phy_id, 18)) & 0x4000) ;
                 while (( status = mdio_read(dev, phy_id, 18)) & 0x0020) ;
                 if (status & 0x80)
@@ -1734,7 +1680,10 @@ static u16 elPMDreadMode(struct device *dev,
                                         "full" : "half");
                 }
         } else {
-//              printk(KERN_INFO "%s: Link Partner detected\n", dev->name);
+		if (sis900_debug > 1) {
+			printk(KERN_INFO "The other end support NWAY...\n");
+		}
+
                 if (status & (MII_NWAY_TX_FDX | MII_NWAY_T_FDX)) {
                         *duplex = FDX_CAPABLE_FULL_SELECTED;
                 }
@@ -1756,19 +1705,56 @@ static u16 elPMDreadMode(struct device *dev,
 
 static u16 elAutoNegotiate(struct device *dev, int phy_id, int *duplex, int *speed)
 {
-        u16 status;
+        u16 status, retnVal;
 
+	if (sis900_debug > 1) {
+		printk(KERN_INFO "AutoNegotiate...\n");
+	}
         mdio_write(dev, phy_id, MII_CONTROL, 0);
-        mdio_write(dev, phy_id, MII_CONTROL, MIICNTL_AUTO |
-                                                        MIICNTL_RST_AUTO);
-        elMIIpollBit(dev, phy_id, MII_CONTROL, MIICNTL_RST_AUTO, FALSE,&status);
-        elMIIpollBit(dev, phy_id, MII_STATUS, MIISTAT_AUTO_DONE, TRUE, &status);
-        elMIIpollBit(dev, phy_id, MII_STATUS, MIISTAT_LINK, TRUE, &status);
+        mdio_write(dev, phy_id, MII_CONTROL, MIICNTL_AUTO | MIICNTL_RST_AUTO);
+        retnVal = elMIIpollBit(dev, phy_id, MII_CONTROL, MIICNTL_RST_AUTO,
+				FALSE,&status);
+	if (!retnVal) {
+		printk(KERN_INFO "Not wait for Reset Complete\n");
+	}
+        retnVal = elMIIpollBit(dev, phy_id, MII_STATUS, MIISTAT_AUTO_DONE,
+				TRUE, &status);
+	if (!retnVal) {
+		printk(KERN_INFO "Not wait for AutoNego Complete\n");
+	}
+        retnVal = elMIIpollBit(dev, phy_id, MII_STATUS, MIISTAT_LINK,
+				TRUE, &status);
+	if (!retnVal) {
+		printk(KERN_INFO "Not wait for Link Complete\n");
+	}
         if (status & MIISTAT_LINK) {
                 elPMDreadMode(dev, phy_id, speed, duplex);
                 elSetMediaType(dev, *speed, *duplex);
         }
         return(status);
+}
+
+static void elSetCapability(struct device *dev, int phy_id,
+			    int duplex, int speed)
+{
+        u16 cap = ( MII_NWAY_T  | MII_NWAY_T_FDX  |
+		    MII_NWAY_TX | MII_NWAY_TX_FDX | MII_NWAY_CSMA_CD );
+
+	if (speed != 100) {
+		cap &= ~( MII_NWAY_TX | MII_NWAY_TX_FDX );
+		if (sis900_debug > 1) {
+			printk(KERN_INFO "UNSET 100Mbps\n");
+		}
+	}
+
+	if (!duplex) {
+		cap &= ~( MII_NWAY_T_FDX | MII_NWAY_TX_FDX );
+		if (sis900_debug > 1) {
+			printk(KERN_INFO "UNSET full-duplex\n");
+		}
+	}
+
+        mdio_write(dev, phy_id, MII_ANAR, cap);
 }
 
 static void elSetMediaType(struct device *dev, int speed, int duplex)

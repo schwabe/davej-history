@@ -3989,7 +3989,7 @@ __initfunc(static void floppy_set_flags(int *ints,int param, int param2))
 		else
 			default_drive_params[i].params.flags &= ~param2;
 	}
-	DPRINT("%s flag 0x%x\n", param2 ? "Setting" : "Clearing", param);
+	DPRINT("%s flag 0x%x\n", param ? "Setting" : "Clearing", param2);
 }
 
 __initfunc(static void daring(int *ints,int param, int param2))

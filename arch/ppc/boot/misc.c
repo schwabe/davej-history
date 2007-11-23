@@ -1,7 +1,7 @@
 /*
  * misc.c
  *
- * $Id: misc.c,v 1.64.2.2 1999/05/29 19:09:29 cort Exp $
+ * $Id: misc.c,v 1.64.2.4 1999/07/22 03:28:03 cort Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -311,6 +311,33 @@ void gunzip(void *dst, int dstlen, unsigned char *src, int *lenp)
 
 unsigned char sanity[0x2000];
 
+/*
+ * This routine is used to control the second processor on the 
+ * Motorola dual processor platforms.  
+ */
+void
+park_cpus()
+{
+#ifdef __SMP__
+	volatile void (*go)(RESIDUAL *, int, int, char *, int);
+	unsigned int i;
+	volatile unsigned long *smp_iar = &(hold_residual->VitalProductData.SmpIar);
+
+	/* Wait for indication to continue.  If the kernel
+	   was not compiled with SMP support then the second 
+	   processor will spin forever here makeing the kernel
+	   multiprocessor safe. */
+	while (*smp_iar == 0) {
+                for (i=0; i < 512; i++);
+	}
+
+	(unsigned long)go = hold_residual->VitalProductData.SmpIar;
+	go(hold_residual, 0, 0, cmd_line, sizeof(cmd_preset));
+#else
+	while(1);
+#endif
+}
+
 unsigned long
 decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 		  RESIDUAL *residual, void *OFW_interface)
@@ -328,6 +355,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 	int res, size;
 	unsigned char board_type;
 	unsigned char base_mod;
+	int start_multi = 0;
 
 	lines = 25;
 	cols = 80;
@@ -367,6 +395,14 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 				   (base_mod == 0xE1)) {
 					keyb_present = 0;	/* no keyboard */
 				}
+			}
+
+			/* If this is a multiprocessor system then
+			 * park the other processor so that the
+			 * kernel knows where to find them.
+			 */
+			if (residual->MaxNumCpus > 1) {
+				start_multi = 1;
 			}
 		}
 		memcpy(hold_residual,residual,sizeof(RESIDUAL));
@@ -408,7 +444,15 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 		residual = hold_residual;
 		/* Turn MMU back off */
 		_put_MSR(orig_MSR & ~0x0030);
-        }
+	}
+
+	if (start_multi) {
+		hold_residual->VitalProductData.SmpIar = 0;
+		hold_residual->Cpus[1].CpuState = CPU_GOOD_FW;
+		residual->VitalProductData.SmpIar = (unsigned long)park_cpus;
+		residual->Cpus[1].CpuState = CPU_GOOD;
+		hold_residual->VitalProductData.Reserved5 = 0xdeadbeef;
+	}
 
 	/* assume the chunk below 8M is free */
 	end_avail = (char *)0x00800000;
@@ -465,22 +509,23 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 		puts(" ");
 		puthex((unsigned long)zimage_size+(unsigned long)zimage_start);
 		puts("\n");
-	}
 
-	/* relocate initrd */
-	if ( initrd_start )
-	{
+		/* relocate initrd */
+		if ( initrd_start )
+		{
+			puts("initrd at:     "); puthex(initrd_start);
+			puts(" "); puthex(initrd_end); puts("\n");
+			avail_ram = (char *)PAGE_ALIGN(
+				(unsigned long)zimage_size+(unsigned long)zimage_start);
+			memcpy ((void *)avail_ram, (void *)initrd_start, INITRD_SIZE );
+			initrd_start = (unsigned long)avail_ram;
+			initrd_end = initrd_start + INITRD_SIZE;
+			puts("relocated to:  "); puthex(initrd_start);
+			puts(" "); puthex(initrd_end); puts("\n");
+		}
+	} else if ( initrd_start ) {
 		puts("initrd at:     "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
-#ifdef OMIT
-		avail_ram = (char *)PAGE_ALIGN(
-			(unsigned long)zimage_size+(unsigned long)zimage_start);
-		memcpy ((void *)avail_ram, (void *)initrd_start, INITRD_SIZE );
-		initrd_start = (unsigned long)avail_ram;
-		initrd_end = initrd_start + INITRD_SIZE;
-		puts("relocated to:  "); puthex(initrd_start);
-		puts(" "); puthex(initrd_end); puts("\n");
-#endif
 	}
 
 	avail_ram = (char *)0x00400000;
@@ -528,6 +573,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 
 	gunzip(0, 0x400000, zimage_start, &zimage_size);
 	puts("done.\n");
+
 	puts("Now booting the kernel\n");
 	return (unsigned long)hold_residual;
 }

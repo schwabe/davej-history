@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.104.2.6 1999/08/08 08:43:23 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.104.2.7 1999/08/12 15:34:32 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1465,14 +1465,12 @@ do_time_wait:
 	case TCP_TW_ACK:
 		tcp_v6_send_ack(skb, ((struct tcp_tw_bucket *)sk)->snd_nxt,
 						((struct tcp_tw_bucket *)sk)->rcv_nxt); 
-		break; 
+		goto discard_it; 
 	case TCP_TW_RST:
 		goto no_tcp_socket;
 	default:
 		goto discard_it; 
 	}
-
-	return 0;
 }
 
 static int tcp_v6_rebuild_header(struct sock *sk)

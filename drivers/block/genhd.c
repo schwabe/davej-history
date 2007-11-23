@@ -28,6 +28,7 @@
 #include <linux/string.h>
 #include <linux/blk.h>
 #include <linux/init.h>
+#include <linux/raid/md.h>
 
 #include <asm/system.h>
 #include <asm/byteorder.h>
@@ -1465,6 +1466,9 @@ __initfunc(void device_setup(void))
 	else
 #endif
 	rd_load();
+#endif
+#ifdef CONFIG_BLK_DEV_MD
+	autodetect_raid();
 #endif
 #ifdef CONFIG_MD_BOOT
         md_setup_drive();

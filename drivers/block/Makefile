@@ -234,19 +234,19 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_BLK_CPQ_DA),y)
-L_OBJS += cpqarray.o
-else
-  ifeq ($(CONFIG_BLK_CPQ_DA),m)
-  M_OBJS += cpqarray.o
-  endif
-endif
-
 ifeq ($(CONFIG_BLK_DEV_DAC960),y)
 LX_OBJS += DAC960.o
 else
   ifeq ($(CONFIG_BLK_DEV_DAC960),m)
   MX_OBJS += DAC960.o
+  endif
+endif
+
+ifeq ($(CONFIG_BLK_CPQ_DA),y)
+L_OBJS += cpqarray.o
+else
+  ifeq ($(CONFIG_BLK_CPQ_DA),m)
+  M_OBJS += cpqarray.o
   endif
 endif
 
@@ -278,10 +278,28 @@ else
 endif
 
 ifeq ($(CONFIG_MD_RAID5),y)
+LX_OBJS += xor.o
 L_OBJS += raid5.o
 else
   ifeq ($(CONFIG_MD_RAID5),m)
+  LX_OBJS += xor.o
   M_OBJS += raid5.o
+  endif
+endif
+
+ifeq ($(CONFIG_MD_TRANSLUCENT),y)
+L_OBJS += translucent.o
+else
+  ifeq ($(CONFIG_MD_TRANSLUCENT),m)
+  M_OBJS += translucent.o
+  endif
+endif
+
+ifeq ($(CONFIG_MD_HSM),y)
+L_OBJS += hsm.o
+else
+  ifeq ($(CONFIG_MD_HSM),m)
+  M_OBJS += hsm.o
   endif
 endif
 

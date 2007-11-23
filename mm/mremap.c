@@ -196,12 +196,14 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 		unsigned long locked = current->mm->locked_vm << PAGE_SHIFT;
 		locked += new_len - old_len;
 		ret = -EAGAIN;
-		if (locked > current->rlim[RLIMIT_MEMLOCK].rlim_cur)
+		if ((current->rlim[RLIMIT_MEMLOCK].rlim_cur < RLIM_INFINITY) &&
+		   (locked > current->rlim[RLIMIT_MEMLOCK].rlim_cur))
 			goto out;
 	}
 	ret = -ENOMEM;
-	if ((current->mm->total_vm << PAGE_SHIFT) + (new_len - old_len)
-	    > current->rlim[RLIMIT_AS].rlim_cur)
+	if ((current->rlim[RLIMIT_AS].rlim_cur < RLIM_INFINITY) &&
+	    ((current->mm->total_vm << PAGE_SHIFT) + (new_len - old_len)
+	    > current->rlim[RLIMIT_AS].rlim_cur))
 		goto out;
 	/* Private writable mapping? Check memory availability.. */
 	if ((vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE &&

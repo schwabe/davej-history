@@ -5,7 +5,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda
+ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc
 
 L_TARGET := net.a
 L_OBJS   := auto_irq.o
@@ -1135,6 +1135,15 @@ MOD_IN_SUB_DIRS += irda
 else
   ifeq ($(CONFIG_IRDA),m)
   MOD_IN_SUB_DIRS += irda
+  endif
+endif
+
+ifeq ($(CONFIG_NET_FC),y)
+SUB_DIRS += fc
+MOD_IN_SUB_DIRS += fc
+else
+  ifeq ($(CONFIG_NET_FC),m)
+  MOD_IN_SUB_DIRS += fc
   endif
 endif
 

@@ -40,7 +40,6 @@
  */
 static struct vm_area_struct init_mmap = INIT_MMAP;
 static struct fs_struct init_fs = INIT_FS;
-static struct file * init_fd_array[NR_OPEN] = { NULL, };
 static struct files_struct init_files = INIT_FILES;
 static struct signal_struct init_signals = INIT_SIGNALS;
 struct mm_struct init_mm = INIT_MM;
@@ -87,9 +86,6 @@ void machine_halt(void)
 
 void machine_power_off(void)
 {
-#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
-	apm_set_power_state(APM_STATE_OFF);
-#endif
 }
 
 void show_regs(struct pt_regs * regs)

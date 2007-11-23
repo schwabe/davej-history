@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 2
-SUBLEVEL = 11
+SUBLEVEL = 12
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -156,6 +156,10 @@ endif
 
 ifeq ($(CONFIG_FC4),y)
 DRIVERS := $(DRIVERS) drivers/fc4/fc4.a
+endif
+
+ifeq ($(CONFIG_NET_FC),y)
+DRIVERS := $(DRIVERS) drivers/net/fc/fc.a
 endif
 
 ifdef CONFIG_PPC

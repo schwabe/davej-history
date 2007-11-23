@@ -378,6 +378,7 @@ _GLOBAL(_outsl_ns)
  *
  *  ashrdi3:     XXXYYY/ZZZAAA -> SSSXXX/YYYZZZ
  *  ashldi3:     XXXYYY/ZZZAAA -> YYYZZZ/AAA000
+ *  lshrdi3:     XXXYYY/ZZZAAA -> 000XXX/YYYZZZ
  */
 _GLOBAL(__ashrdi3)
 	li	r6,32
@@ -387,7 +388,7 @@ _GLOBAL(__ashrdi3)
 	or	r4,r4,r7	/* YYYZZZ */
 	sraw	r3,r3,r5	/* SSSXXX */
 	blr
-	
+
 _GLOBAL(__ashldi3)
 	li	r6,32
 	sub	r6,r6,r5
@@ -395,6 +396,15 @@ _GLOBAL(__ashldi3)
 	slw	r4,r4,r5	/* AAA000 */
 	slw	r3,r3,r5	/* YYY--- */
 	or	r3,r3,r7	/* YYYZZZ */
+	blr
+
+_GLOBAL(__lshrdi3)
+	li	r6,32
+	sub	r6,r6,r5
+	slw	r7,r3,r6        /* isolate YYY */
+	srw	r4,r4,r5        /* isolate ZZZ */
+	or	r4,r4,r7        /* YYYZZZ */
+	srw	r3,r3,r5        /* 000XXX */
 	blr
 
 _GLOBAL(abs)

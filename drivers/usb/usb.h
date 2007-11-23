@@ -6,6 +6,24 @@
 #include <linux/list.h>
 #include <linux/sched.h>
 
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < 0x020300
+#define DECLARE_WAIT_QUEUE_HEAD(w)	struct wait_queue *w = NULL
+#define DECLARE_WAITQUEUE(w,c)		struct wait_queue w = {(c), NULL}
+#define wait_queue_head_t		struct wait_queue *
+#define init_waitqueue_head(w)		*(w) = 0
+#define DECLARE_MUTEX_LOCKED(sem)	struct semaphore sem = MUTEX_LOCKED
+#endif
+
+extern int usb_hub_init(void);
+extern int usb_kbd_init(void);
+extern int usb_cpia_init(void);
+extern int usb_mouse_init(void);
+extern int usb_printer_init(void);
+
+extern void hub_cleanup(void);
+extern void usb_mouse_cleanup(void);
+
 static __inline__ void wait_ms(unsigned int ms)
 {
         current->state = TASK_UNINTERRUPTIBLE;
@@ -22,9 +40,16 @@ typedef struct {
 } devrequest;
 
 /*
- * Class codes
+ * Device and/or Interface Class codes
  */
+#define USB_CLASS_PER_INTERFACE		0	/* for DeviceClass */
+#define USB_CLASS_AUDIO			1
+#define USB_CLASS_COMM			2
+#define USB_CLASS_HID			3
+#define USB_CLASS_PRINTER		7
+#define USB_CLASS_MASS_STORAGE		8
 #define USB_CLASS_HUB			9
+#define USB_CLASS_VENDOR_SPEC		0xff
 
 /*
  * Descriptor types
@@ -37,6 +62,28 @@ typedef struct {
 
 #define USB_DT_HUB			0x29
 #define USB_DT_HID			0x21
+
+/*
+ * Descriptor sizes per descriptor type
+ */
+#define USB_DT_DEVICE_SIZE		18
+#define USB_DT_CONFIG_SIZE		9
+#define USB_DT_INTERFACE_SIZE		9
+#define USB_DT_ENDPOINT_SIZE		7
+#define USB_DT_HUB_NONVAR_SIZE		7
+
+/*
+ * USB Request Type and Endpoint Directions
+ */
+#define USB_DIR_OUT			0
+#define USB_DIR_IN			0x80
+
+/*
+ * USB Packet IDs (PIDs)
+ */
+#define USB_PID_OUT			0xe1
+#define USB_PID_IN			0x69
+#define USB_PID_SETUP			0x2d
 
 /*
  * Standard requests
@@ -87,6 +134,32 @@ typedef struct {
 
 #define USB_RT_HIDD			(USB_TYPE_CLASS | USB_RECIP_INTERFACE)
 
+/* 
+ * Status codes (these follow an OHCI controllers condition codes)
+ */
+#define USB_ST_NOERROR		0x0
+#define USB_ST_CRC		0x1
+#define USB_ST_BITSTUFF		0x2
+#define USB_ST_DTMISMATCH	0x3	/* data toggle mismatch */
+#define USB_ST_STALL		0x4
+#define USB_ST_NORESPONSE	0x5	/* device not responding/handshaking */
+#define USB_ST_PIDCHECK		0x6	/* Check bits on PID failed */
+#define USB_ST_PIDUNDEF		0x7	/* PID unexpected/undefined */
+#define USB_ST_DATAOVERRUN	0x8
+#define USB_ST_DATAUNDERRUN	0x9
+#define USB_ST_RESERVED1	0xA
+#define USB_ST_RESERVED2	0xB
+#define USB_ST_BUFFEROVERRUN	0xC
+#define USB_ST_BUFFERUNDERRUN	0xD
+#define USB_ST_RESERVED3	0xE
+#define USB_ST_RESERVED4	0xF
+
+/* internal errors */
+#define USB_ST_REMOVED		0x100
+#define USB_ST_TIMEOUT		0x110
+#define USB_ST_INTERNALERROR	-1
+#define USB_ST_NOTSUPPORTED	-2
+
 /*
  * USB device number allocation bitmap. There's one bitmap
  * per USB tree.
@@ -103,8 +176,10 @@ struct usb_devmap {
  */
 
 #define USB_MAXCONFIG		8
+#define USB_MAXALTSETTING       5
 #define USB_MAXINTERFACES	32
 #define USB_MAXENDPOINTS	32
+#define USB_MAXSTRINGS		32
 
 struct usb_device_descriptor {
 	__u8  bLength;
@@ -150,6 +225,11 @@ struct usb_interface_descriptor {
 	void  *audio;
 };
 
+/* hack for alternate settings */
+struct usb_alternate_setting {
+        struct usb_interface_descriptor *interface;
+};
+
 /* Configuration descriptor information.. */
 struct usb_config_descriptor {
 	__u8  bLength;
@@ -160,14 +240,16 @@ struct usb_config_descriptor {
 	__u8  iConfiguration;
 	__u8  bmAttributes;
 	__u8  MaxPower;
-
-	struct usb_interface_descriptor *interface;
+        int act_altsetting;                /* active alternate setting */
+        int num_altsetting;                /* number of alternate settings */
+	struct usb_alternate_setting *altsetting;
 };
 
 /* String descriptor */
 struct usb_string_descriptor {
 	__u8  bLength;
 	__u8  bDescriptorType;
+	__u16 wData[1];
 };
 
 /* Hub descriptor */
@@ -175,7 +257,7 @@ struct usb_hub_descriptor {
 	__u8  bLength;
 	__u8  bDescriptorType;
 	__u8  bNbrPorts;
-	__u16 wHubCharacteristics;
+	__u8  wHubCharacteristics[2];	/* __u16 but not aligned! */
 	__u8  bPwrOn2PwrGood;
 	__u8  bHubContrCurrent;
 	/* DeviceRemovable and PortPwrCtrlMask want to be variable-length 
@@ -200,16 +282,28 @@ struct usb_driver {
  *         until we come up with a common meaning.
  *     void *buffer - This is a pointer to the data used in this
  *         USB transfer.
+ *     int length - This is the number of bytes transferred in or out
+ *         of the buffer by this transfer.  (-1 = unknown/unsupported)
  *     void *dev_id - This is a user defined pointer set when the IRQ
  *         is requested that is passed back.
+ *
+ *   Special Cases:
+ *     if (status == USB_ST_REMOVED), don't trust buffer or len.
  */
-typedef int (*usb_device_irq)(int, void *, void *);
+typedef int (*usb_device_irq)(int, void *, int, void *);
 
 struct usb_operations {
 	struct usb_device *(*allocate)(struct usb_device *);
 	int (*deallocate)(struct usb_device *);
-	int (*control_msg)(struct usb_device *, unsigned int, void *, void *, int);
-	int (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
+	int (*control_msg)(struct usb_device *, unsigned int, devrequest *, void *, int);
+	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int,unsigned long *);
+	void* (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
+	int (*release_irq)(void* handle);
+	void *(*alloc_isoc)(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int maxsze, usb_device_irq completed, void *dev_id);
+	void (*delete_isoc)(struct usb_device *dev, void *_isodesc);
+	int (*sched_isoc)(struct usb_device *usb_dev, void *_isodesc, void *_pisodesc);
+	int (*unsched_isoc)(struct usb_device *usb_dev, void *_isodesc);
+	int (*compress_isoc)(struct usb_device *usb_dev, void *_isodesc);
 };
 
 /*
@@ -219,6 +313,7 @@ struct usb_bus {
 	struct usb_devmap devmap;       /* Device map */
 	struct usb_operations *op;      /* Operations (specific to the HC) */
 	struct usb_device *root_hub;    /* Root hub */
+	struct list_head bus_list;
 	void *hcpriv;                   /* Host Controller private data */
 };
 
@@ -226,22 +321,28 @@ struct usb_bus {
 #define USB_MAXCHILDREN (8)
 
 struct usb_device {
-	int devnum;						/* Device number on USB bus */
-	int slow;						/* Slow device? */
-	int maxpacketsize;					/* Maximum packet size */
-
-	struct usb_bus *bus;					/* Bus we're apart of */
-	struct usb_driver *driver;				/* Driver */
-	struct usb_device_descriptor descriptor;		/* Descriptor */
-	struct usb_config_descriptor *config;			/* All of the configs */
+	int devnum;			/* Device number on USB bus */
+	int slow;			/* Slow device? */
+	int maxpacketsize;		/* Maximum packet size; encoded as 0,1,2,3 = 8,16,32,64 */
+	unsigned int toggle[2];		/* one bit for each endpoint ([0] = IN, [1] = OUT) */
+	unsigned int halted;		/* endpoint halts */
+	struct usb_config_descriptor *actconfig;/* the active configuration */
+	int epmaxpacket[16];		/* endpoint specific maximums */
+	int ifnum;			/* active interface number */
+	struct usb_bus *bus;		/* Bus we're apart of */
+	struct usb_driver *driver;	/* Driver */
+	struct usb_device_descriptor descriptor;/* Descriptor */
+	struct usb_config_descriptor *config;	/* All of the configs */
 	struct usb_device *parent;
+	char *stringindex[USB_MAXSTRINGS];	/* pointers to strings */
+	int string_langid;		/* language ID for strings */
   
 	/*
 	 * Child devices - these can be either new devices
 	 * (if this is a hub device), or different instances
 	 * of this same device.
 	 *
-	 * Each instance needs its own set of data structuctures.
+	 * Each instance needs its own set of data structures.
 	 */
 
 	int maxchild;			/* Number of ports if hub */
@@ -254,14 +355,28 @@ struct usb_device {
 extern int usb_register(struct usb_driver *);
 extern void usb_deregister(struct usb_driver *);
 
-extern int usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *);
+extern void usb_register_bus(struct usb_bus *);
+extern void usb_deregister_bus(struct usb_bus *);
+
+extern void* usb_request_irq(struct usb_device *, unsigned int, usb_device_irq, int, void *);
+extern int usb_release_irq(struct usb_device *dev, void *handle);
 
 extern void usb_init_root_hub(struct usb_device *dev);
 extern void usb_connect(struct usb_device *dev);
 extern void usb_disconnect(struct usb_device **);
-extern void usb_device_descriptor(struct usb_device *dev);
 
+extern int usb_device_descriptor(struct usb_device *dev);
+void usb_check_support(struct usb_device *);
+void usb_driver_purge(struct usb_driver *,struct usb_device *);
 extern int  usb_parse_configuration(struct usb_device *dev, void *buf, int len);
+extern void usb_destroy_configuration(struct usb_device *dev);
+
+extern void *usb_allocate_isochronous (struct usb_device *usb_dev, unsigned int pipe, void *data, int len,
+					int maxsze, usb_device_irq completed, void *dev_id);
+extern void usb_delete_isochronous (struct usb_device *dev, void *_isodesc);
+extern int usb_schedule_isochronous (struct usb_device *usb_dev, void *_isodesc, void *_pisodesc);
+extern int usb_unschedule_isochronous (struct usb_device *usb_dev, void *_isodesc);
+extern int usb_compress_isochronous (struct usb_device *usb_dev, void *_isodesc);
 
 /*
  * Calling this entity a "pipe" is glorifying it. A USB pipe
@@ -282,36 +397,47 @@ extern int  usb_parse_configuration(struct usb_device *dev, void *buf, int len);
  * Let's not fall in that trap. We'll just encode it as a simple
  * unsigned int. The encoding is:
  *
+ *  - max size:		bits 0-1	(00 = 8, 01 = 16, 10 = 32, 11 = 64)
+ *  - direction:	bit 7		(0 = Host-to-Device, 1 = Device-to-Host)
  *  - device:		bits 8-14
  *  - endpoint:		bits 15-18
  *  - Data0/1:		bit 19
- *  - direction:	bit 7		(0 = Host-to-Device, 1 = Device-to-Host)
- *  - speed:		bit 26		(0 = High, 1 = Low Speed)
- *  - max size:		bits 0-1	(00 = 8, 01 = 16, 10 = 32, 11 = 64)
+ *  - speed:		bit 26		(0 = Full, 1 = Low Speed)
  *  - pipe type:	bits 30-31	(00 = isochronous, 01 = interrupt, 10 = control, 11 = bulk)
  *
  * Why? Because it's arbitrary, and whatever encoding we select is really
- * up to us. This one happens to share a lot of bit positions with the UCHI
+ * up to us. This one happens to share a lot of bit positions with the UHCI
  * specification, so that much of the uhci driver can just mask the bits
  * appropriately.
  */
 
-#define usb_maxpacket(pipe)	(8 << ((pipe) & 3))
+#define usb_maxpacket(dev,pipe)	((dev)->epmaxpacket[usb_pipeendpoint(pipe)])
 #define usb_packetid(pipe)	(((pipe) & 0x80) ? 0x69 : 0xE1)
 
+#define usb_pipeout(pipe)	((((pipe) >> 7) & 1) ^ 1)
+#define usb_pipein(pipe)	(((pipe) >> 7) & 1)
 #define usb_pipedevice(pipe)	(((pipe) >> 8) & 0x7f)
+#define usb_pipe_endpdev(pipe)	(((pipe) >> 8) & 0x7ff)
 #define usb_pipeendpoint(pipe)	(((pipe) >> 15) & 0xf)
 #define usb_pipedata(pipe)	(((pipe) >> 19) & 1)
-#define usb_pipeout(pipe)	(((pipe) & 0x80) == 0)
 #define usb_pipeslow(pipe)	(((pipe) >> 26) & 1)
-
 #define usb_pipetype(pipe)	(((pipe) >> 30) & 3)
 #define usb_pipeisoc(pipe)	(usb_pipetype((pipe)) == 0)
 #define usb_pipeint(pipe)	(usb_pipetype((pipe)) == 1)
 #define usb_pipecontrol(pipe)	(usb_pipetype((pipe)) == 2)
 #define usb_pipebulk(pipe)	(usb_pipetype((pipe)) == 3)
 
-#define usb_pipe_endpdev(pipe)	(((pipe) >> 8) & 0x7ff)
+#define PIPE_DEVEP_MASK		0x0007ff00
+
+/* The D0/D1 toggle bits */
+#define usb_gettoggle(dev, ep, out) (((dev)->toggle[out] >> ep) & 1)
+#define	usb_dotoggle(dev, ep, out)  ((dev)->toggle[out] ^= (1 << ep))
+#define usb_settoggle(dev, ep, out, bit) ((dev)->toggle[out] = ((dev)->toggle[out] & ~(1 << ep)) | ((bit) << ep))
+
+/* Endpoint halt */
+#define usb_endpoint_halt(dev, ep) ((dev)->halted |= (1 << (ep)))
+#define usb_endpoint_running(dev, ep) ((dev)->halted &= ~(1 << (ep)))
+#define usb_endpoint_halted(dev, ep) ((dev)->halted & (1 << (ep)))
 
 static inline unsigned int __create_pipe(struct usb_device *dev, unsigned int endpoint)
 {
@@ -323,13 +449,15 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
 	return (dev->slow << 26);
 }
 
-/* Create control pipes.. */
+/* Create various pipes... */
 #define usb_sndctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint))
 #define usb_rcvctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint) | 0x80)
+#define usb_sndisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint))
+#define usb_rcvisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint) | 0x80)
+#define usb_sndbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint))
+#define usb_rcvbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint) | 0x80)
 #define usb_snddefctrl(dev)		((2 << 30) | __default_pipe(dev))
 #define usb_rcvdefctrl(dev)		((2 << 30) | __default_pipe(dev) | 0x80)
-
-/* Create .. */
 
 /*
  * Send and receive control messages..
@@ -342,13 +470,18 @@ int usb_get_device_descriptor(struct usb_device *dev);
 int usb_get_hub_descriptor(struct usb_device *dev, void *data, int size);
 int usb_clear_port_feature(struct usb_device *dev, int port, int feature);
 int usb_set_port_feature(struct usb_device *dev, int port, int feature);
+int usb_get_status (struct usb_device *dev, int type, int target, void *data);
 int usb_get_hub_status(struct usb_device *dev, void *data);
 int usb_get_port_status(struct usb_device *dev, int port, void *data);
 int usb_get_protocol(struct usb_device *dev);
 int usb_set_protocol(struct usb_device *dev, int protocol);
+int usb_set_interface(struct usb_device *dev, int interface, int alternate);
 int usb_set_idle(struct usb_device *dev, int duration, int report_id);
+int usb_set_interface(struct usb_device *dev, int interface, int alternate);
 int usb_set_configuration(struct usb_device *dev, int configuration);
 int usb_get_report(struct usb_device *dev);
+char *usb_string(struct usb_device *dev, int index);
+int usb_clear_halt(struct usb_device *dev, int endp);
 
 /*
  * Debugging helpers..
@@ -359,6 +492,7 @@ void usb_show_interface_descriptor(struct usb_interface_descriptor *);
 void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor *);
 void usb_show_hub_descriptor(struct usb_hub_descriptor *);
 void usb_show_device(struct usb_device *);
+void usb_show_string(struct usb_device* dev, char *id, int index);
 
 /*
  * Audio parsing helpers

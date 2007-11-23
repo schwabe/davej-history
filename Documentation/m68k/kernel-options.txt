@@ -1,5 +1,3 @@
-
-
 				  Command Line Options for Linux/m68k
 				  ===================================
 
@@ -14,7 +12,7 @@ Update: jds@kom.auc.dk (Jes Sorensen) and faq@linux-m68k.org (Chris Lawrence)
   Often I've been asked which command line options the Linux/m68k
 kernel understands, or how the exact syntax for the ... option is, or
 ... about the option ... . I hope, this document supplies all the
-answers...
+answers.
 
   Note that some options might be outdated, their descriptions being
 incomplete or missing. Please update the information and send in the
@@ -110,20 +108,19 @@ the kernel command line.
 [Strange and maybe uninteresting stuff ON]
 
   This unusual translation of device names has some strange
-consequences: If, for example, you have a symbolic link from /dev/fd
+consequences: if, for example, you have a symbolic link from /dev/fd
 to /dev/fd0D720 as an abbreviation for floppy driver #0 in DD format,
 you cannot use this name for specifying the root device, because the
 kernel cannot see this symlink before mounting the root FS and it
 isn't in the table above. If you use it, the root device will not be 
-set at all, without an error message. Another example: You cannot use a
+set at all, without an error message. Another example: you cannot use a
 partition on e.g. the sixth SCSI disk as the root filesystem, if you
 want to specify it by name. This is, because only the devices up to
-/dev/sde are in the table above, but not /dev/sdf. Although, you can
-use the sixth SCSI disk for the root FS, but you have to specify the
-device by number... (see below). Or, even more strange, you can use the
-fact that there is no range checking of the partition number, and your
-knowledge that each disk uses 16 minors, and write "root=/dev/sde17"
-(for /dev/sdf1).
+/dev/sde are in the table above, but not /dev/sdf. You can use the sixth 
+SCSI disk for the root filesystem, but you have to specify the device by 
+number (see below). Even more strange, you can use the fact that there is 
+no range checking of the partition number, and your knowledge that each 
+disk uses 16 minors, and write "root=/dev/sde17" (for /dev/sdf1).
 
 [Strange and maybe uninteresting stuff OFF]
 
@@ -181,7 +178,7 @@ at least 8 can also be set by the "debug" command line option (see
 Devices possible for Amiga:
 
  - "ser": built-in serial port; parameters: 9600bps, 8N1
- - "mem": Save the messages to a reserved area in chip mem. After
+ - "mem": Save the messages to a reserved area in chip memory. After
           rebooting, they can be read under AmigaOS with the tool
           'dmesg'.
 
@@ -205,7 +202,7 @@ Devices possible for Atari:
 Syntax: ramdisk=<size>
 
   This option instructs the kernel to set up a ramdisk of the given
-size in KBytes. Do not use this option if the ramdisk contents are
+size in kilobytes. Do not use this option if the ramdisk contents are
 passed by bootstrap! In this case, the size is selected automatically
 and should not be overwritten.
 
@@ -234,10 +231,10 @@ Syntax: ether=[<irq>[,<base_addr>[,<mem_start>[,<mem_end>]]]],<dev-name>
 drivers/net/Space.c in the Linux source. Most prominent are eth0, ...
 eth3, sl0, ... sl3, ppp0, ..., ppp3, dummy, and lo.
 
-  The non-ethernet drivers (sl, ppp, dummy, lo) obviously ignore the
-settings by this options. Also, the existing ethernet drivers for
+  The non-Ethernet drivers (sl, ppp, dummy, lo) obviously ignore the
+settings by this options. Also, the existing Ethernet drivers for
 Linux/m68k (ariadne, a2065, hydra) don't use them because Zorro boards
-are really Plug-'n-Play, so the "ether=" option is useless altogether
+are really Plug-'n'-Play, so the "ether=" option is useless altogether
 for Linux/m68k.
 
 
@@ -288,8 +285,8 @@ driver (Amiga and Atari): <buffers> is the number of buffers you want
 to use (minimum 4, default 4), <buffer-size> is the size of each
 buffer in kilobytes (minimum 4, default 32) and <catch-radius> says
 how much percent of error will be tolerated when setting a frequency
-(maximum 10, default 0). For example with 3% you can play 8000Hz
-AU-Files on the Falcon with its hardware frequency of 8195Hz and thus
+(maximum 10, default 0). For example, with 3% you can play 8000 Hz Sun
+audio files on the Falcon with its hardware frequency of 8195 Hz and thus
 don't need to expand the sound.
 
 
@@ -482,7 +479,7 @@ the physical linelength differs from the visible length. With ProMST,
 xres_virtual must be set to 2048. For ET4000, xres_virtual depends on the
 initialisation of the video-card.
 If you're missing a corresponding yres_virtual: the external part is legacy,
-therefore we don't support hardware-dependend functions like hardware-scroll,
+therefore we don't support hardware-dependent functions like hardware scroll,
 panning or blanking.
 
 4.1.7) eclock:
@@ -653,7 +650,7 @@ present hardware.)
 "ov_midi", ... These options are meant for switching on an OverScan
 video extension. The difference to the bare option is that the
 switch-on is done after video initialization, and somehow synchronized
-to the HBLANK. A speciality is that ov_ikbd and ov_midi are switched
+to the HBLANK. A specialty is that ov_ikbd and ov_midi are switched
 off before rebooting, so that OverScan is disabled and TOS boots
 correctly.
 
@@ -737,8 +734,8 @@ VGA modes:
  - vga70           : 640x400, 31 kHz, 70 Hz
 
 Please notice that the ECS and VGA modes require either an ECS or AGA
-chipset, and that these modes are limited to 2-bit color for the ECS
-chipset and 8-bit color for the AGA chipset.
+chip set, and that these modes are limited to 2-bit color for the ECS
+chip set and 8-bit color for the AGA chip set.
 
 5.1.2) depth
 ------------
@@ -842,11 +839,11 @@ wd33c93.h.
 Syntax: clock:x
 
   x = clock input in MHz for WD33c93 chip. Normal values would be from
-8 through 20. The default value depends on your hostadapter(s),
+8 through 20. The default value depends on your host adapter(s),
 default for the A3000 internal controller is 14, for the A2091 it's 8
-and for the GVP hostadapters it's either 8 or 14, depending on the
-hostadapter and the SCSI-clock jumper present on some GVP
-hostadapters.
+and for the GVP host adapters it's either 8 or 14, depending on the
+host adapter and the SCSI-clock jumper present on some GVP
+host adapters.
 
 5.3.6) next
 -----------
@@ -875,8 +872,8 @@ Syntax: gvp11=<addr-mask>
   The earlier versions of the GVP driver did not handle DMA
 address-mask settings correctly which made it necessary for some
 people to use this option, in order to get their GVP controller
-running under Linux. These problems have hopefully been solved and the
-use of this option is now highly unrecommended!
+running under Linux. These problems should now be solved and
+further use of this option is highly discouraged!
 
   Incorrect use can lead to unpredictable behavior, so please only use
 this option if you *know* what you are doing and have a reason to do

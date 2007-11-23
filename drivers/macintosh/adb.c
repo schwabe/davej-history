@@ -192,13 +192,14 @@ adb_notify_sleep(struct notifier_block *this, unsigned long code, void *x)
 	int ret;
 	
 	switch (code) {
-		case PBOOK_SLEEP:
-			ret = notifier_call_chain(&adb_client_list, ADB_MSG_POWERDOWN, NULL);
-			if (ret & NOTIFY_STOP_MASK)
-				return -EBUSY;
-		case PBOOK_WAKE:
-			adb_reset_bus();
-			break;
+	case PBOOK_SLEEP:
+		ret = notifier_call_chain(&adb_client_list, ADB_MSG_POWERDOWN, NULL);
+		if (ret & NOTIFY_STOP_MASK)
+			return -EBUSY;
+		break;
+	case PBOOK_WAKE:
+		adb_reset_bus();
+		break;
 	}
 	return NOTIFY_DONE;
 }

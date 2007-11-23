@@ -21,6 +21,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <linux/blk.h>
+#include <linux/raid/md.h>
 
 #include <linux/module.h>
 
@@ -49,6 +50,11 @@ DECLARE_TASK_QUEUE(tq_disk);
  * are called with no global kernel lock held ...
  */
 spinlock_t io_request_lock = SPIN_LOCK_UNLOCKED;
+
+/*
+ * per-major idle-IO detection
+ */
+unsigned long io_events[MAX_BLKDEV] = {0, };
 
 /*
  * used to wait on when there are no free requests
@@ -424,6 +430,8 @@ void make_request(int major, int rw, struct buffer_head * bh)
 	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
 
 	lock_buffer(bh);
+	if (!buffer_lowprio(bh))
+		io_events[major]++;
 
 	if (blk_size[major]) {
 		unsigned long maxsector = (blk_size[major][MINOR(bh->b_rdev)] << 1) + 1;
@@ -522,7 +530,7 @@ void make_request(int major, int rw, struct buffer_head * bh)
 		 * entry may be busy being processed and we thus can't change it.
 		 */
 		if (req == blk_dev[major].current_request)
-	        	req = req->next;
+			req = req->next;
 		if (!req)
 			break;
 		/* fall through */
@@ -681,11 +689,12 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		bh[i]->b_rsector=bh[i]->b_blocknr*(bh[i]->b_size >> 9);
 #ifdef CONFIG_BLK_DEV_MD
 		if (major==MD_MAJOR &&
-		    md_map (MINOR(bh[i]->b_dev), &bh[i]->b_rdev,
-			    &bh[i]->b_rsector, bh[i]->b_size >> 9)) {
-		        printk (KERN_ERR
+		/* changed v to allow LVM to remap */
+			md_map (bh[i]->b_rdev, &bh[i]->b_rdev,
+				&bh[i]->b_rsector, bh[i]->b_size >> 9)) {
+			printk (KERN_ERR
 				"Bad md_map in ll_rw_block\n");
-		        goto sorry;
+			goto sorry;
 		}
 #endif
 	}
@@ -700,8 +709,10 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		if (bh[i]) {
 			set_bit(BH_Req, &bh[i]->b_state);
 #ifdef CONFIG_BLK_DEV_MD
-			if (MAJOR(bh[i]->b_dev) == MD_MAJOR) {
-				md_make_request(MINOR (bh[i]->b_dev), rw, bh[i]);
+			/* changed	 v  to allow LVM to remap */
+			if (MAJOR(bh[i]->b_rdev) == MD_MAJOR) {
+				/* changed for LVM to remap     v */
+				md_make_request(bh[i], rw);
 				continue;
 			}
 #endif
@@ -784,10 +795,10 @@ __initfunc(int blk_dev_init(void))
 
 	for (dev = blk_dev + MAX_BLKDEV; dev-- != blk_dev;) {
 		dev->request_fn      = NULL;
-		dev->queue           = NULL;
+		dev->queue	   = NULL;
 		dev->current_request = NULL;
 		dev->plug.rq_status  = RQ_INACTIVE;
-		dev->plug.cmd        = -1;
+		dev->plug.cmd	= -1;
 		dev->plug.next       = NULL;
 		dev->plug_tq.sync    = 0;
 		dev->plug_tq.routine = &unplug_device;
@@ -868,7 +879,7 @@ __initfunc(int blk_dev_init(void))
 	sbpcd_init();
 #endif CONFIG_SBPCD
 #ifdef CONFIG_AZTCD
-        aztcd_init();
+	aztcd_init();
 #endif CONFIG_AZTCD
 #ifdef CONFIG_CDU535
 	sony535_init();

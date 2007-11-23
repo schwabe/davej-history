@@ -425,12 +425,18 @@ enum
 /* CTL_DEV names: */
 enum {
 	DEV_CDROM=1,
-	DEV_HWMON=2
+	DEV_HWMON=2,
+	DEV_MD=3
 };
 
 /* /proc/sys/dev/cdrom */
 enum {
 	DEV_CDROM_INFO=1
+};
+
+/* /proc/sys/dev/md */
+enum {
+	DEV_MD_SPEED_LIMIT=1
 };
 
 #ifdef __KERNEL__

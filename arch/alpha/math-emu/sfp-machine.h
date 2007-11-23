@@ -38,13 +38,13 @@
 #define _FP_NANFRAC_Q		_FP_QNANBIT_Q, 0
 
 /* On some architectures float-to-int conversions return a result
- * code.  On others (e.g. Sparc) they return 0
- */
-#define _FTOI_RESULT		A_r
+   code.  On others (e.g. Sparc) they return 0.  */
+#define _FTOI_RESULT(X)		X##_r
 
-#define _FP_KEEPNANFRACP 1
+#define _FP_KEEPNANFRACP	1
 
-/* Alpha Architecture Manual Section 4.7.10.4: Propagating NaN Values,
+/*
+ * Alpha Architecture Manual Section 4.7.10.4: Propagating NaN Values,
  * summary:
  *
  * The first of the following rules that is applicable governs the
@@ -66,29 +66,25 @@
 #define _FP_CHOOSENAN(fs, wc, R, X, Y)				\
   do {								\
     R##_r |= (X##_r | Y##_r);					\
-    if(_FP_IS_NAN(fs, Y)) {					\
+    if (_FP_IS_NAN(fs, Y)) {					\
 	R##_s = Y##_s;						\
 	R##_c = FP_CLS_NAN;					\
-	if(_FP_IS_QNAN(fs, Y)) {	/* Rule 1 */		\
+	if (_FP_IS_QNAN(fs, Y)) {	/* Rule 1 */		\
 	    _FP_FRAC_COPY_##wc(R,Y);				\
-	}							\
-	else {				/* Rule 2 */		\
+	} else {			/* Rule 2 */		\
 	    _FP_FRAC_SET_##wc(R,Y##_f | _FP_QNANBIT_##fs); 	\
 	    R##_r = EFLAG_INVALID;				\
 	}							\
-    }								\
-    else if(_FP_IS_NAN(fs, X)) {				\
+    } else if (_FP_IS_NAN(fs, X)) {				\
 	R##_s = X##_s;						\
 	R##_c = FP_CLS_NAN;					\
-	if(_FP_IS_QNAN(fs, X)) {	/* Rule 3 */		\
+	if (_FP_IS_QNAN(fs, X)) {	/* Rule 3 */		\
 	    _FP_FRAC_COPY_##wc(R,X);				\
-	}							\
-	else {				/* Rule 4 */		\
+	} else {			/* Rule 4 */		\
 	    _FP_FRAC_SET_##wc(R,X##_f | _FP_QNANBIT_##fs); 	\
 	    R##_r |= EFLAG_INVALID;				\
 	}							\
-    }								\
-    else {				/* Rule 5 */		\
+    } else {				/* Rule 5 */		\
 	R##_s = 1;						\
 	R##_c = FP_CLS_NAN;					\
 	_FP_FRAC_SET_##wc(R,_FP_QNANBIT_##fs | EFLAG_MASK); 	\
@@ -98,18 +94,16 @@
 /* Rules 3 and 4 don't apply to functions of only one argument */
 #define _FP_CHOOSENAN_1(fs, wc, R, X)				\
   do {								\
-    if(_FP_IS_NAN(fs, X)) {					\
+    if (_FP_IS_NAN(fs, X)) {					\
 	R##_s = X##_s;						\
 	R##_c = FP_CLS_NAN;					\
-	if(_FP_IS_QNAN(fs, X)) {	/* Rule 1 */		\
+	if (_FP_IS_QNAN(fs, X)) {	/* Rule 1 */		\
 	    _FP_FRAC_COPY_##wc(R,X);				\
-	}							\
-	else {				/* Rule 2 */		\
+	} else {			/* Rule 2 */		\
 	    _FP_FRAC_SET_##wc(R,X##_f | _FP_QNANBIT_##fs); 	\
 	    R##_r |= EFLAG_INVALID;				\
 	}							\
-    }								\
-    else {				/* Rule 5 */		\
+    } else {				/* Rule 5 */		\
 	R##_s = 1;						\
 	R##_c = FP_CLS_NAN;					\
 	_FP_FRAC_SET_##wc(R,_FP_QNANBIT_##fs | EFLAG_MASK); 	\
@@ -119,45 +113,44 @@
 #define _FP_CHOOSENAN_SQRT	_FP_CHOOSENAN_1
 
 
-#define __FP_UNPACK_DENORM(fs, wc, X)				\
-    {									\
+#define __FP_UNPACK_DENORM(fs, wc, X)					\
+  do {									\
 	_FP_I_TYPE _shift;						\
 	X##_r |= EFLAG_DENORM;						\
-	if(_FP_DENORM_TO_ZERO) {					\
+	if (_FP_DENORM_TO_ZERO) {					\
 	    /* Crunching a nonzero denorm to zero necessarily makes */  \
 	    /* the result inexact */					\
 	    X##_r |= EFLAG_INEXACT;					\
 	    _FP_FRAC_SET_##wc(X, 0);					\
 	    X##_c = FP_CLS_ZERO;					\
-	}								\
-	else {								\
+	} else {							\
 	    _FP_FRAC_CLZ_##wc(_shift, X);				\
 	    _shift -= _FP_FRACXBITS_##fs;				\
 	    _FP_FRAC_SLL_##wc(X, (_shift+_FP_WORKBITS));		\
 	    X##_e -= _FP_EXPBIAS_##fs - 1 + _shift;			\
 	    X##_c = FP_CLS_NORMAL;					\
 	}								\
-    }
-
-#define __FP_UNPACK_RAW_1(fs, X, val)				\
-  do {								\
-    union _FP_UNION_##fs *_flo =				\
-    	(union _FP_UNION_##fs *)val;				\
-								\
-    X##_f = _flo->bits.frac;					\
-    X##_e = _flo->bits.exp;					\
-    X##_s = _flo->bits.sign;					\
   } while (0)
 
-#define __FP_UNPACK_RAW_2(fs, X, val)			\
-  do {							\
-    union _FP_UNION_##fs *_flo =			\
-    	(union _FP_UNION_##fs *)val;			\
-							\
-    X##_f0 = _flo->bits.frac0;				\
-    X##_f1 = _flo->bits.frac1;				\
-    X##_e  = _flo->bits.exp;				\
-    X##_s  = _flo->bits.sign;				\
+#define __FP_UNPACK_RAW_1(fs, X, val)	\
+  do {					\
+    union _FP_UNION_##fs *_flo =	\
+    	(union _FP_UNION_##fs *)val;	\
+					\
+    X##_f = _flo->bits.frac;		\
+    X##_e = _flo->bits.exp;		\
+    X##_s = _flo->bits.sign;		\
+  } while (0)
+
+#define __FP_UNPACK_RAW_2(fs, X, val)	\
+  do {					\
+    union _FP_UNION_##fs *_flo =	\
+    	(union _FP_UNION_##fs *)val;	\
+					\
+    X##_f0 = _flo->bits.frac0;		\
+    X##_f1 = _flo->bits.frac1;		\
+    X##_e  = _flo->bits.exp;		\
+    X##_s  = _flo->bits.sign;		\
   } while (0)
 
 #define __FP_UNPACK_S(X,val)		\
@@ -178,25 +171,25 @@
     _FP_UNPACK_CANONICAL(Q,2,X);	\
   } while (0)
 
-#define __FP_PACK_RAW_1(fs, val, X)				\
-  do {								\
-    union _FP_UNION_##fs *_flo =				\
-    	(union _FP_UNION_##fs *)val;				\
-								\
-    _flo->bits.frac = X##_f;					\
-    _flo->bits.exp  = X##_e;					\
-    _flo->bits.sign = X##_s;					\
+#define __FP_PACK_RAW_1(fs, val, X)	\
+  do {					\
+    union _FP_UNION_##fs *_flo =	\
+    	(union _FP_UNION_##fs *)val;	\
+					\
+    _flo->bits.frac = X##_f;		\
+    _flo->bits.exp  = X##_e;		\
+    _flo->bits.sign = X##_s;		\
   } while (0)
   
-#define __FP_PACK_RAW_2(fs, val, X)			\
-  do {							\
-    union _FP_UNION_##fs *_flo =			\
-    	(union _FP_UNION_##fs *)val;			\
-							\
-    _flo->bits.frac0 = X##_f0;				\
-    _flo->bits.frac1 = X##_f1;				\
-    _flo->bits.exp   = X##_e;				\
-    _flo->bits.sign  = X##_s;				\
+#define __FP_PACK_RAW_2(fs, val, X)	\
+  do {					\
+    union _FP_UNION_##fs *_flo =	\
+    	(union _FP_UNION_##fs *)val;	\
+					\
+    _flo->bits.frac0 = X##_f0;		\
+    _flo->bits.frac1 = X##_f1;		\
+    _flo->bits.exp   = X##_e;		\
+    _flo->bits.sign  = X##_s;		\
   } while (0)
 
 
@@ -223,7 +216,7 @@ do {									     \
 	    _FP_FRAC_SRS_##wc(X, diff, _FP_WFRACBITS_##fs);		     \
 	  else if (!_FP_FRAC_ZEROP_##wc(X)) {				     \
 	    _FP_FRAC_SET_##wc(X, _FP_MINFRAC_##wc);			     \
-	    R_r |= EFLAG_INEXACT;					     \
+	    R##_r |= EFLAG_INEXACT;					     \
 	  }								     \
 	  else								     \
 	    _FP_FRAC_SET_##wc(X, _FP_ZEROFRAC_##wc);			     \
@@ -237,7 +230,7 @@ do {									     \
 	        _FP_FRAC_SRS_##wc(Y, diff, _FP_WFRACBITS_##fs);		     \
 	      else if (!_FP_FRAC_ZEROP_##wc(Y))	{			     \
 	        _FP_FRAC_SET_##wc(Y, _FP_MINFRAC_##wc);			     \
-	         R_r |= EFLAG_INEXACT;					     \
+	         R##_r |= EFLAG_INEXACT;				     \
 	      }								     \
 	      else							     \
 	        _FP_FRAC_SET_##wc(Y, _FP_ZEROFRAC_##wc);		     \
@@ -412,8 +405,8 @@ do {							\
 
 #define _FP_DIV(fs, wc, R, X, Y)			\
 do {							\
-  /* Propagate any flags that may have been set during unpacking */	     \
-  R##_r |= (X##_r | Y##_r);						     \
+  /* Propagate any flags that may have been set during unpacking */ \
+  R##_r |= (X##_r | Y##_r);				\
   R##_s = X##_s ^ Y##_s;				\
   switch (_FP_CLS_COMBINE(X##_c, Y##_c))		\
   {							\
@@ -512,17 +505,14 @@ do {							\
   })
 
 
-/* We only actually write to the destination register
- * if exceptions signalled (if any) will not trap.
- */
-#define __FPU_TEM ((current->tss.flags)& IEEE_TRAP_ENABLE_MASK)
-
-#define __FPU_TRAP_P(bits) \
-	((__FPU_TEM & (bits)) != 0)
+/* We only actually write to the destination register if exceptions
+   signalled (if any) will not trap.  */
+#define __FPU_TEM		(current->tss.flags & IEEE_TRAP_ENABLE_MASK)
+#define __FPU_TRAP_P(bits)	((__FPU_TEM & (bits)) != 0)
 
 #define __FP_PACK_S(val,X)			\
 ({  int __exc = _FP_PACK_CANONICAL(S,1,X);	\
-    if(!__exc || !__FPU_TRAP_P(__exc))		\
+    if (!__exc || !__FPU_TRAP_P(__exc))		\
         __FP_PACK_RAW_1(S,val,X);		\
     __exc;					\
 })
@@ -542,9 +532,7 @@ do {							\
 })
 
 /* Obtain the current rounding mode. */
-#define FP_ROUNDMODE	\
-    (((current->tss.flags)&IEEE_CURRENT_RM_MASK)>>IEEE_CURRENT_RM_SHIFT)
-
+#define FP_ROUNDMODE		mode
 #define FP_RND_NEAREST		(FPCR_DYN_NORMAL >> FPCR_DYN_SHIFT)
 #define FP_RND_ZERO		(FPCR_DYN_CHOPPED >> FPCR_DYN_SHIFT)
 #define FP_RND_PINF		(FPCR_DYN_PLUS >> FPCR_DYN_SHIFT)
@@ -552,48 +540,32 @@ do {							\
 
 
 #define add_ssaaaa(sh, sl, ah, al, bh, bl) \
-  __asm__ ("addq %4,%5,%1; cmpult %1,%4,$28; addq %2,%3,%0; addq %0,$28,%0" \
-	   : "=r" ((UDItype)(sh)), \
-	     "=r" ((UDItype)(sl)) \
-	   : "r" ((UDItype)(ah)), \
-	     "r" ((UDItype)(bh)), \
-	     "r" ((UDItype)(al)), \
-	     "r" ((UDItype)(bl)))
-	   
+  ((sl) = (al) + (bl), (sh) = (ah) + (bh) + ((sl) < (al)))
+
 #define sub_ddmmss(sh, sl, ah, al, bh, bl) \
-  __asm__ ("subq %4,%5,%1; cmpult %4,%5,$28; subq %2,%3,%0; subq %0,$28,%0"\
-	   : "=r" ((UDItype)(sh)), \
-	     "=&r" ((UDItype)(sl)) \
-	   : "r" ((UDItype)(ah)), \
-	     "r" ((UDItype)(bh)), \
-	     "r" ((UDItype)(al)), \
-	     "r" ((UDItype)(bl)))
-	   
-#define umul_ppmm(wh, wl, u, v) \
-  do { \
-	  __asm__ ("mulq %2,%3,%1; umulh %2,%3,%0" \
-	   : "=r" ((UDItype)(wh)), \
-	     "=&r" ((UDItype)(wl)) \
-	   : "r" ((UDItype)(u)), \
-	     "r" ((UDItype)(v))); \
-  } while (0)
+  ((sl) = (al) - (bl), (sh) = (ah) - (bh) - ((al) < (bl)))
 
+#define umul_ppmm(wh, wl, u, v)			\
+  __asm__ ("mulq %2,%3,%1; umulh %2,%3,%0"	\
+	   : "=r" ((UDItype)(wh)),		\
+	     "=&r" ((UDItype)(wl))		\
+	   : "r" ((UDItype)(u)),		\
+	     "r" ((UDItype)(v)))
 
-#define udiv_qrnnd(q, r, n1, n0, d) 				\
-  do {                                                          \
-    unsigned long __n[2];					\
-    unsigned long __d[2];					\
-    unsigned long __q[2];					\
-    unsigned long __r[2];					\
-    __n[0]=n1; __n[1]=n0; __d[0]=0; __d[1]=d;			\
-    udiv128(__n, __d, __q, __r);				\
-    q=__q[1]; r=__r[1];						\
+extern __complex__ unsigned long udiv128(unsigned long, unsigned long,
+					 unsigned long, unsigned long);
+
+#define udiv_qrnnd(q, r, n1, n0, d)	\
+  do {					\
+    __complex__ unsigned long x_;	\
+    x_ = udiv128((n0), (n1), 0, (d));	\
+    (q) = __real__ x_;			\
+    (r) = __imag__ x_;			\
   } while (0)
 
 #define UDIV_NEEDS_NORMALIZATION 1  
 
-#define abort()										\
-	return 0
+#define abort()			goto bad_insn
 
 #ifndef __LITTLE_ENDIAN
 #define __LITTLE_ENDIAN -1
@@ -609,13 +581,7 @@ do {							\
 #define EFLAG_DENORM		IEEE_TRAP_ENABLE_DNO
 #define EFLAG_MASK		IEEE_TRAP_ENABLE_MASK
 
-#ifdef FP_TEST_XXX
-#define _FP_DENORM_TO_ZERO \
-    (tss_flags&IEEE_MAP_DMZ)
-#else
-#define _FP_DENORM_TO_ZERO \
-    ((current->tss.flags)&IEEE_MAP_DMZ)
-#endif
+#define _FP_DENORM_TO_ZERO	((current->tss.flags) & IEEE_MAP_DMZ)
 
 /* Comparison operations */
 #define CMPTXX_EQ		0

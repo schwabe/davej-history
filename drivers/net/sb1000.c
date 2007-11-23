@@ -273,7 +273,7 @@ sb1000_probe(struct device *dev)
 
 	dev->type		= ARPHRD_ETHER;
 	dev->hard_header_len 	= 0;
-	dev->mtu		= 0;
+	dev->mtu		= 1500;
 	dev->addr_len		= ETH_ALEN;
 	/* hardware address is 0:0:serial_number */
 	dev->dev_addr[0] = 0;

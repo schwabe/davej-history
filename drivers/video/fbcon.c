@@ -215,7 +215,7 @@ static int fbcon_show_logo(void);
 
 #ifdef CONFIG_MAC
 /*
- * On the Macintoy, there may or may not be a working VBL int. We need to prob
+ * On the Macintoy, there may or may not be a working VBL int. We need to probe
  */
 static int vbl_detected = 0;
 

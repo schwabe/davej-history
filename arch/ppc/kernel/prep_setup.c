@@ -84,7 +84,6 @@ extern void pckbd_init_hw(void);
 extern unsigned char pckbd_sysrq_xlate[128];
 
 extern void prep_setup_pci_ptrs(void);
-extern void chrp_do_IRQ(struct pt_regs *regs, int cpu, int isfake);
 extern char saved_command_line[256];
 
 int _prep_type;
@@ -704,15 +703,27 @@ prep_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq))
 }
 #endif
 
+unsigned long *MotSave_SmpIar;
+unsigned char *MotSave_CpusState[2];
+
 __initfunc(void
 prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	  unsigned long r6, unsigned long r7))
 {
+	RESIDUAL *old_res = (RESIDUAL *)(r3 + KERNELBASE);
+
 	/* make a copy of residual data */
 	if ( r3 )
 	{
 		memcpy((void *)res,(void *)(r3+KERNELBASE),
 		       sizeof(RESIDUAL));
+
+		/* These need to be saved for the Motorola Prep 
+		 * MVME4600 and Dual MTX boards.
+		 */
+		MotSave_SmpIar = &old_res->VitalProductData.SmpIar;
+		MotSave_CpusState[0] = &old_res->Cpus[0].CpuState;
+		MotSave_CpusState[1] = &old_res->Cpus[1].CpuState;
 	}
 
 	isa_io_base = PREP_ISA_IO_BASE;

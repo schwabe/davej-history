@@ -129,7 +129,7 @@ static int do_mlock(unsigned long start, size_t len, int on)
 	struct vm_area_struct * vma, * next;
 	int error;
 
-	if (!capable(CAP_IPC_LOCK))
+	if (on && !capable(CAP_IPC_LOCK))
 		return -EPERM;
 	len = (len + ~PAGE_MASK) & PAGE_MASK;
 	end = start + len;
@@ -186,11 +186,13 @@ asmlinkage int sys_mlock(unsigned long start, size_t len)
 	locked += current->mm->locked_vm;
 
 	lock_limit = current->rlim[RLIMIT_MEMLOCK].rlim_cur;
-	lock_limit >>= PAGE_SHIFT;
+	if (lock_limit < RLIM_INFINITY) {
+		lock_limit >>= PAGE_SHIFT;
 
-	/* check against resource limits */
-	if (locked > lock_limit)
-		goto out;
+		/* check against resource limits */
+		if (locked > lock_limit)
+			goto out;
+	}
 
 	/* we may lock at most half of physical memory... */
 	/* (this check is pretty bogus, but doesn't hurt) */
@@ -257,12 +259,14 @@ asmlinkage int sys_mlockall(int flags)
 	if (!flags || (flags & ~(MCL_CURRENT | MCL_FUTURE)))
 		goto out;
 
-	lock_limit = current->rlim[RLIMIT_MEMLOCK].rlim_cur;
-	lock_limit >>= PAGE_SHIFT;
-
 	ret = -ENOMEM;
-	if (current->mm->total_vm > lock_limit)
-		goto out;
+	lock_limit = current->rlim[RLIMIT_MEMLOCK].rlim_cur;
+	if (lock_limit < RLIM_INFINITY) {
+		lock_limit >>= PAGE_SHIFT;
+
+		if (current->mm->total_vm > lock_limit)
+			goto out;
+	}
 
 	/* we may lock at most half of physical memory... */
 	/* (this check is pretty bogus, but doesn't hurt) */

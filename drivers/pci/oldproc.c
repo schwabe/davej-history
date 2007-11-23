@@ -535,6 +535,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_82371AB_2,"82371AB PIIX4 USB"),
 	DEVICE( INTEL,		INTEL_82371AB_3,"82371AB PIIX4 ACPI"),
 	DEVICE( INTEL,		INTEL_82443LX_0,"440LX - 82443LX PAC Host"),
+	DEVICE( COMPUTONE,	COMPUTONE_IP2EX, "Computone IntelliPort Plus"),
 	DEVICE( INTEL,		INTEL_82443LX_1,"440LX - 82443LX PAC AGP"),
 	DEVICE( INTEL,		INTEL_82443BX_0,"440BX - 82443BX Host"),
 	DEVICE( INTEL,		INTEL_82443BX_1,"440BX - 82443BX AGP"),
@@ -830,6 +831,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_NVIDIA_SGS:	return "NVidia/SGS Thomson";
 	      case PCI_VENDOR_ID_CBOARDS:	return "ComputerBoards";
 	      case PCI_VENDOR_ID_SYMPHONY:	return "Symphony";
+	      case PCI_VENDOR_ID_COMPUTONE:	return "Computone Corporation";
 	      case PCI_VENDOR_ID_TEKRAM:	return "Tekram";
 	      case PCI_VENDOR_ID_3DLABS:	return "3Dlabs";
 	      case PCI_VENDOR_ID_AVANCE:	return "Avance";

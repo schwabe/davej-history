@@ -6,26 +6,10 @@
 #include <asm/uaccess.h>
 
 #include "soft-fp.h"
-
-extern int CMPTXX(void *, void *, void *, int);
-extern int FXTOS(void *, void *);
-extern int FXTOD(void *, void *);
-extern int FDTOS(void *, void *);
-extern int FSTOD(void *, void *);
-extern int FDIVS(void *, void *, void *);
-extern int FDIVD(void *, void *, void *);
-extern int FMULS(void *, void *, void *);
-extern int FMULD(void *, void *, void *);
-extern int FSUBS(void *, void *, void *);
-extern int FSUBD(void *, void *, void *);
-extern int FADDS(void *, void *, void *);
-extern int FADDD(void *, void *, void *);
-extern int FDTOX(void *, void *);
-extern int FSQRTS(void *, void *);
-extern int FSQRTD(void *, void *);
+#include "double.h"
+#include "single.h"
 
 #define	OPC_PAL		0x00
-
 #define OPC_INTA	0x10
 #define OPC_INTL	0x11
 #define OPC_INTS	0x12
@@ -34,42 +18,26 @@ extern int FSQRTD(void *, void *);
 #define OPC_FLTV	0x15
 #define OPC_FLTI	0x16
 #define OPC_FLTL	0x17
-
 #define OPC_MISC	0x18
-
 #define	OPC_JSR		0x1a
 
-#define OP_FUN(OP,FUN)	((OP << 26) | (FUN << 5))
+#define FOP_SRC_S	0
+#define FOP_SRC_T	2
+#define FOP_SRC_Q	3
 
-/*
- * "Base" function codes for the FLTI-class instructions.
- * Note that in most cases these actually correspond to the "chopped"
- * form of the instruction.  Not to worry---we extract the qualifier
- * bits separately and deal with them separately.  Notice that base
- * function code 0x2c is used for both CVTTS and CVTST.  The other bits
- * in the function code are used to distinguish the two.
- */
-#define FLTI_FUNC_ADDS			OP_FUN(OPC_FLTI, 0x000)
-#define FLTI_FUNC_ADDT			OP_FUN(OPC_FLTI, 0x020)
-#define FLTI_FUNC_CMPTEQ		OP_FUN(OPC_FLTI, 0x025)
-#define FLTI_FUNC_CMPTLT		OP_FUN(OPC_FLTI, 0x026)
-#define FLTI_FUNC_CMPTLE		OP_FUN(OPC_FLTI, 0x027)
-#define FLTI_FUNC_CMPTUN		OP_FUN(OPC_FLTI, 0x024)
-#define FLTI_FUNC_CVTTS_or_CVTST	OP_FUN(OPC_FLTI, 0x02c)
-#define FLTI_FUNC_CVTTQ			OP_FUN(OPC_FLTI, 0x02f)
-#define FLTI_FUNC_CVTQS			OP_FUN(OPC_FLTI, 0x03c)
-#define FLTI_FUNC_CVTQT			OP_FUN(OPC_FLTI, 0x03e)
-#define FLTI_FUNC_DIVS			OP_FUN(OPC_FLTI, 0x003)
-#define FLTI_FUNC_DIVT			OP_FUN(OPC_FLTI, 0x023)
-#define FLTI_FUNC_MULS			OP_FUN(OPC_FLTI, 0x002)
-#define FLTI_FUNC_MULT			OP_FUN(OPC_FLTI, 0x022)
-#define FLTI_FUNC_SUBS			OP_FUN(OPC_FLTI, 0x001)
-#define FLTI_FUNC_SUBT			OP_FUN(OPC_FLTI, 0x021)
-
-#define FLTC_FUNC_SQRTS			OP_FUN(OPC_FLTC, 0x00B)
-#define FLTC_FUNC_SQRTT			OP_FUN(OPC_FLTC, 0x02B)
-
-#define FLTL_FUNC_CVTQL			OP_FUN(OPC_FLTL, 0x030)
+#define FOP_FNC_ADDx	0
+#define FOP_FNC_CVTQL	0
+#define FOP_FNC_SUBx	1
+#define FOP_FNC_MULx	2
+#define FOP_FNC_DIVx	3
+#define FOP_FNC_CMPxUN	4
+#define FOP_FNC_CMPxEQ	5
+#define FOP_FNC_CMPxLT	6
+#define FOP_FNC_CMPxLE	7
+#define FOP_FNC_SQRTx	11
+#define FOP_FNC_CVTxS	12
+#define FOP_FNC_CVTxT	14
+#define FOP_FNC_CVTxQ	15
 
 #define MISC_TRAPB	0x0000
 #define MISC_EXCB	0x0400
@@ -115,6 +83,67 @@ void cleanup_module(void)
 
 #endif /* MODULE */
 
+/* For 128-bit division.  */
+
+__complex__ unsigned long
+udiv128(unsigned long divisor_f0, unsigned long divisor_f1,
+	unsigned long dividend_f0, unsigned long dividend_f1)
+{
+	_FP_FRAC_DECL_2(quo);
+	_FP_FRAC_DECL_2(rem);
+	_FP_FRAC_DECL_2(tmp);
+	unsigned long i, num_bits, bit;
+	__complex__ unsigned long ret;
+
+	_FP_FRAC_SET_2(rem, _FP_ZEROFRAC_2);
+	_FP_FRAC_SET_2(quo, _FP_ZEROFRAC_2);
+
+	if (_FP_FRAC_ZEROP_2(divisor))
+		goto out;
+
+	if (_FP_FRAC_GT_2(divisor, dividend)) {
+		_FP_FRAC_COPY_2(rem, dividend);
+		goto out;
+	}
+
+	if (_FP_FRAC_EQ_2(divisor, dividend)) {
+		__FP_FRAC_SET_2(quo, 0, 1);
+		goto out;
+	}
+
+	num_bits = 128;
+	while (1) {
+		bit = _FP_FRAC_NEGP_2(dividend);
+		_FP_FRAC_COPY_2(tmp, rem);
+		_FP_FRAC_SLL_2(tmp, 1);
+		_FP_FRAC_LOW_2(tmp) |= bit;
+		if (! _FP_FRAC_GE_2(tmp, divisor))
+			break;
+		_FP_FRAC_COPY_2(rem, tmp);
+		_FP_FRAC_SLL_2(dividend, 1);
+		num_bits--;
+	}
+
+	for (i = 0; i < num_bits; i++) {
+		bit = _FP_FRAC_NEGP_2(dividend);
+		_FP_FRAC_SLL_2(rem, 1);
+		_FP_FRAC_LOW_2(rem) |= bit;
+		_FP_FRAC_SUB_2(tmp, rem, divisor);
+		bit = _FP_FRAC_NEGP_2(tmp);
+		_FP_FRAC_SLL_2(dividend, 1);
+		_FP_FRAC_SLL_2(quo, 1);
+		if (!bit) {
+			_FP_FRAC_LOW_2(quo) |= 1;
+			_FP_FRAC_COPY_2(rem, tmp);
+		}
+	}
+
+out:
+	__real__ ret = quo_f1;
+	__imag__ ret = rem_f1;
+	return ret;
+}
+
 /*
  * Emulate the floating point instruction at address PC.  Returns 0 if
  * emulation fails.  Notice that the kernel does not and cannot use FP
@@ -125,195 +154,185 @@ void cleanup_module(void)
 long
 alpha_fp_emul (unsigned long pc)
 {
-	unsigned long op_fun, fa, fb, fc, func, mode;
+	FP_DECL_S(SA); FP_DECL_S(SB); FP_DECL_S(SR);
+	FP_DECL_D(DA); FP_DECL_D(DB); FP_DECL_D(DR);
+
+	unsigned long fa, fb, fc, func, mode, src;
 	unsigned long fpcw = current->tss.flags;
-	unsigned long va, vb, vc, res, fpcr;
+	unsigned long res, cmptype, va, vb, vc, fpcr;
 	__u32 insn;
 
 	MOD_INC_USE_COUNT;
 
 	get_user(insn, (__u32*)pc);
-	fc     = (insn >>  0) &  0x1f;	/* destination register */
-	fb     = (insn >> 16) &  0x1f;
-	fa     = (insn >> 21) &  0x1f;
-	func   = (insn >>  5) & 0x7ff;
-	mode   = (insn >>  11) & 0x3;
-	op_fun = insn & OP_FUN(0x3f, 0x3f);
+	fc     = (insn >>  0) & 0x1f;	/* destination register */
+	fb     = (insn >> 16) & 0x1f;
+	fa     = (insn >> 21) & 0x1f;
+	func   = (insn >>  5) & 0xf;
+	src    = (insn >>  9) & 0x3;
+	mode   = (insn >> 11) & 0x3;
 	
 	fpcr = rdfpcr();
 
-	/*
-	 * Try the operation in software.  First, obtain the rounding
-	 * mode and set it in the task struct
-	 */
-	current->tss.flags &= ~IEEE_CURRENT_RM_MASK;
 	if (mode == 3) {
-	    /* dynamic---get rounding mode from fpcr: */
-	    current->tss.flags |= 
-		(((fpcr&FPCR_DYN_MASK)>>FPCR_DYN_SHIFT)<<IEEE_CURRENT_RM_SHIFT);
-	}
-	else {
-	    current->tss.flags |= (mode << IEEE_CURRENT_RM_SHIFT);
+	    /* Dynamic -- get rounding mode from fpcr.  */
+	    mode = (fpcr >> FPCR_DYN_SHIFT) & 3;
 	}
 
-	/* JRP - What is this test supposed to check for? */
-	if ((IEEE_TRAP_ENABLE_MASK & 0x80 /* was 0xc0 */)) {
-		extern int something_is_wrong (void);
-		something_is_wrong();
-	}
+	res = 0;
 
-	switch (op_fun) {
-	      case FLTI_FUNC_CMPTEQ:
-		va = alpha_read_fp_reg(fa);
-		vb = alpha_read_fp_reg(fb);
-		res = CMPTXX(&vc, &vb, &va, CMPTXX_EQ);
-		alpha_write_fp_reg(fc, vc);
-		break;
+	switch (src) {
+	case FOP_SRC_S:
+		va = alpha_read_fp_reg_s(fa);
+		vb = alpha_read_fp_reg_s(fb);
+		
+		__FP_UNPACK_S(SA, &va);
+		__FP_UNPACK_S(SB, &vb);
 
-	      case FLTI_FUNC_CMPTLT:
-		va = alpha_read_fp_reg(fa);
-		vb = alpha_read_fp_reg(fb);
-		res = CMPTXX(&vc, &vb, &va, CMPTXX_LT);
-		alpha_write_fp_reg(fc, vc);
-		break;
+		switch (func) {
+		case FOP_FNC_SUBx:
+			if (SB_c != FP_CLS_NAN)
+				SB_s ^= 1;
+			/* FALLTHRU */
+		case FOP_FNC_ADDx:
+			FP_ADD_S(SR, SA, SB);
+			goto pack_s;
 
-	      case FLTI_FUNC_CMPTLE:
-		va = alpha_read_fp_reg(fa);
-		vb = alpha_read_fp_reg(fb);
-		res = CMPTXX(&vc, &vb, &va, CMPTXX_LE);
-		alpha_write_fp_reg(fc, vc);
-		break;
+		case FOP_FNC_MULx:
+			FP_MUL_S(SR, SA, SB);
+			goto pack_s;
 
-	      case FLTI_FUNC_CMPTUN:
-		va = alpha_read_fp_reg(fa);
-		vb = alpha_read_fp_reg(fb);
-		res = CMPTXX(&vc, &vb, &va, CMPTXX_UN);
-		alpha_write_fp_reg(fc, vc);
-		break;
+		case FOP_FNC_DIVx:
+			if (SB_c == FP_CLS_ZERO && SA_c != FP_CLS_ZERO) {
+				res |= EFLAG_DIVZERO;
+				if (__FPU_TRAP_P(EFLAG_DIVZERO))
+					goto done;
+			}
+			FP_DIV_S(SR, SA, SB);
+			goto pack_s;
 
-	      case FLTL_FUNC_CVTQL:
-		/*
-		 * Notice: We can get here only due to an integer
-		 * overflow.  Such overflows are reported as invalid
-		 * ops.  We return the result the hw would have
-		 * computed.
-		 */
-		vb = alpha_read_fp_reg(fb);
-		vc = ((vb & 0xc0000000) << 32 |	/* sign and msb */
-		      (vb & 0x3fffffff) << 29);	/* rest of the integer */
-		res = EFLAG_INVALID;
-		alpha_write_fp_reg(fc, vc);
-		break;
-
-	      case FLTI_FUNC_CVTQS:
-		vb = alpha_read_fp_reg(fb);
-		res = FXTOS(&vc, &vb);
-		alpha_write_fp_reg_s(fc, vc);
-		break;
-
-	      case FLTI_FUNC_CVTQT:
-		vb = alpha_read_fp_reg(fb);
-		res = FXTOD(&vc, &vb);
-		alpha_write_fp_reg(fc, vc);
-		break;
-
-	      case FLTI_FUNC_CVTTS_or_CVTST:
-		if (func == 0x6ac) {
-			/*
-			 * 0x2ac is also CVTST, but if the /S
-			 * qualifier isn't set, we wouldn't be here in
-			 * the first place...
-			 */
-			vb = alpha_read_fp_reg_s(fb);
-			res = FSTOD(&vc, &vb);
-			alpha_write_fp_reg(fc, vc);
-		} else {
-			vb = alpha_read_fp_reg(fb);
-			res = FDTOS(&vc, &vb);
-			alpha_write_fp_reg_s(fc, vc);
+		case FOP_FNC_SQRTx:
+			FP_SQRT_S(SR, SA);
+			goto pack_s;
 		}
-		break; 
+		goto bad_insn;
 
-	      case FLTI_FUNC_DIVS:
-		va = alpha_read_fp_reg_s(fa);
-		vb = alpha_read_fp_reg_s(fb);
-		res = FDIVS(&vc, &vb, &va);
-		alpha_write_fp_reg_s(fc, vc);
-		break;
-
-	      case FLTI_FUNC_DIVT:
+	case FOP_SRC_T:
 		va = alpha_read_fp_reg(fa);
 		vb = alpha_read_fp_reg(fb);
-		res = FDIVD(&vc, &vb, &va);
-		alpha_write_fp_reg(fc, vc);
-		break;
+		
+		__FP_UNPACK_D(DA, &va);
+		__FP_UNPACK_D(DB, &vb);
 
-	      case FLTI_FUNC_MULS:
-		va = alpha_read_fp_reg_s(fa);
-		vb = alpha_read_fp_reg_s(fb);
-		res = FMULS(&vc, &vb, &va);
-		alpha_write_fp_reg_s(fc, vc);
-		break;
+		switch (func) {
+		case FOP_FNC_SUBx:
+			if (DB_c != FP_CLS_NAN)
+				DB_s ^= 1;
+			/* FALLTHRU */
+		case FOP_FNC_ADDx:
+			FP_ADD_D(DR, DA, DB);
+			goto pack_d;
 
-	      case FLTI_FUNC_MULT:
-		va = alpha_read_fp_reg(fa);
+		case FOP_FNC_MULx:
+			FP_MUL_D(DR, DA, DB);
+			goto pack_d;
+
+		case FOP_FNC_DIVx:
+			if (DB_c == FP_CLS_ZERO && DA_c != FP_CLS_ZERO) {
+				res |= EFLAG_DIVZERO;
+				if (__FPU_TRAP_P(EFLAG_DIVZERO))
+					goto done;
+			}
+			FP_DIV_D(DR, DA, DB);
+			goto pack_d;
+
+		case FOP_FNC_CMPxUN:
+			cmptype = CMPTXX_UN;
+			goto compare;
+		case FOP_FNC_CMPxEQ:
+			cmptype = CMPTXX_EQ;
+			goto compare;
+		case FOP_FNC_CMPxLT:
+			cmptype = CMPTXX_LT;
+			goto compare;
+		case FOP_FNC_CMPxLE:
+			cmptype = CMPTXX_LE;
+			goto compare;
+		compare:
+			FP_CMP_D(res, DA, DB, 3);
+			vc = 0;
+        		if (res == cmptype
+			    || (cmptype == CMPTXX_LE
+				&& (res == CMPTXX_LT || res == CMPTXX_EQ))) {
+				vc = 0x4000000000000000;  
+			}
+			goto done_d;
+
+		case FOP_FNC_SQRTx:
+			FP_SQRT_D(DR, DA);
+			goto pack_d;
+
+		case FOP_FNC_CVTxS:
+			/* It is irritating that DEC encoded CVTST with
+			   SRC == T_floating.  It is also interesting that
+			   the bit used to tell the two apart is /U... */
+			if (insn & 0x2000) {
+				FP_CONV(S,D,1,1,SR,DA);
+				goto pack_s;
+			} else {
+				/* CVTST need do nothing else but copy the
+				   bits and repack.  */
+				DR_c = DA_c;
+				DR_s = DA_s;
+				DR_e = DA_e;
+				DR_r = DA_r;
+				DR_f = DA_f;
+				goto pack_d;
+			}
+
+		case FOP_FNC_CVTxQ:
+			FP_TO_INT_D(vc, DA, 64, 1);
+			res = _FTOI_RESULT(DA);
+			goto done_d;
+		}
+		goto bad_insn;
+
+	case FOP_SRC_Q:
 		vb = alpha_read_fp_reg(fb);
-		res = FMULD(&vc, &vb, &va);
-		alpha_write_fp_reg(fc, vc);
-		break;
 
-	      case FLTI_FUNC_SUBS:
-		va = alpha_read_fp_reg_s(fa);
-		vb = alpha_read_fp_reg_s(fb);
-		res = FSUBS(&vc, &vb, &va);
-		alpha_write_fp_reg_s(fc, vc);
-		break;
+		switch (func) {
+		case FOP_FNC_CVTQL:
+			/* Notice: We can get here only due to an integer
+			   overflow.  Such overflows are reported as invalid
+			   ops.  We return the result the hw would have
+			   computed.  */
+			vc = ((vb & 0xc0000000) << 32 |	/* sign and msb */
+			      (vb & 0x3fffffff) << 29);	/* rest of the int */
+			res = EFLAG_INVALID;
+			goto done_d;
 
-	      case FLTI_FUNC_SUBT:
-		va = alpha_read_fp_reg(fa);
-		vb = alpha_read_fp_reg(fb);
-		res = FSUBD(&vc, &vb, &va);
-		alpha_write_fp_reg(fc, vc);
-		break;
+		case FOP_FNC_CVTxS:
+			FP_FROM_INT_S(SR, ((long)vb), 64, long);
+			goto pack_s;
 
-	      case FLTI_FUNC_ADDS:
-		va = alpha_read_fp_reg_s(fa);
-		vb = alpha_read_fp_reg_s(fb);
-		res = FADDS(&vc, &vb, &va);
-		alpha_write_fp_reg_s(fc, vc);
-		break;
-
-	      case FLTI_FUNC_ADDT:
-		va = alpha_read_fp_reg(fa);
-		vb = alpha_read_fp_reg(fb);
-		res = FADDD(&vc, &vb, &va);
-		alpha_write_fp_reg(fc, vc);
-		break;
-
-	      case FLTI_FUNC_CVTTQ:
-		vb = alpha_read_fp_reg(fb);
-		res = FDTOX(&vc, &vb);
-		alpha_write_fp_reg(fc, vc);
-		break;
-
-	      case FLTC_FUNC_SQRTS:
-		vb = alpha_read_fp_reg_s(fb);
-		res = FSQRTS(&vc, &vb);
-		alpha_write_fp_reg_s(fc, vc);
-		break;
-
-	      case FLTC_FUNC_SQRTT:
-		vb = alpha_read_fp_reg(fb);
-		res = FSQRTD(&vc, &vb);
-		alpha_write_fp_reg(fc, vc);
-		break;
-
-	      default:
-		printk("alpha_fp_emul: unexpected function code %#lx at %#lx\n",
-		       func & 0x3f, pc);
-		MOD_DEC_USE_COUNT;
-		return 0;
+		case FOP_FNC_CVTxT:
+			FP_FROM_INT_D(DR, ((long)vb), 64, long);
+			goto pack_d;
+		}
+		goto bad_insn;
 	}
+	goto bad_insn;
+
+pack_s:
+	res |= __FP_PACK_S(&vc, SR);
+	alpha_write_fp_reg_s(fc, vc);
+	goto done;
+
+pack_d:
+	res |= __FP_PACK_D(&vc, DR);
+done_d:
+	alpha_write_fp_reg(fc, vc);
+	goto done;
 
 	/*
 	 * Take the appropriate action for each possible
@@ -327,9 +346,11 @@ alpha_fp_emul (unsigned long pc)
 	 * In addition, properly track the exception state in software
 	 * as described in the Alpha Architectre Handbook section 4.7.7.3.
 	 */
+done:
 	if (res) {
 		/* Record exceptions in software control word.  */
-		current->tss.flags = fpcw |= (res << IEEE_STATUS_TO_EXCSUM_SHIFT);
+		current->tss.flags
+		  = fpcw |= (res << IEEE_STATUS_TO_EXCSUM_SHIFT);
 
 		/* Update hardware control register */
 		fpcr &= (~FPCR_MASK | FPCR_DYN_MASK);
@@ -343,16 +364,19 @@ alpha_fp_emul (unsigned long pc)
 		}
 	}
 
-	/* We used to write the destination register here, but
-	 * DEC FORTRAN requires that the result *always* be
-	 * written... so we do the write immediately after
-	 * the operations above.
-	 */
+	/* We used to write the destination register here, but DEC FORTRAN
+	   requires that the result *always* be written... so we do the write
+	   immediately after the operations above.  */
 
 	MOD_DEC_USE_COUNT;
 	return 1;
-}
 
+bad_insn:
+	printk(KERN_ERR "alpha_fp_emul: Invalid FP insn %#x at %#lx\n",
+	       insn, pc);
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
 
 long
 alpha_fp_emul_imprecise (struct pt_regs *regs, unsigned long write_mask)

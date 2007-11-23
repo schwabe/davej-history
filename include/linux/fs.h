@@ -20,24 +20,26 @@
 #include <linux/stat.h>
 
 #include <asm/atomic.h>
-#include <asm/bitops.h>
+#include <linux/bitops.h>
 #include <asm/cache.h>
 
 struct poll_table_struct;
 
 
 /*
- * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
- * that later. Anyway, now the file code is no longer dependent
- * on bitmaps in unsigned longs, but uses the new fd_set structure..
+ * It's silly to have NR_OPEN bigger than NR_FILE, but you can change
+ * the file limit at runtime and only root can increase the per-process
+ * nr_file rlimit, so it's safe to set up a ridiculously high absolute
+ * upper limit on files-per-process.
  *
  * Some programs (notably those using select()) may have to be 
- * recompiled to take full advantage of the new limits..
+ * recompiled to take full advantage of the new limits..  
  */
 
 /* Fixed constants first: */
 #undef NR_OPEN
-#define NR_OPEN 1024
+#define NR_OPEN (1024*1024)	/* Absolute upper limit on fd num */
+#define INR_OPEN 1024		/* Initial setting for nfile rlimits */
 
 #define BLOCK_SIZE_BITS 10
 #define BLOCK_SIZE (1<<BLOCK_SIZE_BITS)
@@ -154,7 +156,7 @@ extern int max_super_blocks, nr_super_blocks;
 #define BLKFRAGET  _IO(0x12,101)/* get filesystem (mm/filemap.c) read-ahead */
 #define BLKSECTSET _IO(0x12,102)/* set max sectors per request (ll_rw_blk.c) */
 #define BLKSECTGET _IO(0x12,103)/* get max sectors per request (ll_rw_blk.c) */
-#define BLKSSZGET  _IO(0x12,104)/* get block device sector size (reserved for) */
+#define BLKSSZGET  _IO(0x12,104) /* get block device sector size */
 
 #define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
 #define FIBMAP	   _IO(0x00,1)	/* bmap access */
@@ -182,6 +184,7 @@ typedef char buffer_block[BLOCK_SIZE];
 #define BH_Lock		2	/* 1 if the buffer is locked */
 #define BH_Req		3	/* 0 if the buffer has been invalidated */
 #define BH_Protected	6	/* 1 if the buffer is protected */
+#define BH_LowPrio	7	/* 1 if the buffer is lowprio */
 
 /*
  * Try to keep the most commonly used fields in single cache lines (16
@@ -484,8 +487,6 @@ extern int posix_lock_file(struct file *, struct file_lock *, unsigned int);
 extern void posix_block_lock(struct file_lock *, struct file_lock *);
 extern void posix_unblock_lock(struct file_lock *);
 
-#include <linux/stat.h>
-
 struct fasync_struct {
 	int    magic;
 	int    fa_fd;
@@ -754,6 +755,7 @@ extern struct file *inuse_filps;
 extern void refile_buffer(struct buffer_head * buf);
 extern void set_writetime(struct buffer_head * buf, int flag);
 extern int try_to_free_buffers(struct page *);
+extern void cache_drop_behind(struct buffer_head *bh);
 
 extern int nr_buffers;
 extern int buffermem;
@@ -774,12 +776,48 @@ extern inline void mark_buffer_clean(struct buffer_head * bh)
 	}
 }
 
+extern inline void mark_buffer_highprio(struct buffer_head * bh)
+{
+	clear_bit(BH_LowPrio, &bh->b_state);
+}
+
+extern inline void mark_buffer_lowprio(struct buffer_head * bh)
+{
+	/*
+	 * dirty buffers cannot be marked lowprio.
+	 */
+	if (!buffer_dirty(bh))
+		set_bit(BH_LowPrio, &bh->b_state);
+}
+
+static inline int buffer_lowprio(struct buffer_head * bh)
+{
+	return test_bit(BH_LowPrio, &bh->b_state);
+}
+
 extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 {
 	if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
 		set_writetime(bh, flag);
 		if (bh->b_list != BUF_DIRTY)
 			refile_buffer(bh);
+	}
+	/*
+	 * if a buffer gets marked dirty then it has to lose
+	 * it's lowprio state.
+	 */
+	mark_buffer_highprio(bh);
+}
+
+extern inline void mark_buffer_dirty_lowprio(struct buffer_head * bh)
+{
+	if (!test_and_set_bit(BH_Dirty, &bh->b_state)) {
+		if (bh->b_list != BUF_DIRTY)
+			refile_buffer(bh);
+		/*
+		 * Mark it lowprio only if it was not dirty before!
+		 */
+		set_bit(BH_LowPrio, &bh->b_state);
 	}
 }
 
@@ -851,6 +889,7 @@ extern struct buffer_head * getblk(kdev_t, int, int);
 extern struct buffer_head * find_buffer(kdev_t dev, int block, int size);
 extern void ll_rw_block(int, int, struct buffer_head * bh[]);
 extern int is_read_only(kdev_t);
+extern int is_device_idle(kdev_t);
 extern void __brelse(struct buffer_head *);
 extern inline void brelse(struct buffer_head *buf)
 {
@@ -866,8 +905,12 @@ extern inline void bforget(struct buffer_head *buf)
 extern void set_blocksize(kdev_t dev, int size);
 extern unsigned int get_hardblocksize(kdev_t dev);
 extern struct buffer_head * bread(kdev_t dev, int block, int size);
+extern struct buffer_head * buffer_ready (kdev_t dev, int block, int size);
+extern void bread_ahead (kdev_t dev, int block, int size);
 extern struct buffer_head * breada(kdev_t dev,int block, int size, 
 				   unsigned int pos, unsigned int filesize);
+extern struct buffer_head * breada_blocks(kdev_t dev,int block,
+						int size, int blocks);
 
 extern int brw_page(int, struct page *, kdev_t, int [], int, int);
 
@@ -903,9 +946,7 @@ extern int file_fsync(struct file *, struct dentry *dir);
 extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);
 
-/* kludge to get SCSI modules working */
-#include <linux/minix_fs.h>
-#include <linux/minix_fs_sb.h>
+extern __u32 inode_generation_count;
 
 #endif /* __KERNEL__ */
 

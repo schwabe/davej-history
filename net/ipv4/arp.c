@@ -65,6 +65,8 @@
  *					clean up the APFDDI & gen. FDDI bits.
  *		Alexey Kuznetsov:	new arp state machine;
  *					now it is in net/core/neighbour.c.
+ *              Wensong Zhang   :       NOARP device (such as tunl) arp fix.
+ *		Peter Kese	:	arp_solicit: saddr opt disabled for vs.
  */
 
 /* RFC1122 Status:
@@ -306,9 +308,15 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 	u32 target = *(u32*)neigh->primary_key;
 	int probes = neigh->probes;
 
+#if !defined(CONFIG_IP_MASQUERADE_VS)	/* Virtual server */ 
+	/* use default interface address as source address in virtual
+	 * server environment. Otherways the saddr might be the virtual
+	 * address and gateway's arp cache might start routing packets
+	 * to the real server */
 	if (skb && inet_addr_type(skb->nh.iph->saddr) == RTN_LOCAL)
 		saddr = skb->nh.iph->saddr;
 	else
+#endif
 		saddr = inet_select_addr(dev, target, RT_SCOPE_LINK);
 
 	if ((probes -= neigh->parms->ucast_probes) < 0) {
@@ -534,6 +542,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	struct rtable *rt;
 	unsigned char *sha, *tha;
 	u32 sip, tip;
+	struct device *tdev;
 	u16 dev_type = dev->type;
 	int addr_type;
 	struct in_device *in_dev = dev->ip_ptr;
@@ -627,6 +636,13 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *	addresses.  If this is one such, delete it.
  */
 	if (LOOPBACK(tip) || MULTICAST(tip))
+		goto out;
+
+/* 
+ *      Check for the device flags for the target IP. If the IFF_NOARP
+ *      is set, just delete it. No arp reply is sent.    -- WZ
+ */ 
+	if ((tdev = ip_dev_find(tip)) && (tdev->flags & IFF_NOARP))
 		goto out;
 
 /*

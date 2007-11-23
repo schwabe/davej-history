@@ -420,13 +420,17 @@ extern __inline__ void dev_init_buffers(struct device *dev)
 extern void		ether_setup(struct device *dev);
 extern void		fddi_setup(struct device *dev);
 extern void		tr_setup(struct device *dev);
+extern void		fc_setup(struct device *dev);
 extern void		tr_freedev(struct device *dev);
+extern void		fc_freedev(struct device *dev);
 extern int		ether_config(struct device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */
 extern int		register_netdev(struct device *dev);
 extern void		unregister_netdev(struct device *dev);
 extern int		register_trdev(struct device *dev);
 extern void		unregister_trdev(struct device *dev);
+extern int		register_fcdev(struct device *dev);
+extern void		unregister_fcdev(struct device *dev);
 /* Functions used for multicast support */
 extern void		dev_mc_upload(struct device *dev);
 extern int 		dev_mc_delete(struct device *dev, void *addr, int alen, int all);

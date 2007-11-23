@@ -688,6 +688,17 @@ CONFIG_BLK_DEV_XD
 
   It's pretty unlikely that you have one of these: say N.
 
+Mylex DAC960/DAC1100 PCI RAID Controller support
+CONFIG_BLK_DEV_DAC960
+  This driver adds support for the Mylex DAC960, AcceleRAID, and
+  eXtremeRAID PCI RAID controllers.  See README.DAC960 for further
+  information about this driver.
+
+  If you want to compile the driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt.  The module will be
+  called DAC960.o. 
+
 Parallel port IDE device support
 CONFIG_PARIDE
   There are many external CD-ROM and disk devices that connect through
@@ -945,6 +956,13 @@ CONFIG_BLK_DEV_MD
 
   If unsure, say N.
 
+Autodetect RAID partitions
+CONFIG_AUTODETECT_RAID
+  This feature lets the kernel detect RAID partitions on bootup.
+  An autodetect RAID partition is a normal partition with partition
+  type 0xfd. Use this if you want to boot RAID devices, or want to
+  run them automatically.
+
 Linear (append) mode
 CONFIG_MD_LINEAR
   If you say Y here, then your multiple devices driver will be able to
@@ -1023,6 +1041,21 @@ CONFIG_MD_RAID5
   Documentation/modules.txt.
 
   If unsure, say Y.
+
+Translucent Block Device Support (EXPERIMENTAL)
+CONFIG_MD_TRANSLUCENT
+  DO NOT USE THIS STUFF YET!
+
+  currently there is only a placeholder there as the implementation
+  is not yet usable.
+
+Logical Volume Manager support (EXPERIMENTAL)
+CONFIG_MD_LVM
+  DO NOT USE THIS STUFF YET!
+
+  i have released this so people can comment on the architecture,
+  but user-space tools are still unusable so there is nothing much
+  you can do with this.
 
 Boot support (linear, striped)
 CONFIG_MD_BOOT
@@ -2632,6 +2665,76 @@ CONFIG_IP_MASQUERADE_MFW
   The module will be called ip_masq_markfw.o. If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
 
+IP: masquerading virtual server support
+CONFIG_IP_MASQUERADE_VS
+  IP Virtual Server support will let you build a virtual server
+  based on cluster of two or more real servers. This option must
+  be enabled for at least one of the clustered computers that will
+  take care of intercepting incomming connections to the virtual IP
+  and scheduling them to real servers.
+  Three request dispatching techniques are implemented, they are 
+  virtual server via NAT, virtual server via tunneling  and virtual
+  server via direct routing. The round-robin scheduling, the weighted
+  round-robin secheduling, or the weighted least-connection scheduling
+  algorithm can be used to choose which server the connection is 
+  directed to, thus load balancing can be achieved among the servers.
+  For more information and its administration program, please visit
+  the following URL:
+	http://proxy.iinchina.net/~wensong/ippfvs/
+  If you want this, say Y.
+
+IP masquerading VS table size (the Nth power of 2)
+CONFIG_IP_MASQUERADE_VS_TAB_BITS
+  Using a big IP masquerading hash table for virtual server will greatly
+  reduce conflicts in the masquerading hash table when there are
+  thousands of active connections.
+  Note the table size must be power of 2. The table size will be the
+  value of 2 to the your input number power. For example, the default
+  number is 12, so the table size is 4096. Don't input the number too
+  small, otherwise you will lose performance on it.
+  You can adapt the table size yourself, according to your virtual
+  server application. It is good to set the table size larger than
+  the number of connections per second multiplying average lasting time
+  of connection in the table. For example, your virtual server gets
+  20 connections per second, the connection lasts for 200 seconds in
+  average in the masquerading table, the table size should be larger
+  than 20x200, it is good to set the table size 4096 (2**12).
+
+IPVS: round-robin scheduling
+CONFIG_IP_MASQUERADE_VS_RR
+  The robin-robin scheduling algorithm simply directs network
+  connections to different real servers in a round-robin manner.
+  If you want to compile it in kernel, say Y. If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
+IPVS: weighted round-robin scheduling
+CONFIG_IP_MASQUERADE_VS_WRR
+  The weighted robin-robin scheduling algorithm directs network
+  connections to different real servers based on server weights
+  in a round-robin manner. Servers with higher weights receive
+  new connections first than those with less weights, and servers
+  with higher weights get more connections than those with less
+  weights and servers with equal weights get equal connections.
+  If you want to compile it in kernel, say Y. If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
+IPVS: weighted least-connection scheduling
+CONFIG_IP_MASQUERADE_VS_WLC
+  The weighted least-connection scheduling algorithm directs network
+  connections to the server with the least number of alive connections
+  dividing the server weight.
+  If you want to compile it in kernel, say Y. If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
+IPVS: persistent client connection scheduling
+CONFIG_IP_MASQUERADE_VS_PCC
+  The persistent client connection feature means that after a client
+  establishs a connection to the selected server, all connections
+  from the same client will be directed to the same server in a
+  specified period.
+  If you want to compile it in kernel, say Y. If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
+
 IP: always defragment (required for masquerading)
 CONFIG_IP_ALWAYS_DEFRAG
   If you say Y here, then all incoming fragments (parts of IP packets
@@ -2827,8 +2930,7 @@ CONFIG_IPV6
   IPv6, see http://playground.sun.com/pub/ipng/html/ipng-main.html (to
   browse the WWW, you need to have access to a machine on the Internet
   that has a program like lynx or netscape); for specific information
-  about IPv6 under Linux read the HOWTO at http://www.terra.net/ipv6/
-  and the file net/ipv6/README in the kernel source. 
+  about IPv6 under Linux read the file net/ipv6/README in the kernel source. 
 
   If you want to use IPv6, please upgrade to the newest net-tools as
   given in Documentation/Changes. You will still be able to do regular
@@ -3248,6 +3350,13 @@ CONFIG_SCC_DELAY
 ### Don't know what's going on here.
 ###
 #
+YAM driver for AX.25
+CONFIG_YAM
+  Support for the YAM modem on serial port. If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
+
 BAYCOM picpar and par96 driver for AX.25
 CONFIG_BAYCOM_PAR
   This is a driver for Baycom style simple amateur radio modems that
@@ -7254,11 +7363,12 @@ CONFIG_NTFS_RW
 
   If unsure, say N.
 
-System V and Coherent filesystem support
+System V, Version 7 and Coherent filesystem support
 CONFIG_SYSV_FS
   SCO, Xenix and Coherent are commercial Unix systems for Intel
-  machines. Saying Y here would allow you to read to and write from
-  their floppies and hard disk partitions.
+  machines, and Version 7 was used on the DEC PDP-11. Saying Y here
+  would allow you to read to and write from their floppies and hard
+  disk partitions.
 
   If you have floppies or hard disk partitions like that, it is likely
   that they contain binaries from those other Unix systems; in order
@@ -7942,6 +8052,16 @@ CONFIG_NLS_ISO8859_10
   set, which adds the last Inuit (Greenlandic) and Sami (Lappish)
   letters that were missing in Latin 4 to cover the entire Nordic
   area.
+
+nls iso8859-14
+CONFIG_NLS_ISO8859_14
+  If you want to display filenames with native language characters
+  from the Microsoft fat filesystem family or from JOLIET CDROMs
+  correctly on the screen, you need to include the appropriate
+  input/output character sets. Say Y here for the Latin 8 character
+  set, which adds the last accented vowels for Welsh (and Manx Gaelic)
+  that were missing in Latin 1. http://linux.speech.cymru.org/
+  has further information.
 
 nls iso8859-15
 CONFIG_NLS_ISO8859_15

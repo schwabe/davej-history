@@ -245,6 +245,7 @@ CONFIG_NETDEVICES=y
 # CONFIG_DUMMY is not set
 # CONFIG_EQUALIZER is not set
 # CONFIG_ETHERTAP is not set
+# CONFIG_NET_SB1000 is not set
 
 #
 # Ethernet (10 or 100Mbit)
@@ -257,6 +258,7 @@ CONFIG_BMAC=y
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_RTL8139 is not set
+# CONFIG_SIS900 is not set
 # CONFIG_YELLOWFIN is not set
 # CONFIG_NET_ISA is not set
 CONFIG_NET_EISA=y

@@ -6,7 +6,7 @@
  *
  * (C) Copyright 1999 Gregory P. Smith <greg@electricrain.com>
  *
- * $Id: ohci.h,v 1.15 1999/05/09 23:25:49 greg Exp $
+ * $Id: ohci.h,v 1.24 1999/05/16 10:18:26 greg Exp $
  */
 
 #include <linux/list.h>
@@ -37,11 +37,16 @@ struct ohci_td {
 	struct ohci_td *next_dl_td;	/* used during donelist processing */
 	void *data;			/* virt. address of the the buffer */
 	usb_device_irq completed;	/* Completion handler routine */
-	int allocated;			/* boolean: is this TD allocated? */
+	int hcd_flags;			/* Flags for the HCD: */
+		/* bit0: Is this TD allocated? */
+		/* bit1: Is this a dummy (end of list) TD? */
+		/* bit2: do NOT automatically free this TD on completion */
+		/* bit3: this is the last TD in a contiguious TD chain */
 
-	/* User or Device class driver specific fields */
+	struct usb_device *usb_dev;	/* the owning device */
+
 	void *dev_id;	/* user defined pointer passed to irq handler */
-} __attribute((aligned(16)));
+} __attribute((aligned(32)));
 
 #define OHCI_TD_ROUND	(1 << 18)	/* buffer rounding bit */
 #define OHCI_TD_D	(3 << 19)	/* direction of xfer: */
@@ -52,25 +57,46 @@ struct ohci_td {
 #define td_set_dir_out(d)	((d) ? OHCI_TD_D_OUT : OHCI_TD_D_IN )
 #define OHCI_TD_IOC_DELAY (7 << 21)	/* frame delay allowed before int. */
 #define OHCI_TD_IOC_OFF	(OHCI_TD_IOC_DELAY)	/* no interrupt on complete */
+#define td_set_ioc_delay(frames)	(((frames) & 7) << 21)
 #define OHCI_TD_DT	(3 << 24)	/* data toggle bits */
 #define TOGGLE_AUTO	(0 << 24)	/* automatic (from the ED) */
 #define TOGGLE_DATA0	(2 << 24)	/* force Data0 */
 #define TOGGLE_DATA1	(3 << 24)	/* force Data1 */
 #define td_force_toggle(b)	(((b) | 2) << 24)
 #define OHCI_TD_ERRCNT	(3 << 26)	/* error count */
-#define td_errorcount(td)	(((td).info >> 26) & 3)
+#define td_errorcount(td)	((le32_to_cpup(&(td).info) >> 26) & 3)
+#define clear_td_errorcount(td)	((td)->info &= cpu_to_le32(~(__u32)OHCI_TD_ERRCNT))
 #define OHCI_TD_CC	(0xf << 28)	/* condition code */
 #define OHCI_TD_CC_GET(td_i) (((td_i) >> 28) & 0xf)
 #define OHCI_TD_CC_NEW	(OHCI_TD_CC)	/* set this on all unaccessed TDs! */
-#define td_cc_notaccessed(td)	(((td).info >> 29) == 7)
-#define td_cc_accessed(td)	(((td).info >> 29) != 7)
-#define td_cc_noerror(td)	((((td).info) & OHCI_TD_CC) == 0)
-#define td_active(td)	(!td_cc_noerror((td)) && (td_errorcount((td)) < 3))
+#define td_cc_notaccessed(td)	((le32_to_cpup(&(td).info) >> 29) == 7)
+#define td_cc_accessed(td)	((le32_to_cpup(&(td).info) >> 29) != 7)
+#define td_cc_noerror(td)	(((le32_to_cpup(&(td).info)) & OHCI_TD_CC) == 0)
 #define td_done(td)	(td_cc_noerror((td)) || (td_errorcount((td)) == 3))
 
-#define td_allocated(td)	((td).allocated)
-#define allocate_td(td)		((td)->allocated = 1)
-#define ohci_free_td(td)	((td)->allocated = 0)
+/*
+ * Macros to use the td->hcd_flags field.
+ */
+#define td_allocated(td)	((td).hcd_flags & 1)
+#define allocate_td(td)		((td)->hcd_flags |= 1)
+#define ohci_free_td(td)	((td)->hcd_flags &= ~(__u32)1)
+
+#define td_dummy(td)		((td).hcd_flags & 2)
+#define make_dumb_td(td)	((td)->hcd_flags |= 2)
+#define clear_dumb_td(td)	((td)->hcd_flags &= ~(__u32)2)
+
+#define td_endofchain(td)	((td).hcd_flags & (1 << 3))
+#define clear_td_endofchain(td)	((td)->hcd_flags &= ~(1 << 3))
+#define set_td_endofchain(td)	((td)->hcd_flags |= (1 << 3))
+
+/*
+ * These control if the IRQ will call ohci_free_td after taking the TDs
+ * off of the donelist (assuming the completion function does not ask
+ * for the TD to be requeued).
+ */
+#define can_auto_free(td)	(!((td).hcd_flags & 4))
+#define noauto_free_td(td)	((td)->hcd_flags |= 4)
+#define auto_free_td(td)	((td)->hcd_flags &= ~(__u32)4)
 
 
 /*
@@ -82,13 +108,27 @@ struct ohci_ed {
 	__u32 tail_td;	/* TD Queue tail pointer */
 	__u32 _head_td;	/* TD Queue head pointer, toggle carry & halted bits */
 	__u32 next_ed;	/* Next ED */
+
+	/* driver fields */
+	struct ohci_device *ohci_dev;
+	struct ohci_ed	*ed_chain;
 } __attribute((aligned(16)));
 
 /* get the head_td */
-#define ed_head_td(ed)	((ed)->_head_td & 0xfffffff0)
+#define ed_head_td(ed)	(le32_to_cpup(&(ed)->_head_td) & 0xfffffff0)
+#define ed_tail_td(ed)	(le32_to_cpup(&(ed)->tail_td))
 
-/* save the carry flag while setting the head_td */
-#define set_ed_head_td(ed, td)	((ed)->_head_td = (td) | ((ed)->_head_td & 3))
+/* save the carry & halted flag while setting the head_td */
+#define set_ed_head_td(ed, td)	((ed)->_head_td = cpu_to_le32((td)) \
+				 | ((ed)->_head_td & cpu_to_le32(3)))
+
+/* Control the ED's halted and carry flags */
+#define ohci_halt_ed(ed)	((ed)->_head_td |= cpu_to_le32(1))
+#define ohci_unhalt_ed(ed)	((ed)->_head_td &= cpu_to_le32(~(__u32)1))
+#define ohci_ed_halted(ed)	((ed)->_head_td & cpu_to_le32(1))
+#define ohci_ed_set_carry(ed)	((ed)->_head_td |= cpu_to_le32(2))
+#define ohci_ed_clr_carry(ed)	((ed)->_head_td &= ~cpu_to_le32(2))
+#define ohci_ed_carry(ed)	((le32_to_cpup(&(ed)->_head_td) >> 1) & 1)
 
 #define OHCI_ED_SKIP	(1 << 14)
 #define OHCI_ED_MPS	(0x7ff << 16)
@@ -108,15 +148,17 @@ struct ohci_ed {
 #define OHCI_ED_EN	(0xf << 7)
 #define OHCI_ED_FA	(0x7f)
 
+#define ed_get_en(ed)	((le32_to_cpup(&(ed)->status) & OHCI_ED_EN) >> 7)
+#define ed_get_fa(ed)	(le32_to_cpup(&(ed)->status) & OHCI_ED_FA)
 
-/* NOTE: bits 27-31 of the status dword are reserved for the driver */
+/* NOTE: bits 27-31 of the status dword are reserved for the HCD */
 /*
  * We'll use this status flag for to mark if an ED is in use by the
- * driver or not.  If the bit is set, it is used.
- *
- * FIXME: implement this!
+ * driver or not.  If the bit is set, it is being used.
  */
-#define ED_USED	(1 << 31)
+#define ED_ALLOCATED	(1 << 31)
+#define ed_allocated(ed)	(le32_to_cpup(&(ed).status) & ED_ALLOCATED)
+#define allocate_ed(ed)		((ed)->status |= cpu_to_le32(ED_ALLOCATED))
 
 /*
  * The HCCA (Host Controller Communications Area) is a 256 byte
@@ -178,20 +220,21 @@ struct ohci_device {
 	struct ohci_td		td[NUM_TDS];	/* Transfer Descriptors */
 
 	unsigned long		data[DATA_BUF_LEN];
-};
+} __attribute((aligned(32)));
 
 /* .... */
 
+/*
+ * These are the index of the placeholder EDs for the root hub to
+ * build the interrupt transfer ED tree out of.
+ */
 #define ED_INT_1	0
 #define ED_INT_2	1
 #define ED_INT_4	2
 #define ED_INT_8	3
 #define ED_INT_16	4
 #define ED_INT_32	5
-#define ED_CONTROL	6
-#define ED_BULK		7
 #define ED_ISO		ED_INT_1	/* same as 1ms interrupt queue */
-#define ED_FIRST_AVAIL  8		/* first non-reserved ED */
 
 /*
  * Given a period p in ms, convert it to the closest endpoint
@@ -210,7 +253,9 @@ struct ohci_device {
  * This is the maximum number of root hub ports.  I don't think we'll
  * ever see more than two as that's the space available on an ATX
  * motherboard's case, but it could happen.  The OHCI spec allows for
- * up to 15... (which is insane!)
+ * up to 15... (which is insane given that they each need to supply up
+ * to 500ma; that would be 7.5 amps!).  I have seen a PCI card with 4
+ * downstream ports on it.
  * 
  * Although I suppose several "ports" could be connected directly to
  * internal laptop devices such as a keyboard, mouse, camera and
@@ -254,15 +299,24 @@ struct ohci_regs {
 	} roothub;
 } __attribute((aligned(32)));
 
+/*
+ * These are used by internal ED managing functions as a
+ * parameter to state the type of ED to deal with (when it matters).
+ */
+#define HCD_ED_ISOC     (0)
+#define HCD_ED_INT      (1)
+#define HCD_ED_CONTROL  (2)
+#define HCD_ED_BULK     (3)
+
 /* 
  * Read a MMIO register and re-write it after ANDing with (m)
  */
-#define writel_mask(m, a) writel( (readl((__u32)(a))) & (__u32)(m), (__u32)(a) )
+#define writel_mask(m, a) writel( (readl((unsigned long)(a))) & (__u32)(m), (unsigned long)(a) )
 
 /*
  * Read a MMIO register and re-write it after ORing with (b)
  */
-#define writel_set(b, a) writel( (readl((__u32)(a))) | (__u32)(b), (__u32)(a) )
+#define writel_set(b, a) writel( (readl((unsigned long)(a))) | (__u32)(b), (unsigned long)(a) )
 
 
 #define PORT_CCS	(1)		/* port current connect status */
@@ -287,6 +341,16 @@ struct ohci_regs {
 #define OHCI_ROOT_LPSC	(1 << 16)	/* turn on root hub ports power */
 #define OHCI_ROOT_OCIC	(1 << 17)	/* Overcurrent indicator change */
 #define OHCI_ROOT_CRWE	(1 << 31)	/* Clear RemoteWakeupEnable */
+
+/*
+ * Root hub A register masks
+ */
+#define OHCI_ROOT_A_NPS	(1 << 9)
+#define OHCI_ROOT_A_PSM	(1 << 8)
+
+/*
+ * Root hub B register masks
+ */
 
 /*
  * Interrupt register masks
@@ -334,12 +398,15 @@ struct ohci {
 	struct list_head interrupt_list;	/* List of interrupt active TDs for this OHCI */
 };
 
-#define OHCI_TIMER
-#define OHCI_TIMER_FREQ	(1)		/* frequency of OHCI status checks */
+#define OHCI_TIMER		/* enable the OHCI timer */
+#define OHCI_TIMER_FREQ	(234)	/* ms between each root hub status check */
 
-/* Debugging code */
+#undef OHCI_RHSC_INT		/* Don't use root hub status interrupts! */
+
+/* Debugging code [ohci-debug.c] */
 void show_ohci_ed(struct ohci_ed *ed);
 void show_ohci_td(struct ohci_td *td);
+void show_ohci_td_chain(struct ohci_td *td);
 void show_ohci_status(struct ohci *ohci);
 void show_ohci_device(struct ohci_device *dev);
 void show_ohci_hcca(struct ohci_hcca *hcca);

@@ -1,0 +1,26 @@
+The contributors of Linux Virtual Server project are listed
+as follows in alphabetical order.
+
+       Mike Douglas <spike@bayside.net>
+       Virtual Server Logo.
+
+       Matthew Kellett <matthewk@corelcomputer.com>
+       Added the loadable load-balancing module to VS-0.5 patch 
+       for kernel 2.0.
+
+       Peter Kese <peter.kese@ijs.si>
+       Suggested the idea of the local-node feature and provided a
+       local-node prototype patch for VS via tunneling.
+       Port the VS patch to kernel 2.2 and rewrite of the code
+       The persistent client connection feature.
+
+       Joseph Mack <mack.joseph@epa.gov>
+       Gaving a talk about Linux Virtual Server in the LinuxExpo'99.
+
+       Rob Thomas <rob@rpi.net.au>
+       Wrote the the "Greased Turkey" document about how to setup a
+       load-sharing server. (a little bit stale, though)
+
+       Wensong Zhang <wensong@iinchina.net>
+       Chief author and developer.
+   

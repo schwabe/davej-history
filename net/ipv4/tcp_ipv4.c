@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.175.2.8 1999/08/08 08:43:20 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.175.2.9 1999/08/12 15:34:26 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1778,13 +1778,12 @@ do_time_wait:
 	case TCP_TW_ACK:
 		tcp_v4_send_ack(skb, ((struct tcp_tw_bucket *)sk)->snd_nxt,
 						((struct tcp_tw_bucket *)sk)->rcv_nxt); 
-		break; 
+		goto discard_it; 
 	case TCP_TW_RST:
 		goto no_tcp_socket; 
 	default:
 		goto discard_it; 
 	}
-	return 0;
 }
 
 static void __tcp_v4_rehash(struct sock *sk)

@@ -2136,6 +2136,9 @@ __initfunc(int tty_init(void))
 #ifdef CONFIG_SERIAL
 	rs_init();
 #endif
+#ifdef CONFIG_COMPUTONE
+	ip2_init();
+#endif
 #ifdef CONFIG_MAC_SERIAL
 	macserial_init();
 #endif

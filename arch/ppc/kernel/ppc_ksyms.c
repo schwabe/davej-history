@@ -47,6 +47,7 @@ extern void do_lost_interrupts(unsigned long);
 extern int do_signal(sigset_t *, struct pt_regs *);
 
 asmlinkage long long __ashrdi3(long long, int);
+asmlinkage long long __lshrdi3(long long, int);
 asmlinkage int abs(int);
 
 EXPORT_SYMBOL(clear_page);
@@ -214,6 +215,7 @@ EXPORT_SYMBOL(abs);
 EXPORT_SYMBOL(device_is_compatible);
 
 EXPORT_SYMBOL_NOVERS(__ashrdi3);
+EXPORT_SYMBOL_NOVERS(__lshrdi3);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
 EXPORT_SYMBOL_NOVERS(memmove);

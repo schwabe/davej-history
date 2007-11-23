@@ -216,6 +216,7 @@ static int mfw_delhost(struct ip_masq_mfw *mfw, struct ip_mfw_user *mu)
 			(!mu->rport || h->port == mu->rport)) {
 			/* HIT */
 			atomic_dec(&mfw->nhosts);
+			e = h->list.prev;
 			list_del(&h->list);
 			kfree_s(h, sizeof(*h));
 			MOD_DEC_USE_COUNT;

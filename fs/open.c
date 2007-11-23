@@ -691,9 +691,13 @@ int get_unused_fd(void)
 {
 	struct files_struct * files = current->files;
 	int fd, error;
-
+	
+repeat:
 	error = -EMFILE;
-	fd = find_first_zero_bit(&files->open_fds, NR_OPEN);
+
+	fd = find_next_zero_bit(files->open_fds, 
+				current->files->max_fdset, 
+				files->next_fd);
 	/*
 	 * N.B. For clone tasks sharing a files structure, this test
 	 * will limit the total number of files that can be opened.
@@ -701,10 +705,27 @@ int get_unused_fd(void)
 	if (fd >= current->rlim[RLIMIT_NOFILE].rlim_cur)
 		goto out;
 
-	/* Check here for fd > files->max_fds to do dynamic expansion */
+	/* Do we need to expand the fdset array? */
+	if (fd >= current->files->max_fdset) {
+		error = expand_fdset(files, 0);
+		if (!error)
+			goto repeat;
+		goto out;
+	}
+	
+	/* 
+	 * Check whether we need to expand the fd array.
+	 */
+	if (fd >= files->max_fds) {
+		error = expand_fd_array(files, 0);
+		if (!error)
+			goto repeat;
+		goto out;
+	}
 
-	FD_SET(fd, &files->open_fds);
-	FD_CLR(fd, &files->close_on_exec);
+	FD_SET(fd, files->open_fds);
+	FD_CLR(fd, files->close_on_exec);
+	files->next_fd = fd + 1;
 #if 1
 	/* Sanity check */
 	if (files->fd[fd] != NULL) {
@@ -715,12 +736,18 @@ int get_unused_fd(void)
 	error = fd;
 
 out:
+#ifdef FDSET_DEBUG	
+	if (error < 0)
+		printk (KERN_ERR __FUNCTION__ ": return %d\n", error);
+#endif
 	return error;
 }
 
 inline void put_unused_fd(unsigned int fd)
 {
-	FD_CLR(fd, &current->files->open_fds);
+	FD_CLR(fd, current->files->open_fds);
+	if (fd < current->files->next_fd)
+		current->files->next_fd = fd;
 }
 
 asmlinkage int sys_open(const char * filename, int flags, int mode)
@@ -820,8 +847,8 @@ asmlinkage int sys_close(unsigned int fd)
 		struct files_struct * files = current->files;
 		files->fd[fd] = NULL;
 		put_unused_fd(fd);
-		FD_CLR(fd, &files->close_on_exec);
-		error = filp_close(filp, files);
+		FD_CLR(fd, files->close_on_exec);
+ 		error = filp_close(filp, files);
 	}
 	unlock_kernel();
 	return error;

@@ -14,6 +14,10 @@
 #include <linux/list.h>
 #endif /* __KERNEL__ */
 
+#ifdef CONFIG_IP_MASQUERADE_VS
+struct ip_vs_dest;
+#endif
+
 /*
  * This define affects the number of ports that can be handled
  * by each of the protocol helper modules.
@@ -40,10 +44,6 @@
 #define IP_MASQ_MOD_CTL			0x00
 #define IP_MASQ_USER_CTL		0x01
 
-#ifdef __KERNEL__
-
-#define IP_MASQ_TAB_SIZE	256
-
 #define IP_MASQ_F_NO_DADDR	      0x0001 	/* no daddr yet */
 #define IP_MASQ_F_NO_DPORT     	      0x0002	/* no dport set yet */
 #define IP_MASQ_F_NO_SADDR	      0x0004	/* no sport set yet */
@@ -59,6 +59,22 @@
 #define IP_MASQ_F_MPORT		      0x1000 	/* own mport specified */
 #define IP_MASQ_F_USER		      0x2000	/* from uspace */
 #define IP_MASQ_F_SIMPLE_HASH	      0x8000	/* prevent s+d and m+d hashing */
+
+#ifdef CONFIG_IP_MASQUERADE_VS
+#define IP_MASQ_F_VS		  0x00010000	/* virtual server releated */
+#define IP_MASQ_F_VS_NO_OUTPUT    0x00020000	/* output packets avoid masq */
+#define IP_MASQ_F_VS_FIN	  0x00040000	/* fin detected */
+#define IP_MASQ_F_VS_FWD_MASK	  0x00700000    /* mask for the fdw method */
+#define IP_MASQ_F_VS_LOCALNODE	  0x00100000    /* local node destination */
+#define IP_MASQ_F_VS_TUNNEL	  0x00200000    /* packets will be tunneled */
+#define IP_MASQ_F_VS_DROUTE	  0x00400000	/* direct routing */
+                                                /* masquerading otherwise */
+#define IP_MASQ_VS_FWD(ms) (ms->flags & IP_MASQ_F_VS_FWD_MASK)
+#endif	/* CONFIG_IP_MASQUERADE_VS */
+
+#ifdef __KERNEL__
+
+#define IP_MASQ_TAB_SIZE	256
 
 /*
  *	Delta seq. info structure
@@ -91,6 +107,9 @@ struct ip_masq {
 	unsigned	timeout;	/* timeout */
 	unsigned	state;		/* state info */
 	struct ip_masq_timeout_table *timeout_table;
+#ifdef CONFIG_IP_MASQUERADE_VS
+	struct ip_vs_dest *dest;	/* real server & service */
+#endif	/* CONFIG_IP_MASQUERADE_VS */
 };
 
 /*

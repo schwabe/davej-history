@@ -294,16 +294,19 @@ __initfunc(void
 	{
 		struct property *p;
 		device = find_devices("rtas");
-		for ( p = device->properties;
-		      p && strncmp(p->name, "rtas-event-scan-rate", 20);
-		      p = p->next )
-			/* nothing */ ;
-		if ( p && *(unsigned long *)p->value )
+		if ( device )
 		{
-			rtas_event_scan_rate = (HZ/(*(unsigned long *)p->value)*30)-1;
-			rtas_event_scan_ct = 1;
-			printk("RTAS Event Scan Rate: %lu (%lu jiffies)\n",
-			       *(unsigned long *)p->value, rtas_event_scan_rate );
+			for ( p = device->properties;
+			      p && strncmp(p->name, "rtas-event-scan-rate", 20);
+			      p = p->next )
+				/* nothing */ ;
+			if ( p && *(unsigned long *)p->value )
+			{
+				rtas_event_scan_rate = (HZ/(*(unsigned long *)p->value)*30)-1;
+				rtas_event_scan_ct = 1;
+				printk("RTAS Event Scan Rate: %lu (%lu jiffies)\n",
+				       *(unsigned long *)p->value, rtas_event_scan_rate );
+			}
 		}
 	}
 }
@@ -312,11 +315,10 @@ void
 chrp_event_scan(void)
 {
 	unsigned char log[1024];
+	unsigned long ret = 0;
 	if ( rtas_event_scan_rate && (rtas_event_scan_ct-- <= 0) )
-	{
-		call_rtas( "event-scan", 4, 1, NULL, 0x0, 1, __pa(log), 1024 );
-		rtas_event_scan_ct = rtas_event_scan_rate;
-	}
+		call_rtas( "event-scan", 4, 1, &ret, 0xffffffff, 0,
+			   __pa(log), 1024 );
 }
 	
 void

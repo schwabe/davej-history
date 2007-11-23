@@ -17,7 +17,7 @@
 #include <linux/if.h>
 #include <linux/malloc.h>
 #include <linux/hdreg.h>
-#include <linux/md.h>
+#include <linux/raid/md.h>
 #include <linux/kd.h>
 #include <linux/route.h>
 #include <linux/skbuff.h>
@@ -1992,11 +1992,24 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case BLKRASET:
 	
 	/* 0x09 */
-	case REGISTER_DEV:
-	case REGISTER_DEV_NEW:
-	case START_MD:
-	case STOP_MD:
-	
+	case RAID_VERSION:
+	case GET_ARRAY_INFO:
+	case GET_DISK_INFO:
+	case CLEAR_ARRAY:
+	case ADD_NEW_DISK:
+	case HOT_REMOVE_DISK:
+	case SET_ARRAY_INFO:
+	case SET_DISK_INFO:
+	case WRITE_RAID_INFO:
+	case UNPROTECT_ARRAY:
+	case PROTECT_ARRAY:
+	case HOT_ADD_DISK:
+	case RUN_ARRAY:
+	case START_ARRAY:
+	case STOP_ARRAY:
+	case STOP_ARRAY_RO:
+	case RESTART_ARRAY_RW:
+
 	/* Big K */
 	case PIO_FONT:
 	case GIO_FONT:

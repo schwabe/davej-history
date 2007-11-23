@@ -136,6 +136,9 @@ extern int apfddi_init(struct device *dev);
 /* HIPPI boards */
 extern int rr_hippi_probe(struct device *);
 
+/* Fibre Channel adapters */
+extern int iph5526_probe(struct device *dev);
+
 struct devprobe
 {
 	int (*probe)(struct device *dev);
@@ -574,6 +577,25 @@ static int hippi_probe(struct device *dev)
 }
 #endif
 
+
+#ifdef CONFIG_NET_FC
+static int fcif_probe(struct device *dev)
+{
+	if (dev->base_addr == -1)
+		return 1;
+
+	if (1
+#ifdef CONFIG_IPHASE5526
+	    && iph5526_probe(dev)
+#endif
+	    && 1 ) {
+		return 1; /* -ENODEV or -EAGAIN would be more accurate. */
+	}
+	return 0;
+}
+#endif  /* CONFIG_NET_FC */
+
+
 #ifdef CONFIG_ETHERTAP
     static struct device tap0_dev = { "tap0", 0, 0, 0, 0, NETLINK_TAPBASE, 0, 0, 0, 0, NEXT_DEV, ethertap_probe, };
 #   undef NEXT_DEV
@@ -821,9 +843,20 @@ static struct device tr0_dev = {
 #   undef       NEXT_DEV
 #   define      NEXT_DEV        (&bif_dev)
 #endif
+
+
+#ifdef CONFIG_NET_FC
+    static struct device fc1_dev = {
+        "fc1", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, fcif_probe};
+	static struct device fc0_dev = {
+		"fc0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fc1_dev, fcif_probe};
+#   undef       NEXT_DEV
+#   define      NEXT_DEV        (&fc0_dev)
+#endif
+	
 	
 #ifdef CONFIG_NET_SB1000
-    extern int sb1000_init(struct device *dev);
+    extern int sb1000_probe(struct device *dev);
     static struct device sb1000_dev = {
         "cm0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, sb1000_probe };
 #   undef       NEXT_DEV

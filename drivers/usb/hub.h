@@ -12,6 +12,7 @@
 /*
  * Port feature numbers
  */
+#define USB_PORT_FEAT_CONNECTION	0
 #define USB_PORT_FEAT_ENABLE		1
 #define USB_PORT_FEAT_SUSPEND		2
 #define USB_PORT_FEAT_OVER_CURRENT	3
@@ -40,7 +41,7 @@
 #define USB_PORT_STAT_C_OVERCURRENT	0x0008
 #define USB_PORT_STAT_C_RESET		0x0010
 
-/* Characteristics */
+/* wHubCharacteristics (masks) */
 #define HUB_CHAR_LPSM		0x0003
 #define HUB_CHAR_COMPOUND	0x0004
 #define HUB_CHAR_OCPM		0x0018
@@ -66,6 +67,12 @@ struct usb_hub_port {
 struct usb_hub {
 	/* Device structure */
 	struct usb_device *dev;
+
+	/* Reference to the hub's polling IRQ */
+	void* irq_handle;
+
+	/* List of hubs */
+	struct list_head hub_list;
 
 	/* Temporary event list */
 	struct list_head event_list;

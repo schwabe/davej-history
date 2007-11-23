@@ -12,14 +12,15 @@
 
 extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
 
-static inline int dupfd(unsigned int fd, unsigned int arg)
+static inline int dupfd(unsigned int fd, unsigned int start)
 {
 	struct files_struct * files = current->files;
 	struct file * file;
+	unsigned int newfd;
 	int error;
 
 	error = -EINVAL;
-	if (arg >= NR_OPEN)
+	if (start >= NR_OPEN)
 		goto out;
 
 	error = -EBADF;
@@ -27,15 +28,39 @@ static inline int dupfd(unsigned int fd, unsigned int arg)
 	if (!file)
 		goto out;
 
+repeat:
 	error = -EMFILE;
-	arg = find_next_zero_bit(&files->open_fds, NR_OPEN, arg);
-	if (arg >= current->rlim[RLIMIT_NOFILE].rlim_cur)
+	if (start < files->next_fd)
+		start = files->next_fd;
+	/* At this point, start MUST be <= max_fdset */
+#if 1
+	if (start > files->max_fdset)
+		printk (KERN_ERR "dupfd: fd %d, max %d\n", 
+			start, files->max_fdset);
+#endif
+	newfd = find_next_zero_bit(files->open_fds->fds_bits, 
+				files->max_fdset,
+				start);
+	if (newfd >= current->rlim[RLIMIT_NOFILE].rlim_cur)
 		goto out_putf;
-	FD_SET(arg, &files->open_fds);
-	FD_CLR(arg, &files->close_on_exec);
-	fd_install(arg, file);
-	error = arg;
+
+	error = expand_files(files, newfd);
+	if (error < 0)
+		goto out_putf;
+	if (error) /* If we might have blocked, try again. */
+		goto repeat;
+
+	FD_SET(newfd, files->open_fds);
+	FD_CLR(newfd, files->close_on_exec);
+	if (start <= files->next_fd)
+		files->next_fd = newfd + 1;
+	fd_install(newfd, file);
+	error = newfd;
 out:
+#ifdef FDSET_DEBUG	
+	if (error < 0)
+		printk (KERN_ERR __FUNCTION__ ": return %d\n", error);
+#endif
 	return error;
 
 out_putf:
@@ -48,18 +73,30 @@ asmlinkage int sys_dup2(unsigned int oldfd, unsigned int newfd)
 	int err = -EBADF;
 
 	lock_kernel();
+#ifdef FDSET_DEBUG	
+	printk (KERN_ERR __FUNCTION__ " 0: oldfd = %d, newfd = %d\n", 
+		oldfd, newfd);
+#endif
 	if (!fcheck(oldfd))
 		goto out;
-	err = newfd;
-	if (newfd == oldfd)
-		goto out;
-	err = -EBADF;
 	if (newfd >= NR_OPEN)
 		goto out;	/* following POSIX.1 6.2.1 */
 
+	err = newfd;
+	if (newfd == oldfd)
+		goto out;
+
+	/* We must be able to do the fd setting inside dupfd() without
+           blocking after the sys_close(). */
+	if ((err = expand_files(current->files, newfd)) < 0)
+		goto out;
+	
 	sys_close(newfd);
 	err = dupfd(oldfd, newfd);
 out:
+#ifdef FDSET_DEBUG	
+	printk (KERN_ERR __FUNCTION__ ": return %d\n", err);
+#endif
 	unlock_kernel();
 	return err;
 }
@@ -71,6 +108,10 @@ asmlinkage int sys_dup(unsigned int fildes)
 	lock_kernel();
 	ret = dupfd(fildes, 0);
 	unlock_kernel();
+#ifdef FDSET_DEBUG	
+	if (ret < 0)
+		printk (KERN_ERR __FUNCTION__ ": return %d\n", ret);
+#endif
 	return ret;
 }
 
@@ -111,19 +152,20 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	filp = fget(fd);
 	if (!filp)
 		goto out;
+
 	err = 0;
 	switch (cmd) {
 		case F_DUPFD:
 			err = dupfd(fd, arg);
 			break;
 		case F_GETFD:
-			err = FD_ISSET(fd, &current->files->close_on_exec);
+			err = FD_ISSET(fd, current->files->close_on_exec);
 			break;
 		case F_SETFD:
 			if (arg&1)
-				FD_SET(fd, &current->files->close_on_exec);
+				FD_SET(fd, current->files->close_on_exec);
 			else
-				FD_CLR(fd, &current->files->close_on_exec);
+				FD_CLR(fd, current->files->close_on_exec);
 			break;
 		case F_GETFL:
 			err = filp->f_flags;
@@ -151,7 +193,6 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			err = filp->f_owner.pid;
 			break;
 		case F_SETOWN:
-			err = 0;
 			filp->f_owner.pid = arg;
 			filp->f_owner.uid = current->uid;
 			filp->f_owner.euid = current->euid;
@@ -171,10 +212,9 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			break;
 		default:
 			/* sockets need a few special fcntls. */
+			err = -EINVAL;
 			if (S_ISSOCK (filp->f_dentry->d_inode->i_mode))
 				err = sock_fcntl (filp, cmd, arg);
-			else
-				err = -EINVAL;
 			break;
 	}
 	fput(filp);

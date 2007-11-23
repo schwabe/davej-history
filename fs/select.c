@@ -107,7 +107,7 @@ static int max_select_fd(unsigned long n, fd_set_bits *fds)
 	/* handle last in-complete long-word first */
 	set = ~(~0UL << (n & (__NFDBITS-1)));
 	n /= __NFDBITS;
-	open_fds = current->files->open_fds.fds_bits+n;
+	open_fds = current->files->open_fds->fds_bits+n;
 	max = 0;
 	if (set) {
 		set &= BITS(fds, n);
@@ -264,21 +264,31 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 		if ((unsigned long) sec < MAX_SELECT_SECONDS) {
 			timeout = ROUND_UP(usec, 1000000/HZ);
 			timeout += sec * (unsigned long) HZ;
+
+			if (timeout < 0) {
+				ret = -EINVAL;
+				goto out_nofds;
+			}
 		}
 	}
 
 	ret = -EINVAL;
+	
+	/*
+	 * We ought to optimise the n=0 case - it is used enough..
+	 */
+	 
 	if (n < 0)
 		goto out_nofds;
-
-	if (n > KFDS_NR)
-		n = KFDS_NR;
-
+	if (n > current->files->max_fdset + 1)
+		n = current->files->max_fdset + 1;
+		
 	/*
 	 * We need 6 bitmaps (in/out/ex for both incoming and outgoing),
 	 * since we used fdset we need to allocate memory in units of
-	 * long-words. 
+	 * long-words.
 	 */
+
 	ret = -ENOMEM;
 	size = FDS_BYTES(n);
 	bits = kmalloc(6 * size, GFP_KERNEL);
@@ -383,13 +393,13 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 	lock_kernel();
 	/* Do a sanity check on nfds ... */
 	err = -EINVAL;
-	if (nfds > NR_OPEN)
+	if (nfds > current->files->max_fds)
 		goto out;
 
 	if (timeout) {
-		/* Carefula about overflow in the intermediate values */
+		/* Careful about overflow in the intermediate values */
 		if ((unsigned long) timeout < MAX_SCHEDULE_TIMEOUT / HZ)
-			timeout = (unsigned long)(timeout*HZ+999)/1000+1;
+			timeout = (timeout*HZ+999)/1000+1;
 		else /* Negative or overflow */
 			timeout = MAX_SCHEDULE_TIMEOUT;
 	}
