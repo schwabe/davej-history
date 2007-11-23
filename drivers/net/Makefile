@@ -1445,7 +1445,7 @@ clean:
 	rm -f core *.o *.a *.s
 
 wanpipe.o: $(WANPIPE_OBJS)
-	ld -r -o $@ $(WANPIPE_OBJS)
+	$(LD) -r -o $@ $(WANPIPE_OBJS)
 
 rcpci.o: rcpci45.o rclanmtl.o
 	$(LD) -r -o rcpci.o rcpci45.o rclanmtl.o

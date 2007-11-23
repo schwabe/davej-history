@@ -1,10 +1,10 @@
-/* $Id: diva.c,v 1.25.6.3 2001/02/13 10:33:58 kai Exp $
+/* $Id: diva.c,v 1.25.6.4 2001/02/16 16:43:25 kai Exp $
  *
  * diva.c     low level stuff for Eicon.Diehl Diva Family ISDN cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
- *		This file is (c) under GNU PUBLIC LICENSE
+ *		This file is (c) under GNU General Public License
  *		For changes and modifications please read
  *		../../../Documentation/isdn/HiSax.cert
  *
@@ -25,7 +25,7 @@
 
 extern const char *CardType[];
 
-const char *Diva_revision = "$Revision: 1.25.6.3 $";
+const char *Diva_revision = "$Revision: 1.25.6.4 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

@@ -133,6 +133,8 @@ MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
 
+#define NETSTATS_VER2
+
 /*
 				Theory of Operation
 

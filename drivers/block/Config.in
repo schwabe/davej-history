@@ -140,7 +140,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
   tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
 fi
 if [ "$CONFIG_PCI" = "y" ]; then
-  tristate 'Compaq CISS Array support' CONFIG_BLK_CPQ_CISS_DA
+  tristate 'Compaq Smart Array 5xxx support' CONFIG_BLK_CPQ_CISS_DA
 fi
 
 

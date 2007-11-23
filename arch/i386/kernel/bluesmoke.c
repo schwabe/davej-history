@@ -46,6 +46,7 @@ void mcheck_fault(void)
 				printk(" at %08x%08x", 
 					high, low);
 			}
+			printk("\n");
 			/* Clear it */
 			wrmsr(0x401+i*4, 0UL, 0UL);
 			/* Serialize */

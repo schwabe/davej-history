@@ -1,4 +1,4 @@
-/* $Id: hysdn_procconf.c,v 1.8 2000/11/13 22:51:47 kai Exp $
+/* $Id: hysdn_procconf.c,v 1.8.6.1 2001/03/13 16:17:09 kai Exp $
 
  * Linux driver for HYSDN cards, /proc/net filesystem dir and conf functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -30,7 +30,7 @@
 
 #include "hysdn_defs.h"
 
-static char *hysdn_procconf_revision = "$Revision: 1.8 $";
+static char *hysdn_procconf_revision = "$Revision: 1.8.6.1 $";
 
 #define INFO_OUT_LEN 80		/* length of info line including lf */
 
@@ -55,7 +55,7 @@ struct conf_writedata {
 /***********************************************************************/
 /* process_line parses one config line and transfers it to the card if */
 /* necessary.                                                          */
-/* if the return value is negative an error occured.                   */
+/* if the return value is negative an error occurred.                   */
 /***********************************************************************/
 static int
 process_line(struct conf_writedata *cnf)
@@ -129,7 +129,7 @@ hysdn_conf_write(struct file *file, const char *buf, size_t count, loff_t * off)
 		if (ch == 0x1A) {
 			/* we detected a pof file */
 			if ((cnf->needed_size = pof_write_open(cnf->card, &cnf->pof_buffer)) <= 0)
-				return (cnf->needed_size);	/* an error occured -> exit */
+				return (cnf->needed_size);	/* an error occurred -> exit */
 			cnf->buf_size = 0;	/* buffer is empty */
 			cnf->state = CONF_STATE_POF;	/* new state */
 		} else {
@@ -157,7 +157,7 @@ hysdn_conf_write(struct file *file, const char *buf, size_t count, loff_t * off)
 			cnf->needed_size = pof_write_buffer(cnf->card, cnf->buf_size);	/* write data */
 			if (cnf->needed_size <= 0) {
 				cnf->card->state = CARD_STATE_BOOTERR;	/* show boot error */
-				return (cnf->needed_size);	/* an error occured */
+				return (cnf->needed_size);	/* an error occurred */
 			}
 			cnf->buf_size = 0;	/* buffer is empty again */
 		}

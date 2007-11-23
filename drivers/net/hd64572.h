@@ -4,7 +4,7 @@
  *
  * Author:	Ivan Passos <ivan@cyclades.com>
  *
- * Copyright:   (c) 2000 Cyclades Corp.
+ * Copyright:   (c) 2000-2001 Cyclades Corp.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License

@@ -1,9 +1,9 @@
-/* $Id: config.c,v 2.57.6.9 2001/02/13 10:33:58 kai Exp $
+/* $Id: config.c,v 2.57.6.11 2001/03/13 16:17:08 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
- * This file is (c) under GNU PUBLIC LICENSE
+ * This file is (c) under GNU General Public License
  *
  */
 #include <linux/types.h>
@@ -436,7 +436,7 @@ HiSax_mod_inc_use_count(void)
 }
 
 #ifndef MODULE
-void __init
+static void __init
 HiSax_setup(char *str, int *ints)
 {
 	int i, j, argc;
@@ -1186,7 +1186,12 @@ checkcard(int cardnr, char *id, int *busy_flag)
 		return (0);
 	}
 	init_tei(cs, cs->protocol);
-	CallcNewChan(cs);
+	ret = CallcNewChan(cs);
+	if (ret) {
+		closecard(cardnr);
+		restore_flags(flags);
+		return 0;
+	}
 	/* ISAR needs firmware download first */
 	if (!test_bit(HW_ISAR, &cs->HW_Flags))
 		ll_run(cs, 0);

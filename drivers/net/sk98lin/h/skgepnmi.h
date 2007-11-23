@@ -2,16 +2,15 @@
  *
  * Name:	skgepnmi.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.39 $
- * Date:	$Date: 1999/12/06 10:09:47 $
+ * Version:	$Revision: 1.48 $
+ * Date:	$Date: 2001/02/23 14:34:24 $
  * Purpose:	Defines for Private Network Management Interface
  *
  ****************************************************************************/
 
 /******************************************************************************
  *
- *	(C)Copyright 1998,1999 SysKonnect,
- *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
+ *	(C)Copyright 1998-2001 SysKonnect GmbH.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -27,12 +26,53 @@
  * History:
  *
  *	$Log: skgepnmi.h,v $
+ *	Revision 1.48  2001/02/23 14:34:24  mkunz
+ *	Changed macro PHYS2INST. Added pAC to Interface
+ *	
+ *	Revision 1.47  2001/02/07 08:28:23  mkunz
+ *	- Added Oids: 	OID_SKGE_DIAG_ACTION
+ *					OID_SKGE_DIAG_RESULT
+ *					OID_SKGE_MULTICAST_LIST
+ *					OID_SKGE_CURRENT_PACKET_FILTER
+ *					OID_SKGE_INTERMEDIATE_SUPPORT
+ *	- Changed value of OID_SKGE_MTU
+ *	
+ *	Revision 1.46  2001/02/06 10:01:41  mkunz
+ *	- Pnmi V4 dual net support added. Interface functions and macros extended
+ *	- Vpd bug fixed
+ *	- OID_SKGE_MTU added
+ *	
+ *	Revision 1.45  2001/01/22 13:41:37  rassmann
+ *	Supporting two nets on dual-port adapters.
+ *	
+ *	Revision 1.44  2000/09/07 07:35:27  rwahl
+ *	- removed NDIS counter specific data type.
+ *	- fixed spelling for OID_SKGE_RLMT_PORT_PREFERRED.
+ *	
+ *	Revision 1.43  2000/08/04 11:41:08  rwahl
+ *	- Fixed compiler warning (port is always >= 0) for macros
+ *	  SK_PNMI_CNT_RX_LONGFRAMES & SK_PNMI_CNT_SYNC_OCTETS
+ *	
+ *	Revision 1.42  2000/08/03 15:14:07  rwahl
+ *	- Corrected error in driver macros addressing a physical port.
+ *	
+ *	Revision 1.41  2000/08/01 16:22:29  rwahl
+ *	- Changed MDB version to 3.1.
+ *	- Added definitions for StatRxLongFrames counter.
+ *	- Added macro to be used by driver to count long frames received.
+ *	- Added directive to control width (default = 32bit) of NDIS statistic
+ *	  counters (SK_NDIS_64BIT_CTR).
+ *	
+ *	Revision 1.40  2000/03/31 13:51:34  rwahl
+ *	Added SK_UPTR cast to offset calculation for PNMI struct fields;
+ *	missing cast caused compiler warnings by Win64 compiler.
+ *
  *	Revision 1.39  1999/12/06 10:09:47  rwahl
  *	Added new error log message.
  *	
  *	Revision 1.38  1999/11/22 13:57:55  cgoos
  *	Changed license header to GPL.
- *	
+ *
  *	Revision 1.37  1999/09/14 14:25:32  rwahl
  *	Set MDB version for 1000Base-T (sensors, Master/Slave) changes.
  *	
@@ -90,7 +130,7 @@
  *	
  *	Revision 1.22  1998/11/03 12:05:51  mhaveman
  *	Added pAC parameter to counter macors.
- *	
+ *
  *	Revision 1.21  1998/11/02 10:47:36  mhaveman
  *	Added syslog messages for internal errors.
  *	
@@ -165,33 +205,34 @@
 #include "h/ski2c.h"
 #include "h/skaddr.h"
 #include "h/skrlmt.h"
-
+#include "h/skvpd.h"
 
 /*
  * Management Database Version
  */
-#define SK_PNMI_MDB_VERSION		0x00030000	/* 3.0 */
+#define SK_PNMI_MDB_VERSION		0x00030001	/* 3.1 */
 
 
 /*
  * Event definitions
  */
-#define SK_PNMI_EVT_SIRQ_OVERFLOW	1	/* Counter overflow */
-#define SK_PNMI_EVT_SEN_WAR_LOW		2	/* Lower war thres exceeded */
-#define SK_PNMI_EVT_SEN_WAR_UPP		3	/* Upper war thres exceeded */
-#define SK_PNMI_EVT_SEN_ERR_LOW		4	/* Lower err thres exceeded */
-#define SK_PNMI_EVT_SEN_ERR_UPP		5	/* Upper err thres exceeded */
-#define SK_PNMI_EVT_CHG_EST_TIMER	6	/* Timer event for RLMT Chg */
+#define SK_PNMI_EVT_SIRQ_OVERFLOW		1	/* Counter overflow */
+#define SK_PNMI_EVT_SEN_WAR_LOW			2	/* Lower war thres exceeded */
+#define SK_PNMI_EVT_SEN_WAR_UPP			3	/* Upper war thres exceeded */
+#define SK_PNMI_EVT_SEN_ERR_LOW			4	/* Lower err thres exceeded */
+#define SK_PNMI_EVT_SEN_ERR_UPP			5	/* Upper err thres exceeded */
+#define SK_PNMI_EVT_CHG_EST_TIMER		6	/* Timer event for RLMT Chg */
 #define SK_PNMI_EVT_UTILIZATION_TIMER	7	/* Timer event for Utiliza. */
-#define SK_PNMI_EVT_CLEAR_COUNTER	8	/* Clear statistic counters */
-#define SK_PNMI_EVT_XMAC_RESET		9	/* XMAC will be reset */
+#define SK_PNMI_EVT_CLEAR_COUNTER		8	/* Clear statistic counters */
+#define SK_PNMI_EVT_XMAC_RESET			9	/* XMAC will be reset */
 
-#define SK_PNMI_EVT_RLMT_PORT_UP	10	/* Port came logically up */
-#define SK_PNMI_EVT_RLMT_PORT_DOWN	11	/* Port went logically down */
-#define SK_PNMI_EVT_RLMT_PORT_SWITCH	12	/* Switched active port */
+#define SK_PNMI_EVT_RLMT_PORT_UP		10	/* Port came logically up */
+#define SK_PNMI_EVT_RLMT_PORT_DOWN		11	/* Port went logically down */
 #define SK_PNMI_EVT_RLMT_SEGMENTATION	13	/* Two SP root bridges found */
 #define SK_PNMI_EVT_RLMT_ACTIVE_DOWN	14	/* Port went logically down */
-#define SK_PNMI_EVT_RLMT_ACTIVE_UP	15	/* Port came logically up */
+#define SK_PNMI_EVT_RLMT_ACTIVE_UP		15	/* Port came logically up */
+#define SK_PNMI_EVT_RLMT_SET_NETS		16	/* 1. Parameter is number of nets
+												1 = single net; 2 = dual net */
 
 /*
  * Return values
@@ -203,6 +244,7 @@
 #define SK_PNMI_ERR_READ_ONLY		4
 #define SK_PNMI_ERR_UNKNOWN_OID		5
 #define SK_PNMI_ERR_UNKNOWN_INST	6
+#define SK_PNMI_ERR_UNKNOWN_NET 	7
 
 
 /*
@@ -333,7 +375,7 @@
 #define OID_SKGE_CHKSM_RX_ERR_CTS	0xFF020113
 #define OID_SKGE_CHKSM_TX_OK_CTS	0xFF020114
 #define OID_SKGE_CHKSM_TX_UNABLE_CTS	0xFF020115
-			
+
 #define OID_SKGE_STAT_TX		0xFF020120
 #define OID_SKGE_STAT_TX_OCTETS		0xFF020121
 #define OID_SKGE_STAT_TX_BROADCAST	0xFF020122
@@ -389,7 +431,11 @@
 #define OID_SKGE_STAT_RX_511		0xFF020154
 #define OID_SKGE_STAT_RX_1023		0xFF020155
 #define OID_SKGE_STAT_RX_MAX		0xFF020156
-			
+#define OID_SKGE_STAT_RX_LONGFRAMES	0xFF020157
+
+#define OID_SKGE_DIAG_ACTION		0xFF01011D
+#define OID_SKGE_DIAG_RESULT		0xFF01011E
+#define OID_SKGE_MTU		0xFF01011F
 #define OID_SKGE_PHYS_CUR_ADDR		0xFF010120
 #define OID_SKGE_PHYS_FAC_ADDR		0xFF010121
 #define OID_SKGE_PMD			0xFF010122
@@ -404,19 +450,22 @@
 #define OID_SKGE_PHY_OPERATION_CAP	0xFF01012B
 #define OID_SKGE_PHY_OPERATION_MODE	0xFF01012C
 #define OID_SKGE_PHY_OPERATION_STATUS	0xFF01012D
-			
+#define OID_SKGE_MULTICAST_LIST		0xFF01012E
+#define OID_SKGE_CURRENT_PACKET_FILTER		0xFF01012F
+
 #define OID_SKGE_TRAP			0xFF010130
 #define OID_SKGE_TRAP_NUMBER		0xFF010131
 
 #define OID_SKGE_RLMT_MODE		0xFF010140
 #define OID_SKGE_RLMT_PORT_NUMBER	0xFF010141
 #define OID_SKGE_RLMT_PORT_ACTIVE	0xFF010142
-#define OID_SKGE_RLMT_PORT_PREFERED	0xFF010143
+#define OID_SKGE_RLMT_PORT_PREFERRED	0xFF010143
+#define OID_SKGE_INTERMEDIATE_SUPPORT		0xFF010160
 #define OID_SKGE_RLMT_CHANGE_CTS	0xFF020160
 #define OID_SKGE_RLMT_CHANGE_TIME	0xFF020161
 #define OID_SKGE_RLMT_CHANGE_ESTIM	0xFF020162
 #define OID_SKGE_RLMT_CHANGE_THRES	0xFF020163
-			
+
 #define OID_SKGE_RLMT_PORT_INDEX	0xFF020164
 #define OID_SKGE_RLMT_STATUS		0xFF020165
 #define OID_SKGE_RLMT_TX_HELLO_CTS	0xFF020166
@@ -424,7 +473,7 @@
 #define OID_SKGE_RLMT_TX_SP_REQ_CTS	0xFF020168
 #define OID_SKGE_RLMT_RX_SP_CTS		0xFF020169
 
-#define OID_SKGE_RLMT_MONITOR_NUMBER	0xFF010150			
+#define OID_SKGE_RLMT_MONITOR_NUMBER	0xFF010150
 #define OID_SKGE_RLMT_MONITOR_INDEX	0xFF010151
 #define OID_SKGE_RLMT_MONITOR_ADDR	0xFF010152
 #define OID_SKGE_RLMT_MONITOR_ERRS	0xFF010153
@@ -448,7 +497,7 @@
 #define OID_SKGE_ERR_RECOVERY_CTS	0xFF02017E
 #define OID_SKGE_SYSUPTIME		0xFF02017F
 
-#define OID_SKGE_ALL_DATA		0xFF020190			
+#define OID_SKGE_ALL_DATA		0xFF020190
 
 
 #define	OID_SKGE_TRAP_SEN_WAR_LOW	500
@@ -577,32 +626,40 @@
 #define SK_PNMI_SET_DRIVER_VER(pAC,v)	((pAC)->Pnmi.pDriverVersion = \
 	(char *)(v))
 
-#define SK_PNMI_CNT_TX_QUEUE_LEN(pAC,v) \
+
+#define SK_PNMI_CNT_TX_QUEUE_LEN(pAC,v,p) \
 	{ \
-		(pAC)->Pnmi.TxSwQueueLen = (SK_U64)(v); \
-		if ((pAC)->Pnmi.TxSwQueueLen > (pAC)->Pnmi.TxSwQueueMax) { \
-			(pAC)->Pnmi.TxSwQueueMax = (pAC)->Pnmi.TxSwQueueLen; \
+		(pAC)->Pnmi.Port[p].TxSwQueueLen = (SK_U64)(v); \
+		if ((pAC)->Pnmi.Port[p].TxSwQueueLen > (pAC)->Pnmi.Port[p].TxSwQueueMax) { \
+			(pAC)->Pnmi.Port[p].TxSwQueueMax = (pAC)->Pnmi.Port[p].TxSwQueueLen; \
 		} \
 	}
-#define SK_PNMI_CNT_TX_RETRY(pAC)	(((pAC)->Pnmi.TxRetryCts)++)
-#define SK_PNMI_CNT_RX_INTR(pAC)	(((pAC)->Pnmi.RxIntrCts)++)
-#define SK_PNMI_CNT_TX_INTR(pAC)	(((pAC)->Pnmi.TxIntrCts)++)
-#define SK_PNMI_CNT_NO_RX_BUF(pAC)	(((pAC)->Pnmi.RxNoBufCts)++)
-#define SK_PNMI_CNT_NO_TX_BUF(pAC)	(((pAC)->Pnmi.TxNoBufCts)++)
-#define SK_PNMI_CNT_USED_TX_DESCR(pAC,v) \
-	((pAC)->Pnmi.TxUsedDescrNo=(SK_U64)(v));
-#define SK_PNMI_CNT_RX_OCTETS_DELIVERED(pAC,v) \
+#define SK_PNMI_CNT_TX_RETRY(pAC,p)	(((pAC)->Pnmi.Port[p].TxRetryCts)++)
+#define SK_PNMI_CNT_RX_INTR(pAC,p)	(((pAC)->Pnmi.Port[p].RxIntrCts)++)
+#define SK_PNMI_CNT_TX_INTR(pAC,p)	(((pAC)->Pnmi.Port[p].TxIntrCts)++)
+#define SK_PNMI_CNT_NO_RX_BUF(pAC,p)	(((pAC)->Pnmi.Port[p].RxNoBufCts)++)
+#define SK_PNMI_CNT_NO_TX_BUF(pAC,p)	(((pAC)->Pnmi.Port[p].TxNoBufCts)++)
+#define SK_PNMI_CNT_USED_TX_DESCR(pAC,v,p) \
+	((pAC)->Pnmi.Port[p].TxUsedDescrNo=(SK_U64)(v));
+#define SK_PNMI_CNT_RX_OCTETS_DELIVERED(pAC,v,p) \
 	{ \
-		((pAC)->Pnmi.RxDeliveredCts)++; \
-		(pAC)->Pnmi.RxOctetsDeliveredCts += (SK_U64)(v); \
+		((pAC)->Pnmi.Port[p].RxDeliveredCts)++; \
+		(pAC)->Pnmi.Port[p].RxOctetsDeliveredCts += (SK_U64)(v); \
 	}
-#define SK_PNMI_CNT_ERR_RECOVERY(pAC)	(((pAC)->Pnmi.ErrRecoveryCts)++);
+#define SK_PNMI_CNT_ERR_RECOVERY(pAC,p)	(((pAC)->Pnmi.Port[p].ErrRecoveryCts)++);
 
 #define SK_PNMI_CNT_SYNC_OCTETS(pAC,p,v) \
 	{ \
-		if (((p) >= 0) && ((p) < SK_MAX_MACS)) { \
-			((pAC)->Pnmi.StatSyncCts[p])++; \
-			(pAC)->Pnmi.StatSyncOctetsCts[p] += (SK_U64)(v); \
+		if ((p) < SK_MAX_MACS) { \
+			((pAC)->Pnmi.Port[p].StatSyncCts)++; \
+			(pAC)->Pnmi.Port[p].StatSyncOctetsCts += (SK_U64)(v); \
+		} \
+	}
+
+#define SK_PNMI_CNT_RX_LONGFRAMES(pAC,p) \
+	{ \
+		if ((p) < SK_MAX_MACS) { \
+			((pAC)->Pnmi.Port[p].StatRxLongFrameCts)++; \
 		} \
 	}
 
@@ -613,14 +670,18 @@
 #define SK_PNMI_PORT_LOG2INST(l)	((unsigned int)(l) + 1)
 #define SK_PNMI_PORT_PHYS2LOG(p)	((unsigned int)(p) + 1)
 #define SK_PNMI_PORT_LOG2PHYS(pAC,l)	((unsigned int)(l) - 1)
-#define SK_PNMI_PORT_PHYS2INST(p)	((unsigned int)(p) + 2)
+#define SK_PNMI_PORT_PHYS2INST(pAC,p)	\
+	(pAC->Pnmi.DualNetActiveFlag ? 2 : ((unsigned int)(p) + 2))
 #define SK_PNMI_PORT_INST2PHYS(pAC,i)	((unsigned int)(i) - 2)
 
 /*
  * Structure definition for SkPnmiGetStruct and SkPnmiSetStruct
  */
-#define SK_PNMI_VPD_ENTRIES		20
-#define SK_PNMI_VPD_DATALEN		128
+#define SK_PNMI_VPD_KEY_SIZE	5
+#define SK_PNMI_VPD_BUFSIZE		(VPD_SIZE)
+#define SK_PNMI_VPD_ENTRIES		(VPD_SIZE / 4)
+#define SK_PNMI_VPD_DATALEN		128 /*  Number of data bytes */
+
 #define SK_PNMI_MULTICAST_LISTLEN	64
 #define SK_PNMI_SENSOR_ENTRIES		(SK_MAX_SENSORS)
 #define SK_PNMI_CHECKSUM_ENTRIES	3
@@ -633,7 +694,7 @@
 #define SK_PNMI_TRAP_QUEUE_LEN		512
 
 typedef struct s_PnmiVpd {
-	char			VpdKey[5];
+	char			VpdKey[SK_PNMI_VPD_KEY_SIZE];
 	char			VpdValue[SK_PNMI_VPD_DATALEN];
 	SK_U8			VpdAccess;
 	SK_U8			VpdAction;
@@ -695,6 +756,7 @@ typedef struct s_PnmiStat {
 	SK_U64			StatRxBroadcastOkCts;
 	SK_U64			StatRxMulticastOkCts;
 	SK_U64			StatRxUnicastOkCts;
+	SK_U64			StatRxLongFramesCts;
 	SK_U64			StatRxPauseMacCtrlCts;
 	SK_U64			StatRxMacCtrlCts;
 	SK_U64			StatRxPauseMacCtrlErrorCts;
@@ -764,7 +826,7 @@ typedef struct s_PnmiStrucData {
 	SK_U32			MgmtDBVersion;
 	SK_PNMI_REQUEST_STATUS	ReturnStatus;
 	SK_U32			VpdFreeBytes;
-	char			VpdEntriesList[SK_PNMI_VPD_DATALEN];
+	char			VpdEntriesList[SK_PNMI_VPD_ENTRIES * SK_PNMI_VPD_KEY_SIZE];
 	SK_U32			VpdEntriesNumber;
 	SK_PNMI_VPD		Vpd[SK_PNMI_VPD_ENTRIES];
 	SK_U32			PortNumber;
@@ -774,6 +836,7 @@ typedef struct s_PnmiStrucData {
 	char			HwDescr[SK_PNMI_STRINGLEN1];
 	char			HwVersion[SK_PNMI_STRINGLEN2];
 	SK_U16			Chipset;
+	SK_U32			MtuSize;
 	SK_U32			Action;
 	SK_U32			TestResult;
 	SK_U8			BusType;
@@ -817,8 +880,9 @@ typedef struct s_PnmiStrucData {
 } SK_PNMI_STRUCT_DATA;
 
 #define SK_PNMI_STRUCT_SIZE	(sizeof(SK_PNMI_STRUCT_DATA))
-#define SK_PNMI_MIN_STRUCT_SIZE	((unsigned int)&(((SK_PNMI_STRUCT_DATA *)0)->\
-					VpdFreeBytes))	/*
+#define SK_PNMI_MIN_STRUCT_SIZE	((unsigned int)(SK_UPTR)\
+				 &(((SK_PNMI_STRUCT_DATA *)0)->VpdFreeBytes))
+							/*
 							 * ReturnStatus field
 							 * must be located
 							 * before VpdFreeBytes
@@ -830,7 +894,7 @@ typedef struct s_PnmiStrucData {
 #define SK_PNMI_MAX_PROTOS		3
 
 #define SK_PNMI_SCNT_NOT		64
-#define SK_PNMI_CNT_NO			66
+#define SK_PNMI_CNT_NO			67
 
 /*
  * Estimate data structure
@@ -851,8 +915,25 @@ typedef struct s_PnmiPort {
 	SK_U64			CounterOffset[SK_PNMI_CNT_NO];
 	SK_U64			StatSyncCts;
 	SK_U64			StatSyncOctetsCts;
+	SK_U64			StatRxLongFrameCts;
 	SK_BOOL			ActiveFlag;
+	SK_U64			TxSwQueueLen;
+	SK_U64			TxSwQueueMax;
+	SK_U64			TxRetryCts;
+	SK_U64			RxIntrCts;
+	SK_U64			TxIntrCts;
+	SK_U64			RxNoBufCts;
+	SK_U64			TxNoBufCts;
+	SK_U64			TxUsedDescrNo;
+	SK_U64			RxDeliveredCts;
+	SK_U64			RxOctetsDeliveredCts;
+	SK_U64			RxHwErrorsCts;
+	SK_U64			TxHwErrorsCts;
+	SK_U64			InErrorsCts;
+	SK_U64			OutErrorsCts;
+	SK_U64			ErrRecoveryCts;
 } SK_PNMI_PORT;
+
 
 typedef struct s_PnmiData {
 	SK_PNMI_PORT		Port[SK_MAX_MACS];
@@ -884,19 +965,8 @@ typedef struct s_PnmiData {
 	char			PciBusWidth;
 	char			PMD;
 	char			Connector;
-
-	SK_U64			TxSwQueueLen;
-	SK_U64			TxSwQueueMax;
-	SK_U64			TxRetryCts;
-	SK_U64			RxIntrCts;
-	SK_U64			TxIntrCts;
-	SK_U64			RxNoBufCts;
-	SK_U64			TxNoBufCts;
-	SK_U64			TxUsedDescrNo;
-	SK_U64			RxDeliveredCts;
-	SK_U64			RxOctetsDeliveredCts;
-	SK_U64			ErrRecoveryCts;
 	SK_U64			StartUpTime;
+	SK_BOOL			DualNetActiveFlag;
 } SK_PNMI;
 
 
@@ -905,17 +975,17 @@ typedef struct s_PnmiData {
  */
 extern int SkPnmiInit(SK_AC *pAc, SK_IOC IoC, int level);
 extern int SkPnmiGetVar(SK_AC *pAc, SK_IOC IoC, SK_U32 Id, void* pBuf,
-	unsigned int* pLen, SK_U32 Instance);
+	unsigned int* pLen, SK_U32 Instance, SK_U32 NetIndex);
 extern int SkPnmiPreSetVar(SK_AC *pAc, SK_IOC IoC, SK_U32 Id,
-	void* pBuf, unsigned int *pLen, SK_U32 Instance);
+	void* pBuf, unsigned int *pLen, SK_U32 Instance, SK_U32 NetIndex);
 extern int SkPnmiSetVar(SK_AC *pAc, SK_IOC IoC, SK_U32 Id, void* pBuf,
-	unsigned int *pLen, SK_U32 Instance);
+	unsigned int *pLen, SK_U32 Instance, SK_U32 NetIndex);
 extern int SkPnmiGetStruct(SK_AC *pAc, SK_IOC IoC, void* pBuf,
-	unsigned int *pLen);
+	unsigned int *pLen, SK_U32 NetIndex);
 extern int SkPnmiPreSetStruct(SK_AC *pAc, SK_IOC IoC, void* pBuf,
-	unsigned int *pLen);
+	unsigned int *pLen, SK_U32 NetIndex);
 extern int SkPnmiSetStruct(SK_AC *pAc, SK_IOC IoC, void* pBuf,
-	unsigned int *pLen);
+	unsigned int *pLen, SK_U32 NetIndex);
 extern int SkPnmiEvent(SK_AC *pAc, SK_IOC IoC, SK_U32 Event,
 	SK_EVPARA Param);
 

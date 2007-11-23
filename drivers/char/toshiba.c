@@ -60,10 +60,8 @@
 #define TOSH_VERSION "1.9 22/3/2001"
 #define TOSH_DEBUG 0
 
-#ifdef MODULE
 #include<linux/module.h>
 #include<linux/version.h>
-#endif
 #include<linux/kernel.h>
 #include<linux/sched.h>
 #include<linux/types.h>
@@ -78,7 +76,7 @@
 #include<linux/proc_fs.h>
 #endif
 
-#include"toshiba.h"
+#include <linux/toshiba.h>
 
 #define TOSH_MINOR_DEV 181
 

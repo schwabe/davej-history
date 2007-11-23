@@ -1,4 +1,4 @@
-/* $Id: hysdn_sched.c,v 1.5 2000/11/22 17:13:13 kai Exp $
+/* $Id: hysdn_sched.c,v 1.5.6.1 2001/03/13 16:17:09 kai Exp $
 
  * Linux driver for HYSDN cards, scheduler routines for handling exchange card <-> pc.
  *
@@ -141,7 +141,7 @@ hysdn_sched_tx(hysdn_card * card, uchar * buf, word volatile *len, word volatile
 
 
 /*****************************************************************************/
-/* send one config line to the card and return 0 if successfull, otherwise a */
+/* send one config line to the card and return 0 if successful, otherwise a */
 /* negative error code.                                                      */
 /* The function works with timeouts perhaps not giving the greatest speed    */
 /* sending the line, but this should be meaningless beacuse only some lines  */

@@ -42,12 +42,12 @@
 #include <linux/genhd.h>
 
 #define CCISS_DRIVER_VERSION(maj,min,submin) ((maj<<16)|(min<<8)|(submin))
-#define DRIVER_NAME "Compaq CISS Driver (v 1.0.0)"
-#define DRIVER_VERSION CCISS_DRIVER_VERSION(1,0,0)
+#define DRIVER_NAME "Compaq CISS Driver (v 1.0.3)"
+#define DRIVER_VERSION CCISS_DRIVER_VERSION(1,0,3)
 
 /* Embedded module documentation macros - see modules.h */
 MODULE_AUTHOR("Charles M. White III - Compaq Computer Corporation");
-MODULE_DESCRIPTION("Driver for Compaq Smart Array Controller 5300");
+MODULE_DESCRIPTION("Driver for Compaq Smart Array 5xxx Controllers ");
 
 #include "cciss_cmd.h"
 #include "cciss.h"
@@ -61,6 +61,8 @@ MODULE_DESCRIPTION("Driver for Compaq Smart Array Controller 5300");
  */
 static struct board_type products[] = {
 	{ 0x40700E11, "Smart Array 5300",	&SA5_access },
+	{ 0x40800E11, "Smart Array 5i", &SA5B_access},
+	{ 0x40820E11, "Smart Array 532", &SA5B_access},
 };
 
 /* How long to wait (in millesconds) for board to go into simple mode */
@@ -135,10 +137,10 @@ static int cciss_proc_get_info(char *buffer, char **start, off_t offset, int len
 
         ctlr = h->ctlr;
         size = sprintf(buffer, "%s:  Compaq %s Controller\n"
-                "       Board ID: %08lx\n"
+                "       Board ID: 0x%08lx\n"
 		"       Firmware Version: %c%c%c%c\n"
-                "       Memory Address: %08lx\n"
-                "       IRQ: 0x%x\n"
+                "       Memory Address: 0x%08lx\n"
+                "       IRQ: %d\n"
                 "       Logical drives: %d\n"
                 "       Current Q depth: %d\n"
 		"       Current # commands on controller %d\n"
@@ -416,6 +418,8 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		put_user(read_ahead[MAJOR(inode->i_rdev)], (int*)arg);
 		return 0;
 	case BLKRRPART:
+		if(!capable(CAP_SYS_ADMIN))
+			return -EPERM;
 		return revalidate_logvol(inode->i_rdev, 1);
 
 	case CCISS_GETPCIINFO:
@@ -719,7 +723,7 @@ static int revalidate_logvol(kdev_t dev, int maxusage)
         spin_lock_irqsave(&io_request_lock, flags);
         if (hba[ctlr]->drv[target].usage_count > maxusage) {
                 spin_unlock_irqrestore(&io_request_lock, flags);
-                printk(KERN_WARNING "cpqarray: Device busy for "
+                printk(KERN_WARNING "cciss: Device busy for "
                         "revalidation (usage=%d)\n",
                         hba[ctlr]->drv[target].usage_count);
                 return -EBUSY;
@@ -1369,7 +1373,7 @@ static void do_cciss_intr(int irq, void *dev_id, struct pt_regs *regs)
 			a &= ~3;
 			if ((c = h->cmpQ) == NULL)
 			{  
-				printk(KERN_WARNING "cpqarray: Completion of %08lx ignored\n", (unsigned long)a1);
+				printk(KERN_WARNING "cciss: Completion of %08lx ignored\n", (unsigned long)a1);
 				continue;	
 			} 
 			while(c->busaddr != a) {
@@ -1437,7 +1441,7 @@ static void print_cfg_table( CfgTable_struct *tb)
 	printk("   Heartbeat Counter = 0x%x\n\n\n", 
 			readl(&(tb->HeartBeat)));
 }
-#endif /* CCISS_DEBUG */
+#endif /* CCISS_DEBUG */ 
 
 static int cciss_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
 {
@@ -1447,7 +1451,9 @@ static int cciss_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
 	uint addr[6];
 	__u32 board_id;
 	struct pci_dev *pdev;
-
+	int cfg_offset;
+	int cfg_base_addr;
+	int cfg_base_addr_index;
 	int i;
 
 	pdev = pci_find_slot(bus, device_fn);
@@ -1487,15 +1493,36 @@ static int cciss_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
 	 * Memory base addr is first addr , the second points to the config
          *   table
 	 */
-	c->paddr = addr[0];
-	c->vaddr = remap_pci_mem(c->paddr, 128);
-	c->cfgtable = (CfgTable_struct *) remap_pci_mem(addr[1], 
-						sizeof(CfgTable_struct));
+	c->paddr = addr[0] & 0xfffffff0; /* remove the addressing mode bits */
+#ifdef CCISS_DEBUG
+	printk("address 0 = %x\n", c->paddr);
+#endif /* CCISS_DEBUG */ 
+	c->vaddr = remap_pci_mem(c->paddr, 200);
+
+	/* get the address index number */
+	cfg_base_addr = readl(c->vaddr + SA5_CTCFG_OFFSET);
+	/* I am not prepared to deal with a 64 bit address value */
+	cfg_base_addr &= 0xffff;
+#ifdef CCISS_DEBUG
+	printk("cfg base address = %x\n", cfg_base_addr);
+#endif /* CCISS_DEBUG */
+	cfg_base_addr_index = (cfg_base_addr  - PCI_BASE_ADDRESS_0)/4;
+#ifdef CCISS_DEBUG
+	printk("cfg base address index = %x\n", cfg_base_addr_index);
+#endif /* CCISS_DEBUG */
+
+	cfg_offset = readl(c->vaddr + SA5_CTMEM_OFFSET);
+#ifdef CCISS_DEBUG
+	printk("cfg offset = %x\n", cfg_offset);
+#endif /* CCISS_DEBUG */
+	c->cfgtable = (CfgTable_struct *) 
+		remap_pci_mem((addr[cfg_base_addr_index] & 0xfffffff0)
+				+ cfg_offset, sizeof(CfgTable_struct));
 	c->board_id = board_id;
 
-#ifdef CCISS_DEBUG
+#ifdef CCISS_DEBUG 
 	print_cfg_table(c->cfgtable); 
-#endif /* CCISS_DEBUG */
+#endif CCISS_DEBUG 
 	for(i=0; i<NR_PRODUCTS; i++) {
 		if (board_id == products[i].board_id) {
 			c->product_name = products[i].product_name;
@@ -1507,6 +1534,14 @@ static int cciss_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
 		printk(KERN_WARNING "cciss: Sorry, I don't know how"
 			" to access the Smart Array controller %08lx\n", 
 				(unsigned long)board_id);
+		return -1;
+	}
+	if (  (readb(&c->cfgtable->Signature[0]) != 'C') ||
+	      (readb(&c->cfgtable->Signature[1]) != 'I') ||
+	      (readb(&c->cfgtable->Signature[2]) != 'S') ||
+	      (readb(&c->cfgtable->Signature[3]) != 'S') )
+	{
+		printk("Does not appear to be a valid CISS config table\n");
 		return -1;
 	}
 #ifdef CCISS_DEBUG
@@ -1550,14 +1585,22 @@ static int cciss_pci_detect(void)
 
 	int index;
 	unchar bus=0, dev_fn=0;
-	
+
+	#define CCISS_BOARD_TYPES 2
+	static int cciss_device_id[CCISS_BOARD_TYPES] = { 
+		PCI_DEVICE_ID_COMPAQ_CISS, PCI_DEVICE_ID_COMPAQ_CISSB};
+	int brdtype;
+
+	/* search for all PCI board types that could be for this driver */
+	for(brdtype=0; brdtype<CCISS_BOARD_TYPES; brdtype++)
+	{
 		for(index=0; ; index++) {
 			if (pcibios_find_device(PCI_VENDOR_ID_COMPAQ,
-			 	PCI_DEVICE_ID_COMPAQ_CISS, 
+			 	cciss_device_id[brdtype], 
 					index, &bus, &dev_fn))
 				break;
 			printk(KERN_DEBUG "cciss: Device %x has been found at %x %x\n",
-				PCI_DEVICE_ID_COMPAQ_CISS, bus, dev_fn);
+				cciss_device_id[brdtype], bus, dev_fn);
 			if (index == 1000000) break;
 			if (nr_ctlr == 8) {
 				printk(KERN_WARNING "cciss: This driver"
@@ -1583,6 +1626,7 @@ static int cciss_pci_detect(void)
 			nr_ctlr++;
 
 		}
+	}
 	return nr_ctlr;
 
 }
@@ -1712,8 +1756,8 @@ static void cciss_getgeometry(int cntl_num)
 			printk(KERN_WARNING "cciss: read capacity failed\n");
 			total_size = block_size = 0; 
 		}	
-		printk("      blocks= %d block_size= %d\n", total_size,
-					block_size);
+		printk(KERN_INFO "      blocks= %d block_size= %d\n", 
+					total_size, block_size);
 
 		/* Execute the command to read the disk geometry */
 		memset(inq_buff, 0, sizeof(InquiryData_struct));

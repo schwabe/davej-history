@@ -114,6 +114,7 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
      fi
   fi
   tristate '   WDT PCI Watchdog timer' CONFIG_WDTPCI
+  tristate '   ZF MachZ Watchdog' CONFIG_MACHZ_WDT
   endmenu
 fi
 

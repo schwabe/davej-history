@@ -1,11 +1,20 @@
 /*
- * $Id: c4.c,v 1.20.6.2 2001/02/13 11:43:29 kai Exp $
+ * $Id: c4.c,v 1.20.6.5 2001/03/21 08:52:21 kai Exp $
  * 
  * Module for AVM C4 card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: c4.c,v $
+ * Revision 1.20.6.5  2001/03/21 08:52:21  kai
+ * merge from main branch: fix buffer for revision string (calle)
+ *
+ * Revision 1.20.6.4  2001/03/15 15:11:23  kai
+ * *** empty log message ***
+ *
+ * Revision 1.20.6.3  2001/02/16 16:43:23  kai
+ * Changes from -ac16, little bug fixes, typos and the like
+ *
  * Revision 1.20.6.2  2001/02/13 11:43:29  kai
  * more compatility changes for 2.2.19
  *
@@ -78,7 +87,7 @@
  * - fixed problem with memory mapping if address is not aligned
  *
  * Revision 1.3  2000/01/25 14:37:39  calle
- * new message after successfull detection including card revision and
+ * new message after successful detection including card revision and
  * used resources.
  *
  * Revision 1.2  2000/01/21 20:52:58  keil
@@ -104,12 +113,13 @@
 #include <linux/init.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
+#include <linux/netdevice.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.20.6.2 $";
+static char *revision = "$Revision: 1.20.6.5 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
@@ -1339,10 +1349,11 @@ static int __init c4_init(void)
 
 	MOD_INC_USE_COUNT;
 
-	if ((p = strchr(revision, ':'))) {
-		strncpy(driver->revision, p + 1, sizeof(driver->revision));
-		p = strchr(driver->revision, '$');
-		*p = 0;
+	if ((p = strchr(revision, ':')) != 0 && p[1]) {
+		strncpy(driver->revision, p + 2, sizeof(driver->revision));
+		driver->revision[sizeof(driver->revision)-1] = 0;
+		if ((p = strchr(driver->revision, '$')) != 0 && p > driver->revision)
+			*(p-1) = 0;
 	}
 
 	printk(KERN_INFO "%s: revision %s\n", driver->name, driver->revision);

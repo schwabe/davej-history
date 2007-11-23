@@ -730,12 +730,31 @@ static int rio_fw_ioctl (struct inode *inode, struct file *filp,
 }
 
 
+int rio2l (int rio_bits)
+{
+  return ((rio_bits & MODEM_CD) ?TIOCM_CD :0) |
+         ((rio_bits & MODEM_DSR)?TIOCM_DSR:0) |
+         ((rio_bits & MODEM_RTS)?TIOCM_RTS:0) |
+         ((rio_bits & MODEM_RI) ?TIOCM_RI :0) |
+         ((rio_bits & MODEM_DTR)?TIOCM_DTR:0) |
+         ((rio_bits & MODEM_CTS)?TIOCM_CTS:0);
+}
+
+int l2rio (int l_bits)
+{
+  return ((l_bits & TIOCM_RTS)?MSET_RTS:0) |
+         ((l_bits & TIOCM_DTR)?MSET_DTR:0);
+}
+
+
 static int rio_ioctl (struct tty_struct * tty, struct file * filp, 
                      unsigned int cmd, unsigned long arg)
 {
   int rc;
   struct Port *PortP;
   int ival;
+  int state;
+  long flags;
 
   func_enter();
 
@@ -766,7 +785,7 @@ static int rio_ioctl (struct tty_struct * tty, struct file * filp,
     break;
   case TCSBRK:
     if ( PortP->State & RIO_DELETED ) {
-      rio_dprintk (RIO_DEBUG_TTY, "BREAK on deleted RTA\n");
+      rio_dprintk (RIO_DEBUG_IOCTL, "BREAK on deleted RTA\n");
       rc = -EIO;      
     } else {
       if (RIOShortCommand(p, PortP, SBREAK, 2, 250) == RIO_FAIL) {
@@ -777,7 +796,7 @@ static int rio_ioctl (struct tty_struct * tty, struct file * filp,
     break;
   case TCSBRKP:
     if ( PortP->State & RIO_DELETED ) {
-      rio_dprintk (RIO_DEBUG_TTY, "BREAK on deleted RTA\n");
+      rio_dprintk (RIO_DEBUG_IOCTL, "BREAK on deleted RTA\n");
       rc = -EIO;      
     } else {
       int l;
@@ -794,39 +813,48 @@ static int rio_ioctl (struct tty_struct * tty, struct file * filp,
                           sizeof(struct serial_struct))) == 0)
       rc = gs_setserial(&PortP->gs, (struct serial_struct *) arg);
     break;
-#if 0
   case TIOCMGET:
-    if ((rc = verify_area(VERIFY_WRITE, (void *) arg,
-                          sizeof(unsigned int))) == 0) {
-      ival = rio_getsignals(port);
-      put_user(ival, (unsigned int *) arg);
-    }
-    break;
-  case TIOCMBIS:
-    if ((rc = verify_area(VERIFY_READ, (void *) arg,
-                          sizeof(unsigned int))) == 0) {
-      Get_user(ival, (unsigned int *) arg);
-      rio_setsignals(port, ((ival & TIOCM_DTR) ? 1 : -1),
-                           ((ival & TIOCM_RTS) ? 1 : -1));
-    }
-    break;
-  case TIOCMBIC:
-    if ((rc = verify_area(VERIFY_READ, (void *) arg,
-                          sizeof(unsigned int))) == 0) {
-      Get_user(ival, (unsigned int *) arg);
-      rio_setsignals(port, ((ival & TIOCM_DTR) ? 0 : -1),
-                           ((ival & TIOCM_RTS) ? 0 : -1));
-    }
+    rio_dprintk (RIO_DEBUG_IOCTL, "TIOCMGET: %x -> %x \n",
+                 PortP->ModemState, rio2l (PortP->ModemState));
+    return put_user (rio2l (PortP->ModemState), (unsigned int *) arg);
     break;
   case TIOCMSET:
-    if ((rc = verify_area(VERIFY_READ, (void *) arg,
-                          sizeof(unsigned int))) == 0) {
-      Get_user(ival, (unsigned int *) arg);
-      rio_setsignals(port, ((ival & TIOCM_DTR) ? 1 : 0),
-                           ((ival & TIOCM_RTS) ? 1 : 0));
-    }
+    Get_user(state, (unsigned int *) arg);
+    rio_dprintk (RIO_DEBUG_IOCTL, "TIOCMSET: %x -> %x\n",
+                 PortP->ModemState, l2rio (state));
+
+    rio_spin_lock_irqsave(&PortP->portSem, flags);
+    PortP->ModemState = l2rio (state);
+    PortP->ModemLines = l2rio (state);
+    if (RIOPreemptiveCmd(p, PortP, MSET) == RIO_FAIL)
+            rio_dprintk (RIO_DEBUG_TTY, "MSET command failed\n");
+    PortP->State |= RIO_BUSY;
+    rio_spin_unlock_irqrestore(&PortP->portSem, flags);
     break;
-#endif
+  case TIOCMBIC:
+    rio_dprintk (RIO_DEBUG_IOCTL, "TIOCMBIC\n");
+    Get_user(state, (unsigned int *) arg);
+
+    rio_spin_lock_irqsave(&PortP->portSem, flags);
+    PortP->ModemState &= ~l2rio (state);
+    PortP->ModemLines  =  l2rio (state);
+    if (RIOPreemptiveCmd(p, PortP, MBIC) == RIO_FAIL)
+            rio_dprintk (RIO_DEBUG_TTY, "TCRIOMBIC command failed\n");
+    PortP->State |= RIO_BUSY;
+    rio_spin_unlock_irqrestore(&PortP->portSem, flags);
+    break;
+  case TIOCMBIS:
+    rio_dprintk (RIO_DEBUG_IOCTL, "TIOCMBIS\n");
+    Get_user(state, (unsigned int *) arg);
+
+    rio_spin_lock_irqsave(&PortP->portSem, flags);
+    PortP->ModemState |= state;
+    PortP->ModemLines  = state;
+    if (RIOPreemptiveCmd(p, PortP, MBIS) == RIO_FAIL)
+            rio_dprintk (RIO_DEBUG_TTY, "TCRIOMBIS command failed\n");
+    PortP->State |= RIO_BUSY;
+    rio_spin_unlock_irqrestore(&PortP->portSem, flags);
+    break;
   default:
     rc = -ENOIOCTLCMD;
     break;

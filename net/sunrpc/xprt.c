@@ -1145,9 +1145,11 @@ xprt_up_transmit(struct rpc_task *task)
 		unsigned long	oldflags;
 		spin_lock_irqsave(&xprt_sock_lock, oldflags);
 		xprt->snd_task = NULL;
-		if (!rpc_wake_up_next(&xprt->sending) && xprt->stream)
+		if (!rpc_wake_up_next(&xprt->sending) && xprt->stream) {
+			spin_unlock_irqrestore(&xprt_sock_lock, oldflags);
 			xprt_add_tcp_timer(xprt, RPCXPRT_TIMEOUT);
-		spin_unlock_irqrestore(&xprt_sock_lock, oldflags);
+		} else
+			spin_unlock_irqrestore(&xprt_sock_lock, oldflags);
 	}
 }
 

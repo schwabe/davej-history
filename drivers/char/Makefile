@@ -373,6 +373,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MACHZ_WDT),y)
+O_OBJS += machzwd.o
+else
+  ifeq ($(CONFIG_MACHZ_WDT),m)
+    M_OBJS += machzwd.o
+  endif
+endif
+
 ifeq ($(CONFIG_RTC),y)
 O_OBJS += rtc.o
 endif

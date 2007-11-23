@@ -1037,12 +1037,6 @@ int get_pci_list(char *buf)
 	static int complained = 0;
 #	define MSG "\nwarning: page-size limit reached!\n"
 
-	if (!complained) {
-		complained++;
-		printk(KERN_INFO "%s uses obsolete /proc/pci interface\n",
-			current->comm);
-	}
-
 	/* reserve same for truncation warning message: */
 	size  = PAGE_SIZE - (strlen(MSG) + 1);
 	len   = sprintf(buf, "PCI devices found:\n");

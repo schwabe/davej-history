@@ -734,6 +734,7 @@ static int flock_make_lock(struct file *filp, struct file_lock *fl,
 	fl->fl_end = OFFSET_MAX;
 	fl->fl_file = filp;
 	fl->fl_owner = NULL;
+	fl->fl_pid = current->pid;
 	
 	return (1);
 }

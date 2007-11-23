@@ -190,3 +190,20 @@ static inline void *rio_memcpy_fromio (void *dest, void *source, int n)
 #define func_enter2()
 #endif
 
+/* Documentation says to use these defines. Why aren't they in a
+ * header then?  Hmm. They are in the header "riowinif.h", however
+ * that file doesn't compile. I give up. Copied here. -- REW
+ */
+
+#define MSET_RTS        0x01            /* RTS modem signal */
+#define MSET_DTR        0x02            /* DTR modem signal */
+
+#define MODEM_DSR               0x80    /* Data Set Ready modem state */
+#define MODEM_CTS               0x40    /* Clear To Send modem state */
+#define MODEM_RI                0x20    /* Ring Indicate modem state */
+#define MODEM_CD                0x10    /* Carrier Detect modem state */
+#define MODEM_TSTOP             0x08    /* Transmit Stopped state */
+#define MODEM_TEMPTY    0x04    /* Transmit Empty state */
+#define MODEM_DTR               0x02    /* DTR modem output state */
+#define MODEM_RTS               0x01    /* RTS modem output state */
+

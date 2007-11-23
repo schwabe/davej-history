@@ -62,7 +62,7 @@ struct get_serial_s {
 struct postcall_s {
   word        command;         /* command = 0x0300 */
   word        dummy;           /* not used */
-  IDI_CALL    callback;        /* routine adress to call back */
+  IDI_CALL    callback;        /* routine address to call back */
   ENTITY      *contxt;         /* ptr to entity to use */
 };
 

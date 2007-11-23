@@ -1,11 +1,11 @@
-/* $Id: w6692.c,v 1.12.6.3 2001/02/13 10:33:58 kai Exp $
+/* $Id: w6692.c,v 1.12.6.4 2001/02/16 16:43:29 kai Exp $
  *
  * w6692.c   Winbond W6692 specific routines
  *
  * Author       Petr Novak <petr.novak@i.cz>
  *              (based on HiSax driver by Karsten Keil)
  *
- *              This file is (c) under GNU PUBLIC LICENSE
+ *              This file is (c) under GNU General Public License
  *
  */
 
@@ -36,7 +36,7 @@ static const PCI_ENTRY id_list[] =
 
 extern const char *CardType[];
 
-const char *w6692_revision = "$Revision: 1.12.6.3 $";
+const char *w6692_revision = "$Revision: 1.12.6.4 $";
 
 #define DBUSY_TIMER_VALUE 80
 

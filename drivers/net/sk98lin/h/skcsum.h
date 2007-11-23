@@ -2,16 +2,15 @@
  *
  * Name:	skcsum.h
  * Project:	GEnesis - SysKonnect SK-NET Gigabit Ethernet (SK-98xx)
- * Version:	$Revision: 1.5 $
- * Date:	$Date: 2000/02/21 12:10:05 $
+ * Version:	$Revision: 1.9 $
+ * Date:	$Date: 2001/02/06 11:21:39 $
  * Purpose:	Store/verify Internet checksum in send/receive packets.
  *
  ******************************************************************************/
 
 /******************************************************************************
  *
- *	(C)Copyright 1998,1999 SysKonnect,
- *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
+ *	(C)Copyright 1998-2001 SysKonnect GmbH.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -27,6 +26,19 @@
  * History:
  *
  *	$Log: skcsum.h,v $
+ *	Revision 1.9  2001/02/06 11:21:39  rassmann
+ *	Editorial changes.
+ *	
+ *	Revision 1.8  2001/02/06 11:15:36  rassmann
+ *	Supporting two nets on dual-port adapters.
+ *	
+ *	Revision 1.7  2000/06/29 13:17:05  rassmann
+ *	Corrected reception of a packet with UDP checksum == 0 (which means there
+ *	is no UDP checksum).
+ *	
+ *	Revision 1.6  2000/02/28 12:33:44  cgoos
+ *	Changed C++ style comments to C style.
+ *	
  *	Revision 1.5  2000/02/21 12:10:05  cgoos
  *	Fixed license comment.
  *	
@@ -110,27 +122,32 @@
  *
  *	SKCS_STATUS_UNKNOWN_IP_VERSION - Not an IP v4 frame.
  *	SKCS_STATUS_IP_CSUM_ERROR - IP checksum error.
+ *	SKCS_STATUS_IP_CSUM_ERROR_TCP - IP checksum error in TCP frame.
+ *	SKCS_STATUS_IP_CSUM_ERROR_UDP - IP checksum error in UDP frame
  *	SKCS_STATUS_IP_FRAGMENT - IP fragment (IP checksum ok).
  *	SKCS_STATUS_IP_CSUM_OK - IP checksum ok (not a TCP or UDP frame).
  *	SKCS_STATUS_TCP_CSUM_ERROR - TCP checksum error (IP checksum ok).
  *	SKCS_STATUS_UDP_CSUM_ERROR - UDP checksum error (IP checksum ok).
  *	SKCS_STATUS_TCP_CSUM_OK - IP and TCP checksum ok.
  *	SKCS_STATUS_UDP_CSUM_OK - IP and UDP checksum ok.
+ *	SKCS_STATUS_IP_CSUM_OK_NO_UDP - IP checksum OK and no UDP checksum. 
  */
 #ifndef SKCS_OVERWRITE_STATUS	/* User overwrite? */
 #define SKCS_STATUS	int	/* Define status type. */
 
 #define SKCS_STATUS_UNKNOWN_IP_VERSION	1
-#define SKCS_STATUS_IP_CSUM_ERROR	2
-#define SKCS_STATUS_IP_FRAGMENT		3
-#define SKCS_STATUS_IP_CSUM_OK		4
-#define SKCS_STATUS_TCP_CSUM_ERROR	5
-#define SKCS_STATUS_UDP_CSUM_ERROR	6
-#define SKCS_STATUS_TCP_CSUM_OK		7
-#define SKCS_STATUS_UDP_CSUM_OK		8
-// needed for Microsoft
+#define SKCS_STATUS_IP_CSUM_ERROR		2
+#define SKCS_STATUS_IP_FRAGMENT			3
+#define SKCS_STATUS_IP_CSUM_OK			4
+#define SKCS_STATUS_TCP_CSUM_ERROR		5
+#define SKCS_STATUS_UDP_CSUM_ERROR		6
+#define SKCS_STATUS_TCP_CSUM_OK			7
+#define SKCS_STATUS_UDP_CSUM_OK			8
+/* needed for Microsoft */
 #define SKCS_STATUS_IP_CSUM_ERROR_UDP	9
 #define SKCS_STATUS_IP_CSUM_ERROR_TCP	10
+/* UDP checksum may be omitted */
+#define SKCS_STATUS_IP_CSUM_OK_NO_UDP	11
 #endif	/* !SKCS_OVERWRITE_STATUS */
 
 /* Clear protocol statistics event. */
@@ -181,13 +198,13 @@ typedef struct s_CsProtocolStatistics {
  */
 typedef struct s_Csum {
 	/* Enabled receive SK_PROTO_XXX bit flags. */
-	unsigned ReceiveFlags;
+	unsigned ReceiveFlags[SK_MAX_NETS];
 #ifdef TX_CSUM
-	unsigned TransmitFlags;
-#endif // TX_CSUM
+	unsigned TransmitFlags[SK_MAX_NETS];
+#endif /* TX_CSUM */
 
 	/* The protocol statistics structure; one per supported protocol. */
-	SKCS_PROTO_STATS ProtoStats[SKCS_NUM_PROTOCOLS];
+	SKCS_PROTO_STATS ProtoStats[SK_MAX_NETS][SKCS_NUM_PROTOCOLS];
 } SK_CSUM;
 
 /*
@@ -225,17 +242,20 @@ extern SKCS_STATUS SkCsGetReceiveInfo(
 	SK_AC		*pAc,
 	void		*pIpHeader,
 	unsigned	Checksum1,
-	unsigned	Checksum2);
+	unsigned	Checksum2,
+	int			NetNumber);
 
 extern void SkCsGetSendInfo(
-	SK_AC			*pAc,
-	void			*pIpHeader,
-	SKCS_PACKET_INFO	*pPacketInfo);
+	SK_AC				*pAc,
+	void				*pIpHeader,
+	SKCS_PACKET_INFO	*pPacketInfo,
+	int					NetNumber);
 
 extern void SkCsSetReceiveFlags(
 	SK_AC		*pAc,
 	unsigned	ReceiveFlags,
 	unsigned	*pChecksum1Offset,
-	unsigned	*pChecksum2Offset);
+	unsigned	*pChecksum2Offset,
+	int			NetNumber);
 
 #endif	/* __INC_SKCSUM_H */

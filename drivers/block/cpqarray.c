@@ -1167,6 +1167,8 @@ static int ida_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, 
 		put_user(read_ahead[MAJOR(inode->i_rdev)], (int*)arg);
 		return 0;
 	case BLKRRPART:
+		if(!capable(CAP_SYS_ADMIN))
+			return -EPERM;
 		return revalidate_logvol(inode->i_rdev, 1);
 	case IDAPASSTHRU:
 		if (!suser()) return -EPERM;

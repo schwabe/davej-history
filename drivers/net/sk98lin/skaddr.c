@@ -2,16 +2,15 @@
  *
  * Name:	skaddr.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.34 $
- * Date:	$Date: 1999/11/22 13:23:44 $
- * Purpose:	Manage Addresses (Multicast and Unicast) and Promiscuous Mode
+ * Version:	$Revision: 1.40 $
+ * Date:	$Date: 2001/02/14 14:04:59 $
+ * Purpose:	Manage Addresses (Multicast and Unicast) and Promiscuous Mode.
  *
  ******************************************************************************/
 
 /******************************************************************************
  *
- *	(C)Copyright 1998,1999 SysKonnect,
- *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
+ *	(C)Copyright 1998-2001 SysKonnect GmbH.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -27,6 +26,25 @@
  * History:
  *
  *	$Log: skaddr.c,v $
+ *	Revision 1.40  2001/02/14 14:04:59  rassmann
+ *	Editorial changes.
+ *	
+ *	Revision 1.39  2001/01/30 10:30:04  rassmann
+ *	Editorial changes.
+ *	
+ *	Revision 1.38  2001/01/25 16:26:52  rassmann
+ *	Ensured that logical address overrides are done on net's active port.
+ *	
+ *	Revision 1.37  2001/01/22 13:41:34  rassmann
+ *	Supporting two nets on dual-port adapters.
+ *	
+ *	Revision 1.36  2000/08/07 11:10:39  rassmann
+ *	Editorial changes.
+ *	
+ *	Revision 1.35  2000/05/04 09:38:41  rassmann
+ *	Editorial changes.
+ *	Corrected multicast address hashing.
+ *	
  *	Revision 1.34  1999/11/22 13:23:44  cgoos
  *	Changed license header to GPL.
  *	
@@ -165,13 +183,13 @@
 
 #ifndef	lint
 static const char SysKonnectFileId[] =
-	"@(#) $Id: skaddr.c,v 1.34 1999/11/22 13:23:44 cgoos Exp $ (C) SysKonnect.";
+	"@(#) $Id: skaddr.c,v 1.40 2001/02/14 14:04:59 rassmann Exp $ (C) SysKonnect.";
 #endif	/* !defined(lint) */
 
 #define __SKADDR_C
 
 #ifdef __cplusplus
-xxxx	/* not supported yet - force error */
+#error C++ is not yet supported.
 extern "C" {
 #endif	/* cplusplus */
 
@@ -180,19 +198,9 @@ extern "C" {
 
 /* defines ********************************************************************/
 
-#define SK_ADDR_CHEAT		YES	/* Cheat. */
-
-/*
- * G32:
- * POLY	equ		04C11DB6h	; CRC polynominal term
- * bit-reversed:	6DB88320
- */
 
 #define CRC32_POLY	0xEDB88320UL	/* CRC32-Poly - XMAC: Little Endian */
-#if 0
-#define CRC32_POLY	0x6DB88320UL	/* CRC32-Poly - XMAC: Little Endian */
-#endif	/* 0 */
-#define HASH_BITS	6		/* #bits in hash */
+#define HASH_BITS	6				/* #bits in hash */
 #define	SK_MC_BIT	0x01
 
 /* Error numbers and messages. */
@@ -220,13 +228,6 @@ static int	Next0[SK_MAX_MACS] = {0, 0};
 
 /* functions ******************************************************************/
 
-#if 0
-void	SkAddrDummy(void)
-{
-	SkAddrInit(NULL, NULL, 0);
-}	/* SkAddrDummy */
-#endif	/* 0 */
-
 /******************************************************************************
  *
  *	SkAddrInit - initialize data, set state to init
@@ -237,7 +238,7 @@ void	SkAddrDummy(void)
  *	============
  *
  *	This routine clears the multicast tables and resets promiscuous mode.
- *	Some entries are reserved for the "logical board address", the
+ *	Some entries are reserved for the "logical MAC address", the
  *	SK-RLMT multicast address, and the BPDU multicast address.
  *
  *
@@ -264,12 +265,12 @@ void	SkAddrDummy(void)
 int	SkAddrInit(
 SK_AC	*pAC,	/* the adapter context */
 SK_IOC	IoC,	/* I/O context */
-int	Level)	/* initialization level */
+int		Level)	/* initialization level */
 {
-	int		j;
-	SK_U32		i;
-	SK_U8		*InAddr;
-	SK_U16		*OutAddr;
+	int				j;
+	SK_U32			i;
+	SK_U8			*InAddr;
+	SK_U16			*OutAddr;
 	SK_ADDR_PORT	*pAPort;
 
 	switch (Level) {
@@ -280,20 +281,15 @@ int	Level)	/* initialization level */
 			pAPort = &pAC->Addr.Port[i];
 			pAPort->PromMode = SK_PROM_MODE_NONE;
 
-			pAPort->FirstExactMatchRlmt =
-				SK_ADDR_FIRST_MATCH_RLMT;
-			pAPort->FirstExactMatchDrv =
-				SK_ADDR_FIRST_MATCH_DRV;
-			pAPort->NextExactMatchRlmt =
-				SK_ADDR_FIRST_MATCH_RLMT;
-			pAPort->NextExactMatchDrv =
-				SK_ADDR_FIRST_MATCH_DRV;
+			pAPort->FirstExactMatchRlmt	= SK_ADDR_FIRST_MATCH_RLMT;
+			pAPort->FirstExactMatchDrv	= SK_ADDR_FIRST_MATCH_DRV;
+			pAPort->NextExactMatchRlmt	= SK_ADDR_FIRST_MATCH_RLMT;
+			pAPort->NextExactMatchDrv	= SK_ADDR_FIRST_MATCH_DRV;
 
 #if 0
-			/* Not here ... */
+			/* Don't do this here ... */
 
 			/* Reset Promiscuous mode. */
-
 			(void)SkAddrPromiscuousChange(
 				pAC,
 				IoC,
@@ -315,7 +311,9 @@ int	Level)	/* initialization level */
 		break;
 
 	case SK_INIT_IO:
-		pAC->Addr.ActivePort = pAC->Rlmt.MacActive;
+		for (i = 0; i < SK_MAX_NETS; i++) {
+			pAC->Addr.Net[i].ActivePort = pAC->Rlmt.Net[i].ActivePort;
+		}
 		
 #ifdef DEBUG
 		for (i = 0; i < SK_MAX_MACS; i++) {
@@ -326,28 +324,35 @@ int	Level)	/* initialization level */
 		}
 #endif	/* DEBUG */
 
-		/* Read permanent virtual address from Control Register File. */
-
+		/* Read permanent logical MAC address from Control Register File. */
 		for (j = 0; j < SK_MAC_ADDR_LEN; j++) {
-			InAddr = (SK_U8 *)&pAC->Addr.PermanentMacAddress.a[j];
+			InAddr = (SK_U8 *)&pAC->Addr.Net[0].PermanentMacAddress.a[j];
 			SK_IN8(IoC, B2_MAC_1 + j, InAddr);
 		}
 
-		if (!pAC->Addr.CurrentMacAddressSet) {
-			/*
-			 * Set the current virtual MAC address
-			 * to the permanent one.
-			 */
-
-			pAC->Addr.CurrentMacAddress =
-				pAC->Addr.PermanentMacAddress;
-			pAC->Addr.CurrentMacAddressSet = SK_TRUE;
+		if (!pAC->Addr.Net[0].CurrentMacAddressSet) {
+			/* Set the current logical MAC address to the permanent one. */
+			pAC->Addr.Net[0].CurrentMacAddress =
+				pAC->Addr.Net[0].PermanentMacAddress;
+			pAC->Addr.Net[0].CurrentMacAddressSet = SK_TRUE;
 		}
 
-		/* Set the current virtual MAC address. */
+		/* Set the current logical MAC address. */
+		pAC->Addr.Port[pAC->Addr.Net[0].ActivePort].Exact[0] =
+			pAC->Addr.Net[0].CurrentMacAddress;
 
-		pAC->Addr.Port[pAC->Addr.ActivePort].Exact[0] =
-			pAC->Addr.CurrentMacAddress;
+#if SK_MAX_NETS > 1
+		/* Set logical MAC address for net 2 to (log | 3). */
+		if (!pAC->Addr.Net[1].CurrentMacAddressSet) {
+			pAC->Addr.Net[1].PermanentMacAddress =
+				pAC->Addr.Net[0].PermanentMacAddress;
+			pAC->Addr.Net[1].PermanentMacAddress.a[5] |= 3;
+			/* Set the current logical MAC address to the permanent one. */
+			pAC->Addr.Net[1].CurrentMacAddress =
+				pAC->Addr.Net[1].PermanentMacAddress;
+			pAC->Addr.Net[1].CurrentMacAddressSet = SK_TRUE;
+		}
+#endif	/* SK_MAX_NETS > 1 */
 
 #ifdef xDEBUG
 		SK_DBG_MSG(
@@ -355,27 +360,27 @@ int	Level)	/* initialization level */
 			SK_DBGMOD_ADDR,
 			SK_DBGCAT_INIT,
 			("Permanent MAC Address: %02X %02X %02X %02X %02X %02X\n",
-                                pAC->Addr.PermanentMacAddress.a[0],
-                                pAC->Addr.PermanentMacAddress.a[1],
-                                pAC->Addr.PermanentMacAddress.a[2],
-                                pAC->Addr.PermanentMacAddress.a[3],
-                                pAC->Addr.PermanentMacAddress.a[4],
-                                pAC->Addr.PermanentMacAddress.a[5]))
+				pAC->Addr.PermanentMacAddress.a[0],
+				pAC->Addr.PermanentMacAddress.a[1],
+				pAC->Addr.PermanentMacAddress.a[2],
+				pAC->Addr.PermanentMacAddress.a[3],
+				pAC->Addr.PermanentMacAddress.a[4],
+				pAC->Addr.PermanentMacAddress.a[5]))
 		SK_DBG_MSG(
 			pAC,
 			SK_DBGMOD_ADDR,
 			SK_DBGCAT_INIT,
-			("Virtual MAC Address: %02X %02X %02X %02X %02X %02X\n",
-                                pAC->Addr.CurrentMacAddress.a[0],
-                                pAC->Addr.CurrentMacAddress.a[1],
-                                pAC->Addr.CurrentMacAddress.a[2],
-                                pAC->Addr.CurrentMacAddress.a[3],
-                                pAC->Addr.CurrentMacAddress.a[4],
-                                pAC->Addr.CurrentMacAddress.a[5]))
+			("Logical MAC Address: %02X %02X %02X %02X %02X %02X\n",
+				pAC->Addr.CurrentMacAddress.a[0],
+				pAC->Addr.CurrentMacAddress.a[1],
+				pAC->Addr.CurrentMacAddress.a[2],
+				pAC->Addr.CurrentMacAddress.a[3],
+				pAC->Addr.CurrentMacAddress.a[4],
+				pAC->Addr.CurrentMacAddress.a[5]))
 #endif	/* DEBUG */
 
 #if 0
-		/* Not here ... */
+		/* Don't do this here ... */
 
 		(void)SkAddrMcUpdate(pAC, IoC, pAC->Addr.ActivePort);
 #endif	/* 0 */
@@ -383,33 +388,23 @@ int	Level)	/* initialization level */
 		for (i = 0; i < (SK_U32)pAC->GIni.GIMacsFound; i++) {
 			pAPort = &pAC->Addr.Port[i];
 
-			/*
-			 * Read permanent port addresses from
-			 * Control Register File.
-			 */
-
+			/* Read permanent port addresses from Control Register File. */
 			for (j = 0; j < SK_MAC_ADDR_LEN; j++) {
-				InAddr = (SK_U8 *)
-					&pAPort->PermanentMacAddress.a[j];
+				InAddr = (SK_U8 *)&pAPort->PermanentMacAddress.a[j];
 				SK_IN8(IoC, B2_MAC_2 + 8 * i + j, InAddr);
 			}
 
 			if (!pAPort->CurrentMacAddressSet) {
 				/*
-				 * Set the current and previous physical
-				 * MAC address of this port to its permanent
-				 * MAC address.
+				 * Set the current and previous physical MAC address
+				 * of this port to its permanent MAC address.
 				 */
-
-				pAPort->CurrentMacAddress =
-					pAPort->PermanentMacAddress;
-				pAPort->PreviousMacAddress =
-					pAPort->PermanentMacAddress;
+				pAPort->CurrentMacAddress = pAPort->PermanentMacAddress;
+				pAPort->PreviousMacAddress = pAPort->PermanentMacAddress;
 				pAPort->CurrentMacAddressSet = SK_TRUE;
 			}
 
 			/* Set port's current MAC addresses. */
-
 			OutAddr = (SK_U16 *)&pAPort->CurrentMacAddress.a[0];
 			XM_OUTADDR(IoC, i, XM_SA, OutAddr);
 
@@ -484,45 +479,42 @@ int	Level)	/* initialization level */
 int	SkAddrMcClear(
 SK_AC	*pAC,		/* adapter context */
 SK_IOC	IoC,		/* I/O context */
-SK_U32	PortIdx,	/* Index of affected port */
-int	Flags)		/* permanent/non-perm, sw-only */
+SK_U32	PortNumber,	/* Index of affected port */
+int		Flags)		/* permanent/non-perm, sw-only */
 {
 	int i;
 
-	if (PortIdx >= (SK_U32)pAC->GIni.GIMacsFound) {
+	if (PortNumber >= (SK_U32)pAC->GIni.GIMacsFound) {
 		return (SK_ADDR_ILLEGAL_PORT);
 	}
 
 	if (Flags & SK_ADDR_PERMANENT) {
 
 		/* Clear RLMT multicast addresses. */
-
-		pAC->Addr.Port[PortIdx].NextExactMatchRlmt =
-			SK_ADDR_FIRST_MATCH_RLMT;
+		pAC->Addr.Port[PortNumber].NextExactMatchRlmt = SK_ADDR_FIRST_MATCH_RLMT;
 	}
 	else {	/* not permanent => DRV */
 
 		/* Clear InexactFilter. */
 
 		for (i = 0; i < 8; i++) {
-			pAC->Addr.Port[PortIdx].InexactFilter.Bytes[i] = 0;
+			pAC->Addr.Port[PortNumber].InexactFilter.Bytes[i] = 0;
 		}
 
 		/* Clear DRV multicast addresses. */
 
-		pAC->Addr.Port[PortIdx].NextExactMatchDrv =
-			SK_ADDR_FIRST_MATCH_DRV;
+		pAC->Addr.Port[PortNumber].NextExactMatchDrv = SK_ADDR_FIRST_MATCH_DRV;
 	}
 
 	if (!(Flags & SK_MC_SW_ONLY)) {
-		(void)SkAddrMcUpdate(pAC, IoC, PortIdx);
+		(void)SkAddrMcUpdate(pAC, IoC, PortNumber);
 	}
 
 	return (SK_ADDR_SUCCESS);
 }	/* SkAddrMcClear */
 
 #ifndef SK_ADDR_CHEAT
-// RA;:;:
+
 /******************************************************************************
  *
  *	SkCrc32McHash - hash multicast address
@@ -549,15 +541,13 @@ unsigned char *pMc)	/* Multicast address */
 
 	Crc = 0xFFFFFFFFUL;
 	for (Idx = 0; Idx < SK_MAC_ADDR_LEN; Idx++) {
-                Data = *pMc++;
+		Data = *pMc++;
 		for (Bit = 0; Bit < 8; Bit++, Data >>= 1) {
-			Crc = (Crc >> 1) ^
-				(((Crc ^ Data) & 1) ? CRC32_POLY : 0);
+			Crc = (Crc >> 1) ^ (((Crc ^ Data) & 1) ? CRC32_POLY : 0);
 		}
 	}
 
 	return (Crc & ((1 << HASH_BITS) - 1));
-
 }	/* SkCrc32McHash */
 
 #endif	/* not SK_ADDR_CHEAT */
@@ -592,9 +582,9 @@ unsigned char *pMc)	/* Multicast address */
 int	SkAddrMcAdd(
 SK_AC		*pAC,		/* adapter context */
 SK_IOC		IoC,		/* I/O context */
-SK_U32		PortIdx,	/* Port Index */
+SK_U32		PortNumber,	/* Port Number */
 SK_MAC_ADDR	*pMc,		/* multicast address to be added */
-int		Flags)		/* permanent/non-permanent */
+int			Flags)		/* permanent/non-permanent */
 {
 	int	i;
 	SK_U8	Inexact;
@@ -602,98 +592,87 @@ int		Flags)		/* permanent/non-permanent */
 	unsigned HashBit;
 #endif	/* !defined(SK_ADDR_CHEAT) */
 
-	if (PortIdx >= (SK_U32)pAC->GIni.GIMacsFound) {
+	if (PortNumber >= (SK_U32)pAC->GIni.GIMacsFound) {
 		return (SK_ADDR_ILLEGAL_PORT);
 	}
 
 	if (Flags & SK_ADDR_PERMANENT) {
 #ifdef DEBUG
-		if (pAC->Addr.Port[PortIdx].NextExactMatchRlmt <
+		if (pAC->Addr.Port[PortNumber].NextExactMatchRlmt <
 			SK_ADDR_FIRST_MATCH_RLMT) {
-			Next0[PortIdx] |= 1;
+			Next0[PortNumber] |= 1;
 			return (SK_MC_RLMT_OVERFLOW);
 		}
 #endif	/* DEBUG */
 		
-		if (pAC->Addr.Port[PortIdx].NextExactMatchRlmt >
+		if (pAC->Addr.Port[PortNumber].NextExactMatchRlmt >
 			SK_ADDR_LAST_MATCH_RLMT) {
 			return (SK_MC_RLMT_OVERFLOW);
 		}
 
 		/* Set an RLMT multicast address. */
 
-		pAC->Addr.Port[PortIdx].Exact[
-			pAC->Addr.Port[PortIdx].NextExactMatchRlmt++] = *pMc;
+		pAC->Addr.Port[PortNumber].Exact[
+			pAC->Addr.Port[PortNumber].NextExactMatchRlmt++] = *pMc;
 
 		return (SK_MC_FILTERING_EXACT);
 	}
 
+#if 0
 	/* Not PERMANENT => DRV */
-
-	if (PortIdx != pAC->Addr.ActivePort) {
-
+	if (PortNumber != pAC->Addr.ActivePort) {
 		/* Only RLMT is allowed to do this. */
-
 		return (SK_MC_ILLEGAL_PORT);
 	}
+#endif	/* 0 */
 
 #ifdef DEBUG
-	if (pAC->Addr.Port[PortIdx].NextExactMatchDrv <
+	if (pAC->Addr.Port[PortNumber].NextExactMatchDrv <
 		SK_ADDR_FIRST_MATCH_DRV) {
-			Next0[PortIdx] |= 2;
+			Next0[PortNumber] |= 2;
 		return (SK_MC_RLMT_OVERFLOW);
 	}
 #endif	/* DEBUG */
 	
-	if (pAC->Addr.Port[PortIdx].NextExactMatchDrv <= SK_ADDR_LAST_MATCH_DRV) {
+	if (pAC->Addr.Port[PortNumber].NextExactMatchDrv <= SK_ADDR_LAST_MATCH_DRV) {
 
 		/* Set exact match entry. */
-
-		pAC->Addr.Port[PortIdx].Exact[
-			pAC->Addr.Port[PortIdx].NextExactMatchDrv++] = *pMc;
+		pAC->Addr.Port[PortNumber].Exact[
+			pAC->Addr.Port[PortNumber].NextExactMatchDrv++] = *pMc;
 
 		/* Clear InexactFilter. */
-
 		for (i = 0; i < 8; i++) {
-			pAC->Addr.Port[PortIdx
-				].InexactFilter.Bytes[i] = 0;
+			pAC->Addr.Port[PortNumber].InexactFilter.Bytes[i] = 0;
 		}
 	}
 	else {
 		if (!(pMc->a[0] & SK_MC_BIT)) {
-
 			/*
 			 * Hashing only possible with
 			 * multicast addresses.
 			 */
-
 			return (SK_MC_ILLEGAL_ADDRESS);
 		}
 #ifndef SK_ADDR_CHEAT
 		/* Compute hash value of address. */
-RA;:;: untested
-		HashBit = SkCrc32McHash(&pMc->a[0]);
+		HashBit = 63 - SkCrc32McHash(&pMc->a[0]);
 
 		/* Add bit to InexactFilter. */
-
-		pAC->Addr.Port[PortIdx].InexactFilter.Bytes[HashBit / 8] |=
+		pAC->Addr.Port[PortNumber].InexactFilter.Bytes[HashBit / 8] |=
 			1 << (HashBit % 8);
-
 #else	/* SK_ADDR_CHEAT */
-
 		/* Set all bits in InexactFilter. */
-
 		for (i = 0; i < 8; i++) {
-			pAC->Addr.Port[PortIdx].InexactFilter.Bytes[i] = 0xFF;
+			pAC->Addr.Port[PortNumber].InexactFilter.Bytes[i] = 0xFF;
 		}
 #endif	/* SK_ADDR_CHEAT */
 	}
 
 	for (Inexact = 0, i = 0; i < 8; i++) {
-		Inexact |= pAC->Addr.Port[PortIdx].InexactFilter.Bytes[i];
+		Inexact |= pAC->Addr.Port[PortNumber].InexactFilter.Bytes[i];
 	}
 
-	if (Inexact == 0 && pAC->Addr.Port[PortIdx].PromMode == 0) {
+	if (Inexact == 0 && pAC->Addr.Port[PortNumber].PromMode == 0) {
 		return (SK_MC_FILTERING_EXACT);
 	}
 	else {
@@ -726,15 +705,15 @@ RA;:;: untested
 int	SkAddrMcUpdate(
 SK_AC	*pAC,		/* adapter context */
 SK_IOC	IoC,		/* I/O context */
-SK_U32	PortIdx)	/* Port Index */
+SK_U32	PortNumber)	/* Port Number */
 {
-	SK_U32		i;
-	SK_U8		Inexact;
-	SK_U16		*OutAddr;
-	SK_U16		LoMode;		/* Lower 16 bits of XMAC Mode Reg. */
+	SK_U32			i;
+	SK_U8			Inexact;
+	SK_U16			*OutAddr;
+	SK_U16			LoMode;		/* Lower 16 bits of XMAC Mode Reg. */
 	SK_ADDR_PORT	*pAPort;
 
-	if (PortIdx >= (SK_U32)pAC->GIni.GIMacsFound) {
+	if (PortNumber >= (SK_U32)pAC->GIni.GIMacsFound) {
 		return (SK_ADDR_ILLEGAL_PORT);
 	}
 
@@ -742,129 +721,102 @@ SK_U32	PortIdx)	/* Port Index */
 		pAC,
 		SK_DBGMOD_ADDR,
 		SK_DBGCAT_CTRL,
-		("SkAddrMcUpdate on Port %u.\n", PortIdx))
+		("SkAddrMcUpdate on Port %u.\n", PortNumber))
 	
-	pAPort = &pAC->Addr.Port[PortIdx];
+	pAPort = &pAC->Addr.Port[PortNumber];
 
 #ifdef DEBUG
 		SK_DBG_MSG(
 			pAC,
 			SK_DBGMOD_ADDR,
 			SK_DBGCAT_CTRL,
-			("Next0 on Port %d: %d\n", PortIdx, Next0[PortIdx]))
+			("Next0 on Port %d: %d\n", PortNumber, Next0[PortNumber]))
 #endif	/* DEBUG */
 
-	for (i = 0;		/* Also program the virtual address. */
-		i < pAPort->NextExactMatchRlmt;
-		i++) {
-
+	/* Start with 0 to also program the logical MAC address. */
+	for (i = 0; i < pAPort->NextExactMatchRlmt; i++) {
 		/* Set exact match address i on HW. */
-
 		OutAddr = (SK_U16 *)&pAPort->Exact[i].a[0];
-		XM_OUTADDR(IoC, PortIdx, XM_EXM(i), OutAddr);
+		XM_OUTADDR(IoC, PortNumber, XM_EXM(i), OutAddr);
 	}
 
 	/* Clear other permanent exact match addresses on HW. */
-
 	if (pAPort->NextExactMatchRlmt <= SK_ADDR_LAST_MATCH_RLMT) {
 		SkXmClrExactAddr(
 			pAC,
 			IoC,
-			PortIdx,
+			PortNumber,
 			pAPort->NextExactMatchRlmt,
 			SK_ADDR_LAST_MATCH_RLMT);
 	}
 
-	for (i = pAPort->FirstExactMatchDrv;
-		i < pAPort->NextExactMatchDrv;
-		i++) {
-
+	for (i = pAPort->FirstExactMatchDrv; i < pAPort->NextExactMatchDrv; i++) {
 		OutAddr = (SK_U16 *)&pAPort->Exact[i].a[0];
-		XM_OUTADDR(IoC, PortIdx, XM_EXM(i), OutAddr);
-
+		XM_OUTADDR(IoC, PortNumber, XM_EXM(i), OutAddr);
 	}
 
 	/* Clear other non-permanent exact match addresses on HW. */
-
 	if (pAPort->NextExactMatchDrv <= SK_ADDR_LAST_MATCH_DRV) {
 		SkXmClrExactAddr(
 			pAC,
 			IoC,
-			PortIdx,
+			PortNumber,
 			pAPort->NextExactMatchDrv,
 			SK_ADDR_LAST_MATCH_DRV);
 	}
 
-	for (Inexact = 0xFF, i = 0; i < 8; i++) {
-		Inexact &= pAPort->InexactFilter.Bytes[i];
+	for (Inexact = 0, i = 0; i < 8; i++) {
+		Inexact |= pAPort->InexactFilter.Bytes[i];
 	}
+
 	if (pAPort->PromMode & SK_PROM_MODE_ALL_MC) {
-
 		/* Set all bits in 64-bit hash register. */
-
-		XM_OUTHASH(IoC, PortIdx, XM_HSM, &OnesHash);
+		XM_OUTHASH(IoC, PortNumber, XM_HSM, &OnesHash);
 
 		/* Set bit 15 in mode register. */
-
-		XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
+		XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
 		LoMode |= XM_MD_ENA_HSH;
-		XM_OUT16(IoC, PortIdx, XM_MODE, LoMode);
+		XM_OUT16(IoC, PortNumber, XM_MODE, LoMode);
 	}
-	else if (Inexact != 0xFF) {
+	else if (Inexact != 0) {
+		/* Set 64-bit hash register to InexactFilter. */
+		XM_OUTHASH(IoC, PortNumber, XM_HSM, &pAPort->InexactFilter.Bytes[0]);
 
-		/* Clear bit 15 in mode register. */
-
-		XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
-		LoMode &= ~XM_MD_ENA_HSH;
-		XM_OUT16(IoC, PortIdx, XM_MODE, LoMode);
+		/* Set bit 15 in mode register. */
+		XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
+		LoMode |= XM_MD_ENA_HSH;
+		XM_OUT16(IoC, PortNumber, XM_MODE, LoMode);
 	}
 	else {
-		/* Set 64-bit hash register to InexactFilter. */
-
-		XM_OUTHASH(
-			IoC,
-			PortIdx,
-			XM_HSM,
-			&pAPort->InexactFilter.Bytes[0]);
-
-		/* Set bit 15 in mode register. */
-
-		XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
-		LoMode |= XM_MD_ENA_HSH;
-		XM_OUT16(IoC, PortIdx, XM_MODE, LoMode);
+		/* Clear bit 15 in mode register. */
+		XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
+		LoMode &= ~XM_MD_ENA_HSH;
+		XM_OUT16(IoC, PortNumber, XM_MODE, LoMode);
 	}
 
 	if (pAPort->PromMode != SK_PROM_MODE_NONE) {
-		(void)SkAddrPromiscuousChange(
-			pAC,
-			IoC,
-			PortIdx,
-			pAPort->PromMode);
+		(void)SkAddrPromiscuousChange(pAC, IoC, PortNumber, pAPort->PromMode);
 	}
 
 	/* Set port's current MAC address. */
-
 	OutAddr = (SK_U16 *)&pAPort->CurrentMacAddress.a[0];
-	XM_OUTADDR(IoC, PortIdx, XM_SA, OutAddr);
+	XM_OUTADDR(IoC, PortNumber, XM_SA, OutAddr);
 
-#ifdef DEBUG
-	for (i = 0;		/* Also program the virtual address. */
-		i < pAPort->NextExactMatchRlmt;
-		i++) {
+#ifdef xDEBUG
+	for (i = 0; i < pAPort->NextExactMatchRlmt; i++) {
 		SK_U8		InAddr8[6];
 		SK_U16		*InAddr;
 
-		/* Get exact match address i from port PortIdx. */
-
+		/* Get exact match address i from port PortNumber. */
 		InAddr = (SK_U16 *)&InAddr8[0];
-		XM_INADDR(IoC, PortIdx, XM_EXM(i), InAddr);
+		XM_INADDR(IoC, PortNumber, XM_EXM(i), InAddr);
 		SK_DBG_MSG(
 			pAC,
-			SK_DBGMOD_RLMT,
+			SK_DBGMOD_ADDR,
 			SK_DBGCAT_CTRL,
 			("MC address %d on Port %u: %02x %02x %02x %02x %02x %02x --  %02x %02x %02x %02x %02x %02x.\n",
 				i,
-				PortIdx,
+				PortNumber,
 				InAddr8[0],
 				InAddr8[1],
 				InAddr8[2],
@@ -881,10 +833,6 @@ SK_U32	PortIdx)	/* Port Index */
 #endif	/* DEBUG */		
 
 	/* Determine return value. */
-
-	for (Inexact = 0, i = 0; i < 8; i++) {
-		Inexact |= pAPort->InexactFilter.Bytes[i];
-	}
 	if (Inexact == 0 && pAPort->PromMode == 0) {
 		return (SK_MC_FILTERING_EXACT);
 	}
@@ -914,52 +862,70 @@ SK_U32	PortIdx)	/* Port Index */
 int	SkAddrOverride(
 SK_AC		*pAC,		/* adapter context */
 SK_IOC		IoC,		/* I/O context */
-SK_U32		PortIdx,	/* Port Index */
+SK_U32		PortNumber,	/* Port Number */
 SK_MAC_ADDR	*pNewAddr,	/* new MAC address */
-int		Flags)		/* logical/physical address */
+int			Flags)		/* logical/physical MAC address */
 {
+	SK_EVPARA	Para;
+	SK_U32		NetNumber;
 	SK_U32		i;
 	SK_U16		*OutAddr;
-	SK_EVPARA	Para;
-#if 0
-	SK_MAC_ADDR	NewAddr;	/* new MAC address */
-	SK_U8		AddrBits;
-#endif	/* 0 */
 
-	if (PortIdx >= (SK_U32)pAC->GIni.GIMacsFound) {
+	NetNumber = pAC->Rlmt.Port[PortNumber].Net->NetNumber;
+
+	if (PortNumber >= (SK_U32)pAC->GIni.GIMacsFound) {
 		return (SK_ADDR_ILLEGAL_PORT);
 	}
 
-	if (pNewAddr->a[0] & SK_MC_BIT) {
+	if (pNewAddr != NULL && (pNewAddr->a[0] & SK_MC_BIT) != 0) {
 		return (SK_ADDR_MULTICAST_ADDRESS);
 	}
 
-#if 0
-DANGEROUS!
-	if (Flags & SK_ADDR_PHYSICAL_ADDRESS) {	/* Physical address. */
-		if (!pAC->Addr.Port[PortIdx].CurrentMacAddressSet) {
-			pAC->Addr.Port[PortIdx].PreviousMacAddress = *pNewAddr;
-			pAC->Addr.Port[PortIdx].CurrentMacAddress = *pNewAddr;
-			pAC->Addr.Port[PortIdx].CurrentMacAddressSet = SK_TRUE;
-			return (SK_ADDR_SUCCESS);
-		}
-	}
-	else {
-		if (!pAC->Addr.CurrentMacAddressSet) {
-			pAC->Addr.CurrentMacAddress = *pNewAddr;
-			pAC->Addr.CurrentMacAddressSet = SK_TRUE;
-			return (SK_ADDR_SUCCESS);
-		}
-	}
-DANGEROUS!
-#endif	/* 0 */
-
-	if (!pAC->Addr.CurrentMacAddressSet) {
+	if (!pAC->Addr.Net[NetNumber].CurrentMacAddressSet) {
 		return (SK_ADDR_TOO_EARLY);
 	}
 
-	if (Flags & SK_ADDR_PHYSICAL_ADDRESS) {	/* Physical address. */
-		if (SK_ADDR_EQUAL(pNewAddr->a, pAC->Addr.CurrentMacAddress.a)) {
+	if (Flags & SK_ADDR_SET_LOGICAL) {	/* Activate logical MAC address. */
+		/* Parameter *pNewAddr is ignored. */
+		for (i = 0; i < (SK_U32)pAC->GIni.GIMacsFound; i++) {
+			if (!pAC->Addr.Port[i].CurrentMacAddressSet) {
+				return (SK_ADDR_TOO_EARLY);
+			}
+		}
+
+		/* Set PortNumber to number of net's active port. */
+		PortNumber = pAC->Rlmt.Net[NetNumber].
+			Port[pAC->Addr.Net[NetNumber].ActivePort]->PortNumber;
+
+		pAC->Addr.Port[PortNumber].Exact[0] =
+			pAC->Addr.Net[NetNumber].CurrentMacAddress;
+
+		/* Write address to first exact match entry of active port. */
+		(void)SkAddrMcUpdate(pAC, IoC, PortNumber);
+	}
+	else if (Flags & SK_ADDR_CLEAR_LOGICAL) {
+		/* Deactivate logical MAC address. */
+		/* Parameter *pNewAddr is ignored. */
+		for (i = 0; i < (SK_U32)pAC->GIni.GIMacsFound; i++) {
+			if (!pAC->Addr.Port[i].CurrentMacAddressSet) {
+				return (SK_ADDR_TOO_EARLY);
+			}
+		}
+
+		/* Set PortNumber to number of net's active port. */
+		PortNumber = pAC->Rlmt.Net[NetNumber].
+			Port[pAC->Addr.Net[NetNumber].ActivePort]->PortNumber;
+
+		for (i = 0; i < SK_MAC_ADDR_LEN; i++ ) {
+			pAC->Addr.Port[PortNumber].Exact[0].a[i] = 0;
+		}
+
+		/* Write address to first exact match entry of active port. */
+		(void)SkAddrMcUpdate(pAC, IoC, PortNumber);
+	}
+	else if (Flags & SK_ADDR_PHYSICAL_ADDRESS) {	/* Physical MAC address. */
+		if (SK_ADDR_EQUAL(pNewAddr->a,
+			pAC->Addr.Net[NetNumber].CurrentMacAddress.a)) {
 			return (SK_ADDR_DUPLICATE_ADDRESS);
 		}
 
@@ -968,10 +934,9 @@ DANGEROUS!
 				return (SK_ADDR_TOO_EARLY);
 			}
 
-			if (SK_ADDR_EQUAL(
-				pNewAddr->a,
+			if (SK_ADDR_EQUAL(pNewAddr->a,
 				pAC->Addr.Port[i].CurrentMacAddress.a)) {
-				if (i == PortIdx) {
+				if (i == PortNumber) {
 					return (SK_ADDR_SUCCESS);
 				}
 				else {
@@ -980,22 +945,22 @@ DANGEROUS!
 			}
 		}
 
-		pAC->Addr.Port[PortIdx].PreviousMacAddress =
-			pAC->Addr.Port[PortIdx].CurrentMacAddress;
-		pAC->Addr.Port[PortIdx].CurrentMacAddress = *pNewAddr;
+		pAC->Addr.Port[PortNumber].PreviousMacAddress =
+			pAC->Addr.Port[PortNumber].CurrentMacAddress;
+		pAC->Addr.Port[PortNumber].CurrentMacAddress = *pNewAddr;
 
 		/* Change port's address. */
-
 		OutAddr = (SK_U16 *)pNewAddr;
-		XM_OUTADDR(IoC, PortIdx, XM_SA, OutAddr);
+		XM_OUTADDR(IoC, PortNumber, XM_SA, OutAddr);
 
 		/* Report address change to RLMT. */
-
-		Para.Para32[0] = PortIdx;
+		Para.Para32[0] = PortNumber;
+		Para.Para32[0] = -1;
 		SkEventQueue(pAC, SKGE_RLMT, SK_RLMT_PORT_ADDR, Para);
 	}
-	else {	/* Logical Address. */
-		if (SK_ADDR_EQUAL(pNewAddr->a, pAC->Addr.CurrentMacAddress.a)) {
+	else {	/* Logical MAC address. */
+		if (SK_ADDR_EQUAL(pNewAddr->a,
+			pAC->Addr.Net[NetNumber].CurrentMacAddress.a)) {
 			return (SK_ADDR_SUCCESS);
 		}
 		
@@ -1004,15 +969,18 @@ DANGEROUS!
 				return (SK_ADDR_TOO_EARLY);
 			}
 
-			if (SK_ADDR_EQUAL(
-				pNewAddr->a,
+			if (SK_ADDR_EQUAL(pNewAddr->a,
 				pAC->Addr.Port[i].CurrentMacAddress.a)) {
 				return (SK_ADDR_DUPLICATE_ADDRESS);
 			}
 		}
 
-		pAC->Addr.CurrentMacAddress = *pNewAddr;
-		pAC->Addr.Port[PortIdx].Exact[0] = *pNewAddr;
+		/* Set PortNumber to number of net's active port. */
+		PortNumber = pAC->Rlmt.Net[NetNumber].
+			Port[pAC->Addr.Net[NetNumber].ActivePort]->PortNumber;
+
+		pAC->Addr.Net[NetNumber].CurrentMacAddress = *pNewAddr;
+		pAC->Addr.Port[PortNumber].Exact[0] = *pNewAddr;
 
 #ifdef DEBUG
 		SK_DBG_MSG(
@@ -1020,28 +988,27 @@ DANGEROUS!
 			SK_DBGMOD_ADDR,
 			SK_DBGCAT_CTRL,
 			("Permanent MAC Address: %02X %02X %02X %02X %02X %02X\n",
-                                pAC->Addr.PermanentMacAddress.a[0],
-                                pAC->Addr.PermanentMacAddress.a[1],
-                                pAC->Addr.PermanentMacAddress.a[2],
-                                pAC->Addr.PermanentMacAddress.a[3],
-                                pAC->Addr.PermanentMacAddress.a[4],
-                                pAC->Addr.PermanentMacAddress.a[5]))
+				pAC->Addr.Net[NetNumber].PermanentMacAddress.a[0],
+				pAC->Addr.Net[NetNumber].PermanentMacAddress.a[1],
+				pAC->Addr.Net[NetNumber].PermanentMacAddress.a[2],
+				pAC->Addr.Net[NetNumber].PermanentMacAddress.a[3],
+				pAC->Addr.Net[NetNumber].PermanentMacAddress.a[4],
+				pAC->Addr.Net[NetNumber].PermanentMacAddress.a[5]))
 		SK_DBG_MSG(
 			pAC,
 			SK_DBGMOD_ADDR,
 			SK_DBGCAT_CTRL,
-			("New Virtual MAC Address: %02X %02X %02X %02X %02X %02X\n",
-                                pAC->Addr.CurrentMacAddress.a[0],
-                                pAC->Addr.CurrentMacAddress.a[1],
-                                pAC->Addr.CurrentMacAddress.a[2],
-                                pAC->Addr.CurrentMacAddress.a[3],
-                                pAC->Addr.CurrentMacAddress.a[4],
-                                pAC->Addr.CurrentMacAddress.a[5]))
+			("New logical MAC Address: %02X %02X %02X %02X %02X %02X\n",
+				pAC->Addr.Net[NetNumber].CurrentMacAddress.a[0],
+				pAC->Addr.Net[NetNumber].CurrentMacAddress.a[1],
+				pAC->Addr.Net[NetNumber].CurrentMacAddress.a[2],
+				pAC->Addr.Net[NetNumber].CurrentMacAddress.a[3],
+				pAC->Addr.Net[NetNumber].CurrentMacAddress.a[4],
+				pAC->Addr.Net[NetNumber].CurrentMacAddress.a[5]))
 #endif	/* DEBUG */
 
 		/* Write address to first exact match entry of active port. */
-
-		(void)SkAddrMcUpdate(pAC, IoC, PortIdx);
+		(void)SkAddrMcUpdate(pAC, IoC, PortNumber);
 	}
 
 	return (SK_ADDR_SUCCESS);
@@ -1067,48 +1034,44 @@ DANGEROUS!
  *	SK_ADDR_ILLEGAL_PORT
  */
 int	SkAddrPromiscuousChange(
-SK_AC	*pAC,		/* adapter context */
-SK_IOC	IoC,		/* I/O context */
-SK_U32	PortIdx,	/* port whose promiscuous mode changes */
-int	NewPromMode)	/* new promiscuous mode */
+SK_AC	*pAC,			/* adapter context */
+SK_IOC	IoC,			/* I/O context */
+SK_U32	PortNumber,		/* port whose promiscuous mode changes */
+int		NewPromMode)	/* new promiscuous mode */
 {
-	int		i;
+	int			i;
 	SK_BOOL		InexactModeBit;
 	SK_U8		Inexact;
 	SK_U8		HwInexact;
 	SK_FILTER64	HwInexactFilter;
 	SK_U16		LoMode;		/* Lower 16 bits of XMAC Mode Register. */
-	int		CurPromMode = SK_PROM_MODE_NONE;
+	int			CurPromMode = SK_PROM_MODE_NONE;
 
-	if (PortIdx >= (SK_U32)pAC->GIni.GIMacsFound) {
+	if (PortNumber >= (SK_U32)pAC->GIni.GIMacsFound) {
 		return (SK_ADDR_ILLEGAL_PORT);
 	}
 
 	/* Read CurPromMode from Hardware. */
-
-	XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
+	XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
 
 	if (LoMode & XM_MD_ENA_PROM) {
 		CurPromMode |= SK_PROM_MODE_LLC;
 	}
 	
 	for (Inexact = 0xFF, i = 0; i < 8; i++) {
-		Inexact &= pAC->Addr.Port[PortIdx].InexactFilter.Bytes[i];
+		Inexact &= pAC->Addr.Port[PortNumber].InexactFilter.Bytes[i];
 	}
 	if (Inexact == 0xFF) {
-		CurPromMode |= (pAC->Addr.Port[PortIdx].PromMode &
-			SK_PROM_MODE_ALL_MC);
+		CurPromMode |= (pAC->Addr.Port[PortNumber].PromMode & SK_PROM_MODE_ALL_MC);
 	}
 	else {
 		/* Read InexactModeBit (bit 15 in mode register). */
-
-		XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
-
-                InexactModeBit = (LoMode & XM_MD_ENA_HSH) != 0;
+		XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
+		
+		InexactModeBit = (LoMode & XM_MD_ENA_HSH) != 0;
 
 		/* Read 64-bit hash register from HW. */
-
-		XM_INHASH(IoC, PortIdx, XM_HSM, &HwInexactFilter.Bytes[0]);
+		XM_INHASH(IoC, PortNumber, XM_HSM, &HwInexactFilter.Bytes[0]);
 
 		for (HwInexact = 0xFF, i = 0; i < 8; i++) {
 			HwInexact &= HwInexactFilter.Bytes[i];
@@ -1119,7 +1082,7 @@ int	NewPromMode)	/* new promiscuous mode */
 		}
 	}
 
-	pAC->Addr.Port[PortIdx].PromMode = NewPromMode;
+	pAC->Addr.Port[PortNumber].PromMode = NewPromMode;
 
 	if (NewPromMode == CurPromMode) {
 		return (SK_ADDR_SUCCESS);
@@ -1127,76 +1090,65 @@ int	NewPromMode)	/* new promiscuous mode */
 
 	if ((NewPromMode & SK_PROM_MODE_ALL_MC) &&
 		!(CurPromMode & SK_PROM_MODE_ALL_MC)) {	/* All MC. */
-
 		/* Set all bits in 64-bit hash register. */
-
-		XM_OUTHASH(IoC, PortIdx, XM_HSM, &OnesHash);
+		XM_OUTHASH(IoC, PortNumber, XM_HSM, &OnesHash);
 
 		/* Set bit 15 in mode register. */
-
-		XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
+		XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
 		LoMode |= XM_MD_ENA_HSH;
-		XM_OUT16(IoC, PortIdx, XM_MODE, LoMode);
+		XM_OUT16(IoC, PortNumber, XM_MODE, LoMode);
 	}
 	else if ((CurPromMode & SK_PROM_MODE_ALL_MC) &&
 		!(NewPromMode & SK_PROM_MODE_ALL_MC)) {	/* Norm MC. */
-
 		for (Inexact = 0, i = 0; i < 8; i++) {
-			Inexact |=
-				pAC->Addr.Port[PortIdx].InexactFilter.Bytes[i];
+			Inexact |= pAC->Addr.Port[PortNumber].InexactFilter.Bytes[i];
 		}
 		if (Inexact == 0) {
 			/* Clear bit 15 in mode register. */
-
-			XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
+			XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
 			LoMode &= ~XM_MD_ENA_HSH;
-			XM_OUT16(IoC, PortIdx, XM_MODE, LoMode);
+			XM_OUT16(IoC, PortNumber, XM_MODE, LoMode);
 		}
 		else {
 			/* Set 64-bit hash register to InexactFilter. */
-
 			XM_OUTHASH(
 				IoC,
-				PortIdx,
+				PortNumber,
 				XM_HSM,
-				&pAC->Addr.Port[PortIdx
-					].InexactFilter.Bytes[0]);
+				&pAC->Addr.Port[PortNumber].InexactFilter.Bytes[0]);
 
 			/* Set bit 15 in mode register. */
-
-			XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
+			XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
 			LoMode |= XM_MD_ENA_HSH;
-			XM_OUT16(IoC, PortIdx, XM_MODE, LoMode);
+			XM_OUT16(IoC, PortNumber, XM_MODE, LoMode);
 		}
 	}
 
 	if ((NewPromMode & SK_PROM_MODE_LLC) &&
 		!(CurPromMode & SK_PROM_MODE_LLC)) {	/* Prom. LLC */
-
 		/* Set promiscuous bit in mode register. */
+		XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
 
-		XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
 #if 0
 		/* Receive MAC frames. */
-
 		LoMode |= XM_MD_RX_MCTRL;
 #endif	/* 0 */
+
 		LoMode |= XM_MD_ENA_PROM;
-		XM_OUT16(IoC, PortIdx, XM_MODE, LoMode);
+		XM_OUT16(IoC, PortNumber, XM_MODE, LoMode);
 	}
 	else if ((CurPromMode & SK_PROM_MODE_LLC) &&
 		!(NewPromMode & SK_PROM_MODE_LLC)) {	/* Norm. LLC. */
-
 		/* Clear promiscuous bit in mode register. */
+		XM_IN16(IoC, PortNumber, XM_MODE, &LoMode);
 
-		XM_IN16(IoC, PortIdx, XM_MODE, &LoMode);
 #if 0
 		/* Don't receive MAC frames. */
-
 		LoMode &= ~XM_MD_RX_MCTRL;
 #endif	/* 0 */
+		
 		LoMode &= ~XM_MD_ENA_PROM;
-		XM_OUT16(IoC, PortIdx, XM_MODE, LoMode);
+		XM_OUT16(IoC, PortNumber, XM_MODE, LoMode);
 	}
 	
 	return (SK_ADDR_SUCCESS);
@@ -1219,21 +1171,25 @@ int	NewPromMode)	/* new promiscuous mode */
  *	SK_ADDR_ILLEGAL_PORT
  */
 int	SkAddrSwap(
-SK_AC	*pAC,		/* adapter context */
-SK_IOC	IoC,		/* I/O context */
-SK_U32	FromPortIdx,	/* Port1 Index */
-SK_U32	ToPortIdx)	/* Port2 Index */
+SK_AC	*pAC,			/* adapter context */
+SK_IOC	IoC,			/* I/O context */
+SK_U32	FromPortNumber,	/* Port1 Index */
+SK_U32	ToPortNumber)		/* Port2 Index */
 {
-	int		i;
+	int			i;
 	SK_U8		Byte;
 	SK_MAC_ADDR	MacAddr;
 	SK_U32		DWord;
 
-	if (FromPortIdx >= (SK_U32)pAC->GIni.GIMacsFound) {
+	if (FromPortNumber >= (SK_U32)pAC->GIni.GIMacsFound) {
 		return (SK_ADDR_ILLEGAL_PORT);
 	}
 
-	if (ToPortIdx >= (SK_U32)pAC->GIni.GIMacsFound) {
+	if (ToPortNumber >= (SK_U32)pAC->GIni.GIMacsFound) {
+		return (SK_ADDR_ILLEGAL_PORT);
+	}
+
+	if (pAC->Rlmt.Port[FromPortNumber].Net != pAC->Rlmt.Port[ToPortNumber].Net) {
 		return (SK_ADDR_ILLEGAL_PORT);
 	}
 
@@ -1250,48 +1206,56 @@ SK_U32	ToPortIdx)	/* Port2 Index */
 	 */
 
 	for (i = 0; i < SK_ADDR_EXACT_MATCHES; i++) {
-		MacAddr = pAC->Addr.Port[FromPortIdx].Exact[i];
-		pAC->Addr.Port[FromPortIdx].Exact[i] =
-			pAC->Addr.Port[ToPortIdx].Exact[i];
-		pAC->Addr.Port[ToPortIdx].Exact[i] = MacAddr;
+		MacAddr = pAC->Addr.Port[FromPortNumber].Exact[i];
+		pAC->Addr.Port[FromPortNumber].Exact[i] =
+			pAC->Addr.Port[ToPortNumber].Exact[i];
+		pAC->Addr.Port[ToPortNumber].Exact[i] = MacAddr;
 	}
 
 	for (i = 0; i < 8; i++) {
-		Byte = pAC->Addr.Port[FromPortIdx].InexactFilter.Bytes[i];
-		pAC->Addr.Port[FromPortIdx].InexactFilter.Bytes[i] =
-			pAC->Addr.Port[ToPortIdx].InexactFilter.Bytes[i];
-		pAC->Addr.Port[ToPortIdx].InexactFilter.Bytes[i] = Byte;
+		Byte = pAC->Addr.Port[FromPortNumber].InexactFilter.Bytes[i];
+		pAC->Addr.Port[FromPortNumber].InexactFilter.Bytes[i] =
+			pAC->Addr.Port[ToPortNumber].InexactFilter.Bytes[i];
+		pAC->Addr.Port[ToPortNumber].InexactFilter.Bytes[i] = Byte;
 	}
 
-	i = pAC->Addr.Port[FromPortIdx].PromMode;
-	pAC->Addr.Port[FromPortIdx].PromMode =
-		pAC->Addr.Port[ToPortIdx].PromMode;
-	pAC->Addr.Port[ToPortIdx].PromMode = i;
+	i = pAC->Addr.Port[FromPortNumber].PromMode;
+	pAC->Addr.Port[FromPortNumber].PromMode = pAC->Addr.Port[ToPortNumber].PromMode;
+	pAC->Addr.Port[ToPortNumber].PromMode = i;
 
-	DWord = pAC->Addr.Port[FromPortIdx].FirstExactMatchRlmt;
-	pAC->Addr.Port[FromPortIdx].FirstExactMatchRlmt =
-		pAC->Addr.Port[ToPortIdx].FirstExactMatchRlmt;
-	pAC->Addr.Port[ToPortIdx].FirstExactMatchRlmt = DWord;
+	DWord = pAC->Addr.Port[FromPortNumber].FirstExactMatchRlmt;
+	pAC->Addr.Port[FromPortNumber].FirstExactMatchRlmt =
+		pAC->Addr.Port[ToPortNumber].FirstExactMatchRlmt;
+	pAC->Addr.Port[ToPortNumber].FirstExactMatchRlmt = DWord;
 
-	DWord = pAC->Addr.Port[FromPortIdx].NextExactMatchRlmt;
-	pAC->Addr.Port[FromPortIdx].NextExactMatchRlmt =
-		pAC->Addr.Port[ToPortIdx].NextExactMatchRlmt;
-	pAC->Addr.Port[ToPortIdx].NextExactMatchRlmt = DWord;
+	DWord = pAC->Addr.Port[FromPortNumber].NextExactMatchRlmt;
+	pAC->Addr.Port[FromPortNumber].NextExactMatchRlmt =
+		pAC->Addr.Port[ToPortNumber].NextExactMatchRlmt;
+	pAC->Addr.Port[ToPortNumber].NextExactMatchRlmt = DWord;
 
-	DWord = pAC->Addr.Port[FromPortIdx].FirstExactMatchDrv;
-	pAC->Addr.Port[FromPortIdx].FirstExactMatchDrv =
-		pAC->Addr.Port[ToPortIdx].FirstExactMatchDrv;
-	pAC->Addr.Port[ToPortIdx].FirstExactMatchDrv = DWord;
+	DWord = pAC->Addr.Port[FromPortNumber].FirstExactMatchDrv;
+	pAC->Addr.Port[FromPortNumber].FirstExactMatchDrv =
+		pAC->Addr.Port[ToPortNumber].FirstExactMatchDrv;
+	pAC->Addr.Port[ToPortNumber].FirstExactMatchDrv = DWord;
 
-	DWord = pAC->Addr.Port[FromPortIdx].NextExactMatchDrv;
-	pAC->Addr.Port[FromPortIdx].NextExactMatchDrv =
-		pAC->Addr.Port[ToPortIdx].NextExactMatchDrv;
-	pAC->Addr.Port[ToPortIdx].NextExactMatchDrv = DWord;
+	DWord = pAC->Addr.Port[FromPortNumber].NextExactMatchDrv;
+	pAC->Addr.Port[FromPortNumber].NextExactMatchDrv =
+		pAC->Addr.Port[ToPortNumber].NextExactMatchDrv;
+	pAC->Addr.Port[ToPortNumber].NextExactMatchDrv = DWord;
 
-        pAC->Addr.ActivePort = ToPortIdx;
+	/* CAUTION: Solution works if only ports of one adapter are in use. */
+	for (i = 0; (SK_U32)i < pAC->Rlmt.Net[pAC->Rlmt.Port[ToPortNumber].
+		Net->NetNumber].NumPorts; i++) {
+		if (pAC->Rlmt.Net[pAC->Rlmt.Port[ToPortNumber].Net->NetNumber].
+			Port[i]->PortNumber == ToPortNumber) {
+			pAC->Addr.Net[pAC->Rlmt.Port[ToPortNumber].Net->NetNumber].
+				ActivePort = i;
+			/* 20001207 RA: Was "ToPortNumber;". */
 
-	(void)SkAddrMcUpdate(pAC, IoC, FromPortIdx);
-	(void)SkAddrMcUpdate(pAC, IoC, ToPortIdx);
+		}
+	}
+	(void)SkAddrMcUpdate(pAC, IoC, FromPortNumber);
+	(void)SkAddrMcUpdate(pAC, IoC, ToPortNumber);
 
 	return (SK_ADDR_SUCCESS);
 }	/* SkAddrSwap */
@@ -1299,3 +1263,4 @@ SK_U32	ToPortIdx)	/* Port2 Index */
 #ifdef __cplusplus
 }
 #endif	/* __cplusplus */
+

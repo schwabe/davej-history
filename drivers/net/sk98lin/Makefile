@@ -3,9 +3,13 @@
 # Makefile for the SysKonnect SK-98xx device driver.
 #
 
+#DEBUG = 1
+
+
 ifeq ($(CONFIG_SK98LIN),y)
     O_TARGET := sk98lin.o
-    O_OBJS = skge.o skaddr.o skgehwt.o skgeinit.o skgepnmi.o skgesirq.o \
+    O_OBJS = skge.o skproc.o skaddr.o skgehwt.o skgeinit.o skgepnmi.o \
+	     skgesirq.o \
              ski2c.o sklm80.o skqueue.o skrlmt.o sktimer.o skvpd.o \
              skxmac2.o skcsum.o
 else
@@ -13,19 +17,20 @@ else
     MOD_LIST_NAME := SK98LIN_MODULES
     M_OBJS := sk98lin.o
     O_TARGET := sk98lin.o
-    O_OBJS = skge.o skaddr.o skgehwt.o skgeinit.o skgepnmi.o skgesirq.o \
+    O_OBJS = skge.o skproc.o skaddr.o skgehwt.o skgeinit.o skgepnmi.o \
+	     skgesirq.o \
              ski2c.o sklm80.o skqueue.o skrlmt.o sktimer.o skvpd.o \
              skxmac2.o skcsum.o
   endif
 endif
 
-# DBGDEF =  \
-# -DDEBUG
-
 ifdef DEBUG
+DBGDEF =  \
+ -DDEBUG
+
 DBGDEF +=  \
--DSK_DEBUG_CHKMOD=0x00000000L \
--DSK_DEBUG_CHKCAT=0x00000000L
+ -DSK_DEBUG_CHKMOD=0x00000000L \
+ -DSK_DEBUG_CHKCAT=0xFFFFFFFF
 endif
 
 

@@ -1,4 +1,4 @@
-/* $Id: niccy.c,v 1.15.6.3 2001/02/13 10:33:58 kai Exp $
+/* $Id: niccy.c,v 1.15.6.4 2001/02/16 16:43:28 kai Exp $
  *
  * niccy.c  low level stuff for Dr. Neuhaus NICCY PnP and NICCY PCI and
  *          compatible (SAGEM cybermodem)
@@ -7,7 +7,7 @@
  * 
  * Thanks to Dr. Neuhaus and SAGEM for informations
  *
- * This file is (c) under GNU PUBLIC LICENSE
+ * This file is (c) under GNU General Public License
  *
  */
 
@@ -23,7 +23,7 @@
 #include <linux/isdn_compat.h>
 
 extern const char *CardType[];
-const char *niccy_revision = "$Revision: 1.15.6.3 $";
+const char *niccy_revision = "$Revision: 1.15.6.4 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

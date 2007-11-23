@@ -2,8 +2,8 @@
  *
  * Name:	skvpd.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.25 $
- * Date:	$Date: 1999/11/22 13:39:32 $
+ * Version:	$Revision: 1.26 $
+ * Date:	$Date: 2000/06/13 08:00:01 $
  * Purpose:	Shared software to read and write VPD data
  *
  ******************************************************************************/
@@ -27,6 +27,9 @@
  * History:
  *
  *	$Log: skvpd.c,v $
+ *	Revision 1.26  2000/06/13 08:00:01  mkarl
+ *	additional cast to avoid compile problems in 64 bit environment
+ *	
  *	Revision 1.25  1999/11/22 13:39:32  cgoos
  *	Changed license header to GPL.
  *	
@@ -121,7 +124,7 @@
 	Please refer skvpd.txt for infomation how to include this module
  */
 static const char SysKonnectFileId[] =
-	"@(#)$Id: skvpd.c,v 1.25 1999/11/22 13:39:32 cgoos Exp $ (C) SK" ;
+	"@(#)$Id: skvpd.c,v 1.26 2000/06/13 08:00:01 mkarl Exp $ (C) SK" ;
 
 #include "h/skdrv1st.h"
 #include "h/sktypes.h"
@@ -644,7 +647,7 @@ int n)			/* number of bytes the memory block has to be moved */
 	if (n == 0)
 		return ;
 
-	i = end - start + 1 ;
+	i = (int) (end - start + 1) ;
 	if (n < 0) {
 		p = start + n ;
 		while (i != 0) {

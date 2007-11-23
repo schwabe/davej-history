@@ -1,11 +1,20 @@
 /*
- * $Id: capi.c,v 1.44.6.5 2001/02/13 11:43:29 kai Exp $
+ * $Id: capi.c,v 1.44.6.8 2001/03/21 08:52:21 kai Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.44.6.8  2001/03/21 08:52:21  kai
+ * merge from main branch: fix buffer for revision string (calle)
+ *
+ * Revision 1.44.6.7  2001/03/15 15:11:24  kai
+ * *** empty log message ***
+ *
+ * Revision 1.44.6.6  2001/03/13 16:17:07  kai
+ * spelling fixes from 2.4.3-pre
+ *
  * Revision 1.44.6.5  2001/02/13 11:43:29  kai
  * more compatility changes for 2.2.19
  *
@@ -237,6 +246,7 @@
 #include <linux/smp_lock.h>
 #include <linux/timer.h>
 #include <linux/wait.h>
+#include <linux/isdn_compat.h>
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 #include <linux/tty.h>
 #ifdef CONFIG_PPP
@@ -258,7 +268,7 @@
 #include "capifs.h"
 #endif
 
-static char *revision = "$Revision: 1.44.6.5 $";
+static char *revision = "$Revision: 1.44.6.8 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 
@@ -1315,7 +1325,6 @@ capinc_raw_open(struct inode *inode, struct file *file)
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_raw_open %d\n", GET_USE_COUNT(&__this_module));
 #endif
-
 	mp->datahandle = 0;
 	mp->file = file;
 	file->private_data = (void *)mp;
@@ -2028,7 +2037,7 @@ static struct capi_interface_user cuser = {
 	callback: lower_callback,
 };
 
-static char rev[10];
+static char rev[32];
 
 static int __init capi_init(void)
 {
@@ -2036,12 +2045,13 @@ static int __init capi_init(void)
 
 	MOD_INC_USE_COUNT;
 
-	if ((p = strchr(revision, ':'))) {
-		strcpy(rev, p + 2);
-		p = strchr(rev, '$');
-		*(p-1) = 0;
+	if ((p = strchr(revision, ':')) != 0 && p[1]) {
+		strncpy(rev, p + 2, sizeof(rev));
+		rev[sizeof(rev)-1] = 0;
+		if ((p = strchr(rev, '$')) != 0 && p > rev)
+		   *(p-1) = 0;
 	} else
-		strcpy(rev, "???");
+		strcpy(rev, "1.0");
 
 	if (register_chrdev(capi_major, "capi20", &capi_fops)) {
 		printk(KERN_ERR "capi20: unable to get major %d\n", capi_major);
@@ -2102,7 +2112,7 @@ static void  capi_exit(void)
 	unregister_chrdev(capi_rawmajor, "capi/r%d");
 #endif
 	(void) detach_capi_interface(&cuser);
-	printk(KERN_NOTICE "capi: Rev%s: unloaded\n", rev);
+	printk(KERN_NOTICE "capi: Rev %s: unloaded\n", rev);
 }
 
 module_init(capi_init);

@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.65.6.2 2000/12/17 22:45:13 kai Exp $
+/* $Id: icn.c,v 1.65.6.3 2001/02/16 16:43:31 kai Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -34,7 +34,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.65.6.2 $";
+*revision = "$Revision: 1.65.6.3 $";
 
 static int icn_addcard(int, char *, char *);
 
@@ -868,7 +868,7 @@ icn_loadboot(u_char * buffer, icn_card * card)
 	SLEEP(1);
 	memcpy_toio(dev.shmem, codebuf, ICN_CODE_STAGE1);	/* Copy code        */
 #ifdef BOOT_DEBUG
-	printk(KERN_DEBUG "Bootloader transfered\n");
+	printk(KERN_DEBUG "Bootloader transferred\n");
 #endif
 	if (card->doubleS0) {
 		SLEEP(1);
@@ -884,7 +884,7 @@ icn_loadboot(u_char * buffer, icn_card * card)
 		SLEEP(1);
 		memcpy_toio(dev.shmem, codebuf, ICN_CODE_STAGE1);	/* Copy code        */
 #ifdef BOOT_DEBUG
-		printk(KERN_DEBUG "Bootloader transfered\n");
+		printk(KERN_DEBUG "Bootloader transferred\n");
 #endif
 	}
 	kfree(codebuf);

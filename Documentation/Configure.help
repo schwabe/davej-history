@@ -10535,6 +10535,19 @@ CONFIG_60XX_WDT
  You can compile this driver directly into the kernel, or use
  it as a module.  The module will be called sbc60xxwdt.o.
 
+ZF MachZ Watchdog
+CONFIG_MACHZ_WDT
+  If you are using a ZF Micro MachZ processor, say Y here, otherwise N.
+  This is the driver for the watchdog timer builtin on that processor
+  using ZF-Logic interface. This watchdog simply watches your kernel to 
+  make sure it doesn't freeze, and if it does, it reboots your computer 
+  after a certain amount of time. 
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module is called machzwd.o. If you want to compile it as a module,
+  say M here and read Documentation/modules.txt.
+
 CONFIG_MICROCODE
   /dev/cpu/microcode - Intel IA32 CPU microcode support
 
@@ -13567,7 +13580,7 @@ CONFIG_BLK_CPQ_DA
 
 Compaq Smart Array support
 CONFIG_BLK_CPQ_CISS_DA
-   This is the driver for Compaq Smart Array controllers.
+   This is the driver for Compaq Smart Array 5xxx controllers.
    Everyone using these boards should say Y here.
    See "linux/Documentation/cciss.txt" for the current list of
    boards supported by this driver, and for further information
