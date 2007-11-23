@@ -141,7 +141,8 @@ int shrink_mmap(int priority, int gfp_mask)
 	unsigned long limit = num_physpages;
 	struct page * page;
 	int count;
-
+	int nr_dirty = 0;
+	
 	/* Make sure we scan all pages twice at priority 0. */
 	count = (limit << 1) >> priority;
 
@@ -197,13 +198,22 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		/* Is it a buffer page? */
 		if (page->buffers) {
+			/*
+			 * Wait for async IO to complete
+			 * at each 64 buffers
+			 */ 
+
+			int wait = ((gfp_mask & __GFP_IO) 
+				&& (!(nr_dirty++ % 64)));
+
 			if (buffer_under_min())
 				continue;
 			/*
 			 * We can sleep if we need to do some write
 			 * throttling.
 			 */
-			if (!try_to_free_buffers(page))
+
+			if (!try_to_free_buffers(page, wait))
 				goto refresh_clock;
 			return 1;
 		}

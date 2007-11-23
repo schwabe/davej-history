@@ -425,7 +425,7 @@ function menu_name () {
 			--menu '$menu_instructions' \
 			$ROWS $COLS $((ROWS-10)) \
 			'$default' " >MCmenu
-	>MCradiolists
+	echo "#!/bin/sh" >MCradiolists
 }
 
 #
@@ -713,11 +713,11 @@ function parser(ifile,menu) {
 			++menu_no
 
 			printf("submenu %s MCmenu%s\n", $0, menu_no) >>menu
-
-			printf( "function MCmenu%s () {\n"\
+			printf( "#!/bin/sh\n"\
+				"function MCmenu%s () {\n"\
 				"default=$1\n"\
 				"menu_name %s\n",\
-				 menu_no, $0) >"MCmenu"menu_no
+				 menu_no, $0) >>"MCmenu"menu_no
 
 			parser(ifile, "MCmenu"menu_no)
 		}
@@ -772,7 +772,8 @@ function parser(ifile,menu) {
 function parse_config_files () {
 	rm -f MCmenu*
 
-	echo "function MCmenu0 () {" >MCmenu0
+	echo "#!/bin/sh" > MCmenu0
+	echo "function MCmenu0 () {" >>MCmenu0
 	echo 'default=$1' >>MCmenu0
 	echo "menu_name 'Main Menu'" >>MCmenu0
 

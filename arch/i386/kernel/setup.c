@@ -464,6 +464,7 @@ __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 			    (boot_cpu_data.x86_mask >= 8)))
 				c->x86_capability |= X86_FEATURE_MTRR;
 		}
+
 		/* Fall through */
 
 	case X86_VENDOR_TRANSMETA:
@@ -474,7 +475,16 @@ __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 				ecx>>24, edx>>24);
 			c->x86_cache_size=(ecx>>24)+(edx>>24);
 		}
-		if (n >= 0x80000006){
+		if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
+			boot_cpu_data.x86 == 6 && 
+			boot_cpu_data.x86_model== 3 &&
+			boot_cpu_data.x86_mask == 0)
+		{
+			/* AMD errata T13 (order #21922) */
+			printk("CPU: L2 Cache: 64K\n");
+			c->x86_cache_size = 64;
+		}
+		else if (n >= 0x80000006){
 			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
 			printk("CPU: L2 Cache: %dK\n", ecx>>16);
 			c->x86_cache_size = ecx>>16;
@@ -1118,10 +1128,15 @@ int get_cpuinfo(char * buffer)
 		    case X86_VENDOR_AMD:
 			if (c->x86 == 5 && c->x86_model == 6)
 				x86_cap_flags[10] = "sep";
-			x86_cap_flags[16] = "fcmov";
+			if (c->x86 < 6)
+				x86_cap_flags[16] = "fcmov";
+			x86_cap_flags[16] = "pat";
+			x86_cap_flags[22] = "mmxext";
+			x86_cap_flags[24] = "fxsr";
+			x86_cap_flags[30] = "3dnowext";
 			x86_cap_flags[31] = "3dnow";
 			break;
-
+																																										
 		    case X86_VENDOR_INTEL:
 			x86_cap_flags[6] = "pae";
 			x86_cap_flags[9] = "apic";

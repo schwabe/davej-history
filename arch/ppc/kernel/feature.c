@@ -18,7 +18,7 @@
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <linux/spinlock.h>
+#include <asm/spinlock.h>
 #include <asm/errno.h>
 #include <asm/ohare.h>
 #include <asm/heathrow.h>

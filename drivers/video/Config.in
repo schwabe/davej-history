@@ -49,6 +49,8 @@ if [ "$CONFIG_FB" = "y" ]; then
   fi
   if [ "$CONFIG_ATARI" = "y" ]; then
     bool 'Atari native chipset support' CONFIG_FB_ATARI
+  fi
+  if [ "$CONFIG_ATARI" = "y" -o "$CONFIG_PCI" != "n" ]; then
     bool 'ATI Mach64 display support' CONFIG_FB_ATY
   fi
   if [ "$CONFIG_PPC" = "y" ]; then
@@ -60,6 +62,7 @@ if [ "$CONFIG_FB" = "y" ]; then
       bool 'IMS Twin Turbo display support' CONFIG_FB_IMSTT
       bool 'Chips 65550 display support' CONFIG_FB_CT65550
       bool 'S3 Trio display support' CONFIG_FB_S3TRIO
+      bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
     fi
   fi
   if [ "$CONFIG_MAC" = "y" ]; then
@@ -89,7 +92,7 @@ if [ "$CONFIG_FB" = "y" ]; then
         bool '  G100/G200 support' CONFIG_FB_MATROX_G100
         bool '  Multihead support' CONFIG_FB_MATROX_MULTIHEAD
       fi
-      bool 'ATI Mach64 display support' CONFIG_FB_ATY
+      bool 'ATI Rage128 display support' CONFIG_FB_ATY128
     fi
   fi
   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then

@@ -574,7 +574,7 @@ ultra2_dmahalt:
 		test	SCSIOFFSET, 0x7f	jnz ultra2_shutdown;
 ultra2_await_nreq:
 		test	SCSISIGI, REQI	jz ultra2_shutdown;
-		test	SSTAT1, PHASEMIS	jz ultra2_await_nreq;
+		test	SSTAT1, (PHASEMIS|REQINIT)	jz ultra2_await_nreq;
 ultra2_shutdown:
 		and     DFCNTRL, ~(HDMAEN|SCSIEN);
 		test	DFCNTRL, (HDMAEN|SCSIEN) jnz .;
@@ -617,7 +617,7 @@ p_command_dma_loop:
 		test	SSTAT1,PHASEMIS	jz p_command_dma_loop;	/* ie. underrun */
 p_command_ultra2_dma_done:
 		test	SCSISIGI, REQI	jz p_command_ultra2_shutdown;
-		test	SSTAT1, PHASEMIS	jz p_command_ultra2_dma_done;
+		test	SSTAT1, (PHASEMIS|REQINIT)	jz p_command_ultra2_dma_done;
 p_command_ultra2_shutdown:
 		and     DFCNTRL, ~(HDMAEN|SCSIEN);
 		test	DFCNTRL, (HDMAEN|SCSIEN) jnz .;
@@ -1069,7 +1069,7 @@ dma_dmadone:
 	test	SCSIRATE, 0x0f	jnz dma_shutdown;
 dma_await_nreq:
 	test	SCSISIGI, REQI	jz dma_shutdown;
-	test	SSTAT1, PHASEMIS	jz dma_await_nreq;
+	test	SSTAT1, (PHASEMIS|REQINIT)	jz dma_await_nreq;
 dma_shutdown:
 	and	DFCNTRL, ~(SCSIEN|SDMAEN|HDMAEN);
 dma_halt:

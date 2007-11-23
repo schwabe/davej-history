@@ -87,7 +87,7 @@
 /*
  * Debug flags.
  */
-#undef DEBUG
+#define DEBUG
 
 #define GUI_RESERVE	0x00001000
 
@@ -419,7 +419,7 @@ static int default_pll __initdata = 0;
 static int default_mclk __initdata = 0;
 
 #if defined(CONFIG_PPC)
-static int default_vmode __initdata = VMODE_NVRAM;
+static int default_vmode __initdata = VMODE_CHOOSE;
 static int default_cmode __initdata = CMODE_NVRAM;
 #endif
 
@@ -452,7 +452,7 @@ static struct aty_features {
     /* mach64CT family / mach64GT (3D RAGE) class */
     { 0x4c42, 0x4c42, "3D RAGE LT PRO (AGP)" },
     { 0x4c44, 0x4c44, "3D RAGE LT PRO" },
-    { 0x4c47, 0x4c47, "3D RAGE LT PRO" },
+    { 0x4c47, 0x4c47, "3D RAGE LT-G" },
     { 0x4c49, 0x4c49, "3D RAGE LT PRO" },
     { 0x4c50, 0x4c50, "3D RAGE LT PRO" },
     { 0x4c54, 0x4c54, "3D RAGE LT" },
@@ -466,6 +466,7 @@ static struct aty_features {
     { 0x4749, 0x4749, "3D RAGE PRO (BGA, PCI)" },
     { 0x4750, 0x4750, "3D RAGE PRO (PQFP, PCI)" },
     { 0x4751, 0x4751, "3D RAGE PRO (PQFP, PCI, limited 3D)" },
+    { 0x4c4e, 0x4c4e, "3D RAGE Mobility (AGP)" }, /* Doesn't quite work yet */
 };
 
 static const char *aty_gx_ram[8] __initdata = {
@@ -485,7 +486,7 @@ static inline u32 aty_ld_le32(volatile unsigned int regindex,
 
 #if defined(__powerpc__)
     temp = info->ati_regbase;
-    asm("lwbrx %0,%1,%2" : "=r"(val) : "b" (regindex), "r" (temp));
+     __asm__ __volatile__("lwbrx %0,%1,%2;eieio" : "=r"(val) : "b" (regindex), "r" (temp));
 #elif defined(__sparc_v9__)
     temp = info->ati_regbase + regindex;
     asm("lduwa [%1] %2, %0" : "=r" (val) : "r" (temp), "i" (ASI_PL));
@@ -503,7 +504,7 @@ static inline void aty_st_le32(volatile unsigned int regindex, u32 val,
 
 #if defined(__powerpc__)
     temp = info->ati_regbase;
-    asm("stwbrx %0,%1,%2" : : "r" (val), "b" (regindex), "r" (temp) :
+     __asm__ __volatile__("stwbrx %0,%1,%2;eieio" : : "r" (val), "b" (regindex), "r" (temp) :
 	"memory");
 #elif defined(__sparc_v9__)
     temp = info->ati_regbase + regindex;
@@ -517,15 +518,43 @@ static inline void aty_st_le32(volatile unsigned int regindex, u32 val,
 static inline u8 aty_ld_8(volatile unsigned int regindex,
 			  const struct fb_info_aty *info)
 {
-    return *(volatile u8 *)(info->ati_regbase+regindex);
+    u8 val = *(volatile u8 *)(info->ati_regbase+regindex);
+#if defined(__powerpc__)
+    eieio();
+#endif
+    return val;
 }
 
 static inline void aty_st_8(volatile unsigned int regindex, u8 val,
 			    const struct fb_info_aty *info)
 {
     *(volatile u8 *)(info->ati_regbase+regindex) = val;
+#if defined(__powerpc__)
+    eieio();
+#endif
 }
 
+static void aty_st_lcd(int index, u32 val, const struct fb_info_aty *info)
+{
+    unsigned long temp;
+    
+    /* write addr byte */
+    temp = aty_ld_le32(LCD_INDEX, info);
+    aty_st_le32(LCD_INDEX, (temp & ~LCD_INDEX_MASK) | index, info);
+    /* write the register value */
+    aty_st_le32(LCD_DATA, val, info);
+}
+
+static u32 aty_ld_lcd(int index, const struct fb_info_aty *info)
+{
+    unsigned long temp;
+    
+    /* write addr byte */
+    temp = aty_ld_le32(LCD_INDEX, info);
+    aty_st_le32(LCD_INDEX, (temp & ~LCD_INDEX_MASK) | index, info);
+    /* read the register value */
+    return aty_ld_le32(LCD_DATA, info);
+}
 
     /*
      *  Generic Mach64 routines
@@ -683,9 +712,7 @@ static void aty_st_514(int offset, u8 val, const struct fb_info_aty *info)
     aty_st_8(DAC_W_INDEX, offset & 0xff, info);
     /* left addr byte */
     aty_st_8(DAC_DATA, (offset >> 8) & 0xff, info);
-    eieio();
     aty_st_8(DAC_MASK, val, info);
-    eieio();
     aty_st_8(DAC_CNTL, 0, info);
 }
 
@@ -693,10 +720,8 @@ static void aty_st_pll(int offset, u8 val, const struct fb_info_aty *info)
 {
     /* write addr byte */
     aty_st_8(CLOCK_CNTL + 1, (offset << 2) | PLL_WR_EN, info);
-    eieio();
     /* write the register value */
     aty_st_8(CLOCK_CNTL + 2, val, info);
-    eieio();
     aty_st_8(CLOCK_CNTL + 1, (offset << 2) & ~PLL_WR_EN, info);
 }
 
@@ -706,10 +731,8 @@ static u8 aty_ld_pll(int offset, const struct fb_info_aty *info)
 
     /* write addr byte */
     aty_st_8(CLOCK_CNTL + 1, (offset << 2), info);
-    eieio();
     /* read the register value */
     res = aty_ld_8(CLOCK_CNTL + 2, info);
-    eieio();
     return res;
 }
 
@@ -1772,6 +1795,9 @@ static void atyfb_set_par(const struct atyfb_par *par,
 	} else if ((Gx == VT_CHIP_ID) || (Gx == VU_CHIP_ID)) {
 	    aty_st_le32(DAC_CNTL, 0x87010184, info);
 	    aty_st_le32(BUS_CNTL, 0x680000f9, info);
+	} else if (Gx == LN_CHIP_ID) {
+	    aty_st_le32(DAC_CNTL, 0x80010102, info);
+	    aty_st_le32(BUS_CNTL, 0x7b33a040, info);
 	} else {
 	    /* GT */
 	    aty_st_le32(DAC_CNTL, 0x86010102, info);
@@ -1788,7 +1814,7 @@ static void atyfb_set_par(const struct atyfb_par *par,
 	init_engine(par, info);
 
 #ifdef CONFIG_FB_COMPAT_XPMAC
-    if (console_fb_info == &info->fb_info) {
+    if (!console_fb_info || console_fb_info == &info->fb_info) {
 	struct fb_var_screeninfo var;
 	int vmode, cmode;
 	display_info.height = ((par->crtc.v_tot_disp>>16) & 0x7ff)+1;
@@ -2406,7 +2432,6 @@ static void atyfb_save_palette(struct fb_info *fb, int enter)
 			tmp |= 0x2;
 		aty_st_8(DAC_CNTL, tmp, info);
 		aty_st_8(DAC_MASK, 0xff, info);
-		eieio();
 		scale = ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID) &&
 			(info->current_par.crtc.bpp == 16)) ? 3 : 0;
 		info->aty_cmap_regs->rindex = i << scale;
@@ -2549,11 +2574,19 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 	    } else if (Gx == GB_CHIP_ID || Gx == GD_CHIP_ID ||
 		       Gx == GI_CHIP_ID || Gx == GP_CHIP_ID ||
 		       Gx == GQ_CHIP_ID || Gx == LB_CHIP_ID ||
-		       Gx == LD_CHIP_ID || Gx == LG_CHIP_ID ||
+		       Gx == LD_CHIP_ID ||
 		       Gx == LI_CHIP_ID || Gx == LP_CHIP_ID) {
 		/* RAGE PRO or LT PRO */
 		pll = 230;
 		mclk = 100;
+	    } else if (Gx == LG_CHIP_ID) {
+		/* Rage LT */
+		pll = 230;
+		mclk = 63;
+	    } else if (Gx == LN_CHIP_ID) {
+	    	/* Rage mobility */
+	    	pll = 230;
+	    	mclk = 100;
 	    } else {
 		/* other RAGE */
 		pll = 135;
@@ -2706,24 +2739,43 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 	}
 
 #if defined(CONFIG_PPC)
+    if (Gx == LI_CHIP_ID && machine_is_compatible("PowerBook1,1")) {
+	/* these bits let the 101 powerbook wake up from sleep -- paulus */
+	aty_st_lcd(LCD_POWER_MANAGEMENT, aty_ld_lcd(LCD_POWER_MANAGEMENT, info)
+		| (USE_F32KHZ | TRISTATE_MEM_EN), info);
+    }
+
     if (default_vmode == VMODE_NVRAM) {
+#if 0 /* This is not really supported */
 	default_vmode = nvram_read_byte(NV_VMODE);
 	if (default_vmode <= 0 || default_vmode > VMODE_MAX)
+#endif
 	    default_vmode = VMODE_CHOOSE;
     }
+    /*
+     * The default video mode is 1024x768 @ 75Hz, as that
+     * works on iMacs as well as the G3 powerbooks. - paulus
+     */
     if (default_vmode == VMODE_CHOOSE) {
 	if (Gx == LG_CHIP_ID)
 	    /* G3 PowerBook with 1024x768 LCD */
 	    default_vmode = VMODE_1024_768_60;
-	else {
-	    sense = read_aty_sense(info);
-	    default_vmode = mac_map_monitor_sense(sense);
-	}
+	else if (Gx == LN_CHIP_ID)
+	    /* iBook with 800x600 LCD */
+	    default_vmode = VMODE_800_600_60;
+	else
+	    default_vmode = VMODE_1024_768_75;
+	/* 'twould be nice to get this going - paulus */
+	sense = read_aty_sense(info);
+	printk(KERN_INFO "atyfb: monitor sense=%x, maps to mode %d\n",
+	       sense, mac_map_monitor_sense(sense));
     }
     if (default_vmode <= 0 || default_vmode > VMODE_MAX)
-	default_vmode = VMODE_640_480_60;
+	default_vmode = VMODE_1024_768_75;
+#if 0
     if (default_cmode == CMODE_NVRAM)
 	default_cmode = nvram_read_byte(NV_CMODE);
+#endif
     if (default_cmode < CMODE_8 || default_cmode > CMODE_32)
 	default_cmode = CMODE_8;
     if (mac_vmode_to_var(default_vmode, default_cmode, &var))
@@ -3476,11 +3528,10 @@ static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     if (Gx == GT_CHIP_ID || Gx == GU_CHIP_ID || Gx == GV_CHIP_ID ||
 	Gx == GW_CHIP_ID || Gx == GZ_CHIP_ID || Gx == LG_CHIP_ID ||
 	Gx == GB_CHIP_ID || Gx == GD_CHIP_ID || Gx == GI_CHIP_ID ||
-	Gx == GP_CHIP_ID || Gx == GQ_CHIP_ID)
+	Gx == GP_CHIP_ID || Gx == GQ_CHIP_ID || Gx == LI_CHIP_ID)
 	i |= 0x2;	/*DAC_CNTL|0x2 turns off the extra brightness for gt*/
     aty_st_8(DAC_CNTL, i, info);
     aty_st_8(DAC_MASK, 0xff, info);
-    eieio();
     scale = ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID) &&
 	     (info->current_par.crtc.bpp == 16)) ? 3 : 0;
     info->aty_cmap_regs->windex = regno << scale;
@@ -3930,6 +3981,124 @@ static struct display_switch fbcon_aty32 = {
 #endif
 
 #ifdef CONFIG_PMAC_PBOOK
+
+/* Power management routines. Those are used for PowerBook sleep.
+ *
+ * It appears that Rage LT and Rage LT Pro have different power
+ * management registers. There's is some confusion about which
+ * chipID is a Rage LT or LT pro :(
+ */
+static int
+aty_power_mgmt_LT(int sleep, struct fb_info_aty *info)
+{
+ 	unsigned int pm;
+	int timeout;
+	
+	pm = aty_ld_le32(POWER_MANAGEMENT_LG, info);
+	pm = (pm & ~PWR_MGT_MODE_MASK) | PWR_MGT_MODE_REG;
+	aty_st_le32(POWER_MANAGEMENT_LG, pm, info);
+	pm = aty_ld_le32(POWER_MANAGEMENT_LG, info);
+	
+	timeout = 200000;
+	if (sleep) {
+		/* Sleep */
+		pm &= ~PWR_MGT_ON;
+		aty_st_le32(POWER_MANAGEMENT_LG, pm, info);
+		pm = aty_ld_le32(POWER_MANAGEMENT_LG, info);
+		udelay(10);
+		pm &= ~(PWR_BLON | AUTO_PWR_UP);
+		pm |= SUSPEND_NOW;
+		aty_st_le32(POWER_MANAGEMENT_LG, pm, info);
+		pm = aty_ld_le32(POWER_MANAGEMENT_LG, info);
+		udelay(10);
+		pm |= PWR_MGT_ON;
+		aty_st_le32(POWER_MANAGEMENT_LG, pm, info);
+		do {
+			pm = aty_ld_le32(POWER_MANAGEMENT_LG, info);
+			udelay(10);
+			if ((--timeout) == 0)
+				break;
+		} while ((pm & PWR_MGT_STATUS_MASK) != PWR_MGT_STATUS_SUSPEND);
+	} else {
+		/* Wakeup */
+		pm &= ~PWR_MGT_ON;
+		aty_st_le32(POWER_MANAGEMENT_LG, pm, info);
+		pm = aty_ld_le32(POWER_MANAGEMENT_LG, info);
+		udelay(10);
+		pm |=  (PWR_BLON | AUTO_PWR_UP);
+		pm &= ~SUSPEND_NOW;
+		aty_st_le32(POWER_MANAGEMENT_LG, pm, info);
+		pm = aty_ld_le32(POWER_MANAGEMENT_LG, info);
+		udelay(10);
+		pm |= PWR_MGT_ON;
+		aty_st_le32(POWER_MANAGEMENT_LG, pm, info);
+		do {
+			pm = aty_ld_le32(POWER_MANAGEMENT_LG, info);
+			udelay(10);
+			if ((--timeout) == 0)
+				break;
+		} while ((pm & PWR_MGT_STATUS_MASK) != 0);
+	}
+	mdelay(500);
+
+	return timeout ? PBOOK_SLEEP_OK : PBOOK_SLEEP_REFUSE;
+}
+
+static int
+aty_power_mgmt_LTPro(int sleep, struct fb_info_aty *info)
+{
+ 	unsigned int pm;
+	int timeout;
+	
+	pm = aty_ld_lcd(LCD_POWER_MANAGEMENT, info);
+	pm = (pm & ~PWR_MGT_MODE_MASK) | PWR_MGT_MODE_REG;
+	aty_st_lcd(LCD_POWER_MANAGEMENT, pm, info);
+	pm = aty_ld_lcd(LCD_POWER_MANAGEMENT, info);
+
+	timeout = 200;
+	if (sleep) {
+		/* Sleep */
+		pm &= ~PWR_MGT_ON;
+		aty_st_lcd(LCD_POWER_MANAGEMENT, pm, info);
+		pm = aty_ld_lcd(LCD_POWER_MANAGEMENT, info);
+		udelay(10);
+		pm &= ~(PWR_BLON | AUTO_PWR_UP);
+		pm |= SUSPEND_NOW;
+		aty_st_lcd(LCD_POWER_MANAGEMENT, pm, info);
+		pm = aty_ld_lcd(LCD_POWER_MANAGEMENT, info);
+		udelay(10);
+		pm |= PWR_MGT_ON;
+		aty_st_lcd(LCD_POWER_MANAGEMENT, pm, info);
+		do {
+			pm = aty_ld_lcd(LCD_POWER_MANAGEMENT, info);
+			udelay(1000);
+			if ((--timeout) == 0)
+				break;
+		} while ((pm & PWR_MGT_STATUS_MASK) != PWR_MGT_STATUS_SUSPEND);
+	} else {
+		/* Wakeup */
+		pm &= ~PWR_MGT_ON;
+		aty_st_lcd(LCD_POWER_MANAGEMENT, pm, info);
+		pm = aty_ld_lcd(LCD_POWER_MANAGEMENT, info);
+		udelay(10);
+		pm &= ~SUSPEND_NOW;
+		pm |= (PWR_BLON | AUTO_PWR_UP);
+		aty_st_lcd(LCD_POWER_MANAGEMENT, pm, info);
+		pm = aty_ld_lcd(LCD_POWER_MANAGEMENT, info);
+		udelay(10);
+		pm |= PWR_MGT_ON;
+		aty_st_lcd(LCD_POWER_MANAGEMENT, pm, info);
+		do {
+			pm = aty_ld_lcd(LCD_POWER_MANAGEMENT, info);			
+			udelay(1000);
+			if ((--timeout) == 0)
+				break;
+		} while ((pm & PWR_MGT_STATUS_MASK) != 0);
+	}
+
+	return timeout ? PBOOK_SLEEP_OK : PBOOK_SLEEP_REFUSE;
+}
+
 /*
  * Save the contents of the frame buffer when we go to sleep,
  * and restore it when we wake up again.
@@ -3938,7 +4107,9 @@ int
 aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
 {
 	struct fb_info_aty *info;
- 	unsigned int pm;
+ 	int result;
+
+	result = PBOOK_SLEEP_OK;
 
 	for (info = first_display; info != NULL; info = info->next) {
 		struct fb_fix_screeninfo fix;
@@ -3950,6 +4121,8 @@ aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
 		switch (when) {
 		case PBOOK_SLEEP_REQUEST:
 			info->save_framebuffer = vmalloc(nb);
+			if (info->save_framebuffer == NULL)
+				return PBOOK_SLEEP_REFUSE;
 			break;
 		case PBOOK_SLEEP_REJECT:
 			if (info->save_framebuffer) {
@@ -3966,80 +4139,38 @@ aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
 
 			/* Backup fb content */	
 			if (info->save_framebuffer)
-				memcpy(info->save_framebuffer,
+				memcpy_fromio(info->save_framebuffer,
 				       (void *)info->frame_buffer, nb);
 
 			/* Blank display and LCD */
 			atyfbcon_blank(VESA_POWERDOWN+1, (struct fb_info *)info);
 
-			/* Set chip to "suspend" mode. Note: There's a HW bug
-			   in the chip which prevents proper resync on wakeup
-			   with automatic power management, we handle suspend
-			   manually using the following (weird) sequence
-			   described by ATI.
-			   Note2:
-			   We could enable this for all Rage LT Pro chip ids */
-			if ((Gx == LG_CHIP_ID) || (Gx == LT_CHIP_ID)
-			    || (Gx == LP_CHIP_ID)) {
-				pm = aty_ld_le32(POWER_MANAGEMENT, info);
-				pm &= ~PWR_MGT_ON;
-				aty_st_le32(POWER_MANAGEMENT, pm, info);
-				pm = aty_ld_le32(POWER_MANAGEMENT, info);
-				mdelay(1);
-				pm &= ~(PWR_BLON | AUTO_PWR_UP);
-				pm |= SUSPEND_NOW;
-				aty_st_le32(POWER_MANAGEMENT, pm, info);
-				pm = aty_ld_le32(POWER_MANAGEMENT, info);
-				mdelay(1);
-				pm |= PWR_MGT_ON;
-				aty_st_le32(POWER_MANAGEMENT, pm, info);
-				do {
-					pm = aty_ld_le32(POWER_MANAGEMENT, info);
-					/* Fix a problem with revision 4c50 of the chip */
-					if (Gx == LP_CHIP_ID)
-						break;
-				} while ((pm & PWR_MGT_STATUS_MASK) != PWR_MGT_STATUS_SUSPEND);
-				mdelay(500);
-			}
+			/* Set chip to "suspend" mode */
+			if (Gx == LG_CHIP_ID)
+				result = aty_power_mgmt_LT(1, info);
+			else
+				result = aty_power_mgmt_LTPro(1, info);
 			break;
 		case PBOOK_WAKE:
 			/* Wakeup chip */
-			if ((Gx == LG_CHIP_ID) || (Gx == LT_CHIP_ID) || (Gx == LP_CHIP_ID)) {
-				pm = aty_ld_le32(POWER_MANAGEMENT, info);
-				pm &= ~PWR_MGT_ON;
-				aty_st_le32(POWER_MANAGEMENT, pm, info);
-				pm = aty_ld_le32(POWER_MANAGEMENT, info);
-				mdelay(1);
-				pm |=  (PWR_BLON | AUTO_PWR_UP);
-				pm &= ~SUSPEND_NOW;
-				aty_st_le32(POWER_MANAGEMENT, pm, info);
-				pm = aty_ld_le32(POWER_MANAGEMENT, info);
-				mdelay(1);
-				pm |= PWR_MGT_ON;
-				aty_st_le32(POWER_MANAGEMENT, pm, info);
-				do {
-					pm = aty_ld_le32(POWER_MANAGEMENT, info);
-					/* Fix a problem with revision 4c50 of the chip */
-					if (Gx == LP_CHIP_ID)
-						break;
-				} while ((pm & PWR_MGT_STATUS_MASK) != 0);
-				mdelay(500);
-			}
+			if (Gx == LG_CHIP_ID)
+				result = aty_power_mgmt_LT(0, info);
+			else
+				result = aty_power_mgmt_LTPro(0, info);
 
 			/* Restore fb content */			
 			if (info->save_framebuffer) {
-				memcpy((void *)info->frame_buffer,
+				memcpy_toio((void *)info->frame_buffer,
 				       info->save_framebuffer, nb);
 				vfree(info->save_framebuffer);
 				info->save_framebuffer = 0;
 			}
-
-			/* Restore display */			
+			/* Restore display */
 			atyfb_set_par(&info->current_par, info);
 			atyfbcon_blank(0, (struct fb_info *)info);
 			break;
 		}
 	}
-	return PBOOK_SLEEP_OK;
+	return result;
 }
 #endif /* CONFIG_PMAC_PBOOK */

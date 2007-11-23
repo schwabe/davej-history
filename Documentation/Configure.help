@@ -7588,13 +7588,17 @@ CONFIG_NTFS_FS
   The module will be called ntfs.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-NTFS read-write support (experimental)
+NTFS read-write support (DANGEROUS)
 CONFIG_NTFS_RW
-  If you say Y here, you will (hopefully) be able to write to NTFS
-  file systems as well as read from them. The read-write support
-  in NTFS is far from being complete and is not well tested. If you
+  If you say Y here, you will (maybe) be able to write to NTFS file
+  systems as well as read from them. The read-write support in
+  NTFS is far from being complete and is not well tested. If you
   enable this, back up your NTFS volume first since it may get
-  damaged.
+  damaged. Also, make sure to run chkdsk from within Microsoft
+  Windows NT after having performed any writes to a NTFS partition
+  from Linux to detect any problems as early as possible.
+  Please note that write support is limited to Windows NT4 and
+  earlier versions.
 
   If unsure, say N.
 

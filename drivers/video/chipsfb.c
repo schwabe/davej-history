@@ -728,6 +728,8 @@ chips_sleep_notify(struct pmu_sleep_notifier *self, int when)
 		switch (when) {
 		case PBOOK_SLEEP_REQUEST:
 			p->save_framebuffer = vmalloc(nb);
+			if (p->save_framebuffer == NULL)
+				return PBOOK_SLEEP_REFUSE;
 			break;
 		case PBOOK_SLEEP_REJECT:
 			if (p->save_framebuffer) {

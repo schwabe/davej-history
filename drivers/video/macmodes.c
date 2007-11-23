@@ -367,8 +367,10 @@ int mac_var_to_vmode(const struct fb_var_screeninfo *var, int *vmode,
 	    continue;
 	if (var->pixclock > mode->pixclock)
 	    continue;
+#if 0
 	if ((var->vmode & FB_VMODE_MASK) != mode->vmode)
 	    continue;
+#endif
 	*vmode = mode->number;
 	return 0;
     }

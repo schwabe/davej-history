@@ -68,6 +68,8 @@ extern void offb_init(void);
 extern void offb_setup(char *options, int *ints);
 extern void atyfb_init(void);
 extern void atyfb_setup(char *options, int *ints);
+extern void aty128fb_init(void);
+extern void aty128fb_setup(char *options, int *ints);
 extern void igafb_init(void);
 extern void igafb_setup(char *options, int *ints);
 extern void imsttfb_init(void);
@@ -92,6 +94,8 @@ extern void sbusfb_init(void);
 extern void sbusfb_setup(char *options, int *ints);
 extern void valkyriefb_init(void);
 extern void valkyriefb_setup(char *options, int *ints);
+extern void control_init(void);
+extern void control_setup(char *options, int *ints);
 extern void g364fb_init(void);
 extern void fm2fb_init(void);
 extern void fm2fb_setup(char *options, int *ints);
@@ -143,6 +147,9 @@ static struct {
 #ifdef CONFIG_FB_ATY
 	{ "atyfb", atyfb_init, atyfb_setup },
 #endif
+#ifdef CONFIG_FB_ATY128
+	{ "aty128fb", aty128fb_init, aty128fb_setup },
+#endif
 #ifdef CONFIG_FB_IGA
         { "igafb", igafb_init, igafb_setup },
 #endif
@@ -178,6 +185,9 @@ static struct {
 #endif 
 #ifdef CONFIG_FB_VALKYRIE
 	{ "valkyriefb", valkyriefb_init, valkyriefb_setup },
+#endif
+#ifdef CONFIG_FB_CONTROL
+	{ "controlfb", control_init, control_setup },
 #endif
 #ifdef CONFIG_FB_G364
 	{ "g364", g364fb_init, NULL },

@@ -531,18 +531,26 @@ __initfunc(static void init_control(struct fb_info_control *p))
 
 	p->sense = read_control_sense(p);
 	printk(KERN_INFO "Monitor sense value = 0x%x, ", p->sense);
+	
 	/* Try to pick a video mode out of NVRAM if we have one. */
-	par->vmode = nvram_read_byte(NV_VMODE);
-	if(par->vmode <= 0 || par->vmode > VMODE_MAX || !control_reg_init[par->vmode - 1])
-		par->vmode = VMODE_CHOOSE;
-	if(par->vmode == VMODE_CHOOSE)
-		par->vmode = mac_map_monitor_sense(p->sense);
-	if(!control_reg_init[par->vmode - 1])
-		par->vmode = VMODE_640_480_60;
+	if (default_vmode == VMODE_NVRAM) {
+		par->vmode = nvram_read_byte(NV_VMODE);
+		if(par->vmode <= 0 || par->vmode > VMODE_MAX || !control_reg_init[par->vmode - 1])
+			par->vmode = VMODE_CHOOSE;
+		if(par->vmode == VMODE_CHOOSE)
+			par->vmode = mac_map_monitor_sense(p->sense);
+		if(!control_reg_init[par->vmode - 1])
+			par->vmode = VMODE_640_480_60;
+	} else
+		par->vmode=default_vmode;
 
-	par->cmode = nvram_read_byte(NV_CMODE);
-	if(par->cmode < CMODE_8 || par->cmode > CMODE_32)
-		par->cmode = CMODE_8;
+	if (default_cmode == CMODE_NVRAM){
+		par->cmode = nvram_read_byte(NV_CMODE);
+		if(par->cmode < CMODE_8 || par->cmode > CMODE_32)
+			par->cmode = CMODE_8;}
+	else
+		par->cmode=default_cmode;
+
 	/*
 	 * Reduce the pixel size if we don't have enough VRAM.
 	 */
@@ -780,14 +788,10 @@ static int control_var_to_par(struct fb_var_screeninfo *var,
      *  bitfields, horizontal timing, vertical timing.
      */
 	/* swiped by jonh from atyfb.c */
-	if (xres <= 512 && yres <= 384)
-		par->vmode = VMODE_512_384_60;		/* 512x384, 60Hz */
-	else if (xres <= 640 && yres <= 480)
+	if (xres <= 640 && yres <= 480)
 		par->vmode = VMODE_640_480_67;		/* 640x480, 67Hz */
 	else if (xres <= 640 && yres <= 870)
 		par->vmode = VMODE_640_870_75P;		/* 640x870, 75Hz (portrait) */
-	else if (xres <= 768 && yres <= 576)
-		par->vmode = VMODE_768_576_50I;		/* 768x576, 50Hz (PAL full frame) */
 	else if (xres <= 800 && yres <= 600)
 		par->vmode = VMODE_800_600_75;		/* 800x600, 75Hz */
 	else if (xres <= 832 && yres <= 624)
@@ -1176,8 +1180,8 @@ __initfunc(void control_setup(char *options, int *ints))
 		}
 		if (!strncmp(this_opt, "vmode:", 6)) {
 			int vmode = simple_strtoul(this_opt+6, NULL, 0);
-		if (vmode > 0 && vmode <= VMODE_MAX)
-			default_vmode = vmode;
+			if (vmode > 0 && vmode <= VMODE_MAX)
+				default_vmode = vmode;
 		} else if (!strncmp(this_opt, "cmode:", 6)) {
 			int depth = simple_strtoul(this_opt+6, NULL, 0);
 			switch (depth) {

@@ -5,6 +5,7 @@
  *  Copyright (C) 1995-1997, 1999 Martin von Löwis
  *  Copyright (C) 1996 Richard Russon
  *  Copyright (C) 1996-1997 Régis Duchesne
+ *  Copyright (C) 2000 Anton Altaparmakov
  */
 
 #ifdef HAVE_CONFIG_H
@@ -79,7 +80,7 @@ ntfs_read(struct file * filp, char *buf, size_t count, loff_t *off)
 	io.param=buf;
 	io.size=count;
 	error=ntfs_read_attr(ino,ino->vol->at_data,NULL,*off,&io);
-	if(error)return -error;
+	if(error && !io.size)return -error;
 	
 	*off+=io.size;
 	return io.size;
