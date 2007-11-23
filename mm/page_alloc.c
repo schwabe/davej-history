@@ -205,6 +205,8 @@ unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 	reserved_pages = 5;
 	if (priority != GFP_NFS)
 		reserved_pages = min_free_pages;
+	if ((priority == GFP_BUFFER || priority == GFP_IO) && reserved_pages >= 48)
+		reserved_pages -= (12 + (reserved_pages>>3));
 	save_flags(flags);
 repeat:
 	cli();
@@ -214,7 +216,7 @@ repeat:
 		return 0;
 	}
 	restore_flags(flags);
-	if (try_to_free_page(priority, dma, 1))
+	if (priority != GFP_BUFFER && try_to_free_page(priority, dma, 1))
 		goto repeat;
 	return 0;
 }
@@ -264,11 +266,13 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 
 	/*
 	 * select nr of pages we try to keep free for important stuff
-	 * with a minimum of 24 pages. This is totally arbitrary
+	 * with a minimum of 48 pages. This is totally arbitrary
 	 */
 	i = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT+7);
 	if (i < 24)
 		i = 24;
+	i += 24;   /* The limit for buffer pages in __get_free_pages is
+	   	    * decreased by 12+(i>>3) */
 	min_free_pages = i;
 	free_pages_low = i + (i>>1);
 	free_pages_high = i + i;

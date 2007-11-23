@@ -137,6 +137,8 @@
 #define	EINPROGRESS	150	/* Operation now in progress */
 #define	ESTALE		151	/* Stale NFS file handle */
 #define ECANCELED	158	/* AIO operation canceled */
+#define	ENOMEDIUM	159	/* No medium found */
+#define	EMEDIUMTYPE	160	/* Wrong medium type */
 #define	EDQUOT		1133	/* Quota exceeded */
 #define ENFSREMOTE	1134	/* ??? */
 

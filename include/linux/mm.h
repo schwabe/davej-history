@@ -304,6 +304,7 @@ extern void truncate_inode_pages(struct inode *, unsigned long);
 #define GFP_KERNEL	0x03
 #define GFP_NOBUFFER	0x04
 #define GFP_NFS		0x05
+#define GFP_IO		0x06
 
 /* Flag - indicates that the buffer will be suitable for DMA.  Ignored on some
    platforms, used as appropriate on others */

@@ -22,7 +22,8 @@ L_OBJS =fpu_entry.o div_small.o errors.o \
 	reg_round.o \
 	wm_shrx.o wm_sqrt.o \
 	div_Xsig.o polynom_Xsig.o round_Xsig.o \
-	shr_Xsig.o mul_Xsig.o
+	shr_Xsig.o mul_Xsig.o \
+	fpu_debug.o
 
 include $(TOPDIR)/Rules.make
 

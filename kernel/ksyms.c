@@ -299,6 +299,7 @@ struct symbol_table symbol_table = {
 	X(sys_call_table),
 	X(hard_reset_now),
 	X(_ctype),
+	X(get_random_bytes),
 
 	/* Signal interfaces */
 	X(send_sig),

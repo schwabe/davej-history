@@ -601,6 +601,8 @@ static int sr_open(struct inode * inode, struct file * filp)
     if (filp->f_mode & 2)  
 	return -EROFS;
 
+    if(sr_template.usage_count) (*sr_template.usage_count)++;
+
     sr_ioctl(inode,filp,CDROMCLOSETRAY,0);
     check_disk_change(inode->i_rdev);
     
@@ -608,7 +610,6 @@ static int sr_open(struct inode * inode, struct file * filp)
 	sr_ioctl(inode, NULL, SCSI_IOCTL_DOORLOCK, 0);
     if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
 	(*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)++;
-    if(sr_template.usage_count) (*sr_template.usage_count)++;
     
     sr_photocd(inode);
     

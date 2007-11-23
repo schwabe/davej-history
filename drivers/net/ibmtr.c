@@ -444,7 +444,7 @@ int tok_probe(struct device *dev)
 	   paging), then only one adapter can be supported.  */
 	
 	/* determine how much of total RAM is mapped into PC space */
-	ti->mapped_ram_size=1<<(((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)) >>2) +4);
+	ti->mapped_ram_size=1<<((((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)) >>2) & 0x03) + 4);
 	ti->page_mask=0;
 	if (ti->shared_ram_paging == 0xf) { /* No paging in adapter */
 		ti->mapped_ram_size = ti->avail_shared_ram;
@@ -500,7 +500,7 @@ int tok_probe(struct device *dev)
 	if (cardpresent==TR_ISA) {
 		static unsigned char ram_bndry_mask[]={0xfe, 0xfc, 0xf8, 0xf0};
 		unsigned char new_base, rrr_32, chk_base, rbm;
-		rrr_32 = (readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD))>>2;
+		rrr_32 = ((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD))>>2) & 0x03;
 		rbm = ram_bndry_mask[rrr_32];
 		new_base = (Shared_Ram_Base + (~rbm)) & rbm; /* up to boundary */
 		chk_base = new_base + (ti->mapped_ram_size>>3);

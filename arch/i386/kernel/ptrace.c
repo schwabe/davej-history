@@ -294,6 +294,127 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 		put_long(tsk, vma, addr, data);
 	return 0;
 }
+#ifdef CONFIG_MATH_EMULATION
+static void write_emulator_word(struct task_struct *child,
+				unsigned long register_offset,
+				long data)
+{
+	int i, j;
+	struct i387_soft_struct *soft_fpu;
+	struct fpu_reg *this_fpreg, *next_fpreg;
+	char hard_reg[2][10];
+	int control_word;
+	unsigned long top;
+	i = register_offset / 10;
+	j = register_offset % 10;
+	soft_fpu = &child->tss.i387.soft;
+	top = i + (unsigned long) soft_fpu->top;
+	control_word = soft_fpu->cwd;
+	this_fpreg = &soft_fpu->regs[(top + i) % 8];
+	next_fpreg = &soft_fpu->regs[(top + i + 1) % 8];
+	softreg_to_hardreg(this_fpreg, hard_reg[0], control_word);
+	if (j > 6)
+		softreg_to_hardreg(next_fpreg, hard_reg[1], control_word);
+	*(long *) &hard_reg[0][j] = data;
+	hardreg_to_softreg(hard_reg[0], this_fpreg);
+	if (j > 6)
+		hardreg_to_softreg(hard_reg[1], next_fpreg);
+}
+#endif /* defined(CONFIG_MATH_EMULATION) */
+
+/* Put a word to the part of the user structure containing
+ * floating point registers
+ * Floating point support added to ptrace by Ramon Garcia,
+ * ramon@juguete.quim.ucm.es
+ */
+
+static int put_fpreg_word (struct task_struct *child,
+	unsigned long addr, long data)
+{
+	struct user *dummy = NULL;
+	if (addr < (long) (&dummy->i387.st_space))
+		return -EIO;
+	addr -= (long) (&dummy->i387.st_space);
+
+	if (!hard_math) {
+#ifdef CONFIG_MATH_EMULATION
+		write_emulator_word(child, addr, data);
+#else
+		return 0;
+#endif
+	}
+	else 
+#ifndef __SMP__
+		if (last_task_used_math == child) {
+			clts();
+			__asm__("fsave %0; fwait":"=m" (child->tss.i387));
+			last_task_used_math = current;
+			stts();
+		}
+#endif
+	*(long *)
+		((char *) (child->tss.i387.hard.st_space) + addr) = data;
+	return 0;
+}
+
+#ifdef CONFIG_MATH_EMULATION
+
+static unsigned long get_emulator_word(struct task_struct *child,
+				       unsigned long register_offset)
+{
+	char hard_reg[2][10];
+	int i, j;
+	struct fpu_reg *this_fpreg, *next_fpreg;
+	struct i387_soft_struct *soft_fpu;
+	long int control_word;
+	unsigned long top;
+	unsigned long tmp;
+	i = register_offset / 10;
+	j = register_offset % 10;
+	soft_fpu = &child->tss.i387.soft;
+	top = (unsigned long) soft_fpu->top;
+	this_fpreg = &soft_fpu->regs[(top + i) % 8];
+	next_fpreg = &soft_fpu->regs[(top + i + 1) % 8];
+	control_word = soft_fpu->cwd;
+	softreg_to_hardreg(this_fpreg, hard_reg[0], control_word);
+	if (j > 6)
+		softreg_to_hardreg(next_fpreg, hard_reg[1], control_word);
+	tmp = *(long *)
+		&hard_reg[0][j];
+	return tmp;
+}
+
+#endif /* defined(CONFIG_MATH_EMULATION) */
+/* Get a word from the part of the user structure containing
+ * floating point registers
+ */
+static unsigned long get_fpreg_word(struct task_struct *child,
+	unsigned long addr)
+{
+	struct user *dummy = NULL;
+	unsigned long tmp;
+	addr -= (long) (&dummy->i387.st_space);
+	if (!hard_math) {
+#ifdef CONFIG_MATH_EMULATION
+		tmp = get_emulator_word(child, addr);
+#else
+		tmp = 0;
+#endif /* !defined(CONFIG_MATH_EMULATION) */
+	} else {
+#ifndef __SMP__
+		if (last_task_used_math == child) {
+			clts();
+			__asm__("fsave %0; fwait":"=m" (child->tss.i387));
+			last_task_used_math = current;
+			stts();
+		}
+#endif
+		tmp = *(long *)
+			((char *) (child->tss.i387.hard.st_space) +
+			 addr);
+	}
+	return tmp;
+}
 
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
@@ -367,15 +488,25 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_PEEKUSR: {
 			unsigned long tmp;
 			int res;
-
-			if ((addr & 3) || addr < 0 || 
-			    addr > sizeof(struct user) - 3)
+			
+  			if ((addr & 3 && 
+  			     (addr < (long) (&dummy->i387) ||
+  			      addr > (long) (&dummy->i387.st_space[20]) )) ||
+  			    addr < 0 || addr > sizeof(struct user) - 3)
 				return -EIO;
-
+			
 			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
 			if (res)
 				return res;
 			tmp = 0;  /* Default return condition */
+  			if (addr >= (long) (&dummy->i387) &&
+  			    addr < (long) (&dummy->i387.st_space[20]) ) {
+#ifndef CONFIG_MATH_EMULATION
+				if (!hard_math)
+					return -EIO;
+#endif /* defined(CONFIG_MATH_EMULATION) */
+				tmp = get_fpreg_word(child, addr);
+  			} 
 			if(addr < 17*sizeof(long)) {
 			  addr = addr >> 2; /* temporary hack. */
 
@@ -401,12 +532,23 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			return write_long(child,addr,data);
 
 		case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
-			if ((addr & 3) || addr < 0 || 
+			if ((addr & 3 &&
+			     (addr < (long) (&dummy->i387.st_space[0]) ||
+			      addr > (long) (&dummy->i387.st_space[20]) )) ||
+			    addr < 0 || 
 			    addr > sizeof(struct user) - 3)
 				return -EIO;
-
+				
+			if (addr >= (long) (&dummy->i387.st_space[0]) &&
+			    addr < (long) (&dummy->i387.st_space[20]) ) {
+#ifndef CONFIG_MATH_EMULATION
+				if (!hard_math)
+					return -EIO;
+#endif /* defined(CONFIG_MATH_EMULATION) */
+				return put_fpreg_word(child, addr, data);
+			}
 			addr = addr >> 2; /* temporary hack. */
-
+			
 			if (addr == ORIG_EAX)
 				return -EIO;
 			if (addr == DS || addr == ES ||

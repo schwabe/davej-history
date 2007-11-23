@@ -93,11 +93,6 @@ static inline int dup_mmap(struct mm_struct * mm)
 		tmp->vm_flags &= ~VM_LOCKED;
 		tmp->vm_mm = mm;
 		tmp->vm_next = NULL;
-		if (copy_page_range(mm, current->mm, tmp)) {
-			kfree(tmp);
-			exit_mmap(mm);
-			return -ENOMEM;
-		}
 		if (tmp->vm_inode) {
 			tmp->vm_inode->i_count++;
 			/* insert tmp into the share list, just after mpnt */
@@ -105,12 +100,22 @@ static inline int dup_mmap(struct mm_struct * mm)
 			mpnt->vm_next_share = tmp;
 			tmp->vm_prev_share = mpnt;
 		}
+		if (copy_page_range(mm, current->mm, tmp)) {
+			if (mpnt->vm_next_share == tmp) {
+				tmp->vm_prev_share->vm_next_share = tmp->vm_next_share;
+				tmp->vm_next_share->vm_prev_share = tmp->vm_prev_share;	
+			}
+			kfree(tmp);
+			exit_mmap(mm);
+			return -ENOMEM;
+		}
 		if (tmp->vm_ops && tmp->vm_ops->open)
 			tmp->vm_ops->open(tmp);
 		*p = tmp;
 		p = &tmp->vm_next;
 	}
 	build_mmap_avl(mm);
+	flush_tlb_mm(current->mm);
 	return 0;
 }
 
@@ -119,7 +124,7 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 	if (!(clone_flags & CLONE_VM)) {
 		struct mm_struct * mm = kmalloc(sizeof(*tsk->mm), GFP_KERNEL);
 		if (!mm)
-			return -1;
+			return -ENOMEM;
 		*mm = *current->mm;
 		mm->count = 1;
 		mm->def_flags = 0;
@@ -128,13 +133,18 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		tsk->min_flt = tsk->maj_flt = 0;
 		tsk->cmin_flt = tsk->cmaj_flt = 0;
 		tsk->nswap = tsk->cnswap = 0;
-		if (new_page_tables(tsk))
+		if (new_page_tables(tsk)) {
+			tsk->mm = NULL;
+			mm->pgd = NULL;
+			exit_mmap(mm);
 			goto free_mm;
+		}
 		if (dup_mmap(mm)) {
+			tsk->mm = NULL;
 			free_page_tables(mm);
 free_mm:
 			kfree(mm);
-			return -1;
+			return -ENOMEM;
 		}
 		return 0;
 	}

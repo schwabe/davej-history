@@ -55,7 +55,8 @@ static inline int vm_enough_memory(long pages)
 	long freepages;
 	freepages = buffermem >> PAGE_SHIFT;
 	freepages += page_cache_size;
-	freepages >>= 1;
+	if (freepages <= (MAP_NR(high_memory) >> 4) + 48)
+		freepages >>= 1;
 	freepages += nr_free_pages;
 	freepages += nr_swap_pages;
 	freepages -= MAP_NR(high_memory) >> 4;

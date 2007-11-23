@@ -38,6 +38,8 @@
  *      Derived linux/timex.h
  * 1995-08-13    Torsten Duwe
  *      kernel PLL updated to 1994-12-13 specs (rfc-1589)
+ * 1997-08-30    Ulrich Windl
+ *      Added new constant NTP_PHASE_LIMIT. Corrected MAXFREQ.
  */
 #ifndef _LINUX_TIMEX_H
 #define _LINUX_TIMEX_H
@@ -91,10 +93,11 @@
 #define FINEUSEC (1L << SHIFT_SCALE) /* 1 us in phase units */
 
 #define MAXPHASE 512000L        /* max phase error (us) */
-#define MAXFREQ (512L << SHIFT_USEC)  /* max frequency error (ppm) */
+#define MAXFREQ (200L << SHIFT_USEC)  /* max frequency error (ppm) */
 #define MAXTIME (200L << PPS_AVG) /* max PPS error (jitter) (200 us) */
 #define MINSEC 16L              /* min interval between updates (s) */
 #define MAXSEC 1200L            /* max interval between updates (s) */
+#define	NTP_PHASE_LIMIT	(MAXPHASE << 5)	/* beyond max. dispersion */
 
 /*
  * The following defines are used only if a pulse-per-second (PPS)

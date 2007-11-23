@@ -236,7 +236,7 @@ void proc_read_inode(struct inode * inode)
 	switch (ino >> 8) {
 		case PROC_PID_FD_DIR:
 			ino &= 0xff;
-			if (ino >= NR_OPEN || !p->files->fd[ino])
+			if (ino >= NR_OPEN || !p->files || !p->files->fd[ino])
 				return;
 			inode->i_op = &proc_link_inode_operations;
 			inode->i_size = 64;

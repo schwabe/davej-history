@@ -106,8 +106,8 @@ static int proc_lookupfd(struct inode * dir, const char * name, int len,
 	if (!pid || i >= NR_TASKS)
 		return -ENOENT;
 
-	if (fd >= NR_OPEN || !p->files->fd[fd] || !p->files->fd[fd]->f_inode)
-	  return -ENOENT;
+	if (fd >= NR_OPEN || !p->files || !p->files->fd[fd] || !p->files->fd[fd]->f_inode)
+		return -ENOENT;
 
 	ino = (pid << 16) + (PROC_PID_FD_DIR << 8) + fd;
 

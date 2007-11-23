@@ -525,7 +525,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 		{
 			/* The buffer get won't block, or use the atomic queue. It does
 			   produce annoying no free page messages still.... */
-			skb = sock_wmalloc(sk, size, 0 , GFP_BUFFER);
+			skb = sock_wmalloc(sk, size, 0 , GFP_IO);
 			if(!skb)
 				skb=sock_wmalloc(sk, fallback, 0, GFP_KERNEL);
 		}

@@ -121,7 +121,7 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 				if (!p->files)
 					break;
 				ino &= 0xff;
-				if (ino < NR_OPEN && p->files->fd[ino]) {
+				if (ino < NR_OPEN && p->files && p->files->fd[ino]) {
 					new_inode = p->files->fd[ino]->f_inode;
 				}
 				break;

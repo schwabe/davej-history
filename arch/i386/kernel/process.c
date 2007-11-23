@@ -504,19 +504,53 @@ int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 {
 	int fpvalid;
 
-/* Flag indicating the math stuff is valid. We don't support this for the
-   soft-float routines yet */
 	if (hard_math) {
 		if ((fpvalid = current->used_math) != 0) {
-			if (last_task_used_math == current)
+#ifdef __SMP__
+			if (current->flags & PF_USEDFPU)
+#else
+			if (last_task_used_math == current) 
+#endif
 				__asm__("clts ; fnsave %0": :"m" (*fpu));
 			else
 				memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
 		}
-	} else {
-		/* we should dump the emulator state here, but we need to
-		   convert it into standard 387 format first.. */
+		} else {
+		/* We dump the emulator state here.
+		   We convert it into standard 387 format first.. */
+#ifdef CONFIG_MATH_EMULATION
+		int i;
+		unsigned long top;
+		char (*hardreg)[10];
+		struct i387_soft_struct *soft_fpu = &current->tss.i387.soft;
+		struct fpu_reg* softreg;
+		long int control_word = soft_fpu->cwd;
+
+		fpu->cwd = soft_fpu->cwd;
+		fpu->swd = soft_fpu->swd;
+		fpu->twd = soft_fpu->twd;
+		fpu->fip = soft_fpu->fip;
+		fpu->fcs = soft_fpu->fcs;
+		fpu->foo = soft_fpu->foo;
+		fpu->fos = soft_fpu->fos;
+		hardreg = (char (*)[10]) &fpu->st_space[0];
+		top = (unsigned long) soft_fpu->top % 8;
+		softreg = &soft_fpu->regs[top];
+		for (i = top ; i < 8; i ++) {
+			softreg_to_hardreg(softreg, *hardreg, control_word);
+			hardreg++;
+			softreg++;
+		}
+		softreg = &soft_fpu->regs[0];
+		for (i = 0; i < top; i++) {
+			softreg_to_hardreg(softreg, *hardreg, control_word);
+			hardreg++;
+			softreg++;
+		}
+		fpvalid = 1;   
+#else /* defined(CONFIG_MATH_EMULATION) */
 		fpvalid = 0;
+#endif /* !defined(CONFIG_MATH_EMULATION) */
 	}
 
 	return fpvalid;

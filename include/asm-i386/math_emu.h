@@ -45,4 +45,13 @@ struct info {
 	long ___vm86_gs;
 };
 
+/* Interface for converting data between the emulator format
+ * and the hardware format. Used for core dumping and for
+ * ptrace(2) */
+void hardreg_to_softreg(const char hardreg[10],
+			      struct fpu_reg *soft_reg);
+
+void softreg_to_hardreg(const struct fpu_reg *rp, char d[10],
+			long int control_word);
+
 #endif

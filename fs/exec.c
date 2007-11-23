@@ -320,7 +320,7 @@ unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
 		for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
 			if (bprm->page[i]) {
 				free_page(bprm->page[i]);
-				bprm->page[i]=NULL;
+				bprm->page[i] = 0;
 			}
 		}
 	}
@@ -411,8 +411,10 @@ static int exec_mmap(void)
 
 		return 0;
 	}
+	flush_cache_mm(current->mm);
 	exit_mmap(current->mm);
 	clear_page_tables(current);
+	flush_tlb_mm(current->mm);
 
 	return 0;
 }

@@ -362,7 +362,8 @@ no_free_page:
 	}
 	{
 		static unsigned long last = 0;
-		if (priority != GFP_BUFFER && (last + 10 * HZ < jiffies)) {
+		if (priority != GFP_BUFFER && priority != GFP_IO &&
+		    (last + 10 * HZ < jiffies)) {
 			last = jiffies;
 			printk("Couldn't get a free page.....\n");
 		}

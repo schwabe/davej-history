@@ -95,7 +95,7 @@ union bdflush_param{
 		int dummy3;    /* unused */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{60, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{40, 500, 64, 64, 15, 30*HZ, 5*HZ, 1884, 2}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   100,   100, 1, 1};
@@ -590,6 +590,48 @@ no_candidate:
 	return NULL;
 }
 
+static void put_unused_buffer_head(struct buffer_head * bh)
+{
+	if (nr_unused_buffer_heads >= MAX_UNUSED_BUFFERS) {
+		nr_buffer_heads--;
+		kfree(bh);
+		return;
+	}
+	memset(bh,0,sizeof(*bh));
+	nr_unused_buffer_heads++;
+	bh->b_next_free = unused_list;
+	unused_list = bh;
+	wake_up(&buffer_wait);
+}
+
+/* 
+ * We can't put completed temporary IO buffer_heads directly onto the
+ * unused_list when they become unlocked, since the device driver
+ * end_request routines still expect access to the buffer_head's
+ * fields after the final unlock.  So, the device driver puts them on
+ * the reuse_list instead once IO completes, and we recover these to
+ * the unused_list here.
+ *
+ * The reuse_list receives buffers from interrupt routines, so we need
+ * to be IRQ-safe here (but note that interrupts only _add_ to the
+ * reuse_list, never take away. So we don't need to worry about the
+ * reuse_list magically emptying).
+ */
+static inline void recover_reusable_buffer_heads(void)
+{
+	if (reuse_list) {
+		struct buffer_head *head;
+
+		head = xchg(&reuse_list, NULL);
+	
+		do {
+			struct buffer_head *bh = head;
+			head = head->b_next_free;
+			put_unused_buffer_head(bh);
+		} while (head);
+	}
+}
+
 extern void allow_interrupts(void);
 
 static void refill_freelist(int size)
@@ -617,6 +659,7 @@ static void refill_freelist(int size)
 
 repeat:
 	allow_interrupts();
+	recover_reusable_buffer_heads();
 	if(needed <= 0)
 		return;
 
@@ -661,11 +704,6 @@ repeat:
 		goto repeat;
 	}
 
-	/* Dirty buffers should not overtake, wakeup_bdflush(1) calls
-	   bdflush and sleeps, therefore kswapd does his important work. */
-	if (nr_buffers_type[BUF_DIRTY] > nr_buffers * bdf_prm.b_un.nfract/100)
-		wakeup_bdflush(1);
-	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
 	
 	if (nr_free_pages > limit) {
@@ -677,13 +715,13 @@ repeat:
 
 	/* If we are not bdflush we should wake up bdflush and try it again. */
 
-	if (current != bdflush_tsk) {
+	if (current != bdflush_tsk &&
+	    (buffermem >> PAGE_SHIFT) > (MAP_NR(high_memory) >> 2) &&
+	    nr_buffers_type[BUF_DIRTY] > bdf_prm.b_un.nref_dirt) {
 		wakeup_bdflush(1);
 		needed -= PAGE_SIZE;
 		goto repeat;
 	}
-
-	/* We are bdflush: let's try our best */
 
 	/*
 	 * In order to protect our reserved pages, 
@@ -694,7 +732,12 @@ repeat:
 		return;
 
 	/* and repeat until we find something good */
-	grow_buffers(GFP_BUFFER, size);
+	i = grow_buffers(GFP_BUFFER, size);
+
+	if (current != bdflush_tsk && !i && nr_buffers_type[BUF_DIRTY] > 0)
+		wakeup_bdflush(1);
+	else if (!i)
+		grow_buffers(GFP_IO, size);
 
 	/* decrease needed even if there is no success */
 	needed -= PAGE_SIZE;
@@ -732,26 +775,30 @@ repeat:
 		return bh;
 	}
 
-	while(!free_list[isize]) {
-		allow_interrupts();
-		refill_freelist(size);
-	}
-	
-	if (find_buffer(dev,block,size))
-		 goto repeat;
-
+get_free:
 	bh = free_list[isize];
+	if (!bh)
+		goto refill;
 	remove_from_free_list(bh);
 
-/* OK, FINALLY we know that this buffer is the only one of its kind, */
-/* and that it's unused (b_count=0), unlocked (buffer_locked=0), and clean */
+	/* OK, FINALLY we know that this buffer is the only one of its kind,
+	 * and that it's unused (b_count=0), unlocked (buffer_locked=0),
+	 * and clean */
 	bh->b_count=1;
+	bh->b_list=BUF_CLEAN;
 	bh->b_flushtime=0;
 	bh->b_state=(1<<BH_Touched);
 	bh->b_dev=dev;
 	bh->b_blocknr=block;
 	insert_into_queues(bh);
 	return bh;
+
+refill:
+	allow_interrupts();
+	refill_freelist(size);
+	if (!find_buffer(dev,block,size))
+		goto get_free;
+	goto repeat;
 }
 
 void set_writetime(struct buffer_head * buf, int flag)
@@ -932,48 +979,6 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 		return bh;
 	brelse(bh);
 	return NULL;
-}
-
-static void put_unused_buffer_head(struct buffer_head * bh)
-{
-	if (nr_unused_buffer_heads >= MAX_UNUSED_BUFFERS) {
-		nr_buffer_heads--;
-		kfree(bh);
-		return;
-	}
-	memset(bh,0,sizeof(*bh));
-	nr_unused_buffer_heads++;
-	bh->b_next_free = unused_list;
-	unused_list = bh;
-	wake_up(&buffer_wait);
-}
-
-/* 
- * We can't put completed temporary IO buffer_heads directly onto the
- * unused_list when they become unlocked, since the device driver
- * end_request routines still expect access to the buffer_head's
- * fields after the final unlock.  So, the device driver puts them on
- * the reuse_list instead once IO completes, and we recover these to
- * the unused_list here.
- *
- * The reuse_list receives buffers from interrupt routines, so we need
- * to be IRQ-safe here (but note that interrupts only _add_ to the
- * reuse_list, never take away. So we don't need to worry about the
- * reuse_list magically emptying).
- */
-static inline void recover_reusable_buffer_heads(void)
-{
-	if (reuse_list) {
-		struct buffer_head *head;
-
-		head = xchg(&reuse_list, NULL);
-	
-		do {
-			struct buffer_head *bh = head;
-			head = head->b_next_free;
-			put_unused_buffer_head(bh);
-		} while (head);
-	}
 }
 
 static void get_more_buffer_heads(void)
@@ -1502,6 +1507,7 @@ static void wakeup_bdflush(int wait)
 	if (wait) {
 		run_task_queue(&tq_disk);
 		sleep_on(&bdflush_done);
+		recover_reusable_buffer_heads();
 	}
 }
 

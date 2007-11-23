@@ -114,7 +114,7 @@ repeat:
 	}
 }
 
-int shrink_mmap(int priority, int dma, int can_do_io)
+int shrink_mmap(int priority, int dma, int free_buf)
 {
 	static int clock = 0;
 	struct page * page;
@@ -174,7 +174,7 @@ int shrink_mmap(int priority, int dma, int can_do_io)
 				}
 
 				/* is it a buffer cache page? */
-				if (can_do_io && bh && try_to_free_buffer(bh, &bh, 6))
+				if (free_buf && bh && try_to_free_buffer(bh, &bh, 6))
 					return 1;
 				break;
 
@@ -662,8 +662,15 @@ success:
 		pos += nr;
 		read += nr;
 		count -= nr;
-		if (count)
+		if (count) {
+			/*
+			 * to prevent hogging the CPU on well-cached systems,
+			 * schedule if needed, it's safe to do it here:
+			 */
+			if (need_resched)
+				schedule();
 			continue;
+		}
 		break;
 	}
 

@@ -130,4 +130,7 @@
 #define	ELIBMAX		123	/* Atmpt to link in too many shared libs */
 #define	ELIBSCN		124	/* .lib section in a.out corrupted */
 
+#define	ENOMEDIUM	125	/* No medium found */
+#define	EMEDIUMTYPE	126	/* Wrong medium type */
+
 #endif

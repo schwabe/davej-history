@@ -2632,7 +2632,7 @@ retry_search:
 							 dev->pa_addr, skb->redirport, dev);
 			else
 #endif
-			sk = NULL;
+			sk = __tcp_v4_lookup(th, saddr, th->source, daddr, th->dest, dev);
 			/* this is not really correct: we should check sk->users */
 			if (sk && sk->state==TCP_LISTEN)
 			{
