@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.38 1998/10/16 03:19:04 davem Exp $
+/*  $Id: signal.c,v 1.38.2.1 1999/06/14 00:36:21 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -950,6 +950,7 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 			default:
 				lock_kernel();
 				sigaddset(&current->signal, signr);
+				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;
 				do_exit(exit_code);
 				/* NOT REACHED */

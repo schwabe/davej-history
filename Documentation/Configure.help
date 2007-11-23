@@ -5228,7 +5228,7 @@ CONFIG_NET_FASTROUTE
   section (except for CONFIG_IP_ROUTE_TOS and CONFIG_IP_ROUTE_FWMARK).
   At the moment, few devices support fast switching (tulip is one of
   them, modified 8390 can be found at
-  ftp://ftp.inr.ac.ru/ip-routing/fastroute-8390.tar.gz).
+  ftp://ftp.inr.ac.ru/ip-routing/fastroute/fastroute-8390.tar.gz).
 
   If unsure, say N.
 
@@ -5238,8 +5238,8 @@ CONFIG_NET_HW_FLOWCONTROL
   during periods of extremal congestion. At the moment only a couple
   of device drivers support it (really only one -- tulip, modified
   8390 can be found at
-  ftp://ftp.inr.ac.ru/ip-routing/fastroute-8390.tar.gz). Really, this
-  option is applicable to any machine attached to a fast enough
+  ftp://ftp.inr.ac.ru/ip-routing/fastroute/fastroute-8390.tar.gz).
+  Really, this option is applicable to any machine attached to a fast enough
   network, and even a 10 Mb NIC is able to kill a not very slow box,
   such as a 120MHz Pentium.
 
@@ -6546,16 +6546,6 @@ CONFIG_HIPPI
   under Linux, say Y here (you must also remember to enable the driver
   for your HIPPI card below). Most people will say N here.
   
-CERN HIPPI PCI adapter support
-CONFIG_CERN_HIPPI
-  Say Y here if this is your PCI HIPPI network card.
-
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called cern_hippi.o. If you want to compile it as
-  a module, say M here and read Documentation/modules.txt. If unsure,
-  say N.
-
 Essential RoadRunner HIPPI PCI adapter support
 CONFIG_ROADRUNNER
   Say Y here if this is your PCI HIPPI network card.
@@ -6655,9 +6645,6 @@ CONFIG_MCD
   Note that this driver does not support XA or MultiSession CDs
   (PhotoCDs). There is a new driver (next question) which can do
   this. If you want that one, say N here.
-
-  If the driver doesn't work out of the box, you might want to have a
-  look at drivers/cdrom/mcd.h. 
 
   If you say Y here, you should also say Y or M to "ISO 9660 CDROM
   filesystem support" below, because that's the filesystem used on
@@ -7491,13 +7478,6 @@ CONFIG_SMB_FS
   can be inserted in and removed from the running kernel whenever you
   want), say M here and read Documentation/modules.txt. The module
   will be called smbfs.o. Most people say N, however.
-
-SMB Win95 bug work-around
-CONFIG_SMB_WIN95
-  If you want to connect to a share exported by Windows 95, you should
-  say Y here. The Windows 95 server contains a bug that makes listing
-  directories unreliable. This option slows down the listing of
-  directories. This makes the Windows 95 server a bit more stable.
 
 Coda filesystem support
 CONFIG_CODA_FS
@@ -10791,6 +10771,30 @@ CONFIG_RADIO_AZTECH_PORT
   haven't changed the setting of jumper JP3 on the card. Removing the
   jumper sets the card to 0x358.
 
+ADS Cadet AM/FM Radio Tuner Card
+CONFIG_RADIO_CADET
+  Choose Y here if you have one of these AM/FM radio cards, and then fill
+  in the port address below.
+  
+  In order to control your radio card, you will need to use programs
+  that are compatible with the Video for Linux API. Information on 
+  this API and pointers to "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
+  you need to have access to a machine on the Internet that has a 
+  program like lynx or netscape.
+
+  Further documentation on this driver can be found on the WWW at
+  http://linux.blackhawke.net/cadet.html. 
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called radio-cadet.o.
+
+ADS Cadet AM/FM Radio Tuner Card I/O Port
+CONFIG_RADIO_CADET_PORT
+  Enter the I/O address of the card here (most commonly 330). 
+
 SF16FMI Radio
 CONFIG_RADIO_SF16FMI
   Choose Y here if you have one of these FM radio cards, and then fill
@@ -10972,6 +10976,15 @@ CONFIG_VIDEO_PMS
   module called pms.o ( = code which can be inserted in and removed
   from the running kernel whenever you want). If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
+
+PlanB Video-In for PowerMacs
+CONFIG_VIDEO_PLANB
+  PlanB is the V4L driver for the PowerMac 7x00/8x00 series video
+  input hardware. If you want to experiment with this, say Y.
+  Otherwise, or if you don't understand a word, say N.
+  See http://www.cpu.lu/~mlan/planb.html for more info.
+
+  Saying M will compile this driver as a module (planb.o).
 
 #
 # ARM options
@@ -11270,6 +11283,21 @@ CONFIG_IRTTY_SIR
 
   If unsure, say Y.
 
+IrPORT IrDA Device Driver
+CONFIG_IRPORT_SIR
+  Say Y here if you want to build support for the IrPORT IrDA device
+  driver. If you want to compile it as a module, say M here and
+  read Documentation/modules.txt. IrPORT can be used instead of
+  IrTTY and sometimes this can be better. One example is if your
+  IrDA port does not have echo-canceling, which will work OK with
+  IrPORT since this driver is working in half-duplex mode only. You
+  don't need to use irattach with IrPORT, but you just insert it 
+  the same way as FIR drivers (insmod irport io=0x3e8 irq=11).
+  Notice that IrPORT is a SIR device driver which means that speed
+  is limited to 115200 bps.
+
+  If unsure, say Y.
+
 Winbond W83977AF IrDA Device Driver
 CONFIG_WINBOND_FIR
   Say Y here if you want to build IrDA support for the Winbond
@@ -11292,6 +11320,13 @@ CONFIG_SHARP_FIR
   chipset. If you want to compile it as a module, say M here and
   read Documentation/modules.txt. This chipset is used by the Toshiba
   Tecra laptops.
+
+Toshiba Type-O IR Port Device Driver
+CONFIG_TOSHIBA_FIR
+  Say Y here if you want to build support for the Toshiba Type-O IR
+  chipset. If you want to compile it as a module, say M here and
+  read Documentation/modules.txt. This chipset is used by the Toshiba
+  Libretto 100CT, and many more laptops.
 
 ESI JetEye PC Dongle
 CONFIG_ESI_DONGLE
@@ -11329,6 +11364,15 @@ CONFIG_GIRBIL_DONGLE
   normal 9-pin serial port connector, and can currently only be used
   by IrTTY. To activate support for Greenwich dongles you will have to
   insert "irattach -d girbil" in the /etc/irda/drivers script.
+
+Parallax Litelink dongle
+CONFIG_LITELINK_DONGLE
+  Say Y here if you want to build support for the Parallax Litelink
+  dongle. If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. The Parallax dongle attaches to the
+  normal 9-pin serial port connector, and can currently only be used
+  by IrTTY. To activate support for Parallax dongles you will have to
+  insert "irattach -d litelink" in the /etc/irda/drivers script.
 
 VME (Motorola and BVM) support
 CONFIG_VME
