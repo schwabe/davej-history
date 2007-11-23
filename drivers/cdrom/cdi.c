@@ -30,7 +30,7 @@
 #include <linux/blk.h>  /* where the proto type of cdi_init() is */
 #ifdef CONFIG_ISP16_CDI
 #include <linux/isp16.h>
-#endif CONFIG_ISP16_CDI
+#endif /* CONFIG_ISP16_CDI */
 
 /*
  *  Cdrom interface configuration.
@@ -42,7 +42,7 @@ cdi_init(void)
 
 #ifdef CONFIG_ISP16_CDI
   ret_val &= isp16_init();
-#endif CONFIG_ISP16_CDI
+#endif /* CONFIG_ISP16_CDI */
 
   return(ret_val);
 }

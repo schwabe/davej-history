@@ -545,7 +545,7 @@ step_envelope (int voice)
 {
   unsigned        vol, prev_vol, phase;
   unsigned char   rate;
-  long int        flags;
+  unsigned long  flags;
 
   if (voices[voice].mode & WAVE_SUSTAIN_ON && voices[voice].env_phase == 2)
     {
@@ -618,7 +618,7 @@ init_envelope (int voice)
 }
 
 static void
-start_release (int voice, long int flags)
+start_release (int voice, unsigned long flags)
 {
   if (gus_read8 (0x00) & 0x03)
     return;			/* Voice already stopped */
@@ -639,7 +639,7 @@ static void
 gus_voice_fade (int voice)
 {
   int             instr_no = sample_map[voice], is16bits;
-  long int        flags;
+  unsigned long   flags;
 
   save_flags (flags);
   cli ();
@@ -1581,7 +1581,7 @@ guswave_start_note2 (int dev, int voice, int note_num, int volume)
 static int
 guswave_start_note (int dev, int voice, int note_num, int volume)
 {
-  long int        flags;
+  unsigned long   flags;
   int             mode;
   int             ret_val = 0;
 

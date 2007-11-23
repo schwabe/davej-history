@@ -99,7 +99,7 @@ union bdflush_param{
 
 /* These are the min and max parameter values that we will allow to be assigned */
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   100,   100, 1, 1};
-int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 60000, 60000, 2047, 5};
+int bdflush_max[N_PARAM] = {100, 5000, 2000, 2000, 100, 60000, 60000, 2047, 5};
 
 /*
  * Rewrote the wait-routines to use the "new" wait-queue functionality,
@@ -266,7 +266,7 @@ asmlinkage int sys_fsync(unsigned int fd)
 		return -EBADF;
 	if (!file->f_op || !file->f_op->fsync)
 		return -EINVAL;
-	if (file->f_op->fsync(inode,file))
+	if (file->f_op->fsync(inode, file))
 		return -EIO;
 	return 0;
 }
@@ -281,7 +281,7 @@ asmlinkage int sys_fdatasync(unsigned int fd)
 	if (!file->f_op || !file->f_op->fsync)
 		return -EINVAL;
 	/* this needs further work, at the moment it is identical to fsync() */
-	if (file->f_op->fsync(inode,file))
+	if (file->f_op->fsync(inode, file))
 		return -EIO;
 	return 0;
 }
@@ -311,8 +311,8 @@ void invalidate_buffers(kdev_t dev)
 	}
 }
 
-#define _hashfn(dev,block) (((unsigned)(HASHDEV(dev)^block))&HASH_MASK)
-#define hash(dev,block) hash_table[_hashfn(dev,block)]
+#define _hashfn(dev, block) (((unsigned)(HASHDEV(dev)^block))&HASH_MASK)
+#define hash(dev, block) hash_table[_hashfn(dev, block)]
 
 static inline void remove_from_hash_queue(struct buffer_head * bh)
 {
@@ -320,8 +320,8 @@ static inline void remove_from_hash_queue(struct buffer_head * bh)
 		bh->b_next->b_prev = bh->b_prev;
 	if (bh->b_prev)
 		bh->b_prev->b_next = bh->b_next;
-	if (hash(bh->b_dev,bh->b_blocknr) == bh)
-		hash(bh->b_dev,bh->b_blocknr) = bh->b_next;
+	if (hash(bh->b_dev, bh->b_blocknr) == bh)
+		hash(bh->b_dev, bh->b_blocknr) = bh->b_next;
 	bh->b_next = bh->b_prev = NULL;
 }
 
@@ -440,17 +440,17 @@ static inline void insert_into_queues(struct buffer_head * bh)
 	bh->b_next = NULL;
 	if (!(bh->b_dev))
 		return;
-	bh->b_next = hash(bh->b_dev,bh->b_blocknr);
-	hash(bh->b_dev,bh->b_blocknr) = bh;
+	bh->b_next = hash(bh->b_dev, bh->b_blocknr);
+	hash(bh->b_dev, bh->b_blocknr) = bh;
 	if (bh->b_next)
 		bh->b_next->b_prev = bh;
 }
 
 static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
-{		
+{
 	struct buffer_head * tmp;
 
-	for (tmp = hash(dev,block) ; tmp != NULL ; tmp = tmp->b_next)
+	for (tmp = hash(dev, block) ; tmp != NULL ; tmp = tmp->b_next)
 		if (tmp->b_blocknr == block && tmp->b_dev == dev)
 			if (tmp->b_size == size)
 				return tmp;
@@ -479,7 +479,7 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 	struct buffer_head * bh;
 
 	for (;;) {
-		if (!(bh=find_buffer(dev,block,size)))
+		if (!(bh=find_buffer(dev, block, size)))
 			return NULL;
 		bh->b_count++;
 		wait_on_buffer(bh);
@@ -568,26 +568,26 @@ static struct buffer_head *find_candidate(struct buffer_head *bh,
 
 	if (!bh)
 		goto no_candidate;
-	
+
 	for (; (*list_len) > 0; bh = bh->b_next_free, (*list_len)--) {
 		if (size != bh->b_size) {
 			/* this provides a mechanism for freeing blocks
 			   of other sizes, this is necessary now that we
 			   no longer have the lav code. */
-			try_to_free_buffer(bh,&bh,1);
+			try_to_free_buffer(bh, &bh, 1);
 			if (!bh)
 				break;
 			lookahead = 7;
 			continue;
 		}
-		else if (buffer_locked(bh) && 
+		else if (buffer_locked(bh) &&
 			 (bh->b_list == BUF_LOCKED || bh->b_list == BUF_LOCKED1)) {
 			if (!--lookahead) {
 				(*list_len) = 0;
 				goto no_candidate;
 			}
 		}
-		else if (can_reclaim(bh,size))
+		else if (can_reclaim(bh, size))
 			return bh;
 	}
 
@@ -602,7 +602,7 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 		kfree(bh);
 		return;
 	}
-	memset(bh,0,sizeof(*bh));
+	memset(bh, 0, sizeof(*bh));
 	nr_unused_buffer_heads++;
 	bh->b_next_free = unused_list;
 	unused_list = bh;
@@ -707,15 +707,15 @@ repeat:
 			needed -= bh->b_size;
 			buffers[i]--;
 			if(buffers[i] == 0) candidate[i] = NULL;
-		
-			if (candidate[i] && !can_reclaim(candidate[i],size))
-				candidate[i] = find_candidate(candidate[i],&buffers[i], size);
+
+			if (candidate[i] && !can_reclaim(candidate[i], size))
+				candidate[i] = find_candidate(candidate[i], &buffers[i], size);
 		}
 		goto repeat;
 	}
 
 	/* Too bad, that was not enough. Try a little harder to grow some. */
-	
+
 	if (nr_free_pages > limit) {
 		if (grow_buffers(GFP_BUFFER, size)) {
 			needed -= PAGE_SIZE;
@@ -806,7 +806,7 @@ get_free:
 refill:
 	allow_interrupts();
 	refill_freelist(size);
-	if (!find_buffer(dev,block,size))
+	if (!find_buffer(dev, block, size))
 		goto get_free;
 	goto repeat;
 }
@@ -946,29 +946,29 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	if (pos >= filesize)
 		return NULL;
 
-	if (block < 0 || !(bh = getblk(dev,block,bufsize)))
+	if (block < 0 || !(bh = getblk(dev, block, bufsize)))
 		return NULL;
 
 	index = BUFSIZE_INDEX(bh->b_size);
 
 	if (buffer_uptodate(bh))
-		return(bh);   
+		return(bh);
 	else ll_rw_block(READ, 1, &bh);
 
 	blocks = (filesize - pos) >> (9+index);
 
 	if (blocks < (read_ahead[MAJOR(dev)] >> index))
 		blocks = read_ahead[MAJOR(dev)] >> index;
-	if (blocks > NBUF) 
+	if (blocks > NBUF)
 		blocks = NBUF;
 
-/*	if (blocks) printk("breada (new) %d blocks\n",blocks); */
+/*	if (blocks) printk("breada (new) %d blocks\n", blocks); */
 
 
 	bhlist[0] = bh;
 	j = 1;
 	for(i=1; i<blocks; i++) {
-		bh = getblk(dev,block+i,bufsize);
+		bh = getblk(dev, block+i, bufsize);
 		if (buffer_uptodate(bh)) {
 			brelse(bh);
 			break;
@@ -1020,7 +1020,7 @@ static void get_more_buffer_heads(void)
 		/* we now use kmalloc() here instead of gfp as we want
                    to be able to easily release buffer heads - they
                    took up quite a bit of memory (tridge) */
-		bh = (struct buffer_head *) kmalloc(sizeof(*bh),GFP_IO);
+		bh = (struct buffer_head *) kmalloc(sizeof(*bh), GFP_IO);
 		if (bh) {
 			put_unused_buffer_head(bh);
 			nr_buffer_heads++;
@@ -1373,7 +1373,7 @@ static int grow_buffers(int pri, int size)
 	int isize;
 
 	if ((size & 511) || (size > PAGE_SIZE)) {
-		printk("VFS: grow_buffers: size = %d\n",size);
+		printk("VFS: grow_buffers: size = %d\n", size);
 		return 0;
 	}
 
@@ -1477,9 +1477,9 @@ void show_buffers(void)
 	int nlist;
 	static char *buf_types[NR_LIST] = {"CLEAN","LOCKED","LOCKED1","DIRTY"};
 
-	printk("Buffer memory:   %6dkB\n",buffermem>>10);
-	printk("Buffer heads:    %6d\n",nr_buffer_heads);
-	printk("Buffer blocks:   %6d\n",nr_buffers);
+	printk("Buffer memory:   %6dkB\n", buffermem>>10);
+	printk("Buffer heads:    %6d\n", nr_buffer_heads);
+	printk("Buffer blocks:   %6d\n", nr_buffers);
 
 	for(nlist = 0; nlist < NR_LIST; nlist++) {
 	  found = locked = dirty = used = lastused = protected = 0;
@@ -1515,7 +1515,7 @@ void buffer_init(void)
 	hash_table = (struct buffer_head **)vmalloc(NR_HASH*sizeof(struct buffer_head *));
 	if (!hash_table)
 		panic("Failed to allocate buffer hash table\n");
-	memset(hash_table,0,NR_HASH*sizeof(struct buffer_head *));
+	memset(hash_table, 0, NR_HASH*sizeof(struct buffer_head *));
 
 	lru_list[BUF_CLEAN] = 0;
 	grow_buffers(GFP_KERNEL, BLOCK_SIZE);
@@ -1577,7 +1577,7 @@ asmlinkage int sync_old_buffers(void)
 		allow_interrupts();
 
 		bh = lru_list[nlist];
-		if(bh) 
+		if (bh)
 			 for (i = nr_buffers_type[nlist]; i-- > 0; bh = next) {
 				 /* We may have stalled while waiting for I/O to complete. */
 				 if(bh->b_list != nlist) goto repeat;
@@ -1681,7 +1681,7 @@ int bdflush(void * unused)
 	/*
 	 *	We have a bare-bones task_struct, and really should fill
 	 *	in a few more things so "top" and /proc/2/{exe,root,cwd}
-	 *	display semi-sane things. Not real crucial though...  
+	 *	display semi-sane things. Not real crucial though...
 	 */
 
 	current->session = 1;
@@ -1748,15 +1748,14 @@ int bdflush(void * unused)
 					  ndirty++;
 					  bh->b_flushtime = 0;
 					  if (major == LOOP_MAJOR) {
-						  ll_rw_block(wrta_cmd,1, &bh);
+						  ll_rw_block(wrta_cmd, 1, &bh);
 						  wrta_cmd = WRITEA;
 						  if (buffer_dirty(bh))
 							  --ndirty;
-					  }
-					  else
-					  ll_rw_block(WRITE, 1, &bh);
+					  } else
+						  ll_rw_block(WRITE, 1, &bh);
 #ifdef DEBUG
-					  if(nlist != BUF_DIRTY) ncount++;
+					  if (nlist != BUF_DIRTY) ncount++;
 #endif
 					  bh->b_count--;
 					  next->b_count--;

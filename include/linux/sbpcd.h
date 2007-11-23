@@ -117,16 +117,16 @@
 /* tray control: eject tray if no disk is in */
 #if DISTRIBUTION
 #define JUKEBOX 0
-#else
+#else /* DISTRIBUTION */
 #define JUKEBOX 1
-#endif DISTRIBUTION
+#endif /* !DISTRIBUTION */
 
 /* tray control: eject tray after last use */
 #if DISTRIBUTION
 #define EJECT 0
-#else
+#else /* DISTRIBUTION */
 #define EJECT 1
-#endif DISTRIBUTION
+#endif /* !DISTRIBUTION */
 
 /* max. number of audio frames to read with one     */
 /* request (allocates n* 2352 bytes kernel memory!) */
@@ -157,14 +157,13 @@
  * nothing to change below here if you are not fully aware what you're doing
  */
 #ifndef _LINUX_SBPCD_H
-
 #define _LINUX_SBPCD_H
 /*==========================================================================*/
 /*==========================================================================*/
 /*
  * driver's own read_ahead, data mode
  */
-#define SBP_BUFFER_FRAMES 8 
+#define SBP_BUFFER_FRAMES 8
 
 #define LONG_TIMING 0 /* test against timeouts with "gold" CDs on CR-521 */
 #undef  FUTURE
@@ -838,13 +837,13 @@ Read XA Parameter:
 
 /*==========================================================================*/
 /*==========================================================================*/
-#endif _LINUX_SBPCD_H
+#endif /* _LINUX_SBPCD_H */
 /*==========================================================================*/
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.
  * Emacs will notice this stuff at the end of the file and automatically
  * adjust the settings for this buffer only.  This must remain at the end
- * of the file. 
+ * of the file.
  * ---------------------------------------------------------------------------
  * Local variables:
  * c-indent-level: 8

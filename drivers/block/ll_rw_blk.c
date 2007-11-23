@@ -356,7 +356,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	if (buffer_locked(bh)) {
 #if 0
 		printk("make_request(): buffer already locked\n");
-#endif
+#endif /* 0 */
 		return;
 	}
 	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
@@ -388,7 +388,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 			if (buffer_uptodate(bh)) {
 #if 0
 				printk ("make_request(): buffer uptodate for READ\n");
-#endif
+#endif /* 0 */
 				unlock_buffer(bh); /* Hmmph! Already have it */
 				return;
 			}
@@ -402,7 +402,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 			if (!buffer_dirty(bh)) {
 #if 0
 				printk ("make_request(): buffer clean for WRITE\n");
-#endif
+#endif /* 0 */
 				unlock_buffer(bh); /* Hmmph! Nothing to write */
 				return;
 			}
@@ -609,7 +609,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 				"Bad md_map in ll_rw_block\n");
 		        goto sorry;
 		}
-#endif
+#endif /* CONFIG_BLK_DEV_MD */
 	}
 
 	if ((rw == WRITE || rw == WRITEA) && is_read_only(bh[0]->b_dev)) {
@@ -626,7 +626,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 				md_make_request(MINOR (bh[i]->b_dev), rw, bh[i]);
 				continue;
 			}
-#endif
+#endif /* CONFIG_BLK_DEV_MD */
 			make_request(MAJOR(bh[i]->b_rdev), rw, bh[i]);
 		}
 	}
@@ -692,8 +692,8 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
                                         "Bad md_map in ll_rw_swap_file\n");
 				return;
 			}
-#endif
-			
+#endif /* CONFIG_BLK_DEV_MD */
+
 			if (j == 0) {
 				req[j] = get_request_wait(max_req, rdev);
 			} else {
@@ -746,62 +746,64 @@ int blk_dev_init(void)
 	memset(ro_bits,0,sizeof(ro_bits));
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_init();
-#endif
+#endif /* CONFIG_BLK_DEV_RAM */
 #ifdef CONFIG_BLK_DEV_LOOP
 	loop_init();
-#endif
+#endif /* CONFIG_BLK_DEV_LOOP */
 #ifdef CONFIG_CDI_INIT
 	cdi_init();		/* this MUST precede ide_init */
-#endif CONFIG_CDI_INIT
+#endif /* CONFIG_CDI_INIT */
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_init();		/* this MUST precede hd_init */
-#endif
+#endif /* CONFIG_BLK_DEV_IDE */
 #ifdef CONFIG_BLK_DEV_HD
 	hd_init();
-#endif
+#endif /* CONFIG_BLK_DEV_HD */
 #ifdef CONFIG_BLK_DEV_XD
 	xd_init();
-#endif
+#endif /* CONFIG_BLK_DEV_XD */
 #ifdef CONFIG_PARIDE
         { extern void paride_init(void); paride_init(); };
-#endif
+#endif /* CONFIG_PARIDE */
 #ifdef CONFIG_BLK_DEV_FD
 	floppy_init();
-#else
+#else /* CONFIG_BLK_DEV_FD */
+#if defined(__i386__)	/* Do we even need this? */
 	outb_p(0xc, 0x3f2);
-#endif
+#endif /* defined(__i386__) */
+#endif /* !CONFIG_BLK_DEV_FD */
 #ifdef CONFIG_CDU31A
 	cdu31a_init();
-#endif CONFIG_CDU31A
+#endif /* CONFIG_CDU31A */
 #ifdef CONFIG_MCD
 	mcd_init();
-#endif CONFIG_MCD
+#endif /* CONFIG_MCD */
 #ifdef CONFIG_MCDX
 	mcdx_init();
-#endif CONFIG_MCDX
+#endif /* CONFIG_MCDX */
 #ifdef CONFIG_SBPCD
 	sbpcd_init();
-#endif CONFIG_SBPCD
+#endif /* CONFIG_SBPCD */
 #ifdef CONFIG_AZTCD
         aztcd_init();
-#endif CONFIG_AZTCD
+#endif /* CONFIG_AZTCD */
 #ifdef CONFIG_CDU535
 	sony535_init();
-#endif CONFIG_CDU535
+#endif /* CONFIG_CDU535 */
 #ifdef CONFIG_GSCD
 	gscd_init();
-#endif CONFIG_GSCD
+#endif /* CONFIG_GSCD */
 #ifdef CONFIG_CM206
 	cm206_init();
-#endif
+#endif /* CONFIG_CM206 */
 #ifdef CONFIG_OPTCD
 	optcd_init();
-#endif CONFIG_OPTCD
+#endif /* CONFIG_OPTCD */
 #ifdef CONFIG_SJCD
 	sjcd_init();
-#endif CONFIG_SJCD
+#endif /* CONFIG_SJCD */
 #ifdef CONFIG_BLK_DEV_MD
 	md_init();
-#endif CONFIG_BLK_DEV_MD
+#endif /* CONFIG_BLK_DEV_MD */
 	return 0;
 }

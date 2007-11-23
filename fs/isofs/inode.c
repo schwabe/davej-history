@@ -241,18 +241,18 @@ static unsigned int isofs_get_last_session(kdev_t dev)
 				       CDROMMULTISESSION,
 				       (unsigned long) &ms_info);
       set_fs(old_fs);
-#if 0 
+#if 0
       printk("isofs.inode: CDROMMULTISESSION: rc=%d\n",i);
       if (i==0)
 	{
 	  printk("isofs.inode: XA disk: %s\n", ms_info.xa_flag ? "yes":"no");
 	  printk("isofs.inode: vol_desc_start = %d\n", ms_info.addr.lba);
 	}
-#endif 0
+#endif /* 0 */
       if (i==0)
 #if WE_OBEY_THE_WRITTEN_STANDARDS
         if (ms_info.xa_flag) /* necessary for a valid ms_info.addr */
-#endif WE_OBEY_THE_WRITTEN_STANDARDS
+#endif /* WE_OBEY_THE_WRITTEN_STANDARDS */
           vol_desc_start=ms_info.addr.lba;
     }
   return vol_desc_start;
@@ -302,7 +302,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	printk("gid = %d\n", opt.gid);
 	printk("uid = %d\n", opt.uid);
 #endif
-	
+
 	blocksize_bits = 0;
 	{
 	  int i = opt.blocksize;
@@ -318,7 +318,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->u.isofs_sb.s_high_sierra = high_sierra = 0; /* default is iso9660 */
 
 	vol_desc_start = isofs_get_last_session(dev);
-	
+
 	for (iso_blknum = vol_desc_start+16;
              iso_blknum < vol_desc_start+100; iso_blknum++)
 	{
@@ -405,7 +405,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	    printk("Multi-volume disks not supported.\n");
 	    goto out;
 	  }
-#endif IGNORE_WRONG_MULTI_VOLUME_SPECS
+#endif /* IGNORE_WRONG_MULTI_VOLUME_SPECS */
 	  s->u.isofs_sb.s_nzones = isonum_733 (h_pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (h_pri->logical_block_size);
 	  s->u.isofs_sb.s_max_size = isonum_733(h_pri->volume_space_size);
@@ -416,14 +416,14 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	    printk("Multi-volume disks not supported.\n");
 	    goto out;
 	  }
-#endif IGNORE_WRONG_MULTI_VOLUME_SPECS
+#endif /* IGNORE_WRONG_MULTI_VOLUME_SPECS */
 	  s->u.isofs_sb.s_nzones = isonum_733 (pri->volume_space_size);
 	  s->u.isofs_sb.s_log_zone_size = isonum_723 (pri->logical_block_size);
 	  s->u.isofs_sb.s_max_size = isonum_733(pri->volume_space_size);
 	}
-	
+
 	s->u.isofs_sb.s_ninodes = 0; /* No way to figure this out easily */
-	
+
 	/* RDE: convert log zone size to bit shift */
 
 	orig_zonesize = s -> u.isofs_sb.s_log_zone_size;
@@ -438,16 +438,16 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	  }
 
 	s->s_magic = ISOFS_SUPER_MAGIC;
-	
+
 	/* The CDROM is read-only, has no nodes (devices) on it, and since
 	   all of the files appear to be owned by root, we really do not want
 	   to allow suid.  (suid or devices will not show up unless we have
 	   Rock Ridge extensions) */
-	
+
 	s->s_flags |= MS_RDONLY /* | MS_NODEV | MS_NOSUID */;
-	
+
 	brelse(bh);
-	
+
 	/* RDE: data zone now byte offset! */
 
 	s->u.isofs_sb.s_firstdatazone = ((isonum_733 (rootp->extent) + 
@@ -564,7 +564,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 #else
 	check_disk_change(s->s_dev);
 	return s;
-#endif	
+#endif
 
  out: /* Kick out for various error conditions */
 	brelse(bh);
@@ -657,7 +657,7 @@ int isofs_bmap(struct inode * inode,int block)
 #endif
 			nextino = ino->u.isofs_i.i_next_section_ino;
 			iput(ino);
-		
+
 			if(++i > MAX_FILE_SECTIONS) {
 				printk("isofs_bmap: More than %d file sections ?!?, aborting...\n",
 				       MAX_FILE_SECTIONS);
@@ -880,14 +880,14 @@ void isofs_read_inode(struct inode * inode)
 	printk("Get inode %d: %d %d: %d\n",inode->i_ino, block, 
 	       ((int)pnt) & 0x3ff, inode->i_size);
 #endif
-	
+
 	inode->i_mtime = inode->i_atime = inode->i_ctime = 
 	  iso_date(raw_inode->date, high_sierra);
 
 	inode->u.isofs_i.i_first_extent = (isonum_733 (raw_inode->extent) + 
 					   isonum_711 (raw_inode->ext_attr_length))
 	  << inode -> i_sb -> u.isofs_sb.s_log_zone_size;
-	
+
 	inode->u.isofs_i.i_backlink = 0xffffffff; /* Will be used for previous directory */
 	switch (inode->i_sb->u.isofs_sb.s_conversion){
 	case 'a':
@@ -912,12 +912,12 @@ void isofs_read_inode(struct inode * inode)
 	  /* hmm..if we want uid or gid set, override the rock ridge setting */
 	 test_and_set_uid(&inode->i_uid, inode->i_sb->u.isofs_sb.s_uid);
 	}
-	
+
 #ifdef DEBUG
 	printk("Inode: %x extent: %x\n",inode->i_ino, inode->u.isofs_i.i_first_extent);
 #endif
 	brelse(bh);
-	
+
 	inode->i_op = NULL;
 
 	/* get the volume sequence number */
@@ -940,7 +940,7 @@ void isofs_read_inode(struct inode * inode)
 	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
 		printk("Multi volume CD somehow got mounted.\n");
 	} else
-#endif IGNORE_WRONG_MULTI_VOLUME_SPECS
+#endif /* IGNORE_WRONG_MULTI_VOLUME_SPECS */
 	{
 	  if (S_ISREG(inode->i_mode))
 	    inode->i_op = &isofs_file_inode_operations;

@@ -61,19 +61,22 @@ asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 
 #define get_seg_byte(seg,addr) ({ \
 register unsigned char __res; \
-__asm__("push %%fs;mov %%ax,%%fs;movb %%fs:%2,%%al;pop %%fs" \
-	:"=a" (__res):"0" (seg),"m" (*(addr))); \
+__asm__("push %%fs; mov %%ax, %%fs; movb %%fs:%2, %%al; pop %%fs" \
+	: "=a" (__res)
+	: "0" (seg), "m" (*(addr))); \
 __res;})
 
 #define get_seg_long(seg,addr) ({ \
 register unsigned long __res; \
-__asm__("push %%fs;mov %%ax,%%fs;movl %%fs:%2,%%eax;pop %%fs" \
-	:"=a" (__res):"0" (seg),"m" (*(addr))); \
+__asm__("push %%fs; mov %%ax, %%fs; movl %%fs:%2, %%eax; pop %%fs" \
+	: "=a" (__res)
+	: "0" (seg), "m" (*(addr))); \
 __res;})
 
 #define _fs() ({ \
 register unsigned short __res; \
-__asm__("mov %%fs,%%ax":"=a" (__res):); \
+__asm__("mov %%fs, %%ax"
+	: "=a" (__res):); \
 __res;})
 
 void page_exception(void);
@@ -219,12 +222,12 @@ asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 			}
 			do_exit(SIGSEGV);
 		}
-		else 
+		else
 			die_if_kernel("general protection",regs,error_code);
 	}
 	current->tss.error_code = error_code;
 	current->tss.trap_no = 13;
-	force_sig(SIGSEGV, current);	
+	force_sig(SIGSEGV, current);
 }
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
@@ -236,7 +239,7 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
 	printk("You probably have a hardware problem with your RAM chips or a\n");
 	printk("power saving mode enabled.\n");
-#endif	
+#endif
 #endif
 }
 
@@ -251,7 +254,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 	current->tss.error_code = error_code;
 	if ((regs->cs & 3) == 0) {
 		/* If this is a kernel mode trap, then reset db7 and allow us to continue */
-		__asm__("movl %0,%%db7"
+		__asm__("movl %0, %%db7"
 			: /* no output */
 			: "r" (0));
 		return;
@@ -282,7 +285,8 @@ void math_error(void)
 	/*
 	 *	Save the info for the exception handler
 	 */
-	__asm__ __volatile__("fnsave %0":"=m" (task->tss.i387.hard));
+	__asm__ __volatile__("fnsave %0"
+		: "=m" (task->tss.i387.hard));
 	task->flags&=~PF_USEDFPU;
 	stts();
 
@@ -329,14 +333,17 @@ asmlinkage void math_state_restore(void)
 	if (last_task_used_math == current)
 		return;
 	if (last_task_used_math)
-		__asm__("fnsave %0":"=m" (last_task_used_math->tss.i387));
+		__asm__("fnsave %0"
+			: "=m" (last_task_used_math->tss.i387));
 	else
 		__asm__("fnclex");
 	last_task_used_math = current;
 #endif
 
 	if(current->used_math)
-		__asm__("frstor %0": :"m" (current->tss.i387));
+		__asm__("frstor %0"
+			:
+			: "m" (current->tss.i387));
 	else
 	{
 		/*
@@ -398,7 +405,8 @@ void trap_init_f00f_bug(void)
 	flush_tlb_all();
 
 		/* now we have the mapping ok, we can do LIDT */
-	 __asm__ __volatile__("\tlidt %0": "=m" (idt_descriptor));
+	 __asm__ __volatile__("\tlidt %0"
+		: "=m" (idt_descriptor));
 
 	printk(" ... done\n");
 }
@@ -409,10 +417,10 @@ void trap_init(void)
 	int i;
 	struct desc_struct * p;
 	static int smptrap=0;
-	
+
 	if(smptrap)
 	{
-		__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
+		__asm__("pushfl; andl $0xffffbfff, (%esp); popfl");
 		load_ldt(0);
 		return;
 	}
@@ -454,7 +462,7 @@ void trap_init(void)
 		p++;
 	}
 /* Clear NT, so that we won't have troubles with that later on */
-	__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
+	__asm__("pushfl; andl $0xffffbfff, (%esp); popfl");
 	load_TR(0);
 	load_ldt(0);
 }

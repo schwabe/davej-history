@@ -1644,4 +1644,4 @@ void cleanup_module(void)
   free_irq(mcd_irq, NULL);
   printk(KERN_INFO "mcd module released.\n");
 }
-#endif MODULE
+#endif /* MODULE */

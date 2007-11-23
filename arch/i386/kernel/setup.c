@@ -57,10 +57,10 @@ static unsigned char Cx86_mult = 0;	/* clock multiplier for Cyrix CPUs */
 static const char *x86_clkmult[] = {
 	"unknown", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5", "5.5",
 	"6", "6.5", "7", "7.5", "8"
-	};
+};
 
 char ignore_irq13 = 0;		/* set if exception 16 works */
-char wp_works_ok = -1;		/* set if paging hardware honours WP */ 
+char wp_works_ok = -1;		/* set if paging hardware honours WP */
 char hlt_works_ok = 1;		/* set if the "hlt" instruction works */
 
 /*
@@ -112,9 +112,9 @@ extern char empty_zero_page[PAGE_SIZE];
 #define COMMAND_LINE ((char *) (PARAM+2048))
 #define COMMAND_LINE_SIZE 256
 
-#define RAMDISK_IMAGE_START_MASK  	0x07FF
+#define RAMDISK_IMAGE_START_MASK	0x07FF
 #define RAMDISK_PROMPT_FLAG		0x8000
-#define RAMDISK_LOAD_FLAG		0x4000	
+#define RAMDISK_LOAD_FLAG		0x4000
 
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
@@ -136,9 +136,9 @@ void setup_arch(char **cmdline_p,
 	}
 	smptrap=1;
 
- 	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
- 	drive_info = DRIVE_INFO;
- 	screen_info = SCREEN_INFO;
+	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
+	drive_info = DRIVE_INFO;
+	screen_info = SCREEN_INFO;
 #ifdef CONFIG_APM
 	apm_bios_info = APM_BIOS_INFO;
 #endif
@@ -167,14 +167,14 @@ void setup_arch(char **cmdline_p,
 	/*
 	 *	The CONFIG_MAX_MEMSIZE sanity checker.
 	 */
-	 
+
 	if (memory_end > (CONFIG_MAX_MEMSIZE-128)*1024*1024)
 	{
 		memory_end = (CONFIG_MAX_MEMSIZE-128)*1024*1024;
 		printk(KERN_WARNING "ONLY %dMB RAM will be used, see Documentation/more-than-900MB-RAM.txt!.\n", CONFIG_MAX_MEMSIZE-128);
 		udelay(3*1000*1000);
 	}
-	
+
 	if (!MOUNT_ROOT_RDONLY)
 		root_mountflags &= ~MS_RDONLY;
 	memory_start = (unsigned long) &_end;
@@ -263,12 +263,12 @@ static const char * Cx86model(void)
     unsigned char nr6x86 = 0;
     unsigned char cx_dir0 = 0;	/* Model and bus clock multiplier */
     unsigned char cx_dir1 = 0;	/* Stepping info */
-    unsigned int flags;
+    unsigned long flags;
     static const char *model[] = {
 	"unknown", "Cx486", "5x86", "MediaGX", "6x86", "6x86L", "6x86MX",
 	"M II"
     };
-    
+
     if (x86_model == -1) {	/* is this an old Cx486 without DIR0/DIR1? */
 	nr6x86 = 1;		/* Cx486 */
 	Cx86_mult = 0;		/* unknown multiplier */
@@ -276,65 +276,65 @@ static const char * Cx86model(void)
     else {
 
 	/* Get DIR0, DIR1 since all other Cyrix CPUs have them */
-    
+
 	save_flags(flags);
 	cli();
 	cx_dir0 = getCx86(CX86_DIR0);	/* we use the access macros */
 	cx_dir1 = getCx86(CX86_DIR1);	/* defined in processor.h */
 	restore_flags(flags);
-	                                
+
 	/* Now cook; the recipe is by Channing Corn, from Cyrix.
 	 * We do the same thing for each generation: we work out
 	 * the model, multiplier and stepping.
 	 */
-	 
+
 	if (cx_dir0 < 0x20) {
 		nr6x86 = 1;				/* Cx486 */
 		Cx86_mult = 0;				/* unknown multiplier */
 		sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) + 1, cx_dir1 & 0x0f);
 	}
-        
+
         if ((cx_dir0 > 0x20) && (cx_dir0 < 0x30)) {
 		nr6x86 = 2;				/* 5x86 */
 		Cx86_mult = ((cx_dir0 & 0x04) ? 5 : 3);	/* either 3x or 2x */
 		sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) + 1, cx_dir1 & 0x0f);
 	}
-        
+
         if ((cx_dir0 >= 0x30) && (cx_dir0 < 0x38)) {
 		nr6x86 = ((x86_capability & (1 << 8)) ? 5 : 4);	/* 6x86(L) */
 		Cx86_mult = ((cx_dir0 & 0x04) ? 5 : 3);	/* either 3x or 2x */
 		sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 3), cx_dir1 & 0x0f);
 	}
-        
+
         if ((cx_dir0 >= 0x40) && (cx_dir0 < 0x50)) {
 	    if (x86 == 4) { /* MediaGX */
 		nr6x86 = 3;
 		Cx86_mult = ((cx_dir0 & 0x01) ? 5 : 7);	/* either 3x or 4x */
-        	switch (cx_dir1 >> 4) {
-            		case (0) :
-            		case (1) :
-            			sprintf(Cx86_step, "2.%d", cx_dir1 & 0x0f);
-			break;
-            		case (2) :
-            			sprintf(Cx86_step, "1.%d", cx_dir1 & 0x0f);
-			break;
+		switch (cx_dir1 >> 4) {
+			case (0) :
+			case (1) :
+				sprintf(Cx86_step, "2.%d", cx_dir1 & 0x0f);
+				break;
+			case (2) :
+				sprintf(Cx86_step, "1.%d", cx_dir1 & 0x0f);
+				break;
                         default  :
-			break;
+				break;
                 }
             } /* endif MediaGX */
-            if (x86 == 5) { /* GXm */
-                char GXm_mult[8] = {7,11,7,11,13,15,13,9}; /* 4 to 8 */
-            	ext_cpuid = 0x80000005;	/* available */
-            	Cx86_mult = GXm_mult[cx_dir0 & 0x0f];
-            	sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) - 1, cx_dir1 & 0x0f);
-            } /* endif GXm */
+	    if (x86 == 5) { /* GXm */
+		    char GXm_mult[8] = {7,11,7,11,13,15,13,9}; /* 4 to 8 */
+		    ext_cpuid = 0x80000005;	/* available */
+		    Cx86_mult = GXm_mult[cx_dir0 & 0x0f];
+		    sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) - 1, cx_dir1 & 0x0f);
+	    } /* endif GXm */
         }
-        
+
         if ((cx_dir0 >= 0x50) && (cx_dir0 < 0x60)) {
 		nr6x86 = ((cx_dir1 > 7) ? 7 : 6);	/* 6x86Mx or M II */
 		Cx86_mult = (cx_dir0 & 0x07) + 2;	/* 2 to 5 in 0.5 steps */
-        	if (((cx_dir1 & 0x0f) > 4) || ((cx_dir1 >> 4) == 2)) cx_dir1 += 0x10;
-        	sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) + 1, cx_dir1 & 0x0f);
+		if (((cx_dir1 & 0x0f) > 4) || ((cx_dir1 >> 4) == 2)) cx_dir1 += 0x10;
+		sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) + 1, cx_dir1 & 0x0f);
 	}
     }
     x86_mask = 1;	/* we don't use it, but has to be set to something */
@@ -358,7 +358,7 @@ static const char * AMDmodel(void)
 {
 	const char *p=NULL;
 	int i;
-	
+
 	if ((x86_model == 0) || (x86 == 4)) {
 		for (i=0; i<sizeof(amd_models)/sizeof(struct cpu_model_info); i++)
 			if (amd_models[i].cpu_x86 == x86) {
@@ -390,31 +390,30 @@ static const char * Intelmodel(void)
 {
 	const char *p = "386 SX/DX";	/* default to a 386 */
 	int i;
-	
+
 	/*
 	 *	Old 486SX has no CPU ID. Set the model to 2 for this
 	 *	case.
 	 */
-	 
+
 	if( x86==4 && x86_model == 0 && hard_math == 0)
 		x86_model = 2;
-	
+
 	for (i=0; i<sizeof(intel_models)/sizeof(struct cpu_model_info); i++)
 		if (intel_models[i].cpu_x86 == x86) {
 			p = intel_models[i].model_names[(int)x86_model];
 			break;
 		}
-	
-	
+
 	return p;
 }
-	
+
 /* Recent Intel CPUs have an EEPROM and a ROM with CPU information. We'll use
  * this information in future versions of this code.
  * AMD and more recently Cyrix have decided to standardize on an extended
  * cpuid mechanism for their CPUs.
  */
- 
+
 static const char * get_cpu_mkt_name(void)
 {
         static char mktbuf[48];
@@ -439,7 +438,7 @@ static const char * getmodel(void)
 	else if (strcmp(x86_vendor_id, "CentaurHauls") == 0)	/* CentaurHauls */
 		p = IDTmodel();
 	/* This isnt quite right */
-	else if (strcmp(x86_vendor_id, "UMC UMC UMC ") == 0) 	/* UMC */
+	else if (strcmp(x86_vendor_id, "UMC UMC UMC ") == 0)	/* UMC */
 		p = Intelmodel();
 	else /* default - this could be anyone */
 		p = Intelmodel();
@@ -464,7 +463,7 @@ int get_cpuinfo(char * buffer)
 		"fpcmov", "17", "psn",    "19",  "20",  "21", "22",   "mmx",
 		  "emmx", "25", "26",    "27",  "28",  "29", "30", "3dnow"
 	};
-         
+
 #ifdef __SMP__
         int n;
 
@@ -475,7 +474,7 @@ int get_cpuinfo(char * buffer)
 
         for ( n = 0 ; n < 32 ; n++ ) {
                 if ( cpu_present_map & (1<<n) ) {
-                        if (len) buffer[len++] = '\n'; 
+                        if (len) buffer[len++] = '\n';
 
 #else
 #define CD(X) (X)
@@ -491,28 +490,28 @@ int get_cpuinfo(char * buffer)
 			len += sprintf(buffer+len,
                                        "\nvendor_id\t: %s\n",
                                        x86_vendor_id);
-        
+
                         if (CD(x86_mask) || have_cpuid)
-                                if      ((strncmp(x86_vendor_id, "Au", 2) == 0)
-                                	&& (x86_model >= 6)) {
-                                	len += sprintf(buffer+len,
-                                        	       "stepping\t: %c\n",
-                                             	       x86_mask + 'A');
+                                if ((strncmp(x86_vendor_id, "Au", 2) == 0)
+					&& (x86_model >= 6)) {
+					len += sprintf(buffer+len,
+							"stepping\t: %c\n",
+							x86_mask + 'A');
                                 }
                                 else if (strncmp(x86_vendor_id, "Cy", 2) == 0) {
-                                	len += sprintf(buffer+len,
+					len += sprintf(buffer+len,
 							"stepping\t: %s, core/bus clock ratio: %sx\n",
-                              				Cx86_step, x86_clkmult[Cx86_mult]);
+							Cx86_step, x86_clkmult[Cx86_mult]);
                                 }
-                                else { 	
-                                	len += sprintf(buffer+len,
-                                        	       "stepping\t: %d\n",
-                                             	       CD(x86_mask));
+                                else {
+					len += sprintf(buffer+len,
+						       "stepping\t: %d\n",
+						       CD(x86_mask));
                                 }
                         else
-                                len += sprintf(buffer+len, 
+                                len += sprintf(buffer+len,
                                                "stepping\t: unknown\n");
-        
+
                         len += sprintf(buffer+len,
                                        "fdiv_bug\t: %s\n"
                                        "hlt_bug\t\t: %s\n"
@@ -530,7 +529,7 @@ int get_cpuinfo(char * buffer)
                                          ? "yes" : "no",
                                        CD(have_cpuid) ? "yes" : "no",
                                        CD(wp_works_ok) ? "yes" : "no");
-        
+
                         for ( i = 0 ; i < 32 ; i++ ) {
                                 if ( CD(x86_capability) & (1 << i) ) {
                                         len += sprintf(buffer+len, " %s",

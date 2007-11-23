@@ -228,8 +228,7 @@ static void check_k6_bug(void)
 
                 if (d > 20*K6_BUG_LOOP) {
                         printk("system stability may be impaired when more than 32 MB are used.\n");
-		}
-                else 
+		} else
                         printk("probably OK (after B9730xxxx).\n");
         }
 }
@@ -346,7 +345,7 @@ static void check_cyrix_various(void)
 				int eax, dummy;
 
 				/* get processor info */
-			
+
 				cpuid(1, &eax, &dummy, &dummy,
 				      &x86_capability);
 

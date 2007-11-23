@@ -84,7 +84,7 @@ S:	Maintained
 
 8390 NETWORK DRIVERS [WD80x3/SMC-ELITE, SMC-ULTRA, NE2000, 3C503, etc.]
 P:	Paul Gortmaker
-M:	gpg109@rsphy1.anu.edu.au
+M:	p_gortmaker@yahoo.com
 L:	linux-net@vger.kernel.org
 S:	Maintained
 
@@ -97,20 +97,20 @@ S:	Maintained
 
 AHA152X SCSI DRIVER
 P:	Juergen E. Fischer
-M:	Juergen Fischer <fischer@et-inf.fho-emden.de>
+M:	Juergen Fischer <fischer@norbit.de>
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 
 APM DRIVER
 P:	Stephen Rothwell
-M:	apm@linuxcare.com.au
+M:	sfr@canb.auug.org.au
 L:	linux-laptop@vger.kernel.org
-W:	http://linuxcare.com.au/apm/
-S:	Maintained
+W:	http://www.canb.auug.org.au/~sfr/
+S:	Supported
 
 APPLETALK NETWORK LAYER
 P:	Jay Schulist
-M:	Jay.Schulist@spacs.k12.wi.us
+M:	jschlst@samba.org
 L:	linux-atalk@netspace.org
 S:	Maintained
 
@@ -118,14 +118,6 @@ ARPD SUPPORT
 P:	Jonathan Layes
 M:	layes@loran.com
 L:	linux-net@vger.kernel.org
-S:	Maintained
-
-AX.25 DAMA SLAVE
-P:	Joerg Reuter
-M:	jreuter@poboxes.com
-W:	http://poboxes.com/jreuter/
-W:	http://qsl.net/dl1bke/
-L:	linux-hams@vger.kernel.org
 S:	Maintained
 
 AX.25 NETWORK LAYER
@@ -148,7 +140,7 @@ S:	Maintained
 
 CYCLADES ASYNC MUX DRIVER
 P:	Ivan Passos
-M:	Ivan Passos <ivan@cyclades.com>
+M:	ivan@cyclades.com
 W:	http://www.cyclades.com/
 S:	Supported
 
@@ -156,6 +148,14 @@ DAC960 RAID DRIVER
 P:	Leonard N. Zubkoff
 M:	Leonard N. Zubkoff <lnz@dandelion.com>
 L:	linux-raid@vger.kernel.org
+S:	Maintained
+
+DAMA SLAVE for AX.25
+P:	Joerg Reuter
+M:	jreuter@yaina.de
+W:	http://yaina.de/jreuter/
+W:	http://qsl.net/dl1bke/
+L:	linux-hams@vger.kernel.org
 S:	Maintained
 
 DC390/AM53C974 SCSI driver
@@ -176,17 +176,18 @@ M:	rgooch@atnf.csiro.au
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 
+DIGI RIGHTSWITCH NETWORK DRIVER
+P:	Rick Richardson
+M:	rick@remotepoint.com
+L:	linux-net@vger.kernel.org
+W:	http://www.dgii.com/linux/
+S:	Maintained
+
 DIGIBOARD DRIVER
 P:	Christoph Lameter
 M:	clameter@fuller.edu
-L:	digiboard@list.fuller.edu
-S:	Maintained
-
-DIGI RIGHTSWITCH NETWORK DRIVER
-P:	Rick Richardson
-M:	rick@dgii.com
-L:	linux-net@vger.kernel.org
-W:	http://www.dgii.com/linux/
+W:	http://www.dgii.com/linux,http://lameter.com/digi
+L:	digilnux@dgii.com
 S:	Maintained
 
 EATA-DMA SCSI DRIVER
@@ -197,7 +198,7 @@ S:	Maintained
 
 EATA ISA/EISA/PCI SCSI DRIVER
 P:	Dario Ballabio
-M:	dario@milano.europe.dg.com
+M:	ballabio_dario@emc.com
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 
@@ -259,8 +260,11 @@ S:	Maintained
 IDE DRIVER [GENERAL]
 P:	Andre Hedrick
 M:	andre@linux-ide.org
+M:	andre@aslab.com
+M:	andre@suse.com
 L:	linux-kernel@vger.kernel.org
-W:	http://linux.kernel.org/pub/linux/kernel/people/hedrick/
+W:	http://www.kernel.org/pub/linux/kernel/people/hedrick/
+W:	http://www.linux-ide.org/
 S:	Supported
 
 IDE/ATAPI CDROM DRIVER 
@@ -297,7 +301,9 @@ S:	Maintained
 
 ISDN SUBSYSTEM HISAX
 P:	Karsten Keil
-M:	keil@isdn4linux.de
+M:	kkeil@suse.de
+P:	Kai Germaschewski
+M:	kai.germaschewski@gmx.de
 L:	isdn4linux@listserv.isdn4linux.de
 W:	http://www.isdn4linux.de
 S:	Maintained
@@ -312,6 +318,13 @@ LANCE AND LANCE32 NETWORK DRIVER
 P:	Thomas Bogendoerfer
 M:	tsbogend@bigbug.franken.de
 L:	linux-net@vger.kernel.org
+S:	Maintained
+
+MCA-SUPPORT
+P:	David Weinehall
+M:	tao@acc.umu.se
+W:	http://www.acc.umu.se/~tao/
+L:	linux-kernel@vger.kernel.org
 S:	Maintained
 
 MENUCONFIG
@@ -427,16 +440,13 @@ M:	mj@atrey.karlin.mff.cuni.cz
 L:	linux-video@atrey.karlin.mff.cuni.cz
 S:	Maintained
 
-THE V2.0 KERNEL IN GENERAL
-P:	David Weinehall
-M:	tao@acc.umu.se
-L:	linux-kernel@vger.kernel.org
-S:	Maintained
-
 TLAN NETWORK DRIVER
 P:	Torben Mathiasen
 M:	torben.mathiasen@compaq.com
+M:	torben@kernel.dk
 L:	tlan@vuser.vu.union.edu
+L:	linux-net@vger.kernel.org
+W:	http://tlan.kernel.dk
 S:	Maintained
 
 TOKEN-RING NETWORK DRIVER
@@ -448,13 +458,13 @@ S:      Maintained
 
 U14-34F SCSI DRIVER
 P:	Dario Ballabio
-M:	dario@milano.europe.dg.com
+M:	ballabio_dario@emc.com
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 
 VFAT FILESYSTEM
 P:	Gordon Chaffee
-M:	chaffee@plateau.cs.berkeley.edu
+M:	chaffee@cs.berkeley.edu
 L:	linux-kernel@vger.kernel.org
 W:	http://bmrc.berkeley.edu/people/chaffee
 S:	Maintained
@@ -473,12 +483,14 @@ S:	Maintained
 
 Z8530 SCC DRIVER FOR AX.25
 P:	Joerg Reuter
-M:	jreuter@poboxes.com
-W:	http://poboxes.com/jreuter/
-W:	http://qsl.net/dl1bke/
+M:	jreuter@yaina.de
+W:	http://yaina.de/jreuter/
+W:	http://www.qsl.net/dl1bke/
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 
 THE REST
-P:	Linus Torvalds
-S:	Buried alive in email
+P:	David Weinehall
+M:	tao@acc.umu.se
+L:	linux-kernel@vger.kernel.org
+S:	Maintained

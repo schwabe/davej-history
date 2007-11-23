@@ -39,8 +39,12 @@ NORET_TYPE void panic(const char * fmt, ...)
 NORET_TYPE void do_exit(long error_code)
 	ATTRIB_NORET;
 extern unsigned long simple_strtoul(const char *,char **,unsigned int);
-extern int sprintf(char * buf, const char * fmt, ...);
-extern int vsprintf(char *buf, const char *, va_list);
+extern int sprintf(char *buf, const char *fmt, ...)
+	__attribute__ ((format (printf, 2, 3)));
+extern int vsprintf(char *buf, const char *, va_list)
+	__attribute__ ((format (printf, 2, 0)));
+extern int _vsnprintf(char *buf, int n, const char *, va_list)
+	__attribute__ ((format (printf, 3, 0)));
 
 extern int session_of_pgrp(int pgrp);
 

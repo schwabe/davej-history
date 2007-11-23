@@ -49,4 +49,4 @@ int promise_cmd(ide_drive_t *, byte);
 void setup_dc4030 (ide_hwif_t *);
 int init_dc4030 (void);
 
-#endif IDE_PROMISE_H
+#endif /* !IDE_PROMISE_H */

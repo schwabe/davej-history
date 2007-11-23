@@ -97,7 +97,7 @@ void	poly_atan(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *result)
 	      EXCEPTION(EX_INTERNAL|0x104);  /* There must be a logic error */
 	      return;
 	    }
-#endif PARANOID
+#endif /* PARANOID */
 	  argSignif.msw = 0;   /* Make the transformed arg -> 0.0 */
 	}
       else
@@ -108,10 +108,10 @@ void	poly_atan(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *result)
 	  if ( exponent < -1 )
 	    shr_Xsig(&Numer, -1-exponent);
 	  negate_Xsig(&Numer);
-      
+
 	  shr_Xsig(&Denom, -exponent);
 	  Denom.msw |= 0x80000000;
-      
+
 	  div_Xsig(&Numer, &Denom, &argSignif);
 
 	  exponent = -1 + norm_Xsig(&argSignif);

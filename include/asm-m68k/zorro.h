@@ -385,7 +385,7 @@ extern u_long zorro_unused_z2ram[4];
 #ifdef CONFIG_ZORRO
 extern void zorro_identify(void);
 extern int zorro_get_list(char *buffer);
-#endif CONFIG_ZORRO
+#endif /* CONFIG_ZORRO */
 
 #endif	/* __ASSEMBLY__ */
 

@@ -97,7 +97,7 @@ FPU_bits_lost:
 	.byte	0
 FPU_denormal:
 	.byte	0
-#endif NON_REENTRANT_FPU
+#endif /* NON_REENTRANT_FPU */
 
 
 .text
@@ -127,13 +127,13 @@ fpu_reg_round_sqrt:		/* Entry point from wm_sqrt.S */
 
 #ifndef NON_REENTRANT_FPU
 	pushl	%ebx		/* adjust the stack pointer */
-#endif NON_REENTRANT_FPU
+#endif /* NON_REENTRANT_FPU */
 
 #ifdef PARANOID
 /* Cannot use this here yet */
 /*	orl	%eax,%eax */
 /*	jns	L_entry_bugged */
-#endif PARANOID
+#endif /* PARANOID */
 
 	cmpl	EXP_UNDER,EXP(%edi)
 	jle	xMake_denorm			/* The number is a de-normal */
@@ -161,12 +161,12 @@ xDenorm_done:
 	je	LRound_To_64
 #ifdef PARANOID
 	jmp	L_bugged_denorm_486
-#endif PARANOID
+#endif /* PARANOID */
 #else
 #ifdef PARANOID
 	jmp	L_bugged_denorm	/* There is no bug, just a bad control word */
-#endif PARANOID
-#endif PECULIAR_486
+#endif /* PARANOID */
+#endif /* PECULIAR_486 */
 
 
 /* Round etc to 24 bit precision */
@@ -187,7 +187,7 @@ LRound_To_24:
 
 #ifdef PARANOID
 	jmp	L_bugged_round24
-#endif PARANOID
+#endif /* PARANOID */
 
 LUp_24:
 	cmpb	SIGN_POS,SIGN(%edi)
@@ -267,7 +267,7 @@ LRound_To_53:
 
 #ifdef PARANOID
 	jmp	L_bugged_round53
-#endif PARANOID
+#endif /* PARANOID */
 
 LUp_53:
 	cmpb	SIGN_POS,SIGN(%edi)
@@ -341,7 +341,7 @@ LRound_To_64:
 
 #ifdef PARANOID
 	jmp	L_bugged_round64
-#endif PARANOID
+#endif /* PARANOID */
 
 LUp_64:
 	cmpb	SIGN_POS,SIGN(%edi)
@@ -417,7 +417,7 @@ xL_Store_significand:
 fpu_reg_round_exit:
 #ifndef NON_REENTRANT_FPU
 	popl	%ebx		/* adjust the stack pointer */
-#endif NON_REENTRANT_FPU
+#endif /* NON_REENTRANT_FPU */
 
 fpu_Arith_exit:
 	popl	%ebx
@@ -553,7 +553,7 @@ xNormalise_result:
 	/* But check it... just in case. */
 	cmpl	EXP_UNDER+1,EXP(%edi)
 	jne	L_norm_bugged
-#endif PARANOID
+#endif /* PARANOID */
 
 #ifdef PECULIAR_486
 	/*
@@ -566,7 +566,7 @@ xNormalise_result:
 	 */
 	orl	%eax,%eax		/* ms bits */
 	js	LNormalise_shift_done	/* Will be masked underflow */
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 
 	orl	%eax,%eax		/* ms bits */
 	js	xL_Normalised		/* No longer a denormal */
@@ -663,7 +663,7 @@ L_bugged_denorm:
 	call	EXCEPTION
 	popl	%ebx
 	jmp	L_exception_exit
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 
 L_bugged_round24:
 	pushl	EX_INTERNAL|0x231
@@ -696,4 +696,4 @@ L_entry_bugged:
 L_exception_exit:
 	mov	$1,%eax
 	jmp	fpu_reg_round_exit
-#endif PARANOID
+#endif /* PARANOID */

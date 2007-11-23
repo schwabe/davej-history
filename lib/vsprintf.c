@@ -131,7 +131,7 @@ static char * number(char * str, long num, int base, int size, int precision
 	return str;
 }
 
-int vsprintf(char *buf, const char *fmt, va_list args)
+int _vsnprintf(char *buf, int n, const char *fmt, va_list args)
 {
 	int len;
 	unsigned long num;
@@ -146,7 +146,7 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 				   number of chars for from string */
 	int qualifier;		/* 'h', 'l', or 'L' for integer fields */
 
-	for (str=buf ; *fmt ; ++fmt) {
+	for (str = buf; *fmt && (n == -1 || str - buf < n); ++fmt) {
 		if (*fmt != '%') {
 			*str++ = *fmt;
 			continue;
@@ -220,6 +220,12 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 
 			len = strnlen(s, precision);
 
+			if (n != -1 && len >= n - (str - buf)) {
+				len = n - 1 - (str - buf);
+				if (len <= 0) break;
+				if (len < field_width) field_width = len;
+			}
+
 			if (!(flags & LEFT))
 				while (len < field_width--)
 					*str++ = ' ';
@@ -291,6 +297,11 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 	}
 	*str = '\0';
 	return str-buf;
+}
+
+int vsprintf(char *buf, const char *fmt, va_list args)
+{
+	return _vsnprintf(buf, -1, fmt, args);
 }
 
 int sprintf(char * buf, const char *fmt, ...)

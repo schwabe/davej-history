@@ -226,7 +226,7 @@ static void log2_kernel(FPU_REG const *arg, Xsig *accum_result,
 	  /* The argument is too large */
 	}
     }
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 
   arg_signif.lsw = argSignif.lsw; XSIG_LL(arg_signif) = XSIG_LL(argSignif);
   adj = norm_Xsig(&argSignif);

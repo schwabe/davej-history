@@ -271,7 +271,7 @@ set_scrmem(int currcons, long offset)
 	    /* Make sure that the hardware is not blanked */
 	    outb_p(HGA_BLINKER_ON | HGA_SCREEN_ON, 0x3b8);
 	  }
-#endif CONFIG_HGA
+#endif /* CONFIG_HGA */
 
 	if (video_mem_term - video_mem_base < offset + video_screen_size)
 	  offset = 0;	/* strange ... */

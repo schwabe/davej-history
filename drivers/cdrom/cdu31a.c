@@ -3243,4 +3243,4 @@ cleanup_module(void)
    release_region(cdu31a_port,4);
    printk(KERN_INFO "cdu31a module released.\n");
 }   
-#endif MODULE
+#endif /* MODULE */

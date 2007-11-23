@@ -9455,7 +9455,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
       } /* while(pdev=....) */
     } /* for PCI_DEVICES */
   } /* PCI BIOS present */
-#endif CONFIG_PCI
+#endif /* CONFIG_PCI */
   /*
    * Now, we re-order the probed devices by BIOS address and BUS class.
    * In general, we follow this algorithm to make the adapters show up

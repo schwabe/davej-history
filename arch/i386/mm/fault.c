@@ -49,7 +49,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 	int write;
 
 	/* get the address */
-	__asm__("movl %%cr2,%0":"=r" (address));
+	__asm__("movl %%cr2,%0" : "=r" (address));
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
 	if (!vma)

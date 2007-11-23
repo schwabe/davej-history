@@ -111,7 +111,7 @@ static inline void add_to_runqueue(struct task_struct * p)
 {
 #ifdef __SMP__
 	int cpu=smp_processor_id();
-#endif	
+#endif
 #if 1	/* sanity tests */
 	if (p->next_run || p->prev_run) {
 		printk("task already on run-queue\n");
@@ -144,7 +144,7 @@ static inline void add_to_runqueue(struct task_struct * p)
 		int i;
 		for (i=0;i<smp_num_cpus;i++)
 		{
-			if (0==current_set[cpu_logical_map[i]]->pid) 
+			if (0==current_set[cpu_logical_map[i]]->pid)
 			{
 				smp_message_pass(cpu_logical_map[i], MSG_RESCHEDULE, 0L, 0);
 				break;
@@ -241,15 +241,15 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 {
 	int weight;
 
-#ifdef __SMP__	
+#ifdef __SMP__
 	/* We are not permitted to run a task someone else is running */
 	if (p->processor != NO_PROC_ID)
 		return -1000;
-#ifdef PAST_2_0		
+#ifdef PAST_2_0
 	/* This process is locked to a processor group */
 	if (p->processor_mask && !(p->processor_mask & (1<<this_cpu))
 		return -1000;
-#endif		
+#endif
 #endif
 
 	/*
@@ -269,7 +269,7 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 	 */
 	weight = p->counter;
 	if (weight) {
-			
+
 #ifdef __SMP__
 		/* Give a largish advantage to the same processor...   */
 		/* (this is equivalent to penalizing other processors) */
@@ -425,11 +425,11 @@ asmlinkage void schedule(void)
 			}
 		default:
 			del_from_runqueue(prev);
-		case TASK_RUNNING:
+		case TASK_RUNNING:;
 	}
 	p = init_task.next_run;
 	sti();
-	
+
 #ifdef __SMP__
 	/*
 	 *	This is safe as we do not permit re-entry of schedule()
@@ -438,7 +438,7 @@ asmlinkage void schedule(void)
 #define idle_task (task[cpu_number_map[this_cpu]])
 #else
 #define idle_task (&init_task)
-#endif	
+#endif
 
 /*
  * Note! there may appear new tasks on the run-queue during this, as
@@ -464,11 +464,11 @@ asmlinkage void schedule(void)
 	/*
 	 *	Allocate process to CPU
 	 */
-	 
+
 	 next->processor = this_cpu;
 	 next->last_processor = this_cpu;
-#endif	 
-#ifdef __SMP_PROF__ 
+#endif
+#ifdef __SMP_PROF__
 	/* mark processor running an idle thread */
 	if (0==next->pid)
 		set_bit(this_cpu,&smp_idle_map);
@@ -591,8 +591,8 @@ bad:
  */
 static inline int waking_non_zero(struct semaphore *sem)
 {
-	int	ret ;
-	long	flags ;
+	int ret;
+	unsigned long flags;
 
 	get_buzz_lock(&sem->lock) ;
 	save_flags(flags) ;
@@ -695,12 +695,12 @@ int __do_down(struct semaphore * sem, int task_state)
 
 void __down(struct semaphore * sem)
 {
-	__do_down(sem,TASK_UNINTERRUPTIBLE) ; 
+	__do_down(sem, TASK_UNINTERRUPTIBLE);
 }
 
 int __down_interruptible(struct semaphore * sem)
 {
-	return(__do_down(sem,TASK_INTERRUPTIBLE)) ; 
+	return (__do_down(sem, TASK_INTERRUPTIBLE));
 }
 
 
@@ -1114,7 +1114,7 @@ static void update_wall_time_one_tick(void)
 		time_adjust_step = tickadj;
 	     else if (time_adjust < -tickadj)
 		time_adjust_step = -tickadj;
-	     
+
 	    /* Reduce by this step the amount of time left  */
 	    time_adjust -= time_adjust_step;
 	}
@@ -1208,7 +1208,7 @@ static __inline__ void update_one_process(struct task_struct *p,
 	do_process_times(p, user, system);
 	do_it_virt(p, user);
 	do_it_prof(p, ticks);
-}	
+}
 
 static void update_process_times(unsigned long ticks, unsigned long system)
 {
@@ -1235,9 +1235,9 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 	{
 		int i = cpu_logical_map[j];
 		struct task_struct *p;
-		
+
 #ifdef __SMP_PROF__
-		if (test_bit(i,&smp_idle_map)) 
+		if (test_bit(i,&smp_idle_map))
 			smp_idle_count[i]++;
 #endif
 		p = current_set[i];
@@ -1463,13 +1463,13 @@ static int setscheduler(pid_t pid, int policy,
 	p = find_process_by_pid(pid);
 	if (!p)
 		return -ESRCH;
-			
+
 	if (policy < 0)
 		policy = p->policy;
 	else if (policy != SCHED_FIFO && policy != SCHED_RR &&
 		 policy != SCHED_OTHER)
 		return -EINVAL;
-	
+
 	/*
 	 * Valid priorities for SCHED_FIFO and SCHED_RR are 1..99, valid
 	 * priority for SCHED_OTHER is 0.
@@ -1495,7 +1495,7 @@ static int setscheduler(pid_t pid, int policy,
 	return 0;
 }
 
-asmlinkage int sys_sched_setscheduler(pid_t pid, int policy, 
+asmlinkage int sys_sched_setscheduler(pid_t pid, int policy,
 				      struct sched_param *param)
 {
 	return setscheduler(pid, policy, param);
@@ -1516,7 +1516,7 @@ asmlinkage int sys_sched_getscheduler(pid_t pid)
 	p = find_process_by_pid(pid);
 	if (!p)
 		return -ESRCH;
-			
+
 	return p->policy;
 }
 
@@ -1588,7 +1588,7 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 	if (error)
 		return error;
 
-	/* Values taken from 2.1.38 */	
+	/* Values taken from 2.1.38 */
 	t.tv_sec = 0;
 	t.tv_nsec = 150000;   /* is this right for non-intel architecture too?*/
 	memcpy_tofs(interval, &t, sizeof(struct timespec));
@@ -1597,7 +1597,7 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 }
 
 /*
- * change timeval to jiffies, trying to avoid the 
+ * change timeval to jiffies, trying to avoid the
  * most obvious overflows..
  */
 static unsigned long timespectojiffies(struct timespec *value)
@@ -1783,7 +1783,7 @@ void sched_init(void)
 	 *	process right in SMP mode.
 	 */
 	int cpu=smp_processor_id();
-#ifndef __SMP__	
+#ifndef __SMP__
 	current_set[cpu]=&init_task;
 #else
 	init_task.processor=cpu;

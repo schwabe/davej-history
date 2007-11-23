@@ -77,7 +77,7 @@ static FUNC const st_instr_table[64] = {
   fdivr_,   trig_b,  __BAD__, __BAD__, fdiv_i,  __BAD__, fdivp_,  __BAD__,
 };
 
-#endif NO_UNDOC_CODE
+#endif /* NO_UNDOC_CODE */
 
 
 #define _NONE_ 0   /* Take no special action */
@@ -119,12 +119,12 @@ static unsigned char const type_table[64] = {
   _REGI_, _NONE_, _null_, _null_, _REGIi, _null_, _REGIp, _null_
 };
 
-#endif NO_UNDOC_CODE
+#endif /* NO_UNDOC_CODE */
 
 
 #ifdef RE_ENTRANT_CHECKING
 char emulating=0;
-#endif RE_ENTRANT_CHECKING
+#endif /* RE_ENTRANT_CHECKING */
 
 static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
 			overrides *override);
@@ -151,7 +151,7 @@ asmlinkage void math_emulate(long arg)
       printk("ERROR: wm-FPU-emu is not RE-ENTRANT!\n");
     }
   RE_ENTRANT_CHECK_ON;
-#endif RE_ENTRANT_CHECKING
+#endif /* RE_ENTRANT_CHECKING */
 
   if (!current->used_math)
     {
@@ -259,7 +259,7 @@ do_another_FPU_instruction:
 #ifdef PARANOID
       EXCEPTION(EX_INTERNAL|0x128);
       math_abort(FPU_info,SIGILL);
-#endif PARANOID
+#endif /* PARANOID */
     }
 
   RE_ENTRANT_CHECK_OFF;
@@ -387,7 +387,7 @@ do_another_FPU_instruction:
 			real_2op_NaN(&loaded_data, st0_ptr,
 				     st0_ptr);
 		      else
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 			/* fadd, fdivr, fmul, or fsubr */
 			real_2op_NaN(st0_ptr, &loaded_data,
 				     st0_ptr);
@@ -500,7 +500,7 @@ do_another_FPU_instruction:
 	 to do this: */
       operand_address.offset = 0;
       operand_address.selector = FPU_DS;
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 
       st0_ptr = &st(0);
       st0_tag = st0_ptr->tag;
@@ -560,7 +560,7 @@ FPU_fwait_done:
   RE_ENTRANT_CHECK_OFF;
   emu_printall();
   RE_ENTRANT_CHECK_ON;
-#endif DEBUG
+#endif /* DEBUG */
 
   if (FPU_lookahead && !need_resched)
     {
@@ -669,10 +669,10 @@ void math_abort(struct info * info, unsigned int signal)
 	current->tss.error_code = 0;
 	send_sig(signal,current,1);
 	RE_ENTRANT_CHECK_OFF;
-	__asm__("movl %0,%%esp ; ret": :"g" (((long) info)-4));
+	__asm__("movl %0,%%esp ; ret" : : "g" (((long) info)-4));
 #ifdef PARANOID
       printk("ERROR: wm-FPU-emu math_abort failed!\n");
-#endif PARANOID
+#endif /* PARANOID */
 }
 
 

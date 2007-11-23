@@ -77,7 +77,7 @@ void	poly_sine(FPU_REG const *arg, FPU_REG *result)
       reg_move(&CONST_Z, result);
       return;
     }
-#endif PARANOID
+#endif /* PARANOID */
 
   exponent = arg->exp - EXP_BIAS;
 
@@ -205,7 +205,7 @@ void	poly_sine(FPU_REG const *arg, FPU_REG *result)
     {
       EXCEPTION(EX_INTERNAL|0x150);
     }
-#endif PARANOID
+#endif /* PARANOID */
 
 }
 
@@ -238,7 +238,7 @@ void	poly_cos(FPU_REG const *arg, FPU_REG *result)
       reg_move(&CONST_QNaN, result);
       return;
     }
-#endif PARANOID
+#endif /* PARANOID */
 
   exponent = arg->exp - EXP_BIAS;
 
@@ -403,6 +403,6 @@ void	poly_cos(FPU_REG const *arg, FPU_REG *result)
     {
       EXCEPTION(EX_INTERNAL|0x151);
     }
-#endif PARANOID
+#endif /* PARANOID */
 
 }

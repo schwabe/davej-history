@@ -14,7 +14,7 @@
  *                      EVERY character on the current page.
  *                      <middelin@polyware.iaf.nl>
  *
- * Danny ter Haar    :	added cpuinfo 
+ * Danny ter Haar    :	added cpuinfo
  *			<dth@cistron.nl>
  *
  * Alessandro Rubini :  profile extension.

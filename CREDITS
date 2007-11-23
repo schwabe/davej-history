@@ -3,7 +3,7 @@
 	formatted in a format that allows for easy grepping and
 	beautification by scripts.  The fields are: name (N), email (E),
 	web-address (W), PGP key ID and fingerprint (P), description (D)
-	and snail-mail address (S). 
+	and snail-mail address (S).
 	Thanks,
 
 			Linus
@@ -263,7 +263,7 @@ E: jjciarla@raiz.uncu.edu.ar
 E: jjo@mendoza.gov.ar
 D: Network driver alias support
 D: IP masq hashing and app modules
-D: IP ip_dynaddr bits 
+D: IP ip_dynaddr bits
 S: Las Cuevas 2385 - Bo Guemes
 S: Las Heras, Mendoza CP 5539
 S: Argentina
@@ -513,7 +513,7 @@ S: USA
 N: Paul Gortmaker
 E: p_gortmaker@yahoo.com
 D: Real Time Clock driver author.
-D: 8390 net driver hacker (ne2000, wd8013, smc-ultra, 3c503, etc.) 
+D: 8390 net driver hacker (ne2000, wd8013, smc-ultra, 3c503, etc.)
 D: Ethernet-HowTo and BootPrompt-HowTo author.
 D: Added many new CONFIG options (modules, ramdisk, generic-serial, etc.)
 D: Implemented 1st "official" kernel thread (moved user bdflush to kflushd)
@@ -540,7 +540,7 @@ E: grant@torque.net
 W: http://www.torque.net/linux-pp.html
 D: Iomega PPA / ZIP driver
 S: 44 St. Joseph Street, Suite 506
-S: Toronto, Ontario, M4Y 2W4 
+S: Toronto, Ontario, M4Y 2W4
 S: Canada
 
 N: Danny ter Haar
@@ -717,7 +717,7 @@ S: USA
 N: Bernhard Kaindl
 E: bkaindl@netway.at
 E: edv@bartelt.via.at
-D: Author of a menu based configuration tool, kmenu, which 
+D: Author of a menu based configuration tool, kmenu, which
 D: is the predecessor of 'make menuconfig' and 'make xconfig'.
 S: Tallak 95
 S: 8103 Rein
@@ -781,7 +781,7 @@ W: http://www.xos.nl/
 D: IP transparent proxy support
 S: X/OS Experts in Open Systems BV
 S: Kruislaan 419
-S: 1098 VA Amsterdam 
+S: 1098 VA Amsterdam
 S: The Netherlands
 
 N: Gero Kuhlmann
@@ -922,7 +922,7 @@ D: MOXA C-218 serial board driver
 D: BOOTP support
 S: Kankovskeho 1241
 S: 182 00 Praha 8
-S: Czech Republic 
+S: Czech Republic
 
 N: John A. Martin
 E: jam@acm.org
@@ -970,7 +970,7 @@ E: meskes@debian.org
 P: 1024/04B6E8F5 6C 77 33 CA CC D6 22 03  AB AB 15 A3 AE AD 39 7D
 D: Kernel hacker. Software watchdog daemon.
 D: Maintainer of several Debian packages
-S: Th.-Heuss-Str. 61 
+S: Th.-Heuss-Str. 61
 S: D-41812 Erkelenz
 S: Germany
 
@@ -1085,7 +1085,7 @@ E: neuffer@goofy.zdv.uni-mainz.de
 W: http://www.i-Connect.Net/~mike/
 D: Developer and maintainer of the EATA-DMA SCSI driver
 D: Co-developer EATA-PIO SCSI driver
-D: /proc/scsi and assorted other snippets 
+D: /proc/scsi and assorted other snippets
 S: Zum Schiersteiner Grund 2
 S: 55127 Mainz
 S: Germany
@@ -1131,23 +1131,23 @@ S: Tula 300000
 S: Russia
 
 N: Kai Petzke
-E: wpp@marie.physik.tu-berlin.de
-W: http://physik.tu-berlin.de/~wpp
-P: 1024/B42868C1 D9 59 B9 98 BB 93 05 38  2E 3E 31 79 C3 65 5D E1 
+E: petzke@teltarif.de
+W: http://www.teltarif.de/
+P: 1024/B42868C1 D9 59 B9 98 BB 93 05 38  2E 3E 31 79 C3 65 5D E1
 D: Driver for Laser Magnetic Storage CD-ROM
 D: Some kernel bug fixes
 D: Port of the database Postgres
-D: "Unix fuer Jedermann" a German introduction to linux (see my web page)
-S: M"ullerstr. 69
-S: 13349 Berlin
+D: Book: "Linux verstehen und anwenden" (Hanser-Verlag)
+S: Triftstraﬂe 55
+S: 13353 Berlin
 S: Germany
 
 N: Ken Pizzini
 E: ken@halcyon.com
 D: CDROM driver "sonycd535" (Sony CDU-535/531)
 
-N: Frederic Potter 
-E: Frederic.Potter@masi.ibp.fr 
+N: Frederic Potter
+E: Frederic.Potter@masi.ibp.fr
 D: Some PCI kernel support
 
 N: Stefan Probst
@@ -1327,7 +1327,7 @@ N: Craig Small
 E: csmall@triode.apana.org.au
 E: vk2xlz@gonzo.vk2xlz.ampr.org (packet radio)
 D: Gracilis PackeTwin device driver
-D: RSPF daemon 
+D: RSPF daemon
 S: 10 Stockalls Place
 S: Minto, NSW, 2566
 S: Australia
@@ -1440,7 +1440,7 @@ N: Tsu-Sheng Tsao
 E: tsusheng@scf.usc.edu
 D: IGMP(Internet Group Management Protocol) version 2
 S: 2F 14 ALY 31 LN 166 SEC 1 SHIH-PEI RD
-S: Taipei 
+S: Taipei
 S: Taiwan 112
 S: Republic of China
 S: 24335 Delta Drive
@@ -1529,7 +1529,7 @@ D: Produced the Slackware distribution, updated the SVGAlib
 D: patches for ghostscript, worked on color 'ls', etc.
 S: 301 15th Street S.
 S: Moorhead, Minnesota 56560
-S: USA 
+S: USA
 
 N: Jos Vos
 E: jos@xos.nl
@@ -1537,7 +1537,7 @@ W: http://www.xos.nl/
 D: Various IP firewall updates, ipfwadm
 S: X/OS Experts in Open Systems BV
 S: Kruislaan 419
-S: 1098 VA Amsterdam 
+S: 1098 VA Amsterdam
 S: The Netherlands
 
 N: Juergen Weigert
@@ -1628,7 +1628,7 @@ N: Roger E. Wolff
 E: R.E.Wolff@BitWizard.nl
 D: Written kmalloc/kfree
 D: Written Specialix IO8+ driver
-S: Van Bronckhorststraat 12 
+S: Van Bronckhorststraat 12
 S: 2612 XV  Delft
 S: The Netherlands
 
@@ -1688,7 +1688,7 @@ S: 95560 Montsoult
 S: France
 
 # Don't add your name here, unless you really _are_ after Marc
-# alphabetically. Leonard used to be very proud of being the 
+# alphabetically. Leonard used to be very proud of being the
 # last entry, and he'll get positively pissed if he can't even
 # be second-to-last.  (and this file really _is_ supposed to be
-# in alphabetic order) 
+# in alphabetic order)

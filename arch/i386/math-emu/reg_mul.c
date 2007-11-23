@@ -46,7 +46,7 @@ int reg_mul(FPU_REG const *a, FPU_REG const *b,
 	{
 	  if ( denormal_operand() ) return 1;
 	}
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
       /* Must have either both arguments == zero, or
 	 one valid and the other zero.
 	 The result is therefore zero. */
@@ -72,7 +72,7 @@ int reg_mul(FPU_REG const *a, FPU_REG const *b,
 	      if ( (b->tag == TW_Valid) && (b->exp <= EXP_UNDER) &&
 		  denormal_operand() )
 		return 1;
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 	      reg_move(a, dest);
 	      dest->sign = sign;
 	    }
@@ -88,7 +88,7 @@ int reg_mul(FPU_REG const *a, FPU_REG const *b,
 	      if ( (a->tag == TW_Valid) && (a->exp <= EXP_UNDER) &&
 		  denormal_operand() )
 		return 1;
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 	      reg_move(b, dest);
 	      dest->sign = sign;
 	    }
@@ -100,6 +100,6 @@ int reg_mul(FPU_REG const *a, FPU_REG const *b,
 	  EXCEPTION(EX_INTERNAL|0x102);
 	  return 1;
 	}
-#endif PARANOID
+#endif /* PARANOID */
     }
 }

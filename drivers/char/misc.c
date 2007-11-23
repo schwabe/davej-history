@@ -197,7 +197,7 @@ int misc_init(void)
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, NULL /* ops -- default to array */,
 		&proc_misc_read /* get_info */,
-	});	
+	});
 #endif /* PROC_FS */
 #ifdef CONFIG_BUSMOUSE
 	bus_mouse_init();
@@ -220,14 +220,18 @@ int misc_init(void)
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
 #endif
-#ifdef CONFIG_SOFT_WATCHDOG
-	watchdog_init();
-#endif
+	/* In 2.0.xx, only the first misc_register() is significant for
+	 * each minor. So we load the hardware watchdogs first, then
+	 * the softdog driver.
+	 */
 #ifdef CONFIG_WDT
 	wdt_init();
 #endif
 #ifdef CONFIG_PCWATCHDOG
 	pcwatchdog_init();
+#endif
+#ifdef CONFIG_SOFT_WATCHDOG
+	watchdog_init();
 #endif
 #ifdef CONFIG_APM
 	apm_bios_init();

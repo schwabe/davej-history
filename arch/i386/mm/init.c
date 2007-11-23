@@ -57,11 +57,13 @@ pte_t * __bad_pagetable(void)
 {
 	extern char empty_bad_page_table[PAGE_SIZE];
 
-	__asm__ __volatile__("cld ; rep ; stosl":
-		:"a" (pte_val(BAD_PAGE)),
-		 "D" ((long) empty_bad_page_table),
-		 "c" (PAGE_SIZE/4)
-		:"di","cx");
+	__asm__ __volatile__(
+		"cld ; rep ; stosl"
+		:
+		: "a" (pte_val(BAD_PAGE)),
+		  "D" ((long) empty_bad_page_table),
+		  "c" (PAGE_SIZE/4)
+		: "di","cx");
 	return (pte_t *) empty_bad_page_table;
 }
 
@@ -69,11 +71,13 @@ pte_t __bad_page(void)
 {
 	extern char empty_bad_page[PAGE_SIZE];
 
-	__asm__ __volatile__("cld ; rep ; stosl":
-		:"a" (0),
-		 "D" ((long) empty_bad_page),
-		 "c" (PAGE_SIZE/4)
-		:"di","cx");
+	__asm__ __volatile__(
+		"cld ; rep ; stosl"
+		:
+		: "a" (0),
+		  "D" ((long) empty_bad_page),
+		  "c" (PAGE_SIZE/4)
+		: "di","cx");
 	return pte_mkdirty(mk_pte((unsigned long) empty_bad_page, PAGE_SHARED));
 }
 
@@ -183,12 +187,16 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 			__asm__("movl %%cr4,%%eax\n\t"
 				"orl $16,%%eax\n\t"
 				"movl %%eax,%%cr4"
-				: : :"ax");
+				:
+				:
+				: "ax");
 #else
 			__asm__(".byte 0x0f,0x20,0xe0\n\t"
 				"orl $16,%%eax\n\t"
 				".byte 0x0f,0x22,0xe0"
-				: : :"ax");
+				:
+				:
+				: "ax");
 #endif
 			wp_works_ok = 1;
 			pgd_val(pg_dir[0]) = _PAGE_TABLE | _PAGE_4M | address;
@@ -292,7 +300,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	if (wp_works_ok < 0) {
 		pg0[0] = pte_val(mk_pte(0, PAGE_READONLY));
 		local_flush_tlb();
-		__asm__ __volatile__("movb 0,%%al ; movb %%al,0": : :"ax", "memory");
+		__asm__ __volatile__("movb 0,%%al ; movb %%al,0" : : : "ax", "memory");
 		pg0[0] = 0;
 		local_flush_tlb();
 		if (wp_works_ok < 0)

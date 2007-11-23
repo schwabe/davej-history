@@ -772,7 +772,7 @@ icn_polldchan(unsigned long data)
 	int left;
 	u_char c;
 	int ch;
-	int flags;
+	unsigned long flags;
 	int i;
 	u_char *p;
 	isdn_ctrl cmd;

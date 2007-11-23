@@ -135,7 +135,7 @@ static unsigned long vm86_segment(unsigned char segment,
       EXCEPTION(EX_INTERNAL|0x130);
       math_abort(FPU_info,SIGSEGV);
     }
-#endif PARANOID
+#endif /* PARANOID */
   *selector = VM86_REG_(segment);
   return (unsigned long)VM86_REG_(segment) << 4;
 }
@@ -155,7 +155,7 @@ static long pm_address(unsigned char FPU_modrm, unsigned char segment,
       EXCEPTION(EX_INTERNAL|0x132);
       math_abort(FPU_info,SIGSEGV);
     }
-#endif PARANOID
+#endif /* PARANOID */
 
   *selector = PM_REG_(segment);
 

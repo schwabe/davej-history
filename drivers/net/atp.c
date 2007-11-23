@@ -537,7 +537,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 	} else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = skb->data;
-		int flags;
+		unsigned long flags;
 
 		/* Disable interrupts by writing 0x00 to the Interrupt Mask Register.
 		   This sequence must not be interrupted by an incoming packet. */

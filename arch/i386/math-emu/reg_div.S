@@ -24,7 +24,7 @@ ENTRY(reg_div)
 	movl	%esp,%ebp
 #ifndef NON_REENTRANT_FPU
 	subl	$28,%esp	/* Needed by divide_kernel */
-#endif NON_REENTRANT_FPU
+#endif /* NON_REENTRANT_FPU */
 
 	pushl	%esi
 	pushl	%edi
@@ -57,7 +57,7 @@ xL_arg1_not_denormal:
 	jnz	fpu_Arith_exit
 
 xL_arg2_not_denormal:
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 
 /* Both arguments are TW_Valid */
 	movb	TW_Valid,TAG(%edi)
@@ -113,7 +113,7 @@ L_no_NaN_arg:
 	/* arg2 must be zero or valid */
 	cmpb	TW_Zero,TAG(%ebx)
 	ja	L_unknown_tags
-#endif PARANOID
+#endif /* PARANOID */
 
 	/* Note that p16-9 says that infinity/0 returns infinity */
 	jmp	L_copy_arg1		/* Answer is Inf */
@@ -126,7 +126,7 @@ L_inf_valid:
 	call	SYMBOL_NAME(denormal_operand)
 	orl	%eax,%eax
 	jnz	fpu_Arith_exit
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 
 	jmp	L_copy_arg1		/* Answer is Inf */
 
@@ -141,7 +141,7 @@ L_arg1_not_inf:
 	/* arg1 must be valid */
 	cmpb	TW_Valid,TAG(%esi)
 	ja	L_unknown_tags
-#endif PARANOID
+#endif /* PARANOID */
 
 /* Division by zero error */
 	pushl	%edi			/* destination */
@@ -165,7 +165,7 @@ L_arg2_not_zero:
 	call	SYMBOL_NAME(denormal_operand)
 	orl	%eax,%eax
 	jnz	fpu_Arith_exit
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 
 	jmp	L_return_zero		/* Answer is zero */
 
@@ -174,7 +174,7 @@ L_arg2_not_inf:
 #ifdef PARANOID
 	cmpb	TW_Zero,TAG(%esi)
 	jne	L_unknown_tags
-#endif PARANOID
+#endif /* PARANOID */
 
 	/* arg1 is zero, arg2 is not Infinity or a NaN */
 
@@ -185,7 +185,7 @@ L_arg2_not_inf:
 	call	SYMBOL_NAME(denormal_operand)
 	orl	%eax,%eax
 	jnz	fpu_Arith_exit
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 
 L_copy_arg1:
 	movb	TAG(%esi),%ax
@@ -215,7 +215,7 @@ LDiv_exit:
 	leal	-40(%ebp),%esp
 #else
 	leal	-12(%ebp),%esp
-#endif NON_REENTRANT_FPU
+#endif /* NON_REENTRANT_FPU */
 
 	popl	%ebx
 	popl	%edi
@@ -245,4 +245,4 @@ L_unknown_tags:
 	movl	SYMBOL_NAME(CONST_QNaN)+8,%eax
 	movl	%eax,SIGH(%edi)
 	jmp	LDiv_exit		/* %eax is nz */
-#endif PARANOID
+#endif /* PARANOID */

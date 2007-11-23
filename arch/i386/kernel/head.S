@@ -51,7 +51,7 @@ startup_32:
 	jmp checkCPUtype
 1:
 	lss stack_start,%esp
-#endif __SMP__
+#endif /* __SMP__ */
 /*
  * Clear BSS first so that there are no surprises...
  */

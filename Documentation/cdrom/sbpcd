@@ -569,11 +569,11 @@ Appendix -- the "cdtester" utility:
 
 #ifdef AZT_PRIVATE_IOCTLS
 #include <linux/aztcd.h>
-#endif AZT_PRIVATE_IOCTLS
+#endif /* AZT_PRIVATE_IOCTLS */
 #ifdef SBP_PRIVATE_IOCTLS
 #include <linux/sbpcd.h>
 #include <linux/fs.h>
-#endif SBP_PRIVATE_IOCTLS
+#endif /* SBP_PRIVATE_IOCTLS */
 
 struct cdrom_tochdr hdr;
 struct cdrom_tochdr tocHdr;
@@ -591,7 +591,7 @@ union
 	struct cdrom_msf msf;
 	unsigned char buf[CD_FRAMESIZE_RAW];
 } azt;
-#endif AZT_PRIVATE_IOCTLS
+#endif /* AZT_PRIVATE_IOCTLS */
 int i, i1, i2, i3, j, k;
 unsigned char sequence=0;
 unsigned char command[80];
@@ -1053,7 +1053,7 @@ main(int argc, char *argv[])
 			rc=ioctl(drive,CDROMAUDIOBUFSIZ,j);
 			printf("%d frames granted.\n",rc);
 			break;
-#endif SBP_PRIVATE_IOCTLS
+#endif /* SBP_PRIVATE_IOCTLS */
 		default:
 			printf("unknown command: \"%s\".\n",command);
 			break;

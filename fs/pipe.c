@@ -35,11 +35,13 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 	if (filp->f_flags & O_NONBLOCK) {
 		if (PIPE_LOCK(*inode))
 			return -EAGAIN;
-		if (PIPE_EMPTY(*inode))
-			if (PIPE_WRITERS(*inode))
+		if (PIPE_EMPTY(*inode)) {
+			if (PIPE_WRITERS(*inode)) {
 				return -EAGAIN;
-			else
+			} else {
 				return 0;
+			}
+		}
 	} else while (PIPE_EMPTY(*inode) || PIPE_LOCK(*inode)) {
 		if (PIPE_EMPTY(*inode)) {
 			if (!PIPE_WRITERS(*inode))

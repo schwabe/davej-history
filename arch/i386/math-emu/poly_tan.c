@@ -65,7 +65,7 @@ void	poly_tan(FPU_REG const *arg, FPU_REG *result)
 #ifdef PARANOID
   if ( arg->sign != 0 )	/* Can't hack a number < 0.0 */
     { arith_invalid(result); return; }  /* Need a positive number */
-#endif PARANOID
+#endif /* PARANOID */
 
   /* Split the problem into two domains, smaller and larger than pi/4 */
   if ( (exponent == 0) || ((exponent == -1) && (arg->sigh > 0xc90fdaa2)) )

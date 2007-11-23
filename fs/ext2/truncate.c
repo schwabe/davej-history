@@ -93,9 +93,9 @@ repeat:
 		if (free_count == 0) {
 			block_to_free = tmp;
 			free_count++;
-		} else if (free_count > 0 && block_to_free == tmp - free_count)
+		} else if (free_count > 0 && block_to_free == tmp - free_count) {
 			free_count++;
-		else {
+		} else {
 			ext2_free_blocks (inode, block_to_free, free_count);
 			block_to_free = tmp;
 			free_count = 1;
@@ -160,9 +160,9 @@ repeat:
 		if (free_count == 0) {
 			block_to_free = tmp;
 			free_count++;
-		} else if (free_count > 0 && block_to_free == tmp - free_count)
+		} else if (free_count > 0 && block_to_free == tmp - free_count) {
 			free_count++;
-		else {
+		} else {
 			ext2_free_blocks (inode, block_to_free, free_count);
 			block_to_free = tmp;
 			free_count = 1;
@@ -177,16 +177,17 @@ repeat:
 	for (i = 0; i < addr_per_block; i++)
 		if (*(ind++))
 			break;
-	if (i >= addr_per_block)
-		if (ind_bh->b_count != 1)
+	if (i >= addr_per_block) {
+		if (ind_bh->b_count != 1) {
 			retry = 1;
-		else {
+		} else {
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
 			inode->i_dirt = 1;
 			ext2_free_blocks (inode, tmp, 1);
 		}
+	}
 	if (IS_SYNC(inode) && buffer_dirty(ind_bh)) {
 		ll_rw_block (WRITE, 1, &ind_bh);
 		wait_on_buffer (ind_bh);
@@ -238,9 +239,9 @@ repeat:
 		if (*(dind++))
 			break;
 	if (i >= addr_per_block)
-		if (dind_bh->b_count != 1)
+		if (dind_bh->b_count != 1) {
 			retry = 1;
-		else {
+		} else {
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
@@ -296,16 +297,17 @@ repeat:
 	for (i = 0; i < addr_per_block; i++)
 		if (*(tind++))
 			break;
-	if (i >= addr_per_block)
-		if (tind_bh->b_count != 1)
+	if (i >= addr_per_block) {
+		if (tind_bh->b_count != 1) {
 			retry = 1;
-		else {
+		} else {
 			tmp = *p;
 			*p = 0;
 			inode->i_blocks -= blocks;
 			inode->i_dirt = 1;
 			ext2_free_blocks (inode, tmp, 1);
 		}
+	}
 	if (IS_SYNC(inode) && buffer_dirty(tind_bh)) {
 		ll_rw_block (WRITE, 1, &tind_bh);
 		wait_on_buffer (tind_bh);
@@ -313,7 +315,7 @@ repeat:
 	brelse (tind_bh);
 	return retry;
 }
-		
+
 void ext2_truncate (struct inode * inode)
 {
 	int retry;

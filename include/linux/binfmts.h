@@ -24,6 +24,7 @@ struct linux_binprm{
 	char * filename;	/* Name of binary */
 	unsigned long loader, exec;
 	int dont_iput;		/* binfmt handler has put inode */
+	int dumpable;
 };
 
 /*

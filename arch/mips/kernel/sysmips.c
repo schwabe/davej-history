@@ -52,7 +52,8 @@ sys_sysmips(int cmd, int arg1, int arg2, int arg3)
 {
 	int	*p;
 	char	*name;
-	int	flags, len, retval = -EINVAL;
+	int	len, retval = -EINVAL;
+	unsigned long flags;
 
 	switch(cmd)
 	{

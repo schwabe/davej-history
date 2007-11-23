@@ -67,14 +67,14 @@
  * CDROM IOCTL structures
  */
 
-struct cdrom_blk 
+struct cdrom_blk
 {
 	unsigned from;
 	unsigned short len;
 };
 
 
-struct cdrom_msf 
+struct cdrom_msf
 {
 	u_char	cdmsf_min0;	/* start minute */
 	u_char	cdmsf_sec0;	/* start second */
@@ -84,7 +84,7 @@ struct cdrom_msf
 	u_char	cdmsf_frame1;	/* end frame */
 };
 
-struct cdrom_ti 
+struct cdrom_ti
 {
 	u_char	cdti_trk0;	/* start track */
 	u_char	cdti_ind0;	/* start index */
@@ -92,7 +92,7 @@ struct cdrom_ti
 	u_char	cdti_ind1;	/* end index */
 };
 
-struct cdrom_tochdr 	
+struct cdrom_tochdr
 {
 	u_char	cdth_trk0;	/* start track */
 	u_char	cdth_trk1;	/* end track */
@@ -111,7 +111,7 @@ union cdrom_addr		/* address in either MSF or logical format */
 	int			lba;
 };
 
-struct cdrom_tocentry 
+struct cdrom_tocentry
 {
 	u_char	cdte_track;
 	u_char	cdte_adr	:4;
@@ -137,7 +137,7 @@ struct cdrom_tocentry
  */
 #define	CDROM_LEADOUT	0xAA
 
-struct cdrom_subchnl 
+struct cdrom_subchnl
 {
 	u_char	cdsc_format;
 	u_char	cdsc_audiostatus;
@@ -204,9 +204,9 @@ struct cdrom_multisession
 
 #ifdef FIVETWELVE
 #define	CDROM_MODE1_SIZE	512
-#else
+#else /* FIVETWELVE */
 #define	CDROM_MODE1_SIZE	2048
-#endif FIVETWELVE
+#endif /* !FIVETWELVE */
 #define	CDROM_MODE2_SIZE	2336
 
 /*
@@ -419,7 +419,7 @@ struct ccs_geometry
 /*
  * cache parameters
  */
-struct ccs_cache 
+struct ccs_cache
 {
 	u_char	_r1	: 2;	/* reserved */
 	u_char	page_code : 6;	/* page code */
@@ -433,13 +433,13 @@ struct ccs_cache
 	u_char	_r2[8];
 };
 
-#endif  _LINUX_CDROM_H
+#endif /* _LINUX_CDROM_H */
 /*==========================================================================*/
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.
  * Emacs will notice this stuff at the end of the file and automatically
  * adjust the settings for this buffer only.  This must remain at the end
- * of the file. 
+ * of the file.
  * ---------------------------------------------------------------------------
  * Local variables:
  * c-indent-level: 8

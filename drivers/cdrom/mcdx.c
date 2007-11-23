@@ -1154,7 +1154,7 @@ void cleanup_module(void)
 #endif
 }
 
-#endif MODULE
+#endif /* MODULE */
 
 /* Support functions ************************************************/
 

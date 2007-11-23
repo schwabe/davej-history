@@ -904,7 +904,8 @@ static void change_speed(struct sun_serial *info)
 void kbd_put_char(unsigned char ch)
 {
 	struct sun_zschannel *chan = zs_kbdchan;
-	int flags, loops = 0;
+	int loops = 0;
+	unsigned long flags;
 
 	if(!chan)
 		return;
@@ -923,7 +924,8 @@ void kbd_put_char(unsigned char ch)
 void mouse_put_char(char ch)
 {
 	struct sun_zschannel *chan = zs_mousechan;
-	int flags, loops = 0;
+	int loops = 0;
+	unsigned long flags;
 
 	if(!chan)
 		return;
@@ -944,7 +946,8 @@ void mouse_put_char(char ch)
 static void rs_put_char(char ch)
 {
 	struct sun_zschannel *chan = zs_conschan;
-	int flags, loops = 0;
+	int loops = 0;
+	unsigned long flags;
 
 	if(!chan)
 		return;
@@ -1900,8 +1903,9 @@ extern void sun_mouse_zsinit(void);
 /* rs_init inits the driver */
 int rs_init(void)
 {
-	int chip, channel, i, flags;
+	int chip, channel, i;
 	struct sun_serial *info;
+	unsigned long flags;
 
 #if CONFIG_AP1000
         printk("not doing rs_init()\n");
@@ -1917,7 +1921,7 @@ int rs_init(void)
 
 	/* Initialize the tty_driver structure */
 	/* SPARC: Not all of this is exactly right for us. */
-	
+
 	memset(&serial_driver, 0, sizeof(struct tty_driver));
 	serial_driver.magic = TTY_DRIVER_MAGIC;
 	serial_driver.name = "ttyS";

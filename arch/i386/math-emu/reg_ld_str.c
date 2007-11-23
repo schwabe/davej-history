@@ -485,7 +485,7 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 	      if ( control_word & CW_Underflow )
 		denormal_operand();
 	    }
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 
 	  tmp.exp += -DOUBLE_Emin + 52;  /* largest exp to be 51 */
 
@@ -498,7 +498,7 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 		 converts to decide underflow. */
 	      if ( !((tmp.sigh == 0x00100000) && (tmp.sigl == 0) &&
 		  (st0_ptr->sigl & 0x000007ff)) )
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 		{
 		  EXCEPTION(EX_Underflow);
 		  /* This is a special case: see sec 16.2.5.1 of
@@ -685,7 +685,7 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 	      if ( control_word & CW_Underflow )
 		denormal_operand();
 	    }
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 
 	  tmp.exp += -SINGLE_Emin + 23;  /* largest exp to be 22 */
 
@@ -698,7 +698,7 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 		 converts to decide underflow. */
 	      if ( !((tmp.sigl == 0x00800000) &&
 		  ((st0_ptr->sigh & 0x000000ff) || st0_ptr->sigl)) )
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 		{
 		  EXCEPTION(EX_Underflow);
 		  /* This is a special case: see sec 16.2.5.1 of
@@ -1206,7 +1206,7 @@ char *fldenv(fpu_addr_modes addr_modes, char *s)
 
 #ifdef PECULIAR_486
   control_word &= ~0xe080;
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
 
   top = (partial_status >> SW_Top_Shift) & 7;
 
@@ -1313,7 +1313,7 @@ char *fstenv(fpu_addr_modes addr_modes, char *d)
       put_fs_long(control_word & ~0xe080, (unsigned short *) d);
 #else
       put_fs_word(control_word, (unsigned short *) d);
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
       put_fs_word(status_word(), (unsigned short *) (d+2));
       put_fs_word(tag_word(), (unsigned short *) (d+4));
       put_fs_word(instruction_address.offset, (unsigned short *) (d+6));
@@ -1346,7 +1346,7 @@ char *fstenv(fpu_addr_modes addr_modes, char *d)
       put_fs_word(control_word, (unsigned short *) d);
       put_fs_word(status_word(), (unsigned short *) (d+4));
       put_fs_word(tag_word(), (unsigned short *) (d+8));
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
       put_fs_long(instruction_address.offset, (unsigned long *) (d+0x0c));
       put_fs_word(instruction_address.selector, (unsigned short *) (d+0x10));
       put_fs_word(instruction_address.opcode, (unsigned short *) (d+0x12));
@@ -1357,7 +1357,7 @@ char *fstenv(fpu_addr_modes addr_modes, char *d)
       put_fs_word(0xffff, (unsigned short *) (d+0x1a));
 #else
       put_fs_long(operand_address.selector, (unsigned long *) (d+0x18));
-#endif PECULIAR_486
+#endif /* PECULIAR_486 */
       RE_ENTRANT_CHECK_ON;
       d += 0x1c;
     }
@@ -1414,7 +1414,7 @@ static void write_to_extended(FPU_REG *rp, char *d)
       if (e > 0x7fff || e < -63)
 	EXCEPTION(EX_INTERNAL | 0x162);
     }
-#endif PARANOID
+#endif /* PARANOID */
 
   /*
     All numbers except denormals are stored internally in a

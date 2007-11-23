@@ -497,8 +497,9 @@ int flush_old_exec(struct linux_binprm * bprm)
 	int ch;
 	char * name;
 
+	bprm->dumpable = 0;
 	if (current->euid == current->uid && current->egid == current->gid)
-		current->dumpable = 1;
+		bprm->dumpable = 1;
 	name = bprm->filename;
 	for (i=0; (ch = *(name++)) != '\0';) {
 		if (ch == '/')
@@ -515,9 +516,9 @@ int flush_old_exec(struct linux_binprm * bprm)
 
 	flush_thread();
 
-	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
-	    permission(bprm->inode,MAY_READ))
-		current->dumpable = 0;
+	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid ||
+	    permission(bprm->inode, MAY_READ))
+		bprm->dumpable = 0;
 
 	flush_old_signals(current->sig);
 	flush_old_files(current->files);
@@ -707,6 +708,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs)
 {
 	struct linux_binprm bprm;
+	int was_dumpable;
 	int retval;
 	int i;
 
@@ -726,6 +728,9 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	if ((bprm.envc = count(envp, sizeof(char *), bprm.p)) < 0)
 		return bprm.envc;
 
+	was_dumpable = current->dumpable;
+	current->dumpable = 0;
+
 	retval = prepare_binprm(&bprm);
 	
 	if(retval>=0) {
@@ -739,14 +744,20 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 
 	if(retval>=0)
 		retval = search_binary_handler(&bprm,regs);
-	if(retval>=0)
+
+	if(retval>=0) {
 		/* execve success */
+		current->dumpable = bprm.dumpable;
 		return retval;
+	}
 
 	/* Something went wrong, return the inode and free the argument pages*/
 	if(!bprm.dont_iput)
 		iput(bprm.inode);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(bprm.page[i]);
+
+	current->dumpable = was_dumpable;
+
 	return(retval);
 }

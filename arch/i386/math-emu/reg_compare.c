@@ -41,7 +41,7 @@ int compare(FPU_REG const *b)
 #ifdef DENORM_OPERAND
 		| ((b->exp <= EXP_UNDER) ?
 		   COMP_Denormal : 0)
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 		  ;
 	    }
 	}
@@ -54,7 +54,7 @@ int compare(FPU_REG const *b)
 #ifdef DENORM_OPERAND
 		| ((st0_ptr->exp <= EXP_UNDER )
 		   ? COMP_Denormal : 0 )
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 		  ;
 	    }
 	}
@@ -68,7 +68,7 @@ int compare(FPU_REG const *b)
 #ifdef DENORM_OPERAND
 	      | (((b->tag == TW_Valid) && (b->exp <= EXP_UNDER)) ?
 		COMP_Denormal : 0 )
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 ;
 	    }
 	  else if ( b->tag == TW_Infinity )
@@ -88,7 +88,7 @@ int compare(FPU_REG const *b)
 		| (((st0_tag == TW_Valid)
 		    && (st0_ptr->exp <= EXP_UNDER)) ?
 		   COMP_Denormal : 0)
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 		  ;
 	    }
 	  /* Fall through to the NaN code */
@@ -106,16 +106,16 @@ int compare(FPU_REG const *b)
 	    /* Neither is a signaling NaN */
 	    return COMP_No_Comp | COMP_NaN;
 	}
-      
+
       EXCEPTION(EX_Invalid);
     }
-  
+
 #ifdef PARANOID
   if (!(st0_ptr->sigh & 0x80000000)) EXCEPTION(EX_Invalid);
   if (!(b->sigh & 0x80000000)) EXCEPTION(EX_Invalid);
-#endif PARANOID
+#endif /* PARANOID */
 
-  
+
   if (st0_ptr->sign != b->sign)
     {
       return ((st0_ptr->sign == SIGN_POS) ? COMP_A_gt_B : COMP_A_lt_B)
@@ -123,7 +123,7 @@ int compare(FPU_REG const *b)
 	|
 	  ( ((st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
 	   COMP_Denormal : 0)
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 	    ;
     }
 
@@ -147,7 +147,7 @@ int compare(FPU_REG const *b)
 	|
 	  ( ((st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
 	   COMP_Denormal : 0)
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 	    ;
     }
   if ( diff < 0 )
@@ -157,7 +157,7 @@ int compare(FPU_REG const *b)
 	|
 	  ( ((st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
 	   COMP_Denormal : 0)
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 	    ;
     }
 
@@ -166,7 +166,7 @@ int compare(FPU_REG const *b)
     |
       ( ((st0_ptr->exp <= EXP_UNDER) || (b->exp <= EXP_UNDER)) ?
        COMP_Denormal : 0)
-#endif DENORM_OPERAND
+#endif /* DENORM_OPERAND */
 	;
 
 }
@@ -204,7 +204,7 @@ int compare_st_data(FPU_REG const *loaded_data)
 	EXCEPTION(EX_INTERNAL|0x121);
 	f = SW_C3 | SW_C2 | SW_C0;
 	break;
-#endif PARANOID
+#endif /* PARANOID */
       }
   setcc(f);
   if (c & COMP_Denormal)
@@ -254,7 +254,7 @@ static int compare_st_st(int nr)
 	EXCEPTION(EX_INTERNAL|0x122);
 	f = SW_C3 | SW_C2 | SW_C0;
 	break;
-#endif PARANOID
+#endif /* PARANOID */
       }
   setcc(f);
   if (c & COMP_Denormal)
@@ -309,7 +309,7 @@ static int compare_u_st_st(int nr)
 	EXCEPTION(EX_INTERNAL|0x123);
 	f = SW_C3 | SW_C2 | SW_C0;
 	break;
-#endif PARANOID
+#endif /* PARANOID */
       }
   setcc(f);
   if (c & COMP_Denormal)

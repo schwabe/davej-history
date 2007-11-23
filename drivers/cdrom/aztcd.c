@@ -334,7 +334,7 @@ int         aztcd_init(void);
 #ifdef MODULE
  int        init_module(void);
  void       cleanup_module(void);
-#endif MODULE
+#endif /* MODULE */
 static struct file_operations azt_fops = {
 	NULL,                   /* lseek - default */
 	block_read,             /* read - general block-dev read */
@@ -1748,7 +1748,7 @@ void cleanup_module(void)
       release_region(azt_port,4);  /*proprietary interface*/
   printk(KERN_INFO "aztcd module released.\n");
 }   
-#endif MODULE
+#endif /* MODULE */
 
 
 /*##########################################################################
