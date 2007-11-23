@@ -547,7 +547,7 @@ static void ncr53c8xx_timeout(unsigned long np);
 #define INB_OFF(o)         IOM_INB_OFF(o)
 #define INW(r)             IOM_INW(r)
 #define INL(r)             IOM_INL(r)
-#define INL_OFF(r)         IOM_INL_OFF(o)
+#define INL_OFF(o)         IOM_INL_OFF(o)
 
 #define OUTB(r, val)       IOM_OUTB(r, val)
 #define OUTW(r, val)       IOM_OUTW(r, val)
@@ -3587,7 +3587,7 @@ printf("%s: cache misconfigured, retrying with IO mapped at 0x%lx\n",
 #   ifdef SCSI_NCR_SHARE_IRQ
 	printf("%s: requesting shared irq %d (dev_id=0x%lx)\n",
 	        ncr_name(np), irq, (u_long) np);
-	if (request_irq(irq, ncr53c8xx_intr, SA_SHIRQ, "53c8xx", np)) {
+	if (request_irq(irq, ncr53c8xx_intr, SA_INTERRUPT|SA_SHIRQ, "53c8xx", np)) {
 #   else
 	if (request_irq(irq, ncr53c8xx_intr, SA_INTERRUPT, "53c8xx", NULL)) {
 #   endif
@@ -4790,6 +4790,11 @@ void ncr_init (ncb_p np, char * msg, u_long code)
 	ncr_wakeup (np, code);
 
 	/*
+	**	Remove Reset, abort ...
+	*/
+	OUTB (nc_istat,  0      );
+
+	/*
 	**	Init chip.
 	*/
 /**	NCR53C810			**/
@@ -4837,8 +4842,6 @@ void ncr_init (ncb_p np, char * msg, u_long code)
 #if 0
 	burstlen = 0xc0;
 #endif
-
-	OUTB (nc_istat,  0      );      /*  Remove Reset, abort ...	     */
 
 #ifdef SCSI_NCR_DISABLE_PARITY_CHECK
 	OUTB (nc_scntl0, 0xc0   );      /*  full arb., (no parity)           */
@@ -7636,7 +7639,6 @@ printk("ncr53c8xx : interrupt received\n");
 #if LINUX_VERSION_CODE >= LinuxVersionCode(1,3,70)
 #   ifdef SCSI_NCR_SHARE_IRQ
                if (dev_id == &host_data->ncb_data)
-	       	    ncr_intr(&host_data->ncb_data);
 #   endif
 #endif
 	       ncr_intr(&host_data->ncb_data);

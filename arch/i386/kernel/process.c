@@ -182,6 +182,17 @@ int cpu_idle(void *unused)
  * and if it doesn't work, we do some other stupid things.
  */
 static long no_idt[2] = {0, 0};
+static int reboot_mode = 0;
+
+void reboot_setup(char *str, int *ints)
+{
+	int mode = 0;
+
+	/* "w" for "warm" reboot (no memory testing etc) */
+	if (str[0] == 'w')
+		mode = 0x1234;
+	reboot_mode = mode;
+}
 
 static inline void kb_wait(void)
 {
@@ -199,7 +210,7 @@ void hard_reset_now(void)
 	sti();
 /* rebooting needs to touch the page at absolute addr 0 */
 	pg0[0] = 7;
-	*((unsigned short *)0x472) = 0x1234;
+	*((unsigned short *)0x472) = reboot_mode;
 	for (;;) {
 		for (i=0; i<100; i++) {
 			kb_wait();

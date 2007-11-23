@@ -100,12 +100,12 @@ static inline int dup_mmap(struct mm_struct * mm)
 			mpnt->vm_next_share = tmp;
 			tmp->vm_prev_share = mpnt;
 		}
-		if (tmp->vm_ops && tmp->vm_ops->open)
-			tmp->vm_ops->open(tmp);
 		if (copy_page_range(mm, current->mm, tmp)) {
 			exit_mmap(mm);
 			return -ENOMEM;
 		}
+		if (tmp->vm_ops && tmp->vm_ops->open)
+			tmp->vm_ops->open(tmp);
 		*p = tmp;
 		p = &tmp->vm_next;
 	}

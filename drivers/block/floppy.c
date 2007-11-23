@@ -2087,7 +2087,7 @@ static void setup_format_params(int track)
 
 	/* determine interleave */
 	il = 1;
-	if (_floppy->sect > DP->interleave_sect && F_SIZECODE == 2)
+	if (_floppy->fmt_gap < 0x22)
 		il++;
 
 	/* initialize field */
