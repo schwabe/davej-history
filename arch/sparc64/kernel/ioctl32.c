@@ -67,6 +67,7 @@
 #include <asm/watchdog.h>
 
 #include <linux/soundcard.h>
+#include <linux/random.h>
 
 /* Use this to get at 32-bit user passed pointers. 
    See sys_sparc32.c for description about these. */
@@ -2811,6 +2812,13 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	/* case D7SIOCRD: Same value as ENVCTRL_RD_VOLTAGE_STATUS */
 	case D7SIOCTM:
 
+	/* Big R */
+	case RNDGETENTCNT:
+	case RNDADDTOENTCNT:
+	case RNDGETPOOL:
+	case RNDADDENTROPY:
+	case RNDZAPENTCNT:
+	case RNDCLEARPOOL:
 
 	/* Little m */
 	case MTIOCTOP:
