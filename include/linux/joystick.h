@@ -139,8 +139,8 @@ struct JS_DATA_SAVE_TYPE {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
 #define __exit
 #define BASE_ADDRESS(x,i)	((x)->base_address[i])
-#define SETUP_PARAM		char *str, int *ints
-#define SETUP_PARSE(x)		do {} while (0)
+#define SETUP_PARAM		char *str
+#define SETUP_PARSE(x)		int ints[x]; get_options(str, x, ints)
 #else
 #define BASE_ADDRESS(x,i)	((x)->resource[i].start)
 #define SETUP_PARAM		char *str

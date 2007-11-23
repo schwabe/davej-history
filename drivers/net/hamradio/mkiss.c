@@ -802,7 +802,7 @@ int kiss_esc(unsigned char *s, unsigned char *d, int len)
 static int kiss_esc_crc(unsigned char *s, unsigned char *d, unsigned short crc, int len)
 {
 	unsigned char *ptr = d;
-	unsigned char c;
+	unsigned char c=0;
 
 	*ptr++ = END;
 	while (len > 0) {

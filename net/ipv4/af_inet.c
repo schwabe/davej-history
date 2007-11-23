@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.87.2.8 2000/07/05 01:33:52 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.87.2.9 2000/09/14 10:44:31 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -536,7 +536,8 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	snum = ntohs(addr->sin_port);
 #ifdef CONFIG_IP_MASQUERADE
 	/* The kernel masquerader needs some ports. */
-	if((snum >= PORT_MASQ_BEGIN) && (snum <= PORT_MASQ_END))
+	if((snum >= PORT_MASQ_BEGIN) && (snum <= PORT_MASQ_END) && 
+	   chk_addr_ret != RTN_MULTICAST)
 		return -EADDRINUSE;
 #endif		 
 	if (snum && snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))

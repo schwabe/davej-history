@@ -708,6 +708,13 @@ success:
 	{
 		unsigned long offset, nr;
 
+		/* If users can be writing to this page using arbitrary
+		 * virtual addresses, take care about potential aliasing
+		 * before reading the page on the kernel side.
+		 */
+		if (inode->i_mmap_shared != NULL)
+			flush_dcache_page(page_address(page));
+
 		offset = pos & ~PAGE_CACHE_MASK;
 		nr = PAGE_CACHE_SIZE - offset;
 		if (nr > inode->i_size - pos)

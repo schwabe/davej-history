@@ -2818,6 +2818,7 @@ int __init uhci_init (void)
 	
 	if(!urb_priv_kmem) {
 		err("kmem_cache_create for urb_priv_t failed (out of memory)");
+		kmem_cache_destroy(urb_priv_kmem);
 		return -ENOMEM;
 	}
 #endif	
@@ -2852,6 +2853,15 @@ int __init uhci_init (void)
 			i++;
 	}
 
+#ifdef DEBUG_SLAB
+	if (retval < 0 ) {
+		if(kmem_cache_destroy(uhci_desc_kmem))
+			err("uhci_desc_kmem remained");
+		if(kmem_cache_destroy(urb_priv_kmem))
+			err("urb_priv_kmem remained");
+	}
+#endif
+	
 	return retval;
 }
 

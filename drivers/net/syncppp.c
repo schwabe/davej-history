@@ -517,7 +517,6 @@ badreq:
 			sppp_ipcp_open (sp);
 			break;
 		case LCP_STATE_OPENED:
-#if 0		
 			/* Remote magic changed -- close session. */
 			sp->lcp.state = LCP_STATE_CLOSED;
 			sp->ipcp.state = IPCP_STATE_CLOSED;
@@ -525,7 +524,6 @@ badreq:
 			sppp_lcp_open (sp);
 			/* An ACK has already been sent. */
 			sp->lcp.state = LCP_STATE_ACK_SENT;
-#endif			
 			break;
 		}
 		break;
@@ -566,7 +564,7 @@ badreq:
 				sp->lcp.magic += newmagic;
 			} else
 				sp->lcp.magic = rmagic;
-			}
+		}
 		if (sp->lcp.state != LCP_STATE_ACK_SENT) {
 			/* Go to closed state. */
 			sp->lcp.state = LCP_STATE_CLOSED;

@@ -41,8 +41,14 @@
 
 #define SMART2_DRIVER_VERSION(maj,min,submin) ((maj<<16)|(min<<8)|(submin))
 
-#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0.9)"
-#define DRIVER_VERSION SMART2_DRIVER_VERSION(1,0,9)
+#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0.10)"
+#define DRIVER_VERSION SMART2_DRIVER_VERSION(1,0,10)
+
+/* Embedded module documentation macros - see modules.h */
+/* Original author Chris Frantz - Compaq Computer Corporation */
+MODULE_AUTHOR("Compaq Computer Corporation");
+MODULE_DESCRIPTION("Driver for Compaq Smart2 Array Controllers");
+
 #define MAJOR_NR COMPAQ_SMART2_MAJOR
 #include <linux/blk.h>
 #include <linux/blkdev.h>
@@ -617,6 +623,8 @@ static int cpqarray_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
 
 	int i;
 
+	c->pci_bus = bus;
+	c->pci_dev_fn = device_fn;
 	pdev = pci_find_slot(bus, device_fn);
 	vendor_id = pdev->vendor;
 	device_id = pdev->device;
@@ -663,6 +671,7 @@ DBGINFO(
 	c->vaddr = remap_pci_mem(c->paddr, 128);
 	c->board_id = board_id;
 
+	
 	for(i=0; i<NR_PRODUCTS; i++) {
 		if (board_id == products[i].board_id) {
 			c->product_name = products[i].product_name;
@@ -752,6 +761,8 @@ static int cpqarray_eisa_detect(void)
 		hba[nr_ctlr]->access = *(products[j].access);
 		hba[nr_ctlr]->ctlr = nr_ctlr;
 		hba[nr_ctlr]->board_id = board_id;
+		hba[nr_ctlr]->pci_bus = 0;  /* not PCI */
+		hba[nr_ctlr]->pci_dev_fn = 0; /* not PCI */
 
 DBGINFO(
 	printk("i = %d, j = %d\n", i, j);
@@ -1174,7 +1185,20 @@ static int ida_ioctl(struct inode *inode, struct file *filep, unsigned int cmd, 
 		if (!arg) return -EINVAL;
 		put_user(DRIVER_VERSION, (unsigned long*)arg);
 		return 0;
+	case IDAGETPCIINFO:
+	{
+		
+		ida_pci_info_struct pciinfo;
 
+		if (!arg) return -EINVAL;
+		pciinfo.bus = hba[ctlr]->pci_bus;
+		pciinfo.dev_fn = hba[ctlr]->pci_dev_fn;
+		pciinfo.board_id = hba[ctlr]->board_id;
+		copy_to_user_ret((void *) arg, &pciinfo,  
+			sizeof( ida_pci_info_struct),  -EFAULT);
+		return(0);
+	}	
+	
 	RO_IOCTLS(inode->i_rdev, arg);
 
 	default:

@@ -30,8 +30,11 @@
  *
  *	Transmeta CPU detection.  H. Peter Anvin <hpa@zytor.com>, May 2000
  *
- *  Cleaned up get_model_name(), AMD_model(), added display_cacheinfo().
- *  Dave Jones <davej@suse.de>, September 2000
+ *	Cleaned up get_model_name(), AMD_model(), added display_cacheinfo().
+ *	Dave Jones <davej@suse.de>, September 2000
+ *
+ *	Added Cyrix III initial detection code
+ *	Alan Cox <alan@redhat.com>, Septembr 2000
  */
 
 /*
@@ -440,7 +443,7 @@ __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 
 	/* 
 	 * Actually we must have cpuid or we could never have
-	 * figured out that this was AMD/Cyrix/Transmeta
+	 * figured out that this was AMD/Centaur/Cyrix/Transmeta
 	 * from the vendor info :-).
 	 */
 
@@ -471,6 +474,7 @@ __initfunc (static void display_cacheinfo(struct cpuinfo_x86 *c))
 		c->x86_cache_size=(ecx>>24)+(edx>>24);
 	}
 
+	/* Yes this can occur - the CyrixIII just has a large L1 */
 	if (n < 0x80000006)
 		return;	/* No function to get L2 info */
 
@@ -945,6 +949,14 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 		transmeta_model(c);
 		return;
 	}
+	
+	if(c->x86_vendor == X86_VENDOR_CENTAUR && c->x86==6)
+	{
+		/* The Cyrix III supports model naming and cache queries */
+		get_model_name(c);
+		display_cacheinfo(c);
+		return;
+	}
 
 	if (c->cpuid_level > 1) {
 		/* supports eax=2  call */
@@ -1051,6 +1063,49 @@ static char *cpu_vendor_names[] __initdata = {
 	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur", "Rise", "Transmeta" };
 
 
+__initfunc(void setup_centaur(struct cpuinfo_x86 *c))
+{
+	u32 hv,lv;
+	
+	/* Centaur C6 Series */
+	if(c->x86==5)
+	{
+		rdmsr(0x107, lv, hv);
+		printk("Centaur FSR was 0x%X ",lv);
+		lv|=(1<<1 | 1<<2 | 1<<7);
+		/* lv|=(1<<6);	- may help too if the board can cope */
+		printk("now 0x%X\n", lv);
+		wrmsr(0x107, lv, hv);
+		/* Emulate MTRRs using Centaur's MCR. */
+		c->x86_capability |= X86_FEATURE_MTRR;
+
+		/* Disable TSC on C6 as per errata. */
+		if (c->x86_model ==4) {
+			printk ("Disabling bugged TSC.\n");
+			c->x86_capability &= ~X86_FEATURE_TSC;
+		}
+
+		/* Set 3DNow! on Winchip 2 and above. */
+		if (c->x86_model >=8)
+		    c->x86_capability |= X86_FEATURE_AMD3D;
+
+		c->x86_capability |=X86_FEATURE_CX8;
+	}
+	/* Cyrix III 'Samuel' CPU */
+	if(c->x86 == 6 && c->x86_model == 6)
+	{
+		rdmsr(0x1107, lv, hv);
+		lv|=(1<<1);	/* Report CX8 */
+		lv|=(1<<7);	/* PGE enable */
+		wrmsr(0x1107, lv, hv);
+		/* Cyrix III */
+		c->x86_capability |= X86_FEATURE_CX8;
+		rdmsr(0x80000001, lv, hv);
+		if(hv&(1<<31))
+			c->x86_capability |= X86_FEATURE_AMD3D;
+	}	
+}
+
 __initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
 {
 	char *vendor = NULL;
@@ -1074,27 +1129,7 @@ __initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
 		printk("\n");
 
 	if(c->x86_vendor == X86_VENDOR_CENTAUR) {
-		u32 hv,lv;
-		rdmsr(0x107, lv, hv);
-		printk("Centaur FSR was 0x%X ",lv);
-		lv|=(1<<1 | 1<<2 | 1<<7);
-		/* lv|=(1<<6);	- may help too if the board can cope */
-		printk("now 0x%X\n", lv);
-		wrmsr(0x107, lv, hv);
-		/* Emulate MTRRs using Centaur's MCR. */
-		c->x86_capability |= X86_FEATURE_MTRR;
-
-		/* Disable TSC on C6 as per errata. */
-		if (c->x86_model ==4) {
-			printk ("Disabling bugged TSC.\n");
-			c->x86_capability &= ~X86_FEATURE_TSC;
-		}
-
-		/* Set 3DNow! on Winchip 2 and above. */
-		if (c->x86_model >=8)
-		    c->x86_capability |= X86_FEATURE_AMD3D;
-
-		c->x86_capability |=X86_FEATURE_CX8;
+		setup_centaur(c);
 	}
 }
 

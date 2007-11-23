@@ -2087,7 +2087,8 @@ int megaraid_release (struct Scsi_Host *pSHost)
 	  remove_proc_entry("config", megaCfg->controller_proc_dir_entry);
 	  remove_proc_entry("mailbox", megaCfg->controller_proc_dir_entry);
           for (i = 0; i < numCtlrs; i++) {
-                char buf[12] ={0};
+                char buf[12];
+                memset(buf,0,12);
 		sprintf(buf,"%d",i);
           	remove_proc_entry(buf,mega_proc_dir_entry);
 	 }

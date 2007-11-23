@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.173.2.5 1999/10/11 08:24:44 davem Exp $
+/* $Id: sun4c.c,v 1.173.2.6 2000/09/07 04:44:48 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -2420,9 +2420,9 @@ static void sun4c_vac_alias_fixup(struct vm_area_struct *vma, unsigned long addr
 		inode = dentry->d_inode;
 	if (inode) {
 		unsigned long offset = (address & PAGE_MASK) - vma->vm_start;
-		struct vm_area_struct *vmaring = inode->i_mmap; 
+		struct vm_area_struct *vmaring = inode->i_mmap_shared; 
 		int alias_found = 0;
-		do {
+		if (vmaring) do {
 			unsigned long vaddr = vmaring->vm_start + offset;
 			unsigned long start;
 

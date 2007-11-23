@@ -401,8 +401,7 @@ extern void md_setup(char *str,int *ints) __init;
 #endif
 
 #ifdef CONFIG_AGP
-extern int agp_initialize (void);
-extern void agp_setup(char *str, int *ints);
+extern int agp_init (void);
 #endif
 
 /*
@@ -1059,9 +1058,6 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_BLK_CPQ_DA
 	{ "smart2=", cpqarray_setup },
 #endif
-#ifdef CONFIG_AGP
-	{ "agp_try_unsupported=", agp_setup},
-#endif
 	{ 0, 0 }
 };
 
@@ -1559,7 +1555,7 @@ static void __init do_basic_setup(void)
 	nubus_init();
 #endif
 #ifdef CONFIG_AGP
-	agp_initialize ();
+	agp_init();
 #endif
 
 	/* Networking initialization needs a process context */ 

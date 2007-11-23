@@ -187,9 +187,9 @@ int register_filesystem(struct file_system_type * fs)
         return 0;
 }
 
-#ifdef CONFIG_MODULES
 int unregister_filesystem(struct file_system_type * fs)
 {
+#ifdef CONFIG_MODULES
 	struct file_system_type ** tmp;
 
 	tmp = &file_systems;
@@ -201,9 +201,9 @@ int unregister_filesystem(struct file_system_type * fs)
 		}
 		tmp = &(*tmp)->next;
 	}
+#endif
 	return -EINVAL;
 }
-#endif
 
 static int fs_index(const char * __name)
 {

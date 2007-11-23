@@ -361,6 +361,7 @@ struct inode {
 	struct wait_queue	*i_wait;
 	struct file_lock	*i_flock;
 	struct vm_area_struct	*i_mmap;
+	struct vm_area_struct	*i_mmap_shared;
 	struct page		*i_pages;
 	struct dquot		*i_dquot[MAXQUOTAS];
 

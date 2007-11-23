@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.187.2.9 2000/03/05 17:39:18 davem Exp $
+/* $Id: srmmu.c,v 1.187.2.10 2000/09/07 04:44:48 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -2056,8 +2056,8 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 			goto done;
 		inode = file->f_dentry->d_inode;
 		offset = (address & PAGE_MASK) - vma->vm_start;
-		vmaring = inode->i_mmap; 
-		do {
+		vmaring = inode->i_mmap_shared; 
+		if (vmaring) do {
 			/* Do not mistake ourselves as another mapping. */
 			if(vmaring == vma)
 				continue;

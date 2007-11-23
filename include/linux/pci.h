@@ -1404,6 +1404,9 @@ extern inline struct pci_dev *pci_find_slot(unsigned int bus, unsigned int devfn
 extern inline void pci_set_master(struct pci_dev *dev)
 { return; }
 
+extern inline unsigned long pci_resource_len (struct pci_dev *dev, int n_base) 
+{ return 0; }
+
 #endif /* !CONFIG_PCI */
 
 #endif /* __KERNEL__ */

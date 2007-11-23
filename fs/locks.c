@@ -415,13 +415,9 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	 */
 	if (IS_MANDLOCK(inode) &&
 	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID &&
-	    inode->i_mmap) {
-		struct vm_area_struct *vma = inode->i_mmap;
+	    inode->i_mmap_shared) {
 		error = -EAGAIN;
-		do {
-			if (vma->vm_flags & VM_MAYSHARE)
-				goto out_putf;
-		} while ((vma = vma->vm_next_share) != NULL);
+		goto out_putf;
 	}
 
 	error = -EINVAL;

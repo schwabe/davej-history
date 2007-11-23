@@ -722,22 +722,8 @@ static void partial_clear(struct vm_area_struct *vma, unsigned long address)
 	flush_page_to_ram(pte_page(pte));
 }
 
-/*
- * Handle all mappings that got truncated by a "truncate()"
- * system call.
- *
- * NOTE! We have to be ready to update the memory sharing
- * between the file and the memory map for a potential last
- * incomplete page.  Ugly, but necessary.
- */
-void vmtruncate(struct inode * inode, unsigned long offset)
+static void vmtruncate_list(struct vm_area_struct *mpnt, unsigned long offset)
 {
-	struct vm_area_struct * mpnt;
-
-	truncate_inode_pages(inode, offset);
-	if (!inode->i_mmap)
-		return;
-	mpnt = inode->i_mmap;
 	do {
 		struct mm_struct *mm = mpnt->vm_mm;
 		unsigned long start = mpnt->vm_start;
@@ -767,6 +753,23 @@ void vmtruncate(struct inode * inode, unsigned long offset)
 		zap_page_range(mm, start, len);
 		flush_tlb_range(mm, start, end);
 	} while ((mpnt = mpnt->vm_next_share) != NULL);
+}
+
+/*
+ * Handle all mappings that got truncated by a "truncate()"
+ * system call.
+ *
+ * NOTE! We have to be ready to update the memory sharing
+ * between the file and the memory map for a potential last
+ * incomplete page.  Ugly, but necessary.
+ */
+void vmtruncate(struct inode * inode, unsigned long offset)
+{
+	truncate_inode_pages(inode, offset);
+	if (inode->i_mmap)
+		vmtruncate_list(inode->i_mmap, offset);
+	if (inode->i_mmap_shared)
+		vmtruncate_list(inode->i_mmap_shared, offset);
 }
 
 

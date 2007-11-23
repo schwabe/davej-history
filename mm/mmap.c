@@ -70,7 +70,7 @@ int vm_enough_memory(long pages)
 	return free > pages;
 }
 
-/* Remove one vm structure from the inode's i_mmap ring. */
+/* Remove one vm structure from the inode's i_mmap{,_shared} ring. */
 static inline void remove_shared_vm_struct(struct vm_area_struct *vma)
 {
 	struct file * file = vma->vm_file;
@@ -755,7 +755,7 @@ void exit_mmap(struct mm_struct * mm)
 }
 
 /* Insert vm structure into process list sorted by address
- * and into the inode's i_mmap ring.
+ * and into the inode's i_mmap{,_shared} ring.
  */
 void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 {
@@ -783,14 +783,20 @@ void insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vmp)
 	file = vmp->vm_file;
 	if (file) {
 		struct inode * inode = file->f_dentry->d_inode;
+		struct vm_area_struct **head;
+
 		if (vmp->vm_flags & VM_DENYWRITE)
 			inode->i_writecount--;
       
+		head = &inode->i_mmap;
+		if (vmp->vm_flags & VM_SHARED)
+			head = &inode->i_mmap_shared;
+
 		/* insert vmp into inode's share list */
-		if((vmp->vm_next_share = inode->i_mmap) != NULL)
-			inode->i_mmap->vm_pprev_share = &vmp->vm_next_share;
-		inode->i_mmap = vmp;
-		vmp->vm_pprev_share = &inode->i_mmap;
+		if((vmp->vm_next_share = *head) != NULL)
+			(*head)->vm_pprev_share = &vmp->vm_next_share;
+		*head = vmp;
+		vmp->vm_pprev_share = head;
 	}
 }
 

@@ -71,7 +71,9 @@ comment 'USB Devices'
       dep_tristate '  Microtek X6USB scanner support (EXPERIMENTAL)' CONFIG_USB_MICROTEK $CONFIG_SCSI
       dep_tristate '  USB Bluetooth support (EXPERIMENTAL)' CONFIG_USB_BLUETOOTH $CONFIG_USB
    fi
-   dep_tristate '  Kawasaki USB-ethernet controller' CONFIG_USB_KAWETH $CONFIG_USB
+   if [ "$CONFIG_NET" = "y" ]; then
+      dep_tristate '  Kawasaki USB-ethernet controller' CONFIG_USB_KAWETH $CONFIG_USB
+   fi
 
 comment 'USB HID'
    dep_tristate '  USB Human Interface Device (HID) support' CONFIG_USB_HID $CONFIG_USB

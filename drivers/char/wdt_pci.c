@@ -82,37 +82,6 @@ static int irq=11;
 
 #define WD_TIMO (100*60)		/* 1 minute */
 
-#ifndef MODULE
-
-/**
- *	wdtpci_setup:
- *	@str: command line string
- *
- *	Setup options. The board isn't really probe-able so we have to
- *	get the user to tell us the configuration. Sane people build it 
- *	modular but the others come here.
- */
- 
-static int __init wdtpci_setup(char *str)
-{
-	int ints[4];
-
-	str = get_options (str, ARRAY_SIZE(ints), ints);
-
-	if (ints[0] > 0)
-	{
-		io = ints[1];
-		if(ints[0] > 1)
-			irq = ints[2];
-	}
-
-	return 1;
-}
-
-__setup("wdt=", wdtpci_setup);
-
-#endif /* !MODULE */
- 
 /*
  *	Programming support
  */

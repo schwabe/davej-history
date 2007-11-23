@@ -156,11 +156,12 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
     hex '  Aztech/Packard Bell I/O port (0x350 or 0x358)' CONFIG_RADIO_AZTECH_PORT 350
   fi
   dep_tristate 'ADS Cadet AM/FM Tuner' CONFIG_RADIO_CADET $CONFIG_VIDEO_DEV
-  dep_tristate 'Miro PCM20 Radio' CONFIG_RADIO_MIROPCM20 $CONFIG_VIDEO_DEV
   dep_tristate 'GemTek Radio Card support' CONFIG_RADIO_GEMTEK $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_GEMTEK" = "y" ]; then
     hex '  GemTek i/o port (0x20c, 0x24c, 0x248, 0x30c, or 0x34c)' CONFIG_RADIO_GEMTEK_PORT 34c
   fi
+  dep_tristate 'Maestro on board radio' CONFIG_RADIO_MAESTRO $CONFIG_VIDEO_DEV
+  dep_tristate 'Miro PCM20 Radio' CONFIG_RADIO_MIROPCM20 $CONFIG_VIDEO_DEV
   dep_tristate 'Trust FM Radio' CONFIG_RADIO_TRUST $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_TRUST" = "y" ]; then
     hex '  Trust FM Radio I/O port (0x350 or 0x358)' CONFIG_RADIO_TRUST_PORT 350

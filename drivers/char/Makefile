@@ -386,7 +386,7 @@ else
 endif
 
 ifeq ($(CONFIG_INTEL_RNG),y)
-L_OBJS += i810_rng.o
+O_OBJS += i810_rng.o
 else
   ifeq ($(CONFIG_INTEL_RNG),m)
   M_OBJS += i810_rng.o
@@ -590,6 +590,14 @@ O_OBJS += radio-miropcm20.o
 else
   ifeq ($(CONFIG_RADIO_MIROPCM20),m)
   M_OBJS += radio-miropcm20.o
+  endif
+endif
+
+ifeq ($(CONFIG_RADIO_MAESTRO),y)
+O_OBJS += radio-maestro.o
+else
+  ifeq ($(CONFIG_RADIO_MAESTRO),m)
+  M_OBJS += radio-maestro.o
   endif
 endif
 
