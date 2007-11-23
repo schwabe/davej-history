@@ -1,5 +1,5 @@
 /*
- * $Id: divert_procfs.c,v 1.6 2000/02/14 19:23:03 werner Exp $
+ * $Id: divert_procfs.c,v 1.9 2000/08/20 07:40:14 keil Exp $
  *
  * Filesystem handling for the diversion supplementary services.
  *
@@ -20,6 +20,17 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: divert_procfs.c,v $
+ * Revision 1.9  2000/08/20 07:40:14  keil
+ * changes from 2.4
+ *
+ * Revision 1.8  2000/03/03 16:37:11  kai
+ * incorporated some cosmetic changes from the official kernel tree back
+ * into CVS
+ *
+ * Revision 1.7  2000/03/02 00:11:06  werner
+ *
+ * Changes related to procfs for 2.3.48
+ *
  * Revision 1.6  2000/02/14 19:23:03  werner
  *
  * Changed handling of proc filesystem tables to a more portable version

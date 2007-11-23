@@ -23,6 +23,9 @@ extern __u32 sysctl_rmem_default;
 
 extern int sysctl_core_destroy_delay;
 extern int sysctl_optmem_max;
+#ifdef CONFIG_NET_DIVERT
+extern char sysctl_divert_version[];
+#endif /* CONFIG_NET_DIVERT */
 
 ctl_table core_table[] = {
 #ifdef CONFIG_NET
@@ -55,6 +58,11 @@ ctl_table core_table[] = {
 	{NET_CORE_OPTMEM_MAX, "optmem_max",
 	 &sysctl_optmem_max, sizeof(int), 0644, NULL,
 	 &proc_dointvec},
+#ifdef CONFIG_NET_DIVERT
+	{NET_CORE_DIVERT_VERSION, "divert_version",
+	 (void *)sysctl_divert_version, 32, 0444, NULL,
+	 &proc_dostring},
+#endif /* CONFIG_NET_DIVERT */
 #endif /* CONFIG_NET */
 	{ 0 }
 };

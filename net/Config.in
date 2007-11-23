@@ -42,6 +42,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   if [ "$CONFIG_BRIDGE" != "n" ]; then
 	int '  Maximum number of bridged interfaces' CONFIG_BRIDGE_NUM_PORTS 8
   fi
+  bool 'Frame Diverter (EXPERIMENTAL)' CONFIG_NET_DIVERT
   bool '802.2 LLC (EXPERIMENTAL)' CONFIG_LLC
 #  if [ "$CONFIG_LLC" = "y" ]; then
 #   bool 'Netbeui (EXPERIMENTAL)' CONFIG_NETBEUI

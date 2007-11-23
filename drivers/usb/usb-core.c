@@ -13,6 +13,7 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/usb.h>
 
 /*
@@ -24,35 +25,6 @@ void usb_hub_cleanup(void);
 int usb_major_init(void);
 void usb_major_cleanup(void);
 
-/*
- * USB device drivers
- */
-
-int input_init_module(void);
-int acm_init_module(void);
-int usb_dc2xx_init_module(void);
-int evdev_init_module(void);
-int hid_init_module(void);
-int joydev_init_module(void);
-int keybdev_init_module(void);
-int mousedev_init_module(void);
-int microtek_drv_init_module(void);
-int usblp_init_module(void);
-int usb_ov511_init_module(void);
-int usb_rio_init_module(void);
-int usb_scanner_init_module(void);
-int usb_serial_init_module(void);
-int usb_stor_init_module(void);
-int usb_kbd_init_module(void);
-int usb_mouse_init_module(void);
-int wacom_init_module(void);
-int wmforce_init_module(void);
-
-int usb_audio_init(void);
-int usb_ibmcam_init(void);
-int dabusb_init(void);
-int plusb_init(void);
-int dsbr100_init(void);
 
 /*
  * HCI drivers
@@ -88,21 +60,6 @@ int usb_init(void)
 	usb_hub_init();
 
 #ifndef CONFIG_USB_MODULE
-#ifdef CONFIG_USB_AUDIO
-	usb_audio_init();
-#endif
-#ifdef CONFIG_USB_IBMCAM
-	usb_ibmcam_init();
-#endif
-#ifdef CONFIG_USB_DABUSB
-	dabusb_init();
-#endif
-#ifdef CONFIG_USB_DSBR
-	dsbr100_init();
-#endif
-#ifdef CONFIG_USB_PLUSB
-	plusb_init();
-#endif
 #ifdef CONFIG_USB_UHCI
 	uhci_init();
 #endif

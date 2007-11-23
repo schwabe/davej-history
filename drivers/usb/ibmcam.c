@@ -35,6 +35,7 @@
 #include <linux/vmalloc.h>
 #include <linux/wrapper.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/spinlock.h>
 #include <linux/usb.h>
 
@@ -127,21 +128,36 @@ static int init_model2_sat = -1;
 static int init_model2_yb = -1;
 
 MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug level: 0-9 (default=0)");
 MODULE_PARM(flags, "i");
+MODULE_PARM_DESC(flags, "Bitfield: 0=VIDIOCSYNC, 1=B/W, 2=show hints, 3=show stats, 4=test pattern, 5=seperate frames, 6=clean frames");
 MODULE_PARM(framerate, "i");
+MODULE_PARM_DESC(framerate, "Framerate setting: 0=slowest, 6=fastest (default=2)");
 MODULE_PARM(lighting, "i");
+MODULE_PARM_DESC(lighting, "Photosensitivity: 0=bright, 1=medium (default), 2=low light");
 MODULE_PARM(sharpness, "i");
+MODULE_PARM_DESC(sharpness, "Model1 noise reduction: 0=smooth, 6=sharp (default=4)");
 MODULE_PARM(videosize, "i");
+MODULE_PARM_DESC(videosize, "Image size: 0=128x96, 1=176x144, 2=352x288, 3=320x240, 4=352x240 (default=1)");
 MODULE_PARM(init_brightness, "i");
+MODULE_PARM_DESC(init_brightness, "Brightness preconfiguration: 0-255 (default=128)");
 MODULE_PARM(init_contrast, "i");
+MODULE_PARM_DESC(init_contrast, "Contrast preconfiguration: 0-255 (default=192)");
 MODULE_PARM(init_color, "i");
+MODULE_PARM_DESC(init_color, "Dolor preconfiguration: 0-255 (default=128)");
 MODULE_PARM(init_hue, "i");
+MODULE_PARM_DESC(init_hue, "Hue preconfiguration: 0-255 (default=128)");
 MODULE_PARM(hue_correction, "i");
+MODULE_PARM_DESC(hue_correction, "YUV colorspace regulation: 0-255 (default=128)");
 
 MODULE_PARM(init_model2_rg, "i");
+MODULE_PARM_DESC(init_model2_rg, "Model2 preconfiguration: 0-255 (default=112)");
 MODULE_PARM(init_model2_rg2, "i");
+MODULE_PARM_DESC(init_model2_rg2, "Model2 preconfiguration: 0-255 (default=47)");
 MODULE_PARM(init_model2_sat, "i");
+MODULE_PARM_DESC(init_model2_sat, "Model2 preconfiguration: 0-255 (default=52)");
 MODULE_PARM(init_model2_yb, "i");
+MODULE_PARM_DESC(init_model2_yb, "Model2 preconfiguration: 0-255 (default=160)");
 
 MODULE_AUTHOR ("module author");
 MODULE_DESCRIPTION ("IBM/Xirlink C-it USB Camera Driver for Linux (c) 2000");
@@ -190,8 +206,10 @@ static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
 		if (!pmd_none(*pmd)) {
 			ptep = pte_offset(pmd, adr);
 			pte = *ptep;
-			if (pte_present(pte))
-				ret = page_address(pte_page(pte)) | (adr & (PAGE_SIZE-1));
+			if (pte_present(pte)) {
+				ret = (unsigned long) page_address(pte_page(pte));
+				ret |= (adr & (PAGE_SIZE - 1));
+			}
 		}
 	}
 	MDEBUG(printk("uv2kva(%lx-->%lx)", adr, ret));
@@ -2933,11 +2951,11 @@ static int ibmcam_find_struct(void)
  * 1/22/00  Moved camera init code to ibmcam_open()
  * 1/27/00  Changed to use static structures, added locking.
  * 5/24/00  Corrected to prevent race condition (MOD_xxx_USE_COUNT).
+ * 7/3/00   Fixed endianness bug.
  */
 static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_ibmcam *ibmcam = NULL;
-	const unsigned char *p_rev;
 	const struct usb_interface_descriptor *interface;
 	const struct usb_endpoint_descriptor *endpoint;
 	int devnum, model=0;
@@ -2955,20 +2973,24 @@ static void *usb_ibmcam_probe(struct usb_device *dev, unsigned int ifnum)
 		return NULL;
 
 	/* Check the version/revision */
-	p_rev = (const unsigned char *) &dev->descriptor.bcdDevice;
-	if (p_rev[1] == 0x00 && p_rev[0] == 0x02) {
+	switch (dev->descriptor.bcdDevice) {
+	case 0x0002:
 		if (ifnum != 2)
 			return NULL;
-		printk(KERN_INFO "IBM USB camera found (model 1).\n");
+		printk(KERN_INFO "IBM USB camera found (model 1, rev. 0x%04x).\n",
+			dev->descriptor.bcdDevice);
 		model = IBMCAM_MODEL_1;
-	} else if (p_rev[1] == 0x03 && p_rev[0] == 0x0A) {
+		break;
+	case 0x030A:
 		if (ifnum != 0)
 			return NULL;
-		printk(KERN_INFO "IBM USB camera found (model 2).\n");
+		printk(KERN_INFO "IBM USB camera found (model 2, rev. 0x%04x).\n",
+			dev->descriptor.bcdDevice);
 		model = IBMCAM_MODEL_2;
-	} else {
-		printk(KERN_ERR "IBM camera revision=%02x.%02x not supported\n",
-		       p_rev[1], p_rev[0]);
+		break;
+	default:
+		printk(KERN_ERR "IBM camera with revision 0x%04x is not supported.\n",
+			dev->descriptor.bcdDevice);
 		return NULL;
 	}
 
@@ -3051,6 +3073,7 @@ static void usb_ibmcam_release(struct usb_ibmcam *ibmcam)
 	if (debug > 0)
 		printk(KERN_DEBUG "usb_ibmcam_release: Video unregistered.\n");
 	ibmcam->ibmcam_used = 0;
+	ibmcam->initialized = 0;
 }
 
 /*
@@ -3116,7 +3139,7 @@ static struct usb_driver ibmcam_driver = {
  * History:
  * 1/27/00  Reworked to use statically allocated usb_ibmcam structures.
  */
-int usb_ibmcam_init(void)
+static int __init usb_ibmcam_init(void)
 {
 	unsigned u;
 
@@ -3128,19 +3151,12 @@ int usb_ibmcam_init(void)
 	return usb_register(&ibmcam_driver);
 }
 
-void usb_ibmcam_cleanup(void)
+static void __exit usb_ibmcam_cleanup(void)
 {
 	usb_deregister(&ibmcam_driver);
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return usb_ibmcam_init();
-}
+module_init(usb_ibmcam_init);
+module_exit(usb_ibmcam_cleanup);
 
-void cleanup_module(void)
-{
-	usb_ibmcam_cleanup();
-}
-#endif
+

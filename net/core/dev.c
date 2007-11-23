@@ -59,6 +59,7 @@
  *	Paul Rusty Russel	:	SIOCSIFNAME
  *	Andrea Arcangeli	:	dev_clear_backlog() needs the
  *					skb_queue_lock held.
+ *	Benoit Locher	:	Added the Frame Diversion code
  */
 
 #include <asm/uaccess.h>
@@ -84,6 +85,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <net/br.h>
+#include <net/divert.h>
 #include <net/dst.h>
 #include <net/pkt_sched.h>
 #include <net/profile.h>
@@ -839,6 +841,17 @@ static inline void handle_bridge(struct sk_buff *skb, unsigned short type)
 }
 #endif
 
+
+#ifdef CONFIG_NET_DIVERT
+static inline void handle_diverter(struct sk_buff *skb)
+{
+	/* if diversion is supported on device, then divert */
+	if (skb->dev->divert && skb->dev->divert->divert)
+		divert_frame(skb);
+	return;
+}
+#endif	 /* CONFIG_NET_DIVERT */
+
 /*
  *	When we are called the queue is ready to grab, the interrupts are
  *	on and hardware can interrupt and queue to the receive queue as we
@@ -947,6 +960,15 @@ void net_bh(void)
 		 */
 
 		type = skb->protocol;
+
+#ifdef CONFIG_NET_DIVERT
+		/*
+		 * Have the frame diverted ?
+		 *
+		 */
+		handle_diverter(skb);
+#endif	/* CONFIG_NET_DIVERT */
+		
 
 #ifdef CONFIG_BRIDGE
 		/*
@@ -1760,10 +1782,12 @@ int dev_new_index(void)
 
 static int dev_boot_phase = 1;
 
-
 int register_netdevice(struct device *dev)
 {
 	struct device *d, **dp;
+#ifdef CONFIG_NET_DIVERT
+	int	ret;
+#endif
 
 	if (dev_boot_phase) {
 		/* This is NOT bug, but I am not sure, that all the
@@ -1786,6 +1810,11 @@ int register_netdevice(struct device *dev)
 		}
 		dev->next = NULL;
 		*dp = dev;
+#ifdef CONFIG_NET_DIVERT
+		ret=alloc_divert_blk(dev);
+		if (ret)
+			return ret;
+#endif /* CONFIG_NET_DIVERT */
 		return 0;
 	}
 
@@ -1809,7 +1838,11 @@ int register_netdevice(struct device *dev)
 
 	/* Notify protocols, that a new device appeared. */
 	notifier_call_chain(&netdev_chain, NETDEV_REGISTER, dev);
-
+#ifdef CONFIG_NET_DIVERT
+	ret=alloc_divert_blk(dev);
+	if (ret)
+		return ret;
+#endif
 	return 0;
 }
 
@@ -1857,6 +1890,9 @@ int unregister_netdevice(struct device *dev)
 
 			if (dev->destructor)
 				dev->destructor(dev);
+#ifdef CONFIG_NET_DIVERT
+			free_divert_blk(dev);	
+#endif /* CONFIG_NET_DIVERT */
 			return 0;
 		}
 	}
@@ -1932,6 +1968,13 @@ __initfunc(int net_dev_init(void))
 #ifdef CONFIG_BRIDGE	 
 	br_init();
 #endif	
+
+	/*
+	 * Frame Diverter init
+	 */
+#ifdef CONFIG_NET_DIVERT
+	dv_init();
+#endif /* CONFIG_NET_DIVERT */
 	
 	/*
 	 * This is Very Ugly(tm).

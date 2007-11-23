@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.87.2.9 2000/09/14 10:44:31 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.87.2.10 2000/09/20 01:47:40 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -109,6 +109,11 @@
 #ifdef CONFIG_BRIDGE
 #include <net/br.h>
 #endif
+ 
+#ifdef CONFIG_NET_DIVERT
+#include <net/divert.h>
+#endif /* CONFIG_NET_DIVERT */
+ 
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
@@ -913,6 +918,14 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return -ENOPKG;
 #endif						
 			
+		case SIOCGIFDIVERT:
+		case SIOCSIFDIVERT:
+#ifdef CONFIG_NET_DIVERT
+			return(divert_ioctl(cmd, (struct divert_cf *) arg));
+#else
+			return -ENOPKG;
+#endif	/* CONFIG_NET_DIVERT */
+
 		case SIOCADDDLCI:
 		case SIOCDELDLCI:
 #ifdef CONFIG_DLCI

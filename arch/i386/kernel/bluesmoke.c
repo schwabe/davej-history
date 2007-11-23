@@ -37,7 +37,7 @@ void mcheck_fault(void)
 			high&=~(1<<31);
 			if(high&(1<<27))
 			{
-				rdmsr(0x402+i*4, alow, ahigh);
+				rdmsr(0x403+i*4, alow, ahigh);
 				printk("[%08x%08x]", alow, ahigh);
 			}
 			if(high&(1<<26))
@@ -49,7 +49,7 @@ void mcheck_fault(void)
 			/* Clear it */
 			wrmsr(0x401+i*4, 0UL, 0UL);
 			/* Serialize */
-			wmb();
+			mb();
 		}
 	}
 	

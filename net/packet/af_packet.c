@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.19.2.1 1999/12/04 05:45:02 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.19.2.2 2000/09/20 01:47:40 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -71,6 +71,10 @@
 #ifdef CONFIG_BRIDGE
 #include <net/br.h>
 #endif
+
+#ifdef CONFIG_NET_DIVERT
+#include <net/divert.h>
+#endif /* CONFIG_NET_DIVERT */
 
 #ifdef CONFIG_DLCI
 extern int dlci_ioctl(unsigned int, void*);
@@ -1132,6 +1136,14 @@ static int packet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg
 #else
 			return -ENOPKG;
 #endif						
+			
+		case SIOCGIFDIVERT:
+		case SIOCSIFDIVERT:
+#ifdef CONFIG_NET_DIVERT
+			return(divert_ioctl(cmd, (struct divert_cf *) arg));
+#else
+			return -ENOPKG;
+#endif /* CONFIG_NET_DIVERT */
 			
 #ifdef CONFIG_INET
 		case SIOCADDRT:

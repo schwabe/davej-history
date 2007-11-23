@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.19.2.1 2000/01/14 03:55:36 davem Exp $ */
+/* $Id: io.h,v 1.19.2.2 2000/09/17 05:11:47 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -244,6 +244,8 @@ out:
 	return retval;
 }
 
+#ifdef __KERNEL__
+
 /*
  * On the sparc we have the whole physical IO address space mapped at all
  * times, so ioremap() and iounmap() do not need to do anything.
@@ -279,5 +281,7 @@ extern void *sparc_alloc_io(u32 pa, void *va, int sz, char *name,
 			    u32 io, int rdonly);
 extern void sparc_free_io (void *va, int sz);
 extern void *sparc_dvma_malloc (int sz, char *name, __u32 *dvma_addr);
+
+#endif /* __KERNEL__ */
 
 #endif /* !(__SPARC64_IO_H) */

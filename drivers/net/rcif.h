@@ -43,10 +43,10 @@ int USER_PROTOCOL_REV = 2;     /* used to track different protocol revisions */
 /* define a single TCB & buffer */
 typedef struct                  /* a single buffer */
 {
-     U32 context;               /* context */
-     U32 scount;                /* segment count */
-     U32 size;                  /* segment size */
-     U32 addr;                  /* segment physical address */
+     u32 context;               /* context */
+     u32 scount;                /* segment count */
+     u32 size;                  /* segment size */
+     u32 addr;                  /* segment physical address */
 }
 __attribute__((packed))
 singleB, *psingleB ;
@@ -65,7 +65,7 @@ typedef struct                  /* a single TCB */
      **  |  <physical address>   |  physical address of buffer  /
      **  +-----------------------+                            _/
      */
-     U32 bcount;                /* buffer count */
+     u32 bcount;                /* buffer count */
      singleB b;                 /* buffer */
 
 }
@@ -82,7 +82,7 @@ singleTCB, *psingleTCB;
       5) Command identifier entry
 
    For Example ("GETSPEED"):
-      1) struct  RCgetspeed_tag { U32 LinkSpeedCode; } RCgetspeed;
+      1) struct  RCgetspeed_tag { u32 LinkSpeedCode; } RCgetspeed;
       2) struct  RCgetspeed_tag *getspeed;
       3) #define RCUS_GETSPEED  data.RCgetspeed;
       4) #define RCUD_GETSPEED  _RC_user_data.getspeed
@@ -121,66 +121,66 @@ struct RC_user_tag
      
         /* GETSPEED structure */
         struct  RCgetspeed_tag {
-            U32 LinkSpeedCode;
+            u32 LinkSpeedCode;
         } RCgetspeed;                   /* <---- RCgetspeed */
   
         /* SETSPEED structure */
         struct RCsetspeed_tag {
-            U16 LinkSpeedCode;
+            u16 LinkSpeedCode;
         } RCsetspeed;                   /* <---- RCsetspeed */
 
         /* GETPROM structure */
         struct  RCgetprom_tag {
-            U32 PromMode;
+            u32 PromMode;
         } RCgetprom;                   /* <---- RCgetprom */
   
         /* SETPROM structure */
         struct RCsetprom_tag {
-            U16 PromMode;
+            u16 PromMode;
         } RCsetprom;                   /* <---- RCsetprom */
 
         /* GETBROADCAST structure */
         struct  RCgetbroadcast_tag {
-            U32 BroadcastMode;
+            u32 BroadcastMode;
         } RCgetbroadcast;                   /* <---- RCgetbroadcast */
   
         /* SETBROADCAST structure */
         struct RCsetbroadcast_tag {
-            U16 BroadcastMode;
+            u16 BroadcastMode;
         } RCsetbroadcast;                   /* <---- RCsetbroadcast */
 
         /* GETFIRMWAREVER structure */
         #define FirmStringLen 80
         struct RCgetfwver_tag {
-            U8 FirmString[FirmStringLen];
+            u8 FirmString[FirmStringLen];
         } RCgetfwver;                   /* <---- RCgetfwver */
   
         /* GETIPANDMASK structure */
         struct RCgetipnmask_tag {
-            U32 IpAddr;
-            U32 NetMask;
+            u32 IpAddr;
+            u32 NetMask;
         } RCgetipandmask;               /* <---- RCgetipandmask */
 
         /* SETIPANDMASK structure */
         struct RCsetipnmask_tag {
-            U32 IpAddr;
-            U32 NetMask;
+            u32 IpAddr;
+            u32 NetMask;
         } RCsetipandmask;               /* <---- RCsetipandmask */
 
         /* GETMAC structure */
         #define MAC_SIZE 10
         struct RCgetmac_tag {
-            U8 mac[MAC_SIZE];
+            u8 mac[MAC_SIZE];
         } RCgetmac;                     /* <---- RCgetmac */
 
         /* SETMAC structure */
         struct RCsetmac_tag {
-            U8 mac[MAC_SIZE];
+            u8 mac[MAC_SIZE];
         } RCsetmac;                     /* <---- RCsetmac */
 
         /* GETLINKSTATUS structure */
         struct RCgetlnkstatus_tag {
-            U32 ReturnStatus;
+            u32 ReturnStatus;
         } RCgetlnkstatus;               /* <---- RCgetlnkstatus */
 
         /* GETLINKSTATISTICS structure */

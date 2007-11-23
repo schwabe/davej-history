@@ -579,7 +579,7 @@ int sock_create(int family, int type, int protocol, struct socket **res)
 	 *	Check protocol is in range
 	 */
 	if(family<0||family>=NPROTO)
-		return -EINVAL;
+		return -EAFNOSUPPORT;
 		
 #if defined(CONFIG_KMOD) && defined(CONFIG_NET)
 	/* Attempt to load a protocol module if the find failed. 

@@ -11,6 +11,13 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  *
+ * (09/11/2000) gkh
+ *	Added usb_serial_debug_data function to help get rid of #DEBUG in the
+ *	drivers.
+ *
+ * (08/28/2000) gkh
+ *	Added port_lock to port structure.
+ *
  * (08/08/2000) gkh
  *	Added open_count to port structure.
  *
@@ -63,6 +70,7 @@ struct usb_serial_port {
 
 	struct tq_struct	tqueue;		/* task queue for line discipline waking up */
 	int			open_count;	/* number of times this port has been opened */
+	spinlock_t		port_lock;
 	
 	void *			private;	/* data private to the specific port */
 };
@@ -183,6 +191,34 @@ static inline int port_paranoia_check (struct usb_serial_port *port, const char 
 	}
 
 	return 0;
+}
+
+
+static inline struct usb_serial* get_usb_serial (struct usb_serial_port *port, const char *function) 
+{ 
+	/* if no port was specified, or it fails a paranoia check */
+	if (!port || 
+		port_paranoia_check (port, function) ||
+		serial_paranoia_check (port->serial, function)) {
+		/* then say that we dont have a valid usb_serial thing, which will
+		 * end up genrating -ENODEV return values */ 
+		return NULL;
+	}
+
+	return port->serial;
+}
+
+
+static inline void usb_serial_debug_data (const char *file, const char *function, int size, const unsigned char *data)
+{
+#ifdef CONFIG_USB_SERIAL_DEBUG
+	int i;
+	printk (KERN_DEBUG "%s: %s - length = %d, data = ", file, function, size);
+	for (i = 0; i < size; ++i) {
+		printk ("%.2x ", data[i]);
+	}
+	printk ("\n");
+#endif
 }
 
 #endif	/* ifdef __LINUX_USB_SERIAL_H */

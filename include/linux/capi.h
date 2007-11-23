@@ -1,20 +1,9 @@
 /*
- * $Id: capi.h,v 1.1 1997/03/04 21:27:33 calle Exp $
+ * $Id: capi.h,v 1.4 2000/06/12 09:20:20 kai Exp $
  * 
  * CAPI 2.0 Interface for Linux
  * 
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
- * 
- * $Log: capi.h,v $
- * Revision 1.1  1997/03/04 21:27:33  calle
- * First version in isdn4linux
- *
- * Revision 2.2  1997/02/12 09:31:39  calle
- * new version
- *
- * Revision 1.1  1997/01/31 10:32:20  calle
- * Initial revision
- *
  * 
  */
 
@@ -107,6 +96,7 @@ typedef struct capi_manufacturer_cmd {
  * CAPI_INSTALLED
  */
 #define CAPI_INSTALLED		_IOR('C',0x22, __u16)
+
 
 /*
  * member contr is input for

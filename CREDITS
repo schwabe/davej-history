@@ -202,6 +202,14 @@ S: Bouwensstraat 22
 S: 6369 BG Simpelveld
 S: The Netherlands
 
+N: Peter Berger
+E: pberger@brimson.com
+W: http://www.brimson.com
+D: Author/maintainer of Digi AccelePort USB driver
+S: 1549 Hiironen Rd.
+S: Brimson, MN  55602
+S: USA
+
 N: Hennus Bergman
 E: hennus@cybercomm.nl
 W: http://www.cybercomm.nl/~hennus/
@@ -220,6 +228,14 @@ P: 1024/8462A731 4C 55 86 34 44 59 A7 99  2B 97 88 4A 88 9A 0D 97
 D: sun4 port
 S: 47 Robert Street
 S: Marrickville NSW 2204
+S: Australia
+
+N: Hugh Blemings
+E: hugh@linuxcare.com
+W: http://www.linuxcare.com.au/hugh/
+D: Author and maintainer of the Keyspan USB to Serial drivers
+S: Po Box 234
+S: Belconnen ACT 2616
 S: Australia
 
 N: Philip Blundell
@@ -252,6 +268,13 @@ E: boldt@math.ucsb.edu
 W: http://math-www.uni-paderborn.de/~axel/
 D: Configuration help text support
 D: Linux CD and Support Giveaway List
+
+N: Al Borchers
+E: alborchers@steinerpoint.com
+D: Author/maintainer of Digi AccelePort USB driver
+S: 4912 Zenith Ave. S.
+S: Minneapolis, MN  55410
+S: USA
 
 N: Zoltán Böszörményi
 E: zboszor@mail.externet.hu
@@ -393,6 +416,13 @@ E: nconway.list@ukaea.org.uk
 D: Assorted sched/mm titbits
 S: Oxfordshire, UK.
 
+N: Mark Corner
+E: mcorner@umich.edu
+W: http://www.eecs.umich.edu/~mcorner/
+D: USB Bluetooth Driver
+S: University of Michigan
+S: Ann Arbor, MI
+
 N: Alan Cox
 W: http://roadrunner.swansea.linux.org.uk/alan.shtml
 E: alan@lxorguk.ukuu.org.uk
@@ -500,6 +530,15 @@ S: Virginia Tech
 S: Blacksburg, Virginia 24061
 S: USA
 
+N: Randy Dunlap
+E: randy.dunlap@intel.com
+W: http://home.att.net/~randy.dunlap/
+W: http://www.linux-usb.org
+D: Linux-USB subsystem, USB core/UHCI/printer/storage drivers
+S: 5200 NE Elam Young Pkwy., M/S HF3-77
+S: Hillsboro, Oregon 97124
+S: USA
+
 N: Cyrus Durgin
 E: cider@speakeasy.org
 W: http://www.speakeasy.org/~cider/
@@ -552,6 +591,13 @@ E: engstad@intermetrics.com
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
 S: 17101 Springdale Street #225
 S: Huntington Beach, California 92649
+S: USA
+
+N: Johannes Erdfelt
+E: jerdfelt@valinux.com
+D: USB
+S: 6350 Stoneridge Mall Road
+S: Pleasanton, CA 94588
 S: USA
 
 N: Doug Evans
@@ -1128,6 +1174,14 @@ S: Markham, Ontario
 S: L3R 8B2
 S: Canada
 
+N: Greg Kroah-Hartman
+E: greg@kroah.com
+W: http://www.kroah.com/linux-usb/
+D: USB Serial Converter driver framework, USB Handspring Visor driver
+D: ConnectTech WHITEHeat USB driver, Generic USB Serial driver
+D: USB Bluetooth driver,
+D: bits and pieces of USB core code.
+
 N: Russell Kroll
 E: rkroll@exploits.org
 W: http://www.exploits.org/
@@ -1287,7 +1341,7 @@ D: Initial implementation of VC's, pty's and select()
 N: Pavel Machek
 E: pavel@atrey.karlin.mff.cuni.cz
 D: Softcursor for vga, hypertech cdrom support, vcsa bugfix
-D: Network block device, sun4/330 port 
+D: Network block device, sun4/330 port, USB
 S: Volkova 1131
 S: 198 00 Praha 9
 S: Czech Republic
@@ -1316,6 +1370,15 @@ D: Program in DOSEMU
 S: PO BOX 220, HFX. CENTRAL
 S: Halifax, Nova Scotia
 S: Canada B3J 3C8
+
+N: Petko Manolov
+E: petkan@dce.bg
+D: USB ethernet (pegasus) driver
+D: optimizing i[45]86 string routines
+D: i386 task swithing hacks
+S: 5, Vrah Mancho str.
+S: 1324 Sofia
+S: Bulgaria
 
 N: Martin Mares
 E: mj@atrey.karlin.mff.cuni.cz
@@ -1382,6 +1445,7 @@ N: Arnaldo Carvalho de Melo
 E: acme@conectiva.com.br
 D: wanrouter hacking
 D: cyclades 2X sync card driver (still in early devel stage)
+D: USB hacking
 S: R. Prof. Rubens Elke Braga, 558 - Parolin
 S: 80220-320 Curitiba - Parana
 S: Brazil
@@ -1472,6 +1536,13 @@ D: Linux/Alpha
 S: 35706 Runckel Lane
 S: Fremont, California 94536
 S: USA
+
+N: Sam Mosel
+E: sam.mosel@computer.org
+D: Wacom Intuos USB Support
+S: 22 Seaview St
+S: Fullarton 5063
+S: South Australia
 
 N: Ian A. Murdock
 E: imurdock@gnu.ai.mit.edu
@@ -1576,7 +1647,7 @@ E: vojtech@suse.cz
 D: Joystick driver
 D: arcnet-hardware readme
 D: Minor ARCnet hacking
-D: USB development
+D: USB (HID, ACM, Printer ...)
 S: Ucitelska 1576
 S: Prague 8
 S: 182 00 Czech Republic
@@ -1799,6 +1870,14 @@ W: http://www.samba.org/netfilter/ipchains
 W: http://netfilter.kernelnotes.org/ipchains
 D: Ruggedly handsome.
 D: Developed Generic IP Firewalling Chains with Michael Neuling.
+
+N: Bill Ryder
+E: bryder@sgi.com
+D: FTDI_SIO usb/serial converter driver
+W: http://reality.sgi.com/bryder_wellington/ftdi_sio
+S: I/3 Walter St
+S: Wellington
+S: New Zealand
 
 N: Thomas Sailer
 E: sailer@ife.ee.ethz.ch

@@ -1,5 +1,5 @@
 /*
- * $Id: evdev.c,v 1.8 2000/05/29 09:01:52 vojtech Exp $
+ * $Id: evdev.c,v 1.10 2000/06/23 09:23:00 vojtech Exp $
  *
  *  Copyright (c) 1999-2000 Vojtech Pavlik
  *
@@ -37,10 +37,11 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/input.h>
+#include <linux/smp_lock.h>
 #include <linux/kcomp.h>
 
 struct evdev {
-	int used;
+	int exist;
 	int open;
 	int minor;
 	struct input_handle handle;
@@ -92,24 +93,28 @@ static int evdev_fasync(int fd, struct file *file, int on)
 static int evdev_release(struct inode * inode, struct file * file)
 {
 	struct evdev_list *list = file->private_data;
-	struct evdev_list **listptr = &list->evdev->list;
+	struct evdev_list **listptr;
 
+	lock_kernel();
+	listptr = &list->evdev->list;
 	evdev_fasync(-1, file, 0);
 
 	while (*listptr && (*listptr != list))
 		listptr = &((*listptr)->next);
 	*listptr = (*listptr)->next;
 
-	if (!--list->evdev->open)
-		input_close_device(&list->evdev->handle);	
-	
-	if (!--list->evdev->used) {
-		input_unregister_minor(list->evdev->devfs);
-		evdev_table[list->evdev->minor] = NULL;
-		kfree(list->evdev);
+	if (!--list->evdev->open) {
+		if (list->evdev->exist) {
+			input_close_device(&list->evdev->handle);	
+		} else {
+			input_unregister_minor(list->evdev->devfs);
+			evdev_table[list->evdev->minor] = NULL;
+			kfree(list->evdev);
+		}
 	}
 
 	kfree(list);
+	unlock_kernel();
 
 	return 0;
 }
@@ -122,9 +127,8 @@ static int evdev_open(struct inode * inode, struct file * file)
 	if (i > EVDEV_MINORS || !evdev_table[i])
 		return -ENODEV;
 
-	if (!(list = kmalloc(sizeof(struct evdev_list), GFP_KERNEL))) {
+	if (!(list = kmalloc(sizeof(struct evdev_list), GFP_KERNEL)))
 		return -ENOMEM;
-	}
 	memset(list, 0, sizeof(struct evdev_list));
 
 	list->evdev = evdev_table[i];
@@ -133,10 +137,9 @@ static int evdev_open(struct inode * inode, struct file * file)
 
 	file->private_data = list;
 
-	list->evdev->used++;
-
 	if (!list->evdev->open++)
-		input_open_device(&list->evdev->handle);	
+		if (list->evdev->exist)
+			input_open_device(&list->evdev->handle);	
 
 	return 0;
 }
@@ -303,7 +306,7 @@ static struct input_handle *evdev_connect(struct input_handler *handler, struct 
 	evdev->handle.handler = handler;
 	evdev->handle.private = evdev;
 
-	evdev->used = 1;
+	evdev->exist = 1;
 
 	evdev->devfs = input_register_minor("event%d", minor, EVDEV_MINOR_BASE);
 
@@ -316,10 +319,11 @@ static void evdev_disconnect(struct input_handle *handle)
 {
 	struct evdev *evdev = handle->private;
 
-	if (evdev->open)
-		input_close_device(handle);
+	evdev->exist = 0;
 
-	if (!--evdev->used) {
+	if (evdev->open) {
+		input_close_device(handle);
+	} else {
 		input_unregister_minor(evdev->devfs);
 		evdev_table[evdev->minor] = NULL;
 		kfree(evdev);
@@ -347,3 +351,6 @@ static void __exit evdev_exit(void)
 
 module_init(evdev_init);
 module_exit(evdev_exit);
+
+MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
+MODULE_DESCRIPTION("Event character device driver");

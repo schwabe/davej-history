@@ -100,6 +100,8 @@ if [ "$CONFIG_SOUND_MSNDPIN" = "y" -o "$CONFIG_SOUND_MSNDCLAS" = "y" ]; then
    int 'MSND buffer size (kB)' CONFIG_MSND_FIFOSIZE 128
 fi
 
+dep_tristate 'VIA 82C686 Audio Codec' CONFIG_SOUND_VIA82CXXX $CONFIG_SOUND
+
 
 dep_tristate 'OSS sound modules' CONFIG_SOUND_OSS $CONFIG_SOUND
 
@@ -202,8 +204,6 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       fi
   fi
   
-  dep_tristate 'VIA 82C686 Audio Codec' CONFIG_SOUND_VIA82CXXX $CONFIG_SOUND_OSS
-
   dep_tristate 'Support for OPTi MAD16 and/or Mozart based cards' CONFIG_SOUND_MAD16 $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_MAD16" = "y" -o "$CONFIG_SOUND_MAD16" = "m" ]; then
     bool 'Support MIDI in older MAD16 based cards (requires SB)' CONFIG_MAD16_OLDCARD

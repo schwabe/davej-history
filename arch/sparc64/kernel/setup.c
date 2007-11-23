@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.43.2.3 2000/03/03 23:50:37 davem Exp $
+/*  $Id: setup.c,v 1.43.2.4 2000/09/16 16:56:08 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -550,7 +550,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	init_task.tss.kregs = &fake_swapper_regs;
 
 #ifdef CONFIG_IP_PNP
-	if (!ic_set_manually) {
+	if (ic_myaddr == INADDR_NONE) {
 		int chosen = prom_finddevice ("/chosen");
 		u32 cl, sv, gw;
 		

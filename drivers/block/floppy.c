@@ -2257,6 +2257,7 @@ static int do_format(kdev_t device, struct format_descr *tmp_format_req)
 static void request_done(int uptodate)
 {
 	int block;
+	unsigned long flags;
 
 	probing = 0;
 	reschedule_timeout(MAXTIMEOUT, "request done %d", uptodate);
@@ -2275,6 +2276,7 @@ static void request_done(int uptodate)
 			DRS->maxtrack = 1;
 
 		/* unlock chained buffers */
+		spin_lock_irqsave(&io_request_lock, flags);
 		while (current_count_sectors && CURRENT &&
 		       current_count_sectors >= CURRENT->current_nr_sectors){
 			current_count_sectors -= CURRENT->current_nr_sectors;
@@ -2282,6 +2284,7 @@ static void request_done(int uptodate)
 			CURRENT->sector += CURRENT->current_nr_sectors;
 			end_request(1);
 		}
+		spin_unlock_irqrestore(&io_request_lock, flags);
 		if (current_count_sectors && CURRENT){
 			/* "unlock" last subsector */
 			CURRENT->buffer += current_count_sectors <<9;
@@ -2305,7 +2308,9 @@ static void request_done(int uptodate)
 			DRWE->last_error_sector = CURRENT->sector;
 			DRWE->last_error_generation = DRS->generation;
 		}
+		spin_lock_irqsave(&io_request_lock, flags);
 		end_request(0);
+		spin_unlock_irqrestore(&io_request_lock, flags);
 	}
 }
 

@@ -368,7 +368,7 @@ static int hub_ioctl (struct usb_device *hub, unsigned int code, void *user_data
 static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 {
 	struct usb_device *usb;
- 	struct usb_port_status portsts;
+	struct usb_port_status portsts;
 	unsigned short portstatus, portchange;
 	int ret, tries;
 
@@ -451,7 +451,7 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port)
 
 	/* Run it through the hoops (find a driver, etc) */
 	ret = usb_new_device(usb);
-	if (ret && usb->devnum != -1) {
+	if (ret) {
 		/* Try resetting the device. Windows does this and it */
 		/*  gets some devices working correctly */
 		usb_set_port_feature(hub, port + 1, USB_PORT_FEAT_RESET);
@@ -588,8 +588,8 @@ static int usb_hub_thread(void *__hub)
 	 * so get rid of all our resources
 	 */
 	exit_files(current);  /* daemonize doesn't do exit_files */
-        current->files = init_task.files;
-        atomic_inc(&current->files->count);
+	current->files = init_task.files;
+	atomic_inc(&current->files->count);
 	daemonize();
 
 	/* Setup a nice name */
@@ -758,6 +758,7 @@ int usb_reset_device(struct usb_device *dev)
 		ret = usb_get_configuration(dev);
 		if (ret < 0) {
 			err("unable to get configuration (error=%d)", ret);
+			usb_destroy_configuration(dev);
 			clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 			dev->devnum = -1;
 			return 1;

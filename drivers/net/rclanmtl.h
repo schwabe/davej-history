@@ -39,11 +39,7 @@
 
 /* Linux specific includes */
 #define kprintf printk
-#ifdef RC_LINUX_MODULE     /* linux modules need non-library version of string functions */
 #include <linux/string.h>
-#else
-#include <string.h>
-#endif
 
 /* PCI/45 Configuration space values */
 #define RC_PCI45_VENDOR_ID  0x4916
@@ -68,12 +64,6 @@
 #define WARM_REBOOT_CAPABLE      0x01
 
  /* scalar data types */
-typedef unsigned char   U8;
-typedef unsigned char*  PU8;
-typedef unsigned short  U16;
-typedef unsigned short* PU16;
-typedef unsigned long   U32;
-typedef unsigned long*  PU32;
 typedef unsigned long   BF;
 typedef int             RC_RETURN;
 
@@ -97,10 +87,10 @@ typedef void (*PFNWAITCALLBACK)(void);  /* void argument avoids compiler complai
  ** The User's TransmitCallbackFunction should recover (put back in free queue)
  ** the packet buffers associated with the buffer context values.
  */
-typedef void (*PFNTXCALLBACK)(U32  Status,
-                              U16  PcktCount,
-                              PU32 BufferContext,
-                              U16  AdaterID);
+typedef void (*PFNTXCALLBACK)(u32  Status,
+                              u16  PcktCount,
+                              u32 * BufferContext,
+                              u16  AdaterID);
 
  /* 
  ** type PFNRXCALLBACK 
@@ -111,11 +101,11 @@ typedef void (*PFNTXCALLBACK)(U32  Status,
  ** The received callback function should process the Packet Descriptor Block
  ** pointed to by PacketDescBlock. See Packet Decription Block below.
  */
-typedef void (*PFNRXCALLBACK)(U32  Status,
-                              U8   PktCount,
-                              U32  BucketsRemain,
-                              PU32 PacketDescBlock,
-                              U16  AdapterID);
+typedef void (*PFNRXCALLBACK)(u32  Status,
+                              u8   PktCount,
+                              u32  BucketsRemain,
+                              u32 * PacketDescBlock,
+                              u16  AdapterID);
 
  /* 
  ** type PFNCALLBACK 
@@ -125,10 +115,10 @@ typedef void (*PFNRXCALLBACK)(U32  Status,
  ** the reset or shutdown is complete.
  ** Param1 and Param2 are invalid for LANReset and LANShutdown.
  */
-typedef void (*PFNCALLBACK)(U32  Status,
-                              U32  Param1,
-                              U32  Param2,
-                              U16  AdapterID);
+typedef void (*PFNCALLBACK)(u32  Status,
+                              u32  Param1,
+                              u32  Param2,
+                              u16  AdapterID);
 
 /*
 ** Status - Transmit and Receive callback status word 
@@ -275,12 +265,12 @@ typedef void (*PFNCALLBACK)(U32  Status,
  /* Buffer Segment Descriptor */
 typedef struct
 {
-    U32 size;
-    U32 phyAddress;
+    u32 size;
+    u32 phyAddress;
 }
  BSD, *PBSD;
  
-typedef PU32 PRCTCB;
+typedef u32 * PRCTCB;
 /*
 ** -------------------------------------------------------------------------
 ** Exported functions comprising the API to the LAN I2O message transport layer
@@ -310,8 +300,8 @@ typedef PU32 PRCTCB;
  **          ReceiveCallbackFunction  - address of user's RX callback function
  **
  */
-RC_RETURN RCInitI2OMsgLayer(U16 AdapterID, U32 pciBaseAddr, 
-                            PU8 p_msgbuf,  PU8 p_phymsgbuf,
+RC_RETURN RCInitI2OMsgLayer(u16 AdapterID, u32 pciBaseAddr, 
+                            u8 * p_msgbuf,  u8 * p_phymsgbuf,
                             PFNTXCALLBACK TransmitCallbackFunction,
                             PFNRXCALLBACK ReceiveCallbackFunction,
                             PFNCALLBACK   RebootCallbackFunction);
@@ -326,7 +316,7 @@ RC_RETURN RCInitI2OMsgLayer(U16 AdapterID, U32 pciBaseAddr,
  ** 0x04030201 and 0x00FFFFFF on a little endian machine.
  **
  */
-RC_RETURN RCSetRavlinIPandMask(U16 AdapterID, U32 ipAddr, U32 netMask);
+RC_RETURN RCSetRavlinIPandMask(u16 AdapterID, u32 ipAddr, u32 netMask);
 
 
 /*
@@ -338,7 +328,7 @@ RC_RETURN RCSetRavlinIPandMask(U16 AdapterID, U32 ipAddr, U32 netMask);
 ** =========================================================================
 */
 RC_RETURN
-RCGetRavlinIPandMask(U16 AdapterID, PU32 pIpAddr, PU32 pNetMask, 
+RCGetRavlinIPandMask(u16 AdapterID, u32 * pIpAddr, u32 * pNetMask, 
                         PFNWAITCALLBACK WaitCallback);
 
  /* 
@@ -350,7 +340,7 @@ RCGetRavlinIPandMask(U16 AdapterID, PU32 pIpAddr, PU32 pNetMask,
  ** callback functions, TransmitCallbackFunction or ReceiveCallbackFunction,
  ** if a TX or RX transaction has completed.
  */
-void RCProcI2OMsgQ(U16 AdapterID);
+void RCProcI2OMsgQ(u16 AdapterID);
 
 
  /*
@@ -361,8 +351,8 @@ void RCProcI2OMsgQ(U16 AdapterID);
  ** will prevent hardware interrupt to host even though the outbound I2O msg
  ** queue is not emtpy.
  */
-RC_RETURN RCEnableI2OInterrupts(U16 adapterID);
-RC_RETURN RCDisableI2OInterrupts(U16 AdapterID);
+RC_RETURN RCEnableI2OInterrupts(u16 adapterID);
+RC_RETURN RCDisableI2OInterrupts(u16 AdapterID);
 
 
  /* 
@@ -377,7 +367,7 @@ RC_RETURN RCDisableI2OInterrupts(U16 AdapterID);
  ** to the RedCreek adapter are considered owned by the adapter until the
  ** context is return to user through the ReceiveCallbackFunction.
  */
-RC_RETURN RCPostRecvBuffers(U16 AdapterID, PRCTCB pTransactionCtrlBlock);
+RC_RETURN RCPostRecvBuffers(u16 AdapterID, PRCTCB pTransactionCtrlBlock);
 #define MAX_NMBR_POST_BUFFERS_PER_MSG 32
 
  /*
@@ -390,30 +380,30 @@ RC_RETURN RCPostRecvBuffers(U16 AdapterID, PRCTCB pTransactionCtrlBlock);
  ** Transmit buffer are considered owned by the adapter until context's
  ** returned to user through the TransmitCallbackFunction.
  */
-RC_RETURN RCI2OSendPacket(U16 AdapterID, 
-                          U32 context, 
+RC_RETURN RCI2OSendPacket(u16 AdapterID, 
+                          u32 context, 
                           PRCTCB pTransactionCtrlBlock);
 
 
  /* Ethernet Link Statistics structure */
 typedef struct tag_RC_link_stats
 {
-    U32 TX_good;      /* good transmit frames */
-    U32 TX_maxcol;    /* frames not TX due to MAX collisions */
-    U32 TX_latecol;   /* frames not TX due to late collisions */
-    U32 TX_urun;      /* frames not TX due to DMA underrun */
-    U32 TX_crs;       /* frames TX with lost carrier sense */
-    U32 TX_def;       /* frames deferred due to activity on link */
-    U32 TX_singlecol; /* frames TX with one and only on collision */
-    U32 TX_multcol;   /* frames TX with more than one collision */
-    U32 TX_totcol;    /* total collisions detected during TX */
-    U32 Rcv_good;     /* good frames received */
-    U32 Rcv_CRCerr;   /* frames RX and discarded with CRC errors */
-    U32 Rcv_alignerr; /* frames RX with alignment and CRC errors */
-    U32 Rcv_reserr;   /* good frames discarded due to no RX buffer */
-    U32 Rcv_orun;     /* RX frames lost due to FIFO overrun */
-    U32 Rcv_cdt;      /* RX frames with collision during RX */
-    U32 Rcv_runt;     /* RX frames shorter than 64 bytes */
+    u32 TX_good;      /* good transmit frames */
+    u32 TX_maxcol;    /* frames not TX due to MAX collisions */
+    u32 TX_latecol;   /* frames not TX due to late collisions */
+    u32 TX_urun;      /* frames not TX due to DMA underrun */
+    u32 TX_crs;       /* frames TX with lost carrier sense */
+    u32 TX_def;       /* frames deferred due to activity on link */
+    u32 TX_singlecol; /* frames TX with one and only on collision */
+    u32 TX_multcol;   /* frames TX with more than one collision */
+    u32 TX_totcol;    /* total collisions detected during TX */
+    u32 Rcv_good;     /* good frames received */
+    u32 Rcv_CRCerr;   /* frames RX and discarded with CRC errors */
+    u32 Rcv_alignerr; /* frames RX with alignment and CRC errors */
+    u32 Rcv_reserr;   /* good frames discarded due to no RX buffer */
+    u32 Rcv_orun;     /* RX frames lost due to FIFO overrun */
+    u32 Rcv_cdt;      /* RX frames with collision during RX */
+    u32 Rcv_runt;     /* RX frames shorter than 64 bytes */
 }
  RCLINKSTATS, *P_RCLINKSTATS;
 
@@ -424,7 +414,7 @@ typedef struct tag_RC_link_stats
  ** If given, not NULL, the function WaitCallback is called during the wait
  ** loop while waiting for the adapter to respond.
  */
-RC_RETURN RCGetLinkStatistics(U16 AdapterID,
+RC_RETURN RCGetLinkStatistics(u16 AdapterID,
                               P_RCLINKSTATS StatsReturnAddr,
                               PFNWAITCALLBACK WaitCallback);
 
@@ -435,8 +425,8 @@ RC_RETURN RCGetLinkStatistics(U16 AdapterID,
  ** If given, not NULL, the function WaitCallback is called during the wait
  ** loop while waiting for the adapter to respond.
  */
-RC_RETURN RCGetLinkStatus(U16 AdapterID, 
-                          PU32 pReturnStatus,
+RC_RETURN RCGetLinkStatus(u16 AdapterID, 
+                          u32 * pReturnStatus,
                           PFNWAITCALLBACK WaitCallback);
                                
  /* Link Status defines - value returned in pReturnStatus */
@@ -452,7 +442,7 @@ RC_RETURN RCGetLinkStatus(U16 AdapterID,
  ** adapter runs in promiscous mode because of the dual address requirement.
  ** The MAC address is returned to the unsigned char array pointer to by mac.
  */
-RC_RETURN RCGetMAC(U16 AdapterID, PU8 mac, PFNWAITCALLBACK WaitCallback);
+RC_RETURN RCGetMAC(u16 AdapterID, u8 * mac, PFNWAITCALLBACK WaitCallback);
 
  /*
  ** RCSetMAC()
@@ -460,14 +450,14 @@ RC_RETURN RCGetMAC(U16 AdapterID, PU8 mac, PFNWAITCALLBACK WaitCallback);
  ** Set a new user port MAC address.  This address will be returned on
  ** subsequent RCGetMAC() calls.
  */
-RC_RETURN RCSetMAC(U16 AdapterID, PU8 mac);
+RC_RETURN RCSetMAC(u16 AdapterID, u8 * mac);
 
  /*
  ** RCSetLinkSpeed()
  **
  ** set adapter's link speed based on given input code.
  */
-RC_RETURN RCSetLinkSpeed(U16 AdapterID, U16 LinkSpeedCode);
+RC_RETURN RCSetLinkSpeed(u16 AdapterID, u16 LinkSpeedCode);
  /* Set link speed codes */
 #define LNK_SPD_AUTO_NEG_NWAY   0
 #define LNK_SPD_100MB_FULL      1
@@ -491,10 +481,10 @@ RC_RETURN RCSetLinkSpeed(U16 AdapterID, U16 LinkSpeedCode);
 #define LNK_SPD_10MB_HALF       4
 
 RC_RETURN
-RCGetLinkSpeed(U16 AdapterID, PU32 pLinkSpeedCode, PFNWAITCALLBACK WaitCallback);
+RCGetLinkSpeed(u16 AdapterID, u32 * pLinkSpeedCode, PFNWAITCALLBACK WaitCallback);
 /*
 ** =========================================================================
-** RCSetPromiscuousMode(U16 AdapterID, U16 Mode)
+** RCSetPromiscuousMode(u16 AdapterID, u16 Mode)
 **
 ** Defined values for Mode:
 **  0 - turn off promiscuous mode
@@ -505,10 +495,10 @@ RCGetLinkSpeed(U16 AdapterID, PU32 pLinkSpeedCode, PFNWAITCALLBACK WaitCallback)
 #define PROMISCUOUS_MODE_OFF 0
 #define PROMISCUOUS_MODE_ON  1
 RC_RETURN
-RCSetPromiscuousMode(U16 AdapterID, U16 Mode);
+RCSetPromiscuousMode(u16 AdapterID, u16 Mode);
 /*
 ** =========================================================================
-** RCGetPromiscuousMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback)
+** RCGetPromiscuousMode(u16 AdapterID, u32 * pMode, PFNWAITCALLBACK WaitCallback)
 **
 ** get promiscuous mode setting
 **
@@ -519,11 +509,11 @@ RCSetPromiscuousMode(U16 AdapterID, U16 Mode);
 ** =========================================================================
 */
 RC_RETURN
-RCGetPromiscuousMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback);
+RCGetPromiscuousMode(u16 AdapterID, u32 * pMode, PFNWAITCALLBACK WaitCallback);
 
 /*
 ** =========================================================================
-** RCSetBroadcastMode(U16 AdapterID, U16 Mode)
+** RCSetBroadcastMode(u16 AdapterID, u16 Mode)
 **
 ** Defined values for Mode:
 **  0 - turn off promiscuous mode
@@ -534,10 +524,10 @@ RCGetPromiscuousMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback);
 #define BROADCAST_MODE_OFF 0
 #define BROADCAST_MODE_ON  1
 RC_RETURN
-RCSetBroadcastMode(U16 AdapterID, U16 Mode);
+RCSetBroadcastMode(u16 AdapterID, u16 Mode);
 /*
 ** =========================================================================
-** RCGetBroadcastMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback)
+** RCGetBroadcastMode(u16 AdapterID, u32 * pMode, PFNWAITCALLBACK WaitCallback)
 **
 ** get broadcast mode setting
 **
@@ -548,10 +538,10 @@ RCSetBroadcastMode(U16 AdapterID, U16 Mode);
 ** =========================================================================
 */
 RC_RETURN
-RCGetBroadcastMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback);
+RCGetBroadcastMode(u16 AdapterID, u32 * pMode, PFNWAITCALLBACK WaitCallback);
 /*
 ** =========================================================================
-** RCReportDriverCapability(U16 AdapterID, U32 capability)
+** RCReportDriverCapability(u16 AdapterID, u32 capability)
 **
 ** Currently defined bits:
 ** WARM_REBOOT_CAPABLE   0x01
@@ -559,7 +549,7 @@ RCGetBroadcastMode(U16 AdapterID, PU32 pMode, PFNWAITCALLBACK WaitCallback);
 ** =========================================================================
 */
 RC_RETURN
-RCReportDriverCapability(U16 AdapterID, U32 capability);
+RCReportDriverCapability(u16 AdapterID, u32 capability);
 
 /*
 ** RCGetFirmwareVer()
@@ -569,7 +559,7 @@ RCReportDriverCapability(U16 AdapterID, U32 capability);
 ** WARNING: user's space pointed to by pFirmString should be at least 60 bytes.
 */
 RC_RETURN
-RCGetFirmwareVer(U16 AdapterID, PU8 pFirmString, PFNWAITCALLBACK WaitCallback);
+RCGetFirmwareVer(u16 AdapterID, u8 * pFirmString, PFNWAITCALLBACK WaitCallback);
 
 /*
 ** ----------------------------------------------
@@ -600,7 +590,7 @@ RCGetFirmwareVer(U16 AdapterID, PU8 pFirmString, PFNWAITCALLBACK WaitCallback);
  ** operation if the receive buffers were returned during LANReset.
  ** Note: The IOP status is not affected by a LAN reset.
  */
-RC_RETURN RCResetLANCard(U16 AdapterID, U16 ResourceFlags, PU32 ReturnAddr, PFNCALLBACK CallbackFunction);
+RC_RETURN RCResetLANCard(u16 AdapterID, u16 ResourceFlags, u32 * ReturnAddr, PFNCALLBACK CallbackFunction);
 
 
  /*
@@ -622,7 +612,7 @@ RC_RETURN RCResetLANCard(U16 AdapterID, U16 ResourceFlags, PU32 ReturnAddr, PFNC
  ** Note: The IOP status is not affected by a LAN shutdown.
  */                                      
 RC_RETURN 
-RCShutdownLANCard(U16 AdapterID, U16 ResourceFlags, PU32 ReturnAddr, PFNCALLBACK CallbackFunction);
+RCShutdownLANCard(u16 AdapterID, u16 ResourceFlags, u32 * ReturnAddr, PFNCALLBACK CallbackFunction);
 
  /*
  ** RCResetIOP();
@@ -632,6 +622,6 @@ RCShutdownLANCard(U16 AdapterID, U16 ResourceFlags, PU32 ReturnAddr, PFNCALLBACK
  **     Clears outbound message Q. 
  */
 RC_RETURN 
-RCResetIOP(U16 AdapterID);
+RCResetIOP(u16 AdapterID);
 
 #endif /* RCLANMTL_H */

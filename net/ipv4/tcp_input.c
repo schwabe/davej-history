@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.164.2.16 2000/06/28 04:54:16 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164.2.17 2000/09/16 16:32:57 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -367,16 +367,16 @@ void tcp_parse_options(struct sock *sk, struct tcphdr *th, struct tcp_opt *tp, i
 
 		switch (opcode) {
 			case TCPOPT_EOL:
-				return;
+				goto check_syn;
 			case TCPOPT_NOP:	/* Ref: RFC 793 section 3.1 */
 				length--;
 				continue;
 			default:
 				opsize=*ptr++;
 				if (opsize < 2) /* "silly options" */
-					return;
+					goto check_syn;
 				if (opsize > length)
-					break;	/* don't parse partial options */
+					goto check_syn;	/* don't parse partial options */
 	  			switch(opcode) {
 				case TCPOPT_MSS:
 					if(opsize==TCPOLEN_MSS && th->syn) {
@@ -439,7 +439,8 @@ void tcp_parse_options(struct sock *sk, struct tcphdr *th, struct tcp_opt *tp, i
 	  			length-=opsize;
 	  	};
 	}
-	if(th->syn && saw_mss == 0)
+check_syn:
+	if (th->syn && saw_mss == 0)
 		tp->mss_clamp = 536;
 }
 

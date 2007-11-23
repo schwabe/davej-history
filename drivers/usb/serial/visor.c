@@ -10,10 +10,20 @@
  *	(at your option) any later version.
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
+ * 
+ * (09/11/2000) gkh
+ *	Got rid of always calling kmalloc for every urb we wrote out to the
+ *	device.
+ *	Added visor_read_callback so we can keep track of bytes in and out for
+ *	those people who like to know the speed of their device.
+ *	Removed DEBUG #ifdefs with call to usb_serial_debug_data
  *
  * (09/06/2000) gkh
  *	Fixed oops in visor_exit.  Need to uncomment usb_unlink_urb call _after_
  *	the host controller drivers set urb->dev = NULL when the urb is finished.
+ *
+ * (08/28/2000) gkh
+ *	Added locks for SMP safeness.
  *
  * (08/08/2000) gkh
  *	Fixed endian problem in visor_startup.
@@ -72,6 +82,7 @@
 
 #include "visor.h"
 
+#define MIN(a,b)                (((a)<(b))?(a):(b))
 
 /* function prototypes for a handspring visor */
 static int  visor_open		(struct usb_serial_port *port, struct file *filp);
@@ -83,7 +94,8 @@ static int  visor_startup	(struct usb_serial *serial);
 static void visor_shutdown	(struct usb_serial *serial);
 static int  visor_ioctl		(struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg);
 static void visor_set_termios	(struct usb_serial_port *port, struct termios *old_termios);
-static void visor_write_bulk_callback (struct urb *urb);
+static void visor_write_bulk_callback	(struct urb *urb);
+static void visor_read_bulk_callback	(struct urb *urb);
 
 /* All of the device info needed for the Handspring Visor */
 static __u16	handspring_vendor_id	= HANDSPRING_VENDOR_ID;
@@ -109,11 +121,16 @@ struct usb_serial_device_type handspring_device = {
 	set_termios:		visor_set_termios,
 	write:			visor_write,
 	write_bulk_callback:	visor_write_bulk_callback,
+	read_bulk_callback:	visor_read_bulk_callback,
 };
 
 
-#define NUM_URBS	24
-static struct urb *write_urb_pool[NUM_URBS];
+#define NUM_URBS			24
+#define URB_TRANSFER_BUFFER_SIZE	64
+static struct urb	*write_urb_pool[NUM_URBS];
+static spinlock_t	write_urb_pool_lock;
+static int		bytes_in;
+static int		bytes_out;
 
 
 /******************************************************************************
@@ -121,23 +138,29 @@ static struct urb *write_urb_pool[NUM_URBS];
  ******************************************************************************/
 static int visor_open (struct usb_serial_port *port, struct file *filp)
 {
+	unsigned long flags;
+
+	if (port_paranoia_check (port, __FUNCTION__))
+		return -ENODEV;
+	
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	if (port->active) {
-		dbg (__FUNCTION__ " - device already open");
-		return -EINVAL;
-	}
-
+	spin_lock_irqsave (&port->port_lock, flags);
+	
 	++port->open_count;
 	MOD_INC_USE_COUNT;
 	
 	if (!port->active) {
 		port->active = 1;
+		bytes_in = 0;
+		bytes_out = 0;
 
 		/*Start reading from the device*/
 		if (usb_submit_urb(port->read_urb))
 			dbg(__FUNCTION__  " - usb_submit_urb(read bulk) failed");
 	}
+	
+	spin_unlock_irqrestore (&port->port_lock, flags);
 	
 	return 0;
 }
@@ -145,15 +168,26 @@ static int visor_open (struct usb_serial_port *port, struct file *filp)
 
 static void visor_close (struct usb_serial_port *port, struct file * filp)
 {
-	struct usb_serial *serial = port->serial;
-	unsigned char *transfer_buffer =  kmalloc (0x12, GFP_KERNEL);
+	struct usb_serial *serial;
+	unsigned char *transfer_buffer;
+	unsigned long flags;
+
+	if (port_paranoia_check (port, __FUNCTION__))
+		return;
 	
 	dbg(__FUNCTION__ " - port %d", port->number);
 			 
+	serial = get_usb_serial (port, __FUNCTION__);
+	if (!serial)
+		return;
+	
+	spin_lock_irqsave (&port->port_lock, flags);
+
 	--port->open_count;
 	MOD_DEC_USE_COUNT;
 
 	if (port->open_count <= 0) {
+		transfer_buffer =  kmalloc (0x12, GFP_KERNEL);
 		if (!transfer_buffer) {
 			err(__FUNCTION__ " - kmalloc(%d) failed.", 0x12);
 		} else {
@@ -167,73 +201,79 @@ static void visor_close (struct usb_serial_port *port, struct file * filp)
 		usb_unlink_urb (port->read_urb);
 		port->active = 0;
 		port->open_count = 0;
+
 	}
+	spin_unlock_irqrestore (&port->port_lock, flags);
+
+	/* Uncomment the following line if you want to see some statistics in your syslog */
+	/* info ("Bytes In = %d  Bytes Out = %d", bytes_in, bytes_out); */
 }
 
 
 static int visor_write (struct usb_serial_port *port, int from_user, const unsigned char *buf, int count)
 {
 	struct usb_serial *serial = port->serial;
-	struct urb *urb = NULL;
-	unsigned char *buffer = NULL;
+	struct urb *urb;
+	const unsigned char *current_position = buf;
+	unsigned long flags;
 	int status;
 	int i;
+	int bytes_sent = 0;
+	int transfer_size;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	if (count == 0) {
-		dbg(__FUNCTION__ " - write request of 0 bytes");
-		return 0;
-	}
-
-	/* try to find a free urb in our list of them */
-	for (i = 0; i < NUM_URBS; ++i) {
-		if (write_urb_pool[i]->status != -EINPROGRESS) {
-			urb = write_urb_pool[i];
-			break;
-		}
-	}
-	if (urb == NULL) {
-		dbg (__FUNCTION__ " - no free urbs");
-		return 0;
-	}
-
-	count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
-
-#ifdef DEBUG
-	printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ " - length = %d, data = ", count);
-	for (i = 0; i < count; ++i) {
-		printk ("%.2x ", buf[i]);
-	}
-	printk ("\n");
-#endif
-
-	if (urb->transfer_buffer != NULL)
-		kfree(urb->transfer_buffer);
-	buffer = kmalloc (count, GFP_KERNEL);
-	if (buffer == NULL) {
-		err(__FUNCTION__" no more kernel memory...");
-		return 0;
-	}
+	usb_serial_debug_data (__FILE__, __FUNCTION__, count, buf);
 	
-	if (from_user) {
-		copy_from_user(buffer, buf, count);
+	while (count > 0) {
+		/* try to find a free urb in our list of them */
+		urb = NULL;
+		spin_lock_irqsave (&write_urb_pool_lock, flags);
+		for (i = 0; i < NUM_URBS; ++i) {
+			if (write_urb_pool[i]->status != -EINPROGRESS) {
+				urb = write_urb_pool[i];
+				break;
+			}
+		}
+		spin_unlock_irqrestore (&write_urb_pool_lock, flags);
+		if (urb == NULL) {
+			dbg (__FUNCTION__ " - no more free urbs");
+			goto exit;
+		}
+		if (urb->transfer_buffer == NULL) {
+			urb->transfer_buffer = kmalloc (URB_TRANSFER_BUFFER_SIZE, GFP_KERNEL);
+			if (urb->transfer_buffer == NULL) {
+				err(__FUNCTION__" no more kernel memory...");
+				goto exit;
+			}
+		}
+		
+		transfer_size = MIN (count, URB_TRANSFER_BUFFER_SIZE);
+		if (from_user)
+			copy_from_user (urb->transfer_buffer, current_position, transfer_size);
+		else
+			memcpy (urb->transfer_buffer, current_position, transfer_size);
+		
+		count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
+
+		/* build up our urb */
+		FILL_BULK_URB (urb, serial->dev, usb_sndbulkpipe(serial->dev, port->bulk_out_endpointAddress), 
+				urb->transfer_buffer, transfer_size, visor_write_bulk_callback, port);
+		urb->transfer_flags |= USB_QUEUE_BULK;
+
+		/* send it down the pipe */
+		status = usb_submit_urb(urb);
+		if (status)
+			dbg(__FUNCTION__ " - usb_submit_urb(write bulk) failed with status = %d", status);
+
+		current_position += transfer_size;
+		bytes_sent += transfer_size;
+		count -= transfer_size;
+		bytes_out += transfer_size;
 	}
-	else {
-		memcpy (buffer, buf, count);
-	}  
 
-	/* build up our urb */
-	FILL_BULK_URB (urb, serial->dev, usb_sndbulkpipe(serial->dev, port->bulk_out_endpointAddress),
-			buffer, count, visor_write_bulk_callback, port);
-	urb->transfer_flags |= USB_QUEUE_BULK;
-
-	/* send it down the pipe */
-	status = usb_submit_urb(urb);
-	if (status)
-		dbg(__FUNCTION__ " - usb_submit_urb(write bulk) failed with status = %d", status);
-
-	return (count);
+exit:
+	return bytes_sent;
 } 
 
 
@@ -258,11 +298,52 @@ static void visor_write_bulk_callback (struct urb *urb)
 }
 
 
-static void visor_throttle (struct usb_serial_port *port)
+static void visor_read_bulk_callback (struct urb *urb)
 {
+	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
+	struct tty_struct *tty;
+	unsigned char *data = urb->transfer_buffer;
+	int i;
+
+	if (port_paranoia_check (port, __FUNCTION__))
+		return;
+
 	dbg(__FUNCTION__ " - port %d", port->number);
 
+	if (urb->status) {
+		dbg(__FUNCTION__ " - nonzero read bulk status received: %d", urb->status);
+		return;
+	}
+
+	usb_serial_debug_data (__FILE__, __FUNCTION__, urb->actual_length, data);
+
+	tty = port->tty;
+	if (urb->actual_length) {
+		for (i = 0; i < urb->actual_length ; ++i) {
+			tty_insert_flip_char(tty, data[i], 0);
+		}
+		tty_flip_buffer_push(tty);
+		bytes_in += urb->actual_length;
+	}
+
+	/* Continue trying to always read  */
+	if (usb_submit_urb(urb))
+		dbg(__FUNCTION__ " - failed resubmitting read urb");
+	return;
+}
+
+
+static void visor_throttle (struct usb_serial_port *port)
+{
+	unsigned long flags;
+
+	dbg(__FUNCTION__ " - port %d", port->number);
+
+	spin_lock_irqsave (&port->port_lock, flags);
+
 	usb_unlink_urb (port->read_urb);
+
+	spin_unlock_irqrestore (&port->port_lock, flags);
 
 	return;
 }
@@ -270,10 +351,16 @@ static void visor_throttle (struct usb_serial_port *port)
 
 static void visor_unthrottle (struct usb_serial_port *port)
 {
+	unsigned long flags;
+
 	dbg(__FUNCTION__ " - port %d", port->number);
+
+	spin_lock_irqsave (&port->port_lock, flags);
 
 	if (usb_submit_urb (port->read_urb))
 		dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
+
+	spin_unlock_irqrestore (&port->port_lock, flags);
 
 	return;
 }
@@ -341,7 +428,7 @@ static int  visor_startup (struct usb_serial *serial)
 	kfree (transfer_buffer);
 
 	/* continue on with initialization */
-	return (0);
+	return 0;
 }
 
 
@@ -433,42 +520,57 @@ static void visor_set_termios (struct usb_serial_port *port, struct termios *old
 }
 
 
-int visor_init (void)
+static int __init visor_init (void)
 {
+	struct urb *urb;
 	int i;
 
 	usb_serial_register (&handspring_device);
 	
-	/* create our write urb pool */ 
+	/* create our write urb pool and transfer buffers */ 
+	spin_lock_init (&write_urb_pool_lock);
 	for (i = 0; i < NUM_URBS; ++i) {
-		struct urb  *urb = usb_alloc_urb(0);
+		urb = usb_alloc_urb(0);
+		write_urb_pool[i] = urb;
 		if (urb == NULL) {
 			err("No more urbs???");
 			continue;
 		}
+
 		urb->transfer_buffer = NULL;
-		write_urb_pool[i] = urb;
+		urb->transfer_buffer = kmalloc (URB_TRANSFER_BUFFER_SIZE, GFP_KERNEL);
+		if (!urb->transfer_buffer) {
+			err (__FUNCTION__ " - out of memory for urb buffers.");
+			continue;
+		}
 	}
 	
 	return 0;
 }
 
 
-void visor_exit (void)
+static void __exit visor_exit (void)
 {
 	int i;
+	unsigned long flags;
 
 	usb_serial_deregister (&handspring_device);
-	
+
+	spin_lock_irqsave (&write_urb_pool_lock, flags);
+
 	for (i = 0; i < NUM_URBS; ++i) {
-		/* FIXME - uncomment the following usb_unlink_urb call when
-		 * the host controllers get fixed to set urb->dev = NULL after
-		 * the urb is finished.  Otherwise this call oopses. */
-		/* usb_unlink_urb(write_urb_pool[i]); */
-		if (write_urb_pool[i]->transfer_buffer)
-			kfree(write_urb_pool[i]->transfer_buffer);
-		usb_free_urb (write_urb_pool[i]);
+		if (write_urb_pool[i]) {
+			/* FIXME - uncomment the following usb_unlink_urb call when
+			 * the host controllers get fixed to set urb->dev = NULL after
+			 * the urb is finished.  Otherwise this call oopses. */
+			/* usb_unlink_urb(write_urb_pool[i]); */
+			if (write_urb_pool[i]->transfer_buffer)
+				kfree(write_urb_pool[i]->transfer_buffer);
+			usb_free_urb (write_urb_pool[i]);
+		}
 	}
+
+	spin_unlock_irqrestore (&write_urb_pool_lock, flags);
 }
 
 

@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.18 1998/09/21 05:07:17 jj Exp $ */
+/* $Id: io.h,v 1.18.2.1 2000/09/17 05:11:47 davem Exp $ */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
@@ -98,6 +98,8 @@ extern __inline__ void outl(unsigned int b, unsigned long addr)
 #define inb_p inb
 #define outb_p outb
 
+#ifdef __KERNEL__
+
 extern void sun4c_mapioaddr(unsigned long, unsigned long, int bus_type, int rdonly);
 extern void srmmu_mapioaddr(unsigned long, unsigned long, int bus_type, int rdonly);
 
@@ -161,5 +163,7 @@ static __inline__ void *sparc_dvma_malloc(int size, char *name, __u32 *dvmaaddr_
 
 #define virt_to_phys(x) __pa((unsigned long)(x))
 #define phys_to_virt(x) __va((unsigned long)(x))
+
+#endif /* __KERNEL__ */
 
 #endif /* !(__SPARC_IO_H) */

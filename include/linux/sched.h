@@ -499,7 +499,7 @@ extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 
 #define __set_current_state(state_value)	do { current->state = state_value; } while (0)
 #ifdef __SMP__
-#define set_current_state(state_value)		do { mb(); __set_current_state(state_value); } while (0)
+#define set_current_state(state_value)		do { __set_current_state(state_value); mb(); } while (0)
 #else
 #define set_current_state(state_value)		__set_current_state(state_value)
 #endif

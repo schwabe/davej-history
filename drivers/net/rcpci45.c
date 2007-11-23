@@ -114,7 +114,7 @@ static char *version =
 #define DEFAULT_RECV_INIT_CONTEXT  0xA17  
 
 
-static U32 DriverControlWord =  0;
+static u32 DriverControlWord =  0;
 
 static void rc_timer(unsigned long);
 
@@ -131,10 +131,10 @@ typedef struct
     struct device *dev;            
      
     char devname[8];                /* "ethN" string */
-    U8     id;                        /* the AdapterID */
-    U32    pci_addr;               /* the pci address of the adapter */
-    U32    bus;
-    U32    function;
+    u8     id;                        /* the AdapterID */
+    u32    pci_addr;               /* the pci address of the adapter */
+    u32    bus;
+    u32    function;
     struct timer_list timer;        /*  timer */
     struct enet_statistics  stats; /* the statistics structure */
     struct device *next;            /* points to the next RC adapter */
@@ -142,7 +142,7 @@ typedef struct
     unsigned char shutdown;
     unsigned char reboot;
     unsigned char nexus;
-    PU8    PLanApiPA;             /* Pointer to Lan Api Private Area */
+    u8 *    PLanApiPA;             /* Pointer to Lan Api Private Area */
 
 }
 DPA, *PDPA;
@@ -169,10 +169,10 @@ static int RCclose(struct device *dev);
 static struct enet_statistics *RCget_stats(struct device *);
 static int RCioctl(struct device *, struct ifreq *, int);
 static int RCconfig(struct device *, struct ifmap *);
-static void RCxmit_callback(U32, U16, PU32, U16);
-static void RCrecv_callback(U32, U8, U32, PU32, U16);
-static void RCreset_callback(U32, U32, U32, U16);
-static void RCreboot_callback(U32, U32, U32, U16);
+static void RCxmit_callback(u32, u16, u32 *, u16);
+static void RCrecv_callback(u32, u8, u32, u32 *, u16);
+static void RCreset_callback(u32, u32, u32, u16);
+static void RCreboot_callback(u32, u32, u32, u16);
 static int RC_allocate_and_post_buffers(struct device *, int);
 
 
@@ -405,14 +405,14 @@ RCfound_device(struct device *dev, int memaddr, int irq,
     if ( request_irq(dev->irq, (void *)RCinterrupt,
                      SA_INTERRUPT|SA_SHIRQ, "RedCreek VPN Adapter", dev) )
     {
-        printk( "RC PCI 45: %s: unable to get IRQ %d\n", (PU8)dev->name, (uint)dev->irq );
+        printk( "RC PCI 45: %s: unable to get IRQ %d\n", (u8 *)dev->name, (uint)dev->irq );
         iounmap(vaddr);
         kfree(dev);
         return 1;
     }
 
     init_status = RCInitI2OMsgLayer(pDpa->id, dev->base_addr, 
-                  pDpa->PLanApiPA, (PU8)virt_to_bus((void *)pDpa->PLanApiPA),
+                  pDpa->PLanApiPA, (u8 *)virt_to_bus((void *)pDpa->PLanApiPA),
                   (PFNTXCALLBACK)RCxmit_callback,
                   (PFNRXCALLBACK)RCrecv_callback,
                   (PFNCALLBACK)RCreboot_callback);
@@ -560,7 +560,7 @@ RC_xmit_packet(struct sk_buff *skb, struct device *dev)
      * we'll get the context when the adapter interrupts us to tell us that
      * the transmision is done. At that time, we can free skb.
      */
-    ptcb->b.context = (U32)skb;    
+    ptcb->b.context = (u32)skb;    
     ptcb->b.scount = 1;
     ptcb->b.size = skb->len;
     ptcb->b.addr = virt_to_bus((void *)skb->data);
@@ -569,7 +569,7 @@ RC_xmit_packet(struct sk_buff *skb, struct device *dev)
     printk("rc: RC xmit: skb = 0x%x, pDpa = 0x%x, id = %d, ptcb = 0x%x\n", 
            (uint)skb, (uint)pDpa, (uint)pDpa->id, (uint)ptcb);
 #endif
-    if ( (status = RCI2OSendPacket(pDpa->id, (U32)NULL, (PRCTCB)ptcb))
+    if ( (status = RCI2OSendPacket(pDpa->id, (u32)NULL, (PRCTCB)ptcb))
          != RC_RTN_NO_ERROR)
     {
 #ifdef RCDEBUG
@@ -600,10 +600,10 @@ RC_xmit_packet(struct sk_buff *skb, struct device *dev)
  * All we need to do is free the buffers.
  */
 static void 
-RCxmit_callback(U32 Status, 
-                U16 PcktCount, 
-                PU32 BufferContext, 
-                U16 AdapterID)
+RCxmit_callback(u32 Status, 
+                u16 PcktCount, 
+                u32 * BufferContext, 
+                u16 AdapterID)
 {
     struct sk_buff *skb;
     PDPA pDpa;
@@ -649,7 +649,7 @@ RCxmit_callback(U32 Status,
 }
 
 static void
-RCreset_callback(U32 Status, U32 p1, U32 p2, U16 AdapterID)
+RCreset_callback(u32 Status, u32 p1, u32 p2, u16 AdapterID)
 {
     PDPA pDpa;
     struct device *dev;
@@ -693,7 +693,7 @@ RCreset_callback(U32 Status, U32 p1, U32 p2, U16 AdapterID)
 }
 
 static void
-RCreboot_callback(U32 Status, U32 p1, U32 p2, U16 AdapterID)
+RCreboot_callback(u32 Status, u32 p1, u32 p2, u16 AdapterID)
 {
     PDPA pDpa;
     
@@ -742,14 +742,14 @@ int broadcast_packet(unsigned char * address)
  * filled (one ethernet packet per buffer).
  */
 static void
-RCrecv_callback(U32  Status, 
-                U8   PktCount, 
-                U32  BucketsRemain, 
-                PU32 PacketDescBlock, 
-                U16  AdapterID)
+RCrecv_callback(u32  Status, 
+                u8   PktCount, 
+                u32  BucketsRemain, 
+                u32 * PacketDescBlock, 
+                u16  AdapterID)
 {
 
-    U32 len, count;
+    u32 len, count;
     PDPA pDpa;
     struct sk_buff *skb;
     struct device *dev;
@@ -845,7 +845,7 @@ RCrecv_callback(U32  Status,
                      * post one buffer at a time but ... may be that should be 
                      * optimized at some point.
                      */
-                    ptcb->b.context = (U32)skb;    
+                    ptcb->b.context = (u32)skb;    
                     ptcb->b.scount = 1;
                     ptcb->b.size = MAX_ETHER_SIZE;
                     ptcb->b.addr = virt_to_bus((void *)skb->data);
@@ -946,7 +946,7 @@ static void rc_timer(unsigned long data)
     {
         init_status = RCInitI2OMsgLayer(pDpa->id, dev->base_addr, 
                                     pDpa->PLanApiPA, 
-                                    (PU8)virt_to_bus((void *)pDpa->PLanApiPA),
+                                    (u8 *)virt_to_bus((void *)pDpa->PLanApiPA),
                                     (PFNTXCALLBACK)RCxmit_callback,
                                     (PFNRXCALLBACK)RCrecv_callback,
                                     (PFNCALLBACK)RCreboot_callback);
@@ -1180,7 +1180,7 @@ static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
         case RCUC_GETFWVER:
             printk("RC GETFWVER\n");
             RCUD_GETFWVER = &RCuser.RCUS_GETFWVER;
-            RCGetFirmwareVer(pDpa->id, (PU8) &RCUD_GETFWVER->FirmString, NULL);
+            RCGetFirmwareVer(pDpa->id, (u8 *) &RCUD_GETFWVER->FirmString, NULL);
             break;
         case RCUC_GETINFO:
             printk("RC GETINFO\n");
@@ -1193,8 +1193,8 @@ static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
         case RCUC_GETIPANDMASK:
             printk("RC GETIPANDMASK\n");
             RCUD_GETIPANDMASK = &RCuser.RCUS_GETIPANDMASK;
-            RCGetRavlinIPandMask(pDpa->id, (PU32) &RCUD_GETIPANDMASK->IpAddr,
-                                 (PU32) &RCUD_GETIPANDMASK->NetMask, NULL);
+            RCGetRavlinIPandMask(pDpa->id, (u32 *) &RCUD_GETIPANDMASK->IpAddr,
+                                 (u32 *) &RCUD_GETIPANDMASK->NetMask, NULL);
             break;
         case RCUC_GETLINKSTATISTICS:
             printk("RC GETLINKSTATISTICS\n");
@@ -1204,22 +1204,22 @@ static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
         case RCUC_GETLINKSTATUS:
             printk("RC GETLINKSTATUS\n");
             RCUD_GETLINKSTATUS = &RCuser.RCUS_GETLINKSTATUS;
-            RCGetLinkStatus(pDpa->id, (PU32) &RCUD_GETLINKSTATUS->ReturnStatus, NULL);
+            RCGetLinkStatus(pDpa->id, (u32 *) &RCUD_GETLINKSTATUS->ReturnStatus, NULL);
             break;
         case RCUC_GETMAC:
             printk("RC GETMAC\n");
             RCUD_GETMAC = &RCuser.RCUS_GETMAC;
-            RCGetMAC(pDpa->id, (PU8) &RCUD_GETMAC->mac, NULL);
+            RCGetMAC(pDpa->id, (u8 *) &RCUD_GETMAC->mac, NULL);
             break;
         case RCUC_GETPROM:
             printk("RC GETPROM\n");
             RCUD_GETPROM = &RCuser.RCUS_GETPROM;
-            RCGetPromiscuousMode(pDpa->id, (PU32) &RCUD_GETPROM->PromMode, NULL);
+            RCGetPromiscuousMode(pDpa->id, (u32 *) &RCUD_GETPROM->PromMode, NULL);
             break;
         case RCUC_GETBROADCAST:
             printk("RC GETBROADCAST\n");
             RCUD_GETBROADCAST = &RCuser.RCUS_GETBROADCAST;
-            RCGetBroadcastMode(pDpa->id, (PU32) &RCUD_GETBROADCAST->BroadcastMode, NULL);
+            RCGetBroadcastMode(pDpa->id, (u32 *) &RCUD_GETBROADCAST->BroadcastMode, NULL);
             break;
         case RCUC_GETSPEED:
             printk("RC GETSPEED\n");
@@ -1229,47 +1229,47 @@ static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
                 return -ENODATA;
             }
             RCUD_GETSPEED = &RCuser.RCUS_GETSPEED;
-            RCGetLinkSpeed(pDpa->id, (PU32) &RCUD_GETSPEED->LinkSpeedCode, NULL);
+            RCGetLinkSpeed(pDpa->id, (u32 *) &RCUD_GETSPEED->LinkSpeedCode, NULL);
             printk("RC speed = 0x%ld\n", RCUD_GETSPEED->LinkSpeedCode);
             break;
         case RCUC_SETIPANDMASK:
             printk("RC SETIPANDMASK\n");
             RCUD_SETIPANDMASK = &RCuser.RCUS_SETIPANDMASK;
-            printk ("RC New IP Addr = %d.%d.%d.%d, ", (U8) ((RCUD_SETIPANDMASK->IpAddr) & 0xff),
-                    (U8) ((RCUD_SETIPANDMASK->IpAddr >>  8) & 0xff),
-                    (U8) ((RCUD_SETIPANDMASK->IpAddr >> 16) & 0xff),
-                    (U8) ((RCUD_SETIPANDMASK->IpAddr >> 24) & 0xff));
-            printk ("RC New Mask = %d.%d.%d.%d\n", (U8) ((RCUD_SETIPANDMASK->NetMask) & 0xff),
-                    (U8) ((RCUD_SETIPANDMASK->NetMask >>  8) & 0xff),
-                    (U8) ((RCUD_SETIPANDMASK->NetMask >> 16) & 0xff),
-                    (U8) ((RCUD_SETIPANDMASK->NetMask >> 24) & 0xff));
-            RCSetRavlinIPandMask(pDpa->id, (U32) RCUD_SETIPANDMASK->IpAddr,
-                                 (U32) RCUD_SETIPANDMASK->NetMask);
+            printk ("RC New IP Addr = %d.%d.%d.%d, ", (u8) ((RCUD_SETIPANDMASK->IpAddr) & 0xff),
+                    (u8) ((RCUD_SETIPANDMASK->IpAddr >>  8) & 0xff),
+                    (u8) ((RCUD_SETIPANDMASK->IpAddr >> 16) & 0xff),
+                    (u8) ((RCUD_SETIPANDMASK->IpAddr >> 24) & 0xff));
+            printk ("RC New Mask = %d.%d.%d.%d\n", (u8) ((RCUD_SETIPANDMASK->NetMask) & 0xff),
+                    (u8) ((RCUD_SETIPANDMASK->NetMask >>  8) & 0xff),
+                    (u8) ((RCUD_SETIPANDMASK->NetMask >> 16) & 0xff),
+                    (u8) ((RCUD_SETIPANDMASK->NetMask >> 24) & 0xff));
+            RCSetRavlinIPandMask(pDpa->id, (u32) RCUD_SETIPANDMASK->IpAddr,
+                                 (u32) RCUD_SETIPANDMASK->NetMask);
             break;
         case RCUC_SETMAC:
             printk("RC SETMAC\n");
             RCUD_SETMAC = &RCuser.RCUS_SETMAC;
             printk ("RC New MAC addr = %02X:%02X:%02X:%02X:%02X:%02X\n",
-                    (U8) (RCUD_SETMAC->mac[0]), (U8) (RCUD_SETMAC->mac[1]), (U8) (RCUD_SETMAC->mac[2]),
-                    (U8) (RCUD_SETMAC->mac[3]), (U8) (RCUD_SETMAC->mac[4]), (U8) (RCUD_SETMAC->mac[5]));
-            RCSetMAC(pDpa->id, (PU8) &RCUD_SETMAC->mac);
+                    (u8) (RCUD_SETMAC->mac[0]), (u8) (RCUD_SETMAC->mac[1]), (u8) (RCUD_SETMAC->mac[2]),
+                    (u8) (RCUD_SETMAC->mac[3]), (u8) (RCUD_SETMAC->mac[4]), (u8) (RCUD_SETMAC->mac[5]));
+            RCSetMAC(pDpa->id, (u8 *) &RCUD_SETMAC->mac);
             break;
         case RCUC_SETSPEED:
             printk("RC SETSPEED\n");
             RCUD_SETSPEED = &RCuser.RCUS_SETSPEED;
-            RCSetLinkSpeed(pDpa->id, (U16) RCUD_SETSPEED->LinkSpeedCode);
+            RCSetLinkSpeed(pDpa->id, (u16) RCUD_SETSPEED->LinkSpeedCode);
             printk("RC New speed = 0x%d\n", RCUD_SETSPEED->LinkSpeedCode);
             break;
         case RCUC_SETPROM:
             printk("RC SETPROM\n");
             RCUD_SETPROM = &RCuser.RCUS_SETPROM;
-            RCSetPromiscuousMode(pDpa->id,(U16)RCUD_SETPROM->PromMode);
+            RCSetPromiscuousMode(pDpa->id,(u16)RCUD_SETPROM->PromMode);
             printk("RC New prom mode = 0x%d\n", RCUD_SETPROM->PromMode);
             break;
         case RCUC_SETBROADCAST:
             printk("RC SETBROADCAST\n");
             RCUD_SETBROADCAST = &RCuser.RCUS_SETBROADCAST;
-            RCSetBroadcastMode(pDpa->id,(U16)RCUD_SETBROADCAST->BroadcastMode);
+            RCSetBroadcastMode(pDpa->id,(u16)RCUD_SETBROADCAST->BroadcastMode);
             printk("RC New broadcast mode = 0x%d\n", RCUD_SETBROADCAST->BroadcastMode);
             break;
         default:
@@ -1349,7 +1349,7 @@ RC_allocate_and_post_buffers(struct device *dev, int numBuffers)
 
     int i;
     PDPA pDpa = (PDPA)dev->priv;
-    PU32 p;
+    u32 * p;
     psingleB pB;
     struct sk_buff *skb;
     RC_RETURN status;
@@ -1365,7 +1365,7 @@ RC_allocate_and_post_buffers(struct device *dev, int numBuffers)
         numBuffers = 32;
     }
     
-    p = (PU32) kmalloc(sizeof(U32) + numBuffers*sizeof(singleB), GFP_ATOMIC);
+    p = (u32 *) kmalloc(sizeof(u32) + numBuffers*sizeof(singleB), GFP_ATOMIC);
 
 #ifdef RCDEBUG
     printk("rc: TCB = 0x%x\n", (uint)p);
@@ -1378,7 +1378,7 @@ RC_allocate_and_post_buffers(struct device *dev, int numBuffers)
     }
 
     p[0] = 0;                              /* Buffer Count */
-    pB = (psingleB)((U32)p + sizeof(U32)); /* point to the first buffer */
+    pB = (psingleB)((u32)p + sizeof(u32)); /* point to the first buffer */
 
 #ifdef RCDEBUG
     printk("rc: p[0] = 0x%x, p = 0x%x, pB = 0x%x\n", (uint)p[0], (uint)p, (uint)pB);
@@ -1408,7 +1408,7 @@ RC_allocate_and_post_buffers(struct device *dev, int numBuffers)
         printk("post 0x%x\n", (uint)skb);
 #endif
         skb_reserve(skb, 2);    /* Align IP on 16 byte boundaries */
-        pB->context = (U32)skb;
+        pB->context = (u32)skb;
         pB->scount = 1;        /* segment count */
         pB->size = MAX_ETHER_SIZE;
         pB->addr = virt_to_bus((void *)skb->data);
@@ -1419,7 +1419,7 @@ RC_allocate_and_post_buffers(struct device *dev, int numBuffers)
     if ( (status = RCPostRecvBuffers(pDpa->id, (PRCTCB)p )) != RC_RTN_NO_ERROR)
     {
         printk("rc: Post buffer failed with error code 0x%x!\n", status);
-        pB = (psingleB)((U32)p + sizeof(U32)); /* point to the first buffer */
+        pB = (psingleB)((u32)p + sizeof(u32)); /* point to the first buffer */
         while(p[0])
         {
             skb = (struct sk_buff *)pB->context;

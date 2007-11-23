@@ -33,6 +33,10 @@
 #include <net/br.h>
 #endif
 
+#ifdef CONFIG_NET_DIVERT
+#include <net/divert.h>
+#endif /* CONFIG_NET_DIVERT */
+
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <net/protocol.h>
@@ -224,6 +228,12 @@ EXPORT_SYMBOL(scm_detach_fds);
 #ifdef CONFIG_BRIDGE 
 EXPORT_SYMBOL(br_ioctl);
 #endif
+
+#ifdef CONFIG_NET_DIVERT
+EXPORT_SYMBOL(alloc_divert_blk);
+EXPORT_SYMBOL(free_divert_blk);
+EXPORT_SYMBOL(divert_ioctl);
+#endif /* CONFIG_NET_DIVERT */
 
 #ifdef CONFIG_INET
 /* Internet layer registration */

@@ -1516,7 +1516,7 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 	char buf[MAX_DISKNAME_LEN];
 
 	if (first_time)
-		printk("Partition check:\n");
+		printk(KERN_INFO "Partition check:\n");
 	first_time = 0;
 	first_sector = hd->part[MINOR(dev)].start_sect;
 
@@ -1529,7 +1529,7 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 		return;
 	}
 
-	printk(" %s:", disk_name(hd, MINOR(dev), buf));
+	printk(KERN_INFO " %s:", disk_name(hd, MINOR(dev), buf));
 #ifdef CONFIG_MSDOS_PARTITION
 	if (msdos_partition(hd, dev, first_sector))
 		return;

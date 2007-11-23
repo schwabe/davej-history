@@ -29,6 +29,10 @@ ifdef CONFIG_FIREWALL
 OX_OBJS += firewall.o
 endif
 
+ifeq ($(CONFIG_NET_DIVERT),y)
+O_OBJS += dv.o
+endif
+
 endif
 
 ifdef CONFIG_NET_PROFILE

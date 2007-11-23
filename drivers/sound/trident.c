@@ -30,6 +30,8 @@
  *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  History
+ *  v0.14.5b Sept 17 2000 Eric Brombaugh
+ *      Fix hang when trying ALi MIDI init on Trident
  *  v0.14.5 June 3 2000 Ollie Lho
  *  	Misc bug fix from the Net
  *	Backported from 2.4.0-test1 to 2.2.16 (Eric Brombaugh)
@@ -2863,30 +2865,37 @@ static int __init trident_install(struct pci_dev *pci_dev, struct pci_audio_info
 		return -ENODEV;
 	}
 	
-	if ((card->dev_midi = register_sound_midi(&trident_midi_fops, -1))<0)
-		printk(KERN_WARNING "trident: Unable to register midi.\n");
-	else
-	{
-		struct midi_stuff *midi = &card->midi;
-		init_waitqueue(&midi->iwait);
-		init_waitqueue(&midi->owait);
-		midi->ird = midi->iwr = midi->icnt = 0;
-		midi->ord = midi->owr = midi->ocnt = 0;
-		outb(0xbc, card->iobase+ALI_MPUR2);
+	if(card->pci_id == PCI_DEVICE_ID_ALI_5451) {
+		/* ALi 5451 has special MIDI regs and FM emulation */
+		if ((card->dev_midi = register_sound_midi(&trident_midi_fops, -1))<0)
+			printk(KERN_WARNING "trident: Unable to register midi.\n");
+		else
+		{
+			struct midi_stuff *midi = &card->midi;
+			init_waitqueue(&midi->iwait);
+			init_waitqueue(&midi->owait);
+			midi->ird = midi->iwr = midi->icnt = 0;
+			midi->ord = midi->owr = midi->ocnt = 0;
+			outb(0xbc, card->iobase+ALI_MPUR2);
 		
-		/* reset command */
-		while (inb(card->iobase + ALI_MPUR1) & 0x40);
-		outb(0xff, card->iobase + ALI_MPUR1);
-		while (inb(card->iobase + ALI_MPUR1) & 0x80);
-		while ((inb(card->iobase + ALI_MPUR0) != 0xfe) && (inb(card->iobase+ALI_MPUR1) != 0x10)) 
+			/* reset command */
+			while (inb(card->iobase + ALI_MPUR1) & 0x40);
+			outb(0xff, card->iobase + ALI_MPUR1);
 			while (inb(card->iobase + ALI_MPUR1) & 0x80);
+			while ((inb(card->iobase + ALI_MPUR0) != 0xfe) && (inb(card->iobase+ALI_MPUR1) != 0x10)) 
+				while (inb(card->iobase + ALI_MPUR1) & 0x80);
 			
-		midi->ird = midi->iwr = midi->icnt = 0;
-	}
-		
-	if ((card->dev_dmfm = register_sound_special(&trident_dmfm_fops, 15))<0)
-		printk(KERN_WARNING "trident: Unable to register FM.\n");
+			midi->ird = midi->iwr = midi->icnt = 0;
+		}
 	
+		if ((card->dev_dmfm = register_sound_special(&trident_dmfm_fops, 15))<0)
+			printk(KERN_WARNING "trident: Unable to register FM.\n");
+	} else {
+		/* don't try to enable MIDI and FM on other chips */
+		card->dev_midi = -1;
+		card->dev_dmfm = -1;
+	}
+
 	outl(0x00, TRID_REG(card, T4D_MUSICVOL_WAVEVOL));
 
 	if (card->pci_id == PCI_DEVICE_ID_ALI_5451) {

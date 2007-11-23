@@ -215,7 +215,8 @@ int ext2_bmap (struct inode * inode, int block)
 		bh = bread (inode->i_dev, i, inode->i_sb->s_blocksize);
 		if (!bh)
 			goto fail;
-		i = le32_to_cpu(((u32 *) bh->b_data)[*++p]);
+		++p;
+		i = le32_to_cpu(((u32 *) bh->b_data)[*p]);
 		brelse (bh);
 	}
 	return i;
