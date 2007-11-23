@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.83.2.2 2000/03/24 00:03:18 davem Exp $
+/* $Id: systbls.S,v 1.83.2.3 2001/01/11 15:44:37 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -26,7 +26,7 @@ sys_call_table:
 /*25*/	.long sys_time, sys_ptrace, sys_alarm, sys_sigaltstack, sys_pause
 /*30*/	.long sys_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
 /*35*/	.long sys_nis_syscall, sys_sync, sys_kill, sys_newstat, sys_sendfile
-/*40*/	.long sys_newlstat, sys_dup, sys_pipe, sys_times, sys_nis_syscall
+/*40*/	.long sys_newlstat, sys_dup, sys_pipe, sys_times, sys_lfs_syscall
 /*45*/	.long sys_umount, sys_setgid, sys_getgid, sys_signal, sys_geteuid
 /*50*/	.long sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys_ioctl
 /*55*/	.long sys_reboot, sys_lfs_syscall, sys_symlink, sys_readlink, sys_execve
@@ -49,7 +49,7 @@ sys_call_table:
 /*140*/	.long sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getrlimit
 /*145*/	.long sys_setrlimit, sys_nis_syscall, sys_prctl, sys_pciconfig_read, sys_pciconfig_write
 /*150*/	.long sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall
-/*155*/	.long sys_nis_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_oldumount
+/*155*/	.long sys_lfs_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_oldumount
 /*160*/	.long sys_nis_syscall, sys_nis_syscall, sys_getdomainname, sys_setdomainname, sys_nis_syscall
 /*165*/	.long sys_quotactl, sys_nis_syscall, sys_mount, sys_ustat, sys_nis_syscall
 /*170*/	.long sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getdents

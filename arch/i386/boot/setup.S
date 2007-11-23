@@ -578,46 +578,44 @@ end_move_self:
 	lgdt	gdt_48		! load gdt with whatever appropriate
 
 ! that was painless, now we enable A20
+	call	empty_8042
+
+! do it the normal way too, so as not to upset normal machines
+	mov	al,#0xD1		! command write
+	out	#0x64,al
+	call	empty_8042
+
+	mov	al,#0xDF		! A20 on
+	out	#0x60,al
+	call	empty_8042
 
 ! if this is SC410 or a few other bits we need to do it with the 'fast' method
+!
+!	You must preserve the other bits here. Otherwise embarrasing things
+!	like laptops powering off on boot happen. Corrected version by Kira
+!	Brown from Linux 2.2
 
         in      al,#0x92        ! read "System Control Port A"
         or      al,#0x02        ! Set "Alternate Gate A20" - Bit
         out     #0x92,al        ! write "System Control Port A"
 
-! do it the normal way too, so as not to upset normal machines
-
-	call	empty_8042
-	mov	al,#0xD1		! command write
-	out	#0x64,al
-	call	empty_8042
-	mov	al,#0xDF		! A20 on
-	out	#0x60,al
-	call	empty_8042
-
 ! wait until a20 really *is* enabled; it can take a fair amount of
 ! time on certain systems; Toshiba Tecras are known to have this
-! problem.  The memory location used here is the int 0x1f vector,
-! which should be safe to use; any *unused* memory location < 0xfff0
-! should work here.  
+! problem.  The memory location used here (0x200) is the int 0x80
+! vector, which should be safe to use.
 
-#define	TEST_ADDR 0x7c
-
-	push	ds
 	xor	ax,ax			! segment 0x0000
-	mov	ds,ax
+	mov	fs,ax
 	dec	ax			! segment 0xffff (HMA)
 	mov	gs,ax
-	mov	bx,[TEST_ADDR]		! we want to restore the value later
 a20_wait:
-	inc	ax
-	mov	[TEST_ADDR],ax
+	inc	ax			! unused memory location <0xfff0
+	seg	fs
+	mov	[0x200],ax		! we use the "int 0x80" vector
 	seg	gs
-	cmp	ax,[TEST_ADDR+0x10]
+	cmp	ax,[0x210]		! and its corresponding HMA addr
 	je	a20_wait		! loop until no longer aliased
-	mov	[TEST_ADDR],bx		! restore original value
-	pop	ds
-		
+
 ! make sure any possible coprocessor is properly reset..
 
 	xor	ax,ax
@@ -797,10 +795,17 @@ bootsect_panic_mess:
 !
 ! Some machines have delusions that the keyboard buffer is always full
 ! with no keyboard attached...
+!
+! If there is no keyboard controller, we will usually get 0xff
+! to all the reads.  With each IO taking a microsecond and
+! a timeout of 100,000 iterations, this can take about half a
+! second ("delay" == outb to port 0x80). That should be ok,
+! and should also be plenty of time for a real keyboard controller
+! to empty.
 
 empty_8042:
        push    ecx
-       mov     ecx,#0xFFFFFF
+       mov     ecx,#100000
 
 empty_8042_loop:
        dec     ecx
@@ -840,7 +845,7 @@ gettime:
 ! Delay is needed after doing I/O
 !
 delay:
-	.word	0x00eb			! jmp $+2
+	out	#0x80,al
 	ret
 
 !

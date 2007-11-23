@@ -145,9 +145,7 @@ static dev_link_t *avmcs_attach(void)
     /* The io structure describes IO port mapping */
     link->io.NumPorts1 = 16;
     link->io.Attributes1 = IO_DATA_PATH_WIDTH_8;
-    link->io.NumPorts2 = 16;
-    link->io.Attributes2 = IO_DATA_PATH_WIDTH_16;
-    link->io.IOAddrLines = 5;
+    link->io.NumPorts2 = 0;
 
     /* Interrupt setup */
     link->irq.Attributes = IRQ_TYPE_EXCLUSIVE;
@@ -233,9 +231,9 @@ static void avmcs_detach(dev_link_t *link)
     /* Unlink device structure, free pieces */
     *linkp = link->next;
     if (link->priv) {
-	kfree_s(link->priv, sizeof(local_info_t));
+	kfree(link->priv);
     }
-    kfree_s(link, sizeof(struct dev_link_t));
+    kfree(link);
     
 } /* avmcs_detach */
 
@@ -329,9 +327,10 @@ static void avmcs_config(dev_link_t *link)
 		link->conf.ConfigIndex = cf->index;
 		link->io.BasePort1 = cf->io.win[0].base;
 		link->io.NumPorts1 = cf->io.win[0].len;
+		link->io.NumPorts2 = 0;
                 printk(KERN_INFO "avm_cs: testing i/o %#x-%#x\n",
 			link->io.BasePort1,
-		        link->io.BasePort1+link->io.NumPorts1);
+		        link->io.BasePort1+link->io.NumPorts1-1);
 		i = CardServices(RequestIO, link->handle, &link->io);
 		if (i == CS_SUCCESS) goto found_port;
 	    }

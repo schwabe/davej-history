@@ -59,7 +59,7 @@ static struct tgafb_par current_par;
 static int current_par_valid = 0;
 static struct display disp;
 
-static char __initdata default_fontname[40] = { 0 };
+static char default_fontname[40] __initdata = { 0 };
 static struct fb_var_screeninfo default_var;
 static int default_var_valid = 0;
 
@@ -1083,6 +1083,11 @@ __initfunc(void tgafb_init(void))
 	fb_info.gen.info.modename);
 }
 
+    /*
+     *  Modularisation
+     */
+
+#ifdef MODULE
 
     /*
      *  Cleanup
@@ -1093,12 +1098,6 @@ void tgafb_cleanup(struct fb_info *info)
     unregister_framebuffer(info);
 }
 
-
-    /*
-     *  Modularisation
-     */
-
-#ifdef MODULE
 int init_module(void)
 {
     tgafb_init();
@@ -1107,7 +1106,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-    tgafb_cleanup(void);
+    tgafb_cleanup(&fb_info.gen.info);
 }
 #endif /* MODULE */
 

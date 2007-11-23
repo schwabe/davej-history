@@ -1487,6 +1487,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 	__u16	        *pptr;	/* port numbers from TCP/UDP contained header */
 	struct ip_masq	*ms;
 	unsigned short   len   = ntohs(iph->tot_len) - (iph->ihl * 4);
+	unsigned short	clen, csize;
 
  	IP_MASQ_DEBUG(2, "Incoming forward ICMP (%d,%d) %X -> %X\n",
 	        icmph->type, ntohs(icmp_id(icmph)),
@@ -1576,16 +1577,22 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 		return 0;
 
 	/* Now find the contained IP header */
+	clen = len - sizeof(struct icmphdr);
+	if (clen < sizeof(struct iphdr)) return -1;
 	ciph = (struct iphdr *) (icmph + 1);
+	csize = ciph->ihl << 2;
+	if (clen < csize) return -1;
 
 #ifdef CONFIG_IP_MASQUERADE_ICMP
 	if (ciph->protocol == IPPROTO_ICMP) {
 		/*
 		 * This section handles ICMP errors for ICMP packets
 		 */
-		struct icmphdr  *cicmph = (struct icmphdr *)((char *)ciph + 
-							     (ciph->ihl<<2));
+		struct icmphdr  *cicmph;
 
+		if (clen < csize + sizeof(struct icmphdr)) return -1;
+
+		cicmph = (struct icmphdr *)((char *)ciph + csize);
 
 		IP_MASQ_DEBUG(2, "fw icmp/icmp rcv %X->%X id %d type %d\n",
 		       ntohl(ciph->saddr),
@@ -1637,12 +1644,15 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 	if ((ciph->protocol != IPPROTO_UDP) && (ciph->protocol != IPPROTO_TCP))
 		return 0;
 
+	/* This is a hack: we need at least the TCP/UDP ports */
+	if (clen < csize + sizeof(struct udphdr)) return -1;
+
 	/*
 	 * Find the ports involved - this packet was
 	 * incoming so the ports are right way round
 	 * (but reversed relative to outer IP header!)
 	 */
-	pptr = (__u16 *)&(((char *)ciph)[ciph->ihl*4]);
+	pptr = (__u16 *)&(((char *)ciph)[csize]);
 #if 0
 	if (ntohs(pptr[1]) < PORT_MASQ_BEGIN ||
  	    ntohs(pptr[1]) > PORT_MASQ_END)
@@ -1745,6 +1755,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 	__u16	        *pptr;	/* port numbers from TCP/UDP contained header */
 	struct ip_masq	*ms;
 	unsigned short   len   = ntohs(iph->tot_len) - (iph->ihl * 4);
+	unsigned short	clen, csize;
 
 
  	IP_MASQ_DEBUG(2, "icmp in/rev (%d,%d) %X -> %X\n",
@@ -1819,7 +1830,11 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 	 * Now find the contained IP header
 	 */
 
+	clen = len - sizeof(struct icmphdr);
+	if (clen < sizeof(struct iphdr)) return -1;
 	ciph = (struct iphdr *) (icmph + 1);
+	csize = ciph->ihl << 2;
+	if (clen < csize) return -1;
 
 #ifdef CONFIG_IP_MASQUERADE_ICMP
 	if (ciph->protocol == IPPROTO_ICMP) {
@@ -1828,9 +1843,11 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 		 *
 		 * First get a new ICMP header structure out of the IP packet
 		 */
-		struct icmphdr  *cicmph = (struct icmphdr *)((char *)ciph + 
-							     (ciph->ihl<<2));
+		struct icmphdr  *cicmph;
 
+		if (clen < csize + sizeof(struct icmphdr)) return -1;
+
+		cicmph = (struct icmphdr *)((char *)ciph +  csize);
 
 		IP_MASQ_DEBUG(2, "rv icmp/icmp rcv %X->%X id %d type %d\n",
 		       ntohl(ciph->saddr),
@@ -1889,11 +1906,14 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 	    (ciph->protocol != IPPROTO_TCP))
 		return 0;
 
+	/* This is a hack: we need at least the TCP/UDP ports */
+	if (clen < csize + sizeof(struct udphdr)) return -1;
+
 	/*
 	 * Find the ports involved - remember this packet was
 	 * *outgoing* so the ports are reversed (and addresses)
 	 */
-	pptr = (__u16 *)&(((char *)ciph)[ciph->ihl*4]);
+	pptr = (__u16 *)&(((char *)ciph)[csize]);
 	if (ntohs(pptr[0]) < PORT_MASQ_BEGIN ||
  	    ntohs(pptr[0]) > PORT_MASQ_END)
  		return 0;

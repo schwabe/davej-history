@@ -45,7 +45,7 @@
 		Tigran Aivazian - bug fixes, skbuff free cleanup
 
 		Martin Mares - suggestions for PCI cleanup
-		
+
 		David S. Miller - PCI DMA and softnet updates
 
 		Ernst Gill - fixes ported from BSD driver
@@ -54,12 +54,12 @@
 			posted MMIO write bugginess
 
 		Gerard Sharp - bug fix, testing and feedback
-		
+
 		David Ford - Rx ring wrap fix
-		
+
 		Dan DeMaggio - swapped RTL8139 cards with me, and allowed me
 		to find and fix a crucial bug on older chipsets.
-		
+
 		Donald Becker/Chris Butterworth/Marcus Westergren -
 		Noticed various Rx packet size-related buglets.
 
@@ -69,6 +69,10 @@
 
 		Martin Dennett - incredibly helpful insight on undocumented
 		features of the 8139 chips
+
+		Jean-Jacques Michel - bug fix
+		
+		Tobias Ringström - Rx interrupt status checking suggestion
 
 	Submitting bug reports:
 
@@ -130,6 +134,7 @@ an MMIO register read.
 
 */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
@@ -137,19 +142,22 @@ an MMIO register read.
 #include <linux/ioport.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/rtnetlink.h>
 #include <linux/delay.h>
 #include <asm/io.h>
 
 
-#define RTL8139_VERSION "0.9.10-2.2"
-#define RTL8139_MODULE_NAME "8139too"
-#define RTL8139_DRIVER_NAME   RTL8139_MODULE_NAME " FastEthernet driver " RTL8139_VERSION
+#define RTL8139_VERSION "0.9.12-2.2"
+#define MODNAME "8139too"
+#define RTL8139_DRIVER_NAME   MODNAME " FastEthernet driver " RTL8139_VERSION
 #define RTL8139_AUTHOR "Jeff Garzik <jgarzik@mandrakesoft.com>"
-#define PFX RTL8139_MODULE_NAME ": "
+#define PFX MODNAME ": "
 
 
-/* define to 1 to enable PIO instead of MMIO */
-#undef USE_IO_OPS
+/* enable PIO instead of MMIO, if CONFIG_8139TOO_PIO is selected */
+#ifdef CONFIG_8139TOO_PIO
+#define USE_IO_OPS 1
+#endif
 
 /* define to 1 to enable copious debugging info */
 #undef RTL8139_DEBUG
@@ -215,7 +223,7 @@ struct resource {
 #define PCI_USES_MEM		2
 #define PCI_USES_MASTER 	4
 
-static inline unsigned int pci_calc_resource_flags(unsigned int flags)
+static inline unsigned int rtl8139_pci_calc_resource_flags(unsigned int flags)
 {
 	if (flags & PCI_BASE_ADDRESS_SPACE_IO)
 		return IORESOURCE_IO;
@@ -256,23 +264,22 @@ static void rtl8139_read_pci_resources(struct pci_dev *dev, struct resource *res
 			sz = ~(sz & PCI_BASE_ADDRESS_IO_MASK) & 0xffff;
 		}
 		res->end = res->start + (unsigned long) sz;
-		res->flags |= (l & 0xf) | pci_calc_resource_flags(l);
+		res->flags |= (l & 0xf) | rtl8139_pci_calc_resource_flags(l);
 	}
 }
 
-#define pci_resource_start(dev_priv,bar)	((dev_priv)->rtl8139_pci_resource[(bar)].start)
-#define pci_resource_end(dev_priv,bar)	((dev_priv)->rtl8139_pci_resource[(bar)].end)
-#define pci_resource_flags(dev_priv,bar)	((dev_priv)->rtl8139_pci_resource[(bar)].flags)
-#define pci_resource_len(dev_priv,bar) \
-	((pci_resource_start((dev_priv),(bar)) == 0 &&	\
-	  pci_resource_end((dev_priv),(bar)) ==		\
-	  pci_resource_start((dev_priv),(bar))) ? 0 :	\
+#define rtl8139_pci_resource_start(dev_priv,bar)	((dev_priv)->rtl8139_pci_resource[(bar)].start)
+#define rtl8139_pci_resource_end(dev_priv,bar)	((dev_priv)->rtl8139_pci_resource[(bar)].end)
+#define rtl8139_pci_resource_flags(dev_priv,bar)	((dev_priv)->rtl8139_pci_resource[(bar)].flags)
+#define rtl8139_pci_resource_len(dev_priv,bar) \
+	((rtl8139_pci_resource_start((dev_priv),(bar)) == 0 &&	\
+	  rtl8139_pci_resource_end((dev_priv),(bar)) ==		\
+	  rtl8139_pci_resource_start((dev_priv),(bar))) ? 0 :	\
 	  						\
-	 (pci_resource_end((dev_priv),(bar)) -		\
-	  pci_resource_start((dev_priv),(bar)) + 1))
+	 (rtl8139_pci_resource_end((dev_priv),(bar)) -		\
+	  rtl8139_pci_resource_start((dev_priv),(bar)) + 1))
 
-#define arraysize(x)            (sizeof(x)/sizeof(*(x)))
-
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 /* A few user-configurable values. */
 /* media options */
@@ -295,8 +302,11 @@ static int multicast_filter_limit = 32;
 /* Number of Tx descriptor registers. */
 #define NUM_TX_DESC	4
 
+/* max supported ethernet frame size -- must be at least (dev->mtu+14+4).*/
+#define MAX_ETH_FRAME_SIZE	1536
+
 /* Size of the Tx bounce buffers -- must be at least (dev->mtu+14+4). */
-#define TX_BUF_SIZE	1536
+#define TX_BUF_SIZE	MAX_ETH_FRAME_SIZE
 #define TX_BUF_TOT_LEN	(TX_BUF_SIZE * NUM_TX_DESC)
 
 /* PCI Tuning Parameters
@@ -561,17 +571,17 @@ const static struct {
 	  0x40,
 	  0xf0fe0040, /* XXX copied from RTL8139A, verify */
 	},
-	
+
 	{ "RTL-8139 rev K",
 	  0x60,
 	  0xf0fe0040,
 	},
-	
+
 	{ "RTL-8139A",
 	  0x70,
 	  0xf0fe0040,
 	},
-	
+
 	{ "RTL-8139B",
 	  0x78,
 	  0xf0fc0040
@@ -597,12 +607,11 @@ struct rtl8139_private {
 	struct pci_dev *pci_dev;
 	struct resource rtl8139_pci_resource[4];
 	struct net_device_stats stats;
-	struct timer_list timer;	/* Media selection timer. */
 	unsigned char *rx_ring;
 	unsigned int cur_rx;	/* Index into the Rx buffer of next Rx pkt. */
 	unsigned int tx_flag;
-	atomic_t cur_tx;
-	atomic_t dirty_tx;
+	unsigned int cur_tx;
+	unsigned int dirty_tx;
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	struct ring_info tx_info[NUM_TX_DESC];
 	unsigned char *tx_buf[NUM_TX_DESC];	/* Tx bounce buffers */
@@ -619,6 +628,9 @@ struct rtl8139_private {
 	unsigned int mediasense:1;	/* Media sensing in progress. */
 	spinlock_t lock;
 	chip_t chipset;
+	pid_t thr_pid;
+	wait_queue_head_t thr_wait;
+	struct semaphore thr_exited;
 };
 
 
@@ -628,7 +640,7 @@ static int rtl8139_open (struct device *dev);
 static int mdio_read (struct device *dev, int phy_id, int location);
 static void mdio_write (struct device *dev, int phy_id, int location,
 			int val);
-static void rtl8139_timer (unsigned long data);
+static int rtl8139_thread (void *data);
 static void rtl8139_tx_timeout (struct device *dev);
 static void rtl8139_init_ring (struct device *dev);
 static int rtl8139_start_xmit (struct sk_buff *skb,
@@ -642,12 +654,11 @@ static inline u32 ether_crc (int length, unsigned char *data);
 static void rtl8139_set_rx_mode (struct device *dev);
 static void rtl8139_hw_start (struct device *dev);
 
-
 #ifdef USE_IO_OPS
 
 #define RTL_R8(reg)		inb (((unsigned long)ioaddr) + (reg))
 #define RTL_R16(reg)		inw (((unsigned long)ioaddr) + (reg))
-#define RTL_R32(reg)		inl (((unsigned long)ioaddr) + (reg))
+#define RTL_R32(reg)		((unsigned long) inl (((unsigned long)ioaddr) + (reg)))
 #define RTL_W8(reg, val8)	outb ((val8), ((unsigned long)ioaddr) + (reg))
 #define RTL_W16(reg, val16)	outw ((val16), ((unsigned long)ioaddr) + (reg))
 #define RTL_W32(reg, val32)	outl ((val32), ((unsigned long)ioaddr) + (reg))
@@ -695,12 +706,12 @@ static void rtl8139_hw_start (struct device *dev);
 /* read MMIO register */
 #define RTL_R8(reg)		readb (ioaddr + (reg))
 #define RTL_R16(reg)		readw (ioaddr + (reg))
-#define RTL_R32(reg)		readl (ioaddr + (reg))
+#define RTL_R32(reg)		((unsigned long) readl (ioaddr + (reg)))
 
 #endif /* USE_IO_OPS */
 
 
-static const u16 rtl8139_intr_mask = 
+static const u16 rtl8139_intr_mask =
 	PCIErr | PCSTimeout | RxUnderrun | RxOverflow | RxFIFOOver |
 	TxErr | TxOK | RxErr | RxOK;
 
@@ -742,15 +753,15 @@ static int rtl8139_init_board (struct pci_dev *pdev, struct device **dev_out,
 
 	rtl8139_read_pci_resources(pdev, &tp->rtl8139_pci_resource[0]);
 
-	pio_start = pci_resource_start (tp, 0);
-	pio_end = pci_resource_end (tp, 0);
-	pio_flags = pci_resource_flags (tp, 0);
-	pio_len = pci_resource_len (tp, 0);
+	pio_start = rtl8139_pci_resource_start (tp, 0);
+	pio_end = rtl8139_pci_resource_end (tp, 0);
+	pio_flags = rtl8139_pci_resource_flags (tp, 0);
+	pio_len = rtl8139_pci_resource_len (tp, 0);
 
-	mmio_start = pci_resource_start (tp, 1);
-	mmio_end = pci_resource_end (tp, 1);
-	mmio_flags = pci_resource_flags (tp, 1);
-	mmio_len = pci_resource_len (tp, 1);
+	mmio_start = rtl8139_pci_resource_start (tp, 1);
+	mmio_end = rtl8139_pci_resource_end (tp, 1);
+	mmio_flags = rtl8139_pci_resource_flags (tp, 1);
+	mmio_len = rtl8139_pci_resource_len (tp, 1);
 
 	/* set this immediately, we need to know before
 	 * we talk to the chip directly */
@@ -765,17 +776,16 @@ static int rtl8139_init_board (struct pci_dev *pdev, struct device **dev_out,
 		rc = -ENODEV;
 		goto err_out;
 	}
-	
+
 	/* make sure PCI base addr 1 is MMIO */
 	if (!(mmio_flags & IORESOURCE_MEM)) {
 		printk (KERN_ERR PFX "region #1 not an MMIO resource, aborting\n");
 		rc = -ENODEV;
 		goto err_out;
 	}
-	
+
 	/* check for weird/broken PCI region reporting */
-	if ((pio_len != mmio_len) ||
-	    (pio_len < RTL_MIN_IO_SIZE) ||
+	if ((pio_len < RTL_MIN_IO_SIZE) ||
 	    (mmio_len < RTL_MIN_IO_SIZE)) {
 		printk (KERN_ERR PFX "Invalid PCI region size(s), aborting\n");
 		rc = -ENODEV;
@@ -838,7 +848,7 @@ static int rtl8139_init_board (struct pci_dev *pdev, struct device **dev_out,
 	assert (inb (pio_start+TxConfig) == readb (ioaddr+TxConfig));
 	assert (inb (pio_start+RxConfig) == readb (ioaddr+RxConfig));
 #endif /* !USE_IO_OPS */
-	
+
 	/* make sure chip thinks PIO and MMIO are enabled */
 	tmp8 = RTL_R8 (Config1);
 	if ((tmp8 & Cfg1_PIO) == 0) {
@@ -851,10 +861,10 @@ static int rtl8139_init_board (struct pci_dev *pdev, struct device **dev_out,
 		rc = -EIO;
 		goto err_out_iounmap;
 	}
-	
+
 	/* identify chip attached to board */
 	tmp = RTL_R8 (ChipVersion);
-	for (i = arraysize (rtl_chip_info) - 1; i >= 0; i--)
+	for (i = ARRAY_SIZE (rtl_chip_info) - 1; i >= 0; i--)
 		if (tmp == rtl_chip_info[i].version) {
 			tp->chipset = i;
 			goto match;
@@ -863,7 +873,7 @@ static int rtl8139_init_board (struct pci_dev *pdev, struct device **dev_out,
 	/* if unknown chip, assume array element #0, original RTL-8139 in this case */
 	printk (KERN_DEBUG PFX "PCI device %08lX: unknown chip version, assuming RTL-8139\n",
 		(unsigned long) pdev);
-	printk (KERN_DEBUG PFX "PCI device %08lX: TxConfig = 0x%x\n", (unsigned long) pdev, RTL_R32 (TxConfig));
+	printk (KERN_DEBUG PFX "PCI device %08lX: TxConfig = 0x%lx\n", (unsigned long) pdev, RTL_R32 (TxConfig));
 	tp->chipset = 0;
 
 match:
@@ -871,11 +881,11 @@ match:
 		tmp,
 		tp->chipset,
 		rtl_chip_info[tp->chipset].name);
-	
+
 	DPRINTK ("EXIT, returning 0\n");
 	*ioaddr_out = ioaddr;
 	*dev_out = dev;
-	return 0;	
+	return 0;
 
 err_out_iounmap:
 	assert (ioaddr > 0);
@@ -901,7 +911,7 @@ static int rtl8139_init_one (struct pci_dev *pdev, const struct pci_device_id *e
 	u8 tmp;
 
 	DPRINTK ("ENTER\n");
-	
+
 	assert (pdev != NULL);
 	assert (ent != NULL);
 
@@ -912,9 +922,9 @@ static int rtl8139_init_one (struct pci_dev *pdev, const struct pci_device_id *e
 		DPRINTK ("EXIT, returning %d\n", i);
 		return i;
 	}
-	
+
 	tp = dev->priv;
-	
+
 	assert (ioaddr != NULL);
 	assert (dev != NULL);
 	assert (tp != NULL);
@@ -944,7 +954,9 @@ static int rtl8139_init_one (struct pci_dev *pdev, const struct pci_device_id *e
 	tp->pci_dev = pdev;
 	tp->board = ent->board;
 	tp->mmio_addr = ioaddr;
-	tp->lock = SPIN_LOCK_UNLOCKED;
+	spin_lock_init (&tp->lock);
+	init_waitqueue_head (&tp->thr_wait);
+	init_MUTEX_LOCKED (&tp->thr_exited);
 
 	tp->phys[0] = 32;
 
@@ -974,7 +986,7 @@ static int rtl8139_init_one (struct pci_dev *pdev, const struct pci_device_id *e
 	RTL_W8_F (HltClk, 'H');	/* 'R' would leave the clock running. */
 
 	/* The lower four bits are the media type. */
-	option = (board_idx > 7) ? 0 : media[board_idx];
+	option = (board_idx >= ARRAY_SIZE(media)) ? 0 : media[board_idx];
 	if (option > 0) {
 		tp->full_duplex = (option & 0x200) ? 1 : 0;
 		tp->default_port = option & 15;
@@ -1017,8 +1029,8 @@ static void rtl8139_remove_one (struct device *dev)
 	iounmap (np->mmio_addr);
 #endif /* !USE_IO_OPS */
 
-	release_region (pci_resource_start (np, 0),
-			pci_resource_len (np, 0));
+	release_region (rtl8139_pci_resource_start (np, 0),
+			rtl8139_pci_resource_len (np, 0));
 #ifndef RTL8139_NDEBUG
 	/* poison memory before freeing */
 	memset (dev, 0xBC,
@@ -1143,7 +1155,7 @@ static void mdio_sync (void *mdio_addr)
 
 static int mdio_read (struct device *dev, int phy_id, int location)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	void *mdio_addr = tp->mmio_addr + Config4;
 	int mii_cmd = (0xf6 << 10) | (phy_id << 5) | location;
 	int retval = 0;
@@ -1186,7 +1198,7 @@ static int mdio_read (struct device *dev, int phy_id, int location)
 static void mdio_write (struct device *dev, int phy_id, int location,
 			int value)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	void *mdio_addr = tp->mmio_addr + Config4;
 	int mii_cmd =
 	    (0x5002 << 16) | (phy_id << 23) | (location << 18) | value;
@@ -1229,7 +1241,7 @@ static void mdio_write (struct device *dev, int phy_id, int location,
 
 static int rtl8139_open (struct device *dev)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	int retval;
 #ifdef RTL8139_DEBUG
 	void *ioaddr = tp->mmio_addr;
@@ -1237,12 +1249,9 @@ static int rtl8139_open (struct device *dev)
 
 	DPRINTK ("ENTER\n");
 
-	MOD_INC_USE_COUNT;
-
 	retval = request_irq (dev->irq, rtl8139_interrupt, SA_SHIRQ, dev->name, dev);
 	if (retval) {
 		DPRINTK ("EXIT, returning %d\n", retval);
-		MOD_DEC_USE_COUNT;
 		return retval;
 	}
 
@@ -1258,13 +1267,13 @@ static int rtl8139_open (struct device *dev)
 		if (tp->rx_ring) kfree(tp->rx_ring);
 
 		DPRINTK ("EXIT, returning -ENOMEM\n");
-		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
-		
+
 	}
-	
+
 	tp->full_duplex = tp->duplex_lock;
 	tp->tx_flag = (TX_FIFO_THRESH << 11) & 0x003f0000;
+	tp->twistie = 1;
 
 	rtl8139_init_ring (dev);
 	rtl8139_hw_start (dev);
@@ -1275,13 +1284,10 @@ static int rtl8139_open (struct device *dev)
 			dev->irq, RTL_R8 (MediaStatus),
 			tp->full_duplex ? "full" : "half");
 
-	/* Set the timer to switch to check for link beat and perhaps switch
-	   to an alternate media type. */
-	init_timer (&tp->timer);
-	tp->timer.expires = jiffies + 3 * HZ;
-	tp->timer.data = (unsigned long) dev;
-	tp->timer.function = &rtl8139_timer;
-	add_timer (&tp->timer);
+	tp->thr_pid = kernel_thread (rtl8139_thread, dev, CLONE_FS | CLONE_FILES);
+	if (tp->thr_pid < 0)
+		printk (KERN_WARNING "%s: unable to start kernel thread\n",
+			dev->name);
 
 	DPRINTK ("EXIT, returning 0\n");
 	return 0;
@@ -1291,13 +1297,13 @@ static int rtl8139_open (struct device *dev)
 /* Start the hardware at open or resume. */
 static void rtl8139_hw_start (struct device *dev)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	void *ioaddr = tp->mmio_addr;
 	u32 i;
 	u8 tmp;
 
 	DPRINTK ("ENTER\n");
-	
+
 	/* Soft reset the chip. */
 	RTL_W8 (ChipCmd, (RTL_R8 (ChipCmd) & ChipCmdClear) | CmdReset);
 	udelay (100);
@@ -1341,9 +1347,9 @@ static void rtl8139_hw_start (struct device *dev)
 	if (tp->chipset >= CH_8139B) {
 		tmp = RTL_R8 (Config4) & ~(1<<2);
 		/* chip will clear Rx FIFO overflow automatically */
-		tmp |= (1<<7);  
+		tmp |= (1<<7);
 		RTL_W8 (Config4, tmp);
-	
+
 		/* disable magic packet scanning, which is enabled
 		 * when PM is enabled above (Config1) */
 		RTL_W8 (Config3, RTL_R8 (Config3) & ~(1<<5));
@@ -1383,14 +1389,14 @@ static void rtl8139_hw_start (struct device *dev)
 /* Initialize the Rx and Tx rings, along with various 'dev' bits. */
 static void rtl8139_init_ring (struct device *dev)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	int i;
 
 	DPRINTK ("ENTER\n");
 
 	tp->cur_rx = 0;
-	atomic_set (&tp->cur_tx, 0);
-	atomic_set (&tp->dirty_tx, 0);
+	tp->cur_tx = 0;
+	tp->dirty_tx = 0;
 
 	for (i = 0; i < NUM_TX_DESC; i++) {
 		tp->tx_info[i].skb = NULL;
@@ -1401,7 +1407,10 @@ static void rtl8139_init_ring (struct device *dev)
 }
 
 
-#ifndef RTL_TUNE_TWISTER
+/* This must be global for CONFIG_8139TOO_TUNE_TWISTER case */
+static int next_tick = 3 * HZ;
+
+#ifndef CONFIG_8139TOO_TUNE_TWISTER
 static inline void rtl8139_tune_twister (struct device *dev,
 				  struct rtl8139_private *tp) {}
 #else
@@ -1409,6 +1418,7 @@ static void rtl8139_tune_twister (struct device *dev,
 				  struct rtl8139_private *tp)
 {
 	int linkcase;
+	void *ioaddr = tp->mmio_addr;
 
 	DPRINTK ("ENTER\n");
 
@@ -1492,15 +1502,13 @@ static void rtl8139_tune_twister (struct device *dev,
 
 	DPRINTK ("EXIT\n");
 }
-#endif /* RTL_TUNE_TWISTER */
+#endif /* CONFIG_8139TOO_TUNE_TWISTER */
 
 
-static void rtl8139_timer (unsigned long data)
+static inline void rtl8139_thread_iter (struct device *dev,
+					struct rtl8139_private *tp,
+					void *ioaddr)
 {
-	struct device *dev = (struct device *) data;
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
-	void *ioaddr = tp->mmio_addr;
-	int next_tick = 60 * HZ;
 	int mii_reg5;
 
 	mii_reg5 = mdio_read (dev, tp->phys[0], 5);
@@ -1521,6 +1529,8 @@ static void rtl8139_timer (unsigned long data)
 		}
 	}
 
+	next_tick = HZ * 60;
+
 	rtl8139_tune_twister (dev, tp);
 
 	DPRINTK ("%s: Media selection tick, Link partner %4.4x.\n",
@@ -1533,43 +1543,43 @@ static void rtl8139_timer (unsigned long data)
 	DPRINTK ("%s:  Chip config %2.2x %2.2x.\n",
 		 dev->name, RTL_R8 (Config0),
 		 RTL_R8 (Config1));
-
-	tp->timer.expires = jiffies + next_tick;
-	add_timer (&tp->timer);
 }
 
 
-static void rtl8139_tx_timeout (struct device *dev)
+static int rtl8139_thread (void *data)
 {
+	struct device *dev = (struct device *) data;
 	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
-	void *ioaddr = tp->mmio_addr;
+	unsigned long timeout;
+
+	daemonize ();
+	sprintf (current->comm, "k8139d-%s", dev->name);
+
+	while (1) {
+		timeout = next_tick;
+		do {
+			timeout = interruptible_sleep_on_timeout (&tp->thr_wait, timeout);
+		} while (!signal_pending (current) && (timeout > 0));
+
+		if (signal_pending (current))
+			break;
+
+		rtnl_lock ();
+		rtl8139_thread_iter (dev, tp, tp->mmio_addr);
+		rtnl_unlock ();
+	}
+
+	up (&tp->thr_exited);
+	return 0;
+}
+
+
+static void rtl8139_tx_clear (struct rtl8139_private *tp)
+{
 	int i;
-	unsigned long flags;
 
-	DPRINTK ("%s: Transmit timeout, status %2.2x %4.4x "
-		 "media %2.2x.\n", dev->name,
-		 RTL_R8 (ChipCmd),
-		 RTL_R16 (IntrStatus),
-		 RTL_R8 (MediaStatus));
-
-	/* Disable interrupts by clearing the interrupt mask. */
-	RTL_W16 (IntrMask, 0x0000);
-
-	/* Emit info to figure out what went wrong. */
-        printk (KERN_DEBUG "%s: Tx queue start entry %d  dirty entry %d.\n",
-		dev->name, atomic_read (&tp->cur_tx),
-		atomic_read (&tp->dirty_tx));
-	for (i = 0; i < NUM_TX_DESC; i++)
-		printk (KERN_DEBUG "%s:  Tx descriptor %d is %8.8x.%s\n",
-			dev->name, i, RTL_R32 (TxStatus0 + (i * 4)),
-			i == atomic_read (&tp->dirty_tx) % NUM_TX_DESC ?
-				" (queue head)" : "");
-
-	spin_lock_irqsave (&tp->lock, flags);
-
-	/* Stop a shared interrupt from scavenging while we are. */
-	atomic_set (&tp->cur_tx, 0);
-	atomic_set (&tp->dirty_tx, 0);
+	tp->cur_tx = 0;
+	tp->dirty_tx = 0;
 
 	/* Dump the unsent Tx packets. */
 	for (i = 0; i < NUM_TX_DESC; i++) {
@@ -1580,18 +1590,52 @@ static void rtl8139_tx_timeout (struct device *dev)
 			tp->stats.tx_dropped++;
 		}
 	}
-	
-	spin_unlock_irqrestore (&tp->lock, flags);
+}
+
+
+static void rtl8139_tx_timeout (struct device *dev)
+{
+	struct rtl8139_private *tp = dev->priv;
+	void *ioaddr = tp->mmio_addr;
+	int i;
+	u8 tmp8;
+
+	DPRINTK ("%s: Transmit timeout, status %2.2x %4.4x "
+		 "media %2.2x.\n", dev->name,
+		 RTL_R8 (ChipCmd),
+		 RTL_R16 (IntrStatus),
+		 RTL_R8 (MediaStatus));
+
+	/* disable Tx ASAP, if not already */
+	tmp8 = RTL_R8 (ChipCmd);
+	if (tmp8 & CmdTxEnb)
+		RTL_W8 (ChipCmd, tmp8 & ~CmdTxEnb);
+
+	/* Disable interrupts by clearing the interrupt mask. */
+	RTL_W16 (IntrMask, 0x0000);
+
+	/* Emit info to figure out what went wrong. */
+        printk (KERN_DEBUG "%s: Tx queue start entry %d  dirty entry %d.\n",
+		dev->name, tp->cur_tx, tp->dirty_tx);
+	for (i = 0; i < NUM_TX_DESC; i++)
+		printk (KERN_DEBUG "%s:  Tx descriptor %d is %8.8lx.%s\n",
+			dev->name, i, RTL_R32 (TxStatus0 + (i * 4)),
+			i == tp->dirty_tx % NUM_TX_DESC ?
+				" (queue head)" : "");
+
+	/* Stop a shared interrupt from scavenging while we are. */
+	spin_lock_irq (&tp->lock);
+	rtl8139_tx_clear (tp);
+	spin_unlock_irq (&tp->lock);
 
 	/* ...and finally, reset everything */
 	rtl8139_hw_start (dev);
 }
 
 
-
 static int rtl8139_start_xmit (struct sk_buff *skb, struct device *dev)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	void *ioaddr = tp->mmio_addr;
 	int entry;
 
@@ -1602,20 +1646,28 @@ static int rtl8139_start_xmit (struct sk_buff *skb, struct device *dev)
 	}
 
 	/* Calculate the next Tx descriptor entry. */
-	entry = atomic_read (&tp->cur_tx) % NUM_TX_DESC;
+	entry = tp->cur_tx % NUM_TX_DESC;
 
 	assert (tp->tx_info[entry].skb == NULL);
 
 	tp->tx_info[entry].skb = skb;
-	memcpy (tp->tx_buf[entry], skb->data, skb->len);
+	if ((long) skb->data & 3) {      /* Must use alignment buffer. */
+		/* tp->tx_info[entry].mapping = 0 */
+		memcpy (tp->tx_buf[entry], skb->data, skb->len);
+		RTL_W32 (TxAddr0 + (entry * 4),
+			 tp->tx_bufs_dma + (tp->tx_buf[entry] - tp->tx_bufs));
+	} else {
+		RTL_W32 (TxAddr0 + (entry * 4), virt_to_bus(skb->data));
+	}
 
 	/* Note: the chip doesn't have auto-pad! */
 	RTL_W32 (TxStatus0 + (entry * sizeof(u32)),
 		 tp->tx_flag | (skb->len >= ETH_ZLEN ? skb->len : ETH_ZLEN));
 
 	dev->trans_start = jiffies;
-	atomic_inc (&tp->cur_tx);
-	if ((atomic_read (&tp->cur_tx) - atomic_read (&tp->dirty_tx)) >= NUM_TX_DESC)
+	tp->cur_tx++;
+	mb();
+	if ((tp->cur_tx - NUM_TX_DESC) == tp->dirty_tx)
 		netif_stop_queue (dev);
 
 	DPRINTK ("%s: Queued Tx packet at %p size %u to slot %d.\n",
@@ -1625,24 +1677,24 @@ static int rtl8139_start_xmit (struct sk_buff *skb, struct device *dev)
 }
 
 
-static inline void rtl8139_tx_interrupt (struct device *dev,
+static void rtl8139_tx_interrupt (struct device *dev,
 					 struct rtl8139_private *tp,
 					 void *ioaddr)
 {
-	unsigned int dirty_tx;
+	unsigned int dirty_tx, tx_left;
 
 	assert (dev != NULL);
 	assert (tp != NULL);
 	assert (ioaddr != NULL);
-	
-	dirty_tx = atomic_read (&tp->dirty_tx);
 
-	while ((atomic_read (&tp->cur_tx) - dirty_tx) > 0) {
+	dirty_tx = tp->dirty_tx;
+	tx_left = tp->cur_tx - dirty_tx;
+	while (tx_left > 0) {
 		int entry = dirty_tx % NUM_TX_DESC;
 		int txstatus;
 
 		txstatus = RTL_R32 (TxStatus0 + (entry * sizeof (u32)));
-		
+
 		if (!(txstatus & (TxStatOK | TxUnderrun | TxAborted)))
 			break;	/* It still hasn't been Txed */
 
@@ -1675,26 +1727,29 @@ static inline void rtl8139_tx_interrupt (struct device *dev,
 			tp->stats.tx_bytes += txstatus & 0x7ff;
 			tp->stats.tx_packets++;
 		}
-
 		dev_kfree_skb_irq (tp->tx_info[entry].skb);
 		tp->tx_info[entry].skb = NULL;
+
 		dirty_tx++;
-		if (netif_queue_stopped (dev) &&
-		    (atomic_read (&tp->cur_tx) - dirty_tx < NUM_TX_DESC))
-			netif_wake_queue (dev);
-		mark_bh(NET_BH);
+		tx_left--;
 	}
 
 #ifndef RTL8139_NDEBUG
-	if (atomic_read (&tp->cur_tx) - dirty_tx > NUM_TX_DESC) {
+	if (tp->cur_tx - dirty_tx > NUM_TX_DESC) {
 		printk (KERN_ERR
 		  "%s: Out-of-sync dirty pointer, %d vs. %d.\n",
-		     dev->name, dirty_tx, atomic_read (&tp->cur_tx));
+		     dev->name, dirty_tx, tp->cur_tx);
 		dirty_tx += NUM_TX_DESC;
 	}
 #endif /* RTL8139_NDEBUG */
 
-	atomic_set (&tp->dirty_tx, dirty_tx);
+	/* only wake the queue if we did work, and the queue is stopped */
+	if (tp->dirty_tx != dirty_tx) {
+		tp->dirty_tx = dirty_tx;
+		mb();
+		if (netif_queue_stopped (dev))
+			netif_wake_queue (dev);
+	}
 }
 
 /* TODO: clean this up!  Rx reset need not be this intensive */
@@ -1769,10 +1824,15 @@ static void rtl8139_rx_interrupt (struct device *dev,
 
 	while ((RTL_R8 (ChipCmd) & RxBufEmpty) == 0) {
 		int ring_offset = cur_rx % RX_BUF_LEN;
-		u32 rx_status = le32_to_cpu (*(u32 *) (rx_ring + ring_offset));
-		int rx_size = rx_status >> 16;
+		u32 rx_status;
+		unsigned int rx_size;
+		unsigned int pkt_size;
 		struct sk_buff *skb;
-		int pkt_size = rx_size - 4;
+
+		/* read size+status of next frame from DMA ring buffer */
+		rx_status = le32_to_cpu (*(u32 *) (rx_ring + ring_offset));
+		rx_size = rx_status >> 16;
+		pkt_size = rx_size - 4;
 
 		DPRINTK ("%s:  rtl8139_rx() status %4.4x, size %4.4x,"
 			 " cur %4.4x.\n", dev->name, rx_status,
@@ -1800,11 +1860,13 @@ static void rtl8139_rx_interrupt (struct device *dev,
 		if (rx_size == 0xfff0)
 			break;
 
-		/* if Rx err received, Rx process gets reset, so
-		 * we abort any further Rx processing
+		/* If Rx err or invalid rx_size/rx_status received
+		 * (which happens if we get lost in the ring),
+		 * Rx process gets reset, so we abort any further
+		 * Rx processing.
 		 */
-		if (rx_status &
-		    (RxBadSymbol | RxRunt | RxTooLong | RxCRCErr | RxBadAlign)) {
+		if ((rx_size > (MAX_ETH_FRAME_SIZE+4)) ||
+		    (!(rx_status & RxStatusOK))) {
 			rtl8139_rx_err (rx_status, dev, tp, ioaddr);
 			return;
 		}
@@ -1819,24 +1881,24 @@ static void rtl8139_rx_interrupt (struct device *dev,
 		 */
 
 		skb = dev_alloc_skb (pkt_size + 2);
-		if (skb == NULL) {
+		if (skb) {
+			skb->dev = dev;
+			skb_reserve (skb, 2);	/* 16 byte align the IP fields. */
+
+			eth_copy_and_sum (skb, &rx_ring[ring_offset + 4], pkt_size, 0);
+			skb_put (skb, pkt_size);
+
+			skb->protocol = eth_type_trans (skb, dev);
+			netif_rx (skb);
+			mark_bh(NET_BH);
+			tp->stats.rx_bytes += pkt_size ;
+			tp->stats.rx_packets++;
+		} else {
 			printk (KERN_WARNING
 				"%s: Memory squeeze, dropping packet.\n",
 				dev->name);
 			tp->stats.rx_dropped++;
-			break;
 		}
-		skb->dev = dev;
-		skb_reserve (skb, 2);	/* 16 byte align the IP fields. */
-
-		eth_copy_and_sum (skb, &rx_ring[ring_offset + 4], pkt_size, 0);
-		skb_put (skb, pkt_size);
-
-		skb->protocol = eth_type_trans (skb, dev);
-		netif_rx (skb);
-		mark_bh(NET_BH);
-		tp->stats.rx_bytes += pkt_size ;
-		tp->stats.rx_packets++;
 
 		cur_rx = (cur_rx + rx_size + 4 + 3) & ~3;
 		RTL_W16_F (RxBufPtr, cur_rx - 16);
@@ -1858,11 +1920,11 @@ static void rtl8139_weird_interrupt (struct device *dev,
 {
 	printk (KERN_DEBUG "%s: Abnormal interrupt, status %8.8x.\n",
 		dev->name, status);
-		 
+
 	assert (dev != NULL);
 	assert (tp != NULL);
 	assert (ioaddr != NULL);
-	
+
 	/* Update the error count. */
 	tp->stats.rx_missed_errors += RTL_R32 (RxMissed);
 	RTL_W32 (RxMissed, 0);
@@ -1877,9 +1939,12 @@ static void rtl8139_weird_interrupt (struct device *dev,
 			tp->full_duplex = duplex;
 			RTL_W8 (Cfg9346, Cfg9346_Unlock);
 			RTL_W8 (Config1, tp->full_duplex ? 0x60 : 0x20);
+			RTL_W8 (Cfg9346, Cfg9346_Lock);
 		}
 		status &= ~RxUnderrun;
 	}
+
+	/* XXX along with rtl8139_rx_err, are we double-counting errors? */
 	if (status &
 	    (RxUnderrun | RxOverflow | RxErr | RxFIFOOver))
 		tp->stats.rx_errors++;
@@ -1909,20 +1974,20 @@ static void rtl8139_interrupt (int irq, void *dev_instance,
 			       struct pt_regs *regs)
 {
 	struct device *dev = (struct device *) dev_instance;
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	int boguscnt = max_interrupt_work;
 	void *ioaddr = tp->mmio_addr;
 	int status = 0, link_changed = 0; /* avoid bogus "uninit" warning */
 
 	spin_lock (&tp->lock);
-	
+
 	do {
 		status = RTL_R16 (IntrStatus);
 
 		/* h/w no longer present (hotplug?) or major error, bail */
 		if (status == 0xFFFF)
 			break;
-		
+
 		/* Acknowledge all of the current interrupt sources ASAP, but
 		   an first get an additional status bit from CSCR. */
 		if (status & RxUnderrun)
@@ -1983,7 +2048,7 @@ static void rtl8139_interrupt (int irq, void *dev_instance,
 	}
 
 	spin_unlock (&tp->lock);
-	
+
 	DPRINTK ("%s: exiting interrupt, intr_status=%#4.4x.\n",
 		 dev->name, RTL_R16 (IntrStatus));
 }
@@ -1991,40 +2056,50 @@ static void rtl8139_interrupt (int irq, void *dev_instance,
 
 static int rtl8139_close (struct device *dev)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	void *ioaddr = tp->mmio_addr;
 	int i;
-	unsigned long flags;
+	int ret = 0;
 
 	DPRINTK ("ENTER\n");
 
 	netif_stop_queue (dev);
 	dev->start = 0;
+	if (tp->thr_pid >= 0) {
+		ret = kill_proc (tp->thr_pid, SIGTERM, 1);
+		if (ret) {
+			printk (KERN_ERR "%s: unable to signal thread\n", dev->name);
+			return ret;
+		}
+		down (&tp->thr_exited);
+	}
 
 	DPRINTK ("%s: Shutting down ethercard, status was 0x%4.4x.\n",
 			dev->name, RTL_R16 (IntrStatus));
 
-	del_timer (&tp->timer);
-	
-	spin_lock_irqsave (&tp->lock, flags);
-
-	/* Disable interrupts by clearing the interrupt mask. */
-	RTL_W16 (IntrMask, 0x0000);
+	spin_lock_irq(&tp->lock);
 
 	/* Stop the chip's Tx and Rx DMA processes. */
 	RTL_W8 (ChipCmd, (RTL_R8 (ChipCmd) & ChipCmdClear));
+
+	/* Disable interrupts by clearing the interrupt mask. */
+	RTL_W16 (IntrMask, 0x0000);
 
 	/* Update the error counts. */
 	tp->stats.rx_missed_errors += RTL_R32 (RxMissed);
 	RTL_W32 (RxMissed, 0);
 
-	spin_unlock_irqrestore (&tp->lock, flags);
-	
+	spin_unlock_irq (&tp->lock);
+
+	synchronize_irq ();
+
 	/* snooze for a small bit */
 	if (current->need_resched)
 		schedule ();
 
 	free_irq (dev->irq, dev);
+
+	rtl8139_tx_clear (tp);
 
 	for (i = 0; i < NUM_TX_DESC; i++) {
 		struct sk_buff *skb = tp->tx_info[i].skb;
@@ -2046,8 +2121,6 @@ static int rtl8139_close (struct device *dev)
 	RTL_W8 (Config1, 0x03);
 	RTL_W8 (HltClk, 'H');	/* 'R' would leave the clock running. */
 
-	MOD_DEC_USE_COUNT;
-
 	DPRINTK ("EXIT\n");
 	return 0;
 }
@@ -2055,9 +2128,8 @@ static int rtl8139_close (struct device *dev)
 
 static int mii_ioctl (struct device *dev, struct ifreq *rq, int cmd)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	u16 *data = (u16 *) & rq->ifr_data;
-	unsigned long flags;
 	int rc = 0;
 
 	DPRINTK ("ENTER\n");
@@ -2068,9 +2140,7 @@ static int mii_ioctl (struct device *dev, struct ifreq *rq, int cmd)
 		/* Fall Through */
 
 	case SIOCDEVPRIVATE + 1:	/* Read the specified MII register. */
-		spin_lock_irqsave (&tp->lock, flags);
 		data[3] = mdio_read (dev, data[0], data[1] & 0x1f);
-		spin_unlock_irqrestore (&tp->lock, flags);
 		break;
 
 	case SIOCDEVPRIVATE + 2:	/* Write the specified MII register */
@@ -2079,9 +2149,7 @@ static int mii_ioctl (struct device *dev, struct ifreq *rq, int cmd)
 			break;
 		}
 
-		spin_lock_irqsave (&tp->lock, flags);
 		mdio_write (dev, data[0], data[1] & 0x1f, data[2]);
-		spin_unlock_irqrestore (&tp->lock, flags);
 		break;
 
 	default:
@@ -2096,22 +2164,14 @@ static int mii_ioctl (struct device *dev, struct ifreq *rq, int cmd)
 
 static struct net_device_stats *rtl8139_get_stats (struct device *dev)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	void *ioaddr = tp->mmio_addr;
 
 	DPRINTK ("ENTER\n");
 
-	assert (tp != NULL);
-
 	if (netif_running(dev)) {
-		unsigned long flags;
-
-		spin_lock_irqsave (&tp->lock, flags);
-
 		tp->stats.rx_missed_errors += RTL_R32 (RxMissed);
 		RTL_W32 (RxMissed, 0);
-
-		spin_unlock_irqrestore (&tp->lock, flags);
 	}
 
 	DPRINTK ("EXIT\n");
@@ -2146,7 +2206,7 @@ static inline u32 ether_crc (int length, unsigned char *data)
 
 static void rtl8139_set_rx_mode (struct device *dev)
 {
-	struct rtl8139_private *tp = (struct rtl8139_private *) dev->priv;
+	struct rtl8139_private *tp = dev->priv;
 	void *ioaddr = tp->mmio_addr;
 	u32 mc_filter[2];	/* Multicast hash filter */
 	int i, rx_mode;
@@ -2180,7 +2240,7 @@ static void rtl8139_set_rx_mode (struct device *dev)
 			set_bit (ether_crc (ETH_ALEN, mclist->dmi_addr) >> 26,
 				 mc_filter);
 	}
-	
+
 	spin_lock_irq (&tp->lock);
 
 	/* We can safely update without stopping the chip. */
@@ -2231,7 +2291,6 @@ MODULE_AUTHOR (RTL8139_AUTHOR);
 MODULE_DESCRIPTION ("RealTek RTL-8139 Fast Ethernet driver");
 MODULE_PARM (multicast_filter_limit, "i");
 MODULE_PARM (max_interrupt_work, "i");
-MODULE_PARM (debug, "i");
 MODULE_PARM (media, "1-" __MODULE_STRING(8) "i");
 
 int init_module(void)

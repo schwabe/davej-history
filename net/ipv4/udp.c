@@ -159,7 +159,7 @@ static int udp_v4_get_port(struct sock *sk, unsigned short snum)
 		next:
 		}
 		result = best;
-		for(;; result += UDP_HTABLE_SIZE) {
+		for(i = 0; i < (1 << 16)/UDP_HTABLE_SIZE; i++, result += UDP_HTABLE_SIZE) {
 			if (result > sysctl_local_port_range[1])
 				result = sysctl_local_port_range[0]
 					+ ((result - sysctl_local_port_range[0]) &
@@ -167,6 +167,8 @@ static int udp_v4_get_port(struct sock *sk, unsigned short snum)
 			if (!udp_lport_inuse(result))
 				break;
 		}
+		if (i >= (1 << 16) / UDP_HTABLE_SIZE)
+			goto fail;
 gotit:
 		udp_port_rover = snum = result;
 	} else {
@@ -1044,6 +1046,8 @@ int udp_chkaddr(struct sk_buff *skb)
 	struct udphdr *uh = (struct udphdr *)(skb->nh.raw + iph->ihl*4);
 	struct sock *sk;
 
+	if (ntohs(iph->tot_len) - iph->ihl*4 < sizeof(struct udphdr))
+		return 0;
 	sk = udp_v4_lookup(iph->saddr, uh->source, iph->daddr, uh->dest, skb->dev->ifindex);
 	if (!sk)
 		return 0;

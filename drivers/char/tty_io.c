@@ -54,6 +54,9 @@
  *
  * Added support for a Unix98-style ptmx device.
  *      -- C. Scott Ananian <cananian@alumni.princeton.edu>, 14-Jan-1998
+ *
+ * Don't call close after a failed open.
+ *	-- Maciej W. Rozycki <macro@ds2.pg.gda.pl>, 21-Jan-2001
  */
 
 #include <linux/config.h>
@@ -1009,7 +1012,7 @@ static void release_mem(struct tty_struct *tty, int idx)
  * WSH 09/09/97: rewritten to avoid some nasty race conditions that could
  * lead to double frees or releasing memory still in use.
  */
-static void release_dev(struct file * filp)
+static void release_dev(struct file * filp, int do_close)
 {
 	struct tty_struct *tty, *o_tty;
 	int	pty_master, tty_closing, o_tty_closing, do_sleep;
@@ -1087,7 +1090,7 @@ static void release_dev(struct file * filp)
 	}
 #endif
 
-	if (tty->driver.close)
+	if (do_close && tty->driver.close)
 		tty->driver.close(tty, filp);
 
 	/*
@@ -1258,7 +1261,7 @@ static void release_dev(struct file * filp)
 static int tty_open(struct inode * inode, struct file * filp)
 {
 	struct tty_struct *tty;
-	int noctty, retval;
+	int noctty, retval, open_ok;
 	kdev_t device;
 	unsigned short saved_flags;
 	char	buf[64];
@@ -1340,9 +1343,12 @@ init_dev_done:
 #ifdef TTY_DEBUG_HANGUP
 	printk("opening %s...", tty_name(tty, buf));
 #endif
-	if (tty->driver.open)
+	open_ok = 0;
+	if (tty->driver.open) {
 		retval = tty->driver.open(tty, filp);
-	else
+		if (!retval)
+			open_ok = 1;
+	} else
 		retval = -ENODEV;
 	filp->f_flags = saved_flags;
 
@@ -1355,7 +1361,7 @@ init_dev_done:
 		       tty_name(tty, buf));
 #endif
 
-		release_dev(filp);
+		release_dev(filp, open_ok);
 		if (retval != -ERESTARTSYS)
 			return retval;
 		if (signal_pending(current))
@@ -1394,7 +1400,7 @@ init_dev_done:
 
 static int tty_release(struct inode * inode, struct file * filp)
 {
-	release_dev(filp);
+	release_dev(filp, 1);
 	return 0;
 }
 

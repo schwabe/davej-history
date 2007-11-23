@@ -60,6 +60,7 @@ static unsigned short x86_keycodes[256] = {
 };
 
 #ifdef CONFIG_INPUT_ADBHID
+#ifdef CONFIG_MAC_ADBKEYCODES
 extern int mac_hid_keyboard_sends_linux_keycodes(void);
 
 static unsigned char mac_keycodes[256] = {
@@ -76,19 +77,20 @@ static unsigned char mac_keycodes[256] = {
 	  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
 	  0,  0,  0,  0,  0, 94,  0, 93,  0,  0,  0,  0,  0,  0,104,102
 };
-
-#ifdef CONFIG_INPUT_MOUSEDEV
+#endif /* CONFIG_MAC_ADBKEYCODES */
+#ifdef CONFIG_MAC_EMUMOUSEBTN
 extern int mac_hid_mouse_emulate_buttons(int, unsigned int, int);
-#endif /* CONFIG_INPUT_MOUSEDEV */
+#endif /* CONFIG_MAC_EMUMOUSEBTN */
 #endif /* CONFIG_INPUT_ADBHID */
 
 static int emulate_raw(unsigned int keycode, int down)
 {
 #ifdef CONFIG_INPUT_ADBHID
-#ifdef CONFIG_INPUT_MOUSEDEV
+#ifdef CONFIG_MAC_EMUMOUSEBTN
 	if (mac_hid_mouse_emulate_buttons(1, keycode, down))
 		return 0;
-#endif /* CONFIG_INPUT_MOUSEDEV */
+#endif /* CONFIG_MAC_EMUMOUSEBTN */
+#ifdef CONFIG_MAC_ADBKEYCODES
 	if (!mac_hid_keyboard_sends_linux_keycodes()) {
 		if (keycode > 255 || !mac_keycodes[keycode])
 			return -1;
@@ -97,6 +99,7 @@ static int emulate_raw(unsigned int keycode, int down)
 
 		return 0;
 	}
+#endif /* CONFIG_MAC_ADBKEYCODES */
 #endif /* CONFIG_INPUT_ADBHID */
 	if (keycode > 255 || !x86_keycodes[keycode])
 		return -1; 

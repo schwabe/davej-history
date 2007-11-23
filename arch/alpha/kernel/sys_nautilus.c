@@ -111,7 +111,7 @@ nautilus_kill_arch (int mode, char *restart_cmd)
 
 	switch(mode) {
         case LINUX_REBOOT_CMD_HALT:
-		printk("Press Reset bottun");
+		printk("Press Reset button");
 		break;
 	case LINUX_REBOOT_CMD_RESTART:
 		{

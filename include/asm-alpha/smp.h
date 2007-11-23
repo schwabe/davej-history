@@ -4,6 +4,7 @@
 #ifdef __SMP__
 
 #include <linux/tasks.h>
+#include <linux/sched.h>
 #include <asm/init.h>
 #include <asm/pal.h>
 

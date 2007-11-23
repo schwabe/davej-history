@@ -1,6 +1,6 @@
 /* sis900.c: A SiS 900/7016 PCI Fast Ethernet driver for Linux.
    Copyright 1999 Silicon Integrated System Corporation 
-   Revision:	1.06.05	Aug 24 2000
+   Revision:	1.06.07	Jan. 8 2001
 
    Modified from the driver which is originally written by Donald Becker.
    
@@ -18,6 +18,8 @@
    preliminary Rev. 1.0 Jan. 18, 1998
    http://www.sis.com.tw/support/databook.htm
 
+   Rev 1.06.07 Jan.  8 2001 Lei-Chun Chang added RTL8201 PHY support
+   Rev 1.06.06 Sep.  6 2000 Lei-Chun Chang added ICS1893 PHY support
    Rev 1.06.05 Aug. 22 2000 Lei-Chun Chang (lcchang@sis.com.tw) modified 630E equalier workaroung rule
    Rev 1.06.03 Dec. 23 1999 Ollie Lho Third release
    Rev 1.06.02 Nov. 23 1999 Ollie Lho bug in mac probing fixed
@@ -51,7 +53,7 @@
 #include "sis900.h"
 
 static const char *version =
-"sis900.c: v1.06.05  08/24/00\n";
+"sis900.c: v1.06.07  01/08/01\n";
 
 static int max_interrupt_work = 20;
 static int multicast_filter_limit = 128;
@@ -82,6 +84,8 @@ static struct mac_chip_info  mac_chip_table[] = {
 
 static void sis900_read_mode(struct device *net_dev, int phy_addr, int *speed, int *duplex);
 static void amd79c901_read_mode(struct device *net_dev, int phy_addr, int *speed, int *duplex);
+static void ics1893_read_mode(struct device *net_dev, int phy_addr, int *speed, int *duplex);
+static void rtl8201_read_mode(struct device *net_dev, int phy_addr, int *speed, int *duplex);
 
 static struct mii_chip_info {
 	const char * name;
@@ -93,6 +97,8 @@ static struct mii_chip_info {
 	{"SiS 7014 Physical Layer Solution", 0x0016, 0xf830,sis900_read_mode},
 	{"AMD 79C901 10BASE-T PHY",  0x0000, 0x35b9, amd79c901_read_mode},
 	{"AMD 79C901 HomePNA PHY",   0x0000, 0x35c8, amd79c901_read_mode},
+	{"ICS 1893 Integrated PHYceiver"   , 0x0015, 0xf441,ics1893_read_mode},
+	{"RTL 8201 10/100Mbps Phyceiver"   , 0x0000, 0x8201,rtl8201_read_mode},
 	{0,},
 };
 
@@ -299,12 +305,10 @@ static struct device * sis900_mac_probe (struct mac_chip_info * mac, struct pci_
 		return NULL;
 
 	pci_read_config_byte(pci_dev, PCI_CLASS_REVISION, &revision);
-	if (revision == SIS630E_REV)
+	if (revision == SIS630E_REV || revision == SIS630EA1_REV)
 		ret = sis630e_get_mac_addr(pci_dev, net_dev);
-	else if (revision == SIS630EA1_REV) {
+	else if (revision == SIS630S_REV)
 		ret = sis630e_get_mac_addr(pci_dev, net_dev);
-		printk(KERN_INFO "using 630ea1\n");
-	}
 	else
 		ret = sis900_get_mac_addr(pci_dev, net_dev);
 
@@ -381,7 +385,8 @@ static int sis900_mii_probe (struct device * net_dev)
 
 		/* search our mii table for the current mii */ 
 		for (i = 0; mii_chip_table[i].phy_id1; i++)
-			if (phy_id0 == mii_chip_table[i].phy_id0) {
+			if (phy_id0 == mii_chip_table[i].phy_id0 &&
+			    phy_id1 == mii_chip_table[i].phy_id1) {
 				struct mii_phy * mii_phy;
 
 				printk(KERN_INFO
@@ -956,6 +961,71 @@ static void amd79c901_read_mode(struct device *net_dev, int phy_addr, int *speed
 			printk(KERN_INFO "%s: Media Link Off\n", net_dev->name);
 	}
 }
+/* ICS1893 PHY use Quick Poll Detailed Status Register to get its status */
+static void ics1893_read_mode(struct device *net_dev, int phy_addr, int *speed, int *duplex)
+{
+	int i = 0;
+	u32 status;
+
+	/* MII_QPDSTS is Latched, read twice in succession will reflect the current state */
+	for (i = 0; i < 2; i++)
+		status = mdio_read(net_dev, phy_addr, MII_QPDSTS);
+
+	if (status & MII_STSICS_SPD)
+		*speed = HW_SPEED_100_MBPS;
+	else
+		*speed = HW_SPEED_10_MBPS;
+
+	if (status & MII_STSICS_DPLX)
+		*duplex = FDX_CAPABLE_FULL_SELECTED;
+	else
+		*duplex = FDX_CAPABLE_HALF_SELECTED;
+
+	if (status & MII_STSICS_LINKSTS)
+		printk(KERN_INFO "%s: Media Link On %s %s-duplex \n",
+		       net_dev->name,
+		       *speed == HW_SPEED_100_MBPS ?
+		       "100mbps" : "10mbps",
+		       *duplex == FDX_CAPABLE_FULL_SELECTED ?
+		       "full" : "half");
+	else
+		printk(KERN_INFO "%s: Media Link Off\n", net_dev->name);
+}
+
+static void rtl8201_read_mode(struct device *net_dev, int phy_addr, int *speed, int *duplex)
+{
+	u32 status;
+
+	status = mdio_read(net_dev, phy_addr, MII_STATUS);
+
+	if (status & MII_STAT_CAN_TX_FDX) {
+		*speed = HW_SPEED_100_MBPS;
+		*duplex = FDX_CAPABLE_FULL_SELECTED;
+	}
+	else if (status & MII_STAT_CAN_TX) {
+		*speed = HW_SPEED_100_MBPS;
+		*duplex = FDX_CAPABLE_HALF_SELECTED;
+	}
+	else if (status & MII_STAT_CAN_T_FDX) {
+		*speed = HW_SPEED_10_MBPS;
+		*duplex = FDX_CAPABLE_FULL_SELECTED;
+	}
+	else if (status & MII_STAT_CAN_T) {
+		*speed = HW_SPEED_10_MBPS;
+		*duplex = FDX_CAPABLE_HALF_SELECTED;
+	}
+
+	if (status & MII_STAT_LINK)
+		printk(KERN_INFO "%s: Media Link On %s %s-duplex \n",
+		       net_dev->name,
+		       *speed == HW_SPEED_100_MBPS ?
+		       "100mbps" : "10mbps",
+		       *duplex == FDX_CAPABLE_FULL_SELECTED ?
+		       "full" : "half");
+	else
+		printk(KERN_INFO "%s: Media Link Off\n", net_dev->name);
+}
+
 static void sis900_tx_timeout(struct device *net_dev)
 {
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;

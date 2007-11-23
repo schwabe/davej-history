@@ -87,6 +87,12 @@ M:	ajk@iehk.rwth-aachen.de
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 
+8139too NETWORK DRIVER
+P:	Jeff Garzik, Jens David (Linux-2.2 port)
+M:	dg1kjd@afthd.tu-darmstadt.de
+L:	linux-net@vger.rutgers.edu
+S:	Maintained
+
 8390 NETWORK DRIVERS [WD80x3/SMC-ELITE, SMC-ULTRA, NE2000, 3C503, etc.]
 P:	Paul Gortmaker
 M:	p_gortmaker@yahoo.com
@@ -586,8 +592,8 @@ S:	Maintained
 
 LINUX FOR POWERPC (PREP)
 P:	Cort Dougan
-M:	cort@cs.nmt.edu
-W:	http://linuxppc.cs.nmt.edu/
+M:	cort@fsmlabs.com
+W:	http://www.fsmlabs.com/linuxppcbk.html
 S:	Maintained
 
 LINUX FOR POWER MACINTOSH

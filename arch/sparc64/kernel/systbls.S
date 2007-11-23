@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.53.2.5 2000/08/23 04:18:26 davem Exp $
+/* $Id: systbls.S,v 1.53.2.6 2001/01/11 15:44:37 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -27,7 +27,7 @@ sys_call_table32:
 /*25*/	.word sys_time, sys_ptrace, sys_alarm, sys32_sigaltstack, sys32_pause
 /*30*/	.word sys32_utime, sys_nis_syscall, sys_nis_syscall, sys_access, sys_nice
 	.word sys_nis_syscall, sys_sync, sys_kill, sys32_newstat, sys32_sendfile
-/*40*/	.word sys32_newlstat, sys_dup, sys_pipe, sys32_times, sys_nis_syscall
+/*40*/	.word sys32_newlstat, sys_dup, sys_pipe, sys32_times, sys_lfs_syscall
 	.word sys_umount, sys_setgid, sys_getgid, sys_signal, sys_geteuid
 /*50*/	.word sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys32_ioctl
 	.word sys_reboot, sys_lfs_syscall, sys_symlink, sys_readlink, sys32_execve
@@ -50,7 +50,7 @@ sys_call_table32:
 /*140*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getrlimit
 	.word sys32_setrlimit, sys_nis_syscall, sys32_prctl, sys32_pciconfig_read, sys32_pciconfig_write
 /*150*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall
-	.word sys_nis_syscall, sys_nis_syscall, sys32_statfs, sys32_fstatfs, sys_oldumount
+	.word sys_lfs_syscall, sys_nis_syscall, sys32_statfs, sys32_fstatfs, sys_oldumount
 /*160*/	.word sys_nis_syscall, sys_nis_syscall, sys_getdomainname, sys_setdomainname, sys_nis_syscall
 	.word sys32_quotactl, sys_nis_syscall, sys32_mount, sys_ustat, sys_nis_syscall
 /*170*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getdents

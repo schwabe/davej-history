@@ -176,22 +176,23 @@ source drivers/usb/Config.in
 
 mainmenu_option next_comment
 comment 'Mac device drivers'
-if [ "$CONFIG_INPUT_KEYBDEV" = "y" -o "$CONFIG_INPUT_MOUSEDEV" = "y" ]; then
-   bool 'Use input layer for ADB keyboard and mouse' CONFIG_INPUT_ADBHID
-fi
+
+bool 'Use input layer for ADB keyboard and mouse' CONFIG_INPUT_ADBHID
 if [ "$CONFIG_INPUT_ADBHID" = "y" ]; then
-   define_bool CONFIG_MAC_HID y
-   bool '  Support for ADB raw keycodes' CONFIG_MAC_ADBKEYCODES
-   bool '  Support for mouse button 2+3 emulation' CONFIG_MAC_EMUMOUSEBTN
+  define_bool CONFIG_INPUT_KEYBDEV $CONFIG_INPUT_ADBHID $CONFIG_VT
+  define_bool CONFIG_INPUT_MOUSEDEV $CONFIG_INPUT_ADBHID
+  define_bool CONFIG_MAC_HID y
+  bool '  Support for ADB raw keycodes' CONFIG_MAC_ADBKEYCODES
+  bool '  Support for mouse button 2+3 emulation' CONFIG_MAC_EMUMOUSEBTN
 else
-   bool 'Support for ADB keyboard (old driver)' CONFIG_MAC_KEYBOARD
-   bool 'Support for ADB mouse (old driver)' CONFIG_ADBMOUSE
+  bool 'Support for ADB keyboard (old driver)' CONFIG_MAC_KEYBOARD
+  bool 'Support for ADB mouse (old driver)' CONFIG_ADBMOUSE
 fi
 tristate 'Support for /dev/rtc' CONFIG_PPC_RTC
 bool 'Support for PowerMac floppy' CONFIG_MAC_FLOPPY
 tristate 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
 if [ "$CONFIG_MAC_SERIAL" = "y" ]; then
-   bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
+  bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
 fi
 endmenu
 

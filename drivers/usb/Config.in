@@ -36,16 +36,23 @@ comment 'USB Controllers'
    dep_tristate '  USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB
 
    comment 'USB Human Interface Devices (HID)'
-   if [ "$CONFIG_INPUT" = "n" ]; then
-      comment '  Input core support is needed for USB HID'
-   else
-      dep_tristate '  USB Human Interface Device (full HID) support' CONFIG_USB_HID $CONFIG_USB $CONFIG_INPUT
-      if [ "$CONFIG_USB_HID" != "y" ]; then
-         dep_tristate '  USB HIDBP Keyboard (basic) support' CONFIG_USB_KBD $CONFIG_USB $CONFIG_INPUT
-         dep_tristate '  USB HIDBP Mouse (basic) support' CONFIG_USB_MOUSE $CONFIG_USB $CONFIG_INPUT
-      fi
-      dep_tristate '  Wacom Intuos/Graphire tablet support' CONFIG_USB_WACOM $CONFIG_USB $CONFIG_INPUT
+   dep_tristate '  USB Human Interface Device (full HID) support' CONFIG_USB_HID $CONFIG_USB
+   if [ "$CONFIG_USB_HID" != "y" ]; then
+      dep_tristate '  USB HIDBP Keyboard (basic) support' CONFIG_USB_KBD $CONFIG_USB
+      dep_tristate '  USB HIDBP Mouse (basic) support' CONFIG_USB_MOUSE $CONFIG_USB
    fi
+   if [ "$CONFIG_VT" = "y" ]; then
+      dep_tristate '  Keyboard support' CONFIG_INPUT_KEYBDEV $CONFIG_USB $CONFIG_USB_HID
+   fi
+   dep_tristate '  Mouse support' CONFIG_INPUT_MOUSEDEV $CONFIG_USB $CONFIG_USB_HID
+   if [ "$CONFIG_INPUT_MOUSEDEV" != "n" ]; then
+      int '   Horizontal screen resolution' CONFIG_INPUT_MOUSEDEV_SCREEN_X 1024
+      int '   Vertical screen resolution' CONFIG_INPUT_MOUSEDEV_SCREEN_Y 768
+   fi
+   dep_tristate '  Joystick support' CONFIG_INPUT_JOYDEV $CONFIG_USB $CONFIG_USB_HID
+   dep_tristate '  Logitech WingMan Force joystick support' CONFIG_USB_WMFORCE $CONFIG_USB $CONFIG_USB_HID
+   dep_tristate '  Wacom Intuos/Graphire tablet support' CONFIG_USB_WACOM $CONFIG_USB $CONFIG_USB_HID
+   dep_tristate '  Event interface support' CONFIG_INPUT_EVDEV $CONFIG_USB $CONFIG_USB_HID
 
    comment 'USB Imaging devices'
    dep_tristate '  USB Kodak DC-2xx Camera support' CONFIG_USB_DC2XX $CONFIG_USB

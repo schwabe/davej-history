@@ -22,6 +22,14 @@
  *				Removed queue walk, fixed for 64bitness.
  *		Boji T Kannanthanam:
  *				Support for dynamic device creation/deletion
+ *				Set the I2O Block devices to be detected in 
+ *				increasing order of TIDs during boot.
+ *				Search and set the I2O block device that we 
+ *				boot off from  as the first device to be 
+ *				claimed (as /dev/i2o/hda)
+ *				Properly attach/detach I2O gendisk structure 
+ *				from the system gendisk list. The I2O block
+ *				devices now appear in /proc/partitions.
  *	To do:
  *		Multiple majors
  *		Serial number scanning to find duplicates for FC multipathing
@@ -1538,14 +1546,14 @@ static void i2ob_geninit(struct gendisk *gd)
 static struct gendisk i2ob_gendisk = 
 {
 	MAJOR_NR,
-	"i2ohd",
+	"i2o/hd",
 	4,
 	1<<4,
 	MAX_I2OB,
 	i2ob_geninit,
 	i2ob,
 	i2ob_sizes,
-	0,
+	MAX_I2OB,
 	NULL,
 	NULL
 };
@@ -1654,6 +1662,13 @@ int i2o_block_init(void)
 	 */
 	i2ob_probe();
 
+	/*
+ 	 *      Adding i2ob_gendisk into the gendisk list.
+	 */
+
+	i2ob_gendisk.next = gendisk_head;
+	gendisk_head = &i2ob_gendisk;
+
 	return 0;
 }
 
@@ -1665,7 +1680,7 @@ MODULE_DESCRIPTION("I2O Block Device OSM");
 
 void cleanup_module(void)
 {
-	struct gendisk **gdp;
+	struct gendisk *gdp;
 	int i;
 	
 	 /*
@@ -1713,9 +1728,17 @@ void cleanup_module(void)
 	 *	Why isnt register/unregister gendisk in the kernel ???
 	 */
 
-	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next))
-		if (*gdp == &i2ob_gendisk)
-			break;
+	if (gendisk_head == &i2ob_gendisk) {
+		gendisk_head = i2ob_gendisk.next;
+		}
+	else {
+		for (gdp = gendisk_head; gdp; gdp = gdp->next)
+			if (gdp->next == &i2ob_gendisk)
+			{
+				gdp->next = i2ob_gendisk.next;
+				break;
+			}
+	}
 
 }
 #endif

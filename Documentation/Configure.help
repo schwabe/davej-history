@@ -6232,6 +6232,37 @@ CONFIG_RTL8139
   say M here and read Documentation/modules.txt. This is recommended.
   The module will be called rtl8139.o.
 
+Alternative RealTek 8139 driver (8139too) support
+CONFIG_RTL8139TOO
+  This is a sophisticated, multi platform driver for RealTek 8139x
+  based Fast Ethernet cards. It tries to work around several not
+  well documented hardware bugs in these chips and is also
+  usually faster than the original driver. However, 8129 is not
+  supported.
+  If you are sure you have a RTL8139-based card, choose this driver.
+  You can find more information in the Ethernet-HOWTO, available by
+  anonymous FTP from ftp://metalab.unc.edu/pub/Linux/docs/HOWTO .
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
+  The module will be called rtl8139too.o .
+
+Use PIO instead of MMIO
+CONFIG_8139TOO_PIO
+  This instructs the driver to use PIO (only on i386 architecture)
+  instead of memory mapped IO. This can possibly solve some problems
+  in case your mainboard has memory consistency issues. If unsure,
+  say n.
+
+Support for automatic channel equalization
+CONFIG_8139TOO_TUNE_TWISTER
+  This implements a function which might come in handy in case
+  you are using low quality on long cabling. It tries to match
+  the transceiver to the cable characteristics. This is experimental
+  since hardly documented by the manufacturer.
+  If unsure, say n.
+
 SiS 900/7016 support
 CONFIG_SIS900
   This is a driver for the Fast Ethernet PCI network cards based on

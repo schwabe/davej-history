@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.30.2.1 1999/07/23 15:29:22 davem Exp $
+ *	Version: $Id: igmp.c,v 1.30.2.2 2001/01/10 10:04:07 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -442,8 +442,8 @@ void ip_mc_inc_group(struct in_device *in_dev, u32 addr)
 	im->timer.function=&igmp_timer_expire;
 	im->unsolicit_count = IGMP_Unsolicited_Report_Count;
 	im->reporter = 0;
-	im->loaded = 0;
 #endif
+	im->loaded = 0;
 	im->next=in_dev->mc_list;
 	in_dev->mc_list=im;
 	igmp_group_added(im);

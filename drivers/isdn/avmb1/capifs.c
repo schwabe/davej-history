@@ -51,22 +51,19 @@
 #include <linux/param.h>
 #include <linux/module.h>
 #include <linux/string.h>
-#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/kdev_t.h>
 #include <linux/kernel.h>
 #include <linux/locks.h>
 #include <linux/major.h>
 #include <linux/malloc.h>
-#include <linux/stat.h>
-#include <linux/tty.h>
 #include <linux/ctype.h>
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.de>");
 
-static char *revision = "$Revision: 1.7 $";
+static char *revision = "$Revision: 1.14.6.1 $";
 
 struct capifs_ncci {
 	struct inode *inode;
@@ -109,11 +106,9 @@ static struct file_operations capifs_root_operations = {
 };
 
 struct inode_operations capifs_root_inode_operations = {
-	&capifs_root_operations, /* file operations */
+	default_file_ops: &capifs_root_operations, /* file operations */
 	lookup: capifs_root_lookup,
 };
-
-struct inode_operations capifs_inode_operations;
 
 static struct dentry_operations capifs_dentry_operations = {
 	d_revalidate: capifs_revalidate,

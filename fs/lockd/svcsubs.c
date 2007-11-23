@@ -44,6 +44,10 @@ static unsigned int file_hash(dev_t dev, ino_t ino)
  * Note that we open the file O_RDONLY even when creating write locks.
  * This is not quite right, but for now, we assume the client performs
  * the proper R/W checking.
+ *
+ * BEWARE:
+ * The cast to struct knfs_fh in this routine, imposes an alignment
+ * requirement on (struct nfs_fh)->data for some platforms.
  */
 u32
 nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
@@ -63,8 +67,7 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 	down(&nlm_file_sema);
 
 	for (file = nlm_files[hash]; file; file = file->f_next) {
-		if (file->f_handle.fh_dcookie == fh->fh_dcookie &&
-		    !memcmp(&file->f_handle, fh, sizeof(*fh)))
+		if (!memcmp(&file->f_handle, fh, sizeof(*fh)))
 			goto found;
 	}
 

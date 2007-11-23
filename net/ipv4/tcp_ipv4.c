@@ -1109,6 +1109,8 @@ int tcp_chkaddr(struct sk_buff *skb)
 	struct tcphdr *th = (struct tcphdr *)(skb->nh.raw + iph->ihl*4);
 	struct sock *sk;
 
+	if (ntohs(iph->tot_len) - iph->ihl*4 < sizeof(struct tcphdr))
+		return 0;
 	sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr,
 			   th->dest, skb->dev->ifindex);
 

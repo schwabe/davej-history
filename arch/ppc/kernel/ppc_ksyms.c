@@ -5,30 +5,24 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/interrupt.h>
+#include <linux/smp_lock.h>
 #include <linux/vt_kern.h>
 #include <linux/nvram.h>
 
-#include <asm/page.h>
 #include <asm/semaphore.h>
 #include <asm/processor.h>
 #include <asm/uaccess.h>
-#include <asm/io.h>
 #include <asm/ide.h>
-#include <asm/atomic.h>
-#include <asm/bitops.h>
 #include <asm/checksum.h>
 #include <asm/pgtable.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/pmu.h>
 #include <asm/prom.h>
-#include <asm/system.h>
 #include <asm/pci-bridge.h>
 #include <asm/irq.h>
 #include <asm/feature.h>
-#include <asm/spinlock.h>
 #include <asm/dma.h>
-#include <asm/machdep.h>
 #include <asm/nvram.h>
 #include <asm/time.h>
 
@@ -179,10 +173,10 @@ EXPORT_SYMBOL(giveup_altivec);
 #endif
 
 #ifdef __SMP__
-EXPORT_SYMBOL(__global_cli);
-EXPORT_SYMBOL(__global_sti);
-EXPORT_SYMBOL(__global_save_flags);
-EXPORT_SYMBOL(__global_restore_flags);
+EXPORT_SYMBOL(cpu_data);
+EXPORT_SYMBOL(kernel_flag);
+EXPORT_SYMBOL(cpu_number_map);
+EXPORT_SYMBOL(smp_num_cpus);
 EXPORT_SYMBOL(_spin_lock);
 EXPORT_SYMBOL(_spin_unlock);
 EXPORT_SYMBOL(spin_trylock);
@@ -190,6 +184,17 @@ EXPORT_SYMBOL(_read_lock);
 EXPORT_SYMBOL(_read_unlock);
 EXPORT_SYMBOL(_write_lock);
 EXPORT_SYMBOL(_write_unlock);
+
+/* Global SMP irq stuff */
+EXPORT_SYMBOL(synchronize_irq);
+EXPORT_SYMBOL(synchronize_bh);
+EXPORT_SYMBOL(global_bh_count);
+EXPORT_SYMBOL(global_bh_lock);
+EXPORT_SYMBOL(global_irq_holder);
+EXPORT_SYMBOL(__global_cli);
+EXPORT_SYMBOL(__global_sti);
+EXPORT_SYMBOL(__global_save_flags);
+EXPORT_SYMBOL(__global_restore_flags);
 #endif /* __SMP__ */
 
 EXPORT_SYMBOL(_machine);

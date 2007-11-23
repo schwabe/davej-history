@@ -622,11 +622,6 @@ static void b1dma_handle_interrupt(avmcard *card)
 	if ((status & TX_TC_INT) != 0) {
 		card->csr &= ~EN_TX_TC_INT;
 	        b1dma_dispatch_tx(card);
-	} else if (card->csr & EN_TX_TC_INT) {
-		if (b1dmainmeml(card->mbase+AMCC_TXLEN) == 0) {
-			card->csr &= ~EN_TX_TC_INT;
-			b1dma_dispatch_tx(card);
-		}
 	}
 	b1dmaoutmeml(card->mbase+AMCC_INTCSR, card->csr);
 }

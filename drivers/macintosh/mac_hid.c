@@ -184,8 +184,6 @@ static unsigned short *pc_key_maps_save[MAX_NR_KEYMAPS];
 
 int mac_hid_kbd_translate(unsigned char keycode, unsigned char *keycodep,
 			  char raw_mode);
-static int mac_hid_sysctl_keycodes(ctl_table *ctl, int write, struct file * filp,
-				   void *buffer, size_t *lenp);
 char mac_hid_kbd_unexpected_up(unsigned char keycode);
 
 static int keyboard_lock_keycodes = 0;
@@ -194,6 +192,8 @@ int keyboard_sends_linux_keycodes = 0;
 int keyboard_sends_linux_keycodes = 1;
 #endif /* CONFIG_MAC_ADBKEYCODES */
 
+static int mac_hid_sysctl_keycodes(ctl_table *ctl, int write, struct file * filp,
+				   void *buffer, size_t *lenp);
 
 static unsigned char e0_keys[128] = {
 	0, 0, 0, KEY_KPCOMMA, 0, KEY_INTL3, 0, 0,		/* 0x00-0x07 */
@@ -225,22 +225,25 @@ static int mouse_last_keycode = 0;
 
 extern void pckbd_init_hw(void);
 
-#if defined CONFIG_SYSCTL && (defined(CONFIG_MAC_ADBKEYCODES) || defined(CONFIG_MAC_EMUMOUSEBTN))
+#ifdef CONFIG_SYSCTL
 /* file(s) in /proc/sys/dev/mac_hid */
 ctl_table mac_hid_files[] =
 {
-#ifdef CONFIG_MAC_ADBKEYCODES
   {
+    /* Leave it available when ADB keycodes are disabled for the sanity of
+     * distro installers...
+     */
     DEV_MAC_HID_KEYBOARD_SENDS_LINUX_KEYCODES,
     "keyboard_sends_linux_keycodes", &keyboard_sends_linux_keycodes, sizeof(int),
     0644, NULL, &mac_hid_sysctl_keycodes
   },
+#ifdef CONFIG_MAC_ADBKEYCODES
   {
     DEV_MAC_HID_KEYBOARD_LOCK_KEYCODES,
     "keyboard_lock_keycodes", &keyboard_lock_keycodes, sizeof(int),
     0644, NULL, &proc_dointvec
   },
-#endif
+#endif /* CONFIG_MAC_ADBKEYCODES */
 #ifdef CONFIG_MAC_EMUMOUSEBTN
   {
     DEV_MAC_HID_MOUSE_BUTTON_EMULATION,
@@ -257,7 +260,7 @@ ctl_table mac_hid_files[] =
     "mouse_button3_keycode", &mouse_button3_keycode, sizeof(int),
     0644, NULL, &proc_dointvec
   },
-#endif
+#endif /* CONFIG_MAC_EMUMOUSEBTN */
   { 0 }
 };
 
@@ -277,11 +280,13 @@ ctl_table mac_hid_root_dir[] =
 
 static struct ctl_table_header *mac_hid_sysctl_header;
 
-#ifdef CONFIG_MAC_ADBKEYCODES
 static
 int mac_hid_sysctl_keycodes(ctl_table *ctl, int write, struct file * filp,
 			    void *buffer, size_t *lenp)
 {
+#ifndef CONFIG_MAC_ADBKEYCODES
+	return write ? 0 : proc_dointvec(ctl, write, filp, buffer, lenp);
+#else /* CONFIG_MAC_ADBKEYCODES */
 	int val = keyboard_sends_linux_keycodes;
 	int ret = 0;
 
@@ -293,14 +298,14 @@ int mac_hid_sysctl_keycodes(ctl_table *ctl, int write, struct file * filp,
 	    && keyboard_sends_linux_keycodes != val) {
 		if (!keyboard_sends_linux_keycodes) {
 #ifdef CONFIG_MAGIC_SYSRQ
-			ppc_md.ppc_kbd_sysrq_xlate   = mac_hid_kbd_sysrq_xlate;
+			ppc_md.sysrq_xlate   = mac_hid_kbd_sysrq_xlate;
 			SYSRQ_KEY                = 0x69;
 #endif
 			memcpy(pc_key_maps_save, key_maps, sizeof(key_maps));
 			memcpy(key_maps, mac_key_maps_save, sizeof(key_maps));
 		} else {
 #ifdef CONFIG_MAGIC_SYSRQ
-			ppc_md.ppc_kbd_sysrq_xlate   = pckbd_sysrq_xlate;
+			ppc_md.sysrq_xlate   = pckbd_sysrq_xlate;
 			SYSRQ_KEY                = 0x54;
 #endif
 			memcpy(mac_key_maps_save, key_maps, sizeof(key_maps));
@@ -309,8 +314,8 @@ int mac_hid_sysctl_keycodes(ctl_table *ctl, int write, struct file * filp,
 	}
 
 	return ret;
+#endif /* CONFIG_MAC_ADBKEYCODES */
 }
-#endif
 #endif /* endif CONFIG_SYSCTL */
 
 int mac_hid_kbd_translate(unsigned char scancode, unsigned char *keycode,
@@ -486,7 +491,7 @@ void __init mac_hid_init_hw(void)
 		pckbd_init_hw();
 #endif
 
-#if defined(CONFIG_SYSCTL) && (defined(CONFIG_MAC_ADBKEYCODES) || defined(CONFIG_MAC_EMUMOUSEBTN))
+#ifdef CONFIG_SYSCTL
 	mac_hid_sysctl_header = register_sysctl_table(mac_hid_root_dir, 1);
 #endif /* CONFIG_SYSCTL */
 }

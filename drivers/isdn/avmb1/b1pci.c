@@ -328,10 +328,13 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 	avmctrl_info *cinfo;
 	int retval;
 
+	MOD_INC_USE_COUNT;
+
 	card = (avmcard *) kmalloc(sizeof(avmcard), GFP_ATOMIC);
 
 	if (!card) {
 		printk(KERN_WARNING "%s: no memory.\n", driver->name);
+	        MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(card, 0, sizeof(avmcard));
@@ -339,6 +342,7 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 	if (!card->dma) {
 		printk(KERN_WARNING "%s: no memory.\n", driver->name);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(card->dma, 0, sizeof(avmcard_dmainfo));
@@ -347,6 +351,7 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 		printk(KERN_WARNING "%s: no memory.\n", driver->name);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -ENOMEM;
 	}
 	memset(cinfo, 0, sizeof(avmctrl_info));
@@ -365,6 +370,7 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 
@@ -379,6 +385,7 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -391,6 +398,7 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 	b1dma_reset(card);
@@ -407,6 +415,7 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 
@@ -419,6 +428,7 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
+	        MOD_DEC_USE_COUNT;
 		return -EBUSY;
 	}
 	card->cardnr = cinfo->capi_ctrl->cnr;
@@ -429,8 +439,6 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 		"%s: AVM B1 PCI V4 at i/o %#x, irq %d, mem %#lx, revision %d (dma)\n",
 		driver->name, card->port, card->irq,
 		card->membase, card->revision);
-
-	MOD_INC_USE_COUNT;
 
 	return 0;
 }
