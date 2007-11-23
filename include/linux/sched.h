@@ -181,7 +181,11 @@ struct mm_struct {
 	atomic_t count;
 	int map_count;				/* number of VMAs */
 	struct semaphore mmap_sem;
+#ifdef __alpha__
+	unsigned long context[NR_CPUS];
+#else
 	unsigned long context;
+#endif
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack;
 	unsigned long arg_start, arg_end, env_start, env_end;
@@ -197,12 +201,18 @@ struct mm_struct {
 	void * segments;
 };
 
+#ifdef __alpha__
+#define CONTEXT_INIT	{ 0, }
+#else
+#define CONTEXT_INIT	0
+#endif
+
 #define INIT_MM {					\
 		&init_mmap, NULL, NULL,			\
 		swapper_pg_dir, 			\
 		ATOMIC_INIT(1), 1,			\
 		MUTEX,					\
-		0,					\
+		CONTEXT_INIT,				\
 		0, 0, 0, 0,				\
 		0, 0, 0, 				\
 		0, 0, 0, 0,				\

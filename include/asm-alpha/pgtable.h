@@ -73,7 +73,13 @@ ev5_flush_tlb_current(struct mm_struct *mm)
 __EXTERN_INLINE void
 ev5_flush_tlb_other(struct mm_struct *mm)
 {
-	mm->context = 0;
+	long * mmc = &mm->context[smp_processor_id()];
+	/*
+	 * Check it's not zero first to avoid cacheline ping pong when
+	 * possible.
+	 */
+	if (*mmc)
+		*mmc = 0;
 }
 
 /*

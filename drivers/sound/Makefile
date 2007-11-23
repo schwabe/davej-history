@@ -98,7 +98,10 @@ obj-$(CONFIG_SOUND_MAESTRO3)	+= maestro3.o
 obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
 obj-$(CONFIG_SOUND_TRIDENT)     += trident.o ac97_codec.o
 obj-$(CONFIG_SOUND_VIA82CXXX)	+= via82cxxx_audio.o ac97_codec.o
-obj-$(CONFIG_SOUND_YMFPCI)	+= ymfpci.o ac97_codec.o uart401.o
+obj-$(CONFIG_SOUND_YMFPCI)	+= ymfpci.o ac97_codec.o
+ifeq ($(CONFIG_SOUND_YMFPCI_LEGACY),y)
+  obj-$(CONFIG_SOUND_YMFPCI)	+= opl3.o uart401.o
+endif
 
 ifeq ($(CONFIG_SOUND_EMU10K1),y)
   obj-y				+= emu10k1/emu10k1.o

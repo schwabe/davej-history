@@ -95,8 +95,7 @@ static inline void __init
 smp_store_cpu_info(int cpuid)
 {
 	cpu_data[cpuid].loops_per_jiffy = loops_per_jiffy;
-	cpu_data[cpuid].last_asn
-	  = (cpuid << WIDTH_HARDWARE_ASN) + ASN_FIRST_VERSION;
+	cpu_data[cpuid].last_asn = ASN_FIRST_VERSION;
 
         cpu_data[cpuid].irq_count = 0;
         cpu_data[cpuid].bh_count = 0;
@@ -739,7 +738,14 @@ handle_ipi(struct pt_regs *regs)
 
 			/* At this point the structure may be gone unless
 			   wait is true.  */
-			(*func)(info);
+			{
+			static void ipi_show_regs(void *);
+
+			if (func != ipi_show_regs)
+				(*func)(info);
+			else
+				(*func)((void *) regs);
+			}
 
 			/* Notify the sending CPU that the task is done.  */
 			mb();
@@ -856,6 +862,21 @@ smp_imb(void)
 }
 
 static void
+ipi_show_regs(void * param)
+{
+	struct pt_regs *regs = (struct pt_regs *) param;
+
+	__show_regs(regs);
+}
+
+void
+smp_show_regs(void)
+{
+	if (smp_call_function(ipi_show_regs, NULL, 1, 1))
+		printk(KERN_CRIT "smp_show_regs: timed out\n");
+}
+
+static void
 ipi_flush_tlb_all(void *ignored)
 {
 	tbia();
@@ -879,6 +900,8 @@ ipi_flush_tlb_mm(void *x)
 	struct mm_struct *mm = (struct mm_struct *) x;
 	if (mm == current->mm)
 		flush_tlb_current(mm);
+	else
+		flush_tlb_other(mm);
 }
 
 void
@@ -886,10 +909,17 @@ flush_tlb_mm(struct mm_struct *mm)
 {
 	if (mm == current->mm) {
 		flush_tlb_current(mm);
-		if (atomic_read(&mm->count) == 1)
+		if (atomic_read(&mm->count) == 1) {
+			int i, cpu, this_cpu = smp_processor_id();
+			for (i = 0; i < smp_num_cpus; i++) {
+				cpu = cpu_logical_map(i);
+				if (cpu == this_cpu)
+					continue;
+				mm->context[cpu] = 0;
+			}
 			return;
-	} else
-		flush_tlb_other(mm);
+		}
+	}
 
 	if (smp_call_function(ipi_flush_tlb_mm, mm, 1, 1)) {
 		printk(KERN_CRIT "flush_tlb_mm: timed out\n");
@@ -906,8 +936,12 @@ static void
 ipi_flush_tlb_page(void *x)
 {
 	struct flush_tlb_page_struct *data = (struct flush_tlb_page_struct *)x;
-	if (data->mm == current->mm)
-		flush_tlb_current_page(data->mm, data->vma, data->addr);
+	struct mm_struct * mm = data->mm;
+
+	if (mm == current->mm)
+		flush_tlb_current_page(mm, data->vma, data->addr);
+	else
+		flush_tlb_other(mm);
 }
 
 void
@@ -918,10 +952,17 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 
 	if (mm == current->mm) {
 		flush_tlb_current_page(mm, vma, addr);
-		if (atomic_read(&current->mm->count) == 1)
+		if (atomic_read(&current->mm->count) == 1) {
+			int i, cpu, this_cpu = smp_processor_id();
+			for (i = 0; i < smp_num_cpus; i++) {
+				cpu = cpu_logical_map(i);
+				if (cpu == this_cpu)
+					continue;
+				mm->context[cpu] = 0;
+			}
 			return;
-	} else
-		flush_tlb_other(mm);
+		}
+	}
        
 	data.vma = vma;
 	data.mm = mm;

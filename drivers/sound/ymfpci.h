@@ -131,13 +131,6 @@
 #define YDSXG_AC97READCMD		0x8000
 #define YDSXG_AC97WRITECMD		0x0000
 
-#define PCIR_VENDORID			0x00
-#define PCIR_DEVICEID			0x02
-#define PCIR_CMD			0x04
-#define PCIR_REVISIONID			0x08
-#define PCIR_BASEADDR			0x10
-#define PCIR_IRQ			0x3c
-
 #define PCIR_LEGCTRL			0x40
 #define PCIR_ELEGCTRL			0x42
 #define PCIR_DSXGCTRL			0x48
@@ -254,27 +247,27 @@ struct ymf_pcm {
 	ymfpci_pcm_type_t type;
 	struct ymf_state *state;
 	ymfpci_voice_t *voices[2];	/* playback only */
-	int running;			// +
+	int running;
 	int spdif;
 };
 
 struct ymf_unit {
 	unsigned int device_id;	/* PCI device ID */
-	unsigned int rev;	/* PCI revision */
+	unsigned char rev;	/* PCI revision */
 	unsigned long reg_area_phys;
 	unsigned long reg_area_virt;
 
-	void *work_ptr;				// +
+	void *work_ptr;
 
 	unsigned int bank_size_playback;
 	unsigned int bank_size_capture;
 	unsigned int bank_size_effect;
 	unsigned int work_size;
 
-	void *bank_base_playback;		// +
-	void *bank_base_capture;		// +
-	void *bank_base_effect;			// +
-	void *work_base;			// +
+	void *bank_base_playback;
+	void *bank_base_capture;
+	void *bank_base_effect;
+	void *work_base;
 
 	u32 *ctrl_playback;
 	ymfpci_playback_bank_t *bank_playback[YDSXG_PLAYBACK_VOICES][2];
@@ -291,20 +284,22 @@ struct ymf_unit {
 
 	struct pci_dev *pci;
 	int irq;
-	int inst;		/* Unit number (instance) */
 
+#ifdef CONFIG_SOUND_YMFPCI_LEGACY
         /* legacy hardware resources */
 	unsigned int iosynth, iomidi;
 	struct address_info opl3_data, mpu_data;
+#endif
 
 	spinlock_t reg_lock;
 	spinlock_t voice_lock;
 
 	/* soundcore stuff */
 	int dev_audio;
+	struct semaphore open_sem;
 
-	ymfpci_t *next;					// *
-	struct ymf_state *states[1];			// *
+	ymfpci_t *next;
+	struct ymf_state *states[1];
 	/* ypcm may be the same thing as state, but not for record, effects. */
 };
 
@@ -352,16 +347,12 @@ struct ymf_pcm_format {
 struct ymf_state {
 	struct ymf_unit *unit;			/* backpointer */
 
-	/* single open lock mechanism, only used for recording */
-	struct semaphore open_sem;
-	struct wait_queue *open_wait;
-
 	/* virtual channel number */
 	int virt;				// * unused a.t.m.
 
-	struct ymf_pcm ypcm;			// *
-	struct ymf_dmabuf dmabuf;		// *
-	struct ymf_pcm_format format;		// *
+	struct ymf_pcm ypcm;
+	struct ymf_dmabuf dmabuf;
+	struct ymf_pcm_format format;
 };
 
 #endif				/* __YMFPCI_H */

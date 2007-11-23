@@ -155,7 +155,7 @@ static void show_registers(struct pt_regs *regs)
 		printk("\nStack: ");
 		stack = (unsigned long *) esp;
 		for(i=0; i < kstack_depth_to_print; i++) {
-			if (((long) stack & 4095) == 0)
+			if (((long) stack & 8191) == 0)
 				break;
 			if (i && ((i % 8) == 0))
 				printk("\n       ");
@@ -170,7 +170,7 @@ static void show_registers(struct pt_regs *regs)
 			module_start = PAGE_OFFSET + (max_mapnr << PAGE_SHIFT);
 			module_start = ((module_start + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
 			module_end = module_start + MODULE_RANGE;
-			while (((long) stack & 4095) != 0) {
+			while (((long) stack & 8191) != 0) {
 				addr = *stack++;
 				/*
 				 * If the address is either in the text segment of the

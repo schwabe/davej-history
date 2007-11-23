@@ -312,7 +312,10 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
   fi
   
   dep_tristate 'NM256AV/NM256ZX audio support' CONFIG_SOUND_NM256 $CONFIG_SOUND_OSS
-  dep_tristate 'Yamaha PCI native mode support (EXPERIMENTAL)' CONFIG_SOUND_YMFPCI $CONFIG_SOUND_OSS
+  dep_tristate 'Yamaha PCI native mode support' CONFIG_SOUND_YMFPCI $CONFIG_SOUND_OSS
+  if [ "$CONFIG_SOUND_YMFPCI" != "n" ]; then
+    bool '  Yamaha PCI legacy ports support' CONFIG_SOUND_YMFPCI_LEGACY
+  fi
 
   # Additional low level drivers.
   

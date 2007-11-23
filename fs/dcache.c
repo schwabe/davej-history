@@ -253,10 +253,15 @@ int prune_dcache(int d_nr, int i_nr)
 
 		if (tmp == &dentry_unused)
 			break;
-		dentry_stat.nr_unused--;
 		list_del(tmp);
-		INIT_LIST_HEAD(tmp);
 		dentry = list_entry(tmp, struct dentry, d_lru);
+		if (dentry->d_flags & DCACHE_REFERENCED) {
+			dentry->d_flags &= ~DCACHE_REFERENCED;
+			list_add(&dentry->d_lru, &dentry_unused);
+			continue;
+		}
+		dentry_stat.nr_unused--;
+		INIT_LIST_HEAD(tmp);
 		if (!dentry->d_count) {
 			i_nr -= prune_one_dentry(dentry);
 			if (!i_nr)
@@ -598,6 +603,7 @@ struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 			if (memcmp(dentry->d_name.name, str, len))
 				continue;
 		}
+		dentry->d_flags |= DCACHE_REFERENCED;
 		return dget(dentry);
 	}
 	return NULL;

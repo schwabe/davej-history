@@ -112,12 +112,21 @@ struct el_common_EV6_mcheck {
 
 extern void halt(void) __attribute__((noreturn));
 
+#ifdef CONFIG_SMP
+#define ctx_cli()	__cli()
+#define ctx_sti()	__sti()
+#else
+#define ctx_cli()	do { } while(0)
+#define ctx_sti()	do { } while(0)
+#endif
+
 #define switch_to(prev,next,last)			\
 do {							\
 	unsigned long pcbb;				\
 	current = (next);				\
 	pcbb = virt_to_phys(&current->tss);		\
 	(last) = alpha_switch_to(pcbb, (prev));		\
+	ctx_sti();					\
 } while (0)
 
 extern struct task_struct* alpha_switch_to(unsigned long, struct task_struct*);

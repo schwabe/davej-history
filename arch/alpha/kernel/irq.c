@@ -385,6 +385,7 @@ atomic_t global_irq_count = ATOMIC_INIT(0);
 /* This protects BH software state (masks, things like that). */
 atomic_t global_bh_lock = ATOMIC_INIT(0);
 atomic_t global_bh_count = ATOMIC_INIT(0);
+spinlock_t alpha_bh_lock = SPIN_LOCK_UNLOCKED;
 
 static void *previous_irqholder = NULL;
 
@@ -650,6 +651,7 @@ wait_on_bh(void)
 void
 synchronize_bh(void)
 {
+	mb();
 	if (atomic_read(&global_bh_count) && !in_interrupt())
 			wait_on_bh();
 }

@@ -231,6 +231,7 @@ static inline void write_unlock(rwlock_t * lock)
 static inline void read_unlock(rwlock_t * lock)
 {
 	long regx;
+	mb();
 	__asm__ __volatile__(
 	"1:	ldl_l	%1,%0\n"
 	"	addl	%1,2,%1\n"

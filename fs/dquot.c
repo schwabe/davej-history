@@ -570,7 +570,7 @@ pressure:
 	 */
 	if (prune_dcache(0, 128))
 	{
-		free_inode_memory(10);
+		free_inode_memory();
 		goto repeat;
 	}
 

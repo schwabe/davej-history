@@ -435,7 +435,7 @@ static void try_to_free_inodes(int goal)
  * This is the externally visible routine for
  * inode memory management.
  */
-void free_inode_memory(int goal)
+void free_inode_memory(void)
 {
 	spin_lock(&inode_lock);
 	free_inodes();

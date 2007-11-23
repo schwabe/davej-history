@@ -65,12 +65,7 @@ extern unsigned long last_asn;
 #endif /* __SMP__ */
 
 #define WIDTH_HARDWARE_ASN	8
-#ifdef __SMP__
-#define WIDTH_THIS_PROCESSOR	5
-#else
-#define WIDTH_THIS_PROCESSOR	0
-#endif
-#define ASN_FIRST_VERSION (1UL << (WIDTH_THIS_PROCESSOR + WIDTH_HARDWARE_ASN))
+#define ASN_FIRST_VERSION (1UL << WIDTH_HARDWARE_ASN)
 #define HARDWARE_ASN_MASK ((1UL << WIDTH_HARDWARE_ASN) - 1)
 
 /*
@@ -100,6 +95,7 @@ __get_new_mmu_context(void)
 	/* If we've wrapped, flush the whole user TLB.  */
 	if ((asn & HARDWARE_ASN_MASK) >= MAX_ASN) {
 		tbiap();
+		imb();
 		next = (asn & ~HARDWARE_ASN_MASK) + ASN_FIRST_VERSION;
 	}
 	cpu_last_asn(smp_processor_id()) = next;
@@ -125,19 +121,21 @@ ev4_get_mmu_context(struct task_struct *p)
 __EXTERN_INLINE void
 ev5_get_mmu_context(struct task_struct *p)
 {
-	/* Check if our ASN is of an older version, or on a different CPU,
-	   and thus invalid.  */
-	/* ??? If we have two threads on different cpus, we'll continually
-	   fight over the context.  Find a way to record a per-mm, per-cpu
-	   value for the asn.  */
-
-	unsigned long asn = cpu_last_asn(smp_processor_id());
-	struct mm_struct *mm = p->mm;
-	unsigned long mmc = mm->context;
+	/* Check if our ASN is of an older version, and thus invalid. */
+	int cpu;
+	unsigned long asn;
+	struct mm_struct *mm;
+	unsigned long mmc;
 	
+	cpu = smp_processor_id();
+	mm = p->mm;
+	ctx_cli();
+	asn = cpu_last_asn(cpu);
+	mmc = mm->context[cpu];
+
 	if ((mmc ^ asn) & ~HARDWARE_ASN_MASK) {
 		mmc = __get_new_mmu_context();
-		mm->context = mmc;
+		mm->context[cpu] = mmc;
 	}
 
 	/* Always update the PCB ASN.  Another thread may have allocated
@@ -159,7 +157,10 @@ ev5_get_mmu_context(struct task_struct *p)
 extern inline void
 init_new_context(struct mm_struct *mm)
 {
-	mm->context = 0;
+	int i;
+
+	for (i = 0; i < smp_num_cpus; i++)
+		mm->context[cpu_logical_map(i)] = 0;
 }
 
 extern inline void

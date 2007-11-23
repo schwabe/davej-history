@@ -106,6 +106,10 @@ struct dentry_operations {
 					 * If this dentry points to a directory, then
 					 * s_nfsd_free_path semaphore will be down
 					 */
+#define	DCACHE_REFERENCED 0x0008	/* This dentry is been recently
+					 * referenced so try to keep it in
+					 * cache.
+					 */
 
 /*
  * d_drop() unhashes the entry from the parent
@@ -149,7 +153,7 @@ extern int d_invalidate(struct dentry *);
 /* dcache memory management */
 extern void shrink_dcache_memory(int, unsigned int);
 extern void check_dcache_memory(void);
-extern void free_inode_memory(int);	/* defined in fs/inode.c */
+extern void free_inode_memory(void);	/* defined in fs/inode.c */
 
 /* only used at mount-time */
 extern struct dentry * d_alloc_root(struct inode * root_inode, struct dentry * old_root);

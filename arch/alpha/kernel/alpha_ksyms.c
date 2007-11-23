@@ -169,6 +169,7 @@ EXPORT_SYMBOL(cpu_number_map);
 EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(global_bh_count);
 EXPORT_SYMBOL(synchronize_bh);
+EXPORT_SYMBOL(alpha_bh_lock);
 EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);

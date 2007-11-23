@@ -41,7 +41,7 @@ void
 get_new_mmu_context(struct task_struct *p, struct mm_struct *mm)
 {
 	unsigned long new = __get_new_mmu_context();
-	mm->context = new;
+	mm->context[smp_processor_id()] = new;
 	p->tss.asn = new & HARDWARE_ASN_MASK;
 }
 

@@ -269,7 +269,7 @@ dik_show_code(unsigned int *pc)
 	}
 }
 
-static void
+void
 dik_show_trace(unsigned long *sp)
 {
 	int i = 1;
