@@ -15,7 +15,7 @@
 */
 
 static char *version =
-"3c59x.c:v0.44 9/9/97 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
+"3c59x.c:v0.46C 10/14/97 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -24,7 +24,7 @@ static const rx_copybreak = 200;
 /* Allow setting MTU to a larger size, bypassing the normal ethernet setup. */
 static const mtu = 1500;
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
-static const max_interrupt_work = 12;
+static int max_interrupt_work = 20;
 
 /* Enable the automatic media selection code -- usually set. */
 #define AUTOMEDIA 1
@@ -113,6 +113,14 @@ static const max_interrupt_work = 12;
 
 #if (LINUX_VERSION_CODE < 0x20123)
 #define test_and_set_bit(val, addr) set_bit(val, addr)
+#else
+MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
+MODULE_DESCRIPTION("3Com 3c590/3c900 series Vortex/Boomerang driver");
+MODULE_PARM(debug, "i");
+MODULE_PARM(options, "1-" __MODULE_STRING(8) "i");
+MODULE_PARM(full_duplex, "1-" __MODULE_STRING(8) "i");
+MODULE_PARM(rx_copybreak, "i");
+MODULE_PARM(max_interrupt_work, "i");
 #endif
 
 /* "Knobs" for adjusting internal parameters. */
@@ -717,7 +725,7 @@ static int vortex_probe1(struct device *dev)
 	/* Read the station address from the EEPROM. */
 	EL3WINDOW(0);
 	for (i = 0; i < 0x18; i++) {
-		short *phys_addr = (short *)dev->dev_addr;
+		u16 *phys_addr = (u16 *)dev->dev_addr;
 		int timer;
 		outw(EEPROM_Read + i, ioaddr + Wn0EepromCmd);
 		/* Pause for at least 162 us. for the read to take place. */
@@ -1076,7 +1084,7 @@ vortex_open(struct device *dev)
 	outw(RxEnable, ioaddr + EL3_CMD); /* Enable the receiver. */
 	outw(TxEnable, ioaddr + EL3_CMD); /* Enable transmitter. */
 	/* Allow status bits to be seen. */
-	outw(SetStatusEnb | AdapterFailure|IntReq|StatsFull |
+	outw(SetStatusEnb | AdapterFailure|IntReq|StatsFull|TxComplete|
 		 (vp->full_bus_master_tx ? DownComplete : TxAvailable) |
 		 (vp->full_bus_master_rx ? UpComplete : RxComplete) |
 		 (vp->bus_master ? DMADone : 0),
@@ -1085,7 +1093,7 @@ vortex_open(struct device *dev)
 	outw(AckIntr | IntLatch | TxAvailable | RxEarly | IntReq,
 		 ioaddr + EL3_CMD);
 	outw(SetIntrEnb | IntLatch | TxAvailable | RxComplete | StatsFull
-		 | AdapterFailure
+		 | AdapterFailure | TxComplete
 		 | (vp->bus_master ? DMADone : 0) | UpComplete | DownComplete,
 			ioaddr + EL3_CMD);
 
@@ -1389,7 +1397,8 @@ boomerang_start_xmit(struct sk_buff *skb, struct device *dev)
 		int entry = vp->cur_tx % TX_RING_SIZE;
 		struct boom_tx_desc *prev_entry =
 			&vp->tx_ring[(vp->cur_tx-1) % TX_RING_SIZE];
-		unsigned long flags, i;
+		unsigned long flags;
+		int i;
 
 		if (vortex_debug > 3)
 			printk("%s: Trying to send a packet, Tx index %d.\n",
@@ -1492,10 +1501,15 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 			mark_bh(NET_BH);
 		}
 		if (status & TxComplete) { /* Really "TxError" for us. */
+			unsigned char tx_status = inb(ioaddr + TxStatus);
 			/* Presumably a tx-timeout. We must merely re-enable. */
-			if (vortex_debug > 0)
-				printk("%s: Host error, Tx status register %2.2x.\n",
-					   dev->name, inb(TxStatus));
+			if (vortex_debug > 2
+				|| (tx_status != 0x88 && vortex_debug > 0))
+				printk("%s: Transmit error, Tx status register %2.2x.\n",
+					   dev->name, tx_status);
+			if (tx_status & 0x04) lp->stats.tx_fifo_errors++;
+			if (tx_status & 0x38) lp->stats.tx_aborted_errors++;
+			outb(0, ioaddr + TxStatus);
 			outw(TxEnable, ioaddr + EL3_CMD);
 		}
 		if (status & DownComplete) {
@@ -1559,7 +1573,8 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 					}
 					EL3WINDOW(7);
 					outw(SetIntrEnb | TxAvailable | RxComplete | AdapterFailure
-						 | UpComplete | DownComplete, ioaddr + EL3_CMD);
+						 | UpComplete | DownComplete | TxComplete,
+						 ioaddr + EL3_CMD);
 					DoneDidThat++;
 				}
 			}
@@ -1590,7 +1605,7 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 		}
 
 		if (--i < 0) {
-			printk("%s: Infinite loop in interrupt, status %4.4x.  "
+			printk("%s: Too much work in interrupt, status %4.4x.  "
 				   "Disabling functions (%4.4x).\n",
 				   dev->name, status, SetStatusEnb | ((~status) & 0x7FE));
 			/* Disable all pending interrupts. */
@@ -1925,7 +1940,7 @@ static int vortex_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 static void
 set_rx_mode(struct device *dev)
 {
-	short ioaddr = dev->base_addr;
+	int ioaddr = dev->base_addr;
 	short new_mode;
 
 	if (dev->flags & IFF_PROMISC) {

@@ -260,7 +260,7 @@ setup_idt:
 	movw %dx,%ax		/* selector = 0x0010 = cs */
 	movw $0x8E00,%dx	/* interrupt gate - dpl=0, present */
 
-	lea SYMBOL_NAME(idt),%edi
+	lea SYMBOL_NAME(__idt),%edi
 	mov $256,%ecx
 rp_sidt:
 	movl %eax,(%edi)
@@ -376,9 +376,9 @@ ignore_int:
 .word 0
 idt_descr:
 	.word 256*8-1		# idt contains 256 entries
-	.long 0xc0000000+SYMBOL_NAME(idt)
+	.long 0xc0000000+SYMBOL_NAME(__idt)
 
-ENTRY(idt)
+ENTRY(__idt)
 	.fill 256,8,0		# idt is uninitialized
 
 	ALIGN

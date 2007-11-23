@@ -537,7 +537,13 @@ void smp_callin(void)
 	extern void calibrate_delay(void);
 	int cpuid=GET_APIC_ID(apic_read(APIC_ID));
 	unsigned long l;
+	extern struct desc_struct idt_descriptor;
+	extern int pentium_f00f_bug;
 	
+	if (pentium_f00f_bug) {
+		__asm__ __volatile__("\tlidt %0": "=m" (idt_descriptor));
+	}
+
 	/*
 	 *	Activate our APIC
 	 */

@@ -24,6 +24,7 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 
 asmlinkage int system_call(void);
 asmlinkage void lcall7(void);
@@ -335,6 +336,49 @@ asmlinkage void math_emulate(long arg)
 }
 
 #endif /* CONFIG_MATH_EMULATION */
+
+struct desc_struct *idt = __idt+0;
+struct {
+	unsigned short limit;
+	unsigned long addr __attribute__((packed));
+} idt_descriptor;
+
+void trap_init_f00f_bug(void)
+{
+	pgd_t * pgd;
+	pmd_t * pmd;
+	pte_t * pte;
+	unsigned long twopage;
+	struct desc_struct *new_idt;
+
+	printk("moving IDT ... ");
+
+	twopage = (unsigned long) vmalloc (2*PAGE_SIZE);
+
+	new_idt = (void *)(twopage + 4096-7*8);
+
+	memcpy(new_idt,idt,256*8);
+
+	idt_descriptor.limit = 256*8-1;
+	idt_descriptor.addr = VMALLOC_VMADDR(new_idt);
+
+	 __asm__ __volatile__("\tlidt %0": "=m" (idt_descriptor));
+	 idt = new_idt;
+
+	/*
+	 * Unmap lower page:
+	 */
+	twopage = VMALLOC_VMADDR(twopage);
+	pgd = pgd_offset(current->mm, twopage);
+	pmd = pmd_offset(pgd, twopage);
+	pte = pte_offset(pmd, twopage);
+
+	pte_clear(pte);
+	flush_tlb_all();
+
+	printk(" ... done\n");
+}
+
 
 void trap_init(void)
 {

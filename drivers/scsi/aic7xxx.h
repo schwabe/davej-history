@@ -40,7 +40,7 @@
 	aic7xxx_info,						\
 	NULL,							\
 	aic7xxx_queue,						\
-	NULL,							\
+	aic7xxx_abort,						\
 	aic7xxx_reset,						\
 	NULL,							\
 	aic7xxx_biosparam,					\
@@ -57,6 +57,7 @@ extern int aic7xxx_queue(Scsi_Cmnd *, void (*)(Scsi_Cmnd *));
 extern int aic7xxx_biosparam(Disk *, kdev_t, int[]);
 extern int aic7xxx_detect(Scsi_Host_Template *);
 extern int aic7xxx_command(Scsi_Cmnd *);
+extern int aic7xxx_abort(Scsi_Cmnd *);
 extern int aic7xxx_reset(Scsi_Cmnd *, unsigned int);
 
 extern const char *aic7xxx_info(struct Scsi_Host *);

@@ -147,6 +147,8 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
 #define ALL_TARGETS -1
 #define ALL_CHANNELS '\0'
 #define ALL_LUNS -1
+#define MAX_TARGETS  16
+#define MAX_LUNS     8
 #ifndef TRUE
 #  define TRUE 1
 #endif
@@ -301,7 +303,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
 #ifdef AIC7XXX_TAGGED_QUEUEING_BY_DEVICE
 typedef struct
 {
-  char tag_commands[16];   /* Allow for wide/twin channel adapters. */
+  unsigned char tag_commands[16];   /* Allow for wide/twin channel adapters. */
 } adapter_tag_info_t;
 
 /*
@@ -871,7 +873,7 @@ struct aic7xxx_host {
     long r_total;                            /* total reads */
     long r_total512;                         /* 512 byte blocks read */
     long r_bins[10];                         /* binned reads */
-  } stats[16][8];                            /* channel, target, lun */
+  } stats[MAX_TARGETS][MAX_LUNS];            /* [(channel << 3)|target][lun] */
 #endif /* AIC7XXX_PROC_STATS */
 };
 
@@ -968,12 +970,7 @@ static int aic7xxx_verbose = 0;	             /* verbose messages */
  * These functions are not used yet, but when we do memory mapped
  * IO, we'll use them then.
  *
- * For now we leave these commented out as the x86 inline assembly causes
- * compiles to barf on DEC Alphas.  Besides, they aren't even used yet, so
- * they constitute wasted .text space right now.
  ***************************************************************************/
-
-/***************************************************************************
 
 static inline unsigned char
 aic_inb(struct aic7xxx_host *p, long port)
@@ -998,22 +995,30 @@ aic_outsb(struct aic7xxx_host *p, long port, unsigned char *valp, size_t size)
 {
   if (p->maddr != NULL)
   {
+#ifdef __alpha__
+    int i;
+
+    for (i=0; i < size; i++)
+    {
+      p->maddr[port] = valp[i];
+    }
+#else
     __asm __volatile("
       cld;
     1:  lodsb;
       movb %%al,(%0);
       loop 1b"      :
               :
-      "r" ((p)->maddr + (port)),
-      "S" ((valp)), "c" ((size))  :
+      "r" (p->maddr + port),
+      "S" (valp), "c" (size)  :
       "%esi", "%ecx", "%eax");
+#endif
   }
   else
   {
     outsb(p->base + port, valp, size);
   }
 }
- ***************************************************************************/
 
 /*+F*************************************************************************
  * Function:
@@ -1443,10 +1448,10 @@ aic7xxx_scsirate(struct aic7xxx_host *p, unsigned char *scsirate,
   unsigned char ultra_enb, sxfrctl0;
 
   /*
-   * If the offset is 0, then the device is requesting asynchronous
+   * If the period is 0, then the device is requesting asynchronous
    * transfers.
    */
-  if ((*period >= aic7xxx_syncrates[i].period) && *offset != 0)
+  if (*period != 0)
   {
     for (i = 0; i < num_aic7xxx_syncrates; i++)
     {
@@ -1977,15 +1982,38 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
   if ((scb->flags & (SCB_MSGOUT_WDTR | SCB_MSGOUT_SDTR)) != 0)
   {
     unsigned short mask;
+    int message_error = FALSE;
 
     mask = 0x01 << TARGET_INDEX(scb->cmd);
+
+    /*
+     * Check to see if we get an invalid message or a message error
+     * after failing to negotiate a wide or sync transfer message.
+     */
+    if ((scb->flags & SCB_SENSE) && 
+          ((scb->cmd->sense_buffer[12] == 0x43) ||  /* INVALID_MESSAGE */
+          (scb->cmd->sense_buffer[12] == 0x49))) /* MESSAGE_ERROR  */
+    {
+      message_error = TRUE;
+    }
+
     if (scb->flags & SCB_MSGOUT_WDTR)
     {
       p->wdtr_pending &= ~mask;
+      if (message_error)
+      {
+        p->needwdtr &= ~mask;
+        p->needwdtr_copy &= ~mask;
+      }
     }
     if (scb->flags & SCB_MSGOUT_SDTR)
     {
       p->sdtr_pending &= ~mask;
+      if (message_error)
+      {
+        p->needsdtr &= ~mask;
+        p->needsdtr_copy &= ~mask;
+      }
     }
   }
   aic7xxx_free_scb(p, scb);
@@ -2009,7 +2037,7 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
       long *ptr;
       int x;
 
-      sp = &p->stats[((cmd->channel << 3) | cmd->target) & 0xf][cmd->lun & 0x7];
+      sp = &p->stats[TARGET_INDEX(cmd)][cmd->lun & 0x7];
       sp->xfers++;
 
       if (cmd->request.cmd == WRITE)
@@ -3097,6 +3125,8 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
             }
             else
             {
+              int send_reject = FALSE;
+
               /*
                * Send our own WDTR in reply.
                */
@@ -3119,14 +3149,25 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
         	  {
                     bus_width = BUS_8_BIT;
                     scratch &= 0x7F;  /* XXX - FreeBSD doesn't do this. */
+                    send_reject = TRUE;
         	  }
         	  break;
 
         	default:
         	  break;
               }
-              aic7xxx_construct_wdtr(p, /* start byte */ 0, bus_width);
-              outb(SEND_MSG, p->base + RETURN_1);
+              if (send_reject)
+              {
+                outb(SEND_REJ, p->base + RETURN_1);
+                printk(KERN_WARNING "scsi%d: Target %d, channel %c, initiating "
+                       "wide negotiation on a narrow bus - rejecting!\n",
+                       p->host_no, target, channel);
+              }
+              else
+              {
+                aic7xxx_construct_wdtr(p, /* start byte */ 0, bus_width);
+                outb(SEND_MSG, p->base + RETURN_1);
+              }
             }
             p->needwdtr &= ~target_mask;
             outb(scratch, p->base + TARG_SCRATCH + scratch_offset);
@@ -5314,6 +5355,12 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p)
     */
   outb(p->qcntmask, p->base + QCNTMASK);
 
+  /*
+   * Set FIFO depth and command out count.  These are only used when
+   * paging is enabled and should not be touched for AIC-7770 based
+   * adapters; FIFODEPTH and CMDOUTCNT overlay SCSICONF and SCSICONF+1
+   * which are used to control termination.
+   */
   if (p->flags & PAGE_ENABLED)
   {
     outb(p->qfullcount, p->base + FIFODEPTH);
@@ -5549,7 +5596,6 @@ load_seeprom (struct aic7xxx_host *p, unsigned char *sxfrctl1)
   {
     case AIC_7770:  /* None of these adapters have seeproms. */
     case AIC_7771:
-    case AIC_7850:
     case AIC_7855:
       break;
 
@@ -5557,6 +5603,7 @@ load_seeprom (struct aic7xxx_host *p, unsigned char *sxfrctl1)
       have_seeprom = read_284x_seeprom(p, (struct seeprom_config *) scarray);
       break;
 
+    case AIC_7850:  /* The 2910B is a 7850 with a seeprom. */
     case AIC_7861:
     case AIC_7870:
     case AIC_7871:
@@ -5666,7 +5713,11 @@ load_seeprom (struct aic7xxx_host *p, unsigned char *sxfrctl1)
     scsi_conf = (p->scsi_id & 0x7);
     if (sc->adapter_control & CFSPARITY)
       scsi_conf |= ENSPCHK;
-    if (sc->adapter_control & CFRESETB)
+    /*
+     * The 7850 controllers with a seeprom, do not honor the CFRESETB
+     * flag in the seeprom.  Assume that we want to reset the SCSI bus.
+     */
+    if ((sc->adapter_control & CFRESETB) || (p->chip_class == AIC_7850))
       scsi_conf |= RESET_SCSI;
 
     if ((p->chip_class == AIC_786x) || (p->chip_class == AIC_788x))
@@ -5799,6 +5850,14 @@ aic7xxx_detect(Scsi_Host_Template *template)
         hcntrl = inb(base + HCNTRL) & IRQMS;  /* Default */
       outb(hcntrl | PAUSE, base + HCNTRL);
 
+      p = aic7xxx_alloc(template, base, 0, chip_type, 0, NULL);
+      if (p == NULL)
+      {
+        printk(KERN_WARNING "aic7xxx: Unable to allocate device space.\n");
+        continue;
+      }
+      aic7xxx_chip_reset(p);
+
       irq = inb(INTDEF + base) & 0x0F;
       switch (irq)
       {
@@ -5812,19 +5871,14 @@ aic7xxx_detect(Scsi_Host_Template *template)
 
         default:
           printk(KERN_WARNING "aic7xxx: Host adapter uses unsupported IRQ "
-          "level, ignoring.\n");
+          "level %d, ignoring.\n", irq);
           irq = 0;
+          aic7xxx_free(p);
           break;
       }
 
       if (irq != 0)
       {
-        p = aic7xxx_alloc(template, base, 0, chip_type, 0, NULL);
-        if (p == NULL)
-        {
-          printk(KERN_WARNING "aic7xxx: Unable to allocate device space.\n");
-          continue;
-        }
         p->irq = irq & 0x0F;
         p->chip_class = AIC_777x;
 #ifdef AIC7XXX_PAGE_ENABLE
@@ -5835,7 +5889,6 @@ aic7xxx_detect(Scsi_Host_Template *template)
         {
           p->flags |= EXTENDED_TRANSLATION;
         }
-        aic7xxx_chip_reset(p);
 
         switch (p->chip_type)
         {
@@ -5997,7 +6050,6 @@ aic7xxx_detect(Scsi_Host_Template *template)
           flags = 0;
           switch (aic7xxx_pci_devices[i].chip_type)
           {
-            case AIC_7850:
             case AIC_7855:
               flags |= USE_DEFAULTS;
               break;
@@ -6790,17 +6842,43 @@ aic7xxx_bus_device_reset(struct aic7xxx_host *p, Scsi_Cmnd *cmd)
 int
 aic7xxx_abort(Scsi_Cmnd *cmd)
 {
+#if 0
   struct aic7xxx_scb  *scb = NULL;
+#endif
   struct aic7xxx_host *p;
+#if 0
   int    base, result;
   unsigned long processor_flags;
+#endif
 
   p = (struct aic7xxx_host *) cmd->host->hostdata;
+#if 0
   scb = (p->scb_data->scb_array[aic7xxx_position(cmd)]);
   base = p->base;
 
   save_flags(processor_flags);
   cli();
+#endif
+
+#if 1
+  switch (aic7xxx_reset(cmd, 0) & 0x0f)
+  {
+    case SCSI_RESET_SNOOZE:
+      return(SCSI_ABORT_SNOOZE);
+    case SCSI_RESET_PENDING:
+      return(SCSI_ABORT_PENDING);
+    case SCSI_RESET_SUCCESS:
+      return(SCSI_ABORT_SUCCESS);
+    case SCSI_RESET_NOT_RUNNING:
+      return(SCSI_ABORT_NOT_RUNNING);
+    case SCSI_RESET_ERROR:
+      return(SCSI_ABORT_ERROR);
+    default:
+      printk(KERN_WARNING "scsi%d Unknown abort/reset return state.\n",
+        p->host_no);
+      return(SCSI_ABORT_ERROR);
+  }  /*  NOT REACHED */
+#else
 
 #ifdef AIC7XXX_DEBUG_ABORT
   if (scb != NULL)
@@ -6872,6 +6950,7 @@ aic7xxx_abort(Scsi_Cmnd *cmd)
   }
   restore_flags(processor_flags);
   return (result);
+#endif
 }
 
 
@@ -6899,7 +6978,7 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
   scb = (p->scb_data->scb_array[aic7xxx_position(cmd)]);
   base = p->base;
   channel = cmd->channel ? 'B': 'A';
-  tindex = (cmd->channel << 3) | cmd->target;
+  tindex = TARGET_INDEX(cmd);
 
 #ifdef 0   /* AIC7XXX_DEBUG_ABORT */
   if (scb != NULL)

@@ -1091,13 +1091,14 @@ scratch_ram {
 	 * the QOUTFIFO.  This is cleared by the
 	 * kernel driver every FIFODEPTH commands.
 	 *
-	 * NOTE: these scratch RAM registers are *only* used on cards
-	 * that enable SCB paging.  The 2742 is unable to page.  We
-	 * won't use these on a 2742, and we can't init these registers
-	 * in the kernel driver for 2742 cards because these locations are
-	 * are used by the 2742 cards to control things like bus
-	 * termination.  Touching these memory locations is a no-no on all
-	 * non-paging cards as far as we are concerned.
+	 * NOTE: These scratch RAM registers are overlaying SCSICONF
+	 *       and SCSICONF2 and are only used on cards that are
+	 *       capable of SCB paging.   Currently, only the PCI
+	 *       controllers can do this, which is good because the
+	 *       AIC-7770 based controllers use the SCSICONF register
+	 *       to control termination.  In other words, do not
+	 *       destroy the contents of SCSICONF and SCSICONF2 for
+	 *       AIC-7770 based controllers.
 	 */
 	CMDOUTCNT {
 		size		1

@@ -175,6 +175,8 @@ static struct notifier_block rarp_dev_notifier={
 	NULL,
 	0
 };
+
+static int rarp_pkt_inited=0;
  
 static void rarp_init_pkt (void)
 {
@@ -182,7 +184,18 @@ static void rarp_init_pkt (void)
 	rarp_packet_type.type=htons(ETH_P_RARP);
 	dev_add_pack(&rarp_packet_type);
 	register_netdevice_notifier(&rarp_dev_notifier);
+        rarp_pkt_inited=1;
 }
+
+static void rarp_end_pkt(void)
+{
+        if(!rarp_pkt_inited)
+                return;
+        dev_remove_pack(&rarp_packet_type);
+        unregister_netdevice_notifier(&rarp_dev_notifier);
+        rarp_pkt_inited=0;
+}
+
 
 /*
  *	Receive an arp request by the device layer.  Maybe it should be 
@@ -574,12 +587,14 @@ int rarp_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 void
 rarp_init(void)
 {
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_RARP, 4, "rarp",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		rarp_get_info
 	});
+#endif
 	rarp_ioctl_hook = rarp_ioctl;
 }
 
@@ -594,7 +609,9 @@ int init_module(void)
 void cleanup_module(void)
 {
 	struct rarp_table *rt, *rt_next;
+#ifdef CONFIG_PROC_FS
 	proc_net_unregister(PROC_NET_RARP);
+#endif
 	rarp_ioctl_hook = NULL;
 	cli();
 	/* Destroy the RARP-table */
@@ -606,5 +623,6 @@ void cleanup_module(void)
 		rt_next = rt->next;
 		rarp_release_entry(rt);
 	}
+	rarp_end_pkt();
 }
 #endif

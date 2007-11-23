@@ -21,6 +21,16 @@
 
 extern void die_if_kernel(const char *,struct pt_regs *,long);
 
+asmlinkage void do_divide_error (struct pt_regs *, unsigned long);
+asmlinkage void do_debug (struct pt_regs *, unsigned long);
+asmlinkage void do_nmi (struct pt_regs *, unsigned long);
+asmlinkage void do_int3 (struct pt_regs *, unsigned long);
+asmlinkage void do_overflow (struct pt_regs *, unsigned long);
+asmlinkage void do_bounds (struct pt_regs *, unsigned long);
+asmlinkage void do_invalid_op (struct pt_regs *, unsigned long);
+
+extern int pentium_f00f_bug;
+
 /*
  * This routine handles page faults.  It determines the address,
  * and the problem, and then passes it off to one of the appropriate
@@ -117,6 +127,30 @@ bad_area:
 		force_sig(SIGSEGV, tsk);
 		return;
 	}
+
+	/*
+	 * Pentium F0 0F C7 C8 bug workaround:
+	 */
+	if ( pentium_f00f_bug ) {
+		unsigned long nr;
+
+		nr = (address - TASK_SIZE - (unsigned long) idt) >> 3;
+
+		if (nr < 7) {
+			static void (*handler[])(struct pt_regs *, unsigned long) = {
+				do_divide_error,	/* 0 - divide overflow */
+				do_debug,		/* 1 - debug trap */
+				do_nmi,			/* 2 - NMI */
+				do_int3,		/* 3 - int 3 */
+				do_overflow,		/* 4 - overflow */
+				do_bounds,		/* 5 - bound range */
+				do_invalid_op };	/* 6 - invalid opcode */
+			handler[nr](regs, error_code);
+			return;
+		}
+	}
+
+
 /*
  * Oops. The kernel tried to access some bad page. We'll have to
  * terminate things with extreme prejudice.

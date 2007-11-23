@@ -135,12 +135,12 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		tsk->nswap = tsk->cnswap = 0;
 		if (new_page_tables(tsk)) {
 			tsk->mm = NULL;
-			mm->pgd = NULL;
 			exit_mmap(mm);
 			goto free_mm;
 		}
 		if (dup_mmap(mm)) {
 			tsk->mm = NULL;
+			exit_mmap(mm);
 			free_page_tables(mm);
 free_mm:
 			kfree(mm);

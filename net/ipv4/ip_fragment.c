@@ -375,7 +375,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	fp = qp->fragments;
 	while(fp != NULL)
 	{
-		if(count+fp->len > skb->len)
+		if (fp->len < 0 || count+fp->len > skb->len)
 		{
 			NETDEBUG(printk("Invalid fragment list: Fragment over size.\n"));
 			ip_free(qp);
