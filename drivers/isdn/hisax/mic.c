@@ -1,4 +1,4 @@
-/* $Id: mic.c,v 1.9 2000/06/26 08:59:14 keil Exp $
+/* $Id: mic.c,v 1.10 2000/11/24 17:05:38 kai Exp $
  *
  * mic.c  low level stuff for mic cards
  *
@@ -18,7 +18,7 @@
 
 extern const char *CardType[];
 
-const char *mic_revision = "$Revision: 1.9 $";
+const char *mic_revision = "$Revision: 1.10 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

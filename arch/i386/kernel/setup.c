@@ -376,8 +376,7 @@ static void __init setup_memory_region(void)
 
                e820.nr_map = 0;
                add_memory_region(0, i386_endbase, E820_RAM);
-               add_memory_region(HIGH_MEMORY, (mem_size << 10)-HIGH_MEMORY,
-				 E820_RAM);
+               add_memory_region(HIGH_MEMORY, (mem_size << 10), E820_RAM);
        }
        printk("BIOS-provided physical RAM map:\n");
        print_memory_map(who);

@@ -1,4 +1,4 @@
-/* $Id: diva.c,v 1.21 2000/06/26 08:59:12 keil Exp $
+/* $Id: diva.c,v 1.25.6.2 2000/11/29 16:00:14 kai Exp $
  *
  * diva.c     low level stuff for Eicon.Diehl Diva Family ISDN cards
  *
@@ -23,7 +23,7 @@
 
 extern const char *CardType[];
 
-const char *Diva_revision = "$Revision: 1.21 $";
+const char *Diva_revision = "$Revision: 1.25.6.2 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -45,20 +45,6 @@ const char *Diva_revision = "$Revision: 1.21 $";
 #define DIVA_PCI	2
 #define DIVA_IPAC_ISA	3
 #define DIVA_IPAC_PCI	4
-
-/* PCI stuff */
-#ifndef PCI_VENDOR_ID_EICON
-#define PCI_VENDOR_ID_EICON	0x1133
-#endif
-#ifndef PCI_DEVICE_ID_EICON_DIVA20
-#define PCI_DEVICE_ID_EICON_DIVA20	0xe002
-#endif
-#ifndef PCI_DEVICE_ID_EICON_DIVA20_U
-#define PCI_DEVICE_ID_EICON_DIVA20_U	0xe004
-#endif
-#ifndef PCI_DEVICE_ID_EICON_DIVA201
-#define PCI_DEVICE_ID_EICON_DIVA201	0xe005
-#endif
 
 /* CTRL (Read) */
 #define DIVA_IRQ_STAT	0x01

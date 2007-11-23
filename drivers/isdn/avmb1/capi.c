@@ -1,11 +1,57 @@
 /*
- * $Id: capi.c,v 1.35 2000/06/19 15:11:24 keil Exp $
+ * $Id: capi.c,v 1.44.6.3 2000/12/17 22:45:08 kai Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.44.6.3  2000/12/17 22:45:08  kai
+ * That's hopefully it for test13-4
+ *
+ * Revision 1.44.6.2  2000/12/14 23:04:12  kai
+ * Makefile changes and the like for 2.4.0-test13-pre1
+ * No compatiblity code for older kernels yet, but note the branch
+ *
+ * Revision 1.45  2000/12/02 19:47:29  kai
+ * Change the Makefiles to new style.
+ * There may be problems there that I missed, so this shouldn't go into
+ * an offical kernel any time soon.
+ * However, if I didn't commit it, we wouldn't find the bugs...
+ *
+ * Revision 1.44  2000/11/25 17:00:59  kai
+ * compatibility cleanup - final part for the time being
+ *
+ * Revision 1.43  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.42  2000/11/19 17:03:55  kai
+ * compatibility cleanup - part 5
+ *
+ * Revision 1.41  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.40  2000/10/24 15:15:04  calle
+ * Workaround: pppd calls restoretty before reseting the ldisc and
+ *   ldisc "ppp_sync" didn't support this. So we call n_tty_ioctl
+ *   in the driver ioctl function. (remember: driver ioctl function is
+ *   only called if ldisc ioctl function did not handle the call)
+ *
+ * Revision 1.39  2000/07/24 13:42:50  calle
+ * - lock_kernel/unlock_kernel for _release functions. (from 2.4)
+ *
+ * Revision 1.38  2000/07/24 08:49:09  calle
+ * - Bugfix: capiminor_del_all_ack completely wrong :-(
+ *
+ * Revision 1.37  2000/07/20 10:22:27  calle
+ * - Made procfs function cleaner and removed variable "begin".
+ *
+ * Revision 1.36  2000/06/29 13:59:35  calle
+ * - call to devfs_register was wrong
+ *
  * Revision 1.35  2000/06/19 15:11:24  keil
  * avoid use of freed structs
  * changes from 2.4.0-ac21
@@ -203,7 +249,7 @@
 #include "capifs.h"
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 
-static char *revision = "$Revision: 1.35 $";
+static char *revision = "$Revision: 1.44.6.3 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 

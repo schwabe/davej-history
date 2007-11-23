@@ -1,4 +1,4 @@
-/* $Id: teles3.c,v 2.16 2000/06/26 08:59:15 keil Exp $
+/* $Id: teles3.c,v 2.17 2000/11/24 17:05:38 kai Exp $
  *
  * teles3.c     low level stuff for Teles 16.3 & PNP isdn cards
  *
@@ -20,7 +20,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *teles3_revision = "$Revision: 2.16 $";
+const char *teles3_revision = "$Revision: 2.17 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

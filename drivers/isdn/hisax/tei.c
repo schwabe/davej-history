@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 2.15 2000/06/26 08:59:14 keil Exp $
+/* $Id: tei.c,v 2.17 2000/11/24 17:05:38 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -16,7 +16,7 @@
 #include "isdnl2.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 2.15 $";
+const char *tei_revision = "$Revision: 2.17 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -28,9 +28,7 @@ const char *tei_revision = "$Revision: 2.15 $";
 
 #define TEI_ENTITY_ID	0xf
 
-static
-struct Fsm teifsm =
-{NULL, 0, 0, NULL, NULL};
+static struct Fsm teifsm;
 
 void tei_handler(struct PStack *st, u_char pr, struct sk_buff *skb);
 

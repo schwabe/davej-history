@@ -94,7 +94,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.14 $";
+static char *revision = "$Revision: 1.20 $";
 
 /* ------------------------------------------------------------- */
 
@@ -510,7 +510,7 @@ void b1_handle_interrupt(avmcard * card)
 	struct sk_buff *skb;
 
 	unsigned ApplId;
-	signed MsgLen;
+	unsigned MsgLen;
 	unsigned DataB3Len;
 	unsigned NCCI;
 	unsigned WindowSize;
@@ -596,25 +596,29 @@ void b1_handle_interrupt(avmcard * card)
 		ctrl->ready(ctrl);
 		break;
 
-        case RECEIVE_TASK_READY:
+	case RECEIVE_TASK_READY:
 		ApplId = (unsigned) b1_get_word(card->port);
 		MsgLen = b1_get_slice(card->port, card->msgbuf);
-		card->msgbuf[MsgLen--] = 0;
-		while (    MsgLen >= 0
-		       && (   card->msgbuf[MsgLen] == '\n'
-			   || card->msgbuf[MsgLen] == '\r'))
-			card->msgbuf[MsgLen--] = 0;
+		card->msgbuf[MsgLen] = 0;
+		while (    MsgLen > 0
+		       && (   card->msgbuf[MsgLen-1] == '\n'
+			   || card->msgbuf[MsgLen-1] == '\r')) {
+			card->msgbuf[MsgLen-1] = 0;
+			MsgLen--;
+		}
 		printk(KERN_INFO "%s: task %d \"%s\" ready.\n",
 				card->name, ApplId, card->msgbuf);
 		break;
 
-        case RECEIVE_DEBUGMSG:
+	case RECEIVE_DEBUGMSG:
 		MsgLen = b1_get_slice(card->port, card->msgbuf);
-		card->msgbuf[MsgLen--] = 0;
-		while (    MsgLen >= 0
-		       && (   card->msgbuf[MsgLen] == '\n'
-			   || card->msgbuf[MsgLen] == '\r'))
-			card->msgbuf[MsgLen--] = 0;
+		card->msgbuf[MsgLen] = 0;
+		while (    MsgLen > 0
+		       && (   card->msgbuf[MsgLen-1] == '\n'
+			   || card->msgbuf[MsgLen-1] == '\r')) {
+			card->msgbuf[MsgLen-1] = 0;
+			MsgLen--;
+		}
 		printk(KERN_INFO "%s: DEBUG: %s\n", card->name, card->msgbuf);
 		break;
 

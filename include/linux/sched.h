@@ -259,7 +259,7 @@ struct task_struct {
 	int pdeath_signal;  /*  The signal sent when the parent dies  */
 	/* ??? */
 	unsigned long personality;
-	int dumpable:1;
+	int dumpable:2;
 	int did_exec:1;
 	pid_t pid;
 	pid_t pgrp;
@@ -319,7 +319,8 @@ struct task_struct {
 	struct files_struct *files;
 /* memory management info */
 	struct mm_struct *mm;
-	struct list_head local_pages; int allocation_order, nr_local_pages;
+	struct list_head local_pages;
+	int allocation_order, nr_local_pages;
 	int fs_locks;
 
 /* signal handlers */

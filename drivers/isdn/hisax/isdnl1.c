@@ -1,4 +1,4 @@
-/* $Id: isdnl1.c,v 2.39 2000/06/26 08:59:13 keil Exp $
+/* $Id: isdnl1.c,v 2.41.6.1 2000/12/10 22:01:04 kai Exp $
  *
  * isdnl1.c     common low level stuff for Siemens Chipsetbased isdn cards
  *              based on the teles driver from Jan den Ouden
@@ -15,7 +15,7 @@
  *
  */
 
-const char *l1_revision = "$Revision: 2.39 $";
+const char *l1_revision = "$Revision: 2.41.6.1 $";
 
 #define __NO_VERSION__
 #include "hisax.h"
@@ -23,13 +23,8 @@ const char *l1_revision = "$Revision: 2.39 $";
 
 #define TIMER3_VALUE 7000
 
-static
-struct Fsm l1fsm_b =
-{NULL, 0, 0, NULL, NULL};
-
-static
-struct Fsm l1fsm_s =
-{NULL, 0, 0, NULL, NULL};
+static struct Fsm l1fsm_b;
+static struct Fsm l1fsm_s;
 
 enum {
 	ST_L1_F2,

@@ -1,5 +1,5 @@
 /* 
- * $Id: divert_init.c,v 1.5 2000/11/13 22:51:47 kai Exp $
+ * $Id: divert_init.c,v 1.5.6.1 2000/12/17 16:47:16 kai Exp $
  *
  * Module init for DSS1 diversion services for i4l.
  *

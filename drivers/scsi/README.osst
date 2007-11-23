@@ -1,6 +1,6 @@
 README file for the osst driver
 ===============================
-(w) Kurt Garloff <garloff@suse.de> 10/2000
+(w) Kurt Garloff <garloff@suse.de> 11/2000
 
 This file describes the osst driver as of version 0.8.x/0.9.x, the released
 version of the osst driver.
@@ -34,8 +34,8 @@ As it represents a new device, it got assigned a new device node: /dev/osstX
 are character devices with major no 206 and minor numbers like the /dev/stX
 devices. If those are not present, you may create them by calling
 Makedevs.sh as root (see below).
-The driver started beig a copy of st and as such, the osst devices'
-behaviour looks very much the same as st to the userspace applications.
+The driver started being a copy of st and as such, the osst devices'
+behavior looks very much the same as st to the userspace applications.
 
 
 History
@@ -50,57 +50,9 @@ their own device.
 
 Installation
 ------------
-There is an easy and a correct approach to install the osst driver
-(a) Without patching your kernel
-(b) Full integration into your kernel
-(c) The mainstream kernel does already include the osst driver
-
-While it is still possible to use possibility (a), i.e. to compile the osst
-driver as a module without patching your kernel, this is not recommended, as
-you then have only very limited possibility to take advantage of the possible
-coexistence of st and osst. This possibility will be removed later.
-Anyway here is a description of how installation works.
-
-Make sure you have a configured 2.2.1x Linux kernel in /usr/src/linux by
-installing the approriate packages from your distro or by fetching the 
-source tarball from ftp.kernel.org or mirror and unpacking it in /usr/src/
-If your kernel is not yet configure, get a reasonable config file by doing
-cd /usr/src/linux
-make oldconfig			# You may use make menuconfig if starting
-				# from scratch
-make dep
-
-(a) Without patching your kernel
-
-cd /path/to/onstream/driver/	# REPLACE THIS WITH THE REAL PATH
-make
-make install
-
-That's all. You will get a couple of warnings on compilation, which you may
-ignore. The osst.o module is now in your module directory ready for loading
-and the device nodes have been created.
-
-(b) Full integration into the kernel. You need to have a reasonable kernel
-    config, otherwise you may be unable to use your system, as the produced
-    kernel may not support your hardware! IF YOU NEVER COMPILED YOUR OWN
-    KERNEL BEFORE, DON'T PROCEED, UNLESS YOU SUCEEDED USING YOUR SELF-
-    COMPILED KERNELS.
-
-cd /usr/src/linux
-patch -p1 < /path/to/onstream/driver/osst-2X.diff	# USE REAL PATH! X = 2,3,4
-cp -p /path/to/onstream/driver/osst.? drivers/scsi/	# Install drv srcs
-cp -p /path/to/onstream/driver/osst_options.h drivers/scsi/
-
-(b) and (c)
-
-make oldconfig			# or menuconfig / xconfig if you prefer
-				# enable the OSST driver!
-make dep
-make bzlilo			# to recopmile your kernel and have it
-				# installed
-make modules			# to compile the kernel modules
-make modules_install		# to install your modules
-depmod -a			# append kernel version if necessary
+osst got integrated into the linux kernel. Select it during kernel
+configuration as module or compile statically into the kernel.
+Compile your kernel and install the modules.
 
 Now, your osst driver is inside the kernel or available as a module,
 depending on your choice during kernel config. You may still need to create
@@ -113,7 +65,7 @@ as root. dmesg should show you, whether your OnStream tapes have been
 recognized.
 
 If you want to have the module autoloaded on access to /dev/osst, you may
-add somethind like
+add something like
 alias char-major-206 osst
 to your /etc/modules.conf (old name: conf.modules).
 
@@ -121,6 +73,9 @@ You may find it convenient to create a symbolic link
 ln -s nosst0 /dev/tape
 to make programs assuming a default name of /dev/tape more convenient to
 use.
+
+The device nodes for osst have to be created. Use the Makedevs.sh script
+attached to this file.
 
 
 Using it
@@ -131,7 +86,11 @@ by specifying /dev/(n)osst0 as the tape device to use or using the above
 symlink trick. The IOCTLs to control tape operation are also mostly
 supported and you may try the mt (or mt_st) program to jump between
 filemarks, eject the tape, ...
-There's one limitation: You need to use a blocksize of 32kB.
+
+There's one limitation: You need to use a block size of 32kB.
+
+(This limitation is worked on and will be fixed in version 0.8.7 of
+ this driver.)
 
 If you just want to get started with standard software, here is an example
 for creating and restoring a full backup:
@@ -141,11 +100,11 @@ tar cvf - / --exclude /proc | buffer -s 32k -m 24M -B -t -o /dev/nosst0
 buffer -s 32k -m 8M -B -t -i /dev/osst0 | tar xvf - -C /
 
 The buffer command has been used to buffer the data before it goes to the
-tape (or the filesystem) in order to smooth out the data stream and prevent
+tape (or the file system) in order to smooth out the data stream and prevent
 the tape from needing to stop and rewind. The OnStream does have an internal
 buffer and a variable speed which help this, but especially on writing, the
 buffering still proves useful in most cases. It also pads the data to
-guarantees the blocksize of 32k. (Otherwise you may pass the -b64 option to
+guarantees the block size of 32k. (Otherwise you may pass the -b64 option to
 tar.)
 Expect something like 1.8MB/s for the SC-x0 drives and 0.9MB/s for the DI-30.
 The USB drive will give you about 0.7MB/s.
@@ -164,9 +123,9 @@ http://www.linux-usb.org/
 http://sourceforge.net/cvs/?group_id=3581
 
 Note that the ide-tape driver as of 1.16f uses a slightly outdated on-tape
-format and therefore is not compeletely interoperable with osst tapes.
+format and therefore is not completely interoperable with osst tapes.
 
-The ADR-x0 line is fully SCSI-2 compliant and is spported by st, not osst.
+The ADR-x0 line is fully SCSI-2 compliant and is supported by st, not osst.
 The on-tape format is supposed to be compatible with the one used by osst.
 
 
@@ -183,7 +142,7 @@ If you find any problems, please have a look at the tester's page in order
 to see whether the problem is already known and solved. Otherwise, please
 report it to the mailing list. Your feedback is welcome. (This holds also
 for reports of successful usage, of course.) 
-In case of trouble, please do always provide the following infos:
+In case of trouble, please do always provide the following info:
 * driver and kernel version used (see syslog)
 * driver messages (syslog)
 * SCSI config and OnStream Firmware (/proc/scsi/scsi)
@@ -201,7 +160,7 @@ All the issues have been addressed.
 Check the web pages for more info about the current developments.
 
 
-Acknowledgements
+Acknowledgments
 ----------------
 The driver has been started by making a copy of Kai Makisara's st driver.
 Most of the development has been done by Willem Riede. The presence of the
@@ -229,7 +188,7 @@ Makedevs.sh
 #!/bin/sh
 # Script to create OnStream SC-x0 device nodes (major 206)
 # Usage: Makedevs.sh [nos [path to dev]]
-# $Id: README.osst,v 1.5.6.1 2000/10/10 13:45:37 garloff Exp $
+# $Id: README.osst.kernel,v 1.1.2.2 2000/12/20 14:08:38 garloff Exp $
 major=206
 nrs=4
 dir=/dev

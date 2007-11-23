@@ -35,6 +35,8 @@
  *		Pentium 4 support + backported fixes from 2.4
  *	1.07	13 Dec 2000, Tigran Aivazian <tigran@veritas.com>
  *		More bugfixes backported from 2.4
+ *	1.08	27 Dec 2000, Tigran Aivazian <tigran@veritas.com>
+ *		Fix: X86_FEATURE_30 was used incorrectly (in a 2.4 manner)
  */
 
 #include <linux/init.h>
@@ -49,7 +51,7 @@
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#define MICROCODE_VERSION 	"1.07"
+#define MICROCODE_VERSION 	"1.08"
 
 MODULE_DESCRIPTION("Intel CPU (IA-32) microcode update driver");
 MODULE_AUTHOR("Tigran Aivazian <tigran@veritas.com>");
@@ -161,7 +163,7 @@ static void do_update_one(void *arg)
 	req->err = 1; /* be pessimistic */
 
 	if (c->x86_vendor != X86_VENDOR_INTEL || c->x86 < 6 ||
-		test_bit(X86_FEATURE_30, &c->x86_capability)) { /* IA64 */
+		(c->x86_capability & X86_FEATURE_30) ) { /* IA64 */
 		printk(KERN_ERR "microcode: CPU%d not a capable Intel processor\n", cpu_num);
 		return;
 	}
@@ -307,8 +309,8 @@ static int microcode_ioctl(struct inode *inode, struct file *file,
 				memset(mc_applied, 0, mc_fsize);
 				kfree(mc_applied);
 				mc_applied = NULL;
-				printk(KERN_WARNING "microcode: freed %d bytes\n", bytes);
 				mc_fsize = 0;
+				printk(KERN_WARNING "microcode: freed %d bytes\n", bytes);
 				up(&microcode_sem);
 				return 0;
 			}

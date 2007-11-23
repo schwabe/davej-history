@@ -1,4 +1,4 @@
-/* $Id: isdnl2.c,v 2.23 2000/06/26 08:59:13 keil Exp $
+/* $Id: isdnl2.c,v 2.25 2000/11/24 17:05:38 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -15,13 +15,11 @@
 #include "hisax.h"
 #include "isdnl2.h"
 
-const char *l2_revision = "$Revision: 2.23 $";
+const char *l2_revision = "$Revision: 2.25 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
-static
-struct Fsm l2fsm =
-{NULL, 0, 0, NULL, NULL};
+static struct Fsm l2fsm;
 
 enum {
 	ST_L2_1,

@@ -1,29 +1,32 @@
-// $Id: l3ni1.c,v 2.3 2000/06/26 08:59:14 keil Exp $
+// $Id: l3ni1.c,v 2.5.6.1 2000/12/06 16:59:19 kai Exp $
+//
 //-----------------------------------------------------------------------------
 //
 // NI1 D-channel protocol
 //
-// Author                Matt Henderson & Guy Ellis - Traverse Tecnologies Pty Ltd
-//                                www.traverse.com.au
+// Authors:
+// Matt Henderson & Guy Ellis - Traverse Tecnologies Pty Ltd
+// www.traverse.com.au
 //
 // 2000.6.6 Initial implementation of routines for US NI1 
 // Layer 3 protocol based on the EURO/DSS1 D-channel protocol 
-// driver written by Karsten Keil et al.  Thanks also for the 
-// code provided by Ragnar Paulson and Will Scales.
+// driver written by Karsten Keil et al.
+// NI-1 Hall of Fame - Thanks to....
+// Ragnar Paulson - for some handy code fragments
+// Will Scales - beta tester extraordinaire
+// Brett Whittacre - beta tester and remote devel system in Vegas
 //
 // This file is (c) under GNU PUBLIC LICENSE
 //
 //-----------------------------------------------------------------------------
-
 #define __NO_VERSION__
 #include "hisax.h"
 #include "isdnl3.h"
 #include "l3ni1.h"
 #include <linux/ctype.h>
-#include <linux/config.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *ni1_revision = "$Revision: 2.3 $";
+const char *ni1_revision = "$Revision: 2.5.6.1 $";
 
 #define EXT_BEARER_CAPS 1
 

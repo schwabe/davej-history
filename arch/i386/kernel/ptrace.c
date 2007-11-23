@@ -413,7 +413,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	if (request == PTRACE_ATTACH) {
 		if (child == current)
 			goto out;
-		if ((!child->dumpable ||
+		if ((child->dumpable != 1 ||
 		    (current->uid != child->euid) ||
 		    (current->uid != child->suid) ||
 		    (current->uid != child->uid) ||

@@ -243,7 +243,7 @@ __initfunc (int ne2k_pci_probe(struct device *dev))
 		{
 			static unsigned version_printed = 0;
 			if (version_printed++ == 0)
-				printk(KERN_INFO "%s", version);
+				printk(KERN_INFO "%s %s", version1, version2);
 		}
 #endif
 

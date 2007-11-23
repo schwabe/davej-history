@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 19
-EXTRAVERSION = pre3
+EXTRAVERSION = pre4
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -24,14 +24,12 @@ AS	=$(CROSS_COMPILE)as
 LD	=$(CROSS_COMPILE)ld
 #
 #	foo-bar-gcc for cross builds
-#	kgcc for Conectiva, Red Hat, Mandrake
-#	gcc272 for Debian
+#	gcc272 for Debian's old compiler for kernels
+#	kgcc for Conectiva, Mandrake and Red Hat 7
 #	otherwise 'cc'
 #
-CCFOUND :=$(shell $(CONFIG_SHELL) scripts/kwhich kgcc gcc272 cc gcc)
-## Faster, but requires GNU make 3.78, which postdates Linux 2.2.0
-##CC	=$(if $(CROSS_COMPILE),$(CROSS_COMPILE)gcc,$(CCFOUND)) -D__KERNEL__ -I$(HPATH)
-CC	=$(shell if [ -n "$(CROSS_COMPILE)" ]; then echo $(CROSS_COMPILE)gcc; else echo $(CCFOUND); fi) \
+CC	=$(shell if [ -n "$(CROSS_COMPILE)" ]; then echo $(CROSS_COMPILE)gcc; else \
+	$(CONFIG_SHELL) scripts/kwhich gcc272 2>/dev/null || $(CONFIG_SHELL) scripts/kwhich kgcc 2>/dev/null || echo cc; fi) \
 	-D__KERNEL__ -I$(HPATH)
 CPP	=$(CC) -E
 AR	=$(CROSS_COMPILE)ar

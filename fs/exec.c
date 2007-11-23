@@ -518,7 +518,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	current->sas_ss_sp = current->sas_ss_size = 0;
 
 	if (current->euid == current->uid && current->egid == current->gid)
-		current->dumpable = 1;
+		current->dumpable = 2;
 	name = bprm->filename;
 	for (i=0; (ch = *(name++)) != '\0';) {
 		if (ch == '/')
@@ -864,6 +864,10 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 
 	if (retval >= 0)
 		retval = search_binary_handler(&bprm,regs);
+
+	if(current->dumpable == 2)
+		current->dumapble = 0;
+		
 	if (retval >= 0)
 		/* execve success */
 		return retval;
@@ -875,5 +879,6 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(bprm.page[i]);
 
+		
 	return retval;
 }

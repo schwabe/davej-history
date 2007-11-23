@@ -1,5 +1,5 @@
 /*
- * $Id: kernelcapi.h,v 1.7 2000/06/12 09:20:20 kai Exp $
+ * $Id: kernelcapi.h,v 1.8.6.1 2000/11/28 09:36:56 kai Exp $
  * 
  * Kernel CAPI 2.0 Interface for Linux
  * 

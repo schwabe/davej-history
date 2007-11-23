@@ -1,4 +1,4 @@
-/* $Id: hscx.c,v 1.19 2000/06/26 08:59:13 keil Exp $
+/* $Id: hscx.c,v 1.21 2000/11/24 17:05:37 kai Exp $
  *
  * hscx.c   HSCX specific routines
  *

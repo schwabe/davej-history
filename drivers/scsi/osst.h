@@ -1,5 +1,5 @@
 /*
- *	$Header: /home/cvsroot/Driver/osst.h,v 1.5.2.1 2000/09/24 14:26:02 riede Exp $
+ *	$Header: /home/cvsroot/Driver/osst.h,v 1.5.2.2 2000/10/08 03:07:33 riede Exp $
  */
 
 #include <linux/config.h>
@@ -489,6 +489,7 @@ typedef struct {
   int      eod_frame_ppos;
   int      eod_frame_lfa;
   int      write_type;				/* used in write error recovery */
+  int      read_error_frame;			/* used in read error recovery */
   unsigned long cmd_start_time;
   unsigned long max_cmd_time;
 

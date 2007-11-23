@@ -1,11 +1,23 @@
 /*
- * $Id: capidrv.c,v 1.36 2000/06/26 15:13:41 keil Exp $
+ * $Id: capidrv.c,v 1.39 2000/11/23 20:45:14 kai Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.39  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.38  2000/11/14 08:43:07  calle
+ * Bugfix for v110. Connectparamters where setup for sync ...
+ *
+ * Revision 1.37  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
  * Revision 1.36  2000/06/26 15:13:41  keil
  * features should be or'ed
  *
@@ -206,7 +218,7 @@
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.36 $";
+static char *revision = "$Revision: 1.39 $";
 static int debugmode = 0;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
@@ -2463,8 +2475,8 @@ static void proc_exit(void)
 }
 
 static struct capi_interface_user cuser = {
-	"capidrv",
-	lower_callback
+	name: "capidrv",
+	callback: lower_callback
 };
 
 #ifdef MODULE

@@ -85,7 +85,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.11 $";
+static char *revision = "$Revision: 1.16 $";
 
 /* ------------------------------------------------------------- */
 
@@ -194,7 +194,7 @@ static void t1_handle_interrupt(avmcard * card)
 	struct sk_buff *skb;
 
 	unsigned ApplId;
-	signed MsgLen;
+	unsigned MsgLen;
 	unsigned DataB3Len;
 	unsigned NCCI;
 	unsigned WindowSize;
@@ -282,24 +282,29 @@ static void t1_handle_interrupt(avmcard * card)
 		case RECEIVE_TASK_READY:
 			ApplId = (unsigned) b1_get_word(card->port);
 			MsgLen = t1_get_slice(card->port, card->msgbuf);
-			card->msgbuf[MsgLen--] = 0;
-			while (    MsgLen >= 0
-			       && (   card->msgbuf[MsgLen] == '\n'
-				   || card->msgbuf[MsgLen] == '\r'))
-				card->msgbuf[MsgLen--] = 0;
+			card->msgbuf[MsgLen] = 0;
+			while (    MsgLen > 0
+			       && (   card->msgbuf[MsgLen-1] == '\n'
+				   || card->msgbuf[MsgLen-1] == '\r')) {
+				card->msgbuf[MsgLen-1] = 0;
+				MsgLen--;
+			}
 			printk(KERN_INFO "%s: task %d \"%s\" ready.\n",
 					card->name, ApplId, card->msgbuf);
 			break;
 
 		case RECEIVE_DEBUGMSG:
 			MsgLen = t1_get_slice(card->port, card->msgbuf);
-			card->msgbuf[MsgLen--] = 0;
-			while (    MsgLen >= 0
-			       && (   card->msgbuf[MsgLen] == '\n'
-				   || card->msgbuf[MsgLen] == '\r'))
-				card->msgbuf[MsgLen--] = 0;
+			card->msgbuf[MsgLen] = 0;
+			while (    MsgLen > 0
+			       && (   card->msgbuf[MsgLen-1] == '\n'
+				   || card->msgbuf[MsgLen-1] == '\r')) {
+				card->msgbuf[MsgLen-1] = 0;
+				MsgLen--;
+			}
 			printk(KERN_INFO "%s: DEBUG: %s\n", card->name, card->msgbuf);
 			break;
+
 
 		case 0xff:
 			printk(KERN_ERR "%s: card reseted ?\n", card->name);
@@ -577,20 +582,20 @@ static char *t1isa_procinfo(struct capi_ctr *ctrl)
 /* ------------------------------------------------------------- */
 
 static struct capi_driver t1isa_driver = {
-    "t1isa",
-    "0.0",
-    t1isa_load_firmware,
-    t1isa_reset_ctr,
-    t1isa_remove_ctr,
-    b1_register_appl,
-    b1_release_appl,
-    t1isa_send_message,
+    name: "t1isa",
+    revision: "0.0",
+    load_firmware: t1isa_load_firmware,
+    reset_ctr: t1isa_reset_ctr,
+    remove_ctr: t1isa_remove_ctr,
+    register_appl: b1_register_appl,
+    release_appl: b1_release_appl,
+    send_message: t1isa_send_message,
 
-    t1isa_procinfo,
-    b1ctl_read_proc,
-    0,	/* use standard driver_read_proc */
+    procinfo: t1isa_procinfo,
+    ctr_read_proc: b1ctl_read_proc,
+    driver_read_proc: 0,	/* use standard driver_read_proc */
 
-    t1isa_add_card,
+    add_card: t1isa_add_card,
 };
 
 #ifdef MODULE

@@ -1,4 +1,4 @@
-/* $Id: sportster.c,v 1.13 2000/06/26 08:59:14 keil Exp $
+/* $Id: sportster.c,v 1.14 2000/11/24 17:05:38 kai Exp $
  *
  * sportster.c     low level stuff for USR Sportster internal TA
  *
@@ -16,7 +16,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *sportster_revision = "$Revision: 1.13 $";
+const char *sportster_revision = "$Revision: 1.14 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

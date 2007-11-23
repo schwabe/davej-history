@@ -1,4 +1,4 @@
-/* $Id: bkm_a8.c,v 1.12 2000/06/26 08:59:12 keil Exp $
+/* $Id: bkm_a8.c,v 1.14.6.2 2000/11/29 16:00:14 kai Exp $
  * bkm_a8.c     low level stuff for Scitel Quadro (4*S0, passive)
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -26,7 +26,7 @@
 
 extern const char *CardType[];
 
-const char sct_quadro_revision[] = "$Revision: 1.12 $";
+const char sct_quadro_revision[] = "$Revision: 1.14.6.2 $";
 
 static const char *sct_quadro_subtypes[] =
 {
@@ -316,8 +316,8 @@ setup_sct_quadro(struct IsdnCard *card))
 			CardType[card->typ]);
 		return (0);
 	}
-	if ((cs->subtyp != SCT_1) && ((sub_sys_id != SCT_SUBSYS_ID) ||
-		(sub_vendor_id != SCT_SUBVEN_ID)))
+	if ((cs->subtyp != SCT_1) && ((sub_sys_id != PCI_DEVICE_ID_BERKOM_SCITEL_QUADRO) ||
+		(sub_vendor_id != PCI_VENDOR_ID_BERKOM)))
 		return (0);
 	if (cs->subtyp == SCT_1) {
 		if (!pci_present()) {
@@ -329,8 +329,8 @@ setup_sct_quadro(struct IsdnCard *card))
 			
 			pci_read_config_word(dev_a8, PCI_SUBSYSTEM_VENDOR_ID, &sub_vendor_id);
 			pci_read_config_word(dev_a8, PCI_SUBSYSTEM_ID, &sub_sys_id);
-			if ((sub_sys_id == SCT_SUBSYS_ID) &&
-				(sub_vendor_id == SCT_SUBVEN_ID)) {
+			if ((sub_sys_id == PCI_DEVICE_ID_BERKOM_SCITEL_QUADRO) &&
+				(sub_vendor_id == PCI_VENDOR_ID_BERKOM)) {
 				if (pci_enable_device(dev_a8))
 					return(0);
 				pci_ioaddr1 = dev_a8->base_address[ 1] & PCI_BASE_ADDRESS_IO_MASK;

@@ -67,35 +67,16 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.12 $";
+static char *revision = "$Revision: 1.20.6.1 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
 
 /* ------------------------------------------------------------- */
 
-#ifndef PCI_VENDOR_ID_DEC
-#define PCI_VENDOR_ID_DEC	0x1011
-#endif
-
-#ifndef PCI_DEVICE_ID_DEC_21285
-#define PCI_DEVICE_ID_DEC_21285	0x1065
-#endif
-
-#ifndef PCI_VENDOR_ID_AVM
-#define PCI_VENDOR_ID_AVM	0x1244
-#endif
-
-#ifndef PCI_DEVICE_ID_AVM_C4
-#define PCI_DEVICE_ID_AVM_C4	0x0800
-#endif
-
-/* ------------------------------------------------------------- */
-
-static int suppress_pollack = 0;
+static int suppress_pollack;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
-
 MODULE_PARM(suppress_pollack, "0-1i");
 
 /* ------------------------------------------------------------- */
@@ -559,8 +540,7 @@ static void c4_handle_rx(avmcard *card)
 	avmctrl_info *cinfo;
 	struct sk_buff *skb;
 	void *p = dma->recvbuf;
-	__u32 ApplId, DataB3Len, NCCI, WindowSize;
-	__s32 MsgLen;
+	__u32 ApplId, MsgLen, DataB3Len, NCCI, WindowSize;
 	__u8 b1cmd =  _get_byte(&p);
 	__u32 cidx;
 
@@ -679,22 +659,26 @@ static void c4_handle_rx(avmcard *card)
 	case RECEIVE_TASK_READY:
 		ApplId = (unsigned) _get_word(&p);
 		MsgLen = _get_slice(&p, card->msgbuf);
-		card->msgbuf[MsgLen--] = 0;
-		while (    MsgLen >= 0
-		       && (   card->msgbuf[MsgLen] == '\n'
-			   || card->msgbuf[MsgLen] == '\r'))
-			card->msgbuf[MsgLen--] = 0;
+		card->msgbuf[MsgLen] = 0;
+		while (    MsgLen > 0
+		       && (   card->msgbuf[MsgLen-1] == '\n'
+			   || card->msgbuf[MsgLen-1] == '\r')) {
+			card->msgbuf[MsgLen-1] = 0;
+			MsgLen--;
+		}
 		printk(KERN_INFO "%s: task %d \"%s\" ready.\n",
 				card->name, ApplId, card->msgbuf);
 		break;
 
 	case RECEIVE_DEBUGMSG:
 		MsgLen = _get_slice(&p, card->msgbuf);
-		card->msgbuf[MsgLen--] = 0;
-		while (    MsgLen >= 0
-		       && (   card->msgbuf[MsgLen] == '\n'
-			   || card->msgbuf[MsgLen] == '\r'))
-			card->msgbuf[MsgLen--] = 0;
+		card->msgbuf[MsgLen] = 0;
+		while (    MsgLen > 0
+		       && (   card->msgbuf[MsgLen-1] == '\n'
+			   || card->msgbuf[MsgLen-1] == '\r')) {
+			card->msgbuf[MsgLen-1] = 0;
+			MsgLen--;
+		}
 		printk(KERN_INFO "%s: DEBUG: %s\n", card->name, card->msgbuf);
 		break;
 
@@ -1286,20 +1270,20 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 /* ------------------------------------------------------------- */
 
 static struct capi_driver c4_driver = {
-    "c4",
-    "0.0",
-    c4_load_firmware,
-    c4_reset_ctr,
-    c4_remove_ctr,
-    c4_register_appl,
-    c4_release_appl,
-    c4_send_message,
+    name: "c4",
+    revision: "0.0",
+    load_firmware: c4_load_firmware,
+    reset_ctr: c4_reset_ctr,
+    remove_ctr: c4_remove_ctr,
+    register_appl: c4_register_appl,
+    release_appl: c4_release_appl,
+    send_message: c4_send_message,
 
-    c4_procinfo,
-    c4_read_proc,
-    0,	/* use standard driver_read_proc */
+    procinfo: c4_procinfo,
+    ctr_read_proc: c4_read_proc,
+    driver_read_proc: 0,	/* use standard driver_read_proc */
 
-    0, /* no add_card function */
+    add_card: 0, /* no add_card function */
 };
 
 #ifdef MODULE

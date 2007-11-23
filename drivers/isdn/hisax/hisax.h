@@ -1,4 +1,4 @@
-/* $Id: hisax.h,v 2.49 2000/09/08 22:55:59 werner Exp $
+/* $Id: hisax.h,v 2.52.6.1 2000/12/06 16:59:19 kai Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -201,7 +201,7 @@ struct Layer1 {
 	void *hardware;
 	struct BCState *bcs;
 	struct PStack **stlistp;
-	int Flags;
+	long Flags;
 	struct FsmInst l1m;
 	struct FsmTimer	timer;
 	void (*l1l2) (struct PStack *, int, void *);
@@ -240,7 +240,7 @@ struct Layer2 {
 	int tei;
 	int sap;
 	int maxlen;
-	unsigned int flag;
+	unsigned long flag;
 	unsigned int vs, va, vr;
 	int rc;
 	unsigned int window;
@@ -365,7 +365,7 @@ struct w6692B_hw {
 };
 
 struct isar_reg {
-	unsigned int Flags;
+	unsigned long Flags;
 	volatile u_char bstat;
 	volatile u_char iis;
 	volatile u_char cmsb;
@@ -482,7 +482,7 @@ struct amd7930_hw {
 struct BCState {
 	int channel;
 	int mode;
-	int Flag;
+	long Flag; /* long req'd for set_bit --RR */
 	struct IsdnCardState *cs;
 	int tx_cnt;		/* B-Channel transmit counter */
 	struct sk_buff *tx_skb; /* B-Channel transmit Buffer */
@@ -527,7 +527,8 @@ struct Channel {
 	int data_open;
 	struct l3_process *proc;
 	setup_parm setup;	/* from isdnif.h numbers and Serviceindicator */
-	int Flags;		/* for remembering action done in l4 */
+	long Flags;		/* for remembering action done in l4 */
+				/* long req'd for set_bit --RR */
 	int leased;
 };
 
@@ -864,7 +865,7 @@ struct IsdnCardState {
 	int protocol;
 	unsigned int irq;
 	unsigned long irq_flags;
-	int HW_Flags;
+	long HW_Flags;
 	int *busy_flag;
         int chanlimit; /* limited number of B-chans to use */
         int logecho; /* log echo if supported by card */
@@ -931,7 +932,7 @@ struct IsdnCardState {
 	int rcvidx;
 	struct sk_buff *tx_skb;
 	int tx_cnt;
-	int event;
+	long event;
 	struct tq_struct tqueue;
 	struct timer_list dbusytimer;
 #ifdef ERROR_STATISTIC

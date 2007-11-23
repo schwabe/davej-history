@@ -40,7 +40,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.5 $";
+static char *revision = "$Revision: 1.11 $";
 
 /* ------------------------------------------------------------- */
 
@@ -468,8 +468,7 @@ static void b1dma_handle_rx(avmcard *card)
 	struct capi_ctr *ctrl = cinfo->capi_ctrl;
 	struct sk_buff *skb;
 	void *p = dma->recvbuf+4;
-	__u32 ApplId, DataB3Len, NCCI, WindowSize;
-	__s32 MsgLen;
+	__u32 ApplId, MsgLen, DataB3Len, NCCI, WindowSize;
 	__u8 b1cmd =  _get_byte(&p);
 
 #ifdef CONFIG_B1DMA_DEBUG
@@ -558,22 +557,26 @@ static void b1dma_handle_rx(avmcard *card)
 	case RECEIVE_TASK_READY:
 		ApplId = (unsigned) _get_word(&p);
 		MsgLen = _get_slice(&p, card->msgbuf);
-		card->msgbuf[MsgLen--] = 0;
-		while (    MsgLen >= 0
-		       && (   card->msgbuf[MsgLen] == '\n'
-			   || card->msgbuf[MsgLen] == '\r'))
-			card->msgbuf[MsgLen--] = 0;
+		card->msgbuf[MsgLen] = 0;
+		while (    MsgLen > 0
+		       && (   card->msgbuf[MsgLen-1] == '\n'
+			   || card->msgbuf[MsgLen-1] == '\r')) {
+			card->msgbuf[MsgLen-1] = 0;
+			MsgLen--;
+		}
 		printk(KERN_INFO "%s: task %d \"%s\" ready.\n",
 				card->name, ApplId, card->msgbuf);
 		break;
 
 	case RECEIVE_DEBUGMSG:
 		MsgLen = _get_slice(&p, card->msgbuf);
-		card->msgbuf[MsgLen--] = 0;
-		while (    MsgLen >= 0
-		       && (   card->msgbuf[MsgLen] == '\n'
-			   || card->msgbuf[MsgLen] == '\r'))
-			card->msgbuf[MsgLen--] = 0;
+		card->msgbuf[MsgLen] = 0;
+		while (    MsgLen > 0
+		       && (   card->msgbuf[MsgLen-1] == '\n'
+			   || card->msgbuf[MsgLen-1] == '\r')) {
+			card->msgbuf[MsgLen-1] = 0;
+			MsgLen--;
+		}
 		printk(KERN_INFO "%s: DEBUG: %s\n", card->name, card->msgbuf);
 		break;
 

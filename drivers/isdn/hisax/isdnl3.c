@@ -1,4 +1,4 @@
-/* $Id: isdnl3.c,v 2.14 2000/06/26 08:59:13 keil Exp $
+/* $Id: isdnl3.c,v 2.17 2000/11/24 17:05:38 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,16 +11,15 @@
  *              Fritz Elfert
  *
  */
+
 #define __NO_VERSION__
 #include "hisax.h"
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 2.14 $";
+const char *l3_revision = "$Revision: 2.17 $";
 
-static
-struct Fsm l3fsm =
-{NULL, 0, 0, NULL, NULL};
+static struct Fsm l3fsm;
 
 enum {
 	ST_L3_LC_REL,

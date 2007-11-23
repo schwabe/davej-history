@@ -253,12 +253,12 @@ loader_ok:
 #ifndef STANDARD_MEMORY_BIOS_CALL
 	mov     [0x1e8], al
 meme820:
-	mov     edx, #0x534d4150
 	xor     ebx, ebx
 	mov     di,#0x2d0
 
 jmpe820:
 	mov     eax,#0x0000e820
+	mov     edx,#0x534d4150		! Some biosen trash edx each call
 	mov     ecx,#20
 	push    ds
 	pop     es

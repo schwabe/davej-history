@@ -115,7 +115,7 @@
 #include <linux/b1lli.h>
 #endif
 
-static char *revision = "$Revision: 1.17 $";
+static char *revision = "$Revision: 1.21.6.1 $";
 
 /* ------------------------------------------------------------- */
 
@@ -1758,7 +1758,6 @@ int kcapi_init(void)
 	MOD_INC_USE_COUNT;
 
 	skb_queue_head_init(&recv_queue);
-	/* init_bh(CAPI_BH, do_capi_bh); */
 
 	tq_state_notify.routine = notify_handler;
 	tq_state_notify.data = 0;

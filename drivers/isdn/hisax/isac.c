@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.26 2000/06/26 08:59:13 keil Exp $
+/* $Id: isac.c,v 1.28 2000/11/24 17:05:37 kai Exp $
  *
  * isac.c   ISAC specific routines
  *

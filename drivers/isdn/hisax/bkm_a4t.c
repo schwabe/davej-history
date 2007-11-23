@@ -1,4 +1,4 @@
-/* $Id: bkm_a4t.c,v 1.11 2000/06/26 08:59:12 keil Exp $
+/* $Id: bkm_a4t.c,v 1.13.6.2 2000/11/29 16:00:14 kai Exp $
  * bkm_a4t.c    low level stuff for T-Berkom A4T
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -23,7 +23,7 @@
 
 extern const char *CardType[];
 
-const char *bkm_a4t_revision = "$Revision: 1.11 $";
+const char *bkm_a4t_revision = "$Revision: 1.13.6.2 $";
 
 
 static inline u_char
@@ -294,7 +294,7 @@ __initfunc(int
 
 		pci_read_config_word(dev_a4t, PCI_SUBSYSTEM_VENDOR_ID, &sub_vendor);
 		pci_read_config_word(dev_a4t, PCI_SUBSYSTEM_ID, &sub_sys);
-		if ((sub_sys == A4T_SUBSYS_ID) && (sub_vendor == A4T_SUBVEN_ID)) {
+		if ((sub_sys == PCI_DEVICE_ID_BERKOM_A4T) && (sub_vendor == PCI_VENDOR_ID_BERKOM)) {
 			if (pci_enable_device(dev_a4t))
 				return(0);
 			found = 1;

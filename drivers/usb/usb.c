@@ -187,6 +187,19 @@ struct usb_interface *usb_ifnum_to_if(struct usb_device *dev, unsigned ifnum)
 	return NULL;
 }
 
+struct usb_endpoint_descriptor *usb_epnum_to_ep_desc(struct usb_device *dev, unsigned epnum)
+{
+	int i, j, k;
+
+	for (i = 0; i < dev->actconfig->bNumInterfaces; i++)
+		for (j = 0; j < dev->actconfig->interface[i].num_altsetting; j++)
+			for (k = 0; k < dev->actconfig->interface[i].altsetting[j].bNumEndpoints; k++)
+				if (epnum == dev->actconfig->interface[i].altsetting[j].endpoint[k].bEndpointAddress)
+					return &dev->actconfig->interface[i].altsetting[j].endpoint[k];
+
+	return NULL;
+}
+
 /*
  * usb_calc_bus_time:
  *
@@ -2037,6 +2050,7 @@ struct list_head *usb_bus_get_list(void)
  * then these symbols need to be exported for the modules to use.
  */
 EXPORT_SYMBOL(usb_ifnum_to_if);
+EXPORT_SYMBOL(usb_epnum_to_ep_desc);
 
 EXPORT_SYMBOL(usb_register);
 EXPORT_SYMBOL(usb_deregister);

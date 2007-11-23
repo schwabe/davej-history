@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 2.47 2000/06/26 08:59:12 keil Exp $
+/* $Id: callc.c,v 2.51 2000/11/24 17:05:37 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -20,7 +20,7 @@
 #define MOD_USE_COUNT ( GET_USE_COUNT (&__this_module))
 #endif	/* MODULE */
 
-const char *lli_revision = "$Revision: 2.47 $";
+const char *lli_revision = "$Revision: 2.51 $";
 
 extern struct IsdnCard cards[];
 extern int nrcards;
@@ -30,10 +30,8 @@ extern void HiSax_mod_inc_use_count(void);
 static int init_b_st(struct Channel *chanp, int incoming);
 static void release_b_st(struct Channel *chanp);
 
-static struct Fsm callcfsm =
-{NULL, 0, 0, NULL, NULL};
-
-static int chancount = 0;
+static struct Fsm callcfsm;
+static int chancount;
 
 /* experimental REJECT after ALERTING for CALLBACK to beat the 4s delay */
 #define ALERT_REJECT 0

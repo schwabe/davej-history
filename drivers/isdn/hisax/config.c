@@ -1,4 +1,4 @@
-/* $Id: config.c,v 2.52 2000/10/02 17:33:43 keil Exp $
+/* $Id: config.c,v 2.57.6.7 2000/12/17 16:47:17 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -338,18 +338,14 @@ struct IsdnCard cards[] =
 	EMPTY_CARD,
 };
 
-static char HiSaxID[64] HISAX_INITDATA = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" \
-"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" \
-"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-char *HiSax_id HISAX_INITDATA = HiSaxID;
+static char HiSaxID[64]  = { 0, };
+
+char *HiSax_id  = HiSaxID;
 #ifdef MODULE
 /* Variables for insmod */
-static int type[] HISAX_INITDATA =
-{0, 0, 0, 0, 0, 0, 0, 0};
-static int protocol[] HISAX_INITDATA =
-{0, 0, 0, 0, 0, 0, 0, 0};
-static int io[] HISAX_INITDATA =
-{0, 0, 0, 0, 0, 0, 0, 0};
+static int type[8]  = { 0, };
+static int protocol[8]  = { 0, };
+static int io[8]  = { 0, };
 #undef IO0_IO1
 #ifdef CONFIG_HISAX_16_3
 #define IO0_IO1
@@ -359,16 +355,12 @@ static int io[] HISAX_INITDATA =
 #define IO0_IO1
 #endif
 #ifdef IO0_IO1
-static int io0[] HISAX_INITDATA =
-{0, 0, 0, 0, 0, 0, 0, 0};
-static int io1[] HISAX_INITDATA =
-{0, 0, 0, 0, 0, 0, 0, 0};
+static int io0[8]  = { 0, };
+static int io1[8]  = { 0, };
 #endif
-static int irq[] HISAX_INITDATA =
-{0, 0, 0, 0, 0, 0, 0, 0};
-static int mem[] HISAX_INITDATA =
-{0, 0, 0, 0, 0, 0, 0, 0};
-static char *id HISAX_INITDATA = HiSaxID;
+static int irq[8]  = { 0, };
+static int mem[8]  = { 0, };
+static char *id  = HiSaxID;
 
 MODULE_AUTHOR("Karsten Keil");
 MODULE_PARM(type, "1-8i");
@@ -1296,7 +1288,7 @@ HiSax_reportcard(int cardnr, int sel)
 	printk(KERN_DEBUG "HiSax: HiSax_reportcard address 0x%lX\n",
 		(ulong) & HiSax_reportcard);
 	printk(KERN_DEBUG "HiSax: cs 0x%lX\n", (ulong) cs);
-	printk(KERN_DEBUG "HiSax: HW_Flags %x bc0 flg %x bc1 flg %x\n",
+	printk(KERN_DEBUG "HiSax: HW_Flags %lx bc0 flg %lx bc1 flg %lx\n",
 		cs->HW_Flags, cs->bcs[0].Flag, cs->bcs[1].Flag);
 	printk(KERN_DEBUG "HiSax: bcs 0 mode %d ch%d\n",
 		cs->bcs[0].mode, cs->bcs[0].channel);

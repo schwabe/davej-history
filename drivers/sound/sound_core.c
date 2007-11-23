@@ -52,6 +52,7 @@ struct sound_unit
 	struct sound_unit *next;
 };
 
+extern int init_cmpci(void);
 extern int init_sonicvibes(void);
 extern int init_maestro(void);
 extern int init_trident(void);
@@ -395,6 +396,9 @@ int soundcore_init(void)
 	/*
 	 *	Now init non OSS drivers
 	 */
+#ifdef CONFIG_SOUND_CMPCI
+        init_cmpci();
+#endif
 #ifdef CONFIG_SOUND_VWSND
 	init_vwsnd();
 #endif
