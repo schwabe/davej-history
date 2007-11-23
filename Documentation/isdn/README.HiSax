@@ -44,9 +44,10 @@ Eicon.Diehl Diva 2.0 ISA and PCI (S0 and U interface, no PRO version)
 Eicon.Diehl Diva Piccola
 ASUSCOM NETWORK INC. ISDNLink 128K PC adapter (order code I-IN100-ST-D)
 Dynalink IS64PH (OEM version of ASUSCOM NETWORK INC. ISDNLink 128K adapter)
+PCBIT-DP (OEM version of ASUSCOM NETWORK INC. ISDNLink)
 HFC-2BS0 based cards (TeleInt SA1)
-Sedlbauer Speed Card (Speed Win, Teledat 100)
-Sedlbauer Speed Star (PCMCIA)
+Sedlbauer Speed Card (Speed Win, Teledat 100, PCI, Fax+)
+Sedlbauer Speed Star/Speed Star2 (PCMCIA)
 Sedlbauer ISDN-Controller PC/104
 USR Sportster internal TA (compatible Stollmann tina-pp V3)
 ith Kommunikationstechnik GmbH MIC 16 ISA card 
@@ -144,11 +145,11 @@ Card types:
    11   Eicon.Diehl Diva ISA PnP irq, io
    11   Eicon.Diehl Diva PCI     no parameter
    12   ASUS COM ISDNLink        irq, io  (from isapnp setup)
-   13   HFC-2BS0 based cards     irq, io  
+   13   HFC-2BS0 based cards     irq, io
    14   Teles 16.3c PnP          irq, io
-   15   Sedlbauer Speed Card     irq, io  
-   16   USR Sportster internal   irq, io  
-   17   MIC card                 irq, io  
+   15   Sedlbauer Speed Card     irq, io
+   16   USR Sportster internal   irq, io
+   17   MIC card                 irq, io
    18   ELSA Quickstep 1000PCI   no parameter
    19   Compaq ISDN S0 ISA card  irq, io0, io1, io (from isapnp setup io=IO2)
    20   NETjet PCI card          no parameter
@@ -159,6 +160,7 @@ Card types:
    25   Teles S0Box              irq, io (of the used lpt port)
    26   AVM A1 PCMCIA (Fritz!)   irq, io (set with card manager)
    27   AVM PCI (Fritz!PCI)      no parameter
+   28   Sedlbauer Speed Fax+     irq, io (from isapnp setup)
 
         
 At the moment IRQ sharing is only possible with PCI cards. Please make sure
@@ -220,8 +222,8 @@ where
                 Note: the ID string must start with an alphabetical character!
 
 Card types:
-       
-  type  
+
+type
     1 	Teles 16.0     	        pa=irq  pb=membase  pc=iobase
     2 	Teles  8.0              pa=irq  pb=membase
     3 	Teles 16.3              pa=irq  pb=iobase
@@ -237,7 +239,7 @@ Card types:
    12   ASUS COM ISDNLink       ONLY WORKS AS A MODULE !
    13	HFC-2BS0 based cards    pa=irq  pb=io
    14   Teles 16.3c PnP         ONLY WORKS AS A MODULE !
-   15	Sedlbauer Speed Card    pa=irq  pb=io (Speed Win only as module !)  
+   15	Sedlbauer Speed Card    pa=irq  pb=io (Speed Win only as module !)
    16   USR Sportster internal  pa=irq  pb=io
    17   MIC card                pa=irq  pb=io
    18   ELSA Quickstep 1000PCI  no parameter
@@ -250,6 +252,8 @@ Card types:
    25   Teles S0Box             irq, io (of the used lpt port)
    26   AVM A1 PCMCIA (Fritz!)  irq, io (set with card manager)
    27   AVM PCI (Fritz!PCI)     no parameter
+   28   Sedlbauer Speed Fax+    ONLY WORKS AS A MODULE !
+
 
 Running the driver
 ------------------
@@ -384,6 +388,7 @@ Special thanks to:
 	Firma Traverse Technologie Australia
 	Firma Medusa GmbH  (www.medusa.de).
 	Firma Quant-X Austria for sponsoring a DEC Alpha board+CPU
+	Firma Cologne Chip Designs GmbH
          
         My girl friend and partner in life Ute for her patience with me.
 

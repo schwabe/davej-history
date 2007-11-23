@@ -4452,8 +4452,8 @@ CONFIG_ISDN_PPP
 Support generic MP (RFC 1717)
 CONFIG_ISDN_MPP
   With synchronous PPP enabled, it is possible to increase throughput
-  by bundling several ISDN-connections, using this protocol. See
-  Documentation/isdn/README.syncppp for more information.
+  by bundling several ISDN-connections, using this protocol.
+  See Documentation/isdn/README.syncppp for more information.
 
 Use VJ-compression with synchronous PPP
 CONFIG_ISDN_PPP_VJ
@@ -4496,38 +4496,38 @@ CONFIG_HISAX_EURO
 
 Support for german chargeinfo
 CONFIG_DE_AOC
-If you have german AOC, you can enable this to get the charginfo.
+  If you have german AOC, you can enable this to get the charginfo.
 
 Disable sending complete
 CONFIG_HISAX_NO_SENDCOMPLETE
-If you have trouble with some ugly exchanges or you live in Australia
-select this option.
+  If you have trouble with some ugly exchanges or you live in
+  Australia select this option.
 
 Disable sending low layer compatibility
 CONFIG_HISAX_NO_LLC
-If you have trouble with some ugly exchanges try to select this
-option.
+  If you have trouble with some ugly exchanges try to select this
+  option.
 
 HiSax Support for german 1TR6
 CONFIG_HISAX_1TR6
-Enable this if you have a old german 1TR6 line.
-Note: Many older local switches are using 1TR6 on internal S0.
+  Enable this if you have a old german 1TR6 line.
+  Note: Many older local switches are using 1TR6 on internal S0.
 
 HiSax Support for Teles 16.0/8.0
 CONFIG_HISAX_16_0
   This enables HiSax support for the Teles ISDN-cards S0-16.0,
   S0-8 and many compatibles.
-  See Documentation/isdn/README.HiSax on how to configure it
-  using the different cards, a different D-channel protocol, or
-  non-standard IRQ/port/shmem settings.
+  See Documentation/isdn/README.HiSax on how to configure it using the
+  different cards, a different D-channel protocol, or non-standard
+  IRQ/port/shmem settings.
 
 HiSax Support for Teles 16.3 or PNP or PCMCIA
 CONFIG_HISAX_16_3
   This enables HiSax support for the Teles ISDN-cards S0-16.3
   the Teles/Creatix PnP and the Teles PCMCIA.
-  See Documentation/isdn/README.HiSax on how to configure it
-  using the different cards, a different D-channel protocol, or
-  non-standard IRQ/port settings.
+  See Documentation/isdn/README.HiSax on how to configure it using the
+  different cards, a different D-channel protocol, or non-standard
+  IRQ/port settings.
 
 HiSax Support for Teles 16.3c
 CONFIG_HISAX_TELES3C
@@ -4541,15 +4541,15 @@ CONFIG_HISAX_TELESPCI
 
 HiSax Support for Teles S0Box
 CONFIG_HISAX_S0BOX
-  This enables HiSax support for the Teles/Creatix parallel port S0BOX.
-  See Documentation/isdn/README.HiSax on how to configure it.
+  This enables HiSax support for the Teles/Creatix parallel port
+  S0BOX.  See Documentation/isdn/README.HiSax on how to configure it.
 
 HiSax Support for AVM A1 (Fritz)
 CONFIG_HISAX_AVM_A1
   This enables HiSax support for the AVM A1 (aka "Fritz!").
-  See Documentation/isdn/README.HiSax on how to configure it
-  using the different cards, a different D-channel protocol, or
-  non-standard IRQ/port settings.
+  See Documentation/isdn/README.HiSax on how to configure it using the
+  different cards, a different D-channel protocol, or non-standard
+  IRQ/port settings.
 
 HiSax Support for AVM PCI (Fritz!PCI)
 CONFIG_HISAX_FRITZPCI
@@ -4564,9 +4564,10 @@ CONFIG_HISAX_AVM_A1_PCMCIA
 HiSax Support for Elsa ISA cards
 CONFIG_HISAX_ELSA
   This enables HiSax support for all Elsa cards.
-  See Documentation/isdn/README.HiSax on how to configure it
-  using the different cards, a different D-channel protocol, or
-  non-standard IRQ/port settings.
+  See Documentation/isdn/README.HiSax on how to configure it using the
+  different cards, a different D-channel protocol, or non-standard
+  IRQ/port settings.
+
 
 HiSax Support for ITK ix1-micro Revision 2
 CONFIG_HISAX_IX1MICROR2
@@ -4575,29 +4576,35 @@ CONFIG_HISAX_IX1MICROR2
 
 HiSax Support for Eicon.Diehl Diva cards
 CONFIG_HISAX_DIEHLDIVA
-  This enables HiSax support for all none Pro versions of Eicon.Diehl's 
-  Diva series passiv cards.
+  This enables HiSax support for all none Pro versions of
+  Eicon.Diehl's Diva series passiv cards.
   See Documentation/isdn/README.HiSax on how to configure it.
 
 HiSax Support for ASUSCOM cards
 CONFIG_HISAX_ASUSCOM
-  This enables HiSax support for all AsusCom passiv cards.
+  This enables HiSax support for all passiv AsusCom and AsusComs OEM cards,
+  e.g PCBIT-DP, Dynalink and much more.
   See Documentation/isdn/README.HiSax on how to configure it.
 
 HiSax Support for TELEINT cards
 CONFIG_HISAX_TELEINT
-  This enables HiSax support for TeleInts semi-activ card and for other
-  HFC-2BS0 based cards
+  This enables HiSax support for TeleInts semi-activ card and for
+  other HFC-2BS0 based cards.
   See Documentation/isdn/README.HiSax on how to configure it.
 
-HiSax Support for Sedlbauer speed card/win/star/PC104/fax
+HiSax Support for Sedlbauer cards
 CONFIG_HISAX_SEDLBAUER
-  This enables HiSax support for all Sedlbauer passiv cards.
+  This enables HiSax support for all Sedlbauer passiv cards such as
+  Sedlbauer Speed Card (Speed Win, Teledat 100), Speed Star
+  and Speed Star2 (PCMCIA), ISDN-Controller PC/104, Speed PCI and
+  Speed Fax+.
+  
   See Documentation/isdn/README.HiSax on how to configure it.
 
 HiSax Support for USR Sportster internal TA
 CONFIG_HISAX_SPORTSTER
-  This enables HiSax support for the USR (3Com) Sportster internal TA passiv card.
+  This enables HiSax support for the USR (3Com) Sportster internal TA
+  passiv card.
   See Documentation/isdn/README.HiSax on how to configure it.
 
 HiSax Support for MIC card
@@ -4607,7 +4614,7 @@ CONFIG_HISAX_MIC
 
 HiSax Support for NETjet card
 CONFIG_HISAX_NETJET
-  This enables HiSax support for the NetJet PCI and maybe for other 
+  This enables HiSax support for the NetJet PCI and maybe for other
   Tiger300 based passiv cards.
   See Documentation/isdn/README.HiSax on how to configure it.
 
@@ -4622,9 +4629,9 @@ CONFIG_ISDN_DRV_PCBIT
   This enables support for the PCBIT ISDN-cards. This card is
   manufactured in Portugal by Octal. For running this card, additional
   firmware is necessary, which has to be downloaded into the card
-  using a utility which is distributed separately.  See
-  Documentation/isdn/README and Documentation/isdn/README.pcbit for
-  more information.
+  using a utility which is distributed separately.
+  See Documentation/isdn/README and Documentation/isdn/README.pcbit
+  for more information.
 
 Spellcaster support (EXPERIMENTAL)
 CONFIG_ISDN_DRV_SC

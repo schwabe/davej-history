@@ -27,6 +27,7 @@ endif
 ISAC_OBJ :=
 ARCOFI_OBJ :=
 HSCX_OBJ :=
+ISAR_OBJ :=
 HFC_OBJ :=
 HFC_2BDS0 :=
 
@@ -107,6 +108,7 @@ ifeq ($(CONFIG_HISAX_SEDLBAUER),y)
 	 O_OBJS += sedlbauer.o
 	 ISAC_OBJ := isac.o
 	 HSCX_OBJ := hscx.o
+	 ISAR_OBJ := isar.o
 endif
 
 ifeq ($(CONFIG_HISAX_SPORTSTER),y)
@@ -137,7 +139,7 @@ ifeq ($(CONFIG_HISAX_NICCY),y)
 	 HSCX_OBJ := hscx.o
 endif
 
-O_OBJS += $(ISAC_OBJ) $(HSCX_OBJ) $(ARCOFI_OBJ) 
+O_OBJS += $(ISAC_OBJ) $(HSCX_OBJ) $(ISAR_OBJ) $(ARCOFI_OBJ) 
 O_OBJS += $(HFC_OBJ) $(HFC_2BDS0)
 OX_OBJS += config.o
 

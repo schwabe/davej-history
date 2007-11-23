@@ -39,7 +39,7 @@ if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
     bool 'HiSax Support for Eicon.Diehl Diva cards' CONFIG_HISAX_DIEHLDIVA
     bool 'HiSax Support for ASUSCOM cards' CONFIG_HISAX_ASUSCOM
     bool 'HiSax Support for TELEINT cards' CONFIG_HISAX_TELEINT
-    bool 'HiSax Support for Sedlbauer speed card/win/star/PC104/fax' CONFIG_HISAX_SEDLBAUER
+    bool 'HiSax Support for Sedlbauer cards' CONFIG_HISAX_SEDLBAUER
     bool 'HiSax Support for USR Sportster internal TA' CONFIG_HISAX_SPORTSTER
     bool 'HiSax Support for MIC card' CONFIG_HISAX_MIC
     bool 'HiSax Support for NETjet card' CONFIG_HISAX_NETJET

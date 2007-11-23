@@ -431,6 +431,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( OPTIBASE,	OPTIBASE_VPLEX,	"VideoPlex"),
 	DEVICE( OPTIBASE,	OPTIBASE_VPLEXCC,"VideoPlex CC"),
 	DEVICE( OPTIBASE,	OPTIBASE_VQUEST,"VideoQuest"),
+	DEVICE( ASIX,		ASIX_88140, "88140"),
 	DEVICE( SATSAGEM,	SATSAGEM_PCR2101,"PCR2101 DVB receiver"),
 	DEVICE( SATSAGEM,	SATSAGEM_TELSATTURBO,"Telsat Turbo DVB"),
 	DEVICE( ENSONIQ,	ENSONIQ_AUDIOPCI,"AudioPCI"),
@@ -833,6 +834,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_ADAPTEC2:	return "Adaptec";
 	      case PCI_VENDOR_ID_ATRONICS:	return "Atronics";
 	      case PCI_VENDOR_ID_ARK:		return "ARK Logic";
+	      case PCI_VENDOR_ID_ASIX:		return "ASIX";
 	      default:				return "Unknown vendor";
 	}
 }

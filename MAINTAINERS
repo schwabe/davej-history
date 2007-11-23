@@ -248,10 +248,18 @@ M:	Gadi Oxman <gadio@netvision.net.il>
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-ISDN SUBSYSTEM
+ISDN SUBSYSTEM [GENERAL]
 P:	Fritz Elfert
-M:	fritz@wuemaus.franken.de
+M:	fritz@isdn4linux.de
 L:	isdn4linux@hub-wue.franken.de
+W:	http://www.isdn4linux.de
+S:	Maintained
+
+ISDN SUBSYSTEM HISAX
+P:	Karsten Keil
+M:	keil@isdn4linux.de
+L:	isdn4linux@hub-wue.franken.de
+W:	http://www.isdn4linux.de
 S:	Maintained
 
 MODULE SUPPORT [GENERAL], KERNELD

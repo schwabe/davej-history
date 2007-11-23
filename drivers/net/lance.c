@@ -512,14 +512,6 @@ int lance_probe1(struct device *dev, int ioaddr, int irq, int options)
 	dev->base_addr = ioaddr;
 	request_region(ioaddr, LANCE_TOTAL_SIZE, chip_table[lance_version].name);
 
-#ifdef CONFIG_LANCE32
-	/* look if it's a PCI or VLB chip */
-	if (lance_version == PCNET_PCI || lance_version == PCNET_VLB || lance_version == PCNET_PCI_II) {
-	    extern int lance32_probe1 (struct device *dev, const char *chipname, int pci_irq_line);
-	    
-	    return lance32_probe1 (dev, chipname, pci_irq_line);
-	}
-#endif    
 	/* Make certain the data structures used by the LANCE are aligned and DMAble. */
 		
 	lp = (struct lance_private *)(((unsigned long)kmalloc(sizeof(*lp)+7,

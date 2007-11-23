@@ -12,7 +12,7 @@
  * 	This driver is for AMD PCnet-PCI based ethercards
  */
 
-static const char *version = "pcnet32.c:v0.99B 4/4/98 DJBecker/TSBogend.\n";
+static const char *version = "\npcnet32.c:v0.99B 4/4/98 DJBecker/TSBogend.\n";
 
 /* A few user-configurable values. */
 
@@ -241,11 +241,6 @@ int pcnet32_probe (struct device *dev)
 									  PCI_COMMAND, new_command);
 		}
 
-#ifdef __powerpc__
-		/* This is bogus! -djb */
-		irq_line = 15;
-#endif
-
 		if (pcnet32_probe1(dev, pci_ioaddr, irq_line) != 0) {
 			/* Should never happen. */
 			printk(KERN_ERR "pcnet32.c: Probe of PCI card at %#x failed.\n",
@@ -346,10 +341,6 @@ static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char
     inw(ioaddr+PCNET32_ADDR);
 
 	dev->irq = irq_line;
-#ifdef __powerpc__
-		/* This is sooo bogus! -djb */
-	    irq_line = 15;
-#endif
 
     outw(0x0002, ioaddr+PCNET32_ADDR);
     /* only touch autoselect bit */
@@ -719,7 +710,22 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 		/* Log misc errors. */
 		if (csr0 & 0x4000) lp->stats.tx_errors++; /* Tx babble. */
-		if (csr0 & 0x1000) lp->stats.rx_errors++; /* Missed a Rx frame. */
+		if (csr0 & 0x1000) {
+			/*
+			 * this happens when our receive ring is full. This 
+			 * shouldn't be a problem as we will see normal rx 
+			 * interrupts for the frames in the receive ring. But 
+			 * there are some PCI chipsets (I can reproduce this 
+			 * on SP3G with Intel saturn chipset) which have some-
+			 * times problems and will fill up the receive ring 
+			 * with error descriptors. In this situation we don't 
+			 * get a rx interrupt, but a missed frame interrupt 
+			 * sooner or later. So we try to clean up our receive 
+			 * ring here.
+			 */
+			pcnet32_rx(dev);
+			lp->stats.rx_errors++; /* Missed a Rx frame. */
+		}
 		if (csr0 & 0x0800) {
 			printk("%s: Bus master arbitration failure, status %4.4x.\n",
 				   dev->name, csr0);

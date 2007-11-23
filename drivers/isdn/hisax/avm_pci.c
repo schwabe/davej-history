@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.1.2.3 1998/09/27 23:52:57 keil Exp $
+/* $Id: avm_pci.c,v 1.1.2.5 1998/10/13 18:38:50 keil Exp $
 
  * avm_pci.c    low level stuff for AVM Fritz!PCI isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -7,6 +7,12 @@
  *
  *
  * $Log: avm_pci.c,v $
+ * Revision 1.1.2.5  1998/10/13 18:38:50  keil
+ * Fix PCI detection
+ *
+ * Revision 1.1.2.4  1998/10/04 23:03:41  keil
+ * PCI has 255 device entries
+ *
  * Revision 1.1.2.3  1998/09/27 23:52:57  keil
  * Fix error handling
  *
@@ -33,7 +39,7 @@
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.1.2.3 $";
+static const char *avm_pci_rev = "$Revision: 1.1.2.5 $";
 
 #define  PCI_VENDOR_AVM		0x1244
 #define  PCI_FRITZPCI_ID	0xa00
@@ -708,8 +714,9 @@ setup_avm_pci(struct IsdnCard *card))
 			return(0);
 		}
 		cs->hw.avm.isac = cs->hw.avm.cfg_reg + 0x10;
+		break;
 	}	
-	if (pci_index == 8) {
+	if (pci_index == 255) {
 		printk(KERN_WARNING "FritzPCI: No PCI card found\n");
 		return(0);
         }
