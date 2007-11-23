@@ -667,10 +667,18 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
                 /* It isnt really a PCI quirk directly, but the cure is the
        	           same. The MediaGX has deep magic SMM stuff that handles the
                    SB emulation. It thows away the fifo on disable_dma() which
-                   is wrong and ruins the audio. */
+                   is wrong and ruins the audio. 
+                   
+                   Bug2: VSA1 has a wrap bug so that using maximum sized DMA 
+                   causes bad things. According to NatSemi VSA2 has another
+                   bug to do with 'hlt'. I've not seen any boards using VSA2
+                   and X doesn't seem to support it either so who cares 8).
+                   VSA1 we work around however.
+                   
+                  */
 
 		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bug.\n");
-                isa_dma_bridge_buggy = 1;
+                isa_dma_bridge_buggy = 2;
                   	                                                                     	        
 #endif
 		/* GXm supports extended cpuid levels 'ala' AMD */

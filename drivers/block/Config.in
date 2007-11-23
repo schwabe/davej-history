@@ -44,6 +44,7 @@ else
             bool '     NS87415 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_NS87415
             bool '     VIA82C586 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82C586
             bool '     CMD646 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CMD646
+            bool '     Cyrix CS5530 MediaGX chipset support' CONFIG_BLK_DEV_CS5530 
           fi
         fi
       fi

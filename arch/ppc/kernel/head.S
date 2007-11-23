@@ -1739,6 +1739,7 @@ __secondary_start_gemini:
 	.globl	__secondary_start_psurge
 __secondary_start_psurge:
 	li	r24,1			/* cpu # */
+	li	r3,0			/* starting physical address */
 	b	__secondary_start
 
 	.globl	__secondary_hold

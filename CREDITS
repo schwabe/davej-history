@@ -1408,7 +1408,7 @@ S: 7546 JA  Enschede
 S: Netherlands
 
 N: David S. Miller
-E: davem@dm.cobaltmicro.com
+E: davem@redhat.com
 D: Sparc and blue box hacker
 D: Vger Linux mailing list co-maintainer
 D: Linux Emacs elf/qmagic support + other libc/gcc things
@@ -2058,12 +2058,8 @@ S: 97078 Wuerzburg
 S: Germany
 
 N: Greg Ungerer
-E: gerg@stallion.com
+E: gerg@moreton.com.au
 D: Author of Stallion multiport serial drivers
-S: Stallion Technologies
-S: 33 Woodstock Rd
-S: Toowong, QLD. 4066
-S: Australia
 
 N: Jeffrey A. Uphoff
 E: juphoff@nrao.edu

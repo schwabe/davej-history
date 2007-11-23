@@ -162,6 +162,10 @@ ifeq ($(CONFIG_BLK_DEV_CMD646),y)
 IDE_OBJS += cmd646.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_CS5530),y)
+IDE_OBJS += cs5530.o
+endif     
+
 ifeq ($(CONFIG_BLK_DEV_SL82C105),y)
 IDE_OBJS += sl82c105.o
 endif

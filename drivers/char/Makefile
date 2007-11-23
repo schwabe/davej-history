@@ -475,6 +475,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_VIDEO_CPIA),y)
+LX_OBJS += cpia.o
+else
+  ifeq ($(CONFIG_VIDEO_CPIA),m)
+    MX_OBJS += cpia.o
+  endif
+endif
+
+ifeq ($(CONFIG_VIDEO_CPIA_PP),y)
+L_OBJS += cpia_pp.o
+else
+  ifeq ($(CONFIG_VIDEO_CPIA_PP),m)
+    M_OBJS += cpia_pp.o
+  endif
+endif
+
 ifeq ($(CONFIG_RADIO_AZTECH),y)
 L_OBJS += radio-aztech.o
 else

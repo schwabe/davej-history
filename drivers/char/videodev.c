@@ -54,6 +54,9 @@ extern int init_colour_qcams(struct video_init *);
 #ifdef CONFIG_VIDEO_BWQCAM
 extern int init_bw_qcams(struct video_init *);
 #endif
+#ifdef CONFIG_VIDEO_CPIA
+extern int cpia_init(struct video_init *);
+#endif
 #ifdef CONFIG_VIDEO_PLANB
 extern int init_planbs(struct video_init *);
 #endif
@@ -104,6 +107,9 @@ static struct video_init video_init_list[]={
 #endif	
 #ifdef CONFIG_VIDEO_BWQCAM
 	{"bw-qcam", init_bw_qcams},
+#endif        
+#ifdef CONFIG_VIDEO_CPIA
+        {"cpia", cpia_init},
 #endif	
 #ifdef CONFIG_VIDEO_PMS
 	{"PMS", init_pms_cards}, 

@@ -217,6 +217,7 @@ if [ "$CONFIG_NET" = "y" ]; then
 	bool 'Network device support' CONFIG_NETDEVICES
 	if [ "$CONFIG_NETDEVICES" = "y" ]; then
 		tristate 'Dummy net driver support' CONFIG_DUMMY
+		tristate 'Bonding driver support' CONFIG_BONDING
 		tristate 'PPP (point-to-point) support' CONFIG_PPP
 		if [ ! "$CONFIG_PPP" = "n" ]; then
 		   comment 'CCP compressors for PPP are only built as modules.'

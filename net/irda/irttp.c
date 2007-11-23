@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Sun Jan 16 22:46:33 2000
+ * Modified at:   Sun Jan 30 14:30:32 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
@@ -60,7 +60,8 @@ static void irttp_flush_queues(struct tsap_cb *self);
 static void irttp_fragment_skb(struct tsap_cb *self, struct sk_buff *skb);
 static void irttp_start_todo_timer(struct tsap_cb *self, int timeout);
 static struct sk_buff *irttp_reassemble_skb(struct tsap_cb *self);
-static int irttp_param_max_sdu_size(void *instance, param_t *param, int get);
+static int irttp_param_max_sdu_size(void *instance, irda_param_t *param, 
+				    int get);
 
 /* Information for parsing parameters in IrTTP */
 static pi_minor_info_t pi_minor_call_table[] = {
@@ -1399,7 +1400,8 @@ static void irttp_fragment_skb(struct tsap_cb *self, struct sk_buff *skb)
  *    will be called both when this parameter needs to be inserted into, and
  *    extracted from the connect frames
  */
-static int irttp_param_max_sdu_size(void *instance, param_t *param, int get)
+static int irttp_param_max_sdu_size(void *instance, irda_param_t *param, 
+				    int get)
 {
 	struct tsap_cb *self;
 

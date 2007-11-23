@@ -47,6 +47,7 @@
 #define DEVID_UM8886A	((ide_pci_devid_t){PCI_VENDOR_ID_UMC,     PCI_DEVICE_ID_UMC_UM8886A})
 #define DEVID_UM8886BF	((ide_pci_devid_t){PCI_VENDOR_ID_UMC,     PCI_DEVICE_ID_UMC_UM8886BF})
 #define DEVID_HPT343	((ide_pci_devid_t){PCI_VENDOR_ID_TTI,     PCI_DEVICE_ID_TTI_HPT343})
+#define DEVID_CS5530	((ide_pci_devid_t){PCI_VENDOR_ID_CYRIX,   PCI_DEVICE_ID_CYRIX_5530_IDE})
 
 #define IDE_IGNORE	((void *)-1)
 
@@ -103,6 +104,13 @@ extern void ide_init_via82c586(ide_hwif_t *);
 #define	INIT_VIA82C586	NULL
 #endif
 
+#ifdef CONFIG_BLK_DEV_CS5530
+extern void ide_init_cs5530(ide_hwif_t *);
+#define INIT_CS5530     &ide_init_cs5530
+#else
+#define INIT_CS5530     NULL
+#endif
+
 typedef struct ide_pci_enablebit_s {
 	byte	reg;	/* byte pci reg holding the enable-bit */
 	byte	mask;	/* mask to isolate the enable-bit */
@@ -141,6 +149,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_UM8886A,	"UM8886A",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_UM8886BF,"UM8886BF",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_HPT343,	"HPT343",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	NEVER_BOARD,	16 },
+	{DEVID_CS5530,	"CS5530",	INIT_CS5530,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	112 },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 }};
 
 /*
@@ -393,6 +402,7 @@ check_if_enabled:
 		if (IDE_PCI_DEVID_EQ(d->devid, DEVID_PDC20246) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_AEC6210) ||
 		    IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT343) ||
+		    IDE_PCI_DEVID_EQ(d->devid, DEVID_CS5530) ||
 		    ((dev->class >> 8) == PCI_CLASS_STORAGE_IDE && (dev->class & 0x80))) {
 			unsigned long dma_base = ide_get_or_set_dma_base(hwif, (!mate && d->extra) ? d->extra : 0, d->name);
 			if (dma_base && !(pcicmd & PCI_COMMAND_MASTER)) {

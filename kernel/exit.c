@@ -473,7 +473,6 @@ repeat:
 				if (!(options & WUNTRACED) && !(p->flags & PF_PTRACED))
 					continue;
 				read_unlock(&tasklist_lock);
-				current->state = TASK_RUNNING;	/* We *must* do this before touching userspace! */
 				retval = ru ? getrusage(p, RUSAGE_BOTH, ru) : 0; 
 				if (!retval && stat_addr) 
 					retval = put_user((p->exit_code << 8) | 0x7f, stat_addr);
@@ -486,7 +485,6 @@ repeat:
 				current->times.tms_cutime += p->times.tms_utime + p->times.tms_cutime;
 				current->times.tms_cstime += p->times.tms_stime + p->times.tms_cstime;
 				read_unlock(&tasklist_lock);
-				current->state = TASK_RUNNING;	/* We *must* do this before touching userspace! */
 				retval = ru ? getrusage(p, RUSAGE_BOTH, ru) : 0;
 				if (!retval && stat_addr)
 					retval = put_user(p->exit_code, stat_addr);

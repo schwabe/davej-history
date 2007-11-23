@@ -41,8 +41,8 @@
 
 #define SMART2_DRIVER_VERSION(maj,min,submin) ((maj<<16)|(min<<8)|(submin))
 
-#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0.5)"
-#define DRIVER_VERSION SMART2_DRIVER_VERSION(1,0,5)
+#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0.6)"
+#define DRIVER_VERSION SMART2_DRIVER_VERSION(1,0,6)
 #define MAJOR_NR COMPAQ_SMART2_MAJOR
 #include <linux/blk.h>
 #include <linux/blkdev.h>
@@ -84,6 +84,7 @@ struct board_type products[] = {
 	{ 0x40400E11, "Integrated Array",	&smart4_access },
 	{ 0x40500E11, "Smart Array 4200",	&smart4_access },
 	{ 0x40510E11, "Smart Array 4250ES",	&smart4_access },
+	{ 0x40580E11, "Smart Array 431",	&smart4_access },
 };
 
 static struct hd_struct * ida;
@@ -1223,7 +1224,7 @@ static int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 			return(error);
 		}
 		copy_from_user(p, (void*)io->sg[0].addr, io->sg[0].size);
-		c->req.bp = virt_to_bus(&(io->c));
+		c->req.hdr.blk = virt_to_bus(&(io->c));
 		c->req.sg[0].size = io->sg[0].size;
 		c->req.sg[0].addr = virt_to_bus(p);
 		c->req.hdr.sg_cnt = 1;

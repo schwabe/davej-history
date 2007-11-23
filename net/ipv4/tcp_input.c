@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.164.2.11 2000/01/13 04:27:59 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164.2.12 2000/01/31 20:43:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -2415,7 +2415,8 @@ step6:
 		 * BSD 4.4 also does reset.
 		 */
 		if ((sk->shutdown & RCV_SHUTDOWN) && sk->dead) {
-			if (after(TCP_SKB_CB(skb)->end_seq - th->fin, tp->rcv_nxt)) {
+			if (TCP_SKB_CB(skb)->end_seq != TCP_SKB_CB(skb)->seq &&
+			    after(TCP_SKB_CB(skb)->end_seq - th->fin, tp->rcv_nxt)) {
 				tcp_reset(sk);
 				return 1;
 			}

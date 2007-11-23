@@ -3,8 +3,8 @@
 /*
  *	istallion.c  -- stallion intelligent multiport serial driver.
  *
- *	Copyright (C) 1996-1999  Stallion Technologies (support@stallion.oz.au).
- *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
+ *	Copyright (C) 1996-2000  Stallion Technologies (support@stallion.oz.au)
+ *	Copyright (C) 1994-1996  Greg Ungerer.
  *
  *	This code is loosely based on the Linux serial driver, written by
  *	Linus Torvalds, Theodore T'so and others.
@@ -167,7 +167,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  */
 static char	*stli_drvtitle = "Stallion Intelligent Multiport Serial Driver";
 static char	*stli_drvname = "istallion";
-static char	*stli_drvversion = "5.5.1";
+static char	*stli_drvversion = "5.6.0";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -383,7 +383,7 @@ static stlibrdtype_t	stli_brdstr[] = {
 /*
  *	Define the module agruments.
  */
-MODULE_AUTHOR("Greg Ungerer");
+MODULE_AUTHOR("Stallion Technologies (support@stallion.oz.au)");
 MODULE_DESCRIPTION("Stallion Intelligent Multiport Serial Driver");
 
 MODULE_PARM(board0, "1-3s");
@@ -711,6 +711,8 @@ static int	stli_getbrdstats(combrd_t *bp);
 static int	stli_getportstats(stliport_t *portp, comstats_t *cp);
 static int	stli_portcmdstats(stliport_t *portp);
 static int	stli_clrportstats(stliport_t *portp, comstats_t *cp);
+static int	stli_geticounters(stliport_t *portp,
+				  struct serial_icounter_struct *cp);
 static int	stli_getportstruct(unsigned long arg);
 static int	stli_getbrdstruct(unsigned long arg);
 static void	*stli_memalloc(int len);
@@ -2170,6 +2172,13 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 		    sizeof(comstats_t))) == 0)
 			rc = stli_clrportstats(portp, (comstats_t *) arg);
 		break;
+	case TIOCGICOUNT:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg,
+		    sizeof(struct serial_icounter_struct *))) == 0)
+			rc = stli_geticounters(portp,
+				      (struct serial_icounter_struct *) arg);
+		break;
+
 	case TIOCSERCONFIG:
 	case TIOCSERGWILD:
 	case TIOCSERSWILD:
@@ -3375,6 +3384,9 @@ static inline int stli_initports(stlibrd_t *brdp)
 		portp->closing_wait = 30 * HZ;
 		portp->tqhangup.routine = stli_dohangup;
 		portp->tqhangup.data = portp;
+		portp->open_wait = 0;
+		portp->close_wait = 0;
+		portp->raw_wait = 0;
 		portp->normaltermios = stli_deftermios;
 		portp->callouttermios = stli_deftermios;
 		panelport++;
@@ -5138,6 +5150,33 @@ static int stli_clrportstats(stliport_t *portp, comstats_t *cp)
 
 	copy_to_user(cp, &stli_comstats, sizeof(comstats_t));
 	return(0);
+}
+
+static int stli_geticounters(stliport_t *portp,
+			     struct serial_icounter_struct *icp)
+{
+	struct serial_icounter_struct icount;
+	comstats_t *s	= &stli_comstats;
+	int rc;
+	
+	if ((rc = stli_portcmdstats(portp)) < 0)
+		return(rc);
+	
+	memset(&icount, 0, sizeof(icount));
+	
+	/*
+	 * we only support a subset of the icounters - the others are handled
+	 * by the uart and we don't get interrupted for them
+	 */
+	icount.dcd	= s->modem;
+	icount.rx	= s->rxtotal;
+	icount.tx	= s->txtotal;
+	icount.frame	= s->rxframing;
+	icount.overrun	= s->rxoverrun;
+	icount.parity	= s->rxparity;
+	icount.brk	= s->rxbreaks;
+	
+	return (copy_to_user(icp, &icount, sizeof(icount)));
 }
 
 /*****************************************************************************/

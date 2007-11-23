@@ -630,11 +630,12 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 		printk ("shm_nopage: id=%d invalid. Race.\n", id);
 		return 0;
 	}
-	if (idx >= shp->shm_npages) {
-		printk ("shm_nopage : too large page index. id=%d\n", id);
-		return 0;
-	}
 #endif
+	/* This can occur on a remap */
+	
+	if (idx >= shp->shm_npages) {
+		return NULL;
+	}
 
 	pte = __pte(shp->shm_pages[idx]);
 	if (!pte_present(pte)) {

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.140.2.7 2000/01/13 23:44:00 davem Exp $
+ * Version:	$Id: tcp.c,v 1.140.2.8 2000/01/27 22:33:35 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1283,9 +1283,6 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		continue;
 
 	found_ok_skb:
-		/* Below we'll be accessing user memory, which might sleep, so... */
-		current->state = TASK_RUNNING;
-
 		/*	Lock the buffer. We can be fairly relaxed as
 		 *	an interrupt will never steal a buffer we are
 		 *	using unless I've missed something serious in
@@ -1367,15 +1364,15 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		break;
 	}
 
-	remove_wait_queue(sk->sleep, &wait);
-	current->state = TASK_RUNNING;
-
 	if(copied >= 0 && msg->msg_name) {
 		tp->af_specific->addr2sockaddr(sk, (struct sockaddr *)
 					       msg->msg_name);       
 		if(addr_len)
 			*addr_len = tp->af_specific->sockaddr_len;
 	}
+
+	remove_wait_queue(sk->sleep, &wait);
+	current->state = TASK_RUNNING;
 
 	/* Clean up data we have read: This will do ACK frames. */
 	cleanup_rbuf(sk, copied);

@@ -413,18 +413,15 @@ __rpc_execute(struct rpc_task *task)
 		}
 
 		/*
-		 * No handler for next step means exit.
-		 */
-		if (!task->tk_action)
-			break;
-
-		/*
 		 * Perform the next FSM step.
 		 * tk_action may be NULL when the task has been killed
 		 * by someone else.
 		 */
-		if (RPC_IS_RUNNING(task) && task->tk_action)
+		if (RPC_IS_RUNNING(task)) {
+			if (!task->tk_action)
+				break;
 			task->tk_action(task);
+		}
 
 		/*
 		 * Check whether task is sleeping.

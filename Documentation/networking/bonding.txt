@@ -1,7 +1,7 @@
 Installation:
 
 Apply patch.  (if your reading this in
-/usr/src/linux/Documentation/network/bonding.txt, then it's already
+/usr/src/linux/Documentation/networking/bonding.txt, then it's already
 applied.)
 
 Run make menuconfig/xconfig/config, and select 'bonding device' in

@@ -1,17 +1,17 @@
 	   Mylex DAC960/DAC1100 PCI RAID Controller Driver for Linux
 
-			Version 2.2.4 for Linux 2.2.11
-			Version 2.0.4 for Linux 2.0.37
+			Version 2.2.5 for Linux 2.2.14
+			Version 2.0.5 for Linux 2.0.38
 
 			      PRODUCTION RELEASE
 
-				23 August 1999
+				23 January 2000
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
 			       lnz@dandelion.com
 
-	 Copyright 1998-1999 by Leonard N. Zubkoff <lnz@dandelion.com>
+	 Copyright 1998-2000 by Leonard N. Zubkoff <lnz@dandelion.com>
 
 
 				 INTRODUCTION
@@ -87,7 +87,9 @@ Drive and 3 bits for the partition.
 The following list comprises the supported DAC960 and DAC1100 PCI RAID
 Controllers as of the date of this document.  It is recommended that anyone
 purchasing a Mylex PCI RAID Controller not in the following table contact the
-author beforehand to verify that it is or will be supported.
+author beforehand to verify that it is or will be supported.  The eXtremeRAID
+2000, eXtremeRAID 3000, and AcceleRAID 352 have an entirely new firmware
+interface and are not yet supported by this driver.
 
 eXtremeRAID 1100 (DAC1164P)
 	    3 Wide Ultra-2/LVD SCSI channels
@@ -163,16 +165,16 @@ ftp://ftp.mylex.com/pub/dac960/diskcomp.html.
 
 			      DRIVER INSTALLATION
 
-This distribution was prepared for Linux kernel version 2.2.11 or 2.0.37.
+This distribution was prepared for Linux kernel version 2.2.14 or 2.0.38.
 
 To install the DAC960 RAID driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf DAC960-2.2.4.tar.gz (or DAC960-2.0.4.tar.gz)
+  tar -xvzf DAC960-2.2.5.tar.gz (or DAC960-2.0.5.tar.gz)
   mv README.DAC960 linux/Documentation
   mv DAC960.[ch] linux/drivers/block
-  patch -p0 < DAC960.patch
+  patch -p0 < DAC960.patch (driver 2.0.5 only)
   cd linux
   make config
   make depend

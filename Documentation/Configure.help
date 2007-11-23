@@ -12103,6 +12103,33 @@ CONFIG_PHONE_IXJ
   If you do not have any Quicknet telephony cards, you can safely
   ignore this option.
  
+CPiA Video For Linux
+CONFIG_VIDEO_CPIA
+  This is the video4linux driver for cameras based on Vision's CPiA
+  (Colour Processor Interface ASIC), such as the Creative Labs Video
+  Blaster Webcam II. If you have one of these cameras, say Y here
+  and select parallel port lowlevel support below (the USB-version,
+  is not supported on this kernel-version) otherwise say N. This will
+  not work with the Creative Webcam III. It is also available as a
+  module (cpia.o).
+
+  For more information (supported camera models, module autoloading, DMA
+  interrupt settings, supported applications, etc.) read
+  Documentation/video4linux/README.cpia.
+
+CPiA Parallel Port Lowlevel Support
+CONFIG_VIDEO_CPIA_PP
+  This is the lowlevel parallel port support for cameras based on
+  Vision's CPiA (Colour Processor Interface ASIC), such as the
+  Creative Webcam II. If you have the parallel port version of one
+  of these cameras, say Y here, otherwise say N. It is also available
+  as a module (cpia_pp.o).
+
+CPiA Parallel Port DMA Support
+CONFIG_VIDEO_CPIA_PP_DMA
+  This will use DMA if possible to reduce CPU usage.  If in doubt,
+  say Y here.
+   
 #
 # A couple of things I keep forgetting:
 #   capitalize: AppleTalk, Ethernet, DOS, DMA, FAT, FTP, Internet, 

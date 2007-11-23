@@ -245,16 +245,6 @@ ok_to_allocate:
 	RMQUEUE_TYPE(order, 1);
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
 
-	/*
-	 * If we can schedule, do so, and make sure to yield.
-	 * We may be a real-time process, and if kswapd is
-	 * waiting for us we need to allow it to run a bit.
-	 */
-	if (gfp_mask & __GFP_WAIT) {
-		current->policy |= SCHED_YIELD;
-		schedule();
-	}
-
 nopage:
 	return 0;
 }

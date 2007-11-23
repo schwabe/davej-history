@@ -111,6 +111,9 @@ extern void console_setup(char *str, int *ints);
 #ifdef CONFIG_PRINTER
 extern void lp_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_VIDEO_CPIA_PP
+extern void cpia_pp_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_JOY_AMIGA
 extern void js_am_setup(char *str, int *ints);
 #endif
@@ -492,6 +495,24 @@ static struct dev_name_struct {
 	{ "rd/c0d14p",0x3070 },
 	{ "rd/c0d15p",0x3078 },
 #endif
+#if defined(CONFIG_BLK_CPQ_DA) || defined(CONFIG_BLK_CPQ_DA_MODULE)
+	{ "ida/c0d0p",0x4800 },
+	{ "ida/c0d1p",0x4810 },
+	{ "ida/c0d2p",0x4820 },
+	{ "ida/c0d3p",0x4830 },
+	{ "ida/c0d4p",0x4840 },
+	{ "ida/c0d5p",0x4850 },
+	{ "ida/c0d6p",0x4860 },
+	{ "ida/c0d7p",0x4870 },
+	{ "ida/c0d8p",0x4880 },
+	{ "ida/c0d9p",0x4890 },
+	{ "ida/c0d10p",0x48A0 },
+	{ "ida/c0d11p",0x48B0 },
+	{ "ida/c0d12p",0x48C0 },
+	{ "ida/c0d13p",0x48D0 },
+	{ "ida/c0d14p",0x48E0 },
+	{ "ida/c0d15p",0x48F0 },
+#endif
 #ifdef CONFIG_ATARI_ACSI
 	{ "ada",     0x1c00 },
 	{ "adb",     0x1c10 },
@@ -692,6 +713,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_PRINTER
         { "lp=", lp_setup },
+#endif
+#ifdef CONFIG_VIDEO_CPIA_PP
+        { "cpia_pp=", cpia_pp_setup },
 #endif
 #ifdef CONFIG_JOY_AMIGA
 	{ "js_am=", js_am_setup },

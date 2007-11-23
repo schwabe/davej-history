@@ -3,8 +3,8 @@
 /*
  *	stallion.c  -- stallion multiport serial driver.
  *
- *	Copyright (C) 1996-1999  Stallion Technologies (support@stallion.oz.au).
- *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
+ *	Copyright (C) 1996-2000  Stallion Technologies (support@stallion.oz.au)
+ *	Copyright (C) 1994-1996  Greg Ungerer.
  *
  *	This code is loosely based on the Linux serial driver, written by
  *	Linus Torvalds, Theodore T'so and others.
@@ -28,6 +28,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/version.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/tty_flip.h>
@@ -46,6 +47,7 @@
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
 #endif
+
 
 /*****************************************************************************/
 
@@ -127,6 +129,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
 #define	STL_TXBUFLOW		512
 #define	STL_TXBUFSIZE		4096
 
+#define	STL_IRQ_DEVID		(&stl_brds[0])
 /*****************************************************************************/
 
 /*
@@ -135,7 +138,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  */
 static char	*stl_drvtitle = "Stallion Multiport Serial Driver";
 static char	*stl_drvname = "stallion";
-static char	*stl_drvversion = "5.5.1";
+static char	*stl_drvversion = "5.6.0";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -313,7 +316,7 @@ static stlbrdtype_t	stl_brdstr[] = {
 /*
  *	Define the module agruments.
  */
-MODULE_AUTHOR("Greg Ungerer");
+MODULE_AUTHOR("Stallion Technologies (support@stallion.oz.au)");
 MODULE_DESCRIPTION("Stallion Multiport Serial Driver");
 
 MODULE_PARM(board0, "1-4s");
@@ -345,6 +348,7 @@ MODULE_PARM_DESC(board3, "Board 3 config -> name[,ioaddr[,ioaddr2][,irq]]");
 #define	ID_BRD4		0x10
 #define	ID_BRD8		0x20
 #define	ID_BRD16	0x30
+#define	ID_BRD4_422     0x40    /* 4 port EIO supporting RS422*/
 
 #define	EIO_INTRPEND	0x08
 #define	EIO_INTEDGE	0x00
@@ -523,6 +527,8 @@ static int	stl_setserial(stlport_t *portp, struct serial_struct *sp);
 static int	stl_getbrdstats(combrd_t *bp);
 static int	stl_getportstats(stlport_t *portp, comstats_t *cp);
 static int	stl_clrportstats(stlport_t *portp, comstats_t *cp);
+static int	stl_geticounters(stlport_t *portp,
+				 struct serial_icounter_struct *cp);
 static int	stl_getportstruct(unsigned long arg);
 static int	stl_getbrdstruct(unsigned long arg);
 static int	stl_waitcarrier(stlport_t *portp, struct file *filp);
@@ -853,7 +859,7 @@ void cleanup_module()
 	}
 
 	for (i = 0; (i < stl_numintrs); i++)
-		free_irq(stl_gotintrs[i], NULL);
+		free_irq(stl_gotintrs[i], STL_IRQ_DEVID);
 
 	restore_flags(flags);
 }
@@ -1599,7 +1605,8 @@ static int stl_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd
 		return(-ENODEV);
 
 	if ((cmd != TIOCGSERIAL) && (cmd != TIOCSSERIAL) &&
- 	    (cmd != COM_GETPORTSTATS) && (cmd != COM_CLRPORTSTATS)) {
+ 	    (cmd != COM_GETPORTSTATS) && (cmd != COM_CLRPORTSTATS) &&
+	    (cmd != TIOCGICOUNT)) {
 		if (tty->flags & (1 << TTY_IO_ERROR))
 			return(-EIO);
 	}
@@ -1671,6 +1678,13 @@ static int stl_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd
 		    sizeof(comstats_t))) == 0)
 			rc = stl_clrportstats(portp, (comstats_t *) arg);
 		break;
+	case TIOCGICOUNT:
+		if ((rc = verify_area(VERIFY_WRITE, (void *) arg,
+		    sizeof(struct serial_icounter_struct *))) == 0)
+			rc = stl_geticounters(portp,
+				      (struct serial_icounter_struct *) arg);
+		break;
+		
 	case TIOCSERCONFIG:
 	case TIOCSERGWILD:
 	case TIOCSERSWILD:
@@ -2294,7 +2308,8 @@ __initfunc(static int stl_mapirq(int irq, char *name))
 			break;
 	}
 	if (i >= stl_numintrs) {
-		if (request_irq(irq, stl_intr, SA_INTERRUPT, name, NULL) != 0) {
+		if (request_irq(irq, stl_intr, SA_SHIRQ, name,
+				STL_IRQ_DEVID) != 0) {
 			printk("STALLION: failed to register interrupt "
 				"routine for %s irq=%d\n", name, irq);
 			rc = -ENODEV;
@@ -2348,6 +2363,8 @@ __initfunc(static int stl_initports(stlbrd_t *brdp, stlpanel_t *panelp))
 		portp->callouttermios = stl_deftermios;
 		portp->tqueue.routine = stl_offintr;
 		portp->tqueue.data = portp;
+		portp->open_wait = 0;
+		portp->close_wait = 0;
 		portp->stats.brd = portp->brdnr;
 		portp->stats.panel = portp->panelnr;
 		portp->stats.port = portp->portnr;
@@ -2444,6 +2461,9 @@ static inline int stl_initeio(stlbrd_t *brdp)
 			break;
 		case ID_BRD16:
 			brdp->nrports = 16;
+			break;
+		case ID_BRD4_422:
+			brdp->nrports = 4;
 			break;
 		default:
 			return(-ENODEV);
@@ -2780,7 +2800,7 @@ static inline int stl_initpcibrd(int brdtype, struct pci_dev *devp)
 
 #if DEBUG
 	printk("stl_initpcibrd(brdtype=%d,busnr=%x,devnr=%x)\n", brdtype,
-		dev->bus->number, dev->devfn);
+		devp->bus->number, devp->devfn);
 #endif
 
 	if ((brdp = stl_allocbrd()) == (stlbrd_t *) NULL)
@@ -3082,6 +3102,28 @@ static int stl_clrportstats(stlport_t *portp, comstats_t *cp)
 	portp->stats.port = portp->portnr;
 	copy_to_user(cp, &portp->stats, sizeof(comstats_t));
 	return(0);
+}
+
+static int stl_geticounters(stlport_t *portp,
+			    struct serial_icounter_struct *icp)
+{
+	struct serial_icounter_struct icount;
+	comstats_t *s	= &portp->stats;
+	
+	memset(&icount, 0, sizeof(icount));
+	/*
+	 * we only support a subset of the icounters - the others are handled
+	 * by the uart and we don't get interrupted for them
+	 */
+	icount.dcd	= s->modem;
+	icount.rx	= s->rxtotal;
+	icount.tx	= s->txtotal;
+	icount.frame	= s->rxframing;
+	icount.overrun	= s->rxoverrun;
+	icount.parity	= s->rxparity;
+	icount.brk	= s->rxbreaks;
+	
+	return (copy_to_user(icp, &icount, sizeof(icount)));
 }
 
 /*****************************************************************************/
@@ -4209,6 +4251,7 @@ static void stl_cd1400rxisr(stlpanel_t *panelp, int ioaddr)
 		if ((tty == (struct tty_struct *) NULL) ||
 		    (tty->flip.char_buf_ptr == (char *) NULL) ||
 		    ((buflen = TTY_FLIPBUF_SIZE - tty->flip.count) == 0)) {
+			len = MIN(len, sizeof(stl_unwanted));
 			outb((RDSR + portp->uartaddr), ioaddr);
 			insb((ioaddr + EREG_DATA), &stl_unwanted[0], len);
 			portp->stats.rxlost += len;
@@ -5175,6 +5218,7 @@ static void stl_sc26198rxisr(stlport_t *portp, unsigned int iack)
 		if ((tty == (struct tty_struct *) NULL) ||
 		    (tty->flip.char_buf_ptr == (char *) NULL) ||
 		    ((buflen = TTY_FLIPBUF_SIZE - tty->flip.count) == 0)) {
+			len = MIN(len, sizeof(stl_unwanted));
 			outb(GRXFIFO, (ioaddr + XP_ADDR));
 			insb((ioaddr + XP_DATA), &stl_unwanted[0], len);
 			portp->stats.rxlost += len;
