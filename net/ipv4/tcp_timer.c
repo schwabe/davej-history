@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.62.2.6 2000/01/13 04:28:06 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.62.2.9 2000/05/27 04:04:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -178,6 +178,7 @@ static int tcp_write_timeout(struct sock *sk)
 		sk->dport = 0;
 		sk->daddr = 0;
 		sk->num = 0;
+		tcp_clear_xmit_timer(sk, TIME_RETRANS);
 	}
 
 	return ret;
@@ -429,6 +430,15 @@ void tcp_retransmit_timer(unsigned long data)
 	if (atomic_read(&sk->sock_readers)) {
 		/* Try again later */  
 		tcp_reset_xmit_timer(sk, TIME_RETRANS, HZ/20);
+		return;
+	}
+
+	/* Unfortunately, here in 2.2.x on SMP this timer can race
+	 * with the user level context.  It is fixed properly in 2.3.x
+	 * and later, but for now we have to use this hack.
+	 */
+	if (tp->packets_out == 0) {
+		tcp_clear_xmit_timer(sk, TIME_RETRANS);
 		return;
 	}
 

@@ -1,8 +1,10 @@
-/* $Id: ioctl32.c,v 1.62.2.9 2000/01/15 04:40:57 davem Exp $
+/* $Id: ioctl32.c,v 1.62.2.12 2000/05/27 04:46:26 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
+ * Copyright (C) 2000  Vinh Truong (vinh.truong@eng.sun.com)
+ *              --- VT: add commands for envctrl driver in sys32_ioctl()
  *
  * These routines maintain argument size conversion between 32bit and 64bit
  * ioctls.
@@ -2168,8 +2170,16 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	/* Little p (/dev/rtc, /dev/envctrl, etc.) */
 	case RTCGET:
 	case RTCSET:
-	case I2CIOCSADR:
-	case I2CIOCGADR:
+	case ENVCTRL_RD_WARNING_TEMPERATURE:
+	case ENVCTRL_RD_SHUTDOWN_TEMPERATURE:
+	case ENVCTRL_RD_CPU_TEMPERATURE:
+	case ENVCTRL_RD_FAN_STATUS:
+	case ENVCTRL_RD_VOLTAGE_STATUS:
+	case ENVCTRL_RD_SCSI_TEMPERATURE:
+	case ENVCTRL_RD_ETHERNET_TEMPERATURE:
+	case ENVCTRL_RD_MTHRBD_TEMPERATURE:
+	case ENVCTRL_RD_CPU_VOLTAGE:
+
 
 	/* Little m */
 	case MTIOCTOP:
@@ -2224,6 +2234,25 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case SG_EMULATED_HOST:
 	case SG_SET_TRANSFORM:
 	case SG_GET_TRANSFORM:
+	case SG_SET_RESERVED_SIZE:
+	case SG_GET_RESERVED_SIZE:
+	case SG_GET_SCSI_ID:
+	case SG_SET_FORCE_LOW_DMA:
+	case SG_GET_LOW_DMA:
+	case SG_SET_FORCE_PACK_ID:
+	case SG_GET_PACK_ID:
+	case SG_GET_NUM_WAITING:
+	case SG_SET_DEBUG:
+	case SG_GET_SG_TABLESIZE:
+	case SG_GET_MERGE_FD:
+	case SG_SET_MERGE_FD:
+	case SG_GET_COMMAND_Q:
+	case SG_SET_COMMAND_Q:
+	case SG_GET_UNDERRUN_FLAG:
+	case SG_SET_UNDERRUN_FLAG:
+	case SG_GET_VERSION_NUM:
+	case SG_NEXT_CMD_LEN:
+	case SG_SCSI_RESET:
 
 	/* PPP stuff */
 	case PPPIOCGFLAGS:

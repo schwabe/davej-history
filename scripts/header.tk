@@ -402,6 +402,7 @@ proc minimenu { w mnum line text variable helpidx } {
 
 proc menusplit {w m n} {
 	if { $n > 2 } then {
+		update idletasks
 		set menuoptsize [expr [$m yposition 2] - [$m yposition 1]]   
 		set maxsize [winfo screenheight $w]
 		set splitpoint [expr $maxsize * 4 / 5 / $menuoptsize - 1]
@@ -409,6 +410,10 @@ proc menusplit {w m n} {
 			$m entryconfigure $i -columnbreak 1
 		}
 	}
+}
+
+proc menutitle {text menu w} {
+	wm title $w "$text"
 }
 
 proc submenu { w mnum line text subnum } {

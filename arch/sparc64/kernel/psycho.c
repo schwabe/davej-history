@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.85.2.5 1999/10/28 02:28:38 davem Exp $
+/* $Id: psycho.c,v 1.85.2.9 2000/05/01 06:33:49 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -936,6 +936,28 @@ static void __init sabre_cookie_fillin(struct linux_psycho *sabre)
 	}
 }
 
+/* Older versions of OBP on PCI systems encode 64-bit MEM
+ * space assignments incorrectly, this fixes them up.
+ */
+static void __init fixup_obp_assignments(struct linux_prom_pci_registers *aregs, int numa)
+{
+	int i;
+
+	for (i = 0; i < numa; i++) {
+		struct linux_prom_pci_registers *ap;
+		int space;
+
+		ap = &aregs[i];
+		space = ap->phys_hi >> 24;
+		if ((space & 0x3) == 2 &&
+		    (space & 0x4) != 0) {
+			ap->phys_hi &= ~(0x7 << 24);
+			ap->phys_hi |= 0x3 << 24;
+		}
+	}
+}
+
+
 /* Walk PROM device tree under PBM, looking for 'assigned-address'
  * properties, and recording them in pci_vma's linked in via
  * PBM->assignments.
@@ -989,6 +1011,8 @@ static void __init assignment_process(struct linux_pbm_info *pbm, int node)
 
 		numa = (err / sizeof(struct linux_prom_pci_registers));
 	}
+
+	fixup_obp_assignments(&aregs[0], numa);
 
 	for(iter = 0; iter < numa; iter++) {
 		struct linux_prom_pci_registers *ap = &aregs[iter];
@@ -1158,15 +1182,6 @@ static void __init fixup_regs(struct pci_dev *pdev,
 				       pdev->bus->number, pdev->devfn,
 				       pdev->vendor, pdev->device);
 			continue;
-		} else if(bustype == 3) {
-			/* XXX add support for this... */
-			printk("%s %02x.%02x [%04x,%04x]: "
-			       "Warning, ignoring 64-bit PCI memory space, "
-			       "tell Eddie C. Dost (ecd@skynet.be).\n",
-			       __FUNCTION__,
-			       pdev->bus->number, pdev->devfn,
-			       pdev->vendor, pdev->device);
-			continue;
 		}
 
 		bsreg = (pregs[preg].phys_hi & 0xff);
@@ -1242,6 +1257,14 @@ static void __init fixup_regs(struct pci_dev *pdev,
 			pdev->base_address[brindex] |= 1;
 			IO_seen = 1;
 		} else {
+			/* Preserve type bits. */
+			if (bustype == 0x3) {
+				/* 64-bit */
+				pdev->base_address[brindex] |= 4;
+			} else if (bustype == 0x2) {
+				/* below 1M */
+				pdev->base_address[brindex] |= 2;
+			}
 			MEM_seen = 1;
 		}
 	}
@@ -1260,8 +1283,13 @@ static void __init fixup_regs(struct pci_dev *pdev,
 			ridx = ((breg - PCI_BASE_ADDRESS_0) >> 2);
 			base = (unsigned int)pdev->base_address[ridx];
 
-			if(pdev->base_address[ridx] > PAGE_OFFSET)
+			if(pdev->base_address[ridx] > PAGE_OFFSET) {
+				if (((base & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_MEMORY) &&
+				    ((base & PCI_BASE_ADDRESS_MEM_TYPE_MASK)
+				     == PCI_BASE_ADDRESS_MEM_TYPE_64))
+					breg += 4;
 				continue;
+			}
 
 			io = (base & PCI_BASE_ADDRESS_SPACE)==PCI_BASE_ADDRESS_SPACE_IO;
 			base &= ~((io ?
@@ -1653,9 +1681,11 @@ static int __init pbm_intmap_match(struct linux_pbm_info *pbm,
 		return 0;
 	}
 	/*
-	 * Underneath a bridge, use register of parent bridge.
+	 * Underneath a bridge, use register of parent bridge
+	 * closest to the PBM.
 	 */
 	if (pdev->bus->number != pbm->pci_first_busno) {
+		struct pci_dev *pwalk;
 		struct pcidev_cookie *pcp;
 		int node, offset;
 		char prom_name[64];
@@ -1663,7 +1693,13 @@ static int __init pbm_intmap_match(struct linux_pbm_info *pbm,
 #ifdef FIXUP_IRQ_DEBUG
 		dprintf("UnderBridge, ");
 #endif
-		pcp = pdev->bus->self->sysdata;
+
+		pwalk = pdev->bus->self;
+		while (pwalk->bus &&
+		       pwalk->bus->number != pbm->pci_first_busno)
+			pwalk = pwalk->bus->self;
+
+		pcp = pwalk->sysdata;
 		if (!pcp) {
 #ifdef FIXUP_IRQ_DEBUG
 			dprintf("No bus PCP\n");
@@ -1873,6 +1909,8 @@ static void __init fixup_doit(struct pci_dev *pdev,
 		numaa = 0;
 	else
 		numaa = (err / sizeof(struct linux_prom_pci_registers));
+
+	fixup_obp_assignments(&assigned[0], numaa);
 
 	/* First, scan and fixup base registers. */
 	fixup_regs(pdev, pbm, pregs, nregs, &assigned[0], numaa);

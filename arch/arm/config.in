@@ -132,7 +132,7 @@ fi
 if [ "$CONFIG_ARCH_EBSA285" = "y" -o \
      "$CONFIG_ARCH_EBSA110" = "y" -o \
      "$CONFIG_ARCH_VNC" = "y" ]; then
-  string 'Initial kernel command string' CONFIG_CMDLINE
+  string 'Initial kernel command string' CONFIG_CMDLINE ""
 fi
 endmenu
 

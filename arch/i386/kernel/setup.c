@@ -23,6 +23,10 @@
  *
  *	Improved Intel cache detection.
  *	Dave Jones <dave@powertweak.com>, October 1999
+ *
+ *	Added proper Cascades CPU and L2 cache detection for Cascades
+ *	and 8-way type cache happy bunch from Intel:^)
+ *	Dragan Stancevic <visitor@valinux.com>, May 2000
  */
 
 /*
@@ -770,8 +774,8 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	{ X86_VENDOR_INTEL,	6,
 	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II (Klamath)", 
 	    NULL, "Pentium II (Deschutes)", "Mobile Pentium II", 
-	    "Pentium III (Katmai)", "Pentium III (Coppermine)", NULL, NULL, 
-	    NULL, NULL, NULL, NULL, NULL }},
+	    "Pentium III (Katmai)", "Pentium III (Coppermine)", NULL,
+	    "Pentium III (Cascades)", NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_AMD,	4,
 	  { NULL, NULL, NULL, "486 DX/2", NULL, NULL, NULL, "486 DX/2-WB",
 	    "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT",
@@ -847,24 +851,26 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 				c->x86_cache_size = 0;
 				break;
 
-			case 0x41:
+			case 0x41: /* 4-way 128 */
 				c->x86_cache_size = 128;
 				break;
 
-			case 0x42:
-			case 0x82: /*Detect 256-Kbyte cache on Coppermine*/ 
+			case 0x42: /* 4-way 256 */
+			case 0x82: /* 8-way 256 */
 				c->x86_cache_size = 256;
 				break;
 
-			case 0x43:
+			case 0x43: /* 4-way 512 */
 				c->x86_cache_size = 512;
 				break;
 
-			case 0x44:
+			case 0x44: /* 4-way 1024 */
+			case 0x84: /* 8-way 1024 */
 				c->x86_cache_size = 1024;
 				break;
 
-			case 0x45:
+			case 0x45: /* 4-way 2048 */
+			case 0x85: /* 8-way 2048 */
 				c->x86_cache_size = 2048;
 				break;
 

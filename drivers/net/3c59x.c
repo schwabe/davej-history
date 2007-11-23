@@ -34,11 +34,19 @@
     - Tell it that 3c905C has NWAY
     - Fix handling of SetStatusEnd in 'Too much work..' code, as
       per 2.3.99's 3c575_cb (Dave Hinds).  Added vp->deferred for this.
+
+    24May00 <2.2.16-pre4> andrewm
+    - Replace union wn3_config with BFINS/BFEXT manipulation for
+      sparc64 (Pete Zaitcev, Peter Jones)
+    - Use insl_ns/outsl_ns for __powerpc__ (Andreas Tobler)
+    - In vortex_error, do_tx_reset and vortex_tx_timeout(Vortex): clear
+      tbusy and force a BH rerun to better recover from errors.
+
     - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.2 for more details.
 */
 
 static char *version =
-"3c59x.c:v0.99H 19May00 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
+"3c59x.c:v0.99H 27May00 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -401,15 +409,21 @@ enum Window2 {			/* Window 2. */
 enum Window3 {			/* Window 3: MAC/config bits. */
 	Wn3_Config=0, Wn3_MAC_Ctrl=6, Wn3_Options=8,
 };
-union wn3_config {
-	int i;
-	struct w3_config_fields {
-		unsigned int ram_size:3, ram_width:1, ram_speed:2, rom_size:2;
-		int pad8:8;
-		unsigned int ram_split:2, pad18:2, xcvr:4, autoselect:1;
-		int pad24:7;
-	} u;
-};
+
+#define BFEXT(value, offset, bitcount)  \
+    ((((unsigned long)(value)) >> (offset)) & ((1 << (bitcount)) - 1))
+
+#define BFINS(lhs, rhs, offset, bitcount)			\
+    (((lhs) & ~((((1 << (bitcount)) - 1)) << (offset))) |	\
+        (((rhs) & ((1 << (bitcount)) - 1)) << (offset)))
+
+#define RAM_SIZE(v)		BFEXT(v, 0, 3)
+#define RAM_WIDTH(v)	BFEXT(v, 3, 1)
+#define RAM_SPEED(v)	BFEXT(v, 4, 2)
+#define ROM_SIZE(v)		BFEXT(v, 6, 2)
+#define RAM_SPLIT(v)	BFEXT(v, 16, 2)
+#define XCVR(v)			BFEXT(v, 20, 4)
+#define AUTOSELECT(v)	BFEXT(v, 24, 1)
 
 enum Window4 {		/* Window 4: Xcvr/media bits. */
 	Wn4_FIFODiag = 4, Wn4_NetDiag = 6, Wn4_PhysicalMgmt=8, Wn4_Media = 10,
@@ -946,24 +960,24 @@ static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 
 	{
 		char *ram_split[] = {"5:3", "3:1", "1:1", "3:5"};
-		union wn3_config config;
+		unsigned int config;
 		EL3WINDOW(3);
 		vp->available_media = inw(ioaddr + Wn3_Options);
 		if ((vp->available_media & 0xff) == 0)		/* Broken 3c916 */
 			vp->available_media = 0x40;
-		config.i = inl(ioaddr + Wn3_Config);
+		config = inl(ioaddr + Wn3_Config);
 		if (vortex_debug > 1)
 			printk(KERN_DEBUG "  Internal config register is %4.4x, "
-				   "transceivers %#x.\n", config.i, inw(ioaddr + Wn3_Options));
+				   "transceivers %#x.\n", config, inw(ioaddr + Wn3_Options));
 		printk(KERN_INFO "  %dK %s-wide RAM %s Rx:Tx split, %s%s interface.\n",
-			   8 << config.u.ram_size,
-			   config.u.ram_width ? "word" : "byte",
-			   ram_split[config.u.ram_split],
-			   config.u.autoselect ? "autoselect/" : "",
-			   config.u.xcvr > XCVR_ExtMII ? "<invalid transceiver>" :
-			   media_tbl[config.u.xcvr].name);
-		vp->default_media = config.u.xcvr;
-		vp->autoselect = config.u.autoselect;
+			   8 << RAM_SIZE(config),
+			   RAM_WIDTH(config) ? "word" : "byte",
+			   ram_split[RAM_SPLIT(config)],
+			   AUTOSELECT(config) ? "autoselect/" : "",
+			   XCVR(config) > XCVR_ExtMII ? "<invalid transceiver>" :
+			   media_tbl[XCVR(config)].name);
+		vp->default_media = XCVR(config);
+		vp->autoselect = AUTOSELECT(config);
 	}
 
 	if (vp->media_override != 7) {
@@ -1031,12 +1045,12 @@ vortex_open(struct device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
-	union wn3_config config;
+	unsigned int config;
 	int i;
 
 	/* Before initializing select the active media port. */
 	EL3WINDOW(3);
-	config.i = inl(ioaddr + Wn3_Config);
+	config = inl(ioaddr + Wn3_Config);
 
 	if (vp->media_override != 7) {
 		if (vortex_debug > 1)
@@ -1065,8 +1079,8 @@ vortex_open(struct device *dev)
 			   dev->name, media_tbl[dev->if_port].name);
 
 	vp->full_duplex = vp->force_fd;
-	config.u.xcvr = dev->if_port;
-	outl(config.i, ioaddr + Wn3_Config);
+	config = BFINS(config, dev->if_port, 20, 4);
+	outl(config, ioaddr + Wn3_Config);
 
 	if (dev->if_port == XCVR_MII || dev->if_port == XCVR_NWAY) {
 		int mii_reg1, mii_reg5;
@@ -1092,7 +1106,7 @@ vortex_open(struct device *dev)
 
 	if (vortex_debug > 1) {
 		printk(KERN_DEBUG "%s: vortex_open() InternalConfig %8.8x.\n",
-			dev->name, config.i);
+			dev->name, config);
 	}
 
 	outw(TxReset, ioaddr + EL3_CMD);
@@ -1286,7 +1300,7 @@ static void vortex_timer(unsigned long data)
 		ok = 1;
 	}
 	if ( ! ok) {
-		union wn3_config config;
+		unsigned int config;
 
 		do {
 			dev->if_port = media_tbl[dev->if_port].next;
@@ -1308,9 +1322,9 @@ static void vortex_timer(unsigned long data)
 			 media_tbl[dev->if_port].media_bits, ioaddr + Wn4_Media);
 
 		EL3WINDOW(3);
-		config.i = inl(ioaddr + Wn3_Config);
-		config.u.xcvr = dev->if_port;
-		outl(config.i, ioaddr + Wn3_Config);
+		config = inl(ioaddr + Wn3_Config);
+		config = BFINS(config, dev->if_port, 20, 4);
+		outl(config, ioaddr + Wn3_Config);
 
 		outw(dev->if_port == XCVR_10base2 ? StartCoax : StopCoax,
 			 ioaddr + EL3_CMD);
@@ -1396,9 +1410,9 @@ static void vortex_tx_timeout(struct device *dev)
 		outw(DownUnstall, ioaddr + EL3_CMD);
 	} else {
 		vp->stats.tx_dropped++;
-		clear_bit(0, (void *)&dev->tbusy);
+		clear_bit(0, (void*)&dev->tbusy);
 	}
-	
+
 	/* Issue Tx Enable */
 	outw(TxEnable, ioaddr + EL3_CMD);
 	dev->trans_start = jiffies;
@@ -1495,6 +1509,9 @@ vortex_error(struct device *dev, int status)
 			if ( ! (inw(ioaddr + EL3_STATUS) & CmdInProgress))
 				break;
 		outw(TxEnable, ioaddr + EL3_CMD);
+		clear_bit(0, (void*)&dev->tbusy);
+		if (!vp->full_bus_master_tx)
+			mark_bh(NET_BH);
 	}
 
 }
@@ -1523,7 +1540,11 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 		/* dev->tbusy will be cleared at the DMADone interrupt. */
 	} else {
 		/* ... and the packet rounded to a doubleword. */
+#ifdef __powerpc__
+		outsl_ns(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
+#else
 		outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
+#endif
 		DEV_FREE_SKB(skb);
 		if (inw(ioaddr + TxFree) > 1536) {
 			clear_bit(0, (void*)&dev->tbusy);
@@ -1787,8 +1808,13 @@ static int vortex_rx(struct device *dev)
 					while (inw(ioaddr + Wn7_MasterStatus) & 0x8000)
 						;
 				} else {
+#ifdef __powerpc__
+					insl_ns(ioaddr + RX_FIFO, skb_put(skb, pkt_len),
+						 (pkt_len + 3) >> 2);
+#else
 					insl(ioaddr + RX_FIFO, skb_put(skb, pkt_len),
 						 (pkt_len + 3) >> 2);
+#endif
 				}
 				outw(RxDiscard, ioaddr + EL3_CMD); /* Pop top Rx packet. */
 				skb->protocol = eth_type_trans(skb, dev);

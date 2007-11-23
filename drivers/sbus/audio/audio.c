@@ -122,6 +122,7 @@ int register_sparcaudio_driver(struct sparcaudio_driver *drv, int duplex)
         init_waitqueue_head(&drv->output_write_wait);
         init_waitqueue_head(&drv->output_drain_wait);
         init_waitqueue_head(&drv->input_read_wait);
+        init_waitqueue_head(&drv->poll_wait);
 #endif
 
         drv->num_output_buffers = 8;
@@ -310,6 +311,7 @@ void sparcaudio_output_done(struct sparcaudio_driver * drv, int status)
   if ((status & 1) || ((drv->output_count + drv->playing_count) 
                        < drv->num_output_buffers)) {
     wake_up_interruptible(&drv->output_write_wait);
+    wake_up_interruptible(&drv->poll_wait);
   }
 
   /* If the output queue is empty, shut down the driver. */
@@ -323,6 +325,7 @@ void sparcaudio_output_done(struct sparcaudio_driver * drv, int status)
     /* Wake up any waiting writers or syncers and return. */
     wake_up_interruptible(&drv->output_write_wait);
     wake_up_interruptible(&drv->output_drain_wait);
+    wake_up_interruptible(&drv->poll_wait);
     return;
   }
 
@@ -344,6 +347,7 @@ void sparcaudio_input_done(struct sparcaudio_driver * drv, int status)
     drv->ops->start_input(drv, drv->input_buffers[drv->input_front],
 			  drv->input_buffer_size);
     wake_up_interruptible(&drv->input_read_wait);
+    wake_up_interruptible(&drv->poll_wait);
     return;
   } 
 
@@ -379,6 +383,7 @@ void sparcaudio_input_done(struct sparcaudio_driver * drv, int status)
 
   /* Wake up any tasks that are waiting. */
   wake_up_interruptible(&drv->input_read_wait);
+  wake_up_interruptible(&drv->poll_wait);
 }
 
 
@@ -401,14 +406,14 @@ static int sparcaudio_select(struct inode * inode, struct file * file,
       dprintk(("read ready: c%d o%d\n", drv->input_count, drv->input_offset));
       return 1;
     }
-    select_wait(&drv->input_read_wait, wait);
+    select_wait(&drv->poll_wait, wait);
     break;
   case SEL_OUT:
     dprintk(("sel out: c%d o%d p%d\n", drv->output_count, drv->output_offset, drv->playing_count));
     if ((drv->output_count + drv->playing_count) < (drv->num_output_buffers)) {
       return 1;
     }
-    select_wait(&drv->output_write_wait, wait);
+    select_wait(&drv->poll_wait, wait);
     break;
   case SEL_EX:
     break;
@@ -424,8 +429,7 @@ static unsigned int sparcaudio_poll(struct file *file, poll_table * wait)
   struct sparcaudio_driver *drv = drivers[(MINOR(inode->i_rdev) >>
                                            SPARCAUDIO_DEVICE_SHIFT)];
 
-  poll_wait(file, &drv->input_read_wait, wait);
-  poll_wait(file, &drv->output_write_wait, wait);
+  poll_wait(file, &drv->poll_wait, wait);
   if (((!file->f_flags & O_NONBLOCK) && drv->input_count) ||
       (drv->input_size > drv->buffer_size)) {
     mask |= POLLIN | POLLRDNORM;
@@ -509,6 +513,7 @@ static ssize_t sparcaudio_read(struct file * file, char *buf,
      */
     if (drv->duplex == 2) {
       wake_up_interruptible(&drv->output_write_wait);
+      wake_up_interruptible(&drv->poll_wait);
     }
   }
 
@@ -1188,6 +1193,7 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 		sparcaudio_sync_output(drv);
 		if (drv->output_active) {
 		  wake_up_interruptible(&drv->output_write_wait);
+		  wake_up_interruptible(&drv->poll_wait);
 		  drv->ops->stop_output(drv);
 		}
 		drv->output_offset = 0;
@@ -1204,6 +1210,7 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 		((unsigned int)arg == FLUSHRW)) {
 	      if (drv->input_active && (file->f_mode & FMODE_READ)) {
 		wake_up_interruptible(&drv->input_read_wait);
+		wake_up_interruptible(&drv->poll_wait);
 		drv->ops->stop_input(drv);
 		drv->input_active = 0;
 		drv->input_front = 0;
@@ -1236,6 +1243,7 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 	  case AUDIO_FLUSH:
 	    if (drv->output_active && (file->f_mode & FMODE_WRITE)) {
 	      wake_up_interruptible(&drv->output_write_wait);
+	      wake_up_interruptible(&drv->poll_wait);
 	      drv->ops->stop_output(drv);
 	      drv->output_active = 0;
 	      drv->output_front = 0;
@@ -1248,6 +1256,7 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
 	    }
 	    if (drv->input_active && (file->f_mode & FMODE_READ)) {
 	      wake_up_interruptible(&drv->input_read_wait);
+	      wake_up_interruptible(&drv->poll_wait);
 	      drv->ops->stop_input(drv);
 	      drv->input_active = 0;
 	      drv->input_front = 0;

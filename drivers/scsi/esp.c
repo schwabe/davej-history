@@ -4316,6 +4316,13 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 }
 #endif
 
+int esp_revoke(Scsi_Device* SDptr)
+{
+	struct Sparc_ESP *esp = (struct Sparc_ESP *) SDptr->host->hostdata;
+	esp->targets_present &= ~(1 << SDptr->id);
+	return 0;
+}
+
 #ifdef MODULE
 Scsi_Host_Template driver_template = SCSI_SPARC_ESP;
 

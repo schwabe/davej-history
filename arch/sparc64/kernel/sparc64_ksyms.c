@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.58.2.3 1999/09/22 17:07:00 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.58.2.7 2000/05/27 04:46:26 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -81,6 +81,7 @@ extern int svr4_setcontext(svr4_ucontext_t *uc, struct pt_regs *regs);
 extern int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
 extern int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg);
 extern int (*handle_mathemu)(struct pt_regs *, struct fpustate *);
+extern void VISenter(void);
                 
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
@@ -109,10 +110,10 @@ extern unsigned long phys_base;
  */
 
 #define EXPORT_SYMBOL_PRIVATE(sym)				\
-extern int __sparc_priv_ ## sym (int) __asm__("__" ## #sym);	\
+extern int __sparc_priv_ ## sym (int) __asm__("__" #sym);	\
 const struct module_symbol __export_priv_##sym			\
 __attribute__((section("__ksymtab"))) =				\
-{ (unsigned long) &__sparc_priv_ ## sym, "__" ## #sym }
+{ (unsigned long) &__sparc_priv_ ## sym, "__" #sym }
 
 /* used by various drivers */
 #ifdef __SMP__
@@ -298,6 +299,9 @@ EXPORT_SYMBOL(sparc64_valid_addr_bitmap);
  * and will always be 'void __ret_efault(void)'.
  */
 EXPORT_SYMBOL_NOVERS(__ret_efault);
+/* VISenter is defined in assembly as well.
+ */
+EXPORT_SYMBOL_NOVERS(VISenter);
 
 /* No version information on these, as gcc produces such symbols. */
 EXPORT_SYMBOL_NOVERS(memcmp);

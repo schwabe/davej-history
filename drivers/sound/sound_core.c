@@ -76,6 +76,9 @@ extern int msnd_pinnacle_init(void);
 #ifdef CONFIG_SOUND_ESSSOLO1
 extern int init_solo1(void);
 #endif
+#ifdef CONFIG_SOUND_YMPCI
+extern init_ymf7xxsb_module();
+#endif
 
 /*
  *	Low level list operator. Scan the ordered list, find a hole and
@@ -430,6 +433,9 @@ int soundcore_init(void)
 #endif
 #ifdef CONFIG_SOUND_ICH
 	i810_probe();
+#endif
+#ifdef CONFIG_SOUND_YMPCI
+	init_ymf7xxsb_module();
 #endif
 	return 0;
 }

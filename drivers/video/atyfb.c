@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.106.2.7 1999/11/19 00:12:29 davem Exp $
+/*  $Id: atyfb.c,v 1.106.2.8 2000/04/28 04:40:09 davem Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -2875,8 +2875,13 @@ __initfunc(void atyfb_init(void))
 		pci_read_config_dword(pdev, breg, &size);
 		pci_write_config_dword(pdev, breg, pbase);
 
-		if (io)
-			size &= ~1;
+		if (io) {
+			size &= PCI_BASE_ADDRESS_IO_MASK;
+			base &= PCI_BASE_ADDRESS_IO_MASK;
+		} else {
+			size &= PCI_BASE_ADDRESS_MEM_MASK;
+			base &= PCI_BASE_ADDRESS_MEM_MASK;
+		}
 		size = ~(size) + 1;
 
 		/*

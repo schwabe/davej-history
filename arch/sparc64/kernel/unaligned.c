@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.15 1999/04/03 11:36:21 anton Exp $
+/* $Id: unaligned.c,v 1.15.2.2 2000/04/03 23:22:37 davem Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -587,9 +587,19 @@ void handle_ld_nf(u32 insn, struct pt_regs *regs)
 	                        
 	maybe_flush_windows(0, 0, rd, from_kernel);
 	reg = fetch_reg_addr(rd, regs);
-	if ((insn & 0x780000) == 0x180000)
-		reg[1] = 0;
-	reg[0] = 0;
+	if (from_kernel || rd < 16) {
+		reg[0] = 0;
+		if ((insn & 0x780000) == 0x180000)
+			reg[1] = 0;
+	} else if (current->tss.flags & SPARC_FLAG_32BIT) {
+		put_user(0, (int *)reg);
+		if ((insn & 0x780000) == 0x180000)
+			put_user(0, ((int *)reg) + 1);
+	} else {
+		put_user(0, reg);
+		if ((insn & 0x780000) == 0x180000)
+			put_user(0, reg + 1);
+	}
 	advance(regs);
 }
 

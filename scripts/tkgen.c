@@ -1248,7 +1248,7 @@ void dump_tk_script( struct kconfig * scfg )
 		printf( "\tminimenu $w.config.f %d %d \"%s\" tmpvar_%d %s\n",
 		    cfg->menu_number, cfg->menu_line, cfg->label,
 		    -(cfg->nameindex), vartable[cfg->next->nameindex].name );
-		printf( "\tmenu $w.config.f.x%d.x.menu -title \"%s\"\n",
+		printf( "\tmenu $w.config.f.x%d.x.menu -tearoffcommand \"menutitle \\\"%s\\\"\"\n",
 		    cfg->menu_line, cfg->label );
 		cfg1 = cfg;
 		opt_count = 0;

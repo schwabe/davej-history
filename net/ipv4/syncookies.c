@@ -9,7 +9,7 @@
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  * 
- *  $Id: syncookies.c,v 1.7.2.3 1999/12/07 03:11:07 davem Exp $
+ *  $Id: syncookies.c,v 1.7.2.4 2000/04/17 05:57:01 davem Exp $
  *
  *  Missing: IPv6 support. 
  */
@@ -104,11 +104,19 @@ get_cookie_sock(struct sock *sk, struct sk_buff *skb, struct open_request *req,
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
+	tp->syn_backlog++;
+
 	sk = tp->af_specific->syn_recv_sock(sk, skb, req, dst);
-	req->sk = sk; 
-	
-	/* Queue up for accept() */
-	tcp_synq_queue(tp, req);
+	if (sk) {
+		req->sk = sk; 
+
+		/* Queue up for accept() */
+		tcp_synq_queue(tp, req);
+	} else {
+		tp->syn_backlog--;
+		(*req->class->destructor)(req);
+		tcp_openreq_free(req); 
+	}
 	
 	return sk; 
 }

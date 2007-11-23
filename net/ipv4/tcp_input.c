@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.164.2.12 2000/01/31 20:43:36 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164.2.15 2000/05/27 04:01:49 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -55,6 +55,7 @@
  *					work without delayed acks. 
  *		Andi Kleen:		Process packets with PSH set in the
  *					fast path.
+ *		Vincent Zweije		Fix TIME-WAIT FIN ACK bug.
  */
 
 #include <linux/config.h>
@@ -295,6 +296,7 @@ static void tcp_reset(struct sock *sk)
 		sk->dport = 0;
 		sk->daddr = 0;
 		sk->num = 0;
+		tcp_clear_xmit_timer(sk, TIME_RETRANS);
 	}
 	sk->shutdown = SHUTDOWN_MASK;
 	if (!sk->dead) 
@@ -1017,7 +1019,7 @@ tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 	}
 	/* Ack old packets if necessary */ 
 	if (!after(TCP_SKB_CB(skb)->end_seq, tw->rcv_nxt) &&
-	    (th->doff * 4) > len)
+	    (len > (th->doff * 4) || th->fin))
 		return TCP_TW_ACK; 
 	return 0; 
 }
@@ -2022,10 +2024,10 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 		}
 	
 		sk = tp->af_specific->syn_recv_sock(sk, skb, req, NULL);
-		tcp_dec_slow_timer(TCP_SLT_SYNACK);
 		if (sk == NULL)
 			return NULL;
 		
+		tcp_dec_slow_timer(TCP_SLT_SYNACK);
 		req->expires = 0UL;
 		req->sk = sk;
 	}

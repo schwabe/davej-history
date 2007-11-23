@@ -182,6 +182,8 @@ do { unsigned long size = 1 << high; \
 unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 {
 	unsigned long flags;
+	static unsigned long last_woke_kswapd = 0;
+	static atomic_t free_before_allocate = ATOMIC_INIT(0);
 
 	if (order >= NR_MEM_LISTS)
 		goto nopage;
@@ -206,28 +208,41 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		int freed;
 		extern struct wait_queue * kswapd_wait;
 
-		if (nr_free_pages >= freepages.high)
-		{
-			/* share RO cachelines in fast path */
-			if (current->trashing_mem)
-				current->trashing_mem = 0;
+		if (nr_free_pages > freepages.high)
 			goto ok_to_allocate;
+		
+		/* Maybe wake up kswapd for background swapping. */
+		if (time_before(last_woke_kswapd + HZ, jiffies)) {
+			last_woke_kswapd = jiffies;
+			wake_up_interruptible(&kswapd_wait);
 		}
-		else
-		{
-			if (nr_free_pages < freepages.low)
-				wake_up_interruptible(&kswapd_wait);
-			if (nr_free_pages > freepages.min && !current->trashing_mem)
+
+		/* Somebody needs to free pages so we free some of our own. */
+		if (atomic_read(&free_before_allocate)) {
+			current->flags |= PF_MEMALLOC;
+			freed = try_to_free_pages(gfp_mask);
+			current->flags &= ~PF_MEMALLOC;
+			if (freed)
 				goto ok_to_allocate;
 		}
 
-		current->trashing_mem = 1;
-		current->flags |= PF_MEMALLOC;
-		freed = try_to_free_pages(gfp_mask);
-		current->flags &= ~PF_MEMALLOC;
+		/* Do we have to help kswapd or can we proceed? */
+		if (nr_free_pages < (freepages.low + freepages.low) / 2) {
+			wake_up_interruptible(&kswapd_wait);
 
-		if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
-			goto nopage;
+			/* Help kswapd a bit... */
+			current->flags |= PF_MEMALLOC;
+			atomic_inc(&free_before_allocate);
+			freed = try_to_free_pages(gfp_mask);
+			atomic_dec(&free_before_allocate);
+			current->flags &= ~PF_MEMALLOC;
+
+			if (nr_free_pages > freepages.min)
+				goto ok_to_allocate;
+
+			if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
+				goto nopage;
+		}
 	}
 ok_to_allocate:
 	spin_lock_irqsave(&page_alloc_lock, flags);

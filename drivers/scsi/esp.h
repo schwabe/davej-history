@@ -413,6 +413,7 @@ extern int esp_abort(Scsi_Cmnd *);
 extern int esp_reset(Scsi_Cmnd *, unsigned int);
 extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
+extern int esp_revoke(Scsi_Device* SDptr);
 
 extern struct proc_dir_entry proc_scsi_esp;
 
@@ -421,6 +422,7 @@ extern struct proc_dir_entry proc_scsi_esp;
 		proc_info:      &esp_proc_info,			\
 		name:           "Sun ESP 100/100a/200",		\
 		detect:         esp_detect,			\
+		revoke:		esp_revoke,			\
 		info:           esp_info,			\
 		command:        esp_command,			\
 		queuecommand:   esp_queue,			\

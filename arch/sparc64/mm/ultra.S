@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.32.2.3 2000/03/03 23:50:46 davem Exp $
+/* $Id: ultra.S,v 1.32.2.4 2000/05/05 18:50:48 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -37,7 +37,7 @@ __flush_tlb_range: /* %o0=(ctx&0x3ff), %o1=start&PAGE_MASK, %o2=SECONDARY_CONTEX
 		    */
 #define TLB_MAGIC	207 /* Students, do you know how I calculated this?  -DaveM */
 /*IC3*/	cmp		%o5, %o4
-	be,pt		%xcc, __flush_tlb_page
+	bleu,pt		%xcc, __flush_tlb_page
 	 srlx		%o5, 13, %g5
 	cmp		%g5, TLB_MAGIC
 	bgeu,pn		%icc, __flush_tlb_range_constant_time

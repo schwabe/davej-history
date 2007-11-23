@@ -96,7 +96,7 @@ bool 'Support for Motorola Hot Swap' CONFIG_MOTOROLA_HOTSWAP
 if [ "$CONFIG_PREP" = "y" -o "$CONFIG_ALL_PPC" = "y" ]; then
   bool 'PReP bootloader kernel arguments' CONFIG_CMDLINE_BOOL y
   if [ "$CONFIG_CMDLINE_BOOL" = "y" ] ; then
-    string 'Initial kernel command string' CONFIG_CMDLINE console=ttyS0,9600 console=tty0 root=/dev/sda2
+    string 'Initial kernel command string' CONFIG_CMDLINE "console=ttyS0,9600 console=tty0 root=/dev/sda2"
   fi
 fi
 

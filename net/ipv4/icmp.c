@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.52.2.4 1999/11/16 02:28:40 davem Exp $
+ *	Version: $Id: icmp.c,v 1.52.2.5 2000/04/08 02:45:56 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -494,9 +494,12 @@ static void icmp_reply(struct icmp_bxm *icmp_param, struct sk_buff *skb)
 		daddr = icmp_param->replyopts.faddr;
 	if (ip_route_output(&rt, daddr, rt->rt_spec_dst, RT_TOS(skb->nh.iph->tos), 0))
 		return;
-	ip_build_xmit(sk, icmp_glue_bits, icmp_param, 
-		icmp_param->data_len+sizeof(struct icmphdr),
-		&ipc, rt, MSG_DONTWAIT);
+	if (icmpv4_xrlim_allow(rt, icmp_param->icmph.type, 
+			       icmp_param->icmph.code)) { 
+		ip_build_xmit(sk, icmp_glue_bits, icmp_param, 
+			      icmp_param->data_len+sizeof(struct icmphdr),
+			      &ipc, rt, MSG_DONTWAIT);
+	}
 	ip_rt_put(rt);
 }
 

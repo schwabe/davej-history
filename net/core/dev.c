@@ -81,7 +81,6 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <linux/rtnetlink.h>
-#include <net/slhc.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <net/br.h>
@@ -1966,18 +1965,6 @@ __initfunc(int net_dev_init(void))
 #endif
 #if defined(CONFIG_COMX)
 	comx_init();
-#endif
-	/*
-	 *	SLHC if present needs attaching so other people see it
-	 *	even if not opened.
-	 */
-	 
-#ifdef CONFIG_INET	 
-#if (defined(CONFIG_SLIP) && defined(CONFIG_SLIP_COMPRESSED)) \
-	 || defined(CONFIG_PPP) \
-    || (defined(CONFIG_ISDN) && defined(CONFIG_ISDN_PPP))
-	slhc_install();
-#endif	
 #endif
 
 #ifdef CONFIG_NET_PROFILE

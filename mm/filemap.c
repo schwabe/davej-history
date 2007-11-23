@@ -142,7 +142,8 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct page * page;
 	int count;
 
-	count = limit >> priority;
+	/* Make sure we scan all pages twice at priority 0. */
+	count = (limit << 1) >> priority;
 
 	page = mem_map + clock;
 	do {

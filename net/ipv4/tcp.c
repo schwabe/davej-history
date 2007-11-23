@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.140.2.10 2000/03/21 20:54:13 davem Exp $
+ * Version:	$Id: tcp.c,v 1.140.2.11 2000/04/17 05:57:01 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1484,15 +1484,18 @@ static void tcp_close_pending (struct sock *sk)
 	while(req) {
 		struct open_request *iter;
 		
-		if (req->sk)
-			tcp_close(req->sk, 0);
-
 		iter = req;
 		req = req->dl_next;
 		
+		if (iter->sk) {
+			tcp_close(iter->sk, 0);
+			sk->ack_backlog--;
+		} else {
+			tcp_dec_slow_timer(TCP_SLT_SYNACK);
+			sk->tp_pinfo.af_tcp.syn_backlog--;
+		}
 		(*iter->class->destructor)(iter);
-		tcp_dec_slow_timer(TCP_SLT_SYNACK);
-		sk->ack_backlog--;
+
 		tcp_openreq_free(iter);
 	}
 

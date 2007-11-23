@@ -489,6 +489,44 @@ static void set_dac_rate(struct cm_state *s, unsigned rate)
 	    	}
 	}
 	s->ratedac = rate;
+	if ( !(inb(s->iobase+CODEC_CMI_FUNCTRL1)&0x80) ) {
+		int functrl1;
+		outb(inb(s->iobase + CODEC_CMI_FUNCTRL1) & ~0x80, s->iobase + CODEC_CMI_FUNCTRL1);
+		if ( rate == 44100 || rate == 48000 ) {
+			functrl1 = inb(s->iobase + 0x16);
+			functrl1 |=  0x80;  /* enable XSPDIF/OUT */
+			outb(functrl1, s->iobase + 0x16);
+			functrl1 = inb(s->iobase + 0x16);
+			functrl1 |=  0x20;  /* enable DAC2SPDO */
+			outb(functrl1, s->iobase + 0x16);
+			functrl1 = inb(s->iobase + 0x19);
+			if ( rate == 44100 )
+				functrl1 &= ~0x80;  /* 0:44.1/ 1:48kHz */
+			else
+				functrl1 |=  0x80;  /* 0:44.1/ 1:48kHz */
+			outb(functrl1, s->iobase + 0x19);
+			functrl1 = inb(s->iobase + 0x05);
+			functrl1 |=  0x01;  /* SPDIF out */
+			outb(functrl1, s->iobase + 0x05);
+			functrl1 = inb(s->iobase + 0x24);
+			functrl1 &=  ~0x01;  /* SPDIF in to DAC*/
+			outb(functrl1, s->iobase + 0x24);
+		}
+		else {
+			functrl1 = inb(s->iobase + 0x16);
+			functrl1 &= ~0x80;  /* disable XSPDIF/OUT */
+			outb(functrl1, s->iobase + 0x16);
+			functrl1 = inb(s->iobase + 0x16);
+			functrl1 &= ~0x20;  /* disable DAC2SPDO */
+			outb(functrl1, s->iobase + 0x16);
+			functrl1 = inb(s->iobase + 0x05);
+			functrl1 &= ~0x01;  /* disable SPDIF out */
+			outb(functrl1, s->iobase + 0x05);
+			functrl1 = inb(s->iobase + 0x24);
+			functrl1 &=  ~0x01;  /* SPDIF in to DAC*/
+			outb(functrl1, s->iobase + 0x24);
+		}
+	}
 	freq <<= 2;
 	spin_lock_irqsave(&s->lock, flags);
 	val = inb(s->iobase + CODEC_CMI_FUNCTRL1 + 1) & ~0x1c; 
@@ -781,6 +819,7 @@ static void cm_handle_midi(struct cm_state *s)
 {
 	unsigned char ch;
 	int wake;
+	int timeout;
 
 	wake = 0;
 	while (!(inb(s->iomidi+1) & 0x80)) {
@@ -797,6 +836,13 @@ static void cm_handle_midi(struct cm_state *s)
 		wake_up(&s->midi.iwait);
 		wake_up(&s->midi.pollwait);
 	}
+	for (timeout = 120000; timeout > 0 && (inb(s->iomidi+1)&0x40); timeout--);
+/*
+	if((inb(s->iomidi+1) & 0x40)) {
+	  	  printk(KERN_WARNING "cmpci: UART Timeout - Device not responding\n");
+	          return;
+	}
+*/
 	wake = 0;
 	while (!(inb(s->iomidi+1) & 0x40) && s->midi.ocnt > 0) {
 		outb(s->midi.obuf[s->midi.ord], s->iomidi);
@@ -837,7 +883,7 @@ static void cm_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		outb(intstat | 2, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
 	}
 	cm_update_ptr(s);
-	cm_handle_midi(s);
+	/*cm_handle_midi(s);*/
 	spin_unlock(&s->lock);
 }
 
@@ -2310,7 +2356,10 @@ static int	rear_out = 0;
 MODULE_PARM(spdif_loop, "i");
 MODULE_PARM(four_ch, "i");
 MODULE_PARM(rear_out, "i");
-
+int mpu_io = 0;
+int synth_io = 0;
+MODULE_PARM(mpu_io, "i");
+MODULE_PARM(synth_io, "i");
 int  __init init_module(void)
 #else
 #ifdef CONFIG_SOUND_CMPCI_SPDIFLOOP
@@ -2387,8 +2436,36 @@ int __init init_cmpci(void)
 		s->open_sem = MUTEX;
 		s->magic = CM_MAGIC;
 		s->iobase = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
-		s->iosynth = 0x388;
-		s->iomidi = 0x330;
+		switch (synth_io) {
+		case 0x3c8:
+			s->iosynth = 0x3c8;
+			break;
+		case 0x3e0:
+			s->iosynth = 0x3e0;
+			break;
+		case 0x3e8:
+			s->iosynth = 0x3e8;
+			break;
+		case 0x388:
+		default:
+			s->iosynth = 0x388;
+			break;
+		}
+		switch (mpu_io) {
+		case 0x300:
+			s->iomidi = 0x300;
+			break;
+		case 0x310:
+			s->iomidi = 0x310;
+			break;
+		case 0x320:
+			s->iomidi = 0x320;
+			break;
+		case 0x330:
+		default:
+			s->iomidi = 0x330;
+			break;
+		}
 		if (s->iobase == 0)
 			continue;
 		s->irq = pcidev->irq;
@@ -2405,8 +2482,21 @@ int __init init_cmpci(void)
 		else
 		{
 			request_region(s->iomidi, CM_EXTENT_MIDI, "cmpci Midi");
-			/* set IO based at 0x330 */
-			outb(inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x60, s->iobase + CODEC_CMI_LEGACY_CTRL + 3);
+			/* set IO based at specified address */
+			switch (s->iomidi) {
+			case 0x300:
+				outb(inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) | 0x60, s->iobase + CODEC_CMI_LEGACY_CTRL + 3);
+				break;
+			case 0x310:
+				outb((inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x60) | 0x40, s->iobase + CODEC_CMI_LEGACY_CTRL + 3);
+				break;
+			case 0x320:
+				outb((inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x60) | 0x20, s->iobase + CODEC_CMI_LEGACY_CTRL + 3);
+				break;
+			default: /* 0x330 */
+				outb(inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x60, s->iobase + CODEC_CMI_LEGACY_CTRL + 3);
+				break;
+			}
 		}
 		if (check_region(s->iosynth, CM_EXTENT_SYNTH)) {
 			printk(KERN_WARNING "cmpci: io ports %#x-%#x in use, synth disabled.\n", s->iosynth, s->iosynth+CM_EXTENT_SYNTH-1);
@@ -2417,6 +2507,22 @@ int __init init_cmpci(void)
 			request_region(s->iosynth, CM_EXTENT_SYNTH, "cmpci FM");
 			/* enable FM */
 			outb(inb(s->iobase + CODEC_CMI_MISC_CTRL + 2) | 8, s->iobase + CODEC_CMI_MISC_CTRL);
+
+			/* set IO base at specified address */
+			switch (s->iosynth) {
+			case 0x3e8:
+				outb(inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) | 0x03, s->iobase + CODEC_CMI_LEGACY_CTRL+3);
+				break;
+				case 0x3e0:
+				outb((inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x03) | 0x02, s->iobase + CODEC_CMI_LEGACY_CTRL+3);
+				break;
+			case 0x3c8:
+				outb((inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x03) | 0x01, s->iobase + CODEC_CMI_LEGACY_CTRL+3);
+				break;
+			default: /* 0x388 */
+				outb(inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x03, s->iobase + CODEC_CMI_LEGACY_CTRL+3);
+				break;
+			}
 		}
 		/* initialize codec registers */
 		outb(0, s->iobase + CODEC_CMI_INT_HLDCLR + 2);  /* disable ints */
@@ -2463,8 +2569,10 @@ int __init init_cmpci(void)
 				outb(inb(s->iobase + CODEC_CMI_FUNCTRL1) | 0x80, s->iobase + CODEC_CMI_FUNCTRL1);
 				printk(KERN_INFO "cmpci: Enable SPDIF loop\n");
 			}
-			else
+			else {
 				outb(inb(s->iobase + CODEC_CMI_FUNCTRL1) & ~0x80, s->iobase + CODEC_CMI_FUNCTRL1);
+			}
+
 			/* enable 4 channels mode */
 			if (four_ch)
 			{

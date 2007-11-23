@@ -1,0 +1,19 @@
+Sun May 21 15:14:37 2000  Daisuke Nagano  <breeze.nagano@nifty.ne.jp>
+
+	* ymf_sb.c: Add 'master_vol' module parameter to change
+	'PCM out Vol" of AC'97.
+	Should I support AC'97 mixer by implementing original mixer
+	codes... ?
+
+	* ymf_sb.c: remove native UART401 support. External MIDI port
+	should be supported by sb_midi driver.
+
+	*ymf_sb.c: add support for SPDIF OUT. Module parameter
+	'spdif_out' is now available.
+
+
+Tue May 16 19:29:29 2000  Daisuke Nagano  <breeze.nagano@nifty.ne.jp>
+
+	* ymf_sb.c (checkCodec): add a little delays for reset devices.
+	
+	* ymf_sb.c (readRegWord): fixed addressing bug.
