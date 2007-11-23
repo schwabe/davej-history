@@ -313,6 +313,10 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 		    failed_command->c[0] == SCMD_READ_SUBCHANNEL)
 			return;
 	}
+
+	if (failed_command && (failed_command->c[0] == TEST_UNIT_READY))
+		return;
+
 	if (reqbuf->error_code == 0x70 && reqbuf->sense_key  == 0x02
 	 && ((reqbuf->asc        == 0x3a && reqbuf->ascq       == 0x00) ||
 	     (reqbuf->asc        == 0x04 && reqbuf->ascq       == 0x01)))

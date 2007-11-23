@@ -140,11 +140,9 @@ static const char SysKonnectFileId[] = "@(#)"
  */
 #ifdef SK_LITTLE_ENDIAN
 #define SKCS_HTON16(Val16)	(((unsigned) (Val16) >> 8) | (((Val16) & 0xFF) << 8))
-#define SKCS_INV_HTON16(Val16)	(Val16)
 #endif	/* SK_LITTLE_ENDIAN */
 #ifdef SK_BIG_ENDIAN
 #define SKCS_HTON16(Val16)	(Val16)
-#define SKCS_INV_HTON16(Val16)	(((unsigned) (Val16) >> 8) | (((Val16) & 0xFF) << 8))
 #endif	/* SK_BIG_ENDIAN */
 #define SKCS_NTOH16(Val16)	SKCS_HTON16(Val16)
 
@@ -644,7 +642,7 @@ unsigned	Checksum2)	/* Hardware checksum 2. */
 		(unsigned long) SKCS_HTON16(IpDataLength) +
 
 		/* Add the TCP/UDP header checksum. */
-		(unsigned long) SKCS_INV_HTON16(IpDataChecksum);
+		(unsigned long) IpDataChecksum;
 
 	/* Add-in any carries. */
 

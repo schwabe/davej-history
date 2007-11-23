@@ -348,6 +348,7 @@ int		version_disp = 0;
 SK_AC		*pAC;
 struct pci_dev	*pdev = NULL;
 unsigned long	base_address;
+unsigned short	tmp;
 
 	if (probed)
 		return -ENODEV;
@@ -418,6 +419,15 @@ unsigned long	base_address;
 		pci_set_master(pdev);
 
 		base_address = pdev->base_address[0];
+
+#ifdef __sparc_v9__
+		/* SPARC machines do not initialize the chache line size */
+                pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 64);
+		/* SPARC machines do not set "Memory write and invalidate" */
+                pci_read_config_word(pdev, PCI_COMMAND, &tmp);
+		tmp |= PCI_COMMAND_INVALIDATE;
+                pci_write_config_word(pdev, PCI_COMMAND, tmp);
+#endif 
 
 #ifdef SK_BIG_ENDIAN
 		/*
@@ -1916,8 +1926,10 @@ rx_start:
 			/* hardware checksum */
 			Type = ntohs(*((short*)&pMsg->data[12]));
 			if (Type == 0x800) {
-				Csum1= pRxd->TcpSums & 0xffff;
-				Csum2=(pRxd->TcpSums >> 16) & 0xffff;
+				/* the hardware calculates the checksums in LITTLE ENDIAN */
+				/* so turn them around for BIG ENDIAN machines */
+				Csum1= le16_to_cpu(pRxd->TcpSums & 0xffff);
+				Csum2= le16_to_cpu((pRxd->TcpSums >> 16) & 0xffff);
 				if ((Csum1 & 0xfffe) && (Csum2 & 0xfffe)) {
 					Result = SkCsGetReceiveInfo(pAC,
 						&pMsg->data[14], 
@@ -3490,8 +3502,10 @@ unsigned int	Flags;
 		pRlmtMbuf = (SK_MBUF*) Param.pParaPtr;
 		pMsg = (struct sk_buff*) pRlmtMbuf->pOs;
 		skb_put(pMsg, pRlmtMbuf->Length);
-		XmitFrame(pAC, &pAC->TxPort[pRlmtMbuf->PortIdx][TX_PRIO_LOW],
-			pMsg);
+		if (XmitFrame(pAC, &pAC->TxPort[pRlmtMbuf->PortIdx][TX_PRIO_LOW],
+			pMsg) < 0) {
+			dev_kfree_skb(pMsg);
+		}
 		break;
 	default:
 		break;

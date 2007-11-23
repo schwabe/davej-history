@@ -169,7 +169,7 @@ int start_secondary(void *unused)
 {
 	trap_init();
 	/* No memory allocation allowed on slave IRQ init */
-	init_IRQ(NULL);
+	init_IRQ(0UL);
 	smp_callin();
 	return cpu_idle(NULL);
 }

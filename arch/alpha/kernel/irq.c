@@ -897,7 +897,7 @@ unsigned long __init init_IRQ(unsigned long memory)
 {
 	wrent(entInt, 0);
 	alpha_mv.init_irq();
-	return memory
+	return memory;
 }
 
 /*
