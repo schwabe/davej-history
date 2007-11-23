@@ -37,6 +37,8 @@
  *                                              port assignment. we lose a 
  *                                              valid localtalk port as a 
  *                                              result.
+ *              Arnaldo Melo		:	fix minor skb handling bug
+ *              				in atalk_rcv
  *              
  *
  *		This program is free software; you can redistribute it and/or
@@ -1638,7 +1640,9 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		{
 			/* 22 bytes - 12 ether, 2 len, 3 802.2 5 snap */
 			struct sk_buff *nskb = skb_realloc_headroom(skb, 32);
-			kfree(skb);
+			kfree_skb(skb);
+			if (!nskb)
+				return 0;
 			skb=nskb;
 		}
 		else

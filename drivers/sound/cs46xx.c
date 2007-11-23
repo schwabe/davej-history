@@ -834,8 +834,9 @@ static void cs_update_ptr(struct cs_state *state)
 					memset (dmabuf->rawbuf + swptr, silence, clear_cnt);
 					dmabuf->endcleared = 1;
 				}
-			}			
-			wake_up(&dmabuf->wait);
+			}
+			if (dmabuf->count < (signed)dmabuf->dmasize/2)
+				wake_up(&dmabuf->wait);
 		}
 	}
 	/* error handling and process wake up for DAC */
@@ -854,7 +855,8 @@ static void cs_update_ptr(struct cs_state *state)
 				__stop_dac(state);
 				dmabuf->error++;
 			}
-			wake_up(&dmabuf->wait);
+			if (dmabuf->count < (signed)dmabuf->dmasize/2)
+				wake_up(&dmabuf->wait);
 		}
 	}
 }
@@ -1485,7 +1487,9 @@ static void amp_none(struct cs_card *card, int change)
  
 static void amp_voyetra(struct cs_card *card, int change)
 {
-	/* Manage the EAPD bit on the Crystal 4297 */
+	/* Manage the EAPD bit on the Crystal 4297 
+	   and the Analog AD1885 */
+	   
 	int old=card->amplifier;
 	
 	card->amplifier+=change;
@@ -2536,13 +2540,14 @@ struct cs_card_type
 	void (*active)(struct cs_card *, int);
 };
 
-static struct cs_card_type __init cards[]={
+static struct cs_card_type __initdata cards[]={
 	{0x1489, 0x7001, "Genius Soundmaker 128 value", amp_none, NULL},
 	{0x5053, 0x3357, "Voyetra", amp_voyetra, NULL},
 	/* Not sure if the 570 needs the clkrun hack */
 	{PCI_VENDOR_ID_IBM, 0x0132, "Thinkpad 570", amp_none, clkrun_hack},
 	{PCI_VENDOR_ID_IBM, 0x0153, "Thinkpad 600X/A20/T20", amp_none, clkrun_hack},
 	{PCI_VENDOR_ID_IBM, 0x1010, "Thinkpad 600E (unsupported)", NULL, NULL},
+	{0, 0, "Card without SSID set", NULL, NULL },
 	{0, 0, NULL, NULL}
 };
 

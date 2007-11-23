@@ -25,6 +25,8 @@
  *		Jaume Grau	-	flush caches on AARP_PROBE
  *		Rob Newberry	-	Added proxy AARP and AARP proc fs, 
  *					moved probing from DDP module.
+ *		Alistair Riddell-	on AARP_PROBE flush sooner - 
+ *					ali@gwc.org.uk 000820
  *
  */
 
@@ -1008,7 +1010,10 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 				   getting into a probe/flush/learn/probe/flush/learn
 				   cycle during probing of a slow to respond host addr */
 				if(a!=NULL)
+				{
 					a->expires_at=jiffies-1;
+					mod_timer(&aarp_timer, jiffies + sysctl_aarp_tick_time);
+				}
 			}
 			if(sa.s_node!=ma->s_node)
 				break;

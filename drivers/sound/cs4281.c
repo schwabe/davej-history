@@ -2361,8 +2361,8 @@ int __init cs4281_probe(void)
                 temp1 = readl(s->pBA0+ BA0_PCICFG00);
                 temp2 = readl(s->pBA0+ BA0_PCICFG04);
                 temp1 = cs4281_hw_init(s);
-                if(!temp1){
-                        printk(KERN_INFO "cs4281: Init4281() failed. Skipping part.\n");
+                if(temp1){
+                        printk(KERN_INFO "cs4281: Hardware setup failed. Skipping part.\n");
                         continue;
                 }	
                 s->magic = CS4281_MAGIC;

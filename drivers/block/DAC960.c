@@ -19,8 +19,8 @@
 */
 
 
-#define DAC960_DriverVersion			"2.2.7"
-#define DAC960_DriverDate			"1 August 2000"
+#define DAC960_DriverVersion			"2.2.8"
+#define DAC960_DriverDate			"19 August 2000"
 
 
 #include <linux/version.h>
@@ -2146,7 +2146,6 @@ static void DAC960_DetectControllers(DAC960_HardwareType_T HardwareType)
       Controller->Bus = Bus;
       Controller->Device = Device;
       Controller->Function = Function;
-      sprintf(Controller->ControllerName, "c%d", Controller->ControllerNumber);
       /*
 	Map the Controller Register Window.
       */
@@ -3847,15 +3846,15 @@ static void DAC960_V2_ReportEvent(DAC960_Controller_T *Controller,
       { 0x008D, "M Rebuild Failed for Unknown Reasons" },
       { 0x008E, "M Rebuild Failed due to New Physical Device" },
       { 0x008F, "M Rebuild Failed due to Logical Drive Failure" },
-      { 0x0090, "L Initialization Started" },
-      { 0x0091, "L Initialization Completed" },
-      { 0x0092, "L Initialization Cancelled" },
-      { 0x0093, "L Initialization Failed" },
+      { 0x0090, "M Initialization Started" },
+      { 0x0091, "M Initialization Completed" },
+      { 0x0092, "M Initialization Cancelled" },
+      { 0x0093, "M Initialization Failed" },
       { 0x0094, "L Found" },
       { 0x0095, "L Gone" },
-      { 0x0096, "L Expand Capacity Started" },
-      { 0x0097, "L Expand Capacity Completed" },
-      { 0x0098, "L Expand Capacity Failed" },
+      { 0x0096, "M Expand Capacity Started" },
+      { 0x0097, "M Expand Capacity Completed" },
+      { 0x0098, "M Expand Capacity Failed" },
       { 0x0099, "L Bad Block Found" },
       { 0x009A, "L Size Changed" },
       { 0x009B, "L Type Changed" },
@@ -3890,6 +3889,12 @@ static void DAC960_V2_ReportEvent(DAC960_Controller_T *Controller,
       { 0, "" } };
   int EventListIndex = 0, EventCode;
   unsigned char EventType, *EventMessage;
+  if (Event->EventCode == 0x1C &&
+      RequestSense->SenseKey == DAC960_SenseKey_VendorSpecific &&
+      (RequestSense->AdditionalSenseCode == 0x80 ||
+       RequestSense->AdditionalSenseCode == 0x81))
+    Event->EventCode = ((RequestSense->AdditionalSenseCode - 0x80) << 8) |
+		       RequestSense->AdditionalSenseCodeQualifier;
   while (true)
     {
       EventCode = EventList[EventListIndex].EventCode;
@@ -3953,6 +3958,7 @@ static void DAC960_V2_ReportEvent(DAC960_Controller_T *Controller,
 		      RequestSense->CommandSpecificInformation[3]);
       break;
     case 'E':
+      if (Controller->SuppressEnclosureMessages) break;
       sprintf(MessageBuffer, EventMessage, Event->LogicalUnit);
       DAC960_Critical("Enclosure %d %s\n", Controller,
 		      Event->TargetID, MessageBuffer);
@@ -4365,7 +4371,7 @@ static void DAC960_V2_ProcessCompletedCommand(DAC960_Command_T *Command)
 					 LogicalDeviceSize);
 	      else if (NewLogicalDeviceInfo->BackgroundInitializationInProgress)
 		DAC960_V2_ReportProgress(Controller,
-					 "BackgroundInitialization",
+					 "Background Initialization",
 					 LogicalDeviceNumber,
 					 NewLogicalDeviceInfo
 					 ->BackgroundInitializationBlockNumber,
@@ -4996,6 +5002,7 @@ static int DAC960_IOCTL(Inode_T *Inode, File_T *File,
   DiskGeometry_T Geometry, *UserGeometry;
   DAC960_Controller_T *Controller;
   int PartitionNumber;
+  if (File == NULL) return -EINVAL;
   if (File->f_flags & O_NONBLOCK)
     return DAC960_UserIOCTL(Inode, File, Request, Argument);
   if (ControllerNumber < 0 || ControllerNumber > DAC960_ControllerCount - 1)
@@ -5189,6 +5196,7 @@ static int DAC960_UserIOCTL(Inode_T *Inode, File_T *File,
 	    ErrorCode =
 	      copy_from_user(&DCDB, UserCommand.DCDB, sizeof(DAC960_V1_DCDB_T));
 	    if (ErrorCode != 0) goto Failure1;
+	    if (DCDB.Channel >= DAC960_V1_MaxChannels) return -EINVAL;
 	    if (!((DataTransferLength == 0 &&
 		   DCDB.Direction
 		   == DAC960_V1_DCDB_NoDataTransfer) ||
@@ -5517,6 +5525,7 @@ int DAC960_KernelIOCTL(unsigned int Request, void *Argument)
 	if (CommandOpcode == DAC960_V1_DCDB)
 	  {
 	    DCDB = KernelCommand->DCDB;
+	    if (DCDB->Channel >= DAC960_V1_MaxChannels) return -EINVAL;
 	    if (!((DataTransferLength == 0 &&
 		   DCDB->Direction == DAC960_V1_DCDB_NoDataTransfer) ||
 		  (DataTransferLength > 0 &&
@@ -6329,6 +6338,8 @@ static boolean DAC960_V2_ExecuteUserCommand(DAC960_Controller_T *Controller,
 			   == DAC960_V2_NormalCompletion
 			   ? "Cancelled" : "Not Cancelled"));
     }
+  else if (strcmp(UserCommand, "suppress-enclosure-messages") == 0)
+    Controller->SuppressEnclosureMessages = true;
   else DAC960_UserCritical("Illegal User Command: '%s'\n",
 			   Controller, UserCommand);
   DAC960_AcquireControllerLock(Controller, &ProcessorFlags);
@@ -6513,6 +6524,7 @@ static void DAC960_CreateProcEntries(void)
       PROC_DirectoryEntry_T *ControllerProcEntry, *InitialStatusProcEntry;
       PROC_DirectoryEntry_T *CurrentStatusProcEntry, *UserCommandProcEntry;
       if (Controller == NULL) continue;
+      sprintf(Controller->ControllerName, "c%d", Controller->ControllerNumber);
       ControllerProcEntry = &Controller->ControllerProcEntry;
       ControllerProcEntry->name = Controller->ControllerName;
       ControllerProcEntry->namelen = strlen(ControllerProcEntry->name);

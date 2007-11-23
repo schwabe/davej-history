@@ -48,6 +48,7 @@ static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned
 static int ac97_init_mixer(struct ac97_codec *codec);
 
 static int sigmatel_init(struct ac97_codec *codec);
+static int enable_eapd(struct ac97_codec *codec);
 
 #define arraysize(x)   (sizeof(x)/sizeof((x)[0]))
 
@@ -58,6 +59,7 @@ static struct {
 } ac97_codec_ids[] = {
 	{0x414B4D00, "Asahi Kasei AK4540"     , NULL},
 	{0x41445340, "Analog Devices AD1881"  , NULL},
+	{0x41445360, "Analog Devices AD1885"  , enable_eapd},
 	{0x43525900, "Cirrus Logic CS4297"    , NULL},
 	{0x43525903, "Cirrus Logic CS4297"  ,	NULL},
 	{0x43525913, "Cirrus Logic CS4297A"   , NULL},
@@ -636,6 +638,17 @@ static int sigmatel_init(struct ac97_codec * codec)
 
 	return 1;
 }
+
+/*
+ *	Bring up an AD1885
+ */
+ 
+static int enable_eapd(struct ac97_codec * codec)
+{
+	codec->codec_write(codec, AC97_POWER_CONTROL,
+		codec->codec_read(codec, AC97_POWER_CONTROL)|0x8000);
+}
+	
 
 EXPORT_SYMBOL(ac97_read_proc);
 EXPORT_SYMBOL(ac97_probe_codec);
