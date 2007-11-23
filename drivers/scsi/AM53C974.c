@@ -1,3 +1,5 @@
+#include <linux/module.h>
+
 #include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/signal.h>
@@ -2241,3 +2243,10 @@ cmd->result = DID_RESET << 16;
 cmd->scsi_done(cmd);
 return SCSI_ABORT_SUCCESS;
 }
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = AM53C974;
+
+#include "scsi_module.c"
+#endif

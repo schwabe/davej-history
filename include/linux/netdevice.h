@@ -5,7 +5,7 @@
  *
  *		Definitions for the Interfaces handler.
  *
- * Version:	@(#)dev.h	1.0.10	08/12/93
+ * Version:	@(#)dev.h	1.0.11	07/31/96
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -13,6 +13,7 @@
  *		Donald J. Becker, <becker@super.org>
  *		Alan Cox, <A.Cox@swansea.ac.uk>
  *		Bjorn Ekwall. <bj0rn@blox.se>
+ *		Lawrence V. Stefani, <stefani@lkg.dec.com>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -20,6 +21,7 @@
  *		2 of the License, or (at your option) any later version.
  *
  *		Moved to /usr/include/linux for NET3
+ *		Added extern for fddi_setup()
  */
 #ifndef _LINUX_NETDEVICE_H
 #define _LINUX_NETDEVICE_H
@@ -286,6 +288,7 @@ extern __inline__ void dev_lock_wait(void)
 
 extern void		ether_setup(struct device *dev);
 extern void		tr_setup(struct device *dev);
+extern void		fddi_setup(struct device *dev);
 extern int		ether_config(struct device *dev, struct ifmap *map);
 /* Support for loadable net-drivers */
 extern int		register_netdev(struct device *dev);

@@ -47,6 +47,9 @@
  *					1 device.
  *	    Thomas Bogendoerfer :	Return ENODEV for dev_open, if there
  *					is no device open function.
+ *	    Lawrence V. Stefani	:	Changed set MTU ioctl to not assume
+ *					min MTU of 68 bytes for devices
+ *					that have change MTU functions.
  *
  */
 
@@ -1196,17 +1199,17 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 	
 		case SIOCSIFMTU:	/* Set the MTU of a device */
 		
-			/*
-			 *	MTU must be positive.
-			 */
-			 
-			if(ifr.ifr_mtu<68)
-				return -EINVAL;
-
 			if (dev->change_mtu)
 				ret = (*dev->change_mtu)(dev, ifr.ifr_mtu);
 			else
 			{
+				/*
+				 *	MTU must be positive.
+				 */
+			 
+				if(ifr.ifr_mtu<68)
+					return -EINVAL;
+
 				dev->mtu = ifr.ifr_mtu;
 				ret = 0;
 			}
@@ -1367,7 +1370,7 @@ extern int lance_init(void);
 extern int ni65_init(void);
 extern int pi_init(void);
 extern void sdla_setup(void);
-extern void dlci_setup(void);
+extern int dlci_setup(void);
 
 int net_dev_init(void)
 {

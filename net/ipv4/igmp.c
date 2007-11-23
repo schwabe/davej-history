@@ -248,7 +248,7 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 
 	if(skb==NULL)
 		return;
-	tmp=ip_build_header(skb, INADDR_ANY, address, &dev, IPPROTO_IGMP, NULL,
+	tmp=ip_build_header(skb, dev->pa_addr, address, &dev, IPPROTO_IGMP, NULL,
 				28 , 0, 1, NULL);
 	if(tmp<0)
 	{
@@ -452,7 +452,7 @@ int igmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	}
 	ih=(struct igmphdr *)skb->h.raw;
 
-	if(skb->len <sizeof(struct igmphdr) || skb->ip_hdr->ttl<1 || ip_compute_csum((void *)skb->h.raw,sizeof(struct igmphdr)))
+	if(len <sizeof(struct igmphdr) || skb->ip_hdr->ttl<1 || ip_compute_csum((void *)skb->h.raw,sizeof(struct igmphdr)))
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;

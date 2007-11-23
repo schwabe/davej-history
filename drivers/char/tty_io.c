@@ -1696,7 +1696,7 @@ void do_SAK( struct tty_struct *tty)
 		if (((*p)->tty == tty) ||
 		    ((session > 0) && ((*p)->session == session)))
 			send_sig(SIGKILL, *p, 1);
-		else {
+		else if ((*p)->files) {
 			for (i=0; i < NR_OPEN; i++) {
 				filp = (*p)->files->fd[i];
 				if (filp && (filp->f_op == &tty_fops) &&

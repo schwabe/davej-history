@@ -335,6 +335,12 @@ M:	emoenke@gwdg.de
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+FPU EMULATOR
+P:	Bill Metzenthen
+M:	billm@suburbia.net
+W:	http://suburbia.net/~billm/floating-point/emulator/
+S:	Maintained
+
 CREDITS FILE
 P:	John A. Martin
 M:	jam@acm.org

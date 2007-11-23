@@ -13,7 +13,7 @@
  *		field of the 'device' structure to store the unit number...
  *		-FvK
  *
- * Version:	@(#)Space.c	1.0.7	08/12/93
+ * Version:	@(#)Space.c	1.0.8	07/31/96
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -381,6 +381,30 @@ struct device eql_dev = {
 #   define	NEXT_DEV	(&ibmtr_dev0)
 
 #endif 
+
+#ifdef CONFIG_DEFXX
+	extern int dfx_probe(struct device *dev);
+	static struct device fddi7_dev =
+		{"fddi7", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, dfx_probe};
+	static struct device fddi6_dev =
+		{"fddi6", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi7_dev, dfx_probe};
+	static struct device fddi5_dev =
+		{"fddi5", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi6_dev, dfx_probe};
+	static struct device fddi4_dev =
+		{"fddi4", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi5_dev, dfx_probe};
+	static struct device fddi3_dev =
+		{"fddi3", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi4_dev, dfx_probe};
+	static struct device fddi2_dev =
+		{"fddi2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi3_dev, dfx_probe};
+	static struct device fddi1_dev =
+		{"fddi1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi2_dev, dfx_probe};
+	static struct device fddi0_dev =
+		{"fddi0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi1_dev, dfx_probe};
+
+#undef	NEXT_DEV
+#define	NEXT_DEV	(&fddi0_dev)
+#endif 
+
 #ifdef CONFIG_NET_IPIP
 #ifdef CONFIG_IP_FORWARD
 	extern int tunnel_init(struct device *);

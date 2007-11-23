@@ -65,13 +65,13 @@ extern unsigned char aux_device_present, kbd_read_mask;
 #endif
 
 extern char *get_options(char *str, int *ints);
-extern void set_device_ro(int dev,int flag);
+extern void set_device_ro(kdev_t dev,int flag);
 extern struct file_operations * get_blkfops(unsigned int);
 extern void blkdev_release(struct inode * inode);
 
 extern void *sys_call_table;
 
-extern int sys_tz;
+extern struct timezone sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
 

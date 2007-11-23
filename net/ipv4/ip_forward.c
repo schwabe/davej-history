@@ -230,9 +230,10 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 
 		/* This is for ip encap. Anand, ernet.*/
 
-		if (is_frag&IPFWD_MULTITUNNEL) {
+		if (is_frag&IPFWD_MULTITUNNEL)
+		{
 			encap=20;
-				}
+		}
 	}
 	else
 	{

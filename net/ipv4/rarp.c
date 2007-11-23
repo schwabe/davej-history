@@ -28,7 +28,7 @@
  * Fixes
  *	Alan Cox	:	Rarp delete on device down needed as
  *				reported by Walter Wolfgang.
- *
+ *  Lawrence V. Stefani : Added FDDI support.
  */
 
 #include <linux/module.h>
@@ -204,13 +204,40 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 /*
  *	If this test doesn't pass, it's not IP, or we should ignore it anyway
  */
-
+#ifdef CONFIG_FDDI
+	if (dev->type == ARPHRD_FDDI)
+	{
+		/*
+		 * Since the dev->type for FDDI is "made up", compare the rarp->ar_hrd
+		 * field against ARPHRD_ETHER and ARPHRD_IEEE802.
+		 *
+		 * Ought to move to a device specifc 'arp_type_ok()'
+		 */
+		if (rarp->ar_hln != dev->addr_len
+			|| ((ntohs(rarp->ar_hrd) != ARPHRD_ETHER) && (ntohs(rarp->ar_hrd) != ARPHRD_IEEE802))
+			|| dev->flags&IFF_NOARP)
+		{
+			kfree_skb(skb, FREE_READ);
+			return 0;
+		}
+	}
+	else
+	{
+		if (rarp->ar_hln != dev->addr_len || dev->type != ntohs(rarp->ar_hrd) 
+			|| dev->flags&IFF_NOARP)
+			{
+			kfree_skb(skb, FREE_READ);
+			return 0;
+		}
+	}
+#else
 	if (rarp->ar_hln != dev->addr_len || dev->type != ntohs(rarp->ar_hrd) 
 		|| dev->flags&IFF_NOARP)
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
+#endif
 
 /*
  *	If it's not a RARP request, delete it.

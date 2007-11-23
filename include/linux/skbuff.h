@@ -102,7 +102,7 @@ struct sk_buff
 #define PACKET_OTHERHOST	3		/* To someone else 				*/
 	unsigned short	users;			/* User count - see datagram.c,tcp.c 		*/
 	unsigned short	protocol;		/* Packet protocol from driver. 		*/
-	unsigned short	truesize;		/* Buffer size 					*/
+	unsigned int	truesize;		/* Buffer size 					*/
 
 	atomic_t	count;			/* reference count				*/
 	struct sk_buff	*data_skb;		/* Link to the actual data skb			*/

@@ -17,6 +17,8 @@
  *	Malcolm Beattie		:	Buffer handling fixes.
  *	Alexey Kuznetsov	:	Double buffer free and other fixes.
  *	SVR Anand		:	Fixed several multicast bugs and problems.
+ *	Alexey Kuznetsov	:	Subset of bugfixes/changes pending for
+ *					2.1. Doesn't include Alexey's PIM support.
  *
  *	Status:
  *		Cache manager under test. Forwarding in vague test mode
@@ -60,8 +62,8 @@
 static struct vif_device vif_table[MAXVIFS];		/* Devices 		*/
 static unsigned long vifc_map;				/* Active device map	*/
 int mroute_do_pim = 0;					/* Set in PIM assert	*/
-static struct mfc_cache *mfc_cache_array[MFC_LINES];	/* Forwarding cache	*/
-static struct mfc_cache *cache_resolve_queue;		/* Unresolved cache	*/
+static struct mfc_cache *mfc_cache_array[MFC_LINES+1];	/* Forwarding cache	*/
+#define cache_resolve_queue (mfc_cache_array[MFC_LINES])/* Unresolved cache 	*/
 int cache_resolve_queue_len = 0;			/* Size of unresolved	*/
 
 /*
@@ -76,22 +78,6 @@ static void vif_delete(struct vif_device *v)
 		dev_mc_upload(v->dev);
 	}
 	v->dev=NULL;
-}
-
-/*
- *	Find a vif
- */
- 
-static int ipmr_vifi_find(struct device *dev)
-{
-	struct vif_device *v=&vif_table[0];
-	int ct;
-	for(ct=0;ct<MAXVIFS;ct++,v++)
-	{
-		if(v->dev==dev)
-			return ct;
-	}
-	return -1;
 }
 
 /*
@@ -388,6 +374,8 @@ int ipmr_mfc_modify(int action, struct mfcctl *mfc)
 		 */
 
 		cache->mfc_flags|=MFC_RESOLVED;
+		cache->mfc_parent=mfc->mfcc_parent;
+		
 		memcpy(cache->mfc_ttls, mfc->mfcc_ttls,sizeof(cache->mfc_ttls));
 		 
 		/*
@@ -733,12 +721,7 @@ void ipmr_forward(struct sk_buff *skb, int is_frag)
 	struct mfc_cache *cache;
 	struct sk_buff *skb2;
 	int psend = -1;
-	int vif=ipmr_vifi_find(skb->dev);
-	if(vif==-1)
-	{
-		kfree_skb(skb, FREE_WRITE);
-		return;
-	}
+ 	int vif,ct=0;
 
 	/*
 	 *	Without the following addition, skb->h.iph points to something
@@ -747,56 +730,63 @@ void ipmr_forward(struct sk_buff *skb, int is_frag)
 	
 	skb->h.iph = skb->ip_hdr;  /* Anand, ernet.  */
 
-	vif_table[vif].pkt_in++;
-	vif_table[vif].bytes_in+=skb->len;
-	
 	cache=ipmr_cache_find(skb->ip_hdr->saddr,skb->ip_hdr->daddr);
-	
+
 	/*
 	 *	No usable cache entry
 	 */
 	 
 	if(cache==NULL || (cache->mfc_flags&MFC_QUEUED))
-		ipmr_cache_unresolved(cache,vif,skb, is_frag);
+	{
+		ipmr_cache_unresolved(cache,ALL_VIFS,skb, is_frag);
+		return;
+	}
+
+	vif=cache->mfc_parent;
+	
+	if(vif>=MAXVIFS || !(vifc_map&(1<<vif)) ||
+		vif_table[vif].dev != skb->dev)
+	{
+		kfree_skb(skb, FREE_READ);
+		return;
+	}
+	
+	vif_table[vif].pkt_in++;
+	vif_table[vif].bytes_in+=skb->len;
+	
+	/*
+	 *	Forward the frame
+	 */
+
+	 while(ct<MAXVIFS)
+	 {
+	 	/*
+	 	 *	0 means don't do it. Silly idea, 255 as don't do it would be cleaner!
+	 	 */
+	 	if(skb->ip_hdr->ttl > cache->mfc_ttls[ct] && cache->mfc_ttls[ct]>0)
+	 	{
+	 		if(psend!=-1)
+	 		{
+	 			/*
+	 			 *	May get variant mac headers
+	 			 *	so must copy -- boo hoo.
+	 			 */
+	 			skb2=skb_copy(skb, GFP_ATOMIC);
+	 			if(skb2)
+	 			{
+	 				skb2->free=1;
+	 				ipmr_queue_xmit(skb2, &vif_table[psend], skb->dev, is_frag);
+	 			}
+			}
+			psend=ct;
+		}
+		ct++;
+	}
+	if(psend==-1)
+		kfree_skb(skb, FREE_WRITE);
 	else
 	{
-		/*
-		 *	Forward the frame
-		 */
-		 int ct=0;
-		 while(ct<MAXVIFS)
-		 {
-		 	/*
-		 	 *	0 means don't do it. Silly idea, 255 as don't do it would be cleaner!
-		 	 */
-		 	if(skb->ip_hdr->ttl > cache->mfc_ttls[ct] && cache->mfc_ttls[ct]>0)
-		 	{
-		 		if(psend!=-1)
-		 		{
-		 			/*
-		 			 *	May get variant mac headers
-		 			 *	so must copy -- boo hoo.
-		 			 */
-		 			skb2=skb_copy(skb, GFP_ATOMIC);
-		 			if(skb2)
-		 			{
-		 				skb2->free=1;
-		 				ipmr_queue_xmit(skb2, &vif_table[psend], skb->dev, is_frag);
-		 			}
-				}
-				psend=ct;
-			}
-			ct++;
-		}
-		if(psend==-1)
-			kfree_skb(skb, FREE_WRITE);
-		else
-		{
-			ipmr_queue_xmit(skb, &vif_table[psend], skb->dev, is_frag);
-		}
-		/*
-		 *	Adjust the stats
-		 */
+		ipmr_queue_xmit(skb, &vif_table[psend], skb->dev, is_frag);
 	}
 }
 
@@ -855,40 +845,38 @@ int ipmr_mfc_info(char *buffer, char **start, off_t offset, int length, int dumm
 	int ct;
 
 	len += sprintf(buffer,
-		 "Group    Origin   SrcIface \n");
+		 "Group    Origin   SrcIface VifTtls\n");
 	pos=len;
   
-	for (ct=0;ct<MFC_LINES;ct++) 
+	for (ct=0;ct<MFC_LINES+1;ct++) 
 	{
 		cli();
 		mfc=mfc_cache_array[ct];
 		while(mfc!=NULL)
 		{
 			char *name="none";
-			char vifmap[MAXVIFS+1];
 			int n;
 			/*
 			 *	Device name
 			 */
-			if(vifc_map&(1<<mfc->mfc_parent))
+			if(mfc->mfc_parent < MAXVIFS && vifc_map&(1<<mfc->mfc_parent))
 				name=vif_table[mfc->mfc_parent].dev->name;
-			/*
-			 *	Interface forwarding map
-			 */
-			for(n=0;n<MAXVIFS;n++)
-				if(vifc_map&(1<<n) && mfc->mfc_ttls[ct])
-					vifmap[n]='X';
-				else
-					vifmap[n]='-';
-			vifmap[n]=0;
-			/*
-			 *	Now print it out
-			 */
-			size = sprintf(buffer+len, "%08lX %08lX %-8s %s\n",
+
+			size = sprintf(buffer+len, "%08lX %08lX %-8s",
 				(unsigned long)mfc->mfc_mcastgrp,
 				(unsigned long)mfc->mfc_origin,
-				name,
-				vifmap);
+				name);
+				
+			for(n=0;n<MAXVIFS;n++)
+			{
+				if(vifc_map&(1<<n))
+					size+=sprintf(buffer+len+size,
+						" %-3d", mfc->mfc_ttls[n]);
+				else
+					size+=sprintf(buffer+len+size,
+						" --- ");
+			}
+			size+=sprintf(buffer+len+size,"\n");
 			len+=size;
 			pos+=size;
 			if(pos<offset)

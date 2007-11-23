@@ -50,7 +50,7 @@
 #endif
 
 extern char _stext, _etext;
-extern char *linux_banner;
+extern const char *linux_banner;
 
 static char printbuf[1024];
 
@@ -65,7 +65,7 @@ extern void init_modules(void);
 extern long console_init(long, long);
 extern long kmalloc_init(long,long);
 extern void sock_init(void);
-extern long pci_init(long, long);
+extern unsigned long pci_init(unsigned long, unsigned long);
 extern void sysctl_init(void);
 
 extern void no_scroll(char *str, int *ints);

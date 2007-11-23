@@ -282,11 +282,11 @@ struct icmp_err icmp_err_convert[] = {
   { ENONET,		1 },	/*	ICMP_HOST_ISOLATED	*/
   { ENETUNREACH,	1 },	/*	ICMP_NET_ANO		*/
   { EHOSTUNREACH,	1 },	/*	ICMP_HOST_ANO		*/
-  { EOPNOTSUPP,		0 },	/*	ICMP_NET_UNR_TOS	*/
-  { EOPNOTSUPP,		0 },	/*	ICMP_HOST_UNR_TOS	*/
-  { EOPNOTSUPP,		1 },	/*	ICMP_PKT_FILTERED	*/
-  { EOPNOTSUPP,		1 },	/*	ICMP_PREC_VIOLATION	*/
-  { EOPNOTSUPP,		1 }	/*	ICMP_PREC_CUTOFF	*/
+  { ENETUNREACH,	0 },	/*	ICMP_NET_UNR_TOS	*/
+  { EHOSTUNREACH,	0 },	/*	ICMP_HOST_UNR_TOS	*/
+  { EHOSTUNREACH,	1 },	/*	ICMP_PKT_FILTERED	*/
+  { EHOSTUNREACH,	1 },	/*	ICMP_PREC_VIOLATION	*/
+  { EHOSTUNREACH,	1 }	/*	ICMP_PREC_CUTOFF	*/
 };
 
 /*
@@ -1030,6 +1030,14 @@ int icmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	int r;
 #endif
 	icmp_statistics.IcmpInMsgs++;
+	
+	if(len < sizeof(struct icmphdr))
+	{
+		icmp_statistics.IcmpInErrors++;
+		printk(KERN_INFO "ICMP: runt packet\n");
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
 	
   	/*
 	 *	Validate the packet

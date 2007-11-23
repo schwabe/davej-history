@@ -112,6 +112,7 @@ CONFIG_EL3=y
 # CONFIG_NET_EISA is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_TR is not set
+# CONFIG_FDDI is not set
 # CONFIG_ARCNET is not set
 
 #

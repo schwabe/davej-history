@@ -443,7 +443,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 {
 	struct sk_buff *skb;
 	int err;
-
+	unsigned long mem;
 	do
 	{
 		if(sk->err!=0)
@@ -462,6 +462,9 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 			return NULL;
 		}
 		
+		
+		mem=sk->wmem_alloc;
+		
 		if(!fallback)
 			skb = sock_wmalloc(sk, size, 0, sk->allocation);
 		else
@@ -479,8 +482,6 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 		 
 		if(skb==NULL)
 		{
-			unsigned long tmp;
-
 			sk->socket->flags |= SO_NOSPACE;
 			if(noblock)
 			{
@@ -492,7 +493,6 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 				*errcode=-EPIPE;
 				return NULL;
 			}
-			tmp = sk->wmem_alloc;
 			cli();
 			if(sk->shutdown&SEND_SHUTDOWN)
 			{
@@ -501,19 +501,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 				return NULL;
 			}
 			
-#if 1
-			if( tmp <= sk->wmem_alloc)
-#else
-			/* ANK: Line above seems either incorrect
-			 *	or useless. sk->wmem_alloc has a tiny chance to change
-			 *	between tmp = sk->w... and cli(),
-			 *	but it might(?) change earlier. In real life
-			 *	it does not (I never seen the message).
-			 *	In any case I'd delete this check at all, or
-			 *	change it to:
-			 */
-			if (sk->wmem_alloc + size >= sk->sndbuf) 
-#endif
+			if (sk->wmem_alloc==mem)
 			{
 				sk->socket->flags &= ~SO_NOSPACE;
 				interruptible_sleep_on(sk->sleep);

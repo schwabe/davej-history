@@ -169,6 +169,7 @@ struct sock
 	__u32			fin_seq;
 	__u32			urg_seq;
 	__u32			urg_data;
+	__u32			syn_seq;
 	int			users;			/* user count */
   /*
    *	Not all are volatile, but some are, so we
@@ -216,7 +217,7 @@ struct sock
 	volatile unsigned long  ato;            /* ack timeout */
 	volatile unsigned long  lrcvtime;       /* jiffies at last data rcv */
 	volatile unsigned long  idletime;       /* jiffies at last rcv */
-	unsigned short		bytes_rcv;
+	unsigned int		bytes_rcv;
 /*
  *	mss is min(mtu, max_window) 
  */
@@ -251,8 +252,8 @@ struct sock
 	unsigned char		max_ack_backlog;
 	unsigned char		priority;
 	unsigned char		debug;
-	unsigned short		rcvbuf;
-	unsigned short		sndbuf;
+	unsigned int		rcvbuf;
+	unsigned int		sndbuf;
 	unsigned short		type;
 	unsigned char		localroute;	/* Route locally only */
 #ifdef CONFIG_AX25

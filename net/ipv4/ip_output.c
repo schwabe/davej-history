@@ -123,13 +123,13 @@ int ip_send(struct rtable * rt, struct sk_buff *skb, __u32 daddr, int len, struc
 	skb->dev = dev;
 	skb->arp = 1;
 	skb->protocol = htons(ETH_P_IP);
+	skb_reserve(skb,(dev->hard_header_len+15)&~15);	/* 16 byte aligned IP headers are always good */
 	if (dev->hard_header)
 	{
 		/*
 		 *	Build a hardware header. Source address is our mac, destination unknown
 		 *  	(rebuild header will sort this out)
 		 */
-		skb_reserve(skb,(dev->hard_header_len+15)&~15);	/* 16 byte aligned IP headers are good */
 		if (rt && dev == rt->rt_dev && rt->rt_hh)
 		{
 			memcpy(skb_push(skb,dev->hard_header_len),rt->rt_hh->hh_data,dev->hard_header_len);

@@ -2314,6 +2314,7 @@ set_location(struct inode * inode, unsigned int block, int partition,
       return (-EBUSY);
 
     STp->drv_block = (STp->mt_status)->mt_fileno = (-1);
+    STp->eof = ST_NOEOF;
     if ((STp->buffer)->last_result_fatal != 0) {
       result = (-EIO);
       if (STp->can_partitions &&

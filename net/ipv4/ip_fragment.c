@@ -24,6 +24,7 @@
 #include <net/icmp.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/inet.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
 #include <net/checksum.h>
@@ -46,6 +47,8 @@
 static struct ipq *ipqueue = NULL;		/* IP fragment queue	*/
 
 atomic_t ip_frag_mem = 0;			/* Memory used for fragments */
+
+char *in_ntoa(unsigned long in);
 
 /*
  *	Memory Tracking Functions
@@ -337,7 +340,15 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	 *	Allocate a new buffer for the datagram.
 	 */
 	len = qp->ihlen + qp->len;
-
+	
+	if(len>65535)
+	{
+		printk("Oversized IP packet from %s.\n", in_ntoa(qp->iph->saddr));
+		ip_statistics.IpReasmFails++;
+		ip_free(qp);
+		return NULL;
+	}
+	
 	if ((skb = dev_alloc_skb(len)) == NULL)
 	{
 		ip_statistics.IpReasmFails++;
@@ -366,7 +377,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 		{
 			NETDEBUG(printk("Invalid fragment list: Fragment over size.\n"));
 			ip_free(qp);
-			frag_kfree_skb(skb,FREE_WRITE);
+			kfree_skb(skb,FREE_WRITE);
 			ip_statistics.IpReasmFails++;
 			return NULL;
 		}
@@ -424,7 +435,7 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 	if (((flags & IP_MF) == 0) && (offset == 0))
 	{
 		if (qp != NULL)
-			ip_free(qp);	/* Huh? How could this exist?? */
+			ip_free(qp);	/* Fragmented frame replaced by full unfragmented copy */
 		return(skb);
 	}
 
@@ -461,11 +472,24 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 		if ((qp = ip_create(skb, iph, dev)) == NULL)
 		{
 			skb->sk = NULL;
-			frag_kfree_skb(skb, FREE_READ);
+			kfree_skb(skb, FREE_READ);
 			ip_statistics.IpReasmFails++;
 			return NULL;
 		}
 	}
+	
+	/*
+	 *	Attempt to construct an oversize packet.
+	 */
+	 
+	if(ntohs(iph->tot_len)+(int)offset>65535)
+	{
+		skb->sk = NULL;
+		printk("Oversized packet received from %s\n",in_ntoa(iph->saddr));
+		frag_kfree_skb(skb, FREE_READ);
+		ip_statistics.IpReasmFails++;
+		return NULL;
+	}	
 
 	/*
 	 *	Determine the position of this fragment.

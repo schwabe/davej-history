@@ -27,6 +27,10 @@
 	FIXES:
 		Alan Cox:       Removed the 'Unexpected interrupt' bug.
 		Michael Meskes:	Upgraded to Donald Becker's version 1.07.
+		Alan Cox:	Increased the eeprom delay. Regardless of 
+				what the docs say some people definitely
+				get problems with lower (but in card spec)
+				delays
 */
 
 static char *version = "3c509.c:1.07 6/15/95 becker@cesdis.gsfc.nasa.gov\n";
@@ -312,7 +316,7 @@ static ushort read_eeprom(short ioaddr, int index)
 {
 	outw(EEPROM_READ + index, ioaddr + 10);
 	/* Pause for at least 162 us. for the read to take place. */
-	udelay (300);
+	udelay (500);
 	return inw(ioaddr + 12);
 }
 
@@ -326,7 +330,7 @@ static ushort id_read_eeprom(int index)
 	outb(EEPROM_READ + index, id_port);
 
 	/* Pause for at least 162 us. for the read to take place. */
-	udelay (300);
+	udelay (500);
 	
 	for (bit = 15; bit >= 0; bit--)
 		word = (word << 1) + (inb(id_port) & 0x01);

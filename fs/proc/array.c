@@ -307,7 +307,7 @@ static int get_meminfo(char * buffer)
 
 static int get_version(char * buffer)
 {
-	extern char *linux_banner;
+	extern const char *linux_banner;
 
 	strcpy(buffer, linux_banner);
 	return strlen(buffer);

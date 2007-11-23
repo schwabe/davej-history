@@ -27,15 +27,15 @@
 #include <linux/config.h>
 
 #ifdef CONFIG_ISDN_DRV_ICN
-extern void icn_init(void);
+extern int icn_init(void);
 #endif
 
 #ifdef CONFIG_ISDN_DRV_TELES
-extern void teles_init(void);
+extern int teles_init(void);
 #endif
 
 #ifdef CONFIG_ISDN_DRV_PCBIT
-extern void pcbit_init(void);
+extern int pcbit_init(void);
 #endif
 
 void isdn_cards_init(void)

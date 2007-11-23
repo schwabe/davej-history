@@ -404,7 +404,7 @@ struct proc_dir_entry proc_scsi_aha152x = {
 
 /* END OF DEFINES */
 
-extern long loops_per_sec;
+extern unsigned long loops_per_sec;
 
 #define DELAY_DEFAULT 100
 

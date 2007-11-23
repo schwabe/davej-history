@@ -21,7 +21,7 @@
 #include <asm/pgtable.h>
 
 extern void sem_exit (void);
-extern void acct_process (long exitcode);
+extern int acct_process (long exitcode);
 extern void kerneld_exit(void);
 
 int getrusage(struct task_struct *, int, struct rusage *);

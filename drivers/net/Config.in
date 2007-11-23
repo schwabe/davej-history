@@ -84,7 +84,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate 'NE2000/NE1000 support' CONFIG_NE2000
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'NI5210 support' CONFIG_NI52
-      bool 'NI6510 support' CONFIG_NI65
+      tristate 'NI6510 support' CONFIG_NI65
     fi
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool 'SEEQ8005 support (EXPERIMENTAL)' CONFIG_SEEQ8005
@@ -115,6 +115,10 @@ fi
 bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then
   tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR
+fi
+bool 'FDDI driver support' CONFIG_FDDI
+if [ "$CONFIG_FDDI" = "y" ]; then
+  bool 'Digital DEFEA and DEFPA adapter support' CONFIG_DEFXX
 fi
 tristate 'ARCnet support' CONFIG_ARCNET
 if [ "$CONFIG_ARCNET" != "n" ]; then

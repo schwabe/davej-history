@@ -350,6 +350,10 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DEFXX),y)
+L_OBJS += defxx.o
+endif
+
 ifeq ($(CONFIG_NI52),y)
 L_OBJS += ni52.o
 else
@@ -360,6 +364,10 @@ endif
 
 ifeq ($(CONFIG_NI65),y)
 L_OBJS += ni65.o
+else
+  ifeq ($(CONFIG_NI65),m)
+  M_OBJS += ni65.o
+  endif
 endif
 
 ifeq ($(CONFIG_ELPLUS),y)
@@ -525,6 +533,9 @@ pi2.o:  pi2.c CONFIG
 
 de4x5.o: de4x5.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(DE4X5_OPTS) -c $<
+
+defxx.o: defxx.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(DEFXX_OPTS) -c $<
 
 ewrk3.o: ewrk3.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(EWRK3_OPTS) -c $<

@@ -88,7 +88,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 	__flush_tlb()
 
 
-#undef CLEVER_SMP_INVALIDATE
+#define CLEVER_SMP_INVALIDATE
 #ifdef CLEVER_SMP_INVALIDATE
 
 /*
@@ -97,9 +97,6 @@ static inline void flush_tlb_range(struct mm_struct *mm,
  *
  *	These mean you can really definitely utterly forget about
  *	writing to user space from interrupts. (Its not allowed anyway).
- *
- *	Doesn't currently work as Linus makes flush tlb calls before
- *	stuff like current/current->mm are setup properly
  */
  
 static inline void flush_tlb_current_task(void)

@@ -108,7 +108,7 @@ struct rmd /* Receive Message Descriptor */
       volatile unsigned char status; 
     } s;
   } u;
-  short blen;
+  volatile short blen;
   volatile unsigned short mlen;
 };
 
@@ -123,7 +123,7 @@ struct tmd
       volatile unsigned char status;
     } s;
   } u;
-  unsigned short blen;
+  volatile unsigned short blen;
   volatile unsigned short status2;
 };
 
