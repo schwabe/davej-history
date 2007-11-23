@@ -1663,7 +1663,7 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 #else
 		do_rw_disk (drive, rq, block); /* simpler and faster */
 		return;
-#endif /* CONFIG_BLK_DEV_IDEATAPI */;
+#endif /* CONFIG_BLK_DEV_IDEATAPI */
 	}
 	do_special(drive);
 	return;
