@@ -29,7 +29,7 @@ static int menu_width, item_x;
 static void
 print_item (WINDOW * win, const char *item, int choice, int selected, int hotkey)
 {
-    int i, j;
+    int j;
     char menu_item[menu_width+1];
 
     strncpy(menu_item, item, menu_width);
@@ -40,8 +40,11 @@ print_item (WINDOW * win, const char *item, int choice, int selected, int hotkey
     wattrset (win, menubox_attr);
     wmove (win, choice, 0);
 #if OLD_NCURSES
-    for (i = 0; i < menu_width; i++)
-	waddch (win, ' ');
+    {
+        int i;
+        for (i = 0; i < menu_width; i++)
+	    waddch (win, ' ');
+    }
 #else
     wclrtoeol(win);
 #endif

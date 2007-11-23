@@ -4,24 +4,27 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Fixes:	
- *		Alan Cox	:	Fixed the worst of the load balancer bugs.
- *		Dave Platt	:	Interrupt stacking fix.
- *	Richard Kooijman	:	Timestamp fixes.
- *		Alan Cox	:	Changed buffer format.
- *		Alan Cox	:	destructor hook for AF_UNIX etc.
- *		Linus Torvalds	:	Better skb_clone.
- *		Alan Cox	:	Added skb_copy.
+ *	Fixes:
+ *		Alan Cox	:	Fixed the worst of the load
+ *					balancer bugs
+ *		Dave Platt	:	Interrupt stacking fix
+ *	Richard Kooijman	:	Timestamp fixes
+ *		Alan Cox	:	Changed buffer format
+ *		Alan Cox	:	destructor hook for AF_UNIX etc
+ *		Linus Torvalds	:	Better skb_clone
+ *		Alan Cox	:	Added skb_copy
  *		Alan Cox	:	Added all the changed routines Linus
  *					only put in the headers
  *		Ray VanTassle	:	Fixed --skb->lock in free
  *	Michael Deutschmann	:	Corrected and expanded
- *					CONFIG_SKB_CHECK system.
+ *					CONFIG_SKB_CHECK system
+ *	        David Weinehall :	Attempt to pad skb's properly
+ *	        			(partial backport form 2.2.25)
  *
  *	TO FIX:
  *		The __skb_ routines ought to check interrupts are disabled
  *	when called, and bitch like crazy if not. Unfortunately I don't think
- *	we currently have a portable way to check if interrupts are off - 
+ *	we currently have a portable way to check if interrupts are off -
  *	Linus ???
  *
  *	This program is free software; you can redistribute it and/or
@@ -848,13 +851,16 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	struct sk_buff *n;
 
 	IS_SKB(skb);
-	n = kmalloc(sizeof(*n), priority);
-	if (!n)
+
+	if (!(n = kmalloc(sizeof (*n), priority)))
 		return NULL;
-	memcpy(n, skb, sizeof(*n));
+
+	memcpy(n, skb, sizeof (*n));
 	n->count = 1;
+
 	if (skb->data_skb)
 		skb = skb->data_skb;
+
 	atomic_inc(&skb->count);
 	atomic_inc(&net_allocs);
 	atomic_inc(&net_skbcount);
@@ -866,13 +872,14 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->tries = 0;
 	n->lock = 0;
 	n->users = 0;
+
 	return n;
 }
 
 /*
- *	This is slower, and copies the whole data area 
+ *	This is slower, and copies the whole data area
  */
- 
+
 struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 {
 	struct sk_buff *n;
@@ -881,55 +888,55 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 	/*
 	 *	Allocate the copy buffer
 	 */
-	 
+
 	IS_SKB(skb);
-	
-	n=alloc_skb(skb->truesize-sizeof(struct sk_buff),priority);
-	if(n==NULL)
+
+	if (!(n = alloc_skb(skb->truesize - sizeof (struct sk_buff), priority)))
 		return NULL;
 
 	/*
 	 *	Shift between the two data areas in bytes
 	 */
-	 
-	offset=n->head-skb->head;
+
+	offset = n->head - skb->head;
 
 	/* Set the data pointer */
-	skb_reserve(n,skb->data-skb->head);
+	skb_reserve(n, skb->data - skb->head);
 	/* Set the tail pointer and length */
-	skb_put(n,skb->len);
+	skb_put(n, skb->len);
 	/* Copy the bytes */
-	memcpy(n->head,skb->head,skb->end-skb->head);
-	n->link3=NULL;
-	n->list=NULL;
-	n->sk=NULL;
-	n->when=skb->when;
-	n->dev=skb->dev;
-	n->h.raw=skb->h.raw+offset;
-	n->mac.raw=skb->mac.raw+offset;
-	n->ip_hdr=(struct iphdr *)(((char *)skb->ip_hdr)+offset);
-	n->saddr=skb->saddr;
-	n->daddr=skb->daddr;
-	n->raddr=skb->raddr;
-	n->seq=skb->seq;
-	n->end_seq=skb->end_seq;
-	n->ack_seq=skb->ack_seq;
-	n->acked=skb->acked;
-	memcpy(n->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
-	n->used=skb->used;
-	n->free=1;
-	n->arp=skb->arp;
-	n->tries=0;
-	n->lock=0;
-	n->users=0;
-	n->pkt_type=skb->pkt_type;
-	n->stamp=skb->stamp;
+	memcpy(n->head, skb->head, skb->end - skb->head);
+	n->link3 = NULL;
+	n->list = NULL;
+	n->sk = NULL;
+	n->when = skb->when;
+	n->dev = skb->dev;
+	n->h.raw = skb->h.raw+offset;
+	n->mac.raw = skb->mac.raw+offset;
+	n->ip_hdr = (struct iphdr *)(((char *)skb->ip_hdr) + offset);
+	n->saddr = skb->saddr;
+	n->daddr = skb->daddr;
+	n->raddr = skb->raddr;
+	n->seq = skb->seq;
+	n->end_seq = skb->end_seq;
+	n->ack_seq = skb->ack_seq;
+	n->acked = skb->acked;
+	memcpy(n->proto_priv, skb->proto_priv, sizeof (skb->proto_priv));
+	n->used = skb->used;
+	n->free = 1;
+	n->arp = skb->arp;
+	n->tries = 0;
+	n->lock = 0;
+	n->users = 0;
+	n->pkt_type = skb->pkt_type;
+	n->stamp = skb->stamp;
 
 	IS_SKB(n);
+
 	return n;
 }
 
-struct sk_buff *skb_copy_grow(struct sk_buff *skb, int pad, int gfp_mask)
+static struct sk_buff *skb_copy_grow(struct sk_buff *skb, int pad, int priority)
 {
 	struct sk_buff *n;
 	unsigned long offset;
@@ -938,14 +945,16 @@ struct sk_buff *skb_copy_grow(struct sk_buff *skb, int pad, int gfp_mask)
 	 *	Allocate the copy buffer
 	 */
 
-	if (!(n = alloc_skb(skb->end - skb->head + pad, gfp_mask)))
+	IS_SKB(skb);
+
+	if (!(n = alloc_skb(skb->truesize - sizeof (struct sk_buff) + pad, priority)))
 		return NULL;
 
 	/*
 	 *	Shift between the two data areas in bytes
 	 */
 
-	offset = n->head-skb->head;
+	offset = n->head - skb->head;
 
 	/* Set the data pointer */
 	skb_reserve(n, skb->data - skb->head);
@@ -953,27 +962,33 @@ struct sk_buff *skb_copy_grow(struct sk_buff *skb, int pad, int gfp_mask)
 	skb_put(n, skb->len);
 	/* Copy the bytes */
 	memcpy(n->head, skb->head, skb->end - skb->head);
-	n->csum = skb->csum;
+	n->link3 = NULL;
 	n->list = NULL;
 	n->sk = NULL;
+	n->when = skb->when;
 	n->dev = skb->dev;
-	n->priority = skb->priority;
-	n->protocol = skb->protocol;
-	n->dst = dst_clone(skb->dst);
-	n->h.raw = skb->h.raw + offset;
-	n->nh.raw = skb->nh.raw + offset;
-	n->mac.raw = skb->mac.raw + offset;
-	memcpy(n->cb, skb->cb, sizeof (skb->cb));
+	n->h.raw = skb->h.raw+offset;
+	n->mac.raw = skb->mac.raw+offset;
+	n->ip_hdr = (struct iphdr *)(((char *)skb->ip_hdr) + offset);
+	n->saddr = skb->saddr;
+	n->daddr = skb->daddr;
+	n->raddr = skb->raddr;
+	n->seq = skb->seq;
+	n->end_seq = skb->end_seq;
+	n->ack_seq = skb->ack_seq;
+	n->acked = skb->acked;
+	memcpy(n->proto_priv, skb->proto_priv, sizeof (skb->proto_priv));
 	n->used = skb->used;
-	n->is_clone = 0;
-	atomic_set(&n->users, 1);
+	n->free = 1;
+	n->arp = skb->arp;
+	n->tries = 0;
+	n->lock = 0;
+	n->users = 0;
 	n->pkt_type = skb->pkt_type;
 	n->stamp = skb->stamp;
-	n->destructor = NULL;
-	n->security = skb->security;
-#ifdef CONFIG_IP_FIREWALL
-        n->fwmark = skb->fwmark;
-#endif
+
+	IS_SKB(n);
+
 	return n;
 }
 
@@ -988,9 +1003,11 @@ struct sk_buff *skb_pad(struct sk_buff *skb, int pad)
 	}
 
 	nskb = skb_copy_grow(skb, pad, GFP_ATOMIC);
-	kfree_skb(skb);
+	kfree_skb(skb, FREE_WRITE);
+
 	if (nskb)
 		memset(nskb->data + nskb->len, 0, pad);
+
 	return nskb;
 }
 

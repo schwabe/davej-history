@@ -386,7 +386,7 @@ W: http://www.pi.se/blox/
 D: Extended support for loadable modules
 D: D-Link pocket adapter drivers
 S: Grevgatan 11
-S: S-114 53 Stockholm
+S: SE-114 53  STOCKHOLM
 S: Sweden
 
 N: Fritz Elfert
@@ -1257,7 +1257,7 @@ D: SYSV Semaphore code rewrite.
 D: Network layer debugging.
 D: Dial on demand facility (diald).
 S: Dag Hammerskjolds v. 3E
-S: S-226 64 LUND
+S: SE-226 64  LUND
 S: Sweden
 
 N: Henning P. Schmiedehausen
@@ -1552,7 +1552,7 @@ D: v2.0 kernel maintainer
 D: Miscellaneous fixes
 D: Cleanup of the Config-files
 S: Västra Varmvattnet 63
-S: S-922 67  TAVELSJÖ
+S: SE-922 67  TAVELSJÖ
 S: Sweden
 
 N: Matt Welsh

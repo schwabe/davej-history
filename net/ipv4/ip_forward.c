@@ -364,7 +364,7 @@ skip_call_fw_firewall:
 				icmp_send(skb, ICMP_DEST_UNREACH,
 					  ICMP_FRAG_NEEDED,
 					  htonl(dev2->mtu + premasq_len_diff),
-					  dev);
+					  dev, 1);
 			else
 #endif
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,

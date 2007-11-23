@@ -926,6 +926,7 @@ rtl8129_start_xmit(struct sk_buff *skb, struct device *dev)
 		if (!(skb = skb_padto(skb, ETH_ZLEN))) {
 			clear_bit(0, (void *)&dev->tbusy);
 			return 0;
+		}
 	}
 
 	/* Calculate the next Tx descriptor entry. */

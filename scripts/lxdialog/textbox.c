@@ -451,7 +451,7 @@ print_page (WINDOW * win, int height, int width)
 static void
 print_line (WINDOW * win, int row, int width)
 {
-    int i, y, x;
+    int y, x;
     char *line;
 
     line = get_line ();
@@ -463,8 +463,11 @@ print_line (WINDOW * win, int row, int width)
     getyx (win, y, x);
     /* Clear 'residue' of previous line */
 #if OLD_NCURSES
-    for (i = 0; i < width - x; i++)
-	waddch (win, ' ');
+    {
+        int i;
+        for (i = 0; i < width - x; i++)
+	    waddch (win, ' ');
+    }
 #else
     wclrtoeol(win);
 #endif
