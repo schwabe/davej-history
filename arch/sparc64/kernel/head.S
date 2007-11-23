@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.60.2.1 1999/08/09 13:00:25 davem Exp $
+/* $Id: head.S,v 1.60.2.2 1999/08/19 01:11:12 davem Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -75,16 +75,6 @@ sparc_ramdisk_size:
 	 * PROM entry point is on %o4
 	 */
 sparc64_boot:
-#if 1
-	/* XXX Disable reception of correctable memory errors until
-	 * XXX we code up the proper handler... -DaveM
-	 */
-	ldxa	[%g0] ASI_ESTATE_ERROR_EN, %g1
-	andn	%g1, 0x1, %g1
-	stxa	%g1, [%g0] ASI_ESTATE_ERROR_EN
-	membar	#Sync
-#endif
-
 	/* Typically PROM has already enabled both MMU's and both on-chip
 	 * caches, but we do it here anyway just to be paranoid.
 	 */

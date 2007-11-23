@@ -200,7 +200,7 @@ out:
 /*
  * count() counts the number of arguments/envelopes
  */
-static int count(char ** argv)
+static int count(char ** argv, int max)
 {
 	int i = 0;
 
@@ -215,7 +215,7 @@ static int count(char ** argv)
 			if (!p)
 				break;
 			argv++;
-			i++;
+			if (++i > max) return -E2BIG;
 		}
 	}
 	return i;
@@ -265,7 +265,7 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		if (from_kmem == 1)
 			set_fs(old_fs);
 		len = strlen_user(str);	/* includes the '\0' */
-		if (p < len) {	/* this shouldn't happen - 128kB */
+		if (!len || p < len) {	/* strlen_user() returns 0 on error */
 			set_fs(old_fs);
 			return 0;
 		}
@@ -823,12 +823,12 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	bprm.java = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
-	if ((bprm.argc = count(argv)) < 0) {
+	if ((bprm.argc = count(argv, bprm.p / sizeof(void *))) < 0) {
 		dput(dentry);
 		return bprm.argc;
 	}
 
-	if ((bprm.envc = count(envp)) < 0) {
+	if ((bprm.envc = count(envp, bprm.p / sizeof(void *))) < 0) {
 		dput(dentry);
 		return bprm.envc;
 	}

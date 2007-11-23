@@ -687,7 +687,7 @@ static struct ip_masq * mfw_in_create(const struct sk_buff *skb, const struct ip
 			/* 	
 			 *	Only open TCP tunnel if SYN+!ACK packet
 			 */
-			if (!tph.th->syn && tph.th->ack)
+			if (!tph.th->syn || tph.th->ack)
 				return NULL;
 		case IPPROTO_UDP:
 			break;

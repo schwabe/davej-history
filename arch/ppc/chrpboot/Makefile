@@ -57,7 +57,10 @@ floppy: zImage
 	mcopy zImage a:zImage
 
 piggyback: piggyback.c
-	$(HOSTCC) -DKERNELBASE=$(KERNELBASE) -o piggyback piggyback.c
+	$(HOSTCC) $(HOSTCFLAGS) -DKERNELBASE=$(KERNELBASE) -o piggyback piggyback.c
+
+mknote: mknote.c
+	$(HOSTCC) $(HOSTCFLAGS) -o mknote mknote.c
 
 image.o: piggyback ../coffboot/vmlinux.gz
 	./piggyback image < ../coffboot/vmlinux.gz | $(AS) -o image.o

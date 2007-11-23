@@ -9008,11 +9008,12 @@ CONFIG_WATCHDOG
   your computer. For details, read Documentation/watchdog.txt in the
   kernel source.
 
-  The watchdog is usually used together with the watchdog daemon 
-  which is available via FTP (user: anonymous) from
-  ftp://tsx-11.mit.edu/pub/linux/sources/sbin/. This daemon can also
-  monitor NFS connections and can reboot the machine when the process
-  table is full.
+  The watchdog is usually used together with the watchdog daemon which is
+  available via FTP (user: anonymous) from
+  ftp://metalab.unc.edu/pub/linux/system/daemons/watchdog. This daemon can
+  check a larger part of the system. For instance it can monitor NFS
+  connections and reboot the machine when the process table is full or the
+  workload exceeds a predefined value.
 
   If unsure, say N.
 

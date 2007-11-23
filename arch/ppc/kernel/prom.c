@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.54.2.7 1999/08/16 01:48:43 paulus Exp $
+ * $Id: prom.c,v 1.54.2.11 1999/08/30 19:29:19 cort Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -82,7 +82,7 @@ static interpret_func interpret_root_props;
 #ifndef FB_MAX			/* avoid pulling in all of the fb stuff */
 #define FB_MAX	8
 #endif
-char *prom_display_paths[FB_MAX] __initdata = { 0, };
+char *prom_display_paths[FB_MAX] __pmacdata = { 0, };
 unsigned int prom_num_displays = 0;
 char *of_stdout_device = 0;
 
@@ -378,7 +378,7 @@ prom_init(int r3, int r4, prom_entry pp)
 #endif
 		return;
 	}
-
+	
 	/* check if we're prep, return if we are */
 	if ( *(unsigned long *)(0) == 0xdeadc0de )
 		return;
@@ -1219,22 +1219,6 @@ find_path_device(const char *path)
 }
 
 /*
- * Indicates whether the root node has a given value in its
- * compatible property.
- */
-__openfirmware
-int
-machine_is_compatible(const char *compat)
-{
-	struct device_node *root;
-
-	root = find_path_device("/");
-	if (root == 0)
-		return 0;
-	return device_is_compatible(root, compat);
-}
-
-/*
  * Find the device_node with a given phandle.
  */
 __openfirmware
@@ -2005,5 +1989,20 @@ static unsigned char vga_font[cmapsz] = {
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 0x00, 0x00, 0x00, 0x00, 
 };
+
+/* Indicates whether the root node has a given value in its
+ * compatible property.
+ */
+__openfirmware
+int
+machine_is_compatible(const char *compat)
+{
+	struct device_node *root;
+	
+	root = find_path_device("/");
+	if (root == 0)
+		return 0;
+	return device_is_compatible(root, compat);
+}
 
 #endif /* CONFIG_BOOTX_TEXT */

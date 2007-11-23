@@ -1,4 +1,4 @@
-/* $Id: p1275.c,v 1.15 1998/10/13 14:03:47 davem Exp $
+/* $Id: p1275.c,v 1.15.2.1 1999/08/19 01:11:19 davem Exp $
  * p1275.c: Sun IEEE 1275 PROM low level interface routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -320,6 +320,10 @@ long p1275_cmd (char *service, long fmt, ...)
 		case P1275_ARG_NUMBER:
 			p1275buf.prom_args[i + 3] =
 						(unsigned)va_arg(list, long);
+			break;
+		case P1275_ARG_IN_64B:
+			p1275buf.prom_args[i + 3] =
+				va_arg(list, unsigned long);
 			break;
 		case P1275_ARG_IN_STRING:
 			strcpy (p, va_arg(list, char *));

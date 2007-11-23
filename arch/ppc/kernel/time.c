@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.47.2.2 1999/08/14 21:45:49 cort Exp $
+ * $Id: time.c,v 1.47.2.4 1999/08/27 04:20:32 cort Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -41,7 +41,6 @@
 #include <asm/processor.h>
 #include <asm/nvram.h>
 #include <asm/cache.h>
-/* Fixme - Why is this here? - Corey */
 #ifdef CONFIG_8xx
 #include <asm/8xx_immap.h>
 #endif
@@ -52,7 +51,7 @@
 void smp_local_timer_interrupt(struct pt_regs *);
 
 /* keep track of when we need to update the rtc */
-unsigned long last_rtc_update = 0;
+time_t last_rtc_update = 0;
 
 /* The decrementer counts down by 128 every 128ns on a 601. */
 #define DECREMENTER_COUNT_601	(1000000000 / HZ)
@@ -111,13 +110,14 @@ void timer_interrupt(struct pt_regs * regs)
 			 * update the rtc when needed
 			 */
 			if ( (time_status & STA_UNSYNC) &&
-			     (xtime.tv_sec > last_rtc_update + 660) )
+			     ((xtime.tv_sec > last_rtc_update + 60) ||
+			      (xtime.tv_sec < last_rtc_update)) )
 			{
 				if (ppc_md.set_rtc_time(xtime.tv_sec) == 0)
 					last_rtc_update = xtime.tv_sec;
 				else
 					/* do it again in 60 s */
-					last_rtc_update = xtime.tv_sec - 60;
+					last_rtc_update = xtime.tv_sec;
 			}
 		}
 	}
@@ -202,10 +202,8 @@ __initfunc(void time_init(void))
         xtime.tv_usec = 0;
 
 	set_dec(decrementer_count);
-	/* mark the rtc/on-chip timer as in sync
-	 * so we don't update right away
-	 */
-	last_rtc_update = xtime.tv_sec;
+	/* allow updates right away */
+	last_rtc_update = 0;
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.

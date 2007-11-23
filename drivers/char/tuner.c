@@ -199,7 +199,7 @@ static int tuner_attach(struct i2c_device *device)
 	 *	(i2c doesn't have a totally clash free 'address' space)
 	 */
 	 
-	if(device->bus->id!=I2C_BUSID_BT848 ||
+	if(device->bus->id!=I2C_BUSID_BT848 &&
 	   device->bus->id!=I2C_BUSID_ZORAN)
 		return -EINVAL;
 		

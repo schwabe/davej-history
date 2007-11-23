@@ -575,6 +575,13 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	struct task_struct *p;
 	struct semaphore sem = MUTEX_LOCKED;
 
+	if(clone_flags & CLONE_PID)
+	{
+		/* This is only allowed from the boot up thread */
+		if(current->pid)
+			return -EPERM;
+	}
+	
 	current->vfork_sem = &sem;
 
 	p = alloc_task_struct();

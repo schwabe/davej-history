@@ -249,7 +249,7 @@ void update_vm_cache_conditional(struct inode * inode, unsigned long pos, const 
 		if (page) {
 			char *dest = (char*) (offset + page_address(page));
 
-			if (dest != source_address) {
+			if ((unsigned long)dest != source_address) {
 				wait_on_page(page);
 				memcpy(dest, buf, len);
 			}

@@ -1056,6 +1056,7 @@ static int netdev_rx(struct device *dev)
 				np->rx_skbuff[entry] = NULL;
 			}
 			skb->protocol = eth_type_trans(skb, dev);
+			np->stats.rx_bytes+=skb->len;
 			netif_rx(skb);
 			dev->last_rx = jiffies;
 			np->stats.rx_packets++;

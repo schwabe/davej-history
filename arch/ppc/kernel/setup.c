@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.132.2.2 1999/07/20 05:04:47 paulus Exp $
+ * $Id: setup.c,v 1.132.2.3 1999/08/24 21:13:51 cort Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -272,7 +272,17 @@ int get_cpuinfo(char *buffer)
 			
 			cpu_node = find_type_devices("cpu");
 			if ( !cpu_node ) break;
+			{
+				int s;
+				for ( s = 0; (s < i) && cpu_node->next ;
+				      s++, cpu_node = cpu_node->next )
+					/* nothing */ ;
+				if ( s != i )
+					printk("get_cpuinfo(): ran out of "
+					       "cpu nodes.\n");
+			}
 			fp = (int *) get_property(cpu_node, "clock-frequency", NULL);
+			
 			if ( !fp ) break;
 			len += sprintf(len+buffer, "clock\t\t: %dMHz\n",
 				       *fp / 1000000);
