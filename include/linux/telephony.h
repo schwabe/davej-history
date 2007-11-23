@@ -14,7 +14,7 @@
  *    Authors:       Ed Okerson, <eokerson@quicknet.net>
  *                   Greg Herlein, <gherlein@quicknet.net>
  *
- *    Contributors:  Alan Cox, <acox@redhat.com>
+ *    Contributors:  Alan Cox, <alan@redhat.com>
  *                   David W. Erhart, <derhart@quicknet.net>
  *
  * Version:       0.1.0 - December 19, 1999

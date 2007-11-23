@@ -526,7 +526,7 @@ static void fbcon_setup(int con, int init, int logo)
     	q = (unsigned short *)(conp->vc_origin + conp->vc_size_row * old_rows);
     	step = logo_lines * old_cols;
     	for (r = q - logo_lines * old_cols; r < q; r++)
-    	    if (*r != conp->vc_video_erase_char)
+    	    if (scr_readw(r) != conp->vc_video_erase_char)
     	    	break;
 	if (r != q && nr_rows >= old_rows + logo_lines) {
     	    save = kmalloc(logo_lines * nr_cols * 2, GFP_KERNEL);

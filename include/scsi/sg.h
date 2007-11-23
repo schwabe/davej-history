@@ -11,10 +11,12 @@ Original driver (sg.h):
 2.x extensions to driver:
 *       Copyright (C) 1998 - 2000 Douglas Gilbert
 
-    Version: 2.1.38 (20000527)
+    Version: 2.1.39 (20000626)
     This version for 2.2.x series kernels
     D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au)
 
+    Changes since 2.1.38 (20000527)
+        - more scatter gather fine tuning for sym53c416
     Changes since 2.1.37 (20000504)
         - fine tune state machine to stop read() race
         - switch to numeric device description (e.g. sg0 instead of sga)

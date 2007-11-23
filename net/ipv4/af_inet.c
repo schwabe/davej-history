@@ -281,7 +281,8 @@ int inet_listen(struct socket *sock, int backlog)
 	struct sock *sk = sock->sk;
 	unsigned char old_state;
 
-	if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
+	if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM ||
+	    !((1<<sk->state)&(TCPF_CLOSE|TCPF_LISTEN)))
 		return(-EINVAL);
 
 	if ((unsigned) backlog == 0)	/* BSDism */
@@ -699,9 +700,6 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	sk2->socket = newsock;
 	newsk->socket = NULL;
 
-	if (flags & O_NONBLOCK)
-		goto do_half_success;
-
 	if(sk2->state == TCP_ESTABLISHED)
 		goto do_full_success;
 	if(sk2->err > 0)
@@ -713,10 +711,6 @@ do_full_success:
 	destroy_sock(newsk);
 	newsock->state = SS_CONNECTED;
 	return 0;
-
-do_half_success:
-	destroy_sock(newsk);
-	return(0);
 
 do_connect_err:
 	err = sock_error(sk2);

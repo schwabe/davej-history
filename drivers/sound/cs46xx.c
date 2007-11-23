@@ -2143,7 +2143,7 @@ static int cs_hardware_init(struct cs_card *card)
 	 *  generating bit clock (so we don't try to start the PLL without an
 	 *  input clock).
 	 */
-	mdelay(1);
+	mdelay(5);		/* 1 should be enough ?? */
 
 	/*
 	 *  Set the serial port timing configuration, so that
@@ -2168,7 +2168,7 @@ static int cs_hardware_init(struct cs_card *card)
 	/*
          *  Wait until the PLL has stabilized.
 	 */
-	mdelay(1);
+	mdelay(5);		/* Again 1 should be enough ?? */
 
 	/*
 	 *  Turn on clocking of the core so that we can setup the serial ports.
@@ -2194,6 +2194,9 @@ static int cs_hardware_init(struct cs_card *card)
 	cs461x_pokeBA0(card, BA0_SERC2, SERC2_SI1F_AC97 | SERC1_SO1EN);
 	cs461x_pokeBA0(card, BA0_SERMC1, SERMC1_PTC_AC97 | SERMC1_MSPE);
 
+
+	mdelay(5);		/* Shouldnt be needed ?? */
+	
 	/*
 	 * Wait for the card ready signal from the AC97 card.
 	 */
@@ -2214,7 +2217,7 @@ static int cs_hardware_init(struct cs_card *card)
 	 */
 	if (!(cs461x_peekBA0(card, BA0_ACSTS) & ACSTS_CRDY)) {
 		printk(KERN_WARNING "cs461x: create - never read card ready from AC'97\n");
-		printk(KERN_WARNING "cs461x: it is not probably bug, try to use CS4236 driver\n");
+		printk(KERN_WARNING "cs461x: it is probably not a bug, try using the CS4232 driver\n");
 		return -EIO;
 	}
 
@@ -2297,6 +2300,8 @@ static int cs_hardware_init(struct cs_card *card)
 	if (cs_ac97_init(card) <= 0)
 		return -EIO;
 		
+	mdelay(5);		/* Do we need this ?? */
+	
 	cs461x_powerup_adc(card);
 	cs461x_powerup_dac(card);
 

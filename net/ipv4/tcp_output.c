@@ -63,6 +63,31 @@ static __inline__ void update_send_head(struct sock *sk)
 		tp->send_head = NULL;
 }
 
+static __inline__ u32 tcp_acceptable_seq(struct sock *sk)
+{
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	struct sk_buff *skb;
+	u32 snd_nxt;
+
+	if (!before(tp->snd_una+tp->snd_wnd, tp->snd_nxt))
+		return tp->snd_nxt;
+
+	/* Umm... No better choice. The case is marginal, no hurry. */
+	skb = skb_peek(&sk->write_queue);
+
+	snd_nxt = tp->snd_una;
+	while((skb != NULL) &&
+	      (skb != tp->send_head) &&
+	      (skb != (struct sk_buff *)&sk->write_queue)) {
+		if (after(TCP_SKB_CB(skb)->end_seq, tp->snd_una+tp->snd_wnd))
+			break;
+		snd_nxt = TCP_SKB_CB(skb)->end_seq;
+		skb = skb->next;
+	}
+
+	return snd_nxt;
+}
+
 /* This routine actually transmits TCP packets queued in by
  * tcp_do_sendmsg().  This is used by both the initial
  * transmission and possible later retransmissions.
@@ -802,7 +827,7 @@ void tcp_send_active_reset(struct sock *sk)
 	TCP_SKB_CB(skb)->urg_ptr = 0;
 
 	/* Send it off. */
-	TCP_SKB_CB(skb)->seq = tp->write_seq;
+	TCP_SKB_CB(skb)->seq = tcp_acceptable_seq(sk);
 	TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(skb)->seq;
 	TCP_SKB_CB(skb)->when = tcp_time_stamp;
 	tcp_transmit_skb(sk, skb);
@@ -1066,7 +1091,7 @@ void tcp_send_ack(struct sock *sk)
 		TCP_SKB_CB(buff)->urg_ptr = 0;
 
 		/* Send it off, this clears delayed acks for us. */
-		TCP_SKB_CB(buff)->seq = TCP_SKB_CB(buff)->end_seq = tp->snd_nxt;
+		TCP_SKB_CB(buff)->seq = TCP_SKB_CB(buff)->end_seq = tcp_acceptable_seq(sk);
 		TCP_SKB_CB(buff)->when = tcp_time_stamp;
 		tcp_transmit_skb(sk, buff);
 	}
@@ -1091,15 +1116,15 @@ void tcp_write_wakeup(struct sock *sk)
 		      TCPF_LAST_ACK|TCPF_CLOSING))
 			return;
 
-		if (before(tp->snd_nxt, tp->snd_una + tp->snd_wnd) &&
-		    ((skb = tp->send_head) != NULL)) {
+		if ((skb = tp->send_head) != NULL &&
+		    before(TCP_SKB_CB(skb)->seq, tp->snd_una+tp->snd_wnd)) {
 			unsigned long win_size;
 
 			/* We are probing the opening of a window
 			 * but the window size is != 0
 			 * must have been a result SWS avoidance ( sender )
 			 */
-			win_size = tp->snd_wnd - (tp->snd_nxt - tp->snd_una);
+			win_size = tp->snd_una+tp->snd_wnd - TCP_SKB_CB(skb)->seq;
 			if (win_size < TCP_SKB_CB(skb)->end_seq - TCP_SKB_CB(skb)->seq) {
 				if (tcp_fragment(sk, skb, win_size))
 					return; /* Let a retransmit get it. */
@@ -1129,7 +1154,7 @@ void tcp_write_wakeup(struct sock *sk)
 			 * end to send an ack.  Don't queue or clone SKB, just
 			 * send it.
 			 */
-			TCP_SKB_CB(skb)->seq = tp->snd_nxt - 1;
+			TCP_SKB_CB(skb)->seq = tp->snd_una - 1;
 			TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(skb)->seq;
 			TCP_SKB_CB(skb)->when = tcp_time_stamp;
 			tcp_transmit_skb(sk, skb);

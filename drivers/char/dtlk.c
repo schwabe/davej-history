@@ -272,14 +272,14 @@ static unsigned int dtlk_poll(struct file *file, poll_table * wait)
 	}
 	/* there are no exception conditions */
 
-	if (mask == 0 && !dtlk_timer_active) {
+	{
 		/* not ready just yet.  There won't be any interrupts,
 		   so we set a timer instead. */
 		dtlk_timer_active = 1;
 		dtlk_timer.expires = jiffies + HZ / 100;
 		add_timer(&dtlk_timer);
 	}
-	return 0;
+	return mask;
 }
 
 static void dtlk_stop_timer()
@@ -295,11 +295,6 @@ static void dtlk_timer_tick(unsigned long data)
 
 	wake_up_interruptible(&dtlk_process_list);
 
-	if (dtlk_timer_active) {
-		del_timer(&dtlk_timer);
-		dtlk_timer.expires = jiffies + HZ / 100;
-		add_timer(&dtlk_timer);
-	}
 }
 
 static int dtlk_ioctl(struct inode *inode,

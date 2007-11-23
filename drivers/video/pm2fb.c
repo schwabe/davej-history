@@ -1272,7 +1272,13 @@ static void pm2fb_clear_margins8(struct vc_data* conp, struct display* p,
 }
 
 static struct display_switch pm2_cfb8 = {
-	fbcon_cfb8_setup, pm2fb_pp_bmove, pm2fb_clear8,
+	fbcon_cfb8_setup, pm2fb_pp_bmove,
+#ifdef __alpha__
+	/* No idea why, but pm2fb_clear8 does not always work on Alpha. */
+	fbcon_cfb8_clear,
+#else
+	pm2fb_clear8,
+#endif
 	fbcon_cfb8_putc, fbcon_cfb8_putcs, fbcon_cfb8_revc,
 	pm2fb_cursor, pm2fb_set_font,
 	pm2fb_clear_margins8,
@@ -1769,7 +1775,11 @@ static void pm2fb_set_disp(const void* par, struct display* disp,
 
 	save_flags(flags);
 	cli();
+#ifdef __alpha__
+	disp->screen_base=i->regions.v_fb + dense_mem(i->regions.v_fb);
+#else
 	disp->screen_base=i->regions.v_fb;
+#endif
 	switch (depth=((struct pm2fb_par* )par)->depth) {
 #ifdef FBCON_HAS_CFB8
 		case 8:

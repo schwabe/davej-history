@@ -97,7 +97,7 @@
 */
 
 static const char *version =
-	"eepro.c: v0.12a 04/26/2000 aris@conectiva.com.br\n";
+	"eepro.c: v0.12b 04/26/2000 aris@conectiva.com.br\n";
 
 #include <linux/module.h>
 
@@ -522,6 +522,20 @@ static unsigned eeprom_reg = EEPROM_REG_PRO;
 
 /* ack for tx int */
 #define eepro_ack_tx(ioaddr) outb (TX_INT, ioaddr + STATUS_REG)
+
+/* a complete sel reset */
+#define eepro_complete_selreset(ioaddr) { 	eepro_dis_int(ioaddr);\
+						lp->stats.tx_errors++;\
+						eepro_sel_reset(ioaddr);\
+						lp->tx_end = \
+							(XMT_LOWER_LIMIT << 8);\
+						lp->tx_start = lp->tx_end;\
+						lp->tx_last = 0;\
+						dev->trans_start = jiffies;\
+						netif_wake_queue(dev);\
+						eepro_en_int(ioaddr);\
+						eepro_en_rx(ioaddr);\
+					}
 
 /* Check for a network adaptor of this type, and return '0' if one exists.
    If dev->base_addr == 0, probe all likely locations.
@@ -1574,9 +1588,6 @@ eepro_rx(struct device *dev)
 	if (net_debug > 5)
 		printk(KERN_DEBUG "%s: entering eepro_rx routine.\n", dev->name);
 
-	/* clear all interrupts */
-	eepro_clear_int(ioaddr);
-	
 	/* Set the read pointer to the start of the RCV */
 	outw(rcv_car, ioaddr + HOST_ADDRESS_REG);
 	
@@ -1655,9 +1666,6 @@ eepro_rx(struct device *dev)
 
 	if (net_debug > 5)
 		printk(KERN_DEBUG "%s: exiting eepro_rx routine.\n", dev->name);
-
-	/* enable tx/rx interrupts */
-	eepro_en_int(ioaddr);
 }
 
 static void
@@ -1754,6 +1762,12 @@ eepro_transmit_interrupt(struct device *dev)
 		}
 		boguscount--;
 	}
+	/* if it reached here then it's probable that the adapter won't
+	 * interrupt again for tx. in other words: tx timeout what will take
+	 * a lot of time to happen, so we'll do a complete selreset.
+	 */
+	if (!boguscount)
+		eepro_complete_selreset(ioaddr);
 }
 
 #ifdef MODULE
