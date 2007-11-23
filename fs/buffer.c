@@ -455,8 +455,10 @@ static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 			if (tmp->b_size == size)
 				return tmp;
 			else {
+/*
 				printk("VFS: Wrong blocksize on device %s\n",
 					kdevname(dev));
+*/
 				return NULL;
 			}
 	return NULL;
