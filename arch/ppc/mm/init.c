@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.164 1999/05/05 17:33:55 cort Exp $
+ *  $Id: init.c,v 1.164.2.2 1999/06/03 03:03:53 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -371,7 +371,7 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	 * same virt address (and this is contiguous).
 	 *  -- Cort
 	 */
-	if ( (v = p_mapped_by_bats(addr)) /*&& p_mapped_by_bats(addr+(size-1))*/ )
+	if ( (v = p_mapped_by_bats(p)) /*&& p_mapped_by_bats(p+size-1)*/ )
 		goto out;
 #endif /* CONFIG_8xx */
 	
@@ -402,7 +402,7 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	for (i = 0; i < size; i += PAGE_SIZE)
 		map_page(&init_task, v+i, p+i, flags);
 out:	
-	return (void *) (v + (p & ~PAGE_MASK));
+	return (void *) (v + (addr & ~PAGE_MASK));
 }
 
 void iounmap(void *addr)
@@ -1510,7 +1510,7 @@ __initfunc(static void hash_init(void))
 	for (h = 256<<10; h < ramsize / 256 && h < 4<<20; h *= 2, Hash_mask++)
 		;
 	Hash_size = h;
-	Hash_mask << 10;  /* so setting _SDR1 works the same -- Cort */
+	Hash_mask <<= 10;  /* so setting _SDR1 works the same -- Cort */
 #else
 	for (h = 64<<10; h < ramsize / 256 && h < 2<<20; h *= 2)
 		;

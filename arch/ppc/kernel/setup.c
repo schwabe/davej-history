@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.132 1999/03/24 00:32:19 cort Exp $
+ * $Id: setup.c,v 1.132.2.1 1999/06/03 03:03:45 paulus Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -375,7 +375,6 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 			else
 			{
 				_machine = _MACH_Pmac;
-				is_prep = 1;
 			}
 		}
 

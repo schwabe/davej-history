@@ -249,7 +249,7 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 		ROOT_DEV = to_kdev_t(0x0801); /* sda1 */
 		break;
 	case _PREP_Radstone:
-		ROOT_DEV = to_kdev_t(0x0801); /* sda1 */
+		ROOT_DEV = to_kdev_t(0x0802); /* sda2 */
 
 		/*
 		 * Determine system type
@@ -767,10 +767,8 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.get_cpuinfo    = prep_get_cpuinfo;
 	ppc_md.irq_cannonicalize = prep_irq_cannonicalize;
 	ppc_md.init_IRQ       = prep_init_IRQ;
-	if ( !OpenPIC )
-		ppc_md.do_IRQ         = prep_do_IRQ;
-	else
-		ppc_md.do_IRQ         = chrp_do_IRQ;
+	/* this gets changed later on if we have an OpenPIC -- Cort */
+	ppc_md.do_IRQ         = prep_do_IRQ;
 	ppc_md.init           = NULL;
 
 	ppc_md.restart        = prep_restart;

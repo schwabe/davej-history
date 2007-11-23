@@ -1,5 +1,5 @@
 /*
- * $Id: irq.c,v 1.105 1999/03/25 19:51:51 cort Exp $
+ * $Id: irq.c,v 1.105.2.1 1999/05/29 19:10:05 cort Exp $
  *
  *  arch/ppc/kernel/irq.c
  *
@@ -65,7 +65,6 @@ extern volatile unsigned long ipi_count;
 void enable_irq(unsigned int irq_nr);
 void disable_irq(unsigned int irq_nr);
 
-/* Fixme - Need to figure out a way to get rid of this - Corey */
 volatile unsigned char *chrp_int_ack_special;
 
 #ifdef CONFIG_APUS

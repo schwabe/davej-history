@@ -34,6 +34,9 @@
  *              Marc Santoro <ultima@snicker.emoti.com>
  * 29-Jan-1999: Locally generated bogus IPs dealt with, rather than crash
  *              during dump_packet. --RR.
+ * 19-May-1999: Star Wars: The Phantom Menace opened.  Rule num
+ *		printed in log (modified from Michael Hasenstein's patch).
+ *		Added SYN in log message. --RR
  */
 
 /*
@@ -400,7 +403,9 @@ static void dump_packet(const struct iphdr *ip,
 			struct ip_fwkernel *f, 
 			const ip_chainlabel chainlabel,
 			__u16 src_port, 
-			__u16 dst_port)
+			__u16 dst_port,
+			unsigned int count,
+			int syn)
 {
 	__u32 *opt = (__u32 *) (ip + 1);
 	int opti;
@@ -432,7 +437,7 @@ static void dump_packet(const struct iphdr *ip,
 
 	for (opti = 0; opti < (ip->ihl - sizeof(struct iphdr) / 4); opti++)
 		printk(" O=0x%8.8X", *opt++);
-	printk("\n");
+	printk(" %s(#%d)\n", tcpsyn ? "SYN " : /* "PENANCE" */ "", count);
 }
 
 /* function for checking chain labels for user space. */
@@ -520,12 +525,14 @@ ip_fw_domatch(struct ip_fwkernel *f,
 	      const ip_chainlabel label,
 	      struct sk_buff *skb,
 	      unsigned int slot,
-	      __u16 src_port, __u16 dst_port)
+	      __u16 src_port, __u16 dst_port, 
+	      unsigned int count,
+	      int tcpsyn)
 {
 	f->counters[slot].bcnt+=ntohs(ip->tot_len);
 	f->counters[slot].pcnt++;
 	if (f->ipfw.fw_flg & IP_FW_F_PRN) {
-		dump_packet(ip,rif,f,label,src_port,dst_port);
+		dump_packet(ip,rif,f,label,src_port,dst_port,count,syn);
 	}
 	ip->tos = (ip->tos & f->ipfw.fw_tosand) ^ f->ipfw.fw_tosxor;
 
@@ -590,6 +597,7 @@ ip_fw_check(struct iphdr *ip,
 	unsigned char		oldtos;
 	struct ip_fwkernel	*f;	
 	int			ret = FW_SKIP+2;
+	unsigned int		count;
 
 	/* We handle fragments by dealing with the first fragment as
 	 * if it was a normal packet.  All other fragments are treated
@@ -610,7 +618,7 @@ ip_fw_check(struct iphdr *ip,
 	if (offset == 1 && ip->protocol == IPPROTO_TCP)	{
 		if (!testing && net_ratelimit()) {
 			printk("Suspect TCP fragment.\n");
-			dump_packet(ip,rif,NULL,NULL,0,0);
+			dump_packet(ip,rif,NULL,NULL,0,0,0,0);
 		}
 		return FW_BLOCK;
 	}
@@ -702,13 +710,16 @@ ip_fw_check(struct iphdr *ip,
 
 	f = chain->chain;
 	do {
+		count = 0;
 		for (; f; f = f->next) {
+			count++;
 			if (ip_rule_match(f,rif,ip,
 					  tcpsyn,src_port,dst_port,offset)) {
 				if (!testing
 				    && !ip_fw_domatch(f, ip, rif, chain->label,
 						      skb, slot, 
-						      src_port, dst_port)) {
+						      src_port, dst_port,
+						      count, tcpsyn)) {
 					ret = FW_BLOCK;
 					goto out;
 				}
@@ -1408,8 +1419,10 @@ int ip_fw_ctl(int cmd, void *m, int len)
 		else if ((chain = find_label(new->fwc_label)) == NULL)
 			ret = ENOENT;
 		else if ((ip_fwkern = convert_ipfw(&new->fwc_rule, &ret))
-			 != NULL)
+			 != NULL) {
 			ret = del_rule_from_chain(chain, ip_fwkern);
+			kfree(ip_fwkern);
+		}
 	}
 	break;
 

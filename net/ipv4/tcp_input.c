@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.165 1999/05/14 23:10:08 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164.2.3 1999/06/02 04:15:06 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1819,7 +1819,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 		}
 	}
 
-	flg = *(((u32 *)th) + 3) & ~htonl(0x8 << 16);
+	flg = *(((u32 *)th) + 3) & ~htonl(0xFC8 << 16);
 
 	/*	pred_flags is 0xS?10 << 16 + snd_wnd
 	 *	if header_predition is to be made
@@ -2284,8 +2284,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 	    !(th->fin && TCP_SKB_CB(skb)->end_seq == tp->rcv_nxt)) {
 		if (!th->rst) {
 			tcp_send_ack(sk);
-			goto discard;
 		}
+		goto discard;
 	}
 
 	/* step 2: check RST bit */

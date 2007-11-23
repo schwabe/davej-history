@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.104 1999/04/24 00:27:25 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.104.2.2 1999/06/02 04:06:27 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -1362,6 +1362,7 @@ int tcp_v6_rcv(struct sk_buff *skb, unsigned long len)
 
 	tcp_statistics.TcpInSegs++;
 
+	len = skb->len;
 	if (len < sizeof(struct tcphdr))
 		goto bad_packet;
 
@@ -1382,6 +1383,10 @@ int tcp_v6_rcv(struct sk_buff *skb, unsigned long len)
 	default:
 		/* CHECKSUM_UNNECESSARY */
 	};
+
+	if((th->doff * 4) < sizeof(struct tcphdr) ||
+	   len < (th->doff * 4))
+		goto bad_packet;
 
 	sk = __tcp_v6_lookup(th, saddr, th->source, daddr, th->dest, tcp_v6_iif(skb));
 

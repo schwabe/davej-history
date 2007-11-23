@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.49 1999/03/18 04:16:31 cort Exp $
+ * $Id: smp.c,v 1.49.2.1 1999/05/29 19:10:20 cort Exp $
  *
  * Smp support for ppc.
  *
@@ -388,9 +388,12 @@ asmlinkage int __init start_secondary(void *unused)
 
 void __init smp_callin(void)
 {
+	int i;
+	
 	printk("SMP %d: smp_callin()\n",current->processor);
         smp_store_cpu_info(current->processor);
 	set_dec(decrementer_count);
+	
 #if 0
 	current->mm->mmap->vm_page_prot = PAGE_SHARED;
 	current->mm->mmap->vm_start = PAGE_OFFSET;
