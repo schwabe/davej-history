@@ -21,6 +21,8 @@ On x86   - You press the key combo 'ALT-SysRQ-<command key>'. Note - Some
 
 On SPARC - You press 'ALT-STOP-<command key>', I believe.
 
+On PowerPC - You press 'ALT-Print Screen-<command key>'.
+
 On other - If you know of the key combos for other architectures, please
            let me know so I can add them to this section. 
 

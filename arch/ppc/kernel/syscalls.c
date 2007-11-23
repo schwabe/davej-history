@@ -30,7 +30,6 @@
 #include <linux/shm.h>
 #include <linux/stat.h>
 #include <linux/mman.h>
-#include <linux/file.h>
 #include <linux/sys.h>
 #include <linux/ipc.h>
 #include <linux/utsname.h>

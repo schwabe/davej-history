@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.54.2.5 1999/07/21 20:28:18 cort Exp $
+ * $Id: prom.c,v 1.54.2.6 1999/08/10 21:36:46 cort Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -257,11 +257,12 @@ prom_print(const char *msg)
 	}
 }
 
+unsigned long smp_ibm_chrp_hack __initdata = 0;
+
 /*
  * We enter here early on, when the Open Firmware prom is still
  * handling exceptions and the MMU hash table for us.
  */
-unsigned long promi = 0;
 __init
 void
 prom_init(int r3, int r4, prom_entry pp)
@@ -527,6 +528,7 @@ prom_init(int r3, int r4, prom_entry pp)
 		/* XXX: hack - don't start cpu 0, this cpu -- Cort */
 		if ( cpu++ == 0 )
 			continue;
+		RELOC(smp_ibm_chrp_hack) = 1;
 		prom_print(RELOC("starting cpu "));
 		prom_print(path);
 		*(unsigned long *)(0x4) = 0;

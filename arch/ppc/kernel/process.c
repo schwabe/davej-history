@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.83 1999/05/10 04:43:43 cort Exp $
+ * $Id: process.c,v 1.83.2.6 1999/08/10 03:24:06 cort Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *
@@ -47,6 +47,7 @@ extern unsigned long _get_SP(void);
 struct task_struct *last_task_used_math = NULL;
 static struct vm_area_struct init_mmap = INIT_MMAP;
 static struct fs_struct init_fs = INIT_FS;
+static struct file * init_fd_array[NR_OPEN] = { NULL, };
 static struct files_struct init_files = INIT_FILES;
 static struct signal_struct init_signals = INIT_SIGNALS;
 struct mm_struct init_mm = INIT_MM;

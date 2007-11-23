@@ -79,6 +79,7 @@ if [ "$CONFIG_FB" = "y" ]; then
   fi
   if [ "$CONFIG_VISWS" = "y" ]; then
     tristate 'SGI Visual Workstation framebuffer support' CONFIG_FB_SGIVW
+    define_bool CONFIG_BUS_I2C y
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     if [ "$CONFIG_PCI" != "n" ]; then

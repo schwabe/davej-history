@@ -1,5 +1,5 @@
 /*
- * $Id: pci.c,v 1.54 1999/03/18 04:16:04 cort Exp $
+ * $Id: pci.c,v 1.54.2.1 1999/07/20 05:04:41 paulus Exp $
  * Common pmac/prep/chrp pci routines. -- Cort
  */
 

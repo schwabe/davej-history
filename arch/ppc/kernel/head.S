@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.130.2.2 1999/06/30 04:53:21 paulus Exp $
+ *  $Id: head.S,v 1.130.2.3 1999/08/10 21:36:48 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -433,16 +433,7 @@ __secondary_start:
  * ready to work.
  */
 #endif /* CONFIG_8xx */
-
-turn_on_mmu:
-	mfmsr	r0
-	ori	r0,r0,MSR_DR|MSR_IR
-	mtspr	SRR1,r0
-	lis	r0,start_here@h
-	ori	r0,r0,start_here@l
-	mtspr	SRR0,r0
-	SYNC
-	rfi				/* enables MMU */
+	b	turn_on_mmu
 
 /*
  * GCC sometimes accesses words at negative offsets from the stack
@@ -1729,6 +1720,37 @@ copy_and_flush:
 	. = 0x4000
 #endif
 
+turn_on_mmu:
+	mfmsr	r0
+	ori	r1,r0,MSR_DR|MSR_IR
+	mtspr	SRR1,r1
+#ifdef CONFIG_SMP
+	/* see the function start_here_ibm_hack for explanation -- Cort */
+	andi.	0,r1,MSR_DR	/* check if the MMU is already on */
+	bne	10f
+	lis	r5,smp_ibm_chrp_hack@h
+	ori	r5,r5,smp_ibm_chrp_hack@l
+	tophys(r5,r5,r6)
+	lwz	r5,0(r5)
+	cmpi	0,r5,0
+	beq	10f
+	lis	r5,first_cpu_booted@h
+	ori	r5,r5,first_cpu_booted@l
+	tophys(r5,r5,r6)
+	lwz	r5,0(r5)
+	cmpi	0,r5,0
+	beq	10f
+	lis	r0,start_here_ibm_hack@h
+	ori	r0,r0,start_here_ibm_hack@l
+	b	1010f
+10:	
+#endif /* CONFIG_SMP */
+	lis	r0,start_here@h
+	ori	r0,r0,start_here@l
+1010:	mtspr	SRR0,r0
+	SYNC
+	rfi				/* enables MMU */
+
 #ifdef CONFIG_SMP
 	.globl	__secondary_start_psurge
 __secondary_start_psurge:
@@ -1758,11 +1780,27 @@ __secondary_hold:
 	blr
 #endif /* CONFIG_SMP */
 	
-/*
- * This is where the main kernel code starts.
+/* 
+ * We get _strange_ behavior on the new IBM chrp firmware.
+ * We end up here with the MMU disabled, even though we enable
+ * it with the rfi that takes us here.  Somehow, a physical address
+ * access fixes this by enabling the MMU.
+ *
+ * The IBM engineers can't explain this behavior and AIX doesn't 
+ * seem to find it.  This hack gets around it for now.
+ *          -- Cort
  */
-start_here:
+start_here_ibm_hack:
+	mfmsr	r1
+	lis	r5,smp_ibm_chrp_hack@h
+	ori	r5,r5,smp_ibm_chrp_hack@l
+	tophys(r5,r5,r6)
+	mfmsr	r1
+	stw	r1,_MSR-16(r5)
+	addi	r5,r5,_MSR-16
+	dcbf	0,r5
 #ifndef CONFIG_8xx
+start_here:
 	/*
 	 * Enable caches and 604-specific features if necessary.
 	 */

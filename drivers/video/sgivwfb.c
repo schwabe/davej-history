@@ -1,8 +1,8 @@
 /*
  *  linux/drivers/video/sgivwfb.c -- SGI DBE frame buffer device
  *
- *	Copyright (C) 1999 Silicon Graphics, Inc.
- *      Jeffrey Newquist, newquist@engr.sgi.som
+ *      Copyright (C) 1999 Silicon Graphics, Inc.
+ *      Jeffrey Newquist, newquist@engr.sgi.com
  *
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License. See the file COPYING in the main directory of this archive for
@@ -25,32 +25,66 @@
 #include <linux/init.h>
 #include <asm/io.h>
 #include <asm/mtrr.h>
+#include <linux/i2c.h>
 
 #include <video/fbcon.h>
 #include <video/fbcon-cfb8.h>
 #include <video/fbcon-cfb16.h>
 #include <video/fbcon-cfb32.h>
 
-#define INCLUDE_TIMING_TABLE_DATA
 #define DBE_REG_BASE regs
 #include "sgivwfb.h"
 
+#define FLATPANEL_SGI_1600SW 5
+
+/*
+ * Video Timing Data Structure
+ */
+
+typedef struct dbe_timing_info
+{
+  int flags;
+  short width;              /* Monitor resolution               */
+  short height;
+  int cfreq;                /* pixel clock frequency (KHz) */
+  short htotal;             /* Horizontal total pixels  */
+  short hblank_start;   /* Horizontal blank start       */
+  short hblank_end;         /* Horizontal blank end             */
+  short hsync_start;    /* Horizontal sync start        */
+  short hsync_end;          /* Horizontal sync end              */
+  short vtotal;             /* Vertical total lines             */
+  short vblank_start;   /* Vertical blank start         */
+  short vblank_end;         /* Vertical blank end               */
+  short vsync_start;    /* Vertical sync start          */
+  short vsync_end;          /* Vertical sync end                */
+  short pll_m;              /* PLL M parameter          */
+  short pll_n;              /* PLL P parameter          */
+  short pll_p;              /* PLL N parameter          */
+} dbe_timing_info_t;
+
 struct sgivwfb_par {
   struct fb_var_screeninfo var;
-  u_long timing_num;
+  dbe_timing_info_t timing;
   int valid;
+};
+
+struct i2c_private {
+    int sda;
+    int scl;
+    volatile u32 *reg;
 };
 
 /*
  *  RAM we reserve for the frame buffer. This defines the maximum screen
  *  size
- *
- *  The default can be overridden if the driver is compiled as a module
  */
 
 /* set by arch/i386/kernel/setup.c */
 u_long                sgivwfb_mem_phys;
 u_long                sgivwfb_mem_size;
+
+EXPORT_SYMBOL(sgivwfb_mem_phys);
+EXPORT_SYMBOL(sgivwfb_mem_size);
 
 static volatile char  *fbmem;
 static asregs         *regs;
@@ -60,6 +94,7 @@ static char           sgivwfb_name[16] = "SGI Vis WS FB";
 static u32            cmap_fifo;
 static int            ypan       = 0;
 static int            ywrap      = 0;
+static int            flatpanel_id = -1;
 
 /* console related variables */
 static int currcon = 0;
@@ -75,15 +110,27 @@ static union {
 } fbcon_cmap;
 
 static struct sgivwfb_par par_current = {
-  {                             /* var (screeninfo) */
-    /* 640x480, 8 bpp */
-    640, 480, 640, 480, 0, 0, 8, 0,
+  { /* var (screeninfo) */
+    /* 800x600, 8 bpp */
+    800, 600, 800, 600, 0, 0, 8, 0,
     {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-    0, 0, -1, -1, 0, 20000, 64, 64, 32, 32, 64, 2,
-    0, FB_VMODE_NONINTERLACED
+    0, 0, -1, -1, 0,
+    25000, 88, 40, 23, 1, 128, 4,
+    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
   },
-  0,                            /* timing_num */
-  0				/* par not activated */
+  { /* timing (dbe_timing_info_t) */
+    0,
+  },
+  0     /* par not activated */
+};
+
+struct fb_var_screeninfo SGI_1600SW_TIMING = 
+{
+    1600, 1024, 1600, 1024, 0, 0, 8, 0,
+    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+    0, 0, -1, -1, 0,
+    9353, 20, 30, 37, 3, 20, 3,
+    0, FB_VMODE_NONINTERLACED
 };
 
 /*
@@ -94,19 +141,19 @@ void sgivwfb_setup(char *options, int *ints);
 static int sgivwfb_open(struct fb_info *info, int user);
 static int sgivwfb_release(struct fb_info *info, int user);
 static int sgivwfb_get_fix(struct fb_fix_screeninfo *fix, int con,
-			   struct fb_info *info);
+                           struct fb_info *info);
 static int sgivwfb_get_var(struct fb_var_screeninfo *var, int con,
-			   struct fb_info *info);
+                           struct fb_info *info);
 static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
-			   struct fb_info *info);
+                           struct fb_info *info);
 static int sgivwfb_pan_display(struct fb_var_screeninfo *var, int con,
-			       struct fb_info *info);
+                               struct fb_info *info);
 static int sgivwfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
-			    struct fb_info *info);
+                            struct fb_info *info);
 static int sgivwfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
-			    struct fb_info *info);
+                            struct fb_info *info);
 static int sgivwfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			 u_long arg, int con, struct fb_info *info);
+                         u_long arg, int con, struct fb_info *info);
 static int sgivwfb_mmap(struct fb_info *info, struct file *file,
                         struct vm_area_struct *vma);
 
@@ -121,6 +168,37 @@ static struct fb_ops sgivwfb_ops = {
   sgivwfb_pan_display,
   sgivwfb_ioctl,
   sgivwfb_mmap
+};
+
+/* i2c bus functions */
+static void i2c_setlines(struct i2c_bus *bus,int ctrl,int data);
+static int i2c_getdataline(struct i2c_bus *bus);
+static int i2c_flatpanel_status(struct i2c_bus *bus);
+static int i2c_flatpanel_id(struct i2c_bus *bus);
+static int i2c_flatpanel_power(struct i2c_bus *bus, int flag);
+
+static struct i2c_bus sgivwfb_i2c_bus_template = 
+{
+        "sgivwfb",
+        I2C_BUSID_SGIVWFB,
+        NULL,
+
+#if LINUX_VERSION_CODE >= 0x020100
+        SPIN_LOCK_UNLOCKED,
+#endif
+
+        NULL,
+        NULL,
+        
+        i2c_setlines,
+        i2c_getdataline,
+        NULL,
+        NULL,
+};
+
+static struct i2c_private flatpanel_i2c =
+{
+    0, 0, NULL
 };
 
 /*
@@ -138,11 +216,11 @@ static u_long get_line_length(int xres_virtual, int bpp);
 static unsigned long bytes_per_pixel(int bpp);
 static void activate_par(struct sgivwfb_par *par);
 static void sgivwfb_encode_fix(struct fb_fix_screeninfo *fix,
-			       struct fb_var_screeninfo *var);
+                               struct fb_var_screeninfo *var);
 static int sgivwfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
-			     u_int *transp, struct fb_info *info);
+                             u_int *transp, struct fb_info *info);
 static int sgivwfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
-			     u_int transp, struct fb_info *info);
+                             u_int transp, struct fb_info *info);
 static void do_install_cmap(int con, struct fb_info *info);
 
 static unsigned long get_line_length(int xres_virtual, int bpp)
@@ -158,6 +236,7 @@ static unsigned long bytes_per_pixel(int bpp)
   case 8:
     length = 1;
     break;
+  case 15:
   case 16:
     length = 2;
     break;
@@ -173,9 +252,52 @@ static unsigned long bytes_per_pixel(int bpp)
 }
 
 /*
- * Function:	dbe_TurnOffDma
- * Parameters:	(None)
- * Description:	This should turn off the monitor and dbe.  This is used
+ * Function:    dbe_CalcClock
+ * Parameters:  Target clock and pointers to PLL parameter destinations
+ * Description: Calculate DBE PLL parameters which give dot clock closest
+ *              to requested TargetClock.  Attempt to make this reasonably
+ *              efficient by skipping obviously wrong parameters.
+ */
+
+static int
+dbe_CalcClock(int TargetClock, short *M, short *N, short *P)
+{
+  short m, n, p;
+  int mBase, nBase, TestClock, PickClock=0, delta, minDelta=10000;
+
+  if (TargetClock > 256*DBE_CLOCK_REF_KHZ)
+    return 0;
+  
+  for (m=TargetClock/DBE_CLOCK_REF_KHZ; m<=256; m++) {
+    mBase = m * DBE_CLOCK_REF_KHZ;
+    for (n=1; n<=64; n++) {
+      nBase = mBase/n;
+      for (p=0; p<=3; p++) {
+        TestClock = nBase>>p;
+        delta = TestClock-TargetClock;
+        if (delta<0)
+          delta = -delta;
+        if (delta < minDelta) {
+          minDelta = delta;
+          PickClock = TestClock;
+          *M = m;
+          *N = n;
+          *P = p;
+        }
+        if (TestClock < TargetClock)
+          break; /* Only going to get smaller, so break this loop */
+      }
+      if (nBase < TargetClock)
+        break; /* Only going to get smaller, so break this loop */
+    }
+  }
+  return PickClock;
+}
+
+/*
+ * Function:    dbe_TurnOffDma
+ * Parameters:  (None)
+ * Description: This should turn off the monitor and dbe.  This is used
  *              when switching between the serial console and the graphics
  *              console.
  */
@@ -246,7 +368,7 @@ static void dbe_TurnOffDma(void)
  */
 static void activate_par(struct sgivwfb_par *par)
 {
-  int i,j, htmp, temp;
+  int i,j, htmp, temp, fp_wid, fp_hgt, fp_vbs, fp_vbe;
   u32 readVal, outputVal;
   int wholeTilesX, maxPixelsPerTileX;
   int frmWrite1, frmWrite2, frmWrite3b;
@@ -254,7 +376,7 @@ static void activate_par(struct sgivwfb_par *par)
   int xpmax, ypmax;                       // Monitor resolution
   int bytesPerPixel;                      // Bytes per pixel
 
-  currentTiming = &dbeVTimings[par->timing_num];
+  currentTiming = &par->timing;
   bytesPerPixel = bytes_per_pixel(par->var.bits_per_pixel);
   xpmax = currentTiming->width;
   ypmax = currentTiming->height;
@@ -270,9 +392,6 @@ static void activate_par(struct sgivwfb_par *par)
   wholeTilesX = xpmax/maxPixelsPerTileX;
   if (wholeTilesX*maxPixelsPerTileX < xpmax)
     wholeTilesX++;
-
-  printk("sgivwfb: pixPerTile=%d wholeTilesX=%d\n",
-	 maxPixelsPerTileX, wholeTilesX);
 
   /* dbe_InitGammaMap(); */
   udelay(10);
@@ -293,6 +412,7 @@ static void activate_par(struct sgivwfb_par *par)
     dbe_TurnOffDma();
 
   /* dbe_Initdbe(); */
+  DBE_SETREG(config, DBE_CONFIG_FBDEV);
   for (i = 0; i < 256; i++)
     {
       for (j = 0; j < 100; j++)
@@ -345,7 +465,7 @@ static void activate_par(struct sgivwfb_par *par)
         SET_DBE_FIELD(WID, TYP, outputVal, DBE_CMODE_I8);
         break;
       case 2:
-        SET_DBE_FIELD(WID, TYP, outputVal, DBE_CMODE_RGBA5);
+        SET_DBE_FIELD(WID, TYP, outputVal, DBE_CMODE_ARGB5);
         break;
       case 4:
         SET_DBE_FIELD(WID, TYP, outputVal, DBE_CMODE_RGB8);
@@ -390,6 +510,38 @@ static void activate_par(struct sgivwfb_par *par)
   SET_DBE_FIELD(VT_HCMAP, VT_HCMAP_ON, outputVal, currentTiming->hblank_start);
   SET_DBE_FIELD(VT_HCMAP, VT_HCMAP_OFF, outputVal, currentTiming->hblank_end-3);
   DBE_SETREG(vt_hcmap, outputVal);
+
+  outputVal = 0;
+  SET_DBE_FIELD(VT_FLAGS, HDRV_INVERT, outputVal, 
+    (currentTiming->flags & FB_SYNC_HOR_HIGH_ACT) ? 0 : 1);
+  SET_DBE_FIELD(VT_FLAGS, VDRV_INVERT, outputVal, 
+    (currentTiming->flags & FB_SYNC_VERT_HIGH_ACT) ? 0 : 1);
+  DBE_SETREG(vt_flags, outputVal);
+
+  /* Turn on the flat panel */
+  switch(flatpanel_id) {
+    case FLATPANEL_SGI_1600SW:
+      fp_wid=1600; fp_hgt=1024; fp_vbs=0; fp_vbe=1600;
+      currentTiming->pll_m = 4;
+      currentTiming->pll_n = 1;
+      currentTiming->pll_p = 0;
+      break;
+    default:
+      fp_wid=0xfff; fp_hgt=0xfff; fp_vbs=0xfff; fp_vbe=0xfff;
+      break;
+  }
+
+  outputVal = 0;
+  SET_DBE_FIELD(FP_DE, FP_DE_ON, outputVal, fp_vbs);
+  SET_DBE_FIELD(FP_DE, FP_DE_OFF, outputVal, fp_vbe);
+  DBE_SETREG(fp_de, outputVal);
+  outputVal = 0;
+  SET_DBE_FIELD(FP_HDRV, FP_HDRV_OFF, outputVal, fp_wid);
+  DBE_SETREG(fp_hdrv, outputVal);
+  outputVal = 0;
+  SET_DBE_FIELD(FP_VDRV, FP_VDRV_ON, outputVal, 1);
+  SET_DBE_FIELD(FP_VDRV, FP_VDRV_OFF, outputVal, fp_hgt+1);
+  DBE_SETREG(fp_vdrv, outputVal);
 
   outputVal = 0;
   temp = currentTiming->vblank_start - currentTiming->vblank_end - 1;
@@ -490,6 +642,17 @@ static void activate_par(struct sgivwfb_par *par)
   DBE_GETREG(ctrlstat, readVal);
   readVal &= 0x02000000;
 
+  if (flatpanel_id != -1) {
+    // Turn on half-phase & enable FP signals
+    DBE_GETREG(config, readVal);
+    readVal |= 1<<3;
+    DBE_SETREG(config, readVal);
+
+    DBE_GETREG(ctrlstat, readVal);
+    readVal |= 1<<26;
+    DBE_SETREG(ctrlstat, readVal);
+  }
+
   if (readVal != 0)
     {
       DBE_SETREG(ctrlstat, 0x30000000);
@@ -497,7 +660,7 @@ static void activate_par(struct sgivwfb_par *par)
 }
 
 static void sgivwfb_encode_fix(struct fb_fix_screeninfo *fix,
-			       struct fb_var_screeninfo *var)
+                               struct fb_var_screeninfo *var)
 {
   memset(fix, 0, sizeof(struct fb_fix_screeninfo));
   strcpy(fix->id, sgivwfb_name);
@@ -561,19 +724,19 @@ static int sgivwfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     cmap_fifo = regs->cm_fifo;
 
   regs->cmap[regno] = (red << 24) | (green << 16) | (blue << 8);
-  cmap_fifo--;			/* assume FIFO is filling up */
+  cmap_fifo--;                  /* assume FIFO is filling up */
   return 0;
 }
 
 static void do_install_cmap(int con, struct fb_info *info)
 {
     if (con != currcon)
-	return;
+        return;
     if (fb_display[con].cmap.len)
-	fb_set_cmap(&fb_display[con].cmap, 1, sgivwfb_setcolreg, info);
+        fb_set_cmap(&fb_display[con].cmap, 1, sgivwfb_setcolreg, info);
     else
-	fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel), 1,
-		    sgivwfb_setcolreg, info);
+        fb_set_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel), 1,
+                    sgivwfb_setcolreg, info);
 }
 
 /* ---------------------------------------------------- */
@@ -600,7 +763,7 @@ static int sgivwfb_release(struct fb_info *info, int user)
  *  Get the Fixed Part of the Display
  */
 static int sgivwfb_get_fix(struct fb_fix_screeninfo *fix, int con,
-			   struct fb_info *info)
+                           struct fb_info *info)
 {
   struct fb_var_screeninfo *var;
 
@@ -616,7 +779,7 @@ static int sgivwfb_get_fix(struct fb_fix_screeninfo *fix, int con,
  *  Get the User Defined Part of the Display. If a real par get it form there
  */
 static int sgivwfb_get_var(struct fb_var_screeninfo *var, int con,
-			   struct fb_info *info)
+                           struct fb_info *info)
 {
   if (con == -1)
     *var = par_current.var;
@@ -630,23 +793,22 @@ static int sgivwfb_get_var(struct fb_var_screeninfo *var, int con,
  *  real video mode.
  */
 static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
-			   struct fb_info *info)
+                           struct fb_info *info)
 {
   int err, activate = var->activate;
   int oldxres, oldyres, oldvxres, oldvyres, oldbpp;
   u_long line_length;
-  u_long min_mode;
   int req_dot;
-  int test_mode;
+  u32 bpp;
 
-  struct dbe_timing_info *timing;
+  struct dbe_timing_info timing;
 
   struct display *display;
 
   if (con >= 0)
     display = &fb_display[con];
   else
-    display = &disp;	/* used during initialization */
+    display = &disp;    /* used during initialization */
 
   /*
    *  FB_VMODE_CONUPDATE and FB_VMODE_SMOOTH_XPAN are equal!
@@ -663,9 +825,11 @@ static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
   var->xoffset = 0;
   var->yoffset = 0;
 
-  /* Limit bpp to 8, 16, and 32 */
+  /* Limit bpp to 8, 15/16, and 32 */
   if (var->bits_per_pixel <= 8)
     var->bits_per_pixel = 8;
+  else if (var->bits_per_pixel <= 15)
+    var->bits_per_pixel = 15;
   else if (var->bits_per_pixel <= 16)
     var->bits_per_pixel = 16;
   else if (var->bits_per_pixel <= 32)
@@ -676,31 +840,33 @@ static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
   var->grayscale = 0;           /* No grayscale for now */
 
   /* determine valid resolution and timing */
-  for (min_mode=0; min_mode<DBE_VT_SIZE; min_mode++) {
-    if (dbeVTimings[min_mode].width >= var->xres &&
-        dbeVTimings[min_mode].height >= var->yres)
+  /* XXX FIXME: Needs sanity check */
+  switch (flatpanel_id) {
+    case FLATPANEL_SGI_1600SW:
+      bpp = var->bits_per_pixel;
+      *var = SGI_1600SW_TIMING;
+      var->bits_per_pixel = bpp;
       break;
+    default:
+      flatpanel_id = -1;
   }
-
-  if (min_mode == DBE_VT_SIZE)
-    return -EINVAL;             /* Resolution to high */
-
-  /* XXX FIXME - should try to pick best refresh rate */
-  /* for now, pick closest dot-clock within 3MHz*/
-  req_dot = (int)((1.0e3/1.0e6) / (1.0e-12 * (float)var->pixclock));
-  printk("sgivwfb: requested pixclock=%d ps (%d KHz)\n", var->pixclock,
-	 req_dot);
-  test_mode=min_mode;
-  while (dbeVTimings[min_mode].width == dbeVTimings[test_mode].width) {
-    if (dbeVTimings[test_mode].cfreq+3000 > req_dot)
-      break;
-    test_mode++;
-  }
-  if (dbeVTimings[min_mode].width != dbeVTimings[test_mode].width)
-    test_mode--;
-  min_mode = test_mode;
-  timing = &dbeVTimings[min_mode];
-  printk("sgivwfb: granted dot-clock=%d KHz\n", timing->cfreq);
+  req_dot = 1000000000 / var->pixclock;
+  req_dot = dbe_CalcClock(req_dot, &timing.pll_m, &timing.pll_n, &timing.pll_p);
+  var->pixclock = 1000000000 / req_dot;
+  timing.flags = var->sync;
+  timing.width = var->xres;
+  timing.height = var->yres;
+  timing.cfreq = req_dot;
+  timing.htotal = var->left_margin + var->xres + var->right_margin + var->hsync_len;
+  timing.hblank_start = var->xres;
+  timing.hblank_end = timing.htotal;
+  timing.hsync_start = var->xres + var->right_margin;
+  timing.hsync_end = timing.hsync_start + var->hsync_len;
+  timing.vtotal = var->upper_margin + var->yres + var->lower_margin + var->vsync_len;
+  timing.vblank_start = var->yres;
+  timing.vblank_end = timing.vtotal;
+  timing.vsync_start = var->yres + var->lower_margin;
+  timing.vsync_end = timing.vsync_start + var->vsync_len;
 
   /* Adjust virtual resolution, if necessary */
   if (var->xres > var->xres_virtual || (!ywrap && !ypan))
@@ -727,24 +893,25 @@ static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
       var->transp.offset = 0;
       var->transp.length = 0;
       break;
-    case 16:	/* RGBA 5551 */
-      var->red.offset = 11;
+    case 15:    /* ARGB 1555 */
+    case 16:    /* ARGB 1555 */
+      var->red.offset = 10;
       var->red.length = 5;
-      var->green.offset = 6;
+      var->green.offset = 5;
       var->green.length = 5;
-      var->blue.offset = 1;
+      var->blue.offset = 0;
       var->blue.length = 5;
-      var->transp.offset = 0;
-      var->transp.length = 0;
+      var->transp.offset = 15;
+      var->transp.length = 1;
       break;
-    case 32:	/* RGB 8888 */
-      var->red.offset = 0;
+    case 32:    /* RGBA 8888 */
+      var->red.offset = 24;
       var->red.length = 8;
-      var->green.offset = 8;
+      var->green.offset = 16;
       var->green.length = 8;
-      var->blue.offset = 16;
+      var->blue.offset = 8;
       var->blue.length = 8;
-      var->transp.offset = 24;
+      var->transp.offset = 0;
       var->transp.length = 8;
       break;
     }
@@ -752,15 +919,6 @@ static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
   var->green.msb_right = 0;
   var->blue.msb_right = 0;
   var->transp.msb_right = 0;
-
-  /* set video timing information */
-  var->pixclock = (__u32)(1.0e+9/(float)timing->cfreq);
-  var->left_margin = timing->htotal - timing->hsync_end;
-  var->right_margin = timing->hsync_start - timing->width;
-  var->upper_margin = timing->vtotal - timing->vsync_end;
-  var->lower_margin = timing->vsync_start - timing->height;
-  var->hsync_len = timing->hsync_end - timing->hsync_start;
-  var->vsync_len = timing->vsync_end -  timing->vsync_start;
 
   if ((activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_NOW) {
     oldxres = display->var.xres;
@@ -770,15 +928,15 @@ static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
     oldbpp = display->var.bits_per_pixel;
     display->var = *var;
     par_current.var = *var;
-    par_current.timing_num = min_mode;
+    par_current.timing = timing;
     if (oldxres != var->xres || oldyres != var->yres ||
-	oldvxres != var->xres_virtual || oldvyres != var->yres_virtual ||
-	oldbpp != var->bits_per_pixel || !par_current.valid) {
+        oldvxres != var->xres_virtual || oldvyres != var->yres_virtual ||
+        oldbpp != var->bits_per_pixel || !par_current.valid) {
       struct fb_fix_screeninfo fix;
       printk("sgivwfb: new video mode xres=%d yres=%d bpp=%d\n",
-	     var->xres, var->yres, var->bits_per_pixel);
+             var->xres, var->yres, var->bits_per_pixel);
       printk("         vxres=%d vyres=%d\n",
-	     var->xres_virtual, var->yres_virtual);
+             var->xres_virtual, var->yres_virtual);
       activate_par(&par_current);
       sgivwfb_encode_fix(&fix, var);
       display->screen_base = (char *)fbmem;
@@ -791,35 +949,35 @@ static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
       display->can_soft_blank = 1;
       display->inverse = 0;
       if (oldbpp != var->bits_per_pixel || !par_current.valid) {
-	if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
-	  return err;
-	do_install_cmap(con, info);
+        if ((err = fb_alloc_cmap(&display->cmap, 0, 0)))
+          return err;
+        do_install_cmap(con, info);
       }
       switch (var->bits_per_pixel) {
 #ifdef FBCON_HAS_CFB8
       case 8:
-	display->dispsw = &fbcon_cfb8;
-	break;
+        display->dispsw = &fbcon_cfb8;
+        break;
 #endif
 #ifdef FBCON_HAS_CFB16
       case 16:
-	display->dispsw = &fbcon_cfb16;
-	display->dispsw_data = fbcon_cmap.cfb16;
-	break;
+        display->dispsw = &fbcon_cfb16;
+        display->dispsw_data = fbcon_cmap.cfb16;
+        break;
 #endif
 #ifdef FBCON_HAS_CFB32
       case 32:
-	display->dispsw = &fbcon_cfb32;
-	display->dispsw_data = fbcon_cmap.cfb32;
-	break;
+        display->dispsw = &fbcon_cfb32;
+        display->dispsw_data = fbcon_cmap.cfb32;
+        break;
 #endif
       default:
-	display->dispsw = &fbcon_dummy;
-	break;
+        display->dispsw = &fbcon_dummy;
+        break;
       }
       par_current.valid = 1;
       if (fb_info.changevar)
-	(*fb_info.changevar)(con);
+        (*fb_info.changevar)(con);
     }
   }
   return 0;
@@ -832,19 +990,19 @@ static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
  */
 
 static int sgivwfb_pan_display(struct fb_var_screeninfo *var, int con,
-			       struct fb_info *info)
+                               struct fb_info *info)
 {
 #if 0
   if (var->vmode & FB_VMODE_YWRAP) {
     if (var->yoffset < 0 ||
-	var->yoffset >= fb_display[con].var.yres_virtual ||
-	var->xoffset)
+        var->yoffset >= fb_display[con].var.yres_virtual ||
+        var->xoffset)
       return -EINVAL;
   } else {
     if (var->xoffset+fb_display[con].var.xres >
-	fb_display[con].var.xres_virtual ||
-	var->yoffset+fb_display[con].var.yres >
-	fb_display[con].var.yres_virtual)
+        fb_display[con].var.xres_virtual ||
+        var->yoffset+fb_display[con].var.yres >
+        fb_display[con].var.yres_virtual)
       return -EINVAL;
   }
   fb_display[con].var.xoffset = var->xoffset;
@@ -862,7 +1020,7 @@ static int sgivwfb_pan_display(struct fb_var_screeninfo *var, int con,
  *  Get the Colormap
  */
 static int sgivwfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
-			    struct fb_info *info)
+                            struct fb_info *info)
 {
   if (con == currcon) /* current console? */
     return fb_get_cmap(cmap, kspc, sgivwfb_getcolreg, info);
@@ -870,7 +1028,7 @@ static int sgivwfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
     fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
   else
     fb_copy_cmap(fb_default_cmap(1<<fb_display[con].var.bits_per_pixel),
-		 cmap, kspc ? 0 : 2);
+                 cmap, kspc ? 0 : 2);
   return 0;
 }
 
@@ -878,16 +1036,16 @@ static int sgivwfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
  *  Set the Colormap
  */
 static int sgivwfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
-			    struct fb_info *info)
+                            struct fb_info *info)
 {
   int err;
 
-  if (!fb_display[con].cmap.len) {	/* no colormap allocated? */
+  if (!fb_display[con].cmap.len) {      /* no colormap allocated? */
     if ((err = fb_alloc_cmap(&fb_display[con].cmap,
-			     1<<fb_display[con].var.bits_per_pixel, 0)))
+                             1<<fb_display[con].var.bits_per_pixel, 0)))
       return err;
   }
-  if (con == currcon)			/* current console? */
+  if (con == currcon)                   /* current console? */
     return fb_set_cmap(cmap, kspc, sgivwfb_setcolreg, info);
   else
     fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
@@ -898,7 +1056,7 @@ static int sgivwfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
  *  Virtual Frame Buffer Specific ioctls
  */
 static int sgivwfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			 u_long arg, int con, struct fb_info *info)
+                         u_long arg, int con, struct fb_info *info)
 {
   return -EINVAL;
 }
@@ -915,7 +1073,6 @@ static int sgivwfb_mmap(struct fb_info *info, struct file *file,
   if (remap_page_range(vma->vm_start, offset, size, vma->vm_page_prot))
     return -EAGAIN;
   vma->vm_file = file;
-  printk("sgivwfb: mmap framebuffer P(%lx)->V(%lx)\n", offset, vma->vm_start);
   return 0;
 }
 
@@ -936,12 +1093,12 @@ __initfunc(void sgivwfb_setup(char *options, int *ints))
 }
 
 /*
- *  Initialisation
+ *  Initialization
  */
 __initfunc(void sgivwfb_init(void))
 {
   printk("sgivwfb: framebuffer at 0x%lx, size %ldk\n",
-	 sgivwfb_mem_phys, sgivwfb_mem_size/1024);
+         sgivwfb_mem_phys, sgivwfb_mem_size/1024);
 
   regs = (asregs*)ioremap_nocache(DBE_REG_PHYS, DBE_REG_SIZE);
   if (!regs) {
@@ -968,7 +1125,32 @@ __initfunc(void sgivwfb_init(void))
     printk("sgivwfb: couldn't ioremap fbmem\n");
     goto fail_ioremap_fbmem;
   }
+  
+  /* setup i2c support, set idle condition on i2c bus */
+  flatpanel_i2c.reg = &regs->i2cfp;
+  sgivwfb_i2c_bus_template.data = (void*)&flatpanel_i2c;
+  i2c_setlines(&sgivwfb_i2c_bus_template, 1, 1);
+  if (i2c_register_bus(&sgivwfb_i2c_bus_template)) {
+    printk("sgivwfb: couldn't register i2c bus\n");
+  }
 
+  /* query flatpanel */
+  flatpanel_id = i2c_flatpanel_id(&sgivwfb_i2c_bus_template);
+  if (flatpanel_id == -1)
+    printk("sgivwfb: flatpanel not detected.\n");
+  else {
+    switch (flatpanel_id) {
+      case FLATPANEL_SGI_1600SW:
+        printk("sgivwfb: SGI 1600SW flatpanel detected (excellent choice).\n");
+        break;
+      default:
+        // XXX TODO: query panel for resolution?
+        printk("sgivwfb: Unknown flatpanel type %d detected.\n", flatpanel_id);
+        flatpanel_id = -1; //ignore it for now
+        break;
+    }
+  }
+ 
   /* turn on default video mode */
   sgivwfb_set_var(&par_current.var, -1, &fb_info);
 
@@ -978,7 +1160,7 @@ __initfunc(void sgivwfb_init(void))
   }
 
   printk("fb%d: Virtual frame buffer device, using %ldK of video memory\n",
-	 GET_FB_IDX(fb_info.node), sgivwfb_mem_size>>10);
+         GET_FB_IDX(fb_info.node), sgivwfb_mem_size>>10);
 
   return;
 
@@ -1030,8 +1212,78 @@ void cleanup_module(void)
 {
   unregister_framebuffer(&fb_info);
   dbe_TurnOffDma();
+  i2c_unregister_bus(&flatpanel_i2c);
   iounmap(regs);
   iounmap(fbmem);
 }
 
 #endif /* MODULE */
+
+#define I2C_DELAY 1000
+#define I2C_FLATPANEL_BASE 0x70
+
+/* Apply clock and data state to the i2c bus */
+static void i2c_setlines(struct i2c_bus *bus,int ctrl,int data)
+{
+    struct i2c_private *info = (struct i2c_private*)bus->data;
+    int timeout = 10000; /* 10ms timeout */
+    
+    if (info->scl==1 && ctrl==0) {
+        /* data change lags falling clock edge */
+        *info->reg = ~(ctrl<<1 | info->sda);
+        info->scl = ctrl;
+        udelay(I2C_DELAY);
+    }
+    /* apply data change, if any */
+    if (data != info->sda) {
+        *info->reg = ~(info->scl<<1 | data);
+        info->sda = data;
+        udelay(I2C_DELAY);
+    }
+    if (info->scl==0 && ctrl==1) {
+        /* data change leads rising clock edge */
+        *info->reg = ~(ctrl<<1 | info->sda);
+        info->scl = ctrl;
+        udelay(I2C_DELAY);
+        
+        /* wait for slave to be ready */
+        while (((~*info->reg)&2) == 0 && timeout != 0) {
+            timeout--;
+            udelay(1);
+        }
+        if (timeout==0)
+            printk("sgivwfb: i2c wait-state timeout.\n");
+    }
+}
+
+/* Get the data line state */
+static int i2c_getdataline(struct i2c_bus *bus)
+{
+    struct i2c_private *info = (struct i2c_private*)bus->data;
+    return (int)((~*info->reg) & 1);
+}
+
+static int i2c_flatpanel_status(struct i2c_bus *bus)
+{
+    return i2c_read(bus, I2C_FLATPANEL_BASE | 1);
+}
+
+static int i2c_flatpanel_id(struct i2c_bus *bus)
+{
+    int id = i2c_flatpanel_status(bus);
+    if (id == -1)
+        return -1;
+    id = (id & 0xe0) >> 5;
+    return id;
+}
+
+static int i2c_flatpanel_power(struct i2c_bus *bus, int flag)
+{
+    int status = i2c_flatpanel_status(bus);
+    if (status == -1)
+        return -1;
+    if (flag == -1)
+        return status & (1<<2);
+    return 0;
+}
+

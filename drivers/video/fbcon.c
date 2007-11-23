@@ -1386,14 +1386,6 @@ static int fbcon_blank(struct vc_data *conp, int blank)
 
     if (!p->can_soft_blank) {
 	if (blank) {
-#ifdef CONFIG_MAC
-	    if (MACH_IS_MAC) {
-		if (p->screen_base)
-		    mymemset(p->screen_base,
-			     p->var.xres_virtual*p->var.yres_virtual*
-			     p->var.bits_per_pixel>>3);
-	    } else
-#endif
 	    if (p->visual == FB_VISUAL_MONO01) {
 		if (p->screen_base)
 		    mymemset(p->screen_base,
@@ -2228,12 +2220,13 @@ __initfunc(static int fbcon_show_logo( void ))
 			   p->type == FB_TYPE_INTERLEAVED_PLANES)) {
 
 	    /* monochrome */
-	    unsigned char inverse = p->inverse ? 0x00 : 0xff;
+	    unsigned char inverse = p->inverse || p->visual == FB_VISUAL_MONO01
+		? 0x00 : 0xff;
 
 	    /* can't use simply memcpy because need to apply inverse */
 	    for( y1 = 0; y1 < LOGO_H; y1++ ) {
-		src = logo + y1*LOGO_LINE + x/8;
-		dst = fb + y1*line;
+		src = logo + y1*LOGO_LINE;
+		dst = fb + y1*line + x/8;
 		for( x1 = 0; x1 < LOGO_LINE; ++x1 )
 		    *dst++ = *src++ ^ inverse;
 	    }
