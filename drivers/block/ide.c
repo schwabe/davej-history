@@ -3422,7 +3422,19 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 
 	printk("%s ", msg);
 
-#endif
+	if (xparm < 0 && (drive->bios_cyl * drive->bios_head * drive->bios_sect) < (1024 * 16 * 63)) {
+		return 0;		/* small disk: no translation needed */
+	}
+
+	if (drive->id) {
+		drive->cyl  = drive->id->cyls;
+		drive->head = drive->id->heads;
+		drive->sect = drive->id->sectors;
+	}
+	drive->bios_cyl  = drive->cyl;
+	drive->bios_head = drive->head;
+	drive->bios_sect = drive->sect;
+	drive->special.b.set_geometry = 1;
 
 	tracks = drive->bios_cyl * drive->bios_head * drive->bios_sect / 63;
 	drive->bios_sect = 63;
@@ -3430,18 +3442,24 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 		drive->bios_head = xparm;
 		drive->bios_cyl = tracks / drive->bios_head;
 	} else {
-		heads = (xparm == -1) ? ez_head_vals : dm_head_vals;
 		while (drive->bios_cyl >= 1024) {
 			drive->bios_head = *heads;
 			drive->bios_cyl = tracks / drive->bios_head;
 			if (0 == *++heads)
 				break;
 		}
+#if FAKE_FDISK_FOR_EZDRIVE
+		if (xparm == -1) {
+			drive->remap_0_to_1 = 1;
+			msg = "0->1";
+		} else
+#endif /* FAKE_FDISK_FOR_EZDRIVE */
 		if (xparm == 1) {
 			drive->sect0 = 63;
 			drive->bios_cyl = (tracks - 1) / drive->bios_head;
-			printk("[remap +63] ");
+			msg = "+63";
 		}
+		printk("[remap %s] ", msg);
 	}
 	drive->part[0].nr_sects = current_capacity(drive);
 	printk("[%d/%d/%d]", drive->bios_cyl, drive->bios_head, drive->bios_sect);

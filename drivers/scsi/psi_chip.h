@@ -1,5 +1,5 @@
 /*+M*************************************************************************
- * Perceptive Solutions, Inc. PSI-240I device driver proc support for Linux.
+ * Perceptive Solutions, Inc. PSI-240i device driver proc support for Linux.
  *
  * Copyright (c) 1997 Perceptive Solutions, Inc.
  *

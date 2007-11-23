@@ -494,7 +494,7 @@ static void chipset_init(struct device *dev)
 	
 	
 
-int pt_init(void)
+int ptwin_init(void)
 {
     int *port;
     int ioaddr = 0;
@@ -551,7 +551,7 @@ int pt_init(void)
     pt0b.irq = pt0a.irq;	/* IRQ is shared */
     
     return 0;
-} /* pt_init() */
+} /* ptwin_init() */
 
 /*
  * Probe for PT card.  Also initialises the timers
@@ -1785,7 +1785,7 @@ static void pt_exisr(struct pt_local *lp)
 int init_module(void)
 {
     register_symtab(NULL);
-    return pt_init();
+    return ptwin_init();
 }
 
 void cleanup_module(void)

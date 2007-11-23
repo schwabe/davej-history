@@ -40,7 +40,7 @@
 #define MAXADAPTER			4			// Increase this and the sizes of the arrays below, if you need more.
 #define	MAX_BUS				2
 #define	MAX_UNITS			16
-#define	TIMEOUT_COMMAND		30 			// number of jiffies for command busy timeout
+#define	TIMEOUT_COMMAND		400			// number of milliSecondos for command busy timeout
 
 /************************************************/
 /*		I/O address offsets						*/

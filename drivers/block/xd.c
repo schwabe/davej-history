@@ -163,8 +163,6 @@ static u_char xd_override = 0, xd_type = 0;
 static u_short xd_iobase = 0x320;
 static int xd_geo[XD_MAXDRIVES*3] = { 0,0,0,0,0,0 };
 
-static int xd[5];
-
 static volatile int xdc_busy = 0;
 static struct wait_queue *xdc_wait = NULL;
 

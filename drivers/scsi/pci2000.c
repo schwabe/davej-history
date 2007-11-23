@@ -1,7 +1,7 @@
 /*+M*************************************************************************
  * Perceptive Solutions, Inc. PCI-2000 device driver proc support for Linux.
  *
- * Copyright (c) 1997 Perceptive Solutions, Inc.
+ * Copyright (c) 1999 Perceptive Solutions, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,12 +21,15 @@
  *	File Name:		pci2000i.c
  *
  *	Revisions	1.10	Jan-21-1999
- *
  *		- Fixed sign on message to reflect proper controller name.
  *		- Added support for RAID status monitoring and control.
  *
+ *  Revisions	1.11	Mar-22-1999
+ *		- Fixed control timeout to not lock up the entire system if
+ *		  controller goes offline completely.
+ *
  *-M*************************************************************************/
-#define PCI2000_VERSION		"1.10"
+#define PCI2000_VERSION		"1.11"
 
 #include <linux/module.h>
 
@@ -108,13 +111,14 @@ static			int				NumAdapters = 0;
  ****************************************************************/
 static int WaitReady (PADAPTER2000 padapter)
 	{
-	ULONG	timer;
+	ULONG	z;
 
-	timer = jiffies + TIMEOUT_COMMAND;								// calculate the timeout value
-	do	{
+	for ( z = 0;  z < (TIMEOUT_COMMAND * 4);  z++ )
+		{
 		if ( !inb_p (padapter->cmd) )
 			return FALSE;
-		}	while ( timer > jiffies );									// test for timeout
+		udelay (250);
+		};								
 	return TRUE;
 	}
 /****************************************************************
@@ -318,7 +322,7 @@ irqProceed:;
 	OpDone (SCpnt, DID_OK << 16);
 	}
 /****************************************************************
- *	Name:	Pci2220i_QueueCommand
+ *	Name:	Pci2000_QueueCommand
  *
  *	Description:	Process a queued command from the SCSI manager.
  *
@@ -507,7 +511,7 @@ int Pci2000_QueueCommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 			if ( cmd )
 				break;
 		default:
-			DEB (printk ("pci2220i_queuecommand: Unsupported command %02X\n", *cdb));
+			DEB (printk ("pci2000_queuecommand: Unsupported command %02X\n", *cdb));
 			OpDone (SCpnt, DID_ERROR << 16);
 			return 0;
 		}
@@ -534,7 +538,7 @@ static void internal_done (Scsi_Cmnd * SCpnt)
 	SCpnt->SCp.Status++;
 	}
 /****************************************************************
- *	Name:	Pci2220i_Command
+ *	Name:	Pci2000_Command
  *
  *	Description:	Process a command from the SCSI manager.
  *
@@ -555,7 +559,7 @@ int Pci2000_Command (Scsi_Cmnd *SCpnt)
 	return SCpnt->result;
 	}
 /****************************************************************
- *	Name:	Pci2220i_Detect
+ *	Name:	Pci2000_Detect
  *
  *	Description:	Detect and initialize our boards.
  *
@@ -638,7 +642,7 @@ unregister:;
 	return pci_index;
 	}
 /****************************************************************
- *	Name:	Pci2220i_Abort
+ *	Name:	Pci2000_Abort
  *
  *	Description:	Process the Abort command from the SCSI manager.
  *
@@ -653,7 +657,7 @@ int Pci2000_Abort (Scsi_Cmnd *SCpnt)
 	return SCSI_ABORT_SNOOZE;
 	}
 /****************************************************************
- *	Name:	Pci2220i_Reset
+ *	Name:	Pci2000_Reset
  *
  *	Description:	Process the Reset command from the SCSI manager.
  *
@@ -675,7 +679,7 @@ int Pci2000_Reset (Scsi_Cmnd *SCpnt, unsigned int reset_flags)
 #include "sd.h"
 
 /****************************************************************
- *	Name:	Pci2220i_BiosParam
+ *	Name:	Pci2000_BiosParam
  *
  *	Description:	Process the biosparam request from the SCSI manager to
  *					return C/H/S data.
@@ -709,7 +713,7 @@ int Pci2000_BiosParam (Scsi_Disk *disk, kdev_t dev, int geom[])
 
 #ifdef MODULE
 /* Eventually this will go into an include file, but this will be later */
-Scsi_Host_Template driver_template = PCI2000;
+Scsi_Host_Template driver_template = PCI2220I;
 
 #include "scsi_module.c"
 #endif

@@ -1199,7 +1199,7 @@ static void chipset_init(struct device *dev)
 }
 
 
-int pi_init(void)
+int pi2_init(void)
 {
     int *port;
     int ioaddr = 0;
@@ -1689,7 +1689,7 @@ static struct netstats *
 int init_module(void)
 {
     register_symtab(NULL);
-    return pi_init();
+    return pi2_init();
 }
 
 void cleanup_module(void)
