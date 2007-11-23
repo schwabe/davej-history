@@ -877,6 +877,10 @@ int ip_mroute_getsockopt(struct sock *sk,int optname,char *optval,int *optlen)
 		return -EFAULT;
 
 	olr=min(olr,sizeof(int));
+	
+	if(olr < 0)
+		return -EINVAL;
+		
 	if(put_user(olr,optlen))
 		return -EFAULT;
 	if(optname==MRT_VERSION)

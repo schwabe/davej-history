@@ -668,8 +668,8 @@ prom_init(int r3, int r4, prom_entry pp)
 	}
 	
 #endif	
-	/* If OpenFirmware version >= 3, then use quiesce call */
-	if (RELOC(prom_version) >= 3) {
+	/* If PowerMac, then use quiesce call */
+	if (!chrp) {
 	    prom_print(RELOC("Calling quiesce ...\n"));
 	    call_prom(RELOC("quiesce"), 0, 0);
 	    offset = reloc_offset();

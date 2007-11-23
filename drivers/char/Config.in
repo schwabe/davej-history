@@ -60,7 +60,7 @@ bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then
 	int 'Maximum number of Unix98 PTYs in use (0-2048)' CONFIG_UNIX98_PTY_COUNT 256
 fi
-if [ "$CONFIG_PARPORT" != "n" ]; then
+if [ "$CONFIG_PARPORT" = "y" -o "$CONFIG_PARPORT" = "m" ]; then
   dep_tristate 'Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
   if [ "$CONFIG_PRINTER" != "n" ]; then
     bool '  Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
@@ -128,7 +128,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   tristate '/dev/agpgart (AGP Support) (EXPERIMENTAL)' CONFIG_AGP n
+   tristate '/dev/agpgart (AGP Support) (EXPERIMENTAL)' CONFIG_AGP
    if [ "$CONFIG_AGP" != "n" ]; then
       bool '   Intel 440LX/BX/GX and I815/820 support' CONFIG_AGP_INTEL
       bool '   Intel I810/I815 (on-board video) support' CONFIG_AGP_I810
@@ -168,24 +168,22 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   if [ "$CONFIG_RADIO_TRUST" = "y" ]; then
     hex '  Trust FM Radio I/O port (0x350 or 0x358)' CONFIG_RADIO_TRUST_PORT 350
   fi
-  if [ "$CONFIG_PCI" != "n" ]; then
+  if [ "$CONFIG_PCI" = "y" ]; then
     dep_tristate 'BT848 Video For Linux' CONFIG_VIDEO_BT848 $CONFIG_VIDEO_DEV
     if [ "$CONFIG_VIDEO_BT848" != "n" ]; then
       comment '  MSP3400 sound decoder support is in the section "additional'
       comment '  low level sound drivers". You may need to enable it there.'
     fi
   fi
-  if [ "$CONFIG_PARPORT" != "n" ]; then
+  if [ "$CONFIG_PARPORT" = "y" -o "$CONFIG_PARPORT" = "m" ]; then
     dep_tristate 'Quickcam BW Video For Linux' CONFIG_VIDEO_BWQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
     dep_tristate 'Colour QuickCam Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     dep_tristate 'CPiA Video For Linux' CONFIG_VIDEO_CPIA $CONFIG_VIDEO_DEV
     if [ "$CONFIG_VIDEO_CPIA" != "n" ]; then
-      if [ "CONFIG_PARPORT_1284" != "n" ]; then
-        dep_tristate '  CPiA Parallel Port Lowlevel Support' CONFIG_VIDEO_CPIA_PP $CONFIG_VIDEO_CPIA $CONFIG_PARPORT
-      fi
-      if [ "$CONFIG_USB" != "n" ]; then
+      dep_tristate '  CPiA Parallel Port Lowlevel Support' CONFIG_VIDEO_CPIA_PP $CONFIG_VIDEO_CPIA $CONFIG_PARPORT
+      if [ "$CONFIG_USB" = "y" -o "$CONFIG_USB" = "m" ]; then
         dep_tristate '  CPiA USB Lowlevel Support' CONFIG_VIDEO_CPIA_USB $CONFIG_VIDEO_CPIA $CONFIG_USB
       fi
     fi

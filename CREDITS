@@ -880,13 +880,13 @@ S: Mountain View, California 94043
 S: USA
 
 N: Benjamin Herrenschmidt
-E: bh40@calva.net
+E: benh@kernel.crashing.org
 E: benh@mipsys.com
-D: PowerMac booter (BootX)
+D: PowerMac booters (BootX, yaboot)
 D: Additional PowerBook support
 D: Apple "Core99" machines support (ibook,g4,...)
-S: 22, rue des Marguettes
-S: 75012 Paris
+S: 122, blvd. Baille
+S: 13005 Marseille
 S: France
 
 N: Sebastian Hetze

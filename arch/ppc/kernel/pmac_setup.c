@@ -449,6 +449,16 @@ note_scsi_host(struct device_node *node, void *host))
 
 #ifdef CONFIG_BLK_DEV_IDE_PMAC
 
+void
+ide_pmac_init(void)
+{
+	if (_machine == _MACH_Pmac)
+		pmu_suspend();
+	ide_init();	
+	if (_machine == _MACH_Pmac)
+		pmu_resume();
+}
+
 extern kdev_t pmac_find_ide_boot(char *bootdevice, int n);
 
 __initfunc(kdev_t find_ide_boot(void))

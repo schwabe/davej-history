@@ -262,7 +262,6 @@ struct fb_info_aty128 {
     int chip_gen;
     struct aty128fb_par default_par, current_par;
     struct display disp;
-    struct display_switch dispsw;       /* for cursor and font */
     struct { u8 red, green, blue, pad; } palette[256];
 #ifdef CONFIG_PMAC_PBOOK
     unsigned char *save_framebuffer;
@@ -1436,29 +1435,25 @@ aty128_set_disp(struct display *disp,
     switch (bpp) {
 #ifdef FBCON_HAS_CFB8
     case 8:
-	info->dispsw = accel ? fbcon_aty128_8 : fbcon_cfb8;
-        disp->dispsw = &info->dispsw;
+	disp->dispsw = accel ? &fbcon_aty128_8 : &fbcon_cfb8;
 	break;
 #endif
 #ifdef FBCON_HAS_CFB16
     case 15:
     case 16:
-	info->dispsw = accel ? fbcon_aty128_16 : fbcon_cfb16;
-        disp->dispsw = &info->dispsw;
+	disp->dispsw = accel ? &fbcon_aty128_16 : &fbcon_cfb16;
 	disp->dispsw_data = info->fbcon_cmap.cfb16;
 	break;
 #endif
 #ifdef FBCON_HAS_CFB24
     case 24:
-	info->dispsw = accel ? fbcon_aty128_24 : fbcon_cfb24;
-        disp->dispsw = &info->dispsw;
+	disp->dispsw = accel ? &fbcon_aty128_24 : &fbcon_cfb24;
 	disp->dispsw_data = info->fbcon_cmap.cfb24;
 	break;
 #endif
 #ifdef FBCON_HAS_CFB32
     case 32:
-	info->dispsw = accel ? fbcon_aty128_32 : fbcon_cfb32;
-        disp->dispsw = &info->dispsw;
+	disp->dispsw = accel ? &fbcon_aty128_32 : &fbcon_cfb32;
 	disp->dispsw_data = info->fbcon_cmap.cfb32;
 	break;
 #endif
@@ -1752,18 +1747,17 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
     memset(&var, 0, sizeof(var));
 
 #ifdef CONFIG_FB_OF
-    if (default_vmode == VMODE_CHOOSE) {
-#endif /* CONFIG_FB_OF */
+    /* New iBook */
+    if (default_vmode == VMODE_CHOOSE &&
+    	machine_is_compatible("PowerBook2,2"))
+        default_vmode = VMODE_800_600_60;
+        
+    if (default_vmode == VMODE_CHOOSE)
         var = default_var;
-
-#ifdef CONFIG_FB_OF
-	/* New iBook */
-	if (machine_is_compatible("PowerBook2,2"))
-		default_vmode = VMODE_800_600_60;
-    } else {
-	if (mac_vmode_to_var(default_vmode, default_cmode, &var))
-	    var = default_var;
-    }
+    else if (mac_vmode_to_var(default_vmode, default_cmode, &var))
+	var = default_var;
+#else /* CONFIG_FB_OF */
+        var = default_var;
 #endif /* CONFIG_FB_OF */
 
 #endif /* MODULE */

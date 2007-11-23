@@ -935,6 +935,7 @@ int handle_mm_fault(struct task_struct *tsk, struct vm_area_struct * vma,
 	pte_t * pte;
 	int ret;
 
+	current->state = TASK_RUNNING;
 	pgd = pgd_offset(vma->vm_mm, address);
 	pmd = pmd_alloc(pgd, address);
 	if (!pmd)

@@ -1779,6 +1779,9 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval,
 		return -EFAULT;
 
 	len = min(len, sizeof(int));
+	
+	if(len < 0)
+		return -EINVAL;
 
 	switch(optname) {
 	case TCP_MAXSEG:

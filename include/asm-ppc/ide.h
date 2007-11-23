@@ -36,6 +36,7 @@ extern ide_ioreg_t chrp_ide_regbase[MAX_HWIFS];
 extern ide_ioreg_t chrp_idedma_regbase; /* one for both channels */
 extern unsigned int chrp_ide_irq;
 extern void chrp_ide_probe(void);
+extern void ide_pmac_init(void);
 
 struct ide_machdep_calls {
         void        (*insw)(ide_ioreg_t port, void *buf, int ns);

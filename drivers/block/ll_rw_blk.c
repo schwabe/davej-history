@@ -24,6 +24,10 @@
 #include <asm/uaccess.h>
 #include <linux/blk.h>
 
+#ifdef CONFIG_POWERMAC
+#include <asm/ide.h>
+#endif
+
 #include <linux/module.h>
 
 /*
@@ -971,7 +975,11 @@ __initfunc(int blk_dev_init(void))
 	isp16_init();
 #endif CONFIG_ISP16_CDI
 #ifdef CONFIG_BLK_DEV_IDE
+#ifdef CONFIG_POWERMAC
+	ide_pmac_init();
+#else
 	ide_init();		/* this MUST precede hd_init */
+#endif
 #endif
 #ifdef CONFIG_BLK_DEV_HD
 	hd_init();

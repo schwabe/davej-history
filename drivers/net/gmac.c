@@ -9,7 +9,7 @@
  * Changes:
  * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/06/2000
  * - check init_etherdev return in gmac_probe1
- * BenH <bh40@calva.net> - 03/09/2000
+ * BenH <benh@kernel.crashing.org> - 03/09/2000
  * - Add support for new PHYs
  * - Add some PowerBook sleep code
  * 

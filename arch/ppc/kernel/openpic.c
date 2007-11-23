@@ -8,8 +8,7 @@
  *
  *  Added initialisation code for Apple Core99 machines, tweaked a few things
  *  to avoid bogus interrupts and to make sure the disable function exits with
- *  the interrupt actually masked.
- *    Benjamin Herrenschmidt <bh40@calva.net>
+ *  the interrupt actually masked. --BenH
  *  Todo: map interrupts to all available CPUs after the ack round
  * 
  *  This file is subject to the terms and conditions of the GNU General Public

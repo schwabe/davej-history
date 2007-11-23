@@ -492,6 +492,8 @@ static int rawv6_geticmpfilter(struct sock *sk, int level, int optname,
 	case ICMPV6_FILTER:
 		if (get_user(len, optlen))
 			return -EFAULT;
+		if (len < 0)
+			return -EINVAL;
 		if (len > sizeof(struct icmp6_filter))
 			len = sizeof(struct icmp6_filter);
 		if (put_user(len, optlen))

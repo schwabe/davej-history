@@ -2237,14 +2237,6 @@ CONFIG_PARPORT
 
   If unsure, say Y.
 
-IEEE1284 transfer modes
-CONFIG_PARPORT_1284
-  If you have a printer that supports status readback or device ID, or
-  want to use a device that uses enhanced parallel port transfer modes
-  such as EPP, you can say Y here to enable advanced IEEE 1284
-  transfer modes. Also say Y if you want device ID information to
-  appear in /proc/parport/*/autoprobe*. It is safe to say N.
- 
 PC-style hardware 
 CONFIG_PARPORT_PC
   You should say Y here if you have a PC-style parallel port. All IBM

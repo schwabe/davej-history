@@ -475,3 +475,29 @@ out:
 	unlock_kernel();
 	return error;
 }
+
+#ifdef __SMP__
+/*
+ * execve() system call for in kernel use.
+ *
+ * Two(user and kernel) execve() have quite different call path and
+ * following function puts lock_kernel() and unlock_kernel() in kernel
+ * execve().  You could put them in unistd.h but you will have to
+ * modify many files to clear compile error -
+ *
+ * soohoon.lee@api-networks.com.  */
+
+asmlinkage int ___kernel_execve(char *filename, char **argp, char **envp,
+	struct pt_regs *regs)
+{
+	int error;
+
+	lock_kernel();
+
+	error = do_execve(filename, argp, envp, regs);
+
+	unlock_kernel();
+
+	return error;
+}
+#endif /* __SMP__ */

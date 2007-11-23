@@ -1769,6 +1769,10 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 		return (-EFAULT);
 
 	len = min(len, sizeof(int));
+	
+	if(len < 0)
+		return -EINVAL;
+		
 	if(put_user(len, optlen))
 		return (-EFAULT);
 

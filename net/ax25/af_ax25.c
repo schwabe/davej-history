@@ -720,6 +720,9 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname, char *op
 	if (get_user(len, optlen))
 		return -EFAULT;
 
+	if (len < 0)
+		return -EINVAL;
+		
 	switch (optname) {
 		case AX25_WINDOW:
 			val = sk->protinfo.ax25->window;

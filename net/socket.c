@@ -1048,7 +1048,10 @@ asmlinkage int sys_setsockopt(int fd, int level, int optname, char *optval, int 
 {
 	int err;
 	struct socket *sock;
-	
+
+	if(optlen < 0)	
+		return -EINVAL;
+		
 	lock_kernel();
 	if ((sock = sockfd_lookup(fd, &err))!=NULL)
 	{

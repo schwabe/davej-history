@@ -150,6 +150,12 @@
 #include <asm/bitops.h>
 #include <asm/serial.h>
 
+#ifdef CONFIG_MAC_SERIAL
+#define SERIAL_DEV_OFFSET	4
+#else
+#define SERIAL_DEV_OFFSET	0
+#endif
+
 #ifdef SERIAL_INLINE
 #define _INLINE_ inline
 #endif
@@ -2622,7 +2628,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	tty->driver_data = info;
 	info->tty = tty;
 	if (serial_paranoia_check(info, tty->device, "rs_open")) {
-		MOD_DEC_USE_COUNT;
+		/* MOD_DEC_USE_COUNT; "info->tty" will cause this */
 		return -ENODEV;
 	}
 
@@ -2635,7 +2641,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	if (!tmp_buf) {
 		page = get_free_page(GFP_KERNEL);
 		if (!page) {
-			MOD_DEC_USE_COUNT;
+			/* MOD_DEC_USE_COUNT; "info->tty" will cause this? */
 			return -ENOMEM;
 		}
 		if (tmp_buf)
@@ -2651,7 +2657,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	    (info->flags & ASYNC_CLOSING)) {
 		if (info->flags & ASYNC_CLOSING)
 			interruptible_sleep_on(&info->close_wait);
-		MOD_DEC_USE_COUNT;
+		/* MOD_DEC_USE_COUNT; "info->tty" will cause this? */
 #ifdef SERIAL_DO_RESTART
 		return ((info->flags & ASYNC_HUP_NOTIFY) ?
 			-EAGAIN : -ERESTARTSYS);
@@ -2665,13 +2671,13 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	 */
 	retval = startup(info);
 	if (retval) {
-		MOD_DEC_USE_COUNT;
+		/* MOD_DEC_USE_COUNT; "info->tty" will cause this? */
 		return retval;
 	}
 
 	retval = block_til_ready(tty, filp, info);
 	if (retval) {
-		MOD_DEC_USE_COUNT;
+		/* MOD_DEC_USE_COUNT; "info->tty" will cause this? */
 #ifdef SERIAL_DEBUG_OPEN
 		printk("rs_open returning after block_til_ready with %d\n",
 		       retval);
@@ -3130,7 +3136,7 @@ __initfunc(int rs_init(void))
 	serial_driver.driver_name = "serial";
 	serial_driver.name = "ttyS";
 	serial_driver.major = TTY_MAJOR;
-	serial_driver.minor_start = 64;
+	serial_driver.minor_start = 64 + SERIAL_DEV_OFFSET;
 	serial_driver.num = NR_PORTS;
 	serial_driver.type = TTY_DRIVER_TYPE_SERIAL;
 	serial_driver.subtype = SERIAL_TYPE_NORMAL;
@@ -3194,11 +3200,22 @@ __initfunc(int rs_init(void))
 		state->icount.frame = state->icount.parity = 0;
 		state->icount.overrun = state->icount.brk = 0;
 		state->irq = irq_cannonicalize(state->irq);
-		if (check_region(state->port,8))
-			continue;
-		if (state->flags & ASYNC_BOOT_AUTOCONF)
-			autoconfig(state);
+#ifdef CONFIG_PPC
+		/* PowerMacs don't have legacy serial ports on IOs and would machine check */
+		if (_machine != _MACH_Pmac) {
+#endif		
+			if (check_region(state->port,8))
+				continue;
+			if (state->flags & ASYNC_BOOT_AUTOCONF)
+				autoconfig(state);
+#ifdef CONFIG_PPC
+		}
+#endif		
 	}
+#ifdef CONFIG_PPC
+	if (_machine == _MACH_Pmac)
+		return 0;
+#endif
 	/*
 	 * Detect the IRQ only once every port is initialised,
 	 * because some 16450 do not reset to 0 the MCR register.
@@ -3268,22 +3285,22 @@ int register_serial(struct serial_struct *req)
 		state->irq = detect_uart_irq(state);
 
 	printk(KERN_INFO "tty%02d at 0x%04x (irq = %d) is a %s\n",
-	       state->line, state->port, state->irq,
+	       state->line + SERIAL_DEV_OFFSET, state->port, state->irq,
 	       uart_config[state->type].name);
-	return state->line;
+	return state->line + SERIAL_DEV_OFFSET;
 }
 
 void unregister_serial(int line)
 {
 	unsigned long flags;
-	struct serial_state *state = &rs_table[line];
+	struct serial_state *state = &rs_table[line + SERIAL_DEV_OFFSET];
 
 	save_flags(flags);
 	cli();
 	if (state->info && state->info->tty)
 		tty_hangup(state->info->tty);
 	state->type = PORT_UNKNOWN;
-	printk(KERN_INFO "tty%02d unloaded\n", state->line);
+	printk(KERN_INFO "tty%02d unloaded\n", state->line + SERIAL_DEV_OFFSET);
 	restore_flags(flags);
 }
 

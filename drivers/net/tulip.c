@@ -30,9 +30,6 @@ static const char version[] = "tulip.c:v0.91g-ppc 7/16/99 becker@cesdis.gsfc.nas
 
 /* A few user-configurable values. */
 
-/* Maximum events (Rx packets, etc.) to handle at each interrupt. */
-static int max_interrupt_work = 25;
-
 #define MAX_UNITS 8
 /* Used to pass the full-duplex flag, etc. */
 static int full_duplex[MAX_UNITS] = {0, };
@@ -143,7 +140,6 @@ static int csr0 = 0x00A00000 | 0x4800;
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("Digital 21*4* Tulip ethernet driver");
 MODULE_PARM(debug, "i");
-MODULE_PARM(max_interrupt_work, "i");
 MODULE_PARM(reverse_probe, "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(csr0, "i");
@@ -152,10 +148,6 @@ MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
 #endif
 
 #define RUN_AT(x) (jiffies + (x))
-
-#if (LINUX_VERSION_CODE >= 0x20100)
-static char kernel_version[] = UTS_RELEASE;
-#endif
 
 #if LINUX_VERSION_CODE < 0x20123
 #define hard_smp_processor_id() smp_processor_id()
@@ -429,7 +421,7 @@ static const char media_cap[] =
 {0,0,0,16,  3,19,16,24,  27,4,7,5, 0,20,23,20 };
 static u8 t21040_csr13[] = {2,0x0C,8,4,  4,0,0,0, 0,0,0,0, 4,0,0,0};
 /* 21041 transceiver register settings: 10-T, 10-2, AUI, 10-T, 10T-FD*/
-static u16 t21041_csr13[] = { 0xEF01, 0xEF09, 0xEF09, 0xEF01, 0xEF09, };
+static u16 t21041_csr13[] = { 0xEF05, 0xEF0D, 0xEF0D, 0xEF05, 0xEF05, };
 static u16 t21041_csr14[] = { 0xFFFF, 0xF7FD, 0xF7FD, 0x7F3F, 0x7F3D, };
 static u16 t21041_csr15[] = { 0x0008, 0x0006, 0x000E, 0x0008, 0x0008, };
 
@@ -590,7 +582,7 @@ int __init tulip_probe(struct device *dev)
 		return -ENODEV;
 
 	for (;pci_index < 0xff; pci_index++) {
-		u16 vendor, device, pci_command, new_command;
+		u16 vendor, device, pci_command, new_command, subvendor;
 		int chip_idx;
 		int irq;
 		long ioaddr;
@@ -608,6 +600,13 @@ int __init tulip_probe(struct device *dev)
 								 PCI_VENDOR_ID, &vendor);
 		pcibios_read_config_word(pci_bus, pci_device_fn,
 								 PCI_DEVICE_ID, &device);
+		pcibios_read_config_word(pci_bus, pci_device_fn,
+								 PCI_SUBSYSTEM_VENDOR_ID, &subvendor);
+		
+	        if( subvendor == 0x1376 ){
+			printk("tulip: skipping LMC card.\n");
+			continue;
+		}	
 
 		for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
 			if (vendor == pci_tbl[chip_idx].vendor_id
@@ -749,13 +748,7 @@ static struct device *tulip_probe1(int pci_bus, int pci_devfn,
 			put_unaligned(le16_to_cpu(value), ((u16*)dev->dev_addr) + i);
 			sum += value & 0xffff;
 		}
-	} else if (chip_idx == COMET){
-		/* No need to read the EEPROM. */
-		put_unaligned(inl(ioaddr + 0xA4), (u32 *)dev->dev_addr);
-		put_unaligned(inl(ioaddr + 0xA8), (u16 *)(dev->dev_addr + 4));
-		for (i = 0; i < 6; i ++)
-			sum += dev->dev_addr[i];
-	} else if (chip_idx == COMET5){
+	} else if ((chip_idx == COMET) || (chip_idx == COMET5)) {
 		/* No need to read the EEPROM. */
 		put_unaligned(inl(ioaddr + 0xA4), (u32 *)dev->dev_addr);
 		put_unaligned(inl(ioaddr + 0xA8), (u16 *)(dev->dev_addr + 4));
@@ -998,8 +991,6 @@ static struct device *tulip_probe1(int pci_bus, int pci_devfn,
 		outl(0x00001000, ioaddr + CSR12);
 		break;
 	case COMET:
-		/* No initialization necessary. */
-		break;
 	case COMET5:
 		/* No initialization necessary. */
 		break;
@@ -1318,18 +1309,7 @@ static int mdio_read(struct device *dev, int phy_id, int location)
 		return 0xffff;
 	}
 
-	if (tp->chip_id == COMET) {
-		if (phy_id == 1) {
-			if (location < 7)
-				return inl(ioaddr + 0xB4 + (location<<2));
-			else if (location == 17)
-				return inl(ioaddr + 0xD0);
-			else if (location >= 29 && location <= 31)
-				return inl(ioaddr + 0xD4 + ((location-29)<<2));
-		}
-		return 0xffff;
-	}
-	if (tp->chip_id == COMET5) {
+	if ((tp->chip_id == COMET) || (tp->chip_id == COMET5)) {
 		if (phy_id == 1) {
 			if (location < 7)
 				return inl(ioaddr + 0xB4 + (location<<2));
@@ -1386,19 +1366,7 @@ static void mdio_write(struct device *dev, int phy_id, int location, int value)
 		return;
 	}
 
-	if (tp->chip_id == COMET) {
-		if (phy_id != 1)
-			return;
-		if (location < 7)
-			outl(value, ioaddr + 0xB4 + (location<<2));
-		else if (location == 17)
-			outl(value, ioaddr + 0xD0);
-		else if (location >= 29 && location <= 31)
-			outl(value, ioaddr + 0xD4 + ((location-29)<<2));
-		return;
-	}
-
-	if (tp->chip_id == COMET5) {
+	if ((tp->chip_id == COMET) || (tp->chip_id == COMET5)) {
 		if (phy_id != 1)
 			return;
 		if (location < 7)
@@ -1488,12 +1456,7 @@ tulip_open(struct device *dev)
 			outl(addr_low,  ioaddr + CSR14);
 			outl(1, ioaddr + CSR13);
 			outl(addr_high, ioaddr + CSR14);
-		} else if (tp->chip_id == COMET) {
-			outl(addr_low,  ioaddr + 0xA4);
-			outl(addr_high, ioaddr + 0xA8);
-			outl(0, ioaddr + 0xAC);
-			outl(0, ioaddr + 0xB0);
-		} else if (tp->chip_id == COMET5) {
+		} else if ((tp->chip_id == COMET) || (tp->chip_id == COMET5)) {
 			outl(addr_low,  ioaddr + 0xA4);
 			outl(addr_high, ioaddr + 0xA8);
 			outl(0, ioaddr + 0xAC);
@@ -1608,10 +1571,7 @@ media_picked:
 		outl(0x0000, ioaddr + CSR13);
 		outl(0x0000, ioaddr + CSR14);
 		outl(0x0008, ioaddr + CSR15);
-	} else if (tp->chip_id == COMET) {
-		dev->if_port = 0;
-		tp->csr6 = 0x00040000;
-	} else if (tp->chip_id == COMET5) {
+	} else if ((tp->chip_id == COMET) || (tp->chip_id == COMET5)) {
 		dev->if_port = 0;
 		tp->csr6 = 0x00040000;
 	} else if (tp->chip_id == AX88140) {
@@ -3051,9 +3011,7 @@ static int private_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 			data[0] = phy;
 		else if (tp->flags & HAS_NWAY143)
 			data[0] = 32;
-		else if (tp->chip_id == COMET)
-			data[0] = 1;
-		else if (tp->chip_id == COMET5)
+		else if ((tp->chip_id == COMET) || (tp->chip_id == COMET5))
 			data[0] = 1;
 		else
 			return -ENODEV;
@@ -3180,10 +3138,9 @@ static void set_rx_mode(struct device *dev)
 				outl(mc_filter[0], ioaddr + CSR14);
 				outl(3, ioaddr + CSR13);
 				outl(mc_filter[1], ioaddr + CSR14);
-			} else if (tp->chip_id == COMET) { /* Has a simple hash filter. */
-				outl(mc_filter[0], ioaddr + 0xAC);
-				outl(mc_filter[1], ioaddr + 0xB0);
-			} else if (tp->chip_id == COMET5) { /* Has a simple hash filter. */
+
+			/* Has a simple hash filter. */
+			} else if ((tp->chip_id == COMET) || (tp->chip_id == COMET5)) {
 				outl(mc_filter[0], ioaddr + 0xAC);
 				outl(mc_filter[1], ioaddr + 0xB0);
 			}

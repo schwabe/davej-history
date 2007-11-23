@@ -407,6 +407,9 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 	if (get_user(len, optlen))
 		return -EFAULT;
 
+	if (len < 0)
+		return -EINVAL;
+		
 	switch (optname) {
 		case NETROM_T1:
 			val = sk->protinfo.nr->t1 / HZ;

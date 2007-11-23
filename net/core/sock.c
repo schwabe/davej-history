@@ -377,11 +377,14 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		struct timeval tm;
 	} v;
 	
-	unsigned int lv=sizeof(int),len;
+	int lv=sizeof(int),len;
   	
   	if(get_user(len,optlen))
   		return -EFAULT;
 
+	if(len < 0)
+		return -EINVAL;
+		
   	switch(optname) 
   	{
 		case SO_DEBUG:		

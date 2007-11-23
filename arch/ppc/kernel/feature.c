@@ -2,7 +2,7 @@
  *  arch/ppc/kernel/feature.c
  *
  *  Copyright (C) 1996 Paul Mackerras (paulus@cs.anu.edu.au)
- *                     Ben. Herrenschmidt (bh40@calva.net)
+ *                     Ben. Herrenschmidt (benh@kernel.crashing.org)
  *
  *  This program is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU General Public License

@@ -497,6 +497,8 @@ static int raw_geticmpfilter(struct sock *sk, char *optval, int *optlen)
 
 	if (get_user(len,optlen))
 		return -EFAULT;
+	if (len < 0)
+		return -EINVAL;
 	if (len > sizeof(struct icmp_filter))
 		len = sizeof(struct icmp_filter);
 	if (put_user(len, optlen))

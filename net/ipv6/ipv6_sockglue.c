@@ -359,6 +359,8 @@ int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval,
 		return -ENOPROTOOPT;
 	if (get_user(len, optlen))
 		return -EFAULT;
+	if(len < 0)
+		return -EINVAL;
 	switch (optname) {
 	case IPV6_PKTOPTIONS:
 	{

@@ -471,6 +471,9 @@ static int rose_getsockopt(struct socket *sock, int level, int optname,
 		
 	if (get_user(len, optlen))
 		return -EFAULT;
+		
+	if (len < 0)
+		return -EINVAL;
 	
 	switch (optname) {
 		case ROSE_DEFER:
