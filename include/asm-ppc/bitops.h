@@ -104,6 +104,8 @@ extern __inline__ unsigned long find_next_zero_bit(void * addr,
 	tmp = *p;
 found_first:
 	tmp |= ~0UL << size;
+	if (tmp == ~0UL)        /* Are any bits zero? */
+		return result + size; /* Nope. */
 found_middle:
 	return result + ffz(tmp);
 }
@@ -194,6 +196,8 @@ extern __inline__ unsigned long ext2_find_next_zero_bit(void *addr,
 	tmp = cpu_to_le32p(p);
 found_first:
 	tmp |= ~0U << size;
+	if (tmp == ~0UL)        /* Are any bits zero? */
+		return result + size; /* Nope. */
 found_middle:
 	return result + ffz(tmp);
 }

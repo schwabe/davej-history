@@ -14,6 +14,10 @@
 /* NS8390 NIC (network interface controller) clone, 16 or 64K on-board RAM  */
 /* and 10BASE-2 (thin coax) and AUI connectors.                             */
 
+/* Changes:								    */
+/* Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/15/2000	    */
+/* - check resource allocation in hydra_probe				    */
+
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -183,6 +187,10 @@ __initfunc(int hydra_probe(struct device *dev))
 			init_etherdev(dev, 0);
 	    
 			dev->priv = kmalloc(sizeof(struct hydra_private), GFP_KERNEL);
+
+			if (!dev->priv)
+				return -ENOMEM;
+
 			priv = (struct hydra_private *)dev->priv;
 			memset(priv, 0, sizeof(struct hydra_private));
 	    

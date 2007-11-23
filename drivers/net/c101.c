@@ -117,12 +117,14 @@ static __inline__ int set_clock(port_t *port, int clock)
 static __inline__ void open_port(port_t *port)
 {
 	writeb(1, port->win0base+C101_DTR);
+	sca_out(0, MSCI1_OFFSET + CTL, port); /* RTS uses ch#2 output */
 }
 
 
 static __inline__ void close_port(port_t *port)
 {
 	writeb(0, port->win0base+C101_DTR);
+	sca_out(CTL_NORTS, MSCI1_OFFSET + CTL, port);
 }
 
 

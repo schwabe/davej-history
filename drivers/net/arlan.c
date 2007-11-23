@@ -3,6 +3,11 @@
  *  Copyright (C) 1998 Elmer.Joandi@ut.ee, +37-255-13500        
  *  Gnu Public License applies
  * This module provides support for the Arlan 655 card made by Aironet
+ *
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 08/15/2000
+ * - fix some leaks on failure at arlan_allocate_device
+ * - check kmalloc in arlan_probe and init_module
  */
 
 
@@ -1197,16 +1202,20 @@ __initfunctio(static int
 		return 0;
 	}
 
-	memset(dev->priv,0,sizeof(struct arlan_private));
+	if (devs)
+		memset(dev->priv,0,sizeof(struct arlan_private));
 
 	((struct arlan_private *) dev->priv)->conf =
 	    kmalloc(sizeof(struct arlan_shmem), GFP_KERNEL);
 
-	if (dev == NULL || dev->priv == NULL ||
-	    ((struct arlan_private *) dev->priv)->conf == NULL)
+	if (((struct arlan_private *) dev->priv)->conf == NULL)
 	{
-		return 0;
 		printk(KERN_CRIT " No memory at arlan_allocate_device \n");
+		if (!devs)
+			kfree(dev);
+		else
+			kfree(dev->priv);
+		return 0;
 	}
 	/* Fill in the 'dev' fields. */
 	dev->base_addr = 0;
@@ -2032,12 +2041,15 @@ __initfunctio(int arlan_probe(struct device *dev))
 	printk("Arlan driver %s\n", arlan_version);
 
 	if (arlan_probe_everywhere(dev))
-		return ENODEV;
+		return -ENODEV;
 
 	arlans_found++;
 
-	if (arlans_found == 1)
+	if (arlans_found == 1) {
 		siteName = kmalloc(100, GFP_KERNEL);
+		if (!siteName)
+			return -ENOMEM;
+	}
 	return 0;
 }
 
@@ -2069,10 +2081,13 @@ int init_module(void)
 	}
 	for (i = 0; i < numDevices && i < MAX_ARLANS; i++)
 	{
-		if (!arlan_allocate_device(i, NULL))
+		if (!arlan_allocate_device(i, NULL)) {
+			kfree(siteName);
 			return -1;
+		}
 		if (arlan_device[i] == NULL)
 		{
+			kfree(siteName);
 			printk(KERN_CRIT "arlan: Not Enough memory \n");
 			return -1;
 		}

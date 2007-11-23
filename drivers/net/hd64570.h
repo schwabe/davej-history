@@ -203,7 +203,7 @@ typedef struct {
 #define MD2_NRZI      0x20	/* NRZI mode */
 #define MD2_LOOPBACK  0x03      /* Local data Loopback */
 
-#define CTL_RTS	      0x01
+#define CTL_NORTS     0x01
 #define CTL_IDLE      0x10	/* Transmit an idle pattern */
 #define CTL_UDRNC     0x20	/* Idle after CRC or FCS+flag transmition */
 

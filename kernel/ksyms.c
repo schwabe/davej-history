@@ -340,6 +340,7 @@ EXPORT_SYMBOL(xtime);
 EXPORT_SYMBOL(do_gettimeofday);
 EXPORT_SYMBOL(loops_per_sec);
 EXPORT_SYMBOL(kstat);
+EXPORT_SYMBOL(pidhash); 
 
 /* misc */
 EXPORT_SYMBOL(panic);
@@ -424,4 +425,11 @@ EXPORT_SYMBOL(strnicmp);
 
 /* init task, for moving kthread roots - ought to export a function ?? */
 EXPORT_SYMBOL(init_task_union);
+
+/* Support for external backtracer */ 
+extern char _stext[], _etext[];
+EXPORT_SYMBOL(_stext);
+EXPORT_SYMBOL(_etext); 
+EXPORT_SYMBOL(module_list); 
+
 

@@ -275,10 +275,8 @@ _GLOBAL(atomic_dec_and_test)
 	stwcx.	r5,0,r3		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
 	SMP_MB
-	cmpi	0,r5,0		/* Return 'true' IFF 0 */
-	li	r3,1
-	beqlr
-	li	r3,0
+	cntlzw	r3,r5
+	srwi	r3,r3,5
 	blr
 _GLOBAL(atomic_clear_mask)
 	SMP_WMB			/* wmb() */
@@ -406,48 +404,59 @@ _GLOBAL(_outsl_ns)
 	blr	
 
 /*
- * Extended precision shifts
+ * Extended precision shifts.
+ * 
+ * Updated to be valid for shift counts from 0 to 63 inclusive.
+ * -- Gabriel
  *
  * R3/R4 has 64 bit value
  * R5    has shift count
  * result in R3/R4
  *
- *  ashrdi3:     XXXYYY/ZZZAAA -> SSSXXX/YYYZZZ
- *  ashldi3:     XXXYYY/ZZZAAA -> YYYZZZ/AAA000
- *  lshrdi3:     XXXYYY/ZZZAAA -> 000XXX/YYYZZZ
+ *  ashrdi3: arithmetic right shift (sign propagation)	    
+ *  lshrdi3: logical right shift	
+ *  ashldi3: left shift
  */
 _GLOBAL(__ashrdi3)
-	li	r6,32
-	sub	r6,r6,r5
-	slw	r7,r3,r6	/* isolate YYY */
-	srw	r4,r4,r5	/* isolate ZZZ */
-	or	r4,r4,r7	/* YYYZZZ */
-	sraw	r3,r3,r5	/* SSSXXX */
+	subfic	r6,r5,32	
+	srw	r4,r4,r5	# LSW = count > 31 ? 0 : LSW >> count
+	addi	r7,r5,32	# could be xori, or addi with -32
+	slw	r6,r3,r6	# t1 = count > 31 ? 0 : MSW << (32-count)
+	rlwinm	r8,r7,0,32	# t3 = (count < 32) ? 32 : 0
+	sraw	r7,r3,r7	# t2 = MSW >> (count-32)
+	or	r4,r4,r6	# LSW |= t1
+	slw	r7,r7,r8	# t2 = (count < 32) ? 0 : t2
+	sraw	r3,r3,r5	# MSW = MSW >> count
+	or	r4,r4,r7	# LSW |= t2
 	blr
 
 _GLOBAL(__ashldi3)
-	li	r6,32
-	sub	r6,r6,r5
-	srw	r7,r4,r6	/* isolate ZZZ */
-	slw	r4,r4,r5	/* AAA000 */
-	slw	r3,r3,r5	/* YYY--- */
-	or	r3,r3,r7	/* YYYZZZ */
+	subfic	r6,r5,32	
+	slw	r3,r3,r5	# MSW = count > 31 ? 0 : MSW << count
+	addi	r7,r5,32	# could be xori, or addi with -32
+	srw	r6,r4,r6	# t1 = count > 31 ? 0 : LSW >> (32-count)
+	slw	r7,r4,r7	# t2 = count < 32 ? 0 : LSW << (count-32)
+	or	r3,r3,r6	# MSW |= t1
+	slw	r4,r4,r5	# LSW = LSW << count
+	or	r3,r3,r7	# MSW |= t2
 	blr
 
 _GLOBAL(__lshrdi3)
-	li	r6,32
-	sub	r6,r6,r5
-	slw	r7,r3,r6        /* isolate YYY */
-	srw	r4,r4,r5        /* isolate ZZZ */
-	or	r4,r4,r7        /* YYYZZZ */
-	srw	r3,r3,r5        /* 000XXX */
+	subfic	r6,r5,32	
+	srw	r4,r4,r5	# LSW = count > 31 ? 0 : LSW >> count
+	addi	r7,r5,32	# could be xori, or addi with -32
+	slw	r6,r3,r6	# t1 = count > 31 ? 0 : MSW << (32-count)
+	srw	r7,r3,r7	# t2 = count < 32 ? 0 : MSW >> (count-32)
+	or	r4,r4,r6	# LSW |= t1
+	srw	r3,r3,r5	# MSW = MSW >> count
+	or	r4,r4,r7	# LSW |= t2 
 	blr
 
 _GLOBAL(abs)
-	cmpi	0,r3,0
-	bge	10f
-	neg	r3,r3
-10:	blr
+	srawi	r4,r3,31
+	xor	r3,r3,r4
+	sub	r3,r3,r4
+	blr
 
 _GLOBAL(_get_SP)
 	mr	r3,r1		/* Close enough */

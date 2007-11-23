@@ -124,10 +124,10 @@ typedef struct card_s {
 
 #define sca_reg(reg, card) (0x8000 | (card)->io | \
 			    ((reg)&0x0F) | (((reg)&0xF0) << 6))
-#define sca_in(reg, card)		readb(sca_reg(reg, card))
-#define sca_out(value, reg, card)	writeb(value, sca_reg(reg, card))
-#define sca_inw(reg, card)		readw(sca_reg(reg, card))
-#define sca_outw(value, reg, card)	writew(value, sca_reg(reg, card))
+#define sca_in(reg, card)		inb(sca_reg(reg, card))
+#define sca_out(value, reg, card)	outb(value, sca_reg(reg, card))
+#define sca_inw(reg, card)		inw(sca_reg(reg, card))
+#define sca_outw(value, reg, card)	outw(value, sca_reg(reg, card))
 
 #define port_to_card(port)		((port)->card)
 #define log_node(port)			((port)->log_node)
@@ -163,9 +163,9 @@ static __inline__ int set_clock(port_t *port, int clock)
 	u8 mcr = inb(io+N2_MCR);
   
 	if (clock == LINE_EXT_CLOCK) /* External clock */
-		mcr |= port->phy_node ? CLOCK_OUT_PORT1 : CLOCK_OUT_PORT0;
-	else
 		mcr &= port->phy_node ? ~CLOCK_OUT_PORT1 : ~CLOCK_OUT_PORT0;
+	else
+		mcr |= port->phy_node ? CLOCK_OUT_PORT1 : CLOCK_OUT_PORT0;
 
 	outb(mcr, io+N2_MCR);
 	port->clkmode = clock;

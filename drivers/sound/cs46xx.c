@@ -864,7 +864,7 @@ static void cs_record_interrupt(struct cs_state *state)
 	memcpy(state->dmabuf.rawbuf + (2048*state->dmabuf.pringbuf++),
 		state->dmabuf.pbuf+2048*state->dmabuf.ppingbuf++, 2048);
 	state->dmabuf.ppingbuf&=1;
-	if(state->dmabuf.pringbuf > (PAGE_SIZE<<state->dmabuf.buforder)/2048)
+	if(state->dmabuf.pringbuf >= (PAGE_SIZE<<state->dmabuf.buforder)/2048)
 		state->dmabuf.pringbuf=0;
 	cs_update_ptr(state);
 }
@@ -1812,10 +1812,35 @@ static u16 cs_ac97_get(struct ac97_codec *dev, u8 reg)
 	return cs461x_peekBA0(card, BA0_ACSDA);
 }
 
+/*
+ *	Do we have the CD potentially enabled either left or right ?
+ */
+ 
+static int cd_active(int r)
+{
+	int l=(r>>8)&0x7;
+	r&=7;
+	if(l==1 || r==1)
+		return 1;		/* CD input */
+	if(l==5 || r==5)
+		return 1;		/* Mixer input */
+	if(l==6 || r==6)
+		return 1;		/* Mixer 16bit input */
+	return 0;
+}
+
 static void cs_ac97_set(struct ac97_codec *dev, u8 reg, u16 val)
 {
 	struct cs_card *card = dev->private_data;
 	int count;
+	int val2;
+	int val3;
+	
+	if(reg==AC97_RECORD_SELECT || reg == AC97_CD_VOL)
+	{
+		val2 = cs_ac97_get(dev, AC97_RECORD_SELECT);
+		val3 = cs_ac97_get(dev, AC97_CD_VOL);
+	}
 	
 	/*
 	 *  1. Write ACCAD = Command Address Register = 46Ch for AC97 register address
@@ -1858,6 +1883,51 @@ static void cs_ac97_set(struct ac97_codec *dev, u8 reg, u16 val)
 	 */
 	if (cs461x_peekBA0(card, BA0_ACCTL) & ACCTL_DCV)
 		printk(KERN_WARNING "cs461x: AC'97 write problem, reg = 0x%x, val = 0x%x\n", reg, val);
+
+	/*
+	 *	Adjust power if the mixer is selected/deselected according
+	 *	to the CD.
+	 *
+	 *	IF the CD is a valid input source (mixer or direct) AND
+	 *		the CD is not muted THEN power is needed
+	 *
+	 *	We do two things. When record select changes the input to
+	 *	add/remove the CD we adjust the power count if the CD is
+	 *	unmuted.
+	 *
+	 *	When the CD mute changes we adjust the power level if the
+	 *	CD was a valid input.
+	 */
+	 
+	if(reg==AC97_RECORD_SELECT && cd_active(val)!=cd_active(val2))
+	{
+		int n=-1;
+		/* If we are turning on the port and it is not muted then
+		   bump the power level. If we are turning it off and its
+		   not muted drop the power level */
+		if(cd_active(val))
+			n=1;
+		if(!(val3 & 0x8000))
+			card->amplifier_ctrl(card, n);
+	}
+	
+	/* CD mute change ? */
+	
+	if(reg==AC97_CD_VOL)
+	{
+		if(cd_active(val2))
+		{
+			/* Mute bit change ? */
+			if((val3^val)&0x8000)
+			{
+				/* Mute on */
+				if(val&0x8000)
+					card->amplifier_ctrl(card, -1);
+				else /* Mute off power on */
+					card->amplifier_ctrl(card, 1);
+			}
+		}
+	}
 }
 
 
@@ -1955,7 +2025,12 @@ static int __init cs_ac97_init(struct cs_card *card)
 		}
 		
 		card->ac97_features = eid;
-				
+			
+		/* If the card has the CD enabled then bump the power to
+		   account for it */
+		   	
+		if(cd_active(cs_ac97_get(codec, AC97_RECORD_SELECT)))
+			card->amplifier_ctrl(card, 1);
 			
 		if ((codec->dev_mixer = register_sound_mixer(&cs_mixer_fops, -1)) < 0) {
 			printk(KERN_ERR "cs461x: couldn't register mixer!\n");

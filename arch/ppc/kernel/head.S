@@ -1829,14 +1829,12 @@ mmu_off:
  	addi	r4, r3, __secondary_start - _start
 	mfmsr	r3
 	andi.	r0,r3,MSR_DR|MSR_IR		/* MMU enabled? */
-	beq	1f
-	ori	r3,r3,MSR_DR|MSR_IR
-	xori	r3,r3,MSR_DR|MSR_IR
+	beqlr
+	andc	r3,r3,r0
 	mtspr	SRR0,r4
 	mtspr	SRR1,r3
-	sync
+	SYNC
 	rfi
-1:	blr
 
 /*
  * This code is jumped to from the startup code to copy
@@ -1956,7 +1954,7 @@ start_here:
 	mfspr	r9,PVR
 	rlwinm	r9,r9,16,16,31
 	cmpi	0,r9,1
-	beq	4f			/* not needed for 601 */
+	beq	6f			/* not needed for 601 */
 	mfspr	r11,HID0
 	andi.	r0,r11,HID0_DCE
 	ori	r11,r11,HID0_ICE|HID0_DCE

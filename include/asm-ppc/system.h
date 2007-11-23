@@ -52,6 +52,7 @@ extern __inline__ void __restore_flags(unsigned long flags)
         }
 }
 
+struct task_struct;
 
 extern void __sti(void);
 extern void __cli(void);
@@ -82,7 +83,6 @@ void chrp_event_scan(void);
 struct device_node;
 extern void note_scsi_host(struct device_node *, void *);
 
-struct task_struct;
 #define switch_to(prev,next,last) _switch_to((prev),(next),&(last))
 extern void _switch_to(struct task_struct *, struct task_struct *,
 		       struct task_struct **);

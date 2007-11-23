@@ -6,6 +6,9 @@
  * Maintainer: Gergely Madarasz <gorgo@itc.hu>
  *
  * Copyright (C) 1998-1999 ITConsult-Pro Co. <info@itc.hu>
+ * 
+ * Contributors:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> (0.73)
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -25,9 +28,12 @@
  * Version 0.72 (99/07/09):
  *		- handle slave tbusy with master tbusy (should be fixed)
  *		- fix the keepalive timer addition/deletion
+ * Version 0.73 (00/08/15)
+ * 		- resource release on failure at fr_master_init and
+ *		  fr_slave_init 		  
  */
 
-#define VERSION "0.72"
+#define VERSION "0.73"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -804,8 +810,9 @@ static int fr_master_init(struct device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_DLCI, S_IFREG | 0644, 
 	    ch->procdir)) == NULL) {
-		return -ENOMEM;
+		goto cleanup_LINE_privdata;
 	}
+
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &fr_read_proc;
 	new_file->write_proc = &fr_write_proc;
@@ -815,8 +822,9 @@ static int fr_master_init(struct device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_KEEPALIVE, S_IFREG | 0644, 
 	    ch->procdir)) == NULL) {
-		return -ENOMEM;
+		goto cleanup_filename_dlci;
 	}
+
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &fr_read_proc;
 	new_file->write_proc = &fr_write_proc;
@@ -828,6 +836,11 @@ static int fr_master_init(struct device *dev)
 
 	MOD_INC_USE_COUNT;
 	return 0;
+cleanup_filename_dlci:
+	 remove_proc_entry(FILENAME_DLCI, ch->procdir);
+cleanup_LINE_privdata:
+	kfree(fr);
+	return -EIO;
 }
 
 static int fr_slave_init(struct device *dev)
@@ -860,7 +873,7 @@ static int fr_slave_init(struct device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_DLCI, S_IFREG | 0644, 
 	    ch->procdir)) == NULL) {
-		return -ENOMEM;
+		goto cleanup_LINE_privdata;
 	}
 	
 	new_file->data = (void *)new_file;
@@ -872,8 +885,9 @@ static int fr_slave_init(struct device *dev)
 
 	if ((new_file = create_proc_entry(FILENAME_MASTER, S_IFREG | 0644, 
 	    ch->procdir)) == NULL) {
-		return -EIO;
+		goto cleanup_filename_dlci;
 	}
+
 	new_file->data = (void *)new_file;
 	new_file->read_proc = &fr_read_proc;
 	new_file->write_proc = &fr_write_proc;
@@ -882,6 +896,11 @@ static int fr_slave_init(struct device *dev)
 	new_file->nlink = 1;
 	MOD_INC_USE_COUNT;
 	return 0;
+cleanup_filename_dlci:
+         remove_proc_entry(FILENAME_DLCI, ch->procdir);
+cleanup_LINE_privdata:
+	kfree(fr);
+	return -EIO;
 }
 
 static int dlci_open(struct device *dev)

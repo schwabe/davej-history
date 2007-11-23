@@ -28,6 +28,10 @@
  *
  * v0.1 - first working version.
  * v0.2 - changed stats to be calculated by summing slaves stats.
+ *
+ * Changes:
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+ * - fix leaks on failure at bond_init
  * 
  */
 
@@ -87,7 +91,8 @@ static int bond_close(struct device *master)
 		slave=next;
 		queue->num_slaves--;
 	}
-
+	queue->head = NULL;
+	
 	restore_flags(flags);
 
 	MOD_DEC_USE_COUNT;
@@ -210,14 +215,19 @@ __initfunc(int bond_init(struct device *dev))
 	bond = (struct bonding *) dev->priv;
 
 	bond->queue = kmalloc(sizeof(struct slave_queue), GFP_KERNEL);
-	if (bond->queue == NULL)
+	if (bond->queue == NULL) {
+		kfree(dev->priv);
 		return -ENOMEM;
+	}
 
 	memset(bond->queue, 0, sizeof(struct slave_queue));
 
 	bond->stats = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
-	if (bond->stats == NULL)
+	if (bond->stats == NULL) {
+		kfree(dev->priv);
+		kfree(bond->queue);
 		return -ENOMEM;
+	}
 
 	memset(bond->stats, 0, sizeof(struct enet_statistics));
 

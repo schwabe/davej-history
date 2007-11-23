@@ -637,6 +637,8 @@ static dev_node_t *vortex_attach(dev_locator_t *loc)
 	dev = vortex_probe1(bus, devfn, NULL, io, irq, chip_idx, MAX_UNITS+1);
 	if (dev) {
 		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
+		if (!node)
+			return NULL;
 		strcpy(node->dev_name, dev->name);
 		node->major = node->minor = 0;
 		node->next = NULL;
@@ -876,6 +878,8 @@ static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 	/* Make certain the descriptor lists are aligned. */
 	{
 		void *mem = kmalloc(sizeof(*vp) + 15, GFP_KERNEL);
+		if (!mem)
+			return NULL;
 		vp =  (void *)(((long)mem + 15) & ~15);
 		vp->priv_addr = mem;
 	}

@@ -2391,7 +2391,9 @@ int ide_cdrom_setup (ide_drive_t *drive)
 	CDROM_CONFIG_FLAGS (drive)->limit_nframes = 0;
 	if (drive->id != NULL) {
 		/* a testament to the nice quality of Samsung drives... */
-		if (!strcmp(drive->id->model, "SAMSUNG CD-ROM SCR-2430"))
+		if (!strcmp(drive->id->model, "SAMSUNG SCR-2030"))
+			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
+		else if (!strcmp(drive->id->model, "SAMSUNG CD-ROM SCR-2430"))
 			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
 		else if (!strcmp(drive->id->model, "SAMSUNG CD-ROM SCR-2432"))
 			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;

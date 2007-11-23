@@ -8,7 +8,7 @@
  * Created at:    Sun May 31 10:12:43 1998
  * Modified at:   Tue Apr 11 19:06:24 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
- * Sources:       af_netroom.c, af_ax25.c, af_rose.c, af_x25.c etc.
+ * Sources:       af_netrom.c, af_ax25.c, af_rose.c, af_x25.c etc.
  * 
  *     Copyright (c) 1999-2000 Dag Brattli <dagb@cs.uit.no>
  *     Copyright (c) 1999 Jean Tourrilhes <jeant@rockfort.hpl.hp.com>
@@ -1074,7 +1074,6 @@ static int irda_release(struct socket *sock, struct socket *peer)
         sock->sk   = NULL;      
         sk->socket = NULL;      /* Not used, but we should do this. */
 	sk->protinfo.irda = NULL;
-	sock_put(sk);
         return 0;
 }
 

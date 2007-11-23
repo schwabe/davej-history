@@ -2295,7 +2295,7 @@ chan_init(struct mac_serial *zss, struct mac_zschannel *zs_chan,
 	zss->irq = ch->intrs[0].line;
 	zss->has_dma = 0;
 #if !defined(CONFIG_KGDB) && defined(SUPPORT_SERIAL_DMA)
-	if (ch->n_addrs == 3 && ch->n_intrs == 3)
+	if (ch->n_addrs >= 3 && ch->n_intrs == 3)
 		zss->has_dma = 1;
 #endif
 	zss->dma_initted = 0;

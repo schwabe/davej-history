@@ -445,16 +445,16 @@ __rpc_execute(struct rpc_task *task)
 			if (current->pid == rpciod_pid)
 				printk(KERN_ERR "RPC: rpciod waiting on sync task!\n");
 
-			sti();
 			__wait_event(task->tk_wait, RPC_IS_RUNNING(task));
-			cli();
 
 			/*
 			 * When the task received a signal, remove from
 			 * any queues etc, and make runnable again.
 			 */
-			if (signalled())
+			if (signalled()) { 
+				cli(); 
 				__rpc_wake_up(task);
+			}
 
 			dprintk("RPC: %4d sync task resuming\n",
 							task->tk_pid);

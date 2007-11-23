@@ -535,6 +535,7 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	/* We need a codec->codec_reset() function here but the delay is a
 	   reasonable hack for the moment */
 	   
+	current->state = TASK_UNINTERRUPTIBLE;
 	schedule_timeout((5*HZ)/100);
 	if ((audio = codec->codec_read(codec, AC97_RESET)) & 0x8000) {
 		printk(KERN_ERR "ac97_codec: %s ac97 codec not present\n",
