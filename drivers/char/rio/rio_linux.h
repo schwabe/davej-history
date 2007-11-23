@@ -23,6 +23,7 @@
  *  Version 1.0 -- July, 1999. 
  * 
  */
+#include <linux/config.h>
 
 #define RIO_NBOARDS        4
 #define RIO_PORTSPERBOARD 128
@@ -157,5 +158,30 @@ static inline void *rio_memcpy_fromio (void *dest, void *source, int n)
 #else
 #define rio_memcpy_toio(dummy,dest,source,n)   memcpy_toio(dest, source, n)
 #define rio_memcpy_fromio                      memcpy_fromio
+#endif
+
+#define DEBUG
+
+
+/* 
+   This driver can spew a whole lot of debugging output at you. If you
+   need maximum performance, you should disable the DEBUG define. To
+   aid in debugging in the field, I'm leaving the compile-time debug
+   features enabled, and disable them "runtime". That allows me to
+   instruct people with problems to enable debugging without requiring
+   them to recompile... 
+*/
+
+#ifdef DEBUG
+#define rio_dprintk(f, str...) if (rio_debug & f) printk (str)
+#define func_enter() rio_dprintk (RIO_DEBUG_FLOW, "rio: enter " __FUNCTION__ "\n")
+#define func_exit()  rio_dprintk (RIO_DEBUG_FLOW, "rio: exit  " __FUNCTION__ "\n")
+#define func_enter2() rio_dprintk (RIO_DEBUG_FLOW, "rio: enter " __FUNCTION__ \
+                                   "(port %d)\n", port->line)
+#else
+#define rio_dprintk(f, str...) /* nothing */
+#define func_enter()
+#define func_exit()
+#define func_enter2()
 #endif
 

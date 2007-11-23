@@ -740,7 +740,7 @@ ip_fw_check(struct iphdr *ip,
 		for (; f; f = f->next) {
 			count++;
 			if (ip_rule_match(f,rif,ip,
-					  tcpsyn,src_port,dst_port,offset)) {
+					  tcpsyn,src_port,dst_port,offset!=0)) {
 				if (!testing
 				    && !ip_fw_domatch(f, ip, rif, chain->label,
 						      skb, slot, 

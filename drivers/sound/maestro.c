@@ -3476,7 +3476,7 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 #ifdef MODULE
 int init_module(void)
 #else
-int SILLY_MAKE_INIT(init_maestro(void))
+SILLY_MAKE_INIT(int init_maestro(void))
 #endif
 {
 	struct pci_dev *pcidev = NULL;

@@ -7,6 +7,9 @@
  *
  *  Steve Beynon		       : Missing last directory entries fixed
  *  (stephen@askone.demon.co.uk)      : 21st June 1996
+ *
+ *  Go Taniguchi			: Move sector and boundarie error fixed
+ *  (go@turbolinux.co.jp)		: Jul 21 2000
  * 
  *  isofs directory handling functions
  */
@@ -160,9 +163,11 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		de = (struct iso_directory_record *) (bh->b_data + offset);
 		if(first_de) inode_number = (block << bufbits) + (offset & (bufsize - 1));
 
-		de_len = *(unsigned char *) de;
+		/* Check boundaries and get length. by GO! */
+		if (offset < bufsize) de_len = *(unsigned char *) de;
 #ifdef DEBUG
-		printk("de_len = %ld\n", de_len);
+		if (offset < bufsize) printk("de_len = %ld\n", de_len);
+		else printk("Move to next sector\n");
 #endif
 	    
 
@@ -170,15 +175,15 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		   CDROM sector.  If we are at the end of the directory, we
 		   kick out of the while loop. */
 
-		if ((de_len == 0) || (offset >= bufsize) ) {
+		if ((offset >= bufsize) || (de_len == 0) ) {
 			brelse(bh);
-			if (de_len == 0) {
+			if (offset >= bufsize) {	/*Check first. by GO!*/
+				offset -= bufsize;
+				filp->f_pos += offset;
+			} else {
 				filp->f_pos = ((filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))
 					       + ISOFS_BLOCK_SIZE);
 				offset = 0;
-			} else {
-				offset -= bufsize;
-				filp->f_pos += offset;
 			}
 
 			if (filp->f_pos >= inode->i_size)

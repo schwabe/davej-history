@@ -5,7 +5,9 @@
 #include <linux/version.h>
 #endif
 
+#ifndef LinuxVersionCode
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
+#endif
 
 #include <linux/types.h>
 #include <linux/kdev_t.h>

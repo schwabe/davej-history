@@ -6,6 +6,8 @@
  * Routines to support directory cacheing using the page cache.
  * Right now this only works for smbfs, but will be generalized
  * for use with other filesystems.
+ *
+ * Please add a note about your changes to smbfs in the ChangeLog file.
  */
 
 #include <linux/sched.h>
@@ -16,9 +18,6 @@
 #include <linux/smb_fs.h>
 
 #include <asm/page.h>
-
-#define SMBFS_PARANOIA 1
-/* #define SMBFS_DEBUG_VERBOSE 1 */
 
 #include "smb_debug.h"
 
@@ -40,8 +39,7 @@ smb_get_dircache(struct dentry * dentry)
 	struct inode * inode = dentry->d_inode;
 	struct cache_head * cachep;
 
-	VERBOSE("smb_get_dircache: finding cache for %s/%s\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name);
+	VERBOSE("finding cache for %s/%s\n", DENTRY_PATH(dentry));
 	cachep = (struct cache_head *) get_cached_page(inode, 0, 1);
 	if (!cachep)
 		goto out;
@@ -60,9 +58,8 @@ smb_get_dircache(struct dentry * dentry)
 		for (i = 0; i < cachep->pages; i++, index++) {
 #ifdef SMBFS_PARANOIA
 			if (index->block)
-				PARANOIA("smb_get_dircache: cache %s/%s has existing block!\n",
-					 dentry->d_parent->d_name.name,
-					 dentry->d_name.name);
+				PARANOIA("cache %s/%s has existing block!\n",
+					 DENTRY_PATH(dentry));
 #endif
 			offset = PAGE_SIZE + (i << PAGE_SHIFT);
 			block = (struct cache_block *) get_cached_page(inode,
@@ -86,7 +83,7 @@ smb_free_cache_blocks(struct cache_head * cachep)
 	struct cache_index * index = cachep->index;
 	int i;
 
-	VERBOSE("smb_free_cache_blocks: freeing %d blocks\n", cachep->pages);
+	VERBOSE("freeing %d blocks\n", cachep->pages);
 	for (i = 0; i < cachep->pages; i++, index++)
 	{
 		if (index->block)
@@ -103,7 +100,7 @@ smb_free_cache_blocks(struct cache_head * cachep)
 void
 smb_free_dircache(struct cache_head * cachep)
 {
-	VERBOSE("smb_free_dircache: freeing cache\n");
+	VERBOSE("freeing cache\n");
 	smb_free_cache_blocks(cachep);
 	put_cached_page((unsigned long) cachep);
 }
@@ -115,8 +112,7 @@ smb_free_dircache(struct cache_head * cachep)
 void
 smb_init_dircache(struct cache_head * cachep)
 {
-	VERBOSE("smb_init_dircache: initializing cache, %d blocks\n", 
-		cachep->pages);
+	VERBOSE("initializing cache, %d blocks\n", cachep->pages);
 	smb_free_cache_blocks(cachep);
 	memset(cachep, 0, sizeof(struct cache_head));
 }
@@ -136,8 +132,8 @@ smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
 	unsigned int nent, offset, len = entry->len;
 	unsigned int needed = len + sizeof(struct cache_entry);
 
-	VERBOSE("smb_add_to_cache: cache inode %p, status %d, adding %s at %ld\n",
-		inode, cachep->status, entry->name, fpos);
+	VERBOSE("cache inode %p, status %d, adding %.*s at %ld\n",
+		inode, cachep->status, entry->len, entry->name, fpos);
 	/*
 	 * Don't do anything if we've had an error ...
 	 */
@@ -163,8 +159,8 @@ smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
 		block->cb_data.table[nent].offset = offset;
 		block->cb_data.table[nent].ino = entry->ino;
 		cachep->entries++;
-		VERBOSE("smb_add_to_cache: added entry %s, len=%d, pos=%ld, entries=%d\n",
-			entry->name, len, fpos, cachep->entries);
+		VERBOSE("added entry %.*s, len=%d, pos=%ld, entries=%d\n",
+			entry->len, entry->name, len, fpos, cachep->entries);
 		return;
 	}
 	/*
@@ -176,7 +172,7 @@ smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
 	index++;
 #ifdef SMBFS_PARANOIA
 	if (index->block)
-		PARANOIA("smb_add_to_cache: new index already has block!\n");
+		PARANOIA("new index already has block!\n");
 #endif
 
 	/*
@@ -190,7 +186,7 @@ get_block:
 	{
 		index->block = block;
 		index->space = PAGE_SIZE;
-		VERBOSE("smb_add_to_cache: inode=%p, pages=%d, block at %ld\n",
+		VERBOSE("inode=%p, pages=%d, block at %ld\n",
 			inode, cachep->pages, page_off);
 		goto add_entry;
 	}
@@ -212,8 +208,7 @@ smb_find_in_cache(struct cache_head * cachep, off_t pos,
 	unsigned int i, nent, offset = 0;
 	off_t next_pos = 2;
 
-	VERBOSE("smb_find_in_cache: cache %p, looking for pos=%ld\n", 
-		cachep, pos);
+	VERBOSE("cache %p, looking for pos=%ld\n", cachep, pos);
 	for (i = 0; i < cachep->pages; i++, index++)
 	{
 		if (pos < next_pos)
@@ -231,8 +226,8 @@ smb_find_in_cache(struct cache_head * cachep, off_t pos,
 		entry->len = block->cb_data.table[nent].namelen;
 		offset = block->cb_data.table[nent].offset;
 		entry->name = &block->cb_data.names[offset];
-		VERBOSE("smb_find_in_cache: found %s, len=%d, pos=%ld\n",
-			entry->name, entry->len, pos);
+		VERBOSE("found %.*s, len=%d, pos=%ld\n",
+			entry->len, entry->name, entry->len, pos);
 		break;
 	}
 	return offset;
@@ -244,9 +239,7 @@ smb_refill_dircache(struct cache_head * cachep, struct dentry *dentry)
 	struct inode * inode = dentry->d_inode;
 	int result;
 
-	VERBOSE("smb_refill_dircache: cache %s/%s, blocks=%d\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name, 
-		cachep->pages);
+	VERBOSE("cache %s/%s, blocks=%d\n", DENTRY_PATH(dentry), cachep->pages);
 	/*
 	 * Fill the cache, starting at position 2.
 	 */
@@ -255,8 +248,7 @@ retry:
 	result = smb_proc_readdir(dentry, 2, cachep);
 	if (result < 0)
 	{
-		PARANOIA("smb_refill_dircache: readdir failed, result=%d\n", 
-			 result);
+		PARANOIA("readdir failed, result=%d\n", result);
 		goto out;
 	}
 
@@ -266,7 +258,7 @@ retry:
 	 */
 	if (!(inode->u.smbfs_i.cache_valid & SMB_F_CACHEVALID))
 	{
-		PARANOIA("smb_refill_dircache: cache invalidated, retrying\n");
+		PARANOIA("cache invalidated, retrying\n");
 		goto retry;
 	}
 
@@ -276,9 +268,8 @@ retry:
 		cachep->valid = 1;
 		cachep->mtime = dentry->d_inode->i_mtime;
 	}
-	VERBOSE("smb_refill_cache: cache %s/%s status=%d, entries=%d\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name,
-		cachep->status, cachep->entries);
+	VERBOSE("cache %s/%s status=%d, entries=%d\n",
+		DENTRY_PATH(dentry), cachep->status, cachep->entries);
 
 out:
 	return result;

@@ -57,6 +57,7 @@ extern int eepro_probe(struct device *);
 extern int eepro100_probe(struct device *);
 extern int el3_probe(struct device *);
 extern int at1500_probe(struct device *);
+extern int bond_init(struct device *);
 extern int pcnet32_probe(struct device *);
 extern int at1700_probe(struct device *);
 extern int fmv18x_probe(struct device *);
@@ -122,6 +123,7 @@ extern int tc515_probe(struct device *dev);
 extern int lance_probe(struct device *dev);
 extern int rcpci_probe(struct device *);
 extern int dmfe_probe(struct device *);
+extern int sktr_probe(struct device *dev);
 
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct device *dev);

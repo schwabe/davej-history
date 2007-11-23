@@ -811,8 +811,8 @@ M:	mingo@redhat.com
 S:	Maintained
 
 SMB FILESYSTEM
-P:	Andrew Tridgell
-M:	tridge@samba.org
+P:	Urban Widmark
+M:	urban@svenskatest.se
 W:	http://samba.org/
 L:	samba@samba.org
 S:	Maintained
@@ -911,7 +911,7 @@ S:	Maintained
 
 UMSDOS FILESYSTEM
 P:	Matija Nalis
-M:	mnalis@jagor.srce.hr
+M:	mnalis-umsdos@voyager.hr
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

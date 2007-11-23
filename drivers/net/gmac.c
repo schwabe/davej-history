@@ -290,7 +290,7 @@ gmac_set_power(struct gmac *gm, int power_up)
 	if (power_up) {
 		out_le32(gm->sysregs + 0x20/4,
 			in_le32(gm->sysregs + 0x20/4) | 0x02000000);
-		udelay(10);
+		udelay(20);
 		if (gm->pci_devfn != 0xff) {
 			u16 cmd;
 			
@@ -310,6 +310,7 @@ gmac_set_power(struct gmac *gm, int power_up)
 		gm->phy_type = 0;
 		out_le32(gm->sysregs + 0x20/4,
 			in_le32(gm->sysregs + 0x20/4) & ~0x02000000);
+		udelay(20);
 	}
 }
 
@@ -396,6 +397,7 @@ gmac_mac_init(struct gmac *gm, unsigned char *mac_addr)
 	GM_OUT(GM_RX_CONF,
 		(RX_OFFSET << GM_RX_CONF_FBYTE_OFF_SHIFT) |
 		(0x22 << GM_RX_CONF_CHK_START_SHIFT) |
+		(GM_RX_CONF_DMA_THR_DEFAULT << GM_RX_CONF_DMA_THR_SHIFT) |
 		NRX_CONF);
 
 	/* Configure other bits of MAC */
@@ -495,6 +497,10 @@ gmac_init_rings(struct gmac *gm, int from_irq)
 	ring = (struct gmac_dma_desc *) gm->txring;
 	memset(ring, 0, NTX * sizeof(struct gmac_dma_desc));
 
+	gm->next_rx = 0;
+	gm->next_tx = 0;
+	gm->tx_gone = 0;
+
 	/* set pointers in chip */
 	mb();
 	GM_OUT(GM_RX_DESC_HI, 0);
@@ -552,14 +558,13 @@ gmac_set_multicast(struct device *dev)
 	unsigned long crc;
 	int multicast_hash = 0;
 	int multicast_all = 0;
-
+	int promisc = 0;
+	
 	/* Lock out others. */
 	set_bit(0, (void *) &dev->tbusy);
 
-	gm->promisc = 0;
-
 	if (dev->flags & IFF_PROMISC)
-		gm->promisc = 1;
+		promisc = 1;
 	else if ((dev->flags & IFF_ALLMULTI) /* || (dev->mc_count > XXX) */) {
 		multicast_all = 1;
 	} else {
@@ -591,7 +596,7 @@ gmac_set_multicast(struct device *dev)
 	    	multicast_hash = 1;
 	}
 
-	if (gm->promisc)
+	if (promisc)
 		GM_BIS(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_RX_ALL);
 	else
 		GM_BIC(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_RX_ALL);
@@ -632,7 +637,6 @@ gmac_open(struct device *dev)
 
 	gm->full_duplex = 0;
 	gm->phy_status = 0;
-	gm->promisc = 0;
 	
 	/* Find a PHY */
 	if (!mii_lookup_and_reset(gm))
@@ -641,12 +645,12 @@ gmac_open(struct device *dev)
 	/* Configure the PHY */
 	mii_setup_phy(gm);
 	
-	/* Initialize the MAC */
-	gmac_mac_init(gm, dev->dev_addr);
-	
 	/* Initialize the descriptor rings */
 	gmac_init_rings(gm, 0);
 
+	/* Initialize the MAC */
+	gmac_mac_init(gm, dev->dev_addr);
+	
 	/* Initialize the multicast tables & promisc mode if any */
 	gmac_set_multicast(dev);
 	
@@ -706,7 +710,7 @@ static void
 gmac_tx_timeout(struct device *dev)
 {
 	struct gmac *gm = (struct gmac *) dev->priv;
-	int i;
+	int i, timeout;
 	unsigned long flags;
 
 	save_flags(flags);
@@ -731,8 +735,24 @@ gmac_tx_timeout(struct device *dev)
 			gm->rx_buff[i] = 0;
 		}
 	}
+	/* Perform a software reset */
+	GM_OUT(GM_RESET, GM_RESET_TX | GM_RESET_RX);
+	for (timeout = 100; timeout > 0; --timeout) {
+		mdelay(10);
+		if ((GM_IN(GM_RESET) & (GM_RESET_TX | GM_RESET_RX)) == 0) {
+			/* Mask out all chips interrupts */
+			GM_OUT(GM_IRQ_MASK, 0xffffffff);
+			break;
+		}
+	}
+	if (!timeout)
+		printk(KERN_ERR "%s reset chip failed !\n", dev->name);
 	/* Create fresh rings */
 	gmac_init_rings(gm, 1);
+	/* re-initialize the MAC */
+	gmac_mac_init(gm, dev->dev_addr);	
+	/* re-initialize the multicast tables & promisc mode if any */
+	gmac_set_multicast(dev);
 	/* Restart PHY auto-poll */
 	mii_interrupt(gm);
 	/* Restart chip */
@@ -832,10 +852,11 @@ gmac_receive(struct device *dev)
 	int i = gm->next_rx;
 	volatile struct gmac_dma_desc *dp;
 	struct sk_buff *skb, *new_skb;
-	int len, flags, drop;
+	int len, flags, drop, last;
 	unsigned char *data;
 	u16 csum;
-	
+
+	last = -1;
 	for (;;) {
 		dp = &gm->rxring[i];
 		if (ld_le32(&dp->size) & RX_SZ_OWN)
@@ -931,10 +952,15 @@ gmac_receive(struct device *dev)
 			++gm->stats.rx_packets;
 		}
 		
+		last = i;
 		if (++i >= NRX)
 			i = 0;
 	}
 	gm->next_rx = i;
+	if (last >= 0) {
+		mb();
+		GM_OUT(GM_RX_KICK, last & 0xfffffffc);
+	}
 }
 
 static void
@@ -952,7 +978,8 @@ gmac_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 
 	status = GM_IN(GM_IRQ_STATUS);
-	GM_OUT(GM_IRQ_ACK, status);
+	if (status & (GM_IRQ_BUS_ERROR | GM_IRQ_MIF))
+		GM_OUT(GM_IRQ_ACK, status & (GM_IRQ_BUS_ERROR | GM_IRQ_MIF));
 	
 	if (status & (GM_IRQ_RX_TAG_ERR | GM_IRQ_BUS_ERROR)) {
 		printk(KERN_ERR "%s: IRQ Error status: 0x%08x\n",

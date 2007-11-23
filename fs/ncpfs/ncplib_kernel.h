@@ -130,7 +130,7 @@ io2vol(struct ncp_server *server, char *name, int case_trans)
 		nc[0] = toupperif(*np, case_trans);
 		nc[1] = 0x00;
 		nls_in->char2uni(nc, &len, &uc.uni2, &uc.uni1);
-		nls_out->uni2char(0x00, uc.uni2, np, 1, &len);
+		nls_out->uni2char(uc.uni1, uc.uni2, np, 1, &len);
 		np++;
 	}
 }
@@ -154,7 +154,7 @@ vol2io(struct ncp_server *server, char *name, int case_trans)
 		nc[0] = *np;
 		nc[1] = 0;
 		nls_in->char2uni(nc, &len, &uc.uni2, &uc.uni1);
-		nls_out->uni2char(0x00, uc.uni2, nc, 1, &len);
+		nls_out->uni2char(uc.uni1, uc.uni2, nc, 1, &len);
 		*np = tolowerif(nc[0], case_trans);
 		np++;
 	}

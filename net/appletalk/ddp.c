@@ -729,7 +729,7 @@ static int atrtr_create(struct rtentry *r, struct device *devhint)
 
 	if(rt == NULL)
 	{
-		rt = (struct atalk_route *)kmalloc(sizeof(struct atalk_route), GFP_KERNEL);
+		rt = (struct atalk_route *)kmalloc(sizeof(struct atalk_route), GFP_ATOMIC);
 		if(rt == NULL) {
 			SOCKHASH_UNLOCK();
 			return (-ENOBUFS);

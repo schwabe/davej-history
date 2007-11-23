@@ -216,13 +216,16 @@
 #define GM_RX_PTH_UNITS			64
 
 /* -- 0x4100	RW	Rx Kick
- * d: 0x00000000	Written by the host with the last tx descriptor number +1 to send
- *					Must be a multiple of 4
+ * d: 0x00000000	The last valid RX descriptor is the one right before the value of the
+ *                      register. Initially set to 0 on reset. RX descriptors must be posted
+ *                      in multiples of 4. The first descriptor should be cache-line aligned
+ *                      for best performance.
  */
 #define GM_RX_KICK			(0x4100 | REG_SZ_16)
 
 /* -- 0x4104	RW	Rx Completion
- * d: 0x00000000	Written by the gmac with the last tx descriptor number +1 sent
+ * d: 0x00000000	All descriptors upto but excluding the register value are ready to be
+ *                      processed by the host.
  */
 #define GM_RX_COMP			(0x4104 | REG_SZ_16)
  
@@ -231,7 +234,7 @@
  *
  * Defines the values used for receive interrupt blanking.
  * For INTR_TIME field, every count is 2048 PCI clock time. For 66 Mhz, each
- * count is about 16 us.
+ * count is about 15 ns.
  */
 #define GM_RX_BLANK			(0x4108 | REG_SZ_32)
 			/*
@@ -251,7 +254,7 @@
 
 /* -- 0x4120	RO	Rx fifo size
  *
- * This 11-bit RO register indicates the size, in 64-bit multiples, of the
+ * This 11-bit RO register indicates the size, in 64-byte multiples, of the
  * RX FIFO. Software should use it to properly configure the PAUSE thresholds.
  * The value read is 0x140, indicating a 20kbyte RX FIFO.
  * -------------------------------------------------------------------------
@@ -842,7 +845,6 @@ struct gmac {
 	int				phy_type;
 	int				phy_status;	/* Cached PHY status */
 	int				full_duplex;	/* Current set to full duplex */
-	int				promisc;
 	struct net_device_stats		stats;
 	u8				pci_bus;
 	u8				pci_devfn;

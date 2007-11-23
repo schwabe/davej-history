@@ -406,7 +406,7 @@ static void sca_intr(int irq, void* dev_id, struct pt_regs *regs)
 	u8 stat;
 
 #ifndef ALL_PAGES_ALWAYS_MAPPED
-	u8 page = get_page(card);
+	u8 page = sca_get_page(card);
 #endif
   
 	while((stat = sca_intr_status(card)) != 0) {
@@ -606,7 +606,7 @@ static int sca_ioctl(hdlc_device *hdlc, struct ifreq *ifr, int cmd)
 #ifdef DEBUG_RINGS
 	default:
 #if !defined(PAGE0_ALWAYS_MAPPED) && !defined(ALL_PAGES_ALWAYS_MAPPED)
-		page=get_page(card);
+		page=sca_get_page(card);
 		openwin(card, 0);
 #endif
 

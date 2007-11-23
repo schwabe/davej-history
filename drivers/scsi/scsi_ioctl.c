@@ -403,6 +403,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 	return ioctl_probe(dev->host, arg);
     case SCSI_IOCTL_SEND_COMMAND:
 	if(!capable(CAP_SYS_ADMIN))  return -EACCES;
+	if(!capable(CAP_SYS_RAWIO))  return -EACCES;
 	return scsi_ioctl_send_command((Scsi_Device *) dev,
 				       (Scsi_Ioctl_Command *) arg);
     case SCSI_IOCTL_DOORLOCK:

@@ -168,7 +168,9 @@ ENABLE_CLUSTERING \
 #endif
 #endif
 
+#ifndef VIRT_TO_BUS
 #define VIRT_TO_BUS(i)  (unsigned int) virt_to_bus((void *)(i))
+#endif
 #define ULONG   unsigned long
 #define PVOID   void *
 #define USHORT  unsigned short

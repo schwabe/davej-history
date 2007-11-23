@@ -715,17 +715,35 @@ out_unlock:
 	if (ret == 0) {
 		struct iattr newattrs;
 
+		/* Do a real lookup to get the short name dentry */
+		temp = umsdos_covered(olddentry->d_parent,
+					old_info.fake.fname,
+					old_info.fake.len);
+		ret = PTR_ERR(temp);
+		if (IS_ERR(temp))
+			goto out_unlock2;
+
+		/* now resolve the link ... */
+		temp = umsdos_solve_hlink(temp);
+		ret = PTR_ERR(temp);
+		if (IS_ERR(temp))
+			goto out_unlock2;
+
 #ifdef UMSDOS_PARANOIA
 if (!oldinode->u.umsdos_i.i_is_hlink)
 printk("UMSDOS_link: %s/%s, ino=%ld, not marked as hlink!\n",
 olddentry->d_parent->d_name.name, olddentry->d_name.name, oldinode->i_ino);
 #endif
-		oldinode->i_nlink++;
+		temp->d_inode->i_nlink++;
 Printk(("UMSDOS_link: linked %s/%s, ino=%ld, nlink=%d\n",
 olddentry->d_parent->d_name.name, olddentry->d_name.name,
 oldinode->i_ino, oldinode->i_nlink));
 		newattrs.ia_valid = 0;
-		ret = umsdos_notify_change_locked(olddentry, &newattrs);
+		ret = umsdos_notify_change_locked(temp, &newattrs);
+ 		if (ret == 0)
+			mark_inode_dirty(temp->d_inode);
+		dput(temp);
+out_unlock2:	
 	}
 	if (olddir != dir)
 		up(&olddir->i_sem);

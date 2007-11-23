@@ -85,6 +85,9 @@ extern int init_ymf7xxsb_module(void);
 #ifdef CONFIG_SOUND_FUSION
 extern int cs_probe(void);
 #endif
+#ifdef CONFIG_SOUND_EMU10K1
+extern int init_emu10k1(void);
+#endif
 
 /*
  *	Low level list operator. Scan the ordered list, find a hole and
@@ -448,6 +451,9 @@ int soundcore_init(void)
 #endif
 #ifdef CONFIG_SOUND_FUSION
 	cs_probe();
+#endif
+#ifdef CONFIG_SOUND_EMU10K1
+	init_emu10k1();
 #endif
 	return 0;
 }

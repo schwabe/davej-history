@@ -73,21 +73,21 @@ typedef struct card_s {
 typedef card_t port_t;
 
 
-#define sca_in(reg, card)	     readb(card->win0base+C101_SCA+reg)
-#define sca_out(value, reg, card)    writeb(value, card->win0base+C101_SCA+reg)
-#define sca_inw(reg, card)	     readw(card->win0base+C101_SCA+reg)
-#define sca_outw(value, reg, card)   writew(value, card->win0base+C101_SCA+reg)
+#define sca_in(reg, card)	   readb((card)->win0base+C101_SCA+(reg))
+#define sca_out(value, reg, card)  writeb(value, (card)->win0base+C101_SCA+(reg))
+#define sca_inw(reg, card)	   readw((card)->win0base+C101_SCA+(reg))
+#define sca_outw(value, reg, card) writew(value, (card)->win0base+C101_SCA+(reg))
 
 #define port_to_card(port)	     (port)
 #define log_node(port)		     (0)
 #define phy_node(port)		     (0)
 #define winsize(card)		     (C101_WINDOW_SIZE)
-#define win0base(card)		     (card->win0base)
-#define winbase(card)      	     (card->win0base+0x2000)
-#define get_port(card, port)	     (port == 0 ? card : NULL)
+#define win0base(card)		     ((card)->win0base)
+#define winbase(card)      	     ((card)->win0base+0x2000)
+#define get_port(card, port)	     ((port) == 0 ? (card) : NULL)
 
 
-static __inline__ u8 get_page(card_t *card)
+static __inline__ u8 sca_get_page(card_t *card)
 {
 	return card->page;
 }

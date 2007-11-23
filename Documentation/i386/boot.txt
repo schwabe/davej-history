@@ -16,15 +16,20 @@ Currently, four versions of the Linux/i386 boot protocol exist.
 Old kernels:	zImage/Image support only.  Some very early kernels
 		may not even support a command line.
 
-Protocol 2.00:	Added bzImage and initrd support, as well as a
-		formalized way to communicate between the boot loader
-		and the kernel.
+Protocol 2.00:	(Kernel 1.3.73) Added bzImage and initrd support, as
+		well as a formalized way to communicate between the
+		boot loader and the kernel.  setup.S made relocatable,
+		although the traditional setup area still assumed
+		writable.
 
-Protocol 2.01:	Added a heap overrun warning.
+Protocol 2.01:	(Kernel 1.3.76) Added a heap overrun warning.
 
-Protocol 2.02:	New command line protocol.  Lower the
-		conventional-memory ceiling.  zImage deprecated but
-		still supported.
+Protocol 2.02:	(Kernel 2.4.0-test3-pre3) New command line protocol.
+		Lower the conventional memory ceiling.  No overwrite
+		of the traditional setup area, thus making booting
+		safe for systems which use the EBDA from SMM or 32-bit
+		BIOS entry points.  zImage deprecated but still
+		supported.
 
 
 **** MEMORY LAYOUT
@@ -136,7 +141,7 @@ setting fields in the header, you must make sure only to set fields
 supported by the protocol version in use.
 
 Most boot loaders will simply load the kernel at its target address
-directly.  Such a boot loader do not need to worry about filling in
+directly.  Such boot loaders do not need to worry about filling in
 most of the fields in the header.  The following fields should be
 filled out, however:
 
@@ -257,6 +262,8 @@ Such a boot loader should enter the following fields in the header:
 			memcpy(0x90000, base_ptr, (setup_sects+1)*512);
 			/* Copy the command line */
 			memcpy(0x99000, base_ptr+0x9000, 256);
+
+			base_ptr = 0x90000;		 /* Relocated */
 		}
 
 		/* It is recommended to clear memory up to the 32K mark */
@@ -338,19 +345,25 @@ real-mode kernel code (0x9000 if the code is loaded at 0x90000), and
 sp should be set up properly, normally pointing to the top of the
 heap.  In our example from above, we would do:
 
+	/* Note: in the case of the "old" kernel protocol, base_ptr must
+	   be == 0x90000 at this point; see the previous sample code */
+
 	seg = base_ptr >> 4;
 
 	cli();	/* Enter with interrupts disabled! */
 
+	/* Set up the real-mode kernel stack */
 	_SS = seg;
 	_SP = 0x9000;	/* Load SP right after loading SS! */
+
 	_DS = _ES = _FS = _GS = seg;
 	jmp_far(seg+0x20, 0);	/* Run the kernel */
 
 If your boot sector accesses a floppy drive, it is recommended to
 switch off the floppy motor before running the kernel, since the
 kernel boot leaves interrupts off and thus the motor will not be
-switched off.
+switched off, especially if the loaded kernel has the floppy driver as
+a demand-loaded module!
 
 
 **** ADVANCED BOOT TIME HOOKS

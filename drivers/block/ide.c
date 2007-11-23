@@ -2254,7 +2254,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		{
 			byte args[4], *argbuf = args;
 			int argsize = 4;
-			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
+			if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO)) return -EACCES;
 			if (NULL == (void *) arg)
 				return ide_do_drive_cmd(drive, &rq, ide_wait);
 			if (copy_from_user(args, (void *)arg, 4))
@@ -2277,7 +2277,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		case HDIO_SCAN_HWIF:
 		{
 			int args[3];
-			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
+			if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO)) return -EACCES;
 			if (copy_from_user(args, (void *)arg, 3 * sizeof(int)))
 				return -EFAULT;
 			if (ide_register(args[0], args[1], args[2]) == -1)

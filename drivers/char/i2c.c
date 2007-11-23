@@ -38,8 +38,8 @@ static int bus_count = 0, driver_count = 0;
 
 #ifdef CONFIG_VIDEO_BT848
 extern int i2c_tuner_init(void);
-extern int msp3400c_init(void);
 #endif
+extern int msp3400c_init(void);
 #ifdef CONFIG_VIDEO_BUZ
 extern int saa7111_init(void);
 extern int saa7185_init(void);

@@ -115,6 +115,9 @@
 typedef __u8 byte_t;
 typedef __u32 int32;
 
+
+#include <linux/ip.h>
+#include <linux/tcp.h>
 /*
  * "state" data for each active tcp conversation on the wire.  This is
  * basically a copy of the entire IP/TCP header from the last packet

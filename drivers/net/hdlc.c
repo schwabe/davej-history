@@ -41,7 +41,7 @@
 #ifndef MODULE
 static int version_printed=0;
 #endif
-static const char* version = "HDLC support routines revision: 1.0a1";
+static const char* version = "HDLC support routines revision: 1.0";
 
 
 #define CISCO_MULTICAST         0x8f    /* Cisco multicast address */
@@ -69,7 +69,10 @@ static int cisco_hard_header(struct sk_buff *skb, struct device *dev, u16 type,
 	
 	skb_push(skb, sizeof(hdlc_header));
 	data=(hdlc_header*)skb->data;
-	data->address = CISCO_MULTICAST;
+	if (type == CISCO_KEEPALIVE)
+		data->address = CISCO_MULTICAST;
+	else
+		data->address = CISCO_UNICAST;
 	data->control = 0;
 	data->protocol = htons(type);
 	
@@ -1025,20 +1028,9 @@ static int hdlc_set_mode(hdlc_device *hdlc, int mode)
 
 		switch(mode & ~MODE_SOFT) {
 		case MODE_CISCO:
-			result = hdlc->set_mode ?
-				hdlc->set_mode(hdlc, MODE_HDLC) : 0;
+		case MODE_PPP:
 			break;
 
-		case MODE_PPP:
-			result = hdlc->set_mode ?
-				hdlc->set_mode(hdlc, MODE_PPP) : 0;
-			break;
-	
-		case MODE_X25:
-			result = hdlc->set_mode ?
-				hdlc->set_mode(hdlc, MODE_X25) : 0;
-			break;
-	
 		case MODE_FR_ANSI:
 		case MODE_FR_CCITT:
 		case MODE_FR_ANSI  | MODE_DCE:
@@ -1046,13 +1038,14 @@ static int hdlc_set_mode(hdlc_device *hdlc, int mode)
 			hdlc_to_dev(hdlc)->addr_len=2;
 			*(u16*)hdlc_to_dev(hdlc)->dev_addr=htons(LMI_DLCI);
 			dlci_to_q922(hdlc_to_dev(hdlc)->broadcast, LMI_DLCI);
-			result = hdlc->set_mode ?
-				hdlc->set_mode(hdlc, MODE_HDLC) : 0;
 			break;
 
 		default:
 			return -EINVAL;
 		}
+
+		result = hdlc->set_mode ?
+			hdlc->set_mode(hdlc, MODE_HDLC) : 0;
 	}
 
 	if (result)

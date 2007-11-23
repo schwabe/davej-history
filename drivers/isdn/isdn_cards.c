@@ -75,6 +75,7 @@ extern void kcapi_init(void);
 extern void capi_init(void);
 extern void capidrv_init(void);
 #endif
+extern void act2000_init(void);
 
 void
 isdn_cards_init(void)

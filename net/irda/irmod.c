@@ -73,7 +73,7 @@ extern int irlpt_server_init(void);
 
 #ifdef CONFIG_IRDA_COMPRESSION
 #ifdef CONFIG_IRDA_DEFLATE
-extern irda_deflate_init();
+extern irda_deflate_init(void);
 #endif /* CONFIG_IRDA_DEFLATE */
 #endif /* CONFIG_IRDA_COMPRESSION */
 

@@ -184,7 +184,7 @@ static int raid0_map (struct md_dev *mddev, kdev_t *rdev,
 
   if (hash - data->hash_table > data->nr_zones) 
   { 
-	  printk(KERN_DEBUG "raid0_map: invalid block %ul\n", block);
+	  printk(KERN_DEBUG "raid0_map: invalid block %li\n", block);
 	  return -1;
   }
 

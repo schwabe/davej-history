@@ -56,8 +56,7 @@ void UMSDOS_put_inode (struct inode *inode)
 		 ,inode->i_count));
 
 	if (inode == pseudo_root) {
-		printk (KERN_ERR "Umsdos: Oops releasing pseudo_root."
-			" Notify jacques@solucorp.qc.ca\n");
+		printk (KERN_ERR "Umsdos: debug: releasing pseudo_root - ino=%lu count=%d\n", inode->i_ino, inode->i_count);
 	}
 
 	if (inode->i_count == 1)
@@ -180,21 +179,6 @@ dentry, f_pos));
 }
 
 
-int umsdos_notify_change_locked(struct dentry *, struct iattr *);
-/*
- * lock the parent dir before starting ...
- */
-int UMSDOS_notify_change (struct dentry *dentry, struct iattr *attr)
-{
-	struct inode *dir = dentry->d_parent->d_inode;
-	int ret;
-
-	down(&dir->i_sem);
-	ret = umsdos_notify_change_locked(dentry, attr);
-	up(&dir->i_sem);
-	return ret;
-}
-
 /*
  * Must be called with the parent lock held.
  */
@@ -300,6 +284,65 @@ out:
 
 
 /*
+ * lock the parent dir before starting ...
+ * also handles hardlink converting
+ */
+int UMSDOS_notify_change (struct dentry *dentry, struct iattr *attr)
+{
+	struct inode *dir;
+	struct umsdos_info info;
+	struct dentry *temp, *old_dentry = NULL;
+	int ret;
+
+	ret = umsdos_parse (dentry->d_name.name, dentry->d_name.len,
+				&info);
+	if (ret)
+		goto out;
+	ret = umsdos_findentry (dentry->d_parent, &info, 0);
+	if (ret) {
+printk("UMSDOS_notify_change: %s/%s not in EMD, ret=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, ret);
+		goto out;
+	}
+
+	if (info.entry.flags & UMSDOS_HLINK) {
+		/*
+		 * In order to get the correct (real) inode, we just drop
+		 * the original dentry.
+		 */ 
+		d_drop(dentry);
+Printk(("UMSDOS_notify_change: hard link %s/%s, fake=%s\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, info.fake.fname));
+	
+		/* Do a real lookup to get the short name dentry */
+		temp = umsdos_covered(dentry->d_parent, info.fake.fname,
+						info.fake.len);
+		ret = PTR_ERR(temp);
+		if (IS_ERR(temp))
+			goto out;
+	
+		/* now resolve the link ... */
+		temp = umsdos_solve_hlink(temp);
+		ret = PTR_ERR(temp);
+		if (IS_ERR(temp))
+			goto out;
+		old_dentry = dentry;
+		dentry = temp;	/* so umsdos_notify_change_locked will operate on that */
+	}
+
+	dir = dentry->d_parent->d_inode;
+
+	down(&dir->i_sem);
+	ret = umsdos_notify_change_locked(dentry, attr);
+	up(&dir->i_sem);
+out:
+	if (old_dentry)
+		dput (dentry);	/* if we had to use fake dentry for hardlinks, dput() it now */
+	return ret;
+}
+
+
+/*
  * Update the disk with the inode content
  */
 void UMSDOS_write_inode (struct inode *inode)
@@ -332,10 +375,27 @@ static struct super_operations umsdos_sops =
 	UMSDOS_notify_change,	/* notify_change */
 	UMSDOS_put_super,	/* put_super */
 	NULL,			/* write_super */
-	fat_statfs,		/* statfs */
+	UMSDOS_statfs,		/* statfs */
 	NULL,			/* remount_fs */
 	fat_clear_inode,	/* clear_inode */
 };
+
+
+int UMSDOS_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
+{
+	int ret;
+	struct statfs tmp;
+	
+	ret = fat_statfs (sb, buf, bufsiz);
+	copy_from_user (&tmp, buf, bufsiz);
+	if (!ret) {
+		copy_from_user (&tmp, buf, bufsiz);
+		tmp.f_namelen = UMSDOS_MAXNAME;
+		copy_to_user (buf, &tmp, bufsiz);
+	}
+	return ret;
+}
+
 
 /*
  * Read the super block of an Extended MS-DOS FS.
@@ -356,7 +416,7 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	if (!res)
 		goto out_fail;
 
-	printk (KERN_INFO "UMSDOS 0.85g "
+	printk (KERN_INFO "UMSDOS 0.85i "
 		"(compatibility level %d.%d, fast msdos)\n", 
 		UMSDOS_VERSION, UMSDOS_RELEASE);
 

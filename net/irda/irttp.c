@@ -1528,9 +1528,9 @@ int irttp_proc_read(char *buf, char **start, off_t offset, int len, int unused)
 			       self->remote_credit);
 		len += sprintf(buf+len, "send credit: %d\n",
 			       self->send_credit);
-		len += sprintf(buf+len, "  tx packets: %d, ",
+		len += sprintf(buf+len, "  tx packets: %ld, ",
 			       self->stats.tx_packets);
-		len += sprintf(buf+len, "rx packets: %d, ",
+		len += sprintf(buf+len, "rx packets: %ld, ",
 			       self->stats.rx_packets);
 		len += sprintf(buf+len, "tx_queue len: %d ", 
 			       skb_queue_len(&self->tx_queue));

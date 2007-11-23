@@ -4,7 +4,7 @@
  * Copyright 1999, Thomas Davis, tadavis@lbl.gov.  
  * Licensed under the GPL. Based on dummy.c, and eql.c devices.
  *
- * bond.c: a bonding/etherchannel/sun trunking net driver
+ * bonding.c: a bonding/etherchannel/sun trunking net driver
  *
  * This is useful to talk to a Cisco 5500, running Etherchannel, aka:
  *	Linux Channel Bonding

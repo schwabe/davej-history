@@ -915,7 +915,7 @@ int isofs_bmap(struct inode * inode,int block)
 	 * If we are beyond the end of this file, don't give out any
 	 * blocks.
 	 */
-	if( b_off > inode->i_size )
+	if( b_off >= inode->i_size )
 	  {
 	    off_t	max_legal_read_offset;
 

@@ -35,7 +35,6 @@ static char *_rioctrl_c_sccs_ = "@(#)rioctrl.c	1.3";
 
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>
@@ -201,6 +200,8 @@ int		su;
 	PKT	*PacketP;
 	int		retval = 0;
 	unsigned long flags;
+	
+	func_enter ();
 	
 	/* Confuse teh compiler to think that we've initialized these */
 	Host=0;
@@ -1777,6 +1778,8 @@ RIO_DEBUG_CTRL, 				if (su)
 	}
 	rio_dprint(RIO_DEBUG_CTRL, ("INVALID DAEMON IOCTL 0x%x\n",cmd));
 	p->RIOError.Error = IOCTL_COMMAND_UNKNOWN;
+
+	func_exit ();
 	return EINVAL;
 }
 

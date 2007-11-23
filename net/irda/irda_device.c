@@ -63,6 +63,8 @@ extern int esi_init(void);
 extern int tekram_init(void);
 extern int actisys_init(void);
 extern int girbil_init(void);
+extern int toshoboe_init(void);
+extern int litelink_init(void);
 
 static void __irda_task_delete(struct irda_task *task);
 

@@ -2585,7 +2585,7 @@ set_serial_info( i2ChanStrPtr pCh, struct serial_struct *new_info )
 	 * base. Also line nunber as such is meaningless but we use it for our
 	 * array index so it is fixed also.
 	 */
-	if ( ns.irq  	    != ip2config.irq
+	if ( ns.irq  	    != ip2config.irq[pCh->port_index]
 	    || (int) ns.port      != ((int) pCh->pMyBord->i2eBase)
 	    || ns.baud_base != pCh->BaudBase
 	    || ns.line      != pCh->port_index ) {

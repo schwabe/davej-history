@@ -122,23 +122,23 @@ typedef struct card_s {
 
 
 
-#define sca_reg(reg, card) (0x8000 | card->io | \
+#define sca_reg(reg, card) (0x8000 | (card)->io | \
 			    ((reg)&0x0F) | (((reg)&0xF0) << 6))
 #define sca_in(reg, card)		readb(sca_reg(reg, card))
 #define sca_out(value, reg, card)	writeb(value, sca_reg(reg, card))
 #define sca_inw(reg, card)		readw(sca_reg(reg, card))
 #define sca_outw(value, reg, card)	writew(value, sca_reg(reg, card))
 
-#define port_to_card(port)		(port->card)
-#define log_node(port)			(port->log_node)
-#define phy_node(port)			(port->phy_node)
+#define port_to_card(port)		((port)->card)
+#define log_node(port)			((port)->log_node)
+#define phy_node(port)			((port)->phy_node)
 #define winsize(card)			(USE_WINDOWSIZE)
-#define winbase(card)      	     	(card->winbase)
-#define get_port(card, port)		(card->ports[port].valid ? \
-					 &card->ports[port] : NULL)
+#define winbase(card)      	     	((card)->winbase)
+#define get_port(card, port)		((card)->ports[port].valid ? \
+					 &(card)->ports[port] : NULL)
 
 
-static __inline__ u8 get_page(card_t *card)
+static __inline__ u8 sca_get_page(card_t *card)
 {
 	return inb(card->io+N2_PSR) & PSR_PAGEBITS;
 }

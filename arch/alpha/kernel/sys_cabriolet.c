@@ -286,7 +286,9 @@ struct alpha_machine_vector cabriolet_mv __initmv = {
 	pci_fixup:		cabriolet_pci_fixup,
 	kill_arch:		generic_kill_arch,
 };
+#ifndef CONFIG_ALPHA_EB64P
 ALIAS_MV(cabriolet)
+#endif
 #endif
 
 #if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_EB164)

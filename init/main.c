@@ -58,6 +58,8 @@
 extern void nubus_init(void);
 #endif
 
+extern int irda_device_init(void);
+
 /*
  * Versions of gcc older than that listed below may actually compile
  * and link okay, but the end product can have subtle run time bugs.

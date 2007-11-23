@@ -47,9 +47,6 @@ struct ttystatics {
 
 #define SEM_SIGIGNORE 0x1234
 
-typedef struct semaphore semtype;
-
-
 #ifdef DEBUG_SEM
 #define swait(a,b)      printk ("waiting:    " __FILE__ " line %d\n", __LINE__)
 #define ssignal(sem)    printk ("signalling: " __FILE__ " line %d\n", __LINE__)

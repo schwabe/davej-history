@@ -33,7 +33,12 @@
  *
  * Revision history:
  * $Log: sx.c,v $
- * Revision 1.32  2000/03/07 90:00:00  wolff,pvdl
+ * Revision 1.33  2000/03/09 10:00:00  pvdl,wolff
+ * - Fixed module and port counting
+ * - Fixed signal handling
+ * - Fixed an Ooops
+ * 
+ * Revision 1.32  2000/03/07 09:00:00  wolff,pvdl
  * - Fixed some sx_dprintk typos
  * - added detection for an invalid board/module configuration
  *
@@ -195,8 +200,8 @@
  * */
 
 
-#define RCS_ID "$Id: sx.c,v 1.32 2000/03/07 17:01:02 wolff, pvdl Exp $"
-#define RCS_REV "$Revision: 1.32 $"
+#define RCS_ID "$Id: sx.c,v 1.33 2000/03/08 10:01:02 wolff, pvdl Exp $"
+#define RCS_REV "$Revision: 1.33 $"
 
 
 #include <linux/module.h>
@@ -414,22 +419,9 @@ static struct real_driver sx_real_driver = {
  */
 
 static struct file_operations sx_fw_fops = {
-	NULL,	/*	lseek	*/
-	NULL,	/*	read	*/
-	NULL,	/*	write	*/
-	NULL,	/*	readdir	*/
-	NULL,	/*	select	*/
-	sx_fw_ioctl,
-	NULL,	/*	mmap	*/
-	sx_fw_open,
-#ifndef TWO_ZERO
-	NULL,	/*	flush	*/
-#endif
-	sx_fw_release,
-	NULL,	/*	fsync	*/
-	NULL,	/*	fasync	*/
-	NULL,	/*	check_media_change	*/
-	NULL,	/*	revalidate	*/
+	open:		sx_fw_open,
+	release:       	sx_fw_release,
+	ioctl:		sx_fw_ioctl
 };
 
 struct miscdevice sx_fw_device = {
@@ -781,6 +773,7 @@ static void sx_setsignals (struct sx_port *port, int dtr, int rts)
 	if (rts >= 0) t = rts? (t | OP_RTS): (t & ~OP_RTS);
 	sx_write_channel_byte (port, hi_op, t);
 	sx_dprintk (SX_DEBUG_MODEMSIGNALS, "setsignals: %d/%d\n", dtr, rts);
+
 	func_exit ();
 }
 
@@ -1035,8 +1028,8 @@ void sx_transmit_chars (struct sx_port *port)
 		if (c > SERIAL_XMIT_SIZE - port->gs.xmit_tail) 
 			c = SERIAL_XMIT_SIZE - port->gs.xmit_tail;
 
-		sx_dprintk (SX_DEBUG_TRANSMIT, " %d(%d) \n", 
-		            c, SERIAL_XMIT_SIZE- port->gs.xmit_tail);
+		sx_dprintk (SX_DEBUG_TRANSMIT, " %d(%ld) \n", 
+		            c, (long)SERIAL_XMIT_SIZE- port->gs.xmit_tail);
 
 		/* If for one reason or another, we can't copy more data, we're done! */
 		if (c == 0) break;
@@ -1060,14 +1053,13 @@ void sx_transmit_chars (struct sx_port *port)
 		sx_disable_tx_interrupts (port);
 	}
 
-	if (port->gs.xmit_cnt <= port->gs.wakeup_chars) {
+	if ((port->gs.xmit_cnt <= port->gs.wakeup_chars) && port->gs.tty) {
 		if ((port->gs.tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 		    port->gs.tty->ldisc.write_wakeup)
 			(port->gs.tty->ldisc.write_wakeup)(port->gs.tty);
 		sx_dprintk (SX_DEBUG_TRANSMIT, "Waking up.... ldisc (%d)....\n",
 		            port->gs.wakeup_chars); 
 		wake_up_interruptible(&port->gs.tty->write_wait);
-		wake_up_interruptible(&port->gs.tty->poll_wait);
 	}
 
 	clear_bit (SX_PORT_TRANSMIT_LOCK, &port->locks);
@@ -1087,7 +1079,7 @@ inline void sx_receive_chars (struct sx_port *port)
 	struct tty_struct *tty;
 	int copied=0;
 
-	/* func_enter2 (); */
+	func_enter2 ();
 	tty = port->gs.tty;
 	while (1) {
 		rx_op = sx_read_channel_byte (port, hi_rxopos);
@@ -1142,7 +1134,7 @@ inline void sx_receive_chars (struct sx_port *port)
 		/*    tty_schedule_flip (tty); */
 	}
 
-	/* func_exit (); */
+	func_exit ();
 }
 
 /* Inlined: it is called only once. Remove the inline if you add another 
@@ -1312,6 +1304,8 @@ static void sx_pollfunc (unsigned long data)
 
 	sx_interrupt (0, board, NULL);
 
+	init_timer(&board->timer);
+
 	board->timer.expires = jiffies + sx_poll;
 	add_timer (&board->timer);
 	func_exit ();
@@ -1407,7 +1401,7 @@ static void sx_shutdown_port (void * ptr)
 	func_enter();
 
 	port->gs.flags &= ~ GS_ACTIVE;
-	if (port->gs.tty && port->gs.tty->termios->c_cflag & HUPCL) {
+	if (port->gs.tty && (port->gs.tty->termios->c_cflag & HUPCL)) {
 		sx_setsignals (port, 0, 0);
 		sx_reconfigure_port(port);
 	}
@@ -1423,7 +1417,6 @@ static void sx_shutdown_port (void * ptr)
  *                Here are the routines that actually                     *
  *               interface with the rest of the system                    *
  * ********************************************************************** */
-
 
 static int sx_fw_open(struct inode *inode, struct file *filp)
 {
@@ -1441,6 +1434,7 @@ static INT sx_fw_release(struct inode *inode, struct file *filp)
 	func_exit ();
 	return NO_ERROR;
 }
+
 
 
 static int sx_open  (struct tty_struct * tty, struct file * filp)
@@ -1470,6 +1464,8 @@ static int sx_open  (struct tty_struct * tty, struct file * filp)
 
 	tty->driver_data = port;
 	port->gs.tty = tty;
+	if (!port->gs.count)
+		MOD_INC_USE_COUNT;
 	port->gs.count++;
 
 	sx_dprintk (SX_DEBUG_OPEN, "starting port\n");
@@ -1481,18 +1477,12 @@ static int sx_open  (struct tty_struct * tty, struct file * filp)
 	sx_dprintk (SX_DEBUG_OPEN, "done gs_init\n");
 	if (retval) {
 		port->gs.count--;
+		if (port->gs.count) MOD_DEC_USE_COUNT;
 		return retval;
 	}
 
 	port->gs.flags |= GS_ACTIVE;
 	sx_setsignals (port, 1,1);
-
-	sx_dprintk (SX_DEBUG_OPEN, "before inc_use_count (count=%d.\n", 
-	            port->gs.count);
-	if (port->gs.count == 1) {
-		MOD_INC_USE_COUNT;
-	}
-	sx_dprintk (SX_DEBUG_OPEN, "after inc_use_count\n");
 
 #if 0
 	if (sx_debug & SX_DEBUG_OPEN)
@@ -1505,8 +1495,8 @@ static int sx_open  (struct tty_struct * tty, struct file * filp)
 
 	if (sx_send_command (port, HS_LOPEN, -1, HS_IDLE_OPEN) != 1) {
 		printk (KERN_ERR "sx: Card didn't respond to LOPEN command.\n");
-		MOD_DEC_USE_COUNT;
 		port->gs.count--;
+		if (!port->gs.count) MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -1515,8 +1505,10 @@ static int sx_open  (struct tty_struct * tty, struct file * filp)
 	            retval, port->gs.count);
 
 	if (retval) {
-		MOD_DEC_USE_COUNT;
-		port->gs.count--;
+		/* 
+		 * Don't lower gs.count here because sx_close() will be called later
+		 */ 
+
 		return retval;
 	}
 	/* tty->low_latency = 1; */
@@ -1548,25 +1540,15 @@ static int sx_open  (struct tty_struct * tty, struct file * filp)
    exit minicom.  I expect an "oops".  -- REW */
 static void sx_hungup (void *ptr)
 {
-/*
-	func_enter ();
-	MOD_DEC_USE_COUNT;
-	func_exit ();
-*/
-	/* 
-	 * Got this from the 2.4.0-test1 serie. The port was closed before
-	 * the lines were set in the proper condition. -- pvdl
-	 */
 	struct sx_port *port = ptr; 
 	func_enter ();
 
-	/* 
-	 *  Set the lines in the proper codition before closing the port.
-	 *  Got the from 2.4.0-test1 series. -- pvdl
-	 */
+	/* Don't force the SX card to close. mgetty doesn't like it !!!!!! -- pvdl */
+	/* For some reson we added this code. Don't know why anymore ;-) -- pvdl */
+	/*
 	sx_setsignals (port, 0, 0);
 	sx_reconfigure_port(port);	
-	sx_send_command (port, HS_CLOSE, -1, HS_IDLE_CLOSED);
+	sx_send_command (port, HS_CLOSE, 0, 0);
 
 	if (sx_read_channel_byte (port, hi_hstat) != HS_IDLE_CLOSED) {
 		if (sx_send_command (port, HS_FORCE_CLOSED, -1, HS_IDLE_CLOSED) != 1) {
@@ -1575,7 +1557,7 @@ static void sx_hungup (void *ptr)
 		} else
 			sx_dprintk (SX_DEBUG_CLOSE, "sent the force_close command.\n");
 	}
-
+	*/
 	MOD_DEC_USE_COUNT;
 	func_exit ();
 }
@@ -1610,6 +1592,11 @@ static void sx_close (void *ptr)
 
 	sx_dprintk (SX_DEBUG_CLOSE, "waited %d jiffies for close. count=%d\n", 
 	            5 * HZ - to - 1, port->gs.count);
+
+	if(port->gs.count) {
+		sx_dprintk(SX_DEBUG_CLOSE, "WARNING port count:%d\n", port->gs.count);
+		port->gs.count = 0;
+	}
 
 	MOD_DEC_USE_COUNT;
 	func_exit ();
@@ -1953,10 +1940,7 @@ static int sx_init_board (struct sx_board *board)
 	func_enter();
 
 	/* This is preceded by downloading the download code. */
-	/* 
-	 * The board should be set to initialized to make sure 
-	 * we can boot the other cards. --pvdl
-	 */ 
+
 	board->flags |= SX_BOARD_INITIALIZED;
 
 	if (read_sx_byte (board, 0))
@@ -2362,6 +2346,13 @@ static int sx_init_portstructs (int nboards, int nports)
 #ifdef NEW_WRITE_LOCKING
 			port->gs.port_write_sem = MUTEX;
 #endif
+			/*
+			 * Initializing wait queue
+			 */
+			/*
+			init_waitqueue_head(&port->gs.open_wait);
+			init_waitqueue_head(&port->gs.close_wait); 		
+			*/
 			port++;
 		}
 	}
@@ -2403,7 +2394,7 @@ static int sx_init_portstructs (int nboards, int nports)
 	return 0;
 }
 
-
+#ifdef MODULE
 static void sx_release_drivers(void)
 {
 	func_enter();
@@ -2411,6 +2402,7 @@ static void sx_release_drivers(void)
 	tty_unregister_driver(&sx_callout_driver);
 	func_exit();
 }
+#endif
 
 #ifdef TWO_ZERO
 #define PDEV unsigned char pci_bus, unsigned pci_fun
@@ -2491,6 +2483,10 @@ int sx_init(void)
 		while ((pdev = pci_find_device (PCI_VENDOR_ID_SPECIALIX, 
 		                                PCI_DEVICE_ID_SPECIALIX_SX_XIO_IO8, 
 			                              pdev))) {
+		  /*
+			if (pci_enable_device(pdev))
+				continue;
+		  */
 #else
 			for (i=0;i< SX_NBOARDS;i++) {
 				if (pcibios_find_device (PCI_VENDOR_ID_SPECIALIX, 
@@ -2526,10 +2522,14 @@ int sx_init(void)
 				                      &tint);
 			else
 				pci_read_config_dword(pdev, PCI_BASE_ADDRESS_2,
-				                      &tint);
-			board->hw_base = tint & PCI_BASE_ADDRESS_MEM_MASK;
+						      &tint);
 			board->base2 = 
 			board->base = (ulong) ioremap(board->hw_base, WINDOW_LEN (board));
+			if (!board->base) {
+				printk(KERN_ERR "ioremap failed\n");
+				/* XXX handle error */
+			}
+
 			/* Most of the stuff on the CF board is offset by
 			   0x18000 ....  */
 			if (IS_CF_BOARD (board)) board->base += 0x18000;

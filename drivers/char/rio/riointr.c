@@ -35,7 +35,6 @@ static char *_riointr_c_sccs_ = "@(#)riointr.c	1.2";
 
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>
@@ -254,7 +253,6 @@ char *		en;
     rio_dprint (RIO_DEBUG_INTR, ("(%d/%d)\n",
 		PortP->gs.wakeup_chars, PortP->gs.xmit_cnt)); 
     wake_up_interruptible(&PortP->gs.tty->write_wait);
-    wake_up_interruptible(&PortP->gs.tty->poll_wait);
   }
 
 }

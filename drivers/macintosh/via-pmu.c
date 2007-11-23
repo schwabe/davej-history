@@ -107,6 +107,7 @@ static int pmu_fully_inited = 0;
 static int pmu_has_adb, pmu_has_backlight;
 static unsigned char *gpio_reg = NULL;
 static int gpio_irq = -1;
+static int irq_flag = 0;
 
 int asleep;
 
@@ -242,7 +243,7 @@ find_via_pmu()
 
 		pmu_kind = PMU_KEYLARGO_BASED;
 		pmu_has_adb = (find_type_devices("adb") != NULL);
-		pmu_has_backlight = (find_type_devices("backlight") != NULL);
+		pmu_has_backlight = 0; /* Not driven by PMU */
 
 		gpiop = find_devices("gpio");
 		if (gpiop && gpiop->n_addrs) {
@@ -303,6 +304,11 @@ via_pmu_init(void)
 
 	/* Enable backlight */
 	pmu_enable_backlight(1);
+
+	/* Make sure PMU settle down before continuing */
+	do {
+		pmu_poll();
+	} while (pmu_state != idle);
 }
 
 static int __openfirmware
@@ -632,43 +638,49 @@ via_pmu_interrupt(int irq, void *arg, struct pt_regs *regs)
 	int nloop = 0;
 	unsigned long flags;
 
-	/* Currently, we use brute-force cli() for syncing with GPIO
-	 * interrupt. I'll make this smarter later, along with some
-	 * spinlocks for SMP */
-	save_flags(flags);cli();
-	++disable_poll;
-	while ((intr = in_8(&via[IFR])) != 0) {
-		if (++nloop > 1000) {
-			printk(KERN_DEBUG "PMU: stuck in intr loop, "
-			       "intr=%x pmu_state=%d\n", intr, pmu_state);
-			break;
-		}
-		if (intr & SR_INT)
-			pmu_sr_intr(regs);
-		else if (intr & CB1_INT) {
-			adb_int_pending = 1;
-			out_8(&via[IFR], CB1_INT);
-		}
-		intr &= ~(SR_INT | CB1_INT);
-		if (intr != 0) {
-			out_8(&via[IFR], intr);
-		}
-	}
-	if (gpio_reg && (in_8(gpio_reg + 0x9) & 0x02) == 0)
-		adb_int_pending = 1;
+	/* This is my 2 cents brain dead synchronisation mecanism */
+	if (test_and_set_bit(0, &irq_flag))
+		return;
 
-	if (pmu_state == idle) {
-		if (adb_int_pending) {
-			pmu_state = intack;
-			send_byte(PMU_INT_ACK);
-			adb_int_pending = 0;
-		} else if (current_req) {
-			pmu_start();
+	while(test_and_clear_bit(0, &irq_flag)) {
+		++disable_poll;
+		while ((intr = in_8(&via[IFR])) != 0) {
+			if (++nloop > 1000) {
+				printk(KERN_DEBUG "PMU: stuck in intr loop, "
+				       "intr=%x pmu_state=%d\n", intr, pmu_state);
+				break;
+			}
+			if (intr & SR_INT)
+				pmu_sr_intr(regs);
+			else if (intr & CB1_INT) {
+				adb_int_pending = 1;
+				out_8(&via[IFR], CB1_INT);
+			}
+			intr &= ~(SR_INT | CB1_INT);
+			if (intr != 0) {
+				out_8(&via[IFR], intr);
+			}
 		}
+		if (gpio_reg && (in_8(gpio_reg + 0x9) & 0x02) == 0)
+			adb_int_pending = 1;
+
+		/* A spinlock would be nicer ... */
+		save_flags(flags);
+		cli();
+		if (pmu_state == idle) {
+			if (adb_int_pending) {
+				pmu_state = intack;
+				send_byte(PMU_INT_ACK);
+				adb_int_pending = 0;
+			} else if (current_req) {
+				pmu_start();
+			}
+		}
+		restore_flags(flags);
+		--disable_poll;
 	}
-	--disable_poll;
-	restore_flags(flags);
 }
+
 
 static void __openfirmware
 gpio1_interrupt(int irq, void *arg, struct pt_regs *regs)

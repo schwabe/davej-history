@@ -7,6 +7,7 @@
 
 #include <linux/tasks.h>
 #include <linux/parport.h>
+#include <linux/parport_pc.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/interrupt.h>

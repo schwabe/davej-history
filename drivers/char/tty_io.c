@@ -135,6 +135,8 @@ extern long con3215_init(long, long);
 #ifdef CONFIG_HWC_CONSOLE
 extern long hwc_console_init(long);
 #endif
+extern int rio_init(void);
+extern int sx_init(void);
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))

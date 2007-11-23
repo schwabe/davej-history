@@ -175,7 +175,9 @@ extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 #endif
 
 
+#ifndef VIRT_TO_BUS
 #define VIRT_TO_BUS(i)  (unsigned int) virt_to_bus((void *)(i))
+#endif
 #define ULONG   unsigned long
 #define USHORT  unsigned short
 #define UCHAR   unsigned char

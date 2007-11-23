@@ -35,7 +35,6 @@ static char *_rioboot_c_sccs_ = "@(#)rioboot.c	1.3";
 #endif
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>
@@ -82,7 +81,6 @@ static char *_rioboot_c_sccs_ = "@(#)rioboot.c	1.3";
 #include "cmdblk.h"
 #include "route.h"
 
-
 static uchar
 RIOAtVec2Ctrl[] =
 {
@@ -114,6 +112,8 @@ struct DownLoad *	rbp;
 {
 	int offset;
 
+	func_enter ();
+
 	/* Linux doesn't allow you to disable interrupts during a
 	   "copyin". (Crash when a pagefault occurs). */
 	/* disable(oldspl); */
@@ -127,6 +127,7 @@ struct DownLoad *	rbp;
 		rio_dprint(RIO_DEBUG_BOOT, ("RTA Boot Code Too Large!\n"));
 		p->RIOError.Error = HOST_FILE_TOO_LARGE;
 		/* restore(oldspl); */
+		func_exit ();
 		return ENOMEM;
 	}
 
@@ -134,6 +135,7 @@ struct DownLoad *	rbp;
 		rio_dprint(RIO_DEBUG_BOOT, ("RTA Boot Code : BUSY BUSY BUSY!\n"));
 		p->RIOError.Error = BOOT_IN_PROGRESS;
 		/* restore(oldspl); */
+		func_exit ();
 		return EBUSY;
 	}
 
@@ -161,6 +163,7 @@ struct DownLoad *	rbp;
 		rio_dprint(RIO_DEBUG_BOOT, ("Bad data copy from user space\n"));
 		p->RIOError.Error = COPYIN_FAILED;
 		/* restore(oldspl); */
+		func_exit ();
 		return EFAULT;
 	}
 
@@ -172,9 +175,61 @@ struct DownLoad *	rbp;
 	p->RIOBootCount   = rbp->Count;
 
 	/* restore(oldspl); */
+	func_exit();
 	return 0;
 }
 
+void rio_start_card_running (struct Host * HostP)
+{
+	func_enter ();
+
+	switch ( HostP->Type ) {
+	case RIO_AT:
+		rio_dprint(RIO_DEBUG_BOOT, ("Start ISA card running\n"));
+		WBYTE(HostP->Control, 
+		      BOOT_FROM_RAM | EXTERNAL_BUS_ON
+		      | HostP->Mode
+		      | RIOAtVec2Ctrl[HostP->Ivec & 0xF] );
+		break;
+		
+#ifdef FUTURE_RELEASE
+	case RIO_MCA:
+				/*
+				** MCA handles IRQ vectors differently, so we don't write 
+				** them to this register.
+				*/
+		rio_dprint(RIO_DEBUG_BOOT, ("Start MCA card running\n"));
+		WBYTE(HostP->Control, McaTpBootFromRam | McaTpBusEnable | HostP->Mode);
+		break;
+
+	case RIO_EISA:
+				/*
+				** EISA is totally different and expects OUTBZs to turn it on.
+				*/
+		rio_dprint(RIO_DEBUG_BOOT, NULL,DBG_DAEMON,"Start EISA card running\n");
+		OUTBZ( HostP->Slot, EISA_CONTROL_PORT, HostP->Mode | RIOEisaVec2Ctrl[HostP->Ivec] | EISA_TP_RUN | EISA_TP_BUS_ENABLE | EISA_TP_BOOT_FROM_RAM );
+		break;
+#endif
+
+	case RIO_PCI:
+				/*
+				** PCI is much the same as MCA. Everything is once again memory
+				** mapped, so we are writing to memory registers instead of io
+				** ports.
+				*/
+		rio_dprint(RIO_DEBUG_BOOT, ("Start PCI card running\n"));
+		WBYTE(HostP->Control, PCITpBootFromRam | PCITpBusEnable | HostP->Mode);
+		break;
+	default:
+		rio_dprint(RIO_DEBUG_BOOT, ("Unknown host type %d\n",HostP->Type));
+		break;
+	}
+/* 
+	printk (KERN_INFO "Done with starting the card\n");
+	func_exit ();
+*/
+	return;
+}
 
 /*
 ** Load in the host boot code - load it directly onto all halted hosts
@@ -207,6 +262,10 @@ register struct DownLoad *rbp;
 	for ( host=0; host<p->RIONumHosts; host++ ) {
 		rio_dprint(RIO_DEBUG_BOOT, ("Attempt to boot host %d\n",host));
 		HostP = &p->RIOHosts[host];
+		
+		rio_dprint(RIO_DEBUG_BOOT,  ("Host Type = 0x%x, Mode = 0x%x, IVec = 0x%x\n",
+		    HostP->Type, HostP->Mode, HostP->Ivec ) );
+
 
 		if ( (HostP->Flags & RUN_STATE) != RC_WAITING ) {
 			rio_dprint(RIO_DEBUG_BOOT, ("%s %d already running\n","Host",host));
@@ -234,6 +293,7 @@ register struct DownLoad *rbp;
 		if ( p->RIOConf.HostLoadBase < rbp->Count ) {
 			rio_dprint(RIO_DEBUG_BOOT, ("Bin too large\n"));
 			p->RIOError.Error = HOST_FILE_TOO_LARGE;
+			func_exit ();
 			return EFBIG;
 		}
 		/*
@@ -260,6 +320,7 @@ register struct DownLoad *rbp;
 			if ( !DownCode ) {
 				rio_dprint(RIO_DEBUG_BOOT, ("No system memory available\n"));
 				p->RIOError.Error = NOT_ENOUGH_CORE_FOR_PCI_COPY;
+				func_exit ();
 				return ENOMEM;
 			}
 			bzero(DownCode, rbp->Count);
@@ -267,6 +328,7 @@ register struct DownLoad *rbp;
 			if ( copyin((int)rbp->DataP,DownCode,rbp->Count)==COPYFAIL ) {
 				rio_dprint(RIO_DEBUG_BOOT, ("Bad copyin of host data\n"));
 				p->RIOError.Error = COPYIN_FAILED;
+				func_exit ();
 				return EFAULT;
 			}
 
@@ -277,6 +339,7 @@ register struct DownLoad *rbp;
 		else if ( copyin((int)rbp->DataP,StartP,rbp->Count)==COPYFAIL ) {
 			rio_dprint(RIO_DEBUG_BOOT, ("Bad copyin of host data\n"));
 			p->RIOError.Error = COPYIN_FAILED;
+			func_exit ();
 			return EFAULT;
 		}
 
@@ -406,47 +469,8 @@ register struct DownLoad *rbp;
 		rio_dprint(RIO_DEBUG_BOOT,  ("Host Type = 0x%x, Mode = 0x%x, IVec = 0x%x\n",
 		    HostP->Type, HostP->Mode, HostP->Ivec ) );
 
-		switch ( HostP->Type ) {
-			case RIO_AT:
-				rio_dprint(RIO_DEBUG_BOOT, ("Start ISA card running\n"));
-				WBYTE(HostP->Control, 
-					BOOT_FROM_RAM | EXTERNAL_BUS_ON
-					| HostP->Mode
-					| RIOAtVec2Ctrl[HostP->Ivec & 0xF] );
-				break;
+		rio_start_card_running(HostP);
 
-#ifdef FUTURE_RELEASE
-			case RIO_MCA:
-				/*
-				** MCA handles IRQ vectors differently, so we don't write 
-				** them to this register.
-				*/
-				rio_dprint(RIO_DEBUG_BOOT, ("Start MCA card running\n"));
-				WBYTE(HostP->Control, McaTpBootFromRam | McaTpBusEnable | HostP->Mode);
-				break;
-
-			case RIO_EISA:
-				/*
-				** EISA is totally different and expects OUTBZs to turn it on.
-				*/
-				rio_dprint(RIO_DEBUG_BOOT, NULL,DBG_DAEMON,"Start EISA card running\n");
-				OUTBZ( HostP->Slot, EISA_CONTROL_PORT, HostP->Mode | RIOEisaVec2Ctrl[HostP->Ivec] | EISA_TP_RUN | EISA_TP_BUS_ENABLE | EISA_TP_BOOT_FROM_RAM );
-				break;
-#endif
-
-			case RIO_PCI:
-				/*
-				** PCI is much the same as MCA. Everything is once again memory
-				** mapped, so we are writing to memory registers instead of io
-				** ports.
-				*/
-				rio_dprint(RIO_DEBUG_BOOT, ("Start PCI card running\n"));
-				WBYTE(HostP->Control, PCITpBootFromRam | PCITpBusEnable | HostP->Mode);
-				break;
-			default:
-				rio_dprint(RIO_DEBUG_BOOT, ("Unknown host type %d\n",HostP->Type));
-				break;
-		}
 		rio_dprint(RIO_DEBUG_BOOT, ("Set control port\n"));
 
 		/*
@@ -454,9 +478,10 @@ register struct DownLoad *rbp;
 		** pointer:
 		*/
 		for ( wait_count=0; (wait_count<p->RIOConf.StartupTime)&&
-				(RWORD(HostP->__ParmMapR)==OldParmMap); wait_count++ ) {
+			(RWORD(HostP->__ParmMapR)==OldParmMap); wait_count++ ) {
 			rio_dprint(RIO_DEBUG_BOOT, ("Checkout %d, 0x%x\n",wait_count,RWORD(HostP->__ParmMapR)));
 			delay(HostP, HUNDRED_MS);
+
 		}
 
 		/*
@@ -614,6 +639,7 @@ register struct DownLoad *rbp;
 	p->RIOSystemUp++;
 	
 	rio_dprint(RIO_DEBUG_BOOT, ("Done everything %x\n", HostP->Ivec));
+	func_exit ();
 	return 0;
 }
 

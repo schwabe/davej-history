@@ -721,6 +721,9 @@ static int prog_dmabuf(struct i810_state *state, unsigned rec)
 	outl(virt_to_bus(&dmabuf->channel->sg[0]), state->card->iobase+dmabuf->channel->port+OFF_BDBAR);
 	outb(16, state->card->iobase+dmabuf->channel->port+OFF_LVI);
 	outb(0, state->card->iobase+dmabuf->channel->port+OFF_CIV);
+	
+	resync_dma_ptrs(state);
+	
 	if (rec) {
 		i810_rec_setup(state);
 	} else {
@@ -1561,7 +1564,7 @@ static int i810_open(struct inode *inode, struct file *file)
 		dmabuf->ossfragshift = 0;
 		dmabuf->ossmaxfrags  = 0;
 		dmabuf->subdivision  = 0;
-		i810_set_dac_rate(state, 48000);
+		i810_set_dac_rate(state, 8000);
 	}
 
 	if (file->f_mode & FMODE_READ) {
@@ -1570,7 +1573,7 @@ static int i810_open(struct inode *inode, struct file *file)
 		dmabuf->ossfragshift = 0;
 		dmabuf->ossmaxfrags  = 0;
 		dmabuf->subdivision  = 0;
-		i810_set_adc_rate(state, 48000);
+		i810_set_adc_rate(state, 8000);
 	}
 
 	state->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
@@ -1733,6 +1736,8 @@ static int __init i810_ac97_init(struct i810_card *card)
 		printk(KERN_ERR "i810_audio: AC'97 reset failed.\n");
 		return 0;
 	}
+	
+	udelay(500);
 	
 	inw(card->ac97base);
 

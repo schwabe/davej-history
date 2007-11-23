@@ -44,7 +44,7 @@ static char *_riodrvr_h_sccs_ = "@(#)riodrvr.h	1.3";
 
 struct rio_info {
 	int			mode;			/* Intr or polled, word/byte */
-	semtype			RIOIntrSem;		/* Interrupt thread sem */
+	spinlock_t		RIOIntrSem;		/* Interrupt thread sem */
 	int			current_chan;		/* current channel */
 	int			RIOFailed;		/* Not initialised ? */
 	int			RIOInstallAttempts;	/* no. of rio-install() calls */
