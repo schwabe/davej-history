@@ -570,10 +570,7 @@ static int smc_wait_to_send_packet( struct sk_buff * skb, struct device * dev )
 	{
 		skb = skb_padto(skb, ETH_ZLEN);
 		if(skb == NULL)
-		{
-			netif_wake_queue(dev);
 			return 0;
-		}
 		length = ETH_ZLEN;
 	}
 	lp->saved_skb = skb;

@@ -271,22 +271,18 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		min = alm_tm.tm_min;
 		sec = alm_tm.tm_sec;
 
-		if (hrs >= 24)
-			hrs = 0xff;
-
-		if (min >= 60)
-			min = 0xff;
-
-		if (sec >= 60)
-			sec = 0xff;
-
 		spin_lock_irqsave(&rtc_lock, flags);
 		if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY) ||
 		    RTC_ALWAYS_BCD)
 		{
-			BIN_TO_BCD(sec);
-			BIN_TO_BCD(min);
-			BIN_TO_BCD(hrs);
+			if (sec < 60) BIN_TO_BCD(sec);
+			else sec = 0xff;
+
+			if (min < 60) BIN_TO_BCD(min);
+			else min = 0xff;
+
+			if (hrs < 24) BIN_TO_BCD(hrs);
+			else hrs = 0xff;
 		}
 		CMOS_WRITE(hrs, RTC_HOURS_ALARM);
 		CMOS_WRITE(min, RTC_MINUTES_ALARM);

@@ -80,6 +80,7 @@
  *		Andi Kleen	:	Add sock_kmalloc()/sock_kfree_s()
  *		Andi Kleen	:	Fix write_space callback
  *		Chris Evans	:	Security fixes - signedness again
+ *		Holger Smolinski:       Fix initialization of sk->sleep
  *
  * To Fix:
  *
@@ -1079,6 +1080,8 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 		sk->type	=	sock->type;
 		sk->sleep	=	&sock->wait;
 		sock->sk	=	sk;
+	} else {
+		sk->sleep	=	NULL;
 	}
 
 	sk->state_change	=	sock_def_wakeup;

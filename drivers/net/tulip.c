@@ -23,6 +23,9 @@
 	Updated 12/17/2000 by Jim McQuillan <jam@McQuil.com> to
 	include support for the Linksys LNE100TX card based on the
 	Admtek 985 Centaur-P chipset.
+
+	2002 Dec 21  Neale Banks <neale@lowendale.com.au>
+	Gracefully handle the case where init_etherdev() returns NULL
 */
 
 #define SMP_CHECK
@@ -694,6 +697,11 @@ static struct device *tulip_probe1(int pci_bus, int pci_devfn,
 		printk(KERN_INFO "%s", version);
 
 	dev = init_etherdev(dev, 0);
+
+	if (dev == NULL) {
+		printk(KERN_ERR "tulip: Unable to allocate net_device structure!\n");
+		return NULL;
+	}
 
 	/* Make certain the data structures are quadword aligned. */
 	tp = (void *)(((long)kmalloc(sizeof(*tp), GFP_KERNEL | GFP_DMA) + 7) & ~7);

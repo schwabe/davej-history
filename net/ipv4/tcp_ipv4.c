@@ -44,7 +44,9 @@
  *		Andi Kleen:		various fixes.
  *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
  *	Andi Kleen		:	Fix new listen.
- *	Andi Kleen		:	Fix accept error reporting.
+ *	Andi Kleen		:	Fix accept error reporting.a
+ * 	Holger Smolinski	:	Fix initialization of newsk->sleep which
+ *					points to a potentially invalid wait_queue
  */
 
 #include <linux/config.h>
@@ -1474,6 +1476,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newsk->timer.function = &net_timer;
 		newsk->timer.data = (unsigned long) newsk;
 		newsk->socket = NULL;
+		newsk->sleep = NULL;
 
 		newtp->tstamp_ok = req->tstamp_ok;
 		if((newtp->sack_ok = req->sack_ok) != 0)
