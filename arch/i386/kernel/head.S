@@ -109,86 +109,7 @@ checkCPUtype:
  * apply at our cpl of 0 and the stack ought to be aligned already, and
  * we don't need to preserve eflags.
  */
-	/*
-	 * A Cyrix/IBM 6x86(L) preserves flags after dividing 5 by 2
-	 * (and it _must_ be 5 divided by 2) while other CPUs change
-	 * them in undefined ways. We need to know this since we may
-	 * need to enable the CPUID instruction at least.
-	 */
-	xor %ax,%ax
-	sahf
-	movb $5,%ax
-	movb $2,%bx
-	div %bl
-	lahf
-	cmpb $2,%ah
-	jne ncyrix
-
-	/*
-	 * It behaves like a Cyrix/IBM 6x86(L) so put "Cyrix" in the 
-	 * vendor id field. It may be overwritten later with the 
-	 * real thing if CPUID works.
-	 */
-	movl $0x69727943,SYMBOL_NAME(x86_vendor_id)	# low 4 chars
-	movl $0x00000078,SYMBOL_NAME(x86_vendor_id)+4	# next 4 chars
-
-	/*
-	 * N.B. The pattern of accesses to 0x22 and 0x23 is *essential*
-	 *      so do not try to "optimize" it! For the same reason we
-	 *	do all this with interrupts off.
-	 */
-#define setCx86(reg, val) \
-	movb reg,%al;	\
-	outb %al,$0x22;	\
-	movb val,%al;	\
-	outb %al,$0x23
-
-#define getCx86(reg) \
-	movb reg,%al;	\
-	outb %al,$0x22;	\
-	inb $0x23,%al
-
-	/*
- 	 *	Cyrix screwed this up. You have to do the basic cyrix
-	 *	detect then pray its right in order to turn CPUID on
-	 *	to see if you have a Cyrix. If its a future non Cyrix
-	 *	chip that seems to be a cyrix but crashes on IO 0x22/0x23
-	 *	don't blame us...
-	 *
-	 *	If we don't set this minimal group however then it breaks
-	 *	our delay loops and stuff so we have to do something
-	 *	for this contraption. 
-	 *
-	 *	Note; We do the minimal here. The xchg bug and other stuff
-	 *	can be tweaked with user mode tools.
-	 */
-
-	cli
-	getCx86($0xc3)		# get CCR3
-	movb %al,%cl		# Save old value
-	movb %al,%bl
-	andb $0x0f,%bl		# Enable access to all config registers
-	orb $0x10,%bl		# by setting bit 4
-	setCx86($0xc3,%bl)
-
-	getCx86($0xe8)		# now we can get CCR4
-	orb $0x80,%al		# and set bit 7 (CPUIDEN)
-	movb %al,%bl		# to enable CPUID execution
-	setCx86($0xe8,%bl)
-
-        getCx86($0xfe)          # DIR0 : let's check this is a 6x86(L)
-        andb $0xf0,%al		# should be 3xh
-	cmpb $0x30,%al		# 
-	jne n6x86
-        getCx86($0xe9)          # CCR5 : we reset the SLOP bit
-        andb $0xfd,%al		# so that udelay calculation
-        movb %al,%bl		# is correct on 6x86(L) CPUs
-        setCx86($0xe9,%bl)
-
-n6x86:	setCx86($0xc3,%cl)	# Restore old CCR3
-	sti
-
-ncyrix:	movl $3, SYMBOL_NAME(x86)
+	movl $3, SYMBOL_NAME(x86)
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
 	movl %eax,%ecx		# save original EFLAGS
@@ -232,25 +153,8 @@ isnew:	pushl %ecx		# restore original EFLAGS
 	andb $0x0f, %cl		# mask mask revision
 	movb %cl,SYMBOL_NAME(x86_mask)
 	movl %edx,SYMBOL_NAME(x86_capability)
-
-#ifdef SOMEONE_FIXED_ME
-	/*
- 	 *	This trips some PPro/PII's and overwrites the mask
-	 *	with crap. Removed until the Linux/Cyrix guys fix it.
-	 */
-	xorl %eax,%eax		# test again for Cyrix CPU
-	sahf
-	movb $5,%al
-	movb $2,%bl
-	div %bl
-	lahf
-	cmpb $2,%ah
-	jne ncyrx2		# skip if not Cyrix CPU
-        getCx86($0xff)          # DIR1 : let's check the stepping
-	movb %al,SYMBOL_NAME(x86_mask)
-#endif
 	/* get vendor info */
-ncyrx2:	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
+	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
 #ifdef GAS_KNOWS_CPUID
 	cpuid
 #else

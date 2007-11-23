@@ -1092,7 +1092,7 @@ u32 TLan_HandleStatOverflow( struct device *dev, u16 host_int )
 	 *	of the list.  If the frame was the last in the Rx
 	 *	channel (EOC), the function restarts the receive channel
 	 *	by sending an Rx Go command to the adapter.  Then it
-	 *	activates/continues the the activity LED.
+	 *	activates/continues the activity LED.
 	 *
 	 **************************************************************/
 
@@ -1508,7 +1508,7 @@ void TLan_ResetLists( struct device *dev )
 	 *		io_base		Base IO port of the device of
 	 *				which to print DIO registers.
 	 *
-	 *	This function prints out all the the internal (DIO)
+	 *	This function prints out all the internal (DIO)
 	 *	registers of a TLAN chip.
 	 *
 	 **************************************************************/

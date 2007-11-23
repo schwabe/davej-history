@@ -70,10 +70,10 @@ function comment () {
 }
 
 #
-# Don't need this yet, but we don't want to puke either.
+# Define a boolean to a specific value.
 #
 function define_bool () {
-	:	
+	eval $1=$2
 }
 
 #
