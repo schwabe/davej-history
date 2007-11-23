@@ -52,6 +52,8 @@ static char *attrib_to_str (int x)
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
+
 #ifdef CONFIG_MTRR
 
 extern void check_mtrr_config(void);

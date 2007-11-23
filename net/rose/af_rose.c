@@ -40,7 +40,6 @@
 #include <net/ax25.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
-#include <linux/if_arp.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <asm/segment.h>

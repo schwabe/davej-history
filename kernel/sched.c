@@ -49,7 +49,7 @@
 int securelevel = 0;			/* system security level */
 
 long tick = (1000000 + HZ/2) / HZ;	/* timer interrupt period */
-volatile struct timeval xtime;		/* The current time */
+volatile struct timeval xtime __attribute__ ((aligned (16)));	/* The current time */
 int tickadj = 500/HZ ? 500/HZ : 1;	/* microsecs */
 
 DECLARE_TASK_QUEUE(tq_timer);
@@ -98,7 +98,7 @@ static struct signal_struct init_signals = INIT_SIGNALS;
 struct mm_struct init_mm = INIT_MM;
 struct task_struct init_task = INIT_TASK;
 
-unsigned long volatile jiffies=0;
+unsigned long volatile jiffies = 0;
 
 struct task_struct *current_set[NR_CPUS];
 struct task_struct *last_task_used_math = NULL;
@@ -1428,7 +1428,8 @@ asmlinkage int sys_nice(int increment)
 
 #endif
 
-static struct task_struct *find_process_by_pid(pid_t pid) {
+static struct task_struct *find_process_by_pid(pid_t pid)
+{
 	struct task_struct *p, *q;
 
 	if (pid == 0)
@@ -1445,8 +1446,7 @@ static struct task_struct *find_process_by_pid(pid_t pid) {
 	return p;
 }
 
-static int setscheduler(pid_t pid, int policy, 
-			struct sched_param *param)
+static int setscheduler(pid_t pid, int policy, struct sched_param *param)
 {
 	int error;
 	struct sched_param lp;

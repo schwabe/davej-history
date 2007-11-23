@@ -3,7 +3,9 @@
 #define _LINUX_INTERRUPT_H
 
 #include <linux/kernel.h>
+
 #include <asm/bitops.h>
+#include <asm/ptrace.h>
 
 struct irqaction {
 	void (*handler)(int, void *, struct pt_regs *);
@@ -25,7 +27,7 @@ asmlinkage void do_bottom_half(void);
 
 /* Who gets which entry in bh_base.  Things which will occur most often
    should come first - in which case NET should be up the top with SERIAL/TQUEUE! */
-   
+
 enum {
 	TIMER_BH = 0,
 	CONSOLE_BH,
@@ -33,7 +35,7 @@ enum {
 	DIGI_BH,
 	SERIAL_BH,
 	RISCOM8_BH,
- 	SPECIALIX_BH,
+	SPECIALIX_BH,
 	BAYCOM_BH,
 	NET_BH,
 	IMMEDIATE_BH,
@@ -117,4 +119,4 @@ extern inline void end_bh_atomic(void)
 extern unsigned long probe_irq_on(void);	/* returns 0 on failure */
 extern int probe_irq_off(unsigned long);	/* returns 0 or negative on failure */
 
-#endif
+#endif /* _LINUX_INTERRUPT_H */

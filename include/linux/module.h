@@ -46,14 +46,14 @@ struct module_ref {
 struct internal_symbol {
 	void *addr;
 	const char *name;
-	};
+};
 
 struct symbol_table { /* received from "insmod" */
 	int size; /* total, including string table!!! */
 	int n_symbols;
 	int n_refs;
-	struct internal_symbol symbol[0]; /* actual size defined by n_symbols */
-	struct module_ref ref[0]; /* actual size defined by n_refs */
+	struct internal_symbol symbol[1]; /* actual size defined by n_symbols */
+	struct module_ref ref[1]; /* actual size defined by n_refs */
 };
 /*
  * Note: The string table follows immediately after the symbol table in memory!
@@ -65,7 +65,7 @@ struct module {
 	struct symbol_table *symtab;
 	const char *name;
 	int size;			/* size of module in pages */
-	void* addr;			/* address of module */
+	void *addr;			/* address of module */
 	int state;
 	void (*cleanup)(void);		/* cleanup routine */
 };

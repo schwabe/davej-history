@@ -202,6 +202,7 @@
  *
  */
 
+#include <linux/config.h>
 #include "icn.h"
 
 /*

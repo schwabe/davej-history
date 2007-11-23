@@ -80,7 +80,6 @@
  * This software is provided ``AS IS'' without any warranties of any kind.
  */
 
-#include <linux/config.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/types.h>

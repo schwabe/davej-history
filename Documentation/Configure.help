@@ -40,7 +40,7 @@
 Prompt for development and/or incomplete code/drivers
 CONFIG_EXPERIMENTAL
   Some of the various things that Linux supports (such as network
-  drivers, filesystems, network protocols, etc.) can be in a state
+  drivers, file systems, network protocols, etc.) can be in a state
   of development where the functionality, stability, or the level of
   testing is not yet high enough for general use.  This is usually
   known as the "alpha-test" phase amongst developers.  If a feature is
@@ -122,7 +122,7 @@ CONFIG_BLK_DEV_FD
 RAM disk support
 CONFIG_BLK_DEV_RAM
   Enabling this option will allow you to use a portion of your RAM
-  memory as a block device, so that you can make filesystems on it,
+  memory as a block device, so that you can make file systems on it,
   read and write to it and do all the other things that normal block
   devices (such as hard drives) can do. It is usually used to load and
   store a copy of a minimal root file system off of a floppy into RAM
@@ -148,17 +148,17 @@ CONFIG_BLK_DEV_LOOP
   system.  This is useful if you want to check an ISO9660 file system
   before burning the CD, or want to use floppy images without first
   writing them to floppy.  This option also allows one to mount a
-  filesystem with encryption.  To use these features, you need a
+  file system with encryption.  To use these features, you need a
   recent version of mount (check the file Documentation/Changes for
   location and latest version).  Note that this loop device has
   nothing to do with the loopback device used for network connections
   from the machine to itself.  Most users will answer N here.
 
-Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support
+Enhanced IDE/MFM/RLL disk/CD-ROM/tape/floppy support
 CONFIG_BLK_DEV_IDE
   This will use the full-featured IDE driver to control up to four
   IDE interfaces, for a combination of up to eight IDE
-  disk/cdrom/tape/floppy drives.  Useful information about large
+  disk/CD-ROM/tape/floppy drives.  Useful information about large
   (>540MB) IDE disks, sound card IDE ports, and other topics, is all
   contained in Documentation/ide.txt.  If you have one or more IDE
   drives, say Y here.  If your system has no IDE drives, or if
@@ -189,7 +189,7 @@ CONFIG_BLK_DEV_HD_IDE
   hard disk driver to control the primary IDE/disk interface in the
   system, leaving the new enhanced IDE driver take care of only the
   2nd/3rd/4th IDE interfaces. Doing this will prevent you from having
-  an IDE/ATAPI CDROM or tape drive connected to the primary IDE
+  an IDE/ATAPI CD-ROM or tape drive connected to the primary IDE
   interface. Choosing this option may be useful for older systems
   which have MFM/RLL/ESDI controller+drives at the primary port
   address (0x1f0), along with IDE drives at the secondary/3rd/4th port
@@ -205,21 +205,21 @@ CONFIG_IDEDISK_MULTI_MODE
 
   If in doubt, say N.
 
-Include IDE/ATAPI CDROM support
+Include IDE/ATAPI CD-ROM support
 CONFIG_BLK_DEV_IDECD
-  If you have a CDROM drive using the ATAPI protocol, say Y.  ATAPI is
-  a new protocol used by IDE CDROM and TAPE drives, similar to the
-  SCSI protocol.  Most new CDROM drives use ATAPI, including the
+  If you have a CD-ROM drive using the ATAPI protocol, say Y.  ATAPI is
+  a new protocol used by IDE CD-ROM and tape drives, similar to the
+  SCSI protocol.  Most new CD-ROM drives use ATAPI, including the
   NEC-260, Mitsumi FX400, Sony 55E, and just about all non-SCSI
   double(2X), quad(4X), and six(6X) speed drives.  At boot time, the
-  TAPE drive will be identified along with other IDE devices, as "hdb"
+  tape drive will be identified along with other IDE devices, as "hdb"
   or "hdc", or something similar.
-  If this is your only CDROM drive, you can say N to all other CDROM
-  options, but be sure to say Y to the ISO9660 filesystem.  Read the
+  If this is your only CD-ROM drive, you can say N to all other CD-ROM
+  options, but be sure to say Y to the ISO9660 file system.  Read the
   CDROM-HOWTO, available via FTP (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO and the file
-  Documentation/cdrom/ide-cd.  Note that older versions of lilo (the
-  Linux boot loader) cannot properly deal with IDE/ATAPI CDROMs, so
+  Documentation/CD-ROM/ide-cd.  Note that older versions of lilo (the
+  Linux boot loader) cannot properly deal with IDE/ATAPI CD-ROMs, so
   install lilo-16 or higher, available from
   sunsite.unc.edu:/pub/Linux/system/Linux-boot/lilo.
 
@@ -236,7 +236,7 @@ CONFIG_BLK_DEV_IDETAPE
 Include IDE/ATAPI FLOPPY support (new)
 CONFIG_BLK_DEV_IDEFLOPPY
   If you have an IDE floppy which uses the ATAPI protocol, say Y.
-  ATAPI is a new protocol used by IDE cdrom/tape/floppy drives,
+  ATAPI is a new protocol used by IDE CD-ROM/tape/floppy drives,
   similar to the SCSI protocol.  IDE floppy drives include the LS-120
   and the ATAPI ZIP (ATAPI PD-CD drives are not supported by this
   driver; support for PD-CD drives is available through the SCSI
@@ -347,7 +347,7 @@ CONFIG_BLK_DEV_PROMISE
   boot parameter.  It enables support for the secondary IDE interface
   of the chipset, and takes advantage of the caching features of the
   card.  This driver is known to incur timeouts/retries during heavy
-  I/O to drives attached to the secondary interface.  CDROM and TAPE
+  I/O to drives attached to the secondary interface.  CD-ROM and TAPE
   devices are not supported yet.  See the Documentation/ide.txt and
   promise.c files for more info.
 
@@ -406,8 +406,8 @@ CONFIG_PARIDE_PCD
   system. Among the devices supported by this driver are the
   MicroSolutions backpack CD-ROM drives and the Freecom Power CD. If
   you have such a CD-ROM drive, you should also say Y to "ISO9660
-  cdrom filesystem support" below, because that's the filesystem used
-  on CDROMs.
+  CD-ROM file system support" below, because that's the file system used
+  on CD-ROMs.
 
 Parallel port ATAPI disks
 CONFIG_PARIDE_PF
@@ -1080,7 +1080,7 @@ CONFIG_MODVERSIONS
 
 Kernel daemon support
 CONFIG_KERNELD
-  Normally when you have selected some drivers and/or filesystems to
+  Normally when you have selected some drivers and/or file systems to
   be created as loadable modules, you also have the responsibility to
   load the corresponding module (via insmod/modprobe) before you can
   use it.  If you select Y here, the kernel will take care of this all
@@ -1212,7 +1212,7 @@ CONFIG_IP_ACCT
   a router or a firewall for some local network, in which case you
   naturally should have said Y to IP forwarding/gatewaying resp. IP
   firewalling. The data is accessible with "cat /proc/net/ip_acct", so
-  you want to say Y to the /proc filesystem below, if you say Y here.
+  you want to say Y to the /proc file system below, if you say Y here.
   To specify what exactly should be recorded, you need the tool
   ipfwadm (check the file Documentation/Changes for location and
   latest version).
@@ -1236,7 +1236,7 @@ CONFIG_NET_IPIP
 IP: firewall packet logging
 CONFIG_IP_FIREWALL_VERBOSE
   This gives you information about what your firewall did with packets
-  it received.  The information is handled by the klogd demon which is
+  it received.  The information is handled by the klogd daemon which is
   responsible for kernel messages ("man klogd").
 
 IP: transparent proxying (EXPERIMENTAL)
@@ -1493,7 +1493,7 @@ CONFIG_IPX
   sunsite.unc.edu:/pub/Linux/system/Filesystems/) or from within the
   Linux DOS emulator dosemu (read the DOSEMU-HOWTO, available in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO). In order to do the former,
-  you'll also have to say Y to "NCP filesystem support", below. To
+  you'll also have to say Y to "NCP file system support", below. To
   turn your Linux box into a fully featured NetWare file server and
   IPX router, say Y here and fetch either lwared from
   sunsite.unc.edu:/pub/Linux/system/Network/daemons/ or mars_nwe from
@@ -1632,7 +1632,7 @@ CONFIG_RTNETLINK
 
 SCSI support?
 CONFIG_SCSI
-  If you want to use a SCSI hard disk, SCSI tapedrive, SCSI CDROM or
+  If you want to use a SCSI hard disk, SCSI tapedrive, SCSI CD-ROM or
   any other SCSI device under Linux, say Y and make sure that you know
   the name of your SCSI host adapter (the card inside your computer
   that "speaks" the SCSI protocol), because you will be asked for it.
@@ -1650,7 +1650,7 @@ CONFIG_BLK_DEV_SD
   If you want to use a SCSI hard disk or the SCSI or parallel port
   version of the IOMEGA ZIP drive under Linux, say Y and read the
   SCSI-HOWTO, available via FTP (user: anonymous) in sunsite.unc.edu:
-  /pub/Linux/docs/HOWTO. This is NOT for SCSI CDROMs.
+  /pub/Linux/docs/HOWTO. This is NOT for SCSI CD-ROMs.
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   If you want to compile it as a module, say M here and read
@@ -1661,18 +1661,18 @@ CONFIG_CHR_DEV_ST
   If you want to use a SCSI tapedrive under Linux, say Y and read the
   SCSI-HOWTO, available via FTP (user: anonymous) in sunsite.unc.edu:
   /pub/Linux/docs/HOWTO and drivers/scsi/README.st in the kernel
-  source. This is NOT for SCSI CDROMs. This driver is also available
+  source. This is NOT for SCSI CD-ROMs. This driver is also available
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want). If you want to compile it as a
   module, say M here and read Documentation/modules.txt and
   Documentation/scsi.txt.
 
-SCSI CDROM support
+SCSI CD-ROM support
 CONFIG_BLK_DEV_SR
-  If you want to use a SCSI CDROM under Linux, say Y and read the
+  If you want to use a SCSI CD-ROM under Linux, say Y and read the
   SCSI-HOWTO and the CDROM-HOWTO from sunsite.unc.edu:
   /pub/Linux/docs/HOWTO. Also make sure to enable the ISO9660
-  filesystem later. This driver is also available as a module ( = code
+  file system later. This driver is also available as a module ( = code
   which can be inserted in and removed from the running kernel
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt and Documentation/scsi.txt.
@@ -1681,7 +1681,7 @@ SCSI generic support
 CONFIG_CHR_DEV_SG
   If you want to use SCSI scanners, synthesizers or CD-writers or just
   about anything having "SCSI" in its name other than hard disks,
-  CDROMs or tapes, say Y here. Those won't be supported by the kernel
+  CD-ROMs or tapes, say Y here. Those won't be supported by the kernel
   directly, so you need some additional software which knows how to
   talk to these devices using the SCSI protocol. For CD-writers, you
   would need the program cdwrite, available via FTP (user: anonymous)
@@ -1708,7 +1708,7 @@ Verbose SCSI error reporting (kernel size +=12K)
 CONFIG_SCSI_CONSTANTS
   The error messages regarding your SCSI hardware will be easier to
   understand if you enable this; it will enlarge your kernel by about
-  12KB.  If in doubt, say Y.
+  12kB.  If in doubt, say Y.
 
 AdvanSys SCSI support
 CONFIG_SCSI_ADVANSYS
@@ -1834,7 +1834,7 @@ CONFIG_AIC7XXX_PROC_STATS
   small amount of overhead to each and every SCSI command the aic7xxx
   driver handles, so if you aren't really interested in this
   information, it is best to leave it disabled. This will only work if
-  you also say Y to "/proc filesystem support", below. 
+  you also say Y to "/proc file system support", below. 
 
   If unsure, say N.
 
@@ -3392,31 +3392,31 @@ CONFIG_IBMTR
 
 Support non-SCSI/IDE/ATAPI drives
 CONFIG_CD_NO_IDESCSI
-  If you have a CDROM drive that is neither SCSI nor IDE/ATAPI, say Y
+  If you have a CD-ROM drive that is neither SCSI nor IDE/ATAPI, say Y
   here, otherwise N. Read the CDROM-HOWTO, available via FTP (user:
   anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. Note that the
   answer to this question doesn't directly affect the kernel: saying N
   will just cause this configure script to skip all the questions
-  about these CDROM drives. If you are unsure what you have, say Y and
+  about these CD-ROM drives. If you are unsure what you have, say Y and
   find out whether you have one of the following drives.
-  For each of these drivers, a file Documentation/cdrom/<driver_name>
+  For each of these drivers, a file Documentation/CD-ROM/<driver_name>
   exists. Especially in cases where you do not know exactly which kind
   of drive you have you should read there.
   Most of these drivers use a file include/linux/<driver_name>.h where
   you can define your interface parameters and switch some internal
   goodies.
-  All these CDROM drivers are also usable as a module ( = code which
+  All these CD-ROM drivers are also usable as a module ( = code which
   can be inserted in and removed from the running kernel whenever you
   want).  If you want to compile them as module, say M instead of Y
   and read Documentation/modules.txt.
-  If you want to use any of these CDROM drivers, you also have to say
-  Y to "ISO9660 cdrom filesystem support" below (this answer will get
-  "defaulted" for you if you enable any of the Linux CDROM drivers).
+  If you want to use any of these CD-ROM drivers, you also have to say
+  Y to "ISO9660 CD-ROM file system support" below (this answer will get
+  "defaulted" for you if you enable any of the Linux CD-ROM drivers).
 
-Sony CDU31A/CDU33A CDROM support
+Sony CDU31A/CDU33A CD-ROM support
 CONFIG_CDU31A
-  These CDROM drives have a spring-pop-out caddyless drawer, and a
-  rectangular green LED centered beneath it.  NOTE: these CDROM drives
+  These CD-ROM drives have a spring-pop-out caddyless drawer, and a
+  rectangular green LED centered beneath it.  NOTE: these CD-ROM drives
   will not be auto detected by the kernel at boot time; you have to
   provide the interface address as an option to the kernel at boot
   time as described in Documentation/cdrom/cdu31a or fill in your
@@ -3424,14 +3424,14 @@ CONFIG_CDU31A
   of your boot loader (lilo or loadlin) about how to pass options to
   the kernel. The lilo procedure is also explained in the SCSI-HOWTO.
 
-Standard Mitsumi [no XA/Multisession] CDROM support
+Standard Mitsumi [no XA/Multisession] CD-ROM support
 CONFIG_MCD
   This is the older of the two drivers for the older Mitsumi models
   LU-005, FX-001 and FX-001D. This is not the right driver for
   the FX-001DE and the triple or quad speed models (all these are
   IDE/ATAPI models).
   With the old LU-005 model, the whole drive chassis slides out for
-  cd insertion. The FX-xxx models use a motorized tray type mechanism.
+  CD insertion. The FX-xxx models use a motorized tray type mechanism.
   Note that this driver does not support XA or MultiSession CDs
   (PhotoCDs).  There is a new driver (next question) which can do
   this. If you want that one, say N here.
@@ -3442,12 +3442,12 @@ Mitsumi [XA/MultiSession] support
 CONFIG_MCDX
   Use this driver if you want to be able to read XA or MultiSession
   CDs (PhotoCDs) as well as ordinary CDs with your Mitsumi LU-005,
-  FX-001 or FX-001D CDROM drive.  In addition, this driver uses much
+  FX-001 or FX-001D CD-ROM drive.  In addition, this driver uses much
   less kernel memory than the old one, if that is a concern.  This
   driver is able to support more than one drive, but each drive needs
   a separate interface card.  Check out Documentation/cdrom/mcdx.
 
-Matsushita/Panasonic/Creative, Longshine, TEAC CDROM support
+Matsushita/Panasonic/Creative, Longshine, TEAC CD-ROM support
 CONFIG_SBPCD
   This driver supports most of the drives which use the Panasonic or
   SoundBlaster interface.
@@ -3467,76 +3467,76 @@ CONFIG_SBPCD
   none of the supported drives gets found.
   Once your drive got found, you should enter the reported parameters
   into linux/include/linux/sbpcd.h and set "DISTRIBUTION 0" there.
-  This driver can support up to four CDROM interface cards, and each
-  card can support up to four CDROM drives; if you say Y here, you
+  This driver can support up to four CD-ROM interface cards, and each
+  card can support up to four CD-ROM drives; if you say Y here, you
   will be asked how many controllers you have. If compiled as a
   module, only one interface card (but with up to four drives) is
   usable.
 
-Matsushita/Panasonic, ... second CDROM controller support
+Matsushita/Panasonic, ... second CD-ROM controller support
 CONFIG_SBPCD2
-  Say Y here only if you have two CDROM controller boards of this type
+  Say Y here only if you have two CD-ROM controller boards of this type
   (usually only if you have more than four drives). You should enter
   the parameters for the second, third and fourth interface card into
   linux/include/linux/sbpcd.h before compiling the new kernel.
 
-Aztech/Orchid/Okano/Wearnes/TXC/CyDROM  CDROM support
+Aztech/Orchid/Okano/Wearnes/TXC/CyDROM  CD-ROM support
 CONFIG_AZTCD
   This is your driver if you have an Aztech CDA268-01A, Orchid
   CD-3110, Okano or Wearnes CDD110, Conrad TXC, or CyCDROM CR520 or
-  CR540 CDROM drive. This driver -- just like all these CDROM drivers
-  -- is NOT for CDROM drives with IDE/ATAPI interface, such as Aztech
+  CR540 CD-ROM drive. This driver -- just like all these CD-ROM drivers
+  -- is NOT for CD-ROM drives with IDE/ATAPI interface, such as Aztech
   CDA269-031SE.
 
-Sony CDU535 CDROM support
+Sony CDU535 CD-ROM support
 CONFIG_CDU535
-  This is the driver for the older Sony CDU-535 and CDU-531 CDROM
+  This is the driver for the older Sony CDU-535 and CDU-531 CD-ROM
   drives.
 
-Goldstar R420 CDROM support
+Goldstar R420 CD-ROM support
 CONFIG_GSCD
-  If this is your CDROM drive, say Y here.
+  If this is your CD-ROM drive, say Y here.
   As described in linux/Documentation/cdrom/gscd, you might have to
   change a setting in the file include/linux/gscd.h before compiling
   the kernel.
 
-Philips/LMS CM206 CDROM support
+Philips/LMS CM206 CD-ROM support
 CONFIG_CM206
-  If you have a Philips/LMS CDROM drive cm206 in combination with a
+  If you have a Philips/LMS CD-ROM drive cm206 in combination with a
   cm260 host adapter card, say Y here.
 
-Optics Storage DOLPHIN 8000AT CDROM support
+Optics Storage DOLPHIN 8000AT CD-ROM support
 CONFIG_OPTCD
   This is the driver for the 'DOLPHIN' drive with a 34-pin Sony
   compatible interface. It also works with the Lasermate CR328A. If
   you have one of those, say Y. This driver does not work for the
-  Optics Storage 8001 drive; use the IDE-ATAPI CDROM driver for that
+  Optics Storage 8001 drive; use the IDE-ATAPI CD-ROM driver for that
   one.
 
-Sanyo CDR-H94A CDROM support
+Sanyo CDR-H94A CD-ROM support
 CONFIG_SJCD
-  If this is your CDROM drive, say Y here. Command line option
+  If this is your CD-ROM drive, say Y here. Command line option
   (or 'append=' option in /etc/lilo.conf) is:
                 sjcd=<port>
   Here 'port' is the base i/o address used by the drive. It defaults
   to port=0x340.
 
-Soft configurable cdrom interface card support
+Soft configurable CD-ROM interface card support
 CONFIG_CDI_INIT
-  If you want to include boot-time initialization of any cdrom
+  If you want to include boot-time initialization of any CD-ROM
   interface card that is software configurable, say Y here.
   Currently only the ISP16/MAD16/Mozart cards are supported.
 
-ISP16/MAD16/Mozart soft configurable cdrom interface support
+ISP16/MAD16/Mozart soft configurable CD-ROM interface support
 CONFIG_ISP16_CDI
-  If you want any of these cdrom interface cards based on the
+  If you want any of these CD-ROM interface cards based on the
   OPTi 82C928 or 82C929 chips get detected and possibly configured
   at boot time, please say Y. Boot time command line options (or
   'append=' options in /etc/lilo.conf) are:
                 isp16=<port>,<irq>,<dma>,<drive_type>
   Here 'port','irq' and 'dma' are the base i/o address, IRQ number and
-  DMA line assumed to be used by the attached cdrom
-  drive. 'drive_type' is the type of cdrom drive or its emulation
+  DMA line assumed to be used by the attached CD-ROM
+  drive. 'drive_type' is the type of CD-ROM drive or its emulation
   mode. Valid values for drive_type include: Sanyo, Panasonic (same as
   Sanyo), Sony and Mitsumi.  Default values are: port=0x340, irq=0,
   dma=0, drive_type=Sanyo.
@@ -3550,7 +3550,7 @@ Quota support
 CONFIG_QUOTA
   If you say Y here, you will be able to set per user limits for disk
   usage (also called diskquotas). Currently, it works only for the
-  ext2 filesystem. You need additional software in order to use quota
+  ext2 file system. You need additional software in order to use quota
   support; check the file Documentation/Changes for that. Probably the
   quota support is only useful for multi user systems. If unsure,
   say N.
@@ -3570,9 +3570,9 @@ CONFIG_LOCK_MANDATORY
 Minix fs support
 CONFIG_MINIX_FS
   Minix is a simple operating system used in many classes about OS's.
-  The minix filesystem ( = method to organize files on a hard disk
-  partition or a floppy disk) was the original filesystem for Linux,
-  has been superseded by the second extended filesystem ext2fs but is
+  The minix file system ( = method to organize files on a hard disk
+  partition or a floppy disk) was the original file system for Linux,
+  has been superseded by the second extended file system ext2fs but is
   still used for root/boot and other floppies or ram disks since it is
   leaner. You don't want to use it on your hard disk because of
   certain built-in restrictions. This option will enlarge your kernel
@@ -3580,22 +3580,22 @@ CONFIG_MINIX_FS
   read this common floppy format. If you want to compile this as
   a module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
-  Documentation/modules.txt. Note that the filesystem of your root
+  Documentation/modules.txt. Note that the file system of your root
   partition cannot be compiled as a module.
 
 Extended fs support
 CONFIG_EXT_FS
-  This is the old Linux filesystem ( = method to organize files on a
+  This is the old Linux file system ( = method to organize files on a
   hard disk partition or a floppy disk) and not in use anymore.
   It enlarges your kernel by about 25 kB. Let's all kill this beast.
   Say N.
 
 Second extended fs support
 CONFIG_EXT2_FS
-  This is the de facto standard Linux filesystem ( = method to
+  This is the de facto standard Linux file system ( = method to
   organize files on a storage device) for hard disks. You want to
   say Y, unless you intend to use Linux exclusively from inside a DOS
-  partition using the umsdos filesystem. The advantage of the latter
+  partition using the umsdos file system. The advantage of the latter
   is that you can get away without repartitioning your hard drive
   (which often implies backing everything up and restoring
   afterwards); the disadvantage is that Linux becomes susceptible to
@@ -3605,7 +3605,7 @@ CONFIG_EXT2_FS
   facilitates the transition to a *real* Linux partition later.
   Another (rare) case which doesn't require ext2fs is a diskless Linux
   box which mounts all files over the network using NFS (in this case
-  it's sufficient to enable NFS filesystem support below; if you are
+  it's sufficient to enable NFS file system support below; if you are
   planning to do this, have a look at the netboot package in
   /pub/Linux/system/Linux-boot/, available via FTP (user: anonymous)
   from sunsite.unc.edu, extract with "tar xzvf filename"). There is a
@@ -3613,31 +3613,31 @@ CONFIG_EXT2_FS
   sunsite.unc.edu:/pub/Linux/docs/faqs. This option will enlarge your
   kernel by about 41 kB. Default is Y.
 
-xiafs filesystem support
+xiafs file system support
 CONFIG_XIA_FS
-  This is an old filesystem ( = method to organize files on a hard
+  This is an old file system ( = method to organize files on a hard
   disk partition or a floppy disk) and not in use anymore. This option
   would enlarge your kernel by about 28 kB. Let's all kill this beast:
   say N. If you want to compile this as a module ( = code which can
   be inserted in and removed from the running kernel whenever you
   want), say M here and read Documentation/modules.txt. Note that the
-  filesystem of your root partition cannot be compiled as a module.
+  file system of your root partition cannot be compiled as a module.
 
-fat fs support
+FAT fs support
 CONFIG_FAT_FS
-  If you want to use one of the FAT-based filesystems (the MS-DOS,
-  VFAT (Windows'95) and UMSDOS filesystems), then you must include
-  FAT support. This is not a filesystem in itself, but it provides
-  the foundation for the other filesystems. This option will enlarge
+  If you want to use one of the FAT-based file systems (the MS-DOS,
+  VFAT (Windows'95) and UMSDOS file systems), then you must include
+  FAT support. This is not a file system in itself, but it provides
+  the foundation for the other file systems. This option will enlarge
   your kernel about 24 kB. If unsure, say Y. If you want to compile
   this as a module however ( = code which can be inserted in and
   removed from the running kernel whenever you want), say M here and
   read Documentation/modules.txt. Note that if you compile the FAT
   support as a module, you cannot compile any of the FAT-based
-  filesystems into the kernel -- they will have to be modules as well.
-  The filesystem of your root partition cannot be a module.
+  file systems into the kernel -- they will have to be modules as well.
+  The file system of your root partition cannot be a module.
 
-msdos fs support
+MSDOS fs support
 CONFIG_MSDOS_FS
   This allows you to mount MSDOS partitions of your hard drive (unless
   they are compressed; to access compressed MSDOS partitions under
@@ -3650,29 +3650,29 @@ CONFIG_MSDOS_FS
   i.e. the MSDOS files look and behave just like all other Unix files.
   Another way to read and write MSDOS floppies from within Linux (but
   not transparently) is with the mtools ("man mtools") program suite,
-  which doesn't require the msdos filesystem support.  If you want to
-  use umsdos, the Unix-like filesystem on top of DOS, which allows you
+  which doesn't require the MSDOS file system support.  If you want to
+  use umsdos, the Unix-like file system on top of DOS, which allows you
   to run Linux from within a DOS partition without repartitioning,
   you'll have to say Y or M here. If your have Windows'95 or Windows
   NT installed on your MSDOS partitions, you should use the VFAT
-  filesystem instead, or you will not be able to see the long
+  file system instead, or you will not be able to see the long
   filenames generated by Windows'95 / Windows NT. This option will
   enlarge your kernel by about 7 kB. If unsure, say Y. This will only
-  work if you said Y to "fat fs support" as well. If you want to
+  work if you said Y to "FAT fs support" as well. If you want to
   compile this as a module however ( = code which can be inserted in
   and removed from the running kernel whenever you want), say M here
-  and read Documentation/modules.txt. Note that the filesystem of your
+  and read Documentation/modules.txt. Note that the file system of your
   root partition cannot be a module.
 
-vfat fs support
+VFAT fs support
 CONFIG_VFAT_FS
   This allows you to mount MSDOS partitions of your hard drive. It
   will let you use filenames in a way compatible with the long
-  filenames used by Windows'95 and Windows NT fat-based (not NTFS)
-  partitions. It does not support Windows'95 compressed filesystems.
-  You cannot use the VFAT filesystem for your root partition; use
+  filenames used by Windows'95 and Windows NT FAT-based (not NTFS)
+  partitions. It does not support Windows'95 compressed file systems.
+  You cannot use the VFAT file system for your root partition; use
   UMSDOS instead. This option enlarges your kernel by about 10 kB and
-  it only works if you enabled the "fat fs support" above. Please read
+  it only works if you enabled the "FAT fs support" above. Please read
   the file Documentation/filesystems/vfat.txt for details.
   If unsure, say N. If you want to compile this as a module ( = code
   which can be inserted in and removed from the running kernel
@@ -3692,19 +3692,19 @@ CONFIG_UMSDOS_FS
   MSDOS floppies. You will need a program called umssync in order to
   make use of umsdos. Read Documentation/filesystems/umsdos.txt. This
   option enlarges your kernel by about 25 kB and it only works if you
-  enabled both "fat fs support" and "msdos fs support" above. If
+  enabled both "FAT fs support" and "MSDOS fs support" above. If
   unsure, say N.  If you want to compile this as a module ( = code
   which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
-  Note that the filesystem of your root partition cannot be a module.
+  Note that the file system of your root partition cannot be a module.
 
 nls: Native language codepages and Unicode support
 CONFIG_NLS
-  This is required by the FAT based filesystems and by the ISO9660
-  filesystem with Joliet support.  Joliet is a Microsoft extension
-  for CDROMs that supports Unicode.
+  This is required by the FAT based file systems and by the ISO9660
+  file system with Joliet support.  Joliet is a Microsoft extension
+  for CD-ROMs that supports Unicode.
   This allows translation between different character sets.  When
-  dealing with the FAT based filesystems, there are two character
+  dealing with the FAT based file systems, there are two character
   sets that are important. The first is the codepage.  Codepages are
   character sets that are used by DOS to allow filenames to have
   native language characters when character sets were limited to
@@ -3850,13 +3850,13 @@ nls codepage 874
 CONFIG_NLS_CODEPAGE_874
   This is the DOS codepage that is used for Thai.
 
-/proc filesystem support
+/proc file system support
 CONFIG_PROC_FS
-  This is a virtual filesystem providing information about the status
+  This is a virtual file system providing information about the status
   of the system. "Virtual" means that it doesn't take up any space on
   your hard disk: the files are created on the fly when you access
   them. Also, you cannot read the files with less: you need to use
-  more or cat. The filesystem is explained in the Kernel Hacker's
+  more or cat. The file system is explained in the Kernel Hacker's
   Guide, available via FTP (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/LDP and also on the proc(8) manpage
   ("man 8 proc").  This option will enlarge your kernel by about 18
@@ -3868,7 +3868,7 @@ CONFIG_PROC_FS
   the same IRQ). Several programs depend on this, so everyone should
   say Y here.
 
-NFS filesystem support
+NFS file system support
 CONFIG_NFS_FS
   If you are connected to some other (usually local) Unix computer
   (using SLIP, PLIP, PPP or Ethernet) and want to mount files
@@ -3877,30 +3877,30 @@ CONFIG_NFS_FS
   can access the files with usual UNIX commands as if they were
   sitting on the client's hard disk. For this to work, the server must
   run the programs nfsd and mountd (but does not need to have NFS
-  filesystem support enabled). NFS is explained in the Network
+  file system support enabled). NFS is explained in the Network
   Administrator's Guide, available via FTP (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/LDP, and on its man page: "man nfs".
   There is also a NFS-FAQ in sunsite.unc.edu:/pub/Linux/docs/faqs
   which presumes that you know the basics of NFS already. If you say Y
   here, you should have said Y to TCP/IP networking also. This option
-  would enlarge your kernel by about 27 kB. This filesystem is also
+  would enlarge your kernel by about 27 kB. This file system is also
   available as a module ( = code which can be inserted in and removed
   from the running kernel whenever you want). If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
   If you configure a diskless machine which will mount its root
-  filesystem over NFS, you cannot compile this driver as a module.
+  file system over NFS, you cannot compile this driver as a module.
   If you don't know what all this is about, say N.
 
 Root file system on NFS
 CONFIG_ROOT_NFS
-  If you want your Linux box to mount its whole root filesystem from
+  If you want your Linux box to mount its whole root file system from
   some other computer over the net via NFS (presumably because your
   box doesn't have a hard disk), say Y. Read Documentation/nfsroot.txt
   for details. Most people say N here.
 
 BOOTP support
 CONFIG_RNFS_BOOTP
-  If you want your Linux box to mount its whole root filesystem from
+  If you want your Linux box to mount its whole root file system from
   some other computer over the net via NFS and you want the IP address
   of your computer to be discovered automatically at boot time using
   the BOOTP protocol (a special protocol designed for doing this job),
@@ -3913,7 +3913,7 @@ CONFIG_RNFS_BOOTP
 
 RARP support
 CONFIG_RNFS_RARP
-  If you want your Linux box to mount its whole root filesystem from
+  If you want your Linux box to mount its whole root file system from
   some other computer over the net via NFS and you want the IP address
   of your computer to be discovered automatically at boot time using
   the RARP protocol (an older protocol which is being obsoleted by
@@ -3921,13 +3921,13 @@ CONFIG_RNFS_RARP
   server must be operating on your network. Read
   Documentation/nfsroot.txt for details.
 
-ISO9660 cdrom filesystem support
+ISO9660 CD-ROM file system support
 CONFIG_ISO9660_FS
-  This is the standard filesystem used on CDROMs. It was previously
+  This is the standard file system used on CD-ROMs. It was previously
   known as "High Sierra Filesystem" and is called "hsfs" on other Unix
   systems. The so-called Rock-Ridge extensions which allow for long
   Unix filenames are also supported by this driver. If you have a
-  CDROM drive and want to do more with it than just listen to audio
+  CD-ROM drive and want to do more with it than just listen to audio
   CDs and watch its LEDs, say Y (and read the CDROM-HOWTO, available
   via FTP (user: anonymous) from sunsite.unc.edu:
   /pub/Linux/docs/HOWTO), thereby enlarging your kernel by about
@@ -3936,20 +3936,20 @@ CONFIG_ISO9660_FS
   kernel whenever you want), say M here and read
   Documentation/modules.txt.
 
-OS/2 HPFS filesystem support (read only)
+OS/2 HPFS file system support (read only)
 CONFIG_HPFS_FS
   OS/2 is IBM's operating system for PC's, the same as Warp, and HPFS
-  is the filesystem used for organizing files on OS/2 hard disk
+  is the file system used for organizing files on OS/2 hard disk
   partitions. Say Y if you want to be able to read files from an OS/2
   HPFS partition of your hard drive. OS/2 floppies however are in
   regular MSDOS format, so you don't need this option in order to be
   able to read them. Read Documentation/filesystems/hpfs.txt. This
-  filesystem is also available as a module ( = code which can be
+  file system is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you
   want). If you want to compile it as a module, say M here and read
   Documentation/modules.txt. If unsure, say N.
 
-System V and Coherent filesystem support
+System V and Coherent file system support
 CONFIG_SYSV_FS
   SCO, Xenix and Coherent are commercial Unix systems for Intel
   machines. Enabling this option would allow you to read and write to
@@ -3962,13 +3962,13 @@ CONFIG_SYSV_FS
   and is often needed to run commercial software, most prominently
   WordPerfect. It's in tsx-11.mit.edu:/pub/linux/BETA). If you only
   intend to mount files from some other Unix over the network using
-  NFS, you don't need the System V filesystem support (but you need
-  NFS filesystem support obviously). Note that this option is
+  NFS, you don't need the System V file system support (but you need
+  NFS file system support obviously). Note that this option is
   generally not needed for floppies, since a good portable way to
   transport files and directories between unixes (and even other
   operating systems) is given by the tar program ("man tar").  Note
   also that this option has nothing whatsoever to do with the option
-  "System V IPC". Read about the System V filesystem in
+  "System V IPC". Read about the System V file system in
   Documentation/filesystems/sysv-fs.txt. This option will enlarge your
   kernel by about 34 kB. If you want to compile this as a module ( =
   code which can be inserted in and removed from the running kernel
@@ -3977,7 +3977,7 @@ CONFIG_SYSV_FS
 
 Kernel automounter support (EXPERIMENTAL)
 CONFIG_AUTOFS_FS
-  The automounter is a tool to automatically mount remote filesystems
+  The automounter is a tool to automatically mount remote file systems
   on demand.  This implementation is partially kernel-based to reduce
   overhead in the already-mounted case; this is unlike the BSD
   automounter (amd), which is only in user space.  To use the
@@ -3986,15 +3986,15 @@ CONFIG_AUTOFS_FS
   a fairly large, distributed network, you probably do not need an
   automounter, and can say N here.
 
-BSD UFS filesystem support (read only)
+BSD UFS file system support (read only)
 CONFIG_UFS_FS
   BSD and derivate versions of Unix (such as SunOS, FreeBSD, NetBSD
-  and NeXTstep) use a filesystem called UFS. Some System V Unixes can
-  create and mount partitions and diskettes using this filesystem
+  and NeXTstep) use a file system called UFS. Some System V Unixes can
+  create and mount partitions and diskettes using this file system
   as well. Enabling this option allows you to mount these partitions
   and diskettes read-only. If you only intend to mount files from
   some other Unix over the network using NFS, you don't need the
-  UFS filesystem support (but you need NFS filesystem support
+  UFS file system support (but you need NFS file system support
   obviously). Note that this option is generally not needed for
   floppies, since a good portable way to transport files and
   directories between unixes (and even other operating systems)
@@ -4014,7 +4014,7 @@ CONFIG_BSD_DISKLABEL
   similarly to DOS extended partitions, putting in its first sector a
   new partition table in disklabel format. Enabling this option allows
   you to read these disklabels and further mount FreeBSD partitions on
-  your Linux box if you also have configured BSD ufs filesystem
+  your Linux box if you also have configured BSD UFS file system
   support. If you don't know what all this is about, say N.
 
 SMD disklabel (Sun partition tables) support
@@ -4022,21 +4022,21 @@ CONFIG_SMD_DISKLABEL
   Like most systems, SunOS uses its own partition table format,
   incompatible with all others.  Enabling this option allows you to
   read these partition tables and further mount SunOS disks on your
-  Linux box if you also have configured BSD ufs filesystem support.
+  Linux box if you also have configured BSD UFS file system support.
   This is mainly used to carry data from a SPARC under SunOS to your
   Linux box via a removable medium like magneto-optical or ZIP drives.
   If you don't know what all this is about, say N.
 
-SMB filesystem support (to mount WfW shares etc...)
+SMB file system support (to mount WfW shares etc...)
 CONFIG_SMB_FS
   SMB (Server Message Buffer) is the protocol Windows for Workgroups
   (WfW), Windows NT and Lan Manager use to talk to each other over an
-  Ethernet. Enabling this allows you to mount their filesystems and
+  Ethernet. Enabling this allows you to mount their file systems and
   access them just like any other unix directory. For details, read
   Documentation/filesystems/smbfs.txt.  Note: if you just want your
   box to act as an SMB *server* and make files and printing services
   available to Windows clients (which need to have a TCP/IP stack),
-  you don't need to enable this filesystem support; you can use the
+  you don't need to enable this file system support; you can use the
   program samba (available via FTP (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/system/Network/samba) for that. General
   information about how to connect Linux, Windows machines and Macs is
@@ -4054,7 +4054,7 @@ CONFIG_SMB_WIN95
   directories unreliable. This option slows down the listing of
   directories. This makes the Windows 95 server a bit more stable.
 
-NCP filesystem support (to mount NetWare volumes)
+NCP file system support (to mount NetWare volumes)
 CONFIG_NCP_FS
   NCP (NetWare Core Protocol) is a protocol that runs over IPX and is
   used by Novell NetWare clients to talk to file servers. It is to IPX
@@ -4113,9 +4113,9 @@ CONFIG_NCPFS_MOUNT_SUBDIR
   you count every byte.
   To utilize this feature you must use ncpfs-2.0.12 or newer.
 
-Amiga FFS filesystem support (EXPERIMENTAL)
+Amiga FFS file system support (EXPERIMENTAL)
 CONFIG_AFFS_FS
-  The Fast File System (FFS) is the common filesystem used on
+  The Fast File System (FFS) is the common file system used on
   hard disks by Amiga (tm) Systems since AmigaOS Version 1.3 (34.20).
   It's also possible to mount diskfiles used by
   the Un*X Amiga Emulator by Bernd Schmidt
@@ -4126,7 +4126,7 @@ CONFIG_AFFS_FS
   however cannot be read with this driver due to an incompatibility of
   the floppy controller used in an Amiga and the standard floppy
   controller in PCs and workstations.  Read
-  Documentation/filesystems/affs.txt.  This filesystem is also
+  Documentation/filesystems/affs.txt.  This file system is also
   available as a module ( = code which can be inserted in and removed
   from the running kernel whenever you want). If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
@@ -4697,7 +4697,7 @@ Kernel profiling support
 CONFIG_PROFILE
   This is for kernel hackers who want to know how much time the kernel
   spends in the various procedures. The information is stored in
-  /proc/profile (enable the /proc filesystem!) and in order to read
+  /proc/profile (enable the /proc file system!) and in order to read
   it, you need the readprofile package from sunsite.unc.edu. Its
   manpage gives information regarding the format of profiling data. To
   become a kernel hacker, you can start with the Kernel Hacker's
@@ -4979,7 +4979,7 @@ CONFIG_MEM_STD
 
 Memory flooding
 CONFIG_SADISTIC_KMALLOC
-  A common class of errors, both in userspace programs and the kernel,
+  A common class of errors, both in user space programs and the kernel,
   is accessing memory areas after freeing them.  Programs with such
   errors often work anyway most of the time, since the bug only bites
   if something else happens to allocate the same area in a short time
@@ -4988,7 +4988,7 @@ CONFIG_SADISTIC_KMALLOC
   any data that has been freed within the kernel, causing such bugs to
   manifest consistently so they may be solved.  Newly allocated memory
   is also flooded, making failure-to-initialize bugs easier to detect.
-  This feature does not affect bugs in userspace programs.
+  This feature does not affect bugs in user space programs.
   Non-kernel hackers should say N.  If there are any such bugs in the
   kernel, there is no point provoking them if you are not prepared to
   fix them.  And it will run slightly slower.
@@ -5017,7 +5017,7 @@ CONFIG_SKB_CHECK_WHOLE_QUEUE
 #
 # LocalWords:  CONFIG coprocessor DX Pentium SX lilo loadlin HOWTO ftp sunsite
 # LocalWords:  unc edu docs emu README kB BLK DEV FD Thinkpad fd MFM RLL IDE gz
-# LocalWords:  cdrom diskless netboot nfs xzvf ATAPI MB ide
+# LocalWords:  cdrom CD-ROM diskless netboot nfs xzvf ATAPI MB ide
 # LocalWords:  HD CDROMs IDECD NEC MITSUMI filesystem XT XD PCI bios
 # LocalWords:  ISA EISA Microchannel VESA BIOSes IPC SYSVIPC ipc Ctrl dmesg hlt
 # LocalWords:  BINFMT Linkable http ac uk jo html GCC SPARC AVANTI CABRIOLET EB
@@ -5065,7 +5065,7 @@ CONFIG_SKB_CHECK_WHOLE_QUEUE
 # LocalWords:  PMAX MILO Alphas Multia Tseng linuxelf endian mipsel mips drv HT
 # LocalWords:  KERNELD kerneld callouts AdvanSys advansys diskquotas Admin WDT
 # LocalWords:  wdt hdb hdc bugfix SiS vlb Acculogic CSA DTC dtc Holtek ht QDI
-# LocalWords:  QD qd UMC umc ALI ali lena fnet fr homepage azstarnet axplinux
+# LocalWords:  QD qd UMC umc ALI ali lena fnet fr azstarnet axplinux
 # LocalWords:  Avanti XL AlphaStations Jensen DECpc AXPpci UDB Cabriolet MCA RC
 # LocalWords:  AlphaPC uwaterloo cpbeaure mca AOUT OUTput PPro sipx gwdg lo nwe
 # LocalWords:  Keepalive linefill RELCOM keepalive analogue CDR conf CDI INIT

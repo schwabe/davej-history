@@ -327,7 +327,7 @@ extern struct task_struct *current_set[NR_CPUS];
 extern unsigned long volatile jiffies;
 extern unsigned long itimer_ticks;
 extern unsigned long itimer_next;
-extern struct timeval xtime;
+extern volatile struct timeval xtime;
 extern int need_resched;
 extern void do_timer(struct pt_regs *);
 
@@ -457,7 +457,7 @@ extern inline void select_wait(struct wait_queue ** wait_address, select_table *
 		return;
 	if (p->nr >= __MAX_SELECT_TABLE_ENTRIES)
 		return;
- 	entry = p->entry + p->nr;
+	entry = p->entry + p->nr;
 	entry->wait_address = wait_address;
 	entry->wait.task = current;
 	entry->wait.next = NULL;

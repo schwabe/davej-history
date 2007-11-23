@@ -53,6 +53,8 @@
  *
  */
 
+#include <linux/config.h>
+
 #undef  ISDN_DEBUG_MODEM_OPEN
 #undef  ISDN_DEBUG_MODEM_IOCTL
 #undef  ISDN_DEBUG_MODEM_WAITSENT

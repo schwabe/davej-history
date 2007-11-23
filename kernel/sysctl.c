@@ -21,7 +21,6 @@
 #include <asm/segment.h>
 
 #include <linux/utsname.h>
-#include <linux/swapctl.h>
 
 /* External variables not in a header file. */
 extern int panic_timeout;

@@ -29,7 +29,6 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
-#include <linux/string.h>
 #include <linux/net.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>

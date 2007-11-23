@@ -16,6 +16,7 @@
 
 #include <linux/mm.h>
 #include <linux/delay.h>
+#include <linux/config.h>
 #include <linux/interrupt.h>
 
 #include <asm/system.h>

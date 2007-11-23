@@ -614,7 +614,7 @@ void calibrate_delay(void)
    (up to lps_precision bits) */
 	loops_per_sec >>= 1;
 	loopbit = loops_per_sec;
-	while ( lps_precision-- && (loopbit >>= 1) ) {
+	while (lps_precision-- && (loopbit >>= 1) ) {
 		loops_per_sec |= loopbit;
 		ticks = jiffies;
 		while (ticks == jiffies);
@@ -624,9 +624,9 @@ void calibrate_delay(void)
 			loops_per_sec &= ~loopbit;
 	}
 
-/* finally, adjust loops per second in terms of seconds instead of clocks */	
+/* finally, adjust loops per second in terms of seconds instead of clocks */
 	loops_per_sec *= HZ;
-/* Round the value and print it */	
+/* Round the value and print it */
 	printk("ok - %lu.%02lu BogoMIPS\n",
 		(loops_per_sec+2500)/500000,
 		((loops_per_sec+2500)/5000) % 100);

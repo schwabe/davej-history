@@ -247,7 +247,6 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/string.h>
-#include <net/snmp.h>
 #include <net/ip.h>
 #include <net/route.h>
 #include <net/protocol.h>

@@ -61,9 +61,6 @@ extern unsigned char aux_device_present, kbd_read_mask;
 #include <linux/kerneld.h>
 #endif
 #include <asm/irq.h>
-#ifdef __SMP__
-#include <linux/smp.h>
-#endif
 
 extern char *get_options(char *str, int *ints);
 extern void set_device_ro(kdev_t dev,int flag);

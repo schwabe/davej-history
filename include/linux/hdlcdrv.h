@@ -9,7 +9,6 @@
 
 #include <linux/version.h>
 #include <linux/sockios.h>
-#include <linux/version.h>
 #if LINUX_VERSION_CODE < 0x20119
 #include <linux/if_ether.h>
 #endif

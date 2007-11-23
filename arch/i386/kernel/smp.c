@@ -22,6 +22,7 @@
  */
 
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/sched.h>

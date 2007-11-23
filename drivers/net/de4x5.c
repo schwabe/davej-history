@@ -414,6 +414,7 @@ static const char *version = "de4x5.c:V0.5352 1998/12/30 davies@maniac.ultranet.
 #include <linux/module.h>
 
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/interrupt.h>

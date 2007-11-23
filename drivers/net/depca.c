@@ -229,6 +229,7 @@ static const char *version = "depca.c:v0.451 1998/11/14 davies@maniac.ultranet.c
 #include <linux/module.h>
 
 #include <linux/kernel.h>
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/ptrace.h>
