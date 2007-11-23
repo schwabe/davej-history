@@ -41,8 +41,8 @@
 
 #define SMART2_DRIVER_VERSION(maj,min,submin) ((maj<<16)|(min<<8)|(submin))
 
-#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0.6)"
-#define DRIVER_VERSION SMART2_DRIVER_VERSION(1,0,6)
+#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0.9)"
+#define DRIVER_VERSION SMART2_DRIVER_VERSION(1,0,9)
 #define MAJOR_NR COMPAQ_SMART2_MAJOR
 #include <linux/blk.h>
 #include <linux/blkdev.h>
@@ -70,7 +70,7 @@ static int eisa[8] = { 0, 0 ,0 ,0, 0, 0 ,0 ,0 };
  *  product = Marketing Name for the board
  *  access = Address of the struct of function pointers 
  */
-struct board_type products[] = {
+static struct board_type products[] = {
 	{ 0x0040110E, "IDA",			&smart1_access },
 	{ 0x0140110E, "IDA-2",			&smart1_access },
 	{ 0x1040110E, "IAES",			&smart1_access },
@@ -82,6 +82,7 @@ struct board_type products[] = {
 	{ 0x40330E11, "Smart Array 3100ES",	&smart2_access },
 	{ 0x40340E11, "Smart Array 221",	&smart2_access },
 	{ 0x40400E11, "Integrated Array",	&smart4_access },
+	{ 0x40480E11, "Compaq Raid LC2",        &smart4_access },
 	{ 0x40500E11, "Smart Array 4200",	&smart4_access },
 	{ 0x40510E11, "Smart Array 4250ES",	&smart4_access },
 	{ 0x40580E11, "Smart Array 431",	&smart4_access },
@@ -93,7 +94,7 @@ static int * ida_blocksizes;
 static int * ida_hardsizes;
 static struct gendisk ida_gendisk[MAX_CTLR];
 
-struct proc_dir_entry *proc_array = NULL;
+static struct proc_dir_entry *proc_array = NULL;
 
 /* Debug... */
 #define DBG(s)	do { s } while(0)
@@ -847,8 +848,10 @@ static inline cmdlist_t *removeQ(cmdlist_t **Qptr, cmdlist_t *c)
 
 /*
  * Get a request and submit it to the controller.
- * This routine needs to grab all the requests it possibly can from the
- * req Q and submit them.  Interrupts are off (and need to be off) when you
+ * This routine needs to grab one requests and submits it.  We would like 
+ * to grab all possible requests, but there is a danger of holding the 
+ * io_request lock to long.  
+ * Interrupts are off (and need to be off) when you
  * are in here (either via the dummy do_ida_request functions or by being
  * called from the interrupt handler
  */
@@ -1005,28 +1008,24 @@ static inline void complete_buffers(struct buffer_head *bh, int ok)
  */
 static inline void complete_command(cmdlist_t *cmd, int timeout)
 {
-	char buf[80];
 	int ok=1;
 
 	if (cmd->req.hdr.rcode & RCODE_NONFATAL &&
 	   (hba[cmd->ctlr]->misc_tflags & MISC_NONFATAL_WARN) == 0) {
-		sprintf(buf, "Non Fatal error on ida/c%dd%d\n",
+		printk(KERN_WARNING "Non Fatal error on ida/c%dd%d\n",
 				cmd->ctlr, cmd->hdr.unit);
-		console_print(buf);
 		hba[cmd->ctlr]->misc_tflags |= MISC_NONFATAL_WARN;
 	}
 	if (cmd->req.hdr.rcode & RCODE_FATAL) {
-		sprintf(buf, "Fatal error on ida/c%dd%d\n",
+		printk(KERN_WARNING "Fatal error on ida/c%dd%d\n",
 				cmd->ctlr, cmd->hdr.unit);
-		console_print(buf);
 		ok = 0;
 	}
 	if (cmd->req.hdr.rcode & RCODE_INVREQ) {
-				sprintf(buf, "Invalid request on ida/c%dd%d = (cmd=%x sect=%d cnt=%d sg=%d ret=%x)\n",
+				printk(KERN_WARNING "Invalid request on ida/c%dd%d = (cmd=%x sect=%d cnt=%d sg=%d ret=%x)\n",
 				cmd->ctlr, cmd->hdr.unit, cmd->req.hdr.cmd,
 				cmd->req.hdr.blk, cmd->req.hdr.blk_cnt,
 				cmd->req.hdr.sg_cnt, cmd->req.hdr.rcode);
-		console_print(buf);
 		ok = 0;	
 	}
 	if (timeout) ok = 0;
@@ -1586,7 +1585,8 @@ static void start_fwbk(int ctlr)
 		id_ctlr_t *id_ctlr_buf; 
 	int ret_code;
 
-	if(	hba[ctlr]->board_id != 0x40400E11)
+	if(	(hba[ctlr]->board_id != 0x40400E11)
+		&& (hba[ctlr]->board_id != 0x40480E11) )
 	/* Not a Integrated Raid, so there is nothing for us to do */
 		return;
 	printk(KERN_DEBUG "cpqarray: Starting firmware's background"

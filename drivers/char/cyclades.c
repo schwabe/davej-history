@@ -1,7 +1,8 @@
 #undef	BLOCKMOVE
 #define	Z_WAKE
+#undef	Z_EXT_CHARS_IN_BUFFER
 static char rcsid[] =
-"$Revision: 2.3.2.6 $$Date: 2000/05/05 13:56:05 $";
+"$Revision: 2.3.2.8 $$Date: 2000/07/06 18:14:16 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -24,6 +25,17 @@ static char rcsid[] =
  * This version supports shared IRQ's (only for PCI boards).
  *
  * $Log: cyclades.c,v $
+ * Revision 2.3.2.8   2000/07/06 18:14:16 ivan
+ * Fixed the PCI detection function to work properly on Alpha systems.
+ * Implemented support for TIOCSERGETLSR ioctl.
+ * Implemented full support for non-standard baud rates.
+ *
+ * Revision 2.3.2.7   2000/06/01 18:26:34 ivan
+ * Request PLX I/O region, although driver doesn't use it, to avoid 
+ * problems with other drivers accessing it.
+ * Removed count for on-board buffer characters in cy_chars_in_buffer
+ * (Cyclades-Z only).
+ *
  * Revision 2.3.2.6   2000/05/05 13:56:05 ivan
  * Driver now reports physical instead of virtual memory addresses.
  * Masks were added to some Cyclades-Z read accesses.
@@ -634,6 +646,7 @@ static char rcsid[] =
 #include <linux/ptrace.h>
 #include <linux/cyclades.h>
 #include <linux/mm.h>
+#include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 
@@ -1365,9 +1378,16 @@ cyy_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
                     while (char_count-- > 0){
 			if (!info->xmit_cnt){
-                            cy_writeb((u_long)base_addr+(CySRER<<index),
-				cy_readb(base_addr+(CySRER<<index)) & 
-					~CyTxRdy);
+			    if (cy_readb(base_addr+(CySRER<<index))&CyTxMpty) {
+				cy_writeb((u_long)base_addr+(CySRER<<index), 
+					  cy_readb(base_addr+(CySRER<<index)) &
+					  ~CyTxMpty);
+			    } else {
+				cy_writeb((u_long)base_addr+(CySRER<<index), 
+					  ((cy_readb(base_addr+(CySRER<<index))
+					    & ~CyTxRdy)
+					   | CyTxMpty));
+			    }
 			    goto txdone;
 			}
 			if (info->xmit_buf == 0){
@@ -3133,12 +3153,15 @@ cy_chars_in_buffer(struct tty_struct *tty)
     card = info->card;
     channel = (info->line) - (cy_card[card].first_line);
 
+#ifdef Z_EXT_CHARS_IN_BUFFER
     if (!IS_CYC_Z(cy_card[card])) {
+#endif /* Z_EXT_CHARS_IN_BUFFER */
 #ifdef CY_DEBUG_IO
 	printk("cyc:cy_chars_in_buffer ttyC%d %d\n",
 		info->line, info->xmit_cnt); /* */
 #endif
 	return info->xmit_cnt;
+#ifdef Z_EXT_CHARS_IN_BUFFER
     } else {
 	static volatile struct FIRM_ID *firm_id;
 	static volatile struct ZFW_CTRL *zfw_ctrl;
@@ -3167,6 +3190,7 @@ cy_chars_in_buffer(struct tty_struct *tty)
 #endif
 	return (info->xmit_cnt + char_count);
     }
+#endif /* Z_EXT_CHARS_IN_BUFFER */
 } /* cy_chars_in_buffer */
 
 
@@ -3176,6 +3200,30 @@ cy_chars_in_buffer(struct tty_struct *tty)
  * ------------------------------------------------------------
  */
 
+static void
+cyy_baud_calc(struct cyclades_port *info, uclong baud)
+{
+    int co, co_val, bpr;
+    uclong cy_clock = ((info->chip_rev >= CD1400_REV_J) ? 60000000 : 25000000);
+
+    if (baud == 0) {
+	info->tbpr = info->tco = info->rbpr = info->rco = 0;
+	return;
+    }
+
+    /* determine which prescaler to use */
+    for (co = 4, co_val = 2048; co; co--, co_val >>= 2) {
+	if (cy_clock / co_val / baud > 63)
+	    break;
+    }
+
+    bpr = (cy_clock / co_val * 2 / baud + 1) / 2;
+    if (bpr > 255)
+	bpr = 255;
+
+    info->tbpr = info->rbpr = bpr;
+    info->tco = info->rco = co;
+}
 
 /*
  * This routine finds or computes the various line characteristics.
@@ -3189,7 +3237,7 @@ set_line_char(struct cyclades_port * info)
   int card,chip,channel,index;
   unsigned cflag, iflag;
   unsigned short chip_number;
-  int baud;
+  int baud, baud_rate = 0;
   int   i;
 
 
@@ -3225,12 +3273,14 @@ set_line_char(struct cyclades_port * info)
 	index = cy_card[card].bus_index;
 
 	/* baud rate */
-	if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST) {
-	    baud = info->baud;
-	} else {
-	    baud = tty_get_baud_rate(info->tty);
-	}
-	if (baud > CD1400_MAX_SPEED) {
+	baud = tty_get_baud_rate(info->tty);
+	if ((baud == 38400) && 
+	    ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)) {
+	    if (info->custom_divisor)
+		baud_rate = info->baud / info->custom_divisor;
+	    else
+		baud_rate = info->baud;
+	} else if (baud > CD1400_MAX_SPEED) {
 	    baud = CD1400_MAX_SPEED;
 	}
 	/* find the baud index */
@@ -3243,22 +3293,29 @@ set_line_char(struct cyclades_port * info)
 	    i = 19; /* CD1400_MAX_SPEED */
 	} 
 
-
-	if(info->chip_rev >= CD1400_REV_J) {
-	    /* It is a CD1400 rev. J or later */
-	    info->tbpr = baud_bpr_60[i]; /* Tx BPR */
-	    info->tco = baud_co_60[i]; /* Tx CO */
-	    info->rbpr = baud_bpr_60[i]; /* Rx BPR */
-	    info->rco = baud_co_60[i]; /* Rx CO */
+	if ((baud == 38400) && 
+	    ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)) {
+	    cyy_baud_calc(info, baud_rate);
 	} else {
-	    info->tbpr = baud_bpr_25[i]; /* Tx BPR */
-	    info->tco = baud_co_25[i]; /* Tx CO */
-	    info->rbpr = baud_bpr_25[i]; /* Rx BPR */
-	    info->rco = baud_co_25[i]; /* Rx CO */
+	    if(info->chip_rev >= CD1400_REV_J) {
+		/* It is a CD1400 rev. J or later */
+		info->tbpr = baud_bpr_60[i]; /* Tx BPR */
+		info->tco = baud_co_60[i]; /* Tx CO */
+		info->rbpr = baud_bpr_60[i]; /* Rx BPR */
+		info->rco = baud_co_60[i]; /* Rx CO */
+	    } else {
+		info->tbpr = baud_bpr_25[i]; /* Tx BPR */
+		info->tco = baud_co_25[i]; /* Tx CO */
+		info->rbpr = baud_bpr_25[i]; /* Rx BPR */
+		info->rco = baud_co_25[i]; /* Rx CO */
+	    }
 	}
 	if (baud_table[i] == 134) {
-	    info->timeout = (info->xmit_fifo_size*HZ*15/269) + 2;
 	    /* get it right for 134.5 baud */
+	    info->timeout = (info->xmit_fifo_size*HZ*30/269) + 2;
+	} else if ((baud == 38400) && 
+		   ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)) {
+	    info->timeout = (info->xmit_fifo_size*HZ*15/baud_rate) + 2;
 	} else if (baud_table[i]) {
 	    info->timeout = (info->xmit_fifo_size*HZ*15/baud_table[i]) + 2;
 	    /* this needs to be propagated into the card info */
@@ -3447,19 +3504,24 @@ set_line_char(struct cyclades_port * info)
 	buf_ctrl = &zfw_ctrl->buf_ctrl[channel];
 
 	/* baud rate */
-	if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST) {
-	    baud = info->baud;
-	} else {
-	    baud = tty_get_baud_rate(info->tty);
-	}
-	if (baud > CYZ_MAX_SPEED) {
+	baud = tty_get_baud_rate(info->tty);
+	if ((baud == 38400) && 
+	    ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)) {
+	    if (info->custom_divisor)
+		baud_rate = info->baud / info->custom_divisor;
+	    else
+		baud_rate = info->baud;
+	} else if (baud > CYZ_MAX_SPEED) {
 	    baud = CYZ_MAX_SPEED;
 	}
 	cy_writel(&ch_ctrl->comm_baud , baud);
 
 	if (baud == 134) {
-	    info->timeout = (info->xmit_fifo_size*HZ*30/269) + 2;
 	    /* get it right for 134.5 baud */
+	    info->timeout = (info->xmit_fifo_size*HZ*30/269) + 2;
+	} else if ((baud == 38400) && 
+		   ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)) {
+	    info->timeout = (info->xmit_fifo_size*HZ*15/baud_rate) + 2;
 	} else if (baud) {
 	    info->timeout = (info->xmit_fifo_size*HZ*15/baud) + 2;
 	    /* this needs to be propagated into the card info */
@@ -3549,8 +3611,6 @@ set_line_char(struct cyclades_port * info)
 	    clear_bit(TTY_IO_ERROR, &info->tty->flags);
 	}
     }
-
-
 } /* set_line_char */
 
 
@@ -3571,7 +3631,7 @@ get_serial_info(struct cyclades_port * info,
     tmp.flags = info->flags;
     tmp.close_delay = info->close_delay;
     tmp.baud_base = info->baud;
-    tmp.custom_divisor = 0;     /*!!!*/
+    tmp.custom_divisor = info->custom_divisor;
     tmp.hub6 = 0;               /*!!!*/
     return copy_to_user(retinfo,&tmp,sizeof(*retinfo))?-EFAULT:0;
 } /* get_serial_info */
@@ -3597,6 +3657,7 @@ set_serial_info(struct cyclades_port * info,
             info->flags = ((info->flags & ~ASYNC_USR_MASK) |
                            (new_serial.flags & ASYNC_USR_MASK));
             info->baud = new_serial.baud_base;
+	    info->custom_divisor = new_serial.custom_divisor;
             goto check_and_exit;
     }
 
@@ -3607,6 +3668,7 @@ set_serial_info(struct cyclades_port * info,
      */
 
     info->baud = new_serial.baud_base;
+    info->custom_divisor = new_serial.custom_divisor;
     info->flags = ((info->flags & ~ASYNC_FLAGS) |
                     (new_serial.flags & ASYNC_FLAGS));
     info->close_delay = new_serial.close_delay * HZ/100;
@@ -3621,6 +3683,43 @@ check_and_exit:
     }
 } /* set_serial_info */
 
+/*
+ * get_lsr_info - get line status register info
+ *
+ * Purpose: Let user call ioctl() to get info when the UART physically
+ *	    is emptied.  On bus types like RS485, the transmitter must
+ *	    release the bus after transmitting. This must be done when
+ *	    the transmit shift register is empty, not be done when the
+ *	    transmit holding register is empty.  This functionality
+ *	    allows an RS485 driver to be written in user space.
+ */
+static int get_lsr_info(struct cyclades_port *info, unsigned int *value)
+{
+    int card, chip, channel, index;
+    unsigned char status;
+    unsigned int result;
+    unsigned long flags;
+    unsigned char *base_addr;
+
+    card = info->card;
+    channel = (info->line) - (cy_card[card].first_line);
+    if (!IS_CYC_Z(cy_card[card])) {
+	chip = channel>>2;
+	channel &= 0x03;
+	index = cy_card[card].bus_index;
+	base_addr = (unsigned char *)
+		     (cy_card[card].base_addr + (cy_chip_offset[chip]<<index));
+
+	CY_LOCK(info, flags);
+	status = cy_readb(base_addr+(CySRER<<index)) & (CyTxRdy|CyTxMpty);
+	CY_UNLOCK(info, flags);
+	result = (status ? 0 : TIOCSER_TEMT);
+    } else {
+	/* Not supported yet */
+	return -EINVAL;
+    }
+    return cy_put_user(result, (unsigned long *) value);
+}
 
 static int
 get_modem_info(struct cyclades_port * info, unsigned int *value)
@@ -4247,6 +4346,9 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
         case TIOCSSERIAL:
             ret_val = set_serial_info(info, (struct serial_struct *) arg);
             break;
+	case TIOCSERGETLSR: /* Get line status register */
+	    ret_val = get_lsr_info(info, (unsigned int *) arg);
+	    break;
 	/*
 	 * Wait for any of the 4 modem inputs (DCD,RI,DSR,CTS) to change 
 	 * - mask passed in arg for lines of interest
@@ -4868,7 +4970,7 @@ cy_detect_pci(void))
   struct pci_dev	*pdev = NULL;
   unsigned char		cyy_rev_id;
   unsigned char         cy_pci_irq = 0;
-  uclong		cy_pci_phys0, cy_pci_phys2;
+  uclong		cy_pci_phys0, cy_pci_phys1, cy_pci_phys2;
   uclong		cy_pci_addr0, cy_pci_addr2;
   unsigned short        i,j,cy_pci_nchan, plx_ver;
   unsigned short        device_id,dev_index = 0;
@@ -4897,6 +4999,7 @@ cy_detect_pci(void))
                 /* read PCI configuration area */
 		cy_pci_irq = pdev->irq;
 		cy_pci_phys0 = pdev->base_address[0];
+		cy_pci_phys1 = pdev->base_address[1]; 
 		cy_pci_phys2 = pdev->base_address[2]; 
 		pci_read_config_byte(pdev, PCI_REVISION_ID, &cyy_rev_id);
 
@@ -4913,6 +5016,7 @@ cy_detect_pci(void))
 		(ulong)cy_pci_phys2, (ulong)cy_pci_phys0);
 #endif
 		cy_pci_phys0  &= PCI_BASE_ADDRESS_MEM_MASK;
+		cy_pci_phys1  &= PCI_BASE_ADDRESS_IO_MASK;
 		cy_pci_phys2  &= PCI_BASE_ADDRESS_MEM_MASK;
 
 		if (cy_pci_phys2 & ~PCI_BASE_ADDRESS_IO_MASK) {
@@ -4920,6 +5024,11 @@ cy_detect_pci(void))
 			   "Ignoring it...\n");
 		    cy_pci_phys2 &= PCI_BASE_ADDRESS_IO_MASK;
 		}
+
+		/* Although we don't use this I/O region, we should 
+		   request it from the kernel anyway, to avoid problems 
+		   with other drivers accessing it. */
+		request_region(cy_pci_phys1, CyPCI_Yctl, "Cyclom-Y");
 
 #if defined(__alpha__)
                 if (device_id  == PCI_DEVICE_ID_CYCLOM_Y_Lo) { /* below 1M? */
@@ -4934,10 +5043,9 @@ cy_detect_pci(void))
 		    i--;
 	            continue;
                 }
-#else
+#endif
 		cy_pci_addr0 = (ulong)ioremap(cy_pci_phys0, CyPCI_Yctl);
 		cy_pci_addr2 = (ulong)ioremap(cy_pci_phys2, CyPCI_Ywin);
-#endif
 
 #ifdef CY_PCI_DEBUG
             printk("Cyclom-Y/PCI: relocate winaddr=0x%lx ctladdr=0x%lx\n",
@@ -5046,6 +5154,7 @@ cy_detect_pci(void))
                 (ulong)cy_pci_phys2, (ulong)cy_pci_phys0);
 #endif
                 cy_pci_phys0 &= PCI_BASE_ADDRESS_MEM_MASK;
+		cy_pci_phys1 &= PCI_BASE_ADDRESS_IO_MASK;
                 cy_pci_phys2 &= PCI_BASE_ADDRESS_MEM_MASK;
 
 		if (cy_pci_phys2 & ~PCI_BASE_ADDRESS_IO_MASK) {
@@ -5053,9 +5162,13 @@ cy_detect_pci(void))
 			   "Ignoring it...\n");
 		    cy_pci_phys2 &= PCI_BASE_ADDRESS_IO_MASK;
 		}
-#if !defined(__alpha__)
-                cy_pci_addr0 = (ulong)ioremap(cy_pci_phys0, CyPCI_Zctl);
-#endif
+
+		/* Although we don't use this I/O region, we should 
+		   request it from the kernel anyway, to avoid problems 
+		   with other drivers accessing it. */
+		request_region(cy_pci_phys1, CyPCI_Zctl, "Cyclades-Z");
+
+		cy_pci_addr0 = (ulong)ioremap(cy_pci_phys0, CyPCI_Zctl);
 
 		/* Disable interrupts on the PLX before resetting it */
 		cy_writew(cy_pci_addr0+0x68,
@@ -5071,9 +5184,7 @@ cy_detect_pci(void))
 		mailbox = (uclong)cy_readl(&((struct RUNTIME_9060 *) 
 			   cy_pci_addr0)->mail_box_0);
 		if (mailbox == ZE_V1) {
-#if !defined(__alpha__)
-               	    cy_pci_addr2 = (ulong)ioremap(cy_pci_phys2, CyPCI_Ze_win);
-#endif
+		    cy_pci_addr2 = (ulong)ioremap(cy_pci_phys2, CyPCI_Ze_win);
 		    if (ZeIndex == NR_CARDS) {
 			printk("Cyclades-Ze/PCI found at 0x%lx ",
 				(ulong)cy_pci_phys2);
@@ -5090,9 +5201,7 @@ cy_detect_pci(void))
 		    i--;
 		    continue;
 		} else {
-#if !defined(__alpha__)
-                    cy_pci_addr2 = (ulong)ioremap(cy_pci_phys2, CyPCI_Zwin);
-#endif
+		    cy_pci_addr2 = (ulong)ioremap(cy_pci_phys2, CyPCI_Zwin);
 		}
 
 #ifdef CY_PCI_DEBUG
@@ -5531,6 +5640,7 @@ cy_init(void))
                     info->tco = 0;
                     info->rbpr = 0;
                     info->rco = 0;
+		    info->custom_divisor = 0;
                     info->close_delay = 5*HZ/10;
 		    info->closing_wait = CLOSING_WAIT_DELAY;
 		    info->icount.cts = info->icount.dsr = 
@@ -5589,6 +5699,7 @@ cy_init(void))
                     info->cor3 = 0x08; /* _very_ small rcv threshold */
                     info->cor4 = 0;
                     info->cor5 = 0;
+		    info->custom_divisor = 0;
                     info->close_delay = 5*HZ/10;
 		    info->closing_wait = CLOSING_WAIT_DELAY;
 		    info->icount.cts = info->icount.dsr = 

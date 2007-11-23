@@ -51,12 +51,14 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/processor.h>
+#include <asm/uaccess.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 //#include <net/ax25dev.h>
 #include <linux/kmod.h>
+#include <linux/init.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
 #include <linux/soundmodem.h>
@@ -67,56 +69,6 @@
 
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
-
-/* --------------------------------------------------------------------- */
-
-/*
- * currently this module is supposed to support both module styles, i.e.
- * the old one present up to about 2.1.9, and the new one functioning
- * starting with 2.1.21. The reason is I have a kit allowing to compile
- * this module also under 2.0.x which was requested by several people.
- * This will go in 2.2
- */
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE >= 0x20100
-#include <asm/uaccess.h>
-#else
-#include <asm/segment.h>
-#include <linux/mm.h>
-
-#undef put_user
-#undef get_user
-
-#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
-#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
-
-extern inline int copy_from_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_READ, from, n);
-        if (i)
-                return i;
-        memcpy_fromfs(to, from, n);
-        return 0;
-}
-
-extern inline int copy_to_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_WRITE, to, n);
-        if (i)
-                return i;
-        memcpy_tofs(to, from, n);
-        return 0;
-}
-#endif
-
-#if LINUX_VERSION_CODE >= 0x20123
-#include <linux/init.h>
-#else
-#define __init
-#define __initdata
-#define __initfunc(x) x
-#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -455,12 +407,8 @@ static int exec_eppfpga(void *b)
 	sprintf(portarg, "%ld", bc->pdev->port->base);
 	printk(KERN_DEBUG "%s: %s -s -p %s -m %s\n", bc_drvname, eppconfig_path, portarg, modearg);
 
-        for (i = 0; i < current->files->max_fds; i++ )
-		if (current->files->fd[i]) 
-			close(i);
-        set_fs(KERNEL_DS);      /* Allow execve args to be in kernel space. */
-        current->uid = current->euid = current->fsuid = 0;
-        if (execve(eppconfig_path, argv, envp) < 0) {
+        i = exec_usermodehelper(eppconfig_path, argv, envp);
+        if (i < 0) {
                 printk(KERN_ERR "%s: failed to exec %s -s -p %s -m %s, errno = %d\n",
                        bc_drvname, eppconfig_path, portarg, modearg, errno);
                 return -errno;

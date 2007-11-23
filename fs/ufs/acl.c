@@ -61,7 +61,7 @@ int ufs_permission (struct inode * inode, int mask)
 	if (((mode & mask & S_IRWXO) == mask) || capable(CAP_DAC_OVERRIDE))
 		return 0;
 	if ((mask == S_IROTH) ||
-	    (S_ISDIR(mode)  && !(mask & ~(S_IROTH | S_IXOTH))))
+	    (S_ISDIR(inode->i_mode)  && !(mask & ~(S_IROTH | S_IXOTH))))
 		if (capable(CAP_DAC_READ_SEARCH))
 			return 0;
 	return -EACCES;

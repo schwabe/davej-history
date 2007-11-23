@@ -1,6 +1,6 @@
 #define	USE_PCI_CLOCK
 static char rcsid[] =
-"$Revision: 3.1.0.1 $$Date: 2000/06/23 $";
+"$Revision: 3.1.0.2 $$Date: 2000/06/27 $";
 
 /*
  * pc300.c	Cyclades-PC300(tm) Driver.
@@ -15,6 +15,10 @@ static char rcsid[] =
  *	2 of the License, or (at your option) any later version.
  * 
  * $Log: pc300.c,v $
+ * Revision 3.1.0.2 2000/06/27 ivan
+ * Previous bugfix for the framing errors with external clock made X21 
+ * boards stop working. This version fixes it.
+ * 
  * Revision 3.1.0.1 2000/06/23 ivan
  * Revisited cpc_queue_xmit to prevent race conditions on Tx DMA buffer 
  * handling when Tx timeouts occur.
@@ -2205,17 +2209,24 @@ ch_config(pc300dev_t *d)
 		cpc_writeb(scabase + M_REG(TXS, ch), (TXS_DTRXC|TXS_IBRG|br));
 		cpc_writeb(scabase + M_REG(TMCR, ch), tmc);
 		cpc_writeb(scabase + M_REG(RXS, ch), (RXS_IBRG|br));
-		if (card->hw.type == PC300_X21)
+		if (card->hw.type == PC300_X21) {
 		    cpc_writeb(scabase + M_REG(GPO, ch), 1);
+		    cpc_writeb(scabase + M_REG(EXS, ch), EXS_TES1|EXS_RES1);
+		} else {
+		    cpc_writeb(scabase + M_REG(EXS, ch), EXS_TES1);
+		}
 	    } else {
 		cpc_writeb(scabase + M_REG(TMCT, ch), 1);
 		cpc_writeb(scabase + M_REG(TXS, ch), TXS_DTRXC);
 		cpc_writeb(scabase + M_REG(TMCR, ch), 1);
 		cpc_writeb(scabase + M_REG(RXS, ch), 0);
-		if (card->hw.type == PC300_X21)
+		if (card->hw.type == PC300_X21) {
 		    cpc_writeb(scabase + M_REG(GPO, ch), 0);
+		    cpc_writeb(scabase + M_REG(EXS, ch), EXS_TES1|EXS_RES1);
+		} else {
+		    cpc_writeb(scabase + M_REG(EXS, ch), EXS_TES1);
+		}
 	    }
-	    cpc_writeb(scabase + M_REG(EXS, ch), EXS_TES1);
 	    break;
 
 	case PC300_TE:

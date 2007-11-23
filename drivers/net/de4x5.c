@@ -3242,6 +3242,7 @@ srom_map_media(struct device *dev)
 
       case ANS:
 	lp->media = ANS;
+	lp->fdx = lp->params.fdx;
 	break;
 
       default: 

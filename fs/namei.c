@@ -155,7 +155,7 @@ int permission(struct inode * inode,int mask)
 		return 0;
 	/* read and search access */
 	if ((mask == S_IROTH) ||
-	    (S_ISDIR(mode)  && !(mask & ~(S_IROTH | S_IXOTH))))
+	    (S_ISDIR(inode->i_mode)  && !(mask & ~(S_IROTH | S_IXOTH))))
 		if (capable(CAP_DAC_READ_SEARCH))
 			return 0;
 	return -EACCES;

@@ -1941,7 +1941,11 @@ scsi_error_handler(void * data)
 	current->pgrp = 1;
 	
 	/* Become as one with the init task */
-	
+
+ 	exit_files(current);
+	current->files = init_task.files;
+	atomic_inc(&current->files->count);
+ 		
 	exit_fs(current);	/* current->fs->count--; */
 	fs = init_task.fs;
 	current->fs = fs;

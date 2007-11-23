@@ -401,15 +401,14 @@ static inline void handle_mouse_event(unsigned char scancode)
 	}
     else if(scancode == AUX_RECONNECT){
         queue->head = queue->tail = 0;  /* Flush input queue */
-        /*
-         * need this stuff? seems to work fine w/o it for me
-        aux_write_ack(AUX_SET_SAMPLE);
-        aux_write_ack(100);
-        aux_write_ack(AUX_SET_RES);
-        aux_write_ack(3);
-        aux_write_ack(AUX_SET_SCALE21);
-        */
-        aux_write_ack(AUX_ENABLE_DEV);  /* ping the mouse :) */
+        /* ping the mouse :) */
+	kb_wait();
+	kbd_write_command(KBD_CCMD_WRITE_MOUSE);
+	kb_wait();
+	kbd_write_output(AUX_ENABLE_DEV);
+	/* we expect an ACK in response. */
+	mouse_reply_expected++;
+	kb_wait();
         return;
     }
 

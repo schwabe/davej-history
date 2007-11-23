@@ -1227,8 +1227,14 @@ static int i2ob_scan(int bios)
 		else
 			b = c->devices;
 		
-		for (d=b;d!=NULL;d=d->next)
+		while(b != NULL)
 		{
+			d=b;
+			if(bios)
+				b = b->next;
+			else
+				b = b->prev;
+			
 			if(d->lct_data.class_id!=I2O_CLASS_RANDOM_BLOCK_STORAGE)
 				continue;
 			if(d->lct_data.user_tid != 0xFFF)
@@ -1303,7 +1309,7 @@ static void i2ob_probe(void)
 	/*
 	 *	Now the remainder.
 	 */
-	 
+	printk(KERN_INFO "i2o_block: Checking for I2O Block devices...\n"); 
 	i2ob_scan(0);
 }
 
@@ -1651,7 +1657,7 @@ int i2o_block_init(void)
 	 *	Finally see what is actually plugged in to our controllers
 	 */
 	i2ob_probe();
-	
+
 	return 0;
 }
 

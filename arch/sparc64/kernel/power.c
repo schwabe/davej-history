@@ -1,4 +1,4 @@
-/* $Id: power.c,v 1.3.2.1 1999/08/31 18:21:23 davem Exp $
+/* $Id: power.c,v 1.3.2.2 2000/07/11 22:42:09 davem Exp $
  * power.c: Power management driver.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -54,7 +54,7 @@ void machine_power_off(void)
 static int powerd(void *__unused)
 {
 	static char *envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL };
-	char *argv[] = { "/usr/bin/shutdown", "-h", "now", NULL };
+	char *argv[] = { "/sbin/shutdown", "-h", "now", NULL };
 
 	current->session = 1;
 	current->pgrp = 1;
@@ -69,7 +69,7 @@ again:
 	}
 
 	/* Ok, down we go... */
-	if (execve("/usr/bin/shutdown", argv, envp) < 0) {
+	if (execve("/sbin/shutdown", argv, envp) < 0) {
 		printk("powerd: shutdown execution failed\n");
 		button_pressed = 0;
 		goto again;

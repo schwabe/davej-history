@@ -1,3 +1,11 @@
+/*
+ * Update: The Berkeley copyright was changed, and the change
+ * is retroactive to all "true" BSD software (ie everything
+ * from UCB as opposed to other peoples code that just carried
+ * the same license). The new copyright doesn't clash with the
+ * GPL, so the module-only restriction has been removed..
+ */
+
 /* Because this code is derived from the 4.3BSD compress source:
  *
  * Copyright (c) 1985, 1986 The Regents of the University of California.
@@ -53,12 +61,9 @@
  * From: bsd_comp.c,v 1.3 1994/12/08 01:59:58 paulus Exp
  */
 
-#ifndef MODULE
-#error This file must be compiled as a module.
-#endif
-
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
@@ -1173,12 +1178,7 @@ static struct compressor ppp_bsd_compress = {
     bsd_comp_stats		/* decomp_stat */
 };
 
-/*************************************************************
- * Module support routines
- *************************************************************/
-
-int
-init_module(void)
+__initfunc(int bsd_comp_install(void))
 {
 	int answer = ppp_register_compressor (&ppp_bsd_compress);
 	if (answer == 0)
@@ -1186,8 +1186,18 @@ init_module(void)
 	return answer;
 }
 
+#ifdef MODULE
+
+int
+init_module(void)
+{
+	return bsd_comp_install();
+}
+
 void
 cleanup_module(void)
 {
 	ppp_unregister_compressor (&ppp_bsd_compress);
 }
+
+#endif /* MODULE */
