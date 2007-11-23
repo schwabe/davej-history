@@ -295,7 +295,7 @@ static void ev6_crd_interp(char *interp, struct el_common_EV6_mcheck * L)
     case EV6__C_STAT__PROBE_BC_ERR0:
     case EV6__C_STAT__PROBE_BC_ERR1:
 	/* Bcache single-bit error on a probe hit */
-	sprintf(interp, "%s: C_STAT[PROBE_BC_ERR]\n Bcache single-bit error on a probe hit, addr 0x$lX, bit %d", slotb, L->C_ADDR, ev6_syn2bit(L->DC0_SYNDROME, L->DC1_SYNDROME));
+	sprintf(interp, "%s: C_STAT[PROBE_BC_ERR]\n Bcache single-bit error on a probe hit, addr 0x%lX, bit %d", slotb, L->C_ADDR, ev6_syn2bit(L->DC0_SYNDROME, L->DC1_SYNDROME));
 	return;
 
     default:				/* not one of these */

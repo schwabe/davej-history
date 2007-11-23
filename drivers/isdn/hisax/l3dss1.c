@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 2.20 1999/10/11 22:16:27 keil Exp $
+/* $Id: l3dss1.c,v 2.21 1999/12/19 20:25:17 keil Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -13,6 +13,10 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
+ * Revision 2.21  1999/12/19 20:25:17  keil
+ * fixed LLC for outgoing analog calls
+ * IE Signal is valid on older local switches
+ *
  * Revision 2.20  1999/10/11 22:16:27  keil
  * Suspend/Resume is possible without explicit ID too
  *
@@ -93,7 +97,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 2.20 $";
+const char *dss1_revision = "$Revision: 2.21 $";
 
 #define EXT_BEARER_CAPS 1
 
@@ -668,34 +672,36 @@ l3dss1_msg_without_setup(struct l3_process *pc, u_char pr, void *arg)
 }
 
 static int ie_ALERTING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
-		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_HLC, IE_USER_USER, -1};
+		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_SIGNAL, IE_HLC,
+		IE_USER_USER, -1};
 static int ie_CALL_PROCEEDING[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
 		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_HLC, -1};
 static int ie_CONNECT[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1, 
-		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_DATE, IE_CONNECT_PN,
-		IE_CONNECT_SUB, IE_LLC, IE_HLC, IE_USER_USER, -1};
-static int ie_CONNECT_ACKNOWLEDGE[] = {IE_CHANNEL_ID, IE_DISPLAY, -1};
+		IE_FACILITY, IE_PROGRESS, IE_DISPLAY, IE_DATE, IE_SIGNAL,
+		IE_CONNECT_PN, IE_CONNECT_SUB, IE_LLC, IE_HLC, IE_USER_USER, -1};
+static int ie_CONNECT_ACKNOWLEDGE[] = {IE_CHANNEL_ID, IE_DISPLAY, IE_SIGNAL, -1};
 static int ie_DISCONNECT[] = {IE_CAUSE | IE_MANDATORY, IE_FACILITY,
-		IE_PROGRESS, IE_DISPLAY, IE_USER_USER, -1};
-static int ie_INFORMATION[] = {IE_COMPLETE, IE_DISPLAY, IE_KEYPAD,
+		IE_PROGRESS, IE_DISPLAY, IE_SIGNAL, IE_USER_USER, -1};
+static int ie_INFORMATION[] = {IE_COMPLETE, IE_DISPLAY, IE_KEYPAD, IE_SIGNAL,
 		IE_CALLED_PN, -1};
 static int ie_NOTIFY[] = {IE_BEARER, IE_NOTIFY | IE_MANDATORY, IE_DISPLAY, -1};
 static int ie_PROGRESS[] = {IE_BEARER, IE_CAUSE, IE_FACILITY, IE_PROGRESS |
 		IE_MANDATORY, IE_DISPLAY, IE_HLC, IE_USER_USER, -1};
-static int ie_RELEASE[] = {IE_CAUSE | IE_MANDATORY_1, IE_FACILITY, IE_DISPLAY, IE_USER_USER, -1};
+static int ie_RELEASE[] = {IE_CAUSE | IE_MANDATORY_1, IE_FACILITY, IE_DISPLAY,
+		IE_SIGNAL, IE_USER_USER, -1};
 /* a RELEASE_COMPLETE with errors don't require special actions 
-static int ie_RELEASE_COMPLETE[] = {IE_CAUSE | IE_MANDATORY_1, IE_DISPLAY, IE_USER_USER, -1};
+static int ie_RELEASE_COMPLETE[] = {IE_CAUSE | IE_MANDATORY_1, IE_DISPLAY, IE_SIGNAL, IE_USER_USER, -1};
 */
 static int ie_RESUME_ACKNOWLEDGE[] = {IE_CHANNEL_ID| IE_MANDATORY, IE_FACILITY,
 		IE_DISPLAY, -1};
 static int ie_RESUME_REJECT[] = {IE_CAUSE | IE_MANDATORY, IE_DISPLAY, -1};
 static int ie_SETUP[] = {IE_COMPLETE, IE_BEARER  | IE_MANDATORY,
 		IE_CHANNEL_ID| IE_MANDATORY, IE_FACILITY, IE_PROGRESS,
-		IE_NET_FAC, IE_DISPLAY, IE_KEYPAD, IE_CALLING_PN,
+		IE_NET_FAC, IE_DISPLAY, IE_KEYPAD, IE_SIGNAL, IE_CALLING_PN,
 		IE_CALLING_SUB, IE_CALLED_PN, IE_CALLED_SUB, IE_LLC, IE_HLC,
 		IE_USER_USER, -1};
 static int ie_SETUP_ACKNOWLEDGE[] = {IE_CHANNEL_ID | IE_MANDATORY, IE_FACILITY,
-		IE_PROGRESS, IE_DISPLAY, -1};
+		IE_PROGRESS, IE_DISPLAY, IE_SIGNAL, -1};
 static int ie_STATUS[] = {IE_CAUSE | IE_MANDATORY, IE_CALL_STATE |
 		IE_MANDATORY, IE_DISPLAY, -1};
 static int ie_STATUS_ENQUIRY[] = {IE_DISPLAY, -1};
@@ -1454,10 +1460,23 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 		p = EncodeASyncParams(p, pc->para.setup.si2 - 192);
 #if HISAX_SEND_STD_LLC_IE
 	} else {
-		*p++ = 0x7c;
-		*p++ = 0x02;
-		*p++ = 0x88;
-		*p++ = 0x90;
+	  switch (pc->para.setup.si1) {
+		case 1:	/* Telephony                               */
+			*p++ = 0x7c;	/* BC-IE-code                              */
+			*p++ = 0x3;	/* Length                                  */
+			*p++ = 0x90;	/* Coding Std. CCITT, 3.1 kHz audio     */
+			*p++ = 0x90;	/* Circuit-Mode 64kbps                     */
+			*p++ = 0xa3;	/* A-Law Audio                             */
+			break;
+		case 5:	/* Datatransmission 64k, BTX               */
+		case 7:	/* Datatransmission 64k                    */
+		default:
+			*p++ = 0x7c;	/* BC-IE-code                              */
+			*p++ = 0x2;	/* Length                                  */
+			*p++ = 0x88;	/* Coding Std. CCITT, unrestr. dig. Inform. */
+			*p++ = 0x90;	/* Circuit-Mode 64kbps                      */
+			break;
+	  }
 #endif
 	}
 #endif

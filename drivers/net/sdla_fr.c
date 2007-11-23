@@ -1252,7 +1252,6 @@ static int if_send (struct sk_buff* skb, struct device* dev)
         	++card->wandev.stats.tx_dropped;
 
 	} else if (!is_tx_ready(card, chan)) {
-		printk(KERN_INFO "%s: Supporting for delayed transmit\n",card->devname);
 		setup_for_delayed_transmit(dev, data, len);
 		chan->drvstats_if_send.if_send_no_bfrs++;
  	} else {

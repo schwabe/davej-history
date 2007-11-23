@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.12 1999/09/04 06:20:05 keil Exp $
+/* $Id: avm_pci.c,v 1.14 1999/12/19 13:09:41 keil Exp $
 
  * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -7,6 +7,13 @@
  *
  *
  * $Log: avm_pci.c,v $
+ * Revision 1.14  1999/12/19 13:09:41  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
+ * Revision 1.13  1999/12/03 12:10:14  keil
+ * Bugfix: Wrong channel use on hangup of channel 2
+ *
  * Revision 1.12  1999/09/04 06:20:05  keil
  * Changes from kernel set_current_state()
  *
@@ -56,7 +63,7 @@
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.12 $";
+static const char *avm_pci_rev = "$Revision: 1.14 $";
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2
@@ -744,11 +751,11 @@ reset_avmpcipnp(struct IsdnCardState *cs)
 	save_flags(flags);
 	sti();
 	outb(AVM_STATUS0_RESET | AVM_STATUS0_DIS_TIMER, cs->hw.avm.cfg_reg + 2);
-	current->state = TASK_INTERRUPTIBLE;
+	current->state = TASK_UNINTERRUPTIBLE;
 	schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 	outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER | AVM_STATUS0_ENA_IRQ, cs->hw.avm.cfg_reg + 2);
 	outb(AVM_STATUS1_ENA_IOM | cs->irq, cs->hw.avm.cfg_reg + 3);
-	current->state = TASK_INTERRUPTIBLE;
+	current->state = TASK_UNINTERRUPTIBLE;
 	schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 	printk(KERN_INFO "AVM PCI/PnP: S1 %x\n", inb(cs->hw.avm.cfg_reg + 3));
 }

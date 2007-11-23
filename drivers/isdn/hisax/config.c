@@ -1,10 +1,14 @@
-/* $Id: config.c,v 2.40 1999/10/30 13:09:45 keil Exp $
+/* $Id: config.c,v 2.42 1999/12/19 13:09:41 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 2.42  1999/12/19 13:09:41  keil
+ * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
+ * signal proof delays
+ *
  * Revision 2.40  1999/10/30 13:09:45  keil
  * Version 3.3c
  *
@@ -985,7 +989,7 @@ HISAX_INITFUNC(static int init_card(struct IsdnCardState *cs))
 	while (cnt) {
 		cs->cardmsg(cs, CARD_INIT, NULL);
 		sti();
-		current->state = TASK_INTERRUPTIBLE;
+		current->state = TASK_UNINTERRUPTIBLE;
 		/* Timeout 10ms */
 		schedule_timeout((10*HZ)/1000);
 		restore_flags(flags);

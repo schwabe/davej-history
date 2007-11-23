@@ -1,11 +1,14 @@
 /*
- * $Id: kcapi.c,v 1.10 1999/10/26 15:30:32 calle Exp $
+ * $Id: kcapi.c,v 1.11 1999/11/23 13:29:29 calle Exp $
  * 
  * Kernel CAPI 2.0 Module
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kcapi.c,v $
+ * Revision 1.11  1999/11/23 13:29:29  calle
+ * Bugfix: incoming capi message were never traced.
+ *
  * Revision 1.10  1999/10/26 15:30:32  calle
  * Generate error message if user want to add card, but driver module is
  * not loaded.
@@ -79,7 +82,7 @@
 #include <linux/b1lli.h>
 #endif
 
-static char *revision = "$Revision: 1.10 $";
+static char *revision = "$Revision: 1.11 $";
 
 /* ------------------------------------------------------------- */
 
@@ -703,9 +706,9 @@ static void controllercb_handle_capimsg(struct capi_ctr * card,
 	if (cmd == CAPI_DATA_B3 && subcmd == CAPI_IND) {
 		card->nrecvdatapkt++;
 	        if (card->traceflag > 2) showctl |= 2;
-	        if (card->traceflag) showctl |= 2;
 	} else {
 		card->nrecvctlpkt++;
+	        if (card->traceflag) showctl |= 2;
 	}
 	showctl |= (card->traceflag & 1);
 	if (showctl & 2) {

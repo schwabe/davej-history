@@ -1,4 +1,4 @@
-/* $Id: eicon_mod.c,v 1.19 1999/11/12 13:21:44 armin Exp $
+/* $Id: eicon_mod.c,v 1.22 1999/11/27 12:56:19 armin Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  * 
@@ -31,6 +31,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.22  1999/11/27 12:56:19  armin
+ * Forgot some iomem changes for last ioremap compat.
+ *
+ * Revision 1.21  1999/11/25 11:35:10  armin
+ * Microchannel fix from Erik Weber (exrz73@ibm.net).
+ * Minor cleanup.
+ *
+ * Revision 1.20  1999/11/18 21:14:30  armin
+ * New ISA memory mapped IO
+ *
  * Revision 1.19  1999/11/12 13:21:44  armin
  * Bugfix of undefined reference with CONFIG_MCA
  *
@@ -46,7 +56,7 @@
  * Improved debug and log via readstat()
  *
  * Revision 1.15  1999/09/08 20:17:31  armin
- * Added microchannel patch from Erik Weber.
+ * Added microchannel patch from Erik Weber (exrz73@ibm.net).
  *
  * Revision 1.14  1999/09/06 07:29:35  fritz
  * Changed my mail-address.
@@ -123,7 +133,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.19 $";
+static char *eicon_revision = "$Revision: 1.22 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -839,8 +849,7 @@ if_sendbuf(int id, int channel, int ack, struct sk_buff *skb)
 }
 
 /* jiftime() copied from HiSax */
-/* Copying functions without making them static causes nameclashed --ADVE */
-static inline int
+inline int
 jiftime(char *s, long mark)
 {
         s += 8;
@@ -1001,19 +1010,28 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
                         case EICON_CTYPE_S:
                         case EICON_CTYPE_SX:
                         case EICON_CTYPE_SCOM:
-                                if (membase == -1)
-                                        membase = EICON_ISA_MEMBASE;
-                                if (irq == -1)
-                                        irq = EICON_ISA_IRQ;
-                                card->bus = EICON_BUS_MCA;
-                                card->hwif.isa.card = (void *)card;
-                                card->hwif.isa.shmem = (eicon_isa_shmem *)membase;
-                                card->hwif.isa.master = 1;
+				if (MCA_bus) {
+	                                if (membase == -1)
+        	                                membase = EICON_ISA_MEMBASE;
+                	                if (irq == -1)
+                        	                irq = EICON_ISA_IRQ;
+	                                card->bus = EICON_BUS_MCA;
+        	                        card->hwif.isa.card = (void *)card;
+                	                card->hwif.isa.shmem = (eicon_isa_shmem *)membase;
+					card->hwif.isa.physmem = (unsigned long)membase;
+                        	        card->hwif.isa.master = 1;
 
-                                card->hwif.isa.irq = irq;
-                                card->hwif.isa.type = Type;
-                                card->nchannels = 2;
-                                card->interface.channels = 1;
+	                                card->hwif.isa.irq = irq;
+        	                        card->hwif.isa.type = Type;
+                	                card->nchannels = 2;
+                        	        card->interface.channels = 1;
+				} else {
+					printk(KERN_WARNING
+						"eicon (%s): no MCA bus detected.\n",
+						card->interface.id);
+					kfree(card);
+					return;
+				}
                                 break;
 #endif /* CONFIG_MCA */
 			case EICON_CTYPE_QUADRO:
@@ -1024,6 +1042,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
                                 card->bus = EICON_BUS_ISA;
 				card->hwif.isa.card = (void *)card;
 				card->hwif.isa.shmem = (eicon_isa_shmem *)(membase + (i+1) * EICON_ISA_QOFFSET);
+				card->hwif.isa.physmem = (unsigned long)(membase + (i+1) * EICON_ISA_QOFFSET);
 				card->hwif.isa.master = 0;
 				strcpy(card->interface.id, id);
 				if (id[strlen(id) - 1] == 'a') {
@@ -1117,6 +1136,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 				card->bus = EICON_BUS_ISA;
 				card->hwif.isa.card = (void *)card;
 				card->hwif.isa.shmem = (eicon_isa_shmem *)membase;
+				card->hwif.isa.physmem = (unsigned long)membase;
 				card->hwif.isa.master = 1;
 				card->hwif.isa.irq = irq;
 				card->hwif.isa.type = Type;
@@ -1131,6 +1151,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
                                 card->bus = EICON_BUS_ISA;
 				card->hwif.isa.card = (void *)card;
 				card->hwif.isa.shmem = (eicon_isa_shmem *)membase;
+				card->hwif.isa.physmem = (unsigned long)membase;
 				card->hwif.isa.master = 1;
 				card->hwif.isa.irq = irq;
 				card->hwif.isa.type = Type;
@@ -1152,14 +1173,15 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 		}
 		for (j=0; j< (card->nchannels + 1); j++) {
 			memset((char *)&card->bch[j], 0, sizeof(eicon_chan));
-			card->bch[j].plci = 0x8000;
-			card->bch[j].ncci = 0x8000;
+			card->bch[j].statectrl = 0;
 			card->bch[j].l2prot = ISDN_PROTO_L2_X75I;
 			card->bch[j].l3prot = ISDN_PROTO_L3_TRANS;
 			card->bch[j].e.D3Id = 0;
 			card->bch[j].e.B2Id = 0;
 			card->bch[j].e.Req = 0;
 			card->bch[j].No = j;
+			card->bch[j].tskb1 = NULL;
+			card->bch[j].tskb2 = NULL;
 			skb_queue_head_init(&card->bch[j].e.X);
 			skb_queue_head_init(&card->bch[j].e.R);
 		}

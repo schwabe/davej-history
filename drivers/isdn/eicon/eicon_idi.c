@@ -1,4 +1,4 @@
-/* $Id: eicon_idi.c,v 1.24 1999/10/26 21:15:33 armin Exp $
+/* $Id: eicon_idi.c,v 1.27 1999/11/29 13:12:03 armin Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  *        IDI interface 
@@ -26,6 +26,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_idi.c,v $
+ * Revision 1.27  1999/11/29 13:12:03  armin
+ * Autoconnect on L2_TRANS doesn't work with link_level correctly,
+ * changed back to former mode.
+ *
+ * Revision 1.26  1999/11/25 11:43:27  armin
+ * Fixed statectrl and connect message.
+ * X.75 fix and HDLC/transparent with autoconnect.
+ * Minor cleanup.
+ *
+ * Revision 1.25  1999/11/18 20:30:55  armin
+ * removed old workaround for ISA cards.
+ *
  * Revision 1.24  1999/10/26 21:15:33  armin
  * using define for checking phone number len to avoid buffer overflow.
  *
@@ -130,7 +142,7 @@
 
 #undef EICON_FULL_SERVICE_OKTETT
 
-char *eicon_idi_revision = "$Revision: 1.24 $";
+char *eicon_idi_revision = "$Revision: 1.27 $";
 
 eicon_manifbuf *manbuf;
 
@@ -187,16 +199,13 @@ idi_assign_req(eicon_REQ *reqbuf, int signet, eicon_chan *chan)
 	reqbuf->XBuffer.P[l++] = LLC;
 	reqbuf->XBuffer.P[l++] = 2;
 	switch(chan->l2prot) {
-		case ISDN_PROTO_L2_HDLC:
-			reqbuf->XBuffer.P[l++] = 2;
+		case ISDN_PROTO_L2_TRANS:
+			reqbuf->XBuffer.P[l++] = 2; /* transparent */
 			break;
 		case ISDN_PROTO_L2_X75I:
 		case ISDN_PROTO_L2_X75UI:
 		case ISDN_PROTO_L2_X75BUI:
-			reqbuf->XBuffer.P[l++] = 5; 
-			break;
-		case ISDN_PROTO_L2_TRANS:
-			reqbuf->XBuffer.P[l++] = 2;
+			reqbuf->XBuffer.P[l++] = 5; /* X.75 */ 
 			break;
 		case ISDN_PROTO_L2_MODEM:
   			if (chan->fsm_state == EICON_STATE_IWAIT)
@@ -204,11 +213,12 @@ idi_assign_req(eicon_REQ *reqbuf, int signet, eicon_chan *chan)
 			else
 				reqbuf->XBuffer.P[l++] = 10; /* V.42 */
 			break;
+		case ISDN_PROTO_L2_HDLC:
 		case ISDN_PROTO_L2_FAX:
   			if (chan->fsm_state == EICON_STATE_IWAIT)
 				reqbuf->XBuffer.P[l++] = 3; /* autoconnect on incoming */
 			else
-				reqbuf->XBuffer.P[l++] = 2;
+				reqbuf->XBuffer.P[l++] = 2; /* transparent */
 			break;
 		default:
 			reqbuf->XBuffer.P[l++] = 1;
@@ -404,8 +414,10 @@ eicon_idi_listen_req(eicon_card *card, eicon_chan *chan)
 		idi_do_req(card, chan, ASSIGN, 0); 
 	}
 	if (chan->fsm_state == EICON_STATE_NULL) {
-		idi_do_req(card, chan, INDICATE_REQ, 0);
-		chan->fsm_state = EICON_STATE_LISTEN;
+		if (!(chan->statectrl & HAVE_CONN_REQ)) {
+			idi_do_req(card, chan, INDICATE_REQ, 0);
+			chan->fsm_state = EICON_STATE_LISTEN;
+		}
 	}
   return(0);
 }
@@ -462,6 +474,7 @@ idi_hangup(eicon_card *card, eicon_chan *chan)
 	}
 	if (chan->e.B2Id) idi_do_req(card, chan, REMOVE, 1);
 	if (chan->fsm_state != EICON_STATE_NULL) {
+		chan->statectrl |= WAITING_FOR_HANGUP;
 		idi_do_req(card, chan, HANGUP, 0);
 		chan->fsm_state = EICON_STATE_NULL;
 	}
@@ -479,7 +492,6 @@ idi_connect_res(eicon_card *card, eicon_chan *chan)
 		return 1;
 
 	chan->fsm_state = EICON_STATE_IWAIT;
-	idi_do_req(card, chan, CALL_RES, 0);
 	
 	/* check if old NetID has been removed */
 	if (chan->e.B2Id) {
@@ -489,6 +501,7 @@ idi_connect_res(eicon_card *card, eicon_chan *chan)
 	}
 
 	idi_do_req(card, chan, ASSIGN, 1);
+	idi_do_req(card, chan, CALL_RES, 0);
 	return(0);
 }
 
@@ -656,9 +669,18 @@ idi_connect_req(eicon_card *card, eicon_chan *chan, char *phone,
 	reqbuf->XBuffer.length = l;
 	reqbuf->Reference = 0; /* Sig Entity */
 
-	skb_queue_tail(&chan->e.X, skb);
-	skb_queue_tail(&card->sndq, skb2); 
-	eicon_schedule_tx(card);
+	if (chan->statectrl & WAITING_FOR_HANGUP) {
+		/*	If the line did not disconnect yet,
+			we have to delay this command		*/
+		eicon_log(card, 32, "idi_req: Ch%d: delaying conn_req\n", chan->No);
+		chan->statectrl |= HAVE_CONN_REQ;
+		chan->tskb1 = skb;
+		chan->tskb2 = skb2;
+	} else {
+		skb_queue_tail(&chan->e.X, skb);
+		skb_queue_tail(&card->sndq, skb2); 
+		eicon_schedule_tx(card);
+	}
 
 	eicon_log(card, 8, "idi_req: Ch%d: Conn_Req %s -> %s\n",chan->No, eazmsn, phone);
    return(0);
@@ -1433,6 +1455,7 @@ idi_edata_action(eicon_card *ccard, eicon_chan *chan, char *buffer, int len)
 			cmd.driver = ccard->myid;
 			cmd.command = ISDN_STAT_BCONN;
 			cmd.arg = chan->No;
+			strcpy(cmd.parm.num, "");
 			ccard->interface.statcallb(&cmd);
 
 			cmd.driver = ccard->myid;
@@ -1489,6 +1512,8 @@ idi_edata_action(eicon_card *ccard, eicon_chan *chan, char *buffer, int len)
 					break;
 				case 2:	/* session end */
 				default:
+					/* send_edata produces error on some */
+					/* fax-machines here, so we don't */
 					/* idi_send_edata(ccard, chan); */
 					break;
 			}
@@ -1505,6 +1530,7 @@ idi_edata_action(eicon_card *ccard, eicon_chan *chan, char *buffer, int len)
 			cmd.driver = ccard->myid;
 			cmd.command = ISDN_STAT_BCONN;
 			cmd.arg = chan->No;
+			strcpy(cmd.parm.num, "");
 			ccard->interface.statcallb(&cmd);
 
 			cmd.driver = ccard->myid;
@@ -2347,12 +2373,25 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				} else {
 					if (chan->e.B2Id)
 						idi_do_req(ccard, chan, REMOVE, 1);
-					chan->fsm_state = EICON_STATE_NULL;
-					cmd.driver = ccard->myid;
-					cmd.arg = chan->No;
-					cmd.command = ISDN_STAT_DHUP;
-					ccard->interface.statcallb(&cmd);
-					eicon_idi_listen_req(ccard, chan);
+					chan->statectrl &= ~WAITING_FOR_HANGUP;
+					if (chan->statectrl & HAVE_CONN_REQ) {
+						eicon_log(ccard, 32, "idi_req: Ch%d: queueing delayed conn_req\n", chan->No);
+						chan->statectrl &= ~HAVE_CONN_REQ;
+						if ((chan->tskb1) && (chan->tskb2)) {
+							skb_queue_tail(&chan->e.X, chan->tskb1);
+							skb_queue_tail(&ccard->sndq, chan->tskb2); 
+							eicon_schedule_tx(ccard);
+						}
+						chan->tskb1 = NULL;
+						chan->tskb2 = NULL;
+					} else {
+						chan->fsm_state = EICON_STATE_NULL;
+						cmd.driver = ccard->myid;
+						cmd.arg = chan->No;
+						cmd.command = ISDN_STAT_DHUP;
+						ccard->interface.statcallb(&cmd);
+						eicon_idi_listen_req(ccard, chan);
+					}
 				}
 				break;
 			case INDICATE_IND:
@@ -2450,8 +2489,12 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 						case ISDN_PROTO_L2_MODEM:
 							/* do nothing, wait for connect */
 							break;
-						default:
+						case ISDN_PROTO_L2_TRANS:
 							idi_do_req(ccard, chan, IDI_N_CONNECT, 1);
+							break;
+						default:
+							/* On most incoming calls we use automatic connect */
+							/* idi_do_req(ccard, chan, IDI_N_CONNECT, 1); */
 					}
 				} else
 					idi_hangup(ccard, chan);
@@ -2530,6 +2573,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				cmd.driver = ccard->myid;
 				cmd.command = ISDN_STAT_BCONN;
 				cmd.arg = chan->No;
+				strcpy(cmd.parm.num, "64000");
 				ccard->interface.statcallb(&cmd);
 				break; 
 			case IDI_N_CONNECT:
@@ -2546,6 +2590,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				cmd.driver = ccard->myid;
 				cmd.command = ISDN_STAT_BCONN;
 				cmd.arg = chan->No;
+				strcpy(cmd.parm.num, "64000");
 				ccard->interface.statcallb(&cmd);
 				break; 
 			case IDI_N_DISC:
@@ -2576,6 +2621,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					cmd.arg = chan->No;
 					ccard->interface.statcallb(&cmd);
 					chan->fsm_state = EICON_STATE_NULL;
+					chan->statectrl |= WAITING_FOR_HANGUP;
 				}
 #ifdef CONFIG_ISDN_TTY_FAX
 				chan->fax = 0;
@@ -2631,7 +2677,8 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 	isdn_ctrl cmd;
 
 	if (ack->RcId != ((chan->e.ReqCh) ? chan->e.B2Id : chan->e.D3Id)) {
-		/* I dont know why this happens, just ignoring this RC */
+		/* I dont know why this happens, should not ! */
+		/* just ignoring this RC */
 		eicon_log(ccard, 16, "idi_ack: Ch%d: RcId %d not equal to last %d\n", chan->No, 
 			ack->RcId, (chan->e.ReqCh) ? chan->e.B2Id : chan->e.D3Id);
 		return 1;
@@ -2647,9 +2694,9 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 	/* Remove an Id */
 	if (chan->e.Req == REMOVE) {
 		if (ack->Reference != chan->e.ref) {
+			/* This should not happen anymore */
 			eicon_log(ccard, 16, "idi_ack: Ch%d: Rc-Ref %d not equal to stored %d\n", chan->No,
 				ack->Reference, chan->e.ref);
-			return 0;
 		}
 		save_flags(flags);
 		cli();

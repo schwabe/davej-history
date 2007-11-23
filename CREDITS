@@ -974,12 +974,14 @@ S: USA
 
 N: Dave Jones
 E: dave@powertweak.com
+E: djones2@glam.ac.uk
 W: http://linux.powertweak.com
-D: Centaur/IDT Winchip/Winchip 2 tweaks
+D: Userspace PCI bridge tuning (Powertweak).
+D: Centaur/IDT Winchip/Winchip 2 tweaks.
 D: Misc clean ups and other random hacking.
-S: 40, Heol Edward Lewis,
-S: Gelligaer, Hengoed,
-S: Mid Glamorgan, CF82 8EJ,
+S: 28 Laura Street,
+S: Treforest, Pontypridd,
+S: Mid Glamorgan, CF37 1NW,
 S: Wales, United Kingdom
 
 N: Bernhard Kaindl

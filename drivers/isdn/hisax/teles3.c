@@ -1,16 +1,19 @@
-/* $Id: teles3.c,v 2.13 1999/08/30 12:01:28 keil Exp $
+/* $Id: teles3.c,v 2.14 1999/12/23 15:09:32 keil Exp $
 
  * teles3.c     low level stuff for Teles 16.3 & PNP isdn cards
  *
  *              based on the teles driver from Jan den Ouden
  *
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *              Beat Doebeli
  *
  * $Log: teles3.c,v $
+ * Revision 2.14  1999/12/23 15:09:32  keil
+ * change email
+ *
  * Revision 2.13  1999/08/30 12:01:28  keil
  * HW version v1.3 support
  *
@@ -88,7 +91,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *teles3_revision = "$Revision: 2.13 $";
+const char *teles3_revision = "$Revision: 2.14 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

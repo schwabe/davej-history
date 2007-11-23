@@ -1,4 +1,4 @@
-/* $Id: eicon_isa.h,v 1.6 1999/11/15 19:37:04 keil Exp $
+/* $Id: eicon_isa.h,v 1.7 1999/11/18 21:14:30 armin Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_isa.h,v $
+ * Revision 1.7  1999/11/18 21:14:30  armin
+ * New ISA memory mapped IO
+ *
  * Revision 1.6  1999/11/15 19:37:04  keil
  * need config.h
  *
@@ -116,6 +119,7 @@ typedef union {
 typedef struct {
 	int               ramsize;
 	int               irq;	    /* IRQ                        */
+	unsigned long	  physmem;  /* physical memory address	  */
 #ifdef CONFIG_MCA
 	int		  io;	    /* IO-port for MCA brand      */
 #endif /* CONFIG_MCA */

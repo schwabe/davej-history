@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 6.18  August 16, 1998
+ *  linux/drivers/block/ide.c	Version 6.19  December 28, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -92,6 +92,7 @@
  * Version 6.16		fixed various bugs; even more SMP friendly
  * Version 6.17		fix for newest EZ-Drive problem
  * Version 6.18		default unpartitioned-disk translation now "BIOS LBA"
+ * Version 6.19		Added SMP support; fixed multmode issues.  -ml
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -1204,11 +1205,18 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, int masked_irq)
 		if (bdev->current_request == &bdev->plug)	/* FIXME: paranoia */
 			printk("%s: Huh? nuking plugged queue\n", drive->name);
 		bdev->current_request = hwgroup->rq = drive->queue;
+		/*
+		 * Some systems have trouble with IDE IRQs arriving while
+		 * the driver is still setting things up.  So, here we disable
+		 * the IRQ used by this interface while the request is being started.
+		 * This may look bad at first, but pretty much the same thing
+		 * happens anyway when any interrupt comes in, IDE or otherwise
+		 *  -- the kernel masks the IRQ while it is being handled.
+		 */
 		if (hwif->irq != masked_irq)
 			disable_irq_nosync(hwif->irq);
 		spin_unlock(&io_request_lock);
-		if (!hwif->serialized)	/* play it safe with buggy hardware */
-			ide__sti();
+		ide__sti();	/* allow other IRQs while we start this request */
 		startstop = start_request(drive);
 		spin_lock_irq(&io_request_lock);
 		if (hwif->irq != masked_irq)
