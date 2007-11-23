@@ -363,6 +363,13 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_MEGARAID),y)
+L_OBJS += megaraid.o
+else
+  ifeq ($(CONFIG_SCSI_MEGARAID),m)
+  M_OBJS += megaraid.o
+  endif
+endif
 
 ifeq ($(CONFIG_BLK_DEV_IDESCSI),y)
 L_OBJS += ide-scsi.o
@@ -376,7 +383,7 @@ aha152x.o: aha152x.c
 gdth.o: gdth.c gdth.h gdth_proc.c gdth_proc.h
 	$(CC) $(CFLAGS) $(GDTH) -c gdth.c 
 
-aic7xxx.o: aic7xxx.c aic7xxx_seq.h aic7xxx_reg.h
+aic7xxx.o: aic7xxx.c aic7xxx_seq.c aic7xxx_reg.h
 	$(CC) $(CFLAGS) -c -o $@ aic7xxx.c
 
 seagate.o: seagate.c
@@ -394,6 +401,9 @@ tmscsim.o : tmscsim.c
 
 g_NCR5380.o: g_NCR5380.c
 	$(CC) $(CFLAGS) -DGENERIC_NCR5380_OVERRIDE="{{(NCR5380_map_type)0x350,5,0, BOARD_NCR53C400}};" -c g_NCR5380.c
+
+megaraid.o: megaraid.c
+	$(CC) $(CFLAGS) -c megaraid.c
 
 scsi_mod.o: $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o

@@ -4,13 +4,13 @@
 /*
  * Header file for the GDT ISA/EISA/PCI Disk Array Controller driver for Linux
  * 
- * gdth.h Copyright (C) 1995-97 ICP vortex Computersysteme GmbH, Achim Leubner
+ * gdth.h Copyright (C) 1995-98 ICP vortex Computersysteme GmbH, Achim Leubner
  * See gdth.c for further informations and 
  * below for supported controller types
  *
  * <achim@vortex.de>
  *
- * $Id: gdth.h,v 1.7 1997/03/20 16:01:59 achim Exp $
+ * $Id: gdth.h,v 1.15 1998/09/28 15:50:10 achim Exp $
  */
 
 #include <linux/version.h>
@@ -29,9 +29,9 @@
 /* defines, macros */
 
 /* driver version */
-#define GDTH_VERSION_STR        "1.00"
+#define GDTH_VERSION_STR        "1.07"
 #define GDTH_VERSION            1
-#define GDTH_SUBVERSION         0
+#define GDTH_SUBVERSION         7
 
 /* protocol version */
 #define PROTOCOL_VERSION        1
@@ -101,15 +101,26 @@
 #define PCI_DEVICE_ID_VORTEX_GDT6x21RP2 0x125   /* GDT6121RP2/GDT6521RP2 */
 #endif
 
+#ifndef PCI_DEVICE_ID_VORTEX_GDT6519RD
+/* GDT_MPR, Fibre Channel */
+#define PCI_DEVICE_ID_VORTEX_GDT6519RD  0x210   /* GDT6519RD */
+#define PCI_DEVICE_ID_VORTEX_GDT6529RD  0x211   /* GDT6529RD */
+#endif
+
+#ifndef PCI_DEVICE_ID_VORTEX_GDTMAXRP
+/* GDT_MPR, last device ID */
+#define PCI_DEVICE_ID_VORTEX_GDTMAXRP  	0x2ff   
+#endif
+
 /* limits */
 #define GDTH_SCRATCH    4096                    /* 4KB scratch buffer */
 #define GDTH_MAXCMDS    124
 #define GDTH_MAXC_P_L   16                      /* max. cmds per lun */
 #define MAXOFFSETS      128
 #define MAXHA           8
-#define MAXID           8
+#define MAXID           16
 #define MAXLUN          8
-#define MAXBUS          5
+#define MAXBUS          6
 #define MAX_HDRIVES     35                      /* max. host drive count */
 #define MAX_EVENTS      100                     /* event buffer count */
 #define MAXCYLS         1024
@@ -147,6 +158,7 @@
 #define SECTOR_SIZE     0x200                   /* always 512 bytes per sector */
 
 /* DPMEM constants */
+#define DPMEM_MAGIC	0xC0FFEE11
 #define IC_HEADER_BYTES 48
 #define IC_QUEUE_BYTES  4
 #define DPMEM_COMMAND_OFFSET    IC_HEADER_BYTES+IC_QUEUE_BYTES*MAXOFFSETS
@@ -170,9 +182,11 @@
 
 /* IOCTL command defines */
 #define SCSI_CHAN_CNT   5                       /* subfunctions */
+#define GET_IOCHAN_DESC	0x5e
 #define L_CTRL_PATTERN  0x20000000L
 #define CACHE_INFO      4
 #define CACHE_CONFIG    5
+#define BOARD_INFO	0x28
 #define IO_CHANNEL      0x00020000L             /* channels */
 #define INVALID_CHANNEL 0x0000ffffL     
 
@@ -254,6 +268,21 @@ typedef struct {
     unchar      siop_state;                     /* SCSI processor state */ 
 } gdth_getch_str;
 
+/* get raw channel count IOCTL (NEW!) */
+typedef struct {
+    ulong	version;			/* version of information (-1UL: newest) */
+    unchar	list_entries;			/* list entry count */
+    unchar	first_chan;			/* first channel number */
+    unchar	last_chan;			/* last channel number */
+    unchar	chan_count;			/* (R) channel count */
+    ulong	list_offset;			/* offset of list[0] */
+    struct {
+	unchar	proc_id;			/* processor id */
+	unchar	proc_defect;			/* defect ? */
+	unchar	reserved[2];
+    } list[MAXBUS];
+} gdth_iochan_str;
+
 /* cache info/config IOCTL */
 typedef struct {
     ulong       version;                        /* firmware version */
@@ -276,6 +305,35 @@ typedef struct {
     gdth_cpar_str   cpar;
     gdth_cstat_str  cstat;
 } gdth_cinfo_str;
+
+/* board info IOCTL */
+typedef struct {
+    ulong	ser_no;				/* serial no. */
+    unchar	oem_id[2];			/* OEM ID */
+    ushort	ep_flags;			/* eprom flags */
+    ulong	proc_id;			/* processor ID */
+    ulong	memsize;			/* memory size (bytes) */
+    unchar	mem_banks;			/* memory banks */
+    unchar	chan_type;			/* channel type */
+    unchar	chan_count;			/* channel count */
+    unchar	rdongle_pres;			/* dongle present? */
+    ulong	epr_fw_ver;			/* (eprom) firmware version */
+    ulong	upd_fw_ver;			/* (update) firmware version */
+    ulong	upd_revision;			/* update revision */
+    char	type_string[16];		/* controller name */
+    char	raid_string[16];		/* RAID firmware name */
+    unchar	update_pres;			/* update present? */
+    unchar	xor_pres;			/* XOR engine present? */
+    unchar	prom_type;			/* ROM type (eprom/flash eprom) */
+    unchar	prom_count;			/* number of ROM devices */
+    ulong	dup_pres;			/* duplexing module present? */
+    ulong	chan_pres;			/* number of expansion channels */
+    ulong	mem_pres;			/* memory expansion installed? */
+    unchar	ft_bus_system;			/* fault bus supported? */
+    unchar	subtype_valid;			/* board_subtype valid? */
+    unchar	board_subtype;			/* controller subtype/hardware level */
+    unchar	ramparity_pres;			/* RAM parity check hardware present? */
+} gdth_binfo_str; 
 
 /* scatter/gather element */
 typedef struct {
@@ -550,9 +608,10 @@ typedef struct {
     unchar              bus_cnt;                /* SCSI bus count */
     unchar              type;                   /* controller class */
     ushort              raw_feat;               /* feat. raw service (s/g,..) */
-    ushort              cache_feat;             /* feat. cache serv. (s/g,..) */
     ulong               stype;                  /* controller subtype */
-    ulong               brd;                    /* BMIC/DPRAM address */
+    ushort              cache_feat;             /* feat. cache serv. (s/g,..) */
+    ushort		bmic;			/* BMIC address (EISA) */
+    void               	*brd;	                /* DPRAM address */
     ulong               brd_phys;               /* slot number/BIOS address */
     gdt6c_plx_regs      *plx;                   /* PLX regs (new PCI contr.) */
     gdth_cmd_str        *pccb;                  /* address command structure */
@@ -580,6 +639,7 @@ typedef struct {
     unchar              mode;                   /* information from /proc */
     ushort              param_size;
     gdth_cpar_str       cpar;                   /* controller cache par. */
+    char		ctr_name[16];		/* controller name */
 } gdth_ha_str;
 
 /* structure for scsi_register(), SCSI bus != 0 */
@@ -648,11 +708,21 @@ typedef struct {
     } bd;
 } gdth_modep_data;
 
+/* stack frame */
 typedef struct {
     ulong       b[10];                          /* 32 bit compiler ! */
 } gdth_stackframe;
 
 #pragma pack()
+
+
+/* data structure for reserve drives */
+typedef struct {
+    unchar	hanum;				
+    unchar	bus;
+    unchar	id;
+} gdth_reserve_str;
+
 
 /* function prototyping */
 
@@ -668,8 +738,38 @@ int gdth_reset(Scsi_Cmnd *);
 #endif
 const char *gdth_info(struct Scsi_Host *);
 
-
-#if LINUX_VERSION_CODE >= 0x010300
+#if LINUX_VERSION_CODE >= 0x02015F
+int gdth_bios_param(Disk *,kdev_t,int *);
+extern struct proc_dir_entry proc_scsi_gdth;
+int gdth_proc_info(char *,char **,off_t,int,int,int);
+int gdth_eh_abort(Scsi_Cmnd *scp);
+int gdth_eh_device_reset(Scsi_Cmnd *scp);
+int gdth_eh_bus_reset(Scsi_Cmnd *scp);
+int gdth_eh_host_reset(Scsi_Cmnd *scp);
+#define GDTH { proc_dir:        &proc_scsi_gdth,                 \
+               proc_info:       gdth_proc_info,                  \
+               name:            "GDT SCSI Disk Array Controller",\
+               detect:          gdth_detect,                     \
+               release:         gdth_release,                    \
+               info:            gdth_info,                       \
+               command:         gdth_command,                    \
+               queuecommand:    gdth_queuecommand,               \
+               eh_abort_handler: gdth_eh_abort,                  \
+               eh_device_reset_handler: gdth_eh_device_reset,    \
+               eh_bus_reset_handler: gdth_eh_bus_reset,          \
+               eh_host_reset_handler: gdth_eh_host_reset,        \
+               abort:           gdth_abort,                      \
+               reset:           gdth_reset,                      \
+               bios_param:      gdth_bios_param,                 \
+               can_queue:       GDTH_MAXCMDS,                    \
+               this_id:         -1,                              \
+               sg_tablesize:    GDTH_MAXSG,                      \
+               cmd_per_lun:     GDTH_MAXC_P_L,                   \
+               present:         0,                               \
+               unchecked_isa_dma: 1,                             \
+               use_clustering:  ENABLE_CLUSTERING,               \
+               use_new_eh_code: 1       /* use new error code */ }    
+#elif LINUX_VERSION_CODE >= 0x010300
 int gdth_bios_param(Disk *,kdev_t,int *);
 extern struct proc_dir_entry proc_scsi_gdth;
 int gdth_proc_info(char *,char **,off_t,int,int,int);

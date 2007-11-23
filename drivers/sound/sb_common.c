@@ -1196,7 +1196,7 @@ probe_sbmpu (struct address_info *hw_config)
     case MDL_SB16:
       if (hw_config->io_base != 0x300 && hw_config->io_base != 0x330)
 	{
-	  printk ("SB16: Invalid MIDI port %x\n", hw_config->irq);
+	  printk ("SB16: Invalid MIDI port %x\n", hw_config->io_base);
 	  return 0;
 	}
       hw_config->name = "Sound Blaster 16";

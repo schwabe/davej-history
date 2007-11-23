@@ -203,8 +203,11 @@ int block_read(struct inode * inode, struct file * filp,
 			blocks = rblocks;
 		
 	}
-	if (block + blocks > size)
+	if (block + blocks > size) {
 		blocks = size - block;
+		if (blocks == 0)
+			return 0;
+	}
 
 	/* We do this in a two stage process.  We first try to request
 	   as many blocks as we can, then we wait for the first one to

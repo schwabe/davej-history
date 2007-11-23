@@ -304,6 +304,8 @@ static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char
 	   The first six bytes are the station address. */
 	for (i = 0; i < 6; i++)
 		printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
+		
+	printk("\n");
 
 	dev->base_addr = ioaddr;
 	request_region(ioaddr, PCNET32_TOTAL_SIZE, dev->name);

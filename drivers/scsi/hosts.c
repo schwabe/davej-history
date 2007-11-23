@@ -161,6 +161,10 @@
 #include "AM53C974.h"
 #endif
 
+#ifdef CONFIG_SCSI_MEGARAID
+#include "megaraid.h"
+#endif
+
 #ifdef CONFIG_SCSI_PPA
 #include "ppa.h"
 #endif
@@ -311,6 +315,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_AM53C974
     AM53C974,
+#endif
+#ifdef CONFIG_SCSI_MEGARAID
+    MEGARAID,
 #endif
 #ifdef CONFIG_SCSI_PPA
     PPA,

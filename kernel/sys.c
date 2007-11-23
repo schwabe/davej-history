@@ -197,6 +197,9 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 	else if (!flag)
 		C_A_D = 0;
 	else if (flag == 0xCDEF0123) {
+#ifdef CONFIG_SCSI_GDTH
+		gdth_halt();
+#endif
 		printk(KERN_EMERG "System halted\n");
 		sys_kill(-1, SIGKILL);
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)

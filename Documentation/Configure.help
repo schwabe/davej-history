@@ -390,24 +390,22 @@ Parallel port generic ATAPI devices
 CONFIG_PARIDE_PG
   This option enables a special high-level driver for generic ATAPI
   devices connected through a parallel port. The driver allows user
-  programs, such as cdrecord, to send ATAPI commands directly to a
-  device. If you chose to build PARIDE support into your kernel, you 
-  may answer Y here to build in the parallel port generic ATAPI driver, 
-  otherwise you should answer M to build it as a loadable module.
-  The module will be called pg.o.  You must also have at least one 
-  parallel port protocol driver in your system.  This driver 
-  implements an API loosely related to the generic SCSI driver.  
-  See /usr/include/linux/pg.h for details. 
-
-  You can obtain the most recent version of cdrecord from
-  ftp://ftp.fokus.gmd.de/pub/unix/cdrecord/ .  Versions 1.6.1a3 and
-  later fully support the pg driver.
+  programs, such as cdrecord, to send ATAPI commands directly to
+  a device.  If you chose to build PARIDE support into your kernel,
+  you may answer Y here to build in the parallel port generic ATAPI
+  driver, otherwise you should answer M to build it as a loadable
+  module.  The module will be called pg.o.  You must also have at
+  least one parallel port protocol driver in your system.  This driver
+  implements an API loosely related to the generic SCSI driver.  See
+  /usr/include/linux/pg.h for details.  You can obtain the most recent
+  version of cdrecord from ftp://ftp.fokus.gmd.de/pub/unix/cdrecord/ .
+  Versions 1.6.1a3 and later fully support the pg driver.
 
 ATEN EH-100 protocol
 CONFIG_PARIDE_ATEN 
   This option enables support for the ATEN EH-100 parallel port IDE
   protocol.  This protocol is used in some inexpensive low performance 
-  parallel port kits made in Hong Kong. If you chose to build PARIDE 
+  parallel port kits made in Hong Kong.  If you chose to build PARIDE 
   support into your kernel, you may answer Y here to build in the 
   protocol driver, otherwise you should answer M to build it as a 
   loadable module.  The module will be called aten.o.  You must also 

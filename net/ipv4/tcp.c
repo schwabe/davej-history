@@ -2053,11 +2053,12 @@ static void tcp_close(struct sock *sk, unsigned long timeout)
 			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_FIN_TIMEOUT);
 	}
 
-	sk->dead = 1;
 	release_sock(sk);
 
 	if(sk->state == TCP_CLOSE)
 		tcp_v4_unhash(sk);
+
+	sk->dead = 1;
 }
 
 
