@@ -1289,7 +1289,7 @@ void i2ob_new_device(struct i2o_controller *c, struct i2o_device *d)
 	  * so we just sleep for a little while and let it do it's thing
 	  */
 	 current->state = TASK_INTERRUPTIBLE;
-	 schedule_timeout(3*HZ);
+	 schedule_timeout(5*HZ);
 
 	 if(i2o_claim_device(d, &i2o_block_handler))
 	 {

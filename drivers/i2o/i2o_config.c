@@ -42,7 +42,8 @@
 static int i2o_cfg_context = -1;
 static void *page_buf;
 static void *i2o_buffer;
-static spinlock_t i2o_config_lock = SPIN_LOCK_UNLOCKED;
+static spinlock_t i2o_queue_lock = SPIN_LOCK_UNLOCKED;
+
 struct wait_queue *i2o_wait_queue;
 
 #define MODINC(x,y) (x = x++ % y)
@@ -144,7 +145,7 @@ static void i2o_cfg_reply(struct i2o_handler *h, struct i2o_controller *c, struc
 				(unsigned char *)(msg + 5),
 				inf->event_q[inf->q_in].data_size);
 
-		spin_lock(&i2o_config_lock);
+		spin_lock(&i2o_queue_lock);
 		MODINC(inf->q_in, I2O_EVT_Q_LEN);
 		if(inf->q_len == I2O_EVT_Q_LEN)
 		{
@@ -156,7 +157,7 @@ static void i2o_cfg_reply(struct i2o_handler *h, struct i2o_controller *c, struc
 			// Keep I2OEVTGET on another CPU from touching this
 			inf->q_len++;
 		}
-		spin_unlock(&i2o_config_lock);
+		spin_unlock(&i2o_queue_lock);
 		
 
 //		printk(KERN_INFO "File %p w/id %d has %d events\n",
@@ -808,11 +809,12 @@ static int ioctl_evt_get(unsigned long arg, struct file *fp)
 
 	memcpy(&kget.info, &p->event_q[p->q_out], sizeof(struct i2o_evt_info));
 	MODINC(p->q_out, I2O_EVT_Q_LEN);
-	spin_lock_irqsave(&i2o_config_lock, flags);
+	spin_lock_irqsave(&i2o_queue_lock, flags);
+	/* FIXME - ought to lock the q_ values here!! */
 	p->q_len--;
 	kget.pending = p->q_len;
 	kget.lost = p->q_lost;
-	spin_unlock_irqrestore(&i2o_config_lock, flags);
+	spin_unlock_irqrestore(&i2o_queue_lock, flags);
 
 	__copy_to_user(uget, &kget, sizeof(struct i2o_evt_get));
 
@@ -838,9 +840,9 @@ static int cfg_open(struct inode *inode, struct file *file)
 	tmp->q_lost = 0;
 	tmp->next = open_files;
 
-	spin_lock_irqsave(&i2o_config_lock, flags);
+	spin_lock_irqsave(&i2o_queue_lock, flags);
 	open_files = tmp;
-	spin_unlock_irqrestore(&i2o_config_lock, flags);
+	spin_unlock_irqrestore(&i2o_queue_lock, flags);
 	
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -854,7 +856,7 @@ static int cfg_release(struct inode *inode, struct file *file)
 
 	p1 = p2 = NULL;
 
-	spin_lock_irqsave(&i2o_config_lock, flags);
+	spin_lock_irqsave(&i2o_queue_lock, flags);
 	for(p1 = open_files; p1; )
 	{
 		if(p1->q_id == id)
@@ -873,7 +875,7 @@ static int cfg_release(struct inode *inode, struct file *file)
 		p2 = p1;
 		p1 = p1->next;
 	}
-	spin_unlock_irqrestore(&i2o_config_lock, flags);
+	spin_unlock_irqrestore(&i2o_queue_lock, flags);
 
 	MOD_DEC_USE_COUNT;
 	return 0;

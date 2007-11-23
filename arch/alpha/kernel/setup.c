@@ -40,7 +40,7 @@
 #include <asm/page.h>
 #include <asm/dma.h>
 #include <asm/io.h>
-
+#include <asm/console.h>
 
 #include "proto.h"
 
@@ -52,6 +52,15 @@ struct alpha_machine_vector alpha_mv;
 int alpha_using_srm, alpha_use_srm_setup;
 #endif
 
+/* Using SRM callbacks for initial console output. This works from
+   setup_arch() time through the end of init_IRQ(), as those places
+   are under our control.
+
+   By default, OFF; set it with a bootcommand arg of "srmcons".
+*/
+int srmcons_output = 0;
+
+/* For PS/2 presence */
 unsigned char aux_device_present = 0xaa;
 
 #define N(a) (sizeof(a)/sizeof(a[0]))
@@ -144,23 +153,31 @@ void __init
 setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	   unsigned long * memory_end_p)
 {
-	extern char _end[];
-
 	struct alpha_machine_vector *vec = NULL;
 	struct percpu_struct *cpu;
 	char *type_name, *var_name, *p;
 	unsigned long memory_end_override = 0;
+	extern char _end;
+	void *kernel_end = &_end; /* End of the kernel. */
 
 	hwrpb = (struct hwrpb_struct*) __va(INIT_HWRPB->phys_addr);
 
-	/* 
-	 * Locate the command line.
-	 */
+#ifdef CONFIG_ALPHA_GENERIC
+	/* Assume that we've booted from SRM if we havn't booted from MILO.
+	   Detect the later by looking for "MILO" in the system serial nr.  */
+	alpha_using_srm = strncmp((const char *)hwrpb->ssn, "MILO", 4) != 0;
+#endif
 
-	/* Hack for Jensen... since we're restricted to 8 or 16 chars for
+	kernel_end = callback_init(kernel_end);
+
+	/* 
+	   Process the command line.
+
+	   Hack for Jensen... since we're restricted to 8 or 16 chars for
 	   boot flags depending on the boot mode, we need some shorthand.
 	   This should do for installation.  Later we'll add other
-	   abbreviations as well... */
+	   abbreviations as well...
+	*/
 	if (strcmp(COMMAND_LINE, "INSTALL") == 0) {
 		strcpy(command_line, "root=/dev/fd0 load_ramdisk=1");
 	} else {
@@ -198,10 +215,19 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 			memory_end_override = get_memory_end_override(p+4);
 			continue;
 		}
+		if (strncmp(p, "srmcons", 7) == 0) {
+			srmcons_output = 1;
+			continue;
+		}
 	}
 
 	/* Replace the command line, not that we've killed it with strtok.  */
 	strcpy(command_line, saved_command_line);
+
+	/* If we want SRM console printk echoing early, do it now. */
+	if (alpha_using_srm && srmcons_output) {
+		register_srm_console();
+	}
 
 	/*
 	 * Indentify and reconfigure for the current system.
@@ -228,12 +254,6 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 		alpha_mv = *vec;
 	}
 	
-#ifdef CONFIG_ALPHA_GENERIC
-	/* Assume that we've booted from SRM if we havn't booted from MILO.
-	   Detect the later by looking for "MILO" in the system serial nr.  */
-	alpha_using_srm = strncmp((const char *)hwrpb->ssn, "MILO", 4) != 0;
-#endif
-
 	printk("%s on %s%s%s using machine vector %s from %s\n",
 #ifdef CONFIG_ALPHA_GENERIC
 	       "Booting GENERIC",
@@ -258,7 +278,7 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	wrmces(0x7);
 
 	/* Find our memory.  */
-	*memory_start_p = (unsigned long) _end;
+	*memory_start_p = (unsigned long)kernel_end;
 	*memory_end_p = find_end_memory();
 	if (memory_end_override && memory_end_override < *memory_end_p) {
 		printk("Overriding memory size from %luMB to %luMB\n",
@@ -342,7 +362,7 @@ find_end_memory(void)
 	struct memdesc_struct * memdesc;
 
 	memdesc = (struct memdesc_struct *)
-		(INIT_HWRPB->mddt_offset + (unsigned long) INIT_HWRPB);
+		(hwrpb->mddt_offset + (unsigned long)hwrpb);
 	cluster = memdesc->cluster;
 
 	for (i = memdesc->numclusters ; i > 0; i--, cluster++) {
@@ -421,7 +441,7 @@ static char rawhide_names[][16] = {
 static int rawhide_indices[] = {0,0,0,1,1,2,2,3,3,4,4};
 
 static char tsunami_names[][16] = {
-	"0", "DP264", "Warhol", "Windjammer", "Monet", "Clipper",
+	"EarlyMonet", "DP264", "Warhol", "Windjammer", "Monet", "Clipper",
 	"Goldrush", "Webbrick", "Catamaran"
 };
 static int tsunami_indices[] = {0,1,2,3,4,5,6,7,8};
@@ -508,7 +528,7 @@ get_sysvec(long type, long variation, long cpu)
 
 	static struct alpha_machine_vector *tsunami_vecs[]  __initlocaldata =
 	{
-		NULL,
+		&monet_mv,		/* HACK for early Monets */
 		&dp264_mv,		/* dp264 */
 		&dp264_mv,		/* warhol */
 		&dp264_mv,		/* windjammer */
@@ -543,7 +563,7 @@ get_sysvec(long type, long variation, long cpu)
 
 	if (!vec) {
 		/* Member ID is a bit-field. */
-		long member = (variation >> 10) & 0x3f;
+		long member = HWRPB_MEMBER_ID(variation);
 
 		switch (type) {
 		case ST_DEC_ALCOR:
@@ -832,3 +852,65 @@ int get_cpuinfo(char *buffer)
 
 	return len;
 }
+
+#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM)
+/*
+ *      Manage the SRM callbacks as a "console".
+ */
+static struct console srmcons;
+
+void __init register_srm_console(void)
+{
+        register_console(&srmcons);
+}
+
+void __init unregister_srm_console(void)
+{
+        unregister_console(&srmcons);
+}
+
+static void srm_console_write(struct console *co, const char *s,
+                                unsigned count)
+{
+	srm_printk(s);
+}
+
+static kdev_t srm_console_device(struct console *c)
+{
+  /* Huh? */
+        return MKDEV(TTY_MAJOR, 64 + c->index);
+}
+
+static int srm_console_wait_key(struct console *co)
+{
+  /* Huh? */
+	return 1;
+}
+
+static int __init srm_console_setup(struct console *co, char *options)
+{
+	return 1;
+}
+
+static struct console srmcons = {
+        "srm0",
+        srm_console_write,
+        NULL,
+        srm_console_device,
+        srm_console_wait_key,
+        NULL,
+	srm_console_setup,
+        CON_PRINTBUFFER | CON_ENABLED, /* fake it out */
+        -1,
+        0,
+        NULL
+};
+
+#else
+void __init register_srm_console(void)
+{
+}
+void __init unregister_srm_console(void)
+{
+}
+#endif

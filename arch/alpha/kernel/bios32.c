@@ -327,6 +327,28 @@ sys_pciconfig_iobase(long which, unsigned long bus, unsigned long dfn)
  */
 #define ALIGN(val,align)	(((val) + ((align) - 1)) & ~((align) - 1))
 
+static short __inline__
+__disable_dev(struct pci_dev *dev)
+{
+	unsigned short cmd, orig_cmd;
+
+	pcibios_read_config_word(dev->bus->number, dev->devfn,
+				 PCI_COMMAND, &cmd);
+
+	orig_cmd = cmd;
+	cmd &= (~PCI_COMMAND_IO & ~PCI_COMMAND_MEMORY & ~PCI_COMMAND_MASTER);
+
+	pcibios_write_config_word(dev->bus->number, dev->devfn,
+				  PCI_COMMAND, cmd);
+	return orig_cmd;
+}
+
+static void __inline__
+__enable_dev(struct pci_dev *dev, short orig_cmd)
+{
+	pcibios_write_config_word(dev->bus->number, dev->devfn,
+				  PCI_COMMAND, orig_cmd);
+}
 
 /* 
  * The following structure records initial configuration of devices
@@ -344,6 +366,7 @@ struct srm_io_reset {
 	struct srm_io_reset *next;
 	struct pci_dev *dev;
 	u32 io;
+	short cmd;
 	u8 reg;
 } *srm_io_resets;
 
@@ -354,6 +377,7 @@ reset_for_srm(void)
 {
 	struct srm_irq_reset *qreset;
 	struct srm_io_reset *ireset;
+	struct pci_dev *last_dev;
 
 	/* Reset any IRQs that we changed.  */
 	for (qreset = srm_irq_resets; qreset ; qreset = qreset->next) {
@@ -370,6 +394,15 @@ reset_for_srm(void)
 #endif
 	}
 
+	/* Disable any devices which had IO addresses that we changed.  */
+	last_dev = NULL;
+	for (ireset = srm_io_resets; ireset ; ireset = ireset->next) {
+		if (ireset->dev != last_dev) {
+			ireset->cmd = __disable_dev(ireset->dev);
+			last_dev = ireset->dev;
+		}
+	}
+
 	/* Reset any IO addresses that we changed.  */
 	for (ireset = srm_io_resets; ireset ; ireset = ireset->next) {
 		pcibios_write_config_dword(ireset->dev->bus->number,
@@ -383,31 +416,40 @@ reset_for_srm(void)
 		       ireset->io);
 #endif
 	}
+
+	/* Re-enable any devices which had IO addresses that we changed.  */
+	last_dev = NULL;
+	for (ireset = srm_io_resets; ireset ; ireset = ireset->next) {
+		if (ireset->dev != last_dev) {
+			__enable_dev(ireset->dev, ireset->cmd);
+			last_dev = ireset->dev;
+		}
+	}
 }
 
 static void
 new_irq_reset(struct pci_dev *dev, u8 irq)
 {
-	struct srm_irq_reset *n;
-	n = kmalloc(sizeof(*n), GFP_KERNEL);
+	struct srm_irq_reset *new;
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
 
-	n->next = srm_irq_resets;
-	n->dev = dev;
-	n->irq = irq;
-	srm_irq_resets = n;
+	new->next = srm_irq_resets;
+	new->dev = dev;
+	new->irq = irq;
+	srm_irq_resets = new;
 }
 
 static void
 new_io_reset(struct pci_dev *dev, u8 reg, u32 io)
 {
-	struct srm_io_reset *n;
-	n = kmalloc(sizeof(*n), GFP_KERNEL);
+	struct srm_io_reset *new;
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
 
-	n->next = srm_io_resets;
-	n->dev = dev;
-	n->reg = reg;
-	n->io = io;
-	srm_io_resets = n;
+	new->next = srm_io_resets;
+	new->dev = dev;
+	new->reg = reg;
+	new->io = io;
+	srm_io_resets = new;
 }
 
 
@@ -418,9 +460,6 @@ new_io_reset(struct pci_dev *dev, u8 reg, u32 io)
 static void __init
 disable_dev(struct pci_dev *dev)
 {
-	struct pci_bus *bus;
-	unsigned short cmd;
-
 	/*
 	 * HACK: the PCI-to-EISA bridge does not seem to identify
 	 *       itself as a bridge... :-(
@@ -442,10 +481,11 @@ disable_dev(struct pci_dev *dev)
 	/*
 	 * We don't have code that will init the CYPRESS bridge correctly
 	 * so we do the next best thing, and depend on the previous
-	 * console code to do the right thing, and ignore it here... :-\
+	 * console code to do the right thing, and ignore it mostly... :-\
 	 */
 	if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
-	    dev->device == PCI_DEVICE_ID_CONTAQ_82C693) {
+	    dev->device == PCI_DEVICE_ID_CONTAQ_82C693 &&
+	    PCI_FUNC(dev->devfn) == 0) {
 		DBG_DEVS(("disable_dev: ignoring CYPRESS bridge...\n"));
 		return;
 	}
@@ -463,12 +503,7 @@ disable_dev(struct pci_dev *dev)
 	DBG_DEVS(("disable_dev: disabling %04x:%04x\n",
 		  dev->vendor, dev->device));
 
-	bus = dev->bus;
-	pcibios_read_config_word(bus->number, dev->devfn, PCI_COMMAND, &cmd);
-
-	/* hack, turn it off first... */
-	cmd &= (~PCI_COMMAND_IO & ~PCI_COMMAND_MEMORY & ~PCI_COMMAND_MASTER);
-	pcibios_write_config_word(bus->number, dev->devfn, PCI_COMMAND, cmd);
+	(void)__disable_dev(dev);
 }
 
 
@@ -489,6 +524,7 @@ layout_dev(struct pci_dev *dev)
 	unsigned int orig_base;
 	unsigned int alignto;
 	unsigned long handle;
+	int start_idx = 0;
 
 	/*
 	 * HACK: the PCI-to-EISA bridge does not seem to identify
@@ -511,18 +547,24 @@ layout_dev(struct pci_dev *dev)
 	/*
 	 * We don't have code that will init the CYPRESS bridge correctly
 	 * so we do the next best thing, and depend on the previous
-	 * console code to do the right thing, and ignore it here... :-\
+	 * console code to do the right thing, and ignore it mostly... :-\
 	 */
 	if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
 	    dev->device == PCI_DEVICE_ID_CONTAQ_82C693) {
+	    int func = PCI_FUNC(dev->devfn);
+	    if (func == 0) {
 		DBG_DEVS(("layout_dev: ignoring CYPRESS bridge...\n"));
 		return;
+	    }
+	    if (func == 1 || func == 2) { 
+		start_idx = 4; /* bypass BAR 0 - 3 for the IDE devs */
+	    }
 	}
 
 	bus = dev->bus;
 	pcibios_read_config_word(bus->number, dev->devfn, PCI_COMMAND, &cmd);
 
-	for (idx = 0; idx <= 5; idx++) {
+	for (idx = start_idx; idx <= 5; idx++) {
 		off = PCI_BASE_ADDRESS_0 + 4*idx;
 		/*
 		 * Figure out how much space and of what type this
@@ -713,6 +755,46 @@ layout_dev(struct pci_dev *dev)
 		  dev->device, dev->class, cmd|PCI_COMMAND_MASTER));
 }
 
+/* We must save away the current bridge settings for restore during exit. */
+static void __init
+save_bridge_setup(struct pci_dev *bridge)
+{
+	unsigned int dword;
+
+	pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
+				   PCI_IO_BASE, &dword);
+	new_io_reset(bridge, PCI_IO_BASE, dword);
+
+	pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
+				   PCI_IO_BASE_UPPER16, &dword);
+	new_io_reset(bridge, PCI_IO_BASE_UPPER16, dword);
+
+	pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
+				   PCI_PREF_BASE_UPPER32, &dword);
+	new_io_reset(bridge, PCI_PREF_BASE_UPPER32, dword);
+
+	pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
+				   PCI_PREF_LIMIT_UPPER32, &dword);
+	new_io_reset(bridge, PCI_PREF_LIMIT_UPPER32, dword);
+
+	pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
+				   PCI_MEMORY_BASE, &dword);
+	new_io_reset(bridge, PCI_MEMORY_BASE, dword);
+
+	pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
+				   PCI_PREF_MEMORY_BASE, &dword);
+	new_io_reset(bridge, PCI_PREF_MEMORY_BASE, dword);
+
+	/* Must use dword that contains PCI_BRIDGE_CONTROL. */
+	pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
+				  PCI_INTERRUPT_LINE, &dword);
+	new_io_reset(bridge, PCI_INTERRUPT_LINE, dword);
+
+	pcibios_read_config_dword(bridge->bus->number, bridge->devfn,
+				   PCI_COMMAND, &dword);
+	new_io_reset(bridge, PCI_COMMAND, dword);
+}
+
 static int __init
 layout_bus(struct pci_bus *bus)
 {
@@ -764,6 +846,7 @@ layout_bus(struct pci_bus *bus)
 		if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
 			found_vga = 1;
 	}
+
 	/*
 	 * Recursively allocate space for all of the sub-buses:
 	 */
@@ -772,6 +855,7 @@ layout_bus(struct pci_bus *bus)
     	for (child = bus->children; child; child = child->next) {
 		found_vga += layout_bus(child);
 	}
+
 	/*
 	 * Align the current bases on 4K and 1MB boundaries:
 	 */
@@ -782,6 +866,8 @@ layout_bus(struct pci_bus *bus)
 		struct pci_dev *bridge = bus->self;
 
 		DBG_DEVS(("layout_bus: config bus %d bridge\n", bus->number));
+
+		save_bridge_setup(bridge);
 
 		/*
 		 * Set up the top and bottom of the PCI I/O segment
@@ -1364,7 +1450,6 @@ static void __init
 layout_hoses(void)
 {
 	struct linux_hose_info * hose;
-	int i;
 
 	/* On multiple bus machines, we play games with pci_root in order
 	   that all of the busses are probed as part of the normal PCI

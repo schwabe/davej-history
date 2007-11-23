@@ -295,7 +295,7 @@ irongate_register_dump(const char *function_name)
 	       IRONGATE0->agpmode);
 }
 #else
-#define irongate_register_dump(x)	1
+#define irongate_register_dump(x)
 #endif
 
 void __init

@@ -180,11 +180,11 @@ static int evt_q_len = 0;
 #define MODINC(x,y) (x = x++ % y)
 
 /*
- *	I2O configuration spinlock. This isnt a big deal for contention
+ *	I2O configuration semaphore. This isnt a big deal for contention
  *	so we have one only
  */
  
-static spinlock_t i2o_configuration_lock = SPIN_LOCK_UNLOCKED;
+static struct semaphore i2o_configuration_lock = MUTEX;
 
 
 /*
@@ -317,18 +317,18 @@ void i2o_core_reply(struct i2o_handler *h, struct i2o_controller *c,
 int i2o_install_handler(struct i2o_handler *h)
 {
 	int i;
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	for(i=0;i<MAX_I2O_MODULES;i++)
 	{
 		if(i2o_handlers[i]==NULL)
 		{
 			h->context = i;
 			i2o_handlers[i]=h;
-			spin_unlock(&i2o_configuration_lock);
+			up(&i2o_configuration_lock);
 			return 0;
 		}
 	}
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return -ENOSPC;
 }
 
@@ -348,7 +348,7 @@ int i2o_install_device(struct i2o_controller *c, struct i2o_device *d)
 {
 	int i;
 
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	d->controller=c;
 	d->owner=NULL;
 	d->next=c->devices;
@@ -358,7 +358,7 @@ int i2o_install_device(struct i2o_controller *c, struct i2o_device *d)
 	for(i = 0; i < I2O_MAX_MANAGERS; i++)
 		d->managers[i] = NULL;
 
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return 0;
 }
 
@@ -431,11 +431,11 @@ int i2o_delete_device(struct i2o_device *d)
 {
 	int ret;
 
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 
 	ret = __i2o_delete_device(d);
 
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 
 	return ret;
 }
@@ -447,7 +447,7 @@ int i2o_delete_device(struct i2o_device *d)
 int i2o_install_controller(struct i2o_controller *c)
 {
 	int i;
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	for(i=0;i<MAX_I2O_CONTROLLERS;i++)
 	{
 		if(i2o_controllers[i]==NULL)
@@ -465,13 +465,13 @@ int i2o_install_controller(struct i2o_controller *c)
 			   sprintf(c->name, "i2o/iop%d", i);
 			   i2o_num_controllers++;
 			   sema_init(&c->lct_sem, 0);
-			   spin_unlock(&i2o_configuration_lock);
+			   up(&i2o_configuration_lock);
 			   return 0;
 
 		}
 	}
 	printk(KERN_ERR "No free i2o controller slots.\n");
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return -EBUSY;
 }
 
@@ -488,12 +488,12 @@ int i2o_delete_controller(struct i2o_controller *c)
 	 if(c->status_block->iop_state == ADAPTER_STATE_OPERATIONAL)
 		  i2o_event_register(c, core_context, 0, 0, 0);
 
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	if((users=atomic_read(&c->users)))
 	{
 		printk(KERN_INFO "%s busy: %d users for controller.\n", c->name, users);
 		c->bus_disable(c); 
-		spin_unlock(&i2o_configuration_lock);
+		up(&i2o_configuration_lock);
 		return -EBUSY;
 	}
 	while(c->devices)
@@ -502,7 +502,7 @@ int i2o_delete_controller(struct i2o_controller *c)
 		{
 			/* Shouldnt happen */
 			c->bus_disable(c); 
-			spin_unlock(&i2o_configuration_lock);
+			up(&i2o_configuration_lock);
 			return -EBUSY;
 		}
 	}
@@ -541,7 +541,7 @@ int i2o_delete_controller(struct i2o_controller *c)
 			c->destructor(c);
 
 			*p=c->next;
-			spin_unlock(&i2o_configuration_lock);
+			up(&i2o_configuration_lock);
 
 			if(c->page_frame)
 				kfree(c->page_frame);
@@ -565,7 +565,7 @@ int i2o_delete_controller(struct i2o_controller *c)
 		}
 		p=&((*p)->next);
 	}
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	printk(KERN_ERR "i2o_delete_controller: bad pointer!\n");
 	return -ENOENT;
 }
@@ -582,11 +582,11 @@ struct i2o_controller *i2o_find_controller(int n)
 	if(n<0 || n>=MAX_I2O_CONTROLLERS)
 		return NULL;
 	
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	c=i2o_controllers[n];
 	if(c!=NULL)
 		atomic_inc(&c->users);
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return c;
 }
 	
@@ -597,23 +597,23 @@ struct i2o_controller *i2o_find_controller(int n)
  */
 int i2o_claim_device(struct i2o_device *d, struct i2o_handler *h)
 {
-	 spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 
 	if(d->owner)
 	{
 		printk(KERN_INFO "issue claim called, but dev has owner!");
-		spin_unlock(&i2o_configuration_lock);
+		up(&i2o_configuration_lock);
 		return -EBUSY;
 	}
 
 	if(i2o_issue_claim(d->controller,d->lct_data.tid, h->context, 1, I2O_CLAIM_PRIMARY))
 	{
-		spin_unlock(&i2o_configuration_lock);
+		up(&i2o_configuration_lock);
 		return -EBUSY;
 	}
 
 	d->owner=h;
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return 0;
 }
 
@@ -621,10 +621,10 @@ int i2o_release_device(struct i2o_device *d, struct i2o_handler *h)
 {
 	int err = 0;
 
-	spin_lock(&i2o_configuration_lock);
+	down(&i2o_configuration_lock);
 	if(d->owner != h)
 	{
-		spin_unlock(&i2o_configuration_lock);
+		up(&i2o_configuration_lock);
 		return -ENOENT;
 	}
 
@@ -636,7 +636,7 @@ int i2o_release_device(struct i2o_device *d, struct i2o_handler *h)
 
 	d->owner = NULL;
 
-	spin_unlock(&i2o_configuration_lock);
+	up(&i2o_configuration_lock);
 	return err;
 }
 
@@ -1178,7 +1178,7 @@ static int i2o_reset_controller(struct i2o_controller *c)
 	u32 *msg;
 	long time;
 
-	printk("begin RESET\n");
+	dprintk(("begin RESET\n"));
 	/* Quiesce all IOPs first */
 
 	for (iop = i2o_controller_chain; iop; iop = iop->next)
@@ -1484,13 +1484,13 @@ rebuild_sys_tab:
 	 * as we can't init the IOPs w/o a system table
 	 */	
 	 
-	printk("SYSTAB\n");
+	dprintk(("SYSTAB\n"));
 	if (i2o_build_sys_table() < 0) {
 		i2o_sys_shutdown();
 		return;
 	}
 
-	printk("ONLINE\n");
+	dprintk(("ONLINE\n"));
 
 	/* If IOP don't get online, we need to rebuild the System table */
 	for (iop = i2o_controller_chain; iop; iop = niop) {
@@ -1499,7 +1499,7 @@ rebuild_sys_tab:
 			goto rebuild_sys_tab;
 	}
 
-	printk("ACTIVE\n");
+	dprintk(("ACTIVE\n"));
 	
 	/* Active IOPs now in OPERATIONAL state
 	 *
@@ -1522,7 +1522,7 @@ rebuild_sys_tab:
 		i2o_event_register(iop, core_context, 0, 0, 0xFFFFFFFF);
 	}
 
-	printk("DONE\n");
+	dprintk(("DONE\n"));
 }
 
 /*
@@ -1548,9 +1548,8 @@ int i2o_activate_controller(struct i2o_controller *iop)
 {
 	/* In INIT state, Wait Inbound Q to initilaize (in i2o_status_get) */
 	/* In READY state, Get status */
-	u32 m;
 
-	printk("ACTIVATE\n");
+	dprintk(("ACTIVATE\n"));
 	
 	if (i2o_status_get(iop) < 0) {
 		printk(KERN_INFO "Unable to obtain status of IOP, attempting a reset.\n");
@@ -1575,42 +1574,30 @@ int i2o_activate_controller(struct i2o_controller *iop)
 	{
 		dprintk((KERN_INFO "%s: already running...trying to reset\n",
 			iop->name));
-		printk("Outbound q2\n");
+		dprintk(("Outbound q2\n"));
 
-		if (i2o_init_outbound_q(iop) < 0) {
-			i2o_reset_controller(iop);			
-
-			if (i2o_status_get(iop) < 0 || 
-				iop->status_block->iop_state != ADAPTER_STATE_RESET)
-			{
-				printk(KERN_CRIT "%s: Failed to initialize.\n", iop->name);
-				i2o_delete_controller(iop);
-				return -1;
-			}
-			if (i2o_init_outbound_q(iop) < 0) {
-				i2o_delete_controller(iop);
-				return -1;
-			}
-		}
-	}
-	else
-	{
-		printk("Outbound q\n");
-
-		if (i2o_init_outbound_q(iop) < 0) {
+		i2o_reset_controller(iop);			
+		if (i2o_status_get(iop) < 0 || iop->status_block->iop_state != ADAPTER_STATE_RESET)
+		{
+			printk(KERN_CRIT "%s: Failed to initialize.\n", iop->name);
 			i2o_delete_controller(iop);
 			return -1;
 		}
 	}
 
+	if (i2o_init_outbound_q(iop) < 0) {
+		i2o_delete_controller(iop);
+		return -1;
+	}
+
 	/* In HOLD state */
-	printk("HRT\n");
+	dprintk("HRT\n");
 	
 	if (i2o_hrt_get(iop) < 0) {
 		i2o_delete_controller(iop);
 		return -1;
 	}
-	printk("DONE\n");
+	dprintk("DONE\n");
 
 	return 0;
 }
@@ -2150,9 +2137,9 @@ static int i2o_core_evt(void *reply_data)
 				    {
 		 			if(i2o_handlers[i] && i2o_handlers[i]->new_dev_notify && (i2o_handlers[i]->class&d->lct_data.class_id))
 					{
-						spin_lock(&i2o_dev_lock);
+						spin_lock_irqsave(&i2o_dev_lock, flags);
 						i2o_handlers[i]->new_dev_notify(c,d);
-						spin_unlock(&i2o_dev_lock);
+						spin_unlock_irqrestore(&i2o_dev_lock, flags);
 					}
 				    }
 
@@ -2214,6 +2201,7 @@ static int i2o_dyn_lct(void *foo)
 	 void *tmp;
 	 char name[16];
 	 struct fs_struct *fs;
+	 unsigned long flags;
 
 	 lock_kernel();
 
@@ -2283,9 +2271,9 @@ static int i2o_dyn_lct(void *foo)
 			   if(!found)
 			   {
 				dprintk((KERN_INFO "Deleted device!\n"));
-				spin_lock(&i2o_dev_lock);
+				spin_lock_irqsave(&i2o_dev_lock,flags);
 				i2o_delete_device(d);
-				spin_unlock(&i2o_dev_lock);
+				spin_unlock_irqrestore(&i2o_dev_lock,flags);
 			   }
 			   d = d1;
 		  }

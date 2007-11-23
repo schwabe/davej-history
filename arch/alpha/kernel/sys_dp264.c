@@ -393,7 +393,12 @@ monet_pci_fixup(void)
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(monet_map_irq, monet_swizzle);
 	SMC669_Init(1);
-	es1888_init();
+
+	/* HACK: early Monets had a member ID of 0 and the ES1888
+	   located in a non-standard spot, so do this only for
+	   official Monets */
+	if (HWRPB_MEMBER_ID(hwrpb->sys_variation) != 0)
+		es1888_init();
 }
 
 static void __init

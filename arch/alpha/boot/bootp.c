@@ -171,8 +171,7 @@ start_kernel(void)
 	srm_printk("Initrd positioned at %#lx\n", initrd_start);
 #endif
 
-	nbytes = srm_dispatch(CCB_GET_ENV, ENV_BOOTED_OSFLAGS,
-			      envval, sizeof(envval));
+	nbytes = callback_getenv(ENV_BOOTED_OSFLAGS, envval, sizeof(envval));
 	if (nbytes < 0 || nbytes >= sizeof(envval)) {
 		nbytes = 0;
 	}

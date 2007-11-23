@@ -896,7 +896,14 @@ do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
 unsigned long __init init_IRQ(unsigned long memory)
 {
 	wrent(entInt, 0);
+
 	alpha_mv.init_irq();
+
+        /* If we had wanted SRM console printk echoing early, undo it now. */
+        if (alpha_using_srm && srmcons_output) {
+                unregister_srm_console();
+        }
+
 	return memory;
 }
 

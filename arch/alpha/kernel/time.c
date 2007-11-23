@@ -236,7 +236,7 @@ time_init(void)
 {
 	void (*irq_handler)(int, void *, struct pt_regs *);
 	unsigned int year, mon, day, hour, min, sec, cc1, cc2;
-	unsigned long cycle_freq, one_percent;
+	unsigned long cycle_freq, ppm_error;
 	long diff;
 
 	/*
@@ -261,17 +261,29 @@ time_init(void)
 		cc1 = cc2;
 	}
 
-	/* If the given value is within 1% of what we calculated, 
-	   accept it.  Otherwise, use what we found.  */
-	cycle_freq = hwrpb->cycle_freq;
-	one_percent = cycle_freq / 100;
+	/* This code used to check for a 1% error.
+	 * PWS600au reports 598802395 which is way off. (ntpd has problems.)
+	 * So I tightened down the check.  Hal Murray, Feb 27, 2000.
+	 *
+	 * HWRPB cycle_freq may be 0 (uninitialized) due to MILO, so make
+	 * sure that we handle this case by forcing use of est_cycle_freq.
+	 */
+	if (!(cycle_freq = hwrpb->cycle_freq))
+		cycle_freq = est_cycle_freq;
+
 	diff = cycle_freq - est_cycle_freq;
 	if (diff < 0)
 		diff = -diff;
-	if (diff > one_percent) {
+	ppm_error = (diff * 1000000L) / cycle_freq;
+#if 0
+	printk("Alpha clock init: HWRPB %lu, Measured %lu, error=%lu ppm.\n",
+	       hwrpb->cycle_freq, est_cycle_freq, ppm_error);
+#endif
+	if (ppm_error > 1000) {
+		printk("HWRPB cycle frequency (%lu) seems inaccurate -"
+		       " using the measured value of %lu Hz\n",
+		       cycle_freq, est_cycle_freq);
 		cycle_freq = est_cycle_freq;
-		printk("HWRPB cycle frequency bogus.  Estimated %lu Hz\n",
-		       cycle_freq);
 	}
 	else {
 		est_cycle_freq = 0;

@@ -662,6 +662,65 @@ mcpcia_print_uncorrectable(struct el_MCPCIA_uncorrected_frame_mcheck *logout)
 }
 
 void
+mcpcia_print_system_area(unsigned long la_ptr)
+{
+	struct el_common *frame;
+	int i;
+
+	struct IOD_subpacket {
+	  unsigned long base;
+	  unsigned int whoami;
+	  unsigned int rsvd1;
+	  unsigned int pci_rev;
+	  unsigned int cap_ctrl;
+	  unsigned int hae_mem;
+	  unsigned int hae_io;
+	  unsigned int int_ctl;
+	  unsigned int int_reg;
+	  unsigned int int_mask0;
+	  unsigned int int_mask1;
+	  unsigned int mc_err0;
+	  unsigned int mc_err1;
+	  unsigned int cap_err;
+	  unsigned int rsvd2;
+	  unsigned int pci_err1;
+	  unsigned int mdpa_stat;
+	  unsigned int mdpa_syn;
+	  unsigned int mdpb_stat;
+	  unsigned int mdpb_syn;
+	  unsigned int rsvd3;
+	  unsigned int rsvd4;
+	  unsigned int rsvd5;
+	} *iodpp;
+
+	frame = (struct el_common *)la_ptr;
+
+	iodpp = (struct IOD_subpacket *) (la_ptr + frame->sys_offset);
+
+	for (i = 0; i < hose_count; i++, iodpp++) {
+	  printk("IOD %d Register Subpacket - Bridge Base Address %16lx\n",
+		 i, iodpp->base);
+	  printk("  WHOAMI      = %8x\n", iodpp->whoami);
+	  printk("  PCI_REV     = %8x\n", iodpp->pci_rev);
+	  printk("  CAP_CTRL    = %8x\n", iodpp->cap_ctrl);
+	  printk("  HAE_MEM     = %8x\n", iodpp->hae_mem);
+	  printk("  HAE_IO      = %8x\n", iodpp->hae_io);
+	  printk("  INT_CTL     = %8x\n", iodpp->int_ctl);
+	  printk("  INT_REG     = %8x\n", iodpp->int_reg);
+	  printk("  INT_MASK0   = %8x\n", iodpp->int_mask0);
+	  printk("  INT_MASK1   = %8x\n", iodpp->int_mask1);
+	  printk("  MC_ERR0     = %8x\n", iodpp->mc_err0);
+	  printk("  MC_ERR1     = %8x\n", iodpp->mc_err1);
+	  printk("  CAP_ERR     = %8x\n", iodpp->cap_err);
+	  printk("  PCI_ERR1    = %8x\n", iodpp->pci_err1);
+	  printk("  MDPA_STAT   = %8x\n", iodpp->mdpa_stat);
+	  printk("  MDPA_SYN    = %8x\n", iodpp->mdpa_syn);
+	  printk("  MDPB_STAT   = %8x\n", iodpp->mdpb_stat);
+	  printk("  MDPB_SYN    = %8x\n", iodpp->mdpb_syn);
+	}
+}
+
+void
 mcpcia_machine_check(unsigned long vector, unsigned long la_ptr,
 		     struct pt_regs * regs)
 {
@@ -709,6 +768,7 @@ halt();
 	    if (vector != 0x620 && vector != 0x630
 		&& ! MCPCIA_mcheck_expected[cpu]) {
 		mcpcia_print_uncorrectable(mchk_logout);
+		mcpcia_print_system_area(la_ptr);
 	    }
 	}
 

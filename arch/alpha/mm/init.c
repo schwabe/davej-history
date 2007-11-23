@@ -182,6 +182,44 @@ load_PCB(struct thread_struct * pcb)
 	return (struct thread_struct *) __reload_tss(pcb);
 }
 
+void
+switch_to_system_map(void)
+{
+	unsigned long newptbr;
+	struct thread_struct *original_pcb_ptr;
+
+	memset(swapper_pg_dir, 0, PAGE_SIZE);
+	newptbr = ((unsigned long) swapper_pg_dir - PAGE_OFFSET) >> PAGE_SHIFT;
+	pgd_val(swapper_pg_dir[1023]) =
+		(newptbr << 32) | pgprot_val(PAGE_KERNEL);
+
+
+	/* Also set up the real kernel PCB while we're at it.  */
+	init_task.tss.ptbr = newptbr;
+	init_task.tss.pal_flags = 1;	/* set FEN, clear everything else */
+	init_task.tss.flags = 0;
+
+	hwrpb->vptb = 0xfffffffe00000000;
+	hwrpb_update_checksum(hwrpb);
+
+	wrvptptr(0xfffffffe00000000);
+	original_pcb_ptr = load_PCB(&init_task.tss);
+	tbia();
+
+	/* Save off the contents of the original PCB so that we can
+	   restore the original console's page tables for a clean reboot.
+
+	   Note that the PCB is supposed to be a physical address, but
+	   since KSEG values also happen to work, folks get confused.
+	   Check this here.  */
+
+	if ((unsigned long)original_pcb_ptr < PAGE_OFFSET) {
+		original_pcb_ptr = (struct thread_struct *)
+		  phys_to_virt((unsigned long) original_pcb_ptr);
+	}
+	original_pcb = *original_pcb_ptr;
+}
+
 /*
  * paging_init() sets up the page tables: in the alpha version this actually
  * unmaps the bootup page table (as we're now in KSEG, so we don't need it).
@@ -190,10 +228,8 @@ unsigned long
 paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int i;
-	unsigned long newptbr;
 	struct memclust_struct * cluster;
 	struct memdesc_struct * memdesc;
-	struct thread_struct *original_pcb_ptr;
 
 	/* initialize mem_map[] */
 	start_mem = free_area_init(start_mem, end_mem);
@@ -221,41 +257,7 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 			clear_bit(PG_reserved, &mem_map[pfn++].flags);
 	}
 
-	/* Initialize the kernel's page tables.  Linux puts the vptb in
-	   the last slot of the L1 page table.  */
 	memset((void *) ZERO_PAGE(0), 0, PAGE_SIZE);
-	memset(swapper_pg_dir, 0, PAGE_SIZE);
-	newptbr = MAP_NR(swapper_pg_dir);
-	pgd_val(swapper_pg_dir[1023]) =
-		(newptbr << 32) | pgprot_val(PAGE_KERNEL);
-
-	/* Set the vptb.  This is often done by the bootloader, but 
-	   shouldn't be required.  */
-	if (hwrpb->vptb != 0xfffffffe00000000) {
-		wrvptptr(0xfffffffe00000000);
-		hwrpb->vptb = 0xfffffffe00000000;
-		hwrpb_update_checksum(hwrpb);
-	}
-
-	/* Also set up the real kernel PCB while we're at it.  */
-	init_task.tss.ptbr = newptbr;
-	init_task.tss.pal_flags = 1;	/* set FEN, clear everything else */
-	init_task.tss.flags = 0;
-	original_pcb_ptr = load_PCB(&init_task.tss);
-	tbia();
-
-	/* Save off the contents of the original PCB so that we can
-	   restore the original console's page tables for a clean reboot.
-
-	   Note that the PCB is supposed to be a physical address, but
-	   since KSEG values also happen to work, folks get confused.
-	   Check this here.  */
-
-	if ((unsigned long)original_pcb_ptr < PAGE_OFFSET) {
-		original_pcb_ptr = (struct thread_struct *)
-		  phys_to_virt((unsigned long) original_pcb_ptr);
-	}
-	original_pcb = *original_pcb_ptr;
 
 	return start_mem;
 }

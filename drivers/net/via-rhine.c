@@ -508,7 +508,9 @@ static int pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
 #ifndef MODULE
 int via_rhine_probe(struct device *dev)
 {
-	printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
+	static int did_version = 0;
+	if (!did_version++)
+		printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
 	return pci_etherdev_probe(dev, pci_tbl);
 }
 #endif

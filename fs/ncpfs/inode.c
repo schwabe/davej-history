@@ -105,8 +105,7 @@ void ncp_update_inode2(struct inode* inode, struct nw_file_info *nwinfo)
 				switch (nwi->attributes & (aHIDDEN|aSYSTEM)) {
 					case aHIDDEN:
 						if (server->m.flags & NCP_MOUNT_SYMLINKS) {
-							if ((inode->i_size >= NCP_MIN_SYMLINK_SIZE)
-							 && (inode->i_size <= NCP_MAX_SYMLINK_SIZE)) {
+							if (inode->i_size <= NCP_MAX_SYMLINK_SIZE) {
 								inode->i_mode = (inode->i_mode & ~S_IFMT) | S_IFLNK;
 								break;
 							}
@@ -168,8 +167,7 @@ static void ncp_set_attr(struct inode *inode, struct nw_file_info *nwinfo)
 			switch (nwi->attributes & (aHIDDEN|aSYSTEM)) {
 				case aHIDDEN:
 					if (server->m.flags & NCP_MOUNT_SYMLINKS) {
-						if ((inode->i_size >= NCP_MIN_SYMLINK_SIZE)
-						 && (inode->i_size <= NCP_MAX_SYMLINK_SIZE)) {
+						if (inode->i_size <= NCP_MAX_SYMLINK_SIZE) {
 							inode->i_mode = (inode->i_mode & ~S_IFMT) | S_IFLNK;
 							break;
 						}

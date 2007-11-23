@@ -190,6 +190,8 @@ struct hwrpb_struct {
 	unsigned long dsr_offset;	/* "Dynamic System Recognition Data Block Table" */
 };
 
+#define HWRPB_MEMBER_ID(v)	(((v) >> 10) & 0x3f)
+
 #ifdef __KERNEL__
 
 extern struct hwrpb_struct *hwrpb;

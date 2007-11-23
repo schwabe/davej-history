@@ -1,10 +1,11 @@
 OUTPUT_FORMAT("elf64-alpha")
 ENTRY(__start)
+PHDRS { kernel PT_LOAD ; }
 SECTIONS
 {
    . = 0xfffffc0000310000;
    _text = .;
-   .text : { *(.text) }
+   .text : { *(.text) } :kernel
    .text2 : { *(.text2) }
    _etext = .;
 

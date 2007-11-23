@@ -257,7 +257,7 @@ S:      Maintained
 
 DIGI RIGHTSWITCH NETWORK DRIVER
 P:	Rick Richardson
-M:	rick@dgii.com
+M:	rick@remotepoint.com
 L:	linux-net@vger.rutgers.edu
 W:	http://www.dgii.com/linux/
 S:	Maintained
@@ -414,7 +414,7 @@ S:      Supported
 
 IDE DRIVER [GENERAL]
 P:	Andre Hedrick
-M:	hedrick@astro.dyer.vanderbilt.edu
+M:	andre@linux-ide.org
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

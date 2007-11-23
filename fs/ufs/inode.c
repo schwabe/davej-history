@@ -336,6 +336,7 @@ repeat:
 			goto repeat;
 		}
 		else {
+			brelse (bh);
 			return NULL;
 		}
 	}		

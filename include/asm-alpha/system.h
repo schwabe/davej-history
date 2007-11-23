@@ -137,6 +137,9 @@ __asm__ __volatile__ ("call_pal %0 #imb" : : "i" (PAL_imb) : "memory")
 #define draina() \
 __asm__ __volatile__ ("call_pal %0 #draina" : : "i" (PAL_draina) : "memory")
 
+#define __halt() \
+__asm__ __volatile__ ("call_pal %0 #halt" : : "i" (PAL_halt))
+
 enum implver_enum {
 	IMPLVER_EV4,
 	IMPLVER_EV5,

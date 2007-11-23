@@ -274,6 +274,7 @@ int drive_is_flashcard (ide_drive_t *drive)
 		if (!strncmp(id->model, "KODAK ATA_FLASH", 15)	/* Kodak */
 		 || !strncmp(id->model, "Hitachi CV", 10)		/* Hitachi */
 		 || !strncmp(id->model, "SunDisk SDCFB", 13)	/* SunDisk */
+		 || !strncmp(id->model, "ATA_FLASH", 9)	/* Simple Tech */
 		 || !strncmp(id->model, "HAGIWARA HPC", 12))	/* Hagiwara */
 		{
 			return 1;	/* yes, it is a flash memory card */

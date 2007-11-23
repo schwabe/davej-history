@@ -60,6 +60,7 @@ extern int irongate_hose_write_config_dword (u8, u8, u8, u32 value,
 					    struct linux_hose_info *hose);
 extern void irongate_init_arch(unsigned long *, unsigned long *);
 extern void irongate_machine_check(u64, u64, struct pt_regs *);
+extern int irongate_pci_clr_err(void);
 
 /* core_lca.c */
 extern int lca_hose_read_config_byte (u8, u8, u8, u8 *value,
@@ -164,6 +165,9 @@ extern void tsunami_machine_check(u64, u64, struct pt_regs *);
 
 /* setup.c */
 extern unsigned long srm_hae;
+extern int srmcons_output;
+extern void register_srm_console(void);
+extern void unregister_srm_console(void);
 
 /* smp.c */
 extern void setup_smp(void);
@@ -219,6 +223,7 @@ extern int ptrace_set_bpt (struct task_struct *child);
 extern int ptrace_cancel_bpt (struct task_struct *child);
 
 /* ../mm/init.c */
+extern void switch_to_system_map(void);
 void srm_paging_stop(void);
 
 /* irq.c */
