@@ -7,11 +7,11 @@ if [ "$CONFIG_INET" != "n" ]; then
     bool 'Use VJ-compression with synchronous PPP' CONFIG_ISDN_PPP_VJ
     bool 'Support generic MP (RFC 1717)' CONFIG_ISDN_MPP
   fi
-  bool 'Support dynamic timeout-rules' CONFIG_ISDN_TIMEOUT_RULES
-  if [ "$CONFIG_ISDN_TIMEOUT_RULES" != "n" ]; then
-    bool 'Use masqueraded addresses for rule-matching' CONFIG_ISDN_TIMRU_USE_MASQ
-  fi
-  bool 'Support budget-accounting' CONFIG_ISDN_BUDGET
+  #bool 'Support dynamic timeout-rules' CONFIG_ISDN_TIMEOUT_RULES
+  #if [ "$CONFIG_ISDN_TIMEOUT_RULES" != "n" ]; then
+  #  bool 'Use masqueraded addresses for rule-matching' CONFIG_ISDN_TIMRU_USE_MASQ
+  #fi
+  #bool 'Support budget-accounting' CONFIG_ISDN_BUDGET
 fi
 bool 'Support audio via ISDN' CONFIG_ISDN_AUDIO
 dep_tristate 'ICN 2B and 4B support' CONFIG_ISDN_DRV_ICN $CONFIG_ISDN

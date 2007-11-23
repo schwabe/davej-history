@@ -146,11 +146,10 @@ sound.o: local.h $(FIXEDOBJS) sound.a
 	$(LD) -r -o sound.o $(FIXEDOBJS) sound.a
 
 modules: local.h sound.o
-	ln -fs `pwd`/sound.o $(TOPDIR)/modules/sound.o
-
+	ln -fs ../drivers/sound/sound.o $(TOPDIR)/modules/sound.o
 
 lowlevel/lowlevel.o: dummy
-		cd lowlevel;make
+	cd lowlevel; make
 
 ifdef USE_DEPEND
 #

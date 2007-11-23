@@ -7,6 +7,9 @@ comment 'Character devices'
 tristate 'Standard/generic serial support' CONFIG_SERIAL
 bool 'Digiboard PC/Xx Support' CONFIG_DIGI
 tristate 'Cyclades async mux support' CONFIG_CYCLADES
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	dep_tristate 'Multi-Tech multiport card support' CONFIG_ISI m
+fi
 bool 'Stallion multiport serial support' CONFIG_STALDRV
 if [ "$CONFIG_STALDRV" = "y" ]; then
   tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION

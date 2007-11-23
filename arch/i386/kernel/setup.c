@@ -372,7 +372,7 @@ static struct cpu_model_info intel_models[] = {
 	    NULL, NULL, NULL, NULL }},
 	{ 6,
 	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II (Klamath)", 
-	    NULL, "Pentium II (Deschutes)", NULL, NULL, NULL, NULL, NULL, NULL,
+	    NULL, "Pentium II (Deschutes)", "Celeron (Mendocino)", NULL, NULL, NULL, NULL, NULL,
 	    NULL, NULL, NULL, NULL }},
 };
 
@@ -381,11 +381,21 @@ static const char * Intelmodel(void)
 	const char *p = "386 SX/DX";	/* default to a 386 */
 	int i;
 	
+	/*
+	 *	Old 486SX has no CPU ID. Set the model to 2 for this
+	 *	case.
+	 */
+	 
+	if( x86==4 && x86_model == 0 && hard_math == 0)
+		x86_model = 2;
+	
 	for (i=0; i<sizeof(intel_models)/sizeof(struct cpu_model_info); i++)
 		if (intel_models[i].cpu_x86 == x86) {
 			p = intel_models[i].model_names[(int)x86_model];
 			break;
 		}
+	
+	
 	return p;
 }
 	
@@ -409,16 +419,19 @@ static const char * get_cpu_mkt_name(void)
 }
 
 static const char * getmodel(void)
-/* Default is Intel. We disregard Nexgen and UMC processors. */
+/* Default is Intel. We disregard Nexgen processors. */
 {
         const char *p = NULL;
-	if      (strncmp(x86_vendor_id, "Au", 2) == 0)	/* AuthenticAMD */
+	if      (strcmp(x86_vendor_id, "AuthenticAMD") == 0)	/* AuthenticAMD */
 		p = AMDmodel();
-	else if (strncmp(x86_vendor_id, "Cy", 2) == 0)	/* CyrixInstead */
+	else if (strcmp(x86_vendor_id, "CyrixInstead") == 0)	/* CyrixInstead */
 		p = Cx86model();
-	else if (strncmp(x86_vendor_id, "Ce", 2) == 0)	/* CentaurHauls */
+	else if (strcmp(x86_vendor_id, "CentaurHauls") == 0)	/* CentaurHauls */
 		p = IDTmodel();
-	else /* default */
+	/* This isnt quite right */
+	else if (strcmp(x86_vendor_id, "UMC UMC UMC ") == 0) 	/* UMC */
+		p = Intelmodel();
+	else /* default - this could be anyone */
 		p = Intelmodel();
 	if (ext_cpuid)
 		return get_cpu_mkt_name();
@@ -431,7 +444,7 @@ int get_cpuinfo(char * buffer)
         int i, len = 0;
         static const char *x86_cap_flags[] = {
                 "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
-                "cx8", "apic", "10", "11", "mtrr", "pge", "mca", "cmov",
+                "cx8", "apic", "10", "sep", "mtrr", "pge", "mca", "cmov",
                 "16", "17", "18", "19", "20", "21", "22", "mmx",
                 "24", "25", "26", "27", "28", "29", "30", "31"
         };

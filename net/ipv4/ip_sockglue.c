@@ -424,22 +424,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			return -err;	/* -0 is 0 after all */
 			
 #endif
-#ifdef CONFIG_IP_MASQUERADE_IPPFVS
-		case IP_PORTFW_ADD:
-		case IP_PORTFW_DEL:
-		case IP_PORTFW_FLUSH:
-			if(!suser())
-				return -EPERM;
-			if(optlen>sizeof(tmp_fw) || optlen<1)
-				return -EINVAL;
-			err=verify_area(VERIFY_READ,optval,optlen);
-			if(err)
-				return err;
-			memcpy_fromfs(&tmp_fw,optval,optlen);
-			err=ip_portfw_ctl(optname, &tmp_fw,optlen);
-			return -err;	/* -0 is 0 after all */
-			
-#endif
 #ifdef CONFIG_IP_ACCT
 		case IP_ACCT_INSERT:
 		case IP_ACCT_APPEND:

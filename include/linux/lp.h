@@ -20,6 +20,7 @@
 #define LP_ABORT 0x0040
 #define LP_CAREFUL 0x0080
 #define LP_ABORTOPEN 0x0100
+#define LP_STRICT 0x0200
 
 /* timeout for each character.  This is relative to bus cycles -- it
  * is the count in a busy loop.  THIS IS THE VALUE TO CHANGE if you
@@ -70,6 +71,7 @@
 #define LPRESET     0x060c  /* reset printer */
 #define LPGETSTATS  0x060d  /* get statistics (struct lp_stats) */
 #define LPGETFLAGS  0x060e  /* get status flags */
+#define LPSTRICT    0x060f  /* enable/disable strict compliance */
 
 /* timeout for printk'ing a timeout, in jiffies (100ths of a second).
    This is also used for re-checking error conditions if LP_ABORT is

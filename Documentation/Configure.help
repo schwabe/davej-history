@@ -1194,22 +1194,6 @@ CONFIG_IP_MASQUERADE_IPAUTOFW
   and other information, is available at
   ftp://ftp.netis.com/pub/members/rlynch/.
 
-IP: ipportfw masquerade and virtual server support
-CONFIG_IP_MASQUERADE_IPPFVS
-  ippfvs is port forwarding & virtual server program in Linux kernel
-  by Wensong Zhang, based on IP masquerading and Steven Clarke's
-  port forwarding codes. It can dynamically forward a connection on
-  given ports from outside to one server in a cluster of servers 
-  inside a firewall, the round-robin secheduling or weighted 
-  round-robin scheduling algorithm is used to choose which server 
-  the connection is redirected to. This function can be used to build 
-  a virtual internet server on a cluster of servers, such as scalable
-  web server.
-  For information and source of ippfvsadm administration program, 
-  please visit the following URL: 
-        http://proxy.iinchina.net/~wensong/ippfvs/
-  If you want this, say Y.
-
 IP: ICMP masquerading
 CONFIG_IP_MASQUERADE_ICMP
   The basic masquerade code described for CONFIG_IP_MASQUERADE only

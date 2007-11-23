@@ -546,7 +546,10 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	/* If the socket is dead, don't accept the connection. */
 	if (!sk->dead) 
 	{
-  		sk->data_ready(sk,0);
+		/*
+		 * This must wait for 3 way completion.
+  		 * sk->data_ready(sk,0);
+  		 */
 	}
 	else 
 	{
@@ -889,7 +892,7 @@ static int tcp_conn_request_fake(struct sock *sk, struct sk_buff *skb,
 	/* If the socket is dead, don't accept the connection. */
 	if (!sk->dead) 
 	{
-  		sk->data_ready(sk,0);
+  		/*sk->data_ready(sk,0); */
 	}
 	else 
 	{

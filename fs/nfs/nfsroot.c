@@ -16,6 +16,7 @@
  *
  *	Changes:
  *
+ *	R. Drahtmueller	:	Set IFF_MULTICAST in dev->flags if applicable.
  *	Alan Cox	:	Removed get_address name clash with FPU.
  *	Alan Cox	:	Reformatted a bit.
  *	Gero Kuhlmann	:	Code cleanup
@@ -179,7 +180,11 @@ static int root_dev_open(void)
 		    (!user_dev_name[0] || !strcmp(dev->name, user_dev_name))) {
 			/* First up the interface */
 			old_flags = dev->flags;
+#ifdef CONFIG_IP_MULTICAST
+			dev->flags = IFF_UP | IFF_BROADCAST | IFF_RUNNING | IFF_MULTICAST;
+#else
 			dev->flags = IFF_UP | IFF_BROADCAST | IFF_RUNNING;
+#endif
 			if (!(old_flags & IFF_UP) && dev_open(dev)) {
 				dev->flags = old_flags;
 				continue;

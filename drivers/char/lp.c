@@ -89,12 +89,18 @@ static inline int lp_char_polled(char lpchar, int minor)
 	while(wait != LP_WAIT(minor)) wait++;
 	/* control port takes strobe high */
 	outb_p(( LP_PSELECP | LP_PINITP | LP_PSTROBE ), ( LP_C( minor )));
-	/* Wait until NBUSY line goes high */
-	count = 0;
-	do {
-		status = LP_S(minor);
-		count++;
-	} while (LP_READY(minor, status) && (count<LP_CHAR(minor)));
+	
+	if(LP_F(minor)&LP_STRICT)
+	{
+		/* Wait until NBUSY line goes high */
+		count = 0;
+		do {
+			status = LP_S(minor);
+			count++;
+		} while (LP_READY(minor, status) && (count<LP_CHAR(minor)));
+	}
+	else while(wait) wait--;
+	
 	/* take strobe low */
 	outb_p(( LP_PSELECP | LP_PINITP ), ( LP_C( minor )));
 	/* update waittime statistics */
@@ -433,6 +439,12 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 				LP_F(minor) |= LP_CAREFUL;
 			else
 				LP_F(minor) &= ~LP_CAREFUL;
+			break;
+		case LPSTRICT:
+			if (arg)
+				LP_F(minor) |= LP_STRICT;
+			else
+				LP_F(minor) &= ~LP_STRICT;
 			break;
 		case LPWAIT:
 			LP_WAIT(minor) = arg;
