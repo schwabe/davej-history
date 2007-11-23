@@ -24,7 +24,8 @@ endif
 
 export-objs	:=  ad1848.o audio_syms.o midi_syms.o mpu401.o \
 		    msnd.o opl3.o sb_card.o sequencer_syms.o \
-		    sound_core.o sound_syms.o uart401.o ad1816.o
+		    sound_core.o sound_syms.o uart401.o ad1816.o \
+		    nm256_audio.o
 
 
 
@@ -76,6 +77,7 @@ obj-$(CONFIG_SOUND_VIDC)	+= vidc_mod.o
 obj-$(CONFIG_SOUND_VWSND)	+= vwsnd.o
 obj-$(CONFIG_SOUND_WAVEARTIST)	+= waveartist.o
 obj-$(CONFIG_SOUND_WAVEFRONT)   += wavefront.o
+obj-$(CONFIG_SOUND_NM256)	+= nm256.o
 
 #jnx
 obj-$(CONFIG_SOUND_CMPCI)	+= cmpci.o
@@ -87,7 +89,7 @@ obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
 # Declare multi-part drivers.
 
 list-multi	:= sound.o gus.o pas2.o sb.o softoss2.o vidc_mod.o \
-    soundcore.o wavefront.o
+    soundcore.o wavefront.o nm256.o
 
 sound-objs	:= 							\
     dev_table.o soundcard.o sound_syms.o		\
@@ -104,6 +106,7 @@ sb-objs		:= sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o	\
 softoss2-objs	:= softoss.o softoss_rs.o
 vidc_mod-objs	:= vidc.o vidc_audio.o vidc_fill.o vidc_mixer.o vidc_synth.o
 wavefront-objs  := wavfront.o wf_midi.o yss225.o
+nm256-objs	:= nm256_audio.o ac97.o
 
 
 # Extract lists of the multi-part drivers.
@@ -188,6 +191,9 @@ vidc_mod.o: $(vidc_mod-objs)
 
 wavefront.o: $(wavefront-objs)
 	$(LD) -r -o $@ $(wavefront-objs)
+
+nm256.o: $(nm256-objs)
+	$(LD) -r -o $@ $(nm256-objs)
 
 # Firmware files that need translation
 #

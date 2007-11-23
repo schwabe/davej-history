@@ -322,7 +322,7 @@ out_no_target:
 	int this_cpu = smp_processor_id();
 	struct task_struct *tsk;
 
-	tsk = cpu_curr(this_cpu);
+	tsk = current;
 	if (preemption_goodness(tsk, p, this_cpu) > 0)
 		tsk->need_resched = 1;
 #endif

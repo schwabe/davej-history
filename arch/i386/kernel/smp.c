@@ -863,6 +863,14 @@ void __init smp_callin(void)
  	smp_store_cpu_info(cpuid);
 
 	/*
+	 * Unblock the master CPU _only_ when the scheduler state
+	 * of all secondary CPUs will be up-to-date, so after
+	 * the SMP initialization the master will be just allowed
+	 * to call the scheduler code.
+	 */
+	init_idle();
+
+	/*
 	 *	Allow the master to continue.
 	 */
 	set_bit(cpuid, (unsigned long *)&cpu_callin_map[0]);

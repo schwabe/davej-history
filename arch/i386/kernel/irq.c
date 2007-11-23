@@ -449,6 +449,7 @@ atomic_t global_irq_count;
 
 atomic_t global_bh_count;
 atomic_t global_bh_lock;
+spinlock_t i386_bh_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * "global_cli()" is a special case, in that it can hold the
@@ -726,10 +727,11 @@ int handle_IRQ_event(unsigned int irq, struct pt_regs * regs, struct irqaction *
 
 	status = 1;	/* Force the "do bottom halves" bit */
 
-	if (!(action->flags & SA_INTERRUPT))
-		__sti();
-
 	do {
+		if (!(action->flags & SA_INTERRUPT))
+			__sti();
+		else
+			__cli();
 		status |= action->flags;
 		action->handler(irq, action->dev_id, regs);
 		action = action->next;

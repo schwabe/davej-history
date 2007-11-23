@@ -9907,6 +9907,16 @@ CONFIG_SOUND_WAVEARTIST
   Say Y here to include support for the Rockwell WaveArtist sound
   system.  This driver is mainly for the NetWinder.
 
+NeoMagic 256AV/256ZX sound chipsets
+CONFIG_SOUND_NM256
+  Say M here to include audio support for the NeoMagic 256AV/256ZX
+  chipsets.  These are the audio chipsets found in the Sony Z505S/SX/DX,
+  some Sony F-series, and the Dell Latitude CPi and CPt laptops. It includes 
+  support for an AC97-compatible mixer and an apparently proprietary sound 
+  engine.
+
+  See Documentation/sound/NM256 for further information.
+
 Are you using a crosscompiler
 CONFIG_CROSSCOMPILE
   Say Y here if you are compiling the kernel on a different
