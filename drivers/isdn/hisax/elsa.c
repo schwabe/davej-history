@@ -1,4 +1,4 @@
-/* $Id: elsa.c,v 2.14 1999/07/12 21:05:07 keil Exp $
+/* $Id: elsa.c,v 2.17 1999/08/11 20:57:40 keil Exp $
 
  * elsa.c     low level stuff for Elsa isdn cards
  *
@@ -13,8 +13,19 @@
  *              Klaus Lichtenwalder (Klaus.Lichtenwalder@WebForum.DE)
  *              for ELSA PCMCIA support
  *
- *
  * $Log: elsa.c,v $
+ * Revision 2.17  1999/08/11 20:57:40  keil
+ * bugfix IPAC version 1.1
+ * new PCI codefix
+ *
+ * Revision 2.16  1999/08/10 16:01:51  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
+ * Revision 2.15  1999/08/09 19:25:21  keil
+ * Support (alpha version) for the '98 model of ELSA Microlink ISDN/MC
+ * by Christer Weinigel, Cendio Systems AB <wingel@cendio.se>
+ * Add support for IPAC 1.2
+ *
  * Revision 2.14  1999/07/12 21:05:07  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -85,10 +96,11 @@
 
 extern const char *CardType[];
 
-const char *Elsa_revision = "$Revision: 2.14 $";
+const char *Elsa_revision = "$Revision: 2.17 $";
 const char *Elsa_Types[] =
 {"None", "PC", "PCC-8", "PCC-16", "PCF", "PCF-Pro",
- "PCMCIA", "QS 1000", "QS 3000", "QS 1000 PCI", "QS 3000 PCI"};
+ "PCMCIA", "QS 1000", "QS 3000", "QS 1000 PCI", "QS 3000 PCI", 
+ "PCMCIA-IPAC" };
 
 const char *ITACVer[] =
 {"?0?", "?1?", "?2?", "?3?", "?4?", "V2.2",
@@ -118,6 +130,7 @@ const char *ITACVer[] =
 #define ELSA_QS3000  8
 #define ELSA_QS1000PCI 9
 #define ELSA_QS3000PCI 10
+#define ELSA_PCMCIA_IPAC 11
 
 /* PCI stuff */
 #define PCI_VENDOR_ELSA	0x1048
@@ -445,9 +458,11 @@ elsa_interrupt_ipac(int intno, void *dev_id, struct pt_regs *regs)
 		printk(KERN_WARNING "Elsa: Spurious interrupt!\n");
 		return;
 	}
-	val = bytein(cs->hw.elsa.cfg + 0x4c); /* PCI IRQ */
-	if (!(val & ELSA_PCI_IRQ_MASK))
-		return;
+	if (cs->subtyp == ELSA_QS1000PCI || cs->subtyp == ELSA_QS3000PCI) {
+		val = bytein(cs->hw.elsa.cfg + 0x4c); /* PCI IRQ */
+		if (!(val & ELSA_PCI_IRQ_MASK))
+			return;
+	}
 #if ARCOFI_USE
 	if (cs->hw.elsa.MFlag) {
 		val = serial_inp(cs, UART_IIR);
@@ -513,6 +528,9 @@ release_io_elsa(struct IsdnCardState *cs)
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_ATX, 0xff);
 		release_region(cs->hw.elsa.cfg, 0x80);
 	}
+ 	if (cs->subtyp == ELSA_PCMCIA_IPAC) {
+		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_ATX, 0xff);
+ 	}
 	if ((cs->subtyp == ELSA_PCFPRO) ||
 		(cs->subtyp == ELSA_QS3000) ||
 		(cs->subtyp == ELSA_PCF) ||
@@ -547,7 +565,7 @@ reset_elsa(struct IsdnCardState *cs)
 		if (cs->hw.elsa.trig)
 			byteout(cs->hw.elsa.trig, 0xff);
 	}
-	if ((cs->subtyp == ELSA_QS1000PCI) || (cs->subtyp == ELSA_QS3000PCI)) {
+	if ((cs->subtyp == ELSA_QS1000PCI) || (cs->subtyp == ELSA_QS3000PCI) || (cs->subtyp == ELSA_PCMCIA_IPAC)) {
 		save_flags(flags);
 		sti();
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_POTA2, 0x20);
@@ -558,8 +576,14 @@ reset_elsa(struct IsdnCardState *cs)
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_MASK, 0xc0);
 		schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 		restore_flags(flags);
-		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_ACFG, 0x0);
-		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_AOE, 0x3c);
+		if (cs->subtyp != ELSA_PCMCIA_IPAC) {
+			writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_ACFG, 0x0);
+			writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_AOE, 0x3c);
+		} else {
+			writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_PCFG, 0x10);
+			writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_ACFG, 0x4);
+			writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_AOE, 0xf8);
+		}
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_ATX, 0xff);
 		if (cs->subtyp == ELSA_QS1000PCI)
 			byteout(cs->hw.elsa.cfg + 0x4c, 0x41); /* enable ELSA PCI IRQ */
@@ -675,7 +699,7 @@ elsa_led_handler(struct IsdnCardState *cs)
 {
 	int blink = 0;
 
-	if (cs->subtyp == ELSA_PCMCIA)
+	if (cs->subtyp == ELSA_PCMCIA || cs->subtyp == ELSA_PCMCIA_IPAC)
 		return;
 	del_timer(&cs->hw.elsa.tl);
 	if (cs->hw.elsa.status & ELSA_ASSIGN)
@@ -739,6 +763,7 @@ Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			return(0);
 		case CARD_TEST:
 			if ((cs->subtyp == ELSA_PCMCIA) ||
+				(cs->subtyp == ELSA_PCMCIA_IPAC) ||
 				(cs->subtyp == ELSA_QS1000PCI)) {
 				return(0);
 			} else if (cs->subtyp == ELSA_QS3000PCI) {
@@ -989,10 +1014,19 @@ setup_elsa(struct IsdnCard *card)
 	} else if (cs->typ == ISDN_CTYPE_ELSA_PCMCIA) {
 		cs->hw.elsa.base = card->para[1];
 		cs->irq = card->para[0];
-		cs->subtyp = ELSA_PCMCIA;
-		cs->hw.elsa.ale = cs->hw.elsa.base + ELSA_ALE_PCM;
-		cs->hw.elsa.isac = cs->hw.elsa.base + ELSA_ISAC_PCM;
-		cs->hw.elsa.hscx = cs->hw.elsa.base + ELSA_HSCX;
+		val = readreg(cs->hw.elsa.base + 0, cs->hw.elsa.base + 2, IPAC_ID);
+		if ((val == 1) || (val == 2)) { /* IPAC version 1.1/1.2 */
+			cs->subtyp = ELSA_PCMCIA_IPAC;
+			cs->hw.elsa.ale = cs->hw.elsa.base + 0;
+			cs->hw.elsa.isac = cs->hw.elsa.base + 2;
+			cs->hw.elsa.hscx = cs->hw.elsa.base + 2;
+			test_and_set_bit(HW_IPAC, &cs->HW_Flags);
+		} else {
+			cs->subtyp = ELSA_PCMCIA;
+			cs->hw.elsa.ale = cs->hw.elsa.base + ELSA_ALE_PCM;
+			cs->hw.elsa.isac = cs->hw.elsa.base + ELSA_ISAC_PCM;
+			cs->hw.elsa.hscx = cs->hw.elsa.base + ELSA_HSCX;
+		}
 		cs->hw.elsa.timer = 0;
 		cs->hw.elsa.trig = 0;
 		cs->hw.elsa.ctrl = 0;
@@ -1013,17 +1047,17 @@ setup_elsa(struct IsdnCard *card)
 			 dev_qs1000))) {
 				cs->subtyp = ELSA_QS1000PCI;
 			cs->irq = dev_qs1000->irq;
-			cs->hw.elsa.cfg = dev_qs1000->base_address[1] & 
+			cs->hw.elsa.cfg = get_pcibase(dev_qs1000, 1) & 
 				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = dev_qs1000->base_address[3] & 
+			cs->hw.elsa.base = get_pcibase(dev_qs1000, 3) & 
 				PCI_BASE_ADDRESS_IO_MASK;
 		} else if ((dev_qs3000 = pci_find_device(PCI_VENDOR_ELSA,
 			PCI_QS3000_ID, dev_qs3000))) {
 			cs->subtyp = ELSA_QS3000PCI;
 			cs->irq = dev_qs3000->irq;
-			cs->hw.elsa.cfg = dev_qs3000->base_address[1] & 
+			cs->hw.elsa.cfg = get_pcibase(dev_qs3000, 1) & 
 				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = dev_qs3000->base_address[3] & 
+			cs->hw.elsa.base = get_pcibase(dev_qs3000, 3) & 
 				PCI_BASE_ADDRESS_IO_MASK;
 		} else {
 			printk(KERN_WARNING "Elsa: No PCI card found\n");
@@ -1123,6 +1157,7 @@ setup_elsa(struct IsdnCard *card)
 		case ELSA_PCC16:
 		case ELSA_QS1000:
 		case ELSA_PCMCIA:
+		case ELSA_PCMCIA_IPAC:
 			bytecnt = 8;
 			break;
 		case ELSA_PCFPRO:
@@ -1197,7 +1232,7 @@ setup_elsa(struct IsdnCard *card)
 	cs->BC_Send_Data = &hscx_fill_fifo;
 	cs->cardmsg = &Elsa_card_msg;
 	reset_elsa(cs);
-	if ((cs->subtyp == ELSA_QS1000PCI) || (cs->subtyp == ELSA_QS3000PCI)) {
+	if ((cs->subtyp == ELSA_QS1000PCI) || (cs->subtyp == ELSA_QS3000PCI) || (cs->subtyp == ELSA_PCMCIA_IPAC)) {
 		cs->readisac = &ReadISAC_IPAC;
 		cs->writeisac = &WriteISAC_IPAC;
 		cs->readisacfifo = &ReadISACfifo_IPAC;

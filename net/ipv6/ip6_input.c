@@ -212,7 +212,7 @@ int ip6_input(struct sk_buff *skb)
 
 		if (ipprot->copy || raw_sk)
 			buff = skb_clone(skb, GFP_ATOMIC);
-
+		/* buff == NULL ?????? */
 		ipprot->handler(buff, len);
 		found = 1;
 	}

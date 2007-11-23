@@ -1,4 +1,4 @@
-/* $Id: hfcscard.c,v 1.3 1999/07/12 21:05:12 keil Exp $
+/* $Id: hfcscard.c,v 1.4 1999/08/09 18:59:59 keil Exp $
 
  * hfcscard.c     low level stuff for hfcs based cards (Teles3c, ACER P10)
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hfcscard.c,v $
+ * Revision 1.4  1999/08/09 18:59:59  keil
+ * Fix S0 init - Thanks to Stefan Gybas
+ *
  * Revision 1.3  1999/07/12 21:05:12  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -24,7 +27,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcs_revision = "$Revision: 1.3 $";
+static const char *hfcs_revision = "$Revision: 1.4 $";
 
 static void
 hfcs_interrupt(int intno, void *dev_id, struct pt_regs *regs)
@@ -105,8 +108,8 @@ reset_hfcs(struct IsdnCardState *cs)
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_STATES, HFCD_LOAD_STATE | 2); /* HFC ST 2 */
 	udelay(10);
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_STATES, 2); /* HFC ST 2 */
-	cs->hw.hfcD.mst_m = 0;
-	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_MST_MODE, HFCD_MASTER); /* HFC Master */
+	cs->hw.hfcD.mst_m = HFCD_MASTER;
+	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_MST_MODE, cs->hw.hfcD.mst_m); /* HFC Master */
 	cs->hw.hfcD.sctrl = 0;
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_SCTRL, cs->hw.hfcD.sctrl);
 	restore_flags(flags);

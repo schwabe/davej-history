@@ -1,11 +1,20 @@
 /*
- * $Id: capidrv.c,v 1.23 1999/07/09 15:05:44 keil Exp $
+ * $Id: capidrv.c,v 1.26 1999/08/06 07:41:16 calle Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.26  1999/08/06 07:41:16  calle
+ * Added the "vbox patch". if (si1 == 1) si2 = 0;
+ *
+ * Revision 1.25  1999/08/04 10:10:11  calle
+ * Bugfix: corrected /proc functions, added structure for new AVM cards.
+ *
+ * Revision 1.24  1999/07/20 06:48:02  calle
+ * Bugfix: firmware version check for D2 trace was too restrictiv.
+ *
  * Revision 1.23  1999/07/09 15:05:44  keil
  * compat.h is now isdn_compat.h
  *
@@ -154,7 +163,7 @@
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.23 $";
+static char *revision = "$Revision: 1.26 $";
 int debugmode = 0;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
@@ -285,6 +294,8 @@ static inline __u32 b1prot(int l2, int l3)
         case ISDN_PROTO_L2_V11019:
         case ISDN_PROTO_L2_V11038:
 		return 2;
+        case ISDN_PROTO_L2_FAX:
+		return 4;
 	}
 }
 
@@ -302,6 +313,8 @@ static inline __u32 b2prot(int l2, int l3)
         case ISDN_PROTO_L2_V11019:
         case ISDN_PROTO_L2_V11038:
 		return 1;
+        case ISDN_PROTO_L2_FAX:
+		return 4;
 	}
 }
 
@@ -318,6 +331,8 @@ static inline __u32 b3prot(int l2, int l3)
         case ISDN_PROTO_L2_V11038:
 	default:
 		return 0;
+        case ISDN_PROTO_L2_FAX:
+		return 4;
 	}
 }
 
@@ -1016,6 +1031,13 @@ static void handle_incoming_call(capidrv_contr * card, _cmsg * cmsg)
 			cmd.parm.setup.si1,
 			cmd.parm.setup.si2,
 			cmd.parm.setup.eazmsn);
+
+	if (cmd.parm.setup.si1 == 1 && cmd.parm.setup.si2 != 0) {
+		printk(KERN_INFO "capidrv-%d: patching si2=%d to 0 for VBOX\n", 
+			card->contrnr,
+			cmd.parm.setup.si2);
+		cmd.parm.setup.si2 = 0;
+	}
 
 	switch (card->interface.statcallb(&cmd)) {
 	case 0:
@@ -2083,7 +2105,7 @@ static void enable_dchannel_trace(capidrv_contr *card)
 	avmversion[1] |= (version.minormanuversion >> 4) & 0x0f;
 	avmversion[2] |= version.minormanuversion & 0x0f;
 
-        if (avmversion[0] > 3 || (avmversion[0] == 3 && avmversion[1] > 6)) {
+        if (avmversion[0] > 3 || (avmversion[0] == 3 && avmversion[1] > 5)) {
 		printk(KERN_INFO "%s: D2 trace enabled\n", card->name);
 		capi_fill_MANUFACTURER_REQ(&cmdcmsg, global.appid,
 					   card->msgid++,
@@ -2135,7 +2157,7 @@ static void disable_dchannel_trace(capidrv_contr *card)
 	avmversion[1] |= (version.minormanuversion >> 4) & 0x0f;
 	avmversion[2] |= version.minormanuversion & 0x0f;
 
-        if (avmversion[0] > 3 || (avmversion[0] == 3 && avmversion[1] > 6)) {
+        if (avmversion[0] > 3 || (avmversion[0] == 3 && avmversion[1] > 5)) {
 		printk(KERN_INFO "%s: D2 trace disabled\n", card->name);
 	} else {
 		printk(KERN_INFO "%s: D3 trace disabled\n", card->name);
@@ -2189,6 +2211,10 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	    ISDN_FEATURE_L2_V11096 |
 	    ISDN_FEATURE_L2_V11019 |
 	    ISDN_FEATURE_L2_V11038 |
+#if 0
+	    ISDN_FEATURE_L2_FAX |
+	    ISDN_FEATURE_L3_FAX |
+#endif
 	    ISDN_FEATURE_P_UNKNOWN;
 	card->interface.hl_hdrlen = 22; /* len of DATA_B3_REQ */
 	strncpy(card->interface.id, id, sizeof(card->interface.id) - 1);
@@ -2312,10 +2338,11 @@ static int proc_capidrv_read_proc(char *page, char **start, off_t off,
 			global.nrecvdatapkt,
 			global.nsentctlpkt,
 			global.nsentdatapkt);
-	if (len < off) 
+	if (off+count >= len)
+	   *eof = 1;
+	if (len < off)
            return 0;
-	*eof = 1;
-	*start = page -off;
+	*start = page + off;
 	return ((count < len-off) ? count : len-off);
 }
 

@@ -1,5 +1,5 @@
 /*
- * $Id: capilli.h,v 1.2 1999/07/05 15:09:52 calle Exp $
+ * $Id: capilli.h,v 1.4 1999/07/23 08:51:05 calle Exp $
  * 
  * Kernel CAPI 2.0 Driver Interface for Linux
  * 
@@ -25,6 +25,7 @@ typedef struct capicardparams {
 	unsigned irq;
 	int cardtype;
 	int cardnr;
+	unsigned int membase;
 } capicardparams;
 
 struct capi_driver;

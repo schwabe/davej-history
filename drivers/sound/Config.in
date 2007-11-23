@@ -9,6 +9,9 @@
 
 # Prompt user for primary drivers.
 
+if [ "$CONFIG_VISWS" = "y" ]; then
+    dep_tristate 'SGI Visual Workstation Sound' CONFIG_SOUND_VWSND $CONFIG_SOUND
+fi
 dep_tristate 'Ensoniq AudioPCI (ES1370)' CONFIG_SOUND_ES1370 $CONFIG_SOUND
 if [ "$CONFIG_SOUND_ES1370" = "y" ]; then
    bool 'Joystick support at boot time' CONFIG_SOUND_ES1370_JOYPORT_BOOT

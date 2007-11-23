@@ -1,6 +1,9 @@
-/* $Id: isdnl3.h,v 2.4 1999/07/01 08:11:54 keil Exp $
+/* $Id: isdnl3.h,v 2.5 1999/07/25 16:18:32 keil Exp $
 
  * $Log: isdnl3.h,v $
+ * Revision 2.5  1999/07/25 16:18:32  keil
+ * Fix Suspend/Resume
+ *
  * Revision 2.4  1999/07/01 08:11:54  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -34,7 +37,7 @@
  */
 
 #define SBIT(state) (1<<state)
-#define ALL_STATES  0x00ffffff
+#define ALL_STATES  0x03ffffff
 
 #define PROTO_DIS_EURO	0x08
 

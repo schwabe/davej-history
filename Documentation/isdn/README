@@ -149,6 +149,8 @@ README for the ISDN-subsystem
                AT&X0    BTX-mode and T.70-mode off (default)
                AT&X1    BTX-mode on. (S13.1=1, S13.5=0 S14=0, S16=7, S18=7, S19=0)
                AT&X2    T.70-mode on. (S13.1=1, S13.5=1, S14=0, S16=7, S18=7, S19=0)
+               AT+Rx    Resume a suspended call with CallID x (x = 1,2,3...)
+               AT+Sx    Suspend a call with CallID x (x = 1,2,3...)
 
            For voice-mode commands refer to README.audio
 

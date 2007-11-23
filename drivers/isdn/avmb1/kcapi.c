@@ -1,11 +1,15 @@
 /*
- * $Id: kcapi.c,v 1.5 1999/07/09 15:05:48 keil Exp $
+ * $Id: kcapi.c,v 1.6 1999/07/20 06:41:49 calle Exp $
  * 
  * Kernel CAPI 2.0 Module
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kcapi.c,v $
+ * Revision 1.6  1999/07/20 06:41:49  calle
+ * Bugfix: After the redesign of the AVM B1 driver, the driver didn't even
+ *         compile, if not selected as modules.
+ *
  * Revision 1.5  1999/07/09 15:05:48  keil
  * compat.h is now isdn_compat.h
  *
@@ -61,7 +65,7 @@
 #include <linux/b1lli.h>
 #endif
 
-static char *revision = "$Revision: 1.5 $";
+static char *revision = "$Revision: 1.6 $";
 
 /* ------------------------------------------------------------- */
 
@@ -1462,6 +1466,21 @@ EXPORT_SYMBOL(detach_capi_interface);
 EXPORT_SYMBOL(attach_capi_driver);
 EXPORT_SYMBOL(detach_capi_driver);
 
+#ifndef MODULE
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
+extern int b1isa_init(void);
+#endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
+extern int b1pci_init(void);
+#endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
+extern int t1isa_init(void);
+#endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
+extern int b1pcmcia_init(void);
+#endif
+#endif
+
 /*
  * init / exit functions
  */
@@ -1497,6 +1516,18 @@ int kcapi_init(void)
         printk(KERN_NOTICE "CAPI-driver Rev%s: loaded\n", rev);
 #else
 	printk(KERN_NOTICE "CAPI-driver Rev%s: started\n", rev);
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
+	(void)b1isa_init();
+#endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
+	(void)b1pci_init();
+#endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
+	(void)t1isa_init();
+#endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
+	(void)b1pcmcia_init();
+#endif
 #endif
 	return 0;
 }

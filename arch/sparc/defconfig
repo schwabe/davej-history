@@ -305,6 +305,7 @@ CONFIG_NLS=y
 # CONFIG_NLS_ISO8859_7 is not set
 # CONFIG_NLS_ISO8859_8 is not set
 # CONFIG_NLS_ISO8859_9 is not set
+# CONFIG_NLS_ISO8859_14 is not set
 # CONFIG_NLS_ISO8859_15 is not set
 # CONFIG_NLS_KOI8_R is not set
 

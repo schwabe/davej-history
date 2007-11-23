@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 2.14 1999/07/09 08:30:08 keil Exp $
+/* $Id: l3dss1.c,v 2.18 1999/08/11 20:54:39 keil Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -13,6 +13,15 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
+ * Revision 2.18  1999/08/11 20:54:39  keil
+ * High layer compatibility is valid in SETUP
+ *
+ * Revision 2.17  1999/07/25 16:18:25  keil
+ * Fix Suspend/Resume
+ *
+ * Revision 2.16  1999/07/21 14:46:23  keil
+ * changes from EICON certification
+ *
  * Revision 2.14  1999/07/09 08:30:08  keil
  * cosmetics
  *
@@ -78,7 +87,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 2.14 $";
+const char *dss1_revision = "$Revision: 2.18 $";
 
 #define EXT_BEARER_CAPS 1
 
@@ -662,10 +671,8 @@ static int ie_CONNECT[] = {IE_BEARER, IE_CHANNEL_ID | IE_MANDATORY_1,
 static int ie_CONNECT_ACKNOWLEDGE[] = {IE_CHANNEL_ID, IE_DISPLAY, -1};
 static int ie_DISCONNECT[] = {IE_CAUSE | IE_MANDATORY, IE_FACILITY,
 		IE_PROGRESS, IE_DISPLAY, IE_USER_USER, -1};
-/* not used
- * static int ie_INFORMATION[] = {IE_COMPLETE, IE_DISPLAY, IE_KEYPAD,
- *		IE_CALLED_PN, -1};
- */
+static int ie_INFORMATION[] = {IE_COMPLETE, IE_DISPLAY, IE_KEYPAD,
+		IE_CALLED_PN, -1};
 static int ie_NOTIFY[] = {IE_BEARER, IE_NOTIFY | IE_MANDATORY, IE_DISPLAY, -1};
 static int ie_PROGRESS[] = {IE_BEARER, IE_CAUSE, IE_FACILITY, IE_PROGRESS |
 		IE_MANDATORY, IE_DISPLAY, IE_HLC, IE_USER_USER, -1};
@@ -679,7 +686,8 @@ static int ie_RESUME_REJECT[] = {IE_CAUSE | IE_MANDATORY, IE_DISPLAY, -1};
 static int ie_SETUP[] = {IE_COMPLETE, IE_BEARER  | IE_MANDATORY,
 		IE_CHANNEL_ID| IE_MANDATORY, IE_FACILITY, IE_PROGRESS,
 		IE_NET_FAC, IE_DISPLAY, IE_KEYPAD, IE_CALLING_PN,
-		IE_CALLING_SUB, IE_CALLED_PN, IE_CALLED_SUB, IE_LLC, IE_USER_USER, -1};
+		IE_CALLING_SUB, IE_CALLED_PN, IE_CALLED_SUB, IE_LLC, IE_HLC,
+		IE_USER_USER, -1};
 static int ie_SETUP_ACKNOWLEDGE[] = {IE_CHANNEL_ID | IE_MANDATORY, IE_FACILITY,
 		IE_PROGRESS, IE_DISPLAY, -1};
 static int ie_STATUS[] = {IE_CAUSE | IE_MANDATORY, IE_CALL_STATE |
@@ -805,12 +813,13 @@ check_infoelements(struct l3_process *pc, struct sk_buff *skb, int *checklist)
 				err_ureg++;
 		}
 		ie = *p++;
-		if (newpos >= 0) {
+		if (ie & 0x80) {
+			l = 1;
+		} else {
 			l = *p++;
 			p += l;
 			l += 2;
-		} else
-			l = 1;
+		}
 		if (l > getmax_ie_len(ie))
 			err_len++;
 	}
@@ -1243,9 +1252,8 @@ DecodeSI2(struct sk_buff *skb)
 
 				break;
 			case 0x08:	// if (p[5] == 0x02) // sync. Bitratenadaption
-
-				return DecodeSyncParams(176, p[5]);	// V.120
-
+				if (p[1] > 3) 
+					return DecodeSyncParams(176, p[5]);	// V.120
 				break;
 		}
 	}
@@ -1479,8 +1487,11 @@ l3dss1_call_proc(struct l3_process *pc, u_char pr, void *arg)
 		pc->para.bchannel = id;
 	} else if (1 == pc->state) {
 		if (pc->debug & L3_DEB_WARN)
-			l3_debug(pc->st, "setup answer without chid (ret %d)", id);
-		pc->para.cause = 96;
+			l3_debug(pc->st, "setup answer wrong chid (ret %d)", id);
+		if (id == -1)
+			pc->para.cause = 96;
+		else
+			pc->para.cause = 100;
 		l3dss1_status_send(pc, pr, NULL);
 		return;
 	}
@@ -1515,8 +1526,11 @@ l3dss1_setup_ack(struct l3_process *pc, u_char pr, void *arg)
 		pc->para.bchannel = id;
 	} else {
 		if (pc->debug & L3_DEB_WARN)
-			l3_debug(pc->st, "setup answer without chid (ret %d)", id);
-		pc->para.cause = 96;
+			l3_debug(pc->st, "setup answer wrong chid (ret %d)", id);
+		if (id == -1)
+			pc->para.cause = 96;
+		else
+			pc->para.cause = 100;
 		l3dss1_status_send(pc, pr, NULL);
 		return;
 	}
@@ -1640,10 +1654,6 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 /* JIM, 05.11.97 I wanna set service indicator 2 */
 #if EXT_BEARER_CAPS
 					pc->para.setup.si2 = DecodeSI2(skb);
-					if (pc->debug & L3_DEB_SI)
-						l3_debug(pc->st, "SI=%d, AI=%d",
-							pc->para.setup.si1,
-							pc->para.setup.si2);
 #endif
 					break;
 				case 0x09: /* Restricted digital information */
@@ -1664,6 +1674,7 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 			}
 			switch (p[3] & 0x7f) {
 				case 0x40: /* packed mode */
+					pc->para.setup.si1 = 8;
 					break;
 				case 0x10: /* 64 kbit */
 				case 0x11: /* 2*64 kbit */
@@ -1677,6 +1688,9 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 					break;
 			}
 		}
+		if (pc->debug & L3_DEB_SI)
+			l3_debug(pc->st, "SI=%d, AI=%d",
+				pc->para.setup.si1, pc->para.setup.si2);
 		if (err) {
 			if (pc->debug & L3_DEB_WARN)
 				l3_debug(pc->st, "setup with wrong bearer(l=%d:%x,%x)",
@@ -1715,7 +1729,10 @@ l3dss1_setup(struct l3_process *pc, u_char pr, void *arg)
 	} else {
 		if (pc->debug & L3_DEB_WARN)
 			l3_debug(pc->st, "setup with wrong chid ret %d", id);
-		pc->para.cause = 96;
+		if (id == -1)
+			pc->para.cause = 96;
+		else
+			pc->para.cause = 100;
 		l3dss1_msg_without_setup(pc, pr, NULL);
 		return;
 	}
@@ -1991,7 +2008,7 @@ l3dss1_progress(struct l3_process *pc, u_char pr, void *arg)
 	u_char *p;
 
 	if ((p = findie(skb->data, skb->len, IE_PROGRESS, 0))) {
-		if (p[1] != 4) {
+		if (p[1] != 2) {
 			err = 1;
 			pc->para.cause = 100;
 		} else if (p[2] & 0x60) {
@@ -2089,10 +2106,20 @@ l3dss1_status_enq(struct l3_process *pc, u_char pr, void *arg)
 
 	ret = check_infoelements(pc, skb, ie_STATUS_ENQUIRY);
 	l3dss1_std_ie_err(pc, ret);
+// KKe 19.7.99 test eicon
+//        idev_kfree_skb(skb, FREE_READ);
+	pc->para.cause = 30; /* response to STATUS_ENQUIRY */
+        l3dss1_status_send(pc, pr, NULL);
+}
 
-        idev_kfree_skb(skb, FREE_READ);
+static void
+l3dss1_information(struct l3_process *pc, u_char pr, void *arg)
+{
+	int ret;
+	struct sk_buff *skb = arg;
 
-        l3dss1_status_send(pc, 0x1E, NULL);   /* answer status enquire */
+	ret = check_infoelements(pc, skb, ie_INFORMATION);
+	l3dss1_std_ie_err(pc, ret);
 }
 
 /******************************/
@@ -2326,6 +2353,7 @@ l3dss1_t303(struct l3_process *pc, u_char pr, void *arg)
 		l3dss1_setup_req(pc, pr, arg);
 	} else {
 		L3DelTimer(&pc->timer);
+		l3dss1_message_cause(pc, MT_RELEASE_COMPLETE, 102);
 		pc->st->l3.l3l4(pc->st, CC_NOSETUP_RSP, pc);
 		dss1_release_l3_process(pc);
 	}
@@ -2610,7 +2638,7 @@ l3dss1_resume_req(struct l3_process *pc, u_char pr, void *arg)
 	memcpy(skb_put(skb, l), tmp, l);
 	l3_msg(pc->st, DL_DATA | REQUEST, skb);
 	newl3state(pc, 17);
-	L3AddTimer(&pc->timer, T319, CC_T319);
+	L3AddTimer(&pc->timer, T318, CC_T318);
 }
 
 static void
@@ -2758,9 +2786,10 @@ l3dss1_dl_reestablish(struct l3_process *pc, u_char pr, void *arg)
 static void
 l3dss1_dl_reest_status(struct l3_process *pc, u_char pr, void *arg)
 {
-        L3DelTimer(&pc->timer);
+	L3DelTimer(&pc->timer);
  
-        l3dss1_status_send(pc, 0x1F, NULL);   /* normal, unspecified */
+ 	pc->para.cause = 0x1F; /* normal, unspecified */
+	l3dss1_status_send(pc, 0, NULL);
 }
 
 /* *INDENT-OFF* */
@@ -2831,8 +2860,10 @@ static struct stateentry datastatelist[] =
 	 MT_STATUS, l3dss1_release_ind},
 	{ALL_STATES,
 	 MT_STATUS, l3dss1_status},
-	{SBIT(0) | SBIT(6),
+	{SBIT(0),
 	 MT_SETUP, l3dss1_setup},
+	{SBIT(6) | SBIT(7),
+	 MT_SETUP, l3dss1_dummy},
 	{SBIT(1) | SBIT(2),
 	 MT_CALL_PROCEEDING, l3dss1_call_proc},
 	{SBIT(1),
@@ -2841,15 +2872,18 @@ static struct stateentry datastatelist[] =
 	 MT_ALERTING, l3dss1_alerting},
 	{SBIT(2) | SBIT(3),
 	 MT_PROGRESS, l3dss1_progress},
+	{SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) |
+	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
+	 MT_INFORMATION, l3dss1_information},
 	{SBIT(10) | SBIT(11) | SBIT(15),
 	 MT_NOTIFY, l3dss1_notify},
 	{SBIT(0) | SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(10) |
-	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19),
+	 SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(19) | SBIT(25),
 	 MT_RELEASE_COMPLETE, l3dss1_release_cmpl},
-	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) /* | SBIT(17) | SBIT(19)*/,
+	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(12) | SBIT(15) | SBIT(17) | SBIT(25),
 	 MT_RELEASE, l3dss1_release},
 	{SBIT(19),  MT_RELEASE, l3dss1_release_ind},
-	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(15),
+	{SBIT(1) | SBIT(2) | SBIT(3) | SBIT(4) | SBIT(7) | SBIT(8) | SBIT(9) | SBIT(10) | SBIT(11) | SBIT(15) | SBIT(17) | SBIT(25),
 	 MT_DISCONNECT, l3dss1_disconnect},
 //	{SBIT(11),
 //	 MT_DISCONNECT, l3dss1_release_req},
@@ -3021,6 +3055,13 @@ dss1up(struct PStack *st, int pr, void *arg)
 		 */
 		if (mt == MT_SETUP) {
 			/* Setup creates a new transaction process */
+			if (skb->data[2] & 0x80) {
+				/* Setup with wrong CREF flag */
+				if (st->l3.debug & L3_DEB_STATE)
+					l3_debug(st, "dss1up wrong CRef flag");
+				idev_kfree_skb(skb, FREE_READ);
+				return;
+			}
 			if (!(proc = dss1_new_l3_process(st, cr))) {
 				/* May be to answer with RELEASE_COMPLETE and
 				 * CAUSE 0x2f "Resource unavailable", but this
@@ -3222,8 +3263,3 @@ setstack_dss1(struct PStack *st)
 	strcpy(tmp, dss1_revision);
 	printk(KERN_INFO "HiSax: DSS1 Rev. %s\n", HiSax_getrev(tmp));
 }
-
-
-
-
-

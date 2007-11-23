@@ -1,13 +1,29 @@
-/* $Id: diva.c,v 1.12 1999/07/12 21:05:04 keil Exp $
+/* $Id: diva.c,v 1.16 1999/08/11 21:01:25 keil Exp $
 
  * diva.c     low level stuff for Eicon.Diehl Diva Family ISDN cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
- * Thanks to Eicon Technology Diehl GmbH & Co. oHG for documents and informations
+ *		This file is (c) under GNU PUBLIC LICENSE
+ *		For changes and modifications please read
+ *		../../../Documentation/isdn/HiSax.cert
+ *
+ * Thanks to Eicon Technology for documents and informations
  *
  *
  * $Log: diva.c,v $
+ * Revision 1.16  1999/08/11 21:01:25  keil
+ * new PCI codefix
+ *
+ * Revision 1.15  1999/08/10 16:01:49  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
+ * Revision 1.14  1999/08/07 17:35:08  keil
+ * approval for Eicon Technology Diva 2.01 PCI
+ *
+ * Revision 1.13  1999/07/21 14:46:07  keil
+ * changes from EICON certification
+ *
  * Revision 1.12  1999/07/12 21:05:04  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -64,7 +80,7 @@
 
 extern const char *CardType[];
 
-const char *Diva_revision = "$Revision: 1.12 $";
+const char *Diva_revision = "$Revision: 1.16 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -891,7 +907,7 @@ setup_diva(struct IsdnCard *card))
 		val = readreg(cs->hw.diva.cfg_reg + DIVA_IPAC_ADR,
 			cs->hw.diva.cfg_reg + DIVA_IPAC_DATA, IPAC_ID);
 		printk(KERN_INFO "Diva: IPAC version %x\n", val);
-		if (val == 1) {
+		if ((val == 1) || (val==2)) {
 			cs->subtyp = DIVA_IPAC_ISA;
 			cs->hw.diva.ctrl = 0;
 			cs->hw.diva.isac = card->para[1] + DIVA_IPAC_DATA;
@@ -922,23 +938,23 @@ setup_diva(struct IsdnCard *card))
 			PCI_DIVA20_ID, dev_diva))) {
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva->irq;
-			cs->hw.diva.cfg_reg = dev_diva->base_address[2]
+			cs->hw.diva.cfg_reg = get_pcibase(dev_diva, 2)
 				& PCI_BASE_ADDRESS_IO_MASK;
 		} else if ((dev_diva_u = pci_find_device(PCI_VENDOR_EICON_DIEHL,
 			PCI_DIVA20_U_ID, dev_diva_u))) {
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva_u->irq;
-			cs->hw.diva.cfg_reg = dev_diva_u->base_address[2]
+			cs->hw.diva.cfg_reg = get_pcibase(dev_diva_u, 2)
 				& PCI_BASE_ADDRESS_IO_MASK;
 		} else if ((dev_diva201 = pci_find_device(PCI_VENDOR_EICON_DIEHL,
 			PCI_DIVA_201, dev_diva201))) {
 			cs->subtyp = DIVA_IPAC_PCI;
 			cs->irq = dev_diva201->irq;
 			cs->hw.diva.pci_cfg =
-				(ulong) ioremap((dev_diva201->base_address[0]
+				(ulong) ioremap((get_pcibase(dev_diva201, 0)
 					& PCI_BASE_ADDRESS_IO_MASK), 4096);
 			cs->hw.diva.cfg_reg =
-				(ulong) ioremap((dev_diva201->base_address[1]
+				(ulong) ioremap((get_pcibase(dev_diva201, 1)
 					& PCI_BASE_ADDRESS_IO_MASK), 4096);
 		} else {
 			printk(KERN_WARNING "Diva: No PCI card found\n");

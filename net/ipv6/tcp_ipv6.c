@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.104.2.7 1999/08/12 15:34:32 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.104.2.9 1999/08/13 18:49:56 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -134,10 +134,13 @@ static int tcp_v6_get_port(struct sock *sk, unsigned short snum)
 					if (!sk_reuse	||
 					    !sk2->reuse	||
 					    sk2->state == TCP_LISTEN) {
+						/* NOTE: IPv6 tw bucket have different format */
 						if (!sk2->rcv_saddr	||
-						    !addr_type == IPV6_ADDR_ANY ||
+						    addr_type == IPV6_ADDR_ANY ||
 						    !ipv6_addr_cmp(&sk->net_pinfo.af_inet6.rcv_saddr,
-								   &sk2->net_pinfo.af_inet6.rcv_saddr))
+								   sk2->state != TCP_TIME_WAIT ?
+								   &sk2->net_pinfo.af_inet6.rcv_saddr :
+								   &((struct tcp_tw_bucket*)sk)->v6_rcv_saddr))
 							break;
 					}
 				}

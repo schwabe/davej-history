@@ -24,6 +24,9 @@ ifeq ($(CONFIG_ISDN),y)
   endif
   ifdef CONFIG_ISDN_AUDIO
     L_OBJS += isdn_audio.o
+    ifdef CONFIG_ISDN_TTY_FAX
+      L_OBJS += isdn_ttyfax.o
+    endif
   endif
 else
   ifeq ($(CONFIG_ISDN),m)
@@ -41,6 +44,9 @@ else
     endif  
     ifdef CONFIG_ISDN_AUDIO
       O_OBJS += isdn_audio.o
+      ifdef CONFIG_ISDN_TTY_FAX
+        O_OBJS += isdn_ttyfax.o
+      endif
     endif
   endif
 endif

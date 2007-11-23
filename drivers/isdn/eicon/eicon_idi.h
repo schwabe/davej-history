@@ -1,4 +1,4 @@
-/* $Id: eicon_idi.h,v 1.5 1999/07/11 17:16:26 armin Exp $
+/* $Id: eicon_idi.h,v 1.6 1999/07/25 15:12:04 armin Exp $
  *
  * ISDN lowlevel-module for the Eicon.Diehl active cards.
  * IDI-Interface
@@ -21,6 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_idi.h,v $
+ * Revision 1.6  1999/07/25 15:12:04  armin
+ * fix of some debug logs.
+ * enabled ISA-cards option.
+ *
  * Revision 1.5  1999/07/11 17:16:26  armin
  * Bugfixes in queue handling.
  * Added DSP-DTMF decoder functions.
@@ -256,5 +260,9 @@ extern void idi_handle_ind(eicon_card *card, struct sk_buff *skb);
 extern int eicon_idi_manage(eicon_card *card, eicon_manifbuf *mb);
 extern int idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, int que);
 extern void idi_audio_cmd(eicon_card *ccard, eicon_chan *chan, int cmd, u_char *value);
+#ifdef CONFIG_ISDN_TTY_FAX
+extern void idi_fax_cmd(eicon_card *card, eicon_chan *chan);
+extern int idi_faxdata_send(eicon_card *ccard, eicon_chan *chan, struct sk_buff *skb);
+#endif
 
 #endif

@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.c,v 1.68 1999/07/11 17:51:51 armin Exp $
+/* $Id: isdn_tty.c,v 1.72 1999/07/31 12:59:45 armin Exp $
 
  * Linux ISDN subsystem, tty functions and AT-command emulator (linklevel).
  *
@@ -20,6 +20,20 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.c,v $
+ * Revision 1.72  1999/07/31 12:59:45  armin
+ * Added tty fax capabilities.
+ *
+ * Revision 1.71  1999/07/27 10:34:34  armin
+ * Fixed last change. Did not compile with AUDIO support off.
+ *
+ * Revision 1.70  1999/07/25 16:17:58  keil
+ * Fix Suspend/Resume
+ *
+ * Revision 1.69  1999/07/25 12:56:15  armin
+ * isdn_tty_at_cout() now queues the message if online and
+ * data is in queue or flip buffer is full.
+ * needed for fax connections.
+ *
  * Revision 1.68  1999/07/11 17:51:51  armin
  * Bugfix, "-" was missing for AT&L settings.
  *
@@ -331,7 +345,7 @@ static int bit2si[8] =
 static int si2bit[8] =
 {4, 1, 4, 4, 4, 4, 4, 4};
 
-char *isdn_tty_revision = "$Revision: 1.68 $";
+char *isdn_tty_revision = "$Revision: 1.72 $";
 
 
 /* isdn_tty_try_read() is called from within isdn_tty_rcv_skb()
@@ -534,6 +548,15 @@ isdn_tty_rcv_skb(int i, int di, int channel, struct sk_buff *skb)
 		ISDN_AUDIO_SKB_DLECOUNT(skb) =
 			isdn_tty_countDLE(skb->data, skb->len);
 	}
+#ifdef CONFIG_ISDN_TTY_FAX
+	else {
+		if (info->faxonline & 2) {
+			isdn_tty_fax_bitorder(info, skb);
+			ISDN_AUDIO_SKB_DLECOUNT(skb) =
+				isdn_tty_countDLE(skb->data, skb->len);
+		}
+	}
+#endif
 #endif
 	/* Try to deliver directly via tty-flip-buf if queue is empty */
 	save_flags(flags);
@@ -863,6 +886,35 @@ isdn_tty_modem_ncarrier(modem_info * info)
 	}
 }
 
+/*
+ * return the usage calculated by si and layer 2 protocol
+ */
+int
+isdn_calc_usage(int si, int l2)
+{
+	int usg = ISDN_USAGE_MODEM;
+
+#ifdef CONFIG_ISDN_AUDIO
+	if (si == 1) {
+		switch(l2) {
+			case ISDN_PROTO_L2_MODEM: 
+				usg = ISDN_USAGE_MODEM;
+				break;
+#ifdef CONFIG_ISDN_TTY_FAX
+			case ISDN_PROTO_L2_FAX: 
+				usg = ISDN_USAGE_FAX;
+				break;
+#endif
+			case ISDN_PROTO_L2_TRANS: 
+			default:
+				usg = ISDN_USAGE_VOICE;
+				break;
+		}
+	}
+#endif
+	return(usg);
+}
+
 /* isdn_tty_dial() performs dialing of a tty an the necessary
  * setup of the lower levels before that.
  */
@@ -882,8 +934,14 @@ isdn_tty_dial(char *n, modem_info * info, atemu * m)
 			si = bit2si[j];
 			break;
 		}
+	usg = isdn_calc_usage(si, l2);
 #ifdef CONFIG_ISDN_AUDIO
-	if ((si == 1) && (l2 != ISDN_PROTO_L2_MODEM)) {
+	if ((si == 1) && 
+		(l2 != ISDN_PROTO_L2_MODEM)
+#ifdef CONFIG_ISDN_TTY_FAX
+		&& (l2 != ISDN_PROTO_L2_FAX)
+#endif
+		) {
 		l2 = ISDN_PROTO_L2_TRANS;
 		usg = ISDN_USAGE_VOICE;
 	}
@@ -921,6 +979,12 @@ isdn_tty_dial(char *n, modem_info * info, atemu * m)
 		cmd.driver = info->isdn_driver;
 		cmd.command = ISDN_CMD_SETL3;
 		cmd.arg = info->isdn_channel + (m->mdmreg[REG_L3PROT] << 8);
+#ifdef CONFIG_ISDN_TTY_FAX
+		if (l2 == ISDN_PROTO_L2_FAX) {
+			cmd.parm.fax = info->fax;
+			info->fax->direction = ISDN_TTY_FAX_CONN_OUT;
+		}
+#endif
 		isdn_command(&cmd);
 		cmd.driver = info->isdn_driver;
 		cmd.arg = info->isdn_channel;
@@ -943,7 +1007,7 @@ isdn_tty_dial(char *n, modem_info * info, atemu * m)
  * ISDN-line (hangup). The usage-status is cleared
  * and some cleanup is done also.
  */
-static void
+void
 isdn_tty_modem_hup(modem_info * info, int local)
 {
 	isdn_ctrl cmd;
@@ -964,6 +1028,10 @@ isdn_tty_modem_hup(modem_info * info, int local)
 	}
 #ifdef CONFIG_ISDN_AUDIO
 	info->vonline = 0;
+#ifdef CONFIG_ISDN_TTY_FAX
+	info->faxonline = 0;
+	info->fax->phase = ISDN_FAX_PHASE_IDLE;
+#endif
 	info->emu.vpar[4] = 0;
 	info->emu.vpar[5] = 8;
 	if (info->dtmf_state) {
@@ -997,9 +1065,8 @@ isdn_tty_modem_hup(modem_info * info, int local)
 		}
 		isdn_all_eaz(info->isdn_driver, info->isdn_channel);
 		info->emu.mdmreg[REG_RINGCNT] = 0;
-		usage = ((info->emu.mdmreg[REG_SI1I] != 1) || 
-		    (info->emu.mdmreg[REG_L2PROT] == ISDN_PROTO_L2_MODEM)) ?
-			ISDN_USAGE_MODEM : ISDN_USAGE_VOICE;
+		usage = isdn_calc_usage(info->emu.mdmreg[REG_SI1I],
+					info->emu.mdmreg[REG_L2PROT]);
 		isdn_free_channel(info->isdn_driver, info->isdn_channel,
 				  usage);
 	}
@@ -1086,8 +1153,14 @@ isdn_tty_resume(char *id, modem_info * info, atemu * m)
 			si = bit2si[j];
 			break;
 		}
+	usg = isdn_calc_usage(si, l2);
 #ifdef CONFIG_ISDN_AUDIO
-	if ((si == 1) && (l2 != ISDN_PROTO_L2_MODEM)) {
+	if ((si == 1) && 
+		(l2 != ISDN_PROTO_L2_MODEM)
+#ifdef CONFIG_ISDN_TTY_FAX
+		&& (l2 != ISDN_PROTO_L2_FAX)
+#endif
+		) {
 		l2 = ISDN_PROTO_L2_TRANS;
 		usg = ISDN_USAGE_VOICE;
 	}
@@ -1140,11 +1213,11 @@ isdn_tty_resume(char *id, modem_info * info, atemu * m)
 		cmd.parm.cmsg.para[5] = l;
 		strncpy(&cmd.parm.cmsg.para[6], id, l);
 		cmd.command =CAPI_PUT_MESSAGE;
-/*		info->dialing = 1;
-		strcpy(dev->num[i], n);
+		info->dialing = 1;
+//		strcpy(dev->num[i], n);
 		isdn_info_update();
-*/
 		isdn_command(&cmd);
+		isdn_timer_ctrl(ISDN_TIMER_CARRIER, 1);
 	}
 }
 
@@ -1174,8 +1247,14 @@ isdn_tty_send_msg(modem_info * info, atemu * m, char *msg)
 			si = bit2si[j];
 			break;
 		}
+	usg = isdn_calc_usage(si, l2);
 #ifdef CONFIG_ISDN_AUDIO
-	if ((si == 1) && (l2 != ISDN_PROTO_L2_MODEM)) {
+	if ((si == 1) && 
+		(l2 != ISDN_PROTO_L2_MODEM)
+#ifdef CONFIG_ISDN_TTY_FAX
+		&& (l2 != ISDN_PROTO_L2_FAX)
+#endif
+		) {
 		l2 = ISDN_PROTO_L2_TRANS;
 		usg = ISDN_USAGE_VOICE;
 	}
@@ -2160,8 +2239,42 @@ isdn_tty_modem_reset_vpar(atemu * m)
 	m->vpar[1] = 0;         /* Silence detection level (0 = none      ) */
 	m->vpar[2] = 70;        /* Silence interval        (7 sec.        ) */
 	m->vpar[3] = 2;         /* Compression type        (1 = ADPCM-2   ) */
-	m->vpar[4] = 0;		/* DTMF detection level    (0 = softcode  ) */
-	m->vpar[5] = 8;		/* DTMF interval           (8 * 5 ms.     ) */
+	m->vpar[4] = 0;         /* DTMF detection level    (0 = softcode  ) */
+	m->vpar[5] = 8;         /* DTMF interval           (8 * 5 ms.     ) */
+}
+#endif
+
+#ifdef CONFIG_ISDN_TTY_FAX
+static void
+isdn_tty_modem_reset_faxpar(modem_info * info)
+{
+	T30_s *f = info->fax;
+
+	f->code = 0;
+	f->phase = ISDN_FAX_PHASE_IDLE;
+	f->direction = 0;
+	f->resolution = 1;	/* fine */
+	f->rate = 5;		/* 14400 bit/s */
+	f->width = 0;
+	f->length = 0;
+	f->compression = 0;
+	f->ecm = 0;
+	f->binary = 0;
+	f->scantime = 0;
+	memset(&f->id[0], 32, FAXIDLEN - 1);
+	f->id[FAXIDLEN - 1] = 0;
+	f->badlin = 0;
+	f->badmul = 0;
+	f->bor = 0;
+	f->nbc = 0;
+	f->cq = 0;
+	f->cr = 0;
+	f->ctcrty = 0;
+	f->minsp = 0;
+	f->phcto = 30;
+	f->rel = 0;
+	memset(&f->pollid[0], 32, FAXIDLEN - 1);
+	f->pollid[FAXIDLEN - 1] = 0;
 }
 #endif
 
@@ -2177,6 +2290,9 @@ isdn_tty_modem_reset_regs(modem_info * info, int force)
 	}
 #ifdef CONFIG_ISDN_AUDIO
 	isdn_tty_modem_reset_vpar(m);
+#endif
+#ifdef CONFIG_ISDN_TTY_FAX
+	isdn_tty_modem_reset_faxpar(info);
 #endif
 	m->mdmcmdl = 0;
 }
@@ -2250,6 +2366,12 @@ isdn_tty_modem_init(void)
 	}
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		info = &m->info[i];
+#ifdef CONFIG_ISDN_TTY_FAX
+		if (!(info->fax = kmalloc(sizeof(T30_s), GFP_KERNEL))) {
+			printk(KERN_ERR "Could not allocate fax t30-buffer\n");
+			return -3;
+		}
+#endif
 #ifdef COMPAT_HAS_NEW_WAITQ
 		init_MUTEX(&info->write_sem);
 #else
@@ -2330,8 +2452,15 @@ isdn_tty_match_icall(char *cid, atemu *emu, int di)
 				break;
 		}
 		return ret;
-	} else
-		return isdn_wildmat(cid, isdn_map_eaz2msn(emu->msn, di));
+	} else {
+		int tmp;
+		tmp = isdn_wildmat(cid, isdn_map_eaz2msn(emu->msn, di));
+#ifdef ISDN_DEBUG_MODEM_ICALL
+			printk(KERN_DEBUG "m_fi: mmsn=%s -> tmp=%d\n",
+			       isdn_map_eaz2msn(emu->msn, di), tmp);
+#endif
+		return tmp;
+	}
 }
 
 /*
@@ -2383,7 +2512,7 @@ isdn_tty_find_icall(int di, int ch, setup_parm setup)
 		    (info->emu.mdmreg[REG_SI2] == si2))	{         /* SI2 is matching */
 			idx = isdn_dc2minor(di, ch);
 #ifdef ISDN_DEBUG_MODEM_ICALL
-			printk(KERN_DEBUG "m_fi: match1\n");
+			printk(KERN_DEBUG "m_fi: match1 wret=%d\n", wret);
 			printk(KERN_DEBUG "m_fi: idx=%d flags=%08lx drv=%d ch=%d usg=%d\n", idx,
 			       info->flags, info->isdn_driver, info->isdn_channel,
 			       dev->usage[idx]);
@@ -2405,8 +2534,7 @@ isdn_tty_find_icall(int di, int ch, setup_parm setup)
 					info->drv_index = idx;
 					dev->m_idx[idx] = info->line;
 					dev->usage[idx] &= ISDN_USAGE_EXCLUSIVE;
-					dev->usage[idx] |= ((si1 != 1) || (info->emu.mdmreg[REG_L2PROT] == ISDN_PROTO_L2_MODEM)) ? 
-						ISDN_USAGE_MODEM : ISDN_USAGE_VOICE;
+					dev->usage[idx] |= isdn_calc_usage(si1, info->emu.mdmreg[REG_L2PROT]); 
 					strcpy(dev->num[idx], nr);
 					strcpy(info->emu.cpn, eaz);
 					info->emu.mdmreg[REG_SI1I] = si2bit[si1];
@@ -2584,6 +2712,13 @@ isdn_tty_stat_callback(int i, isdn_ctrl * c)
 					}
 				}
 				return 1;
+#ifdef CONFIG_ISDN_TTY_FAX
+			case ISDN_STAT_FAXIND:
+				if (TTY_IS_ACTIVE(info)) {
+					isdn_tty_fax_command(info); 
+				}
+				break;
+#endif
 #ifdef CONFIG_ISDN_AUDIO
 			case ISDN_STAT_AUDIO:
 				if (TTY_IS_ACTIVE(info)) {
@@ -2621,6 +2756,8 @@ isdn_tty_at_cout(char *msg, modem_info * info)
 	char *p;
 	char c;
 	ulong flags;
+	struct sk_buff *skb = 0;
+	char *sp = 0;
 
 	if (!msg) {
 		printk(KERN_WARNING "isdn_tty: Null-Message in isdn_tty_at_cout\n");
@@ -2629,6 +2766,34 @@ isdn_tty_at_cout(char *msg, modem_info * info)
 	save_flags(flags);
 	cli();
 	tty = info->tty;
+	if ((info->flags & ISDN_ASYNC_CLOSING) || (!tty)) {
+		restore_flags(flags);
+		return;
+	}
+
+	/* use queue instead of direct flip, if online and */
+	/* data is in queue or flip buffer is full */
+	if ((info->online) && (((tty->flip.count + strlen(msg)) >= TTY_FLIPBUF_SIZE) ||
+	    (!skb_queue_empty(&dev->drv[info->isdn_driver]->rpqueue[info->isdn_channel])))) {
+		skb = alloc_skb(strlen(msg)
+#ifdef CONFIG_ISDN_AUDIO
+			+ sizeof(isdn_audio_skb)
+#endif
+			, GFP_ATOMIC);
+		if (!skb) {
+			restore_flags(flags);
+			return;
+		}
+#ifdef CONFIG_ISDN_AUDIO
+		skb_reserve(skb, sizeof(isdn_audio_skb));
+#endif
+		sp = skb_put(skb, strlen(msg));
+#ifdef CONFIG_ISDN_AUDIO
+		ISDN_AUDIO_SKB_DLECOUNT(skb) = 0;
+		ISDN_AUDIO_SKB_LOCK(skb) = 0;
+#endif
+	}
+
 	for (p = msg; *p; p++) {
 		switch (*p) {
 			case '\r':
@@ -2643,16 +2808,26 @@ isdn_tty_at_cout(char *msg, modem_info * info)
 			default:
 				c = *p;
 		}
-		if ((info->flags & ISDN_ASYNC_CLOSING) || (!tty)) {
-			restore_flags(flags);
-			return;
+		if (skb) {
+			*sp++ = c;
+		} else {
+			if (tty->flip.count >= TTY_FLIPBUF_SIZE)
+				break;
+			tty_insert_flip_char(tty, c, 0);
 		}
-		if (tty->flip.count >= TTY_FLIPBUF_SIZE)
-			break;
-		tty_insert_flip_char(tty, c, 0);
 	}
-	restore_flags(flags);
-	queue_task(&tty->flip.tqueue, &tq_timer);
+	if (skb) {
+		__skb_queue_tail(&dev->drv[info->isdn_driver]->rpqueue[info->isdn_channel], skb);
+		dev->drv[info->isdn_driver]->rcvcount[info->isdn_channel] += skb->len;
+		restore_flags(flags);
+		/* Schedule dequeuing */
+		if ((dev->modempoll) && (info->rcvsched))
+			isdn_timer_ctrl(ISDN_TIMER_MODEMREAD, 1);
+
+	} else {
+		restore_flags(flags);
+		queue_task(&tty->flip.tqueue, &tq_timer);
+	}
 }
 
 /*
@@ -3328,7 +3503,7 @@ isdn_tty_cmd_ATA(modem_info * info)
 		/* If more than one bit set in reg18, autoselect Layer2 */
 		if ((m->mdmreg[REG_SI1] & m->mdmreg[REG_SI1I]) != m->mdmreg[REG_SI1]) {
 			if (m->mdmreg[REG_SI1I] == 1) {
-				if (l2 != ISDN_PROTO_L2_MODEM)
+				if ((l2 != ISDN_PROTO_L2_MODEM) && (l2 != ISDN_PROTO_L2_FAX))
 					l2 = ISDN_PROTO_L2_TRANS;
 			} else
 				l2 = ISDN_PROTO_L2_X75I;
@@ -3342,6 +3517,12 @@ isdn_tty_cmd_ATA(modem_info * info)
 		cmd.driver = info->isdn_driver;
 		cmd.command = ISDN_CMD_SETL3;
 		cmd.arg = info->isdn_channel + (m->mdmreg[REG_L3PROT] << 8);
+#ifdef CONFIG_ISDN_TTY_FAX
+		if (l2 == ISDN_PROTO_L2_FAX) {
+			cmd.parm.fax = info->fax;
+			info->fax->direction = ISDN_TTY_FAX_CONN_IN;
+		}
+#endif
 		isdn_command(&cmd);
 		cmd.driver = info->isdn_driver;
 		cmd.arg = info->isdn_channel;
@@ -3362,7 +3543,6 @@ static int
 isdn_tty_cmd_PLUSF(char **p, modem_info * info)
 {
 	atemu *m = &info->emu;
-	int par;
 	char rs[20];
 
 	if (!strncmp(p[0], "CLASS", 5)) {
@@ -3372,6 +3552,10 @@ isdn_tty_cmd_PLUSF(char **p, modem_info * info)
 				p[0]++;
 				sprintf(rs, "\r\n%d",
 					(m->mdmreg[REG_SI1] & 1) ? 8 : 0);
+#ifdef CONFIG_ISDN_TTY_FAX
+				if (m->mdmreg[REG_L2PROT] == ISDN_PROTO_L2_FAX)
+				sprintf(rs, "\r\n2");
+#endif
 				isdn_tty_at_cout(rs, info);
 				break;
 			case '=':
@@ -3379,23 +3563,37 @@ isdn_tty_cmd_PLUSF(char **p, modem_info * info)
 				switch (*p[0]) {
 					case '0':
 						p[0]++;
+						m->mdmreg[REG_L2PROT] = ISDN_PROTO_L2_X75I;
+						m->mdmreg[REG_L3PROT] = ISDN_PROTO_L3_TRANS;
 						m->mdmreg[REG_SI1] = 4;
 						info->xmit_size =
 						    m->mdmreg[REG_PSIZE] * 16;
 						break;
+#ifdef CONFIG_ISDN_TTY_FAX
 					case '2':
-						printk(KERN_DEBUG "isdn_tty: FCLASS=2\n");
 						p[0]++;
+						m->mdmreg[REG_SI1] = 1;
+						m->mdmreg[REG_L2PROT] = ISDN_PROTO_L2_FAX;
+						m->mdmreg[REG_L3PROT] = ISDN_PROTO_L3_FAX;
+						info->xmit_size =
+						    m->mdmreg[REG_PSIZE] * 16;
 						break;
+#endif
 					case '8':
 						p[0]++;
+						/* L2 will change on dialout with si=1 */
+						m->mdmreg[REG_L2PROT] = ISDN_PROTO_L2_X75I;
+						m->mdmreg[REG_L3PROT] = ISDN_PROTO_L3_TRANS;
 						m->mdmreg[REG_SI1] = 5;
 						info->xmit_size = VBUF;
 						break;
 					case '?':
 						p[0]++;
-						isdn_tty_at_cout("\r\n0,2,8",
-								 info);
+#ifdef CONFIG_ISDN_TTY_FAX
+						isdn_tty_at_cout("\r\n0,2,8", info);
+#else
+						isdn_tty_at_cout("\r\n0,8", info);
+#endif
 						break;
 					default:
 						PARSE_ERROR1;
@@ -3406,115 +3604,11 @@ isdn_tty_cmd_PLUSF(char **p, modem_info * info)
 		}
 		return 0;
 	}
-	if (!strncmp(p[0], "AA", 2)) {
-		p[0] += 2;
-		switch (*p[0]) {
-			case '?':
-				p[0]++;
-				sprintf(rs, "\r\n%d",
-					m->mdmreg[REG_RINGATA]);
-				isdn_tty_at_cout(rs, info);
-				break;
-			case '=':
-				p[0]++;
-				par = isdn_getnum(p);
-				if ((par < 0) || (par > 255))
-					PARSE_ERROR1;
-				m->mdmreg[REG_RINGATA] = par;
-				break;
-			default:
-				PARSE_ERROR1;
-		}
-		return 0;
-	}
-        if (!strncmp(p[0], "TBC=", 4)) { /* UNKLAR !! */
-                p[0] += 4;
-                printk(KERN_DEBUG "isdn_tty: Fax FTBC=%c\n", *p[0]);
-                switch (*p[0]) {
-                        case '0':
-                                p[0]++;
-                                break;
-                        default:
-                                PARSE_ERROR1;
-                }
-                return 0;
-        }
-        if (!strncmp(p[0], "BOR=", 4)) { /* UNKLAR !! */
-                p[0] += 4;
-                printk(KERN_DEBUG "isdn_tty: Fax FBOR=%c\n", *p[0]);
-                switch (*p[0]) {
-                        case '0':
-                                p[0]++;
-                                break;
-                        default:
-                                PARSE_ERROR1;
-                }
-                return 0;
-        }
-        if (!strncmp(p[0], "DCC=", 4)) { /* SETUP irgendwie !! */
-		int i, val[]={0,0,0,0,0,0,0,0};
-
-                p[0] += 4;
-                if (*p[0] == '?') {
-			isdn_tty_at_cout("\r\n(0,1),(0-5),(0-2),(0-2),(0,1),(0),(0),(0-7)",info);
-			p[0]++;
-                } else {
-			for (i=0; (*p[0]>='0') && (*p[0]<='9'); i++) {
-				val[i] = *p[0] - 48;
-				p[0]++;
-				if (*p[0] == ',')
-					p[0]++;
-			}
-			printk(KERN_DEBUG "isdn_tty: Fax Setup values=%d,%d,%d,%d,%d,%d,%d,%d\n",
-			       val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
-                }
-                return 0;
-        }
-        if (!strncmp(p[0], "LID=", 4)) { /* set sender ID !! */
-		char senderID[80];
-		int i;
-
-                p[0] += 4;
-                if (*p[0] =='"')
-			p[0]++;
-                for(i=0; (*p[0]) && (*p[0] != '"'); i++)
-			senderID[i] = *p[0]++;
-                senderID[i] = 0;
-                if (*p[0] =='"')
-			p[0]++;
-                printk(KERN_DEBUG "isdn_tty: Fax sender=>%s<\n", senderID);
-                return 0;
-        }
-        if (!strncmp(p[0], "MFR?", 4)) {
-                p[0] += 4;
-                printk(KERN_DEBUG "isdn_tty: FMFR?\n");
-                isdn_tty_at_cout("\r\nISDNfax", info);
-                return 0;
-        }
-        if (!strncmp(p[0], "MDL?", 4)) {
-                p[0] += 4;
-                printk(KERN_DEBUG "isdn_tty: FMDL?\n");
-                isdn_tty_at_cout("\r\nAVM-B1", info);
-                return 0;
-        }
-        if (!strncmp(p[0], "AP=?", 4)) {
-                p[0] += 4;
-                printk(KERN_DEBUG "isdn_tty: FAP=?\n");
-                return 0;
-        }
-        if (!strncmp(p[0], "PHCTO=", 6)) {
-		/* beim trace mit dem zyxel folgt der wert 30 ;*/
-                p[0] += 6;
-                printk(KERN_DEBUG "isdn_tty: FPHCTO=%s\n", p[0]);
-                return 0;
-        }
-        if (!strncmp(p[0], "CR=", 3)) {
-                p[0] += 3;
-                printk(KERN_DEBUG "isdn_tty: FCR=%s\n", p[0]);
-                return 0;
-        }
-        printk(KERN_DEBUG "isdn_tty: unknown token=>AT+F%s<\n", p[0]);
+#ifdef CONFIG_ISDN_TTY_FAX
+	return (isdn_tty_cmd_PLUSF_FAX(p, info));
+#else
 	PARSE_ERROR1;
+#endif
 }
 
 /*
@@ -3959,8 +4053,10 @@ isdn_tty_parse_at(modem_info * info)
 						isdn_tty_suspend(ds, info, m);
 						break;
 					case 'R':	/* RESUME */
+						p++;
 						isdn_tty_get_msnstr(ds, &p);
 						isdn_tty_resume(ds, info, m);
+						break;
 					case 'M':	/* MESSAGE */
 						p++;
 						isdn_tty_send_msg(info, m, p);

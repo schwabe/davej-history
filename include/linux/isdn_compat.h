@@ -16,6 +16,7 @@
 #include <linux/mm.h>
 
 #define ioremap vremap
+#define ioremap_nocache vremap
 #define iounmap vfree
 
 static inline unsigned long copy_from_user(void *to, const void *from, unsigned long n)
@@ -88,6 +89,11 @@ static inline unsigned long copy_to_user(void *to, const void *from, unsigned lo
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,91)
 #define COMPAT_HAS_NEW_PCI
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,13)
+#define get_pcibase(ps, nr) ps->base_address[nr]
+#else
+#define get_pcibase(ps, nr) ps->resource[nr].start
+#endif
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,127)

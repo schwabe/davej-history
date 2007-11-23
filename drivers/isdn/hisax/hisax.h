@@ -1,8 +1,14 @@
-/* $Id: hisax.h,v 2.30 1999/07/14 12:38:38 werner Exp $
+/* $Id: hisax.h,v 2.33 1999/08/05 20:43:16 keil Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
+ * Revision 2.33  1999/08/05 20:43:16  keil
+ * ISAR analog modem support
+ *
+ * Revision 2.31  1999/07/21 14:46:11  keil
+ * changes from EICON certification
+ *
  * Revision 2.30  1999/07/14 12:38:38  werner
  * Added changes for echo channel handling
  *
@@ -321,6 +327,7 @@ struct Layer1 {
 #define FLG_ESTAB_PEND	13
 #define FLG_PTP		14
 #define FLG_FIXED_TEI	15
+#define FLG_L2BLOCK	16
 
 struct Layer2 {
 	int tei;
@@ -452,6 +459,7 @@ struct isar_hw {
 	int txcnt;
 	int mml;
 	u_char *rcvbuf;         /* B-Channel receive Buffer */
+	u_char conmsg[16];
 	struct isar_reg *reg;
 };
 
@@ -519,11 +527,15 @@ struct amd7930_hw {
 #define BC_FLG_NOFRAME	4
 #define BC_FLG_HALF	5
 #define BC_FLG_EMPTY	6
+#define BC_FLG_ORIG	7
 
 #define L1_MODE_NULL	0
 #define L1_MODE_TRANS	1
 #define L1_MODE_HDLC	2
+#define L1_MODE_EXTRN	3
 #define L1_MODE_MODEM	7
+#define L1_MODE_V32	8
+#define L1_MODE_FAX	9
 
 struct BCState {
 	int channel;
@@ -536,6 +548,7 @@ struct BCState {
 	struct sk_buff_head squeue;	/* B-Channel send Queue */
 	struct PStack *st;
 	u_char *blog;
+	u_char *conmsg;
 	struct timer_list transbusy;
 	struct tq_struct tqueue;
 	int event;

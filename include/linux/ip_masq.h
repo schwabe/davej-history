@@ -1,6 +1,6 @@
 /*
  *	IP_MASQ user space control interface
- *	$Id: ip_masq.h,v 1.2 1998/12/08 05:41:48 davem Exp $
+ *	$Id: ip_masq.h,v 1.2.2.1 1999/08/13 18:23:03 davem Exp $
  */
 
 #ifndef _LINUX_IP_MASQ_H

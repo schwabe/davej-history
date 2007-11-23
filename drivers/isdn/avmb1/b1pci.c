@@ -1,11 +1,17 @@
 /*
- * $Id: b1pci.c,v 1.14 1999/07/09 15:05:41 keil Exp $
+ * $Id: b1pci.c,v 1.16 1999/08/11 21:01:07 keil Exp $
  * 
  * Module for AVM B1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pci.c,v $
+ * Revision 1.16  1999/08/11 21:01:07  keil
+ * new PCI codefix
+ *
+ * Revision 1.15  1999/08/10 16:02:27  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
  * Revision 1.14  1999/07/09 15:05:41  keil
  * compat.h is now isdn_compat.h
  *
@@ -51,7 +57,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.14 $";
+static char *revision = "$Revision: 1.16 $";
 
 /* ------------------------------------------------------------- */
 
@@ -246,7 +252,7 @@ int b1pci_init(void)
 	while ((dev = pci_find_device(PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_B1, dev))) {
 		struct capicardparams param;
 
-		param.port = dev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
+		param.port = get_pcibase(dev, 1) & PCI_BASE_ADDRESS_IO_MASK;
 		param.irq = dev->irq;
 		printk(KERN_INFO
 			"%s: PCI BIOS reports AVM-B1 at i/o %#x, irq %d\n",

@@ -139,6 +139,8 @@ static inline void wrfpcr(unsigned long val)
 
 extern unsigned long alpha_read_fp_reg (unsigned long reg);
 extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
+extern unsigned long alpha_read_fp_reg_s (unsigned long reg);
+extern void alpha_write_fp_reg_s (unsigned long reg, unsigned long val);
 
 #endif /* __KERNEL__ */
 

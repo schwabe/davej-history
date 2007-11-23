@@ -395,6 +395,9 @@ int soundcore_init(void)
 	/*
 	 *	Now init non OSS drivers
 	 */
+#ifdef CONFIG_SOUND_VWSND
+	init_vwsnd();
+#endif
 #ifdef CONFIG_SOUND_SONICVIBES
 	init_sonicvibes();
 #endif

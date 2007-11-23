@@ -9873,6 +9873,12 @@ CONFIG_AEDSP16_MPU_IRQ
   you compiled aedsp16.o as a module you can specify this parameter as
   'mpu_irq=NN'.
 
+SGI Visual Workstation on-board audio
+CONFIG_SOUND_VWSND
+  Say Y or M if you have an SGI Visual Workstation and you want to
+  be able to use its on-board audio.  Read Documentation/sound/visws
+  for more info on this driver's capabilities.
+
 Ensoniq ES1370 based PCI sound cards
 CONFIG_SOUND_ES1370
   Say Y or M if you have a PCI sound card utilizing the Ensoniq
@@ -10300,6 +10306,30 @@ CONFIG_ISDN_DRV_SC
   http://www.spellcast.com for more information (to browse the WWW,
   you need to have access to a machine on the Internet that has a
   program like lynx or netscape).
+
+Eicon.Diehl active card support
+CONFIG_ISDN_DRV_EICON
+  Say Y here if you have an Eicon active ISDN card. In order to use
+  this card, additional firmware is necessary, which has to be loaded
+  into the card using the eiconctrl utility which is part of the latest
+  isdn4k-utils package. Please read the file
+  Documentation/isdn/README.eicon for more information.
+  
+Eicon old-type card support
+CONFIG_ISDN_DRV_EICON_ISA
+  Say Y here if you have an old-type Eicon active ISDN card. In order to
+  use this card, additional firmware is necessary, which has to be loaded
+  into the card using the eiconctrl utility which is part of the latest
+  isdn4k-utils package. Please read the file
+  Documentation/isdn/README.eicon for more information.
+
+Support AT-Fax Class 2 commands
+CONFIG_ISDN_TTY_FAX
+  If you say Y here, the modem-emulator will support a subset of the
+  Fax Class 2 commands. Using a getty with fax-support
+  (mgetty+sendfax, hylafax), you will be able to use your Linux box 
+  as an ISDN-fax-machine. This must be supported by the lowlevel driver
+  also. See Documentation/isdn/README.fax for more information.
 
 AVM-B1 with CAPI2.0 support
 CONFIG_ISDN_DRV_AVMB1

@@ -2,7 +2,7 @@
  *		IP_MASQ_AUTOFW auto forwarding module
  *
  *
- * 	$Id: ip_masq_autofw.c,v 1.3 1998/08/29 23:51:10 davem Exp $
+ * 	$Id: ip_masq_autofw.c,v 1.3.2.1 1999/08/13 18:26:20 davem Exp $
  *
  * Author:	Richard Lynch
  *

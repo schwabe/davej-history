@@ -5,7 +5,7 @@
  *              high-performance and highly available server based on a
  *              cluster of servers.
  *
- * Version:     $Id: ip_vs.c,v 1.2 1999/07/09 12:12:23 wensong Exp $
+ * Version:     $Id: ip_vs.c,v 1.1.2.1 1999/08/13 18:25:27 davem Exp $
  *
  * Authors:     Wensong Zhang <wensong@iinchina.net>
  *              Peter Kese <peter.kese@ijs.si>

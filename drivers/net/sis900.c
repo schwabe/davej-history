@@ -558,6 +558,9 @@ static struct device * sis900_probe1(   int pci_bus,
                 printk(KERN_INFO "%s", version);
 
         dev = init_etherdev(dev, 0);
+        
+        if(dev==NULL)
+        	return NULL;
 
         printk(KERN_INFO "%s: %s at %#lx, IRQ %d, ",
                    dev->name, pci_tbl[chip_idx].name, ioaddr, irq);
@@ -580,6 +583,11 @@ static struct device * sis900_probe1(   int pci_bus,
 
         /* Some data structures must be quadword aligned. */
         tp = kmalloc(sizeof(*tp), GFP_KERNEL | GFP_DMA);
+        if(tp==NULL)
+        {
+        	free_region(ioaddr, pci_tbl[chip_idx].io_size);
+        	return NULL;
+        }
         memset(tp, 0, sizeof(*tp));
         dev->priv = tp;
 

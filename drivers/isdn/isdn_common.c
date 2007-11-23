@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.83 1999/07/13 21:02:05 werner Exp $
+/* $Id: isdn_common.c,v 1.86 1999/07/31 12:59:42 armin Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.86  1999/07/31 12:59:42  armin
+ * Added tty fax capabilities.
+ *
+ * Revision 1.85  1999/07/29 16:58:35  armin
+ * Bugfix: DLE handling in isdn_readbchan()
+ *
+ * Revision 1.84  1999/07/25 16:21:10  keil
+ * fix number matching
+ *
  * Revision 1.83  1999/07/13 21:02:05  werner
  * Added limit possibilty of driver b_channel resources (ISDN_STAT_DISCH)
  *
@@ -372,7 +381,7 @@
 
 isdn_dev *dev = (isdn_dev *) 0;
 
-static char *isdn_revision = "$Revision: 1.83 $";
+static char *isdn_revision = "$Revision: 1.86 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -483,6 +492,8 @@ isdn_wildmat(char *s, char *p)
 	register int reverse;
 	register int nostar = 1;
 
+	if (!(*s) && !(*p))
+		return(1);
 	for (; *p; s++, p++)
 		switch (*p) {
 			case '\\':
@@ -1041,6 +1052,11 @@ isdn_status_callback(isdn_ctrl * c)
 			break;
 		case CAPI_PUT_MESSAGE:
 			return(isdn_capi_rec_hl_msg(&c->parm.cmsg));
+#ifdef CONFIG_ISDN_TTY_FAX
+		case ISDN_STAT_FAXIND:
+			isdn_tty_stat_callback(i, c);
+			break;
+#endif
 #ifdef CONFIG_ISDN_AUDIO
 		case ISDN_STAT_AUDIO:
 			isdn_tty_stat_callback(i, c);
@@ -1119,7 +1135,7 @@ isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, struct w
 		if (ISDN_AUDIO_SKB_LOCK(skb))
 			break;
 		ISDN_AUDIO_SKB_LOCK(skb) = 1;
-		if (ISDN_AUDIO_SKB_DLECOUNT(skb)) {
+		if ((ISDN_AUDIO_SKB_DLECOUNT(skb)) || (dev->drv[di]->DLEflag & (1 << channel))) {
 			char *p = skb->data;
 			unsigned long DLEmask = (1 << channel);
 
@@ -2605,6 +2621,9 @@ cleanup_module(void)
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		isdn_tty_cleanup_xmit(&dev->mdm.info[i]);
 		kfree(dev->mdm.info[i].xmit_buf - 4);
+#ifdef CONFIG_ISDN_TTY_FAX
+		kfree(dev->mdm.info[i].fax);
+#endif
 	}
 	if (unregister_chrdev(ISDN_MAJOR, "isdn") != 0) {
 		printk(KERN_WARNING "isdn: controldevice busy, remove cancelled\n");

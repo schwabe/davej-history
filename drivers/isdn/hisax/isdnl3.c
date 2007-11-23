@@ -1,4 +1,4 @@
-/* $Id: isdnl3.c,v 2.9 1999/07/01 08:11:53 keil Exp $
+/* $Id: isdnl3.c,v 2.10 1999/07/21 14:46:19 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,9 @@
  *              Fritz Elfert
  *
  * $Log: isdnl3.c,v $
+ * Revision 2.10  1999/07/21 14:46:19  keil
+ * changes from EICON certification
+ *
  * Revision 2.9  1999/07/01 08:11:53  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -65,7 +68,7 @@
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 2.9 $";
+const char *l3_revision = "$Revision: 2.10 $";
 
 static
 struct Fsm l3fsm =
@@ -347,8 +350,18 @@ release_l3_process(struct l3_process *p)
 			if (pp)
 				pp->next = np->next;
 			else if (!(p->st->l3.proc = np->next) &&
-				 !test_bit(FLG_PTP, &p->st->l2.flag))
-			         FsmEvent(&p->st->l3.l3m, EV_RELEASE_REQ, NULL);
+				!test_bit(FLG_PTP, &p->st->l2.flag)) {
+				if (p->debug)
+					l3_debug(p->st, "release_l3_process: last process");
+				if (!skb_queue_len(&p->st->l3.squeue)) {
+					if (p->debug)
+						l3_debug(p->st, "release_l3_process: release link");
+					FsmEvent(&p->st->l3.l3m, EV_RELEASE_REQ, NULL);
+				} else {
+					if (p->debug)
+						l3_debug(p->st, "release_l3_process: not release link");
+				}
+			} 
 			kfree(p);
 			return;
 		}
@@ -362,12 +375,12 @@ release_l3_process(struct l3_process *p)
 static void
 l3ml3p(struct PStack *st, int pr)
 {
-       struct l3_process *p = st->l3.proc;
+	struct l3_process *p = st->l3.proc;
 
-       while (p) {
-               st->l3.l3ml3(st, pr, p);
-               p = p->next;
-       }
+	while (p) {
+		st->l3.l3ml3(st, pr, p);
+		p = p->next;
+	}
 }
 
 void
@@ -474,12 +487,19 @@ lc_connect(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;
 	struct sk_buff *skb = arg;
+	int dequeued = 0;
 
 	FsmChangeState(fi, ST_L3_LC_ESTAB);
 	while ((skb = skb_dequeue(&st->l3.squeue))) {
 		st->l3.l3l2(st, DL_DATA | REQUEST, skb);
+		dequeued++;
 	}
-	l3ml3p(st, DL_ESTABLISH | INDICATION);
+	if ((!st->l3.proc) &&  dequeued) {
+		if (st->l3.debug)
+			l3_debug(st, "lc_connect: release link");
+		FsmEvent(&st->l3.l3m, EV_RELEASE_REQ, NULL);
+	} else
+		l3ml3p(st, DL_ESTABLISH | INDICATION);
 }
 
 static void
@@ -487,13 +507,20 @@ lc_connected(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;
 	struct sk_buff *skb = arg;
+	int dequeued = 0;
 
 	FsmDelTimer(&st->l3.l3m_timer, 51);
 	FsmChangeState(fi, ST_L3_LC_ESTAB);
 	while ((skb = skb_dequeue(&st->l3.squeue))) {
 		st->l3.l3l2(st, DL_DATA | REQUEST, skb);
+		dequeued++;
 	}
-	l3ml3p(st, DL_ESTABLISH | CONFIRM);
+	if ((!st->l3.proc) &&  dequeued) {
+		if (st->l3.debug)
+			l3_debug(st, "lc_connected: release link");
+		FsmEvent(&st->l3.l3m, EV_RELEASE_REQ, NULL);
+	} else
+		l3ml3p(st, DL_ESTABLISH | CONFIRM);
 }
 
 static void
@@ -510,8 +537,15 @@ lc_release_req(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;
 
-	FsmChangeState(fi, ST_L3_LC_REL_WAIT);
-	st->l3.l3l2(st, DL_RELEASE | REQUEST, NULL);
+	if (test_bit(FLG_L2BLOCK, &st->l2.flag)) {
+		if (st->l3.debug)
+			l3_debug(st, "lc_release_req: l2 blocked");
+		/* restart release timer */
+		FsmAddTimer(&st->l3.l3m_timer, DREL_TIMER_VALUE, EV_TIMEOUT, NULL, 51);
+	} else {
+		FsmChangeState(fi, ST_L3_LC_REL_WAIT);
+		st->l3.l3l2(st, DL_RELEASE | REQUEST, NULL);
+	}
 }
 
 static void
@@ -528,11 +562,11 @@ lc_release_ind(struct FsmInst *fi, int event, void *arg)
 static void
 lc_release_cnf(struct FsmInst *fi, int event, void *arg)
 {
-       struct PStack *st = fi->userdata;
+	struct PStack *st = fi->userdata;
 
-        FsmChangeState(fi, ST_L3_LC_REL);
-        discard_queue(&st->l3.squeue);
-       l3ml3p(st, DL_RELEASE | CONFIRM);
+	FsmChangeState(fi, ST_L3_LC_REL);
+	discard_queue(&st->l3.squeue);
+	l3ml3p(st, DL_RELEASE | CONFIRM);
 }
 
 

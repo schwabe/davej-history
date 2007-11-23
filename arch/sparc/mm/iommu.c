@@ -1,4 +1,4 @@
-/* $Id: iommu.c,v 1.10 1999/05/07 17:03:34 jj Exp $
+/* $Id: iommu.c,v 1.10.2.1 1999/08/13 12:35:35 davem Exp $
  * iommu.c:  IOMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -224,6 +224,11 @@ static void iommu_map_dma_area(unsigned long addr, int len)
 			pgd_t *pgdp;
 			pmd_t *pmdp;
 			pte_t *ptep;
+
+			if (viking_mxcc_present)
+				viking_mxcc_flush_page(page);
+			else if (viking_flush)
+				viking_flush_page(page);
 
 			pgdp = pgd_offset(init_task.mm, addr);
 			pmdp = pmd_offset(pgdp, addr);

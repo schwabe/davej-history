@@ -1,4 +1,4 @@
-/* $Id: tei.c,v 2.12 1999/07/01 08:12:11 keil Exp $
+/* $Id: tei.c,v 2.13 1999/07/21 14:46:28 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,9 @@
  *              Fritz Elfert
  *
  * $Log: tei.c,v $
+ * Revision 2.13  1999/07/21 14:46:28  keil
+ * changes from EICON certification
+ *
  * Revision 2.12  1999/07/01 08:12:11  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -75,7 +78,7 @@
 #include "isdnl2.h"
 #include <linux/random.h>
 
-const char *tei_revision = "$Revision: 2.12 $";
+const char *tei_revision = "$Revision: 2.13 $";
 
 #define ID_REQUEST	1
 #define ID_ASSIGNED	2
@@ -227,6 +230,25 @@ tei_id_assign(struct FsmInst *fi, int event, void *arg)
 		cs = (struct IsdnCardState *) st->l1.hardware;
 		cs->cardmsg(cs, MDL_ASSIGN | REQUEST, NULL);
 	}
+}
+
+static void
+tei_id_test_dup(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *ost, *st = fi->userdata;
+	struct sk_buff *skb = arg;
+	int tei, ri;
+
+	ri = ((unsigned int) skb->data[1] << 8) + skb->data[2];
+	tei = skb->data[4] >> 1;
+	if (st->ma.debug)
+		st->ma.tei_m.printdebug(&st->ma.tei_m,
+			"foreign identity assign ri %d tei %d", ri, tei);
+	if ((ost = findtei(st, tei))) {		/* same tei is in use */
+		st->ma.tei_m.printdebug(&st->ma.tei_m,
+			"possible duplicate assignment tei %d", tei);
+		FsmEvent(&ost->ma.tei_m, EV_VERIFY, NULL);
+	} 
 }
 
 static void
@@ -472,6 +494,7 @@ release_tei(struct IsdnCardState *cs)
 static struct FsmNode TeiFnList[] HISAX_INITDATA =
 {
 	{ST_TEI_NOP, EV_IDREQ, tei_id_request},
+	{ST_TEI_NOP, EV_ASSIGN, tei_id_test_dup},
 	{ST_TEI_NOP, EV_VERIFY, tei_id_verify},
 	{ST_TEI_NOP, EV_REMOVE, tei_id_remove},
 	{ST_TEI_NOP, EV_CHKREQ, tei_id_chk_req},

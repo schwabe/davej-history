@@ -1,10 +1,16 @@
-/* $Id: config.c,v 2.28 1999/07/14 12:38:36 werner Exp $
+/* $Id: config.c,v 2.30 1999/08/05 20:43:14 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 2.30  1999/08/05 20:43:14  keil
+ * ISAR analog modem support
+ *
+ * Revision 2.29  1999/07/21 14:46:00  keil
+ * changes from EICON certification
+ *
  * Revision 2.28  1999/07/14 12:38:36  werner
  * Added changes for echo channel handling
  *
@@ -508,9 +514,9 @@ HiSaxVersion(void))
 
 	printk(KERN_INFO "HiSax: Linux Driver for passive ISDN cards\n");
 #ifdef MODULE
-	printk(KERN_INFO "HiSax: Version 3.2a (module)\n");
+	printk(KERN_INFO "HiSax: Version 3.3 (module)\n");
 #else
-	printk(KERN_INFO "HiSax: Version 3.2a (kernel)\n");
+	printk(KERN_INFO "HiSax: Version 3.3 (kernel)\n");
 #endif
 	strcpy(tmp, l1_revision);
 	printk(KERN_INFO "HiSax: Layer1 Revision %s\n", HiSax_getrev(tmp));
@@ -1047,7 +1053,7 @@ checkcard(int cardnr, char *id, int *busy_flag))
 		cs->iif.features =
 			ISDN_FEATURE_L2_X75I |
 			ISDN_FEATURE_L2_HDLC |
-//			ISDN_FEATURE_L2_MODEM |
+			ISDN_FEATURE_L2_MODEM |
 			ISDN_FEATURE_L2_TRANS |
 			ISDN_FEATURE_L3_TRANS |
 #ifdef	CONFIG_HISAX_1TR6

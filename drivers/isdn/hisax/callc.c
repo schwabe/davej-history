@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 2.29 1999/07/13 21:05:41 werner Exp $
+/* $Id: callc.c,v 2.31 1999/08/05 20:43:10 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,12 @@
  *              Fritz Elfert
  *
  * $Log: callc.c,v $
+ * Revision 2.31  1999/08/05 20:43:10  keil
+ * ISAR analog modem support
+ *
+ * Revision 2.30  1999/07/25 16:24:04  keil
+ * Fixed TEI now working again
+ *
  * Revision 2.29  1999/07/13 21:05:41  werner
  * Modified set_channel_limit to use new callback ISDN_STAT_DISCH.
  *
@@ -133,7 +139,7 @@ extern long mod_use_count_;
 #endif /* COMPAT_HAS_NEW_SYMTAB */
 #endif	/* MODULE */
 
-const char *lli_revision = "$Revision: 2.29 $";
+const char *lli_revision = "$Revision: 2.31 $";
 
 extern struct IsdnCard cards[];
 extern int nrcards;
@@ -304,7 +310,7 @@ static inline void
 HL_LL(struct Channel *chanp, int command)
 {
         isdn_ctrl ic;
- 
+
         ic.driver = chanp->cs->myid;
         ic.command = command;
         ic.arg = chanp->chan;
@@ -430,12 +436,21 @@ static void
 lli_go_active(struct FsmInst *fi, int event, void *arg)
 {
 	struct Channel *chanp = fi->userdata;
+	isdn_ctrl ic;
+
 
 	FsmChangeState(fi, ST_ACTIVE);
 	chanp->data_open = !0;
+	if (chanp->bcs->conmsg)
+		strcpy(ic.parm.num, chanp->bcs->conmsg);
+	else
+		ic.parm.num[0] = 0;
 	if (chanp->debug & 1)
-		link_debug(chanp, 0, "STAT_BCONN");
-	HL_LL(chanp, ISDN_STAT_BCONN);
+		link_debug(chanp, 0, "STAT_BCONN %s", ic.parm.num);
+	ic.driver = chanp->cs->myid;
+	ic.command = ISDN_STAT_BCONN;
+	ic.arg = chanp->chan;
+	chanp->cs->iif.statcallb(&ic);
 	chanp->cs->cardmsg(chanp->cs, MDL_INFO_CONN, (void *) (long)chanp->chan);
 }
 
@@ -1341,9 +1356,10 @@ init_b_st(struct Channel *chanp, int incoming)
 			st->l1.mode = L1_MODE_TRANS;
 			break;
 		case (ISDN_PROTO_L2_MODEM):
-			st->l1.mode = L1_MODE_MODEM;
+			st->l1.mode = L1_MODE_V32;
 			break;
 	}
+	chanp->bcs->conmsg = NULL;
 	if (chanp->bcs->BC_SetStack(st, chanp->bcs))
 		return (-1);
 	st->l2.flag = 0;
@@ -1747,6 +1763,8 @@ HiSax_command(isdn_ctrl * ic)
 					HiSax_putstatus(csta, "set card ", "in FIXED TEI (%d) mode", num);
 					printk(KERN_DEBUG "HiSax: set card in FIXED TEI (%d) mode\n",
 						num);
+					chanp->d_st->lli.l4l3(chanp->d_st,
+						DL_ESTABLISH | REQUEST, NULL);
 					break;
 				case (9): /* load firmware */
 					memcpy(&adr, ic->parm.num, sizeof(ulong));

@@ -1,4 +1,4 @@
-/* $Id: bkm_a4t.c,v 1.4 1999/07/14 11:43:14 keil Exp $
+/* $Id: bkm_a4t.c,v 1.6 1999/08/11 21:01:22 keil Exp $
  * bkm_a4t.c    low level stuff for T-Berkom A4T
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -7,6 +7,12 @@
  * Author       Roland Klabunde (R.Klabunde@Berkom.de)
  *
  * $Log: bkm_a4t.c,v $
+ * Revision 1.6  1999/08/11 21:01:22  keil
+ * new PCI codefix
+ *
+ * Revision 1.5  1999/08/10 16:01:46  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
  * Revision 1.4  1999/07/14 11:43:14  keil
  * correct PCI_SUBSYSTEM_VENDOR_ID
  *
@@ -35,7 +41,7 @@
 
 extern const char *CardType[];
 
-const char *bkm_a4t_revision = "$Revision: 1.4 $";
+const char *bkm_a4t_revision = "$Revision: 1.6 $";
 
 
 static inline u_char
@@ -314,7 +320,7 @@ __initfunc(int
 			&sub_sys_id);
 		if (sub_sys_id == ((A4T_SUBSYS_ID << 16) | A4T_SUBVEN_ID)) {
 			found = 1;
-			pci_memaddr = dev_a4t->base_address[0];
+			pci_memaddr = get_pcibase(dev_a4t, 0);
 			cs->irq = dev_a4t->irq;
 		}
 	}

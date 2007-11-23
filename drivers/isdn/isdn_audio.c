@@ -1,4 +1,4 @@
-/* $Id: isdn_audio.c,v 1.14 1999/07/11 17:14:06 armin Exp $
+/* $Id: isdn_audio.c,v 1.16 1999/08/06 12:47:35 calle Exp $
 
  * Linux ISDN subsystem, audio conversion and compression (linklevel).
  *
@@ -21,6 +21,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_audio.c,v $
+ * Revision 1.16  1999/08/06 12:47:35  calle
+ * Using __GNUC__ == 2 && __GNUC_MINOR__ < 95 how to define
+ *   ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT
+ *
+ * Revision 1.15  1999/08/06 12:02:52  calle
+ * egcs 2.95 complain about invalid asm statement:
+ *    "fixed or forbidden register 2 (cx) was spilled for class CREG."
+ * Using ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT and not
+ * define it at the moment.
+ *
  * Revision 1.14  1999/07/11 17:14:06  armin
  * Added new layer 2 and 3 protocols for Fax and DSP functions.
  * Moved "Add CPN to RING message" to new register S23,
@@ -82,7 +92,7 @@
 #include "isdn_audio.h"
 #include "isdn_common.h"
 
-char *isdn_audio_revision = "$Revision: 1.14 $";
+char *isdn_audio_revision = "$Revision: 1.16 $";
 
 /*
  * Misc. lookup-tables.
@@ -279,7 +289,18 @@ static char dtmf_matrix[4][4] =
 	{'*', '0', '#', 'D'}
 };
 
-#if ((CPU == 386) || (CPU == 486) || (CPU == 586))
+
+/*
+ * egcs 2.95 complain about invalid asm statement:
+ * "fixed or forbidden register 2 (cx) was spilled for class CREG."
+ */
+#if ((CPU == 386) || (CPU == 486) || (CPU == 586)) || defined(__GNUC__)
+#if __GNUC__ == 2 && __GNUC_MINOR__ < 95
+#define ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT
+#endif
+#endif
+
+#ifdef ISDN_AUDIO_OPTIMIZE_ON_X386_WITH_ASM_IF_GCC_ALLOW_IT
 static inline void
 isdn_audio_tlookup(const void *table, void *buff, unsigned long n)
 {

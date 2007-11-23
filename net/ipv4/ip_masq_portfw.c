@@ -2,7 +2,7 @@
  *		IP_MASQ_PORTFW masquerading module
  *
  *
- *	$Id: ip_masq_portfw.c,v 1.3.2.1 1999/07/02 10:10:02 davem Exp $
+ *	$Id: ip_masq_portfw.c,v 1.3.2.2 1999/08/13 18:26:29 davem Exp $
  *
  * Author:	Steven Clarke <steven.clarke@monmouth.demon.co.uk>
  *

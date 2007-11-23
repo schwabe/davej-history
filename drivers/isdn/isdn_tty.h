@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.h,v 1.14 1999/07/11 17:14:15 armin Exp $
+/* $Id: isdn_tty.h,v 1.15 1999/07/31 12:59:48 armin Exp $
 
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
@@ -20,6 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.h,v $
+ * Revision 1.15  1999/07/31 12:59:48  armin
+ * Added tty fax capabilities.
+ *
  * Revision 1.14  1999/07/11 17:14:15  armin
  * Added new layer 2 and 3 protocols for Fax and DSP functions.
  * Moved "Add CPN to RING message" to new register S23,
@@ -157,3 +160,9 @@ extern int isdn_tty_stat_callback(int, isdn_ctrl *);
 extern int isdn_tty_rcv_skb(int, int, int, struct sk_buff *);
 extern int isdn_tty_capi_facility(capi_msg *cm); 
 extern void isdn_tty_at_cout(char *, modem_info *);
+extern void isdn_tty_modem_hup(modem_info *, int);
+#ifdef CONFIG_ISDN_TTY_FAX
+extern int isdn_tty_cmd_PLUSF_FAX(char **, modem_info *);
+extern int isdn_tty_fax_command(modem_info *);
+extern void isdn_tty_fax_bitorder(modem_info *, struct sk_buff *);
+#endif

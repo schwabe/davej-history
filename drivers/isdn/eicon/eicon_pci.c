@@ -1,4 +1,4 @@
-/* $Id: eicon_pci.c,v 1.7 1999/06/09 19:31:29 armin Exp $
+/* $Id: eicon_pci.c,v 1.9 1999/08/11 21:01:11 keil Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  * Hardware-specific code for PCI cards.
@@ -26,6 +26,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_pci.c,v $
+ * Revision 1.9  1999/08/11 21:01:11  keil
+ * new PCI codefix
+ *
+ * Revision 1.8  1999/08/10 16:02:20  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
  * Revision 1.7  1999/06/09 19:31:29  armin
  * Wrong PLX size for request_region() corrected.
  * Added first MCA code from Erik Weber.
@@ -64,7 +70,7 @@
 #include "eicon_pci.h"
 
 
-char *eicon_pci_revision = "$Revision: 1.7 $";
+char *eicon_pci_revision = "$Revision: 1.9 $";
 
 #if CONFIG_PCI	         /* intire stuff is only for PCI */
 
@@ -139,8 +145,8 @@ int eicon_pci_find_card(char *ID)
           aparms->type = EICON_CTYPE_MAESTRA;
 
           aparms->irq = pdev->irq;
-          preg = pdev->base_address[2] & 0xfffffffc;
-          pcfg = pdev->base_address[1] & 0xffffff80;
+          preg = get_pcibase(pdev, 2) & 0xfffffffc;
+          pcfg = get_pcibase(pdev, 1) & 0xffffff80;
 
 #ifdef EICON_PCI_DEBUG
           printk(KERN_DEBUG "eicon_pci: irq=%d\n", aparms->irq);
@@ -161,9 +167,9 @@ int eicon_pci_find_card(char *ID)
          printk(KERN_INFO "Eicon: DIVA Server PRI/PCI detected !\n");
           aparms->type = EICON_CTYPE_MAESTRAP; /*includes 9M,30M*/
           aparms->irq = pdev->irq;
-          pram = pdev->base_address[0] & 0xfffff000;
-          preg = pdev->base_address[2] & 0xfffff000;
-          pcfg = pdev->base_address[4] & 0xfffff000;
+          pram = get_pcibase(pdev, 0) & 0xfffff000;
+          preg = get_pcibase(pdev, 2) & 0xfffff000;
+          pcfg = get_pcibase(pdev, 4) & 0xfffff000;
 
 #ifdef EICON_PCI_DEBUG
           printk(KERN_DEBUG "eicon_pci: irq=%d\n", aparms->irq);

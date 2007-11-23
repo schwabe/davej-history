@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.69 1999/07/13 20:47:53 werner Exp $
+/* $Id: isdn.h,v 1.70 1999/07/31 12:59:58 armin Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.70  1999/07/31 12:59:58  armin
+ * Added tty fax capabilities.
+ *
  * Revision 1.69  1999/07/13 20:47:53  werner
  * added channel bit ISDN_USAGE_DISABLED for limiting b-channel access.
  *
@@ -731,6 +734,10 @@ typedef struct modem_info {
   void                  *adpcmr;         /* state for adpcm compression    */
   void                  *dtmf_state;     /* state for dtmf decoder         */
   void                  *silence_state;  /* state for silence detection    */
+#endif
+#ifdef CONFIG_ISDN_TTY_FAX
+  struct T30_s		*fax;		 /* T30 Fax Group 3 data/interface */
+  int			faxonline;	 /* Fax-channel status             */
 #endif
   struct tty_struct 	*tty;            /* Pointer to corresponding tty   */
   atemu                 emu;             /* AT-emulator data               */

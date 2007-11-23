@@ -1,4 +1,4 @@
-/* $Id: bkm_a8.c,v 1.4 1999/07/14 11:43:15 keil Exp $
+/* $Id: bkm_a8.c,v 1.6 1999/08/11 21:01:24 keil Exp $
  * bkm_a8.c     low level stuff for Scitel Quadro (4*S0, passive)
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -7,6 +7,12 @@
  * Author       Roland Klabunde (R.Klabunde@Berkom.de)
  *
  * $Log: bkm_a8.c,v $
+ * Revision 1.6  1999/08/11 21:01:24  keil
+ * new PCI codefix
+ *
+ * Revision 1.5  1999/08/10 16:01:48  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
  * Revision 1.4  1999/07/14 11:43:15  keil
  * correct PCI_SUBSYSTEM_VENDOR_ID
  *
@@ -36,7 +42,7 @@
 
 extern const char *CardType[];
 
-const char sct_quadro_revision[] = "$Revision: 1.4 $";
+const char sct_quadro_revision[] = "$Revision: 1.6 $";
 
 /* To survive the startup phase */
 typedef struct {
@@ -371,7 +377,7 @@ __initfunc(int
 			&sub_sys_id);
 		if (sub_sys_id == ((SCT_SUBSYS_ID << 16) | SCT_SUBVEN_ID)) {
 			found = 1;
-			pci_ioaddr1 = dev_a8->base_address[1];
+			pci_ioaddr1 = get_pcibase(dev_a8, 1);
 			pci_irq = dev_a8->irq;
 			pci_bus = dev_a8->bus->number;
 			pci_device_fn = dev_a8->devfn;
@@ -433,7 +439,7 @@ __initfunc(int
 		pcibios_write_config_dword(pci_bus, pci_device_fn,
 			PCI_BASE_ADDRESS_1, pci_ioaddr1);
 #ifdef COMPAT_HAS_NEW_PCI
-		dev_a8->base_address[1] = pci_ioaddr1;
+		get_pcibase(dev_a8, 1) = pci_ioaddr1;
 #endif /* COMPAT_HAS_NEW_PCI */
 	}
 /* End HACK */

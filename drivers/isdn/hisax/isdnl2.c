@@ -1,4 +1,4 @@
-/* $Id: isdnl2.c,v 2.17 1999/07/01 08:11:50 keil Exp $
+/* $Id: isdnl2.c,v 2.19 1999/08/05 20:40:26 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,12 @@
  *              Fritz Elfert
  *
  * $Log: isdnl2.c,v $
+ * Revision 2.19  1999/08/05 20:40:26  keil
+ * Fix interlayer communication
+ *
+ * Revision 2.18  1999/07/21 14:46:16  keil
+ * changes from EICON certification
+ *
  * Revision 2.17  1999/07/01 08:11:50  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -74,7 +80,7 @@
 #include "hisax.h"
 #include "isdnl2.h"
 
-const char *l2_revision = "$Revision: 2.17 $";
+const char *l2_revision = "$Revision: 2.19 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -163,6 +169,19 @@ static char *strL2Event[] =
 static int l2addrsize(struct Layer2 *l2);
 
 static void
+set_peer_busy(struct Layer2 *l2) {
+	test_and_set_bit(FLG_PEER_BUSY, &l2->flag);
+	if (skb_queue_len(&l2->i_queue) || skb_queue_len(&l2->ui_queue))
+		test_and_set_bit(FLG_L2BLOCK, &l2->flag);
+}
+
+static void
+clear_peer_busy(struct Layer2 *l2) {
+	if (test_and_clear_bit(FLG_PEER_BUSY, &l2->flag))
+		test_and_clear_bit(FLG_L2BLOCK, &l2->flag);
+}
+
+static void
 InitWin(struct Layer2 *l2)
 {
 	int i;
@@ -219,7 +238,7 @@ clear_exception(struct Layer2 *l2)
 	test_and_clear_bit(FLG_ACK_PEND, &l2->flag);
 	test_and_clear_bit(FLG_REJEXC, &l2->flag);
 	test_and_clear_bit(FLG_OWN_BUSY, &l2->flag);
-	test_and_clear_bit(FLG_PEER_BUSY, &l2->flag);
+	clear_peer_busy(l2);
 }
 
 inline int
@@ -1026,10 +1045,10 @@ l2_st7_got_super(struct FsmInst *fi, int event, void *arg)
 
 	skb_pull(skb, l2addrsize(l2));
 	if (IsRNR(skb->data, st)) {
-		test_and_set_bit(FLG_PEER_BUSY, &l2->flag);
+		set_peer_busy(l2);
 		typ = RNR;
 	} else
-		test_and_clear_bit(FLG_PEER_BUSY, &l2->flag);
+		clear_peer_busy(l2);
 	if (IsREJ(skb->data, st))
 		typ = REJ;
 
@@ -1376,10 +1395,10 @@ l2_st8_got_super(struct FsmInst *fi, int event, void *arg)
 	skb_pull(skb, l2addrsize(l2));
 
 	if (IsRNR(skb->data, st)) {
-		test_and_set_bit(FLG_PEER_BUSY, &l2->flag);
+		set_peer_busy(l2);
 		rnr = 1;
 	} else
-		test_and_clear_bit(FLG_PEER_BUSY, &l2->flag);
+		clear_peer_busy(l2);
 
 	if (test_bit(FLG_MOD128, &l2->flag)) {
 		PollFlag = (skb->data[1] & 0x1) == 0x1;
@@ -1496,11 +1515,14 @@ l2_tei_remove(struct FsmInst *fi, int event, void *arg)
 }
 
 static void
-l2_discard_i(struct FsmInst *fi, int event, void *arg)
+l2_st14_persistant_da(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;
 	
 	discard_queue(&st->l2.i_queue);
+	discard_queue(&st->l2.ui_queue);
+	if (test_and_clear_bit(FLG_ESTAB_PEND, &st->l2.flag))
+		st->l2.l2l3(st, DL_RELEASE | INDICATION, NULL);
 }
 
 static void
@@ -1663,9 +1685,10 @@ static struct FsmNode L2FnList[] HISAX_INITDATA =
 	{ST_L2_6, EV_L2_FRAME_ERROR, l2_frame_error},
 	{ST_L2_7, EV_L2_FRAME_ERROR, l2_frame_error_reest},
 	{ST_L2_8, EV_L2_FRAME_ERROR, l2_frame_error_reest},
+	{ST_L2_1, EV_L1_DEACTIVATE, l2_st14_persistant_da},
 	{ST_L2_2, EV_L1_DEACTIVATE, l2_st24_tei_remove},
 	{ST_L2_3, EV_L1_DEACTIVATE, l2_st3_tei_remove},
-	{ST_L2_4, EV_L1_DEACTIVATE, l2_discard_i},
+	{ST_L2_4, EV_L1_DEACTIVATE, l2_st14_persistant_da},
 	{ST_L2_5, EV_L1_DEACTIVATE, l2_st5_persistant_da},
 	{ST_L2_6, EV_L1_DEACTIVATE, l2_st6_persistant_da},
 	{ST_L2_7, EV_L1_DEACTIVATE, l2_persistant_da},

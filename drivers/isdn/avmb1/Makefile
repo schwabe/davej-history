@@ -1,5 +1,5 @@
 #
-# $Id: Makefile,v 1.5 1999/07/01 15:26:20 calle Exp $
+# $Id: Makefile,v 1.6 1999/07/20 06:41:44 calle Exp $
 #
 # Makefile for the CAPI and AVM-B1 device drivers.
 #
@@ -11,6 +11,10 @@
 # parent makes..
 #
 # $Log: Makefile,v $
+# Revision 1.6  1999/07/20 06:41:44  calle
+# Bugfix: After the redesign of the AVM B1 driver, the driver didn't even
+#         compile, if not selected as modules.
+#
 # Revision 1.5  1999/07/01 15:26:20  calle
 # complete new version (I love it):
 # + new hardware independed "capi_driver" interface that will make it easy to:
@@ -73,7 +77,7 @@ L_TARGET := # used for .a targets (from L and LX objects)
 ifeq ($(CONFIG_ISDN_DRV_AVMB1),y)
   O_TARGET += avmb1.o
   OX_OBJS  += kcapi.o
-  O_OBJS   += capi.o kernelcapi.o
+  O_OBJS   += capi.o
   ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
   O_OBJS   += b1isa.o
   endif

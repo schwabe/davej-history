@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.h,v 1.3 1999/07/14 12:39:34 werner Exp $
+/* $Id: hfc_pci.h,v 1.5 1999/08/09 19:13:34 werner Exp $
 
  *  specific defines for CCD's HFC 2BDS0 PCI chips
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hfc_pci.h,v $
+ * Revision 1.5  1999/08/09 19:13:34  werner
+ * moved constant pci ids to pci id table
+ *
+ * Revision 1.4  1999/08/08 10:17:33  werner
+ * added new PCI vendor and card ids for Manufacturer 0x1043
+ *
  * Revision 1.3  1999/07/14 12:39:34  werner
  * Added changes for echo handling.
  *
@@ -34,10 +40,6 @@
 
 /* defines for PCI config */
 
-#define PCI_VENDOR_CCD	 0x1397
-#define PCI_CCD_PCI_ID	 0x2BD0
-// #define PCI_VENDOR_CCD	 0x1043
-// #define PCI_CCD_PCI_ID	 0x675
 #define PCI_ENA_MEMIO    0x02
 #define PCI_ENA_MASTER   0x04
 

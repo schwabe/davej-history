@@ -9,6 +9,9 @@ if [ "$CONFIG_INET" != "n" ]; then
   fi
 fi
 bool 'Support audio via ISDN' CONFIG_ISDN_AUDIO
+if [ "$CONFIG_ISDN_AUDIO" != "n" ]; then
+  bool 'Support AT-Fax Class 2 commands' CONFIG_ISDN_TTY_FAX
+fi
 bool 'Support isdn diversion services' CONFIG_ISDN_DIVERSION
 if [ "$CONFIG_X25" != "n" ]; then
   bool 'X.25 PLP on top of ISDN (EXPERIMENTAL)' CONFIG_ISDN_X25
@@ -61,6 +64,9 @@ if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
 	dep_tristate 'IBM Active 2000 support (EXPERIMENTAL)' CONFIG_ISDN_DRV_ACT2000 $CONFIG_ISDN
 fi
 dep_tristate 'Eicon.Diehl active card support' CONFIG_ISDN_DRV_EICON $CONFIG_ISDN
+if [ "$CONFIG_ISDN_DRV_EICON" != "n" ]; then
+    bool 'Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
+fi
 dep_tristate 'AVM CAPI2.0 support' CONFIG_ISDN_DRV_AVMB1 $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_AVMB1" != "n" ]; then
     bool 'AVM B1 ISA support' CONFIG_ISDN_DRV_AVMB1_B1ISA

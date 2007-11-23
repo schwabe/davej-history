@@ -1,4 +1,4 @@
-/* $Id: telespci.c,v 2.7 1999/07/12 21:05:34 keil Exp $
+/* $Id: telespci.c,v 2.9 1999/08/11 21:01:34 keil Exp $
 
  * telespci.c     low level stuff for Teles PCI isdn cards
  *
@@ -7,6 +7,12 @@
  *
  *
  * $Log: telespci.c,v $
+ * Revision 2.9  1999/08/11 21:01:34  keil
+ * new PCI codefix
+ *
+ * Revision 2.8  1999/08/10 16:02:10  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
  * Revision 2.7  1999/07/12 21:05:34  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -41,7 +47,7 @@
 #endif
 
 extern const char *CardType[];
-const char *telespci_revision = "$Revision: 2.7 $";
+const char *telespci_revision = "$Revision: 2.9 $";
 
 #define ZORAN_PO_RQ_PEN	0x02000000
 #define ZORAN_PO_WR	0x00800000
@@ -331,10 +337,10 @@ setup_telespci(struct IsdnCard *card))
 			printk(KERN_WARNING "Teles: No IRQ for PCI card found\n");
 			return(0);
 		}
-		cs->hw.teles0.membase = (u_int) ioremap(dev_tel->base_address[0],
+		cs->hw.teles0.membase = (u_int) ioremap(get_pcibase(dev_tel, 0),
 			PAGE_SIZE);
 		printk(KERN_INFO "Found: Zoran, base-address: 0x%lx, irq: 0x%x\n",
-			dev_tel->base_address[0], dev_tel->irq);
+			get_pcibase(dev_tel, 0), dev_tel->irq);
 	} else {
 		printk(KERN_WARNING "TelesPCI: No PCI card found\n");
 		return(0);

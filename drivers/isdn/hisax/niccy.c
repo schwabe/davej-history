@@ -1,4 +1,4 @@
-/* $Id: niccy.c,v 1.6 1999/07/12 21:05:23 keil Exp $
+/* $Id: niccy.c,v 1.8 1999/08/11 21:01:33 keil Exp $
 
  * niccy.c  low level stuff for Dr. Neuhaus NICCY PnP and NICCY PCI and
  *          compatible (SAGEM cybermodem)
@@ -8,6 +8,12 @@
  * Thanks to Dr. Neuhaus and SAGEM for informations
  *
  * $Log: niccy.c,v $
+ * Revision 1.8  1999/08/11 21:01:33  keil
+ * new PCI codefix
+ *
+ * Revision 1.7  1999/08/10 16:02:04  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
  * Revision 1.6  1999/07/12 21:05:23  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -39,7 +45,7 @@
 #endif
 
 extern const char *CardType[];
-const char *niccy_revision = "$Revision: 1.6 $";
+const char *niccy_revision = "$Revision: 1.8 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -314,16 +320,16 @@ setup_niccy(struct IsdnCard *card))
 				return(0);
 			}
 			cs->irq = niccy_dev->irq;
-			if (!niccy_dev->base_address[0]) {
+			if (!get_pcibase(niccy_dev, 0)) {
 				printk(KERN_WARNING "Niccy: No IO-Adr for PCI cfg found\n");
 				return(0);
 			}
-			cs->hw.niccy.cfg_reg = niccy_dev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
-			if (!niccy_dev->base_address[1]) {
+			cs->hw.niccy.cfg_reg = get_pcibase(niccy_dev, 0) & PCI_BASE_ADDRESS_IO_MASK;
+			if (!get_pcibase(niccy_dev, 1)) {
 				printk(KERN_WARNING "Niccy: No IO-Adr for PCI card found\n");
 				return(0);
 			}
-			pci_ioaddr = niccy_dev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
+			pci_ioaddr = get_pcibase(niccy_dev, 1) & PCI_BASE_ADDRESS_IO_MASK;
 			cs->subtyp = NICCY_PCI;
 		} else {
 			printk(KERN_WARNING "Niccy: No PCI card found\n");

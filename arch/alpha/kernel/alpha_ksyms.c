@@ -91,6 +91,8 @@ EXPORT_SYMBOL(wrusp);
 EXPORT_SYMBOL(start_thread);
 EXPORT_SYMBOL(alpha_read_fp_reg);
 EXPORT_SYMBOL(alpha_write_fp_reg);
+EXPORT_SYMBOL(alpha_read_fp_reg_s);
+EXPORT_SYMBOL(alpha_write_fp_reg_s);
 
 /* In-kernel system calls.  */
 EXPORT_SYMBOL(__kernel_thread);

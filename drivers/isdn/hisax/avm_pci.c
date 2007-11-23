@@ -1,4 +1,4 @@
-/* $Id: avm_pci.c,v 1.9 1999/07/12 21:04:57 keil Exp $
+/* $Id: avm_pci.c,v 1.11 1999/08/11 21:01:18 keil Exp $
 
  * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
@@ -7,6 +7,12 @@
  *
  *
  * $Log: avm_pci.c,v $
+ * Revision 1.11  1999/08/11 21:01:18  keil
+ * new PCI codefix
+ *
+ * Revision 1.10  1999/08/10 16:01:44  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
  * Revision 1.9  1999/07/12 21:04:57  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -50,7 +56,7 @@
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.9 $";
+static const char *avm_pci_rev = "$Revision: 1.11 $";
 
 #define  AVM_FRITZ_PCI		1
 #define  AVM_FRITZ_PNP		2
@@ -802,7 +808,7 @@ setup_avm_pcipnp(struct IsdnCard *card))
 				printk(KERN_WARNING "FritzPCI: No IRQ for PCI card found\n");
 				return(0);
 			}
-			cs->hw.avm.cfg_reg = dev_avm->base_address[1] &
+			cs->hw.avm.cfg_reg = get_pcibase(dev_avm, 1) &
 				PCI_BASE_ADDRESS_IO_MASK; 
 			if (!cs->hw.avm.cfg_reg) {
 				printk(KERN_WARNING "FritzPCI: No IO-Adr for PCI card found\n");

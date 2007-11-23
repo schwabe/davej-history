@@ -1,4 +1,4 @@
-/* $Id: sedlbauer.c,v 1.11 1999/07/12 21:05:27 keil Exp $
+/* $Id: sedlbauer.c,v 1.14 1999/08/11 20:59:22 keil Exp $
 
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
@@ -17,6 +17,16 @@
  *            Edgar Toernig
  *
  * $Log: sedlbauer.c,v $
+ * Revision 1.14  1999/08/11 20:59:22  keil
+ * new PCI codefix
+ * fix IRQ problem while unload
+ *
+ * Revision 1.13  1999/08/10 16:02:08  calle
+ * struct pci_dev changed in 2.3.13. Made the necessary changes.
+ *
+ * Revision 1.12  1999/08/05 20:43:22  keil
+ * ISAR analog modem support
+ *
  * Revision 1.11  1999/07/12 21:05:27  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -89,7 +99,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.11 $";
+const char *Sedlbauer_revision = "$Revision: 1.14 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 
@@ -433,9 +443,11 @@ sedlbauer_interrupt_isar(int intno, void *dev_id, struct pt_regs *regs)
 void
 release_io_sedlbauer(struct IsdnCardState *cs)
 {
-	int bytecnt = (cs->subtyp == SEDL_SPEED_FAX) ? 16 : 8;
+	int bytecnt = 8;
 
-	if (cs->hw.sedl.bus == SEDL_BUS_PCI) {
+	if (cs->subtyp == SEDL_SPEED_FAX) {
+		bytecnt = 16;
+	} else if (cs->hw.sedl.bus == SEDL_BUS_PCI) {
 		bytecnt = 256;
 	}
 	if (cs->hw.sedl.cfg_reg)
@@ -488,6 +500,17 @@ Sedl_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			reset_sedlbauer(cs);
 			return(0);
 		case CARD_RELEASE:
+			if (cs->hw.sedl.chip == SEDL_CHIP_ISAC_ISAR) {
+				writereg(cs->hw.sedl.adr, cs->hw.sedl.hscx,
+					ISAR_IRQBIT, 0);
+				writereg(cs->hw.sedl.adr, cs->hw.sedl.isac,
+					ISAC_MASK, 0xFF);
+				reset_sedlbauer(cs);
+				writereg(cs->hw.sedl.adr, cs->hw.sedl.hscx,
+					ISAR_IRQBIT, 0);
+				writereg(cs->hw.sedl.adr, cs->hw.sedl.isac,
+					ISAC_MASK, 0xFF);
+			}
 			release_io_sedlbauer(cs);
 			return(0);
 		case CARD_INIT:
@@ -576,7 +599,7 @@ setup_sedlbauer(struct IsdnCard *card))
 				printk(KERN_WARNING "Sedlbauer: No IRQ for PCI card found\n");
 				return(0);
 			}
-			cs->hw.sedl.cfg_reg = dev_sedl->base_address[0] &
+			cs->hw.sedl.cfg_reg = get_pcibase(dev_sedl, 0) &
 				PCI_BASE_ADDRESS_IO_MASK; 
 		} else {
 			printk(KERN_WARNING "Sedlbauer: No PCI card found\n");

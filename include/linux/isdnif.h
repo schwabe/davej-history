@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.28 1999/07/13 20:57:48 werner Exp $
+/* $Id: isdnif.h,v 1.29 1999/07/31 13:00:02 armin Exp $
  *
  * Linux ISDN subsystem
  *
@@ -22,6 +22,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.29  1999/07/31 13:00:02  armin
+ * Added tty fax capabilities.
+ *
  * Revision 1.28  1999/07/13 20:57:48  werner
  * added callback ISDN_STAT_DISCH for limiting b-channel resources.
  *
@@ -373,6 +376,84 @@ typedef struct setup_parm {
     unsigned char screen;   /* Screening info      */
 } setup_parm;
 
+
+#ifdef CONFIG_ISDN_TTY_FAX
+/* T.30 Fax G3 */
+
+#define FAXIDLEN 21
+
+typedef struct T30_s {
+	/* session parameters */
+	__u8 resolution		__attribute__ ((packed));
+	__u8 rate		__attribute__ ((packed));
+	__u8 width		__attribute__ ((packed));
+	__u8 length		__attribute__ ((packed));
+	__u8 compression	__attribute__ ((packed));
+	__u8 ecm		__attribute__ ((packed));
+	__u8 binary		__attribute__ ((packed));
+	__u8 scantime		__attribute__ ((packed));
+	__u8 id[FAXIDLEN]	__attribute__ ((packed));
+	/* additional parameters */
+	__u8 phase		__attribute__ ((packed));
+	__u8 direction		__attribute__ ((packed));
+	__u8 code		__attribute__ ((packed));
+	__u8 badlin		__attribute__ ((packed));
+	__u8 badmul		__attribute__ ((packed));
+	__u8 bor		__attribute__ ((packed));
+	__u8 fet		__attribute__ ((packed));
+	__u8 pollid[FAXIDLEN]	__attribute__ ((packed));
+	__u8 cq			__attribute__ ((packed));
+	__u8 cr			__attribute__ ((packed));
+	__u8 ctcrty		__attribute__ ((packed));
+	__u8 minsp		__attribute__ ((packed));
+	__u8 phcto		__attribute__ ((packed));
+	__u8 rel		__attribute__ ((packed));
+	__u8 nbc		__attribute__ ((packed));
+	/* remote station parameters */
+	__u8 r_resolution	__attribute__ ((packed));
+	__u8 r_rate		__attribute__ ((packed));
+	__u8 r_width		__attribute__ ((packed));
+	__u8 r_length		__attribute__ ((packed));
+	__u8 r_compression	__attribute__ ((packed));
+	__u8 r_ecm		__attribute__ ((packed));
+	__u8 r_binary		__attribute__ ((packed));
+	__u8 r_scantime		__attribute__ ((packed));
+	__u8 r_id[FAXIDLEN]	__attribute__ ((packed));
+	__u8 r_code		__attribute__ ((packed));
+} T30_s;
+
+#define ISDN_TTY_FAX_CONN_IN	0
+#define ISDN_TTY_FAX_CONN_OUT	1
+
+#define ISDN_TTY_FAX_FCON	0
+#define ISDN_TTY_FAX_DIS 	1
+#define ISDN_TTY_FAX_FTT 	2
+#define ISDN_TTY_FAX_MCF 	3
+#define ISDN_TTY_FAX_DCS 	4
+#define ISDN_TTY_FAX_TRAIN_OK	5
+#define ISDN_TTY_FAX_EOP 	6
+#define ISDN_TTY_FAX_EOM 	7
+#define ISDN_TTY_FAX_MPS 	8
+#define ISDN_TTY_FAX_DTC 	9
+#define ISDN_TTY_FAX_RID 	10
+#define ISDN_TTY_FAX_HNG 	11
+#define ISDN_TTY_FAX_DT  	12
+#define ISDN_TTY_FAX_FCON_I	13
+#define ISDN_TTY_FAX_DR  	14
+#define ISDN_TTY_FAX_ET  	15
+#define ISDN_TTY_FAX_CFR 	16
+#define ISDN_TTY_FAX_PTS 	17
+#define ISDN_TTY_FAX_SENT	18
+
+#define ISDN_FAX_PHASE_IDLE	0
+#define ISDN_FAX_PHASE_A	1
+#define ISDN_FAX_PHASE_B   	2
+#define ISDN_FAX_PHASE_C   	3
+#define ISDN_FAX_PHASE_D   	4
+#define ISDN_FAX_PHASE_E   	5
+
+#endif /* TTY_FAX */
+
 /* CAPI structs */
 
 /* this is compatible to the old union size */
@@ -411,6 +492,9 @@ typedef struct {
 		capi_msg cmsg;	/* For CAPI like messages		*/
 		char display[85];/* display message data          */ 
 		dss1_cmd_stat dss1_io; /* DSS1 IO-parameter/result */
+#ifdef CONFIG_ISDN_TTY_FAX
+		T30_s	*fax;	/* Pointer to ttys fax struct		*/
+#endif
 	} parm;
 } isdn_ctrl;
 
