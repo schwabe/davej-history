@@ -12,9 +12,6 @@ if [ "$CONFIG_SERIAL" != "n" ]; then
 fi
 bool 'Digiboard PC/Xx Support' CONFIG_DIGI
 tristate 'Cyclades async mux support' CONFIG_CYCLADES
-if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_CYCLADES" != "n" ]; then
-   bool '  Cyclades-Z interrupt mode operation (EXPERIMENTAL)' CONFIG_CYZ_INTR
-fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    dep_tristate 'Multi-Tech multiport card support (EXPERIMENTAL)' CONFIG_ISI m
 fi

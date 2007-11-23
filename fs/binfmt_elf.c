@@ -55,6 +55,19 @@ static int elf_core_dump(long signr, struct pt_regs *regs);
 #define ELF_PAGESTART(_v) ((_v) & ~(unsigned long)(ELF_EXEC_PAGESIZE-1))
 #define ELF_PAGEOFFSET(_v) ((_v) & (ELF_EXEC_PAGESIZE-1))
 
+/* Amount to offset dynamic executables, such as glibc 2.x's ld.so when 
+ * used from command line.
+ *   Loading at 0x00000000 is not appropriate since it means 
+ * null-pointer-dereferences are not caught. (and obstructs vm86 use.)
+ *   Loading low in general is bad for ld.so, since it or the heap may 
+ * collide with the second executable it loads.
+ *   Loading near MMAP_SEARCH_START is even worse, since the heap will 
+ * start after the executable, and quickly be occluded by shared 
+ * libraries, etc.
+ *   So we load in the top third of virtual memory.
+ */
+#define DYNAMIC_BIAS  PAGE_ALIGN((TASK_SIZE/3)*2)
+
 static struct linux_binfmt elf_format =
 {
 #ifndef MODULE
@@ -557,13 +570,25 @@ static inline int do_load_elf_binary(struct linux_binprm *bprm, struct pt_regs *
 	current->mm->end_code = 0;
 	current->mm->start_mmap = ELF_START_MMAP;
 	current->mm->mmap = NULL;
-	elf_entry = (unsigned long) elf_ex.e_entry;
 
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
 	current->mm->rss = 0;
 	bprm->p = setup_arg_pages(bprm->p, bprm);
 	current->mm->start_stack = bprm->p;
+
+	/* Bias dynamic executables so they are not loaded at 
+         * 0x00000000.  See comment at DYNAMIC_BIAS define.
+         */
+	if (elf_ex.e_type == ET_DYN)
+        {
+		for (i = 0, elf_ppnt = elf_phdata; i < elf_ex.e_phnum; i++, elf_ppnt++) {
+			elf_ppnt->p_vaddr += DYNAMIC_BIAS;
+		}
+		elf_ex.e_entry += DYNAMIC_BIAS;
+        }
+
+	elf_entry = (unsigned long) elf_ex.e_entry;
 
 	/* Now we do a little grungy work by mmaping the ELF image into
 	   the correct location in memory.  At this point, we assume that

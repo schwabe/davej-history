@@ -283,6 +283,10 @@
  *			to trition.c and added UDMA to current DMA support.
  *			update Promise Ultra33 and added AEC6210U/UF UDMA cards.
  *			add configuration flag to allow booting of either card.
+ * Version 5.53.5	Fixed chipset identifiers.
+ * Version 5.53.6	Added Aladdin IV/V M5229 chipset support.
+ * Version 5.53.7	Added HPT343 basic support with everything at PIO 0.
+ *			This is regardless of DMA capabilties.
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -328,9 +332,9 @@
 #define IS_PROMISE_DRIVE (0)	/* auto-NULLs out Promise code */
 #endif /* CONFIG_BLK_DEV_PROMISE */
 
-static const byte	ide_hwif_to_major[MAX_HWIFS] = {IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR};
-static const unsigned short default_io_base[MAX_HWIFS] = {0x1f0, 0x170, 0x1e8, 0x168};
-static const byte	default_irqs[MAX_HWIFS]     = {14, 15, 11, 10};
+static const byte	ide_hwif_to_major[MAX_HWIFS] = {IDE0_MAJOR, IDE1_MAJOR, IDE2_MAJOR, IDE3_MAJOR, IDE4_MAJOR, IDE5_MAJOR};
+static const unsigned short default_io_base[MAX_HWIFS] = {0x1f0, 0x170, 0x1e8, 0x168, 0x1e0, 0x160};
+static const byte	default_irqs[MAX_HWIFS]     = {14, 15, 11, 10, 8, 12};
 static int	idebus_parameter; /* holds the "idebus=" parameter */
 static int	system_bus_speed; /* holds what we think is VESA/PCI bus speed */
 
@@ -1596,11 +1600,16 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 		goto kill_rq;
 	}
 	block += drive->part[minor&PARTN_MASK].start_sect + drive->sect0;
+
 #if FAKE_FDISK_FOR_EZDRIVE
+	/* Yecch - this will shift the entire interval,
+	   possibly killing some innocent following sector */
 	if (block == 0 && drive->remap_0_to_1)
 		block = 1;  /* redirect MBR access to EZ-Drive partn table */
 #endif /* FAKE_FDISK_FOR_EZDRIVE */
+
 	((ide_hwgroup_t *)hwif->hwgroup)->drive = drive;
+
 #if (DISK_RECOVERY_TIME > 0)
 	while ((read_timer() - hwif->last_time) < DISK_RECOVERY_TIME);
 #endif
@@ -1760,6 +1769,20 @@ static void do_ide2_request (void)	/* invoked with cli() */
 static void do_ide3_request (void)	/* invoked with cli() */
 {
 	do_hwgroup_request (ide_hwifs[3].hwgroup);
+}
+#endif
+
+#if MAX_HWIFS > 4
+static void do_ide4_request (void)	/* invoked with cli() */
+{
+	do_hwgroup_request (ide_hwifs[4].hwgroup);
+}
+#endif
+
+#if MAX_HWIFS > 5
+static void do_ide5_request (void)	/* invoked with cli() */
+{
+	do_hwgroup_request (ide_hwifs[5].hwgroup);
 }
 #endif
 
@@ -2322,10 +2345,18 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 					argbuf[3] = args[3];
 				}
 				if (!(err = verify_area(VERIFY_WRITE,(void *)arg, argsize))) {
+					if ((args[0] == WIN_SETFEATURES) &&
+					    (args[1] > 66) &&
+					    (args[2] == 3) &&
+					    ((drive->id->word93 & 0x2000) == 0)) {
+						printk("%s: Speed warnings UDMA 3/4 is not functional.\n", drive->name);
+						goto abort_speed;
+					}
 					rq.buffer = argbuf;
 					err = ide_do_drive_cmd(drive, &rq, ide_wait);
 					memcpy_tofs((void *)arg, argbuf, argsize);
 				}
+abort_speed:
 				if (argsize > 4)
 					kfree(argbuf);
 			}
@@ -2557,6 +2588,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	}
 
 	drive->media = ide_disk;
+
 	/* Extract geometry if we did not already have one for the drive */
 	if (!drive->present) {
 		drive->present = 1;
@@ -2650,8 +2682,12 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		capacity/2048L, id->buf_size/2,
 		drive->bios_cyl, drive->bios_head, drive->bios_sect);
 	if (drive->using_dma) {
-		if ((id->field_valid & 4) && (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
-			printk(", UDMA");	/* UDMA BIOS-enabled! */
+		if ((id->field_valid & 4) && (id->word93 & 0x2000) &&
+		    (id->dma_ultra & (id->dma_ultra >>  11) & 3)) {
+			printk(", UDMA(66)");	/* UDMA BIOS-enabled! */
+		} else if ((id->field_valid & 4) &&
+			   (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
+			printk(", UDMA(33)");	/* UDMA BIOS-enabled! */
 		} else if (id->field_valid & 4) {
 			printk(", (U)DMA");	/* Can be BIOS-enabled! */
 		} else {
@@ -2915,6 +2951,12 @@ static inline byte probe_for_drive (ide_drive_t *drive)
  * The only "perfect" way to handle this would be to modify the setup.[cS] code
  * to do BIOS calls Int13h/Fn08h and Int13h/Fn48h to get all of the drive info
  * for us during initialization.  I have the necessary docs -- any takers?  -ml
+ * [I did this. But the result is more suited for user space. -aeb]
+ *
+ * Unfortunately the above is far too optimistic. One of the problems is that
+ * drives 1 and 2 may be SCSI disks (even when IDE disks are present), so that
+ * the geometry we read here from BIOS is attributed to the wrong disks.
+ * Eventually the routine below should be removed.
  */
 static void probe_cmos_for_drives (ide_hwif_t *hwif)
 {
@@ -3380,30 +3422,26 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 
 	printk("%s ", msg);
 
+#endif
+
 	tracks = drive->bios_cyl * drive->bios_head * drive->bios_sect / 63;
 	drive->bios_sect = 63;
 	if (xparm > 1) {
 		drive->bios_head = xparm;
 		drive->bios_cyl = tracks / drive->bios_head;
 	} else {
+		heads = (xparm == -1) ? ez_head_vals : dm_head_vals;
 		while (drive->bios_cyl >= 1024) {
 			drive->bios_head = *heads;
 			drive->bios_cyl = tracks / drive->bios_head;
 			if (0 == *++heads)
 				break;
 		}
-#if FAKE_FDISK_FOR_EZDRIVE
-		if (xparm == -1) {
-			drive->remap_0_to_1 = 1;
-			msg = "0->1";
-		} else
-#endif /* FAKE_FDISK_FOR_EZDRIVE */
 		if (xparm == 1) {
 			drive->sect0 = 63;
 			drive->bios_cyl = (tracks - 1) / drive->bios_head;
-			msg = "+63";
+			printk("[remap +63] ");
 		}
-		printk("[remap %s] ", msg);
 	}
 	drive->part[0].nr_sects = current_capacity(drive);
 	printk("[%d/%d/%d]", drive->bios_cyl, drive->bios_head, drive->bios_sect);
@@ -3570,7 +3608,18 @@ static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci
 	save_flags(flags);
 	cli();
 	for (index = 0; !pcibios_find_device (vendor, device, index, &bus, &fn); ++index) {
-		init (bus, fn + func_adj);
+		if ((vendor == PCI_VENDOR_ID_TTI) &&
+		    (device == PCI_DEVICE_ID_TTI_HPT343) && (func_adj)) {
+			unsigned short pcicmd = 0;
+
+			pcibios_read_config_word(bus, fn, PCI_COMMAND, &pcicmd);
+			if (pcicmd & PCI_COMMAND_MEMORY)
+				init (bus, fn);
+			else
+				return;
+		} else {
+			init (bus, fn + func_adj);
+		}
 	}
 	restore_flags(flags);
 }
@@ -3605,17 +3654,22 @@ static void probe_for_hwifs (void)
 		 */
 #ifdef CONFIG_BLK_DEV_OFFBOARD
 		ide_probe_pci (PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246, &ide_init_triton, 0);
+		ide_probe_pci (PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20262, &ide_init_triton, 0);
 		ide_probe_pci (PCI_VENDOR_ID_ARTOP, PCI_DEVICE_ID_ARTOP_ATP850UF, &ide_init_triton, 0);
+		ide_probe_pci (PCI_VENDOR_ID_TTI, PCI_DEVICE_ID_TTI_HPT343, &ide_init_triton, 1);
 #endif /* CONFIG_BLK_DEV_OFFBOARD */
 		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371_0, &ide_init_triton, 1);
 		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_1, &ide_init_triton, 0);
 		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB, &ide_init_triton, 0);
 		ide_probe_pci (PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_5513, &ide_init_triton, 0);
 		ide_probe_pci (PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_1, &ide_init_triton, 0);
+		ide_probe_pci (PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M5229, &ide_init_triton, 0);
 #ifndef CONFIG_BLK_DEV_OFFBOARD
 		ide_probe_pci (PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246, &ide_init_triton, 0);
+		ide_probe_pci (PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20262, &ide_init_triton, 0);
 		ide_probe_pci (PCI_VENDOR_ID_ARTOP, PCI_DEVICE_ID_ARTOP_ATP850UF, &ide_init_triton, 0);
 #endif /* CONFIG_BLK_DEV_OFFBOARD */
+		ide_probe_pci (PCI_VENDOR_ID_TTI, PCI_DEVICE_ID_TTI_HPT343, &ide_init_triton, 0);
 #endif /* CONFIG_BLK_DEV_TRITON */
 	}
 #endif /* CONFIG_PCI */
@@ -3661,6 +3715,12 @@ static int hwif_init (int h)
 #endif
 #if MAX_HWIFS > 3
 	case IDE3_MAJOR: rfn = &do_ide3_request; break;
+#endif
+#if MAX_HWIFS > 4
+	case IDE4_MAJOR: rfn = &do_ide4_request; break;
+#endif
+#if MAX_HWIFS > 5
+	case IDE5_MAJOR: rfn = &do_ide5_request; break;
 #endif
 	default:
 		printk("%s: request_fn NOT DEFINED\n", hwif->name);

@@ -68,6 +68,10 @@
 #define DAC960_MAJOR	48	/* 48..55 */
 #define RISCOM8_CALLOUT_MAJOR 49
 #define MKISS_MAJOR	55
+
+#define IDE4_MAJOR	56
+#define IDE5_MAJOR	57
+
 #define APBLOCK_MAJOR   60   /* AP1000 Block device */
 #define DDV_MAJOR       61   /* AP1000 DDV block device */
 

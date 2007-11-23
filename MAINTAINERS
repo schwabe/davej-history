@@ -251,14 +251,15 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 IDE DRIVER [GENERAL]
-P:	Mark Lord
-M:	mlord@pobox.com
+P:	Andre Hedrick
+M:	andre@linux-ide.org
 L:	linux-kernel@vger.rutgers.edu
-S:	Maintained
+W:	http://linux.kernel.org/pub/linux/kernel/people/hedrick/
+S:	Supported
 
 IDE/ATAPI CDROM DRIVER 
 P:	Jens Axboe
-M:	axboe@image.dk
+M:	axboe@suse.de
 L:	linux-kernel@vger.rutgers.edu
 W:	http://www.kernel.dk
 S:	Maintained

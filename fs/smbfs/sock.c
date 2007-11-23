@@ -64,12 +64,33 @@ _send(struct socket *sock, const void *buff, int len,
 	return sock->ops->sendmsg(sock, &msg, len, nonblock, flags);
 }
 
+struct data_callback {
+	struct tq_struct cb;
+	struct sock *sk;
+};
+/*
+ * N.B. What happens if we're in here when the socket closes??
+ */
 static void
-smb_data_callback(struct sock *sk, int len)
+found_data(struct sock *sk)
 {
-	struct socket *sock = sk->socket;
+	/*
+	 * FIXME: copied from sock_def_readable, it should be a call to
+	 * server->data_ready();
+	 */
+	if (!sk->dead) {
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket, 1);
+	}
+}
 
-	if (!sk->dead)
+static void
+smb_data_callback(void *ptr)
+{
+	struct data_callback *job = ptr;
+	struct socket *sock = job->sk->socket;
+
+	if (!job->sk->dead)
 	{
 		unsigned char peek_buf[4];
 		int result;
@@ -101,11 +122,27 @@ smb_data_callback(struct sock *sk, int len)
 		set_fs(fs);
 
 		if (result != -EAGAIN)
-		{
-			wake_up_interruptible(sk->sleep);
-		}
+			found_data(job->sk);
 	}
+	kfree(ptr);
 }
+static void
+smb_data_ready(struct sock *sk, int len)
+{
+	struct data_callback *job;
+	job = kmalloc(sizeof(struct data_callback), GFP_ATOMIC);
+	if (job == 0) {
+		printk("smb_data_ready(): lost SESSION KEEPALIVE due to OOM.\n");
+		found_data(sk);
+		return;
+	}
+	job->cb.next = NULL;
+	job->cb.sync = 0;
+	job->cb.routine = smb_data_callback;
+	job->cb.data = job;
+	job->sk = sk;
+	queue_task(&job->cb, &tq_scheduler);
+ }
 
 int
 smb_catch_keepalive(struct smb_server *server)
@@ -113,6 +150,7 @@ smb_catch_keepalive(struct smb_server *server)
 	struct file *file;
 	struct inode *inode;
 	struct socket *sock;
+	void *data_ready;
 	struct sock *sk;
 
 	if ((server == NULL)
@@ -143,15 +181,18 @@ smb_catch_keepalive(struct smb_server *server)
 	DDPRINTK("smb_catch_keepalive.: sk->d_r = %x, server->d_r = %x\n",
 		 (unsigned int) (sk->data_ready),
 		 (unsigned int) (server->data_ready));
-
-	if (sk->data_ready == smb_data_callback)
-	{
-		printk("smb_catch_keepalive: already done\n");
+        /*
+         * Install the callback atomically to avoid races ...
+         */
+        data_ready = xchg(&sk->data_ready, smb_data_ready);
+        if (data_ready != smb_data_ready)
+        {
+                server->data_ready = data_ready;
+                return 0;
+        } else {
+                printk("smb_catch_keepalive: already done\n");
 		return -EINVAL;
 	}
-	server->data_ready = sk->data_ready;
-	sk->data_ready = smb_data_callback;
-	return 0;
 }
 
 int
@@ -160,6 +201,7 @@ smb_dont_catch_keepalive(struct smb_server *server)
 	struct file *file;
 	struct inode *inode;
 	struct socket *sock;
+	void *data_ready;
 	struct sock *sk;
 
 	if ((server == NULL)
@@ -191,18 +233,20 @@ smb_dont_catch_keepalive(struct smb_server *server)
 		       "server->data_ready == NULL\n");
 		return -EINVAL;
 	}
-	if (sk->data_ready != smb_data_callback)
+	/*
+ 	 * Restore the original callback atomically to avoid races ...
+	 */
+	data_ready = xchg(&sk->data_ready, server->data_ready);
+	server->data_ready = NULL;
+	if (data_ready != smb_data_ready)
 	{
 		printk("smb_dont_catch_keepalive: "
-		       "sk->data_callback != smb_data_callback\n");
+		"sk->data_ready != smb_data_ready\n");
 		return -EINVAL;
 	}
 	DDPRINTK("smb_dont_catch_keepalive: sk->d_r = %x, server->d_r = %x\n",
 		 (unsigned int) (sk->data_ready),
 		 (unsigned int) (server->data_ready));
-
-	sk->data_ready = server->data_ready;
-	server->data_ready = NULL;
 	return 0;
 }
 

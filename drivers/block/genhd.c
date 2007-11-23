@@ -76,6 +76,10 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	 * This requires special handling here.
 	 */
 	switch (hd->major) {
+		case IDE5_MAJOR:
+			unit += 2;
+		case IDE4_MAJOR:
+			unit += 2;
 		case IDE3_MAJOR:
 			unit += 2;
 		case IDE2_MAJOR:
@@ -158,6 +162,8 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 	struct partition *p;
 	unsigned long first_sector, first_size, this_sector, this_size;
 	int mask = (1 << hd->minor_shift) - 1;
+	int loopct = 0;		/* number of links followed
+				   without finding a data partition */
 	int i;
 
 	first_sector = hd->part[MINOR(dev)].start_sect;
@@ -165,6 +171,8 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 	this_sector = first_sector;
 
 	while (1) {
+		if (++loopct > 100)
+			return;
 		if ((current_minor & mask) == 0)
 			return;
 		if (!(bh = bread(dev,0,1024)))
@@ -209,6 +217,7 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 
 		    add_partition(hd, current_minor, this_sector+START_SECT(p), NR_SECTS(p));
 		    current_minor++;
+		    loopct = 0;
 		    if ((current_minor & mask) == 0)
 		      goto done;
 		}

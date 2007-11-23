@@ -490,7 +490,20 @@ struct ZFW_CTRL {
 /****************** ****************** *******************/
 #endif
 
+/* Per card data structure */
+struct cyclades_card {
+    long base_addr;
+    long ctl_addr;
+    int irq;
+    int num_chips;	/* 0 if card absent, -1 if Z/PCI, else Y */
+    int first_line;	/* minor number of first channel on card */
+    int bus_index;	/* address shift - 0 for ISA, 1 for PCI */
+    int	intr_enabled;	/* FW Interrupt flag - 0 disabled, 1 enabled */
+};
 
+struct cyclades_chip {
+  int filler;
+};
 
 
 #ifdef __KERNEL__
@@ -507,22 +520,6 @@ struct ZFW_CTRL {
 #define cy_readb(port)  readb(port)
 #define cy_readw(port)  readw(port)
 #define cy_readl(port)  readl(port)
-
-/* Per card data structure */
-
-struct cyclades_card {
-    long base_addr;
-    long ctl_addr;
-    int irq;
-    int num_chips;	/* 0 if card absent, -1 if Z/PCI, else Y */
-    int first_line;	/* minor number of first channel on card */
-    int bus_index;	/* address shift - 0 for ISA, 1 for PCI */
-    int	inact_ctrl;	/* FW Inactivity control - 0 disabled, 1 enabled */
-};
-
-struct cyclades_chip {
-  int filler;
-};
 
 /*
  * This is our internal structure for each serial port's state.
@@ -567,16 +564,16 @@ struct cyclades_port {
 	int			xmit_cnt;
         int                     default_threshold;
         int                     default_timeout;
-	struct tq_struct	tqueue;
+	unsigned long		jiffies[3];
+	unsigned long		rflush_count;
 	struct termios		normal_termios;
 	struct termios		callout_termios;
+        struct cyclades_monitor mon;
+	struct cyclades_idle_stats   idle_stats;
+	struct tq_struct	tqueue;
 	struct wait_queue	*open_wait;
 	struct wait_queue	*close_wait;
 	struct wait_queue	*shutdown_wait;
-        struct cyclades_monitor mon;
-	unsigned long		jiffies[3];
-	unsigned long		rflush_count;
-	struct cyclades_idle_stats   idle_stats;
 };
 
 /*

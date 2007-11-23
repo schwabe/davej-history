@@ -145,7 +145,7 @@ typedef unsigned char	byte;	/* used everywhere */
 #define PARTN_MASK	((1<<PARTN_BITS)-1)	/* a useful bit mask */
 #define MAX_DRIVES	2	/* per interface; 2 assumed by lots of code */
 #ifndef MAX_HWIFS
-#define MAX_HWIFS	4	/* an arbitrary, but realistic limit */
+#define MAX_HWIFS	6	/* an arbitrary, but realistic limit */
 #endif
 #define SECTOR_WORDS	(512 / 4)	/* number of 32bit words per sector */
 
@@ -429,7 +429,8 @@ typedef void (ide_selectproc_t) (ide_drive_t *);
 typedef enum {	ide_unknown,	ide_generic,	ide_triton,
 		ide_cmd640,	ide_dtc2278,	ide_ali14xx,
 		ide_qd6580,	ide_umc8672,	ide_ht6560b,
-		ide_promise,	ide_udma }
+		ide_promise,	ide_hpt343,	ide_udma,
+		ide_ultra66 }
 	hwif_chipset_t;
 
 typedef struct hwif_s {

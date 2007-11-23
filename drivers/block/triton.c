@@ -2,7 +2,9 @@
  *  linux/drivers/block/triton.c	Version 1.13  Aug 12, 1996
  *					Version 1.13a June 1998 - new chipsets
  *					Version 1.13b July 1998 - DMA blacklist
+ *					Version 1.14  June 22, 1999
  *
+ *  Copyright (c) 1998-1999  Andre Hedrick
  *  Copyright (c) 1995-1996  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
  */
@@ -27,16 +29,23 @@
 
 #include <asm/io.h>
 #include <asm/dma.h>
+#include <asm/irq.h>
 
 #include "ide.h"
 
 #undef DISPLAY_TRITON_TIMINGS	/* define this to display timings */
 #undef DISPLAY_APOLLO_TIMINGS	/* define this for extensive debugging information */
+#undef DISPLAY_ALI15X3_TIMINGS	/* define this for extensive debugging information */
 
-#if defined(CONFIG_PROC_FS) && defined(DISPLAY_APOLLO_TIMINGS)
+#if defined(CONFIG_PROC_FS)
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
+#ifdef DISPLAY_APOLLO_TIMINGS
 #include <linux/via_ide_dma.h>
+#endif
+#ifdef DISPLAY_ALI15X3_TIMINGS
+#include <linux/ali_ide_dma.h>
+#endif
 #endif
 
 /*
@@ -90,6 +99,7 @@ const char *bad_dma_drives[] = {"WDC AC11000H",
 #define PRD_ENTRIES	(PAGE_SIZE / (2 * PRD_BYTES))
 #define DEFAULT_BMIBA	0xe800	/* in case BIOS did not init it */
 #define DEFAULT_BMCRBA  0xcc00  /* VIA's default value */
+#define DEFAULT_BMALIBA	0xd400	/* ALI's default value */
 
 /*
  * dma_intr() is the handler for disk read/write DMA interrupts
@@ -194,6 +204,11 @@ static int config_drive_for_dma (ide_drive_t *drive)
 	const char **list;
 	struct hd_driveid *id = drive->id;
 
+	if (HWIF(drive)->chipset == ide_hpt343) {
+		drive->using_dma = 0;	/* no DMA */
+		return 1;	/* DMA disabled */
+	}
+
 	if (id && (id->capability & 1)) {
 		/* Consult the list of known "bad" drives */
 		list = bad_dma_drives;
@@ -204,15 +219,24 @@ static int config_drive_for_dma (ide_drive_t *drive)
 				return 1;	/* DMA disabled */
 			}
 		}
-		/* Enable DMA on any drive that has mode 2 UltraDMA enabled */
-		if (id->field_valid & 4)	/* UltraDMA */
-			if  ((id->dma_ultra & 0x404) == 0x404) {
+		/* Enable DMA on any drive that has mode 4 or 2 UltraDMA enabled */
+		if (id->field_valid & 4) {	/* UltraDMA */
+			/* Enable DMA on any drive that has mode 4 UltraDMA enabled */
+			if (((id->dma_ultra & 0x1010) == 0x1010) &&
+			    (id->word93 & 0x2000) &&
+			    (HWIF(drive)->chipset == ide_ultra66)) {
+				drive->using_dma = 1;
+				return 0;	/* DMA enabled */
+			} else
+			/* Enable DMA on any drive that has mode 2 UltraDMA enabled */
+				if ((id->dma_ultra & 0x404) == 0x404) {
 				drive->using_dma = 1;
 				return 0;	/* DMA enabled */
 			}
+		}
 		/* Enable DMA on any drive that has mode2 DMA enabled */
 		if (id->field_valid & 2)	/* regular DMA */
-			if  ((id->dma_mword & 0x404) == 0x404) {
+			if ((id->dma_mword & 0x404) == 0x404) {
 				drive->using_dma = 1;
 				return 0;	/* DMA enabled */
 			}
@@ -363,6 +387,70 @@ static int set_via_timings (byte bus, byte fn, byte post, byte flush)
 	return (0);
 }
 
+static int setup_aladdin (byte bus, byte fn)
+{
+	byte confreg0 = 0, confreg1 = 0, progif = 0;
+	int errors = 0;
+
+	if (pcibios_read_config_byte(bus, fn, 0x50, &confreg1))
+		goto veryspecialsettingserror;
+	if (!(confreg1 & 0x02))
+		if (pcibios_write_config_byte(bus, fn, 0x50, confreg1 | 0x02))
+			goto veryspecialsettingserror;
+
+	if (pcibios_read_config_byte(bus, fn, 0x09, &progif))
+		goto veryspecialsettingserror;
+	if (!(progif & 0x40)) {
+		/*
+		 * The way to enable them is to set progif
+		 * writable at 0x4Dh register, and set bit 6
+		 * of progif to 1:
+		 */
+		if (pcibios_read_config_byte(bus, fn, 0x4d, &confreg0))
+			goto veryspecialsettingserror;
+		if (confreg0 & 0x80)
+			if (pcibios_write_config_byte(bus, fn, 0x4d, confreg0 & ~0x80))
+				goto veryspecialsettingserror;
+		if (pcibios_write_config_byte(bus, fn, 0x09, progif | 0x40))
+			goto veryspecialsettingserror;
+		if (confreg0 & 0x80)
+			if (pcibios_write_config_byte(bus, fn, 0x4d, confreg0))
+				errors++;
+	}
+
+	if ((pcibios_read_config_byte(bus, fn, 0x09, &progif)) || (!(progif & 0x40)))
+		goto veryspecialsettingserror;
+
+	printk("ide: ALI15X3: enabled read of IDE channels state (en/dis-abled) %s.\n",
+		errors ? "with Error(s)" : "Succeeded" );
+	return 1;
+veryspecialsettingserror:
+	printk("ide: ALI15X3: impossible to enable read of IDE channels state (en/dis-abled)!\n");
+	return 0;
+}
+
+void set_promise_hpt343_extra (unsigned short device, unsigned int bmiba)
+{
+	switch(device) {
+		case PCI_DEVICE_ID_PROMISE_20246:
+			if(!check_region((bmiba+16), 16))
+				request_region((bmiba+16), 16, "PDC20246");
+			break;
+		case PCI_DEVICE_ID_PROMISE_20262:
+			if (!check_region((bmiba+48), 48))
+				request_region((bmiba+48), 48, "PDC20262");
+			break;
+		case PCI_DEVICE_ID_TTI_HPT343:
+			if(!check_region((bmiba+16), 16))
+				request_region((bmiba+16), 16, "HPT343");
+			break;
+		default:
+			break;
+	}
+}
+
+#define HPT343_PCI_INIT_REG		0x80
+
 /*
  * ide_init_triton() prepares the IDE driver for DMA operation.
  * This routine is called once, from ide.c during driver initialization,
@@ -370,17 +458,20 @@ static int set_via_timings (byte bus, byte fn, byte post, byte flush)
  */
 void ide_init_triton (byte bus, byte fn)
 {
-	int rc = 0, h;
-	int dma_enabled = 0;
-	unsigned short io[6], count = 0, step_count = 0;
+	byte bridgebus, bridgefn, bridgeset = 0, hpt34x_flag = 0;
+	unsigned char irq = 0;
+	int dma_enabled = 0, rc = 0, h;
+	unsigned short io[6], count = 0, step_count = 0, pass_count = 0;
 	unsigned short pcicmd, vendor, device, class;
 	unsigned int bmiba, timings, reg, tmp;
 	unsigned int addressbios = 0;
+	unsigned long flags;
+	unsigned index;
 
-#ifdef DISPLAY_APOLLO_TIMINGS
+#if defined(DISPLAY_APOLLO_TIMINGS) || defined(DISPLAY_ALI15X3_TIMINGS)
 	bmide_bus = bus;
 	bmide_fn = fn;
-#endif /* DISPLAY_APOLLO_TIMINGS */
+#endif /* DISPLAY_APOLLO_TIMINGS || DISPLAY_ALI15X3_TIMINGS */
 
 /*
  *  We pick up the vendor, device, and class info for selecting the correct
@@ -392,19 +483,61 @@ void ide_init_triton (byte bus, byte fn)
 	pcibios_read_config_word (bus, fn, PCI_VENDOR_ID, &vendor);
 	pcibios_read_config_word (bus, fn, PCI_DEVICE_ID, &device);
 	pcibios_read_config_word (bus, fn, PCI_CLASS_DEVICE, &class);
+	pcibios_read_config_byte (bus, fn, PCI_INTERRUPT_LINE, &irq);
 
 	switch(vendor) {
 		case PCI_VENDOR_ID_INTEL:
-                   printk("ide: Intel 82371 (single FIFO) DMA Bus Mastering IDE ");
-                   break;
+			printk("ide: Intel 82371 ");
+			switch(device) {
+				case PCI_DEVICE_ID_INTEL_82371_0:
+					printk("PIIX (single FIFO) ");
+					break;
+				case PCI_DEVICE_ID_INTEL_82371SB_1:
+					printk("PIIX3 (dual FIFO) ");
+					break;
+				case PCI_DEVICE_ID_INTEL_82371AB:
+					printk("PIIX4 (dual FIFO) ");
+					break;
+				default:
+					printk(" (unknown) 0x%04x ", device);
+					break;
+			}
+			printk("DMA Bus Mastering IDE ");
+			break;
 		case PCI_VENDOR_ID_SI:
 			printk("ide: SiS 5513 (dual FIFO) DMA Bus Mastering IDE ");
 			break;
                 case PCI_VENDOR_ID_VIA:
-                   printk("ide: VIA VT82C586B (split FIFO) UDMA Bus Mastering IDE ");
-                   break;
+			printk("ide: VIA VT82C586B (split FIFO) UDMA Bus Mastering IDE ");
+			break;
+		case PCI_VENDOR_ID_TTI:
+			/*PCI_CLASS_STORAGE_UNKNOWN == class */
+			if (device == PCI_DEVICE_ID_TTI_HPT343) {
+				pcibios_write_config_byte(bus, fn, HPT343_PCI_INIT_REG, 0x00);
+				pcibios_read_config_word(bus, fn, PCI_COMMAND, &pcicmd);
+				hpt34x_flag = (pcicmd & PCI_COMMAND_MEMORY) ? 1 : 0;
+#if 1
+				if (!hpt34x_flag) {
+					save_flags(flags);
+					cli();
+					pcibios_write_config_word(bus, fn, PCI_COMMAND, pcicmd & ~PCI_COMMAND_IO);
+					pcibios_read_config_dword(bus, fn, PCI_BASE_ADDRESS_4, &bmiba);
+					pcibios_write_config_dword(bus, fn, PCI_BASE_ADDRESS_0, bmiba | 0x20);
+					pcibios_write_config_dword(bus, fn, PCI_BASE_ADDRESS_1, bmiba | 0x34);
+					pcibios_write_config_dword(bus, fn, PCI_BASE_ADDRESS_2, bmiba | 0x28);
+					pcibios_write_config_dword(bus, fn, PCI_BASE_ADDRESS_3, bmiba | 0x3c);
+					pcibios_write_config_word(bus, fn, PCI_COMMAND, pcicmd);
+					bmiba = 0;
+					restore_flags(flags);
+				}
+#endif
+				pcibios_write_config_byte(bus, fn, PCI_LATENCY_TIMER, 0x20); 
+				goto hpt343_jump_in;
+			} else {
+				printk("ide: HPTXXX did == 0x%04X unsupport chipset error.\n", device);
+				return;
+			}
 		case PCI_VENDOR_ID_PROMISE:
-			/*	PCI_CLASS_STORAGE_RAID == class	*/
 			/*
 			 *  I have been able to make my Promise Ultra33 UDMA card change class.
 			 *  It has reported as both PCI_CLASS_STORAGE_RAID and PCI_CLASS_STORAGE_IDE.
@@ -414,15 +547,17 @@ void ide_init_triton (byte bus, byte fn)
 			 *  correction if needed.
 			 *  PDC20246 (primary) PDC20247 (secondary) IDE hwif's.
 			 *
+			 *  PDC20262 Promise Ultra66 UDMA.
+			 *
 			 *  Note that Promise "stories,fibs,..." about this device not being
 			 *  capable of ATAPI and AT devices.
 			 */
-			if (PCI_CLASS_STORAGE_RAID == class) {
-				unsigned char irq1 = 0, irq2 = 0;
-				pcibios_read_config_byte (bus, fn, PCI_INTERRUPT_LINE, &irq1);
-				pcibios_read_config_byte (bus, fn, (PCI_INTERRUPT_LINE)|0x80, &irq2);
-				if (irq1 != irq2) {
-					pcibios_write_config_byte(bus, fn, (PCI_INTERRUPT_LINE)|0x80, irq1);
+			if (class != PCI_CLASS_STORAGE_IDE) {
+				unsigned char irq_mirror = 0;
+
+				pcibios_read_config_byte(bus, fn, (PCI_INTERRUPT_LINE)|0x80, &irq_mirror);
+				if (irq != irq_mirror) {
+					pcibios_write_config_byte(bus, fn, (PCI_INTERRUPT_LINE)|0x80, irq);
 				}
 			}
 		case PCI_VENDOR_ID_ARTOP:
@@ -436,8 +571,13 @@ void ide_init_triton (byte bus, byte fn)
 			 *  0x6000 range.  If they are setup in the 0xef00 range it is reported.
 			 *  WHY??? got me.........
 			 */
+hpt343_jump_in:
 			printk("ide: %s UDMA Bus Mastering ",
-				(vendor == PCI_VENDOR_ID_ARTOP) ? "AEC6210" : "PDC20246");
+				(device == PCI_DEVICE_ID_ARTOP_ATP850UF) 		? "AEC6210" :
+				(device == PCI_DEVICE_ID_PROMISE_20246)  		? "PDC20246" :
+				(device == PCI_DEVICE_ID_PROMISE_20262)  		? "PDC20262" :
+				(hpt34x_flag && (device == PCI_DEVICE_ID_TTI_HPT343))	? "HPT345" :
+				(device == PCI_DEVICE_ID_TTI_HPT343)     		? "HPT343" : "UNKNOWN");
 			pcibios_read_config_dword(bus, fn, PCI_ROM_ADDRESS, &addressbios);
 			if (addressbios) {
 				pcibios_write_config_byte(bus, fn, PCI_ROM_ADDRESS, addressbios | PCI_ROM_ADDRESS_ENABLE);
@@ -459,6 +599,15 @@ void ide_init_triton (byte bus, byte fn)
 				if (tmp & PCI_BASE_ADDRESS_SPACE_IO)
 					io[count++] = tmp & PCI_BASE_ADDRESS_IO_MASK;
 			}
+			break;
+		case PCI_VENDOR_ID_AL:
+			save_flags(flags);
+			cli();
+			for (index = 0; !pcibios_find_device (PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533, index, &bridgebus, &bridgefn); ++index) {
+				bridgeset = setup_aladdin(bus, fn);
+			}
+			restore_flags(flags);
+			printk("ide: ALI15X3 (dual FIFO) DMA Bus Mastering IDE ");
 			break;
 		default:
 			return;
@@ -491,12 +640,20 @@ void ide_init_triton (byte bus, byte fn)
 				break;
 			} else {
                                 printk("ide: BM-DMA base register is invalid (0x%04x, PnP BIOS problem)\n", bmiba);
-                                if (inb(((vendor == PCI_VENDOR_ID_VIA) ? DEFAULT_BMCRBA : DEFAULT_BMIBA)) != 0xff || !try_again)
+                                if (inb(((vendor == PCI_VENDOR_ID_AL) ? DEFAULT_BMALIBA :
+					 (vendor == PCI_VENDOR_ID_VIA) ? DEFAULT_BMCRBA :
+									DEFAULT_BMIBA)) != 0xff || !try_again)
 					break;
-				printk("ide: setting BM-DMA base register to 0x%04x\n", ((vendor == PCI_VENDOR_ID_VIA) ? DEFAULT_BMCRBA : DEFAULT_BMIBA));
+				printk("ide: setting BM-DMA base register to 0x%04x\n",
+					((vendor == PCI_VENDOR_ID_AL) ? DEFAULT_BMALIBA :
+					 (vendor == PCI_VENDOR_ID_VIA) ? DEFAULT_BMCRBA :
+									DEFAULT_BMIBA));
 				if ((rc = pcibios_write_config_word(bus, fn, PCI_COMMAND, pcicmd&~1)))
 					goto quit;
-				rc = pcibios_write_config_dword(bus, fn, 0x20, ((vendor == PCI_VENDOR_ID_VIA) ? DEFAULT_BMCRBA : DEFAULT_BMIBA)|1);
+				rc = pcibios_write_config_dword(bus, fn, 0x20,
+					((vendor == PCI_VENDOR_ID_AL) ? DEFAULT_BMALIBA :
+					 (vendor == PCI_VENDOR_ID_VIA) ? DEFAULT_BMCRBA :
+									DEFAULT_BMIBA)|1);
 				if (pcibios_write_config_word(bus, fn, PCI_COMMAND, pcicmd|5) || rc)
 					goto quit;
 			}
@@ -509,14 +666,17 @@ void ide_init_triton (byte bus, byte fn)
 	if ((rc = pcibios_read_config_dword(bus, fn,
 		(vendor == PCI_VENDOR_ID_PROMISE) ? 0x50 : 
 		(vendor == PCI_VENDOR_ID_ARTOP) ? 0x54 :
+		(vendor == PCI_VENDOR_ID_SI) ? 0x48 :
+		(vendor == PCI_VENDOR_ID_AL) ? 0x08 :
 		0x40, &timings)))
 		goto quit;
 	/*
-	 * We do a vendor check since the Ultra33 and AEC6210
+	 * We do a vendor check since the Ultra33/66 and AEC6210
 	 * holds their timings in a different location.
 	 */
+#if 0
 	printk("ide: timings == %08x\n", timings);
-
+#endif
 	/*
 	 *  The switch preserves some stuff that was original.
 	 */
@@ -533,9 +693,39 @@ void ide_init_triton (byte bus, byte fn)
 				goto quit;
 			}
 			break;
+		case PCI_VENDOR_ID_AL:
+			timings <<= 16;
+			timings >>= 24;
+			if (!(timings & 0x30)) {
+				printk("ide: ALI15X3: neither port is enabled\n");
+				goto quit;
+			}
+			break;
 		case PCI_VENDOR_ID_SI:
+			timings <<= 8;
+			timings >>= 24;
+			if (!(timings & 0x06)) {
+				printk("ide: SIS5513: neither port is enabled\n");
+				goto quit;
+			}
+			break;
 		case PCI_VENDOR_ID_PROMISE:
+			printk("    (U)DMA Burst Bit %sABLED " \
+				"Primary %s Mode " \
+				"Secondary %s Mode.\n",
+				(inb(bmiba + 0x001f) & 1) ? "EN" : "DIS",
+				(inb(bmiba + 0x001a) & 1) ? "MASTER" : "PCI",
+				(inb(bmiba + 0x001b) & 1) ? "MASTER" : "PCI" );
+#if 0
+			if (!(inb(bmiba + 0x001f) & 1)) {
+				outb(inb(bmiba + 0x001f)|0x01, (bmiba + 0x001f));
+				printk("    (U)DMA Burst Bit Forced %sABLED.\n",
+					(inb(bmiba + 0x001f) & 1) ? "EN" : "DIS");
+			}
+#endif
+			break;
 		case PCI_VENDOR_ID_ARTOP:
+		case PCI_VENDOR_ID_TTI:
                 default:
                         break;
         }
@@ -545,15 +735,22 @@ void ide_init_triton (byte bus, byte fn)
 	 */
 	for (h = 0; h < MAX_HWIFS; ++h) {
 		ide_hwif_t *hwif = &ide_hwifs[h];
+		byte channel = ((h == 1) || (h == 3) || (h == 5)) ? 1 : 0;
 
 		/*
 		 *  This prevents the first contoller from accidentally
 		 *  initalizing the hwif's that it does not use and block
 		 *  an off-board ide-pci from getting in the game.
 		 */
-		if (step_count >= 2) {
+		if ((step_count >= 2) || (pass_count >= 2)) {
 			goto quit;
 		}
+
+#if 0
+		if (hwif->chipset == ide_unknown)
+			printk("ide: index == %d channel(%d)\n", h, channel);
+#endif
+
 #ifdef CONFIG_BLK_DEV_OFFBOARD
 		/*
 		 *  This is a forced override for the onboard ide controller
@@ -562,21 +759,14 @@ void ide_init_triton (byte bus, byte fn)
 		 *  for offboard UDMA upgrades with hard disks, but saving
 		 *  the onboard DMA2 controllers for CDROMS, TAPES, ZIPS, etc...
 		 */
-		if ((vendor == PCI_VENDOR_ID_INTEL) ||
-		    (vendor == PCI_VENDOR_ID_SI) ||
-		    (vendor == PCI_VENDOR_ID_VIA)) {
-			if (h == 2) {
-				hwif->io_base = 0x1f0;
-				hwif->ctl_port = 0x3f6;
-				hwif->irq = 14;
-				hwif->noprobe = 0;
-			}
-			if (h == 3) {
-				hwif->io_base = 0x170;
-				hwif->ctl_port = 0x376;
-				hwif->irq = 15;
-				hwif->noprobe = 0;
-			}
+		if (((vendor == PCI_VENDOR_ID_INTEL) ||
+		     (vendor == PCI_VENDOR_ID_SI) ||
+		     (vendor == PCI_VENDOR_ID_VIA) ||
+		     (vendor == PCI_VENDOR_ID_AL)) && (h >= 2)) {
+			hwif->io_base	= channel ? 0x170 : 0x1f0;
+			hwif->ctl_port	= channel ? 0x376 : 0x3f6;
+			hwif->irq	= channel ? 15 : 14;
+			hwif->noprobe	= 0;
 		}
 #endif /* CONFIG_BLK_DEV_OFFBOARD */
 		/*
@@ -592,6 +782,7 @@ void ide_init_triton (byte bus, byte fn)
 			byte s_clks, r_clks;
 			unsigned short devid;
 #endif /* DISPLAY_TRITON_TIMINGS */
+			pass_count++;
 			if (hwif->io_base == 0x1f0) {
 				time = timings & 0xffff;
 				if ((time & 0x8000) == 0)	/* interface enabled? */
@@ -637,12 +828,17 @@ void ide_init_triton (byte bus, byte fn)
 			print_triton_drive_flags (1, (time >> 4) & 0xf);
 #endif /* DISPLAY_TRITON_TIMINGS */
 		} else if (vendor == PCI_VENDOR_ID_SI) {
+			pass_count++;
 			if (hwif->io_base == 0x1f0) {
+				if ((timings & 0x02) == 0)
+					continue;
 				hwif->chipset = ide_triton;
 				if (dma_enabled)
 					init_triton_dma(hwif, bmiba);
 				step_count++;
 			} else if (hwif->io_base == 0x170) {
+				if ((timings & 0x04) == 0)
+					continue;
 				hwif->chipset = ide_triton;
 				if (dma_enabled)
 					init_triton_dma(hwif, bmiba + 8);
@@ -650,9 +846,10 @@ void ide_init_triton (byte bus, byte fn)
 			} else {
 				continue;
 			}
-		} else if(vendor == PCI_VENDOR_ID_VIA) {
+		} else if (vendor == PCI_VENDOR_ID_VIA) {
+			pass_count++;
 			if (hwif->io_base == 0x1f0) {
-				if((timings & 0x02) == 0)
+				if ((timings & 0x02) == 0)
 					continue;
 				hwif->chipset = ide_triton;
 				if (dma_enabled)
@@ -664,7 +861,7 @@ void ide_init_triton (byte bus, byte fn)
 #endif /* DISPLAY_APOLLO_TIMINGS */
 				step_count++;
 			} else if (hwif->io_base == 0x170) {
-				if((timings & 0x01) == 0)
+				if ((timings & 0x01) == 0)
 					continue;
 				hwif->chipset = ide_triton;
 				if (dma_enabled)
@@ -675,41 +872,91 @@ void ide_init_triton (byte bus, byte fn)
 			} else {
 				continue;
 			}
-		} else if ((vendor == PCI_VENDOR_ID_PROMISE) ||
-			   (vendor == PCI_VENDOR_ID_ARTOP)) {
-	/*
-	 *  This silly tmp = h routine allows an off-board ide-pci card to
-	 *  be booted as primary hwifgroup, provided that the onboard
-	 *  controllers are disabled.  If they are active, then we wait our
-	 *  turn for hwif assignment.
-	 */
-			unsigned char irq = 0;
-			pcibios_read_config_byte (bus, fn, PCI_INTERRUPT_LINE, &irq);
-			if ((h == 0) || (h == 1)) {
-				tmp = h * 2;
-			} else {
-				tmp = (h - 2) * 2;
+		} else if (vendor == PCI_VENDOR_ID_AL) {
+			byte ideic, inmir;
+			byte irq_routing_table[] = { -1,  9, 3, 10, 4,  5, 7,  6,
+						      1, 11, 0, 12, 0, 14, 0, 15 };
+
+			if (bridgeset) {
+				pcibios_read_config_byte(bridgebus, bridgefn, 0x58, &ideic);
+				ideic = ideic & 0x03;
+				if ((channel && ideic == 0x03) || (!channel && !ideic)) {
+					pcibios_read_config_byte(bridgebus, bridgefn, 0x44, &inmir);
+					inmir = inmir & 0x0f;
+					hwif->irq = irq_routing_table[inmir];
+				} else if (channel && !(ideic & 0x01)) {
+					pcibios_read_config_byte(bridgebus, bridgefn, 0x75, &inmir);
+					inmir = inmir & 0x0f;
+					hwif->irq = irq_routing_table[inmir];
+				}
 			}
-			hwif->io_base = io[tmp];
-			hwif->ctl_port = io[tmp + 1] + 2;
+			pass_count++;
+			if (hwif->io_base == 0x1f0) {
+				if ((timings & 0x20) == 0)
+					continue;
+				hwif->chipset = ide_triton;
+				if (dma_enabled)
+					init_triton_dma(hwif, bmiba);
+				outb(inb(bmiba+2) & 0x60, bmiba+2);
+				if (inb(bmiba+2) & 0x80)
+					printk("ALI15X3: simplex device: DMA forced\n");
+#ifdef DISPLAY_ALI15X3_TIMINGS
+				proc_register_dynamic(&proc_root, &ali_proc_entry);
+#endif /* DISPLAY_ALI15X3_TIMINGS */
+				step_count++;
+			} else if (hwif->io_base == 0x170) {
+				if ((timings & 0x10) == 0)
+					continue;
+				hwif->chipset = ide_triton;
+				if (dma_enabled)
+					init_triton_dma(hwif, bmiba + 8);
+				outb(inb(bmiba+10) & 0x60, bmiba+10);
+				if (inb(bmiba+10) & 0x80)
+					printk("ALI15X3: simplex device: DMA forced\n");
+				step_count++;
+			} else {
+				continue;
+			}
+		} else if ((vendor == PCI_VENDOR_ID_PROMISE) ||
+			   (vendor == PCI_VENDOR_ID_ARTOP) ||
+			   (vendor == PCI_VENDOR_ID_TTI)) {
+			pass_count++;
+			if (vendor == PCI_VENDOR_ID_TTI) {
+				if ((!hpt34x_flag) && (h < 2)) {
+					goto quit;
+				} else if (hpt34x_flag) {
+					hwif->io_base	= channel ? (bmiba + 0x28) : (bmiba + 0x20);
+					hwif->ctl_port	= channel ? (bmiba + 0x3e) : (bmiba + 0x36);
+				} else {
+					goto io_temps;
+				}
+			} else {
+io_temps:
+				tmp		= channel ? 2 : 0;
+				hwif->io_base	= io[tmp];
+				hwif->ctl_port	= io[tmp + 1] + 2;
+			}
 			hwif->irq = irq;
 			hwif->noprobe = 0;
 
-			if (vendor == PCI_VENDOR_ID_ARTOP) {
+			if (device == PCI_DEVICE_ID_ARTOP_ATP850UF) {
 				hwif->serialized = 1;
 			}
 
+			if ((vendor == PCI_VENDOR_ID_PROMISE) ||
+			    (vendor == PCI_VENDOR_ID_TTI)) {
+				set_promise_hpt343_extra(device, bmiba);
+			}
+
 			if (dma_enabled) {
-				if (!check_region(bmiba, 8)) {
-					hwif->chipset = ide_udma;
+				if ((!check_region(bmiba, 8)) && (!channel)) {
+					hwif->chipset = ((vendor == PCI_VENDOR_ID_TTI) && !hpt34x_flag) ? ide_hpt343 :
+							 (device == PCI_DEVICE_ID_PROMISE_20262) ? ide_ultra66 : ide_udma;
 					init_triton_dma(hwif, bmiba);
 					step_count++;
-				} else if (!check_region((bmiba + 0x08), 8)) {
-					if ((vendor == PCI_VENDOR_ID_PROMISE) &&
-					    (!check_region(bmiba+16, 16))) {
-						request_region(bmiba+16, 16, "PDC20246");
-					}
-					hwif->chipset = ide_udma;
+				} else if ((!check_region((bmiba + 0x08), 8)) && (channel)) {
+					hwif->chipset = ((vendor == PCI_VENDOR_ID_TTI) && !hpt34x_flag) ? ide_hpt343 :
+							 (device == PCI_DEVICE_ID_PROMISE_20262) ? ide_ultra66 : ide_udma;
 					init_triton_dma(hwif, bmiba + 8);
 					step_count++;
 				} else {

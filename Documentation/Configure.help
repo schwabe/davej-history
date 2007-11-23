@@ -4195,6 +4195,16 @@ CONFIG_CYCLADES
   safe to say N. (As of 1.3.9x kernels, this driver's minor numbers
   start at 0 instead of 32.)
 
+Cyclades-Z interrupt mode operation (EXPERIMENTAL)
+CONFIG_CYZ_INTR
+  The Cyclades-Z family of multiport cards allows 2 (two) driver
+  op modes: polling and interrupt. In polling mode, the driver will
+  check the status of the Cyclades-Z ports every certain amount of
+  time (which is called polling cycle and is configurable). In
+  interrupt mode, it will use an interrupt line (IRQ) in order to check
+  the status of the Cyclades-Z ports. The default op mode is polling.
+  If unsure, say N.
+
 Stallion multiport serial support
 CONFIG_STALDRV
   Stallion cards give you many serial ports. You would need something

@@ -445,6 +445,8 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	     case FLOPPY_MAJOR:
 	     case IDE2_MAJOR:
 	     case IDE3_MAJOR:
+	     case IDE4_MAJOR:
+	     case IDE5_MAJOR:
 		/*
 		 * The scsi disk and cdrom drivers completely remove the request
 		 * from the queue when they start processing an entry.  For this
