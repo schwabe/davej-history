@@ -1394,8 +1394,10 @@ static void vortex_tx_timeout(struct device *dev)
 		}
 		outb(PKT_BUF_SZ>>8, ioaddr + TxFreeThreshold);
 		outw(DownUnstall, ioaddr + EL3_CMD);
-	} else
+	} else {
 		vp->stats.tx_dropped++;
+		clear_bit(0, (void *)&dev->tbusy);
+	}
 	
 	/* Issue Tx Enable */
 	outw(TxEnable, ioaddr + EL3_CMD);

@@ -405,9 +405,7 @@ EXPORT_SYMBOL(brw_page);
 EXPORT_SYMBOL(add_mouse_randomness);
 EXPORT_SYMBOL(fasync_helper);
 
-#ifdef CONFIG_BLK_DEV_MD
-EXPORT_SYMBOL(disk_name);	/* for md.c */
-#endif
+EXPORT_SYMBOL(disk_name);	/* for md.c and others */
 
 /* binfmt_aout */
 EXPORT_SYMBOL(get_write_access);

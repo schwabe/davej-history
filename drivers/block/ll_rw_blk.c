@@ -359,6 +359,7 @@ int blkelv_ioctl(kdev_t dev, unsigned long cmd, unsigned long arg)
 	case BLKELVSET:
 		return blkelvset_ioctl(elevator, __arg);
 	}
+	return -EINVAL;
 }
 
 static inline int seek_to_not_starving_chunk(struct request ** req, int * lat)

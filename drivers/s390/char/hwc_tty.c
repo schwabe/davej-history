@@ -207,8 +207,6 @@ hwc_tty_input (unsigned char *buf, unsigned int count)
 {
 	struct tty_struct *tty = hwc_tty_data.tty;
 
-#if 0
-
 	if (tty != NULL) {
 
 		if (count == 2 && (
@@ -249,7 +247,7 @@ hwc_tty_input (unsigned char *buf, unsigned int count)
 		tty_flip_buffer_push (tty);
 		hwc_tty_wake_up ();
 	}
-#endif
+#if 0
 
 	if (tty != NULL) {
 
@@ -289,6 +287,7 @@ hwc_tty_input (unsigned char *buf, unsigned int count)
 		tty_flip_buffer_push(tty);
 		hwc_tty_wake_up ();
 	}
+#endif
 }
 
 void 

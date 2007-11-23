@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/nls.h>
+#include <linux/init.h>
 
 static struct nls_unicode charset2uni[256] = {
 	/* 0x00*/
@@ -435,7 +436,7 @@ static struct nls_table table = {
 	NULL
 };
 
-int init_nls_cp865(void)
+int __init init_nls_cp865(void)
 {
 	return register_nls(&table);
 }

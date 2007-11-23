@@ -474,6 +474,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	}
 	ret = -ESRCH;
 	// printk("child=%lX child->flags=%lX",child,child->flags);
+	/* I added child!=current line so we can get the */
+	/* ieee_instruction_pointer from the user structure DJB */
+	if(child!=current)
+	{
 	if (!(child->flags & PF_PTRACED))
 		goto out;
 	if (child->state != TASK_STOPPED) 
@@ -483,7 +487,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	}
 	if (child->p_pptr != current)
 		goto out;
-
+	}
 	switch (request) 
 	{
 		/* If I and D space are separate, these will need to be fixed. */

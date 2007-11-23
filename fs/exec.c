@@ -515,6 +515,8 @@ int flush_old_exec(struct linux_binprm * bprm)
 	/* This is the point of no return */
 	release_old_signals(oldsig);
 
+	current->sas_ss_sp = current->sas_ss_size = 0;
+
 	if (current->euid == current->uid && current->egid == current->gid)
 		current->dumpable = 1;
 	name = bprm->filename;

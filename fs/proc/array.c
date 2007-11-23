@@ -651,6 +651,26 @@ static unsigned long get_wchan(struct task_struct *p)
 			fp = rw->ins[6] + bias;
 		} while (++count < 16);
 	}
+#elif defined (__s390__)
+        {
+                unsigned long ksp, backchain, ip;
+                unsigned long stack_page;
+                int count = 0;
+
+                stack_page = (unsigned long)p;
+                ksp = p->tss.ksp;
+                if (!stack_page || ksp < stack_page || ksp >= 8188+stack_page)
+                        return 0;
+                backchain = (*(unsigned long *) ksp) & 0x7fffffff;
+                do {
+                        if (backchain < stack_page || backchain >= 8188+stack_page)
+                                return 0;
+                        ip = (*(unsigned long *) (backchain+56)) & 0x7fffffff;
+                        if (ip < first_sched || ip >= last_sched)
+                                return ip;
+                        backchain = (*(unsigned long *) backchain) & 0x7fffffff;
+                } while (count++ < 16);
+        }
 #endif
 
 	return 0;

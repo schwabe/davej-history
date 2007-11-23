@@ -211,6 +211,13 @@ __initfunc(void setup_arch(char **cmdline_p,
 #endif
         memory_start = (unsigned long) &_end;    /* fixit if use $CODELO etc*/
 	memory_end = MEMORY_SIZE;
+        /*
+         * We need some free virtual space to be able to do vmalloc.
+         * On a machine with 2GB memory we make sure that we have at
+         * least 128 MB free space for vmalloc.
+         */
+        if (memory_end > 1920*1024*1024)
+                memory_end = 1920*1024*1024;
         init_task.mm->start_code = PAGE_OFFSET;
         init_task.mm->end_code = (unsigned long) &_etext;
         init_task.mm->end_data = (unsigned long) &_edata;

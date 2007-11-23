@@ -69,6 +69,7 @@ typedef struct _ioinfo {
      devstat_t     devstat;       /* device status */
      ccw1_t       *qcpa;          /* queued channel program */
      ccw1_t        senseccw;      /* ccw for sense command */
+     __u8          sense_data[32];/* buffer for basic sense */
      unsigned int  stctl;         /* accumulated status control from irb */
      unsigned long qintparm;      /* queued interruption parameter  */
      unsigned long qflag;         /* queued flags */

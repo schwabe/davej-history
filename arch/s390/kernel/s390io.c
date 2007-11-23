@@ -437,7 +437,16 @@ static int enable_subchannel( unsigned int irq)
       else
       {
 			ioinfo[irq]->schib.pmcw.ena = 1;
+
+			if ( irq == cons_dev )
+			{
+				ioinfo[irq]->schib.pmcw.isc = 7;
+			}
+			else	
+			{
 			ioinfo[irq]->schib.pmcw.isc = 3;
+
+			} /* endif */
 
          do
          {
@@ -776,7 +785,7 @@ int s390_start_IO( int            irq,      /* IRQ */
 	ioinfo[irq]->orb.fmt     = 1;
 
 	ioinfo[irq]->orb.pfch = !(flag & DOIO_DENY_PREFETCH);
-	ioinfo[irq]->orb.spnd =  (flag & DOIO_ALLOW_SUSPEND);
+	ioinfo[irq]->orb.spnd =  (flag & DOIO_ALLOW_SUSPEND ? TRUE : FALSE);
 	ioinfo[irq]->orb.ssic =  (    (flag & DOIO_ALLOW_SUSPEND )
 	                          && (flag & DOIO_SUPPRESS_INTER) );
 
@@ -2092,7 +2101,7 @@ int s390_process_IRQ( unsigned int irq )
 	ccode = tsch( irq, &(ioinfo[irq]->devstat.ii.irb) );
 
 	//
-	// We must only accumulate the status if initiated by do_IO() or halt_IO()
+	// We must only accumulate the status if the device is busy already
 	//
 	if ( ioinfo[irq]->ui.flags.busy )
 				{
@@ -2130,9 +2139,11 @@ int s390_process_IRQ( unsigned int irq )
 	 * Save residual count and CCW information in case primary and
 	 *  secondary status are presented with different interrupts.
 			 */
-	if ( ioinfo[irq]->devstat.ii.irb.scsw.stctl & SCSW_STCTL_PRIM_STATUS )
+	if ( ioinfo[irq]->devstat.ii.irb.scsw.stctl
+	           & (   SCSW_STCTL_PRIM_STATUS | SCSW_STCTL_INTER_STATUS ) )
 			{
 		ioinfo[irq]->devstat.rescnt = ioinfo[irq]->devstat.ii.irb.scsw.count;
+		ioinfo[irq]->devstat.cpa    = ioinfo[irq]->devstat.ii.irb.scsw.cpa;
 
 #ifdef CONFIG_DEBUG_IO
       if ( irq != cons_dev )
@@ -2140,11 +2151,6 @@ int s390_process_IRQ( unsigned int irq )
                  "residual count from irb after tsch() %d\n",
                  irq, ioinfo[irq]->devstat.rescnt );
 #endif
-	} /* endif */
-
-	if ( ioinfo[irq]->devstat.ii.irb.scsw.cpa != 0 )
-	{
-		ioinfo[irq]->devstat.cpa = ioinfo[irq]->devstat.ii.irb.scsw.cpa;
 
 	} /* endif */
 
@@ -2305,7 +2311,7 @@ int s390_process_IRQ( unsigned int irq )
 				        sizeof( devstat_t) );
 
 				s_ccw->cmd_code = CCW_CMD_BASIC_SENSE;
-				s_ccw->cda      = (char *)virt_to_phys( ioinfo[irq]->devstat.ii.sense.data);
+				s_ccw->cda      = (char *)virt_to_phys( ioinfo[irq]->sense_data);
 				s_ccw->count    = SENSE_MAX_COUNT;
 				s_ccw->flags    = CCW_FLAG_SLI;
 
@@ -2373,7 +2379,7 @@ int s390_process_IRQ( unsigned int irq )
 		 * we allow for the device action handler if .
 		 *  - we received ending status
 		 *  - the action handler requested to see all interrupts
-		 *  - we received a PCI
+		 *  - we received an intermediate status
 		 *  - fast notification was requested (primary status)
 		 *  - unsollicited interrupts
 		 *
@@ -2382,7 +2388,7 @@ int s390_process_IRQ( unsigned int irq )
 		{
 			allow4handler =    ending_status
 			   || ( ioinfo[irq]->ui.flags.repall                                      )
-			   || ( ioinfo[irq]->devstat.ii.irb.scsw.cstat & SCHN_STAT_PCI            )
+			   || ( stctl & SCSW_STCTL_INTER_STATUS                                   )
 				|| ( (ioinfo[irq]->ui.flags.fast ) && (stctl & SCSW_STCTL_PRIM_STATUS) )
 				|| ( ioinfo[irq]->ui.flags.oper == 0                                   );
 
@@ -2421,7 +2427,7 @@ int s390_process_IRQ( unsigned int irq )
 				if ( sense_count >= 0 )
 				{
 					memcpy( ((devstat_t *)(action->dev_id))->ii.sense.data,
-					        &(ioinfo[irq]->devstat.ii.sense.data),
+					        &(ioinfo[irq]->sense_data),
 					        sense_count);
 				}
 				else
@@ -2557,13 +2563,31 @@ int s390_process_IRQ( unsigned int irq )
 			{
 				ioinfo[irq]->ui.flags.w4final = 1;
 
+				/*
+				 * Eventually reset subchannel PCI status and
+				 *  set the PCI or SUSPENDED flag in the user
+				 *  device status block if appropriate.
+				 */
+				if ( ioinfo[irq]->devstat.cstat & SCHN_STAT_PCI )
+				{
+					((devstat_t *)(action->dev_id))->flag |= DEVSTAT_PCI;
+					ioinfo[irq]->devstat.cstat &= ~SCHN_STAT_PCI;
+				}
+				else if ( actl & SCSW_ACTL_SUSPENDED )
+				{
+					((devstat_t *)(action->dev_id))->flag |= DEVSTAT_SUSPENDED;
+
+				} /* endif */
+
 				if ( ioinfo[irq]->ui.flags.newreq )
 				{
 					action->handler( irq, ioinfo[irq]->u_intparm );
 				}
 				else
 				{
-					((io_handler_func1_t)action->handler)( irq, action->dev_id, &regs );
+					((io_handler_func1_t)action->handler)( irq,
+					                                       action->dev_id,
+					                                       &regs );
 
 				} /* endif */
 
@@ -4549,7 +4573,7 @@ int s390_SenseID( int irq, senseid_t *sid, __u8 lpm )
 								        ioinfo[irq]->schib.pmcw.dev,
 								        irq);
 #endif
-								io_retry = 0;
+								io_retry = 1;
 		}
 #ifdef CONFIG_DEBUG_IO
 		else
@@ -4579,7 +4603,7 @@ int s390_SenseID( int irq, senseid_t *sid, __u8 lpm )
 #endif
 	}
 						else if (    ( pdevstat->flag & DEVSTAT_NOT_OPER )
-					             || ( irq_ret        != -ENODEV         ) )
+					             || ( irq_ret        == -ENODEV         ) )
 	{
 #ifdef CONFIG_DEBUG_IO
 							printk( "SenseID : path %02X for "

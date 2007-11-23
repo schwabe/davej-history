@@ -16,6 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/nls.h>
+#include <linux/init.h>
 
 static struct nls_unicode charset2uni[256] = {
 	/* 0x00*/
@@ -219,6 +220,30 @@ static unsigned char *page_uni2charset[256] = {
 	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,	NULL,
 };
 
+static void uni2char(unsigned char ch, unsigned char cl, unsigned char *out, int boundlen, int *outlen)
+{
+	unsigned char *uni2charset;
+
+	if (boundlen <= 0)
+		return;
+
+	uni2charset = page_uni2charset[ch];
+	if (uni2charset && uni2charset[cl])
+		out[0] = uni2charset[cl];
+	else
+		out[0] = '?';
+	*outlen = 1;
+	return;
+}
+
+static void char2uni(unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
+{
+	*uni1 = charset2uni[*rawstring].uni1;
+	*uni2 = charset2uni[*rawstring].uni2;
+	*offset = 1;
+	return;
+}
+
 static void inc_use_count(void)
 {
 	MOD_INC_USE_COUNT;
@@ -231,14 +256,14 @@ static void dec_use_count(void)
 
 static struct nls_table table = {
 	"iso8859-14",
-	page_uni2charset,
-	charset2uni,
+	uni2char,
+	char2uni,
 	inc_use_count,
 	dec_use_count,
 	NULL
 };
 
-int init_nls_iso8859_14(void)
+int __init init_nls_iso8859_14(void)
 {
 	return register_nls(&table);
 }

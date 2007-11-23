@@ -15,6 +15,7 @@
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
+#include <linux/init.h>
 #include <asm/byteorder.h>
 
 static struct nls_table *tables = (struct nls_table *) NULL;
@@ -429,7 +430,7 @@ EXPORT_SYMBOL(utf8_mbstowcs);
 EXPORT_SYMBOL(utf8_wctomb);
 EXPORT_SYMBOL(utf8_wcstombs);
 
-int init_nls(void)
+int __init init_nls(void)
 {
 #ifdef CONFIG_NLS_ISO8859_1
 	init_nls_iso8859_1();

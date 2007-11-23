@@ -630,22 +630,27 @@ extern void __bad_pte_kernel(pmd_t *pmd);
 extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 {
         address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-        if (pmd_none(*pmd)) {
-                pte_t * page = (pte_t *) get_pte_fast();
 
-                if (!page)
-                        return get_pte_kernel_slow(pmd, address);
-                pmd_val(pmd[0]) = _KERNPG_TABLE + __pa(page);
-                pmd_val(pmd[1]) = _KERNPG_TABLE + __pa(page+1024);
-                pmd_val(pmd[2]) = _KERNPG_TABLE + __pa(page+2048);
-                pmd_val(pmd[3]) = _KERNPG_TABLE + __pa(page+3072);
-                return page + address;
-        }
-        if (pmd_bad(*pmd)) {
-                __bad_pte_kernel(pmd);
-                return NULL;
-        }
+        if (pmd_none(*pmd))
+                goto getnew;
+        if (pmd_bad(*pmd))
+                goto fix;
         return (pte_t *) pmd_page(*pmd) + address;
+getnew:
+{
+        unsigned long page = (unsigned long) get_pte_fast();
+
+        if (!page)
+                return get_pte_kernel_slow(pmd, address);
+        pmd_val(pmd[0]) = _KERNPG_TABLE + __pa(page);
+        pmd_val(pmd[1]) = _KERNPG_TABLE + __pa(page+1024);
+        pmd_val(pmd[2]) = _KERNPG_TABLE + __pa(page+2048);
+        pmd_val(pmd[3]) = _KERNPG_TABLE + __pa(page+3072);
+        return (pte_t *) page + address;
+}
+fix:
+        __bad_pte_kernel(pmd);
+        return NULL;
 }
 
 extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)

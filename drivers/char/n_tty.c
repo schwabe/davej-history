@@ -228,9 +228,9 @@ static ssize_t opost_block(struct tty_struct * tty,
 		nr = space;
 	if (nr > sizeof(buf))
 	    nr = sizeof(buf);
-	nr -= copy_from_user(buf, inbuf, nr);
-	if (!nr)
-		return 0;
+
+	if (copy_from_user(buf, inbuf, nr))
+		return -EFAULT;
 	
 	for (i = 0, cp = buf; i < nr; i++, cp++) {
 		switch (*cp) {

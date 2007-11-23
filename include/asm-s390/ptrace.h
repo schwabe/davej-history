@@ -1,3 +1,4 @@
+
 /*
  *  include/asm-s390/ptrace.h
  *
@@ -133,6 +134,8 @@ struct user_regs_struct
  * this is the way intel does it
  */
 	per_struct per_info;
+	addr_t  ieee_instruction_pointer; 
+	/* Used to give failing instruction back to user for ieee exceptions */
 };
 
 typedef struct user_regs_struct user_regs_struct;
@@ -269,8 +272,9 @@ enum
 	PT_CR_9=pt_off(per_info.control_regs.words.cr[0]),
 	PT_CR_10=pt_off(per_info.control_regs.words.cr[1]),
 	PT_CR_11=pt_off(per_info.control_regs.words.cr[2]),
-	PT_LASTOFF=PT_CR_11,
-	PT_ENDREGS=offsetof(user_regs_struct,per_info.lowcore.words.perc_atmid)
+	PT_IEEE_IP=pt_off(ieee_instruction_pointer),
+	PT_LASTOFF=PT_IEEE_IP,
+	PT_ENDREGS=sizeof(user_regs_struct)-1
 };
 
 #define PTRACE_AREA \

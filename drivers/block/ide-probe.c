@@ -191,6 +191,10 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	} else
 		hd_status = IDE_ALTSTATUS_REG;	/* use non-intrusive polling */
 
+	/* set features register for atapi identify command */
+	if((cmd == WIN_PIDENTIFY))
+	        OUT_BYTE(0,IDE_FEATURE_REG); /* disable dma & overlap mode */
+
 #if CONFIG_BLK_DEV_PDC4030
 	if (IS_PDC4030_DRIVE) {
 		extern int pdc4030_cmd(ide_drive_t *, byte);

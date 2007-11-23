@@ -9,13 +9,15 @@
 Original driver (sg.h):
 *       Copyright (C) 1992 Lawrence Foard
 2.x extensions to driver:
-*       Copyright (C) 1998, 1999 Douglas Gilbert
+*       Copyright (C) 1998 - 2000 Douglas Gilbert
 
-
-    Version: 2.1.36 (991008)
+    Version: 2.1.37 (20000504)
     This version for 2.2.x series kernels
     D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au)
 
+    Changes since 2.1.36 (991008)
+        - fix 0 length scatter gather requests + alignment
+        - activate SG_SCSI_RESET ioctl() [to work needs mid level changes]
     Changes since 2.1.34 (990603)
         - skipped 2.1.35 (never fully released)
         - add queuing info into struct sg_scsi_id
@@ -35,19 +37,24 @@ Original driver (sg.h):
         - clean up logging of pointers to use %p (for 64 bit architectures)
         - rework usage of get_user/copy_to_user family of kernel calls
         - "disown" scsi_command blocks before releasing them
-    Changes since 2.1.30 (990320)
-        - memory tweaks: change flags on kmalloc (GFP_KERNEL to GFP_ATOMIC)
-        -                increase max allowable mid-level pool usage
 
+Map of SG verions to the Linux kernels in which they appear:
+       ----------        ----------------------------------
+       original          all kernels < 2.2.6
+       2.1.31            2.2.6 and 2.2.7
+       2.1.32            2.2.8 and 2.2.9
+       2.1.34            2.2.10 to 2.2.13
+       2.1.36            2.2.14 and 2.2.15
+       2.1.37            2.2.16
+       3.0.13            optional version 3 sg driver for 2.2 series
+       3.1.13            2.3.99-pre5, version 3 sg driver for 2.3 series
 
     New features and changes:
-        - per file descriptor (fd) write-read sequencing and command queues.
-        - command queuing supported (SG_MAX_QUEUE is maximum per fd).
+        - per file descriptor (fd) write-read sequencing
+        - command queuing supported
         - scatter-gather supported (allowing potentially megabyte transfers).
-        - the SCSI target, host and driver status are returned
-          in unused fields of sg_header (maintaining its original size).
-        - asynchronous notification support added (SIGPOLL, SIGIO) for
-          read()s (write()s should never block).
+        - more SCSI status information returned
+        - asynchronous notification support added (SIGPOLL, SIGIO)
         - pack_id logic added so read() can wait for a specific pack_id. 
         - uses memory > ISA_DMA_THRESHOLD if adapter allows it (e.g. a
           pci scsi adapter).
@@ -68,61 +75,21 @@ Original driver (sg.h):
           calling the ioctl of the same name is a more flexible and
           safer approach.
         - adds several ioctl calls, see ioctl section below.
- 
- Good documentation on the original "sg" device interface and usage can be
- found in the Linux HOWTO document: "SCSI Programming HOWTO" (version 0.5)
- by Heiko Eissfeldt; last updated 7 May 1996. Here is a quick summary of
- sg basics:
- An SG device is accessed by writing SCSI commands plus any associated 
- outgoing data to it; the resulting status codes and any incoming data
- are then obtained by a read call. The device can be opened O_NONBLOCK
- (non-blocking) and poll() used to monitor its progress. The device may be
- opened O_EXCL which excludes other "sg" users from this device (but not 
- "sd", "st" or "sr" users). The buffer given to the write() call is made
- up as follows:
-        - struct sg_header image (see below)
-        - scsi command (6, 10 or 12 bytes long)
-        - data to be written to the device (if any)
 
- The buffer received from the corresponding read() call contains:
-        - struct sg_header image (check results + sense_buffer)
-        - data read back from device (if any)
-
- The given SCSI command has its LUN field overwritten internally by the
- value associated with the device that has been opened.
-
- This device currently uses "indirect IO" in the sense that data is
- DMAed into kernel buffers from the hardware and afterwards is
- transferred into the user space (or vice versa if you are writing).
- Transfer speeds or up to 20 to 30MBytes/sec have been measured using
- indirect IO. For faster throughputs "direct IO" which cuts out the
- double handling of data is required. This will also need a new interface.
-
- Grabbing memory for those kernel buffers used in this driver for DMA may
- cause the dreaded ENOMEM error. This error seems to be more prevalent 
- under early 2.2.x kernels than under the 2.0.x kernel series. For a given 
- (large) transfer the memory obtained by this driver must be contiguous or
- scatter-gather must be used (if supported by the adapter). [Furthermore, 
- ISA SCSI adapters can only use memory below the 16MB level on a i386.]
-
- When a "sg" device is open()ed O_RDWR then this driver will attempt to
- reserve a buffer of SG_DEF_RESERVED_SIZE that will be used by subsequent
- write()s on this file descriptor as long as:
-    -  it is not already in use (eg when command queuing is in use)
-    -  the write() does not call for a buffer size larger than the
-       reserved size.
- In these cases the write() will attempt to find the memory it needs for
- DMA buffers dynamically and in the worst case will fail with ENOMEM.
- The amount of memory actually reserved depends on various dynamic factors
- and can be checked with the SG_GET_RESERVED_SIZE ioctl(). [In a very
- tight memory situation it may yield 0!] The size of the reserved buffer
- can be changed with the SG_SET_RESERVED_SIZE ioctl(). It should be
- followed with a call to the SG_GET_RESERVED_SIZE ioctl() to find out how
- much was actually reserved.
-
- More documentation plus test and utility programs can be found at 
- http://www.torque.net/sg
+ Documentation
+ =============
+ A web site for SG device drivers can be found at:
+        http://www.torque.net/sg  [alternatively check the MAINTAINERS file]
+ The main documents are still based on 2.x versions:
+        http://www.torque.net/sg/p/scsi-generic.txt
+        http://www.torque.net/sg/p/scsi-generic_long.txt
+ The first document can also be found in the kernel source tree, probably at:
+        /usr/src/linux/Documentation/scsi-generic.txt .
+ Documentation on the changes and additions in 3.x version of the sg driver
+ can be found at: http://www.torque.net/sg/p/scsi-generic_v3.txt
+ Utility and test programs are also available at that web site.
 */
+ 
 
 #define SG_MAX_SENSE 16   /* too little, unlikely to change in 2.2.x */
 
@@ -213,9 +180,13 @@ typedef struct sg_scsi_id {
 #define SG_NEXT_CMD_LEN 0x2283  /* override SCSI command length with given
                    number on the next write() on this file descriptor */
 
-/* Returns -EBUSY if occupied else takes as input: 0 -> do nothing,
-   1 -> device reset or  2 -> bus reset (not operational yet) */
+/* Returns -EBUSY if occupied. 3rd argument pointer to int (see next) */
 #define SG_SCSI_RESET 0x2284
+/* Associated values that can be given to SG_SCSI_RESET follow */
+#define         SG_SCSI_RESET_NOTHING   0
+#define         SG_SCSI_RESET_DEVICE    1
+#define         SG_SCSI_RESET_BUS       2
+#define         SG_SCSI_RESET_HOST      3
 
 
 #define SG_SCATTER_SZ (8 * 4096)  /* PAGE_SIZE not available to user */

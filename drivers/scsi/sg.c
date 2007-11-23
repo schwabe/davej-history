@@ -7,7 +7,7 @@
  * Original driver (sg.c):
  *        Copyright (C) 1992 Lawrence Foard
  * 2.x extensions to driver:
- *        Copyright (C) 1998, 1999 Douglas Gilbert
+ *        Copyright (C) 1998 - 2000 Douglas Gilbert
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,8 +16,8 @@
  *
  *  Borrows code from st driver. Thanks to Alessandro Rubini's "dd" book.
  */
- static char * sg_version_str = "Version: 2.1.36 (991218)";
- static int sg_version_num = 20136; /* 2 digits for each component */
+ static char * sg_version_str = "Version: 2.1.37 (20000504)";
+ static int sg_version_num = 20137; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
  *      - scsi logging is available via SCSI_LOG_TIMEOUT macros. First
@@ -100,7 +100,7 @@ static int sg_detect(Scsi_Device *);
 static void sg_detach(Scsi_Device *);
 
 
-struct Scsi_Device_Template sg_template = {NULL, NULL, "sg", NULL, 0xff,
+struct Scsi_Device_Template sg_template = {NULL, "generic", "sg", NULL, 0xff,
                                            SCSI_GENERIC_MAJOR, 0, 0, 0, 0,
                                            sg_detect, sg_init,
                                            sg_finish, sg_attach, sg_detach};
@@ -609,8 +609,29 @@ static int sg_ioctl(struct inode * inode, struct file * filp,
             return -EBUSY;
         result = get_user(val, (int *)arg);
         if (result) return result;
-        /* Don't do anything till scsi mod level visibility */
-        return 0;
+        if (SG_SCSI_RESET_NOTHING == val)
+            return 0;
+#ifdef SCSI_TRY_RESET_DEVICE
+        switch (val)
+        {
+        case SG_SCSI_RESET_DEVICE:
+            val = SCSI_TRY_RESET_DEVICE;
+            break;
+        case SG_SCSI_RESET_BUS:
+            val = SCSI_TRY_RESET_BUS;
+            break;
+        case SG_SCSI_RESET_HOST:
+            val = SCSI_TRY_RESET_HOST;
+            break;
+        default:
+            return -EINVAL;
+        }
+        if(! capable(CAP_SYS_ADMIN))  return -EACCES;
+        return (scsi_reset_provider(sdp->device, val) == SUCCESS) ? 0 : -EIO;
+#else
+        SCSI_LOG_TIMEOUT(1, printk("sg_ioctl: SG_RESET_SCSI not supported\n"));
+        result = -EINVAL;
+#endif
     case SCSI_IOCTL_SEND_COMMAND:
         /* Allow SCSI_IOCTL_SEND_COMMAND without checking suser() since the
            user already has read/write access to the generic device and so
@@ -1124,6 +1145,8 @@ static int sg_start_req(Sg_request * srp, int max_buff_size,
 
     SCSI_LOG_TIMEOUT(4, printk("sg_start_req: max_buff_size=%d\n", 
                                max_buff_size)); 
+    if (max_buff_size <= 0)
+        return 0;
     if ((! sg_res_in_use(sfp)) && (max_buff_size <= rsv_schp->bufflen)) {
         sg_link_reserve(sfp, srp, max_buff_size);
         sg_write_xfer(req_schp, inp, num_write_xfer);
@@ -1351,6 +1374,8 @@ static void sg_link_reserve(Sg_fd * sfp, Sg_request * srp, int size)
     Sg_scatter_hold * rsv_schp = &sfp->reserve;
 
     SCSI_LOG_TIMEOUT(4, printk("sg_link_reserve: size=%d\n", size)); 
+    /* round request up to next highest SG_SECTOR_SZ byte boundary */
+    size = (size + SG_SECTOR_MSK) & (~SG_SECTOR_MSK);
     if (rsv_schp->use_sg > 0) {
         int k, num;
         int rem = size;
@@ -1431,12 +1456,12 @@ static Sg_request * sg_get_request(const Sg_fd * sfp, int pack_id)
 static Sg_request * sg_add_request(Sg_fd * sfp)
 {
     int k;
-    Sg_request * resp = NULL;
-    Sg_request * rp;
+    Sg_request * resp = sfp->headrp;
+    Sg_request * rp = sfp->req_arr;
 
-    resp = sfp->headrp;
-    rp = sfp->req_arr;
     if (! resp) {
+        memset(rp, 0, sizeof(Sg_request));
+        rp->parentfp = sfp;
         resp = rp;
         sfp->headrp = resp;
     }
@@ -1444,12 +1469,15 @@ static Sg_request * sg_add_request(Sg_fd * sfp)
         if (0 == sfp->cmd_q)
             resp = NULL;   /* command queuing disallowed */
         else {
-            for (k = 0, rp; k < SG_MAX_QUEUE; ++k, ++rp) {
+            for (k = 0; k < SG_MAX_QUEUE; ++k, ++rp) {
                 if (! rp->parentfp)
                     break;
             }
             if (k < SG_MAX_QUEUE) {
-                while (resp->nextrp) resp = resp->nextrp;
+                memset(rp, 0, sizeof(Sg_request));
+                rp->parentfp = sfp;
+                while (resp->nextrp) 
+                    resp = resp->nextrp;
                 resp->nextrp = rp;
                 resp = rp;
             }
@@ -1458,11 +1486,7 @@ static Sg_request * sg_add_request(Sg_fd * sfp)
         }
     }
     if (resp) {
-        resp->parentfp = sfp;
         resp->nextrp = NULL;
-        resp->res_used = 0;
-        memset(&resp->data, 0, sizeof(Sg_scatter_hold));
-        memset(&resp->header, 0, sizeof(struct sg_header));
         resp->my_cmdp = NULL;
     }
     return resp;
@@ -1478,14 +1502,14 @@ static int sg_remove_request(Sg_fd * sfp, const Sg_request * srp)
         return 0;
     prev_rp = sfp->headrp;
     if (srp == prev_rp) {
-        prev_rp->parentfp = NULL;
         sfp->headrp = prev_rp->nextrp;
+        prev_rp->parentfp = NULL;
         return 1;
     }
     while ((rp = prev_rp->nextrp)) {
         if (srp == rp) {
-            rp->parentfp = NULL;
             prev_rp->nextrp = rp->nextrp;
+            rp->parentfp = NULL;
             return 1;
         }
         prev_rp = rp;

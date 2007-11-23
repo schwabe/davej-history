@@ -38,6 +38,7 @@
 #include <linux/videodev.h>
 #include <linux/netdevice.h>
 #include <linux/smb_fs.h>
+#include <linux/blkdev.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */

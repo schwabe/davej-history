@@ -42,6 +42,9 @@
  *            IFCONFIG dev DOWN and IFCONFIG dev UP 
  *          - Possibility to switch the automatic selection off
  *          - Minor bug fixes 
+ *    0.52  Bug fixes 
+ *          - Subchannel check message enhanced 
+ *          - Read / Write retry routine check for CTC_STOP added  
  */
 #include <linux/version.h>
 #include <linux/init.h>
@@ -80,7 +83,7 @@
         #define KERN_WARNING KERN_EMERG
         #define KERN_DEBUG   KERN_EMERG
 #endif  
-//#undef DEBUG
+
 
 #define CCW_CMD_WRITE           0x01
 #define CCW_CMD_READ            0x02
@@ -914,10 +917,10 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 
         devstat_t *devstat = ((devstat_t *)initparm);
 
-        /* Bypass all 'unsolited interrupts' */
+        /* Bypass all 'unsolicited interrupts' */
         if (devstat->intparm == 0) {
 #ifdef DEBUG
-                printk(KERN_DEBUG "ctc: unsolited interrupt for device: %04x received c-%02x d-%02x f-%02x\n",
+                printk(KERN_DEBUG "ctc: unsolicited interrupt for device: %04x received c-%02x d-%02x f-%02x\n",
                     devstat->devno, devstat->cstat, devstat->dstat, devstat->flag);
 #endif 
                 /* FIXME - find the related intparm!!! No IO outstanding!!!! */
@@ -935,8 +938,8 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 
         /* Check for good subchannel return code, otherwise error message */
         if (devstat->cstat) {
-                printk(KERN_WARNING "%s: subchannel check for device: %04x - %02x\n", 
-                    dev->name, ctc->devno, devstat->cstat);
+                printk(KERN_WARNING "%s: subchannel check for device: %04x - %02x %02x %02x\n", 
+                    dev->name, ctc->devno, devstat->cstat, devstat->dstat, devstat->flag);
                 return;
         }
 
@@ -1245,6 +1248,8 @@ static void ctc_read_retry (struct channel *ctc)
 #ifdef DEBUG
         printk(KERN_DEBUG "%s: read retry - state-%02x\n" ,dev->name, ctc->state);
 #endif 
+        if (ctc->state == CTC_STOP)
+                return;
         s390irq_spin_lock_irqsave(ctc->irq, saveflags);
         ctc->ccw[1].cda  = (char *)virt_to_phys(ctc->free_anchor->block);
         parm = (__u32) ctc; 
@@ -1269,6 +1274,8 @@ static void ctc_write_retry (struct channel *ctc)
 #ifdef DEBUG
         printk(KERN_DEBUG "%s: write retry - state-%02x\n" ,dev->name, ctc->state);
 #endif 
+        if (ctc->state == CTC_STOP)
+                return;
         s390irq_spin_lock_irqsave(ctc->irq, saveflags);
         ctc->ccw[1].count = 0;
         ctc->ccw[1].cda  = (char *)virt_to_phys(ctc->proc_anchor->block);
@@ -1414,6 +1421,7 @@ static void ctc_timer (struct channel *ctc)
 static int ctc_release(net_device *dev)
 {   
         int                rc;
+        int                x; 
         int                i;
         int                j;
         __u8               flags = 0x00;
@@ -1429,6 +1437,7 @@ static int ctc_release(net_device *dev)
 	ctc_unprotect_busy_irqrestore(dev,flags);
         for (i = 0; i < 2;  i++) {
                 s390irq_spin_lock_irqsave(privptr->channel[i].irq, saveflags);
+                del_timer(&privptr->channel[READ].timer);  
                 privptr->channel[i].state = CTC_STOP;
                 parm = (__u32) &privptr->channel[i]; 
                 rc = halt_IO (privptr->channel[i].irq, parm, flags );

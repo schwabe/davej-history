@@ -483,6 +483,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( NVIDIA_SGS,	NVIDIA_SGS_RIVA128,	"Riva 128"),
 	DEVICE( CBOARDS,	CBOARDS_DAS1602_16,"DAS1602/16"),
 	DEVICE( MOTOROLA_OOPS,	MOTOROLA_FALCON,"Falcon"),
+	DEVICE( TIMEDIA,	TIMEDIA_4008A, "Noname 4008A"),
 	DEVICE( SYMPHONY,	SYMPHONY_101,	"82C101"),
 	DEVICE( TEKRAM,		TEKRAM_DC290,	"DC-290"),
 	DEVICE( 3DLABS,		3DLABS_300SX,	"GLINT 300SX"),
@@ -846,6 +847,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_PICTUREL:	return "Picture Elements";
 	      case PCI_VENDOR_ID_NVIDIA_SGS:	return "NVidia/SGS Thomson";
 	      case PCI_VENDOR_ID_CBOARDS:	return "ComputerBoards";
+	      case PCI_VENDOR_ID_TIMEDIA:	return "Timedia Technology";
 	      case PCI_VENDOR_ID_SYMPHONY:	return "Symphony";
 	      case PCI_VENDOR_ID_COMPUTONE:	return "Computone Corporation";
 	      case PCI_VENDOR_ID_TEKRAM:	return "Tekram";

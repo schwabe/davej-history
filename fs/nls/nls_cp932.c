@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/nls.h>
+#include <linux/init.h>
 
 static struct nls_unicode c2u_81[256] = {
 	{0x00, 0x3F}, {0x00, 0x3F}, {0x00, 0x3F}, {0x00, 0x3F}, /* 0x00-0x03 */
@@ -9809,7 +9810,7 @@ static struct nls_table table = {
 	NULL
 };
 
-int init_nls_cp932(void)
+int __init init_nls_cp932(void)
 {
 	return register_nls(&table);
 }
