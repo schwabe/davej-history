@@ -1453,11 +1453,11 @@ static void SCC_timer_int (int irq, void *data, struct pt_regs *fp)
 }
 
 
-/* DMA finished before timer occured?
+/* DMA finished before timer occurred?
  */
 static void SCC_dma_int (int irq, void *data, struct pt_regs *fp)
 {
-	printk ("SCC-A: DMA-INT occured, data lost!\n");
+	printk ("SCC-A: DMA-INT occurred, data lost!\n");
 #if 0
 	/* is there any reason why we should call this? if the timer INT was
 	 * delayed so long that this happened then this INT was delayed too, so

@@ -2,8 +2,8 @@
  *
  * Name:	skgepnmi.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.86 $
- * Date:	$Date: 2001/03/09 09:18:03 $
+ * Version:	$Revision: 1.87 $
+ * Date:	$Date: 2001/04/06 13:35:09 $
  * Purpose:	Private Network Management Interface
  *
  ****************************************************************************/
@@ -26,6 +26,9 @@
  * History:
  *
  *	$Log: skgepnmi.c,v $
+ *	Revision 1.87  2001/04/06 13:35:09  mkunz
+ *	-Bugs fixed in handling of OID_SKGE_MTU and the VPD OID's
+ *	
  *	Revision 1.86  2001/03/09 09:18:03  mkunz
  *	Changes in SK_DBG_MSG
  *	
@@ -359,7 +362,7 @@
 
 
 static const char SysKonnectFileId[] =
-	"@(#) $Id: skgepnmi.c,v 1.86 2001/03/09 09:18:03 mkunz Exp $"
+	"@(#) $Id: skgepnmi.c,v 1.87 2001/04/06 13:35:09 mkunz Exp $"
 	" (C) SysKonnect.";
 
 #include "h/skdrv1st.h"
@@ -1636,7 +1639,7 @@ int Level)		/* Initialization level */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to take
  *	                         the data.
  *	SK_PNMI_ERR_UNKNOWN_OID  The requested OID is unknown
@@ -1675,7 +1678,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -1719,7 +1722,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -1763,7 +1766,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to take
  *	                         the data.
  *	SK_PNMI_ERR_UNKNOWN_NET  The requested NetIndex doesn't exist 
@@ -1862,7 +1865,6 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 		TableIndex ++) {
 
 		InstanceNo = IdTable[TableIndex].InstanceNo;
-
 		for (InstanceCnt = 1; InstanceCnt <= InstanceNo;
 			InstanceCnt ++) {
 
@@ -1880,8 +1882,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 				IdTable[TableIndex].Id == OID_SKGE_VPD_ACCESS ||
 				IdTable[TableIndex].Id == OID_SKGE_VPD_ACTION) {
 
-				SK_PNMI_READ_U32(KeyArr[InstanceCnt - 1],
-					Instance);
+				SK_STRNCPY((char *)&Instance, KeyArr[InstanceCnt - 1], 4);
 			}
 			else {
 				Instance = (SK_U32)InstanceCnt;
@@ -1900,7 +1901,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 			 */
 			if (Ret == SK_PNMI_ERR_UNKNOWN_INST) {
 
-				break;
+                break;
 			}
 
 			if (Ret != SK_PNMI_ERR_OK) {
@@ -1943,7 +1944,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -1982,7 +1983,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -2933,7 +2934,7 @@ SK_U32 Id)		/* Object identifier to be searched */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -3001,7 +3002,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -3136,7 +3137,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -3279,7 +3280,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -3315,32 +3316,26 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 	PhysPortMax = pAC->GIni.GIMacsFound;
 	LogPortMax = SK_PNMI_PORT_PHYS2LOG(PhysPortMax);
 
+	if(pAC->Pnmi.DualNetActiveFlag == SK_TRUE){ /* Dual net mode */
+		LogPortMax--;
+	}
+
 	if ((Instance != (SK_U32)(-1))) { /* Only one specific instance is queried */
 		/* Check instance range */
-		if ((Instance < 1) || (Instance > LogPortMax)) { 
+		if ((Instance < 1) || (Instance > LogPortMax)) {
 
 			*pLen = 0;
 			return (SK_PNMI_ERR_UNKNOWN_INST);
 		}
 		LogPortIndex = SK_PNMI_PORT_INST2LOG(Instance);
-
-		if(pAC->Pnmi.DualNetActiveFlag == SK_TRUE){ /* Dual net mode */
-			LogPortMax--;
-			if(LogPortIndex >= LogPortMax) {
-				*pLen = 0;
-				return (SK_PNMI_ERR_UNKNOWN_INST);
-			}
-		} 
+		Limit = LogPortIndex + 1;
 	}
 
 	else { /* Instance == (SK_U32)(-1), get all Instances of that OID */
 
 		LogPortIndex = 0;
-		if(pAC->Pnmi.DualNetActiveFlag == SK_TRUE){ /* Dual net mode */
-			LogPortMax--;
-		}
+		Limit = LogPortMax;
 	}
-	Limit = LogPortMax;
 
 
 	/*
@@ -3432,7 +3427,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -3472,6 +3467,10 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 	PhysPortMax = pAC->GIni.GIMacsFound;
 	LogPortMax = SK_PNMI_PORT_PHYS2LOG(PhysPortMax);
 
+	if(pAC->Pnmi.DualNetActiveFlag == SK_TRUE){ /* Dual net mode */
+		LogPortMax--;
+	}
+
 	if ((Instance != (SK_U32)(-1))) { /* Only one specific instance is queried */
 		/* Check instance range */
 		if ((Instance < 1) || (Instance > LogPortMax)) {
@@ -3480,25 +3479,14 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 			return (SK_PNMI_ERR_UNKNOWN_INST);
 		}
 		LogPortIndex = SK_PNMI_PORT_INST2LOG(Instance);
-
-		if(pAC->Pnmi.DualNetActiveFlag == SK_TRUE){ /* Dual net mode */
-			LogPortMax--;
-			if(LogPortIndex >= LogPortMax) {
-				*pLen = 0;
-				return (SK_PNMI_ERR_UNKNOWN_INST);
-			}
-		}
+		Limit = LogPortIndex + 1;
 	}
 
 	else { /* Instance == (SK_U32)(-1), get all Instances of that OID */
 
 		LogPortIndex = 0;
-		if(pAC->Pnmi.DualNetActiveFlag == SK_TRUE){ /* Dual net mode */
-			LogPortMax--;
-		}
+		Limit = LogPortMax;
 	}
-	Limit = LogPortMax;
-
 
 	/*
 	 * Perform Action
@@ -3651,7 +3639,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -3770,7 +3758,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -4015,7 +4003,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -4058,7 +4046,6 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 	Ret = GetVpdKeyArr(pAC, IoC, &KeyArr[0][0], sizeof(KeyArr),
 		&KeyNo);
 	if (Ret != SK_PNMI_ERR_OK) {
-
 		*pLen = 0;
 		return (Ret);
 	}
@@ -4083,7 +4070,6 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 			for (Index = 0; Index < KeyNo; Index ++) {
 
 				if (SK_STRCMP(KeyStr, KeyArr[Index]) == 0) {
-
 					FirstIndex = Index;
 					LastIndex = Index+1;
 					break;
@@ -4496,7 +4482,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -5203,7 +5189,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -5512,7 +5498,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -5712,7 +5698,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -5754,6 +5740,10 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 	PhysPortMax = pAC->GIni.GIMacsFound;
 	LogPortMax = SK_PNMI_PORT_PHYS2LOG(PhysPortMax);
 
+	if(pAC->Pnmi.DualNetActiveFlag == SK_TRUE){ /* Dual net mode */
+		LogPortMax--;
+	}
+
 	if ((Instance != (SK_U32)(-1))) { /* Only one specific instance is queried */
 		/* Check instance range */
 		if ((Instance < 1) || (Instance > LogPortMax)) {
@@ -5762,25 +5752,14 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
 			return (SK_PNMI_ERR_UNKNOWN_INST);
 		}
 		LogPortIndex = SK_PNMI_PORT_INST2LOG(Instance);
-
-		if(pAC->Pnmi.DualNetActiveFlag == SK_TRUE){ /* Dual net mode */
-			LogPortMax--;
-			if(LogPortIndex >= LogPortMax) {
-				*pLen = 0;
-				return (SK_PNMI_ERR_UNKNOWN_INST);
-			}
-		}
+		Limit = LogPortIndex + 1;
 	}
 
 	else { /* Instance == (SK_U32)(-1), get all Instances of that OID */
 
 		LogPortIndex = 0;
-		if(pAC->Pnmi.DualNetActiveFlag == SK_TRUE){ /* Dual net mode */
-			LogPortMax--;
-		}
+		Limit = LogPortMax;
 	}
-	Limit = LogPortMax;
-
 
 	/*
 	 * Perform action
@@ -6383,7 +6362,7 @@ SK_U32 NetIndex)	/* NetIndex (0..n), in single net mode allways zero */
  *
  * Returns:
  *	SK_PNMI_ERR_OK           The request was successfully performed.
- *	SK_PNMI_ERR_GENERAL      A general severe internal error occured.
+ *	SK_PNMI_ERR_GENERAL      A general severe internal error occurred.
  *	SK_PNMI_ERR_TOO_SHORT    The passed buffer is too short to contain
  *	                         the correct data (e.g. a 32bit value is
  *	                         needed, but a 16 bit value was passed).
@@ -7385,7 +7364,7 @@ SK_U32 NetIndex)
  *
  * Description:
  *	The trap buffer stores various events. A user application somehow
- *	gets notified that an event occured and retrieves the trap buffer
+ *	gets notified that an event occurred and retrieves the trap buffer
  *	contens (or simply polls the buffer). The buffer is organized as
  *	a ring which stores the newest traps at the beginning. The oldest
  *	traps are overwritten by the newest ones. Each trap entry has a

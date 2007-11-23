@@ -877,7 +877,8 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCGSTAMP:
 			if(sk->stamp.tv_sec==0)
 				return -ENOENT;
-			err = copy_to_user((void *)arg,&sk->stamp,sizeof(struct timeval));
+			err = copy_to_user((void *)arg, &sk->stamp,
+					   sizeof(struct timeval));
 			if (err)
 				err = -EFAULT;
 			return err;

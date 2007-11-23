@@ -2,8 +2,8 @@
  *
  * Name:	skgeinit.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.62 $
- * Date:	$Date: 2001/02/07 07:54:21 $
+ * Version:	$Revision: 1.63 $
+ * Date:	$Date: 2001/04/05 11:02:09 $
  * Purpose:	Contains functions to initialize the GE HW
  *
  ******************************************************************************/
@@ -26,6 +26,9 @@
  * History:
  *
  *	$Log: skgeinit.c,v $
+ *	Revision 1.63  2001/04/05 11:02:09  rassmann
+ *	Stop Port check of the STOP bit did not take 2/18 sec as wanted.
+ *	
  *	Revision 1.62  2001/02/07 07:54:21  rassmann
  *	Corrected copyright.
  *	
@@ -297,7 +300,7 @@
 /* local variables ************************************************************/
 
 static const char SysKonnectFileId[] =
-	"@(#)$Id: skgeinit.c,v 1.62 2001/02/07 07:54:21 rassmann Exp $ (C) SK ";
+	"@(#)$Id: skgeinit.c,v 1.63 2001/04/05 11:02:09 rassmann Exp $ (C) SK ";
 
 struct s_QOffTab {
 	int	RxQOff;		/* Receive Queue Address Offset */
@@ -1216,10 +1219,10 @@ int		RstMode)/* Reset Mode (SK_SOFT_RST, SK_HARD_RST) */
 	SK_U16	Word;
 	SK_U32	XsCsr;
 	SK_U32	XaCsr;
-	int	i;
+	int		i;
 	SK_BOOL	AllPortsDis;
 	SK_U64	ToutStart;
-	int	ToutCnt;
+	int		ToutCnt;
 
 	pPrt = &pAC->GIni.GP[Port];
 
@@ -1244,7 +1247,7 @@ int		RstMode)/* Reset Mode (SK_SOFT_RST, SK_HARD_RST) */
 		do {
 			/*
 			 * Clear packet arbiter timeout to make sure
-			 * this loop will terminate
+			 * this loop will terminate.
 			 */
 			if (Port == MAC_1) {
 				Word = PA_CLR_TO_TX1;
@@ -1255,9 +1258,8 @@ int		RstMode)/* Reset Mode (SK_SOFT_RST, SK_HARD_RST) */
 			SK_OUT16(IoC, B3_PA_CTRL, Word);
 
 			/*
-			 * If the transfer stucks at the XMAC the STOP command
-			 * will not terminate if we don't flush the XMACs
-			 * transmit FIFO !
+			 * If the transfer stucks at the XMAC the STOP command will not
+			 * terminate if we don't flush the XMAC's transmit FIFO!
 			 */
 			XM_IN32(IoC, Port, XM_MODE, &DWord);
 			DWord |= XM_MD_FTF;
@@ -1266,7 +1268,7 @@ int		RstMode)/* Reset Mode (SK_SOFT_RST, SK_HARD_RST) */
 			XsCsr = TestStopBit(pAC, IoC, pPrt->PXsQOff);
 			XaCsr = TestStopBit(pAC, IoC, pPrt->PXaQOff);
 
-			if (ToutStart + (SK_TICKS_PER_SEC / 18) >= SkOsGetTime(pAC)) {
+			if (SkOsGetTime(pAC) - ToutStart > (SK_TICKS_PER_SEC / 18)) {
 				/*
 				 * Timeout of 1/18 second reached.
 				 * This needs to be checked at 1/18 sec only.
@@ -1275,9 +1277,8 @@ int		RstMode)/* Reset Mode (SK_SOFT_RST, SK_HARD_RST) */
 				switch (ToutCnt) {
 				case 1:
 					/*
-					 * Cache Incoherency workaround:
-					 * Assume a start command has been 
-					 * lost while sending the frame. 
+					 * Cache Incoherency workaround: Assume a start command
+					 * has been lost while sending the frame. 
 					 */
 					ToutStart = SkOsGetTime(pAC);
 					if (XsCsr & CSR_STOP) {
@@ -1293,6 +1294,7 @@ int		RstMode)/* Reset Mode (SK_SOFT_RST, SK_HARD_RST) */
 					 * calls StopPort again.
 					 * XXX.
 					 */
+
 					/* Fatal Error, Loop aborted */
 					/* Create an Error Log Entry */
 					SK_ERR_LOG(
@@ -1308,12 +1310,12 @@ int		RstMode)/* Reset Mode (SK_SOFT_RST, SK_HARD_RST) */
 				}
 			}
 
-		/*
-		 * Because of the ASIC problem report entry from 21.08.1998 it is
-		 * required to wait until CSR_STOP is reset and CSR_SV_IDLE is set.
-		 */
-		} while ((XsCsr & (CSR_STOP|CSR_SV_IDLE)) != CSR_SV_IDLE ||
-			 (XaCsr & (CSR_STOP|CSR_SV_IDLE)) != CSR_SV_IDLE);
+			/*
+			 * Because of the ASIC problem report entry from 21.08.1998 it is
+			 * required to wait until CSR_STOP is reset and CSR_SV_IDLE is set.
+			 */
+		} while ((XsCsr & (CSR_STOP | CSR_SV_IDLE)) != CSR_SV_IDLE ||
+			 (XaCsr & (CSR_STOP | CSR_SV_IDLE)) != CSR_SV_IDLE);
 
 		/* reset the XMAC depending on the RstMode */
 		if (RstMode == SK_SOFT_RST) {
@@ -1380,13 +1382,13 @@ int		RstMode)/* Reset Mode (SK_SOFT_RST, SK_HARD_RST) */
 				i--;
 			}
 
-		/* finish if CSR_STOP is done or CSR_SV_IDLE is true and i==0 */
-		/*
-		 * because of the ASIC problem report entry from 21.08.98
-		 * it is required to wait until CSR_STOP is reset and
-		 * CSR_SV_IDLE is set.
-		 */
-		} while ((DWord & (CSR_STOP|CSR_SV_IDLE)) != CSR_SV_IDLE &&
+			/* finish if CSR_STOP is done or CSR_SV_IDLE is true and i==0 */
+			/*
+			 * because of the ASIC problem report entry from 21.08.98
+			 * it is required to wait until CSR_STOP is reset and
+			 * CSR_SV_IDLE is set.
+			 */
+		} while ((DWord & (CSR_STOP | CSR_SV_IDLE)) != CSR_SV_IDLE &&
 			((DWord & CSR_SV_IDLE) == 0 || i != 0));
 
 		/* The path data transfer activity is fully stopped now. */

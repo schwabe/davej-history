@@ -797,9 +797,9 @@
       commandline parameter is added, called 'activity'.
    2) Added the READ_CONTROL bit for test_unit_ready SCSI-command.
    3) Added some suppress_exception bits to read_device_capacity and
-      all device_inquiry occurences in the driver code.
+      all device_inquiry occurrences in the driver code.
    4) Complaints about the various KERNEL_VERSION implementations are
-      taken into account. Every local_LinuxKernelVersion occurence is
+      taken into account. Every local_LinuxKernelVersion occurrence is
       now replaced by KERNEL_VERSION, defined in linux/version.h. 
       Corresponding changes were applied to ibmmca.h, too. This was a
       contribution to all kernel-parts by Philipp Hahn.

@@ -239,7 +239,7 @@ static void envctrl_i2c_test_bb(void)
 		printk(KERN_INFO "envctrl: Busy bit will not clear.\n");
 }
 
-/* Function Description: Send the adress for a read access.
+/* Function Description: Send the address for a read access.
  * Return : 0 if not acknowledged, otherwise acknowledged.
  */
 static int envctrl_i2c_read_addr(unsigned char addr)
@@ -265,7 +265,7 @@ static int envctrl_i2c_read_addr(unsigned char addr)
 	}
 }
 
-/* Function Description: Send the adress for write mode.  
+/* Function Description: Send the address for write mode.  
  * Return : None.
  */
 static void envctrl_i2c_write_addr(unsigned char addr)

@@ -34,7 +34,7 @@ Linux 2.4test:
 	This kernel tree is under active development. The same rules apply
 	as 2.2 but you may wish to submit your driver via linux-kernel (see
 	resources) and follow that list to track changes in API's. These
-	should no longer be occuring as we are now in a code freeze.
+	should no longer be occurring as we are now in a code freeze.
 	The final contact point for Linux 2.4 submissions is 	
 	<torvalds@transmeta.com>.
 

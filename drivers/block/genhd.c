@@ -336,7 +336,8 @@ static void extended_partition(struct gendisk *hd, kdev_t dev, int sector_size)
 			goto done;	 /* nothing left to do */
 
 		hd->part[current_minor].nr_sects = NR_SECTS(p) * sector_size; /* JSt */
-		hd->part[current_minor].start_sect = first_sector + START_SECT(p) * sector_size;
+		hd->part[current_minor].start_sect =
+			first_sector + START_SECT(p) * sector_size;
 		this_sector = first_sector + START_SECT(p) * sector_size;
 		dev = MKDEV(hd->major, current_minor);
 		brelse(bh);

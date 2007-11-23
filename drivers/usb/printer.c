@@ -460,7 +460,7 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 	struct usb_endpoint_descriptor *epread, *epwrite;
 	struct usblp *usblp;
 	int minor, i, bidir = 0, quirks;
-	int alts = dev->actconfig->interface[ifnum].act_altsetting;
+	int alts = -1;
 	int length, err;
 	char *buf;
 
@@ -474,12 +474,18 @@ static void *usblp_probe(struct usb_device *dev, unsigned int ifnum)
 		   (interface->bInterfaceProtocol > 1 && interface->bNumEndpoints < 2))
 			continue;
 
+		if (alts == -1)
+			alts = i;
+
 		if (interface->bInterfaceProtocol > 1) {
 			bidir = 1;
 			alts = i;
 			break;
 		}
 	}
+
+	if (alts == -1)
+		return NULL;
 
 	interface = &dev->actconfig->interface[ifnum].altsetting[alts];
 	if (usb_set_interface(dev, ifnum, alts))

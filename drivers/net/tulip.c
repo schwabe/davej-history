@@ -2742,7 +2742,8 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					(tp->link_change)(dev, csr5);
 			}
 			if (csr5 & SytemError) {
-				printk(KERN_ERR "%s: (%lu) System Error occured\n", dev->name, tp->nir);
+				printk(KERN_ERR "%s: (%lu) System Error occurred\n",
+				       dev->name, tp->nir);
 			}
 			/* Clear all error sources, included undocumented ones! */
 			outl(0x0800f7ba, ioaddr + CSR5);

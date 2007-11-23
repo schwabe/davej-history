@@ -109,7 +109,7 @@ pmac_pci_dev_root_bridge(unsigned char bus, unsigned char dev_fn)
 	bridge_node = NULL;
 	node = find_pci_device_OFnode(bus, dev_fn & 0xf8);
 	if (node) {
-	    /* note: we don't stop on the first occurence since we need to go
+	    /* note: we don't stop on the first occurrence since we need to go
              * up to the root bridge */
 	    do {
 		if (node->type && !strcmp(node->type, "pci") 

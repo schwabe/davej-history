@@ -953,7 +953,7 @@ static int pc_write(struct tty_struct * tty, int from_user,
 					Remember copy_from_user WILL generate a page fault if the
 					user memory being accessed has been swapped out.  This can
 					cause this routine to temporarily sleep while this page
-					fault is occuring.
+					fault is occurring.
 				
 				----------------------------------------------------------------- */
 
@@ -3601,7 +3601,7 @@ static void pc_start(struct tty_struct *tty)
 /* ------------------------------------------------------------------
 	The below routines pc_throttle and pc_unthrottle are used 
 	to slow (And resume) the receipt of data into the kernels
-	receive buffers.  The exact occurence of this depends on the
+	receive buffers.  The exact occurrence of this depends on the
 	size of the kernels receive buffer and what the 'watermarks'
 	are set to for that buffer.  See the n_ttys.c file for more
 	details. 

@@ -216,8 +216,8 @@ struct floppy_drive_struct {
 	/* Prevent "aliased" accesses. */
 	int fd_ref;
 	int fd_device;
-	unsigned long last_checked; /* when was the drive last checked for a disk 
-			   * change? */
+	unsigned long last_checked; /* when was the drive last checked
+				     * for a disk change? */
 	
 	char *dmabuf;
 	int bufblocks;

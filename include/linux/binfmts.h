@@ -32,6 +32,8 @@ struct linux_binprm{
 	int priv_change;
 };
 
+struct file;
+
 /*
  * This structure defines the functions that are used to load the binary formats that
  * linux accepts.
@@ -41,9 +43,11 @@ struct linux_binfmt {
 	struct module *module;
 	int (*load_binary)(struct linux_binprm *, struct  pt_regs * regs);
 	int (*load_shlib)(int fd);
-	int (*core_dump)(long signr, struct pt_regs * regs);
+	int (*core_dump)(long signr, struct pt_regs * regs, struct file *file);
+	unsigned long min_coredump;
 };
 
+extern int do_coredump(long, struct pt_regs *);
 extern int register_binfmt(struct linux_binfmt *);
 extern int unregister_binfmt(struct linux_binfmt *);
 

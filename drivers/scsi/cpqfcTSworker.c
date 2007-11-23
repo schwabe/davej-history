@@ -421,7 +421,7 @@ void cpqfcTS_WorkTask( struct Scsi_Host *HostAdapter)
     
 //      printk(" *ELS %Xh* ", fcLQ->Qitem[QconsumerNdx].Type);
       // if PortDiscDone is not set, it means the SendLogins routine
-      // failed to complete -- assume that LDn occured, so login frames
+      // failed to complete -- assume that LDn occurred, so login frames
       // are invalid
       if( !cpqfcHBAdata->PortDiscDone) // cleared by LDn
       {

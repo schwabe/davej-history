@@ -36,11 +36,11 @@
  
 static const char SysKonnectFileId[] = "@(#)" __FILE__ " (C) SysKonnect GmbH.";
 static const char SysKonnectBuildNumber[] =
-	"@(#)SK-BUILD: 4.03 PL: 01"; 
+	"@(#)SK-BUILD: 4.07 PL: 01"; 
 
-#define BOOT_STRING	"sk98lin: Network Device Driver v4.03\n" \
+#define BOOT_STRING	"sk98lin: Network Device Driver v4.07\n" \
 			"Copyright (C) 2000-2001 SysKonnect GmbH."
 
-#define VER_STRING	"4.03"
+#define VER_STRING	"4.07"
 
 

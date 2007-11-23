@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.38.2.1 1999/06/14 00:36:21 davem Exp $
+/*  $Id: signal.c,v 1.38.2.2 2001/06/18 12:26:13 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -918,12 +918,8 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
 			case SIGABRT: case SIGFPE: case SIGSEGV: case SIGBUS:
-				if(current->binfmt && current->binfmt->core_dump) {
-					lock_kernel();
-					if(current->binfmt->core_dump(signr, regs))
-						exit_code |= 0x80;
-					unlock_kernel();
-				}
+				if (do_coredump(signr, regs))
+					exit_code |= 0x80;
 #ifdef DEBUG_SIGNALS
 				/* Very useful to debug the dynamic linker */
 				printk ("Sig %d going...\n", (int)signr);

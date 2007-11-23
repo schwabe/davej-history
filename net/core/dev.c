@@ -2105,7 +2105,7 @@ __initfunc(int net_dev_init(void))
 #ifdef CONFIG_PC300
 	cpc_init();
 #endif
-#ifdef CONFIG_HDLC
+#ifdef CONFIG_SYNCPPP
 	sync_ppp_init();
 #endif
 

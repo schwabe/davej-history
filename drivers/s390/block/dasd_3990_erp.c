@@ -986,7 +986,7 @@ dasd_3990_erp_error_match (ccw_req_t * cqr1,
  *
  * RETURN VALUES
  *   erp                erp-pointer to the already defined error recovery procedure OR
- *                      NULL if a 'new' error occured.
+ *                      NULL if a 'new' error occurred.
  */
 ccw_req_t *
 dasd_3990_erp_in_erp (ccw_req_t * cqr)
@@ -1068,7 +1068,7 @@ dasd_3990_erp_further_erp (ccw_req_t * erp)
  * DASD_3990_ERP_HANDLE_MATCH_ERP 
  *
  * DESCRIPTION
- *   An error occured again and an ERP has been detected which is already
+ *   An error occurred again and an ERP has been detected which is already
  *   used to handle this error (e.g. retries). 
  *   All prior ERP's are set to status DONE and the retry counter is
  *   decremented.

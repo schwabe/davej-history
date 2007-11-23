@@ -609,7 +609,7 @@ smb_retry(struct smb_sb_info *server)
 	 * Check for a valid connection.
 	 */
 	if (server->state == CONN_VALID) {
-		PARANOIA("sucessful, new pid=%d, generation=%d\n",
+		PARANOIA("successful, new pid=%d, generation=%d\n",
 			 server->conn_pid, server->generation);
 		result = 1;
 	}

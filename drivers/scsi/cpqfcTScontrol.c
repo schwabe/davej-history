@@ -553,7 +553,7 @@ int CpqTsInitializeFrameManager( void *pChip, int opcode)
 
 
 
-// This "look ahead" function examines the IMQ for occurence of
+// This "look ahead" function examines the IMQ for occurrence of
 // "type".  Returns 1 if found, 0 if not.
 static int PeekIMQEntry( PTACHYON fcChip, ULONG type)
 {
@@ -1204,7 +1204,7 @@ int CpqTsProcessIMQEntry(void *host)
           // open Login exchanges, in case the LinkDown happened in the
           // middle of logins.  It's possible that some ports already
           // ACCepted login commands which we have not processed before
-          // another LinkDown occured.  Any accepted Login exhanges are
+          // another LinkDown occurred.  Any accepted Login exhanges are
           // invalidated by LinkDown, even before they are acknowledged.
           // It's also possible for a port to have a Queued Reply or Request
           // for login which was interrupted by LinkDown; it may come later,

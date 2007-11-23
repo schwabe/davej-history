@@ -33,20 +33,20 @@
  * I have also done a look in the following sources: (mail me if you need them)
  *   crynwr-packet-driver by Russ Nelson
  *   Garret A. Wollman's (fourth) i82586-driver for BSD
- *   (before getting an i82596 (yes 596 not 586) manual, the existing drivers helped
- *    me a lot to understand this tricky chip.)
+ *   (before getting an i82596 (yes 596 not 586) manual, the existing drivers
+ *    helped me a lot to understand this tricky chip.)
  *
  * Known Problems:
  *   The internal sysbus seems to be slow. So we often lose packets because of
  *   overruns while receiving from a fast remote host.
- *   This can slow down TCP connections. Maybe the newer ni5210 cards are better.
- *   my experience is, that if a machine sends with more then about 500-600K/s
- *   the fifo/sysbus overflows.
+ *   This can slow down TCP connections. Maybe the newer ni5210 cards are
+ *   better.  My experience is, that if a machine sends with more than
+ *   about 500-600K/s the fifo/sysbus overflows.
  *
  * IMPORTANT NOTE:
  *   On fast networks, it's a (very) good idea to have 16K shared memory. With
- *   8K, we can store only 4 receive frames, so it can (easily) happen that a remote
- *   machine 'overruns' our system.
+ *   8K, we can store only 4 receive frames, so it can (easily) happen that a
+ *   remote machine 'overruns' our system.
  *
  * Known i82586/card problems (I'm sure, there are many more!):
  *   Running the NOP-mode, the i82586 sometimes seems to forget to report
@@ -60,7 +60,8 @@
  *
  * results from ftp performance tests with Linux 1.2.5
  *   send and receive about 350-400 KByte/s (peak up to 460 kbytes/s)
- *   sending in NOP-mode: peak performance up to 530K/s (but better don't run this mode)
+ *   sending in NOP-mode: peak performance up to 530K/s (but better
+ *   don't run this mode)
  */
 
 /*

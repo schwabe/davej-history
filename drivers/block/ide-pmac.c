@@ -97,7 +97,7 @@ static pmac_ide_timing udma_timings[] =
 /* Wait 2s for disk to answer on IDE bus after
  * enable operation.
  * NOTE: There is at least one case I know of a disk that needs about 10sec
- *       before anwering on the bus. I beleive we could add a kernel command
+ *       before anwering on the bus. I believe we could add a kernel command
  *       line arg to override this delay for such cases.
  */
 #define IDE_WAKEUP_DELAY_MS	2000
@@ -192,9 +192,10 @@ pmac_ide_get_devnode(ide_drive_t *drive)
 }
 #endif
 
-/* Setup timings for the selected drive (master/slave). I still need to verify if this
- * is enough, I beleive selectproc will be called whenever an IDE command is started,
- * but... */
+/* Setup timings for the selected drive (master/slave). I still need to
+ * verify if this is enough, I believe selectproc will be called whenever
+ * an IDE command is started, but...
+ */
 static void
 pmac_ide_selectproc(ide_drive_t *drive)
 {

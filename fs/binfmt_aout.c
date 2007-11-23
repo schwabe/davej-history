@@ -31,16 +31,16 @@
 
 static int load_aout_binary(struct linux_binprm *, struct pt_regs * regs);
 static int load_aout_library(int fd);
-static int aout_core_dump(long signr, struct pt_regs * regs);
+static int aout_core_dump(long signr, struct pt_regs * regs, struct file *);
 
 extern void dump_thread(struct pt_regs *, struct user *);
 
 static struct linux_binfmt aout_format = {
-#ifndef MODULE
-	NULL, NULL, load_aout_binary, load_aout_library, aout_core_dump
-#else
-	NULL, &__this_module, load_aout_binary, load_aout_library, aout_core_dump
-#endif
+	module:		THIS_MODULE,
+	load_binary:	load_aout_binary,
+	load_shlib:	load_aout_library,
+	core_dump:	aout_core_dump,
+	min_coredump:	PAGE_SIZE,
 };
 
 static void set_brk(unsigned long start, unsigned long end)
@@ -88,15 +88,11 @@ if (file->f_op->llseek) { \
  * dumping of the process results in another error..
  */
 
-static inline int
-do_aout_core_dump(long signr, struct pt_regs * regs)
+static int
+aout_core_dump(long signr, struct pt_regs * regs, struct file * file)
 {
-	struct dentry * dentry = NULL;
-	struct inode * inode = NULL;
-	struct file * file;
 	mm_segment_t fs;
 	int has_dumped = 0;
-	char corefile[6+sizeof(current->comm)];
 	unsigned long dump_start, dump_size;
 	struct user dump;
 #if defined(__alpha__)
@@ -112,32 +108,8 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 #       define START_STACK(u)   (u.start_stack)
 #endif
 
-	if (!current->dumpable || atomic_read(&current->mm->count) != 1)
-		return 0;
-	current->dumpable = 0;
-
-/* See if we have enough room to write the upage.  */
-	if (current->rlim[RLIMIT_CORE].rlim_cur < PAGE_SIZE)
-		return 0;
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-	memcpy(corefile,"core.",5);
-#if 0
-	memcpy(corefile+5,current->comm,sizeof(current->comm));
-#else
-	corefile[4] = '\0';
-#endif
-	file = filp_open(corefile,O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
-	if (IS_ERR(file))
-		goto end_coredump;
-	dentry = file->f_dentry;
-	inode = dentry->d_inode;
-	if (!S_ISREG(inode->i_mode))
-		goto close_coredump;
-	if (!inode->i_op || !inode->i_op->default_file_ops)
-		goto close_coredump;
-	if (!file->f_op->write)
-		goto close_coredump;
 	has_dumped = 1;
 	current->flags |= PF_DUMPCORE;
        	strncpy(dump.u_comm, current->comm, sizeof(current->comm));
@@ -217,21 +189,8 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 	set_fs(KERNEL_DS);
 	DUMP_WRITE(current,sizeof(*current));
 close_coredump:
-	filp_close(file, NULL);
-end_coredump:
 	set_fs(fs);
 	return has_dumped;
-}
-
-static int
-aout_core_dump(long signr, struct pt_regs * regs)
-{
-	int retval;
-
-	MOD_INC_USE_COUNT;
-	retval = do_aout_core_dump(signr, regs);
-	MOD_DEC_USE_COUNT;
-	return retval;
 }
 
 /*

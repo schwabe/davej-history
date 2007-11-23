@@ -2,9 +2,9 @@
 All rights reserved
 ===========================================================================
 
-sk98lin.txt created 27-Mar-2001
+sk98lin.txt created 07-Jun-2001
 
-Readme File for sk98lin v4.03
+Readme File for sk98lin v4.07
 SK-NET Gigabit Ethernet PCI driver for LINUX
 
 This file contains

@@ -711,10 +711,10 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 }
 
 /*
- * a page-table entry has only 19 bit for offset and 7 bit for type
- * if bits 0, 20 or 23 are set, a translation specification exceptions occures, and it's
- * hard to find out the failing address
- * therefor, we zero out this bits
+ * a page-table entry has only 19 bits for offset and 7 bits for type
+ * if bits 0, 20 or 23 are set, a translation specification exception occurs,
+ * and it's hard to find out the failing address
+ * therefore, we zero out these bits
  */
 
 #define SWP_TYPE(entry) (((entry) >> 1) & 0x3f)

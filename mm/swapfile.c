@@ -448,7 +448,7 @@ int get_swaparea_info(char *buf)
 
 	len += sprintf(buf, "Filename\t\t\tType\t\tSize\tUsed\tPriority\n");
 	for (i = 0 ; i < nr_swapfiles ; i++, ptr++) {
-		if (ptr->flags & SWP_USED) {
+		if ((ptr->flags & SWP_USED) && ptr->swap_map) {
 			char * path = d_path(ptr->swap_file, page, PAGE_SIZE);
 
 			len += sprintf(buf + len, "%-31s ", path);

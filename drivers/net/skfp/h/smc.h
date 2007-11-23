@@ -297,7 +297,7 @@ struct s_srf {
 #define RS_NORINGOP	(1<< 5)			/* no ring op */
 #define RS_VERSION	(1<< 4)			/* SMT version mismatch */
 #define RS_STUCKBYPASSS	(1<< 3)			/* stuck bypass */
-#define RS_EVENT	(1<< 2)			/* FDDI event occured */
+#define RS_EVENT	(1<< 2)			/* FDDI event occurred */
 #define RS_RINGOPCHANGE	(1<< 1)			/* ring op changed */
 #define RS_RES0		(1<< 0)			/* reserved */
 
@@ -320,7 +320,7 @@ struct s_srf_evc {
 	u_char	evc_rep_required ;		/* report required */
 	u_short	evc_para ;			/* SMT Para Number */
 	u_char	*evc_cond_state ;		/* condition state */
-	u_char	*evc_multiple ;			/* multiple occurence */
+	u_char	*evc_multiple ;			/* multiple occurrence */
 } ;
 
 /*

@@ -242,7 +242,7 @@ __initfunc(int ip_masq_vdolive_init(void))
 						      ports[i]))) {
 				return j;
 			}
-			IP_MASQ_DEBUG(1-debug, "RealAudio: loaded support on port[%d] = %d\n", i, ports[i]);
+			IP_MASQ_DEBUG(1-debug, "VDOlive: loaded support on port[%d] = %d\n", i, ports[i]);
 		} else {
 			/* To be safe, force the incarnation table entry to NULL */
 			masq_incarnations[i] = NULL;

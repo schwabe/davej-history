@@ -758,7 +758,7 @@ static inline unsigned short sbni_recv(struct device *dev)
 					 */
 					DP( printk("%s: sbni_recv SendComplete\n",dev->name); );
 					/*
-					 *	We sucessfully sent current packet
+					 *	We successfully sent current packet
 					 */
 	      
 					if(lp->waitack)

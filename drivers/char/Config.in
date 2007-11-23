@@ -53,8 +53,8 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
      tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION
      tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION
    fi
-   dep_tristate 'Microgate SyncLink card support' CONFIG_SYNCLINK m
-   dep_tristate 'HDLC line discipline support' CONFIG_N_HDLC m
+   tristate 'Microgate SyncLink card support' CONFIG_SYNCLINK
+   tristate 'HDLC line discipline support' CONFIG_N_HDLC
 fi
 bool 'Unix98 PTY support' CONFIG_UNIX98_PTYS
 if [ "$CONFIG_UNIX98_PTYS" = "y" ]; then

@@ -292,8 +292,8 @@ static int hippi_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
 void ether_setup(struct device *dev)
 {
 	int i;
-	/* Fill in the fields of the device structure with ethernet-generic values.
-	   This should be in a common file instead of per-driver.  */
+	/* Fill in the fields of the device structure with
+	   ethernet-generic values. */
 	
 	/* register boot-defined "eth" devices */
 	if (dev->name && (strncmp(dev->name, "eth", 3) == 0)) {

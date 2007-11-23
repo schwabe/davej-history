@@ -69,7 +69,7 @@ start:
 ! SETUP-header, must start at CS:2 (old 0x9020:2)
 !
 		.ascii	"HdrS"		! Signature for SETUP-header
-		.word	0x0201		! Version number of header format
+		.word	0x0202		! Version number of header format
 					! (must be >= 0x0105
 					! else old loadlin-1.5 will fail)
 realmode_swtch:	.word	0,0		! default_switch,SETUPSEG
@@ -120,9 +120,28 @@ ramdisk_image:	.long	0	! address of loaded ramdisk image
 ramdisk_size:	.long	0	! its size in bytes
 bootsect_kludge:
 		.word   bootsect_helper,SETUPSEG
-heap_end_ptr:	.word	modelist+1024	! space from here (exclusive) down to
-				! end of setup code can be used by setup
-				! for local heap purposes.
+heap_end_ptr:	.word	modelist+1024	! (Header version 0x0201 or later)
+					! space from here (exclusive) down to
+					! end of setup code can be used by setup
+					! for local heap purposes.
+
+pad1:		.word 0			! Reserved for future use
+
+cmd_line_ptr:	.long 0			! (Header version 0x0202 or later)
+					! If nonzero, a 32-bit pointer
+					! to the kernel command line.
+					! The command line should be
+					! located between the start of
+					! setup and the end of low
+					! memory (0xa0000), or it may
+					! get overwritten before it
+					! gets read.  If this field is
+					! used, there is no longer
+					! anything magical about the
+					! 0x90000 segment; the setup
+					! can be located anywhere in
+					! low memory 0x10000 or higher.
+	
 ! ------------------------ end of header ----------------------------------
 
 start_of_setup:
@@ -534,6 +553,13 @@ end_move:
 	mov	ax,cs ! aka #SETUPSEG	! right, forgot this at first. didn't work :-)
 	mov	ds,ax
 
+! Check whether we need to be downward compatible with version <= 0x0201
+	cmp	dword ptr [cmd_line_ptr],#0
+	jne	end_move_self
+	cmp	byte ptr [type_of_loader],#0x20
+	je	end_move_self
+
+! Boot loader does not support boot protocol version 2.02.
 ! If we have our code not at 0x90000, we need to move it there now.
 ! We also then need to move the parameters behind it (command line)
 ! Because we would overwrite the code on the current IP, we move
@@ -572,9 +598,14 @@ move_self_here:
 	mov	ds,ax
 	mov	ss,dx
 			! now we are at the right place
-end_move_self:
 
+end_move_self:
 	lidt	idt_48		! load idt with 0,0
+	xor	eax,eax
+	mov	ax,ds
+	shl	eax,#4
+	add	eax,#gdt
+	mov	[gdt_48+2],eax
 	lgdt	gdt_48		! load gdt with whatever appropriate
 
 ! that was painless, now we enable A20
@@ -679,7 +710,11 @@ a20_wait:
 	jmp	flush_instr
 flush_instr:
 	xor	bx,bx		! Flag to indicate a boot
-
+	xor	esi,esi		! Pointer to real-mode code
+	mov	si,cs
+	sub	si,#DELTA_INITSEG
+	shl	esi,#4		! Convert to 32-bit pointer
+	
 ! NOTE: For high loaded big kernels we need a
 !	jmpi    0x100000,__KERNEL_CS
 !
@@ -873,7 +908,7 @@ idt_48:
 
 gdt_48:
 	.word	0x800		! gdt limit=2048, 256 GDT entries
-	.word	512+gdt,0x9	! gdt base = 0X9xxxx
+	.word	0, 0		! gdt base (filled in later)
 
 !
 ! Include video setup & detection code

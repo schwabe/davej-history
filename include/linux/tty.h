@@ -364,6 +364,8 @@ extern int riscom8_init(void);
 extern int specialix_init(void);
 extern int espserial_init(void);
 extern int macserial_init(void);
+extern int mgsl_init(void);
+extern int n_hdlc_init(void);
 
 extern int tty_paranoia_check(struct tty_struct *tty, kdev_t device,
 			      const char *routine);

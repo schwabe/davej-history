@@ -65,11 +65,8 @@ static void entry_proc_cleanup(Node *e);
 static int entry_proc_setup(Node *e);
 
 static struct linux_binfmt misc_format = {
-#ifndef MODULE
-	NULL, 0, load_misc_binary, NULL, NULL
-#else
-	NULL, &__this_module, load_misc_binary, NULL, NULL
-#endif
+	module:		THIS_MODULE,
+	load_binary:	load_misc_binary,
 };
 
 static struct proc_dir_entry *bm_dir = NULL;

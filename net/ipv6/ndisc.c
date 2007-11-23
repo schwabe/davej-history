@@ -364,17 +364,7 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
         struct nd_msg *msg;
         int len;
 	int err;
-
-	len = sizeof(struct icmp6hdr) + sizeof(struct in6_addr);
-	if (dev->addr_len)
-		len += NDISC_OPT_SPACE(dev->addr_len);
-
-	skb = sock_alloc_send_skb(sk, MAX_HEADER + len + dev->hard_header_len + 15,
-				  0, 0, &err);
-	if (skb == NULL) {
-		ND_PRINTK1("send_ns: alloc skb failed\n");
-		return;
-	}
+	int send_llinfo;
 
 	if (saddr == NULL) {
 		struct inet6_ifaddr *ifa;
@@ -384,7 +374,22 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 
 		if (ifa)
 			saddr = &ifa->addr;
+		else
+			return;
 	}
+
+	len = sizeof(struct icmp6hdr) + sizeof(struct in6_addr);
+	send_llinfo = dev->addr_len && ipv6_addr_type(saddr) != IPV6_ADDR_ANY;
+	if (send_llinfo)
+		len += NDISC_OPT_SPACE(dev->addr_len);
+
+	skb = sock_alloc_send_skb(sk, MAX_HEADER + len + dev->hard_header_len + 15,
+				  0, 0, &err);
+	if (skb == NULL) {
+		ND_PRINTK1("send_ns: alloc skb failed\n");
+		return;
+	}
+
 
 	if (ndisc_build_ll_hdr(skb, dev, daddr, neigh, len) == 0) {
 		kfree_skb(skb);
@@ -402,7 +407,7 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 	/* Set the target address. */
 	ipv6_addr_copy(&msg->target, solicit);
 
-	if (dev->addr_len)
+	if (send_llinfo)
 		ndisc_fill_option((void*)&msg->opt, ND_OPT_SOURCE_LL_ADDR, dev->dev_addr, dev->addr_len);
 
 	/* checksum */

@@ -242,8 +242,8 @@ openpic_init(int main_pic)
 			    openpic_mapirq(i, 1<<0);
 			}
 		} else {
-			/* Prevent any interrupt from occuring during initialisation.
-			 * Hum... I beleive this is not necessary, Apple does that in
+			/* Prevent any interrupt from occurring during initialisation.
+			 * Hum... I believe this is not necessary, Apple does that in
 			 * Darwin's PowerExpress code.
 			 */
 			openpic_set_priority(0, 0xf);

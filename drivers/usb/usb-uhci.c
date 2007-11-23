@@ -2297,7 +2297,7 @@ _static int process_interrupt (uhci_t *s, urb_t *urb)
 			usb_endpoint_halt (urb->dev, usb_pipeendpoint (urb->pipe), usb_pipeout (urb->pipe));
 		}
 
-		// if any error occured: ignore this td, and continue
+		// if any error occurred: ignore this td, and continue
 		if (status != 0) {
 			//uhci_show_td (desc);
 			urb->error_count++;

@@ -702,7 +702,7 @@ void d_rehash(struct dentry * entry)
  * Note that we have to be a lot more careful about getting the hash
  * switched - we have to switch the hash value properly even if it
  * then no longer matches the actual (corrupted) string of the target.
- * The has value has to match the hash queue that the dentry is on..
+ * The hash value has to match the hash queue that the dentry is on..
  */
 static inline void switch_names(struct dentry * dentry, struct dentry * target)
 {
@@ -829,7 +829,7 @@ asmlinkage int sys_getcwd(char *buf, unsigned long size)
 	struct dentry *pwd = current->fs->pwd; 
 
 	error = -ENOENT;
-	/* Has the current directory has been unlinked? */
+	/* Has the current directory been unlinked? */
 	if (pwd->d_parent == pwd || !list_empty(&pwd->d_hash)) {
 		char *page = (char *) __get_free_page(GFP_USER);
 		error = -ENOMEM;

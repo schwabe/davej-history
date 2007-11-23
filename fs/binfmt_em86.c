@@ -103,11 +103,8 @@ static int load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 }
 
 struct linux_binfmt em86_format = {
-#ifndef MODULE
-	NULL, 0, load_em86, NULL, NULL
-#else
-	NULL, &__this_module, load_em86, NULL, NULL
-#endif
+	module:		THIS_MODULE,
+	load_binary:	load_em86,
 };
 
 int __init init_em86_binfmt(void)

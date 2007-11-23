@@ -184,12 +184,20 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_SYNCLINK),m)
+ifeq ($(CONFIG_SYNCLINK),y)
+O_OBJS += synclink.o
+else
+  ifeq ($(CONFIG_SYNCLINK),m)
   M_OBJS += synclink.o
+  endif
 endif
 
-ifeq ($(CONFIG_N_HDLC),m)
+ifeq ($(CONFIG_N_HDLC),y)
+O_OBJS += n_hdlc.o
+else
+  ifeq ($(CONFIG_N_HDLC),m)
   M_OBJS += n_hdlc.o
+  endif
 endif
 
 ifeq ($(CONFIG_SPECIALIX),y)

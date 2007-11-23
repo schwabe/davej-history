@@ -4835,7 +4835,7 @@ ips_init_copperhead(ips_ha_t *ha) {
       }
 
       if (j >= 45)
-         /* error occured */
+         /* error occurred */
          return (0);
 
       PostByte[i] = inb(ha->io_addr + IPS_REG_ISPR);
@@ -4859,7 +4859,7 @@ ips_init_copperhead(ips_ha_t *ha) {
       }
 
       if (j >= 240)
-         /* error occured */
+         /* error occurred */
          return (0);
 
       ConfigByte[i] = inb(ha->io_addr + IPS_REG_ISPR);
@@ -4924,7 +4924,7 @@ ips_init_copperhead_memio(ips_ha_t *ha) {
       }
 
       if (j >= 45)
-         /* error occured */
+         /* error occurred */
          return (0);
 
       PostByte[i] = readb(ha->mem_ptr + IPS_REG_ISPR);
@@ -4948,7 +4948,7 @@ ips_init_copperhead_memio(ips_ha_t *ha) {
       }
 
       if (j >= 240)
-         /* error occured */
+         /* error occurred */
          return (0);
 
       ConfigByte[i] = readb(ha->mem_ptr + IPS_REG_ISPR);
@@ -4965,7 +4965,7 @@ ips_init_copperhead_memio(ips_ha_t *ha) {
    }
 
    if (i >= 240)
-      /* error occured */
+      /* error occurred */
       return (0);
 
    /* setup CCCR */
@@ -5015,7 +5015,7 @@ ips_init_morpheus(ips_ha_t *ha) {
    }
 
    if (i >= 45) {
-      /* error occured */
+      /* error occurred */
       printk(KERN_WARNING "(%s%d) timeout waiting for post.\n",
              ips_name, ha->host_num);
 
@@ -5046,7 +5046,7 @@ ips_init_morpheus(ips_ha_t *ha) {
    }
 
    if (i >= 240) {
-      /* error occured */
+      /* error occurred */
       printk(KERN_WARNING "(%s%d) timeout waiting for config.\n",
              ips_name, ha->host_num);
 

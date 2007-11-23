@@ -3268,7 +3268,7 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
 	    addr = dp->addrs[1].address;
 	    break;
 	default:
-	    printk("Warning: got %d adresses for ATY:\n", dp->n_addrs);
+	    printk("Warning: got %d addresses for ATY:\n", dp->n_addrs);
 	    for (i = 0; i < dp->n_addrs; i++)
 		printk(" %08x-%08x", dp->addrs[i].address,
 		       dp->addrs[i].address+dp->addrs[i].size-1);

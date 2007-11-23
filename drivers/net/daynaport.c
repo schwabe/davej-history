@@ -447,7 +447,7 @@ __initfunc(int mac8390_probe(struct device *dev))
 	}
 
 	/* We should hopefully not get here */
-	printk(KERN_ERR "Probe unsucessful.\n");
+	printk(KERN_ERR "Probe unsuccessful.\n");
 	return -ENODEV;
 
  membad:

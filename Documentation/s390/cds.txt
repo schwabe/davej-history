@@ -317,7 +317,7 @@ The read_dev_chars() function returns :
       0 - successful completion
 -ENODEV - irq doesn't specify a valid subchannel number
 -EINVAL - an invalid parameter was detected
--EBUSY  - an irrecoverable I/O error occured or the device is not
+-EBUSY  - an irrecoverable I/O error occurred or the device is not
           operational.
 
 Usage Notes :
@@ -549,7 +549,7 @@ The cpa parameter points to the first format 1 CCW of a channel program :
 
 typedef struct {
    char            cmd_code; /* command code */
-   char            flags;    /* flags, like IDA adressing, etc. */
+   char            flags;    /* flags, like IDA addressing, etc. */
    unsigned short  count;    /* byte count */
    void           *cda;      /* data address */
 } ccw1_t __attribute__ ((aligned(8)));

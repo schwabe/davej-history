@@ -6,6 +6,11 @@
  * Authors:	Olaf Kirch (okir@monad.swb.de)
  *
  * Copyright (C) 1995-1999 Olaf Kirch <okir@monad.swb.de>
+ *
+ * Apr 24, 2001: Added semaphores around nfsd_cache calls
+ * 		 to protect it since it can yeild the processor
+ * 		 in its kmalloc call.
+ * 		 Craig I. Hagan <hagan@cih.com>
  */
 
 #define __NO_VERSION__
@@ -44,6 +49,8 @@ static void			nfsd(struct svc_rqst *rqstp);
 struct timeval			nfssvc_boot = { 0, 0 };
 static atomic_t			nfsd_active = ATOMIC_INIT(0);
 
+static struct semaphore nfsd_cache_sem = MUTEX;
+
 /*
  * Maximum number of nfsd processes
  */
@@ -81,8 +88,9 @@ nfsd_svc(unsigned short port, int nrservs)
 	if (error < 0)
 		goto failure;
 #endif
-
+	down(&nfsd_cache_sem);
 	nfsd_racache_init();	/* Readahead param cache */
+	up(&nfsd_cache_sem);
 
 	while (nrservs--) {
 		error = svc_create_thread(nfsd, serv);
@@ -146,7 +154,6 @@ nfsd(struct svc_rqst *rqstp)
                 if (err < 0)
                         break;
 
-
 		/* Lock the export hash tables for reading. */
 		exp_readlock();
 
@@ -159,6 +166,7 @@ nfsd(struct svc_rqst *rqstp)
 		siginitsetinv(&current->blocked, ALLOWED_SIGS);
 		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
+
 
 		svc_process(serv, rqstp);
 
@@ -180,8 +188,10 @@ nfsd(struct svc_rqst *rqstp)
 
 	/* Count active threads */
 	if (atomic_dec_and_test(&nfsd_active)) {
+		down(&nfsd_cache_sem);
 		nfsd_export_shutdown();		/* revoke all exports */
 	        nfsd_racache_shutdown();	/* release read-ahead cache */
+		up(&nfsd_cache_sem);
 	}
 
 	/* Release lockd */
@@ -200,13 +210,19 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 	struct svc_procedure	*proc;
 	kxdrproc_t		xdr;
 	u32			nfserr;
+	int			res_lookup;
 
 	dprintk("nfsd_dispatch: vers %d proc %d\n",
 				rqstp->rq_vers, rqstp->rq_proc);
 	proc = rqstp->rq_procinfo;
 
 	/* Check whether we have this call in the cache. */
-	switch (nfsd_cache_lookup(rqstp, proc->pc_cachetype)) {
+
+	down(&nfsd_cache_sem);
+	res_lookup = nfsd_cache_lookup(rqstp, proc->pc_cachetype);
+	up(&nfsd_cache_sem);
+
+	switch (res_lookup) {
 	case RC_INTR:
 	case RC_DROPIT:
 		return 0;
@@ -220,7 +236,9 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 	xdr = proc->pc_decode;
 	if (xdr && !xdr(rqstp, rqstp->rq_argbuf.buf, rqstp->rq_argp)) {
 		dprintk("nfsd: failed to decode arguments!\n");
+		down(&nfsd_cache_sem);
 		nfsd_cache_update(rqstp, RC_NOCACHE, NULL);
+		up(&nfsd_cache_sem);
 		*statp = rpc_garbage_args;
 		return 1;
 	}
@@ -239,7 +257,9 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 		if (xdr && !xdr(rqstp, rqstp->rq_resbuf.buf, rqstp->rq_resp)) {
 			/* Failed to encode result. Release cache entry */
 			dprintk("nfsd: failed to encode result!\n");
+			down(&nfsd_cache_sem);
 			nfsd_cache_update(rqstp, RC_NOCACHE, NULL);
+			up(&nfsd_cache_sem);
 			*statp = rpc_system_err;
 			return 1;
 		}
@@ -250,14 +270,18 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 	 && !xdr(rqstp, rqstp->rq_resbuf.buf, rqstp->rq_resp)) {
 		/* Failed to encode result. Release cache entry */
 		dprintk("nfsd: failed to encode result!\n");
+		down(&nfsd_cache_sem);
 		nfsd_cache_update(rqstp, RC_NOCACHE, NULL);
+		up(&nfsd_cache_sem);
 		*statp = rpc_system_err;
 		return 1;
 	}
 #endif /* CONFIG_NFSD_V3 */
 
 	/* Store reply in cache. */
+	down(&nfsd_cache_sem);
 	nfsd_cache_update(rqstp, proc->pc_cachetype, statp + 1);
+	up(&nfsd_cache_sem);
 	return 1;
 }
 

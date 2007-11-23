@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.80.2.4 2001/02/20 04:21:46 davem Exp $
+ * Version:	$Id: sock.c,v 1.80.2.5 2001/05/11 02:07:23 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -752,9 +752,11 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size,
 				break;
 			try_size = fallback;
 		}
-		skb = sock_wmalloc(sk, try_size, 0, sk->allocation);
+		skb = sock_wmalloc_err(sk, try_size, 0, sk->allocation, &err);
 		if (skb)
 			break;
+		if (err)
+			goto failure;
 
 		/*
 		 *	This means we have too many buffers for this socket already.

@@ -217,6 +217,20 @@ int ide_build_dmatable (ide_drive_t *drive)
 				xcount = bcount & 0xffff;
 				if (is_trm290_chipset)
 					xcount = ((xcount >> 2) - 1) << 16;
+				if (xcount == 0x0000) {
+					/* 
+					 * Most chipsets correctly interpret a length of 0x0000 as 64KB,
+					 * but at least one (e.g. CS5530) misinterprets it as zero (!).
+					 * So here we break the 64KB entry into two 32KB entries instead.
+					 */
+					if (count++ >= PRD_ENTRIES) {
+						printk("%s: DMA table too small\n", drive->name);
+						return 0; /* revert to PIO for this request */
+					}
+					*table++ = cpu_to_le32(0x8000);
+					*table++ = cpu_to_le32(addr + 0x8000);
+					xcount = 0x8000;
+				}
 				*table++ = cpu_to_le32(xcount);
 				addr += bcount;
 				size -= bcount;

@@ -96,7 +96,7 @@ very much to do besides increasing the number of buffers (see below).
 
  If you should see a message like:
 
-Sep 26 10:39:32 zaphod kernel: SCC-A: DMA-INT occured, data lost!
+Sep 26 10:39:32 zaphod kernel: SCC-A: DMA-INT occurred, data lost!
 
  that means that the timer routine itself has been delayed so long that the DMA
 counter went to zero already. There's not very much to do about this, because

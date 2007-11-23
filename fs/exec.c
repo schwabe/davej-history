@@ -888,3 +888,56 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 
 	return retval;
 }
+
+int do_coredump(long signr, struct pt_regs * regs)
+{
+	struct linux_binfmt *binfmt;
+	char corename[6+sizeof(current->comm)];
+	struct file * file;
+	struct inode * inode;
+
+	lock_kernel();
+	binfmt = current->binfmt;
+	if (!binfmt || !binfmt->core_dump)
+		goto fail;
+	if (!current->dumpable || atomic_read(&current->mm->count) != 1)
+		goto fail;
+	if (current->rlim[RLIMIT_CORE].rlim_cur < binfmt->min_coredump)
+		goto fail;
+	current->dumpable = 0;
+
+	memcpy(corename,"core.", 5);
+#if 0
+	memcpy(corename+5,current->comm,sizeof(current->comm));
+#else
+	corename[4] = '\0';
+#endif
+	file = filp_open(corename, O_CREAT | 2 | O_NOFOLLOW, 0600);
+	if (IS_ERR(file))
+		goto fail;
+	inode = file->f_dentry->d_inode;
+	if (inode->i_nlink > 1)
+		goto close_fail;	/* multiple links - don't dump */
+	if (list_empty(&file->f_dentry->d_hash))
+		goto close_fail;
+
+	if (!S_ISREG(inode->i_mode))
+		goto close_fail;
+	if (!file->f_op)
+		goto close_fail;
+	if (!file->f_op->write)
+		goto close_fail;
+	if (do_truncate(file->f_dentry, 0) != 0)
+		goto close_fail;
+	if (!binfmt->core_dump(signr, regs, file))
+		goto close_fail;
+	filp_close(file, NULL);
+	unlock_kernel();
+	return 1;
+
+close_fail:
+	filp_close(file, NULL);
+fail:
+	unlock_kernel();
+	return 0;
+}

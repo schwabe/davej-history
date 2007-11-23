@@ -301,7 +301,7 @@ dep_tristate 'Sealevel Systems 4021 support' CONFIG_SEALEVEL_4021 m
 #
 # Microgate Synclink HDLC/SYNCPPP support
 #
-dep_tristate 'SyncLink HDLC/SYNCPPP support' CONFIG_SYNCLINK_SYNCPPP m
+tristate 'SyncLink HDLC/SYNCPPP support' CONFIG_SYNCLINK_SYNCPPP
 
 #
 # Lan Media's board. Currently 1000, 1200, 5200, 5245
@@ -342,6 +342,11 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       fi
     fi
   fi
+fi
+
+if [ "$CONFIG_HDLC" = "y" -o "$CONFIG_SYNCLINK_SYNCPPP" = "y" -o \
+     "$CONFIG_LANMEDIA" = "y" ] ; then
+	define_bool CONFIG_SYNCPPP y
 fi
 
 tristate 'Frame relay DLCI support' CONFIG_DLCI

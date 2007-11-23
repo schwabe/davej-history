@@ -2244,5 +2244,11 @@ __initfunc(int tty_init(void))
 #ifdef CONFIG_VT
 	vcs_init();
 #endif
+#ifdef CONFIG_SYNCLINK
+	mgsl_init();
+#endif
+#ifdef CONFIG_N_HDLC
+	n_hdlc_init();
+#endif
 	return 0;
 }

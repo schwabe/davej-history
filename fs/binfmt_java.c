@@ -150,11 +150,8 @@ static int load_java(struct linux_binprm *bprm,struct pt_regs *regs)
 }
 
 static struct linux_binfmt java_format = {
-#ifndef MODULE
-	NULL, 0, load_java, NULL, NULL
-#else
-	NULL, &__this_module, load_java, NULL, NULL
-#endif
+	module:		THIS_MODULE,
+	load_binary:	load_java,
 };
 
 static int load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
@@ -167,11 +164,8 @@ static int load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 }
 
 static struct linux_binfmt applet_format = {
-#ifndef MODULE
-	NULL, 0, load_applet, NULL, NULL
-#else
-	NULL, &__this_module, load_applet, NULL, NULL
-#endif
+	module:		THIS_MODULE,
+	load_binary:	load_applet,
 };
 
 int __init init_java_binfmt(void)

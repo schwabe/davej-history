@@ -1298,9 +1298,10 @@ void ide_timer_expiry (unsigned long data)
 	del_timer(&hwgroup->timer);
 	if ((handler = hwgroup->handler) == NULL) {
 		/*
-		 * Either a marginal timeout occured (got the interrupt just as timer expired),
-		 * or we were "sleeping" to give other devices a chance.  Either way, we don't
-		 * really want to complain about anything.
+		 * Either a marginal timeout occurred (got the interrupt
+		 * just as timer expired), or we were "sleeping" to give
+		 * other devices a chance.  Either way, we don't really
+		 * want to complain about anything.
 		 */
 		if (hwgroup->sleeping) {
 			hwgroup->sleeping = 0;

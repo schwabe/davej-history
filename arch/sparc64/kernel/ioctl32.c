@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.62.2.20 2001/05/16 07:28:40 davem Exp $
+/* $Id: ioctl32.c,v 1.62.2.21 2001/06/08 01:34:11 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -2692,6 +2692,8 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case /* STOP_ARRAY */		_IO (MD_MAJOR, 0x32):
 	case /* STOP_ARRAY_RO */	_IO (MD_MAJOR, 0x33):
 	case /* RESTART_ARRAY_RW */	_IO (MD_MAJOR, 0x34):
+	case /* PRINT_RAID_DEBUG */	_IO (MD_MAJOR, 0x13):
+	case /* SET_DISK_FAULTY */	_IO (MD_MAJOR, 0x29):
 
 	/* Big K */
 	case PIO_FONT:

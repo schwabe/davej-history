@@ -306,7 +306,7 @@ static inline int lp_char(char lpchar, int minor)
 		}
 		/*
 		 * NOTE: if you run with irqs you _must_ use
-		 * `tunelp /dev/lp? -c 1' to be rasonable efficient!
+		 * `tunelp /dev/lp? -c 1' to be reasonably efficient!
 		 *
 		 * ..but beware that data corruption can happen that way. -Tim
 		 */

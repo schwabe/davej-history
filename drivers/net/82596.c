@@ -1106,7 +1106,7 @@ __initfunc(int i82596_probe(struct device *dev))
 {
 	int i;
 	struct i596_private *lp;
-	char eth_addr[6];
+	char eth_addr[8];
 	static int probed = 0;
 
 	if (probed)

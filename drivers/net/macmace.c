@@ -607,7 +607,7 @@ static void mace68k_handle_misc_intrs(struct mace68k_data *mp, int intr)
 }
 
 /*
- *	A transmit error has occured. (We kick the transmit side from
+ *	A transmit error has occurred. (We kick the transmit side from
  *	the DMA completion)
  */
  
@@ -636,7 +636,7 @@ static void mace68k_xmit_error(struct device *dev)
 }
 
 /*
- *	A receive interrupt occured.
+ *	A receive interrupt occurred.
  */
  
 static void mace68k_recv_interrupt(struct device *dev)

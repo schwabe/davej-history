@@ -77,7 +77,7 @@
 *                                  the if clause for it(0,dev->tbusy) 
 *				   forever.
 *				   The code got into this stage due to an 
-*				   interrupt occuring within the if clause for 
+*				   interrupt occurring within the if clause for 
 *				   set_bit(0,dev->tbusy).  Since an interrupt 
 *				   disables furhter transmit interrupt and 
 * 				   makes dev->tbusy = 0, this effect was undone 
@@ -1329,7 +1329,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 
 
 /*============================================================================
- * Setup so that a frame can be transmitted on the occurence of a transmit
+ * Setup so that a frame can be transmitted on the occurrence of a transmit
  * interrupt.
  */
 static void setup_for_delayed_transmit (struct device* dev, void* buf,
@@ -1647,7 +1647,7 @@ static void fr_isr (sdla_t* card)
 			++card->statistics.isr_intr_test;
 	    		break;	
 
-                case FR_INTR_DLC: /* Event interrupt occured */
+                case FR_INTR_DLC: /* Event interrupt occurred */
 			mbox->cmd.command = FR_READ_STATUS;
 			mbox->cmd.length = 0;
 			err = sdla_exec(mbox) ? mbox->cmd.result : CMD_TIMEOUT;
@@ -1684,7 +1684,7 @@ static void fr_isr (sdla_t* card)
 /*============================================================================
  * Receive interrupt handler.
  * When a receive interrupt occurs do the following:
- *	1- Find the structure for the dlci that the interrupt occured on
+ *	1- Find the structure for the dlci that the interrupt occurred on
  *      2- If it doesn't exist then print appropriate msg and goto step 8. 
  * 	3- If it exist then copy data to a skb.
  * 	4- If skb contains Sangoma UDP data then process them

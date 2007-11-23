@@ -1,32 +1,23 @@
 /******************************************************************************
  *
  * Name:	skqueue.c
- * Project:	PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.14 $
- * Date:	$Date: 1998/10/15 15:11:35 $
+ * Project:	GEnesis, PCI Gigabit Ethernet Adapter
+ * Version:	$Revision: 1.15 $
+ * Date:	$Date: 1999/11/22 13:36:29 $
  * Purpose:	Management of an event queue.
  *
  ******************************************************************************/
 
 /******************************************************************************
  *
- *	(C)Copyright 1989-1998 SysKonnect,
+ *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *	All Rights Reserved
  *
- *	THIS IS UNPUBLISHED PROPRIETARY SOURCE CODE OF SYSKONNECT
- *	The copyright notice above does not evidence any
- *	actual or intended publication of such source code.
+ *	This program is free software; you can redistribute it and/or modify
+ *	it under the terms of the GNU General Public License as published by
+ *	the Free Software Foundation; either version 2 of the License, or
+ *	(at your option) any later version.
  *
- *	This Module contains Proprietary Information of SysKonnect
- *	and should be treated as Confidential.
- *
- *	The information in this file is provided for the exclusive use of
- *	the licensees of SysKonnect.
- *	Such users have the right to use, modify, and incorporate this code
- *	into products for purposes authorized by the license agreement
- *	provided they include this notice and the associated copyright notice
- *	with any such product.
  *	The information in this file is provided "AS IS" without warranty.
  *
  ******************************************************************************/
@@ -36,6 +27,9 @@
  * History:
  *
  *	$Log: skqueue.c,v $
+ *	Revision 1.15  1999/11/22 13:36:29  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.14  1998/10/15 15:11:35  gklug
  *	fix: ID_sccs to SysKonnectFileId
  *	
@@ -88,7 +82,7 @@
 	Event queue and dispatcher
 */
 static const char SysKonnectFileId[] =
-	"$Header: /usr56/projects/ge/schedule/skqueue.c,v 1.14 1998/10/15 15:11:35 gklug Exp $" ;
+	"$Header: /usr56/projects/ge/schedule/skqueue.c,v 1.15 1999/11/22 13:36:29 cgoos Exp $" ;
 
 #include "h/skdrv1st.h"		/* Driver Specific Definitions */
 #include "h/skqueue.h"		/* Queue Definitions */
@@ -153,7 +147,7 @@ SK_EVPARA	Para)	/* Event parameter */
  *		send command to state machine
  *	end
  *	return error reported by individual Event function
- *		0 if no error occured.
+ *		0 if no error occurred.
  */
 int	SkEventDispatcher(
 SK_AC	*pAC,	/* Adapters Context */

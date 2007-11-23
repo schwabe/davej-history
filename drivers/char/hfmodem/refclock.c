@@ -133,7 +133,7 @@ hfmodem_time_t hfmodem_refclock_current(struct hfmodem_state *dev, hfmodem_time_
 			"subl %2,%%eax\n\t"
 			"sbbl %3,%%edx\n\t" : "=&a" (tmp0), "=&d" (tmp1) 
 			: "m" (dev->clk.starttime_lo), "m" (dev->clk.starttime_hi));
-		__asm__("mull %2" : "=d" (tmp2), "=a" (tmp4) : "m" (scale_rdtsc), "1" (tmp0) : "ax");
+		__asm__("mull %2" : "=d" (tmp2), "=a" (tmp4) : "m" (scale_rdtsc), "1" (tmp0));
 		__asm__("mull %1" : "=a" (tmp3) : "m" (scale_rdtsc), "a" (tmp1) : "dx");
 		curtime = tmp2 + tmp3;
 		goto time_known;

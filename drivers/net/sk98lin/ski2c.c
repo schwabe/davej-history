@@ -2,8 +2,8 @@
  *
  * Name:	ski2c.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.45 $
- * Date:	$Date: 2001/03/21 12:12:49 $
+ * Version:	$Revision: 1.47 $
+ * Date:	$Date: 2001/04/05 11:38:09 $
  * Purpose:	Functions to access Voltage and Temperature Sensor
  *			(taken from Monalisa (taken from Concentrator))
  *
@@ -11,8 +11,7 @@
 
 /******************************************************************************
  *
- *	(C)Copyright 1998-2000 SysKonnect,
- *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
+ *	(C)Copyright 1998-2001 SysKonnect GmbH.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -28,15 +27,22 @@
  * History:
  *
  *	$Log: ski2c.c,v $
+ *	Revision 1.47  2001/04/05 11:38:09  rassmann
+ *	Set SenState to idle in SkI2cWaitIrq().
+ *	Changed error message in SkI2cWaitIrq().
+ *	
+ *	Revision 1.46  2001/04/02 14:03:35  rassmann
+ *	Changed pAC to IoC in SK_IN32().
+ *	
  *	Revision 1.45  2001/03/21 12:12:49  rassmann
  *	Resetting I2C_READY interrupt in SkI2cInit1().
  *	
  *	Revision 1.44  2000/08/07 15:49:03  gklug
- *	fix: SK_INFAST only in NetWare driver
+ *	Fix: SK_INFAST only in NetWare driver.
  *	
  *	Revision 1.43  2000/08/03 14:28:17  rassmann
- *	- Added function to wait for I2C being ready before resetting the board.
- *	- Replaced one duplicate "out of range" message with correct one.
+ *	Added function to wait for I2C being ready before resetting the board.
+ *	Replaced one duplicate "out of range" message with correct one.
  *	
  *	Revision 1.42  1999/11/22 13:35:12  cgoos
  *	Changed license header to GPL.
@@ -183,10 +189,10 @@
 
 
 /*
-	I2C Protocol
-*/
+ *	I2C Protocol
+ */
 static const char SysKonnectFileId[] =
-	"$Id: ski2c.c,v 1.45 2001/03/21 12:12:49 rassmann Exp $";
+	"$Id: ski2c.c,v 1.47 2001/04/05 11:38:09 rassmann Exp $";
 
 #include "h/skdrv1st.h"		/* Driver Specific Definitions */
 #include "h/lm80.h"
@@ -194,7 +200,7 @@ static const char SysKonnectFileId[] =
 
 #ifdef __C2MAN__
 /*
-	I2C protocol implemetation.
+	I2C protocol implementation.
 
 	General Description:
 
@@ -604,13 +610,14 @@ SK_IOC	IoC)	/* I/O Context */
 		if (SkOsGetTime(pAC) - StartTime > SK_TICKS_PER_SEC / 8) {
 			SK_I2C_STOP(IoC);
 #ifndef SK_DIAG
-			SK_ERR_LOG(pAC, SK_ERRCL_SW, SKERR_I2C_E002, SKERR_I2C_E002MSG);
+			SK_ERR_LOG(pAC, SK_ERRCL_SW, SKERR_I2C_E016, SKERR_I2C_E016MSG);
 #endif	/* !SK_DIAG */
 			return;
 		}
-		SK_IN32(pAC, B0_ISRC, &IrqSrc);
+		SK_IN32(IoC, B0_ISRC, &IrqSrc);
 	} while ((IrqSrc & IS_I2C_READY) == 0);
 
+	pSen->SenState = SK_SEN_IDLE;
 	return;
 }	/* SkI2cWaitIrq */
 
@@ -930,12 +937,13 @@ SK_IOC	IoC)	/* I/O Context */
  * Level 0:
  *	Initialize only the data structures. Do NOT access hardware.
  * Level 1:
- *	Initialize hardware through SK_IN?OUT commands. Do NOT use interrupts.
+ *	Initialize hardware through SK_IN / SK_OUT commands. Do NOT use interrupts.
  * Level 2:
  *	Everything is possible. Interrupts may be used from now on.
  *
- * return:	0 = success
- *		other = error.
+ * return:
+ *	0 = success
+ *	other = error.
  */
 int	SkI2cInit(
 SK_AC	*pAC,	/* Adapter Context */

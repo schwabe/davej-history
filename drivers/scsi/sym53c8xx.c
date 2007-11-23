@@ -3646,7 +3646,7 @@ static	struct scripth scripth0 __initdata = {
 	**	some target to reset or some disconnected 
 	**	job to abort. Since error recovery is a serious 
 	**	busyness, we will really reset the SCSI BUS, if 
-	**	case of a SCSI interrupt occuring in this path.
+	**	case of a SCSI interrupt occurring in this path.
 	*/
 
 	/*
@@ -8635,7 +8635,7 @@ static void ncr_timeout (ncb_p np)
 **		si:	sist
 **
 **	SCSI bus lines:
-**		so:	control lines as driver by NCR.
+**		so:	control lines as driven by NCR.
 **		si:	control lines as seen by NCR.
 **		sd:	scsi data lines as seen by NCR.
 **
@@ -8644,7 +8644,7 @@ static void ncr_timeout (ncb_p np)
 **		scntl3:	(see the manual)
 **
 **	current script command:
-**		dsp:	script adress (relative to start of script).
+**		dsp:	script address (relative to start of script).
 **		dbc:	first word of script command.
 **
 **	First 24 register of the chip:

@@ -2,8 +2,8 @@
  *
  * Name:    skge.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.33 $
- * Date:	$Date: 2001/03/20 12:26:08 $
+ * Version:	$Revision: 1.37 $
+ * Date:	$Date: 2001/05/08 11:25:40 $
  * Purpose:	The main driver source module
  *
  ******************************************************************************/
@@ -50,6 +50,18 @@
  * History:
  *
  *	$Log: skge.c,v $
+ *	Revision 1.37  2001/05/08 11:25:40  mlindner
+ *	fix: removed VLAN error message
+ *	
+ *	Revision 1.36  2001/05/04 12:02:25  gklug
+ *	fix: compilation bug
+ *	
+ *	Revision 1.35  2001/05/04 11:42:12  gklug
+ *	fix: receive IRQ can now handle invalid frames correctly
+ *	
+ *	Revision 1.34  2001/05/04 11:13:49  gklug
+ *	fix: do not free meassage if ring is full on entry.
+ *	
  *	Revision 1.33  2001/03/20 12:26:08  mlindner
  *	Fix: Memory problem
  *	Fix: proc_unregister fixed
@@ -1833,7 +1845,8 @@ int		BytesSend;
 				SK_DBGCAT_DRV_TX_PROGRESS,
 				("XmitFrame failed\n"));
 			/* this message can not be sent now */
-			DEV_KFREE_SKB(pMessage);
+			/* Because tbusy seems to be set, the message should not be freed here */
+			/* It will be used by the scheduler of the ethernet handler */
 			return (-1);
 		}
 	}
@@ -2100,33 +2113,71 @@ int		Result;
 
 rx_start:	
 	/* do forever; exit if RX_CTRL_OWN_BMU found */
-	while (pRxPort->RxdRingFree < pAC->RxDescrPerRing) {
-		pRxd = pRxPort->pRxdRingHead;
-		
+	for ( pRxd = pRxPort->pRxdRingHead ;
+		  pRxPort->RxdRingFree < pAC->RxDescrPerRing ;
+		  pRxd = pRxd->pNextRxd,
+		  pRxPort->pRxdRingHead = pRxd,
+		  pRxPort->RxdRingFree ++) {
+
+		/*
+		 * For a better understanding of this loop 
+		 * Go through every descriptor beginning at the head 
+		 * Please note: the ring might be completely received so the OWN bit
+		 * set is not a good crirteria to leave that loop.
+		 * Therefore the RingFree counter is used.
+		 * On entry of this loop pRxd is a pointer to the Rxd that needs
+		 * to be checked next.
+		 */
+
 		Control = pRxd->RBControl;
-
-
 	
 		/* check if this descriptor is ready */
 		if ((Control & RX_CTRL_OWN_BMU) != 0) {
 			/* this descriptor is not yet ready */
+			/* This is the usual end of the loop */
+			/* We don't need to start the ring again */
 			FillRxRing(pAC, pRxPort);
 			return;
 		}
 
 		/* get length of frame and check it */
 		FrameLength = Control & RX_CTRL_LEN_MASK;
-		if (FrameLength > pAC->RxBufSize)
+		if (FrameLength > pAC->RxBufSize) {
 			goto rx_failed;
+		}
 
 		/* check for STF and EOF */
 		if ((Control & (RX_CTRL_STF | RX_CTRL_EOF)) !=
-			(RX_CTRL_STF | RX_CTRL_EOF))
+			(RX_CTRL_STF | RX_CTRL_EOF)) {
 			goto rx_failed;
+		}
 		
 		/* here we have a complete frame in the ring */
 		pMsg = pRxd->pMBuf;
+
+		FrameStat = pRxd->FrameStat;
+		SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 0,
+			("Received frame of length %d on port %d\n",
+			FrameLength, PortIndex));
+		SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 0,
+			("Number of free rx descriptors: %d\n",
+			pRxPort->RxdRingFree));
+/*DumpMsg(pMsg, "Rx");	*/	
 		
+		if ((Control & RX_CTRL_STAT_VALID) != RX_CTRL_STAT_VALID ||
+			(FrameStat & (XMR_FS_ANY_ERR | XMR_FS_2L_VLAN)) != 0) {
+			/* there is a receive error in this frame */
+			SK_DBG_MSG(NULL, SK_DBGMOD_DRV,
+				SK_DBGCAT_DRV_RX_PROGRESS,
+				("skge: Error in received frame, dropped!\n"
+				"Control: %x\nRxStat: %x\n",
+				Control, FrameStat));
+			ReQueueRxBuffer(pAC, pRxPort, pMsg,
+				pRxd->VDataHigh, pRxd->VDataLow);
+
+			continue;
+		}
+
 		/*
 		 * if short frame then copy data to reduce memory waste
 		 */
@@ -2177,114 +2228,85 @@ rx_start:
 			} /* IP frame */
 		} /* frame > SK_COPY_TRESHOLD */
 		
-		FrameStat = pRxd->FrameStat;
-		pRxd = pRxd->pNextRxd;
-		pRxPort->pRxdRingHead = pRxd;
-		pRxPort->RxdRingFree ++;
-		SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 0,
-			("Received frame of length %d on port %d\n",
-			FrameLength, PortIndex));
-		SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 0,
-			("Number of free rx descriptors: %d\n",
-			pRxPort->RxdRingFree));
-/*DumpMsg(pMsg, "Rx");	*/	
-		if ((Control & RX_CTRL_STAT_VALID) == RX_CTRL_STAT_VALID &&
-			(FrameStat & 
-			(XMR_FS_ANY_ERR | XMR_FS_2L_VLAN))
- 			 == 0) {
-			SK_DBG_MSG(NULL, SK_DBGMOD_DRV,	1,("V"));
-			ForRlmt = SK_RLMT_RX_PROTOCOL;
-			IsBc = (FrameStat & XMR_FS_BC)==XMR_FS_BC;
-			SK_RLMT_PRE_LOOKAHEAD(pAC, PortIndex, FrameLength,
-				IsBc, &Offset, &NumBytes);
-			if (NumBytes != 0) {
-				IsMc = (FrameStat & XMR_FS_MC)==XMR_FS_MC;
-				SK_RLMT_LOOKAHEAD(pAC, PortIndex, 
-					&pMsg->data[Offset],
-					IsBc, IsMc, &ForRlmt);
-			}
-			if (ForRlmt == SK_RLMT_RX_PROTOCOL) {
-						SK_DBG_MSG(NULL, SK_DBGMOD_DRV,	1,("W"));
-	/* send up only frames from active port */
-			    if ((PortIndex == pAC->ActivePort) ||
-					(pAC->RlmtNets == 2)) {
-					/* frame for upper layer */
-					SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 1,("U"));
-#ifdef xDEBUG
-					DumpMsg(pMsg, "Rx");
-#endif
-					SK_PNMI_CNT_RX_OCTETS_DELIVERED(pAC,
-						FrameLength, pRxPort->PortIndex);
-
-					pMsg->dev = pAC->dev[pRxPort->PortIndex];
-					pMsg->protocol = eth_type_trans(pMsg,
-						pAC->dev[pRxPort->PortIndex]);
-					netif_rx(pMsg);
-					pAC->dev[pRxPort->PortIndex]->last_rx = jiffies;
-				}
-				else {
-					/* drop frame */
-					SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 
-						SK_DBGCAT_DRV_RX_PROGRESS,
-						("D"));
-					DEV_KFREE_SKB(pMsg);
-				}
-				
-			} /* if not for rlmt */
-			else {
-				/* packet for rlmt */
-				SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 
-					SK_DBGCAT_DRV_RX_PROGRESS, ("R"));
-				pRlmtMbuf = SkDrvAllocRlmtMbuf(pAC,
-					pAC->IoBase, FrameLength);
-				if (pRlmtMbuf != NULL) {
-					pRlmtMbuf->pNext = NULL;
-					pRlmtMbuf->Length = FrameLength;
-					pRlmtMbuf->PortIdx = PortIndex;
-					EvPara.pParaPtr = pRlmtMbuf;
-					memcpy((char*)(pRlmtMbuf->pData),
-					       (char*)(pMsg->data),
-					       FrameLength);
-					SkEventQueue(pAC, SKGE_RLMT,
-						SK_RLMT_PACKET_RECEIVED,
-						EvPara);
-					pAC->CheckQueue = SK_TRUE;
-					SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 
-						SK_DBGCAT_DRV_RX_PROGRESS,
-						("Q"));
-				}
-				if ((pAC->dev[pRxPort->PortIndex]->flags & 
-					(IFF_PROMISC | IFF_ALLMULTI)) != 0 ||
-					(ForRlmt & SK_RLMT_RX_PROTOCOL) == 
-					SK_RLMT_RX_PROTOCOL) { 
-					pMsg->dev = pAC->dev[pRxPort->PortIndex];
-					pMsg->protocol = eth_type_trans(pMsg,
-						pAC->dev[pRxPort->PortIndex]);
-					netif_rx(pMsg);
-					pAC->dev[pRxPort->PortIndex]->last_rx = jiffies;
-				}
-				else {
-					DEV_KFREE_SKB(pMsg);
-				}
-
-			} /* if packet for rlmt */
-		} /* if valid frame */
-		else {
-			/* there is a receive error in this frame */
-			if ((FrameStat & XMR_FS_2L_VLAN) != 0) {
-				printk("%s: Received frame"
-					" with VLAN Level 2 header, check"
-					" switch configuration\n",
-					pAC->dev[pRxPort->PortIndex]->name);
-			}
-			SK_DBG_MSG(NULL, SK_DBGMOD_DRV,
-				SK_DBGCAT_DRV_RX_PROGRESS,
-				("skge: Error in received frame, dropped!\n"
-				"Control: %x\nRxStat: %x\n",
-				Control, FrameStat));
-			DEV_KFREE_SKB(pMsg);
+		SK_DBG_MSG(NULL, SK_DBGMOD_DRV,	1,("V"));
+		ForRlmt = SK_RLMT_RX_PROTOCOL;
+		IsBc = (FrameStat & XMR_FS_BC)==XMR_FS_BC;
+		SK_RLMT_PRE_LOOKAHEAD(pAC, PortIndex, FrameLength,
+			IsBc, &Offset, &NumBytes);
+		if (NumBytes != 0) {
+			IsMc = (FrameStat & XMR_FS_MC)==XMR_FS_MC;
+			SK_RLMT_LOOKAHEAD(pAC, PortIndex, 
+				&pMsg->data[Offset],
+				IsBc, IsMc, &ForRlmt);
 		}
-	} /* while */
+		if (ForRlmt == SK_RLMT_RX_PROTOCOL) {
+					SK_DBG_MSG(NULL, SK_DBGMOD_DRV,	1,("W"));
+/* send up only frames from active port */
+			if ((PortIndex == pAC->ActivePort) ||
+				(pAC->RlmtNets == 2)) {
+				/* frame for upper layer */
+				SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 1,("U"));
+#ifdef xDEBUG
+				DumpMsg(pMsg, "Rx");
+#endif
+				SK_PNMI_CNT_RX_OCTETS_DELIVERED(pAC,
+					FrameLength, pRxPort->PortIndex);
+
+				pMsg->dev = pAC->dev[pRxPort->PortIndex];
+				pMsg->protocol = eth_type_trans(pMsg,
+					pAC->dev[pRxPort->PortIndex]);
+				netif_rx(pMsg);
+				pAC->dev[pRxPort->PortIndex]->last_rx = jiffies;
+			}
+			else {
+				/* drop frame */
+				SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 
+					SK_DBGCAT_DRV_RX_PROGRESS,
+					("D"));
+				DEV_KFREE_SKB(pMsg);
+			}
+			
+		} /* if not for rlmt */
+		else {
+			/* packet for rlmt */
+			SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 
+				SK_DBGCAT_DRV_RX_PROGRESS, ("R"));
+			pRlmtMbuf = SkDrvAllocRlmtMbuf(pAC,
+				pAC->IoBase, FrameLength);
+			if (pRlmtMbuf != NULL) {
+				pRlmtMbuf->pNext = NULL;
+				pRlmtMbuf->Length = FrameLength;
+				pRlmtMbuf->PortIdx = PortIndex;
+				EvPara.pParaPtr = pRlmtMbuf;
+				memcpy((char*)(pRlmtMbuf->pData),
+					   (char*)(pMsg->data),
+					   FrameLength);
+				SkEventQueue(pAC, SKGE_RLMT,
+					SK_RLMT_PACKET_RECEIVED,
+					EvPara);
+				pAC->CheckQueue = SK_TRUE;
+				SK_DBG_MSG(NULL, SK_DBGMOD_DRV, 
+					SK_DBGCAT_DRV_RX_PROGRESS,
+					("Q"));
+			}
+			if ((pAC->dev[pRxPort->PortIndex]->flags & 
+				(IFF_PROMISC | IFF_ALLMULTI)) != 0 ||
+				(ForRlmt & SK_RLMT_RX_PROTOCOL) == 
+				SK_RLMT_RX_PROTOCOL) { 
+				pMsg->dev = pAC->dev[pRxPort->PortIndex];
+				pMsg->protocol = eth_type_trans(pMsg,
+					pAC->dev[pRxPort->PortIndex]);
+				netif_rx(pMsg);
+				pAC->dev[pRxPort->PortIndex]->last_rx = jiffies;
+			}
+			else {
+				DEV_KFREE_SKB(pMsg);
+			}
+
+		} /* if packet for rlmt */
+	} /* for ... scanning the RXD ring */
+
+	/* RXD ring is empty -> fill and restart */
 	FillRxRing(pAC, pRxPort);
 	/* do not start if called from Close */
 	if (pAC->BoardLevel > 0) {

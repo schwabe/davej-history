@@ -25,7 +25,7 @@ extern int (*prom_printf)(char *, ...);
 
 extern unsigned long mips_memory_upper;
 
-volatile unsigned long mem_err = 0;	/* So we know an error occured */
+volatile unsigned long mem_err = 0;	/* So we know an error occurred */
 
 /*
  * Probe memory in 4MB chunks, waiting for an error to tell us we've fallen

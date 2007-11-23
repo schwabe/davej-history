@@ -42,8 +42,8 @@
 #include <linux/genhd.h>
 
 #define CCISS_DRIVER_VERSION(maj,min,submin) ((maj<<16)|(min<<8)|(submin))
-#define DRIVER_NAME "Compaq CISS Driver (v 1.0.3)"
-#define DRIVER_VERSION CCISS_DRIVER_VERSION(1,0,3)
+#define DRIVER_NAME "Compaq CISS Driver (v 1.0.4)"
+#define DRIVER_VERSION CCISS_DRIVER_VERSION(1,0,4)
 
 /* Embedded module documentation macros - see modules.h */
 MODULE_AUTHOR("Charles M. White III - Compaq Computer Corporation");
@@ -734,7 +734,7 @@ static int revalidate_logvol(kdev_t dev, int maxusage)
         max_p = gdev->max_p;
         start = target << gdev->minor_shift;
 
-        for(i=max_p; i>=0; i--) {
+        for(i=max_p-1; i>=0; i--) {
                 int minor = start+i;
                 kdev_t devi = MKDEV(MAJOR_NR + ctlr, minor);
                 struct super_block *sb = get_super(devi);
@@ -1129,7 +1129,7 @@ static inline void complete_command( CommandList_struct *cmd, int timeout)
 	if (timeout)
 		status = 0; 
 	if(cmd->err_info->CommandStatus != 0) 
-	{ /* an error has occured */ 
+	{ /* an error has occurred */ 
 		switch(cmd->err_info->CommandStatus)
 		{
 			case CMD_TARGET_STATUS:

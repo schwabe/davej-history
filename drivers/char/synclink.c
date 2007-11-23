@@ -1,7 +1,7 @@
 /*
  * linux/drivers/char/synclink.c
  *
- * $Id: synclink.c,v 2.8 2001/03/30 17:30:37 ez Exp $
+ * $Id: synclink.c,v 2.12 2001/05/10 20:53:04 paulkf Exp $
  *
  * Device driver for Microgate SyncLink ISA and PCI
  * high speed multiprotocol serial adapters.
@@ -54,7 +54,11 @@
  */
 
 #define VERSION(ver,rel,seq) (((ver)<<16) | ((rel)<<8) | (seq))
-#define BREAKPOINT() asm("   int $3");
+#if defined(__i386__)
+#  define BREAKPOINT() asm("   int $3");
+#else
+#  define BREAKPOINT() { }
+#endif
 
 #define MAX_ISA_DEVICES 10
 #define MAX_PCI_DEVICES 10
@@ -924,7 +928,7 @@ MODULE_PARM(txdmabufs,"1-" __MODULE_STRING(MAX_TOTAL_DEVICES) "i");
 MODULE_PARM(txholdbufs,"1-" __MODULE_STRING(MAX_TOTAL_DEVICES) "i");
 
 static char *driver_name = "SyncLink serial driver";
-static char *driver_version = "2.8";
+static char *driver_version = "$Revision: 2.12 $";
 
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
@@ -4486,18 +4490,20 @@ void mgsl_add_device( struct mgsl_struct *info )
 		info->max_frame_size = 65535;
 	
 	if ( info->bus_type == MGSL_BUS_TYPE_PCI ) {
-		printk( "SyncLink device %s added:PCI bus IO=%04X IRQ=%d Mem=%08X LCR=%08X MaxFrameSize=%u\n",
+		printk( "SyncLink device %s:PCI IO=%04X IRQ=%d Mem=%08X LCR=%08X MaxFrameSize=%u\n",
 			info->device_name, info->io_base, info->irq_level,
 			info->phys_memory_base, info->phys_lcr_base,
 		     	info->max_frame_size );
 	} else {
-		printk( "SyncLink device %s added:ISA bus IO=%04X IRQ=%d DMA=%d MaxFrameSize=%u\n",
+		printk( "SyncLink device %s:ISA IO=%04X IRQ=%d DMA=%d MaxFrameSize=%u\n",
 			info->device_name, info->io_base, info->irq_level, info->dma_level,
 		     	info->max_frame_size );
 	}
 
 #ifdef CONFIG_SYNCLINK_SYNCPPP
+#ifdef MODULE
 	if (info->dosyncppp)
+#endif
 		mgsl_sppp_init(info);
 #endif
 }	/* end of mgsl_add_device() */
@@ -4661,7 +4667,7 @@ int __init mgsl_init(void)
 
 	EXPORT_NO_SYMBOLS;
 	
- 	printk("%s version %s\n", driver_name, driver_version);
+ 	printk("%s %s\n", driver_name, driver_version);
 	
 	/* determine how many SyncLink devices are installed */
 	mgsl_enumerate_devices();
@@ -4729,7 +4735,7 @@ int __init mgsl_init(void)
 		printk("%s(%d):Couldn't register callout driver\n",
 			__FILE__,__LINE__);
 
- 	printk("%s version %s, tty major#%d callout major#%d\n",
+ 	printk("%s %s, tty major#%d callout major#%d\n",
 		driver_name, driver_version,
 		serial_driver.major, callout_driver.major);
 		
@@ -4746,6 +4752,7 @@ int __init mgsl_init(void)
 	
 }	/* end of mgsl_init() */
 
+#ifdef MODULE
 int __init init_module(void)
 {
 /* Uncomment this to kernel debug module.
@@ -4796,6 +4803,7 @@ void cleanup_module(void)
 	}
 	
 }	/* end of cleanup_module() */
+#endif
 
 /*
  * usc_RTCmd()
@@ -7663,7 +7671,7 @@ BOOLEAN mgsl_dma_test( struct mgsl_struct *info )
 		status = info->rx_buffer_list[0].status;
 
 		if ( status & (BIT8 + BIT3 + BIT1) ) {
-			/* receive error has occured */
+			/* receive error has occurred */
 			rc = FALSE;
 		} else {
 			if ( memcmp( info->tx_buffer_list[0].virt_addr ,

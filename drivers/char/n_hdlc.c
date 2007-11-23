@@ -9,7 +9,7 @@
  *	Al Longyear <longyear@netcom.com>, Paul Mackerras <Paul.Mackerras@cs.anu.edu.au>
  *
  * Original release 01/11/99
- * $Id: n_hdlc.c,v 2.2 2000/11/08 17:08:29 paul Exp $
+ * $Id: n_hdlc.c,v 2.3 2001/05/09 14:42:37 paul Exp $
  *
  * This code is released under the GNU General Public License (GPL)
  *
@@ -78,7 +78,7 @@
  */
 
 #define HDLC_MAGIC 0x239e
-#define HDLC_VERSION "2.2"
+#define HDLC_VERSION "$Revision: 2.3 $"
 
 #include <linux/version.h>
 #include <linux/config.h>
@@ -98,6 +98,7 @@
 #include <linux/malloc.h>
 #include <linux/tty.h>
 #include <linux/errno.h>
+#include <linux/init.h>
 #include <linux/string.h>	/* used in new tty drivers */
 #include <linux/signal.h>	/* used in new tty drivers */
 #include <asm/system.h>
@@ -986,14 +987,7 @@ N_HDLC_BUF* n_hdlc_buf_get(N_HDLC_BUF_LIST *list)
 	
 }	/* end of n_hdlc_buf_get() */
 
-/* init_module()
- *
- *	called when module is loading to register line discipline
- * 	
- * Arguments:		None
- * Return Value:	0 if success, otherwise error code
- */
-int init_module(void)
+int __init n_hdlc_init()
 {
 	static struct tty_ldisc	n_hdlc_ldisc;
 	int    status;
@@ -1031,16 +1025,14 @@ int init_module(void)
 	if (status)
 		printk(KERN_INFO"N_HDLC: init failure %d\n", status);
 	return (status);
-	
-}	/* end of init_module() */
+}
 
-/* cleanup_module()
- *
- *	called when module is unloading to unregister line discipline
- * 	
- * Arguments:		None
- * Return Value:	None
- */
+#ifdef MODULE
+int init_module(void)
+{
+	return n_hdlc_init();
+}
+
 void cleanup_module(void)
 {
 	int status;
@@ -1050,3 +1042,4 @@ void cleanup_module(void)
 	else
 		printk("N_HDLC: line discipline unregistered\n");
 }
+#endif

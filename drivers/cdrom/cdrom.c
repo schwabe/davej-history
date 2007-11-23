@@ -514,12 +514,12 @@ int open_for_data(struct cdrom_device_info * cdi)
 					couldn't close the tray.  We only care 
 					that there is no disc in the drive, 
 					since that is the _REAL_ problem here.*/
-					ret=-ENOMEDIUM;
+					ret = -ENOMEDIUM;
 					goto clean_up_and_return;
 				}
 			} else {
 				cdinfo(CD_OPEN, "bummer. this drive can't close the tray.\n"); 
-				ret=-ENOMEDIUM;
+				ret = -ENOMEDIUM;
 				goto clean_up_and_return;
 			}
 			/* Ok, the door should be closed now.. Check again */
@@ -527,7 +527,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 			if ((ret == CDS_NO_DISC) || (ret==CDS_TRAY_OPEN)) {
 				cdinfo(CD_OPEN, "bummer. the tray is still not closed.\n"); 
 				cdinfo(CD_OPEN, "tray might not contain a medium.\n");
-				ret=-ENOMEDIUM;
+				ret = -ENOMEDIUM;
 				goto clean_up_and_return;
 			}
 			cdinfo(CD_OPEN, "the tray is now closed.\n"); 
@@ -540,7 +540,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 	cdrom_count_tracks(cdi, &tracks);
 	if (tracks.error == CDS_NO_DISC) {
 		cdinfo(CD_OPEN, "bummer. no disc.\n");
-		ret=-ENOMEDIUM;
+		ret = -ENOMEDIUM;
 		goto clean_up_and_return;
 	}
 	/* CD-Players which don't use O_NONBLOCK, workman
@@ -1952,6 +1952,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 			ra.buf += (CD_FRAMESIZE_RAW * frames);
 			ra.nframes -= frames;
 			lba += frames;
+			if (frames>ra.nframes) frames=ra.nframes;
 		}
 		kfree(cgc.buffer);
 		return ret;
