@@ -1,0 +1,24 @@
+# kwhich 1.0 (C) 2000 Miquel van Smoorenburg
+# This program is GPLed
+
+if [ $# -lt 1 ]
+then
+        echo "Usage: $0 cmd [cmd..]" >&2
+        exit 1
+fi
+
+IFS=:
+for cmd in $*
+do
+        for path in $PATH
+        do
+                if [ -x "$path/$cmd" ]
+                then
+                        echo "$path/$cmd"
+                        exit 0
+                fi
+        done
+done
+
+echo "$*: not found" >&2
+exit 1

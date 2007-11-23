@@ -1781,10 +1781,9 @@ static void doevent(int crd)
 /*
  * pcxxdelay - delays a specified number of milliseconds
  */
-static void pcxxdelay(int msec)
+static void pcxxdelay(int mseconds)
 {
-	while(msec-- > 0)
-		__delay(loops_per_sec/1000);
+	mdelay(mseconds);
 }
 
 

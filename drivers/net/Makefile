@@ -580,6 +580,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_RTL8139TOO),y)
+L_OBJS += 8139too.o
+else
+  ifeq ($(CONFIG_RTL8139TOO),m)
+  M_OBJS += 8139too.o
+  endif
+endif
+
 ifeq ($(CONFIG_SIS900),y)
 L_OBJS += sis900.o
 else

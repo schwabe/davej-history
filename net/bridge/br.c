@@ -2455,7 +2455,7 @@ __initfunc(int brg_probe(struct device *dev))
 
 	/* Set up MAC address based on BogoMIPs figure for first CPU and time
 	 */ 
-	bogomips = (loops_per_sec+2500)/500000 ;
+	bogomips = (loops_per_jiffy+2500)/500000/HZ ;
 	get_fast_time(&utime);
 
 	/* Ummmm....  YES! */

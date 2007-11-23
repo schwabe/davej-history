@@ -36,7 +36,7 @@
 
 #include <linux/agp_backend.h>
 
-static __attribute__((unused)) void unused(void)
+static void __attribute__((unused)) unused(void)
 {
 	agp_enable(0);
 }

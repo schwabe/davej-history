@@ -115,6 +115,7 @@ extern int etherh_probe (struct device *dev);
 extern int am79c961_probe(struct device *dev);
 extern int epic100_probe(struct device *dev);
 extern int rtl8139_probe(struct device *dev);
+extern int rtl8139too_probe(struct device *dev);
 extern int sis900_probe(struct device *dev);
 extern int hplance_probe(struct device *dev);
 extern int bagetlance_probe(struct device *);
@@ -249,6 +250,9 @@ struct devprobe pci_probes[] __initdata = {
 #endif
 #ifdef CONFIG_RTL8139
 	{rtl8139_probe, 0},
+#endif
+#ifdef CONFIG_RTL8139TOO
+	{rtl8139too_probe, 0},
 #endif
 #ifdef CONFIG_SIS900
 	{sis900_probe, 0},

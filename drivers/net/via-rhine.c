@@ -111,7 +111,7 @@ static const int multicast_filter_limit = 32;
 #define RUN_AT(x) (jiffies + (x))
 
 #if (LINUX_VERSION_CODE >= 0x20100)
-char kernel_version[] = UTS_RELEASE;
+static char kernel_version[] = UTS_RELEASE;
 #else
 #ifndef __alpha__
 #define ioremap vremap

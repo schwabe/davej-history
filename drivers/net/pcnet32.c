@@ -316,6 +316,12 @@ static struct pcnet32_pci_id_info pcnet32_tbl[] = {
 	PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, 0x1014, 0x2000,
 	PCI_USES_IO|PCI_USES_MASTER, PCNET32_TOTAL_SIZE,
 	pcnet32_probe1},
+    /* Someone apparently got their vendor id wrong ..
+       reported in an IBM box */
+    { "AMD PCnetPCI series (IBM)",
+	0x1023, 0x2000, 0, 0,
+	PCI_USES_IO|PCI_USES_MASTER, PCNET32_TOTAL_SIZE,
+	pcnet32_probe1},
     { "AMD PCnetHome series",
 	PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_PCNETHOME, 0, 0,
 	PCI_USES_IO|PCI_USES_MASTER, PCNET32_TOTAL_SIZE,
