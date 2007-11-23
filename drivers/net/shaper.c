@@ -381,10 +381,14 @@ static int shaper_open(struct device *dev)
 	
 	/*
 	 *	Can't open until attached.
+	 *	Also can't open until speed is set, or we'll get
+	 *	a division by zero.
 	 */
 	 
 	if(shaper->dev==NULL)
 		return -ENODEV;
+	if(shaper->bitspersec==0)
+		return -EINVAL;
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -462,6 +466,7 @@ static int shaper_attach(struct device *shdev, struct shaper *sh, struct device 
 	shdev->type=dev->type;
 	shdev->addr_len=dev->addr_len;
 	shdev->mtu=dev->mtu;
+	sh->bitspersec=0;
 	return 0;
 }
 

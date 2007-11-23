@@ -149,6 +149,7 @@ Card types:
    13   HFC-2BS0 based cards     irq, io
    14   Teles 16.3c PnP          irq, io
    15   Sedlbauer Speed Card     irq, io
+   15   Sedlbauer PC/104         irq, io
    15   Sedlbauer Speed PCI	 no parameter
    16   USR Sportster internal   irq, io
    17   MIC card                 irq, io
@@ -243,6 +244,7 @@ type
    13	HFC-2BS0 based cards    pa=irq  pb=io
    14   Teles 16.3c PnP         ONLY WORKS AS A MODULE !
    15	Sedlbauer Speed Card    pa=irq  pb=io (Speed Win only as module !)
+   15   Sedlbauer PC/104        pa=irq  pb=io
    15   Sedlbauer Speed PCI	no parameter
    16   USR Sportster internal  pa=irq  pb=io
    17   MIC card                pa=irq  pb=io
@@ -353,6 +355,20 @@ configurable with
 hisaxctrl <DriverId> 2 <delay>
 <delay> in ms Value between 50 and 800 ms is recommended.
 
+Downloading Firmware
+--------------------
+At the moment, the Sedlbauer speed fax+ is the only card, which
+needs to download firmware.
+The firmware is downloaded with the hisaxctrl tool:
+
+    hisaxctrl <DriverId> 9 <firmware_filename>
+
+<DriverId> default is HiSax, if you didn't specify one,
+
+where <firmware_filename> is the filename of the firmware file.
+
+For example, 'hisaxctrl HiSax 9 ISAR.BIN' downloads the firmware for
+ISAR based cards (like the Sedlbauer speed fax+).
 
 Warning
 -------

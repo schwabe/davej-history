@@ -44,11 +44,10 @@ static char *version =
 
 
 #include <linux/config.h>
-#include <linux/modversions.h>
 #include <linux/module.h>
 #include <linux/version.h>
 
-char kernel_version [] = UTS_RELEASE;
+static char kernel_version [] = UTS_RELEASE;
 
 #include <linux/kernel.h>
 #include <linux/sched.h>

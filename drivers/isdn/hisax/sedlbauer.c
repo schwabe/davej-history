@@ -1,9 +1,10 @@
-/* $Id: sedlbauer.c,v 1.1.2.15 1998/11/03 00:07:32 keil Exp $
+/* $Id: sedlbauer.c,v 1.1.2.16 1998/11/08 13:01:01 niemann Exp $
 
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
+ *              support for the Sedlbauer speed fax+,
  *              support for the Sedlbauer ISDN-Controller PC/104 and
- *		support for the Sedlbauer speed pci
+ *              support for the Sedlbauer speed pci
  *              derived from the original file asuscom.c from Karsten Keil
  *
  * Copyright (C) 1997,1998 Marcus Niemann (for the modifications to
@@ -16,6 +17,10 @@
  *            Edgar Toernig
  *
  * $Log: sedlbauer.c,v $
+ * Revision 1.1.2.16  1998/11/08 13:01:01  niemann
+ * Added doc for Sedlbauer ISDN cards,
+ * added info for downloading firmware (Sedlbauer speed fax+)
+ *
  * Revision 1.1.2.15  1998/11/03 00:07:32  keil
  * certification related changes
  * fixed logging for smaller stack use
@@ -80,6 +85,11 @@
  * ISDN PC/104	IPAC		DIP-SWITCH
  * Speed Star2	IPAC		CARDMGR
  * Speed PCI	IPAC		PNP		
+ *
+ * Important:
+ * For the sedlbauer speed fax+ to work properly you have to download 
+ * the firmware onto the card.
+ * For example: hisaxctrl <DriverID> 9 ISAR.BIN
 */
 
 #define SEDLBAUER_PCI 1
@@ -97,7 +107,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.1.2.15 $";
+const char *Sedlbauer_revision = "$Revision: 1.1.2.16 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 

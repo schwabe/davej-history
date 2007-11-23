@@ -1,10 +1,17 @@
-/* $Id: config.c,v 1.15.2.21 1998/11/05 21:13:46 keil Exp $
+/* $Id: config.c,v 1.15.2.23 1998/11/11 11:04:36 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 1.15.2.23  1998/11/11 11:04:36  keil
+ * update version
+ *
+ * Revision 1.15.2.22  1998/11/08 13:00:56  niemann
+ * Added doc for Sedlbauer ISDN cards,
+ * added info for downloading firmware (Sedlbauer speed fax+)
+ *
  * Revision 1.15.2.21  1998/11/05 21:13:46  keil
  * minor fixes
  *
@@ -119,6 +126,8 @@
  *   13 Teleint          p0=irq p1=iobase
  *   14 Teles 16.3c      p0=irq p1=iobase
  *   15 Sedlbauer speed  p0=irq p1=iobase
+ *   15 Sedlbauer PC/104	p0=irq p1=iobase
+ *   15 Sedlbauer speed pci	no parameter
  *   16 USR Sportster internal  p0=irq  p1=iobase
  *   17 MIC card                p0=irq  p1=iobase
  *   18 ELSA Quickstep 1000PCI  no parameter
@@ -421,7 +430,11 @@ HiSaxVersion(void))
 	char tmp[64];
 
 	printk(KERN_INFO "HiSax: Linux Driver for passive ISDN cards\n");
-	printk(KERN_INFO "HiSax: Version 3.0e\n");
+#ifdef MODULE
+	printk(KERN_INFO "HiSax: Version 3.1 (module)\n");
+#else
+	printk(KERN_INFO "HiSax: Version 3.1 (kernel)\n");
+#endif
 	strcpy(tmp, l1_revision);
 	printk(KERN_INFO "HiSax: Layer1 Revision %s\n", HiSax_getrev(tmp));
 	strcpy(tmp, l2_revision);

@@ -1190,8 +1190,6 @@ isdn_net_xmit(struct device *ndev, isdn_net_local * lp, struct sk_buff *skb)
 {
 	int ret;
 
-	(void)isdn_net_recalc_timeout(ISDN_TIMRU_KEEPUP_OUT,
-		ISDN_TIMRU_PACKET_SKB, ndev, skb, 0);
 	/* For the other encaps the header has already been built */
 #ifdef CONFIG_ISDN_PPP
 	if (lp->p_encap == ISDN_NET_ENCAP_SYNCPPP) {
