@@ -94,8 +94,6 @@ static inline int lp_char_polled(char lpchar, int minor)
 	do {
 		status = LP_S(minor);
 		count++;
-		if (need_resched)
-			schedule();
 	} while (LP_READY(minor, status) && (count<LP_CHAR(minor)));
 	/* take strobe low */
 	outb_p(( LP_PSELECP | LP_PINITP ), ( LP_C( minor )));

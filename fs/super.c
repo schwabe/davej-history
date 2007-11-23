@@ -973,7 +973,9 @@ static void do_mount_root(void)
 
 #ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
+#ifdef CONFIG_BLK_DEV_INITRD
 		extern int rd_doload;
+#endif
 		floppy_eject();
 #ifndef CONFIG_BLK_DEV_RAM
 		printk(KERN_NOTICE "(Warning, this kernel has no ramdisk support)\n");

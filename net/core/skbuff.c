@@ -865,6 +865,11 @@ void skb_device_unlock(struct sk_buff *skb)
 	if(skb->lock==0)
 		net_locked--;
 	restore_flags(flags);
+
+        if (skb->free == 3) {
+            skb->free = 1;
+            kfree_skb(skb, FREE_WRITE);
+        }
 }
 
 void dev_kfree_skb(struct sk_buff *skb, int mode)

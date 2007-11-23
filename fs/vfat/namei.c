@@ -832,6 +832,9 @@ static int vfat_readdir_cb(
 		if ((vf->len != name_len + 1) || (vf->name[name_len] != '.')) {
 			return 0;
 		}
+		if (name_len == 2 && name[0] == '.' && name[1] == '.') {
+			return 0;
+		}
 	}
 
 	s1 = name; s2 = vf->name;

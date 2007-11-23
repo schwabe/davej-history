@@ -1507,6 +1507,8 @@ extern int pt_init(void);
 extern int bpq_init(void);
 extern void sdla_setup(void);
 extern int dlci_setup(void);
+extern int sm_init(void);
+extern int baycom_init(void);
 
 int net_dev_init(void)
 {
@@ -1545,6 +1547,12 @@ int net_dev_init(void)
 #endif
 #if defined(CONFIG_SDLA)
 	sdla_setup();
+#endif
+#if defined(CONFIG_BAYCOM)
+        baycom_init();
+#endif
+#if defined(CONFIG_SOUNDMODEM)
+        sm_init();
 #endif
 	/*
 	 *	SLHC if present needs attaching so other people see it

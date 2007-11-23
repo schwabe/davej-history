@@ -20,9 +20,9 @@ static char *version =
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
    Setting to > 1512 effectively disables this feature. */
-static const int rx_copybreak = 200;
+static const rx_copybreak = 200;
 /* Allow setting MTU to a larger size, bypassing the normal ethernet setup. */
-static const int mtu = 1500;
+static const mtu = 1500;
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
 static int max_interrupt_work = 20;
 
@@ -44,9 +44,7 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0, rx_csumhits;
    programmed-I/O for Vortex cards.  Full-bus-master transfers are always
    enabled by default on Boomerang cards.  If VORTEX_BUS_MASTER is defined,
    the feature may be turned on using 'options'. */
-#if YOU_ARE_BRAVER_THAN_ME
 #define VORTEX_BUS_MASTER
-#endif
 
 /* A few values that may be tweaked. */
 /* Time in jiffies before concluding the transmitter is hung. */
@@ -194,7 +192,7 @@ XL, 3Com's PCI to 10/100baseT adapters.  It also works with the 10Mbs
 versions of the FastEtherLink cards.  The supported product IDs are
   3c590, 3c592, 3c595, 3c597, 3c900, 3c905
 
-The ISA 3c515 is supported with a separate driver, 3c515.c, included with
+The ISA 3c515 is supported with a seperate driver, 3c515.c, included with
 the kernel source or available from
     cesdis.gsfc.nasa.gov:/pub/linux/drivers/3c515.html
 
@@ -212,7 +210,7 @@ The 3c59x series use an interface that's very similar to the previous 3c5x9
 series.  The primary interface is two programmed-I/O FIFOs, with an
 alternate single-contiguous-region bus-master transfer (see next).
 
-The 3c900 "Boomerang" series uses a full-bus-master interface with separate
+The 3c900 "Boomerang" series uses a full-bus-master interface with seperate
 lists of transmit and receive descriptors, similar to the AMD LANCE/PCnet,
 DEC Tulip and Intel Speedo3.  The first chip version retains a compatible
 programmed-I/O interface that will be removed in the 'B' and subsequent
@@ -1342,7 +1340,7 @@ static void vortex_tx_timeout(struct device *dev)
 }
 
 /*
- * Handle uncommon interrupt sources.  This is a separate routine to minimize
+ * Handle uncommon interrupt sources.  This is a seperate routine to minimize
  * the cache impact.
  */
 static void
@@ -1761,7 +1759,8 @@ boomerang_rx(struct device *dev)
 		printk(KERN_DEBUG "  In boomerang_rx(), status %4.4x, rx_status "
 			   "%4.4x.\n",
 			   inw(ioaddr+EL3_STATUS), inw(ioaddr+RxStatus));
-	while ((rx_status = vp->rx_ring[entry].status) & RxDComplete) {
+	while ((--rx_work_limit >= 0) &&
+			((rx_status = vp->rx_ring[entry].status) & RxDComplete)) {
 		if (rx_status & RxDError) { /* Error, update stats. */
 			unsigned char rx_error = rx_status >> 16;
 			if (vortex_debug > 2)
@@ -1801,6 +1800,10 @@ boomerang_rx(struct device *dev)
 				void *temp;
 				/* Pass up the skbuff already on the Rx ring. */
 				skb = vp->rx_skbuff[entry];
+				if (skb == NULL) {
+					printk(KERN_WARNING "%s: in boomerang_rx -- attempt to use NULL skb caught\n", dev->name);
+					break;
+				}
 				vp->rx_skbuff[entry] = NULL;
 #if LINUX_VERSION_CODE >= 0x10300
 				temp = skb_put(skb, pkt_len);
@@ -1833,8 +1836,6 @@ boomerang_rx(struct device *dev)
 			vp->stats.rx_packets++;
 		}
 		entry = (++vp->cur_rx) % RX_RING_SIZE;
-		if (--rx_work_limit < 0)
-			break;
 	}
 	/* Refill the Rx ring buffers. */
 	for (; vp->dirty_rx < vp->cur_rx; vp->dirty_rx++) {
@@ -1842,8 +1843,10 @@ boomerang_rx(struct device *dev)
 		entry = vp->dirty_rx % RX_RING_SIZE;
 		if (vp->rx_skbuff[entry] == NULL) {
 			skb = DEV_ALLOC_SKB(PKT_BUF_SZ);
-			if (skb == NULL)
+			if (skb == NULL) {
+				printk(KERN_DEBUG "%s: in boomerang_rx -- could not allocate skbuff\n", dev->name);
 				break;			/* Bad news!  */
+			}
 			skb->dev = dev;			/* Mark as being used by this device. */
 #if LINUX_VERSION_CODE > 0x10300
 			skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
@@ -1856,6 +1859,12 @@ boomerang_rx(struct device *dev)
 		vp->rx_ring[entry].status = 0;	/* Clear complete bit. */
 		outw(UpUnstall, ioaddr + EL3_CMD);
 	}
+
+	if (vp->dirty_rx >= RX_RING_SIZE ) {
+		vp->cur_rx -= RX_RING_SIZE;
+		vp->dirty_rx -= RX_RING_SIZE;
+	}
+
 	return 0;
 }
 

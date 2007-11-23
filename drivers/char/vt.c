@@ -172,8 +172,10 @@ _kd_mksound(unsigned int hz, unsigned int ticks)
 	if (hz > 20 && hz < 32767)
 		count = 1193180 / hz;
         
+        if (!count)
+        	kd_nosound(0);
         /* ignore multiple simultaneous requests for sound */
-        if (!set_bit(0, &mksound_lock)) {
+        else if (!set_bit(0, &mksound_lock)) {
         /* set_bit in 2.0.x is same as test-and-set in 2.1.x */
                 del_timer(&sound_timer);
                 if (count) {
@@ -189,9 +191,7 @@ _kd_mksound(unsigned int hz, unsigned int ticks)
                                 sound_timer.expires = jiffies+ticks;
                                 add_timer(&sound_timer);
                         }
-                } else
-                        kd_nosound(0);
- 
+		} 
                 mksound_lock = 0;
         }	
 	return;

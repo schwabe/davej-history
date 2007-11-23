@@ -1,5 +1,8 @@
 TLan Device Driver change log.
 
+1.0	- Stopped ignoring devices that didn't has the bus master
+	  flag set.
+
 0.43	- Changed the id strings of the Compaq devices to their real
 	  names.
 	- Added 2 other Olicom devices with a patch provided by
