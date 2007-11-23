@@ -1,6 +1,10 @@
-/* $Id: isdnl3.h,v 1.3.2.2 1998/05/27 18:06:02 keil Exp $
+/* $Id: isdnl3.h,v 1.3.2.3 1998/11/03 00:07:08 keil Exp $
 
  * $Log: isdnl3.h,v $
+ * Revision 1.3.2.3  1998/11/03 00:07:08  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.3.2.2  1998/05/27 18:06:02  keil
  * HiSax 3.0
  *
@@ -41,7 +45,8 @@ struct stateentry {
 	void (*rout) (struct l3_process *, u_char, void *);
 };
 
-extern void l3_debug(struct PStack *st, const char *fmt, ...);
+#define l3_debug(st, fmt, args...) HiSax_putstatus(st->l1.hardware, "l3 ", fmt, ## args)
+
 extern void newl3state(struct l3_process *pc, int state);
 extern void L3InitTimer(struct l3_process *pc, struct L3Timer *t);
 extern void L3DelTimer(struct L3Timer *t);

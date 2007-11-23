@@ -12,7 +12,7 @@
  * 	This driver is for AMD PCnet-PCI based ethercards
  */
 
-static const char *version = "\npcnet32.c:v0.99B 4/4/98 DJBecker/TSBogend.\n";
+static const char *version = "pcnet32.c:v0.99B 4/4/98 DJBecker/TSBogend.\n";
 
 /* A few user-configurable values. */
 
@@ -178,7 +178,8 @@ static struct pcnet_chip_type {
 	{0x2420, "PCnet/PCI 79C970", 0},
 	{0x2430, "PCnet32", 0},
 	{0x2621, "PCnet/PCI II 79C970A", 0},
-	{0x2623, "PCnet/PCI II 79C971A", 0},
+	{0x2623, "PCnet/FAST 79C971", 0},
+	{0x2624, "PCnet/FAST+ 79C972", 0},
 	{0x0, 	 "PCnet32 (unknown)", 0},
 };
 
@@ -340,11 +341,7 @@ static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char
     outw(0x0000, ioaddr+PCNET32_ADDR);
     inw(ioaddr+PCNET32_ADDR);
 
-	dev->irq = irq_line;
-
-    outw(0x0002, ioaddr+PCNET32_ADDR);
-    /* only touch autoselect bit */
-    outw(inw(ioaddr+PCNET32_BUS_IF) | 0x0002, ioaddr+PCNET32_BUS_IF);
+    dev->irq = irq_line;
 
     if (pcnet32_debug > 0)
       printk(version);
@@ -395,7 +392,17 @@ pcnet32_open(struct device *dev)
 		           (u32) virt_to_bus(lp->rx_ring),
 			   (u32) virt_to_bus(&lp->init_block));
 
-	lp->init_block.mode = 0x0000;
+	/* check for ATLAS T1/E1 LAW card */
+	if (dev->dev_addr[0] == 0x00 && dev->dev_addr[1] == 0xe0 && dev->dev_addr[2] == 0x75) {
+		/* select GPSI mode */
+		lp->init_block.mode = 0x0100;
+		outw(0x0002, ioaddr+PCNET32_ADDR);
+		outw(inw(ioaddr+PCNET32_BUS_IF) & ~2, ioaddr+PCNET32_BUS_IF);
+		/* switch full duplex on */
+		outw(0x0009, ioaddr+PCNET32_ADDR);
+		outw(inw(ioaddr+PCNET32_BUS_IF) | 1, ioaddr+PCNET32_BUS_IF);
+	} else
+		lp->init_block.mode = 0x0000;
 	lp->init_block.filter[0] = 0x00000000;
 	lp->init_block.filter[1] = 0x00000000;
 	pcnet32_init_ring(dev);
@@ -885,14 +892,14 @@ static void pcnet32_set_multicast_list(struct device *dev)
 	if (dev->flags&IFF_PROMISC) {
 		/* Log any net taps. */
 		printk("%s: Promiscuous mode enabled.\n", dev->name);
-		lp->init_block.mode = 0x8000;
+		lp->init_block.mode |= 0x8000;
 	} else {
 		int num_addrs=dev->mc_count;
 		if(dev->flags&IFF_ALLMULTI)
 			num_addrs=1;
 		/* FIXIT: We don't use the multicast table, but rely on upper-layer filtering. */
 		memset(lp->init_block.filter , (num_addrs == 0) ? 0 : -1, sizeof(lp->init_block.filter));
-		lp->init_block.mode = 0x0000;
+		lp->init_block.mode &= ~0x8000;
 	}
 
 	outw(0, ioaddr+PCNET32_ADDR);

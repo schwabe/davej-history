@@ -1,8 +1,8 @@
-/* $Id: isdnloop.c,v 1.1 1997/03/24 23:02:04 fritz Exp $
+/* $Id: isdnloop.c,v 1.1.2.1 1998/11/05 22:13:15 fritz Exp $
 
  * ISDN low-level module implementing a dummy loop driver.
  *
- * Copyright 1997 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1998 by Fritz Elfert (fritz@isdn4linux.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdnloop.c,v $
+ * Revision 1.1.2.1  1998/11/05 22:13:15  fritz
+ * Changed mail-address.
+ *
  * Revision 1.1  1997/03/24 23:02:04  fritz
  * Added isdnloop driver.
  *
@@ -27,7 +30,7 @@
 #include "isdnloop.h"
 
 static char
-*revision = "$Revision: 1.1 $";
+*revision = "$Revision: 1.1.2.1 $";
 
 static int isdnloop_addcard(char *);
 

@@ -1,4 +1,4 @@
-/* $Id: telespci.c,v 1.1.2.2 1998/04/20 08:52:46 keil Exp $
+/* $Id: telespci.c,v 1.1.2.3 1998/10/16 12:46:09 keil Exp $
 
  * telespci.c     low level stuff for Teles PCI isdn cards
  *
@@ -7,6 +7,9 @@
  *
  *
  * $Log: telespci.c,v $
+ * Revision 1.1.2.3  1998/10/16 12:46:09  keil
+ * fix pci detection for more as one card
+ *
  * Revision 1.1.2.2  1998/04/20 08:52:46  keil
  * Fix register offsets
  *
@@ -26,7 +29,7 @@
 
 extern const char *CardType[];
 
-const char *telespci_revision = "$Revision: 1.1.2.2 $";
+const char *telespci_revision = "$Revision: 1.1.2.3 $";
 
 #define ZORAN_PO_RQ_PEN	0x02000000
 #define ZORAN_PO_WR	0x00800000
@@ -284,7 +287,7 @@ TelesPCI_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			return(0);
 		case CARD_SETIRQ:
 			return(request_irq(cs->irq, &telespci_interrupt,
-					I4L_IRQ_FLAG, "HiSax", cs));
+					I4L_IRQ_FLAG | SA_SHIRQ, "HiSax", cs));
 		case CARD_INIT:
 			inithscxisac(cs, 3);
 			return(0);
@@ -311,7 +314,7 @@ setup_telespci(struct IsdnCard *card))
 		return (0);
 
 #if CONFIG_PCI
-	for (pci_index = 0; pci_index < 0xff; pci_index++) {
+	for (; pci_index < 0xff; pci_index++) {
 		if (pcibios_find_device (0x11DE, 0x6120,
 			pci_index, &pci_bus, &pci_device_fn)
 			== PCIBIOS_SUCCESSFUL) {

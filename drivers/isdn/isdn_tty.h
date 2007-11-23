@@ -1,8 +1,8 @@
-/* $Id: isdn_tty.h,v 1.10 1997/03/02 14:29:26 fritz Exp $
+/* $Id: isdn_tty.h,v 1.10.2.2 1998/11/05 22:12:25 fritz Exp $
 
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994-1998  by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    by Thinking Objects Software GmbH Wuerzburg
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,6 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.h,v $
+ * Revision 1.10.2.2  1998/11/05 22:12:25  fritz
+ * Changed mail-address.
+ *
+ * Revision 1.10.2.1  1998/10/25 15:48:44  fritz
+ * Misc bugfixes and adaptions to new HiSax
+ *
  * Revision 1.10  1997/03/02 14:29:26  fritz
  * More ttyI related cleanup.
  *
@@ -59,7 +65,7 @@ extern void isdn_tty_modem_ring(void);
 extern void isdn_tty_modem_xmit(void);
 extern int isdn_tty_modem_init(void);
 extern void isdn_tty_readmodem(void);
-extern int isdn_tty_find_icall(int, int, setup_parm);
+extern int isdn_tty_find_icall(int, isdn_ctrl *);
 extern void isdn_tty_cleanup_xmit(modem_info *);
 extern int isdn_tty_stat_callback(int, isdn_ctrl *);
 extern int isdn_tty_rcv_skb(int, int, int, struct sk_buff *);

@@ -1,8 +1,8 @@
-/* $Id: icn.h,v 1.26 1997/02/14 12:23:16 fritz Exp $
+/* $Id: icn.h,v 1.26.2.1 1998/11/05 22:13:06 fritz Exp $
 
  * ISDN lowlevel-module for the ICN active ISDN-Card.
  *
- * Copyright 1994 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994-1998 by Fritz Elfert (fritz@isdn4linux.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.h,v $
+ * Revision 1.26.2.1  1998/11/05 22:13:06  fritz
+ * Changed mail-address.
+ *
  * Revision 1.26  1997/02/14 12:23:16  fritz
  * Added support for new insmod parameter handling.
  *

@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.1.2.3 1998/10/04 23:04:58 keil Exp $
+/* $Id: isar.c,v 1.1.2.4 1998/11/03 00:06:44 keil Exp $
 
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -6,6 +6,10 @@
  *
  *
  * $Log: isar.c,v $
+ * Revision 1.1.2.4  1998/11/03 00:06:44  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.1.2.3  1998/10/04 23:04:58  keil
  * ISAR works now
  *
@@ -58,12 +62,8 @@ sendmsg(struct IsdnCardState *cs, u_char his, u_char creg, u_char len,
 	if (!waitforHIA(cs, 4000))
 		return(0);
 #if DUMP_MBOXFRAME
-	if (cs->debug & L1_DEB_HSCX) {
-		char tmp[32];
-		
-		sprintf(tmp, "sendmsg(%02x,%02x,%d)", his, creg, len);
-		debugl1(cs, tmp);
-	}
+	if (cs->debug & L1_DEB_HSCX)
+		debugl1(cs, "sendmsg(%02x,%02x,%d)", his, creg, len);
 #endif
 	save_flags(flags);
 	cli();
@@ -132,13 +132,9 @@ get_irq_infos(struct IsdnCardState *cs, struct isar_reg *ireg)
 	ireg->cmsb = cs->BC_Read_Reg(cs, 1, ISAR_CTRL_H);
 	ireg->clsb = cs->BC_Read_Reg(cs, 1, ISAR_CTRL_L);
 #if DUMP_MBOXFRAME
-	if (cs->debug & L1_DEB_HSCX) {
-		char tmp[32];
-		
-		sprintf(tmp, "rcv_mbox(%02x,%02x,%d)", ireg->iis, ireg->cmsb,
+	if (cs->debug & L1_DEB_HSCX)
+		debugl1(cs, "rcv_mbox(%02x,%02x,%d)", ireg->iis, ireg->cmsb,
 			ireg->clsb);
-		debugl1(cs, tmp);
-	}
 #endif
 }
 
@@ -424,7 +420,6 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 	u_char *ptr;
 	struct sk_buff *skb;
 	struct isar_reg *ireg = bcs->hw.isar.reg;
-	char tmp[64];
 	
 	if (!ireg->clsb) {
 		debugl1(cs, "isar zero len frame");
@@ -433,10 +428,10 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 	}
 	switch (bcs->mode) {
 	case L1_MODE_NULL:
-		sprintf(tmp, "isar mode 0 spurious IIS_RDATA %x/%x/%x",
+		debugl1(cs, "isar mode 0 spurious IIS_RDATA %x/%x/%x",
 			ireg->iis, ireg->cmsb, ireg->clsb);
-		printk(KERN_WARNING"%s\n",tmp);
-		debugl1(cs, tmp);
+		printk(KERN_WARNING"isar mode 0 spurious IIS_RDATA %x/%x/%x\n",
+			ireg->iis, ireg->cmsb, ireg->clsb);
 		cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
 		break;
 	case L1_MODE_TRANS:
@@ -457,11 +452,9 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
 			bcs->hw.isar.rcvidx = 0;
 		} else if (ireg->cmsb & HDLC_ERROR) {
-			if (cs->debug & L1_DEB_WARN) {
-				sprintf(tmp, "isar frame error %x len %d",
+			if (cs->debug & L1_DEB_WARN)
+				debugl1(cs, "isar frame error %x len %d",
 					ireg->cmsb, ireg->clsb);
-				debugl1(cs, tmp);
-			}
 			bcs->hw.isar.rcvidx = 0;
 			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
 		} else {
@@ -497,7 +490,6 @@ void
 isar_fill_fifo(struct BCState *bcs)
 {
 	struct IsdnCardState *cs = bcs->cs;
-	char tmp[64];
 	int count;
 	u_char msb;
 	u_char *ptr;
@@ -534,21 +526,17 @@ isar_fill_fifo(struct BCState *bcs)
 	case L1_MODE_TRANS:
 		if (!sendmsg(cs, SET_DPS(bcs->hw.isar.dpath) | ISAR_HIS_SDATA,
 			0, count, ptr)) {
-			if (cs->debug) {
-				sprintf(tmp, "isar bin data send dp%d failed",
+			if (cs->debug)
+				debugl1(cs, "isar bin data send dp%d failed",
 					bcs->hw.isar.dpath);
-				debugl1(cs, tmp);
-			}
 		}
 		break;
 	case L1_MODE_HDLC:
 		if (!sendmsg(cs, SET_DPS(bcs->hw.isar.dpath) | ISAR_HIS_SDATA,
 			msb, count, ptr)) {
-			if (cs->debug) {
-				sprintf(tmp, "isar hdlc data send dp%d failed",
+			if (cs->debug)
+				debugl1(cs, "isar hdlc data send dp%d failed",
 					bcs->hw.isar.dpath);
-				debugl1(cs, tmp);
-			}
 		}
 		break;
 	default:
@@ -618,11 +606,12 @@ check_send(struct IsdnCardState *cs, u_char rdm)
 	
 }
 
+static char debbuf[64];
+
 void
 isar_int_main(struct IsdnCardState *cs)
 {
 	long flags;
-	char tmp[64];
 	struct isar_reg *ireg = cs->bcs[0].hw.isar.reg;
 	struct BCState *bcs;
 
@@ -634,10 +623,10 @@ isar_int_main(struct IsdnCardState *cs)
 			if ((bcs = sel_bcs_isar(cs, ireg->iis >> 6))) {
 				isar_rcv_frame(cs, bcs);
 			} else {
-				sprintf(tmp, "isar spurious IIS_RDATA %x/%x/%x",
+				debugl1(cs, "isar spurious IIS_RDATA %x/%x/%x",
 					ireg->iis, ireg->cmsb, ireg->clsb);
-				printk(KERN_WARNING"%s\n",tmp);
-				debugl1(cs, tmp);
+				printk(KERN_WARNING"isar spurious IIS_RDATA %x/%x/%x\n",
+					ireg->iis, ireg->cmsb, ireg->clsb);
 				cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
 			}
 			break;
@@ -648,12 +637,9 @@ isar_int_main(struct IsdnCardState *cs)
 			break;
 		case ISAR_IIS_BSTEV:
 			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
-			if (cs->debug & L1_DEB_WARN) {
-				sprintf(tmp, "Buffer STEV dpath%d msb(%x)",
+			if (cs->debug & L1_DEB_WARN)
+				debugl1(cs, "Buffer STEV dpath%d msb(%x)",
 					ireg->iis>>6, ireg->cmsb);
-				debugl1(cs, tmp);
-			}
-			
 			break;
 		case ISAR_IIS_DIAG:
 		case ISAR_IIS_PSTRSP:
@@ -663,21 +649,19 @@ isar_int_main(struct IsdnCardState *cs)
 			rcv_mbox(cs, ireg, (u_char *)ireg->par);
 			if ((cs->debug & (L1_DEB_HSCX | L1_DEB_HSCX_FIFO))
 				== L1_DEB_HSCX) {
-				u_char *tp=tmp;
+				u_char *tp=debbuf;
 
-				tp += sprintf(tmp, "msg iis(%x) msb(%x)",
+				tp += sprintf(debbuf, "msg iis(%x) msb(%x)",
 					ireg->iis, ireg->cmsb);
 				QuickHex(tp, (u_char *)ireg->par, ireg->clsb);
-				debugl1(cs, tmp);
+				debugl1(cs, debbuf);
 			}
 			break;
 		default:
-			rcv_mbox(cs, ireg, tmp);
-			if (cs->debug & L1_DEB_WARN) {
-				sprintf(tmp, "unhandled msg iis(%x) ctrl(%x/%x)",
+			rcv_mbox(cs, ireg, debbuf);
+			if (cs->debug & L1_DEB_WARN)
+				debugl1(cs, "unhandled msg iis(%x) ctrl(%x/%x)",
 					ireg->iis, ireg->cmsb, ireg->clsb);
-				debugl1(cs, tmp);
-			}
 			break;
 	}
 	restore_flags(flags);
@@ -687,27 +671,22 @@ void
 setup_pump(struct BCState *bcs) {
 	struct IsdnCardState *cs = bcs->cs;
 	u_char dps = SET_DPS(bcs->hw.isar.dpath);
-	char tmp[40];
 	
 	switch (bcs->mode) {
 		case L1_MODE_NULL:
 		case L1_MODE_TRANS:
 		case L1_MODE_HDLC:
 			if (!sendmsg(cs, dps | ISAR_HIS_PUMPCFG, PMOD_BYPASS, 0, NULL)) {
-				if (cs->debug) {
-					sprintf(tmp, "isar pump bypass cfg dp%d failed",
+				if (cs->debug)
+					debugl1(cs, "isar pump bypass cfg dp%d failed",
 						bcs->hw.isar.dpath);
-					debugl1(cs, tmp);
-				}
 			}
 			break;
 	}
 	if (!sendmsg(cs, dps | ISAR_HIS_PSTREQ, 0, 0, NULL)) {
-		if (cs->debug) {
-			sprintf(tmp, "isar pump status req dp%d failed",
+		if (cs->debug)
+			debugl1(cs, "isar pump status req dp%d failed",
 				bcs->hw.isar.dpath);
-			debugl1(cs, tmp);
-		}
 	}
 }
 
@@ -715,46 +694,34 @@ void
 setup_sart(struct BCState *bcs) {
 	struct IsdnCardState *cs = bcs->cs;
 	u_char dps = SET_DPS(bcs->hw.isar.dpath);
-	char tmp[40];
 	
 	switch (bcs->mode) {
 		case L1_MODE_NULL:
 			if (!sendmsg(cs, dps | ISAR_HIS_SARTCFG, SMODE_DISABLE, 0, NULL)) {
-				if (cs->debug) {
-					sprintf(tmp, "isar sart disable dp%d failed",
+				if (cs->debug)
+					debugl1(cs, "isar sart disable dp%d failed",
 						bcs->hw.isar.dpath);
-					debugl1(cs, tmp);
-				}
 			}
 			break;
 		case L1_MODE_TRANS:
-			tmp[0] = 0;
-			tmp[1] = 0;
-			if (!sendmsg(cs, dps | ISAR_HIS_SARTCFG, SMODE_BINARY, 2, tmp)) {
-				if (cs->debug) {
-					sprintf(tmp, "isar sart binary dp%d failed",
+			if (!sendmsg(cs, dps | ISAR_HIS_SARTCFG, SMODE_BINARY, 2, "\0\0")) {
+				if (cs->debug)
+					debugl1(cs, "isar sart binary dp%d failed",
 						bcs->hw.isar.dpath);
-					debugl1(cs, tmp);
-				}
 			}
 			break;
 		case L1_MODE_HDLC:
-			tmp[0] = 0;
-			if (!sendmsg(cs, dps | ISAR_HIS_SARTCFG, SMODE_HDLC, 1, tmp)) {
-				if (cs->debug) {
-					sprintf(tmp, "isar sart binary dp%d failed",
+			if (!sendmsg(cs, dps | ISAR_HIS_SARTCFG, SMODE_HDLC, 1, "\0")) {
+				if (cs->debug)
+					debugl1(cs, "isar sart binary dp%d failed",
 						bcs->hw.isar.dpath);
-					debugl1(cs, tmp);
-				}
 			}
 			break;
 	}
 	if (!sendmsg(cs, dps | ISAR_HIS_BSTREQ, 0, 0, NULL)) {
-		if (cs->debug) {
-			sprintf(tmp, "isar buf stat req dp%d failed",
+		if (cs->debug)
+			debugl1(cs, "isar buf stat req dp%d failed",
 				bcs->hw.isar.dpath);
-			debugl1(cs, tmp);
-		}
 	}
 }
 
@@ -762,7 +729,6 @@ void
 setup_iom2(struct BCState *bcs) {
 	struct IsdnCardState *cs = bcs->cs;
 	u_char dps = SET_DPS(bcs->hw.isar.dpath);
-	char tmp[40];
 	u_char cmsb = 0, msg[5] = {0x10,0,0,0,0};
 	
 	switch (bcs->mode) {
@@ -778,17 +744,13 @@ setup_iom2(struct BCState *bcs) {
 			break;
 	}
 	if (!sendmsg(cs, dps | ISAR_HIS_IOM2CFG, cmsb, 5, msg)) {
-		if (cs->debug) {
-			sprintf(tmp, "isar iom2 dp%d failed", bcs->hw.isar.dpath);
-			debugl1(cs, tmp);
-		}
+		if (cs->debug)
+			debugl1(cs, "isar iom2 dp%d failed", bcs->hw.isar.dpath);
 	}
 	if (!sendmsg(cs, dps | ISAR_HIS_IOM2REQ, 0, 0, NULL)) {
-		if (cs->debug) {
-			sprintf(tmp, "isar IOM2 cfg req dp%d failed",
+		if (cs->debug)
+			debugl1(cs, "isar IOM2 cfg req dp%d failed",
 				bcs->hw.isar.dpath);
-			debugl1(cs, tmp);
-		}
 	}
 }
 
@@ -796,7 +758,6 @@ int
 modeisar(struct BCState *bcs, int mode, int bc)
 {
 	struct IsdnCardState *cs = bcs->cs;
-	char tmp[40];
 
 	/* Here we are selecting the best datapath for requested mode */
 	if(bcs->mode == L1_MODE_NULL) { /* New Setup */
@@ -820,11 +781,9 @@ modeisar(struct BCState *bcs, int mode, int bc)
 				break;
 		}
 	}
-	if (cs->debug & L1_DEB_HSCX) {
-		sprintf(tmp, "isar dp%d mode %d->%d ichan %d",
+	if (cs->debug & L1_DEB_HSCX)
+		debugl1(cs, "isar dp%d mode %d->%d ichan %d",
 			bcs->hw.isar.dpath, bcs->mode, mode, bc);
-		debugl1(cs, tmp);
-	}
 	bcs->mode = mode;
 	setup_pump(bcs);
 	setup_sart(bcs);
@@ -844,7 +803,6 @@ void
 isar_setup(struct IsdnCardState *cs)
 {
 	u_char msg;
-	char tmp[40];
 	int i;
 	
 	/* Dpath 1, 2 */
@@ -853,10 +811,8 @@ isar_setup(struct IsdnCardState *cs)
 		/* Buffer Config */
 		if (!sendmsg(cs, (i ? ISAR_HIS_DPS2 : ISAR_HIS_DPS1) |
 			ISAR_HIS_P12CFG, 4, 1, &msg)) {
-			if (cs->debug) {
-				sprintf(tmp, "isar P%dCFG failed", i+1);
-				debugl1(cs, tmp);
-			}
+			if (cs->debug)
+				debugl1(cs, "isar P%dCFG failed", i+1);
 		}
 		cs->bcs[i].hw.isar.mml = msg;
 		cs->bcs[i].mode = 0;

@@ -41,11 +41,11 @@ README for the ISDN-subsystem
   In the following Text, the terms MSN and EAZ are used.
 
   MSN is the abbreviation for (M)ultiple(S)ubscriber(N)umber, and applies
-  to Euro(EDSS1)-type lines. Usually it is simply the phone-number.
+  to Euro(EDSS1)-type lines. Usually it is simply the phone number.
 
   EAZ is the abbreviation of (E)ndgeraete(A)uswahl(Z)iffer and
   applies to German 1TR6-type lines. This is a one-digit string,
-  simply appended to the base phone-number
+  simply appended to the base phone number
 
   The internal handling is nearly identical, so replace the appropriate
   term to that one, which applies to your local ISDN-environment.
@@ -62,7 +62,7 @@ README for the ISDN-subsystem
      read:  raw D-channel-messages (format: depends on driver).
      ioctl: depends on driver, i.e. for the ICN-driver, the base-address of
             the ports and the shared memory on the card can be set and read
-            also the boot-code an the protocol software can be loaded into 
+            also the boot-code and the protocol software can be loaded into 
             the card.
 
    O N L Y !!!  for debugging (no locking against other devices):
@@ -74,7 +74,7 @@ README for the ISDN-subsystem
 
    128 tty-devices (64 cuix and 64 ttyIx) with integrated modem-emulator:
    The functionality is almost the same as that of a serial device
-   (the line-discs are handled by the kernel, which lets you run 
+   (the line-discs are handled by the kernel), which lets you run 
    SLIP, CSLIP and asynchronous PPP through the devices. We have tested 
    Seyon, minicom, CSLIP (uri-dip) PPP and mgetty (compiled with NO_FAX),
    XCept.
@@ -82,57 +82,57 @@ README for the ISDN-subsystem
    The modem-emulation supports the following:
            1.3.1 Commands:
 
-               ATA	Answer incoming call.
-	       ATD<No.> Dial, the number may contain:
+               ATA      Answer incoming call.
+               ATD<No.> Dial, the number may contain:
                         [0-9] and [,#.*WPT-S]
                         the latter are ignored until 'S'.
                         The 'S' must precede the number, if 
                         the line is a SPV (German 1TR6).
-               ATE0	Echo off.
-	       ATE1     Echo on (default).
+               ATE0     Echo off.
+               ATE1     Echo on (default).
                ATH      Hang-up.
-	       ATH1     Off hook (ignored).
+               ATH1     Off hook (ignored).
                ATH0     Hang-up.
-	       ATI      Return "ISDN for Linux...".
+               ATI      Return "ISDN for Linux...".
                ATI0        "
                ATI1        "
-			   ATI2 Report of last connection.
+               ATI2     Report of last connection.
                ATO      On line (data mode).
                ATQ0     Enable result codes (default).
                ATQ1     Disable result codes (default).
-               ATSx=y	Set register x to y.
-	       ATSx?    Show contents of register x.
+               ATSx=y   Set register x to y.
+               ATSx?    Show contents of register x.
                ATV0     Numeric responses.
                ATV1     English responses (default).
-	       ATZ      Load registers and EAZ/MSN from Profile.
-	       AT&Bx    Set Send-Packet-size to x (max. 4000)
+               ATZ      Load registers and EAZ/MSN from Profile.
+               AT&Bx    Set Send-Packet-size to x (max. 4000)
                         The real packet-size may be limited by the
-                        low-level-driver used. i.e.: the HiSax-Module-
+                        low-level-driver used. e.g. the HiSax-Module-
                         limit is 2000. You will get NO Error-Message,
-                        if you set it to higher Values, because at the
+                        if you set it to higher values, because at the
                         time of giving this command the corresponding
                         driver may not be selected (see "Automatic
                         Assignment") however the size of outgoing packets
                         will be limited correctly.
-	       AT&D0    Ignore DTR
-	       AT&D2    DTR-low-edge: Hang up and return to 
+               AT&D0    Ignore DTR
+               AT&D2    DTR-low-edge: Hang up and return to 
                         command mode (default).
                AT&D3    Same as AT&D2 but also resets all registers.
-	       AT&Ex    Set the EAZ/MSN for this channel to x.
-	       AT&F     Reset all registers and profile to "factory-defaults"
-	       AT&Sx    Set window-size (x = 1..8) (not yet implemented)
-	       AT&V     Show all settings.
+               AT&Ex    Set the EAZ/MSN for this channel to x.
+               AT&F     Reset all registers and profile to "factory-defaults"
+               AT&Sx    Set window-size (x = 1..8) (not yet implemented)
+               AT&V     Show all settings.
                AT&W0    Write registers and EAZ/MSN to profile. See also
                         iprofd (5.c in this README).
-               AT&X0	BTX-mode off (default)
-	       AT&X1    BTX-mode on. (S13.1=1, S14=0, S16=7, S18=7, S19=0)
+               AT&X0    BTX-mode off (default)
+               AT&X1    BTX-mode on. (S13.1=1, S14=0, S16=7, S18=7, S19=0)
 
            For voice-mode commands refer to README.audio
 
-	   1.3.2 Escape sequence:
+           1.3.2 Escape sequence:
                During a connection, the emulation reacts just like
                a normal modem to the escape sequence <DELAY>+++<DELAY>.
-	       (The escape character - default '+' - can be set in the
+               (The escape character - default '+' - can be set in the
                register 2).
                The DELAY must at least be 1.5 seconds long and delay 
                between the escape characters must not exceed 0.5 seconds.
@@ -180,19 +180,19 @@ README for the ISDN-subsystem
                                       1 = T.70 protocol (Only for BTX!) on
                             Bit 2:    0 = Don't hangup on DTR low.
                                       1 = Hangup on DTR low.
-			    Bit 3:    0 = Standard response messages
-				      1 = Extended response messages
+                            Bit 3:    0 = Standard response messages
+                                      1 = Extended response messages
                             Bit 4:    0 = CALLER NUMBER before every RING.
                                       1 = CALLER NUMBER after first RING.
-	     14   0         Layer-2 protocol:
-				      0 = X75/LAPB with I-frames
-				      1 = X75/LAPB with UI-frames
+             14   0         Layer-2 protocol:
+                                      0 = X75/LAPB with I-frames
+                                      1 = X75/LAPB with UI-frames
                                       2 = X75/LAPB with BUI-frames
                                       3 = HDLC
                                       4 = Transparent (audio)
              15   0         Layer-3 protocol: (at the moment always 0)
                                       0 = transparent
-	     16   250       Send-Packet-size/16
+             16   250       Send-Packet-size/16
              17   8         Window-size (not yet implemented)
              18   4         Bit coded register, Service-Octet-1 to accept,
                             or to be used on dialout:
@@ -211,7 +211,7 @@ README for the ISDN-subsystem
              19   0         Service-Octet-2
              20   0         Bit coded register (readonly)
                             Service-Octet-1 of last call.
-                            Bit mapping is the same like register 18
+                            Bit mapping is the same as register 18
              21   0         Bit coded register (readonly)
                             Set on incoming call (during RING) to
                             octet 3 of calling party number IE (Numbering plan)
@@ -229,17 +229,17 @@ README for the ISDN-subsystem
   All inactive physical lines are listening to all EAZs for incoming
   calls and are NOT assigned to a specific tty or network interface.
   When an incoming call is detected, the driver looks first for a network 
-  interfaces and then for an opened tty which:
+  interface and then for an opened tty which:
 
   1. is configured for the same EAZ.
   2. has the same protocol settings for the B-channel.
   3. (only for network interfaces if the security flag is set)
      contains the caller number in its access list.
   4. Either the channel is not bound exclusively to another Net-interface, or
-     it is bound AND the other checks apply to exact this Interface.
+     it is bound AND the other checks apply to exactly this interface.
      (For usage of the bind-features, refer to the isdnctrl-man-page)
 
-  Only when a matching interface or tty is found, the call is accepted
+  Only when a matching interface or tty is found is the call accepted
   and the "connection" between the low-level-layer and the link-level-layer
   is established and kept until the end of the connection.
   In all other cases no connection is established. Isdn4linux can be
@@ -275,8 +275,8 @@ README for the ISDN-subsystem
 
 4. Device-inodes
 
-   The major and minor-numbers and its names are described in
-   Documentation/devices.txt. The major-numbers are:
+   The major and minor numbers and their names are described in
+   Documentation/devices.txt. The major numbers are:
 
      43 for the ISDN-tty's.
      44 for the ISDN-callout-tty's.
@@ -285,7 +285,7 @@ README for the ISDN-subsystem
 5. Application
 
    a) For some card-types, firmware has to be loaded into the cards, before
-      proceeding with device-independant setup. See README.<yourDriver>
+      proceeding with device-independent setup. See README.<yourDriver>
       for how to do that.
 
    b) If you only intend to use ttys, you are nearly ready now.
@@ -321,23 +321,42 @@ README for the ISDN-subsystem
       the charge-info during and after the connection):
        isdnctrl chargehup isdn0 on
 
-   i) Setup the interface with ifconfig as usual, and set a route to it.
+   i) Set the dial mode of the interface:
+       isdnctrl dialmode isdn0 auto
+      "off" means that you (or the system) cannot make any connection
+        (neither incoming or outgoing connections are possible). Use
+        this if you want to be sure that no connections will be made.
+      "auto" means that the interface is in auto-dial mode, and will
+        attempt to make a connection whenever a network data packet needs
+        the interface's link. Note that this can cause unexpected dialouts,
+        and lead to a high phone bill! Some daemons or other pc's that use
+        this interface can cause this.
+        Incoming connections are also possible.
+      "manual" is a dial mode created to prevent the unexpected dialouts.
+        In this mode, the interface will never make any connections on its
+        own. You must explicitly initiate a connection with "isdnctrl dial
+        isdn0". You _must_ also hangup the line explicitly as well! There
+        is NO timeout in this mode. Use "isdnctrl hangup isdn0" to end the
+        connection.
+        "manual" is the default.
 
-   j) (optional) If you run X11 and have Tcl/Tk-wish Version4.0, you can use
+   j) Setup the interface with ifconfig as usual, and set a route to it.
+
+   k) (optional) If you run X11 and have Tcl/Tk-wish version 4.0, you can use
      the script tools/tcltk/isdnmon. You can add actions for line-status
      changes. See the comments at the beginning of the script for how to
      do that. There are other tty-based tools in the tools-subdirectory
      contributed by Michael Knigge (imon), Volker Götz (imontty) and
      Andreas Kool (isdnmon).
 
-   k) For initial testing, you can set the verbose-level to 2 (default: 0).
+   l) For initial testing, you can set the verbose-level to 2 (default: 0).
       Then all incoming calls are logged, even if they are not addressed
       to one of the configured net-interfaces:
       isdnctrl verbose 2
 
-  Now you are ready! A ping to the set address should now result in a
-  dial-out (look at syslog kernel-messages).
-  The phone-numbers and EAZs can be assigned at any time with isdnctrl.
+  Now you are ready! A ping to the set address should now result in an
+  automatic dial-out (look at syslog kernel-messages).
+  The phone numbers and EAZs can be assigned at any time with isdnctrl.
   You can add as many interfaces as you like with addif following the
   directions above. Of course, there may be some limitations. But we have 
   tested as many as 20 interfaces without any problem. However, if you 
@@ -365,7 +384,7 @@ README for the ISDN-subsystem
 
 
    "isdnctrl secure <InterfaceName> off" 
-   Switch of secure operation (default).
+   Switch off secure operation (default).
 
    "isdnctrl ihup <InterfaceName> [on|off]" 
    Switch the hang-up-timer for incoming calls on or off.
@@ -400,7 +419,7 @@ README for the ISDN-subsystem
    Selects the type of packet-encapsulation. The encapsulation can be changed
    only while an interface is down.
 
-   At the moment th following Values are supported:
+   At the moment the following values are supported:
  
    rawip    (Default) Selects raw-IP-encapsulation. This means, MAC-headers
             are stripped off.  
@@ -436,13 +455,13 @@ README for the ISDN-subsystem
    Forces hangup of an interface.
 
    "isdnctrl bind <InterfaceName> <DriverId>,<ChannelNumber> [exclusive]"
-   If you are using more than one ISDN-Card, it is sometimes necessary to
-   dial out using a specific Card or even preserve a specific Channel for
-   Dialout of a specific net-interface. This can be done with the above
+   If you are using more than one ISDN card, it is sometimes necessary to
+   dial out using a specific card or even preserve a specific channel for
+   dialout of a specific net-interface. This can be done with the above
    command. Replace <DriverId> by whatever you assigned while loading the
-   module. The <ChannelNumber> is counting from zero. the upper Limit
-   depends on the card used. At the Moment no card supports more than
-   2 Channels, so the upper limit is one.
+   module. The <ChannelNumber> is counted from zero. The upper limit
+   depends on the card used. At the moment no card supports more than
+   2 channels, so the upper limit is one.
 
    "isdnctrl unbind <InterfaceName>"
    unbinds a previously bound interface.
@@ -451,8 +470,8 @@ README for the ISDN-subsystem
    If switched on, isdn4linux replies a REJECT to incoming calls, it
    cannot match to any configured interface.
    If switched off, nothing happens in this case.
-   You normally should NOT enable this feature, if the ISDN-adaptor is not
-   the only device, connected to the S0-bus. Otherwise it could happen, that
+   You normally should NOT enable this feature, if the ISDN adapter is not
+   the only device connected to the S0-bus. Otherwise it could happen that
    isdn4linux rejects an incoming call, which belongs to another device on
    the bus. 
 
@@ -507,7 +526,7 @@ README for the ISDN-subsystem
    If other drivers will not be affected, I will include the changes
    in the next release.
    For developers only, there is a second mailing-list. Write to me
-   (fritz@wuemaus.franken.de), if you want to join that list.
+   (fritz@isdn4linux.de), if you want to join that list.
 
 Have fun!
 

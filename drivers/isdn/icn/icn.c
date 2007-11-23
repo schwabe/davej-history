@@ -1,8 +1,8 @@
- /* $Id: icn.c,v 1.45.2.3 1998/06/07 13:32:04 fritz Exp $
+ /* $Id: icn.c,v 1.45.2.4 1998/11/05 22:13:02 fritz Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994-1998 by Fritz Elfert (fritz@isdn4linux.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
+ * Revision 1.45.2.4  1998/11/05 22:13:02  fritz
+ * Changed mail-address.
+ *
  * Revision 1.45.2.3  1998/06/07 13:32:04  fritz
  * Minor bugfixes for broken Switches.
  *
@@ -199,7 +202,6 @@
  *
  */
 
-#include <linux/config.h> /* CONFIG_ISDN_WITH_ABC */ 
 #include "icn.h"
 
 /*
@@ -213,7 +215,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.45.2.3 $";
+*revision = "$Revision: 1.45.2.4 $";
 
 static int icn_addcard(int, char *, char *);
 

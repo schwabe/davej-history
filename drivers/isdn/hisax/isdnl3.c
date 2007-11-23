@@ -1,12 +1,20 @@
-/* $Id: isdnl3.c,v 1.10.2.5 1998/09/27 13:06:39 keil Exp $
+/* $Id: isdnl3.c,v 1.10.2.6 1998/11/03 00:07:06 keil Exp $
 
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
+ *
+ *		This file is (c) under GNU PUBLIC LICENSE
+ *		For changes and modifications please read
+ *		../../../Documentation/isdn/HiSax.cert
  *
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *
  * $Log: isdnl3.c,v $
+ * Revision 1.10.2.6  1998/11/03 00:07:06  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.10.2.5  1998/09/27 13:06:39  keil
  * Apply most changes from 2.1.X (HiSax 3.1)
  *
@@ -45,7 +53,7 @@
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 1.10.2.5 $";
+const char *l3_revision = "$Revision: 1.10.2.6 $";
 
 static
 struct Fsm l3fsm =
@@ -90,14 +98,14 @@ static char *strL3Event[] =
 };
 
 static void
-l3m_debug(struct FsmInst *fi, char *s)
+l3m_debug(struct FsmInst *fi, char *fmt, ...)
 {
+	va_list args;
 	struct PStack *st = fi->userdata;
-	char tm[32], str[256];
 
-	jiftime(tm, jiffies);
-	sprintf(str, "%s %s %s\n", tm, st->l3.debug_id, s);
-	HiSax_putstatus(st->l1.hardware, str);
+	va_start(args, fmt);
+	VHiSax_putstatus(st->l1.hardware, st->l3.debug_id, fmt, args);
+	va_end(args);
 }
 
 u_char *
@@ -163,23 +171,6 @@ newcallref(void)
 	else
 		OrigCallRef++;
 	return (OrigCallRef);
-}
-
-void
-l3_debug(struct PStack *st, const char *fmt, ...)
-{
-	va_list args;
-	char str[256], tm[32];
-	char *t = str;
-
-	va_start(args, fmt);
-	jiftime(tm, jiffies);
-	t += sprintf(str, "%s l3 ", tm);
-	t += vsprintf(t, fmt, args);
-	va_end(args);
-	*t++ = '\n';
-	*t++ = 0;
-	HiSax_putstatus(st->l1.hardware, str);
 }
 
 void
@@ -252,7 +243,7 @@ no_l3_proto(struct PStack *st, int pr, void *arg)
 {
 	struct sk_buff *skb = arg;
 
-	HiSax_putstatus(st->l1.hardware, "L3 no D protocol\n");
+	HiSax_putstatus(st->l1.hardware, "L3", "no D protocol");
 	if (skb) {
 		dev_kfree_skb(skb, FREE_READ);
 	}
@@ -350,7 +341,7 @@ setstack_l3dc(struct PStack *st, struct Channel *chanp)
 	st->l3.l3m.userdata = st;
 	st->l3.l3m.userint = 0;
 	st->l3.l3m.printdebug = l3m_debug;
-	strcpy(st->l3.debug_id, "L3DC");
+	strcpy(st->l3.debug_id, "L3DC ");
 
 #ifdef	CONFIG_HISAX_EURO
 	if (st->protocol == ISDN_PTYPE_EURO) {
@@ -415,7 +406,7 @@ setstack_l3bc(struct PStack *st, struct Channel *chanp)
 	st->l3.l3m.userdata = st;
 	st->l3.l3m.userint = 0;
 	st->l3.l3m.printdebug = l3m_debug;
-	strcpy(st->l3.debug_id, "L3BC");
+	strcpy(st->l3.debug_id, "L3BC ");
 	st->lli.l4l3 = isdnl3_trans;
 }
 

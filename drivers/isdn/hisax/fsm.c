@@ -1,4 +1,4 @@
-/* $Id: fsm.c,v 1.4.2.4 1998/05/27 18:05:21 keil Exp $
+/* $Id: fsm.c,v 1.4.2.5 1998/11/03 00:06:23 keil Exp $
 
  * Author       Karsten Keil (keil@temic-ech.spacenet.de)
  *              based on the teles driver from Jan den Ouden
@@ -7,6 +7,10 @@
  *              Fritz Elfert
  *
  * $Log: fsm.c,v $
+ * Revision 1.4.2.5  1998/11/03 00:06:23  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.4.2.4  1998/05/27 18:05:21  keil
  * HiSax 3.0
  *
@@ -74,7 +78,6 @@ int
 FsmEvent(struct FsmInst *fi, int event, void *arg)
 {
 	FSMFNPTR r;
-	char str[80];
 
 	if ((fi->state>=fi->fsm->state_count) || (event >= fi->fsm->event_count)) {
 		printk(KERN_ERR "FsmEvent Error st(%ld/%ld) ev(%d/%ld)\n",
@@ -83,21 +86,17 @@ FsmEvent(struct FsmInst *fi, int event, void *arg)
 	}
 	r = fi->fsm->jumpmatrix[fi->fsm->state_count * event + fi->state];
 	if (r) {
-		if (fi->debug) {
-			sprintf(str, "State %s Event %s",
+		if (fi->debug)
+			fi->printdebug(fi, "State %s Event %s",
 				fi->fsm->strState[fi->state],
 				fi->fsm->strEvent[event]);
-			fi->printdebug(fi, str);
-		}
 		r(fi, event, arg);
 		return (0);
 	} else {
-		if (fi->debug) {
-			sprintf(str, "State %s Event %s no routine",
+		if (fi->debug)
+			fi->printdebug(fi, "State %s Event %s no routine",
 				fi->fsm->strState[fi->state],
 				fi->fsm->strEvent[event]);
-			fi->printdebug(fi, str);
-		}
 		return (!0);
 	}
 }
@@ -105,25 +104,18 @@ FsmEvent(struct FsmInst *fi, int event, void *arg)
 void
 FsmChangeState(struct FsmInst *fi, int newstate)
 {
-	char str[80];
-
 	fi->state = newstate;
-	if (fi->debug) {
-		sprintf(str, "ChangeState %s",
+	if (fi->debug)
+		fi->printdebug(fi, "ChangeState %s",
 			fi->fsm->strState[newstate]);
-		fi->printdebug(fi, str);
-	}
 }
 
 static void
 FsmExpireTimer(struct FsmTimer *ft)
 {
 #if FSM_TIMER_DEBUG
-	if (ft->fi->debug) {
-		char str[40];
-		sprintf(str, "FsmExpireTimer %lx", (long) ft);
-		ft->fi->printdebug(ft->fi, str);
-	}
+	if (ft->fi->debug)
+		ft->fi->printdebug(ft->fi, "FsmExpireTimer %lx", (long) ft);
 #endif
 	FsmEvent(ft->fi, ft->event, ft->arg);
 }
@@ -135,11 +127,8 @@ FsmInitTimer(struct FsmInst *fi, struct FsmTimer *ft)
 	ft->tl.function = (void *) FsmExpireTimer;
 	ft->tl.data = (long) ft;
 #if FSM_TIMER_DEBUG
-	if (ft->fi->debug) {
-		char str[40];
-		sprintf(str, "FsmInitTimer %lx", (long) ft);
-		ft->fi->printdebug(ft->fi, str);
-	}
+	if (ft->fi->debug)
+		ft->fi->printdebug(ft->fi, "FsmInitTimer %lx", (long) ft);
 #endif
 	init_timer(&ft->tl);
 }
@@ -148,11 +137,8 @@ void
 FsmDelTimer(struct FsmTimer *ft, int where)
 {
 #if FSM_TIMER_DEBUG
-	if (ft->fi->debug) {
-		char str[40];
-		sprintf(str, "FsmDelTimer %lx %d", (long) ft, where);
-		ft->fi->printdebug(ft->fi, str);
-	}
+	if (ft->fi->debug)
+		ft->fi->printdebug(ft->fi, "FsmDelTimer %lx %d", (long) ft, where);
 #endif
 	del_timer(&ft->tl);
 }
@@ -163,11 +149,9 @@ FsmAddTimer(struct FsmTimer *ft,
 {
 
 #if FSM_TIMER_DEBUG
-	if (ft->fi->debug) {
-		char str[40];
-		sprintf(str, "FsmAddTimer %lx %d %d", (long) ft, millisec, where);
-		ft->fi->printdebug(ft->fi, str);
-	}
+	if (ft->fi->debug)
+		ft->fi->printdebug(ft->fi, "FsmAddTimer %lx %d %d",
+			(long) ft, millisec, where);
 #endif
 
 	if (ft->tl.next || ft->tl.prev) {
@@ -189,11 +173,9 @@ FsmRestartTimer(struct FsmTimer *ft,
 {
 
 #if FSM_TIMER_DEBUG
-	if (ft->fi->debug) {
-		char str[40];
-		sprintf(str, "FsmRestartTimer %lx %d %d", (long) ft, millisec, where);
-		ft->fi->printdebug(ft->fi, str);
-	}
+	if (ft->fi->debug)
+		ft->fi->printdebug(ft->fi, "FsmRestartTimer %lx %d %d",
+			(long) ft, millisec, where);
 #endif
 
 	if (ft->tl.next || ft->tl.prev)
@@ -203,25 +185,4 @@ FsmRestartTimer(struct FsmTimer *ft,
 	ft->arg = arg;
 	ft->tl.expires = jiffies + (millisec * HZ) / 1000;
 	add_timer(&ft->tl);
-}
-
-void
-jiftime(char *s, long mark)
-{
-	s += 8;
-
-	*s-- = '\0';
-	*s-- = mark % 10 + '0';
-	mark /= 10;
-	*s-- = mark % 10 + '0';
-	mark /= 10;
-	*s-- = '.';
-	*s-- = mark % 10 + '0';
-	mark /= 10;
-	*s-- = mark % 6 + '0';
-	mark /= 6;
-	*s-- = ':';
-	*s-- = mark % 10 + '0';
-	mark /= 10;
-	*s-- = mark % 10 + '0';
 }

@@ -1,11 +1,14 @@
 /*
- * $Id: capidrv.c,v 1.3.2.11 1998/04/02 10:27:59 calle Exp $
+ * $Id: capidrv.c,v 1.3.2.12 1998/09/11 15:37:11 calle Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.3.2.12  1998/09/11 15:37:11  calle
+ * Started with support for CAPI channel allocation/bundling.
+ *
  * Revision 1.3.2.11  1998/04/02 10:27:59  calle
  * version check for D2 trace was wrong :-(
  *
@@ -80,13 +83,14 @@
 #include <linux/isdnif.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
+#include <linux/ctype.h>
 
 #include "compat.h"
 #include "capiutil.h"
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.3.2.11 $";
+static char *revision = "$Revision: 1.3.2.12 $";
 int debugmode = 0;
 
 #ifdef HAS_NEW_SYMTAB
@@ -144,6 +148,7 @@ struct capidrv_contr {
 			__u16 msgid;	/* to identfy CONNECT_CONF */
 			int chan;
 			int state;
+			int leasedline;
 			struct capidrv_ncci {
 				struct capidrv_ncci *next;
 				struct capidrv_plci *plcip;
@@ -1405,11 +1410,103 @@ static int capidrv_ioctl(isdn_ctrl * c, capidrv_contr * card)
 	return -EINVAL;
 }
 
+/*
+ * Handle leased lines (CAPI-Bundling)
+ */
+
+struct internal_bchannelinfo {
+   unsigned short channelalloc;
+   unsigned short operation;
+   unsigned char  cmask[31];
+};
+
+static int decodeFVteln(char *teln, unsigned long *bmaskp, int *activep)
+{
+	unsigned long bmask = 0;
+	int active = !0;
+	char *s;
+	int i;
+
+	if (strncmp(teln, "FV:", 3) != 0)
+		return 1;
+	s = teln + 3;
+	while (*s && *s == ' ') s++;
+	if (!*s) return -2;
+	if (*s == 'p' || *s == 'P') {
+		active = 0;
+		s++;
+	}
+	if (*s == 'a' || *s == 'A') {
+		active = !0;
+		s++;
+	}
+	while (*s) {
+		int digit1 = 0;
+		int digit2 = 0;
+		if (!isdigit(*s)) return -3;
+		while (isdigit(*s)) { digit1 = digit1*10 + (*s - '0'); s++; }
+		if (digit1 <= 0 && digit1 > 30) return -4;
+		if (*s == 0 || *s == ',' || *s == ' ') {
+			bmask |= (1 << digit1);
+			digit1 = 0;
+			if (*s) s++;
+			continue;
+		}
+		if (*s != '-') return -5;
+		s++;
+		if (!isdigit(*s)) return -3;
+		while (isdigit(*s)) { digit2 = digit2*10 + (*s - '0'); s++; }
+		if (digit2 <= 0 && digit2 > 30) return -4;
+		if (*s == 0 || *s == ',' || *s == ' ') {
+			if (digit1 > digit2)
+				for (i = digit2; i <= digit1 ; i++)
+					bmask |= (1 << i);
+			else 
+				for (i = digit1; i <= digit2 ; i++)
+					bmask |= (1 << i);
+			digit1 = digit2 = 0;
+			if (*s) s++;
+			continue;
+		}
+		return -6;
+	}
+	if (activep) *activep = active;
+	if (bmaskp) *bmaskp = bmask;
+	return 0;
+}
+
+static int FVteln2capi20(char *teln, __u8 AdditionalInfo[1+2+2+31])
+{
+	unsigned long bmask;
+	int active;
+	int rc, i;
+   
+	rc = decodeFVteln(teln, &bmask, &active);
+	if (rc) return rc;
+	/* Length */
+	AdditionalInfo[0] = 2+2+31;
+        /* Channel: 3 => use channel allocation */
+        AdditionalInfo[1] = 3; AdditionalInfo[2] = 0;
+	/* Operation: 0 => DTE mode, 1 => DCE mode */
+        if (active) {
+   		AdditionalInfo[3] = 0; AdditionalInfo[4] = 0;
+   	} else {
+   		AdditionalInfo[3] = 1; AdditionalInfo[4] = 0;
+	}
+	/* Channel mask array */
+	AdditionalInfo[5] = 0; /* no D-Channel */
+	for (i=1; i <= 30; i++)
+		AdditionalInfo[5+i] = (bmask & (1 << i)) ? 0xff : 0;
+	return 0;
+}
+
 static int capidrv_command(isdn_ctrl * c, capidrv_contr * card)
 {
 	isdn_ctrl cmd;
 	struct capidrv_bchan *bchan;
 	struct capidrv_plci *plcip;
+	__u8 AdditionalInfo[1+2+2+31];
+        int rc, isleasedline = 0;
 
 	if (c->command == ISDN_CMD_IOCTL)
 		return capidrv_ioctl(c, card);
@@ -1447,14 +1544,26 @@ static int capidrv_command(isdn_ctrl * c, capidrv_contr * card)
 			strncpy(bchan->num, c->parm.setup.phone, sizeof(bchan->num));
 			strncpy(bchan->mynum, c->parm.setup.eazmsn, sizeof(bchan->mynum));
 
-			calling[0] = strlen(bchan->mynum) + 2;
-			calling[1] = 0;
-			calling[2] = 0x80;
-			strncpy(calling + 3, bchan->mynum, ISDN_MSNLEN);
+                        rc = FVteln2capi20(bchan->num, AdditionalInfo);
+			isleasedline = (rc == 0);
+			if (rc < 0)
+				printk(KERN_ERR "capidrv-%d: WARNING: illegal leased linedefinition \"%s\"\n", card->contrnr, bchan->num);
 
-			called[0] = strlen(bchan->num) + 1;
-			called[1] = 0x80;
-			strncpy(called + 2, bchan->num, ISDN_MSNLEN);
+			if (isleasedline) {
+				calling[0] = 0;
+				called[0] = 0;
+			        if (debugmode)
+					printk(KERN_DEBUG "capidrv-%d: connecting leased line\n", card->contrnr);
+			} else {
+		        	calling[0] = strlen(bchan->mynum) + 2;
+		        	calling[1] = 0;
+		     		calling[2] = 0x80;
+			   	strncpy(calling + 3, bchan->mynum, ISDN_MSNLEN);
+				called[0] = strlen(bchan->num) + 1;
+				called[1] = 0x80;
+				strncpy(called + 2, bchan->num, ISDN_MSNLEN);
+			}
+
 
 			capi_fill_CONNECT_REQ(&cmdcmsg,
 					      global.appid,
@@ -1474,7 +1583,8 @@ static int capidrv_command(isdn_ctrl * c, capidrv_contr * card)
 					      0,	/* BC */
 					      0,	/* LLC */
 					      0,	/* HLC */
-					      0,	/* BChannelinformation */
+					      /* BChannelinformation */
+					      isleasedline ? AdditionalInfo : 0,
 					      0,	/* Keypadfacility */
 					      0,	/* Useruserdata */
 					      0		/* Facilitydataarray */
@@ -1487,6 +1597,7 @@ static int capidrv_command(isdn_ctrl * c, capidrv_contr * card)
 				return -1;
 			}
 			plcip->msgid = cmdcmsg.Messagenumber;
+			plcip->leasedline = isleasedline;
 			plci_change_state(card, plcip, EV_PLCI_CONNECT_REQ);
 			send_message(card, &cmdcmsg);
 			return 0;

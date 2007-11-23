@@ -1963,13 +1963,8 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
 		 * Delay the ack if possible.  Send ack's to
 		 * fin frames immediately as there shouldn't be
 		 * anything more to come.
-		 *
-		 * ACK immediately if we still have any out of
-		 * order data.  This is because we desire "maximum
-		 * feedback during loss".  --DaveM
 		 */
-		if (!sk->delay_acks || th->fin ||
-		    (skb->next != (struct sk_buff *) &sk->receive_queue)) {
+		if (!sk->delay_acks || th->fin) {
 			tcp_send_ack(sk);
 		} else {
 			/*
@@ -2521,10 +2516,14 @@ retry_search:
 		 *	then it's a new connection
 		 */
 		 
-		if (sk->state == TCP_SYN_RECV && th->syn && skb->seq+1 == sk->acked_seq)
+		if (sk->state == TCP_SYN_RECV)
 		{
-			kfree_skb(skb, FREE_READ);
-			return 0;
+			if(th->syn && skb->seq+1 == sk->acked_seq)
+			{
+				kfree_skb(skb, FREE_READ);
+				return 0;
+			}
+			goto rfc_step4;
 		}
 		
 		/*
@@ -2613,6 +2612,7 @@ retry_search:
 				sk->rtt = 0;
 				sk->rto = TCP_TIMEOUT_INIT;
 				sk->mdev = TCP_TIMEOUT_INIT;
+				goto rfc_step6;
 			}
 			else
 			{
@@ -2639,10 +2639,11 @@ retry_search:
 				kfree_skb(skb, FREE_READ);
 				return 0;
 			}
+
 			/*
-			 *	SYN_RECV with data maybe.. drop through
+			 *	Data maybe.. drop through
 			 */
-			goto rfc_step4;
+			 
 		}
 
 	/*
@@ -2764,7 +2765,7 @@ rfc_step4:		/* I'll clean this up later */
 		return 0;
 	}
 	
-
+rfc_step6:
 	/*
 	 *	If the accepted buffer put us over our queue size we
 	 *	now drop it (we must process the ack first to avoid

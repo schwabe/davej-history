@@ -1,8 +1,8 @@
-/* $Id: isdn_common.h,v 1.6.2.1 1998/03/16 09:55:48 cal Exp $
+/* $Id: isdn_common.h,v 1.6.2.3 1998/11/05 22:11:50 fritz Exp $
 
  * header for Linux ISDN subsystem, common used functions and debugging-switches (linklevel).
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994-1998  by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    by Thinking Objects Software GmbH Wuerzburg
  * Copyright 1995,96    by Michael Hipp (Michael.Hipp@student.uni-tuebingen.de)
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.h,v $
+ * Revision 1.6.2.3  1998/11/05 22:11:50  fritz
+ * Changed mail-address.
+ *
+ * Revision 1.6.2.2  1998/10/25 15:48:10  fritz
+ * Misc bugfixes and adaptions to new HiSax
+ *
  * Revision 1.6.2.1  1998/03/16 09:55:48  cal
  * Merged in TimRu-patches. Still needs validation in conjunction with ABC-patches.
  *
@@ -47,7 +53,6 @@
  *
  */
 
-#include <linux/config.h> /* CONFIG_ISDN_TIMEOUT_RULES */
 #undef  ISDN_DEBUG_MODEM_OPEN
 #undef  ISDN_DEBUG_MODEM_IOCTL
 #undef  ISDN_DEBUG_MODEM_WAITSENT
@@ -64,6 +69,7 @@
 extern void isdn_MOD_INC_USE_COUNT(void);
 extern void isdn_MOD_DEC_USE_COUNT(void);
 extern void isdn_free_channel(int di, int ch, int usage);
+extern int isdn_command(isdn_ctrl *);
 extern void isdn_all_eaz(int di, int ch);
 extern int isdn_dc2minor(int di, int ch);
 extern void isdn_info_update(void);

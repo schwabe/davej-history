@@ -1,6 +1,10 @@
-/* $Id: isdnl1.h,v 1.4.2.6 1998/09/30 22:20:04 keil Exp $
+/* $Id: isdnl1.h,v 1.4.2.7 1998/11/03 00:06:55 keil Exp $
 
  * $Log: isdnl1.h,v $
+ * Revision 1.4.2.7  1998/11/03 00:06:55  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.4.2.6  1998/09/30 22:20:04  keil
  * Cosmetics
  *
@@ -31,22 +35,6 @@
  *
  */
 
-
-#define L2FRAME_DEBUG
-
-/* DEBUG Level */
-
-#define	L1_DEB_WARN		0x01
-#define	L1_DEB_INTSTAT		0x02
-#define	L1_DEB_ISAC		0x04
-#define	L1_DEB_ISAC_FIFO	0x08
-#define	L1_DEB_HSCX		0x10
-#define	L1_DEB_HSCX_FIFO	0x20
-#define	L1_DEB_LAPD	        0x40
-#define	L1_DEB_IPAC	        0x80
-#define	L1_DEB_RECEIVE_FRAME    0x100
-#define L1_DEB_MONITOR		0x200
-
 #define D_RCVBUFREADY	0
 #define D_XMTBUFREADY	1
 #define D_L1STATECHANGE	2
@@ -59,13 +47,12 @@
 #define B_RCVBUFREADY 0
 #define B_XMTBUFREADY 1
 
-extern void debugl1(struct IsdnCardState *cs, char *msg);
+extern void debugl1(struct IsdnCardState *cs, char *fmt, ...);
 extern void DChannel_proc_xmt(struct IsdnCardState *cs);
 extern void DChannel_proc_rcv(struct IsdnCardState *cs);
 extern void l1_msg(struct IsdnCardState *cs, int pr, void *arg);
 extern void l1_msg_b(struct PStack *st, int pr, void *arg);
 
-
 #ifdef L2FRAME_DEBUG
-extern void Logl2Frame(struct IsdnCardState *sp, struct sk_buff *skb, char *buf, int dir);
+extern void Logl2Frame(struct IsdnCardState *cs, struct sk_buff *skb, char *buf, int dir);
 #endif

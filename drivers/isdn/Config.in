@@ -32,7 +32,7 @@ if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
     bool 'HiSax Support for Teles PCI' CONFIG_HISAX_TELESPCI 
     bool 'HiSax Support for Teles S0Box' CONFIG_HISAX_S0BOX 
     bool 'HiSax Support for AVM A1 (Fritz)' CONFIG_HISAX_AVM_A1
-    bool 'HiSax Support for AVM PCI (Fritz!PCI)' CONFIG_HISAX_FRITZPCI
+    bool 'HiSax Support for AVM PnP/PCI (Fritz!PnP/PCI)' CONFIG_HISAX_FRITZPCI
     bool 'HiSax Support for AVM A1 PCMCIA (Fritz)' CONFIG_HISAX_AVM_A1_PCMCIA
     bool 'HiSax Support for Elsa cards' CONFIG_HISAX_ELSA
     bool 'HiSax Support for ITK ix1-micro Revision 2' CONFIG_HISAX_IX1MICROR2

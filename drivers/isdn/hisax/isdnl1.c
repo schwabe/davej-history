@@ -1,9 +1,13 @@
-/* $Id: isdnl1.c,v 1.15.2.18 1998/09/30 22:26:35 keil Exp $
+/* $Id: isdnl1.c,v 1.15.2.19 1998/11/03 00:06:48 keil Exp $
 
  * isdnl1.c     common low level stuff for Siemens Chipsetbased isdn cards
  *              based on the teles driver from Jan den Ouden
  *
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
+ *
+ *		This file is (c) under GNU PUBLIC LICENSE
+ *		For changes and modifications please read
+ *		../../../Documentation/isdn/HiSax.cert
  *
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
@@ -11,6 +15,10 @@
  *
  *
  * $Log: isdnl1.c,v $
+ * Revision 1.15.2.19  1998/11/03 00:06:48  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.15.2.18  1998/09/30 22:26:35  keil
  * Add init of l1.Flags
  *
@@ -97,110 +105,12 @@
  *
  */
 
-const char *l1_revision = "$Revision: 1.15.2.18 $";
+const char *l1_revision = "$Revision: 1.15.2.19 $";
 
 #define __NO_VERSION__
 #include <linux/config.h>
 #include "hisax.h"
 #include "isdnl1.h"
-#include <linux/kernel_stat.h>
-#define kstat_irqs( PAR ) kstat.interrupts[PAR]
-
-#if CARD_TELES0
-extern int setup_teles0(struct IsdnCard *card);
-#endif
-
-#if CARD_TELES3
-extern int setup_teles3(struct IsdnCard *card);
-#endif
-
-#if CARD_S0BOX
-extern int setup_s0box(struct IsdnCard *card);
-#endif
-
-#if CARD_TELESPCI
-extern int setup_telespci(struct IsdnCard *card);
-#endif
-
-#if CARD_AVM_A1
-extern int setup_avm_a1(struct IsdnCard *card);
-#endif
-
-#if CARD_AVM_A1_PCMCIA
-extern int setup_avm_a1_pcmcia(struct IsdnCard *card);
-#endif
-
-#if CARD_FRITZPCI
-extern int setup_avm_pci(struct IsdnCard *card);
-#endif
-
-#if CARD_ELSA
-extern int setup_elsa(struct IsdnCard *card);
-#endif
-
-#if CARD_IX1MICROR2
-extern int setup_ix1micro(struct IsdnCard *card);
-#endif
-
-#if CARD_DIEHLDIVA
-extern	int  setup_diva(struct IsdnCard *card);
-#endif
-
-#if CARD_ASUSCOM
-extern int setup_asuscom(struct IsdnCard *card);
-#endif
-
-#if CARD_TELEINT
-extern int setup_TeleInt(struct IsdnCard *card);
-#endif
-
-#if CARD_SEDLBAUER
-extern int setup_sedlbauer(struct IsdnCard *card);
-#endif
-
-#if CARD_SPORTSTER
-extern int setup_sportster(struct IsdnCard *card);
-#endif
-
-#if CARD_MIC
-extern int setup_mic(struct IsdnCard *card);
-#endif
-
-#if CARD_NETJET
-extern int setup_netjet(struct IsdnCard *card);
-#endif
-
-#if CARD_TELES3C
-extern int setup_t163c(struct IsdnCard *card);
-#endif
-
-#if CARD_AMD7930
-extern int setup_amd7930(struct IsdnCard *card);
-#endif
-
-#if CARD_NICCY
-extern int setup_niccy(struct IsdnCard *card);
-#endif
-
-#define HISAX_STATUS_BUFSIZE 4096
-#define ISDN_CTRL_DEBUG 1
-#define INCLUDE_INLINE_FUNCS
-#include <linux/tqueue.h>
-#include <linux/interrupt.h>
-const char *CardType[] =
-{"No Card", "Teles 16.0", "Teles 8.0", "Teles 16.3", "Creatix/Teles PnP",
- "AVM A1", "Elsa ML", "Elsa Quickstep", "Teles PCMCIA", "ITK ix1-micro Rev.2",
- "Elsa PCMCIA", "Eicon.Diehl Diva", "ISDNLink", "TeleInt", "Teles 16.3c", 
- "Sedlbauer Speed Card", "USR Sportster", "ith mic Linux", "Elsa PCI",
- "Compaq ISA", "NETjet", "Teles PCI", "Sedlbauer Speed Star (PCMCIA)",
- "AMD 7930", "NICCY", "S0Box", "AVM A1 (PCMCIA)", "AVM Fritz!PCI",
- "Sedlbauer Speed Fax +"
-};
-
-extern struct IsdnCard cards[];
-extern int nrcards;
-extern char *HiSax_id;
-extern struct IsdnBuffers *tracebuf;
 
 #define TIMER3_VALUE 7000
 
@@ -285,154 +195,30 @@ static char *strL1Event[] =
 	"EV_TIMER3",
 };
 
-/*
- * Find card with given driverId
- */
-static inline struct IsdnCardState
-*hisax_findcard(int driverid)
-{
-	int i;
-
-	for (i = 0; i < nrcards; i++)
-		if (cards[i].cs)
-			if (cards[i].cs->myid == driverid)
-				return (cards[i].cs);
-	return (NULL);
-}
-
-int
-HiSax_readstatus(u_char * buf, int len, int user, int id, int channel)
-{
-	int count;
-	u_char *p;
-	struct IsdnCardState *csta = hisax_findcard(id);
-
-	if (csta) {
-		for (p = buf, count = 0; count < len; p++, count++) {
-			if (user)
-				put_user(*csta->status_read++, p);
-			else
-				*p++ = *csta->status_read++;
-			if (csta->status_read > csta->status_end)
-				csta->status_read = csta->status_buf;
-		}
-		return count;
-	} else {
-		printk(KERN_ERR
-		 "HiSax: if_readstatus called with invalid driverId!\n");
-		return -ENODEV;
-	}
-}
-
-#if ISDN_CTRL_DEBUG
 void
-HiSax_putstatus(struct IsdnCardState *csta, char *buf)
+debugl1(struct IsdnCardState *cs, char *fmt, ...)
 {
-	long flags;
-	int len, count, i;
-	u_char *p;
-	isdn_ctrl ic;
-
-	save_flags(flags);
-	cli();
-	count = 0;
-	len = strlen(buf);
-
-	if (!csta) {
-		printk(KERN_WARNING "HiSax: No CardStatus for message %s", buf);
-		restore_flags(flags);
-		return;
-	}
-	for (p = buf, i = len; i > 0; i--, p++) {
-		*csta->status_write++ = *p;
-		if (csta->status_write > csta->status_end)
-			csta->status_write = csta->status_buf;
-		count++;
-	}
-	restore_flags(flags);
-	if (count) {
-		ic.command = ISDN_STAT_STAVAIL;
-		ic.driver = csta->myid;
-		ic.arg = count;
-		csta->iif.statcallb(&ic);
-	}
-}
-#else
-#define KDEBUG_DEF
-#include "../kdebug.h"
-
-static int DbgLineNr=0,DbgSequenzNr=1;
-
-void
-HiSax_putstatus(struct IsdnCardState *csta, char *buf)
-{
-	char tmp[512];
+	va_list args;
+	char tmp[8];
 	
-	if (DbgLineNr==23)
-		DbgLineNr=0;
-	sprintf(tmp, "%5d %s",DbgSequenzNr++,buf);
-	gput_str(tmp,0,DbgLineNr++);
-}	
-#endif
-
-int
-ll_run(struct IsdnCardState *csta)
-{
-	long flags;
-	isdn_ctrl ic;
-
-	save_flags(flags);
-	cli();
-	ic.driver = csta->myid;
-	ic.command = ISDN_STAT_RUN;
-	csta->iif.statcallb(&ic);
-	restore_flags(flags);
-	return 0;
-}
-
-void
-ll_stop(struct IsdnCardState *csta)
-{
-	isdn_ctrl ic;
-
-	ic.command = ISDN_STAT_STOP;
-	ic.driver = csta->myid;
-	csta->iif.statcallb(&ic);
-	CallcFreeChan(csta);
+	va_start(args, fmt);
+	sprintf(tmp, "Card%d ", cs->cardnr + 1);
+	VHiSax_putstatus(cs, tmp, fmt, args);
+	va_end(args);
 }
 
 static void
-ll_unload(struct IsdnCardState *csta)
+l1m_debug(struct FsmInst *fi, char *fmt, ...)
 {
-	isdn_ctrl ic;
-
-	ic.command = ISDN_STAT_UNLOAD;
-	ic.driver = csta->myid;
-	csta->iif.statcallb(&ic);
-	if (csta->status_buf)
-		kfree(csta->status_buf);
-	csta->status_read = NULL;
-	csta->status_write = NULL;
-	csta->status_end = NULL;
-	kfree(csta->dlogspace);
-}
-
-void
-debugl1(struct IsdnCardState *cs, char *msg)
-{
-	char tmp[256], tm[32];
-
-	jiftime(tm, jiffies);
-	sprintf(tmp, "%s Card %d %s\n", tm, cs->cardnr + 1, msg);
-	HiSax_putstatus(cs, tmp);
-}
-
-static void
-l1m_debug(struct FsmInst *fi, char *s)
-{
+	va_list args;
 	struct PStack *st = fi->userdata;
+	struct IsdnCardState *cs = st->l1.hardware;
+	char tmp[8];
 	
-	debugl1(st->l1.hardware, s);
+	va_start(args, fmt);
+	sprintf(tmp, "Card%d ", cs->cardnr + 1);
+	VHiSax_putstatus(cs, tmp, fmt, args);
+	va_end(args);
 }
 
 void
@@ -488,7 +274,6 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 	struct sk_buff *skb, *nskb;
 	struct PStack *stptr = cs->stlist;
 	int found, tei, sapi;
-	char tmp[64];
 
 	if (stptr)
 		if (test_bit(FLG_L1_ACTTIMER, &stptr->l1.Flags))
@@ -502,13 +287,12 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 		sapi = skb->data[0] >> 2;
 		tei = skb->data[1] >> 1;
 
+		if (cs->debug & DEB_DLOG_HEX)
+			LogFrame(cs, skb->data, skb->len);
+		if (cs->debug & DEB_DLOG_VERBOSE)
+			dlogframe(cs, skb, 1);
 		if (tei == GROUP_TEI) {
-			if (sapi == CTRL_SAPI) {	/* sapi 0 */
-				if (cs->dlogflag) {
-					LogFrame(cs, skb->data, skb->len);
-					dlogframe(cs, skb->data + 3, skb->len - 3,
-						  "Q.931 frame network->user broadcast");
-				}
+			if (sapi == CTRL_SAPI) { /* sapi 0 */
 				while (stptr != NULL) {
 					if ((nskb = skb_clone(skb, GFP_ATOMIC)))
 						stptr->l1.l1l2(stptr, PH_DATA | INDICATION, nskb);
@@ -526,7 +310,7 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 				}
 			}
 			dev_kfree_skb(skb, FREE_READ);
-		} else if (sapi == CTRL_SAPI) {
+		} else if (sapi == CTRL_SAPI) { /* sapi 0 */
 			found = 0;
 			while (stptr != NULL)
 				if (tei == stptr->l2.tei) {
@@ -535,21 +319,8 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 					break;
 				} else
 					stptr = stptr->next;
-			if (!found) {
-				/* BD 10.10.95
-				 * Print out D-Channel msg not processed
-				 * by isdn4linux
-				 */
-
-				if ((!(skb->data[0] >> 2)) && (!(skb->data[2] & 0x01))) {
-					sprintf(tmp,
-						"Q.931 frame network->user with tei %d (not for us)",
-						skb->data[1] >> 1);
-					LogFrame(cs, skb->data, skb->len);
-					dlogframe(cs, skb->data + 4, skb->len - 4, tmp);
-				}
+			if (!found)
 				dev_kfree_skb(skb, FREE_READ);
-			}
 		}
 	}
 }
@@ -643,469 +414,6 @@ init_bcstate(struct IsdnCardState *cs,
 	bcs->Flag = 0;
 }
 
-static void
-closecard(int cardnr)
-{
-	struct IsdnCardState *csta = cards[cardnr].cs;
-	
-	if (csta->bcs->BC_Close != NULL) { 
-		csta->bcs->BC_Close(csta->bcs + 1);
-		csta->bcs->BC_Close(csta->bcs);
-	}
-
-	if (csta->rcvbuf) {
-		kfree(csta->rcvbuf);
-		csta->rcvbuf = NULL;
-	}
-	discard_queue(&csta->rq);
-	discard_queue(&csta->sq);
-	if (csta->tx_skb) {
-		dev_kfree_skb(csta->tx_skb, FREE_WRITE);
-		csta->tx_skb = NULL;
-	}
-	if (csta->mon_rx) {
-		kfree(csta->mon_rx);
-		csta->mon_rx = NULL;
-	}
-	if (csta->mon_tx) {
-		kfree(csta->mon_tx);
-		csta->mon_tx = NULL;
-	}
-	csta->cardmsg(csta, CARD_RELEASE, NULL);
-	if (csta->dbusytimer.function != NULL)
-		del_timer(&csta->dbusytimer);
-	ll_unload(csta);
-}
-
-HISAX_INITFUNC(static int init_card(struct IsdnCardState *cs))
-{
-	int irq_cnt, cnt = 3;
-	long flags;
-
-	save_flags(flags);
-	cli();
-	irq_cnt = kstat_irqs(cs->irq);
-	printk(KERN_INFO "%s: IRQ %d count %d\n", CardType[cs->typ], cs->irq,
-		irq_cnt);
-	if (cs->cardmsg(cs, CARD_SETIRQ, NULL)) {
-		printk(KERN_WARNING "HiSax: couldn't get interrupt %d\n",
-			cs->irq);
-		restore_flags(flags);
-		return(1);
-	}
-	while (cnt) {
-		cs->cardmsg(cs, CARD_INIT, NULL);
-		sti();
-		current->state = TASK_INTERRUPTIBLE;
-		/* Timeout 10ms */
-		current->timeout = jiffies + (10 * HZ) / 1000;
-		schedule();
-		restore_flags(flags);
-		printk(KERN_INFO "%s: IRQ %d count %d\n", CardType[cs->typ],
-			cs->irq, kstat_irqs(cs->irq));
-		if (kstat_irqs(cs->irq) == irq_cnt) {
-			printk(KERN_WARNING
-			       "%s: IRQ(%d) getting no interrupts during init %d\n",
-			       CardType[cs->typ], cs->irq, 4 - cnt);
-			if (cnt == 1) {
-				free_irq(cs->irq, cs);
-				return (2);
-			} else {
-				cs->cardmsg(cs, CARD_RESET, NULL);
-				cnt--;
-			}
-		} else {
-			cs->cardmsg(cs, CARD_TEST, NULL);
-			return(0);
-		}
-	}
-	restore_flags(flags);
-	return(3);
-}
-
-HISAX_INITFUNC(static int
-checkcard(int cardnr, char *id, int *busy_flag))
-{
-	long flags;
-	int ret = 0;
-	struct IsdnCard *card = cards + cardnr;
-	struct IsdnCardState *cs;
-
-	save_flags(flags);
-	cli();
-	if (!(cs = (struct IsdnCardState *)
-		kmalloc(sizeof(struct IsdnCardState), GFP_ATOMIC))) {
-		printk(KERN_WARNING
-		       "HiSax: No memory for IsdnCardState(card %d)\n",
-		       cardnr + 1);
-		restore_flags(flags);
-		return (0);
-	}
-	memset(cs, 0, sizeof(struct IsdnCardState));
-	card->cs = cs;
-	cs->cardnr = cardnr;
-	cs->debug = L1_DEB_WARN;
-	cs->HW_Flags = 0;
-	cs->busy_flag = busy_flag;
-#if TEI_PER_CARD
-#else
-	test_and_set_bit(FLG_TWO_DCHAN, &cs->HW_Flags);
-#endif
-	cs->protocol = card->protocol;
-
-	if ((card->typ > 0) && (card->typ < 31)) {
-		if (!((1 << card->typ) & SUPORTED_CARDS)) {
-			printk(KERN_WARNING
-			     "HiSax: Support for %s Card not selected\n",
-			       CardType[card->typ]);
-			restore_flags(flags);
-			return (0);
-		}
-	} else {
-		printk(KERN_WARNING
-		       "HiSax: Card Type %d out of range\n",
-		       card->typ);
-		restore_flags(flags);
-		return (0);
-	}
-	if (!(cs->dlogspace = kmalloc(4096, GFP_ATOMIC))) {
-		printk(KERN_WARNING
-		       "HiSax: No memory for dlogspace(card %d)\n",
-		       cardnr + 1);
-		restore_flags(flags);
-		return (0);
-	}
-	if (!(cs->status_buf = kmalloc(HISAX_STATUS_BUFSIZE, GFP_ATOMIC))) {
-		printk(KERN_WARNING
-		       "HiSax: No memory for status_buf(card %d)\n",
-		       cardnr + 1);
-		kfree(cs->dlogspace);
-		restore_flags(flags);
-		return (0);
-	}
-	cs->stlist = NULL;
-	cs->dlogflag = 0;
-	cs->mon_tx = NULL;
-	cs->mon_rx = NULL;
-	cs->status_read = cs->status_buf;
-	cs->status_write = cs->status_buf;
-	cs->status_end = cs->status_buf + HISAX_STATUS_BUFSIZE - 1;
-	cs->typ = card->typ;
-	strcpy(cs->iif.id, id);
-	cs->iif.channels = 2;
-	cs->iif.maxbufsize = MAX_DATA_SIZE;
-	cs->iif.hl_hdrlen = MAX_HEADER_LEN;
-	cs->iif.features =
-	    ISDN_FEATURE_L2_X75I |
-	    ISDN_FEATURE_L2_HDLC |
-//	    ISDN_FEATURE_L2_MODEM |
-	    ISDN_FEATURE_L2_TRANS |
-	    ISDN_FEATURE_L3_TRANS |
-#ifdef	CONFIG_HISAX_1TR6
-	    ISDN_FEATURE_P_1TR6 |
-#endif
-#ifdef	CONFIG_HISAX_EURO
-	    ISDN_FEATURE_P_EURO |
-#endif
-#ifdef        CONFIG_HISAX_NI1
-	    ISDN_FEATURE_P_NI1 |
-#endif
-	    0;
-
-	cs->iif.command = HiSax_command;
-	cs->iif.writecmd = NULL;
-	cs->iif.writebuf_skb = HiSax_writebuf_skb;
-	cs->iif.readstat = HiSax_readstatus;
-	register_isdn(&cs->iif);
-	cs->myid = cs->iif.channels;
-	printk(KERN_INFO
-	       "HiSax: Card %d Protocol %s Id=%s (%d)\n", cardnr + 1,
-	       (card->protocol == ISDN_PTYPE_1TR6) ? "1TR6" :
-	       (card->protocol == ISDN_PTYPE_EURO) ? "EDSS1" :
-	       (card->protocol == ISDN_PTYPE_LEASED) ? "LEASED" :
-	       (card->protocol == ISDN_PTYPE_NI1) ? "NI1" :
-	       "NONE", cs->iif.id, cs->myid);
-	switch (card->typ) {
-#if CARD_TELES0
-		case ISDN_CTYPE_16_0:
-		case ISDN_CTYPE_8_0:
-			ret = setup_teles0(card);
-			break;
-#endif
-#if CARD_TELES3
-		case ISDN_CTYPE_16_3:
-		case ISDN_CTYPE_PNP:
-		case ISDN_CTYPE_TELESPCMCIA:
-		case ISDN_CTYPE_COMPAQ_ISA:
-			ret = setup_teles3(card);
-			break;
-#endif
-#if CARD_S0BOX
-		case ISDN_CTYPE_S0BOX:
-			ret = setup_s0box(card);
-			break;
-#endif
-#if CARD_TELESPCI
-		case ISDN_CTYPE_TELESPCI:
-			ret = setup_telespci(card);
-			break;
-#endif
-#if CARD_AVM_A1
-		case ISDN_CTYPE_A1:
-			ret = setup_avm_a1(card);
-			break;
-#endif
-#if CARD_AVM_A1_PCMCIA
-		case ISDN_CTYPE_A1_PCMCIA:
-			ret = setup_avm_a1_pcmcia(card);
-			break;
-#endif
-#if CARD_FRITZPCI
-		case ISDN_CTYPE_FRITZPCI:
-			ret = setup_avm_pci(card);
-			break;
-#endif
-#if CARD_ELSA
-		case ISDN_CTYPE_ELSA:
-		case ISDN_CTYPE_ELSA_PNP:
-		case ISDN_CTYPE_ELSA_PCMCIA:
-		case ISDN_CTYPE_ELSA_PCI:
-			ret = setup_elsa(card);
-			break;
-#endif
-#if CARD_IX1MICROR2
-		case ISDN_CTYPE_IX1MICROR2:
-			ret = setup_ix1micro(card);
-			break;
-#endif
-#if CARD_DIEHLDIVA
-		case ISDN_CTYPE_DIEHLDIVA:
-			ret = setup_diva(card);
-			break;
-#endif
-#if CARD_ASUSCOM
-		case ISDN_CTYPE_ASUSCOM:
-			ret = setup_asuscom(card);
-			break;
-#endif
-#if CARD_TELEINT
-		case ISDN_CTYPE_TELEINT:
-			ret = setup_TeleInt(card);
-			break;
-#endif
-#if CARD_SEDLBAUER
-		case ISDN_CTYPE_SEDLBAUER:
-		case ISDN_CTYPE_SEDLBAUER_PCMCIA:
-		case ISDN_CTYPE_SEDLBAUER_FAX:
-			ret = setup_sedlbauer(card);
-			break;
-#endif
-#if CARD_SPORTSTER
-		case ISDN_CTYPE_SPORTSTER:
-			ret = setup_sportster(card);
-			break;
-#endif
-#if CARD_MIC
-		case ISDN_CTYPE_MIC:
-			ret = setup_mic(card);
-			break;
-#endif
-#if CARD_NETJET
-		case ISDN_CTYPE_NETJET:
-			ret = setup_netjet(card);
-			break;
-#endif
-#if CARD_TELES3C
-		case ISDN_CTYPE_TELES3C:
-			ret = setup_t163c(card);
-			break;
-#endif
-#if CARD_NICCY
-		case ISDN_CTYPE_NICCY:
-			ret = setup_niccy(card);
-			break;
-#endif
-#if CARD_AMD7930
-		case ISDN_CTYPE_AMD7930:
-			ret = setup_amd7930(card);
-			break;
-#endif
-		default:
-			printk(KERN_WARNING "HiSax: Unknown Card Typ %d\n",
-			       card->typ);
-			ll_unload(cs);
-			restore_flags(flags);
-			return (0);
-	}
-	if (!ret) {
-		ll_unload(cs);
-		restore_flags(flags);
-		return (0);
-	}
-	if (!(cs->rcvbuf = kmalloc(MAX_DFRAME_LEN_L1, GFP_ATOMIC))) {
-		printk(KERN_WARNING
-		       "HiSax: No memory for isac rcvbuf\n");
-		return (1);
-	}
-	cs->rcvidx = 0;
-	cs->tx_skb = NULL;
-	cs->tx_cnt = 0;
-	cs->event = 0;
-	cs->tqueue.next = 0;
-	cs->tqueue.sync = 0;
-	cs->tqueue.data = cs;
-
-	skb_queue_head_init(&cs->rq);
-	skb_queue_head_init(&cs->sq);
-
-	init_bcstate(cs, 0);
-	init_bcstate(cs, 1);
-	ret = init_card(cs);
-	if (ret) {
-		closecard(cardnr);
-		restore_flags(flags);
-		return (0);
-	}
-	init_tei(cs, cs->protocol);
-	CallcNewChan(cs);
-	/* ISAR needs firmware download first */
-	if (!test_bit(HW_ISAR, &cs->HW_Flags))
-		ll_run(cs);
-	restore_flags(flags);
-	return (1);
-}
-
-HISAX_INITFUNC(void
-HiSax_shiftcards(int idx))
-{
-	int i;
-
-	for (i = idx; i < (HISAX_MAX_CARDS - 1); i++)
-		memcpy(&cards[i], &cards[i + 1], sizeof(cards[i]));
-}
-
-HISAX_INITFUNC(int
-HiSax_inithardware(int *busy_flag))
-{
-	int foundcards = 0;
-	int i = 0;
-	int t = ',';
-	int flg = 0;
-	char *id;
-	char *next_id = HiSax_id;
-	char ids[20];
-
-	if (strchr(HiSax_id, ','))
-		t = ',';
-	else if (strchr(HiSax_id, '%'))
-		t = '%';
-
-	while (i < nrcards) {
-		if (cards[i].typ < 1)
-			break;
-		id = next_id;
-		if ((next_id = strchr(id, t))) {
-			*next_id++ = 0;
-			strcpy(ids, id);
-			flg = i + 1;
-		} else {
-			next_id = id;
-			if (flg >= i)
-				strcpy(ids, id);
-			else
-				sprintf(ids, "%s%d", id, i);
-		}
-		if (checkcard(i, ids, busy_flag)) {
-			foundcards++;
-			i++;
-		} else {
-			printk(KERN_WARNING "HiSax: Card %s not installed !\n",
-			       CardType[cards[i].typ]);
-			if (cards[i].cs)
-				kfree((void *) cards[i].cs);
-			cards[i].cs = NULL;
-			HiSax_shiftcards(i);
-		}
-	}
-	return foundcards;
-}
-
-void
-HiSax_closecard(int cardnr)
-{
-	int 	i,last=nrcards - 1;
-
-	if (cardnr>last)
-		return;
-	if (cards[cardnr].cs) {
-		ll_stop(cards[cardnr].cs);
-		release_tei(cards[cardnr].cs);
-		closecard(cardnr);
-		free_irq(cards[cardnr].cs->irq, cards[cardnr].cs);
-		kfree((void *) cards[cardnr].cs);
-		cards[cardnr].cs = NULL;
-	}
-	i = cardnr;
-	while (i!=last) {
-		cards[i] = cards[i+1];
-		i++;
-	}
-	nrcards--;
-}
-
-void
-HiSax_reportcard(int cardnr)
-{
-	struct IsdnCardState *cs = cards[cardnr].cs;
-	struct PStack *stptr;
-	struct l3_process *pc;
-	int j, i = 1;
-
-	printk(KERN_DEBUG "HiSax: reportcard No %d\n", cardnr + 1);
-	printk(KERN_DEBUG "HiSax: Type %s\n", CardType[cs->typ]);
-	printk(KERN_DEBUG "HiSax: debuglevel %x\n", cs->debug);
-	printk(KERN_DEBUG "HiSax: HiSax_reportcard address 0x%lX\n",
-	       (ulong) & HiSax_reportcard);
-	printk(KERN_DEBUG "HiSax: cs 0x%lX\n", (ulong) cs);
-	printk(KERN_DEBUG "HiSax: HW_Flags %x bc0 flg %x bc0 flg %x\n",
-		cs->HW_Flags, cs->bcs[0].Flag, cs->bcs[1].Flag);
-	printk(KERN_DEBUG "HiSax: bcs 0 mode %d ch%d\n",
-		cs->bcs[0].mode, cs->bcs[0].channel);
-	printk(KERN_DEBUG "HiSax: bcs 1 mode %d ch%d\n",
-		cs->bcs[1].mode, cs->bcs[1].channel);
-	printk(KERN_DEBUG "HiSax: cs stl 0x%lX\n", (ulong) & (cs->stlist));
-	stptr = cs->stlist;
-	while (stptr != NULL) {
-		printk(KERN_DEBUG "HiSax: dst%d 0x%lX\n", i, (ulong) stptr);
-		printk(KERN_DEBUG "HiSax: dst%d stp 0x%lX\n", i, (ulong) stptr->l1.stlistp);
-		printk(KERN_DEBUG "HiSax:   tei %d sapi %d\n",
-		       stptr->l2.tei, stptr->l2.sap);
-		printk(KERN_DEBUG "HiSax:      man 0x%lX\n", (ulong) stptr->ma.layer);
-		pc = stptr->l3.proc;
-		while (pc) {
-			printk(KERN_DEBUG "HiSax: l3proc %x 0x%lX\n", pc->callref,
-			       (ulong) pc);
-			printk(KERN_DEBUG "HiSax:    state %d  st 0x%lX chan 0x%lX\n",
-			    pc->state, (ulong) pc->st, (ulong) pc->chan);
-			pc = pc->next;
-		}
-		stptr = stptr->next;
-		i++;
-	}
-	for (j = 0; j < 2; j++) {
-		printk(KERN_DEBUG "HiSax: ch%d 0x%lX\n", j,
-		       (ulong) & cs->channel[j]);
-		stptr = cs->channel[j].b_st;
-		i = 1;
-		while (stptr != NULL) {
-			printk(KERN_DEBUG "HiSax:  b_st%d 0x%lX\n", i, (ulong) stptr);
-			printk(KERN_DEBUG "HiSax:    man 0x%lX\n", (ulong) stptr->ma.layer);
-			stptr = stptr->next;
-			i++;
-		}
-	}
-}
-
 #ifdef L2FRAME_DEBUG		/* psa */
 
 char *
@@ -1140,7 +448,7 @@ l2cmd(u_char cmd)
 	}
 }
 
-static char tmp[24];
+static char tmpdeb[32];
 
 char *
 l2frames(u_char * ptr)
@@ -1149,7 +457,7 @@ l2frames(u_char * ptr)
 		case 1:
 		case 5:
 		case 9:
-			sprintf(tmp, "%s[%d](nr %d)", l2cmd(ptr[2]), ptr[3] & 1, ptr[3] >> 1);
+			sprintf(tmpdeb, "%s[%d](nr %d)", l2cmd(ptr[2]), ptr[3] & 1, ptr[3] >> 1);
 			break;
 		case 0x6f:
 		case 0x0f:
@@ -1158,36 +466,33 @@ l2frames(u_char * ptr)
 		case 0x63:
 		case 0x87:
 		case 0xaf:
-			sprintf(tmp, "%s[%d]", l2cmd(ptr[2]), (ptr[2] & 0x10) >> 4);
+			sprintf(tmpdeb, "%s[%d]", l2cmd(ptr[2]), (ptr[2] & 0x10) >> 4);
 			break;
 		default:
 			if (!(ptr[2] & 1)) {
-				sprintf(tmp, "I[%d](ns %d, nr %d)", ptr[3] & 1, ptr[2] >> 1, ptr[3] >> 1);
+				sprintf(tmpdeb, "I[%d](ns %d, nr %d)", ptr[3] & 1, ptr[2] >> 1, ptr[3] >> 1);
 				break;
 			} else
 				return "invalid command";
 	}
 
 
-	return tmp;
+	return tmpdeb;
 }
 
 void
 Logl2Frame(struct IsdnCardState *cs, struct sk_buff *skb, char *buf, int dir)
 {
-	char tmp[132];
 	u_char *ptr;
 
 	ptr = skb->data;
 
 	if (ptr[0] & 1 || !(ptr[1] & 1))
-		debugl1(cs, "Addres not LAPD");
-	else {
-		sprintf(tmp, "%s %s: %s%c (sapi %d, tei %d)",
+		debugl1(cs, "Address not LAPD");
+	else
+		debugl1(cs, "%s %s: %s%c (sapi %d, tei %d)",
 			(dir ? "<-" : "->"), buf, l2frames(ptr),
 			((ptr[0] & 2) >> 1) == dir ? 'C' : 'R', ptr[0] >> 2, ptr[1] >> 1);
-		debugl1(cs, tmp);
-	}
 }
 #endif
 
@@ -1447,7 +752,6 @@ static void
 dch_l2l1(struct PStack *st, int pr, void *arg)
 {
 	struct IsdnCardState *cs = (struct IsdnCardState *) st->l1.hardware;
-	char tmp[32];
 
 	switch (pr) {
 		case (PH_DATA | REQUEST):
@@ -1456,11 +760,9 @@ dch_l2l1(struct PStack *st, int pr, void *arg)
 			st->l1.l1hw(st, pr, arg);
 			break;
 		case (PH_ACTIVATE | REQUEST):
-			if (cs->debug) {
-				sprintf(tmp, "PH_ACTIVATE_REQ %s",
+			if (cs->debug)
+				debugl1(cs, "PH_ACTIVATE_REQ %s",
 					strL1DState[st->l1.l1m.state]);
-				debugl1(cs, tmp);
-			}
 			if (test_bit(FLG_L1_ACTIVATED, &st->l1.Flags))
 				st->l1.l1l2(st, PH_ACTIVATE | CONFIRM, NULL);
 			else {
@@ -1478,10 +780,8 @@ dch_l2l1(struct PStack *st, int pr, void *arg)
 			st->l1.l1hw(st, HW_TESTLOOP | REQUEST, arg);
 			break;
 		default:
-			if (cs->debug) {
-				sprintf(tmp, "dch_l2l1 msg %04X unhandled", pr);
-				debugl1(cs, tmp);
-			}
+			if (cs->debug)
+				debugl1(cs, "dch_l2l1 msg %04X unhandled", pr);
 			break;
 	}
 }
@@ -1517,10 +817,8 @@ l1_msg(struct IsdnCardState *cs, int pr, void *arg) {
 				FsmEvent(&st->l1.l1m, EV_INFO4_IND, arg);
 				break;
 			default:
-				if (cs->debug) {
-					sprintf(tmp, "l1msg %04X unhandled", pr);
-					debugl1(cs, tmp);
-				}
+				if (cs->debug)
+					debugl1(cs, "l1msg %04X unhandled", pr);
 				break;
 		}
 		st = st->next;

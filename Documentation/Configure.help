@@ -4569,9 +4569,9 @@ CONFIG_HISAX_AVM_A1
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for AVM PCI (Fritz!PCI)
+HiSax Support for AVM PnP/PCI (Fritz!PNP/PCI)
 CONFIG_HISAX_FRITZPCI
-  This enables HiSax support for the AVM "Fritz!PCI").
+  This enables HiSax support for the AVM "Fritz!PnP" and "Fritz!PCI".
   See Documentation/isdn/README.HiSax on how to configure it.
 
 HiSax Support for AVM A1 PCMCIA (Fritz)

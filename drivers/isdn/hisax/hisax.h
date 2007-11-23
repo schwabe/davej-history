@@ -1,8 +1,15 @@
-/* $Id: hisax.h,v 1.13.2.17 1998/10/11 19:33:48 niemann Exp $
+/* $Id: hisax.h,v 1.13.2.19 1998/11/05 21:11:17 keil Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
+ * Revision 1.13.2.19  1998/11/05 21:11:17  keil
+ * AVM PnP support
+ *
+ * Revision 1.13.2.18  1998/11/03 00:06:33  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.13.2.17  1998/10/11 19:33:48  niemann
  * Added new IPAC based cards.
  * Code cleanup and simplified (sedlbauer.c)
@@ -192,6 +199,8 @@
 #define MAX_HEADER_LEN	4
 #define MAX_WINDOW	8
 #define MAX_MON_FRAME	32
+#define MAX_DLOG_SPACE	2048
+#define MAX_BLOG_SPACE	256
 
 /* #define I4L_IRQ_FLAG SA_INTERRUPT */
 #define I4L_IRQ_FLAG    0
@@ -216,7 +225,7 @@ struct FsmInst {
 	int debug;
 	void *userdata;
 	int userint;
-	void (*printdebug) (struct FsmInst *, char *);
+	void (*printdebug) (struct FsmInst *, char *, ...);
 };
 
 struct FsmNode {
@@ -270,8 +279,8 @@ struct Layer1 {
 #define FLG_ORIG	2
 #define FLG_MOD128	3
 #define FLG_PEND_REL	4
-#define FLG_L3_INIT	5 
-#define FLG_T200_RUN	6 
+#define FLG_L3_INIT	5
+#define FLG_T200_RUN	6
 #define FLG_ACK_PEND	7
 #define FLG_REJEXC	8
 #define FLG_OWN_BUSY	9
@@ -301,7 +310,7 @@ struct Layer2 {
 	struct FsmTimer t200, t203;
 	int T200, N200, T203;
 	int debug;
-	char debug_id[32];
+	char debug_id[16];
 };
 
 struct Layer3 {
@@ -313,7 +322,7 @@ struct Layer3 {
 	struct l3_process *global;
 	int N303;
 	int debug;
-	char debug_id[32];
+	char debug_id[8];
 };
 
 struct LLInterface {
@@ -350,7 +359,7 @@ struct PStack {
 	struct Layer1 l1;
 	struct Layer2 l2;
 	struct Layer3 l3;
-	struct LLInterface lli; 
+	struct LLInterface lli;
 	struct Management ma;
 	int protocol;		/* EDSS1 or 1TR6 */
 };
@@ -392,8 +401,18 @@ struct isar_hw {
 	struct isar_reg *reg;
 };
 
+struct hdlc_stat_reg {
+	u_char cmd  __attribute__((packed));
+	u_char xml  __attribute__((packed));
+	u_char mode __attribute__((packed));
+	u_char fill __attribute__((packed));
+};
+
 struct hdlc_hw {
-	u_int ctrl;
+	union {
+		u_int ctrl;
+		struct hdlc_stat_reg sr;
+	} ctrl;
 	u_int stat;
 	int rcvidx;
 	int count;              /* Current skb sent count */
@@ -462,6 +481,7 @@ struct BCState {
 	struct sk_buff_head rqueue;	/* B-Channel receive Queue */
 	struct sk_buff_head squeue;	/* B-Channel send Queue */
 	struct PStack *st;
+	u_char *blog;
 	struct timer_list transbusy;
 	struct tq_struct tqueue;
 	int event;
@@ -529,12 +549,12 @@ struct teles3_hw {
 	signed   int hscx[2];
 	signed   int isacfifo;
 	signed   int hscxfifo[2];
-};	
+};
 
 struct teles0_hw {
 	unsigned int cfg_reg;
 	unsigned int membase;
-};	
+};
 
 struct avm_hw {
 	unsigned int cfg_reg;
@@ -543,7 +563,7 @@ struct avm_hw {
 	unsigned int isacfifo;
 	unsigned int hscxfifo[2];
 	unsigned int counter;
-};	
+};
 
 struct ix1_hw {
 	unsigned int cfg_reg;
@@ -563,7 +583,7 @@ struct diva_hw {
 	unsigned int status;
 	struct timer_list tl;
 	u_char ctrl_reg;
-};	
+};
 
 struct asus_hw {
 	unsigned int cfg_reg;
@@ -602,7 +622,7 @@ struct spt_hw {
 	unsigned int isac;
 	unsigned int hscx[2];
 	unsigned char res_irq;
-};	
+};
 
 struct mic_hw {
 	unsigned int cfg_reg;
@@ -661,7 +681,7 @@ struct IsdnCardState {
 	unsigned char subtyp;
 	int protocol;
 	unsigned int irq;
-	int HW_Flags; 
+	int HW_Flags;
 	int *busy_flag;
 	union {
 		struct elsa_hw elsa;
@@ -706,8 +726,7 @@ struct IsdnCardState {
 	struct sk_buff_head rq, sq; /* D-channel queues */
 	int ph_state;
 	int cardnr;
-	int dlogflag;
-	char *dlogspace;
+	char *dlog;
 	int debug;
 	u_char *mon_tx;
 	u_char *mon_rx;
@@ -801,7 +820,7 @@ struct IsdnCardState {
 
 #ifdef	CONFIG_HISAX_AVM_A1
 #define  CARD_AVM_A1 (1<< ISDN_CTYPE_A1)
-#ifndef ISDN_CHIP_ISAC 
+#ifndef ISDN_CHIP_ISAC
 #define ISDN_CHIP_ISAC 1
 #endif
 #else
@@ -810,7 +829,7 @@ struct IsdnCardState {
 
 #ifdef	CONFIG_HISAX_AVM_A1_PCMCIA
 #define  CARD_AVM_A1_PCMCIA (1<< ISDN_CTYPE_A1_PCMCIA)
-#ifndef ISDN_CHIP_ISAC 
+#ifndef ISDN_CHIP_ISAC
 #define ISDN_CHIP_ISAC 1
 #endif
 #else
@@ -819,7 +838,7 @@ struct IsdnCardState {
 
 #ifdef	CONFIG_HISAX_FRITZPCI
 #define  CARD_FRITZPCI (1<< ISDN_CTYPE_FRITZPCI)
-#ifndef ISDN_CHIP_ISAC 
+#ifndef ISDN_CHIP_ISAC
 #define ISDN_CHIP_ISAC 1
 #endif
 #else
@@ -975,6 +994,26 @@ struct IsdnCardState {
 #endif
 #endif
 
+/* L1 Debug */
+#define	L1_DEB_WARN		0x01
+#define	L1_DEB_INTSTAT		0x02
+#define	L1_DEB_ISAC		0x04
+#define	L1_DEB_ISAC_FIFO	0x08
+#define	L1_DEB_HSCX		0x10
+#define	L1_DEB_HSCX_FIFO	0x20
+#define	L1_DEB_LAPD	        0x40
+#define	L1_DEB_IPAC	        0x80
+#define	L1_DEB_RECEIVE_FRAME    0x100
+#define L1_DEB_MONITOR		0x200
+#define DEB_DLOG_HEX		0x400
+#define DEB_DLOG_VERBOSE	0x800
+
+#define L2FRAME_DEBUG
+
+#ifdef L2FRAME_DEBUG
+extern void Logl2Frame(struct IsdnCardState *cs, struct sk_buff *skb, char *buf, int dir);
+#endif
+
 struct IsdnCard {
 	int typ;
 	int protocol;		/* EDSS1 or 1TR6 */
@@ -982,8 +1021,7 @@ struct IsdnCard {
 	struct IsdnCardState *cs;
 };
 
-int HiSax_inithardware(int *);
-void HiSax_closecard(int cardnr);
+void init_bcstate(struct IsdnCardState *cs, int bc);
 
 void setstack_HiSax(struct PStack *st, struct IsdnCardState *cs);
 unsigned int random_ri(void);
@@ -1018,15 +1056,16 @@ int FsmAddTimer(struct FsmTimer *ft, int millisec, int event,
 void FsmRestartTimer(struct FsmTimer *ft, int millisec, int event,
 	void *arg, int where);
 void FsmDelTimer(struct FsmTimer *ft, int where);
-void jiftime(char *s, long mark);
+int jiftime(char *s, long mark);
 
 int HiSax_command(isdn_ctrl * ic);
 int HiSax_writebuf_skb(int id, int chan, struct sk_buff *skb);
-void HiSax_putstatus(struct IsdnCardState *csta, char *buf);
+void HiSax_putstatus(struct IsdnCardState *cs, char *head, char *fmt, ...);
+void VHiSax_putstatus(struct IsdnCardState *cs, char *head, char *fmt, va_list args);
 void HiSax_reportcard(int cardnr);
 int QuickHex(char *txt, u_char * p, int cnt);
-void LogFrame(struct IsdnCardState *sp, u_char * p, int size);
-void dlogframe(struct IsdnCardState *sp, u_char * p, int size, char *comment);
+void LogFrame(struct IsdnCardState *cs, u_char * p, int size);
+void dlogframe(struct IsdnCardState *cs, struct sk_buff *skb, int dir);
 void iecpy(u_char * dest, u_char * iestart, int ieoffset);
 int discard_queue(struct sk_buff_head *q);
 #ifdef ISDN_CHIP_ISAC
@@ -1036,20 +1075,21 @@ void setstack_isac(struct PStack *st, struct IsdnCardState *cs);
 
 #define HZDELAY(jiffs) {int tout = jiffs; while (tout--) udelay(1000000/HZ);}
 
-int ll_run(struct IsdnCardState *csta);
-void ll_stop(struct IsdnCardState *csta);
+int ll_run(struct IsdnCardState *cs);
+void ll_stop(struct IsdnCardState *cs);
 void CallcNew(void);
 void CallcFree(void);
-int CallcNewChan(struct IsdnCardState *csta);
-void CallcFreeChan(struct IsdnCardState *csta);
+int CallcNewChan(struct IsdnCardState *cs);
+void CallcFreeChan(struct IsdnCardState *cs);
 void Isdnl1New(void);
 void Isdnl1Free(void);
 void Isdnl2New(void);
 void Isdnl2Free(void);
 void Isdnl3New(void);
 void Isdnl3Free(void);
-void init_tei(struct IsdnCardState *sp, int protocol);
-void release_tei(struct IsdnCardState *sp);
+void init_tei(struct IsdnCardState *cs, int protocol);
+void release_tei(struct IsdnCardState *cs);
 char *HiSax_getrev(const char *revision);
 void TeiNew(void);
 void TeiFree(void);
+int certification_check(int output);

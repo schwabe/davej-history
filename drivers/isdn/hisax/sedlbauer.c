@@ -1,9 +1,9 @@
-/* $Id: sedlbauer.c,v 1.1.2.12 1998/10/13 18:38:53 keil Exp $
+/* $Id: sedlbauer.c,v 1.1.2.15 1998/11/03 00:07:32 keil Exp $
 
  * sedlbauer.c  low level stuff for Sedlbauer cards
- *              includes support for the Sedlbauer speed star (speed star II)
- *              and support for the Sedlbauer ISDN-Controller PC/104
- *		with beginning support for the Sedlbauer speed pci
+ *              includes support for the Sedlbauer speed star (speed star II),
+ *              support for the Sedlbauer ISDN-Controller PC/104 and
+ *		support for the Sedlbauer speed pci
  *              derived from the original file asuscom.c from Karsten Keil
  *
  * Copyright (C) 1997,1998 Marcus Niemann (for the modifications to
@@ -16,6 +16,16 @@
  *            Edgar Toernig
  *
  * $Log: sedlbauer.c,v $
+ * Revision 1.1.2.15  1998/11/03 00:07:32  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
+ * Revision 1.1.2.14  1998/10/30 22:51:41  niemann
+ * Added new card, Sedlbauer speed pci works now.
+ *
+ * Revision 1.1.2.13  1998/10/16 12:46:06  keil
+ * fix pci detection for more as one card
+ *
  * Revision 1.1.2.12  1998/10/13 18:38:53  keil
  * Fix PCI detection
  *
@@ -69,10 +79,10 @@
  * Speed Win2	IPAC		ISAPNP
  * ISDN PC/104	IPAC		DIP-SWITCH
  * Speed Star2	IPAC		CARDMGR
- * Speed PCI	IPAC		PNP		#not ready#
+ * Speed PCI	IPAC		PNP		
 */
 
-#undef SEDLBAUER_PCI
+#define SEDLBAUER_PCI 1
 
 #define __NO_VERSION__
 #include <linux/config.h>
@@ -87,15 +97,15 @@
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.1.2.12 $";
+const char *Sedlbauer_revision = "$Revision: 1.1.2.15 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 
 	"speed win II / ISDN PC/104", "speed star II", "speed pci"};
 
 #ifdef SEDLBAUER_PCI
-#define PCI_VENDOR_SEDLBAUER	0x0000
-#define PCI_SPEEDPCI_ID	0x00
+#define PCI_VENDOR_SEDLBAUER	0xe159
+#define PCI_SPEEDPCI_ID	0x02
 #endif
  
 #define SEDL_SPEED_CARD_WIN	1
@@ -354,7 +364,6 @@ sedlbauer_interrupt_ipac(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
 	u_char ista, val, icnt = 20;
-	char   tmp[64];
 
 	if (!cs) {
 		printk(KERN_WARNING "Sedlbauer: Spurious interrupt!\n");
@@ -362,10 +371,8 @@ sedlbauer_interrupt_ipac(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	ista = readreg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_ISTA);
 Start_IPAC:
-	if (cs->debug & L1_DEB_IPAC) {
-		sprintf(tmp, "IPAC ISTA %02X", ista);
-		debugl1(cs, tmp);
-	}
+	if (cs->debug & L1_DEB_IPAC)
+		debugl1(cs, "IPAC ISTA %02X", ista);
 	if (ista & 0x0f) {
 		val = readreg(cs->hw.sedl.adr, cs->hw.sedl.hscx, HSCX_ISTA + 0x40);
 		if (ista & 0x01)
@@ -597,7 +604,7 @@ setup_sedlbauer(struct IsdnCard *card))
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
 					PCI_INTERRUPT_LINE, &irq);
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
-					PCI_BASE_ADDRESS_1, &ioaddr);
+					PCI_BASE_ADDRESS_0, &ioaddr);
 			cs->irq = irq;
 			cs->hw.sedl.cfg_reg = ioaddr & PCI_BASE_ADDRESS_IO_MASK; 
 			if (!cs->hw.sedl.cfg_reg) {
@@ -606,7 +613,7 @@ setup_sedlbauer(struct IsdnCard *card))
 			}
 			cs->hw.sedl.bus = SEDL_BUS_PCI;
 			cs->hw.sedl.chip = SEDL_CHIP_IPAC;
-			cs->hw.sedl.subtyp = SEDL_SPEED_PCI;
+			cs->subtyp = SEDL_SPEED_PCI;
 			bytecnt = 256;
 			byteout(cs->hw.sedl.cfg_reg, 0xff);
 			byteout(cs->hw.sedl.cfg_reg, 0x00);
@@ -618,6 +625,7 @@ setup_sedlbauer(struct IsdnCard *card))
 			printk(KERN_WARNING "Sedlbauer: No PCI card found\n");
 			return(0);
 		}
+		pci_index++;
 #else
 		printk(KERN_WARNING "Sedlbauer: NO_PCI_BIOS\n");
 		return (0);

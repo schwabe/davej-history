@@ -8,7 +8,7 @@ L_TARGET :=
 O_TARGET :=
 
 O_OBJS := isdnl1.o tei.o isdnl2.o isdnl3.o \
-          lmgr.o q931.o callc.o fsm.o
+          lmgr.o q931.o callc.o fsm.o cert.o
 
 # EXTRA_CFLAGS += -S
 
@@ -154,4 +154,14 @@ else
   endif
 endif
 
+
 include $(TOPDIR)/Rules.make
+
+MD5FILES += isac.c isdnl1.c isdnl2.c isdnl3.c \
+	    tei.c callc.c cert.c l3dss1.c l3_1tr6.c elsa.c
+
+CERT = $(shell md5sum -c md5sums.asc >> /dev/null;echo $$?)
+
+cert.o:	$(MD5FILES) md5sums.asc
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -D CERTIFICATION=$(CERT) -c -o cert.o cert.c
+

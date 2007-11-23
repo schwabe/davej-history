@@ -98,7 +98,7 @@ struct pcbit_dev {
 };
 
 #define STATS_TIMER (10*HZ)
-#define ERRTIME     (HZ/10)
+#define ERRTIME     (0.1*HZ)
 
 /* MRU */
 #define MAXBUFSIZE  1534

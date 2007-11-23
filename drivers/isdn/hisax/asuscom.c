@@ -1,13 +1,17 @@
-/* $Id: asuscom.c,v 1.1.2.3 1998/06/18 23:10:26 keil Exp $
+/* $Id: asuscom.c,v 1.1.2.4 1998/11/03 00:05:42 keil Exp $
 
  * asuscom.c     low level stuff for ASUSCOM NETWORK INC. ISDNLink cards
  *
- * Author     Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author     Karsten Keil (keil@isdn4linux.de)
  *
  * Thanks to  ASUSCOM NETWORK INC. Taiwan and  Dynalink NL for informations
  *
  *
  * $Log: asuscom.c,v $
+ * Revision 1.1.2.4  1998/11/03 00:05:42  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.1.2.3  1998/06/18 23:10:26  keil
  * Support for new IPAC card
  *
@@ -29,7 +33,7 @@
 
 extern const char *CardType[];
 
-const char *Asuscom_revision = "$Revision: 1.1.2.3 $";
+const char *Asuscom_revision = "$Revision: 1.1.2.4 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -225,7 +229,6 @@ asuscom_interrupt_ipac(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
 	u_char ista, val, icnt = 20;
-	char   tmp[64];
 
 	if (!cs) {
 		printk(KERN_WARNING "ISDNLink: Spurious interrupt!\n");
@@ -233,10 +236,8 @@ asuscom_interrupt_ipac(int intno, void *dev_id, struct pt_regs *regs)
 	}
 	ista = readreg(cs->hw.asus.adr, cs->hw.asus.isac, IPAC_ISTA);
 Start_IPAC:
-	if (cs->debug & L1_DEB_IPAC) {
-		sprintf(tmp, "IPAC ISTA %02X", ista);
-		debugl1(cs, tmp);
-	}
+	if (cs->debug & L1_DEB_IPAC)
+		debugl1(cs, "IPAC ISTA %02X", ista);
 	if (ista & 0x0f) {
 		val = readreg(cs->hw.asus.adr, cs->hw.asus.hscx, HSCX_ISTA + 0x40);
 		if (ista & 0x01)

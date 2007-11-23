@@ -8,7 +8,7 @@ extern int isdn_ppp_hangup_slave(char *);
 #define CALLTYPE_OUTGOING 0x2
 #define CALLTYPE_CALLBACK 0x4
 
-#define IPPP_VERSION    "2.2.0" 	/* For now */
+#define IPPP_VERSION    "2.2.0"
 
 struct pppcallinfo
 {

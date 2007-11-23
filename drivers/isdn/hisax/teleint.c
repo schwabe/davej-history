@@ -1,11 +1,15 @@
-/* $Id: teleint.c,v 1.1.2.6 1998/05/27 18:06:24 keil Exp $
+/* $Id: teleint.c,v 1.1.2.7 1998/11/03 00:07:39 keil Exp $
 
  * teleint.c     low level stuff for TeleInt isdn cards
  *
- * Author     Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author     Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: teleint.c,v $
+ * Revision 1.1.2.7  1998/11/03 00:07:39  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.1.2.6  1998/05/27 18:06:24  keil
  * HiSax 3.0
  *
@@ -38,7 +42,7 @@
 
 extern const char *CardType[];
 
-const char *TeleInt_revision = "$Revision: 1.1.2.6 $";
+const char *TeleInt_revision = "$Revision: 1.1.2.7 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -169,11 +173,8 @@ ReadHFC(struct IsdnCardState *cs, int data, u_char reg)
 		cs->hw.hfc.cip = reg;
 		byteout(cs->hw.hfc.addr | 1, reg);
 		ret = bytein(cs->hw.hfc.addr);
-		if (cs->debug & L1_DEB_HSCX_FIFO && (data != 2)) {
-			char tmp[32];
-			sprintf(tmp, "hfc RD %02x %02x", reg, ret);
-			debugl1(cs, tmp);
-		}
+		if (cs->debug & L1_DEB_HSCX_FIFO && (data != 2))
+			debugl1(cs, "hfc RD %02x %02x", reg, ret);
 	} else
 		ret = bytein(cs->hw.hfc.addr | 1);
 	return (ret);
@@ -186,11 +187,8 @@ WriteHFC(struct IsdnCardState *cs, int data, u_char reg, u_char value)
 	cs->hw.hfc.cip = reg;
 	if (data)
 		byteout(cs->hw.hfc.addr, value);
-	if (cs->debug & L1_DEB_HSCX_FIFO && (data != 2)) {
-		char tmp[32];
-		sprintf(tmp, "hfc W%c %02x %02x", data ? 'D' : 'C', reg, value);
-		debugl1(cs, tmp);
-	}
+	if (cs->debug & L1_DEB_HSCX_FIFO && (data != 2))
+		debugl1(cs, "hfc W%c %02x %02x", data ? 'D' : 'C', reg, value);
 }
 
 static void

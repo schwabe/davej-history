@@ -1,8 +1,8 @@
-/* $Id: isdn.h,v 1.31.2.10 1998/06/07 13:48:30 fritz Exp $
+/* $Id: isdn.h,v 1.31.2.17 1998/11/05 22:13:28 fritz Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994-1998  by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    by Thinking Objects Software GmbH Wuerzburg
  * Copyright 1995,96    by Michael Hipp (Michael.Hipp@student.uni-tuebingen.de)
  * 
@@ -21,6 +21,30 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.31.2.17  1998/11/05 22:13:28  fritz
+ * Changed mail-address.
+ *
+ * Revision 1.31.2.16  1998/11/04 17:22:53  fritz
+ * Replaced broken lowlevel-driver locking.
+ *
+ * Revision 1.31.2.15  1998/11/03 14:31:57  fritz
+ * Reduced stack usage in various functions.
+ * Adapted statemachine to work with certified HiSax.
+ * Some fixes in callback handling.
+ *
+ * Revision 1.31.2.14  1998/10/25 14:37:37  fritz
+ * Backported from MIPS (Cobalt).
+ *
+ * Revision 1.31.2.13  1998/10/23 10:14:25  paul
+ * Implementation of "dialmode" (successor of "status")
+ * You also need current isdnctrl for this!
+ *
+ * Revision 1.31.2.12  1998/08/22 16:41:25  armin
+ * Added silence detection in audio receive mode (AT+VSD).
+ *
+ * Revision 1.31.2.11  1998/07/15 15:04:19  calle
+ * make isdn4k-utils compile again.
+ *
  * Revision 1.31.2.10  1998/06/07 13:48:30  fritz
  * ABC cleanup
  *
@@ -177,6 +201,7 @@
 #ifndef isdn_h
 #define isdn_h
 
+#include <linux/config.h>
 #include <linux/ioctl.h>
 
 #define ISDN_TTY_MAJOR    43
@@ -188,14 +213,20 @@
  * the correspondent code in isdn.c
  */
 
+#ifdef CONFIG_COBALT_MICRO_SERVER
+/* Save memory */
+#define ISDN_MAX_DRIVERS    2
+#define ISDN_MAX_CHANNELS   8
+#else
 #define ISDN_MAX_DRIVERS    32
 #define ISDN_MAX_CHANNELS   64
+#endif
 #define ISDN_MINOR_B        0
 #define ISDN_MINOR_BMAX     (ISDN_MAX_CHANNELS-1)
-#define ISDN_MINOR_CTRL     ISDN_MAX_CHANNELS
-#define ISDN_MINOR_CTRLMAX  (2*ISDN_MAX_CHANNELS-1)
-#define ISDN_MINOR_PPP      (2*ISDN_MAX_CHANNELS)
-#define ISDN_MINOR_PPPMAX   (3*ISDN_MAX_CHANNELS-1)
+#define ISDN_MINOR_CTRL     64
+#define ISDN_MINOR_CTRLMAX  (64 + (ISDN_MAX_CHANNELS-1))
+#define ISDN_MINOR_PPP      128
+#define ISDN_MINOR_PPPMAX   (128 + (ISDN_MAX_CHANNELS-1))
 #define ISDN_MINOR_STATUS   255
 
 /* New ioctl-codes */
@@ -206,8 +237,8 @@
 #define IIOCNETANM  _IO('I',5)
 #define IIOCNETDNM  _IO('I',6)
 #define IIOCNETGNM  _IO('I',7)
-#define IIOCGETSET  _IO('I',8)
-#define IIOCSETSET  _IO('I',9)
+/* #define IIOCGETSET  _IO('I',8) obsolete */
+/* #define IIOCSETSET  _IO('I',9) obsolete */
 #define IIOCSETVER  _IO('I',10)
 #define IIOCNETHUP  _IO('I',11)
 #define IIOCSETGST  _IO('I',12)
@@ -256,6 +287,7 @@
 
 #define ISDN_MODEM_ANZREG    23        /* Number of Modem-Registers        */
 #define ISDN_MSNLEN          20
+#define ISDN_LMSNLEN         255 /* Length of tty's Listen-MSN string */
 
 typedef struct {
   char drvid[25];
@@ -276,6 +308,7 @@ typedef struct {
 
 #define NET_DV 0x04 /* Data version for net_cfg     */
 #define TTY_DV 0x04 /* Data version for iprofd etc. */
+#define INF_DV 0x01 /* Data version for /dev/isdninfo */
 
 typedef struct {
   char name[10];     /* Name of interface                     */
@@ -302,8 +335,14 @@ typedef struct {
   int  triggercps;   /* BogoCPS needed for triggering slave   */
   int  dialtimeout;  /* Dial-Timeout                          */
   int  dialwait;     /* Time to wait after failed dial        */
-  int  stopped;      /* Flag: Stopped                         */
+  int  dialmode;     /* Flag: off / on / auto                 */
 } isdn_net_ioctl_cfg;
+
+#define ISDN_NET_DIALMODE_MASK 0xC0  /* bits for status                   */
+#define  ISDN_NET_DM_OFF	0x00    /* this interface is stopped      */
+#define  ISDN_NET_DM_MANUAL	0x40    /* this interface is on (manual)  */
+#define  ISDN_NET_DM_AUTO	0x80    /* this interface is autodial     */
+#define ISDN_NET_DIALMODE(x) ((&(x))->flags & ISDN_NET_DIALMODE_MASK)
 
 #ifdef __KERNEL__
 
@@ -395,6 +434,7 @@ typedef struct {
 /* Timeout-Values for isdn_net_dial() */
 #define ISDN_TIMER_DTIMEOUT10 (10*HZ/(ISDN_TIMER_02SEC*(ISDN_TIMER_RES+1)))
 #define ISDN_TIMER_DTIMEOUT15 (15*HZ/(ISDN_TIMER_02SEC*(ISDN_TIMER_RES+1)))
+#define ISDN_TIMER_DTIMEOUT60 (60*HZ/(ISDN_TIMER_02SEC*(ISDN_TIMER_RES+1)))
 
 /* GLOBAL_FLAGS */
 #define ISDN_GLOBAL_STOPPED 1
@@ -414,7 +454,10 @@ typedef struct {
 #define ISDN_NET_DYNAMIC    0x20       /* this link is dynamically allocated */
 #endif
 
-#define ISDN_NET_STOPPED    0x40       /* this interface is stopped         */
+/*
+ * also see the ISDN_NET_DM_* defines earlier
+ * (they are not here, as we need access to those in userspace)
+ */
 
 #define ISDN_NET_MAGIC      0x49344C02 /* for paranoia-checking             */
 
@@ -423,6 +466,7 @@ typedef struct {
   void *next;
   char num[ISDN_MSNLEN];
 } isdn_net_phone;
+
 
 /* Local interface-data */
 typedef struct isdn_net_local_s {
@@ -639,6 +683,7 @@ typedef struct modem_info {
   void                  *adpcms;         /* state for adpcm decompression  */
   void                  *adpcmr;         /* state for adpcm compression    */
   void                  *dtmf_state;     /* state for dtmf decoder         */
+  void			*silence_state;	 /* state for silence detection	   */
 #endif
   struct tty_struct 	*tty;            /* Pointer to corresponding tty   */
   atemu                 emu;             /* AT-emulator data               */
@@ -740,16 +785,19 @@ typedef struct {
   char *private;
 } infostruct;
 
+#define DRV_FLAG_RUNNING 1
+#define DRV_FLAG_REJBUS  2
+#define DRV_FLAG_LOADED  4
+
 /* Description of hardware-level-driver */
 typedef struct {
-  ulong               flags;            /* Flags                            */
+  ulong               online;           /* Channel-Online flags             */
+  ulong               flags;            /* Misc driver flags                */
+  int                 locks;            /* Number of locks for this driver  */
   int                 channels;         /* Number of channels               */
-  int                 reject_bus;       /* Flag: Reject rejected call on bus*/
   struct wait_queue  *st_waitq;         /* Wait-Queue for status-read's     */
   int                 maxbufsize;       /* Maximum Buffersize supported     */
   unsigned long       pktcount;         /* Until now: unused                */
-  int                 running;          /* Flag: Protocolcode running       */
-  int                 loaded;           /* Flag: Driver loaded              */
   int                 stavail;          /* Chars avail on Status-device     */
   isdn_if            *interface;        /* Interface to driver              */
   int                *rcverr;           /* Error-counters for B-Ch.-receive */

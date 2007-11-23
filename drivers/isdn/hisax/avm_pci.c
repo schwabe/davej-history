@@ -1,12 +1,22 @@
-/* $Id: avm_pci.c,v 1.1.2.5 1998/10/13 18:38:50 keil Exp $
+/* $Id: avm_pci.c,v 1.1.2.8 1998/11/05 21:11:12 keil Exp $
 
- * avm_pci.c    low level stuff for AVM Fritz!PCI isdn cards
+ * avm_pci.c    low level stuff for AVM Fritz!PCI and ISA PnP isdn cards
  *              Thanks to AVM, Berlin for informations
  *
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: avm_pci.c,v $
+ * Revision 1.1.2.8  1998/11/05 21:11:12  keil
+ * AVM PnP support
+ *
+ * Revision 1.1.2.7  1998/11/03 00:05:48  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
+ * Revision 1.1.2.6  1998/10/16 12:46:03  keil
+ * fix pci detection for more as one card
+ *
  * Revision 1.1.2.5  1998/10/13 18:38:50  keil
  * Fix PCI detection
  *
@@ -39,7 +49,10 @@
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
-static const char *avm_pci_rev = "$Revision: 1.1.2.5 $";
+static const char *avm_pci_rev = "$Revision: 1.1.2.8 $";
+
+#define  AVM_FRITZ_PCI		1
+#define  AVM_FRITZ_PNP		2
 
 #define  PCI_VENDOR_AVM		0x1244
 #define  PCI_FRITZPCI_ID	0xa00
@@ -53,10 +66,10 @@ static const char *avm_pci_rev = "$Revision: 1.1.2.5 $";
 #define	 AVM_ISAC_REG_LOW	0x04
 #define	 AVM_ISAC_REG_HIGH	0x06
 
-#define  AVM_STATUS0_IRQ_ISAC	0x010000
-#define  AVM_STATUS0_IRQ_HDLC	0x020000
-#define  AVM_STATUS0_IRQ_TIMER	0x040000
-#define  AVM_STATUS0_IRQ_MASK	0x070000
+#define  AVM_STATUS0_IRQ_ISAC	0x01
+#define  AVM_STATUS0_IRQ_HDLC	0x02
+#define  AVM_STATUS0_IRQ_TIMER	0x04
+#define  AVM_STATUS0_IRQ_MASK	0x07
 
 #define  AVM_STATUS0_RESET	0x01
 #define  AVM_STATUS0_DIS_TIMER	0x02
@@ -67,11 +80,11 @@ static const char *avm_pci_rev = "$Revision: 1.1.2.5 $";
 #define  AVM_STATUS1_INT_SEL	0x0f
 #define  AVM_STATUS1_ENA_IOM	0x80
 
-#define  HDLC_MODE_ITF_FLG	0x010000
-#define  HDLC_MODE_TRANS	0x020000
-#define  HDLC_MODE_CCR_7	0x040000
-#define  HDLC_MODE_CCR_16	0x080000
-#define  HDLC_MODE_TESTLOOP	0x800000
+#define  HDLC_MODE_ITF_FLG	0x01
+#define  HDLC_MODE_TRANS	0x02
+#define  HDLC_MODE_CCR_7	0x04
+#define  HDLC_MODE_CCR_16	0x08
+#define  HDLC_MODE_TESTLOOP	0x80
 
 #define  HDLC_INT_XPR		0x80
 #define  HDLC_INT_XDU		0x40
@@ -95,14 +108,13 @@ static const char *avm_pci_rev = "$Revision: 1.1.2.5 $";
 static u_char
 ReadISAC(struct IsdnCardState *cs, u_char offset)
 {
-	register u_int idx = (offset > 0x2f) ? AVM_ISAC_REG_HIGH : AVM_ISAC_REG_LOW;
+	register u_char idx = (offset > 0x2f) ? AVM_ISAC_REG_HIGH : AVM_ISAC_REG_LOW;
 	register u_char val;
 	register long flags;
-	
+
 	save_flags(flags);
 	cli();
-	if (idx != inl(cs->hw.avm.cfg_reg + 4))
-		outl(idx, cs->hw.avm.cfg_reg + 4);
+	outb(idx, cs->hw.avm.cfg_reg + 4);
 	val = inb(cs->hw.avm.isac + (offset & 0xf));
 	restore_flags(flags);
 	return (val);
@@ -111,13 +123,12 @@ ReadISAC(struct IsdnCardState *cs, u_char offset)
 static void
 WriteISAC(struct IsdnCardState *cs, u_char offset, u_char value)
 {
-	register u_int idx = (offset > 0x2f) ? AVM_ISAC_REG_HIGH : AVM_ISAC_REG_LOW;
+	register u_char idx = (offset > 0x2f) ? AVM_ISAC_REG_HIGH : AVM_ISAC_REG_LOW;
 	register long flags;
-	
+
 	save_flags(flags);
 	cli();
-	if (idx != inl(cs->hw.avm.cfg_reg + 4))
-		outl(idx, cs->hw.avm.cfg_reg + 4);  
+	outb(idx, cs->hw.avm.cfg_reg + 4);
 	outb(value, cs->hw.avm.isac + (offset & 0xf));
 	restore_flags(flags);
 }
@@ -125,59 +136,83 @@ WriteISAC(struct IsdnCardState *cs, u_char offset, u_char value)
 static void
 ReadISACfifo(struct IsdnCardState *cs, u_char * data, int size)
 {
-	if (AVM_ISAC_FIFO != inl(cs->hw.avm.cfg_reg + 4))
-		outl(AVM_ISAC_FIFO, cs->hw.avm.cfg_reg + 4);
+	outb(AVM_ISAC_FIFO, cs->hw.avm.cfg_reg + 4);
 	insb(cs->hw.avm.isac, data, size);
 }
 
 static void
 WriteISACfifo(struct IsdnCardState *cs, u_char * data, int size)
 {
-	if (AVM_ISAC_FIFO != inl(cs->hw.avm.cfg_reg + 4))
-		outl(AVM_ISAC_FIFO, cs->hw.avm.cfg_reg + 4);
+	outb(AVM_ISAC_FIFO, cs->hw.avm.cfg_reg + 4);
 	outsb(cs->hw.avm.isac, data, size);
 }
 
 static inline u_int
-ReadHDLC(struct IsdnCardState *cs, int chan, u_char offset)
+ReadHDLCPCI(struct IsdnCardState *cs, int chan, u_char offset)
 {
 	register u_int idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
 	register u_int val;
 	register long flags;
-	
+
 	save_flags(flags);
 	cli();
-	if (idx != inl(cs->hw.avm.cfg_reg + 4))
-		outl(idx, cs->hw.avm.cfg_reg + 4);
+	outl(idx, cs->hw.avm.cfg_reg + 4);
 	val = inl(cs->hw.avm.isac + offset);
 	restore_flags(flags);
 	return (val);
 }
 
 static inline void
-WriteHDLC(struct IsdnCardState *cs, int chan, u_char offset, u_int value)
+WriteHDLCPCI(struct IsdnCardState *cs, int chan, u_char offset, u_int value)
 {
 	register u_int idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
 	register long flags;
-	
+
 	save_flags(flags);
 	cli();
-	if (idx != inl(cs->hw.avm.cfg_reg + 4))
-		outl(idx, cs->hw.avm.cfg_reg + 4);
+	outl(idx, cs->hw.avm.cfg_reg + 4);
 	outl(value, cs->hw.avm.isac + offset);
+	restore_flags(flags);
+}
+
+static inline u_char
+ReadHDLCPnP(struct IsdnCardState *cs, int chan, u_char offset)
+{
+	register u_char idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
+	register u_char val;
+	register long flags;
+
+	save_flags(flags);
+	cli();
+	outb(idx, cs->hw.avm.cfg_reg + 4);
+	val = inb(cs->hw.avm.isac + offset);
+	restore_flags(flags);
+	return (val);
+}
+
+static inline void
+WriteHDLCPnP(struct IsdnCardState *cs, int chan, u_char offset, u_char value)
+{
+	register u_char idx = chan ? AVM_HDLC_2 : AVM_HDLC_1;
+	register long flags;
+
+	save_flags(flags);
+	cli();
+	outb(idx, cs->hw.avm.cfg_reg + 4);
+	outb(value, cs->hw.avm.isac + offset);
 	restore_flags(flags);
 }
 
 static u_char
 ReadHDLC_s(struct IsdnCardState *cs, int chan, u_char offset)
 {
-	return(0xff & ReadHDLC(cs, chan, offset));
+	return(0xff & ReadHDLCPCI(cs, chan, offset));
 }
 
 static void
 WriteHDLC_s(struct IsdnCardState *cs, int chan, u_char offset, u_char value)
 {
-	WriteHDLC(cs, chan, offset, value);
+	WriteHDLCPCI(cs, chan, offset, value);
 }
 
 static inline
@@ -200,38 +235,60 @@ hdlc_sched_event(struct BCState *bcs, int event)
 }
 
 void
+write_ctrl(struct BCState *bcs, int which) {
+
+	if (bcs->cs->debug & L1_DEB_HSCX)
+		debugl1(bcs->cs, "hdlc %c wr%x ctrl %x",
+			'A' + bcs->channel, which, bcs->hw.hdlc.ctrl.ctrl);
+	if (bcs->cs->subtyp == AVM_FRITZ_PCI) {
+		WriteHDLCPCI(bcs->cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl.ctrl);
+	} else {
+		if (which & 4)
+			WriteHDLCPnP(bcs->cs, bcs->channel, HDLC_STATUS + 2,
+				bcs->hw.hdlc.ctrl.sr.mode);
+		if (which & 2)
+			WriteHDLCPnP(bcs->cs, bcs->channel, HDLC_STATUS + 1,
+				bcs->hw.hdlc.ctrl.sr.xml);
+		if (which & 1)
+			WriteHDLCPnP(bcs->cs, bcs->channel, HDLC_STATUS,
+				bcs->hw.hdlc.ctrl.sr.cmd);
+	}
+}
+
+void
 modehdlc(struct BCState *bcs, int mode, int bc)
 {
 	struct IsdnCardState *cs = bcs->cs;
 	int hdlc = bcs->channel;
 
-	if (cs->debug & L1_DEB_HSCX) {
-		char tmp[40];
-		sprintf(tmp, "hdlc %c mode %d ichan %d",
+	if (cs->debug & L1_DEB_HSCX)
+		debugl1(cs, "hdlc %c mode %d ichan %d",
 			'A' + hdlc, mode, bc);
-		debugl1(cs, tmp);
-	}
 	bcs->mode = mode;
 	bcs->channel = bc;
+	bcs->hw.hdlc.ctrl.ctrl = 0;
 	switch (mode) {
 		case (L1_MODE_NULL):
-			bcs->hw.hdlc.ctrl = HDLC_MODE_TRANS | HDLC_CMD_XRS | HDLC_CMD_RRS;
-			WriteHDLC(cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl);
+			bcs->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
+			bcs->hw.hdlc.ctrl.sr.mode = HDLC_MODE_TRANS;
+			write_ctrl(bcs, 5);
 			break;
 		case (L1_MODE_TRANS):
-			bcs->hw.hdlc.ctrl = HDLC_MODE_TRANS | HDLC_CMD_XRS | HDLC_CMD_RRS;
-			WriteHDLC(cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl);
-			bcs->hw.hdlc.ctrl = HDLC_MODE_TRANS | HDLC_CMD_XRS;
-			WriteHDLC(cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl);
-			bcs->hw.hdlc.ctrl = HDLC_MODE_TRANS;
+			bcs->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
+			bcs->hw.hdlc.ctrl.sr.mode = HDLC_MODE_TRANS;
+			write_ctrl(bcs, 5);
+			bcs->hw.hdlc.ctrl.sr.cmd = HDLC_CMD_XRS;
+			write_ctrl(bcs, 1);
+			bcs->hw.hdlc.ctrl.sr.cmd = 0;
 			hdlc_sched_event(bcs, B_XMTBUFREADY);
 			break;
 		case (L1_MODE_HDLC):
-			bcs->hw.hdlc.ctrl = HDLC_MODE_ITF_FLG | HDLC_CMD_XRS | HDLC_CMD_RRS;
-			WriteHDLC(cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl);
-			bcs->hw.hdlc.ctrl = HDLC_MODE_ITF_FLG | HDLC_CMD_XRS;
-			WriteHDLC(cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl);
-			bcs->hw.hdlc.ctrl = HDLC_MODE_ITF_FLG;
+			bcs->hw.hdlc.ctrl.sr.cmd  = HDLC_CMD_XRS | HDLC_CMD_RRS;
+			bcs->hw.hdlc.ctrl.sr.mode = HDLC_MODE_ITF_FLG;
+			write_ctrl(bcs, 5);
+			bcs->hw.hdlc.ctrl.sr.cmd = HDLC_CMD_XRS;
+			write_ctrl(bcs, 1);
+			bcs->hw.hdlc.ctrl.sr.cmd = 0;
 			hdlc_sched_event(bcs, B_XMTBUFREADY);
 			break;
 	}
@@ -242,15 +299,12 @@ hdlc_empty_fifo(struct BCState *bcs, int count)
 {
 	register u_int *ptr;
 	u_char *p;
-	u_int idx = bcs->channel ? AVM_HDLC_2 : AVM_HDLC_1;
+	u_char idx = bcs->channel ? AVM_HDLC_2 : AVM_HDLC_1;
 	int cnt=0;
 	struct IsdnCardState *cs = bcs->cs;
 
-	if ((cs->debug & L1_DEB_HSCX) && !(cs->debug & L1_DEB_HSCX_FIFO)) {
-		u_char tmp[32];
-		sprintf(tmp, "hdlc_empty_fifo %d", count);
-		debugl1(cs, tmp);
-	}
+	if ((cs->debug & L1_DEB_HSCX) && !(cs->debug & L1_DEB_HSCX_FIFO))
+		debugl1(cs, "hdlc_empty_fifo %d", count);
 	if (bcs->hw.hdlc.rcvidx + count > HSCX_BUFMAX) {
 		if (cs->debug & L1_DEB_WARN)
 			debugl1(cs, "hdlc_empty_fifo: incoming packet too large");
@@ -258,20 +312,28 @@ hdlc_empty_fifo(struct BCState *bcs, int count)
 	}
 	ptr = (u_int *) p = bcs->hw.hdlc.rcvbuf + bcs->hw.hdlc.rcvidx;
 	bcs->hw.hdlc.rcvidx += count;
-	if (idx != inl(cs->hw.avm.cfg_reg + 4))
+	if (cs->subtyp == AVM_FRITZ_PCI) {
 		outl(idx, cs->hw.avm.cfg_reg + 4);
-	while (cnt<count) {
-		*ptr++ = inl(cs->hw.avm.isac);
-		cnt += 4;
+		while (cnt < count) {
+			*ptr++ = inl(cs->hw.avm.isac);
+			cnt += 4;
+		}
+	} else {
+		outb(idx, cs->hw.avm.cfg_reg + 4);
+		while (cnt < count) {
+			*p++ = inb(cs->hw.avm.isac);
+			cnt++;
+		}
 	}
 	if (cs->debug & L1_DEB_HSCX_FIFO) {
-		char tmp[256];
-		char *t = tmp;
+		char *t = bcs->blog;
 
+		if (cs->subtyp == AVM_FRITZ_PNP)
+			p = (u_char *) ptr;
 		t += sprintf(t, "hdlc_empty_fifo %c cnt %d",
 			     bcs->channel ? 'B' : 'A', count);
 		QuickHex(t, p, count);
-		debugl1(cs, tmp);
+		debugl1(cs, bcs->blog);
 	}
 }
 
@@ -283,8 +345,6 @@ hdlc_fill_fifo(struct BCState *bcs)
 	int fifo_size = 32;
 	u_char *p;
 	u_int *ptr;
-	u_int idx = bcs->channel ? AVM_HDLC_2 : AVM_HDLC_1;
-
 
 	if ((cs->debug & L1_DEB_HSCX) && !(cs->debug & L1_DEB_HSCX_FIFO))
 		debugl1(cs, "hdlc_fill_fifo");
@@ -293,40 +353,42 @@ hdlc_fill_fifo(struct BCState *bcs)
 	if (bcs->tx_skb->len <= 0)
 		return;
 
-	bcs->hw.hdlc.ctrl &= ~HDLC_CMD_XME;
+	bcs->hw.hdlc.ctrl.sr.cmd &= ~HDLC_CMD_XME;
 	if (bcs->tx_skb->len > fifo_size) {
 		count = fifo_size;
 	} else {
 		count = bcs->tx_skb->len;
 		if (bcs->mode != L1_MODE_TRANS)
-			bcs->hw.hdlc.ctrl |= HDLC_CMD_XME;
+			bcs->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_XME;
 	}
-	if ((cs->debug & L1_DEB_HSCX) && !(cs->debug & L1_DEB_HSCX_FIFO)) {
-		u_char tmp[32];
-		sprintf(tmp, "hdlc_fill_fifo %d/%ld", count, bcs->tx_skb->len);
-		debugl1(cs, tmp);
-	}
+	if ((cs->debug & L1_DEB_HSCX) && !(cs->debug & L1_DEB_HSCX_FIFO))
+		debugl1(cs, "hdlc_fill_fifo %d/%ld", count, bcs->tx_skb->len);
 	ptr = (u_int *) p = bcs->tx_skb->data;
 	skb_pull(bcs->tx_skb, count);
 	bcs->tx_cnt -= count;
 	bcs->hw.hdlc.count += count;
-	if (idx != inl(cs->hw.avm.cfg_reg + 4))
-		outl(idx, cs->hw.avm.cfg_reg + 4);
-	bcs->hw.hdlc.ctrl &= ~HDLC_CMD_XML_MASK;
-	bcs->hw.hdlc.ctrl |= ((count == fifo_size) ? 0 : count)<<8;
-	outl(bcs->hw.hdlc.ctrl, cs->hw.avm.isac + HDLC_STATUS);
-	while (cnt<count) {
-		outl(*ptr++, cs->hw.avm.isac);
-		cnt += 4;
+	bcs->hw.hdlc.ctrl.sr.xml = ((count == fifo_size) ? 0 : count);
+	write_ctrl(bcs, 3);  /* sets the correct index too */
+	if (cs->subtyp == AVM_FRITZ_PCI) {
+		while (cnt<count) {
+			outl(*ptr++, cs->hw.avm.isac);
+			cnt += 4;
+		}
+	} else {
+		while (cnt<count) {
+			outb(*p++, cs->hw.avm.isac);
+			cnt++;
+		}
 	}
 	if (cs->debug & L1_DEB_HSCX_FIFO) {
-		char tmp[256];
-		char *t = tmp;
+		char *t = bcs->blog;
 
+		if (cs->subtyp == AVM_FRITZ_PNP)
+			p = (u_char *) ptr;
 		t += sprintf(t, "hdlc_fill_fifo %c cnt %d",
 			     bcs->channel ? 'B' : 'A', count);
 		QuickHex(t, p, count);
-		debugl1(cs, tmp);
+		debugl1(cs, bcs->blog);
 	}
 }
 
@@ -342,27 +404,22 @@ fill_hdlc(struct BCState *bcs)
 
 static inline void
 HDLC_irq(struct BCState *bcs, u_int stat) {
-	u_char tmp[32];
 	int len;
 	struct sk_buff *skb;
-	
-	if (bcs->cs->debug & L1_DEB_HSCX) {
-		sprintf(tmp, "ch%d stat %#x", bcs->channel, stat);
-		debugl1(bcs->cs, tmp);
-	}	
+
+	if (bcs->cs->debug & L1_DEB_HSCX)
+		debugl1(bcs->cs, "ch%d stat %#x", bcs->channel, stat);
 	if (stat & HDLC_INT_RPR) {
 		if (stat & HDLC_STAT_RDO) {
-			if (bcs->cs->debug & L1_DEB_HSCX) {
+			if (bcs->cs->debug & L1_DEB_HSCX)
 				debugl1(bcs->cs, "RDO");
-			} else {
-				sprintf(tmp, "ch%d stat %#x", bcs->channel, stat);
-				debugl1(bcs->cs, tmp);
-			}
-			bcs->hw.hdlc.ctrl &= ~HDLC_STAT_RML_MASK;
-			bcs->hw.hdlc.ctrl |= HDLC_CMD_RRS;
-			WriteHDLC(bcs->cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl);
-			bcs->hw.hdlc.ctrl &= ~HDLC_CMD_RRS;
-			WriteHDLC(bcs->cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl);
+			else
+				debugl1(bcs->cs, "ch%d stat %#x", bcs->channel, stat);
+			bcs->hw.hdlc.ctrl.sr.xml = 0;
+			bcs->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_RRS;
+			write_ctrl(bcs, 1);
+			bcs->hw.hdlc.ctrl.sr.cmd &= ~HDLC_CMD_RRS;
+			write_ctrl(bcs, 1);
 			bcs->hw.hdlc.rcvidx = 0;
 		} else {
 			if (!(len = (stat & HDLC_STAT_RML_MASK)>>8))
@@ -381,14 +438,12 @@ HDLC_irq(struct BCState *bcs, u_int stat) {
 					bcs->hw.hdlc.rcvidx = 0;
 					hdlc_sched_event(bcs, B_RCVBUFREADY);
 				} else {
-					if (bcs->cs->debug & L1_DEB_HSCX) {
+					if (bcs->cs->debug & L1_DEB_HSCX)
 						debugl1(bcs->cs, "invalid frame");
-					} else {
-						sprintf(tmp, "ch%d invalid frame %#x", bcs->channel, stat);
-						debugl1(bcs->cs, tmp);
-					}
+					else
+						debugl1(bcs->cs, "ch%d invalid frame %#x", bcs->channel, stat);
 					bcs->hw.hdlc.rcvidx = 0;
-				} 
+				}
 			}
 		}
 	}
@@ -401,17 +456,15 @@ HDLC_irq(struct BCState *bcs, u_int stat) {
 			bcs->tx_cnt += bcs->hw.hdlc.count;
 			bcs->hw.hdlc.count = 0;
 //			hdlc_sched_event(bcs, B_XMTBUFREADY);
-			sprintf(tmp, "ch%d XDU", bcs->channel);
-		} else {
-			sprintf(tmp, "ch%d XDU without skb", bcs->channel);
-		}
-		if (bcs->cs->debug & L1_DEB_WARN)
-			debugl1(bcs->cs, tmp);
-		bcs->hw.hdlc.ctrl &= ~HDLC_STAT_RML_MASK;
-		bcs->hw.hdlc.ctrl |= HDLC_CMD_XRS;
-		WriteHDLC(bcs->cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl);
-		bcs->hw.hdlc.ctrl &= ~HDLC_CMD_XRS;
-		WriteHDLC(bcs->cs, bcs->channel, HDLC_STATUS, bcs->hw.hdlc.ctrl);
+			if (bcs->cs->debug & L1_DEB_WARN)
+				debugl1(bcs->cs, "ch%d XDU", bcs->channel);
+		} else if (bcs->cs->debug & L1_DEB_WARN)
+			debugl1(bcs->cs, "ch%d XDU without skb", bcs->channel);
+		bcs->hw.hdlc.ctrl.sr.xml = 0;
+		bcs->hw.hdlc.ctrl.sr.cmd |= HDLC_CMD_XRS;
+		write_ctrl(bcs, 1);
+		bcs->hw.hdlc.ctrl.sr.cmd &= ~HDLC_CMD_XRS;
+		write_ctrl(bcs, 1);
 		hdlc_fill_fifo(bcs);
 	} else if (stat & HDLC_INT_XPR) {
 		if (bcs->tx_skb) {
@@ -423,7 +476,7 @@ HDLC_irq(struct BCState *bcs, u_int stat) {
 					(PACKET_NOACK != bcs->tx_skb->pkt_type))
 					bcs->st->lli.l1writewakeup(bcs->st, bcs->hw.hdlc.count);
 				dev_kfree_skb(bcs->tx_skb, FREE_WRITE);
-				bcs->hw.hdlc.count = 0; 
+				bcs->hw.hdlc.count = 0;
 				bcs->tx_skb = NULL;
 			}
 		}
@@ -446,8 +499,14 @@ HDLC_irq_main(struct IsdnCardState *cs)
 	struct BCState *bcs;
 
 	save_flags(flags);
-	cli();	
-	stat = ReadHDLC(cs, 0, HDLC_STATUS);
+	cli();
+	if (cs->subtyp == AVM_FRITZ_PCI) {
+		stat = ReadHDLCPCI(cs, 0, HDLC_STATUS);
+	} else {
+		stat = ReadHDLCPnP(cs, 0, HDLC_STATUS);
+		if (stat & HDLC_INT_RPR)
+			stat |= (ReadHDLCPnP(cs, 0, HDLC_STATUS+1))<<8;
+	}
 	if (stat & HDLC_INT_MASK) {
 		if (!(bcs = Sel_BCS(cs, 0))) {
 			if (cs->debug)
@@ -455,7 +514,13 @@ HDLC_irq_main(struct IsdnCardState *cs)
 		} else
 			HDLC_irq(bcs, stat);
 	}
-	stat = ReadHDLC(cs, 1, HDLC_STATUS);
+	if (cs->subtyp == AVM_FRITZ_PCI) {
+		stat = ReadHDLCPCI(cs, 1, HDLC_STATUS);
+	} else {
+		stat = ReadHDLCPnP(cs, 1, HDLC_STATUS);
+		if (stat & HDLC_INT_RPR)
+			stat |= (ReadHDLCPnP(cs, 1, HDLC_STATUS+1))<<8;
+	}
 	if (stat & HDLC_INT_MASK) {
 		if (!(bcs = Sel_BCS(cs, 1))) {
 			if (cs->debug)
@@ -463,7 +528,7 @@ HDLC_irq_main(struct IsdnCardState *cs)
 		} else
 			HDLC_irq(bcs, stat);
 	}
-	restore_flags(flags);	
+	restore_flags(flags);
 }
 
 void
@@ -530,6 +595,10 @@ close_hdlcstate(struct BCState *bcs)
 			kfree(bcs->hw.hdlc.rcvbuf);
 			bcs->hw.hdlc.rcvbuf = NULL;
 		}
+		if (bcs->blog) {
+			kfree(bcs->blog);
+			bcs->blog = NULL;
+		}
 		discard_queue(&bcs->rqueue);
 		discard_queue(&bcs->squeue);
 		if (bcs->tx_skb) {
@@ -548,6 +617,14 @@ open_hdlcstate(struct IsdnCardState *cs, struct BCState *bcs)
 			printk(KERN_WARNING
 			       "HiSax: No memory for hdlc.rcvbuf\n");
 			return (1);
+		}
+		if (!(bcs->blog = kmalloc(MAX_BLOG_SPACE, GFP_ATOMIC))) {
+			printk(KERN_WARNING
+				"HiSax: No memory for bcs->blog\n");
+			test_and_clear_bit(BC_FLG_INIT, &bcs->Flag);
+			kfree(bcs->hw.hdlc.rcvbuf);
+			bcs->hw.hdlc.rcvbuf = NULL;
+			return (2);
 		}
 		skb_queue_head_init(&bcs->rqueue);
 		skb_queue_head_init(&bcs->squeue);
@@ -577,18 +654,34 @@ setstack_hdlc(struct PStack *st, struct BCState *bcs)
 HISAX_INITFUNC(void
 clear_pending_hdlc_ints(struct IsdnCardState *cs))
 {
-	int val;
-	char tmp[64];
+	u_int val;
 
-	val = ReadHDLC(cs, 0, HDLC_STATUS);
-	sprintf(tmp, "HDLC 1 STA %x", val);
-	debugl1(cs, tmp);
-	val = ReadHDLC(cs, 1, HDLC_STATUS);
-	sprintf(tmp, "HDLC 2 STA %x", val);
-	debugl1(cs, tmp);
+	if (cs->subtyp == AVM_FRITZ_PCI) {
+		val = ReadHDLCPCI(cs, 0, HDLC_STATUS);
+		debugl1(cs, "HDLC 1 STA %x", val);
+		val = ReadHDLCPCI(cs, 1, HDLC_STATUS);
+		debugl1(cs, "HDLC 2 STA %x", val);
+	} else {
+		val = ReadHDLCPnP(cs, 0, HDLC_STATUS);
+		debugl1(cs, "HDLC 1 STA %x", val);
+		val = ReadHDLCPnP(cs, 0, HDLC_STATUS + 1);
+		debugl1(cs, "HDLC 1 RML %x", val);
+		val = ReadHDLCPnP(cs, 0, HDLC_STATUS + 2);
+		debugl1(cs, "HDLC 1 MODE %x", val);
+		val = ReadHDLCPnP(cs, 0, HDLC_STATUS + 3);
+		debugl1(cs, "HDLC 1 VIN %x", val);
+		val = ReadHDLCPnP(cs, 1, HDLC_STATUS);
+		debugl1(cs, "HDLC 2 STA %x", val);
+		val = ReadHDLCPnP(cs, 1, HDLC_STATUS + 1);
+		debugl1(cs, "HDLC 2 RML %x", val);
+		val = ReadHDLCPnP(cs, 1, HDLC_STATUS + 2);
+		debugl1(cs, "HDLC 2 MODE %x", val);
+		val = ReadHDLCPnP(cs, 1, HDLC_STATUS + 3);
+		debugl1(cs, "HDLC 2 VIN %x", val);
+	}
 }
 
-HISAX_INITFUNC(void 
+HISAX_INITFUNC(void
 inithdlc(struct IsdnCardState *cs))
 {
 	cs->bcs[0].BC_SetStack = setstack_hdlc;
@@ -600,17 +693,17 @@ inithdlc(struct IsdnCardState *cs))
 }
 
 static void
-avm_pci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
+avm_pcipnp_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
 	u_char val, stat = 0;
-	u_int sval;
+	u_char sval;
 
 	if (!cs) {
 		printk(KERN_WARNING "AVM PCI: Spurious interrupt!\n");
 		return;
 	}
-	sval = inl(cs->hw.avm.cfg_reg);
+	sval = inb(cs->hw.avm.cfg_reg + 2);
 	if ((sval & AVM_STATUS0_IRQ_MASK) == AVM_STATUS0_IRQ_MASK)
 		/* possible a shared  IRQ reqest */
 		return;
@@ -629,10 +722,11 @@ avm_pci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 }
 
 static void
-reset_avmpci(struct IsdnCardState *cs)
+reset_avmpcipnp(struct IsdnCardState *cs)
 {
 	long flags;
 
+	printk(KERN_INFO "AVM PCI/PnP: reset\n");
 	save_flags(flags);
 	sti();
 	outb(AVM_STATUS0_RESET | AVM_STATUS0_DIS_TIMER, cs->hw.avm.cfg_reg + 2);
@@ -640,26 +734,33 @@ reset_avmpci(struct IsdnCardState *cs)
 	current->timeout = jiffies + (10 * HZ) / 1000;	/* Timeout 10ms */
 	schedule();
 	outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER | AVM_STATUS0_ENA_IRQ, cs->hw.avm.cfg_reg + 2);
-	outb(AVM_STATUS1_ENA_IOM, cs->hw.avm.cfg_reg + 3);
+	outb(AVM_STATUS1_ENA_IOM | cs->irq, cs->hw.avm.cfg_reg + 3);
 	current->state = TASK_INTERRUPTIBLE;
 	current->timeout = jiffies + (10 * HZ) / 1000;	/* Timeout 10ms */
 	schedule();
+	printk(KERN_INFO "AVM PCI/PnP: S1 %x\n", inb(cs->hw.avm.cfg_reg + 3));
 }
 
 static int
 AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 {
+	u_int irq_flag;
+
 	switch (mt) {
 		case CARD_RESET:
-			reset_avmpci(cs);
+			reset_avmpcipnp(cs);
 			return(0);
 		case CARD_RELEASE:
 			outb(0, cs->hw.avm.cfg_reg + 2);
 			release_region(cs->hw.avm.cfg_reg, 32);
 			return(0);
 		case CARD_SETIRQ:
-			return(request_irq(cs->irq, &avm_pci_interrupt,
-					I4L_IRQ_FLAG | SA_SHIRQ, "HiSax", cs));
+			if (cs->subtyp == AVM_FRITZ_PCI)
+				irq_flag = I4L_IRQ_FLAG | SA_SHIRQ;
+			else
+				irq_flag = I4L_IRQ_FLAG;
+			return(request_irq(cs->irq, &avm_pcipnp_interrupt,
+					irq_flag, "HiSax", cs));
 		case CARD_INIT:
 			clear_pending_isac_ints(cs);
 			initisac(cs);
@@ -668,7 +769,7 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER,
 				cs->hw.avm.cfg_reg + 2);
 			WriteISAC(cs, ISAC_MASK, 0);
-			outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER | 
+			outb(AVM_STATUS0_DIS_TIMER | AVM_STATUS0_RES_TIMER |
 				AVM_STATUS0_ENA_IRQ, cs->hw.avm.cfg_reg + 2);
 			/* RESET Receiver and Transmitter */
 			WriteISAC(cs, ISAC_CMDR, 0x41);
@@ -682,49 +783,56 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 static 	int pci_index __initdata = 0;
 
 __initfunc(int
-setup_avm_pci(struct IsdnCard *card))
+setup_avm_pcipnp(struct IsdnCard *card))
 {
-	u_int val;
+	u_int val, ver;
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];
 
 	strcpy(tmp, avm_pci_rev);
-	printk(KERN_INFO "HiSax: AVM PCI driver Rev. %s\n", HiSax_getrev(tmp));
+	printk(KERN_INFO "HiSax: AVM PCI/ISAPnP driver Rev. %s\n", HiSax_getrev(tmp));
 	if (cs->typ != ISDN_CTYPE_FRITZPCI)
 		return (0);
+	if (card->para[1]) {
+		cs->hw.avm.cfg_reg = card->para[1];
+		cs->irq = card->para[0];
+		cs->subtyp = AVM_FRITZ_PNP;
+	} else {
 #if CONFIG_PCI
-	for (pci_index = 0; pci_index < 255; pci_index++) {
-		unsigned char pci_bus, pci_device_fn;
-		unsigned int ioaddr;
-		unsigned char irq;
+		for (; pci_index < 255; pci_index++) {
+			unsigned char pci_bus, pci_device_fn;
+			unsigned int ioaddr;
+			unsigned char irq;
 
-		if (pcibios_find_device (PCI_VENDOR_AVM,
-					PCI_FRITZPCI_ID, pci_index,
-					&pci_bus, &pci_device_fn) != 0) {
-			continue;
-		}
-		pcibios_read_config_byte(pci_bus, pci_device_fn,
+			if (pcibios_find_device (PCI_VENDOR_AVM,
+				PCI_FRITZPCI_ID, pci_index,
+				&pci_bus, &pci_device_fn) != 0) {
+				continue;
+			}
+			pcibios_read_config_byte(pci_bus, pci_device_fn,
 				PCI_INTERRUPT_LINE, &irq);
-		pcibios_read_config_dword(pci_bus, pci_device_fn,
+			pcibios_read_config_dword(pci_bus, pci_device_fn,
 				PCI_BASE_ADDRESS_1, &ioaddr);
-		cs->irq = irq;
-		cs->hw.avm.cfg_reg = ioaddr & PCI_BASE_ADDRESS_IO_MASK; 
-		if (!cs->hw.avm.cfg_reg) {
-			printk(KERN_WARNING "FritzPCI: No IO-Adr for PCI card found\n");
-			return(0);
+			cs->irq = irq;
+			cs->hw.avm.cfg_reg = ioaddr & PCI_BASE_ADDRESS_IO_MASK;
+			if (!cs->hw.avm.cfg_reg) {
+				printk(KERN_WARNING "FritzPCI: No IO-Adr for PCI card found\n");
+				return(0);
+			}
+			cs->subtyp = AVM_FRITZ_PCI;
+			break;
 		}
-		cs->hw.avm.isac = cs->hw.avm.cfg_reg + 0x10;
-		break;
-	}	
-	if (pci_index == 255) {
-		printk(KERN_WARNING "FritzPCI: No PCI card found\n");
-		return(0);
-        }
+		if (pci_index == 255) {
+			printk(KERN_WARNING "FritzPCI: No PCI card found\n");
+			return(0);
+        	}
+	        pci_index++;
 #else
-	printk(KERN_WARNING "FritzPCI: NO_PCI_BIOS\n");
-	return (0);
+		printk(KERN_WARNING "FritzPCI: NO_PCI_BIOS\n");
+		return (0);
 #endif /* CONFIG_PCI */
-
+	}
+	cs->hw.avm.isac = cs->hw.avm.cfg_reg + 0x10;
 	if (check_region((cs->hw.avm.cfg_reg), 32)) {
 		printk(KERN_WARNING
 		       "HiSax: %s config port %x-%x already in use\n",
@@ -733,27 +841,40 @@ setup_avm_pci(struct IsdnCard *card))
 		       cs->hw.avm.cfg_reg + 31);
 		return (0);
 	} else {
-		request_region(cs->hw.avm.cfg_reg, 32, "avm PCI");
+		request_region(cs->hw.avm.cfg_reg, 32,
+			(cs->subtyp == AVM_FRITZ_PCI) ? "avm PCI" : "avm PnP");
 	}
-
-	val = inl(cs->hw.avm.cfg_reg);
-	printk(KERN_INFO "AVM PCI: stat %#x\n", val);
-	printk(KERN_INFO "AVM PCI: Class %X Rev %d\n",
-	       val & 0xff, (val>>8) & 0xff);
-
-	printk(KERN_INFO
-	       "HiSax: %s config irq:%d base:0x%X\n",
-	       CardType[cs->typ], cs->irq,
-	       cs->hw.avm.cfg_reg);
+	switch (cs->subtyp) {
+	  case AVM_FRITZ_PCI:
+		val = inl(cs->hw.avm.cfg_reg);
+		printk(KERN_INFO "AVM PCI: stat %#x\n", val);
+		printk(KERN_INFO "AVM PCI: Class %X Rev %d\n",
+			val & 0xff, (val>>8) & 0xff);
+		cs->BC_Read_Reg = &ReadHDLC_s;
+		cs->BC_Write_Reg = &WriteHDLC_s;
+		break;
+	  case AVM_FRITZ_PNP:
+		val = inb(cs->hw.avm.cfg_reg);
+		ver = inb(cs->hw.avm.cfg_reg + 1);
+		printk(KERN_INFO "AVM PnP: Class %X Rev %d\n", val, ver);
+		reset_avmpcipnp(cs);
+		cs->BC_Read_Reg = &ReadHDLCPnP;
+		cs->BC_Write_Reg = &WriteHDLCPnP;
+		break;
+	  default:
+	  	printk(KERN_WARNING "AVM unknown subtype %d\n", cs->subtyp);
+	  	return(0);
+	}
+	printk(KERN_INFO "HiSax: %s config irq:%d base:0x%X\n",
+		(cs->subtyp == AVM_FRITZ_PCI) ? "AVM Fritz!PCI" : "AVM Fritz!PnP",
+		cs->irq, cs->hw.avm.cfg_reg);
 
 	cs->readisac = &ReadISAC;
 	cs->writeisac = &WriteISAC;
 	cs->readisacfifo = &ReadISACfifo;
 	cs->writeisacfifo = &WriteISACfifo;
-	cs->BC_Read_Reg = &ReadHDLC_s;
-	cs->BC_Write_Reg = &WriteHDLC_s;
 	cs->BC_Send_Data = &fill_hdlc;
 	cs->cardmsg = &AVM_card_msg;
-	ISACVersion(cs, "AVM PCI:");
+	ISACVersion(cs, (cs->subtyp == AVM_FRITZ_PCI) ? "AVM PCI:" : "AVM PnP:");
 	return (1);
 }

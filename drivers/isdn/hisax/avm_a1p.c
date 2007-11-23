@@ -1,4 +1,4 @@
-/* $Id: avm_a1p.c,v 1.1.2.2 1998/09/27 13:05:33 keil Exp $
+/* $Id: avm_a1p.c,v 1.1.2.3 1998/11/03 00:05:47 keil Exp $
  *
  * avm_a1p.c    low level stuff for the following AVM cards:
  *              A1 PCMCIA
@@ -8,6 +8,10 @@
  * Author       Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: avm_a1p.c,v $
+ * Revision 1.1.2.3  1998/11/03 00:05:47  keil
+ * certification related changes
+ * fixed logging for smaller stack use
+ *
  * Revision 1.1.2.2  1998/09/27 13:05:33  keil
  * Apply most changes from 2.1.X (HiSax 3.1)
  *
@@ -60,7 +64,7 @@
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
 
-static const char *avm_revision = "$Revision: 1.1.2.2 $";
+static const char *avm_revision = "$Revision: 1.1.2.3 $";
 
 static inline u_char
 ReadISAC(struct IsdnCardState *cs, u_char offset)
@@ -189,17 +193,14 @@ avm_a1p_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
 	u_char val, sval, stat = 0;
-	char tmp[32];
 
 	if (!cs) {
 		printk(KERN_WARNING "AVM A1 PCMCIA: Spurious interrupt!\n");
 		return;
 	}
 	while ((sval = (~bytein(cs->hw.avm.cfg_reg+ASL0_OFFSET) & ASL0_R_IRQPENDING))) {
-		if (cs->debug & L1_DEB_INTSTAT) {
-			sprintf(tmp, "avm IntStatus %x", sval);
-			debugl1(cs, tmp);
-		}
+		if (cs->debug & L1_DEB_INTSTAT)
+			debugl1(cs, "avm IntStatus %x", sval);
 		if (sval & ASL0_R_HSCX) {
                         val = ReadHSCX(cs, 1, HSCX_ISTA);
 			if (val) {

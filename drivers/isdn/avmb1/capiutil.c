@@ -1,5 +1,5 @@
 /*
- * $Id: capiutil.c,v 1.3 1997/05/18 09:24:18 calle Exp $
+ * $Id: capiutil.c,v 1.3.2.1 1998/08/03 15:52:21 paul Exp $
  *
  * CAPI 2.0 convert capi message to capi message struct
  *
@@ -7,6 +7,10 @@
  * Rewritten for Linux 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capiutil.c,v $
+ * Revision 1.3.2.1  1998/08/03 15:52:21  paul
+ * various changes from 2.0.3[45] kernel sources, as suggested by
+ * Oliver.Lauer@coburg.baynet.de
+ *
  * Revision 1.3  1997/05/18 09:24:18  calle
  * added verbose disconnect reason reporting to avmb1.
  * some fixes in capi20 interface.
