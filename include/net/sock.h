@@ -42,10 +42,13 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>	/* struct sk_buff */
 #include <net/protocol.h>		/* struct inet_protocol */
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <net/ax25.h>
-#ifdef CONFIG_NETROM
+#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 #include <net/netrom.h>
+#endif
+#if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
+#include <net/rose.h>
 #endif
 #endif
 
@@ -267,12 +270,6 @@ struct sock
 	int			sndbuf;
 	unsigned short		type;
 	unsigned char		localroute;	/* Route locally only */
-#ifdef CONFIG_AX25
-	ax25_cb			*ax25;
-#ifdef CONFIG_NETROM
-	nr_cb			*nr;
-#endif
-#endif
   
 /*
  *	This is where all the private (optional) areas that don't
@@ -282,6 +279,15 @@ struct sock
 	union
 	{
 	  	struct unix_opt	af_unix;
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
+		ax25_cb			*ax25;
+#if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
+		nr_cb			*nr;
+#endif
+#if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
+		rose_cb			*rose;
+#endif
+#endif
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)
 		struct atalk_sock	af_at;
 #endif

@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 MOD_SUB_DIRS := ipv4
-ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipx unix appletalk netrom #decnet
+ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipx unix appletalk netrom rose #decnet
 SUB_DIRS     := core ethernet unix
 MOD_LIST_NAME := NET_MISC_MODULES
 
@@ -42,10 +42,26 @@ endif
 
 ifeq ($(CONFIG_NETROM),y)
 SUB_DIRS += netrom
+else
+  ifeq ($(CONFIG_NETROM),m)
+  MOD_SUB_DIRS += netrom
+  endif
+endif
+
+ifeq ($(CONFIG_ROSE),y)
+SUB_DIRS += rose
+else
+  ifeq ($(CONFIG_ROSE),m)
+  MOD_SUB_DIRS += rose
+  endif
 endif
 
 ifeq ($(CONFIG_AX25),y)
 SUB_DIRS += ax25
+else
+  ifeq ($(CONFIG_AX25),m)
+  MOD_SUB_DIRS += ax25
+  endif
 endif
 
 L_TARGET     := network.a

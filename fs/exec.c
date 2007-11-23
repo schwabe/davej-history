@@ -398,6 +398,8 @@ static int exec_mmap(void)
 		old_mm = current->mm;
 		current->mm = mm;
 		if (new_page_tables(current)) {
+			/* The pgd belongs to the parent ... don't free it! */
+			mm->pgd = NULL;
 			current->mm = old_mm;
 			exit_mmap(mm);
 			kfree(mm);

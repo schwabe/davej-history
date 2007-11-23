@@ -80,6 +80,7 @@ struct __sysctl_args {
 #define NET_NETROM      8
 #define NET_AX25        9
 #define NET_BRIDGE	10
+#define	NET_ROSE	11
 
 /* /proc/sys/net/core */
 #define NET_CORE_NET_ALIAS_MAX 1
@@ -106,8 +107,41 @@ struct __sysctl_args {
 /* /proc/sys/net/appletalk */
 
 /* /proc/sys/net/netrom */
+#define	NET_NETROM_DEFAULT_PATH_QUALITY			1
+#define	NET_NETROM_OBSOLESCENCE_COUNT_INITIALISER	2
+#define	NET_NETROM_NETWORK_TTL_INITIALISER		3
+#define	NET_NETROM_TRANSPORT_TIMEOUT			4
+#define	NET_NETROM_TRANSPORT_MAXIMUM_TRIES		5
+#define	NET_NETROM_TRANSPORT_ACKNOWLEDGE_DELAY		6
+#define	NET_NETROM_TRANSPORT_BUSY_DELAY			7
+#define	NET_NETROM_TRANSPORT_REQUESTED_WINDOW_SIZE	8
+#define	NET_NETROM_ROUTING_CONTROL			9
+#define	NET_NETROM_LINK_FAILS_COUNT			10
 
 /* /proc/sys/net/ax25 */
+#define	NET_AX25_IP_DEFAULT_MODE			1
+#define	NET_AX25_DEFAULT_MODE				2
+#define	NET_AX25_BACKOFF_TYPE				3
+#define	NET_AX25_CONNECT_MODE				4
+#define	NET_AX25_STANDARD_WINDOW			5
+#define	NET_AX25_EXTENDED_WINDOW			6
+#define	NET_AX25_T1_TIMEOUT				7
+#define	NET_AX25_T2_TIMEOUT				8
+#define	NET_AX25_T3_TIMEOUT				9
+#define	NET_AX25_IDLE_TIMEOUT				10
+#define	NET_AX25_N2					11
+#define	NET_AX25_PACLEN					12
+ 
+/* /proc/sys/net/rose */
+#define	NET_ROSE_RESTART_REQUEST_TIMEOUT		1
+#define	NET_ROSE_CALL_REQUEST_TIMEOUT			2
+#define	NET_ROSE_RESET_REQUEST_TIMEOUT			3
+#define	NET_ROSE_CLEAR_REQUEST_TIMEOUT			4
+#define	NET_ROSE_ACK_HOLD_BACK_TIMEOUT			5
+#define	NET_ROSE_ROUTING_CONTROL			6
+#define	NET_ROSE_LINK_FAIL_TIMEOUT			7
+#define	NET_ROSE_MAX_VCS				8
+#define	NET_ROSE_WINDOW_SIZE				9
 
 /* CTL_PROC names: */
 

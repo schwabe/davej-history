@@ -3535,7 +3535,6 @@ static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci
 }
 
 #endif /* defined(CONFIG_BLK_DEV_RZ1000) || defined(CONFIG_BLK_DEV_TRITON) */
-#endif /* CONFIG_PCI */
 
 static void ide_probe_promise_20246(void)
 {
@@ -3572,6 +3571,8 @@ static void ide_probe_promise_20246(void)
 	ide_init_promise (bus, fn, &ide_hwifs[2], &ide_hwifs[3], io[4]);
 #endif /* CONFIG_BLK_DEV_TRITON */
 }
+
+#endif /* CONFIG_PCI */
 
 /*
  * ide_init_pci() finds/initializes "known" PCI IDE interfaces

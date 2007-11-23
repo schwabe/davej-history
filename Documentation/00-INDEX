@@ -14,6 +14,8 @@ CodingStyle
 	- how the boss likes the C code in the kernel to look.
 Configure.help
 	- text file that is used for help when you run "make config"
+IO-mapping.txt
+	- how to access I/O mapped memory from within device drivers.
 SMP.txt
 	- notes, and "To Fix" list for multi-processor Linux. (see smp.tex)
 cdrom/
@@ -38,10 +40,16 @@ java.txt
 	- info on the in-kernel binary support for Java(tm)
 locks.txt
 	- info on file locking implementations, flock() vs. fcntl(), etc.
+logo.gif
+	- GIF image of penguin as a linux logo (see logo.txt)
+logo.txt
+	- the who where and how of the penguin linux logo.
 magic-number.txt
 	- list of magic numbers used to mark/protect kernel data structures.
 mandatory.txt
 	- info on the linux implementation of Sys V mandatory file locking.
+memory-tuning.txt
+	- info on setting the /proc/sys/vm parameters to match your system.
 modules.txt
 	- short guide on how to make kernel parts into loadable modules
 networking/
@@ -50,6 +58,8 @@ nfsroot.txt
 	- short guide on setting up a diskless box with NFS root filesystem
 oops-tracing.txt
 	- how to decode those nasty internal kernel error dump messages.
+paride.txt
+	- info on parallel port IDE devices (tapes, floppies, CD-ROMS, etc)
 ramdisk.txt
 	- short guide on how to set up and use the RAM disk.
 riscom8.txt
@@ -60,10 +70,14 @@ scsi.txt
 	- short blurb on using SCSI support as a module.
 smp.tex
 	- TeX document describing implementation of Multiprocessor Linux
+specialix.txt
+	- info on hardware/driver for specialix IO8+ multiport serial card.
 svga.txt
 	- short guide on selecting video modes at boot via VGA BIOS.
 unicode.txt
 	- info on the Unicode character/font mapping used in Linux.
 watchdog.txt
 	- how to auto-reboot Linux if it has "fallen and can't get up". ;-)
+xterm-linux.xpm
+	- XPM format image/icon of penguin on an xterm (see logo.txt)
 

@@ -34,6 +34,7 @@
 #define DEV_NUMBUFFS	3
 #define MAX_ADDR_LEN	7
 #ifndef CONFIG_AX25
+#ifndef CONFIG_AX25_MODULE
 #ifndef CONFIG_TR
 #if !defined(CONFIG_NET_IPIP) && !defined(CONFIG_NET_IPIP_MODULE)
 #define MAX_HEADER	32		/* We really need about 18 worst case .. so 32 is aligned */
@@ -44,8 +45,11 @@
 #define MAX_HEADER	48		/* Token Ring header needs 40 bytes ... 48 is aligned */ 
 #endif /* TR */
 #else
-#define MAX_HEADER	96		/* AX.25 + NetROM */
-#endif /* AX25 */
+#define MAX_HEADER	96		/* AX.25 + NET/ROM module*/
+#endif /* AX.25 module */
+#else
+#define MAX_HEADER	96		/* AX.25 + NET/ROM */
+#endif /* AX.25 */
 
 #define IS_MYADDR	1		/* address is (one of) our own	*/
 #define IS_LOOPBACK	2		/* address is for LOOPBACK	*/

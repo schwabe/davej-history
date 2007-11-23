@@ -1503,6 +1503,8 @@ int dev_ioctl(unsigned int cmd, void *arg)
  */
 extern int lance_init(void);
 extern int pi_init(void);
+extern int pt_init(void);
+extern int bpq_init(void);
 extern void sdla_setup(void);
 extern int dlci_setup(void);
 
@@ -1534,6 +1536,9 @@ int net_dev_init(void)
 #endif	
 #if defined(CONFIG_PT)
 	pt_init();
+#endif
+#if defined(CONFIG_BPQETHER)
+	bpq_init();
 #endif
 #if defined(CONFIG_DLCI)
 	dlci_setup();

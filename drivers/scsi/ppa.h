@@ -12,11 +12,13 @@
 
 #define   PPA_VERSION   "1.42"
 
+#if 0
 /* Use the following to enable certain chipset support
  * Default is PEDANTIC = 3
  */
 #ifndef CONFIG_SCSI_PPA_HAVE_PEDANTIC
 #define CONFIG_SCSI_PPA_HAVE_PEDANTIC	3
+#endif
 #endif
 
 /* 

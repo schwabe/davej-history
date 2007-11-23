@@ -323,40 +323,10 @@ static void write_emulator_word(struct task_struct *child,
 }
 #endif /* defined(CONFIG_MATH_EMULATION) */
 
-/* Put a word to the part of the user structure containing
- * floating point registers
+/*
  * Floating point support added to ptrace by Ramon Garcia,
  * ramon@juguete.quim.ucm.es
  */
-
-static int put_fpreg_word (struct task_struct *child,
-	unsigned long addr, long data)
-{
-	struct user *dummy = NULL;
-	if (addr < (long) (&dummy->i387.st_space))
-		return -EIO;
-	addr -= (long) (&dummy->i387.st_space);
-
-	if (!hard_math) {
-#ifdef CONFIG_MATH_EMULATION
-		write_emulator_word(child, addr, data);
-#else
-		return 0;
-#endif
-	}
-	else 
-#ifndef __SMP__
-		if (last_task_used_math == child) {
-			clts();
-			__asm__("fsave %0; fwait":"=m" (child->tss.i387));
-			last_task_used_math = current;
-			stts();
-		}
-#endif
-	*(long *)
-		((char *) (child->tss.i387.hard.st_space) + addr) = data;
-	return 0;
-}
 
 #ifdef CONFIG_MATH_EMULATION
 
@@ -386,36 +356,6 @@ static unsigned long get_emulator_word(struct task_struct *child,
 }
 
 #endif /* defined(CONFIG_MATH_EMULATION) */
-/* Get a word from the part of the user structure containing
- * floating point registers
- */
-static unsigned long get_fpreg_word(struct task_struct *child,
-	unsigned long addr)
-{
-	struct user *dummy = NULL;
-	unsigned long tmp;
-	addr -= (long) (&dummy->i387.st_space);
-	if (!hard_math) {
-#ifdef CONFIG_MATH_EMULATION
-		tmp = get_emulator_word(child, addr);
-#else
-		tmp = 0;
-#endif /* !defined(CONFIG_MATH_EMULATION) */
-	} else {
-#ifndef __SMP__
-		if (last_task_used_math == child) {
-			clts();
-			__asm__("fsave %0; fwait":"=m" (child->tss.i387));
-			last_task_used_math = current;
-			stts();
-		}
-#endif
-		tmp = *(long *)
-			((char *) (child->tss.i387.hard.st_space) +
-			 addr);
-	}
-	return tmp;
-}
 
 static int putreg(struct task_struct *child,
 	unsigned long regno, unsigned long value)

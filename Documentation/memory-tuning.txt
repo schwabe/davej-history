@@ -21,8 +21,8 @@ below free_pages_low.  A "page" is 4 kB.
 
 The values selected as boot defaults are the following:  For a
 machine with n>=8 Megabytes of memory, set min_free_pages = n*2,
-free_pages_low = n*3 and free_pages_high = n*4.  Machines with less
-than 8 Megabytes or less as if they had 8 Megabytes.
+free_pages_low = n*3 and free_pages_high = n*4.  Machines with
+8 Megabytes or less behave as if they had 8 Megabytes.
 
 If "out of memory" errors sometimes occur, or if your machine does lots
 of networking, increasing min_free_pages to 64 or more may be a good

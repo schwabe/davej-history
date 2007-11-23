@@ -225,7 +225,9 @@ static const char * i486model(unsigned int nr)
 static const char * i586model(unsigned int nr)
 {
 	static const char *model[] = {
-		"0", "Pentium 60/66","Pentium 75+","OverDrive PODP5V83"
+		"0", "Pentium 60/66","Pentium 75+","OverDrive PODP5V83",
+		"Pentium MMX", NULL, NULL, "Mobile Pentium 75+",
+		"Mobile Pentium MMX"
 	};
 	if (nr < sizeof(model)/sizeof(char *))
 		return model[nr];
@@ -296,12 +298,44 @@ static const char * i686model(unsigned int nr)
 	return NULL;
 }
 
+struct cpu_model_info {
+	int x86;
+	char *model_names[16];
+};
+
+static struct cpu_model_info amd_models[] = {
+	{ 4,
+	  { NULL, NULL, NULL, "DX/2", NULL, NULL, NULL, "DX/2-WB", "DX/4",
+	    "DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT", "Am5x86-WB" }},
+	{ 5,
+	  { "K5/SSA5 (PR-75, PR-90, PR-100)", "K5 (PR-120, PR-133)",
+	    "K5 (PR-166)", "K5 (PR-200)", NULL, NULL,
+	    "K6 (166 - 266)", "K6 (166 - 300)", "K6-2 (200 - 450)",
+	    "K6-3D-Plus (200 - 450)", NULL, NULL, NULL, NULL, NULL, NULL }},
+};
+
+static const char * AMDmodel(void)
+{
+	const char *p=NULL;
+	int i;
+	
+	if (x86_model < 16)
+		for (i=0; i<sizeof(amd_models)/sizeof(struct cpu_model_info); i++)
+			if (amd_models[i].x86 == x86) {
+				p = amd_models[i].model_names[x86_model];
+				break;
+			}
+	return p;
+}
+
 static const char * getmodel(int x86, int model)
 {
         const char *p = NULL;
         static char nbuf[12];
 	if (strncmp(x86_vendor_id, "Cyrix", 5) == 0)
 		p = Cx86model();
+	else if(strcmp(x86_vendor_id, "AuthenticAMD")==0)
+		p = AMDmodel();
 	else {
 		switch (x86) {
 			case 4:

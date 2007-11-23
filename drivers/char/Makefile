@@ -217,14 +217,6 @@ else
   endif
 endif  
 
-ifeq ($(CONFIG_BAYCOM),y)
-L_OBJS += baycom.o
-else
-  ifeq ($(CONFIG_BAYCOM),m)
-  M_OBJS += baycom.o
-  endif
-endif  
-
 ifdef CONFIG_TGA_CONSOLE
 L_OBJS += tga.o
   ifdef CONFIG_VGA_CONSOLE

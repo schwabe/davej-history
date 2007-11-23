@@ -15,10 +15,6 @@
 #include <linux/ioport.h>
 #include <net/sock.h>
 
-#ifdef CONFIG_AX25
-#include <net/ax25.h>
-#endif
-
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
@@ -30,6 +26,7 @@
 #include <net/icmp.h>
 #include <net/route.h>
 #include <linux/net_alias.h>
+#include <linux/inet.h>
 #endif
 
 #ifdef CONFIG_NETLINK
@@ -119,7 +116,7 @@ static struct symbol_table net_syms = {
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
 	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
-	defined(CONFIG_ULTRA32)
+	defined(CONFIG_ULTRA32)	||	defined(CONFIG_NE2K_PCI)
 	/* If 8390 NIC support is built in, we will need these. */
 	X(ei_open),
 	X(ei_close),
@@ -150,10 +147,6 @@ static struct symbol_table net_syms = {
 #endif
 
         /* support for loadable net drivers */
-#ifdef CONFIG_AX25
-	X(ax25_encapsulate),
-	X(ax25_rebuild_header),
-#endif
 #ifdef CONFIG_INET
 	X(register_netdev),
 	X(unregister_netdev),
@@ -164,9 +157,11 @@ static struct symbol_table net_syms = {
 	X(alloc_skb),
 	X(kfree_skb),
 	X(skb_clone),
+	X(skb_copy),
 	X(dev_alloc_skb),
 	X(dev_kfree_skb),
 	X(skb_device_unlock),
+	X(skb_device_locked),
 	X(netif_rx),
 	X(dev_tint),
 	X(irq2dev_map),
@@ -183,6 +178,10 @@ static struct symbol_table net_syms = {
 	X(tty_register_ldisc),
 	X(kill_fasync),
 	X(arp_query),
+	X(ip_rcv),
+	X(arp_rcv),
+	X(in_aton),
+	X(in_ntoa),
 #endif  /* CONFIG_INET */
 
 #ifdef CONFIG_NETLINK

@@ -189,14 +189,6 @@ int ne2k_pci_probe(struct device *dev)
 	if ( ! pcibios_present())
 		return -ENODEV;
 
-#ifndef MODULE
-	{
-		static unsigned version_printed = 0;
-		if (version_printed++ == 0)
-			printk(KERN_INFO "%s", version);
-	}
-#endif
-
 	for (;pci_index < 0xff; pci_index++) {
 		unsigned char pci_bus, pci_device_fn;
 		u8 pci_irq_line;
@@ -219,6 +211,14 @@ int ne2k_pci_probe(struct device *dev)
 				break;
 		if (pci_clone_list[i].vendor == 0)
 			continue;
+
+#ifndef MODULE
+		{
+			static unsigned version_printed = 0;
+			if (version_printed++ == 0)
+				printk(KERN_INFO "%s", version);
+		}
+#endif
 
 		pcibios_read_config_dword(pci_bus, pci_device_fn,
 								  PCI_BASE_ADDRESS_0, &pci_ioaddr);

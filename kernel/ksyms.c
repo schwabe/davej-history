@@ -239,6 +239,11 @@ struct symbol_table symbol_table = {
 	/* sysctl table registration */
 	X(register_sysctl_table),
 	X(unregister_sysctl_table),
+	X(sysctl_string),
+	X(sysctl_intvec),
+	X(proc_dostring),
+	X(proc_dointvec),
+	X(proc_dointvec_minmax),
 
 	/* interrupt handling */
 	X(request_irq),

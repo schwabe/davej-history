@@ -1,8 +1,5 @@
 /*
- *	AX.25 release 032
- *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	AX.25 release 035
  *
  *	This code REQUIRES 1.3.61 or higher/ NET3.029
  *
@@ -32,10 +29,11 @@
  *			Joerg(DL1BKE)	Found the real bug in ax25.h, sri.
  *	AX.25 032	Joerg(DL1BKE)	Added ax25_queue_length to count the number of
  *					enqueued buffers of a socket..
+ *	AX.25 035	Frederic(F1OAT)	Support for pseudo-digipeating.
  */
 
 #include <linux/config.h>
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -64,23 +62,17 @@ void ax25_clear_queues(ax25_cb *ax25)
 {
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&ax25->write_queue)) != NULL) {
-		skb->free = 1;
+	while ((skb = skb_dequeue(&ax25->write_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
-	}
 
-	while ((skb = skb_dequeue(&ax25->ack_queue)) != NULL) {
-		skb->free = 1;
+	while ((skb = skb_dequeue(&ax25->ack_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
-	}
 
-	while ((skb = skb_dequeue(&ax25->reseq_queue)) != NULL) {
+	while ((skb = skb_dequeue(&ax25->reseq_queue)) != NULL)
 		kfree_skb(skb, FREE_READ);
-	}
 
-	while ((skb = skb_dequeue(&ax25->frag_queue)) != NULL) {
+	while ((skb = skb_dequeue(&ax25->frag_queue)) != NULL)
 		kfree_skb(skb, FREE_READ);
-	}
 }
 
 /*
@@ -98,7 +90,6 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 	if (ax25->va != nr) {
 		while (skb_peek(&ax25->ack_queue) != NULL && ax25->va != nr) {
 		        skb = skb_dequeue(&ax25->ack_queue);
-			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
 			ax25->va = (ax25->va + 1) % ax25->modulus;
 			if (ax25->dama_slave)
@@ -107,7 +98,8 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 	}
 }
 
-/* Maybe this should be your ax25_invoke_retransmission(), which appears
+/*
+ * Maybe this should be your ax25_invoke_retransmission(), which appears
  * to be used but not do anything.  ax25_invoke_retransmission() used to
  * be in AX 0.29, but has now gone in 0.30.
  */
@@ -141,7 +133,7 @@ int ax25_validate_nr(ax25_cb *ax25, unsigned short nr)
 		if (nr == vc) return 1;
 		vc = (vc + 1) % ax25->modulus;
 	}
-	
+
 	if (nr == ax25->vs) return 1;
 
 	return 0;
@@ -154,41 +146,41 @@ int ax25_validate_nr(ax25_cb *ax25, unsigned short nr)
 int ax25_decode(ax25_cb *ax25, struct sk_buff *skb, int *ns, int *nr, int *pf)
 {
 	unsigned char *frame;
-	int frametype = ILLEGAL;
+	int frametype = AX25_ILLEGAL;
 
 	frame = skb->data;
 	*ns = *nr = *pf = 0;
 
-	if (ax25->modulus == MODULUS) {
-		if ((frame[0] & S) == 0) {
-			frametype = I;			/* I frame - carries NR/NS/PF */
+	if (ax25->modulus == AX25_MODULUS) {
+		if ((frame[0] & AX25_S) == 0) {
+			frametype = AX25_I;			/* I frame - carries NR/NS/PF */
 			*ns = (frame[0] >> 1) & 0x07;
 			*nr = (frame[0] >> 5) & 0x07;
-			*pf = frame[0] & PF;
-		} else if ((frame[0] & U) == 1) { 	/* S frame - take out PF/NR */
+			*pf = frame[0] & AX25_PF;
+		} else if ((frame[0] & AX25_U) == 1) { 	/* S frame - take out PF/NR */
 			frametype = frame[0] & 0x0F;
 			*nr = (frame[0] >> 5) & 0x07;
-			*pf = frame[0] & PF;
-		} else if ((frame[0] & U) == 3) { 	/* U frame - take out PF */
-			frametype = frame[0] & ~PF;
-			*pf = frame[0] & PF;
+			*pf = frame[0] & AX25_PF;
+		} else if ((frame[0] & AX25_U) == 3) { 	/* U frame - take out PF */
+			frametype = frame[0] & ~AX25_PF;
+			*pf = frame[0] & AX25_PF;
 		}
 		skb_pull(skb, 1);
 	} else {
-		if ((frame[0] & S) == 0) {
-			frametype = I;			/* I frame - carries NR/NS/PF */
+		if ((frame[0] & AX25_S) == 0) {
+			frametype = AX25_I;			/* I frame - carries NR/NS/PF */
 			*ns = (frame[0] >> 1) & 0x7F;
 			*nr = (frame[1] >> 1) & 0x7F;
-			*pf = frame[1] & EPF;
+			*pf = frame[1] & AX25_EPF;
 			skb_pull(skb, 2);
-		} else if ((frame[0] & U) == 1) { 	/* S frame - take out PF/NR */
+		} else if ((frame[0] & AX25_U) == 1) { 	/* S frame - take out PF/NR */
 			frametype = frame[0] & 0x0F;
 			*nr = (frame[1] >> 1) & 0x7F;
-			*pf = frame[1] & EPF;
+			*pf = frame[1] & AX25_EPF;
 			skb_pull(skb, 2);
-		} else if ((frame[0] & U) == 3) { 	/* U frame - take out PF */
-			frametype = frame[0] & ~PF;
-			*pf = frame[0] & PF;
+		} else if ((frame[0] & AX25_U) == 3) { 	/* U frame - take out PF */
+			frametype = frame[0] & ~AX25_PF;
+			*pf = frame[0] & AX25_PF;
 			skb_pull(skb, 1);
 		}
 	}
@@ -206,41 +198,36 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int poll_bit, int type)
 	struct sk_buff *skb;
 	unsigned char  *dptr;
 	struct device *dev;
-	
+
 	if ((dev = ax25->device) == NULL)
 		return;	/* Route died */
 
 	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat) + 2, GFP_ATOMIC)) == NULL)
 		return;
 
+	skb->free = 1;
+
 	skb_reserve(skb, AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat));
 
-	if (ax25->sk != NULL) {
-		skb->sk = ax25->sk;
-		atomic_add(skb->truesize, &ax25->sk->wmem_alloc);
-	}
-
 	/* Assume a response - address structure for DTE */
-	if (ax25->modulus == MODULUS) {
+	if (ax25->modulus == AX25_MODULUS) {
 		dptr = skb_put(skb, 1);
 		*dptr = frametype;
-		*dptr |= (poll_bit) ? PF : 0;
-		if ((frametype & U) == S)		/* S frames carry NR */
+		*dptr |= (poll_bit) ? AX25_PF : 0;
+		if ((frametype & AX25_U) == AX25_S)		/* S frames carry NR */
 			*dptr |= (ax25->vr << 5);
 	} else {
-		if ((frametype & U) == U) {
+		if ((frametype & AX25_U) == AX25_U) {
 			dptr = skb_put(skb, 1);
 			*dptr = frametype;
-			*dptr |= (poll_bit) ? PF : 0;
+			*dptr |= (poll_bit) ? AX25_PF : 0;
 		} else {
 			dptr = skb_put(skb, 2);
 			dptr[0] = frametype;
 			dptr[1] = (ax25->vr << 1);
-			dptr[1] |= (poll_bit) ? EPF : 0;
+			dptr[1] |= (poll_bit) ? AX25_EPF : 0;
 		}
 	}
-
-	skb->free = 1;
 
 	ax25_transmit_buffer(ax25, skb, type);
 }
@@ -262,24 +249,21 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + size_ax25_addr(digi) + 1, GFP_ATOMIC)) == NULL)
 		return;	/* Next SABM will get DM'd */
 
+	skb->free = 1;
+
 	skb_reserve(skb, AX25_BPQ_HEADER_LEN + size_ax25_addr(digi));
 
 	ax25_digi_invert(digi, &retdigi);
 
 	dptr = skb_put(skb, 1);
-	skb->sk = NULL;
 
-	*dptr = DM | PF;
+	*dptr = AX25_DM | AX25_PF;
 
 	/*
 	 *	Do the address ourselves
 	 */
-
 	dptr  = skb_push(skb, size_ax25_addr(digi));
-	dptr += build_ax25_addr(dptr, dest, src, &retdigi, C_RESPONSE, MODULUS);
-
-	skb->arp  = 1;
-	skb->free = 1;
+	dptr += build_ax25_addr(dptr, dest, src, &retdigi, AX25_RESPONSE, AX25_MODULUS);
 
 	ax25_queue_xmit(skb, dev, SOPRI_NORMAL);
 }
@@ -291,11 +275,19 @@ unsigned short ax25_calculate_t1(ax25_cb *ax25)
 {
 	int n, t = 2;
 
-	if (ax25->backoff) {
-		for (n = 0; n < ax25->n2count; n++)
-			t *= 2;
+	switch (ax25->backoff) {
+		case 0:
+			break;
 
-		if (t > 8) t = 8;
+		case 1:
+			t += 2 * ax25->n2count;
+			break;
+
+		case 2:
+			for (n = 0; n < ax25->n2count; n++)
+				t *= 2;
+			if (t > 8) t = 8;
+			break;
 	}
 
 	return t * ax25->rtt;
@@ -306,28 +298,29 @@ unsigned short ax25_calculate_t1(ax25_cb *ax25)
  */
 void ax25_calculate_rtt(ax25_cb *ax25)
 {
-	if (ax25->t1timer > 0 && ax25->n2count == 0)
-		ax25->rtt = (9 * ax25->rtt + ax25->t1 - ax25->t1timer) / 10;
+	switch (ax25->backoff) {
+		case 0:
+			ax25->rtt = ax25->t1 / 2;
+			break;
 
-#ifdef	AX25_T1CLAMPLO
-	/* Don't go below one tenth of a second */
-	if (ax25->rtt < (AX25_T1CLAMPLO))
-		ax25->rtt = (AX25_T1CLAMPLO);
-#else	/* Failsafe - some people might have sub 1/10th RTTs :-) **/
-	if (ax25->rtt == 0)
-		ax25->rtt = PR_SLOWHZ;
-#endif
-#ifdef	AX25_T1CLAMPHI
-	/* OR above clamped seconds **/
-	if (ax25->rtt > (AX25_T1CLAMPHI))
-		ax25->rtt = (AX25_T1CLAMPHI);
-#endif
+		case 1:
+		case 2:
+			if (ax25->t1timer > 0 && ax25->n2count == 0)
+				ax25->rtt = (9 * ax25->rtt + ax25->t1 - ax25->t1timer) / 10;
+			break;
+	}
+
+	if (ax25->rtt < AX25_T1CLAMPLO)
+		ax25->rtt = AX25_T1CLAMPLO;
+
+	if (ax25->rtt > AX25_T1CLAMPHI)
+		ax25->rtt = AX25_T1CLAMPHI;
 }
 
 /*
  *	Digipeated address processing
  */
- 
+
 
 /*
  *	Given an AX.25 address pull of to, from, digi list, command/response and the start of data
@@ -336,46 +329,41 @@ void ax25_calculate_rtt(ax25_cb *ax25)
 unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, ax25_address *dest, ax25_digi *digi, int *flags, int *dama)
 {
 	int d = 0;
-	
+
 	if (len < 14) return NULL;
-		
-	if (flags != NULL) {
-		*flags = 0;
-	
-		if (buf[6] & LAPB_C) {
-			*flags = C_COMMAND;
-		}
-		if (buf[13] & LAPB_C) {
-			*flags = C_RESPONSE;
-		}
-	}
-		
+
+	*flags = 0;
+
+	if (buf[6] & AX25_CBIT)
+		*flags = AX25_COMMAND;
+	if (buf[13] & AX25_CBIT)
+		*flags = AX25_RESPONSE;
+
 	if (dama != NULL) 
-		*dama = ~buf[13] & DAMA_FLAG;
-		
+		*dama = ~buf[13] & AX25_DAMA_FLAG;
+
 	/* Copy to, from */
-	if (dest != NULL) 
-		memcpy(dest, buf + 0, AX25_ADDR_LEN);
-	if (src != NULL)  
-		memcpy(src,  buf + 7, AX25_ADDR_LEN);
+	memcpy(dest, buf + 0, AX25_ADDR_LEN);
+	memcpy(src,  buf + 7, AX25_ADDR_LEN);
+
 	buf += 2 * AX25_ADDR_LEN;
 	len -= 2 * AX25_ADDR_LEN;
+
 	digi->lastrepeat = -1;
 	digi->ndigi      = 0;
-	
-	while (!(buf[-1] & LAPB_E)) {
+
+	while (!(buf[-1] & AX25_EBIT)) {
 		if (d >= AX25_MAX_DIGIS)  return NULL;	/* Max of 6 digis */
 		if (len < 7) return NULL;	/* Short packet */
 
-		if (digi != NULL) {
-			memcpy(&digi->calls[d], buf, AX25_ADDR_LEN);
-			digi->ndigi = d + 1;
-			if (buf[6] & AX25_REPEATED) {
-				digi->repeated[d] = 1;
-				digi->lastrepeat  = d;
-			} else {
-				digi->repeated[d] = 0;
-			}
+		memcpy(&digi->calls[d], buf, AX25_ADDR_LEN);
+		digi->ndigi = d + 1;
+
+		if (buf[6] & AX25_HBIT) {
+			digi->repeated[d] = 1;
+			digi->lastrepeat  = d;
+		} else {
+			digi->repeated[d] = 0;
 		}
 
 		buf += AX25_ADDR_LEN;
@@ -395,53 +383,54 @@ int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, a
 	int ct  = 0;
 
 	memcpy(buf, dest, AX25_ADDR_LEN);
-	buf[6] &= ~(LAPB_E | LAPB_C);
-	buf[6] |= SSSID_SPARE;
+	buf[6] &= ~(AX25_EBIT | AX25_CBIT);
+	buf[6] |= AX25_SSSID_SPARE;
 
-	if (flag == C_COMMAND) buf[6] |= LAPB_C;
+	if (flag == AX25_COMMAND) buf[6] |= AX25_CBIT;
 
 	buf += AX25_ADDR_LEN;
 	len += AX25_ADDR_LEN;
 
 	memcpy(buf, src, AX25_ADDR_LEN);
-	buf[6] &= ~(LAPB_E | LAPB_C);
-	buf[6] &= ~SSSID_SPARE;
+	buf[6] &= ~(AX25_EBIT | AX25_CBIT);
+	buf[6] &= ~AX25_SSSID_SPARE;
 
-	if (modulus == MODULUS) {
-		buf[6] |= SSSID_SPARE;
-	} else {
-		buf[6] |= ESSID_SPARE;
-	}
+	if (modulus == AX25_MODULUS)
+		buf[6] |= AX25_SSSID_SPARE;
+	else
+		buf[6] |= AX25_ESSID_SPARE;
 
-	if (flag == C_RESPONSE) buf[6] |= LAPB_C;
+	if (flag == AX25_RESPONSE) buf[6] |= AX25_CBIT;
 
 	/*
 	 *	Fast path the normal digiless path
 	 */
 	if (d == NULL || d->ndigi == 0) {
-		buf[6] |= LAPB_E;
+		buf[6] |= AX25_EBIT;
 		return 2 * AX25_ADDR_LEN;
 	}	
-	
+
 	buf += AX25_ADDR_LEN;
 	len += AX25_ADDR_LEN;
-	
+
 	while (ct < d->ndigi) {
 		memcpy(buf, &d->calls[ct], AX25_ADDR_LEN);
+
 		if (d->repeated[ct])
-			buf[6] |= AX25_REPEATED;
+			buf[6] |= AX25_HBIT;
 		else
-			buf[6] &= ~AX25_REPEATED;
-		buf[6] &= ~LAPB_E;
-		buf[6] |= SSSID_SPARE;
+			buf[6] &= ~AX25_HBIT;
+
+		buf[6] &= ~AX25_EBIT;
+		buf[6] |= AX25_SSSID_SPARE;
 
 		buf += AX25_ADDR_LEN;
 		len += AX25_ADDR_LEN;
 		ct++;
 	}
 
-	buf[-1] |= LAPB_E;
-	
+	buf[-1] |= AX25_EBIT;
+
 	return len;
 }
 
@@ -452,63 +441,30 @@ int size_ax25_addr(ax25_digi *dp)
 
 	return AX25_ADDR_LEN * (2 + dp->ndigi);
 }
-	
+
 /* 
  *	Reverse Digipeat List. May not pass both parameters as same struct
- */	
+ */
 void ax25_digi_invert(ax25_digi *in, ax25_digi *out)
 {
-	int ct = 0;
-	
+	int ct;
+
+	out->ndigi      = in->ndigi;
+	out->lastrepeat = in->ndigi - in->lastrepeat - 2;
+
 	/* Invert the digipeaters */
-	
-	while (ct < in->ndigi) {
-		out->calls[ct]    = in->calls[in->ndigi - ct - 1];
-		out->repeated[ct] = 0;
-		ct++;
+
+	for (ct = 0; ct < in->ndigi; ct++) {
+		out->calls[ct] = in->calls[in->ndigi - ct - 1];
+
+		if (ct <= out->lastrepeat) {
+			out->calls[ct].ax25_call[6] |= AX25_HBIT;
+			out->repeated[ct]            = 1;
+		} else {
+			out->calls[ct].ax25_call[6] &= ~AX25_HBIT;
+			out->repeated[ct]            = 0;
+		}
 	}
-	
-	/* Copy ndigis */
-	out->ndigi = in->ndigi;
-
-	/* Finish off */
-	out->lastrepeat = 0;
-}
-
-/*
- *	count the number of buffers on a list belonging to the same
- *	socket as skb
- */
-
-static int ax25_list_length(struct sk_buff_head *list, struct sk_buff *skb)
-{
-	int count = 0;
-	long flags;
-	struct sk_buff *skbq;
-
-	save_flags(flags);
-	cli();
-
-	if (list == NULL) {
-		restore_flags(flags);
-                return 0;
-        }
-
-	for (skbq = list->next; skbq != (struct sk_buff *)list; skbq = skbq->next)
-		if (skb->sk == skbq->sk)
-			count++;
-
-        restore_flags(flags);
-        return count;
-}
-
-/*
- *	count the number of buffers of one socket on the write/ack-queue
- */
-
-int ax25_queue_length(ax25_cb *ax25, struct sk_buff *skb)
-{
-	return ax25_list_length(&ax25->write_queue, skb) + ax25_list_length(&ax25->ack_queue, skb);
 }
 
 /*
@@ -519,7 +475,6 @@ int ax25_queue_length(ax25_cb *ax25, struct sk_buff *skb)
  *
  *	Not to mention this request isn't currently reliable.
  */
- 
 void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 {
 	struct sk_buff *skb;
@@ -532,19 +487,14 @@ void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
 		return;
 
 	skb->free = 1;
-	skb->arp = 1;
-
-	if (ax25->sk != NULL) {
-		skb->sk = ax25->sk;
-		atomic_add(skb->truesize, &ax25->sk->wmem_alloc);
-	}
+	skb->arp  = 1;
 
 	skb->protocol = htons(ETH_P_AX25);
 
 	p = skb_put(skb, 2);
 
-	*p++=cmd;
-	*p  =param;
+	*p++ = cmd;
+	*p++ = param;
 
 	dev_queue_xmit(skb, ax25->device, SOPRI_NORMAL);
 }
@@ -554,6 +504,7 @@ void ax25_dama_on(ax25_cb *ax25)
 	if (ax25_dev_is_dama_slave(ax25->device) == 0) {
 		if (ax25->sk != NULL && ax25->sk->debug)
 			printk("ax25_dama_on: DAMA on\n");
+
 		ax25_kiss_cmd(ax25, 5, 1);
 	}
 }
@@ -564,10 +515,37 @@ void ax25_dama_off(ax25_cb *ax25)
 		return;
 
 	ax25->dama_slave = 0;
+
 	if (ax25_dev_is_dama_slave(ax25->device) == 0) {
 		if (ax25->sk != NULL && ax25->sk->debug)
 			printk("ax25_dama_off: DAMA off\n");
+
 		ax25_kiss_cmd(ax25, 5, 0);
+	}
+}
+
+void ax25_disconnect(ax25_cb *ax25, int reason)
+{
+	ax25_clear_queues(ax25);
+
+	ax25_dama_off(ax25);
+
+	ax25->t1timer   = 0;
+	ax25->t2timer   = 0;
+	ax25->t3timer   = 0;
+	ax25->idletimer = 0;
+
+	ax25->state = AX25_STATE_0;
+
+	ax25_link_failed(ax25, reason);
+
+	if (ax25->sk != NULL) {
+		ax25->sk->state     = TCP_CLOSE;
+		ax25->sk->err       = reason;
+		ax25->sk->shutdown |= SEND_SHUTDOWN;
+		if (!ax25->sk->dead)
+			ax25->sk->state_change(ax25->sk);
+		ax25->sk->dead      = 1;
 	}
 }
 

@@ -12,8 +12,14 @@ arcnet.txt
 	- info on the using the arcnet driver itself.
 ax25.txt
 	- info on using AX.25 and NET/ROM code for Linux
+depca.txt
+	- the Digital DEPCA/EtherWORKS DE1?? and DE2?? LANCE Ethernet driver
 framerelay.txt
 	- info on using Frame Relay/Data Link Connection Identifier (DLCI).
+ip_dynaddr.txt
+	- info on using dynamic IP addressing for diald and IP masquerading.
+ipx.txt
+	- info on the two possible modes of kernel IPX network support.
 masquerading.txt
 	- using IP masquerading, multiple machines using a single IP address.
 ncsa-telnet
@@ -22,8 +28,14 @@ net-modules.txt
 	- info and "insmod" parameters for all network driver modules.
 ppp.txt
 	- info on what software you should use to run PPP.
+so_bindtodevice.txt
+	- info on binding a socket to a specific device/interface.
 tcp.txt
 	- short blurb on how TCP output takes place.
+tlan.FAQ
+	- freq. asked questions on the TLAN (Compaq Netelligent) driver.
+tlan.README
+	- usage and supported hardware info for the Thunderlan driver.
 tulip.txt
 	- info on using DEC 21040/21041/21140 based PCI Ethernet cards.
 vortex.txt

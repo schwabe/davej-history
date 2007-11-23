@@ -1604,7 +1604,7 @@ asmlinkage int sync_old_buffers(void)
 	if (ncount) printk("sync_old_buffers: %d dirty buffers not on dirty list\n", ncount);
 	printk("Wrote %d/%d buffers\n", nwritten, ndirty);
 #endif
-	run_task_queue(&tq_disk);
+	run_task_queue(&tq_disk); 
 	return 0;
 }
 

@@ -7,6 +7,10 @@
 # are difficult for users to deal with.
 include CONFIG
 
+SUB_DIRS     := 
+MOD_SUB_DIRS := $(SUB_DIRS)
+ALL_SUB_DIRS := $(SUB_DIRS)
+
 L_TARGET := net.a
 L_OBJS   := auto_irq.o
 M_OBJS   :=
@@ -18,6 +22,8 @@ CONFIG_8390_BUILTIN :=
 CONFIG_8390_MODULE  :=
 CONFIG_SLHC_BUILTIN :=
 CONFIG_SLHC_MODULE  :=
+CONFIG_HDLCDRV_BUILTIN :=
+CONFIG_HDLCDRV_MODULE  :=
 
 ifeq ($(CONFIG_ISDN),y)
   ifeq ($(CONFIG_ISDN_PPP),y)
@@ -501,12 +507,36 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MKISS),y)
+L_OBJS += mkiss.o
+else
+  ifeq ($(CONFIG_MKISS),m)
+  M_OBJS += mkiss.o
+  endif
+endif
+
 ifeq ($(CONFIG_PI),y)
 L_OBJS += pi2.o
+else
+  ifeq ($(CONFIG_PI),m)
+  M_OBJS += pi2.o
+  endif
 endif
 
 ifeq ($(CONFIG_PT),y)
 L_OBJS += pt.o
+else
+  ifeq ($(CONFIG_PT),m)
+  M_OBJS += pt.o
+  endif
+endif
+
+ifeq ($(CONFIG_BPQETHER),y)
+L_OBJS += bpqether.o
+else
+  ifeq ($(CONFIG_BPQETHER),m)
+  M_OBJS += bpqether.o
+  endif
 endif
 
 # If anything built-in uses slhc, then build it into the kernel also.
@@ -516,6 +546,40 @@ LX_OBJS += slhc.o
 else
   ifdef CONFIG_SLHC_MODULE
   MX_OBJS += slhc.o
+  endif
+endif
+
+
+ifeq ($(CONFIG_BAYCOM),y)
+L_OBJS += baycom.o
+CONFIG_HDLCDRV_BUILTIN = y
+else
+  ifeq ($(CONFIG_BAYCOM),m)
+  CONFIG_HDLCDRV_MODULE = y
+  M_OBJS += baycom.o
+  endif
+endif
+
+ifeq ($(CONFIG_SOUNDMODEM),y)
+ALL_SUB_DIRS += soundmodem
+SUB_DIRS += soundmodem
+L_OBJS += soundmodem/soundmodem.o
+CONFIG_HDLCDRV_BUILTIN = y
+else
+  ifeq ($(CONFIG_SOUNDMODEM),m)
+  CONFIG_HDLCDRV_MODULE = y
+  ALL_SUB_DIRS += soundmodem
+  MOD_SUB_DIRS += soundmodem
+  endif
+endif
+
+# If anything built-in uses the hdlcdrv, then build it into the kernel also.
+# If not, but a module uses it, build as a module.
+ifdef CONFIG_HDLCDRV_BUILTIN
+LX_OBJS += hdlcdrv.o
+else
+  ifdef CONFIG_HDLCDRV_MODULE
+  MX_OBJS += hdlcdrv.o
   endif
 endif
 

@@ -25,16 +25,32 @@ fi
 bool 'Radio network interfaces' CONFIG_NET_RADIO
 if [ "$CONFIG_NET_RADIO" != "n" ]; then
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'BAYCOM ser12 and par96 kiss emulation driver for AX.25' CONFIG_BAYCOM
+    tristate 'BAYCOM ser12 and par96 driver for AX.25' CONFIG_BAYCOM
+    tristate 'Soundcard modem driver for AX.25' CONFIG_SOUNDMODEM
+    if [ "$CONFIG_SOUNDMODEM" != "n" ]; then
+      bool 'Soundmodem support for Soundblaster and compatible cards' CONFIG_SOUNDMODEM_SBC
+      bool 'Soundmodem support for WSS and Crystal cards' CONFIG_SOUNDMODEM_WSS
+      bool 'Soundmodem support for 1200 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK1200
+      bool 'Soundmodem support for 2400 baud AFSK modulation (7.3728MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_7
+      bool 'Soundmodem support for 2400 baud AFSK modulation (8MHz crystal)' CONFIG_SOUNDMODEM_AFSK2400_8
+      bool 'Soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
+      bool 'Soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
+      if [ -f drivers/net/soundmodem/sm_afsk2666.c ]; then
+        bool 'Soundmodem support for 2666 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK2666
+      fi
+      if [ -f drivers/net/soundmodem/sm_psk4800.c ]; then
+        bool 'Soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
+      fi
+    fi
   fi
-  if [ "$CONFIG_AX25" = "y" ]; then
-    bool 'Gracilis PackeTwin support' CONFIG_PT
-    bool 'Ottawa PI and PI/2 support' CONFIG_PI
-  fi
+  tristate 'Serial port KISS driver for AX.25' CONFIG_MKISS
+  tristate 'BPQ Ethernet driver for AX.25' CONFIG_BPQETHER
+  tristate 'Gracilis PackeTwin support for AX.25' CONFIG_PT
+  tristate 'Ottawa PI and PI/2 support for AX.25' CONFIG_PI
+  tristate 'Z8530 SCC KISS emulation driver for AX.25' CONFIG_SCC
   tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
   tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
   tristate 'WIC Radio IP bridge (EXPERIMENTAL)' CONFIG_WIC
-  tristate 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC
 fi
 #
 #	Ethernet

@@ -63,7 +63,8 @@ struct msghdr
 #ifdef LINUX_2_1_X
 #define AF_INET6	10	/* IP version 6			*/
 #endif
-#define AF_MAX		12	/* For now.. */
+#define AF_ROSE		11	/* Amateur Radio X.25 PLP       */
+#define AF_MAX		13	/* For now.. */
 #define AF_PACKET	17	/* Forward compat hook		*/
 
 /* Protocol families, same as address families. */
@@ -80,6 +81,7 @@ struct msghdr
 #ifdef LINUX_2_1_X
 #define PF_INET6	AF_INET6
 #endif
+#define	PF_ROSE		AF_ROSE
 #define PF_MAX		AF_MAX
 #define PF_PACKET	AF_PACKET
 /* Maximum queue length specifiable by listen.  */
@@ -98,6 +100,7 @@ struct msghdr
 #define SOL_AX25	257
 #define SOL_ATALK	258
 #define	SOL_NETROM	259
+#define	SOL_ROSE	260
 #define SOL_TCP		6
 #define SOL_UDP		17
 
