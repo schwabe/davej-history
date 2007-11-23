@@ -471,9 +471,9 @@ void time_init(void)
 				if( x86_model == 0 ) {
 					/* turn on cycle counters during power down */
 					__asm__ __volatile__ (" movl $0x83, %%ecx \n \
-								rdmsr \n \
+								.byte 0x0f,0x32 \n \
 								orl $1,%%eax \n \
-								wrmsr \n " 
+								.byte 0x0f,0x30 \n " 
                                                                 : : : "ax", "cx", "dx" );
 					udelay(500);
 				}

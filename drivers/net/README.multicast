@@ -19,6 +19,7 @@ Board		Multicast	AllMulti	Promisc		Filter
 3c505		YES		NO		YES		Hardware
 3c507		NO		NO		NO		N/A
 3c509		YES		YES		YES		Software
+3c59x		YES		YES		YES		Software
 ac3200		YES		YES		YES		Software(#)
 apricot		YES		PROMISC		YES		Hardware
 arcnet		NO		NO		NO		N/A

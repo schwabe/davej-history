@@ -542,7 +542,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 				return -EINVAL;
 			if((err=verify_area(VERIFY_READ, optval,sizeof(int)))<0)
 				return err;
-			mroute_do_pim= (optval)?1:0;
+			mroute_do_pim= get_user((int *)optval)?1:0;
 			return 0;
 		/*
 		 *	Spurious command, or MRT_VERSION which you cannot

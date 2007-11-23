@@ -202,7 +202,7 @@ static void bad_tcp_sequence(struct sock *sk, struct tcphdr *th, u32 end_seq,
   	 
 	if (sk->state==TCP_SYN_SENT || sk->state==TCP_SYN_RECV) 
 	{
-		tcp_send_reset(sk->saddr,sk->daddr,th,sk->prot,NULL,dev, sk->ip_tos,sk->ip_ttl);
+		tcp_send_reset(sk->saddr,sk->daddr,th,sk->prot,NULL,dev,0,255);
 		return;
 	}
 
@@ -248,11 +248,18 @@ static int tcp_reset(struct sock *sk, struct sk_buff *skb)
 	/*
 	 *	We want the right error as BSD sees it (and indeed as we do).
 	 */
-	sk->err = ECONNRESET;
-	if (sk->state == TCP_SYN_SENT)
+	switch (sk->state) {
+	case TCP_TIME_WAIT:
+		break;
+	case TCP_SYN_SENT:
 		sk->err = ECONNREFUSED;
-	if (sk->state == TCP_CLOSE_WAIT)
+		break;
+	case TCP_CLOSE_WAIT:
 		sk->err = EPIPE;
+		break;
+	default:
+		sk->err = ECONNRESET;
+	}
 #ifdef CONFIG_TCP_RFC1337
 	/*
 	 *	Time wait assassination protection [RFC1337]
@@ -368,7 +375,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	{
 		if(sk->debug)
 			printk("Reset on %p: Connect on dead socket.\n",sk);
-		tcp_send_reset(daddr, saddr, th, sk->prot, opt, dev, sk->ip_tos,sk->ip_ttl);
+		tcp_send_reset(daddr, saddr, th, sk->prot, opt, dev, 0,255);
 		tcp_statistics.TcpAttemptFails++;
 		kfree_skb(skb, FREE_READ);
 		return;
@@ -1558,7 +1565,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 				{
 					sk->acked_seq = new_seq + th->fin;
 					tcp_send_reset(sk->saddr, sk->daddr, skb->h.th,
-						sk->prot, NULL, skb->dev, sk->ip_tos, sk->ip_ttl);
+						sk->prot, NULL, skb->dev, 0, 255);
 					tcp_statistics.TcpEstabResets++;
 					sk->err = EPIPE;
 					sk->error_report(sk);
@@ -1863,7 +1870,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		if(sk->state==TCP_LISTEN)
 		{
 			if(th->ack)	/* These use the socket TOS.. might want to be the received TOS */
-				tcp_send_reset(daddr,saddr,th,sk->prot,opt,dev,sk->ip_tos, sk->ip_ttl);
+				tcp_send_reset(daddr,saddr,th,sk->prot,opt,dev,0, 255);
 
 			/*
 			 *	We don't care for RST, and non SYN are absorbed (old segments)
@@ -1944,7 +1951,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 					   different connection  [ th->rst is checked in tcp_send_reset()] */
 					tcp_statistics.TcpAttemptFails++;
 					tcp_send_reset(daddr, saddr, th,
-						sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
+						sk->prot, opt,dev,0,255);
 					kfree_skb(skb, FREE_READ);
 					return(0);
 				}
@@ -1956,7 +1963,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 					   start. Shouldn't happen but cover it */
 	         			tcp_statistics.TcpAttemptFails++;
 	                                tcp_send_reset(daddr, saddr, th,
-	                                        sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
+	                                        sk->prot, opt,dev,0,255);
 					kfree_skb(skb, FREE_READ);
 					return 0;
 				}
@@ -2103,7 +2110,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 
 	if(th->syn && skb->seq!=sk->syn_seq)
 	{
-		tcp_send_reset(daddr,saddr,th, &tcp_prot, opt, dev, skb->ip_hdr->tos, 255);
+		tcp_send_reset(daddr,saddr,th, &tcp_prot, opt, dev,0, 255);
 		return tcp_reset(sk,skb);	
 	}
 
@@ -2120,7 +2127,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		 
 		if(sk->state==TCP_SYN_RECV)
 		{
-			tcp_send_reset(daddr, saddr, th,sk->prot, opt, dev,sk->ip_tos,sk->ip_ttl);
+			tcp_send_reset(daddr, saddr, th,sk->prot, opt, dev,0,255);
 		}
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -2164,7 +2171,7 @@ no_tcp_socket:
 	/*
 	 *	No such TCB. If th->rst is 0 send a reset (checked in tcp_send_reset)
 	 */
-	tcp_send_reset(daddr, saddr, th, &tcp_prot, opt,dev,skb->ip_hdr->tos,255);
+	tcp_send_reset(daddr, saddr, th, &tcp_prot, opt,dev,0,255);
 
 discard_it:
 	/*

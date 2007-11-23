@@ -1085,7 +1085,7 @@ static int atalk_getsockopt(struct socket *sock, int level, int optname,
 	err=verify_area(VERIFY_WRITE,optval,sizeof(int));
 	if (err) 
 		return err;
-	put_user(val,optval);
+	put_user(val,(int *)optval);
 	return(0);
 }
 

@@ -642,7 +642,14 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	unsigned char *dp;	
 	int match_addr=0;
 	
+	if(len<sizeof(struct iphdr))
+		goto flush_it;
+		
 	iph = (struct iphdr *) (icmph + 1);
+	
+	len-=iph->ihl<<2;
+	if(len<0)
+		goto flush_it;
 	
 	dp= ((unsigned char *)iph)+(iph->ihl<<2);
 	
@@ -784,12 +791,13 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 			if (iph->protocol == ipprot->protocol && ipprot->err_handler) 
 			{
 				ipprot->err_handler(icmph->type, icmph->code, dp,
-					    iph->daddr, iph->saddr, ipprot);
+					    iph->daddr, iph->saddr, ipprot, len);
 			}
 
 			ipprot = nextip;
 		}
 	}
+flush_it:
 	kfree_skb(skb, FREE_READ);
 }
 
@@ -806,6 +814,9 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 	/*
 	 *	Get the copied header of the packet that caused the redirect
 	 */
+	
+	if(len<=sizeof(struct iphdr))
+		goto flush_it;
 	 
 	iph = (struct iphdr *) (icmph + 1);
 	ip = iph->daddr;
@@ -861,7 +872,7 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
   	/*
   	 *	Discard the original packet
   	 */
-  	 
+flush_it:
   	kfree_skb(skb, FREE_READ);
 }
 

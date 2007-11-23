@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.16 1996/08/12 16:20:56 hipp Exp $
+/* $Id: isdn.h,v 1.18 1996/11/06 17:37:50 keil Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.18  1996/11/06 17:37:50  keil
+ * more changes for 2.1.X
+ *
+ * Revision 1.17  1996/09/07 12:53:57  hipp
+ * moved a few isdn_ppp.c specific defines to drives/isdn/isdn_ppp.h
+ *
  * Revision 1.16  1996/08/12 16:20:56  hipp
  * renamed ppp_minor to ppp_slot
  *
@@ -212,7 +218,6 @@ typedef struct {
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/malloc.h>
-#include <linux/mm.h>
 #include <linux/timer.h>
 #include <linux/wait.h>
 #include <linux/tty.h>
@@ -503,11 +508,6 @@ typedef struct {
 
 #define NUM_RCV_BUFFS     64
 #define PPP_HARD_HDR_LEN 4
-
-#define IPPP_OPEN        0x1
-#define IPPP_CONNECT     0x2
-#define IPPP_CLOSEWAIT   0x4
-#define IPPP_NOBLOCK     0x8
 
 #ifdef CONFIG_ISDN_PPP
 

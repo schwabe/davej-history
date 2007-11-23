@@ -1,6 +1,12 @@
-/* $Id: l3_1TR6.c,v 1.4 1996/06/06 14:22:28 fritz Exp $
+/* $Id: l3_1TR6.c,v 1.6 1996/09/25 18:34:57 keil Exp $
  *
  * $Log: l3_1TR6.c,v $
+ * Revision 1.6  1996/09/25 18:34:57  keil
+ * missing states in 1TR6 Statemachine added
+ *
+ * Revision 1.5  1996/09/23 01:53:51  fritz
+ * Bugfix: discard unknown frames (non-EDSS1 and non-1TR6).
+ *
  * Revision 1.4  1996/06/06 14:22:28  fritz
  * Changed level of "non-digital call..." message, since
  * with audio support, this is quite normal.
@@ -18,6 +24,8 @@
  *
  *
  */
+
+#include	"proto.h"
 
 static void
 l3_1TR6_message(struct PStack *st, int mt, int pd)
@@ -404,7 +412,7 @@ l3_1tr6_conn(struct PStack *st, byte pr,
 }
 
 static void
-l3_1tr6_ignore(struct PStack *st, byte pr, void *arg)
+l3_1tr6_reset(struct PStack *st, byte pr, void *arg)
 {
 	newl3state(st, 0);
 }
@@ -453,16 +461,36 @@ l3_1tr6_rel_req(struct PStack *st, byte pr, void *arg)
 static struct stateentry downstatelist_1tr6t[] =
 {
 	{0, CC_SETUP_REQ, l3_1tr6_setup},
+	{1, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
+	{1, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {1, CC_DLRL, l3_1tr6_reset},
+	{2, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
+	{2, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {2, CC_DLRL, l3_1tr6_reset},
+	{3, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
+	{3, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {3, CC_DLRL, l3_1tr6_reset},
 	{4, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
-	{6, CC_REJECT_REQ, l3_1tr6_ignore},
+	{4, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {4, CC_DLRL, l3_1tr6_reset},
+	{6, CC_REJECT_REQ, l3_1tr6_reset},
+	{6, CC_RELEASE_REQ, l3_1tr6_rel_req},
 	{6, CC_SETUP_RSP, l3_1tr6_conn},
 	{6, CC_ALERTING_REQ, l3_1tr6_alert},
+        {6, CC_DLRL, l3_1tr6_reset},
 	{7, CC_SETUP_RSP, l3_1tr6_conn},
+	{7, CC_RELEASE_REQ, l3_1tr6_rel_req},
 	{7, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
-        {7, CC_DLRL, l3_1tr6_disconn_req},
+        {7, CC_DLRL, l3_1tr6_reset},
 	{8, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
+	{8, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {8, CC_DLRL, l3_1tr6_reset},
 	{10, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
-	{12, CC_RELEASE_REQ, l3_1tr6_rel_req}
+	{10, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {10, CC_DLRL, l3_1tr6_reset},
+	{12, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {12, CC_DLRL, l3_1tr6_reset},
+        {19, CC_DLRL, l3_1tr6_reset},
 };
 
 static int      downsl_1tr6t_len = sizeof(downstatelist_1tr6t) /

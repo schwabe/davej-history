@@ -3717,7 +3717,7 @@ int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int 
 	ide_drive_t *drive=idetape_chrdev.drive;
 	idetape_tape_t *tape=&(drive->tape);
 	char *buf_ptr=buf;
-	int bytes_read,temp,actually_read=0, original_count = count;
+	int bytes_read,temp,actually_read=0;
 
 #if IDETAPE_DEBUG_LOG
 	printk ("Reached idetape_chrdev_read\n");
@@ -3777,7 +3777,7 @@ int idetape_chrdev_read (struct inode *inode, struct file *file, char *buf, int 
 		tape->merge_buffer_size=bytes_read-temp;
 	}
 finish:
-	if (actually_read < original_count && tape->filemark)
+	if (!actually_read && tape->filemark)
 		idetape_space_over_filemarks (drive, MTFSF, 1);
 	return (actually_read);
 }

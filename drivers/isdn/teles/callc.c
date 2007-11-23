@@ -1,6 +1,9 @@
-/* $Id: callc.c,v 1.13 1996/06/24 17:15:55 fritz Exp $
+/* $Id: callc.c,v 1.14 1996/10/22 23:14:14 fritz Exp $
  *
  * $Log: callc.c,v $
+ * Revision 1.14  1996/10/22 23:14:14  fritz
+ * Changes for compatibility to 2.0.X and 2.1.X kernels.
+ *
  * Revision 1.13  1996/06/24 17:15:55  fritz
  * corrected return code of teles_writebuf()
  *
@@ -1451,7 +1454,7 @@ teles_writebuf(int id, int chan, const u_char * buf, int count, int user)
         ptr += i;
 
         if (user)
-                memcpy_fromfs(ptr, buf, count);
+                copy_from_user(ptr, buf, count);
         else
                 memcpy(ptr, buf, count);
         ibh->datasize = count + i;

@@ -502,7 +502,7 @@ void tcp_time_wait(struct sock *sk)
  */
 
 void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
-	__u32 saddr, struct inet_protocol *protocol)
+	__u32 saddr, struct inet_protocol *protocol, int len)
 {
 	struct tcphdr *th = (struct tcphdr *)header;
 	struct sock *sk;
@@ -514,6 +514,10 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 	struct iphdr *iph=(struct iphdr *)(header-sizeof(struct iphdr));
 #endif
 	th =(struct tcphdr *)header;
+	
+	if(len<sizeof(struct tcphdr))
+		return;
+		
 	sk = get_sock(&tcp_prot, th->source, daddr, th->dest, saddr, 0, 0);
 
 	if (sk == NULL)
@@ -1420,6 +1424,8 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 			if (copied)
 				break;
 			copied = -ERESTARTSYS;
+			if (nonblock)
+				copied = -EAGAIN;
 			break;
 		}
 

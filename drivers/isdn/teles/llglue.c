@@ -1,6 +1,9 @@
-/* $Id: llglue.c,v 1.6 1996/06/03 20:03:39 fritz Exp $
+/* $Id: llglue.c,v 1.7 1996/10/22 23:14:17 fritz Exp $
  *
  * $Log: llglue.c,v $
+ * Revision 1.7  1996/10/22 23:14:17  fritz
+ * Changes for compatibility to 2.0.X and 2.1.X kernels.
+ *
  * Revision 1.6  1996/06/03 20:03:39  fritz
  * Fixed typos.
  *
@@ -47,7 +50,7 @@ teles_readstatus(byte * buf, int len, int user, int id, int channel)
 
 	for (p = buf, count = 0; count < len; p++, count++) {
 		if (user)
-			put_fs_byte(*teles_status_read++, p);
+			put_user(*teles_status_read++, p);
 		else
 			*p++ = *teles_status_read++;
 		if (teles_status_read > teles_status_end)

@@ -1,4 +1,4 @@
-/* $Id: card.c,v 1.13 1996/07/18 11:21:24 jdenoud Exp $
+/* $Id: card.c,v 1.16 1996/10/22 23:14:16 fritz Exp $
  *
  * card.c     low level stuff for the Teles S0 isdn card
  * 
@@ -7,6 +7,15 @@
  * Beat Doebeli         log all D channel traffic
  * 
  * $Log: card.c,v $
+ * Revision 1.16  1996/10/22 23:14:16  fritz
+ * Changes for compatibility to 2.0.X and 2.1.X kernels.
+ *
+ * Revision 1.15  1996/09/29 19:41:56  fritz
+ * Bugfix: ignore unknown frames.
+ *
+ * Revision 1.14  1996/09/23 01:53:49  fritz
+ * Bugfix: discard unknown frames (non-EDSS1 and non-1TR6).
+ *
  * Revision 1.13  1996/07/18 11:21:24  jdenoud
  * Use small buffers for incoming audio data
  *
@@ -59,6 +68,7 @@
 
 #define __NO_VERSION__
 #include "teles.h"
+#include "proto.h"
 
 #define INCLUDE_INLINE_FUNCS
 #include <linux/tqueue.h>
@@ -77,7 +87,7 @@ extern int      nrcards;
 static inline   byte
 readisac_0(byte * cardm, byte offset)
 {
-	return *(byte *) (cardm + 0x100 + ((offset & 1) ? 0x1ff : 0) + offset);
+	return readb(cardm + 0x100 + ((offset & 1) ? 0x1ff : 0) + offset);
 }
 
 static inline   byte
@@ -92,7 +102,7 @@ readisac_3(int iobase, byte offset)
 static inline void
 writeisac_0(byte * cardm, byte offset, byte value)
 {
-	*(byte *) (cardm + 0x100 + ((offset & 1) ? 0x1ff : 0) + offset) = value;
+	writeb(value, cardm + 0x100 + ((offset & 1) ? 0x1ff : 0) + offset);
 }
 
 static inline void
@@ -119,7 +129,7 @@ writeisac_s(int iobase, byte offset, byte * src, int count)
 static inline   byte
 readhscx_0(byte * base, byte hscx, byte offset)
 {
-	return *(byte *) (base + 0x180 + ((offset & 1) ? 0x1FF : 0) +
+	return readb(base + 0x180 + ((offset & 1) ? 0x1FF : 0) +
 			  ((hscx & 1) ? 0x40 : 0) + offset);
 }
 
@@ -135,8 +145,8 @@ readhscx_3(int iobase, byte hscx, byte offset)
 static inline void
 writehscx_0(byte * base, byte hscx, byte offset, byte data)
 {
-	*(byte *) (base + 0x180 + ((offset & 1) ? 0x1FF : 0) +
-		   ((hscx & 1) ? 0x40 : 0) + offset) = data;
+	writeb(data, base + 0x180 + ((offset & 1) ? 0x1FF : 0) +
+		   ((hscx & 1) ? 0x40 : 0) + offset);
 }
 
 static inline void
@@ -1253,12 +1263,12 @@ checkcard(int cardnr)
         if (card->membase) {
                 cli();
                 timout = jiffies + (HZ / 5) + 1;
-                *(byte *) (card->membase + 0x80) = 0;
+                writeb(0, card->membase + 0x80);
                 sti();
                 while (jiffies <= timout);
                 
                 cli();
-                *(byte *) (card->membase + 0x80) = 1;
+                writeb(1, card->membase + 0x80);
                 timout = jiffies + (HZ / 5) + 1;
                 sti();
                 while (jiffies <= timout);

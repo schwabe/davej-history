@@ -428,7 +428,7 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 		{
 			u_char cbuf[1024];
 
-			memcpy_fromfs(cbuf, buf, len);
+			copy_from_user(cbuf, buf, len);
 			for (i=0; i<len; i++)
 				writeb(cbuf[i], dev->sh_mem + i);
 		}
@@ -446,7 +446,7 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 			/* get it into kernel space */
 			if ((ptr = kmalloc(len, GFP_KERNEL))==NULL)
 				return -ENOMEM;
-			memcpy_fromfs(ptr, buf, len);
+			copy_from_user(ptr, buf, len);
 			loadbuf = ptr;
 		}
 		else
@@ -761,8 +761,13 @@ static int stat_st = 0;
 static int stat_end = 0;
 
 
-#define memcpy_to_COND(flag, d, s, len) \
-(flag ? memcpy_tofs(d, s, len) : memcpy(d, s, len))
+static __inline void
+memcpy_to_COND(int flag, char *d, const char *s, int len) {
+	if (flag)
+		copy_to_user(d, s, len);
+	else
+		memcpy(d, s, len);
+}
 
 
 int pcbit_stat(u_char* buf, int len, int user, int driver, int channel)

@@ -34,7 +34,10 @@ http://www.datanet.hu/generations/linux/Changes.html (English version).
 bunshou no nihongo ban wa
 http://jf.gee.kyoto-u.ac.jp/JF/v2.0/Changes-2.0.html ni arimasu.
 
-Last updated: October 12, 1996.
+   Voyez le site http://www.linux-kheops.com/traduc/kernels/ pour la
+traduction francais (merci, David Bourgin).  (French translation)
+
+Last updated: November 5, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -43,16 +46,16 @@ Current Releases
 - Kernel modules	 2.0.0
 - PPP daemon		 2.2.0f
 - Dynamic linker (ld.so) 1.7.14
-- GNU CC		 2.7.2
+- GNU CC		 2.7.2.1
 - Binutils		 2.7.0.3
-- Linux C Library	 Stable:  5.2.18, Beta:  5.3.12 / 5.4.7
-- Linux C++ Library	 2.7.1.4
+- Linux C Library	 Stable:  5.2.18, Beta:  5.4.10
+- Linux C++ Library	 2.7.2.1
 - Termcap		 2.0.8
 - Procps		 1.01
 - Gpm			 1.10
 - SysVinit		 2.64
 - Util-linux		 2.5
-- Mount                  2.5k
+- Mount                  2.5p
 - Net-tools              1.32-alpha
 - Kbd                    0.91
 
@@ -69,11 +72,11 @@ daemons to quit working), look for a line like `route add -net
 127.0.0.1' in your network configuration files and change it to `route
 add -net 127.0.0.0'.
 
-   This error is present in all Red Hat distributions (and derivative
-distributions like Caldera).  If you're running one of these, edit
-/etc/sysconfig/network-scripts/ifup-lo, changing the line `route add
--net $(IPADDR)' to `route add -net 127.0.0.0' and you should be fine.
-The new Red Hat 4.0 (Colgate) distribution does not have this problem.
+   This error is present in all Red Hat distributions through Red Hat
+3.03 (and derivative distributions like Caldera).  If you're running
+one of these, edit /etc/sysconfig/network-scripts/ifup-lo, changing the
+line `route add -net $(IPADDR)' to `route add -net 127.0.0.0' and you
+should be fine.
 
    People have also reported problems due to the naming of the dummy
 network interface driver.  If the dummy driver is compiled into the
@@ -134,9 +137,8 @@ binary is at the end of this file).
 
    Also, the libc-5.3.x line has a known security hole relating to
 rlogin.  Libc-5.3.12 fixes this, so if you're going to run an
-experimental libc, be sure to upgrade to 5.3.12.  Libc-5.4.7 is
-currently available as well, but it has a few problems of its own (a
-few missing symbols, for example, that will break existing apps).
+experimental libc, be sure to upgrade to 5.3.12.  Libc-5.4.10 is
+currently available as well, but it may have problems, so caveat emptor.
 
    If you're getting an error message that is something to the effect of
 
@@ -271,7 +273,7 @@ allowed.  For example, a file cannot be simultaneously locked with
 details.  Among the programs this has impacted are older sendmails.  If
 you get a message that sendmail cannot lock aliases.dir (or other
 files), you'll need to upgrade to at least 8.7.x. The latest sendmail
-is at ftp://ftp.cs.berkeley.edu/ucb/src/sendmail/sendmail.8.7.5.tar.gz.
+is at ftp://ftp.cs.berkeley.edu/ucb/src/sendmail/sendmail.8.8.2.tar.gz.
 
 Uugetty
 =======
@@ -293,7 +295,7 @@ Mount
 currently at release 2.5.  Some may find, especially when using the
 loop or xiafs file system, NFS, or automounting, that they need to
 upgrade to the latest release of mount, available from
-ftp://ftp.win.tue.nl/pub/linux/util/mount-2.5k.tar.gz.
+ftp://ftp.win.tue.nl/pub/linux/util/mount-2.5p.tar.gz.
 
 Console
 =======
@@ -504,7 +506,7 @@ ftp://tsx-11.mit.edu/pub/linux/BETA/ibcs2/ibcs-2.0-960610.tar.gz
 
    For a version of Dosemu that works (well, at least as well as DOS
 ever works ;-), get
-ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/Development/dosemu-0.63.1.55.tgz
+ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/Development/dosemu-0.64.0.3.tgz
 or check out http://www.ednet.ns.ca/auto/rddc. Be sure to follow the
 instructions in README.newkernels about patching your include files, or
 it will not compile.
@@ -584,7 +586,8 @@ How to know the version of the installed programs
 *************************************************
 
    There are some simple methods useful to know the version of the
-installed programs and libraries.
+installed programs and libraries.  The SysVinit version display
+requires that you be logged in as root.
 
 GNU CC: gcc -v and gcc --version
 PPP: pppd -h (wrong but it show the version)
@@ -595,6 +598,8 @@ ldd: ldd -v and ldd -V
 termcap: ls -l /lib/libtermcap.so.*
 modules: insmod -V
 procps: ps --version
+SysVinit: cat /proc/`cat /var/run/syslog.pid`/environ|strings|awk '$1 ~
+/INIT_VERSION/ {print}'
 
 Where to get the files
 **********************
@@ -602,16 +607,16 @@ Where to get the files
 Binutils
 ========
 
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.7.0.3.bin.tar.gz
+ftp://tsx-11.mit.edu:/pub/linux/packages/GCC/binutils-2.7.0.3.bin.tar.gz
 Installation notes:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.7.0.3
+ftp://tsx-11.mit.edu:/pub/linux/packages/GCC/release.binutils-2.7.0.3
 
 GNU CC
 ======
 
-ftp://sunsite.unc.edu/pub/Linux/GCC/gcc-2.7.2.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/gcc-2.7.2.1.bin.tar.gz
 Installation notes:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2.1
 
 Linux C Library
 ===============
@@ -621,10 +626,10 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.2.18.bin.tar.gz
 Installation notes for 5.2.18:
 ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.2.18
 
-The latest 5.3.12 release:
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.3.12.bin.tar.gz
-Installation notes for 5.3.12:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.3.12
+The latest 5.4.10 release:
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.10.bin.tar.gz
+Installation notes for 5.4.10:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.10
 
 Patched make sources:
 ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74.patched.tar.gz
@@ -634,12 +639,9 @@ ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74-direntfix-elf.tgz
 Linux C++ Library
 =================
 
-ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.1.4.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.1.3.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.2.1.bin.tar.gz
 Installation notes:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.1.4
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.1.3
-Use 2.7.13 with libc 5.2.18 and 2.7.14 with libc 5.3.12.
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.2.1
 
 Dynamic Linker
 ==============
@@ -712,11 +714,9 @@ mirrors.
    For others, David Bourgin has put together a package of everything
 necessary to quickly and easily upgrade to 2.0.x.  See
 ftp://ftp.wsc.com/pub/freeware/linux/update.linux/ for more information
-and the files.  This package also includes many bug-fixes, including
-one for a recently discovered bug in sendmail-8.7.5 (just look at
-/pub/freeware/linux/update.linux/updat2-0.addon1/sendmail-8.7.5a.tar.gz
-if you only need the bug fix).  There's also an alternate lightweight
-termcap in the same directory that works well for many people.
+and the files.  This package also includes many bug-fixes, such as the
+latest sendmail. There's also an alternate lightweight termcap in the
+same directory that works well for many people.
 
 Please send info about any other packages that 2.0.x "broke" or about
 any new features of 2.0.x that require extra or new packages for use to

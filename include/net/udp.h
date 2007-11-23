@@ -32,7 +32,7 @@ extern struct proto udp_prot;
 
 
 extern void	udp_err(int type, int code, unsigned char *header, __u32 daddr,
-			__u32 saddr, struct inet_protocol *protocol);
+			__u32 saddr, struct inet_protocol *protocol, int len);
 extern void	udp_send_check(struct udphdr *uh, __u32 saddr, 
 			__u32 daddr, int len, struct sock *sk);
 extern int	udp_recvfrom(struct sock *sk, unsigned char *to,

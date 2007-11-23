@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.9 1996/06/06 21:24:24 fritz Exp $
+/* $Id: isdnif.h,v 1.13 1996/11/13 02:39:59 fritz Exp $
  *
  * Linux ISDN subsystem
  *
@@ -22,6 +22,18 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.13  1996/11/13 02:39:59  fritz
+ * More compatibility changes.
+ *
+ * Revision 1.12  1996/11/06 17:38:48  keil
+ * more changes for 2.1.X
+ *
+ * Revision 1.11  1996/10/23 11:59:42  fritz
+ * More compatibility changes.
+ *
+ * Revision 1.10  1996/10/22 23:14:19  fritz
+ * Changes for compatibility to 2.0.X and 2.1.X kernels.
+ *
  * Revision 1.9  1996/06/06 21:24:24  fritz
  * Started adding support for suspend/resume.
  *
@@ -301,6 +313,30 @@ typedef struct {
  *
  */
 extern int register_isdn(isdn_if*);
+
+/* Compatibility Linux-2.0.X <-> Linux-2.1.X */
+
+#ifndef LINUX_VERSION_CODE
+#include <linux/version.h>
+#endif
+#if (LINUX_VERSION_CODE < 0x020100)
+#include <linux/mm.h>
+#define copy_from_user memcpy_fromfs
+#define copy_to_user memcpy_tofs
+#define GET_USER(x, addr) ( x = get_user(addr) )
+#define RWTYPE int
+#define LSTYPE int
+#define RWARG int
+#define LSARG off_t
+#else
+#include <asm/uaccess.h>
+#define GET_USER get_user
+#define PUT_USER put_user
+#define RWTYPE long
+#define LSTYPE long long
+#define RWARG unsigned long
+#define LSARG long long
+#endif
 
 #endif /* __KERNEL__ */
 #endif /* isdnif_h */

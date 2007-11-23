@@ -1,4 +1,4 @@
-/* $Id: icn.h,v 1.21 1996/08/29 20:35:57 fritz Exp $
+/* $Id: icn.h,v 1.22 1996/11/13 02:37:33 fritz Exp $
  *
  * ISDN lowlevel-module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: icn.h,v $
+ * Revision 1.22  1996/11/13 02:37:33  fritz
+ * Added delay include.
+ *
  * Revision 1.21  1996/08/29 20:35:57  fritz
  * Speed up B-Channel polling interval.
  *
@@ -135,6 +138,7 @@ typedef struct icn_cdef {
 #include <linux/ioport.h>
 #include <linux/timer.h>
 #include <linux/wait.h>
+#include <linux/delay.h>
 #include <linux/isdnif.h>
 
 #endif /* __KERNEL__ */

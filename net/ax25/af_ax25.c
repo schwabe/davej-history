@@ -1034,7 +1034,7 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname,
 	if ((err = verify_area(VERIFY_WRITE, optval, sizeof(int))) != 0)
 		return err;
 
-	put_user(val, optval);
+	put_user(val, (int *)optval);
 
 	return 0;
 }

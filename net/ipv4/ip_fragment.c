@@ -10,6 +10,8 @@
  *
  * Fixes:
  *		Alan Cox	:	Split from ip.c , see ip_input.c for history.
+ *		Alan Cox	:	Handling oversized frames
+ *		Uriel Maimon	:	Accounting errors in two fringe cases.
  */
 
 #include <linux/types.h>
@@ -486,7 +488,7 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 	{
 		skb->sk = NULL;
 		printk("Oversized packet received from %s\n",in_ntoa(iph->saddr));
-		frag_kfree_skb(skb, FREE_READ);
+		kfree_skb(skb, FREE_READ);
 		ip_statistics.IpReasmFails++;
 		return NULL;
 	}	
@@ -554,6 +556,9 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 		/*
 		 *	If we get a frag size of <= 0, remove it and the packet
 		 *	that it goes with.
+		 *
+		 *	We never throw the new frag away, so the frag being
+		 *	dumped has always been charged for.
 		 */
 		if (tmp->len <= 0)
 		{
@@ -580,15 +585,21 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 	tfp = ip_frag_create(offset, end, skb, ptr);
 
 	/*
-	 *	No memory to save the fragment - so throw the lot
+	 *	No memory to save the fragment - so throw the lot. If we
+	 *	failed the frag_create we haven't charged the queue.
 	 */
 
 	if (!tfp)
 	{
 		skb->sk = NULL;
-		frag_kfree_skb(skb, FREE_READ);
+		kfree_skb(skb, FREE_READ);
 		return NULL;
 	}
+	
+	/*
+	 *	From now on our buffer is charged to the queues.
+	 */
+	 
 	tfp->prev = prev;
 	tfp->next = next;
 	if (prev != NULL)

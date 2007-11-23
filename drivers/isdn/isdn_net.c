@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.20 1996/08/29 20:06:03 fritz Exp $
+/* $Id: isdn_net.c,v 1.29 1996/11/13 02:31:38 fritz Exp $
  *
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,35 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.29  1996/11/13 02:31:38  fritz
+ * Minor cleanup.
+ *
+ * Revision 1.28  1996/10/27 20:49:06  keil
+ * bugfix to compile without MPP
+ *
+ * Revision 1.27  1996/10/25 18:46:01  fritz
+ * Another bugfix in isdn_net_autohup()
+ *
+ * Revision 1.26  1996/10/23 23:05:36  fritz
+ * Bugfix: Divide by zero in isdn_net_autohup()
+ *
+ * Revision 1.25  1996/10/22 23:13:58  fritz
+ * Changes for compatibility to 2.0.X and 2.1.X kernels.
+ *
+ * Revision 1.24  1996/10/11 13:57:40  fritz
+ * Bugfix: Error in BogoCPS calculation.
+ *
+ * Revision 1.23  1996/09/23 01:58:08  fritz
+ * Fix: With syncPPP encapsulation, discard LCP packets
+ *      when calculating hangup timeout.
+ *
+ * Revision 1.22  1996/09/23 00:03:37  fritz
+ * Fix: did not compile without CONFIG_ISDN_PPP
+ *
+ * Revision 1.21  1996/09/07 12:44:50  hipp
+ * (hopefully) fixed callback problem with syncPPP
+ * syncPPP network devices now show PPP link encap
+ *
  * Revision 1.20  1996/08/29 20:06:03  fritz
  * Bugfix: Transmission timeout had been much to low.
  *
@@ -130,7 +159,7 @@ static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
  
 extern void dev_purge_queues(struct device *dev);	/* move this to net/core/dev.c */
 
-char *isdn_net_revision = "$Revision: 1.20 $";
+char *isdn_net_revision = "$Revision: 1.29 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -237,19 +266,21 @@ isdn_net_unbind_channel(isdn_net_local * lp)
  * Since this function is called every second, simply reset the
  * byte-counter of the interface after copying it to the cps-variable.
  */
+unsigned long last_jiffies = -HZ;
+
 void
 isdn_net_autohup()
 {
 	isdn_net_dev *p = dev->netdev;
         int anymore;
-	ulong flags;
 
-	save_flags(flags);
-	cli();
         anymore = 0;
 	while (p) {
 		isdn_net_local *l = (isdn_net_local *) & (p->local);
-		l->cps = l->transcount;
+		if ((jiffies - last_jiffies) == 0)
+			l->cps = 0;
+		else
+			l->cps = l->transcount / (jiffies - last_jiffies);
 		l->transcount = 0;
 		if (dev->net_verbose > 3)
 			printk(KERN_DEBUG "%s: %d bogocps\n", l->name, l->cps);
@@ -270,8 +301,8 @@ isdn_net_autohup()
 		}
 		p = (isdn_net_dev *) p->next;
 	}
+	last_jiffies = jiffies;
         isdn_timer_ctrl(ISDN_TIMER_NETHANGUP,anymore);
-	restore_flags(flags);
 }
 
 /*
@@ -902,8 +933,8 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
                                                 restore_flags(flags);
 						return 0;	/* STN (skb to nirvana) ;) */
 					}
-	                                isdn_net_dial();	/* Initiate dialing */
 					restore_flags(flags);
+	                                isdn_net_dial();	/* Initiate dialing */
 					return 1;	/* let upper layer requeue skb packet */
 				}
 #endif
@@ -917,9 +948,9 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
                                 }
                                 lp->first_skb = skb;
 				/* Initiate dialing */
-				isdn_net_dial();
                                 ndev->tbusy = 0;
 				restore_flags(flags);
+				isdn_net_dial();
                                 return 0;
 			} else {
                                 /*
@@ -1053,11 +1084,20 @@ isdn_net_receive(struct device *ndev, struct sk_buff *skb)
 	isdn_net_local *lp = (isdn_net_local *) ndev->priv;
 #ifdef CONFIG_ISDN_PPP
         isdn_net_local *olp = lp;  /* original 'lp' */
+        int proto = PPP_PROTOCOL(skb->data);
 #endif
 
 	lp->transcount += skb->len;
 	lp->stats.rx_packets++;
-	lp->huptimer = 0;
+#ifdef CONFIG_ISDN_PPP
+        /*
+         * If encapsulation is syncppp, don't reset
+         * huptimer on LCP packets.
+         */
+        if (lp->p_encap != ISDN_NET_ENCAP_SYNCPPP ||
+            (lp->p_encap == ISDN_NET_ENCAP_SYNCPPP && proto != PPP_LCP))
+#endif
+	        lp->huptimer = 0;
 
 	if (lp->master) {
 		/* Bundling: If device is a slave-device, deliver to master, also
@@ -1066,7 +1106,15 @@ isdn_net_receive(struct device *ndev, struct sk_buff *skb)
 		ndev = lp->master;
 		lp = (isdn_net_local *) ndev->priv;
 		lp->stats.rx_packets++;
-		lp->huptimer = 0;
+#ifdef CONFIG_ISDN_PPP
+                /*
+                 * If encapsulation is syncppp, don't reset
+                 * huptimer on LCP packets.
+                 */
+                if (lp->p_encap != ISDN_NET_ENCAP_SYNCPPP ||
+                    (lp->p_encap == ISDN_NET_ENCAP_SYNCPPP && proto != PPP_LCP))
+#endif
+                        lp->huptimer = 0;
 	}
 
 	skb->dev = ndev;
@@ -1716,9 +1764,14 @@ isdn_net_find_icall(int di, int ch, int idx, char *num)
 					       eaz);
 					/* if this interface is dialing, it does it probably on a different
 					   device, so free this device */
-					if ((p->local.dialstate == 4) || (p->local.dialstate == 12))
+					if ((p->local.dialstate == 4) || (p->local.dialstate == 12)) {
+#ifdef CONFIG_ISDN_PPP
+                                                if (lp->p_encap == ISDN_NET_ENCAP_SYNCPPP)
+                                                        isdn_ppp_free(lp);
+#endif
 						isdn_free_channel(p->local.isdn_device, p->local.isdn_channel,
 							 ISDN_USAGE_NET);
+                                        }
 					dev->usage[idx] &= ISDN_USAGE_EXCLUSIVE;
 					dev->usage[idx] |= ISDN_USAGE_NET;
 					strcpy(dev->num[idx], nr);
@@ -1808,8 +1861,8 @@ int isdn_net_force_dial_lp(isdn_net_local * lp)
 				}
 #endif
 			/* Initiate dialing */
-			isdn_net_dial();
 			restore_flags(flags);
+			isdn_net_dial();
 			return 0;
 		} else
 			return -EINVAL;
@@ -1899,6 +1952,8 @@ isdn_net_new(char *name, struct device *master)
 	netdev->local.exclusive = -1;
 	netdev->local.ppp_slot = -1;
 	netdev->local.pppbind = -1;
+        netdev->local.sav_skb = NULL;
+        netdev->local.first_skb = NULL;
 	netdev->local.l2_proto = ISDN_PROTO_L2_X75I;
 	netdev->local.l3_proto = ISDN_PROTO_L3_TRANS;
 	netdev->local.slavedelay = 10 * HZ;
@@ -1972,13 +2027,16 @@ int isdn_net_setcfg(isdn_net_ioctl_cfg * cfg)
                                        p->local.name);
                                 return -EBUSY;
                         }
-#ifndef CONFIG_ISDN_PPP
                 if (cfg->p_encap == ISDN_NET_ENCAP_SYNCPPP) {
-                        printk(KERN_WARNING "%s: SyncPPP not configured\n",
+#ifndef CONFIG_ISDN_PPP
+                        printk(KERN_WARNING "%s: SyncPPP support not configured\n",
                                p->local.name);
                         return -EINVAL;
-                }
+#else
+                        p->dev.type = ARPHRD_PPP; /* change ARP type */
+                        p->dev.addr_len = 0;
 #endif
+                }
 		if (strlen(cfg->drvid)) {
 			/* A bind has been requested ... */
 			char *c,*e;
@@ -2188,19 +2246,19 @@ int isdn_net_getphones(isdn_net_ioctl_phone * phone, char *phones)
 	inout &= 1;
         for (n = p->local.phone[inout]; n; n = n->next) {
 		if (more) {
-			put_fs_byte(' ', phones++);
+			put_user(' ', phones++);
 			count++;
 		}
 		if ((ret = verify_area(VERIFY_WRITE, (void *) phones, strlen(n->num) + 1))) {
 			restore_flags(flags);
 			return ret;
 		}
-		memcpy_tofs(phones, n->num, strlen(n->num) + 1);
+		copy_to_user(phones, n->num, strlen(n->num) + 1);
 		phones += strlen(n->num);
 		count += strlen(n->num);
 		more = 1;
 	}
-        put_fs_byte(0,phones);
+        put_user(0,phones);
         count++;
 	restore_flags(flags);
 	return count;
@@ -2268,16 +2326,11 @@ static int isdn_net_rmallphone(isdn_net_dev * p)
 int isdn_net_force_hangup(char *name)
 {
 	isdn_net_dev *p = isdn_net_findif(name);
-	int flags;
 	struct device *q;
 
 	if (p) {
-		save_flags(flags);
-		cli();
-		if (p->local.isdn_device < 0) {
-			restore_flags(flags);
+		if (p->local.isdn_device < 0)
 			return 1;
-		}
 		isdn_net_hangup(&p->dev);
 		q = p->local.slave;
 		/* If this interface has slaves, do a hangup for them also. */
@@ -2285,7 +2338,6 @@ int isdn_net_force_hangup(char *name)
 			isdn_net_hangup(q);
 			q = (((isdn_net_local *) q->priv)->slave);
 		}
-		restore_flags(flags);
 		return 0;
 	}
 	return -ENODEV;
@@ -2347,7 +2399,7 @@ static int isdn_net_realrm(isdn_net_dev * p, isdn_net_dev * q)
 		isdn_timer_ctrl(ISDN_TIMER_NETHANGUP, 0);
 	restore_flags(flags);
 
-#ifdef CONFIG_ISDN_PPP
+#ifdef CONFIG_ISDN_MPP
 	isdn_ppp_free_mpqueue(p);	/* still necessary? */
 #endif
 	kfree(p);
@@ -2417,14 +2469,3 @@ void dev_purge_queues(struct device *dev)
         }
 	
 }
-
-
-
-
-
-
-
-
-
-
-

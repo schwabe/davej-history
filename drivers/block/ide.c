@@ -2279,7 +2279,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	ide_input_data(drive, id, SECTOR_WORDS);/* read 512 bytes of id info */
 	sti();
 
-#if defined (CONFIG_SCSI_EATA_DMA) || defined (CONFIG_SCSI_EATA_PIO)
+#if defined (CONFIG_SCSI_EATA_DMA) || defined (CONFIG_SCSI_EATA_PIO) || defined (CONFIG_SCSI_EATA)
 	/*
 	 * EATA SCSI controllers do a hardware ATA emulation:  
 	 * Ignore them if there is a driver for them available.

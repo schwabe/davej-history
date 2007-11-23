@@ -26,11 +26,13 @@
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 
+#if 0
 /*
  * The SMP kernel can't handle the 4MB page table optimizations yet
  */
 #ifdef __SMP__
 #undef USE_PENTIUM_MM
+#endif
 #endif
 
 extern void die_if_kernel(char *,struct pt_regs *,long);

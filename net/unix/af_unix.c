@@ -679,7 +679,7 @@ static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int *uaddr_
  *	Support routines for struct cmsghdr handling
  */
  
-static struct cmsghdr *unix_copyrights(void *userp, int len)
+static struct cmsghdr *unix_copyrights(void *userp, int len) /* AT&T ? */
 {
 	struct cmsghdr *cm;
 
@@ -724,9 +724,6 @@ static int unix_fd_copy(struct sock *sk, struct cmsghdr *cmsg, struct file **fp)
 		int fd;
 		
 		fd = fdp[i];	
-#if 0
-		printk("testing  fd %d\n", fd);
-#endif
 		if (fd < 0 || fd >= NR_OPEN)
 			return -EBADF;
 		if (current->files->fd[fd]==NULL)
@@ -1106,9 +1103,9 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 					return copied;
 				if(noblock)
 					return -EAGAIN;
+				unix_data_wait(sk);
 				if(current->signal & ~current->blocked)
 					return -ERESTARTSYS;
-				unix_data_wait(sk);
 				down(&sk->protinfo.af_unix.readsem);
 				continue;
 			}
@@ -1297,7 +1294,7 @@ struct proto_ops unix_proto_ops = {
 
 void unix_proto_init(struct net_proto *pro)
 {
-	printk(KERN_INFO "NET3: Unix domain sockets 0.12 for Linux NET3.035.\n");
+	printk(KERN_INFO "NET3: Unix domain sockets 0.13 for Linux NET3.035.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {

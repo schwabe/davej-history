@@ -129,7 +129,7 @@ extern struct proto tcp_prot;
 extern struct tcp_mib tcp_statistics;
 
 extern void	tcp_err(int type, int code, unsigned char *header, __u32 daddr,
-			__u32, struct inet_protocol *protocol);
+			__u32, struct inet_protocol *protocol, int len);
 extern void	tcp_shutdown (struct sock *sk, int how);
 extern int	tcp_rcv(struct sk_buff *skb, struct device *dev,
 			struct options *opt, __u32 daddr,

@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.h,v 1.4 1996/05/06 11:34:56 hipp Exp $
+/* $Id: isdn_ppp.h,v 1.6 1996/09/23 01:58:11 fritz Exp $
  *
  * header for Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,13 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_ppp.h,v $
+ * Revision 1.6  1996/09/23 01:58:11  fritz
+ * Fix: With syncPPP encapsulation, discard LCP packets
+ *      when calculating hangup timeout.
+ *
+ * Revision 1.5  1996/09/07 12:51:34  hipp
+ * *** empty log message ***
+ *
  * Revision 1.4  1996/05/06 11:34:56  hipp
  * fixed a few bugs
  *
@@ -34,6 +41,7 @@
  *
  */
 
+#include <linux/ppp_defs.h> /* for PPP_PROTOCOL */
 extern void isdn_ppp_timer_timeout(void);
 extern int  isdn_ppp_read(int , struct file *, char *, int);
 extern int  isdn_ppp_write(int , struct file *, const char *, int);
@@ -54,3 +62,10 @@ extern int  isdn_ppp_dial_slave(char *);
 extern void isdn_ppp_wakeup_daemon(isdn_net_local *);
 
 extern struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
+
+#define IPPP_OPEN	0x01
+#define IPPP_CONNECT	0x02
+#define IPPP_CLOSEWAIT	0x04
+#define IPPP_NOBLOCK	0x08
+#define IPPP_ASSIGNED	0x10
+

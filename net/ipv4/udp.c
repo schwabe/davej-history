@@ -151,7 +151,7 @@ void udp_cache_zap(void)
  */
 
 void udp_err(int type, int code, unsigned char *header, __u32 daddr,
-	__u32 saddr, struct inet_protocol *protocol)
+	__u32 saddr, struct inet_protocol *protocol, int len)
 {
 	struct udphdr *uh;
 	struct sock *sk;
@@ -159,6 +159,9 @@ void udp_err(int type, int code, unsigned char *header, __u32 daddr,
 	/*
 	 *	Find the 8 bytes of post IP header ICMP included for us
 	 */  
+	 
+	if(len<sizeof(struct udphdr))
+		return;
 	
 	uh = (struct udphdr *)header;  
    

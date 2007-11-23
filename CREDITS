@@ -68,7 +68,7 @@ D: Wrote SYS V IPC (part of standard kernel since 0.99.10)
 N: Dario Ballabio
 E: dario@milano.europe.dg.com
 D: Author and maintainer of the Ultrastor 14F/34F SCSI driver
-D: Author and maintainer of the EATA ISA/EISA SCSI driver
+D: Author and maintainer of the EATA ISA/EISA/PCI SCSI driver
 S: Data General Corporation
 S: Milano
 S: Italy
@@ -370,6 +370,14 @@ D: D-Link pocket adapter drivers
 S: Myrstuguv. 83
 S: S-143 32 VARBY
 S: Sweden
+
+N: Fritz Elfert
+E: fritz@wuemaus.franken.de
+D: ISDN subsystem
+D: ICN ISDN driver
+S: Grombuehlstr. 11r
+S: 97080 Wuerzburg
+S: Germany
 
 N: Paal-Kristian Engstad
 E: engstad@funcom.com
