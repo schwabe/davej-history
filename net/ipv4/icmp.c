@@ -831,8 +831,9 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 	NETDEBUG(printk(KERN_INFO "icmp: ICMP redirect ignored. dest = %lX, "
 	       "orig gw = %lX, \"new\" gw = %lX, device = %s.\n", ntohl(ip),
 		ntohl(source), ntohl(icmph->un.gateway), dev->name));
+		goto flush_it;
 	}
-#else	
+#endif
 	switch(icmph->code & 7) 
 	{
 		case ICMP_REDIR_NET:
@@ -870,7 +871,7 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 		default:
 			break;
   	}
-#endif  	
+
   	/*
   	 *	Discard the original packet
   	 */

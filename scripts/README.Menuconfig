@@ -171,10 +171,11 @@ COMPATIBILITY ISSUE:
 
 ******** IMPORTANT, OPTIONAL ALTERNATE PERSONALITY AVAILABLE ********
 ********                                                     ********
-If you prefer to have all of the kernel options listed in a single
-menu, rather than the default multimenu hierarchy, you may edit the
-Menuconfig script and change the line "single_menu_mode="  to 
-"single_menu_mode=TRUE".
+If you prefer having all of the kernel options listed in a single
+menu rather than the default multimenu hierarchy, place the following
+line in your login scripts. (ie. .profile, .bashrc, etc...)
+
+export SINGLE_MENU_MODE=TRUE
 
 This mode is not recommended unless you have a fairly fast machine.
 *********************************************************************
@@ -189,6 +190,6 @@ intact.  Please DO NOT contact Savio with questions about lxdialog.
 He will not be able to assist.
 
 Please feel free to send any questions, comments or suggestions to
-William Roadcap <roadcapw@cfw.com>.
+William Roadcap <roadcapw@titus.org>.
 
 <END OF FILE>

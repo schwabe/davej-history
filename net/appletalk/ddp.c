@@ -828,7 +828,7 @@ int atif_ioctl(int cmd, void *arg)
 			else 
 			{
 				limit=ntohs(nr->nr_lastnet);
-				if(limit-ntohs(nr->nr_firstnet) > 256)
+				if(limit-ntohs(nr->nr_firstnet) > 4096)
 				{
 					printk(KERN_WARNING "Too many routes/iface.\n");
 					return -EINVAL;
@@ -1144,6 +1144,7 @@ static int atalk_create(struct socket *sock, int protocol)
 	MOD_INC_USE_COUNT;
 
 	sk->no_check=0;		/* Checksums on by default */
+	sk->no_check=1;		/* Checksums off by default */
 	sk->allocation=GFP_KERNEL;
 	sk->rcvbuf=SK_RMEM_MAX;
 	sk->sndbuf=SK_WMEM_MAX;
@@ -1623,6 +1624,67 @@ static int ltalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	return atalk_rcv(skb,dev,pt);
 }
 
+
+/*
+ *	This is slower, and copies the whole data area 
+ */
+ 
+static struct sk_buff *ddp_skb_copy(struct sk_buff *skb, int priority)
+{
+	struct sk_buff *n;
+	unsigned long offset;
+
+	/*
+	 *	Allocate the copy buffer
+	 */
+	 
+	IS_SKB(skb);
+	
+	n=alloc_skb(skb->truesize-sizeof(struct sk_buff),priority);
+	if(n==NULL)
+		return NULL;
+
+	/*
+	 *	Shift between the two data areas in bytes
+	 */
+	 
+	offset=n->head-skb->head;
+
+	/* Set the data pointer */
+	skb_reserve(n,skb->data-skb->head);
+	/* Set the tail pointer and length */
+	skb_put(n,skb->len);
+	/* Copy the bytes */
+	memcpy(n->head,skb->head,skb->end-skb->head);
+	n->link3=NULL;
+	n->list=NULL;
+	n->sk=NULL;
+	n->when=skb->when;
+	n->dev=skb->dev;
+	n->h.raw=skb->h.raw+offset;
+	n->mac.raw=skb->mac.raw+offset;
+	n->ip_hdr=(struct iphdr *)(((char *)skb->ip_hdr)+offset);
+	n->saddr=skb->saddr;
+	n->daddr=skb->daddr;
+	n->raddr=skb->raddr;
+	n->seq=skb->seq;
+	n->end_seq=skb->end_seq;
+	n->ack_seq=skb->ack_seq;
+	n->acked=skb->acked;
+	memcpy(n->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
+	n->used=skb->used;
+	n->free=1;
+	n->arp=skb->arp;
+	n->tries=0;
+	n->lock=0;
+	n->users=0;
+	n->pkt_type=skb->pkt_type;
+	n->stamp=skb->stamp;
+	
+	IS_SKB(n);
+	return n;
+}
+
 static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nonblock, int flags)
 {
 	atalk_socket *sk=(atalk_socket *)sock->data;
@@ -1763,16 +1825,27 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 	{
 		if((!(rt->flags&RTF_GATEWAY))&&(!(dev->flags&IFF_LOOPBACK)))
 		{
-			struct sk_buff *skb2=skb_clone(skb, GFP_KERNEL);
-			if(skb2)
-			{
-				loopback=1;
-				if(sk->debug)
-					printk("SK %p: send out(copy).\n", sk);
-				if(aarp_send_ddp(dev,skb2,&usat->sat_addr, NULL)==-1)
-					kfree_skb(skb2, FREE_WRITE);
-				/* else queued/sent above in the aarp queue */
-			}
+		  struct sk_buff *skb2;
+
+		  /* Make a copy of the skbuf so that the loopback does not trash it
+		   * in the next block.
+		   * Added by Peter Skarpetis, Serendipity Software 24 June 1997
+		   */
+		  skb2 = ddp_skb_copy(skb, GFP_ATOMIC);
+		  if (skb2 == NULL) {
+			printk("ddp.c: cannot allocate skb copy buffer\n");
+			return -1;
+		  }
+		  
+		  if(skb2)
+		    {
+		      loopback=1;
+		      if(sk->debug)
+			printk("SK %p: send out(copy).\n", sk);
+		      if(aarp_send_ddp(dev, skb2, &usat->sat_addr, NULL)==-1)
+			kfree_skb(skb2, FREE_WRITE);
+		      /* else queued/sent above in the aarp queue */
+		    }
 		}
 	}
 

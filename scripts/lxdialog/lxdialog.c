@@ -119,7 +119,8 @@ main (int argc, const char * const * argv)
     if (modePtr->argmax && argc - offset > modePtr->argmax)
 	Usage (argv[0]);
 
-
+    if (title && strlen(title) > atoi(argv[offset+4])-4)
+	title[atoi(argv[offset+4])-4] = 0;
 
     init_dialog ();
     retval = (*(modePtr->jumper)) (title, argc - offset, argv + offset);

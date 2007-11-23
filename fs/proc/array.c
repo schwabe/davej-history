@@ -975,7 +975,7 @@ extern int get_cpuinfo(char *);
 extern int get_pci_list(char*);
 extern int get_md_status (char *);
 extern int get_rtc_status (char *);
-extern int get_locks_status (char *);
+extern int get_locks_status (char *, char **, off_t, int);
 #ifdef __SMP_PROF__
 extern int get_smp_prof_list(char *);
 #endif
@@ -1051,7 +1051,7 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 			return get_rtc_status(page);
 #endif
 		case PROC_LOCKS:
-			return get_locks_status(page);
+			return get_locks_status(page, start, offset, length);
 	}
 	return -EBADF;
 }

@@ -1694,6 +1694,7 @@ static void isdn_close(struct inode *ino, struct file *filep)
 					q->next = p->next;
 				else
 					dev->infochain = (infostruct *) (p->next);
+				kfree(p);
 				return;
 			}
 			q = p;

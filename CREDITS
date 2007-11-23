@@ -1125,9 +1125,9 @@ S: 79539 Loerrach
 S: Germany
 
 N: William E. Roadcap
-E: roadcapw@cfw.com
+E: roadcapw@titus.org
 W: http://www.cfw.com/~roadcapw
-D: Author of menu based configuration tool, Menuconfig.
+D: Author of ncurses based configuration tool, Menuconfig.
 S: 1407 Broad Street
 S: Waynesboro, Virginia  22980
 S: USA

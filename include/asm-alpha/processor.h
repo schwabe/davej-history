@@ -43,8 +43,9 @@ struct thread_struct {
 
 	/* the fields below are Linux-specific: */
 	/*
-	 * bit 0:    perform syscall argument validation (get/set_fs)
-	 * bit 1..5: IEEE_TRAP_ENABLE bits (see fpu.h)
+	 * bit 0:	perform syscall argument validation (get/set_fs)
+	 * bit 1..5:	IEEE_TRAP_ENABLE bits (see fpu.h)
+	 * bit 17..21:	IEEE_STATUS bits (see fpu.h)
 	 */
 	unsigned long flags;
 };

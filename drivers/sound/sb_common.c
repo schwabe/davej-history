@@ -583,6 +583,20 @@ sb_dsp_detect (struct address_info *hw_config)
  * Detect the device
  */
 
+  cli();			/* Some ESS1688 cards need this */
+  inb (devc->base + 0x9);
+  inb (devc->base + 0x9);
+  inb (devc->base + 0x9);
+  inb (devc->base + 0xb);
+  inb (devc->base + 0x9);
+  inb (devc->base + 0xb);
+  inb (devc->base + 0x9);
+  inb (devc->base + 0x9);
+  inb (devc->base + 0xb);
+  inb (devc->base + 0x9);
+  inb (devc->base);
+  sti();
+
   if (sb_dsp_reset (devc))
     dsp_get_vers (devc);
   else

@@ -14,7 +14,7 @@
 # Menuconfig or xconfig, please notify the respective authors so that 
 # those utilities can be updated in parallel.
 #
-# Menuconfig:  <roadcapw@cfw.com>
+# Menuconfig:  <roadcapw@titus.org>
 # xconfig:     <apenwarr@foxnet.net>  <eric@aib.com>
 #              ****************************************
 #
@@ -45,6 +45,9 @@
 #
 # 090397 Axel Boldt (boldt@math.ucsb.edu) - avoid ? and + in regular 
 # expressions for GNU expr since version 1.15 and up use \? and \+.
+
+# 040697 Larry Augustin (lma@varesearch.com) - integer expr test
+# fails with GNU expr 1.12. Re-write to work with new and old expr.
 
 #
 # Make sure we're really running bash.
@@ -285,13 +288,20 @@ function define_int () {
 # int processes an integer argument
 #
 #	int question define default
-#
+# GNU expr changed handling of ?.  In older versions you need ?,
+# in newer you need \?
+OLD_EXPR=`expr "0" : '0\?'`
+if [ $OLD_EXPR -eq 1 ]; then
+    INT_EXPR='0$\|-\?[1-9][0-9]*$'
+else
+    INT_EXPR='0$\|-?[1-9][0-9]*$'
+fi
 function int () {
 	old=$(eval echo "\${$2}")
 	def=${old:-$3}
 	while :; do
 	  readln "$1 ($2) [$def] " "$def" "$old"
-	  if expr "$ans" : '0$\|\(-[1-9]\|[1-9]\)[0-9]*$' > /dev/null; then
+	  if expr "$ans" : $INT_EXPR > /dev/null; then
 	    define_int "$2" "$ans"
 	    break
 	  else

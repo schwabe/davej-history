@@ -298,19 +298,29 @@ alpha_fp_emul (unsigned long pc)
 	 *
 	 *	- Set the appropriate bits in the FPCR
 	 *	- If the specified exception is enabled in the FPCR,
-	 *	  return.  The caller (mxr_signal_handler) will dispatch
+	 *	  return.  The caller (entArith) will dispatch
 	 *	  the appropriate signal to the translated program.
+	 *
+	 * In addition, properly track the exception state in software
+	 * as described in Alpha Architecture Handbook 4.7.7.3.
 	 */
 	if (res) {
-		fpcr |= FPCR_SUM | res;
-		wrfpcr(fpcr);
-		if (((res & FPCR_INV) && (fpcw & IEEE_TRAP_ENABLE_INV)) ||
-		    ((res & FPCR_DZE) && (fpcw & IEEE_TRAP_ENABLE_DZE)) ||
-		    ((res & FPCR_OVF) && (fpcw & IEEE_TRAP_ENABLE_OVF)) ||
-		    ((res & FPCR_UNF) && (fpcw & IEEE_TRAP_ENABLE_UNF)) ||
-		    ((res & FPCR_INE) && (fpcw & IEEE_TRAP_ENABLE_INE)))
+		/* record exceptions in software control word.  */
+		fpcw |= res >> 35;
+		current->tss.flags = fpcw;
+
+		/* update hardware control register, disabling hardware
+		   exceptions for disabled software exceptions for which
+		   we have a status.  (no, really.)  */
+		fpcr &= (~FPCR_MASK | FPCR_DYN_MASK);
+		fpcr |= ieee_sw_to_fpcr(fpcw | (~fpcw & IEEE_STATUS_MASK)>>16);
+                wrfpcr(fpcr);
+
+		/* Do we generate a signal?  */
+		if (res >> 51 & fpcw & IEEE_TRAP_ENABLE_MASK)
 			return 0;
 	}
+
 	/*
 	 * Whoo-kay... we got this far, and we're not generating a signal
 	 * to the translated program.  All that remains is to write the

@@ -203,6 +203,7 @@ static void fib_free_node(struct fib_node * f)
 			fi->fib_prev->fib_next = fi->fib_next;
 		if (fi == fib_info_list)
 			fib_info_list = fi->fib_next;
+		kfree_s(fi, sizeof(struct fib_info));
 	}
 	kfree_s(f, sizeof(struct fib_node));
 }
@@ -1436,6 +1437,8 @@ struct rtable * ip_rt_slow_route (__u32 daddr, int local)
 		ip_rt_unlock();
 		kfree_s(rth, sizeof(struct rtable));
 #ifdef CONFIG_KERNELD		
+		if (MULTICAST(daddr)) 
+			return NULL; 
 		daddr=ntohl(daddr);
 		sprintf(wanted_route, "%d.%d.%d.%d",
 			(int)(daddr >> 24) & 0xff, (int)(daddr >> 16) & 0xff,

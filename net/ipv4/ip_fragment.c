@@ -388,6 +388,8 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 		fp = fp->next;
 	}
 
+	skb->pkt_type = qp->fragments->skb->pkt_type;
+	skb->protocol = qp->fragments->skb->protocol;
 	/* We glued together all fragments, so remove the queue entry. */
 	ip_free(qp);
 
@@ -567,7 +569,7 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 			else
 				qp->fragments = tmp->next;
 
-			if (tfp->next != NULL)
+			if (tmp->next != NULL)
 				tmp->next->prev = tmp->prev;
 			
 			next=tfp;	/* We have killed the original next frame */

@@ -714,29 +714,25 @@ asmlinkage unsigned long
 osf_getsysinfo (unsigned long op, void * buffer, unsigned long nbytes,
 		int * start, void *arg)
 {
-    extern unsigned long rdfpcr (void);
-    unsigned long fpcw;
+	switch (op) {
+	case 45:	/* GSI_IEEE_FP_CONTROL */
+		/* Return current sw control & status bits.  */
+		put_user(current->tss.flags & IEEE_SW_MASK,
+			 (unsigned long *)buffer);
+		return 0;
 
-    switch (op) {
-      case 45:	/* GSI_IEEE_FP_CONTROL */
-	  /* build and return current fp control word: */
-	  fpcw = current->tss.flags & IEEE_TRAP_ENABLE_MASK;
-	  fpcw |= ((rdfpcr() >> 52) << 17) & IEEE_STATUS_MASK;
-	  put_user(fpcw, (unsigned long *) buffer);
-	  return 0;
+	case 46:	/* GSI_IEEE_STATE_AT_SIGNAL */
+		/*
+		 * Not sure anybody will ever use this weird stuff.  These
+		 * ops can be used (under OSF/1) to set the fpcr that should
+		 * be used when a signal handler starts executing.
+		 */
+		break;
 
-      case 46:	/* GSI_IEEE_STATE_AT_SIGNAL */
-	  /*
-	   * Not sure anybody will ever use this weird stuff.  These
-	   * ops can be used (under OSF/1) to set the fpcr that should
-	   * be used when a signal handler starts executing.
-	   */
-	  break;
-
-      default:
-	  break;
-    }
-    return -EOPNOTSUPP;
+	default:
+		break;
+	}
+	return -EOPNOTSUPP;
 }
 
 
@@ -744,25 +740,43 @@ asmlinkage unsigned long
 osf_setsysinfo (unsigned long op, void * buffer, unsigned long nbytes,
 		int * start, void *arg)
 {
-    unsigned long fpcw;
+	switch (op) {
+	case 14: {	/* SSI_IEEE_FP_CONTROL */
+		unsigned long sw, fpcw;
 
-    switch (op) {
-      case 14:	/* SSI_IEEE_FP_CONTROL */
-	  /* update trap enable bits: */
-	  fpcw = get_user((unsigned long *) buffer);
-	  current->tss.flags &= ~IEEE_TRAP_ENABLE_MASK;
-	  current->tss.flags |= (fpcw & IEEE_TRAP_ENABLE_MASK);
-	  return 0;
+		/*
+		 * Alpha Architecture Handbook 4.7.7.3:
+		 * To be fully IEEE compiant, we must track the current IEEE
+		 * exception state in software, because spurrious bits can be
+		 * set in the trap shadow of a software-complete insn.
+		 */
 
-      case 15:	/* SSI_IEEE_STATE_AT_SIGNAL */
-      case 16:	/* SSI_IEEE_IGNORE_STATE_AT_SIGNAL */
-	  /*
-	   * Not sure anybody will ever use this weird stuff.  These
-	   * ops can be used (under OSF/1) to set the fpcr that should
-	   * be used when a signal handler starts executing.
-	   */
-      default:
-	  break;
-    }
-    return -EOPNOTSUPP;
+		/* Update software trap enable bits.  */
+		sw = get_user((unsigned long *) buffer) & IEEE_SW_MASK;
+		current->tss.flags &= ~IEEE_SW_MASK;
+		current->tss.flags |= sw & IEEE_SW_MASK;
+
+		/* Update the real fpcr.  For exceptions that are disabled,
+		   but that we have seen, turn off exceptions in h/w.
+		   Otherwise leave them enabled so that we can update our
+		   software status mask.  */
+		fpcw = rdfpcr() & (~FPCR_MASK | FPCR_DYN_MASK);
+		fpcw |= ieee_sw_to_fpcr(sw | ((~sw & IEEE_STATUS_MASK) >> 16));
+		wrfpcr(fpcw);
+		return 0;
+	}
+
+	case 15:	/* SSI_IEEE_STATE_AT_SIGNAL */
+	case 16:	/* SSI_IEEE_IGNORE_STATE_AT_SIGNAL */
+		/*
+		 * Not sure anybody will ever use this weird stuff.  These
+		 * ops can be used (under OSF/1) to set the fpcr that should
+		 * be used when a signal handler starts executing.
+		 */
+		break;
+
+	default:
+		break;
+	}
+	return -EOPNOTSUPP;
 }
