@@ -104,6 +104,7 @@ static struct symbol_table net_syms = {
 	X(ip_options_compile),
 	X(ip_rt_put),
 	X(arp_send),
+	X(arp_bind_cache),
 	X(ip_id_count),
 	X(ip_send_check),
 	X(ip_forward),

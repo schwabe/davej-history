@@ -17,7 +17,7 @@
  */
 
 static const char *version = 
-	"Equalizer1996: $Revision: 1.2.1 $ $Date: 1996/09/22 13:52:00 $ Simon Janes (simon@ncm.com)\n";
+	"Equalizer1996: $Revision: 1.9 $ $Date: 1996/10/12 11:14:37 $ Simon Janes (simon@ncm.com)\n";
 
 /*
  * Sources:
@@ -31,6 +31,9 @@ static const char *version =
 
 /*
  * $Log: eql.c,v $
+ * Revision 1.9  1996/10/12 11:14:37  davem
+ * Quick merge to 2.0.20
+ *
  * Revision 1.2  1996/04/11 17:51:52  guru
  * Added one-line eql_remove_slave patch.
  *
@@ -262,6 +265,7 @@ int eql_init(struct device *dev)
 
 	dev->hard_header	= eql_header; 
 	dev->rebuild_header	= eql_rebuild_header;
+	dev->hard_header_len	= MAX_HEADER; /* enough space for any slave */
 
 	/*
 	 *	Now we undo some of the things that eth_setup does
@@ -371,9 +375,18 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 	equalizer_t *eql = (equalizer_t *) dev->priv;
 	struct device *slave_dev = 0;
 	slave_t *slave;
+	struct sk_buff *skb2;
 
 	if (skb == NULL)
 		return 0;
+
+#if 0
+	/* Make a copy we can free so we don't mess up the skb->dev pointer */
+	skb2 = skb_clone(skb, GFP_ATOMIC);
+
+	if (skb2 == NULL)
+		return 1;
+#endif
 
 	eql_schedule_slaves (eql->queue);
   
@@ -388,20 +401,48 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 				dev->name, eql_number_slaves (eql->queue), skb->len,
 				slave_dev->name);
 #endif
-		dev_queue_xmit (skb, slave_dev, 1);
-		eql->stats->tx_packets++;
-		slave->bytes_queued += skb->len; 
-	}
-	else
-	{
-		/*
-		 *	The alternative for this is the return 1 and have
-		 *	dev_queue_xmit just queue it up on the eql's queue. 
+
+		/* Rip off the fake header */
+		skb_pull(skb,MAX_HEADER);
+
+		/* The original code had no hard header constructed.
+		 * If a frame is fragmented on EQL and then passed to PPP,
+		 * or ISDN, the result will be a panic.
+		 * The solution is to call the hard_header constructor
+		 * for the device we point to just before we send the packet.
+		 * If this fails we drop the packet.
+		 * We don't know any special parameters for the hard_header
+		 * constructor at this point, so we pass in made up values
+		 * that will cause the constructor to fail on every device
+		 * except those that we are allowed to use EQL on:
+		 * PPP, SLIP and ISDN (in some cases!).
+		 * The worst thing that happens is if some fool
+		 * configures EQL to enslave something that needs
+		 * these parameters it throws out packets.
+		 * This is not an issue for the things EQL is intended for
+		 * anyway, and probably would have crashed the kernel
+		 * or sent garbage down the wire previously.
 		 */
 
-		eql->stats->tx_dropped++;
-		dev_kfree_skb(skb, FREE_WRITE);
-	}	  
+		if (slave_dev->hard_header == NULL
+		|| slave_dev->hard_header(skb,slave_dev,
+			ETH_P_IP,NULL,NULL,skb->len) >= 0) {
+			dev_queue_xmit (skb, slave_dev, 1);
+			eql->stats->tx_packets++;
+			slave->bytes_queued += skb->len; 
+			/* dev_kfree_skb(skb, FREE_WRITE); */
+			return 0;
+		}
+	}
+
+	/*
+	 *	The alternative for this is the return 1 and have
+	 *	dev_queue_xmit just queue it up on the eql's queue. 
+	 */
+
+	eql->stats->tx_dropped++;
+	/* dev_kfree_skb(skb2, FREE_WRITE); */
+	dev_kfree_skb(skb, FREE_WRITE);
 	return 0;
 }
 
@@ -417,7 +458,9 @@ static int  eql_header(struct sk_buff *skb, struct device *dev,
 	   unsigned short type, void *daddr, void *saddr, 
 	   unsigned len)
 {
-	return 0;
+	/* Fake header to keep space during buggy IP fragmentation.  */
+	skb_push(skb,MAX_HEADER);
+	return MAX_HEADER;
 }
 
 

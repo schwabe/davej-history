@@ -2038,7 +2038,7 @@ sequencer_init (void)
   iqueue = (unsigned char *) (sound_mem_blocks[sound_nblocks] = vmalloc (SEQ_MAX_QUEUE * IEV_SZ));
   if (sound_nblocks < 1024)
     sound_nblocks++;;
-  if (queue == NULL)
+  if (iqueue == NULL)
     {
       printk ("Sound: Can't allocate memory for sequencer input queue\n");
       return;

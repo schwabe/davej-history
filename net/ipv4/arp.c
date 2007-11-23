@@ -1973,7 +1973,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 				memcpy(ha, proxy_entry->ha, dev->addr_len);
 				arp_unlock();
 
-				rt = ip_rt_route(tip, 0);
+				rt = ip_rt_route(tip, 0, NULL);
 				if (rt  && rt->rt_dev != dev)
 					arp_send(ARPOP_REPLY,ETH_P_ARP,sip,dev,tip,sha,ha,sha);
 				ip_rt_put(rt);
@@ -2046,7 +2046,7 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 		if (!dev)
 		{
 			struct rtable * rt;
-			rt = ip_rt_route(ip, 0);
+			rt = ip_rt_route(ip, 0, NULL);
 			if (!rt)
 				return -ENETUNREACH;
 			dev = rt->rt_dev;

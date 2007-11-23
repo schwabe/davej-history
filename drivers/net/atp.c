@@ -1,9 +1,9 @@
 /* atp.c: Attached (pocket) ethernet adapter driver for linux. */
 /*
-	This is a driver for a commonly OEMed pocket (parallel port)
-	ethernet adapter.  
+	This is a driver for commonly OEMed pocket (parallel port)
+	ethernet adapters based on the Realtek RTL8002 and RTL8012 chips.
 
-	Written 1993,1994,1995 by Donald Becker.
+	Written 1993-95,1997 by Donald Becker.
 
 	Copyright 1993 United States Government as represented by the
 	Director, National Security Agency.
@@ -19,7 +19,11 @@
 */
 
 static const char *version =
-	"atp.c:v1.01 1/18/95 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
+	"atp.c:v1.08 4/1/97 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
+
+/* Operational parameters that may be safely changed. */
+/* Time in jiffies before concluding the transmitter is hung. */
+#define TX_TIMEOUT  ((400*HZ)/1000)
 
 /*
 	This file is a device driver for the RealTek (aka AT-Lan-Tec) pocket
@@ -32,6 +36,10 @@ static const char *version =
 	device works just from the assembly code?  It ain't pretty.  The following
 	description is written based on guesses and writing lots of special-purpose
 	code to test my theorized operation.
+
+	In 1997 Realtek made available the documentation for the second generation
+	RTL8012 chip, which has lead to several driver improvements.
+	  http://www.realtek.com.tw/cn/cn.html
 
 					Theory of Operation
 	
@@ -58,6 +66,10 @@ static const char *version =
 	timing and control bits.  The data is then read from status port or written
 	to the data port.
 
+	Correction: the controller has two banks of 16 registers.  The second
+	bank contains only the multicast filter table (now used) and the EEPROM
+	access registers.
+
 	Since the bulk data transfer of the actual packets through the slow
 	parallel port dominates the driver's running time, four distinct data
 	(non-register) transfer modes are provided by the adapter, two in each
@@ -80,6 +92,14 @@ static const char *version =
 	generate reasonable object code.  This header file also documents my
 	interpretations of the device registers.
 */
+#include <linux/config.h>
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#else
+#define MOD_INC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -103,6 +123,49 @@ static const char *version =
 
 #include "atp.h"
 
+/* Kernel compatibility defines, common to David Hind's PCMCIA package.
+   This is only in the support-all-kernels source code. */
+#include <linux/version.h>		/* Evil, but neccessary */
+
+#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x10300
+#define RUN_AT(x) (x)			/* What to put in timer->expires.  */
+#define DEV_ALLOC_SKB(len) alloc_skb(len, GFP_ATOMIC)
+#define virt_to_bus(addr)  ((unsigned long)addr)
+#define bus_to_virt(addr) ((void*)addr)
+
+#else  /* 1.3.0 and later */
+#define RUN_AT(x) (jiffies + (x))
+#define DEV_ALLOC_SKB(len) dev_alloc_skb(len + 2)
+#endif
+#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x10338
+#ifdef MODULE
+#if !defined(CONFIG_MODVERSIONS) && !defined(__NO_VERSION__)
+char kernel_version[] = UTS_RELEASE;
+#endif
+#else
+#undef MOD_INC_USE_COUNT
+#define MOD_INC_USE_COUNT
+#undef MOD_DEC_USE_COUNT
+#define MOD_DEC_USE_COUNT
+#endif
+#endif /* 1.3.38 */
+
+#if (LINUX_VERSION_CODE >= 0x10344)
+#define NEW_MULTICAST
+#include <linux/delay.h>
+#endif
+
+#ifdef SA_SHIRQ
+#define FREE_IRQ(irqnum, dev) free_irq(irqnum, dev)
+#define REQUEST_IRQ(i,h,f,n, instance) request_irq(i,h,f,n, instance)
+#define IRQ(irq, dev_id, pt_regs) (irq, dev_id, pt_regs)
+#else
+#define FREE_IRQ(irqnum, dev) free_irq(irqnum)
+#define REQUEST_IRQ(i,h,f,n, instance) request_irq(i,h,f,n)
+#define IRQ(irq, dev_id, pt_regs) (irq, pt_regs)
+#endif
+/* End of kernel compatibility defines. */
+
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifndef NET_DEBUG
 #define NET_DEBUG 1
@@ -112,6 +175,9 @@ static unsigned int net_debug = NET_DEBUG;
 /* The number of low I/O ports used by the ethercard. */
 #define ETHERCARD_TOTAL_SIZE	3
 
+/* Sequence to switch an 8012 from printer mux to ethernet mode. */
+static char mux_8012[] = { 0xff, 0xf7, 0xff, 0xfb, 0xf3, 0xfb, 0xff, 0xf7,};
+
 /* This code, written by wwc@super.org, resets the adapter every
    TIMED_CHECKER ticks.  This recovers from an unknown error which
    hangs the device. */
@@ -119,13 +185,11 @@ static unsigned int net_debug = NET_DEBUG;
 #ifdef TIMED_CHECKER
 #include <linux/timer.h>
 static void atp_timed_checker(unsigned long ignored);
-static struct device *atp_timed_dev;
-static struct timer_list atp_timer = {NULL, NULL, 0, 0, atp_timed_checker};
 #endif
 
 /* Index to functions, as function prototypes. */
 
-extern int atp_probe(struct device *dev);
+extern int atp_init(struct device *dev);
 
 static int atp_probe1(struct device *dev, short ioaddr);
 static void get_node_ID(struct device *dev);
@@ -135,14 +199,23 @@ static void hardware_init(struct device *dev);
 static void write_packet(short ioaddr, int length, unsigned char *packet, int mode);
 static void trigger_send(short ioaddr, int length);
 static int	net_send_packet(struct sk_buff *skb, struct device *dev);
-static void net_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+static void net_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs);
 static void net_rx(struct device *dev);
 static void read_block(short ioaddr, int length, unsigned char *buffer, int data_mode);
 static int net_close(struct device *dev);
 static struct enet_statistics *net_get_stats(struct device *dev);
-static void set_multicast_list(struct device *dev);
+#ifdef NEW_MULTICAST
+static void set_rx_mode_8002(struct device *dev);
+static void set_rx_mode_8012(struct device *dev);
+#else
+static void set_rx_mode_8002(struct device *dev, int num_addrs, void *addrs);
+static void set_rx_mode_8012(struct device *dev, int num_addrs, void *addrs);
+#endif
 
 
+/* A list of all installed ATP devices, for removing the driver module. */
+static struct device *root_atp_dev = NULL;
+
 /* Check for a network adapter of this type, and return '0' iff one exists.
    If dev->base_addr == 0, probe all likely locations.
    If dev->base_addr == 1, always return failure.
@@ -153,7 +226,7 @@ int
 atp_init(struct device *dev)
 {
 	int *port, ports[] = {0x378, 0x278, 0x3bc, 0};
-	int base_addr = dev->base_addr;
+	int base_addr = dev ? dev->base_addr : 0;
 
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
 		return atp_probe1(dev, base_addr);
@@ -174,7 +247,8 @@ atp_init(struct device *dev)
 
 static int atp_probe1(struct device *dev, short ioaddr)
 {
-	int saved_ctrl_reg, status;
+	struct net_local *lp;
+	int saved_ctrl_reg, status, i;
 
 	outb(0xff, ioaddr + PAR_DATA);
 	/* Save the original value of the Control register, in case we guessed
@@ -182,6 +256,9 @@ static int atp_probe1(struct device *dev, short ioaddr)
 	saved_ctrl_reg = inb(ioaddr + PAR_CONTROL);
 	/* IRQEN=0, SLCTB=high INITB=high, AUTOFDB=high, STBB=high. */
 	outb(0x04, ioaddr + PAR_CONTROL);
+	/* Turn off the printer multiplexer on the 8012. */
+	for (i = 0; i < 8; i++)
+		outb(mux_8012[i], ioaddr + PAR_DATA);
 	write_reg_high(ioaddr, CMR1, CMR1h_RESET);
 	eeprom_delay(2048);
 	status = read_nibble(ioaddr, CMR1);
@@ -196,6 +273,9 @@ static int atp_probe1(struct device *dev, short ioaddr)
 		outb(saved_ctrl_reg, ioaddr + PAR_CONTROL);
 		return 1;
 	}
+
+	dev = init_etherdev(dev, sizeof(struct net_local));
+
 	/* Find the IRQ used by triggering an interrupt. */
 	write_reg_byte(ioaddr, CMR2, 0x01);			/* No accept mode, IRQ out. */
 	write_reg_high(ioaddr, CMR1, CMR1h_RxENABLE | CMR1h_TxENABLE);	/* Enable Tx and Rx. */
@@ -218,27 +298,29 @@ static int atp_probe1(struct device *dev, short ioaddr)
 		   dev->irq, dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
 		   dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
 
-	/* Leave the hardware in a reset state. */
-    write_reg_high(ioaddr, CMR1, CMR1h_RESET);
+	/* Reset the ethernet hardware and activate the printer pass-through. */
+    write_reg_high(ioaddr, CMR1, CMR1h_RESET | CMR1h_MUX);
 
 	if (net_debug)
 		printk(version);
 
 	/* Initialize the device structure. */
 	ether_setup(dev);
-	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
 	if (dev->priv == NULL)
 		return -ENOMEM;
 	memset(dev->priv, 0, sizeof(struct net_local));
 
+	lp = (struct net_local *)dev->priv;
+	lp->chip_type = RTL8002;
+	lp->addr_mode = CMR2h_Normal;
 
-	{
-		struct net_local *lp = (struct net_local *)dev->priv;
-		lp->addr_mode = CMR2h_Normal;
-	}
+	lp->next_module = root_atp_dev;
+	root_atp_dev = dev;
 
 	/* For the ATP adapter the "if_port" is really the data transfer mode. */
-	dev->if_port = (dev->mem_start & 0xf) ? dev->mem_start & 0x7 : 4;
+	dev->if_port = (dev->mem_start & 0xf) ? (dev->mem_start & 0x7) : 4;
 	if (dev->mem_end & 0xf)
 		net_debug = dev->mem_end & 7;
 
@@ -246,14 +328,9 @@ static int atp_probe1(struct device *dev, short ioaddr)
 	dev->stop		= net_close;
 	dev->hard_start_xmit = net_send_packet;
 	dev->get_stats	= net_get_stats;
-	dev->set_multicast_list = &set_multicast_list;
+	dev->set_multicast_list =
+	  lp->chip_type == RTL8002 ? &set_rx_mode_8002 : &set_rx_mode_8012;
 
-#ifdef TIMED_CHECKER
-	del_timer(&atp_timer);
-	atp_timer.expires = jiffies + TIMED_CHECKER;
-	atp_timed_dev = dev;
-	add_timer(&atp_timer);
-#endif
 	return 0;
 }
 
@@ -322,18 +399,32 @@ static unsigned short eeprom_op(short ioaddr, unsigned int cmd)
    */
 static int net_open(struct device *dev)
 {
+	struct net_local *lp = (struct net_local *)dev->priv;
 
 	/* The interrupt line is turned off (tri-stated) when the device isn't in
 	   use.  That's especially important for "attached" interfaces where the
 	   port or interrupt may be shared. */
+#ifndef SA_SHIRQ
 	if (irq2dev_map[dev->irq] != 0
 		|| (irq2dev_map[dev->irq] = dev) == 0
-		|| request_irq(dev->irq, &net_interrupt, 0, "ATP", NULL)) {
+		|| REQUEST_IRQ(dev->irq, &net_interrupt, 0, "ATP", dev)) {
 		return -EAGAIN;
 	}
+#else
+	if (request_irq(dev->irq, &net_interrupt, 0, "ATP Ethernet", dev))
+		return -EAGAIN;
+#endif
 
+	MOD_INC_USE_COUNT;
 	hardware_init(dev);
 	dev->start = 1;
+
+	init_timer(&lp->timer);
+	lp->timer.expires = RUN_AT(TIMED_CHECKER);
+	lp->timer.data = (unsigned long)dev;
+	lp->timer.function = &atp_timed_checker;    /* timer handler */
+	add_timer(&lp->timer);
+
 	return 0;
 }
 
@@ -345,6 +436,9 @@ static void hardware_init(struct device *dev)
 	int ioaddr = dev->base_addr;
     int i;
 
+	/* Turn off the printer multiplexer on the 8012. */
+	for (i = 0; i < 8; i++)
+		outb(mux_8012[i], ioaddr + PAR_DATA);
 	write_reg_high(ioaddr, CMR1, CMR1h_RESET);
 	
     for (i = 0; i < 6; i++)
@@ -418,11 +512,18 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 
-	if (dev->tbusy) {
-		/* If we get here, some higher level has decided we are broken.
-		   There should really be a "kick me" function call instead. */
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 5)
+#ifndef final_version
+	if (skb == NULL || skb->len <= 0) {
+		printk("%s: Obsolete driver layer request made: skbuff==NULL.\n",
+			   dev->name);
+		dev_tint(dev);
+		return 0;
+	}
+#endif
+
+	/* Use transmit-while-tbusy as a crude error timer. */
+	if (set_bit(0, (void*)&dev->tbusy) != 0) {
+		if (jiffies - dev->trans_start < TX_TIMEOUT)
 			return 1;
 		printk("%s: transmit timed out, %s?\n", dev->name,
 			   inb(ioaddr + PAR_CONTROL) & 0x10 ? "network cable problem"
@@ -432,21 +533,8 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		hardware_init(dev);
 		dev->tbusy=0;
 		dev->trans_start = jiffies;
-	}
-
-	/* If some higher layer thinks we've missed an tx-done interrupt
-	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
-	   itself. */
-	if (skb == NULL) {
-		dev_tint(dev);
-		return 0;
-	}
-
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (set_bit(0, (void*)&dev->tbusy) != 0)
-		printk("%s: Transmitter access conflict.\n", dev->name);
-	else {
+		return 1;
+	} else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = skb->data;
 		int flags;
@@ -484,9 +572,13 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 /* The typical workload of the driver:
    Handle the network interface interrupts. */
 static void
-net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+net_interrupt IRQ(int irq, void *dev_instance, struct pt_regs * regs)
 {
+#ifdef SA_SHIRQ
+	struct device *dev = (struct device *)dev_instance;
+#else
 	struct device *dev = (struct device *)(irq2dev_map[irq]);
+#endif
 	struct net_local *lp;
 	int ioaddr, status, boguscount = 20;
 	static int num_tx_since_rx = 0;
@@ -585,11 +677,6 @@ net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		int i;
 		for (i = 0; i < 6; i++)
 			write_reg_byte(ioaddr, PAR0 + i, dev->dev_addr[i]);
-#ifdef TIMED_CHECKER
-		del_timer(&atp_timer);
-		atp_timer.expires = jiffies + TIMED_CHECKER;
-		add_timer(&atp_timer);
-#endif
 	}
 
 	/* Tell the adapter that it can go back to using the output line as IRQ. */
@@ -610,17 +697,23 @@ net_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 #ifdef TIMED_CHECKER
 /* This following code fixes a rare (and very difficult to track down)
    problem where the adapter forgets its ethernet address. */
-static void atp_timed_checker(unsigned long ignored)
+static void atp_timed_checker(unsigned long data)
 {
-  int i;
-  int ioaddr = atp_timed_dev->base_addr;
+	struct device *dev = (struct device *)data;
+	int ioaddr = dev->base_addr;
+	struct net_local *lp = (struct net_local *)dev->priv;
+	int tickssofar = jiffies - lp->last_rx_time;
+	int i;
 
-  if (!atp_timed_dev->interrupt)
-	{
-	  for (i = 0; i < 6; i++)
-#if 0
-		if (read_cmd_byte(ioaddr, PAR0 + i) != atp_timed_dev->dev_addr[i])
-		  {
+	if (tickssofar > 2*HZ  &&  dev->interrupt == 0) {
+#if 1
+		for (i = 0; i < 6; i++)
+			write_reg_byte(ioaddr, PAR0 + i, dev->dev_addr[i]);
+		lp->last_rx_time = jiffies;
+#else
+		for (i = 0; i < 6; i++)
+			if (read_cmd_byte(ioaddr, PAR0 + i) != atp_timed_dev->dev_addr[i])
+				{
 			struct net_local *lp = (struct net_local *)atp_timed_dev->priv;
 			write_reg_byte(ioaddr, PAR0 + i, atp_timed_dev->dev_addr[i]);
 			if (i == 2)
@@ -632,13 +725,10 @@ static void atp_timed_checker(unsigned long ignored)
 			else
 			  lp->stats.rx_errors++;
 		  }
-#else
-	  write_reg_byte(ioaddr, PAR0 + i, atp_timed_dev->dev_addr[i]);
 #endif
 	}
-  del_timer(&atp_timer);
-  atp_timer.expires = jiffies + TIMED_CHECKER;
-  add_timer(&atp_timer);
+	lp->timer.expires = RUN_AT(TIMED_CHECKER);
+	add_timer(&lp->timer);
 }
 #endif
 
@@ -647,11 +737,7 @@ static void net_rx(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
-#ifdef notdef
-	ushort header[4];
-#else
 	struct rx_header rx_head;
-#endif
 
 	/* Process the received packet. */
 	outb(EOC+MAR, ioaddr + PAR_DATA);
@@ -661,18 +747,23 @@ static void net_rx(struct device *dev)
 			   rx_head.rx_count, rx_head.rx_status, rx_head.cur_addr);
 	if ((rx_head.rx_status & 0x77) != 0x01) {
 		lp->stats.rx_errors++;
-		/* Ackkk!  I don't have any documentation on what the error bits mean!
-		   The best I can do is slap the device around a bit. */
+		if (rx_head.rx_status & 0x0004) lp->stats.rx_frame_errors++;
+		else if (rx_head.rx_status & 0x0002) lp->stats.rx_crc_errors++;
 		if (net_debug > 3) printk("%s: Unknown ATP Rx error %04x.\n",
 								  dev->name, rx_head.rx_status);
-		hardware_init(dev);
+		if  (rx_head.rx_status & 0x0020) {
+			lp->stats.rx_fifo_errors++;
+			write_reg_high(ioaddr, CMR1, CMR1h_TxENABLE);
+			write_reg_high(ioaddr, CMR1, CMR1h_RxENABLE | CMR1h_TxENABLE);
+		} else if (rx_head.rx_status & 0x0050)
+			hardware_init(dev);
 		return;
 	} else {
-		/* Malloc up new buffer. */
-		int pkt_len = (rx_head.rx_count & 0x7ff) - 4; 		/* The "-4" is omits the FCS (CRC). */
+		/* Malloc up new buffer. The "-4" is omits the FCS (CRC). */
+		int pkt_len = (rx_head.rx_count & 0x7ff) - 4;
 		struct sk_buff *skb;
 		
-		skb = dev_alloc_skb(pkt_len);
+		skb = DEV_ALLOC_SKB(pkt_len + 2);
 		if (skb == NULL) {
 			printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 			lp->stats.rx_dropped++;
@@ -680,23 +771,20 @@ static void net_rx(struct device *dev)
 		}
 		skb->dev = dev;
 		
+#if LINUX_VERSION_CODE >= 0x10300
+		skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 		read_block(ioaddr, pkt_len, skb_put(skb,pkt_len), dev->if_port);
-
-		if (net_debug > 6) {
-			unsigned char *data = skb->data;
-			printk(" data %02x%02x%02x %02x%02x%02x %02x%02x%02x"
-				   "%02x%02x%02x %02x%02x..",
-				   data[0], data[1], data[2], data[3], data[4], data[5],
-				   data[6], data[7], data[8], data[9], data[10], data[11],
-				   data[12], data[13]);
-		}
-		
-		skb->protocol=eth_type_trans(skb,dev);
+		skb->protocol = eth_type_trans(skb, dev);
+#else
+		read_block(ioaddr, pkt_len, skb->data, dev->if_port);
+		skb->len = pkt_len;
+#endif
 		netif_rx(skb);
 		lp->stats.rx_packets++;
 	}
  done:
 	write_reg(ioaddr, CMR1, CMR1_NextPkt);
+	lp->last_rx_time = jiffies;
 	return;
 }
 
@@ -730,17 +818,23 @@ net_close(struct device *dev)
 	dev->tbusy = 1;
 	dev->start = 0;
 
+	del_timer(&lp->timer);
+
 	/* Flush the Tx and disable Rx here. */
 	lp->addr_mode = CMR2h_OFF;
 	write_reg_high(ioaddr, CMR2, CMR2h_OFF);
 
 	/* Free the IRQ line. */
 	outb(0x00, ioaddr + PAR_CONTROL);
-	free_irq(dev->irq, NULL);
+	FREE_IRQ(dev->irq, dev);
+#ifndef SA_SHIRQ
 	irq2dev_map[dev->irq] = 0;
+#endif
 
-	/* Leave the hardware in a reset state. */
-    write_reg_high(ioaddr, CMR1, CMR1h_RESET);
+	/* Reset the ethernet hardware and activate the printer pass-through. */
+    write_reg_high(ioaddr, CMR1, CMR1h_RESET | CMR1h_MUX);
+
+	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -757,29 +851,125 @@ net_get_stats(struct device *dev)
 /*
  *	Set or clear the multicast filter for this adapter.
  */
- 
-static void set_multicast_list(struct device *dev)
+
+/* The little-endian AUTODIN32 ethernet CRC calculation.
+   This is common code and should be moved to net/core/crc.c */
+static unsigned const ethernet_polynomial_le = 0xedb88320U;
+static inline unsigned ether_crc_le(int length, unsigned char *data)
+{
+    unsigned int crc = 0xffffffff;	/* Initial value. */
+    while(--length >= 0) {
+		unsigned char current_octet = *data++;
+		int bit;
+		for (bit = 8; --bit >= 0; current_octet >>= 1) {
+			if ((crc ^ current_octet) & 1) {
+				crc >>= 1;
+				crc ^= ethernet_polynomial_le;
+			} else
+				crc >>= 1;
+		}
+    }
+    return crc;
+}
+
+static void
+#ifdef NEW_MULTICAST
+set_rx_mode_8002(struct device *dev)
+#else
+static void set_rx_mode_8002(struct device *dev, int num_addrs, void *addrs);
+#endif
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
-	int num_addrs=dev->mc_list;
-	
-	if(dev->flags&(IFF_ALLMULTI|IFF_PROMISC))
-		num_addrs=1;
-	/*
-	 *	We must make the kernel realise we had to move
-	 *	into promisc mode or we start all out war on
-	 *	the cable. - AC
-	 */
-	if(num_addrs)
-		dev->flags|=IFF_PROMISC;		
-	lp->addr_mode = num_addrs ? CMR2h_PROMISC : CMR2h_Normal;
+
+	if ( dev->mc_count > 0 || (dev->flags & (IFF_ALLMULTI|IFF_PROMISC))) {
+		/* We must make the kernel realise we had to move
+		 *	into promisc mode or we start all out war on
+		 *	the cable. - AC
+		 */
+		dev->flags|=IFF_PROMISC;
+		lp->addr_mode = CMR2h_PROMISC;
+	} else
+		lp->addr_mode = CMR2h_Normal;
 	write_reg_high(ioaddr, CMR2, lp->addr_mode);
 }
+
+static void
+#ifdef NEW_MULTICAST
+set_rx_mode_8012(struct device *dev)
+#else
+static void set_rx_mode_8012(struct device *dev, int num_addrs, void *addrs);
+#endif
+{
+	struct net_local *lp = (struct net_local *)dev->priv;
+	short ioaddr = dev->base_addr;
+	unsigned char new_mode, mc_filter[8]; /* Multicast hash filter */
+	int i;
+
+	if (dev->flags & IFF_PROMISC) {			/* Set promiscuous. */
+		new_mode = CMR2h_PROMISC;
+	} else if ((dev->mc_count > 1000)  ||  (dev->flags & IFF_ALLMULTI)) {
+		/* Too many to filter perfectly -- accept all multicasts. */
+		memset(mc_filter, 0xff, sizeof(mc_filter));
+		new_mode = CMR2h_Normal;
+	} else {
+		struct dev_mc_list *mclist;
+
+		memset(mc_filter, 0, sizeof(mc_filter));
+		for (i = 0, mclist = dev->mc_list; mclist && i < dev->mc_count;
+			 i++, mclist = mclist->next)
+			set_bit(ether_crc_le(ETH_ALEN, mclist->dmi_addr) & 0x3f,
+					mc_filter);
+		new_mode = CMR2h_Normal;
+	}
+	lp->addr_mode = new_mode;
+    write_reg(ioaddr, CMR2, CMR2_IRQOUT | 0x04); /* Switch to page 1. */
+    for (i = 0; i < 8; i++)
+		write_reg_byte(ioaddr, i, mc_filter[i]);
+	if (net_debug > 2 || 1) {
+		lp->addr_mode = 1;
+		printk("%s: Mode %d, setting multicast filter to",
+			   dev->name, lp->addr_mode);
+		for (i = 0; i < 8; i++)
+			printk(" %2.2x", mc_filter[i]);
+		printk(".\n");
+	}
+
+	write_reg_high(ioaddr, CMR2, lp->addr_mode);
+    write_reg(ioaddr, CMR2, CMR2_IRQOUT); /* Switch back to page 0 */
+}
+
+#ifdef MODULE
+static int debug = 1;
+int
+init_module(void)
+{
+	net_debug = debug;
+	root_atp_dev = NULL;
+	atp_init(0);
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	struct device *next_dev;
+
+	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
+	/* No need to release_region(), since we never snarf it. */
+	while (root_atp_dev) {
+		next_dev = ((struct net_local *)root_atp_dev->priv)->next_module;
+		unregister_netdev(root_atp_dev);
+		kfree(root_atp_dev);
+		root_atp_dev = next_dev;
+	}
+}
+#endif /* MODULE */
+
 
 /*
  * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c atp.c"
+ *  compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -c atp.c"
  *  version-control: t
  *  kept-new-versions: 5
  *  tab-width: 4

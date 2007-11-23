@@ -16,6 +16,8 @@
 #include <net/datalink.h>
 #include <linux/ipx.h>
 
+/* #define CONFIG_IPX_INTERN 1 */
+
 typedef struct
 {
 	unsigned long net;

@@ -295,7 +295,7 @@ Mount
 currently at release 2.5.  Some may find, especially when using the
 loop or xiafs file system, NFS, or automounting, that they need to
 upgrade to the latest release of mount, available from
-ftp://ftp.win.tue.nl/pub/linux/util/mount-2.5p.tar.gz.
+ftp://ftp.win.tue.nl/pub/linux/util/mount-2.6g.tar.gz.
 
 Console
 =======
@@ -679,12 +679,14 @@ ftp://sunsite.unc.edu/pub/Linux/system/Daemons/gpm-1.10.tar.gz
 SysVinit utilities
 ==================
 
-ftp://sunsite.unc.edu/pub/Linux/system/Daemons/init/sysvinit-2.64.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/daemons/init/sysvinit-2.64.tar.gz
+or for the very latest:
+ftp://ftp.debian.org/debian/unstable/source/base/sysvinit_2.71-1.tar.gz
 
 Util-linux
 ==========
 
-ftp://sunsite.unc.edu/pub/Linux/system/Misc/util-linux-2.5.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/misc/util-linux-2.6.tar.gz
 
 Mtools
 ======

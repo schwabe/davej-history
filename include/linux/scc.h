@@ -1,7 +1,9 @@
-/* $Id: scc.h,v 1.15 1995/11/16 20:19:26 jreuter Exp jreuter $ */
+/* $Id: scc.h,v 1.29 1997/04/10 15:27:21 jreuter Exp jreuter $ */
 
 #ifndef	_SCC_H
 #define	_SCC_H
+
+#include <linux/if_ether.h>
 
 /* selection of hardware types */
 
@@ -16,19 +18,38 @@
 
 #define SCC_PARANOIA_CHECK	/* tell the user if something is going wrong */
 
-/* ioctl() commands */
+/* TTY ioctl() commands */
 
-#define TIOCSCCCFG	0x2200		/* set hardware parameters */
-#define TIOCSCCINI	0x2201		/* init driver */
-#define TIOCCHANINI	0x2202		/* init channel */
+#define TIOCSCCCFG	 _IOW('Z', 0, sizeof(struct scc_hw_config))	/* set hardware parameters */
+#define TIOCSCCINI	  _IO('Z', 1)					/* init driver */
+#define TIOCSCCCHANINI	 _IOW('Z', 2, sizeof(struct scc_modem))		/* init channel */
+#define TIOCSCCSMEM	 _IOW('Z', 3, sizeof(struct scc_mem_config))	/* adjust buffer pools */
+#define TIOCSCCGKISS	_IOWR('Z', 4, sizeof(struct scc_kiss_cmd))	/* get kiss parameter */
+#define TIOCSCCSKISS	 _IOW('Z', 5, sizeof(struct scc_kiss_cmd))	/* set kiss parameter */
+#define TIOCSCCGSTAT	 _IOR('Z', 6, sizeof(struct scc_stat))		/* get scc status */
 
-#define TIOCCHANMEM	0x2210		/* adjust buffer pools */
+/* old TTY ioctl() commands */
 
-#define TIOCGKISS	0x2282		/* get kiss parameter */
-#define TIOCSKISS	0x2283		/* set kiss parameter */
+#define TIOCSCCCFG_OLD	0x2200
+#define TIOCSCCINI_OLD	0x2201
+#define TIOCCHANINI_OLD	0x2202
+#define TIOCCHANMEM_OLD 0x2210
+#define TIOCSKISS_OLD	0x2282
+#define TIOCGKISS_OLD	0x2283
+#define TIOCSCCSTAT_OLD 0x2284
 
-#define TIOCSCCSTAT	0x2284		/* get scc status */
+/* DEV ioctl() commands */
 
+enum SCC_IOCTL_CMD {
+	SIOCSCCRESERVED=SIOCDEVPRIVATE,
+	SIOCSCCCFG,
+	SIOCSCCINI,
+	SIOCSCCCHANINI,
+	SIOCSCCSMEM,
+	SIOCSCCGKISS,
+	SIOCSCCSKISS,
+	SIOCSCCGSTAT
+};
 
 /* magic number */
 
@@ -42,36 +63,59 @@
 
 /* KISS state machine */
 
-#define	KISS_IDLE	0
-#define KISS_DATA	1
-#define KISS_ESCAPE	2
-#define KISS_RXFRAME	3
+enum SCC_KISS_STATES {
+	KISS_IDLE,
+	KISS_DATA,
+	KISS_ESCAPE,
+	KISS_RXFRAME
+};
 
 /* Device parameter control (from WAMPES) */
 
-#define	PARAM_TXDELAY	1
-#define	PARAM_PERSIST	2
-#define	PARAM_SLOTTIME	3
-#define	PARAM_TXTAIL	4
-#define	PARAM_FULLDUP	5
-#define PARAM_SOFTDCD	6	/* was: PARAM_HW */
-#define PARAM_MUTE	7	/* ??? */
-#define PARAM_DTR       8
-#define PARAM_RTS	9
-#define PARAM_SPEED     10
-#define PARAM_ENDDELAY	11	/* ??? */
-#define PARAM_GROUP     12
-#define PARAM_IDLE      13
-#define PARAM_MIN       14
-#define	PARAM_MAXKEY	15
-#define PARAM_WAIT      16
-#define PARAM_MAXDEFER	17
-#define PARAM_TX        18
-#define PARAM_SLIP	19
-#define PARAM_RETURN	255	/* reset kiss mode */
+enum SCC_KISS_PARAMS {
+	PARAM_TXDELAY=1,
+	PARAM_PERSIST,
+	PARAM_SLOTTIME,
+	PARAM_TXTAIL,
+	PARAM_FULLDUP,
+	PARAM_SOFTDCD,		/* was: PARAM_HW */
+	PARAM_MUTE,		/* ??? */
+	PARAM_DTR,
+	PARAM_RTS,
+	PARAM_SPEED,
+	PARAM_ENDDELAY,		/* ??? */
+	PARAM_GROUP,
+	PARAM_IDLE,
+	PARAM_MIN,
+	PARAM_MAXKEY,
+	PARAM_WAIT,
+	PARAM_MAXDEFER,
+	PARAM_TX,
+	PARAM_HWEVENT=31,
+	PARAM_RETURN=255	/* reset kiss mode */
+};
+
+/* fulldup parameter */
+
+enum SCC_KISS_DUPLEX_MODES {
+	KISS_DUPLEX_HALF,	/* normal CSMA operation */
+	KISS_DUPLEX_FULL,	/* fullduplex, key down trx after transmission */
+	KISS_DUPLEX_LINK,	/* fullduplex, key down trx after 'idletime' sec */
+	KISS_DUPLEX_OPTIMA,	/* fullduplex, let the protocol layer control the hw */
+};
+
+/* misc. parameters */
 
 #define TIMER_OFF	65535U	/* to switch off timers */
 #define NO_SUCH_PARAM	65534U	/* param not implemented */
+
+/* HWEVENT parameter */
+
+enum SCC_HWEV_PARAMETERS {
+	HWEV_DCD_ON,
+	HWEV_DCD_OFF,
+	HWEV_ALL_SENT
+};
 
 /* channel grouping */
 
@@ -80,20 +124,26 @@
 
 /* Tx/Rx clock sources */
 
-#define CLK_DPLL	0	/* normal halfduplex operation */
-#define CLK_EXTERNAL	1	/* external clocking (G3RUH/DF9IC modems) */
-#define CLK_DIVIDER	2	/* Rx = DPLL, Tx = divider (fullduplex with */
-				/* modems without clock regeneration */
+enum SCC_CLK_SOURCES {
+	CLK_DPLL,	/* normal halfduplex operation */
+	CLK_EXTERNAL,	/* external clocking (G3RUH/DF9IC modems) */
+	CLK_DIVIDER	/* Rx = DPLL, Tx = divider (fullduplex with */
+			/* modems without clock regeneration */
+};
 
 /* Tx state */
 
-#define TXS_IDLE	0	/* Transmitter off, no data pending */
-#define TXS_BUSY	1	/* waiting for permission to send / tailtime */
-#define TXS_ACTIVE	2	/* Transmitter on, sending data */
-#define TXS_NEWFRAME	3	/* reset CRC and send (next) frame */
+enum SCC_TX_STATES {
+	TXS_IDLE,	/* Transmitter off, no data pending */
+	TXS_BUSY,	/* waiting for permission to send / tailtime */
+	TXS_ACTIVE,	/* Transmitter on, sending data */
+	TXS_NEWFRAME,	/* reset CRC and send (next) frame */
+	TXS_IDLE2,	/* Transmitter on, no data pending */
+	TXS_WAIT,	/* Waiting for Mintime to expire */
+	TXS_TIMEOUT	/* We had a transmission timeout */
+};
 
-#define TX_ON		1	/* command for scc_key_trx() */
-#define TX_OFF		0	/* dto */
+enum SCC_TX_KEY {TX_OFF, TX_ON}; /* command for scc_key_trx() */
 
 /* Buffer management */
 
@@ -115,13 +165,7 @@ typedef unsigned short ioaddr;  /* old def */
 #define Outb(port, val)	outb(val, port)
 #endif
 
-/* some nasty macros (esp. Expired) */
-
-#define TIMER_STOPPED 65535U
-#define Running(k) (scc->k != TIMER_STOPPED)
-#define Expired(k) (scc->k != TIMER_STOPPED) && (!(scc->k) || (--(scc->k) == 0))
-#define Stop_Timer(k) scc->k = TIMER_STOPPED
-
+#define TIMER_OFF 65535U
 
 /* Basic message buffer structure */
 
@@ -140,17 +184,18 @@ struct scc_kiss {
 	unsigned char txdelay;		/* Transmit Delay 10 ms/cnt */
 	unsigned char persist;		/* Persistence (0-255) as a % */
 	unsigned char slottime;		/* Delay to wait on persistence hit */
-	unsigned char tailtime;		/* Delay after XMTR OFF */
+	unsigned char tailtime;		/* Delay after last byte written */
 	unsigned char fulldup;		/* Full Duplex mode 0=CSMA 1=DUP 2=ALWAYS KEYED */
 	unsigned char waittime;		/* Waittime before any transmit attempt */
 	unsigned int  maxkeyup;		/* Maximum time to transmit (seconds) */
-	unsigned char mintime;		/* Minimal offtime after MAXKEYUP timeout */
+	unsigned char mintime;		/* Minimal offtime after MAXKEYUP timeout (seconds) */
 	unsigned int  idletime;		/* Maximum idle time in ALWAYS KEYED mode (seconds) */
 	unsigned int  maxdefer;		/* Timer for CSMA channel busy limit */
 	unsigned char tx_inhibit;	/* Transmit is not allowed when set */	
-	unsigned char group;		/* group ID for AX.25 TX interlocking */
-	unsigned char not_slip;		/* set to zero: use SLIP instead of KISS */
-	unsigned char softdcd;		/* use DPLL instead of DCD pin for carrier detect */
+	unsigned char group;		/* Group ID for AX.25 TX interlocking */
+	unsigned char mode;		/* 'normal' or 'hwctrl' mode (unused) */
+
+	unsigned char softdcd;		/* Use DPLL instead of DCD pin for carrier detect */
 };
 
 
@@ -182,6 +227,8 @@ struct scc_stat {
 	unsigned int rxbuffers;	/* allocated rx_buffers */
 	unsigned int txbuffers;	/* allocated tx_buffers */
 	unsigned int bufsize;	/* used buffersize */
+
+	unsigned char is_netdev;/* If set: act as network instead of character device */
 };
 
 
@@ -191,12 +238,10 @@ struct scc_modem {
 	char nrz;		/* NRZ instead of NRZI */	
 };
 
-struct ioctl_command {
+struct scc_kiss_cmd {
 	int  	 command;	/* one of the KISS-Commands defined above */
 	unsigned param;		/* KISS-Param */
 };
-
-/* currently unused */
 
 struct scc_hw_config {
 	io_port data_a;		/* data port channel A */
@@ -214,14 +259,15 @@ struct scc_hw_config {
 	char escc;		/* use ext. features of a 8580/85180/85280 */
 };
 
+/* (#) only one INTACK latch allowed. */
+
+
 struct scc_mem_config {
 	unsigned int rxbuffers;
 	unsigned int txbuffers;
 	unsigned int bufsize;
 };
 
-/* (#) only one INTACK latch allowed. */
-	
 
 /* SCC channel structure */
 
@@ -232,6 +278,10 @@ struct scc_channel {
 	struct tty_struct *tty; /* link to tty control structure */
 	char tty_opened;	/* No. of open() calls... */
 	char throttled;		/* driver is throttled  */
+	
+	struct device *dev;	/* link to device control structure */
+	struct enet_statistics dev_stat;
+				/* device statistics */
 		
 	char brand;		/* manufacturer of the board */
 	long clock;		/* used clock */
@@ -239,6 +289,7 @@ struct scc_channel {
 	io_port ctrl;		/* I/O address of CONTROL register */
 	io_port	data;		/* I/O address of DATA register */
 	io_port special;	/* I/O address of special function port */
+	int irq;		/* Number of Interrupt */
 	
 	char option;
 	char enhanced;		/* Enhanced SCC support */
@@ -250,6 +301,7 @@ struct scc_channel {
         struct scc_stat stat;	/* statistical information */
         struct scc_modem modem; /* modem information */
         
+        char mempool;		/* pool empty or allocated? */
         struct mbuf *rx_buffer_pool; /* free buffers for rx/tx frames are */
         struct mbuf *tx_buffer_pool; /* linked in these ring chains */
         
@@ -264,18 +316,9 @@ struct scc_channel {
 	/* Timer */
 	
 	struct timer_list tx_t;	/* tx timer for this channel */
+	struct timer_list tx_wdog;
+				/* tx watchdogs */
 	struct timer_list rx_t; /* rx timer */
-
-	/* rx timer counters */
-	
-	unsigned int t_dwait;	/* wait time (DWAIT) */
-	unsigned int t_slot;	/* channel sample frequency */
-	unsigned int t_txdel;	/* TX delay */
-	unsigned int t_tail;	/* tail time */
-	unsigned int t_maxk;	/* max. key up */
-	unsigned int t_min;	/* minimal key up */
-	unsigned int t_idle;	/* */
-	unsigned int t_mbusy;	/* time until defer if channel busy */	 	
 };
 
 
@@ -564,8 +607,4 @@ struct scc_channel {
 
 /* global functions */
 
-#ifdef PREV_LINUX_1_3_33
-extern long scc_init(long kmem_start);
-#else
 extern int scc_init(void);
-#endif

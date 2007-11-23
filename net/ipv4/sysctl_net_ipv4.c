@@ -18,7 +18,8 @@ extern int sysctl_arp_check_interval;
 extern int sysctl_arp_confirm_interval;
 extern int sysctl_arp_confirm_timeout;
 
-extern int sysctl_ip_forward; 
+extern int sysctl_ip_forward;
+extern int sysctl_ip_dynaddr;
 static int proc_doipforward(ctl_table *ctl, int write, struct file *filp,
 			    void *buffer, size_t *lenp) 
 {
@@ -58,5 +59,7 @@ ctl_table ipv4_table[] = {
          &proc_dointvec},
 	{NET_IPV4_FORWARD, "ip_forward", &sysctl_ip_forward, sizeof(int),
 	 0644, NULL, &proc_doipforward },
+        {NET_IPV4_DYNADDR, "ip_dynaddr",
+         &sysctl_ip_dynaddr, sizeof(int), 0644, NULL, &proc_dointvec},
 	{0}
 };

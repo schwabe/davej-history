@@ -392,7 +392,7 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 
 #ifdef CONFIG_NET_ALIAS
 	if (net_alias_is(dev))
-	  	skb->dev = dev = net_alias_main_dev(dev);
+	  	skb->dev = dev = net_alias_dev_tx(dev);
 #endif
 
 	/*
@@ -436,7 +436,18 @@ static void do_dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 					struct sk_buff *skb2;
 					if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
 						break;
+					/* FIXME?: Wrong when the hard_header_len
+					 * is an upper bound. Is this even
+					 * used anywhere?
+					 */
 					skb2->h.raw = skb2->data + dev->hard_header_len;
+					/* On soft header devices we
+					 * yank the header before mac.raw
+					 * back off. This is set by
+					 * dev->hard_header().
+					 */
+					if (dev->flags&IFF_SOFTHEADERS)
+						skb_pull(skb2,skb2->mac.raw-skb2->data);
 					skb2->mac.raw = skb2->data;
 					ptype->func(skb2, skb->dev, ptype);
 				}
@@ -1095,7 +1106,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 	switch(getset) 
 	{
 		case SIOCGIFFLAGS:	/* Get interface flags */
-			ifr.ifr_flags = dev->flags;
+			ifr.ifr_flags = (dev->flags & ~IFF_SOFTHEADERS);
 			goto rarok;
 
 		case SIOCSIFFLAGS:	/* Set interface flags */
@@ -1117,7 +1128,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 					IFF_BROADCAST | IFF_DEBUG | IFF_LOOPBACK |
 					IFF_POINTOPOINT | IFF_NOTRAILERS | IFF_RUNNING |
 					IFF_NOARP | IFF_PROMISC | IFF_ALLMULTI | IFF_SLAVE | IFF_MASTER
-					| IFF_MULTICAST)) | (dev->flags & IFF_UP);
+					| IFF_MULTICAST)) | (dev->flags & (IFF_SOFTHEADERS|IFF_UP));
 				/*
 				 *	Load in the correct multicast list now the flags have changed.
 				 */				

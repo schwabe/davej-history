@@ -375,6 +375,8 @@ extern inline void pte_free_kernel(pte_t * pte)
 	free_page((unsigned long) pte);
 }
 
+extern const char bad_pmd_string[];
+
 extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
@@ -391,7 +393,7 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 		free_page((unsigned long) page);
 	}
 	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+		printk(bad_pmd_string, pmd_val(*pmd));
 		pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
 		return NULL;
 	}
@@ -444,7 +446,7 @@ freenew:
 }
 
 fix:
-	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+	printk(bad_pmd_string, pmd_val(*pmd));
 oom:
 	pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
 	return NULL;

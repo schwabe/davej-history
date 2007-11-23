@@ -122,6 +122,7 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		*mm = *current->mm;
 		mm->count = 1;
 		mm->def_flags = 0;
+		mm->mmap_sem = MUTEX;
 		tsk->mm = mm;
 		tsk->min_flt = tsk->maj_flt = 0;
 		tsk->cmin_flt = tsk->cmaj_flt = 0;

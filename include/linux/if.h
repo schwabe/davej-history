@@ -39,6 +39,12 @@
 #define IFF_SLAVE	0x800		/* slave of a load balancer	*/
 
 #define IFF_MULTICAST	0x1000		/* Supports multicast		*/
+#define IFF_SOFTHEADERS 0x2000		/* Device cannot construct headers
+					 * until broadcast time. Therefore
+					 * SOCK_PACKET must call header
+					 * construction. Private flag.
+					 * Never visible outside of kernel.
+					 */
 
 /*
  * The ifaddr structure contains information about one address

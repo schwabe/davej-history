@@ -82,6 +82,7 @@ struct __sysctl_args {
 #define NET_BRIDGE	10
 
 /* /proc/sys/net/core */
+#define NET_CORE_NET_ALIAS_MAX 1
 
 /* /proc/sys/net/ethernet */
 
@@ -98,6 +99,7 @@ struct __sysctl_args {
 #define NET_IPV4_ARP_CONFIRM_INTERVAL   6
 #define NET_IPV4_ARP_CONFIRM_TIMEOUT	7
 #define NET_IPV4_FORWARD                8
+#define NET_IPV4_DYNADDR		9
 
 /* /proc/sys/net/ipx */
 

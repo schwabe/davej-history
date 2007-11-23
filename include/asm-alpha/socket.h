@@ -33,4 +33,6 @@
 #define SO_PRIORITY	12
 #define SO_BSDCOMPAT	14
 
+#define SO_BINDTODEVICE 25
+
 #endif /* _ASM_SOCKET_H */

@@ -62,6 +62,8 @@
 #define PCI_CBER     iobase+0x0030   /* PCI Expansion ROM Base Address Reg. */
 #define PCI_CFIT     iobase+0x003c   /* PCI Configuration Interrupt Register */
 #define PCI_CFDA     iobase+0x0040   /* PCI Driver Area Register */
+#define PCI_CFDD     iobase+0x0041   /* PCI Driver Dependent Area Register */
+#define PCI_CFPM     iobase+0x0043   /* PCI Power Management Area Register */
 
 /*
 ** EISA Configuration Register 0 bit definitions
@@ -95,16 +97,20 @@
 #define ER3_LSR       0x02           /* Local Software Reset */
 
 /*
-** PCI Configuration ID Register (PCI_CFID)
+** PCI Configuration ID Register (PCI_CFID). The Device IDs are left
+** shifted 8 bits to allow detection of DC21142 and DC21143 variants with
+** the configuration revision register step number.
 */
 #define CFID_DID    0xff00           /* Device ID */
 #define CFID_VID    0x00ff           /* Vendor ID */
-#define DC21040_DID 0x0002           /* Unique Device ID # */
+#define DC21040_DID 0x0200           /* Unique Device ID # */
 #define DC21040_VID 0x1011           /* DC21040 Manufacturer */
-#define DC21041_DID 0x0014           /* Unique Device ID # */
+#define DC21041_DID 0x1400           /* Unique Device ID # */
 #define DC21041_VID 0x1011           /* DC21041 Manufacturer */
-#define DC21140_DID 0x0009           /* Unique Device ID # */
+#define DC21140_DID 0x0900           /* Unique Device ID # */
 #define DC21140_VID 0x1011           /* DC21140 Manufacturer */
+#define DC2114x_DID 0x1900           /* Unique Device ID # */
+#define DC2114x_VID 0x1011           /* DC2114[23] Manufacturer */
 
 /*
 ** Chipset defines
@@ -112,10 +118,16 @@
 #define DC21040     DC21040_DID
 #define DC21041     DC21041_DID
 #define DC21140     DC21140_DID
+#define DC2114x     DC2114x_DID
+#define DC21142     (DC2114x_DID | 0x0010)
+#define DC21143     (DC2114x_DID | 0x0020)
 
 #define is_DC21040 ((vendor == DC21040_VID) && (device == DC21040_DID))
 #define is_DC21041 ((vendor == DC21041_VID) && (device == DC21041_DID))
 #define is_DC21140 ((vendor == DC21140_VID) && (device == DC21140_DID))
+#define is_DC2114x ((vendor == DC2114x_VID) && (device == DC2114x_DID))
+#define is_DC21142 ((vendor == DC2114x_VID) && (device == DC21142))
+#define is_DC21143 ((vendor == DC2114x_VID) && (device == DC21143))
 
 /*
 ** PCI Configuration Command/Status Register (PCI_CFCS)
@@ -127,7 +139,7 @@
 #define CFCS_DST    0x06000000       /* DEVSEL Timing         (S) */
 #define CFCS_DPR    0x01000000       /* Data Parity Report    (S) */
 #define CFCS_FBB    0x00800000       /* Fast Back-To-Back     (S) */
-#define CFCS_SLE    0x00000100       /* System Error Enable   (C) */
+#define CFCS_SEE    0x00000100       /* System Error Enable   (C) */
 #define CFCS_PER    0x00000040       /* Parity Error Response (C) */
 #define CFCS_MO     0x00000004       /* Master Operation      (C) */
 #define CFCS_MSA    0x00000002       /* Memory Space Access   (C) */
@@ -138,8 +150,8 @@
 */
 #define CFRV_BC     0xff000000       /* Base Class */
 #define CFRV_SC     0x00ff0000       /* Subclass */
-#define CFRV_SN     0x000000f0       /* Step Number */
-#define CFRV_RN     0x0000000f       /* Revision Number */
+#define CFRV_RN     0x000000f0       /* Revision Number */
+#define CFRV_SN     0x0000000f       /* Step Number */
 #define BASE_CLASS  0x02000000       /* Indicates Network Controller */
 #define SUB_CLASS   0x00000000       /* Indicates Ethernet Controller */
 #define STEP_NUMBER 0x00000020       /* Increments for future chips */
@@ -158,19 +170,46 @@
 #define CBIO_IOSI   0x00000001       /* I/O Space Indicator (RO, value is 1) */
 
 /*
+** PCI Configuration Card Information Structure Register (PCI_CCIS)
+*/
+#define CCIS_ROMI   0xf0000000       /* ROM Image */
+#define CCIS_ASO    0x0ffffff8       /* Address Space Offset */
+#define CCIS_ASI    0x00000007       /* Address Space Indicator */
+
+/*
+** PCI Configuration Subsystem ID Register (PCI_SSID)
+*/
+#define SSID_SSID   0xffff0000       /* Subsystem ID */
+#define SSID_SVID   0x0000ffff       /* Subsystem Vendor ID */
+
+/*
 ** PCI Configuration Expansion ROM Base Address Register (PCI_CBER)
 */
 #define CBER_MASK   0xfffffc00       /* Expansion ROM Base Address Mask */
 #define CBER_ROME   0x00000001       /* ROM Enable */
 
 /*
-** PCI Configuration Driver Area Register (PCI_CFDA)
+** PCI Configuration Interrupt Register (PCI_CFIT)
 */
-#define CFDA_PSM    0x80000000       /* Power Saving Mode */
+#define CFIT_MXLT   0xff000000       /* MAX_LAT Value (0.25us periods) */
+#define CFIT_MNGT   0x00ff0000       /* MIN_GNT Value (0.25us periods) */
+#define CFIT_IRQP   0x0000ff00       /* Interrupt Pin */
+#define CFIT_IRQL   0x000000ff       /* Interrupt Line */
+
+/*
+** PCI Configuration Power Management Area Register (PCI_CFPM)
+*/
+#define SLEEP       0x80             /* Power Saving Sleep Mode */
+#define SNOOZE      0x40             /* Power Saving Snooze Mode */
+#define WAKEUP      0x00             /* Power Saving Wakeup */
+
+#define PCI_CFDA_DSU 0x41            /* 8 bit Configuration Space Address */
+#define PCI_CFDA_PSM 0x43            /* 8 bit Configuration Space Address */
 
 /*
 ** DC21040 Bus Mode Register (DE4X5_BMR)
 */
+#define BMR_RML    0x00200000       /* [Memory] Read Multiple */
 #define BMR_DBO    0x00100000       /* Descriptor Byte Ordering (Endian) */
 #define BMR_TAP    0x000e0000       /* Transmit Automatic Polling */
 #define BMR_DAS    0x00010000       /* Diagnostic Address Space */
@@ -181,6 +220,7 @@
 #define BMR_BAR    0x00000002       /* Bus ARbitration */
 #define BMR_SWR    0x00000001       /* Software Reset */
 
+                                    /* Timings here are for 10BASE-T/AUI only*/
 #define TAP_NOPOLL 0x00000000       /* No automatic polling */
 #define TAP_200US  0x00020000       /* TX automatic polling every 200us */
 #define TAP_800US  0x00040000       /* TX automatic polling every 800us */
@@ -232,18 +272,21 @@
 #define TRBA       0xfffffffc       /* TX Descriptor List Start Address */
 
 /*
-** DC21040 Status Register (DE4X5_STS)
+** Status Register (DE4X5_STS)
 */
+#define STS_GPI    0x04000000       /* General Purpose Port Interrupt */
 #define STS_BE     0x03800000       /* Bus Error Bits */
 #define STS_TS     0x00700000       /* Transmit Process State */
 #define STS_RS     0x000e0000       /* Receive Process State */
 #define STS_NIS    0x00010000       /* Normal Interrupt Summary */
 #define STS_AIS    0x00008000       /* Abnormal Interrupt Summary */
 #define STS_ER     0x00004000       /* Early Receive */
+#define STS_FBE    0x00002000       /* Fatal Bus Error */
 #define STS_SE     0x00002000       /* System Error */
 #define STS_LNF    0x00001000       /* Link Fail */
 #define STS_FD     0x00000800       /* Full-Duplex Short Frame Received */
 #define STS_TM     0x00000800       /* Timer Expired (DC21041) */
+#define STS_ETI    0x00000400       /* Early Transmit Interupt */
 #define STS_AT     0x00000400       /* AUI/TP Pin */
 #define STS_RWT    0x00000200       /* Receive Watchdog Time-Out */
 #define STS_RPS    0x00000100       /* Receive Process Stopped */
@@ -251,6 +294,7 @@
 #define STS_RI     0x00000040       /* Receive Interrupt */
 #define STS_UNF    0x00000020       /* Transmit Underflow */
 #define STS_LNP    0x00000010       /* Link Pass */
+#define STS_ANC    0x00000010       /* Autonegotiation Complete */
 #define STS_TJT    0x00000008       /* Transmit Jabber Time-Out */
 #define STS_TU     0x00000004       /* Transmit Buffer Unavailable */
 #define STS_TPS    0x00000002       /* Transmit Process Stopped */
@@ -283,8 +327,10 @@
 #define INT_CANCEL 0x0001ffff       /* For zeroing all interrupt sources */
 
 /*
-** DC21040 Operation Mode Register (DE4X5_OMR)
+** Operation Mode Register (DE4X5_OMR)
 */
+#define OMR_SC     0x80000000       /* Special Capture Effect Enable */
+#define OMR_RA     0x40000000       /* Receive All */
 #define OMR_SDP    0x02000000       /* SD Polarity - MUST BE ASSERTED */
 #define OMR_SCR    0x01000000       /* Scrambler Mode */
 #define OMR_PCS    0x00800000       /* PCS Function */
@@ -298,7 +344,7 @@
 #define OMR_ST     0x00002000       /* Start/Stop Transmission Command */
 #define OMR_FC     0x00001000       /* Force Collision Mode */
 #define OMR_OM     0x00000c00       /* Operating Mode */
-#define OMR_FD     0x00000200       /* Full Duplex Mode */
+#define OMR_FDX    0x00000200       /* Full Duplex Mode */
 #define OMR_FKD    0x00000100       /* Flaky Oscillator Disable */
 #define OMR_PM     0x00000080       /* Pass All Multicast */
 #define OMR_PR     0x00000040       /* Promiscuous Mode */
@@ -309,27 +355,31 @@
 #define OMR_SR     0x00000002       /* Start/Stop Receive */
 #define OMR_HP     0x00000001       /* Hash/Perfect Receive Filtering Mode */
 
-#define TR_72      0x00000000       /* Threshold set to 72 bytes */
-#define TR_96      0x00004000       /* Threshold set to 96 bytes */
-#define TR_128     0x00008000       /* Threshold set to 128 bytes */
-#define TR_160     0x0000c000       /* Threshold set to 160 bytes */
+#define TR_72      0x00000000       /* Threshold set to 72 (128) bytes */
+#define TR_96      0x00004000       /* Threshold set to 96 (256) bytes */
+#define TR_128     0x00008000       /* Threshold set to 128 (512) bytes */
+#define TR_160     0x0000c000       /* Threshold set to 160 (1024) bytes */
 
 /*
 ** DC21040 Interrupt Mask Register (DE4X5_IMR)
 */
+#define IMR_GPM    0x04000000       /* General Purpose Port Mask */
 #define IMR_NIM    0x00010000       /* Normal Interrupt Summary Mask */
 #define IMR_AIM    0x00008000       /* Abnormal Interrupt Summary Mask */
 #define IMR_ERM    0x00004000       /* Early Receive Mask */
+#define IMR_FBM    0x00002000       /* Fatal Bus Error Mask */
 #define IMR_SEM    0x00002000       /* System Error Mask */
 #define IMR_LFM    0x00001000       /* Link Fail Mask */
 #define IMR_FDM    0x00000800       /* Full-Duplex (Short Frame) Mask */
 #define IMR_TMM    0x00000800       /* Timer Expired Mask (DC21041) */
+#define IMR_ETM    0x00000400       /* Early Transmit Interrupt Mask */
 #define IMR_ATM    0x00000400       /* AUI/TP Switch Mask */
 #define IMR_RWM    0x00000200       /* Receive Watchdog Time-Out Mask */
 #define IMR_RSM    0x00000100       /* Receive Stopped Mask */
 #define IMR_RUM    0x00000080       /* Receive Buffer Unavailable Mask */
 #define IMR_RIM    0x00000040       /* Receive Interrupt Mask */
 #define IMR_UNM    0x00000020       /* Underflow Interrupt Mask */
+#define IMR_ANM    0x00000010       /* Autonegotiation Complete Mask */
 #define IMR_LPM    0x00000010       /* Link Pass */
 #define IMR_TJM    0x00000008       /* Transmit Time-Out Jabber Mask */
 #define IMR_TUM    0x00000004       /* Transmit Buffer Unavailable Mask */
@@ -337,13 +387,7 @@
 #define IMR_TIM    0x00000001       /* Transmit Interrupt Mask */
 
 /*
-** DC21040 Missed Frames Counter (DE4X5_MFC)
-*/
-#define MFC_OVFL   0x00010000       /* Missed Frames Counter Overflow Bit */
-#define MFC_CNTR   0x0000ffff       /* Missed Frames Counter Bits */
-
-/*
-** DC21140 Missed Frames and FIFO Overflow Counters (DE4X5_MFC)
+** Missed Frames and FIFO Overflow Counters (DE4X5_MFC)
 */
 #define MFC_FOCO   0x10000000       /* FIFO Overflow Counter Overflow Bit */
 #define MFC_FOC    0x0ffe0000       /* FIFO Overflow Counter Bits */
@@ -444,7 +488,7 @@
 ** MII Management Auto Negotiation Advertisement Register
 */
 #define MII_ANA_TAF  0x03e0        /* Technology Ability Field */
-#define MII_ANA_T4AM 0x0400        /* T4 Technology Ability Mask */
+#define MII_ANA_T4AM 0x0200        /* T4 Technology Ability Mask */
 #define MII_ANA_TXAM 0x0180        /* TX Technology Ability Mask */
 #define MII_ANA_FDAM 0x0140        /* Full Duplex Technology Ability Mask */
 #define MII_ANA_HDAM 0x02a0        /* Half Duplex Technology Ability Mask */
@@ -459,7 +503,7 @@
 #define MII_ANLPA_ACK  0x4000      /* Remote Acknowledge */
 #define MII_ANLPA_RF   0x2000      /* Remote Fault */
 #define MII_ANLPA_TAF  0x03e0      /* Technology Ability Field */
-#define MII_ANLPA_T4AM 0x0400      /* T4 Technology Ability Mask */
+#define MII_ANLPA_T4AM 0x0200      /* T4 Technology Ability Mask */
 #define MII_ANLPA_TXAM 0x0180      /* TX Technology Ability Mask */
 #define MII_ANLPA_FDAM 0x0140      /* Full Duplex Technology Ability Mask */
 #define MII_ANLPA_HDAM 0x02a0      /* Half Duplex Technology Ability Mask */
@@ -476,6 +520,76 @@
 #define MEDIA_AUI      0x0004      /* AUI Media present */
 #define MEDIA_TP       0x0002      /* TP Media present */
 #define MEDIA_BNC      0x0001      /* BNC Media present */
+
+/*
+** SROM Definitions (Digital Semiconductor Format)
+*/
+#define SROM_SSVID     0x0000      /* Sub-system Vendor ID offset */
+#define SROM_SSID      0x0002      /* Sub-system ID offset */
+#define SROM_CISPL     0x0004      /* CardBus CIS Pointer low offset */
+#define SROM_CISPH     0x0006      /* CardBus CIS Pointer high offset */
+#define SROM_IDCRC     0x0010      /* ID Block CRC offset*/
+#define SROM_RSVD2     0x0011      /* ID Reserved 2 offset */
+#define SROM_SFV       0x0012      /* SROM Format Version offset */
+#define SROM_CCNT      0x0013      /* Controller Count offset */
+#define SROM_HWADD     0x0014      /* Hardware Address offset */
+#define SROM_MRSVD     0x007c      /* Manufacturer Reserved offset*/
+#define SROM_CRC       0x007e      /* SROM CRC offset */
+
+/*
+** SROM Media Connection Definitions
+*/
+#define SROM_10BT      0x0000      /*  10BASE-T half duplex */
+#define SROM_10BTN     0x0100      /*  10BASE-T with Nway */
+#define SROM_10BTF     0x0204      /*  10BASE-T full duplex */
+#define SROM_10BTNLP   0x0400      /*  10BASE-T without Link Pass test */
+#define SROM_10B2      0x0001      /*  10BASE-2 (BNC) */
+#define SROM_10B5      0x0002      /*  10BASE-5 (AUI) */
+#define SROM_100BTH    0x0003      /*  100BASE-T half duplex */
+#define SROM_100BTF    0x0205      /*  100BASE-T full duplex */
+#define SROM_100BT4    0x0006      /*  100BASE-T4 */
+#define SROM_100BFX    0x0007      /*  100BASE-FX half duplex (Fiber) */
+#define SROM_M10BT     0x0009      /*  MII 10BASE-T half duplex */
+#define SROM_M10BTF    0x020a      /*  MII 10BASE-T full duplex */
+#define SROM_M100BT    0x000d      /*  MII 100BASE-T half duplex */
+#define SROM_M100BTF   0x020e      /*  MII 100BASE-T full duplex */
+#define SROM_M100BT4   0x000f      /*  MII 100BASE-T4 */
+#define SROM_M100BF    0x0010      /*  MII 100BASE-FX half duplex */
+#define SROM_M100BFF   0x0211      /*  MII 100BASE-FX full duplex */
+#define SROM_PDA       0x0800      /*  Powerup & Dynamic Autosense */
+#define SROM_PAO       0x8800      /*  Powerup Autosense Only */
+#define SROM_NSMI      0xffff      /*  No Selected Media Information */
+
+/*
+** SROM Media Definitions
+*/
+#define SROM_10BASET   0x0000      /*  10BASE-T half duplex */
+#define SROM_10BASE2   0x0001      /*  10BASE-2 (BNC) */
+#define SROM_10BASE5   0x0002      /*  10BASE-5 (AUI) */
+#define SROM_100BASET  0x0003      /*  100BASE-T half duplex */
+#define SROM_10BASETF  0x0004      /*  10BASE-T full duplex */
+#define SROM_100BASETF 0x0005      /*  100BASE-T full duplex */
+#define SROM_100BASET4 0x0006      /*  100BASE-T4 */
+#define SROM_100BASEF  0x0007      /*  100BASE-FX half duplex */
+#define SROM_100BASEFF 0x0008      /*  100BASE-FX full duplex */
+
+#define BLOCK_LEN      0x7f        /* Extended blocks length mask */
+#define EXT_FIELD      0x40        /* Extended blocks extension field bit */
+#define MEDIA_CODE     0x3f        /* Extended blocks media code mask */
+
+/*
+** SROM Compact Format Block Masks
+*/
+#define COMPACT_FI      0x80       /* Format Indicator */
+#define COMPACT_LEN     0x04       /* Length */
+#define COMPACT_MC      0x3f       /* Media Code */
+
+/*
+** SROM Extended Format Block Type 0 Masks
+*/
+#define BLOCK0_FI      0x80        /* Format Indicator */
+#define BLOCK0_MCS     0x80        /* Media Code byte Sign */
+#define BLOCK0_MC      0x3f        /* Media Code */
 
 /*
 ** DC21040 Full Duplex Register (DE4X5_FDR)
@@ -501,17 +615,21 @@
 #define GEP_FLED 0x00000002        /* Force Activity LED on   (output) */
 #define GEP_MODE 0x00000001        /* 0: 10Mb/s,  1: 100Mb/s           */
 #define GEP_INIT 0x0000011f        /* Setup inputs (0) and outputs (1) */
-
+#define GEP_CTRL 0x00000100        /* GEP control bit                  */
 
 /*
-** DC21040 SIA Status Register (DE4X5_SISR)
+** SIA Status Register (DE4X5_SISR)
 */
 #define SISR_LPC   0xffff0000      /* Link Partner's Code Word */
 #define SISR_LPN   0x00008000      /* Link Partner Negotiable */
 #define SISR_ANS   0x00007000      /* Auto Negotiation Arbitration State */
-#define SISR_NSN   0x00000800      /* Non Stable NLPs Detected */
+#define SISR_NSN   0x00000800      /* Non Stable NLPs Detected (DC21041) */
+#define SISR_TRF   0x00000800      /* Transmit Remote Fault */
+#define SISR_NSND  0x00000400      /* Non Stable NLPs Detected (DC21142) */
 #define SISR_ANR_FDS 0x00000400    /* Auto Negotiate Restart/Full Duplex Sel.*/
+#define SISR_TRA   0x00000200      /* 10BASE-T Receive Port Activity */
 #define SISR_NRA   0x00000200      /* Non Selected Port Receive Activity */
+#define SISR_ARA   0x00000100      /* AUI Receive Port Activity */
 #define SISR_SRA   0x00000100      /* Selected Port Receive Activity */
 #define SISR_DAO   0x00000080      /* PLL All One */
 #define SISR_DAZ   0x00000040      /* PLL All Zero */
@@ -521,7 +639,7 @@
 #define SISR_LKF   0x00000004      /* Link Fail Status */
 #define SISR_NCR   0x00000002      /* Network Connection Error */
 #define SISR_PAUI  0x00000001      /* AUI_TP Indication */
-#define SIA_RESET  0x00000000      /* SIA Reset */
+#define SISR_MRA   0x00000001      /* MII Receive Port Activity */
 
 #define ANS_NDIS   0x00000000      /* Nway disable */
 #define ANS_TDIS   0x00001000      /* Transmit Disable */
@@ -532,7 +650,7 @@
 #define ANS_LCHK   0x00006000      /* Link Check */
 
 /*
-** DC21040 SIA Connectivity Register (DE4X5_SICR)
+** SIA Connectivity Register (DE4X5_SICR)
 */
 #define SICR_SDM   0xffff0000       /* SIA Diagnostics Mode */
 #define SICR_OE57  0x00008000       /* Output Enable 5 6 7 */
@@ -551,14 +669,14 @@
 #define SICR_SIM   0x00000040       /* Serial Interface Input Multiplexer */
 #define SICR_ENI   0x00000020       /* Encoder Input Multiplexer */
 #define SICR_EDP   0x00000010       /* SIA PLL External Input Enable */
-#define SICR_AUI   0x00000008       /* 10Base-T or AUI */
+#define SICR_AUI   0x00000008       /* 10Base-T (0) or AUI (1) */
 #define SICR_CAC   0x00000004       /* CSR Auto Configuration */
 #define SICR_PS    0x00000002       /* Pin AUI/TP Selection */
 #define SICR_SRL   0x00000001       /* SIA Reset */
-#define SICR_RESET 0xffff0000       /* Reset value for SICR */
+#define SIA_RESET  0x00000000       /* SIA Reset Value */
 
 /*
-** DC21040 SIA Transmit and Receive Register (DE4X5_STRR)
+** SIA Transmit and Receive Register (DE4X5_STRR)
 */
 #define STRR_TAS   0x00008000       /* 10Base-T/AUI Autosensing Enable */
 #define STRR_SPP   0x00004000       /* Set Polarity Plus */
@@ -578,8 +696,20 @@
 #define STRR_RESET 0xffffffff       /* Reset value for STRR */
 
 /*
-** DC21040 SIA General Register (DE4X5_SIGR)
+** SIA General Register (DE4X5_SIGR)
 */
+#define SIGR_RMI   0x40000000       /* Receive Match Interrupt */
+#define SIGR_GI1   0x20000000       /* General Port Interrupt 1 */
+#define SIGR_GI0   0x10000000       /* General Port Interrupt 0 */
+#define SIGR_CWE   0x08000000       /* Control Write Enable */
+#define SIGR_RME   0x04000000       /* Receive Match Enable */
+#define SIGR_GEI1  0x02000000       /* GEP Interrupt Enable on Port 1 */
+#define SIGR_GEI0  0x01000000       /* GEP Interrupt Enable on Port 0 */
+#define SIGR_LGS3  0x00800000       /* LED/GEP3 Select */
+#define SIGR_LGS2  0x00400000       /* LED/GEP2 Select */
+#define SIGR_LGS1  0x00200000       /* LED/GEP1 Select */
+#define SIGR_LGS0  0x00100000       /* LED/GEP0 Select */
+#define SIGR_MD    0x000f0000       /* General Purpose Mode and Data */
 #define SIGR_LV2   0x00008000       /* General Purpose LED2 value */
 #define SIGR_LE2   0x00004000       /* General Purpose LED2 enable */
 #define SIGR_FRL   0x00002000       /* Force Receiver Low */
@@ -602,7 +732,8 @@
 ** Receive Descriptor Bit Summary
 */
 #define R_OWN      0x80000000       /* Own Bit */
-#define RD_FL      0x7fff0000       /* Frame Length */
+#define RD_FF      0x40000000       /* Filtering Fail */
+#define RD_FL      0x3fff0000       /* Frame Length */
 #define RD_ES      0x00008000       /* Error Summary */
 #define RD_LE      0x00004000       /* Length Error */
 #define RD_DT      0x00003000       /* Data Type */
@@ -614,6 +745,7 @@
 #define RD_CS      0x00000040       /* Collision Seen */
 #define RD_FT      0x00000020       /* Frame Type */
 #define RD_RJ      0x00000010       /* Receive Watchdog */
+#define RD_RE      0x00000008       /* Report on MII Error */
 #define RD_DB      0x00000004       /* Dribbling Bit */
 #define RD_CE      0x00000002       /* CRC Error */
 #define RD_OF      0x00000001       /* Overflow */
@@ -649,40 +781,53 @@
 #define TD_TCH     0x01000000       /* Second Address Chained */
 #define TD_DPD     0x00800000       /* Disabled Padding */
 #define TD_FT0     0x00400000       /* Filtering Type */
-#define TD_RBS2    0x003ff800       /* Buffer 2 Size */
-#define TD_RBS1    0x000007ff       /* Buffer 1 Size */
+#define TD_TBS2    0x003ff800       /* Buffer 2 Size */
+#define TD_TBS1    0x000007ff       /* Buffer 1 Size */
 
 #define PERFECT_F  0x00000000
 #define HASH_F     TD_FT0
 #define INVERSE_F  TD_FT1
-#define HASH_O_F   TD_FT1| TD_F0
+#define HASH_O_F   (TD_FT1 | TD_F0)
 
 /*
 ** Media / mode state machine definitions
 */
-#define NC              0x0000     /* No Connection */
-#define TP              0x0001     /* 10Base-T */
-#define TP_NW           0x0002     /* 10Base-T with Nway */
-#define BNC             0x0004     /* Thinwire */
-#define AUI             0x0008     /* Thickwire */
+#define NC              0x0000     /* No Connection                        */
+#define TP              0x0001     /* 10Base-T                             */
+#define TP_NW           0x0002     /* 10Base-T with Nway                   */
+#define BNC             0x0004     /* Thinwire                             */
+#define AUI             0x0008     /* Thickwire                            */
 #define BNC_AUI         0x0010     /* BNC/AUI on DC21040 indistinguishable */
-#define ANS             0x0020     /* Intermediate AutoNegotiation State */
-#define ANS_1           0x0021     /* Intermediate AutoNegotiation State */
+#define ANS             0x0020     /* Intermediate AutoNegotiation State   */
+#define _10Mb           0x0040     /* 10Mb/s Ethernet                      */
+#define _100Mb          0x0080     /* 100Mb/s Ethernet                     */
+#define SPD_DET         0x0100     /* Parallel speed detection             */
+#define INIT            0x0200     /* Initial state                        */
+#define EXT_SIA         0x0400     /* External SIA for motherboard chip    */
+#define ANS_SUSPECT     0x0802     /* Suspect the ANS (TP) port is down    */
+#define TP_SUSPECT      0x0803     /* Suspect the TP port is down          */
+#define BNC_AUI_SUSPECT 0x0804     /* Suspect the BNC or AUI port is down  */
+#define EXT_SIA_SUSPECT 0x0805     /* Suspect the EXT SIA port is down     */
+#define BNC_SUSPECT     0x0806     /* Suspect the BNC port is down         */
+#define AUI_SUSPECT     0x0807     /* Suspect the AUI port is down         */
+#define MII             0x1000     /* MII on the 21143                     */
 
-#define _10Mb           0x0040     /* 10Mb/s Ethernet */
-#define _100Mb          0x0080     /* 100Mb/s Ethernet */
-#define SPD_DET         0x0100     /* Parallel speed detection */
-#define INIT            0x0200     /* Initial state */
-#define EXT_SIA         0x0400     /* External SIA for motherboard chip */
-#define ANS_SUSPECT     0x0802     /* Suspect the ANS (TP) port is down */
-#define TP_SUSPECT      0x0803     /* Suspect the TP port is down */
-#define BNC_AUI_SUSPECT 0x0804     /* Suspect the BNC or AUI port is down */
-#define EXT_SIA_SUSPECT 0x0805     /* Suspect the EXT SIA port is down */
-#define BNC_SUSPECT     0x0806     /* Suspect the BNC port is down */
-#define AUI_SUSPECT     0x0807     /* Suspect the AUI port is down */
+#define AUTO            0x4000     /* Auto sense the media or speed        */
+#define TIMER_CB        0x80000000 /* Timer callback detection             */
 
-#define AUTO            0x4000     /* Auto sense the media or speed */
-#define TIMER_CB        0x80000000 /* Timer callback detection */
+/*
+** DE4X5 DEBUG Options
+*/
+#define DEBUG_NONE      0x0000     /* No DEBUG messages */
+#define DEBUG_VERSION   0x0001     /* Print version message */
+#define DEBUG_MEDIA     0x0002     /* Print media messages */
+#define DEBUG_TX        0x0004     /* Print TX (queue_pkt) messages */
+#define DEBUG_RX        0x0008     /* Print RX (de4x5_rx) messages */
+#define DEBUG_SROM      0x0010     /* Print SROM messages */
+#define DEBUG_MII       0x0020     /* Print MII messages */
+#define DEBUG_OPEN      0x0040     /* Print de4x5_open() messages */
+#define DEBUG_CLOSE     0x0080     /* Print de4x5_close() messages */
+#define DEBUG_PCICFG    0x0100
 
 /*
 ** Miscellaneous
@@ -699,7 +844,6 @@
 #define POLL_DEMAND          1
 
 #define LOST_MEDIA_THRESHOLD 3
-#define LOST_MEDIA           (lp->lostMedia > LOST_MEDIA_THRESHOLD)
 
 #define MASK_INTERRUPTS      1
 #define UNMASK_INTERRUPTS    0
@@ -728,11 +872,16 @@
 */
 #define NO                   0
 #define FALSE                0
-#define CLOSED               0
 
 #define YES                  ~0
 #define TRUE                 ~0
-#define OPEN                 ~0
+
+/*
+** Adapter state
+*/
+#define INITIALISED          0     /* After h/w initialised and mem alloc'd */
+#define CLOSED               1     /* Ready for opening */
+#define OPEN                 2     /* Running */
 
 /*
 ** IEEE OUIs for various PHY vendor/chip combos - Reg 2 values only. Since
@@ -748,55 +897,67 @@
 ** Speed Selection stuff
 */
 #define SET_10Mb {\
-  if (lp->phy[lp->active].id) {\
-    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD);\
+  if ((lp->phy[lp->active].id) && (!lp->useSROM || lp->useMII)) {\
+    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX);\
     if ((lp->tmp != MII_SR_ASSC) || (lp->autosense != AUTO)) {\
-      mii_wr(MII_CR_10|(de4x5_full_duplex?MII_CR_FDM:0), MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
+      mii_wr(MII_CR_10|(lp->fdx?MII_CR_FDM:0), MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
     }\
-    omr |= ((de4x5_full_duplex ? OMR_FD : 0) | OMR_TTM);\
+    omr |= ((lp->fdx ? OMR_FDX : 0) | OMR_TTM);\
     outl(omr, DE4X5_OMR);\
-    outl(0, DE4X5_GEP);\
+    if (!lp->useSROM) lp->cache.gep = 0;\
+  } else if (lp->useSROM && !lp->useMII) {\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    omr |= (lp->fdx ? OMR_FDX : 0);\
+    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
   } else {\
-    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
-    omr |= (de4x5_full_duplex ? OMR_FD : 0);\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    omr |= (lp->fdx ? OMR_FDX : 0);\
     outl(omr | OMR_TTM, DE4X5_OMR);\
-    outl((de4x5_full_duplex ? 0 : GEP_FDXD), DE4X5_GEP);\
+    lp->cache.gep = (lp->fdx ? 0 : GEP_FDXD);\
   }\
 }
 
 #define SET_100Mb {\
-  if (lp->phy[lp->active].id) {\
+  if ((lp->phy[lp->active].id) && (!lp->useSROM || lp->useMII)) {\
     int fdx=0;\
     if (lp->phy[lp->active].id == NATIONAL_TX) {\
         mii_wr(mii_rd(0x18, lp->phy[lp->active].addr, DE4X5_MII) & ~0x2000,\
                       0x18, lp->phy[lp->active].addr, DE4X5_MII);\
     }\
-    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD);\
+    omr = inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX);\
     sr = mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII);\
-    if (!(sr & MII_ANA_T4AM) && de4x5_full_duplex) fdx=1;\
+    if (!(sr & MII_ANA_T4AM) && lp->fdx) fdx=1;\
     if ((lp->tmp != MII_SR_ASSC) || (lp->autosense != AUTO)) {\
       mii_wr(MII_CR_100|(fdx?MII_CR_FDM:0), MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
     }\
-    if (fdx) omr |= OMR_FD;\
+    if (fdx) omr |= OMR_FDX;\
     outl(omr, DE4X5_OMR);\
+    if (!lp->useSROM) lp->cache.gep = 0;\
+  } else if (lp->useSROM && !lp->useMII) {\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    omr |= (lp->fdx ? OMR_FDX : 0);\
+    outl(omr | lp->infoblock_csr6 | OMR_HBD, DE4X5_OMR);\
   } else {\
-    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
-    omr |= (de4x5_full_duplex ? OMR_FD : 0);\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    omr |= (lp->fdx ? OMR_FDX : 0);\
     outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
-    outl((de4x5_full_duplex ? 0 : GEP_FDXD) | GEP_MODE, DE4X5_GEP);\
+    lp->cache.gep = (lp->fdx ? 0 : GEP_FDXD) | GEP_MODE;\
   }\
 }
 
 /* FIX ME so I don't jam 10Mb networks */
 #define SET_100Mb_PDET {\
-  if (lp->phy[lp->active].id) {\
+  if ((lp->phy[lp->active].id) && (!lp->useSROM || lp->useMII)) {\
     mii_wr(MII_CR_100|MII_CR_ASSE, MII_CR, lp->phy[lp->active].addr, DE4X5_MII);\
-    omr = (inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
+    omr = (inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
+    outl(omr, DE4X5_OMR);\
+  } else if (lp->useSROM && !lp->useMII) {\
+    omr = (inl(DE4X5_OMR) & ~(OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     outl(omr, DE4X5_OMR);\
   } else {\
-    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FD));\
+    omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
-    outl(GEP_FDXD | GEP_MODE, DE4X5_GEP);\
+    lp->cache.gep = (GEP_FDXD | GEP_MODE);\
   }\
 }
 
@@ -817,7 +978,7 @@ struct de4x5_ioctl {
 ** Recognised commands for the driver 
 */
 #define DE4X5_GET_HWADDR	0x01 /* Get the hardware address */
-#define DE4X5_SET_HWADDR	0x02 /* Get the hardware address */
+#define DE4X5_SET_HWADDR	0x02 /* Set the hardware address */
 #define DE4X5_SET_PROM  	0x03 /* Set Promiscuous Mode */
 #define DE4X5_CLR_PROM  	0x04 /* Clear Promiscuous Mode */
 #define DE4X5_SAY_BOO	        0x05 /* Say "Boo!" to the kernel log file */

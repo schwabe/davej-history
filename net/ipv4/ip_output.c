@@ -26,6 +26,8 @@
  *		Alexander Demenshin:	Missing sk/skb free in ip_queue_xmit
  *					(in case if packet not accepted by
  *					output firewall rules)
+ *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
+ *		Juan Jose Ciarlante:	sk/skb source address rewriting
  */
 
 #include <asm/segment.h>
@@ -64,6 +66,78 @@
 #include <linux/firewall.h>
 #include <linux/mroute.h>
 #include <net/netlink.h>
+
+/*
+ *	Allows dynamic re-writing of packet's addresses.
+ *	if value > 1, be verbose about addr rewriting.
+ *	Currently implemented:
+ *		tcp_output.c   if sk->state!=TCP_SYN_SENT
+ *		ip_masq.c      if no packet has been received by tunnel
+ */
+int sysctl_ip_dynaddr = 0;
+
+/*
+ *	Very Promisc source address re-assignation.
+ *	ONLY acceptable if socket is NOT connected yet.
+ *      Caller already checked sysctl_ip_dynaddr != 0 and consistent sk->state
+ *	 (TCP_SYN_SENT for tcp, udp-connect sockets are set TCP_ESTABLISHED)
+ */
+
+int ip_rewrite_addrs (struct sock *sk, struct sk_buff *skb, struct device *dev)
+{
+	u32 new_saddr = dev->pa_addr;
+        struct iphdr *iph;
+        
+        /*
+         *	Be carefull: new_saddr must be !0
+         */
+        if (!new_saddr) {
+                printk(KERN_WARNING "ip_rewrite_addrs(): NULL device \"%s\" addr\n",
+                       dev->name);
+                return 0;
+        }
+        
+        /*
+         *	Ouch!, this should not happen.
+         */
+        if (!sk->saddr || !sk->rcv_saddr) {
+                printk(KERN_WARNING "ip_rewrite_addrs(): not valid sock addrs: saddr=%08lX rcv_saddr=%08lX",
+                       ntohl(sk->saddr), ntohl(sk->rcv_saddr));
+                return 0;
+        }
+        
+        /*
+         *	Be verbose if sysctl value > 1
+         */
+        if (sysctl_ip_dynaddr > 1) {
+                printk(KERN_INFO "ip_rewrite_addrs(): shifting saddr from %s",
+                       in_ntoa(skb->saddr));
+                printk(" to %s\n", in_ntoa(new_saddr));
+        }
+        
+        iph = skb->ip_hdr;
+
+        if (new_saddr != iph->saddr) {
+                iph->saddr = new_saddr;
+                skb->saddr = new_saddr;
+                ip_send_check(iph);
+        } else if (sysctl_ip_dynaddr > 1) {
+                printk(KERN_WARNING "ip_rewrite_addrs(): skb already changed (???).\n");
+                return 0;
+        }
+        
+        /*
+         *	Maybe whe are in a skb chain loop and socket address has
+         *	yet been 'damaged'.
+         */
+        if (new_saddr != sk->saddr) {
+                sk->saddr = new_saddr;
+                sk->rcv_saddr = new_saddr;
+                sk->prot->rehash(sk);
+        } else if (sysctl_ip_dynaddr > 1)
+                printk(KERN_NOTICE "ip_rewrite_addrs(): no change needed for sock\n");
+        return 1;
+}
 
 /*
  *	Loop a packet back to the sender.
@@ -218,7 +292,7 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 #endif
 	if (rp)
 	{
-		rt = ip_check_route(rp, daddr, skb->localroute);
+		rt = ip_check_route(rp, daddr, skb->localroute, *dev);
 		/*
 		 * If rp != NULL rt_put following below should not
 		 * release route, so that...
@@ -227,7 +301,7 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 			atomic_inc(&rt->rt_refcnt);
 	}
 	else
-		rt = ip_rt_route(daddr, skb->localroute);
+		rt = ip_rt_route(daddr, skb->localroute, *dev);
 
 
 	if (*dev == NULL)
@@ -590,7 +664,7 @@ int ip_build_xmit(struct sock *sk,
 #endif	
 		rt = ip_check_route(&sk->ip_route_cache, daddr,
 				    sk->localroute || (flags&MSG_DONTROUTE) ||
-				    (opt && opt->is_strictroute));
+				    (opt && opt->is_strictroute), sk->bound_device);
 		if (rt == NULL) 
 		{
 			ip_statistics.IpOutNoRoutes++;

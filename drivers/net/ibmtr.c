@@ -971,14 +971,15 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 			} /* ARB response */
 			
 			if (status & SSB_RESP_INT) { /* SSB response */
-						
+				unsigned char retcode;		
 				switch (readb(ti->ssb)) { /* SSB command check */
 					
 				      case XMIT_DIR_FRAME:
 				      case XMIT_UI_FRAME:
-					if (readb(ti->ssb+2)) /* checks ret_code */
+					retcode = readb(ti->ssb+2);
+					if (retcode && (retcode != 0x22)) /* checks ret_code */
 						DPRINTK("xmit ret_code: %02X xmit error code: %02X\n", 
-							(int)readb(ti->ssb+2), (int)readb(ti->ssb+6));		
+							(int)retcode, (int)readb(ti->ssb+6));		
 					else ti->tr_stats.tx_packets++;
 					break;
 					

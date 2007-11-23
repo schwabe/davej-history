@@ -122,6 +122,9 @@ extern int		ip_build_xmit(struct sock *sk,
 
 extern struct ip_mib	ip_statistics;
 
+extern int sysctl_ip_dynaddr;
+int ip_rewrite_addrs(struct sock *sk, struct sk_buff *skb, struct device *dev);
+
 /*
  *	Functions provided by ip_fragment.o
  */

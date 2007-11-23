@@ -169,10 +169,11 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	 *	raw protocol and you must do your own fragmentation at this level.
 	 */
 	 
-	if(len>dev->mtu+dev->hard_header_len)
+	if ((dev->flags & IFF_SOFTHEADERS && len>dev->mtu)
+	|| len>dev->mtu+dev->hard_header_len)
   		return -EMSGSIZE;
 
-	skb = sock_wmalloc(sk, len, 0, GFP_KERNEL);
+	skb = sock_wmalloc(sk, len+dev->hard_header_len, 0, GFP_KERNEL);
 
 	/*
 	 *	If the write buffer is full, then tough. At this level the user gets to
@@ -191,6 +192,16 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
 	 
 	skb->sk = sk;
 	skb->free = 1;
+	if (dev->flags & IFF_SOFTHEADERS) {
+        	/* Do the hard header calls for drivers that must set the
+		 * headers at transmission time by themselves. PPP and ISDN
+	 	 * are the notable offenders here. A proper fix requires some
+         	 * changes at the device driver level, but that is a 2.1 issue.
+         	 */
+        	skb_reserve(skb,dev->hard_header_len);
+		if (dev->hard_header)
+			dev->hard_header(skb,dev,ETH_P_IP,NULL,NULL,len);
+	}
 	memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 	skb->arp = 1;		/* No ARP needs doing on this (complete) frame */
 	skb->protocol = proto;

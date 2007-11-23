@@ -11,9 +11,6 @@ if [ "$CONFIG_INET" = "y" ]; then
 fi
 comment ' '
 tristate 'The IPX protocol' CONFIG_IPX
-if [ "$CONFIG_IPX" != "n" ]; then
-  bool 'Full internal IPX network' CONFIG_IPX_INTERN
-fi
 tristate 'Appletalk DDP' CONFIG_ATALK
 bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25
 if [ "$CONFIG_AX25" = "y" ]; then

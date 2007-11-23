@@ -476,6 +476,34 @@ int isofs_bmap(struct inode * inode,int block)
 		printk("_isofs_bmap: block<0");
 		return 0;
 	}
+
+	/*
+	 * If we are beyond the end of this file, don't give out any
+	 * blocks.
+	 */
+	if( (block << ISOFS_BUFFER_BITS(inode)) > inode->i_size )
+	  {
+	    off_t	max_legal_read_offset;
+
+	    /*
+	     * If we are *way* beyond the end of the file, print a message.
+	     * Access beyond the end of the file up to the next page boundary
+	     * is normal because of the way the page cache works.
+	     * In this case, we just return 0 so that we can properly fill
+	     * the page with useless information without generating any
+	     * I/O errors.
+	     */
+	    max_legal_read_offset = (inode->i_size + PAGE_SIZE - 1) 
+	      & ~(PAGE_SIZE - 1);
+	    if( (block << ISOFS_BUFFER_BITS(inode)) >= max_legal_read_offset )
+	      {
+
+		printk("_isofs_bmap: block>= EOF(%d, %d)", block, 
+		       inode->i_size);
+	      }
+	    return 0;
+	  }
+
 	return (inode->u.isofs_i.i_first_extent >> ISOFS_BUFFER_BITS(inode)) + block;
 }
 

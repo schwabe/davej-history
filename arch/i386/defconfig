@@ -124,7 +124,6 @@ CONFIG_EL3=y
 # ISDN subsystem
 #
 # CONFIG_ISDN is not set
-CONFIG_HISAX_EURO=y
 
 #
 # CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
@@ -161,6 +160,7 @@ CONFIG_SERIAL=y
 # CONFIG_STALDRV is not set
 # CONFIG_RISCOM8 is not set
 # CONFIG_PRINTER is not set
+# CONFIG_SPECIALIX is not set
 # CONFIG_MOUSE is not set
 # CONFIG_UMISC is not set
 # CONFIG_QIC02_TAPE is not set

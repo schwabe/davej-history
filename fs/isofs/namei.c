@@ -242,9 +242,12 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 	if (!ino) {
 		char *lcname;
 
-		/* If mounted with check=relaxed (and most likely norock),
-		   then first convert this name to lower case. */
-		if (dir->i_sb->u.isofs_sb.s_name_check == 'r'
+		/* First try the original name. If that doesn't work and the fs
+		 * was mounted with check=relaxed, convert the name to lower
+		 * case and try again.
+		 */
+		if (!(bh = isofs_find_entry(dir,name,len, &ino, &ino_back))
+		    && dir->i_sb->u.isofs_sb.s_name_check == 'r'
 		    && (lcname = kmalloc(len, GFP_KERNEL)) != NULL) {
 			int i;
 			char c;
@@ -256,8 +259,7 @@ int isofs_lookup(struct inode * dir,const char * name, int len,
 			}
 			bh = isofs_find_entry(dir,lcname,len, &ino, &ino_back);
 			kfree(lcname);
-		} else
-			bh = isofs_find_entry(dir,name,len, &ino, &ino_back);
+		}
 
 		if (!bh) {
 			iput(dir);

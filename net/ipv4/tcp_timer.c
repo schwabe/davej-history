@@ -138,7 +138,9 @@ void tcp_retransmit(struct sock *sk, int all)
 		return;
 	}
 
-	sk->ssthresh = sk->cong_window >> 1; /* remember window where we lost */
+	/* remember window where we lost */
+	sk->ssthresh = min(sk->cong_window,
+			(sk->window_seq-sk->rcv_ack_seq)/max(sk->mss,1)) >> 1;
 	/* sk->ssthresh in theory can be zero.  I guess that's OK */
 	sk->cong_count = 0;
 	sk->cong_window = 1;

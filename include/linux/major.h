@@ -69,6 +69,9 @@
 #define APBLOCK_MAJOR   60   /* AP1000 Block device */
 #define DDV_MAJOR       61   /* AP1000 DDV block device */
 
+#define SPECIALIX_NORMAL_MAJOR 75
+#define SPECIALIX_CALLOUT_MAJOR 76
+
 /*
  * Tests for SCSI devices.
  */

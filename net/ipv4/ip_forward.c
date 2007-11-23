@@ -177,7 +177,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		 * and give it to the IP sender for further processing.
 		 */
 
-		rt = ip_rt_route(target_addr, 0);
+		rt = ip_rt_route(target_addr, 0, NULL);
 
 		if (rt == NULL)
 		{
@@ -419,7 +419,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			skb2->dev=dev2;
 #ifdef CONFIG_IP_MROUTE
 			if(is_frag&IPFWD_MULTITUNNEL)
-				ip_encap(skb,skb->len, dev2, raddr);
+				ip_encap(skb, 0, dev2, target_addr);
 			else
 			{
 #endif

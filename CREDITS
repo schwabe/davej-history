@@ -240,7 +240,7 @@ S: USA
 
 N: Juan Jose Ciarlante
 E: jjciarla@raiz.uncu.edu.ar
-E: juanjo@irriga.uncu.edu.ar
+E: irriga@impsat1.com.ar
 D: Network driver alias support
 D: IP masq hashing and app modules
 S: Las Cuevas 2385 - Bo Guemes
@@ -862,8 +862,9 @@ S: Australia
 
 N: Martin Mares
 E: mj@k332.feld.cvut.cz
+W: http://atrey.karlin.mff.cuni.cz/~mj/
 D: BIOS video mode handling code
-D: Miscellaneous kernel fixes
+D: Miscellaneous kernel fixes and hacks
 D: MOXA C-218 serial board driver
 D: BOOTP support
 S: Kankovskeho 1241
@@ -1124,6 +1125,12 @@ S: Rebmannsweg 34h
 S: 79539 Loerrach
 S: Germany
 
+N: Joerg Reuter
+E: jreuter@poboxes.com
+E: dl1bke@db0pra.ampr.org (amateur radio)
+W: http://www.rat.de/jr
+D: Z8530 SCC driver and DAMA Slave for AX.25
+
 N: William E. Roadcap
 E: roadcapw@titus.org
 W: http://www.cfw.com/~roadcapw
@@ -1178,14 +1185,14 @@ S: 00980 Helsinki
 S: Finland
 
 N: Eric Schenk
-E: schenk@cs.toronto.edu
+E: Eric.Schenk@dna.lth.se
 D: Random kernel debugging.
 D: SYSV Semaphore code rewrite.
 D: Network layer debugging.
 D: Dial on demand facility (diald).
-S: 7 Borden Street
-S: Toronto, Ontario
-S: Canada M5S 2M8
+S: Dag Hammerskjolds v. 3E
+S: S-226 64 LUND
+S: Sweden
 
 N: Peter De Schrijver
 E: stud11@cc4.kuleuven.ac.be
@@ -1524,8 +1531,9 @@ S: Fin-00150 Helsinki
 S: Finland
 
 N: Roger E. Wolff
-E: wolff@dutecai.et.tudelft.nl
+E: R.E.Wolff@BitWizard.nl
 D: Written kmalloc/kfree
+D: Written Specialix IO8+ driver
 S: Oosterstraat 23
 S: 2611 TT Delft
 S: The Netherlands

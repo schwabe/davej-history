@@ -1,6 +1,6 @@
-#define RCS_ID "$Id: scc.c,v 1.41 1995/12/17 22:36:40 jreuter Exp jreuter $"
+#define RCS_ID "$Id: scc.c,v 1.67 1997/04/10 15:24:41 jreuter Exp jreuter $"
 
-#define BANNER "Z8530 SCC driver version 2.01.dl1bke (alpha) by DL1BKE\n"
+#define BANNER "Z8530 SCC driver version 2.4c.dl1bke (experimental) by DL1BKE\n"
 
 /*
 
@@ -11,7 +11,7 @@
 
    ********************************************************************
 
-	Copyright (c) 1993, 1995 Joerg Reuter DL1BKE
+	Copyright (c) 1993, 1997 Joerg Reuter DL1BKE
 
 	portions (c) 1993 Guido ten Dolle PE1NNZ
 
@@ -48,16 +48,6 @@
    
    ******************************************************************** 
 
-
-   ...If you find any portions of the code that are copyrighted to you,
-   and you don't want to see in here, please send me a private (!) 
-   message to my internet site. I will change it as soon as possible. 
-   Please don't flame to the tcp-group or anywhere else. Thanks!
-
-   Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
-		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
-		Internet: jreuter@lykos.tng.oche.de
-		
 		
    Incomplete history of z8530drv:
    -------------------------------
@@ -74,89 +64,105 @@
    950131	- changed copyright notice to GPL without limitations.
    
      .
-     .
+     .	<snip!>
      .
       
-   950922	- using kernel timer chain
-   
-   951002	- splitting timer routine, adding support for throttle/
-   		  unthrottle calls, removed typo in kiss decoder,
-   		  corrected termios settings.
-   		  
-   951011	- at last found one (the?) problem which caused the 
-   		  driver to mess up buffers on heavy load pe1ayx was
-   		  complaining about. Quite simple to reproduce:
-   		  set a 9k6 port into audio loopback, add a route
-   		  to 44.99.99.99 on that route and do a 
-   		  ping -f 44.99.99.99
-   		  
-   951013	- it still does not survive a flood ping...
-   
-   951107	- axattach w/o "-s" option (or setting an invalid 
-   		  baudrate) does not produce "division by zero" faults 
-   		  anymore.
-   		  
    951114	- rewrote memory management, took first steps to allow
 		  compilation as a module. Well, it looks like a whole
-		  new driver now. BTW: It  d o e s  survive the flood
-		  ping at last...
-		  
-   951116	- scc_config.h is gone -- the driver will be initialized
-   		  through ioctl-commands. Use sccinit.c for this purpose.
-   		  
-   951117	- Well --- what should I say: You can compile it as a
-   		  module now. And I solved the problem with slip.c...
-   		  
-   951120	- most ioctl() routines may be called w/o suser()
-   		  permissions, check if you've set the permissions of
-   		  /dev/scc* right! NOT 0666, you know it's evil ;-)
-   		  
-   951217	- found silly bug in init_channel(), some bugfixes
-   		  for the "standalone" module
+		  new driver now.
 
+   960413	- Heiko Eissfeld fixed missing verify_area() calls
+
+   960507	- the driver may be used as a network driver now.
+ 		  (for kernel AX.25). 
+
+   960512	- added scc_net_ioctl(), restructured ioctl routines
+   		  added /proc filesystem support
+   		  
+   960517	- fixed fullduplex mode 2 operation and waittime bug
+   
+   960518	- added fullduplex mode 3 to allow direct hardware
+   		  access via protocol layer. Removed kiss.not_slip,
+   		  I do not think someone really needed it.
+   		  
+   960607	- switching off receiver while transmission in halfduplex
+   		  mode with external MODEM clock.
+   		  
+   960715	- rewrote interrupt service routine for "polling" mode,
+   		  fixed bug in grouping algorithm.
+   		  
+   960719	- New transmit timer routines (let's see what it breaks),
+   		  some improvements regarding DCD and SYNC interrupts,
+   		  clean-up of printk().
+   		  
+   960725	- Fixed Maxkeyup problems. Will generate HDLC abort and
+   		  recover now.
+
+   960808	- Maxkeyup will set dev->tbusy until all remaining frames
+   		  are sent.
+   		  
+   970115	- Fixed return values in scc_net_tx(), added missing
+   		  scc_enqueue_buffer()
+   		  
+   970410	- Fixed problem with new *_timer() code in sched.h for
+   		  kernel 2.0.30.
 
    Thanks to:
    ----------
    
-   PE1CHL Rob	- for a lot of good ideas from his SCC driver for DOS
-   PE1NNZ Guido - for his port of the original driver to Linux
-   KA9Q   Phil  - from whom we stole the mbuf-structure
-   PA3AYX Hans  - for some useful changes
-   DL8MBT Flori - for support
-   DG0FT  Rene  - for the BayCom USCC support
-   PA3AOU Harry - for ESCC testing, information supply and support
-   
+   PE1CHL Rob	  - for a lot of good ideas from his SCC driver for DOS
+   PE1NNZ Guido   - for his port of the original driver to Linux
+   KA9Q   Phil    - from whom we stole the mbuf-structure
+   PA3AYX Hans    - for some useful changes
+   DL8MBT Flori   - for support
+   DG0FT  Rene    - for the BayCom USCC support
+   PA3AOU Harry   - for ESCC testing, information supply and support
+   Heiko Eissfeld - verify_area() clean-up
+   DL3KHB Klaus   - fullduplex mode 2 bug-hunter
+   PA3GCU Richard - for support and finding various bugs.
+
    PE1KOX Rob, DG1RTF Thomas, ON5QK Roland, G4XYW Andy, Linus,
-   EI9GL Paul,
-   
+   GW4PTS Alan, EI9GL Paul, G0DZB Peter, G8IMB Martin
+
    and all who sent me bug reports and ideas... 
    
    
    NB -- if you find errors, change something, please let me know
       	 first before you distribute it... And please don't touch
    	 the version number. Just replace my callsign in
-   	 "v2.01.dl1bke" with your own. Just to avoid confusion...
-   	 
+   	 "v2.4c.dl1bke" with your own. Just to avoid confusion...
+
    If you want to add your modification to the linux distribution
    please (!) contact me first.
-   	  
-   Jörg Reuter DL1BKE
-  
+   
+   New versions of the driver will be announced on the linux-hams
+   mailing list on vger.rutgers.edu. To subscribe send an e-mail
+   to majordomo@vger.rutgers.edu with the following line in
+   the body of the mail:
+   
+	   subscribe linux-hams
+	   
+   The content of the "Subject" field will be ignored.
+
+   vy 73,
+   Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
+		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
+		Internet: jreuter@poboxes.com  
 */
 
 /* ----------------------------------------------------------------------- */
 
-#define DEBUG_BUFFERS	/* keep defined unless it is really stable... */
-
-#undef  SCC_DELAY 	/* perhaps a 486DX2 is a *bit* too fast */
-#undef  SCC_LDELAY 5	/* slow it even a bit more down */
+#undef  SCC_DELAY 	/* perhaps your ISA bus is a *bit* too fast? */
+#undef  SCC_LDELAY 1	/* slow it even a bit more down */
 #undef  DONT_CHECK	/* don't look if the SCCs you specified are available */
 
 #define MAXSCC          4       /* number of max. supported chips */
 #define RXBUFFERS       8       /* default number of RX buffers */
 #define TXBUFFERS       8       /* default number of TX buffers */
 #define BUFSIZE         384     /* must not exceed 4096-sizeof(mbuf) */
-#define TPS             25      /* scc_tx_timer():  Ticks Per Second */
+#undef  DISABLE_ALL_INTS	/* use cli()/sti() in ISR instead of */
+				/* enable_irq()/disable_irq()        */
+#undef	SCC_DEBUG
 
 #define DEFAULT_CLOCK	4915200 /* default pclock if nothing is specified */
 
@@ -177,12 +183,26 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/string.h>
+#include <linux/in.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
-#include <linux/scc.h>
 
+#include <linux/skbuff.h>
+#include <linux/netdevice.h>
+#include <linux/if_ether.h>
+#include <linux/if_arp.h>
+#include <linux/socket.h>
+
+#ifdef CONFIG_SCC_STANDALONE
+#include "scc.h"
+#else
+#include <linux/scc.h>
+#endif
+
+#include <net/ax25.h>
+#include <asm/irq.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -193,6 +213,7 @@
 #include <ctype.h>
 #include <time.h>
 #include <linux/kernel.h>
+#include <linux/proc_fs.h>
 
 #ifdef MODULE
 int init_module(void);
@@ -203,6 +224,15 @@ void cleanup_module(void);
 #define Z8530_MAJOR 34
 #endif
 
+#ifndef PROC_NET_Z8530
+#define PROC_NET_Z8530 PROC_NET_LAST+10		/* sorry... */
+#endif
+
+#if !defined(CONFIG_SCC_DEV) && !defined(CONFIG_SCC_TTY)
+#define CONFIG_SCC_DEV
+#define CONFIG_SCC_TTY
+#endif
+
 int scc_init(void);
 
 static struct mbuf * scc_enqueue_buffer(struct mbuf **queue, struct mbuf * buffer);
@@ -211,6 +241,7 @@ static void alloc_buffer_pool(struct scc_channel *scc);
 static void free_buffer_pool(struct scc_channel *scc);
 static struct mbuf * scc_get_buffer(struct scc_channel *scc, char type);
 
+#ifdef CONFIG_SCC_TTY
 int scc_open(struct tty_struct *tty, struct file *filp);
 static void scc_close(struct tty_struct *tty, struct file *filp);
 int scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count);
@@ -219,81 +250,112 @@ static void scc_flush_chars(struct tty_struct *tty);
 static int scc_write_room(struct tty_struct *tty);
 static int scc_chars_in_buffer(struct tty_struct *tty);
 static void scc_flush_buffer(struct tty_struct *tty);
-static int scc_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd, unsigned long arg);
+static int scc_tty_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd, unsigned long arg);
 static void scc_set_termios(struct tty_struct *tty, struct termios *old_termios);
 static void scc_set_ldisc(struct tty_struct *tty);
 static void scc_throttle(struct tty_struct *tty);
 static void scc_unthrottle(struct tty_struct *tty);
 static void scc_start(struct tty_struct *tty);
 static void scc_stop(struct tty_struct *tty);
+static void kiss_encode(struct scc_channel *scc);
+static void scc_rx_timer(unsigned long);
+static void scc_change_speed(struct scc_channel *scc);
+#endif
+
+static void t_dwait(unsigned long);
+static void t_txdelay(unsigned long);
+static void t_tail(unsigned long);
+static void t_busy(unsigned long);
+static void t_maxkeyup(unsigned long);
+static void t_idle(unsigned long);
+static void scc_tx_done(struct scc_channel *);
+static void scc_start_tx_timer(struct scc_channel *, void (*)(unsigned long), unsigned long);
+static void scc_start_maxkeyup(struct scc_channel *);
+static void scc_start_defer(struct scc_channel *);
+
+static int scc_ioctl(struct scc_channel *scc, unsigned int cmd, void * arg);
 
 static void z8530_init(void);
 
-static void scc_change_speed(struct scc_channel *scc);
-static void kiss_encode(struct scc_channel *scc);
-
 static void init_channel(struct scc_channel *scc);
 static void scc_key_trx (struct scc_channel *scc, char tx);
-static void scc_txint(register struct scc_channel *scc);
-static void scc_exint(register struct scc_channel *scc);
-static void scc_rxint(register struct scc_channel *scc);
-static void scc_spint(register struct scc_channel *scc);
 static void scc_isr(int irq, void *dev_id, struct pt_regs *regs);
-static void scc_tx_timer(unsigned long);
-static void scc_rx_timer(unsigned long);
 static void scc_init_timer(struct scc_channel *scc);
 
-/* from serial.c */
+#ifdef CONFIG_SCC_DEV
+static int scc_net_setup(struct scc_channel *scc, unsigned char *name);
+static void scc_net_rx(struct scc_channel *scc, struct mbuf *bp);
+#endif
 
+static unsigned char *SCC_DriverName = "scc";
+
+#ifdef CONFIG_SCC_TTY
 static int baud_table[] = {
 	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
 	9600, 19200, 38400, 57600, 115200, 0 };
 
+struct semaphore scc_sem = MUTEX;
+static struct termios scc_std_termios;
+unsigned char scc_wbuf[BUFSIZE];
 
 struct tty_driver scc_driver;
-static int scc_refcount;
 static struct tty_struct *scc_table[2*MAXSCC];
 static struct termios scc_termios[2 * MAXSCC];
 static struct termios scc_termios_locked[2 * MAXSCC];
+static int scc_refcount;
+#endif
 
-struct irqflags { unsigned char used : 1; } Ivec[16];
+
+static struct irqflags { unsigned char used : 1; } Ivec[16];
 	
-struct scc_channel SCC_Info[2 * MAXSCC];         /* information per channel */
-io_port SCC_ctrl[2 * MAXSCC];			 /* Control ports */
+static struct scc_channel SCC_Info[2 * MAXSCC];	/* information per channel */
 
-unsigned char Random = 0;		/* random number for p-persist */
-unsigned char Driver_Initialized = 0;
-int Nchips = 0;
-io_port Vector_Latch = 0;
+static struct scc_ctrl {
+	io_port chan_A;
+	io_port chan_B;
+	int irq;
+} SCC_ctrl[MAXSCC+1];
 
-struct semaphore scc_sem = MUTEX;
-unsigned char scc_wbuf[BUFSIZE];
+static unsigned char Driver_Initialized = 0;
+static int Nchips = 0;
+static io_port Vector_Latch = 0;
 
-static struct termios scc_std_termios;
+#define SCC_DEVNAME (scc->stat.is_netdev? scc->dev->name:kdevname(scc->tty->device))
 
 /* ******************************************************************** */
 /* *			Port Access Functions			      * */
 /* ******************************************************************** */
 
-static inline unsigned char
-InReg(register io_port port, register unsigned char reg)
+/* These provide interrupt save 2-step access to the Z8530 registers */
+
+static __inline__ unsigned char
+InReg(io_port port, unsigned char reg)
 {
+	unsigned long flags;
+	unsigned char r;
+	
+	save_flags(flags);
+	cli();
 #ifdef SCC_LDELAY
-	register unsigned char r;
 	Outb(port, reg);
 	udelay(SCC_LDELAY);
 	r=Inb(port);
 	udelay(SCC_LDELAY);
-	return r;
 #else
 	Outb(port, reg);
-	return Inb(port);
+	r=Inb(port);
 #endif
+	restore_flags(flags);
+	return r;
 }
 
-static inline void
-OutReg(register io_port port, register unsigned char reg, register unsigned char val)
+static __inline__ void
+OutReg(io_port port, unsigned char reg, unsigned char val)
 {
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
 #ifdef SCC_LDELAY
 	Outb(port, reg); udelay(SCC_LDELAY);
 	Outb(port, val); udelay(SCC_LDELAY);
@@ -301,25 +363,39 @@ OutReg(register io_port port, register unsigned char reg, register unsigned char
 	Outb(port, reg);
 	Outb(port, val);
 #endif
+	restore_flags(flags);
 }
 
-static inline void
-wr(register struct scc_channel *scc, register unsigned char reg, register unsigned char val)
+static __inline__ void
+wr(struct scc_channel *scc, unsigned char reg, unsigned char val)
 {
 	OutReg(scc->ctrl, reg, (scc->wreg[reg] = val));
 }
 
-static inline void
-or(register struct scc_channel *scc, register unsigned char reg, register unsigned char val)
+static __inline__ void
+or(struct scc_channel *scc, unsigned char reg, unsigned char val)
 {
 	OutReg(scc->ctrl, reg, (scc->wreg[reg] |= val));
 }
 
-static inline void
-cl(register struct scc_channel *scc, register unsigned char reg, register unsigned char val)
+static __inline__ void
+cl(struct scc_channel *scc, unsigned char reg, unsigned char val)
 {
 	OutReg(scc->ctrl, reg, (scc->wreg[reg] &= ~val));
 }
+
+#ifdef DISABLE_ALL_INTS
+static __inline__ void scc_cli(int irq)
+{ cli(); }
+static __inline__ void scc_sti(int irq)
+{ sti(); }
+#else
+static __inline__ void scc_cli(int irq)
+{ disable_irq(irq); }
+static __inline__ void scc_sti(int irq)
+{ enable_irq(irq); }
+#endif
+
 
 /* ******************************************************************** */
 /* * 			Memory Buffer Management			*/
@@ -330,6 +406,9 @@ cl(register struct scc_channel *scc, register unsigned char reg, register unsign
  * advantage to access both, first and last element of the list, very
  * fast. It has the disadvantage to mess things up double if something
  * is wrong.
+ *
+ * We could have used the socket buffer routines from skbuff.h instead,
+ * but our own routines keep the driver portable...
  *
  * Every scc channel has its own buffer pool now with an adjustable
  * number of buffers for transmit and receive buffers. The buffer
@@ -354,23 +433,6 @@ scc_enqueue_buffer(struct mbuf **queue, struct mbuf * buffer)
 	
 	save_flags(flags); cli();		/* do not disturb! */
 
-#ifdef DEBUG_BUFFERS			
-	if (queue == NULLBUFP)			/* called with illegal parameters, notify the user */
-
-	{
-		printk("z8530drv: Pointer to queue anchor is NULL pointer [enq]\n");
-		restore_flags(flags);
-		return NULLBUF;
-	}
-	
-	if (buffer == NULLBUF)
-	{
-		printk("z8530drv: can't enqueue a NULL pointer\n");
-		restore_flags(flags);
-		return NULLBUF;
-	}
-#endif
-
 	anchor = *queue;			/* the anchor is the "start" of the chain */
 
 	if (anchor == NULLBUF)			/* found an empty list */
@@ -380,22 +442,9 @@ scc_enqueue_buffer(struct mbuf **queue, struct mbuf * buffer)
 	} else	
 	if (anchor->prev == NULLBUF)		/* list has one member only */
 	{
-#ifdef DEBUG_BUFFERS
-		if (anchor->prev != NULLBUF)	/* oops?! */
-			printk("weird --- anchor->prev is NULL but not anchor->next [enq]\n");
-#endif			
 		anchor->next = anchor->prev = buffer;
 		buffer->next = buffer->prev = anchor;
-	} else
-#ifdef DEBUG_BUFFERS	
-	if (anchor->next == NULLBUF)		/* this has to be an error. Okay, make the best out of it */
-	{
-		printk("z8530drv: weird --- anchor->next is NULL but not anchor->prev [enq]\n");
-		anchor->next = anchor->prev = buffer;
-		buffer->next = buffer->prev = anchor;
-	} else
-#endif
-	{					/* every other case */
+	} else {				/* every other case */
 		buffer->prev = anchor->prev;	/* self explaining, isn't it? */
 		buffer->next = anchor;
 		anchor->prev->next = buffer;
@@ -418,28 +467,12 @@ scc_dequeue_buffer(struct mbuf **queue)
 	
 	save_flags(flags); cli();
 
-#ifdef DEBUG_BUFFERS			
-	if (queue == NULLBUFP)			/* called with illegal parameter */
-
-	{
-		printk("z8530drv: Pointer to queue anchor is NULL pointer [deq]\n");
-		restore_flags(flags);
-		return NULLBUF;
-	}
-#endif
-
 	buffer = *queue;			/* head of the chain */
 	
 	if (buffer != NULLBUF)			/* not an empty list? */
 	{
 		if (buffer->prev != NULLBUF)	/* not last buffer? */
 		{
-#ifdef DEBUG_BUFFERS
-			if (buffer->next == NULLBUF)
-			{			/* what?! */
-				printk("z8530drv: weird --- buffer->next is NULL but not buffer->prev [deq]\n");
-			} else
-#endif
 			if (buffer->prev->next == buffer->prev->prev)
 			{			/* only one buffer remaining... */
 				buffer->next->prev = NULLBUF;
@@ -449,10 +482,7 @@ scc_dequeue_buffer(struct mbuf **queue)
 				buffer->prev->next = buffer->next;
 			}
 		} 
-#ifdef DEBUG_BUFFERS
-		else if (buffer->next != NULLBUF)
-			printk("z8530drv: weird --- buffer->prev is NULL but not buffer->next [deq]\n");
-#endif
+
 		*queue = buffer->next;		/* new head of chain */
 		
 		buffer->next = NULLBUF;		/* for security only... */
@@ -476,6 +506,12 @@ alloc_buffer_pool(struct scc_channel *scc)
 	struct mbuf * bptr;
 	int  buflen;
 	
+	if (scc->mempool)
+	{
+		printk(KERN_DEBUG "z8530drv: alloc_buffer_pool() had buffers already allocated\n");
+		return;
+	}
+	
 	buflen = sizeof(struct mbuf) + scc->stat.bufsize;
 	
 	if (scc->stat.bufsize <  336) scc->stat.bufsize = 336;
@@ -487,7 +523,6 @@ alloc_buffer_pool(struct scc_channel *scc)
 	
 	if (scc->stat.rxbuffers < 4)  scc->stat.rxbuffers = 4;
 	if (scc->stat.txbuffers < 4)  scc->stat.txbuffers = 4;
-	
 
 	
 	/* allocate receive buffers for this channel */
@@ -502,7 +537,7 @@ alloc_buffer_pool(struct scc_channel *scc)
 		
 		if (bptr == NULLBUF)
 		{
-			printk("z8530drv: %s: can't allocate memory for rx buffer pool", kdevname(scc->tty->device));
+			printk(KERN_WARNING "z8530drv: %s: can't allocate memory for rx buffer pool", SCC_DEVNAME);
 			break;
 		}
 		
@@ -527,7 +562,7 @@ alloc_buffer_pool(struct scc_channel *scc)
 		
 		if (bptr == NULLBUF)
 		{
-			printk("z8530drv: %s: can't allocate memory for tx buffer pool", kdevname(scc->tty->device));
+			printk(KERN_WARNING "z8530drv: %s: can't allocate memory for tx buffer pool", SCC_DEVNAME);
 			break;
 		}
 		
@@ -537,6 +572,8 @@ alloc_buffer_pool(struct scc_channel *scc)
 		
 		scc_enqueue_buffer(&scc->tx_buffer_pool, bptr);
 	}
+	
+	scc->mempool = 1;
 }
 
 
@@ -545,102 +582,89 @@ alloc_buffer_pool(struct scc_channel *scc)
 static void 
 free_buffer_pool(struct scc_channel *scc)
 {
-	struct mbuf * bptr;
 	unsigned long flags;
-	int cnt;
+	int rx_cnt, tx_cnt;
+	
+	if (!scc->mempool)
+		return;
 	
 	/* this one is a bit tricky and probably dangerous. */
+	rx_cnt = tx_cnt = 0;
 		
 	save_flags(flags); cli();
 	
 	/* esp. to free the buffers currently in use by ISR */
 	
-	bptr = scc->rx_bp;
-	if (bptr != NULLBUF)
+	if (scc->rx_bp != NULLBUF)
 	{
+		kfree(scc->rx_bp);
 		scc->rx_bp = NULLBUF;
-		scc_enqueue_buffer(&scc->rx_buffer_pool, bptr);
+		rx_cnt++;
 	}
 
-	bptr = scc->tx_bp;	
-	if (bptr != NULLBUF)
+	if (scc->tx_bp != NULLBUF)
 	{
+		kfree(scc->tx_bp);
 		scc->tx_bp = NULLBUF;
-		scc_enqueue_buffer(&scc->tx_buffer_pool, bptr);
+		tx_cnt++;
 	}
 	
-	bptr = scc->kiss_decode_bp;
-	if (bptr != NULLBUF)
+	if (scc->kiss_decode_bp != NULLBUF)
 	{
+		kfree(scc->kiss_decode_bp);
 		scc->kiss_decode_bp = NULLBUF;
-		scc_enqueue_buffer(&scc->tx_buffer_pool, bptr);
+		tx_cnt++;
 	}
-	
-	bptr = scc->kiss_encode_bp;
-	if (bptr != NULLBUF)
+
+#ifdef CONFIG_SCC_TTY
+	if (scc->kiss_encode_bp != NULLBUF)
 	{
+		kfree(scc->kiss_encode_bp);
 		scc->kiss_encode_bp = NULLBUF;
-		scc_enqueue_buffer(&scc->rx_buffer_pool, bptr);
+		rx_cnt++;
 	}
+#endif
 	
 	restore_flags(flags);
 	
 	
 	while (scc->rx_queue != NULLBUF)
 	{
-		bptr = scc_dequeue_buffer(&scc->rx_queue);
-		scc_enqueue_buffer(&scc->rx_buffer_pool, bptr);
+		kfree(scc_dequeue_buffer(&scc->rx_queue));
+		rx_cnt++;
 	}
+	scc->stat.rx_queued = 0;
 	
 	while (scc->tx_queue != NULLBUF)
 	{
-		bptr = scc_dequeue_buffer(&scc->tx_queue);
-		scc_enqueue_buffer(&scc->tx_buffer_pool, bptr);
+		kfree(scc_dequeue_buffer(&scc->tx_queue));
+		tx_cnt++;
 	}
-	
-	/* you want to know why we move every buffer back to the
-	   buffer pool? Well, good question... ;-) 
-	 */
-	
-	cnt = 0;
-	
-	/* Probably because we just want a central position in the
-	   code were we actually call free()?
-	 */
+	scc->stat.tx_queued = 0;
 	
 	while (scc->rx_buffer_pool != NULLBUF)
 	{
-		bptr = scc_dequeue_buffer(&scc->rx_buffer_pool);
-		
-		if (bptr != NULLBUF)
-		{
-			cnt++;
-			kfree(bptr);
-		}
+		kfree(scc_dequeue_buffer(&scc->rx_buffer_pool));
+		rx_cnt++;
 	}
-
-	if (cnt < scc->stat.rxbuffers)		/* hmm... hmm... :-( */
-		printk("z8530drv: oops, deallocated only %d of %d rx buffers\n", cnt, scc->stat.rxbuffers);
-	if (cnt > scc->stat.rxbuffers)		/* WHAT?!! */
-		printk("z8530drv: oops, deallocated %d instead of %d rx buffers. Very strange.\n", cnt, scc->stat.rxbuffers);
-		
-	cnt = 0;
 	
 	while (scc->tx_buffer_pool != NULLBUF)
 	{
-		bptr = scc_dequeue_buffer(&scc->tx_buffer_pool);
-		
-		if (bptr != NULLBUF)
-		{
-			cnt++;
-			kfree(bptr);
-		}
+		kfree(scc_dequeue_buffer(&scc->tx_buffer_pool));
+		tx_cnt++;
 	}
-
-	if (cnt < scc->stat.txbuffers)
-		printk("z8530drv: oops, deallocated only %d of %d tx buffers\n", cnt, scc->stat.txbuffers);
-	if (cnt > scc->stat.txbuffers)
-		printk("z8530drv: oops, deallocated %d instead of %d tx buffers. Very strange.\n", cnt, scc->stat.txbuffers);
+	
+	if (rx_cnt < scc->stat.rxbuffers)	/* hmm... hmm... :-( */
+		printk(KERN_ERR "z8530drv: oops, deallocated only %d of %d rx buffers\n", rx_cnt, scc->stat.rxbuffers);
+	if (rx_cnt > scc->stat.rxbuffers)	/* WHAT?!! */
+		printk(KERN_ERR "z8530drv: oops, deallocated %d instead of %d rx buffers. Very strange.\n", rx_cnt, scc->stat.rxbuffers);
+		
+	if (tx_cnt < scc->stat.txbuffers)
+		printk(KERN_ERR "z8530drv: oops, deallocated only %d of %d tx buffers\n", tx_cnt, scc->stat.txbuffers);
+	if (tx_cnt > scc->stat.txbuffers)
+		printk(KERN_ERR "z8530drv: oops, deallocated %d instead of %d tx buffers. Very strange.\n", tx_cnt, scc->stat.txbuffers);
+		
+	scc->mempool = 0;
 }
 		
 		
@@ -666,28 +690,33 @@ scc_get_buffer(struct scc_channel *scc, char type)
 		
 		if (bptr == NULLBUF)
 		{
-			printk("z8530drv: scc_get_buffer(%s): tx buffer pool empty\n", kdevname(scc->tty->device));
-			
+#if 0
+			printk(KERN_DEBUG "z8530drv: tx buffer pool for %s empty\n", SCC_DEVNAME);
+#endif
 			/* use the oldest from the queue instead */
 			
 			bptr = scc_dequeue_buffer(&scc->tx_queue);
+			scc->stat.tx_queued--;
+			scc->stat.nospace++;
 			
 			/* this should never, ever happen... */
 			
 			if (bptr == NULLBUF)
-				printk("z8530drv: scc_get_buffer(): panic - even no buffer found in tx queue\n");
+				printk(KERN_ERR "z8530drv: panic - all tx buffers for %s gone\n", SCC_DEVNAME);
 		}
 	} else {
 		bptr = scc_dequeue_buffer(&scc->rx_buffer_pool);
 		
 		if (bptr == NULLBUF)
 		{
-			printk("z8530drv: scc_get_buffer(%s): rx buffer pool empty\n", kdevname(scc->tty->device));
+			printk(KERN_DEBUG "z8530drv: rx buffer pool for %s empty\n", SCC_DEVNAME);
 			
 			bptr = scc_dequeue_buffer(&scc->rx_queue);
+			scc->stat.rx_queued--;
+			scc->stat.nospace++;
 			
 			if (bptr == NULLBUF)
-				printk("z8530drv: scc_get_buffer(): panic - even no buffer found in rx queue\n");
+				printk(KERN_ERR "z8530drv: panic - all rx buffers for %s gone\n", SCC_DEVNAME);
 		}	
 	}
 	
@@ -705,192 +734,68 @@ scc_get_buffer(struct scc_channel *scc, char type)
 /* *			Interrupt Service Routines		      * */
 /* ******************************************************************** */
 
-/* ----> interrupt service routine for the 8530 <---- */
-
-/* it's recommended to keep this function "inline" ;-) */
-
-static inline void
-scc_isr_dispatch(register struct scc_channel *scc, register int vector)
-{
-	switch (vector & VECTOR_MASK)
-	{
-		case TXINT: scc_txint(scc); break;
-		case EXINT: scc_exint(scc); break;
-		case RXINT: scc_rxint(scc); break;
-		case SPINT: scc_spint(scc); break;
-		default	  : printk("scc_isr(): unknown interrupt status (addr %4.4x, state %2.2x)\n",scc->ctrl,vector);
-	}
-}
 
 
+/* ----> subroutines for the interrupt handlers <---- */
 
 
+#ifdef CONFIG_SCC_TTY
+/* kick rx_timer (try to send received frame or a status message ASAP) */
 
-/* If the card has a latch for the interrupt vector (like the PA0HZP card)
-   use it to get the number of the chip that generated the int.
-   If not: poll all defined chips.
+/* of course we could define a "bottom half" routine to do the job,
+   but since its structures are saved in an array instead of a linked
+   list we would get in trouble if it clashes with another driver.
+   IMHO we are fast enough with a timer routine called on the next 
+   timer-INT... Your opinions?
  */
 
-static void
-scc_isr(int irq, void *dev_id, struct pt_regs *regs)
+static __inline__ void
+kick_rx_timer(struct scc_channel *scc)
 {
-	register unsigned char vector;	
-	register struct scc_channel *scc;
-	register io_port q;
-	register io_port *p;
-	register int k;
-
-
-	cli();
-	
-	if (Vector_Latch)
-	{
-	    	while(1)			   /* forever...? */
-    		{ 
-			Outb(Vector_Latch, 0);      /* Generate INTACK */
-        
-			/* Read the vector */
-			if((vector=Inb(Vector_Latch)) >= 16 * Nchips) break; 
-						/* ...not forever! */
-          
-			/* Extract channel number and status from vector. */
-			/* Isolate channel number */
-			/* Call handler */
-	        
-			if (vector & 0x01) break; 
-        	 
-		        scc=&SCC_Info[(((vector>>1)&0x7c)^0x04) >> 2];
-        
-			if (!scc->tty) break;
-
-			scc_isr_dispatch(scc, vector);
-			
-			Outb(scc->ctrl,0x38);              /* Reset Highest IUS" opcode to WR0 */
-		}  
-	    	
-		sti();	
-		return;
-	}
-	
-	
-	/* Find the SCC generating the interrupt by polling all attached SCCs
-	 * reading RR3A (the interrupt pending register)
-	 */
-
-	k = 0;
-	p = SCC_ctrl;
-	
-	while (k++ < Nchips)
-	{
-		if (!(q=*p++)) break;
-		
-		Outb(q,3);
-		
-		if (Inb(q))
-		{
-			if (!(q=*p++)) break;
-			
-			Outb(q,2);
-			vector=Inb(q);                  /* Read the vector */
-        
-		        /* Extract channel number and status from vector. */
-		        /* Isolate channel number */
-		        /* Call handler */
-        
-
-			if (vector & 1) break; 
-        
-		        scc = &SCC_Info[(((vector >> 1) & 0x7c) ^ 0x04) >> 2];
-        
-		        if (!scc->tty) break;
-
-			/* Isolate status info from vector, call handler */
-			
-			scc_isr_dispatch(scc, vector);
-
-			k = 0;
-			p = SCC_ctrl;
-
-	     	} else p++;
-	}    
-	
-	sti();
+	del_timer(&(scc->rx_t));
+	scc->rx_t.expires = jiffies + 1;
+	scc->rx_t.function = scc_rx_timer;
+	scc->rx_t.data = (unsigned long) scc;
+	add_timer(&scc->rx_t);
 }
+#endif
 
-
-
-/* ----> four different interrupt handlers for Tx, Rx, changing of	*/
-/*       DCD/CTS and Rx/Tx errors					*/
-
-
-/* Transmitter interrupt handler */
-static void
-scc_txint(register struct scc_channel *scc)
+static __inline__ void
+scc_notify(struct scc_channel *scc, int event)
 {
-	register struct mbuf *bp;
-
-	scc->stat.txints++;
-
-	bp = scc->tx_bp;
+	struct mbuf *bp;
 	
+	if (scc->kiss.fulldup != KISS_DUPLEX_OPTIMA)
+		return;
+	
+	bp = scc_get_buffer(scc, BT_RECEIVE);
+
 	if (bp == NULLBUF)
-	{
-		do 
-		{
-			if (bp != NULLBUF)
-				scc_enqueue_buffer(&scc->tx_buffer_pool, bp);
-
-			bp = scc_dequeue_buffer(&scc->tx_queue);
-			
-			if (bp == NULLBUF)
-			{
-				scc->stat.tx_state = TXS_BUSY;
-				scc->t_tail = scc->kiss.tailtime;
-				
-				Outb(scc->ctrl, RES_Tx_P);	/* clear int */
-				return;
-			}
-			
-			if ( scc->kiss.not_slip && (bp->cnt > 0) )
-			{
-				bp->rw_ptr++;
-				bp->cnt--;
-			}
-			
-		} while (bp->cnt < 1);
-		
-		
-		Outb(scc->ctrl, RES_Tx_CRC);	/* reset CRC generator */
-		or(scc,R10,ABUNDER);		/* re-install underrun protection */
-		Outb(scc->data,*bp->rw_ptr);	/* send byte */
-		if (!scc->enhanced)		/* reset EOM latch */
-			Outb(scc->ctrl, RES_EOM_L);
-		
-		scc->tx_bp = bp;
-		scc->stat.tx_state = TXS_ACTIVE; /* next byte... */
-	} else
-	if (bp->cnt <= 0)
-	{
-		if (--scc->stat.tx_queued < 0) scc->stat.tx_queued = 0;
-		
-		Outb(scc->ctrl, RES_Tx_P);	/* reset pending int */
-		cl(scc, R10, ABUNDER);		/* send CRC */
-		scc_enqueue_buffer(&scc->tx_buffer_pool, bp);
-		scc->tx_bp = NULLBUF;
-		scc->stat.tx_state = TXS_NEWFRAME; /* next frame... */
 		return;
+		
+	bp->data[0] = PARAM_HWEVENT;
+	bp->data[1] = event;
+	bp->cnt += 2;
+
+	if (scc->stat.is_netdev)
+	{
+#ifdef CONFIG_SCC_DEV
+		scc_net_rx(scc, bp);
+		scc_enqueue_buffer(&scc->rx_buffer_pool, bp);
+#endif
 	} else {
-		Outb(scc->data,*bp->rw_ptr);		
+#ifdef CONFIG_SCC_TTY
+		scc_enqueue_buffer(&scc->rx_queue, bp);
+		scc->stat.rx_queued++;
+		kick_rx_timer(scc);
+#endif
 	}
-	
-	bp->rw_ptr++;			/* increment pointer */
-	bp->cnt--;                      /* decrease byte count */
 }
 
-static inline void
-flush_FIFO(register struct scc_channel *scc)
+static __inline__ void
+flush_rx_FIFO(struct scc_channel *scc)
 {
-	register int k;
+	int k;
 	
 	for (k=0; k<3; k++)
 		Inb(scc->data);
@@ -905,11 +810,89 @@ flush_FIFO(register struct scc_channel *scc)
 }
 
 
-/* External/Status interrupt handler */
-static void
-scc_exint(register struct scc_channel *scc)
+/* ----> four different interrupt handlers for Tx, Rx, changing of	*/
+/*       DCD/CTS and Rx/Tx errors					*/
+
+/* Transmitter interrupt handler */
+static __inline__ void
+scc_txint(struct scc_channel *scc)
 {
-	register unsigned char status,changes,chg_and_stat;
+	struct mbuf *bp;
+
+	scc->stat.txints++;
+
+	bp = scc->tx_bp;
+	
+	/* send first octet */
+	
+	if (bp == NULLBUF)
+	{
+		do
+		{
+			if (bp != NULLBUF)
+			{
+				scc_enqueue_buffer(&scc->tx_buffer_pool, bp);
+				scc->stat.tx_queued--;
+			}
+
+			bp = scc_dequeue_buffer(&scc->tx_queue);
+			
+			if (bp == NULLBUF)
+			{
+				scc_tx_done(scc);
+				Outb(scc->ctrl, RES_Tx_P);	/* clear int */
+				return;
+			}
+			
+			if (bp->cnt > 0)
+			{
+				bp->rw_ptr++;
+				bp->cnt--;
+			}
+			
+		} while (bp->cnt < 1);
+		
+		scc->tx_bp = bp;
+		scc->stat.tx_state = TXS_ACTIVE;
+
+		OutReg(scc->ctrl, R0, RES_Tx_CRC);
+						/* reset CRC generator */
+		or(scc,R10,ABUNDER);		/* re-install underrun protection */
+		Outb(scc->data,*bp->rw_ptr++);	/* send byte */
+
+		if (!scc->enhanced)		/* reset EOM latch */
+			Outb(scc->ctrl,RES_EOM_L);
+
+		bp->cnt--;
+		return;
+	}
+	
+	/* End Of Frame... */
+	
+	if (bp->cnt <= 0)
+	{
+		Outb(scc->ctrl, RES_Tx_P);	/* reset pending int */
+		cl(scc, R10, ABUNDER);		/* send CRC */
+		scc_enqueue_buffer(&scc->tx_buffer_pool, bp);
+		scc->stat.tx_queued--;
+		scc->tx_bp = NULLBUF;
+		scc->stat.tx_state = TXS_NEWFRAME; /* next frame... */
+		return;
+	} 
+	
+	/* send octet */
+	
+	Outb(scc->data,*bp->rw_ptr);		
+	bp->rw_ptr++;			/* increment pointer */
+	bp->cnt--;                      /* decrease byte count */
+}
+
+
+/* External/Status interrupt handler */
+static __inline__ void
+scc_exint(struct scc_channel *scc)
+{
+	unsigned char status,changes,chg_and_stat;
 
 	scc->stat.exints++;
 
@@ -920,9 +903,9 @@ scc_exint(register struct scc_channel *scc)
 	/* ABORT: generated whenever DCD drops while receiving */
 
 	if (chg_and_stat & BRK_ABRT)		/* Received an ABORT */
-		flush_FIFO(scc);
-			
-		
+		flush_rx_FIFO(scc);
+
+
 	/* DCD: on = start to receive packet, off = ABORT condition */
 	/* (a successfully received packet generates a special condition int) */
 	
@@ -936,69 +919,67 @@ scc_exint(register struct scc_channel *scc)
 			or(scc,R3,ENT_HM|RxENABLE); /* enable the receiver, hunt mode */
 		} else {                        /* DCD is now OFF */
 			cl(scc,R3,ENT_HM|RxENABLE); /* disable the receiver */
-			flush_FIFO(scc);
+			flush_rx_FIFO(scc);
 		}
+		
+		if (!scc->kiss.softdcd)
+			scc_notify(scc, (status & DCD)? HWEV_DCD_ON:HWEV_DCD_OFF);
+	}
+	
+	/* HUNT: software DCD; on = waiting for SYNC, off = receiving frame */
+	
+	if (changes & SYNC_HUNT)
+	{
+		if (scc->kiss.softdcd)
+			scc_notify(scc, (status & SYNC_HUNT)? HWEV_DCD_OFF:HWEV_DCD_ON);
+		else
+			cl(scc,R15,SYNCIE);	/* oops, we were too lazy to disable this? */
 	}
 
 #ifdef notdef
-	/* CTS: use external TxDelay (what's that good for?!) */
-	
+	/* CTS: use external TxDelay (what's that good for?!)
+	 * Anyway: If we _could_ use it (BayCom USCC uses CTS for
+	 * own purposes) we _should_ use the "autoenable" feature
+	 * of the Z8530 and not this interrupt...
+	 */
+	 
 	if (chg_and_stat & CTS)			/* CTS is now ON */
-	{			
-		if (!Running(t_txdel) && scc->kiss.txdelay == 0) /* zero TXDELAY = wait for CTS */
-			scc->t_txdel = 0;	/* kick it! */		
-		
+	{
+		if (scc->kiss.txdelay == 0)	/* zero TXDELAY = wait for CTS */
+			scc_start_tx_timer(scc, t_txdelay, 0);
 	}
 #endif
 	
-	if ( (status & TxEOM) && (scc->stat.tx_state == TXS_ACTIVE) )
+	if (scc->stat.tx_state == TXS_ACTIVE && (status & TxEOM))
 	{
 		scc->stat.tx_under++;	  /* oops, an underrun! count 'em */
-		Outb(scc->ctrl, RES_Tx_P);
 		Outb(scc->ctrl, RES_EXT_INT);	/* reset ext/status interrupts */
-		scc->t_maxk = 1;
-		
-		if (scc->tx_bp != NULLBUF)
-		{
-			scc_enqueue_buffer(&scc->tx_buffer_pool, scc->tx_bp);
-			scc->tx_bp = NULLBUF;
-		}
-		
-		if (--scc->stat.tx_queued < 0) scc->stat.tx_queued = 0;
-		or(scc,R10,ABUNDER);
-	}
-		
-	if (status & ZCOUNT)		   /* Oops? */
-	{
-		scc->stat.tx_under = 9999;  /* errr... yes. */
-		Outb(scc->ctrl, RES_Tx_P); /* just to be sure */
-		scc->t_maxk = 1;
-		
-		if (scc->tx_bp != NULLBUF)
-		{
-			scc_enqueue_buffer(&scc->tx_buffer_pool, scc->tx_bp);
-			scc->tx_bp = NULLBUF;
-		}
 
-		if (--scc->stat.tx_queued < 0) scc->stat.tx_queued = 0;
-		scc->kiss.tx_inhibit = 1;	/* don't try it again! */
+		if (scc->tx_bp != NULLBUF)
+		{
+			scc_enqueue_buffer(&scc->tx_buffer_pool, scc->tx_bp);
+			scc->stat.tx_queued--;
+			scc->tx_bp = NULLBUF;
+		}
+		
+		or(scc,R10,ABUNDER);
+		scc_start_tx_timer(scc, t_txdelay, 1);	/* restart transmission */
 	}
 		
-	
 	scc->status = status;
 	Outb(scc->ctrl,RES_EXT_INT);
 }
 
 
 /* Receiver interrupt handler */
-static void
-scc_rxint(register struct scc_channel *scc)
+static __inline__ void
+scc_rxint(struct scc_channel *scc)
 {
-	register struct mbuf *bp;
+	struct mbuf *bp;
 
 	scc->stat.rxints++;
 
-	if( Running(t_maxk) && !(scc->kiss.fulldup))
+	if((scc->wreg[5] & RTS) && scc->kiss.fulldup == KISS_DUPLEX_HALF)
 	{
 		Inb(scc->data);		/* discard char */
 		or(scc,R3,ENT_HM);	/* enter hunt mode for next flag */
@@ -1012,20 +993,22 @@ scc_rxint(register struct scc_channel *scc)
 		bp = scc_get_buffer(scc, BT_RECEIVE);
 		if (bp == NULLBUF)
 		{
-			printk("scc_rxint(): panic --- cannot get a buffer\n");
 			Inb(scc->data);
 			or(scc, R3, ENT_HM);
-			scc->stat.nospace++;
 			return;
 		}
 		
 		scc->rx_bp = bp;
+		
+		*bp->rw_ptr=0;		/* KISS data */
+		bp->rw_ptr++;
+		bp->cnt++;
 	}
 	
 	if (bp->cnt > scc->stat.bufsize)
 	{
 #ifdef notdef
-		printk("scc_rxint(): oops, received huge frame...\n");
+		printk(KERN_DEBUG "z8530drv: oops, scc_rxint() received huge frame...\n");
 #endif
 		scc_enqueue_buffer(&scc->rx_buffer_pool, bp);
 		scc->rx_bp = NULLBUF;
@@ -1040,33 +1023,13 @@ scc_rxint(register struct scc_channel *scc)
 	bp->cnt++;
 }
 
-/* kick rx_timer (try to send received frame or part of it ASAP) */
-
-/* of course we could define a "bottom half" routine to do the job,
-   but since its structures are saved in an array instead of a linked
-   list we would get in trouble if it clashes with another driver or
-   when we try to modularize the driver. IMHO we are fast enough
-   with a timer routine called on the next timer-INT... Your opinions?
- */
-
-static inline void
-kick_rx_timer(register struct scc_channel *scc)
-{
-	if (scc->rx_t.next)
-		del_timer(&(scc->rx_t));
-		
-	scc->rx_t.expires = jiffies + 1;
-	scc->rx_t.function = scc_rx_timer;
-	scc->rx_t.data = (unsigned long) scc;
-	add_timer(&scc->rx_t);
-}
 
 /* Receive Special Condition interrupt handler */
-static void
-scc_spint(register struct scc_channel *scc)
+static __inline__ void
+scc_spint(struct scc_channel *scc)
 {
-	register unsigned char status;
-	register struct mbuf *bp;
+	unsigned char status;
+	struct mbuf *bp;
 
 	scc->stat.spints++;
 
@@ -1083,7 +1046,7 @@ scc_spint(register struct scc_channel *scc)
 		if (bp) scc_enqueue_buffer(&scc->rx_buffer_pool, bp);
 		scc->rx_bp = NULLBUF;
 	}
-	
+
 	if(status & END_FR && bp != NULLBUF)	/* end of frame */
 	{
 		/* CRC okay, frame ends on 8 bit boundary and received something ? */
@@ -1092,21 +1055,139 @@ scc_spint(register struct scc_channel *scc)
 		{
 			/* ignore last received byte (first of the CRC bytes) */
 			bp->cnt--;
-			
-			scc_enqueue_buffer(&scc->rx_queue, bp);
+
+			if (scc->stat.is_netdev)
+			{
+#ifdef CONFIG_SCC_DEV
+				scc_net_rx(scc, bp);
+				scc_enqueue_buffer(&scc->rx_buffer_pool, bp);
+#endif
+			} else {
+#ifdef CONFIG_SCC_TTY
+				scc_enqueue_buffer(&scc->rx_queue, bp);
+				scc->stat.rx_queued++;
+				kick_rx_timer(scc);
+#endif
+			}
+
 			scc->rx_bp = NULLBUF;
 			scc->stat.rxframes++;
-			scc->stat.rx_queued++;
-			kick_rx_timer(scc);
 		} else {				/* a bad frame */
 			scc_enqueue_buffer(&scc->rx_buffer_pool, bp);
 			scc->rx_bp = NULLBUF;
 			scc->stat.rxerrs++;
 		}
-	}
-	
+	} 
+
 	Outb(scc->ctrl,ERR_RES);
 }
+
+
+/* ----> interrupt service routine for the Z8530 <---- */
+
+static void
+scc_isr_dispatch(struct scc_channel *scc, int vector)
+{
+	switch (vector & VECTOR_MASK)
+	{
+		case TXINT: scc_txint(scc); break;
+		case EXINT: scc_exint(scc); break;
+		case RXINT: scc_rxint(scc); break;
+		case SPINT: scc_spint(scc); break;
+	}
+}
+
+/* If the card has a latch for the interrupt vector (like the PA0HZP card)
+   use it to get the number of the chip that generated the int.
+   If not: poll all defined chips.
+ */
+
+#define SCC_IRQTIMEOUT 30000
+
+static void
+scc_isr(int irq, void *dev_id, struct pt_regs *regs)
+{
+	unsigned char vector;	
+	struct scc_channel *scc;
+	struct scc_ctrl *ctrl;
+	int k;
+	
+	scc_cli(irq);
+
+	if (Vector_Latch)
+	{
+	    	for(k=0; k < SCC_IRQTIMEOUT; k++)
+    		{
+			Outb(Vector_Latch, 0);      /* Generate INTACK */
+        
+			/* Read the vector */
+			if((vector=Inb(Vector_Latch)) >= 16 * Nchips) break; 
+			if (vector & 0x01) break;
+        	 
+		        scc=&SCC_Info[vector >> 3 ^ 0x01];
+			if (!scc->tty && !scc->dev) break;
+
+			scc_isr_dispatch(scc, vector);
+
+			OutReg(scc->ctrl,R0,RES_H_IUS);              /* Reset Highest IUS */
+		}  
+		scc_sti(irq);
+
+		if (k == SCC_IRQTIMEOUT)
+			printk(KERN_WARNING "z8530drv: endless loop in scc_isr()?\n");
+
+		return;
+	}
+
+	/* Find the SCC generating the interrupt by polling all attached SCCs
+	 * reading RR3A (the interrupt pending register)
+	 */
+
+	ctrl = SCC_ctrl;
+	while (ctrl->chan_A)
+	{
+		if (ctrl->irq != irq)
+		{
+			ctrl++;
+			continue;
+		}
+
+		scc = NULL;
+		for (k = 0; InReg(ctrl->chan_A,R3) && k < SCC_IRQTIMEOUT; k++)
+		{
+			vector=InReg(ctrl->chan_B,R2);	/* Read the vector */
+			if (vector & 0x01) break; 
+
+			scc = &SCC_Info[vector >> 3 ^ 0x01];
+		        if (!scc->tty && !scc->dev) break;
+
+			scc_isr_dispatch(scc, vector);
+		}
+
+		if (k == SCC_IRQTIMEOUT)
+		{
+			printk(KERN_WARNING "z8530drv: endless loop in scc_isr()?!\n");
+			break;
+		}
+
+		/* This looks wierd and it is. At least the BayCom USCC doesn't
+		 * use the Interrupt Daisy Chain, thus we'll have to start
+		 * all over again to be sure not to miss an interrupt from 
+		 * (any of) the other chip(s)...
+		 * Honestly, the situation *is* braindamaged...
+		 */
+
+		if (scc != NULL)
+		{
+			OutReg(scc->ctrl,R0,RES_H_IUS);
+			ctrl = SCC_ctrl; 
+		} else
+			ctrl++;
+	}
+	
+	scc_sti(irq);
+}
+
 
 
 /* ******************************************************************** */
@@ -1116,30 +1197,31 @@ scc_spint(register struct scc_channel *scc)
 
 /* ----> set SCC channel speed <---- */
 
-static inline void set_brg(register struct scc_channel *scc, unsigned int tc)
+static __inline__ void 
+set_brg(struct scc_channel *scc, unsigned int tc)
 {
-	unsigned long flags;
-
- 	save_flags(flags); cli();      	/* 2-step register accesses... */
-
 	cl(scc,R14,BRENABL);		/* disable baudrate generator */
 	wr(scc,R12,tc & 255);		/* brg rate LOW */
 	wr(scc,R13,tc >> 8);   		/* brg rate HIGH */
 	or(scc,R14,BRENABL);		/* enable baudrate generator */
-
-	restore_flags(flags);
 }
 
-static inline void set_speed(register struct scc_channel *scc)
+static __inline__ void 
+set_speed(struct scc_channel *scc)
 {
+	disable_irq(scc->irq);
+
 	if (scc->modem.speed > 0)	/* paranoia... */
 		set_brg(scc, (unsigned) (scc->clock / (scc->modem.speed * 64)) - 2);
+
+	enable_irq(scc->irq);
 }
 
 
 /* ----> initialize a SCC channel <---- */
 
-static inline void init_brg(register struct scc_channel *scc)
+static __inline__ void 
+init_brg(struct scc_channel *scc)
 {
 	wr(scc, R14, BRSRC);				/* BRG source = PCLK */
 	OutReg(scc->ctrl, R14, SSBR|scc->wreg[R14]);	/* DPLL source = BRG */
@@ -1192,14 +1274,17 @@ static inline void init_brg(register struct scc_channel *scc)
  */
  
 static void
-init_channel(register struct scc_channel *scc)
+init_channel(struct scc_channel *scc)
 {
-	unsigned long flags;
+	disable_irq(scc->irq);
 	
-	if (scc->rx_t.next) del_timer(&(scc->rx_t));
-	if (scc->tx_t.next) del_timer(&(scc->tx_t));
+#ifdef CONFIG_SCC_TTY
+	del_timer(&scc->rx_t);
+#endif
+	del_timer(&scc->tx_t);
+	del_timer(&scc->tx_wdog);
 
-	save_flags(flags); cli();
+
 
 	wr(scc,R4,X1CLK|SDLC);		/* *1 clock, SDLC mode */
 	wr(scc,R1,0);			/* no W/REQ operation */
@@ -1273,9 +1358,12 @@ init_channel(register struct scc_channel *scc)
 		or(scc,R3,ENT_HM|RxENABLE);	/* enable the receiver, hunt mode */
 	}
 	
-	/* enable CTS (not for Baycom), ABORT & DCD interrupts */
-	wr(scc,R15,((scc->brand & BAYCOM) ? 0 : CTSIE)|BRKIE|DCDIE|TxUIE);
-	
+	/* enable ABORT, DCD & SYNC/HUNT interrupts */
+
+	wr(scc,R15, BRKIE|TxUIE|DCDIE);
+	if (scc->kiss.softdcd)
+		or(scc,R15, SYNCIE);
+
 	Outb(scc->ctrl,RES_EXT_INT);	/* reset ext/status interrupts */
 	Outb(scc->ctrl,RES_EXT_INT);	/* must be done twice */
 
@@ -1287,7 +1375,7 @@ init_channel(register struct scc_channel *scc)
 	
 	scc_init_timer(scc);
 			
-	restore_flags(flags);
+	enable_irq(scc->irq);
 }
 
 
@@ -1305,21 +1393,29 @@ static void
 scc_key_trx(struct scc_channel *scc, char tx)
 {
 	unsigned int time_const;
-
-	if (scc->modem.speed < baud_table[1]) 
-		scc->modem.speed = 1200;
 		
 	if (scc->brand & PRIMUS)
 		Outb(scc->ctrl + 4, scc->option | (tx? 0x80 : 0));
-	
+
+	if (scc->modem.speed < 300) 
+		scc->modem.speed = 1200;
+
 	time_const = (unsigned) (scc->clock / (scc->modem.speed * (tx? 2:64))) - 2;
-	
+
+	disable_irq(scc->irq);
+
+	if (tx)
+	{
+		or(scc, R1, TxINT_ENAB);	/* t_maxkeyup may have reset these */
+		or(scc, R15, TxUIE);
+	}
+
 	if (scc->modem.clocksrc == CLK_DPLL)
-	{				/* simplex operation */
+	{				/* force simplex operation */
 		if (tx)
 		{
-			cl(scc,R3,RxENABLE|ENT_HM);	/* then switch off receiver */
-			
+			cl(scc, R3, RxENABLE|ENT_HM);	/* switch off receiver */
+			cl(scc, R15, DCDIE);		/* No DCD changes, please */
 			set_brg(scc, time_const);	/* reprogram baudrate generator */
 
 			/* DPLL -> Rx clk, BRG -> Tx CLK, TRxC mode output, TRxC = BRG */
@@ -1335,21 +1431,140 @@ scc_key_trx(struct scc_channel *scc, char tx)
 			wr(scc, R11, RCDPLL|TCDPLL|TRxCOI|TRxCDP);
 			
 			or(scc,R3,RxENABLE|ENT_HM);
+			or(scc,R15, DCDIE);
 		}
 	} else {
 		if (tx)
+		{
+			if (scc->kiss.fulldup == KISS_DUPLEX_HALF)
+			{
+				cl(scc, R3, RxENABLE);
+				cl(scc, R15, DCDIE);
+			}
+				
+				
 			or(scc,R5,RTS|TxENAB);		/* enable tx */
-		else
+		} else {
 			cl(scc,R5,RTS|TxENAB);		/* disable tx */
+			
+			if (scc->kiss.fulldup == KISS_DUPLEX_HALF)
+			{
+				or(scc, R3, RxENABLE|ENT_HM);
+				or(scc, R15, DCDIE);
+			}
+		}
 	}
+
+	enable_irq(scc->irq);
 }
 
 
-/* ----> SCC timer interrupt handler and friends. Will be called every 1/TPS s <---- */
+/* ----> SCC timer interrupt handler and friends. <---- */
+
+static void 
+scc_start_tx_timer(struct scc_channel *scc, void (*handler)(unsigned long), unsigned long when)
+{
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
+
+	del_timer(&scc->tx_t);
+
+	if (when == 0)
+	{
+		handler((unsigned long) scc);
+	} else 
+	if (when != TIMER_OFF)
+	{
+		scc->tx_t.data = (unsigned long) scc;
+		scc->tx_t.function = handler;
+		scc->tx_t.expires = jiffies + (when*HZ)/100;
+		add_timer(&scc->tx_t);
+	}
+	
+	restore_flags(flags);	
+}
+
+static void
+scc_start_defer(struct scc_channel *scc)
+{
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
+
+	del_timer(&scc->tx_wdog);
+	
+	if (scc->kiss.maxdefer != 0 && scc->kiss.maxdefer != TIMER_OFF)
+	{
+		scc->tx_wdog.data = (unsigned long) scc;
+		scc->tx_wdog.function = t_busy;
+		scc->tx_wdog.expires = jiffies + HZ*scc->kiss.maxdefer;
+		add_timer(&scc->tx_wdog);
+	}
+	restore_flags(flags);
+}
+
+static void
+scc_start_maxkeyup(struct scc_channel *scc)
+{
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
+
+	del_timer(&scc->tx_wdog);
+	
+	if (scc->kiss.maxkeyup != 0 && scc->kiss.maxkeyup != TIMER_OFF)
+	{
+		scc->tx_wdog.data = (unsigned long) scc;
+		scc->tx_wdog.function = t_maxkeyup;
+		scc->tx_wdog.expires = jiffies + HZ*scc->kiss.maxkeyup;
+		add_timer(&scc->tx_wdog);
+	}
+	
+	restore_flags(flags);
+}
+
+/* 
+ * This is called from scc_txint() when there are no more frames to send.
+ * Not exactly a timer function, but it is a close friend of the family...
+ */
+
+static void
+scc_tx_done(struct scc_channel *scc)
+{
+	/* 
+	 * trx remains keyed in fulldup mode 2 until t_idle expires.
+	 */
+				 
+	switch (scc->kiss.fulldup)
+	{
+		case KISS_DUPLEX_LINK:
+			scc->stat.tx_state = TXS_IDLE2;
+			if (scc->kiss.idletime != TIMER_OFF)
+			scc_start_tx_timer(scc, t_idle, scc->kiss.idletime*100);
+			break;
+		case KISS_DUPLEX_OPTIMA:
+			scc_notify(scc, HWEV_ALL_SENT);
+			break;
+		default:
+			scc->stat.tx_state = TXS_BUSY;
+			scc_start_tx_timer(scc, t_tail, scc->kiss.tailtime);
+	}
+
+#ifdef CONFIG_SCC_DEV
+	if (scc->stat.is_netdev)
+ 		scc->dev->tbusy = 0;
+#endif
+}
+
 
 static unsigned char Rand = 17;
 
-static inline int is_grouped(register struct scc_channel *scc)
+static __inline__ int 
+is_grouped(struct scc_channel *scc)
 {
 	int k;
 	struct scc_channel *scc2;
@@ -1362,8 +1577,8 @@ static inline int is_grouped(register struct scc_channel *scc)
 		scc2 = &SCC_Info[k];
 		grp2 = scc2->kiss.group;
 		
-		if (scc2 == scc || !(scc2->tty && grp2)) 
-			return 0;
+		if (scc2 == scc || !(scc2->tty && scc2->dev && grp2))
+			continue;
 		
 		if ((grp1 & 0x3f) == (grp2 & 0x3f))
 		{
@@ -1376,205 +1591,244 @@ static inline int is_grouped(register struct scc_channel *scc)
 	}
 	return 0;
 }
-		
 
-static inline void dw_slot_timeout(register struct scc_channel *scc)
+/* DWAIT and SLOTTIME expired
+ *
+ * fulldup == 0:  DCD is active or Rand > P-persistence: start t_busy timer
+ *                else key trx and start txdelay
+ * fulldup == 1:  key trx and start txdelay
+ * fulldup == 2:  mintime expired, reset status or key trx and start txdelay
+ */
+
+static void 
+t_dwait(unsigned long channel)
 {
-	scc->t_dwait = TIMER_STOPPED;
-	scc->t_slot = TIMER_STOPPED;
+	struct scc_channel *scc = (struct scc_channel *) channel;
 	
-	if (!scc->kiss.fulldup)
+	if (scc->stat.tx_state == TXS_WAIT)
+	{
+		if (scc->tx_queue == NULL)
+		{
+			scc->stat.tx_state = TXS_IDLE;
+			return;
+		}
+
+		scc->stat.tx_state = TXS_BUSY;
+	}
+
+	if (scc->kiss.fulldup == KISS_DUPLEX_HALF)
 	{
 		Rand = Rand * 17 + 31;
 		
 		if ( (scc->kiss.softdcd? !(scc->status & SYNC_HUNT):(scc->status & DCD))  || (scc->kiss.persist) < Rand || (scc->kiss.group && is_grouped(scc)) )
 		{
-			if (scc->t_mbusy == TIMER_STOPPED)
-				scc->t_mbusy = TPS * scc->kiss.maxdefer;
-				
-			scc->t_slot = scc->kiss.slottime;
+			scc_start_defer(scc);
+			scc_start_tx_timer(scc, t_dwait, scc->kiss.slottime);
 			return ;
-			
 		}
 	}
-	
+
 	if ( !(scc->wreg[R5] & RTS) )
 	{
-		scc->t_txdel = scc->kiss.txdelay;
 		scc_key_trx(scc, TX_ON);
+		scc_start_tx_timer(scc, t_txdelay, scc->kiss.txdelay);
 	} else {
-		scc->t_txdel = 0;
+		scc_start_tx_timer(scc, t_txdelay, 0);
 	}
 }
 
 
+/* TXDELAY expired
+ *
+ * kick transmission by a fake scc_txint(scc), start 'maxkeyup' watchdog.
+ */
 
-
-static inline void txdel_timeout(register struct scc_channel *scc)
+static void 
+t_txdelay(unsigned long channel)
 {
-	scc->t_txdel = TIMER_STOPPED;
-	
-	scc->t_maxk = TPS * scc->kiss.maxkeyup;
-	
+	struct scc_channel *scc = (struct scc_channel *) channel;
+
+	scc_start_maxkeyup(scc);
+
 	if (scc->tx_bp == NULLBUF)
+	{
+		disable_irq(scc->irq);
 		scc_txint(scc);	
+		enable_irq(scc->irq);
+	}
 }
 	
 
+/* TAILTIME expired
+ *
+ * switch off transmitter. If we were stopped by Maxkeyup restart
+ * transmission after 'mintime' seconds
+ */
 
-static inline void tail_timeout(register struct scc_channel *scc)
+static void 
+t_tail(unsigned long channel)
 {
-	scc->t_tail = TIMER_STOPPED;
+	struct scc_channel *scc = (struct scc_channel *) channel;
 	
-	/* when fulldup is 0 or 1, switch off the transmitter.
-	 * when frames are still queued (because of transmit time limit),
-	 * restart the procedure to get the channel after MINTIME.
-	 * when fulldup is 2, the transmitter remains keyed and we
-	 * continue sending after waiting for waittime. IDLETIME is an 
-	 * idle timeout in this case.
-	 */ 
-	 
-	 if (scc->kiss.fulldup < 2)
-	 {
-	 	if (scc->tx_bp)		/* we had a timeout? */
-	 	{
-	 		scc->stat.tx_state = TXS_BUSY;
-	 		scc->t_dwait = TPS * scc->kiss.mintime; /* try again */
-	 	}
-	 	
-	 	scc->stat.tx_state = TXS_IDLE;
-		scc->t_maxk = TIMER_STOPPED;
-	 	scc_key_trx(scc, TX_OFF);
-	 	return;
-	 }
-	 
-	 if (scc->tx_bp)			/* maxkeyup expired */ /* ?! */
-	 {
-	 	scc->stat.tx_state = TXS_BUSY;
-	 	scc->t_txdel = TPS * scc->kiss.waittime;
-	 }
-	 else
-	 
-	 	scc->t_idle = TPS * scc->kiss.idletime;
+ 	del_timer(&scc->tx_wdog);
+ 	scc_key_trx(scc, TX_OFF);
+
+ 	if (scc->stat.tx_state == TXS_TIMEOUT)		/* we had a timeout? */
+ 	{
+ 		scc->stat.tx_state = TXS_WAIT;
+ 
+  		if (scc->tx_bp != NULLBUF)
+	 		scc_enqueue_buffer(&scc->tx_queue, scc->tx_bp);
+
+ 		scc->tx_bp = NULLBUF;
+
+ 		if (scc->kiss.mintime != TIMER_OFF)	/* try it again */
+ 			scc_start_tx_timer(scc, t_dwait, scc->kiss.mintime*100);
+ 		else
+ 			scc_start_tx_timer(scc, t_dwait, 0);
+ 		return;
+ 	}
+ 	
+ 	scc->stat.tx_state = TXS_IDLE;
+ 
+#ifdef CONFIG_SCC_DEV
+ 	if (scc->stat.is_netdev)
+		scc->dev->tbusy = 0;
+#endif
 }
 
 
-static inline void busy_timeout(register struct scc_channel *scc)
-{
-#ifdef	THROW_AWAY_AFTER_BUSY_TIMEOUT
-	register struct mbuf *bp;		/* not tested */
+/* BUSY timeout
+ *
+ * throw away send buffers if DCD remains active too long.
+ */
 
-	while (bp = scc_dequeue_buffer(&scc->tx_queue))
+static void 
+t_busy(unsigned long channel)
+{
+	struct scc_channel *scc = (struct scc_channel *) channel;
+	struct mbuf *bp;
+
+	del_timer(&scc->tx_t);
+
+	while ((bp = scc_dequeue_buffer(&scc->tx_queue)) != NULLBUF)
 		scc_enqueue_buffer(&scc->tx_buffer_pool, bp);
+
+	scc->stat.tx_queued = 0;
+	scc->stat.txerrs++;
 		
 	scc->tx_queue = NULLBUF;
 	scc->stat.tx_state = TXS_IDLE;
-	
-#else
-	scc->t_txdel = scc->kiss.txdelay;	/* brute force ... */
+
+#ifdef CONFIG_SCC_DEV
+ 	if (scc->stat.is_netdev)
+ 		scc->dev->tbusy = 0;
 #endif
-	scc->t_mbusy = TIMER_STOPPED;
-	
 }
 
+/* MAXKEYUP timeout
+ *
+ * this is our watchdog.
+ */
 
-static inline void maxk_idle_timeout(register struct scc_channel *scc)
+static void 
+t_maxkeyup(unsigned long channel)
 {
-	scc->t_maxk = TIMER_STOPPED;
-	scc->t_idle = TIMER_STOPPED;
-	
-	scc->stat.tx_state = TXS_BUSY;
-	scc->t_tail = scc->kiss.tailtime;
-}
-
-static void
-scc_tx_timer(unsigned long channel)
-{
-	register struct scc_channel *scc;
+	struct scc_channel *scc = (struct scc_channel *) channel;
 	unsigned long flags;
-		
 
-	scc = (struct scc_channel *) channel;
-		
-	if (scc->tty && scc->init)
-	{		
-		save_flags(flags); cli();
-		
-		/* KISS-TNC emulation */
-		
-		if (Expired(t_dwait)) dw_slot_timeout(scc)	; else
-		if (Expired(t_slot))  dw_slot_timeout(scc)	; else
-		if (Expired(t_txdel)) txdel_timeout(scc)   	; else
-		if (Expired(t_tail))  tail_timeout(scc)	   	;
-			
-		/* watchdogs */
-		
-		if (Expired(t_mbusy)) busy_timeout(scc);
-		if (Expired(t_maxk))  maxk_idle_timeout(scc);
-		if (Expired(t_idle))  maxk_idle_timeout(scc);
-			
-		restore_flags(flags);
+	save_flags(flags);
+	cli();
+
+	if (scc->stat.is_netdev)
+	{
+#ifdef CONFIG_SCC_DEV
+		/* 
+		 * let things settle down before we start to
+		 * accept new data.
+		 */
+		scc->dev->tbusy = 1;
+		scc->dev->trans_start = jiffies;
+#endif
 	}
-	
-	scc->tx_t.expires = jiffies + HZ/TPS;
-	add_timer(&scc->tx_t);
-}
-			
 
+	del_timer(&scc->tx_t);
+
+	cl(scc, R1, TxINT_ENAB);	/* force an ABORT, but don't */
+	cl(scc, R15, TxUIE);		/* count it. */
+	OutReg(scc->ctrl, R0, RES_Tx_P);
+
+	restore_flags(flags);
+
+	scc->stat.txerrs++;
+	scc->stat.tx_state = TXS_TIMEOUT;
+	scc_start_tx_timer(scc, t_tail, scc->kiss.tailtime);
+}
+
+/* IDLE timeout
+ *
+ * in fulldup mode 2 it keys down the transmitter after 'idle' seconds
+ * of inactivity. We will not restart transmission before 'mintime'
+ * expires.
+ */
+
+static void 
+t_idle(unsigned long channel)
+{
+	struct scc_channel *scc = (struct scc_channel *) channel;
+	
+	del_timer(&scc->tx_wdog);
+	scc_key_trx(scc, TX_OFF);
+
+	if (scc->kiss.mintime != TIMER_OFF)
+		scc_start_tx_timer(scc, t_dwait, scc->kiss.mintime*100);
+	scc->stat.tx_state = TXS_WAIT;
+}
+
+
+#ifdef CONFIG_SCC_TTY
 static void
 scc_rx_timer(unsigned long channel)
 {
-	register struct scc_channel *scc;
+	struct scc_channel *scc;
 	
 	scc = (struct scc_channel *) channel;
 	
 	if (scc->rx_queue && scc->throttled)
 	{
-		scc->rx_t.expires = jiffies + HZ/TPS;
+		scc->rx_t.expires = jiffies + HZ/25;	/* 40 msec */
 		add_timer(&scc->rx_t);
 		return;
 	}
 	
 	kiss_encode(scc);
-	
+
 	if (scc->rx_queue && !scc->throttled)
 	{
 
-		printk("z8530drv: warning: %s should be throttled\n", 
-		       kdevname(scc->tty->device));
-			       
-		scc->rx_t.expires = jiffies + HZ/TPS;
+		printk(KERN_DEBUG "z8530drv: warning, %s should be throttled\n", 
+		       SCC_DEVNAME);
+		       
+		scc->rx_t.expires = jiffies + HZ/25;	/* 40 msec */
 		add_timer(&scc->rx_t);
 	}
 }
+#endif
 
 static void
 scc_init_timer(struct scc_channel *scc)
 {
 	unsigned long flags;
 	
-	save_flags(flags); cli();
-	
-	Stop_Timer(t_dwait);
-	Stop_Timer(t_slot);
-	Stop_Timer(t_txdel);
-	Stop_Timer(t_tail);
-	Stop_Timer(t_mbusy);
-	Stop_Timer(t_maxk);
-	Stop_Timer(t_idle);
+	save_flags(flags); 
+	cli();
 	
 	scc->stat.tx_state = TXS_IDLE;
 	
-	if (scc->tx_t.next) 
-		del_timer(&scc->tx_t);
-	
-	scc->tx_t.data = (unsigned long) scc;
-	scc->tx_t.function = scc_tx_timer;
-	scc->tx_t.expires = jiffies + HZ/TPS;
-	add_timer(&scc->tx_t);
-	
+#ifdef CONFIG_SCC_TTY	
 	scc->rx_t.data = (unsigned long) scc;
 	scc->rx_t.function = scc_rx_timer;
+#endif
 	
 	restore_flags(flags);
 }
@@ -1586,54 +1840,111 @@ scc_init_timer(struct scc_channel *scc)
 
 
 /*
- * this will set the "kiss" parameters through kiss itself
+ * this will set the "kiss" parameters through KISS commands or ioctl()
  */
- 
-static void
-kiss_set_param(struct scc_channel *scc,char cmd, unsigned int val)
+
+#define CAST(x) (unsigned long)(x)
+
+static unsigned int
+kiss_set_param(struct scc_channel *scc, unsigned int cmd, unsigned int arg)
 {
+	int dcd;
 
-#define  VAL val=val*TPS/100
-#define SVAL val? val:TIMER_STOPPED
+	switch (cmd)
+	{
+		case PARAM_TXDELAY:	scc->kiss.txdelay=arg;		break;
+		case PARAM_PERSIST:	scc->kiss.persist=arg;		break;
+		case PARAM_SLOTTIME:	scc->kiss.slottime=arg;		break;
+		case PARAM_TXTAIL:	scc->kiss.tailtime=arg;		break;
+		case PARAM_FULLDUP:	scc->kiss.fulldup=arg;		break;
+		case PARAM_DTR:		break; /* does someone need this? */
+		case PARAM_GROUP:	scc->kiss.group=arg;		break;
+		case PARAM_IDLE:	scc->kiss.idletime=arg;		break;
+		case PARAM_MIN:		scc->kiss.mintime=arg;		break;
+		case PARAM_MAXKEY:	scc->kiss.maxkeyup=arg;		break;
+		case PARAM_WAIT:	scc->kiss.waittime=arg;		break;
+		case PARAM_MAXDEFER:	scc->kiss.maxdefer=arg;		break;
+		case PARAM_TX:		scc->kiss.tx_inhibit=arg;	break;
 
-	switch(cmd){
-	case PARAM_TXDELAY:
-		scc->kiss.txdelay = VAL; break;
-	case PARAM_PERSIST:
-		scc->kiss.persist = val; break;
-	case PARAM_SLOTTIME:
-		scc->kiss.slottime = VAL; break;
-	case PARAM_TXTAIL:
-		scc->kiss.tailtime = VAL; break;
-	case PARAM_FULLDUP:
-		scc->kiss.fulldup = val; break;
-	case PARAM_WAIT:
-		scc->kiss.waittime = VAL; break;
-	case PARAM_MAXKEY:
-		scc->kiss.maxkeyup = SVAL; break;
-	case PARAM_MIN:
-		scc->kiss.mintime = SVAL; break;
-	case PARAM_IDLE:
-		scc->kiss.idletime = val; break;
-	case PARAM_MAXDEFER:
-		scc->kiss.maxdefer = SVAL; break;
-	case PARAM_GROUP:
-		scc->kiss.group = val;  break;
-	case PARAM_TX:
-		scc->kiss.tx_inhibit = val;
-	case PARAM_SOFTDCD:
-		scc->kiss.softdcd = val;
+		case PARAM_SOFTDCD:	
+			scc->kiss.softdcd=arg;
+			if (arg)
+				or(scc, R15, SYNCIE);
+			else
+				cl(scc, R15, SYNCIE);
+			break;
+				
+		case PARAM_SPEED:
+			if (arg < 256)
+				scc->modem.speed=arg*100;
+			else
+				scc->modem.speed=arg;
+
+			if (scc->stat.tx_state == 0)	/* only switch baudrate on rx... ;-) */
+				set_speed(scc);
+			break;
+			
+		case PARAM_RTS:	
+			if ( !(scc->wreg[R5] & RTS) )
+			{
+				if (arg != TX_OFF)
+					scc_key_trx(scc, TX_ON);
+					scc_start_tx_timer(scc, t_txdelay, scc->kiss.txdelay);
+			} else {
+				if (arg == TX_OFF)
+				{
+					scc->stat.tx_state = TXS_BUSY;
+					scc_start_tx_timer(scc, t_tail, scc->kiss.tailtime);
+				}
+			}
+			break;
+			
+		case PARAM_HWEVENT:
+			dcd = (scc->kiss.softdcd? !(scc->status & SYNC_HUNT):(scc->status & DCD));
+			scc_notify(scc, dcd? HWEV_DCD_ON:HWEV_DCD_OFF);
+			break;
+
+		default:		return -EINVAL;
 	}
-	return;
-
-#undef  VAL
-#undef SVAL
+	
+	return 0;
 }
 
 
+ 
+static unsigned long
+kiss_get_param(struct scc_channel *scc, unsigned int cmd)
+{
+	switch (cmd)
+	{
+		case PARAM_TXDELAY:	return CAST(scc->kiss.txdelay);
+		case PARAM_PERSIST:	return CAST(scc->kiss.persist);
+		case PARAM_SLOTTIME:	return CAST(scc->kiss.slottime);
+		case PARAM_TXTAIL:	return CAST(scc->kiss.tailtime);
+		case PARAM_FULLDUP:	return CAST(scc->kiss.fulldup);
+		case PARAM_SOFTDCD:	return CAST(scc->kiss.softdcd);
+		case PARAM_DTR:		return CAST((scc->wreg[R5] & DTR)? 1:0);
+		case PARAM_RTS:		return CAST((scc->wreg[R5] & RTS)? 1:0);
+		case PARAM_SPEED:	return CAST(scc->modem.speed);
+		case PARAM_GROUP:	return CAST(scc->kiss.group);
+		case PARAM_IDLE:	return CAST(scc->kiss.idletime);
+		case PARAM_MIN:		return CAST(scc->kiss.mintime);
+		case PARAM_MAXKEY:	return CAST(scc->kiss.maxkeyup);
+		case PARAM_WAIT:	return CAST(scc->kiss.waittime);
+		case PARAM_MAXDEFER:	return CAST(scc->kiss.maxdefer);
+		case PARAM_TX:		return CAST(scc->kiss.tx_inhibit);
+		default:		return NO_SUCH_PARAM;
+	}
+
+}
+
+#undef CAST
+#undef SVAL
+
 /* interpret frame: strip CRC and decode KISS */
 
-static void kiss_interpret_frame(struct scc_channel * scc)
+static void 
+kiss_interpret_frame(struct scc_channel * scc)
 {
 	unsigned char kisscmd;
 	unsigned long flags;
@@ -1642,14 +1953,6 @@ static void kiss_interpret_frame(struct scc_channel * scc)
 	bp = scc->kiss_decode_bp;
 	bp->rw_ptr = bp->data;
 	
-#ifdef DEBUG_BUFFERS
-	if (bp == NULLBUF)
-	{
-		printk("kiss_interpret_frame(): weird --- nothing to do.\n");
-		return;
-	}
-#endif
-	
 	if (bp->cnt < 2)
 	{
 		scc_enqueue_buffer(&scc->tx_buffer_pool, bp);
@@ -1657,15 +1960,8 @@ static void kiss_interpret_frame(struct scc_channel * scc)
 		return;
 	}
 	
-	
-	
-	if (scc->kiss.not_slip)
-	{
-		kisscmd = *bp->rw_ptr;
-		bp->rw_ptr++;
-	} else {
-		kisscmd = 0;
-	}
+	kisscmd = *bp->rw_ptr;
+	bp->rw_ptr++;
 
 	if (kisscmd & 0xa0)
 	{
@@ -1679,10 +1975,8 @@ static void kiss_interpret_frame(struct scc_channel * scc)
 		}
 	}
 	
-	
 	kisscmd &= 0x1f;
-	
-		
+			
 	if (kisscmd)
 	{
 		kiss_set_param(scc, kisscmd, *bp->rw_ptr);
@@ -1692,32 +1986,47 @@ static void kiss_interpret_frame(struct scc_channel * scc)
 	}
 
 	scc_enqueue_buffer(&scc->tx_queue, bp);	/* enqueue frame */
+	scc->kiss_decode_bp = NULLBUF;
 	
 	scc->stat.txframes++;
 	scc->stat.tx_queued++;
-	scc->kiss_decode_bp = NULLBUF;
 
-	save_flags(flags); cli();
+	save_flags(flags); 
+	cli();
 
-	if(scc->stat.tx_state == TXS_IDLE)
-	{      				/* when transmitter is idle */
+	/*
+	 * start transmission if the trx state is idle or
+	 * t_idle hasn't expired yet. Use dwait/persistance/slottime
+	 * algorithm for normal halfduplex operation.
+	 */
+
+	if(scc->stat.tx_state == TXS_IDLE || scc->stat.tx_state == TXS_IDLE2)
+	{
 		scc->stat.tx_state = TXS_BUSY;
-		scc->t_dwait = (scc->kiss.fulldup? 0:scc->kiss.waittime);
+		if (scc->kiss.fulldup == KISS_DUPLEX_HALF)
+			scc_start_tx_timer(scc, t_dwait, scc->kiss.waittime);
+		else
+			scc_start_tx_timer(scc, t_dwait, 0);
 	}
-	
+
 	restore_flags(flags);
 }
 
-static inline void kiss_store_byte(struct scc_channel *scc, unsigned char ch)
+#ifdef CONFIG_SCC_TTY
+static inline void 
+kiss_store_byte(struct scc_channel *scc, unsigned char ch)
 {
-	register struct mbuf *bp = scc->kiss_decode_bp;
+	struct mbuf *bp = scc->kiss_decode_bp;
+	static int k = 0;
 	
 	if (bp != NULLBUF)
 	{
 		if (bp->cnt > scc->stat.bufsize)
-			printk("kiss_decode(): frame too long\n");
-		else
 		{
+			if (!k++)
+				printk(KERN_NOTICE "z8530drv: KISS frame too long\n");
+		} else {
+			k = 0;
 			*bp->rw_ptr = ch;
 			bp->rw_ptr++;
 			bp->cnt++;
@@ -1725,7 +2034,8 @@ static inline void kiss_store_byte(struct scc_channel *scc, unsigned char ch)
 	}
 }
 
-static inline int kiss_decode(struct scc_channel *scc, unsigned char ch)
+static inline int 
+kiss_decode(struct scc_channel *scc, unsigned char ch)
 {
 	switch (scc->stat.tx_kiss_state) 
 	{
@@ -1779,7 +2089,7 @@ static inline int kiss_decode(struct scc_channel *scc, unsigned char ch)
 /* ----> Encode received data and write it to the flip-buffer  <---- */
 
 static void
-kiss_encode(register struct scc_channel *scc)
+kiss_encode(struct scc_channel *scc)
 {
 	struct mbuf *bp;
 	struct tty_struct * tty = scc->tty;
@@ -1825,10 +2135,6 @@ kiss_encode(register struct scc_channel *scc)
 		if (scc->stat.rx_kiss_state == KISS_IDLE)
 		{
 			tty_insert_flip_char(tty, FEND, 0);
-			
-			if (scc->kiss.not_slip)
-				tty_insert_flip_char(tty, 0, 0);
-					
 			scc->stat.rx_kiss_state = KISS_RXFRAME;
 		}
 				
@@ -1852,6 +2158,7 @@ kiss_encode(register struct scc_channel *scc)
 		
  	queue_task(&tty->flip.tqueue, &tq_timer); /* kick it... */
 }
+#endif /* CONFIG_SCC_TTY */
 
 
 /* ******************************************************************* */
@@ -1868,7 +2175,7 @@ z8530_init(void)
 	char *flag;
 
 
-	printk("Init Z8530 driver: %u channels, IRQ", Nchips*2);
+	printk(KERN_INFO "Init Z8530 driver: %u channels, IRQ", Nchips*2);
 	
 	flag=" ";
 	for (k = 0; k < 16; k++)
@@ -1885,9 +2192,7 @@ z8530_init(void)
 	{
 		scc=&SCC_Info[2*chip];
 		if (!scc->ctrl) continue;
-			
-		save_flags(flags); cli();	/* because of 2-step accesses */
-		
+
 		/* Special SCC cards */
 
 		if(scc->brand & EAGLE)			/* this is an EAGLE card */
@@ -1901,12 +2206,15 @@ z8530_init(void)
 
 		/* some general init we can do now */
 		
+		save_flags(flags);
+		cli();
+		
 		Outb(scc->ctrl, 0);
 		OutReg(scc->ctrl,R9,FHWRES);		/* force hardware reset */
 		udelay(100);				/* give it 'a bit' more time than required */
 		wr(scc, R2, chip*16);			/* interrupt vector */
 		wr(scc, R9, VIS);			/* vector includes status */
-
+		
         	restore_flags(flags);
         }
 
@@ -1920,18 +2228,17 @@ z8530_init(void)
 /* ******************************************************************** */
 
 
-
 /* scc_paranoia_check(): warn user if something went wrong		*/
 
-static inline int scc_paranoia_check(struct scc_channel *scc, kdev_t device,
-				     const char *routine)
+static __inline__ int 
+scc_paranoia_check(struct scc_channel *scc, kdev_t device, const char *routine)
 {
 #ifdef SCC_PARANOIA_CHECK
 
 static const char *badmagic = 
-	"Warning: bad magic number for Z8530 SCC struct (%s) in %s\n"; 
+	KERN_ALERT "Warning: bad magic number for Z8530 SCC struct (%s) in %s\n"; 
 static const char *badinfo =  
-	"Warning: Z8530 not found for (%s) in %s\n";
+	KERN_CRIT "Warning: Z8530 not found for (%s) in %s (forgot to run sccinit?)\n";
        
 	if (!scc->init) 
 	{
@@ -1949,10 +2256,11 @@ static const char *badinfo =
 	return 0;
 }
 
-
+#ifdef CONFIG_SCC_TTY
 /* ----> this one is called whenever you open the device <---- */
 
-int scc_open(struct tty_struct *tty, struct file * filp)
+int 
+scc_open(struct tty_struct *tty, struct file * filp)
 {
 	struct scc_channel *scc;
 	int chan;
@@ -1976,28 +2284,30 @@ int scc_open(struct tty_struct *tty, struct file * filp)
  	
 	if (scc->magic != SCC_MAGIC)
 	{
-		printk("ERROR: scc_open(): bad magic number for device (%s)",
+		printk(KERN_ALERT "z8530drv: scc_open() found bad magic number for device (%s)",
 		       kdevname(tty->device));
 		return -ENODEV;
-	}		
-	
+	}
+
 	MOD_INC_USE_COUNT;
-	
-	if(scc->tty != NULL)
+
+	if(scc->tty != NULL || scc->stat.is_netdev)
 	{
 		scc->tty_opened++;
 		return 0;
 	}
-
-  	scc->tty = tty;
-	alloc_buffer_pool(scc);
 	
- 	if(!scc->init) return 0;
+	scc->tty = tty;
+
+ 	if(!scc->init) 
+ 		return 0;
+ 
+	alloc_buffer_pool(scc);
  	
 	scc->throttled = 0;
 
-	scc->stat.tx_kiss_state = KISS_IDLE;	/* don't change this... */
-	scc->stat.rx_kiss_state = KISS_IDLE;	/* ...or this */
+	scc->stat.tx_kiss_state = KISS_IDLE;
+	scc->stat.rx_kiss_state = KISS_IDLE;
  
 	init_channel(scc);
 	return 0;
@@ -2014,10 +2324,11 @@ scc_close(struct tty_struct *tty, struct file * filp)
 
         if (!scc || (scc->magic != SCC_MAGIC))
                 return;
+
                 
         MOD_DEC_USE_COUNT;
 	
-	if(scc->tty_opened)
+	if(scc->tty_opened || scc->stat.is_netdev)
 	{
 		scc->tty_opened--;
 		return;
@@ -2028,20 +2339,25 @@ scc_close(struct tty_struct *tty, struct file * filp)
 	if (!Driver_Initialized)
 		return;
 	
-	save_flags(flags); cli();
+	save_flags(flags);
+	cli();
 	
 	Outb(scc->ctrl,0);		/* Make sure pointer is written */
 	wr(scc,R1,0);			/* disable interrupts */
 	wr(scc,R3,0);
 	
 	scc->tty = NULL;
-	
+
 	del_timer(&scc->tx_t);
+	del_timer(&scc->tx_wdog);
 	del_timer(&scc->rx_t);
 
-	free_buffer_pool(scc);
-	
 	restore_flags(flags);
+	
+	if (!scc->init)
+		return;
+
+	free_buffer_pool(scc);
 	
 	scc->throttled = 0;
 	tty->stopped = 0;
@@ -2068,134 +2384,143 @@ scc_change_speed(struct scc_channel * scc)
 	if (scc->stat.tx_state == 0)	/* only switch baudrate on rx... ;-) */
 		set_speed(scc);
 }
-
+#endif /* CONFIG_SCC_TTY */
 
 /* ----> ioctl-routine of the driver <---- */
 
-/* perform ioctl on SCC (sdlc) channel
- * this is used for AX.25 mode, and will set the "kiss" parameters
- */
- 
-/* TIOCMGET 	- get modem status	arg: (unsigned long *) arg
- * TIOCMBIS 	- set PTT		arg: ---
- * TIOCMBIC 	- reset PTT		arg: ---
- * TIOCMBIC 	- set PTT		arg: ---
- * TIOCSCCINI	- initialize driver	arg: ---
- * TIOCCHANINI	- initialize channel	arg: (struct scc_modem *) arg
- * TIOCGKISS	- get level 1 parameter	arg: (struct ioctl_command *) arg
- * TIOCSKISS	- set level 1 parameter arg: (struct ioctl_command *) arg
- * TIOCSCCSTAT  - get driver status	arg: (struct scc_stat *) arg
- */
- 
 
+/* sub routines to read/set KISS parameters */
+ 
+/* generic ioctl() functions for both TTY or network device mode:
+ *
+ * TIOCSCCCFG		- configure driver	arg: (struct scc_hw_config *) arg
+ * TIOCSCCINI		- initialize driver	arg: ---
+ * TIOCSCCCHANINI	- initialize channel	arg: (struct scc_modem *) arg
+ * TIOCSCCGKISS		- get level 1 parameter	arg: (struct scc_kiss_cmd *) arg
+ * TIOCSCCSKISS		- set level 1 parameter arg: (struct scc_kiss_cmd *) arg
+ * TIOCSCCSTAT		- get driver status	arg: (struct scc_stat *) arg
+ */
+ 
 static int
-scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg)
+scc_ioctl(struct scc_channel *scc, unsigned int cmd, void *arg)
 {
-	struct scc_channel * scc = tty->driver_data;
-	unsigned long flags, r;
-	unsigned int result;
-	unsigned int value;
-	struct ioctl_command kiss_cmd;
+	unsigned long flags;
+	struct scc_kiss_cmd kiss_cmd;
 	struct scc_mem_config memcfg;
 	struct scc_hw_config hwcfg;
 	int error, chan;
-
-        if (scc->magic != SCC_MAGIC) 
-        {
-		printk("ERROR: scc_ioctl(): bad magic number for device %s",
-			kdevname(tty->device));
-			
-                return -ENODEV;
-        }
-	                                                 
-	r = NO_SUCH_PARAM;
+	unsigned char device_name[10];
 	
 	if (!Driver_Initialized)
 	{
 		if (cmd == TIOCSCCCFG)
 		{
 			int found = 1;
-			
+
 			if (!suser()) return -EPERM;
 			if (!arg) return -EFAULT;
-			
+
+			error = verify_area(VERIFY_READ, arg, sizeof(struct scc_hw_config));
+			if (error) return error;
+
 			if (Nchips >= MAXSCC) 
 				return -EINVAL;
-			
-			memcpy_fromfs(&hwcfg, (void *) arg, sizeof(hwcfg));
-			
+
+			memcpy_fromfs(&hwcfg, arg, sizeof(hwcfg));
+
 			if (hwcfg.irq == 2) hwcfg.irq = 9;
-			
+
 			if (!Ivec[hwcfg.irq].used && hwcfg.irq)
 			{
 				if (request_irq(hwcfg.irq, scc_isr, SA_INTERRUPT, "AX.25 SCC", NULL))
-					printk("z8530drv: Warning --- could not get IRQ %d\n", hwcfg.irq);
+					printk(KERN_WARNING "z8530drv: warning, cannot get IRQ %d\n", hwcfg.irq);
 				else
 					Ivec[hwcfg.irq].used = 1;
 			}
-			
+
 			if (hwcfg.vector_latch) 
 				Vector_Latch = hwcfg.vector_latch;
-				
+
 			if (hwcfg.clock == 0)
 				hwcfg.clock = DEFAULT_CLOCK;
 
 #ifndef DONT_CHECK
-			save_flags(flags); cli();
-			
+			disable_irq(hwcfg.irq);
+
 			check_region(scc->ctrl, 1);
 			Outb(hwcfg.ctrl_a, 0);
 			udelay(5);
 			OutReg(hwcfg.ctrl_a,R13,0x55);		/* is this chip really there? */
 			udelay(5);
-			
-			if (InReg(hwcfg.ctrl_a,R13) != 0x55 )
+
+			if (InReg(hwcfg.ctrl_a,R13) != 0x55)
 				found = 0;
-				
-			restore_flags(flags);
+
+			enable_irq(hwcfg.irq);
 #endif
 
 			if (found)
 			{
 				SCC_Info[2*Nchips  ].ctrl = hwcfg.ctrl_a;
 				SCC_Info[2*Nchips  ].data = hwcfg.data_a;
+				SCC_Info[2*Nchips  ].irq  = hwcfg.irq;
 				SCC_Info[2*Nchips+1].ctrl = hwcfg.ctrl_b;
 				SCC_Info[2*Nchips+1].data = hwcfg.data_b;
+				SCC_Info[2*Nchips+1].irq  = hwcfg.irq;
 			
-				SCC_ctrl[2*Nchips  ] = hwcfg.ctrl_a;
-				SCC_ctrl[2*Nchips+1] = hwcfg.ctrl_b;
+				SCC_ctrl[Nchips].chan_A = hwcfg.ctrl_a;
+				SCC_ctrl[Nchips].chan_B = hwcfg.ctrl_b;
+				SCC_ctrl[Nchips].irq    = hwcfg.irq;
 			}
-		
+
+
 			for (chan = 0; chan < 2; chan++)
 			{
+				sprintf(device_name, "%s%i", SCC_DriverName, 2*Nchips+chan);
+
 				SCC_Info[2*Nchips+chan].special = hwcfg.special;
 				SCC_Info[2*Nchips+chan].clock = hwcfg.clock;
 				SCC_Info[2*Nchips+chan].brand = hwcfg.brand;
 				SCC_Info[2*Nchips+chan].option = hwcfg.option;
 				SCC_Info[2*Nchips+chan].enhanced = hwcfg.escc;
-			
+
 #ifdef DONT_CHECK
-				printk("%s%i: data port = 0x%3.3x  control port = 0x%3.3x\n",
-					scc_driver.name, 2*Nchips+chan, 
+				printk(KERN_INFO "%s: data port = 0x%3.3x  control port = 0x%3.3x\n",
+					device_name, 
 					SCC_Info[2*Nchips+chan].data, 
 					SCC_Info[2*Nchips+chan].ctrl);
 
 #else
-				printk("%s%i: data port = 0x%3.3x  control port = 0x%3.3x -- %s\n",
-					scc_driver.name, 2*Nchips+chan, 
+				printk(KERN_INFO "%s: data port = 0x%3.3x  control port = 0x%3.3x -- %s\n",
+					device_name,
 					chan? hwcfg.data_b : hwcfg.data_a, 
 					chan? hwcfg.ctrl_b : hwcfg.ctrl_a,
 					found? "found" : "missing");
 #endif
-				
+
 				if (found)
 				{
 					request_region(SCC_Info[2*Nchips+chan].ctrl, 1, "scc ctrl");
 					request_region(SCC_Info[2*Nchips+chan].data, 1, "scc data");
+#ifdef CONFIG_SCC_DEV
+					if (Nchips+chan != 0)
+						scc_net_setup(&SCC_Info[2*Nchips+chan], device_name);
+#endif
 				}
 			}
 			
 			if (found) Nchips++;
+			
+#ifdef SCC_DEBUG
+			printk(KERN_INFO "Available modes:"
+#ifdef CONFIG_SCC_DEV
+			" dev"
+#endif
+#ifdef CONFIG_SCC_TTY
+			" tty"
+#endif
+			"\n");
+#endif
 			
 			return 0;
 		}
@@ -2209,9 +2534,6 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 				return -EINVAL;
 			
 			z8530_init();
-			
-			scc->tty=tty;
-			alloc_buffer_pool(scc);
 			return 0;
 		}
 		
@@ -2220,263 +2542,268 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 	
 	if (!scc->init)
 	{
-		if (cmd == TIOCCHANINI)
+		if (cmd == TIOCSCCCHANINI)
 		{
-			if (!arg)
-				return -EFAULT;
-				
-			if (!suser())
-				return -EPERM;
-			
-			memcpy_fromfs(&scc->modem, (void *) arg, sizeof(struct scc_modem));
+			if (!suser()) return -EPERM;
+			if (!arg) return -EINVAL;
+			error = verify_area(VERIFY_READ, arg, sizeof(struct scc_modem));
+			if (error) return error;
+
+			scc->stat.rxbuffers = RXBUFFERS;
+			scc->stat.txbuffers = TXBUFFERS;
+			scc->stat.bufsize   = BUFSIZE;
+
+			memcpy_fromfs(&scc->modem, arg, sizeof(struct scc_modem));
 			
 			/* default KISS Params */
 		
 			if (scc->modem.speed < 4800)
 			{
-				scc->kiss.txdelay = 36*TPS/100;    /* 360 ms */
-				scc->kiss.persist = 42;            /* 25% persistence */			/* was 25 */
-				scc->kiss.slottime = 16*TPS/100;   /* 160 ms */
-				scc->kiss.tailtime = 4;            /* minimal reasonable value */
-				scc->kiss.fulldup = 0;             /* CSMA */
-				scc->kiss.waittime = 50*TPS/100;   /* 500 ms */
-				scc->kiss.maxkeyup = 10;           /* 10 s */
-				scc->kiss.mintime = 3;             /* 3 s */
-				scc->kiss.idletime = 30;           /* 30 s */
-				scc->kiss.maxdefer = 120;	   /* 2 min */
-				scc->kiss.not_slip = 1;		   /* KISS mode */
-				scc->kiss.softdcd = 0;		   /* hardware dcd */
+				scc->kiss.txdelay = 36;		/* 360 ms */
+				scc->kiss.persist = 42;		/* 25% persistence */			/* was 25 */
+				scc->kiss.slottime = 16;	/* 160 ms */
+				scc->kiss.tailtime = 4;		/* minimal reasonable value */
+				scc->kiss.fulldup = 0;		/* CSMA */
+				scc->kiss.waittime = 50;	/* 500 ms */
+				scc->kiss.maxkeyup = 10;	/* 10 s */
+				scc->kiss.mintime = 3;		/* 3 s */
+				scc->kiss.idletime = 30;	/* 30 s */
+				scc->kiss.maxdefer = 120;	/* 2 min */
+				scc->kiss.softdcd = 0;		/* hardware dcd */
 			} else {
-				scc->kiss.txdelay = 10*TPS/100;    /* 100 ms */
-				scc->kiss.persist = 64;            /* 25% persistence */			/* was 25 */
-				scc->kiss.slottime = 8*TPS/100;    /* 160 ms */
-				scc->kiss.tailtime = 1;            /* minimal reasonable value */
-				scc->kiss.fulldup = 0;             /* CSMA */
-				scc->kiss.waittime = 50*TPS/100;   /* 500 ms */
-				scc->kiss.maxkeyup = 7;            /* 7 s */
-				scc->kiss.mintime = 3;             /* 3 s */
-				scc->kiss.idletime = 30;           /* 30 s */
-				scc->kiss.maxdefer = 120;	   /* 2 min */
-				scc->kiss.not_slip = 1;		   /* KISS mode */
-				scc->kiss.softdcd = 0;		   /* hardware dcd */
+				scc->kiss.txdelay = 10;		/* 100 ms */
+				scc->kiss.persist = 64;		/* 25% persistence */			/* was 25 */
+				scc->kiss.slottime = 8;		/* 160 ms */
+				scc->kiss.tailtime = 1;		/* minimal reasonable value */
+				scc->kiss.fulldup = 0;		/* CSMA */
+				scc->kiss.waittime = 50;	/* 500 ms */
+				scc->kiss.maxkeyup = 7;		/* 7 s */
+				scc->kiss.mintime = 3;		/* 3 s */
+				scc->kiss.idletime = 30;	/* 30 s */
+				scc->kiss.maxdefer = 120;	/* 2 min */
+				scc->kiss.softdcd = 0;		/* hardware dcd */
 			}
 			
-			scc->init = 1;			
+			scc->init = 1;
 			
 			return 0;
 		}
 		
 		return -EINVAL;
 	}
+	
+	switch(cmd)
+	{
+		case TIOCSCCSMEM:
+		case TIOCCHANMEM_OLD:
+			if (!suser()) return -EPERM;
+			if (!arg) return -EINVAL;
+			error = verify_area(VERIFY_READ, arg, sizeof(struct scc_mem_config));
+			if (error) return error;
+	
+			memcpy_fromfs(&memcfg, arg, sizeof(struct scc_mem_config));
 
-	switch(cmd){
-	case TCSBRK:
-		return 0;
-	case TIOCMGET:
-		error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(unsigned int *));
-		if (error)
-			return error;
+			save_flags(flags); 
+			cli();
 
-		save_flags(flags); cli();
+			free_buffer_pool(scc);
+			scc->stat.rxbuffers = memcfg.rxbuffers;
+			scc->stat.txbuffers = memcfg.txbuffers;
+			scc->stat.bufsize   = memcfg.bufsize;
+			if (scc->tty || (scc->dev && (scc->dev->flags & IFF_UP)))
+				alloc_buffer_pool(scc);
 		
-		result =  ((scc->wreg[R5] & RTS) ? TIOCM_RTS : 0)
-			| ((scc->wreg[R5] & DTR) ? TIOCM_DTR : 0)
-			| ((InReg(scc->ctrl,R0) & DCD)  ? TIOCM_CAR : 0)
-			| ((InReg(scc->ctrl,R0) & CTS)  ? TIOCM_CTS : 0);
+			restore_flags(flags);
+			return 0;
 		
-		restore_flags(flags);
+		case TIOCSCCGSTAT:
+		case TIOCSCCSTAT_OLD:
+			if (!arg) return -EINVAL;
+			error = verify_area(VERIFY_WRITE, arg, sizeof(struct scc_mem_config));
+			if (error) return error;
 			
-		put_user(result,(unsigned int *) arg);
-		return 0;
-	case TIOCMBIS:
-	case TIOCMBIC:
-	case TIOCMSET:
-		switch (cmd) {
+			memcpy_tofs(arg, &scc->stat, sizeof(struct scc_stat));
+			return 0;
+		
+		case TIOCSCCGKISS:
+		case TIOCGKISS_OLD:
+			if (!arg) return -EINVAL;
+			error = verify_area(VERIFY_WRITE, arg, sizeof(struct scc_mem_config));
+			if (error) return error;
+		
+			memcpy_fromfs(&kiss_cmd, arg, sizeof(struct scc_kiss_cmd));
+			kiss_cmd.param = kiss_get_param(scc, kiss_cmd.command);
+			memcpy_tofs(arg, &kiss_cmd, sizeof(struct scc_kiss_cmd));
+			return 0;
+			break;
+		
+		case TIOCSCCSKISS:
+		case TIOCSKISS_OLD:
+			if (!suser()) return -EPERM;
+			if (!arg) return -EINVAL;
+			error = verify_area(VERIFY_READ, arg, sizeof(struct scc_mem_config));
+			if (error) return error;
+
+			memcpy_fromfs(&kiss_cmd, arg, sizeof(struct scc_kiss_cmd));
+			return kiss_set_param(scc, kiss_cmd.command, kiss_cmd.param);
+			break;
+
+		default:
+			return -ENOIOCTLCMD;
+		
+	}
+	
+	return 0;
+}
+
+#ifdef CONFIG_SCC_TTY
+/* addtional ioctl() for TTY driver mode:
+ *
+ * TIOCMGET 	- get modem status	arg: (unsigned long *) arg
+ * TIOCMBIS 	- set PTT		arg: ---
+ * TIOCMBIC 	- reset PTT		arg: ---
+ * TIOCMBIC 	- set PTT		arg: ---
+ */
+
+static int
+scc_tty_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg)
+{
+	struct scc_channel * scc = tty->driver_data;
+	unsigned long flags;
+	unsigned int result;
+	unsigned int value;
+	int error;
+
+        if (scc->magic != SCC_MAGIC) 
+        {
+		printk(KERN_ALERT "z8530drv: scc_ioctl() found bad magic number for device %s",
+			SCC_DEVNAME);
+			
+                return -ENODEV;
+        }
+	                                                 
+	if (!Driver_Initialized && cmd == TIOCSCCINI)
+		scc->tty=tty;
+
+	switch(cmd)
+	{
+		case TIOCSCCCFG:
+		case TIOCSCCINI:
+		case TIOCSCCCHANINI:
+		case TIOCSCCSMEM:
+		case TIOCSCCSKISS:
+		case TIOCSCCGKISS:
+
+		case TIOCSCCCFG_OLD:
+		case TIOCSCCINI_OLD:
+		case TIOCCHANINI_OLD:
+		case TIOCCHANMEM_OLD:
+		case TIOCSKISS_OLD:
+		case TIOCGKISS_OLD:
+		case TIOCSCCSTAT_OLD:
+			return scc_ioctl(scc, cmd, (void *) arg);
+
+		case TCSBRK:
+			return 0;
+			
+		case TIOCMGET:
+			error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(unsigned int *));
+			if (error)
+				return error;
+
+			save_flags(flags);
+			cli();
+		
+			result =  ((scc->wreg[R5] & RTS) ? TIOCM_RTS : 0)
+				| ((scc->wreg[R5] & DTR) ? TIOCM_DTR : 0)
+				| ((InReg(scc->ctrl,R0) & DCD)  ? TIOCM_CAR : 0)
+				| ((InReg(scc->ctrl,R0) & CTS)  ? TIOCM_CTS : 0);
+		
+			restore_flags(flags);
+			
+			put_user(result,(unsigned int *) arg);
+			return 0;
+			
 		case TIOCMBIS:
-			scc->wreg[R5] |= DTR;
-			scc->wreg[R5] |= RTS;
-			break;
 		case TIOCMBIC:
-			scc->wreg[R5] &= ~DTR;
-			scc->wreg[R5] &= ~RTS;
-			break;
 		case TIOCMSET:
-			value = get_user((unsigned int *) arg);
+			switch (cmd) 
+			{
+				case TIOCMBIS:
+					scc->wreg[R5] |= DTR;
+					scc->wreg[R5] |= RTS;
+					break;
+				case TIOCMBIC:
+					scc->wreg[R5] &= ~DTR;
+					scc->wreg[R5] &= ~RTS;
+					break;
+				case TIOCMSET:
+					error = verify_area(VERIFY_READ, (void *) arg,sizeof(unsigned int *));
+					if (error)
+						return error;
+					value = get_user((unsigned int *) arg);
 			
-			if(value & TIOCM_DTR)
-				scc->wreg[R5] |= DTR;
-			else
-				scc->wreg[R5] &= ~DTR;
-			if(value & TIOCM_RTS)
-				scc->wreg[R5] |= RTS;
-			else
-				scc->wreg[R5] &= ~RTS;
-			break;
-		}
-		
-		save_flags(flags); cli();
-		
-		if(scc->stat.tx_state == TXS_IDLE && !Running(t_idle))
-			maxk_idle_timeout(scc);
+					if(value & TIOCM_DTR)
+						scc->wreg[R5] |= DTR;
+					else
+						scc->wreg[R5] &= ~DTR;
+					if(value & TIOCM_RTS)
+						scc->wreg[R5] |= RTS;
+					else
+						scc->wreg[R5] &= ~RTS;
+					break;
+			}
 			
-		restore_flags(flags);
+			OutReg(scc->ctrl, R5, scc->wreg[R5]);
+			return 0;
 		
-		return 0;
-		
-	case TCGETS:
-		error = verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct termios));
-		if (error)
-			return error;
-		if (!arg) 
-			return -EFAULT;
+		case TCGETS:
+			error = verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct termios));
+			if (error)
+				return error;
+			if (!arg) 
+				return -EFAULT;
 			
-		memcpy_tofs((void *) arg, scc->tty->termios, sizeof(struct termios));
-		return 0;
+			memcpy_tofs((void *) arg, scc->tty->termios, sizeof(struct termios));
+			return 0;
 		
-	case TCSETS:
-	case TCSETSF:		/* should flush first, but... */
-	case TCSETSW:		/* should wait 'till flush, but... */
-		if (!arg)
-			return -EFAULT;
+		case TCSETS:
+		case TCSETSF:		/* should flush first, but... */
+		case TCSETSW:		/* should wait 'till flush, but... */
+			if (!arg)
+				return -EFAULT;
 		
-		memcpy_fromfs(scc->tty->termios, (void *) arg, sizeof(struct termios));
-		scc_change_speed(scc);
-		return 0;
+			error = verify_area(VERIFY_READ, (void *) arg, sizeof(struct termios));
+			if (error)
+				return error;
+			memcpy_fromfs(scc->tty->termios, (void *) arg, sizeof(struct termios));
+			scc_change_speed(scc);
+			return 0;
 		
-	case TIOCCHANMEM:
-		if (!arg)
-			return -EFAULT;
-			
-		memcpy_fromfs(&memcfg, (void *) arg, sizeof(struct scc_mem_config));
-		
-		save_flags(flags); cli();
-		
-		free_buffer_pool(scc);
-		scc->stat.rxbuffers = memcfg.rxbuffers;
-		scc->stat.txbuffers = memcfg.txbuffers;
-		scc->stat.bufsize   = memcfg.bufsize;
-		alloc_buffer_pool(scc);
-		
-		restore_flags(flags);
-		return 0;
-		
-		
-	case TIOCSCCSTAT:
-		error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(struct scc_stat));
-		if (error)
-			return error;
-		
-		if (!arg)
-			return -EFAULT;
-			
-		memcpy_tofs((void *) arg, &scc->stat, sizeof(struct scc_stat));
-		return 0;
-		
-#define TICKS (100/TPS)
-#define CAST(x) (unsigned long)(x)
-#define  Val	kiss_cmd.param
-#define  VAL	kiss_cmd.param*TPS/100
-#define SVAL	kiss_cmd.param? kiss_cmd.param:TIMER_STOPPED
-
-	case TIOCGKISS:
-		error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(struct ioctl_command));
-		if (error)
-			return error;
-			
-		if (!arg)
-			return -EFAULT;
-			
-		memcpy_fromfs(&kiss_cmd, (void *) arg, sizeof(struct ioctl_command));
-
-		switch (kiss_cmd.command)
-		{
-			case PARAM_TXDELAY:	r = CAST(scc->kiss.txdelay*TICKS);	break;
-			case PARAM_PERSIST:	r = CAST(scc->kiss.persist); 		break;
-			case PARAM_SLOTTIME:	r = CAST(scc->kiss.slottime*TICKS);	break;
-			case PARAM_TXTAIL:	r = CAST(scc->kiss.tailtime*TICKS);	break;
-			case PARAM_FULLDUP:	r = CAST(scc->kiss.fulldup); 		break;
-			case PARAM_SOFTDCD:	r = CAST(scc->kiss.softdcd);		break;
-			case PARAM_DTR:		r = CAST((scc->wreg[R5] & DTR)? 1:0); break;
-			case PARAM_RTS:		r = CAST((scc->wreg[R5] & RTS)? 1:0); break;
-			case PARAM_SPEED:	r = CAST(scc->modem.speed);	break;
-			case PARAM_GROUP:	r = CAST(scc->kiss.group); 		break;
-			case PARAM_IDLE:	r = CAST(scc->kiss.idletime);		break;
-			case PARAM_MIN:		r = CAST(scc->kiss.mintime);		break;
-			case PARAM_MAXKEY:	r = CAST(scc->kiss.maxkeyup);		break;
-			case PARAM_WAIT:	r = CAST(scc->kiss.waittime);		break;
-			case PARAM_MAXDEFER:	r = CAST(scc->kiss.maxdefer);		break;
-			case PARAM_TX:		r = CAST(scc->kiss.tx_inhibit);	break;
-			case PARAM_SLIP:	r = CAST(!scc->kiss.not_slip);		break;
-			default:		r = NO_SUCH_PARAM;
-		}
-		
-		kiss_cmd.param = r;
-		
-		memcpy_tofs((void *) arg, &kiss_cmd, sizeof(struct ioctl_command));
-		return 0;
-		break;
-		
-	case TIOCSKISS:
-		if (!arg)
-			return -EFAULT;
-
-		memcpy_fromfs(&kiss_cmd, (void *) arg, sizeof(struct ioctl_command));
-		
-		switch (kiss_cmd.command)
-		{
-			case PARAM_TXDELAY:	scc->kiss.txdelay=VAL;		break;
-			case PARAM_PERSIST:	scc->kiss.persist=Val;		break;
-			case PARAM_SLOTTIME:	scc->kiss.slottime=VAL;		break;
-			case PARAM_TXTAIL:	scc->kiss.tailtime=VAL;		break;
-			case PARAM_FULLDUP:	scc->kiss.fulldup=Val;		break;
-			case PARAM_SOFTDCD:	scc->kiss.softdcd=Val;		break;
-			case PARAM_DTR:		break; /* does someone need this? */
-			case PARAM_RTS:		break; /* or this? */
-			case PARAM_SPEED:	scc->modem.speed=Val;		break;
-			case PARAM_GROUP:	scc->kiss.group=Val;		break;
-			case PARAM_IDLE:	scc->kiss.idletime=Val;		break;
-			case PARAM_MIN:		scc->kiss.mintime=SVAL;		break;
-			case PARAM_MAXKEY:	scc->kiss.maxkeyup=SVAL;	break;
-			case PARAM_WAIT:	scc->kiss.waittime=Val;		break;
-			case PARAM_MAXDEFER:	scc->kiss.maxdefer=SVAL;	break;
-			case PARAM_TX:		scc->kiss.tx_inhibit=Val;	break;
-			case PARAM_SLIP:	scc->kiss.not_slip=!Val;	break;
-			default:		return -ENOIOCTLCMD;
-		}
-		
-		return 0;
-		break;
-#undef TICKS
-#undef CAST
-#undef VAL
-#undef SVAL
-#undef Val
-		
-	default:
-		return -ENOIOCTLCMD;
-    }
+	}
+	
+	return -ENOIOCTLCMD;
 }
 
 
 /* ----> tx routine: decode KISS data and scc_enqueue it <---- */
 
 /* send raw frame to SCC. used for AX.25 */
-int scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count)
+int 
+scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count)
 {
 	struct scc_channel * scc = tty->driver_data;
 	unsigned char *p;
-	unsigned long flags;
 	int cnt, cnt2;
 	
-	if (!tty) return count;
+	if (!tty) 
+		return -EINVAL;
 	
 	if (scc_paranoia_check(scc, tty->device, "scc_write"))
-		return 0;
+		return -EINVAL;
 
 	if (scc->kiss.tx_inhibit) return count;
-	
-	save_flags(flags); cli();
-	
+
 	cnt2 = count;
 	
 	while (cnt2)
@@ -2493,8 +2820,8 @@ int scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, i
 		else
 			memcpy(scc_wbuf, buf, cnt);
 		
-		/* Strange thing. The timeout of the slip driver is */
-		/* very small, thus we'll wake him up now. 	    */
+		/* The timeout of the slip driver is very small, */
+		/* thus we'll wake him up now. 	    		 */
 
 		if (cnt2 == 0)
 		{
@@ -2510,34 +2837,28 @@ int scc_write(struct tty_struct *tty, int from_user, const unsigned char *buf, i
 		
 		while(cnt--) 
 		  if (kiss_decode(scc, *p++))
-		  {
-		  	scc->stat.nospace++;
-		  	restore_flags(flags);
-		  	return 0;
-		  }		  	
+		  	return -ENOMEM;
 	} /* while cnt2 */
 
-	restore_flags(flags);
-		
 	return count;
 }
 				
 
 /* put a single char into the buffer */
 
-static void scc_put_char(struct tty_struct * tty, unsigned char ch)
+static void 
+scc_put_char(struct tty_struct * tty, unsigned char ch)
 {
 	struct scc_channel *scc = tty->driver_data;
-	unsigned char ch2;
 	
 	if (scc_paranoia_check(scc, tty->device, "scc_put_char"))
 		return;
-		
-	ch2 = ch;
-	scc_write(tty, 0, &ch2, 1);	/* that's all */
+
+	kiss_decode(scc, ch);
 }
 
-static void scc_flush_chars(struct tty_struct * tty)
+static void 
+scc_flush_chars(struct tty_struct * tty)
 {
 	struct scc_channel *scc = tty->driver_data;
 	
@@ -2547,7 +2868,8 @@ static void scc_flush_chars(struct tty_struct * tty)
 }
 
 
-static int scc_write_room(struct tty_struct *tty)
+static int 
+scc_write_room(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
 	
@@ -2557,7 +2879,8 @@ static int scc_write_room(struct tty_struct *tty)
 	return BUFSIZE;
 }
 
-static int scc_chars_in_buffer(struct tty_struct *tty)
+static int 
+scc_chars_in_buffer(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
 	
@@ -2567,7 +2890,8 @@ static int scc_chars_in_buffer(struct tty_struct *tty)
 		return 0;
 }
 
-static void scc_flush_buffer(struct tty_struct *tty)
+static void 
+scc_flush_buffer(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
 
@@ -2579,41 +2903,43 @@ static void scc_flush_buffer(struct tty_struct *tty)
 		(tty->ldisc.write_wakeup)(tty);
 }
 
-static void scc_throttle(struct tty_struct *tty)
+static void 
+scc_throttle(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
 	
 	if (scc_paranoia_check(scc, tty->device, "scc_throttle"))
 		return;
 
-#ifdef DEBUG		
-	printk("scc: scc_throttle() called for device %d\n", MINOR(tty->device));
+#ifdef SCC_DEBUG		
+	printk(KERN_DEBUG "z8530drv: scc_throttle() called for device %d\n", MINOR(tty->device));
 #endif
 	scc->throttled = 1;
 	
 	del_timer(&(scc->rx_t));
-	scc->rx_t.expires = jiffies + HZ/TPS;
+	scc->rx_t.expires = jiffies + HZ/25;
 	add_timer(&scc->rx_t);
 }
 
-static void scc_unthrottle(struct tty_struct *tty)
+static void 
+scc_unthrottle(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
 	
 	if (scc_paranoia_check(scc, tty->device, "scc_unthrottle"))
 		return;
 		
-#ifdef DEBUG
-	printk("scc: scc_unthrottle() called for device %d\n", MINOR(tty->device));
+#ifdef SCC_DEBUG
+	printk(KERN_DEBUG "z8350drv: scc_unthrottle() called for device %d\n", MINOR(tty->device));
 #endif		
 	scc->throttled = 0;
 	del_timer(&(scc->rx_t));
-	scc_tx_timer(scc->rx_t.data);
 }
 
 /* experimental, the easiest way to stop output is a fake scc_throttle */
 
-static void scc_start(struct tty_struct *tty)
+static void 
+scc_start(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
 	
@@ -2623,7 +2949,8 @@ static void scc_start(struct tty_struct *tty)
 	scc_unthrottle(tty);
 }
 
-static void scc_stop(struct tty_struct *tty)
+static void 
+scc_stop(struct tty_struct *tty)
 {
 	struct scc_channel *scc = tty->driver_data;
 	
@@ -2657,20 +2984,521 @@ scc_set_ldisc(struct tty_struct * tty)
 		
 	scc_change_speed(scc);
 }
+#endif /* CONFIG_SCC_TTY */
+
+#ifdef CONFIG_SCC_DEV
+/* ******************************************************************** */
+/* *			    Network driver routines		      * */
+/* ******************************************************************** */
+
+static unsigned char ax25_bcast[AX25_ADDR_LEN] =
+{'Q' << 1, 'S' << 1, 'T' << 1, ' ' << 1, ' ' << 1, ' ' << 1, '0' << 1};
+static unsigned char ax25_nocall[AX25_ADDR_LEN] =
+{'L' << 1, 'I' << 1, 'N' << 1, 'U' << 1, 'X' << 1, ' ' << 1, '1' << 1};
+
+static int 
+scc_net_init(struct device *dev)
+{
+	return 0;	/* dummy */
+}
+
+/* ----> open network device <---- */
+
+static int 
+scc_net_open(struct device *dev)
+{
+	struct scc_channel *scc = (struct scc_channel *) dev->priv;
+
+	if (scc == NULL || scc->magic != SCC_MAGIC)
+		return -ENODEV;
+
+	if (scc->tty != NULL)
+		return -EBUSY;
+
+ 	if (!scc->init)
+		return -EINVAL;
+
+	scc->stat.is_netdev = 1;
+
+	MOD_INC_USE_COUNT;
+
+	alloc_buffer_pool(scc);
+
+	scc->stat.tx_kiss_state = KISS_IDLE;	/* unused */
+	scc->stat.rx_kiss_state = KISS_IDLE;	/* unused */
+ 
+	init_channel(scc);
+
+	dev->tbusy = 0;
+	dev->start = 1;
+
+	return 0;
+}
+
+/* ----> close network device <---- */
+
+static int 
+scc_net_close(struct device *dev)
+{
+	struct scc_channel *scc = (struct scc_channel *) dev->priv;
+	unsigned long flags;
+
+	if (scc == NULL || scc->magic != SCC_MAGIC)
+		return -ENODEV;
+
+	if (!scc->stat.is_netdev)
+		return -ENXIO;
+
+	MOD_DEC_USE_COUNT;
+
+	scc->stat.is_netdev = 0;
+
+	save_flags(flags); 
+	cli();
+	
+	Outb(scc->ctrl,0);		/* Make sure pointer is written */
+	wr(scc,R1,0);			/* disable interrupts */
+	wr(scc,R3,0);
+
+	del_timer(&scc->tx_t);
+	del_timer(&scc->tx_wdog);
+#ifdef CONFIG_SCC_TTY
+	del_timer(&scc->rx_t);
+#endif
+	restore_flags(flags);
+
+	free_buffer_pool(scc);
+
+	dev->tbusy = 1;
+	dev->start = 0;
+
+	return 0;
+}
+
+/* ----> receive frame, called from scc_rxint() <---- */
+
+static void 
+scc_net_rx(struct scc_channel *scc, struct mbuf *bp)
+{
+	struct sk_buff *skb;
+
+	if ( bp == NULL || bp->cnt == 0 || 
+	    scc == NULL || scc->magic != SCC_MAGIC)
+		return;
+		
+	skb = dev_alloc_skb(bp->cnt+1);
+
+	if (skb == NULL)
+	{
+		scc->dev_stat.rx_dropped++;
+		return;
+	}
+
+	scc->dev_stat.rx_packets++;
+
+	skb->dev = scc->dev;
+	skb->protocol = htons(ETH_P_AX25);
+	
+	memcpy(skb_put(skb, bp->cnt), bp->data, bp->cnt);
+
+	skb->mac.raw = skb->data;
+	netif_rx(skb);
+
+	return;
+}
+
+/* ----> transmit frame <---- */
+
+static int 
+scc_net_tx(struct sk_buff *skb, struct device *dev)
+{
+	struct scc_channel *scc = (struct scc_channel *) dev->priv;
+	struct mbuf *bp;
+	long ticks;
+	
+	/* 
+	 * We have our own queues, dev->tbusy is set only by t_maxkeyup
+	 * to avoid running the driver into maxkeup again and again.
+	 *
+	 * Hope I havn't outsmart me _again_ ;-)
+	 */
+
+	if (dev->tbusy)
+	{
+		ticks = (signed) (jiffies - dev->trans_start);
+
+		if (ticks < scc->kiss.maxdefer*HZ || scc == NULL)
+			return 1;
+
+		/* 
+		 * Arrgh... Seems to be a _very_ busy channel.
+		 * throw away transmission queue. 
+		 */
+
+		del_timer(&scc->tx_wdog);
+		t_busy((unsigned long) scc);
+
+                dev->tbusy=0;
+                dev->trans_start = jiffies;
+        }
+
+	if (skb == NULL)
+	{
+		dev_tint(dev);
+		return 0;
+	}
+
+	if (scc == NULL || scc->magic != SCC_MAGIC)
+	{
+		dev_kfree_skb(skb, FREE_WRITE);
+		return 0;
+	}
+
+	scc->dev_stat.tx_packets++;
+	bp = scc_get_buffer(scc, BT_TRANSMIT);
+
+	if (bp == NULLBUF || skb->len > scc->stat.bufsize || skb->len == 0)
+	{
+		scc->dev_stat.tx_dropped++;
+		if (bp) scc_enqueue_buffer(&scc->tx_buffer_pool, bp);
+		dev_kfree_skb(skb, FREE_WRITE);
+		return 0;
+	}
+
+	memcpy(bp->data, skb->data, skb->len);
+	bp->cnt = skb->len;
+
+	dev_kfree_skb(skb, FREE_WRITE);
+
+	scc->kiss_decode_bp = bp;
+	kiss_interpret_frame(scc);
+	dev->trans_start = jiffies;
+	return 0;
+}
+
+/* ----> set interface callsign <---- */
+
+static int 
+scc_net_set_mac_address(struct device *dev, void *addr)
+{
+	struct sockaddr *sa = (struct sockaddr *) addr;
+	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);
+	return 0;
+}
+
+/* ----> rebuild header <---- */
+
+static int 
+scc_net_rebuild_header(void *buff, struct device *dev, unsigned long raddr, struct sk_buff *skb)
+{
+    return ax25_rebuild_header(buff, dev, raddr, skb);
+}
+
+/* ----> "hard" header <---- */
+
+static int 
+scc_net_header(struct sk_buff *skb, struct device *dev, unsigned short type, 
+	       void *daddr, void *saddr, unsigned len)
+{
+    return ax25_encapsulate(skb, dev, type, daddr, saddr, len);
+}
+
+/* ----> get statistics <---- */
+
+static struct enet_statistics *
+scc_net_get_stats(struct device *dev)
+{
+	struct scc_channel *scc = (struct scc_channel *) dev->priv;
+	
+	if (scc == NULL || scc->magic != SCC_MAGIC)
+		return NULL;
+		
+	scc->dev_stat.rx_errors = scc->stat.rxerrs + scc->stat.rx_over;
+	scc->dev_stat.tx_errors = scc->stat.txerrs + scc->stat.tx_under;
+	scc->dev_stat.rx_fifo_errors = scc->stat.rx_over;
+	scc->dev_stat.tx_fifo_errors = scc->stat.tx_under;
+
+	return &scc->dev_stat;
+}
+
+/* ----> ioctl for network devices <---- */
+
+static int 
+scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
+{
+	struct scc_channel *scc = (struct scc_channel *) dev->priv;
+	unsigned int ncmd = 0;
+	int res;
+
+	if (scc == NULL || scc->magic != SCC_MAGIC)
+		return -EINVAL;
+
+	if (!Driver_Initialized && cmd == SIOCSCCINI)
+	{
+		scc->dev = dev;
+		scc->stat.is_netdev = 1;
+	}
+
+	switch (cmd)
+	{
+		case SIOCSCCRESERVED:	return -EINVAL;      /* unused */
+		case SIOCSCCCFG:	ncmd = TIOCSCCCFG;	break;
+		case SIOCSCCINI:	ncmd = TIOCSCCINI;	break;
+		case SIOCSCCCHANINI:	ncmd = TIOCSCCCHANINI;	break;
+		case SIOCSCCSMEM:	ncmd = TIOCSCCSMEM;	break;
+		case SIOCSCCGKISS:	ncmd = TIOCSCCGKISS;	break;
+		case SIOCSCCSKISS:	ncmd = TIOCSCCSKISS;	break;
+		case SIOCSCCGSTAT:	ncmd = TIOCSCCGSTAT;	break;
+		default:		return -EINVAL;
+	}
+
+	res = scc_ioctl(scc, ncmd, (void *) ifr->ifr_data);
+
+#ifdef CONFIG_SCC_TTY
+	if (!(dev->flags & IFF_UP))
+		scc->stat.is_netdev = 0;
+#endif
+
+	return res;
+	
+}
 
 
+/* ----> initialize interface <---- */
+
+static int 
+scc_net_setup(struct scc_channel *scc, unsigned char *name)
+{
+	int k;
+	unsigned char *buf;
+	struct device *dev;
+
+	if (dev_get(name) != NULL)
+	{
+		printk(KERN_INFO "Z8530drv: device %s already exists.\n", name);
+		return -EEXIST;
+	}
+
+	if ((scc->dev = (struct device *) kmalloc(sizeof(struct device), GFP_KERNEL)) == NULL)
+		return -ENOMEM;
+
+#ifndef CONFIG_SCC_TTY
+	scc->stat.is_netdev = 1;
+#endif
+	dev = scc->dev;
+	memset(dev, 0, sizeof(struct device));
+
+	buf = (unsigned char *) kmalloc(10, GFP_KERNEL);
+	strcpy(buf, name);
+
+	dev->priv = (void *) scc;
+	dev->name = buf;
+	dev->init = scc_net_init;
+
+	if (register_netdev(dev) != 0)
+	{
+		kfree(dev);
+		return -EIO;
+	}
+
+	for (k=0; k < DEV_NUMBUFFS; k++)
+		skb_queue_head_init(&dev->buffs[k]);
+
+	dev->open            = scc_net_open;
+	dev->stop	     = scc_net_close;
+
+	dev->hard_start_xmit = scc_net_tx;
+	dev->hard_header     = scc_net_header;
+	dev->rebuild_header  = scc_net_rebuild_header;
+	dev->set_mac_address = scc_net_set_mac_address;
+	dev->get_stats       = scc_net_get_stats;
+	dev->do_ioctl        = scc_net_ioctl;
+
+	memcpy(dev->broadcast, ax25_bcast,  AX25_ADDR_LEN);
+	memcpy(dev->dev_addr,  ax25_nocall, AX25_ADDR_LEN);
+ 
+	dev->flags      = 0;
+	dev->family     = AF_INET;
+	dev->pa_addr    = 0;
+	dev->pa_brdaddr = 0;
+	dev->pa_mask    = 0;
+	dev->pa_alen    = 4;
+
+	dev->type = ARPHRD_AX25;
+	dev->hard_header_len = AX25_MAX_HEADER_LEN + AX25_BPQ_HEADER_LEN;
+	dev->mtu = AX25_DEF_PACLEN;
+	dev->addr_len = AX25_ADDR_LEN;
+
+	return 0;
+}
+#endif /* CONFIG_SCC_DEV */
+
+/* ******************************************************************** */
+/* *		dump statistics to /proc/net/z8530drv		      * */
+/* ******************************************************************** */
+
+
+static int 
+scc_net_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+{
+	struct scc_channel *scc;
+	char *txstate, *clksrc, *brand;
+	struct scc_kiss *kiss;
+	struct scc_stat *stat;
+	int len = 0;
+	off_t pos = 0;
+	off_t begin = 0;
+	int k;
+
+	if (!Driver_Initialized)
+	{
+		len += sprintf(buffer, "Driver not initialized.\n");
+		goto done;
+	}
+
+	if (!Nchips)
+	{
+		len += sprintf(buffer, "Z8530 chips not found\n");
+		goto done;
+	}
+
+	for (k = 0; k < Nchips*2; k++)
+	{
+		scc = &SCC_Info[k];
+		stat = &scc->stat;
+		kiss = &scc->kiss;
+
+		if (!scc->init)
+			continue;
+
+		switch(stat->tx_state)
+		{
+			case TXS_IDLE:		txstate = "idle";	break;
+			case TXS_BUSY:		txstate = "busy";	break;
+			case TXS_ACTIVE:	txstate = "active";	break;
+			case TXS_NEWFRAME:	txstate = "new";	break;
+			case TXS_IDLE2:		txstate = "keyed";	break;
+			case TXS_WAIT:		txstate = "wait";	break;
+			case TXS_TIMEOUT:	txstate = "timeout";	break;
+			default:		txstate = "???";
+		}
+		switch(scc->modem.clocksrc)
+		{
+			case CLK_DPLL:		clksrc = "dpll";	break;
+			case CLK_EXTERNAL:	clksrc = "ext";		break;
+			case CLK_DIVIDER:	clksrc = "div";		break;
+			default:		clksrc = "???";
+		}
+		switch(scc->brand)
+		{
+			case PA0HZP:	brand="pa0hzp";	break;
+			case EAGLE:	brand="eagle";	break;
+			case PC100:	brand="pc1100";	break;
+			case PRIMUS:	brand="primus";	break;
+			case DRSI:	brand="drsi";	break;
+			case BAYCOM:	brand="baycom";	break;
+			default:	brand="???";
+		}
+	
+		len += sprintf(buffer+len, "Device     : %s%d\n", SCC_DriverName, k);
+		len += sprintf(buffer+len, "Hardware   : %3.3x %3.3x %d %lu %s %s %3.3x %3.3x %d\n", 
+				scc->data, scc->ctrl, scc->irq, scc->clock, brand,
+				scc->enhanced? "enh":"norm", Vector_Latch, scc->special, 
+				scc->option);
+		len += sprintf(buffer+len, "Received   : %lu %lu %d\n", 
+				stat->rxframes, stat->rxerrs, stat->rx_over);
+		len += sprintf(buffer+len, "Transmitted: %lu %lu %d %s\n", 
+				stat->txframes, stat->txerrs, stat->tx_under, txstate);
+		len += sprintf(buffer+len, "Interrupts : %lu %lu %lu %lu\n",
+				stat->rxints, stat->txints, stat->exints, stat->spints);
+		len += sprintf(buffer+len, "Buffers    : %d %d/%d %d/%d %d\n", 
+				stat->bufsize, stat->rx_queued, stat->rxbuffers,
+				stat->tx_queued, stat->txbuffers, stat->nospace);
+		len += sprintf(buffer+len, "MODEM      : %lu %s %s %s\n", 
+				scc->modem.speed, scc->modem.nrz? "nrz":"nrzi",
+				clksrc, kiss->softdcd? "soft":"hard");
+		len += sprintf(buffer+len, "Mode       : %s\n",
+				stat->is_netdev? "dev":"tty");
+#define K(x) kiss->x
+		len += sprintf(buffer+len, "KISS params: %d %d %d %d %d %d %d %d %d %d %d %d\n",
+				K(txdelay), K(persist), K(slottime), K(tailtime),
+				K(fulldup), K(waittime), K(mintime), K(maxkeyup),
+				K(idletime), K(maxdefer), K(tx_inhibit), K(group));
+#undef K
+#ifdef SCC_DEBUG
+		{
+			int reg;
+
+			len += sprintf(buffer+len, "Z8530 wregs: ");
+			for (reg = 0; reg < 16; reg++)
+				len += sprintf(buffer+len, "%2.2x ", scc->wreg[reg]);
+			len += sprintf(buffer+len, "\n");
+			
+			len += sprintf(buffer+len, "Z8530 rregs: %2.2x %2.2x XX ", InReg(scc->ctrl,R0), InReg(scc->ctrl,R1));
+			for (reg = 3; reg < 8; reg++)
+				len += sprintf(buffer+len, "%2.2x ", InReg(scc->ctrl, reg));
+			len += sprintf(buffer+len, "XX ");
+			for (reg = 9; reg < 16; reg++)
+				len += sprintf(buffer+len, "%2.2x ", InReg(scc->ctrl, reg));
+			len += sprintf(buffer+len, "\n");
+		}
+#endif
+		len += sprintf(buffer+len, "\n");
+
+                pos = begin + len;
+
+                if (pos < offset) {
+                        len   = 0;
+                        begin = pos;
+                }
+
+                if (pos > offset + length)
+                        break;
+	}
+
+done:
+
+        *start = buffer + (offset - begin);
+        len   -= (offset - begin);
+
+        if (len > length) len = length;
+
+        return len;
+}
+
+#ifdef CONFIG_INET
+struct proc_dir_entry scc_proc_dir_entry = 
+{ 
+  PROC_NET_Z8530, 8, "z8530drv", S_IFREG | S_IRUGO, 1, 0, 0, 0, 
+  &proc_net_inode_operations, scc_net_get_info 
+};
+
+#define scc_net_procfs_init()   proc_net_register(&scc_proc_dir_entry);
+#define scc_net_procfs_remove() proc_net_unregister(PROC_NET_Z8530);
+#else
+#define scc_net_procfs_init()
+#define scc_net_procfs_remove()
+#endif
+
+  
 /* ******************************************************************** */
 /* * 			Init SCC driver 			      * */
 /* ******************************************************************** */
 
-int  scc_init (void)
+int scc_init (void)
 {
 	int chip, chan, k;
+#ifdef CONFIG_SCC_DEV
+	char devname[10];
+#endif
 	
+	printk(KERN_INFO BANNER);
+
+#ifdef CONFIG_SCC_TTY
 	memset(&scc_std_termios, 0, sizeof(struct termios));
         memset(&scc_driver, 0, sizeof(struct tty_driver));
         scc_driver.magic = TTY_DRIVER_MAGIC;
-        scc_driver.name = "scc";
+        scc_driver.name = SCC_DriverName;
         scc_driver.major = Z8530_MAJOR;
         scc_driver.minor_start = 0;
         scc_driver.num = MAXSCC*2;
@@ -2699,17 +3527,19 @@ int  scc_init (void)
 	scc_driver.throttle = scc_throttle;
 	scc_driver.unthrottle = scc_unthrottle;
         
-        scc_driver.ioctl = scc_ioctl;
+        scc_driver.ioctl = scc_tty_ioctl;
         scc_driver.set_termios = scc_set_termios;
         scc_driver.set_ldisc = scc_set_ldisc;
 
-	printk(BANNER);
         
         if (tty_register_driver(&scc_driver))
         {
-		printk("Failed to register Z8530 SCC driver\n");
+		printk(KERN_ERR "Failed to register Z8530 SCC driver\n");
 		return -EIO;
 	}
+#endif
+	
+	memset(&SCC_ctrl, 0, sizeof(SCC_ctrl));
 	
 	/* pre-init channel information */
 	
@@ -2719,15 +3549,18 @@ int  scc_init (void)
 		memset((char *) &SCC_Info[2*chip+1], 0, sizeof(struct scc_channel));
 		
 		for (chan = 0; chan < 2; chan++)
-		{
 			SCC_Info[2*chip+chan].magic    = SCC_MAGIC;
-			SCC_Info[2*chip+chan].stat.rxbuffers = RXBUFFERS;
-			SCC_Info[2*chip+chan].stat.txbuffers = TXBUFFERS;
-			SCC_Info[2*chip+chan].stat.bufsize   = BUFSIZE;
-		}
 	}
-	
+
 	for (k = 0; k < 16; k++) Ivec[k].used = 0;
+
+#ifdef CONFIG_SCC_DEV
+	sprintf(devname,"%s0", SCC_DriverName);
+	
+	if (scc_net_setup(SCC_Info, devname))
+		printk(KERN_WARNING "z8530drv: cannot setup network device\n");
+#endif
+	scc_net_procfs_init();
 
 	return 0;
 }
@@ -2743,9 +3576,9 @@ int init_module(void)
 	int result = 0;
 	
 	result = scc_init();
-	
+
 	if (result == 0)
-		printk("Copyright 1993,1995 Joerg Reuter DL1BKE (jreuter@lykos.tng.oche.de)\n");
+		printk(KERN_INFO "Copyright 1993,1996 Joerg Reuter DL1BKE (jreuter@lykos.tng.oche.de)\n");
 		
 	return result;
 }
@@ -2754,19 +3587,26 @@ void cleanup_module(void)
 {
 	long flags;
 	io_port ctrl;
-	int k, errno;
+	int k;
 	struct scc_channel *scc;
 	
-	save_flags(flags); cli();
-	if ( (errno = tty_unregister_driver(&scc_driver)) )
+	save_flags(flags); 
+	cli();
+
+#ifdef CONFIG_SCC_TTY
+	if ( (k = tty_unregister_driver(&scc_driver)) )
 	{
-		printk("Failed to unregister Z8530 SCC driver (%d)", -errno);
+		printk(KERN_ERR "z8530drv: failed to unregister tty driver: (%d)\n", -k);
 		restore_flags(flags);
 		return;
 	}
-	
+#endif
+
+	if (Nchips == 0)
+		unregister_netdev(SCC_Info[0].dev);
+
 	for (k = 0; k < Nchips; k++)
-		if ( (ctrl = SCC_ctrl[k*2]) )
+		if ( (ctrl = SCC_ctrl[k].chan_A) )
 		{
 			Outb(ctrl, 0);
 			OutReg(ctrl,R9,FHWRES);	/* force hardware reset */
@@ -2780,6 +3620,11 @@ void cleanup_module(void)
 		{
 			release_region(scc->ctrl, 1);
 			release_region(scc->data, 1);
+			if (scc->dev)
+			{
+				unregister_netdev(scc->dev);
+				kfree(scc->dev);
+			}
 		}
 	}
 	
@@ -2787,5 +3632,7 @@ void cleanup_module(void)
 		if (Ivec[k].used) free_irq(k, NULL);
 		
 	restore_flags(flags);
+
+	scc_net_procfs_remove();
 }
 #endif

@@ -12,6 +12,7 @@
  *		Martin Mares	:	TOS setting fixed.
  *		Alan Cox	:	Fixed a couple of oopses in Martin's 
  *					TOS tweaks.
+ *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
  */
 
 #include <linux/config.h>
@@ -293,7 +294,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				/*
 				 *	Not set so scan.
 				 */
-				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,0))!=NULL)
+				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,0,sk->bound_device))!=NULL)
 				{
 					dev=rt->rt_dev;
 					atomic_dec(&rt->rt_use);
@@ -345,7 +346,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
  
 			if(mreq.imr_interface.s_addr==INADDR_ANY) 
 			{
-				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,0))!=NULL)
+				if((rt=ip_rt_route(mreq.imr_multiaddr.s_addr,0,sk->bound_device))!=NULL)
 			        {
 					dev=rt->rt_dev;
 					atomic_dec(&rt->rt_use);

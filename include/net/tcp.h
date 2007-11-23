@@ -41,7 +41,23 @@ extern struct sock *tcp_bound_hash[TCP_BHTABLE_SIZE];
 /* These are AF independant. */
 static __inline__ int tcp_bhashfn(__u16 lport)
 {
-	return (lport ^ (lport >> 7)) & (TCP_BHTABLE_SIZE - 1);
+	return (lport ^ (lport >> 7)) & (TCP_BHTABLE_SIZE-1);
+}
+
+/* Find the next port that hashes h that is larger than lport.
+ * If you change the hash, change this function to match, or you will
+ * break TCP port selection. This function must also NOT wrap around
+ * when the next number exceeds the largest possible port (2^16-1).
+ */
+static __inline__ int tcp_bhashnext(__u16 short lport, __u16 h)
+{
+        __u32 s;	/* don't change this to a smaller type! */
+
+        s = (lport ^ (h ^ tcp_bhashfn(lport)));
+        if (s > lport)
+                return s;
+        s = lport + TCP_BHTABLE_SIZE;
+        return (s ^ (h ^ tcp_bhashfn(s)));
 }
 
 static __inline__ int tcp_sk_bhashfn(struct sock *sk)
@@ -116,7 +132,7 @@ static __inline__ void tcp_sk_unbindify(struct sock *sk)
 					   stacks do signed 16bit maths! */
 #define MIN_WINDOW	2048
 #define MAX_ACK_BACKLOG	2
-#define MAX_DUP_ACKS	2
+#define MAX_DUP_ACKS	3
 #define MIN_WRITE_SPACE	2048
 #define TCP_WINDOW_DIFF	2048
 

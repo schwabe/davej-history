@@ -354,7 +354,7 @@ static int rarp_req_set(struct arpreq *req)
  *	Is it reachable directly ?
  */
   
-	rt = ip_rt_route(ip, 0);
+	rt = ip_rt_route(ip, 0, NULL);
 	if (rt == NULL)
 		return -ENETUNREACH;
 	dev = rt->rt_dev;

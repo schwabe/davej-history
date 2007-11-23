@@ -6,7 +6,7 @@
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 960528==
+ *  ==FILEVERSION 970703==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -406,7 +406,14 @@ ppp_init_dev (struct device *dev)
 		skb_queue_head_init (&dev->buffs[indx]);
 
 	/* New-style flags */
+#ifdef IFF_SOFTHEADERS
+	/* Needed to make SOCK_PACKET work correctly in
+	 * memory fussy kernels.
+	 */
+	dev->flags	= IFF_POINTOPOINT|IFF_SOFTHEADERS;
+#else
 	dev->flags	= IFF_POINTOPOINT;
+#endif
 	dev->family	= AF_INET;
 	dev->pa_addr	= 0;
 	dev->pa_brdaddr = 0;
@@ -697,7 +704,7 @@ ppp_release (struct ppp *ppp)
 
 	if (dev && dev->flags & IFF_UP) {
 		dev_close (dev); /* close the device properly */
-		dev->flags = 0;	 /* prevent recursion */
+		dev->flags &= ~IFF_UP;	 /* prevent recursion */
 	}
 
 	ppp_free_buf (ppp->rbuf);
@@ -3079,7 +3086,7 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
  * Fetch the pointer to the data
  */
 	len   = skb->len;
-	data  = skb_data(skb);
+	data  = skb_data(skb) + PPP_HARD_HDR_LEN;
 /*
  * Bug trap for null data. Release the skb and bail out.
  */
@@ -3152,7 +3159,12 @@ static int ppp_dev_header (sk_buff *skb, struct device *dev,
 			   __u16 type, void *daddr,
 			   void *saddr, unsigned int len)
 {
-	return (0);
+	/* On the PPP device the hard header must be ignored
+	 * by the SOCK_PACKET layer. (Backward compatability).
+	 */
+	skb->mac.raw = skb->data;
+	skb_push(skb,PPP_HARD_HDR_LEN);
+	return PPP_HARD_HDR_LEN;
 }
 
 static int

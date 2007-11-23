@@ -102,7 +102,7 @@ struct device *ip_alias_dev_select(struct net_alias_type *this, struct device *m
 	 *	net_alias module will check if returned device is main_dev's alias
 	 */
 
-	rt = ip_rt_route(addr, 0);
+	rt = ip_rt_route(addr, 0, NULL);
 	if(rt)
 	{
 		dev=rt->rt_dev;

@@ -205,6 +205,7 @@
  *		Theodore Ts'o	:	Do secure TCP sequence numbers.
  *		David S. Miller	:	New socket lookup architecture for ISS.
  *					This code is dedicated to John Dyson.
+ *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
  *					
  * To Fix:
  *		Fast path the code. Two things here - fix the window calculation
@@ -471,6 +472,11 @@ static int tcp_v4_verify_bind(struct sock *sk, unsigned short snum)
 			unsigned char state = sk2->state;
 			int sk2_reuse = sk2->reuse;
 
+			/* Two sockets can be bound to the same port if they're
+			 * bound to different interfaces... */
+			if (sk->bound_device != sk2->bound_device)
+				continue;
+
 			if(!sk2->rcv_saddr || !sk->rcv_saddr) {
 				if((!sk2_reuse)			||
 				   (!sk_reuse)			||
@@ -523,49 +529,58 @@ unsigned short tcp_good_socknum(void)
 	int retval = 0, i, end, bc;
 
 	SOCKHASH_LOCK();
-	i = tcp_bhashfn(start);
-	end = i + TCP_BHTABLE_SIZE;
-	bc = binding_contour;
-	do {
-		struct sock *sk = tcp_bound_hash[tcp_bhashfn(i)];
-		if(!sk) {
-			retval = (start + i);
-			start  = (retval + 1);
+        i = tcp_bhashfn(start);
+        end = i + TCP_BHTABLE_SIZE;
+        bc = binding_contour;
+        do {
+                struct sock *sk = tcp_bound_hash[i&(TCP_BHTABLE_SIZE-1)];
+                if(!sk) {
+                        /* find the smallest value no smaller than start
+                         * that has this hash value.
+                         */
+                        retval = tcp_bhashnext(start-1,i&(TCP_BHTABLE_SIZE-1));
 
-			/* Check for decreasing load. */
-			if(bc != 0)
-				binding_contour = 0;
-			goto done;
-		} else {
-			int j = 0;
-			do { sk = sk->bind_next; } while(++j < size && sk);
-			if(j < size) {
-				best = (start + i);
-				size = j;
-				if(bc && size <= bc) {
-					start = best + 1;
-					goto verify;
-				}
-			}
-		}
-	} while(++i != end);
+                        /* Check for decreasing load. */
+                        if (bc != 0)
+                                binding_contour = 0;
+                        goto done;
+                } else {
+                        int j = 0;
+                        do { sk = sk->bind_next; } while (++j < size && sk);
+                        if (j < size) {
+                                best = i&(TCP_BHTABLE_SIZE-1);
+                                size = j;
+                                if (bc && size <= bc)
+                                        goto verify;
+                        }
+                }
+        } while(++i != end);
+        i = best;
 
-	/* Socket load is increasing, adjust our load average. */
-	binding_contour = size;
+        /* Socket load is increasing, adjust our load average. */
+        binding_contour = size;
 verify:
-	if(size < binding_contour)
-		binding_contour = size;
+        if (size < binding_contour)
+                binding_contour = size;
 
-	if(best > 32767)
-		best -= (32768 - PROT_SOCK);
+        retval = tcp_bhashnext(start-1,i);
 
-	while(tcp_lport_inuse(best))
-		best += TCP_BHTABLE_SIZE;
-	retval = best;
+	best = retval;	/* mark the starting point to avoid infinite loops */
+        while(tcp_lport_inuse(retval)) {
+               	retval = tcp_bhashnext(retval,i);
+		if (retval > 32767)	/* Upper bound */
+			retval = tcp_bhashnext(PROT_SOCK,i);
+		if (retval == best) {
+			/* This hash chain is full. No answer. */
+			retval = 0;
+			break;
+		}
+        }
+
 done:
-	if(start > 32767)
-		start -= (32768 - PROT_SOCK);
-
+        start = (retval + 1);
+        if (start > 32767 || start < PROT_SOCK)
+                start = PROT_SOCK;
 	SOCKHASH_UNLOCK();
 
 	return retval;
@@ -731,6 +746,7 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 		 * here as well.
 		 */
 		sk->cong_window = 1;
+		sk->cong_count = 0;
 		sk->high_seq = sk->sent_seq;
 		return;
 	}
@@ -1254,7 +1270,10 @@ static int do_tcp_sendmsg(struct sock *sk,
 					sk->write_seq += copy;
 					seglen -= copy;
 				}
-				if (tcp_size >= sk->mss || (flags & MSG_OOB) || !sk->packets_out)
+				/* If we have a full packet or a new OOB
+				 * message, we have to force this packet out.
+				 */
+				if (tcp_size >= sk->mss || (flags & MSG_OOB))
 					tcp_send_skb(sk, skb);
 				else
 					tcp_enqueue_partial(skb, sk);
@@ -1290,8 +1309,14 @@ static int do_tcp_sendmsg(struct sock *sk,
 
 			delay = 0;
 			tmp = copy + sk->prot->max_header + 15;
-			if (copy < sk->mss && !(flags & MSG_OOB) && sk->packets_out)
-			{
+			/* If won't fill the current packet, and it's not an OOB message,
+			 * then we might want to delay to allow data in the later parts
+			 * of iov to fill this packet out. Note that if we aren't
+			 * Nagling or there are no packets currently out then the top
+			 * level code in tcp_sendmsg() will force any partial packets out
+			 * after we finish building the largest packets this write allows.
+			 */
+			if (copy < sk->mss && !(flags & MSG_OOB)) {
 				tmp = tmp - copy + sk->mtu + 128;
 				delay = 1;
 			}
@@ -2027,8 +2052,8 @@ static void tcp_close(struct sock *sk, unsigned long timeout)
 			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_FIN_TIMEOUT);
 	}
 
-	release_sock(sk);
 	sk->dead = 1;
+	release_sock(sk);
 
 	if(sk->state == TCP_CLOSE)
 		tcp_v4_unhash(sk);
@@ -2201,6 +2226,9 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	buff->free = 0;
 	buff->localroute = sk->localroute;
 
+	/* If this socket is bound to a particular device, make sure we use it. */
+	dev = sk->bound_device;
+
 	/*
 	 *	Put in the IP header and routing stuff.
 	 */
@@ -2255,10 +2283,14 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	 *	but not bigger than device MTU
 	 */
 
-	if(sk->mtu <32)
-		sk->mtu = 32;	/* Sanity limit */
-
 	sk->mtu = min(sk->mtu, dev->mtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
+
+	/* Must check it here, just to be absolutely safe.  If we end up
+	 * with an sk->mtu of zero, we can thus end up with an sk->mss
+	 * of zero, which causes us to bomb out in tcp_do_sendmsg. -DaveM
+	 */
+	if(sk->mtu < 32)
+		sk->mtu = 32;	/* Sanity limit */
 
 	/*
 	 *	Put in the TCP options to say MTU.

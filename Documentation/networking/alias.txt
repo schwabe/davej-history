@@ -1,9 +1,11 @@
-NET_ALIAS device aliasing v0.4x
+NET_ALIAS device aliasing v0.5x
 ===============================
   The main step taken in versions 0.40+ is the implementation of a
   device aliasing mechanism that creates *actual* devices.
   This development includes NET_ALIAS (generic aliasing) plus IP_ALIAS
   (specific IP) support.
+  From version 0.50, dynamic configuration of max alias per device and
+  tx/rx stats for aliases added.
 
 Features
 --------
@@ -13,6 +15,10 @@ o  AF_INET optimized
 o  hashed alias address lookup
 o  net_alias_type objs registration/unreg., module-ables.
 o  /proc/net/aliases & /proc/net/alias_types entries
+o  /proc/sys/net/core/net_alias_max entry (affects hash table size
+   also)
+o  tx/rx stats   
+
 
 o IP alias implementation: static or runtime module.
 
@@ -23,10 +29,14 @@ Usage (IP aliasing)
      # cat /proc/net/alias*
 
   For IP aliasing you must have IP_ALIAS support included by
-  static linking ('y' to 2nd question above), or runtime module
-  insertion ('m' to 2nd q. above):
-     # insmod /usr/src/linux/modules/ip_alias.o (1.3.xx)
-     # insmod /usr/src/ip_alias/ip_alias.o      (1.2.xx) see above.
+  static linking ('y' to CONFIG_IP_ALIAS? question), or runtime module
+  insertion ('m'):
+     # insmod /usr/src/linux/modules/ip_alias.o (2.0.xx) or
+     # modprobe ip_alias.o
+     
+     Also, dynamic loading is supported (kerneld).
+       You should have the following line in /etc/conf.modules:
+       alias net_alias-2 ip_alias
 
 o Alias creation.
   Alias creation is done by 'magic' iface naming: eg. to create a
@@ -49,11 +59,11 @@ o Alias deletion.
   alias device is closed before deletion, so all network stuff that
   points to it (routes, arp entries, ...) will be released.
   		   		   
-Alias (re-)configuring
+o Alias (re-)configuring
   Aliases *are* devices, so you configure and refer to them as usual (ifconfig,
   route, etc).
   
-o Procfs entries
+o PROCfs entries
   2 entries are added to help fetching alias runtime configuration:
   a) /proc/net/alias_types
      Will show you alias_types registered (ie. address families that
@@ -70,7 +80,50 @@ o Procfs entries
      # cat /proc/net/aliases
      device           family address                                
      eth0:0           2      200.1.1.1
+     
+o PROCfs dynamic configuration
+  You can now change the max aliases per device limit via
+  /proc/sys/net/core/net_alias_max entry
+     # cat /proc/sys/net/core/net_alias_max
+     256
+     # echo 1000 > /proc/sys/net/core/net_alias_max
+     # cat /proc/sys/net/core/net_alias_max
+     1000
+     # _
+          
+  With this funcionality you can disable net_alias creation from now on
+     # echo 0 > /proc/sys/net/core/net_alias_max
 
+  The new aliasing limit is considered (grabbed) when creating the
+  FIRST alias for the main device.
+  Eg:
+     # echo 10 > /proc/sys/net/core/net_alias_max
+     # ifconfig eth0:0 xx.xx.xx.xx  (first alias creation for eth0,
+                                     eth0 will 'remember' max==10)
+     # echo 1000 > /proc/sys/net/core/net_alias_max
+     # ifconfig eth0:999 xx.xx.xx.xx
+     SIOCIFSADDR: No such device
+  Of course these semantics can be changed, please let me know.
+  
+  Configuration changes get logged as usual (klogd -> /var/log/messages)
+  
+o Alias devices rx/tx stats
+  Fake rx/tx stats are accounted:
+  - TX
+    When the packet is ``switched'' from logical alias device to
+    physical device, tx counter gets incr.
+  - RX
+    When an incoming packet's address equals alias device's addr it
+    gets ``switched'' from physical to logical device, rx counter gets
+    incr.
+    
+  Please NOTE that for ``same'' network alias devices you usually have
+  one net-route through physical device (eg. eth0), so output pkts
+  will NOT pass down via alias device (so, no tx++ will occur).
+  
+  Also NOTE that currently ifconfig does not handle the ``:'' of alias devices
+  names, a little patch (attached) solves the problem.
+  
 Relationship with main device
 -----------------------------
   - On main device closing, all aliases will be closed and freed.
@@ -78,12 +131,12 @@ Relationship with main device
     main device (aliases get 'stacked' after main_dev), eg:
       lo->eth0->eth0:0->eth0:2->eth1->0
     If eth0 is unregistered, all it aliases will also be:
-      lo->eth1->0     
+      lo->eth1->0
 
 Contact
 -------
-Please finger or e-mail me:
-   Juan Jose Ciarlante <jjciarla@raiz.uncu.edu.ar>
+Please e-mail me:
+   Juan Jose Ciarlante <irriga@impsat1.com.ar> or <jjciarla@raiz.uncu.edu.ar>
    
 		   		
 ; local variables:

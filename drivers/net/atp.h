@@ -1,3 +1,6 @@
+/* Linux header file for the ATP pocket ethernet adapter. */
+/* v1.04 4/1/97 becker@cesdis.gsfc.nasa.gov. */
+
 #include <linux/if_ether.h>
 #include <linux/types.h>
 #include <asm/io.h>
@@ -6,16 +9,19 @@ struct net_local {
 #ifdef __KERNEL__
     struct enet_statistics stats;
 #endif
+    struct device *next_module;
+    struct timer_list timer;	/* Media selection timer. */
+    long last_rx_time;		/* Last Rx, in jiffies, to handle Rx hang. */
     ushort saved_tx_size;
-    unsigned char
-	re_tx,			/* Number of packet retransmissions. */
-	tx_unit_busy,
-	addr_mode,		/* Current Rx filter e.g. promiscuous, etc. */
-	pac_cnt_in_tx_buf;
+    unsigned tx_unit_busy:1;
+    unsigned char re_tx,	/* Number of packet retransmissions. */
+      addr_mode,		/* Current Rx filter e.g. promiscuous, etc. */
+      pac_cnt_in_tx_buf,
+      chip_type;
 };
 
 struct rx_header {
-    ushort pad;			/* The first read is always corrupted. */
+    ushort pad;			/* Pad. */
     ushort rx_count;
     ushort rx_status;		/* Unknown bit assignments :-<.  */
     ushort cur_addr;		/* Apparently the current buffer address(?) */
@@ -24,6 +30,8 @@ struct rx_header {
 #define PAR_DATA	0
 #define PAR_STATUS	1
 #define PAR_CONTROL 2
+
+enum chip_type { RTL8002, RTL8012 };
 
 #define Ctrl_LNibRead	0x08	/* LP_PSELECP */
 #define Ctrl_HNibRead	0
@@ -47,7 +55,8 @@ enum page0_regs
     ISR = 10, IMR = 11,			/* Interrupt status and mask. */
     CMR1 = 12,				/* Command register 1. */
     CMR2 = 13,				/* Command register 2. */
-    MAR = 14,				/* Memory address register. */
+    MODSEL = 14,			/* Mode select register. */
+    MAR = 14,				/* Memory address register (?). */
     CMR2_h = 0x1d, };
 
 enum eepage_regs
@@ -59,6 +68,7 @@ enum eepage_regs
 #define ISR_TxErr	0x02
 #define ISRh_RxErr	0x11	/* ISR, high nibble */
 
+#define CMR1h_MUX	0x08	/* Select printer multiplexor on 8012. */
 #define CMR1h_RESET	0x04	/* Reset. */
 #define CMR1h_RxENABLE	0x02	/* Rx unit enable.  */
 #define CMR1h_TxENABLE	0x01	/* Tx unit enable.  */

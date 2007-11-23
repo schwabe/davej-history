@@ -57,7 +57,7 @@ static struct miscdevice misc_list = { 0, "head", NULL, &misc_list, &misc_list }
 /*
  * Assigned numbers, used for dynamic minors
  */
-#define DYNAMIC_MINORS 64 /* like dynamic majors */
+#define DYNAMIC_MINORS 64 /* like dynamic majors used to do */
 static unsigned char misc_minors[DYNAMIC_MINORS / 8];
 
 #ifndef MODULE
@@ -70,6 +70,8 @@ extern void watchdog_init(void);
 extern void wdt_init(void);
 extern void pcwatchdog_init(void);
 extern int rtc_init(void);
+extern int con_get_info(int *mode, int *shift, int *col, int *row,
+			struct tty_struct **tty);
 
 #ifdef CONFIG_PROC_FS
 static int proc_misc_read(char *buf, char **start, off_t offset, int len, int unused)
@@ -181,6 +183,7 @@ static struct symbol_table misc_syms = {
 #ifndef MODULE
 	X(set_selection),   /* used by the kmouse module, can only */
 	X(paste_selection), /* be exported if misc.c is in linked in */
+	X(con_get_info),
 #endif
 #include <linux/symtab_end.h>
 };

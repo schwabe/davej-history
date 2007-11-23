@@ -2320,3 +2320,22 @@ int con_get_font (char *arg)
 {
 	return set_get_font (arg,0,video_mode_512ch);
 }
+
+/*
+ * Report the current status of the vc. This is exported to modules (ARub)
+ */
+
+int con_get_info(int *mode, int *shift, int *col, int *row,
+			struct tty_struct **tty)
+{
+	extern int shift_state;
+	extern struct tty_driver console_driver;
+	struct tty_struct **console_table=console_driver.table;
+
+	if (mode) *mode = vt_cons[fg_console]->vc_mode;
+	if (shift) *shift = shift_state;
+	if (col) *col = video_num_columns;
+	if (row) *row = video_num_lines;
+	if (tty) *tty = console_table[fg_console];
+	return fg_console;
+}

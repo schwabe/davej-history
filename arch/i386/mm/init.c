@@ -35,6 +35,8 @@
 #endif
 #endif
 
+const char bad_pmd_string[] = "Bad pmd in pte_alloc: %08lx\n";
+
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 

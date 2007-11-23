@@ -1931,6 +1931,9 @@ int tty_init(void)
 #ifdef CONFIG_BAYCOM
 	baycom_init();
 #endif
+#ifdef CONFIG_SPECIALIX
+	specialix_init();
+#endif
 	pty_init();
 	vcs_init();
 	return 0;
