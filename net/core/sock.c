@@ -241,6 +241,10 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
  			/* Bind this socket to a particular device like "eth0",
  			 * as specified in an ifreq structure.  If the device 
  			 * is "", socket is NOT bound to a device. */
+ 			 
+ 			if(!suser())
+ 				return -EPERM;
+ 				
  			if (!valbool) {
  				sk->bound_device = NULL;
  			} else {

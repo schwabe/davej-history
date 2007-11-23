@@ -216,15 +216,16 @@ is486x:	xor %ax,%ax
 	orb $0x10,%bx		# by setting bit 4
 	setCx86($0xc3,%bx)
 
+        getCx86($0xfe)          # DIR0 : let's check this is a 6x86(L)
+        andb $0xf0,%ax		# should be 3xh
+	cmpb $0x30,%ax		# 
+	jne n6x86
+
 	getCx86($0xe8)		# now we can get CCR4
 	orb $0x80,%ax		# and set bit 7 (CPUIDEN)
 	movb %ax,%bx		# to enable CPUID execution
 	setCx86($0xe8,%bx)
 
-        getCx86($0xfe)          # DIR0 : let's check this is a 6x86(L)
-        andb $0xf0,%ax		# should be 3xh
-	cmpb $0x30,%ax		# 
-	jne n6x86
         getCx86($0xe9)          # CCR5 : we reset the SLOP bit
         andb $0xfd,%ax		# so that udelay calculation
         movb %ax,%bx		# is correct on 6x86(L) CPUs

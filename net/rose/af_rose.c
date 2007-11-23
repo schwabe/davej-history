@@ -1621,7 +1621,7 @@ void rose_proto_init(struct net_proto *pro)
 
 	sock_register(rose_proto_ops.family, &rose_proto_ops);
 	register_netdevice_notifier(&rose_dev_notifier);
-	printk(KERN_INFO "F6FBB/G4KLX ROSE for Linux. Version 0.62 for AX25.035 Linux 2.0\n");
+	printk(KERN_INFO "F6FBB/G4KLX ROSE for Linux. Version 0.63 for AX25.035 Linux 2.0\n");
 
 	if (!ax25_protocol_register(AX25_P_ROSE, rose_route_frame))
 		printk(KERN_ERR "ROSE: unable to register protocol with AX.25\n");

@@ -48,12 +48,11 @@ void rose_clear_queues(struct sock *sk)
 		kfree_skb(skb, FREE_WRITE);
 
 	while ((skb = skb_dequeue(&sk->protinfo.rose->ack_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb, FREE_WRITE);
 
 #ifdef M_BIT
-	while ((skb = skb_dequeue(&sk->protinfo.rose->frag_queue)) != NULL) {
+	while ((skb = skb_dequeue(&sk->protinfo.rose->frag_queue)) != NULL)
 		kfree_skb(skb, FREE_READ);
-	}
 #endif
 }
 

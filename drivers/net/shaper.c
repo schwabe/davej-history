@@ -483,7 +483,7 @@ static int shaper_ioctl(struct device *dev,  struct ifreq *ifr, int cmd)
 		case SHAPER_GET_DEV:
 			if(sh->dev==NULL)
 				return -ENODEV;
-			memcpy(ss->ss_name, sh->dev->name, sizeof(ss->ss_name));
+			memcpy(ss->ss_name, sh->dev->name, strlen(sh->dev->name)+1);
 			return 0;
 		case SHAPER_SET_SPEED:
 			shaper_setspeed(sh,ss->ss_speed);

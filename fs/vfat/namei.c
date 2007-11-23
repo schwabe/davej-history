@@ -969,7 +969,6 @@ static int vfat_find(struct inode *dir,const char *name,int len,
 		sinfo_out->shortname_offset = offset - sizeof(struct msdos_dir_slot);
 		sinfo_out->longname_offset = offset - sizeof(struct msdos_dir_slot) * slots;
 		res = 0;
-		return 0;
 	} else {
 		res = -ENOENT;
 	}

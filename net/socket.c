@@ -89,6 +89,7 @@ static int sock_write(struct inode *inode, struct file *file, const char *buf,
 		      int size);
 
 static void sock_close(struct inode *inode, struct file *file);
+static int sock_no_open(struct inode *inode, struct file *file);
 static int sock_select(struct inode *inode, struct file *file, int which, select_table *seltable);
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
@@ -108,7 +109,7 @@ static struct file_operations socket_file_ops = {
 	sock_select,
 	sock_ioctl,
 	NULL,			/* mmap */
-	NULL,			/* no special open code... */
+	sock_no_open,		/* special open code... */
 	sock_close,
 	NULL,			/* no fsync */
 	sock_fasync
@@ -295,6 +296,17 @@ static inline void sock_release_peer(struct socket *peer)
 	peer->state = SS_DISCONNECTING;
 	wake_up_interruptible(peer->wait);
 	sock_wake_async(peer, 1);
+}
+
+/*
+ *	In theory you can't get an open on this inode, but /proc provides
+ *	a back door. Remember to keep it shut otherwise you'll let the
+ *	creepy crawlies in.
+ */
+  
+static int sock_no_open(struct inode *inode, struct file *file)
+{
+	return -ENXIO;
 }
 
 void sock_release(struct socket *sock)

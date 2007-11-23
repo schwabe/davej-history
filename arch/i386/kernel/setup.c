@@ -165,6 +165,17 @@ void setup_arch(char **cmdline_p,
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;
 #endif
+
+	/*
+	 *	The 1Gig sanity checker.
+	 */
+	 
+	if (memory_end > 980*1024*1024)
+	{
+		printk(KERN_WARNING "Warning only 980Mb will be used.\n");
+		memory_end = 980 * 1024 * 1024;
+	}
+	
 	if (!MOUNT_ROOT_RDONLY)
 		root_mountflags &= ~MS_RDONLY;
 	memory_start = (unsigned long) &_end;

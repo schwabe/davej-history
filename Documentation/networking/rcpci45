@@ -1,0 +1,85 @@
+
+
+Application Information
+
+The included application, called "rcc" (for RedCreek Control), is an 
+example of a user-space application (i.e., not running within kernel
+space).  It issues ioctl commands to communicate with the PCI driver.  
+It is intended for reference only.  It can currently report any of 
+the following information:
+
+   - PCI driver information ("getinfo")
+   - card statistics ("getstats")
+   - card's ip address & netmask ("getipnmask")
+   - card's mac address ("getmac")
+   - current speed ("getspeed")
+   - firmware version string ("getfirmware")
+   - status of the link (up or down) ("getstatus")
+
+This program needs to run as root, to avoid encountering permission 
+problems.  An alternative is to change the permission and ownership
+so that it runs as a setuid root process (for example, "chown 
+root.root rcc; chmod u+s rcc").
+
+
+Quick PCI driver background
+
+The adapter has its own IP and mac addresses which you have to
+assign using the RedCreek manager (assuming the adapter is
+running 3.X firmware).  Your linux box will not know anything 
+about the adapter's IP address -- ie, the adapter will show up 
+as a regular nic.  You will assign the linux box IP address using 
+the "ifconfig" command, as mentioned below.
+
+To compile the driver, simply type "make".  
+This, of course, assumes that you have GNU compiler environment
+already setup on a linux box.  The .c and .h files were copied 
+to a dos filesystem (the floppy), so you may have to use "dos2unix" to 
+convert it back to a unix text file.  Keep in mind that the driver
+currently works with kernels 2.0.X only.  Furthermore, it was only
+tested with kernel 2.0.34.  There is work being done on porting the
+driver to the 2.1.X kernel, however, it's still incomplete.
+
+When the compile is done, you'll send up with three object files
+related to the driver: rcmtl.o, rcpci45.o, and rc.o;  rcmtl.o
+is the RedCreek API message layer; rcpci45.o is the upper level
+Linux driver which contains the interface to the kernel.  Finally,
+since the driver is compiled as a loadable module, rcmtl.o and
+rcpci45.o are linked together into a third file, rc.o, which is the
+actual driver.  
+
+To load the driver:
+
+"insmod rc"
+
+If you are in console mode, you'll see a few messages send by the
+driver.  One of the messages will indicated how many adapters were
+found; the messages are also stored in /var/log/messages, so they
+can be viewed later.  If you are running X, then you'll have to 
+view the messages by examining /var/log/messages.
+
+The adapter will show up as a regular nic.  Thus, if you have only
+one nic (the pci card) in your box, you would at this point configure
+it with the following commands:
+
+mandatory:
+"ifconfig eth0 <your linux box IP address (NOT the IP address of the 
+                adapter!>"
+"route add -net <your network address> eth0"
+
+optional (if you want to be able to access other networks):
+"route add default gw <your default gateway IP address> eth0"
+
+Done.  Type "ifconfig" to see "eth0" and the packet count, as well
+as the IP address, net mask, etc.
+
+To unload the driver, you first have to shutdown the interface:
+
+"ifconfig eth0 down"
+
+Then you unload the driver with "rmmod rc".
+
+
+For technical support, please send email to Pete Popov at 
+ppopov@redcreek.com.  Please have as complete of a description of
+the problem as possible.

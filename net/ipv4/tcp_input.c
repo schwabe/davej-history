@@ -2637,7 +2637,7 @@ retry_search:
 			/*
 			 *	SYN_RECV with data maybe.. drop through
 			 */
-			goto rfc_step6;
+			goto rfc_step4;
 		}
 
 	/*
@@ -2696,6 +2696,8 @@ retry_search:
 #endif	
 	}
 
+rfc_step4:		/* I'll clean this up later */
+
 	/*
 	 *	We are now in normal data flow (see the step list in the RFC)
 	 *	Note most of these are inline now. I'll inline the lot when
@@ -2737,8 +2739,13 @@ retry_search:
 	 *	Process the ACK
 	 */
 	 
+	if(!th->ack)
+	{
+		kfree_skb(skb, FREE_WRITE);
+		return 0;
+	}
 
-	if(th->ack && !tcp_ack(sk,th,skb->ack_seq,len))
+	if(!tcp_ack(sk,th,skb->ack_seq,len))
 	{
 		/*
 		 *	Our three way handshake failed.
@@ -2752,7 +2759,6 @@ retry_search:
 		return 0;
 	}
 	
-rfc_step6:		/* I'll clean this up later */
 
 	/*
 	 *	If the accepted buffer put us over our queue size we

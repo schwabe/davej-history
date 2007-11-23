@@ -658,6 +658,7 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 			oom(current);
 			return BAD_PAGE;
 		}
+	repeat:
 		pte_val(pte) = shp->shm_pages[idx];
 		if (pte_present(pte)) {
 			free_page (page); /* doesn't sleep */
@@ -665,11 +666,8 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 		}
 		if (!pte_none(pte)) {
 			read_swap_page(pte_val(pte), (char *) page);
-			pte_val(pte) = shp->shm_pages[idx];
-			if (pte_present(pte))  {
-				free_page (page); /* doesn't sleep */
-				goto done;
-			}
+			if (pte_val(pte) != shp->shm_pages[idx])
+				goto repeat;
 			swap_free(pte_val(pte));
 			shm_swp--;
 		}
@@ -699,6 +697,7 @@ static unsigned long swap_idx = 0; /* next to swap */
 int shm_swap (int prio, int dma)
 {
 	pte_t page;
+	struct page *page_map;
 	struct shmid_ds *shp;
 	struct vm_area_struct *shmd;
 	unsigned long swap_nr;
@@ -733,7 +732,10 @@ int shm_swap (int prio, int dma)
 	pte_val(page) = shp->shm_pages[idx];
 	if (!pte_present(page))
 		goto check_table;
-	if (dma && !PageDMA(&mem_map[MAP_NR(pte_page(page))]))
+	page_map = &mem_map[MAP_NR(pte_page(page))];
+	if (PageLocked(page_map))
+		goto check_table;
+	if (dma && !PageDMA(page_map))
 		goto check_table;
 	swap_attempts++;
 

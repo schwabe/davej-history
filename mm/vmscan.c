@@ -415,7 +415,7 @@ int try_to_free_page(int priority, int dma, int wait)
 	switch (state) {
 		do {
 		case 0:
-			if (shrink_mmap(i, dma, can_do_io))
+			if (shrink_mmap(i, dma, 1))
 				return 1;
 			state = 1;
 		case 1:

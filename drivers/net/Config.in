@@ -147,4 +147,5 @@ fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Traffic Shaper (EXPERIMENTAL)' CONFIG_SHAPER
+  tristate 'Red Creek Hardware VPN (EXPERIMENTAL)' CONFIG_RCPCI
 fi

@@ -289,14 +289,19 @@ static void check_cyrix_various(void)
 		{	/* if has DIR0/DIR1 */
 		
 			char ccr3;
+			char dir0;
 			x86_model = 0;
 
 			/* Enable MAPEN */
 			ccr3 = getCx86(CX86_CCR3);
 			setCx86(CX86_CCR3, (ccr3 & 0x0f) | 0x10);
 
-			/* try enabling cpuid */
-			setCx86(CX86_CCR4, getCx86(CX86_CCR4) | 0x80);
+			dir0 = getCx86(CX86_DIR0);
+			if ((dir0 & 0xf0) == 0x30)	/* Use DIR0 to determine if this is a 6x86 class processor */
+			{
+				/* try enabling cpuid */
+				setCx86(CX86_CCR4, getCx86(CX86_CCR4) | 0x80);
+			}
 
 			if (test_cpuid()) 
 			{
@@ -315,6 +320,7 @@ static void check_cyrix_various(void)
 			/* disable MAPEN */
 			setCx86(CX86_CCR3, ccr3);
 		} /* endif has DIR0/DIR1 */
+		sti();
 		restore_flags(flags);	/* restore interrupt state */
 	} /* endif it's a Cyrix */
 }

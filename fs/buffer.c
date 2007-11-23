@@ -1005,11 +1005,22 @@ static void get_more_buffer_heads(void)
 		 * This is no longer true, it is GFP_BUFFER again, the
 		 * swapping code now knows not to perform I/O when that
 		 * GFP level is specified... -DaveM
+		 * 
+		 * Ouch, another bug!  get_free_page() does not call
+		 * try_to_free_page() if priority == GFP_BUFFER.  This
+		 * lets kswapd get into a lockup situation if there is
+		 * no free space for buffer growth but we need more
+		 * memory for a buffer_head for swapping.  If memory is
+		 * full of recyclable buffers, we deadlock because
+		 * kswapd won't recycle them!  Use GFP_IO instead: it
+		 * still won't recurse (GFP_IO sets can_do_io to zero in
+		 * try_to_free_page), but it lets us recover those
+		 * buffer heads.  --sct
 		 */
 		/* we now use kmalloc() here instead of gfp as we want
                    to be able to easily release buffer heads - they
                    took up quite a bit of memory (tridge) */
-		bh = (struct buffer_head *) kmalloc(sizeof(*bh),GFP_BUFFER);
+		bh = (struct buffer_head *) kmalloc(sizeof(*bh),GFP_IO);
 		if (bh) {
 			put_unused_buffer_head(bh);
 			nr_buffer_heads++;
