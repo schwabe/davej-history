@@ -463,7 +463,7 @@ int get_cpuinfo(char * buffer)
 	static const char *x86_ext_cap_flags[] = {
 		   "fpu","vme", "de",   "pse", "tsc", "msr",  "6",   "mce",
 		   "cx8",  "9", "10", "syscr",  "12", "pge", "14",  "cmov",
-		"fpcmov", "17", "18",    "19",  "20",  "21", "22",   "mmx",
+		"fpcmov", "17", "psn",    "19",  "20",  "21", "22",   "mmx",
 		  "emmx", "25", "26",    "27",  "28",  "29", "30", "3dnow"
 	};
          
