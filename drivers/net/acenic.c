@@ -166,10 +166,10 @@
  * Default values for tuning parameters
  */
 #define DEF_TX_RATIO	31
-#define DEF_TX_COAL	TICKS_PER_SEC / 500
-#define DEF_TX_MAX_DESC	7
-#define DEF_RX_COAL	TICKS_PER_SEC / 10000
-#define DEF_RX_MAX_DESC	2
+#define DEF_TX_COAL	1000
+#define DEF_TX_MAX_DESC	40
+#define DEF_RX_COAL	1000
+#define DEF_RX_MAX_DESC	20
 #define DEF_TRACE	0
 #define DEF_STAT	2 * TICKS_PER_SEC
 
@@ -181,7 +181,7 @@ static int max_tx_desc[8] = {0, };
 static int max_rx_desc[8] = {0, };
 static int tx_ratio[8] = {0, };
 
-static const char __initdata *version = "acenic.c: v0.33 07/20/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
+static const char __initdata *version = "acenic.c: v0.33a 08/16/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
 
 static struct device *root_dev = NULL;
 

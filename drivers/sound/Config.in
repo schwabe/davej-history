@@ -23,6 +23,10 @@ if [ "$CONFIG_SOUND_ES1371" = "y" ]; then
       hex 'Gameport I/O 200,208,210,218' CONFIG_SOUND_ES1371_GAMEPORT 200
    fi
 fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   dep_tristate 'ESS Solo1 (Experimental)' CONFIG_SOUND_ESSSOLO1 $CONFIG_SOUND
+fi
+
 dep_tristate 'S3 SonicVibes' CONFIG_SOUND_SONICVIBES $CONFIG_SOUND
 
 dep_tristate 'Support for Turtle Beach MultiSound Classic, Tahiti, Monterey' CONFIG_SOUND_MSNDCLAS $CONFIG_SOUND
