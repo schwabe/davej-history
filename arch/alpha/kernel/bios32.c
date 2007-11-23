@@ -639,11 +639,11 @@ layout_dev(struct pci_dev *dev)
 				/* Bypass hi reg in the loop.  */
 				dev->base_address[++idx] = 0;
 
-				DBG_DEVS(("bios32 WARNING: "
-					  "handling 64-bit device in "
-					  "slot %d, function %d: \n",
-					  PCI_SLOT(dev->devfn),
-					  PCI_FUNC(dev->devfn)));
+				printk("bios32 WARNING: "
+				       "handling 64-bit device in "
+				       "slot %d, function %d: \n",
+				       PCI_SLOT(dev->devfn),
+				       PCI_FUNC(dev->devfn));
 			}
 
 			DBG_DEVS(("layout_dev: dev 0x%x MEM @ 0x%lx (0x%x)\n",

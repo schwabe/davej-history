@@ -30,7 +30,6 @@
 #include <asm/machvec.h>
 #include <asm/pgtable.h>
 #include <asm/semaphore.h>
-#include <asm/delay.h>
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
@@ -99,7 +98,6 @@ EXPORT_SYMBOL(__memcpy);
 EXPORT_SYMBOL(__memset);
 EXPORT_SYMBOL(__memsetw);
 EXPORT_SYMBOL(__constant_c_memset);
-EXPORT_SYMBOL(___delay);
 
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);

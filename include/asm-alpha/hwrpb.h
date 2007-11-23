@@ -55,7 +55,6 @@
 #define ST_DEC_TSUNAMI		 34	/* Tsunami systype	*/
 #define ST_DEC_WILDFIRE		 35	/* Wildfire systype	*/
 #define ST_DEC_CUSCO		 36	/* CUSCO systype	*/
-#define ST_DEC_EIGER		 37	/* Eiger systype	*/
 
 /* UNOFFICIAL!!! */
 #define ST_UNOFFICIAL_BIAS	100

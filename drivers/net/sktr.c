@@ -24,7 +24,8 @@
  *
  *  Maintainer(s):
  *    JS        Jay Schulist            jschlst@samba.anu.edu.au
- *    CG	Christoph Goos		cgoos@syskonnect.de
+ *    CG	Christoph Goos          cgoos@syskonnect.de
+ *    AF	Adam Fritzler		mid@auk.cx
  *
  *  Modification History:
  *	29-Aug-97	CG	Created
@@ -33,10 +34,14 @@
  *	27-May-98	JS	Formated to Linux Kernel Format
  *	31-May-98	JS	Hacked in PCI support
  *	16-Jun-98	JS	Modulized for multiple cards with one driver
+ *	21-Sep-99	CG	Fixed source routing issues for 2.2 kernels
+ *	21-Sep-99	AF	Added multicast changes recommended by 
+ *				  Jochen Friedrich <jochen@nwe.de> (untested)
+ *				Added detection of compatible Compaq PCI card  
  *
  *  To do:
  *    1. Selectable 16 Mbps or 4Mbps
- *    2. Multi/Broadcast packet handling
+ *    2. Multi/Broadcast packet handling (might be done)
  *
  */
 
@@ -135,7 +140,6 @@ static void 	sktr_enable_interrupts(struct device *dev);
 static void 	sktr_exec_cmd(struct device *dev, unsigned short Command);
 static void 	sktr_exec_sifcmd(struct device *dev, unsigned int WriteValue);
 /* "F" */
-static unsigned char *sktr_fix_srouting(unsigned char *buf, short *FrameLen);
 /* "G" */
 static struct enet_statistics *sktr_get_stats(struct device *dev);
 /* "H" */
@@ -254,10 +258,17 @@ __initfunc(static int sktr_pci_chk_card(struct device *dev))
 		/* Remove I/O space marker in bit 0. */
 		pci_ioaddr &= ~3;
 
-		if(vendor != PCI_VENDOR_ID_SK)
+		if((vendor != PCI_VENDOR_ID_SK) &&
+		   (vendor != PCI_VENDOR_ID_COMPAQ))
 			continue;
-		if(device != PCI_DEVICE_ID_SK_TR)
+
+		if((vendor == PCI_VENDOR_ID_SK) && 
+		   (device != PCI_DEVICE_ID_SK_TR))
 			continue;
+		else if((vendor == PCI_VENDOR_ID_COMPAQ) && 
+			(device != PCI_DEVICE_ID_COMPAQ_TOKENRING))
+			continue;
+     
 		if(check_region(pci_ioaddr, SKTR_IO_EXTENT))
 			continue;
 		request_region(pci_ioaddr, SKTR_IO_EXTENT, pci_cardname);
@@ -390,6 +401,7 @@ __initfunc(static int sktr_probe1(struct device *dev, int ioaddr))
 {
 	static unsigned version_printed = 0;
 	struct net_local *tp;
+	int DeviceType = SK_PCI;
 	int err;
 
 	if(sktr_debug && version_printed++ == 0)
@@ -407,6 +419,7 @@ __initfunc(static int sktr_probe1(struct device *dev, int ioaddr))
 		err = sktr_isa_chk_card(dev, ioaddr);
 		if(err < 0)
 			return (-ENODEV);
+		DeviceType = SK_ISA;
 	}
 
 	/* Setup this devices private information structure */
@@ -414,6 +427,7 @@ __initfunc(static int sktr_probe1(struct device *dev, int ioaddr))
 	if(tp == NULL)
 		return (-ENOMEM);
 	memset(tp, 0, sizeof(struct net_local));
+	tp->DeviceType = DeviceType;
 
 	dev->priv		= tp;
 	dev->init               = sktr_init_card;
@@ -690,7 +704,9 @@ static void sktr_init_net_local(struct device *dev)
 			skb_put(tp->Rpl[i].Skb, tp->MaxPacketSize);
 
 			/* data unreachable for DMA ? then use local buffer */
-			if(virt_to_bus(tp->Rpl[i].Skb->data) + tp->MaxPacketSize > ISA_MAX_ADDRESS)
+			if(tp->DeviceType == SK_ISA &&
+				virt_to_bus(tp->Rpl[i].Skb->data) +
+				tp->MaxPacketSize > ISA_MAX_ADDRESS)
 			{
 				tp->Rpl[i].SkbStat = SKB_DATA_COPY;
 				tp->Rpl[i].FragList[0].DataAddr = htonl(virt_to_bus(tp->LocalRxBuffers[i]));
@@ -748,7 +764,7 @@ static void sktr_init_opb(struct net_local *tp)
 
 	tp->ocpl.OPENOptions 	 = 0;
 	tp->ocpl.OPENOptions 	|= ENABLE_FULL_DUPLEX_SELECTION;
-	tp->ocpl.OPENOptions 	|= PAD_ROUTING_FIELD;
+/*	tp->ocpl.OPENOptions 	|= PAD_ROUTING_FIELD; no more needed */
 	tp->ocpl.FullDuplex 	 = 0;
 	tp->ocpl.FullDuplex 	|= OPEN_FULL_DUPLEX_OFF;
 
@@ -823,32 +839,6 @@ static void sktr_exec_cmd(struct device *dev, unsigned short Command)
 	sktr_chk_outstanding_cmds(dev);
 
 	return;
-}
-
-/*
- * Linux always gives 18 byte of source routing information in the frame header.
- * But the length field can indicate shorter length. Then cut header
- * appropriate.
- */
-static unsigned char *sktr_fix_srouting(unsigned char *buf, short *FrameLen)
-{
-	struct trh_hdr *trh = (struct trh_hdr *)buf;
-	int len;
-        
-	if(buf[8] & TR_RII)
-	{
-		trh->rcf &= ~SWAPB((unsigned short) TR_RCF_LONGEST_FRAME_MASK);
-		trh->rcf |= SWAPB((unsigned short) TR_RCF_FRAME4K);
-		len = (SWAPB(trh->rcf) & TR_RCF_LEN_MASK) >> 8;
-		if(len < 18)
-		{
-			memcpy(&buf[18-len],buf,sizeof(struct trh_hdr)-18+len);
-			*FrameLen -= (18 - len);
-		}
-		return (&buf[18-len]);
-	}
-
-	return (buf);
 }
 
 /*
@@ -933,7 +923,8 @@ static void sktr_hardware_send_packet(struct device *dev, struct net_local* tp)
 
 		tp->QueueSkb++;
 		/* Is buffer reachable for Busmaster-DMA? */
-		if(virt_to_bus((void*)(((long) skb->data) + skb->len))
+		if(tp->DeviceType == SK_ISA && 
+			virt_to_bus((void*)(((long) skb->data) + skb->len))
 			> ISA_MAX_ADDRESS)
 		{
 			/* Copy frame to local buffer */
@@ -941,13 +932,13 @@ static void sktr_hardware_send_packet(struct device *dev, struct net_local* tp)
 			length 	= skb->len;
 			buf 	= tp->LocalTxBuffers[i];
 			memcpy(buf, skb->data, length);
-			newbuf 	= sktr_fix_srouting(buf, &length);
+			newbuf 	= buf;
 		}
 		else
 		{
 			/* Send direct from skb->data */
 			length = skb->len;
-			newbuf = sktr_fix_srouting(skb->data, &length);
+			newbuf = skb->data;
 		}
 
 		/* Source address in packet? */
@@ -1485,53 +1476,64 @@ static struct enet_statistics *sktr_get_stats(struct device *dev)
 static void sktr_set_multicast_list(struct device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
-	unsigned int OpenOptions;
-
-	OpenOptions = tp->ocpl.OPENOptions &
-		~(PASS_ADAPTER_MAC_FRAMES
-		| PASS_ATTENTION_FRAMES
-		| PASS_BEACON_MAC_FRAMES
-		| COPY_ALL_MAC_FRAMES
-		| COPY_ALL_NON_MAC_FRAMES);
-
-	if(dev->flags & IFF_PROMISC)
-		/* Enable promiscuous mode */
-		OpenOptions |= COPY_ALL_NON_MAC_FRAMES | COPY_ALL_MAC_FRAMES;
-	else
-	{
-		if(dev->flags & IFF_ALLMULTI)
-			/* || dev->mc_count > HW_MAX_ADDRS) */
-		{
-			/* Disable promiscuous mode, use normal mode. */
-		}
-		else
-		{
-			if(dev->mc_count)
-			{
-				/* Walk the address list, and load the filter */
-			}
-		}
-	}
-
-	tp->ocpl.OPENOptions = OpenOptions;
-	sktr_exec_cmd(dev, OC_MODIFY_OPEN_PARMS);
-
-	return;
+        unsigned int OpenOptions;
+	
+        OpenOptions = tp->ocpl.OPENOptions &
+                ~(PASS_ADAPTER_MAC_FRAMES
+		  | PASS_ATTENTION_FRAMES
+		  | PASS_BEACON_MAC_FRAMES
+		  | COPY_ALL_MAC_FRAMES
+		  | COPY_ALL_NON_MAC_FRAMES);
+	
+        tp->ocpl.FunctAddr = 0;
+	
+        if(dev->flags & IFF_PROMISC)
+                /* Enable promiscuous mode */
+                OpenOptions |= COPY_ALL_NON_MAC_FRAMES |
+			COPY_ALL_MAC_FRAMES;
+        else
+        {
+                if(dev->flags & IFF_ALLMULTI)
+                {
+                        /* Disable promiscuous mode, use normal mode. */
+                        tp->ocpl.FunctAddr = 0xFFFFFFFF;
+			
+                }
+                else
+                {
+                        int i;
+                        struct dev_mc_list *mclist = dev->mc_list;
+                        for (i=0; i< dev->mc_count; i++)
+                        {
+                                ((char *)(&tp->ocpl.FunctAddr))[0] |=
+					mclist->dmi_addr[2];
+                                ((char *)(&tp->ocpl.FunctAddr))[1] |=
+					mclist->dmi_addr[3];
+                                ((char *)(&tp->ocpl.FunctAddr))[2] |=
+					mclist->dmi_addr[4];
+                                ((char *)(&tp->ocpl.FunctAddr))[3] |=
+					mclist->dmi_addr[5];
+                                mclist = mclist->next;
+                        }
+                }
+                sktr_exec_cmd(dev, OC_SET_FUNCT_ADDR);
+        }
+	
+        tp->ocpl.OPENOptions = OpenOptions;
+        sktr_exec_cmd(dev, OC_MODIFY_OPEN_PARMS);
+        return;
 }
 
 /*
  * Wait for some time (microseconds)
+ *
+ * udelay() is a bit harsh, but using a looser timer causes
+ * the bring-up-diags to stall indefinitly.  
+ *
  */
 static void sktr_wait(unsigned long time)
 {
-	long tmp;
-
-	tmp = jiffies + time/(1000000/HZ);
-	do {
-  		current->state 		= TASK_INTERRUPTIBLE;
-		tmp = schedule_timeout(tmp);
-	} while(time_after(tmp, jiffies));
-
+	udelay(time);
 	return;
 }
 
@@ -2450,8 +2452,6 @@ static void sktr_rcv_status_irq(struct device *dev)
 			/* Drop frames sent by myself */
 			if(sktr_chk_frame(dev, rpl->MData))
 			{
-				printk(KERN_INFO "%s: Received my own frame\n",
-					dev->name);
 				if(rpl->Skb != NULL)
 					dev_kfree_skb(rpl->Skb);
 			}
@@ -2463,9 +2463,10 @@ static void sktr_rcv_status_irq(struct device *dev)
 					printk("%s: Packet Length %04X (%d)\n",
 						dev->name, Length, Length);
 
-				/* Indicate the received frame to system the
-				 * adapter does the Source-Routing padding for 
-				 * us. See: OpenOptions in sktr_init_opb()
+				/* Indicate the received frame to system.
+				 * The source routing padding is no more
+				 * necessary with 2.2.x kernel.
+				 * See: OpenOptions in sktr_init_opb()
 				 */
 				skb = rpl->Skb;
 				if(rpl->SkbStat == SKB_UNAVAILABLE)
@@ -2528,7 +2529,8 @@ static void sktr_rcv_status_irq(struct device *dev)
 			skb_put(rpl->Skb, tp->MaxPacketSize);
 
 			/* Data unreachable for DMA ? then use local buffer */
-			if(virt_to_bus(rpl->Skb->data) + tp->MaxPacketSize
+			if(tp->DeviceType == SK_ISA &&
+				virt_to_bus(rpl->Skb->data) + tp->MaxPacketSize
 				> ISA_MAX_ADDRESS)
 			{
 				rpl->SkbStat = SKB_DATA_COPY;

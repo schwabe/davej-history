@@ -523,7 +523,7 @@ struct atapi_mechstat_header {
 	__u8 door_open     : 1;
 	__u8 reserved1     : 4;
 #elif defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8 reserved1     : 5;
+	__u8 reserved1     : 4;
 	__u8 door_open     : 1;
 	__u8 mech_state    : 3;
 #else

@@ -42,7 +42,7 @@ takara_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 			outb(mask >> 8, 0xA1);	/* ISA PIC2 */
 	} else if (irq <= 31) {
 		regaddr = 0x510 + ((irq - 16) & 0x0c);
-		outl((mask >> ((irq - 16) & 0x0c)) & 0x000f0000UL, regaddr);
+		outl((mask >> ((irq - 16) & 0x0c)) & 0xf0000Ul, regaddr);
 	}
 }
 
@@ -101,7 +101,8 @@ takara_init_irq(void)
 
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = takara_srm_device_interrupt;
-	else {
+
+	if (!alpha_using_srm) {
 		unsigned int ctlreg = inl(0x500);
 
 		/* Return to non-accelerated mode.  */
@@ -128,7 +129,7 @@ takara_init_irq(void)
 static int __init
 takara_map_irq(struct pci_dev *dev, int slot, int pin)
 {
-	static char arc_irq_tab[15][5] __initlocaldata = {
+	static char irq_tab[15][5] __initlocaldata = {
 		{ 16+3, 16+3, 16+3, 16+3, 16+3},   /* slot  6 == device 3 */
 		{ 16+2, 16+2, 16+2, 16+2, 16+2},   /* slot  7 == device 2 */
 		{ 16+1, 16+1, 16+1, 16+1, 16+1},   /* slot  8 == device 1 */
@@ -145,32 +146,8 @@ takara_map_irq(struct pci_dev *dev, int slot, int pin)
 		{ 16+2, 16+2, 16+2, 16+2, 16+2},   /* slot 19 == device 2 */
 		{ 16+1, 16+1, 16+1, 16+1, 16+1},   /* slot 20 == device 1 */
 	};
-	static char srm_irq_tab[15][5] __initlocaldata = {
-		{ 16+3, 16+3, 16+3, 16+3, 16+3},   /* slot  6 == device 3 */
-		{ 16+2, 16+2, 16+2, 16+2, 16+2},   /* slot  7 == device 2 */
-		{ 16+1, 16+1, 16+1, 16+1, 16+1},   /* slot  8 == device 1 */
-		{   -1,   -1,   -1,   -1,   -1},   /* slot  9 == nothing */
-		{   -1,   -1,   -1,   -1,   -1},   /* slot 10 == nothing */
-		{   -1,   -1,   -1,   -1,   -1},   /* slot 11 == nothing */
-		{   -1,   -1,   -1,   -1,   -1},   /* slot 12 == nothing */
-		{   -1,   -1,   -1,   -1,   -1},   /* slot 13 == nothing */
-		{   -1,   -1,   -1,   -1,   -1},   /* slot 14 == nothing */
-		{   -1,   -1,   -1,   -1,   -1},   /* slot 15 == nothing */
-		{   -1,   -1,   -1,   -1,   -1},   /* slot 16 == nothing */
-		{16+12,16+12,16+13,16+14,16+15},   /* slot 17= device 4 */
-		{16+ 8, 16+8, 16+9,16+10,16+11},   /* slot 18= device 3 */
-		{16+ 4, 16+4, 16+5, 16+6, 16+7},   /* slot 19= device 2 */
-		{16+ 0, 16+0, 16+1, 16+2, 16+3},   /* slot 20= device 1 */
-	};
 	const long min_idsel = 6, max_idsel = 20, irqs_per_slot = 5;
-
-	if (slot >= min_idsel && slot <= max_idsel && pin < irqs_per_slot) {
-		if (alpha_using_srm)
-			return srm_irq_tab[slot - min_idsel][pin];
-		else
-			return arc_irq_tab[slot - min_idsel][pin];
-	} else
-		return -1;
+	return COMMON_TABLE_LOOKUP;
 }
 
 static int __init
@@ -182,18 +159,14 @@ takara_swizzle(struct pci_dev *dev, int *pinp)
 	unsigned int busslot = PCI_SLOT(dev->bus->self->devfn);
 
 	/* Check first for built-in bridges.  */
-	if (busslot > 16 && ((1U << (36 - busslot)) & ctlreg)) {
+	if (busslot > 16 && ((1<<(36-busslot)) & ctlreg)) {
 		if (pin == 1)
 			pin += (20 - busslot);
 		else {
-			/* Can only handle INTA pins currently.  */
-			printk(KERN_WARNING "takara_swizzle: cannot only "
-			       "handle cards with INTA IRQ pin now.\n");
+			/* Must be a card-based bridge.  */
+			printk(KERN_WARNING "takara_swizzle: cannot handle "
+			       "card-bridge behind builtin bridge yet.\n");
 		}
-	} else {
-		/* Must be a card-based bridge.  */
-		printk(KERN_WARNING "takara_swizzle: cannot handle "
-		       "card-bridge behind builtin bridge yet.\n");
 	}
 
 	*pinp = pin;
@@ -205,7 +178,7 @@ takara_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(takara_map_irq, takara_swizzle);
-	enable_ide(0x26e);
+	/* enable_ide(0x26e); */
 }
 
 
@@ -222,8 +195,8 @@ struct alpha_machine_vector takara_mv __initmv = {
 	machine_check:		cia_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
 
-	nr_irqs:		32,
-	irq_probe_mask:		_PROBE_MASK(32),
+	nr_irqs:		20,
+	irq_probe_mask:		_PROBE_MASK(20),
 	update_irq_hw:		takara_update_irq_hw,
 	ack_irq:		generic_ack_irq,
 	device_interrupt:	takara_device_interrupt,

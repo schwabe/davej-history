@@ -112,7 +112,6 @@ WEAK(eb164_mv);
 WEAK(eb64p_mv);
 WEAK(eb66_mv);
 WEAK(eb66p_mv);
-WEAK(eiger_mv);
 WEAK(jensen_mv);
 WEAK(lx164_mv);
 WEAK(miata_mv);
@@ -359,7 +358,7 @@ static char systype_names[][16] = {
 	"Mikasa", "EB64", "EB66", "EB64+", "AlphaBook1",
 	"Rawhide", "K2", "Lynx", "XL", "EB164", "Noritake",
 	"Cortex", "29", "Miata", "XXM", "Takara", "Yukon",
-	"Tsunami", "Wildfire", "CUSCO", "Eiger"
+	"Tsunami", "Wildfire", "CUSCO"
 };
 
 static char unofficial_names[][8] = {"100", "Ruffian"};
@@ -430,7 +429,6 @@ get_sysvec(long type, long variation, long cpu)
 		NULL,		/* Tsunami -- see variation.  */
 		NULL,		/* Wildfire */
 		NULL,		/* CUSCO */
-		&eiger_mv,	/* Eiger */
 	};
 
 	static struct alpha_machine_vector *unofficial_vecs[] __initlocaldata =
@@ -560,7 +558,6 @@ get_sysvec_byname(const char *name)
 		&eb64p_mv,
 		&eb66_mv,
 		&eb66p_mv,
-		&eiger_mv,
 		&jensen_mv,
 		&lx164_mv,
 		&miata_mv,

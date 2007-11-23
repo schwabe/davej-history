@@ -153,7 +153,6 @@ extern int smp_info(char *buffer);
 extern void handle_ipi(struct pt_regs *);
 extern void smp_percpu_timer_interrupt(struct pt_regs *);
 extern int smp_boot_cpuid;
-extern unsigned long cpu_present_mask;
 
 /* bios32.c */
 extern void reset_for_srm(void);

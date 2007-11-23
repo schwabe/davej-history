@@ -16,6 +16,9 @@
 #define TR_RCF_LONGEST_FRAME_MASK 0x0070
 #define TR_RCF_FRAME4K 0x0030
 
+#define SK_ISA 0
+#define SK_PCI 1
+
 /*------------------------------------------------------------------*/
 /*  Bit order for adapter communication with DMA		    */
 /*  --------------------------------------------------------------  */
@@ -1062,6 +1065,8 @@ typedef struct net_local {
 	int DataRate;
 	unsigned char ScbInUse;
 	unsigned short CMDqueue;
+
+	unsigned int DeviceType;
 
 	unsigned long AdapterOpenFlag:1;
 	unsigned long AdapterVirtOpenFlag:1;
