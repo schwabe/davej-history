@@ -1980,7 +1980,7 @@ cdrom_read_block (ide_drive_t *drive, int format, int lba, int nblocks,
 	pc.c[7] = ((nblocks>>8) & 0xff);
 	pc.c[6] = ((nblocks>>16) & 0xff);
 	if (format <= 1)
-		pc.c[9] = 0xf0;
+		pc.c[9] = 0xf8;
 	else
 		pc.c[9] = 0x10;
 
@@ -2409,7 +2409,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		kfree (buf);
 		return stat;
 	}
-
+	case CDROMREADRAW:
 	case CDROMREADMODE1:
 	case CDROMREADMODE2: {
 		struct cdrom_msf msf;
@@ -2420,10 +2420,13 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		if (cmd == CDROMREADMODE1) {
 			blocksize = CD_FRAMESIZE;
 			format = 2;
-		} else {
-			blocksize = CD_FRAMESIZE_RAW0;
-			format = 3;
-		}
+		} else if (cmd == CDROMREADMODE2) {
+				blocksize = CD_FRAMESIZE_RAW0;
+				format = 3;
+		       } else {
+				blocksize = CD_FRAMESIZE_RAW;
+			 	format = 0;      	
+		       }
 
 		stat = verify_area (VERIFY_WRITE, (char *)arg, blocksize);
 		if (stat) return stat;
@@ -2434,16 +2437,16 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 				  msf.cdmsf_sec0,
 				  msf.cdmsf_frame0);
 	
-		/* Make sure the TOC is up to date. */
-		stat = cdrom_read_toc (drive, NULL);
+		/* DON'T make sure the TOC is up to date. */
+	     /*	stat = cdrom_read_toc (drive, NULL);
 		if (stat) return stat;
 
 		toc = drive->cdrom_info.toc;
 
 		if (lba < 0 || lba >= toc->capacity)
-			return -EINVAL;
+			return -EINVAL; */
 
-		buf = (char *) kmalloc (CD_FRAMESIZE_RAW0, GFP_KERNEL);
+		buf = (char *) kmalloc (CD_FRAMESIZE_RAW, GFP_KERNEL);
 		if (buf == NULL)
 			return -ENOMEM;
 

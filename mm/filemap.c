@@ -9,6 +9,7 @@
  * most "normal" filesystems (but you don't /have/ to use this:
  * the NFS filesystem does this differently, for example)
  */
+#include <linux/config.h> /* CONFIG_READA_SMALL */
 #include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

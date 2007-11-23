@@ -68,7 +68,7 @@ extern int tmscsim_proc_info(char *buffer, char **start, off_t offset, int lengt
 	NULL,	/* *usage_count */	\
 	&proc_scsi_tmscsim,	/* *proc_dir */ 	\
 	tmscsim_proc_info,	/* (*proc_info)() */	\
-	"Tekram DC390(T) V1.10 Dec-05-1996",  /* *name */ \
+	"Tekram DC390(T) V1.11 Feb-05-1997",  /* *name */ \
 	DC390_detect,			\
 	DC390_release,	/* (*release)() */	\
 	NULL,	/* *(*info)() */	\
@@ -96,7 +96,7 @@ extern int tmscsim_proc_info(char *buffer, char **start, off_t offset, int lengt
 	NULL,	/* *usage_count */	\
 	&proc_scsi_tmscsim,	/* *proc_dir */ 	\
 	tmscsim_proc_info,	/* (*proc_info)() */	\
-	"Tekram DC390(T) V1.10 Dec-05-1996",  /* *name */ \
+	"Tekram DC390(T) V1.11 Feb-05-1997",  /* *name */ \
 	DC390_detect,			\
 	DC390_release,	/* (*release)() */	\
 	NULL,	/* *(*info)() */	\
@@ -122,7 +122,7 @@ extern int tmscsim_proc_info(char *buffer, char **start, off_t offset, int lengt
 #define DC390_T     {		\
 	NULL,			\
 	NULL,			\
-	"Tekram DC390(T) V1.10 Dec-05-1996",\
+	"Tekram DC390(T) V1.11 Feb-05-1997",\
 	DC390_detect,		\
 	DC390_release,			\
 	NULL, /* info */	\

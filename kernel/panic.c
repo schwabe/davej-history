@@ -10,6 +10,7 @@
  */
 #include <stdarg.h>
 
+#include <linux/config.h> /* CONFIG_SCSI_GDTH */
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/delay.h>

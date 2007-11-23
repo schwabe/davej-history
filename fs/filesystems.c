@@ -43,6 +43,10 @@ asmlinkage int sys_setup(void)
 
 	binfmt_setup();
 
+#ifdef CONFIG_NLS
+	init_nls();
+#endif
+
 #ifdef CONFIG_EXT_FS
 	init_ext_fs();
 #endif

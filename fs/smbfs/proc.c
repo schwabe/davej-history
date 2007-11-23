@@ -570,6 +570,8 @@ smb_proc_open(struct smb_server *server,
 			smb_unlock_server(server);
 			return error;
 		}
+		/* N.B. Packet may change after request */
+		buf = server->packet;
 		p = smb_setup_header(server, SMBopen, 2, 0);
 		WSET(buf, smb_vwv0, 0x40);	/* read only */
 		WSET(buf, smb_vwv1, o_attr);
@@ -589,6 +591,8 @@ smb_proc_open(struct smb_server *server,
 	}
 	/* We should now have data in vwv[0..6]. */
 
+	/* N.B. Packet may change after request */
+	buf = server->packet;
 	entry->fileid = WVAL(buf, smb_vwv0);
 	entry->attr = WVAL(buf, smb_vwv1);
 	entry->f_ctime = entry->f_atime =
@@ -646,7 +650,7 @@ smb_proc_read(struct smb_server *server, struct smb_dirent *finfo,
 		smb_unlock_server(server);
 		return error;
 	}
-	returned_count = WVAL(buf, smb_vwv0);
+	returned_count = WVAL(server->packet, smb_vwv0);
 
 	smb_decode_data(SMB_BUF(server->packet), data, &data_len, fs);
 
@@ -682,7 +686,7 @@ smb_proc_write(struct smb_server *server, struct smb_dirent *finfo,
 
 	if ((res = smb_request_ok(server, SMBwrite, 1, 0)) >= 0)
 	{
-		res = WVAL(buf, smb_vwv0);
+		res = WVAL(server->packet, smb_vwv0);
 	}
 	smb_unlock_server(server);
 
@@ -718,7 +722,7 @@ smb_proc_create(struct inode *dir, const char *name, int len,
 		smb_unlock_server(server);
 		return error;
 	}
-	fileid = WVAL(buf, smb_vwv0);
+	fileid = WVAL(server->packet, smb_vwv0);
 	smb_unlock_server(server);
 
 	smb_proc_close(server, fileid, CURRENT_TIME);
@@ -1345,6 +1349,10 @@ smb_proc_readdir(struct smb_server *server, struct inode *dir, int fpos,
 					      entry);
 }
 
+/*
+ * This version uses the core protocol to get the attribute info.
+ * It works OK with Win 3.11, 95 and NT 3.51, but NOT with NT 4 (bad mtime).
+ */
 static int
 smb_proc_getattr_core(struct inode *dir, const char *name, int len,
 		      struct smb_dirent *entry)
@@ -1356,7 +1364,7 @@ smb_proc_getattr_core(struct inode *dir, const char *name, int len,
 
 	smb_lock_server(server);
 
-	DDPRINTK("smb_proc_getattr: %s\n", name);
+	DDPRINTK("smb_proc_getattr_core: %s\n", name);
 
       retry:
 	buf = server->packet;
@@ -1374,13 +1382,103 @@ smb_proc_getattr_core(struct inode *dir, const char *name, int len,
 		smb_unlock_server(server);
 		return result;
 	}
+	/* N.B. Packet may change after request */
+	buf = server->packet;
 	entry->attr = WVAL(buf, smb_vwv0);
 	entry->f_ctime = entry->f_atime =
 	    entry->f_mtime = local2utc(DVAL(buf, smb_vwv1));
 
+	DDPRINTK("smb_proc_getattr_core: mtime=%ld\n", entry->f_mtime);
+
 	entry->f_size = DVAL(buf, smb_vwv3);
 	smb_unlock_server(server);
 	return 0;
+}
+
+/*
+ * This version uses the trans2 findfirst to get the attribute info.
+ * It works fine with NT 3.51 and NT 4 (any SP), but not with Win95 (ERRerror).
+ */
+static int
+smb_proc_getattr_ff(struct inode *dir, const char *name, int len,
+		    struct smb_dirent *entry)
+{
+	unsigned char *resp_data = NULL;
+	unsigned char *resp_param = NULL;
+	int resp_data_len = 0;
+	int resp_param_len = 0;
+
+	char param[SMB_MAXPATHLEN + 1 + 12];
+	int mask_len;
+	unsigned char *mask = &(param[12]);
+
+	int result;
+	char *p;
+	struct smb_server *server = SMB_SERVER(dir);
+
+	mask_len = smb_encode_path(server, mask,
+				   SMB_INOP(dir), name, len) - mask;
+
+	mask[mask_len] = 0;
+
+	DDPRINTK("smb_proc_getattr_ff: mask=%s\n", mask);
+
+	smb_lock_server(server);
+
+      retry:
+
+	WSET(param, 0, aSYSTEM | aHIDDEN | aDIR);
+	WSET(param, 2, 1);      /* max count */
+	WSET(param, 4, 2 + 1);  /* close on end + close after this call */
+	WSET(param, 6, 1);      /* info level */
+	DSET(param, 8, 0);
+
+	result = smb_trans2_request(server, TRANSACT2_FINDFIRST,
+				    0, NULL, 12 + mask_len + 1, param,
+				    &resp_data_len, &resp_data,
+				    &resp_param_len, &resp_param);
+
+	if (result < 0)
+	{
+		if (smb_retry(server))
+		{
+			DPRINTK("smb_proc_getattr_ff: error=%d, retrying\n",
+				 result);
+			goto retry;
+		}
+		goto out;
+	}
+	if (server->rcls != 0)
+	{
+		result = -smb_errno(server->rcls, server->err);
+		if (result != -ENOENT)
+			DPRINTK("smb_proc_getattr_ff: rcls=%d, err=%d\n",
+				 server->rcls, server->err);
+		goto out;
+	}
+	/* Make sure we got enough data ... */
+	result = -EINVAL;      /* WVAL(resp_param, 2) is ff_searchcount */
+	if (resp_data_len < 22 || WVAL(resp_param, 2) != 1)
+	{
+		DPRINTK("smb_proc_getattr_ff: bad result, len=%d, count=%d\n",
+			 resp_data_len, WVAL(resp_param, 2));
+		goto out;
+	}
+	/* Decode the response (info level 1, as in smb_decode_long_dirent) */
+	p = resp_data;
+	entry->f_ctime = date_dos2unix(WVAL(p, 2), WVAL(p, 0));
+	entry->f_atime = date_dos2unix(WVAL(p, 6), WVAL(p, 4));
+	entry->f_mtime = date_dos2unix(WVAL(p, 10), WVAL(p, 8));
+	entry->f_size = DVAL(p, 12);
+	entry->attr = WVAL(p, 20);
+
+	DDPRINTK("smb_proc_getattr_ff: attr=%x\n", entry->attr);
+
+	result = 0;
+
+out:
+	smb_unlock_server(server);
+	return result;
 }
 
 int
@@ -1391,7 +1489,17 @@ smb_proc_getattr(struct inode *dir, const char *name, int len,
         int result;
 
 	smb_init_dirent(server, entry);
-        result = smb_proc_getattr_core(dir, name, len, entry);
+ 
+ 	/* Use trans2 for NT, use core protocol for others (Win95/3.11/...).
+ 	 * We distinguish NT from Win95 by looking at the capabilities,
+ 	 * in the same way as in Samba 1.9.18p2's reply.c.
+ 	 */
+	if ((server->protocol >= PROTOCOL_LANMAN2)
+	    && (server->blkmode & (CAP_NT_SMBS | CAP_STATUS32)))
+		result = smb_proc_getattr_ff(dir, name, len, entry);
+	else
+		result = smb_proc_getattr_core(dir, name, len, entry);
+
 	smb_finish_dirent(server, entry);
 
 	entry->len = len;
@@ -1612,12 +1720,12 @@ smb_proc_reconnect(struct smb_server *server)
 		word passlen = strlen(server->m.password);
 		word userlen = strlen(server->m.username);
 
+#ifdef DEBUG_SMB_PASSWORD
 		DPRINTK("smb_proc_connect: password = %s\n",
 			server->m.password);
+#endif			
 		DPRINTK("smb_proc_connect: usernam = %s\n",
 			server->m.username);
-		DPRINTK("smb_proc_connect: blkmode = %d\n",
-			WVAL(server->packet, smb_vwv5));
 
 		if (server->protocol >= PROTOCOL_NT1)
 		{
@@ -1634,6 +1742,8 @@ smb_proc_reconnect(struct smb_server *server)
 			server->blkmode = WVAL(server->packet, smb_vwv5);
 			server->sesskey = DVAL(server->packet, smb_vwv6);
 		}
+		DPRINTK("smb_proc_connect: blkmode (capabilities) = %x\n",
+			server->blkmode);
 
 		if (server->max_xmit < given_max_xmit)
 		{

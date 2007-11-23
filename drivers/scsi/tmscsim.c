@@ -24,6 +24,8 @@
  *	1.09  11/30/96	KG	Added register the allocated IO space	*
  *	1.10  12/05/96	CLH	Modified tmscsim_proc_info(), and reset *
  *				pending interrupt in DC390_detect()	*
+ * 	1.11  02/05/97	KG/CLH	Fixeds problem with partitions greater	*
+ * 				than 1GB				*
  ***********************************************************************/
 
 
@@ -689,11 +691,11 @@ int DC390_bios_param(Disk *disk, kdev_t devno, int geom[])
     sectors = 32;
     cylinders = disk->capacity / (heads * sectors);
 
-    if ( cylinders > 1024)
+    if ( (pACB->Gmode2 & GREATER_1G) && (cylinders > 1024) )
     {
       heads = 255;
       sectors = 63;
-      cylinders = disk->capacity / (255 * 63);
+      cylinders = disk->capacity / (heads * sectors);
     }
 
     geom[0] = heads;
@@ -1182,7 +1184,7 @@ int DC390_initAdapter( PSH psh, ULONG io_port, UCHAR Irq, USHORT index )
 #ifdef	VERSION_ELF_1_2_13
 	if( request_irq(Irq, DC390_Interrupt, SA_INTERRUPT, "tmscsim"))
 #else
-	if( request_irq(Irq, DC390_Interrupt, SA_INTERRUPT, "tmscsim", NULL))
+	if( request_irq(Irq, DC390_Interrupt, SA_INTERRUPT | SA_SHIRQ, "tmscsim", NULL))
 #endif
 	{
 	    printk("DC390: register IRQ error!\n");
@@ -1793,7 +1795,7 @@ int tmscsim_proc_info(char *buffer, char **start,
   if (acbpnt == (PACB)-1) return(-ESRCH);
   if(!shpnt) return(-ESRCH);
 
-  if(inout) // Has data been written to the file ?
+  if(inout) /* Has data been written to the file ? */
     return(tmscsim_set_info(buffer, length, shpnt));
 
   SPRINTF("Tekram DC390(T) PCI SCSI Host Adadpter, ");

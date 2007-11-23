@@ -109,6 +109,7 @@ int Using_Versions; /* gcc will handle this global (used as a flag) correctly */
 
 /* insert new symbol table */
 extern int register_symtab_from(struct symbol_table *, long *);
+extern void *get_module_symbol(char *, char *);
 #ifdef MODULE
 #define register_symtab(symtab) register_symtab_from(symtab, &mod_use_count_)
 #else

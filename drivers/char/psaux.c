@@ -561,7 +561,7 @@ int psaux_init(void)
 #ifdef MODULE
 int init_module(void)
 {
-	return psaux_init(); /*?? Bjorn */
+	return psaux_init(); /*??  Bjorn */
 }
 
 void cleanup_module(void)

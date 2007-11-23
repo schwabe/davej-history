@@ -10,11 +10,42 @@ tristate 'Extended fs support' CONFIG_EXT_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 tristate 'xiafs filesystem support' CONFIG_XIA_FS
 
-# msdos filesystems
-tristate 'DOS FAT fs support' CONFIG_FAT_FS
-dep_tristate 'MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
-dep_tristate 'VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
-dep_tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
+tristate 'Native language support (Unicode, codepages)' CONFIG_NLS
+if [ "$CONFIG_NLS" = "y" -o "$CONFIG_NLS" = "m" ]; then
+  dep_tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS $CONFIG_NLS
+
+  # msdos filesystems
+  dep_tristate 'DOS FAT fs support' CONFIG_FAT_FS $CONFIG_NLS
+  dep_tristate 'MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
+  dep_tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
+  dep_tristate 'VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
+  dep_tristate 'Codepage 437'      CONFIG_NLS_CODEPAGE_437 $CONFIG_NLS
+  dep_tristate 'Codepage 737'      CONFIG_NLS_CODEPAGE_737 $CONFIG_NLS
+  dep_tristate 'Codepage 775'      CONFIG_NLS_CODEPAGE_775 $CONFIG_NLS
+  dep_tristate 'Codepage 850'      CONFIG_NLS_CODEPAGE_850 $CONFIG_NLS
+  dep_tristate 'Codepage 852'      CONFIG_NLS_CODEPAGE_852 $CONFIG_NLS
+  dep_tristate 'Codepage 855'      CONFIG_NLS_CODEPAGE_855 $CONFIG_NLS
+  dep_tristate 'Codepage 857'      CONFIG_NLS_CODEPAGE_857 $CONFIG_NLS
+  dep_tristate 'Codepage 860'      CONFIG_NLS_CODEPAGE_860 $CONFIG_NLS
+  dep_tristate 'Codepage 861'      CONFIG_NLS_CODEPAGE_861 $CONFIG_NLS
+  dep_tristate 'Codepage 862'      CONFIG_NLS_CODEPAGE_862 $CONFIG_NLS
+  dep_tristate 'Codepage 863'      CONFIG_NLS_CODEPAGE_863 $CONFIG_NLS
+  dep_tristate 'Codepage 864'      CONFIG_NLS_CODEPAGE_864 $CONFIG_NLS
+  dep_tristate 'Codepage 865'      CONFIG_NLS_CODEPAGE_865 $CONFIG_NLS
+  dep_tristate 'Codepage 866'      CONFIG_NLS_CODEPAGE_866 $CONFIG_NLS
+  dep_tristate 'Codepage 869'      CONFIG_NLS_CODEPAGE_869 $CONFIG_NLS
+  dep_tristate 'Codepage 874'      CONFIG_NLS_CODEPAGE_874 $CONFIG_NLS
+  dep_tristate 'NLS ISO 8859-1'    CONFIG_NLS_ISO8859_1    $CONFIG_NLS 
+  dep_tristate 'NLS ISO 8859-2'    CONFIG_NLS_ISO8859_2    $CONFIG_NLS
+  dep_tristate 'NLS ISO 8859-3'    CONFIG_NLS_ISO8859_3    $CONFIG_NLS
+  dep_tristate 'NLS ISO 8859-4'    CONFIG_NLS_ISO8859_4    $CONFIG_NLS
+  dep_tristate 'NLS ISO 8859-5'    CONFIG_NLS_ISO8859_5    $CONFIG_NLS
+  dep_tristate 'NLS ISO 8859-6'    CONFIG_NLS_ISO8859_6    $CONFIG_NLS
+  dep_tristate 'NLS ISO 8859-7'    CONFIG_NLS_ISO8859_7    $CONFIG_NLS
+  dep_tristate 'NLS ISO 8859-8'    CONFIG_NLS_ISO8859_8    $CONFIG_NLS
+  dep_tristate 'NLS ISO 8859-9'    CONFIG_NLS_ISO8859_9    $CONFIG_NLS
+  dep_tristate 'NLS KOI8-R'        CONFIG_NLS_KOI8_R       $CONFIG_NLS
+fi
 
 bool '/proc filesystem support' CONFIG_PROC_FS
 if [ "$CONFIG_INET" = "y" ]; then
@@ -34,7 +65,6 @@ fi
 if [ "$CONFIG_IPX" != "n" ]; then
   tristate 'NCP filesystem support (to mount NetWare volumes)' CONFIG_NCP_FS
 fi
-tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

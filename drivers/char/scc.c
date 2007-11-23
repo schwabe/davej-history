@@ -168,6 +168,7 @@
 
 /* ----------------------------------------------------------------------- */
 
+#include <linux/config.h> /* CONFIG_INET and CONFIG_SCC_* */
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -208,10 +209,6 @@
 #include <asm/segment.h>
 #include <asm/bitops.h>
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <time.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
 

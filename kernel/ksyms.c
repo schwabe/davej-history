@@ -87,6 +87,7 @@ struct symbol_table symbol_table = {
 
 	/* stackable module support */
 	X(register_symtab_from),
+	X(get_module_symbol),
 #ifdef CONFIG_KERNELD
 	X(kerneld_send),
 #endif

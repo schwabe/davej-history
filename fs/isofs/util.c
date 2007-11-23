@@ -9,6 +9,8 @@
  *  the 386bsd iso9660 filesystem, by Pace Willisson <pace@blitz.com>.
  */
 
+#include <linux/time.h>
+
 int
 isonum_711 (char * p)
 {
@@ -84,10 +86,9 @@ isonum_733 (char * p)
 	return (isonum_731 (p));
 }
 
-/* We have to convert from a MM/DD/YY format to the unix ctime format.  We have to
-   take into account leap years and all of that good stuff.  Unfortunately, the kernel
-   does not have the information on hand to take into account daylight savings time,
-   so there will be cases (roughly half the time) where the dates are off by one hour. */
+/* We have to convert from a MM/DD/YY format to the unix ctime format.
+ * We have to take into account leap years and all of that good stuff.
+ */
 int iso_date(char * p, int flag)
 {
 	int year, month, day, hour ,minute, second, tz;
@@ -106,6 +107,8 @@ int iso_date(char * p, int flag)
 		crtime = 0;
 	} else {
 		int monlen[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+		extern struct timezone sys_tz;
+
 		days = year * 365;
 		if (year > 2)
 			days += (year+1) / 4;
@@ -116,7 +119,9 @@ int iso_date(char * p, int flag)
 		days += day - 1;
 		crtime = ((((days * 24) + hour) * 60 + minute) * 60)
 			+ second;
-		
+		if (sys_tz.tz_dsttime)
+			crtime -= 3600;
+
 		/* sign extend */
 		if (tz & 0x80)
 			tz |= (-1 << 8);

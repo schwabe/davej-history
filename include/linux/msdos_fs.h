@@ -7,6 +7,8 @@
 #include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/fd.h>
+#include <linux/config.h>
+#include <asm/byteorder.h>
 
 #define MSDOS_ROOT_INO  1 /* == MINIX_ROOT_INO */
 #define SECTOR_SIZE     512 /* sector size (bytes) */
@@ -69,6 +71,10 @@
 
 #define MSDOS_FAT12 4078 /* maximum number of clusters in a 12 bit FAT */
 
+#define EOF_FAT12 0xFF8		/* standard EOF */
+#define EOF_FAT16 0xFFF8
+#define EOF_FAT32 0xFFFFFF8
+
 /*
  * Inode flags
  */
@@ -77,8 +83,8 @@
 /*
  * ioctl commands
  */
-#define	VFAT_IOCTL_READDIR_BOTH		_IOR('r', 1, long)
-#define	VFAT_IOCTL_READDIR_SHORT	_IOW('r', 2, long)
+#define	VFAT_IOCTL_READDIR_BOTH		_IOR('r', 1, struct dirent [2])
+#define	VFAT_IOCTL_READDIR_SHORT	_IOR('r', 2, struct dirent [2])
 
 /*
  * Conversion from and to little-endian byte order. (no-op on i386/i486)
@@ -93,7 +99,7 @@
 #define CT_LE_L(v) (v)
 
 
-struct msdos_boot_sector {
+struct fat_boot_sector {
 	__s8	ignored[3];	/* Boot strap short or near jump */
 	__s8	system_id[8];	/* Name - can be used to special case
 				   partition manager volumes */
@@ -109,6 +115,24 @@ struct msdos_boot_sector {
 	__u16	heads;		/* number of heads */
 	__u32	hidden;		/* hidden sectors (unused) */
 	__u32	total_sect;	/* number of sectors (if sectors == 0) */
+
+	/* The following fields are only used by FAT32 */
+	__u32	fat32_length;	/* sectors/FAT */
+	__u16	flags;		/* bit 8: fat mirroring, low 4: active fat */
+	__u8	version[2];	/* major, minor filesystem version */
+	__u32	root_cluster;	/* first cluster in root directory */
+	__u16	info_sector;	/* filesystem info sector */
+	__u16	backup_boot;	/* backup boot sector */
+	__u16	reserved2[6];	/* Unused */
+};
+
+struct fat_boot_fsinfo {
+	__u32   reserved1;	/* Nothing as far as I can tell */
+	__u32   signature;	/* 0x61417272L */
+	__u32   free_clusters;	/* Free cluster count.  -1 if unknown */
+	__u32   next_cluster;	/* Most recently allocated cluster.
+				 * Unused under Linux. */
+	__u32   reserved2[4];
 };
 
 struct msdos_dir_entry {
@@ -119,7 +143,7 @@ struct msdos_dir_entry {
 	__u16	ctime;		/* Creation time */
 	__u16	cdate;		/* Creation date */
 	__u16	adate;		/* Last access date */
-	__u8    unused[2];
+	__u16   starthi;	/* High 16 bits of cluster in FAT32 */
 	__u16	time,date,start;/* time, date and first cluster */
 	__u32	size;		/* file size (in bytes) */
 };
@@ -132,7 +156,7 @@ struct msdos_dir_slot {
 	__u8    reserved;	/* always 0 */
 	__u8    alias_checksum;	/* checksum for 8.3 alias */
 	__u8    name5_10[12];	/* 6 more characters in name */
-	__u8    start[2];	/* starting cluster number */
+	__u16   start;		/* starting cluster number, 0 in long slots */
 	__u8    name11_12[4];	/* last 2 characters in name */
 };
 
@@ -185,6 +209,7 @@ extern int fat_scan(struct inode *dir,const char *name,struct buffer_head **res_
 		    struct msdos_dir_entry **res_de,int *ino,char scantype);
 extern int fat_parent_ino(struct inode *dir,int locked);
 extern int fat_subdirs(struct inode *dir);
+void fat_clusters_flush(struct super_block *sb);
 
 /* fat.c */
 extern int fat_access(struct super_block *sb,int nr,int new_value);
@@ -254,13 +279,32 @@ extern int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
 			struct inode *new_dir,const char *new_name,int new_len,
 			int must_be_dir);
 
+/* nls.c */
+extern int init_fat_nls(void);
+extern struct fat_nls_table *fat_load_nls(int codepage);
+
+/* tables.c */
+extern unsigned char fat_uni2esc[];
+extern unsigned char fat_esc2uni[];
+
 /* fatfs_syms.c */
 extern int init_fat_fs(void);
+extern void cleanup_fat_fs(void);
+
+/* nls.c */
+extern int fat_register_nls(struct fat_nls_table * fmt);
+extern int fat_unregister_nls(struct fat_nls_table * fmt);
+extern struct fat_nls_table *fat_find_nls(int codepage);
+extern struct fat_nls_table *fat_load_nls(int codepage);
+extern void fat_unload_nls(int codepage);
+extern int init_fat_nls(void);
+
 
 /* vfat/namei.c - these are for dmsdos */
 extern int vfat_create(struct inode *dir,const char *name,int len,int mode,
 		       struct inode **result);
 extern int vfat_unlink(struct inode *dir,const char *name,int len);
+extern int vfat_unlink_uvfat(struct inode *dir,const char *name,int len);
 extern int vfat_mkdir(struct inode *dir,const char *name,int len,int mode);
 extern int vfat_rmdir(struct inode *dir,const char *name,int len);
 extern int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
@@ -272,6 +316,10 @@ extern struct super_block *vfat_read_super(struct super_block *sb,void *data,
 extern void vfat_read_inode(struct inode *inode);
 extern int vfat_lookup(struct inode *dir,const char *name,int len,
 		       struct inode **result);
+
+/* vfat/vfatfs_syms.c */
+extern struct file_system_type vfat_fs_type;
+
 
 #endif /* __KERNEL__ */
 

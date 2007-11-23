@@ -73,7 +73,6 @@
 #include <linux/version.h>
 #endif
 
-#include <stdlib.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>

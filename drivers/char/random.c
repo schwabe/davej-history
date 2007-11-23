@@ -226,6 +226,7 @@
  * Eastlake, Steve Crocker, and Jeff Schiller.
  */
 
+#include <linux/config.h> /* CONFIG_RST_COOKIES and CONFIG_SYN_COOKIES */
 #include <linux/utsname.h>
 #include <linux/kernel.h>
 #include <linux/major.h>

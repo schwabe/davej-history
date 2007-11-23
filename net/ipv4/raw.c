@@ -425,6 +425,7 @@ static void raw_close(struct sock *sk, unsigned long timeout)
 		mroute_socket=NULL;
 	}
 #endif	
+	sk->dead=1;
 	destroy_sock(sk);
 }
 

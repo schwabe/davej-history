@@ -6,6 +6,8 @@
  *  regular file handling primitives for fat-based filesystems
  */
 
+#define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
+#include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/locks.h>
 #include <linux/fs.h>
@@ -16,7 +18,17 @@
 #include <linux/string.h>
 #include <linux/pagemap.h>
 
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
+#include <asm/uaccess.h>
+#define FAT_COPY_TO_USER(uaddr, kaddr, len) copy_to_user(uaddr, kaddr, len)
+#define FAT_COPY_FROM_USER(uaddr, kaddr, len) copy_from_user(uaddr, kaddr, len)
+#define FAT_GET_USER(c, ptr) get_user((c), ptr)
+#else
 #include <asm/segment.h>
+#define FAT_COPY_TO_USER(uaddr, kaddr, len) memcpy_tofs(uaddr, kaddr, len)
+#define FAT_COPY_FROM_USER(uaddr, kaddr, len) memcpy_fromfs(uaddr, kaddr, len)
+#define FAT_GET_USER(c, ptr) (c) = get_user(ptr)
+#endif
 #include <asm/system.h>
 
 #include "msbuffer.h"
@@ -32,7 +44,7 @@ static struct file_operations fat_file_operations = {
 	fat_file_read,		/* read */
 	fat_file_write,		/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* select v2.0.x/poll v2.1.x - default */
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
@@ -71,7 +83,7 @@ static struct file_operations fat_file_operations_1024 = {
 	fat_file_read,		/* read */
 	fat_file_write,		/* write */
 	NULL,			/* readdir - bad */
-	NULL,			/* select - default */
+	NULL,			/* select v2.0.x/poll v2.1.x - default */
 	NULL,			/* ioctl - default */
 	fat_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
@@ -152,11 +164,12 @@ static void fat_prefetch (
 /*
 	Read a file into user space
 */
-int fat_file_read(
-	struct inode *inode,
-	struct file *filp,
-	char *buf,
-	int count)
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
+long fat_file_read(struct inode *inode,struct file *filp,char *buf,
+		   unsigned long count)
+#else
+int fat_file_read(struct inode *inode,struct file *filp,char *buf,int count)
+#endif
 {
 	struct super_block *sb = inode->i_sb;
 	char *start = buf;
@@ -175,7 +188,11 @@ int fat_file_read(
 		printk("fat_file_read: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
+	if (filp->f_pos >= inode->i_size || count == 0) return 0;
+#else
 	if (filp->f_pos >= inode->i_size || count <= 0) return 0;
+#endif
 	/*
 		Tell the buffer cache which block we expect to read in advance
 		Since we are limited with the stack, we preread only MSDOS_PREFETCH
@@ -238,7 +255,7 @@ int fat_file_read(
 		size = MIN(SECTOR_SIZE-offset,left_in_file);
 		if (MSDOS_I(inode)->i_binary) {
 			size = MIN(size,end-buf);
-			memcpy_tofs(buf,data,size);
+			FAT_COPY_TO_USER(buf,data,size);
 			buf += size;
 			filp->f_pos += size;
 		}else{
@@ -269,11 +286,12 @@ int fat_file_read(
 /*
 	Write to a file either from user space
 */
-int fat_file_write(
-	struct inode *inode,
-	struct file *filp,
-	const char *buf,
-	int count)
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
+long fat_file_write(struct inode *inode,struct file *filp,const char *buf,
+		    unsigned long count)
+#else
+int fat_file_write(struct inode *inode,struct file *filp,const char *buf,int count)
+#endif
 {
 	struct super_block *sb = inode->i_sb;
 	int sector,offset,size,left,written;
@@ -301,8 +319,11 @@ int fat_file_write(
  */
 	if (filp->f_flags & O_APPEND)
 		filp->f_pos = inode->i_size;
-	if (count <= 0)
-		return 0;
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
+	if (count == 0) return 0;
+#else
+	if (count <= 0) return 0;
+#endif
 	error = carry = 0;
 	for (start = buf; count || carry; count -= size) {
 		while (!(sector = fat_smap(inode,filp->f_pos >> SECTOR_BITS)))
@@ -329,7 +350,7 @@ int fat_file_write(
 			break;
 		}
 		if (binary_mode) {
-			memcpy_fromfs(bh->b_data+offset,buf,written = size);
+			FAT_COPY_FROM_USER(bh->b_data+offset,buf,written = size);
 			buf += size;
 		} else {
 			written = left = SECTOR_SIZE-offset;
@@ -340,7 +361,8 @@ int fat_file_write(
 				carry = 0;
 			}
 			for (size = 0; size < count && left; size++) {
-				if ((ch = get_user(buf++)) == '\n') {
+				FAT_GET_USER(ch, buf++);
+				if (ch == '\n') {
 					*to++ = '\r';
 					left--;
 				}

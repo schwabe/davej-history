@@ -1170,6 +1170,7 @@ static void change_speed(struct async_struct *info)
 	int	quot = 0;
 	unsigned cflag,cval,fcr;
 	int	i;
+	unsigned long flags;
 
 	if (!info->tty || !info->tty->termios)
 		return;
@@ -1208,15 +1209,15 @@ static void change_speed(struct async_struct *info)
 	if (quot) {
 		info->MCR |= UART_MCR_DTR;
 		info->MCR_noint |= UART_MCR_DTR;
-		cli();
+		save_flags(flags); cli();
 		serial_out(info, UART_MCR, info->MCR);
-		sti();
+		restore_flags(flags);
 	} else {
 		info->MCR &= ~UART_MCR_DTR;
 		info->MCR_noint &= ~UART_MCR_DTR;
-		cli();
+		save_flags(flags); cli();
 		serial_out(info, UART_MCR, info->MCR);
-		sti();
+		restore_flags(flags);
 		return;
 	}
 	/* byte size and parity */
@@ -1302,13 +1303,13 @@ static void change_speed(struct async_struct *info)
 				UART_LSR_PE | UART_LSR_FE;
 		}
 	}
-	cli();
+	save_flags(flags); cli();
 	serial_outp(info, UART_LCR, cval | UART_LCR_DLAB);	/* set DLAB */
 	serial_outp(info, UART_DLL, quot & 0xff);	/* LS of divisor */
 	serial_outp(info, UART_DLM, quot >> 8);		/* MS of divisor */
 	serial_outp(info, UART_LCR, cval);		/* reset DLAB */
 	serial_outp(info, UART_FCR, fcr); 	/* set fcr */
-	sti();
+	restore_flags(flags);
 }
 
 static void rs_put_char(struct tty_struct *tty, unsigned char ch)

@@ -2,6 +2,7 @@
 /* By Ross Biro 1/23/92 */
 /* edited by Linus Torvalds */
 
+#include <linux/config.h> /* CONFIG_MATH_EMULATION */
 #include <linux/head.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -416,60 +417,6 @@ static unsigned long get_fpreg_word(struct task_struct *child,
 	return tmp;
 }
 
-void safe_wake_up_process(struct task_struct * p)
-{
-	struct desc_struct * d;
-	unsigned long limit;
-
-	void check(int index, int mask, int value) {
-		unsigned long selector, limit;
-
-		if (!p) return;
-
-		selector = get_stack_long(p, sizeof(long)*index - MAGICNUMBER);
-		if (selector & 4) {
-			d = p->ldt;
-			if (d) limit = get_limit(p->tss.ldt); else limit = 0;
-		} else {
-			d = gdt;
-			limit = 8 * 8;
-		}
-
-		if ((selector & 0xFFF8) >= limit) {
-			d = NULL;
-			force_sig(SIGSEGV, p); p = NULL;
-		} else {
-			d += selector >> 3;
-			if ((d->b & mask) != value ||
-			    (d->b >> 13) < (selector & 3)) {
-				force_sig(SIGSEGV, p); p = NULL;
-			}
-		}
-	}
-
-	check(DS, 0x9800, 0x9000); /* Allow present data segments only */
-	check(ES, 0x9800, 0x9000);
-	check(FS, 0x9800, 0x9000);
-	check(GS, 0x9800, 0x9000);
-	check(SS, 0x9A00, 0x9200); /* Stack segment should not be read-only */
-	check(CS, 0x9800, 0x9800); /* Allow present code segments only */
-
-	if (!p) return;
-
-	if (d) {
-		limit = (d->a & 0xFFFF) | (d->b & 0xF0000);
-		if (d->b & 0x800000) {
-			limit <<= 12; limit |= 0xFFF;
-		}
-
-		if (get_stack_long(p, sizeof(long)*EIP - MAGICNUMBER) > limit) {
-			force_sig(SIGSEGV, p); return;
-		}
-	}
-
-	wake_up_process(p);
-}
-
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
@@ -663,7 +610,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			else
 				child->flags &= ~PF_TRACESYS;
 			child->exit_code = data;
-			safe_wake_up_process(child);
+			wake_up_process(child);
 	/* make sure the single step bit is not set. */
 			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
 			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
@@ -696,8 +643,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			child->flags &= ~PF_TRACESYS;
 			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) | TRAP_FLAG;
 			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
+			wake_up_process(child);
 			child->exit_code = data;
-			safe_wake_up_process(child);
 	/* give it a chance to run. */
 			return 0;
 		}
@@ -708,8 +655,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			if ((unsigned long) data > NSIG)
 				return -EIO;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+			wake_up_process(child);
 			child->exit_code = data;
-			safe_wake_up_process(child);
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);

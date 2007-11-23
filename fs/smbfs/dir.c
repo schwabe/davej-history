@@ -107,21 +107,6 @@ strncasecmp(const char *s1, const char *s2, int len)
 	return result;
 }
 
-static int
-compare_filename(const struct smb_server *server,
-		 const char *s1, int len, struct smb_dirent *entry)
-{
-	if (len != entry->len)
-	{
-		return 1;
-	}
-	if (server->case_handling == CASE_DEFAULT)
-	{
-		return strncasecmp(s1, entry->name, len);
-	}
-	return strncmp(s1, entry->name, len);
-}
-
 struct smb_inode_info *
 smb_find_inode(struct smb_server *server, ino_t ino)
 {
@@ -507,9 +492,33 @@ smb_invalidate_all_inodes(struct smb_server *server)
 	return;
 }
 
-/* We will search the inode that belongs to this name, currently by a
-   complete linear search through the inodes belonging to this
-   filesystem. This has to be fixed. */
+static int
+compare_filename(const struct smb_server *server,
+		 const char *s1, int len, struct smb_dirent *entry)
+{
+	if (len != entry->len)
+	{
+#if 0
+		/* Check whether the entry is about to be removed */
+		if (!entry->len)
+			printk("SMBFS: dead entry %s\n", entry->name);
+#endif
+		return 1;
+	}
+	if (server->case_handling == CASE_DEFAULT)
+	{
+		return strncasecmp(s1, entry->name, len);
+	}
+	return strncmp(s1, entry->name, len);
+}
+
+/*
+ * Search for the smb_inode_info that belongs to this name,
+ * currently by a complete linear search through the inodes
+ * belonging to this filesystem.
+ *
+ * Note that this returns files as well as directories.
+ */
 static struct smb_inode_info *
 smb_find_dir_inode(struct inode *parent, const char *name, int len)
 {

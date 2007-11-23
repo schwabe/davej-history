@@ -25,6 +25,7 @@
  * Initial revision
  *
  */
+#include <linux/config.h> /* CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON */
 #include <linux/module.h>
 #include <linux/string.h>
 #include <linux/ctype.h>

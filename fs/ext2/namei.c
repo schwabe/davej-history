@@ -578,7 +578,7 @@ static int empty_dir (struct inode * inode)
 	offset = de->rec_len + de1->rec_len;
 	de = (struct ext2_dir_entry *) ((char *) de1 + de1->rec_len);
 	while (offset < inode->i_size ) {
-		if ((void *) de >= (void *) (bh->b_data + sb->s_blocksize)) {
+		if (!bh || (void *) de >= (void *) (bh->b_data + sb->s_blocksize)) {
 			brelse (bh);
 			bh = ext2_bread (inode, offset >> EXT2_BLOCK_SIZE_BITS(sb), 1, &err);
 			if (!bh) {

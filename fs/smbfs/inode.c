@@ -95,7 +95,6 @@ smb_put_inode(struct inode *inode)
 {
 	struct smb_server *server = SMB_SERVER(inode);
 	struct smb_inode_info *info = SMB_INOP(inode);
-	struct smb_dirent *finfo;
 	__u32 mtime = inode->i_mtime;
 
 	if (inode->i_count > 1) {
@@ -107,6 +106,12 @@ smb_put_inode(struct inode *inode)
 	if (S_ISDIR(inode->i_mode))
 	{
 		smb_invalid_dir_cache(inode->i_ino);
+	} else
+	{
+		/*
+		 * Clear the length so the info structure can't be found.
+		 */
+		info->finfo.len = 0;
 	}
 	clear_inode(inode);
 
@@ -116,13 +121,13 @@ smb_put_inode(struct inode *inode)
 	 */
 	inode->i_count++;
 	if (info) {
-		finfo = &info->finfo;
-		if (finfo->opened != 0)
+		if (info->finfo.opened != 0)
 		{
-			if (smb_proc_close(server, finfo->fileid, mtime))
+			if (smb_proc_close(server, info->finfo.fileid, mtime))
 			{
 				/* We can't do anything but complain. */
-				printk("smb_put_inode: could not close\n");
+				printk("smb_put_inode: could not close %s\n",
+					info->finfo.name);
 			}
 		}
 		smb_free_inode_info(info);

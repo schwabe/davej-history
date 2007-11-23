@@ -11,8 +11,12 @@
  *  Merged with msdos fs by Henrik Storner <storner@osiris.ping.dk>
  */
 
+#define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
+
+#include <linux/version.h>
 #include <linux/fs.h>
 #include <linux/msdos_fs.h>
+#include <linux/nls.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
@@ -21,15 +25,28 @@
 #include <linux/dirent.h>
 #include <linux/mm.h>
 
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
+#include <asm/uaccess.h>
+#define FAT_GET_USER(len, addr) get_user(len, addr)
+#define FAT_COPY_TO_USER(uaddr, kaddr, len) copy_to_user(uaddr, kaddr, len)
+#else
 #include <asm/segment.h>
+#define FAT_GET_USER(len, addr) (len) = get_user(addr)
+#define FAT_COPY_TO_USER(uaddr, kaddr, len) memcpy_tofs(uaddr, kaddr, len)
+#endif
 
 #include "msbuffer.h"
-#include "tables.h"
 
 
 #define PRINTK(X)
 
+
+#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(2,1,0)
+static long fat_dir_read(struct inode * inode,struct file * filp,
+			 char * buf,unsigned long count)
+#else
 static int fat_dir_read(struct inode * inode,struct file * filp, char * buf,int count)
+#endif
 {
 	return -EISDIR;
 }
@@ -39,7 +56,7 @@ struct file_operations fat_dir_operations = {
 	fat_dir_read,		/* read */
 	NULL,			/* write - bad */
 	fat_readdir,		/* readdir */
-	NULL,			/* select - default */
+	NULL,			/* select v2.0.x/poll v2.1.x - default */
 	fat_dir_ioctl,		/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open code */
@@ -47,7 +64,9 @@ struct file_operations fat_dir_operations = {
 	file_fsync		/* fsync */
 };
 
-/* Convert Unicode string to ASCII.  If uni_xlate is enabled and we
+/*
+ * Convert Unicode 16 to UTF8, translated unicode, or ascii.
+ * If uni_xlate is enabled and we
  * can't get a 1:1 conversion, use a colon as an escape character since
  * it is normally invalid on the vfat filesystem.  The following three
  * characters are a sort of uuencoded 16 bit Unicode value.  This lets
@@ -55,10 +74,11 @@ struct file_operations fat_dir_operations = {
  * into some trouble with long Unicode names, but ignore that right now.
  */
 static int
-uni2ascii(unsigned char *uni, unsigned char *ascii, int uni_xlate)
+uni16_to_x8(unsigned char *ascii, unsigned char *uni, int uni_xlate,
+	    struct nls_table *nls)
 {
 	unsigned char *ip, *op;
-	unsigned char page, pg_off;
+	unsigned char ch, cl;
 	unsigned char *uni_page;
 	unsigned short val;
 
@@ -66,21 +86,21 @@ uni2ascii(unsigned char *uni, unsigned char *ascii, int uni_xlate)
 	op = ascii;
 
 	while (*ip || ip[1]) {
-		pg_off = *ip++;
-		page = *ip++;
-		
-		uni_page = fat_uni2asc_pg[page];
-		if (uni_page && uni_page[pg_off]) {
-			*op++ = uni_page[pg_off];
+		cl = *ip++;
+		ch = *ip++;
+
+		uni_page = nls->page_uni2charset[ch];
+		if (uni_page && uni_page[cl]) {
+			*op++ = uni_page[cl];
 		} else {
 			if (uni_xlate == 1) {
 				*op++ = ':';
-				val = (pg_off << 8) + page;
-				op[2] = fat_uni2code[val & 0x3f];
+				val = (cl << 8) + ch;
+				op[2] = fat_uni2esc[val & 0x3f];
 				val >>= 6;
-				op[1] = fat_uni2code[val & 0x3f];
+				op[1] = fat_uni2esc[val & 0x3f];
 				val >>= 6;
-				*op = fat_uni2code[val & 0x3f];
+				*op = fat_uni2esc[val & 0x3f];
 				op += 3;
 			} else {
 				*op++ = '?';
@@ -89,6 +109,19 @@ uni2ascii(unsigned char *uni, unsigned char *ascii, int uni_xlate)
 	}
 	*op = 0;
 	return (op - ascii);
+}
+
+
+static void dump_de(struct msdos_dir_entry *de)
+{
+	int i;
+	unsigned char *p = (unsigned char *) de;
+	printk("[");
+
+	for (i = 0; i < 32; i++, p++) {
+		printk("%02x ", *p);
+	}
+	printk("]\n");
 }
 
 int fat_readdirx(
@@ -114,7 +147,9 @@ int fat_readdirx(
 	unsigned char alias_checksum = 0; /* Make compiler warning go away */
 	unsigned char long_slots = 0;
 	int uni_xlate = MSDOS_SB(sb)->options.unicode_xlate;
+	int utf8 = MSDOS_SB(sb)->options.utf8;
 	unsigned char *unicode = NULL;
+	struct nls_table *nls = MSDOS_SB(sb)->nls_io;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
@@ -137,6 +172,9 @@ int fat_readdirx(
 	is_long = 0;
 	ino = fat_get_entry(inode,&filp->f_pos,&bh,&de);
 	while (ino > -1) {
+#if 0
+		dump_de(de);
+#endif
 		/* Check for long filename entry */
 		if (MSDOS_SB(sb)->options.isvfat && (de->name[0] == (__s8) DELETED_FLAG)) {
 			is_long = 0;
@@ -213,10 +251,10 @@ int fat_readdirx(
 			char bufname[14];
 			char *ptname = bufname;
 			int dotoffset = 0;
+			int was_long = is_long;
 
 			if (is_long) {
 				unsigned char sum;
-				long_len = uni2ascii(unicode, longname, uni_xlate);
 				for (sum = 0, i = 0; i < 11; i++) {
 					sum = (((sum&1)<<7)|((sum&0xfe)>>1)) + de->name[i];
 				}
@@ -224,6 +262,11 @@ int fat_readdirx(
 				if (sum != alias_checksum) {
 					PRINTK(("Checksums don't match %d != %d\n", sum, alias_checksum));
 					is_long = 0;
+				}
+				if (utf8) {
+					long_len = utf8_wcstombs(longname, (__u16 *) unicode, sizeof(longname));
+				} else {
+					long_len = uni16_to_x8(longname, unicode, uni_xlate, nls);
 				}
 			}
 
@@ -264,7 +307,7 @@ int fat_readdirx(
 						bufname[i+dotoffset] = '\0';
 					}
 					spos = oldpos;
-					if (is_long) {
+					if (was_long) {
 						spos = filp->f_pos - sizeof(struct msdos_dir_entry);
 					} else {
 						long_slots = 0;
@@ -343,7 +386,8 @@ static int vfat_ioctl_fill(
 	int len, slen;
 	int dotdir;
 
-	if (get_user(&d1->d_reclen) != 0) {
+	FAT_GET_USER(len, &d1->d_reclen);
+	if (len != 0) {
 		return -1;
 	}
 
@@ -356,19 +400,19 @@ static int vfat_ioctl_fill(
 		len = strlen(name);
 	}
 	if (len != name_len) {
-		memcpy_tofs(d2->d_name, name, len);
+		FAT_COPY_TO_USER(d2->d_name, name, len);
 		put_user(0, d2->d_name + len);
 		put_user(len, &d2->d_reclen);
 		put_user(ino, &d2->d_ino);
 		put_user(offset, &d2->d_off);
 		slen = name_len - len;
-		memcpy_tofs(d1->d_name, name+len+1, slen);
+		FAT_COPY_TO_USER(d1->d_name, name+len+1, slen);
 		put_user(0, d1->d_name+slen);
 		put_user(slen, &d1->d_reclen);
 	} else {
 		put_user(0, d2->d_name);
 		put_user(0, &d2->d_reclen);
-		memcpy_tofs(d1->d_name, name, len);
+		FAT_COPY_TO_USER(d1->d_name, name, len);
 		put_user(0, d1->d_name+len);
 		put_user(len, &d1->d_reclen);
 	}
@@ -391,7 +435,7 @@ int fat_dir_ioctl(struct inode * inode, struct file * filp,
 	switch (cmd) {
 	case VFAT_IOCTL_READDIR_BOTH: {
 		struct dirent *d1 = (struct dirent *)arg;
-		err = verify_area(VERIFY_WRITE, d1, sizeof (*d1));
+		err = verify_area(VERIFY_WRITE, d1, sizeof(struct dirent[2]));
 		if (err)
 			return err;
 		put_user(0, &d1->d_reclen);
@@ -401,7 +445,7 @@ int fat_dir_ioctl(struct inode * inode, struct file * filp,
 	case VFAT_IOCTL_READDIR_SHORT: {
 		struct dirent *d1 = (struct dirent *)arg;
 		put_user(0, &d1->d_reclen);
-		err = verify_area(VERIFY_WRITE, d1, sizeof (*d1));
+		err = verify_area(VERIFY_WRITE, d1, sizeof(struct dirent[2]));
 		if (err)
 			return err;
 		return fat_readdirx(inode,filp,(void *)arg,

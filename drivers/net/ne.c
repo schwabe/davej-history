@@ -207,6 +207,7 @@ static int ne_probe_pci(struct device *dev)
 	for (i = 0; pci_clone_list[i].vendor != 0; i++) {
 		unsigned char pci_bus, pci_device_fn;
 		unsigned int pci_ioaddr;
+		u16 pci_command, new_command;
 		int pci_index;
 		
 		for (pci_index = 0; pci_index < 8; pci_index++) {
@@ -228,6 +229,20 @@ static int ne_probe_pci(struct device *dev)
 		if (pci_irq_line == 0) continue;	/* Try next PCI ID */
 		printk("ne.c: PCI BIOS reports NE 2000 clone at i/o %#x, irq %d.\n",
 				pci_ioaddr, pci_irq_line);
+
+		pcibios_read_config_word(pci_bus, pci_device_fn, 
+					PCI_COMMAND, &pci_command);
+
+		/* Activate the card: fix for brain-damaged Win98 BIOSes. */
+		new_command = pci_command | PCI_COMMAND_IO;
+		if (pci_command != new_command) {
+			printk(KERN_INFO "  The PCI BIOS has not enabled this"
+				" NE2k clone!  Updating PCI command %4.4x->%4.4x.\n",
+					pci_command, new_command);
+			pcibios_write_config_word(pci_bus, pci_device_fn,
+					PCI_COMMAND, new_command);
+		}
+
 		if (ne_probe1(dev, pci_ioaddr) != 0) {	/* Shouldn't happen. */
 			printk(KERN_ERR "ne.c: Probe of PCI card at %#x failed.\n", pci_ioaddr);
 			pci_irq_line = 0;
@@ -422,9 +437,10 @@ static int ne_probe1(struct device *dev, int ioaddr)
     }
     
     /* Snarf the interrupt now.  There's no point in waiting since we cannot
-       share and the board will usually be enabled. */
+       share (with ISA cards) and the board will usually be enabled. */
     {
-	int irqval = request_irq(dev->irq, ei_interrupt, 0, name, NULL);
+	int irqval = request_irq(dev->irq, ei_interrupt,
+			pci_irq_line ? SA_SHIRQ : 0, name, dev);
 	if (irqval) {
 	    printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
 	    return EAGAIN;
@@ -732,6 +748,7 @@ static struct device dev_ne[MAX_NE_CARDS] = {
 
 static int io[MAX_NE_CARDS] = { 0, };
 static int irq[MAX_NE_CARDS]  = { 0, };
+static int bad[MAX_NE_CARDS]  = { 0, };
 
 /* This is set up so that no autoprobe takes place. We can't guarantee
 that the ne2k probe is the last 8390 based probe to take place (as it
@@ -749,6 +766,7 @@ init_module(void)
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
 		dev->init = ne_probe;
+		dev->mem_end = bad[this_dev];
 		if (register_netdev(dev) == 0) {
 			found++;
 			continue;
