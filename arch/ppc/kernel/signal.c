@@ -220,6 +220,10 @@ int sys_sigreturn(struct pt_regs *regs)
 		sr = (struct sigregs *) sigctx.regs;
 		if (regs->msr & MSR_FP )
 			giveup_fpu(current);
+#ifdef CONFIG_ALTIVEC
+		if (regs->msr & MSR_VEC)
+			giveup_altivec(current);
+#endif /* CONFIG_ALTIVEC */
 		if (copy_from_user(saved_regs, &sr->gp_regs,
 				   sizeof(sr->gp_regs)))
 			goto badframe;
@@ -268,6 +272,10 @@ setup_frame(struct pt_regs *regs, struct sigregs *frame,
 		goto badframe;
 	if (regs->msr & MSR_FP)
 		giveup_fpu(current);
+#ifdef CONFIG_ALTIVEC
+	if (regs->msr & MSR_VEC)
+		giveup_altivec(current);
+#endif /* CONFIG_ALTIVEC */
 	if (__copy_to_user(&frame->gp_regs, regs, GP_REGS_SIZE)
 	    || __copy_to_user(&frame->fp_regs, current->tss.fpr,
 			      ELF_NFPREG * sizeof(double))

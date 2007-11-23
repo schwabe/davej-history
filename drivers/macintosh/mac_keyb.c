@@ -24,6 +24,7 @@
  * - Hunter digital (NoHandsMouse)
  * - Kensignton TurboMouse 5 (needs testing)
  * - Mouse Systems A3 mice and trackballs <aidan@kublai.com>
+ * - MacAlly 2-buttons mouse (needs testing) <pochini@denise.shiny.it>
  *
  * To do:
  *
@@ -272,6 +273,7 @@ static struct adb_ids buttons_ids;
 #define ADBMOUSE_MICROSPEED	6	/* Microspeed mouse (&trackball ?), MacPoint */
 #define ADBMOUSE_TRACKBALLPRO	7	/* Trackball Pro (special buttons) */
 #define ADBMOUSE_MS_A3		8	/* Mouse systems A3 trackball (handler 3) */
+#define ADBMOUSE_MACALLY2	9	/* MacAlly 2-button mouse */
 
 static int adb_mouse_kinds[16];
 
@@ -490,6 +492,19 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
     data[3] = byyy bxxx Third button and fourth button.  Y is additional
 	      high bits of y-axis motion.  XY is additional
 	      high bits of x-axis motion.
+
+    MacAlly 2-button mouse protocol.
+
+    For MacAlly 2-button mouse protocol the data array will contain the
+    following values:
+
+		BITS    COMMENTS
+    data[0] = dddd 1100 ADB command: Talk, register 0, for device dddd.
+    data[1] = bxxx xxxx Left button and x-axis motion.
+    data[2] = byyy yyyy Right button and y-axis motion.
+    data[3] = ???? ???? unknown
+    data[4] = ???? ???? unknown
+
   */
 	struct kbd_struct *kbd;
 
@@ -521,6 +536,11 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 		data[2] = (data[2] & 0x7f) | ((data[3] & 0x02) << 6);
 		data[3] = ((data[3] & 0x04) << 5);
 		break;
+            case ADBMOUSE_MACALLY2:
+		data[3] = (data[2] & 0x80) ? 0x80 : 0x00;
+		data[2] |= 0x80;  /* Right button is mapped as button 3 */
+		nb=4;
+                break;
 	}
 
 	if (adb_mouse_interrupt_hook)
@@ -581,7 +601,7 @@ buttons_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 	/* Ignore data from register other than 0 */
 	if ((adb_hardware != ADB_VIAPMU) || (data[0] & 0x3) || (nb < 2))
 		return;
-		
+
 	switch (data[1]&0xf )
 	{
 		/* mute */
@@ -645,7 +665,6 @@ static int pending_led_end=0;
 
 static void real_mackbd_leds(unsigned char leds, int device)
 {
-
     if (led_request.complete) {
 	adb_request(&led_request, leds_done, 0, 3,
 		    ADB_WRITEREG(device, KEYB_LEDREG), 0xff,
@@ -705,21 +724,29 @@ __initfunc(void mackbd_init_hw(void))
 	led_request.complete = 1;
 
 	mackeyb_probe();
-	
+
 	notifier_chain_register(&adb_client_list, &mackeyb_adb_notifier);
 }
 
 static int
 adb_message_handler(struct notifier_block *this, unsigned long code, void *x)
 {
+	unsigned long flags;
+
 	switch (code) {
 	case ADB_MSG_PRE_RESET:
 	case ADB_MSG_POWERDOWN:
-		/* Add unregister_keyboard when merging with Paul Mackerras */
+	    	/* Stop the repeat timer. Autopoll is already off at this point */
+		save_flags(flags);
+		cli();
+		del_timer(&repeat_timer);
+		restore_flags(flags);
+
+		/* Stop pending led requests */
 		while(!led_request.complete)
 			adb_poll();
 		break;
-			
+
 	case ADB_MSG_POST_RESET:
 		mackeyb_probe();
 		break;
@@ -802,7 +829,7 @@ mackeyb_probe(void)
 		    || (adb_mouse_kinds[id] == ADBMOUSE_MICROSPEED)) {
 			init_microspeed(id);
 		} else if (adb_mouse_kinds[id] == ADBMOUSE_MS_A3) {
-			init_ms_a3(id);	
+			init_ms_a3(id);
 		}  else if (adb_mouse_kinds[id] ==  ADBMOUSE_EXTENDED) {
 			/*
 			 * Register 1 is usually used for device
@@ -825,6 +852,14 @@ mackeyb_probe(void)
 			    (req.reply[1] == 0x4b) && (req.reply[2] == 0x4d) &&
 			    (req.reply[3] == 0x4c) && (req.reply[4] == 0x31))
 				init_turbomouse(id);
+			else if ((req.reply_len == 9) &&
+			    (req.reply[1] == 0x4b) && (req.reply[2] == 0x4f) &&
+			    (req.reply[3] == 0x49) && (req.reply[4] == 0x54)){
+				if (adb_try_handler_change(id, 0x42)) {
+					printk("\nADB MacAlly 2-button mouse at %d, handler set to 0x42", id);
+					adb_mouse_kinds[id] = ADBMOUSE_MACALLY2;
+				}
+			}
 		}
 		printk("\n");
         }
@@ -833,7 +868,7 @@ mackeyb_probe(void)
 static void 
 init_trackpad(int id)
 {
-	struct adb_request req;	
+	struct adb_request req;
 	unsigned char r1_buffer[8];
 
 	printk(" (trackpad)");
@@ -886,9 +921,9 @@ static void
 init_trackball(int id)
 {
 	struct adb_request req;
-	
+
 	printk(" (trackman/mouseman)");
-	
+
 	adb_mouse_kinds[id] = ADBMOUSE_TRACKBALL;
 
 	adb_request(&req, NULL, ADBREQ_SYNC, 3,
@@ -924,7 +959,7 @@ init_turbomouse(int id)
         printk(" (TurboMouse 5)");
 
 	adb_mouse_kinds[id] = ADBMOUSE_TURBOMOUSE5;
-	
+
 	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(id));
 
 	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(3));

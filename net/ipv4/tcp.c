@@ -698,13 +698,16 @@ static inline int tcp_memory_free(struct sock *sk)
 
 /*
  *	Wait for more memory for a socket
+ *
+ *	If we got here an allocation has failed on us. We cannot
+ *	spin here or we may block the very code freeing memory
+ *	for us.
  */
 static void wait_for_tcp_memory(struct sock * sk)
 {
 	release_sock(sk);
 	if (!tcp_memory_free(sk)) {
 		struct wait_queue wait = { current, NULL };
-
 		sk->socket->flags &= ~SO_NOSPACE;
 		add_wait_queue(sk->sleep, &wait);
 		for (;;) {
@@ -721,6 +724,12 @@ static void wait_for_tcp_memory(struct sock * sk)
 		}
 		current->state = TASK_RUNNING;
 		remove_wait_queue(sk->sleep, &wait);
+	}
+	else
+	{
+		/* Yield time to the memory freeing paths */
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(1);
 	}
 	lock_sock(sk);
 }

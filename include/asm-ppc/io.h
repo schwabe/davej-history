@@ -54,10 +54,10 @@ extern unsigned long pci_dram_offset;
 
 #define insb(port, buf, ns)	_insb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
 #define outsb(port, buf, ns)	_outsb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
-#define insw(port, buf, ns)	_insw((unsigned short *)((port)+_IO_BASE), (buf), (ns))
-#define outsw(port, buf, ns)	_outsw((unsigned short *)((port)+_IO_BASE), (buf), (ns))
-#define insl(port, buf, nl)	_insl((unsigned long *)((port)+_IO_BASE), (buf), (nl))
-#define outsl(port, buf, nl)	_outsl((unsigned long *)((port)+_IO_BASE), (buf), (nl))
+#define insw(port, buf, ns)	_insw_ns((unsigned short *)((port)+_IO_BASE), (buf), (ns))
+#define outsw(port, buf, ns)	_outsw_ns((unsigned short *)((port)+_IO_BASE), (buf), (ns))
+#define insl(port, buf, nl)	_insl_ns((unsigned long *)((port)+_IO_BASE), (buf), (nl))
+#define outsl(port, buf, nl)	_outsl_ns((unsigned long *)((port)+_IO_BASE), (buf), (nl))
 
 #define inb(port)		in_8((unsigned char *)((port)+_IO_BASE))
 #define outb(val, port)		out_8((unsigned char *)((port)+_IO_BASE), (val))

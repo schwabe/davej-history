@@ -68,6 +68,13 @@ extern void gemini_init(unsigned long r3,
                       unsigned long r6,
                       unsigned long r7);
 
+#ifdef CONFIG_BOOTX_TEXT
+extern void map_bootx_text(void);
+#endif
+#ifdef CONFIG_XMON
+extern void xmon_map_scc(void);
+#endif
+
 extern boot_infos_t *boot_infos;
 extern char cmd_line[512];
 char saved_command_line[256];
@@ -255,6 +262,9 @@ int get_cpuinfo(char *buffer)
 			break;
 		case 10:
 			len += sprintf(len+buffer, "604ev5 (MachV)\n");
+			break;
+		case 12:
+			len += sprintf(len+buffer, "7400 (G4)\n");
 			break;
 		case 50:
 			len += sprintf(len+buffer, "821\n");
@@ -456,11 +466,15 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 			char *p;
 			
 #ifdef CONFIG_BLK_DEV_INITRD
-			if (r3 - KERNELBASE < 0x800000
-			    && r4 != 0 && r4 != 0xdeadbeef) {
+			/* Removed check < 0x800000, yaboot loads the kernel at +16Mb
+			 * and the ramdisk _after_ the kernel */
+			if (r3 && r4 && r4 != 0xdeadbeef) {
+				if (r3 < KERNELBASE)
+					r3 += KERNELBASE;
 				initrd_start = r3;
 				initrd_end = r3 + r4;
 				ROOT_DEV = MKDEV(RAMDISK_MAJOR, 0);
+				initrd_below_start_ok = 1;
 			}
 #endif
 			cmd_line[0] = 0;
@@ -538,7 +552,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 /* Checks "l2cr=xxxx" command-line option */
 void ppc_setup_l2cr(char *str, int *ints)
 {
-	if ( (_get_PVR() >> 16) == 8)
+	if ( ((_get_PVR() >> 16) == 8) || ((_get_PVR() >> 16) == 12) )
 	{
 		unsigned long val = simple_strtoul(str, NULL, 0);
 		printk(KERN_INFO "l2cr set to %lx\n", val);
@@ -564,14 +578,19 @@ __initfunc(void setup_arch(char **cmdline_p,
 	extern unsigned long find_available_memory(void);
 	extern unsigned long *end_of_DRAM;
 
-#ifdef CONFIG_XMON
-	extern void xmon_map_scc(void);
-	char *p;
+#ifdef CONFIG_BOOTX_TEXT
+	map_bootx_text();
+#endif
 
-	xmon_map_scc();
-	p = strstr(cmd_line, "xmon");
-	if (p != NULL && (p == cmd_line || p[-1] == ' '))
-		xmon(0);
+#ifdef CONFIG_XMON
+	{
+		char *p;
+
+		xmon_map_scc();
+		p = strstr(cmd_line, "xmon");
+		if (p != NULL && (p == cmd_line || p[-1] == ' '))
+			xmon(0);
+	}
 #endif /* CONFIG_XMON */
  
 	/* reboot on panic */	

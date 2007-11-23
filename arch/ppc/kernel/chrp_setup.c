@@ -488,6 +488,7 @@ __initfunc(void
 		ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
 		ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+		ppc_md.SYSRQ_KEY	 = 0x54;
 #endif		
 	}
 	else
@@ -500,6 +501,7 @@ __initfunc(void
 		ppc_md.kbd_init_hw       = mackbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
 		ppc_md.kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
+		ppc_md.SYSRQ_KEY	 = 0x69;
 #endif		
 	}
 #else
@@ -511,6 +513,7 @@ __initfunc(void
 	ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
 	ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+	ppc_md.SYSRQ_KEY	 = 0x54;
 #endif
 #endif
 #endif

@@ -7,8 +7,13 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
+# Once a gas that groks -mvec is generally available, we'll use it...
 .S.o:
+#ifdef CONFIG_ALTIVEC
+#	$(CC) $(CFLAGS) -D__ASSEMBLY__ -Wa,-mvec -c $< -o $*.o
+#else
 	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c $< -o $*.o
+#endif
 
 O_TARGET := kernel.o
 OX_OBJS := ppc_ksyms.o setup.o

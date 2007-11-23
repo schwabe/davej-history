@@ -71,7 +71,10 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	       (error_code&0x80000000)?"I/O ":"",
 	       (regs->trap == 0x400)?"instr":"data"
 	       );*/
-	       
+
+	if (regs->trap == 0x400)
+		error_code &= 0x48200000;
+
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
 	if (debugger_fault_handler && regs->trap == 0x300) {
 		debugger_fault_handler(regs);

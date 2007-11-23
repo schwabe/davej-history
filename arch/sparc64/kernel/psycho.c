@@ -37,6 +37,12 @@ unsigned long pci_dvma_mask = 0xffffffffUL;
 unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
 unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
 
+/* If this is non-NULL it points to Sabre's DMA write-sync register
+ * which is used by drivers of devices behind bridges other than APB
+ * to synchronize DMA write streams with interrupt delivery.
+ */
+volatile u64 *pci_dma_wsync = NULL;
+
 #ifndef CONFIG_PCI
 
 int pcibios_present(void)
@@ -299,6 +305,8 @@ void __init sabre_init(int pnode)
 		prom_printf("SABRE: Error, cannot map SABRE main registers.\n");
 		prom_halt();
 	}
+
+	pci_dma_wsync = &sabre->psycho_regs->pci_dma_wsync;
 
 	printk("PCI: Found SABRE, main regs at %p CTRL[%016lx]\n",
 	       sabre->psycho_regs, sabre->psycho_regs->control);

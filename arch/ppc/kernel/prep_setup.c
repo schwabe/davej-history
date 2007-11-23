@@ -607,6 +607,7 @@ prep_init_IRQ(void))
 	int i;
 
 	if (OpenPIC != NULL) {
+		open_pic.irq_offset = 16;
 		for ( i = 16 ; i < 36 ; i++ )
 			irq_desc[i].ctl = &open_pic;
 		openpic_init(1);
@@ -857,6 +858,7 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
 	ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
+	ppc_md.SYSRQ_KEY	 = 0x54;
 #endif
 #endif
 }

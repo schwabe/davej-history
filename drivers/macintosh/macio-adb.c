@@ -115,11 +115,6 @@ void macio_adb_init(void)
 	out_8(&adb->intr_enb.r, DFB | TAG);
 
 	adb_controller = &macio_controller;
-//	adb_hardware = ADB_MACIO;
-
-//	adb_send_request = macio_adb_send_request;
-//	adb_autopoll = macio_adb_autopoll;
-//	adb_reset_bus = macio_reset_bus;
 }
 
 static int macio_adb_autopoll(int devs)

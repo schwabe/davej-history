@@ -418,6 +418,10 @@ int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
 					      EXT2_FEATURE_INCOMPAT_FILETYPE))
 			de->file_type = EXT2_FT_REG_FILE;
+	} else if (S_ISSOCK(inode->i_mode)) {
+		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+					      EXT2_FEATURE_INCOMPAT_FILETYPE))
+			de->file_type = EXT2_FT_SOCK;
 	} else if (S_ISCHR(inode->i_mode)) {
 		inode->i_op = &chrdev_inode_operations;
 		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
@@ -793,6 +797,8 @@ int ext2_link (struct dentry * old_dentry,
 			de->file_type = EXT2_FT_DIR;
 		else if (S_ISLNK(inode->i_mode))
 			de->file_type = EXT2_FT_SYMLINK;
+		else if (S_ISSOCK(inode->i_mode))  
+			de->file_type = EXT2_FT_SOCK;
 		else if (S_ISCHR(inode->i_mode))
 			de->file_type = EXT2_FT_CHRDEV;
 		else if (S_ISBLK(inode->i_mode))

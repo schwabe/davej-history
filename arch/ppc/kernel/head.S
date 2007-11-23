@@ -13,6 +13,7 @@
  *    Copyright (C) 1996 Paul Mackerras.
  *  MPC8xx modifications Copyright (C) 1997 Dan Malek (dmalek@jlc.net).
  *  Amiga/APUS changes by Jesper Skov (jskov@cygnus.co.uk).
+ *  AltiVec additions by Kumar Gala (kumar.gala@motorola.com).
  *
  *  This file contains the low-level support and setup for the
  *  PowerPC platform, including trap and interrupt dispatch.
@@ -81,6 +82,28 @@ LG_CACHE_LINE_SIZE = 4
 #define REST_8FPRS(n, base)	REST_4FPRS(n, base); REST_4FPRS(n+4, base)
 #define REST_16FPRS(n, base)	REST_8FPRS(n, base); REST_8FPRS(n+8, base)
 #define REST_32FPRS(n, base)	REST_16FPRS(n, base); REST_16FPRS(n+16, base)
+
+/*
+ * Once a version of gas that understands the AltiVec instructions
+ * is freely available, we can do this the normal way...  - paulus
+ */
+#define LVX(r,a,b)	.long	(31<<26)+((r)<<21)+((a)<<16)+((b)<<11)+(103<<1)
+#define STVX(r,a,b)	.long	(31<<26)+((r)<<21)+((a)<<16)+((b)<<11)+(231<<1)
+#define MFVSCR(r)	.long	(4<<26)+((r)<<11)+(770<<1)
+#define MTVSCR(r)	.long	(4<<26)+((r)<<11)+(802<<1)
+
+#define SAVE_VR(n,b,base)	li b,TSS_VR0+(16*(n)); STVX(n,b,base)
+#define SAVE_2VR(n,b,base)	SAVE_VR(n,b,base); SAVE_VR(n+1,b,base) 
+#define SAVE_4VR(n,b,base)	SAVE_2VR(n,b,base); SAVE_2VR(n+2,b,base) 
+#define SAVE_8VR(n,b,base)	SAVE_4VR(n,b,base); SAVE_4VR(n+4,b,base) 
+#define SAVE_16VR(n,b,base)	SAVE_8VR(n,b,base); SAVE_8VR(n+8,b,base)
+#define SAVE_32VR(n,b,base)	SAVE_16VR(n,b,base); SAVE_16VR(n+16,b,base)
+#define REST_VR(n,b,base)	li b,TSS_VR0+(16*(n)); LVX(n,b,base)
+#define REST_2VR(n,b,base)	REST_VR(n,b,base); REST_VR(n+1,b,base) 
+#define REST_4VR(n,b,base)	REST_2VR(n,b,base); REST_2VR(n+2,b,base) 
+#define REST_8VR(n,b,base)	REST_4VR(n,b,base); REST_4VR(n+4,b,base) 
+#define REST_16VR(n,b,base)	REST_8VR(n,b,base); REST_8VR(n+8,b,base) 
+#define REST_32VR(n,b,base)	REST_16VR(n,b,base); REST_16VR(n+16,b,base)
 
 #define SYNC \
 	sync; \
@@ -651,7 +674,26 @@ SystemCall:
 	STD_EXCEPTION(0xd00, SingleStep, SingleStepException)
 
 	STD_EXCEPTION(0xe00, Trap_0e, UnknownException)
+
+#ifndef CONFIG_ALTIVEC
 	STD_EXCEPTION(0xf00, Trap_0f, UnknownException)
+#else
+/*
+ * The Altivec unavailable trap is at 0x0f20.  Foo.
+ * We effectively remap it to 0x3000.
+ */
+	. = 0xf00
+	b	Trap_0f
+trap_0f_cont:
+	addi	r3,r1,STACK_FRAME_OVERHEAD
+	li	r20,MSR_KERNEL
+	bl	transfer_to_handler
+	.long	UnknownException
+	.long	int_return
+
+	. = 0xf20
+	b	AltiVecUnavailable
+#endif /* CONFIG_ALTIVEC */
 
 #ifndef CONFIG_8xx
 /*
@@ -1169,9 +1211,24 @@ DataTLBError:
 	STD_EXCEPTION(0x2f00, Trap_2f, UnknownException)
 
 	. = 0x3000
-#else
+#ifdef CONFIG_ALTIVEC
+AltiVecUnavailable:
+	EXCEPTION_PROLOG
+	bne	load_up_altivec		/* if from user, just load it up */
+	li	r20,MSR_KERNEL
+	bl	transfer_to_handler	/* if from kernel, take a trap */
+	.long	KernelAltiVec
+	.long	int_return
+
+/* here are the bits of trap 0xf00 which got displaced */
+Trap_0f:
+	EXCEPTION_PROLOG
+	b	trap_0f_cont
+#endif /* CONFIG_ALTIVEC */
+
+#else /* CONFIG_8xx */
 	. = 0x2000
-#endif
+#endif /* CONFIG_8xx */
 
 /*
  * This code finishes saving the registers to the exception frame
@@ -1493,6 +1550,7 @@ found_slot:
 	REST_GPR(20, r21)
 	REST_2GPRS(22, r21)
 	lwz	r21,GPR21(r21)
+	sync
 	rfi
 	
 #ifdef __SMP__
@@ -1632,6 +1690,135 @@ giveup_fpu:
 #endif /* __SMP__ */
 	blr
 
+#ifdef CONFIG_ALTIVEC
+/* Note that the AltiVec support is closely modeled after the FP
+ * support.  Changes to one are likely to be applicable to the
+ * other!  */
+load_up_altivec:
+/*
+ * Disable AltiVec for the task which had AltiVec previously,
+ * and save its AltiVec registers in its thread_struct.
+ * Enables AltiVec for use in the kernel on return.
+ * On SMP we know the AltiVec units are free, since we give it up every
+ * switch.  -- Kumar
+ */
+	mfmsr	r5
+	oris	r5,r5,MSR_VEC@h
+	SYNC
+	mtmsr	r5			/* enable use of AltiVec now */
+	SYNC
+/*
+ * For SMP, we don't do lazy AltiVec switching because it just gets too
+ * horrendously complex, especially when a task switches from one CPU
+ * to another.  Instead we call giveup_altivec in switch_to.
+ */
+#ifndef __SMP__
+#ifndef CONFIG_APUS
+	lis	r6,-KERNELBASE@h
+#else
+	lis	r6,CYBERBASEp@h
+	lwz	r6,0(r6)
+#endif
+	addis	r3,r6,last_task_used_altivec@ha
+	lwz	r4,last_task_used_altivec@l(r3)
+	cmpi	0,r4,0
+	beq	1f
+	add	r4,r4,r6
+	addi	r4,r4,TSS	/* want TSS of last_task_used_altivec */
+	SAVE_32VR(0,r20,r4)
+	MFVSCR(vr0)
+	li	r20,TSS_VSCR
+	STVX(vr0,r20,r4)
+	lwz	r5,PT_REGS(r4)
+	add	r5,r5,r6
+	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+	lis	r20,MSR_VEC@h
+	andc	r4,r4,r20	/* disable altivec for previous task */
+	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+1:
+#endif /* __SMP__ */
+	/* enable use of AltiVec after return */
+	oris	r23,r23,MSR_VEC@h
+	mfspr	r5,SPRG3		/* current task's TSS (phys) */
+	li	r20,TSS_VSCR
+	LVX(vr0,r20,r5)
+	MTVSCR(vr0)
+	REST_32VR(0,r20,r5)
+#ifndef __SMP__
+	subi	r4,r5,TSS
+	sub	r4,r4,r6
+	stw	r4,last_task_used_altivec@l(r3)
+#endif /* __SMP__ */
+	/* restore registers and return */
+	lwz	r3,_CCR(r21)
+	lwz	r4,_LINK(r21)
+	mtcrf	0xff,r3
+	mtlr	r4
+	REST_GPR(1, r21)
+	REST_4GPRS(3, r21)
+	/* we haven't used ctr or xer */
+	mtspr	SRR1,r23
+	mtspr	SRR0,r22
+	REST_GPR(20, r21)
+	REST_2GPRS(22, r21)
+	lwz	r21,GPR21(r21)
+	SYNC
+	rfi
+
+/*
+ * AltiVec unavailable trap from kernel - print a message, but let
+ * the task use AltiVec in the kernel until it returns to user mode.
+ */
+KernelAltiVec:
+	lwz	r3,_MSR(r1)
+	oris	r3,r3,MSR_VEC@h
+	stw	r3,_MSR(r1)	/* enable use of AltiVec after return */
+	lis	r3,87f@h
+	ori	r3,r3,87f@l
+	mr	r4,r2		/* current */
+	lwz	r5,_NIP(r1)
+	bl	printk
+	b	int_return
+87:	.string	"AltiVec used in kernel  (task=%p, pc=%x)  \n"
+	.align	4
+
+/*
+ * giveup_altivec(tsk)
+ * Disable AltiVec for the task given as the argument,
+ * and save the AltiVec registers in its thread_struct.
+ * Enables AltiVec for use in the kernel on return.
+ */
+
+	.globl	giveup_altivec
+giveup_altivec:
+	mfmsr	r5
+	oris	r5,r5,MSR_VEC@h
+	SYNC
+	mtmsr	r5			/* enable use of AltiVec now */
+	SYNC
+	cmpi	0,r3,0
+	beqlr-				/* if no previous owner, done */
+	addi	r3,r3,TSS		/* want TSS of task */
+	lwz	r5,PT_REGS(r3)
+	cmpi	0,r5,0
+	SAVE_32VR(0, r4, r3)
+	MFVSCR(vr0)
+	li	r4,TSS_VSCR
+	STVX(vr0, r4, r3)
+	beq	1f
+	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+	lis	r3,MSR_VEC@h
+	andc	r4,r4,r3		/* disable AltiVec for previous task */
+	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
+1:
+#ifndef __SMP__
+	li	r5,0
+	lis	r4,last_task_used_altivec@ha
+	stw	r5,last_task_used_altivec@l(r4)
+#endif /* __SMP__ */
+	blr
+#endif /* CONFIG_ALTIVEC */
+
 #else  /* CONFIG_8xx */
 	.globl	giveup_fpu
 giveup_fpu:
@@ -1660,10 +1847,6 @@ relocate_kernel:
 	addi	r9,r9,0x6f58		/* translate source addr */
 	cmpw	r31,r9			/* (we have to on chrp) */
 	beq	7f
-#if 0 // still needed ? breaks on me if I don't disable this
-	rlwinm	r4,r4,0,8,31		/* translate source address */
-	add	r4,r4,r3		/* to region mapped with BATs */
-#endif	
 7:	addis	r9,r26,klimit@ha	/* fetch klimit */
 	lwz	r25,klimit@l(r9)
 	addis	r25,r25,-KERNELBASE@h
@@ -1790,14 +1973,23 @@ start_here:
 	cmpi	0,r9,4			/* check for 604 */
 	cmpi	1,r9,9			/* or 604e */
 	cmpi	2,r9,10			/* or mach5 */
+	cmpi	3,r9,8			/* check for 750 (G3) */
+	cmpi	4,r9,12			/* or 7400 (G4) */
 	cror	2,2,6
 	cror	2,2,10
 	bne	4f
 	ori	r11,r11,HID0_SIED|HID0_BHTE /* for 604[e], enable */
 	bne	2,5f
 	ori	r11,r11,HID0_BTCD
-5:	mtspr	HID0,r11		/* superscalar exec & br history tbl */
+	b	5f
 4:
+	cror	14,14,18
+	bne	3,6f
+	ori	r11,r11,HID0_SGE|HID0_BHTE|HID0_BTIC|HID0_ABE /* for g3/g4, enable */
+ 	li	r3,0
+ 	mtspr	ICTC,r3
+5:	mtspr	HID0,r11		/* superscalar exec & br history tbl */
+6:
 #endif /* CONFIG_8xx */
 #ifdef __SMP__
 	/* if we're the second cpu stack and r2 are different
@@ -1878,10 +2070,10 @@ start_here:
 	li	r3,MSR_KERNEL & ~(MSR_IR|MSR_DR)
 	mtspr	SRR0,r4
 	mtspr	SRR1,r3
+	SYNC
 	rfi
 /* Load up the kernel context */
 2:
-	SYNC			/* Force all PTE updates to finish */
 	tlbia			/* Clear all TLB entries */
 	sync			/* wait for tlbia/tlbie to finish */
 #ifdef __SMP__
@@ -1938,6 +2130,7 @@ start_here:
 #endif /* __SMP__ */
 	mtspr	SRR0,r3
 	mtspr	SRR1,r4
+	SYNC
 	rfi			/* enable MMU and jump to start_kernel */
 
 /*
@@ -2114,6 +2307,9 @@ _GLOBAL(_switch)
 	mflr	r20		/* Return to switch caller */
 	mfmsr	r22
 	li	r0,MSR_FP	/* Disable floating-point */
+#ifdef CONFIG_ALTIVEC
+	oris	r0,r0,MSR_VEC@h
+#endif /* CONFIG_ALTIVEC */
 	andc	r22,r22,r0
 	stw	r20,_NIP(r1)
 	stw	r22,_MSR(r1)
@@ -2427,6 +2623,38 @@ _GLOBAL(clear_page)
 	blr
 
 /*
+ * Copy a whole page.  We use the dcbz instruction on the destination
+ * to reduce memory traffic (it eliminates the unnecessary reads of
+ * the destination into cache).  This requires that the destination
+ * is cacheable.
+ */
+_GLOBAL(copy_page)
+	li	r0,4096/CACHE_LINE_SIZE
+	mtctr	r0
+	addi	r3,r3,-4
+	addi	r4,r4,-4
+	li	r5,4
+1:	dcbz	r5,r3
+	lwz	r6,4(r4)
+	lwz	r7,8(r4)
+	lwz	r8,12(r4)
+	lwzu	r9,16(r4)
+	stw	r6,4(r3)
+	stw	r7,8(r3)
+	stw	r8,12(r3)
+	stwu	r9,16(r3)
+	lwz	r6,4(r4)
+	lwz	r7,8(r4)
+	lwz	r8,12(r4)
+	lwzu	r9,16(r4)
+	stw	r6,4(r3)
+	stw	r7,8(r3)
+	stw	r8,12(r3)
+	stwu	r9,16(r3)
+	bdnz	1b
+	blr
+
+/*
  * Flush entries from the hash table with VSIDs in the range
  * given.
  */
@@ -2624,6 +2852,7 @@ enter_rtas:
 	mtspr	SPRG2,r7
 	mtspr	SRR0,r8
 	mtspr	SRR1,r9
+	SYNC
 	rfi
 1:	addis	r9,r1,-KERNELBASE@h
 	lwz	r8,20(r9)	/* get return address */
@@ -2632,6 +2861,7 @@ enter_rtas:
 	mtspr	SPRG2,r0
 	mtspr	SRR0,r8
 	mtspr	SRR1,r9
+	SYNC
 	rfi			/* return to caller */
 #endif /* CONFIG_8xx */
 

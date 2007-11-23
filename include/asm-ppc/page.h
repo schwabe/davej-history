@@ -64,7 +64,7 @@ typedef unsigned long pgprot_t;
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
 extern void clear_page(unsigned long page);
-#define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+extern void copy_page(unsigned long to, unsigned long from);
 
 /* map phys->virtual and virtual->phys for RAM pages */
 #ifdef CONFIG_APUS

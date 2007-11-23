@@ -11,16 +11,30 @@
 #include <asm/prom.h>
 #include <asm/bootx.h>
 #include <asm/pmu.h>
+#include <asm/feature.h>
 
 static volatile unsigned char *sccc, *sccd;
 unsigned long TXRDY, RXRDY;
 extern void xmon_printf(const char *fmt, ...);
-extern void map_bootx_text(void);
 extern void drawchar(char);
 extern void drawstring(const char *str);
+static int xmon_expect(const char *str, unsigned int timeout);
 
 static int console = 0;
 static int use_screen = 0;
+static int via_modem = 0;
+static int xmon_use_sccb = 0;
+static struct device_node *macio_node;
+
+#define TB_SPEED	25000000
+
+static inline unsigned int readtb(void)
+{
+	unsigned int ret;
+
+	asm volatile("mftb %0" : "=r" (ret) :);
+	return ret;
+}
 
 void buf_access(void)
 {
@@ -36,17 +50,18 @@ xmon_map_scc(void)
 	if ( _machine == _MACH_Pmac )
 	{
 		struct device_node *np;
-		extern boot_infos_t *boot_infos;
 		unsigned long addr;
-
 #ifdef CONFIG_BOOTX_TEXT
-		if (boot_infos != 0 && find_via_pmu()) {
+		extern boot_infos_t *disp_bi;
+
+		/* needs to be hacked if xmon_printk is to be used
+ 		   from within find_via_pmu() */
+		if (!via_modem && disp_bi && find_via_pmu()) {
 			printk(KERN_INFO "xmon uses screen and keyboard\n");
 			use_screen = 1;
-			map_bootx_text();
-			return;
 		}
 #endif
+
 #ifdef CHRP_ESCC
 		addr = 0xc1013020;
 #else
@@ -57,18 +72,13 @@ xmon_map_scc(void)
 		
 		np = find_devices("mac-io");
 		if (np && np->n_addrs) {
-			addr = np->addrs[0].address + 0x13000;
-			/* use the B channel on the iMac, A channel on others */
-			if (addr >= 0xf0000000)
-				addr += 0x20; /* use A channel */
+			macio_node = np;
+			addr = np->addrs[0].address + 0x13020;
 		}
-		base = (volatile unsigned char *) ioremap(addr & PAGE_MASK, PAGE_SIZE);
+		base = (volatile unsigned char *)
+			ioremap(addr & PAGE_MASK, PAGE_SIZE);
 		sccc = base + (addr & ~PAGE_MASK);
-#ifdef CHRP_ESCC
-		sccd = sccc + (0xc1013030 - 0xc1013020);
-#else
-		sccd = sccc + (0xf3013030 - 0xf3013020);
-#endif
+		sccd = sccc + 0x10;
 	}
 	else
 	{
@@ -89,7 +99,7 @@ int
 xmon_write(void *handle, void *ptr, int nb)
 {
     char *p = ptr;
-    int i, ct;
+    int i, c, ct;
 
 #ifdef CONFIG_BOOTX_TEXT
     if (use_screen) {
@@ -101,19 +111,23 @@ xmon_write(void *handle, void *ptr, int nb)
 #endif
     if (!scc_initialized)
 	xmon_init_scc();
+    ct = 0;
     for (i = 0; i < nb; ++i) {
 	while ((*sccc & TXRDY) == 0)
 	    if (adb_hardware == ADB_VIAPMU)
 		pmu_poll();
+	c = p[i];
+	if (c == '\n' && !ct) {
+	    c = '\r';
+	    ct = 1;
+	    --i;
+	} else {
+	    if (console)
+		printk("%c", c);
+	    ct = 0;
+	}
 	buf_access();
-	if ( console && (*p != '\r'))
-		printk("%c", *p);
-	ct = 0;
-	if ( *p == '\n')
-		ct = 1;
-	*sccd = *p++;
-	if ( ct )
-		xmon_write(handle, "\r", 1);
+	*sccd = c;
     }
     return i;
 }
@@ -199,14 +213,21 @@ xmon_read(void *handle, void *ptr, int nb)
 	    if (adb_hardware == ADB_VIAPMU)
 		pmu_poll();
 	buf_access();
-#if 0	
-	if ( 0/*console*/ )
-		*p++ = ppc_md.kbd_getkeycode();
-	else
-#endif		
-		*p++ = *sccd;
+	*p++ = *sccd;
     }
     return i;
+}
+
+int
+xmon_read_poll(void)
+{
+	if ((*sccc & RXRDY) == 0) {
+		if (adb_hardware == ADB_VIAPMU)
+			pmu_poll();
+		return -1;
+	}
+	buf_access();
+	return *sccd;
 }
 
 static unsigned char scc_inittab[] = {
@@ -214,8 +235,8 @@ static unsigned char scc_inittab[] = {
     12, 1,
     14, 1,		/* baud rate gen enable, src=rtxc */
     11, 0x50,		/* clocks = br gen */
-    5,  0x6a,		/* tx 8 bits, assert RTS */
-    4,  0x44,		/* x16 clock, 1 stop */
+    5,  0xea,		/* tx 8 bits, assert DTR & RTS */
+    4,  0x46,		/* x16 clock, 1 stop */
     3,  0xc1,		/* rx enable, 8 bits */
 };
 
@@ -235,6 +256,21 @@ xmon_init_scc()
 	{
 		int i, x;
 
+		if (macio_node != 0) {
+			unsigned int t0;
+
+			feature_set(macio_node, FEATURE_Serial_enable);
+			if (via_modem) {
+				feature_set(macio_node, FEATURE_Modem_power);
+				t0 = readtb();
+				while (readtb() - t0 < 3*TB_SPEED)
+					eieio();
+			}
+		}
+		if (xmon_use_sccb) {
+			sccc -= 0x20;
+			sccd -= 0x20;
+		}
 		for (i = 20000; i != 0; --i) {
 			x = *sccc; eieio();
 		}
@@ -246,6 +282,18 @@ xmon_init_scc()
 		}
 	}
 	scc_initialized = 1;
+	if (via_modem) {
+		for (;;) {
+			xmon_write(0, "ATE1V1\r", 7);
+			if (xmon_expect("OK", 5)) {
+				xmon_write(0, "ATA\r", 4);
+				if (xmon_expect("CONNECT", 40))
+					break;
+			}
+			xmon_write(0, "+++", 3);
+			xmon_expect("OK", 3);
+		}
+	}
 }
 
 #if 0
@@ -317,6 +365,35 @@ xmon_readchar(void)
 static char line[256];
 static char *lineptr;
 static int lineleft;
+
+int xmon_expect(const char *str, unsigned int timeout)
+{
+	int c;
+	unsigned int t0;
+
+	timeout *= TB_SPEED;
+	t0 = readtb();
+	do {
+		lineptr = line;
+		for (;;) {
+			c = xmon_read_poll();
+			if (c == -1) {
+				if (readtb() - t0 > timeout) {
+					printk("timeout\n");
+					return 0;
+				}
+				continue;
+			}
+			if (c == '\n')
+				break;
+			printk("%c", c);
+			if (c != '\r' && lineptr < &line[sizeof(line) - 1])
+				*lineptr++ = c;
+		}
+		*lineptr = 0;
+	} while (strstr(line, str) == NULL);
+	return 1;
+}
 
 int
 xmon_getchar(void)

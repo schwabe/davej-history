@@ -7,7 +7,7 @@
  * deal of code from the sparc and intel versions.
  *
  * Support for PReP (Motorola MTX/MVME) SMP by Troy Benjegerdes
- * (troy@microux.com, hozer@drgw.net)
+ * (troy@blacklablinux.com, hozer@drgw.net)
  */
 
 #include <linux/kernel.h>

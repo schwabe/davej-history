@@ -416,7 +416,12 @@ out:
 
 void iounmap(void *addr)
 {
-	/* XXX todo */
+	/* For support of dynamic hot swap on the cPCI bus this routine
+	   is now necessary.  This has been well tested on a Motorola
+	   MPC750 (Mesquite) processor board.  Johnnie Peters
+	*/
+	if (addr > high_memory && addr < ioremap_bot)
+		return vfree((void *) (PAGE_MASK & (unsigned long) addr));
 }
 
 unsigned long iopa(unsigned long addr)

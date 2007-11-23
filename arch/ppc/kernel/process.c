@@ -43,9 +43,11 @@
 #include <asm/mmu_context.h>
 
 int dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs);
+int dump_altivec(struct pt_regs *regs, elf_vrregset_t *vrregs);
 extern unsigned long _get_SP(void);
 
 struct task_struct *last_task_used_math = NULL;
+struct task_struct *last_task_used_altivec = NULL;
 static struct vm_area_struct init_mmap = INIT_MMAP;
 static struct fs_struct init_fs = INIT_FS;
 static struct files_struct init_files = INIT_FILES;
@@ -78,6 +80,31 @@ dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs)
 	memcpy(fpregs, &current->tss.fpr[0], sizeof(*fpregs));
 	return 1;
 }
+
+#ifdef CONFIG_ALTIVEC
+int
+dump_altivec(struct pt_regs *regs, elf_vrregset_t *vrregs)
+{
+	if (regs->msr & MSR_VEC)
+		giveup_altivec(current);
+	memcpy(vrregs, &current->tss.vr[0], sizeof(*vrregs));
+	return 1;
+}
+
+void 
+enable_kernel_altivec(void)
+{
+#ifdef __SMP__
+	if (current->tss.regs && (current->tss.regs->msr & MSR_VEC))
+		giveup_altivec(current);
+	else
+		giveup_altivec(NULL);	/* just enable AltiVec for kernel - force */
+#else
+	giveup_altivec(last_task_used_altivec);
+#endif /* __SMP __ */
+	printk("MSR_VEC in enable_altivec_kernel\n");
+}
+#endif /* CONFIG_ALTIVEC */
 
 void
 enable_kernel_fp(void)
@@ -194,22 +221,53 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 	_enable_interrupts(s);
 }
 
-void show_regs(struct pt_regs * regs)
+struct bits {
+	const char *name;
+	unsigned int bit;
+};
+
+void print_bits(unsigned int val, struct bits *bits)
+{
+	const char *sep = "";
+
+	printk("[");
+	for (; bits->bit != 0; ++bits) {
+		if (val & bits->bit) {
+			printk("%s", bits->name);
+			sep = ", ";
+		}
+	}
+	printk("]");
+}
+
+struct bits msr_bits[] = {
+	{"VEC", MSR_VEC},
+	{"EE", MSR_EE},
+	{"PR", MSR_PR},
+	{"FP", MSR_FP},
+	{"IR", MSR_IR},
+	{"DR", MSR_DR},
+	{"ME", MSR_ME},
+	{0, 0}
+};
+
+void show_regs(struct pt_regs *regs)
 {
 	int i;
 
 	printk("NIP: %08lX XER: %08lX LR: %08lX REGS: %p TRAP: %04lx\n",
 	       regs->nip, regs->xer, regs->link, regs,regs->trap);
-	printk("MSR: %08lx EE: %01x PR: %01x FP: %01x ME: %01x IR/DR: %01x%01x\n",
-	       regs->msr, regs->msr&MSR_EE ? 1 : 0, regs->msr&MSR_PR ? 1 : 0,
-	       regs->msr & MSR_FP ? 1 : 0,regs->msr&MSR_ME ? 1 : 0,
-	       regs->msr&MSR_IR ? 1 : 0,
-	       regs->msr&MSR_DR ? 1 : 0);
+	printk("MSR: %08lx ", regs->msr);
+	print_bits(regs->msr, msr_bits);
+	printk("\n");
 	printk("TASK = %p[%d] '%s' mm->pgd %p ",
 	       current, current->pid, current->comm, current->mm->pgd);
 	printk("Last syscall: %ld ", current->tss.last_syscall);
-	printk("\nlast math %p", last_task_used_math);
-	
+	if (last_task_used_math)
+		printk("\nlast math %p", last_task_used_math);
+	if (last_task_used_altivec)
+		printk("\nlast altivec %p", last_task_used_altivec);
+
 #ifdef __SMP__	
 	printk(" CPU: %d last CPU: %d", current->processor,current->last_processor);
 #endif /* __SMP__ */
@@ -256,12 +314,16 @@ void exit_thread(void)
 {
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
+	if (last_task_used_altivec == current)
+		last_task_used_altivec = NULL;
 }
 
 void flush_thread(void)
 {
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
+	if (last_task_used_altivec == current)
+		last_task_used_altivec = NULL;
 }
 
 void
@@ -318,6 +380,19 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	 */
 	if (regs->msr & MSR_FP)
 		giveup_fpu(current);
+
+#ifdef CONFIG_ALTIVEC
+	/*
+	 * copy altiVec info - assume lazy altiVec switch
+	 * - kumar
+	 */
+	if (regs->msr & MSR_VEC)
+		giveup_altivec(current);
+
+	memcpy(&p->tss.vr, &current->tss.vr, sizeof(p->tss.vr));
+	p->tss.vscr = current->tss.vscr;
+	childregs->msr &= ~MSR_VEC;
+#endif /* CONFIG_ALTIVEC */
 
 	memcpy(&p->tss.fpr, &current->tss.fpr, sizeof(p->tss.fpr));
 	p->tss.fpscr = current->tss.fpscr;
@@ -380,6 +455,8 @@ void start_thread(struct pt_regs *regs, unsigned long nip, unsigned long sp)
 	shove_aux_table(sp);
 	if (last_task_used_math == current)
 		last_task_used_math = 0;
+	if (last_task_used_altivec == current)
+		last_task_used_altivec = 0;
 	current->tss.fpscr = 0;
 }
 
@@ -439,6 +516,10 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 		goto out;
 	if (regs->msr & MSR_FP)
 		giveup_fpu(current);
+#ifdef CONFIG_ALTIVEC
+	if (regs->msr & MSR_VEC)
+		giveup_altivec(current);
+#endif /* CONFIG_ALTIVEC */ 
 	error = do_execve(filename, (char **) a1, (char **) a2, regs);
 	putname(filename);
 out:

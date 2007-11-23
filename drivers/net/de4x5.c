@@ -653,11 +653,19 @@ struct parameters {
 #define ALIGN64     ((u_long)64 - 1)    /* 16 longword align */
 #define ALIGN128    ((u_long)128 - 1)   /* 32 longword align */
 
+#ifndef __powerpc__
 #define ALIGN         ALIGN32           /* Keep the DC21040 happy... */
 #define CACHE_ALIGN   CAL_16LONG
 #define DESC_SKIP_LEN DSL_0             /* Must agree with DESC_ALIGN */
 /*#define DESC_ALIGN    u32 dummy[4];  / * Must agree with DESC_SKIP_LEN */
 #define DESC_ALIGN
+
+#else /* __powerpc__ */
+#define ALIGN         ALIGN32           /* Keep the DC21040 happy... */
+#define CACHE_ALIGN   CAL_8LONG
+#define DESC_SKIP_LEN DSL_4             /* Must agree with DESC_ALIGN */
+#define DESC_ALIGN    u32 dummy[4];  	/* Must agree with DESC_SKIP_LEN */
+#endif /* __powerpc__ */
 
 #ifndef DEC_ONLY                        /* See README.de4x5 for using this */
 static int dec_only = 0;
@@ -763,6 +771,9 @@ struct de4x5_desc {
 struct de4x5_private {
     char adapter_name[80];                  /* Adapter name                 */
     u_long interrupt;                       /* Aligned ISR flag             */
+#ifdef __powerpc__
+    u_long dummy[3];			    /* Keep rx_ring 32-byte aligned */
+#endif
     struct de4x5_desc rx_ring[NUM_RX_DESC]; /* RX descriptor ring           */
     struct de4x5_desc tx_ring[NUM_TX_DESC]; /* TX descriptor ring           */
     struct sk_buff *tx_skb[NUM_TX_DESC];    /* TX skb for freeing when sent */

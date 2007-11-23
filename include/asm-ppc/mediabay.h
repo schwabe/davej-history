@@ -7,11 +7,16 @@
 #ifndef _PPC_MEDIABAY_H
 #define _PPC_MEDIABAY_H
 
-#define MB_FD	0		/* media bay contains floppy drive */
-#define MB_CD	3		/* media bay contains ATA drive such as CD */
-#define MB_NO	7		/* media bay contains nothing */
-
 #ifdef __KERNEL__
+
+/* We keep those constants local to the kernel to avoid
+ * compatibility problems with different HW. A /proc inteface
+ * could be defined to tell userland about the content of the bay
+ */
+#define MB_FD	0		/* media bay contains floppy drive */
+#define MB_FD1	1		/* media bay contains floppy drive */
+#define MB_CD	3		/* media bay contains ATA drive such as CD */
+#define MB_NO	0xF		/* media bay contains nothing */
 
 void media_bay_init(void);
 int check_media_bay(struct device_node *which_bay, int what);

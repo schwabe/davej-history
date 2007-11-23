@@ -14,6 +14,8 @@
 
 struct linux_pbm_info;
 
+extern volatile u64 *pci_dma_wsync;
+
 /* This is what we use to determine what the PROM has assigned so
  * far, so that we can perform assignments for addresses which
  * were not taken care of by OBP.  See psycho.c for details.

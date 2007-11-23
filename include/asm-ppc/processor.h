@@ -7,6 +7,7 @@
 #include <asm/residual.h>
 
 /* Bit encodings for Machine State Register (MSR) */
+#define MSR_VEC		(1<<25)		/* Enable Altivec */
 #define MSR_POW		(1<<18)		/* Enable Power Management */
 #define MSR_TGPR	(1<<17)		/* TLB Update registers in use */
 #define MSR_ILE		(1<<16)		/* Interrupt Little-Endian enable */
@@ -53,6 +54,9 @@
 #define HID0_DCI	(1<<10)		/* Data Cache Invalidate */
 #define HID0_SPD	(1<<9)		/* Speculative disable */
 #define HID0_SIED	(1<<7)		/* Serial Instruction Execution [Disable] */
+#define HID0_SGE	(1<<7)		/* Store Gathering Enable */
+#define HID0_BTIC	(1<<5)		/* Branch Target Instruction Cache Enable */
+#define HID0_ABE	(1<<3)		/* Address Broadcast Enable */
 #define HID0_BHTE	(1<<2)		/* Branch History Table Enable */
 #define HID0_BTCD	(1<<1)		/* Branch target cache disable */
 
@@ -147,6 +151,7 @@ n:
 #define EAR	282	/* External Address Register */
 #define L2CR	1017    /* PPC 750 L2 control register */
 
+#define ICTC	1019
 #define THRM1	1020
 #define THRM2	1021
 #define THRM3	1022
@@ -177,6 +182,10 @@ n:
 #define SR15	15
 
 #ifndef __ASSEMBLY__
+#include <asm/types.h>
+
+#ifdef __KERNEL__
+
 extern int _machine;
 
 /* Temporary hacks until we can clean things up better - Corey */
@@ -242,9 +251,20 @@ struct thread_struct {
 	double		fpr[32];	/* Complete floating point set */
 	unsigned long	fpscr_pad;	/* fpr ... fpscr must be contiguous */
 	unsigned long	fpscr;		/* Floating point status */
+#ifdef CONFIG_ALTIVEC
+	vector128	vr[32];		/* Complete AltiVec set */
+	vector128	vscr;		/* AltiVec status */
+	unsigned long	vrsave;
+#endif /* CONFIG_ALTIVEC */
 };
 
 #define INIT_SP		(sizeof(init_stack) + (unsigned long) &init_stack)
+
+#ifdef CONFIG_ALTIVEC
+#define INIT_TSS_AVEC	{{{0}}}, {{0}}, 0,
+#else
+#define INIT_TSS_AVEC
+#endif /* CONFIG_ALTIVEC */
 
 #define INIT_TSS  { \
 	INIT_SP, /* ksp */ \
@@ -253,7 +273,8 @@ struct thread_struct {
 	(struct pt_regs *)INIT_SP - 1, /* regs */ \
 	KERNEL_DS, /*fs*/ \
 	0, /* last_syscall */ \
-	{0}, 0, 0 \
+	{0}, 0, 0, \
+	INIT_TSS_AVEC \
 }
 
 /*
@@ -295,5 +316,6 @@ void _nmask_and_or_msr(unsigned long nmask, unsigned long or_val);
 
 #endif /* ndef ASSEMBLY*/
 
-  
+#endif /* __KERNEL__ */
+
 #endif /* __ASM_PPC_PROCESSOR_H */

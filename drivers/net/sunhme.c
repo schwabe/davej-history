@@ -2336,6 +2336,11 @@ static void pci_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs
 
 	dev->interrupt = 1;
 
+	if ((happy_status & (GREG_STAT_TXALL | GREG_STAT_RXTOHOST)) &&
+	    (hp->happy_flags & HFLAG_QUATTRO) != 0 &&
+	    pci_dma_wsync != NULL)
+		(void) *(pci_dma_wsync);
+
 	if(happy_status & GREG_STAT_ERRORS) {
 		HMD(("ERRORS "));
 		if(happy_meal_is_not_so_happy(hp, gregs, /* un- */ happy_status)) {

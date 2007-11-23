@@ -93,7 +93,7 @@ void __init fix_intr(struct device_node *node, struct pci_dev *dev)
 
 	for (; node != 0;node = node->sibling) {
 		class_code = (unsigned int *) get_property(node, "class-code", 0);
-		if((*class_code >> 8) == PCI_CLASS_BRIDGE_PCI)
+		if(class_code && (*class_code >> 8) == PCI_CLASS_BRIDGE_PCI)
 			fix_intr(node->child, dev);
 		reg = (unsigned int *) get_property(node, "reg", 0);
 		if (reg == 0 || ((reg[0] >> 8) & 0xff) != dev->devfn)

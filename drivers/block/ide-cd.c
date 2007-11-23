@@ -2066,11 +2066,11 @@ int ide_cdrom_get_last_session (struct cdrom_device_info *cdi,
 	struct request_sense sense;
 	int ret;
 
-	toc = info->toc;
-	if (!CDROM_STATE_FLAGS(drive)->toc_valid || toc == NULL)
+	if (!CDROM_STATE_FLAGS(drive)->toc_valid || info->toc == NULL)
 		if ((ret = cdrom_read_toc(drive, &sense)))
 			return ret;
 
+	toc = info->toc;
 	ms_info->addr.lba = toc->last_session_lba;
 	ms_info->xa_flag = toc->xa_flag;
 

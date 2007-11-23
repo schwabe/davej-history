@@ -53,6 +53,9 @@ GZIP_FLAGS = -v9
 
 OBJECTS := head.o misc.o ../coffboot/zlib.o
 CFLAGS = -O2 -DSTDC_HEADERS -fno-builtin -I$(TOPDIR)/include
+ifeq ($(CONFIG_SMP),y)
+CFLAGS += -D__SMP__
+endif
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O elf32-powerpc
 

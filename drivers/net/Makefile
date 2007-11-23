@@ -1253,6 +1253,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_GMAC),y)
+L_OBJS += gmac.o
+else
+  ifeq ($(CONFIG_GMAC),m)
+  M_OBJS += gmac.o
+  endif
+endif
+
 ifeq ($(CONFIG_NCR885E),y)
 L_OBJS += ncr885e.o
 else

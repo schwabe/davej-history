@@ -50,6 +50,7 @@ struct machdep_calls {
 	void		(*kbd_init_hw)(void);
 #ifdef CONFIG_MAGIC_SYSRQ
 	unsigned char 	*kbd_sysrq_xlate;
+	unsigned long	SYSRQ_KEY;
 #endif
 
 	/* PCI interfaces */

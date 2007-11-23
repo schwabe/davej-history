@@ -100,26 +100,27 @@ MachineCheckException(struct pt_regs *regs)
 			return;
 		}
 #endif
-		printk("Machine check in kernel mode.\n");
-		printk("Caused by (from msr): ");
-		printk("regs %p ",regs);
-		switch( regs->msr & 0x0000F000)
-		{
-		case (1<<12) :
-			printk("Machine check signal - probably due to mm fault\n"
-				"with mmu off\n");
+		printk("Machine check in kernel mode.  (regs at %p)\n", regs);
+		printk("Caused by (from srr1): ");
+		switch( regs->msr & 0x001F0000) {
+		case 0x100000:
+			printk("L2 data cache parity error\n");
 			break;
-		case (1<<13) :
+		case 0x80000:
+			printk("Machine check signal\n");
+			printk("(probably due to access of bad physical address\n");
+			break;
+		case 0x40000:
 			printk("Transfer error ack signal\n");
 			break;
-		case (1<<14) :
+		case 0x20000:
 			printk("Data parity signal\n");
 			break;
-		case (1<<15) :
+		case 0x10000:
 			printk("Address parity signal\n");
 			break;
 		default:
-			printk("Unknown values in msr\n");
+			printk("Unknown values in srr1\n");
 		}
 		show_regs(regs);
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)

@@ -4,6 +4,7 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/pci.h>
+#include <linux/openpic.h>
 #include <asm/pci-bridge.h>
 #include <asm/io.h>
 #include <asm/smp.h>
@@ -27,6 +28,7 @@ static volatile struct pmac_irq_hw *pmac_irq_hw[4] = {
 
 static int max_irqs;
 static int max_real_irqs;
+static int has_openpic = 0;
 
 #define MAXCOUNT 10000000
 
@@ -104,6 +106,18 @@ static void __pmac pmac_unmask_irq(unsigned int irq_nr)
         pmac_set_irq_mask(irq_nr);
 }
 
+static void pmac_openpic_mask_irq(unsigned int irq_nr)
+{
+	openpic_disable_irq(irq_nr);
+}
+
+static void pmac_openpic_unmask_irq(unsigned int irq_nr)
+{
+	openpic_enable_irq(irq_nr);
+}
+
+
+
 struct hw_interrupt_type pmac_pic = {
         " PMAC-PIC ",
         NULL,
@@ -123,6 +137,17 @@ struct hw_interrupt_type gatwick_pic = {
 	pmac_unmask_irq,
 	pmac_mask_irq,
 	pmac_mask_and_ack_irq,
+	0
+};
+
+struct hw_interrupt_type pmac_open_pic = {
+	" OpenPIC  ",
+	NULL,
+	NULL,
+	NULL,
+	pmac_openpic_unmask_irq,
+	pmac_openpic_mask_irq,
+	NULL,/*pmac_openpic_mask_irq,*/
 	0
 };
 
@@ -195,6 +220,29 @@ pmac_do_IRQ(struct pt_regs *regs,
                 }
         }
 #endif /* __SMP__ */
+
+	/* Yeah, I know, this could be a separate do_IRQ function */
+	if (has_openpic) {
+	    irq = openpic_irq(0);
+	    if (irq == OPENPIC_VEC_SPURIOUS) {
+                /* Spurious interrupts should never be ack'ed */
+                ppc_spurious_interrupts++;
+            } else {
+            	/* Can this happen ? (comes from CHRP code) */
+		if (irq < 0) {
+		    printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
+                       irq, regs->nip);
+		    ppc_spurious_interrupts++;
+		} else {
+		    if (!irq_desc[irq].level)
+	                openpic_eoi(0);
+		    ppc_irq_dispatch_handler( regs, irq );
+		    if (irq_desc[irq].level)
+	                openpic_eoi(0);
+		}
+            }
+            return;
+	}
 
         for (irq = max_real_irqs - 1; irq > 0; irq -= 32) {
                 int i = irq >> 5;
@@ -350,6 +398,36 @@ pmac_pic_init(void))
         struct device_node *irqctrler;
         volatile struct pmac_irq_hw *addr;
 	int second_irq;
+
+	/* We first try to detect Apple's new Core99 chipset, since mac-io
+	 * is quite different on those machines and contains an IBM MPIC2.
+	 */
+	irqctrler = find_type_devices("open-pic");
+	if (irqctrler != NULL) {
+	    printk("PowerMac using OpenPIC irq controller\n");
+	    if (irqctrler->n_addrs > 0) {
+#ifdef CONFIG_XMON
+		struct device_node* pswitch;
+#endif /* CONFIG_XMON */	
+		OpenPIC = (volatile struct OpenPIC *)
+			ioremap(irqctrler->addrs[0].address,
+			irqctrler->addrs[0].size);
+		for ( i = 0 ; i < NR_IRQS ; i++ ) {
+		    irq_desc[i].ctl = &pmac_open_pic;
+		    irq_desc[i].level = 0;
+		}
+		openpic_init(1);
+		has_openpic = 1;
+#ifdef CONFIG_XMON
+		pswitch = find_devices("programmer-switch");
+		if (pswitch && pswitch->n_intrs)
+			request_irq(pswitch->intrs[0].line, xmon_irq, 0,	
+				"NMI - XMON", 0);
+#endif	/* CONFIG_XMON */
+		return;
+	    }
+	    irqctrler = NULL;
+	}
 
 	/*
 	 * G3 powermacs and 1999 G3 PowerBooks have 64 interrupts,

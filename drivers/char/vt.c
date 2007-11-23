@@ -590,6 +590,8 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 
 	case KDGETKEYCODE:
 	case KDSETKEYCODE:
+		if(!suser())
+			perm=0;
 		return do_kbkeycode_ioctl(cmd, (struct kbkeycode *)arg, perm);
 
 	case KDGKBENT:

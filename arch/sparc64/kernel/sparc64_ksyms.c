@@ -43,6 +43,7 @@
 #endif
 #ifdef CONFIG_PCI
 #include <asm/ebus.h>
+#include <asm/pbm.h>
 #endif
 #include <asm/a.out.h>
 #include <asm/svr4.h>
@@ -193,6 +194,7 @@ EXPORT_SYMBOL(outsl);
 EXPORT_SYMBOL(insb);
 EXPORT_SYMBOL(insw);
 EXPORT_SYMBOL(insl);
+EXPORT_SYMBOL(pci_dma_wsync);
 #endif
 
 /* Solaris/SunOS binary compatibility */

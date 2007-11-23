@@ -5,6 +5,12 @@
  *
  *  Fixed up IPI and restructured a bit
  *    Cort Dougan <cort@ppc.kernel.org>
+ *
+ *  Added initialisation code for Apple Core99 machines, tweaked a few things
+ *  to avoid bogus interrupts and to make sure the disable function exits with
+ *  the interrupt actually masked.
+ *    Benjamin Herrenschmidt <bh40@calva.net>
+ *  Todo: map interrupts to all available CPUs after the ack round
  * 
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License.  See the file COPYING in the main directory of this archive
@@ -21,9 +27,16 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include "open_pic.h"
+#ifdef __powerpc__
+#include <asm/prom.h>
+#endif
 
 #define REGISTER_DEBUG
 #undef REGISTER_DEBUG
+
+#ifdef __powerpc__
+extern int use_of_interrupt_tree;
+#endif
 
 volatile struct OpenPIC *OpenPIC = NULL;
 u_int OpenPIC_NumInitSenses __initdata = 0;
@@ -80,7 +93,7 @@ static void no_action(int ir1, void *dev, struct pt_regs *regs)
  *  I/O functions
  */
 #ifdef __i386__
-static inline u_int ld_le32(volatile u_int *addr)
+static inline u_int in_le32(volatile u_int *addr)
 {
 	return *addr;
 }
@@ -95,7 +108,7 @@ u_int openpic_read(volatile u_int *addr)
 {
 	u_int val;
 
-	val = ld_le32(addr);
+	val = in_le32(addr);
 #ifdef REGISTER_DEBUG
 	printk("openpic_read(0x%08x) = 0x%08x\n", (u_int)addr, val);
 #endif
@@ -142,6 +155,9 @@ static void openpic_safe_writefield(volatile u_int *addr, u_int mask,
 {
 	openpic_setfield(addr, OPENPIC_MASK);
 	/* wait until it's not in use */
+	/* BenH: Is this code really enough ? I would rather check the result
+	 *       and eventually retry ...
+	 */
 	while (openpic_read(addr) & OPENPIC_ACTIVITY);
 	openpic_writefield(addr, mask | OPENPIC_MASK, field | OPENPIC_MASK);
 }
@@ -149,6 +165,16 @@ static void openpic_safe_writefield(volatile u_int *addr, u_int mask,
 /*
  *  Initialize the OpenPIC
  */
+
+/* PoweMac note:
+ *
+ * With BootX, we consider the controller as beeing already initialized by MacOS
+ * and we only mask out interrupts.
+ * With OF booting, we initialize the interrupts that we find in the device tree,
+ * other ones are just masked out.
+ * Note: We might want to adjust priorities too.
+ */
+
 __initfunc(void openpic_init(int main_pic))
 {
 	u_int t, i;
@@ -179,13 +205,16 @@ __initfunc(void openpic_init(int main_pic))
 		      OPENPIC_FEATURE_LAST_SOURCE_SHIFT) + 1;
 	printk("OpenPIC Version %s (%d CPUs and %d IRQ sources) at %p\n", version,
 	       NumProcessors, NumSources, OpenPIC);
-	timerfreq = openpic_read(&OpenPIC->Global.Timer_Frequency);
-	printk("OpenPIC timer frequency is ");
-	if (timerfreq)
-		printk("%d Hz\n", timerfreq);
-	else
-		printk("not set\n");
-
+	/* Apple's OpenPIC is an IBM MPIC without the timer. */
+	if (_machine != _MACH_Pmac) {
+		timerfreq = openpic_read(&OpenPIC->Global.Timer_Frequency);
+		printk("OpenPIC timer frequency is ");
+		if (timerfreq)
+			printk("%d Hz\n", timerfreq);
+		else
+			printk("not set\n");
+	}
+	
 	if ( main_pic )
 	{
 		/* Initialize timer interrupts */
@@ -198,24 +227,60 @@ __initfunc(void openpic_init(int main_pic))
 	    
 		/* Initialize IPI interrupts */
 		for (i = 0; i < OPENPIC_NUM_IPI; i++) {
-			openpic_initipi(i, 10, OPENPIC_VEC_IPI+i);
+			openpic_initipi(i, 0/*10*/, OPENPIC_VEC_IPI+i);
 		}
 	    
-		/* Initialize external interrupts */
-		for (i = 0; i < NumSources; i++) {
-			/* Enabled, Priority 8 */
-			openpic_initirq(i, 8, open_pic.irq_offset+i, 0,
-					i < OpenPIC_NumInitSenses ? OpenPIC_InitSenses[i] : 1);
-			/* Processor 0 */
-			openpic_mapirq(i, 1<<0);
+		if (_machine != _MACH_Pmac) {
+			/* Initialize external interrupts */
+			for (i = 0; i < NumSources; i++) {
+			    /* Enabled, Priority 8 */
+			    openpic_initirq(i, 8, open_pic.irq_offset+i, 0,
+				i < OpenPIC_NumInitSenses ? OpenPIC_InitSenses[i] : 1);
+			    /* Processor 0 */
+			    openpic_mapirq(i, 1<<0);
+			}
+		} else {
+			/* Prevent any interrupt from occuring during initialisation.
+			 * Hum... I beleive this is not necessary, Apple does that in
+			 * Darwin's PowerExpress code.
+			 */
+			openpic_set_priority(0, 0xf);
+
+			/* First disable all interrupts and map them to CPU 0 */
+			for (i = 0; i < NumSources; i++) {
+				openpic_disable_irq(i);
+				openpic_mapirq(i, 1<<0);
+			}
+			
+			/* If we use the device tree, then lookup all interrupts and
+			 * initialize them according to sense infos found in the tree
+			 */
+			if (use_of_interrupt_tree) {
+				struct device_node* np = find_all_nodes();
+			    	while(np) {
+				    int j, pri;
+				    pri = strcmp(np->name, "programmer-switch") ? 2 : 7;
+				    for (j=0;j<np->n_intrs;j++) {
+    				    	openpic_initirq(	np->intrs[j].line,
+    				    				pri,
+    				    				np->intrs[j].line,
+    				    				np->intrs[j].sense,
+    				    				np->intrs[j].sense);
+    				    	irq_desc[np->intrs[j].line].level = np->intrs[j].sense;
+    				    }
+				    np = np->next;
+				}
+			} else {
+				/* Fixme: read level value from controller */
+				printk("openpic: WARNING, openpic running without interrupt tree\n");
+			}
 		}
-	    
+
 		/* Initialize the spurious interrupt */
 		openpic_set_spurious(OPENPIC_VEC_SPURIOUS);
 
 		/* Gemini has no i8259 */
-		if ( _machine != _MACH_gemini )
-		{
+		if (( _machine != _MACH_gemini ) && (_machine != _MACH_Pmac)) {
 			/* SIOint (8259 cascade) is special */
 			openpic_initirq(0, 8, open_pic.irq_offset, 1, 1);
 			openpic_mapirq(0, 1<<0);
@@ -225,6 +290,14 @@ __initfunc(void openpic_init(int main_pic))
 		}
 		openpic_set_priority(0, 0);
 		openpic_disable_8259_pass_through();
+
+		/* We ack pending interrupts to avoid blocking them */
+		if (_machine == _MACH_Pmac) {
+			for (i = 0; i < NumSources; i++) {
+				(void)openpic_irq(0);
+				openpic_eoi(0);
+			}
+		}
 	}
 }
 
@@ -281,6 +354,7 @@ void openpic_eoi(u_int cpu)
 {
 	check_arg_cpu(cpu);
 	openpic_write(&OpenPIC->THIS_CPU.EOI, 0);
+	(void)openpic_read(&OpenPIC->THIS_CPU.EOI);
 }
 
 
@@ -428,12 +502,22 @@ void openpic_enable_irq(u_int irq)
 {
 	check_arg_irq(irq);
 	openpic_clearfield(&OpenPIC->Source[irq].Vector_Priority, OPENPIC_MASK);
+	/* make sure mask gets to controller before we return to user */
+	do {
+		mb();
+	} while(openpic_readfield(&OpenPIC->Source[irq].Vector_Priority,
+			OPENPIC_MASK));
 }
 
 void openpic_disable_irq(u_int irq)
 {
 	check_arg_irq(irq);
 	openpic_setfield(&OpenPIC->Source[irq].Vector_Priority, OPENPIC_MASK);
+	/* make sure mask gets to controller before we return to user */
+	do {
+		mb();
+	} while(!openpic_readfield(&OpenPIC->Source[irq].Vector_Priority,
+    			OPENPIC_MASK));
 }
 
 /*
@@ -452,10 +536,11 @@ void openpic_initirq(u_int irq, u_int pri, u_int vec, int pol, int sense)
 	check_arg_vec(vec);
 	openpic_safe_writefield(&OpenPIC->Source[irq].Vector_Priority,
 				OPENPIC_PRIORITY_MASK | OPENPIC_VECTOR_MASK |
-				OPENPIC_SENSE_POLARITY | OPENPIC_SENSE_LEVEL,
+				OPENPIC_POLARITY_MASK | OPENPIC_SENSE_MASK,
 				(pri << OPENPIC_PRIORITY_SHIFT) | vec |
-				(pol ? OPENPIC_SENSE_POLARITY : 0) |
-				(sense ? OPENPIC_SENSE_LEVEL : 0));
+				(pol ? OPENPIC_POLARITY_POSITIVE :
+			    		OPENPIC_POLARITY_NEGATIVE) |
+				(sense ? OPENPIC_SENSE_LEVEL : OPENPIC_SENSE_EDGE));
 }
 
 /*

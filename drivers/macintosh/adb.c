@@ -170,9 +170,9 @@ void adb_init(void)
 	
 	if (adb_controller == NULL)
 		printk(KERN_WARNING "Warning: no ADB interface detected\n");
-	else
-	{
+	else {
 		adb_hardware = adb_controller->kind;
+		
 #ifdef CONFIG_PMAC_PBOOK
 		pmu_register_sleep_notifier(&adb_sleep_notifier);
 #endif /* CONFIG_PMAC_PBOOK */
@@ -194,6 +194,8 @@ adb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 	switch (when) {
 	case PBOOK_SLEEP_REQUEST:
 		adb_got_sleep = 1;
+		if (adb_controller->autopoll)
+			adb_controller->autopoll(0);
 		ret = notifier_call_chain(&adb_client_list, ADB_MSG_POWERDOWN, NULL);
 		if (ret & NOTIFY_STOP_MASK)
 			return PBOOK_SLEEP_REFUSE;
@@ -209,6 +211,7 @@ adb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 		break;
 	case PBOOK_WAKE:
 		adb_reset_bus();
+		adb_got_sleep = 0;
 		break;
 	}
 	return PBOOK_SLEEP_OK;
@@ -218,15 +221,21 @@ adb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 int
 adb_reset_bus(void)
 {
-	int ret, devs;
+	int ret, nret, devs;
 	unsigned long flags;
 	
 	if (adb_controller == NULL)
 		return -ENXIO;
 		
-	ret = notifier_call_chain(&adb_client_list, ADB_MSG_PRE_RESET, NULL);
-	if (ret & NOTIFY_STOP_MASK)
+	if (adb_controller->autopoll)
+		adb_controller->autopoll(0);
+
+	nret = notifier_call_chain(&adb_client_list, ADB_MSG_PRE_RESET, NULL);
+	if (nret & NOTIFY_STOP_MASK) {
+		if (adb_controller->autopoll)
+			adb_controller->autopoll(devs);
 		return -EBUSY;
+	}
 
 	save_flags(flags);
 	cli();
@@ -238,18 +247,17 @@ adb_reset_bus(void)
 	else
 		ret = 0;
 
-	if (!ret)
-	{
+	if (!ret) {
 		devs = adb_scan_bus();
 		if (adb_controller->autopoll)
 			adb_controller->autopoll(devs);
 	}
 
-	ret = notifier_call_chain(&adb_client_list, ADB_MSG_POST_RESET, NULL);
-	if (ret & NOTIFY_STOP_MASK)
+	nret = notifier_call_chain(&adb_client_list, ADB_MSG_POST_RESET, NULL);
+	if (nret & NOTIFY_STOP_MASK)
 		return -EBUSY;
 	
-	return 1;
+	return ret;
 }
 
 void
@@ -327,6 +335,12 @@ adb_input(unsigned char *buf, int nb, struct pt_regs *regs, int autopoll)
 	int i, id;
 	static int dump_adb_input = 0;
 
+	/* We skip keystrokes and mouse moves when the sleep process
+	 * has been started. We stop autopoll, but this is another security
+	 */
+	if (adb_got_sleep)
+		return;
+		
 	id = buf[0] >> 4;
 	if (dump_adb_input) {
 		printk(KERN_INFO "adb packet: ");
@@ -347,12 +361,8 @@ adb_try_handler_change(int address, int new_id)
 
 	if (adb_handler[address].handler_id == new_id)
 	    return 1;
-	adb_request(&req, NULL, ADBREQ_SYNC | ADBREQ_REPLY, 1,
-    	    ADB_READREG(address,3));
-	if (req.reply_len < 2)
-	    return 0;
 	adb_request(&req, NULL, ADBREQ_SYNC, 3,
-	    ADB_WRITEREG(address, 3), req.reply[1] & 0xF0, new_id);	
+	    ADB_WRITEREG(address, 3), address | 0x20, new_id);
 	adb_request(&req, NULL, ADBREQ_SYNC | ADBREQ_REPLY, 1,
 	    ADB_READREG(address, 3));
 	if (req.reply_len < 2)
@@ -423,7 +433,7 @@ static int adb_open(struct inode *inode, struct file *file)
 {
 	struct adbdev_state *state;
 
-	if (MINOR(inode->i_rdev) > 0 || (adb_controller == NULL)/*adb_hardware == ADB_NONE*/)
+	if (MINOR(inode->i_rdev) > 0 || (adb_controller == NULL))
 		return -ENXIO;
 	state = kmalloc(sizeof(struct adbdev_state), GFP_KERNEL);
 	if (state == 0)
@@ -554,10 +564,11 @@ static ssize_t adb_write(struct file *file, const char *buf,
 	/* Special case for ADB_BUSRESET request, all others are sent to
 	   the controller */
 	if ((req->data[0] == ADB_PACKET)&&(count > 1)
-		&&(req->data[1] == ADB_BUSRESET))
+		&&(req->data[1] == ADB_BUSRESET)) {
 		ret = adb_reset_bus();
-	else
-	{	
+		atomic_dec(&state->n_pending);
+		goto out;
+	} else {	
 		req->reply_expected = ((req->data[1] & 0xc) == 0xc);
 
 		if (adb_controller && adb_controller->send_request)

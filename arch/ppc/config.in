@@ -8,7 +8,7 @@ mainmenu_option next_comment
 comment 'Platform support'
 define_bool CONFIG_PPC y
 choice 'Processor type' \
-	"6xx/7xx		CONFIG_6xx \
+	"6xx/7xx/7400		CONFIG_6xx \
 	 860/821		CONFIG_8xx" 6xx/7xx
 
 choice 'Machine Type' \
@@ -21,6 +21,11 @@ choice 'Machine Type' \
 	 MBX		CONFIG_MBX" PowerMac
 
 bool 'Symmetric multi-processing support' CONFIG_SMP
+
+if [ "$CONFIG_6xx" = "y" ]; then
+  bool 'Altivec (G4) support' CONFIG_ALTIVEC
+fi
+
 if [ "$CONFIG_ALL_PPC" != "y" ];then
   define_bool CONFIG_MACH_SPECIFIC y
 fi
@@ -77,9 +82,6 @@ fi
 
 bool 'Support for VGA Console' CONFIG_VGA_CONSOLE
 bool 'Support for frame buffer devices' CONFIG_FB
-if [ "$CONFIG_FB" = "y" ]; then
-  bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
-fi
 
 bool 'Power management support for Apple PowerBooks' CONFIG_PMAC_PBOOK
 bool 'Support for PowerMac keyboard' CONFIG_MAC_KEYBOARD
@@ -151,6 +153,8 @@ if [ "$CONFIG_NET" = "y" ]; then
 fi
 
 source net/ax25/Config.in
+
+source net/irda/Config.in
 
 mainmenu_option next_comment
 comment 'ISDN subsystem'
