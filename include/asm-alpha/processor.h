@@ -126,4 +126,11 @@ extern void release_thread(struct task_struct *);
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)
 
+extern long __kernel_thread(unsigned long, int (*)(void *), void *);
+
+static inline long kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+{
+	return __kernel_thread(flags | CLONE_VM, fn, arg);
+}
+
 #endif /* __ASM_ALPHA_PROCESSOR_H */

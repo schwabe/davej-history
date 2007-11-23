@@ -41,6 +41,15 @@ extern inline struct file * fget(unsigned int fd)
 	return file;
 }
 
+extern int get_unused_fd(void);   /* in fs/open.c */
+
+static inline void put_unused_fd(unsigned int fd)
+{
+	FD_CLR(fd, current->files->open_fds);
+	if (fd < current->files->next_fd)
+		current->files->next_fd = fd;
+}
+
 /*
  * Install a file pointer in the fd array.
  */

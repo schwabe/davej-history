@@ -31,7 +31,7 @@ static int __init dmi_table(u32 base, int len, int num, void (*decode)(struct dm
 	char *buf;
 	struct dmi_header *dm;
 	u8 *data;
-	int i=0;
+	int i=1;
 		
 		
 	buf = ioremap(base, len);
@@ -124,8 +124,8 @@ static void __init dmi_decode(struct dmi_header *dm)
 			 */
 			 
 			if(strcmp(dmi_string(dm, data[4]), "Phoenix Technologies LTD")==0 &&
-			   strcmp(dmi_string(dm, data[5]), "A04")==0)
-//			   &&strcmp(dmi_string(dm, data[8]), "???")==0)
+			   strcmp(dmi_string(dm, data[5]), "A04")==0 &&
+			   strcmp(dmi_string(dm, data[8]), "08/24/2000")==0)
 			{
 #ifdef CONFIG_APM
 				extern void apm_battery_horked(void);

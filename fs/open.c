@@ -748,13 +748,6 @@ out:
 	return error;
 }
 
-inline void put_unused_fd(unsigned int fd)
-{
-	FD_CLR(fd, current->files->open_fds);
-	if (fd < current->files->next_fd)
-		current->files->next_fd = fd;
-}
-
 asmlinkage int sys_open(const char * filename, int flags, int mode)
 {
 	char * tmp;

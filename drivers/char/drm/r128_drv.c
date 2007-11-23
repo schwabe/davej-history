@@ -51,8 +51,8 @@ static drm_device_t	      r128_device;
 drm_ctx_t	              r128_res_ctx;
 
 static struct file_operations r128_fops = {
-#if LINUX_VERSION_CODE >= 0x020322
-				/* This started being used approx. 2.3.34 */
+#if LINUX_VERSION_CODE >= 0x020400
+				/* This started being used during 2.4.0-test */
 	owner:   THIS_MODULE,
 #endif
 	open:	 r128_open,
@@ -607,6 +607,7 @@ int r128_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 #endif
                 add_wait_queue(&dev->lock.lock_queue, &entry);
                 for (;;) {
+                        current->state = TASK_INTERRUPTIBLE;
                         if (!dev->lock.hw_lock) {
                                 /* Device has been unregistered */
                                 ret = -EINTR;
@@ -619,10 +620,8 @@ int r128_lock(struct inode *inode, struct file *filp, unsigned int cmd,
                                 atomic_inc(&dev->total_locks);
                                 break;  /* Got lock */
                         }
-
                                 /* Contention */
                         atomic_inc(&dev->total_sleeps);
-                        current->state = TASK_INTERRUPTIBLE;
 #if 1
 			current->policy |= SCHED_YIELD;
 #endif

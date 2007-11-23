@@ -339,7 +339,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 		goto out;
 
 	error = -EINVAL;
-	if (!filp->f_dentry || !filp->f_dentry->d_inode)
+	if (!filp->f_dentry || !filp->f_dentry->d_inode || !filp->f_op)
 		goto out_putf;
 
 	if (!posix_make_lock(filp, &file_lock, &flock))
@@ -408,6 +408,8 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	if (!(dentry = filp->f_dentry))
 		goto out_putf;
 	if (!(inode = dentry->d_inode))
+		goto out_putf;
+	if (!filp->f_op)
 		goto out_putf;
 
 	/* Don't allow mandatory locks on files that may be memory mapped
@@ -489,7 +491,9 @@ repeat:
 	while ((fl = *before) != NULL) {
 		if ((fl->fl_flags & FL_POSIX) && fl->fl_owner == owner) {
 			int (*lock)(struct file *, int, struct file_lock *);
-			lock = filp->f_op->lock;
+			lock = NULL;
+			if(filp->f_op)
+				lock = filp->f_op->lock;
 			if (lock) {
 				file_lock = *fl;
 				file_lock.fl_type = F_UNLCK;

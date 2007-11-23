@@ -432,6 +432,7 @@ static inline void handle_mouse_event(unsigned char scancode)
 }
 
 static unsigned char kbd_exists = 1;
+static unsigned char status_mask = 0;	/* At probe time we want all */
 
 /*
  * This reads the keyboard status port, and does the
@@ -453,7 +454,7 @@ static unsigned char handle_kbd_event(void)
 		/* Check for errors. Shouldnt ever happen but it does on Compaq
 		   Presario 16[89]. */
 		   
-		if(!(status&(KBD_STAT_GTO|KBD_STAT_PERR)))
+		if(!(status& status_mask))
 		{
 			if (status & KBD_STAT_MOUSE_OBF) {
 				handle_mouse_event(scancode);
@@ -748,7 +749,8 @@ void __init pckbd_init_hw(void)
 #if defined CONFIG_PSMOUSE
 	psaux_init();
 #endif
-
+	/* Switch keyboard processing to checking error bits */
+	status_mask = KBD_STAT_GTO|KBD_STAT_PERR;
 	/* Ok, finally allocate the IRQ, and off we go.. */
 	kbd_request_irq(keyboard_interrupt);
 }

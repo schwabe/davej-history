@@ -648,6 +648,7 @@ static int ffb_lock(struct inode *inode, struct file *filp, unsigned int cmd, un
 
 	add_wait_queue(&dev->lock.lock_queue, &entry);
 	for (;;) {
+		current->state = TASK_INTERRUPTIBLE;
 		if (!dev->lock.hw_lock) {
 			/* Device has been unregistered */
 			ret = -EINTR;
@@ -663,7 +664,6 @@ static int ffb_lock(struct inode *inode, struct file *filp, unsigned int cmd, un
                         
 		/* Contention */
 		atomic_inc(&dev->total_sleeps);
-		current->state = TASK_INTERRUPTIBLE;
 		current->policy |= SCHED_YIELD;
 		schedule();
 		if (signal_pending(current)) {

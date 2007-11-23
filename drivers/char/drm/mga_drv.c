@@ -42,9 +42,9 @@ static void __attribute__((unused)) unused(void)
 }
 
 #define MGA_NAME	 "mga"
-#define MGA_DESC	 "Matrox g200/g400"
-#define MGA_DATE	 "20000719"
-#define MGA_MAJOR	 1
+#define MGA_DESC	 "Matrox G200/G400"
+#define MGA_DATE	 "20000910"
+#define MGA_MAJOR	 2
 #define MGA_MINOR	 0
 #define MGA_PATCHLEVEL	 0
 
@@ -52,8 +52,8 @@ static drm_device_t	      mga_device;
 drm_ctx_t		      mga_res_ctx;
 
 static struct file_operations mga_fops = {
-#if LINUX_VERSION_CODE >= 0x020322
-				/* This started being used approx. 2.3.34 */
+#if LINUX_VERSION_CODE >= 0x020400
+				/* This started being used during 2.4.0-test */
 	owner:   THIS_MODULE,
 #endif
 	open:	 mga_open,
@@ -223,6 +223,7 @@ static int mga_takedown(drm_device_t *dev)
 
 	DRM_DEBUG("\n");
 
+	if (dev->dev_private) mga_dma_cleanup(dev);
 	if (dev->irq) mga_irq_uninstall(dev);
 	
 	down(&dev->struct_sem);
@@ -422,7 +423,6 @@ static void mga_cleanup(void)
 		DRM_INFO("Module unloaded\n");
 	}
 	drm_ctxbitmap_cleanup(dev);
-	mga_dma_cleanup(dev);
 #ifdef CONFIG_MTRR
    	if(dev->agp && dev->agp->agp_mtrr) {
 	   	int retval;
@@ -514,22 +514,27 @@ int mga_release(struct inode *inode, struct file *filp)
 	if (dev->lock.hw_lock && _DRM_LOCK_IS_HELD(dev->lock.hw_lock->lock)
 	    && dev->lock.pid == current->pid) {
 	      	mga_reclaim_buffers(dev, priv->pid);
-		DRM_ERROR("Process %d dead, freeing lock for context %d\n",
-			  current->pid,
-			  _DRM_LOCKING_CONTEXT(dev->lock.hw_lock->lock));
+		DRM_INFO("Process %d dead (ctx %d, d_s = 0x%02x)\n",
+			 current->pid,
+			 _DRM_LOCKING_CONTEXT(dev->lock.hw_lock->lock),
+			 dev->dev_private ?
+			 ((drm_mga_private_t *)dev->dev_private)
+			 ->dispatch_status
+			 : 0);
+
+		if (dev->dev_private)
+			((drm_mga_private_t *)dev->dev_private)
+				->dispatch_status &= MGA_IN_DISPATCH;
+		
 		drm_lock_free(dev,
 			      &dev->lock.hw_lock->lock,
 			      _DRM_LOCKING_CONTEXT(dev->lock.hw_lock->lock));
-		
-				/* FIXME: may require heavy-handed reset of
-                                   hardware at this point, possibly
-                                   processed via a callback to the X
-                                   server. */
 	} else if (dev->lock.hw_lock) {
 	   	/* The lock is required to reclaim buffers */
 	   	DECLARE_WAITQUEUE(entry, current);
 	   	add_wait_queue(&dev->lock.lock_queue, &entry);
 		for (;;) {
+			current->state = TASK_INTERRUPTIBLE;
 			if (!dev->lock.hw_lock) {
 				/* Device has been unregistered */
 				retcode = -EINTR;
@@ -544,7 +549,6 @@ int mga_release(struct inode *inode, struct file *filp)
 			}			
 				/* Contention */
 			atomic_inc(&dev->total_sleeps);
-			current->state = TASK_INTERRUPTIBLE;
 			schedule();
 			if (signal_pending(current)) {
 				retcode = -ERESTARTSYS;
@@ -555,6 +559,9 @@ int mga_release(struct inode *inode, struct file *filp)
 		remove_wait_queue(&dev->lock.lock_queue, &entry);
 	   	if(!retcode) {
 		   	mga_reclaim_buffers(dev, priv->pid);
+			if (dev->dev_private)
+				((drm_mga_private_t *)dev->dev_private)
+					->dispatch_status &= MGA_IN_DISPATCH;
 		   	drm_lock_free(dev, &dev->lock.hw_lock->lock,
 				      DRM_KERNEL_CONTEXT);
 		}
@@ -562,6 +569,13 @@ int mga_release(struct inode *inode, struct file *filp)
 	drm_fasync(-1, filp, 0);
 
 	down(&dev->struct_sem);
+	if (priv->remove_auth_on_close == 1) {
+		drm_file_t *temp = dev->file_first;
+		while(temp) {
+			temp->authenticated = 0;
+			temp = temp->next;
+		}
+	}
 	if (priv->prev) priv->prev->next = priv->next;
 	else		dev->file_first	 = priv->next;
 	if (priv->next) priv->next->prev = priv->prev;
@@ -619,7 +633,10 @@ int mga_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		func	  = ioctl->func;
 
 		if (!func) {
-			DRM_DEBUG("no function\n");
+			DRM_DEBUG("no function: pid = %d, cmd = 0x%02x,"
+				  " nr = 0x%02x, dev 0x%x, auth = %d\n",
+				  current->pid, cmd, nr, dev->device,
+				  priv->authenticated);
 			retcode = -EINVAL;
 		} else if ((ioctl->root_only && !capable(CAP_SYS_ADMIN))
 			    || (ioctl->auth_needed && !priv->authenticated)) {

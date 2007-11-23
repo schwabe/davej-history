@@ -5,6 +5,8 @@
  *  Modified for big endian by J.F. Chadima and David S. Miller
  *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
  *  Modified 1998 Wolfram Pienkoss for NLS
+ *  22/11/2000 - Fixed ncp_date_unix2dos for dates earlier than 01/01/1980
+ *		 by Igor Zhbanov(bsg@uniyar.ac.ru)
  *
  */
 
@@ -1158,6 +1160,8 @@ ncp_date_unix2dos(int unix_date, unsigned short *time, unsigned short *date)
 	int day, year, nl_day, month;
 
 	unix_date = utc2local(unix_date);
+	if (unix_date < 315532800)
+		unix_date = 315532800; /* Jan 1 GMT 00:00:00 1980. But what about another time zone? */
 	*time = (unix_date % 60) / 2 + (((unix_date / 60) % 60) << 5) +
 	    (((unix_date / 3600) % 24) << 11);
 	day = unix_date / 86400 - 3652;

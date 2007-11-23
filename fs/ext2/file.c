@@ -120,14 +120,14 @@ static long long ext2_file_lseek(
 		case 1:
 			offset += file->f_pos;
 	}
-	if (((unsigned long long) offset >> 32) != 0) {
 #if BITS_PER_LONG < 64
+	if (offset >> 31)
 		return -EINVAL;
 #else
-		if (offset > ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(inode->i_sb)])
-			return -EINVAL;
+	if (offset < 0 ||
+	    offset > ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(inode->i_sb)])
+		return -EINVAL;
 #endif
-	} 
 	if (offset != file->f_pos) {
 		file->f_pos = offset;
 		file->f_reada = 0;

@@ -128,10 +128,10 @@ static int drm_flush_queue(drm_device_t *dev, int context)
 	atomic_inc(&q->use_count);
 	if (atomic_read(&q->use_count) > 1) {
 		atomic_inc(&q->block_write);
-		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&q->flush_queue, &entry);
 		atomic_inc(&q->block_count);
 		for (;;) {
+			current->state = TASK_INTERRUPTIBLE;
 			if (!DRM_BUFCOUNT(&q->waitlist)) break;
 			schedule();
 			if (signal_pending(current)) {

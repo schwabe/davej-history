@@ -542,8 +542,8 @@ static int gamma_dma_send_buffers(drm_device_t *dev, drm_dma_t *d)
 	
 	if (d->flags & _DRM_DMA_BLOCK) {
 		DRM_DEBUG("%d waiting\n", current->pid);
-		current->state = TASK_INTERRUPTIBLE;
 		for (;;) {
+			current->state = TASK_INTERRUPTIBLE;
 			if (!last_buf->waiting
 			    && !last_buf->pending)
 				break; /* finished */
@@ -774,6 +774,7 @@ int gamma_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 		}
 		add_wait_queue(&dev->lock.lock_queue, &entry);
 		for (;;) {
+			current->state = TASK_INTERRUPTIBLE;
 			if (!dev->lock.hw_lock) {
 				/* Device has been unregistered */
 				ret = -EINTR;
@@ -790,7 +791,6 @@ int gamma_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 			
 				/* Contention */
 			atomic_inc(&dev->total_sleeps);
-			current->state = TASK_INTERRUPTIBLE;
 			schedule();
 			if (signal_pending(current)) {
 				ret = -ERESTARTSYS;

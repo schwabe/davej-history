@@ -73,7 +73,7 @@ int drm_addmap(struct inode *inode, struct file *filp, unsigned int cmd,
 	switch (map->type) {
 	case _DRM_REGISTERS:
 	case _DRM_FRAME_BUFFER:
-#ifndef __sparc__
+#if !defined(__sparc__) && !defined(__alpha__)
 		if (map->offset + map->size < map->offset
 		    || map->offset < virt_to_phys(high_memory)) {
 			drm_free(map, sizeof(*map), DRM_MEM_MAPS);

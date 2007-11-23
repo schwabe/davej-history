@@ -1,0 +1,11 @@
+--- i810_rng.c_orig	Sun Nov 26 18:58:26 2000
++++ i810_rng.c	Sun Nov 26 18:59:27 2000
+@@ -439,6 +439,8 @@
+ 	if (!pdev)
+ 		pdev = pci_find_device (0x8086, 0x2428, NULL);
+ 	if (!pdev)
++		pdev = pci_find_device (0x8086, 0x1130, NULL);
++	if (!pdev)
+ 		return -ENODEV;
+ 
+ 	DPRINTK ("ENTER\n");

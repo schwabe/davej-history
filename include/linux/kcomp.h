@@ -9,16 +9,6 @@
 
 #define __exit
 
-#ifdef __alpha
-extern long __kernel_thread (unsigned long, int (*)(void *), void *);
-static inline long kernel_thread (int (*fn) (void *), void *arg, unsigned long flags)
-{
-	return __kernel_thread (flags | CLONE_VM, fn, arg);
-}
-#undef CONFIG_APM
-#endif
-
-
 #define pci_enable_device(x)			0
 
 #define page_address(x)				(x | PAGE_OFFSET)

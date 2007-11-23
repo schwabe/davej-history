@@ -30,6 +30,7 @@
 #include <linux/soundcard.h>
 #include <linux/ac97_codec.h>
 #include <linux/smp_lock.h>
+#include <linux/delay.h>
 #include <asm/io.h>
 #include <asm/delay.h>
 #include <asm/uaccess.h>

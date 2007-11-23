@@ -196,14 +196,17 @@ static long long mem_lseek(struct file * file, long long offset, int orig)
 {
 	switch (orig) {
 		case 0:
-			file->f_pos = offset;
-			return file->f_pos;
+			break;
 		case 1:
-			file->f_pos += offset;
-			return file->f_pos;
+			offset += file->f_pos;
+			break;
 		default:
 			return -EINVAL;
 	}
+	if (offset < 0)
+			return -EINVAL;
+	file->f_pos = offset;
+	return offset;
 }
 
 /*

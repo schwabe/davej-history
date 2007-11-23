@@ -34,11 +34,15 @@
 #include "drmP.h"
 #include "tdfx_drv.h"
 
+#if defined(CONFIG_AGP) || defined(CONFIG_AGP_MODULE)
 #include <linux/agp_backend.h>
+#endif
 
 static void __attribute__((unused)) unused(void)
 {
+#if defined(CONFIG_AGP) || defined(CONFIG_AGP_MODULE)
 	agp_enable(0);
+#endif
 }
 
 #define TDFX_NAME	 "tdfx"
@@ -566,6 +570,7 @@ int tdfx_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 #endif
                 add_wait_queue(&dev->lock.lock_queue, &entry);
                 for (;;) {
+                        current->state = TASK_INTERRUPTIBLE;
                         if (!dev->lock.hw_lock) {
                                 /* Device has been unregistered */
                                 ret = -EINTR;
@@ -578,10 +583,8 @@ int tdfx_lock(struct inode *inode, struct file *filp, unsigned int cmd,
                                 atomic_inc(&dev->total_locks);
                                 break;  /* Got lock */
                         }
-                        
                                 /* Contention */
                         atomic_inc(&dev->total_sleeps);
-                        current->state = TASK_INTERRUPTIBLE;
 #if 1
 			current->policy |= SCHED_YIELD;
 #endif

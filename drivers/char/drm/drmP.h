@@ -33,6 +33,11 @@
 #define _DRM_P_H_
 
 #ifdef __KERNEL__
+#ifdef __alpha__
+/* add include of current.h so that "current" is defined
+ * before static inline funcs in wait.h. 4/21/2000 S + B */
+#include <asm/current.h>
+#endif /* __alpha__ */
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -46,10 +51,13 @@
 #include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/smp_lock.h>	/* For (un)lock_kernel */
+#include <linux/mm.h>
+#ifdef __alpha__
+#include <asm/pgtable.h> /* For pte_wrprotect */
+#endif
 #include <asm/io.h>
 #include <asm/mman.h>
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
 #ifdef CONFIG_MTRR
 #include <asm/mtrr.h>
 #endif
@@ -132,10 +140,25 @@ typedef struct wait_queue *wait_queue_head_t;
 #define NOPAGE_OOM 0
 #endif
 
+				/* module_init/module_exit added in 2.3.13 */
+#ifndef module_init
+#define module_init(x)  int init_module(void) { return x(); }
+#endif
+#ifndef module_exit
+#define module_exit(x)  void cleanup_module(void) { x(); }
+#endif
+
+				/* virt_to_page added in 2.4.0-test6 */
+#if LINUX_VERSION_CODE < 0x020400
+#define virt_to_page(kaddr) (mem_map + MAP_NR(kaddr))
+#endif
+
 				/* Generic cmpxchg added in 2.3.x */
 #ifndef __HAVE_ARCH_CMPXCHG
 				/* Include this here so that driver can be
                                    used with older kernels. */
+
+#if __i386__
 static inline unsigned long __cmpxchg(volatile void *ptr, unsigned long old,
 				      unsigned long new, int size)
 {
@@ -166,6 +189,7 @@ static inline unsigned long __cmpxchg(volatile void *ptr, unsigned long old,
 #define cmpxchg(ptr,o,n)						\
   ((__typeof__(*(ptr)))__cmpxchg((ptr),(unsigned long)(o),		\
 				 (unsigned long)(n),sizeof(*(ptr))))
+#endif /* i386 */
 #endif
 
 				/* Macros to make printk easier */
@@ -315,6 +339,7 @@ typedef struct drm_freelist {
 	int		  low_mark;    /* Low water mark		   */
 	int		  high_mark;   /* High water mark		   */
 	atomic_t	  wfh;	       /* If waiting for high mark	   */
+	spinlock_t        lock;
 } drm_freelist_t;
 
 typedef struct drm_buf_entry {
@@ -343,6 +368,7 @@ typedef struct drm_file {
 	struct drm_file	  *next;
 	struct drm_file	  *prev;
 	struct drm_device *dev;
+	int 		  remove_auth_on_close;
 } drm_file_t;
 
 
@@ -551,6 +577,9 @@ extern unsigned long drm_vm_nopage(struct vm_area_struct *vma,
 extern unsigned long drm_vm_shm_nopage(struct vm_area_struct *vma,
 				       unsigned long address,
 				       int write_access);
+extern unsigned long drm_vm_shm_nopage_lock(struct vm_area_struct *vma,
+					    unsigned long address,
+					    int write_access);
 extern unsigned long drm_vm_dma_nopage(struct vm_area_struct *vma,
 				       unsigned long address,
 				       int write_access);
@@ -562,6 +591,9 @@ extern struct page *drm_vm_nopage(struct vm_area_struct *vma,
 extern struct page *drm_vm_shm_nopage(struct vm_area_struct *vma,
 				      unsigned long address,
 				      int write_access);
+extern struct page *drm_vm_shm_nopage_lock(struct vm_area_struct *vma,
+					   unsigned long address,
+					   int write_access);
 extern struct page *drm_vm_dma_nopage(struct vm_area_struct *vma,
 				      unsigned long address,
 				      int write_access);
@@ -571,9 +603,7 @@ extern void	     drm_vm_close(struct vm_area_struct *vma);
 extern int	     drm_mmap_dma(struct file *filp,
 				  struct vm_area_struct *vma);
 extern int	     drm_mmap(struct file *filp, struct vm_area_struct *vma);
-extern struct vm_operations_struct drm_vm_ops;
-extern struct vm_operations_struct drm_vm_shm_ops;
-extern struct vm_operations_struct drm_vm_dma_ops;
+
 
 				/* Proc support (proc.c) */
 extern int	     drm_proc_init(drm_device_t *dev);

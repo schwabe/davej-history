@@ -84,6 +84,7 @@
 #include <linux/random.h>
 #include <linux/sysctl.h>
 #include <linux/miscdevice.h>
+#include <linux/mm.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -438,6 +439,8 @@ int __init rng_init (void)
 	pdev = pci_find_device (0x8086, 0x2418, NULL);
 	if (!pdev)
 		pdev = pci_find_device (0x8086, 0x2428, NULL);
+	if (!pdev)
+		pdev = pci_find_device (0x8086, 0x1130, NULL);
 	if (!pdev)
 		return -ENODEV;
 

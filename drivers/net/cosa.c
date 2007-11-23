@@ -568,6 +568,7 @@ static void sppp_channel_init(struct channel_data *chan)
 	struct device *d;
 	chan->if_ptr = &chan->pppdev;
 	chan->pppdev.dev = kmalloc(sizeof(struct device), GFP_KERNEL);
+	memset(chan->pppdev.dev, 0, sizeof(struct device));
 	sppp_attach(&chan->pppdev);
 	d=chan->pppdev.dev;
 	d->name = chan->name;

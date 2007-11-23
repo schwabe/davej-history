@@ -282,8 +282,8 @@ static unsigned long i810_alloc_page(drm_device_t *dev)
 	if(address == 0UL) 
 		return 0;
 	
-	atomic_inc(&mem_map[MAP_NR((void *) address)].count);
-	set_bit(PG_locked, &mem_map[MAP_NR((void *) address)].flags);
+	atomic_inc(&virt_to_page(address)->count);
+	set_bit(PG_locked, &virt_to_page(address)->flags);
    
 	return address;
 }
@@ -293,9 +293,9 @@ static void i810_free_page(drm_device_t *dev, unsigned long page)
 	if(page == 0UL) 
 		return;
 	
-	atomic_dec(&mem_map[MAP_NR((void *) page)].count);
-	clear_bit(PG_locked, &mem_map[MAP_NR((void *) page)].flags);
-	wake_up(&mem_map[MAP_NR((void *) page)].wait);
+	atomic_dec(&virt_to_page(page)->count);
+	clear_bit(PG_locked, &virt_to_page(page)->flags);
+	wake_up(&virt_to_page(page)->wait);
 	free_page(page);
 	return;
 }
@@ -1068,11 +1068,11 @@ static void i810_dma_quiescent(drm_device_t *dev)
 	   	return;
 	}
       	atomic_set(&dev_priv->flush_done, 0);
-   	current->state = TASK_INTERRUPTIBLE;
    	add_wait_queue(&dev_priv->flush_queue, &entry);
    	end = jiffies + (HZ*3);
    
    	for (;;) {
+		current->state = TASK_INTERRUPTIBLE;
 	      	i810_dma_quiescent_emit(dev);
 	   	if (atomic_read(&dev_priv->flush_done) == 1) break;
 		if((signed)(end - jiffies) <= 0) {
@@ -1103,10 +1103,10 @@ static int i810_flush_queue(drm_device_t *dev)
 	   	return 0;
 	}
       	atomic_set(&dev_priv->flush_done, 0);
-   	current->state = TASK_INTERRUPTIBLE;
    	add_wait_queue(&dev_priv->flush_queue, &entry);
    	end = jiffies + (HZ*3);
    	for (;;) {
+		current->state = TASK_INTERRUPTIBLE;
 	      	i810_dma_emit_flush(dev);
 	   	if (atomic_read(&dev_priv->flush_done) == 1) break;
 		if((signed)(end - jiffies) <= 0) {
@@ -1199,6 +1199,7 @@ int i810_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 	if (!ret) {
 		add_wait_queue(&dev->lock.lock_queue, &entry);
 		for (;;) {
+			current->state = TASK_INTERRUPTIBLE;
 			if (!dev->lock.hw_lock) {
 				/* Device has been unregistered */
 				ret = -EINTR;
@@ -1214,7 +1215,6 @@ int i810_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 			
 				/* Contention */
 			atomic_inc(&dev->total_sleeps);
-			current->state = TASK_INTERRUPTIBLE;
 		   	DRM_DEBUG("Calling lock schedule\n");
 			schedule();
 			if (signal_pending(current)) {
