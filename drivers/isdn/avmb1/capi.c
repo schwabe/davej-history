@@ -1,11 +1,14 @@
 /*
- * $Id: capi.c,v 1.44.6.3 2000/12/17 22:45:08 kai Exp $
+ * $Id: capi.c,v 1.44.6.4 2001/02/10 14:41:20 kai Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.44.6.4  2001/02/10 14:41:20  kai
+ * Changes from kernel tree
+ *
  * Revision 1.44.6.3  2000/12/17 22:45:08  kai
  * That's hopefully it for test13-4
  *
@@ -217,16 +220,18 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/sched.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/fcntl.h>
 #include <linux/fs.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
+#include <linux/smp_lock.h>
 #include <linux/timer.h>
 #include <linux/wait.h>
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
@@ -243,13 +248,14 @@
 #include <linux/poll.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
+#include <linux/init.h>
 #include "capiutil.h"
 #include "capicmd.h"
-#ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
+#if defined(CONFIG_ISDN_CAPI_CAPIFS) || defined(CONFIG_ISDN_CAPI_CAPIFS_MODULE)
 #include "capifs.h"
-#endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
+#endif
 
-static char *revision = "$Revision: 1.44.6.3 $";
+static char *revision = "$Revision: 1.44.6.4 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 
@@ -308,8 +314,8 @@ struct capiminor {
 
 	/* for raw device */
 	struct sk_buff_head recvqueue;
-	struct wait_queue *recvwait;
-	struct wait_queue *sendwait;
+	wait_queue_head_t recvwait;
+	wait_queue_head_t sendwait;
 	
 	/* transmit path */
 	struct datahandle_queue {
@@ -339,7 +345,7 @@ struct capidev {
 	unsigned        userflags;
 
 	struct sk_buff_head recvqueue;
-	struct wait_queue *recvwait;
+	wait_queue_head_t recvwait;
 
 	/* Statistic */
 	unsigned long	nrecvctlpkt;
@@ -400,7 +406,8 @@ void capiminor_del_all_ack(struct capiminor *mp)
 {
 	struct datahandle_queue **pp, *p;
 
-	for (pp = &mp->ackqueue; *pp; pp = &(*pp)->next) {
+	pp = &mp->ackqueue;
+	while (*pp) {
 		p = *pp;
 		*pp = (*pp)->next;
 		kfree(p);
@@ -436,6 +443,8 @@ struct capiminor *capiminor_alloc(__u16 applid, __u32 ncci)
 	skb_queue_head_init(&mp->outqueue);
 
 	skb_queue_head_init(&mp->recvqueue);
+	init_waitqueue_head(&mp->recvwait);
+	init_waitqueue_head(&mp->sendwait);
 
 	for (pp = &minors; *pp; pp = &(*pp)->next) {
 		if ((*pp)->minor < minor)
@@ -517,7 +526,7 @@ static struct capincci *capincci_alloc(struct capidev *cdev, __u32 ncci)
 #ifdef _DEBUG_REFCOUNT
 		printk(KERN_DEBUG "set mp->nccip\n");
 #endif
-#ifdef CONFIG_ISDN_CAPIFS
+#if defined(CONFIG_ISDN_CAPI_CAPIFS) || defined(CONFIG_ISDN_CAPI_CAPIFS_MODULE)
 		kdev = MKDEV(capi_rawmajor, mp->minor);
 		capifs_new_ncci('r', mp->minor, kdev);
 		kdev = MKDEV(capi_ttymajor, mp->minor);
@@ -542,7 +551,7 @@ static void capincci_free(struct capidev *cdev, __u32 ncci)
 			*pp = (*pp)->next;
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 			if ((mp = np->minorp) != 0) {
-#ifdef CONFIG_ISDN_CAPIFS
+#if defined(CONFIG_ISDN_CAPI_CAPIFS) || defined(CONFIG_ISDN_CAPI_CAPIFS_MODULE)
 				capifs_free_ncci('r', mp->minor);
 				capifs_free_ncci(0, mp->minor);
 #endif
@@ -598,6 +607,7 @@ static struct capidev *capidev_alloc(struct file *file)
 	cdev->minor = MINOR(file->f_dentry->d_inode->i_rdev);
 
 	skb_queue_head_init(&cdev->recvqueue);
+	init_waitqueue_head(&cdev->recvwait);
 	pp=&capidev_openlist;
 	while (*pp) pp = &(*pp)->next;
 	*pp = cdev;
@@ -1258,6 +1268,7 @@ capi_release(struct inode *inode, struct file *file)
 {
 	struct capidev *cdev = (struct capidev *)file->private_data;
 
+	lock_kernel();
 	capincci_free(cdev, 0xffffffff);
 	capidev_free(cdev);
 	file->private_data = NULL;
@@ -1266,6 +1277,7 @@ capi_release(struct inode *inode, struct file *file)
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_release %d\n", GET_USE_COUNT(&__this_module));
 #endif
+	unlock_kernel();
 	return 0;
 }
 
@@ -1447,11 +1459,13 @@ capinc_raw_release(struct inode *inode, struct file *file)
 	struct capiminor *mp = (struct capiminor *)file->private_data;
 
 	if (mp) {
+		lock_kernel();
 		mp->file = 0;
 		if (mp->nccip == 0) {
 			capiminor_free(mp);
 			file->private_data = NULL;
 		}
+		unlock_kernel();
 	}
 
 #ifdef _DEBUG_REFCOUNT
@@ -1485,6 +1499,8 @@ int capinc_tty_open(struct tty_struct * tty, struct file * file)
 		return -EBUSY;
 
 	skb_queue_head_init(&mp->recvqueue);
+	init_waitqueue_head(&mp->recvwait);
+	init_waitqueue_head(&mp->sendwait);
 	tty->driver_data = (void *)mp;
 #ifdef _DEBUG_REFCOUNT
 	printk(KERN_DEBUG "capi_tty_open %d\n", GET_USE_COUNT(&__this_module));
@@ -1943,7 +1959,7 @@ static struct procfsentries {
    { "capi/capi20ncci",   0	 , proc_capincci_read_proc },
 };
 
-static void proc_init(void)
+static void __init proc_init(void)
 {
     int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
     int i;
@@ -1955,7 +1971,7 @@ static void proc_init(void)
     }
 }
 
-static void proc_exit(void)
+static void  proc_exit(void)
 {
     int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
     int i;
@@ -1999,18 +2015,14 @@ static void lower_callback(unsigned int cmd, __u32 contr, void *data)
 	}
 }
 
-#ifdef MODULE
-#define	 capi_init	init_module
-#endif
-
 static struct capi_interface_user cuser = {
-	"capi20",
-	lower_callback,
+	name: "capi20",
+	callback: lower_callback,
 };
 
 static char rev[10];
 
-int capi_init(void)
+static int __init capi_init(void)
 {
 	char *p;
 
@@ -2069,8 +2081,7 @@ int capi_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void  capi_exit(void)
 {
 #ifdef CONFIG_ISDN_CAPI_MIDDLEWARE
 #endif
@@ -2086,4 +2097,5 @@ void cleanup_module(void)
 	printk(KERN_NOTICE "capi: Rev%s: unloaded\n", rev);
 }
 
-#endif
+module_init(capi_init);
+module_exit(capi_exit);

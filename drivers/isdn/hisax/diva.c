@@ -1,4 +1,4 @@
-/* $Id: diva.c,v 1.25.6.2 2000/11/29 16:00:14 kai Exp $
+/* $Id: diva.c,v 1.25.6.3 2001/02/13 10:33:58 kai Exp $
  *
  * diva.c     low level stuff for Eicon.Diehl Diva Family ISDN cards
  *
@@ -21,10 +21,11 @@
 #include "ipac.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
+#include <linux/isdn_compat.h>
 
 extern const char *CardType[];
 
-const char *Diva_revision = "$Revision: 1.25.6.2 $";
+const char *Diva_revision = "$Revision: 1.25.6.3 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

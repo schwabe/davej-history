@@ -1,11 +1,44 @@
 /*
- * $Id: capifs.c,v 1.7 2000/06/18 16:09:54 keil Exp $
+ * $Id: capifs.c,v 1.14.6.2 2001/02/10 14:41:20 kai Exp $
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.de)
  *
  * Heavily based on devpts filesystem from H. Peter Anvin
  * 
  * $Log: capifs.c,v $
+ * Revision 1.14.6.2  2001/02/10 14:41:20  kai
+ * Changes from kernel tree
+ *
+ * Revision 1.14.6.1  2000/11/28 12:02:45  kai
+ * MODULE_DEVICE_TABLE for 2.4
+ *
+ * Revision 1.14.2.1  2000/11/26 17:47:53  kai
+ * added PCI_DEV_TABLE for 2.4
+ *
+ * Revision 1.14  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.13  2000/11/18 16:17:25  kai
+ * change from 2.4 tree
+ *
+ * Revision 1.12  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.11  2000/10/24 15:08:47  calle
+ * Too much includes.
+ *
+ * Revision 1.10  2000/10/12 10:12:35  calle
+ * Bugfix: second iput(inode) on umount, destroies a foreign inode.
+ *
+ * Revision 1.9  2000/08/20 07:30:13  keil
+ * changes for 2.4
+ *
+ * Revision 1.8  2000/07/20 10:23:13  calle
+ * Include isdn_compat.h for people that don't use -p option of std2kern.
+ *
  * Revision 1.7  2000/06/18 16:09:54  keil
  * more changes for 2.4
  *
@@ -56,14 +89,14 @@
 #include <linux/kernel.h>
 #include <linux/locks.h>
 #include <linux/major.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/ctype.h>
 #include <asm/bitops.h>
 #include <asm/uaccess.h>
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.de>");
 
-static char *revision = "$Revision: 1.14.6.1 $";
+static char *revision = "$Revision: 1.14.6.2 $";
 
 struct capifs_ncci {
 	struct inode *inode;
@@ -552,7 +585,7 @@ void capifs_free_ncci(char type, unsigned int num)
 	}
 }
 
-int __init capifs_init(void)
+static int __init capifs_init(void)
 {
 	char rev[10];
 	char *p;
@@ -581,7 +614,7 @@ int __init capifs_init(void)
 	return 0;
 }
 
-void capifs_exit(void)
+static void  capifs_exit(void)
 {
 	unregister_filesystem(&capifs_fs_type);
 }
@@ -589,16 +622,5 @@ void capifs_exit(void)
 EXPORT_SYMBOL(capifs_new_ncci);
 EXPORT_SYMBOL(capifs_free_ncci);
 
-#ifdef MODULE
-
-int init_module(void)
-{
-	return capifs_init();
-}
-
-void cleanup_module(void)
-{
-	capifs_exit();
-}
-
-#endif
+module_init(capifs_init);
+module_exit(capifs_exit);

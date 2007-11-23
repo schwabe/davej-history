@@ -90,6 +90,7 @@
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/init.h>
 #include <asm/segment.h>
 #include <linux/config.h>
 
@@ -995,15 +996,14 @@ EXPORT_SYMBOL(capi_cmsg2str);
 EXPORT_SYMBOL(capi_message2str);
 EXPORT_SYMBOL(capi_info2str);
 
-#ifdef MODULE
-
-int init_module(void)
-{
-	return 0;
+static int __init capiutil_init(void)
+{ 
+	return 0; 
 }
 
-void cleanup_module(void)
+static void  capiutil_exit(void)
 {
 }
 
-#endif
+module_init(capiutil_init);
+module_exit(capiutil_exit);

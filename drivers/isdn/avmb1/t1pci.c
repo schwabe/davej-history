@@ -1,11 +1,37 @@
 /*
- * $Id: t1pci.c,v 1.9 2000/05/19 15:43:22 calle Exp $
+ * $Id: t1pci.c,v 1.13.6.1 2000/11/28 12:02:45 kai Exp $
  * 
  * Module for AVM T1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1pci.c,v $
+ * Revision 1.13.6.1  2000/11/28 12:02:45  kai
+ * MODULE_DEVICE_TABLE for 2.4
+ *
+ * Revision 1.13.2.2  2000/11/26 17:47:53  kai
+ * added PCI_DEV_TABLE for 2.4
+ *
+ * Revision 1.13.2.1  2000/11/26 17:14:19  kai
+ * fix device ids
+ * also needs patches to include/linux/pci_ids.h
+ *
+ * Revision 1.13  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.12  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.11  2000/08/08 09:24:19  calle
+ * calls to pci_enable_device surounded by #ifndef COMPAT_HAS_2_2_PCI
+ *
+ * Revision 1.10  2000/07/20 10:21:21  calle
+ * Bugfix: driver will not be unregistered, if not cards were detected.
+ *         this result in an oops in kcapi.c
+ *
  * Revision 1.9  2000/05/19 15:43:22  calle
  * added calls to pci_device_start().
  *
@@ -54,9 +80,10 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/pci.h>
+#include <linux/isdn_compat.h>
 #include <linux/capi.h>
+#include <linux/init.h>
 #include <asm/io.h>
-#include <linux/isdn.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
@@ -259,14 +286,9 @@ static struct capi_driver t1pci_driver = {
     add_card: 0, /* no add_card function */
 };
 
-#ifdef MODULE
-#define t1pci_init init_module
-void cleanup_module(void);
-#endif
-
 static int ncards = 0;
 
-int t1pci_init(void)
+static int __init t1pci_init(void)
 {
 	struct capi_driver *driver = &t1pci_driver;
 	struct pci_dev *dev = NULL;
@@ -312,9 +334,6 @@ int t1pci_init(void)
 		        printk(KERN_ERR
 			"%s: failed to enable AVM-T1-PCI at i/o %#x, irq %d, mem %#x err=%d\n",
 			driver->name, param.port, param.irq, param.membase, retval);
-#ifdef MODULE
-			cleanup_module();
-#endif
 			MOD_DEC_USE_COUNT;
 			return -EIO;
 		}
@@ -327,9 +346,6 @@ int t1pci_init(void)
 		        printk(KERN_ERR
 			"%s: no AVM-T1-PCI at i/o %#x, irq %d detected, mem %#x\n",
 			driver->name, param.port, param.irq, param.membase);
-#ifdef MODULE
-			cleanup_module();
-#endif
 			MOD_DEC_USE_COUNT;
 			return retval;
 		}
@@ -351,9 +367,10 @@ int t1pci_init(void)
 #endif
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void  t1pci_exit(void)
 {
     detach_capi_driver(&t1pci_driver);
 }
-#endif
+
+module_init(t1pci_init);
+module_exit(t1pci_exit);

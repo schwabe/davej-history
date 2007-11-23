@@ -208,8 +208,8 @@ get_io_range(struct IsdnCardState *cs)
 	}
 }
 
-__initfunc(int
-setup_sportster(struct IsdnCard *card))
+int __init
+setup_sportster(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

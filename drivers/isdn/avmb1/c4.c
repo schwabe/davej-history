@@ -1,11 +1,49 @@
 /*
- * $Id: c4.c,v 1.12 2000/06/19 16:51:53 keil Exp $
+ * $Id: c4.c,v 1.20.6.1 2000/11/28 12:02:45 kai Exp $
  * 
  * Module for AVM C4 card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: c4.c,v $
+ * Revision 1.20.6.1  2000/11/28 12:02:45  kai
+ * MODULE_DEVICE_TABLE for 2.4
+ *
+ * Revision 1.20.2.2  2000/11/26 17:47:53  kai
+ * added PCI_DEV_TABLE for 2.4
+ *
+ * Revision 1.20.2.1  2000/11/26 17:14:19  kai
+ * fix device ids
+ * also needs patches to include/linux/pci_ids.h
+ *
+ * Revision 1.20  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.19  2000/11/19 17:02:47  kai
+ * compatibility cleanup - part 3
+ *
+ * Revision 1.18  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.17  2000/10/10 17:44:19  kai
+ * changes from/for 2.2.18
+ *
+ * Revision 1.16  2000/08/20 07:30:13  keil
+ * changes for 2.4
+ *
+ * Revision 1.15  2000/08/08 09:24:19  calle
+ * calls to pci_enable_device surounded by #ifndef COMPAT_HAS_2_2_PCI
+ *
+ * Revision 1.14  2000/08/04 12:20:08  calle
+ * - Fix unsigned/signed warning in the right way ...
+ *
+ * Revision 1.13  2000/07/20 10:21:21  calle
+ * Bugfix: driver will not be unregistered, if not cards were detected.
+ *         this result in an oops in kcapi.c
+ *
  * Revision 1.12  2000/06/19 16:51:53  keil
  * don't free skb in irq context
  *
@@ -58,8 +96,9 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/pci.h>
+#include <linux/isdn_compat.h>
 #include <linux/capi.h>
-#include <linux/isdn.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include "capicmd.h"
@@ -1286,35 +1325,9 @@ static struct capi_driver c4_driver = {
     add_card: 0, /* no add_card function */
 };
 
-#ifdef MODULE
-#define c4_init init_module
-void cleanup_module(void);
-#endif
-
-#ifndef PCI_ANY_ID
-#define PCI_ANY_ID (~0)
-#endif
-
-static struct pci_dev *
-pci_find_subsys(unsigned int vendor, unsigned int device,
-		unsigned int ss_vendor, unsigned int ss_device,
-		struct pci_dev *from)
-{
-	unsigned short subsystem_vendor, subsystem_device;
-
-	while ((from = pci_find_device(vendor, device, from))) {
-		pci_read_config_word(from, PCI_SUBSYSTEM_VENDOR_ID, &subsystem_vendor);
-		pci_read_config_word(from, PCI_SUBSYSTEM_ID, &subsystem_device);
-		if ((ss_vendor == PCI_ANY_ID || subsystem_vendor == ss_vendor) &&
-		    (ss_device == PCI_ANY_ID || subsystem_device == ss_device))
-			return from;
-	}
-	return NULL;
-}
-
 static int ncards = 0;
 
-int c4_init(void)
+static int __init c4_init(void)
 {
 	struct capi_driver *driver = &c4_driver;
 	struct pci_dev *dev = NULL;
@@ -1362,9 +1375,6 @@ int c4_init(void)
 		        printk(KERN_ERR
 			"%s: failed to enable AVM-C4 at i/o %#x, irq %d, mem %#x err=%d\n",
 			driver->name, param.port, param.irq, param.membase, retval);
-#ifdef MODULE
-			cleanup_module();
-#endif
 			MOD_DEC_USE_COUNT;
 			return -EIO;
 		}
@@ -1377,9 +1387,6 @@ int c4_init(void)
 		        printk(KERN_ERR
 			"%s: no AVM-C4 at i/o %#x, irq %d detected, mem %#x\n",
 			driver->name, param.port, param.irq, param.membase);
-#ifdef MODULE
-			cleanup_module();
-#endif
 			MOD_DEC_USE_COUNT;
 			return retval;
 		}
@@ -1401,9 +1408,10 @@ int c4_init(void)
 #endif
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void  c4_exit(void)
 {
     detach_capi_driver(&c4_driver);
 }
-#endif
+
+module_init(c4_init);
+module_exit(c4_exit);

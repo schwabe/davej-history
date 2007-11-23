@@ -1,11 +1,20 @@
 /*
- * $Id: b1pcmcia.c,v 1.10 2000/05/06 00:52:36 kai Exp $
+ * $Id: b1pcmcia.c,v 1.12 2000/11/23 20:45:14 kai Exp $
  * 
  * Module for AVM B1/M1/M2 PCMCIA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pcmcia.c,v $
+ * Revision 1.12  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.11  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
  * Revision 1.10  2000/05/06 00:52:36  kai
  * merged changes from kernel tree
  * fixed timer and net_device->name breakage
@@ -75,6 +84,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <linux/capi.h>
 #include <linux/b1pcmcia.h>
@@ -300,12 +310,7 @@ EXPORT_SYMBOL(b1pcmcia_delcard);
 
 /* ------------------------------------------------------------- */
 
-#ifdef MODULE
-#define b1pcmcia_init init_module
-void cleanup_module(void);
-#endif
-
-int b1pcmcia_init(void)
+static int __init b1pcmcia_init(void)
 {
 	struct capi_driver *driver = &b1pcmcia_driver;
 	char *p;
@@ -332,9 +337,10 @@ int b1pcmcia_init(void)
 	return retval;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void  b1pcmcia_exit(void)
 {
     detach_capi_driver(&b1pcmcia_driver);
 }
-#endif
+
+module_init(b1pcmcia_init);
+module_exit(b1pcmcia_exit);

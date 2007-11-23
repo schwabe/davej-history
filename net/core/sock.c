@@ -79,6 +79,7 @@
  *		Jay Schulist	:	Added SO_ATTACH_FILTER and SO_DETACH_FILTER.
  *		Andi Kleen	:	Add sock_kmalloc()/sock_kfree_s()
  *		Andi Kleen	:	Fix write_space callback
+ *		Chris Evans	:	Security fixes - signedness again
  *
  * To Fix:
  *
@@ -376,7 +377,7 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		struct timeval tm;
 	} v;
 	
-	int lv=sizeof(int),len;
+	unsigned int lv=sizeof(int),len;
   	
   	if(get_user(len,optlen))
   		return -EFAULT;

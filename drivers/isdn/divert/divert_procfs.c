@@ -32,6 +32,7 @@
 #include <linux/fs.h>
 #endif
 #include <linux/isdnif.h>
+#include <linux/isdn_compat.h>
 #include "isdn_divert.h"
 
 /*********************************/

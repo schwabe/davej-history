@@ -1,11 +1,31 @@
 /*
- * $Id: b1dma.c,v 1.5 2000/06/19 16:51:53 keil Exp $
+ * $Id: b1dma.c,v 1.11 2000/11/19 17:02:47 kai Exp $
  * 
  * Common module for AVM B1 cards that support dma with AMCC
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1dma.c,v $
+ * Revision 1.11  2000/11/19 17:02:47  kai
+ * compatibility cleanup - part 3
+ *
+ * Revision 1.10  2000/11/19 17:01:53  kai
+ * compatibility cleanup - part 2
+ *
+ * Revision 1.9  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.8  2000/10/10 17:44:19  kai
+ * changes from/for 2.2.18
+ *
+ * Revision 1.7  2000/08/04 12:20:08  calle
+ * - Fix unsigned/signed warning in the right way ...
+ *
+ * Revision 1.6  2000/06/29 13:59:06  calle
+ * Bugfix: reinit txdma without interrupt will confuse some AMCC chips.
+ *
  * Revision 1.5  2000/06/19 16:51:53  keil
  * don't free skb in irq context
  *
@@ -34,13 +54,14 @@
 #include <linux/ioport.h>
 #include <linux/capi.h>
 #include <asm/io.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include "capilli.h"
 #include "avmcard.h"
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.11 $";
+static char *revision = "$Revision: 1.11.6.1 $";
 
 /* ------------------------------------------------------------- */
 
@@ -963,11 +984,6 @@ EXPORT_SYMBOL(b1dma_release_appl);
 EXPORT_SYMBOL(b1dma_send_message);
 EXPORT_SYMBOL(b1dmactl_read_proc);
 
-#ifdef MODULE
-#define b1dma_init init_module
-void cleanup_module(void);
-#endif
-
 int b1dma_init(void)
 {
 	char *p;
@@ -985,8 +1001,9 @@ int b1dma_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+void b1dma_exit(void)
 {
 }
-#endif
+
+module_init(b1dma_init);
+module_exit(b1dma_exit);

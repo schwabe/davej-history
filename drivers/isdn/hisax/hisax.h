@@ -1,4 +1,4 @@
-/* $Id: hisax.h,v 2.52.6.1 2000/12/06 16:59:19 kai Exp $
+/* $Id: hisax.h,v 2.52.6.2 2001/02/10 14:41:22 kai Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -16,7 +16,7 @@
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
 #include <linux/ioport.h>
@@ -475,6 +475,7 @@ struct amd7930_hw {
 #define L1_MODE_TRANS	1
 #define L1_MODE_HDLC	2
 #define L1_MODE_EXTRN	3
+#define L1_MODE_HDLC_56K 4
 #define L1_MODE_MODEM	7
 #define L1_MODE_V32	8
 #define L1_MODE_FAX	9
@@ -1348,17 +1349,3 @@ char *HiSax_getrev(const char *revision);
 void TeiNew(void);
 void TeiFree(void);
 int certification_check(int output);
-#ifdef __powerpc__
-#include <linux/pci.h>
-static inline int pci_enable_device(struct pci_dev *dev)
-{
-	u16 cmd;
-	pci_read_config_word(dev, PCI_COMMAND, &cmd);
-	cmd |= PCI_COMMAND_MEMORY | PCI_COMMAND_IO | PCI_COMMAND_SERR;
-	cmd &= ~PCI_COMMAND_FAST_BACK;
-	pci_write_config_word(dev, PCI_COMMAND, cmd);
-	return(0);
-}
-#else
-#define pci_enable_device(dev)	!dev
-#endif /* __powerpc__ */

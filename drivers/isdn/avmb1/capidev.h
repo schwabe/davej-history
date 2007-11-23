@@ -61,7 +61,7 @@ struct capidev {
 	unsigned int    minor;
 
 	struct sk_buff_head recv_queue;
-	struct wait_queue *recv_wait;
+	wait_queue_head_t recv_wait;
 
 	/* Statistic */
 	unsigned long	nrecvctlpkt;

@@ -1,11 +1,29 @@
 /*
- * $Id: t1isa.c,v 1.11 2000/04/03 13:29:25 calle Exp $
+ * $Id: t1isa.c,v 1.16 2000/11/23 20:45:14 kai Exp $
  * 
  * Module for AVM T1 HEMA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: t1isa.c,v $
+ * Revision 1.16  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.15  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.14  2000/10/10 17:44:19  kai
+ * changes from/for 2.2.18
+ *
+ * Revision 1.13  2000/08/04 15:36:31  calle
+ * copied wrong from file to file :-(
+ *
+ * Revision 1.12  2000/08/04 12:20:08  calle
+ * - Fix unsigned/signed warning in the right way ...
+ *
  * Revision 1.11  2000/04/03 13:29:25  calle
  * make Tim Waugh happy (module unload races in 2.3.99-pre3).
  * no real problem there, but now it is much cleaner ...
@@ -79,6 +97,7 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/capi.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include "capicmd.h"
 #include "capiutil.h"
@@ -598,12 +617,7 @@ static struct capi_driver t1isa_driver = {
     add_card: t1isa_add_card,
 };
 
-#ifdef MODULE
-#define t1isa_init init_module
-void cleanup_module(void);
-#endif
-
-int t1isa_init(void)
+static int __init t1isa_init(void)
 {
 	struct capi_driver *driver = &t1isa_driver;
 	char *p;
@@ -631,9 +645,10 @@ int t1isa_init(void)
 	return retval;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void  t1isa_exit(void)
 {
     detach_capi_driver(&t1isa_driver);
 }
-#endif
+
+module_init(t1isa_init);
+module_exit(t1isa_exit);

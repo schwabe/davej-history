@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.111 2000/11/25 17:01:02 kai Exp $
+/* $Id: isdn.h,v 1.111.6.3 2001/02/10 14:44:10 kai Exp $
 
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -538,8 +538,7 @@ typedef struct modem_info {
   atemu                 emu;             /* AT-emulator data               */
   struct termios	normal_termios;  /* For saving termios structs     */
   struct termios	callout_termios;
-  struct wait_queue	*open_wait;
-  struct wait_queue	*close_wait;
+  wait_queue_head_t	open_wait, close_wait;
   struct semaphore      write_sem;
 } modem_info;
 

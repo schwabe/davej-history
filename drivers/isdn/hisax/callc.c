@@ -878,6 +878,7 @@ release_b_st(struct Channel *chanp)
 				releasestack_isdnl2(st);
 				break;
 			case (ISDN_PROTO_L2_HDLC):
+			case (ISDN_PROTO_L2_HDLC_56K):
 			case (ISDN_PROTO_L2_TRANS):
 			case (ISDN_PROTO_L2_MODEM):
 			case (ISDN_PROTO_L2_FAX):
@@ -1271,6 +1272,9 @@ init_b_st(struct Channel *chanp, int incoming)
 		case (ISDN_PROTO_L2_HDLC):
 			st->l1.mode = L1_MODE_HDLC;
 			break;
+		case (ISDN_PROTO_L2_HDLC_56K):
+			st->l1.mode = L1_MODE_HDLC_56K;
+			break;
 		case (ISDN_PROTO_L2_TRANS):
 			st->l1.mode = L1_MODE_TRANS;
 			break;
@@ -1307,6 +1311,7 @@ init_b_st(struct Channel *chanp, int incoming)
 			st->l2.debug = chanp->debug & 64;
 			break;
 		case (ISDN_PROTO_L2_HDLC):
+		case (ISDN_PROTO_L2_HDLC_56K):
 		case (ISDN_PROTO_L2_TRANS):
 		case (ISDN_PROTO_L2_MODEM):
 		case (ISDN_PROTO_L2_FAX):

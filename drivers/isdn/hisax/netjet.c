@@ -1,4 +1,4 @@
-/* $Id: netjet.c,v 1.24.6.2 2000/12/17 22:45:11 kai Exp $
+/* $Id: netjet.c,v 1.24.6.3 2001/02/13 10:33:58 kai Exp $
  *
  * netjet.c     low level stuff for Traverse Technologie NETJet ISDN cards
  *
@@ -16,13 +16,12 @@
 #include "isac.h"
 #include "hscx.h"
 #include "isdnl1.h"
-#include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/ppp_defs.h>
 #include <asm/io.h>
 #include "netjet.h"
 
-const char *NETjet_revision = "$Revision: 1.24.6.2 $";
+const char *NETjet_revision = "$Revision: 1.24.6.3 $";
 
 /* Interface functions */
 
@@ -155,7 +154,8 @@ mode_tiger(struct BCState *bcs, int mode, int bc)
 			break;
 		case (L1_MODE_TRANS):
 			break;
-		case (L1_MODE_HDLC): 
+		case (L1_MODE_HDLC_56K):
+		case (L1_MODE_HDLC):
 			fill_mem(bcs, bcs->hw.tiger.send,
 				NETJET_DMA_TXSIZE, bc, 0xff);
 			bcs->hw.tiger.r_state = HDLC_ZERO_SEARCH;
@@ -170,7 +170,8 @@ mode_tiger(struct BCState *bcs, int mode, int bc)
 				cs->hw.njet.dmactrl = 1;
 				byteout(cs->hw.njet.base + NETJET_DMACTRL,
 					cs->hw.njet.dmactrl);
-				byteout(cs->hw.njet.base + NETJET_IRQMASK0, 0x3f);
+				byteout(cs->hw.njet.base + NETJET_IRQMASK0, 0x0f);
+			/* was 0x3f now 0x0f for TJ300 and TJ320  GE 13/07/00 */
 			}
 			bcs->hw.tiger.sendp = bcs->hw.tiger.send;
 			bcs->hw.tiger.free = NETJET_DMA_TXSIZE;
@@ -208,6 +209,8 @@ static void printframe(struct IsdnCardState *cs, u_char *buf, int count, char *s
 	}
 }
 
+// macro for 64k
+
 #define MAKE_RAW_BYTE for (j=0; j<8; j++) { \
 			bitcnt++;\
 			s_val >>= 1;\
@@ -236,6 +239,7 @@ static void printframe(struct IsdnCardState *cs, u_char *buf, int count, char *s
 		}
 
 static int make_raw_data(struct BCState *bcs) {
+// this make_raw is for 64k
 	register u_int i,s_cnt=0;
 	register u_char j;
 	register u_char val;
@@ -291,6 +295,113 @@ static int make_raw_data(struct BCState *bcs) {
 	return(0);
 }
 
+// macro for 56k
+
+#define MAKE_RAW_BYTE_56K for (j=0; j<8; j++) { \
+			bitcnt++;\
+			s_val >>= 1;\
+			if (val & 1) {\
+				s_one++;\
+				s_val |= 0x80;\
+			} else {\
+				s_one = 0;\
+				s_val &= 0x7f;\
+			}\
+			if (bitcnt==7) {\
+				s_val >>= 1;\
+				s_val |= 0x80;\
+				bcs->hw.tiger.sendbuf[s_cnt++] = s_val;\
+				bitcnt = 0;\
+			}\
+			if (s_one == 5) {\
+				s_val >>= 1;\
+				s_val &= 0x7f;\
+				bitcnt++;\
+				s_one = 0;\
+			}\
+			if (bitcnt==7) {\
+				s_val >>= 1;\
+				s_val |= 0x80;\
+				bcs->hw.tiger.sendbuf[s_cnt++] = s_val;\
+				bitcnt = 0;\
+			}\
+			val >>= 1;\
+		}
+
+static int make_raw_data_56k(struct BCState *bcs) {
+// this make_raw is for 56k
+	register u_int i,s_cnt=0;
+	register u_char j;
+	register u_char val;
+	register u_char s_one = 0;
+	register u_char s_val = 0;
+	register u_char bitcnt = 0;
+	u_int fcs;
+	
+	if (!bcs->tx_skb) {
+		debugl1(bcs->cs, "tiger make_raw_56k: NULL skb");
+		return(1);
+	}
+	val = HDLC_FLAG_VALUE;
+	for (j=0; j<8; j++) { 
+		bitcnt++;
+		s_val >>= 1;
+		if (val & 1)
+			s_val |= 0x80;
+		else
+			s_val &= 0x7f;
+		if (bitcnt==7) {
+			s_val >>= 1;
+			s_val |= 0x80;
+			bcs->hw.tiger.sendbuf[s_cnt++] = s_val;
+			bitcnt = 0;
+		}
+		val >>= 1;
+	};
+	fcs = PPP_INITFCS;
+	for (i=0; i<bcs->tx_skb->len; i++) {
+		val = bcs->tx_skb->data[i];
+		fcs = PPP_FCS (fcs, val);
+		MAKE_RAW_BYTE_56K;
+	}
+	fcs ^= 0xffff;
+	val = fcs & 0xff;
+	MAKE_RAW_BYTE_56K;
+	val = (fcs>>8) & 0xff;
+	MAKE_RAW_BYTE_56K;
+	val = HDLC_FLAG_VALUE;
+	for (j=0; j<8; j++) { 
+		bitcnt++;
+		s_val >>= 1;
+		if (val & 1)
+			s_val |= 0x80;
+		else
+			s_val &= 0x7f;
+		if (bitcnt==7) {
+			s_val >>= 1;
+			s_val |= 0x80;
+			bcs->hw.tiger.sendbuf[s_cnt++] = s_val;
+			bitcnt = 0;
+		}
+		val >>= 1;
+	}
+	if (bcs->cs->debug & L1_DEB_HSCX)
+		debugl1(bcs->cs,"tiger make_raw_56k: in %ld out %d.%d",
+			bcs->tx_skb->len, s_cnt, bitcnt);
+	if (bitcnt) {
+		while (8>bitcnt++) {
+			s_val >>= 1;
+			s_val |= 0x80;
+		}
+		bcs->hw.tiger.sendbuf[s_cnt++] = s_val;
+		bcs->hw.tiger.sendbuf[s_cnt++] = 0xff;	// NJ<->NJ thoughput bug fix
+	}
+	bcs->hw.tiger.sendcnt = s_cnt;
+	bcs->tx_cnt -= bcs->tx_skb->len;
+	bcs->hw.tiger.sp = bcs->hw.tiger.sendbuf;
+	return(0);
+}
+
 static void got_frame(struct BCState *bcs, int count) {
 	struct sk_buff *skb;
 		
@@ -320,20 +431,30 @@ static void read_raw(struct BCState *bcs, u_int *buf, int cnt){
 	register u_char r_val = bcs->hw.tiger.r_val;
 	register u_int bitcnt = bcs->hw.tiger.r_bitcnt;
 	u_int *p = buf;
-        
+	int bits;
+	u_char mask;
+
+        if (bcs->mode == L1_MODE_HDLC) { // it's 64k
+		mask = 0xff;
+		bits = 8;
+	}
+	else { // it's 56K
+		mask = 0x7f;
+		bits = 7;
+	};
 	for (i=0;i<cnt;i++) {
 		val = bcs->channel ? ((*p>>8) & 0xff) : (*p & 0xff);
 		p++;
 		if (p > pend)
 			p = bcs->hw.tiger.rec;
-		if (val == 0xff) {
+		if ((val & mask) == mask) {
 			state = HDLC_ZERO_SEARCH;
 			bcs->hw.tiger.r_tot++;
 			bitcnt = 0;
 			r_one = 0;
 			continue;
 		}
-		for (j=0;j<8;j++) {
+		for (j=0;j<bits;j++) {
 			if (state == HDLC_ZERO_SEARCH) {
 				if (val & 1) {
 					r_one++;
@@ -499,9 +620,10 @@ void read_tiger(struct IsdnCardState *cs) {
 		p = cs->bcs[0].hw.tiger.rec + NETJET_DMA_RXSIZE - 1;
 	else
 		p = cs->bcs[0].hw.tiger.rec + cnt - 1;
-	if (cs->bcs[0].mode == L1_MODE_HDLC)
+	if ((cs->bcs[0].mode == L1_MODE_HDLC) || (cs->bcs[0].mode == L1_MODE_HDLC_56K))
 		read_raw(cs->bcs, p, cnt);
-	if (cs->bcs[1].mode == L1_MODE_HDLC)
+
+	if ((cs->bcs[1].mode == L1_MODE_HDLC) || (cs->bcs[1].mode == L1_MODE_HDLC_56K))
 		read_raw(cs->bcs + 1, p, cnt);
 	cs->hw.njet.irqstat0 &= ~NETJET_IRQM0_READ;
 }
@@ -520,8 +642,14 @@ void netjet_fill_dma(struct BCState *bcs)
 			bcs->Flag);
 	if (test_and_set_bit(BC_FLG_BUSY, &bcs->Flag))
 		return;
-	if (make_raw_data(bcs))
-		return;		
+	if (bcs->mode == L1_MODE_HDLC) { // it's 64k
+		if (make_raw_data(bcs))
+			return;		
+	}
+	else { // it's 56k
+		if (make_raw_data_56k(bcs))
+			return;		
+	};
 	if (bcs->cs->debug & L1_DEB_HSCX)
 		debugl1(bcs->cs,"tiger fill_dma2: c%d %4x", bcs->channel,
 			bcs->Flag);
@@ -676,9 +804,9 @@ void write_tiger(struct IsdnCardState *cs) {
 		p = cs->bcs[0].hw.tiger.send + NETJET_DMA_TXSIZE - 1;
 	else
 		p = cs->bcs[0].hw.tiger.send + cnt - 1;
-	if (cs->bcs[0].mode == L1_MODE_HDLC)
+	if ((cs->bcs[0].mode == L1_MODE_HDLC) || (cs->bcs[0].mode == L1_MODE_HDLC_56K))
 		write_raw(cs->bcs, p, cnt);
-	if (cs->bcs[1].mode == L1_MODE_HDLC)
+	if ((cs->bcs[1].mode == L1_MODE_HDLC) || (cs->bcs[1].mode == L1_MODE_HDLC_56K))
 		write_raw(cs->bcs + 1, p, cnt);
 	cs->hw.njet.irqstat0 &= ~NETJET_IRQM0_WRITE;
 }

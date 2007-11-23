@@ -1,11 +1,37 @@
 /*
- * $Id: b1pci.c,v 1.25 2000/05/29 12:29:18 keil Exp $
+ * $Id: b1pci.c,v 1.29.6.1 2000/11/28 12:02:45 kai Exp $
  * 
  * Module for AVM B1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pci.c,v $
+ * Revision 1.29.6.1  2000/11/28 12:02:45  kai
+ * MODULE_DEVICE_TABLE for 2.4
+ *
+ * Revision 1.29.2.2  2000/11/26 17:47:53  kai
+ * added PCI_DEV_TABLE for 2.4
+ *
+ * Revision 1.29.2.1  2000/11/26 17:14:19  kai
+ * fix device ids
+ * also needs patches to include/linux/pci_ids.h
+ *
+ * Revision 1.29  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.28  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.27  2000/08/08 09:24:19  calle
+ * calls to pci_enable_device surounded by #ifndef COMPAT_HAS_2_2_PCI
+ *
+ * Revision 1.26  2000/07/20 10:21:21  calle
+ * Bugfix: driver will not be unregistered, if not cards were detected.
+ *         this result in an oops in kcapi.c
+ *
  * Revision 1.25  2000/05/29 12:29:18  keil
  * make pci_enable_dev compatible to 2.2 kernel versions
  *
@@ -87,7 +113,8 @@
 #include <linux/pci.h>
 #include <linux/capi.h>
 #include <asm/io.h>
-#include <linux/isdn.h>
+#include <linux/init.h>
+#include <linux/isdn_compat.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
@@ -465,11 +492,6 @@ static struct capi_driver b1pciv4_driver = {
 
 #endif /* CONFIG_ISDN_DRV_AVMB1_B1PCIV4 */
 
-#ifdef MODULE
-#define b1pci_init init_module
-void cleanup_module(void);
-#endif
-
 static int ncards = 0;
 
 static int add_card(struct pci_dev *dev)
@@ -491,9 +513,6 @@ static int add_card(struct pci_dev *dev)
 		        printk(KERN_ERR
 			"%s: failed to enable AVM-B1 V4 at i/o %#x, irq %d, mem %#x err=%d\n",
 			driver->name, param.port, param.irq, param.membase, retval);
-#ifdef MODULE
-			cleanup_module();
-#endif
 			MOD_DEC_USE_COUNT;
 			return -EIO;
 		}
@@ -521,9 +540,6 @@ static int add_card(struct pci_dev *dev)
 		        printk(KERN_ERR
 			"%s: failed to enable AVM-B1 at i/o %#x, irq %d, err=%d\n",
 			driver->name, param.port, param.irq, retval);
-#ifdef MODULE
-			cleanup_module();
-#endif
 			MOD_DEC_USE_COUNT;
 			return -EIO;
 		}
@@ -540,7 +556,7 @@ static int add_card(struct pci_dev *dev)
 	return retval;
 }
 
-int b1pci_init(void)
+static int __init b1pci_init(void)
 {
 	struct capi_driver *driver = &b1pci_driver;
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
@@ -603,9 +619,6 @@ int b1pci_init(void)
 	while ((dev = pci_find_device(PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_B1, dev))) {
 		retval = add_card(dev);
 		if (retval != 0) {
-#ifdef MODULE
-			cleanup_module();
-#endif
 			MOD_DEC_USE_COUNT;
 			return retval;
 		}
@@ -627,12 +640,13 @@ int b1pci_init(void)
 #endif
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void  b1pci_exit(void)
 {
     detach_capi_driver(&b1pci_driver);
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
     detach_capi_driver(&b1pciv4_driver);
 #endif
 }
-#endif
+
+module_init(b1pci_init);
+module_exit(b1pci_exit);

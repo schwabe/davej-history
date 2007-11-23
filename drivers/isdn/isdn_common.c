@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.114.6.3 2000/12/18 22:14:09 kai Exp $
+/* $Id: isdn_common.c,v 1.114.6.7 2001/02/10 14:41:19 kai Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -24,6 +24,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/version.h>
 #include <linux/poll.h>
 #include <linux/vmalloc.h>
@@ -40,7 +41,6 @@
 #include <linux/isdn_divertif.h>
 #endif CONFIG_ISDN_DIVERSION
 #include "isdn_v110.h"
-#include "isdn_cards.h"
 
 /* Debugflags */
 #undef ISDN_DEBUG_STATCALLB
@@ -2230,12 +2230,6 @@ register_isdn(isdn_if * i)
  *****************************************************************************
  */
 
-extern int printk(const char *fmt,...);
-
-#ifdef MODULE
-#define isdn_init init_module
-#endif
-
 static char *
 isdn_getrev(const char *revision)
 {
@@ -2255,8 +2249,7 @@ isdn_getrev(const char *revision)
 /*
  * Allocate and initialize all data, register modem-devices
  */
-int
-isdn_init(void)
+static int __init isdn_init(void)
 {
 	int i;
 	char tmprev[50];
@@ -2323,18 +2316,15 @@ isdn_init(void)
 	printk(" loaded\n");
 #else
 	printk("\n");
-	isdn_cards_init();
 #endif
 	isdn_info_update();
 	return 0;
 }
 
-#ifdef MODULE
 /*
  * Unload module
  */
-void
-cleanup_module(void)
+static void  isdn_exit(void)
 {
 	int flags;
 	int i;
@@ -2377,4 +2367,6 @@ cleanup_module(void)
 		printk(KERN_NOTICE "ISDN-subsystem unloaded\n");
 	}
 }
-#endif
+
+module_init(isdn_init);
+module_exit(isdn_exit);

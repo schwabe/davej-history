@@ -1,11 +1,31 @@
 /*
- * $Id: kcapi.c,v 1.17 2000/04/21 13:00:56 calle Exp $
+ * $Id: kcapi.c,v 1.21.6.1 2000/12/10 23:39:19 kai Exp $
  * 
  * Kernel CAPI 2.0 Module
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kcapi.c,v $
+ * Revision 1.21.6.1  2000/12/10 23:39:19  kai
+ * in 2.4 we don't have tq_scheduler anymore.
+ * also add one supported card to hfc_pci.c
+ * (from main branch)
+ *
+ * Revision 1.21  2000/11/23 20:45:14  kai
+ * fixed module_init/exit stuff
+ * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
+ *
+ * Revision 1.20  2000/11/19 17:01:53  kai
+ * compatibility cleanup - part 2
+ *
+ * Revision 1.19  2000/11/01 14:05:02  calle
+ * - use module_init/module_exit from linux/init.h.
+ * - all static struct variables are initialized with "membername:" now.
+ * - avm_cs.c, let it work with newer pcmcia-cs.
+ *
+ * Revision 1.18  2000/07/20 10:22:27  calle
+ * - Made procfs function cleaner and removed variable "begin".
+ *
  * Revision 1.17  2000/04/21 13:00:56  calle
  * Bugfix: driver_proc_info was also wrong.
  *
@@ -107,6 +127,7 @@
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
 #include <linux/locks.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 #include "capicmd.h"
 #include "capiutil.h"
@@ -1487,7 +1508,7 @@ static int old_capi_manufacturer(unsigned int cmd, void *data)
 
 		while (card->cardstate != CARD_RUNNING) {
 
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(HZ/10);	/* 0.1 sec */
 
 			if (signal_pending(current))
@@ -1512,7 +1533,7 @@ static int old_capi_manufacturer(unsigned int cmd, void *data)
 
 		while (card->cardstate > CARD_DETECTED) {
 
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(HZ/10);	/* 0.1 sec */
 
 			if (signal_pending(current))
@@ -1563,7 +1584,7 @@ static int old_capi_manufacturer(unsigned int cmd, void *data)
 
 		while (card->cardstate != CARD_FREE) {
 
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(HZ/10);	/* 0.1 sec */
 
 			if (signal_pending(current))
@@ -1721,36 +1742,11 @@ EXPORT_SYMBOL(detach_capi_interface);
 EXPORT_SYMBOL(attach_capi_driver);
 EXPORT_SYMBOL(detach_capi_driver);
 
-#ifndef MODULE
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
-extern int b1isa_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
-extern int b1pci_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
-extern int t1isa_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-extern int b1pcmcia_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
-extern int t1pci_init(void);
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_C4
-extern int c4_init(void);
-#endif
-#endif
-
 /*
  * init / exit functions
  */
 
-#ifdef MODULE
-#define kcapi_init init_module
-#endif
-
-int kcapi_init(void)
+static int __init kcapi_init(void)
 {
 	char *p;
 	char rev[10];
@@ -1778,31 +1774,12 @@ int kcapi_init(void)
         printk(KERN_NOTICE "CAPI-driver Rev%s: loaded\n", rev);
 #else
 	printk(KERN_NOTICE "CAPI-driver Rev%s: started\n", rev);
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
-	(void)b1isa_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
-	(void)b1pci_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
-	(void)t1isa_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-	(void)b1pcmcia_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
-	(void)t1pci_init();
-#endif
-#ifdef CONFIG_ISDN_DRV_AVMB1_C4
-	(void)c4_init();
-#endif
 #endif
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void  kcapi_exit(void)
 {
 	char rev[10];
 	char *p;
@@ -1818,4 +1795,6 @@ void cleanup_module(void)
         proc_capi_exit();
 	printk(KERN_NOTICE "CAPI-driver Rev%s: unloaded\n", rev);
 }
-#endif
+
+module_init(kcapi_init);
+module_exit(kcapi_exit);

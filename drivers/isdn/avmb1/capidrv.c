@@ -1,11 +1,14 @@
 /*
- * $Id: capidrv.c,v 1.39 2000/11/23 20:45:14 kai Exp $
+ * $Id: capidrv.c,v 1.39.6.1 2001/02/10 14:41:20 kai Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.39.6.1  2001/02/10 14:41:20  kai
+ * Changes from kernel tree
+ *
  * Revision 1.39  2000/11/23 20:45:14  kai
  * fixed module_init/exit stuff
  * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
@@ -198,7 +201,7 @@
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/sched.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/fcntl.h>
 #include <linux/fs.h>
 #include <linux/signal.h>
@@ -212,13 +215,14 @@
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
 #include <linux/ctype.h>
+#include <linux/init.h>
 #include <asm/segment.h>
 
 #include "capiutil.h"
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.39 $";
+static char *revision = "$Revision: 1.39.6.1 $";
 static int debugmode = 0;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
@@ -2448,7 +2452,7 @@ static struct procfsentries {
    { "capi/capidrv", 	  0	 , proc_capidrv_read_proc },
 };
 
-static void proc_init(void)
+static void __init proc_init(void)
 {
     int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
     int i;
@@ -2460,7 +2464,7 @@ static void proc_init(void)
     }
 }
 
-static void proc_exit(void)
+static void  proc_exit(void)
 {
     int nelem = sizeof(procfsentries)/sizeof(procfsentries[0]);
     int i;
@@ -2479,11 +2483,7 @@ static struct capi_interface_user cuser = {
 	callback: lower_callback
 };
 
-#ifdef MODULE
-#define capidrv_init init_module
-#endif
-
-int capidrv_init(void)
+static int __init capidrv_init(void)
 {
 	struct capi_register_params rparam;
 	capi_profile profile;
@@ -2543,8 +2543,7 @@ int capidrv_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void  capidrv_exit(void)
 {
 	char rev[10];
 	char *p;
@@ -2566,4 +2565,5 @@ void cleanup_module(void)
 	printk(KERN_NOTICE "capidrv: Rev%s: unloaded\n", rev);
 }
 
-#endif
+module_init(capidrv_init);
+module_exit(capidrv_exit);

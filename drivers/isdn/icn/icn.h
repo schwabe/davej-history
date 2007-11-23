@@ -1,4 +1,4 @@
-/* $Id: icn.h,v 1.30 2000/11/13 22:51:48 kai Exp $
+/* $Id: icn.h,v 1.30.6.1 2001/02/10 14:41:23 kai Exp $
 
  * ISDN lowlevel-module for the ICN active ISDN-Card.
  *
@@ -55,7 +55,7 @@ typedef struct icn_cdef {
 #include <asm/io.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
 #include <linux/ioport.h>

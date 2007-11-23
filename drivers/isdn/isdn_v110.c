@@ -1,4 +1,4 @@
-/* $Id: isdn_v110.c,v 1.5.6.1 2001/01/23 17:45:02 kai Exp $
+/* $Id: isdn_v110.c,v 1.5.6.2 2001/02/10 14:41:19 kai Exp $
 
  * Linux ISDN subsystem, V.110 related functions (linklevel).
  *
@@ -22,7 +22,7 @@
 
 #include <linux/string.h>
 #include <linux/kernel.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/mm.h>
 
 #include <linux/isdn.h>
@@ -30,7 +30,7 @@
 
 #undef ISDN_V110_DEBUG
 
-char *isdn_v110_revision = "$Revision: 1.5.6.1 $";
+char *isdn_v110_revision = "$Revision: 1.5.6.2 $";
 
 #define V110_38400 255
 #define V110_19200  15

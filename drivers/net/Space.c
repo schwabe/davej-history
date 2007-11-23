@@ -127,6 +127,7 @@ extern int lance_probe(struct device *dev);
 extern int rcpci_probe(struct device *);
 extern int dmfe_probe(struct device *);
 extern int sktr_probe(struct device *dev);
+extern int starfire_probe(struct device *dev);
 
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct device *dev);
@@ -278,9 +279,12 @@ struct devprobe pci_probes[] __initdata = {
 #ifdef CONFIG_VIA_RHINE
 	{via_rhine_probe, 0},
 #endif
-#ifdef CONFI_NET_DM9102
+#ifdef CONFIG_NET_DM9102
 	{dmfe_probe, 0},
-#endif	
+#endif
+#ifdef CONFIG_ADAPTEC_STARFIRE
+	{starfire_probe, 0},
+#endif
 	{NULL, 0},
 };
 

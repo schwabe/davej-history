@@ -1,4 +1,4 @@
-/* $Id: sedlbauer.c,v 1.25.6.2 2000/11/29 17:48:59 kai Exp $
+/* $Id: sedlbauer.c,v 1.25.6.3 2001/02/13 10:33:58 kai Exp $
  *
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
@@ -49,10 +49,11 @@
 #include "isar.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
+#include <linux/isdn_compat.h>
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.25.6.2 $";
+const char *Sedlbauer_revision = "$Revision: 1.25.6.3 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 
@@ -529,7 +530,7 @@ Sedl_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static 	struct pci_dev *dev_sedl  = NULL;
+static struct pci_dev *dev_sedl  = NULL;
 
 int 
 setup_sedlbauer(struct IsdnCard *card)

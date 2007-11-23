@@ -1,4 +1,4 @@
-/* $Id: act2000.h,v 1.8 2000/11/12 16:32:06 kai Exp $
+/* $Id: act2000.h,v 1.8.6.1 2001/02/10 14:41:20 kai Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000.
  *
@@ -88,7 +88,7 @@ typedef struct act2000_fwid {
 #include <asm/io.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
 #include <linux/ioport.h>

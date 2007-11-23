@@ -12,9 +12,9 @@
  *
  */
 #define __NO_VERSION__
-#include <linux/init.h>
 #include "hisax.h"
 #include "isdnl2.h"
+#include <linux/init.h>
 #include <linux/random.h>
 
 const char *tei_revision = "$Revision: 2.17 $";

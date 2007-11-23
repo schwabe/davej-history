@@ -1,5 +1,4 @@
-/* $Id: config.c,v 2.57.6.7 2000/12/17 16:47:17 kai Exp $
- *
+/* $Id: config.c,v 2.57.6.8 2001/01/23 17:45:02 kai Exp $
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
@@ -435,11 +434,9 @@ HiSax_mod_inc_use_count(void)
 	MOD_INC_USE_COUNT;
 }
 
-#ifdef MODULE
-#define HiSax_init init_module
-#else
-__initfunc(void
-HiSax_setup(char *str, int *ints))
+#ifndef MODULE
+static void __init
+HiSax_setup(char *str, int *ints)
 {
 	int i, j, argc;
 	argc = ints[0];
@@ -961,6 +958,7 @@ checkcard(int cardnr, char *id, int *busy_flag)
 		cs->iif.features =
 			ISDN_FEATURE_L2_X75I |
 			ISDN_FEATURE_L2_HDLC |
+			ISDN_FEATURE_L2_HDLC_56K |
 			ISDN_FEATURE_L2_TRANS |
 			ISDN_FEATURE_L3_TRANS |
 #ifdef	CONFIG_HISAX_1TR6
@@ -1318,21 +1316,21 @@ HiSax_reportcard(int cardnr, int sel)
 #endif
 }
 
-
-__initfunc(int
-HiSax_init(void))
+static int __init HiSax_init(void)
 {
 	int i,j;
+	int nzproto = 0;
+
+	HiSaxVersion();
+	CallcNew();
+	Isdnl3New();
+	Isdnl2New();
+	TeiNew();
+	Isdnl1New();
 
 #ifdef MODULE
-	int nzproto = 0;
 	if (!type[0]) {
 		/* We 'll register drivers later, but init basic functions*/
-		CallcNew();
-		Isdnl3New();
-		Isdnl2New();
-		TeiNew();
-		Isdnl1New();
 		return 0;
 	}
 #ifdef CONFIG_HISAX_ELSA
@@ -1361,7 +1359,6 @@ HiSax_init(void))
 #endif
 #endif
 	nrcards = 0;
-	HiSaxVersion();
 #ifdef MODULE
 	if (id)			/* If id= string used */
 		HiSax_id = id;
@@ -1463,7 +1460,6 @@ HiSax_init(void))
 	}
 	if (!nzproto) {
 		printk(KERN_WARNING "HiSax: Warning - no protocol specified\n");
-		printk(KERN_WARNING "HiSax: Note! module load syntax has changed.\n");
 		printk(KERN_WARNING "HiSax: using protocol %s\n", DEFAULT_PROTO_NAME);
 	}
 #endif
@@ -1477,15 +1473,8 @@ HiSax_init(void))
 	printk(KERN_DEBUG "HiSax: Total %d card%s defined\n",
 	       nrcards, (nrcards > 1) ? "s" : "");
 
-	CallcNew();
-	Isdnl3New();
-	Isdnl2New();
-	TeiNew();
-	Isdnl1New();
 	if (HiSax_inithardware(NULL)) {
 		/* Install only, if at least one card found */
-#ifdef MODULE
-#endif /* MODULE */
 		return (0);
 	} else {
 		Isdnl1Free();
@@ -1497,9 +1486,7 @@ HiSax_init(void))
 	}
 }
 
-#ifdef MODULE
-void
-cleanup_module(void)
+static void  HiSax_exit(void)
 {
 	int cardnr = nrcards -1;
 	long flags;
@@ -1516,17 +1503,14 @@ cleanup_module(void)
 	restore_flags(flags);
 	printk(KERN_INFO "HiSax module removed\n");
 }
-#endif
 
 #ifdef CONFIG_HISAX_ELSA
 int elsa_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 {
 #ifdef MODULE
 	int i;
-	int nzproto = 0;
 
 	nrcards = 0;
-	HiSaxVersion();
 	/* Initialize all structs, even though we only accept
 	   two pcmcia cards
 	   */
@@ -1536,14 +1520,12 @@ int elsa_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 		cards[i].typ = type[i];
 		if (protocol[i]) {
 			cards[i].protocol = protocol[i];
-			nzproto++;
 		}
 	}
 	cards[0].para[0] = pcm_irq;
 	cards[0].para[1] = (int)pcm_iob;
 	cards[0].protocol = prot;
-	cards[0].typ = 10;
-	nzproto = 1;
+	cards[0].typ = ISDN_CTYPE_ELSA_PCMCIA;
 
 	if (!HiSax_id)
 		HiSax_id = HiSaxID;
@@ -1555,11 +1537,6 @@ int elsa_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	printk(KERN_DEBUG "HiSax: Total %d card%s defined\n",
 	       nrcards, (nrcards > 1) ? "s" : "");
 
-	Isdnl1New();
-	CallcNew();
-	Isdnl3New();
-	Isdnl2New();
-	TeiNew();
 	HiSax_inithardware(busy_flag);
 	printk(KERN_NOTICE "HiSax: module installed\n");
 #endif
@@ -1575,7 +1552,6 @@ int hfc_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	int nzproto = 0;
 
 	nrcards = 0;
-	HiSaxVersion();
 	/* Initialize all structs, even though we only accept
 	   two pcmcia cards
 	   */
@@ -1604,11 +1580,6 @@ int hfc_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	printk(KERN_DEBUG "HiSax: Total %d card%s defined\n",
 	       nrcards, (nrcards > 1) ? "s" : "");
 
-	Isdnl1New();
-	CallcNew();
-	Isdnl3New();
-	Isdnl2New();
-	TeiNew();
 	HiSax_inithardware(busy_flag);
 	printk(KERN_NOTICE "HiSax: module installed\n");
 #endif
@@ -1624,7 +1595,6 @@ int sedl_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	int nzproto = 0;
 
 	nrcards = 0;
-	HiSaxVersion();
 	/* Initialize all structs, even though we only accept
 	   two pcmcia cards
 	   */
@@ -1653,11 +1623,6 @@ int sedl_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	printk(KERN_DEBUG "HiSax: Total %d card%s defined\n",
 	       nrcards, (nrcards > 1) ? "s" : "");
 
-	CallcNew();
-	Isdnl3New();
-	Isdnl2New();
-	Isdnl1New();
-	TeiNew();
 	HiSax_inithardware(busy_flag);
 	printk(KERN_NOTICE "HiSax: module installed\n");
 #endif
@@ -1673,7 +1638,6 @@ int avm_a1_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	int nzproto = 0;
 
 	nrcards = 0;
-	HiSaxVersion();
 	/* Initialize all structs, even though we only accept
 	   two pcmcia cards
 	   */
@@ -1702,11 +1666,6 @@ int avm_a1_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	printk(KERN_DEBUG "HiSax: Total %d card%s defined\n",
 	       nrcards, (nrcards > 1) ? "s" : "");
 
-	Isdnl1New();
-	CallcNew();
-	Isdnl3New();
-	Isdnl2New();
-	TeiNew();
 	HiSax_inithardware(busy_flag);
 	printk(KERN_NOTICE "HiSax: module installed\n");
 #endif
@@ -1714,7 +1673,7 @@ int avm_a1_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 }
 #endif
 
-int hisax_init_pcmcia(void *pcm_iob, int *busy_flag, struct IsdnCard *card)
+int  hisax_init_pcmcia(void *pcm_iob, int *busy_flag, struct IsdnCard *card)
 {
 	u_char ids[16];
 	int ret = -1;
@@ -1731,3 +1690,7 @@ int hisax_init_pcmcia(void *pcm_iob, int *busy_flag, struct IsdnCard *card)
 	nrcards++;
 	return (ret);
 }
+
+
+module_init(HiSax_init);
+module_exit(HiSax_exit);

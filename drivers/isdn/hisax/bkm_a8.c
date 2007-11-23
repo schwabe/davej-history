@@ -1,4 +1,4 @@
-/* $Id: bkm_a8.c,v 1.14.6.2 2000/11/29 16:00:14 kai Exp $
+/* $Id: bkm_a8.c,v 1.14.6.3 2001/02/13 10:33:58 kai Exp $
  * bkm_a8.c     low level stuff for Scitel Quadro (4*S0, passive)
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -19,6 +19,7 @@
 #include "hscx.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
+#include <linux/isdn_compat.h>
 #include "bkm_ax.h"
 
 #if CONFIG_PCI
@@ -27,7 +28,7 @@
 
 extern const char *CardType[];
 
-const char sct_quadro_revision[] = "$Revision: 1.14.6.2 $";
+const char sct_quadro_revision[] = "$Revision: 1.14.6.3 $";
 
 static const char *sct_quadro_subtypes[] =
 {

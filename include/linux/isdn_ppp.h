@@ -201,7 +201,7 @@ struct ippp_struct {
   struct ippp_buf_queue rq[NUM_RCV_BUFFS]; /* packet queue for isdn_ppp_read() */
   struct ippp_buf_queue *first;  /* pointer to (current) first packet */
   struct ippp_buf_queue *last;   /* pointer to (current) last used packet in queue */
-  struct wait_queue *wq;
+  wait_queue_head_t wq;
   struct task_struct *tk;
   unsigned int mpppcfg;
   unsigned int pppcfg;

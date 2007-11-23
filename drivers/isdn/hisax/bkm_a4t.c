@@ -1,4 +1,4 @@
-/* $Id: bkm_a4t.c,v 1.13.6.2 2000/11/29 16:00:14 kai Exp $
+/* $Id: bkm_a4t.c,v 1.13.6.3 2001/02/13 10:33:58 kai Exp $
  * bkm_a4t.c    low level stuff for T-Berkom A4T
  *              derived from the original file sedlbauer.c
  *              derived from the original file niccy.c
@@ -20,11 +20,12 @@
 #include "jade.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
+#include <linux/isdn_compat.h>
 #include "bkm_ax.h"
 
 extern const char *CardType[];
 
-const char *bkm_a4t_revision = "$Revision: 1.13.6.2 $";
+const char *bkm_a4t_revision = "$Revision: 1.13.6.3 $";
 
 
 static inline u_char

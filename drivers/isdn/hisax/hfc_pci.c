@@ -1,4 +1,4 @@
-/* $Id: hfc_pci.c,v 1.34.6.3 2000/12/10 23:39:19 kai Exp $
+/* $Id: hfc_pci.c,v 1.34.6.4 2001/02/13 10:33:58 kai Exp $
 
  * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
  *
@@ -31,11 +31,12 @@
 #include "hfc_pci.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
+#include <linux/isdn_compat.h>
 #include <linux/interrupt.h>
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.34.6.3 $";
+static const char *hfcpci_revision = "$Revision: 1.34.6.4 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -1636,7 +1637,6 @@ static struct pci_dev *dev_hfcpci __initdata = NULL;
 int __init setup_hfcpci(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
-	unsigned short cmd;
 	char tmp[64];
 	int i;
 	struct pci_dev *tmp_hfcpci = NULL;
@@ -1646,15 +1646,11 @@ int __init setup_hfcpci(struct IsdnCard *card)
 #endif
 	strcpy(tmp, hfcpci_revision);
 	printk(KERN_INFO "HiSax: HFC-PCI driver Rev. %s\n", HiSax_getrev(tmp));
-#if CONFIG_PCI
+#ifdef CONFIG_PCI
 	cs->hw.hfcpci.int_s1 = 0;
 	cs->dc.hfcpci.ph_state = 0;
 	cs->hw.hfcpci.fifo = 255;
 	if (cs->typ == ISDN_CTYPE_HFC_PCI) {
-		if (!pci_present()) {
-			printk(KERN_ERR "HFC-PCI: no PCI bus present\n");
-			return (0);
-		}
 		i = 0;
 		while (id_list[i].vendor_id) {
 			tmp_hfcpci = pci_find_device(id_list[i].vendor_id,
@@ -1686,39 +1682,6 @@ int __init setup_hfcpci(struct IsdnCard *card)
 		} else {
 			printk(KERN_WARNING "HFC-PCI: No PCI card found\n");
 			return (0);
-		}
-		if (((int) cs->hw.hfcpci.pci_io & (PAGE_SIZE - 1))) {
-			printk(KERN_WARNING "HFC-PCI shared mem address will be corrected\n");
-			pcibios_write_config_word(cs->hw.hfcpci.pci_bus,
-					     cs->hw.hfcpci.pci_device_fn,
-						  PCI_COMMAND,
-						  0x0103);	/* set SERR */
-			pcibios_read_config_word(cs->hw.hfcpci.pci_bus,
-					     cs->hw.hfcpci.pci_device_fn,
-						 PCI_COMMAND,
-						 &cmd);
-			pcibios_write_config_word(cs->hw.hfcpci.pci_bus,
-					     cs->hw.hfcpci.pci_device_fn,
-						  PCI_COMMAND,
-						  cmd & ~2);
-			(int) cs->hw.hfcpci.pci_io &= ~(PAGE_SIZE - 1);
-			pcibios_write_config_dword(cs->hw.hfcpci.pci_bus,
-					     cs->hw.hfcpci.pci_device_fn,
-						   PCI_BASE_ADDRESS_1,
-					     (int) cs->hw.hfcpci.pci_io);
-			pcibios_write_config_word(cs->hw.hfcpci.pci_bus,
-					     cs->hw.hfcpci.pci_device_fn,
-						  PCI_COMMAND,
-						  cmd);
-			pcibios_read_config_dword(cs->hw.hfcpci.pci_bus,
-					     cs->hw.hfcpci.pci_device_fn,
-						  PCI_BASE_ADDRESS_1,
-					 (void *) &cs->hw.hfcpci.pci_io);
-			if (((int) cs->hw.hfcpci.pci_io & (PAGE_SIZE - 1))) {
-				printk(KERN_WARNING "HFC-PCI unable to align address %x\n", (unsigned) cs->hw.hfcpci.pci_io);
-				return (0);
-			}
-			dev_hfcpci->base_address[1] = (int) cs->hw.hfcpci.pci_io;
 		}
 		if (!cs->hw.hfcpci.pci_io) {
 			printk(KERN_WARNING "HFC-PCI: No IO-Mem for PCI card found\n");

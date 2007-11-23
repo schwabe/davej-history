@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.12.6.2 2000/11/29 16:00:14 kai Exp $
+/* $Id: w6692.c,v 1.12.6.3 2001/02/13 10:33:58 kai Exp $
  *
  * w6692.c   Winbond W6692 specific routines
  *
@@ -17,6 +17,7 @@
 #include "isdnl1.h"
 #include <linux/interrupt.h>
 #include <linux/pci.h>
+#include <linux/isdn_compat.h>
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -35,7 +36,7 @@ static const PCI_ENTRY id_list[] =
 
 extern const char *CardType[];
 
-const char *w6692_revision = "$Revision: 1.12.6.2 $";
+const char *w6692_revision = "$Revision: 1.12.6.3 $";
 
 #define DBUSY_TIMER_VALUE 80
 
@@ -955,11 +956,12 @@ w6692_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return (0);
 }
 
-static int id_idx = 0;
+static int id_idx ;
 
 static struct pci_dev *dev_w6692 __initdata = NULL;
 
-__initfunc(int setup_w6692(struct IsdnCard *card))
+int __init 
+setup_w6692(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

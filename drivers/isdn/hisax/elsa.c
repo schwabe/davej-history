@@ -1,4 +1,4 @@
-/* $Id: elsa.c,v 2.26.6.1 2000/11/28 12:02:46 kai Exp $
+/* $Id: elsa.c,v 2.26.6.2 2001/02/13 10:33:58 kai Exp $
  *
  * elsa.c     low level stuff for Elsa isdn cards
  *
@@ -25,12 +25,13 @@
 #include "hscx.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
+#include <linux/isdn_compat.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
 
 extern const char *CardType[];
 
-const char *Elsa_revision = "$Revision: 2.26.6.1 $";
+const char *Elsa_revision = "$Revision: 2.26.6.2 $";
 const char *Elsa_Types[] =
 {"None", "PC", "PCC-8", "PCC-16", "PCF", "PCF-Pro",
  "PCMCIA", "QS 1000", "QS 3000", "Microlink PCI", "QS 3000 PCI", 

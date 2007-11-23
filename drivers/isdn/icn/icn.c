@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.65 2000/11/13 22:51:48 kai Exp $
+/* $Id: icn.c,v 1.65.6.2 2000/12/17 22:45:13 kai Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -21,6 +21,7 @@
  */
 
 #include "icn.h"
+#include <linux/init.h>
 
 /*
  * Verbose bootcode- and protocol-downloading.
@@ -33,7 +34,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.65 $";
+*revision = "$Revision: 1.65.6.2 $";
 
 static int icn_addcard(int, char *, char *);
 
@@ -1638,9 +1639,7 @@ icn_addcard(int port, char *id1, char *id2)
 	return 0;
 }
 
-#ifdef MODULE
-#define icn_init init_module
-#else
+#ifndef MODULE
 void
 icn_setup(char *str, int *ints)
 {
@@ -1661,10 +1660,9 @@ icn_setup(char *str, int *ints)
 		}
 	}
 }
-#endif /* MODULES */
+#endif /* MODULE */
 
-int
-icn_init(void)
+static int __init icn_init(void)
 {
 	char *p;
 	char rev[10];
@@ -1674,9 +1672,6 @@ icn_init(void)
 	dev.channel = -1;
 	dev.mcard = NULL;
 	dev.firstload = 1;
-
-	/* No symbols to export, hide all symbols */
-	EXPORT_NO_SYMBOLS;
 
 	if ((p = strchr(revision, ':'))) {
 		strcpy(rev, p + 1);
@@ -1689,9 +1684,7 @@ icn_init(void)
 	return (icn_addcard(portbase, icn_id, icn_id2));
 }
 
-#ifdef MODULE
-void
-cleanup_module(void)
+static void  icn_exit(void)
 {
 	isdn_ctrl cmd;
 	icn_card *card = cards;
@@ -1725,4 +1718,6 @@ cleanup_module(void)
 		release_shmem((ulong) dev.shmem, 0x4000);
 	printk(KERN_NOTICE "ICN-ISDN-driver unloaded\n");
 }
-#endif
+
+module_init(icn_init);
+module_exit(icn_exit);
