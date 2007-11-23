@@ -279,8 +279,10 @@ int el3_probe(struct device *dev)
 	memcpy(dev->dev_addr, phys_addr, sizeof(phys_addr));
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
-	dev->if_port = if_port;
-
+	if (dev->mem_start)
+		dev->if_port = dev->mem_start & 3;
+	else
+		dev->if_port = if_port;
 	request_region(dev->base_addr, EL3_IO_EXTENT, "3c509");
 
 	{
@@ -692,8 +694,9 @@ el3_rx(struct device *dev)
 				printk("%s: Couldn't allocate a sk_buff of size %d.\n",
 					   dev->name, pkt_len);
 		}
-		lp->stats.rx_dropped++;
 		outw(RxDiscard, ioaddr + EL3_CMD);
+		lp->stats.rx_dropped++;
+		SLOW_DOWN_IO;
 		while (inw(ioaddr + EL3_STATUS) & 0x1000)
 			printk("	Waiting for 3c509 to discard packet, status %x.\n",
 				   inw(ioaddr + EL3_STATUS) );
@@ -724,7 +727,7 @@ set_multicast_list(struct device *dev)
 		outw(SetRxFilter | RxStation | RxMulticast | RxBroadcast, ioaddr + EL3_CMD);
 	}
 	else
-                outw(SetRxFilter | RxStation | RxBroadcast, ioaddr + EL3_CMD);
+		outw(SetRxFilter | RxStation | RxBroadcast, ioaddr + EL3_CMD);
 }
 
 static int

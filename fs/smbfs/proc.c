@@ -1685,6 +1685,7 @@ smb_proc_reconnect(struct smb_server *server)
 	if (server->packet != NULL)
 	{
 		smb_vfree(server->packet);
+		server->packet = NULL;
 		server->packet_size = 0;
 	}
 	server->packet = smb_vmalloc(max_xmit);
@@ -1920,6 +1921,7 @@ smb_proc_reconnect(struct smb_server *server)
 
 	/* Now make a new packet with the correct size. */
 	smb_vfree(server->packet);
+	server->packet = NULL;
 
 	server->packet = smb_vmalloc(server->max_xmit);
 	if (server->packet == NULL)

@@ -97,7 +97,6 @@ static char *version = "$Id: dgrs.c,v 1.12 1996/12/21 13:43:58 rick Exp $";
 #include <linux/skbuff.h>
 
 #include <linux/types.h>
-#include <linux/config.h>	/* for CONFIG_PCI */
 
 /*
  *	API changed at linux version 2.1.0

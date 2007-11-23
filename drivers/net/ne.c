@@ -62,9 +62,11 @@ static const char *version =
 /* Do we have a non std. amount of memory? (in units of 256 byte pages) */
 /* #define PACKETBUF_MEMSIZE	0x40 */
 
+#if defined(HAVE_DEVLIST) || !defined(MODULE)
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int netcard_portlist[] =
 { 0x300, 0x280, 0x320, 0x340, 0x360, 0};
+#endif /* defined(HAVE_DEVLIST) || !defined(MODULE) */
 
 #ifdef CONFIG_PCI
 /* Ack! People are making PCI ne2000 clones! Oh the horror, the horror... */
@@ -160,7 +162,9 @@ struct netdev_entry netcard_drv =
 
 int ne_probe(struct device *dev)
 {
+#ifndef MODULE
     int i;
+#endif /* MODULE */
     int base_addr = dev ? dev->base_addr : 0;
 
     /* First check any supplied i/o locations. User knows best. <cough> */

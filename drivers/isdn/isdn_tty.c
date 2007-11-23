@@ -2445,13 +2445,16 @@ isdn_tty_get_msnstr(char *n, char **p)
  * Get phone-number from modem-commandbuffer
  */
 static void
-isdn_tty_getdial(char *p, char *q)
+isdn_tty_getdial(char *p, char *q, int max)
 {
 	int first = 1;
 
-	while (strchr("0123456789,#.*WPTS-", *p) && *p) {
-		if ((*p >= '0' && *p <= '9') || ((*p == 'S') && first))
+	max--;
+	while (strchr("0123456789,#.*WPTS-", *p) && *p && (max > 0)) {
+		if ((*p >= '0' && *p <= '9') || ((*p == 'S') && first)) {
 			*q++ = *p;
+			max--;
+		}
 		p++;
 		first = 0;
 	}
@@ -3092,7 +3095,7 @@ isdn_tty_parse_at(modem_info * info)
 				break;
 			case 'D':
 				/* D - Dial */
-				isdn_tty_getdial(++p, ds);
+				isdn_tty_getdial(++p, ds, sizeof(ds));
 				p += strlen(p);
 				if (!strlen(m->msn))
 					isdn_tty_modem_result(10, info);

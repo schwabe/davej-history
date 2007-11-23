@@ -133,13 +133,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 			  !strcmp(this_char,"uid") ||
 			  !strcmp(this_char,"gid"))) {
 		  char * vpnt = value;
-		  unsigned int ivalue;
-		  ivalue = 0;
-		  while(*vpnt){
-		    if(*vpnt <  '0' || *vpnt > '9') break;
-		    ivalue = ivalue * 10 + (*vpnt - '0');
-		    vpnt++;
-		  }
+		  unsigned int ivalue = simple_strtoul(vpnt, &vpnt, 0);
 		  if (*vpnt) return 0;
 		  switch(*this_char) {
 		  case 'b':
@@ -498,7 +492,7 @@ int isofs_bmap(struct inode * inode,int block)
 	    if( (block << ISOFS_BUFFER_BITS(inode)) >= max_legal_read_offset )
 	      {
 
-		printk("_isofs_bmap: block>= EOF(%d, %d)", block, 
+		printk("_isofs_bmap: block>= EOF(%d, %ld)", block, 
 		       inode->i_size);
 	      }
 	    return 0;

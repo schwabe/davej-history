@@ -338,6 +338,8 @@ smb_receive(struct smb_server *server)
 		DPRINTK("smb_receive: Increase packet size from %d to %d\n",
 			server->packet_size, len + 4);
 		smb_vfree(server->packet);
+		server->packet = NULL;
+
 		server->packet_size = 0;
 		server->packet = smb_vmalloc(len + 4);
 		if (server->packet == NULL)

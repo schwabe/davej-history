@@ -50,7 +50,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate '3c507 support' CONFIG_EL16
     fi
     tristate '3c509/3c579 support' CONFIG_EL3
-    tristate '3c590 series (592/595/597) "Vortex" support' CONFIG_VORTEX
+    tristate '3c590/3c900 series (592/595/597/900/905) "Vortex/Boomerang" support' CONFIG_VORTEX
   fi
   bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
   if [ "$CONFIG_LANCE" = "y" ]; then
@@ -98,6 +98,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
     tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT
+    tristate 'Intel EtherExpress/Pro 100B support' CONFIG_EEXPRESS_PRO100B
     tristate 'DE425, DE434, DE435, DE450, DE500 support' CONFIG_DE4X5
     tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
     tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS

@@ -153,6 +153,10 @@
 #include "NCR53c406a.h"
 #endif
 
+#ifdef CONFIG_SCSI_DC390T
+#include "dc390.h"
+#endif
+
 #ifdef CONFIG_SCSI_AM53C974
 #include "AM53C974.h"
 #endif
@@ -283,6 +287,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_DTC3280
         DTC3x80,
+#endif
+#ifdef CONFIG_SCSI_DC390T
+    DC390_T,
 #endif
 #ifdef CONFIG_SCSI_NCR53C7xx
     NCR53c7xx,

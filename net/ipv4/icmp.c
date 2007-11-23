@@ -749,7 +749,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 				break;
 		}
 		if(icmph->code>NR_ICMP_UNREACH)	/* Invalid type */
-			return;
+			goto flush_it;
 	}
 	
 	/*

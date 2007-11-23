@@ -400,10 +400,10 @@ smb_iget(struct inode *dir, struct smb_inode_info *new_inode_info)
 
 	SMB_INOP(dir)->nused += 1;
 
-	/* We have to link the new inode_info into the doubly linked
-	   list of inode_infos to make a complete linear search
-	   possible. */
-
+	/*
+	 * We have to link the new inode_info into the doubly linked
+	 * list of inode_infos to make a complete linear search possible.
+	 */
 	root = &(SMB_SERVER(dir)->root);
 
 	new_inode_info->prev = root;
@@ -413,13 +413,15 @@ smb_iget(struct inode *dir, struct smb_inode_info *new_inode_info)
 
 	if (!(inode = iget(dir->i_sb, smb_info_ino(new_inode_info))))
 	{
-		new_inode_info->next->prev = new_inode_info->prev;
-		new_inode_info->prev->next = new_inode_info->next;
-		SMB_INOP(dir)->nused -= 1;
-
 		printk("smb_iget: iget failed!");
+		/*
+		 * If we blocked in iget(), another task may have referenced
+		 * the info structure ... clean up with smb_free_inode_info.
+		 */
+		smb_free_inode_info(new_inode_info);
 		return NULL;
 	}
+
 	return inode;
 }
 
@@ -660,13 +662,18 @@ smb_lookup(struct inode *dir, const char *name, int len,
 	{
 		goto in_tree;
 	}
+
+	if (new_inode_info == NULL)
+	{
+		iput(dir);
+		return -ENOMEM;
+	}
 	new_inode_info->finfo = finfo;
 
 	DPRINTK("attr: %x\n", finfo.attr);
 
 	if ((*result = smb_iget(dir, new_inode_info)) == NULL)
 	{
-		smb_kfree_s(new_inode_info, sizeof(struct smb_inode_info));
 		iput(dir);
 		return -EACCES;
 	}
@@ -719,7 +726,6 @@ smb_create(struct inode *dir, const char *name, int len, int mode,
 
 	if ((*result = smb_iget(dir, new_inode_info)) == NULL)
 	{
-		smb_kfree_s(new_inode_info, sizeof(struct smb_inode_info));
 		iput(dir);
 		return error;
 	}

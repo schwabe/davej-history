@@ -472,7 +472,10 @@ CONFIG_SYN_COOKIES
   the same end. SYN cookies use less space than RST cookies,
   but have a small probability of introducing an non timed-out
   failure to connect in the remote TCP. You can use both options
-  simultatenously.
+  simultatenously.  If you are SYN flooded, the source address
+  reported by the kernel is likely to have been forged by the attacker.
+  The source address is reported as an aid in tracing the packets to 
+  their actual source.  
 
 SYN flood protection
 CONFIG_RST_COOKIES
@@ -486,7 +489,10 @@ CONFIG_RST_COOKIES
   The SYN_COOKIES option provides an alternative method to accomplish
   the same end. RST cookies use more space than SYN cookies on your
   machine, but never increase the probability of a frozen connection
-  in a remote TCP. You can use both options simultatenously.
+  in a remote TCP. You can use both options simultatenously.  If you 
+  are SYN flooded, the source address reported by the kernel is likely 
+  to have been forged by the attacker.  The source address is reported 
+  as an aid in tracing the packets to their actual source.  
 
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
@@ -1554,24 +1560,41 @@ CONFIG_SCSI_NCR53C8XX
   of PCI-SCSI controllers. This driver supports parity checking,
   tagged command queuing, fast scsi II transfer up to 10 MB/s with
   narrow scsi devices and 20 MB/s with wide scsi devices.
-  This driver has been tested OK with linux/i386 and is currently
-  untested under linux/Alpha. If you intend to use this driver under
-  linux/Alpha, just try it first with read-only or mounted read-only
-  devices.  Memory mapped io is currently not supported under
-  linux/Alpha. Please read drivers/scsi/README.ncr53c8xx for more
-  information. 
+  Support of Ultra SCSI data transfers with NCR53C860 and NCR53C875 
+  controllers has been recently added to the driver.
+  Please read drivers/scsi/README.ncr53c8xx for more information.
+  Linux/i386 and Linux/Alpha are supported by this driver.
 
-force normal IO
+synchronous data transfers frequency
+CONFIG_SCSI_NCR53C8XX_SYNC
+  SCSI-2 specifications allow scsi devices to negotiate a synchronous 
+  transfer period of 25 nano-seconds or more.
+  The transfer period value is 4 times the agreed transfer period.
+  So, data can be transferred at a 10 MHz frequency, allowing 10
+  MB/second throughput with 8 bits scsi-2 devices and 20 MB/second
+  with wide16 devices.  This frequency can be used safely with
+  differential devices but may cause problems with singled-ended
+  devices.
+  Specify 0 if you want to only use asynchronous data transfers.
+  Otherwise, specify a value between 5 and 10.  Commercial O/Ses
+  generally use 5 Mhz frequency for synchronous transfers.  It is a
+  reasonable default value.
+  However, a flawless singled-ended scsi bus supports 10 MHz data
+  transfers.  Regardless the value chosen in the Linux configuration,
+  the synchronous period can be changed after boot-up through the
+  /proc/scsi file system. The generic command is:
+      echo "setsync #target period" >/proc/scsi/ncr53c8xx/0
+  Use a 25 ns period for 10 Mhz synchronous data transfers.
+  If you don't know what to do now, go with the default.
+
+use normal IO
 CONFIG_SCSI_NCR53C8XX_IOMAPPED
-  Under linux/Alpha only normal io is currently supported.
-  Under linux/i386, this option allows you to force the driver to use
-  normal IO.  Memory mapped IO has less latency than normal IO.
-  During the initialization phase, the driver first tries to use
-  memory mapped io.  If nothing seems wrong, it will use memory mapped
-  io.  If a flaw is detected, it will use normal io.  However, it's
-  possible that memory mapped does not work properly for you and the
-  driver has not detected the problem; then you would want to say Y
-  here.  The normal answer therefore is N.
+  This option allows you to force the driver to use normal IO.
+  Memory mapped IO has less latency than normal IO and works for most 
+  Intel-based hardware.
+  Under Linux/Alpha only normal IO is currently supported by the driver 
+  and so, this option has no effect.
+  The normal answer therefore is N.
 
 not allow targets to disconnect
 CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
@@ -1596,36 +1619,51 @@ CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
   The safe answer therefore is N.
   The normal answer therefore is Y.
 
-force asynchronous transfer mode
-CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS
-  This option allows you to force asynchronous transfer mode for all
-  devices at linux startup. You can enable synchronous negotiation
-  with the "setsync" control command after boot-up, for example:
-     echo "setsync 2 25" >/proc/scsi/ncr53c8xx/0
-  asks the driver to set the period to 25 ns (10MB/sec) for target 2
-  of controller 0 (please read drivers/scsi/README.ncr53c8xx for more
-  information). The safe answer therefore is Y.  The normal answer
-  therefore is N.
- 
-force synchronous negotiation
-CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
-  Some scsi-2 devices support synchronous negotiations but do not
-  report this feature in byte 7 of inquiry data.
-  Answer Y only if you suspect some device to be so humble.
-  The normal answer therefore is N.
- 
-disable master parity checking
-CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK
-  Some hardware may have problems with parity during master cycles on
-  PCI bus.  Only seen once. Answer Y if you suspect such problem.  The
-  normal answer therefore is N.
+maximum number of queued commands
+CONFIG_SCSI_NCR53C8XX_MAX_TAGS
+  This option allows you to specify the maximum number of commands
+  that can be queued to a device, when tagged command queuing is
+  possible.  The default value is 4. Minimum is 2, maximum is 12.  The
+  normal answer therefore is the default one.
 
-disable scsi parity checking
-CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
-  Parity on scsi bus is a system option. If one device checks parity,
-  then all devices on the scsi bus must generate parity.  However, the
-  parity can be ignored by the scsi devices.  Answer Y only if you
-  know what you are doing.  The normal answer therefore is N.
+detect and read serial NVRAM
+CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
+  Enable support for reading the serial NVRAM data on Symbios and
+  some Symbios compatible cards, and Tekram DC390W/U/F cards. Useful for
+  systems with more than one Symbios compatible controller where at least
+  one has a serial NVRAM, or for a system with a mixture of Symbios and
+  Tekram cards. Enables setting the boot order of host adaptors
+  to something other than the default order or "reverse probe" order. 
+  Also enables Symbios and Tekram cards to be distinguished so
+  CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT may be set in a system with a
+  mixture of Symbios and Tekram cards so the Symbios cards can make use of
+  the full range of Symbios features, differential, led pin, without
+  causing problems for the Tekram card(s).
+      (added by Richard Waltham: dormouse@farsrobt.demon.co.uk)
+  Also enables setting host and targets SCSI features as defined in the 
+  user setup for each host using a serial NVRAM (added by the maintainer).
+  The default answer is N, the normal answer should be Y.
+  Read drivers/scsi/README.ncr53c8xx for more information.
+
+assume boards are SYMBIOS compatible
+CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
+  This option allows you to enable some features depending on GPIO
+  wiring.  These General Purpose Input/Output pins can be used for
+  vendor specific features or implementation of the standard SYMBIOS
+  features.  Genuine SYMBIOS boards use GPIO0 in output for controller
+  LED and GPIO3 bit as a flag indicating singled-ended/differential
+  interface.
+  If all the boards of your system are genuine SYMBIOS boards or use
+  BIOS and drivers from SYMBIOS, you would want to enable this option.
+  The driver behaves correctly on my system with this option enabled.
+  (SDMS 4.0 + Promise SCSI ULTRA 875 rev 0x3 + ASUS SC200 810A rev
+  0x12).  This option must be set to N if your system has at least one
+  53C8XX based scsi board with a vendor-specific BIOS (example: Tekram
+  DC-390/U/W/F).  If unsure, say N.
+  However, if all your non Symbios compatible boards have NvRAM, setting 
+  option CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT allows the driver to 
+  distinguish Symbios compatible boards from other ones.
+  So, you can answer Y if all non Symbios compatible boards have NVRAM.
 
 Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
@@ -1741,6 +1779,13 @@ CONFIG_SCSI_NCR53C406A
   compile this driver as a module ( = code which can be inserted in
   and removed from the running kernel whenever you want), say M here
   and read Documentation/modules.txt.
+
+Tekram DC390(T) (AMD PCscsi) SCSI support
+CONFIG_SCSI_DC390T
+  This driver supports the Tekram DC390(T) PCI SCSI Hostadapter with
+  the Am53C974A chip, and perhaps other cards using the same chip.
+  This driver does _not_ support the DC390W/U/F adaptor with the 
+  NCR/Symbios chips.
 
 AM53/79C974 PCI SCSI support
 CONFIG_SCSI_AM53C974
@@ -2396,6 +2441,12 @@ CONFIG_FMV18X
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you use FMV-183 or
   FMV-184 and it is not working, you may need to disable Plug & Play
   mode of the card.
+
+Intel EtherExpress/Pro 100B support'
+CONFIG_EEXPRESS_PRO100B
+  If you have an Intel EtherExpress Pro 100 10/100Mbps PCI Ethernet
+  card, answer yes.  As of kernel release 2.0.31 this driver was
+  still experimental.
 
 EtherExpressPro support
 CONFIG_EEXPRESS_PRO

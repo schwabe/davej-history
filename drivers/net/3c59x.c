@@ -40,14 +40,8 @@ static char *version =
    Setting to > 1512 effectively disables this feature. */
 static const rx_copybreak = 200;
 
-#include <linux/config.h>
-#ifdef MODULE
 #include <linux/version.h>
 #include <linux/module.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>

@@ -178,6 +178,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_DC390T),y)
+L_OBJS += tmscsim.o
+else
+  ifeq ($(CONFIG_SCSI_DC390T),m)
+  M_OBJS += tmscsim.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_AM53C974),y)
 L_OBJS += AM53C974.o
 else
@@ -379,6 +387,9 @@ aic7xxx.o: aic7xxx.c aic7xxx_seq.h aic7xxx_reg.h
 
 seagate.o: seagate.c
 	$(CC) $(CFLAGS) -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -c seagate.c 
+
+tmscsim.o : tmscsim.c
+	$(CC) $(CFLAGS) -c tmscsim.c
 
 53c8xx_d.h 53c8xx_u.h : 53c7,8xx.scr script_asm.pl
 	ln -sf 53c7,8xx.scr fake.c

@@ -50,6 +50,7 @@ extern int hp_plus_probe(struct device *dev);
 extern int znet_probe(struct device *);
 extern int express_probe(struct device *);
 extern int eepro_probe(struct device *);
+extern int eepro100_probe(struct device *);
 extern int el3_probe(struct device *);
 extern int at1500_probe(struct device *);
 extern int at1700_probe(struct device *);
@@ -162,6 +163,9 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_EEXPRESS_PRO	/* Intel EtherExpress Pro/10 */
 	&& eepro_probe(dev)
+#endif
+#ifdef CONFIG_EEXPRESS_PRO100B	/* Intel EtherExpress Pro100B */
+	&& eepro100_probe(dev)
 #endif
 #ifdef CONFIG_DEPCA		/* DEC DEPCA */
 	&& depca_probe(dev)

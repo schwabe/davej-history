@@ -59,7 +59,8 @@ smb_read_inode(struct inode *inode)
 	{
 		/* Ok, now we're in trouble. The inode info is not
 		   there. What should we do now??? */
-		printk("smb_read_inode: inode info not found\n");
+		printk("smb_read_inode: inode %ld info not found\n",
+			inode->i_ino);
 		return;
 	}
 	inode_info->state = SMB_INODE_VALID;
@@ -92,24 +93,43 @@ smb_read_inode(struct inode *inode)
 static void
 smb_put_inode(struct inode *inode)
 {
-	struct smb_dirent *finfo = SMB_FINFO(inode);
 	struct smb_server *server = SMB_SERVER(inode);
 	struct smb_inode_info *info = SMB_INOP(inode);
+	struct smb_dirent *finfo;
+	__u32 mtime = inode->i_mtime;
+
+	if (inode->i_count > 1) {
+		printk("smb_put_inode: in use device %s, inode %ld count=%d\n",
+			kdevname(inode->i_dev), inode->i_ino, inode->i_count);
+		return;
+	}
 
 	if (S_ISDIR(inode->i_mode))
 	{
 		smb_invalid_dir_cache(inode->i_ino);
 	}
-	if (finfo->opened != 0)
-	{
-		if (smb_proc_close(server, finfo->fileid, inode->i_mtime))
-		{
-			/* We can't do anything but complain. */
-			DPRINTK("smb_put_inode: could not close\n");
-		}
-	}
-	smb_free_inode_info(info);
 	clear_inode(inode);
+
+	/*
+	 * We don't want the inode to be reused as free if we block here,
+	 * so temporarily increment i_count.
+	 */
+	inode->i_count++;
+	if (info) {
+		finfo = &info->finfo;
+		if (finfo->opened != 0)
+		{
+			if (smb_proc_close(server, finfo->fileid, mtime))
+			{
+				/* We can't do anything but complain. */
+				printk("smb_put_inode: could not close\n");
+			}
+		}
+		smb_free_inode_info(info);
+	} else
+		printk("smb_put_inode: no inode info??\n");
+
+	inode->i_count--;
 }
 
 static void

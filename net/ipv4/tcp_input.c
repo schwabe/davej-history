@@ -618,7 +618,8 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 			/* Only let this warning get printed once a minute. */
 			if (jiffies - warning_time > HZ*60) {
 				warning_time = jiffies;
-				printk(KERN_INFO "Warning: possible SYN flooding on port %d. Sending cookies.\n", ntohs(th->dest));
+				printk(KERN_INFO "Warning: possible SYN flood from %d.%d.%d.%d on %d.%d.%d.%d:%d.  Sending cookies.\n", 
+					NIPQUAD(saddr), NIPQUAD(daddr), ntohs(th->dest));
 			}
 #ifdef CONFIG_RST_COOKIES
 			tcp_send_synack_probe(daddr, saddr, th, &tcp_prot,
