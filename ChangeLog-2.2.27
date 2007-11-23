@@ -21,25 +21,41 @@ You may find more informations about it at http://www.wolk-project.de/
 
 
 
+2.2.27-rc2
+----------
+o	CAN-2005-0001: fixed expand_stack() SMP race		(Redhat)
+o	CAN-2004-0883, CAN-2004-0949: smbfs: fixed client	(Stefan Esser)
+	  overflow. There are two bugs in the handling of SMB
+	  responses that result in remote kernel overflows. Due
+	  to the nature of the bugs both seem to be very hard
+	  to exploit (in the sense of remote code execution or
+	  local privilege escalation) but are trivial remote
+	  kernel crashes.
+o	rose_rt_ioctl: lack of bounds checking			(Coverity)
+o	sdla_xfer: lack of bounds checking			(Coverity)
+o	coda: bounds checking for tainted scalars		(Coverity)
+o	sendmsg compat wrapper fixes for 64bit compat mode	(Olaf Kirch)
+
+
+
 2.2.27-rc1
 ----------
 o	CAN-2004-0497: fixed missing DAC check on sys_chown	(Thomas Biege)
-o       CAN-2004-1016: fixed a buffer overflow vulnerability	(Paul Starzetz)
-          in the "__scm_send" function which handles the sending
-          of UDP network packets. A wrong validity check of the
-          cmsghdr structure allowed a local attacker to modify
-          kernel memory, thus causing an endless loop (DoS) or
-          possibly even root privilege escalation.
-o       CAN-2004-1333: fixed integer overflow in the vc_resize	(Georgi Guninski)
-          function allows local users to cause a denial of
-          service (kernel crash) via a short new screen value,
-          which leads to a buffer overflow. Make sure VC
-          resizing fits in s16.
-o       If the user makes ip_cmsg_send call ip_options_get	(Georgi Guninski)
-          multiple times, we leak kmalloced IP options data.
-o       fixed moxa serial bound checking issue			(Alan Cox)
+o	CAN-2004-1016: fixed a buffer overflow vulnerability	(Paul Starzetz)
+	  in the "__scm_send" function which handles the sending
+	  of UDP network packets. A wrong validity check of the
+	  cmsghdr structure allowed a local attacker to modify
+	  kernel memory, thus causing an endless loop (DoS) or
+	  possibly even root privilege escalation.
+o	CAN-2004-1333: fixed integer overflow in the vc_resize	(Georgi Guninski)
+	  function allows local users to cause a denial of
+	  service (kernel crash) via a short new screen value,
+	  which leads to a buffer overflow. Make sure VC
+	  resizing fits in s16.
+o	If the user makes ip_cmsg_send call ip_options_get	(Georgi Guninski)
+	  multiple times, we leak kmalloced IP options data.
+o	fixed moxa serial bound checking issue			(Alan Cox)
 o	menu cleanups						(me)
-
 
 
 

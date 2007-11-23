@@ -880,10 +880,8 @@ S:	Maintained
 
 SMB FILESYSTEM
 P:	Urban Widmark
-M:	urban@svenskatest.se
-W:	http://samba.org/
-L:	samba@samba.org
-S:	Maintained
+M:	Urban.Widmark@enlight.net
+S:	Odd Fixes
 
 SMP: (except SPARC)
 P:	Linus Torvalds

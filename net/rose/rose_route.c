@@ -629,6 +629,9 @@ int rose_rt_ioctl(unsigned int cmd, void *arg)
 			if (rose_route.mask > 10) /* Mask can't be more than 10 digits */
 				return -EINVAL;
 
+			if (rose_route.ndigis > 8) /* No more than 8 digipeats */
+				return -EINVAL;
+
 			return rose_add_node(&rose_route, dev);
 
 		case SIOCDELRT:
