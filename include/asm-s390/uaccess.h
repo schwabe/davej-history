@@ -505,7 +505,6 @@ strnlen_user(const char * src, unsigned long n)
 			      : "cc", "0", "4" );
         return n;
 }
-#define strlen_user(str) strnlen_user(str, ~0UL)
 
 /*
  * Zero Userspace

@@ -121,8 +121,6 @@ static __inline__ long __strncpy_from_user (char *dst, const char *src, long cou
 	return res;
 }
 
-#define strlen_user(s)	strnlen_user(s, ~0UL >> 1)
-
 extern __inline__ long strnlen_user (const char *s, long n)
 {
 	unsigned long res = 0;

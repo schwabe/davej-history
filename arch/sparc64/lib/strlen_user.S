@@ -14,9 +14,7 @@
 #define HI_MAGIC 0x80808080
 
 	.align 4
-	.global __strlen_user, __strnlen_user
-__strlen_user:
-	sethi	%hi(32768), %o1
+	.global __strnlen_user
 __strnlen_user:	
 	mov	%o1, %g1
 	mov	%o0, %o1

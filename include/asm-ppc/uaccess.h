@@ -276,8 +276,6 @@ extern __inline__ int strnlen_user(const char *str, long len)
 	return __strnlen_user(str, len, top);
 }
 
-#define strlen_user(str)	strnlen_user((str), 0x7ffffffe)
-
 #endif  /* __ASSEMBLY__ */
 
 #endif	/* _PPC_UACCESS_H */

@@ -801,7 +801,6 @@ strncpy_from_user(char *dst, const char *src, long count)
  *
  * Return 0 for error
  */
-#define strlen_user(str) strnlen_user(str, ~0UL >> 1)
 static inline long strnlen_user(const char * src, long n)
 {
     long res = -(long) src;

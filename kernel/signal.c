@@ -820,7 +820,7 @@ sys_rt_sigqueueinfo(int pid, int sig, siginfo_t *uinfo)
 
 	/* Not even root can pretend to send signals from the kernel.
 	   Nor can they impersonate a kill(), which adds source info.  */
-	if (info.si_code >= 0)
+	if (SI_FROMKERNEL(&info))
 		return -EPERM;
 	info.si_signo = sig;
 

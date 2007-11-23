@@ -381,14 +381,19 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 		else
 			return -EPERM;
 	}
+
+	lock_kernel();
+
 	if (euid != (uid_t) -1) {
 		if ((old_ruid == euid) ||
 		    (current->euid == euid) ||
 		    (current->suid == euid) ||
 		    capable(CAP_SETUID))
 			current->fsuid = current->euid = euid;
-		else
+		else {
+			unlock_kernel();
 			return -EPERM;
+		}
 	}
 	if (ruid != (uid_t) -1 ||
 	    (euid != (uid_t) -1 && euid != old_ruid))
@@ -407,6 +412,8 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 		current->uid = new_ruid;
 		alloc_uid(current);
 	}
+
+	unlock_kernel();
 	
 	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
 		cap_emulate_setxuid(old_ruid, old_euid, old_suid);
@@ -433,14 +440,18 @@ asmlinkage int sys_setuid(uid_t uid)
 	int old_euid = current->euid;
 	int old_ruid, old_suid, new_ruid;
 
+	lock_kernel();
+
 	old_ruid = new_ruid = current->uid;
 	old_suid = current->suid;
 	if (capable(CAP_SETUID))
 		new_ruid = current->euid = current->suid = current->fsuid = uid;
 	else if ((uid == current->uid) || (uid == current->suid))
 		current->fsuid = current->euid = uid;
-	else
+	else {
+		unlock_kernel();
 		return -EPERM;
+	}
 
 	if (current->euid != old_euid)
 		current->dumpable = 0;
@@ -451,6 +462,8 @@ asmlinkage int sys_setuid(uid_t uid)
 		current->uid = new_ruid;
 		alloc_uid(current);
 	}
+
+	unlock_kernel();
 
 	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
 		cap_emulate_setxuid(old_ruid, old_euid, old_suid);
@@ -481,6 +494,9 @@ asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 		    (suid != current->euid) && (suid != current->suid))
 			return -EPERM;
 	}
+
+	lock_kernel();
+
 	if (ruid != (uid_t) -1) {
 		/* See above commentary about NPROC rlimit issues here. */
 		free_uid(current);
@@ -495,6 +511,8 @@ asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 	}
 	if (suid != (uid_t) -1)
 		current->suid = suid;
+
+	unlock_kernel();
 
 	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
 		cap_emulate_setxuid(old_ruid, old_euid, old_suid);
@@ -565,6 +583,8 @@ asmlinkage int sys_setfsuid(uid_t uid)
 {
 	int old_fsuid;
 
+	lock_kernel();
+
 	old_fsuid = current->fsuid;
 	if (uid == current->uid || uid == current->euid ||
 	    uid == current->suid || uid == current->fsuid || 
@@ -572,6 +592,8 @@ asmlinkage int sys_setfsuid(uid_t uid)
 		current->fsuid = uid;
 	if (current->fsuid != old_fsuid)
 		current->dumpable = 0;
+
+	unlock_kernel();
 
 	/* We emulate fsuid by essentially doing a scaled-down version
 	 * of what we did in setresuid and friends. However, we only

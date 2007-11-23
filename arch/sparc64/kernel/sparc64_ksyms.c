@@ -253,7 +253,6 @@ EXPORT_SYMBOL(__strlen);
 #if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 EXPORT_SYMBOL(strlen);
 #endif
-EXPORT_SYMBOL(__strlen_user);
 EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strcpy);
 EXPORT_SYMBOL(strncpy);

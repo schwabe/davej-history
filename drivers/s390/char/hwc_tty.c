@@ -171,7 +171,9 @@ hwc_tty_ioctl (
 
 	switch (cmd) {
 	case TIOCHWCTTYSINTRC:
-		count = strlen_user ((const char *) arg);
+		count = strnlen_user((const char *)arg, HWC_TTY_MAX_CNTL_SIZE);
+		if (!count)
+			return -EFAULT;
 		if (count > HWC_TTY_MAX_CNTL_SIZE)
 			return -EINVAL;
 		strncpy_from_user (hwc_tty_data.ioctl.intr_char,

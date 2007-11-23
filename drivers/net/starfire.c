@@ -49,6 +49,16 @@
 	LK1.2.4 (Ion Badulescu)
 	- More 2.2.x initialization fixes
 
+	LK1.2.5 (Ion Badulescu)
+	- Several fixes from Manfred Spraul
+
+	LK1.2.6 (Ion Badulescu)
+	- Fixed ifup/ifdown/ifup problem in 2.4.x
+
+	LK1.2.7 (Ion Badulescu)
+	- Removed unused code
+	- Made more functions static and __init
+
 TODO:
 	- implement tx_timeout() properly
 	- support ethtool
@@ -61,7 +71,7 @@ static const char version2[] =
 " Updates and info at http://www.scyld.com/network/starfire.html\n";
 
 static const char version3[] =
-" (unofficial 2.2.x kernel port, version 1.2.4, February 11, 2001)\n";
+" (unofficial 2.2.x kernel port, version 1.2.7, February 26, 2001)\n";
 
 /* The user-configurable values.
    These may be modified when a driver module is loaded.*/
@@ -330,7 +340,7 @@ static inline void *pci_alloc_consistent(struct pci_dev *hwdev, size_t size,
 #define pci_resource_flags(dev, i) \
   ((dev->base_address[i] & IORESOURCE_IO) ? IORESOURCE_IO : IORESOURCE_MEM)
 
-void * pci_get_drvdata (struct pci_dev *dev)
+static void * pci_get_drvdata (struct pci_dev *dev)
 {
 	int i;
 
@@ -341,7 +351,7 @@ void * pci_get_drvdata (struct pci_dev *dev)
 	return NULL;
 }
 
-void pci_set_drvdata (struct pci_dev *dev, void *driver_data)
+static void pci_set_drvdata (struct pci_dev *dev, void *driver_data)
 {
 	int i;
 
@@ -352,7 +362,7 @@ void pci_set_drvdata (struct pci_dev *dev, void *driver_data)
 		}
 }
 
-const struct pci_device_id *
+static const struct pci_device_id * __init
 pci_compat_match_device(const struct pci_device_id *ids, struct pci_dev *dev)
 {
 	u16 subsystem_vendor, subsystem_device;
@@ -372,7 +382,7 @@ pci_compat_match_device(const struct pci_device_id *ids, struct pci_dev *dev)
 	return NULL;
 }
 
-static int
+static int __init
 pci_announce_device(struct pci_driver *drv, struct pci_dev *dev)
 {
 	const struct pci_device_id *id;
@@ -405,7 +415,7 @@ pci_announce_device(struct pci_driver *drv, struct pci_dev *dev)
 	return 0;
 }
 
-int
+static int __init
 pci_register_driver(struct pci_driver *drv)
 {
 	struct pci_dev *dev;
@@ -424,7 +434,7 @@ pci_register_driver(struct pci_driver *drv)
 	return count;
 }
 
-void
+static void
 pci_unregister_driver(struct pci_driver *drv)
 {
 	struct pci_dev *dev;
@@ -445,14 +455,6 @@ pci_unregister_driver(struct pci_driver *drv)
 		}
 	}
 #endif
-}
-
-void *compat_request_region (unsigned long start, unsigned long n, const char *name)
-{
-	if (check_region (start, n) != 0)
-		return NULL;
-	request_region (start, n, name);
-	return (void *) 1;
 }
 
 static inline int pci_module_init(struct pci_driver *drv)
@@ -483,6 +485,9 @@ int __init starfire_probe(struct net_device *dev)
 			func(dev); \
 	}
 
+#define netif_start_if(dev)	dev->start = 1
+#define netif_stop_if(dev)	dev->start = 0
+
 #else  /* LINUX_VERSION_CODE > 0x20300 */
 
 #define COMPAT_MOD_INC_USE_COUNT
@@ -493,6 +498,8 @@ int __init starfire_probe(struct net_device *dev)
 	dev->watchdog_timeo = timeout;
 #define kick_tx_timer(dev, func, timeout)
 
+#define netif_start_if(dev)
+#define netif_stop_if(dev)
 
 #endif /* LINUX_VERSION_CODE > 0x20300 */
 /* end of compatibility code */
@@ -658,7 +665,6 @@ struct tx_done_report {
 #endif
 };
 
-#define PRIV_ALIGN	15	/* Required alignment mask */
 struct rx_ring_info {
 	struct sk_buff *skb;
 	dma_addr_t mapping;
@@ -668,6 +674,7 @@ struct tx_ring_info {
 	dma_addr_t first_mapping;
 };
 
+#define MII_CNT		2
 struct netdev_private {
 	/* Descriptor rings first for alignment. */
 	struct starfire_rx_desc *rx_ring;
@@ -704,7 +711,7 @@ struct netdev_private {
 	/* MII transceiver section. */
 	int mii_cnt;			/* MII device addresses. */
 	u16 advertising;		/* NWay media advertisement */
-	unsigned char phys[2];		/* MII device addresses. */
+	unsigned char phys[MII_CNT];	/* MII device addresses. */
 };
 
 static int	mdio_read(struct net_device *dev, int phy_id, int location);
@@ -856,7 +863,7 @@ static int __devinit starfire_init_one(struct pci_dev *pdev,
 	if (drv_flags & CanHaveMII) {
 		int phy, phy_idx = 0;
 		int mii_status;
-		for (phy = 0; phy < 32 && phy_idx < 4; phy++) {
+		for (phy = 0; phy < 32 && phy_idx < MII_CNT; phy++) {
 			mdio_write(dev, phy, 0, 0x8000);
 			udelay(500);
 			boguscnt = 1000;
@@ -1038,6 +1045,7 @@ static int netdev_open(struct net_device *dev)
 	if (dev->if_port == 0)
 		dev->if_port = np->default_port;
 
+	netif_start_if(dev);
 	netif_start_queue(dev);
 
 	if (debug > 1)
@@ -1709,7 +1717,8 @@ static int netdev_close(struct net_device *dev)
 	struct netdev_private *np = dev->priv;
 	int i;
 
-	netif_device_detach(dev);
+	netif_stop_queue(dev);
+	netif_stop_if(dev);
 
 	del_timer_sync(&np->timer);
 

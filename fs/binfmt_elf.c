@@ -113,6 +113,7 @@ create_elf_tables(char *p, int argc, int envc,
 	char *k_platform, *u_platform;
 	long hwcap;
 	size_t platform_len = 0;
+	long len;
 
 	/*
 	 * Get hold of platform and hardware capabilities masks for
@@ -191,13 +192,21 @@ create_elf_tables(char *p, int argc, int envc,
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
 		__put_user((elf_caddr_t)(unsigned long)p,argv++);
-		p += strlen_user(p);
+		len = strnlen_user(p, PAGE_SIZE*MAX_ARG_PAGES);
+		/* "can't happen" */
+		if (!len || len > PAGE_SIZE*MAX_ARG_PAGES)
+			return NULL;
+		p += len;
 	}
 	__put_user(NULL, argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
 		__put_user((elf_caddr_t)(unsigned long)p,envp++);
-		p += strlen_user(p);
+		len = strnlen_user(p, PAGE_SIZE*MAX_ARG_PAGES);
+		/* "can't happen" */
+		if (!len || len > PAGE_SIZE*MAX_ARG_PAGES)
+			return NULL;
+		p += len;
 	}
 	__put_user(NULL, envp);
 	current->mm->env_end = (unsigned long) p;
@@ -706,7 +715,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 				elf_interpreter);
 			kfree(elf_interpreter);
 			kfree(elf_phdata);
-			send_sig(SIGSEGV, current, 0);
+			force_sig(SIGSEGV, current);
 			return 0;
 		}
 
@@ -729,9 +738,6 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	if (current->binfmt && current->binfmt->module)
 		__MOD_INC_USE_COUNT(current->binfmt->module);
 
-#ifndef VM_STACK_FLAGS
-	current->executable = dget(bprm->dentry);
-#endif
 	compute_creds(bprm);
 	current->flags &= ~PF_FORKNOEXEC;
 	bprm->p = (unsigned long)
@@ -742,6 +748,10 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			load_addr, load_bias,
 			interp_load_addr,
 			(interpreter_type == INTERPRETER_AOUT ? 0 : 1));
+	if (!bprm->p) {
+		force_sig(SIGSEGV, current);
+		return 0;
+	}
 	/* N.B. passed_fileno might not be initialized? */
 	if (interpreter_type == INTERPRETER_AOUT)
 		current->mm->arg_start += strlen(passed_fileno) + 1;

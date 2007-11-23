@@ -479,14 +479,6 @@ strncpy_from_user(char *to, const char *from, long n)
 	return ret;
 }
 
-/* Returns: 0 if bad, string length+1 (memory size) of string if ok */
-extern long __strlen_user(const char *);
-
-extern inline long strlen_user(const char *str)
-{
-	return access_ok(VERIFY_READ,str,0) ? __strlen_user(str) : 0;
-}
-
 /* Returns: 0 if exception before NUL or reaching the supplied limit (N),
  * a value greater than N if the limit would be exceeded, else strlen.  */
 extern long __strnlen_user(const char *, long);

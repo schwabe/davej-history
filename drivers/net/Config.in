@@ -356,7 +356,7 @@ fi
 #
 
 #  CONFIG_WAN_ROUTER is defined only when CONFIG_EXPERIMENTAL=y
-if [ "$CONFIG_EXPERIMENTAL" = y -a "$CONFIG_WAN_ROUTER" != "n" ]; then
+if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_WAN_ROUTER" != "n" ]; then
   bool 'WAN drivers' CONFIG_WAN_DRIVERS 
   if [ "$CONFIG_WAN_DRIVERS" = "y" ]; then
     dep_tristate 'Sangoma WANPIPE(tm) multi-port cards: (select M not Y !)' CONFIG_VENDOR_SANGOMA $CONFIG_WAN_DRIVERS 

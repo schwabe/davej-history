@@ -20,6 +20,9 @@
  * table to check for several different types  of binary formats.  We keep
  * trying until we recognize the file or we run out of supported binary
  * formats. 
+ *
+ * (current->executable doesn't exist anymore, procfs searches for the vma
+ * that corresponds to the executable and uses its dentry.)
  */
 
 #include <linux/config.h>

@@ -47,9 +47,7 @@
 	 mov	3, %o0
 
 	.align 4
-	.global C_LABEL(__strlen_user), C_LABEL(__strnlen_user)
-C_LABEL(__strlen_user):
-	sethi	%hi(32768), %o1
+	.global C_LABEL(__strnlen_user)
 C_LABEL(__strnlen_user):
 	mov	%o1, %g1
 	mov	%o0, %o1

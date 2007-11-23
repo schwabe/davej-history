@@ -151,6 +151,7 @@ static const struct scanner_device {
 		{ 0x04b8, 0x0101 },	/* Perfection 636U and 636Photo */
 		{ 0x04b8, 0x0103 },	/* Perfection 610 */
 		{ 0x04b8, 0x0104 },	/* Perfection 1200U and 1200Photo */
+		{ 0x04b8, 0x010b },	/* Perfection 1240U and 1240Photo */
 	/* Umax */
 		{ 0x1606, 0x0010 },	/* Astra 1220U */
 		{ 0x1606, 0x0002 },	/* Astra 1236U */

@@ -97,8 +97,8 @@ typedef struct siginfo {
 #define SI_MESGQ	-4	/* sent by real time mesq state change */
 #define SI_SIGIO	-5	/* sent by queued SIGIO */
 
-#define SI_FROMUSER(siptr)	((siptr)->si_code <= 0)
-#define SI_FROMKERNEL(siptr)	((siptr)->si_code > 0)
+#define SI_FROMUSER(siptr)	((siptr)->si_code <= 0 && (siptr)->si_code != SI_SIGIO)
+#define SI_FROMKERNEL(siptr)	((siptr)->si_code > 0 || (siptr)->si_code == SI_SIGIO)
 
 /*
  * SIGILL si_codes

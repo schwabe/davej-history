@@ -383,16 +383,7 @@ if(__access_ok(__sfu_src, __sfu_count)) { \
 __sfu_res = __strncpy_from_user((unsigned long) (dest), __sfu_src, __sfu_count); \
 } __sfu_res; })
 
-extern int __strlen_user(const char *);
 extern int __strnlen_user(const char *, long len);
-
-extern __inline__ int strlen_user(const char *str)
-{
-	if(!access_ok(VERIFY_READ, str, 0))
-		return 0;
-	else
-		return __strlen_user(str);
-}
 
 extern __inline__ int strnlen_user(const char *str, long len)
 {
