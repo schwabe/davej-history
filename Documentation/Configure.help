@@ -1199,7 +1199,7 @@ CONFIG_SYN_COOKIES
   is no need for the legitimate users to change their TCP/IP software;
   SYN cookies work transparently to them. For technical information
   about SYN cookies, check out
-  ftp://koobera.math.uic.edu/pub/docs/syncookies-archive.
+  ftp://koobera.math.uic.edu/syncookies.html .
 
   If you are SYN flooded, the source address reported by the kernel is
   likely to have been forged by the attacker; it is only reported as

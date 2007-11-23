@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.58.2.1 1999/08/19 01:11:16 davem Exp $
+/* $Id: traps.c,v 1.58.2.2 1999/12/01 23:55:43 davem Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -26,6 +26,7 @@
 #include <asm/uaccess.h>
 #include <asm/fpumacro.h>
 #include <asm/lsu.h>
+#include <asm/psrcompat.h>
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
@@ -814,6 +815,13 @@ void cache_flush_trap(struct pt_regs *regs)
 #endif
 }
 #endif
+
+void do_getpsr(struct pt_regs *regs)
+{
+	regs->u_regs[UREG_I0] = tstate_to_psr(regs->tstate);
+	regs->tpc   = regs->tnpc;
+	regs->tnpc += 4;
+}
 
 void trap_init(void)
 {

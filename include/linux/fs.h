@@ -783,7 +783,9 @@ extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 extern int check_disk_change(kdev_t dev);
 extern int invalidate_inodes(struct super_block * sb);
 extern void invalidate_inode_pages(struct inode *);
-extern void invalidate_buffers(kdev_t dev);
+#define invalidate_buffers(dev)	__invalidate_buffers((dev), 0)
+#define destroy_buffers(dev)	__invalidate_buffers((dev), 1)
+extern void __invalidate_buffers(kdev_t dev, int);
 extern int floppy_is_wp(int minor);
 extern void sync_inodes(kdev_t dev);
 extern void write_inode_now(struct inode *inode);

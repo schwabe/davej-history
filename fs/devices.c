@@ -216,7 +216,8 @@ int check_disk_change(kdev_t dev)
 	if (sb && invalidate_inodes(sb))
 		printk("VFS: busy inodes on changed media.\n");
 
-	invalidate_buffers(dev);
+	/* special: trash all dirty data as well as the media is changed */
+	destroy_buffers(dev);
 
 	if (fops->revalidate)
 		fops->revalidate(dev);

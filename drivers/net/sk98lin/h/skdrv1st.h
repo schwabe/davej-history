@@ -175,6 +175,12 @@ typedef struct s_DrvRlmtMbuf SK_MBUF;
 
 #ifdef DEBUG
 #define SK_DBG_PRINTF		printk
+#ifndef SK_DEBUG_CHKMOD
+#define SK_DEBUG_CHKMOD		0
+#endif
+#ifndef SK_DEBUG_CHKCAT
+#define SK_DEBUG_CHKCAT		0
+#endif
 /* those come from the makefile */
 #define SK_DBG_CHKMOD(pAC)	(SK_DEBUG_CHKMOD)
 #define SK_DBG_CHKCAT(pAC)	(SK_DEBUG_CHKCAT)

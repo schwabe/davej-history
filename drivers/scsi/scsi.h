@@ -41,6 +41,7 @@
 
 #define MAX_SCSI_DEVICE_CODE 14
 extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
+extern spinlock_t scsi_malloc_lock;
 
 #ifdef DEBUG
     #define SCSI_TIMEOUT (5*HZ)

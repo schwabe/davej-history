@@ -1276,7 +1276,10 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 		umount_error = do_umount(old_root_dev,1, 0);
 		if (!umount_error) {
 			printk("okay\n");
-			invalidate_buffers(old_root_dev);
+			/* special: the old device driver is going to be
+			   a ramdisk and the point of this call is to free its
+			   protected memory (even if dirty). */
+			destroy_buffers(old_root_dev);
 			return 0;
 		}
 		printk(KERN_ERR "error %d\n",umount_error);

@@ -38,6 +38,7 @@ void send_s870(unsigned char);
 extern const char *atp870u_info(struct Scsi_Host *);
 
 extern int atp870u_proc_info(char *, char **, off_t, int, int, int);
+extern struct proc_dir_entry proc_scsi_atp870u;
 
 #define ATP870U {						\
 	next: NULL,						\

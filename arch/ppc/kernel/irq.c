@@ -94,8 +94,8 @@ atomic_t ppc_n_lost_interrupts;
  * this needs to be removed.
  * -- Cort
  */
-static char cache_bitmask = 0;
-static struct irqaction malloc_cache[8];
+static unsigned long cache_bitmask[1];
+static struct irqaction malloc_cache[32];
 extern int mem_init_done;
 
 void *irq_kmalloc(size_t size, int pri)
@@ -103,10 +103,10 @@ void *irq_kmalloc(size_t size, int pri)
 	unsigned int i;
 	if ( mem_init_done )
 		return kmalloc(size,pri);
-	for ( i = 0; i <= 3 ; i++ )
-		if ( ! ( cache_bitmask & (1<<i) ) )
+	for ( i = 0; i < 32 ; i++ )
+		if ( ! (test_bit(i, (void *)cache_bitmask)) )
 		{
-			cache_bitmask |= (1<<i);
+			set_bit(i,(void *)cache_bitmask);
 			return (void *)(&malloc_cache[i]);
 		}
 	return 0;
@@ -115,10 +115,10 @@ void *irq_kmalloc(size_t size, int pri)
 void irq_kfree(void *ptr)
 {
 	unsigned int i;
-	for ( i = 0 ; i <= 3 ; i++ )
+	for ( i = 0 ; i < 32 ; i++ )
 		if ( ptr == &malloc_cache[i] )
 		{
-			cache_bitmask &= ~(1<<i);
+			clear_bit( i, (void *)cache_bitmask );
 			return;
 		}
 	kfree(ptr);

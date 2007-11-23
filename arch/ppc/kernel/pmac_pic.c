@@ -168,7 +168,7 @@ pmac_do_IRQ(struct pt_regs *regs,
                         if (xmon_2nd)
                                 xmon(regs);
 #endif
-                        smp_message_recv();
+                        pmac_smp_message_recv();
                         goto out;
                 }
                 /* could be here due to a do_fake_interrupt call but we don't

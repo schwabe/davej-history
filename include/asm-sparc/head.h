@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.36.2.1 1999/09/22 11:37:45 jj Exp $ */
+/* $Id: head.h,v 1.36.2.2 1999/12/01 23:55:47 davem Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -92,6 +92,10 @@
 /* The Set Condition Codes software trap for userland. */
 #define SETCC_TRAP \
         b setcc_trap_handler; mov %psr, %l0; nop; nop;
+
+/* The Get PSR software trap for userland. */
+#define GETPSR_TRAP \
+	mov %psr, %o0; jmpl %l2, %g0; rett %l2 + 4; nop;
 
 /* This is for hard interrupts from level 1-14, 15 is non-maskable (nmi) and
  * gets handled with another macro.

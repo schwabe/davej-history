@@ -632,7 +632,6 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 
 		if (dst == NULL) {
 			struct flowi fl;
-			struct dst_entry *dst;
 
 			/* BUGGG_FUTURE: Again, it is not clear how
 			   to handle rthdr case. Ignore this complexity

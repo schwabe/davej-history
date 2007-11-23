@@ -10,7 +10,7 @@
 #ifdef __SMP__
 void openpic_ipi_action(int cpl, void *dev_id, struct pt_regs *regs)
 {
-	smp_message_recv();
+	smp_message_recv(cpl-OPENPIC_VEC_IPI);
 }
 #endif /* __SMP__ */
 

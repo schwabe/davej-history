@@ -57,17 +57,7 @@ void
 gemini_do_IRQ(struct pt_regs *regs, int cpu, int isfake)
 {
 	int irq, openpic_eoi_done = 0;
-	unsigned long bits = 0;
-	
 #ifdef __SMP__
-	if (cpu != 0) {
-		if (!isfake) {
-			smp_message_recv();
-			goto out;
-		}
-		goto out;
-	}
-	
 	{
 		unsigned int loops = 1000000;
 		while(test_bit(0, &global_irq_lock)) {
@@ -85,15 +75,12 @@ gemini_do_IRQ(struct pt_regs *regs, int cpu, int isfake)
 
 	irq = openpic_irq(cpu);
 	
-	if (irq == OPENPIC_VEC_SPURIOUS) {
+	if (irq == OPENPIC_VEC_SPURIOUS ) {
 		ppc_spurious_interrupts++;
 		openpic_eoi_done = 1;
 		goto out;
 	}
-	
-	bits = 1UL<<irq;
-	irq -= OPENPIC_VEC_SOURCE;
-	
+
 	if (irq < 0) {
 		printk(KERN_DEBUG "Bogus interrupt %d from pc=%lx\n", irq,
 		       regs->nip);
@@ -104,7 +91,7 @@ gemini_do_IRQ(struct pt_regs *regs, int cpu, int isfake)
 		ppc_irq_dispatch_handler(regs, irq);
  out:
 	if (!openpic_eoi_done)
-		openpic_eoi(0);
+		openpic_eoi(smp_processor_id());
 }
 
 static inline unsigned long _get_HID1(void)
@@ -384,11 +371,18 @@ void __init gemini_init_IRQ(void)
 
 	/* gemini has no 8259 */
 	open_pic.irq_offset = 0;
-	for( i=0; i < OPENPIC_VEC_SPURIOUS; i++ ) 
+	for( i=0; i < NR_IRQS; i++ ) 
 		irq_desc[i].ctl = &open_pic;
 	openpic_init(1);
 #ifdef __SMP__
-	request_irq(OPENPIC_VEC_IPI, openpic_ipi_action, 0, "IPI0", 0);
+	request_irq(OPENPIC_VEC_IPI, openpic_ipi_action,
+		    0, "IPI0", 0);
+	request_irq(OPENPIC_VEC_IPI+1, openpic_ipi_action,
+		    0, "IPI1 (invalidate TLB)", 0);
+	request_irq(OPENPIC_VEC_IPI+2, openpic_ipi_action,
+		    0, "IPI2 (stop CPU)", 0);
+	request_irq(OPENPIC_VEC_IPI+3, openpic_ipi_action,
+		    0, "IPI3 (reschedule)", 0);
 #endif	/* __SMP__ */
 }
 

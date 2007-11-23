@@ -137,12 +137,9 @@ S: Notre Dame, Indiana
 S: USA
 
 N: James Banks
-E: james.banks@caldera.com
+E: james@sovereign.org
 D: TLAN network driver
-S: Caldera, Inc.
-S: 633 South 550 East
-S: Provo, Utah 84606
-S: USA
+D: Logitech Busmouse driver
 
 N: Paul Barton-Davis
 E: pbd@op.net
@@ -866,7 +863,7 @@ S: CV5 8BZ
 S: United Kingdom
 
 N: Ron Holt
-E: ron@caldera.com
+E: ron@sovereign.org
 W: http://www.holt.org/
 P: 1024/1FD44539 DF 4B EB 9F 5B 68 38 9A  40 E3 FB 71 D1 C8 0B 56
 D: Kernel development

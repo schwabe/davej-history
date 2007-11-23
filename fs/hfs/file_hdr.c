@@ -164,10 +164,10 @@ const struct hfs_hdr_layout hfs_nat_hdr_layout = {
 	__constant_htonl(HFS_HDR_VERSION_1),	/* version */
 	5,					/* entries */
 	{					/* descr[] */
-		{HFS_HDR_FNAME, offsetof(struct hfs_dbl_hdr, real_name),   ~0},
-		{HFS_HDR_COMNT, offsetof(struct hfs_dbl_hdr, comment),      0},
-		{HFS_HDR_OLDI,  offsetof(struct hfs_dbl_hdr, create_time), 16},
-		{HFS_HDR_FINFO, offsetof(struct hfs_dbl_hdr, finderinfo),  32},
+		{HFS_HDR_FNAME, offsetof(struct hfs_nat_hdr, real_name),   ~0},
+		{HFS_HDR_COMNT, offsetof(struct hfs_nat_hdr, comment),      0},
+		{HFS_HDR_OLDI,  offsetof(struct hfs_nat_hdr, old_info),    16},
+		{HFS_HDR_FINFO, offsetof(struct hfs_nat_hdr, finderinfo),  32},
 		{HFS_HDR_RSRC,  HFS_NAT_HDR_LEN,                           ~0},
 	},
 	{					/* order[] */

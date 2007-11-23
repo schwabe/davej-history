@@ -674,6 +674,8 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_mkdir(NFS_DSERVER(dentry), NFS_FH(dentry->d_parent),
 				dentry->d_name.name, &sattr, &fhandle, &fattr);
+	if (!error)
+		dir->i_nlink++;
 	return error;
 }
 
@@ -691,8 +693,8 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 	/* Update i_nlink and invalidate dentry. */
 	if (!error) {
 		d_drop(dentry);
-		if (dentry->d_inode->i_nlink)
-			dentry->d_inode->i_nlink --;
+		if (dir->i_nlink)
+			dir->i_nlink--;
 	}
 
 	return error;

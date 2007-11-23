@@ -1,4 +1,4 @@
-/* $Id: advansys.h,v 1.17 1998/01/08 21:23:49 bobf Exp bobf $ */
+/* $Id: advansys.h,v 1.18 1999/11/29 21:47:16 bobf Exp bobf $ */
 
 /*
  * advansys.h - Linux Host Driver for AdvanSys SCSI Adapters
@@ -49,7 +49,9 @@ int advansys_reset(Scsi_Cmnd *, unsigned int);
 int advansys_biosparam(Disk *, int, int[]);
 #else /* version >= v1.3.0 */
 int advansys_biosparam(Disk *, kdev_t, int[]);
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,3,28)
 extern struct proc_dir_entry proc_scsi_advansys;
+#endif /* version < v2.3.28 */
 int advansys_proc_info(char *, char **, off_t, int, int, int);
 #endif /* version >= v1.3.0 */
 
@@ -142,7 +144,7 @@ void advansys_setup(char *, int *);
      */ \
     ENABLE_CLUSTERING,        /* unsigned use_clustering:1 */ \
 }
-#else /* version >= v2.1.75 */
+#elif LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,3,28)
 #define ADVANSYS { \
     proc_dir:     &proc_scsi_advansys, \
     proc_info:    advansys_proc_info, \
@@ -154,7 +156,7 @@ void advansys_setup(char *, int *);
     queuecommand: advansys_queuecommand, \
     abort:        advansys_abort, \
     reset:        advansys_reset, \
-    bios_param:    advansys_biosparam, \
+    bios_param:   advansys_biosparam, \
     /* \
      * Because the driver may control an ISA adapter 'unchecked_isa_dma' \
      * must be set. The flag will be cleared in advansys_detect for non-ISA \
@@ -170,5 +172,33 @@ void advansys_setup(char *, int *);
      */ \
     use_clustering: ENABLE_CLUSTERING, \
 }
-#endif /* version >= v2.1.75 */
+#else /* version >= v2.3.28 */
+#define ADVANSYS { \
+    proc_name:    "advansys", \
+    proc_info:    advansys_proc_info, \
+    name:         "advansys", \
+    detect:       advansys_detect, \
+    release:      advansys_release, \
+    info:         advansys_info, \
+    command:      advansys_command, \
+    queuecommand: advansys_queuecommand, \
+    abort:        advansys_abort, \
+    reset:        advansys_reset, \
+    bios_param:   advansys_biosparam, \
+    /* \
+     * Because the driver may control an ISA adapter 'unchecked_isa_dma' \
+     * must be set. The flag will be cleared in advansys_detect for non-ISA \
+     * adapters. Refer to the comment in scsi_module.c for more information. \
+     */ \
+    unchecked_isa_dma: 1, \
+    /* \
+     * All adapters controlled by this driver are capable of large \
+     * scatter-gather lists. According to the mid-level SCSI documentation \
+     * this obviates any performance gain provided by setting \
+     * 'use_clustering'. But empirically while CPU utilization is increased \
+     * by enabling clustering, I/O throughput increases as well. \
+     */ \
+    use_clustering: ENABLE_CLUSTERING, \
+}
+#endif /* version >= v2.3.28 */
 #endif /* _ADVANSYS_H */

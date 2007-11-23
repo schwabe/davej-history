@@ -265,12 +265,10 @@
        
      * Title: "Linux Kernel Module Programming Guide"
        Author: Ori Pomerantz.
-       URL:
-       http://www.leo.org/pub/comp/os/unix/linux/sunsite/docs/linux-doc-p
-       roject/module-programming-guide/index.html
-       Keywords: modules, free book, /proc, ioctls, system calls,
+       URL: http://www.linuxdoc.org/LDP/lkmpg/mpg.html
+       Keywords: modules, GPL book, /proc, ioctls, system calls,
        interrupt handlers .
-       Description: Very nice 92 pages free book on the topic of modules
+       Description: Very nice 92 pages GPL book on the topic of modules
        programming. Lots of examples.
        
      * Title: "Device File System (devfs) Overview"
@@ -402,7 +400,7 @@
        produced during the week. Published every Thursday.
        
      * Name: Kernel Traffic.
-       URL: http://lwn.net
+       URL: http://kt.linuxcare.com
        Keywords: linux-kernel mailing list, weekly kernel news.
        Description: Weekly newsletter covering the most relevant
        discussions of the linux-kernel mailing list.
@@ -437,4 +435,4 @@
        dcache.
      _________________________________________________________________
    
-   Document last updated on Wed Oct 27 17:14:03 CEST 1999
+   Document last updated on Tue Nov 30 11:20:00 CET 1999

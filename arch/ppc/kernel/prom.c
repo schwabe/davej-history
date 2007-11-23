@@ -539,7 +539,7 @@ prom_init(int r3, int r4, prom_entry pp)
 		node = call_prom(RELOC("finddevice"), 1, 1, RELOC("/"));
 		if ( (int)call_prom(RELOC("getprop"), 4, 1, node,
 			    RELOC("device_type"),type, sizeof(type)) <= 0)
-			return;
+			return phys;
 		
 		/* copy the holding pattern code to someplace safe (8M) */
 		memcpy( (void *)(8<<20), RELOC(__secondary_hold), 0x100 );

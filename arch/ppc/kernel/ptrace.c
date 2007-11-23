@@ -413,11 +413,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	/* read the word at location addr in the USER area. */
 		case PTRACE_PEEKUSR: {
 			unsigned long tmp;
-			
-			if ((addr & 3) || addr < 0 || addr > (PT_FPSCR << 2)) {
-				ret = -EIO;
+
+			ret = -EIO;
+			if ((addr & 3) || addr < 0 || addr > (PT_FPSCR << 2))
 				goto out;
-			}
 			
 			tmp = 0;  /* Default return condition */
 			addr = addr >> 2; /* temporary hack. */
@@ -430,9 +429,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				tmp = ((long *)child->tss.fpr)[addr - PT_FPR0];
 			}
 			else
-				ret = -EIO;
-			if (!ret)
-				ret = put_user(tmp, (unsigned long *) data);
+				goto out;
+			ret = put_user(tmp, (unsigned long *) data);
 			goto out;
 		}
 

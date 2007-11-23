@@ -19,11 +19,14 @@ else
   endif
 endif
 
-
 # DBGDEF =  \
-# -DDEBUG \
-# -DSK_DEBUG_CHKMOD=0x00010000L \
-# -DSK_DEBUG_CHKCAT=0xffff0000L
+# -DDEBUG
+
+ifdef DEBUG
+DBGDEF +=  \
+-DSK_DEBUG_CHKMOD=0x00000000L \
+-DSK_DEBUG_CHKCAT=0x00000000L
+endif
 
 
 # **** possible debug modules for SK_DEBUG_CHKMOD *****************

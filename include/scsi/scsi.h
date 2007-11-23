@@ -18,8 +18,6 @@
  *      SCSI opcodes
  */
 
-extern spinlock_t scsi_malloc_lock;
-
 #define TEST_UNIT_READY       0x00
 #define REZERO_UNIT           0x01
 #define REQUEST_SENSE         0x03

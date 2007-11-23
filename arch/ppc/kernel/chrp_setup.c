@@ -386,8 +386,8 @@ chrp_do_IRQ(struct pt_regs *regs,
                 }
         }
 #endif /* __SMP__ */
-
-        irq = openpic_irq(0);
+	
+        irq = openpic_irq(smp_processor_id());
         if (irq == IRQ_8259_CASCADE)
         {
                 /*
@@ -402,7 +402,7 @@ chrp_do_IRQ(struct pt_regs *regs,
                 /*
                  * Acknowledge as soon as possible to allow i8259
                  * interrupt nesting                         */
-                openpic_eoi(0);
+                openpic_eoi(smp_processor_id());
                 openpic_eoi_done = 1;
         }
         if (irq == OPENPIC_VEC_SPURIOUS)
@@ -429,7 +429,7 @@ chrp_do_IRQ(struct pt_regs *regs,
 	}
 out:
         if (!openpic_eoi_done)
-                openpic_eoi(0);
+                openpic_eoi(smp_processor_id());
 }
 
 __initfunc(void
@@ -449,10 +449,6 @@ __initfunc(void
 	open_pic.irq_offset = 16;
 	for ( i = 16 ; i < NR_IRQS ; i++ )
 		irq_desc[i].ctl = &open_pic;
-	/* openpic knows that it's at irq 16 offset
-	 * so we don't need to set it in the pic structure
-	 * -- Cort
-	 */
 	openpic_init(1);
 	for ( i = 0 ; i < 16  ; i++ )
 		irq_desc[i].ctl = &i8259_pic;
@@ -462,8 +458,14 @@ __initfunc(void
 		    xmon_irq, 0, "NMI", 0);
 #endif	/* CONFIG_XMON */
 #ifdef __SMP__
-	request_irq(openpic_to_irq(OPENPIC_VEC_IPI),
-		    openpic_ipi_action, 0, "IPI0", 0);
+	request_irq(OPENPIC_VEC_IPI, openpic_ipi_action,
+		    0, "IPI0", 0);
+	request_irq(OPENPIC_VEC_IPI+1, openpic_ipi_action,
+		    0, "IPI1 (invalidate TLB)", 0);
+	request_irq(OPENPIC_VEC_IPI+2, openpic_ipi_action,
+		    0, "IPI2 (stop CPU)", 0);
+	request_irq(OPENPIC_VEC_IPI+3, openpic_ipi_action,
+		    0, "IPI3 (reschedule)", 0);
 #endif	/* __SMP__ */
 }
 
@@ -472,7 +474,6 @@ __initfunc(void
 {
 	adb_init();
 
-	/* Should this be here? - Corey */
 	pmac_nvram_init();
 
 #ifdef CONFIG_VT

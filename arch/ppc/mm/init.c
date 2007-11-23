@@ -116,6 +116,7 @@ static void print_mem_pieces(struct mem_pieces *);
 static void append_mem_piece(struct mem_pieces *, unsigned, unsigned);
 
 extern struct task_struct *current_set[NR_CPUS];
+unsigned long cpu_invalidate_tlb[NR_CPUS];
 
 PTE *Hash, *Hash_end;
 unsigned long Hash_size, Hash_mask;
@@ -497,6 +498,9 @@ local_flush_tlb_all(void)
 #ifndef CONFIG_8xx
 	__clear_user(Hash, Hash_size);
 	_tlbia();
+#ifdef __SMP__
+	smp_send_tlb_invalidate(0);
+#endif	
 #else
 	asm volatile ("tlbia" : : );
 #endif
@@ -514,6 +518,9 @@ local_flush_tlb_mm(struct mm_struct *mm)
 	mm->context = NO_CONTEXT;
 	if (mm == current->mm)
 		activate_context(current);
+#ifdef __SMP__
+	smp_send_tlb_invalidate(0);
+#endif	
 #else
 	asm volatile ("tlbia" : : );
 #endif
@@ -527,6 +534,9 @@ local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
 		flush_hash_page(vma->vm_mm->context, vmaddr);
 	else
 		flush_hash_page(0, vmaddr);
+#ifdef __SMP__
+	smp_send_tlb_invalidate(0);
+#endif	
 #else
 	asm volatile ("tlbia" : : );
 #endif
@@ -556,6 +566,9 @@ local_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long e
 	{
 		flush_hash_page(mm->context, start);
 	}
+#ifdef __SMP__
+	smp_send_tlb_invalidate(0);
+#endif	
 #else
 	asm volatile ("tlbia" : : );
 #endif
@@ -581,6 +594,9 @@ mmu_context_overflow(void)
 	}
 	read_unlock(&tasklist_lock);
 	flush_hash_segments(0x10, 0xffffff);
+#ifdef __SMP__
+	smp_send_tlb_invalidate(0);
+#endif	
 	atomic_set(&next_mmu_context, 0);
 	/* make sure current always has a context */
 	current->mm->context = MUNGE_CONTEXT(atomic_inc_return(&next_mmu_context));

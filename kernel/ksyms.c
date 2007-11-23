@@ -148,7 +148,7 @@ EXPORT_SYMBOL(filp_close);
 EXPORT_SYMBOL(fput);
 EXPORT_SYMBOL(put_filp);
 EXPORT_SYMBOL(check_disk_change);
-EXPORT_SYMBOL(invalidate_buffers);
+EXPORT_SYMBOL(__invalidate_buffers);
 EXPORT_SYMBOL(invalidate_inodes);
 EXPORT_SYMBOL(invalidate_inode_pages);
 EXPORT_SYMBOL(truncate_inode_pages);
