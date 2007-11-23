@@ -51,7 +51,6 @@
 #include <linux/pci.h>
 #include <linux/capi.h>
 #include <asm/io.h>
-#include <linux/isdn_compat.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
@@ -252,7 +251,7 @@ int b1pci_init(void)
 	while ((dev = pci_find_device(PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_B1, dev))) {
 		struct capicardparams param;
 
-		param.port = get_pcibase(dev, 1) & PCI_BASE_ADDRESS_IO_MASK;
+		param.port = dev->base_address[ 1] & PCI_BASE_ADDRESS_IO_MASK;
 		param.irq = dev->irq;
 		printk(KERN_INFO
 			"%s: PCI BIOS reports AVM-B1 at i/o %#x, irq %d\n",

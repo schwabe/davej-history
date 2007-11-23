@@ -587,6 +587,7 @@ pcnet32_probe1(struct device *dev, unsigned long ioaddr, unsigned char irq_line,
      case 0x2627:
 	chipname = "PCnet/FAST III 79C975";
 	fdx = 1; mii = 1;
+	break;
      default:
 	printk("pcnet32: PCnet version %#x, no PCnet32 chip.\n",chip_version);
 	return ENODEV;

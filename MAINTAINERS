@@ -362,7 +362,7 @@ S:	Maintained
 
 HFS FILESYSTEM
 P:      Adrian Sun
-M:      asun@u.washington.edu
+M:      asun@cobaltnet.com
 L:      linux-kernel@vger.rutgers.edu
 S:      Maintained
 
@@ -437,10 +437,17 @@ L:      linux-irda@list.uit.no
 W:      http://www.cs.uit.no/linux-irda/
 S:      Maintained
 
-ISDN SUBSYSTEM
+ISDN SUBSYSTEM (general)
 P:	Fritz Elfert
-M:	fritz@wuemaus.franken.de
-L:	isdn4linux@hub-wue.franken.de
+M:	fritz@isdn4linux.de
+L:	isdn4linux@listserv.isdn4linux.de
+W:	www.isdn4linux.de
+S:	Maintained
+
+ISDN SUBSYSTEM (HiSax)
+P:	Karsten Keil
+M:	keil@isdn4linux.de
+L:	isdn4linux@listserv.isdn4linux.de
 S:	Maintained
 
 JOYSTICK DRIVER

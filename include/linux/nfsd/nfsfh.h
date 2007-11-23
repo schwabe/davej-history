@@ -8,7 +8,7 @@
  * or SHA. I've removed this code, because it doesn't give you more
  * security than blocking external access to port 2049 on your firewall.
  *
- * Copyright (C) 1995, 1996, 1997 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1999 Olaf Kirch <okir@monad.swb.de>
  */
 
 #ifndef NFSD_FH_H
@@ -33,6 +33,7 @@ struct nfs_fhbase {
 	__u32		fb_dev;		/* our device */
 	__u32		fb_xdev;
 	__u32		fb_xino;
+	__u32		fb_generation;
 };
 
 #define NFS_FH_PADDING		(NFS_FHSIZE - sizeof(struct nfs_fhbase))
@@ -47,6 +48,7 @@ struct knfs_fh {
 #define fh_dev			fh_base.fb_dev
 #define fh_xdev			fh_base.fb_xdev
 #define fh_xino			fh_base.fb_xino
+#define fh_generation		fh_base.fb_generation
 
 #ifdef __KERNEL__
 
@@ -179,34 +181,6 @@ fh_unlock(struct svc_fh *fhp)
 		up(&inode->i_sem);
 	}
 }
-
-/*
- * Release an inode
- */
-#if 0
-#define fh_put(fhp)	__fh_put(fhp, __FILE__, __LINE__)
-
-static inline void
-__fh_put(struct svc_fh *fhp, char *file, int line)
-{
-	struct dentry	*dentry;
-
-	if (!fhp->fh_dverified)
-		return;
-
-	dentry = fhp->fh_dentry;
-	if (!dentry->d_count) {
-		printk("nfsd: trying to free free dentry in %s:%d\n"
-		       "      file %s/%s\n",
-		       file, line,
-		       dentry->d_parent->d_name.name, dentry->d_name.name);
-	} else {
-		fh_unlock(fhp);
-		fhp->fh_dverified = 0;
-		dput(dentry);
-	}
-}
-#endif
 
 #endif /* __KERNEL__ */
 

@@ -1,4 +1,4 @@
-/* $Id: isdnl2.c,v 2.19 1999/08/05 20:40:26 keil Exp $
+/* $Id: isdnl2.c,v 2.20 1999/08/25 16:52:04 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,9 @@
  *              Fritz Elfert
  *
  * $Log: isdnl2.c,v $
+ * Revision 2.20  1999/08/25 16:52:04  keil
+ * Make gcc on AXP happy
+ *
  * Revision 2.19  1999/08/05 20:40:26  keil
  * Fix interlayer communication
  *
@@ -80,7 +83,7 @@
 #include "hisax.h"
 #include "isdnl2.h"
 
-const char *l2_revision = "$Revision: 2.19 $";
+const char *l2_revision = "$Revision: 2.20 $";
 
 static void l2m_debug(struct FsmInst *fi, char *fmt, ...);
 
@@ -198,7 +201,7 @@ freewin1(struct Layer2 *l2)
 	for (i = 0; i < MAX_WINDOW; i++) {
 		if (l2->windowar[i]) {
 			cnt++;
-			idev_kfree_skb(l2->windowar[i], FREE_WRITE);
+			dev_kfree_skb(l2->windowar[i]);
 			l2->windowar[i] = NULL;
 		}
 	}
@@ -477,7 +480,7 @@ setva(struct PStack *st, unsigned int nr)
 		len = l2->windowar[l2->sow]->len;
 		if (PACKET_NOACK == l2->windowar[l2->sow]->pkt_type)
 			len = -1;
-		idev_kfree_skb(l2->windowar[l2->sow], FREE_WRITE);
+		dev_kfree_skb(l2->windowar[l2->sow]);
 		l2->windowar[l2->sow] = NULL;
 		l2->sow = (l2->sow + 1) % l2->window;
 		if (st->lli.l2writewakeup && (len >=0))
@@ -498,7 +501,7 @@ send_uframe(struct PStack *st, u_char cmd, u_char cr)
 		printk(KERN_WARNING "isdl2 can't alloc sbbuff for send_uframe\n");
 		return;
 	}
-	SET_SKB_FREE(skb);
+	;
 	memcpy(skb_put(skb, i), tmp, i);
 	enqueue_super(st, skb);
 }
@@ -512,7 +515,7 @@ get_PollFlag(struct PStack * st, struct sk_buff * skb)
 inline void
 FreeSkb(struct sk_buff *skb)
 {
-	idev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 }
 
 
@@ -967,7 +970,7 @@ enquiry_cr(struct PStack *st, u_char typ, u_char cr, u_char pf)
 		printk(KERN_WARNING "isdl2 can't alloc sbbuff for enquiry_cr\n");
 		return;
 	}
-	SET_SKB_FREE(skb);
+	;
 	memcpy(skb_put(skb, i), tmp, i);
 	enqueue_super(st, skb);
 }
@@ -1340,7 +1343,7 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 	if (l2->windowar[p1]) {
 		printk(KERN_WARNING "isdnl2 try overwrite ack queue entry %d\n",
 		       p1);
-		idev_kfree_skb(l2->windowar[p1], FREE_WRITE);
+		dev_kfree_skb(l2->windowar[p1]);
 	}
 	l2->windowar[p1] = skb_clone(skb, GFP_ATOMIC);
 
@@ -1364,7 +1367,7 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 		"isdl2 pull_iqueue skb header(%d/%d) too short\n", i, p1);
 		oskb = skb;
 		skb = alloc_skb(oskb->len + i, GFP_ATOMIC);
-		SET_SKB_FREE(skb);
+		;
 		memcpy(skb_put(skb, i), header, i);
 		memcpy(skb_put(skb, oskb->len), oskb->data, oskb->len);
 		FreeSkb(oskb);
@@ -1747,7 +1750,7 @@ isdnl2_l1l2(struct PStack *st, int pr, void *arg)
 			}
 			if(c) {
 				FreeSkb(skb);
-				FsmEvent(&st->l2.l2m, EV_L2_FRAME_ERROR, (void *) c);
+				FsmEvent(&st->l2.l2m, EV_L2_FRAME_ERROR, (void *)(long)c);
 				ret = 0;
 			}
 			if (ret)
@@ -1785,12 +1788,12 @@ isdnl2_l3l2(struct PStack *st, int pr, void *arg)
 	switch (pr) {
 		case (DL_DATA | REQUEST):
 			if (FsmEvent(&st->l2.l2m, EV_L2_DL_DATA, arg)) {
-				idev_kfree_skb((struct sk_buff *) arg, FREE_READ);
+				dev_kfree_skb((struct sk_buff *) arg);
 			}
 			break;
 		case (DL_UNIT_DATA | REQUEST):
 			if (FsmEvent(&st->l2.l2m, EV_L2_DL_UNIT_DATA, arg)) {
-				idev_kfree_skb((struct sk_buff *) arg, FREE_READ);
+				dev_kfree_skb((struct sk_buff *) arg);
 			}
 			break;
 		case (DL_ESTABLISH | REQUEST):

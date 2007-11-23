@@ -1,4 +1,4 @@
-/* $Id: eicon_pci.c,v 1.9 1999/08/11 21:01:11 keil Exp $
+/* $Id: eicon_pci.c,v 1.10 1999/08/22 20:26:49 calle Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  * Hardware-specific code for PCI cards.
@@ -26,6 +26,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_pci.c,v $
+ * Revision 1.10  1999/08/22 20:26:49  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.9  1999/08/11 21:01:11  keil
  * new PCI codefix
  *
@@ -64,13 +70,14 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/pci.h>
 
 #include "eicon.h"
 #include "eicon_pci.h"
 
 
-char *eicon_pci_revision = "$Revision: 1.9 $";
+char *eicon_pci_revision = "$Revision: 1.10 $";
 
 #if CONFIG_PCI	         /* intire stuff is only for PCI */
 
@@ -145,8 +152,8 @@ int eicon_pci_find_card(char *ID)
           aparms->type = EICON_CTYPE_MAESTRA;
 
           aparms->irq = pdev->irq;
-          preg = get_pcibase(pdev, 2) & 0xfffffffc;
-          pcfg = get_pcibase(pdev, 1) & 0xffffff80;
+          preg = pdev->base_address[ 2] & 0xfffffffc;
+          pcfg = pdev->base_address[ 1] & 0xffffff80;
 
 #ifdef EICON_PCI_DEBUG
           printk(KERN_DEBUG "eicon_pci: irq=%d\n", aparms->irq);
@@ -167,9 +174,9 @@ int eicon_pci_find_card(char *ID)
          printk(KERN_INFO "Eicon: DIVA Server PRI/PCI detected !\n");
           aparms->type = EICON_CTYPE_MAESTRAP; /*includes 9M,30M*/
           aparms->irq = pdev->irq;
-          pram = get_pcibase(pdev, 0) & 0xfffff000;
-          preg = get_pcibase(pdev, 2) & 0xfffff000;
-          pcfg = get_pcibase(pdev, 4) & 0xfffff000;
+          pram = pdev->base_address[ 0] & 0xfffff000;
+          preg = pdev->base_address[ 2] & 0xfffff000;
+          pcfg = pdev->base_address[ 4] & 0xfffff000;
 
 #ifdef EICON_PCI_DEBUG
           printk(KERN_DEBUG "eicon_pci: irq=%d\n", aparms->irq);

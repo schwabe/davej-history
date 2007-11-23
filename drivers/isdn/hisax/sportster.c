@@ -1,4 +1,4 @@
-/* $Id: sportster.c,v 1.9 1999/07/12 21:05:29 keil Exp $
+/* $Id: sportster.c,v 1.10 1999/09/04 06:20:06 keil Exp $
 
  * sportster.c     low level stuff for USR Sportster internal TA
  *
@@ -7,6 +7,9 @@
  * Thanks to Christian "naddy" Weisgerber (3Com, US Robotics) for documentation
  *
  * $Log: sportster.c,v $
+ * Revision 1.10  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.9  1999/07/12 21:05:29  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -43,7 +46,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *sportster_revision = "$Revision: 1.9 $";
+const char *sportster_revision = "$Revision: 1.10 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

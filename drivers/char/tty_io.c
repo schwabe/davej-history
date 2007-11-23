@@ -656,23 +656,27 @@ static inline ssize_t do_tty_write(
 		down(&inode->i_sem);
 		return -ERESTARTSYS;
 	}
-	for (;;) {
-		unsigned long size = PAGE_SIZE*2;
-		if (size > count)
-			size = count;
-		ret = write(tty, file, buf, size);
-		if (ret <= 0)
-			break;
-		written += ret;
-		buf += ret;
-		count -= ret;
-		if (!count)
-			break;
-		ret = -ERESTARTSYS;
-		if (signal_pending(current))
-			break;
-		if (current->need_resched)
-			schedule();
+	if ( test_bit(TTY_NO_WRITE_SPLIT, &tty->flags) )
+		written = write(tty, file, buf, count);
+	else {
+		for (;;) {
+			unsigned long size = PAGE_SIZE*2;
+			if (size > count)
+				size = count;
+			ret = write(tty, file, buf, size);
+			if (ret <= 0)
+				break;
+			written += ret;
+			buf += ret;
+			count -= ret;
+			if (!count)
+				break;
+			ret = -ERESTARTSYS;
+			if (signal_pending(current))
+				break;
+			if (current->need_resched)
+				schedule();
+		}
 	}
 	if (written) {
 		file->f_dentry->d_inode->i_mtime = CURRENT_TIME;

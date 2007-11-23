@@ -899,9 +899,10 @@ static int get_stat(int pid, char * buffer)
 
 	read_lock(&tasklist_lock);
 	tsk = find_task_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
-	if (!tsk)
+	if (!tsk) {
+		read_unlock(&tasklist_lock);
 		return 0;
+	}
 	state = *get_task_state(tsk);
 	vsize = eip = esp = 0;
 	if (tsk->mm && tsk->mm != &init_mm) {
@@ -910,9 +911,14 @@ static int get_stat(int pid, char * buffer)
 			vsize += vma->vm_end - vma->vm_start;
 			vma = vma->vm_next;
 		}
-		eip = KSTK_EIP(tsk);
-		esp = KSTK_ESP(tsk);
+		if ((current->fsuid == tsk->euid && tsk->dumpable &&
+		    cap_issubset(tsk->cap_permitted, current->cap_permitted)) ||
+		    capable(CAP_DAC_OVERRIDE)) {
+			eip = KSTK_EIP(tsk);
+			esp = KSTK_ESP(tsk);
+		}
 	}
+	read_unlock(&tasklist_lock);	/* FIXME!! This should be done after the last use */
 
 	wchan = get_wchan(tsk);
 

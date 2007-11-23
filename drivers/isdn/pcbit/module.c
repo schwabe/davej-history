@@ -105,7 +105,6 @@ void cleanup_module(void)
 void pcbit_setup(char *str, int *ints)
 {
 	int i, j, argc;
-
 	argc = ints[0];
 	i = 0;
 	j = 1;

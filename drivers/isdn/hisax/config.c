@@ -1,10 +1,29 @@
-/* $Id: config.c,v 2.30 1999/08/05 20:43:14 keil Exp $
+/* $Id: config.c,v 2.36 1999/09/07 05:43:58 werner Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 2.36  1999/09/07 05:43:58  werner
+ *
+ * Added io as parameter 0 for HFC-PCI cards, if manual selection needed.
+ *
+ * Revision 2.35  1999/09/04 06:35:09  keil
+ * Winbond W6692 support
+ *
+ * Revision 2.34  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
+ * Revision 2.33  1999/08/30 11:57:52  keil
+ * Fix broken avm pcmcia
+ *
+ * Revision 2.32  1999/08/28 22:11:10  keil
+ * __setup function should be static
+ *
+ * Revision 2.31  1999/08/25 16:47:43  keil
+ * Support new __setup; allow to add FEATURES after register_isdn
+ *
  * Revision 2.30  1999/08/05 20:43:14  keil
  * ISAR analog modem support
  *
@@ -169,6 +188,8 @@
  *   33 Scitel Quadro		p0=subcontroller (4*S0, subctrl 1...4)
  *   34	Gazel ISDN cards
  *   35 HFC 2BDS0 PCI           none
+ *   36 Winbond 6692 PCI        none
+ *
  * protocol can be either ISDN_PTYPE_EURO or ISDN_PTYPE_1TR6 or ISDN_PTYPE_NI1
  *
  *
@@ -182,7 +203,7 @@ const char *CardType[] =
  "Compaq ISA", "NETjet", "Teles PCI", "Sedlbauer Speed Star (PCMCIA)",
  "AMD 7930", "NICCY", "S0Box", "AVM A1 (PCMCIA)", "AVM Fritz PnP/PCI",
  "Sedlbauer Speed Fax +", "Siemens I-Surf", "Acer P10", "HST Saphir",
- "Telekom A4T", "Scitel Quadro", "Gazel", "HFC 2BDS0 PCI",
+ "Telekom A4T", "Scitel Quadro", "Gazel", "HFC 2BDS0 PCI", "Winbond 6692",
 };
 
 void HiSax_closecard(int cardnr);
@@ -191,15 +212,7 @@ void HiSax_closecard(int cardnr);
 #define DEFAULT_CARD ISDN_CTYPE_ELSA
 #define DEFAULT_CFG {0,0,0,0}
 int elsa_init_pcmcia(void*, int, int*, int);
-#ifdef COMPAT_HAS_NEW_SYMTAB
 EXPORT_SYMBOL(elsa_init_pcmcia);
-#else
-static struct symbol_table hisax_syms_elsa = {
-#include <linux/symtab_begin.h>
-	X(elsa_init_pcmcia),
-#include <linux/symtab_end.h>
-};
-#endif /* COMPAT_HAS_NEW_SYMTAB */
 #endif /* CONFIG_HISAX_ELSA */
 
 #ifdef CONFIG_HISAX_AVM_A1
@@ -215,16 +228,8 @@ static struct symbol_table hisax_syms_elsa = {
 #define DEFAULT_CARD ISDN_CTYPE_A1_PCMCIA
 #define DEFAULT_CFG {11,0x170,0,0}
 int avm_a1_init_pcmcia(void*, int, int*, int);
-#ifdef COMPAT_HAS_NEW_SYMTAB
 EXPORT_SYMBOL(avm_a1_init_pcmcia);
-#else
-static struct symbol_table hisax_syms_avm_a1= {
-#include <linux/symtab_begin.h>
-	X(avm_a1_init_pcmcia),
-	X(HiSax_closecard),
-#include <linux/symtab_end.h>
-};
-#endif /* COMPAT_HAS_NEW_SYMTAB */
+EXPORT_SYMBOL(HiSax_closecard);
 #endif /* CONFIG_HISAX_AVM_A1_PCMCIA */
 
 #ifdef CONFIG_HISAX_FRITZPCI
@@ -296,15 +301,7 @@ static struct symbol_table hisax_syms_avm_a1= {
 #define DEFAULT_CARD ISDN_CTYPE_SEDLBAUER
 #define DEFAULT_CFG {11,0x270,0,0}
 int sedl_init_pcmcia(void*, int, int*, int);
-#ifdef COMPAT_HAS_NEW_SYMTAB
 EXPORT_SYMBOL(sedl_init_pcmcia);
-#else
-static struct symbol_table hisax_syms_sedl= {
-#include <linux/symtab_begin.h>
-	X(sedl_init_pcmcia),
-#include <linux/symtab_end.h>
-};
-#endif /* COMPAT_HAS_NEW_SYMTAB */
 #endif /* CONFIG_HISAX_SEDLBAUER */
 
 #ifdef CONFIG_HISAX_SPORTSTER
@@ -392,6 +389,13 @@ static struct symbol_table hisax_syms_sedl= {
 #define DEFAULT_CFG {15,0x180,0,0}
 #endif
 
+#ifdef CONFIG_HISAX_W6692
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_W6692
+#define DEFAULT_CFG {0,0,0,0}
+#endif
+
 #ifdef CONFIG_HISAX_1TR6
 #define DEFAULT_PROTO ISDN_PTYPE_1TR6
 #define DEFAULT_PROTO_NAME "1TR6"
@@ -469,7 +473,6 @@ static int mem[] HISAX_INITDATA =
 {0, 0, 0, 0, 0, 0, 0, 0};
 static char *id HISAX_INITDATA = HiSaxID;
 
-#ifdef COMPAT_HAS_NEW_SYMTAB
 MODULE_AUTHOR("Karsten Keil");
 MODULE_PARM(type, "1-8i");
 MODULE_PARM(protocol, "1-8i");
@@ -481,7 +484,6 @@ MODULE_PARM(id, "s");
 MODULE_PARM(io0, "1-8i");
 MODULE_PARM(io1, "1-8i");
 #endif /* CONFIG_HISAX_16_3 */
-#endif /* COMPAT_HAS_NEW_SYMTAB */
 #endif /* MODULE */
 
 int nrcards;
@@ -514,9 +516,9 @@ HiSaxVersion(void))
 
 	printk(KERN_INFO "HiSax: Linux Driver for passive ISDN cards\n");
 #ifdef MODULE
-	printk(KERN_INFO "HiSax: Version 3.3 (module)\n");
+	printk(KERN_INFO "HiSax: Version 3.3a (module)\n");
 #else
-	printk(KERN_INFO "HiSax: Version 3.3 (kernel)\n");
+	printk(KERN_INFO "HiSax: Version 3.3a (kernel)\n");
 #endif
 	strcpy(tmp, l1_revision);
 	printk(KERN_INFO "HiSax: Layer1 Revision %s\n", HiSax_getrev(tmp));
@@ -550,8 +552,8 @@ __initfunc(void
 HiSax_setup(char *str, int *ints))
 {
 	int i, j, argc;
-
 	argc = ints[0];
+	printk(KERN_DEBUG"HiSax_setup: argc(%d) str(%s)\n", argc, str);
 	i = 0;
 	j = 1;
 	while (argc && (i < HISAX_MAX_CARDS)) {
@@ -590,7 +592,7 @@ HiSax_setup(char *str, int *ints))
 		HiSax_id = HiSaxID;
 	}
 }
-#endif
+#endif /* MODULES */
 
 #if CARD_TELES0
 extern int setup_teles0(struct IsdnCard *card);
@@ -684,16 +686,20 @@ extern int setup_saphir(struct IsdnCard *card);
 extern int setup_testemu(struct IsdnCard *card);
 #endif
 
-#if	CARD_BKM_A4T
+#if CARD_BKM_A4T
 extern int setup_bkm_a4t(struct IsdnCard *card);
 #endif
 
-#if	CARD_SCT_QUADRO
+#if CARD_SCT_QUADRO
 extern int setup_sct_quadro(struct IsdnCard *card);
 #endif
 
 #if CARD_GAZEL
 extern int setup_gazel(struct IsdnCard *card);
+#endif
+
+#if CARD_W6692
+extern int setup_w6692(struct IsdnCard *card);
 #endif
 
 /*
@@ -875,7 +881,7 @@ HiSax_putstatus(struct IsdnCardState *cs, char *head, char *fmt, ...)
 }
 
 int
-ll_run(struct IsdnCardState *cs)
+ll_run(struct IsdnCardState *cs, int addfeatures)
 {
 	long flags;
 	isdn_ctrl ic;
@@ -884,6 +890,7 @@ ll_run(struct IsdnCardState *cs)
 	cli();
 	ic.driver = cs->myid;
 	ic.command = ISDN_STAT_RUN;
+	cs->iif.features |= addfeatures;
 	cs->iif.statcallb(&ic);
 	restore_flags(flags);
 	return 0;
@@ -933,7 +940,7 @@ closecard(int cardnr)
 		csta->rcvbuf = NULL;
 	}
 	if (csta->tx_skb) {
-		idev_kfree_skb(csta->tx_skb, FREE_WRITE);
+		dev_kfree_skb(csta->tx_skb);
 		csta->tx_skb = NULL;
 	}
 	if (csta->DC_Close != NULL) {
@@ -1053,7 +1060,6 @@ checkcard(int cardnr, char *id, int *busy_flag))
 		cs->iif.features =
 			ISDN_FEATURE_L2_X75I |
 			ISDN_FEATURE_L2_HDLC |
-			ISDN_FEATURE_L2_MODEM |
 			ISDN_FEATURE_L2_TRANS |
 			ISDN_FEATURE_L3_TRANS |
 #ifdef	CONFIG_HISAX_1TR6
@@ -1221,6 +1227,11 @@ checkcard(int cardnr, char *id, int *busy_flag))
  			ret = setup_gazel(card);
  			break;
 #endif
+#if CARD_W6692
+		case ISDN_CTYPE_W6692:
+			ret = setup_w6692(card);
+			break;
+#endif
 		default:
 			printk(KERN_WARNING
 				"HiSax: Support for %s Card not selected\n",
@@ -1269,7 +1280,7 @@ checkcard(int cardnr, char *id, int *busy_flag))
 	CallcNewChan(cs);
 	/* ISAR needs firmware download first */
 	if (!test_bit(HW_ISAR, &cs->HW_Flags))
-		ll_run(cs);
+		ll_run(cs, 0);
 	restore_flags(flags);
 	return (1);
 }
@@ -1419,27 +1430,18 @@ HiSax_init(void))
 #ifdef CONFIG_HISAX_ELSA
 	if (type[0] == ISDN_CTYPE_ELSA_PCMCIA) {
 		/* we have exported  and return in this case */
-#ifndef COMPAT_HAS_NEW_SYMTAB
-		register_symtab(&hisax_syms_elsa);
-#endif
 		return 0;
 	}
 #endif
 #ifdef CONFIG_HISAX_SEDLBAUER
 	if (type[0] == ISDN_CTYPE_SEDLBAUER_PCMCIA) {
 		/* we have to export  and return in this case */
-#ifndef COMPAT_HAS_NEW_SYMTAB
-		register_symtab(&hisax_syms_sedl);
-#endif
 		return 0;
 	}
 #endif
 #ifdef CONFIG_HISAX_AVM_A1_PCMCIA
 	if (type[0] == ISDN_CTYPE_A1_PCMCIA) {
 		/* we have to export  and return in this case */
-#ifndef COMPAT_HAS_NEW_SYMTAB
-		register_symtab(&hisax_syms_avm_a1);
-#endif
 		return 0;
 	}
 #endif
@@ -1482,6 +1484,7 @@ HiSax_init(void))
 				break;
 #endif
 			case ISDN_CTYPE_ELSA:
+			case ISDN_CTYPE_HFC_PCI:
 				cards[i].para[0] = io[i];
 				break;
 			case ISDN_CTYPE_16_3:
@@ -1517,6 +1520,7 @@ HiSax_init(void))
 			case ISDN_CTYPE_NETJET:
 			case ISDN_CTYPE_AMD7930:
 			case ISDN_CTYPE_TELESPCI:
+			case ISDN_CTYPE_W6692:
 				break;
 			case ISDN_CTYPE_BKM_A4T:
 	  		   	break;
@@ -1549,11 +1553,6 @@ HiSax_init(void))
 	if (HiSax_inithardware(NULL)) {
 		/* Install only, if at least one card found */
 #ifdef MODULE
-#ifndef COMPAT_HAS_NEW_SYMTAB
-		/* No symbols to export, hide all symbols */
-		register_symtab(NULL);
-		printk(KERN_INFO "HiSax: module installed\n");
-#endif /* COMPAT_HAS_NEW_SYMTAB */
 #endif /* MODULE */
 		return (0);
 	} else {

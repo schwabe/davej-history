@@ -47,7 +47,6 @@
   #include <linux/fs.h>
 #endif
 #include <linux/isdnif.h>
-#include <linux/isdn_compat.h>
 #include "isdn_divert.h"
 
 /*********************************/
@@ -56,11 +55,7 @@
 ulong if_used = 0; /* number of interface users */
 static struct divert_info *divert_info_head = NULL; /* head of queue */
 static struct divert_info *divert_info_tail = NULL; /* pointer to last entry */
-#ifdef COMPAT_HAS_NEW_WAITQ
-static wait_queue_head_t rd_queue;
-#else
 static struct wait_queue *rd_queue = 0; /* Queue IO */
-#endif
 
 /*********************************/
 /* put an info buffer into queue */
@@ -102,7 +97,7 @@ void put_info_buffer(char *cp)
 /* deflection device read routine */
 /**********************************/
 #if (LINUX_VERSION_CODE < 0x020117)
-static int isdn_divert_read(struct inode *inode, struct file *file, char *buf, RWARG count)
+static int isdn_divert_read(struct inode *inode, struct file *file, char *buf, unsigned long count)
 #else
 static ssize_t isdn_divert_read(struct file *file, char *buf, size_t count, loff_t *off)
 #endif
@@ -131,7 +126,7 @@ static ssize_t isdn_divert_read(struct file *file, char *buf, size_t count, loff
 /* deflection device write routine */
 /**********************************/
 #if (LINUX_VERSION_CODE < 0x020117)
-static int isdn_divert_write(struct inode *inode, struct file *file, const char *buf, RWARG count)
+static int isdn_divert_write(struct inode *inode, struct file *file, const char *buf, unsigned long count)
 #else
 static ssize_t isdn_divert_write(struct file *file, const char *buf, size_t count, loff_t *off)
 #endif
@@ -302,8 +297,8 @@ static int isdn_divert_ioctl(struct inode *inode, struct file *file,
 
 #ifdef CONFIG_PROC_FS
 #if (LINUX_VERSION_CODE < 0x020117)
-static LSTYPE
-isdn_divert_lseek(struct inode *inode, struct file *file, LSARG offset, int orig)
+static long long
+isdn_divert_lseek(struct inode *inode, struct file *file, long long offset, int orig)
 #else
 static loff_t
 isdn_divert_lseek(struct file *file, loff_t offset, int orig)
@@ -396,9 +391,6 @@ static int (*proc_unreg)(struct proc_dir_entry *, int) = NULL;
 int divert_dev_init(void)
 { int i;
 
-#ifdef COMPAT_HAS_NEW_WAITQ
-	init_waitqueue_head(&rd_queue);
-#endif
 
 #ifdef CONFIG_PROC_FS
 #if (LINUX_VERSION_CODE < 0x020117)

@@ -703,11 +703,11 @@ void __init print_IO_APIC(void)
 		(reg_01.entries != 0x17) && /* typical ISA+PCI boards */
 		(reg_01.entries != 0x1b) && /* Compaq Proliant boards */
 		(reg_01.entries != 0x1f) && /* dual Xeon boards */
-		(reg_01.entries != 0x3F)    /* bigger Xeon boards */
+		(reg_01.entries != 0x22) && /* bigger Xeon boards */
+		(reg_01.entries != 0x2E) &&
+		(reg_01.entries != 0x3F)
 	)
 		UNEXPECTED_IO_APIC();
-	if (reg_01.entries == 0x0f)
-		printk(".......       [IO-APIC cannot route PCI PIRQ 0-3]\n");
 
 	printk(".......     : IO APIC version: %04X\n", reg_01.version);
 	if (	(reg_01.version != 0x10) && /* oldest IO-APICs */

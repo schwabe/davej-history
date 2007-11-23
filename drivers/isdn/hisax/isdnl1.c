@@ -1,4 +1,4 @@
-/* $Id: isdnl1.c,v 2.34 1999/07/09 13:50:15 keil Exp $
+/* $Id: isdnl1.c,v 2.36 1999/08/25 16:50:57 keil Exp $
 
  * isdnl1.c     common low level stuff for Siemens Chipsetbased isdn cards
  *              based on the teles driver from Jan den Ouden
@@ -15,6 +15,15 @@
  *
  *
  * $Log: isdnl1.c,v $
+ * Revision 2.36  1999/08/25 16:50:57  keil
+ * Fix bugs which cause 2.3.14 hangs (waitqueue init)
+ *
+ * Revision 2.35  1999/08/22 20:27:07  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 2.34  1999/07/09 13:50:15  keil
  * remove unused variable
  *
@@ -129,10 +138,9 @@
  *
  */
 
-const char *l1_revision = "$Revision: 2.34 $";
+const char *l1_revision = "$Revision: 2.36 $";
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include "hisax.h"
 #include "isdnl1.h"
 
@@ -310,12 +318,12 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 		stptr = cs->stlist;
 		if (skb->len<3) {
 			debugl1(cs, "D-channel frame too short(%d)",skb->len);
-			idev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 			return;
 		}
 		if ((skb->data[0] & 1) || !(skb->data[1] &1)) {
 			debugl1(cs, "D-channel frame wrong EA0/EA1");
-			idev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 			return;
 		}
 		sapi = skb->data[0] >> 2;
@@ -342,7 +350,7 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 					stptr = stptr->next;
 				}
 			}
-			idev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 		} else if (sapi == CTRL_SAPI) { /* sapi 0 */
 			found = 0;
 			while (stptr != NULL)
@@ -353,7 +361,7 @@ DChannel_proc_rcv(struct IsdnCardState *cs)
 				} else
 					stptr = stptr->next;
 			if (!found)
-				idev_kfree_skb(skb, FREE_READ);
+				dev_kfree_skb(skb);
 		}
 	}
 }
@@ -391,7 +399,7 @@ BChannel_proc_rcv(struct BCState *bcs)
 	}
 }
 
-static void
+void
 BChannel_bh(struct BCState *bcs)
 {
 	if (!bcs)

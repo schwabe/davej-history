@@ -1,4 +1,4 @@
-/* $Id: elsa.c,v 2.17 1999/08/11 20:57:40 keil Exp $
+/* $Id: elsa.c,v 2.19 1999/09/04 06:20:06 keil Exp $
 
  * elsa.c     low level stuff for Elsa isdn cards
  *
@@ -14,6 +14,12 @@
  *              for ELSA PCMCIA support
  *
  * $Log: elsa.c,v $
+ * Revision 2.19  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
+ * Revision 2.18  1999/08/25 16:50:54  keil
+ * Fix bugs which cause 2.3.14 hangs (waitqueue init)
+ *
  * Revision 2.17  1999/08/11 20:57:40  keil
  * bugfix IPAC version 1.1
  * new PCI codefix
@@ -88,15 +94,12 @@
 #include "hscx.h"
 #include "isdnl1.h"
 #include <linux/pci.h>
-#ifndef COMPAT_HAS_NEW_PCI
-#include <linux/bios32.h>
-#endif
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
 
 extern const char *CardType[];
 
-const char *Elsa_revision = "$Revision: 2.17 $";
+const char *Elsa_revision = "$Revision: 2.19 $";
 const char *Elsa_Types[] =
 {"None", "PC", "PCC-8", "PCC-16", "PCF", "PCF-Pro",
  "PCMCIA", "QS 1000", "QS 3000", "QS 1000 PCI", "QS 3000 PCI", 
@@ -180,6 +183,7 @@ const char *ITACVer[] =
 #define ELSA_IPAC_LINE_LED	0x40	/* Bit 6 Gelbe LED */
 #define ELSA_IPAC_STAT_LED	0x80	/* Bit 7 Gruene LED */
 
+#if ARCOFI_USE
 static struct arcofi_msg ARCOFI_XOP_F =
 	{NULL,0,2,{0xa1,0x3f,0,0,0,0,0,0,0,0}}; /* Normal OP */
 static struct arcofi_msg ARCOFI_XOP_1 =
@@ -203,9 +207,8 @@ static struct arcofi_msg ARCOFI_XOP_0 =
 
 static void set_arcofi(struct IsdnCardState *cs, int bc);
 
-#if ARCOFI_USE
 #include "elsa_ser.c"
-#endif
+#endif /* ARCOFI_USE */
 
 static inline u_char
 readreg(unsigned int ale, unsigned int adr, u_char off)
@@ -432,6 +435,7 @@ elsa_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 			cs->hw.elsa.counter++;
 		}
 	}
+#if ARCOFI_USE
 	if (cs->hw.elsa.MFlag) {
 		val = serial_inp(cs, UART_MCR);
 		val ^= 0x8;
@@ -440,6 +444,7 @@ elsa_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		val ^= 0x8;
 		serial_outp(cs, UART_MCR, val);
 	}
+#endif
 	if (cs->hw.elsa.trig)
 		byteout(cs->hw.elsa.trig, 0x00);
 	writereg(cs->hw.elsa.ale, cs->hw.elsa.hscx, HSCX_MASK, 0x0);
@@ -514,7 +519,9 @@ release_io_elsa(struct IsdnCardState *cs)
 	int bytecnt = 8;
 
 	del_timer(&cs->hw.elsa.tl);
+#if ARCOFI_USE
 	clear_arcofi(cs);
+#endif
 	if (cs->hw.elsa.ctrl)
 		byteout(cs->hw.elsa.ctrl, 0);	/* LEDs Out */
 	if (cs->subtyp == ELSA_QS1000PCI) {
@@ -536,7 +543,9 @@ release_io_elsa(struct IsdnCardState *cs)
 		(cs->subtyp == ELSA_PCF) ||
 		(cs->subtyp == ELSA_QS3000PCI)) {
 		bytecnt = 16;
+#if ARCOFI_USE
 		release_modem(cs);
+#endif
 	}
 	if (cs->hw.elsa.base)
 		release_region(cs->hw.elsa.base, bytecnt);
@@ -592,6 +601,8 @@ reset_elsa(struct IsdnCardState *cs)
 	}
 }
 
+#if ARCOFI_USE
+
 static void
 set_arcofi(struct IsdnCardState *cs, int bc) {
 	cs->dc.isac.arcofi_bc = bc;
@@ -602,7 +613,6 @@ set_arcofi(struct IsdnCardState *cs, int bc) {
 static int
 check_arcofi(struct IsdnCardState *cs)
 {
-#if ARCOFI_USE
 	int arcofi_present = 0;
 	char tmp[40];
 	char *t;
@@ -690,9 +700,9 @@ check_arcofi(struct IsdnCardState *cs)
 		interruptible_sleep_on(&cs->dc.isac.arcofi_wait);
 		return(1);
 	}
-#endif
 	return(0);
 }
+#endif /* ARCOFI_USE */
 
 static void
 elsa_led_handler(struct IsdnCardState *cs)
@@ -738,8 +748,7 @@ elsa_led_handler(struct IsdnCardState *cs)
 static int
 Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 {
-	int len, ret = 0;
-	u_char *msg;
+	int ret = 0;
 	long flags;
 
 	switch (mt) {
@@ -828,8 +837,12 @@ Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 				cs->hw.elsa.status &= ~0x0100;
 			}
 			break;
+#if ARCOFI_USE
 		case CARD_AUX_IND:
 			if (cs->hw.elsa.MFlag) {
+				int len;
+				u_char *msg;
+
 				if (!arg)
 					return(0);
 				msg = arg;
@@ -838,6 +851,7 @@ Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 				modem_write_cmd(cs, msg, len);
 			}
 			break;
+#endif
 	}
 	if (cs->typ == ISDN_CTYPE_ELSA) {
 		int pwr = bytein(cs->hw.elsa.ale);
@@ -914,12 +928,8 @@ probe_elsa(struct IsdnCardState *cs)
 	return (CARD_portlist[i]);
 }
 
-#ifdef COMPAT_HAS_NEW_PCI
 static 	struct pci_dev *dev_qs1000 __initdata = NULL;
 static 	struct pci_dev *dev_qs3000 __initdata = NULL;
-#else
-static 	int pci_index __initdata = 0;
-#endif
 
 int
 setup_elsa(struct IsdnCard *card)
@@ -1037,7 +1047,6 @@ setup_elsa(struct IsdnCard *card)
 		       cs->irq);
 	} else if (cs->typ == ISDN_CTYPE_ELSA_PCI) {
 #if CONFIG_PCI
-#ifdef COMPAT_HAS_NEW_PCI
 		if (!pci_present()) {
 			printk(KERN_ERR "Elsa: no PCI bus present\n");
 			return(0);
@@ -1047,17 +1056,17 @@ setup_elsa(struct IsdnCard *card)
 			 dev_qs1000))) {
 				cs->subtyp = ELSA_QS1000PCI;
 			cs->irq = dev_qs1000->irq;
-			cs->hw.elsa.cfg = get_pcibase(dev_qs1000, 1) & 
+			cs->hw.elsa.cfg = dev_qs1000->base_address[ 1] & 
 				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = get_pcibase(dev_qs1000, 3) & 
+			cs->hw.elsa.base = dev_qs1000->base_address[ 3] & 
 				PCI_BASE_ADDRESS_IO_MASK;
 		} else if ((dev_qs3000 = pci_find_device(PCI_VENDOR_ELSA,
 			PCI_QS3000_ID, dev_qs3000))) {
 			cs->subtyp = ELSA_QS3000PCI;
 			cs->irq = dev_qs3000->irq;
-			cs->hw.elsa.cfg = get_pcibase(dev_qs3000, 1) & 
+			cs->hw.elsa.cfg = dev_qs3000->base_address[ 1] & 
 				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = get_pcibase(dev_qs3000, 3) & 
+			cs->hw.elsa.base = dev_qs3000->base_address[ 3] & 
 				PCI_BASE_ADDRESS_IO_MASK;
 		} else {
 			printk(KERN_WARNING "Elsa: No PCI card found\n");
@@ -1082,54 +1091,6 @@ setup_elsa(struct IsdnCard *card)
 			HZDELAY(500);	/* wait 500*10 ms */
 			restore_flags(flags);
 		}
-#else
-		u_char pci_bus, pci_device_fn, pci_irq;
-		u_int pci_ioaddr;
-
-		cs->subtyp = 0;
-		for (; pci_index < 0xff; pci_index++) {
-			if (pcibios_find_device(PCI_VENDOR_ELSA,
-			   PCI_QS1000_ID, pci_index, &pci_bus, &pci_device_fn)
-			   == PCIBIOS_SUCCESSFUL)
-				cs->subtyp = ELSA_QS1000PCI;
-			else if (pcibios_find_device(PCI_VENDOR_ELSA,
-			   PCI_QS3000_ID, pci_index, &pci_bus, &pci_device_fn)
-			   == PCIBIOS_SUCCESSFUL)
-				cs->subtyp = ELSA_QS3000PCI;
-			else
-				break;
-			/* get IRQ */
-			pcibios_read_config_byte(pci_bus, pci_device_fn,
-				PCI_INTERRUPT_LINE, &pci_irq);
-
-			/* get IO address */
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_BASE_ADDRESS_1, &pci_ioaddr);
-			pci_ioaddr &= ~3; /* remove io/mem flag */
-			cs->hw.elsa.cfg = pci_ioaddr;
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-				PCI_BASE_ADDRESS_3, &pci_ioaddr);
-			if (cs->subtyp)
-				break;
-		}
-		if (!cs->subtyp) {
-			printk(KERN_WARNING "Elsa: No PCI card found\n");
-			return(0);
-		}
-		pci_index++;
-		if (!pci_irq) {
-			printk(KERN_WARNING "Elsa: No IRQ for PCI card found\n");
-			return(0);
-		}
-
-		if (!pci_ioaddr) {
-			printk(KERN_WARNING "Elsa: No IO-Adr for PCI card found\n");
-			return(0);
-		}
-		pci_ioaddr &= ~3; /* remove io/mem flag */
-		cs->hw.elsa.base = pci_ioaddr;
-		cs->irq = pci_irq;
-#endif /* COMPAT_HAS_NEW_PCI */
 		cs->hw.elsa.ale  = cs->hw.elsa.base;
 		cs->hw.elsa.isac = cs->hw.elsa.base +1;
 		cs->hw.elsa.hscx = cs->hw.elsa.base +1; 
@@ -1199,7 +1160,9 @@ setup_elsa(struct IsdnCard *card)
 			request_region(cs->hw.elsa.cfg, 0x80, "elsa isdn pci");
 		}
 	}
+#if ARCOFI_USE
 	init_arcofi(cs);
+#endif
 	cs->hw.elsa.tl.function = (void *) elsa_led_handler;
 	cs->hw.elsa.tl.data = (long) cs;
 	init_timer(&cs->hw.elsa.tl);

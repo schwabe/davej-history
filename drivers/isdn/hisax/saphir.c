@@ -1,4 +1,4 @@
-/* $Id: saphir.c,v 1.3 1999/07/12 21:05:26 keil Exp $
+/* $Id: saphir.c,v 1.4 1999/09/04 06:20:06 keil Exp $
 
  * saphir.c low level stuff for HST Saphir 1
  *
@@ -8,6 +8,9 @@
  *
  *
  * $Log: saphir.c,v $
+ * Revision 1.4  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.3  1999/07/12 21:05:26  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -26,7 +29,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-static char *saphir_rev = "$Revision: 1.3 $";
+static char *saphir_rev = "$Revision: 1.4 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

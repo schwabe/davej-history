@@ -1,4 +1,4 @@
-/* $Id: act2000_isa.c,v 1.8 1999/01/05 18:29:25 he Exp $
+/* $Id: act2000_isa.c,v 1.9 1999/09/04 06:20:04 keil Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000 (ISA-Version).
  *
@@ -20,6 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: act2000_isa.c,v $
+ * Revision 1.9  1999/09/04 06:20:04  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.8  1999/01/05 18:29:25  he
  * merged remaining schedule_timeout() changes from 2.1.127
  *
@@ -412,9 +415,6 @@ isa_send(act2000_card * card)
 		while (skb->len) {
 			if (isa_writeb(card, *(skb->data))) {
 				/* Fifo is full, but more data to send */
-#if 0
-				printk(KERN_DEBUG "isa_send: %d bytes\n", l);
-#endif
 				test_and_clear_bit(ACT2000_LOCK_TX, (void *) &card->ilock);
 				/* Schedule myself */
 				act2000_schedule_tx(card);
@@ -437,9 +437,6 @@ isa_send(act2000_card * card)
 		} else
 			dev_kfree_skb(skb);
 		card->sbuf = NULL;
-#if 0
-		printk(KERN_DEBUG "isa_send: %d bytes\n", l);
-#endif
 	}
 }
 

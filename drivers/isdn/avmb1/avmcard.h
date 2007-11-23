@@ -1,9 +1,14 @@
 /*
- * $Id: avmcard.h,v 1.4 1999/08/04 10:10:08 calle Exp $
+ * $Id: avmcard.h,v 1.5 1999/09/07 09:02:53 calle Exp $
  *
  * Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: avmcard.h,v $
+ * Revision 1.5  1999/09/07 09:02:53  calle
+ * SETDATA removed. Now inside the kernel the datapart of DATA_B3_REQ and
+ * DATA_B3_IND is always directly after the CAPI message. The "Data" member
+ * ist never used inside the kernel.
+ *
  * Revision 1.4  1999/08/04 10:10:08  calle
  * Bugfix: corrected /proc functions, added structure for new AVM cards.
  *
@@ -94,7 +99,7 @@ typedef struct avmcard {
 	int interrupt;
 
 	void *mbase;
-	__u32 csr;
+	volatile __u32 csr;
 	avmcard_dmainfo *dma;
 
 	struct capi_ctr *ctrl;

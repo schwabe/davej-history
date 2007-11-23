@@ -1,4 +1,4 @@
-/* $Id: asuscom.c,v 1.7 1999/07/12 21:04:53 keil Exp $
+/* $Id: asuscom.c,v 1.8 1999/09/04 06:20:05 keil Exp $
 
  * asuscom.c     low level stuff for ASUSCOM NETWORK INC. ISDNLink cards
  *
@@ -8,6 +8,9 @@
  *
  *
  * $Log: asuscom.c,v $
+ * Revision 1.8  1999/09/04 06:20:05  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.7  1999/07/12 21:04:53  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -39,7 +42,7 @@
 
 extern const char *CardType[];
 
-const char *Asuscom_revision = "$Revision: 1.7 $";
+const char *Asuscom_revision = "$Revision: 1.8 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

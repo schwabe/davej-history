@@ -516,15 +516,6 @@ int identify_board(unsigned long rambase, unsigned int iobase)
 	schedule_timeout(HZ);
 	sig = readl(rambase + SIG_OFFSET);
 	pr_debug("Looking for a signature, got 0x%x\n", sig);
-#if 0
-/*
- * For Gary: 
- * If it's a timing problem, it should be gone with the above schedule()
- * Another possible reason may be the missing volatile in the original
- * code. readl() does this for us.
- */
-	printk("");	/* Hack! Doesn't work without this !!!??? */
-#endif
 	if(sig == SIGNATURE)
 		return PRI_BOARD;
 
@@ -536,9 +527,6 @@ int identify_board(unsigned long rambase, unsigned int iobase)
 	schedule_timeout(HZ);
 	sig = readl(rambase + SIG_OFFSET);
 	pr_debug("Looking for a signature, got 0x%x\n", sig);
-#if 0
-	printk("");	/* Hack! Doesn't work without this !!!??? */
-#endif
 	if(sig == SIGNATURE)
 		return BRI_BOARD;
 

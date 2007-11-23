@@ -158,7 +158,6 @@
 #include <linux/ctype.h>
 #include <asm/segment.h>
 
-#include <linux/isdn_compat.h>
 #include "capiutil.h"
 #include "capicmd.h"
 #include "capidrv.h"
@@ -2022,10 +2021,8 @@ static int if_sendbuf(int id, int channel, int doack, struct sk_buff *skb)
 		        (void)capidrv_del_ack(nccip, datahandle);
 			return 0;
 		}
-#if 1
 		printk(KERN_DEBUG "capidrv-%d: only %d bytes headroom, need %d\n",
 		       card->contrnr, skb_headroom(skb), msglen);
-#endif
 		memcpy(skb_push(nskb, msglen), sendcmsg.buf, msglen);
 		errcode = (*capifuncs->capi_put_message) (global.appid, nskb);
 		if (errcode == CAPI_NOERROR) {
@@ -2211,10 +2208,6 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	    ISDN_FEATURE_L2_V11096 |
 	    ISDN_FEATURE_L2_V11019 |
 	    ISDN_FEATURE_L2_V11038 |
-#if 0
-	    ISDN_FEATURE_L2_FAX |
-	    ISDN_FEATURE_L3_FAX |
-#endif
 	    ISDN_FEATURE_P_UNKNOWN;
 	card->interface.hl_hdrlen = 22; /* len of DATA_B3_REQ */
 	strncpy(card->interface.id, id, sizeof(card->interface.id) - 1);

@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.132.2.4 1999/09/10 01:08:08 paulus Exp $
+ * $Id: setup.c,v 1.132.2.5 1999/09/11 03:32:50 paulus Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -412,6 +412,8 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	{
 #ifdef CONFIG_MACH_SPECIFIC
 		/* prom_init has already been called from __start */
+		if (boot_infos)
+			relocate_nodes();
 		finish_device_tree();
 #endif /* CONFIG_MACH_SPECIFIC	*/
 		/*

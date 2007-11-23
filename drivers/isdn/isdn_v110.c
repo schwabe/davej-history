@@ -155,14 +155,6 @@ isdn_v110_close(isdn_v110_stream * v)
 		return;
 #ifdef ISDN_V110_DEBUG
 	printk(KERN_DEBUG "v110 close\n");
-#if 0
-	printk(KERN_DEBUG "isdn_v110_close: nbytes=%d\n", v->nbytes);
-	printk(KERN_DEBUG "isdn_v110_close: nbits=%d\n", v->nbits);
-	printk(KERN_DEBUG "isdn_v110_close: key=%d\n", v->key);
-	printk(KERN_DEBUG "isdn_v110_close: SyncInit=%d\n", v->SyncInit);
-	printk(KERN_DEBUG "isdn_v110:close: decodelen=%d\n", v->decodelen);
-	printk(KERN_DEBUG "isdn_v110_close: framelen=%d\n", v->framelen);
-#endif
 #endif
 	kfree(v->encodebuf);
 	kfree(v);

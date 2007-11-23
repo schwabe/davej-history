@@ -1,8 +1,8 @@
-/* $Id: eicon.h,v 1.8 1999/07/25 15:12:01 armin Exp $
+/* $Id: eicon.h,v 1.14 1999/09/08 20:17:31 armin Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  *
- * Copyright 1998    by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1998    by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1998,99 by Armin Schindler (mac@melware.de) 
  * Copyright 1999    Cytronics & Melware (info@melware.de)
  *
@@ -21,6 +21,29 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon.h,v $
+ * Revision 1.14  1999/09/08 20:17:31  armin
+ * Added microchannel patch from Erik Weber.
+ *
+ * Revision 1.13  1999/09/06 07:29:35  fritz
+ * Changed my mail-address.
+ *
+ * Revision 1.12  1999/09/04 06:20:05  keil
+ * Changes from kernel set_current_state()
+ *
+ * Revision 1.11  1999/08/29 17:23:44  armin
+ * New setup compat.
+ * Bugfix if compile as not module.
+ *
+ * Revision 1.10  1999/08/22 20:26:41  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
+ * Revision 1.9  1999/08/18 20:16:57  armin
+ * Added XLOG function for all cards.
+ * Bugfix of alloc_skb NULL pointer.
+ *
  * Revision 1.8  1999/07/25 15:12:01  armin
  * fix of some debug logs.
  * enabled ISA-cards option.
@@ -73,6 +96,7 @@
 #define EICON_IOCTL_LOADPCI   7 
 #define EICON_IOCTL_LOADISA   8 
 #define EICON_IOCTL_GETVER    9 
+#define EICON_IOCTL_GETXLOG  10 
 
 #define EICON_IOCTL_MANIF    90 
 
@@ -101,6 +125,7 @@
 #define EICON_CTYPE_QUADRO_NR(n) (n<<4)
 
 #define MAX_HEADER_LEN 10
+
 
 /* Struct for adding new cards */
 typedef struct eicon_cdef {
@@ -186,6 +211,7 @@ typedef struct {
 #ifdef __KERNEL__
 
 /* Kernel includes */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/tqueue.h>
@@ -209,6 +235,7 @@ typedef struct {
 
 #include <linux/isdnif.h>
 
+
 typedef struct {
   __u16 length __attribute__ ((packed)); /* length of data/parameter field */
   __u8  P[1];                          /* data/parameter field */
@@ -223,6 +250,92 @@ typedef struct {
 }
 
 #endif /* KERNEL */
+
+#define DIVAS_SHARED_OFFSET	(0x1000)
+
+#define MIPS_BUFFER_SZ  128
+#define MIPS_MAINT_OFFS 0xff00
+
+#define XLOG_ERR_CARD_NUM       (13)
+#define XLOG_ERR_DONE           (14)
+#define XLOG_ERR_CMD            (15)
+#define XLOG_ERR_TIMEOUT        (16)
+#define XLOG_ERR_CARD_STATE     (17)
+#define XLOG_ERR_UNKNOWN        (18)
+#define XLOG_OK                  (0)
+
+typedef struct {
+  __u8 Id	__attribute__ ((packed));
+  __u8 uX	__attribute__ ((packed));
+  __u8 listen	__attribute__ ((packed));
+  __u8 active	__attribute__ ((packed));
+  __u8 sin[3]	__attribute__ ((packed));
+  __u8 bc[6]	__attribute__ ((packed));
+  __u8 llc[6]	__attribute__ ((packed));
+  __u8 hlc[6]	__attribute__ ((packed));
+  __u8 oad[20]	__attribute__ ((packed));
+}DSigStruc;
+
+typedef struct {
+  __u32 cx_b1	__attribute__ ((packed));
+  __u32 cx_b2	__attribute__ ((packed));
+  __u32 cr_b1	__attribute__ ((packed));
+  __u32 cr_b2	__attribute__ ((packed));
+  __u32 px_b1	__attribute__ ((packed));
+  __u32 px_b2	__attribute__ ((packed));
+  __u32 pr_b1	__attribute__ ((packed));
+  __u32 pr_b2	__attribute__ ((packed));
+  __u16 er_b1	__attribute__ ((packed));
+  __u16 er_b2	__attribute__ ((packed));
+}BL1Struc;
+
+typedef struct {
+  __u32 XTotal	__attribute__ ((packed));
+  __u32 RTotal	__attribute__ ((packed));
+  __u16 XError	__attribute__ ((packed));
+  __u16 RError	__attribute__ ((packed));
+}L2Struc;
+
+typedef struct {
+  __u16 free_n;
+}OSStruc;
+
+typedef union
+{
+  DSigStruc DSigStats;
+  BL1Struc BL1Stats;
+  L2Struc L2Stats;
+  OSStruc OSStats;
+  __u8   b[MIPS_BUFFER_SZ];
+  __u16   w[MIPS_BUFFER_SZ>>1];
+  __u16   l[MIPS_BUFFER_SZ>>2]; /* word is wrong, do not use! Use 'd' instead. */
+  __u32  d[MIPS_BUFFER_SZ>>2];
+} MIPS_BUFFER;
+
+typedef struct
+{
+  __u8 req	__attribute__ ((packed));
+  __u8 rc	__attribute__ ((packed));
+  __u8 reserved[2]	__attribute__ ((packed));     /* R3000 alignment ... */
+  __u8 *mem	__attribute__ ((packed));
+  __u16 length	__attribute__ ((packed));		/* used to be short */
+  __u16 port	__attribute__ ((packed));
+  __u8 fill[4]	__attribute__ ((packed));         /* data at offset 16   */
+  MIPS_BUFFER data	__attribute__ ((packed));
+} mi_pc_maint_t;
+
+typedef struct
+{
+        __u16 command;
+        mi_pc_maint_t pcm;
+}xlogreq_t;
+
+typedef struct{
+        __u16 code	__attribute__ ((packed));	/* used to be short */
+        __u16 timeh	__attribute__ ((packed));
+        __u16 timel	__attribute__ ((packed));
+        char buffer[MIPS_BUFFER_SZ - 6];
+}xlog_entry_t;
 
 
 #define DSP_COMBIFILE_FORMAT_IDENTIFICATION_SIZE 48
@@ -497,8 +610,9 @@ typedef struct eicon_card {
         isdn_if interface;               /* Interface to upper layer         */
         char regname[35];                /* Name used for request_region     */
 #ifdef CONFIG_MCA
-        int  mca_slot;                   /* # of cards MCA slot              */
-#endif
+        int	mca_slot;	 	 /* # of cards MCA slot              */
+	int	mca_io;			 /* MCA cards IO port		     */
+#endif /* CONFIG_MCA */
 } eicon_card;
 
 /* -----------------------------------------------------------**
@@ -555,6 +669,7 @@ extern void eicon_io_transmit(eicon_card *card);
 extern void eicon_irq(int irq, void *dev_id, struct pt_regs *regs);
 extern void eicon_io_rcv_dispatch(eicon_card *ccard);
 extern void eicon_io_ack_dispatch(eicon_card *ccard);
+extern int eicon_get_xlog(eicon_card *card, xlogreq_t *xlogreq);
 #ifdef CONFIG_MCA
 extern int eicon_mca_find_card(int, int, int, char *);
 extern int eicon_mca_probe(int, int, int, int, char *);

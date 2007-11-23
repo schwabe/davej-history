@@ -17,15 +17,15 @@
 #endif
 
 #define spin_lock_init(lock)	do { } while(0)
-#define spin_lock(lock)		do { } while(0)
+#define spin_lock(lock)		(void)(lock)	/* avoid unused vble warning */
 #define spin_trylock(lock)	(1)
 #define spin_unlock_wait(lock)	do { } while(0)
 #define spin_unlock(lock)	do { } while(0)
-#define spin_lock_irq(lock)	cli()
+#define spin_lock_irq(lock)	do { cli(); (void)(lock); } while (0)
 #define spin_unlock_irq(lock)	sti()
 
 #define spin_lock_irqsave(lock, flags) \
-	do { save_flags(flags); cli(); } while (0)
+	do { save_flags(flags); cli(); (void)(lock); } while (0)
 #define spin_unlock_irqrestore(lock, flags) \
 	restore_flags(flags)
 
@@ -49,21 +49,21 @@
   #define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
 #endif
 
-#define read_lock(lock)		do { } while(0)
+#define read_lock(lock)		(void)(lock)
 #define read_unlock(lock)	do { } while(0)
-#define write_lock(lock)	do { } while(0)
+#define write_lock(lock)	(void)(lock)
 #define write_unlock(lock)	do { } while(0)
-#define read_lock_irq(lock)	cli()
+#define read_lock_irq(lock)	do { cli(); (void)(lock); } while (0)
 #define read_unlock_irq(lock)	sti()
-#define write_lock_irq(lock)	cli()
+#define write_lock_irq(lock)	do { cli(); (void)(lock); } while (0)
 #define write_unlock_irq(lock)	sti()
 
 #define read_lock_irqsave(lock, flags)	\
-	do { save_flags(flags); cli(); } while (0)
+	do { save_flags(flags); cli(); (void)(lock); } while (0)
 #define read_unlock_irqrestore(lock, flags) \
 	restore_flags(flags)
 #define write_lock_irqsave(lock, flags)	\
-	do { save_flags(flags); cli(); } while (0)
+	do { save_flags(flags); cli(); (void)(lock); } while (0)
 #define write_unlock_irqrestore(lock, flags) \
 	restore_flags(flags)
 

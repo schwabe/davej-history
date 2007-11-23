@@ -1,4 +1,4 @@
-/* $Id: isac.c,v 1.22 1999/08/09 19:04:40 keil Exp $
+/* $Id: isac.c,v 1.23 1999/08/25 16:50:52 keil Exp $
 
  * isac.c   ISAC specific routines
  *
@@ -9,6 +9,9 @@
  *		../../../Documentation/isdn/HiSax.cert
  *
  * $Log: isac.c,v $
+ * Revision 1.23  1999/08/25 16:50:52  keil
+ * Fix bugs which cause 2.3.14 hangs (waitqueue init)
+ *
  * Revision 1.22  1999/08/09 19:04:40  keil
  * Fix race condition - Thanks to Christer Weinigel
  *
@@ -168,10 +171,14 @@ isac_bh(struct IsdnCardState *cs)
 		DChannel_proc_rcv(cs);
 	if (test_and_clear_bit(D_XMTBUFREADY, &cs->event))
 		DChannel_proc_xmt(cs);
+#if ARCOFI_USE
+	if (!test_bit(HW_ARCOFI, &cs->HW_Flags))
+		return;
 	if (test_and_clear_bit(D_RX_MON1, &cs->event))
 		arcofi_fsm(cs, ARCOFI_RX_END, NULL);
 	if (test_and_clear_bit(D_TX_MON1, &cs->event))
 		arcofi_fsm(cs, ARCOFI_TX_END, NULL);
+#endif
 }
 
 void
@@ -293,7 +300,7 @@ isac_interrupt(struct IsdnCardState *cs, u_char val)
 				if (!(skb = alloc_skb(count, GFP_ATOMIC)))
 					printk(KERN_WARNING "HiSax: D receive out of memory\n");
 				else {
-					SET_SKB_FREE(skb);
+					;
 					memcpy(skb_put(skb, count), cs->rcvbuf, count);
 					skb_queue_tail(&cs->rq, skb);
 				}
@@ -321,7 +328,7 @@ isac_interrupt(struct IsdnCardState *cs, u_char val)
 				isac_fill_fifo(cs);
 				goto afterXPR;
 			} else {
-				idev_kfree_skb(cs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(cs->tx_skb);
 				cs->tx_cnt = 0;
 				cs->tx_skb = NULL;
 			}
@@ -607,7 +614,7 @@ ISAC_l1hw(struct PStack *st, int pr, void *arg)
 			discard_queue(&cs->rq);
 			discard_queue(&cs->sq);
 			if (cs->tx_skb) {
-				idev_kfree_skb(cs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(cs->tx_skb);
 				cs->tx_skb = NULL;
 			}
 			if (test_and_clear_bit(FLG_DBUSY_TIMER, &cs->HW_Flags))
@@ -663,7 +670,7 @@ dbusy_timer_handler(struct IsdnCardState *cs)
 			/* discard frame; reset transceiver */
 			test_and_clear_bit(FLG_DBUSY_TIMER, &cs->HW_Flags);
 			if (cs->tx_skb) {
-				idev_kfree_skb(cs->tx_skb, FREE_WRITE);
+				dev_kfree_skb(cs->tx_skb);
 				cs->tx_cnt = 0;
 				cs->tx_skb = NULL;
 			} else {

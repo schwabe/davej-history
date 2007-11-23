@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.49 1999/07/06 07:47:11 calle Exp $
+/* $Id: isdn_ppp.c,v 1.54 1999/09/13 23:25:17 he Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,24 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
+ * Revision 1.54  1999/09/13 23:25:17  he
+ * serialized xmitting frames from isdn_ppp and BSENT statcallb
+ *
+ * Revision 1.53  1999/08/31 11:18:14  paul
+ * various spelling corrections (new checksums may be needed, Karsten!)
+ *
+ * Revision 1.52  1999/08/22 20:26:07  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
+ * Revision 1.51  1999/08/18 16:19:17  hipp
+ * applied MPPP-resize-headroom patch
+ *
+ * Revision 1.50  1999/08/16 07:11:41  hipp
+ * Additional VJ decomp-buffer-size increased from 40 to 128
+ *
  * Revision 1.49  1999/07/06 07:47:11  calle
  * bugfix: dev_alloc_skb only reserve 16 bytes. We need to look at the
  *  	hdrlen the driver want. So I changed dev_alloc_skb calls
@@ -269,7 +287,7 @@ static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
 static void isdn_ppp_free_mpqueue(isdn_net_dev *);
 #endif
 
-char *isdn_ppp_revision = "$Revision: 1.49 $";
+char *isdn_ppp_revision = "$Revision: 1.54 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 static struct isdn_ppp_compressor *ipc_head = NULL;
@@ -438,9 +456,7 @@ isdn_ppp_wakeup_daemon(isdn_net_local * lp)
 
 	ippp_table[lp->ppp_slot]->state = IPPP_OPEN | IPPP_CONNECT | IPPP_NOBLOCK;
 
-#ifndef COMPAT_HAS_NEW_WAITQ
 	if (ippp_table[lp->ppp_slot]->wq)
-#endif
 		wake_up_interruptible(&ippp_table[lp->ppp_slot]->wq);
 }
 
@@ -458,11 +474,7 @@ isdn_ppp_closewait(int slot)
 		return 0;
 	is = ippp_table[slot];
 
-#ifdef COMPAT_HAS_NEW_WAITQ
-	if (is->state)
-#else
 	if (is->state && is->wq)
-#endif
 		wake_up_interruptible(&is->wq);
 
 	is->state = IPPP_CLOSEWAIT;
@@ -503,9 +515,6 @@ isdn_ppp_open(int min, struct file *file)
 	}
 	is = file->private_data = ippp_table[slot];
 
-#if 0
-	if (is->debug & 0x1)
-#endif
 		printk(KERN_DEBUG "ippp, open, slot: %d, minor: %d, state: %04x\n", slot, min, is->state);
 
 	/* compression stuff */
@@ -527,11 +536,7 @@ isdn_ppp_open(int min, struct file *file)
 	is->mru = 1524;         /* MRU, default 1524 */
 	is->maxcid = 16;        /* VJ: maxcid */
 	is->tk = current;
-#ifdef COMPAT_HAS_NEW_WAITQ
-	init_waitqueue_head(&is->wq);
-#else
 	is->wq = NULL;          /* read() wait queue */
-#endif
 	is->first = is->rq + NUM_RCV_BUFFS - 1;	/* receive queue */
 	is->last = is->rq;
 	is->minor = min;
@@ -707,10 +712,6 @@ isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long arg)
 			}
 			is->pppcfg = val;
 			break;
-#if 0
-		case PPPIOCGSTAT:	/* read PPP statistic information */
-			break;
-#endif
 		case PPPIOCGIDLE:	/* get idle time information */
 			if (lp) {
 				struct ppp_idle pidle;
@@ -899,9 +900,7 @@ isdn_ppp_fill_rq(unsigned char *buf, int len, int proto, int slot)
 	is->last = bl->next;
 	restore_flags(flags);
 
-#ifndef COMPAT_HAS_NEW_WAITQ
 	if (is->wq)
-#endif
 		wake_up_interruptible(&is->wq);
 
 	return len;
@@ -992,6 +991,7 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 			lp->dialstate == 0 &&
 		    (lp->flags & ISDN_NET_CONNECTED)) {
 			unsigned short hl;
+			unsigned long flags;
 			int cnt;
 			struct sk_buff *skb;
 			/*
@@ -1015,6 +1015,8 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 
 			isdn_ppp_send_ccp(lp->netdev,lp,skb); /* keeps CCP/compression states in sync */
 
+			save_flags(flags);
+			cli();
 			if ((cnt = isdn_writebuf_skb_stub(lp->isdn_device, lp->isdn_channel, 1, skb)) != count) {
 				if (lp->sav_skb) {
 					dev_kfree_skb(lp->sav_skb);
@@ -1023,6 +1025,7 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 					printk(KERN_INFO "isdn_ppp_write: Can't write PPP frame to LL (%d,%d)!\n", cnt, count);
 				lp->sav_skb = skb;
 			}
+			restore_flags(flags);
 		}
 	}
 	return count;
@@ -1103,7 +1106,7 @@ void isdn_ppp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buf
 		isdn_ppp_frame_log("receive", skb->data, skb->len, 32,is->unit,lp->ppp_slot);
 	}
 	if (net_dev->local->master) {
-		printk(KERN_WARNING "isdn_ppp_receice: net_dev != master\n");
+		printk(KERN_WARNING "isdn_ppp_receive: net_dev != master\n");
 		net_dev = ((isdn_net_local *) net_dev->local->master->priv)->netdev;
 	}
 	if (skb->data[0] == 0xff && skb->data[1] == 0x03)
@@ -1413,22 +1416,24 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 static unsigned char *isdn_ppp_skb_push(struct sk_buff **skb_p,int len)
 {
 	struct sk_buff *skb = *skb_p;
-	
+
 	if(skb_headroom(skb) < len) {
 		struct sk_buff *nskb = skb_realloc_headroom(skb, len);
-		
+
 		if (!nskb) {
-			printk(KERN_INFO "isdn_ppp_skb_push: can't realloc headroom!\n");
+			printk(KERN_ERR "isdn_ppp_skb_push: can't realloc headroom!\n");
 			dev_kfree_skb(skb);
 			return NULL;
 		}
+		printk(KERN_DEBUG "isdn_ppp_skb_push:under %d %d\n",skb_headroom(skb),len);
 		dev_kfree_skb(skb);
 		*skb_p = nskb;
 		return skb_push(nskb, len);
 	}
 	return skb_push(skb,len);
 }
-	
+
+
 /*
  * send ppp frame .. we expect a PIDCOMPressable proto --
  *  (here: currently always PPP_IP,PPP_VJC_COMP,PPP_VJC_UNCOMP)
@@ -1445,6 +1450,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 	isdn_net_dev *nd;
 	unsigned int proto = PPP_IP;     /* 0x21 */
 	struct ippp_struct *ipt,*ipts;
+	unsigned long flags;
 
 	if (mdev)
 		mlp = (isdn_net_local *) (mdev->priv);
@@ -1640,13 +1646,16 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 		printk(KERN_DEBUG "skb xmit: len: %d\n", (int) skb->len);
 		isdn_ppp_frame_log("xmit", skb->data, skb->len, 32,ipt->unit,lp->ppp_slot);
 	}
+	save_flags(flags);
+	cli();
 	if (isdn_net_send_skb(netdev, lp, skb)) {
-		if (lp->sav_skb) {	/* whole sav_skb processing with disabled IRQs ?? */
+		if (lp->sav_skb) {	/* should never happen as sav_skb are sent with disabled IRQs) */
 			printk(KERN_ERR "%s: whoops .. there is another stored skb!\n", netdev->name);
 			dev_kfree_skb(skb);
 		} else
 			lp->sav_skb = skb;
 	}
+	restore_flags(flags);
 	return 0;
 }
 
@@ -1730,12 +1739,6 @@ isdn_ppp_bundle(struct ippp_struct *is, int unit)
 
 	ippp_table[nlp->ppp_slot]->mpppcfg |= ippp_table[lp->ppp_slot]->mpppcfg &
 	    (SC_MP_PROT | SC_REJ_MP_PROT | SC_OUT_SHORT_SEQ | SC_IN_SHORT_SEQ);
-#if 0
-	if (ippp_table[nlp->ppp_slot]->mpppcfg != ippp_table[lp->ppp_slot]->mpppcfg) {
-		printk(KERN_WARNING "isdn_ppp_bundle: different MP options %04x and %04x\n",
-		       ippp_table[nlp->ppp_slot]->mpppcfg, ippp_table[lp->ppp_slot]->mpppcfg);
-	}
-#endif
 
 	restore_flags(flags);
 	return 0;
@@ -2061,9 +2064,6 @@ isdn_ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	int len;
 	isdn_net_local *lp = (isdn_net_local *) dev->priv;
 
-#if 0
-	printk(KERN_DEBUG "ippp, dev_ioctl: cmd %#08x , %d \n", cmd, lp->ppp_slot);
-#endif
 
 	if (lp->p_encap != ISDN_NET_ENCAP_SYNCPPP)
 		return -EINVAL;
@@ -2228,6 +2228,7 @@ static void isdn_ppp_ccp_xmit_reset(struct ippp_struct *is, int proto,
 	struct sk_buff *skb;
 	unsigned char *p;
 	int count;
+	unsigned long flags;
 	int cnt = 0;
 	isdn_net_local *lp = is->lp;
 
@@ -2270,6 +2271,8 @@ static void isdn_ppp_ccp_xmit_reset(struct ippp_struct *is, int proto,
 	   especially dunno what the sav_skb stuff is good for. */
 
 	count = skb->len;
+	save_flags(flags);
+	cli();
 	if ((cnt = isdn_writebuf_skb_stub(lp->isdn_device, lp->isdn_channel,
 					  1, skb)) != count) {
 		if (lp->sav_skb) {
@@ -2283,6 +2286,7 @@ static void isdn_ppp_ccp_xmit_reset(struct ippp_struct *is, int proto,
 			       cnt, count);
 		lp->sav_skb = skb;
 	}
+	restore_flags(flags);
 }
 
 /* Allocate the reset state vector */
@@ -2639,13 +2643,7 @@ static struct sk_buff *isdn_ppp_compress(struct sk_buff *skb_in,int *proto,
     }
 
 	if(type) { /* type=1 => Link compression */
-#if 0
-		compressor = is->link_compressor;
-		stat = is->link_comp_stat;
-		new_proto = PPP_LINK_COMP;
-#else
 		return skb_in;
-#endif
 	}
 	else {
 		if(!master) {
@@ -2986,5 +2984,3 @@ static int isdn_ppp_set_compressor(struct ippp_struct *is, struct isdn_ppp_comp_
 	}
 	return -EINVAL;
 }
-
-

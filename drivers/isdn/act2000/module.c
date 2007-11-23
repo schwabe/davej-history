@@ -701,10 +701,6 @@ act2000_alloccard(int bus, int port, int irq, char *id)
         card->interface.features =
 		ISDN_FEATURE_L2_X75I |
 		ISDN_FEATURE_L2_HDLC |
-#if 0
-/* Not yet! New Firmware is on the way ... */
-		ISDN_FEATURE_L2_TRANS |
-#endif
 		ISDN_FEATURE_L3_TRANS |
 		ISDN_FEATURE_P_UNKNOWN;
         card->interface.hl_hdrlen = 20;

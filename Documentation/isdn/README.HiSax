@@ -55,13 +55,15 @@ USR Sportster internal TA (compatible Stollmann tina-pp V3)
 ith Kommunikationstechnik GmbH MIC 16 ISA card
 Traverse Technologie NETjet PCI S0 card
 Dr. Neuhaus Niccy PnP/PCI
-Siemens I-Surf
+Siemens I-Surf 1.0
+Siemens I-Surf 2.0 (with IPAC, try type 12 asuscom) 
 ACER P10
 HST Saphir
 Berkom Telekom A4T
 Scitel Quadro
 Gazel ISDN cards
 HFC-PCI based cards
+Winbond W6692 based cards
 
 Note: PCF, PCF-Pro: up to now, only the ISDN part is supported
       PCC-8: not tested yet
@@ -173,7 +175,7 @@ Card types:
    27   AVM PnP (Fritz!PnP)      irq, io  (from isapnp setup)
    27   AVM PCI (Fritz!PCI)      no parameter
    28   Sedlbauer Speed Fax+     irq, io (from isapnp setup)
-   29	Siemens I-Surf           irq, io, memory (from isapnp setup)   
+   29	Siemens I-Surf 1.0       irq, io, memory (from isapnp setup)   
    30	ACER P10                 irq, io (from isapnp setup)   
    31	HST Saphir               irq, io
    32	Telekom A4T              none
@@ -181,6 +183,7 @@ Card types:
    34	Gazel ISDN cards (ISA)   irq,io
    34	Gazel ISDN cards (PCI)   none
    35	HFC 2BDS0 PCI            none
+   36	W6692 based PCI cards    none
 
 
 At the moment IRQ sharing is only possible with PCI cards. Please make sure
@@ -276,7 +279,7 @@ type
    27   AVM PnP (Fritz!PnP)     ONLY WORKS AS A MODULE !
    27   AVM PCI (Fritz!PCI)     no parameter
    28   Sedlbauer Speed Fax+    ONLY WORKS AS A MODULE !
-   29	Siemens I-Surf          ONLY WORKS AS A MODULE !
+   29	Siemens I-Surf 1.0      ONLY WORKS AS A MODULE !
    30	ACER P10                ONLY WORKS AS A MODULE !
    31	HST Saphir              pa=irq, pb=io
    32	Telekom A4T             no parameter
@@ -284,6 +287,7 @@ type
    34	Gazel ISDN cards (ISA)  pa=irq, pb=io
    34	Gazel ISDN cards (PCI)  no parameter
    35	HFC 2BDS0 PCI           no parameter
+   36	W6692 based PCI cards   none
 
 Running the driver
 ------------------
@@ -424,6 +428,7 @@ Special thanks to:
 	Klaus Lichtenwalder (Klaus.Lichtenwalder@WebForum.DE), for ELSA PCMCIA support
 	Enrik Berkhan (enrik@starfleet.inka.de) for S0BOX specific stuff
 	Ton van Rosmalen for Teles PCI
+	Petr Novak <petr.novak@i.cz> for Winbond W6692 support
         and more people who are hunting bugs. (If I forgot somebody, please
 	send me a mail).
 

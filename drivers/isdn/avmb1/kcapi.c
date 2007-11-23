@@ -1,11 +1,18 @@
 /*
- * $Id: kcapi.c,v 1.6 1999/07/20 06:41:49 calle Exp $
+ * $Id: kcapi.c,v 1.8 1999/09/10 17:24:18 calle Exp $
  * 
  * Kernel CAPI 2.0 Module
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kcapi.c,v $
+ * Revision 1.8  1999/09/10 17:24:18  calle
+ * Changes for proposed standard for CAPI2.0:
+ * - AK148 "Linux Exention"
+ *
+ * Revision 1.7  1999/09/04 06:20:05  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.6  1999/07/20 06:41:49  calle
  * Bugfix: After the redesign of the AVM B1 driver, the driver didn't even
  *         compile, if not selected as modules.
@@ -57,7 +64,7 @@
 #include <linux/tqueue.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
-#include <linux/isdn_compat.h>
+#include <asm/uaccess.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
@@ -65,7 +72,7 @@
 #include <linux/b1lli.h>
 #endif
 
-static char *revision = "$Revision: 1.6 $";
+static char *revision = "$Revision: 1.8 $";
 
 /* ------------------------------------------------------------- */
 
@@ -119,7 +126,7 @@ struct capi_appl {
 /* ------------------------------------------------------------- */
 
 static struct capi_version driver_version = {2, 0, 1, 1<<4};
-static char driver_serial[CAPI_SERIAL_LEN] = "4711";
+static char driver_serial[CAPI_SERIAL_LEN] = "0004711";
 static char capi_manufakturer[64] = "AVM Berlin";
 
 #define APPL(a)		   (&applications[(a)-1])
@@ -719,7 +726,7 @@ error:
 
 /* -------- Notifier ------------------------------------------ */
 
-static void notify_up(__u16 contr)
+static void notify_up(__u32 contr)
 {
 	struct capi_interface_user *p;
 
@@ -730,7 +737,7 @@ static void notify_up(__u16 contr)
 	}
 }
 
-static void notify_down(__u16 contr)
+static void notify_down(__u32 contr)
 {
 	struct capi_interface_user *p;
         printk(KERN_NOTICE "kcapi: notify down contr %d\n", contr);
@@ -742,7 +749,7 @@ static void notify_down(__u16 contr)
 
 static void notify_handler(void *dummy)
 {
-	__u16 contr;
+	__u32 contr;
 
 	for (contr=1; VALID_CARD(contr); contr++)
 		 if (test_and_clear_bit(contr, &notify_up_set))
@@ -984,14 +991,14 @@ void detach_capi_driver(struct capi_driver *driver)
 /* -------- CAPI2.0 Interface ---------------------------------- */
 /* ------------------------------------------------------------- */
 
-static int capi_installed(void)
+static __u16 capi_isinstalled(void)
 {
 	int i;
 	for (i = 0; i < CAPI_MAXCONTR; i++) {
 		if (cards[i].cardstate == CARD_RUNNING)
-			return 1;
+			return CAPI_NOERROR;
 	}
-	return 0;
+	return CAPI_REGNOTINSTALLED;
 }
 
 static __u16 capi_register(capi_register_params * rparam, __u16 * applidp)
@@ -1053,7 +1060,7 @@ static __u16 capi_release(__u16 applid)
 static __u16 capi_put_message(__u16 applid, struct sk_buff *skb)
 {
 	struct capi_ncci *np;
-	int contr;
+	__u32 contr;
 	int showctl = 0;
 	__u8 cmd, subcmd;
 
@@ -1131,53 +1138,53 @@ static __u16 capi_set_signal(__u16 applid,
 	return CAPI_NOERROR;
 }
 
-static __u16 capi_get_manufacturer(__u16 contr, __u8 buf[CAPI_MANUFACTURER_LEN])
+static __u16 capi_get_manufacturer(__u32 contr, __u8 buf[CAPI_MANUFACTURER_LEN])
 {
 	if (contr == 0) {
 		strncpy(buf, capi_manufakturer, CAPI_MANUFACTURER_LEN);
 		return CAPI_NOERROR;
 	}
 	if (!VALID_CARD(contr) || CARD(contr)->cardstate != CARD_RUNNING) 
-		return 0x2002;
+		return CAPI_REGNOTINSTALLED;
 
 	strncpy(buf, CARD(contr)->manu, CAPI_MANUFACTURER_LEN);
 	return CAPI_NOERROR;
 }
 
-static __u16 capi_get_version(__u16 contr, struct capi_version *verp)
+static __u16 capi_get_version(__u32 contr, struct capi_version *verp)
 {
 	if (contr == 0) {
 		*verp = driver_version;
 		return CAPI_NOERROR;
 	}
 	if (!VALID_CARD(contr) || CARD(contr)->cardstate != CARD_RUNNING) 
-		return 0x2002;
+		return CAPI_REGNOTINSTALLED;
 
 	memcpy((void *) verp, &CARD(contr)->version, sizeof(capi_version));
 	return CAPI_NOERROR;
 }
 
-static __u16 capi_get_serial(__u16 contr, __u8 serial[CAPI_SERIAL_LEN])
+static __u16 capi_get_serial(__u32 contr, __u8 serial[CAPI_SERIAL_LEN])
 {
 	if (contr == 0) {
 		strncpy(serial, driver_serial, CAPI_SERIAL_LEN);
 		return CAPI_NOERROR;
 	}
 	if (!VALID_CARD(contr) || CARD(contr)->cardstate != CARD_RUNNING) 
-		return 0x2002;
+		return CAPI_REGNOTINSTALLED;
 
 	strncpy((void *) serial, CARD(contr)->serial, CAPI_SERIAL_LEN);
 	return CAPI_NOERROR;
 }
 
-static __u16 capi_get_profile(__u16 contr, struct capi_profile *profp)
+static __u16 capi_get_profile(__u32 contr, struct capi_profile *profp)
 {
 	if (contr == 0) {
 		profp->ncontroller = ncards;
 		return CAPI_NOERROR;
 	}
 	if (!VALID_CARD(contr) || CARD(contr)->cardstate != CARD_RUNNING) 
-		return 0x2002;
+		return CAPI_REGNOTINSTALLED;
 
 	memcpy((void *) profp, &CARD(contr)->profile,
 			sizeof(struct capi_profile));
@@ -1404,7 +1411,7 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 
 struct capi_interface avmb1_interface =
 {
-	capi_installed,
+	capi_isinstalled,
 	capi_register,
 	capi_release,
 	capi_put_message,
@@ -1479,6 +1486,12 @@ extern int t1isa_init(void);
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
 extern int b1pcmcia_init(void);
 #endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
+extern int t1pci_init(void);
+#endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_C4
+extern int c4_init(void);
+#endif
 #endif
 
 /*
@@ -1527,6 +1540,12 @@ int kcapi_init(void)
 #endif
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
 	(void)b1pcmcia_init();
+#endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
+	(void)t1pci_init();
+#endif
+#ifdef CONFIG_ISDN_DRV_AVMB1_C4
+	(void)c4_init();
 #endif
 #endif
 	return 0;

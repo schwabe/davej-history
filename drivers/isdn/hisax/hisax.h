@@ -1,8 +1,15 @@
-/* $Id: hisax.h,v 2.33 1999/08/05 20:43:16 keil Exp $
+/* $Id: hisax.h,v 2.35 1999/09/04 06:35:09 keil Exp $
 
  *   Basic declarations, defines and prototypes
  *
  * $Log: hisax.h,v $
+ * Revision 2.35  1999/09/04 06:35:09  keil
+ * Winbond W6692 support
+ *
+ * Revision 2.34  1999/08/25 17:00:04  keil
+ * Make ISAR V32bis modem running
+ * Make LL->HL interface open for additional commands
+ *
  * Revision 2.33  1999/08/05 20:43:16  keil
  * ISAR analog modem support
  *
@@ -154,7 +161,6 @@
 #define CARD_RELEASE	0x00F3
 #define CARD_TEST	0x00F4
 #define CARD_AUX_IND	0x00F5
-#define CARD_LOAD_FIRM	0x00F6
 
 #define PH_ACTIVATE	0x0100
 #define PH_DEACTIVATE	0x0110
@@ -444,6 +450,13 @@ struct hscx_hw {
 	u_char tsaxr1;
 };
 
+struct w6692B_hw {
+	int bchan;
+	int rcvidx;
+	int count;              /* Current skb sent count */
+	u_char *rcvbuf;         /* B-Channel receive Buffer */
+};
+
 struct isar_reg {
 	unsigned int Flags;
 	volatile u_char bstat;
@@ -458,6 +471,12 @@ struct isar_hw {
 	int rcvidx;
 	int txcnt;
 	int mml;
+	u_char state;
+	u_char cmd;
+	u_char mod;
+	u_char newcmd;
+	u_char newmod;
+	struct timer_list ftimer;
 	u_char *rcvbuf;         /* B-Channel receive Buffer */
 	u_char conmsg[16];
 	struct isar_reg *reg;
@@ -528,6 +547,14 @@ struct amd7930_hw {
 #define BC_FLG_HALF	5
 #define BC_FLG_EMPTY	6
 #define BC_FLG_ORIG	7
+#define BC_FLG_DLEETX	8
+#define BC_FLG_LASTDLE	9
+#define BC_FLG_FIRST	10
+#define BC_FLG_LASTDATA	11
+#define BC_FLG_NMD_DATA	12
+#define BC_FLG_FTI_RUN	13
+#define BC_FLG_LL_OK	14
+#define BC_FLG_LL_CONN	15
 
 #define L1_MODE_NULL	0
 #define L1_MODE_TRANS	1
@@ -561,6 +588,7 @@ struct BCState {
 		struct hfcB_hw hfc;
 		struct tiger_hw tiger;
 		struct amd7930_hw  amd7930;
+		struct w6692B_hw w6692;
 	} hw;
 };
 
@@ -796,6 +824,11 @@ struct gazel_hw {
 	unsigned char iom2;
 };
 
+struct w6692_hw {
+	unsigned int iobase;
+	struct timer_list timer;
+};
+
 #ifdef  CONFIG_HISAX_TESTEMU
 struct te_hw {
 	unsigned char *sfifo;
@@ -804,13 +837,8 @@ struct te_hw {
 	unsigned char *sfifo_e;
 	int sfifo_cnt;
 	unsigned int stat;
-#ifdef COMPAT_HAS_NEW_WAITQ
-	wait_queue_head_t rwaitq;
-	wait_queue_head_t swaitq;
-#else
 	struct wait_queue *rwaitq;
 	struct wait_queue *swaitq;
-#endif
 };
 #endif
 
@@ -830,11 +858,7 @@ struct isac_chip {
 	int mon_rxp;
 	struct arcofi_msg *arcofi_list;
 	struct timer_list arcofitimer;
-#ifdef COMPAT_HAS_NEW_WAITQ
-	wait_queue_head_t arcofi_wait;
-#else
 	struct wait_queue *arcofi_wait;
-#endif
 	u_char arcofi_bc;
 	u_char arcofi_state;
 	u_char mocr;
@@ -849,9 +873,14 @@ struct hfcpci_chip {
 	int ph_state;
 };
 
+struct w6692_chip {
+	int ph_state;
+};
+
 #define HW_IOM1			0
 #define HW_IPAC			1
 #define HW_ISAR			2
+#define HW_ARCOFI		3
 #define FLG_TWO_DCHAN		4
 #define FLG_L1_DBUSY		5
 #define FLG_DBUSY_TIMER 	6
@@ -892,6 +921,7 @@ struct IsdnCardState {
 #endif
 		struct bkm_hw ax;
 		struct gazel_hw gazel;
+		struct w6692_hw w6692;
 	} hw;
 	int myid;
 	isdn_if iif;
@@ -910,6 +940,7 @@ struct IsdnCardState {
 	void   (*setstack_d) (struct PStack *, struct IsdnCardState *);
 	void   (*DC_Close) (struct IsdnCardState *);
 	void   (*irq_func) (int, void *, struct pt_regs *);
+	int    (*auxcmd) (struct IsdnCardState *, isdn_ctrl *);
 	struct Channel channel[2+MAX_WAITING_CALLS];
 	struct BCState bcs[2+MAX_WAITING_CALLS];
 	struct PStack *stlist;
@@ -921,6 +952,7 @@ struct IsdnCardState {
 		struct isac_chip isac;
 		struct hfcd_chip hfcd;
 		struct hfcpci_chip hfcpci;
+		struct w6692_chip w6692;
 	} dc;
 	u_char *rcvbuf;
 	int rcvidx;
@@ -973,7 +1005,8 @@ struct IsdnCardState {
 #define	 ISDN_CTYPE_SCT_QUADRO	33
 #define  ISDN_CTYPE_GAZEL	34
 #define  ISDN_CTYPE_HFC_PCI	35
-#define  ISDN_CTYPE_COUNT	35
+#define  ISDN_CTYPE_W6692	36
+#define  ISDN_CTYPE_COUNT	36
 
 
 #ifdef ISDN_CHIP_ISAC
@@ -1138,7 +1171,6 @@ struct IsdnCardState {
 
 #ifdef	CONFIG_HISAX_HFC_PCI
 #define  CARD_HFC_PCI 1
-extern int hfcpci_set_echo(struct IsdnCardState *, int);
 #else
 #define  CARD_HFC_PCI 0
 #endif
@@ -1219,6 +1251,15 @@ extern int hfcpci_set_echo(struct IsdnCardState *, int);
 #endif
 #else
 #define  CARD_GAZEL  0
+#endif
+
+#ifdef	CONFIG_HISAX_W6692
+#define	CARD_W6692	1
+#ifndef	ISDN_CHIP_W6692
+#define	ISDN_CHIP_W6692	1
+#endif
+#else
+#define	CARD_W6692	0
 #endif
 
 #define TEI_PER_CARD 0
@@ -1327,7 +1368,7 @@ void setstack_isac(struct PStack *st, struct IsdnCardState *cs);
 
 #define HZDELAY(jiffs) {int tout = jiffs; while (tout--) udelay(1000000/HZ);}
 
-int ll_run(struct IsdnCardState *cs);
+int ll_run(struct IsdnCardState *cs, int addfeatures);
 void ll_stop(struct IsdnCardState *cs);
 void CallcNew(void);
 void CallcFree(void);

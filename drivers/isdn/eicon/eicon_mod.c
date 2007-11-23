@@ -1,8 +1,8 @@
-/* $Id: eicon_mod.c,v 1.8 1999/07/25 15:12:08 armin Exp $
+/* $Id: eicon_mod.c,v 1.15 1999/09/08 20:17:31 armin Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  * 
- * Copyright 1997    by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1997    by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1998,99 by Armin Schindler (mac@melware.de) 
  * Copyright 1999    Cytronics & Melware (info@melware.de)
  * 
@@ -26,6 +26,31 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.15  1999/09/08 20:17:31  armin
+ * Added microchannel patch from Erik Weber.
+ *
+ * Revision 1.14  1999/09/06 07:29:35  fritz
+ * Changed my mail-address.
+ *
+ * Revision 1.13  1999/09/04 17:37:59  armin
+ * Removed not used define, did not work and caused error
+ * in 2.3.16
+ *
+ * Revision 1.12  1999/08/31 11:20:14  paul
+ * various spelling corrections (new checksums may be needed, Karsten!)
+ *
+ * Revision 1.11  1999/08/29 17:23:45  armin
+ * New setup compat.
+ * Bugfix if compile as not module.
+ *
+ * Revision 1.10  1999/08/28 21:32:53  armin
+ * Prepared for fax related functions.
+ * Now compilable without errors/warnings.
+ *
+ * Revision 1.9  1999/08/18 20:17:02  armin
+ * Added XLOG function for all cards.
+ * Bugfix of alloc_skb NULL pointer.
+ *
  * Revision 1.8  1999/07/25 15:12:08  armin
  * fix of some debug logs.
  * enabled ISA-cards option.
@@ -63,12 +88,14 @@
  *
  */
 
+#define DRIVERPATCH ""
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #ifdef CONFIG_MCA
 #include <linux/mca.h>
-#endif
+#endif /* CONFIG_MCA */
 
 #include "eicon.h"
 
@@ -77,7 +104,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.8 $";
+static char *eicon_revision = "$Revision: 1.15 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -87,7 +114,7 @@ extern char *eicon_idi_revision;
 #define MOD_USE_COUNT (GET_USE_COUNT (&__this_module))
 #endif
 
-#define EICON_CTRL_VERSION 1
+#define EICON_CTRL_VERSION 2 
 
 ulong DebugVar;
 
@@ -225,87 +252,6 @@ eicon_find_eaz(eicon_card *card, char eaz)
 	return("\0");
 }
 
-#if 0
-/*
- * Add or delete an MSN to the MSN list
- *
- * First character of msneaz is EAZ, rest is MSN.
- * If length of eazmsn is 1, delete that entry.
- */
-static int
-eicon_set_msn(eicon_card *card, char *eazmsn)
-{
-        struct msn_entry *p = card->msn_list;
-        struct msn_entry *q = NULL;
-	unsigned long flags;
-	int i;
-	
-	if (!strlen(eazmsn))
-		return 0;
-	if (strlen(eazmsn) > 16)
-		return -EINVAL;
-	for (i = 0; i < strlen(eazmsn); i++)
-		if (!isdigit(eazmsn[i]))
-			return -EINVAL;
-        if (strlen(eazmsn) == 1) {
-		/* Delete a single MSN */
-		while (p) {
-			if (p->eaz == eazmsn[0]) {
-				save_flags(flags);
-				cli();
-				if (q)
-					q->next = p->next;
-				else
-					card->msn_list = p->next;
-				restore_flags(flags);
-				kfree(p);
-				if (DebugVar & 8)
-					printk(KERN_DEBUG
-					       "Mapping for EAZ %c deleted\n",
-					       eazmsn[0]);
-				return 0;
-			}
-			q = p;
-			p = p->next;
-		}
-		return 0;
-        }
-	/* Add a single MSN */
-	while (p) {
-		/* Found in list, replace MSN */
-		if (p->eaz == eazmsn[0]) {
-			save_flags(flags);
-			cli();
-			strcpy(p->msn, &eazmsn[1]);
-			restore_flags(flags);
-			if (DebugVar & 8)
-				printk(KERN_DEBUG
-				       "Mapping for EAZ %c changed to %s\n",
-				       eazmsn[0],
-				       &eazmsn[1]);
-			return 0;
-		}
-		p = p->next;
-	}
-	/* Not found in list, add new entry */
-	p = kmalloc(sizeof(msn_entry), GFP_KERNEL);
-	if (!p)
-		return -ENOMEM;
-	p->eaz = eazmsn[0];
-	strcpy(p->msn, &eazmsn[1]);
-	p->next = card->msn_list;
-	save_flags(flags);
-	cli();
-	card->msn_list = p;
-	restore_flags(flags);
-	if (DebugVar & 8)
-		printk(KERN_DEBUG
-		       "Mapping %c -> %s added\n",
-		       eazmsn[0],
-		       &eazmsn[1]);
-	return 0;
-}
-#endif
 
 static void
 eicon_rcv_dispatch(struct eicon_card *card)
@@ -355,6 +301,32 @@ eicon_transmit(struct eicon_card *card)
 	}
 }
 
+static int eicon_xlog(eicon_card *card, xlogreq_t *xlogreq)
+{
+	xlogreq_t *xlr;
+	int ret_val;
+
+	if (!(xlr = kmalloc(sizeof(xlogreq_t), GFP_KERNEL))) {
+		if (DebugVar & 1)
+			printk(KERN_WARNING "idi_err: alloc_xlogreq_t failed\n");
+		return -ENOMEM;
+	}
+	if (copy_from_user(xlr, xlogreq, sizeof(xlogreq_t))) {
+		kfree(xlr);
+		return -EFAULT;
+	}
+
+	ret_val = eicon_get_xlog(card, xlr);
+
+	if (copy_to_user(xlogreq, xlr, sizeof(xlogreq_t))) {
+		kfree(xlr);
+		return -EFAULT;
+	}
+	kfree(xlr);
+
+	return ret_val;
+}
+
 static int
 eicon_command(eicon_card * card, isdn_ctrl * c)
 {
@@ -366,6 +338,10 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 	int ret = 0;
 	unsigned long flags;
  
+	if (DebugVar & 16)
+		printk(KERN_WARNING "eicon_cmd 0x%x with arg 0x%lx (0x%lx)\n",
+			c->command, c->arg, (ulong) *c->parm.num);
+
         switch (c->command) {
 		case ISDN_CMD_IOCTL:
 			memcpy(&a, c->parm.num, sizeof(ulong));
@@ -396,13 +372,22 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 						return -EBUSY;
 					switch (card->bus) {
 						case EICON_BUS_ISA:
-						case EICON_BUS_MCA:
 							if (eicon_isa_find_card(a,
 								card->hwif.isa.irq,
 								card->regname) < 0)
 								return -EFAULT;
 							card->hwif.isa.shmem = (eicon_isa_shmem *)a;
 							return 0;
+						case EICON_BUS_MCA:
+#if CONFIG_MCA
+							if (eicon_mca_find_card(
+								0, a,
+								card->hwif.isa.irq,
+								card->regname) < 0)
+								return -EFAULT;
+							card->hwif.isa.shmem = (eicon_isa_shmem *)a;
+							return 0;
+#endif /* CONFIG_MCA */
 						default:
 							if (DebugVar & 1)
 								printk(KERN_WARNING
@@ -507,6 +492,12 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 						card, 
 						(eicon_manifbuf *)a);
 					return ret;
+
+				case EICON_IOCTL_GETXLOG:
+					if (!card->flags & EICON_FLAGS_RUNNING)
+						return XLOG_ERR_CARD_STATE;
+					ret = eicon_xlog(card, (xlogreq_t *)a);
+					return ret;
 #if CONFIG_PCI 
 				case EICON_IOCTL_LOADPCI:
 						if (card->flags & EICON_FLAGS_RUNNING)
@@ -541,18 +532,6 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 							} 
                                                         return ret;
 						} else return -ENODEV;
-#endif
-#if 0
-				case EICON_IOCTL_SETMSN:
-					if ((ret = copy_from_user(tmp, (char *)a, sizeof(tmp))))
-						return -EFAULT;
-					if ((ret = eicon_set_msn(card, tmp)))
-						return ret;
-#if 0
-					if (card->flags & EICON_FLAGS_RUNNING)
-						return(eicon_capi_manufacturer_req_msn(card));
-#endif
-					return 0;
 #endif
 				case EICON_IOCTL_ADDCARD:
 					if ((ret = copy_from_user(&cdef, (char *)a, sizeof(cdef))))
@@ -674,6 +653,10 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 			if (!(chan = find_channel(card, c->arg & 0x1f)))
 				break;
 			chan->l3prot = (c->arg >> 8);
+#ifdef CONFIG_ISDN_TTY_FAX
+			if (chan->l3prot == ISDN_PROTO_L3_FAX)
+				chan->fax = c->parm.fax;
+#endif
 			return 0;
 		case ISDN_CMD_GETL3:
 			if (!card->flags & EICON_FLAGS_RUNNING)
@@ -705,6 +688,17 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 		case ISDN_CMD_UNLOCK:
 			MOD_DEC_USE_COUNT;
 			return 0;
+#ifdef CONFIG_ISDN_TTY_FAX
+		case ISDN_CMD_FAXCMD:
+			if (!card->flags & EICON_FLAGS_RUNNING)
+				return -ENODEV;
+			if (!(chan = find_channel(card, c->arg & 0x1f)))
+				break;
+			if (!chan->fax)
+				break;
+			idi_fax_cmd(card, chan);
+			return 0;
+#endif
 		case ISDN_CMD_AUDIO:
 			if (!card->flags & EICON_FLAGS_RUNNING)
 				return -ENODEV;
@@ -752,34 +746,13 @@ if_command(isdn_ctrl * c)
 static int
 if_writecmd(const u_char * buf, int len, int user, int id, int channel)
 {
-        eicon_card *card = eicon_findcard(id);
-
-        if (card) {
-                if (!card->flags & EICON_FLAGS_RUNNING)
-                        return -ENODEV;
-                return (len);
-        }
-        printk(KERN_ERR
-               "eicon: if_writecmd called with invalid driverId!\n");
-        return -ENODEV;
+        return (len);
 }
 
 static int
 if_readstatus(u_char * buf, int len, int user, int id, int channel)
 {
-#if 0
-	/* Not yet used */
-        eicon_card *card = eicon_findcard(id);
-	
-        if (card) {
-                if (!card->flags & EICON_FLAGS_RUNNING)
-                        return -ENODEV;
-                return (eicon_readstatus(buf, len, user, card));
-        }
-        printk(KERN_ERR
-               "eicon: if_readstatus called with invalid driverId!\n");
-#endif
-        return -ENODEV;
+        return 0;
 }
 
 static int
@@ -802,6 +775,13 @@ if_sendbuf(int id, int channel, int ack, struct sk_buff *skb)
 			return -ENODEV;
 		}
 		if (chan->fsm_state == EICON_STATE_ACTIVE) {
+#ifdef CONFIG_ISDN_TTY_FAX
+			if (chan->l2prot == ISDN_PROTO_L2_FAX) {
+				if ((ret = idi_faxdata_send(card, chan, skb)) > 0)
+					ret = len;
+			}
+			else
+#endif
 				ret = idi_send_data(card, chan, ack, skb, 1);
 			return (ret);
 		} else {
@@ -939,7 +919,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_V11019 |
 					ISDN_FEATURE_L2_V11038 |
 					ISDN_FEATURE_L2_MODEM |
-					ISDN_FEATURE_L2_FAX |
+					/* ISDN_FEATURE_L2_FAX | */ 
 					ISDN_FEATURE_L3_TRANSDSP |
 					ISDN_FEATURE_L3_FAX;
                                 card->hwif.pci.card = (void *)card;
@@ -963,7 +943,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_V11019 |
 					ISDN_FEATURE_L2_V11038 |
 					ISDN_FEATURE_L2_MODEM |
-					ISDN_FEATURE_L2_FAX |
+					/* ISDN_FEATURE_L2_FAX | */
 					ISDN_FEATURE_L3_TRANSDSP |
 					ISDN_FEATURE_L3_FAX;
                                 card->hwif.pci.card = (void *)card;
@@ -1056,7 +1036,7 @@ eicon_registercard(eicon_card * card)
 		case EICON_BUS_MCA:
 			eicon_isa_printpar(&card->hwif.isa);
 			break;
-#endif
+#endif /* CONFIG_MCA */
 #endif
 		case EICON_BUS_PCI:
 #if CONFIG_PCI
@@ -1095,7 +1075,7 @@ unregister_card(eicon_card * card)
 		case EICON_BUS_ISA:
 #ifdef CONFIG_MCA
 		case EICON_BUS_MCA:
-#endif
+#endif /* CONFIG_MCA */
 			eicon_isa_release(&card->hwif.isa);
 			break;
 #endif
@@ -1200,8 +1180,8 @@ eicon_addcard(int Type, int membase, int irq, char *id)
 #define eicon_init init_module
 #endif
 
-__initfunc(int
-eicon_init(void))
+int
+eicon_init(void)
 {
 	int card_count = 0;
 	int release = 0;
@@ -1231,8 +1211,8 @@ eicon_init(void))
 	printk("%s\n", eicon_getrev(tmprev));
 	release += getrel(tmprev);
 	sprintf(tmprev,"%d", release);
-        printk(KERN_INFO "%s Release: %s.%s\n", DRIVERNAME,
-		DRIVERRELEASE, tmprev);
+        printk(KERN_INFO "%s Release: %s.%s%s\n", DRIVERNAME,
+		DRIVERRELEASE, tmprev, DRIVERPATCH);
 
 #ifdef CONFIG_ISDN_DRV_EICON_ISA
 #ifdef CONFIG_MCA
@@ -1268,7 +1248,7 @@ eicon_init(void))
 #else
                 printk(KERN_INFO "Eicon: No PCI-cards found, driver not loaded !\n");
 #endif
-#endif
+#endif /* MODULE */
 		return -ENODEV;
 
 	} else
@@ -1286,12 +1266,14 @@ cleanup_module(void)
         eicon_card *card = cards;
         eicon_card *last;
         while (card) {
+#ifdef CONFIG_ISDN_DRV_EICON_ISA
 #ifdef CONFIG_MCA
         	if (MCA_bus)
                         {
                         mca_mark_as_unused (card->mca_slot);
                         mca_set_adapter_procfn(card->mca_slot, NULL, NULL);
                         };
+#endif /* CONFIG_MCA */
 #endif
                 unregister_card(card); 
                 card = card->next;
@@ -1306,13 +1288,15 @@ cleanup_module(void)
 }
 
 #else /* no module */
-__initfunc(void
-eicon_setup(char *str, int *ints))
+
+void
+eicon_setup(char *str, int *ints)
 {
         int i, argc;
 
         argc = ints[0];
         i = 1;
+#ifdef CONFIG_ISDN_DRV_EICON_ISA
         if (argc) {
 		membase = irq = -1;
 		if (argc) {
@@ -1330,10 +1314,14 @@ eicon_setup(char *str, int *ints))
 		} else {
 			strcpy(id, "eicon");
 		} 
-		/* eicon_addcard(0, membase, irq, id); */
-       		printk(KERN_INFO "eicon: membase=0x%x irq=%d id=%s\n", membase, irq, id);
+       		printk(KERN_INFO "Eicon ISDN active driver setup (id=%s membase=0x%x irq=%d)\n",
+			id, membase, irq);
 	}
+#else
+	printk(KERN_INFO "Eicon ISDN active driver setup\n");
+#endif
 }
+
 #endif /* MODULE */
 
 #ifdef CONFIG_ISDN_DRV_EICON_ISA
@@ -1444,7 +1432,7 @@ int eicon_mca_probe(int slot,  /* slot-nr where the card was detected         */
 			if (irq == -1) { 
 				irq = cards_irq;
 			} else {
-				if (irq != irq)
+				if (irq != cards_irq)
 					return ENODEV;
 			};
 			cards_io= 0xC00 + ((adf_pos0>>4)*0x10);
@@ -1477,7 +1465,7 @@ int eicon_mca_probe(int slot,  /* slot-nr where the card was detected         */
 			if (irq == -1) { 
 				irq = cards_irq;
 			} else {
-				if (irq != irq)
+				if (irq != cards_irq)
 					return ENODEV;
 			};
 			type = 0; 
@@ -1493,8 +1481,13 @@ int eicon_mca_probe(int slot,  /* slot-nr where the card was detected         */
         	mca_mark_as_used(slot);
 		cards->mca_slot = slot; 
 		/* card->io noch setzen  oder ?? */
+		cards->mca_io = cards_io;
+		cards->hwif.isa.io = cards_io;
+		/* reset card */
+		outb_p(0,cards_io+1);
+
 		if (DebugVar & 8)
-			printk("eicon_addcard: erfolgreich fuer slot: %d.\n", 
+			printk(KERN_INFO "eicon_addcard: successful for slot # %d.\n", 
 			cards->mca_slot+1);
 		return  0 ; /* eicon_addcard hat eine Karte zugefuegt */
 	} else {

@@ -5,6 +5,8 @@
  *
  * Copyright (C) 1996 Paul Mackerras (Paul.Mackerras@cs.anu.edu.au)
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ *
+ * $Id: macserial.c,v 1.24.2.3 1999/09/10 02:05:58 paulus Exp $
  */
 
 #include <linux/config.h>
@@ -2084,6 +2086,7 @@ int macserial_init(void)
 		/* By default, disable the port */
 		set_scc_power(info, 0);
  	}
+	tmp_buf = 0;
 
 	return 0;
 }
@@ -2109,6 +2112,16 @@ void cleanup_module(void)
 	restore_flags(flags);
 	tty_unregister_driver(&callout_driver);
 	tty_unregister_driver(&serial_driver);
+
+	if (tmp_buf) {
+		free_page((unsigned long) tmp_buf);
+		tmp_buf = 0;
+	}
+
+#ifdef CONFIG_PMAC_PBOOK
+	if (zs_channels_found)
+		pmu_unregister_sleep_notifier(&serial_sleep_notifier);
+#endif /* CONFIG_PMAC_PBOOK */
 }
 #endif /* MODULE */
 
@@ -2520,6 +2533,3 @@ serial_notify_sleep(struct pmu_sleep_notifier *self, int when)
 	return PBOOK_SLEEP_OK;
 }
 #endif /* CONFIG_PMAC_PBOOK */
-
-
-

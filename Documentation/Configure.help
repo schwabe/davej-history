@@ -10071,6 +10071,10 @@ CONFIG_HISAX_NO_LLC
   If you have trouble with some ugly exchanges try to select this
   option.
 
+HiSax Support for german 1TR6
+CONFIG_HISAX_1TR6
+  Enable this if you have a old german 1TR6 line.
+
 HiSax Support for Teles 16.0/8.0
 CONFIG_HISAX_16_0
   This enables HiSax support for the Teles ISDN-cards S0-16.0, S0-8
@@ -10241,6 +10245,19 @@ CONFIG_HISAX_GAZEL
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
+HiSax Support for HFC PCI-Bus cards
+CONFIG_HISAX_HFC_PCI
+  This enables HiSax support for the HFC-S PCI 2BDS0 based cards.
+  
+  For more informations see under Documentation/isdn/README.hfc-pci.
+
+HiSax Support for Winbond W6692 based cards (EXPERIMENTAL)
+CONFIG_HISAX_W6692
+  This enables HiSax support for Winbond W6692 based PCI ISDN cards.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
 HiSax Support for Am7930 (EXPERIMENTAL)
 CONFIG_HISAX_AMD7930
   This enables HiSax support for the AMD7930 chips on some SPARCs.
@@ -10297,7 +10314,7 @@ CONFIG_ISDN_TTY_FAX
 
 AVM-B1 with CAPI2.0 support
 CONFIG_ISDN_DRV_AVMB1
-  This enables support for the AVM B1 ISDN networking cards. In
+  This enables support for the AVM B1/T1 ISDN networking cards.In
   addition, a CAPI (Common ISDN Application Programming Interface, a
   standard making it easy for programs to access ISDN hardware, see
   http://www.capi.org/; to browse the WWW, you need to have access to
@@ -10311,6 +10328,23 @@ CONFIG_ISDN_DRV_AVMB1
   inserted in and removed from the running kernel whenever you want).
   The module will be called avmb1.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+AVM B1 ISA support
+CONFIG_ISDN_DRV_AVMB1_B1ISA
+  Enable support for the ISA version of the AVM B1 card.
+
+AVM B1 PCI support
+CONFIG_ISDN_DRV_AVMB1_B1PCI
+  Enable support for the PCI version of the AVM B1 card.
+
+AVM T1/T1B ISA support
+CONFIG_ISDN_DRV_AVMB1_T1ISA
+  Enable support for the AVM T1 T1B card.
+  Note: This is a PRI card and handle 30 B-channels.
+
+AVM B1/M1/M2 PCMCIA support
+CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
+  Enable support for the PCMCIA version of the AVM B1 card.
 
 Verbose reason code reporting (kernel size +=7K)
 CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON

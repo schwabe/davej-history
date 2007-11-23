@@ -1,4 +1,4 @@
-/* $Id: hfcscard.c,v 1.4 1999/08/09 18:59:59 keil Exp $
+/* $Id: hfcscard.c,v 1.5 1999/09/04 06:20:06 keil Exp $
 
  * hfcscard.c     low level stuff for hfcs based cards (Teles3c, ACER P10)
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hfcscard.c,v $
+ * Revision 1.5  1999/09/04 06:20:06  keil
+ * Changes from kernel set_current_state()
+ *
  * Revision 1.4  1999/08/09 18:59:59  keil
  * Fix S0 init - Thanks to Stefan Gybas
  *
@@ -27,7 +30,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcs_revision = "$Revision: 1.4 $";
+static const char *hfcs_revision = "$Revision: 1.5 $";
 
 static void
 hfcs_interrupt(int intno, void *dev_id, struct pt_regs *regs)

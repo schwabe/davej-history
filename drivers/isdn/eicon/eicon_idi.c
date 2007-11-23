@@ -1,4 +1,4 @@
-/* $Id: eicon_idi.c,v 1.11 1999/07/25 15:12:03 armin Exp $
+/* $Id: eicon_idi.c,v 1.18 1999/09/07 12:48:05 armin Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  *        IDI interface 
@@ -21,6 +21,33 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_idi.c,v $
+ * Revision 1.18  1999/09/07 12:48:05  armin
+ * Prepared for sub-address usage.
+ *
+ * Revision 1.17  1999/09/07 12:35:39  armin
+ * Better checking and channel Id handling.
+ *
+ * Revision 1.16  1999/09/04 13:44:19  armin
+ * Fix of V.42 analog Modem negotiation handling.
+ *
+ * Revision 1.15  1999/08/28 21:32:50  armin
+ * Prepared for fax related functions.
+ * Now compilable without errors/warnings.
+ *
+ * Revision 1.14  1999/08/28 20:24:40  armin
+ * Corrected octet 3/3a in CPN/OAD information element.
+ * Thanks to John Simpson <xfl23@dial.pipex.com>
+ *
+ * Revision 1.13  1999/08/22 20:26:44  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
+ * Revision 1.12  1999/08/18 20:16:59  armin
+ * Added XLOG function for all cards.
+ * Bugfix of alloc_skb NULL pointer.
+ *
  * Revision 1.11  1999/07/25 15:12:03  armin
  * fix of some debug logs.
  * enabled ISA-cards option.
@@ -70,6 +97,7 @@
  *
  */
 
+#include <linux/config.h>
 #define __NO_VERSION__
 #include "eicon.h"
 #include "eicon_idi.h"
@@ -77,7 +105,7 @@
 
 #undef EICON_FULL_SERVICE_OKTETT
 
-char *eicon_idi_revision = "$Revision: 1.11 $";
+char *eicon_idi_revision = "$Revision: 1.18 $";
 
 eicon_manifbuf *manbuf;
 
@@ -143,8 +171,13 @@ idi_assign_req(eicon_REQ *reqbuf, int signet, eicon_chan *chan)
 			reqbuf->XBuffer.P[l++] = 5; 
 			break;
 		case ISDN_PROTO_L2_TRANS:
-		case ISDN_PROTO_L2_MODEM:
 			reqbuf->XBuffer.P[l++] = 2;
+			break;
+		case ISDN_PROTO_L2_MODEM:
+  			if (chan->fsm_state == EICON_STATE_IWAIT)
+				reqbuf->XBuffer.P[l++] = 9; /* V.42 incoming */
+			else
+				reqbuf->XBuffer.P[l++] = 10; /* V.42 */
 			break;
 		case ISDN_PROTO_L2_FAX:
   			if (chan->fsm_state == EICON_STATE_IWAIT)
@@ -264,8 +297,8 @@ idi_call_res_req(eicon_REQ *reqbuf, eicon_chan *chan)
 int
 idi_do_req(eicon_card *card, eicon_chan *chan, int cmd, int layer)
 {
-        struct sk_buff *skb = 0;
-        struct sk_buff *skb2 = 0;
+        struct sk_buff *skb;
+        struct sk_buff *skb2;
 	eicon_REQ *reqbuf;
 	eicon_chan_ptr *chan2;
 
@@ -415,10 +448,19 @@ idi_hangup(eicon_card *card, eicon_chan *chan)
 int
 idi_connect_res(eicon_card *card, eicon_chan *chan)
 {
-  chan->fsm_state = EICON_STATE_IWAIT;
-  idi_do_req(card, chan, CALL_RES, 0);
-  idi_do_req(card, chan, ASSIGN, 1);
-  return(0);
+	chan->fsm_state = EICON_STATE_IWAIT;
+	idi_do_req(card, chan, CALL_RES, 0);
+	
+	/* check if old NetID has been removed */
+	if (chan->e.B2Id) {
+		if (DebugVar & 1)
+			printk(KERN_WARNING "idi_err: Ch%d: Old NetID %x was not removed.\n",
+				chan->No, chan->e.B2Id);
+		idi_do_req(card, chan, REMOVE, 1);
+	}
+
+	idi_do_req(card, chan, ASSIGN, 1);
+	return(0);
 }
 
 int
@@ -428,6 +470,7 @@ idi_connect_req(eicon_card *card, eicon_chan *chan, char *phone,
 	int l = 0;
 	int i;
 	unsigned char tmp;
+	unsigned char *sub, *sp;
 	unsigned char bc[5];
 	unsigned char hlc[5];
         struct sk_buff *skb;
@@ -456,18 +499,52 @@ idi_connect_req(eicon_card *card, eicon_chan *chan, char *phone,
 	reqbuf->ReqCh = 0;
 	reqbuf->ReqId = 1;
 
+	sub = NULL;
+	sp = phone;
+	while (*sp) {
+		if (*sp == '.') {
+			sub = sp + 1;
+			*sp = 0;
+		} else
+			sp++;
+	}
 	reqbuf->XBuffer.P[l++] = CPN;
 	reqbuf->XBuffer.P[l++] = strlen(phone) + 1;
-	reqbuf->XBuffer.P[l++] = 0xc1;
+	reqbuf->XBuffer.P[l++] = 0x81;
 	for(i=0; i<strlen(phone);i++) 
-		reqbuf->XBuffer.P[l++] = phone[i];
+		reqbuf->XBuffer.P[l++] = phone[i] & 0x7f;
+	if (sub) {
+		reqbuf->XBuffer.P[l++] = DSA;
+		reqbuf->XBuffer.P[l++] = strlen(sub) + 2;
+		reqbuf->XBuffer.P[l++] = 0x80; /* NSAP coded */
+		reqbuf->XBuffer.P[l++] = 0x50; /* local IDI format */
+		while (*sub)
+			reqbuf->XBuffer.P[l++] = *sub++ & 0x7f;
+	}
 
+	sub = NULL;
+	sp = eazmsn;
+	while (*sp) {
+		if (*sp == '.') {
+			sub = sp + 1;
+			*sp = 0;
+		} else
+			sp++;
+	}
 	reqbuf->XBuffer.P[l++] = OAD;
 	reqbuf->XBuffer.P[l++] = strlen(eazmsn) + 2;
 	reqbuf->XBuffer.P[l++] = 0x01;
-	reqbuf->XBuffer.P[l++] = 0x81;
+	reqbuf->XBuffer.P[l++] = 0x80;
 	for(i=0; i<strlen(eazmsn);i++) 
-		reqbuf->XBuffer.P[l++] = eazmsn[i];
+		reqbuf->XBuffer.P[l++] = eazmsn[i] & 0x7f;
+	if (sub) {
+		reqbuf->XBuffer.P[l++] = OSA;
+		reqbuf->XBuffer.P[l++] = strlen(sub) + 2;
+		reqbuf->XBuffer.P[l++] = 0x80; /* NSAP coded */
+		reqbuf->XBuffer.P[l++] = 0x50; /* local IDI format */
+		while (*sub)
+			reqbuf->XBuffer.P[l++] = *sub++ & 0x7f;
+	}
 
 	if ((tmp = idi_si2bc(si1, si2, bc, hlc)) > 0) {
 		reqbuf->XBuffer.P[l++] = BC;
@@ -481,6 +558,7 @@ idi_connect_req(eicon_card *card, eicon_chan *chan, char *phone,
 				reqbuf->XBuffer.P[l++] = hlc[i];
 		}
 	}
+
         reqbuf->XBuffer.P[l++] = CAI;
         reqbuf->XBuffer.P[l++] = 6;
         reqbuf->XBuffer.P[l++] = 0x09;
@@ -641,15 +719,15 @@ idi_IndParse(eicon_card *ccard, eicon_chan *chan, idi_ind_message *message, unsi
 						(__u8)message->cpn[0], message->cpn + 1);
 				break;
 			case DSA:
-				pos++;
-				for(i=0; i < wlen-1; i++) 
+				pos += 2;
+				for(i=0; i < wlen-2; i++) 
 					message->dsa[i] = buffer[pos++];
 				if (DebugVar & 2)
 					printk(KERN_DEBUG"idi_inf: Ch%d: DSA=%s\n", chan->No, message->dsa);
 				break;
 			case OSA:
-				pos++;
-				for(i=0; i < wlen-1; i++) 
+				pos += 2;
+				for(i=0; i < wlen-2; i++) 
 					message->osa[i] = buffer[pos++];
 				if (DebugVar & 2)
 					printk(KERN_DEBUG"idi_inf: Ch%d: OSA=%s\n", chan->No, message->osa);
@@ -882,6 +960,120 @@ idi_bc2si(unsigned char *bc, unsigned char *hlc, unsigned char *si1, unsigned ch
   }
 }
 
+/********************* FAX stuff ***************************/
+
+#ifdef CONFIG_ISDN_TTY_FAX
+
+int
+idi_fill_in_T30(eicon_chan *chan, unsigned char *buffer)
+{
+
+	/* TODO , code follows */
+
+	return(0);
+}
+
+/* send fax struct */
+int
+idi_send_edata(eicon_card *card, eicon_chan *chan)
+{
+
+	/* TODO , code follows */
+
+	return (0);
+}
+
+void
+idi_parse_edata(eicon_card *ccard, eicon_chan *chan, unsigned char *buffer, int len)
+{
+
+	/* TODO , code follows */
+
+}
+
+void
+idi_fax_send_header(eicon_card *card, eicon_chan *chan, int header)
+{
+
+	/* TODO , code follows */
+
+}
+
+void
+idi_fax_cmd(eicon_card *card, eicon_chan *chan) 
+{
+
+	/* TODO , code follows */
+
+}
+
+void
+idi_edata_rcveop(eicon_card *card, eicon_chan *chan)
+{
+
+	/* TODO , code follows */
+
+}
+
+void
+idi_reset_fax_stat(eicon_chan *chan)
+{
+
+	/* TODO , code follows */
+
+}
+
+void
+idi_edata_action(eicon_card *ccard, eicon_chan *chan, char *buffer, int len)
+{
+
+	/* TODO , code follows */
+
+}
+
+void
+fax_put_rcv(eicon_card *ccard, eicon_chan *chan, u_char *Data, int len)
+{
+
+	/* TODO , code follows */
+
+}
+
+void
+idi_faxdata_rcv(eicon_card *ccard, eicon_chan *chan, struct sk_buff *skb)
+{
+
+	/* TODO , code follows */
+
+}
+
+int
+idi_fax_send_outbuf(eicon_card *ccard, eicon_chan *chan, eicon_OBJBUFFER *OutBuf)
+{
+
+	/* TODO , code follows */
+
+	return(0);
+}
+
+int
+idi_faxdata_send(eicon_card *ccard, eicon_chan *chan, struct sk_buff *skb)
+{
+
+	/* TODO , code follows */
+
+	return(0);
+}
+
+void
+idi_fax_hangup(eicon_card *ccard, eicon_chan *chan)
+{
+
+	/* TODO , code follows */
+
+}
+
+#endif	/******** FAX ********/
 
 int
 idi_send_udata(eicon_card *card, eicon_chan *chan, int UReq, u_char *buffer, int len)
@@ -1064,7 +1256,6 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				chan->queued = 0;
 				chan->waitq = 0;
 				chan->waitpq = 0;
-				chan->fsm_state = EICON_STATE_NULL;
 				if (message.e_cau[0] & 0x7f) {
 					cmd.driver = ccard->myid;
 					cmd.arg = chan->No;
@@ -1074,14 +1265,23 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					ccard->interface.statcallb(&cmd);
 				}
 				chan->cause[0] = 0; 
-				cmd.driver = ccard->myid;
-				cmd.arg = chan->No;
-				cmd.command = ISDN_STAT_DHUP;
-				ccard->interface.statcallb(&cmd);
-				eicon_idi_listen_req(ccard, chan);
 #ifdef CONFIG_ISDN_TTY_FAX
-				chan->fax = 0;
+				if (!chan->e.B2Id)
+					chan->fax = 0;
 #endif
+				if ((chan->fsm_state == EICON_STATE_ACTIVE) ||
+				    (chan->fsm_state == EICON_STATE_WMCONN)) {
+					chan->fsm_state = EICON_STATE_NULL;
+				} else {
+					if (chan->e.B2Id)
+						idi_do_req(ccard, chan, REMOVE, 1);
+					chan->fsm_state = EICON_STATE_NULL;
+					cmd.driver = ccard->myid;
+					cmd.arg = chan->No;
+					cmd.command = ISDN_STAT_DHUP;
+					ccard->interface.statcallb(&cmd);
+					eicon_idi_listen_req(ccard, chan);
+				}
 				break;
 			case INDICATE_IND:
 				if (DebugVar & 8)
@@ -1094,6 +1294,10 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					strcat(chan->cpn, message.dsa);
 				}
 				strcpy(chan->oad, message.oad);
+				if (strlen(message.osa)) {
+					strcat(chan->oad, ".");
+					strcat(chan->oad, message.osa);
+				}
 				try_stat_icall_again: 
 				cmd.driver = ccard->myid;
 				cmd.command = ISDN_STAT_ICALL;
@@ -1155,15 +1359,19 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					cmd.command = ISDN_STAT_DCONN;
 					cmd.arg = chan->No;
 					ccard->interface.statcallb(&cmd);
-					if (chan->l2prot != ISDN_PROTO_L2_FAX) {
-						idi_do_req(ccard, chan, IDI_N_CONNECT, 1);
-					}
+					switch(chan->l2prot) {
+						case ISDN_PROTO_L2_FAX:
 #ifdef CONFIG_ISDN_TTY_FAX
-					else {
-						if (chan->fax)
-							chan->fax->phase = ISDN_FAX_PHASE_A;
-					}
+							if (chan->fax)
+								chan->fax->phase = ISDN_FAX_PHASE_A;
 #endif
+							break;
+						case ISDN_PROTO_L2_MODEM:
+							/* do nothing, wait for connect */
+							break;
+						default:
+							idi_do_req(ccard, chan, IDI_N_CONNECT, 1);
+					}
 				} else
 					idi_hangup(ccard, chan);
 				break;
@@ -1176,6 +1384,15 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 					cmd.command = ISDN_STAT_DCONN;
 					cmd.arg = chan->No;
 					ccard->interface.statcallb(&cmd);
+
+					/* check if old NetID has been removed */
+					if (chan->e.B2Id) {
+						if (DebugVar & 1)
+							printk(KERN_WARNING "idi_err: Ch%d: Old NetID %x was not removed.\n",
+								chan->No, chan->e.B2Id);
+						idi_do_req(ccard, chan, REMOVE, 1);
+					}
+
 					idi_do_req(ccard, chan, ASSIGN, 1); 
 					idi_do_req(ccard, chan, IDI_N_CONNECT, 1);
 #ifdef CONFIG_ISDN_TTY_FAX
@@ -1273,12 +1490,17 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
 				chan->queued = 0;
 				chan->waitq = 0;
 				chan->waitpq = 0;
+				idi_do_req(ccard, chan, HANGUP, 0);
 				if (chan->fsm_state == EICON_STATE_ACTIVE) {
 					cmd.driver = ccard->myid;
 					cmd.command = ISDN_STAT_BHUP;
 					cmd.arg = chan->No;
 					ccard->interface.statcallb(&cmd);
+					chan->fsm_state = EICON_STATE_NULL;
 				}
+#ifdef CONFIG_ISDN_TTY_FAX
+				chan->fax = 0;
+#endif
 				break; 
 			case IDI_N_DISC_ACK:
 				if (DebugVar & 16)
@@ -1327,7 +1549,7 @@ idi_handle_ind(eicon_card *ccard, struct sk_buff *skb)
    if (free_buff) dev_kfree_skb(skb);
 }
 
-void
+int
 idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 {
 	isdn_ctrl cmd;
@@ -1337,7 +1559,7 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 		if (DebugVar & 16)
 			printk(KERN_DEBUG "idi_ack: Ch%d: RcId %d not equal to last %d\n", chan->No, 
 				ack->RcId, (chan->e.ReqCh) ? chan->e.B2Id : chan->e.D3Id);
-		return;
+		return 1;
 	}
 
 	/* Management Interface */	
@@ -1350,25 +1572,26 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 	/* Remove an Id */
 	if (chan->e.Req == REMOVE) {
 		if (ack->Reference != chan->e.ref) {
-			if (DebugVar & 1)
+			if (DebugVar & 16)
 				printk(KERN_DEBUG "idi_ack: Ch%d: Rc-Ref %d not equal to stored %d\n", chan->No,
 					ack->Reference, chan->e.ref);
+			return 0;
 		}
 		ccard->IdTable[ack->RcId] = NULL;
 		if (DebugVar & 16)
-			printk(KERN_DEBUG "idi_ack: Ch%d: Removed : Id=%d Ch=%d (%s)\n", chan->No,
+			printk(KERN_DEBUG "idi_ack: Ch%d: Removed : Id=%x Ch=%d (%s)\n", chan->No,
 				ack->RcId, ack->RcCh, (chan->e.ReqCh)? "Net":"Sig");
 		if (!chan->e.ReqCh) 
 			chan->e.D3Id = 0;
 		else
 			chan->e.B2Id = 0;
-		return;
+		return 1;
 	}
 
 	/* Signal layer */
 	if (!chan->e.ReqCh) {
 		if (DebugVar & 16)
-			printk(KERN_DEBUG "idi_ack: Ch%d: RC OK Id=%d Ch=%d (ref:%d)\n", chan->No,
+			printk(KERN_DEBUG "idi_ack: Ch%d: RC OK Id=%x Ch=%d (ref:%d)\n", chan->No,
 				ack->RcId, ack->RcCh, ack->Reference);
 	} else {
 	/* Network layer */
@@ -1409,10 +1632,11 @@ idi_handle_ack_ok(eicon_card *ccard, eicon_chan *chan, eicon_RC *ack)
 				break;
 			default:
 				if (DebugVar & 16)
-					printk(KERN_DEBUG "idi_ack: Ch%d: RC OK Id=%d Ch=%d (ref:%d)\n", chan->No,
+					printk(KERN_DEBUG "idi_ack: Ch%d: RC OK Id=%x Ch=%d (ref:%d)\n", chan->No,
 						ack->RcId, ack->RcCh, ack->Reference);
 		}
 	}
+	return 1;
 }
 
 void
@@ -1447,7 +1671,8 @@ idi_handle_ack(eicon_card *ccard, struct sk_buff *skb)
 					printk(KERN_ERR "idi_ack: Ch%d: OK on chan without Id\n", dCh);
 				break;
 			}
-			idi_handle_ack_ok(ccard, chan, ack);
+			if (!idi_handle_ack_ok(ccard, chan, ack))
+				chan = NULL;
 			break;
 
 		case ASSIGN_OK:
@@ -1486,9 +1711,8 @@ idi_handle_ack(eicon_card *ccard, struct sk_buff *skb)
 		case UNKNOWN_IE:
 		case WRONG_IE:
 		default:
-			chan->e.busy = 0;
-			if (DebugVar & 24)
-				printk(KERN_ERR "eicon_ack: Ch%d: Not OK: Rc=%d Id=%d Ch=%d\n", dCh, 
+			if (DebugVar & 1)
+				printk(KERN_ERR "eicon_ack: Ch%d: Not OK !!: Rc=%d Id=%x Ch=%d\n", dCh, 
 					ack->Rc, ack->RcId, ack->RcCh);
 			if (dCh == ccard->nchannels) { /* Management */
 				chan->fsm_state = 2;
@@ -1583,7 +1807,6 @@ idi_send_data(eicon_card *card, eicon_chan *chan, int ack, struct sk_buff *skb, 
         dev_kfree_skb(skb);
         return len;
 }
-
 
 
 int

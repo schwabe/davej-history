@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.88 1999/07/07 10:13:31 detabc Exp $
+/* $Id: isdn_net.c,v 1.92 1999/09/13 23:25:17 he Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,26 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.92  1999/09/13 23:25:17  he
+ * serialized xmitting frames from isdn_ppp and BSENT statcallb
+ *
+ * Revision 1.91  1999/09/12 16:19:39  detabc
+ * added abc features
+ * low cost routing for net-interfaces (only the HL side).
+ * need more implementation in the isdnlog-utility
+ * udp info support (first part).
+ * different EAZ on outgoing call's.
+ * more checks on D-Channel callbacks (double use of channels).
+ * tested and running with kernel 2.3.17
+ *
+ * Revision 1.90  1999/09/04 22:21:39  detabc
+ *
+ * Revision 1.89  1999/08/22 20:26:03  calle
+ * backported changes from kernel 2.3.14:
+ * - several #include "config.h" gone, others come.
+ * - "struct device" changed to "struct net_device" in 2.3.14, added a
+ *   define in isdn_compat.h for older kernel versions.
+ *
  * Revision 1.88  1999/07/07 10:13:31  detabc
  * remove unused messages
  *
@@ -354,13 +374,15 @@
 #include "isdn_concap.h"
 #endif
 
+
+
 /* Prototypes */
 
 int isdn_net_force_dial_lp(isdn_net_local *);
 static int isdn_net_start_xmit(struct sk_buff *, struct device *);
 static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
 
-char *isdn_net_revision = "$Revision: 1.88 $";
+char *isdn_net_revision = "$Revision: 1.92 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -601,6 +623,13 @@ isdn_net_stat_callback(int idx, isdn_ctrl *c)
 				    (!lp->dialstate)) {
 					lp->stats.tx_packets++;
 					lp->stats.tx_bytes += c->parm.length;
+					/* some HL drivers deliver 
+					   ISDN_STAT_BSENT from hw interrupt.
+					   Output routines in isdn_ppp are now
+					   called with irq disabled such that
+					   dequeueing the sav_skb while another
+					   frame is sent will not occur.
+					*/
 					if (lp->p_encap == ISDN_NET_ENCAP_SYNCPPP && lp->sav_skb) {
 						struct device *mdev;
 						if (lp->master)
@@ -1292,7 +1321,6 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 #ifdef CONFIG_ISDN_X25
 	struct concap_proto * cprot = lp -> netdev -> cprot;
 #endif
-
 	if (ndev->tbusy) {
 		if (jiffies - ndev->trans_start < (2 * HZ))
 			return 1;
@@ -1909,7 +1937,7 @@ isdn_net_rebuild_header(struct sk_buff *skb)
 }
 
 /*
- * Interface-setup. (called just after registering a new interface)
+ * Interface-setup. (just after registering a new interface)
  */
 static int
 isdn_net_init(struct device *ndev)
@@ -3070,7 +3098,6 @@ isdn_net_realrm(isdn_net_dev * p, isdn_net_dev * q)
 	if (dev->netdev == NULL)
 		isdn_timer_ctrl(ISDN_TIMER_NETHANGUP, 0);
 	restore_flags(flags);
-
 	kfree(p->local);
 	kfree(p);
 
@@ -3126,3 +3153,4 @@ isdn_net_rmall(void)
 	restore_flags(flags);
 	return 0;
 }
+

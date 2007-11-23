@@ -636,7 +636,8 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 			continue;
 		}
 
-		if (check_region(host->io_port, 0xff)) {
+		if (host->io_port != 0UL &&
+		    check_region(host->io_port, 0xff)) {
 			printk("qlogicisp : i/o region 0x%lx-0x%lx already "
 			       "in use\n",
 			       host->io_port, host->io_port + 0xff);
@@ -1269,7 +1270,7 @@ static int isp1020_init(struct Scsi_Host *sh)
 		hostdata->memaddr = mem_base;
 		io_base = 0;
 	} else {
-		if (command & PCI_COMMAND_IO && (io_base & 3) == 1)
+		if ((command & PCI_COMMAND_IO) && (io_base & 3) == 1)
 			io_base &= PCI_BASE_ADDRESS_IO_MASK;
 		else {
 			printk("qlogicisp : i/o mapping is disabled\n");

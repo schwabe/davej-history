@@ -632,7 +632,7 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 			c->x86_model = (dir1 & 0x20) ? 1 : 2;
 			c->x86_capability&=~X86_FEATURE_TSC;
 		}
-#ifdef CONFIG_PCI
+#ifdef CONFIG_PCI_QUIRKS
                 /* It isnt really a PCI quirk directly, but the cure is the
        	           same. The MediaGX has deep magic SMM stuff that handles the
                    SB emulation. It thows away the fifo on disable_dma() which
