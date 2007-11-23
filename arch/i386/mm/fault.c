@@ -28,8 +28,120 @@ asmlinkage void do_int3 (struct pt_regs *, unsigned long);
 asmlinkage void do_overflow (struct pt_regs *, unsigned long);
 asmlinkage void do_bounds (struct pt_regs *, unsigned long);
 asmlinkage void do_invalid_op (struct pt_regs *, unsigned long);
+asmlinkage void do_general_protection (struct pt_regs *, unsigned long);
 
 extern int pentium_f00f_bug;
+
+static int handle_intx_eip_adjust(struct pt_regs *regs)
+{
+	unsigned char *addr, *csp = 0;
+	int wrap = 0;
+	int count = 8; /* only check for reasonable number of bytes
+			 * else we do it the save 'simple way' */
+	unsigned long _eip;
+#define XX_WRAP(x) (wrap ? *((unsigned short *)&x) : x)
+
+	/* We rely on being able to access the memory pointed to by cs:eip
+	 * and the bytes behind it up to the faulting instruction,
+	 * because we just got an exception for this instruction and
+	 * hence the memory should just be successfully accessed.
+	 * In case of crossing a page boundary or when accessing kernel space
+	 * we just do the simple fix (increase eip by one).
+	 * This assumption also obsoletes checking of segment limit.
+	 * ( should be veryfied, however, if this assumption is true )
+	 */
+
+	if (regs->cs == KERNEL_CS) {
+		/* not what we expect */
+		regs->eip++;
+		return 0;
+	}
+
+	if (regs->eflags & VM_MASK) {
+		/* we have real mode type selector */
+		wrap = 1;
+		csp = (unsigned char *)((unsigned long)regs->cs << 4);
+	}
+	else if (regs->cs & 4) {
+		/* we have a LDT selector */
+		struct desc_struct *p, *ldt = current->ldt;
+		if (!ldt)
+			ldt = (struct desc_struct*) &default_ldt;
+		p = ldt + (regs->cs >> 3);
+		csp = (unsigned char *)((p->a >> 16) | ((p->b & 0xff) << 16) | (p->b & 0xFF000000));
+		if (!(p->b & 0x400000))
+			wrap = 1;	/* 16-bit segment */
+	}
+
+	_eip = regs->eip;
+	addr = csp+XX_WRAP(_eip);
+	while (count-- > 0) {
+		if ((unsigned long)addr >= TASK_SIZE) {
+			/* accessing kernel space, do the simple case */
+			regs->eip++;
+			return 0;
+		}
+		switch (get_user(addr)) {
+
+			case 0xCC:	/* single byte INT3 */
+				XX_WRAP(_eip)++;
+				regs->eip = _eip;
+				return 0;
+
+			case 0xCD:	/* two byte INT 3 */
+				XX_WRAP(_eip)++;
+				/* fall through */
+			case 0xCE:	/* INTO, single byte */
+				XX_WRAP(_eip)++;
+				if ( (regs->eflags & VM_MASK)
+					&& ((regs->eflags & IOPL_MASK) != IOPL_MASK)) {
+					/* not allowed, do GP0 fault */
+					do_general_protection(regs, 0);
+					return -1;
+				}
+				regs->eip = _eip;
+				return 0;
+
+					/* the prefixes from the Intel patch */
+			case 0xF2 ... 0xF3:
+			case 0x2E:
+			case 0x36:
+			case 0x3E:
+			case 0x26:
+			case 0x64 ... 0x67:
+				break;	/* just skipping them */
+
+			default:
+				/* not what we handle here,
+				 * just doing the simple fix
+				 */
+				regs->eip++;
+				return 0;
+		}
+
+		if ( !(++XX_WRAP(_eip)) ) {
+			/* we wrapped around */
+			regs->eip++;
+			return 0;
+		}
+
+		addr = csp+XX_WRAP(_eip);
+		if ( !((unsigned long)addr & ~(PAGE_SIZE -1)) ) {
+			/* we would cross page boundary, not good,
+			 * doing the simple fix
+			 */
+			regs->eip++;
+			return 0;
+		}
+	}
+
+	/* if we come here something weird happened,
+	 * just doing the simple fix
+	 */
+	regs->eip++;
+	return 0;
+}
+
 
 /*
  * This routine handles page faults.  It determines the address,
@@ -145,6 +257,9 @@ bad_area:
 				do_overflow,		/* 4 - overflow */
 				do_bounds,		/* 5 - bound range */
 				do_invalid_op };	/* 6 - invalid opcode */
+			if ((nr == 3) || (nr == 4))
+				if (handle_intx_eip_adjust(regs))
+					return;
 			handler[nr](regs, error_code);
 			return;
 		}

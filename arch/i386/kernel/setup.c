@@ -307,7 +307,7 @@ int get_cpuinfo(char * buffer)
                         len += sprintf(buffer+len,
                                        "fdiv_bug\t: %s\n"
                                        "hlt_bug\t\t: %s\n"
-                                       "f00f_bug\t\t: %s\n"
+                                       "f00f_bug\t: %s\n"
                                        "fpu\t\t: %s\n"
                                        "fpu_exception\t: %s\n"
                                        "cpuid\t\t: %s\n"
