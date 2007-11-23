@@ -1840,6 +1840,14 @@ static int rtl8139_start_xmit (struct sk_buff *skb, struct device *dev)
 			return 0;
 		}
 	}
+	
+	if(skb->len < ETH_ZLEN)
+	{
+		skb = skb_padto(skb, ETH_ZLEN);
+		if(skb == NULL)
+			return 0;
+	}
+	
 	mb();
 
 	/* Calculate the next Tx descriptor entry. */
