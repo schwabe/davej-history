@@ -1,10 +1,10 @@
 /*
  * USB Empeg empeg-car player driver
  *
- *	Copyright (C) 2000
+ *	Copyright (C) 2000, 2001
  *	    Gary Brubaker (xavyer@ix.netcom.com)
  *
- *	Copyright (C) 1999, 2000
+ *	Copyright (C) 1999 - 2001
  *	    Greg Kroah-Hartman (greg@kroah.com)
  *
  *	This program is free software; you can redistribute it and/or modify
@@ -13,10 +13,13 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
- * (07/29/2001) gb
+ * (07/16/2001) gb
  *	remove unused code in empeg_close() (thanks to Oliver Neukum for pointing this
  *	out) and rewrote empeg_set_termios().
  * 
+ * (05/30/2001) gkh
+ *	switched from using spinlock to a semaphore, which fixes lots of problems.
+ *
  * (04/08/2001) gb
  *      Identify version on module load.
  * 
@@ -75,7 +78,7 @@
 /*
  * Version Information
  */
-#define DRIVER_VERSION "v1.0.1"
+#define DRIVER_VERSION "v1.2"
 #define DRIVER_AUTHOR "Greg Kroah-Hartman <greg@kroah.com>, Gary Brubaker <xavyer@ix.netcom.com>"
 #define DRIVER_DESC "USB Empeg Mark I/II Driver"
 
@@ -147,15 +150,14 @@ static int		bytes_out;
 static int empeg_open (struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
-	unsigned long flags;
-	int result;
+	int result = 0;;
 
 	if (port_paranoia_check (port, __FUNCTION__))
 		return -ENODEV;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 
 	++port->open_count;
 	MOD_INC_USE_COUNT;
@@ -189,16 +191,15 @@ static int empeg_open (struct usb_serial_port *port, struct file *filp)
 
 	}
 
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	up (&port->sem);
 
-	return 0;
+	return result;
 }
 
 
 static void empeg_close (struct usb_serial_port *port, struct file * filp)
 {
 	struct usb_serial *serial;
-	unsigned long flags;
 
 	if (port_paranoia_check (port, __FUNCTION__))
 		return;
@@ -209,24 +210,25 @@ static void empeg_close (struct usb_serial_port *port, struct file * filp)
 	if (!serial)
 		return;
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 
 	--port->open_count;
 
 	if (port->open_count <= 0) {
-		/* shutdown our bulk read */
-		usb_unlink_urb (port->read_urb);
+		if (serial->dev) {
+			/* shutdown our bulk read */
+			usb_unlink_urb (port->read_urb);
+		}
 		port->active = 0;
 		port->open_count = 0;
 	}
 
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	up (&port->sem);
 
 	/* Uncomment the following line if you want to see some statistics in your syslog */
 	/* info ("Bytes In = %d  Bytes Out = %d", bytes_in, bytes_out); */
 
 	MOD_DEC_USE_COUNT;
-
 }
 
 
@@ -277,7 +279,10 @@ static int empeg_write (struct usb_serial_port *port, int from_user, const unsig
 		transfer_size = MIN (count, URB_TRANSFER_BUFFER_SIZE);
 
 		if (from_user) {
-			copy_from_user (urb->transfer_buffer, current_position, transfer_size);
+			if (copy_from_user (urb->transfer_buffer, current_position, transfer_size)) {
+				bytes_sent = -EFAULT;
+				break;
+			}
 		} else {
 			memcpy (urb->transfer_buffer, current_position, transfer_size);
 		}
@@ -297,8 +302,11 @@ static int empeg_write (struct usb_serial_port *port, int from_user, const unsig
 
 		/* send it down the pipe */
 		status = usb_submit_urb(urb);
-		if (status)
-			dbg(__FUNCTION__ " - usb_submit_urb(write bulk) failed with status = %d", status);
+		if (status) {
+			err(__FUNCTION__ " - usb_submit_urb(write bulk) failed with status = %d", status);
+			bytes_sent = status;
+			break;
+		}
 
 		current_position += transfer_size;
 		bytes_sent += transfer_size;
@@ -321,7 +329,7 @@ static int empeg_write_room (struct usb_serial_port *port)
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	spin_lock_irqsave (&write_urb_pool_lock, flags);
 
 	/* tally up the number of bytes available */
 	for (i = 0; i < NUM_URBS; ++i) {
@@ -330,7 +338,7 @@ static int empeg_write_room (struct usb_serial_port *port)
 		}
 	} 
 
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	spin_unlock_irqrestore (&write_urb_pool_lock, flags);
 
 	dbg(__FUNCTION__ " - returns %d", room);
 
@@ -347,7 +355,7 @@ static int empeg_chars_in_buffer (struct usb_serial_port *port)
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	spin_lock_irqsave (&write_urb_pool_lock, flags);
 
 	/* tally up the number of bytes waiting */
 	for (i = 0; i < NUM_URBS; ++i) {
@@ -356,7 +364,7 @@ static int empeg_chars_in_buffer (struct usb_serial_port *port)
 		}
 	}
 
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	spin_unlock_irqrestore (&write_urb_pool_lock, flags);
 
 	dbg (__FUNCTION__ " - returns %d", chars);
 
@@ -458,15 +466,13 @@ static void empeg_read_bulk_callback (struct urb *urb)
 
 static void empeg_throttle (struct usb_serial_port *port)
 {
-	unsigned long flags;
-
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 
 	usb_unlink_urb (port->read_urb);
 
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	up (&port->sem);
 
 	return;
 
@@ -475,12 +481,11 @@ static void empeg_throttle (struct usb_serial_port *port)
 
 static void empeg_unthrottle (struct usb_serial_port *port)
 {
-	unsigned long flags;
 	int result;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 
 	port->read_urb->dev = port->serial->dev;
 
@@ -489,7 +494,7 @@ static void empeg_unthrottle (struct usb_serial_port *port)
 	if (result)
 		err(__FUNCTION__ " - failed submitting read urb, error %d", result);
 
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	up (&port->sem);
 
 	return;
 

@@ -23,7 +23,10 @@
  *    framework in, but haven't analyzed the "tty_flip" interface yet.
  * -- Add support for flush commands
  * -- Add everything that is missing :)
- * 
+ *
+ * 30-May-2001 gkh
+ *	switched from using spinlock to a semaphore, which fixes lots of problems.
+ *
  * 08-Apr-2001 gb
  *	- Identify version on module load.
  *
@@ -85,7 +88,7 @@
 /*
  * Version Information
  */
-#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_VERSION "v1.1"
 #define DRIVER_AUTHOR "William Greathouse <wgreathouse@smva.com>"
 #define DRIVER_DESC "USB Belkin Serial converter driver"
 
@@ -98,6 +101,30 @@ static void belkin_sa_read_int_callback (struct urb *urb);
 static void belkin_sa_set_termios	(struct usb_serial_port *port, struct termios * old);
 static int  belkin_sa_ioctl		(struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg);
 static void belkin_sa_break_ctl		(struct usb_serial_port *port, int break_state );
+
+/* All of the device info needed for the Belkin dockstation serial converter */
+static __u16	belkin_dockstation_vendor_id	= BELKIN_DOCKSTATION_VID;
+static __u16	belkin_dockstation_product_id	= BELKIN_DOCKSTATION_PID;
+struct usb_serial_device_type belkin_dockstation_device = {
+	name:			"Belkin F5U120-PC USB Serial Adapter",
+	idVendor:		&belkin_dockstation_vendor_id,
+	idProduct:		&belkin_dockstation_product_id,
+	needs_interrupt_in:	MUST_HAVE,			/* this device must have an interrupt in endpoint */
+	needs_bulk_in:		MUST_HAVE,			/* this device must have a bulk in endpoint */
+	needs_bulk_out:		MUST_HAVE,			/* this device must have a bulk out endpoint */
+	num_interrupt_in:	1,
+	num_bulk_in:		1,
+	num_bulk_out:		1,
+	num_ports:		1,
+	open:			belkin_sa_open,
+	close:			belkin_sa_close,
+	read_int_callback:	belkin_sa_read_int_callback,	/* How we get the status info */
+	ioctl:			belkin_sa_ioctl,
+	set_termios:		belkin_sa_set_termios,
+	break_ctl:		belkin_sa_break_ctl,
+	startup:		belkin_sa_startup,
+	shutdown:		belkin_sa_shutdown,
+};
 
 /* All of the device info needed for the Belkin serial converter */
 static __u16	belkin_sa_vendor_id	= BELKIN_SA_VID;
@@ -263,11 +290,11 @@ static void belkin_sa_shutdown (struct usb_serial *serial)
 
 static int  belkin_sa_open (struct usb_serial_port *port, struct file *filp)
 {
-	unsigned long flags;
+	int retval = 0;
 
 	dbg(__FUNCTION__" port %d", port->number);
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 	
 	++port->open_count;
 	MOD_INC_USE_COUNT;
@@ -280,47 +307,61 @@ static int  belkin_sa_open (struct usb_serial_port *port, struct file *filp)
 		 *       enhance buffering.  Win trace shows 16 initial read URBs.
 		 */
 		port->read_urb->dev = port->serial->dev;
-		if (usb_submit_urb(port->read_urb))
+		retval = usb_submit_urb(port->read_urb);
+		if (retval) {
 			err("usb_submit_urb(read bulk) failed");
+			goto exit;
+		}
 
 		port->interrupt_in_urb->dev = port->serial->dev;
-		if (usb_submit_urb(port->interrupt_in_urb))
+		retval = usb_submit_urb(port->interrupt_in_urb);
+		if (retval)
 			err(" usb_submit_urb(read int) failed");
 	}
 	
-	spin_unlock_irqrestore (&port->port_lock, flags);
+exit:
+	up (&port->sem);
 
-	return 0;
+	return retval;
 } /* belkin_sa_open */
 
 
 static void belkin_sa_close (struct usb_serial_port *port, struct file *filp)
 {
-	unsigned long flags;
+	struct usb_serial *serial;
+
+	if (port_paranoia_check (port, __FUNCTION__))
+		return;
+
+	serial = get_usb_serial (port, __FUNCTION__);
+	if (!serial)
+		return;
 
 	dbg(__FUNCTION__" port %d", port->number);
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 
 	--port->open_count;
-	MOD_DEC_USE_COUNT;
 
 	if (port->open_count <= 0) {
-		/* shutdown our bulk reads and writes */
-		usb_unlink_urb (port->write_urb);
-		usb_unlink_urb (port->read_urb);
-		usb_unlink_urb (port->interrupt_in_urb);	/* wgg - do I need this? I think so. */
+		if (serial->dev) {
+			/* shutdown our bulk reads and writes */
+			usb_unlink_urb (port->write_urb);
+			usb_unlink_urb (port->read_urb);
+			usb_unlink_urb (port->interrupt_in_urb);
+		}
 		port->active = 0;
 	}
 	
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	up (&port->sem);
+	MOD_DEC_USE_COUNT;
 } /* belkin_sa_close */
 
 
 static void belkin_sa_read_int_callback (struct urb *urb)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
-	struct belkin_sa_private *priv = (struct belkin_sa_private *)port->private;
+	struct belkin_sa_private *priv;
 	struct usb_serial *serial;
 	unsigned char *data = urb->transfer_buffer;
 
@@ -328,16 +369,17 @@ static void belkin_sa_read_int_callback (struct urb *urb)
 	if (urb->status)
 		return;
 	
-	if (port_paranoia_check (port, "belkin_sa_read_interrupt")) return;
+	if (port_paranoia_check (port, __FUNCTION__)) return;
 
 	serial = port->serial;
-	if (serial_paranoia_check (serial, "belkin_sa_read_interrupt")) return;
+	if (serial_paranoia_check (serial, __FUNCTION__)) return;
 	
 	usb_serial_debug_data (__FILE__, __FUNCTION__, urb->actual_length, data);
 
 	/* Handle known interrupt data */
 	/* ignore data[0] and data[1] */
 
+	priv = (struct belkin_sa_private *)port->private;
 	priv->last_msr = data[BELKIN_SA_MSR_INDEX];
 	
 	/* Record Control Line states */
@@ -526,7 +568,8 @@ static int belkin_sa_ioctl (struct usb_serial_port *port, struct file * file, un
 	case TIOCMSET: /* Turns on and off the lines as specified by the mask */
 	case TIOCMBIS: /* turns on (Sets) the lines as specified by the mask */
 	case TIOCMBIC: /* turns off (Clears) the lines as specified by the mask */
-		if ((ret = get_user(mask, (unsigned long *) arg))) return ret;
+		if (get_user(mask, (unsigned long *) arg))
+			return -EFAULT;
 
 		if ((cmd == TIOCMSET) || (mask & TIOCM_RTS)) {
 			/* RTS needs set */
@@ -577,17 +620,19 @@ static int belkin_sa_ioctl (struct usb_serial_port *port, struct file * file, un
 
 static int __init belkin_sa_init (void)
 {
+	usb_serial_register (&belkin_dockstation_device);
 	usb_serial_register (&belkin_sa_device);
 	usb_serial_register (&belkin_old_device);
 	usb_serial_register (&peracom_device);
 	usb_serial_register (&gocom232_device);
-	info(DRIVER_VERSION ":" DRIVER_DESC);
+	info(DRIVER_DESC " " DRIVER_VERSION);
 	return 0;
 }
 
 
 static void __exit belkin_sa_exit (void)
 {
+	usb_serial_deregister (&belkin_dockstation_device);
 	usb_serial_deregister (&belkin_sa_device);
 	usb_serial_deregister (&belkin_old_device);
 	usb_serial_deregister (&peracom_device);

@@ -15,7 +15,7 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 O_TARGET := macintosh.o
 M_OBJS   :=
 
-ifndef CONFIG_MBX
+ifdef CONFIG_POWERMAC
 O_OBJS   := via-cuda.o macio-adb.o via-pmu.o mediabay.o
 OX_OBJS  := adb.o
 endif

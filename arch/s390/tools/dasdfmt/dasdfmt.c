@@ -158,15 +158,16 @@ void
 exit_usage(int exitcode)
 {
 #ifdef RANGE_FORMATTING
-	printf("Usage: %s [-htvyLV] [-l <label>] [-b <blocksize>] [<range>] " \
+	printf("Usage: %s [-htvyLVF] [-l <label>] [-b <blocksize>] [<range>] " \
 		"<diskspec>\n\n",prog_name);
 #else /* RANGE_FORMATTING */
-	printf("Usage: %s [-htvyLV] [-l <label>] [-b <blocksize>] " \
+	printf("Usage: %s [-htvyLVF] [-l <label>] [-b <blocksize>] " \
 		"<diskspec>\n\n",prog_name);
 #endif /* RANGE_FORMATTING */
 	printf("       -t means testmode\n");
 	printf("       -v means verbose mode\n");
 	printf("       -V means print version\n");
+	printf("       -F means don't check for the device being used\n");
 	printf("       -L means don't write disk label\n");
 	printf("       <label> is a label which is converted to EBCDIC and " \
 		"written to disk\n");
@@ -459,7 +460,7 @@ check_mounted(int major, int minor)
 void
 do_format_dasd(char *dev_name,format_data_t format_params,int testmode,
 	int verbosity,int writenolabel,int labelspec,
-	char *label,int withoutprompt,int devno)
+	char *label,int withoutprompt,int force,int devno)
 {
 	int fd,rc;
 	struct stat stat_buf;
@@ -488,7 +489,7 @@ do_format_dasd(char *dev_name,format_data_t format_params,int testmode,
 		major_no=MAJOR(stat_buf.st_rdev);
 		minor_no=MINOR(stat_buf.st_rdev);
 	}
-	check_mounted(major_no, minor_no);
+	if (!force) check_mounted(major_no, minor_no);
 
 	if ((!writenolabel) && (!labelspec)) {
 		sprintf(label,"LNX1 x%04x",devno);
@@ -618,6 +619,7 @@ int main(int argc,char *argv[]) {
 	int verbosity;
 	int testmode;
 	int withoutprompt;
+	int force;
 	int writenolabel,labelspec;
 
 	char *dev_name;
@@ -652,6 +654,7 @@ int main(int argc,char *argv[]) {
 	testmode=0;
 	verbosity=0;
 	withoutprompt=0;
+	force=0;
 	writenolabel=0;
 	labelspec=0;
 	for (i=0;i<LABEL_LENGTH;i++) label[i]=' ';
@@ -666,10 +669,14 @@ int main(int argc,char *argv[]) {
 	opterr=0;
 
 #ifdef RANGE_FORMATTING
-	while ( (oc=getopt(argc,argv,"r:s:e:b:n:l:f:hLty?vV")) !=EOF) {
+	while ( (oc=getopt(argc,argv,"r:s:e:b:n:l:f:hLty?vVF")) !=EOF) {
 #endif /* RANGE_FORMATTING */
-	while ( (oc=getopt(argc,argv,"b:n:l:f:hLty?vV")) !=EOF) {
+	while ( (oc=getopt(argc,argv,"b:n:l:f:hLty?vVF")) !=EOF) {
 		switch (oc) {
+		case 'F':
+			force=1;
+			break;
+
 		case 'y':
 			withoutprompt=1;
 			break;
@@ -812,7 +819,7 @@ int main(int argc,char *argv[]) {
 
 	/******* issue the real command and reread part table *******/
 	do_format_dasd(dev_name,format_params,testmode,verbosity,
-		writenolabel,labelspec,label,withoutprompt,devno);
+		writenolabel,labelspec,label,withoutprompt,force,devno);
 
 	/*************** cleanup ********************************/
 	if (strncmp(dev_name,TEMPFILENAME,TEMPFILENAMECHARS)==0) {

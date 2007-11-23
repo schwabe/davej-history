@@ -1,7 +1,7 @@
 /*
  * USB Serial Converter driver
  *
- * Copyright (C) 1999, 2000 Greg Kroah-Hartman (greg@kroah.com)
+ * Copyright (C) 1999 - 2001 Greg Kroah-Hartman (greg@kroah.com)
  * Copyright (c) 2000 Peter Berger (pberger@brimson.com)
  * Copyright (c) 2000 Al Borchers (borchers@steinerpoint.com)
  *
@@ -14,7 +14,30 @@
  * based on a driver by Brad Keryan)
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
- * 
+ *
+ * (10/10/2001) gkh
+ *	usb_serial_disconnect() now sets the serial->dev pointer is to NULL to
+ *	help prevent child drivers from accessing the device since it is now
+ *	gone.
+ *
+ * (09/13/2001) gkh
+ *	Moved generic driver initialize after we have registered with the USB
+ *	core.  Thanks to Randy Dunlap for pointing this problem out.
+ *
+ * (07/03/2001) gkh
+ *	Fixed module paramater size.  Thanks to John Brockmeyer for the pointer.
+ *	Fixed vendor and product getting defined through the MODULE_PARM macro
+ *	if the Generic driver wasn't compiled in.
+ *	Fixed problem with generic_shutdown() not being called for drivers that
+ *	don't have a shutdown() function.
+ *
+ * (06/06/2001) gkh
+ *	added evil hack that is needed for the prolific pl2303 device due to the
+ *	crazy way its endpoints are set up.
+ *
+ * (05/30/2001) gkh
+ *	switched from using spinlock to a semaphore, which fixes lots of problems.
+ *
  * (04/08/2001) gb
  *	Identify version on module load.
  *
@@ -28,7 +51,7 @@
  *	Also fixed bug with there not being a MOD_DEC for the generic driver
  *	(thanks to Gary Brubaker for finding this.)
  *
- * (12/29/2000) gkh
+ * (11/29/2000) gkh
  *	Small NULL pointer initialization cleanup which saves a bit of disk image
  *
  * (10/05/2000) gkh
@@ -276,11 +299,12 @@
 #endif
 
 #include "usb-serial.h"
+#include "pl2303.h"
 
 /*
  * Version Information
  */
-#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_VERSION "v1.4"
 #define DRIVER_AUTHOR "Greg Kroah-Hartman, greg@kroah.com, http://www.kroah.com/linux-usb/"
 #define DRIVER_DESC "USB Serial Driver core"
 
@@ -317,6 +341,13 @@ static struct usb_serial_device_type generic_device = {
 	num_ports:		1,
 	shutdown:		generic_shutdown,
 };
+
+#define if_generic_do(x)			\
+	if ((serial->vendor == vendor) &&	\
+	    (serial->product == product))	\
+	                x
+#else
+#define if_generic_do(x)
 #endif
 
 
@@ -330,6 +361,7 @@ static void serial_throttle (struct tty_struct * tty);
 static void serial_unthrottle (struct tty_struct * tty);
 static int  serial_ioctl (struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg);
 static void serial_set_termios (struct tty_struct *tty, struct termios * old);
+static void serial_shutdown (struct usb_serial *serial);
 
 static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum);
 static void usb_serial_disconnect(struct usb_device *dev, void *ptr);
@@ -348,7 +380,7 @@ static struct termios *		serial_termios_locked[SERIAL_TTY_MINORS];
 static struct usb_serial	*serial_table[SERIAL_TTY_MINORS];	/* initially all NULL */
 
 
-LIST_HEAD(usb_serial_driver_list);
+static LIST_HEAD(usb_serial_driver_list);
 
 
 static struct usb_serial *get_serial_by_minor (int minor)
@@ -418,10 +450,15 @@ static void return_serial (struct usb_serial *serial)
 int ezusb_writememory (struct usb_serial *serial, int address, unsigned char *data, int length, __u8 bRequest)
 {
 	int result;
-	unsigned char *transfer_buffer =  kmalloc (length, GFP_KERNEL);
+	unsigned char *transfer_buffer;
 
-//	dbg("ezusb_writememory %x, %d", address, length);
+	/* dbg("ezusb_writememory %x, %d", address, length); */
+	if (!serial->dev) {
+		dbg(__FUNCTION__ " - no physical device present, failing.");
+		return -ENODEV;
+	}
 
+	transfer_buffer =  kmalloc (length, GFP_KERNEL);
 	if (!transfer_buffer) {
 		err(__FUNCTION__ " - kmalloc(%d) failed.", length);
 		return -ENOMEM;
@@ -468,8 +505,6 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 		return -ENODEV;
 	}
 
-	MOD_INC_USE_COUNT;
-	
 	/* set up our port structure making the tty driver remember our port object, and us it */
 	portNumber = MINOR(tty->device) - serial->minor;
 	port = &serial->port[portNumber];
@@ -507,8 +542,6 @@ static void serial_close(struct tty_struct *tty, struct file * filp)
 	} else {
 		generic_close(port, filp);
 	}
-
-	MOD_DEC_USE_COUNT;
 }	
 
 
@@ -709,6 +742,16 @@ static void serial_break (struct tty_struct *tty, int break_state)
 }
 
 
+static void serial_shutdown (struct usb_serial *serial)
+{
+	if (serial->type->shutdown) {
+		serial->type->shutdown(serial);
+	} else {
+		generic_shutdown(serial);
+	}
+}
+
+
 
 /*****************************************************************************
  * generic devices specific driver functions
@@ -716,17 +759,17 @@ static void serial_break (struct tty_struct *tty, int break_state)
 static int generic_open (struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
-	unsigned long flags;
-	int result;
+	int result = 0;
 
 	if (port_paranoia_check (port, __FUNCTION__))
 		return -ENODEV;
 
-	MOD_INC_USE_COUNT;
+	/* only increment our usage count, if this device is _really_ a generic device */
+	if_generic_do(MOD_INC_USE_COUNT);
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 	
 	++port->open_count;
 	
@@ -754,43 +797,45 @@ static int generic_open (struct usb_serial_port *port, struct file *filp)
 		}
 	}
 	
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	up (&port->sem);
 	
-	return 0;
+	return result;
 }
 
 
 static void generic_close (struct usb_serial_port *port, struct file * filp)
 {
 	struct usb_serial *serial = port->serial;
-	unsigned long flags;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 
 	--port->open_count;
 
 	if (port->open_count <= 0) {
-		/* shutdown any bulk reads that might be going on */
-		if (serial->num_bulk_out)
-			usb_unlink_urb (port->write_urb);
-		if (serial->num_bulk_in)
-			usb_unlink_urb (port->read_urb);
+		if (serial->dev) {
+			/* shutdown any bulk reads that might be going on */
+			if (serial->num_bulk_out)
+				usb_unlink_urb (port->write_urb);
+			if (serial->num_bulk_in)
+				usb_unlink_urb (port->read_urb);
+		}
 		
 		port->active = 0;
 		port->open_count = 0;
 	}
 
-	spin_unlock_irqrestore (&port->port_lock, flags);
-	MOD_DEC_USE_COUNT;
+	up (&port->sem);
+
+	/* only decrement our usage count, if this device is _really_ a generic device */
+	if_generic_do(MOD_DEC_USE_COUNT);
 }
 
 
 static int generic_write (struct usb_serial_port *port, int from_user, const unsigned char *buf, int count)
 {
 	struct usb_serial *serial = port->serial;
-	unsigned long flags;
 	int result;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
@@ -807,11 +852,11 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 			return (0);
 		}
 
-		spin_lock_irqsave (&port->port_lock, flags);
 		count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
 
 		if (from_user) {
-			copy_from_user(port->write_urb->transfer_buffer, buf, count);
+			if (copy_from_user(port->write_urb->transfer_buffer, buf, count))
+				return -EFAULT;
 		}
 		else {
 			memcpy (port->write_urb->transfer_buffer, buf, count);
@@ -830,14 +875,12 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 
 		/* send the data out the bulk port */
 		result = usb_submit_urb(port->write_urb);
-		if (result) {
+		if (result)
 			err(__FUNCTION__ " - failed submitting write urb, error %d", result);
-			spin_unlock_irqrestore (&port->port_lock, flags);
-			return 0;
-		}
+		else
+			result = count;
 
-		spin_unlock_irqrestore (&port->port_lock, flags);
-		return (count);
+		return result;
 	}
 	
 	/* no bulk out, so return 0 bytes written */
@@ -852,9 +895,10 @@ static int generic_write_room (struct usb_serial_port *port)
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 	
-	if (serial->num_bulk_out)
+	if (serial->num_bulk_out) {
 		if (port->write_urb->status != -EINPROGRESS)
 			room = port->bulk_out_size;
+	}
 	
 	dbg(__FUNCTION__ " - returns %d", room);
 	return (room);
@@ -868,9 +912,10 @@ static int generic_chars_in_buffer (struct usb_serial_port *port)
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 	
-	if (serial->num_bulk_out)
+	if (serial->num_bulk_out) {
 		if (port->write_urb->status == -EINPROGRESS)
 			chars = port->write_urb->transfer_buffer_length;
+	}
 
 	dbg (__FUNCTION__ " - returns %d", chars);
 	return (chars);
@@ -1074,6 +1119,33 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 		}
 	}
 	
+#if defined(CONFIG_USB_SERIAL_PL2303) || defined(CONFIG_USB_SERIAL_PL2303_MODULE)
+	/* BEGIN HORRIBLE HACK FOR PL2303 */ 
+	/* this is needed due to the looney way its endpoints are set up */
+	if (ifnum == 1) {
+		if (((dev->descriptor.idVendor == PL2303_VENDOR_ID) &&
+		     (dev->descriptor.idProduct == PL2303_PRODUCT_ID)) ||
+		    ((dev->descriptor.idVendor == ATEN_VENDOR_ID) &&
+		     (dev->descriptor.idProduct == ATEN_PRODUCT_ID))) {
+			/* check out the endpoints of the other interface*/
+			interface = &dev->actconfig->interface[ifnum ^ 1];
+			iface_desc = &interface->altsetting[0];
+			for (i = 0; i < iface_desc->bNumEndpoints; ++i) {
+				endpoint = &iface_desc->endpoint[i];
+				if ((endpoint->bEndpointAddress & 0x80) &&
+				    ((endpoint->bmAttributes & 3) == 0x03)) {
+					/* we found a interrupt in endpoint */
+					dbg("found interrupt in for Prolific device on separate interface");
+					interrupt_pipe = HAS;
+					interrupt_in_endpoint[num_interrupt_in] = endpoint;
+					++num_interrupt_in;
+				}
+			}
+		}
+	}
+	/* END HORRIBLE HACK FOR PL2303 */
+#endif
+	
 	/* verify that we found all of the endpoints that we need */
 	if (!((interrupt_pipe & type->needs_interrupt_in) &&
 	      (bulk_in_pipe & type->needs_bulk_in) &&
@@ -1111,6 +1183,8 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	serial->num_bulk_in = num_bulk_in;
 	serial->num_bulk_out = num_bulk_out;
 	serial->num_interrupt_in = num_interrupt_in;
+	serial->vendor = dev->descriptor.idVendor;
+	serial->product = dev->descriptor.idProduct;
 
 	/* if this device type has a startup function, call it */
 	if (type->startup) {
@@ -1205,7 +1279,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 		port->magic = USB_SERIAL_PORT_MAGIC;
 		port->tqueue.routine = port_softint;
 		port->tqueue.data = port;
-		spin_lock_init (&port->port_lock);
+		init_MUTEX (&port->sem);
 	}
 	
 	/* initialize the devfs nodes for this device and let the user know what ports we are bound to */
@@ -1263,8 +1337,8 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 				serial->port[i].tty->driver_data = NULL;
 		}
 
-		if (serial->type->shutdown)
-			serial->type->shutdown(serial);
+		serial->dev = NULL;
+		serial_shutdown (serial);
 
 		for (i = 0; i < serial->num_ports; ++i)
 			serial->port[i].active = 0;
@@ -1344,7 +1418,7 @@ static struct tty_driver serial_tty_driver = {
 };
 
 
-int usb_serial_init(void)
+static int __init usb_serial_init(void)
 {
 	int i;
 	int result;
@@ -1381,7 +1455,7 @@ int usb_serial_init(void)
 }
 
 
-void usb_serial_exit(void)
+static void __exit usb_serial_exit(void)
 {
 
 #ifdef CONFIG_USB_SERIAL_GENERIC
@@ -1449,9 +1523,10 @@ MODULE_DESCRIPTION( DRIVER_DESC );
 MODULE_PARM(debug, "i");
 MODULE_PARM_DESC(debug, "Debug enabled or not");
 
-MODULE_PARM(vendor, "i");
+#ifdef CONFIG_USB_SERIAL_GENERIC
+MODULE_PARM(vendor, "h");
 MODULE_PARM_DESC(vendor, "User specified USB idVendor");
 
-MODULE_PARM(product, "i");
+MODULE_PARM(product, "h");
 MODULE_PARM_DESC(product, "User specified USB idProduct");
-
+#endif

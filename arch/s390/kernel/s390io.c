@@ -2280,9 +2280,8 @@ int s390_process_IRQ( unsigned int irq )
 		ioinfo[irq]->stctl |= stctl;
 
 		ending_status =    ( stctl & SCSW_STCTL_SEC_STATUS                          )
-			|| ( stctl == (SCSW_STCTL_ALERT_STATUS | SCSW_STCTL_STATUS_PEND)         )
-		   || ( (fctl == SCSW_FCTL_HALT_FUNC)  && (stctl == SCSW_STCTL_STATUS_PEND) )
-		   || ( (fctl == SCSW_FCTL_CLEAR_FUNC) && (stctl == SCSW_STCTL_STATUS_PEND) );
+			|| ( stctl == (SCSW_STCTL_ALERT_STATUS | SCSW_STCTL_STATUS_PEND)    )
+			|| ( stctl == SCSW_STCTL_STATUS_PEND);
 
 		/*
 		 * Check for unsolicited interrupts - for debug purposes only
@@ -5109,6 +5108,18 @@ int s390_SetPGID( int irq, __u8 lpm, pgid_t *pgid )
 					{
 						if ( mpath )
 						{
+							/*
+							 * We now try single path mode.
+							 * Note we must not issue the suspend
+							 * multipath reconnect, or we will get
+							 * a command reject by tapes.
+							 */
+							
+							spid_ccw[0].cmd_code = CCW_CMD_SET_PGID;
+							spid_ccw[0].cda = (__u32)virt_to_phys (pgid);
+							spid_ccw[0].count = sizeof (pgid_t);
+							spid_ccw[0].flags = CCW_FLAG_SLI;
+
 							pgid->inf.fc =   SPID_FUNC_SINGLE_PATH
 							               | SPID_FUNC_ESTABLISH;
 							mpath        = 0;

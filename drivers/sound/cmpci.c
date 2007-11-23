@@ -2096,7 +2096,7 @@ static int cm_midi_release(struct inode *inode, struct file *file)
 	VALIDATE_STATE(s);
 
 	if (file->f_mode & FMODE_WRITE) {
- current->state = TASK_INTERRUPTIBLE;
+		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
 			spin_lock_irqsave(&s->lock, flags);
@@ -2107,9 +2107,7 @@ static int cm_midi_release(struct inode *inode, struct file *file)
 			if (signal_pending(current))
 				break;
 			if (file->f_flags & O_NONBLOCK) {
-				remove_wait_queue(&s->midi.owait, &wait);
-				current->state = TASK_RUNNING;
-				return -EBUSY;
+				break;
 			}
 			tmo = (count * HZ) / 3100;
 			if (!schedule_timeout(tmo ? : 1) && tmo)

@@ -126,7 +126,7 @@ static int msdos_format_name(char conv,const char *name,int len,
 
 /***** Locates a directory entry.  Uses unformatted name. */
 static int msdos_find(struct inode *dir,const char *name,int len,
-    struct buffer_head **bh,struct msdos_dir_entry **de,int *ino)
+    struct buffer_head **bh,struct msdos_dir_entry **de,loff_t *ino)
 {
 	int res;
 	char dotsOK;
@@ -220,7 +220,8 @@ struct dentry *msdos_lookup(struct inode *dir,struct dentry *dentry)
 	struct inode *inode = NULL;
 	struct msdos_dir_entry *de;
 	struct buffer_head *bh = NULL;
-	int ino,res;
+	int res;
+	loff_t ino;
 	
 	PRINTK (("msdos_lookup\n"));
 
@@ -249,7 +250,7 @@ out:
 static int msdos_add_entry(struct inode *dir, const char *name,
 			   struct buffer_head **bh,
 			   struct msdos_dir_entry **de,
-			   int *ino,
+			   loff_t *ino,
 			   int is_dir, int is_hid)
 {
 	struct super_block *sb = dir->i_sb;
@@ -285,7 +286,8 @@ int msdos_create(struct inode *dir,struct dentry *dentry,int mode)
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 	struct inode *inode;
-	int ino,res,is_hid;
+	int res,is_hid;
+	loff_t ino;
 	char msdos_name[MSDOS_NAME];
 
 	res = msdos_format_name(MSDOS_SB(sb)->options.name_check,
@@ -318,7 +320,8 @@ int msdos_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode = dentry->d_inode;
-	int res,ino;
+	int res;
+	loff_t ino;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 
@@ -365,7 +368,7 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 	char msdos_name[MSDOS_NAME];
 	struct buffer_head *bh1;
 	struct msdos_dir_entry *de1;
-	int ino;
+	loff_t ino;
 
 	res = msdos_format_name(MSDOS_SB(sb)->options.name_check,
 				dentry->d_name.name,dentry->d_name.len,
@@ -451,7 +454,8 @@ int msdos_unlink( struct inode *dir, struct dentry *dentry)
 {
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode = dentry->d_inode;
-	int res,ino;
+	int res;
+	loff_t ino;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
 
@@ -479,13 +483,13 @@ static int do_msdos_rename(struct inode *old_dir, char *old_name,
     struct dentry *old_dentry,
     struct inode *new_dir,char *new_name, struct dentry *new_dentry,
     struct buffer_head *old_bh,
-    struct msdos_dir_entry *old_de, int old_ino, int is_hid)
+    struct msdos_dir_entry *old_de, loff_t old_ino, int is_hid)
 {
 	struct super_block *sb = old_dir->i_sb;
 	struct buffer_head *new_bh=NULL,*dotdot_bh=NULL;
 	struct msdos_dir_entry *new_de,*dotdot_de;
 	struct inode *old_inode,*new_inode;
-	int new_ino,dotdot_ino;
+	loff_t new_ino,dotdot_ino;
 	int error;
 	int is_dir;
 
@@ -582,7 +586,8 @@ int msdos_rename(struct inode *old_dir,struct dentry *old_dentry,
 	struct super_block *sb = old_dir->i_sb;
 	struct buffer_head *old_bh;
 	struct msdos_dir_entry *old_de;
-	int old_ino, error;
+	int error;
+	loff_t old_ino;
 	int is_hid,old_hid; /* if new file and old file are hidden */
 	char old_msdos_name[MSDOS_NAME], new_msdos_name[MSDOS_NAME];
 
@@ -605,7 +610,7 @@ int msdos_rename(struct inode *old_dir,struct dentry *old_dentry,
 
 	error = do_msdos_rename(old_dir, old_msdos_name, old_dentry,
 				new_dir, new_msdos_name, new_dentry,
-				old_bh, old_de, (ino_t)old_ino, is_hid);
+				old_bh, old_de, old_ino, is_hid);
 	fat_brelse(sb, old_bh);
 
 rename_done:

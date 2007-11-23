@@ -76,10 +76,11 @@ dia210 (void *devchar)
 static __inline__ int
 dia250 (void *iob, int cmd)
 {
-	int rc;
-
-	__asm__ __volatile__ ("    lr    1,%1\n"
-                              "    diag  1,%2,0x250\n"
+	__asm__ __volatile__ ("    lr    0,%1\n"
+                              "    diag  0,%0,0x250\n"
+                              "0:  ipm   %0\n"
+                              "    srl   %0,28\n"
+			      "    or    %0,1\n"
                               "1:\n"
                               ".section .fixup,\"ax\"\n"
                               "2:  lhi   %0,3\n"
@@ -90,12 +91,12 @@ dia250 (void *iob, int cmd)
                               ".previous\n"
                               ".section __ex_table,\"a\"\n"
                               "    .align 4\n"
-                              "    .long 1b,2b\n"
+                              "    .long 0b,2b\n"
                               ".previous\n"
-                              : "=d" (rc)
-                              : "d" ((void *) __pa (iob)), "0" (cmd)
-                              : "1" );
-	return rc;
+                              : "+d" (cmd)
+                              : "d" ((void *) __pa (iob))
+                              : "0", "1", "cc" );
+	return cmd;
 }
 
 static __inline__ int
@@ -115,7 +116,7 @@ mdsk_init_io (dasd_device_t *device, int blocksize, int offset, int size)
 
 	rc = dia250 (iib, INIT_BIO);
 
-	return rc;
+	return rc & 3;
 }
 
 static __inline__ int
@@ -128,7 +129,7 @@ mdsk_term_io (dasd_device_t *device)
 	memset (iib, 0, sizeof (diag_init_io_t));
 	iib->dev_nr = device->devinfo.devno;
 	rc = dia250 (iib, TERM_BIO);
-	return rc;
+	return rc & 3;
 }
 
 int
@@ -141,7 +142,6 @@ dasd_start_diag (ccw_req_t * cqr)
 
         private = (dasd_diag_private_t *)device->private;
 	iob = &private->iob;
-
 	iob->dev_nr = device->devinfo.devno;
 	iob->key = 0;
 	iob->flags = 2;
@@ -156,6 +156,11 @@ dasd_start_diag (ccw_req_t * cqr)
 		atomic_compare_and_swap_debug(&cqr->status, 
                                               CQR_STATUS_QUEUED, 
                                               CQR_STATUS_ERROR);
+	} else if (rc == 0 ) {
+		atomic_compare_and_swap_debug(&cqr->status, 
+                                              CQR_STATUS_QUEUED, 
+                                              CQR_STATUS_DONE);
+		dasd_schedule_bh();
 	} else {
 		if ( cqr->expires ) {
 			cqr->expires += cqr->startclk;
@@ -171,6 +176,7 @@ dasd_start_diag (ccw_req_t * cqr)
 void 
 dasd_ext_handler (struct pt_regs *regs, __u16 code)
 {
+    	int cpu = smp_processor_id();
 	ccw_req_t *cqr;
 	int ip = S390_lowcore.ext_params;
 	char status = *((char *) S390_lowcore.ext_params + 5);
@@ -178,15 +184,19 @@ dasd_ext_handler (struct pt_regs *regs, __u16 code)
 	int done_fast_io = 0;
         int devno,devindex;
 
+	irq_enter(cpu, -1);
+
 	if (!ip) {		/* no intparm: unsolicited interrupt */
 		printk ( KERN_WARNING PRINTK_HEADER
 			 "caught unsolicited interrupt\n");
+		irq_exit(cpu, -1);
 		return;
 	}
 	if (ip & 0x80000001) {
 		printk ( KERN_WARNING PRINTK_HEADER
 			 "caught spurious interrupt with parm %08x\n",
 			 ip);
+		irq_exit(cpu, -1);
 		return;
 	}
 	cqr = (ccw_req_t *) ip;
@@ -208,6 +218,7 @@ dasd_ext_handler (struct pt_regs *regs, __u16 code)
 			major_from_devindex (devindex),
 			devindex << DASD_PARTN_BITS,
 			cqr->magic, *(int *) (&device->discipline->name));
+		irq_exit(cpu, -1);
 		return;
 	}
 	asm volatile ("STCK %0":"=m" (cqr->stopclk));
@@ -249,6 +260,7 @@ dasd_ext_handler (struct pt_regs *regs, __u16 code)
 	}
 #endif /* LINUX_VERSION_CODE */
 	dasd_schedule_bh ();
+        irq_exit(cpu, -1);
 }
 
 static int

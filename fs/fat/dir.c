@@ -129,7 +129,8 @@ int fat_search_long(
 	loff_t *spos, loff_t *lpos)
 {
 	struct super_block *sb = inode->i_sb;
-	int ino,i,i2,last;
+	int i,i2,last;
+    loff_t ino;
 	char c;
 	struct buffer_head *bh = NULL;
 	struct msdos_dir_entry *de;
@@ -293,7 +294,8 @@ static int fat_readdirx(
 	int both)
 {
 	struct super_block *sb = inode->i_sb;
-	int ino,inum,i,i2,last;
+	int i,i2,last;
+    loff_t ino, inum;
 	char c;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
@@ -589,7 +591,8 @@ int fat_dir_empty(struct inode *dir)
 	loff_t pos;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *de;
-	int ino,result = 0;
+	int result = 0;
+    loff_t ino;
 
 	pos = 0;
 	bh = NULL;
@@ -613,7 +616,7 @@ int fat_dir_empty(struct inode *dir)
 /* This assumes that size of cluster is above the 32*slots */
 
 int fat_add_entries(struct inode *dir,int slots, struct buffer_head **bh,
-		  struct msdos_dir_entry **de, int *ino)
+		  struct msdos_dir_entry **de, loff_t *ino)
 {
 	struct super_block *sb = dir->i_sb;
 	loff_t offset, curr;

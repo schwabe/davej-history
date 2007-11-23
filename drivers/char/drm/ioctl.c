@@ -75,7 +75,7 @@ int drm_setunique(struct inode *inode, struct file *filp, unsigned int cmd,
 	if (dev->unique_len || dev->unique) return -EBUSY;
 
 	copy_from_user_ret(&u, (drm_unique_t *)arg, sizeof(u), -EFAULT);
-	if (!u.unique_len || u.unique_len > 1024)
+	if (!u.unique_len || u.unique_len > 1024) return -EINVAL;
 	
 	dev->unique_len = u.unique_len;
 	dev->unique	= drm_alloc(u.unique_len + 1, DRM_MEM_DRIVER);

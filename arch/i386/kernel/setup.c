@@ -727,7 +727,7 @@ static int __init init_amd(struct cpuinfo_x86 *c)
 
 
 /*
- * Read Cyrix DEVID registers (DIR) to get more detailed info. about the CPU
+ * Read NSC/Cyrix DEVID registers (DIR) to get more detailed info. about the CPU
  */
 static inline void do_cyrix_devid(unsigned char *dir0, unsigned char *dir1)
 {
@@ -763,7 +763,7 @@ static inline void do_cyrix_devid(unsigned char *dir0, unsigned char *dir1)
 
 /*
  * Cx86_dir0_msb is a HACK needed by check_cx686_cpuid/slop in bugs.h in
- * order to identify the Cyrix CPU model after we're out of setup.c
+ * order to identify the NSC/Cyrix CPU model after we're out of setup.c
  */
 unsigned char Cx86_dir0_msb __initdata = 0;
 
@@ -924,7 +924,7 @@ static void __init init_transmeta(struct cpuinfo_x86 *c)
 	unsigned int cpu_rev, cpu_freq, cpu_flags;
 	char cpu_info[65];
 
-	get_model_name(c);	/* Same as AMD/Cyrix */
+	get_model_name(c);	/* Same as AMD/NSC/Cyrix */
 	display_cacheinfo(c);
 
 	/* Print CMS and CPU revision */
@@ -1016,6 +1016,8 @@ static void __init get_cpu_vendor(struct cpuinfo_x86 *c)
 		c->x86_vendor = X86_VENDOR_AMD;
 	else if (!strcmp(v, "CyrixInstead"))
 		c->x86_vendor = X86_VENDOR_CYRIX;
+	else if (!strcmp(v, "Geode by NSC"))
+		c->x86_vendor = X86_VENDOR_NSC;
 	else if (!strcmp(v, "UMC UMC UMC "))
 		c->x86_vendor = X86_VENDOR_UMC;
 	else if (!strcmp(v, "CentaurHauls"))
@@ -1346,7 +1348,11 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 		case X86_VENDOR_CYRIX:
 			init_cyrix(c);
 			return;
-
+		
+		case X86_VENDOR_NSC:
+			init_cyrix(c);
+			return;
+	
 		case X86_VENDOR_AMD:
 			init_amd(c);
 			return;
@@ -1393,7 +1399,7 @@ void __init dodgy_tsc(void)
 {
 	get_cpu_vendor(&boot_cpu_data);
 	
-	if(boot_cpu_data.x86_vendor != X86_VENDOR_CYRIX)
+	if(boot_cpu_data.x86_vendor != X86_VENDOR_CYRIX && boot_cpu_data.x86_vendor != X86_VENDOR_NSC)
 	{
 		return;
 	}
@@ -1402,7 +1408,9 @@ void __init dodgy_tsc(void)
 	
 
 static char *cpu_vendor_names[] __initdata = {
-	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur", "Rise", "Transmeta" };
+	"Intel", "Cyrix", "AMD", "UMC", "NexGen",
+	"Centaur", "Rise", "Transmeta" , "NSC" 
+};
 
 
 void __init print_cpu_info(struct cpuinfo_x86 *c)

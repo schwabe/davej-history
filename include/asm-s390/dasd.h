@@ -58,6 +58,7 @@ typedef struct format_data_t {
 #define DASD_FORMAT_DEFAULT_STOP_UNIT -1
 #define DASD_FORMAT_DEFAULT_BLOCKSIZE -1
 #define DASD_FORMAT_DEFAULT_INTENSITY -1
+#define DASD_FORMAT_INVALIDATION_BS   10  
 
 #ifdef __KERNEL__
 
@@ -247,6 +248,7 @@ ccw_req_t *default_erp_postaction (ccw_req_t *);
 int dasd_chanq_deq (dasd_chanq_t *, ccw_req_t *);
 ccw_req_t *dasd_alloc_request (char *, int, int);
 void dasd_free_request (ccw_req_t *);
+void dasd_schedule_bh (void);
 
 
 #define DASD_MESSAGE(d_loglevel,d_device,d_string,d_args...)\

@@ -1017,6 +1017,9 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	}
 	if (!other)
 	{
+		err = -ECONNRESET;
+		if(sunaddr==NULL)
+			goto out_free;
 		other = unix_find_other(sunaddr, namelen, sk->type, hash, &err);
 		if (other==NULL)
 			goto out_free;

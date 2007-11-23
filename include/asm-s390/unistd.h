@@ -178,6 +178,8 @@
 #define __NR_capset             185
 #define __NR_sigaltstack        186
 #define __NR_sendfile           187
+#define __NR_getpmsg		188
+#define __NR_putpmsg		189
 #define __NR_vfork		190
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-s390/errno.h> */

@@ -1,7 +1,7 @@
 /*
- * USB Keyspan PDA Converter driver
+ * USB Keyspan PDA / Xircom / Entregra Converter driver
  *
- * Copyright (c) 1999, 2000 Greg Kroah-Hartman	<greg@kroah.com>
+ * Copyright (c) 1999 - 2001 Greg Kroah-Hartman	<greg@kroah.com>
  * Copyright (c) 1999, 2000 Brian Warner	<warner@lothar.com>
  * Copyright (c) 2000 Al Borchers		<borchers@steinerpoint.com>
  *
@@ -12,6 +12,17 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (09/07/2001) gkh
+ *	cleaned up the Xircom support.  Added ids for Entregra device which is
+ *	the same as the Xircom device.  Enabled the code to be compiled for
+ *	either Xircom or Keyspan devices.
+ *
+ * (08/11/2001) Cristian M. Craciunescu
+ *	support for Xircom PGSDB9
+ *
+ * (05/31/2001) gkh
+ *	switched from using spinlock to a semaphore, which fixes lots of problems.
+ *
  * (04/08/2001) gb
  *	Identify version on module load.
  * 
@@ -82,13 +93,32 @@ struct ezusb_hex_record {
 	__u8 data[16];
 };
 
+/* make a simple define to handle if we are compiling keyspan_pda or xircom support */
+#if defined(CONFIG_USB_SERIAL_KEYSPAN_PDA) || defined(CONFIG_USB_SERIAL_KEYSPAN_PDA_MODULE)
+	#define KEYSPAN
+#else
+	#undef KEYSPAN
+#endif
+#if defined(CONFIG_USB_SERIAL_XIRCOM) || defined(CONFIG_USB_SERIAL_XIRCOM_MODULE)
+	#define XIRCOM
+#else
+	#undef XIRCOM
+#endif
+
+#ifdef KEYSPAN
 #include "keyspan_pda_fw.h"
+#endif
+
+#ifdef XIRCOM
+#include "xircom_pgs_fw.h"
+#endif
+
 #include "usb-serial.h"
 
 /*
  * Version Information
  */
-#define DRIVER_VERSION "v1.0.0"
+#define DRIVER_VERSION "v1.1"
 #define DRIVER_AUTHOR "Brian Warner <warner@lothar.com>"
 #define DRIVER_DESC "USB Keyspan PDA Converter driver"
 
@@ -99,14 +129,25 @@ struct keyspan_pda_private {
 	struct tq_struct	unthrottle_task;
 };
 
+
 #define KEYSPAN_VENDOR_ID		0x06cd
 #define KEYSPAN_PDA_FAKE_ID		0x0103
 #define KEYSPAN_PDA_ID			0x0104 /* no clue */
+
+/* For Xircom PGSDB9 and older Entregra version of the same device */
+#define XIRCOM_VENDOR_ID		0x085a
+#define XIRCOM_FAKE_ID			0x8027
+#define ENTREGRA_VENDOR_ID		0x1645
+#define ENTREGRA_FAKE_ID		0x8093
 
 /* All of the device info needed for the Keyspan PDA serial converter */
 static __u16	keyspan_vendor_id		= KEYSPAN_VENDOR_ID;
 static __u16	keyspan_pda_fake_product_id	= KEYSPAN_PDA_FAKE_ID;
 static __u16	keyspan_pda_product_id		= KEYSPAN_PDA_ID;
+static __u16	xircom_vendor_id		= XIRCOM_VENDOR_ID;
+static __u16	xircom_fake_product_id		= XIRCOM_FAKE_ID;
+static __u16	entregra_vendor_id		= ENTREGRA_VENDOR_ID;
+static __u16	entregra_fake_product_id	= ENTREGRA_FAKE_ID;
 
 
 
@@ -438,7 +479,6 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 	int request_unthrottle = 0;
 	int rc = 0;
 	struct keyspan_pda_private *priv;
-	unsigned long flags;
 
 	priv = (struct keyspan_pda_private *)(port->private);
 	/* guess how much room is left in the device's ring buffer, and if we
@@ -468,7 +508,6 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 	   finished).  Also, the tx process is not throttled. So we are
 	   ready to write. */
 
-	spin_lock_irqsave (&port->port_lock, flags);
 	count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
 
 	/* Check if we might overrun the Tx buffer.   If so, ask the
@@ -488,13 +527,12 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 				     2*HZ);
 		if (rc < 0) {
 			dbg(" roomquery failed");
-			spin_unlock_irqrestore (&port->port_lock, flags);
-			return rc; /* failed */
+			goto exit;
 		}
 		if (rc == 0) {
 			dbg(" roomquery returned 0 bytes");
-			spin_unlock_irqrestore (&port->port_lock, flags);
-			return -EIO; /* device didn't return any data */
+			rc = -EIO; /* device didn't return any data */
+			goto exit;
 		}
 		dbg(" roomquery says %d", room);
 		priv->tx_room = room;
@@ -511,8 +549,8 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 		if (from_user) {
 			if( copy_from_user(port->write_urb->transfer_buffer,
 			buf, count) ) {
-				spin_unlock_irqrestore (&port->port_lock, flags);
-				return( -EFAULT );
+				rc = -EFAULT;
+				goto exit;
 			}
 		}
 		else {
@@ -524,10 +562,10 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 		priv->tx_room -= count;
 
 		port->write_urb->dev = port->serial->dev;
-		if (usb_submit_urb(port->write_urb)) {
+		rc = usb_submit_urb(port->write_urb);
+		if (rc) {
 			dbg(" usb_submit_urb(write bulk) failed");
-			spin_unlock_irqrestore (&port->port_lock, flags);
-			return (0);
+			goto exit;
 		}
 	}
 	else {
@@ -543,8 +581,9 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 			MOD_DEC_USE_COUNT;
 	}
 
-	spin_unlock_irqrestore (&port->port_lock, flags);
-	return (count);
+	rc = count;
+exit:
+	return rc;
 }
 
 
@@ -602,11 +641,10 @@ static int keyspan_pda_open (struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
 	unsigned char room;
-	int rc;
+	int rc = 0;
 	struct keyspan_pda_private *priv;
-	unsigned long flags;
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 
 	MOD_INC_USE_COUNT;
 	++port->open_count;
@@ -615,7 +653,6 @@ static int keyspan_pda_open (struct usb_serial_port *port, struct file *filp)
 		port->active = 1;
  
 		/* find out how much room is in the Tx ring */
-		spin_unlock_irqrestore (&port->port_lock, flags);
 		rc = usb_control_msg(serial->dev, usb_rcvctrlpipe(serial->dev, 0),
 				     6, /* write_room */
 				     USB_TYPE_VENDOR | USB_RECIP_INTERFACE
@@ -625,7 +662,6 @@ static int keyspan_pda_open (struct usb_serial_port *port, struct file *filp)
 				     &room,
 				     1,
 				     2*HZ);
-		spin_lock_irqsave (&port->port_lock, flags);
 		if (rc < 0) {
 			dbg(__FUNCTION__" - roomquery failed");
 			goto error;
@@ -641,7 +677,6 @@ static int keyspan_pda_open (struct usb_serial_port *port, struct file *filp)
 
 		/* the normal serial device seems to always turn on DTR and RTS here,
 		   so do the same */
-		spin_unlock_irqrestore (&port->port_lock, flags);
 		if (port->tty->termios->c_cflag & CBAUD)
 			keyspan_pda_set_modem_info(serial, (1<<7) | (1<<2) );
 		else
@@ -649,19 +684,22 @@ static int keyspan_pda_open (struct usb_serial_port *port, struct file *filp)
 
 		/*Start reading from the device*/
 		port->interrupt_in_urb->dev = serial->dev;
-		if (usb_submit_urb(port->interrupt_in_urb))
+		rc = usb_submit_urb(port->interrupt_in_urb);
+		if (rc) {
 			dbg(__FUNCTION__" - usb_submit_urb(read int) failed");
-	} else {
-		spin_unlock_irqrestore (&port->port_lock, flags);
+			goto error;
+		}
+
 	}
 
 
-	return (0);
+	up (&port->sem);
+	return rc;
 error:
 	--port->open_count;
 	port->active = 0;
 	MOD_DEC_USE_COUNT;
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	up (&port->sem);
 	return rc;
 }
 
@@ -669,28 +707,27 @@ error:
 static void keyspan_pda_close(struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
-	unsigned long flags;
 
-	spin_lock_irqsave (&port->port_lock, flags);
+	down (&port->sem);
 
 	--port->open_count;
-	MOD_DEC_USE_COUNT;
 
 	if (port->open_count <= 0) {
-		/* the normal serial device seems to always shut off DTR and RTS now */
-		spin_unlock_irqrestore (&port->port_lock, flags);
-		if (port->tty->termios->c_cflag & HUPCL)
-			keyspan_pda_set_modem_info(serial, 0);
-		spin_lock_irqsave (&port->port_lock, flags);
+		if (serial->dev) {
+			/* the normal serial device seems to always shut off DTR and RTS now */
+			if (port->tty->termios->c_cflag & HUPCL)
+				keyspan_pda_set_modem_info(serial, 0);
 
-		/* shutdown our bulk reads and writes */
-		usb_unlink_urb (port->write_urb);
-		usb_unlink_urb (port->interrupt_in_urb);
+			/* shutdown our bulk reads and writes */
+			usb_unlink_urb (port->write_urb);
+			usb_unlink_urb (port->interrupt_in_urb);
+		}
 		port->active = 0;
 		port->open_count = 0;
 	}
 
-	spin_unlock_irqrestore (&port->port_lock, flags);
+	up (&port->sem);
+	MOD_DEC_USE_COUNT;
 }
 
 
@@ -698,12 +735,25 @@ static void keyspan_pda_close(struct usb_serial_port *port, struct file *filp)
 static int keyspan_pda_fake_startup (struct usb_serial *serial)
 {
 	int response;
-	const struct ezusb_hex_record *record;
+	const struct ezusb_hex_record *record = NULL;
 
 	/* download the firmware here ... */
 	response = ezusb_set_reset(serial, 1);
 
-	record = &keyspan_pda_firmware[0];
+#ifdef KEYSPAN
+	if (serial->dev->descriptor.idVendor == KEYSPAN_VENDOR_ID)
+		record = &keyspan_pda_firmware[0];
+#endif
+#ifdef XIRCOM
+	if ((serial->dev->descriptor.idVendor == XIRCOM_VENDOR_ID) ||
+	    (serial->dev->descriptor.idVendor == ENTREGRA_VENDOR_ID))
+		record = &xircom_pgs_firmware[0];
+#endif
+	if (record == NULL) {
+		err(__FUNCTION__": unknown vendor, aborting.");
+		return -ENODEV;
+	}
+
 	while(record->address != 0xffff) {
 		response = ezusb_writememory(serial, record->address,
 					     (unsigned char *)record->data,
@@ -738,11 +788,9 @@ static int keyspan_pda_startup (struct usb_serial *serial)
 	if (!priv)
 		return (1); /* error */
 	init_waitqueue_head(&serial->port[0].write_wait);
-	priv->wakeup_task.next = NULL;
 	priv->wakeup_task.sync = 0;
 	priv->wakeup_task.routine = (void *)keyspan_pda_wakeup_write;
 	priv->wakeup_task.data = (void *)(&serial->port[0]);
-	priv->unthrottle_task.next = NULL;
 	priv->unthrottle_task.sync = 0;
 	priv->unthrottle_task.routine = (void *)keyspan_pda_request_unthrottle;
 	priv->unthrottle_task.data = (void *)(serial);
@@ -759,7 +807,8 @@ static void keyspan_pda_shutdown (struct usb_serial *serial)
 	kfree(serial->port[0].private);
 }
 
-struct usb_serial_device_type keyspan_pda_fake_device = {
+#ifdef KEYSPAN
+static struct usb_serial_device_type keyspan_pda_fake_device = {
 	name:			"Keyspan PDA - (prerenumeration)",
 	idVendor:		&keyspan_vendor_id,
 	idProduct:		&keyspan_pda_fake_product_id,
@@ -772,8 +821,39 @@ struct usb_serial_device_type keyspan_pda_fake_device = {
 	num_ports:		1,
 	startup:		keyspan_pda_fake_startup,
 };
+#endif
 
-struct usb_serial_device_type keyspan_pda_device = {
+#ifdef XIRCOM
+static struct usb_serial_device_type xircom_pgs_fake_device = {
+        name:                   "Xircom PGS - (prerenumeration)",
+	idVendor:		&xircom_vendor_id,
+	idProduct:		&xircom_fake_product_id,
+        needs_interrupt_in:     DONT_CARE,
+        needs_bulk_in:          DONT_CARE,
+        needs_bulk_out:         DONT_CARE,
+        num_interrupt_in:       NUM_DONT_CARE,
+        num_bulk_in:            NUM_DONT_CARE,
+        num_bulk_out:           NUM_DONT_CARE,
+        num_ports:              1,
+        startup:                keyspan_pda_fake_startup,
+};
+
+static struct usb_serial_device_type entregra_pgs_fake_device = {
+        name:                   "Entregra PGS - (prerenumeration)",
+       	idVendor:		&entregra_vendor_id,
+	idProduct:		&entregra_fake_product_id,
+        needs_interrupt_in:     DONT_CARE,
+        needs_bulk_in:          DONT_CARE,
+        needs_bulk_out:         DONT_CARE,
+        num_interrupt_in:       NUM_DONT_CARE,
+        num_bulk_in:            NUM_DONT_CARE,
+        num_bulk_out:           NUM_DONT_CARE,
+        num_ports:              1,
+        startup:                keyspan_pda_fake_startup,
+};
+#endif
+
+static struct usb_serial_device_type keyspan_pda_device = {
 	name:			"Keyspan PDA",
 	idVendor:		&keyspan_vendor_id,
 	idProduct:		&keyspan_pda_product_id,
@@ -805,15 +885,28 @@ static int __init keyspan_pda_init (void)
 {
 	usb_serial_register (&keyspan_pda_fake_device);
 	usb_serial_register (&keyspan_pda_device);
-	info(DRIVER_VERSION ":" DRIVER_DESC);
+#ifdef KEYSPAN
+	usb_serial_register (&keyspan_pda_fake_device);
+#endif
+#ifdef XIRCOM
+	usb_serial_register (&xircom_pgs_fake_device);
+	usb_serial_register (&entregra_pgs_fake_device);
+#endif
+	info(DRIVER_DESC " " DRIVER_VERSION);
 	return 0;
 }
 
 
 static void __exit keyspan_pda_exit (void)
 {
-	usb_serial_deregister (&keyspan_pda_fake_device);
 	usb_serial_deregister (&keyspan_pda_device);
+#ifdef KEYSPAN
+	usb_serial_deregister (&keyspan_pda_fake_device);
+#endif
+#ifdef XIRCOM
+	usb_serial_deregister (&entregra_pgs_fake_device);
+	usb_serial_deregister (&xircom_pgs_fake_device);
+#endif
 }
 
 

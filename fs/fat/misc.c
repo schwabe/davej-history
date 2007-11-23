@@ -349,10 +349,10 @@ void fat_date_unix2dos(int unix_date,unsigned short *time,
  */
 
 int fat__get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
-    struct msdos_dir_entry **de, int *ino)
+    struct msdos_dir_entry **de, loff_t *ino)
 {
 	struct super_block *sb = dir->i_sb;
-	int sector, offset;
+	long long sector, offset;
 
 	while (1) {
 		offset = *pos;
@@ -428,8 +428,8 @@ int fat__get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 	    (*number)++; \
     }
 
-static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
-    int *number,int *ino,struct buffer_head **res_bh,
+static int raw_scan_sector(struct super_block *sb,long long sector,
+    const char *name, int *number,loff_t *ino,struct buffer_head **res_bh,
     struct msdos_dir_entry **res_de)
 {
 	struct buffer_head *bh;
@@ -475,7 +475,7 @@ static int raw_scan_sector(struct super_block *sb,int sector,const char *name,
  * requested entry is found or the end of the directory is reached.
  */
 
-static int raw_scan_root(struct super_block *sb,const char *name,int *number,int *ino,
+static int raw_scan_root(struct super_block *sb,const char *name,int *number,loff_t *ino,
     struct buffer_head **res_bh,struct msdos_dir_entry **res_de)
 {
 	int count,cluster;
@@ -494,7 +494,7 @@ static int raw_scan_root(struct super_block *sb,const char *name,int *number,int
  */
 
 static int raw_scan_nonroot(struct super_block *sb,int start,const char *name,
-    int *number,int *ino,struct buffer_head **res_bh,struct msdos_dir_entry
+    int *number,loff_t *ino,struct buffer_head **res_bh,struct msdos_dir_entry
     **res_de)
 {
 	int count,cluster;
@@ -530,7 +530,7 @@ static int raw_scan_nonroot(struct super_block *sb,int start,const char *name,
  */
 
 static int raw_scan(struct super_block *sb, int start, const char *name,
-    int *number, int *ino, struct buffer_head **res_bh,
+    int *number, loff_t *ino, struct buffer_head **res_bh,
     struct msdos_dir_entry **res_de)
 {
 	if (start) return raw_scan_nonroot
@@ -621,7 +621,7 @@ int fat_subdirs(struct inode *dir)
  */
 
 int fat_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
-    struct msdos_dir_entry **res_de,int *ino)
+    struct msdos_dir_entry **res_de,loff_t *ino)
 {
 	int res;
 

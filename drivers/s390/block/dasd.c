@@ -152,6 +152,7 @@ static int dasd_autodetect = 1;
  
 static dasd_range_t *dasd_range_head = NULL;
 static dasd_devreg_t *dasd_devreg_head = NULL;
+static spinlock_t dasd_open_count_lock;
 
 static dasd_devreg_t *
 dasd_create_devreg ( int devno ) {
@@ -1527,6 +1528,7 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 		return;
 	}
 	asm volatile ("STCK %0":"=m" (cqr->stopclk));
+
 #ifdef ERP_DEBUG
                 if ((++counter % 937 >= 100) &&
                     (  counter % 937 <= 110) &&
@@ -1559,22 +1561,6 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
                                 sense[26]=0x40;
                                 sense[27]=0xe0;
                         }
-// sense 32
-//                        {
-//                                char *sense = stat->ii.sense.data;
-//                                sense [25] = 0x1D;
-//                                sense [27] = 0x00;
-//                                //sense [25] = (fake_count % 256); //0x1B;
-//                               //sense [27] = 0x00;
-//                        }
-// sense 24
-//                        {
-//                                char *sense = stat->ii.sense.data;
-//                                sense [0] = (counter % 0xFF); //0x1B;
-//                                sense [1] = ((counter * 7) % 0xFF); //0x1B;
-//                                sense [2] = (fake_count % 0xFF); //0x1B;
-//                                sense [27] = 0x80;
-//                        }
                 }
 #endif
 
@@ -1769,12 +1755,14 @@ default_erp_postaction (ccw_req_t * erp)
 static int
 dasd_format (dasd_device_t * device, format_data_t * fdata)
 {
-	int rc         = 0;
-	int devno      = device->devinfo.devno;
-	int irq        = device->devinfo.irq;
-	int devindex   = devindex_from_devno (devno);
-        ccw_req_t *req = NULL;
+	int rc          = 0;
+        int format_done = 0;  
+	int devno       = device->devinfo.devno;
+	int irq         = device->devinfo.irq;
+	int devindex    = devindex_from_devno (devno);
+        ccw_req_t *req  = NULL;
         
+        spin_lock (&dasd_open_count_lock);
 	if (device->open_count != 1) {
 		printk (KERN_WARNING PRINTK_HEADER
 			" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
@@ -1784,8 +1772,11 @@ dasd_format (dasd_device_t * device, format_data_t * fdata)
                         device->name, 
                         major_from_devindex (devindex), 
                         devindex << DASD_PARTN_BITS);
+                spin_unlock (&dasd_open_count_lock);
 		return -EINVAL;
 	}
+        device->open_count = -1;
+        spin_unlock (&dasd_open_count_lock);
         printk (KERN_WARNING PRINTK_HEADER
                 " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
                 " Starting format process\n",
@@ -1806,19 +1797,24 @@ dasd_format (dasd_device_t * device, format_data_t * fdata)
                         fdata->stop_unit, 
                         fdata->blksize, 
                         fdata->intensity};
-                printk (KERN_WARNING PRINTK_HEADER
-                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-                        " invalidating disk...\n",
-                        devno, 
-                        irq, 
-                        device->name, 
-                        major_from_devindex (devindex), 
-                        devindex << DASD_PARTN_BITS);
                 
-                if ( fdata -> start_unit == DASD_FORMAT_DEFAULT_START_UNIT &&
-                     fdata -> stop_unit == DASD_FORMAT_DEFAULT_STOP_UNIT &&
-                     !(fdata -> intensity & 0x04)) {
-                        format_data_t temp2 = { 0,0,DASD_FORMAT_DEFAULT_BLOCKSIZE,0x04};
+                if ((fdata -> start_unit == DASD_FORMAT_DEFAULT_START_UNIT) &&
+                    (fdata -> stop_unit  == DASD_FORMAT_DEFAULT_STOP_UNIT ) &&
+                    (fdata -> intensity  == DASD_FORMAT_DEFAULT_INTENSITY )   ) {
+
+                        format_data_t temp2 = {0,0,
+                                               DASD_FORMAT_INVALIDATION_BS,
+                                               fdata->intensity};
+                        
+                        printk (KERN_WARNING PRINTK_HEADER
+                                " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                " invalidating disk...\n",
+                                devno, 
+                                irq, 
+                                device->name, 
+                                major_from_devindex (devindex), 
+                                devindex << DASD_PARTN_BITS);
+
                         req = device->discipline->format_device (device,&temp2);
 
                         if ( req ) {
@@ -1829,20 +1825,23 @@ dasd_format (dasd_device_t * device, format_data_t * fdata)
                         }
                         if ( rc ) {
                                 printk (KERN_WARNING PRINTK_HEADER "Can't invalidate Track 0\n");
+                        } else {
+                                printk (KERN_WARNING PRINTK_HEADER
+                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                        " ...invalidation done.\n",
+                                        devno, 
+                                        irq, 
+                                        device->name, 
+                                        major_from_devindex (devindex), 
+                                        devindex << DASD_PARTN_BITS);
                         }
                         temp.start_unit++;
                 }
-                printk (KERN_WARNING PRINTK_HEADER
-                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-                        " ...invalidation done.\n",
-                        devno, 
-                        irq, 
-                        device->name, 
-                        major_from_devindex (devindex), 
-                        devindex << DASD_PARTN_BITS);
 
                 while ((!rc                                                               ) &&
                        ((req = device->discipline->format_device (device, &temp)) != NULL )   ) {
+                        
+                        format_done = 1;   /* at least one formatting cp was build */
 
                         if ( (rc=sleep_on_req(req)) != 0 ) {
                                 printk (KERN_WARNING PRINTK_HEADER
@@ -1860,21 +1859,24 @@ dasd_format (dasd_device_t * device, format_data_t * fdata)
                         temp.start_unit++;
                 }  /* end if no more requests */
                 
-                printk (KERN_WARNING PRINTK_HEADER
-                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-                        " revalidating disk...\n",
-                        devno, 
-                        irq, 
-                        device->name, 
-                        major_from_devindex (devindex), 
-                        devindex << DASD_PARTN_BITS);
-
                 if (!rc          &&
                     req  == NULL   ) {
-                        if ( fdata -> start_unit == DASD_FORMAT_DEFAULT_START_UNIT &&
-                             fdata -> stop_unit == DASD_FORMAT_DEFAULT_STOP_UNIT &&
-                             !(fdata -> intensity & 0x04)) {
-                                format_data_t temp2 = { 0,0,fdata->blksize,fdata->intensity};
+                        if ((fdata -> start_unit == DASD_FORMAT_DEFAULT_START_UNIT) &&
+                            (fdata -> stop_unit  == DASD_FORMAT_DEFAULT_STOP_UNIT ) &&
+                            (fdata -> intensity  == DASD_FORMAT_DEFAULT_INTENSITY )   ) {
+
+                                format_data_t temp2 = {0,0,
+                                                       fdata->blksize,
+                                                       fdata->intensity};
+
+                                printk (KERN_WARNING PRINTK_HEADER
+                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                        " revalidating disk...\n",
+                                        devno, 
+                                        irq, 
+                                        device->name, 
+                                        major_from_devindex (devindex), 
+                                        devindex << DASD_PARTN_BITS);
                                 
                                 req = device->discipline->format_device (device, 
                                                                          &temp2);
@@ -1886,18 +1888,26 @@ dasd_format (dasd_device_t * device, format_data_t * fdata)
                                 }
                                 if ( rc ) {
                                         printk (KERN_WARNING PRINTK_HEADER "Can't revalidate Track 0\n");
+                                } else {
+
+                                        printk (KERN_WARNING PRINTK_HEADER
+                                                " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                                " ...revalidation done\n",
+                                                devno, 
+                                                irq, 
+                                                device->name, 
+                                                major_from_devindex (devindex), 
+                                                devindex << DASD_PARTN_BITS);
                                 }
                         }
                 }
-                printk (KERN_WARNING PRINTK_HEADER
-                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-                        " ...revalidation done\n",
-                        devno, 
-                        irq, 
-                        device->name, 
-                        major_from_devindex (devindex), 
-                        devindex << DASD_PARTN_BITS);
+
         } /* end if discipline->format_device */
+
+        /* check if at least one format cp was build in discipline */
+        if (!format_done) {
+                rc = -EINVAL;
+        }        
 
         if (!rc) {
                 printk (KERN_WARNING PRINTK_HEADER
@@ -1910,17 +1920,29 @@ dasd_format (dasd_device_t * device, format_data_t * fdata)
                         devindex << DASD_PARTN_BITS);
         }
 
-        dasd_set_device_level( device->devinfo.irq,
-                               DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
-                               device->discipline,
-                               0);
-        udelay(1500000);
+        /* 
+         * re-analyse device if either no formatting was done 
+         * (e.g. invalidation was not possible) or formatting was
+         * successful.
+         */
+        if ((!format_done) ||
+            (!rc         )   ) {
+                
+                dasd_set_device_level (device->devinfo.irq,
+                                       DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
+                                       device->discipline,
+                                       0);
+                udelay(1500000);
+                
+                dasd_set_device_level (device->devinfo.irq,
+                                       DASD_DEVICE_LEVEL_ANALYSED,
+                                       device->discipline,
+                                       0);
+        }
         
-        dasd_set_device_level( device->devinfo.irq,
-                               DASD_DEVICE_LEVEL_ANALYSED,
-                               device->discipline,
-                               0);
-
+        spin_lock (&dasd_open_count_lock);
+        device->open_count=1;
+        spin_unlock (&dasd_open_count_lock);
 	return rc;
 } /* end dasd_format */
 
@@ -2123,10 +2145,16 @@ dasd_open (struct inode *inp, struct file *filp)
 			MAJOR (inp->i_rdev), MINOR (inp->i_rdev));
 		return -EINVAL;
 	}
+        spin_lock (&dasd_open_count_lock);
+        if (device->open_count == -1) {
+            spin_unlock (&dasd_open_count_lock);
+            return -EBUSY;
+        }
 #ifdef MODULE
 	MOD_INC_USE_COUNT;
 #endif				/* MODULE */
 	device->open_count++;
+        spin_unlock (&dasd_open_count_lock);
 	return rc;
 }
 
@@ -2148,6 +2176,7 @@ dasd_release (struct inode *inp, struct file *filp)
 			MAJOR(inp->i_rdev),MINOR(inp->i_rdev));
 		return -EINVAL;
 	}
+        spin_lock(&dasd_open_count_lock);
 	if(device->open_count--) {
 #ifdef MODULE
 	MOD_DEC_USE_COUNT;
@@ -2157,6 +2186,7 @@ dasd_release (struct inode *inp, struct file *filp)
 		rc = fsync_dev (inp->i_rdev);
 		invalidate_buffers(inp->i_rdev);
 	}
+        spin_unlock(&dasd_open_count_lock);
 	return rc;
 }
 
@@ -2604,13 +2634,13 @@ dasd_set_device_level (unsigned int irq, int desired_level,
 			case 4096:
 				break;
 			default:
-                        {
+                                {
 					printk (KERN_INFO PRINTK_HEADER
 						"/dev/%s (devno 0x%04X): Detected invalid blocksize of %d bytes"
 						" Did you format the drive?\n",
 						device->name, devno, device->sizes.bp_block);
 					return -EMEDIUMTYPE;
-                        }
+                                }
 			}
 			for (i = 0; i < (1 << DASD_PARTN_BITS); i++) {
                                 if (i == 0)
@@ -2824,7 +2854,7 @@ dasd_devices_open (struct inode* inode, struct file*  file )
 	}
         info->len=len;
 #ifdef MODULE
-	MOD_INC_USE_COUNT;
+        MOD_INC_USE_COUNT;
 #endif
         return rc;
 }

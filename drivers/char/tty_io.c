@@ -667,9 +667,17 @@ static inline ssize_t do_tty_write(
 	struct inode *inode = file->f_dentry->d_inode;
 	
 	up(&inode->i_sem);
-	if (down_interruptible(&tty->atomic_write)) {
-		down(&inode->i_sem);
-		return -ERESTARTSYS;
+	if (file->f_flags & O_NONBLOCK) {
+		if (down_trylock(&tty->atomic_write)) {
+			down(&inode->i_sem);
+			return -EAGAIN;
+		}
+	}
+	else {
+		if (down_interruptible(&tty->atomic_write)) {
+			down(&inode->i_sem);
+			return -ERESTARTSYS;
+		}
 	}
 	if ( test_bit(TTY_NO_WRITE_SPLIT, &tty->flags) )
 		written = write(tty, file, buf, count);

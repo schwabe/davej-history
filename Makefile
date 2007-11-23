@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 21
-EXTRAVERSION = pre2
+EXTRAVERSION = pre3
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -170,7 +170,7 @@ ifeq ($(CONFIG_NET_FC),y)
 DRIVERS := $(DRIVERS) drivers/net/fc/fc.a
 endif
 
-ifdef CONFIG_POWERMAC
+ifdef CONFIG_PPC
 DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.o
 endif
 
@@ -445,6 +445,9 @@ dep-files: scripts/mkdep archdep include/linux/version.h new-genksyms
 #	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep ;done
 # let this be made through the fastdep rule in Rules.make
 	$(MAKE) $(patsubst %,_sfdep_%,$(SUBDIRS)) _FASTDEP_ALL_SUB_DIRS="$(SUBDIRS)"
+ifdef CONFIG_MODVERSIONS
+	$(MAKE) update-modverfile
+endif
 
 MODVERFILE :=
 

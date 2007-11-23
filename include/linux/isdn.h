@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.1.2.1 2001/12/31 13:26:52 kai Exp $
+/* $Id: isdn.h,v 1.1.2.2 2002/01/24 15:27:22 kai Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -136,6 +136,27 @@ typedef struct {
 #define ISDN_NET_DM_AUTO	0x80    /* this interface is autodial     */
 #define ISDN_NET_DIALMODE(x) ((&(x))->flags & ISDN_NET_DIALMODE_MASK)
 
+/* The minor-devicenumbers for Channel 0 and 1 are used as arguments for
+ * physical Channel-Mapping, so they MUST NOT be changed without changing
+ * the correspondent code in isdn.c
+ */
+
+#ifdef CONFIG_COBALT_MICRO_SERVER
+/* Save memory */
+#define ISDN_MAX_DRIVERS    2
+#define ISDN_MAX_CHANNELS   8
+#else
+#define ISDN_MAX_DRIVERS    32
+#define ISDN_MAX_CHANNELS   64
+#endif
+#define ISDN_MINOR_B        0
+#define ISDN_MINOR_BMAX     (ISDN_MAX_CHANNELS-1)
+#define ISDN_MINOR_CTRL     64
+#define ISDN_MINOR_CTRLMAX  (64 + (ISDN_MAX_CHANNELS-1))
+#define ISDN_MINOR_PPP      128
+#define ISDN_MINOR_PPPMAX   (128 + (ISDN_MAX_CHANNELS-1))
+#define ISDN_MINOR_STATUS   255
+
 #ifdef __KERNEL__
 
 #include <linux/config.h>
@@ -165,27 +186,6 @@ typedef struct {
 #define ISDN_TTY_MAJOR    43
 #define ISDN_TTYAUX_MAJOR 44
 #define ISDN_MAJOR        45
-
-/* The minor-devicenumbers for Channel 0 and 1 are used as arguments for
- * physical Channel-Mapping, so they MUST NOT be changed without changing
- * the correspondent code in isdn.c
- */
-
-#ifdef CONFIG_COBALT_MICRO_SERVER
-/* Save memory */
-#define ISDN_MAX_DRIVERS    2
-#define ISDN_MAX_CHANNELS   8
-#else
-#define ISDN_MAX_DRIVERS    32
-#define ISDN_MAX_CHANNELS   64
-#endif
-#define ISDN_MINOR_B        0
-#define ISDN_MINOR_BMAX     (ISDN_MAX_CHANNELS-1)
-#define ISDN_MINOR_CTRL     64
-#define ISDN_MINOR_CTRLMAX  (64 + (ISDN_MAX_CHANNELS-1))
-#define ISDN_MINOR_PPP      128
-#define ISDN_MINOR_PPPMAX   (128 + (ISDN_MAX_CHANNELS-1))
-#define ISDN_MINOR_STATUS   255
 
 #ifdef CONFIG_ISDN_PPP
 

@@ -71,6 +71,8 @@ void HwFatalError(void);
 /* void HwAssert(char *file, int line, char *condition); */
 
 #include <linux/kernel.h>
+#include <linux/string.h>
+
 #define _PRINTK printk
 
 #define _PRINTF	DivasPrintf

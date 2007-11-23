@@ -87,6 +87,9 @@ round_up_multiple (unsigned int no, unsigned int mult)
 	return (rem ? no - rem + mult : no);
 }
 
+/*
+ * ret = d1/d2 (rounded up to an interger)
+ */
 static inline unsigned int
 ceil_quot (unsigned int d1, unsigned int d2)
 {
@@ -256,7 +259,7 @@ locate_record (ccw1_t * lo_ccw,
 	ch_t geo = {private->rdc_data.no_cyl,
                     private->rdc_data.trk_per_cyl};
 	ch_t seek ={trk / (geo.head), trk % (geo.head)};
-        int sector;
+        int sector = 0;
 
 	memset (lo_ccw, 0, sizeof (ccw1_t));
 	lo_ccw->cmd_code = DASD_ECKD_CCW_LOCATE_RECORD;
@@ -313,24 +316,33 @@ locate_record (ccw1_t * lo_ccw,
 	default:
 		INTERNAL_ERROR ("unknown opcode 0x%x\n", cmd);
 	}
-        switch ( private -> rdc_data.dev_type == 0x3390 ) {
-        case 0x3390: {
-                int dn,d;
-                dn = ceil_quot(reclen + 6,232);
-                d = 9 + ceil_quot(reclen + 6 * (dn + 1),34);
-                sector = (49 + (rec_on_trk - 1) * ( 10 + d ))/8;
-                break;
+
+        /* 
+         * calculate 'Rotational Position Sensing (RPS)'
+         * (see 3390 Reference Summary for more info)
+         */
+        if (rec_on_trk) {
+                switch ( private -> rdc_data.dev_type ) {
+                case 0x3390: {
+                        int dn,d;
+                        dn = ceil_quot(reclen + 6,232);
+                        d = 9 + ceil_quot(reclen + 6 * (dn + 1),34);
+                        sector = (49 + (rec_on_trk - 1) * ( 10 + d ))/8;
+                        break;
+                }
+                case 0x3380: {
+                        int d;
+                        d = 7 + ceil_quot(reclen + 12, 32);
+                        sector = (39 + (rec_on_trk - 1) * ( 8 + d ))/7;
+                        break;
+                }
+                case 0x9345:
+                default:
+                        sector = 0;
+                        
+                }
         }
-        case 0x3380: {
-                int d;
-                d = 7 + ceil_quot(reclen + 12, 32);
-                sector = (39 + (rec_on_trk - 1) * ( 8 + d ))/7;
-                break;
-        }
-        case 0x9345:
-        default:
-                sector = 0;
-        }
+
         data -> sector = sector;
 	memcpy (&(data->seek_addr), &seek, sizeof (ch_t));
 	memcpy (&(data->search_arg), &seek, sizeof (ch_t));
@@ -477,18 +489,33 @@ dasd_eckd_do_analysis (struct dasd_device_t *device)
         case 4096:
 		device->sizes.bp_block = bs;
                 break;
+
+        case DASD_FORMAT_INVALIDATION_BS:
+                
+                printk (KERN_INFO PRINTK_HEADER 
+                        "/dev/%s (%04X): analysis detectet invalidated dasd\n",
+                        device->name, 
+                        device->devinfo.devno);
+                
+		return -EMEDIUMTYPE;
+                
+                break;
+
         default:
-                printk ( KERN_INFO PRINTK_HEADER 
-                         "/dev/%s (%04X): invalid blocksize %d\n"
-                         KERN_INFO PRINTK_HEADER 
-                         "/dev/%s (%04X): capacity (at 4kB blks): %dkB at %dkB/trk\n",
-                         device->name, device->devinfo.devno,bs,
-                         device->name, device->devinfo.devno,
-                         ( private->rdc_data.no_cyl * private->rdc_data.trk_per_cyl *
-                          recs_per_track (&private->rdc_data, 0, 4096)),
+
+                printk (KERN_INFO PRINTK_HEADER 
+                        "/dev/%s (%04X): analysis detected invalid blocksize %d\n"
+                        KERN_INFO PRINTK_HEADER 
+                        "/dev/%s (%04X): capacity (at 4kB blks): %dkB at %dkB/trk\n",
+                        device->name, device->devinfo.devno,bs,
+                        device->name, device->devinfo.devno,
+                        (private->rdc_data.no_cyl * private->rdc_data.trk_per_cyl *
+                         recs_per_track (&private->rdc_data, 0, 4096)),
                         recs_per_track (&private->rdc_data, 0, 4096));
+                
 		return -EMEDIUMTYPE;
 	}
+
 	device->sizes.s2b_shift = 0;	/* bits to shift 512 to get a block */
 	for (sb = 512; sb < bs; sb = sb << 1)
 		device->sizes.s2b_shift++;
@@ -567,6 +594,7 @@ dasd_eckd_format_device (dasd_device_t *device, format_data_t *fdata)
         case 1024:
         case 2048:
         case 4096:
+        case DASD_FORMAT_INVALIDATION_BS:        
                 break;
         default: 
                 printk (KERN_WARNING PRINTK_HEADER "Invalid blocksize %d...terminating!\n",bs);
@@ -597,7 +625,7 @@ dasd_eckd_format_device (dasd_device_t *device, format_data_t *fdata)
                         flags);
         }
         
-        if ( flags & 0x04) {
+        if (flags & 0x04) { /* invalidate track 0 */
                 rpt = 1;
                 wrccws = 1;
         } else {

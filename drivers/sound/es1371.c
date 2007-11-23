@@ -2999,8 +2999,6 @@ static int es1371_midi_release(struct inode *inode, struct file *file)
 			if (signal_pending(current))
 				break;
 			if (file->f_flags & O_NONBLOCK) {
-				remove_wait_queue(&s->midi.owait, &wait);
-				set_current_state(TASK_RUNNING);
 				break;
 			}
 			tmo = (count * HZ) / 3100;
@@ -3206,7 +3204,7 @@ __initfunc(static int probe_chip(struct pci_dev *pcidev, int index))
 	pci_set_master(pcidev);  /* enable bus mastering */
 	/* if we are a 5880 turn on the AC97 */
 	if (s->vendor == PCI_VENDOR_ID_ENSONIQ &&
-	    ((s->device == PCI_DEVICE_ID_ENSONIQ_CT5880 && s->rev == CT5880REV_CT5880_C) || 
+	    ((s->device == PCI_DEVICE_ID_ENSONIQ_CT5880 && s->rev >= CT5880REV_CT5880_C) || 
 	     (s->device == PCI_DEVICE_ID_ENSONIQ_ES1371 && s->rev == ES1371REV_CT5880_A) || 
 	     (s->device == PCI_DEVICE_ID_ENSONIQ_ES1371 && s->rev == ES1371REV_ES1373_8))) { 
 		cssr |= CSTAT_5880_AC97_RST;

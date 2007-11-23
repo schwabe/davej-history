@@ -1927,9 +1927,7 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 			if (signal_pending(current))
 				break;
 			if (file->f_flags & O_NONBLOCK) {
-				remove_wait_queue(&s->midi.owait, &wait);
-				set_current_state(TASK_RUNNING);
-				return -EBUSY;
+				break;
 			}
 			tmo = (count * HZ) / 3100;
 			if (!schedule_timeout(tmo ? : 1) && tmo)

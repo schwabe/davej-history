@@ -45,7 +45,7 @@ static void intel_machine_check(struct pt_regs * regs, long error_code)
 			{
 				rdmsr(0x402+i*4, alow, ahigh);
 				printk(" at %08x%08x", 
-					high, low);
+					ahigh, alow);
 			}
 			printk("\n");
 			/* Clear it */

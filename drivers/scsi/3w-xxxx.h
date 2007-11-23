@@ -6,7 +6,7 @@
 		     Arnaldo Carvalho de Melo <acme@conectiva.com.br>
                      Brad Strand <linux@3ware.com>
 
-   Copyright (C) 1999-2001 3ware Inc.
+   Copyright (C) 1999-2002 3ware Inc.
 
    Kernel compatablity By:	Andre Hedrick <andre@suse.com>
    Non-Copyright (C) 2000	Andre Hedrick <andre@suse.com>
@@ -62,7 +62,7 @@
 static char *tw_aen_string[] = {
 	"AEN queue empty",                      // 0x000
 	"Soft reset occurred",                  // 0x001
-	"Mirorr degraded: Unit #",              // 0x002
+	"Unit degraded: Unit #",                // 0x002
 	"Controller error",                     // 0x003
 	"Rebuild failed: Unit #",               // 0x004
 	"Rebuild complete: Unit #",             // 0x005
@@ -90,10 +90,12 @@ static char *tw_aen_string[] = {
 	"DCB unsupported version: Port #",      // 0x028
 	"Verify started: Unit #",               // 0x029
 	"Verify failed: Port #",                // 0x02A
-	"Verify complete: Unit #"               // 0x02B
+	"Verify complete: Unit #",              // 0x02B
+	"Overwrote bad sector during rebuild: Port #",  //0x2C
+	"Encountered bad sector during rebuild: Port #" //0x2D
 };
 
-#define TW_AEN_STRING_MAX                      0x02C
+#define TW_AEN_STRING_MAX                      0x02E
 
 /* Control register bit definitions */
 #define TW_CONTROL_CLEAR_HOST_INTERRUPT	       0x00080000
@@ -108,6 +110,7 @@ static char *tw_aen_string[] = {
 #define TW_CONTROL_DISABLE_INTERRUPTS	       0x00000040
 #define TW_CONTROL_ISSUE_HOST_INTERRUPT	       0x00000020
 #define TW_CONTROL_CLEAR_PARITY_ERROR          0x00800000
+#define TW_CONTROL_CLEAR_PCI_ABORT             0x00100000
 
 /* Status register bit definitions */
 #define TW_STATUS_MAJOR_VERSION_MASK	       0xF0000000
@@ -140,6 +143,7 @@ static char *tw_aen_string[] = {
 #define TW_DEVICE_ID2 (0x1001)  /* 7000 series controller */
 #define TW_NUMDEVICES 2
 #define TW_PCI_CLEAR_PARITY_ERRORS 0xc100
+#define TW_PCI_CLEAR_PCI_ABORT     0x2000
 
 /* Command packet opcodes */
 #define TW_OP_NOP	      0x0
@@ -153,6 +157,7 @@ static char *tw_aen_string[] = {
 #define TW_OP_AEN_LISTEN      0x1c
 #define TW_CMD_PACKET         0x1d
 #define TW_ATA_PASSTHRU       0x1e
+#define TW_CMD_PACKET_WITH_DATA 0x1f
 
 /* Asynchronous Event Notification (AEN) Codes */
 #define TW_AEN_QUEUE_EMPTY       0x0000
@@ -193,6 +198,7 @@ static char *tw_aen_string[] = {
 #define TW_IN_INTR                            1
 #define TW_MAX_SECTORS                        128
 #define TW_AEN_WAIT_TIME                      1000
+#define TW_IOCTL_WAIT_TIME                    (1 * HZ) /* 1 second */
 
 /* Macros */
 #define TW_STATUS_ERRORS(x) \
@@ -379,6 +385,7 @@ typedef struct TAG_TW_Device_Extension {
 	unsigned char		aen_head;
 	unsigned char		aen_tail;
 	u32			flags;
+	char                    *ioctl_data[TW_Q_LENGTH];
 } TW_Device_Extension;
 
 /* Function prototypes */
@@ -395,6 +402,7 @@ void tw_decode_error(TW_Device_Extension *tw_dev, unsigned char status, unsigned
 void tw_disable_interrupts(TW_Device_Extension *tw_dev);
 int tw_empty_response_que(TW_Device_Extension *tw_dev);
 void tw_enable_interrupts(TW_Device_Extension *tw_dev);
+void tw_enable_and_clear_interrupts(TW_Device_Extension *tw_dev);
 int tw_findcards(Scsi_Host_Template *tw_host);
 void tw_free_device_extension(TW_Device_Extension *tw_dev);
 int tw_initconnection(TW_Device_Extension *tw_dev, int message_credits);

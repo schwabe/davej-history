@@ -421,7 +421,8 @@ static int vfat_find_form(struct inode *dir,char *name)
 {
 	struct msdos_dir_entry *de;
 	struct buffer_head *bh = NULL;
-	int ino,res;
+	int res;
+	loff_t ino;
 
 	res=fat_scan(dir,name,&bh,&de,&ino);
 	fat_brelse(dir->i_sb, bh);
@@ -814,7 +815,7 @@ static int vfat_add_entry(struct inode *dir,struct qstr* qname,
 	int res;
 	struct msdos_dir_entry *de1;
 	struct buffer_head *bh1;
-	int ino;
+	loff_t ino;
 	int len;
 	loff_t dummy;
 
@@ -1025,7 +1026,8 @@ static void vfat_remove_entry(struct inode *dir,struct vfat_slot_info *sinfo,
 {
 	struct super_block *sb = dir->i_sb;
 	loff_t offset;
-	int i,ino;
+	int i;
+    loff_t ino;
 
 	/* remove the shortname */
 	dir->i_mtime = CURRENT_TIME;
@@ -1150,7 +1152,7 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 	struct super_block *sb = old_dir->i_sb;
 	struct buffer_head *old_bh,*new_bh,*dotdot_bh;
 	struct msdos_dir_entry *old_de,*new_de,*dotdot_de;
-	int dotdot_ino;
+	loff_t dotdot_ino;
 	struct inode *old_inode, *new_inode;
 	int res, is_dir;
 	struct vfat_slot_info old_sinfo,sinfo;

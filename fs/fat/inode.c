@@ -90,7 +90,7 @@ static inline unsigned long fat_hash(struct super_block *sb, int i_pos)
 	return tmp & FAT_HASH_MASK;
 }
 
-void fat_attach(struct inode *inode, int i_pos) {
+void fat_attach(struct inode *inode, loff_t i_pos) {
 	spin_lock(&fat_inode_lock);
 	MSDOS_I(inode)->i_location = i_pos;
 	list_add(&MSDOS_I(inode)->i_fat_hash,
@@ -106,7 +106,7 @@ void fat_detach(struct inode *inode) {
 	spin_unlock(&fat_inode_lock);
 }
 
-struct inode *fat_iget(struct super_block *sb, int i_pos) {
+struct inode *fat_iget(struct super_block *sb, loff_t i_pos) {
 	struct list_head *p = fat_inode_hashtable + fat_hash(sb, i_pos);
 	struct list_head *walk;
 	struct msdos_inode_info *i;
@@ -127,7 +127,7 @@ struct inode *fat_iget(struct super_block *sb, int i_pos) {
 static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de);
 
 struct inode *fat_build_inode(struct super_block *sb,
-				struct msdos_dir_entry *de, int ino, int *res)
+				struct msdos_dir_entry *de, loff_t ino, int *res)
 {
 	struct inode *inode;
 	*res = 0;
@@ -846,13 +846,12 @@ void fat_write_inode(struct inode *inode)
 	struct super_block *sb = inode->i_sb;
 	struct buffer_head *bh;
 	struct msdos_dir_entry *raw_entry;
-	int i_pos;
+	loff_t i_pos;
 
 retry:
-	i_pos = MSDOS_I(inode)->i_location;
 	if (inode->i_ino == MSDOS_ROOT_INO || !i_pos) return;
-	if (!(bh = fat_bread(sb, i_pos >> MSDOS_DPB_BITS))) {
-		printk("dev = %s, ino = %d\n", kdevname(inode->i_dev), i_pos);
+	if (!(bh = fat_bread(sb, ((unsigned long long) i_pos) >> MSDOS_DPB_BITS))) {
+		printk("dev = %s, ino = %ld\n", kdevname(inode->i_dev), i_pos);
 		fat_fs_panic(sb, "msdos_write_inode: unable to read i-node block");
 		return;
 	}

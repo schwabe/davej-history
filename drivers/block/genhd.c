@@ -393,44 +393,45 @@ solaris_x86_partition(struct gendisk *hd, kdev_t dev, long offset) {
 #endif
 
 #ifdef CONFIG_BSD_DISKLABEL
-static void check_and_add_bsd_partition(struct gendisk *hd,
-					struct bsd_partition *bsd_p, kdev_t dev)
+static void
+check_and_add_bsd_partition(struct gendisk *hd, struct bsd_partition *bsd_p,
+			    int baseminor)
 {
-	struct hd_struct *lin_p;
-		/* check relative position of partitions.  */
-	for (lin_p = hd->part + 1 + MINOR(dev);
-	     lin_p - hd->part - MINOR(dev) < current_minor; lin_p++) {
-			/* no relationship -> try again */
-		if (lin_p->start_sect + lin_p->nr_sects <= bsd_p->p_offset 
-			|| lin_p->start_sect >= bsd_p->p_offset + bsd_p->p_size)
-			continue;	
-			/* equal -> no need to add */
-		if (lin_p->start_sect == bsd_p->p_offset && 
-			lin_p->nr_sects == bsd_p->p_size) 
-			return;
+	int i, bsd_start, bsd_size;
+
+	bsd_start = le32_to_cpu(bsd_p->p_offset);
+	bsd_size = le32_to_cpu(bsd_p->p_size);
+
+	/* check relative position of already allocated partitions */
+	for (i = baseminor+1; i < current_minor; i++) {
+		int start = hd->part[i].start_sect;
+		int size = hd->part[i].nr_sects;
+
+		if (start+size <= bsd_start || start >= bsd_start+bsd_size)
+			continue;       /* no overlap */
+
+		if (start == bsd_start && size == bsd_size)
+			return;         /* equal -> no need to add */
+
+		if (start <= bsd_start && start+size >= bsd_start+bsd_size) {
 			/* bsd living within dos partition */
-		if (lin_p->start_sect <= bsd_p->p_offset && lin_p->start_sect 
-			+ lin_p->nr_sects >= bsd_p->p_offset + bsd_p->p_size) {
 #ifdef DEBUG_BSD_DISKLABEL
 			printk("w: %d %ld+%ld,%d+%d", 
-				lin_p - hd->part, 
-				lin_p->start_sect, lin_p->nr_sects, 
-				bsd_p->p_offset, bsd_p->p_size);
+			       i, start, size, bsd_start, bsd_size);
 #endif
-			break;
+			break;		/* ok */
 		}
-	 /* ouch: bsd and linux overlap. Don't even try for that partition */
+
+		/* ouch: bsd and linux overlap */
 #ifdef DEBUG_BSD_DISKLABEL
 		printk("???: %d %ld+%ld,%d+%d",
-			lin_p - hd->part, lin_p->start_sect, lin_p->nr_sects,
-			bsd_p->p_offset, bsd_p->p_size);
+		       i, start, size, bsd_start, bsd_size);
 #endif
 		printk("???");
 		return;
-	} /* if the bsd partition is not currently known to linux, we end
-	   * up here 
-	   */
-	add_partition(hd, current_minor, bsd_p->p_offset, bsd_p->p_size, 0);
+	}
+
+	add_partition(hd, current_minor, bsd_start, bsd_size, 0);
 	current_minor++;
 }
 /* 
@@ -444,6 +445,7 @@ static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev,
 	struct bsd_disklabel *l;
 	struct bsd_partition *p;
 	int mask = (1 << hd->minor_shift) - 1;
+	int baseminor = (MINOR(dev) & ~mask);
 
 	if (!(bh = bread(dev,0,get_ptable_blocksize(dev))))
 		return;
@@ -457,14 +459,12 @@ static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev,
 	if (l->d_npartitions < max_partitions)
 		max_partitions = l->d_npartitions;
 	for (p = l->d_partitions; p - l->d_partitions <  max_partitions; p++) {
-		if ((current_minor & mask) >= (4 + hd->max_p))
+		if ((current_minor & mask) == 0)
 			break;
-
-		if (p->p_fstype != BSD_FS_UNUSED) 
-			check_and_add_bsd_partition(hd, p, dev);
+		if (p->p_fstype != BSD_FS_UNUSED)
+			check_and_add_bsd_partition(hd, p, baseminor);
 	}
 	brelse(bh);
-
 }
 #endif
 

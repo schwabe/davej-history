@@ -43,6 +43,8 @@
 		Changed command completion time and added debug info as to which
 		CMD timed out. Problem reported by:
 		"Ulrich Windl" <Ulrich.Windl@rz.uni-regensburg.de>
+	2002 Jan 21  Neale Banks <neale@lowendale.com.au>
+		Gracefully handle the case where init_etherdev() returns NULL
 */
 
 /*#define USE_IO*/
@@ -174,6 +176,9 @@ MODULE_PARM(multicast_filter_limit, "i");
 #endif
 #ifndef PCI_DEVICE_ID_INTEL_ID1030
 #define PCI_DEVICE_ID_INTEL_ID1030 0x1030
+#endif
+#ifndef PCI_DEVICE_ID_INTEL_ID1031
+#define PCI_DEVICE_ID_INTEL_ID1031 0x1031
 #endif
 #ifndef PCI_DEVICE_ID_INTEL_ID2449
 #define PCI_DEVICE_ID_INTEL_ID2449 0x2449
@@ -335,6 +340,10 @@ struct pci_id_info {
 	},
 	{ "Intel Corporation 82559 InBusiness 10/100",
 	  PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ID1030,
+	  0
+	},
+	{ "Intel Pro/100 VE",
+	  PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ID1031,
 	  0 
 	},
 	{ "Intel PCI EtherExpress Pro100 82562EM",
@@ -698,6 +707,11 @@ static struct net_device *speedo_found1(struct pci_dev *pdev, int pci_bus,
 #endif
 
 	dev = init_etherdev(NULL, sizeof(struct speedo_private));
+
+	if (dev == NULL) {
+		printk(KERN_ERR "eepro100: Unable to allocate net_device structure!\n");
+		return NULL;
+	}
 
 	if (dev->mem_start > 0)
 		option = dev->mem_start;
