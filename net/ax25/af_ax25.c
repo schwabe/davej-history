@@ -1266,7 +1266,6 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 	newsk->sleep = &newsock->wait;
 
 	/* Now attach up the new socket */
-	skb->sk = NULL;
 	skb->destructor = NULL;
 	kfree_skb(skb);
 	sk->ack_backlog--;

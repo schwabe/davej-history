@@ -234,7 +234,7 @@ __start:
 	.globl	__secondary_start
 __secondary_start:
 /* Switch MMU off, clear BATs and flush TLB */
-	bl	mmu_off
+ 	bl	mmu_off
 	bl	clear_bats
 	bl	flush_tlbs
 
@@ -1346,6 +1346,7 @@ hash_page_patch_A:
 	li	r2,8			/* PTEs/group */
 	bne	10f			/* no PTE: go look for an empty slot */
 	tlbie	r3			/* invalidate TLB entry */
+
 	/* Search the primary PTEG for a PTE whose 1st word matches r5 */
 	mtctr	r2
 	addi	r3,r4,-8
@@ -2251,17 +2252,7 @@ do_signal_ret:
 	stw	r4,TSS+KSP(r2)	/* save kernel stack pointer */
 	tophys(r3,r1,r3)
 	mtspr	SPRG2,r3	/* phys exception stack pointer */
-10:	
-#ifdef CONFIG_SMP
-	/* see smp_invalidate_tlb_cpu for explanation */
-	mfspr	r3,PVR
-	rlwinm	r3,r3,16,16,31
-	cmpi	0,r3,8
-	bne	1010f
-	bl	smp_invalidate_tlb_cpu
-1010:		
-#endif /* CONFIG_SMP */	
-	lwz	r2,_CTR(r1)
+10:	lwz	r2,_CTR(r1)
 	lwz	r0,_LINK(r1)
 	mtctr	r2
 	mtlr	r0

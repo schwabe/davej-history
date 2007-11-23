@@ -751,7 +751,10 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
 	lba = (((msf.cdmsf_min0 * CD_SECS) + msf.cdmsf_sec0)
 			* CD_FRAMES + msf.cdmsf_frame0) - CD_MSF_OFFSET;
         if (lba < 0 || lba >= scsi_CDs[target].capacity)
+        {
+            scsi_free(raw, 2048+512);
             return -EINVAL;
+        }
 
         rc = sr_read_sector(target, lba, blocksize, raw);
 	if (!rc)

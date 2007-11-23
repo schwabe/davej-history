@@ -221,7 +221,8 @@ static inline int prune_one_dentry(struct dentry * dentry)
 	ret = dentry_iput(dentry);
 	parent = dentry->d_parent;
 	d_free(dentry);
-	dput(parent);
+	if (parent != dentry)
+		dput(parent);
 
 	return ret;
 }

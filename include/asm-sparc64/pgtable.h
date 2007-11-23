@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.103.2.1 1999/08/07 10:52:55 davem Exp $
+/* $Id: pgtable.h,v 1.103.2.2 1999/12/05 07:24:45 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -332,7 +332,7 @@ static __inline__ pte_t pte_mkdirty(pte_t _pte)
 #else
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;
-	unsigned long *pte_cache;
+	unsigned long *pte_cache[2];
 	unsigned int pgcache_size;
 	unsigned int pgdcache_size;
 } pgt_quicklists;
@@ -429,9 +429,12 @@ extern pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long address_premasked);
 extern __inline__ pmd_t *get_pmd_fast(void)
 {
 	unsigned long *ret;
+	int color = 0;
 
-	if((ret = (unsigned long *)pte_quicklist) != NULL) {
-		pte_quicklist = (unsigned long *)(*ret);
+	if (pte_quicklist[color] == NULL)
+		color = 1;
+	if((ret = (unsigned long *)pte_quicklist[color]) != NULL) {
+		pte_quicklist[color] = (unsigned long *)(*ret);
 		ret[0] = 0;
 		pgtable_cache_size--;
 	}
@@ -440,8 +443,10 @@ extern __inline__ pmd_t *get_pmd_fast(void)
 
 extern __inline__ void free_pmd_fast(pgd_t *pmd)
 {
-	*(unsigned long *)pmd = (unsigned long) pte_quicklist;
-	pte_quicklist = (unsigned long *) pmd;
+	int color = (int) (((long)pmd >> PAGE_SHIFT) & 0x1);
+
+	*(unsigned long *)pmd = (unsigned long) pte_quicklist[color];
+	pte_quicklist[color] = (unsigned long *) pmd;
 	pgtable_cache_size++;
 }
 
@@ -450,14 +455,15 @@ extern __inline__ void free_pmd_slow(pmd_t *pmd)
 	free_page((unsigned long)pmd);
 }
 
-extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);
+extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted,
+			   unsigned long color);
 
-extern __inline__ pte_t *get_pte_fast(void)
+extern __inline__ pte_t *get_pte_fast(unsigned long color)
 {
 	unsigned long *ret;
 
-	if((ret = (unsigned long *)pte_quicklist) != NULL) {
-		pte_quicklist = (unsigned long *)(*ret);
+	if((ret = (unsigned long *)pte_quicklist[color]) != NULL) {
+		pte_quicklist[color] = (unsigned long *)(*ret);
 		ret[0] = 0;
 		pgtable_cache_size--;
 	}
@@ -466,8 +472,9 @@ extern __inline__ pte_t *get_pte_fast(void)
 
 extern __inline__ void free_pte_fast(pte_t *pte)
 {
-	*(unsigned long *)pte = (unsigned long) pte_quicklist;
-	pte_quicklist = (unsigned long *) pte;
+	unsigned long color = (((unsigned long)pte >> PAGE_SHIFT) & 0x1);
+	*(unsigned long *)pte = (unsigned long) pte_quicklist[color];
+	pte_quicklist[color] = (unsigned long *) pte;
 	pgtable_cache_size++;
 }
 
@@ -487,10 +494,12 @@ extern inline pte_t * pte_alloc(pmd_t *pmd, unsigned long address)
 {
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 	if (pmd_none(*pmd)) {
-		pte_t *page = get_pte_fast();
+		/* Be careful, address can be just about anything... */
+		unsigned long color = (((unsigned long)pmd)>>2UL) & 0x1UL;
+		pte_t *page = get_pte_fast(color);
 
 		if (!page)
-			return get_pte_slow(pmd, address);
+			return get_pte_slow(pmd, address, color);
 		pmd_set(pmd, page);
 		return page + address;
 	}

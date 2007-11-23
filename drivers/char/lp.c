@@ -972,7 +972,8 @@ int lp_init(void)
 			return -EIO;
 		}
 	} else {
-		printk(KERN_INFO "lp: driver loaded but no devices found\n");
+		printk(KERN_INFO "lp: no devices found\n");
+		return -ENODEV;
 	}
 
 	return 0;

@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.76 1999/04/02 14:54:30 davem Exp $
+/* $Id: irq.c,v 1.76.2.1 1999/12/05 07:24:37 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -825,10 +825,10 @@ static void show(char * str)
 	int cpu = smp_processor_id();
 
 	printk("\n%s, CPU %d:\n", str, cpu);
-	printk("irq:  %d [%ld %ld]\n",
+	printk("irq:  %d [%u %u]\n",
 	       atomic_read(&global_irq_count),
 	       cpu_data[0].irq_count, cpu_data[1].irq_count);
-	printk("bh:   %d [%ld %ld]\n",
+	printk("bh:   %d [%u %u]\n",
 	       (spin_is_locked(&global_bh_count) ? 1 : 0),
 	       cpu_data[0].bh_count, cpu_data[1].bh_count);
 }

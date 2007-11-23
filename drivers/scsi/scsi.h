@@ -655,8 +655,8 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	    req->nr_sectors -= bh->b_size >> 9;
 	    req->sector += bh->b_size >> 9;
 	    bh->b_reqnext = NULL;
-	    bh->b_end_io(bh, uptodate);
 	    sectors -= bh->b_size >> 9;
+	    bh->b_end_io(bh, uptodate);
 	    if ((bh = req->bh) != NULL) {
 		req->current_nr_sectors = bh->b_size >> 9;
 		if (req->nr_sectors < req->current_nr_sectors) {

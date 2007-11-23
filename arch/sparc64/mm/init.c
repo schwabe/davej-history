@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.127.2.5 1999/11/19 07:30:48 davem Exp $
+/*  $Id: init.c,v 1.127.2.6 1999/12/05 07:24:42 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -53,8 +53,10 @@ int do_check_pgt_cache(int low, int high)
 			if(pgd_quicklist)
 				free_pgd_slow(get_pgd_fast()), freed++;
 #endif
-			if(pte_quicklist)
-				free_pte_slow(get_pte_fast()), freed++;
+			if(pte_quicklist[0])
+				free_pte_slow(get_pte_fast(0)), freed++;
+			if(pte_quicklist[1])
+				free_pte_slow(get_pte_fast(1)), freed++;
 		} while(pgtable_cache_size > low);
 	}
 #ifndef __SMP__ 
@@ -1104,6 +1106,10 @@ out:
 struct pgtable_cache_struct pgt_quicklists;
 #endif
 
+/* For PMDs we don't care about the color, writes are
+ * only done via Dcache which is write-thru, so non-Dcache
+ * reads will always see correct data.
+ */
 pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
 {
 	pmd_t *pmd;
@@ -1117,13 +1123,51 @@ pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
 	return NULL;
 }
 
-pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
+/* OK, we have to color these pages because during DTLB
+ * protection faults we set the dirty bit via a non-Dcache
+ * enabled mapping in the VPTE area.  The kernel can end
+ * up missing the dirty bit resulting in processes crashing
+ * _iff_ the VPTE mapping of the ptes have a virtual address
+ * bit 13 which is different from bit 13 of the physical address.
+ *
+ * The sequence is:
+ *	1) DTLB protection fault, write dirty bit into pte via VPTE
+ *	   mappings.
+ *	2) Swapper checks pte, does not see dirty bit, frees page.
+ *	3) Process faults back in the page, the old pre-dirtied copy
+ *	   is provided and here is the corruption.
+ */
+pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset, unsigned long color)
 {
-	pte_t *pte;
+	unsigned long paddr = __get_free_pages(GFP_KERNEL, 1);
 
-	pte = (pte_t *) __get_free_page(GFP_KERNEL);
-	if(pte) {
-		memset(pte, 0, PAGE_SIZE);
+	if (paddr) {
+		struct page *page2 = mem_map + MAP_NR(paddr + PAGE_SIZE);
+		unsigned long *to_free;
+		pte_t *pte;
+
+		/* Set count of second page, so we can free it
+		 * seperately later on.
+		 */
+		atomic_set(&page2->count, 1);
+
+		/* Clear out both pages now. */
+		memset((char *)paddr, 0, (PAGE_SIZE << 1));
+
+		/* Determine which page we give to this request. */
+		if (!color) {
+			pte = (pte_t *) paddr;
+			to_free = (unsigned long *) (paddr + PAGE_SIZE);
+		} else {
+			pte = (pte_t *) (paddr + PAGE_SIZE);
+			to_free = (unsigned long *) paddr;
+		}
+
+		/* Now free the other one up, adjust cache size. */
+		*to_free = (unsigned long) pte_quicklist[color ^ 0x1];
+		pte_quicklist[color ^ 0x1] = to_free;
+		pgtable_cache_size++;
+
 		pmd_set(pmd, pte);
 		return pte + offset;
 	}

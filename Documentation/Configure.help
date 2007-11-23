@@ -6486,6 +6486,32 @@ CONFIG_DEC_ELCP
   More specific information is contained in
   Documentation/networking/tulip.txt.
 
+  This is the new version of this driver. If it does not work for
+  you please try older version which is also available.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called tulip.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt.
+
+Old DECchip Tulip (dc21x4x) PCI support
+CONFIG_DEC_ELCP_OLD
+  This driver is developed for the SMC EtherPower series Ethernet
+  cards and also works with cards based on the DECchip
+  21040/21041/21140 (Tulip series) chips. Some LinkSys PCI cards are
+  of this type. (If your card is NOT SMC EtherPower 10/100 PCI
+  (smc9332dst), you can also try the driver for "Generic DECchip"
+  cards, above. However, most people with a network card of this type
+  will say Y here.) Do read the Ethernet-HOWTO, available via FTP
+  (user: anonymous) in ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
+  More specific information is contained in
+  Documentation/networking/tulip.txt.
+
+  This an older version of the driver which supports some cards the
+  new version does not (yet) support. Use it if the new driver does
+  not work for you.
+
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called tulip.o. If you want to compile it as a
