@@ -1,6 +1,0 @@
-#define UTS_VERSION "#3 Wed Feb 10 18:12:00 GMT 1999"
-#define LINUX_COMPILE_TIME "18:12:01"
-#define LINUX_COMPILE_BY "root"
-#define LINUX_COMPILE_HOST "box.swansea.uk.linux.org"
-#define LINUX_COMPILE_DOMAIN ""
-#define LINUX_COMPILER "gcc version 2.7.2.3"

@@ -139,18 +139,22 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 		 *	the error...
 		 */
 		if (!smp_scan_config(639*0x400,0x400))	/* Scan the top 1K of base RAM */
-			smp_scan_config(0xF0000,0x10000);	/* Scan the 64K of bios */
-		/*
-		 * If it is an SMP machine we should know now, unless the
-		 * configuration is in an EISA/MCA bus machine with an
-		 * extended bios data area. 
-		 *
-		 * there is a real-mode segmented pointer pointing to the
-		 * 4K EBDA area at 0x40E, calculate and scan it here:
-		 */
-		address = *(unsigned short *)phys_to_virt(0x40E);
-		address<<=4;
-		smp_scan_config(address, 0x1000);
+		{
+			if(!(smp_scan_config(0xF0000,0x10000)) /* Scan the 64K of bios */
+			{
+				/*
+				 * If it is an SMP machine we should know now, unless the
+				 * configuration is in an EISA/MCA bus machine with an
+				 * extended bios data area. 
+				 *
+				 * there is a real-mode segmented pointer pointing to the
+				 * 4K EBDA area at 0x40E, calculate and scan it here:
+				 */
+				address = *(unsigned short *)phys_to_virt(0x40E);
+				address<<=4;
+				smp_scan_config(address, 0x1000);
+			}
+		}
 	}
 	/*
 	 *	If it is an SMP machine we should know now, unless the configuration

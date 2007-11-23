@@ -1,6 +1,0 @@
-ipv4.o
-ipx.o
-appletalk.o
-netrom.o
-rose.o
-ax25.o

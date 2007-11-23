@@ -359,7 +359,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	lock_buffer(bh);
 
 	if (blk_size[major])
-		if (blk_size[major][MINOR(bh->b_rdev)] < (sector + count)>>1) {
+		if (((blk_size[major][MINOR(bh->b_rdev)]<<1)+count) < sector) {
 			bh->b_state &= (1 << BH_Lock) | (1 << BH_FreeOnIO);
                         /* This may well happen - the kernel calls bread()
                            without checking the size of the device, e.g.,

@@ -71,6 +71,7 @@
 	12/13/98 bv, Use spinlocks instead of cli() for serialized
 		     access to HCS_Semaph, HCS_FirstAvail and HCS_LastAvail
 		     members of the HCS structure.
+	01/09/98 bv, Fix a deadlock on SMP system.
 **********************************************************************/
 
 #define DEBUG_INTERRUPT 0
@@ -89,7 +90,9 @@
 
 #include <linux/sched.h>
 #include <linux/delay.h>
+#include <linux/blk.h>
 #include <asm/io.h>
+
 #include "i91uscsi.h"
 
 /*--- external functions --*/
@@ -219,18 +222,7 @@ static void tul_do_pause(unsigned amount)
 	unsigned long the_time = jiffies + amount;	/* 0.01 seconds per jiffy */
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	/*
-	 * We need to release the io_request_lock 
-	 * to make sure that the jiffies are updated
-	 */
-	spin_unlock_irq(&io_request_lock);
-
 	while (time_before_eq(jiffies, the_time));
-
-	/*
-	 * Acquire the io_request_lock again
-	 */
-	spin_lock_irq(&io_request_lock);
 #else
 	while (jiffies < the_time);
 #endif
@@ -518,10 +510,10 @@ int Addi91u_into_Adapter_table(WORD wBIOS, WORD wBASE, BYTE bInterrupt,
 		if (i91u_adpt[i].ADPT_BIOS < wBIOS)
 			continue;
 		if (i91u_adpt[i].ADPT_BIOS == wBIOS) {
-			if (i91u_adpt[i].ADPT_BASE == wBASE)
+			if (i91u_adpt[i].ADPT_BASE == wBASE) {
 				if (i91u_adpt[i].ADPT_Bus != 0xFF)
 					return (FAILURE);
-				else if (i91u_adpt[i].ADPT_BASE < wBASE)
+			} else if (i91u_adpt[i].ADPT_BASE < wBASE)
 					continue;
 		}
 		for (j = MAX_SUPPORTED_ADAPTERS - 1; j > i; j--) {
@@ -1035,7 +1027,16 @@ int tul_abort_srb(HCS * pCurHcb, ULONG srbp)
 	if ((pCurHcb->HCS_Semaph == 0) && (pCurHcb->HCS_ActScb == NULL)) {
 		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
 		/* disable Jasmin SCSI Int        */
+
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+                spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
+
 		tulip_main(pCurHcb);
+
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+        	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
 
 		pCurHcb->HCS_Semaph = 1;
 		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
@@ -1174,7 +1175,16 @@ int tul_device_reset(HCS * pCurHcb, ULONG pSrb, unsigned int target, unsigned in
 		if ((pCurHcb->HCS_Semaph == 0) && (pCurHcb->HCS_ActScb == NULL)) {
 			TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
 			/* disable Jasmin SCSI Int        */
+
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+        		spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
+
 			tulip_main(pCurHcb);
+
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+        		spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
 
 			pCurHcb->HCS_Semaph = 1;
 			TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
@@ -1228,7 +1238,15 @@ int tul_device_reset(HCS * pCurHcb, ULONG pSrb, unsigned int target, unsigned in
 		/* disable Jasmin SCSI Int        */
 		pCurHcb->HCS_Semaph = 0;
 
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+        	spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
+
 		tulip_main(pCurHcb);
+
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+                spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
 
 		pCurHcb->HCS_Semaph = 1;
 		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
@@ -1272,7 +1290,15 @@ int tul_reset_scsi_bus(HCS * pCurHcb)
 #endif
 	tul_post_scsi_rst(pCurHcb);
 
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+        spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
+
 	tulip_main(pCurHcb);
+
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+        spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
 
 	pCurHcb->HCS_Semaph = 1;
 	TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
@@ -1295,7 +1321,7 @@ void tul_exec_scb(HCS * pCurHcb, SCB * pCurScb)
 	pCurScb->SCB_SGMax = pCurScb->SCB_SGLen;
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_lock_irqsave(&(pCurScb->HCS_SemaphLock), flags);
+	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
 #else
 	save_flags(flags);
 	cli();
@@ -1309,7 +1335,15 @@ void tul_exec_scb(HCS * pCurHcb, SCB * pCurScb)
 		/* disable Jasmin SCSI Int        */
 		pCurHcb->HCS_Semaph = 0;
 
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+        	spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
+
 		tulip_main(pCurHcb);
+
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+        	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
+#endif
 
 		pCurHcb->HCS_Semaph = 1;
 		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);

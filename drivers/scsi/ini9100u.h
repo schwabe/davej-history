@@ -90,7 +90,7 @@ extern struct proc_dir_entry proc_scsi_ini9100u;
 extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 #endif
 
-#define i91u_REVID "Initio INI-9X00U/UW SCSI device driver; Revision: 1.03e"
+#define i91u_REVID "Initio INI-9X00U/UW SCSI device driver; Revision: 1.03f"
 
 #if LINUX_VERSION_CODE < CVT_LINUX_VERSION(1, 3, 0)
 #define INI9100U	{ \

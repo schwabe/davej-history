@@ -91,6 +91,8 @@ static struct notifier_block br_dev_notifier={
 
 void transmit_config(int port_no)			  /* (4.6.1)	 */
 {
+	if(!(br_stats.flags & BR_UP))
+		return; /* this should not happen but happens */
 	if (hold_timer[port_no].active) {	  /* (4.6.1.3.1)	 */
 		port_info[port_no].config_pending = TRUE;	/* (4.6.1.3.1)	 */
 	} else {				  /* (4.6.1.3.2)	 */
@@ -875,6 +877,8 @@ int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 	struct device *dev = port_info[port_no].dev;
 	int size;
 	
+	if(!(br_stats.flags & BR_UP))
+		return(-1); /* this should not happen but happens */
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_config_bpdu: port %i not valid\n",port_no);
 		return(-1);
@@ -930,6 +934,8 @@ int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
 	struct device *dev = port_info[port_no].dev;
 	int size;
 	
+	if(!(br_stats.flags & BR_UP))
+		return(-1); /* this should not happen but happens */
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_tcn_bpdu: port %i not valid\n",port_no);
 		return(-1);

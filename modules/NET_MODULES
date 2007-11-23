@@ -1,2 +1,0 @@
-soundmodem.o
-ppp.o slhc.o hdlcdrv.o ibmtr.o shaper.o new_tunnel.o hp100.o smc9194.o wd.o 3c503.o ne.o hp.o hp-plus.o smc-ultra.o smc-ultra32.o e2100.o plip.o bsd_comp.o slip.o strip.o dummy.o de600.o de620.o lance.o at1700.o fmv18x.o 3c501.o 3c507.o 3c515.o 3c59x.o via-rhine.o eexpress.o eepro.o eepro100.o epic100.o ne2k-pci.o pcnet32.o rtl8139.o yellowfin.o wavelan.o depca.o ewrk3.o atp.o de4x5.o ni52.o ni65.o 3c505.o ac3200.o apricot.o tulip.o tlan.o arcnet.o eth16i.o mkiss.o pi2.o pt.o bpqether.o baycom.o 8390.o eql.o dlci.o dgrs.o rcpci.o

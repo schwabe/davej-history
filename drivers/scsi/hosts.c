@@ -193,6 +193,14 @@
 #include "ini9100u.h"
 #endif
 
+#ifdef CONFIG_SCSI_TC2550
+#include "tripace.h"
+#endif
+
+#ifdef CONFIG_SCSI_INIA100
+#include "inia100.h"
+#endif
+
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
@@ -333,6 +341,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_MEGARAID
     MEGARAID,
+#endif
+#ifdef CONFIG_SCSI_INIA100
+    INIA100,
 #endif
 #ifdef CONFIG_SCSI_PPA
     PPA,

@@ -53,6 +53,8 @@
  *
  **************************************************************************/
 
+#include <linux/config.h>
+
 #define ULONG   unsigned long
 #define USHORT  unsigned short
 #define UCHAR   unsigned char

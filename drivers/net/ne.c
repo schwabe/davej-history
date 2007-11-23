@@ -97,6 +97,7 @@ bad_clone_list[] = {
     {"ET-100","ET-200", {0x00, 0x45, 0x54}}, /* YANG and YA clone */
     {"COMPEX","COMPEX16",{0x00,0x80,0x48}}, /* Broken ISA Compex cards */
     {"E-LAN100", "E-LAN200", {0x00, 0x00, 0x5d}}, /* Broken ne1000 clones */
+    {"PCM-4823", "PCM-4823", {0x00, 0xc0, 0x6c}}, /* Broken Advantech MoBo */
     {0,}
 };
 #endif

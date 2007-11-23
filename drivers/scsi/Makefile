@@ -388,11 +388,27 @@ else
   endif 
 endif 
 
+ifeq ($(CONFIG_SCSI_TC2550),y) 
+L_OBJS += tripace.o 
+else 
+  ifeq ($(CONFIG_SCSI_TC2550),m) 
+  M_OBJS += tripace.o 
+  endif 
+endif 
+
 ifeq ($(CONFIG_SCSI_MEGARAID),y)
 L_OBJS += megaraid.o
 else
   ifeq ($(CONFIG_SCSI_MEGARAID),m)
   M_OBJS += megaraid.o
+  endif
+endif
+
+ifeq ($(CONFIG_SCSI_INIA100),y)
+L_OBJS += a100u2w.o
+else
+  ifeq ($(CONFIG_SCSI_INIA100),m)
+  M_OBJS += a100u2w.o
   endif
 endif
 
@@ -432,6 +448,9 @@ initio.o: ini9100u.o i91uscsi.o
 
 megaraid.o: megaraid.c
 	$(CC) $(CFLAGS) -c megaraid.c
+
+a100u2w.o: inia100.o i60uscsi.o
+	$(LD) -r -o a100u2w.o inia100.o i60uscsi.o
 
 scsi_mod.o: $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o

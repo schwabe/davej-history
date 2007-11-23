@@ -182,12 +182,6 @@ M:	Leonard N. Zubkoff <lnz@dandelion.com>
 L:	linux-raid@vger.rutgers.edu
 S:	Maintained
 
-COMPAQ SMART2 RAID DRIVER
-P:	Chris Frantz
-M:	Chris Frantz <arrays@compaq.com>
-L:	linux-raid@vger.rutgers.edu
-S:	Maintained
-
 EATA ISA/EISA/PCI SCSI DRIVER
 P:	Dario Ballabio
 M:	dario@milano.europe.dg.com

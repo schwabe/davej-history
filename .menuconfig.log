@@ -1,7 +1,0 @@
-make[1]: Entering directory `/usr/src/LINUX2.0/linux/drivers/sound'
-Compiling Sound Driver v 3.5.5-beta1 for Linux
-rm -f configure
-gcc -I/usr/src/LINUX2.0/linux/include -o configure configure.c
-./configure fixedlocal > local.h
-./configure fixeddefines > .defines
-make[1]: Leaving directory `/usr/src/LINUX2.0/linux/drivers/sound'

@@ -1244,6 +1244,65 @@ CONFIG_IP_MASQUERADE
   IP always defragment.
   If you want this, say Y.
 
+IP: MS PPTP masq support (EXPERIMENTAL)
+CONFIG_IP_MASQUERADE_PPTP
+  Support for masquerading of the GRE data channel portion of the PPTP
+  Virtual Private Network protocol.
+  If you are masquerading a PPTP client or server you need to enable
+  this in addition to regular IP Masquerade.
+  See http://www.wolfenet.com/~jhardin/ip_masq_pptp.html for more details.
+
+IP: MS PPTP Call ID masq support (EXPERIMENTAL)
+CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+  Enabling this adds code to masquerade PPTP Call IDs, which allows
+  more than one masqueraded client to access the same server.
+  This only needs to be enabled if you are masquerading more than one
+  client, and if those clients will try to access the same PPTP server
+  at the same time.
+  You do NOT need to enable this if you are masquerading a PPTP
+  server, regardless of how many clients will be accessing it.
+
+IP: MS PPTP masq debugging
+DEBUG_IP_MASQUERADE_PPTP
+  Enables PPTP Masquerade debugging messages. This should be disabled
+  for normal use once you have PPTP masq working, as it will cause
+  your system logs to quickly grow rather large. Enable verbose
+  debugging for more detailed information.
+
+IP: IPSEC ESP & ISAKMP masq support (EXPERIMENTAL)
+CONFIG_IP_MASQUERADE_IPSEC
+  Support for limited masquerading of the IPSEC ESP network encryption
+  and ISAKMP key-exchange protocols.
+  If you are masquerading an IPSEC client you need to enable this in
+  addition to regular IP Masquerade.
+  Note that this may not successfully masquerade all types of
+  IPSEC-based encryption, as some options in the protocol offer a
+  cryptographic checksum across the IP addresses, which prevents the
+  masqueraded packets from being accepted.
+
+IP: IPSEC masq table lifetime (minutes)
+CONFIG_IP_MASQUERADE_IPSEC_EXPIRE
+  After a period of inactivity IPSEC masq table entries expire and are
+  removed. When this happens inbound traffic can no longer be routed
+  to the masqueraded host until new outbound traffic creates a new
+  masq table entry.
+  For greatest reliability, your IPSEC rekey interval should be less
+  than the table entry lifetime. If your rekey interval is greater
+  than thirty minutes you will improve security by reducing it to
+  thirty minutes. If you don't want to do that, then increase the masq
+  table entry lifetime. Note that doing this will increase the clutter
+  in the IPSEC masq table, as old table entries will persist for this
+  many minutes after a rekey.
+  The minimum lifetime is 15 minutes. Decreasing the lifetime will
+  interfere with sessions that are idle for long periods of time.
+
+IP: IPSEC masq debugging
+DEBUG_IP_MASQUERADE_IPSEC
+  Enables IPSEC Masquerade debugging messages. This should be disabled
+  for normal use once you have IPSEC masq working, as it will cause
+  your system logs to quickly grow rather large. Enable verbose
+  debugging for more detailed information.
+
 IP: ipautofw masquerading (EXPERIMENTAL)
 CONFIG_IP_MASQUERADE_IPAUTOFW
   Richard Lynch's ipautofw allows masquerading to work with protocols
@@ -2186,6 +2245,17 @@ CONFIG_SCSI_PPA_HAVE_PEDANTIC
   reliably transfer data:
        Winbond xxx837
        National Semiconductor PC87306 (early revisions)
+
+Initio INI-A100U2W SCSI support
+CONFIG_SCSI_INIA100
+  This is support for the Initio INI-A100U2W SCSI host adapter.
+  Please read the SCSI-HOWTO, available via FTP (user anonymous) at
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documenation/modules.txt. The module will be
+  called a100u2w.o
 
 Network device support?
 CONFIG_NETDEVICES
