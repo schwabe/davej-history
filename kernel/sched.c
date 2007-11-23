@@ -696,6 +696,7 @@ asmlinkage void schedule(void)
 	struct task_struct *prev, *next, *p;
 	int this_cpu, c;
 
+	sti();
 	if (tq_scheduler)
 		goto handle_tq_scheduler;
 tq_scheduler_back:

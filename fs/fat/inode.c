@@ -216,6 +216,7 @@ static int parse_options(char *options,int *fat, int *blksize, int *debug,
 	opts->quiet = opts->sys_immutable = opts->dotsOK = opts->showexec = 0;
 	opts->codepage = 0;
 	opts->utf8 = 0;
+	opts->small_letter = 0;
 	opts->iocharset = NULL;
 	*debug = *fat = 0;
 
@@ -260,6 +261,9 @@ static int parse_options(char *options,int *fat, int *blksize, int *debug,
 		}
 		else if (!strcmp(this_char,"showexec")) {
 			opts->showexec = 1;
+		}
+		else if (!strcmp(this_char,"small")) {
+			opts->small_letter = 1;
 		}
 		else if (!strcmp(this_char,"dotsOK") && value) {
 			if (!strcmp(value,"yes")) opts->dotsOK = 1;

@@ -1141,10 +1141,16 @@ static unsigned int cs_poll(struct file *file, struct poll_table_struct *wait)
 	return mask;
 }
 
+/*
+ *	We let users mmap the ring buffer. Its not the real DMA buffer but
+ *	that side of the code is hidden in the IRQ handling. We do a software
+ *	emulation of DMA from a 64K or so buffer into a 2K FIFO. 
+ *	(the hardware probably deserves a moan here but Crystal send me nice
+ *	toys ;)).
+ */
+ 
 static int cs_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	return -EINVAL;
-#if 0	
 	struct cs_state *state = (struct cs_state *)file->private_data;
 	struct dmabuf *dmabuf = &state->dmabuf;
 	int ret;
@@ -1171,7 +1177,6 @@ static int cs_mmap(struct file *file, struct vm_area_struct *vma)
 	dmabuf->mapped = 1;
 
 	return 0;
-#endif	
 }
 
 static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
@@ -1822,34 +1827,15 @@ static u16 cs_ac97_get(struct ac97_codec *dev, u8 reg)
 	return cs461x_peekBA0(card, BA0_ACSDA);
 }
 
-/*
- *	Do we have the CD potentially enabled either left or right ?
- */
- 
-static int cd_active(int r)
-{
-	int l=(r>>8)&0x7;
-	r&=7;
-	if(l==1 || r==1)
-		return 1;		/* CD input */
-	if(l==5 || r==5)
-		return 1;		/* Mixer input */
-	if(l==6 || r==6)
-		return 1;		/* Mixer 16bit input */
-	return 0;
-}
-
 static void cs_ac97_set(struct ac97_codec *dev, u8 reg, u16 val)
 {
 	struct cs_card *card = dev->private_data;
 	int count;
 	int val2;
-	int val3;
 	
-	if(reg==AC97_RECORD_SELECT || reg == AC97_CD_VOL)
+	if(reg == AC97_CD_VOL)
 	{
-		val2 = cs_ac97_get(dev, AC97_RECORD_SELECT);
-		val3 = cs_ac97_get(dev, AC97_CD_VOL);
+		val2 = cs_ac97_get(dev, AC97_CD_VOL);
 	}
 	
 	/*
@@ -1909,33 +1895,26 @@ static void cs_ac97_set(struct ac97_codec *dev, u8 reg, u16 val)
 	 *	CD was a valid input.
 	 */
 	 
-	if(reg==AC97_RECORD_SELECT && cd_active(val)!=cd_active(val2))
-	{
-		int n=-1;
-		/* If we are turning on the port and it is not muted then
-		   bump the power level. If we are turning it off and its
-		   not muted drop the power level */
-		if(cd_active(val))
-			n=1;
-		if(!(val3 & 0x8000))
-			card->amplifier_ctrl(card, n);
-	}
-	
 	/* CD mute change ? */
 	
 	if(reg==AC97_CD_VOL)
 	{
-		if(cd_active(val2))
+		/* Mute bit change ? */
+		if((val2^val)&0x8000)
 		{
-			/* Mute bit change ? */
-			if((val3^val)&0x8000)
-			{
-				/* Mute on */
-				if(val&0x8000)
-					card->amplifier_ctrl(card, -1);
-				else /* Mute off power on */
-					card->amplifier_ctrl(card, 1);
-			}
+			/* This is a hack but its cleaner than the alternatives.
+			   Right now card->ac97_codec[0] might be NULL as we are
+			   still doing codec setup. This does an early assignment
+			   to avoid the problem if it occurs */
+			   
+			if(card->ac97_codec[0]==NULL)
+				card->ac97_codec[0]=dev;
+				
+			/* Mute on */
+			if(val&0x8000)
+				card->amplifier_ctrl(card, -1);
+			else /* Mute off power on */
+				card->amplifier_ctrl(card, 1);
 		}
 	}
 }
@@ -2035,12 +2014,6 @@ static int __init cs_ac97_init(struct cs_card *card)
 		}
 		
 		card->ac97_features = eid;
-			
-		/* If the card has the CD enabled then bump the power to
-		   account for it */
-		   	
-		if(cd_active(cs_ac97_get(codec, AC97_RECORD_SELECT)))
-			card->amplifier_ctrl(card, 1);
 			
 		if ((codec->dev_mixer = register_sound_mixer(&cs_mixer_fops, -1)) < 0) {
 			printk(KERN_ERR "cs461x: couldn't register mixer!\n");
@@ -2343,7 +2316,7 @@ static int cs_hardware_init(struct cs_card *card)
 	 *  generating bit clock (so we don't try to start the PLL without an
 	 *  input clock).
 	 */
-	mdelay(5);		/* 1 should be enough ?? */
+	mdelay(5);		/* 1 should be enough ?? (and pigs might fly) */
 
 	/*
 	 *  Set the serial port timing configuration, so that

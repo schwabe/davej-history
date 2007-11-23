@@ -570,6 +570,16 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 	}
 	return r;
 }
+
+__initfunc(static void intel_model(struct cpuinfo_x86 *c))
+{
+	unsigned int *v = (unsigned int *) c->x86_model_id;
+	cpuid(0x80000002, &v[0], &v[1], &v[2], &v[3]);
+	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
+	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
+	c->x86_model_id[48] = 0;
+	printk("CPU: %s\n", c->x86_model_id);
+}
 			
 
 /*
@@ -895,6 +905,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 {
 	int i;
 	char *p = NULL;
+	extern void mcheck_init(void);
 
 	c->loops_per_sec = loops_per_sec;
 	c->x86_cache_size = -1;
@@ -917,7 +928,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 		printk(KERN_INFO "CPU serial number disabled.\n");
 	}
 
-	mcheck_init(c);
+	mcheck_init();
 	
 	if (c->x86_vendor == X86_VENDOR_CYRIX) {
 		cyrix_model(c);
@@ -974,7 +985,19 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 				break;
 		}
 	}
-
+	
+	/*
+	 *	Intel finally adopted the AMD/Cyrix extended id naming
+	 *	stuff
+	 */
+	 
+	if(c->x86_vendor ==X86_VENDOR_INTEL && c->x86 == 15)
+	{
+		c->x86 = 6;
+		intel_model(c);
+		return;
+	}
+	
 	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
 		if (cpu_models[i].vendor == c->x86_vendor &&
 		    cpu_models[i].x86 == c->x86) {
@@ -1146,13 +1169,19 @@ int get_cpuinfo(char * buffer)
 			x86_cap_flags[16] = "pat";
 			x86_cap_flags[17] = "pse36";
 			x86_cap_flags[18] = "psn";
+			x86_cap_flags[19] = "cflush";
+			x86_cap_flags[21] = "dtrace";
+			x86_cap_flags[22] = "acpi";
 			x86_cap_flags[24] = "fxsr";
 			x86_cap_flags[25] = "xmm";
+			x86_cap_flags[26] = "xmm2";
+			x86_cap_flags[27] = "ssnp";
+			x86_cap_flags[29] = "acc";
 			break;
 
 		    case X86_VENDOR_CENTAUR:
 			if (c->x86_model >=8)	/* Only Winchip2 and above */
-			    x86_cap_flags[31] = "3dnow";
+				x86_cap_flags[31] = "3dnow";
 			break;
 
 		    default:

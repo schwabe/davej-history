@@ -139,6 +139,7 @@ int fat_search_long(
 	unsigned char long_slots;
 	int uni_xlate = MSDOS_SB(sb)->options.unicode_xlate;
 	int utf8 = MSDOS_SB(sb)->options.utf8;
+	int small_letter = MSDOS_SB(sb)->options.small_letter;
 	unsigned char *unicode = NULL;
 	struct nls_table *nls = MSDOS_SB(sb)->nls_io;
 	int res = 0;
@@ -226,7 +227,7 @@ parse_long:
 
 		for (i = 0, last = 0; i < 8;) {
 			if (!(c = de->name[i])) break;
-			if (c >= 'A' && c <= 'Z') c += 32;
+			if (small_letter) c = tolower(c);
 			if (c == 0x05) c = 0xE5;
 			if ((bufname[i++] = c) != ' ')
 				last = i;
@@ -235,7 +236,7 @@ parse_long:
 		bufname[i++] = '.';
 		for (i2 = 0; i2 < 3; i2++) {
 			if (!(c = de->ext[i2])) break;
-			if (c >= 'A' && c <= 'Z') c += 32;
+			if (small_letter) c = tolower(c);
 			if ((bufname[i++] = c) != ' ')
 				last = i;
 		}
@@ -301,6 +302,7 @@ static int fat_readdirx(
 	unsigned char long_slots;
 	int uni_xlate = MSDOS_SB(sb)->options.unicode_xlate;
 	int utf8 = MSDOS_SB(sb)->options.utf8;
+	int small_letter = MSDOS_SB(sb)->options.small_letter;
 	unsigned char *unicode = NULL;
 	struct nls_table *nls = MSDOS_SB(sb)->nls_io;
 	char bufname[14];
@@ -419,7 +421,7 @@ ParseLong:
 	}
 	for (i = 0, last = 0; i < 8;) {
 		if (!(c = de->name[i])) break;
-		if (c >= 'A' && c <= 'Z') c += 32;
+		if (small_letter) c = tolower(c);
 		/* see namei.c, msdos_format_name */
 		if (c == 0x05) c = 0xE5;
 		if ((ptname[i++] = c) != ' ')
@@ -429,7 +431,7 @@ ParseLong:
 	ptname[i++] = '.';
 	for (i2 = 0; i2 < 3; i2++) {
 		if (!(c = de->ext[i2])) break;
-		if (c >= 'A' && c <= 'Z') c += 32;
+		if (small_letter) c = tolower(c);
 		if ((ptname[i++] = c) != ' ')
 			last = i;
 	}

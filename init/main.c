@@ -107,6 +107,9 @@ extern void smp_setup(char *str, int *ints);
 extern void ioapic_pirq_setup(char *str, int *ints);
 extern void ioapic_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_MICROCODE
+extern int microcode_init(void);
+#endif
 extern void no_scroll(char *str, int *ints);
 extern void kbd_reset_setup(char *str, int *ints);
 extern void panic_setup(char *str, int *ints);
@@ -1560,6 +1563,10 @@ static void __init do_basic_setup(void)
 
 #ifdef CONFIG_IRDA
 	irda_device_init(); /* Must be done after protocol initialization */
+#endif
+
+#ifdef CONFIG_MICROCODE
+	microcode_init();
 #endif
 
 	/* Mount the root filesystem.. */

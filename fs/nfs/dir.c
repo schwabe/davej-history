@@ -309,6 +309,8 @@ nfs_invalidate_dircache(struct inode *inode)
 			continue;
 		if (cache->dev != dev)
 			continue;
+		if (!cache->valid)
+			continue;
 		if (cache->locked) {
 			printk("NFS: cache locked for %s/%ld\n",
 				kdevname(dev), (long) ino);

@@ -120,6 +120,7 @@ static int parse_options(char *options,	struct fat_mount_options *opts)
 	opts->unicode_xlate = opts->posixfs = 0;
 	opts->numtail = 1;
 	opts->utf8 = 0;
+	opts->force_long = 0;
 
 	if (!options) return 1;
 	save = 0;
@@ -142,9 +143,10 @@ static int parse_options(char *options,	struct fat_mount_options *opts)
 			if (ret) opts->posixfs = val;
 		} else if (!strcmp(this_char,"nonumtail")) {
 			ret = simple_getbool(value, &val);
-			if (ret) {
-				opts->numtail = !val;
-			}
+			if (ret) opts->numtail = !val;
+		} else if (!strcmp(this_char,"forcelong") ||
+			   !strcmp(this_char,"force_long")) {
+			opts->force_long = 1;
 		}
 		if (this_char != options)
 			*(this_char-1) = ',';
@@ -383,7 +385,7 @@ static int vfat_valid_shortname(const char *name,int len,int utf8)
 		len--;
 		if (utf8 && (c & 0x80)) return -EINVAL;
 		if (strchr(replace_chars,c)) return -EINVAL;
-  		if (c >= 'A' && c <= 'Z') return -EINVAL;
+  		if (islower(c)) return -EINVAL;
 		if (c < ' '|| c==':') return -EINVAL;
 		if (c == '.') break;
 		space = c == ' ';
@@ -406,7 +408,7 @@ static int vfat_valid_shortname(const char *name,int len,int utf8)
 				return -EINVAL;
 			if (c < ' ' || c == '.'|| c==':')
 				return -EINVAL;
-			if (c >= 'A' && c <= 'Z') return -EINVAL;
+			if (islower(c)) return -EINVAL;
 			space = c == ' ';
 		}
 		if (space) return -EINVAL;
@@ -428,6 +430,16 @@ static int vfat_find_form(struct inode *dir,char *name)
 	return 0;
 }
 
+static void vfat_format_name_fast(const char *name,int len,char *res)
+{
+	char *walk = res;
+
+	while (len-- && *name != '.') *walk++ = *name++;
+	while (walk-res < 8) *walk++ = ' ';
+	while (--len >= 0) *walk++ = *++name;
+	while (walk-res < MSDOS_NAME) *walk++ = ' ';
+}
+
 static int vfat_format_name(const char *name,int len,char *res,int utf8)
 {
 	char *walk;
@@ -439,10 +451,10 @@ static int vfat_format_name(const char *name,int len,char *res,int utf8)
 		if (walk-res == 8) return -EINVAL;
 		if (utf8 && (c & 0x80)) return -EINVAL;
 		if (strchr(replace_chars,c)) return -EINVAL;
-		if (c >= 'A' && c <= 'Z') return -EINVAL;
+		if (islower(c)) return -EINVAL;
 		if (c < ' '|| c==':') return -EINVAL;
 		space = c == ' ';
-		*walk = c >= 'a' && c <= 'z' ? c-32 : c;
+		*walk = c;
 	}
 	if (space) return -EINVAL;
 	if (len >= 0) {
@@ -455,9 +467,9 @@ static int vfat_format_name(const char *name,int len,char *res,int utf8)
 				return -EINVAL;
 			if (c < ' ' || c == '.'|| c==':')
 				return -EINVAL;
-			if (c >= 'A' && c <= 'Z') return -EINVAL;
+			if (islower(c)) return -EINVAL;
 			space = c == ' ';
-			*walk++ = c >= 'a' && c <= 'z' ? c-32 : c;
+			*walk++ = c;
 		}
 		if (space) return -EINVAL;
 		if (len) return -EINVAL;
@@ -505,11 +517,7 @@ static int vfat_create_shortname(struct inode *dir, const char *name,
 
 			if (*ip == ' ')
 				break;
-			if (*ip >= 'A' && *ip <= 'Z') {
-				*p = *ip + 32;
-			} else {
-				*p = *ip;
-			}
+			*p = toupper(*ip);
 		}
 	}
 
@@ -555,11 +563,7 @@ static int vfat_create_shortname(struct inode *dir, const char *name,
 			*p++ = '_';
 			baselen++;
 		} else if (!strchr(skip_chars, *ip)) {
-			if (*ip >= 'a' && *ip <= 'z') {
-				*p = *ip - 32;
-			} else {
-				*p = *ip;
-			}
+			*p = toupper(*ip);
 			if (strchr(replace_chars, *p)) *p='_';
 			p++; baselen++;
 		}
@@ -576,11 +580,7 @@ static int vfat_create_shortname(struct inode *dir, const char *name,
 				*p++ = '_';
 				extlen++;
 			} else if (!strchr(skip_chars, *ip)) {
-				if (*ip >= 'a' && *ip <= 'z') {
-					*p = *ip - 32;
-				} else {
-					*p = *ip;
-				}
+				*p = toupper(*ip);
 				if (strchr(replace_chars, *p)) *p='_';
 				extlen++;
 				p++;
@@ -774,25 +774,30 @@ static int vfat_build_slots(struct inode *dir,const char *name,int len,
 {
 	struct msdos_dir_entry *de;
 	char msdos_name[MSDOS_NAME];
-	int res, xlate, utf8;
+	int res, xlate, utf8, force_long;
 	struct nls_table *nls;
 
 	de = (struct msdos_dir_entry *) ds;
 	xlate = MSDOS_SB(dir->i_sb)->options.unicode_xlate;
 	utf8 = MSDOS_SB(dir->i_sb)->options.utf8;
+	force_long = MSDOS_SB(dir->i_sb)->options.force_long;
 	nls = MSDOS_SB(dir->i_sb)->nls_io;
 
 	*slots = 1;
-	res = vfat_valid_longname(name, len, xlate);
-	if (res < 0)
-		return res;
 	if (vfat_valid_shortname(name, len, utf8) >= 0) {
-		vfat_format_name(name, len, de->name, utf8);
-		return 0;
+		if (!force_long) {
+			vfat_format_name_fast(name, len, de->name);
+			return 0;
+		}
+		vfat_format_name_fast(name, len, msdos_name);
+	} else {
+		res = vfat_valid_longname(name, len, xlate);
+		if (res < 0)
+			return res;
+		res = vfat_create_shortname(dir, name, len, msdos_name, utf8);
+		if (res < 0)
+			return res;
 	}
-	res = vfat_create_shortname(dir, name, len, msdos_name, utf8);
-	if (res < 0)
-		return res;
 	return vfat_fill_long_slots(ds, name, len, msdos_name, slots, xlate,
 					utf8, nls);
 }

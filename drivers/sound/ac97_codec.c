@@ -556,6 +556,7 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	id2 = codec->codec_read(codec, AC97_VENDOR_ID2);
 	for (i = 0; i < arraysize(ac97_codec_ids); i++) {
 		if (ac97_codec_ids[i].id == ((id1 << 16) | id2)) {
+			codec->id = ac97_codec_ids[i].id;
 			codec->name = ac97_codec_ids[i].name;
 			codec->codec_init = ac97_codec_ids[i].init;
 			break;

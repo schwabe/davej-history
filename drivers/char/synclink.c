@@ -1,7 +1,7 @@
 /*
  * linux/drivers/char/synclink.c
  *
- * ==FILEDATE 20000705==
+ * ==FILEDATE 20000821==
  *
  * Device driver for Microgate SyncLink ISA and PCI
  * high speed multiprotocol serial adapters.
@@ -124,7 +124,6 @@ typedef struct wait_queue *wait_queue_head_t;
 #define netif_queue_stopped(a) ((a)->tbusy)
 #else
 #include "../net/wan/syncppp.h"
-#define netif_queue_stopped(a) test_bit(LINK_STATE_XOFF,&(a)->state)
 #endif
 #endif
 
@@ -401,8 +400,9 @@ struct mgsl_struct {
 /*
  * The size of the serial xmit buffer is 1 page, or 4096 bytes
  */
+#ifndef SERIAL_XMIT_SIZE
 #define SERIAL_XMIT_SIZE 4096
-
+#endif
 
 /*
  * These macros define the offsets used in calculating the
@@ -965,7 +965,7 @@ MODULE_PARM(dosyncppp,"1-" __MODULE_STRING(MAX_TOTAL_DEVICES) "i");
 #endif
 
 static char *driver_name = "SyncLink serial driver";
-static char *driver_version = "1.19";
+static char *driver_version = "1.22";
 
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
@@ -4528,6 +4528,12 @@ int mgsl_enumerate_devices()
 	if (!serial_table || !serial_termios || !serial_termios_locked){
 		printk("%s(%d):Can't allocate tty/termios arrays.\n",
 			__FILE__,__LINE__);
+		if (serial_table)
+			kfree(serial_table);
+		if (serial_termios)
+			kfree(serial_termios);
+		if (serial_termios_locked)
+			kfree(serial_termios_locked);
 		return -ENOMEM;
 	}
 	
@@ -7396,12 +7402,7 @@ BOOLEAN mgsl_memory_test( struct mgsl_struct *info )
 void mgsl_load_pci_memory( char* TargetPtr, const char* SourcePtr, 
 	unsigned short count )
 {
-	/*******************************************************/
-	/* A load interval of 16 allows for 4 32-bit writes at */
-	/* 60ns each for a maximum latency of 240ns on the		 */
-	/* local bus.														 */
-	/*******************************************************/
-
+	/* 16 32-bit writes @ 60ns each = 960ns max latency on local bus */
 #define PCI_LOAD_INTERVAL 64
 
 	unsigned short Intervalcount = count / PCI_LOAD_INTERVAL;
@@ -7411,7 +7412,7 @@ void mgsl_load_pci_memory( char* TargetPtr, const char* SourcePtr,
 	for ( Index = 0 ; Index < Intervalcount ; Index++ )
 	{
 		memcpy(TargetPtr, SourcePtr, PCI_LOAD_INTERVAL);
-		Dummy = *((unsigned long *)TargetPtr);
+		Dummy = *((volatile unsigned long *)TargetPtr);
 		TargetPtr += PCI_LOAD_INTERVAL;
 		SourcePtr += PCI_LOAD_INTERVAL;
 	}
@@ -7582,7 +7583,7 @@ void mgsl_sppp_init(struct mgsl_struct *info)
 	sppp_attach(&info->pppdev);
 
 	d = info->netdev;
-	d->name = info->netname;
+	strcpy(d->name, info->netname);
 	d->base_addr = info->io_base;
 	d->irq = info->irq_level;
 	d->dma = info->dma_level;

@@ -38,6 +38,7 @@ enum sis900_registers {
 
 /* Symbolic names for bits in various registers */
 enum sis900_command_register_bits {
+	RELOAD  = 0x00000400,
 	RESET   = 0x00000100, SWI = 0x00000080, RxRESET = 0x00000020,
 	TxRESET = 0x00000010, RxDIS = 0x00000008, RxENA = 0x00000004,
 	TxDIS   = 0x00000002, TxENA = 0x00000001
@@ -164,7 +165,7 @@ enum mii_registers {
 /* mii registers specific to SiS 900 */
 enum sis_mii_registers {
 	MII_CONFIG1 = 0x0010, MII_CONFIG2 = 0x0011, MII_STSOUT = 0x0012,
-	MII_MASK    = 0x0013
+	MII_MASK    = 0x0013, MII_RESV    = 0x0014
 };
 
 /* mii registers specific to AMD 79C901 */
@@ -214,6 +215,10 @@ enum mii_stsout_register_bits {
 enum mii_stssum_register_bits {
 	MII_STSSUM_LINK = 0x0008, MII_STSSUM_DPLX = 0x0004,
 	MII_STSSUM_AUTO = 0x0002, MII_STSSUM_SPD  = 0x0001
+};
+
+enum sis630_revision_id {
+	SIS630E_REV = 0x81, SIS630EA1_REV = 0x83
 };
 
 #define FDX_CAPABLE_DUPLEX_UNKNOWN      0

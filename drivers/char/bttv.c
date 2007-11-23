@@ -1196,6 +1196,7 @@ static void make_clip_tab(struct bttv *btv, struct video_clip *cr, int ncr)
 		*(ro++)=cpu_to_le32(btv->bus_vbi_even);
 		*(re++)=cpu_to_le32(BT848_RISC_JUMP);
 		*(re++)=cpu_to_le32(btv->bus_vbi_odd);
+		return;
 	}
 	if (ncr < 0) {	/* bitmap was pased */
 		memcpy(clipmap, (unsigned char *)cr, VIDEO_CLIPMAP_SIZE);
@@ -1307,8 +1308,8 @@ static void bt848_set_geo(struct bttv *btv, u16 width, u16 height, u16 fmt, int 
 
 	tvn=&tvnorms[btv->win.norm];
 	
-        btv->win.cropheight=tvn->sheight;
-        btv->win.cropwidth=tvn->swidth;
+/*        btv->win.cropheight=tvn->sheight;
+          btv->win.cropwidth=tvn->swidth; set somewhere else now */
 
 /*
 	if (btv->win.cropwidth>tvn->cropwidth)
@@ -1413,6 +1414,62 @@ static void bt848_set_winsize(struct bttv *btv)
  *	Set TSA5522 synthesizer frequency in 1/16 Mhz steps
  */
 
+static void reset_cropwin(struct bttv * btv)
+{
+        btv->win.cropx=0;
+        btv->win.cropy=0;
+        btv->win.cropheight=tvnorms[btv->win.norm].sheight;
+        btv->win.cropwidth=tvnorms[btv->win.norm].swidth;
+}                       
+
+static void clip_cropwin(struct bttv * btv, u16 width, u16 height)
+{
+        /* don't allow values beyond max */
+
+        if (btv->win.cropwidth>tvnorms[btv->win.norm].swidth)
+                btv->win.cropwidth=tvnorms[btv->win.norm].swidth;
+
+	if (btv->win.cropheight>tvnorms[btv->win.norm].sheight)
+	        btv->win.cropheight=tvnorms[btv->win.norm].sheight;
+
+        /* horizontal: downscaling only (bt848 limitation)*/
+	if (width>btv->win.cropwidth)
+                btv->win.cropwidth=width;
+
+        /* horizontal scaling is kinda limited by the registers
+         probably irrelevant */
+        if (btv->win.cropwidth>((65535UL+4096UL)*width)/4096UL)
+                btv->win.cropwidth = ((65535UL+4096UL)*width)/4096UL;
+
+        /* vertical: downscaling only (not mentioned in the specs
+         but doesnt work anyways */
+        if (height>btv->win.cropheight)
+                btv->win.cropheight = height;
+
+        if (btv->win.interlace == 0)
+        {
+                if (btv->win.cropheight>127UL*height)
+                        btv->win.cropheight = 127UL*height;
+/*                if (((127UL*512UL-1023UL)*height)/512UL>btv->win.cropheight)
+                  btv->win.cropheight = (127UL*512UL-1023UL)*height/512UL;*/
+        } else
+        {
+                if (btv->win.cropheight>2UL*127UL*height)
+                        btv->win.cropheight = 2UL*127UL*height;
+                btv->win.cropheight = (btv->win.cropheight/2)*2;  /*even number */
+/*                if (((127UL*512UL-1023UL)*height)/256UL>btv->win.cropheight)
+                        btv->win.cropheight = (127UL*512UL-1023UL)*height/256UL;*/
+        }
+        
+        if (btv->win.cropx>tvnorms[btv->win.norm].swidth-btv->win.cropwidth)
+                btv->win.cropx = tvnorms[btv->win.norm].swidth-btv->win.cropwidth;
+
+        if (btv->win.cropy>tvnorms[btv->win.norm].sheight-btv->win.cropheight)
+                btv->win.cropy = tvnorms[btv->win.norm].sheight-btv->win.cropheight;
+
+        return;
+}
+
 static void set_freq(struct bttv *btv, unsigned short freq)
 {
 	int fixme = freq; /* XXX */
@@ -1496,6 +1553,10 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 	 *	like QCIF has meaning as a capture.
 	 */
 	 
+
+        clip_cropwin(btv, mp->width, mp->height);
+        bt848_set_geo(btv, mp->width, mp->height, mp->format, 1);
+
 	/*
 	 *	Ok load up the BT848
 	 */
@@ -1602,7 +1663,7 @@ static int bttv_open(struct video_device *dev, int flags)
         audio(btv, AUDIO_UNMUTE);
         for (i=users=0; i<bttv_num; i++)
                 users+=bttvs[i].user;
-        if (users==1)
+        if (users==0)
                 find_vga();
         btv->fbuffer=NULL;
         if (!btv->fbuffer)
@@ -1721,6 +1782,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			b.type = VID_TYPE_CAPTURE|
 				VID_TYPE_TELETEXT|
 				VID_TYPE_OVERLAY|
+                                VID_TYPE_SUBCAPTURE|
 				VID_TYPE_CLIPPING|
 				VID_TYPE_FRAMERAM|
 				VID_TYPE_SCALES|
@@ -1780,7 +1842,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			btv->win.norm = v.norm;
                         make_vbitab(btv);
 			bt848_set_winsize(btv);
-			btv->channel=v.channel;
+                        reset_cropwin(btv);
+ 			btv->channel=v.channel;
 			return 0;
 		}
 		case VIDIOCGTUNER:
@@ -1905,6 +1968,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			on=(btv->cap&3);
 			
 			bt848_cap(btv,0);
+                        clip_cropwin(btv, vw.width, vw.height);
 			bt848_set_winsize(btv);
 
 			/*
@@ -2226,6 +2290,8 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EIO;
                         if (btv->frame_stat[vm.frame] == GBUFFER_GRABBING)
                                 return -EBUSY;
+
+                     
 		        return vgrab(btv, &vm);
 		}
 		
@@ -2263,7 +2329,38 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			return 0;
 		}
 		
-	        case BTTV_BURST_ON:
+                case VIDIOCGCAPTURE:
+                {
+                        struct video_capture vc;
+                        vc.x=btv->win.cropx;
+                        vc.y=btv->win.cropy;
+                        vc.width=btv->win.cropwidth;
+                        vc.height=btv->win.cropheight;
+                        vc.decimation=0; /* not implemented at the moment */
+                        vc.flags=0; /* dito */
+                        if(copy_to_user((void *)arg, (void *)&vc, sizeof(vc)))
+                                return -EFAULT;
+                        return 0;
+                }
+
+                case VIDIOCSCAPTURE:
+                {
+                        struct video_capture vc;
+                        if(copy_from_user((void *) &vc, (void *) arg, sizeof(vc)))
+                             return -EFAULT;
+                        if (vc.x>tvnorms[btv->win.norm].swidth||
+                            vc.y>tvnorms[btv->win.norm].sheight||
+                            vc.width>tvnorms[btv->win.norm].swidth||
+                            vc.height>tvnorms[btv->win.norm].sheight)
+                                return -EFAULT;
+                        btv->win.cropx=vc.x;
+                        btv->win.cropy=(vc.y>>1)<<1; // make even
+                        btv->win.cropwidth=vc.width;
+                        btv->win.cropheight=vc.height;                        
+                        return 0;
+                }
+
+                case BTTV_BURST_ON:
 		{
 			tvnorms[0].scaledtwidth=1135-BURSTOFFSET-2;
 			tvnorms[0].hdelayx1=186-BURSTOFFSET;
@@ -3444,6 +3541,7 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 					btv->grf = btv->grf_next;
                                         btv->risc_jmp[5]=cpu_to_le32(btv->gro);
 					btv->risc_jmp[11]=cpu_to_le32(btv->gre);
+                                        clip_cropwin(btv, btv->gwidth, btv->gheight);
 					bt848_set_geo(btv, btv->gwidth,
 						      btv->gheight,
 						      btv->gfmt, 0);
@@ -3451,7 +3549,9 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 					bt848_set_risc_jmps(btv);
 					btand(~BT848_VSCALE_COMB, BT848_E_VSCALE_HI);
 					btand(~BT848_VSCALE_COMB, BT848_O_VSCALE_HI);
-                                        bt848_set_geo(btv, btv->win.width, 
+					clip_cropwin(btv, btv->win.width, 
+                                                        btv->win.height);
+					bt848_set_geo(btv, btv->win.width, 
 						      btv->win.height,
 						      btv->win.color_fmt, 0);
 				}
@@ -3463,7 +3563,8 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 			        btv->risc_jmp[5]=cpu_to_le32(btv->gro);
 				btv->risc_jmp[11]=cpu_to_le32(btv->gre);
 				btv->risc_jmp[12]=cpu_to_le32(BT848_RISC_JUMP);
-				bt848_set_geo(btv, btv->gwidth, btv->gheight,
+                                clip_cropwin(btv, btv->gwidth, btv->gheight);
+                                bt848_set_geo(btv, btv->gwidth, btv->gheight,
 					      btv->gfmt, 0);
 			}
 		}

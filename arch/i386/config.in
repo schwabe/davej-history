@@ -33,6 +33,8 @@ if [ "$CONFIG_M686" = "y" ]; then
   define_bool CONFIG_X86_GOOD_APIC y
 fi
 
+tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE
+
 choice 'Maximum Physical Memory' \
 	"1GB		CONFIG_1GB \
 	 2GB		CONFIG_2GB" 1GB

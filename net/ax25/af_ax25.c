@@ -1140,12 +1140,19 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	 */
 	if (sk->zapped) {
 		if ((err = ax25_rt_autobind(sk->protinfo.ax25, &fsa->fsa_ax25.sax25_call)) < 0)
+		{
+			if(digi)
+				kfree(digi);
 			return err;
+		}
 		ax25_fillin_cb(sk->protinfo.ax25, sk->protinfo.ax25->ax25_dev);
 		ax25_insert_socket(sk->protinfo.ax25);
 	} else {
 		if (sk->protinfo.ax25->ax25_dev == NULL)
+		{
+			if (digi != NULL) kfree(digi);
 			return -EHOSTUNREACH;
+		}
 	}
 
 	if (sk->type == SOCK_SEQPACKET && ax25_find_cb(&sk->protinfo.ax25->source_addr, &fsa->fsa_ax25.sax25_call, digi, sk->protinfo.ax25->ax25_dev->dev) != NULL) {
@@ -1191,7 +1198,9 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 
 	/* Now the loop */
 	if (sk->state != TCP_ESTABLISHED && (flags & O_NONBLOCK))
+	{
 		return -EINPROGRESS;
+	}
 
 	cli();	/* To avoid races on the sleep */
 

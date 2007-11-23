@@ -18,8 +18,6 @@ extern spinlock_t kernel_flag;
 do { \
 	if (task->lock_depth >= 0) \
 		spin_unlock(&kernel_flag); \
-	release_irqlock(cpu); \
-	__sti(); \
 } while (0)
 
 /*

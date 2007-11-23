@@ -4081,9 +4081,11 @@ CONFIG_SCSI_NCR53C8XX
   tagged command queuing and fast synchronous data transfers up to 80
   MB/s with wide FAST-40 LVD devices and controllers.
 
+  This driver does not support SYM53C1010 Ultra-160 PCI-SCSI chips.
+  Support for SYM53C1010 chips requires the "SYM53C8XX SCSI option" to
+  be configured. This option will configure a different driver.
   Recent versions of the 53C8XX chips are better supported by the
-  option "SYM53C8XX SCSI support", below. This option will configure 
-  a different driver.
+  option "SYM53C8XX SCSI support", below.
 
   If you want the kernel to select the recommended driver for each of 
   of your NCR/SYM53C8XX controllers you may just configure both the 
@@ -4102,7 +4104,8 @@ SYM53C8XX SCSI support
 CONFIG_SCSI_SYM53C8XX
   This driver supports all the features of recent 53C8XX chips (used
   in PCI SCSI controllers), notably the hardware phase mismatch
-  feature of the SYM53C896.
+  feature of the SYM53C896, SYM53C895A and SYM53C1010.
+  It also supports Ultra-160 SCSI data transfers for the SYM53C1010.
 
   Older versions of the 53C8XX chips are not supported by this
   driver. If your system uses either a 810 rev. < 16, a 815, or a 825
@@ -4124,8 +4127,8 @@ CONFIG_SCSI_SYM53C8XX
 
 synchronous data transfers frequency
 CONFIG_SCSI_NCR53C8XX_SYNC
-  The SCSI Parallel Interface-2 Standard defines 4 classes of transfer
-  rates: FAST-5, FAST-10, FAST-20 and FAST-40. The numbers are
+  The SCSI Parallel Interface-2 Standard defines 5 classes of transfer
+  rates: FAST-5, FAST-10, FAST-20, FAST-40 and FAST-80. The numbers are
   respectively the maximum data transfer rates in mega-transfers per
   second for each class. For example, a FAST-20 Wide 16 device is able
   to transfer data at 20 million 16 bit packets per second for a total
@@ -4133,9 +4136,9 @@ CONFIG_SCSI_NCR53C8XX_SYNC
 
   You may specify 0 if you want to only use asynchronous data
   transfers. This is the safest and slowest option. Otherwise, specify
-  a value between 5 and 40, depending on the capability of your SCSI
+  a value between 5 and 80, depending on the capability of your SCSI
   controller. The higher the number, the faster the data transfer.
-  Note that 40 should normally be ok since the driver decreases the
+  Note that 80 should normally be ok since the driver decreases the
   value automatically according to the controller's capabilities.
 
   Your answer to this question is ignored for controllers with NVRAM,
@@ -4146,7 +4149,7 @@ CONFIG_SCSI_NCR53C8XX_SYNC
   second).
 
   The normal answer therefore is not to go with the default but to
-  select the maximum value 40 allowing the driver to use the maximum
+  select the maximum value 80 allowing the driver to use the maximum
   value supported by each controller. If this causes problems with
   your SCSI devices, you should come back and decrease the value.
 
@@ -4197,7 +4200,9 @@ maximum number of queued commands
 CONFIG_SCSI_NCR53C8XX_MAX_TAGS
   This option allows you to specify the maximum number of commands
   that can be queued to any device, when tagged command queuing is
-  possible. The default value is 32. Minimum is 2, maximum is 64.
+  possible. The default value is 32. Minimum is 2, maximum is 64 for
+  the generic NCR53C8XX driver and 255 for the SYM53C8XX driver.
+  
   Modern hard disks are able to support 64 tags and even more, but 
   do not seem to be faster when more than 32 tags are being used.
   
@@ -5190,6 +5195,14 @@ CONFIG_SEALEVEL_4021
   inserted in and removed from the running kernel whenever you want).
   If you want to do that, say M here. The module will be called
   sealevel.o.
+
+SyncLink HDLC/SYNCPPP support
+CONFIG_SYNCLINK_SYNCPPP
+  Enables HDLC/SYNCPPP support for the SyncLink WAN driver.
+  Normally the SyncLink WAN driver works with the main PPP
+  driver (ppp.c) and pppd program. HDLC/SYNCPPP support allows use
+  of the Cisco HDLC/PPP driver (syncppp.c).
+  The SyncLink WAN driver (in character devices) must also be enabled.
 
 Frame Relay (DLCI) support
 CONFIG_DLCI
@@ -9500,6 +9513,23 @@ CONFIG_60XX_WDT
 
  You can compile this driver directly into the kernel, or use
  it as a module.  The module will be called sbc60xxwdt.o.
+
+CONFIG_MICROCODE
+  /dev/cpu/microcode - Intel P6 CPU microcode support
+
+  If you say Y here you will be able to update the microcode on
+  Intel processors in the P6 family, e.g. Pentium Pro, Pentium II,
+  Pentium III, Xeon etc. You will obviously need the actual microcode
+  binary data itself which is not shipped with the Linux kernel.
+ 
+  For latest news and information on obtaining all the required
+  ingredients for this driver, check:
+  http://www.urbanmyth.org/microcode/
+ 
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called microcode.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
 
 Enhanced Real Time Clock Support
 CONFIG_RTC

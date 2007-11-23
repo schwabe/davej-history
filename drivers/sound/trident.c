@@ -2892,7 +2892,7 @@ static int __init trident_install(struct pci_dev *pci_dev, struct pci_audio_info
 	if (card->pci_id == PCI_DEVICE_ID_ALI_5451) {
 		/* edited by HMSEO for GT sound */
 #ifdef CONFIG_ALPHA_NAUTILUS
-		ac97_data = trident_ac97_get (card->ac97_codec[0], AC97_POWER_CONTROL);
+		u16 ac97_data = trident_ac97_get (card->ac97_codec[0], AC97_POWER_CONTROL);
 		trident_ac97_set (card->ac97_codec[0], AC97_POWER_CONTROL,
 				  ac97_data | ALI_EAPD_POWER_DOWN);
 #endif

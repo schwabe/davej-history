@@ -40,7 +40,7 @@
 #define VBIBUF_SIZE     65536
 
 /* maximum needed buffer size for extended VBI frame mode capturing */
-#define BTTV_MAX_FBUF	0x190000
+#define BTTV_MAX_FBUF   0x208000
 
 #ifdef __KERNEL__
 

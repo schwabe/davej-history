@@ -1358,6 +1358,8 @@ static int sendcmd(
 	ctlr_info_t *info_p = hba[ctlr];
 
 	c = cmd_alloc(info_p);
+	if (!c)
+		return IO_ERROR;
 	c->ctlr = ctlr;
 	c->hdr.unit = log_unit;
 	c->hdr.prio = 0;

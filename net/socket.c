@@ -597,7 +597,7 @@ int sock_create(int family, int type, int protocol, struct socket **res)
 #endif
 
 	if (net_families[family]==NULL)
-		return -EINVAL;
+		return -EAFNOSUPPORT;
 
 /*
  *	Check that this is a type that we know how to manipulate and

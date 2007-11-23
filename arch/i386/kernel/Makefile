@@ -35,6 +35,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MICROCODE),y)
+OX_OBJS += microcode.o
+else
+  ifeq ($(CONFIG_MICROCODE),m)
+  MX_OBJS += microcode.o
+  endif
+endif
+
 ifdef CONFIG_APM
 OX_OBJS += apm.o
 endif

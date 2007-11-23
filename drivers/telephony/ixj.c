@@ -4473,14 +4473,21 @@ static int ixj_build_cadence(int board, IXJ_CADENCE * cp)
 	if (lcp == NULL)
 		return -ENOMEM;
 	if (copy_from_user(lcp, (char *) cp, sizeof(IXJ_CADENCE)))
+	{
+		kfree(lcp);
 		return -EFAULT;
+	}
 	lcep = kmalloc(sizeof(IXJ_CADENCE_ELEMENT) * lcp->elements_used, GFP_KERNEL);
 	if (lcep == NULL) {
 		kfree(lcp);
 		return -ENOMEM;
 	}
 	if (copy_from_user(lcep, lcp->ce, sizeof(IXJ_CADENCE_ELEMENT) * lcp->elements_used))
+	{
+		kfree(lcep);
+		kfree(lcp);
 		return -EFAULT;
+	}
 	if (j->cadence_t) {
 		kfree(j->cadence_t->ce);
 		kfree(j->cadence_t);
