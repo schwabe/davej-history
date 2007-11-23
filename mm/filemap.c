@@ -114,7 +114,7 @@ repeat:
 	}
 }
 
-int shrink_mmap(int priority, int dma)
+int shrink_mmap(int priority, int dma, int can_do_io)
 {
 	static int clock = 0;
 	struct page * page;
@@ -174,7 +174,7 @@ int shrink_mmap(int priority, int dma)
 				}
 
 				/* is it a buffer cache page? */
-				if (bh && try_to_free_buffer(bh, &bh, 6))
+				if (can_do_io && bh && try_to_free_buffer(bh, &bh, 6))
 					return 1;
 				break;
 

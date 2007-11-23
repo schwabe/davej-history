@@ -142,7 +142,7 @@ obtain a precompiled binary is at the end of this file).
 rlogin.  Libc-5.3.12 fixes this, so if you're going to run an
 experimental libc, be sure to upgrade to 5.3.12.  Libc-5.4.33 is
 currently available as well, but it may have problems, so caveat
-emptor.  It fixes lots of problems, but make break even more programs
+emptor.  It fixes lots of problems, but may break even more programs
 than 5.3.12.
 
    If you're getting an error message that is something to the effect of

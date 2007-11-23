@@ -130,9 +130,9 @@ static struct fib_info 	*fib_info_list;
  * Backlogging.
  */
 
-#define RT_BH_REDIRECT		0
-#define RT_BH_GARBAGE_COLLECT 	1
-#define RT_BH_FREE	 	2
+#define RT_BH_REDIRECT		1
+#define RT_BH_GARBAGE_COLLECT 	2
+#define RT_BH_FREE	 	4
 
 struct rt_req
 {

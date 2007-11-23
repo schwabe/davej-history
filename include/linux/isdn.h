@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.30 1997/06/17 13:07:23 hipp Exp $
+/* $Id: isdn.h,v 1.32 1997/08/21 09:49:46 fritz Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.32  1997/08/21 09:49:46  fritz
+ * Increased NET_DV
+ *
+ * Revision 1.31  1997/06/22 11:57:07  fritz
+ * Added ability to adjust slave triggerlevel.
+ *
  * Revision 1.30  1997/06/17 13:07:23  hipp
  * compression changes , MP changes
  *
@@ -222,7 +228,7 @@ typedef struct {
   int  outgoing;
 } isdn_net_ioctl_phone;
 
-#define NET_DV 0x03 /* Data version for net_cfg     */
+#define NET_DV 0x04 /* Data version for net_cfg     */
 #define TTY_DV 0x04 /* Data version for iprofd etc. */
 
 typedef struct {
@@ -239,7 +245,6 @@ typedef struct {
   int  exclusive;    /* Channel, if bound exclusive           */
   int  dialmax;      /* Dial Retry-Counter                    */
   int  slavedelay;   /* Delay until slave starts up           */
-  int  triggercps;   /* BogoCPS needed for triggering slave   */
   int  cbdelay;      /* Delay before Callback                 */
   int  chargehup;    /* Flag: Charge-Hangup                   */
   int  ihup;         /* Flag: Hangup-Timeout on incoming line */
@@ -248,6 +253,7 @@ typedef struct {
   int  cbhup;        /* Flag: Reject Call before Callback     */
   int  pppbind;      /* ippp device for bindings              */
   int  chargeint;    /* Use fixed charge interval length      */
+  int  triggercps;   /* BogoCPS needed for triggering slave   */
 } isdn_net_ioctl_cfg;
 
 #ifdef __KERNEL__

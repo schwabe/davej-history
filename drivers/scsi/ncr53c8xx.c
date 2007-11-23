@@ -64,7 +64,7 @@
 */
 
 /*
-**	26 July 1997, version 2.4
+**	21 August 1997, version 2.4a
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -8801,7 +8801,7 @@ void ncr53c8xx_setup(char *str, int *ints)
 		else if	(!strncmp(cur, "safe:", 5) && val)
 			memcpy(&driver_setup, &driver_safe_setup, sizeof(driver_setup));
 		else
-			printf("ncr53c8xx_setup: unexpected boot option '%.*s' ignored\n", pc-cur+1, cur);
+			printf("ncr53c8xx_setup: unexpected boot option '%.*s' ignored\n", (int)(pc-cur+1), cur);
 
 		if ((cur = strchr(cur, ',')) != NULL)
 			++cur;
@@ -9293,7 +9293,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	*/
 #ifdef NCR_IOMAPPED
 	request_region(io_port, 128, "ncr53c8xx");
-	device->slot.port = ioport;
+	device->slot.port = io_port;
 #else
 	device->slot.reg = (struct ncr_reg *) remap_pci_mem((ulong) base, 128);
 	if (!device->slot.reg)

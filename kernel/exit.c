@@ -533,7 +533,8 @@ static void exit_notify(void)
 
 		p->p_pptr = p->p_opptr;
 		p->p_osptr = p->p_pptr->p_cptr;
-		p->p_osptr->p_ysptr = p;
+		if (p->p_osptr)
+			p->p_osptr->p_ysptr = p;
 		p->p_pptr->p_cptr = p;
 		if (p->state == TASK_ZOMBIE)
 			notify_parent(p, p->exit_signal);

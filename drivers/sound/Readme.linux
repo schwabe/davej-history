@@ -67,13 +67,18 @@ Readme.cards for info about configuring the driver with your card. Also
 check for possible boot (insmod) time error messages in /var/adm/messages.
 
 - Other messages or problems
-Please check http://www.4front-tech.com/usslite for more info.
+Please check http://www.4front-tech.com/ossfree for more info.
 
 Hannu Savolainen
-hannu@voxware.pp.fi
+hannu@4front-tech.com
 
 ----------------- cut here ------------------------------
 #!/bin/sh
+echo Error: Read the notice in the beginning of this script before executing.
+exit -1
+Notice! Remove this notice and the above two lines before trying to execute.
+        Trying to run this script is normally useless. The device files are
+        almost certainly already set up correctly. 
 # *****************************************
 # * NOTICE!
 # *

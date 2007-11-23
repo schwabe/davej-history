@@ -1,11 +1,15 @@
 /*
- * $Id: b1capi.c,v 1.4 1997/05/27 15:17:45 fritz Exp $
+ * $Id: b1capi.c,v 1.4.2.1 1997/07/12 08:18:59 calle Exp $
  * 
  * CAPI 2.0 Module for AVM B1-card.
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1capi.c,v $
+ * Revision 1.4.2.1  1997/07/12 08:18:59  calle
+ * Correct bug in CARD_NR macro, so now more than one card will work.
+ * Allow card reset, even if card is in running state.
+ *
  * Revision 1.4  1997/05/27 15:17:45  fritz
  * Added changes for recent 2.1.x kernels:
  *   changed return type of isdn_close
@@ -48,7 +52,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.4 $";
+static char *revision = "$Revision: 1.4.2.1 $";
 
 /* ------------------------------------------------------------- */
 
@@ -109,7 +113,7 @@ static char capi_manufakturer[64] = "AVM Berlin";
 
 #define VALID_CARD(c)	   ((c) > 0 && (c) <= ncards)
 #define CARD(c)		   (&cards[(c)-1])
-#define CARDNR(cp)	   ((cards-(cp))+1)
+#define CARDNR(cp)	   (((cp)-cards)+1)
 
 static avmb1_appl applications[CAPI_MAXAPPL];
 static avmb1_card cards[CAPI_MAXCONTR];
@@ -285,6 +289,8 @@ static avmb1_ncci *find_ncci(avmb1_appl * app, __u32 ncci)
 	return 0;
 }
 
+
+
 /* -------- Receiver ------------------------------------------ */
 
 
@@ -365,6 +371,7 @@ static void notify_up(__u16 contr)
 {
 	struct capi_interface_user *p;
 
+        printk(KERN_NOTICE "b1capi: notify up contr %d\n", contr);
 	for (p = capi_users; p; p = p->next) {
 		if (p->callback)
 			(*p->callback) (KCI_CONTRUP, contr,
@@ -376,6 +383,7 @@ static void notify_up(__u16 contr)
 static void notify_down(__u16 contr)
 {
 	struct capi_interface_user *p;
+        printk(KERN_NOTICE "b1capi: notify down contr %d\n", contr);
 	for (p = capi_users; p; p = p->next) {
 		if (p->callback)
 			(*p->callback) (KCI_CONTRDOWN, contr, 0);
@@ -422,6 +430,32 @@ void avmb1_card_ready(avmb1_card * card)
 
         set_bit(CARDNR(card), &notify_up_set);
         queue_task(&tq_state_notify, &tq_scheduler);
+        printk(KERN_NOTICE "b1capi: card %d ready.\n", CARDNR(card));
+}
+
+static void avmb1_card_down(avmb1_card * card)
+{
+	__u16 appl;
+
+        card->cardstate = CARD_DETECTED;
+
+	for (appl = 1; appl <= CAPI_MAXAPPL; appl++) {
+		avmb1_ncci **pp, **nextpp;
+		for (pp = &APPL(appl)->nccilist; *pp; pp = nextpp) {
+			if (NCCI2CTRL((*pp)->ncci) == card->cnr) {
+				avmb1_ncci *np = *pp;
+				*pp = np->next;
+				printk(KERN_INFO "b1capi: appl %d ncci 0x%x forced down!\n", appl, np->ncci);
+				kfree(np);
+				nextpp = pp;
+			} else {
+				nextpp = &(*pp)->next;
+			}
+		}
+	}
+	set_bit(CARDNR(card), &notify_down_set);
+	queue_task(&tq_state_notify, &tq_scheduler);
+	printk(KERN_NOTICE "b1capi: card %d down.\n", CARDNR(card));
 }
 
 /* ------------------------------------------------------------- */
@@ -537,8 +571,9 @@ static __u16 capi_release(__u16 applid)
 	while ((skb = skb_dequeue(&APPL(applid)->recv_queue)) != 0)
 		kfree_skb(skb, FREE_READ);
 	for (i = 0; i < ncards; i++) {
-		if (cards[i].cardstate != CARD_RUNNING)
+		if (cards[i].cardstate != CARD_RUNNING) {
 			continue;
+		}
 		APPL(applid)->releasing++;
 		B1_send_release(cards[i].port, applid);
 	}
@@ -775,12 +810,13 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 		card = CARD(rdef.contr);
 
 		if (card->cardstate == CARD_RUNNING)
-			return -EBUSY;
-
-		B1_reset(card->port);
-		B1_reset(card->port);
+			avmb1_card_down(card);
 
 		card->cardstate = CARD_DETECTED;
+
+		B1_reset(card->port);
+		B1_reset(card->port);
+
 		return 0;
 	}
 	return -EINVAL;

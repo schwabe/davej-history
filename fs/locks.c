@@ -128,6 +128,8 @@ static int posix_lock_file(struct file *filp, struct file_lock *caller,
 			   unsigned int wait);
 static int posix_locks_deadlock(struct task_struct *my_task,
 				struct task_struct *blocked_task);
+static void posix_remove_locks(struct file_lock **before, struct task_struct *task);
+static void flock_remove_locks(struct file_lock **before, struct file *filp);
 
 static struct file_lock *locks_alloc_lock(struct file_lock *fl);
 static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl);
@@ -281,7 +283,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 
 	for (fl = filp->f_inode->i_flock; fl != NULL; fl = fl->fl_next) {
 		if (!(fl->fl_flags & FL_POSIX))
-			continue;
+			break;
 		if (posix_locks_conflict(&file_lock, fl)) {
 			flock.l_pid = fl->fl_owner->pid;
 			flock.l_start = fl->fl_start;
@@ -301,6 +303,8 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 
 /* Apply the lock described by l to an open file descriptor.
  * This implements both the F_SETLK and F_SETLKW commands of fcntl().
+ * It also emulates flock() in a pretty broken way for older C
+ * libraries.
  */
 int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 {
@@ -354,9 +358,21 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		break;
 	case F_SHLCK:
 	case F_EXLCK:
+#if 1
+/* warn a bit for now, but don't overdo it */
+{
+	static int count = 0;
+	if (!count) {
+		count=1;
 		printk(KERN_WARNING
-		       "fcntl_setlk(): process %d (%s) requested broken flock() emulation\n",
+		       "fcntl_setlk() called by process %d (%s) with broken flock() emulation\n",
 		       current->pid, current->comm);
+	}
+}
+#endif
+		if (!(filp->f_mode & 3))
+			return (-EBADF);
+		break;
 	default:
 		return (-EINVAL);
 	}
@@ -369,21 +385,44 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 void locks_remove_locks(struct task_struct *task, struct file *filp)
 {
 	struct file_lock *fl;
-	struct file_lock **before;
 
 	/* For POSIX locks we free all locks on this file for the given task.
 	 * For FLOCK we only free locks on this *open* file if it is the last
 	 * close on that file.
 	 */
-	before = &filp->f_inode->i_flock;
+	if ((fl = filp->f_inode->i_flock) != NULL) {
+		if (fl->fl_flags & FL_POSIX)
+			posix_remove_locks(&filp->f_inode->i_flock, task);
+		else
+			flock_remove_locks(&filp->f_inode->i_flock, filp);
+	}
+
+	return;
+}
+
+static void posix_remove_locks(struct file_lock **before, struct task_struct *task)
+{
+	struct file_lock *fl;
 
 	while ((fl = *before) != NULL) {
-		if (((fl->fl_flags & FL_POSIX) && (fl->fl_owner == task)) ||
-		    ((fl->fl_flags & FL_FLOCK) && (fl->fl_file == filp) &&
-		     (filp->f_count == 1)))
+		if (fl->fl_owner == task)
 			locks_delete_lock(before, 0);
 		else
 			before = &fl->fl_next;
+	}
+
+	return;
+}
+
+static void flock_remove_locks(struct file_lock **before, struct file *filp)
+{
+	struct file_lock *fl;
+
+ 	while ((fl = *before) != NULL) {
+		if ((fl->fl_file == filp) && (filp->f_count == 1))
+ 			locks_delete_lock(before, 0);
+ 		else
+ 			before = &fl->fl_next;
 	}
 
 	return;
@@ -417,13 +456,16 @@ int locks_mandatory_locked(struct inode *inode)
 {
 	struct file_lock *fl;
 
+	/* If there are no FL_POSIX locks then go ahead. */
+	if (!(fl = inode->i_flock) || !(fl->fl_flags & FL_POSIX))
+		return (0);
+
 	/* Search the lock list for this inode for any POSIX locks.
 	 */
-	for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
-		if (!(fl->fl_flags & FL_POSIX))
-			continue;
+	while (fl != NULL) {
 		if (fl->fl_owner != current)
 			return (-EAGAIN);
+		fl = fl->fl_next;
 	}
 	return (0);
 }
@@ -445,12 +487,14 @@ int locks_mandatory_area(int read_write, struct inode *inode,
 	tfl.fl_end = offset + count - 1;
 
 repeat:
+	/* If there are no FL_POSIX locks then go ahead. */
+	if (!(fl = inode->i_flock) || !(fl->fl_flags & FL_POSIX))
+		return (0);
+
 	/* Search the lock list for this inode for locks that conflict with
 	 * the proposed read/write.
 	 */
-	for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
-		if (!(fl->fl_flags & FL_POSIX))
-			continue;
+	while (fl != NULL) {
 		/* Block for writes against a "read" lock,
 		 * and both reads and writes against a "write" lock.
 		 */
@@ -475,6 +519,7 @@ repeat:
 				break;
 			goto repeat;
 		}
+		fl = fl->fl_next;
 	}
 	return (0);
 }
@@ -496,6 +541,14 @@ static int posix_make_lock(struct file *filp, struct file_lock *fl,
 	case F_WRLCK:
 	case F_UNLCK:
 		fl->fl_type = l->l_type;
+		break;
+	case F_SHLCK :
+		fl->fl_type = F_RDLCK;
+		fl->fl_flags |= FL_BROKEN;
+		break;
+	case F_EXLCK :
+		fl->fl_type = F_WRLCK;
+		fl->fl_flags |= FL_BROKEN;
 		break;
 	default:
 		return (0);
@@ -569,8 +622,7 @@ static int posix_locks_conflict(struct file_lock *caller_fl, struct file_lock *s
 	/* POSIX locks owned by the same process do not conflict with
 	 * each other.
 	 */
-	if (!(sys_fl->fl_flags & FL_POSIX) ||
-	    (caller_fl->fl_owner == sys_fl->fl_owner))
+	if (caller_fl->fl_owner == sys_fl->fl_owner)
 		return (0);
 
 	return (locks_conflict(caller_fl, sys_fl));
@@ -584,8 +636,7 @@ static int flock_locks_conflict(struct file_lock *caller_fl, struct file_lock *s
 	/* FLOCK locks referring to the same filp do not conflict with
 	 * each other.
 	 */
-	if (!(sys_fl->fl_flags & FL_FLOCK) ||
-	    (caller_fl->fl_file == sys_fl->fl_file))
+	if (caller_fl->fl_file == sys_fl->fl_file)
 		return (0);
 
 	return (locks_conflict(caller_fl, sys_fl));
@@ -662,7 +713,11 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 	int change = 0;
 
 	before = &filp->f_inode->i_flock;
-	while (((fl = *before) != NULL) && (fl->fl_flags & FL_FLOCK)) {
+
+	if ((fl = *before) && (fl->fl_flags & FL_POSIX))
+		return (-EBUSY);
+
+	while ((fl = *before) != NULL) {
 		if (caller->fl_file == fl->fl_file) {
 			if (caller->fl_type == fl->fl_type)
 				return (0);
@@ -681,10 +736,16 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 	if ((new_fl = locks_alloc_lock(caller)) == NULL)
 		return (-ENOLCK);
 repeat:
-	for (fl = filp->f_inode->i_flock; (fl != NULL) && (fl->fl_flags & FL_FLOCK);
-	     fl = fl->fl_next) {
-		if (!flock_locks_conflict(new_fl, fl))
+	if ((fl = filp->f_inode->i_flock) && (fl->fl_flags & FL_POSIX)) {
+		locks_free_lock(new_fl);
+		return (-EBUSY);
+	}
+
+	while (fl != NULL) {
+		if (!flock_locks_conflict(new_fl, fl)) {
+			fl = fl->fl_next;
 			continue;
+		}
 		if (!wait) {
 			locks_free_lock(new_fl);
 			return (-EAGAIN);
@@ -738,11 +799,14 @@ static int posix_lock_file(struct file *filp, struct file_lock *caller,
 
 	if (caller->fl_type != F_UNLCK) {
   repeat:
-		for (fl = filp->f_inode->i_flock; fl != NULL; fl = fl->fl_next) {
-			if (!(fl->fl_flags & FL_POSIX))
+		if ((fl = filp->f_inode->i_flock) && (fl->fl_flags & FL_FLOCK))
+			return (-EBUSY);
+
+		while (fl != NULL) {
+			if (!posix_locks_conflict(caller, fl)) {
+				fl = fl->fl_next;
 				continue;
-			if (!posix_locks_conflict(caller, fl))
-				continue;
+			}
 			if (!wait)
 				return (-EAGAIN);
 			if (current->signal & ~current->blocked)
@@ -763,10 +827,12 @@ static int posix_lock_file(struct file *filp, struct file_lock *caller,
 	
 	before = &filp->f_inode->i_flock;
 
+	if ((*before != NULL) && ((*before)->fl_flags & FL_FLOCK))
+		return (-EBUSY);
+
 	/* First skip locks owned by other processes.
 	 */
-	while ((fl = *before) && (!(fl->fl_flags & FL_POSIX) ||
-				  (caller->fl_owner != fl->fl_owner))) {
+	while ((fl = *before) && (caller->fl_owner != fl->fl_owner)) {
 		before = &fl->fl_next;
 	}
 
@@ -964,6 +1030,7 @@ static char *lock_get_status(struct file_lock *fl, int id, char *pfx)
 	p += sprintf(p, "%d:%s ", id, pfx);
 	if (fl->fl_flags & FL_POSIX) {
 		p += sprintf(p, "%6s %s ",
+			     (fl->fl_flags & FL_BROKEN) ? "BROKEN" :
 			     (fl->fl_flags & FL_ACCESS) ? "ACCESS" : "POSIX ",
 			     (IS_MANDLOCK(inode) &&
 			      (inode->i_mode & (S_IXGRP | S_ISGID)) == S_ISGID) ?

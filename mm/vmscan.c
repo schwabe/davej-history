@@ -31,7 +31,7 @@
 /*
  * To check memory consuming code elsewhere set this to 1
  */
-#define MM_DEBUG 0
+/* #define MM_DEBUG */
 
 /* 
  * When are we next due for a page scan? 
@@ -80,7 +80,7 @@ static void init_swap_timer(void);
  * have died while we slept).
  */
 static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
-	unsigned long address, pte_t * page_table, int dma, int wait)
+	unsigned long address, pte_t * page_table, int dma, int wait, int can_do_io)
 {
 	pte_t pte;
 	unsigned long entry;
@@ -112,6 +112,8 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	if (page_map->age)
 		return 0;
 	if (pte_dirty(pte)) {
+		if(!can_do_io)
+			return 0;
 		if (vma->vm_ops && vma->vm_ops->swapout) {
 			pid_t pid = tsk->pid;
 			vma->vm_mm->rss--;
@@ -169,7 +171,8 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
  */
 
 static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct * vma,
-	pmd_t *dir, unsigned long address, unsigned long end, int dma, int wait)
+	pmd_t *dir, unsigned long address, unsigned long end, int dma, int wait,
+	int can_do_io)
 {
 	pte_t * pte;
 	unsigned long pmd_end;
@@ -191,7 +194,8 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 	do {
 		int result;
 		tsk->swap_address = address + PAGE_SIZE;
-		result = try_to_swap_out(tsk, vma, address, pte, dma, wait);
+		result = try_to_swap_out(tsk, vma, address, pte, dma, wait,
+					 can_do_io);
 		if (result)
 			return result;
 		address += PAGE_SIZE;
@@ -201,7 +205,8 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 }
 
 static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct * vma,
-	pgd_t *dir, unsigned long address, unsigned long end, int dma, int wait)
+	pgd_t *dir, unsigned long address, unsigned long end, int dma, int wait,
+	int can_do_io)
 {
 	pmd_t * pmd;
 	unsigned long pgd_end;
@@ -221,7 +226,8 @@ static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct *
 		end = pgd_end;
 	
 	do {
-		int result = swap_out_pmd(tsk, vma, pmd, address, end, dma, wait);
+		int result = swap_out_pmd(tsk, vma, pmd, address, end, dma, wait,
+					  can_do_io);
 		if (result)
 			return result;
 		address = (address + PMD_SIZE) & PMD_MASK;
@@ -231,7 +237,7 @@ static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct *
 }
 
 static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
-	pgd_t *pgdir, unsigned long start, int dma, int wait)
+	pgd_t *pgdir, unsigned long start, int dma, int wait, int can_do_io)
 {
 	unsigned long end;
 
@@ -242,7 +248,8 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 
 	end = vma->vm_end;
 	while (start < end) {
-		int result = swap_out_pgd(tsk, vma, pgdir, start, end, dma, wait);
+		int result = swap_out_pgd(tsk, vma, pgdir, start, end, dma, wait,
+					  can_do_io);
 		if (result)
 			return result;
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
@@ -251,7 +258,7 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 	return 0;
 }
 
-static int swap_out_process(struct task_struct * p, int dma, int wait)
+static int swap_out_process(struct task_struct * p, int dma, int wait, int can_do_io)
 {
 	unsigned long address;
 	struct vm_area_struct* vma;
@@ -272,7 +279,8 @@ static int swap_out_process(struct task_struct * p, int dma, int wait)
 		address = vma->vm_start;
 
 	for (;;) {
-		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, dma, wait);
+		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, dma, wait,
+					  can_do_io);
 		if (result)
 			return result;
 		vma = vma->vm_next;
@@ -284,7 +292,7 @@ static int swap_out_process(struct task_struct * p, int dma, int wait)
 	return 0;
 }
 
-static int swap_out(unsigned int priority, int dma, int wait)
+static int swap_out(unsigned int priority, int dma, int wait, int can_do_io)
 {
 	static int swap_task;
 	int loop, counter, shfrv;
@@ -357,7 +365,7 @@ static int swap_out(unsigned int priority, int dma, int wait)
 		}
 		if (!--p->swap_cnt)
 			swap_task++;
-		switch (swap_out_process(p, dma, wait)) {
+		switch (swap_out_process(p, dma, wait, can_do_io)) {
 			case 0:
 				if (p->state == TASK_STOPPED)
 					/* Stopped task occupy nonused ram */
@@ -391,24 +399,30 @@ int try_to_free_page(int priority, int dma, int wait)
 {
 	static int state = 0;
 	int i=6;
-	int stop;
+	int stop, can_do_io;
 
 	/* we don't try as hard if we're not waiting.. */
 	stop = 3;
+	can_do_io = 1;
 	if (wait)
 		stop = 0;
+	if (priority == GFP_BUFFER) {
+		/* bdflush() should do the rest if we fail */
+		stop = 3;
+		can_do_io = 0;
+	}
 	switch (state) {
 		do {
 		case 0:
-			if (shrink_mmap(i, dma))
+			if (shrink_mmap(i, dma, can_do_io))
 				return 1;
 			state = 1;
 		case 1:
-			if (shm_swap(i, dma))
+			if (can_do_io && shm_swap(i, dma))
 				return 1;
 			state = 2;
 		default:
-			if (swap_out(i, dma, wait))
+			if (swap_out(i, dma, wait, can_do_io))
 				return 1;
 			state = 0;
 		i--;

@@ -1592,7 +1592,7 @@ sequencer_ioctl (int dev, struct fileinfo *file,
 	return -(EIO);
 
       midi_dev = get_user ((int *) arg);
-      if (midi_dev >= max_mididev)
+      if (midi_dev < 0 || midi_dev >= max_mididev)
 	return -(ENXIO);
 
       if (!midi_opened[midi_dev])

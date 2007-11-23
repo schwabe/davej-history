@@ -1,11 +1,14 @@
 /*
- * $Id: capidrv.c,v 1.3 1997/05/18 09:24:15 calle Exp $
+ * $Id: capidrv.c,v 1.3.2.1 1997/07/13 12:16:48 calle Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.3.2.1  1997/07/13 12:16:48  calle
+ * bug fix for more than one controller in connect_req.
+ *
  * Revision 1.3  1997/05/18 09:24:15  calle
  * added verbose disconnect reason reporting to avmb1.
  * some fixes in capi20 interface.
@@ -48,7 +51,7 @@
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.3 $";
+static char *revision = "$Revision: 1.3.2.1 $";
 int debugmode = 0;
 
 #ifdef HAS_NEW_SYMTAB
@@ -1270,7 +1273,7 @@ static int capidrv_command(isdn_ctrl * c, capidrv_contr * card)
 			capi_fill_CONNECT_REQ(&cmdcmsg,
 					      global.appid,
 					      card->msgid++,
-					      1,	/* adr */
+					      card->contrnr,	/* adr */
 					  si2cip(bchan->si1, bchan->si2),	/* cipvalue */
 					      called,	/* CalledPartyNumber */
 					      calling,	/* CallingPartyNumber */

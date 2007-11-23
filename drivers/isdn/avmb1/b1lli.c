@@ -1,11 +1,14 @@
 /*
- * $Id: b1lli.c,v 1.1 1997/03/04 21:50:28 calle Exp $
+ * $Id: b1lli.c,v 1.1.2.1 1997/07/13 12:16:46 calle Exp $
  * 
  * ISDN lowlevel-module for AVM B1-card.
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1lli.c,v $
+ * Revision 1.1.2.1  1997/07/13 12:16:46  calle
+ * bug fix for more than one controller in connect_req.
+ *
  * Revision 1.1  1997/03/04 21:50:28  calle
  * Frirst version in isdn4linux
  *
@@ -428,7 +431,9 @@ void B1_send_message(unsigned short port, struct sk_buff *skb)
 				       CAPIMSG_APPID(skb->data),
 				       capi_cmd2str(cmd, subcmd), len);
 			} else {
-				printk(KERN_DEBUG "b1lli: Put %s\n", capi_message2str(skb->data));
+				printk(KERN_DEBUG "b1lli: Put [0x%lx] %s\n",
+						(unsigned long) contr,
+						capi_message2str(skb->data));
 			}
 
 		}
@@ -447,7 +452,7 @@ void B1_send_message(unsigned short port, struct sk_buff *skb)
 				       CAPIMSG_APPID(skb->data),
 				       capi_cmd2str(cmd, subcmd), len);
 			} else {
-				printk(KERN_DEBUG "b1lli: Put %s\n", capi_message2str(skb->data));
+				printk(KERN_DEBUG "b1lli: Put [0x%lx] %s\n", (unsigned long)contr, capi_message2str(skb->data));
 			}
 		}
 		save_flags(flags);
@@ -499,7 +504,7 @@ void B1_handle_interrupt(avmb1_card * card)
 				       capi_cmd2str(cmd, subcmd),
 				       MsgLen, DataB3Len);
 			} else {
-				printk(KERN_DEBUG "b1lli: Got %s\n", capi_message2str(card->msgbuf));
+				printk(KERN_DEBUG "b1lli: Got [0x%lx] %s\n", (unsigned long)contr, capi_message2str(card->msgbuf));
 			}
 		}
 		if (!(skb = dev_alloc_skb(DataB3Len + MsgLen))) {
@@ -528,7 +533,9 @@ void B1_handle_interrupt(avmb1_card * card)
 				       capi_cmd2str(cmd, subcmd),
 				       MsgLen);
 			} else {
-				printk(KERN_DEBUG "b1lli: Got %s\n", capi_message2str(card->msgbuf));
+				printk(KERN_DEBUG "b1lli: Got [0x%lx] %s\n",
+						(unsigned long) contr,
+						capi_message2str(card->msgbuf));
 			}
 
 		}

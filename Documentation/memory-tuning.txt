@@ -12,7 +12,7 @@ free_pages_high.
 
 You can adjust these with a command such as:
 
-# echo 128 256 512 > /proc/sys/vm/freepages
+# echo "128 256 512" > /proc/sys/vm/freepages
 
 Free memory never goes down below min_free_pages except for atomic
 allocation.  Background swapping is started if the number of free
@@ -38,7 +38,7 @@ ready for this purpose is probably a good idea.
 
 I've found that
 
-# echo 128 256 1024 > /proc/sys/vm/freepages
+# echo "128 256 1024" > /proc/sys/vm/freepages
 
 gives good performance for a 32 Meg system used as a small server and
 personal workstation.

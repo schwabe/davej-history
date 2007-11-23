@@ -543,14 +543,11 @@ void set_blocksize(kdev_t dev, int size)
 static inline int can_reclaim(struct buffer_head *bh, int size)
 {
 	if (bh->b_count || 
-	    buffer_protected(bh) || buffer_locked(bh))
+	    buffer_protected(bh) ||
+	    buffer_locked(bh) ||
+	    mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1 ||
+	    buffer_dirty(bh))
 		return 0;
-			 
-	if (mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1 ||
-	    buffer_dirty(bh)) {
-		/* WSH: don't attempt to refile here! */
-		return 0;
-	}
 
 	if (bh->b_size != size)
 		return 0;
@@ -559,13 +556,15 @@ static inline int can_reclaim(struct buffer_head *bh, int size)
 }
 
 /* find a candidate buffer to be reclaimed */
-static struct buffer_head *find_candidate(struct buffer_head *list,int *list_len,int size)
+static struct buffer_head *find_candidate(struct buffer_head *bh,
+					  int *list_len, int size)
 {
-	struct buffer_head *bh;
+	int behind = 0;
+
+	if (!bh)
+		goto no_candidate;
 	
-	for (bh = list; 
-	     bh && (*list_len) > 0; 
-	     bh = bh->b_next_free, (*list_len)--) {
+	for (; (*list_len) > 0; bh = bh->b_next_free, (*list_len)--) {
 		if (size != bh->b_size) {
 			/* this provides a mechanism for freeing blocks
 			   of other sizes, this is necessary now that we
@@ -575,21 +574,18 @@ static struct buffer_head *find_candidate(struct buffer_head *list,int *list_len
 				break;
 			continue;
 		}
-
-		if (buffer_locked(bh) && 
-		    (bh->b_list == BUF_LOCKED || bh->b_list == BUF_LOCKED1)) {
-			/* Buffers are written in the order they are placed 
-			   on the locked list. If we encounter a locked
-			   buffer here, this means that the rest of them
-			   are also locked */
-			(*list_len) = 0;
-			return NULL;
+		else if (buffer_locked(bh) && 
+			 (bh->b_list == BUF_LOCKED || bh->b_list == BUF_LOCKED1)) {
+			if (behind++ > 10) {
+				(*list_len) = 0;
+				goto no_candidate;
+			}
 		}
-
-		if (can_reclaim(bh,size))
-		    return bh;
+		else if (can_reclaim(bh,size))
+			return bh;
 	}
 
+no_candidate:
 	return NULL;
 }
 
@@ -662,6 +658,12 @@ repeat:
 		}
 		goto repeat;
 	}
+
+	/* Dirty buffers should not overtake, wakeup_bdflush(1) calls
+	   bdflush and sleeps, therefore kswapd does his important work. */
+	if ((nr_buffers_type[BUF_DIRTY] > nr_buffers * bdf_prm.b_un.nfract/100) ||
+	    (nr_free_pages < min_free_pages))
+		wakeup_bdflush(1);
 	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
 	
@@ -672,18 +674,7 @@ repeat:
 		};
 	}
 
-#if 0
-	/*
-	 * In order to protect our reserved pages, 
-	 * return now if we got any buffers.
-	 */
-	if (free_list[BUFSIZE_INDEX(size)])
-		return;
-
 	/* and repeat until we find something good */
-	if (!grow_buffers(GFP_ATOMIC, size))
-		wakeup_bdflush(1);
-#endif
 	wakeup_bdflush(1);
 
 	/* decrease needed even if there is no success */
@@ -1717,7 +1708,7 @@ int bdflush(void * unused)
 		 * dirty buffers, then make the next write to a
 		 * loop device to be a blocking write.
 		 * This lets us block--which we _must_ do! */
-		if (ndirty == 0 && nr_buffers_type[BUF_DIRTY] > 0) {
+		if (ndirty == 0 && nr_buffers_type[BUF_DIRTY] > 0 && wrta_cmd != WRITE) {
 			wrta_cmd = WRITE;
 			continue;
 		}
@@ -1725,7 +1716,7 @@ int bdflush(void * unused)
 		
 		/* If there are still a lot of dirty buffers around, skip the sleep
 		   and flush some more */
-		if(nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
+		if(ndirty == 0 || nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
 			wake_up(&bdflush_done);
 			current->signal = 0;
 			interruptible_sleep_on(&bdflush_wait);
