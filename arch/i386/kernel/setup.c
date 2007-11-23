@@ -1081,7 +1081,7 @@ static void __init init_centaur(struct cpuinfo_x86 *c)
 
 static void __init init_intel(struct cpuinfo_x86 *c)
 {
-	char *p;
+	char *p = NULL;
 	unsigned int l1i = 0, l1d = 0, l2 = 0, l3 = 0; /* Cache sizes */
 
 	if (c->cpuid_level > 1) {

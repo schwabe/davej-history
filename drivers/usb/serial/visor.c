@@ -12,6 +12,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (11/11/2001) gkh
+ *	Added support for the m125 devices, and added check to prevent oopses
+ *	for Clié devices that lie about the number of ports they have.
+ *
  * (08/30/2001) gkh
  *	Added support for the Clie devices, both the 3.5 and 4.0 os versions.
  *	Many thanks to Daniel Burke, and Bryan Payne for helping with this.
@@ -123,9 +127,9 @@
 /*
  * Version Information
  */
-#define DRIVER_VERSION "v1.4"
+#define DRIVER_VERSION "v1.5"
 #define DRIVER_AUTHOR "Greg Kroah-Hartman <greg@kroah.com>"
-#define DRIVER_DESC "USB HandSpring Visor, Palm m50x, Sony Clie driver"
+#define DRIVER_DESC "USB HandSpring Visor, Palm m50x, Sony Clié driver"
 
 #define MIN(a,b)                (((a)<(b))?(a):(b))
 
@@ -148,7 +152,7 @@ static void visor_read_bulk_callback	(struct urb *urb);
 /* All of the device info needed for the Handspring Visor */
 static __u16	handspring_vendor_id	= HANDSPRING_VENDOR_ID;
 static __u16	handspring_product_id	= HANDSPRING_VISOR_ID;
-struct usb_serial_device_type handspring_device = {
+static struct usb_serial_device_type handspring_device = {
 	name:			"Handspring Visor",
 	idVendor:		&handspring_vendor_id,
 	idProduct:		&handspring_product_id,
@@ -178,7 +182,8 @@ struct usb_serial_device_type handspring_device = {
 static __u16	palm_vendor_id	= PALM_VENDOR_ID;
 static __u16	palm_m500_id	= PALM_M500_ID;
 static __u16	palm_m505_id	= PALM_M505_ID;
-struct usb_serial_device_type palm_m500_device = {
+static __u16	palm_m125_id	= PALM_M125_ID;
+static struct usb_serial_device_type palm_m500_device = {
 	name:			"Palm M500",
 	idVendor:		&palm_vendor_id,
 	idProduct:		&palm_m500_id,
@@ -205,10 +210,37 @@ struct usb_serial_device_type palm_m500_device = {
 };
 
 /* device info for the Palm M505 */
-struct usb_serial_device_type palm_m505_device = {
+static struct usb_serial_device_type palm_m505_device = {
 	name:			"Palm M505",
 	idVendor:		&palm_vendor_id,
 	idProduct:		&palm_m505_id,
+	needs_interrupt_in:	MUST_HAVE_NOT,		/* this device must not have an interrupt in endpoint */
+	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
+	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
+	num_interrupt_in:	0,
+	num_bulk_in:		2,
+	num_bulk_out:		2,
+	num_ports:		2,
+	open:			visor_open,
+	close:			visor_close,
+	throttle:		visor_throttle,
+	unthrottle:		visor_unthrottle,
+	startup:		visor_startup,
+	shutdown:		visor_shutdown,
+	ioctl:			visor_ioctl,
+	set_termios:		visor_set_termios,
+	write:			visor_write,
+	write_room:		visor_write_room,
+	chars_in_buffer:	visor_chars_in_buffer,
+	write_bulk_callback:	visor_write_bulk_callback,
+	read_bulk_callback:	visor_read_bulk_callback,
+};
+
+/* device info for the Palm M125 */
+static struct usb_serial_device_type palm_m125_device = {
+	name:			"Palm M125",
+	idVendor:		&palm_vendor_id,
+	idProduct:		&palm_m125_id,
 	needs_interrupt_in:	MUST_HAVE_NOT,		/* this device must not have an interrupt in endpoint */
 	needs_bulk_in:		MUST_HAVE,		/* this device must have a bulk in endpoint */
 	needs_bulk_out:		MUST_HAVE,		/* this device must have a bulk out endpoint */
@@ -306,6 +338,11 @@ static int visor_open (struct usb_serial_port *port, struct file *filp)
 		return -ENODEV;
 	
 	dbg(__FUNCTION__ " - port %d", port->number);
+
+	if (!port->read_urb) {
+		err ("Device lied about number of ports, please use a lower one.");
+		return -ENODEV;
+	}
 
 	down (&port->sem);
 	
@@ -709,9 +746,8 @@ static void visor_shutdown (struct usb_serial *serial)
 
 	/* stop reads and writes on all ports */
 	for (i=0; i < serial->num_ports; ++i) {
-		while (serial->port[i].open_count > 0) {
-			visor_close (&serial->port[i], NULL);
-		}
+		serial->port[i].active = 0;
+		serial->port[i].open_count = 0;
 	}
 }
 
@@ -798,6 +834,7 @@ static int __init visor_init (void)
 	usb_serial_register (&handspring_device);
 	usb_serial_register (&palm_m500_device);
 	usb_serial_register (&palm_m505_device);
+	usb_serial_register (&palm_m125_device);
 	usb_serial_register (&clie_3_5_device);
 	usb_serial_register (&clie_4_0_device);
 	
@@ -833,6 +870,7 @@ static void __exit visor_exit (void)
 	usb_serial_deregister (&handspring_device);
 	usb_serial_deregister (&palm_m500_device);
 	usb_serial_deregister (&palm_m505_device);
+	usb_serial_deregister (&palm_m125_device);
 	usb_serial_deregister (&clie_3_5_device);
 	usb_serial_deregister (&clie_4_0_device);
 

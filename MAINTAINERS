@@ -1075,12 +1075,12 @@ L:	linux-usb-devel@lists.sourceforge.net
 S:	Maintained
 
 USB SERIAL KEYSPAN DRIVER
-P:	Hugh Blemings
-M:	hugh@linuxcare.com
+P:	Greg Kroah-Hartman
+M:	greg@kroah.com
 L:	linux-usb-users@lists.sourceforge.net
 L:	linux-usb-devel@lists.sourceforge.net
 S:	Maintained
-W:	http://www.linuxcare.com.au/hugh/keyspan.html
+W:	http://www.kroah.com/linux/
 
 USB SERIAL DRIVER
 P:	Greg Kroah-Hartman
