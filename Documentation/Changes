@@ -44,7 +44,7 @@ translation).
    The most current version should always be available from
 http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
 
-Last updated: February 16, 1998.
+Last updated: December 16, 1999.
 Current Author: Chris Ricker (kaboom@gatech.edu).
 
 Current Releases (the latest necessary for basic functionality, not
@@ -56,7 +56,7 @@ Current Releases (the latest necessary for basic functionality, not
 - PPP daemon		 2.2.0f
 - Dynamic linker (ld.so) 1.7.14
 - GNU CC		 2.7.2.1
-- Binutils		 2.7.0.3
+- Binutils		 2.8.1.0.23
 - Linux C Library	 Stable:  5.2.18, Beta:  5.4.33
 - Linux C++ Library	 2.7.2.1
 - Termcap		 2.0.8

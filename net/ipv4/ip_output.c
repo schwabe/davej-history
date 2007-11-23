@@ -30,6 +30,7 @@
  *		Juan Jose Ciarlante:	sk/skb source address rewriting
  * 	Elena Apolinario Fdez de Sousa,:ipmr_forward never received multicast
  *	Juan-Mariano de Goyeneche	traffic generated locally.
+ *	Andrea Arcangeli	:	Fix for the 65468 bytes ping-exploit
  */
 
 #include <asm/segment.h>
@@ -703,7 +704,12 @@ int ip_build_xmit(struct sock *sk,
 
 	if (!sk->ip_hdrincl) {
 		length += sizeof(struct iphdr);
-		if(opt) length += opt->optlen;
+		if (opt) {
+			/* make sure not to exceed maximum packet size */
+			if (0xffff - length < opt->optlen)
+				return -EMSGSIZE;
+			length += opt->optlen;
+		}
 	}
 
 	if(length <= dev->mtu && !MULTICAST(daddr) && daddr!=0xFFFFFFFF && daddr!=dev->pa_brdaddr)
