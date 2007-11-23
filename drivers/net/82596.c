@@ -283,7 +283,7 @@ static inline void CA(struct device *dev)
 		volatile u32 i = *(volatile u32 *) (dev->base_addr);
 	}
 #endif
-#ifdef CONFIG_APRICOT_i596
+#ifdef CONFIG_APRICOT
 	if (MACH_IS_APRICOT) {
 		outw(0, (short) (dev->base_addr) + 4);
 	}
@@ -444,7 +444,7 @@ static inline void init_i596_mem(struct device *dev)
 	if (MACH_IS_BVME6000)
 		lp->scp.sysbus = 0x0000004c;
 #endif
-#ifdef CONFIG_APRICOT_i596
+#ifdef CONFIG_APRICOT
 	if (MACH_IS_APRICOT)
 		lp->scp.sysbus = 0x00440000;
 #endif
@@ -914,7 +914,7 @@ __initfunc(int i82596_probe(struct device *dev))
 		dev->irq = (unsigned) BVME_IRQ_I596;
 	}
 #endif
-#ifdef CONFIG_APRICOT_INTEL
+#ifdef CONFIG_APRICOT
 	int checksum = 0;
 	int ioaddr = 0x300;
 
@@ -1163,7 +1163,7 @@ static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		*ethirq = 3;
 	}
 #endif
-#ifdef CONFIG_APRICOT_INTEL
+#ifdef CONFIG_APRICOT
 	(void) inb(ioaddr + 0x10);
 	outb(4, ioaddr + 0xf);
 #endif

@@ -455,13 +455,27 @@ struct dentry * lookup_inode(kdev_t dev, ino_t dirino, ino_t ino)
 			break;
 		}
 
-		result = ERR_PTR(-ENOENT);
-		dir = iget_in_use(sb, dirino);
-		if (!dir)
-			goto out_root;
-		dentry = d_alloc_root(dir, NULL);
-		if (!dentry)
-			goto out_iput;
+		/*
+		 *  Fix for /// bad export bug: if dirino is the root,
+		 *  get the real root dentry rather than creating a temporary
+		 *  "root" dentry.  XXX We could extend this to use
+		 *  any existing dentry for the located 'dir', but all
+		 *  of this code is going to be completely rewritten soon,
+		 *  so I won't bother. 
+		 */
+
+		if (dirino == root_ino) {
+			dentry = dget(root);
+		}
+		else {
+			result = ERR_PTR(-ENOENT);
+			dir = iget_in_use(sb, dirino);
+			if (!dir)
+				goto out_root;
+			dentry = d_alloc_root(dir, NULL);
+			if (!dentry)
+				goto out_iput;
+		}
 
 		/*
 		 * Get the name for this inode and the next parent inode.
@@ -1330,7 +1344,7 @@ fh_update(struct svc_fh *fhp)
 	fhp->fh_handle.fh_ino = ino_t_to_u32(inode->i_ino);
 	fhp->fh_handle.fh_generation = inode->i_generation;
 	fhp->fh_handle.fh_dcookie = (struct dentry *)0xfeebbaca;
- out:
+out:
 	return;
 
 out_bad:

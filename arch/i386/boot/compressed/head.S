@@ -53,7 +53,7 @@ startup_32:
 	xorl %eax,%eax			# Back to 0
 	mov  %cx,%ax			# SP low 16 bits
 	movl %eax,%esp
-	pushl 0				# Clear NT
+	pushl $0			# Clear NT
 	popfl
 	ljmp $(__KERNEL_CS), $0x100000    # Into C and sanity
 

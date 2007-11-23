@@ -222,9 +222,10 @@ if (last) printk("next set to %d\n",fat_access(sb,last,-1));
 	sector = MSDOS_SB(sb)->data_start+(nr-2)*cluster_size;
 	last_sector = sector + cluster_size;
 	if (MSDOS_SB(sb)->cvf_format &&
-	    MSDOS_SB(sb)->cvf_format->zero_out_cluster)
+	    MSDOS_SB(sb)->cvf_format->zero_out_cluster) {
 		MSDOS_SB(sb)->cvf_format->zero_out_cluster(inode,nr);
-	else
+		res=fat_bread(sb,fat_smap(inode,inode->i_blocks));
+	}else
 	for ( ; sector < last_sector; sector++) {
 		#ifdef DEBUG
 			printk("zeroing sector %d\n",sector);

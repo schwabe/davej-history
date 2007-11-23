@@ -72,6 +72,8 @@ kdev_t hwc_console_device(struct console *c)
 __initfunc(unsigned long hwc_console_init(unsigned long kmem_start))
 {
 
+        if (MACHINE_IS_P390)
+                return kmem_start;
 #ifdef CONFIG_3215
         if (MACHINE_IS_VM)
                 return kmem_start;

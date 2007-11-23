@@ -253,9 +253,9 @@ W: http://math-www.uni-paderborn.de/~axel/
 D: Configuration help text support
 D: Linux CD and Support Giveaway List
 
-N: Zoltan Boszormenyi
-E: zboszor@mol.hu
-D: MTRR emulation with Cyrix style ARR registers
+N: Zoltán Böszörményi
+E: zboszor@mail.externet.hu
+D: MTRR emulation with Cyrix style ARR registers, Athlon MTRR support
 
 N: John Boyd
 E: boyd@cis.ohio-state.edu
@@ -2263,6 +2263,13 @@ E: qx@math.columbia.edu
 D: Xiafs filesystem [defunct]
 S: 542 West 112th Street, 5N
 S: New York, New York 10025
+S: USA
+
+N: Victor Yodaiken
+E: yodaiken@fsmlabs.com
+D: RTLinux (RealTime Linux)
+S: POB 1822 
+S: Socorro NM, 87801
 S: USA
 
 N: Eric Youngdale

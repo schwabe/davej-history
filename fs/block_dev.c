@@ -92,6 +92,7 @@ ssize_t block_write(struct file * filp, const char * buf,
 		      blocks = read_ahead[MAJOR(dev)] / (blocksize >> 9) / 2;
 		      if (block + blocks > size) blocks = size - block;
 		      if (blocks > NBUF) blocks=NBUF;
+		      if (!blocks) blocks = 1;
 		      for(i=1; i<blocks; i++)
 		      {
 		        bhlist[i] = getblk (dev, block+i, blocksize);
@@ -105,8 +106,10 @@ ssize_t block_write(struct file * filp, const char * buf,
 		    ll_rw_block(READ, blocks, bhlist);
 		    for(i=1; i<blocks; i++) brelse(bhlist[i]);
 		    wait_on_buffer(bh);
-		    if (!buffer_uptodate(bh))
+		    if (!buffer_uptodate(bh)) {
+			  brelse(bh);
 			  return written ? written : -EIO;
+		    }
 		  };
 		};
 #endif

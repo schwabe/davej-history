@@ -303,6 +303,7 @@ static struct dev_info device_list[] =
 {"iomega","jaz 1GB","J.86", BLIST_NOTQ | BLIST_NOLUN},
 {"CREATIVE","DVD-RAM RAM","*", BLIST_GHOST},
 {"MATSHITA","PD-2 LF-D100","*", BLIST_GHOST},
+{"AOpen","PD-2 DVD-520S","*", BLIST_GHOST},
 {"HITACHI","GF-1050","*", BLIST_GHOST},        /* Hitachi SCSI DVD-RAM */
 {"TOSHIBA","CDROM","*", BLIST_ISROM},
 {"TOSHIBA","DVD-RAM SD-W1101","*", BLIST_GHOST},

@@ -343,7 +343,6 @@ is_disk1:
 	mov ax,cs		! aka #SETUPSEG
 	sub ax,#DELTA_INITSEG	! aka #INITSEG
 	mov ds,ax
-	mov ds,ax
 	xor ax,ax
 	mov [0xa0], ax		! set table length to 0
 	mov ah, #0xc0

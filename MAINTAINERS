@@ -712,6 +712,13 @@ M:	pgmdsg@ibi.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+RTLINUX  REALTIME  LINUX
+P:	Victor Yodaiken
+M:	yodaiken@fsmlabs.com
+L:	rtl@rtlinux.org
+W:	www.rtlinux.org
+S:	Maintained
+
 SBPCD CDROM DRIVER
 P:	Eberhard Moenkeberg
 M:	emoenke@gwdg.de

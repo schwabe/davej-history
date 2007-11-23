@@ -596,8 +596,8 @@ void do_iucv_interrupt(void)
 #ifdef DEBUG
         printk(  "iucv: transaction complete now.\n");
 #endif
+        iucv_next = *((unsigned short*)rcvptr);
         rcvptr = rcvptr + iucv_data_len;
-        iucv_next = iucv_data_len; 
         /* get next packet offset */  
         iucv_data_len= *((unsigned short*)rcvptr);
 	
@@ -791,7 +791,9 @@ int iucv_config(struct device *dev, struct ifmap *map)
 /*----------------*/
 int iucv_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 {
+#ifdef DEBUG
     printk(  "iucv: device %s; iucv_ioctl\n",dev->name);
+#endif
     return 0;
 }
 

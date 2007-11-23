@@ -151,6 +151,9 @@ extern void arcrimi_setup(char *str, int *ints);
 #ifdef CONFIG_CTC  
 extern void ctc_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_IUCV
+extern void iucv_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_ARCNET_COM90xxIO
 extern void com90io_setup(char *str, int *ints);
 #endif
@@ -181,6 +184,9 @@ extern void pg_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_PARIDE_PCD
 extern void pcd_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_3215
+extern void con3215_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_MDISK
 extern void mdisk_setup(char *str, int *ints);
@@ -638,6 +644,10 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_CTC
         { "ctc=", ctc_setup } ,
 #endif
+#ifdef CONFIG_IUCV
+        { "iucv=", iucv_setup } ,
+#endif
+
 #endif
 
 #ifdef CONFIG_FB
@@ -980,6 +990,9 @@ static struct kernel_param raw_params[] __initdata = {
 #endif
 #ifdef CONFIG_APM
 	{ "apm=", apm_setup },
+#endif
+#ifdef CONFIG_3215
+	{ "condev=", con3215_setup },
 #endif
 #ifdef CONFIG_MDISK
         { "mdisk=", mdisk_setup },

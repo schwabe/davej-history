@@ -139,41 +139,41 @@
 	       Changed locking to spin with reschedule.
 	       Made use of new <smp_call_function>.
   v1.28
-    19990201   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990201   Zoltán Böszörményi <zboszor@mail.externet.hu>
 	       Extended the driver to be able to use Cyrix style ARRs.
     19990204   Richard Gooch <rgooch@atnf.csiro.au>
 	       Restructured Cyrix support.
   v1.29
-    19990204   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990204   Zoltán Böszörményi <zboszor@mail.externet.hu>
 	       Refined ARR support: enable MAPEN in set_mtrr_prepare()
 	       and disable MAPEN in set_mtrr_done().
     19990205   Richard Gooch <rgooch@atnf.csiro.au>
 	       Minor cleanups.
   v1.30
-    19990208   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990208   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Protect plain 6x86s (and other processors without the
                Page Global Enable feature) against accessing CR4 in
                set_mtrr_prepare() and set_mtrr_done().
     19990210   Richard Gooch <rgooch@atnf.csiro.au>
 	       Turned <set_mtrr_up> and <get_mtrr> into function pointers.
   v1.31
-    19990212   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990212   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Major rewrite of cyrix_arr_init(): do not touch ARRs,
                leave them as the BIOS have set them up.
                Enable usage of all 8 ARRs.
                Avoid multiplications by 3 everywhere and other
                code clean ups/speed ups.
-    19990213   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990213   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Set up other Cyrix processors identical to the boot cpu.
                Since Cyrix don't support Intel APIC, this is l'art pour l'art.
                Weigh ARRs by size:
                If size <= 32M is given, set up ARR# we were given.
                If size >  32M is given, set up ARR7 only if it is free,
                fail otherwise.
-    19990214   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990214   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Also check for size >= 256K if we are to set up ARR7,
                mtrr_add() returns the value it gets from set_mtrr()
-    19990218   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990218   Zoltán Böszörményi <zboszor@mail.externet.hu>
                Remove Cyrix "coma bug" workaround from here.
                Moved to linux/arch/i386/kernel/setup.c and
                linux/include/asm-i386/bugs.h
@@ -187,7 +187,7 @@
     19990305   Richard Gooch <rgooch@atnf.csiro.au>
 	       Temporarily disable AMD support now MTRR capability flag is set.
   v1.32
-    19990308   Zoltan Boszormenyi <zboszor@mol.hu>
+    19990308   Zoltán Böszörményi <zboszor@mail.externet.hu>
 	       Adjust my changes (19990212-19990218) to Richard Gooch's
 	       latest changes. (19990228-19990305)
   v1.33
@@ -197,7 +197,7 @@
 	       Support K6-II/III based on Alan Cox's <alan@redhat.com> patches.
   v1.34
     19990511   Bart Hartgers <bart@etpmod.phys.tue.nl>
-	       Support Centaur C6 MCR's.
+	       Support Centaur C6 MCRs.
     19990512   Richard Gooch <rgooch@atnf.csiro.au>
 	       Minor cleanups.
   v1.35
@@ -210,6 +210,9 @@
     19990819   Alan Cox <alan@redhat.com>
     	       Tested Zoltan's changes on a pre production Athlon - 100%
     	       success. Fixed one fall through check to be Intel only.
+    19991116   Bart Hartgers <bart@etpmod.phys.tue.nl>
+               Changed Centaur/IDT WinChip support to include WinChip 2.
+               (WC 2 kindly provided by IDT).
 */
 
 #include <linux/types.h>
@@ -581,18 +584,31 @@ static void amd_get_mtrr (unsigned int reg, unsigned long *base,
     return;
 }   /*  End Function amd_get_mtrr  */
 
-static struct
+static struct CENTAUR_MCR_CTX
 {
-    unsigned long high;
-    unsigned long low;
-} centaur_mcr[8];
+   unsigned type_bits[MTRR_NUM_TYPES];
+   struct {
+      u32 low;
+      u32 high;
+   } mcr[8];
+} *centaur_ctx=NULL;
 
 static void centaur_get_mcr (unsigned int reg, unsigned long *base,
 			     unsigned long *size, mtrr_type *type)
 {
-    *base = centaur_mcr[reg].high & 0xfffff000;
-    *size = (~(centaur_mcr[reg].low & 0xfffff000))+1;
-    *type = MTRR_TYPE_WRCOMB;	/*  If it is there, it is write-combining  */
+    unsigned i;
+    u32 tb;
+    tb = centaur_ctx->mcr[reg].low & 0xfff;
+    *base = centaur_ctx->mcr[reg].high & 0xfffff000;
+    *size = (~(centaur_ctx->mcr[reg].low & 0xfffff000))+1;
+    if (*size) {
+        for( i=0; i<MTRR_NUM_TYPES; ++i)
+	    if (centaur_ctx->type_bits[i]==tb) {
+	        *type = (mtrr_type) i;
+	        return;
+	    }
+        *size = 0;
+    }
 }   /*  End Function centaur_get_mcr  */
 
 static void (*get_mtrr) (unsigned int reg, unsigned long *base,
@@ -716,6 +732,7 @@ static void centaur_set_mcr_up (unsigned int reg, unsigned long base,
     unsigned long low, high;
 
     if (do_safe) set_mtrr_prepare( &ctxt );
+   
     if (size == 0)
     {
         /*  Disable  */
@@ -724,12 +741,13 @@ static void centaur_set_mcr_up (unsigned int reg, unsigned long base,
     else
     {
         high = base & 0xfffff000; /* base works on 4K pages... */
-        low = ((~(size-1))&0xfffff000);
-        low |= 0x1f;		  /* only support write-combining... */
+        low = ((~(size-1))&0xfffff000)|(centaur_ctx->type_bits[type]);
     }
-    centaur_mcr[reg].high = high;
-    centaur_mcr[reg].low = low;
+    centaur_ctx->mcr[reg].high = high;
+    centaur_ctx->mcr[reg].low = low;
+   
     wrmsr (0x110 + reg, low, high);
+   
     if (do_safe) set_mtrr_done( &ctxt );
 }   /*  End Function centaur_set_mtrr_up  */
 
@@ -1078,6 +1096,12 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     unsigned long lbase, lsize, last;
 
     if ( !(boot_cpu_data.x86_capability & X86_FEATURE_MTRR) ) return -ENODEV;
+    if (type >= MTRR_NUM_TYPES)
+    {
+	printk ("mtrr: type: %u illegal\n", type);
+	return -EINVAL;
+    }
+   
     switch (boot_cpu_data.x86_vendor)
     {
       case X86_VENDOR_AMD:
@@ -1113,13 +1137,12 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	}
         if (boot_cpu_data.x86_vendor == X86_VENDOR_CENTAUR)
 	{
-	    if (type != MTRR_TYPE_WRCOMB)
-	    {
-		printk ("mtrr: only write-combining is supported\n");
+	    if (centaur_ctx->type_bits[type]==0) {
+		printk ("mtrr: type not supported\n");
 		return -EINVAL;
 	    }
 	}
-	else if (base + size < 0x100000)
+	else if (base + size < 0x100000) /* Cyrix */
 	{
 	    printk ("mtrr: cannot set region below 1 MiB (0x%lx,0x%lx)\n",
 		    base, size);
@@ -1140,11 +1163,6 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
       default:
 	return -EINVAL;
 	/*break;*/
-    }
-    if (type >= MTRR_NUM_TYPES)
-    {
-	printk ("mtrr: type: %u illegal\n", type);
-	return -EINVAL;
     }
     /*  If the type is WC, check that this processor supports it  */
     if ( (type == MTRR_TYPE_WRCOMB) && !have_wrcomb () )
@@ -1172,7 +1190,8 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
 	/*  New region is enclosed by an existing region  */
 	if (ltype != type)
 	{
-	    if (type == MTRR_TYPE_UNCACHABLE) continue;
+	    if ((boot_cpu_data.x86_vendor != X86_VENDOR_CENTAUR) && 
+	        (type == MTRR_TYPE_UNCACHABLE)) continue;
 	    spin_unlock (&main_lock);
 	    printk ( "mtrr: type mismatch for %lx,%lx old: %s new: %s\n",
 		     base, size, attrib_to_str (ltype), attrib_to_str (type) );
@@ -1652,7 +1671,51 @@ __initfunc(static void centaur_mcr_init (void))
 {
     unsigned i;
     struct set_mtrr_context ctxt;
-
+    u32 low,high;
+    u32 mcr_ctrl_value;
+    unsigned mcr_type;
+    /* Deduce the MCR traits type for this processor.
+     * The documentation of the WinChip 2 suggests that we can read the
+     * MCR_CTRL register for all WinChips, but this hangs on my C6.
+     * -> Work around this.
+     */
+    if ((boot_cpu_data.x86 == 5) && (boot_cpu_data.x86_model == 4)) {
+	/* C6 */
+	mcr_type = 0;
+    } else {
+	rdmsr (0x120, low, high );
+	mcr_type = (low>>17)&0x7;
+    }
+    centaur_ctx = kmalloc( sizeof( struct CENTAUR_MCR_CTX ), GFP_KERNEL );
+    if (centaur_ctx == NULL) {
+        printk("mtrr: Could not allocate memory. Disabling MTRR.\n");
+        boot_cpu_data.x86_capability &= ~X86_FEATURE_MTRR;
+        return;
+    }
+    for( i=0; i<MTRR_NUM_TYPES; ++i) {
+        centaur_ctx->type_bits[i] = 0;
+    }
+    switch( mcr_type ) {
+      case 0:
+        centaur_ctx->type_bits[ MTRR_TYPE_WRCOMB ] = 0x0f;
+        centaur_ctx->type_bits[ MTRR_TYPE_WRBACK ] = 0x1f;
+        mcr_ctrl_value = 0x01f0001f;
+        break;
+      case 1:
+        centaur_ctx->type_bits[ MTRR_TYPE_UNCACHABLE ] = 0x02;
+        centaur_ctx->type_bits[ MTRR_TYPE_WRCOMB ]     = 0x13;
+        centaur_ctx->type_bits[ MTRR_TYPE_WRTHROUGH ]  = 0x11;
+        centaur_ctx->type_bits[ MTRR_TYPE_WRBACK ]     = 0x19;
+        mcr_ctrl_value = 0x01f2005f;
+        break;
+      default:
+        kfree( centaur_ctx );
+        centaur_ctx = NULL;
+        printk ("mtrr: Centaur MCR traits version %u not supported. "
+		"Disabling MTRR.\n", mcr_type);
+	boot_cpu_data.x86_capability &= ~X86_FEATURE_MTRR;
+        return;
+    }
     set_mtrr_prepare (&ctxt);
     /* Unfortunately, MCR's are read-only, so there is no way to
      * find out what the bios might have done.
@@ -1661,14 +1724,16 @@ __initfunc(static void centaur_mcr_init (void))
      * This way we are sure that the centaur_mcr array contains the actual
      * values. The disadvantage is that any BIOS tweaks are thus undone.
      */
+    /* switch off MCR's first */
+    wrmsr (0x120, 0, 0 );
     for (i = 0; i < 8; ++i)
     {
-        centaur_mcr[i].high = 0;
-	centaur_mcr[i].low = 0;
+        centaur_ctx->mcr[i].high = 0;
+	centaur_ctx->mcr[i].low = 0;
 	wrmsr (0x110 + i , 0, 0);
     }
     /*  Throw the main write-combining switch...  */
-    wrmsr (0x120, 0x01f0001f, 0);
+    wrmsr (0x120, mcr_ctrl_value, 0);
     set_mtrr_done (&ctxt);
 }   /*  End Function centaur_mcr_init  */
 

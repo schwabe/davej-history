@@ -3,7 +3,7 @@
 /*
  *      esssolo1.c  --  ESS Technology Solo1 (ES1946) audio driver.
  *
- *      Copyright (C) 1998-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *      Copyright (C) 1998-2000  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -28,38 +28,41 @@
  *  /dev/midi   simple MIDI UART interface, no ioctl
  *
  *  Revision history
- *    10.11.98   0.1   Initial release (without any hardware)
- *    22.03.99   0.2   cinfo.blocks should be reset after GETxPTR ioctl.
- *                     reported by Johan Maes <joma@telindus.be>
- *                     return EAGAIN instead of EBUSY when O_NONBLOCK
- *                     read/write cannot be executed
- *    07.04.99   0.3   implemented the following ioctl's: SOUND_PCM_READ_RATE, 
- *                     SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
- *                     Alpha fixes reported by Peter Jones <pjones@redhat.com>
- *    15.06.99   0.4   Fix bad allocation bug.
- *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
- *    28.06.99   0.5   Add pci_set_master
- *    12.08.99   0.6   Fix MIDI UART crashing the driver
- *                     Changed mixer semantics from OSS documented
- *                     behaviour to OSS "code behaviour".
- *                     Recording might actually work now.
- *                     The real DDMA controller address register is at PCI config
- *                     0x60, while the register at 0x18 is used as a placeholder
- *                     register for BIOS address allocation. This register
- *                     is supposed to be copied into 0x60, according
- *                     to the Solo1 datasheet. When I do that, I can access
- *                     the DDMA registers except the mask bit, which
- *                     is stuck at 1. When I copy the contents of 0x18 +0x10
- *                     to the DDMA base register, everything seems to work.
- *                     The fun part is that the Windows Solo1 driver doesn't
- *                     seem to do these tricks.
- *                     Bugs remaining: plops and clicks when starting/stopping playback
- *    31.08.99   0.7   add spin_lock_init
- *                     replaced current->state = x with set_current_state(x)
- *    03.09.99   0.8   change read semantics for MIDI to match
- *                     OSS more closely; remove possible wakeup race
- *    07.10.99   0.9   Fix initialization; complain if sequencer writes time out
- *                     Revised resource grabbing for the FM synthesizer
+ *    10.11.1998   0.1   Initial release (without any hardware)
+ *    22.03.1999   0.2   cinfo.blocks should be reset after GETxPTR ioctl.
+ *                       reported by Johan Maes <joma@telindus.be>
+ *                       return EAGAIN instead of EBUSY when O_NONBLOCK
+ *                       read/write cannot be executed
+ *    07.04.1999   0.3   implemented the following ioctl's: SOUND_PCM_READ_RATE, 
+ *                       SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
+ *                       Alpha fixes reported by Peter Jones <pjones@redhat.com>
+ *    15.06.1999   0.4   Fix bad allocation bug.
+ *                       Thanks to Deti Fliegl <fliegl@in.tum.de>
+ *    28.06.1999   0.5   Add pci_set_master
+ *    12.08.1999   0.6   Fix MIDI UART crashing the driver
+ *                       Changed mixer semantics from OSS documented
+ *                       behaviour to OSS "code behaviour".
+ *                       Recording might actually work now.
+ *                       The real DDMA controller address register is at PCI config
+ *                       0x60, while the register at 0x18 is used as a placeholder
+ *                       register for BIOS address allocation. This register
+ *                       is supposed to be copied into 0x60, according
+ *                       to the Solo1 datasheet. When I do that, I can access
+ *                       the DDMA registers except the mask bit, which
+ *                       is stuck at 1. When I copy the contents of 0x18 +0x10
+ *                       to the DDMA base register, everything seems to work.
+ *                       The fun part is that the Windows Solo1 driver doesn't
+ *                       seem to do these tricks.
+ *                       Bugs remaining: plops and clicks when starting/stopping playback
+ *    31.08.1999   0.7   add spin_lock_init
+ *                       replaced current->state = x with set_current_state(x)
+ *    03.09.1999   0.8   change read semantics for MIDI to match
+ *                       OSS more closely; remove possible wakeup race
+ *    07.10.1999   0.9   Fix initialization; complain if sequencer writes time out
+ *                       Revised resource grabbing for the FM synthesizer
+ *    28.10.1999   0.10  More waitqueue races fixed
+ *    09.12.1999   0.11  Work around stupid Alpha port issue (virt_to_bus(kmalloc(GFP_DMA)) > 16M)
+ *                       Disabling recording on Alpha
  *
  */
 
@@ -442,6 +445,14 @@ static int prog_dmabuf(struct solo1_state *s, struct dmabuf *db, int gfp_mask)
 				break;
 		if (!db->rawbuf)
 			return -ENOMEM;
+		/* work around a problem of the alpha port */
+		if ((gfp_mask & GFP_DMA) && (virt_to_bus(db->rawbuf) & (~0xffffffUL))) {
+			printk(KERN_ERR "solo1: requested DMA buffer below 16M but got 0x%lx, Alpha bug?\n", 
+			       (unsigned long)virt_to_bus(db->rawbuf));
+			kfree(db->rawbuf);
+			db->rawbuf = NULL;
+			return -ENOMEM;
+		}
 		db->buforder = order;
 		/* now mark the pages as reserved; otherwise remap_page_range doesn't do what we want */
 		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
@@ -963,9 +974,9 @@ static int drain_dac(struct solo1_state *s, int nonblock)
 	
 	if (s->dma_dac.mapped)
 		return 0;
-        __set_current_state(TASK_INTERRUPTIBLE);
         add_wait_queue(&s->dma_dac.wait, &wait);
         for (;;) {
+		set_current_state(TASK_INTERRUPTIBLE);
                 spin_lock_irqsave(&s->lock, flags);
 		count = s->dma_dac.count;
                 spin_unlock_irqrestore(&s->lock, flags);
@@ -998,6 +1009,7 @@ static int drain_dac(struct solo1_state *s, int nonblock)
 static ssize_t solo1_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned swptr;
@@ -1013,12 +1025,15 @@ static ssize_t solo1_read(struct file *file, char *buffer, size_t count, loff_t 
 	if (!access_ok(VERIFY_WRITE, buffer, count))
 		return -EFAULT;
 	ret = 0;
+	add_wait_queue(&s->dma_adc.wait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		swptr = s->dma_adc.swptr;
 		cnt = s->dma_adc.dmasize-swptr;
 		if (s->dma_adc.count < cnt)
 			cnt = s->dma_adc.count;
+		if (cnt <= 0)
+			__set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&s->lock, flags);
 		if (cnt > count)
 			cnt = count;
@@ -1039,9 +1054,12 @@ static ssize_t solo1_read(struct file *file, char *buffer, size_t count, loff_t 
 #endif
 			if (inb(s->ddmabase+15) & 1)
 				printk(KERN_ERR "solo1: cannot start recording, DDMA mask bit stuck at 1\n");
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->dma_adc.wait);
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			schedule();
 #ifdef DEBUGREC
 			printk(KERN_DEBUG "solo1_read: regs: A1: 0x%02x  A2: 0x%02x  A4: 0x%02x  A5: 0x%02x  A8: 0x%02x\n"
 			       KERN_DEBUG "solo1_read: regs: B1: 0x%02x  B2: 0x%02x  B7: 0x%02x  B8: 0x%02x  B9: 0x%02x\n"
@@ -1051,12 +1069,18 @@ static ssize_t solo1_read(struct file *file, char *buffer, size_t count, loff_t 
 			       read_ctrl(s, 0xb1), read_ctrl(s, 0xb2), read_ctrl(s, 0xb7), read_ctrl(s, 0xb8), read_ctrl(s, 0xb9), 
 			       inl(s->ddmabase), inw(s->ddmabase+4), inb(s->ddmabase+8), inb(s->ddmabase+15), inb(s->sbbase+0xc), cnt);
 #endif
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_to_user(buffer, s->dma_adc.rawbuf + swptr, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_to_user(buffer, s->dma_adc.rawbuf + swptr, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		swptr = (swptr + cnt) % s->dma_adc.dmasize;
 		spin_lock_irqsave(&s->lock, flags);
 		s->dma_adc.swptr = swptr;
@@ -1071,12 +1095,15 @@ static ssize_t solo1_read(struct file *file, char *buffer, size_t count, loff_t 
 		       read_ctrl(s, 0xb8), inb(s->ddmabase+8), inw(s->ddmabase+4), inb(s->sbbase+0xc));
 #endif
 	}
+	remove_wait_queue(&s->dma_adc.wait, &wait);
+	set_current_state(TASK_RUNNING);
 	return ret;
 }
 
 static ssize_t solo1_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned swptr;
@@ -1100,6 +1127,7 @@ static ssize_t solo1_write(struct file *file, const char *buffer, size_t count, 
 	       read_mixer(s, 0x78), read_mixer(s, 0x7a), inw(s->iobase+4), inb(s->iobase+6), inb(s->sbbase+0xc));
 #endif
 	ret = 0;
+	add_wait_queue(&s->dma_dac.wait, &wait);	
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		if (s->dma_dac.count < 0) {
@@ -1110,20 +1138,31 @@ static ssize_t solo1_write(struct file *file, const char *buffer, size_t count, 
 		cnt = s->dma_dac.dmasize-swptr;
 		if (s->dma_dac.count + cnt > s->dma_dac.dmasize)
 			cnt = s->dma_dac.dmasize - s->dma_dac.count;
+		if (cnt <= 0)
+			__set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&s->lock, flags);
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
 			start_dac(s);
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->dma_dac.wait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			schedule();
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_from_user(s->dma_dac.rawbuf + swptr, buffer, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_from_user(s->dma_dac.rawbuf + swptr, buffer, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		swptr = (swptr + cnt) % s->dma_dac.dmasize;
 		spin_lock_irqsave(&s->lock, flags);
 		s->dma_dac.swptr = swptr;
@@ -1135,6 +1174,8 @@ static ssize_t solo1_write(struct file *file, const char *buffer, size_t count, 
 		ret += cnt;
 		start_dac(s);
 	}
+	remove_wait_queue(&s->dma_dac.wait, &wait);
+	set_current_state(TASK_RUNNING);
 	return ret;
 }
 
@@ -1410,6 +1451,12 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if (s->dma_dac.mapped)
 			s->dma_dac.count &= s->dma_dac.fragsize-1;
 		spin_unlock_irqrestore(&s->lock, flags);
+#if 0
+		printk(KERN_DEBUG "esssolo1: GETOPTR: bytes %u blocks %u ptr %u, buforder %u numfrag %u fragshift %u\n"
+		       KERN_DEBUG "esssolo1: swptr %u count %u fragsize %u dmasize %u fragsamples %u\n",
+		       cinfo.bytes, cinfo.blocks, cinfo.ptr, s->dma_dac.buforder, s->dma_dac.numfrag, s->dma_dac.fragshift,
+		       s->dma_dac.swptr, s->dma_dac.count, s->dma_dac.fragsize, s->dma_dac.dmasize, s->dma_dac.fragsamples);
+#endif
                 return copy_to_user((void *)arg, &cinfo, sizeof(cinfo));
 
         case SNDCTL_DSP_GETBLKSIZE:
@@ -1497,8 +1544,8 @@ static int solo1_release(struct inode *inode, struct file *file)
 		dealloc_dmabuf(&s->dma_adc);
 	}
 	s->open_mode &= ~(FMODE_READ | FMODE_WRITE);
-	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	up(&s->open_sem);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -1506,6 +1553,7 @@ static int solo1_release(struct inode *inode, struct file *file)
 static int solo1_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
+	DECLARE_WAITQUEUE(wait, current);
 	struct solo1_state *s = devs;
 
 	while (s && ((s->dev_audio ^ minor) & ~0xf))
@@ -1521,8 +1569,12 @@ static int solo1_open(struct inode *inode, struct file *file)
 			up(&s->open_sem);
 			return -EBUSY;
 		}
+		add_wait_queue(&s->open_wait, &wait);
+		__set_current_state(TASK_INTERRUPTIBLE);
 		up(&s->open_sem);
-		interruptible_sleep_on(&s->open_wait);
+		schedule();
+		remove_wait_queue(&s->open_wait, &wait);
+		set_current_state(TASK_RUNNING);
 		if (signal_pending(current))
 			return -ERESTARTSYS;
 		down(&s->open_sem);
@@ -1537,10 +1589,6 @@ static int solo1_open(struct inode *inode, struct file *file)
 	s->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&s->open_sem);
 	MOD_INC_USE_COUNT;
-	if (prog_dmabuf_dac(s) || prog_dmabuf_adc(s)) {
-		solo1_release(inode, file);
-		return -ENOMEM;
-	}
 	prog_codec(s);
 	return 0;
 }
@@ -1654,6 +1702,8 @@ static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, lo
 		cnt = MIDIINBUF - ptr;
 		if (s->midi.icnt < cnt)
 			cnt = s->midi.icnt;
+		if (cnt <= 0)
+			__set_current_state(TASK_INTERRUPTIBLE);
 		spin_unlock_irqrestore(&s->lock, flags);
 		if (cnt > count)
 			cnt = count;
@@ -1663,7 +1713,6 @@ static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, lo
 					ret = -EAGAIN;
 				break;
 			}
-			__set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
 			if (signal_pending(current)) {
 				if (!ret)
@@ -1716,8 +1765,10 @@ static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t co
 		cnt = MIDIOUTBUF - ptr;
 		if (s->midi.ocnt + cnt > MIDIOUTBUF)
 			cnt = MIDIOUTBUF - s->midi.ocnt;
-		if (cnt <= 0)
+		if (cnt <= 0) {
+			__set_current_state(TASK_INTERRUPTIBLE);
 			solo1_handle_midi(s);
+		}
 		spin_unlock_irqrestore(&s->lock, flags);
 		if (cnt > count)
 			cnt = count;
@@ -1727,7 +1778,6 @@ static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t co
 					ret = -EAGAIN;
 				break;
 			}
-			__set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
 			if (signal_pending(current)) {
 				if (!ret)
@@ -1785,6 +1835,7 @@ static unsigned int solo1_midi_poll(struct file *file, struct poll_table_struct 
 static int solo1_midi_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
+	DECLARE_WAITQUEUE(wait, current);
 	struct solo1_state *s = devs;
 	unsigned long flags;
 
@@ -1801,8 +1852,12 @@ static int solo1_midi_open(struct inode *inode, struct file *file)
 			up(&s->open_sem);
 			return -EBUSY;
 		}
+		add_wait_queue(&s->open_wait, &wait);
+		__set_current_state(TASK_INTERRUPTIBLE);
 		up(&s->open_sem);
-		interruptible_sleep_on(&s->open_wait);
+		schedule();
+		remove_wait_queue(&s->open_wait, &wait);
+		set_current_state(TASK_RUNNING);
 		if (signal_pending(current))
 			return -ERESTARTSYS;
 		down(&s->open_sem);
@@ -1846,9 +1901,9 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 	VALIDATE_STATE(s);
 
 	if (file->f_mode & FMODE_WRITE) {
-		current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
+			__set_current_state(TASK_INTERRUPTIBLE);
 			spin_lock_irqsave(&s->lock, flags);
 			count = s->midi.ocnt;
 			spin_unlock_irqrestore(&s->lock, flags);
@@ -1858,7 +1913,7 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 				break;
 			if (file->f_flags & O_NONBLOCK) {
 				remove_wait_queue(&s->midi.owait, &wait);
-				current->state = TASK_RUNNING;
+				set_current_state(TASK_RUNNING);
 				return -EBUSY;
 			}
 			tmo = (count * HZ) / 3100;
@@ -1866,7 +1921,7 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 				printk(KERN_DEBUG "solo1: midi timed out??\n");
 		}
 		remove_wait_queue(&s->midi.owait, &wait);
-		current->state = TASK_RUNNING;
+		set_current_state(TASK_RUNNING);
 	}
 	down(&s->open_sem);
 	s->open_mode &= (~(file->f_mode << FMODE_MIDI_SHIFT)) & (FMODE_MIDI_READ|FMODE_MIDI_WRITE);
@@ -1876,8 +1931,8 @@ static int solo1_midi_release(struct inode *inode, struct file *file)
 		del_timer(&s->midi.timer);		
 	}
 	spin_unlock_irqrestore(&s->lock, flags);
-	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	up(&s->open_sem);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -2002,6 +2057,7 @@ static int solo1_dmfm_ioctl(struct inode *inode, struct file *file, unsigned int
 static int solo1_dmfm_open(struct inode *inode, struct file *file)
 {
 	int minor = MINOR(inode->i_rdev);
+	DECLARE_WAITQUEUE(wait, current);
 	struct solo1_state *s = devs;
 
 	while (s && s->dev_dmfm != minor)
@@ -2017,8 +2073,12 @@ static int solo1_dmfm_open(struct inode *inode, struct file *file)
 			up(&s->open_sem);
 			return -EBUSY;
 		}
+		add_wait_queue(&s->open_wait, &wait);
+		__set_current_state(TASK_INTERRUPTIBLE);
 		up(&s->open_sem);
-		interruptible_sleep_on(&s->open_wait);
+		schedule();
+		remove_wait_queue(&s->open_wait, &wait);
+		set_current_state(TASK_RUNNING);
 		if (signal_pending(current))
 			return -ERESTARTSYS;
 		down(&s->open_sem);
@@ -2057,8 +2117,8 @@ static int solo1_dmfm_release(struct inode *inode, struct file *file)
 		outb(0, s->sbbase+3);
 	}
 	release_region(s->sbbase, FMSYNTH_EXTENT);
-	up(&s->open_sem);
 	wake_up(&s->open_wait);
+	up(&s->open_sem);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -2113,7 +2173,7 @@ static struct initvol {
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.9 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.11 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, pcidev))) {
 		if (pcidev->base_address[0] == 0 ||

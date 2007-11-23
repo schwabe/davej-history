@@ -345,7 +345,7 @@ void nfsd_modcount(struct inode *inode, int fill)
 int
 init_module(void)
 {
-	printk(KERN_INFO "Installing knfsd (copyright (C) 1996 okir@monad.swb.de).\n");
+	printk(KERN_INFO "Installing knfsd (copyright (C) 1996 okir@monad.swb.de)\n");
 	do_nfsservctl = handle_sys_nfsservctl;
 	return 0;
 }

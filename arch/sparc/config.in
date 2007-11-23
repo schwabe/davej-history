@@ -103,6 +103,25 @@ endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
 	source net/Config.in
+	mainmenu_option next_comment
+	comment 'Amateur Radio support'
+	bool 'Amateur Radio support' CONFIG_HAMRADIO
+	if [ "$CONFIG_HAMRADIO" != "n" ] ; then
+		comment 'Packet Radio protocols'
+		tristate 'Amateur Radio AX.25 Level 2 protocol' CONFIG_AX25
+		if [ "$CONFIG_AX25" != "n" ]; then
+			bool '   AX.25 DAMA Slave support' CONFIG_AX25_DAMA_SLAVE
+#			bool '   AX.25 DAMA Master support' CONFIG_AX25_DAMA_MASTER
+			dep_tristate '   Amateur Radio NET/ROM protocol' CONFIG_NETROM $CONFIG_AX25
+			dep_tristate '   Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
+		fi
+	fi
+	if [ "$CONFIG_AX25" != "n" ]; then
+		comment 'AX.25 network device drivers'
+		dep_tristate 'Serial port KISS driver' CONFIG_MKISS $CONFIG_AX25
+		dep_tristate 'Serial port 6PACK driver' CONFIG_6PACK $CONFIG_AX25
+	fi
+	endmenu
 fi
 
 mainmenu_option next_comment

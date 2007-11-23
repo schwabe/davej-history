@@ -2573,7 +2573,7 @@ CONFIG_IP_MASQUERADE_MOD
 
   You will need the user space program "ipmasqadm" to use these
   additional modules; you can download it from
-  http://juanjox.linuxhq.com/
+  http://juanjox.kernelnotes.org/
 
   All this additional code is still under development and so is
   currently marked EXPERIMENTAL.
@@ -2588,7 +2588,7 @@ CONFIG_IP_MASQUERADE_IPAUTOFW
   ftp://ftp.netis.com/pub/members/rlynch/
 
   You will also need the ipmasqadm tool available from
-  http://juanjox.linuxhq.com/ .
+  http://juanjox.kernelnotes.org/ .
 
   The ipautofw code is still under development and so is currently
   marked EXPERIMENTAL. If you want to try it, say Y.
@@ -2619,7 +2619,7 @@ CONFIG_IP_MASQUERADE_IPPORTFW
   see ftp://ftp.compsoc.net/users/steve/ipportfw/linux21/
 
   You will need the user space program "ipmasqadm" which can be
-  downloaded from http://juanjox.linuxhq.com/
+  downloaded from http://juanjox.kernelnotes.org/
 
   The portfw code is still under development and so is currently
   marked EXPERIMENTAL. If you want to try it, say Y.
@@ -8976,9 +8976,12 @@ CONFIG_MTRR
 
   The AMD K6-2 (stepping 8 and above) and K6-3 processors have two
   MTRRs. These are supported.
-  
-  The Centaur C6 (WinChip) has 8 MCRs, allowing write-combining. These
-  are supported.
+
+  The Centaur C6 (WinChip) and WinChip 2&3 processors have 8 MCRs. 
+  These are supported. Note that, due to the design of the WinChip 2&3, 
+  setting the access for normal memory to uncachable or write-combine
+  on these processors will result in instant kernel panic. It is okay 
+  to set this for non-cacheable (video) memory.
 
   Saying Y here also fixes a problem with buggy SMP BIOSes which only
   set the MTRRs for the boot CPU and not the secondary CPUs. This can

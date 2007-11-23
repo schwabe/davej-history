@@ -212,7 +212,12 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (!data)
 		goto out_miss_args;
 
-	if (data->version != NFS_MOUNT_VERSION) {
+	/* No NFS V3. */
+	if (data->flags & NFS_MOUNT_VER3)
+		goto out_fail;
+
+	/* Don't complain if "mount" is newer. */
+	if (data->version < NFS_MOUNT_VERSION) {
 		printk("nfs warning: mount version %s than kernel\n",
 			data->version < NFS_MOUNT_VERSION ? "older" : "newer");
 		if (data->version < 2)

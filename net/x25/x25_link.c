@@ -84,8 +84,9 @@ void x25_link_control(struct sk_buff *skb, struct x25_neigh *neigh, unsigned sho
 	switch (frametype) {
 		case X25_RESTART_REQUEST:
 			x25_stop_t20timer(neigh);
+			if (neigh->state!=X25_LINK_STATE_2)
+				x25_transmit_restart_confirmation(neigh);
 			neigh->state = X25_LINK_STATE_3;
-			x25_transmit_restart_confirmation(neigh);
 			break;
 
 		case X25_RESTART_CONFIRMATION:

@@ -1004,7 +1004,7 @@ void tcp_send_delayed_ack(struct tcp_opt *tp, int max_timeout)
 	unsigned long timeout;
 
 	/* Stay within the limit we were given */
-	timeout = tp->ato;
+	timeout = (tp->ato << 1) >> 1;
 	if (timeout > max_timeout)
 		timeout = max_timeout;
 	timeout += jiffies;

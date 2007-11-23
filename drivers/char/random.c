@@ -1328,6 +1328,7 @@ random_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
 			schedule();
 			continue;
 		}
+		current->state = TASK_RUNNING;
 		n = extract_entropy(&random_state, buf, n, 1);
 		if (n < 0) {
 			retval = n;

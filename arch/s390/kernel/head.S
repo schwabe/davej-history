@@ -24,7 +24,34 @@
 
 #ifndef CONFIG_IPL
         .org   0
-        .long  0x00080000,0x80000000+start     # Just a restart PSW
+        .long  0x00080000,0x80000000+iplstart  # Just a restart PSW
+
+iplstart:
+        l     %r12,.Lparm                      # pointer to parameter area
+#
+# find out memory size
+#
+        mvc   104(8,0),.Lpcmem0          # setup program check handler
+        slr   %r2,%r2
+        lhi   %r3,1
+        sll   %r3,20
+.Lloop0:
+        l     %r0,0(%r2)                 # test page
+        ar    %r2,%r3                    # add 1M
+        jnm   .Lloop0                    # r1 < 0x80000000 -> loop
+.Lchkmem0:
+        n     %r2,.L4malign0             # align to multiples of 4M
+        st    %r2,MEMORY_SIZE-PARMAREA(%r12)  # store memory size
+        slr   %r2,%r2
+        st    %r2,INITRD_SIZE-PARMAREA(%r12)  # null ramdisk
+        st    %r2,INITRD_START-PARMAREA(%r12)
+        j     start
+
+.Lparm: .long  PARMAREA
+.L4malign0:.long 0xffc00000
+        .align 8
+.Lpcmem0:.long  0x00080000,0x80000000 + .Lchkmem0
+
 #else
 #ifdef CONFIG_IPL_TAPE
 #define IPL_BS 1024
@@ -52,6 +79,26 @@ iplstart:
         lhi   %r2,IPL_BS                       # load start address
         bras  %r14,.Lloader                    # load rest of ipl image
         l     %r12,.Lparm                      # pointer to parameter area
+
+#
+# find out memory size
+#
+        mvc   104(8,0),.Lpcmem0          # setup program check handler
+        slr   %r2,%r2
+        lhi   %r3,1
+        sll   %r3,20
+.Lloop0:
+        l     %r0,0(%r2)                 # test page
+        ar    %r2,%r3                    # add 1M
+        jnm   .Lloop0                    # r1 < 0x80000000 -> loop
+.Lchkmem0:
+        n     %r2,.L4malign0             # align to multiples of 4M
+        st    %r2,MEMORY_SIZE-PARMAREA(%r12)  # store memory size
+        c     %r2,.Lbigmem               # more than 64 MB of memory ?
+        jl    .Lmemok                    # if yes load ramdisk to 32 MB
+        mvc   INITRD_START-PARMAREA(4,%r12),.Lrdstart
+.Lmemok:
+
 #
 # load parameter file from tape
 #
@@ -73,12 +120,12 @@ iplstart:
         tr    0(256,%r4),0(%r3)                # convert parameters to ascii
         tr    256(256,%r4),0(%r3)
         tr    512(256,%r4),0(%r3)
-        tr    768(128,%r4),0(%r3)
+        tr    768(122,%r4),0(%r3)
 .Lnocv: la    %r3,COMMAND_LINE-PARMAREA(%r12)  # load adr. of command line
 	mvc   0(256,%r3),0(%r4)
 	mvc   256(256,%r3),256(%r4)
 	mvc   512(256,%r3),512(%r4)
-	mvc   768(128,%r3),768(%r4)
+	mvc   768(122,%r3),768(%r4)
         slr   %r0,%r0
         j     .Lcntlp
 .Ldelspc:
@@ -197,7 +244,11 @@ iplstart:
 .Lcr6:  .long  0xff000000
         .align 8
 .Lcrash:.long  0x000a0000,0x00000000
+.Lpcmem0:.long  0x00080000,0x80000000 + .Lchkmem0
 .Lparm: .long  PARMAREA
+.L4malign0:.long 0xffc00000
+.Lbigmem:.long 0x04000000
+.Lrdstart:.long 0x02000000
 .Lldret:.long  0
 .Lsnsret: .long 0
 .Lebcdic:.long 0xc5c2c3c4,0xc9c30000
@@ -235,31 +286,57 @@ iplstart:
 
         .org   0xf0
 iplstart:
-        stidp __LC_CPUID                       # store cpuid
-	tm    __LC_CPUID,0xff                  # running under VM ?
-	jno   start                            #   no -> skip loader part
 	l     %r1,0xb8                         # load ipl subchannel number
         lhi   %r2,0x730                        # load start address
         bras  %r14,.Lloader                    # load rest of ipl image
-
 	l     %r12,.Lparm                      # pointer to parameter area
+
+#
+# find out memory size
+#
+        mvc   104(8,0),.Lpcmem0           # setup program check handler
+        slr   %r2,%r2
+        lhi   %r3,1
+        sll   %r3,20
+.Lloop0:
+        l     %r0,0(%r2)                 # test page
+        ar    %r2,%r3                    # add 1M
+        jnm   .Lloop0                    # r1 < 0x80000000 -> loop
+.Lchkmem0:
+        n     %r2,.L4malign0             # align to multiples of 4M
+        st    %r2,MEMORY_SIZE-PARMAREA(%r12)  # store memory size
+        c     %r2,.Lbigmem               # more than 64 MB of memory ?
+        jl    .Lmemok                    # if yes load ramdisk to 32 MB
+        mvc   INITRD_START-PARMAREA(4,%r12),.Lrdstart
+.Lmemok:
 
 #
 # load parameter file from reader
 #
-        la    %r2,COMMAND_LINE-PARMAREA(%r12)  # load adr. of command line
+        l     %r2,INITRD_START-PARMAREA(%r12)  # use ramdisk location as temp
         bras  %r14,.Lloader                    # load parameter file
         ltr   %r2,%r2                          # got anything ?
         jz    .Lnopf
-        la    %r3,COMMAND_LINE-PARMAREA(%r12)  # load adr. of command line
-        l     %r4,.Lcvtab                 
-        tr    0(256,3),0(4)                    # convert parameters to ascii
-        l     %r4,.Lcvtab                 
-        tr    256(256,3),0(4)
-        l     %r4,.Lcvtab                 	
-        tr    512(256,3),0(4)
-        l     %r4,.Lcvtab                 	
-        tr    768(128,3),0(4)            
+        chi   %r2,896
+        jnh   .Lnotrunc
+        lhi   %r2,896
+.Lnotrunc:
+        l     %r4,INITRD_START-PARMAREA(%r12)
+        clc   0(6,%r4),.Lebcdic                # prefix EBCDIC in parm file ?
+        jne   .Lnocv
+        ahi   %r4,6                            # skip EBCDIC
+        ahi   %r2,-6
+        jnp   .Lnopf
+        l     %r3,.Lcvtab
+        tr    0(256,%r4),0(%r3)                # convert parameters to ascii
+        tr    256(256,%r4),0(%r3)
+        tr    512(256,%r4),0(%r3)
+        tr    768(122,%r4),0(%r3)
+.Lnocv: la    %r3,COMMAND_LINE-PARMAREA(%r12)  # load adr. of command line
+        mvc   0(256,%r3),0(%r4)
+        mvc   256(256,%r3),256(%r4)
+        mvc   512(256,%r3),512(%r4)
+        mvc   768(122,%r3),768(%r4)
         slr   %r0,%r0
         j     .Lcntlp
 .Ldelspc:
@@ -289,6 +366,10 @@ iplstart:
 #
 # everything loaded, reset files in reader, then go for it
 #
+        stidp __LC_CPUID                       # store cpuid
+        lh    %r0,__LC_CPUID+4                 # get cpu version
+        chi   %r0,0x7490                       # running on P/390 ?
+        je   start                             #   no -> skip reset
         la    %r2,.Lreset              
         lhi   %r3,26
         .long 0x83230008
@@ -358,13 +439,17 @@ iplstart:
 .Lcr6:  .long  0xff000000
 .Lloadp:.long  0,0
 .Lparm:	.long  PARMAREA
+.Lebcdic:.long 0xc5c2c3c4,0xc9c30000
+.L4malign0:.long 0xffc00000
+.Lbigmem:.long 0x04000000
+.Lrdstart:.long 0x02000000
 .Lcvtab:.long  _ebcasc                         # ebcdic to ascii table
 .Lreset:.byte  0xc3,0xc8,0xc1,0xd5,0xc7,0xc5,0x40,0xd9,0xc4,0xd9,0x40
         .byte  0xc1,0xd3,0xd3,0x40,0xd2,0xc5,0xc5,0xd7,0x40,0xd5,0xd6
         .byte  0xc8,0xd6,0xd3,0xc4             # "change rdr all keep nohold"
         .align 8
-.Lcrash:
-        .long  0x000a0000,0x00000000
+.Lpcmem0:.long  0x00080000,0x80000000 + .Lchkmem0
+.Lcrash:.long  0x000a0000,0x00000000
 .Lnewpsw:
         .long  0x00080000,0x80000000+.Lioint
 .Lwaitpsw:
@@ -395,8 +480,11 @@ start:  basr  %r13,0                     # get base
 	l     %r12,.Lparm1-.LPG1(%r13)   # pointer to parameter area
 
 #
-# find out memory size
+# find out memory size. That is done in the ipl loader too but for
+# ipl from dasd the size of the memory has to be detected too...
 #
+        icm   %r0,15,MEMORY_SIZE-PARMAREA(%r12)
+        jnz   .Lsizeok
 	mvc   104(8,0),.Lpcmem-.LPG1(%r13) # setup program check handler
         slr   %r1,%r1
         lhi   %r2,1
@@ -408,6 +496,7 @@ start:  basr  %r13,0                     # get base
 .Lchkmem:
 	n     %r1,.L4malign-.LPG1(%r13)  # align to multiples of 4M
 	st    %r1,MEMORY_SIZE-PARMAREA(%r12)  # store memory size
+.Lsizeok:
 
 #
 # find out if we are running under VM
@@ -417,6 +506,11 @@ start:  basr  %r13,0                     # get base
 	jno    .Lnovm
         oi     MACHINE_FLAGS+3-PARMAREA(%r12),1    # set VM flag
 .Lnovm:
+        lh     %r0,__LC_CPUID+4         # get cpu version
+        chi    %r0,0x7490               # running on a P/390 ?
+        jne    .Lnop390
+        oi     MACHINE_FLAGS+3-PARMAREA(%r12),4    # set P/390 flag
+.Lnop390:
 
 #
 # find out if we have an IEEE fpu
@@ -428,23 +522,6 @@ start:  basr  %r13,0                     # get base
         oi     MACHINE_FLAGS+3-PARMAREA(%r12),2    # set IEEE fpu flag
 .Lchkfpu:
 
-#
-# move ramdisk to the end of storage, out of the way of the paging tables
-#
-        icm   %r2,15,INITRD_START-PARMAREA(%r12)  # load adr. of ramdisk
-        jz    .Lnocprd
-        icm   %r3,15,INITRD_SIZE-PARMAREA(%r12)   # store size of ramdisk
-        jz    .Lnocprd
-        l     %r4,MEMORY_SIZE-PARMAREA(%r12)
-        sr    %r4,%r3
-        srl   %r4,12
-        sll   %r4,12
-        st    %r4,INITRD_START-PARMAREA(%r12)
-        lr    %r5,%r3
-.Lcprd:
-        mvcle %r4,%r2,0
-        jo    .Lcprd
-.Lnocprd:
         lpsw  .Lentry-.LPG1(13)         # jump to _stext in primary-space,
                                         # virtual and never return ...
         .align 8

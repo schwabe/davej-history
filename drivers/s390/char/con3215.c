@@ -45,6 +45,8 @@
 
 struct _raw3215_info;		      /* forward declaration ... */
 
+int raw3215_condevice = -1;           /* preset console device */
+
 /*
  * Request types for a 3215 device
  */
@@ -96,6 +98,16 @@ static int tty3215_refcount;
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #endif
+
+__initfunc(void con3215_setup(char *str, char *ints))
+{
+        int vdev;
+
+        vdev = simple_strtoul(str,&str,16);
+        if (vdev >= 0 && vdev < 65536)
+                raw3215_condevice = vdev;
+        return;
+}
 
 /*
  * Get a request structure from the free list
@@ -365,7 +377,7 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
 	struct tty_struct *tty;
 	devstat_t *stat;
         int cstat, dstat;
-	int count;
+	int count, slen;
 
 	stat = (devstat_t *) int_parm;
 	req = (raw3215_req *) stat->intparm;
@@ -384,6 +396,7 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
 		}
 	}
         if (dstat & 0x01) { /* we got a unit exception */
+#if 0
 		raw = raw3215_find_info(irq);
 		if (raw != NULL) {
                         raw->message = KERN_WARNING
@@ -394,7 +407,8 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
                         queue_task(&raw->tqueue, &tq_immediate);
                         mark_bh(IMMEDIATE_BH);
 		}
-		dstat &= ~0x01;
+#endif
+		dstat &= ~0x01;  /* we can ignore it */
         }
 	switch (dstat) {
 	case 0x80:
@@ -407,6 +421,8 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
 		req = raw3215_mk_read_req(raw);
 		raw3215_mk_read_ccw(raw, req);
 		raw->queued_read = req;
+                if (MACHINE_IS_P390)
+                        memset(raw->inbuf, 0, RAW3215_INBUF_SIZE);
 		queue_task(&raw->tqueue, &tq_immediate);
 		mark_bh(IMMEDIATE_BH);
 		break;
@@ -426,6 +442,11 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
 		if (req->type == RAW3215_READ && raw->tty != NULL) {
 			tty = raw->tty;
 			count = 160 - req->residual;
+                        if (MACHINE_IS_P390) {
+                                slen = strnlen(raw->inbuf, RAW3215_INBUF_SIZE);
+                                if (count > slen)
+                                        count = slen;
+                        } else
 			if (count >= TTY_FLIPBUF_SIZE - tty->flip.count)
 				count = TTY_FLIPBUF_SIZE - tty->flip.count - 1;
 			EBCASC(raw->inbuf, count);
@@ -690,7 +711,8 @@ raw3215_find_dev(int number)
 	irq = 0;
 	count = 0;
 	while (count <= number && get_dev_info(irq, &dinfo) != -ENODEV) {
-		if (dinfo.sid_data.cu_type == 0x3215)
+		if (dinfo.devno == raw3215_condevice ||
+                    dinfo.sid_data.cu_type == 0x3215)
 			count++;
 		irq++;
 	}
@@ -710,7 +732,7 @@ int con3215_activate(void)
 {
 	raw3215_info *raw;
 
-        if (!MACHINE_IS_VM)
+        if (!MACHINE_IS_VM && !MACHINE_IS_P390)
                 return 0;
 	raw = raw3215[0];  /* 3215 console is the first one */
 	if (raw->irq == -1) /* now console device found in con3215_init */
@@ -761,7 +783,7 @@ void con3215_unblank(void)
 	s390irq_spin_unlock_irqrestore(raw->irq, flags);
 }
 
-__initfunc(static int con3215_setup(struct console *co, char *options))
+__initfunc(static int con3215_consetup(struct console *co, char *options))
 {
 	return 0;
 }
@@ -776,7 +798,7 @@ static struct console con3215 = {
 	con3215_device,
 	NULL,
 	con3215_unblank,
-	con3215_setup,
+	con3215_consetup,
 	CON_PRINTBUFFER,
 	0,
 	0,
@@ -1008,12 +1030,14 @@ __initfunc (long con3215_init(long kmem_start, long kmem_end))
 	raw3215_req *req;
 	int i;
 
-	if (!MACHINE_IS_VM)
+	if (!MACHINE_IS_VM && !MACHINE_IS_P390)
                 return kmem_start;
+        if (MACHINE_IS_VM) {
 	cpcmd("TERM CONMODE 3215", NULL, 0);
 	cpcmd("TERM AUTOCR OFF", NULL, 0);
 	cpcmd("TERM HOLD OFF", NULL, 0);
 	cpcmd("TERM MORE 5 5", NULL, 0);
+        }
 
 	kmem_start = (kmem_start + 7) & -8L;
 
