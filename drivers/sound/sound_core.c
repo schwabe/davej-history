@@ -58,6 +58,9 @@ extern int init_sonicvibes(void);
 #ifdef CONFIG_SOUND_MAESTRO
 extern int init_maestro(void);
 #endif
+#ifdef CONFIG_SOUND_ICH
+extern int i810_probe(void);
+#endif
 #ifdef CONFIG_SOUND_ES1370
 extern int init_es1370(void);
 #endif
@@ -424,6 +427,9 @@ int soundcore_init(void)
 #endif
 #ifdef CONFIG_SOUND_ESSSOLO1
 	init_solo1();
+#endif
+#ifdef CONFIG_SOUND_ICH
+	i810_probe();
 #endif
 	return 0;
 }

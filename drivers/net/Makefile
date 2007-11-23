@@ -831,6 +831,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_HAMACHI),y)
+L_OBJS += hamachi.o
+else
+  ifeq ($(CONFIG_HAMACHI),m)
+  M_OBJS += hamachi.o
+  endif
+endif
+
 ifeq ($(CONFIG_HOSTESS_SV11),y)
 L_OBJS += hostess_sv11.o
 CONFIG_85230_BUILTIN = y
@@ -874,6 +882,14 @@ else
   ifeq ($(CONFIG_COSA),m)
   CONFIG_SYNCPPP_MODULE = y
   M_OBJS += cosa.o
+  endif
+endif
+
+ifeq ($(CONFIG_SYNCLINK_SYNCPPP),y)
+CONFIG_SYNCPPP_BUILTIN = y
+else
+  ifeq ($(CONFIG_SYNCLINK_SYNCPPP),m)
+  CONFIG_SYNCPPP_MODULE = y
   endif
 endif
 
@@ -950,6 +966,40 @@ else
   ifdef CONFIG_85230_MODULE
   MX_OBJS += z85230.o
   CONFIG_SYNCPPP_MODULE=y
+  endif
+endif
+
+ifeq ($(CONFIG_HDLC),y)
+L_OBJS += hdlc.o
+CONFIG_SYNCPPP_BUILTIN = y
+else
+  ifeq ($(CONFIG_HDLC),m)
+  M_OBJS += hdlc.o
+  CONFIG_SYNCPPP_MODULE = y
+  endif
+endif
+
+ifeq ($(CONFIG_N2),y)
+L_OBJS += n2.o
+else
+  ifeq ($(CONFIG_N2),m)
+  M_OBJS += n2.o
+  endif
+endif
+
+ifeq ($(CONFIG_C101),y)
+L_OBJS += c101.o
+else
+  ifeq ($(CONFIG_C101),m)
+  M_OBJS += c101.o
+  endif
+endif
+
+ifeq ($(CONFIG_WANXL),y)
+L_OBJS += wanxl.o
+else
+  ifeq ($(CONFIG_WANXL),m)
+  M_OBJS += wanxl.o
   endif
 endif
 

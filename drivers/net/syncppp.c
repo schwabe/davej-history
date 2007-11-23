@@ -50,6 +50,7 @@
 #include <linux/random.h>
 #include <linux/pkt_sched.h>
 #include <asm/byteorder.h>
+#include <asm/uaccess.h>
 #include "syncppp.h"
 
 #define MAXALIVECNT     6               /* max. alive packets */
@@ -903,6 +904,14 @@ int sppp_do_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 			sp->pp_flags&=~PP_DEBUG;
 			if(ifr->ifr_flags)
 				sp->pp_flags|=PP_DEBUG;
+			break;
+		case SPPPIOCGFLAGS:
+			if(copy_to_user(ifr->ifr_data, &sp->pp_flags, sizeof(sp->pp_flags)))
+				return -EFAULT;
+			break;
+		case SPPPIOCSFLAGS:
+			if(copy_from_user(&sp->pp_flags, ifr->ifr_data, sizeof(sp->pp_flags)))
+				return -EFAULT;
 			break;
 		default:
 			return -EINVAL;

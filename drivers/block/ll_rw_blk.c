@@ -517,25 +517,31 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	switch (major) {
 		case DAC960_MAJOR+0:
 			disk_index = (minor & 0x00f8) >> 3;
-			if (disk_index < 4)
-				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
 		case SCSI_DISK0_MAJOR:
+		case COMPAQ_SMART2_MAJOR+0:
+		case COMPAQ_SMART2_MAJOR+1:
+		case COMPAQ_SMART2_MAJOR+2:
+		case COMPAQ_SMART2_MAJOR+3:
+		case COMPAQ_SMART2_MAJOR+4:
+		case COMPAQ_SMART2_MAJOR+5:
+		case COMPAQ_SMART2_MAJOR+6:
+		case COMPAQ_SMART2_MAJOR+7:
 			disk_index = (minor & 0x00f0) >> 4;
-			if (disk_index < 4)
-				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
 		case IDE0_MAJOR:	/* same as HD_MAJOR */
 		case XT_DISK_MAJOR:
 			disk_index = (minor & 0x0040) >> 6;
-			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
 		case IDE1_MAJOR:
 			disk_index = ((minor & 0x0040) >> 6) + 2;
-			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
+			break;
 		default:
+			disk_index = -1;
 			break;
 	}
+	if (disk_index >= 0 && disk_index < 4)
+		drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 
 	latency = get_request_latency(&dev->elevator, req->cmd);
 

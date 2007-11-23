@@ -1300,7 +1300,7 @@ boomerang_rx(struct device *dev)
 		entry = (++vp->cur_rx) % RX_RING_SIZE;
 	}
 	/* Refill the Rx ring buffers. */
-	for (; vp->dirty_rx < vp->cur_rx; vp->dirty_rx++) {
+	for (; vp->cur_rx - vp->dirty_rx > 0; vp->dirty_rx++) {
 		struct sk_buff *skb;
 		entry = vp->dirty_rx % RX_RING_SIZE;
 		if (vp->rx_skbuff[entry] == NULL) {

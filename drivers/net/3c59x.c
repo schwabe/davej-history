@@ -38,7 +38,7 @@
 */
 
 static char *version =
-"3c59x.c:v0.99H 11/17/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
+"3c59x.c:v0.99H 19May00 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -256,7 +256,7 @@ struct pci_id_info {
 							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 
-enum { IS_VORTEX=1, IS_BOOMERANG=2, IS_CYCLONE=4,
+enum { IS_VORTEX=1, IS_BOOMERANG=2, IS_CYCLONE=4, IS_TORNADO=8,
 	   HAS_PWR_CTRL=0x10, HAS_MII=0x20, HAS_NWAY=0x40, HAS_CB_FNS=0x80, };
 static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 									struct device *dev, long ioaddr,
@@ -301,7 +301,7 @@ static struct pci_id_info pci_tbl[] = {
 	{"3c905B-FX Cyclone 100baseFx",	0x10B7, 0x905A, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
 	{"3c905C Tornado",	0x10B7, 0x9200, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY, 128, vortex_probe1},
+	 PCI_USES_IO|PCI_USES_MASTER, IS_TORNADO|HAS_NWAY, 128, vortex_probe1},
 	{"3c980 Cyclone",	0x10B7, 0x9800, 0xfff0,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
 	{"3cSOHO100-TX Hurricane",	0x10B7, 0x7646, 0xffff,
@@ -321,8 +321,8 @@ static struct pci_id_info pci_tbl[] = {
 	 128, vortex_probe1},
 	{"3c575 series CardBus (unknown version)", 0x10B7, 0x5057, 0xf0ff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, vortex_probe1},
-	{"3c450 Cyclone/unknown", 0x10B7, 0x4500, 0xffff,				/* AKPM: from Don's 0.99N */
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY, 128, vortex_probe1},
+	{"3c450 HomePNA Tornado", 0x10B7, 0x4500, 0xffff,				/* AKPM: from Don's 0.99P */
+	 PCI_USES_IO|PCI_USES_MASTER, IS_TORNADO|HAS_NWAY, 128, vortex_probe1},
 	{"3Com Boomerang (unknown version)",	0x10B7, 0x9000, 0xff00,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, vortex_probe1},
 	{0,},						/* 0 terminated list. */
@@ -907,7 +907,7 @@ static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 			checksum ^= eeprom[i++];
 		checksum = (checksum ^ (checksum >> 8)) & 0xff;
 	}
-	if (checksum != 0x00)
+	if (checksum != 0x00 && !(pci_tbl[chip_idx].drv_flags & IS_TORNADO))
 		printk(" ***INVALID CHECKSUM %4.4x*** ", checksum);
 
 	for (i = 0; i < 3; i++)
@@ -1224,7 +1224,7 @@ static void vortex_timer(unsigned long data)
 	struct device *dev = (struct device *)data;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	int next_tick = 0;
+	int next_tick = 60 * HZ;
 	int ok = 0;
 	int media_status, mii_status, old_window;
 
@@ -1596,7 +1596,7 @@ boomerang_start_xmit(struct sk_buff *skb, struct device *dev)
 		spin_lock_irqsave(&vp->lock, flags);
 		outw(DownStall, ioaddr + EL3_CMD);
 		/* Wait for the stall to complete. */
-		for (i = 600; i >= 0 ; i--)
+		for (i = 4000; i >= 0 ; i--)
 			if ( (inw(ioaddr + EL3_STATUS) & CmdInProgress) == 0)
 				break;
 		prev_entry->next = cpu_to_le32(virt_to_bus(&vp->tx_ring[entry]));
@@ -1892,7 +1892,7 @@ boomerang_rx(struct device *dev)
 		entry = (++vp->cur_rx) % RX_RING_SIZE;
 	}
 	/* Refill the Rx ring buffers. */
-	for (; vp->dirty_rx < vp->cur_rx; vp->dirty_rx++) {
+	for (; vp->cur_rx - vp->dirty_rx > 0; vp->dirty_rx++) {
 		struct sk_buff *skb;
 		entry = vp->dirty_rx % RX_RING_SIZE;
 		if (vp->rx_skbuff[entry] == NULL) {

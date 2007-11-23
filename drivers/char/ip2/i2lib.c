@@ -1087,7 +1087,7 @@ i2Output(i2ChanStrPtr pCh, const char *pSource, int count, int user )
 
 			// Move the data
 			if ( user ) {
-				rc=copy_from_user((char*)(DATA_OF(pInsert)), pSource,
+				COPY_FROM_USER(rc, (char*)(DATA_OF(pInsert)), pSource,
 						amountToMove );
 			} else {
 				memcpy( (char*)(DATA_OF(pInsert)), pSource, amountToMove );
@@ -1519,8 +1519,8 @@ i2StripFifo(i2eBordStrPtr pB)
 				return;     /* Bail out ASAP */
 			}
 			// Channel is illegally big ?
-			if (channel >= pB->i2eChannelCnt ||
-				(pCh = (((i2ChanStrPtr*)pB->i2eChannelPtr)[channel])) == NULL)
+			if ((channel >= pB->i2eChannelCnt) ||
+				(NULL==(pCh = ((i2ChanStrPtr*)pB->i2eChannelPtr)[channel])))
 			{
 				iiReadBuf(pB, junkBuffer, count);
 				WRITE_UNLOCK_IRQRESTORE(&pB->read_fifo_spinlock,bflags);
@@ -1544,7 +1544,8 @@ i2StripFifo(i2eBordStrPtr pB)
 
 			// Normal data! We crudely assume there is room for the data in our
 			// buffer because the board wouldn't have exceeded his credit limit.
-			WRITE_LOCK_IRQSAVE(&pCh->Ibuf_spinlock,cflags);// We have 2 locks now
+			WRITE_LOCK_IRQSAVE(&pCh->Ibuf_spinlock,cflags);
+													// We have 2 locks now
 			stuffIndex = pCh->Ibuf_stuff;
 			amountToRead = IBUF_SIZE - stuffIndex;
 			if (amountToRead > count)
@@ -1555,6 +1556,7 @@ i2StripFifo(i2eBordStrPtr pB)
 			// one.
 
 			iiReadBuf(pB, &(pCh->Ibuf[stuffIndex]), amountToRead);
+			pCh->icount.rx += amountToRead;
 
 			// Update the stuffIndex by the amount of data moved. Note we could
 			// never ask for more data than would just fit. However, we might
@@ -1579,6 +1581,7 @@ i2StripFifo(i2eBordStrPtr pB)
 			if (count > amountToRead) {
 				amountToRead = count - amountToRead;
 				iiReadBuf(pB, &(pCh->Ibuf[stuffIndex]), amountToRead);
+				pCh->icount.rx += amountToRead;
 				stuffIndex += amountToRead;
 			}
 
@@ -1635,7 +1638,7 @@ i2StripFifo(i2eBordStrPtr pB)
 						if ( !(pCh->dataSetIn & I2_CTS) )
 						{
 							pCh->dataSetIn |= I2_DCTS;
-							++pCh->icount.cts;
+							pCh->icount.cts++;
 							dss_change = 1;
 						}
 						pCh->dataSetIn |= I2_CTS;
@@ -1645,7 +1648,7 @@ i2StripFifo(i2eBordStrPtr pB)
 						if ( pCh->dataSetIn & I2_CTS )
 						{
 							pCh->dataSetIn |= I2_DCTS;
-							++pCh->icount.cts;
+							pCh->icount.cts++;
 							dss_change = 1;
 						}
 						pCh->dataSetIn &= ~I2_CTS;
@@ -1661,7 +1664,7 @@ i2StripFifo(i2eBordStrPtr pB)
 							ip2trace (CHANN, ITRC_MODEM, 2, 0 );
 #endif
 							pCh->dataSetIn |= I2_DDCD;
-							++pCh->icount.dcd;
+							pCh->icount.dcd++;
 							dss_change = 1;
 						}
 						pCh->dataSetIn |= I2_DCD;
@@ -1680,7 +1683,7 @@ i2StripFifo(i2eBordStrPtr pB)
 							ip2trace (channel, ITRC_MODEM, 5, 0 );
 #endif
 							pCh->dataSetIn |= I2_DDCD;
-							++pCh->icount.dcd;
+							pCh->icount.dcd++;
 							dss_change = 1;
 						}
 						pCh->dataSetIn &= ~I2_DCD;
@@ -1693,7 +1696,7 @@ i2StripFifo(i2eBordStrPtr pB)
 						if ( !(pCh->dataSetIn & I2_DSR) )
 						{
 							pCh->dataSetIn |= I2_DDSR;
-							++pCh->icount.dsr;
+							pCh->icount.dsr++;
 							dss_change = 1;
 						}
 						pCh->dataSetIn |= I2_DSR;
@@ -1703,7 +1706,7 @@ i2StripFifo(i2eBordStrPtr pB)
 						if ( pCh->dataSetIn & I2_DSR )
 						{
 							pCh->dataSetIn |= I2_DDSR;
-							++pCh->icount.dsr;
+							pCh->icount.dsr++;
 							dss_change = 1;
 						}
 						pCh->dataSetIn &= ~I2_DSR;
@@ -1713,23 +1716,26 @@ i2StripFifo(i2eBordStrPtr pB)
 						if ( !(pCh->dataSetIn & I2_RI) )
 						{
 							pCh->dataSetIn |= I2_DRI;
-							++pCh->icount.rng;
+							pCh->icount.rng++;
 							dss_change = 1;
 						}
 						pCh->dataSetIn |= I2_RI ;
 						break;
 
 					case STAT_RI_DN:
-						if ( pCh->dataSetIn & I2_RI )
-						{
-							pCh->dataSetIn |= I2_DRI;
-							dss_change = 1;
-						}
+						// to be compat with serial.c
+						//if ( pCh->dataSetIn & I2_RI )
+						//{
+						//	pCh->dataSetIn |= I2_DRI;
+						//	pCh->icount.rng++; 
+						//	dss_change = 1;
+						//}
 						pCh->dataSetIn &= ~I2_RI ;
 						break;
 
 					case STAT_BRK_DET:
 						pCh->dataSetIn |= I2_BRK;
+						pCh->icount.brk++;
 						dss_change = 1;
 						break;
 
@@ -1794,9 +1800,6 @@ i2StripFifo(i2eBordStrPtr pB)
 					case STAT_BOXIDS:
 						pB->channelBtypes = *((bidStatPtr)pc);
 						pc += sizeof(bidStat);
-//printk("boxids: %x %x %x %x\n",
-//	pB->channelBtypes.bid_value[0],pB->channelBtypes.bid_value[1],
-//	pB->channelBtypes.bid_value[2],pB->channelBtypes.bid_value[3]);
 						set_baud_params(pB);
 						break;
 
@@ -1813,18 +1816,26 @@ i2StripFifo(i2eBordStrPtr pB)
 						switch (uc & STAT_MOD_ERROR)
 						{
 						case STAT_ERROR:
-							if (uc & STAT_E_PARITY) 
+							if (uc & STAT_E_PARITY) {
 								pCh->dataSetIn |= I2_PAR;
-							if (uc & STAT_E_FRAMING) 
+								pCh->icount.parity++;
+							}
+							if (uc & STAT_E_FRAMING){
 								pCh->dataSetIn |= I2_FRA;
-							if (uc & STAT_E_OVERRUN) 
+								pCh->icount.frame++;
+							}
+							if (uc & STAT_E_OVERRUN){
 								pCh->dataSetIn |= I2_OVR;
+								pCh->icount.overrun++;
+							}
 							break;
 
 						case STAT_MODEM:
+							// the answer to DSS_NOW request (not change)
 							pCh->dataSetIn = (pCh->dataSetIn
 								& ~(I2_RI | I2_CTS | I2_DCD | I2_DSR) )
 								| xlatDss[uc & 0xf];
+							wake_up_interruptible ( &pCh->dss_now_wait );
 						default:
 							break;
 						}
@@ -1849,16 +1860,6 @@ i2StripFifo(i2eBordStrPtr pB)
 						pc += 4;    /* Skip the data */
 						break;
 
-					case STAT_CTS_UP:
-					case STAT_CTS_DN:
-					case STAT_DCD_UP:
-					case STAT_DCD_DN:
-					case STAT_DSR_UP:
-					case STAT_DSR_DN:
-					case STAT_RI_UP:
-					case STAT_RI_DN:
-					case STAT_BRK_DET:
-					case STAT_BMARK:
 					default:
 						break;
 					}
@@ -2105,6 +2106,7 @@ WriteDBGBuf("DATA", pRemove, paddedSize);
 #endif /* DEBUG_FIFO */
 			pB->debugInlineCount++;
 
+			pCh->icount.tx += flowsize;
 			// Update current credits
 			pCh->outfl.room -= flowsize;
 			pCh->outfl.asof += flowsize;

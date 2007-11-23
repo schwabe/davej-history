@@ -112,11 +112,7 @@ static int rd_kbsize[NUM_RAMDISKS];		/* Size in blocks of 1024 bytes */
  * architecture-specific setup routine (from the stored boot sector
  * information). 
  */
-#ifdef CONFIG_ARCH_S390
-int rd_size = 8192;		/* Size of the RAM disks */
-#else
-int rd_size = 4096;		/* Size of the RAM disks */
-#endif
+int rd_size = CONFIG_BLK_DEV_RAM_SIZE;	/* Size of the RAM disks */
 
 #ifndef MODULE
 int rd_doload = 0;		/* 1 = load RAM disk, 0 = don't load */

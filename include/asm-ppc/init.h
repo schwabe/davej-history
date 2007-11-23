@@ -1,7 +1,7 @@
 #ifndef _PPC_INIT_H
 #define _PPC_INIT_H
 
-#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 90 /* egcs */
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 90) /* egcs */
 #define __init __attribute__ ((__section__ (".text.init")))
 #define __initdata __attribute__ ((__section__ (".data.init")))
 #define __initfunc(__arginit) \

@@ -364,6 +364,12 @@ L:	linux-scsi@vger.rutgers.edu
 W:	http://www.icp-vortex.com/
 S:	Supported
 
+GENERIC HDLC DRIVER AND N2, C101 AND WANXL DRIVERS
+P:	Krzysztof Halasa
+M:	khc@pm.waw.pl
+W:	http://hq.pm.waw.pl/hdlc/
+S:	Maintained
+
 HAYES ESP SERIAL DRIVER
 P:	Andrew J. Robinson
 M:	arobinso@nyx.net

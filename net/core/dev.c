@@ -96,6 +96,10 @@
 #ifdef CONFIG_PLIP
 extern int plip_init(void);
 #endif
+extern void n2_init(void);
+extern void c101_init(void);
+extern int wanxl_init(void);
+extern void sync_ppp_init(void);
 
 NET_PROFILE_DEFINE(dev_queue_xmit)
 NET_PROFILE_DEFINE(net_bh)
@@ -2038,6 +2042,19 @@ __initfunc(int net_dev_init(void))
 	 * Register any statically linked ethernet devices with the bridge
 	 */
 	br_spacedevice_register();
+#endif
+
+#ifdef CONFIG_N2
+	n2_init();
+#endif
+#ifdef CONFIG_C101
+	c101_init();
+#endif
+#ifdef CONFIG_WANXL
+	wanxl_init();
+#endif
+#ifdef CONFIG_HDLC
+	sync_ppp_init();
 #endif
 
 #ifdef CONFIG_IP_PNP

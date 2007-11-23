@@ -606,7 +606,6 @@ typedef struct {
 #define ISDN_TIMER_MODEMXMIT   8
 #define ISDN_TIMER_NETDIAL    16 
 #define ISDN_TIMER_NETHANGUP  32
-#define ISDN_TIMER_IPPP       64 
 #define ISDN_TIMER_KEEPALIVE 128 /* Cisco-Keepalive */
 #define ISDN_TIMER_CARRIER   256 /* Wait for Carrier */
 #define ISDN_TIMER_FAST      (ISDN_TIMER_MODEMREAD | ISDN_TIMER_MODEMPLUS | \
@@ -742,8 +741,8 @@ typedef struct isdn_net_dev_s {
   void           *next;                /* Pointer to next isdn-interface   */
   struct device dev;               /* interface to upper levels        */
 #ifdef CONFIG_ISDN_PPP
-  struct mpqueue *mp_last; 
-  struct ippp_bundle ib;
+  ippp_bundle * pb;		/* pointer to the common bundle structure
+   			         * with the the per-bundle data */
 #endif
 #ifdef CONFIG_ISDN_X25
   struct concap_proto  *cprot; /* connection oriented encapsulation protocol */

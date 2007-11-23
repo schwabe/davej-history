@@ -1101,6 +1101,9 @@ int i2o_enable_controller(struct i2o_controller *c)
 	i2o_status_get(c);
 
 	/* Enable only allowed on READY state */
+	if(c->status_block->iop_state == ADAPTER_STATE_OPERATIONAL)
+		return 0;
+
 	if(c->status_block->iop_state != ADAPTER_STATE_READY)
 		return -EINVAL;
 
@@ -1175,6 +1178,7 @@ static int i2o_reset_controller(struct i2o_controller *c)
 	u32 *msg;
 	long time;
 
+	printk("begin RESET\n");
 	/* Quiesce all IOPs first */
 
 	for (iop = i2o_controller_chain; iop; iop = iop->next)
@@ -1306,6 +1310,9 @@ int i2o_status_get(struct i2o_controller *c)
 	msg[6]=virt_to_phys(c->status_block);
 	msg[7]=0;	/* 64bit host FIXME */
 	msg[8]=sizeof(i2o_status_block); /* always 88 bytes */
+	
+	if(msg[8]!=88)
+		printk(KERN_CRIT "i2o compiled wrongly\n");
 
 	i2o_post_message(c,m);
 
@@ -1421,23 +1428,23 @@ static int i2o_systab_send(struct i2o_controller *iop)
 	 privio[1]=iop->priv_io_size;
 
 	msg[0] = I2O_MESSAGE_SIZE(12) | SGL_OFFSET_6;
-	 msg[1] = I2O_CMD_SYS_TAB_SET<<24 | HOST_TID<<12 | ADAPTER_TID;
+	msg[1] = I2O_CMD_SYS_TAB_SET<<24 | HOST_TID<<12 | ADAPTER_TID;
 	/* msg[2] filled in i2o_post_wait */
 	msg[3] = 0;
-	 msg[4] = (0<<16) | ((iop->unit+2) << 12); /* Host 0 IOP ID (unit + 2) */
-	 msg[5] = 0;				   /* Segment 0 */
+	msg[4] = (0<<16) | ((iop->unit+2) << 12); /* Host 0 IOP ID (unit + 2) */
+	msg[5] = 0;				   /* Segment 0 */
 
-	 /* 
-	  * Provide three SGL-elements:
-	  * System table (SysTab), Private memory space declaration and 
-	  * Private i/o space declaration  
+	/* 
+	 * Provide three SGL-elements:
+	 * System table (SysTab), Private memory space declaration and 
+	 * Private i/o space declaration  
 	 */
-	 msg[6] = 0x54000000 | sys_tbl_len;
-	 msg[7] = virt_to_phys(sys_tbl);
-	 msg[8] = 0x54000000 | 0;
-	 msg[9] = virt_to_phys(privmem);
-	 msg[10] = 0xD4000000 | 0;
-	 msg[11] = virt_to_phys(privio);
+	msg[6] = 0x54000000 | sys_tbl_len;
+	msg[7] = virt_to_phys(sys_tbl);
+	msg[8] = 0x54000000 | 0;
+	msg[9] = virt_to_phys(privmem);
+	msg[10] = 0xD4000000 | 0;
+	msg[11] = virt_to_phys(privio);
 
 	if ((ret=i2o_post_wait(iop, msg, sizeof(msg), 120)))
 		printk(KERN_INFO "%s: Unable to set SysTab (status=%#10x).\n", 
@@ -1476,10 +1483,14 @@ rebuild_sys_tab:
 	 * If build_sys_table fails, we kill everything and bail
 	 * as we can't init the IOPs w/o a system table
 	 */	
+	 
+	printk("SYSTAB\n");
 	if (i2o_build_sys_table() < 0) {
 		i2o_sys_shutdown();
 		return;
 	}
+
+	printk("ONLINE\n");
 
 	/* If IOP don't get online, we need to rebuild the System table */
 	for (iop = i2o_controller_chain; iop; iop = niop) {
@@ -1487,28 +1498,31 @@ rebuild_sys_tab:
 		if (i2o_online_controller(iop) < 0)
 			goto rebuild_sys_tab;
 	}
-	
-	/* Active IOPs now in OPERATIONAL state */
-	 /*
-	  * Register for status updates from all IOPs
-	  */
-	 for(iop = i2o_controller_chain; iop; iop=iop->next) {
 
-		  /* Create a kernel thread to deal with dynamic LCT updates */
-		   iop->lct_pid = kernel_thread(i2o_dyn_lct, iop, CLONE_SIGHAND);
+	printk("ACTIVE\n");
+	
+	/* Active IOPs now in OPERATIONAL state
+	 *
+	 * Register for status updates from all IOPs
+	 */
+	for(iop = i2o_controller_chain; iop; iop=iop->next) {
+
+		/* Create a kernel thread to deal with dynamic LCT updates */
+		iop->lct_pid = kernel_thread(i2o_dyn_lct, iop, CLONE_SIGHAND);
 
 		printk(KERN_INFO "event thread created as pid %d \n", iop->lct_pid);
 
-		  /* Update change ind on DLCT */
-		   iop->dlct->change_ind = iop->lct->change_ind;
+		/* Update change ind on DLCT */
+		iop->dlct->change_ind = iop->lct->change_ind;
 
-		  /* Start dynamic LCT updates */
-		   i2o_lct_notify(iop);
+		/* Start dynamic LCT updates */
+		i2o_lct_notify(iop);
 
-		  /* Register for all events from IRTOS */
-		  i2o_event_register(iop, core_context, 0, 0, 0xFFFFFFFF);
-	 }
+		/* Register for all events from IRTOS */
+		i2o_event_register(iop, core_context, 0, 0, 0xFFFFFFFF);
+	}
 
+	printk("DONE\n");
 }
 
 /*
@@ -1534,7 +1548,10 @@ int i2o_activate_controller(struct i2o_controller *iop)
 {
 	/* In INIT state, Wait Inbound Q to initilaize (in i2o_status_get) */
 	/* In READY state, Get status */
+	u32 m;
 
+	printk("ACTIVATE\n");
+	
 	if (i2o_status_get(iop) < 0) {
 		printk(KERN_INFO "Unable to obtain status of IOP, attempting a reset.\n");
 		i2o_reset_controller(iop);
@@ -1557,29 +1574,43 @@ int i2o_activate_controller(struct i2o_controller *iop)
 	    iop->status_block->iop_state == ADAPTER_STATE_FAILED)
 	{
 		dprintk((KERN_INFO "%s: already running...trying to reset\n",
-				iop->name));
-		i2o_reset_controller(iop);			
+			iop->name));
+		printk("Outbound q2\n");
 
-		if (i2o_status_get(iop) < 0 || 
-			iop->status_block->iop_state != ADAPTER_STATE_RESET)
-		{
-			printk(KERN_CRIT "%s: Failed to initialize.\n", iop->name);
+		if (i2o_init_outbound_q(iop) < 0) {
+			i2o_reset_controller(iop);			
+
+			if (i2o_status_get(iop) < 0 || 
+				iop->status_block->iop_state != ADAPTER_STATE_RESET)
+			{
+				printk(KERN_CRIT "%s: Failed to initialize.\n", iop->name);
+				i2o_delete_controller(iop);
+				return -1;
+			}
+			if (i2o_init_outbound_q(iop) < 0) {
+				i2o_delete_controller(iop);
+				return -1;
+			}
+		}
+	}
+	else
+	{
+		printk("Outbound q\n");
+
+		if (i2o_init_outbound_q(iop) < 0) {
 			i2o_delete_controller(iop);
 			return -1;
 		}
 	}
 
-	if (i2o_init_outbound_q(iop) < 0) {
-		i2o_delete_controller(iop);
-		return -1;
-	}
-
 	/* In HOLD state */
+	printk("HRT\n");
 	
 	if (i2o_hrt_get(iop) < 0) {
 		i2o_delete_controller(iop);
 		return -1;
 	}
+	printk("DONE\n");
 
 	return 0;
 }

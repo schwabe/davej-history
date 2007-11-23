@@ -65,6 +65,7 @@
  *					clean up the APFDDI & gen. FDDI bits.
  *		Alexey Kuznetsov:	new arp state machine;
  *					now it is in net/core/neighbour.c.
+ *		Krzysztof Halasa:	Added Frame Relay ARP support.
  *		Julian Anastasov:	"hidden" flag: hide the
  *					interface and don't reply for it
  */
@@ -618,7 +619,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #endif
 	}
 
-	/* Undertsand only these message types */
+	/* Understand only these message types */
 
 	if (arp->ar_op != __constant_htons(ARPOP_REPLY) &&
 	    arp->ar_op != __constant_htons(ARPOP_REQUEST))
@@ -634,12 +635,19 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	tha=arp_ptr;
 	arp_ptr += dev->addr_len;
 	memcpy(&tip, arp_ptr, 4);
+
 /* 
  *	Check for bad requests for 127.x.x.x and requests for multicast
  *	addresses.  If this is one such, delete it.
  */
 	if (LOOPBACK(tip) || MULTICAST(tip))
 		goto out;
+
+/*
+ *     Special case: We must set Frame Relay source Q.922 address
+ */
+	if (dev_type == ARPHRD_DLCI)
+		sha = dev->broadcast;
 
 /*
  *  Process entry.  The idea here is we want to send a reply if it is a

@@ -1050,17 +1050,17 @@ static void __init pci_fixup_peer_bus_scan(unsigned char busno, unsigned char bu
 	}
 }
 
-static void __init pci_fixup_rcc(struct pci_dev *d)
+static void __init pci_fixup_serverworks(struct pci_dev *d)
 {
 	/*
-	 * Find and scan busses behind RCC LE north bridge chips
+	 * Find and scan busses behind ServerWorks north bridge chips
 	 */
 	struct pci_bus *bus;
 	unsigned char busno, busmax;
 	pci_probe |= PCI_NO_PEER_FIXUP;
 	pci_read_config_byte(d, 0x44, &busno);
 	pci_read_config_byte(d, 0x45, &busmax);
-	printk("PCI: Scanning RCC HE/LE Peer Bus Bridge %02x/%02x\n",
+	printk("PCI: Scanning ServerWorks HE/LE Peer Bus Bridge %02x/%02x\n",
 		PCI_SLOT(d->devfn), PCI_FUNC(d->devfn));
 	pci_fixup_peer_bus_scan(busno, busmax);
 }
@@ -1118,8 +1118,9 @@ struct dev_ex {
 
 static struct dev_ex __initdata dev_ex_table[] = {
  { PCI_VENDOR_ID_INTEL,		PCI_DEVICE_ID_INTEL_82451NX,	pci_fixup_i450nx, 	"Scanning peer host bridges" },
- { PCI_VENDOR_ID_RCC,		PCI_DEVICE_ID_RCC_HE,	pci_fixup_rcc, 	"Scanning peer host bridges" },
- { PCI_VENDOR_ID_RCC,		PCI_DEVICE_ID_RCC_LE,	pci_fixup_rcc, 	"Scanning peer host bridges" },
+ { PCI_VENDOR_ID_SERVERWORKS,		PCI_DEVICE_ID_SERVERWORKS_HE,	pci_fixup_serverworks, 	"Scanning peer host bridges" },
+ { PCI_VENDOR_ID_SERVERWORKS,		PCI_DEVICE_ID_SERVERWORKS_LE,	pci_fixup_serverworks, 	"Scanning peer host bridges" },
+ { PCI_VENDOR_ID_SERVERWORKS,		PCI_DEVICE_ID_SERVERWORKS_CMIC_HE,	pci_fixup_serverworks, 	"Scanning peer host bridges" },
  { PCI_VENDOR_ID_COMPAQ,	PCI_DEVICE_ID_COMPAQ_6010,	pci_fixup_compaq, 	"Scanning peer host bridges" },
  { PCI_VENDOR_ID_UMC,		PCI_DEVICE_ID_UMC_UM8886BF,	pci_fixup_umc_ide,	"Working around UM8886BF bugs" }
 };

@@ -207,6 +207,11 @@ CONFIG_BLK_DEV_RAM
   Most normal users won't need the RAM disk functionality, and can
   thus say N here.
 
+Default RAM disk size
+CONFIG_BLK_DEV_RAM_SIZE
+  The default value is 4096. Only change this if you know what are
+  you doing. If you are using IBM S/390, then set this to 8192.
+
 Initial RAM disk (initrd) support
 CONFIG_BLK_DEV_INITRD
   The initial RAM disk is a RAM disk that is loaded by the boot loader
@@ -5692,6 +5697,46 @@ CONFIG_COMX_PROTO_FR
 
   If you want to compile this as a module, say M and read
   Documentation/modules.txt. The module will be called comx-proto-fr.o.
+
+Generic HDLC driver
+CONFIG_HDLC
+  Say Y to this option if your Linux box contains a WAN card supported
+  by this driver and you are planning to connect the box to a WAN
+  ( = Wide Area Network). You will need supporting software from
+  ftp://ftp.pm.waw.pl/pub/Linux/hdlc/
+
+  If unsure, say N here.
+
+SDL RISCom/N2 driver
+CONFIG_N2
+  This driver is for RISCom/N2 single or dual channel ISA cards
+  made by SDL Communications Inc.
+  If you have such a card, say Y here. This driver requires
+  Generic HDLC driver and its supporting utility available from
+  ftp://ftp.pm.waw.pl/pub/Linux/hdlc/
+  Note that N2csu and N2dds cards are not supported by this driver.
+
+  If unsure, say N here.
+
+Moxa C101 driver
+CONFIG_C101
+  This driver is for C101 SuperSync ISA cards made by Moxa
+  Technologies Co., Ltd.
+  If you have such a card, say Y here. This driver requires
+  Generic HDLC driver and its supporting utility available from
+  ftp://ftp.pm.waw.pl/pub/Linux/hdlc/
+
+  If unsure, say N here.
+
+SBE wanXL driver
+CONFIG_WANXL
+  This driver is for wanXL PCI cards made by SBE Inc.
+  If you have such a card, say Y here. This driver requires
+  Generic HDLC driver and its supporting utility available from
+  ftp://ftp.pm.waw.pl/pub/Linux/hdlc/ and a firmware available
+  from SBE Inc.
+
+  If unsure, say N here.
 
 Ethernet (10 or 100Mbit)
 CONFIG_NET_ETHERNET

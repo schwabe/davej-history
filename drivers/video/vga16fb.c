@@ -480,7 +480,7 @@ static int vga16fb_decode_var(const struct fb_var_screeninfo *var,
 	if (pos & 0x200)
 		r7 |= 0x80;
 	pos += vslen;
-	par->crtc[CRTC_V_SYNC_END] = (pos & 0x0F) | 0x10; /* disabled IRQ */
+	par->crtc[CRTC_V_SYNC_END] = (pos & 0x0F) & ~0x10; /* disabled IRQ */
 	pos += upper - 1; /* blank_end + 1 <= ytotal + 2 */
 	par->crtc[CRTC_V_BLANK_END] = pos & 0xFF; /* 0x7F for original VGA,
                      but some SVGA chips requires all 8 bits to set */

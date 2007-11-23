@@ -16,6 +16,9 @@ if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
   bool '      Boot support (linear, striped)' CONFIG_MD_BOOT
 fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
+if [ "$CONFIG_BLK_DEV_RAM" = "y" -o "$CONFIG_BLK_DEV_RAM" = "m" ]; then
+  int '   Default RAM disk size' CONFIG_BLK_DEV_RAM_SIZE 8192
+fi
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
   bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
 fi

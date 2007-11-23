@@ -172,6 +172,7 @@ comment 'Ethernet (1000 Mbit)'
 
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
+      tristate 'Packet Engines GNIC-II (Hamachi) support' CONFIG_HAMACHI
       tristate 'Packet Engines Yellowfin Gigabit-NIC support' CONFIG_YELLOWFIN
     fi
     tristate 'SysKonnect SK-98xx support' CONFIG_SK98LIN
@@ -281,6 +282,10 @@ dep_tristate 'COSA/SRP sync serial boards support' CONFIG_COSA m
 # There is no way to detect a Sealevel board. Force it modular
 #
 dep_tristate 'Sealevel Systems 4021 support' CONFIG_SEALEVEL_4021 m
+#
+# Microgate Synclink HDLC/SYNCPPP support
+#
+dep_tristate 'SyncLink HDLC/SYNCPPP support' CONFIG_SYNCLINK_SYNCPPP m
 
 #
 # Lan Media's board. Currently 1000, 1200, 5200, 5245
@@ -304,6 +309,18 @@ tristate 'MultiGate (COMX) synchronous serial boards support' CONFIG_COMX
       dep_tristate '  Support for LAPB protocol on MultiGate boards' CONFIG_COMX_PROTO_LAPB $CONFIG_LAPB
    fi
    dep_tristate '  Support for Frame Relay on MultiGate boards' CONFIG_COMX_PROTO_FR $CONFIG_COMX
+fi
+
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Generic HDLC driver (EXPERIMENTAL)' CONFIG_HDLC
+  if [ "$CONFIG_HDLC" != "n" ]; then
+    dep_tristate '  SDL RISCom/N2 support' CONFIG_N2 $CONFIG_HDLC
+    dep_tristate '  Moxa C101 support' CONFIG_C101 $CONFIG_HDLC
+
+    if [ "$CONFIG_PCI" != "n" ]; then
+      dep_tristate '  SBE wanXL support' CONFIG_WANXL $CONFIG_HDLC
+    fi
+  fi
 fi
 
 tristate 'Frame relay DLCI support' CONFIG_DLCI

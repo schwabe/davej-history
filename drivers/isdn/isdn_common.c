@@ -665,10 +665,6 @@ isdn_timer_funct(ulong dummy)
 			}
 			if (tf & ISDN_TIMER_CARRIER)
 				isdn_tty_carrier_timeout();
-#if (defined CONFIG_ISDN_PPP) && (defined CONFIG_ISDN_MPP)
-			if (tf & ISDN_TIMER_IPPP)
-				isdn_ppp_timer_timeout();
-#endif
 		}
 	}
 	if (tf) 

@@ -124,6 +124,7 @@ extern int dmfe_probe(struct device *);
 
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct device *dev);
+extern int hamachi_probe(struct device *dev);
 extern int acenic_probe(struct device *dev);
 extern int skge_probe(struct device *dev);
 
@@ -232,6 +233,9 @@ struct devprobe pci_probes[] __initdata = {
 
 #ifdef CONFIG_YELLOWFIN
 	{yellowfin_probe, 0},
+#endif
+#ifdef CONFIG_HAMACHI
+	{hamachi_probe, 0},
 #endif
 #ifdef CONFIG_ACENIC
 	{acenic_probe, 0},

@@ -305,9 +305,10 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 			 * as a child bus
 			 */
 			if(
-			   ((dev->vendor == PCI_VENDOR_ID_RCC) &&
-			    ((dev->device == PCI_DEVICE_ID_RCC_HE) ||
-			     (dev->device == PCI_DEVICE_ID_RCC_LE))) ||
+			   ((dev->vendor == PCI_VENDOR_ID_SERVERWORKS) &&
+			    ((dev->device == PCI_DEVICE_ID_SERVERWORKS_HE) ||
+			     (dev->device == PCI_DEVICE_ID_SERVERWORKS_LE) ||
+			     (dev->device == PCI_DEVICE_ID_SERVERWORKS_CMIC_HE))) ||
 			   ((dev->vendor == PCI_VENDOR_ID_COMPAQ) &&
 			    (dev->device == PCI_DEVICE_ID_COMPAQ_6010)) ||
 			   ((dev->vendor == PCI_VENDOR_ID_INTEL) &&

@@ -330,6 +330,10 @@ extern void pcxx_setup(char *str, int *ints);
 #ifdef CONFIG_RISCOM8
 extern void riscom8_setup(char *str, int *ints);
 #endif
+
+extern void n2_setup(char *str, int *ints);
+extern void c101_setup(char *str, int *ints);
+
 #ifdef CONFIG_SPECIALIX
 extern void specialix_setup(char *str, int *ints);
 #endif
@@ -1079,6 +1083,12 @@ static struct kernel_param raw_params[] __initdata = {
 #endif
 #ifdef CONFIG_APM
 	{ "apm=", apm_setup },
+#endif
+#ifdef CONFIG_N2
+	{ "n2=", n2_setup },
+#endif
+#ifdef CONFIG_C101
+	{ "c101=", c101_setup },
 #endif
 #ifdef CONFIG_3215
 	{ "condev=", con3215_setup },

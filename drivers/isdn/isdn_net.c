@@ -2676,11 +2676,6 @@ isdn_net_new(char *name, struct device *master)
 	}
 	netdev->local->magic = ISDN_NET_MAGIC;
 
-#ifdef CONFIG_ISDN_PPP
-	netdev->mp_last = NULL; /* mpqueue is empty */
-	netdev->ib.next_num = 0;
-	netdev->ib.last = NULL;
-#endif
 	netdev->queue = netdev->local;
 	netdev->local->last = netdev->local;
 	netdev->local->netdev = netdev;
