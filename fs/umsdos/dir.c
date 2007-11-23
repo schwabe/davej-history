@@ -597,6 +597,13 @@ struct dentry *UMSDOS_lookup (struct inode *dir, struct dentry *dentry)
 	return ret;
 }
 
+/*
+ * looks up REAL DOS filename and returns result dentry
+ *
+ * NOTE: since it is looked via UMSDOS_rlookup, it will not have i_patched,
+ * umsdos_i.pos and other EMD-related stuff ! Moreover, it will destroy them
+ * if such dentry was pre-existant.
+ */
 struct dentry *umsdos_covered(struct dentry *parent, char *name, int len)
 {
 	struct dentry *result, *dentry;
@@ -674,7 +681,7 @@ char * umsdos_d_path(struct dentry *dentry, char * buffer, int len)
 	if (*path == '/')
 		path++; /* skip leading '/' */
 
-	if (old_root->d_inode == pseudo_root)
+	if (current->fs->root->d_inode == pseudo_root)
 	{
 		*(path-1) = '/';
 		path -= (UMSDOS_PSDROOT_LEN+1);
@@ -718,6 +725,7 @@ hlink->d_parent->d_name.name, hlink->d_name.name);
 	filp.f_flags = O_RDONLY;
 
 	len = umsdos_file_read_kmem (&filp, path, hlink->d_inode->i_size);
+	if ((len > 0) && (len < PATH_MAX)) path[len] = '\0';
 	if (len != hlink->d_inode->i_size)
 		goto out_noread;
 #ifdef UMSDOS_DEBUG_VERBOSE

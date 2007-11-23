@@ -81,11 +81,11 @@ extern struct inode_operations umsdos_rdir_inode_operations;
 void check_inode (struct inode *inode)
 {
 	if (inode) {
-		printk (KERN_DEBUG "*   inode is %lu (i_count=%d)",
-			 inode->i_ino, inode->i_count);
+		printk (KERN_DEBUG "*   inode is %lu (i_count=%d, pos=%lu)",
+			 inode->i_ino, inode->i_count, inode->u.umsdos_i.pos);
 		check_sb (inode->i_sb, 'i');
 		
-		if (inode->i_dentry.next) {	/* FIXME: does this work ? */
+		if (!list_empty(&inode->i_dentry)) {
 			printk (" (has i_dentry)");
 		} else {
 			printk (" (NO i_dentry)");

@@ -14,22 +14,8 @@
 	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
-	Fixing alignment problem with 1.3.* kernel and some minor changes
-	by Andrey V. Savochkin, 1996.
-
-	Problems or questions may be send to Donald Becker (see above) or to
-	Andrey Savochkin -- saw@shade.msu.ru or
-		Laboratory of Computation Methods, 
-		Department of Mathematics and Mechanics,
-		Moscow State University,
-		Leninskye Gory, Moscow 119899
-
-	But I should to inform you that I'm not an expert in the LANCE card
-	and it may occurs that you will receive no answer on your mail
-	to Donald Becker. I didn't receive any answer on all my letters
-	to him. Who knows why... But may be you are more lucky?  ;->
-                                                          SAW
-
+	Andrey V. Savochkin:
+	- alignment problem with 1.3.* kernel and some minor changes.
 	Thomas Bogendoerfer (tsbogend@bigbug.franken.de):
 	- added support for Linux/Alpha, but removed most of it, because
         it worked only for the PCI chip. 

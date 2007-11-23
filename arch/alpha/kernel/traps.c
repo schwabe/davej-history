@@ -417,8 +417,13 @@ do_entIF(unsigned long type, unsigned long a1,
 			/* EV4 does not implement anything except normal
 			   rounding.  Everything else will come here as
 			   an illegal instruction.  Emulate them.  */
-			if (alpha_fp_emul(regs.pc - 4))
+			if (alpha_fp_emul(regs.pc))
+			{
+				/* Increment the PC so that the program in
+				   user space continues */
+				regs.pc += 4;
 				return;
+			}
 		}
 		send_sig(SIGILL, current, 1);
 		break;

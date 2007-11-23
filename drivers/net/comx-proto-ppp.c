@@ -25,10 +25,13 @@
  *
  * Version 0.22 (99/08/05):
  *		- don't test IFF_RUNNING but the pp_link_state of the sppp
+ * 
+ * Version 0.23 (99/12/02):
+ *		- tbusy fixes
  *
  */
 
-#define VERSION "0.22"
+#define VERSION "0.23"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -74,8 +77,12 @@ static void syncppp_status_timerfun(unsigned long d) {
 
 static int syncppp_tx(struct device *dev) 
 {
-	clear_bit(0, &dev->tbusy);
-	mark_bh(NET_BH);
+	struct comx_channel *ch=dev->priv;
+	
+	if(ch->line_status & LINE_UP) {
+		clear_bit(0, &dev->tbusy);
+		mark_bh(NET_BH);
+	}
 	return 0;
 }
 
@@ -87,6 +94,7 @@ static void syncppp_status(struct device *dev, unsigned short status)
 		sppp_open(dev);
 	} else 	{
 		/* Line went down */
+		dev->tbusy = 1;
 		sppp_close(dev);
 	}
 	comx_status(dev, status);

@@ -1,4 +1,4 @@
-/* 
+/*
  * Device driver framework for the COMX line of synchronous serial boards
  * 
  * for Linux kernel 2.2.X
@@ -36,9 +36,12 @@
  * Version 0.83 (99/07/15):
  *		- reset line_status when interface is down
  *
+ * Version 0.84 (99/12/01):
+ *		- comx_status should not check for IFF_UP (to report
+ *		  line status from dev->open())
  */
 
-#define VERSION "0.82"
+#define VERSION "0.84"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -54,10 +57,6 @@
 
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
-#endif
-
-#ifndef CONFIG_PROC_FS
-#error For now, COMX really needs the /proc filesystem
 #endif
 
 #include "comx.h"
@@ -321,12 +320,10 @@ void comx_status(struct device *dev, int status)
 	}
 #endif
 
-	if (dev->flags & IFF_UP) {
-		printk(KERN_NOTICE "Interface %s: modem status %s, line protocol %s\n",
+	printk(KERN_NOTICE "Interface %s: modem status %s, line protocol %s\n",
 		    dev->name, status & LINE_UP ? "UP" : "DOWN", 
 		    status & PROTO_LOOP ? "LOOP" : status & PROTO_UP ? 
 		    "UP" : "DOWN");
-	}
 	
 	ch->line_status = status;
 }

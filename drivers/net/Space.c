@@ -791,6 +791,7 @@ struct device eql_dev = {
 /* Token-ring device probe */
 extern int ibmtr_probe(struct device *);
 extern int olympic_probe(struct device *);
+extern int streamer_probe(struct device *);
 
 static int
 trif_probe(struct device *dev)
@@ -802,6 +803,9 @@ trif_probe(struct device *dev)
 #ifdef CONFIG_IBMOL
 	&& olympic_probe(dev)
 #endif
+#ifdef CONFIG_IBMLS
+	&& streamer_probe(dev)
+#endif	
 #ifdef CONFIG_SKTR
 	&& sktr_probe(dev)
 #endif

@@ -275,7 +275,8 @@ extern int low_on_memory;
 
 #define free_page(addr) free_pages((addr),0)
 extern void FASTCALL(free_pages(unsigned long addr, unsigned long order));
-extern void FASTCALL(__free_page(struct page *));
+#define __free_page(page) __free_pages((page),0)
+extern void FASTCALL(__free_pages(struct page *, unsigned long));
 
 extern void show_free_areas(void);
 extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
@@ -334,7 +335,7 @@ extern void put_cached_page(unsigned long);
 
 #define __GFP_DMA	0x80
 
-#define GFP_BUFFER	(__GFP_LOW | __GFP_WAIT)
+#define GFP_BUFFER	(__GFP_MED | __GFP_WAIT)
 #define GFP_ATOMIC	(__GFP_HIGH)
 #define GFP_USER	(__GFP_LOW | __GFP_WAIT | __GFP_IO)
 #define GFP_KERNEL	(__GFP_MED | __GFP_WAIT | __GFP_IO)

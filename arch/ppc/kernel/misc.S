@@ -147,6 +147,19 @@ _GLOBAL(_tlbie)
 	blr
 
 /*
+ * The atomic operations here generally act as memory barriers too on SMP.
+ * The general usage of them assumes this since x86 processors won't
+ * move a load past a lock instruction and don't reorder stores.
+ */
+#ifdef __SMP__
+#define SMP_WMB	eieio
+#define SMP_MB	sync
+#else
+#define SMP_WMB
+#define SMP_MB
+#endif /* CONFIG_SMP */
+
+/*
  * Atomic [test&set] exchange
  *
  *	unsigned long xchg_u32(void *ptr, unsigned long val)
@@ -155,9 +168,11 @@ _GLOBAL(_tlbie)
  */
 _GLOBAL(xchg_u32)
 	mr	r5,r3		/* Save pointer */
+	SMP_WMB
 10:	lwarx	r3,0,r5		/* Fetch old value & reserve */
 	stwcx.	r4,0,r5		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	SMP_MB
 	blr
 
 /*
@@ -169,14 +184,14 @@ _GLOBAL(xchg_u32)
  */
 _GLOBAL(__spin_trylock)
 	mr	r4,r3
-	eieio			/* prevent reordering of stores */
+	SMP_WMB			/* prevent reordering of stores */
 	li	r5,-1
 	lwarx	r3,0,r4		/* fetch old value, establish reservation */
 	cmpwi	0,r3,0		/* is it 0? */
 	bnelr-			/* return failure if not */
 	stwcx.	r5,0,r4		/* try to update with new value */
 	bne-	1f		/* if we failed */
-	eieio			/* prevent reordering of stores */
+	SMP_WMB			/* prevent reordering of stores */
 	blr
 1:	li	r3,1		/* return non-zero for failure */
 	blr
@@ -195,71 +210,91 @@ _GLOBAL(__spin_trylock)
  * void atomic_set_mask(atomic_t mask, atomic_t *addr);
  */
 _GLOBAL(atomic_add)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r4		/* Fetch old value & reserve */
 	add	r5,r5,r3	/* Perform 'add' operation */
 	stwcx.	r5,0,r4		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	SMP_MB
 	blr
 _GLOBAL(atomic_add_return)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r4		/* Fetch old value & reserve */
 	add	r5,r5,r3	/* Perform 'add' operation */
 	stwcx.	r5,0,r4		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
 	mr	r3,r5
+	SMP_MB
 	blr
 _GLOBAL(atomic_sub)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r4		/* Fetch old value & reserve */
 	sub	r5,r5,r3	/* Perform 'add' operation */
 	stwcx.	r5,0,r4		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	SMP_MB
 	blr
 _GLOBAL(atomic_inc)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r3		/* Fetch old value & reserve */
 	addi	r5,r5,1		/* Perform 'add' operation */
 	stwcx.	r5,0,r3		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	SMP_MB
 	blr
 _GLOBAL(atomic_inc_return)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r3		/* Fetch old value & reserve */
 	addi	r5,r5,1		/* Perform 'add' operation */
 	stwcx.	r5,0,r3		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
 	mr	r3,r5		/* Return new value */
+	SMP_MB
 	blr
 _GLOBAL(atomic_dec)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r3		/* Fetch old value & reserve */
 	subi	r5,r5,1		/* Perform 'add' operation */
 	stwcx.	r5,0,r3		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	SMP_MB
 	blr
 _GLOBAL(atomic_dec_return)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r3		/* Fetch old value & reserve */
 	subi	r5,r5,1		/* Perform 'add' operation */
 	stwcx.	r5,0,r3		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
 	mr	r3,r5		/* Return new value */
+	SMP_MB
 	blr
 _GLOBAL(atomic_dec_and_test)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r3		/* Fetch old value & reserve */
 	subi	r5,r5,1		/* Perform 'add' operation */
 	stwcx.	r5,0,r3		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	SMP_MB
 	cmpi	0,r5,0		/* Return 'true' IFF 0 */
 	li	r3,1
 	beqlr
 	li	r3,0
 	blr
 _GLOBAL(atomic_clear_mask)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r4
 	andc	r5,r5,r3
 	stwcx.	r5,0,r4
 	bne-	10b
+	SMP_MB
 	blr
 _GLOBAL(atomic_set_mask)
+	SMP_WMB			/* wmb() */
 10:	lwarx	r5,0,r4
 	or	r5,r5,r3
 	stwcx.	r5,0,r4
 	bne-	10b
+	SMP_MB
 	blr
 
 /*

@@ -291,7 +291,8 @@ out_of_memory:
 	up(&mm->mmap_sem);
 	if (error_code & 4)
 	{
-		if (!((regs->eflags >> 12) & 3))
+		if (tsk->oom_kill_try++ > 10 ||
+		    !((regs->eflags >> 12) & 3))
 		{
 			printk("VM: killing process %s\n", tsk->comm);
 			do_exit(SIGKILL);
@@ -304,6 +305,11 @@ out_of_memory:
 			 */
 			printk("VM: terminating process %s\n", tsk->comm);
 			force_sig(SIGTERM, current);
+			if (tsk->oom_kill_try > 1)
+			{
+				tsk->policy |= SCHED_YIELD;
+				schedule();
+			}
 			return;
 		}
 	}

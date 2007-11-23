@@ -18,7 +18,7 @@ at http://cvs.linux.hr/
 Legend: those lines marked with '+' on the beggining of line indicates it
 passed all of my tests, and performed perfect in all of them.
 
-Current status (990202) - UMSDOS 0.85:
+Current status (000123) - UMSDOS 0.85g:
 
 (1) pure MSDOS (no --linux-.--- EMD file):
 
@@ -60,13 +60,13 @@ READ:
 
 WRITE:
 + create symlink		- works
-- create hardlink		- works
+- create hardlink		- works for same DIR (see notes)
 + create file			- works
 + create special file		- works
 + write to file			- works
 + rename file (same dir)	- works
 + rename file (dif. dir)	- works
-- rename hardlink (same dir)	-
++ rename hardlink (same dir)	- works
 - rename hardlink (dif. dir)	-
 + rename symlink (same dir)	- works
 + rename symlink (dif. dir)	- works
@@ -74,7 +74,7 @@ WRITE:
 + rename dir (dif. dir)		- works
 + delete file			- works
 + notify_change (chown,perms)	- works
-+ delete hardlink		- works
+- delete hardlink		- works for same DIR (see notes)
 + mkdir				- works
 + rmdir 			- works
 + umssyncing (many ioctls)	- works

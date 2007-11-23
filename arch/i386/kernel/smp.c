@@ -1846,15 +1846,20 @@ void smp_flush_tlb(void)
 
 		/*
 		 * Spin waiting for completion
+		 *
+		 * It turns out Intel seem to have been tuning their chips
+		 * a little. The PIII-500+ seem to execute this little bit
+		 * way faster than their older silicon. We now add on a factor
+		 * guessed from the TSC calibration.
 		 */
 
-		stuck = 50000000;
+		stuck = 50000000 + cpu_data[cpu].loops_per_sec/2;
 		while (smp_invalidate_needed) {
 			/*
 			 * Take care of "crossing" invalidates
 			 */
 			if (test_bit(cpu, &smp_invalidate_needed))
-			clear_bit(cpu, &smp_invalidate_needed);
+				clear_bit(cpu, &smp_invalidate_needed);
 			--stuck;
 			if (!stuck) {
 				printk("stuck on TLB IPI wait (CPU#%d)\n",cpu);

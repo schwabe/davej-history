@@ -902,8 +902,8 @@ int init_module(void)
 int __init i2o_config_init(void)
 #endif
 {
-	printk(KERN_INFO "I2O configuration manager v 0.04.\n");
-	printk(KERN_INFO "  (C) Copyright 1999 Red Hat Software");
+	printk(KERN_INFO "I2O configuration manager v 0.04\n");
+	printk(KERN_INFO "(C) Copyright 1999 Red Hat Software\n");
 	
 	if((page_buf = kmalloc(4096, GFP_KERNEL))==NULL)
 	{

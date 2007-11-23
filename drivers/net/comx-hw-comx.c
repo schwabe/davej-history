@@ -7,7 +7,7 @@
  * Rewritten by: Tivadar Szemethy <tiv@itc.hu>
  * Currently maintained by: Gergely Madarasz <gorgo@itc.hu>
  *
- * Copyright (C) 1995-1999 ITConsult-Pro Co. <info@itc.hu>
+ * Copyright (C) 1995-2000 ITConsult-Pro Co. <info@itc.hu>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -26,10 +26,20 @@
  *
  * Version 0.82 (99/08/24):
  *		- fix multiple board support
+ *
+ * Version 0.83 (99/11/30):
+ *		- interrupt handling and locking fixes during initalization
+ *		- really fix multiple board support
  * 
+ * Version 0.84 (99/12/02):
+ *		- some workarounds for problematic hardware/firmware
+ *
+ * Version 0.85 (00/01/14):
+ *		- some additional workarounds :/
+ *		- printk cleanups
  */
 
-#define VERSION "0.82"
+#define VERSION "0.85"
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -76,7 +86,7 @@ struct comx_privdata {
 	u_long	histogram[5];
 };
 
-struct device *memory_used[(COMX_MEM_MAX - COMX_MEM_MIN) / 0x10000];
+static struct device *memory_used[(COMX_MEM_MAX - COMX_MEM_MIN) / 0x10000];
 extern struct comx_hardware hicomx_hw;
 extern struct comx_hardware comx_hw;
 extern struct comx_hardware cmx_hw;
@@ -122,21 +132,22 @@ static struct device *COMX_access_board(struct device *dev)
 	int mempos = (dev->mem_start - COMX_MEM_MIN) >> 16;
 	unsigned long flags;
 
+
 	save_flags(flags); cli();
-	if (memory_used[mempos] == dev) {
-		restore_flags(flags);
-		return dev;
+	
+	ret = memory_used[mempos];
+
+	if(ret == dev) {
+		goto out;
 	}
 
-	if (ch->twin && memory_used[mempos] == ch->twin) {
-		memory_used[mempos] = dev;
-		ret = ch->twin;
-	} else {	
-		ret = memory_used[mempos];
-		if (ret) ch->HW_board_off(ret);
-		memory_used[mempos] = dev;
+	memory_used[mempos] = dev;
+
+	if (!ch->twin || ret != ch->twin) {
+		if (ret) ((struct comx_channel *)ret->priv)->HW_board_off(ret);
 		ch->HW_board_on(dev);
 	}
+out:
 	restore_flags(flags);
 	return ret;
 }
@@ -148,16 +159,17 @@ static void COMX_release_board(struct device *dev, struct device *savep)
 	struct comx_channel *ch = dev->priv;
 
 	save_flags(flags); cli();
+
 	if (memory_used[mempos] == savep) {
-		restore_flags(flags);
-		return;
+		goto out;
 	}
 
 	memory_used[mempos] = savep;
 	if (!ch->twin || ch->twin != savep) {
 		ch->HW_board_off(dev);
-		if (savep) ch->HW_board_on(savep);
+		if (savep) ((struct comx_channel*)savep->priv)->HW_board_on(savep);
 	}
+out:
 	restore_flags(flags);
 }
 
@@ -170,8 +182,11 @@ static int COMX_txe(struct device *dev)
 	savep = ch->HW_access_board(dev);
 	if (COMX_readw(dev,OFF_A_L2_LINKUP) == LINKUP_READY) {
 		rc = COMX_readw(dev,OFF_A_L2_TxEMPTY);
-	}
+	} 
 	ch->HW_release_board(dev,savep);
+	if(rc==0xffff) {
+		printk(KERN_ERR "%s, OFF_A_L2_TxEMPTY is %d\n",dev->name, rc);
+	}
 	return rc;
 }
 
@@ -181,6 +196,7 @@ static int COMX_send_packet(struct device *dev, struct sk_buff *skb)
 	struct comx_channel *ch = dev->priv;
 	struct comx_privdata *hw = ch->HW_privdata;
 	int ret = FRAME_DROPPED;
+	word tmp;
 
 	savep = ch->HW_access_board(dev);	
 
@@ -189,15 +205,22 @@ static int COMX_send_packet(struct device *dev, struct sk_buff *skb)
 	}
 
 	if (skb->len > COMX_MAX_TX_SIZE) {
-		dev_kfree_skb(skb);
-		return FRAME_DROPPED;
+		ret=FRAME_DROPPED;
+		goto out;
 	}
 
-	if ((ch->line_status & LINE_UP) && COMX_readw(dev, OFF_A_L2_TxEMPTY)) {
+	tmp=COMX_readw(dev, OFF_A_L2_TxEMPTY);
+	if ((ch->line_status & LINE_UP) && tmp==1) {
 		int lensave = skb->len;
 		int dest = COMX_readw(dev, OFF_A_L2_TxBUFP);
 		word *data = (word *)skb->data;
 
+		if(dest==0xffff) {
+			printk(KERN_ERR "%s: OFF_A_L2_TxBUFP is %d\n", dev->name, dest);
+			ret=FRAME_DROPPED;
+			goto out;
+		}
+					
 		writew((unsigned short)skb->len, dev->mem_start + dest);
 		dest += 2;
 		while (skb->len > 1) {
@@ -215,8 +238,12 @@ static int COMX_send_packet(struct device *dev, struct sk_buff *skb)
 	} else {
 		ch->stats.tx_dropped++;
 		printk(KERN_INFO "%s: frame dropped\n",dev->name);
+		if(tmp) {
+			printk(KERN_ERR "%s: OFF_A_L2_TxEMPTY is %d\n",dev->name,tmp);
+		}
 	}
 	
+out:
 	ch->HW_release_board(dev, savep);
 	dev_kfree_skb(skb);
 	return ret;
@@ -233,7 +260,15 @@ static inline int comx_read_buffer(struct device *dev)
 
 	i = 0;
 	rbuf_offs = COMX_readw(dev, OFF_A_L2_RxBUFP);
+	if(rbuf_offs == 0xffff) {
+		printk(KERN_ERR "%s: OFF_A_L2_RxBUFP is %d\n",dev->name,rbuf_offs);
+		return 0;
+	}
 	len = readw(dev->mem_start + rbuf_offs);
+	if(len > COMX_MAX_RX_SIZE) {
+		printk(KERN_ERR "%s: packet length is %d\n",dev->name,len);
+		return 0;
+	}
 	if ((skb = dev_alloc_skb(len + 16)) == NULL) {
 		ch->stats.rx_dropped++;
 		COMX_WRITE(dev, OFF_A_L2_DAV, 0);
@@ -314,13 +349,13 @@ static void COMX_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (dev->interrupt) {
 		printk(KERN_ERR "%s: re-entering interrupt handler!\n", dev->name);
 		return;
-	}
+		}
 
-	printk("%s: entering interrupt handler\n", dev->name);
 
 	jiffs = jiffies;
 
 	dev->interrupt = 1;
+
 	interrupted = ch->HW_access_board(dev);
 
 	while (!idle && count < 5000) {
@@ -355,22 +390,43 @@ static void COMX_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			/* Collect stats */
 			tmp = COMX_readw(dev, OFF_A_L1_ABOREC);
 			COMX_WRITE(dev, OFF_A_L1_ABOREC, 0);
-			ch->stats.rx_missed_errors += (tmp >> 8) & 0xff;
-			ch->stats.rx_over_errors += tmp & 0xff;
+			if(tmp==0xffff) {
+				printk(KERN_ERR "%s: OFF_A_L1_ABOREC is %d\n",dev->name,tmp);
+				break;
+			} else {
+				ch->stats.rx_missed_errors += (tmp >> 8) & 0xff;
+				ch->stats.rx_over_errors += tmp & 0xff;
+			}
 			tmp = COMX_readw(dev, OFF_A_L1_CRCREC);
 			COMX_WRITE(dev, OFF_A_L1_CRCREC, 0);
-			ch->stats.rx_crc_errors += (tmp >> 8) & 0xff;
-			ch->stats.rx_missed_errors += tmp & 0xff;
-
+			if(tmp==0xffff) {
+				printk(KERN_ERR "%s: OFF_A_L1_CRCREC is %d\n",dev->name,tmp);
+				break;
+			} else {
+				ch->stats.rx_crc_errors += (tmp >> 8) & 0xff;
+				ch->stats.rx_missed_errors += tmp & 0xff;
+			}
+			
 			if ((ch->line_status & LINE_UP) && ch->LINE_rx) {
-				while (COMX_readw(dev, OFF_A_L2_DAV)) {
+				tmp=COMX_readw(dev, OFF_A_L2_DAV); 
+				while (tmp==1) {
 					idle=0;
 					buffers_emptied+=comx_read_buffer(dev);
+					tmp=COMX_readw(dev, OFF_A_L2_DAV); 
+				}
+				if(tmp) {
+					printk(KERN_ERR "%s: OFF_A_L2_DAV is %d\n", dev->name, tmp);
+					break;
 				}
 			}
 
-			if (COMX_readw(dev, OFF_A_L2_TxEMPTY) && ch->LINE_tx) {
+			tmp=COMX_readw(dev, OFF_A_L2_TxEMPTY);
+			if (tmp==1 && ch->LINE_tx) {
 				ch->LINE_tx(dev);
+			} 
+			if(tmp==0xffff) {
+				printk(KERN_ERR "%s: OFF_A_L2_TxEMPTY is %d\n", dev->name, tmp);
+				break;
 			}
 
 			if (COMX_readw(dev, OFF_A_L1_PBUFOVR) >> 8) {
@@ -394,7 +450,6 @@ static void COMX_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 
 	ch->HW_release_board(dev, interrupted);
-	printk("%s: leaving interrupt handler\n", dev->name);
 	dev->interrupt = 0;
 }
 
@@ -404,18 +459,23 @@ static int COMX_open(struct device *dev)
 	struct comx_privdata *hw = ch->HW_privdata;
 	struct proc_dir_entry *procfile = ch->procdir->subdir;
 	unsigned long jiffs;
+	int twin_open=0;
+	int retval;
 	struct device *savep;
 
 	if (!dev->base_addr || !dev->irq || !dev->mem_start) {
 		return -ENODEV;
 	}
 
-	if (!ch->twin || 
-	   (!(((struct comx_channel *)(ch->twin->priv))->init_status & HW_OPEN))) {
+	if (ch->twin && (((struct comx_channel *)(ch->twin->priv))->init_status & HW_OPEN)) {
+		twin_open=1;
+	}
+
+	if (!twin_open) {
 		if (check_region(dev->base_addr, hw->io_extent)) {
 			return -EAGAIN;
 		}
-		if (request_irq(dev->irq, COMX_interrupt, SA_INTERRUPT, dev->name, 
+		if (request_irq(dev->irq, COMX_interrupt, 0, dev->name, 
 		   (void *)dev)) {
 			printk(KERN_ERR "comx-hw-comx: unable to obtain irq %d\n", dev->irq);
 			return -EAGAIN;
@@ -423,10 +483,9 @@ static int COMX_open(struct device *dev)
 		ch->init_status |= IRQ_ALLOCATED;
 		request_region(dev->base_addr, hw->io_extent, dev->name);
 		if (!ch->HW_load_board || ch->HW_load_board(dev)) {
-			release_region(dev->base_addr, hw->io_extent);
-			free_irq(dev->irq, (void *)dev);
 			ch->init_status &= ~IRQ_ALLOCATED;
-			return -ENODEV;
+			retval=-ENODEV;
+			goto error;
 		}
 	}
 
@@ -443,19 +502,28 @@ static int COMX_open(struct device *dev)
 		schedule_timeout(1);
 	}
 	
-	ch->HW_release_board(dev, savep);
-	if (jiffies > jiffs + HZ) {
+	if (jiffies >= jiffs + HZ) {
 		printk(KERN_ERR "%s: board timeout on INIT command\n", dev->name);
-		release_region(dev->base_addr, hw->io_extent);
-		free_irq(dev->irq, (void *)dev);
-		return -EIO;
+		ch->HW_release_board(dev, savep);
+		retval=-EIO;
+		goto error;
 	}
+	udelay(1000);
 
-	savep = ch->HW_access_board(dev);
-
-	/* Ide kellene irni, hogy DTE vagy DCE ? */
 	COMX_CMD(dev, COMX_CMD_OPEN);
 
+	jiffs = jiffies;
+	while (COMX_readw(dev, OFF_A_L2_LINKUP) != 3 && jiffies < jiffs + HZ) {
+		schedule_timeout(1);
+	}
+	
+	if (jiffies >= jiffs + HZ) {
+		printk(KERN_ERR "%s: board timeout on OPEN command\n", dev->name);
+		ch->HW_release_board(dev, savep);
+		retval=-EIO;
+		goto error;
+	}
+	
 	ch->init_status |= HW_OPEN;
 	
 	/* Ez eleg ciki, de ilyen a rendszer */
@@ -484,6 +552,14 @@ static int COMX_open(struct device *dev)
 	}	
 	
 	return 0;	
+
+error:
+	if(!twin_open) {
+		release_region(dev->base_addr, hw->io_extent);
+		free_irq(dev->irq, (void *)dev);
+	}
+	return retval;
+
 }
 
 static int COMX_close(struct device *dev)
@@ -571,8 +647,12 @@ static int COMX_load_board(struct device *dev)
 	struct comx_privdata *hw = ch->HW_privdata;
 	struct comx_firmware *fw = hw->firmware;
 	word board_segment = dev->mem_start >> 16;
-	unsigned long jiff;
+	int mempos = (dev->mem_start - COMX_MEM_MIN) >> 16;
+	unsigned long flags;
 	unsigned char id1, id2;
+	struct device *saved;
+	int retval;
+	int loopcount;
 	int len;
 	byte *COMX_address;
 
@@ -611,33 +691,43 @@ static int COMX_load_board(struct device *dev)
 	outb_p(board_segment | COMX_BOARD_RESET, dev->base_addr);
 	/* 10 usec should be enough here */
 	udelay(100);
+
+	save_flags(flags); cli();
+	saved=memory_used[mempos];
+	if(saved) {
+		((struct comx_channel *)saved->priv)->HW_board_off(saved);
+	}
+	memory_used[mempos]=dev;
+
 	outb_p(board_segment | COMX_ENABLE_BOARD_MEM, dev->base_addr);
 
 	writeb(0, dev->mem_start + COMX_JAIL_OFFSET);	
-	jiff=jiffies;
-	while(jiffies < jiff + HZ && readb(dev->mem_start + COMX_JAIL_OFFSET) 
-	    != COMX_JAIL_VALUE) {
-		schedule_timeout(1);
+
+	loopcount=0;
+	while(loopcount++ < 10000 && 
+	    readb(dev->mem_start + COMX_JAIL_OFFSET) != COMX_JAIL_VALUE) {
+		udelay(100);
 	}	
 	
 	if (readb(dev->mem_start + COMX_JAIL_OFFSET) != COMX_JAIL_VALUE) {
 		printk(KERN_ERR "%s: Can't reset board, JAIL value is %02x\n",
 			dev->name, readb(dev->mem_start + COMX_JAIL_OFFSET));
-		outb_p(board_segment | COMX_DISABLE_ALL, dev->base_addr);
-		return -ENODEV;
+		retval=-ENODEV;
+		goto out;
 	}
 
 	writeb(0x55, dev->mem_start + 0x18ff);
-	jiff=jiffies;
-	while(jiffies < jiff + 3*HZ && readb(dev->mem_start + 0x18ff) != 0) {
-		schedule_timeout(1);
+	
+	loopcount=0;
+	while(loopcount++ < 10000 && readb(dev->mem_start + 0x18ff) != 0) {
+		udelay(100);
 	}
 
 	if(readb(dev->mem_start + 0x18ff) != 0) {
 		printk(KERN_ERR "%s: Can't reset board, reset timeout\n",
 			dev->name);
-		outb_p(board_segment | COMX_DISABLE_ALL, dev->base_addr);
-		return -ENODEV;
+		retval=-ENODEV;
+		goto out;
 	}		
 
 	len = 0;
@@ -656,27 +746,36 @@ static int COMX_load_board(struct device *dev)
 		printk(KERN_ERR "%s: error loading firmware: [%d] is 0x%02x "
 			"instead of 0x%02x\n", dev->name, len, 
 			readb(COMX_address - 1), fw->data[len]);
-		outb_p(board_segment | COMX_DISABLE_ALL, dev->base_addr);
-		return -EAGAIN;
+		retval=-EAGAIN;
+		goto out;
 	}
 
 	writeb(0, dev->mem_start + COMX_JAIL_OFFSET);
 
-	jiff = jiffies;
-	while ( COMX_readw(dev, OFF_A_L2_LINKUP) != 1 && jiffies < jiff + 3*HZ ) {
-		schedule_timeout(1);
+	loopcount = 0;
+	while ( loopcount++ < 10000 && COMX_readw(dev, OFF_A_L2_LINKUP) != 1 ) {
+		udelay(100);
 	}
 
-	if (jiffies > jiff + 3*HZ) {
+	if (COMX_readw(dev, OFF_A_L2_LINKUP) != 1) {
 		printk(KERN_ERR "%s: error starting firmware, linkup word is %04x\n",
 			dev->name, COMX_readw(dev, OFF_A_L2_LINKUP));
-		outb_p(board_segment | COMX_DISABLE_ALL, dev->base_addr);
-		return -EAGAIN;
+		retval=-EAGAIN;
+		goto out;
 	}
 
-	outb_p(board_segment | COMX_DISABLE_BOARD_MEM, dev->base_addr);
+
 	ch->init_status |= FW_LOADED;
-	return 0;
+	retval=0;
+
+out: 
+	outb_p(board_segment | COMX_DISABLE_ALL, dev->base_addr);
+	if(saved) {
+		((struct comx_channel *)saved->priv)->HW_board_on(saved);
+	}
+	memory_used[mempos]=saved;
+	restore_flags(flags);
+	return retval;
 }
 
 static int CMX_load_board(struct device *dev)
@@ -685,10 +784,14 @@ static int CMX_load_board(struct device *dev)
 	struct comx_privdata *hw = ch->HW_privdata;
 	struct comx_firmware *fw = hw->firmware;
 	word board_segment = dev->mem_start >> 16;
-	unsigned long jiff;
+	int mempos = (dev->mem_start - COMX_MEM_MIN) >> 16;
 	#if 0
 	unsigned char id1, id2;
 	#endif
+	struct device *saved;
+	unsigned long flags;
+	int retval;
+	int loopcount;
 	int len;
 	byte *COMX_address;
 
@@ -716,6 +819,13 @@ static int CMX_load_board(struct device *dev)
 	printk(KERN_INFO "%s: Loading CMX Layer 1 firmware %s\n", dev->name, 
 		(char *)(fw->data + OFF_FW_L1_ID + 2));
 
+	save_flags(flags); cli();
+	saved=memory_used[mempos];
+	if(saved) {
+		((struct comx_channel *)saved->priv)->HW_board_off(saved);
+	}
+	memory_used[mempos]=dev;
+	
 	outb_p(board_segment | COMX_ENABLE_BOARD_MEM | COMX_BOARD_RESET, 
 		dev->base_addr);
 
@@ -737,25 +847,33 @@ static int CMX_load_board(struct device *dev)
 		printk(KERN_ERR "%s: error loading firmware: [%d] is 0x%02x "
 			"instead of 0x%02x\n", dev->name, len, 
 			readb(COMX_address - 1), fw->data[len]);
-		outb_p(board_segment | COMX_DISABLE_ALL, dev->base_addr);
-		return -EAGAIN;
+		retval=-EAGAIN;
+		goto out;
 	}
 
-	jiff = jiffies;
-	while ( COMX_readw(dev, OFF_A_L2_LINKUP) != 1 && jiffies < jiff + 3*HZ ) {
-		schedule_timeout(1);
+	loopcount=0;
+	while( loopcount++ < 10000 && COMX_readw(dev, OFF_A_L2_LINKUP) != 1 ) {
+		udelay(100);
 	}
 
-	if (jiffies > jiff + 3*HZ) {
+	if (COMX_readw(dev, OFF_A_L2_LINKUP) != 1) {
 		printk(KERN_ERR "%s: error starting firmware, linkup word is %04x\n",
 			dev->name, COMX_readw(dev, OFF_A_L2_LINKUP));
-		outb_p(board_segment | COMX_DISABLE_ALL, dev->base_addr);
-		return -EAGAIN;
+		retval=-EAGAIN;
+		goto out;
 	}
 
-	outb_p(board_segment | COMX_DISABLE_BOARD_MEM, dev->base_addr);
 	ch->init_status |= FW_LOADED;
-	return 0;
+	retval=0;
+
+out: 
+	outb_p(board_segment | COMX_DISABLE_ALL, dev->base_addr);
+	if(saved) {
+		((struct comx_channel *)saved->priv)->HW_board_on(saved);
+	}
+	memory_used[mempos]=saved;
+	restore_flags(flags);
+	return retval;
 }
 
 static int HICOMX_load_board(struct device *dev)
@@ -764,8 +882,12 @@ static int HICOMX_load_board(struct device *dev)
 	struct comx_privdata *hw = ch->HW_privdata;
 	struct comx_firmware *fw = hw->firmware;
 	word board_segment = dev->mem_start >> 12;
-	unsigned long jiff;
+	int mempos = (dev->mem_start - COMX_MEM_MIN) >> 16;
+	struct device *saved;
 	unsigned char id1, id2;
+	unsigned long flags;
+	int retval;
+	int loopcount;
 	int len;
 	word *HICOMX_address;
 	char id = 1;
@@ -815,6 +937,14 @@ static int HICOMX_load_board(struct device *dev)
 
 	outb_p(board_segment | HICOMX_BOARD_RESET, dev->base_addr);
 	udelay(10);	
+
+	save_flags(flags); cli();
+	saved=memory_used[mempos];
+	if(saved) {
+		((struct comx_channel *)saved->priv)->HW_board_off(saved);
+	}
+	memory_used[mempos]=dev;
+
 	outb_p(board_segment | HICOMX_ENABLE_BOARD_MEM, dev->base_addr);
 	outb_p(HICOMX_PRG_MEM, dev->base_addr + 1);
 
@@ -834,30 +964,40 @@ static int HICOMX_load_board(struct device *dev)
 		printk(KERN_ERR "%s: error loading firmware: [%d] is 0x%02x "
 			"instead of 0x%02x\n", dev->name, len, 
 			readw(HICOMX_address - 1) & 0xff, fw->data[len]);
-		outb_p(board_segment | HICOMX_DISABLE_ALL, dev->base_addr);
-		outb_p(HICOMX_DATA_MEM, dev->base_addr + 1);
-		return -EAGAIN;
+		retval=-EAGAIN;
+		goto out;
 	}
 
 	outb_p(board_segment | HICOMX_BOARD_RESET, dev->base_addr);
 	outb_p(HICOMX_DATA_MEM, dev->base_addr + 1);
+
 	outb_p(board_segment | HICOMX_ENABLE_BOARD_MEM, dev->base_addr);
 
-	jiff = jiffies;
-	while ( COMX_readw(dev, OFF_A_L2_LINKUP) != 1 && jiffies < jiff + 3*HZ ) {
-		schedule_timeout(1);
+	loopcount=0;
+	while(loopcount++ < 10000 && COMX_readw(dev, OFF_A_L2_LINKUP) != 1) {
+		udelay(100);
 	}
 
 	if ( COMX_readw(dev, OFF_A_L2_LINKUP) != 1 ) {
 		printk(KERN_ERR "%s: error starting firmware, linkup word is %04x\n",
 			dev->name, COMX_readw(dev, OFF_A_L2_LINKUP));
-		outb_p(board_segment | HICOMX_DISABLE_ALL, dev->base_addr);
-		return -EAGAIN;
+		retval=-EAGAIN;
+		goto out;
 	}
 
-	outb_p(board_segment | HICOMX_DISABLE_ALL, dev->base_addr);
 	ch->init_status |= FW_LOADED;
-	return 0;
+	retval=0;
+
+out:
+	outb_p(board_segment | HICOMX_DISABLE_ALL, dev->base_addr);
+	outb_p(HICOMX_DATA_MEM, dev->base_addr + 1);
+
+	if(saved) {
+		((struct comx_channel *)saved->priv)->HW_board_on(saved);
+	}
+	memory_used[mempos]=saved;
+	restore_flags(flags);
+	return retval;
 }
 
 static struct device *comx_twin_check(struct device *dev)

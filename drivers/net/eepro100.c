@@ -1,6 +1,6 @@
 /* drivers/net/eepro100.c: An Intel i82557-559 Ethernet driver for Linux. */
 /*
-   NOTICE: this version tested with kernels 1.3.72 and later only!
+   NOTICE: this version of the driver is supposed to work with 2.2 kernels.
 	Written 1996-1999 by Donald Becker.
 
 	This software may be used and distributed according to the terms
@@ -21,15 +21,14 @@
 	There is a Majordomo mailing list based at
 		linux-eepro100@cesdis.gsfc.nasa.gov
 	
-	This driver also contains updates by Andrey Savochkin and others.
-	For this specific driver variant please use linux-kernel for 
-	bug reports.
-
+	The driver also contains updates by different kernel developers.
+	This driver clone is maintained by Andrey V. Savochkin <saw@saw.sw.com.sg>.
+	Please use this email address and linux-kernel mailing list for bug reports.
 */
 
 static const char *version =
 "eepro100.c:v1.09j-t 9/29/99 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/eepro100.html\n"
-"eepro100.c: $Revision: 1.20 $ 1999/12/29 Modified by Andrey V. Savochkin <saw@msu.ru>\n";
+"eepro100.c: $Revision: 1.20.2.3 $ 2000/03/02 Modified by Andrey V. Savochkin <saw@saw.sw.com.sg> and others\n";
 
 /* A few user-configurable values that apply to all boards.
    First set is undocumented and spelled per Intel recommendations. */
@@ -589,7 +588,7 @@ int eepro100_init(void)
 			if (check_region(ioaddr, 32))
 				continue;
 		} else if ((ioaddr = (long)ioremap(pciaddr & ~0xfUL, 0x1000)) == 0) {
-			printk(KERN_INFO "Failed to map PCI address %#x.\n",
+			printk(KERN_INFO "Failed to map PCI address %#lx.\n",
 				   pciaddr);
 			continue;
 		}
@@ -2159,9 +2158,8 @@ cleanup_module(void)
 	while (root_speedo_dev) {
 		struct speedo_private *sp = (void *)root_speedo_dev->priv;
 		unregister_netdev(root_speedo_dev);
-#ifdef USE_IO
 		release_region(root_speedo_dev->base_addr, SPEEDO3_TOTAL_SIZE);
-#else
+#ifndef USE_IO
 		iounmap((char *)root_speedo_dev->base_addr);
 #endif
 #if defined(HAS_PCI_NETIF)

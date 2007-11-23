@@ -6767,6 +6767,19 @@ CONFIG_IBMOL
   Linux Token Ring Project site for the latest information at
   http://www.linuxtr.net
 
+IBM Lanstreamer chipset PCI adapter support
+CONFIG_IBMLS
+  This is support for IBM Lanstreamer PCI Token Ring Cards.
+
+  If you have such an adapter, say Y and read the Token-Ring mini-HOWTO
+  available via FTP (user:anonymous) from
+  ftp://metalab.unc/edu/pub/Linux/docs/HOWTO.
+
+  This driver is also available as a modules ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The modules will be called lanstreamer.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
+
 SysKonnect adapter support
 CONFIG_SKTR
   This is support for all SysKonnect Token Ring cards, specifically

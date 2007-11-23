@@ -20,6 +20,7 @@
 #define	HICOMX_IO_EXTENT	16
 
 #define COMX_MAX_TX_SIZE	1600
+#define COMX_MAX_RX_SIZE	2048
 
 #define COMX_JAIL_OFFSET	0xffff
 #define COMX_JAIL_VALUE		0xfe

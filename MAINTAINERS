@@ -304,6 +304,11 @@ M:	mike@i-Connect.Net
 L:	linux-eata@i-connect.net, linux-scsi@vger.rutgers.edu
 S:	Maintained
 
+EEPRO100 NETWORK DRIVER
+P:	Andrey V. Savochkin
+M:	saw@saw.sw.com.sg
+S:	Maintained
+
 ETHEREXPRESS-16 NETWORK DRIVER
 P:	Philip Blundell
 M:	Philip.Blundell@pobox.com
@@ -468,6 +473,13 @@ P:	Jean-Paul Roubelat
 M:	jpr@f6fbb.org
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
+
+KERNEL  (2.2.XX TREE)
+P:      Alan Cox
+M:	Alan.Cox@linux.org
+L:      linux-kernel@vger.rutgers.edu
+W:      http://www.kernel.org/pub/linux/kernel/alan/
+S:      Maintained
 
 KERNEL AUTOMOUNTER (AUTOFS)
 P:	H. Peter Anvin
@@ -644,7 +656,7 @@ S:	Maintained
 
 OPL3-SA2, SA3, and SAx DRIVER
 P:	Scott Murray
-M:	scottm@interlog.com
+M:	scott@spiteful.org
 L:	linux-sound@vger.rutgers.edu
 S:	Maintained
 

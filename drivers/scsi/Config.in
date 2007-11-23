@@ -19,7 +19,7 @@ mainmenu_option next_comment
 comment 'SCSI low-level drivers'
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   dep_tristate '3Ware Hardware ATA-RAID support (EXPERIMENTAL)' CONFIG_BLK_DEV_3W_XXXX_RAID $CONFIG_SCSI
+   dep_tristate '3ware Hardware ATA-RAID support (EXPERIMENTAL)' CONFIG_BLK_DEV_3W_XXXX_RAID $CONFIG_SCSI
 fi
 dep_tristate '7000FASST SCSI support' CONFIG_SCSI_7000FASST $CONFIG_SCSI
 dep_tristate 'ACARD SCSI support' CONFIG_SCSI_ACARD $CONFIG_SCSI

@@ -69,6 +69,11 @@ nautilus_init_irq(void)
 {
 	STANDARD_INIT_IRQ_PROLOG;
 
+	if (alpha_using_srm) {
+		alpha_mv.device_interrupt = srm_device_interrupt;
+		alpha_mv.kill_arch = generic_kill_arch;
+	}
+
 	enable_irq(2);			/* enable cascade */
 	disable_irq(8);
 }
@@ -111,7 +116,7 @@ nautilus_kill_arch (int mode, char *restart_cmd)
 	case LINUX_REBOOT_CMD_RESTART:
 		{
 			int v;
-			irongate_hose_write_config_byte(0, 0x07<<3, 0x43, &v, 0);
+			irongate_hose_read_config_byte(0, 0x07<<3, 0x43, &v, 0);
 			irongate_hose_write_config_byte(0, 0x07<<3, 0x43, v | 0x80, 0);
 			outb(1, 0x92);
 			outb(0, 0x92);

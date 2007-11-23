@@ -1,5 +1,5 @@
 ALS-007/ALS-100/ALS-200 based sound cards
-=========================
+=========================================
 
 Support for sound cards based around the Avance Logic
 ALS-007/ALS-100/ALS-200 chip is included.  These chips are a single

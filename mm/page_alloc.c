@@ -20,9 +20,6 @@
 
 int nr_swap_pages = 0;
 int nr_free_pages = 0;
-int low_on_memory = 0;
-extern struct wait_queue * kswapd_wait;
-extern int out_of_memory(unsigned long);
 
 /*
  * Free area management
@@ -126,7 +123,7 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order, unsi
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
 }
 
-static inline void __free_pages(struct page *page, unsigned long order)
+void __free_pages(struct page *page, unsigned long order)
 {
 	if (!PageReserved(page) && atomic_dec_and_test(&page->count)) {
 		if (PageSwapCache(page))
@@ -135,11 +132,6 @@ static inline void __free_pages(struct page *page, unsigned long order)
 		free_pages_ok(page - mem_map, order, PageDMA(page) ? 1 : 0);
 		return;
 	}
-}
-
-void __free_page(struct page *page)
-{
-	__free_pages(page, 0);
 }
 
 void free_pages(unsigned long addr, unsigned long order)
@@ -211,50 +203,30 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	 * further thought.
 	 */
 	if (!(current->flags & PF_MEMALLOC)) {
-#ifdef SLEEP_MEMORY_DEBUGGING
-		if (current->state != TASK_RUNNING && (gfp_mask & __GFP_WAIT)) {
-			printk("gfp called by non-running (%ld) task from %p!\n",
-				current->state, __builtin_return_address(0));
-			/* if we're not running, we can't sleep */
-			gfp_mask &= ~__GFP_WAIT;
-		}
-#endif		
+		int freed;
+		extern struct wait_queue * kswapd_wait;
 
-		if (low_on_memory) {
-			int freed;
-			current->flags |= PF_MEMALLOC;
-			freed = try_to_free_pages(gfp_mask);
-			current->flags &= ~PF_MEMALLOC;
-			if (time_after(jiffies, low_on_memory + 60 * HZ))
-				out_of_memory(gfp_mask);
-			if (freed && nr_free_pages > freepages.low)
-				low_on_memory = 0;
+		if (nr_free_pages >= freepages.high)
+		{
+			/* share RO cachelines in fast path */
+			if (current->trashing_mem)
+				current->trashing_mem = 0;
+			goto ok_to_allocate;
+		}
+		else
+		{
+			if (nr_free_pages < freepages.low)
+				wake_up_interruptible(&kswapd_wait);
+			if (nr_free_pages > freepages.min && !current->trashing_mem)
+				goto ok_to_allocate;
 		}
 
-		if (nr_free_pages <= freepages.low) {
-			wake_up_interruptible(&kswapd_wait);
-			if ((gfp_mask & __GFP_WAIT) && current->state == TASK_RUNNING) {
-				schedule();
-				/* kswapd couldn't save us */
-				if (nr_free_pages <= freepages.low)
-					low_on_memory = jiffies;
-			}
-		}
+		current->trashing_mem = 1;
+		current->flags |= PF_MEMALLOC;
+		freed = try_to_free_pages(gfp_mask);
+		current->flags &= ~PF_MEMALLOC;
 
-		if (nr_free_pages > freepages.min)
-			goto ok_to_allocate;
-
-		/*
-		 * out_of_memory() should usually fix the situation.
-		 * If it does, we can continue like nothing happened.
-		 */
-		if (!out_of_memory(gfp_mask))
-			goto ok_to_allocate;
-
-		if ((gfp_mask & __GFP_MED) && nr_free_pages > freepages.min / 2)
-			goto ok_to_allocate;
-
-		if (!(gfp_mask & __GFP_HIGH))
+		if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
 			goto nopage;
 	}
 ok_to_allocate:

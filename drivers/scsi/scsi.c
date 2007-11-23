@@ -312,6 +312,7 @@ static struct dev_info device_list[] =
 {"TOSHIBA","CDROM","*", BLIST_ISROM},
 {"TOSHIBA","DVD-RAM SD-W1101","*", BLIST_GHOST},
 {"TOSHIBA","DVD-RAM SD-W1111","*", BLIST_GHOST},
+{"MegaRAID", "LD", "*", BLIST_FORCELUN},
 /*
  * Must be at end of list...
  */

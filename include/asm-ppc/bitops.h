@@ -26,68 +26,6 @@ extern __inline__  int cntlzw(int bits)
 	return lz;
 }
 
-/*
- * These are if'd out here because using : "cc" as a constraint
- * results in errors from gcc. -- Cort
- * Besides, they need to be changed so we have both set_bit
- * and test_and_set_bit, etc.
- */
-#if 0
-extern __inline__ int set_bit(int nr, void * addr)
-{
-	unsigned long old, t;
-	unsigned long mask = 1 << (nr & 0x1f);
-	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
-	
-	__asm__ __volatile__(
-		"1:lwarx %0,0,%3 \n\t"
-		"or	%1,%0,%2 \n\t"
-		"stwcx.	%1,0,%3 \n\t"
-		"bne	1b \n\t"
-		: "=&r" (old), "=&r" (t)	/*, "=m" (*p)*/
-		: "r" (mask), "r" (p)
-		/*: "cc" */);
-
-	return (old & mask) != 0;
-}
-
-extern __inline__  unsigned long clear_bit(unsigned long nr, void *addr)
-{
-	unsigned long old, t;
-	unsigned long mask = 1 << (nr & 0x1f);
-	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
-
-	__asm__ __volatile__("\n\
-1:	lwarx	%0,0,%3
-	andc	%1,%0,%2
-	stwcx.	%1,0,%3
-	bne	1b"
-	: "=&r" (old), "=&r" (t)	/*, "=m" (*p)*/
-	: "r" (mask), "r" (p)
-      /*: "cc"*/);
-
-	return (old & mask) != 0;
-}
-
-extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
-{
-	unsigned long old, t;
-	unsigned long mask = 1 << (nr & 0x1f);
-	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
-
-	__asm__ __volatile__("\n\
-1:	lwarx	%0,0,%3
-	xor	%1,%0,%2
-	stwcx.	%1,0,%3
-	bne	1b"
-	: "=&r" (old), "=&r" (t)	/*, "=m" (*p)*/
-	: "r" (mask), "r" (p)
-      /*: "cc"*/);
-
-	return (old & mask) != 0;
-}
-#endif
-
 extern __inline__ unsigned long test_bit(int nr, __const__ volatile void *addr)
 {
 	__const__ unsigned int *p = (__const__ unsigned int *) addr;
@@ -115,17 +53,6 @@ extern __inline__ int ffz(unsigned int x)
  */
 
 #define ffs(x) generic_ffs(x)
-
-#if 0
-/* untested, someone with PPC knowledge? */
-/* From Alexander Kjeldaas <astor@guardian.no> */
-extern __inline__ int ffs(int x)
-{
-        int result;
-        asm ("cntlzw %0,%1" : "=r" (result) : "r" (x));
-        return 32 - result; /* IBM backwards ordering of bits */
-}
-#endif
 
 /*
  * hweightN: returns the hamming weight (i.e. the number

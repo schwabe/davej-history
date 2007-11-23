@@ -19,7 +19,6 @@
 #include <linux/init.h>
 
 #include <asm/pgtable.h>
-extern int low_on_memory;
 
 /*
  * The swap-out functions return 1 if they successfully
@@ -63,14 +62,6 @@ static int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
 	    || PageLocked(page_map)
 	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page_map)))
 		return 0;
-
-	/*
-	 * By setting this bit shrink_mmap() will do
-	 * second-chance page replacement, only do this
-	 * when we are the only (non-pagecache) user.
-	 */
-	if (atomic_read(&page_map->count) <= 2)
-		set_bit(PG_referenced, &page_map->flags);
 
 	/*
 	 * Is the page already in the swap cache? If so, then
@@ -446,7 +437,7 @@ void __init kswapd_setup(void)
        printk ("Starting kswapd v%.*s\n", i, s);
 }
 
-struct wait_queue * kswapd_wait = NULL;
+struct wait_queue * kswapd_wait;
 
 /*
  * The background pageout daemon, started as a kernel thread
@@ -494,24 +485,18 @@ int kswapd(void *unused)
 		 * the processes needing more memory will wake us
 		 * up on a more timely basis.
 		 */
+		interruptible_sleep_on(&kswapd_wait);
 		while (nr_free_pages < freepages.high)
 		{
-			if (!do_try_to_free_pages(GFP_KSWAPD)) {
-				/* out of memory? we can't do much */
-				low_on_memory = jiffies;
-				if (nr_free_pages < freepages.min) {
-					run_task_queue(&tq_disk);
-					tsk->state = TASK_INTERRUPTIBLE;
-					schedule_timeout(HZ);
-				} else {	
-					break;
-				}
+			if (do_try_to_free_pages(GFP_KSWAPD))
+			{
+				if (tsk->need_resched)
+					schedule();
+				continue;
 			}
-			if (tsk->need_resched)
-				schedule();
+			tsk->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(10*HZ);
 		}
-		run_task_queue(&tq_disk);
-		interruptible_sleep_on_timeout(&kswapd_wait, HZ);
 	}
 }
 

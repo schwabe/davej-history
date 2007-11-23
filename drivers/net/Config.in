@@ -243,7 +243,7 @@ comment 'Token ring devices'
 bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then
   tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR
-#  tristate 'IBM Lanstreamer PCI adaptor support' CONFIG_IBMLS
+  tristate 'IBM Lanstreamer PCI adaptor support' CONFIG_IBMLS
   tristate 'IBM Olympic chipset PCI adapter support' CONFIG_IBMOL
   tristate 'SysKonnect adapter support' CONFIG_SKTR
 fi
@@ -291,9 +291,7 @@ tristate 'LanMedia Corp. SSI/V.35, T1/E1, HSSI, T3 boards' CONFIG_LANMEDIA
 
 tristate 'MultiGate (COMX) synchronous serial boards support' CONFIG_COMX
    if [ "$CONFIG_COMX" != "n" ]; then
-   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      dep_tristate '  Support for COMX/CMX/HiCOMX boards' CONFIG_COMX_HW_COMX $CONFIG_COMX
-   fi
+   dep_tristate '  Support for COMX/CMX/HiCOMX boards' CONFIG_COMX_HW_COMX $CONFIG_COMX
    dep_tristate '  Support for LoCOMX board' CONFIG_COMX_HW_LOCOMX $CONFIG_COMX
    dep_tristate '  Support for MixCOM board' CONFIG_COMX_HW_MIXCOM $CONFIG_COMX
    dep_tristate '  Support for HDLC and syncPPP protocols on MultiGate boards' CONFIG_COMX_PROTO_PPP $CONFIG_COMX

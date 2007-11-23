@@ -68,7 +68,7 @@ void UMSDOS_put_inode (struct inode *inode)
 void UMSDOS_put_super (struct super_block *sb)
 {
 	Printk ((KERN_DEBUG "UMSDOS_put_super: entering\n"));
-	if (saved_root) {
+	if (saved_root && pseudo_root && sb->s_dev == ROOT_DEV) {
 		shrink_dcache_parent(saved_root);
 printk("UMSDOS_put_super: freeing saved root, d_count=%d\n",
 saved_root->d_count);
@@ -356,7 +356,7 @@ struct super_block *UMSDOS_read_super (struct super_block *sb, void *data,
 	if (!res)
 		goto out_fail;
 
-	printk (KERN_INFO "UMSDOS 0.85b "
+	printk (KERN_INFO "UMSDOS 0.85g "
 		"(compatibility level %d.%d, fast msdos)\n", 
 		UMSDOS_VERSION, UMSDOS_RELEASE);
 

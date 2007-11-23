@@ -26,9 +26,12 @@
  *
  * Version 0.63 (99/09/21):
  *		- line status report fixes
+ *
+ * Version 0.64 (99/12/01):
+ *		- some more cosmetical fixes
  */
 
-#define VERSION "0.63"
+#define VERSION "0.64"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -167,7 +170,7 @@ static int mixcom_probe(struct device *dev)
 
 	save_flags(flags); cli();
 
-	id=inb_p(MIXCOM_BOARD_BASE(dev) + MIXCOM_ID_OFFSET);
+	id=inb_p(MIXCOM_BOARD_BASE(dev) + MIXCOM_ID_OFFSET) & 0x7f;
 
  	if (id != MIXCOM_ID ) {
 		ret=-ENODEV;
@@ -522,7 +525,6 @@ static int MIXCOM_open(struct device *dev)
 
 	mixcom_on(dev);
 
-	restore_flags(flags);
 
 	hw->status=inb(MIXCOM_BOARD_BASE(dev) + MIXCOM_STATUS_OFFSET);
 	if(hw->status != 0xff) {
@@ -538,6 +540,8 @@ static int MIXCOM_open(struct device *dev)
 	} else {
 		ch->line_status &= ~LINE_UP;
 	}
+
+	restore_flags(flags);
 
 	ch->LINE_status(dev, ch->line_status);
 

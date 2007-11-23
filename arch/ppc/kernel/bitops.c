@@ -1,9 +1,23 @@
 /*
  * Copyright (C) 1996 Paul Mackerras.
  */
-
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <asm/bitops.h>
+
+/*
+ * The atomic bit operations here generally act as memory barriers also
+ * on SMP, since the code that calls them expects them to in many cases.
+ * (x86 processors don't move loads past lock instructions and don't
+ * reorder stores.)
+ */
+#ifdef CONFIG_SMP
+#define SMP_WMB		__asm__ __volatile__("eieio")
+#define SMP_MB		__asm__ __volatile__("sync")
+#else
+#define SMP_WMB		do { } while (0)
+#define SMP_MB		do { } while (0)
+#endif /* CONFIG_SMP */
 
 /*
  * I left these here since the problems with "cc" make it difficult to keep
@@ -17,6 +31,7 @@ void set_bit(int nr, volatile void *addr)
 
 	if ((unsigned long)addr & 3)
 		printk(KERN_ERR "set_bit(%x, %p)\n", nr, addr);
+	SMP_WMB;
 	__asm__ __volatile__("\n\
 1:	lwarx	%0,0,%2
 	or	%0,%0,%1
@@ -25,6 +40,7 @@ void set_bit(int nr, volatile void *addr)
 	: "=&r" (t)		/*, "=m" (*p)*/
 	: "r" (mask), "r" (p)
 	: "cc");
+	SMP_MB;
 }
 
 void clear_bit(int nr, volatile void *addr)
@@ -35,6 +51,7 @@ void clear_bit(int nr, volatile void *addr)
 
 	if ((unsigned long)addr & 3)
 		printk(KERN_ERR "clear_bit(%x, %p)\n", nr, addr);
+	SMP_WMB;
 	__asm__ __volatile__("\n\
 1:	lwarx	%0,0,%2
 	andc	%0,%0,%1
@@ -43,6 +60,7 @@ void clear_bit(int nr, volatile void *addr)
 	: "=&r" (t)		/*, "=m" (*p)*/
 	: "r" (mask), "r" (p)
 	: "cc");
+	SMP_MB;
 }
 
 void change_bit(int nr, volatile void *addr)
@@ -53,6 +71,7 @@ void change_bit(int nr, volatile void *addr)
 
 	if ((unsigned long)addr & 3)
 		printk(KERN_ERR "change_bit(%x, %p)\n", nr, addr);
+	SMP_WMB;
 	__asm__ __volatile__("\n\
 1:	lwarx	%0,0,%2
 	xor	%0,%0,%1
@@ -61,6 +80,7 @@ void change_bit(int nr, volatile void *addr)
 	: "=&r" (t)		/*, "=m" (*p)*/
 	: "r" (mask), "r" (p)
 	: "cc");
+	SMP_MB;
 }
 
 int test_and_set_bit(int nr, volatile void *addr)
@@ -71,6 +91,7 @@ int test_and_set_bit(int nr, volatile void *addr)
 
 	if ((unsigned long)addr & 3)
 		printk(KERN_ERR "test_and_set_bit(%x, %p)\n", nr, addr);
+	SMP_WMB;
 	__asm__ __volatile__("\n\
 1:	lwarx	%0,0,%3
 	or	%1,%0,%2
@@ -79,6 +100,7 @@ int test_and_set_bit(int nr, volatile void *addr)
 	: "=&r" (old), "=&r" (t)	/*, "=m" (*p)*/
 	: "r" (mask), "r" (p)
 	: "cc");
+	SMP_MB;
 
 	return (old & mask) != 0;
 }
@@ -91,6 +113,7 @@ int test_and_clear_bit(int nr, volatile void *addr)
 
 	if ((unsigned long)addr & 3)
 		printk(KERN_ERR "test_and_clear_bit(%x, %p)\n", nr, addr);
+	SMP_WMB;
 	__asm__ __volatile__("\n\
 1:	lwarx	%0,0,%3
 	andc	%1,%0,%2
@@ -99,6 +122,7 @@ int test_and_clear_bit(int nr, volatile void *addr)
 	: "=&r" (old), "=&r" (t)	/*, "=m" (*p)*/
 	: "r" (mask), "r" (p)
 	: "cc");
+	SMP_MB;
 
 	return (old & mask) != 0;
 }
@@ -111,6 +135,7 @@ int test_and_change_bit(int nr, volatile void *addr)
 
 	if ((unsigned long)addr & 3)
 		printk(KERN_ERR "test_and_change_bit(%x, %p)\n", nr, addr);
+	SMP_WMB;
 	__asm__ __volatile__("\n\
 1:	lwarx	%0,0,%3
 	xor	%1,%0,%2
@@ -119,6 +144,7 @@ int test_and_change_bit(int nr, volatile void *addr)
 	: "=&r" (old), "=&r" (t)	/*, "=m" (*p)*/
 	: "r" (mask), "r" (p)
 	: "cc");
+	SMP_MB;
 
 	return (old & mask) != 0;
 }

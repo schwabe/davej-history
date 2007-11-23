@@ -404,8 +404,15 @@ static int umsdos_rename_f (struct inode *old_dir, struct dentry *old_dentry,
 		goto out_unlock;
 	/* make sure it's the same inode! */
 	ret = -ENOENT;
-	if (old->d_inode != old_inode)
-		goto out_dput;
+	/*
+	 * note: for hardlinks they will be different!
+	 *  old_inode will contain inode of .LINKxxx file containing data, and
+	 *  old->d_inode will contain inode of file containing path to .LINKxxx file
+	 */
+	if (!(old_info.entry.flags & UMSDOS_HLINK)) {
+		if (old->d_inode != old_inode)
+			goto out_dput;
+	}
 
 	new = umsdos_covered(new_dentry->d_parent, new_info.fake.fname, 
 					new_info.fake.len);

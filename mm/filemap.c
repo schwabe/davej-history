@@ -164,16 +164,16 @@ int shrink_mmap(int priority, int gfp_mask)
 			clock = page - mem_map;
 		}
 		
+		/* We can't free pages unless there's just one user */
+		if (atomic_read(&page->count) != 1)
+			continue;
+
 		referenced = test_and_clear_bit(PG_referenced, &page->flags);
 
 		if (PageLocked(page))
 			continue;
 
 		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
-			continue;
-
-		/* We can't free pages unless there's just one user */
-		if (atomic_read(&page->count) != 1)
 			continue;
 
 		count--;
@@ -254,6 +254,7 @@ void update_vm_cache_conditional(struct inode * inode, unsigned long pos, const 
 			if ((unsigned long)dest != source_address) {
 				wait_on_page(page);
 				memcpy(dest, buf, len);
+				flush_dcache_page(page_address(page));
 			}
 			page_cache_release(page);
 		}
@@ -1553,8 +1554,10 @@ generic_file_write(struct file *file, const char *buf,
 		 * is done with the page.
 		 */
 		dest = (char *) page_address(page) + offset;
-		if (dest != buf) /* See comment in update_vm_cache_cond. */
+		if (dest != buf) { /* See comment in update_vm_cache_cond. */
 			bytes -= copy_from_user(dest, buf, bytes);
+			flush_dcache_page(page_address(page));
+		}
 		status = -EFAULT;
 		if (bytes)
 			status = inode->i_op->updatepage(file, page, offset, bytes, sync);

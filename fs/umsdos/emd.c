@@ -287,6 +287,7 @@ recsize, UMSDOS_REC_SIZE));
 	}
 	Printk (("umsdos_emd_dir_readentry /mn/: ret=%d.\n", ret));
 	if (entry && ret == 0) {
+		entry->name[entry->name_len]='\0';
 Printk (("umsdos_emd_dir_readentry /mn/: returning len=%d,name=%.*s\n",
 (int) entry->name_len, (int) entry->name_len, entry->name));
 	}

@@ -145,6 +145,8 @@ static void sppp_print_bytes (u8 *p, u16 len);
 
 static int debug = 0;
 
+MODULE_PARM(debug,"1i");
+
 /*
  *	Interface down stub
  */	
