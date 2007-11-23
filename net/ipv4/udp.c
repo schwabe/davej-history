@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.66.2.1 1999/06/20 20:14:48 davem Exp $
+ * Version:	$Id: udp.c,v 1.66.2.3 1999/08/07 10:56:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -687,8 +687,15 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		connected = 0;
 	}
 
-	if (connected)
-		rt = (struct rtable*)dst_clone(sk->dst_cache);
+	if (connected && sk->dst_cache) {
+		rt = (struct rtable*)sk->dst_cache;
+		if (rt->u.dst.obsolete) {
+			sk->dst_cache = NULL;
+			dst_release(&rt->u.dst);
+			rt = NULL;
+		} else
+			dst_clone(&rt->u.dst);
+	}
 
 	if (rt == NULL) {
 		err = ip_route_output(&rt, daddr, ufh.saddr,
@@ -702,6 +709,8 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		err = -EACCES;
 		if (rt->rt_flags&RTCF_BROADCAST && !sk->broadcast) 
 			goto out;
+		if (connected && sk->dst_cache == NULL)
+			sk->dst_cache = dst_clone(&rt->u.dst);
 	}
 
 	ufh.saddr = rt->rt_src;

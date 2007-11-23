@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.104.2.4 1999/06/30 09:27:12 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.104.2.5 1999/07/23 15:38:49 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -342,7 +342,8 @@ static int tcp_v6_unique_address(struct sock *sk)
 			 */
 			sk = __tcp_v6_lookup(NULL, &sk->net_pinfo.af_inet6.daddr,
 					     sk->dport,
-					     &sk->net_pinfo.af_inet6.rcv_saddr, snum,
+					     &sk->net_pinfo.af_inet6.rcv_saddr,
+					     htons(snum),
 					     sk->bound_dev_if);
 			if((sk != NULL) && (sk->state != TCP_LISTEN))
 				retval = 0;

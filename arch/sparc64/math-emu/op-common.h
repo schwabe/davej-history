@@ -248,7 +248,7 @@ do {									     \
 	_FP_FRAC_SET_##wc(R, _FP_NANFRAC_##fs);				     \
 	R##_s = X##_s ^ Y##_s;						     \
 	R##_c = FP_CLS_NAN;						     \
-	R##_r |= EFLAG_INVALID;
+	R##_r |= EFLAG_INVALID;						     \
 	break;								     \
       }									     \
     /* FALLTHRU */							     \

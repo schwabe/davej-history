@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.140.2.1 1999/05/29 04:16:48 davem Exp $
+ * Version:	$Id: tcp.c,v 1.140.2.2 1999/08/07 10:56:35 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1335,8 +1335,8 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	if(copied >= 0 && msg->msg_name) {
 		tp->af_specific->addr2sockaddr(sk, (struct sockaddr *)
 					       msg->msg_name);       
-	if(addr_len)
-		*addr_len = tp->af_specific->sockaddr_len;
+		if(addr_len)
+			*addr_len = tp->af_specific->sockaddr_len;
 	}
 
 	remove_wait_queue(sk->sleep, &wait);

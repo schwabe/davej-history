@@ -1421,7 +1421,7 @@ static int eb4231_recintr(struct sparcaudio_driver *drv)
     status += 2;
   }
 
-  sparcaudio_input_done(drv, 1);
+  sparcaudio_input_done(drv, status);
 
   return 1;
 }
@@ -1484,26 +1484,23 @@ static void cs4231_start_output(struct sparcaudio_driver *drv, __u8 * buffer,
   cs4231_chip->perchip_info.play.active = 1;
   cs4231_chip->playing_count = 0;
 
+  cs4231_playintr(drv);
   if ((cs4231_chip->regs->dmacsr & APC_PPAUSE) || 
       !(cs4231_chip->regs->dmacsr & APC_PDMA_READY)) {
-    cs4231_chip->regs->dmacsr &= ~APC_XINT_PLAY;
-    cs4231_chip->regs->dmacsr &= ~APC_PPAUSE;
-    
-    cs4231_playintr(drv);
-
-    cs4231_chip->regs->dmacsr |= APC_PLAY_SETUP;
+    cs4231_chip->regs->dmacsr &= ~(APC_XINT_PLAY | APC_PPAUSE);
+    cs4231_chip->regs->dmacsr |= APC_GENL_INT | APC_XINT_ENA | APC_XINT_PLAY
+      | APC_XINT_GENL | APC_XINT_PENA | APC_PDMA_READY;
     cs4231_enable_play(drv);
-
+  
     cs4231_ready(drv);
-  } else 
-    cs4231_playintr(drv);
+  }
 }
 
 #ifdef EB4231_SUPPORT
 static void eb4231_stop_output(struct sparcaudio_driver *drv)
 {
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
-  int dcsr;
+  unsigned int dcsr;
 
   dprintk(("eb4231_stop_output: dcsr 0x%x dacr 0x%x dbcr %d\n",
            readl(&cs4231_chip->eb2p->dcsr),
@@ -1547,8 +1544,11 @@ static void cs4231_stop_output(struct sparcaudio_driver *drv)
     cs4231_chip->output_next_dma_handle = 0;
     cs4231_chip->output_next_dma_size = 0;
   }
-#if 0 /* Not safe without shutting off the DMA controller as well. -DaveM */
+#if 1 /* Not safe without shutting off the DMA controller as well. -DaveM */
   /* Else subsequent speed setting changes are ignored by the chip. */
+  cs4231_chip->regs->dmacsr &= ~(APC_GENL_INT | APC_XINT_ENA | APC_XINT_PLAY 
+                                 | APC_XINT_GENL | APC_PDMA_READY 
+                                 | APC_XINT_PENA );
   cs4231_disable_play(drv);
 #endif
 }
@@ -1634,6 +1634,68 @@ static void cs4231_stop_input(struct sparcaudio_driver *drv)
   }
   cs4231_pollinput(drv);
 }
+
+#ifdef EB4231_SUPPORT
+static void eb4231_start_input(struct sparcaudio_driver *drv, __u8 * buffer, 
+                               unsigned long count)
+{
+  struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
+  unsigned int dcsr;
+
+  cs4231_chip->input_ptr = buffer;
+  cs4231_chip->input_size = count;
+
+  if (cs4231_chip->perchip_info.record.active || 
+      (cs4231_chip->perchip_info.record.pause))
+    return;
+
+  cs4231_ready(drv);
+
+  cs4231_chip->perchip_info.record.active = 1;
+  cs4231_chip->recording_count = 0;
+
+  dcsr = readl(&cs4231_chip->eb2c->dcsr);
+  if (!(dcsr & EBUS_DCSR_EN_DMA)) {
+    writel(EBUS_DCSR_RESET, &(cs4231_chip->eb2c->dcsr));
+    writel(EBUS_DCSR_BURST_SZ_16, &(cs4231_chip->eb2c->dcsr));
+
+    eb4231_recintr(drv);
+
+    writel(EBUS_DCSR_BURST_SZ_16 |
+           (EBUS_DCSR_EN_DMA | EBUS_DCSR_INT_EN | EBUS_DCSR_EN_CNT | EBUS_DCSR_EN_NEXT),
+           &(cs4231_chip->eb2c->dcsr));
+
+    cs4231_enable_rec(drv);
+    cs4231_ready(drv);
+  } else
+    eb4231_recintr(drv);
+}
+
+static void eb4231_stop_input(struct sparcaudio_driver *drv)
+{
+  struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
+  unsigned int dcsr;
+
+  cs4231_chip->perchip_info.record.active = 0;
+
+  cs4231_chip->input_ptr = NULL;
+  cs4231_chip->input_size = 0;
+  if (cs4231_chip->input_dma_handle) {
+    cs4231_chip->input_dma_handle = 0;
+    cs4231_chip->input_dma_size = 0;
+  }
+  if (cs4231_chip->input_next_dma_handle) {
+    cs4231_chip->input_next_dma_handle = 0;
+    cs4231_chip->input_next_dma_size = 0;
+  }
+
+  dcsr = readl(&(cs4231_chip->eb2c->dcsr));
+  if (dcsr & EBUS_DCSR_EN_DMA)
+    writel(dcsr & ~EBUS_DCSR_EN_DMA, &(cs4231_chip->eb2c->dcsr));
+
+  cs4231_disable_rec(drv);
+}
+#endif
 
 static int cs4231_set_output_pause(struct sparcaudio_driver *drv, int value)
 {
@@ -1763,13 +1825,25 @@ void eb4231_cinterrupt(int irq, void *dev_id, struct pt_regs *regs)
   struct cs4231_chip *cs4231_chip = (struct cs4231_chip *)drv->private;
   int dummy;
   
-  /* Read status. */
-  dummy = readl(&cs4231_chip->eb2c->dcsr);
+  /* Clear the interrupt. */
+  dummy = readl(&(cs4231_chip->eb2c->dcsr));
+  writel(dummy, &(cs4231_chip->eb2c->dcsr));
 
-  cs4231_chip->perchip_info.record.samples += 
-          cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.record), 
-                                       cs4231_chip->reclen);
-  eb4231_recintr(drv);
+  if ((dummy & EBUS_DCSR_TC) != 0
+      /*&& (dummy & EBUS_DCSR_A_LOADED) != 0*/) {
+    cs4231_chip->perchip_info.record.samples += 
+      cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.record), 
+                                   cs4231_chip->reclen);
+    eb4231_recintr(drv);
+  }
+
+  if ((dummy & EBUS_DCSR_A_LOADED) == 0) {
+    cs4231_chip->perchip_info.record.active = 0;
+    eb4231_recintr(drv);
+#if 1
+    eb4231_getsamplecount(drv, cs4231_chip->reclen, 1);
+#endif
+  }
 }
 
 /* ebus audio play interrupt handler. */
@@ -1823,7 +1897,7 @@ void cs4231_interrupt(int irq, void *dev_id, struct pt_regs *regs)
    */
 
   if (dummy & APC_PLAY_INT) {
-    if (dummy & APC_XINT_PNVA) {
+    if (dummy & APC_XINT_PEMP) {
       cs4231_chip->perchip_info.play.samples += 
 	cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.play), 
 				     cs4231_chip->playlen); 
@@ -1937,8 +2011,8 @@ static struct sparcaudio_operations eb4231_ops = {
 	cs4231_ioctl,
 	eb4231_start_output,
 	eb4231_stop_output,
-	cs4231_start_input,
-        cs4231_stop_input,
+	eb4231_start_input,
+        eb4231_stop_input,
 	cs4231_audio_getdev,
         cs4231_set_output_volume,
         cs4231_get_output_volume,

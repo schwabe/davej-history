@@ -818,6 +818,14 @@ static struct device tr0_dev = {
 #   define      NEXT_DEV        (&bif_dev)
 #endif
 	
+#ifdef CONFIG_NET_SB1000
+    extern int sb1000_init(struct device *dev);
+    static struct device sb1000_dev = {
+        "cm0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, sb1000_probe };
+#   undef       NEXT_DEV
+#   define      NEXT_DEV        (&sb1000_dev)
+#endif
+	
 extern int loopback_init(struct device *dev);
 struct device loopback_dev = {
 	"lo",			/* Software Loopback interface		*/

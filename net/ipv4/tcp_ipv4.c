@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.175.2.6 1999/07/02 10:09:59 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.175.2.7 1999/07/23 15:38:46 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -542,7 +542,8 @@ static int tcp_v4_unique_address(struct sock *sk)
 			 * so it actually scales.
 			 */
 			sk = __tcp_v4_lookup(NULL, sk->daddr, sk->dport,
-					     sk->rcv_saddr, snum, sk->bound_dev_if);
+					     sk->rcv_saddr, htons(snum),
+					     sk->bound_dev_if);
 			if((sk != NULL) && (sk->state != TCP_LISTEN))
 				retval = 0;
 			break;

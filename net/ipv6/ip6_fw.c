@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fw.c,v 1.10 1998/08/26 12:04:57 davem Exp $
+ *	$Id: ip6_fw.c,v 1.10.2.1 1999/08/07 10:56:39 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License

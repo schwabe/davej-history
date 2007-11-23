@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.30 1999/03/25 10:04:10 davem Exp $
+ *	Version: $Id: igmp.c,v 1.30.2.1 1999/07/23 15:29:22 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -242,7 +242,7 @@ static void igmp_heard_report(struct in_device *in_dev, u32 group)
 
 	/* Timers are only set for non-local groups */
 
-	if (LOCAL_MCAST(group))
+	if (group == IGMP_ALL_HOSTS)
 		return;
 
 	for (im=in_dev->mc_list; im!=NULL; im=im->next) {
@@ -284,7 +284,7 @@ static void igmp_heard_query(struct in_device *in_dev, unsigned char max_resp_ti
 	for (im=in_dev->mc_list; im!=NULL; im=im->next) {
 		if (group && group != im->multiaddr)
 			continue;
-		if (LOCAL_MCAST(im->multiaddr))
+		if (im->multiaddr == IGMP_ALL_HOSTS)
 			continue;
 		im->unsolicit_count = 0;
 		if (im->tm_running && (long)(im->timer.expires-jiffies) > max_delay)
@@ -377,7 +377,7 @@ static void igmp_group_dropped(struct ip_mc_list *im)
 	}
 
 #ifdef CONFIG_IP_MULTICAST
-	if (LOCAL_MCAST(im->multiaddr))
+	if (im->multiaddr == IGMP_ALL_HOSTS)
 		return;
 
 	start_bh_atomic();
@@ -397,7 +397,7 @@ static void igmp_group_added(struct ip_mc_list *im)
 	}
 
 #ifdef CONFIG_IP_MULTICAST
-	if (LOCAL_MCAST(im->multiaddr))
+	if (im->multiaddr == IGMP_ALL_HOSTS)
 		return;
 
 	start_bh_atomic();

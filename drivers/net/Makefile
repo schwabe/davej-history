@@ -91,6 +91,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_NET_SB1000),y)
+L_OBJS += sb1000.o
+else
+  ifeq ($(CONFIG_NET_SB1000),m)
+  M_OBJS += sb1000.o
+  endif
+endif
+
 ifeq ($(CONFIG_DAYNAPORT), y)
 L_OBJS += daynaport.o
 CONFIG_8390_BUILTIN = y

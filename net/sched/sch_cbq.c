@@ -176,6 +176,7 @@ struct cbq_sched_data
 	struct cbq_class	*tx_borrowed;
 	int			tx_len;
 	psched_time_t		now;		/* Cached timestamp */
+	psched_time_t		now_rt;		/* Cached real time */
 	unsigned		pmask;
 
 	struct timer_list	delay_timer;
@@ -375,9 +376,11 @@ cbq_mark_toplevel(struct cbq_sched_data *q, struct cbq_class *cl)
 
 	if (toplevel > cl->level && !(cl->q->flags&TCQ_F_THROTTLED)) {
 		psched_time_t now;
+		psched_tdiff_t incr;
+
 		PSCHED_GET_TIME(now);
-		if (PSCHED_TLESS(now, q->now))
-			now = q->now;
+		incr = PSCHED_TDIFF(now, q->now_rt);
+		PSCHED_TADD2(q->now, incr, now);
 
 		do {
 			if (PSCHED_TLESS(cl->undertime, now)) {
@@ -503,7 +506,7 @@ static void cbq_ovl_classic(struct cbq_class *cl)
 			}
 		}
 
-		q->wd_expires = delay;
+		q->wd_expires = base_delay;
 	}
 }
 
@@ -756,14 +759,19 @@ cbq_update(struct cbq_sched_data *q)
 		         idle = (now - last) - last_pktlen/rate
 		 */
 
-		idle = PSCHED_TDIFF(q->now, cl->last) - L2T(cl, len);
+		idle = PSCHED_TDIFF(q->now, cl->last);
+		if ((unsigned long)idle > 128*1024*1024) {
+			avgidle = cl->maxidle;
+		} else {
+			idle -= L2T(cl, len);
 
 		/* true_avgidle := (1-W)*true_avgidle + W*idle,
 		   where W=2^{-ewma_log}. But cl->avgidle is scaled:
 		   cl->avgidle == true_avgidle/W,
 		   hence:
 		 */
-		avgidle += idle - (avgidle>>cl->ewma_log);
+			avgidle += idle - (avgidle>>cl->ewma_log);
+		}
 
 		if (avgidle <= 0) {
 			/* Overlimit or at-limit */
@@ -980,10 +988,13 @@ cbq_dequeue(struct Qdisc *sch)
 	struct sk_buff *skb;
 	struct cbq_sched_data *q = (struct cbq_sched_data *)sch->data;
 	psched_time_t now;
+	psched_tdiff_t incr;
 
 	PSCHED_GET_TIME(now);
+	incr = PSCHED_TDIFF(now, q->now_rt);
 
 	if (q->tx_class) {
+		psched_tdiff_t incr2;
 		/* Time integrator. We calculate EOS time
 		   by adding expected packet transmittion time.
 		   If real time is greater, we warp artificial clock,
@@ -991,12 +1002,14 @@ cbq_dequeue(struct Qdisc *sch)
 
 		   cbq_time = max(real_time, work);
 		 */
-		PSCHED_TADD(q->now, L2T(&q->link, q->tx_len));
-		if (PSCHED_TLESS(q->now, now))
-			q->now = now;
+		incr2 = L2T(&q->link, q->tx_len);
+		PSCHED_TADD(q->now, incr2);
 		cbq_update(q);
-	} else if (PSCHED_TLESS(q->now, now))
-		q->now = now;
+		if ((incr -= incr2) < 0)
+			incr = 0;
+	}
+	PSCHED_TADD(q->now, incr);
+	q->now_rt = now;
 
 	for (;;) {
 		q->wd_expires = 0;
@@ -1044,6 +1057,11 @@ cbq_dequeue(struct Qdisc *sch)
 			del_timer(&q->wd_timer);
 			if (delay <= 0)
 				delay = 1;
+			if (delay > 10*HZ) {
+				if (net_ratelimit())
+					printk(KERN_DEBUG "CBQ delay %ld > 10sec\n", delay);
+				delay = 10*HZ;
+			}
 			q->wd_timer.expires = jiffies + delay;
 			add_timer(&q->wd_timer);
 			sch->flags |= TCQ_F_THROTTLED;
@@ -1224,7 +1242,7 @@ static int cbq_drop(struct Qdisc* sch)
 	struct cbq_class *cl, *cl_head;
 	int prio;
 
-	for (prio = TC_CBQ_MAXPRIO; prio >= 0; prio++) {
+	for (prio = TC_CBQ_MAXPRIO; prio >= 0; prio--) {
 		if ((cl_head = q->active[prio]) == NULL)
 			continue;
 
@@ -1252,6 +1270,8 @@ cbq_reset(struct Qdisc* sch)
 	del_timer(&q->wd_timer);
 	del_timer(&q->delay_timer);
 	q->toplevel = TC_CBQ_MAXLEVEL;
+	PSCHED_GET_TIME(q->now);
+	q->now_rt = q->now;
 
 	for (prio = 0; prio <= TC_CBQ_MAXPRIO; prio++)
 		q->active[prio] = NULL;
@@ -1425,6 +1445,8 @@ static int cbq_init(struct Qdisc *sch, struct rtattr *opt)
 	q->delay_timer.data = (unsigned long)sch;
 	q->delay_timer.function = cbq_undelay;
 	q->toplevel = TC_CBQ_MAXLEVEL;
+	PSCHED_GET_TIME(q->now);
+	q->now_rt = q->now;
 
 	cbq_link_class(&q->link);
 

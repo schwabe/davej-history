@@ -79,9 +79,12 @@ extern __inline__ int tc_classify(struct sk_buff *skb, struct tcf_proto *tp, str
 
 extern __inline__ unsigned long cls_set_class(unsigned long *clp, unsigned long cl)
 {
-	cl = xchg(clp, cl);
+	unsigned long old_cl; 
+
+	old_cl = *clp;
+	*clp = cl;
 	synchronize_bh();
-	return cl;
+	return old_cl;
 }
 
 extern int register_tcf_proto_ops(struct tcf_proto_ops *ops);

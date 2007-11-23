@@ -2211,6 +2211,7 @@ N: Roger E. Wolff
 E: R.E.Wolff@BitWizard.nl
 D: Written kmalloc/kfree
 D: Written Specialix IO8+ driver
+D: Written Specialix SX driver
 S: van Bronckhorststraat 12
 S: 2612 XV Delft
 S: The Netherlands

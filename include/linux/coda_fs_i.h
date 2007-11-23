@@ -20,6 +20,13 @@
  * coda fs inode data
  */
 struct coda_inode_info {
+	/*
+	 * This is a place holder so named pipes work (more or less
+	 * correctly). This must be first in the struct because the
+	 * data is really accessed via inode->u.pipe_i.
+	 */
+	struct pipe_inode_info  pipeinfo;
+
         struct ViceFid     c_fid;	/* Coda identifier */
         u_short	           c_flags;     /* flags (see below) */
         u_short	           c_ocount;    /* count of openers */
