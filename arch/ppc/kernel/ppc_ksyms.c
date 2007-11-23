@@ -30,6 +30,7 @@
 #include <asm/dma.h>
 #include <asm/machdep.h>
 #include <asm/nvram.h>
+#include <asm/time.h>
 
 /* Tell string.h we don't want memcpy etc. as cpp defines */
 #define EXPORT_SYMTAB_STROPS

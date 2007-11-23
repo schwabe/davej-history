@@ -420,7 +420,7 @@ void iounmap(void *addr)
 	   is now necessary.  This has been well tested on a Motorola
 	   MPC750 (Mesquite) processor board.  Johnnie Peters
 	*/
-	if (addr > high_memory && addr < ioremap_bot)
+	if (addr > high_memory && (unsigned long) addr < ioremap_bot)
 		return vfree((void *) (PAGE_MASK & (unsigned long) addr));
 }
 
@@ -1391,7 +1391,7 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	if (boot_infos == 0) {
 		/* record which bits the prom is using */
 		get_mem_prop("available", &phys_avail);
-		remove_mem_piece(&phys_avail, __max_memory, ~0U, 0);
+		remove_mem_piece(&phys_avail, __max_memory, ~__max_memory, 0);
 		prom_mem = phys_mem;
 		for (i = 0; i < phys_avail.n_regions; ++i)
 			remove_mem_piece(&prom_mem,

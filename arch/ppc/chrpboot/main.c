@@ -41,6 +41,8 @@ chrpboot(int a1, int a2, void *prom)
     unsigned char *im;
     unsigned initrd_start, initrd_size;
 
+    printf("chrpboot starting: loaded at 0x%x\n\r", _start);
+
     if (initrd_len) {
 	initrd_size = initrd_len;
 	initrd_start = (RAM_END - initrd_size) & ~0xFFF;

@@ -1502,6 +1502,7 @@ static int sync_page_buffers(struct buffer_head *bh, int wait)
 int try_to_free_buffers(struct page * page_map, int wait)
 {
 	struct buffer_head * tmp, * bh = page_map->buffers;
+	int too_many;
 
 	tmp = bh;
 	do {
@@ -1530,14 +1531,25 @@ int try_to_free_buffers(struct page * page_map, int wait)
 	return 1;
 
  busy:
-	if (!sync_page_buffers(bh, wait))
+	too_many = (nr_buffers * bdf_prm.b_un.nfract/100);
+
+	if (!sync_page_buffers(bh, wait)) {
+
+		/* If a high percentage of the buffers are dirty, 
+		 * wake kflushd 
+		 */
+		if (nr_buffers_type[BUF_DIRTY] > too_many)
+			wakeup_bdflush(0);
+			
 		/*
 		 * We can jump after the busy check because
 		 * we rely on the kernel lock.
 		 */
 		goto succeed;
+	}
 
-	wakeup_bdflush(0);
+	if(nr_buffers_type[BUF_DIRTY] > too_many)
+		wakeup_bdflush(0);
 	return 0;
 }
 

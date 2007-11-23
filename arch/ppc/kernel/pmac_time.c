@@ -24,7 +24,7 @@
 #include <asm/pgtable.h>
 #include <asm/nvram.h>
 
-#include "time.h"
+#include <asm/time.h>
 
 /* Apparently the RTC stores seconds since 1 Jan 1904 */
 #define RTC_OFFSET	2082844800

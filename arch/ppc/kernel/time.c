@@ -46,7 +46,7 @@
 #endif
 #include <asm/machdep.h>
 
-#include "time.h"
+#include <asm/time.h>
 
 void smp_local_timer_interrupt(struct pt_regs *);
 

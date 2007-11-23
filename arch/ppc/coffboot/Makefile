@@ -135,5 +135,6 @@ vmlinux.gz: $(TOPDIR)/vmlinux
 clean:
 	rm -f hack-coff coffboot zImage vmlinux.coff vmlinux.gz
 	rm -f mknote piggyback vmlinux.elf note
+	rm -f micoffboot miboot.image
 
 fastdep:

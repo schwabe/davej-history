@@ -35,8 +35,8 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/gemini.h>
-
-#include "time.h"
+#include <asm/residual.h>
+#include <asm/time.h>
 #include "open_pic.h"
 
 int first_cpu_booted = 0;

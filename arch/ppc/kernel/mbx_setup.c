@@ -41,7 +41,7 @@
 #include <asm/mbx.h>
 #include <asm/machdep.h>
 
-#include "time.h"
+#include <asm/time.h>
 #include "local_irq.h"
 
 static int mbx_set_rtc_time(unsigned long time);

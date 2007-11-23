@@ -42,18 +42,18 @@
 
 /* CHRP NVRAM header */
 struct chrp_header {
-  u8		signature;
-  u8		cksum;
-  u16		len;
-  char          name[12];
-  u8		data[0];
+	u8	signature;
+	u8	cksum;
+	u16	len;
+	char    name[12];
+	u8	data[0];
 };
 
 struct core99_header {
-  struct chrp_header	hdr;
-  u32			adler;
-  u32			generation;
-  u32			reserved[2];
+	struct chrp_header hdr;
+	u32	adler;
+	u32	generation;
+	u32	reserved[2];
 };
 
 /*
@@ -77,7 +77,6 @@ __pmac static char nvram_image[NVRAM_SIZE];
 #endif
 
 extern int pmac_newworld;
-
 
 static u8
 chrp_checksum(struct chrp_header* hdr)
@@ -206,6 +205,7 @@ lookup_partitions(void)
 		hdr = (struct chrp_header *)buffer;
 	
 		offset = 0;
+		buffer[16] = 0;
 		do {
 			for (i=0;i<16;i++)
 				buffer[i] = nvram_read_byte(offset+i);
@@ -281,7 +281,7 @@ void pmac_nvram_init(void)
 	} else if (nvram_naddrs == 2) {
 		nvram_addr = ioremap(dp->addrs[0].address, dp->addrs[0].size);
 		nvram_data = ioremap(dp->addrs[1].address, dp->addrs[1].size);
-	} else if (nvram_naddrs == 0 && adb_hardware == ADB_VIAPMU) {
+	} else if (nvram_naddrs == 0 && adb_controller->kind == ADB_VIAPMU) {
 		nvram_naddrs = -1;
 	} else {
 		printk(KERN_ERR "Don't know how to access NVRAM with %d addresses\n",

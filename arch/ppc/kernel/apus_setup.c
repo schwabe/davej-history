@@ -42,7 +42,7 @@
 #include <asm/machdep.h>
 #include <asm/ide.h>
 
-#include "time.h"
+#include <asm/time.h>
 #include "local_irq.h"
 
 unsigned long apus_get_rtc_time(void);

@@ -35,6 +35,7 @@
 
 #include <asm/adb_mouse.h>
 #include <asm/uaccess.h>
+#include <asm/hardirq.h>
 #ifdef __powerpc__
 #include <asm/processor.h>
 #endif
@@ -56,7 +57,7 @@ extern int console_loglevel;
  *	XXX: need to figure out what ADB mouse packets mean ... 
  *	This is the stuff stolen from the Atari driver ...
  */
-static void adb_mouse_interrupt(unsigned char *buf, int nb)
+void adb_mouse_interrupt(unsigned char *buf, int nb)
 {
     int buttons, id;
 
@@ -154,6 +155,7 @@ static int release_mouse(struct inode *inode, struct file *file)
       return 0;
 
     adb_mouse_interrupt_hook = NULL;
+    synchronize_irq();
     MOD_DEC_USE_COUNT;
     return 0;
 }

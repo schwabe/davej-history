@@ -4,7 +4,6 @@
 #include <linux/config.h>
 
 #include <asm/ptrace.h>
-#include <asm/residual.h>
 
 /* Bit encodings for Machine State Register (MSR) */
 #define MSR_VEC		(1<<25)		/* Enable Altivec */

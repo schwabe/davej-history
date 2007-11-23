@@ -106,7 +106,7 @@ static int pmu_kind = PMU_UNKNOWN;
 static int pmu_fully_inited = 0;
 static int pmu_has_adb, pmu_has_backlight;
 static unsigned char *gpio_reg = NULL;
-static int gpio_irq;
+static int gpio_irq = -1;
 
 int asleep;
 
@@ -238,9 +238,19 @@ find_via_pmu()
 	else if (device_is_compatible(vias->parent, "heathrow"))
 		pmu_kind = PMU_HEATHROW_BASED;
 	else if (device_is_compatible(vias->parent, "Keylargo")) {
+		struct device_node *gpio, *gpiop;
+
 		pmu_kind = PMU_KEYLARGO_BASED;
 		pmu_has_adb = (find_type_devices("adb") != NULL);
 		pmu_has_backlight = (find_type_devices("backlight") != NULL);
+
+		gpiop = find_devices("gpio");
+		if (gpiop && gpiop->n_addrs) {
+			gpio_reg = ioremap(gpiop->addrs->address, 0x10);
+			gpio = find_devices("extint-gpio1");
+			if (gpio && gpio->parent == gpiop && gpio->n_intrs)
+				gpio_irq = gpio->intrs[0].line;
+		}
 	} else
 		pmu_kind = PMU_UNKNOWN;
 
@@ -281,21 +291,9 @@ via_pmu_init(void)
 		return;
 	}
 
-	if (pmu_kind == PMU_KEYLARGO_BASED) {
-		struct device_node *gpio, *gpiop;
-
-		gpiop = find_devices("gpio");
-		if (gpiop && gpiop->n_addrs) {
-			gpio_reg = ioremap(gpiop->addrs->address, 0x10);
-			gpio = find_devices("extint-gpio1");
-			if (gpio && gpio->parent == gpiop && gpio->n_intrs) {
-				gpio_irq = gpio->intrs[0].line;
-				if (request_irq(gpio_irq, gpio1_interrupt, 0,
-						"GPIO1/ADB", (void *)0))
-					printk(KERN_ERR "pmu: can't get irq %d (GPIO1)\n",
-					       gpio->intrs[0].line);
-			}
-		}
+	if (pmu_kind == PMU_KEYLARGO_BASED && gpio_irq != -1) {
+		if (request_irq(gpio_irq, gpio1_interrupt, 0, "GPIO1/ADB", (void *)0))
+			printk(KERN_ERR "pmu: can't get irq %d (GPIO1)\n", gpio_irq);
 	}
 
 	/* Enable interrupts */

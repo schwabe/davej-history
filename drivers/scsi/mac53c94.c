@@ -7,6 +7,7 @@
  * Paul Mackerras, August 1996.
  * Copyright (C) 1996 Paul Mackerras.
  */
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -542,3 +543,9 @@ data_goes_out(Scsi_Cmnd *cmd)
 		return 0;
 	}
 }
+
+#ifdef MODULE
+Scsi_Host_Template driver_template = SCSI_MAC53C94;
+
+#include "scsi_module.c"
+#endif /* MODULE */

@@ -1628,9 +1628,9 @@ void cleanup_module(void)
     bp = (struct bmac_data *) bmac_devs->priv;
     unregister_netdev(bmac_devs);
 
-    free_irq(bmac_devs->irq, bmac_misc_intr);
-    free_irq(bp->tx_dma_intr, bmac_txdma_intr);
-    free_irq(bp->rx_dma_intr, bmac_rxdma_intr);
+    free_irq(bmac_devs->irq, dev);
+    free_irq(bp->tx_dma_intr, dev);
+    free_irq(bp->rx_dma_intr, dev);
 
 #ifdef CONFIG_PMAC_PBOOK
     pmu_unregister_sleep_notifier(&bmac_sleep_notifier);

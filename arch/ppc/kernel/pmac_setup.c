@@ -58,7 +58,7 @@
 #include <asm/ide.h>
 #include <asm/machdep.h>
 
-#include "time.h"
+#include <asm/time.h>
 #include "local_irq.h"
 #include "pmac_pic.h"
 
@@ -371,9 +371,15 @@ __initfunc(static void ohare_init(void))
 __initfunc(static void init_uninorth(void))
 {
 	/* 
-	 * Turns on the gmac clock so that it responds to PCI cycles
-	 * later, the driver may want to turn it off again to save
-	 * power when interface is down
+	 * Turns OFF the gmac clock. The gmac driver will turn
+	 * it back ON when the interface is enabled. This save
+	 * power on portables.
+	 * 
+	 * Note: We could also try to turn OFF the PHY. Since this
+	 * has to be done by both the gmac driver and this code,
+	 * I'll probably end-up moving some of this out of the
+	 * modular gmac driver into a non-modular stub containing
+	 * some basic PHY management and power management stuffs
 	 */
 	struct device_node* uni_n = find_devices("uni-n");
 	struct device_node* gmac = find_devices("ethernet");
@@ -389,7 +395,7 @@ __initfunc(static void init_uninorth(void))
 		gmac = gmac->next;
 	}
 	if (gmac) {
-		*(addr + 8) |= 2;
+		*(addr + 8) &= ~0x00000002UL;
 		eieio();
 	}
 }

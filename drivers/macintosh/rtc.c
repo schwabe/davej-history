@@ -26,10 +26,7 @@
 #include <asm/uaccess.h>
 #include <asm/machdep.h>
 
-/* in kernel/time.c, these prototypes shouldn't be here */
-extern unsigned long mktime(unsigned int, unsigned int, unsigned int,
-                            unsigned int, unsigned int, unsigned int);
-extern void to_tm(int tim, struct rtc_time * tm);
+#include <asm/time.h>
 
 static int rtc_busy = 0;
 

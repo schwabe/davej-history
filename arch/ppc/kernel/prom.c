@@ -2034,15 +2034,6 @@ drawchar(char c)
 	}
 }
 
-void
-here(int n)
-{
-	chrp_indicator(n);
-	if (n == 1)
-		clearscreen();
-	showvalue("here ", n);
-}
-
 __pmac
 void
 drawstring(const char *c)

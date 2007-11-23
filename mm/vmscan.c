@@ -419,7 +419,7 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 done:
 	unlock_kernel();
 
-	if (priority < 0)
+	if (!ret)
 		printk("VM: do_try_to_free_pages failed for %s...\n",
 				current->comm);
 	/* Return success if we freed a page. */

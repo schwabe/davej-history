@@ -8,6 +8,7 @@
  * Copyright (C) 1996 Paul Mackerras.
  */
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -1910,6 +1911,12 @@ data_goes_out(Scsi_Cmnd *cmd)
 		return 0;
 	}
 }
+
+#ifdef MODULE
+Scsi_Host_Template driver_template = SCSI_MESH;
+
+#include "scsi_module.c"
+#endif /* MODULE */
 
 #ifdef MESH_DBG
 static inline u32 readtb(void)

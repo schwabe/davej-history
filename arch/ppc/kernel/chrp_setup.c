@@ -48,7 +48,7 @@
 #include <asm/adb.h>
 #include <asm/hydra.h>
 
-#include "time.h"
+#include <asm/time.h>
 #include "local_irq.h"
 #include "i8259.h"
 #include "open_pic.h"
