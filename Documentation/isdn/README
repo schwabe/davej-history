@@ -335,7 +335,7 @@ README for the ISDN-subsystem
       "manual" is a dial mode created to prevent the unexpected dialouts.
         In this mode, the interface will never make any connections on its
         own. You must explicitly initiate a connection with "isdnctrl dial
-        sdn0". However, after an idle time of no traffic as configured for 
+        isdn0". However, after an idle time of no traffic as configured for 
         the huptimeout value with isdnctrl, the connection _will_ be ended.
         If you don't want any automatic hangup, set the huptimeout value to 0.
         "manual" is the default.

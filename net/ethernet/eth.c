@@ -11,16 +11,17 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Mark Evans, <evansmp@uhura.aston.ac.uk>
  *		Florian  La Roche, <rzsfl@rz.uni-sb.de>
- *		Alan Cox, <gw4pts@gw4pts.ampr.org>
- * 
+ *		Alan Cox, <alan@lxorguk.ukuu.org.uk>
+ *
  * Fixes:
  *		Mr Linux	: Arp problems
  *		Alan Cox	: Generic queue tidyup (very tiny here)
  *		Alan Cox	: eth_header ntohs should be htons
  *		Alan Cox	: eth_rebuild_header missing an htons and
  *				  minor other things.
- *		Tegge		: Arp bug fixes. 
- *		Florian		: Removed many unnecessary functions, code cleanup
+ *		Tegge		: Arp bug fixes.
+ *		Florian		: Removed many unnecessary functions,
+ *				  code cleanup
  *				  and changes for new arp and skbuff.
  *		Alan Cox	: Redid header building to reflect new format.
  *		Alan Cox	: ARP only when compiled with CONFIG_INET
@@ -30,7 +31,8 @@
  *		Alan Cox	: Protect against forwarding explosions with
  *				  older network drivers and IFF_ALLMULTI.
  *	Christer Weinigel	: Better rebuild header message.
- *		Russell King	: eth_header_cache_bind and eth_header_cache_update
+ *		Russell King	: eth_header_cache_bind and
+ *				  eth_header_cache_update
  *				  only compiled if CONFIG_INET is selected
  *
  *		This program is free software; you can redistribute it and/or

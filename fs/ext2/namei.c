@@ -36,7 +36,7 @@
  * NOTE! unlike strncmp, ext2_match returns 1 for success, 0 for failure.
  */
 static int ext2_match (int len, const char * const name,
-		       struct ext2_dir_entry * de)
+		       struct ext2_dir_entry_2 * de)
 {
 	if (!de || !de->inode || len > EXT2_NAME_LEN)
 		return 0;
@@ -61,7 +61,7 @@ static int ext2_match (int len, const char * const name,
  */
 static struct buffer_head * ext2_find_entry (struct inode * dir,
 					     const char * const name, int namelen,
-					     struct ext2_dir_entry ** res_dir)
+					     struct ext2_dir_entry_2 ** res_dir)
 {
 	struct super_block * sb;
 	struct buffer_head * bh_use[NAMEI_RA_SIZE];
@@ -92,7 +92,7 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 
 	for (block = 0, offset = 0; offset < dir->i_size; block++) {
 		struct buffer_head * bh;
-		struct ext2_dir_entry * de;
+		struct ext2_dir_entry_2 * de;
 		char * dlimit;
 
 		if ((block % NAMEI_RA_BLOCKS) == 0 && toread) {
@@ -115,7 +115,7 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 			break;
 		}
 
-		de = (struct ext2_dir_entry *) bh->b_data;
+		de = (struct ext2_dir_entry_2 *) bh->b_data;
 		dlimit = bh->b_data + sb->s_blocksize;
 		while ((char *) de < dlimit) {
 			if (!ext2_check_dir_entry ("ext2_find_entry", dir,
@@ -130,7 +130,7 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 				return bh;
 			}
 			offset += de->rec_len;
-			de = (struct ext2_dir_entry *)
+			de = (struct ext2_dir_entry_2 *)
 				((char *) de + de->rec_len);
 		}
 
@@ -155,7 +155,7 @@ int ext2_lookup (struct inode * dir, const char * name, int len,
 		 struct inode ** result)
 {
 	unsigned long ino;
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 	struct buffer_head * bh;
 
 	*result = NULL;
@@ -211,13 +211,13 @@ int ext2_lookup (struct inode * dir, const char * name, int len,
  */
 static struct buffer_head * ext2_add_entry (struct inode * dir,
 					    const char * name, int namelen,
-					    struct ext2_dir_entry ** res_dir,
+					    struct ext2_dir_entry_2 ** res_dir,
 					    int *err)
 {
 	unsigned long offset;
 	unsigned short rec_len;
 	struct buffer_head * bh;
-	struct ext2_dir_entry * de, * de1;
+	struct ext2_dir_entry_2 * de, * de1;
 	struct super_block * sb;
 
 	*err = -EINVAL;
@@ -247,7 +247,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 		return NULL;
 	rec_len = EXT2_DIR_REC_LEN(namelen);
 	offset = 0;
-	de = (struct ext2_dir_entry *) bh->b_data;
+	de = (struct ext2_dir_entry_2 *) bh->b_data;
 	*err = -ENOSPC;
 	while (1) {
 		if ((char *)de >= sb->s_blocksize + bh->b_data) {
@@ -264,7 +264,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 
 				ext2_debug ("creating next block\n");
 
-				de = (struct ext2_dir_entry *) bh->b_data;
+				de = (struct ext2_dir_entry_2 *) bh->b_data;
 				de->inode = 0;
 				de->rec_len = sb->s_blocksize;
 				dir->i_size = offset + sb->s_blocksize;
@@ -273,7 +273,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 
 				ext2_debug ("skipping to next block\n");
 
-				de = (struct ext2_dir_entry *) bh->b_data;
+				de = (struct ext2_dir_entry_2 *) bh->b_data;
 			}
 		}
 		if (!ext2_check_dir_entry ("ext2_add_entry", dir, de, bh,
@@ -291,7 +291,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 		    (de->rec_len >= EXT2_DIR_REC_LEN(de->name_len) + rec_len)) {
 			offset += de->rec_len;
 			if (de->inode) {
-				de1 = (struct ext2_dir_entry *) ((char *) de +
+				de1 = (struct ext2_dir_entry_2 *) ((char *) de +
 					EXT2_DIR_REC_LEN(de->name_len));
 				de1->rec_len = de->rec_len -
 					EXT2_DIR_REC_LEN(de->name_len);
@@ -300,6 +300,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 			}
 			de->inode = 0;
 			de->name_len = namelen;
+			de->file_type = 0;
 			memcpy (de->name, name, namelen);
 			/*
 			 * XXX shouldn't update any times until successful
@@ -321,7 +322,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 			return bh;
 		}
 		offset += de->rec_len;
-		de = (struct ext2_dir_entry *) ((char *) de + de->rec_len);
+		de = (struct ext2_dir_entry_2 *) ((char *) de + de->rec_len);
 	}
 	brelse (bh);
 	return NULL;
@@ -331,15 +332,15 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
  * ext2_delete_entry deletes a directory entry by merging it with the
  * previous entry
  */
-static int ext2_delete_entry (struct ext2_dir_entry * dir,
+static int ext2_delete_entry (struct ext2_dir_entry_2 * dir,
 			      struct buffer_head * bh)
 {
-	struct ext2_dir_entry * de, * pde;
+	struct ext2_dir_entry_2 * de, * pde;
 	int i;
 
 	i = 0;
 	pde = NULL;
-	de = (struct ext2_dir_entry *) bh->b_data;
+	de = (struct ext2_dir_entry_2 *) bh->b_data;
 	while (i < bh->b_size) {
 		if (!ext2_check_dir_entry ("ext2_delete_entry", NULL, 
 					   de, bh, i))
@@ -352,7 +353,7 @@ static int ext2_delete_entry (struct ext2_dir_entry * dir,
 		}
 		i += de->rec_len;
 		pde = de;
-		de = (struct ext2_dir_entry *) ((char *) de + de->rec_len);
+		de = (struct ext2_dir_entry_2 *) ((char *) de + de->rec_len);
 	}
 	return -ENOENT;
 }
@@ -362,7 +363,7 @@ int ext2_create (struct inode * dir,const char * name, int len, int mode,
 {
 	struct inode * inode;
 	struct buffer_head * bh;
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 	int err;
 
 	*result = NULL;
@@ -385,6 +386,9 @@ int ext2_create (struct inode * dir,const char * name, int len, int mode,
 		return err;
 	}
 	de->inode = inode->i_ino;
+	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+				      EXT2_FEATURE_INCOMPAT_FILETYPE))
+		de->file_type = EXT2_FT_REG_FILE;
 	dir->i_version = ++event;
 	dcache_add(dir, de->name, de->name_len, de->inode);
 	mark_buffer_dirty(bh, 1);
@@ -403,7 +407,7 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 {
 	struct inode * inode;
 	struct buffer_head * bh;
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 	int err;
 
 	if (!dir)
@@ -427,21 +431,27 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 	inode->i_uid = current->fsuid;
 	inode->i_mode = mode;
 	inode->i_op = NULL;
-	if (S_ISREG(inode->i_mode))
+	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &ext2_file_inode_operations;
-	else if (S_ISDIR(inode->i_mode)) {
-		inode->i_op = &ext2_dir_inode_operations;
-		if (dir->i_mode & S_ISGID)
-			inode->i_mode |= S_ISGID;
-	}
-	else if (S_ISLNK(inode->i_mode))
-		inode->i_op = &ext2_symlink_inode_operations;
-	else if (S_ISCHR(inode->i_mode))
+		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+					      EXT2_FEATURE_INCOMPAT_FILETYPE))
+			de->file_type = EXT2_FT_REG_FILE;
+	} else if (S_ISCHR(inode->i_mode)) {
 		inode->i_op = &chrdev_inode_operations;
-	else if (S_ISBLK(inode->i_mode))
+		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+					      EXT2_FEATURE_INCOMPAT_FILETYPE))
+			de->file_type = EXT2_FT_CHRDEV;
+	} else if (S_ISBLK(inode->i_mode)) {
 		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode)) 
+		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+					      EXT2_FEATURE_INCOMPAT_FILETYPE))
+			de->file_type = EXT2_FT_BLKDEV;
+	} else if (S_ISFIFO(inode->i_mode)) {
 		init_fifo(inode);
+		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+					      EXT2_FEATURE_INCOMPAT_FILETYPE))
+			de->file_type = EXT2_FT_FIFO;
+	}
 	if (S_ISBLK(mode) || S_ISCHR(mode))
 		inode->i_rdev = to_kdev_t(rdev);
 	inode->i_dirt = 1;
@@ -471,7 +481,7 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 {
 	struct inode * inode;
 	struct buffer_head * bh, * dir_block;
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 	int err;
 
 	if (!dir)
@@ -506,16 +516,22 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 		return err;
 	}
 	inode->i_blocks = inode->i_sb->s_blocksize / 512;
-	de = (struct ext2_dir_entry *) dir_block->b_data;
+	de = (struct ext2_dir_entry_2 *) dir_block->b_data;
 	de->inode = inode->i_ino;
 	de->name_len = 1;
 	de->rec_len = EXT2_DIR_REC_LEN(de->name_len);
 	strcpy (de->name, ".");
-	de = (struct ext2_dir_entry *) ((char *) de + de->rec_len);
+	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+				      EXT2_FEATURE_INCOMPAT_FILETYPE))
+		de->file_type = EXT2_FT_DIR;
+	de = (struct ext2_dir_entry_2 *) ((char *) de + de->rec_len);
 	de->inode = dir->i_ino;
 	de->rec_len = inode->i_sb->s_blocksize - EXT2_DIR_REC_LEN(1);
 	de->name_len = 2;
 	strcpy (de->name, "..");
+	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+				      EXT2_FEATURE_INCOMPAT_FILETYPE))
+		de->file_type = EXT2_FT_DIR;
 	inode->i_nlink = 2;
 	mark_buffer_dirty(dir_block, 1);
 	brelse (dir_block);
@@ -532,6 +548,9 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 		return err;
 	}
 	de->inode = inode->i_ino;
+	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+				      EXT2_FEATURE_INCOMPAT_FILETYPE))
+		de->file_type = EXT2_FT_DIR;
 	dir->i_version = ++event;
 	dcache_add(dir, de->name, de->name_len, de->inode);
 	mark_buffer_dirty(bh, 1);
@@ -554,7 +573,7 @@ static int empty_dir (struct inode * inode)
 {
 	unsigned long offset;
 	struct buffer_head * bh;
-	struct ext2_dir_entry * de, * de1;
+	struct ext2_dir_entry_2 * de, * de1;
 	struct super_block * sb;
 	int err;
 
@@ -566,8 +585,8 @@ static int empty_dir (struct inode * inode)
 			      inode->i_ino);
 		return 1;
 	}
-	de = (struct ext2_dir_entry *) bh->b_data;
-	de1 = (struct ext2_dir_entry *) ((char *) de + de->rec_len);
+	de = (struct ext2_dir_entry_2 *) bh->b_data;
+	de1 = (struct ext2_dir_entry_2 *) ((char *) de + de->rec_len);
 	if (de->inode != inode->i_ino || !de1->inode || 
 	    strcmp (".", de->name) || strcmp ("..", de1->name)) {
 	    	ext2_warning (inode->i_sb, "empty_dir",
@@ -577,7 +596,7 @@ static int empty_dir (struct inode * inode)
 		return 1;
 	}
 	offset = de->rec_len + de1->rec_len;
-	de = (struct ext2_dir_entry *) ((char *) de1 + de1->rec_len);
+	de = (struct ext2_dir_entry_2 *) ((char *) de1 + de1->rec_len);
 	while (offset < inode->i_size ) {
 		if (!bh || (void *) de >= (void *) (bh->b_data + sb->s_blocksize)) {
 			brelse (bh);
@@ -589,7 +608,7 @@ static int empty_dir (struct inode * inode)
 				offset += sb->s_blocksize;
 				continue;
 			}
-			de = (struct ext2_dir_entry *) bh->b_data;
+			de = (struct ext2_dir_entry_2 *) bh->b_data;
 		}
 		if (!ext2_check_dir_entry ("empty_dir", inode, de, bh,
 					   offset)) {
@@ -601,7 +620,7 @@ static int empty_dir (struct inode * inode)
 			return 0;
 		}
 		offset += de->rec_len;
-		de = (struct ext2_dir_entry *) ((char *) de + de->rec_len);
+		de = (struct ext2_dir_entry_2 *) ((char *) de + de->rec_len);
 	}
 	brelse (bh);
 	return 1;
@@ -612,7 +631,7 @@ int ext2_rmdir (struct inode * dir, const char * name, int len)
 	int retval;
 	struct inode * inode;
 	struct buffer_head * bh;
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 
 repeat:
 	if (!dir)
@@ -701,7 +720,7 @@ int ext2_unlink (struct inode * dir, const char * name, int len)
 	int retval;
 	struct inode * inode;
 	struct buffer_head * bh;
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 
 repeat:
 	if (!dir)
@@ -766,7 +785,7 @@ end_unlink:
 int ext2_symlink (struct inode * dir, const char * name, int len,
 		  const char * symname)
 {
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 	struct inode * inode = NULL;
 	struct buffer_head * bh = NULL, * name_block = NULL;
 	char * link;
@@ -831,6 +850,9 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 		return err;
 	}
 	de->inode = inode->i_ino;
+	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
+				      EXT2_FEATURE_INCOMPAT_FILETYPE))
+		de->file_type = EXT2_FT_SYMLINK;
 	dir->i_version = ++event;
 	dcache_add(dir, de->name, de->name_len, de->inode);
 	mark_buffer_dirty(bh, 1);
@@ -847,7 +869,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 int ext2_link (struct inode * oldinode, struct inode * dir,
 	       const char * name, int len)
 {
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 	struct buffer_head * bh;
 	int err;
 
@@ -880,6 +902,21 @@ int ext2_link (struct inode * oldinode, struct inode * dir,
 		return err;
 	}
 	de->inode = oldinode->i_ino;
+	if (EXT2_HAS_INCOMPAT_FEATURE(oldinode->i_sb,
+				      EXT2_FEATURE_INCOMPAT_FILETYPE)) {
+		if (S_ISREG(oldinode->i_mode))
+			de->file_type = EXT2_FT_REG_FILE;
+		else if (S_ISDIR(oldinode->i_mode))
+			de->file_type = EXT2_FT_DIR;
+		else if (S_ISLNK(oldinode->i_mode))
+			de->file_type = EXT2_FT_SYMLINK;
+		else if (S_ISCHR(oldinode->i_mode))
+			de->file_type = EXT2_FT_CHRDEV;
+		else if (S_ISBLK(oldinode->i_mode))
+			de->file_type = EXT2_FT_BLKDEV;
+		else if (S_ISFIFO(oldinode->i_mode))  
+			de->file_type = EXT2_FT_FIFO;
+	}
 	dir->i_version = ++event;
 	dcache_add(dir, de->name, de->name_len, de->inode);
 	mark_buffer_dirty(bh, 1);
@@ -921,12 +958,12 @@ static int subdir (struct inode * new_inode, struct inode * old_inode)
 }
 
 #define PARENT_INO(buffer) \
-	((struct ext2_dir_entry *) ((char *) buffer + \
-	((struct ext2_dir_entry *) buffer)->rec_len))->inode
+	((struct ext2_dir_entry_2 *) ((char *) buffer + \
+	((struct ext2_dir_entry_2 *) buffer)->rec_len))->inode
 
 #define PARENT_NAME(buffer) \
-	((struct ext2_dir_entry *) ((char *) buffer + \
-	((struct ext2_dir_entry *) buffer)->rec_len))->name
+	((struct ext2_dir_entry_2 *) ((char *) buffer + \
+	((struct ext2_dir_entry_2 *) buffer)->rec_len))->name
 
 /*
  * rename uses retrying to avoid race-conditions: at least they should be
@@ -946,7 +983,7 @@ static int do_ext2_rename (struct inode * old_dir, const char * old_name,
 {
 	struct inode * old_inode, * new_inode;
 	struct buffer_head * old_bh, * new_bh, * dir_bh;
-	struct ext2_dir_entry * old_de, * new_de;
+	struct ext2_dir_entry_2 * old_de, * new_de;
 	int retval;
 
 	goto start_up;
@@ -1060,6 +1097,9 @@ start_up:
 	 * ok, that's it
 	 */
 	new_de->inode = old_inode->i_ino;
+	if (EXT2_HAS_INCOMPAT_FEATURE(new_dir->i_sb,
+				      EXT2_FEATURE_INCOMPAT_FILETYPE))
+		new_de->file_type = old_de->file_type;
 	dcache_add(new_dir, new_de->name, new_de->name_len, new_de->inode);
 	retval = ext2_delete_entry (old_de, old_bh);
 	if (retval == -ENOENT)

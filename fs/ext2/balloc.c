@@ -645,6 +645,25 @@ static inline int block_in_use (unsigned long block,
 			 EXT2_BLOCKS_PER_GROUP(sb), map);
 }
 
+static int test_root(int a, int b)
+{
+	if (a == 0)
+		return 1;
+	while (1) {
+		if (a == 1)
+			return 1;
+		if (a % b)
+			return 0;
+		a = a / b;
+	}
+}
+
+int ext2_group_sparse(int group)
+{
+	return (test_root(group, 3) || test_root(group, 5) ||
+		test_root(group, 7));
+}
+
 void ext2_check_blocks_bitmap (struct super_block * sb)
 {
 	struct buffer_head * bh;
@@ -671,16 +690,22 @@ void ext2_check_blocks_bitmap (struct super_block * sb)
 
 		bh = sb->u.ext2_sb.s_block_bitmap[bitmap_nr];
 
-		if (!test_bit (0, bh->b_data))
-			ext2_error (sb, "ext2_check_blocks_bitmap",
-				    "Superblock in group %d is marked free", i);
-
-		for (j = 0; j < desc_blocks; j++)
-			if (!test_bit (j + 1, bh->b_data))
+		if (!(sb->u.ext2_sb.s_feature_ro_compat &
+		     EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER) ||
+		    ext2_group_sparse(i)) {
+			if (!test_bit (0, bh->b_data))
 				ext2_error (sb, "ext2_check_blocks_bitmap",
+					    "Superblock in group %d "
+					    "is marked free", i);
+
+			for (j = 0; j < desc_blocks; j++)
+				if (!test_bit (j + 1, bh->b_data))
+					ext2_error (sb,
+					    "ext2_check_blocks_bitmap",
 					    "Descriptor block #%d in group "
 					    "%d is marked free", j, i);
-
+		}
+		
 		if (!block_in_use (gdp->bg_block_bitmap, sb, bh->b_data))
 			ext2_error (sb, "ext2_check_blocks_bitmap",
 				    "Block bitmap for group %d is marked free",

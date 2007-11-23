@@ -14,8 +14,8 @@
  *			Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *			Mark Evans, <evansmp@uhura.aston.ac.uk>
  *			Florian La Roche, <rzsfl@rz.uni-sb.de>
- *			Alan Cox, <gw4pts@gw4pts.ampr.org>
- * 
+ *			Alan Cox, <alan@lxorguk.ukuu.org.uk>
+ *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version

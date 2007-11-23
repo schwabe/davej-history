@@ -8,9 +8,9 @@
  * Version:	@(#)ip.c	1.0.16b	9/1/93
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
- *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
- *		Donald Becker, <becker@super.org>
- *		Alan Cox, <Alan.Cox@linux.org>
+ *		Fred N. van Kempen, <waltje@linux.com>
+ *		Donald Becker, <becker@cesdis.gsfc.nasa.gov>
+ *		Alan Cox, <alan@lxorguk.ukuu.org.uk>
  *		Richard Underwood
  *		Stefan Becker, <stefanb@yello.ping.de>
  *		Jorge Cwik, <jorge@laser.satlink.net>
@@ -19,18 +19,20 @@
  *	See ip_input.c for original log
  *
  *	Fixes:
- *		Alan Cox	:	Missing nonblock feature in ip_build_xmit.
- *		Mike Kilburn	:	htons() missing in ip_build_xmit.
- *		Bradford Johnson:	Fix faulty handling of some frames when 
- *					no route is found.
- *		Alexander Demenshin:	Missing sk/skb free in ip_queue_xmit
+ *			 Alan Cox:	Missing nonblock feature in
+ *					ip_build_xmit
+ *		     Mike Kilburn:	htons() missing in ip_build_xmit
+ *		 Bradford Johnson:	Fix faulty handling of some frames
+ *					when no route is found
+ *	      Alexander Demenshin:	Missing sk/skb free in ip_queue_xmit
  *					(in case if packet not accepted by
  *					output firewall rules)
- *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
- *		Juan Jose Ciarlante:	sk/skb source address rewriting
- * 	Elena Apolinario Fdez de Sousa,:ipmr_forward never received multicast
- *	Juan-Mariano de Goyeneche	traffic generated locally.
- *	Andrea Arcangeli	:	Fix for the 65468 bytes ping-exploit
+ *		     Elliot Poger:	Added support for SO_BINDTODEVICE
+ *	      Juan Jose Ciarlante:	sk/skb source address rewriting
+ * Elena Apolinario Fdez de Sousa
+ *    + Juan-Mariano de Goyeneche:	ipmr_forward never received multicast
+ *					traffic generated locally
+ *		 Andrea Arcangeli:	Fix for the 65468 bytes ping-exploit
  */
 
 #include <asm/segment.h>

@@ -1,4 +1,4 @@
-From: Linus Torvalds <torvalds@cs.helsinki.fi>
+From: Linus Torvalds <torvalds@transmeta.com>
 
 How to track down an Oops.. [originally a mail to linux-kernel]
 

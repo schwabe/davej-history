@@ -98,11 +98,20 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dum
 static struct device *ip_mc_find_devfor(unsigned long addr)
 {
 	struct device *dev;
-	for(dev = dev_base; dev; dev = dev->next)
-	{
-		if((dev->flags&IFF_UP)&&(dev->flags&IFF_MULTICAST)&&
-			(dev->pa_addr==addr))
-			return dev;
+	for(dev = dev_base; dev; dev = dev->next) {
+		if((dev->flags&IFF_UP)&&(dev->flags&IFF_MULTICAST)) {
+			if(dev->flags&IFF_POINTOPOINT) {
+				/* gated needs this so that Multicast works   */
+				/* PTP interfaces cant be identified uniquely */
+				/* by their protocol address as it can very   */
+				/* likely be the address of eth0!             */
+				if(dev->pa_dstaddr==addr)
+					return dev;
+			} else {
+				 if(dev->pa_addr==addr)
+					return dev;
+			}
+		}
 	}
 
 	return NULL;

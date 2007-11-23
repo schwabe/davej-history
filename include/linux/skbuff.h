@@ -2,7 +2,7 @@
  *	Definitions for the 'struct sk_buff' memory handlers.
  *
  *	Authors:
- *		Alan Cox, <gw4pts@gw4pts.ampr.org>
+ *		Alan Cox, <alan@lxorguk.ukuu.org.uk>
  *		Florian La Roche, <rzsfl@rz.uni-sb.de>
  *
  *	This program is free software; you can redistribute it and/or

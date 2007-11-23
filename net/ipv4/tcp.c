@@ -13,8 +13,8 @@
  *		Corey Minyard <wf-rch!minyard@relay.EU.net>
  *		Florian La Roche, <flla@stud.uni-sb.de>
  *		Charles Hedrick, <hedrick@klinzhai.rutgers.edu>
- *		Linus Torvalds, <torvalds@cs.helsinki.fi>
- *		Alan Cox, <gw4pts@gw4pts.ampr.org>
+ *		Linus Torvalds, <torvalds@transmeta.com>
+ *		Alan Cox, <alan@lxorguk.ukuu.org.uk>
  *		Matthew Dillon, <dillon@apollo.west.oic.com>
  *		Arnt Gulbrandsen, <agulbra@nvg.unit.no>
  *		Jorge Cwik, <jorge@laser.satlink.net>

@@ -9,8 +9,8 @@
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
- *		Alan Cox, <gw4pts@gw4pts.ampr.org>
- *		Linus Torvalds, <Linus.Torvalds@helsinki.fi>
+ *		Alan Cox, <alan@lxorguk.ukuu.org.uk>
+ *		Linus Torvalds, <torvalds@transmeta.com>
  *
  * Fixes:
  *		Alan Cox	:	Verify area fixes.

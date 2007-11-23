@@ -1,5 +1,5 @@
 /*
- * 	NET3	Protocol independent device support routines.
+ *	NET3	Protocol independent device support routines.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -7,40 +7,44 @@
  *		2 of the License, or (at your option) any later version.
  *
  *	Derived from the non IP parts of dev.c 1.0.19
- * 		Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
+ *		Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *				Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *				Mark Evans, <evansmp@uhura.aston.ac.uk>
  *
  *	Additional Authors:
  *		Florian la Roche <rzsfl@rz.uni-sb.de>
- *		Alan Cox <gw4pts@gw4pts.ampr.org>
+ *		Alan Cox <alan@lxorguk.ukuu.org.uk>
  *		David Hinds <dhinds@allegro.stanford.edu>
  *
  *	Changes:
  *		Alan Cox	:	device private ioctl copies fields back.
- *		Alan Cox	:	Transmit queue code does relevant stunts to
- *					keep the queue safe.
+ *		Alan Cox	:	Transmit queue code does relevant stunts
+ *					to keep the queue safe.
  *		Alan Cox	:	Fixed double lock.
  *		Alan Cox	:	Fixed promisc NULL pointer trap
  *		????????	:	Support the full private ioctl range
- *		Alan Cox	:	Moved ioctl permission check into drivers
+ *		Alan Cox	:	Moved ioctl permission check into
+ :					drivers
  *		Tim Kordas	:	SIOCADDMULTI/SIOCDELMULTI
  *		Alan Cox	:	100 backlog just doesn't cut it when
  *					you start doing multicast video 8)
  *		Alan Cox	:	Rewrote net_bh and list manager.
- *		Alan Cox	: 	Fix ETH_P_ALL echoback lengths.
+ *		Alan Cox	:	Fix ETH_P_ALL echoback lengths.
  *		Alan Cox	:	Took out transmit every packet pass
  *					Saved a few bytes in the ioctl handler
- *		Alan Cox	:	Network driver sets packet type before calling netif_rx. Saves
- *					a function call a packet.
+ *		Alan Cox	:	Network driver sets packet type before
+ *					calling netif_rx. Saves a function
+ *					call a packet.
  *		Alan Cox	:	Hashed net_bh()
  *		Richard Kooijman:	Timestamp fixes.
  *		Alan Cox	:	Wrong field in SIOCGIFDSTADDR
  *		Alan Cox	:	Device lock protection.
- *		Alan Cox	: 	Fixed nasty side effect of device close changes.
- *		Rudi Cilibrasi	:	Pass the right thing to set_mac_address()
- *		Dave Miller	:	32bit quantity for the device lock to make it work out
- *					on a Sparc.
+ *		Alan Cox	:	Fixed nasty side effect of device
+ *					close changes.
+ *		Rudi Cilibrasi	:	Pass the right thing to
+ *					set_mac_address()
+ *		Dave Miller	:	32bit quantity for the device lock
+ *					to make it work out on a Sparc.
  *		Bjorn Ekwall	:	Added KERNELD hack.
  *		Alan Cox	:	Cleaned up the backlog initialise.
  *		Craig Metz	:	SIOCGIFCONF fix if space for under

@@ -76,7 +76,7 @@ static void ps_set_intr( void (*continuation)(void),
 
         if (!ps_timer_active) {
 		ps_timer_active = 1;
-                ps_timer.expires = jiffies + (ps_nice>0)?(ps_nice-1):0;
+                ps_timer.expires = jiffies + ((ps_nice>0)?(ps_nice-1):0);
                 add_timer(&ps_timer);
         }
 

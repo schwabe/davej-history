@@ -505,7 +505,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 				printk(":%hu", dst_port);
 			printk(" L=%hu S=0x%2.2hX I=%hu F=0x%4.4hX T=%hu",
 				ntohs(ip->tot_len), ip->tos, ntohs(ip->id),
-				ip->frag_off, ip->ttl);
+				ntohs(ip->frag_off), ip->ttl);
 			for (opti = 0; opti < (ip->ihl - sizeof(struct iphdr) / 4); opti++)
 				printk(" O=0x%8.8X", *opt++);
 			printk("\n");

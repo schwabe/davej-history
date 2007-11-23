@@ -13,8 +13,8 @@ mainmenu_option next_comment
 comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
-  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-  bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
+   bool '  Set version information on all module symbols' CONFIG_MODVERSIONS
+   bool '  Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
 fi
 endmenu
 
@@ -28,27 +28,27 @@ choice 'Memory configuration' \
 	 Custom		CONFIG_MEM_SPECIAL" Standard
 
 if [ "$CONFIG_MEM_SPECIAL" = "y" ]; then
-	int ' Max physical memory in MB (must be a multiple of 4)' CONFIG_MAX_MEMSIZE 1024
+   int ' Max physical memory in MB (must be a multiple of 4)' CONFIG_MAX_MEMSIZE 1024
 fi
 if [ "$CONFIG_MEM_ENT" = "y" ]; then
-	define_int CONFIG_MAX_MEMSIZE 2048
+   define_int CONFIG_MAX_MEMSIZE 2048
 fi
 if [ "$CONFIG_MEM_STD" = "y" ]; then
-	define_int CONFIG_MAX_MEMSIZE 1024
+   define_int CONFIG_MAX_MEMSIZE 1024
 fi
 bool 'Networking support' CONFIG_NET
 bool 'Limit memory to low 16MB' CONFIG_MAX_16M
 bool 'PCI bios support' CONFIG_PCI
 if [ "$CONFIG_PCI" = "y" ]; then
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
-  fi
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      bool '  PCI bridge optimization (EXPERIMENTAL)' CONFIG_PCI_OPTIMIZE
+   fi
 fi
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
+   tristate 'Kernel support for JAVA binaries (EXPERIMENTAL)' CONFIG_BINFMT_JAVA
 fi
 bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
 
@@ -60,17 +60,17 @@ choice 'Processor type' \
 
 # Conditionally compile MTRR manipulation support
 if [ "$CONFIG_M686" = "y" -o "$CONFIG_M586" = "y" ]; then
-  bool 'Handle buggy SMP BIOSes with bad MTRR setup' CONFIG_MTRR
+   bool 'Handle buggy SMP BIOSes with bad MTRR setup' CONFIG_MTRR
 fi
 
 bool 'Advanced Power Management BIOS support' CONFIG_APM
 if [ "$CONFIG_APM" = "y" ]; then
-  bool '   Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
-  bool '   Enable PM at boot time' CONFIG_APM_DO_ENABLE
-  bool '   Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
-  bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
-  bool '   Power off on shutdown' CONFIG_APM_POWER_OFF
-  bool '   Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+   bool '  Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
+   bool '  Enable PM at boot time' CONFIG_APM_DO_ENABLE
+   bool '  Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
+   bool '  Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
+   bool '  Power off on shutdown' CONFIG_APM_POWER_OFF
+   bool '  Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
 fi
 
 endmenu
@@ -78,7 +78,7 @@ endmenu
 source drivers/block/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
-  source net/Config.in
+   source net/Config.in
 fi
 
 mainmenu_option next_comment
@@ -87,19 +87,19 @@ comment 'SCSI support'
 tristate 'SCSI support' CONFIG_SCSI
 
 if [ "$CONFIG_SCSI" != "n" ]; then
-  source drivers/scsi/Config.in
+   source drivers/scsi/Config.in
 fi
 endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'Network device support'
+   mainmenu_option next_comment
+   comment 'Network device support'
 
-  bool 'Network device support' CONFIG_NETDEVICES
-  if [ "$CONFIG_NETDEVICES" = "y" ]; then
-    source drivers/net/Config.in
-  fi
-  endmenu
+   bool 'Network device support' CONFIG_NETDEVICES
+   if [ "$CONFIG_NETDEVICES" = "y" ]; then
+      source drivers/net/Config.in
+   fi
+   endmenu
 fi
 
 mainmenu_option next_comment
@@ -107,7 +107,7 @@ comment 'ISDN subsystem'
 
 tristate 'ISDN support' CONFIG_ISDN
 if [ "$CONFIG_ISDN" != "n" ]; then
-  source drivers/isdn/Config.in
+   source drivers/isdn/Config.in
 fi
 endmenu
 
@@ -116,7 +116,7 @@ comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
 
 bool 'Support non-SCSI/IDE/ATAPI CDROM drives' CONFIG_CD_NO_IDESCSI
 if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
-  source drivers/cdrom/Config.in
+   source drivers/cdrom/Config.in
 fi
 endmenu
 
@@ -129,7 +129,7 @@ comment 'Sound'
 
 tristate 'Sound card support' CONFIG_SOUND
 if [ "$CONFIG_SOUND" != "n" ]; then
-  source drivers/sound/Config.in
+   source drivers/sound/Config.in
 fi
 endmenu
 
@@ -139,6 +139,6 @@ comment 'Kernel hacking'
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
-  int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
+   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
 endmenu

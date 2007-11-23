@@ -15,11 +15,11 @@
  *            quite a bit, modularized the code.
  * fvk 4/'93  waltje@uwalt.nl.mugnet.org (Fred N. van Kempen)
  *	      Renamed "route_get_info()" to "rt_get_info()" for consistency.
- * Alan Cox (gw4pts@gw4pts.ampr.org) 4/94
+ * Alan Cox (alan@lxorguk.ukuu.org.uk) 4/94
  *	      Dusted off the code and added IPX. Fixed the 4K limit.
  * Erik Schoenfelder (schoenfr@ibr.cs.tu-bs.de)
  *	      /proc/net/snmp.
- * Alan Cox (gw4pts@gw4pts.ampr.org) 1/95
+ * Alan Cox (alan@lxorguk.ukuu.org.uk) 1/95
  *	      Added Appletalk slots
  *
  *  proc net directory handling functions

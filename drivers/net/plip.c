@@ -5,7 +5,7 @@
  * Authors:	Donald Becker,  <becker@super.org>
  *		Tommy Thorn, <thorn@daimi.aau.dk>
  *		Tanabe Hiroyasu, <hiro@sanpo.t.u-tokyo.ac.jp>
- *		Alan Cox, <gw4pts@gw4pts.ampr.org>
+ *		Alan Cox, <alan@lxorguk.ukuu.org.uk>
  *		Peter Bauer, <100136.3530@compuserve.com>
  *		Niibe Yutaka, <gniibe@mri.co.jp>
  *

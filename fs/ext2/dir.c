@@ -72,7 +72,7 @@ struct inode_operations ext2_dir_inode_operations = {
 };
 
 int ext2_check_dir_entry (const char * function, struct inode * dir,
-			  struct ext2_dir_entry * de, struct buffer_head * bh,
+			  struct ext2_dir_entry_2 * de, struct buffer_head * bh,
 			  unsigned long offset)
 {
 	const char * error_msg = NULL;
@@ -104,7 +104,7 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 	unsigned long offset, blk;
 	int i, num, stored;
 	struct buffer_head * bh, * tmp, * bha[16];
-	struct ext2_dir_entry * de;
+	struct ext2_dir_entry_2 * de;
 	struct super_block * sb;
 	int err;
 
@@ -173,7 +173,7 @@ revalidate:
 		
 		while (!error && filp->f_pos < inode->i_size 
 		       && offset < sb->s_blocksize) {
-			de = (struct ext2_dir_entry *) (bh->b_data + offset);
+			de = (struct ext2_dir_entry_2 *) (bh->b_data + offset);
 			if (!ext2_check_dir_entry ("ext2_readdir", inode, de,
 						   bh, offset)) {
 				/* On error, skip the f_pos to the
