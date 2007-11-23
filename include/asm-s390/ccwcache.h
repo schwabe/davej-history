@@ -1,5 +1,5 @@
 /* 
-   * File...........: linux/drivers/s390/block/ccwcache.c
+   * File...........: linux/include/asm-s390/ccwcache.h
    * Author(s)......: Holger Smolinski <Holger.Smolinski@de.ibm.com>
    * Bugreports.to..: <Linux390@de.ibm.com>
    * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 2000
@@ -34,7 +34,8 @@ typedef struct ccw_req_t {
 	devstat_t *dstat;	/* The device status in case of an error */
 
 	/* these are important for recovering erroneous requests */
-	int retries;		/* A retry counter to be set when filling */
+	short retries;		/* A retry counter to be set when filling */
+	char lpm;               /* logical path mask                      */
 	devstat_t *devstat;	/* Keeping the device status */
 	struct ccw_req_t *refers;	/* Does this request refer to another one? */
 	void *function; /* refers to the originating ERP action */ ;
@@ -64,6 +65,7 @@ typedef struct ccw_req_t {
 #define CQR_STATUS_DONE     0x08	/* request is completed sucessfully */
 #define CQR_STATUS_ERROR    0x10	/* request is completed with error */
 #define CQR_STATUS_FAILED   0x20	/* request is finally failed */
+#define CQR_STATUS_PENDING  0x07        /* request is waiting for interrupt - ERP only */ 
 #define CQR_STATUS_FINISHED 0x40	/* request is ready for cleanup */
 
 #ifdef __KERNEL__

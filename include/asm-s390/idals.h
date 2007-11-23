@@ -7,19 +7,50 @@
    * History of changes
    * 07/24/00 new file
  */
-
-#define IDAL_NUMBER_CACHES 7
+#include <asm/irq.h>
 
 typedef unsigned long idaw_t;
 
-#ifdef CONFIG_ARCH_S390
-extern inline int 
-normalize_cpa(ccw1_t * ccw, unsigned long address)
+static inline idaw_t *
+idal_alloc ( int nridaws )
 {
-	return address;
+	if ( nridaws > 33 )
+		BUG();
+	return kmalloc(nridaws * sizeof(idaw_t), GFP_ATOMIC | GFP_DMA );
 }
+
+static inline void 
+idal_free ( idaw_t *idal )
+{
+	kfree (idal);
+}
+
+/*
+ * Function: set_normalized_cda
+ * sets the address of the data in CCW
+ * if necessary it allocates an IDAL and sets sthe appropriate flags
+ */
+#if defined (CONFIG_ARCH_S390)
+static inline void
+set_normalized_cda(ccw1_t * ccw, unsigned long address)
+{
+	ccw->cda = address;
+}
+#elif defined (CONFIG_ARCH_S390X)
+extern void set_normalized_cda(ccw1_t * ccw, unsigned long address);
 #endif
 
-int idal_alloc ( int nridaws );
-void idal_release ( idaw_t *idal );
+/*
+ * Function: clear_normalized_cda
+ * releases any allocated IDAL related to the CCW
+ */
+static inline void
+clear_normalized_cda ( ccw1_t * ccw ) 
+{
+	if ( ccw -> flags & CCW_FLAG_IDA ) {
+		idal_free ( (idaw_t *) (ccw -> cda ));
+		ccw -> flags &= ~CCW_FLAG_IDA;
+	}
+	ccw -> cda = 0;
+}
 

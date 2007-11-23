@@ -413,7 +413,7 @@ long xpram_page_in (unsigned long page_addr, unsigned long xpage_index)
 		"   .long 0xb22e0012 \n"   /* pgin r1,r2                     */
 		/* copy page from expanded memory */
 		"0: ipm  %0          \n"   /* save status (cc & program mask */
-		"   srl  %0,28(0)    \n"   /* cc into least significant bits */
+		"   srl  %0,28       \n"   /* cc into least significant bits */
                 "1:                  \n"   /* we are done                    */
                 ".section .fixup,\"ax\"\n" /* start of fix up section        */
                 "2: lhi    %0,2      \n"   /* return unused condition code 2 */
@@ -456,7 +456,7 @@ long xpram_page_out (unsigned long page_addr, unsigned long xpage_index)
 		" .long 0xb22f0012 \n"   /* pgout r1,r2                    */
                                 /* copy page from expanded memory */
 		"0: ipm  %0        \n"   /* save status (cc & program mask */
-                " srl  %0,28(0)    \n"   /* cc into least significant bits */
+                " srl  %0,28       \n"   /* cc into least significant bits */
                 "1:                  \n"   /* we are done                    */
                 ".section .fixup,\"ax\"\n" /* start of fix up section        */
                 "2: lhi   %0,2       \n"   /* return unused condition code 2 */

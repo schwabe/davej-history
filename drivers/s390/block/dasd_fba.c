@@ -117,13 +117,14 @@ dasd_fba_check_characteristics (struct dasd_device_t *device)
                          "Null device pointer passed to characteristics checker\n");
                 return -ENODEV;
         }
+        if ( device->private != NULL ) {
+                kfree(device->private);
+        }
+        device->private = kmalloc(sizeof(dasd_fba_private_t),GFP_KERNEL);
         if ( device->private == NULL ) {
-		device->private = kmalloc(sizeof(dasd_fba_private_t),GFP_KERNEL);
-		if ( device->private == NULL ) {
-			printk ( KERN_WARNING PRINTK_HEADER
-				 "memory allocation failed for private data\n");
-			return -ENOMEM;
-		}
+                printk ( KERN_WARNING PRINTK_HEADER
+                         "memory allocation failed for private data\n");
+                return -ENOMEM;
         }
         private = (dasd_fba_private_t *)device->private;
         rdc_data = (void *)&(private->rdc_data);
@@ -306,7 +307,7 @@ dasd_fba_build_cp_from_req (dasd_device_t *device, struct request *req)
 					ccw->flags = CCW_FLAG_DC;
 				} else {
 					PRINT_WARN ("Cannot chain chunks smaller than one block\n");
-					ccw_free_request (rw_cp);
+					dasd_free_request (rw_cp);
 					return NULL;
 				}
 				ccw->cmd_code = rw_cmd;
@@ -318,7 +319,7 @@ dasd_fba_build_cp_from_req (dasd_device_t *device, struct request *req)
 			ccw->flags = CCW_FLAG_CC;
 			if (size != byt_per_blk) {
 				PRINT_WARN ("Cannot fulfill request smaller than block\n");
-				ccw_free_request (rw_cp);
+				dasd_free_request (rw_cp);
 				return NULL;
 			}
 		}

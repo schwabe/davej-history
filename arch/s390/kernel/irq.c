@@ -11,6 +11,7 @@
  *  S/390 I/O interrupt processing and I/O request processing is
  *   implemented in arch/s390/kernel/s390io.c
  */
+#include <linux/module.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
@@ -426,3 +427,12 @@ int request_irq( unsigned int   irq,
 
 }
 
+#ifdef CONFIG_SMP
+EXPORT_SYMBOL(s390_bh_lock);
+EXPORT_SYMBOL(__global_cli);
+EXPORT_SYMBOL(__global_sti);
+EXPORT_SYMBOL(__global_save_flags);
+EXPORT_SYMBOL(__global_restore_flags);
+EXPORT_SYMBOL(global_bh_lock);
+EXPORT_SYMBOL(synchronize_bh);
+#endif

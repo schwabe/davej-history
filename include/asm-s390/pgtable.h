@@ -546,7 +546,7 @@ static inline void __flush_tlb_one(struct mm_struct *mm,
 extern __inline__ pgd_t* get_pgd_slow(void)
 {
         int i;
-        pgd_t *pgd,*ret = (pgd_t *)__get_free_pages(GFP_KERNEL,2);
+        pgd_t *pgd,*ret = (pgd_t *)__get_free_pages(GFP_KERNEL,1);
 	if (ret)
 		for (i=0,pgd=ret;i<USER_PTRS_PER_PGD;i++,pgd++)
 			pmd_clear(pmd_offset(pgd,i*PGDIR_SIZE));
@@ -560,17 +560,7 @@ extern __inline__ pgd_t* get_pgd_fast(void)
         if((ret = pgd_quicklist) != NULL) {
                 pgd_quicklist = (unsigned long *)(*ret);
                 ret[0] = ret[1];
-                pgtable_cache_size--;
-		/*
-		 * Need to flush tlb, since private page tables
-		 * are unique thru address of pgd and virtual address.
-		 * If we reuse pgd we need to be sure no tlb entry
-		 * with that pdg is left -> global flush
-		 *
-		 * Fixme: To avoid this global flush we should
-		 * use pdg_quicklist as fix lenght fifo list
-		 * and not as stack
-		 */
+                pgtable_cache_size -= 2;
         } else
                 ret = (unsigned long *)get_pgd_slow();
         return (pgd_t *)ret;
@@ -580,12 +570,12 @@ extern __inline__ void free_pgd_fast(pgd_t *pgd)
 {
         *(unsigned long *)pgd = (unsigned long) pgd_quicklist;
         pgd_quicklist = (unsigned long *) pgd;
-        pgtable_cache_size++;
+        pgtable_cache_size += 2;
 }
 
 extern __inline__ void free_pgd_slow(pgd_t *pgd)
 {
-        free_pages((unsigned long)pgd,2);
+        free_pages((unsigned long)pgd, 1);
 }
 
 extern pte_t *get_pte_slow(pmd_t *pmd, unsigned long address_preadjusted);

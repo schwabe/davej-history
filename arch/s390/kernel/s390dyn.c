@@ -7,6 +7,7 @@
  *    Author(s): Ingo Adlung (adlung@de.ibm.com)
  */
 
+#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/smp_lock.h>
 
@@ -204,3 +205,5 @@ devreg_t * s390_search_devreg( ioinfo_t *ioinfo )
 	return( pdevreg);
 }
 
+EXPORT_SYMBOL(s390_device_register);
+EXPORT_SYMBOL(s390_device_unregister);

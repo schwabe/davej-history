@@ -24,6 +24,7 @@
 #include <asm/timex.h>
 #include <asm/init.h>
 #include <asm/spinlock.h>
+#include <linux/module.h>
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
@@ -721,3 +722,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
         }
 }
 
+EXPORT_SYMBOL(kernel_flag);
+EXPORT_SYMBOL(smp_ctl_set_bit);
+EXPORT_SYMBOL(smp_ctl_clear_bit);
+EXPORT_SYMBOL(smp_do_callback_all);

@@ -397,7 +397,7 @@ static void floppy_off(unsigned int nr);
 #define LOCAL_END_REQUEST
 #define DEVICE_NAME "dasd"
 #define DEVICE_REQUEST do_dasd_request
-#define DEVICE_NR(device) (MINOR(device) >> PARTN_BITS)
+#define DEVICE_NR(device) (MINOR(device) >> DASD_PARTN_BITS)
 #define DEVICE_ON(device) 
 #define DEVICE_OFF(device)
 

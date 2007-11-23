@@ -1792,7 +1792,7 @@ __initfunc(void device_setup(void))
 }
 
 #ifdef CONFIG_PROC_FS
-int get_partition_list(char * page)
+int get_partition_list(char *page, char **start, off_t offset, int count)
 {
 	struct gendisk *p;
 	char buf[MAX_DISKNAME_LEN];
@@ -1801,14 +1801,23 @@ int get_partition_list(char * page)
 	len = sprintf(page, "major minor  #blocks  name\n\n");
 	for (p = gendisk_head; p; p = p->next) {
 		for (n=0; n < (p->nr_real << p->minor_shift); n++) {
-			if (p->part[n].nr_sects && len < PAGE_SIZE - 80) {
+			if (p->part[n].nr_sects) {
 				len += sprintf(page+len,
 					       "%4d  %4d %10d %s\n",
 					       p->major, n, p->sizes[n],
 					       disk_name(p, n, buf));
+				if (len < offset) 
+					offset -= len, len = 0;
+				else if (len >= offset + count)
+					goto leave_loops;
 			}
 		}
 	}
-	return len;
+leave_loops:
+	*start = page + offset;
+	len -= offset;
+	if (len < 0)
+		len = 0;
+	return len > count ? count : len;
 }
 #endif

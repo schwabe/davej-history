@@ -68,6 +68,8 @@ typedef __u64	Elf64_Word;
 
 #define EM_SPARCV9     43	/* SPARC v9 64-bit */
 
+#define EM_S390        22	/* IBM S/390 */
+
 /*
  * This is an interim value that we will use until the committee comes
  * up with a final number.
@@ -75,9 +77,9 @@ typedef __u64	Elf64_Word;
 #define EM_ALPHA	0x9026
 
 /*
- * This is an interim value for S390 architecture
+ * This is the old interim value for S/390 architecture
  */
-#define EM_S390         0xA390
+#define EM_S390_OLD     0xA390
 
 /* This is the info that is needed to parse the dynamic section of the file */
 #define DT_NULL		0

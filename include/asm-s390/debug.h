@@ -9,42 +9,59 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-#ifdef __KERNEL__
+/* Note:
+ * struct __debug_entry must be defined outside of #ifdef __KERNEL__ 
+ * in order to allow a user program to analyze the 'raw'-view.
+ */
 
-#include <asm/spinlock.h>
+struct __debug_entry{
+        union {
+                struct {
+                        unsigned long long clock:52;
+                        unsigned long long exception:1;
+                        unsigned long long level:3;
+                        unsigned long long cpuid:8;
+                } fields;
+
+                unsigned long long stck;
+        } id;
+        void* caller;
+} __attribute__((packed));
+
+
+#define __DEBUG_FEATURE_VERSION      1  /* version of debug feature */
+
+#ifdef __KERNEL__
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
+ #include <asm/spinlock.h>
+#else
+ #include <linux/spinlock.h>
+#endif /* LINUX_VERSION_CODE */
 #include <linux/kernel.h>
 #include <linux/time.h>
 #include <linux/proc_fs.h>
 
-#define DEBUG_MAX_AREAS            16 /* max number of allowed registers */
 #define DEBUG_MAX_LEVEL            6  /* debug levels range from 0 to 6 */
+#define DEBUG_OFF_LEVEL            -1 /* level where debug is switched off */
 #define DEBUG_MAX_VIEWS            10 /* max number of views in proc fs */
 #define DEBUG_MAX_PROCF_LEN        16 /* max length for a proc file name */
 #define DEBUG_DEFAULT_LEVEL        3  /* initial debug level */
 
 #define DEBUG_DIR_ROOT "s390dbf" /* name of debug root directory in proc fs */
 
+#define DEBUG_DATA(entry) (char*)(entry + 1) /* data is stored behind */
+                                             /* the entry information */
+
 #define STCK(x)	asm volatile ("STCK %0":"=m" (x))
 
-typedef struct {
-	union {
-		struct {
-			unsigned long long clock:52;
-			unsigned long long unused:2;
-			unsigned long long cpuid:8;
-			unsigned long long exception:1;
-			unsigned long long used:1;
-		} fields;
-
-		unsigned long long stck;
-	} id;
-	void* caller;
-	char data[4];
-} debug_entry_t;
+typedef struct __debug_entry debug_entry_t;
 
 struct debug_view;
 
-typedef struct {	
+typedef struct debug_info {	
+	struct debug_info* next;
+	struct debug_info* prev;
 	atomic_t ref_count;
 	spinlock_t lock;			
 	int level;
@@ -54,7 +71,7 @@ typedef struct {
 	int entry_size;	
 	debug_entry_t** areas;
 	int active_area;
-	int active_entry[DEBUG_MAX_AREAS];
+	int *active_entry;
 	struct proc_dir_entry* proc_root_entry;
 	struct proc_dir_entry* proc_entries[DEBUG_MAX_VIEWS];
 	struct debug_view* views[DEBUG_MAX_VIEWS];	
@@ -87,29 +104,97 @@ struct debug_view {
 	debug_header_proc_t* header_proc;
 	debug_format_proc_t* format_proc;
 	debug_input_proc_t*  input_proc;
+	void*                private_data;
 };
 
-extern struct debug_view debug_ascii_view;
-extern struct debug_view debug_ebcdic_view;
-extern struct debug_view debug_hex_view;
+extern struct debug_view debug_hex_ascii_view;
+extern struct debug_view debug_raw_view;
+extern struct debug_view debug_sprintf_view;
+
+/* do NOT use the _common functions */
+
+debug_entry_t* debug_event_common(debug_info_t* id, int level, 
+                                  const void* data, int length);
+
+debug_entry_t* debug_exception_common(debug_info_t* id, int level, 
+                                      const void* data, int length);
+
+/* Debug Feature API: */
 
 debug_info_t* debug_register(char* name, int pages_index, int nr_areas,
-			     int buf_size);
+                             int buf_size);
+
 void debug_unregister(debug_info_t* id);
 
-debug_entry_t* debug_event(debug_info_t* id, int level, void* data,
-			   int length);
-debug_entry_t* debug_int_event(debug_info_t* id, int level,
-			       unsigned int tag);
-debug_entry_t* debug_text_event(debug_info_t* id, int level,
-				const char* txt);
+void debug_set_level(debug_info_t* id, int new_level);
 
-debug_entry_t* debug_exception(debug_info_t* id, int level, void* data,
-			       int length);
-debug_entry_t* debug_int_exception(debug_info_t* id, int level,
-				   unsigned int tag);
-debug_entry_t* debug_text_exception(debug_info_t* id, int level,
-				    const char* txt);
+extern inline debug_entry_t* 
+debug_event(debug_info_t* id, int level, void* data, int length)
+{
+	if ((!id) || (level > id->level)) return NULL;
+        return debug_event_common(id,level,data,length);
+}
+
+extern inline debug_entry_t* 
+debug_int_event(debug_info_t* id, int level, unsigned int tag)
+{
+        unsigned int t=tag;
+	if ((!id) || (level > id->level)) return NULL;
+        return debug_event_common(id,level,&t,sizeof(unsigned int));
+}
+
+extern inline debug_entry_t *
+debug_long_event (debug_info_t* id, int level, unsigned long tag)
+{
+        unsigned long t=tag;
+	if ((!id) || (level > id->level)) return NULL;
+        return debug_event_common(id,level,&t,sizeof(unsigned long));
+}
+
+extern inline debug_entry_t* 
+debug_text_event(debug_info_t* id, int level, const char* txt)
+{
+	if ((!id) || (level > id->level)) return NULL;
+        return debug_event_common(id,level,txt,strlen(txt));
+}
+
+extern debug_entry_t *
+debug_sprintf_event(debug_info_t* id,int level,char *string,...);
+
+
+extern inline debug_entry_t* 
+debug_exception(debug_info_t* id, int level, void* data, int length)
+{
+	if ((!id) || (level > id->level)) return NULL;
+        return debug_exception_common(id,level,data,length);
+}
+
+extern inline debug_entry_t* 
+debug_int_exception(debug_info_t* id, int level, unsigned int tag)
+{
+        unsigned int t=tag;
+	if ((!id) || (level > id->level)) return NULL;
+        return debug_exception_common(id,level,&t,sizeof(unsigned int));
+}
+
+extern inline debug_entry_t * 
+debug_long_exception (debug_info_t* id, int level, unsigned long tag)
+{
+        unsigned long t=tag;
+	if ((!id) || (level > id->level)) return NULL;
+        return debug_exception_common(id,level,&t,sizeof(unsigned long));
+}
+
+extern inline debug_entry_t* 
+debug_text_exception(debug_info_t* id, int level, const char* txt)
+{
+	if ((!id) || (level > id->level)) return NULL;
+        return debug_exception_common(id,level,txt,strlen(txt));
+}
+
+
+extern debug_entry_t *
+debug_sprintf_exception(debug_info_t* id,int level,char *string,...);
 
 int debug_register_view(debug_info_t* id, struct debug_view* view);
 int debug_unregister_view(debug_info_t* id, struct debug_view* view);

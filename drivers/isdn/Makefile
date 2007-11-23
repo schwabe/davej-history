@@ -32,7 +32,7 @@ obj-$(CONFIG_ISDN_PPP_BSDCOMP)		+= isdn_bsdcomp.o
 
 # Object files in subdirectories
 
-mod-subdirs				:= avmb1
+mod-subdirs				:= avmb1 eicon
 subdir-$(CONFIG_ISDN_DIVERSION)		+= divert
 subdir-$(CONFIG_ISDN_DRV_HISAX)		+= hisax
 subdir-$(CONFIG_ISDN_DRV_ICN)		+= icn

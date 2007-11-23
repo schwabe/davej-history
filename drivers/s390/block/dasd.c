@@ -1,9 +1,10 @@
 /* 
  * File...........: linux/drivers/s390/block/dasd.c
  * Author(s)......: Holger Smolinski <Holger.Smolinski@de.ibm.com>
+ *                  Horst Hummel <Horst.Hummel@de.ibm.com>  
  * Bugreports.to..: <Linux390@de.ibm.com>
  * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999,2000
-
+ *
  * History of changes (starts July 2000)
  * 07/03/00 Adapted code to compile with 2.2 and 2.4 kernels
  * 07/05/00 Added some missing cases when shutting down a device
@@ -36,8 +37,12 @@
  * 10/26/00 fixed ITPM PL010261EPA race condition when formatting  
             are the fixes in dasd_do_chanq
  * 11/21/00 fixed BLKFLSBUF ioctl and dasd_release to flush the buffers
+ * 01/17/01 fixed PL020234MVE problem accessing DASD 68-127, 133-191,...
+ * 01/23/01 fixed sleep_on_request to terminate when signal_pending
+ * 01/25/01 added code for error recovery with PAC'0x1D' = long busy
  */
 
+#include <linux/module.h>
 #include <linux/config.h>
 #include <linux/version.h>
 #include <linux/init.h>
@@ -96,12 +101,7 @@
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
 static struct block_device_operations dasd_device_operations;
 #endif /* VERSION_CODE */
-  
-#ifdef MODULE
-#define EXPORT_SYMTAB
-#include <linux/module.h>
 
-EXPORT_NO_SYMBOLS;
 MODULE_AUTHOR ("Holger Smolinski <Holger.Smolinski@de.ibm.com>");
 MODULE_DESCRIPTION ("Linux on S/390 DASD device driver, Copyright 2000 IBM Corporation");
 MODULE_SUPPORTED_DEVICE("dasd");
@@ -113,13 +113,8 @@ EXPORT_SYMBOL (dasd_int_handler);
 EXPORT_SYMBOL (dasd_alloc_request);
 EXPORT_SYMBOL (dasd_free_request);
 
-#else
-#endif				/* MODULE */
-
 /* SECTION: Constant definitions to be used within this file */
-#ifdef PRINTK_HEADER
 #undef PRINTK_HEADER
-#endif
 #define PRINTK_HEADER DASD_NAME":"
 
 #define DASD_QUEUE_LIMIT 10
@@ -252,7 +247,7 @@ dasd_split_parm_string ( char * str )
 
 static char dasd_parm_string[1024] = {0,};
 
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,2,17))
 static int
 dasd_setup (char *str) 
 {
@@ -280,7 +275,7 @@ dasd_setup (char *str, int *ints)
 #endif /* LINUX_IS_24 */
 
 
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,2,17))
 __setup("dasd=", dasd_setup);
 #endif /* LINUX_IS_24 */
 
@@ -476,7 +471,7 @@ dasd_discipline_deq (dasd_discipline_t * d)
  * void dasd_chanq_enq (dasd_chanq_t * q, ccw_req_t * cqr)
  */
 
-static void
+void
 dasd_chanq_enq (dasd_chanq_t * q, ccw_req_t * cqr)
 {
 	if (q->head != NULL) {
@@ -493,7 +488,7 @@ dasd_chanq_enq (dasd_chanq_t * q, ccw_req_t * cqr)
  * void dasd_chanq_enq_head (dasd_chanq_t * q, ccw_req_t * cqr)
  */
 
-static void
+void
 dasd_chanq_enq_head (dasd_chanq_t * q, ccw_req_t * cqr)
 {
 	cqr->next = q->head;
@@ -501,14 +496,17 @@ dasd_chanq_enq_head (dasd_chanq_t * q, ccw_req_t * cqr)
 	if (q->tail == NULL)
 		q->tail = cqr;
 	q->queued_requests++;
-	atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_FILLED, CQR_STATUS_QUEUED);
+
+        atomic_compare_and_swap_debug (&cqr->status, 
+                                       CQR_STATUS_FILLED, 
+                                       CQR_STATUS_QUEUED);
 }
 
 /* 
  * int dasd_chanq_deq (dasd_chanq_t * q, ccw_req_t * cqr)
  */
 
-static int
+int
 dasd_chanq_deq (dasd_chanq_t * q, ccw_req_t * cqr)
 {
 	ccw_req_t *prev;
@@ -776,9 +774,8 @@ dasd_start_IO (ccw_req_t * cqr)
 	int retries = DASD_SSCH_RETRIES;
 	dasd_device_t *device = cqr->device;
 	int irq, devno;
-	int devindex, partn;
+	int devindex;
 	major_info_t *major_info;
-	struct request *req;
 
 	if (!cqr) {
 		printk (KERN_WARNING PRINTK_HEADER "No request passed to start_io function");
@@ -786,10 +783,9 @@ dasd_start_IO (ccw_req_t * cqr)
 	}
 	irq = device->devinfo.irq;
 	devno = device->devinfo.devno;
-	req = (struct request *) cqr->req;
-	devindex = devindex_from_kdev_t (req->rq_dev);
+	devindex = devindex_from_devno (devno);
 	major_info = major_info_from_devindex (devindex);
-	partn = MINOR (req->rq_dev) & ((1 << major_info->gendisk.minor_shift) - 1);
+
 	if (strncmp ((char *) &cqr->magic, device->discipline->ebcname, 4)) {
 		printk (KERN_WARNING PRINTK_HEADER
 			"0x%04X on sch %d = /dev/%s (%d:%d)"
@@ -801,10 +797,12 @@ dasd_start_IO (ccw_req_t * cqr)
 			cqr->magic, *(long *) device->discipline->name);
 		return -EINVAL;
 	}
-	atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_QUEUED, CQR_STATUS_IN_IO);
+	atomic_compare_and_swap_debug (&cqr->status, 
+                                       CQR_STATUS_QUEUED, 
+                                       CQR_STATUS_IN_IO);
 	do {
 		asm volatile ("STCK %0":"=m" (cqr->startclk));
-		rc = do_IO (irq, cqr->cpaddr, (long) cqr, 0x00, cqr->options);
+		rc = do_IO (irq, cqr->cpaddr, (long) cqr, cqr->lpm, cqr->options);
 		switch (rc) {
 		case 0:
                         if (!(cqr->options & DOIO_WAIT_FOR_INTERRUPT)) {
@@ -848,7 +846,7 @@ dasd_start_IO (ccw_req_t * cqr)
 	if (rc) {
                 atomic_compare_and_swap_debug (&cqr->status, 
                                                CQR_STATUS_IN_IO, 
-                                               CQR_STATUS_ERROR);
+                                               CQR_STATUS_FAILED);
 	}
 	return rc;
 }
@@ -879,6 +877,10 @@ sleep_on_req ( ccw_req_t * req )
                 schedule ();
                 s390irq_spin_lock_irqsave (device->devinfo.irq, flags);
                 cs = atomic_read (&req->status);
+		if ( signal_pending(current) ) {
+			rc = -ERESTARTSYS;
+			break;
+		}
         } while ( ! (cs & CQR_STATUS_FINISHED) );
         /* was originally: while ((cs != CQR_STATUS_DONE) && (cs != CQR_STATUS_FAILED)); */ 
         remove_wait_queue (&device->wait_q, &wait);
@@ -1178,189 +1180,216 @@ dasd_do_chanq (void)
 					printk (KERN_WARNING PRINTK_HEADER
 						" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
 						" Failing to start I/O operation with rc %d\n",
-						devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, rc);
+						devno, irq, device->name, major_from_devindex (devindex), 
+                                                devindex << DASD_PARTN_BITS, rc);
 					switch (rc) {
 					case EBUSY:
 						if (cqr->retries--) {
 							printk (KERN_WARNING PRINTK_HEADER
 								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d) busy:"
 								" retrying ... %d retries left\n",
-								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, cqr->retries);
+								devno, irq, device->name, major_from_devindex (devindex), 
+                                                                devindex << DASD_PARTN_BITS, cqr->retries);
 							break;
 						}
 					default:{	/* Fallthrough ?? */
 							printk (KERN_WARNING PRINTK_HEADER
 								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
 								" Giving up this request!\n",
-								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
-
-							atomic_compare_and_swap_debug (&cqr->status,
-                                                                                       CQR_STATUS_QUEUED,
-                                                                                       CQR_STATUS_FAILED | CQR_STATUS_FINISHED);
+								devno, irq, device->name, major_from_devindex (devindex),
+                                                                devindex << DASD_PARTN_BITS);
 							break;
 						}
 					}
 				}
 				break;
 			case CQR_STATUS_IN_IO:{
-                                        unsigned long long now;
-                                        unsigned long long delta;
-                                        
-					asm volatile ("STCK %0":"=m" (now));
-					if (cqr->expires && cqr->startclk &&
-					    cqr->expires < now) {
-                                                delta = cqr->expires - cqr->startclk;
-						printk (KERN_ERR PRINTK_HEADER
-							" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-							" I/O operation outstanding longer than 0x%08x%08x usecs on req %p\n",
-							devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, (long)(delta >> 44), (long)(delta >> 12), cqr);
-							cqr->expires += delta;
+                                unsigned long long now;
+                                unsigned long long delta;
+                                
+                                asm volatile ("STCK %0":"=m" (now));
+                                if (cqr->expires && cqr->startclk &&
+                                    cqr->expires < now) {
+                                        delta = cqr->expires - cqr->startclk;
+                                        printk (KERN_ERR PRINTK_HEADER
+                                                " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                                " I/O operation outstanding longer than 0x%08x%08x usecs on req %p\n",
+                                                devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, (long)(delta >> 44), (long)(delta >> 12), cqr);
+                                        cqr->expires += delta;
 #if 0
-						if ( cqr->retries-- ) {
-							printk (KERN_WARNING PRINTK_HEADER
-								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-								" waiting %d more times\n",
-								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, cqr->retries);
-							cqr->expires += delta;
-							break;
-						} else {
-							printk (KERN_WARNING PRINTK_HEADER
-								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-								" You should disable that device by issueing '@#?!'\n",		/* FIXME */
-								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
-							atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_IN_IO, CQR_STATUS_FAILED);
-							halt_IO(irq,(unsigned long)cqr, DOIO_WAIT_FOR_INTERRUPT);
-							break;
-						}
+                                        if ( cqr->retries-- ) {
+                                                printk (KERN_WARNING PRINTK_HEADER
+                                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                                        " waiting %d more times\n",
+                                                        devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, cqr->retries);
+                                                cqr->expires += delta;
+                                                break;
+                                        } else {
+                                                printk (KERN_WARNING PRINTK_HEADER
+                                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                                        " You should disable that device by issueing '@#?!'\n",		/* FIXME */
+                                                        devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
+                                                atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_IN_IO, CQR_STATUS_FAILED);
+                                                halt_IO(irq,(unsigned long)cqr, DOIO_WAIT_FOR_INTERRUPT);
+                                                break;
+                                        }
 #endif
-					}
-					break;
+                                }
+                                break;
                         }
 			case CQR_STATUS_ERROR:{
-                                        dasd_erp_action_fn_t erp_action;
-                                        ccw_req_t *erp_cqr = NULL;
-                                        
- 					if (cqr->dstat->flag & DEVSTAT_HALT_FUNCTION) {
- 						atomic_compare_and_swap_debug(&cqr->status,CQR_STATUS_ERROR,CQR_STATUS_FAILED);
-                                                next = cqr;
-                                        } else if ( cqr -> retries--  &&
-                                             cqr -> refers == NULL &&
-                                             discipline -> erp_action != NULL &&
-                                             (erp_action = discipline->erp_action (cqr)) != NULL &&
-                                             (erp_cqr = erp_action (cqr)) != NULL ) {
+                                dasd_erp_action_fn_t erp_action;
+                                ccw_req_t *erp_cqr = NULL;
+                                
+                                if (cqr->dstat->flag & DEVSTAT_HALT_FUNCTION) {
+                                        atomic_compare_and_swap_debug(&cqr->status,
+                                                                      CQR_STATUS_ERROR,
+                                                                      CQR_STATUS_FAILED);
+                                        next = cqr;
+                                } else if (discipline -> erp_action != NULL                    &&
+                                           (erp_action = discipline->erp_action (cqr)) != NULL &&
+                                           (erp_cqr = erp_action (cqr)) != NULL                  ) {
+
+                                        if (erp_cqr != cqr){
+                                                
                                                 dasd_chanq_enq_head (qp, erp_cqr);
-                                                next = erp_cqr;		/* prefer execution of erp ccw */
-                                        } else {
-                                                atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_ERROR, CQR_STATUS_FAILED);
-                                                next = cqr;
                                         }
-					break;
-				}
+                                        cqr->retries--;
+                                        next = erp_cqr;	/* prefer execution of erp ccw */
+
+                                } else {
+                                        atomic_compare_and_swap_debug (&cqr->status, 
+                                                                       CQR_STATUS_ERROR, 
+                                                                       CQR_STATUS_FAILED);
+                                        next = cqr;
+                                }
+                                break;
+                        }
 			case CQR_STATUS_DONE:{
-                                        dasd_erp_postaction_fn_t erp_postaction;
-                                        next = cqr->next;
-                                        asm volatile ("STCK %0":"=m" (cqr->endclk));
-					if (cqr->refers && cqr->function) {	/* we deal with an ERP */
-						if ( discipline->erp_postaction &&
-						     ((erp_postaction = discipline->erp_postaction (cqr)) != NULL)) {
-							printk (KERN_WARNING PRINTK_HEADER
-								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-								" postprocessing successful error recovery action using %p\n",
-								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, erp_postaction);
-							erp_postaction (cqr, 1);
-						} else {
-							printk (KERN_WARNING PRINTK_HEADER
-								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-								" No procedure to postprocess error recovery action"
-                                                                " giving up request",
-								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
-							atomic_compare_and_swap_debug (&cqr->refers->status, CQR_STATUS_ERROR, CQR_STATUS_FAILED);
-						}
+                                dasd_erp_postaction_fn_t erp_postaction;
+                                next = cqr->next;
+                                asm volatile ("STCK %0":"=m" (cqr->endclk));
+                                if (cqr->refers && cqr->function) {	/* we deal with an ERP */
+                                        if ( discipline->erp_postaction &&
+                                             ((erp_postaction = discipline->erp_postaction (cqr)) != NULL)) {
+                                                printk (KERN_WARNING PRINTK_HEADER
+                                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                                        " postprocessing successful ERA using %p\n",
+                                                        devno, irq, device->name, major_from_devindex (devindex), 
+                                                        devindex << DASD_PARTN_BITS, erp_postaction);
+                                                cqr = erp_postaction (cqr);  
+                                                next = cqr; 
+                                        } else {
+                                                printk (KERN_WARNING PRINTK_HEADER
+                                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                                        " No procedure to postprocess ERA - "
+                                                        " giving up request",
+                                                        devno, irq, device->name, major_from_devindex (devindex), 
+                                                        devindex << DASD_PARTN_BITS);
+                                                atomic_compare_and_swap_debug (&cqr->refers->status,
+                                                                               CQR_STATUS_ERROR, 
+                                                                               CQR_STATUS_FAILED);
+
                                                 atomic_dec (&device->queue.dirty_requests);
                                                 dasd_chanq_deq (&device->queue, cqr);
                                                 dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
-					} else if ( cqr->req ) {
-						dasd_end_request (cqr->req, 1);
-#ifdef DASD_PROFILE
-						dasd_profile_add (cqr);
-#endif				/* DASD_PROFILE */
-                                                dasd_chanq_deq (&device->queue, cqr);
-                                                dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
-					} else {
-                                                /* during format we don't have the request structure */
-                                                /* notify sleeping task about finished postprocessing */
-                                                atomic_compare_and_swap_debug (&cqr->status, 
-                                                                               CQR_STATUS_DONE, 
-                                                                               CQR_STATUS_DONE | CQR_STATUS_FINISHED); 
-                                                dasd_chanq_deq (&device->queue, cqr);
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
-                                                wake_up (&device->wait_q);
-#else
-                                                if (device->wait_q) {
-                                                  wake_up (&device->wait_q);
-                                                }
-#endif /* LINUX_IS_24 */
                                         }
-					break;
-				}
+                                } else if ( cqr->req ) {
+                                        dasd_end_request (cqr->req, 1);
+#ifdef DASD_PROFILE
+                                        dasd_profile_add (cqr);
+#endif				/* DASD_PROFILE */
+                                        dasd_chanq_deq (&device->queue, cqr);
+                                        dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
+                                } else {
+                                        /* during format we don't have the request structure */
+                                        /* notify sleeping task about finished postprocessing */
+                                        atomic_compare_and_swap_debug (&cqr->status, 
+                                                                       CQR_STATUS_DONE, 
+                                                                       CQR_STATUS_DONE | CQR_STATUS_FINISHED); 
+                                        dasd_chanq_deq (&device->queue, cqr);
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
+                                        wake_up (&device->wait_q);
+#else
+                                        if (device->wait_q) {
+                                                wake_up (&device->wait_q);
+                                        }
+#endif /* LINUX_IS_24 */
+                                }
+                                break;
+                        }
 			case CQR_STATUS_FAILED:{
-					dasd_erp_postaction_fn_t erp_postaction;
-					next = cqr->next;
-                                        asm volatile ("STCK %0":"=m" (cqr->endclk));
-					if (cqr->refers && cqr->function) {	/* we deal with an ERP */
-						if ( discipline->erp_postaction &&
-                                                     ((erp_postaction = discipline->erp_postaction (cqr)) != NULL)) {
-							printk (KERN_WARNING PRINTK_HEADER
-								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-								" postprocessing unsuccessful error recovery action using %p\n",
-								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, erp_postaction);
-							erp_postaction (cqr, 0);
-						} else {
-							printk (KERN_WARNING PRINTK_HEADER
-								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-								" No procedure to postprocess unsuccessful error recovery action"
-                                                                " giving up request",
-								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
-							atomic_compare_and_swap_debug (&cqr->refers->status, CQR_STATUS_ERROR, CQR_STATUS_FAILED);
-						}
+                                dasd_erp_postaction_fn_t erp_postaction;
+                                next = cqr->next;
+                                asm volatile ("STCK %0":"=m" (cqr->endclk));
+                                if (cqr->refers && cqr->function) {	/* we deal with an ERP */
+                                        if ( discipline->erp_postaction &&
+                                             ((erp_postaction = discipline->erp_postaction (cqr)) != NULL)) {
+                                                printk (KERN_WARNING PRINTK_HEADER
+                                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                                        " postprocessing unsuccessful ERA using %p\n",
+                                                        devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, erp_postaction);
+                                                cqr = erp_postaction (cqr); 
+                                                next = cqr; 
+                                        } else {
+                                                printk (KERN_WARNING PRINTK_HEADER
+                                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                                        " No procedure to postprocess unsuccessful ERA - "
+                                                        " giving up request",
+                                                        devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
+                                                atomic_compare_and_swap_debug (&cqr->refers->status, 
+                                                                               CQR_STATUS_ERROR, 
+                                                                               CQR_STATUS_FAILED);
+                                                
                                                 atomic_dec (&device->queue.dirty_requests);
                                                 dasd_chanq_deq (&device->queue, cqr);
                                                 dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
-					} else if (cqr->req) {
-						dasd_end_request (cqr->req, 0);
+                                        }
+                                } else if (cqr->req) {
+                                        dasd_end_request (cqr->req, 0);
 #ifdef DASD_PROFILE
-						dasd_profile_add (cqr);
+                                        dasd_profile_add (cqr);
 #endif				/* DASD_PROFILE */
-                                                dasd_chanq_deq (&device->queue, cqr);
-                                                dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
-					} else {
-                                                /* during format we don't have the request structure */
-                                                /* notify sleeping task about finished postprocessing */
-                                                atomic_compare_and_swap_debug (&cqr->status, 
-                                                                               CQR_STATUS_FAILED, 
-                                                                               CQR_STATUS_FAILED | CQR_STATUS_FINISHED); 
-
-                                                dasd_chanq_deq (&device->queue, cqr);
+                                        dasd_chanq_deq (&device->queue, cqr);
+                                        dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
+                                } else {
+                                        /* during format we don't have the request structure */
+                                        /* notify sleeping task about finished postprocessing */
+                                        atomic_compare_and_swap_debug (&cqr->status, 
+                                                                       CQR_STATUS_FAILED, 
+                                                                       CQR_STATUS_FAILED | CQR_STATUS_FINISHED); 
+                                        
+                                        dasd_chanq_deq (&device->queue, cqr);
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
-                                                wake_up (&device->wait_q);
+                                        wake_up (&device->wait_q);
 #else
-                                                if (device->wait_q) {
-                                                  wake_up (&device->wait_q);
-                                                }
+                                        if (device->wait_q) {
+                                                wake_up (&device->wait_q);
+                                        }
 #endif /* LINUX_IS_24 */
-                                        } 
-					break;
-				}
+                                } 
+                                break;
+                        }
 
-			default:{
-					printk (KERN_WARNING PRINTK_HEADER
-						"Internal error in " __FILE__ " on line %d."
-                                                " inconsistent content of ccw_req_t"
-						" cqrstatus = %d"
-						" Pls send this message and your System.map to"
-						" linux390@de.ibm.com\n",
-						__LINE__, cqrstatus);
-				}
+			case CQR_STATUS_PENDING:
+                                /* just wait */
+                                printk (KERN_WARNING PRINTK_HEADER
+                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                        " CQR_STATUS_PENDING - just wait...\n",
+                                        devno, irq, device->name, 
+                                        major_from_devindex (devindex), 
+                                        devindex << DASD_PARTN_BITS);
+                                break;
+                        
+			default:
+                                printk (KERN_WARNING PRINTK_HEADER
+                                        "Internal error in " __FILE__ " on line %d."
+                                        " inconsistent content of ccw_req_t"
+                                        " cqrstatus = %d"
+                                        " Pls send this message and your System.map to"
+                                        " linux390@de.ibm.com\n",
+                                        __LINE__, cqrstatus);
+                                
 			}
 			s390irq_spin_unlock_irqrestore (irq, flags);
 		} while ((cqr = next) != NULL);
@@ -1368,6 +1397,56 @@ dasd_do_chanq (void)
 	schedule_request_fn (try_request_fn);
         return;
 }
+
+/*
+ * DASD_HANDLE_STATE_CHANGE_PENDING 
+ *
+ * DESCRIPTION
+ *   Handles the state change pending interrupt.
+ *   Search for the device related request queue and check if the first 
+ *   cqr in queue in in status 'CQR_STATUE_PENDING'.
+ *   If so the status is set to 'CQR_STATUS_QUEUED' and the bh is
+ *   scheduled.
+ *
+ *  PARAMETER
+ *   stat               device status of state change pending interrupt.
+ */
+void 
+dasd_handle_state_change_pending (devstat_t *stat)
+{
+        dasd_device_t *device;
+        ccw_req_t     *cqr;
+        int           devindex;
+
+	devindex = devindex_from_devno (stat->devno);
+	if (devindex < 0) {
+                return;
+	}
+
+	device = find_dasd_device (devindex);
+	if (device == NULL) {
+                return; 
+        }
+
+        /* re-activate first request in queue */
+        cqr = device->queue.head;    
+        
+        if (cqr != NULL                                     &&
+            atomic_read(&cqr->status) == CQR_STATUS_PENDING   ) {
+                dasd_device_t *device = cqr->device;
+
+                DASD_MESSAGE (KERN_INFO, device,
+                              "%s",
+                              "device request queue restarted by "
+                              "SCP interrupt\n");
+                
+                del_timer(&device->timer);
+                atomic_compare_and_swap_debug (&cqr->status, 
+                                               CQR_STATUS_PENDING, 
+                                               CQR_STATUS_QUEUED);
+                dasd_schedule_bh();
+        }
+} /* end dasd_handle_state_change_pending */
 
 void
 dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
@@ -1380,8 +1459,7 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 	dasd_device_t *device;
 	int devno = -1, devindex = -1;
         
-#undef  ERP_DEBUG
-#ifdef ERP_DEBUG 
+#ifdef ERP_DEBUG                /* #define ERP_DEBUG is done in dasd.h */
         static int counter = 0;
 #endif
 
@@ -1389,12 +1467,23 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 		PRINT_ERR ("handler called without devstat");
 		return;
 	}
+
 	ip = stat->intparm;
 	if (!ip) {		/* no intparm: unsolicited interrupt */
 		PRINT_INFO ("%04X caught unsolicited interrupt\n",
 			    stat->devno);
+
+                /* check for state change pending interrupt */
+                if (stat->dstat & (DEV_STAT_ATTENTION | 
+                                   DEV_STAT_DEV_END   |
+                                   DEV_STAT_UNIT_EXCEP )) {
+                        
+                        dasd_handle_state_change_pending (stat);
+                }
+
 		return;
 	}
+
 	if (ip & 0x80000001) {
 		PRINT_INFO ("%04X  caught spurious interrupt with parm %08x\n",
 			    stat->devno, ip);
@@ -1436,20 +1525,63 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 		return;
 	}
 	asm volatile ("STCK %0":"=m" (cqr->stopclk));
+#ifdef ERP_DEBUG
+                if ((++counter % 937 >= 100) &&
+                    (  counter % 937 <= 110) &&
+                    (  counter < 5000    ) &&
+                    (  counter > 2000    )   ){
+                        static int fake_count = 0;
+                        printk ( KERN_INFO PRINTK_HEADER "***********************************************\n");
+                        printk ( KERN_INFO PRINTK_HEADER "Faking I/O error to recover from; cntr=%i / %02X\n",counter,++fake_count);
+                        printk ( KERN_INFO PRINTK_HEADER "***********************************************\n");
+                        era = dasd_era_recover;
+                        stat->flag |= DEVSTAT_FLAG_SENSE_AVAIL;
+                        stat->dstat |= 0x02;
+// reset notification
+                        {
+                                char *sense = stat->ii.sense.data;
+                                char buffer[100];
+				memset(sense,0,32);
+                                sprintf(buffer,"CPU ALL TR IO %X INST INT CCW", devno);
+                                cpcmd(buffer,NULL,NULL);
+                                sense[0]=0x10;
+                                sense[4]=0x21;
+                                sense[7]=0x9;
+                                sense[15]=0x4;
+                                sense[16]=0xe5;
+                                sense[18]=0x43;
+                                sense[19]=0xfb;
+                                sense[20]=0x54;
+                                sense[22]=0x0f;
+                                sense[23]=0x09;
+                                sense[26]=0x40;
+                                sense[27]=0xe0;
+                        }
+// sense 32
+//                        {
+//                                char *sense = stat->ii.sense.data;
+//                                sense [25] = 0x1D;
+//                                sense [27] = 0x00;
+//                                //sense [25] = (fake_count % 256); //0x1B;
+//                               //sense [27] = 0x00;
+//                        }
+// sense 24
+//                        {
+//                                char *sense = stat->ii.sense.data;
+//                                sense [0] = (counter % 0xFF); //0x1B;
+//                                sense [1] = ((counter * 7) % 0xFF); //0x1B;
+//                                sense [2] = (fake_count % 0xFF); //0x1B;
+//                                sense [27] = 0x80;
+//                        }
+                }
+#endif
+
 	if ((!(stat->flag & DEVSTAT_HALT_FUNCTION) &&
 	     stat->cstat == 0x00 &&
 	     stat->dstat == (DEV_STAT_CHN_END | DEV_STAT_DEV_END)) ||
  	    (device->discipline->examine_error &&
 	     (era = device->discipline->examine_error (cqr, stat)) == dasd_era_none)) {
-#ifdef ERP_DEBUG
-                if ( ++counter % 137 == 0 ) {
-                        printk ( KERN_INFO PRINTK_HEADER "Faking I/O error to recover from\n");
-                        era = dasd_era_recover;
-                        stat->flag |= DEVSTAT_FLAG_SENSE_AVAIL;
-                        stat->dstat |= 0x02;
-                        goto error_fake_done;
-                }
-#endif
+
 		atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_IN_IO, CQR_STATUS_DONE);
                 atomic_compare_and_swap (DASD_DEVICE_LEVEL_ANALYSIS_PENDING,
 					 DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
@@ -1462,9 +1594,6 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 			}
 		}
 	} else {		/* only visited in case of error ! */
-#ifdef ERP_DEBUG
-        error_fake_done:
-#endif
 		if (cqr->dstat == NULL)
 			cqr->dstat = kmalloc (sizeof (devstat_t), GFP_ATOMIC);
 		if (cqr->dstat) {
@@ -1512,7 +1641,12 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 ccw_req_t *
 default_erp_action (ccw_req_t * cqr)
 {
-	ccw_req_t *erp = ccw_alloc_request ((char *) &cqr->magic, 1, 0);
+	ccw_req_t *erp = dasd_alloc_request ((char *) &cqr->magic, 1, 0);
+	if ( !erp ) {
+		printk(KERN_WARNING PRINTK_HEADER 
+                       "unable to allocate ERP request\n");
+		return NULL;
+	}
         
 	erp->cpaddr->cmd_code = CCW_CMD_TIC;
         erp->cpaddr->cda = (__u32)cqr -> cpaddr;
@@ -1528,30 +1662,97 @@ default_erp_action (ccw_req_t * cqr)
         return erp;
 }
 
-int
-default_erp_postaction (ccw_req_t * cqr, int success)
+/*
+ * DEFAULT_ERP_POSTACTION
+ *
+ * DESCRIPTION
+ *   Frees all ERPs of the current ERP Chain and set the status
+ *   of the original CQR either to CQR_STATUS_DONE if ERP was successful
+ *   or to CQR_STATUS_FAILED if ERP was NOT successful.
+ *
+ * PARAMETER
+ *   erp                current erp_head
+ *
+ * RETURN VALUES
+ *   cqr                pointer to the original CQR
+ */
+ccw_req_t *
+default_erp_postaction (ccw_req_t * erp)
 {
-	if (cqr->refers == NULL || cqr->function == NULL) {
-		printk (KERN_WARNING PRINTK_HEADER
-			"ERP postaction called for non ERP cqr\n");
-		return -EINVAL;
+	ccw_req_t *cqr = NULL, *free_erp = NULL;
+	dasd_device_t *device = NULL;
+	int success;
+
+	device = (dasd_device_t *) (erp->device);
+
+	if (atomic_read(&erp->status) == CQR_STATUS_DONE)
+		success = 1;
+	else
+		success = 0;
+
+#ifdef ERP_DEBUG
+
+	/* print current erp_chain */
+        printk (KERN_WARNING PRINTK_HEADER
+                "default ERP postaction called for erp chain:\n");
+        {
+                ccw_req_t *temp_erp = NULL;
+                for (temp_erp = erp; temp_erp != NULL; temp_erp = temp_erp->refers){
+                        printk(KERN_WARNING PRINTK_HEADER 
+                               "       erp %p refers to %p with erp function %p\n",
+                               temp_erp,
+                               temp_erp->refers,
+                               temp_erp->function );
+                }
+        }
+
+#endif /* ERP_DEBUG*/
+
+	if (erp->refers == NULL || erp->function == NULL) {
+		panic (PRINTK_HEADER "Programming error in ERP! Postaction called "
+                       "for invalid ERPt\n");
 	}
-	if (cqr->function != default_erp_action) {
-		printk (KERN_WARNING PRINTK_HEADER
-                        "default ERP postaction called for non default ERP cqr\n");
-		return -EINVAL;
+
+	/* free all ERPs - but NOT the original cqr */
+	while (erp->refers != NULL) {
+		free_erp = erp;
+		erp = erp->refers;
+		/* remove the request from the device queue */
+		dasd_chanq_deq (&device->queue,	free_erp);
+		/* free the finished erp request */
+		dasd_free_request (free_erp);
 	}
-        if ( success ) {
-		atomic_compare_and_swap_debug (&cqr->refers->status,
-					       CQR_STATUS_ERROR,
-					       CQR_STATUS_DONE);
-        } else {
-		atomic_compare_and_swap_debug (&cqr->refers->status,
-					       CQR_STATUS_ERROR,
-					       CQR_STATUS_FAILED);
-        } 
-	return 0;
-}
+
+	/* save ptr to original cqr */
+	cqr = erp;
+
+	/* set corresponding status to original cqr */
+	if (success) {
+		atomic_compare_and_swap_debug (&cqr->status, 
+                                               CQR_STATUS_ERROR, 
+                                               CQR_STATUS_DONE);
+	} else {
+		atomic_compare_and_swap_debug (&cqr->status,
+                                               CQR_STATUS_ERROR,
+                                               CQR_STATUS_FAILED);
+	}
+
+#ifdef ERP_DEBUG
+	/* print current erp_chain */
+	printk (KERN_WARNING PRINTK_HEADER
+		"default ERP postaction finished with remaining chain:\n");
+	{
+		ccw_req_t *temp_erp = NULL;
+		for (temp_erp = cqr; temp_erp != NULL; temp_erp = temp_erp->refers) {
+			printk (KERN_WARNING PRINTK_HEADER
+				" erp %p refers to %p \n",
+				temp_erp, temp_erp->refers);
+		}
+	}
+#endif /* ERP_DEBUG */
+
+	return cqr;
+} /* end default_erp_postaction */
 
 /* SECTION: The helpers of the struct file_operations */
 
@@ -1985,10 +2186,6 @@ get_new_major_info (void)
 	major_info_t *major_info = NULL;
 	major_info = kmalloc (sizeof (major_info_t), GFP_KERNEL);
 	if (major_info) {
-                major_info_t *temp = dasd_major_info;
-                while (temp->next)
-                        temp = temp->next;
-		temp->next = major_info;
                 
 		memset (major_info, 0, sizeof (major_info_t));
 		major_info->read_ahead = 8;
@@ -1998,7 +2195,8 @@ get_new_major_info (void)
 		major_info->gendisk.minor_shift = DASD_PARTN_BITS;
 		major_info->gendisk.max_p = 1 << DASD_PARTN_BITS;
 #if !(LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
-		major_info->gendisk.max_nr= 1 << DASD_PARTN_BITS;
+		/* HSM changed for PL020234MVE */
+		major_info->gendisk.max_nr= DASD_PER_MAJOR;
 #endif /* LINUX_IS_24 */
 		major_info->gendisk.nr_real=DASD_PER_MAJOR;
 	}
@@ -2013,6 +2211,7 @@ dasd_register_major (major_info_t * major_info)
 #endif /* LINUX_IS_24 */
 	int rc = 0;
 	int major;
+        int need_insert=0;
 
 	if (major_info == NULL) {
 		major_info = get_new_major_info ();
@@ -2024,6 +2223,7 @@ dasd_register_major (major_info_t * major_info)
 			printk (KERN_INFO PRINTK_HEADER
 				"Created another major number\n");
 		}
+                need_insert=1; //insert new major info into dasd_major_info later
 	}
 	major = major_info->gendisk.major;
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
@@ -2052,6 +2252,13 @@ dasd_register_major (major_info_t * major_info)
 
 		}
 	}
+        /* Insert the new major info into dasd_major_info if needed */
+        if (need_insert) {
+            major_info_t *temp = dasd_major_info;
+            while (temp->next)
+                temp = temp->next;
+            temp->next = major_info;
+        }
         major_info->dasd_device = (dasd_device_t **) kmalloc( DASD_PER_MAJOR * sizeof(dasd_device_t*), 
                                                               GFP_ATOMIC);
         memset ( major_info->dasd_device ,0,DASD_PER_MAJOR * sizeof(dasd_device_t*));
@@ -2153,15 +2360,15 @@ dasd_device_name (char *str, int index, int partition, struct gendisk *hd)
                 index = devindex_from_kdev_t (MKDEV(hd->major,index<<hd->minor_shift));
         }
         third = index % 26;
-        second = (index / 26) % 27;
-	first = ((index / 26) / 27) % 27;
+        second = ((index-26) / 26) % 26;
+	first = (((index-702) / 26) / 26) % 26;
         
 	len = sprintf (str, "dasd");
-	if (first) {
-                len += sprintf (str + len, "%c", first + 'a' - 1 );
+	if (index>701) {
+                len += sprintf (str + len, "%c", first + 'a' );
 	}
-	if (second) {
-                len += sprintf (str + len, "%c", second + 'a' - 1 );
+	if (index>25) {
+                len += sprintf (str + len, "%c", second + 'a' );
 	}
         len += sprintf (str + len, "%c", third + 'a' );
 	if (partition) {
@@ -2307,6 +2514,7 @@ dasd_set_device_level (unsigned int irq, int desired_level,
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
         init_waitqueue_head(&device->wait_q);
 #endif /* KERNEL_VERSION */
+        init_timer(&device->timer);
         minor = MINOR(device->kdev);
 	current_level = atomic_read (&device->level);
 	if (desired_level > current_level) {
@@ -2509,6 +2717,14 @@ typedef struct {
         int len;
 } tempinfo_t;
 
+void dasd_fill_inode (struct inode* inode, int fill) {
+    if (fill)
+        MOD_INC_USE_COUNT;
+    else
+        MOD_DEC_USE_COUNT;
+}
+
+
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
 static struct proc_dir_entry *dasd_proc_root_entry = NULL;
 #else
@@ -2521,7 +2737,8 @@ static struct proc_dir_entry dasd_proc_root_entry =
 	nlink:1,
 	uid:0,
 	gid:0,
-	size:0
+	size:0,
+        fill_inode:dasd_fill_inode
 };
 #endif /* KERNEL_VERSION */
 static struct proc_dir_entry* dasd_devices_entry;
@@ -2604,6 +2821,9 @@ dasd_devices_open (struct inode* inode, struct file*  file )
 		temp = temp->next;
 	}
         info->len=len;
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
         return rc;
 }
 
@@ -2661,6 +2881,9 @@ dasd_devices_close (struct inode* inode, struct file*  file)
                 if ( p_info->data ) vfree(p_info->data);
                 vfree(p_info);
         }
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
         return rc;
 }
 

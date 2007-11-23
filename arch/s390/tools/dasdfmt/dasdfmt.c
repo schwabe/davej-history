@@ -201,7 +201,7 @@ get_xno_from_xno(int *devno,kdev_t *major_no,kdev_t *minor_no,int mode)
 
 	/*	fgets(line,sizeof(line),file); omit first line */ 
 	while (fgets(line,sizeof(line),file)!=NULL) {
-		rc=sscanf(line,"%X %*[(A-Z)] at (%d:%d)",&d,&ma_i,&mi_i);
+		rc=sscanf(line,"%X %*[(A-Z) ] at (%d:%d)",&d,&ma_i,&mi_i);
 		ma=ma_i;
 		mi=mi_i;
 		if ( (rc==3) &&
@@ -219,7 +219,8 @@ get_xno_from_xno(int *devno,kdev_t *major_no,kdev_t *minor_no,int mode)
 	fclose(file);
 
 	ERRMSG_EXIT(EXIT_FAILURE,"%s: failed to find device in the /proc " \
-		"filesystem (are you sure to have the right param line?)\n",
+		    "filesystem (are you sure to have the right parameter " \
+		    "dasd=xxx?)\n",
 		prog_name);
 }
 

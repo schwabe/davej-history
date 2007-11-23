@@ -141,7 +141,7 @@ int do_check_pgt_cache(int low, int high)
         if(pgtable_cache_size > high) {
                 do {
                         if(pgd_quicklist)
-                                free_pgd_slow(get_pgd_fast()), freed++;
+                                free_pgd_slow(get_pgd_fast()), freed += 2;
                         if(pmd_quicklist)
                                 free_pmd_slow(get_pmd_fast()), freed++;
                         if(pte_quicklist)

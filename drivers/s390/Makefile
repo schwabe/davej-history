@@ -11,12 +11,13 @@ all: io.o
 
 CFLAGS += 
 O_TARGET := io.o
-O_OBJS   := ccwcache.o idals.o
+O_OBJS   := idals.o
+OX_OBJS  := ccwcache.o
 M_OBJS   :=
 
 SUBDIRS := $(SUBDIRS) arch/s390/drivers/block arch/s390/drivers/char \
 	arch/s390/drivers/misc  arch/s390/drivers/net
-MOD_SUB_DIRS += ./net ./block
+MOD_SUB_DIRS += ./net ./block ./char
 
 O_OBJS += block/s390-block.o \
   char/s390-char.o \

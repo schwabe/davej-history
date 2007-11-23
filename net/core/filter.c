@@ -196,7 +196,7 @@ int sk_run_filter(struct sk_buff *skb, struct sock_filter *filter, int flen)
 			case BPF_LD|BPF_W|BPF_ABS:
 				k = fentry->k;
 load_w:
-				if(k+sizeof(u32) <= len) {
+				if((unsigned int)(k+sizeof(u32)) <= len) {
 					A = ntohl(*(u32*)&data[k]);
 					continue;
 				}
@@ -215,7 +215,7 @@ load_w:
 			case BPF_LD|BPF_H|BPF_ABS:
 				k = fentry->k;
 load_h:
-				if(k + sizeof(u16) <= len) {
+				if((unsigned int) (k + sizeof(u16)) <= len) {
 					A = ntohs(*(u16*)&data[k]);
 					continue;
 				}
@@ -234,7 +234,7 @@ load_h:
 			case BPF_LD|BPF_B|BPF_ABS:
 				k = fentry->k;
 load_b:
-				if(k < len) {
+				if((unsigned int)k < len) {
 					A = data[k];
 					continue;
 				}
@@ -271,7 +271,7 @@ load_b:
 
 			case BPF_LDX|BPF_B|BPF_MSH:
 				k = fentry->k;
-				if(k >= len)
+				if((unsigned int)k >= len)
 					return (0);
 				X = (data[k] & 0xf) << 2;
 				continue;

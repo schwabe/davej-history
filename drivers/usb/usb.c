@@ -501,12 +501,17 @@ static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
 			
 		tmp = tmp->next;
 		down(&driver->serialize);
+		if (usb_interface_claimed(interface)) {
+			up(&driver->serialize);
+			return -1;
+		}
 		private = driver->probe(dev, ifnum);
-		up(&driver->serialize);
-		if (!private)
+		if (!private) {
+			up(&driver->serialize);
 			continue;
+		}
 		usb_driver_claim_interface(driver, interface, private);
-
+		up(&driver->serialize);
 		return 0;
 	}
 	
@@ -754,7 +759,7 @@ static void usb_find_drivers(struct usb_device *dev)
 		dbg("unhandled interfaces on device");
 
 	if (!claimed) {
-		warn("USB device %d (prod/vend 0x%x/0x%x) is not claimed by any active driver.",
+		warn("USB device %d (vend/prod 0x%x/0x%x) is not claimed by any active driver.",
 			dev->devnum,
 			dev->descriptor.idVendor,
 			dev->descriptor.idProduct);

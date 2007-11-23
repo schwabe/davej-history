@@ -183,6 +183,33 @@ typedef struct {
 #define SNS0_EQUIPMENT_CHECK    0x10
 #define SNS0_DATA_CHECK         0x08
 #define SNS0_OVERRUN            0x04
+/*                              0x02 reserved */
+#define SNS0_INCOMPL_DOMAIN     0x01
+
+/*
+ * architectured values for second sense byte
+ */
+#define SNS1_PERM_ERR           0x80
+#define SNS1_INV_TRACK_FORMAT   0x40
+#define SNS1_EOC                0x20
+#define SNS1_MESSAGE_TO_OPER    0x10
+#define SNS1_NO_REC_FOUND       0x08
+#define SNS1_FILE_PROTECTED     0x04
+#define SNS1_WRITE_INHIBITED    0x02
+#define SNS1_INPRECISE_END      0x01
+
+/*
+ * architectured values for third sense byte
+ */
+#define SNS2_REQ_INH_WRITE      0x80
+#define SNS2_CORRECTABLE        0x40
+#define SNS2_FIRST_LOG_ERR      0x20
+#define SNS2_ENV_DATA_PRESENT   0x10
+/*                              0x08 reserved */
+#define SNS2_INPRECISE_END      0x04
+/*                              0x02 reserved */
+/*                              0x01 reserved */
+
 
 /*
  * operation request block
@@ -319,6 +346,7 @@ typedef struct _ciw {
 #define CIW_TYPE_SII    0x1    // set interface identifier
 #define CIW_TYPE_RNI    0x2    // read node identifier
 
+#define MAX_CIWS 8
 //
 // sense-id response buffer layout
 //
@@ -331,7 +359,7 @@ typedef struct {
       __u8           dev_model;    /* device model */
       __u8           unused;       /* padding byte */
   /* extended part */
-      ciw_t    ciw[16];            /* variable # of CIWs */
+      ciw_t    ciw[MAX_CIWS];      /* variable # of CIWs */
    }  __attribute__ ((packed,aligned(4))) senseid_t;
 
 #endif /* __KERNEL__ */
@@ -383,6 +411,7 @@ typedef struct {
 #define DEVSTAT_FINAL_STATUS       0x80000000
 
 #define INTPARM_STATUS_PENDING     0xFFFFFFFF
+
 #ifdef __KERNEL__
 
 typedef  void (* io_handler_func1_t) ( int             irq,
@@ -543,7 +572,7 @@ int s390_request_irq_special( int                      irq,
                               not_oper_handler_func_t  not_oper_handler,
                               unsigned long            irqflags,
                               const char              *devname,
-                              void                    *dev_id);
+                              devstat_t               *dev_id);
 
 extern int handle_IRQ_event( unsigned int irq, int cpu, struct pt_regs *);
 
@@ -809,7 +838,7 @@ static inline void s390_do_profile (unsigned long addr)
 {
         if (prof_buffer && current->pid) {
                 addr &= 0x7fffffff;
-                addr -= (unsigned long)&_stext;
+                addr -= (unsigned long) &_stext;
                 addr >>= prof_shift;
                 /*
                  * Don't ignore out-of-bounds EIP values silently,
@@ -832,8 +861,10 @@ static inline void s390_do_profile (unsigned long addr)
 
 #define s390irq_spin_lock_irqsave(irq,flags) \
         spin_lock_irqsave(&(ioinfo[irq]->irq_lock), flags)
+
 #define s390irq_spin_unlock_irqrestore(irq,flags) \
         spin_unlock_irqrestore(&(ioinfo[irq]->irq_lock), flags)
 #endif /* __KERNEL__ */
+
 #endif
 

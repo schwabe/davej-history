@@ -66,6 +66,7 @@ Code	Seq#	Include File		Comments
 0x22	all	scsi/sg.h
 'A'	all	linux/apm_bios.h
 'C'	all	linux/soundcard.h
+'D'	all	asm-s390/dasd.h
 'F'	all	linux/fb.h
 'I'	all	linux/isdn.h
 'K'	all	linux/kd.h

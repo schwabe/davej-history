@@ -5,7 +5,7 @@
  *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Hartmut Penner (hp@de.ibm.com),
  *               Martin Schwidefsky (schwidefsky@de.ibm.com),
- *               Rob van der Heij
+ *               Rob van der Heij (rvdhei@iae.nl)
  *
  * There are 5 different IPL methods
  *  1) load the image directly into ram at address 0 and do an PSW restart
@@ -13,11 +13,18 @@
  *     and start the code thru LPSW 0x0008000080010000 (VM only, deprecated)
  *  3) generate the tape ipl header, store the generated image on a tape
  *     and ipl from it
+ *     In case of SL tape you need to IPL 5 times to get past VOL1 etc
  *  4) generate the vm reader ipl header, move the generated image to the
  *     VM reader (use option NOH!) and do a ipl from reader (VM only)
  *  5) direct call of start by the SALIPL loader
  *  We use the cpuid to distinguish between VM and native ipl
  *  params for kernel are pushed to 0x10400 (see setup.h)
+
+    Changes: 
+    Okt 25 2000 <rvdheij@iae.nl>
+	added code to skip HDR and EOF to allow SL tape IPL (5 retries)
+	changed first CCW from rewind to backspace block
+
  */
 
 #include <linux/config.h>
@@ -32,7 +39,7 @@
 #define IPL_BS 1024
         .org   0
         .long  0x00080000,0x80000000+iplstart  # The first 24 bytes are loaded
-        .long  0x07000000,0x60000001           # by ipl to addresses 0-23.
+        .long  0x27000000,0x60000001           # by ipl to addresses 0-23.
         .long  0x02000000,0x20000000+IPL_BS    # (a PSW and two CCWs).
         .long  0x00000000,0x00000000           # external old psw
         .long  0x00000000,0x00000000           # svc old psw
@@ -140,7 +147,7 @@
 .Lcrash:.long  0x000a0000,0x00000000
 .Lldret:.long  0
 .Lsnsret: .long 0
-#endif  /* CONFIG_IPL_NONE */
+#endif  /* CONFIG_IPL_TAPE */
 
 #ifdef CONFIG_IPL_VM
 #define IPL_BS 0x730
@@ -260,6 +267,7 @@ iplstart:
 #
 # load parameter file from ipl device
 #
+.Lagain1:
  	l     %r2,INITRD_START-PARMAREA(%r12)  # use ramdisk location as temp
         bas   %r14,.Lloader                    # load parameter file
         ltr   %r2,%r2                          # got anything ?
@@ -269,6 +277,10 @@ iplstart:
 	la    %r2,895
 .Lnotrunc:
 	l     %r4,INITRD_START-PARMAREA(%r12)
+	clc   0(3,%r4),.L_hdr		       # if it is HDRx
+	bz    .Lagain1			       # skip dataset header
+	clc   0(3,%r4),.L_eof		       # if it is EOFx
+	bz    .Lagain1			       # skip dateset trailer
         la    %r5,0(%r4,%r2)
         lr    %r3,%r2
 .Lidebc:
@@ -306,6 +318,7 @@ iplstart:
 #
 # load ramdisk from ipl device
 #	
+.Lagain2:
  	l     %r2,INITRD_START-PARMAREA(%r12)  # load adr. of ramdisk
         bas   %r14,.Lloader                    # load ramdisk
  	st    %r2,INITRD_SIZE-PARMAREA(%r12)   # store size of ramdisk
@@ -313,6 +326,12 @@ iplstart:
         bnz   .Lrdcont
         st    %r2,INITRD_START-PARMAREA(%r12)  # no ramdisk found, null it
 .Lrdcont:
+	l     %r2,INITRD_START-PARMAREA(%r12)
+
+	clc   0(3,%r2),.L_hdr		       # skip HDRx and EOFx 
+	bz    .Lagain2
+	clc   0(3,%r2),.L_eof
+	bz    .Lagain2
 
 #ifdef CONFIG_IPL_VM
 #
@@ -340,7 +359,8 @@ iplstart:
 .Lreset:.byte  0xc3,0xc8,0xc1,0xd5,0xc7,0xc5,0x40,0xd9,0xc4,0xd9,0x40
         .byte  0xc1,0xd3,0xd3,0x40,0xd2,0xc5,0xc5,0xd7,0x40,0xd5,0xd6
         .byte  0xc8,0xd6,0xd3,0xc4             # "change rdr all keep nohold"
-
+.L_eof:	.long  0xc5d6c600	/* C'EOF' */
+.L_hdr:	.long  0xc8c4d900	/* C'HDR' */
 #endif  /* CONFIG_IPL */
 
 #
@@ -375,7 +395,7 @@ start:
 	.long 0x83300060		# diag 3,0,x'0060' - storage size
 	b     .done
 .test:
-	mvc   0x68(8,0),.pgmnw		# set up pgm check handler
+	mvc   0x68(8),.pgmnw		# set up pgm check handler
 	l     %r2,.fourmeg
 	lr    %r3,%r2
 	bctr  %r3,%r0			# 4M-1
@@ -443,7 +463,7 @@ startup:basr  %r13,0                     # get base
 #
 # find out memory size.
 #
-	mvc   104(8,0),.Lpcmem-.LPG1(%r13) # setup program check handler
+	mvc   104(8),.Lpcmem-.LPG1(%r13) # setup program check handler
         slr   %r1,%r1
         lhi   %r2,1
         sll   %r2,20
@@ -507,7 +527,7 @@ startup:basr  %r13,0                     # get base
 #
 # find out if we have an IEEE fpu
 #
-        mvc    104(8,0),.Lpcfpu-.LPG1(%r13) # setup program check handler
+        mvc    104(8),.Lpcfpu-.LPG1(%r13) # setup program check handler
         ld     %f0,.Lflt0-.LPG1(%r13)   # load (float) 0.0
         ldr    %f2,%f0
         adbr   %f0,%f2                  # test IEEE add instruction
@@ -517,7 +537,7 @@ startup:basr  %r13,0                     # get base
 #
 # find out if we have the CSP instruction
 #
-       mvc    104(8,0),.Lpccsp-.LPG1(%r13) # setup program check handler
+       mvc    104(8),.Lpccsp-.LPG1(%r13) # setup program check handler
        la     %r0,0
        lr     %r1,%r0
        la     %r2,.Lflt0-.LPG1(%r13)

@@ -203,9 +203,6 @@ extern void con3215_setup(char *str, int *ints);
 #ifdef CONFIG_MDISK
 extern void mdisk_setup(char *str, int *ints);
 #endif
-#ifdef CONFIG_DASD
-extern void dasd_setup(char *str, int *ints);
-#endif
 #ifdef CONFIG_BLK_DEV_XPRAM
 extern void xpram_setup(char *str, int *ints);
 #endif
@@ -1110,9 +1107,6 @@ static struct kernel_param raw_params[] __initdata = {
 #endif
 #ifdef CONFIG_MDISK
         { "mdisk=", mdisk_setup },
-#endif
-#ifdef CONFIG_DASD
-        { "dasd=", dasd_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_XPRAM
         { "xpram_parts=", xpram_setup },

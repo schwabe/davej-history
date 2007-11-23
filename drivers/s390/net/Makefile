@@ -2,7 +2,8 @@ all: s390-net.o
 
 CFLAFS += 
 O_TARGET := s390-net.o
-O_OBJS   := iucv.o
+O_OBJS   :=
+OX_OBJS  := iucv.o
 M_OBJS   :=
 
 ifeq ($(CONFIG_CTC),y)

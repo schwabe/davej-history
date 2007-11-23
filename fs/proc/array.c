@@ -1329,7 +1329,7 @@ extern int get_module_list(char *);
 extern int get_ksyms_list(char *, char **, off_t, int);
 #endif
 extern int get_device_list(char *);
-extern int get_partition_list(char *);
+extern int get_partition_list(char *, char **, off_t, int);
 extern int get_filesystem_list(char *);
 extern int get_filesystem_info( char * );
 #ifndef CONFIG_ARCH_S390
@@ -1397,7 +1397,7 @@ static long get_root_array(char * page, int type, char **start,
 			return get_device_list(page);
 
 		case PROC_PARTITIONS:
-			return get_partition_list(page);
+			return get_partition_list(page, start, offset, length);
 #ifndef CONFIG_ARCH_S390
 		case PROC_INTERRUPTS:
 			return get_irq_list(page);

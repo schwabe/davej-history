@@ -16,9 +16,7 @@ bool '  Support audio via ISDN' CONFIG_ISDN_AUDIO
 if [ "$CONFIG_ISDN_AUDIO" != "n" ]; then
    bool '    Support AT-Fax Class 1 and 2 commands' CONFIG_ISDN_TTY_FAX
 fi
-
-#  CONFIG_X25 is defined only when CONFIG_EXPERIMENTAL=y
-if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_X25" != "n" ]; then
+if [ "$CONFIG_X25" != "n" ]; then
    bool '  X.25 PLP on top of ISDN' CONFIG_ISDN_X25
 fi
 
@@ -91,9 +89,18 @@ dep_tristate       'PCBIT-D support' CONFIG_ISDN_DRV_PCBIT $CONFIG_ISDN
 dep_tristate       'Spellcaster support' CONFIG_ISDN_DRV_SC $CONFIG_ISDN
 dep_tristate       'IBM Active 2000 support' CONFIG_ISDN_DRV_ACT2000 $CONFIG_ISDN
 
-dep_tristate 'Eicon active card support' CONFIG_ISDN_DRV_EICON $CONFIG_ISDN
+bool               'Eicon active card support' CONFIG_ISDN_DRV_EICON
 if [ "$CONFIG_ISDN_DRV_EICON" != "n" ]; then
-   bool '  Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
+   if [ "$CONFIG_ISDN_DRV_EICON_OLD" != "y" ]; then
+      dep_tristate '  Build Eicon driver type standalone' CONFIG_ISDN_DRV_EICON_DIVAS $CONFIG_ISDN
+   fi
+   if [ "$CONFIG_ISDN_DRV_EICON_DIVAS" != "y" ]; then
+      dep_tristate '  Legacy Eicon driver' CONFIG_ISDN_DRV_EICON_OLD $CONFIG_ISDN
+      if [ "$CONFIG_ISDN_DRV_EICON_OLD" != "n" ]; then
+         dep_bool  '    Eicon PCI DIVA Server BRI/PRI/4BRI support' CONFIG_ISDN_DRV_EICON_PCI $CONFIG_PCI
+         bool      '    Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
+      fi
+   fi
 fi
 
 # CAPI subsystem

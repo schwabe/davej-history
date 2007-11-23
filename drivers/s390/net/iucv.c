@@ -9,6 +9,8 @@
  *               Alan Altmark (Alan_Altmark@us.ibm.com)
  */
 
+#include <linux/module.h>
+#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
@@ -28,8 +30,6 @@
 //#define DEBUG         /* Turns Printk's on                         */
 //#define DEBUG2        /* This prints the parameter list before and */
 		      /* after the b2f0 call to cp                 */
-#define EXPORT_SYMTAB
-#include <linux/module.h>
 #undef NULL
 #define NULL 0
 #define ADDED_STOR 64		/* ADDITIONAL STORAGE FOR PATHID @'S */
@@ -1533,7 +1533,7 @@ top_half_interrupt (struct pt_regs *regs, __u16 code)
 {
 	iucv_packet *pkt;
 	pkt = (iucv_packet *) kmalloc
-	    (sizeof (iucv_packet), GFP_KERNEL | GFP_ATOMIC);
+	    (sizeof (iucv_packet), GFP_ATOMIC);
 	if (pkt == NULL) {
 		printk (KERN_DEBUG "out of memory\n");
 		return;
@@ -1869,15 +1869,16 @@ iucv_register_program (uchar pgmname[16],
 	new_handler->size = ADDED_STOR;
 	/* Allocate storage for pathid table */
 	new_handler->start = kmalloc (ADDED_STOR * sizeof (ulong), GFP_KERNEL);
-	memset (new_handler->start, 0, ADDED_STOR * sizeof (ulong));
 	if (new_handler->start == NULL) {
 #ifdef DEBUG
 		printk (KERN_DEBUG
 			"IUCV: returned NULL address for pathid table,"
 			" exiting\n");
 #endif
+		kfree(new_handler);
 		return NULL;
 	}
+	memset (new_handler->start, 0, ADDED_STOR * sizeof (ulong));
 	new_handler->end = (*new_handler).start + ADDED_STOR;
 	new_handler->next = 0;
 	new_handler->prev = 0;

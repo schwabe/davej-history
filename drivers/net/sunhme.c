@@ -3523,6 +3523,7 @@ int __init happy_meal_probe(struct device *dev)
 	struct linux_sbus_device *sdev = 0;
 	static int called = 0;
 	int cards = 0, v;
+	char model[128];
 
 	if(called)
 		return ENODEV;
@@ -3534,7 +3535,13 @@ int __init happy_meal_probe(struct device *dev)
 				dev = NULL;
 			if(!strcmp(sdev->prom_name, "SUNW,hme")) {
 				cards++;
-				if((v = happy_meal_ether_init(dev, sdev, 0)))
+				prom_getstring(sdev->prom_node, "model",
+					       model, sizeof(model));
+				if (!strcmp(model, "SUNW,sbus-qfe"))
+					v = happy_meal_ether_init(dev, sdev, 1);
+				else
+					v = happy_meal_ether_init(dev, sdev, 0);
+				if(v)
 					return v;
 			} else if(!strcmp(sdev->prom_name, "qfe") ||
 				  !strcmp(sdev->prom_name, "SUNW,qfe")) {
@@ -3582,11 +3589,20 @@ void
 cleanup_module(void)
 {
 	struct happy_meal *sunshine;
+	struct quattro *last_seen_qfe = NULL;
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_happy_dev) {
 		struct happy_meal *hp = root_happy_dev;
 		sunshine = root_happy_dev->next_module;
+
+		if (!(hp->happy_flags & HFLAG_PCI) &&
+		    (hp->happy_flags & HFLAG_QUATTRO)) {
+			if (hp->qfe_parent != last_seen_qfe) {
+				free_irq(hp->dev->irq, hp->qfe_parent);
+				last_seen_qfe = hp->qfe_parent;
+			}
+		}
 
 		sparc_free_io(hp->gregs, sizeof(struct hmeal_gregs));
 		sparc_free_io(hp->etxregs, sizeof(struct hmeal_etxregs));

@@ -148,11 +148,11 @@ sysc_dn:
         xc      0(4,%r15),0(%r15)     ; /* clear back chain */
 
 #define RESTORE_ALL \
-        mvc     __LC_RETURN_PSW(8,0),SP_PSW(%r15) ; /* move user PSW to lowcore */ \
+        mvc     __LC_RETURN_PSW(8),SP_PSW(%r15) ; /* move user PSW to lowcore */ \
         lam     %a0,%a15,SP_AREGS(%r15) ; /* load the access registers */ \
-        lm      %r0,%r15,SP_R0(%r15)      ; /* load gprs 0-15 of user */ \
-        ni      __LC_RETURN_PSW+1(0),0xfd ; /* clear wait state bit */ \
-        lpsw    __LC_RETURN_PSW             /* back to caller */
+        lm      %r0,%r15,SP_R0(%r15)    ; /* load gprs 0-15 of user */ \
+        ni      __LC_RETURN_PSW+1,0xfd  ; /* clear wait state bit */ \
+        lpsw    __LC_RETURN_PSW           /* back to caller */
 
 #define GET_CURRENT /* load pointer to task_struct to R9 */ \
 	lr      %r9,%r15 ;  \

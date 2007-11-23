@@ -16,7 +16,7 @@ do_reipl:	basr	%r13,0
                 ni      .Lctlsave-.Lpg0(%r13),0xef
                 lctl    %c0,%c0,.Lctlsave-.Lpg0(%r13)
                 lr      %r1,%r2
-        	mvc     __LC_PGM_NEW_PSW(8,0),.Lpcnew-.Lpg0(%r13)
+        	mvc     __LC_PGM_NEW_PSW(8),.Lpcnew-.Lpg0(%r13)
                 stsch   .Lschib-.Lpg0(%r13)                                    
 	        oi      .Lschib+5-.Lpg0(%r13),0x84 
 .Lecs:  	xi      .Lschib+27-.Lpg0(%r13),0x01 
@@ -24,9 +24,9 @@ do_reipl:	basr	%r13,0
 		ssch	.Liplorb-.Lpg0(%r13)           
 		jz	.L001   
 		bas	%r14,.Ldisab-.Lpg0(%r13)
-.L001:		mvc	__LC_IO_NEW_PSW(8,0),.Lionew-.Lpg0(%r13)	
+.L001:		mvc	__LC_IO_NEW_PSW(8),.Lionew-.Lpg0(%r13)	
 .Ltpi:		lpsw	.Lwaitpsw-.Lpg0(%r13)          
-.Lcont:		c	%r1,__LC_SUBCHANNEL_ID(%r0)
+.Lcont:		c	%r1,__LC_SUBCHANNEL_ID
 		jnz	.Ltpi
 		clc	__LC_IO_INT_PARM(4),.Liplorb-.Lpg0(%r13)
 		jnz	.Ltpi
@@ -38,7 +38,7 @@ do_reipl:	basr	%r13,0
                 jz      .L003
                 bas     %r14,.Ldisab-.Lpg0(%r13)	
 .L003:		spx	.Lnull-.Lpg0(%r13)
-		st 	%r1,__LC_SUBCHANNEL_ID(%r0)	
+		st 	%r1,__LC_SUBCHANNEL_ID
                 lpsw 	0
 		sigp    0,0,0(6)               
 .Ldisab:	st      %r14,.Ldispsw+4-.Lpg0(%r13)

@@ -8,6 +8,7 @@
  *    Author(s): Ingo Adlung (adlung@de.ibm.com)
  */
 
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
 #include <linux/signal.h>
@@ -126,7 +127,7 @@ int s390_request_irq_special( int                      irq,
                               not_oper_handler_func_t  not_oper_handler,
                               unsigned long            irqflags,
                               const char              *devname,
-                              void                    *dev_id)
+                              devstat_t               *dev_id)
 {
 	int               retval;
 	struct s390_irqaction *action;
@@ -204,7 +205,7 @@ int s390_request_irq( unsigned int   irq,
                                    NULL,
                                    irqflags,
                                    devname,
-                                   dev_id);
+                                   (devstat_t *)dev_id);
 
 	if ( ret == 0 )
 	{
@@ -2041,6 +2042,7 @@ int s390_process_IRQ( unsigned int irq )
 	int               ending_status   = 0;
 	int               allow4handler   = 1;
 	int               chnchk          = 0;
+	devstat_t        *dp;
 #if 0
 	int               cpu             = smp_processor_id();
 
@@ -2058,7 +2060,8 @@ int s390_process_IRQ( unsigned int irq )
 		action = ioinfo[irq]->irq_desc.action;
 	
   	} /* endif */
-
+	dp  = &ioinfo[irq]->devstat;
+	
 #ifdef CONFIG_DEBUG_IO
 	/*
 	 * It might be possible that a device was not-oper. at the time
@@ -2176,8 +2179,22 @@ int s390_process_IRQ( unsigned int irq )
 		chnchk = 1;
 
 	} /* endif */
+	if (    (dp->ii.irb.scsw.stctl == SCSW_STCTL_STATUS_PEND)
+	     &&	(dp->ii.irb.scsw.eswf  == 0                     ))
+	{
+		issense = 0;
+	}
+	else if (    (dp->ii.irb.scsw.stctl ==
+	                (SCSW_STCTL_STATUS_PEND | SCSW_STCTL_INTER_STATUS)) 
+	          && ((dp->ii.irb.scsw.actl & SCSW_ACTL_SUSPENDED) == 0))
+	{
+		issense = 0;
+	}
+	else
+	{
+		issense = dp->ii.irb.esw.esw0.erw.cons;
 
-	issense = ioinfo[irq]->devstat.ii.irb.esw.esw0.erw.cons;
+	} /* endif */
 
 	if ( issense )
 	{
@@ -5524,3 +5541,17 @@ reipl ( int sch )
 	do_reipl( 0x10000 | sch );
 }
 
+EXPORT_SYMBOL(halt_IO);
+EXPORT_SYMBOL(clear_IO);
+EXPORT_SYMBOL(do_IO);
+EXPORT_SYMBOL(resume_IO);
+EXPORT_SYMBOL(ioinfo);
+EXPORT_SYMBOL(get_dev_info_by_irq);
+EXPORT_SYMBOL(get_dev_info_by_devno);
+EXPORT_SYMBOL(get_irq_by_devno);
+EXPORT_SYMBOL(get_devno_by_irq);
+EXPORT_SYMBOL(get_irq_first);
+EXPORT_SYMBOL(get_irq_next);
+EXPORT_SYMBOL(read_conf_data);
+EXPORT_SYMBOL(read_dev_chars);
+EXPORT_SYMBOL(s390_request_irq_special);

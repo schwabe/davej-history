@@ -230,6 +230,10 @@ addrform_done:
 
 		if (optlen == 0)
 			goto update;
+		
+		retv = -EINVAL;
+		if(optlen > 1024)
+			break;
 
 		opt = sock_kmalloc(sk, sizeof(*opt) + optlen, GFP_KERNEL);
 		retv = -ENOBUFS;

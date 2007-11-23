@@ -1,5 +1,5 @@
 /*
- * $Id: ctc.c,v 1.25.2.5 2000/10/11 15:08:59 bird Exp $
+ * $Id: ctc.c,v 1.29 2001/01/25 22:28:21 uweigand Exp $
  *
  *  drivers/s390/net/ctc.c 
  *    CTC / ESCON network driver
@@ -22,12 +22,13 @@
  *    order or doesn't want to have automatic channel selection on, you can do 
  *    this with the "ctc= kernel keyword". 
  *
- *	 ctc=0,0xrrrr,0xwwww,ddddd
+ *	 ctc=prid,0xrrrr,0xwwww,ddddd
  *
  *     Where:
  *
- *	 "rrrr" is the read channel address
- *	 "wwww" is the write channel address
+ *       "prid" is the protocol id (must always be 0)
+ *	 "rrrr" is the read channel address (hexadecimal)
+ *	 "wwww" is the write channel address (hexadecimal)
  *	 "dddd" is the network device (ctc0 to ctc7 for a parallel channel, escon0
  *		to escon7 for ESCON channels).
  *
@@ -38,24 +39,39 @@
  *	 ctc=noauto
  * 
  * $Log: ctc.c,v $
- * Revision 1.25.2.5  2000/10/11 15:08:59  bird
- * ctc_tx(): Quick fix of possible underflow when calculating free block space
+ * Revision 1.29  2001/01/25 22:28:21  uweigand
+ * Minor 2.2.18 fix.
  *
- * Revision 1.25.2.4  2000/09/25 16:40:56  bird
- * Some more debug information
+ * Revision 1.28  2001/01/18 13:04:47  tonn
+ * upgrade to 2.2.18
  *
- * Revision 1.25.2.3  2000/09/20 13:28:19  bird
- * - ctc_open(): fixed bug
- * - ctc_release(): added timer for terminating in case of halt_io()-hang
+ * Revision 1.27  2000/10/26 16:16:07  bird
+ * Merged in changes from Revision 1.25.2.1 to Revision 1.25.2.6:
  *
- * Revision 1.25.2.2  2000/09/20 09:48:27  bird
- * - ctc_open()/ctc_release(): use wait_event_interruptible()/wait_event() in
- *   instead of direct waiting on a wait queue
- * - ctc_buffer_swap(), ccw_check_return_code() and ccw_check_unit_check():
- *   print more debug information
+ *   Revision 1.25.2.6  2000/10/25 16:11:55  bird
+ *   Set size of empty block to BLOCK_HEADER_LENGTH (used to be 0)
  *
- * Revision 1.25.2.1  2000/09/19 09:09:56  bird
- * Merged in changes from 1.25 to 1.26
+ *   Revision 1.25.2.5  2000/10/11 15:08:59  bird
+ *   ctc_tx(): Quick fix of possible underflow when calculating free block space
+ *
+ *   Revision 1.25.2.4  2000/09/25 16:40:56  bird
+ *   Some more debug information
+ *
+ *   Revision 1.25.2.3  2000/09/20 13:28:19  bird
+ *   - ctc_open(): fixed bug
+ *   - ctc_release(): added timer for terminating in case of halt_io()-hang
+ *
+ *   Revision 1.25.2.2  2000/09/20 09:48:27  bird
+ *   - ctc_open()/ctc_release(): use wait_event_interruptible()/wait_event() in
+ *     instead of direct waiting on a wait queue
+ *   - ctc_buffer_swap(), ccw_check_return_code() and ccw_check_unit_check():
+ *     print more debug information
+ *
+ *   Revision 1.25.2.1  2000/09/19 09:09:56  bird
+ *   Merged in changes from 1.25 to 1.26
+ *
+ * Revision 1.26  2000/09/15 12:29:32  weigand
+ * Some 2.3 diffs merged and other fixes.
  *
  * Revision 1.25  2000/09/08 09:22:11  bird
  * Proper cleanup and bugfixes in ctc_probe()
@@ -317,9 +333,9 @@ struct channel {
 #define CTC_BH_ACTIVE	    0	
 	__u8		    last_dstat;
 	__u8		    flag;
-#define CTC_WRITE      0x01      /* - Set if this is a write channel */
+#define CTC_WRITE	     0x01      /* - Set if this is a write channel */
 #define CTC_WAKEUP     0x02      /* - Set if this channel should wake up from waiting for an event */
-#define CTC_TIMER      0x80      /* - Set if timer made the wake_up  */ 
+#define CTC_TIMER	     0x80      /* - Set if timer made the wake_up  */ 
 };
 
 
@@ -350,6 +366,8 @@ struct block {
 	__u16	      length;
 	struct packet data;
 };
+#define BLOCK_PAGES_POW 4    /* 2^4 = 16 pages per block (64k) */
+#define BLOCK_MAX_DATA 65535 /* maximal amount of data a block can hold */
 
 #if LINUX_VERSION_CODE>=0x02032D
 #define ctc_protect_busy(dev) \
@@ -483,7 +501,7 @@ static void channel_sort(struct devicelist list[], int n);
  */
 static void print_banner(void) {
 	static int printed = 0;
-	char vbuf[] = "$Revision: 1.25.2.5 $";
+	char vbuf[] = "$Revision: 1.29 $";
 	char *version = vbuf;
 
 	if (printed)
@@ -761,12 +779,12 @@ static int ctc_buffer_alloc(struct channel *ctc) {
 	else {	
 		p->next = NULL;	 
 		p->packets = 0;
-		p->block = (struct block *) __get_free_pages(GFP_KERNEL+GFP_DMA, 4);
+		p->block = (struct block *) __get_free_pages(GFP_KERNEL+GFP_DMA, BLOCK_PAGES_POW);
 		if (p->block == NULL) {
 			kfree(p);
 			return -ENOMEM;
 		}
-		p->block->length = 0; 
+		p->block->length = BLOCK_HEADER_LENGTH; /* empty block */
 	}
    
 	if (ctc->free_anchor == NULL) 
@@ -1107,7 +1125,7 @@ static void inline ccw_check_unit_check (net_device *dev, char sense, char *call
 
 } 
 
- 
+
 static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 {
 	int		  rc = 0;
@@ -1194,7 +1212,6 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 			wake_up(&ctc->wait);   /* wake up ctc_release */
 			return;
  
-
 		case CTC_START_HALT_IO:	 /* HALT_IO issued by ctc_open (start sequence) */
 #ifdef DEBUG
 		  printk(KERN_DEBUG "%s: %s(): entering state %s\n", dev->name, __FUNCTION__,  "CTC_START_HALT_IO");
@@ -1226,7 +1243,6 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 				return;
 			ctc->state =  CTC_START_SELECT;
  
-
 		case CTC_START_SELECT:
 #ifdef DEBUG
 		  printk(KERN_DEBUG "%s: %s(): entering state %s\n", dev->name, __FUNCTION__,  "CTC_START_SELECT");
@@ -1239,7 +1255,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 			}
 			if (!(ctc->flag & CTC_WRITE)) {
 				ctc->state = CTC_START_READ_TEST;
-				ctc->free_anchor->block->length = 0;	
+				ctc->free_anchor->block->length = BLOCK_HEADER_LENGTH; /* empty block */
 				ctc->ccw[1].cda	 = __pa(ctc->free_anchor->block);
 				parm = (__u32)(long) ctc;
 				rc = do_IO (ctc->irq, &ctc->ccw[0], parm, 0xff, flags );
@@ -1251,7 +1267,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 			} else {
 				ctc->state = CTC_START_WRITE_TEST;
 				/* ADD HERE THE RIGHT PACKET TO ISSUE A ROUND TRIP - PART 1 */
-				ctc->free_anchor->block->length = 0;	
+				ctc->free_anchor->block->length = BLOCK_HEADER_LENGTH; /* empty block */
 				ctc->ccw[1].count = BLOCK_HEADER_LENGTH; /* Transfer only length */
 				ctc->ccw[1].cda	 = __pa(ctc->free_anchor->block);
 				parm = (__u32)(long) ctc; 
@@ -1260,7 +1276,6 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 					ccw_check_return_code(dev, rc, __FUNCTION__ "()[3]");
 			}
 			return;
-
 
 		case CTC_START_READ_TEST:
 #ifdef DEBUG
@@ -1298,8 +1313,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 			/* ADD HERE THE RIGHT PACKET TO ISSUE A ROUND TRIP - PART 2 */
 			/* wake_up(&privptr->channel[WRITE].wait);*/  /* wake up ctc_open (WRITE) */
 
-
-		case CTC_START_READ:
+		case CTC_START_READ: 
 #ifdef DEBUG
 		  printk(KERN_DEBUG "%s: %s(): entering state %s\n", dev->name, __FUNCTION__,  "CTC_START_READ");
 #endif 
@@ -1331,7 +1345,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 			ctc_buffer_swap(&ctc->free_anchor, &ctc->proc_anchor, dev);
 
 			if (ctc->free_anchor != NULL) {
-				ctc->free_anchor->block->length = 0;
+				ctc->free_anchor->block->length = BLOCK_HEADER_LENGTH; /* empty block */
 				ctc->ccw[1].cda	 = __pa(ctc->free_anchor->block);
 				parm = (__u32)(long) ctc;
 				rc = do_IO (ctc->irq, &ctc->ccw[0], parm, 0xff, flags );
@@ -1349,7 +1363,6 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 				mark_bh(IMMEDIATE_BH);
 			}
 			return;
-
 
 		case CTC_START_WRITE_TEST:
 #ifdef DEBUG
@@ -1376,7 +1389,6 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 			wake_up(&ctc->wait);  /* wake up ctc_open (WRITE) */
 			return;
  
-
 		case CTC_START_WRITE:
 #ifdef DEBUG
 		  printk(KERN_DEBUG "%s: %s(): entering state %s\n", dev->name, __FUNCTION__,  "CTC_START_WRITE");
@@ -1392,7 +1404,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 				privptr->stats.tx_packets += ctc->proc_anchor->packets;
 			} 
 
-			ctc->proc_anchor->block->length = 0;
+			ctc->proc_anchor->block->length = BLOCK_HEADER_LENGTH; /* empty block */
 			ctc_buffer_swap(&ctc->proc_anchor, &ctc->free_anchor, dev);
 			ctc_clearbit_busy(TB_NOBUFFER, dev);	 
 			if (ctc->proc_anchor != NULL) {	 
@@ -1414,7 +1426,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 							 "irq=%d, ctc=0x%p, dev=0x%p \n", irq, ctc, privptr);
 				return;
 			}
-			if (ctc->free_anchor->block->length != 0) {
+			if (ctc->free_anchor->block->length != BLOCK_HEADER_LENGTH) { /* non-empty block */
 				if (ctc_test_and_setbit_busy(TB_TX,dev) == 0) {	    
 				       /* set transmission to busy */
 					ctc_buffer_swap(&ctc->free_anchor, &ctc->proc_anchor, dev);
@@ -1468,15 +1480,17 @@ static void ctc_irq_bh (void *data)
 
 	while (ctc->proc_anchor != NULL) {
 		block = ctc->proc_anchor->block;
-		if (block->length < BLOCK_HEADER_LENGTH) {
-			if(block->length == 0 && !ctc->initial_block_received)
-				ctc->initial_block_received = 1;
-			else
+
+		if ((block->length < BLOCK_HEADER_LENGTH)
+		    || (block->length == BLOCK_HEADER_LENGTH && ctc->initial_block_received)) {
 				printk(KERN_INFO "%s: %s(): discarding block at 0x%p: "
-				       "block length=%d<%d=block header length\n",
+					 "block length=%d<=%d=block header length\n",
 				       dev->name, __FUNCTION__, block, block->length, BLOCK_HEADER_LENGTH);
 		}
-		else {
+		else if(block->length == BLOCK_HEADER_LENGTH && !ctc->initial_block_received) {
+			ctc->initial_block_received = 1;
+		}
+		else { /* there is valid data in the buffer */
 			lp = &block->data;
 			while ((__u8 *) lp < (__u8 *) block + block->length) {
 				if(lp->length < PACKET_HEADER_LENGTH) {
@@ -1557,6 +1571,7 @@ static void ctc_read_retry (unsigned long data)
 	       dev->name, ctc->state);
 #endif	
 	s390irq_spin_lock_irqsave(ctc->irq, saveflags);
+
 	if (ctc->state != CTC_STOP) {
 		if (!ctc->free_anchor) {
 			s390irq_spin_unlock_irqrestore(ctc->irq, saveflags);
@@ -1566,7 +1581,7 @@ static void ctc_read_retry (unsigned long data)
 			return;
 		}
 
-		ctc->free_anchor->block->length = 0;
+		ctc->free_anchor->block->length = BLOCK_HEADER_LENGTH; /* empty block */
 		ctc->ccw[1].cda	 = __pa(ctc->free_anchor->block);
 		parm = (__u32)(long) ctc; 
 		rc = do_IO(ctc->irq, &ctc->ccw[0], parm, 0xff, flags);
@@ -1634,7 +1649,6 @@ static int ctc_open(net_device *dev)
 	struct ctc_priv	   *privptr;
 	struct timer_list  timer;
 
-
 	ctc_set_busy(dev);
 
 	privptr = (struct ctc_priv *) (dev->priv);
@@ -1696,13 +1710,13 @@ static int ctc_open(net_device *dev)
 		rc = halt_IO(privptr->channel[i].irq, parm, flags);
 		s390irq_spin_unlock_irqrestore(privptr->channel[i].irq, saveflags);
 
-		wait_rc = wait_event_interruptible(privptr->channel[i].wait, privptr->channel[i].flag & CTC_WAKEUP);
-
-		del_timer(&timer);
-
 		if(rc != 0)
 			ccw_check_return_code(dev, rc, __FUNCTION__ "()[1]");
 
+		wait_rc = wait_event_interruptible(privptr->channel[i].wait, privptr->channel[i].flag & CTC_WAKEUP);
+
+			del_timer(&timer);
+	
 		if (wait_rc == -ERESTARTSYS) { /* wait_event_interruptible() was terminated by a signal */
 			for (ii=0; ii<=i; ii++) {
 
@@ -1718,7 +1732,7 @@ static int ctc_open(net_device *dev)
 			return -ERESTARTSYS;
 		}
 	}
-	
+
 	if ((((privptr->channel[READ].last_dstat | privptr->channel[WRITE].last_dstat) & 
 	       ~(DEV_STAT_CHN_END | DEV_STAT_DEV_END)) != 0x00) ||
 	    (((privptr->channel[READ].flag | privptr->channel[WRITE].flag) & CTC_TIMER) != 0x00)) {
@@ -1781,7 +1795,7 @@ static int ctc_release(net_device *dev)
 	ctc_setbit_busy(TB_STOP,dev);	 
 	ctc_unprotect_busy_irqrestore(dev, saveflags);
 
-	for (i = 0; i < 2;  i++) {
+	for (i = 0; i < 2;  i++) {		  
 		privptr->channel[i].flag &= ~(CTC_WAKEUP | CTC_TIMER);
 		init_timer(&timer);
 		timer.function = ctc_timer; 
@@ -1803,7 +1817,7 @@ static int ctc_release(net_device *dev)
 		if (rc != 0) {
 			ccw_check_return_code(dev, rc, __FUNCTION__ "()[1]");
 		}
-
+		 
 		if(privptr->channel[i].flag & CTC_TIMER)
 		{
 			printk(KERN_WARNING "%s: %s(): timeout during halt_io()\n",
@@ -1872,7 +1886,7 @@ static int ctc_tx(struct sk_buff *skb, net_device *dev)
 		goto Done;
 	} 
 
-	if (privptr->channel[WRITE].free_anchor->block->length + BLOCK_HEADER_LENGTH + PACKET_HEADER_LENGTH + skb->len > 65535) {
+	if (privptr->channel[WRITE].free_anchor->block->length + PACKET_HEADER_LENGTH + skb->len > BLOCK_MAX_DATA) {
 #ifdef DEBUG
 		printk(KERN_DEBUG "%s: early swap\n", dev->name);
 #endif
@@ -1885,15 +1899,14 @@ static int ctc_tx(struct sk_buff *skb, net_device *dev)
 		}
 	}
 	
-	if (privptr->channel[WRITE].free_anchor->block->length == 0) {
-		privptr->channel[WRITE].free_anchor->block->length = BLOCK_HEADER_LENGTH; 
+	if (privptr->channel[WRITE].free_anchor->block->length == BLOCK_HEADER_LENGTH) { /* empty block */
 		privptr->channel[WRITE].free_anchor->packets = 0;
 	} 
 
 
 	(__u8 *)lp = (__u8 *) (privptr->channel[WRITE].free_anchor->block) + privptr->channel[WRITE].free_anchor->block->length;
-	privptr->channel[WRITE].free_anchor->block->length += skb->len + PACKET_HEADER_LENGTH;
-	lp->length = skb->len + PACKET_HEADER_LENGTH; 
+	privptr->channel[WRITE].free_anchor->block->length += PACKET_HEADER_LENGTH + skb->len;
+	lp->length = PACKET_HEADER_LENGTH + skb->len; 
 	lp->type = 0x0800; 
 	lp->unused = 0;
 	memcpy(&lp->data, skb->data, skb->len); 

@@ -2,12 +2,15 @@
 #ifndef DASD_H
 #define DASD_H
 
+#undef ERP_DEBUG               /* enable debug messages */
+
 /* First of all the external stuff */
 #include <linux/version.h>
 #include <linux/ioctl.h>
 #include <linux/major.h>
 #include <linux/wait.h>
 #include <asm/ccwcache.h>
+#include <asm/todclk.h>
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
 #include <linux/blkdev.h> 
 #endif
@@ -65,6 +68,12 @@ typedef enum {
 	dasd_era_recover = 2	/* recovery action recommended       */
 } dasd_era_t;
 
+/* BIT DEFINITIONS FOR SENSE DATA */
+#define DASD_SENSE_BIT_0 0x80
+#define DASD_SENSE_BIT_1 0x40
+#define DASD_SENSE_BIT_2 0x20
+#define DASD_SENSE_BIT_3 0x10
+
 /* 
  * struct dasd_sizes_t
  * represents all data needed to access dasd with properly set up sectors
@@ -97,7 +106,7 @@ struct dasd_chanq_t {
 struct dasd_device_t;
 
 typedef ccw_req_t *(*dasd_erp_action_fn_t) (ccw_req_t * cqr);
-typedef int (*dasd_erp_postaction_fn_t) (ccw_req_t * cqr, int);
+typedef ccw_req_t *(*dasd_erp_postaction_fn_t) (ccw_req_t * cqr);
 
 typedef int (*dasd_ck_id_fn_t) (dev_info_t *);
 typedef int (*dasd_ck_characteristics_fn_t) (struct dasd_device_t *);
@@ -165,6 +174,7 @@ typedef struct dasd_device_t {
         struct wait_queue wait;
         struct wait_queue *wait_q;
 #endif /* LINUX_IS_24 */
+        struct timer_list timer;      /* HUM new */
         dasd_sizes_t sizes;
 	devstat_t dev_status;
 	char *characteristics;
@@ -231,6 +241,24 @@ void dasd_discipline_enq (dasd_discipline_t *);
 int dasd_discipline_deq(dasd_discipline_t *);
 int dasd_start_IO (ccw_req_t *);
 void dasd_int_handler (int , void *, struct pt_regs *);
+ccw_req_t *default_erp_action (ccw_req_t *);
+ccw_req_t *default_erp_postaction (ccw_req_t *);
+int dasd_chanq_deq (dasd_chanq_t *, ccw_req_t *);
+ccw_req_t *dasd_alloc_request (char *, int, int);
+void dasd_free_request (ccw_req_t *);
+
+
+#define DASD_MESSAGE(d_loglevel,d_device,d_string,d_args...)\
+do { \
+        int d_devno = d_device->devinfo.devno; \
+        int d_irq = d_device->devinfo.irq; \
+        char *d_name = d_device->name; \
+        int d_major = MAJOR(d_device->kdev); \
+        int d_minor = MINOR(d_device->kdev); \
+        printk(d_loglevel PRINTK_HEADER \
+               "/dev/%s(%d:%d), 0x%04X on SCH 0x%x: " \
+               d_string "\n",d_name,d_major,d_minor,d_devno,d_irq,d_args ); \
+} while(0)
 
 #endif /* __KERNEL__ */
 

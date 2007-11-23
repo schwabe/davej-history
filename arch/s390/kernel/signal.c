@@ -327,6 +327,11 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 #endif
 	/* Martin wants this for pthreads */
 	regs->gprs[3] = (addr_t)&frame->sc;
+
+	/* We forgot to include these in the sigcontext. 
+	   To avoid breaking binary compatibility, they are passed as args. */
+	regs->gprs[4] = current->tss.trap_no;
+	regs->gprs[5] = current->tss.prot_addr;
 	return;
 
 give_sigsegv:
@@ -383,7 +388,7 @@ handle_signal(unsigned long sig, struct k_sigaction *ka,
 	      siginfo_t *info, sigset_t *oldset, struct pt_regs * regs)
 {
 	/* Are we from a system call? */
-	if (regs->orig_gpr2 >= 0) {
+	if (regs->trap == __LC_SVC_OLD_PSW) {
 		/* If so, check system call restarting.. */
 		switch (regs->gprs[2]) {
 			case -ERESTARTNOHAND:

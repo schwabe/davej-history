@@ -8,6 +8,7 @@
    * 07/10/00 moved ccwcache.h from linux/ to asm/
  */
 
+#include <linux/module.h>
 #include <linux/malloc.h>
 #include <asm/debug.h>
 #include <asm/ccwcache.h>
@@ -15,19 +16,14 @@
 #include <asm/ebcdic.h>
 #include <asm/spinlock.h>
 
-#ifdef PRINTK_HEADER
-#undef PRINTK_HEADER
-#endif
+#undef  PRINTK_HEADER
 #define PRINTK_HEADER "ccwcache"
 
-#ifdef MODULE
 MODULE_AUTHOR ("Holger Smolinski <Holger.Smolinski@de.ibm.com>");
 MODULE_DESCRIPTION ("Linux on S/390 CCW cache,"
 		    "Copyright 2000 IBM Corporation");
-EXPORT_NO_SYMBOLS; 
 EXPORT_SYMBOL(ccw_alloc_request);
 EXPORT_SYMBOL(ccw_free_request);
-#endif /* MODULE */
 
 
 /* pointer to list of allocated requests */
@@ -314,8 +310,7 @@ ccwcache_init (void)
 	} else {
 		printk (KERN_DEBUG PRINTK_HEADER "debug area is 0x%8p\n", debug_area );
 	}
-        debug_register_view(debug_area,&debug_hex_view);
-        debug_register_view(debug_area,&debug_ebcdic_view);
+        debug_register_view(debug_area,&debug_hex_ascii_view);
 	debug_text_event ( debug_area, 0, "INIT");
 	
 	/* First allocate the kmem caches */
@@ -389,3 +384,4 @@ cleanup_module ( void )
 	ccwcache_cleanup();
 }
 #endif /* MODULE */
+
