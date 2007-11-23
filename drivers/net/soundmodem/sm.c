@@ -3,7 +3,7 @@
 /*
  *	sm.c  -- soundcard radio modem driver.
  *
- *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -39,6 +39,8 @@
  *   0.4  21.01.97  Separately compileable soundcard/modem modules
  *   0.5  03.03.97  fixed LPT probing (check_lpt result was interpreted the wrong way round)
  *   0.6  16.04.97  init code/data tagged
+ *   0.7  30.07.97  fixed halfduplex interrupt handlers/hotfix for CS423X
+ *   0.8  14.04.98  cleanups
  */
 
 /*****************************************************************************/
@@ -112,8 +114,8 @@ extern inline int copy_to_user(void *to, const void *from, unsigned long n)
 /* --------------------------------------------------------------------- */
 
 /*static*/ const char sm_drvname[] = "soundmodem";
-static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-1997 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "soundmodem: version 0.6 compiled " __TIME__ " " __DATE__ "\n";
+static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-1998 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "soundmodem: version 0.8 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -591,7 +593,7 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 		return 0;
 
 	case HDLCDRVCTL_SETMODE:
-		if (!suser() || dev->start)
+		if (dev->start || !suser())
 			return -EACCES;
 		hi->data.modename[sizeof(hi->data.modename)-1] = '\0';
 		return sethw(dev, sm, hi->data.modename);
@@ -690,42 +692,42 @@ int sm_x86_capability = 0;
 
 __initfunc(static void i386_capability(void))
 {
-	unsigned long flags;
-	unsigned long fl1;
-	union {
-		struct {
-			unsigned int ebx, edx, ecx;
-		} r;
-		unsigned char s[13];
-	} id;
-	unsigned int eax;
+       unsigned long flags;
+       unsigned long fl1;
+       union {
+               struct {
+                       unsigned int ebx, edx, ecx;
+               } r;
+               unsigned char s[13];
+       } id;
+       unsigned int eax;
 
-	save_flags(flags);
-	flags |= 0x200000;
-	restore_flags(flags);
-	save_flags(flags);
-	fl1 = flags;
-	flags &= ~0x200000;
-	restore_flags(flags);
-	save_flags(flags);
-	if (!(fl1 & 0x200000) || (flags & 0x200000)) {
-		printk(KERN_WARNING "%s: cpu does not support CPUID\n", sm_drvname);
-		return;
-	}
-	__asm__ ("cpuid" : "=a" (eax), "=b" (id.r.ebx), "=c" (id.r.ecx), "=d" (id.r.edx) :
-		 "0" (0));
-	id.s[12] = 0;
-	if (eax < 1) {
-		printk(KERN_WARNING "%s: cpu (vendor string %s) does not support capability "
-		       "list\n", sm_drvname, id.s);
-		return;
-	}
-	printk(KERN_INFO "%s: cpu: vendor string %s ", sm_drvname, id.s);
-	__asm__ ("cpuid" : "=a" (eax), "=d" (sm_x86_capability) : "0" (1) : "ebx", "ecx");
-	printk("fam %d mdl %d step %d cap 0x%x\n", (eax >> 8) & 15, (eax >> 4) & 15,
-	       eax & 15, sm_x86_capability);
-}	
-#endif /* __i386__ */	
+       save_flags(flags);
+       flags |= 0x200000;
+       restore_flags(flags);
+       save_flags(flags);
+       fl1 = flags;
+       flags &= ~0x200000;
+       restore_flags(flags);
+       save_flags(flags);
+       if (!(fl1 & 0x200000) || (flags & 0x200000)) {
+               printk(KERN_WARNING "%s: cpu does not support CPUID\n", sm_drvname);
+               return;
+       }
+       __asm__ ("cpuid" : "=a" (eax), "=b" (id.r.ebx), "=c" (id.r.ecx), "=d" (id.r.edx) :
+                "0" (0));
+       id.s[12] = 0;
+       if (eax < 1) {
+               printk(KERN_WARNING "%s: cpu (vendor string %s) does not support capability "
+                      "list\n", sm_drvname, id.s);
+               return;
+       }
+       printk(KERN_INFO "%s: cpu: vendor string %s ", sm_drvname, id.s);
+       __asm__ ("cpuid" : "=a" (eax), "=d" (sm_x86_capability) : "0" (1) : "ebx", "ecx");
+       printk("fam %d mdl %d step %d cap 0x%x\n", (eax >> 8) & 15, (eax >> 4) & 15,
+              eax & 15, sm_x86_capability);
+}      
+#endif /* __i386__ */  
 
 /* --------------------------------------------------------------------- */
 
@@ -742,8 +744,8 @@ __initfunc(int sm_init(void))
 
 	printk(sm_drvinfo);
 #ifdef __i386__
-	i386_capability();
-#endif /* __i386__ */	
+       i386_capability();
+#endif /* __i386__ */  
 	/*
 	 * register net devices
 	 */

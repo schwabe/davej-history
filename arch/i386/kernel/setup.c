@@ -322,7 +322,7 @@ static const char * AMDmodel(void)
 	if (x86_model < 16)
 		for (i=0; i<sizeof(amd_models)/sizeof(struct cpu_model_info); i++)
 			if (amd_models[i].x86 == x86) {
-				p = amd_models[i].model_names[x86_model];
+				p = amd_models[i].model_names[(int)x86_model];
 				break;
 			}
 	return p;

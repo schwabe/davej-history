@@ -2296,72 +2296,100 @@ CONFIG_BAYCOM
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. This is recommended.
 
-Soundcard modem driver for AX.25
+Sound card modem driver for AX.25
 CONFIG_SOUNDMODEM
-  This experimental driver allows a standard SoundBlaster or 
-  WindowsSoundSystem compatible soundcard to be used as a packet radio
-  modem. To configure the driver, use the sethdlc, smdiag and smmixer
+  This experimental driver allows a standard SoundBlaster or
+  WindowsSoundSystem compatible sound card to be used as a packet radio
+  modem (NOT as a telephone modem!), to send digital traffic over
+  amateur radio. 
+
+  To configure the driver, use the sethdlc, smdiag and smmixer
   utilities available in the standard ax25 utilities package. For
-  informations on how to key the transmitter, see
-  http://www.ife.ee.ethz.ch/~sailer/pcf/ptt_circ/ptt.html and
-  drivers/net/README.soundmodem. If you want to compile this as a
-  module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt. This is recommended.
+  information on how to key the transmitter, see
+  http://www.ife.ee.ethz.ch/~sailer/pcf/ptt_circ/ptt.html (to browse
+  the WWW, you need to have access to a machine on the Internet that
+  has a program like lynx or netscape) and
+  Documentation/networking/soundmodem.txt. 
 
-Soundcard modem support for SoundBlaster and compatible cards
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
+  The module will be called soundmodem.o.
+
+Sound card modem support for SoundBlaster and compatible cards
 CONFIG_SOUNDMODEM_SBC
-  This option enables the soundmodem driver to use SoundBlaster
-  and compatible cards. Dual mode cards (i.e. WSS cards with a
-  SoundBlaster emulation) should be used in WSS mode because
-  this results in usually better performance.
+  This option enables the soundmodem driver to use SoundBlaster and
+  compatible cards. If you have a dual mode card (i.e. a WSS cards
+  with a SoundBlaster emulation) you should say N here and Y to
+  "Sound card modem support for WSS and Crystal cards", below, because
+  this usually results in better performance. This option also supports
+  SB16/32/64 in full duplex mode.
 
-Soundcard modem support for WSS and Crystal cards
+Sound card modem support for WSS and Crystal cards
 CONFIG_SOUNDMODEM_WSS
   This option enables the soundmodem driver to use WindowsSoundSystem
   compatible cards. These cards feature a codec chip from either
-  Analog Devices (such as AD1848, AD1845, AD1812) or Crystal Semiconductors
-  (such as CS4248, CS423x). This option also supports the WSS full duplex
-  operation which currently works with Crystal CS423x chips. If you don't
-  need full duplex operation, do not enable it to save performance.
+  Analog Devices (such as AD1848, AD1845, AD1812) or Crystal
+  Semiconductors (such as CS4248, CS423x). This option also supports
+  the WSS full duplex operation which currently works with Crystal
+  CS423x chips. If you don't need full duplex operation, do not enable
+  it to save performance.
 
-Soundcard modem support for 1200 baud AFSK modulation
+Sound card modem support for 1200 baud AFSK modulation
 CONFIG_SOUNDMODEM_AFSK1200
   This option enables the soundmodem driver 1200 baud AFSK modem, 
   compatible to popular modems using TCM3105 or AM7911. The demodulator
   requires about 12% of the CPU power of a Pentium 75 CPU per channel.
 
-Soundcard modem support for 4800 baud HAPN-1 modulation
-CONFIG_SOUNDMODEM_HAPN4800
-  This option enables the soundmodem driver 4800 baud HAPN-1 compatible
-  modem. This modulation seems to be widely used 'down under' and in
-  the netherlands. Here, nobody uses it, so I could not test if it works.
-  It is compatible to itself, however :-)
+Sound card modem support for 2400 baud AFSK modulation (7.3728MHz crystal)
+CONFIG_SOUNDMODEM_AFSK2400_7
+  This option enables the soundmodem driver 2400 baud AFSK modem,
+  compatible to TCM3105 modems (over-)clocked with a 7.3728MHz
+  crystal.  Note that the availability of this driver does _not_ imply
+  that I recommend building such links. It is only here since users
+  especially in eastern Europe have asked me to do so. In fact this
+  modulation scheme has many disadvantages, mainly its incompatibility
+  with many transceiver designs and the fact that the TCM3105 (if
+  used) is operated widely outside its specifications.
 
-Soundcard modem support for 9600 baud FSK G3RUH modulation
+Sound card modem support for 2400 baud AFSK modulation (8MHz crystal)
+CONFIG_SOUNDMODEM_AFSK2400_8
+  This option enables the soundmodem driver 2400 baud AFSK modem,
+  compatible to TCM3105 modems (over-)clocked with an 8MHz crystal.
+  Note that the availability of this driver does _not_ imply that I
+  recommend building such links. It is only here since users
+  especially in eastern Europe have asked me to do so. In fact this
+  modulation scheme has many disadvantages, mainly its incompatibility
+  with many transceiver designs and the fact that the TCM3105 (if
+  used) is operated widely outside its specifications.
+
+Sound card modem support for 2666 baud AFSK modulation
+CONFIG_SOUNDMODEM_AFSK2666
+  This option enables the soundmodem driver 2666 baud AFSK modem.
+  This modem is experimental, and not compatible to anything
+  else I know of.
+
+Sound card modem support for 4800 baud 8PSK modulation
+CONFIG_SOUNDMODEM_PSK4800
+  This option enables the soundmodem driver 4800 baud 8PSK modem.
+  This modem is experimental, and not compatible to anything
+  else I know of.
+
+Sound card modem support for 4800 baud HAPN-1 modulation
+CONFIG_SOUNDMODEM_HAPN4800
+  This option enables the soundmodem driver 4800 baud HAPN-1
+  compatible modem. This modulation seems to be widely used 'down
+  under' and in the Netherlands. Here, nobody uses it, so I could not
+  test if it works.  It is compatible to itself, however :-)
+
+Sound card modem support for 9600 baud FSK G3RUH modulation
 CONFIG_SOUNDMODEM_FSK9600
   This option enables the soundmodem driver 9600 baud FSK modem,
   compatible to the G3RUH standard. The demodulator requires about 4%
-  of the CPU power of a Pentium 75 CPU per channel.
-
-Soundcard modem support using floating point arithmetic
-CONFIG_SOUNDMODEM_FLOAT
-  This option enables floating point calculations to be used for the
-  AFSK1200 baud modem. The Intel Pentium is a perverted chip because
-  integer multiplications are, altough easier to implement in silicon,
-  an order of a magnitude slower than floating point calculations.
-  Enabling this option uses a highly optimized assembler routine for
-  correlations, modelled after the one published by Phil Karn, KA9Q.
-  This reduces the computing power needed on Intel Pentium chips to about
-  50%. On the other hand, Pentium clones with faster integer multiply and
-  slower floating point multiply will probably take longer with this
-  option turned on. As a rule of thumb, enable it for Intel Pentium and
-  Pentium Pro processors, and disable it for anything else.
-  I (sailer@ife.ee.ethz.ch) am very interested in figures. If you are
-  willing to give me a feedback, please compile the driver once with this
-  option enabled and once with it disabled, and send me the cycle counter
-  numbers obtained with both compilations, and your exact chip. The cycle
-  counter numbers can be optained by a recent sethdlc utility.
+  of the CPU power of a Pentium 75 CPU per channel. You can say Y to
+  both 1200 baud AFSK and 9600 baud FSK if you want (but obviously you
+  can only use one protocol at a time, depending on what the other end
+  can understand).
 
 PLIP (parallel port) support
 CONFIG_PLIP

@@ -41,7 +41,7 @@
         defined(CONFIG_EL2)     ||      defined(CONFIG_NE2000)          || \
         defined(CONFIG_E2100)   ||      defined(CONFIG_HPLAN_PLUS)      || \
         defined(CONFIG_HPLAN)   ||      defined(CONFIG_AC3200)		|| \
-	defined(CONFIG_ULTRA32)
+	defined(CONFIG_ULTRA32) ||	defined(CONFIG_NE2K_PCI)
 #include "../drivers/net/8390.h"
 #endif
 

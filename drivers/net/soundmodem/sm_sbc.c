@@ -32,6 +32,7 @@
 #include <asm/dma.h>
 #include <linux/ioport.h>
 #include <linux/soundmodem.h>
+#include <linux/delay.h>
 #include "sm.h"
 #include "smdma.h"
 
@@ -144,8 +145,7 @@ static int inline reset_dsp(struct device *dev)
 	int i;
 
 	outb(1, DSP_RESET(dev->base_addr));
-	for (i = 0; i < 0x100; i++)
-		SLOW_DOWN_IO;
+	udelay(300);
 	outb(0, DSP_RESET(dev->base_addr));
 	for (i = 0; i < 0xffff; i++)
 		if (inb(DSP_DATA_AVAIL(dev->base_addr)) & 0x80)
@@ -343,6 +343,7 @@ static void sbc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (hdlcdrv_ptt(&sm->hdrv)) {
 			/* starting to transmit */
 			disable_dma(dev->dma);
+			hdlcdrv_transmitter(dev, &sm->hdrv); /* prefill HDLC buffer */
 			dma_start_transmit(sm);
 			setup_dma_dsp(dev, sm, 1);
 			dma_transmit(sm);
@@ -416,11 +417,7 @@ static int sbc_open(struct device *dev, struct sm_state *sm)
 	 */
 	dma_init_receive(sm);
 	dmasz = (NUM_FRAGMENTS + 1) * sm->dma.ifragsz;
-	if (sm->dma.i16bit)
-		dmasz <<= 1;
 	u = NUM_FRAGMENTS * sm->dma.ofragsz;
-	if (sm->dma.o16bit)
-		u <<= 1;
 	if (u > dmasz)
 		dmasz = u;
 	if (!(sm->dma.ibuf = sm->dma.obuf = kmalloc(dmasz, GFP_KERNEL | GFP_DMA)))

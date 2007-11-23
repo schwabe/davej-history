@@ -3,7 +3,7 @@
 /*
  *	sm.h  --  soundcard radio modem driver internal header.
  *
- *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -296,8 +296,8 @@ extern int sm_x86_capability;
 #define HAS_RDTSC (sm_x86_capability & 0x10)
 
 /*
- * only do 32bit cycle counter arithmetic; we hope we won't overflow :-)
- * in fact, overflowing modems would require over 2THz clock speeds :-)
+ * only do 32bit cycle counter arithmetic; we hope we won't overflow.
+ * in fact, overflowing modems would require over 2THz CPU clock speeds :-)
  */
 
 #define time_exec(var,cmd)                                              \

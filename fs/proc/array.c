@@ -28,6 +28,8 @@
  *
  * Yves Arrouye      :  remove removal of trailing spaces in get_array.
  *			<Yves.Arrouye@marin.fdn.fr>
+ *
+ * Alan Cox	     :  security fixes. <Alan.Cox@linux.org>a
  */
 
 #include <linux/types.h>
@@ -1056,6 +1058,28 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 	return -EBADF;
 }
 
+static int process_unauthorized(int type, int pid)
+{
+	struct task_struct ** p = get_task(pid);
+
+	if (!p || !*p || !(*p)->mm)
+		return 1;
+
+	switch(type)
+	{
+		case PROC_PID_STATUS:
+		case PROC_PID_STATM:
+		case PROC_PID_STAT:
+		case PROC_PID_MAPS:
+		case PROC_PID_CMDLINE:
+			return 0;	
+	}
+	if(current->fsuid == (*p)->euid)
+		return 0;
+	return 1;
+}
+
+
 static int get_process_array(char * page, int pid, int type)
 {
 	switch (type) {
@@ -1103,6 +1127,13 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 	type &= 0x0000ffff;
 	start = NULL;
 	dp = (struct proc_dir_entry *) inode->u.generic_ip;
+	
+	if (pid && process_unauthorized(type, pid))
+	{
+		free_page(page);
+		return -EIO;
+	}
+	
 	if (dp->get_info)
 		length = dp->get_info((char *)page, &start, file->f_pos,
 				      count, 0);
