@@ -27,17 +27,17 @@ asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 	struct inode * inode;
 	int error;
 
-	error = verify_area(VERIFY_WRITE, buf, sizeof(struct statfs));
+	error = verify_area(VERIFY_WRITE, buf, sizeof (struct statfs));
 	if (error)
 		return error;
-	error = namei(path,&inode);
+	error = namei(path, &inode);
 	if (error)
 		return error;
 	if (!inode->i_sb->s_op->statfs) {
 		iput(inode);
 		return -ENOSYS;
 	}
-	inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof(struct statfs));
+	inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof (struct statfs));
 	iput(inode);
 	return 0;
 }
@@ -48,7 +48,7 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	struct file * file;
 	int error;
 
-	error = verify_area(VERIFY_WRITE, buf, sizeof(struct statfs));
+	error = verify_area(VERIFY_WRITE, buf, sizeof (struct statfs));
 	if (error)
 		return error;
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
@@ -59,7 +59,7 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	        return -ENODEV;
 	if (!inode->i_sb->s_op->statfs)
 		return -ENOSYS;
-	inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof(struct statfs));
+	inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof (struct statfs));
 	return 0;
 }
 
@@ -70,8 +70,8 @@ int do_truncate(struct inode *inode, unsigned long length)
 
         /* Not pretty: "inode->i_size" shouldn't really be "off_t". But it is. */
         if ((off_t) length < 0)
-        	return -EINVAL;
-                                 
+		return -EINVAL;
+
 	down(&inode->i_sem);
 	newattrs.ia_size = length;
 	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;
@@ -91,7 +91,7 @@ asmlinkage int sys_truncate(const char * path, unsigned long length)
 	struct inode * inode;
 	int error;
 
-	error = namei(path,&inode);
+	error = namei(path, &inode);
 	if (error)
 		return error;
 
@@ -99,7 +99,7 @@ asmlinkage int sys_truncate(const char * path, unsigned long length)
 	if (S_ISDIR(inode->i_mode))
 		goto out;
 
-	error = permission(inode,MAY_WRITE);
+	error = permission(inode, MAY_WRITE);
 	if (error)
 		goto out;
 
@@ -170,7 +170,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 	struct inode * inode;
 	struct iattr newattrs;
 
-	error = namei(filename,&inode);
+	error = namei(filename, &inode);
 	if (error)
 		return error;
 	if (IS_RDONLY(inode)) {
@@ -180,7 +180,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 	/* Don't worry, the checks are done in inode_change_ok() */
 	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME;
 	if (times) {
-		error = verify_area(VERIFY_READ, times, sizeof(*times));
+		error = verify_area(VERIFY_READ, times, sizeof (*times));
 		if (error) {
 			iput(inode);
 			return error;
@@ -190,7 +190,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
 		if (current->fsuid != inode->i_uid &&
-		    (error = permission(inode,MAY_WRITE)) != 0) {
+		    (error = permission(inode, MAY_WRITE)) != 0) {
 			iput(inode);
 			return error;
 		}
@@ -212,7 +212,7 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 	struct inode * inode;
 	struct iattr newattrs;
 
-	error = namei(filename,&inode);
+	error = namei(filename, &inode);
 	if (error)
 		return error;
 	if (IS_RDONLY(inode)) {
@@ -223,17 +223,18 @@ asmlinkage int sys_utimes(char * filename, struct timeval * utimes)
 	newattrs.ia_valid = ATTR_CTIME | ATTR_MTIME | ATTR_ATIME;
 	if (utimes) {
 		struct timeval times[2];
-		error = verify_area(VERIFY_READ, utimes, sizeof(times));
+		error = verify_area(VERIFY_READ, utimes, sizeof (times));
 		if (error) {
 			iput(inode);
 			return error;
 		}
-		memcpy_fromfs(&times, utimes, sizeof(times));
+		memcpy_fromfs(&times, utimes, sizeof (times));
 		newattrs.ia_atime = times[0].tv_sec;
 		newattrs.ia_mtime = times[1].tv_sec;
 		newattrs.ia_valid |= ATTR_ATIME_SET | ATTR_MTIME_SET;
 	} else {
-		if ((error = permission(inode,MAY_WRITE)) != 0) {
+		if (current->fsuid != inode->i_uid &&
+		    (error = permission(inode, MAY_WRITE)) != 0) {
 			iput(inode);
 			return error;
 		}
@@ -259,7 +260,7 @@ asmlinkage int sys_access(const char * filename, int mode)
 	old_fsgid = current->fsgid;
 	current->fsuid = current->uid;
 	current->fsgid = current->gid;
-	res = namei(filename,&inode);
+	res = namei(filename, &inode);
 	if (!res) {
 		res = permission(inode, mode);
 		iput(inode);
@@ -274,14 +275,14 @@ asmlinkage int sys_chdir(const char * filename)
 	struct inode * inode;
 	int error;
 
-	error = namei(filename,&inode);
+	error = namei(filename, &inode);
 	if (error)
 		return error;
 	if (!S_ISDIR(inode->i_mode)) {
 		iput(inode);
 		return -ENOTDIR;
 	}
-	if ((error = permission(inode,MAY_EXEC)) != 0) {
+	if ((error = permission(inode, MAY_EXEC)) != 0) {
 		iput(inode);
 		return error;
 	}
@@ -302,7 +303,7 @@ asmlinkage int sys_fchdir(unsigned int fd)
 		return -ENOENT;
 	if (!S_ISDIR(inode->i_mode))
 		return -ENOTDIR;
-	if ((error = permission(inode,MAY_EXEC)) != 0)
+	if ((error = permission(inode, MAY_EXEC)) != 0)
 		return error;
 	iput(current->fs->pwd);
 	current->fs->pwd = inode;
@@ -315,7 +316,7 @@ asmlinkage int sys_chroot(const char * filename)
 	struct inode * inode;
 	int error;
 
-	error = namei(filename,&inode);
+	error = namei(filename, &inode);
 	if (error)
 		return error;
 	if (!S_ISDIR(inode->i_mode)) {
@@ -359,7 +360,7 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 	int error;
 	struct iattr newattrs;
 
-	error = namei(filename,&inode);
+	error = namei(filename, &inode);
 	if (error)
 		return error;
 	if (IS_RDONLY(inode)) {
@@ -439,7 +440,7 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	int error;
 	struct iattr newattrs;
 
-	error = lnamei(filename,&inode);
+	error = lnamei(filename, &inode);
 	if (error)
 		return error;
 	if (IS_RDONLY(inode)) {
@@ -503,22 +504,22 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
-static int do_open(const char * filename,int flags,int mode, int fd)
+static int do_open(const char * filename, int flags, int mode, int fd)
 {
 	struct inode * inode;
 	struct file * f;
-	int flag,error;
+	int flag, error;
 
 	f = get_empty_filp();
 	if (!f)
 		return -ENFILE;
 	f->f_flags = flag = flags;
-	f->f_mode = (flag+1) & O_ACCMODE;
+	f->f_mode = (flag + 1) & O_ACCMODE;
 	if (f->f_mode)
 		flag++;
 	if (flag & O_TRUNC)
 		flag |= 2;
-	error = open_namei(filename,flag,mode,&inode,NULL);
+	error = open_namei(filename, flag, mode, &inode, NULL);
 	if (error)
 		goto cleanup_file;
 	if (f->f_mode & FMODE_WRITE) {
@@ -534,7 +535,7 @@ static int do_open(const char * filename,int flags,int mode, int fd)
 	if (inode->i_op)
 		f->f_op = inode->i_op->default_file_ops;
 	if (f->f_op && f->f_op->open) {
-		error = f->f_op->open(inode,f);
+		error = f->f_op->open(inode, f);
 		if (error)
 			goto cleanup_all;
 	}
@@ -575,7 +576,7 @@ inline void put_unused_fd(int fd)
 	FD_CLR(fd, &current->files->open_fds);
 }
 
-asmlinkage int sys_open(const char * filename,int flags,int mode)
+asmlinkage int sys_open(const char * filename, int flags, int mode)
 {
 	char * tmp;
 	int fd, error;
@@ -585,7 +586,7 @@ asmlinkage int sys_open(const char * filename,int flags,int mode)
 		return fd;
 	error = getname(filename, &tmp);
 	if (!error) {
-		error = do_open(tmp,flags,mode, fd);
+		error = do_open(tmp, flags, mode, fd);
 		putname(tmp);
 		if (!error)
 			return fd;
@@ -610,7 +611,7 @@ asmlinkage int sys_creat(const char * pathname, int mode)
 void __fput(struct file *filp, struct inode *inode)
 {
 	if (filp->f_op && filp->f_op->release)
-		filp->f_op->release(inode,filp);
+		filp->f_op->release(inode, filp);
 	filp->f_inode = NULL;
 	if (filp->f_mode & FMODE_WRITE)
 		put_write_access(inode);

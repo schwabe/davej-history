@@ -208,10 +208,8 @@ L:	linux-net@vger.kernel.org
 S:	Maintained
 
 EXT2 FILE SYSTEM
-P:	Remy Card
-M:	Remy.Card@linux.org
-L:	linux-kernel@vger.kernel.org
-S:	Maintained
+L:	ext2-devel@lists.sourceforge.net
+S:	Odd fixes
 
 FILE LOCKING (flock() and fcntl()/lockf())
 P:	Andy Walker
