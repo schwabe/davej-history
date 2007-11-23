@@ -4,7 +4,7 @@
  *
  *  S390 version
  *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
- *    Author(s): Martin Peschke <peschke@fh-brandenburg.de>
+ *    Author(s): Martin Peschke <mpeschke@de.ibm.com>
  *
  *  Thanks to Martin Schwidefsky.
  */
@@ -171,9 +171,7 @@ hwc_tty_ioctl (
 
 	switch (cmd) {
 	case TIOCHWCTTYSINTRC:
-		count = strnlen_user((const char *)arg, HWC_TTY_MAX_CNTL_SIZE);
-		if (!count)
-			return -EFAULT;
+		count = strlen_user ((const char *) arg);
 		if (count > HWC_TTY_MAX_CNTL_SIZE)
 			return -EINVAL;
 		strncpy_from_user (hwc_tty_data.ioctl.intr_char,

@@ -54,6 +54,10 @@ MOD_SUB_DIRS += usb
 else
   ifeq ($(CONFIG_USB),m)
   MOD_SUB_DIRS += usb
+  else
+    ifdef CONFIG_INPUT_ADBHID
+    SUB_DIRS += usb
+    endif
   endif
 endif 
 

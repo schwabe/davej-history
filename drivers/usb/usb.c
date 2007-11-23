@@ -2,7 +2,7 @@
  * drivers/usb/usb.c
  *
  * (C) Copyright Linus Torvalds 1999
- * (C) Copyright Johannes Erdfelt 1999
+ * (C) Copyright Johannes Erdfelt 1999-2001
  * (C) Copyright Andreas Gal 1999
  * (C) Copyright Gregory P. Smith 1999
  * (C) Copyright Deti Fliegl 1999 (new USB architecture)
@@ -15,8 +15,6 @@
  * Think of this as a "USB library" rather than anything else.
  * It should be considered a slave, with no callbacks. Callbacks
  * are evil.
- *
- * $Id: usb.c,v 1.53 2000/01/14 16:19:09 acher Exp $
  */
 
 #include <linux/config.h>
@@ -25,6 +23,7 @@
 #include <linux/bitops.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>  /* for in_interrupt() */
+#include <linux/init.h>
 
 
 #if	defined(CONFIG_KMOD) && defined(CONFIG_HOTPLUG)
@@ -54,6 +53,9 @@ static const int usb_bandwidth_option =
 				0;
 #endif
 
+extern int  usb_hub_init(void);
+extern void usb_hub_cleanup(void);
+
 /*
  * Prototypes for the device driver probing/loading functions
  */
@@ -71,6 +73,15 @@ static struct usb_busmap busmap;
 
 static struct usb_driver *usb_minors[16];
 
+/**
+ *	usb_register - register a USB driver
+ *	@new_driver: USB operations for the driver
+ *
+ *	Registers a USB driver with the USB core.  The list of unattached
+ *	interfaces will be rescanned whenever a new driver is added, allowing
+ *	the new driver to attach to any recognized devices.
+ *	Returns a negative error code on failure and 0 on success.
+ */
 int usb_register(struct usb_driver *new_driver)
 {
 	if (new_driver->fops != NULL) {
@@ -86,19 +97,21 @@ int usb_register(struct usb_driver *new_driver)
 	init_MUTEX(&new_driver->serialize);
 
 	/* Add it to the list of known drivers */
-	list_add(&new_driver->driver_list, &usb_driver_list);
+	list_add_tail(&new_driver->driver_list, &usb_driver_list);
 
 	usb_scan_devices();
 
 	return 0;
 }
 
-/*
- * We go through all existing devices, and see if any of them would
- * be acceptable to the new driver.. This is done using a depth-first
- * search for devices without a registered driver already, then 
- * running 'probe' with each of the drivers registered on every one 
- * of these.
+/**
+ *	usb_scan_devices - scans all unclaimed USB interfaces
+ *
+ *	Goes through all unclaimed USB interfaces, and offers them to all
+ *	registered USB drivers through the 'probe' function.
+ *	This will automatically be called after usb_register is called.
+ *	It is called by some of the USB subsystems after one of their subdrivers
+ *	are registered.
  */
 void usb_scan_devices(void)
 {
@@ -140,7 +153,9 @@ static void usb_drivers_purge(struct usb_driver *driver,struct usb_device *dev)
 			down(&driver->serialize);
 			driver->disconnect(dev, interface->private_data);
 			up(&driver->serialize);
-			usb_driver_release_interface(driver, interface);
+			/* if driver->disconnect didn't release the interface */
+			if (interface->driver)
+				usb_driver_release_interface(driver, interface);
 			/*
 			 * This will go through the list looking for another
 			 * driver that can handle the device
@@ -150,8 +165,11 @@ static void usb_drivers_purge(struct usb_driver *driver,struct usb_device *dev)
 	}
 }
 
-/*
- * Unlink a driver from the driver list when it is unloaded
+/**
+ *	usb_deregister - unregister a USB driver
+ *	@driver: USB operations of the driver to unregister
+ *
+ *	Unlinks the specified driver from the internal USB driver list.
  */
 void usb_deregister(struct usb_driver *driver)
 {
@@ -327,8 +345,28 @@ void usb_release_bandwidth(struct usb_device *dev, struct urb *urb, int isoc)
 	urb->bandwidth = 0;
 }
 
-/*
- * New functions for (de)registering a controller
+static void usb_bus_get(struct usb_bus *bus)
+{
+	atomic_inc(&bus->refcnt);
+}
+
+static void usb_bus_put(struct usb_bus *bus)
+{
+	if (atomic_dec_and_test(&bus->refcnt))
+		kfree(bus);
+}
+
+/**
+ *	usb_alloc_bus - creates a new USB host controller structure
+ *	@op: pointer to a struct usb_operations that this bus structure should use
+ *
+ *	Creates a USB host controller bus structure with the specified 
+ *	usb_operations and initializes all the necessary internal objects.
+ *	(For use only by USB Host Controller Drivers.)
+ *
+ *	If no memory is available, NULL is returned.
+ *
+ *	The caller should call usb_free_bus() when it is finished with the structure.
  */
 struct usb_bus *usb_alloc_bus(struct usb_operations *op)
 {
@@ -339,6 +377,10 @@ struct usb_bus *usb_alloc_bus(struct usb_operations *op)
 		return NULL;
 
 	memset(&bus->devmap, 0, sizeof(struct usb_devmap));
+
+#ifdef DEVNUM_ROUND_ROBIN
+	bus->devnum_next = 1;
+#endif /* DEVNUM_ROUND_ROBIN */
 
 	bus->op = op;
 	bus->root_hub = NULL;
@@ -351,17 +393,31 @@ struct usb_bus *usb_alloc_bus(struct usb_operations *op)
 	INIT_LIST_HEAD(&bus->bus_list);
 	INIT_LIST_HEAD(&bus->inodes);
 
+	atomic_set(&bus->refcnt, 1);
+
 	return bus;
 }
 
+/**
+ *	usb_free_bus - frees the memory used by a bus structure
+ *	@bus: pointer to the bus to free
+ *
+ *	(For use only by USB Host Controller Drivers.)
+ */
 void usb_free_bus(struct usb_bus *bus)
 {
 	if (!bus)
 		return;
 
-	kfree(bus);
+	usb_bus_put(bus);
 }
 
+/**
+ *	usb_register_bus - registers the USB host controller with the usb core
+ *	@bus: pointer to the bus to register
+ *
+ *	(For use only by USB Host Controller Drivers.)
+ */
 void usb_register_bus(struct usb_bus *bus)
 {
 	int busnum;
@@ -373,6 +429,8 @@ void usb_register_bus(struct usb_bus *bus)
 	} else
 		warn("too many buses");
 
+	usb_bus_get(bus);
+
 	/* Add it to the list of buses */
 	list_add(&bus->bus_list, &usb_bus_list);
 
@@ -381,6 +439,12 @@ void usb_register_bus(struct usb_bus *bus)
 	info("new USB bus registered, assigned bus number %d", bus->busnum);
 }
 
+/**
+ *	usb_deregister_bus - deregisters the USB host controller
+ *	@bus: pointer to the bus to deregister
+ *
+ *	(For use only by USB Host Controller Drivers.)
+ */
 void usb_deregister_bus(struct usb_bus *bus)
 {
 	info("USB bus %d deregistered", bus->busnum);
@@ -395,6 +459,8 @@ void usb_deregister_bus(struct usb_bus *bus)
         usbdevfs_remove_bus(bus);
 
 	clear_bit(bus->busnum, busmap.busmap);
+
+	usb_bus_put(bus);
 }
 
 /*
@@ -722,7 +788,8 @@ static void call_policy (char *verb, struct usb_device *dev)
 	value = call_usermodehelper (argv [0], argv, envp);
 	kfree (buf);
 	kfree (envp);
-	dbg ("kusbd policy returned 0x%x", value);
+	if (value != 0)
+		dbg ("kusbd policy returned 0x%x", value);
 }
 
 #else
@@ -783,6 +850,8 @@ struct usb_device *usb_alloc_dev(struct usb_device *parent, struct usb_bus *bus)
 
 	memset(dev, 0, sizeof(*dev));
 
+	usb_bus_get(bus);
+
 	dev->bus = bus;
 	dev->parent = parent;
 	atomic_set(&dev->refcnt, 1);
@@ -799,6 +868,9 @@ void usb_free_dev(struct usb_device *dev)
 	if (atomic_dec_and_test(&dev->refcnt)) {
 		dev->bus->op->deallocate(dev);
 		usb_destroy_configuration(dev);
+
+		usb_bus_put(dev->bus);
+
 		kfree(dev);
 	}
 }
@@ -807,10 +879,23 @@ void usb_inc_dev_use(struct usb_device *dev)
 {
 	atomic_inc(&dev->refcnt);
 }
+
 /* ------------------------------------------------------------------------------------- 
  * New USB Core Functions
  * -------------------------------------------------------------------------------------*/
 
+/**
+ *	usb_alloc_urb - creates a new urb for a USB driver to use
+ *	@iso_packets: number of iso packets for this urb
+ *
+ *	Creates an urb for the USB driver to use and returns a pointer to it.
+ *	If no memory is available, NULL is returned.
+ *
+ *	If the driver want to use this urb for interrupt, control, or bulk
+ *	endpoints, pass '0' as the number of iso packets.
+ *
+ *	The driver should call usb_free_urb() when it is finished with the urb.
+ */
 urb_t *usb_alloc_urb(int iso_packets)
 {
 	urb_t *urb;
@@ -829,7 +914,14 @@ urb_t *usb_alloc_urb(int iso_packets)
 	return urb;
 }
 
-/*-------------------------------------------------------------------*/
+/**
+ *	usb_free_urb - frees the memory used by a urb
+ *	@urb: pointer to the urb to free
+ *
+ *	If an urb is created with a call to usb_create_urb() it should be
+ *	cleaned up with a call to usb_free_urb() when the driver is finished
+ *	with it.
+ */
 void usb_free_urb(urb_t* urb)
 {
 	if (urb)
@@ -894,6 +986,7 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, int* actual_length)
 	if (status) {
 		// something went wrong
 		usb_free_urb(urb);
+		current->state = TASK_RUNNING;
 		remove_wait_queue(&wqh, &wait);
 		return status;
 	}
@@ -904,6 +997,7 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, int* actual_length)
 	} else
 		status = 1;
 
+	current->state = TASK_RUNNING;
 	remove_wait_queue(&wqh, &wait);
 
 	if (!status) {
@@ -945,7 +1039,27 @@ int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe,
 	
 }
 
-/*-------------------------------------------------------------------*/
+/**
+ *	usb_control_msg - Builds a control urb, sends it off and waits for completion
+ *	@dev: pointer to the usb device to send the message to
+ *	@pipe: endpoint "pipe" to send the message to
+ *	@request: USB message request value
+ *	@requesttype: USB message request type value
+ *	@value: USB message value
+ *	@index: USB message index value
+ *	@data: pointer to the data to send
+ *	@size: length in bytes of the data to send
+ *	@timeout: time to wait for the message to complete before timing out (if 0 the wait is forever)
+ *
+ *	This function sends a simple control message to a specified endpoint
+ *	and waits for the message to complete, or timeout.
+ *	
+ *	If successful, it returns 0, othwise a negative error number.
+ *
+ *	Don't use this function from within an interrupt context, like a
+ *	bottom half handler.  If you need a asyncronous message, or need to send
+ *	a message from within interrupt context, use usb_submit_urb()
+ */
 int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype,
 			 __u16 value, __u16 index, void *data, __u16 size, int timeout)
 {
@@ -970,10 +1084,27 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u
 	return ret;
 }
 
-/*-------------------------------------------------------------------*/
-/* compatibility wrapper, builds bulk urb, and waits for completion */
-/* synchronous behavior */
 
+/**
+ *	usb_bulk_msg - Builds a bulk urb, sends it off and waits for completion
+ *	@usb_dev: pointer to the usb device to send the message to
+ *	@pipe: endpoint "pipe" to send the message to
+ *	@data: pointer to the data to send
+ *	@len: length in bytes of the data to send
+ *	@actual_length: pointer to a location to put the actual length transfered in bytes
+ *	@timeout: time to wait for the message to complete before timing out (if 0 the wait is forever)
+ *
+ *	This function sends a simple bulk message to a specified endpoint
+ *	and waits for the message to complete, or timeout.
+ *	
+ *	If successful, it returns 0, othwise a negative error number.
+ *	The number of actual bytes transferred will be plaed in the 
+ *	actual_timeout paramater.
+ *
+ *	Don't use this function from within an interrupt context, like a
+ *	bottom half handler.  If you need a asyncronous message, or need to
+ *	send a message from within interrupt context, use usb_submit_urb()
+ */
 int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, 
 			void *data, int len, int *actual_length, int timeout)
 {
@@ -1479,8 +1610,6 @@ void usb_disconnect(struct usb_device **pdev)
 
 	info("USB disconnect on device %d", dev->devnum);
 
-	call_policy ("remove", dev);
-
 	if (dev->actconfig) {
 		for (i = 0; i < dev->actconfig->bNumInterfaces; i++) {
 			struct usb_interface *interface = &dev->actconfig->interface[i];
@@ -1489,7 +1618,9 @@ void usb_disconnect(struct usb_device **pdev)
 				down(&driver->serialize);
 				driver->disconnect(dev, interface->private_data);
 				up(&driver->serialize);
-				usb_driver_release_interface(driver, interface);
+				/* if driver->disconnect didn't release the interface */
+				if (interface->driver)
+					usb_driver_release_interface(driver, interface);
 			}
 		}
 	}
@@ -1500,6 +1631,9 @@ void usb_disconnect(struct usb_device **pdev)
 		if (*child)
 			usb_disconnect(child);
 	}
+
+	/* Let policy agent unload modules etc */
+	call_policy ("remove", dev);
 
 	/* Free the device number and remove the /proc/bus/usb entry */
 	if (dev->devnum > 0) {
@@ -1522,10 +1656,20 @@ void usb_connect(struct usb_device *dev)
 	int devnum;
 	// FIXME needs locking for SMP!!
 	/* why? this is called only from the hub thread, 
-	 * which hopefully doesn't run on multiple CPU's simulatenously 8-)
+	 * which hopefully doesn't run on multiple CPU's simultaneously 8-)
 	 */
 	dev->descriptor.bMaxPacketSize0 = 8;  /* Start off at 8 bytes  */
+#ifndef DEVNUM_ROUND_ROBIN
 	devnum = find_next_zero_bit(dev->bus->devmap.devicemap, 128, 1);
+#else	/* round_robin alloc of devnums */
+	/* Try to allocate the next devnum beginning at bus->devnum_next. */
+	devnum = find_next_zero_bit(dev->bus->devmap.devicemap, 128, dev->bus->devnum_next);
+	if (devnum >= 128)
+		devnum = find_next_zero_bit(dev->bus->devmap.devicemap, 128, 1);
+
+	dev->bus->devnum_next = ( devnum >= 127 ? 1 : devnum + 1);
+#endif	/* round_robin alloc of devnums */
+
 	if (devnum < 128) {
 		set_bit(devnum, dev->bus->devmap.devicemap);
 		dev->devnum = devnum;
@@ -1556,9 +1700,9 @@ int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char
 	while (i--) {
 		if ((result = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0),
 			USB_REQ_GET_DESCRIPTOR, USB_DIR_IN,
-			(type << 8) + index, 0, buf, size, HZ * GET_TIMEOUT)) >= 0 ||
+			(type << 8) + index, 0, buf, size, HZ * GET_TIMEOUT)) > 0 ||
 		     result == -EPIPE)
-			break;
+			break;	/* retry if the returned length was 0; flaky device */
 	}
 	return result;
 }
@@ -1933,7 +2077,8 @@ int usb_new_device(struct usb_device *dev)
 
 	err = usb_set_address(dev);
 	if (err < 0) {
-		err("USB device not accepting new address (error=%d)", err);
+		err("USB device not accepting new address=%d (error=%d)",
+			dev->devnum, err);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
 		return 1;
@@ -1959,7 +2104,8 @@ int usb_new_device(struct usb_device *dev)
 		if (err < 0)
 			err("unable to get device descriptor (error=%d)", err);
 		else
-			err("USB device descriptor short read (expected %i, got %i)", sizeof(dev->descriptor), err);
+			err("USB device descriptor short read (expected %Zi, got %i)",
+				sizeof(dev->descriptor), err);
 	
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
@@ -1968,17 +2114,18 @@ int usb_new_device(struct usb_device *dev)
 
 	err = usb_get_configuration(dev);
 	if (err < 0) {
-		err("unable to get configuration (error=%d)", err);
-		usb_destroy_configuration(dev);
+		err("unable to get device %d configuration (error=%d)", dev->devnum, err);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
+		usb_free_dev(dev);
 		return 1;
 	}
 
 	/* we set the default configuration here */
 	err = usb_set_configuration(dev, dev->config[0].bConfigurationValue);
 	if (err) {
-		err("failed to set default configuration (error=%d)", err);
+		err("failed to set device %d default configuration (error=%d)",
+			dev->devnum, err);
 		clear_bit(dev->devnum, &dev->bus->devmap.devicemap);
 		dev->devnum = -1;
 		return 1;
@@ -2051,6 +2198,32 @@ struct list_head *usb_bus_get_list(void)
 	return &usb_bus_list;
 }
 #endif
+
+
+/*
+ * Init
+ */
+static int __init usb_init(void)
+{
+	usb_major_init();
+	usbdevfs_init();
+	usb_hub_init();
+
+	return 0;
+}
+
+/*
+ * Cleanup
+ */
+static void __exit usb_exit(void)
+{
+	usb_major_cleanup();
+	usbdevfs_cleanup();
+	usb_hub_cleanup();
+}
+
+module_init(usb_init);
+module_exit(usb_exit);
 
 /*
  * USB may be built into the kernel or be built as modules.

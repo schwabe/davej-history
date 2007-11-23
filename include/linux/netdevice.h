@@ -441,6 +441,8 @@ extern int		register_netdev(struct device *dev);
 extern void		unregister_netdev(struct device *dev);
 extern int		register_trdev(struct device *dev);
 extern void		unregister_trdev(struct device *dev);
+extern int		register_fddidev(struct device *dev);
+extern void		unregister_fddidev(struct device *dev);
 extern int		register_fcdev(struct device *dev);
 extern void		unregister_fcdev(struct device *dev);
 /* Functions used for multicast support */

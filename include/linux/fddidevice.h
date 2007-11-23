@@ -34,6 +34,8 @@ extern int		fddi_header(struct sk_buff *skb,
 extern int		fddi_rebuild_header(struct sk_buff *skb);
 extern unsigned short	fddi_type_trans(struct sk_buff *skb,
 				struct device *dev);
+struct device *
+init_fddidev(struct device *dev, int sizeof_priv);
 #endif
 
 #endif	/* _LINUX_FDDIDEVICE_H */

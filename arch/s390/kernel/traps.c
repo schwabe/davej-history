@@ -37,6 +37,8 @@
 #include <asm/gdb-stub.h>
 #endif
 
+#include "cpcmd.h"
+
 /* Called from entry.S only */
 extern void handle_per_exception(struct pt_regs *regs);
 
@@ -44,6 +46,7 @@ typedef void pgm_check_handler_t(struct pt_regs *, long);
 pgm_check_handler_t *pgm_check_table[128];
 
 extern pgm_check_handler_t do_page_fault;
+extern pgm_check_handler_t do_pseudo_page_fault;
 
 static inline void console_verbose(void)
 {
@@ -113,7 +116,7 @@ int do_debugger_trap(struct pt_regs *regs,int signal)
 	return(FALSE);
 }
 
-DO_ERROR(SIGSEGV, "Unknown program exception", default_trap_handler);
+DO_ERROR(SIGSEGV, "Unknown program exception", default_trap_handler)
 DO_ERROR(SIGILL,  "privileged operation", privileged_op)
 DO_ERROR(SIGILL,  "execute exception", execute_exception)
 DO_ERROR(SIGSEGV, "addressing exception", addressing_exception)
@@ -317,18 +320,20 @@ __initfunc(void trap_init(void))
         pgm_check_table[1] = &illegal_op;
         pgm_check_table[2] = &privileged_op;
         pgm_check_table[3] = &execute_exception;
+        pgm_check_table[4] = &do_page_fault;
         pgm_check_table[5] = &addressing_exception;
         pgm_check_table[6] = &specification_exception;
         pgm_check_table[7] = &data_exception;
         pgm_check_table[9] = &divide_exception;
-        pgm_check_table[0x12] = &translation_exception;
-        pgm_check_table[0x13] = &special_op_exception;
-        pgm_check_table[0x15] = &operand_exception;
-        pgm_check_table[4] = &do_page_fault;
         pgm_check_table[0x10] = &do_page_fault;
         pgm_check_table[0x11] = &do_page_fault;
+        pgm_check_table[0x12] = &translation_exception;
+        pgm_check_table[0x13] = &special_op_exception;
+	pgm_check_table[0x14] = &do_pseudo_page_fault;
+        pgm_check_table[0x15] = &operand_exception;
         pgm_check_table[0x1C] = &privileged_op;
-
+	if (MACHINE_IS_VM)
+	        cpcmd("SET PAGEX ON", NULL, 0);
 }
 
 

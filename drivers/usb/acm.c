@@ -1,5 +1,5 @@
 /*
- * acm.c  Version 0.16
+ * acm.c  Version 0.18
  *
  * Copyright (c) 1999 Armin Fuerst	<fuerst@in.tum.de>
  * Copyright (c) 1999 Pavel Machek	<pavel@suse.cz>
@@ -19,6 +19,8 @@
  *	v0.14 - sized down struct acm
  *	v0.15 - fixed flow control again - characters could be lost
  *	v0.16 - added code for modems with swapped data and control interfaces
+ *	v0.17 - added new style probing
+ *	v0.18 - fixed new style probing for devices with more configurations
  */
 
 /*
@@ -45,13 +47,20 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
-#include <linux/tty.h>
 #include <linux/module.h>
-//#define DEBUG
+#undef DEBUG
 #include <linux/usb.h>
 #include <linux/devfs_fs_kernel.h>
+
+/*
+ * Version Information
+ */
+#define DRIVER_VERSION "v0.18"
+#define DRIVER_AUTHOR "Armin Fuerst, Pavel Machek, Johannes Erdfelt, Vojtech Pavlik"
+#define DRIVER_DESC "USB Abstract Control Model driver for USB modems and ISDN adapters"
 
 /*
  * CMSPAR, some architectures can't have space and mark parity.
@@ -145,7 +154,7 @@ struct acm {
 
 static struct usb_driver acm_driver;
 static struct tty_driver acm_tty_driver;
-static struct acm *acm_table[ACM_TTY_MINORS] = { NULL, /* .... */ };
+static struct acm *acm_table[ACM_TTY_MINORS];
 
 #define ACM_READY(acm)	(acm && acm->dev && acm->used)
 
@@ -232,8 +241,14 @@ static void acm_read_bulk(struct urb *urb)
 		dbg("nonzero read bulk status received: %d", urb->status);
 
 	if (!urb->status & !acm->throttle)  {
-		for (i = 0; i < urb->actual_length && !acm->throttle; i++)
+		for (i = 0; i < urb->actual_length && !acm->throttle; i++) {
+			/* if we insert more than TTY_FLIPBUF_SIZE characters,
+			 * we drop them. */
+			if (tty->flip.count >= TTY_FLIPBUF_SIZE) {
+				tty_flip_buffer_push(tty);
+			}
 			tty_insert_flip_char(tty, data[i], 0);
+		}
 		tty_flip_buffer_push(tty);
 	}
 
@@ -244,6 +259,7 @@ static void acm_read_bulk(struct urb *urb)
 	}
 
 	urb->actual_length = 0;
+	urb->dev = acm->dev;
 
 	if (usb_submit_urb(urb))
 		dbg("failed resubmitting read urb");
@@ -292,13 +308,19 @@ static int acm_tty_open(struct tty_struct *tty, struct file *filp)
 
 	if (acm->used++) return 0;
 
+	acm->ctrlurb.dev = acm->dev;
 	if (usb_submit_urb(&acm->ctrlurb))
 		dbg("usb_submit_urb(ctrl irq) failed");
 
+	acm->readurb.dev = acm->dev;
 	if (usb_submit_urb(&acm->readurb))
 		dbg("usb_submit_urb(read bulk) failed");
 
 	acm_set_control(acm, acm->ctrlout = ACM_CTRL_DTR | ACM_CTRL_RTS);
+
+	/* force low_latency on so that our tty_push actually forces the data through, 
+	   otherwise it is scheduled, and with high data rates data can get lost. */
+	tty->low_latency = 1;
 
 	return 0;
 }
@@ -340,6 +362,7 @@ static int acm_tty_write(struct tty_struct *tty, int from_user, const unsigned c
 		memcpy(acm->writeurb.transfer_buffer, buf, count);
 
 	acm->writeurb.transfer_buffer_length = count;
+	acm->writeurb.dev = acm->dev;
 
 	if (usb_submit_urb(&acm->writeurb))
 		dbg("usb_submit_urb(write bulk) failed");
@@ -500,7 +523,7 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 		ifcom = cfacm->interface[0].altsetting + 0;
 		ifdata = cfacm->interface[1].altsetting + 0;
 
-		if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints != 2) {
+		if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints < 2) {
 			ifcom = cfacm->interface[1].altsetting + 0;
 			ifdata = cfacm->interface[0].altsetting + 0;
 			if (ifdata->bInterfaceClass != 10 || ifdata->bNumEndpoints < 2)
@@ -563,7 +586,7 @@ static void *acm_probe(struct usb_device *dev, unsigned int ifnum)
 
 		FILL_BULK_URB(&acm->writeurb, dev, usb_sndbulkpipe(dev, epwrite->bEndpointAddress),
 			buf += readsize, acm->writesize, acm_write_bulk, acm);
-	
+
 		printk(KERN_INFO "ttyACM%d: USB ACM device\n", minor);
 
 		acm_set_control(acm, acm->ctrlout);
@@ -679,6 +702,8 @@ static int __init acm_init(void)
 		return -1;
 	}
 
+	info(DRIVER_VERSION ":" DRIVER_DESC);
+
 	return 0;
 }
 
@@ -691,5 +716,6 @@ static void __exit acm_exit(void)
 module_init(acm_init);
 module_exit(acm_exit);
 
-MODULE_AUTHOR("Armin Fuerst, Pavel Machek, Johannes Erdfelt, Vojtech Pavlik");
-MODULE_DESCRIPTION("USB Abstract Control Model driver for USB modems and ISDN adapters");
+MODULE_AUTHOR( DRIVER_AUTHOR );
+MODULE_DESCRIPTION( DRIVER_DESC );
+

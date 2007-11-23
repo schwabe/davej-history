@@ -73,6 +73,11 @@ Current status:
   the port to use for the HotSync transfer. The "Generic" port can be used
   for other device communication, such as a PPP link.
 
+  If after pressing the sync button, nothing shows up in the system log,
+  try resetting the Visor, first a hot reset, and then a cold reset if
+  necessary.  Some Visors need this before they can talk to the USB port
+  properly.
+  
   There is a webpage and mailing lists for this portion of the driver at: 
   http://usbvisor.sourceforge.net/
 
@@ -103,22 +108,22 @@ Current status:
 
 Keyspan USA-series Serial Adapters
 
-  Single and Dual port adapters - driver uses Keyspan supplied 
+  Single, Dual and Quad port adapters - driver uses Keyspan supplied 
   firmware and is being developed with their support.
   
-  Driver isn't as far advanced as Keyspan PDA driver mentioned above.
-  
 Current status:
- Things that work:
-   Firmware upload for USA-18X, USA-28, USA-28X, USA-19 and USA-19W 
-   Simple character I/O fixed at 9600 baud on USA-19 only
-   
- Things that don't:
-   Everything else. (for now...)
-   
- Big Things on the todo list:
-   Driver is in infancy, much functionality remains to be added
+  The USA-18X, USA-28X, USA-19, USA-19W and USA-49W are supported and
+  have been pretty throughly tested at various baud rates with 8-N-1
+  character settings.  Other character lengths and parity setups are
+  presently untested.
 
+  The USA-28 isn't yet supported though doing so should be pretty
+  straightforward.  Contact the maintainer if you require this
+  functionality.
+  
+  More information is available at:
+        http://www.linuxcare.com.au/hugh/keyspan.html
+   
 
 FTDI Single Port Serial Driver
 
@@ -139,8 +144,8 @@ Digi AccelePort Driver
   (plus a parallel port) and 4 port USB serial converters.  The driver
   does NOT yet support the Digi AccelePort USB 8.
 
-  This driver works under SMP with the usb-uhci driver.  It does not work
-  under SMP with the uhci driver.
+  This driver works under SMP with the usb-uhci driver.  It does not
+  work under SMP with the uhci driver.
 
   The driver is generally working, though we still have a few more ioctls
   to implement and final testing and debugging to do.  The paralled port
@@ -157,6 +162,7 @@ Digi AccelePort Driver
 Belkin USB Serial Adapter F5U103
 
   Single port DB-9/PS-2 serial adapter from Belkin with firmware by eTEK Labs.
+  The Peracom single port serial adapter also works with this driver.
 
 Current status:
   The following have been tested and work:
@@ -190,8 +196,53 @@ Empeg empeg-car Mark I/II Driver (empeg.c)
   This is an experimental driver to provide connectivity support for the
   client synchronization tools for an Empeg empeg-car mp3 player.
 
+  Tips:
+
+    * Don't forget to create the device nodes for ttyUSB{0,1,2,...}
+    * modprobe empeg (modprobe is your friend)
+    * emptool --usb /dev/ttyUSB0 (or whatever you named your device node)
+
   The driver is still pretty new, so some testing 'in the wild' would be
   helpful. :)
+
+
+MCT USB Single Port Serial Adapter U232
+
+ This driver is for the MCT USB-RS232 Converter (25 pin, Model No.
+ U232-P25) from Magic Control Technology Corp. (there is also a 9 pin
+ Model No. U232-P9). More information about this device can be found
+ at the manufacture's web-site: http://www.mct.com.tw.
+
+ The driver is generally working, though it still needs some more
+ testing. It is derived from the Belkin USB Serial Adapter F5U103
+ driver and its TODO list is valid for this driver as well.
+
+ This driver has also been found to work for other products, which have 
+ the same Vendor ID but different Product IDs. Sitecom's U232-P25 
+ serial converter uses Product ID 0x230 and Vendor ID 0x711 and works with 
+ this driver. Also, D-Link's DU-H3SP USB BAY also works with this driver.
+
+
+Inside Out Networks Edgeport Driver
+
+  This driver supports all devices made by Inside Out Networks, specifically
+  the following models:
+       Edgeport/4
+       Rapidport/4
+       Edgeport/4t
+       Edgeport/2
+       Edgeport/4i
+       Edgeport/2i
+       Edgeport/421
+       Edgeport/21
+       Edgeport/8
+       Edgeport/8 Dual
+       Edgeport/2D8
+       Edgeport/4D8
+       Edgeport/8i
+       Edgeport/2 DIN
+       Edgeport/4 DIN
+       Edgeport/16 Dual
 
 
 Generic Serial driver
@@ -205,7 +256,7 @@ Generic Serial driver
   
   To enable the generic driver to recognize your device, build the driver
   as a module and load it by the following invocation:
-	insmod usb-serial vendor=0x#### product=0x####
+	insmod usbserial vendor=0x#### product=0x####
   where the #### is replaced with the hex representation of your device's
   vendor id and product id.
 

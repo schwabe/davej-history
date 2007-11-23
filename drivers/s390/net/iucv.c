@@ -20,6 +20,7 @@
 #include <asm/atomic.h>
 #include "iucv.h"
 #include <asm/io.h>
+#include <asm/irq.h>
 #include <asm/s390_ext.h>
 #include <asm/spinlock.h>
 #include <asm/ebcdic.h>
@@ -1531,11 +1532,16 @@ iucv_send2way_prmmsg_array (ushort pathid, ulong * msgid,
 inline void
 top_half_interrupt (struct pt_regs *regs, __u16 code)
 {
+    	int cpu = smp_processor_id();
 	iucv_packet *pkt;
+
+	irq_enter(cpu, 0x4000);
+
 	pkt = (iucv_packet *) kmalloc
 	    (sizeof (iucv_packet), GFP_ATOMIC);
 	if (pkt == NULL) {
 		printk (KERN_DEBUG "out of memory\n");
+		irq_exit(cpu, 0x4000);
 		return;
 	}
 	memcpy (pkt->data, iucv_external_int_buffer, 40);
@@ -1560,6 +1566,7 @@ printk (KERN_EMERG "TH: Queuing BH\n");
 		queue_task (&short_task, &tq_immediate);
 		mark_bh (IMMEDIATE_BH);
 	}
+	irq_exit(cpu, 0x4000);
 	return;
 }
 

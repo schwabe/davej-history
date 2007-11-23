@@ -1,19 +1,21 @@
               
-                          Debugging on Linux for 390
+                          Debugging on Linux for s/390 & zSeries
 			               by
 		Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
-		Copyright (C) 2000 IBM Deutschland Entwicklung GmbH, IBM Corporation 	       
+		Copyright (C) 2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
                               Best viewed with fixed width fonts 
 
 Overview of Document:
 =====================
 This document is intended to give an good overview of how to debug 
-Linux for S390 it isn't intended as a complete reference & not a
+Linux for s/390 & zSeries it isn't intended as a complete reference & not a
 tutorial on the fundamentals of C & assembly, it dosen't go into
 390 IO in any detail. It is intended to compliment the following
 books.
+z/Architecture Principles of Operation SA22-7832-00
 Enterprise Systems Architecture/390 Reference Summary SA22-7209-01 & the
 Enterprise Systems Architecture/390 Principles of Operation SA22-7201-05
+Linux for zSeries and S/390 Elf Application Binary Interface
 & any other worthwhile references you get.
 
 It is intended like the Enterprise Systems Architecture/390 Reference Summary
@@ -22,21 +24,21 @@ problems occur.
 
 Contents
 ========
-S390 Register Set
+Register Set
 Address Spaces on Linux
-Address Spaces on Linux for S390
-The Linux for S390 Kernel Task Structure
-Register Usage & Stackframes on Linux for S390 with glossary
-Compiling programs for debugging on Linux for S390
+Address Spaces on Linux for s/390 & zSeries
+The Linux for s/390 & zSeries Kernel Task Structure
+Register Usage & Stackframes on Linux for s/390 & zSeries with glossary
+Compiling programs for debugging on Linux for s/390 & zSeries
 Figuring out gcc compile errors
 Debugging Tools
 objdump
 strace
 Debugging under VM
 Stack Tracing under VM
-S390 IO Overview
-Debugging IO on S390 under VM
-GDB on S390
+s/390 & zSeries IO Overview
+Debugging IO on s/390 & zSeries under VM
+GDB on s/390 & zSeries
 Stack chaining in gdb by hand
 Examining core dumps
 LDD
@@ -44,13 +46,13 @@ Debugging modules
 The proc file system
 Starting points for debugging scripting languages etc.
 
-S390 Register Set
-================
-The current ESA 390 architecture has the following registers.
+Register Set
+============
+The current architectures have the following registers.
  
-16 32 bit General propose registers ( r0-r15 or gpr0-gpr15) used for arithmetic & addressing 
+16  General propose registers, 32 bit on s/390 64 bit on zSeries, r0-r15 or gpr0-gpr15 used for arithmetic & addressing. 
 
-16 Control registers ( cr0-cr15 kernel usage only ) used for memory managment,
+16 Control registers, 32 bit on s/390 64 bit on zSeries, ( cr0-cr15 kernel usage only ) used for memory managment,
 interrupt control,debugging control etc.
 
 16 Access registers ( ar0-ar15 ) not used by normal programs but potentially could 
@@ -67,8 +69,8 @@ Linux (currently) always uses IEEE & emulates G5 IEEE format on older machines,
 
 
 The PSW is the most important register on the machine it
-is 64 bit & serves the roles of a program counter (pc),
-condition code register,memory space designator.
+is 64 bit on s/390 & 128 bit on zSeries & serves the roles of 
+a program counter (pc), condition code register,memory space designator.
 In IBM standard notation I am counting bit 0 as the MSB.
 It has several advantages over a normal program counter
 in that you can change address translation & program counter 
@@ -77,73 +79,98 @@ e.g. switching address translation off requires that you
 have a logical=physical mapping for the address you are
 currently running at.
 
-Bit       Value
+      Bit           Value
+s/390 zSeries
+0       0     Reserved ( must be 0 ) otherwise specification exception occurs.
 
-0         Reserved ( must be 0 ) otherwise specification exception occurs.
+1       1     Program Event Recording 1 PER enabled, 
+	      PER is used to facilititate debugging e.g. single stepping.
 
-1         Program Event Recording 1 PER enabled, 
-	  PER is used to facilititate debugging e.g. single stepping.
+2-4    2-4    Reserved ( must be 0 ). 
 
-2-4       Reserved ( must be 0 ). 
+5       5     Dynamic address translation 1=DAT on.
 
-5         Dynamic address translation 1=DAT on.
+6       6     Input/Output interrupt Mask
 
-6         Input/Output interrupt Mask
+7       7     External interrupt Mask used primarily for interprocessor signalling & 
+	      clock interupts.
 
-7         External interrupt Mask used primarily for interprocessor signalling & 
-	  clock interupts.
+8-11  8-11    PSW Key used for complex memory protection mechanism not used under linux
 
-8-12      PSW Key used for complex memory protection mechanism not used under linux
+12      12    1 on s/390 0 on zSeries
 
-13        Machine Check Mask 1=enable machine check interrupts
+13      13    Machine Check Mask 1=enable machine check interrupts
 
-14        Wait State set this to 1 to stop the processor except for interrupts & give 
-	  time to other LPARS used in CPU idle in the kernel to increase overall 
-	  usage of processor resources.
+14      14    Wait State set this to 1 to stop the processor except for interrupts & give 
+	      time to other LPARS used in CPU idle in the kernel to increase overall 
+	      usage of processor resources.
 
-15        Problem state ( if set to 1 certain instructions are disabled )
-	  all linux user programs run with this bit 1 ( useful info for debugging under VM ).
+15      15    Problem state ( if set to 1 certain instructions are disabled )
+	      all linux user programs run with this bit 1 
+	      ( useful info for debugging under VM ).
 
-16-17     Address Space Control
+16-17 16-17   Address Space Control
 
-	  00 Primary Space Mode when DAT on
-	  The linux kernel currently runs in this mode, CR1 is affiliated with this mode
-	  & points to the primary segment table origin etc.
+	      00 Primary Space Mode when DAT on
+	      The linux kernel currently runs in this mode, CR1 is affiliated with 
+              this mode & points to the primary segment table origin etc.
 
-	  01 Access register mode this mode is used in functions to 
-	  copy data between kernel & user space.
+	      01 Access register mode this mode is used in functions to 
+	      copy data between kernel & user space.
 
-	  10 Secondary space mode not used in linux however CR7 the
-	  register affiliated with this mode is & this & normally
-	  CR13=CR7 to allow us to copy data between kernel & user space.
-	  We do this as follows:
-	  We set ar2 to 0 to designate its
-	  affiliated gpr ( gpr2 )to point to primary=kernel space.
-	  We set ar4 to 1 to designate its
-	  affiliated gpr ( gpr4 ) to point to secondary=home=user space
-	  & then essentially do a memcopy(gpr2,gpr4,size) to
-	  copy data between the address spaces, the reason we use home space for the
-	  kernel & don't keep secondary space free is that code will not run in secondary space.
+	      10 Secondary space mode not used in linux however CR7 the
+	      register affiliated with this mode is & this & normally
+	      CR13=CR7 to allow us to copy data between kernel & user space.
+	      We do this as follows:
+	      We set ar2 to 0 to designate its
+	      affiliated gpr ( gpr2 )to point to primary=kernel space.
+	      We set ar4 to 1 to designate its
+	      affiliated gpr ( gpr4 ) to point to secondary=home=user space
+	      & then essentially do a memcopy(gpr2,gpr4,size) to
+	      copy data between the address spaces, the reason we use home space for the
+	      kernel & don't keep secondary space free is that code will not run in 
+	      secondary space.
 
-	  11 Home Space Mode all user programs run in this mode.
-	  it is affiliated with CR13.
+	      11 Home Space Mode all user programs run in this mode.
+	      it is affiliated with CR13.
 
-18-19     Condition codes (CC)
+18-19 18-19   Condition codes (CC)
 
-20	  Fixed point overflow mask if 1=FPU exceptions for this event occur ( normally 0 ) 
+20    20      Fixed point overflow mask if 1=FPU exceptions for this event 
+              occur ( normally 0 ) 
 
-21	  Decimal overflow mask if 1=FPU exceptions for this event occur ( normally 0 )
+21    21      Decimal overflow mask if 1=FPU exceptions for this event occur 
+              ( normally 0 )
 
-22        Exponent underflow mask if 1=FPU exceptions for this event occur ( normally 0 )
+22    22      Exponent underflow mask if 1=FPU exceptions for this event occur 
+              ( normally 0 )
 
-23        Significance Mask if 1=FPU exceptions for this event occur ( normally 0 )
+23    23      Significance Mask if 1=FPU exceptions for this event occur 
+              ( normally 0 )
 
-24-31     Reserved Must be 0.
+24-31 24-30   Reserved Must be 0.
 
-32        1=31 bit addressing mode 0=24 bit addressing mode (for backward compatibility ),
-	  linux always runs with this bit set to 1
+      31      Extended Addressing Mode
+      32      Basic Addressing Mode
+              Used to set addressing mode
+	      PSW 31   PSW 32
+                0         0        24 bit
+                0         1        31 bit
+                1         1        64 bit
 
-33-64     Instruction address.	  
+32             1=31 bit addressing mode 0=24 bit addressing mode (for backward 
+               compatibility ), linux always runs with this bit set to 1
+
+33-64          Instruction address.
+      33-63    Reserved must be 0
+      64-127   Address
+               In 24 bits mode bits 64-103=0 bits 104-127 Address 
+               In 31 bits mode bits 64-96=0 bits 97-127 Address
+               Note: unlike 31 bit mode on s/390 bit 96 must be zero
+	       when loading the address with LPSWE otherwise a 
+               specification exception occurs, LPSW is fully backward
+               compatible.
+ 	  
 	  
 Prefix Page
 -----------	  
@@ -221,8 +248,8 @@ Address Spaces on Linux for S390
 Our addressing scheme is as follows
 
 
-Himem 0x7fffffff 2GB            *****************          ****************
-                                *  User Stack   *          *              *
+Himem 0x7fffffff 2GB on s/390   *****************          ****************
+2^64 bytes on zSeries           *  User Stack   *          *              *
 				*****************          *              *
 		                *  Shared Libs  *          *              *          
                                 *****************          *              *  
@@ -248,6 +275,7 @@ the __LC_KERNEL_STACK variable in the spare prefix area for this cpu
 The kernel stack pointer is intimately tied with the task stucture for
 each processor as follows.
 
+                      s/390
             ************************
             *  1 page kernel stack *
 	    *        ( 4K )        *
@@ -256,9 +284,18 @@ each processor as follows.
             *        ( 4K )        *
 8K aligned  ************************ 
 
+                     zSeries
+            ************************
+            *  2 page kernel stack *
+	    *        ( 8K )        *
+            ************************
+            *  2 page task_struct  *        
+            *        ( 8K )        *
+16K aligned ************************ 
+
 What this means is that we don't need to dedicate any register or global variable
 to point to the current running process & can retrieve it with the following
-very simple construct
+very simple construct for s/390 & one very similar for zSeries.
 
 static inline struct task_struct * get_current(void)
 {
@@ -289,6 +326,10 @@ after a crash without a source level debugger.
 
 Note: To follow stackframes requires a knowledge of C or Pascal &
 limited knowledge of one assembly language.
+
+It should be noted that there are some differences between the
+s/390 & zSeries stack layouts as the zSeries stack layout didn't have
+to maintain compatibility with older linkage formats.
 
 Glossary:
 ---------
@@ -404,8 +445,8 @@ r15      stack-pointer                              saved
 
 f0       argument 0 / return value ( float/double ) call-clobbered
 f2       argument 1                                 call-clobbered
-f4                                                  saved
-f6                                                  saved
+f4       zSeries argument 2                           saved
+f6       zSeries argument 3                           saved
 The remaining floating points
 f1,f3,f5 f7-f15 are call-clobbered.
 
@@ -434,33 +475,36 @@ outgoing args area. It must be purely in the outgoing args
 area if crossing this boundary.
 6) Floating point parameters are mixed with outgoing args
 on the outgoing args area in the order the are passed in as parameters.
+7) Floating point arguments 2 & 3 are saved in the outgoing args area for zSeries
+
 
 Stack Frame Layout
 ==================
-0            back chain ( a 0 here signifies end of back chain )
-4            eos ( end of stack, not used on Linux for S390 used in other linkage formats )
-8            glue used in other linkage formats for saved routine descriptors etc.
-12           glue used in other linkage formats for saved routine descriptors etc.
-16           scratch area
-20           scratch area
-24           saved r6 of caller function
-28           saved r7 of caller function
-32           saved r8 of caller function
-36           saved r9 of caller function
-40           saved r10 of caller function
-44           saved r11 of caller function
-48           saved r12 of caller function
-52           saved r13 of caller function
-56           saved r14 of caller function
-60           saved r15 of caller function
-64           saved f4 of caller function
-72           saved f6 of caller function
-80           undefined
-96           outgoing args passed from caller to callee
-96+x         possible stack alignment ( 8 bytes desirable )
-96+x+y       alloca space of caller ( if used )
-96+x+y+z     automatics of caller ( if used )
-0            back-chain
+s/390     zSeries
+0         0             back chain ( a 0 here signifies end of back chain )
+4         8             eos ( end of stack, not used on Linux for S390 used in other linkage formats )
+8         16            glue used in other s/390 linkage formats for saved routine descriptors etc.
+12        24            glue used in other s/390 linkage formats for saved routine descriptors etc.
+16        32            scratch area
+20        40            scratch area
+24        48            saved r6 of caller function
+28        56            saved r7 of caller function
+32        64            saved r8 of caller function
+36        72            saved r9 of caller function
+40        80            saved r10 of caller function
+44        88            saved r11 of caller function
+48        96            saved r12 of caller function
+52        104           saved r13 of caller function
+56        112           saved r14 of caller function
+60        120           saved r15 of caller function
+64        128           saved f4 of caller function
+72        132           saved f6 of caller function
+80                      undefined
+96        160           outgoing args passed from caller to callee
+96+x      160+x         possible stack alignment ( 8 bytes desirable )
+96+x+y    160+x+y       alloca space of caller ( if used )
+96+x+y+z  160+x+y+z     automatics of caller ( if used )
+0                       back-chain
 
 A sample program with comments.
 ===============================
@@ -551,14 +595,10 @@ have been warned.
 
 
 
-Compiling programs for debugging on Linux for S390
-==================================================
-Make sure that the gcc is compiling & linking with the -g flag on
-this generates plain old gnu stabs, don't use
--ggdb, -gxcoff+ or any other silly option these other options more than
-likely don't work ( we haven't tested them ), -gstabs is supposed to add
-extra extensions to the debugging info for debugging c++ we haven't got
-round to testing this yet.
+Compiling programs for debugging on Linux for s/390 & zSeries
+=============================================================
+-gdwarf2 now works & normal -g debugging works much better now
+Thanks to the IBM java compiler developers bug reports. 
 
 This is typically done adding/appending the flags -g to the 
 CFLAGS & LDFLAGS variables Makefile of the program concerned.
@@ -573,6 +613,10 @@ This aids debugging because the compiler will copy parameters passed in
 in registers onto the stack so backtracing & looking at passed in
 parameters will work, however some larger programs which use inline functions
 will not compile without optimisation.
+
+Debugging with optimisation has since much improved after fixing
+some bugs, please make sure you are using gdb-5.0 or later developed 
+after Nov'2000.
 
 Figuring out gcc compile errors
 ===============================
@@ -931,8 +975,8 @@ As some of you are probably in a panic now this isn't as unintuitive as it may s
 as the 390 instructions are easy to decode mentally & you can make a good guess at a lot 
 of them as all the operands are nibble ( half byte aligned ) & if you have an objdump listing
 also it is quite easy to follow, if you don't have an objdump listing keep a copy of
-the ESA Reference Summary & look at between pages 2 & 7 or alternatively the
-ESA principles of operation.
+the s/390 Reference Summary & look at between pages 2 & 7 or alternatively the
+s/390 principles of operation.
 e.g. even I can guess that 
 0001AFF8' LR    180F        CC 0
 is a ( load register ) lr r0,r15 
@@ -1085,7 +1129,7 @@ The most common ones you will normally be tracing for is
 10=segment translation exception
 11=page translation exception
 
-The full list of these is on page 22 of the current ESA Reference Summary.
+The full list of these is on page 22 of the current s/390 Reference Summary.
 e.g.
 tr prog 10 will trace segment translation exceptions.
 tr prog on its own will trace all program interruption codes.
@@ -1161,7 +1205,7 @@ We have stopped at a breakpoint
 000151B0' SVC   0A05     -> 0001909A'   CC 0
 
 D 20.8 to check the SVC old psw in the prefix area & see was it from userspace
-( for the layout of the prefix area consult P18 of the ESA 390 Reference Summary 
+( for the layout of the prefix area consult P18 of the s/390 390 Reference Summary 
 if you have it available ).
 V00000020  070C2000 800151B2
 The problem state bit wasn't set &  it's also too early in the boot sequence
@@ -1334,7 +1378,7 @@ S390 IO Overview
 
 I am not going to give a course in 390 IO architecture as this would take me quite a
 while & I'm no expert. Instead I'll give a 390 IO architecture summary for Dummies if you have 
-the ESA principles of operation available read this instead. If nothing else you may find a few 
+the s/390 principles of operation available read this instead. If nothing else you may find a few 
 useful keywords in here & be able to use them on a web search engine like altavista to find 
 more useful information.
 
@@ -2031,4 +2075,6 @@ Various bits of man & info pages of Linux.
 Linux & GDB source.
 Various info & man pages.
 CMS Help on tracing commands.
+Linux for zSeries and S/390 Elf Application Binary Interface ( Highly Recommended )
+z/Architecture Principles of Operation
 

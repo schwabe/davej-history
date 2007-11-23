@@ -533,17 +533,13 @@ L:      linux-irda@list.uit.no
 W:      http://www.cs.uit.no/linux-irda/
 S:      Maintained
 
-ISDN SUBSYSTEM (general)
-P:	Fritz Elfert
-M:	fritz@isdn4linux.de
-L:	isdn4linux@listserv.isdn4linux.de
-W:	www.isdn4linux.de
-S:	Maintained
-
-ISDN SUBSYSTEM (HiSax)
+ISDN SUBSYSTEM
 P:	Karsten Keil
-M:	keil@isdn4linux.de
+M:	kkeil@suse.de
+P:	Kai Germaschewski
+M:	kai.germaschewski@gmx.de
 L:	isdn4linux@listserv.isdn4linux.de
+W:	http://www.isdn4linux.de
 S:	Maintained
 
 ISDN SUBSYSTEM (Eicon active card driver)

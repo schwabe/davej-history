@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 20
-EXTRAVERSION = pre8
+EXTRAVERSION = pre9
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -200,6 +200,10 @@ endif
 
 ifeq ($(CONFIG_USB),y)
 DRIVERS := $(DRIVERS) drivers/usb/usbdrv.o
+else
+  ifdef CONFIG_INPUT_ADBHID
+  DRIVERS := $(DRIVERS) drivers/usb/usbdrv.o
+  endif
 endif
 
 ifeq ($(CONFIG_I2O),y)

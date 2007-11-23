@@ -22,6 +22,7 @@
  *	  <sshore@escape.ca>
  *	Scottie Shore		:  added support for mIRC DCC resume negotiation
  *	  <sshore@escape.ca>
+ *	Juan Jose Ciarlante	:  src addr/port checking for better security (spotted by Michal Zalewski)
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -38,7 +39,12 @@
  *	/etc/conf.modules (or /etc/modules.conf depending on your config)
  *	where modload will pick it up should you use modload to load your
  *	modules.
- *	
+ *
+ * Insecure "back" data channel opening
+ * 	The helper does some trivial checks when opening a new DCC data
+ * 	channel. Use module parameter
+ * 		insecure=1
+ *	... to avoid this and get previous (pre 2.2.20) behaviour.
  */
 
 #include <linux/config.h>
@@ -71,6 +77,9 @@ MODULE_PARM(debug, "i");
 #endif
 
 MODULE_PARM(ports, "1-" __MODULE_STRING(MAX_MASQ_APP_PORTS) "i");
+
+static int insecure=0;
+MODULE_PARM(insecure, "i");
 
 
 /*
@@ -110,6 +119,30 @@ masq_irc_done_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
         return 0;
 }
 
+
+/*
+ * 	Ugly workaround [TM] --mummy ... why does this protocol sucks?
+ *
+ *	The <1024 check and same source address just raise the
+ *	security "feeling" => they don't prevent a redirector listening
+ *	in same src address at a higher port; you should protect 
+ *	your internal network with ipchains output rules anyway
+ */
+
+static inline int masq_irc_out_check(const struct ip_masq *ms, __u32 data_saddr, __u16 data_sport) {
+	int allow=1;
+
+	IP_MASQ_DEBUG(1-debug, "masq_irc_out_check( s_addr=%d.%d.%d.%d, data_saddr=%d.%d.%d.%d, data_sport=%d",
+			NIPQUAD(ms->saddr), NIPQUAD(data_saddr), ntohs(data_sport));
+
+	/* 
+	 * 	Ignore data channel back to other src addr, nor to port < 1024
+	 */
+	if (ms->saddr != data_saddr || ntohs(data_sport) < 1024) 
+		allow=0;
+
+	return allow;
+}
 int
 masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, __u32 maddr)
 {
@@ -118,7 +151,7 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 	struct tcphdr *th;
 	char *data, *data_limit;
 	__u32 s_addr;
-	__u16 s_port;
+	__u32 s_port;	/* larger to allow strtoul() return value validation */
 	struct ip_masq *n_ms;
 	char buf[20];		/* "m_addr m_port" (dec base)*/
         unsigned buf_len;
@@ -199,12 +232,25 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 				s_port = simple_strtoul(data,&data,10);
 				addr_end_p = data;
 
+				/*	Sanity checks 		*/
+				if (!s_addr || !s_port || s_port > 65535)
+					continue;
+
+				/*	Prefer net order from now on 	*/
+				s_addr = htonl(s_addr);
+				s_port = htons(s_port);
+
+				/* 	Simple validation 	*/
+				if (!insecure && !masq_irc_out_check(ms, s_addr, s_port))
+					/* We may just: return 0; */
+					continue;
+
 				/*	Do we already have a port open for this client?
 				 *	If so, use it (for DCC ACCEPT)
 				 */
 
 				n_ms = ip_masq_out_get(IPPROTO_TCP,
-						htonl(s_addr),htons(s_port),
+						s_addr, s_port,
 						0, 0);
 
 				/*
@@ -216,7 +262,7 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 				if (n_ms==NULL)
 					n_ms = ip_masq_new(IPPROTO_TCP,
 							maddr, 0,
-							htonl(s_addr),htons(s_port),
+							s_addr, s_port,
 							0, 0,
 							IP_MASQ_F_NO_DPORT|IP_MASQ_F_NO_DADDR);
 				if (n_ms==NULL)
@@ -236,7 +282,10 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 				diff = buf_len - (addr_end_p-addr_beg_p);
 
 				*addr_beg_p = '\0';
-				IP_MASQ_DEBUG(1-debug, "masq_irc_out(): '%s' %X:%X detected (diff=%d)\n", dcc_p, s_addr,s_port, diff);
+				IP_MASQ_DEBUG(1-debug, "masq_irc_out(): '%s' %d.%d.%d.%d:%d -> %d.%d.%d.%d:%d detected (diff=%d)\n", dcc_p, 
+					NIPQUAD(s_addr), htons(s_port), 
+					NIPQUAD(n_ms->maddr), htons(n_ms->mport), 
+					diff);
 
 				/*
 				 *	No shift.

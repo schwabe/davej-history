@@ -1,0 +1,177 @@
+L/390 stand alone dump tools for Linux 2.2.x
+
+-----------------------------WARNING-----------------------------------------
+This driver is considered to be EXPERIMENTAL. Do NOT use it in
+production environments. Feel free to test it and report problems back to us.
+-----------------------------------------------------------------------------
+
+1. Overview
+
+Two stand alone dump tools are provided for generating system memory dumps
+on dasd volumes and tapes: dumpeckd.boot and dumptape.boot
+respectively.  The tools should be installed on the device which will
+be used for dumping the system memory; We shall refer to this device as
+dump device. A system memory dump can be initiated by the operator
+at any time. Normally this should be done after a system crash.
+In order to take a dump an ipl of the dump device is required.
+This is destructive which means that the actual running Linux Operating
+System will be killed.
+The ipl process then writes the system memory to the ipl device (either tape
+or dasd).
+
+
+2. Build the dump utilities
+
+The dump tools are compiled with the Kernel: 
+> make menuconfig
+> make dep
+> make image
+
+Then under linux/arch/s390/boot the following two files are built:
+- dumpeckd.boot
+- dumptape.boot
+
+
+
+3. Install the Dump utilities
+
+Make sure that there is enough space (memory-size + 1MB) on your dump device
+to hold all your system memory. 
+
+3.1 Install DASD dump utility
+
+You have to have an unused dasd partition for dumping. The dump utility is
+installed there and dumps are written afterwards to this dasd. This is how
+to install the dump tool on dasd:
+
+  1. Format dasd with 4K blocksize:
+        > dasdfmt -f /dev/dasdx -b 4096
+
+  2. Copy dump utility to dasd (e.g. /dev/dasdx) by issuing the following
+     two commands:
+        > dd if=dumpeckd.boot of=/dev/dasdx
+        > sync
+
+3.2 Install tape dump utility
+
+  1. Insert empty dump cartridge into your tapedevice (e.g. /dev/ntibm0).
+  2. Ensure the tape is rewound (e.g mt -f /dev/ntibm0 rewind)
+  3. Copy dump utility to tape:
+        > dd if=/boot/dumptape.boot of=/dev/ntibm0 bs=4096
+
+
+
+4. Taking the dump
+
+The operator has to do the following tasks in order to take a dump:
+ - Ensure that tape is rewound (if using tapedump.boot)
+ - Stop all cpus (only under VM)
+ - Store status on ipl cpu
+ - IPL the dump tool on ipl cpu
+
+The dump process can take several minutes, depending on the devicetype you are
+using and the amount of your system memory.
+After the dump has completed, the ipl CPU should go into disabled wait.
+
+The following PSW indicates that the dump has been taken successfully:
+
+PSW: 000A0000 00000000
+
+Any other disabled wait PSW indicates an error.
+
+On VM (a three processor machine in this example) this could look like the
+following:
+
+  #cp cpu all stop
+  #cp store status
+  #cp I 193 (if 193 is the dump device)
+  01: The virtual machine is placed in CP mode due to a SIGP stop from CPU 00.
+  02: The virtual machine is placed in CP mode due to a SIGP stop from CPU 00.
+  "CP entered; disabled wait PSW 000A0000 00000000"
+  #cp I 192 (the linux dasd)
+
+When initiating the dump process e.g. from a service element check the
+"Store Status" checkbox of the ipl panel.
+
+For detailed information on the actual steps to be performed please consult the
+appropriate manual of your processor.
+
+
+
+5. Copying the dump to a filesystem
+
+After the dump has been created by one of the dump utilities the dump should
+normally be copied over to a filesystem in order to send it e.g.
+to a service organization for analysis.
+
+To copy the dump to a filesystem, you can use command dd as illustrated below:
+
+5.1 Dasd:
+
+Copying the dump from dasd to a filesystem is only necessary, if the dump
+cannot be analyzed locally on the system, but must be e.g. sent to the service
+organization.
+
+- Copy the dump from raw dasd to filesystem (e.g. Dump dasd is /dev/dasdx):
+
+    > dd if=/dev/dasdx1 of=/DUMPDIR/mydump bs=1M  \
+         count=<memory size of the crashed system in MB + 1MB>
+
+    or if you want to compress the dump:
+
+    > dd if=/dev/dasdx1 bs=1M count=<memory size in MB + 1MB> | bzip2  \
+         > /DUMPDIR/dump.bz2
+
+5.2 Tape:
+
+  1. Rewind the tape:
+
+      > mt -f /dev/ntibm0 rewind
+
+  2. Skip first file on tape (first file is the dump utility itself):
+
+      > mt -f /dev/ntibm0 fsf
+
+  3. Copy dump from tape to filesystem:
+
+      > dd if=/dev/ntibm0 of=/DUMPDIR/mydump bs=32k
+
+      or if you want to compress the dump:
+
+      > dd if=/dev/ntibm0 bs=32k | bzip2 > /DUMPDIR/mydump.bz2
+
+Note: mt is a tape utility which has be be installed first. You can use
+any other available tape tool to skip the first file.
+
+6. Analyzing the dumps
+
+The dump analysis tool 'lcrash' can be used to analyze the generated dumps.
+The required version of the lkcdutilities is 3.1.2
+(see ftp://oss.sgi.com/projects/lkcd/download/3.1.2/lkcdutils/) 
+
+lcrash gets three input files:
+- System.map of the crashed kernel
+- the dump
+- Kerntypes file of the crashed kernel with Kernel type information
+  There is provided a patch for the Kerntypes file under 
+  http://oss.software.ibm.com/developerworks/opensource/linux390 
+
+Call lcrash:
+> lcrash System.map mydump Kerntypes
+
+Note: If you used dumpeckd.boot to take the dump it is possible to specify
+the /dev/dasdx1 dump device directly as input file to lcrash instead of
+a copy in the filesystem:
+> lcrash System.map /dev/dasdx1 Kerntypes
+
+7. Supported Devices
+
+The dump tools should work with the following devices:
+
+- ECKD Dasds:
+   + 3380
+   + 3390
+
+- Tape units:
+   + 3480
+   + 3490

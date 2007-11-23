@@ -301,6 +301,7 @@ static void *setup_frame_common(int sig, struct k_sigaction *ka,
 		/* Set up registers for signal handler */
 		regs->gprs[15] = (addr_t)frame;
 		regs->psw.addr = FIX_PSW(ka->sa.sa_handler);
+		regs->psw.mask = _USER_PSW_MASK;
 	}
 	/* Set up to return from userspace.  If provided, use a stub
 	   already in userspace.  */

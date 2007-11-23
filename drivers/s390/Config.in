@@ -75,3 +75,16 @@ if [ "$CONFIG_HWC" = "y" ]; then
 fi
 endmenu
 
+mainmenu_option next_comment
+comment 'S/390 character device drivers'
+
+tristate 'S/390 tape device support' CONFIG_S390_TAPE
+if [ "$CONFIG_S390_TAPE" != "n" ]; then
+  comment 'S/390 tape interface support'
+  bool '   Support for tape character devices' CONFIG_S390_TAPE_CHAR
+  bool '   Support for tape block devices' CONFIG_S390_TAPE_BLOCK
+  comment 'S/390 tape hardware support'
+  bool '   Support for 3490 tape hardware' CONFIG_S390_TAPE_3490
+  bool '   Support for 3480 tape hardware' CONFIG_S390_TAPE_3480
+fi
+endmenu

@@ -35,7 +35,7 @@ Contents
 3.6  /proc/sys/dev - Device specific parameters
 3.7  /proc/sys/sunrpc - Remote procedure calls
 3.8  /proc/sys/net - Networking stuff
-3.9  /proc/sys/net/ipv4 - IPV4 settings=20
+3.9  /proc/sys/net/ipv4 - IPV4 settings
 3.10 Appletalk
 3.11 IPX
 
@@ -861,7 +861,7 @@ swapctl
 
            sc_age_cluster_fract
            -------------------- * resident set size
-              1024   =20
+              1024   
 
    So if you want kswapd to scan the whole process,
    sc_age_cluster_fract needs to have a value of 1024. The minimum
@@ -1050,7 +1050,7 @@ ip_always_defrag
 
    This is automagically enabled when enabling masquerading.
 
-ipfrag_high_trash and ipfrag_low_trash
+ipfrag_high_tresh and ipfrag_low_tresh
    Maximum memory used to reassemble IP fragments. When
    ipfrag_high_thresh bytes of memory is allocated for this purpose,
    the fragment handler will toss packets until ipfrag_low_thresh is

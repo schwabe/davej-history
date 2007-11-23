@@ -426,7 +426,33 @@ int smp_signal_others(sigp_order_code order_code, u32 parameter,
 
 void smp_send_stop(void)
 {
-        smp_signal_others(sigp_stop_and_store_status, 0, TRUE, NULL);
+        int i;
+        u32 dummy;
+        unsigned long low_core_addr;
+
+        /* write magic number to zero page (absolute 0) */
+
+        get_cpu_lowcore(smp_processor_id()).panic_magic = __PANIC_MAGIC;
+
+        /* stop all processors */
+
+        smp_signal_others(sigp_stop, 0, TRUE, NULL);
+
+        /* store status of all processors in their lowcores (real 0) */
+
+        for (i =  0; i < smp_num_cpus; i++) {
+                if (smp_processor_id() != i) {
+                        int ccode;
+                        low_core_addr = (unsigned long)&get_cpu_lowcore(i);
+                        do {
+                                ccode = signal_processor_ps(
+                                   &dummy,
+                                   low_core_addr,
+                                   i,
+                                   sigp_store_status_at_address);
+                        } while(ccode == sigp_busy);
+                }
+        }
 }
 
 /*

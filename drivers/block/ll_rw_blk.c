@@ -1063,6 +1063,9 @@ __initfunc(int blk_dev_init(void))
 #ifdef CONFIG_DASD
 	dasd_init();
 #endif
+#if defined(CONFIG_S390_TAPE) && defined(CONFIG_S390_TAPE_BLOCK)
+	tapeblock_init();
+#endif
 #ifdef CONFIG_BLK_DEV_XPRAM
 	xpram_init();
 #endif

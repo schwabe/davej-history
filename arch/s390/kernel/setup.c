@@ -273,6 +273,8 @@ __initfunc(void setup_arch(char **cmdline_p,
                         break;
                 if (cn == '\n')
                         cn = ' ';  /* replace newlines with space */
+		if (cn == 0x0d)
+			cn = ' ';  /* replace 0x0d with space */
                 if (cn == ' ' && c == ' ')
                         continue;  /* remove additional spaces */
                 c = cn;

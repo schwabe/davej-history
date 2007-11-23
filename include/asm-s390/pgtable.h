@@ -115,7 +115,7 @@ static inline void __flush_global_tlb_csp(void)
 			     "lr    4,%2\n\t"
 			     "csp   2,4" :
 			     : "d" (cs1), "d" (dum), "d" (adr)
-			     : "2", "3", "4");
+			     : "2", "3", "4", "cc" );
 }
 
 static inline void __flush_global_tlb(void)
@@ -529,7 +529,7 @@ static inline void __flush_tlb_one(struct mm_struct *mm,
        	__asm__ __volatile("    ic   0,2(%0)\n"
 			   "    ipte %1,%2\n"
 			   "    stc  0,2(%0)"
-			   : : "a" (pte), "a" (pto), "a" (addr): "0");
+			   : : "a" (pte), "a" (pto), "a" (addr): "0", "cc" );
 }
 
 /*

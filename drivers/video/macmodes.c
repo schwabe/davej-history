@@ -202,8 +202,22 @@ static const struct mac_mode mac_mode_20 = {
     FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 };
 
+    /* 1152x768, 60 Hz, Titanium PowerBook */
 
-static const struct mac_mode *mac_modes[20] = {
+static const struct mac_mode mac_mode_21 = {
+    VMODE_1152_768_60, 1152, 768,
+    15386, 158, 26, 29, 3, 136, 6,
+    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+};
+
+    /* 1600x1024, 60 Hz, Non-Interlaced (112.27 MHz dotclock) */
+static const struct mac_mode mac_mode_22 = {
+    VMODE_1600_1024_60, 1600, 1024, 
+    8908, 88, 104, 1, 10, 16, 1,
+    FB_SYNC_HOR_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+};
+
+static const struct mac_mode *mac_modes[22] = {
     NULL,		/* 512x384, 60Hz interlaced (NTSC) */
     NULL,		/* 512x384, 60Hz */
     NULL,		/* 640x480, 50Hz interlaced (PAL) */
@@ -224,6 +238,8 @@ static const struct mac_mode *mac_modes[20] = {
     &mac_mode_18,	/* 1152x870, 75Hz */
     &mac_mode_19,	/* 1280x960, 75Hz */
     &mac_mode_20,	/* 1280x1024, 75Hz */
+    &mac_mode_21,	/* 1152x768, 60Hz */
+    &mac_mode_22,       /* 1600x1024, 60Hz */
 };
 
 static const struct mac_mode *mac_modes_inv[] = {
@@ -241,6 +257,7 @@ static const struct mac_mode *mac_modes_inv[] = {
     &mac_mode_18,	/* 1152x870, 75Hz */
     &mac_mode_19,	/* 1280x960, 75Hz */
     &mac_mode_20,	/* 1280x1024, 75Hz */
+    &mac_mode_22,       /* 1600x1024, 60Hz */
 };
 
 
@@ -267,6 +284,7 @@ static struct mon_map {
     { 0x730, VMODE_768_576_50I },	/* PAL (Alternate) */
     { 0x73a, VMODE_1152_870_75 },	/* 3rd party 19" */
     { 0x73f, VMODE_640_480_67 },	/* no sense lines connected at all */
+    { 0xBEEF, VMODE_1600_1024_60 },     /* 22" Apple Cinema Display */
     { -1,    VMODE_640_480_60 },	/* catch-all, must be last */
 };
 

@@ -6,6 +6,9 @@
  *    Copyright (C) 1999, 2000 IBM Deutschland Entwicklung GmbH,
  *                             IBM Corporation
  *    Author(s): Ingo Adlung (adlung@de.ibm.com)
+ *
+ *    ChangeLog : 03/14/2001 Ingo Adlung Save not_oper func pointer prior
+ *                                        to wipe it out		 
  */
 
 #include <linux/module.h>
@@ -121,7 +124,10 @@ void s390_displayhex(char *str,void *ptr,s32 cnt)
 	}
 }
 
-
+/*
+ * Note : internal use of irqflags SA_PROBE for NOT path grouping
+ *
+ */
 int s390_request_irq_special( int                      irq,
                               io_handler_func_t        io_handler,
                               not_oper_handler_func_t  not_oper_handler,
@@ -172,7 +178,8 @@ int s390_request_irq_special( int                      irq,
 	{
 		if ( !retval )
 		{
-			s390_DevicePathVerification( irq, 0 );
+			if ( !(irqflags & SA_PROBE))
+				s390_DevicePathVerification( irq, 0 );
 		}
 		else
 		{
@@ -1947,6 +1954,7 @@ asmlinkage void do_IRQ( struct pt_regs regs,
 	int			new_irq;
 #endif
 	int			use_irq     = irq;
+	int cpu = smp_processor_id();
 
 	//
 	// fix me !!!
@@ -1974,6 +1982,7 @@ asmlinkage void do_IRQ( struct pt_regs regs,
 
 	} /* endif */
 
+	irq_enter(cpu, use_irq);
 	s390irq_spin_lock(use_irq);
 
 #ifdef CONFIG_FAST_IRQ
@@ -2012,6 +2021,7 @@ asmlinkage void do_IRQ( struct pt_regs regs,
 #endif /*  CONFIG_FAST_IRQ */
 
 	s390irq_spin_unlock(use_irq);
+	irq_exit(cpu, use_irq);
 
 	return;
 }
@@ -2141,9 +2151,28 @@ int s390_process_IRQ( unsigned int irq )
 	 *  secondary status are presented with different interrupts.
 	 */
 	if ( ioinfo[irq]->devstat.ii.irb.scsw.stctl
-	           & (   SCSW_STCTL_PRIM_STATUS | SCSW_STCTL_INTER_STATUS ) )
-	{
-		ioinfo[irq]->devstat.rescnt = ioinfo[irq]->devstat.ii.irb.scsw.count;
+ 	     & ( SCSW_STCTL_PRIM_STATUS | SCSW_STCTL_INTER_STATUS ) ) {
+ 
+ 		/*
+ 		 * If the subchannel status shows status pending
+ 		 * and we received a check condition, the count
+ 		 * information is not meaningful.
+ 		 */
+ 		
+ 		 if ( !(    (dp->ii.irb.scsw.stctl & SCSW_STCTL_STATUS_PEND) 
+ 			 && (   dp->ii.irb.scsw.cstat 
+ 			      & (   SCHN_STAT_CHN_DATA_CHK
+ 				  | SCHN_STAT_CHN_CTRL_CHK
+ 				  | SCHN_STAT_INTF_CTRL_CHK
+ 				  | SCHN_STAT_PROG_CHECK
+ 				  | SCHN_STAT_PROT_CHECK
+ 				  | SCHN_STAT_CHAIN_CHECK )))) {
+ 
+ 			 dp->rescnt = dp->ii.irb.scsw.count;
+ 		 } else {
+ 			 dp->rescnt = SENSE_MAX_COUNT;
+ 		 }
+ 
 		ioinfo[irq]->devstat.cpa    = ioinfo[irq]->devstat.ii.irb.scsw.cpa;
 
 #ifdef CONFIG_DEBUG_IO
@@ -3363,7 +3392,7 @@ int read_dev_chars( int irq, void **buffer, int length )
 	{
 		ret = request_irq( irq,
 		                   init_IRQ_handler,
-		                   0, "RDC", &devstat );
+		                   SA_PROBE, "RDC", &devstat );
 
 		if ( !ret )
 		{
@@ -3519,7 +3548,7 @@ int read_conf_data( int irq, void **buffer, int *length, __u8 lpm )
 			pdevstat = &devstat;
 			ret      = request_irq( irq,
 			                        init_IRQ_handler,
-			                        0, "RCD", pdevstat );
+			                        SA_PROBE, "RCD", pdevstat );
 
 			if ( !ret )
 			{
@@ -3961,9 +3990,9 @@ void s390_device_recognition_irq( int irq )
 		int       irq_ret;
 		devstat_t devstat;
 
-	   irq_ret = request_irq( irq,
+		irq_ret = request_irq( irq,
 		                       init_IRQ_handler,
-		                       0,
+		                       SA_PROBE,
 		                       "INIT",
 		                       &devstat);
 
@@ -4028,8 +4057,6 @@ void s390_device_recognition_irq( int irq )
 
      	      } /* endif */
 #endif
-				s390_DevicePathVerification( irq, 0 );
-
 				disable_cpu_sync_isc( irq );
 
 				ioinfo[irq]->ui.flags.syncio = 0; // global
@@ -4463,7 +4490,7 @@ int s390_SenseID( int irq, senseid_t *sid, __u8 lpm )
 		 *  requests and evaluate the devstat area on return therefore
 		 *  we don't need a real I/O handler in place.
 		 */
-		irq_ret = request_irq( irq, init_IRQ_handler, 0, "SID", &devstat);
+		irq_ret = request_irq( irq, init_IRQ_handler, SA_PROBE, "SID", &devstat);
 
 		if ( irq_ret == 0 )
 			inlreq = 1;
@@ -4972,6 +4999,7 @@ int s390_SetPGID( int irq, __u8 lpm, pgid_t *pgid )
 	ccw1_t     spid_ccw[2]; /* ccw area for SPID command */
 	devstat_t  devstat;     /* required by request_irq() */
 	devstat_t *pdevstat = &devstat;
+	unsigned long flags;
 
 	int        irq_ret = 0; /* return code */
 	int        retry   = 5; /* retry count */
@@ -5005,7 +5033,7 @@ int s390_SetPGID( int irq, __u8 lpm, pgid_t *pgid )
 		 */
 		irq_ret = request_irq( irq,
 		                       init_IRQ_handler,
-		                       0,
+		                       SA_PROBE,
 		                       "SPID",
 		                       pdevstat);
 
@@ -5020,7 +5048,7 @@ int s390_SetPGID( int irq, __u8 lpm, pgid_t *pgid )
 
 	if ( irq_ret == 0 )
 	{
-		s390irq_spin_lock( irq);
+		s390irq_spin_lock_irqsave( irq, flags);
 
 		spid_ccw[0].cmd_code = 0x5B;	/* suspend multipath reconnect */
 		spid_ccw[0].cda      = 0;
@@ -5093,9 +5121,9 @@ int s390_SetPGID( int irq, __u8 lpm, pgid_t *pgid )
 
 						} /* endif */
 					}
-#ifdef CONFIG_DEBUG_IO
 					else
 					{
+#ifdef CONFIG_DEBUG_IO
 						printk( "SPID - device %04X,"
 						        " unit check,"
 						        " retry %d, cnt %02d,"
@@ -5112,9 +5140,10 @@ int s390_SetPGID( int irq, __u8 lpm, pgid_t *pgid )
 						        pdevstat->ii.sense.data[5],
 						        pdevstat->ii.sense.data[6],
 						        pdevstat->ii.sense.data[7]);
-
-					} /* endif */
 #endif
+						retry--;
+					} /* endif */
+
 				}
 				else if ( pdevstat->flag & DEVSTAT_NOT_OPER )
 				{
@@ -5140,7 +5169,7 @@ int s390_SetPGID( int irq, __u8 lpm, pgid_t *pgid )
 
 		} while ( retry > 0 );
 
-		s390irq_spin_unlock( irq);
+		s390irq_spin_unlock_irqrestore( irq, flags);
 
 		/*
 		 * If we installed the irq action handler we have to
@@ -5170,6 +5199,7 @@ int s390_SensePGID( int irq, __u8 lpm, pgid_t *pgid )
 	int        irq_ret = 0; /* return code */
 	int        retry   = 5; /* retry count */
 	int        inlreq  = 0; /* inline request_irq() */
+	unsigned long flags;
 
 	if ( (irq > highest_subchannel) || (irq < 0 ) )
 	{
@@ -5198,7 +5228,7 @@ int s390_SensePGID( int irq, __u8 lpm, pgid_t *pgid )
 		 */
 		irq_ret = request_irq( irq,
 		                       init_IRQ_handler,
-		                       0,
+		                       SA_PROBE,
 		                       "SNID",
 		                       pdevstat);
 
@@ -5214,7 +5244,7 @@ int s390_SensePGID( int irq, __u8 lpm, pgid_t *pgid )
 
 	if ( irq_ret == 0 )
 	{
-		s390irq_spin_lock( irq);
+		s390irq_spin_lock_irqsave( irq, flags);
 
 		snid_ccw.cmd_code = CCW_CMD_SENSE_PGID;
 		snid_ccw.cda      = (__u32)virt_to_phys( pgid );
@@ -5324,7 +5354,7 @@ int s390_SensePGID( int irq, __u8 lpm, pgid_t *pgid )
 
 		} while ( retry > 0 );
 
-		s390irq_spin_unlock( irq);
+		s390irq_spin_unlock_irqrestore( irq, flags);
 
 		/*
 		 * If we installed the irq action handler we have to
@@ -5372,10 +5402,10 @@ void s390_do_crw_pending( crwe_t *pcrwe )
 			 * If the device isn't known yet
 			 *   we can't lock it ...
 			 */
-	      if ( ioinfo[irq] != INVALID_STORAGE_AREA )
+			if ( ioinfo[irq] != INVALID_STORAGE_AREA )
 			{
 				s390irq_spin_lock( irq );
-            lock = 1;
+				lock = 1;
 
 				dev_oper = ioinfo[irq]->ui.flags.oper;
 
@@ -5417,20 +5447,21 @@ void s390_do_crw_pending( crwe_t *pcrwe )
 
 			if ( ioinfo[irq] != INVALID_STORAGE_AREA )
 			{
-				if ( ioinfo[irq]->ui.flags.oper == 0 )
-				{
-					/*
-					 * If the device has gone
-					 *  call not oper handler        	
-					 */       	
-					if (    (             dev_oper == 1    )
-					     && ( ioinfo[irq]->nopfunc != NULL ) )
-					{
+				not_oper_handler_func_t nopfunc = ioinfo[irq]->nopfunc;
 
-						free_irq( irq,
+				if ( ioinfo[irq]->ui.flags.oper == 0 )
+                                {
+                                        /*
+                                         * If the device has gone
+                                         *  call not oper handler
+                                         */
+                                        if (    ( dev_oper == 1    )
+                                             && ( nopfunc != NULL ) )                                                   {
+
+                                                free_irq( irq,
                                                           ioinfo[irq]->irq_desc.action->dev_id );
-						ioinfo[irq]->nopfunc( irq,
-						    DEVSTAT_DEVICE_GONE );				
+                                                nopfunc( irq, DEVSTAT_DEVICE_GONE );
+
 					} /* endif */
 				}
 				else
@@ -5466,10 +5497,10 @@ void s390_do_crw_pending( crwe_t *pcrwe )
 					 * ... it is and was operational, but
 					 *      the devno may have changed
 					 */
-					else if ( ioinfo[irq]->devno != dev_no )   					
+					else if (    ( ioinfo[irq]->devno != dev_no )
+					          && (            nopfunc != NULL   ) )
 					{
-						ioinfo[irq]->nopfunc( irq,
-						                      DEVSTAT_REVALIDATE );				
+						nopfunc( irq, DEVSTAT_REVALIDATE );				
 
 					} /* endif */
 

@@ -834,7 +834,7 @@ con3215_write(struct console *co, const char *str, unsigned int count)
 
 kdev_t con3215_device(struct console *c)
 {
-	return MKDEV(TTY_MAJOR, c->index);
+	return MKDEV(TTY_MAJOR, c->index + 64);
 }
 
 /*

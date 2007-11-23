@@ -193,7 +193,7 @@ static inline void disabled_wait(unsigned long code)
                       "    stctl 0,15,0x1c0\n" /* store control registers */
                       "    oi    0x1c0,0x10\n" /* fake protection bit */
                       "    lpsw 0(%0)"
-                      : : "a" (dw_psw), "a" (&ctl_buf));
+                      : : "a" (dw_psw), "a" (&ctl_buf) : "cc" );
 }
 
 #endif                                 /* __ASM_S390_PROCESSOR_H           */

@@ -447,6 +447,7 @@ __initfunc(static int offb_init_driver(struct device_node *dp))
 #ifdef CONFIG_FB_ATY128
     if (!strncmp(dp->name, "ATY,Rage128", 11) ||
     	!strncmp(dp->name, "ATY,RageM3p1", 12) ||
+    	!strncmp(dp->name, "ATY,RageM3p2", 12) ||
     	!strncmp(dp->name, "ATY,RageM3pA", 12)) {
 	aty128fb_of_init(dp);
 	return 1;

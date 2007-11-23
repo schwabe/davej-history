@@ -841,7 +841,7 @@ ext2_find_next_zero_bit(void *vaddr, unsigned size, unsigned offset)
                         "   icm  %0,2,1(%1)\n"
                         "   icm  %0,4,2(%1)\n"
                         "   icm  %0,8,3(%1)"
-                        : "=&a" (word) : "a" (p) );
+                        : "=&a" (word) : "a" (p) : "cc" );
 		word >>= bit;
                 res = bit;
                 /* Look for zero in first longword */
@@ -857,7 +857,7 @@ ext2_find_next_zero_bit(void *vaddr, unsigned size, unsigned offset)
                 	"1: nr   %1,0\n"
                 	"   ic   %1,0(%1,%2)\n"
                 	"   alr  %0,%1"
-                	: "+&d" (res), "+&d" (word)
+                	: "+&d" (res), "+&a" (word)
                   	: "a" (&_zb_findmap)
                 	: "cc", "0" );
                 if (res < 32)

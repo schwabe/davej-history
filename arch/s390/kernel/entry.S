@@ -657,7 +657,6 @@ pgm_sv:
         lh      %r7,__LC_PGM_ILC  # load instruction length
 pgm_no_sv:
         lh      %r8,__LC_PGM_INT_CODE  # N.B. saved int code used later KEEP it
-        stosm   24(%r15),0x03     # reenable interrupts
         lr      %r3,%r8
         la      %r0,0x7f
         nr      %r3,%r0           # clear per-event-bit
@@ -672,6 +671,9 @@ pgm_no_sv:
         l       %r5,SP_PSW+4(15)  # load psw addr
         sr      %r5,%r7           # substract ilc from psw
         st      %r5,SP_PSW+4(15)  # store corrected psw addr
+pgm_per:cl      %r3,BASED(.Lc20)  # pseudo page fault ?
+        be      BASED(pgm_go)     # if yes then don't reenable interrupts
+        stosm   24(%r15),0x03     # reenable interrupts
 pgm_go: basr    %r14,%r9          # branch to interrupt-handler
 pgm_dn: la      %r0,0x80
         nr      %r8,%r0           # check for per exception
@@ -834,6 +836,7 @@ restart_go:
 .Lc_ac:	       .long  0,0,1
 .Lc_ENOSYS:    .long  -ENOSYS
 .Lc4:	       .long  4
+.Lc20:         .long  20
 .Lc0x1202:     .long  0x1202
 .Lc0x1004:     .long  0x1004
 .Lc0x2401:     .long  0x2401

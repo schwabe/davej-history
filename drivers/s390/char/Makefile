@@ -13,4 +13,31 @@ ifeq ($(CONFIG_HWC),y)
   O_OBJS += hwc_con.o hwc_rw.o hwc_tty.o
 endif
 
+# stuff for building tape390.o
+T390_OBJS = tape.o
+ifeq ($(CONFIG_S390_TAPE_CHAR),y)
+  T390_OBJS += tapechar.o
+endif
+ifeq ($(CONFIG_S390_TAPE_BLOCK),y)
+  T390_OBJS += tapeblock.o
+endif
+ifeq ($(CONFIG_S390_TAPE_3480),y)
+  T390_OBJS += tape3480.o
+  CONFIG_S390_TAPE_NEED_34xx = y 
+endif
+ifeq ($(CONFIG_S390_TAPE_3490),y)
+  T390_OBJS += tape3490.o
+  CONFIG_S390_TAPE_NEED_34xx = y
+endif
+ifeq ($(CONFIG_S390_TAPE_NEED_34xx),y) 
+  T390_OBJS += tape34xx.o
+endif
+ifeq ($(CONFIG_S390_TAPE),y)
+  O_OBJS += tape390.o
+endif
+ifeq ($(CONFIG_S390_TAPE),m)
+  M_OBJS += tape390.o
+endif
+tape390.o: $(T390_OBJS)
+	$(LD) -r -o $@ $(T390_OBJS)
 include $(TOPDIR)/Rules.make

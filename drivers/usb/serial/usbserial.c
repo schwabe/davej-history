@@ -1375,8 +1375,7 @@ int usb_serial_init(void)
 		return -1;
 	}
 
-	info(DRIVER_VERSION " " DRIVER_AUTHOR);
-	info(DRIVER_DESC);
+	info(DRIVER_VERSION ":" DRIVER_DESC);
 
 	return 0;
 }

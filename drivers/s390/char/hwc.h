@@ -4,7 +4,7 @@
  *
  *  S390 version
  *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
- *    Author(s): Martin Peschke <peschke@fh-brandenburg.de>
+ *    Author(s): Martin Peschke <mpeschke@de.ibm.com>
  *
  * 
  * 
@@ -12,6 +12,9 @@
 
 #ifndef __HWC_H__
 #define __HWC_H__
+
+#define HWC_EXT_INT_PARAM_ADDR	0xFFFFFFF8
+#define HWC_EXT_INT_PARAM_PEND 0x00000001
 
 #define ET_OpCmd		0x01
 #define ET_Msg		0x02

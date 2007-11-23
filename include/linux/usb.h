@@ -236,36 +236,36 @@ struct usb_device_descriptor {
 
 /* Endpoint descriptor */
 struct usb_endpoint_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
-	__u8  bEndpointAddress;
-	__u8  bmAttributes;
-	__u16 wMaxPacketSize;
-	__u8  bInterval;
-	__u8  bRefresh;
-	__u8  bSynchAddress;
+	__u8  bLength		__attribute__ ((packed));
+	__u8  bDescriptorType	__attribute__ ((packed));
+	__u8  bEndpointAddress	__attribute__ ((packed));
+	__u8  bmAttributes	__attribute__ ((packed));
+	__u16 wMaxPacketSize	__attribute__ ((packed));
+	__u8  bInterval		__attribute__ ((packed));
+	__u8  bRefresh		__attribute__ ((packed));
+	__u8  bSynchAddress	__attribute__ ((packed));
 
    	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
-} __attribute__ ((packed));
+};
 
 /* Interface descriptor */
 struct usb_interface_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
-	__u8  bInterfaceNumber;
-	__u8  bAlternateSetting;
-	__u8  bNumEndpoints;
-	__u8  bInterfaceClass;
-	__u8  bInterfaceSubClass;
-	__u8  bInterfaceProtocol;
-	__u8  iInterface;
+	__u8  bLength		__attribute__ ((packed));
+	__u8  bDescriptorType	__attribute__ ((packed));
+	__u8  bInterfaceNumber	__attribute__ ((packed));
+	__u8  bAlternateSetting	__attribute__ ((packed));
+	__u8  bNumEndpoints	__attribute__ ((packed));
+	__u8  bInterfaceClass	__attribute__ ((packed));
+	__u8  bInterfaceSubClass __attribute__ ((packed));
+	__u8  bInterfaceProtocol __attribute__ ((packed));
+	__u8  iInterface	__attribute__ ((packed));
 
   	struct usb_endpoint_descriptor *endpoint;
 
-	unsigned char *extra;	/* Extra descriptors */
+   	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
-} __attribute__ ((packed));
+};
 
 struct usb_interface {
 	struct usb_interface_descriptor *altsetting;
@@ -280,20 +280,20 @@ struct usb_interface {
 
 /* Configuration descriptor information.. */
 struct usb_config_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
-	__u16 wTotalLength;
-	__u8  bNumInterfaces;
-	__u8  bConfigurationValue;
-	__u8  iConfiguration;
-	__u8  bmAttributes;
-	__u8  MaxPower;
+	__u8  bLength		__attribute__ ((packed));
+	__u8  bDescriptorType	__attribute__ ((packed));
+	__u16 wTotalLength	__attribute__ ((packed));
+	__u8  bNumInterfaces	__attribute__ ((packed));
+	__u8  bConfigurationValue __attribute__ ((packed));
+	__u8  iConfiguration	__attribute__ ((packed));
+	__u8  bmAttributes	__attribute__ ((packed));
+	__u8  MaxPower		__attribute__ ((packed));
 
 	struct usb_interface *interface;
 
-	unsigned char *extra;	/* Extra descriptors */
+   	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
-} __attribute__ ((packed));
+};
 
 /* String descriptor */
 struct usb_string_descriptor {
@@ -317,6 +317,7 @@ struct usb_driver {
 
 	struct semaphore serialize;
 
+	/* ioctl -- userspace apps can talk to drivers through usbdevfs */
 	int (*ioctl)(struct usb_device *dev, unsigned int code, void *buf);
 };
 
@@ -350,6 +351,8 @@ typedef int (*usb_device_irq)(int, void *, int, void *);
 #define USB_URB_EARLY_COMPLETE  0x0004
 #define USB_ASYNC_UNLINK        0x0008
 #define USB_QUEUE_BULK          0x0010
+#define USB_NO_FSBR		0x0020
+#define USB_ZERO_PACKET         0x0040  // Finish bulk OUTs always with zero length packet
 #define USB_TIMEOUT_KILLED	0x1000	// only set by HCD!
 
 typedef struct
@@ -372,7 +375,7 @@ typedef struct urb
 	struct usb_device *dev;		// pointer to associated USB device
 	unsigned int pipe;		// pipe information
 	int status;			// returned status
-	unsigned int transfer_flags;	// USB_DISABLE_SPD | USB_ISO_ASAP | USB_URB_EARLY_COMPLETE
+	unsigned int transfer_flags;	// USB_DISABLE_SPD | USB_ISO_ASAP | etc.
 	void *transfer_buffer;		// associated data buffer
 	int transfer_buffer_length;	// data buffer length
 	int actual_length;              // actual data buffer length	
@@ -486,11 +489,17 @@ struct usb_operations {
 	int (*unlink_urb) (struct urb* purb);
 };
 
+#define DEVNUM_ROUND_ROBIN	/***** OPTION *****/
+
 /*
  * Allocated per bus we have
  */
 struct usb_bus {
 	int busnum;			/* Bus number (in order of reg) */
+
+#ifdef DEVNUM_ROUND_ROBIN
+	int devnum_next;                /* Next open device number in round-robin allocation */
+#endif /* DEVNUM_ROUND_ROBIN */
 
 	struct usb_devmap devmap;       /* Device map */
 	struct usb_operations *op;      /* Operations (specific to the HC) */
@@ -508,6 +517,8 @@ struct usb_bus {
 
 	/* usbdevfs inode list */
 	struct list_head inodes;
+
+	atomic_t refcnt;
 };
 
 #define USB_MAXCHILDREN		(16)	/* This is arbitrary */
@@ -779,13 +790,13 @@ extern void usbdevfs_cleanup(void);
 
 #else /* CONFIG_USB_DEVICEFS */
 
-extern inline void usbdevfs_add_bus(struct usb_bus *bus) {}
-extern inline void usbdevfs_remove_bus(struct usb_bus *bus) {}
-extern inline void usbdevfs_add_device(struct usb_device *dev) {}
-extern inline void usbdevfs_remove_device(struct usb_device *dev) {}
+static inline void usbdevfs_add_bus(struct usb_bus *bus) {}
+static inline void usbdevfs_remove_bus(struct usb_bus *bus) {}
+static inline void usbdevfs_add_device(struct usb_device *dev) {}
+static inline void usbdevfs_remove_device(struct usb_device *dev) {}
 
-extern inline int usbdevfs_init(void) { return 0; }
-extern inline void usbdevfs_cleanup(void) { }
+static inline int usbdevfs_init(void) { return 0; }
+static inline void usbdevfs_cleanup(void) { }
 
 #endif /* CONFIG_USB_DEVICEFS */
 

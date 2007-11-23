@@ -4,7 +4,7 @@
  *
  *  S390 version
  *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
- *    Author(s): Martin Peschke <peschke@fh-brandenburg.de>
+ *    Author(s): Martin Peschke <mpeschke@de.ibm.com>
  *
  * 
  *
@@ -27,6 +27,7 @@
 #include <asm/setup.h>
 #include <asm/page.h>
 #include <asm/s390_ext.h>
+#include <asm/irq.h>
 
 #ifndef MIN
 #define MIN(a,b) (((a<b) ? a : b))
@@ -194,7 +195,7 @@ static struct {
 		    0,
 		    80,
 		    1,
-		    50,
+		    MAX_KMEM_PAGES,
 		    MAX_KMEM_PAGES,
 
 		    0,
@@ -331,15 +332,15 @@ service_call (
 	return condition_code;
 }
 
-static inline unsigned char *
-ext_int_param (void)
+static inline unsigned long 
+hwc_ext_int_param (void)
 {
 	u32 param;
 
 	__asm__ __volatile__ ("L %0,128\n\t"
 			      :"=r" (param));
 
-	return ((unsigned char *) param);
+	return (unsigned long) param;
 }
 
 static int 
@@ -421,11 +422,11 @@ sane_write_hwcb (void)
 		internal_print (
 				       DELAYED_WRITE,
 				       HWC_RW_PRINT_HEADER
-			"found invalid HWCB at address 0x%x. List corrupted. "
+		       "found invalid HWCB at address 0x%lx. List corrupted. "
 			   "Lost %i HWCBs with %i characters within up to %i "
 			   "messages. Saved %i HWCB with last %i characters i"
 				       "within up to %i messages.\n",
-				       (unsigned int) bad_addr,
+				       (unsigned long) bad_addr,
 				       lost_hwcb, lost_char, lost_msg,
 				       hwc_data.hwcb_count,
 				       ALL_HWCB_CHAR, ALL_HWCB_MTO);
@@ -760,24 +761,22 @@ flush_hwcbs (void)
 }
 
 static int 
-write_event_data_2 (void)
+write_event_data_2 (u32 ext_int_param)
 {
 	write_hwcb_t *hwcb;
 	int retval = 0;
 
 #ifdef DUMP_HWC_WRITE_ERROR
-	unsigned char *param;
-
-	param = ext_int_param ();
-	if (param != hwc_data.current_hwcb) {
+	if ((ext_int_param & HWC_EXT_INT_PARAM_ADDR)
+	    != (unsigned long) hwc_data.current_hwcb) {
 		internal_print (
 				       DELAYED_WRITE,
 				       HWC_RW_PRINT_HEADER
 				       "write_event_data_2 : "
 				       "HWCB address does not fit "
-				       "(expected: 0x%x, got: 0x%x).\n",
-				       hwc_data.current_hwcb,
-				       param);
+				       "(expected: 0x%lx, got: 0x%lx).\n",
+				       (unsigned long) hwc_data.current_hwcb,
+				       ext_int_param);
 		return -EINVAL;
 	}
 #endif
@@ -1720,7 +1719,7 @@ unconditional_read_1 (void)
 }
 
 static int 
-unconditional_read_2 (void)
+unconditional_read_2 (u32 ext_int_param)
 {
 	read_hwcb_t *hwcb = (read_hwcb_t *) hwc_data.page;
 
@@ -1857,7 +1856,7 @@ write_event_mask_1 (void)
 }
 
 static int 
-write_event_mask_2 (void)
+write_event_mask_2 (u32 ext_int_param)
 {
 	init_hwcb_t *hwcb = (init_hwcb_t *) hwc_data.page;
 	int retval = 0;
@@ -2009,7 +2008,7 @@ do_hwc_init (void)
 	return retval;
 }
 
-void do_hwc_interrupt (struct pt_regs *regs, __u16 code);
+void hwc_interrupt_handler (struct pt_regs *regs, __u16 code);
 
 int 
 hwc_init (unsigned long *kmem_start)
@@ -2023,7 +2022,7 @@ hwc_init (unsigned long *kmem_start)
 
 #endif
 
-	if (register_external_interrupt (0x2401, do_hwc_interrupt) != 0)
+	if (register_external_interrupt (0x2401, hwc_interrupt_handler) != 0)
 		panic ("Couldn't request external interrupts 0x2401");
 
 	spin_lock_init (&hwc_data.lock);
@@ -2102,8 +2101,81 @@ hwc_unregister_calls (hwc_high_level_calls_t * calls)
 }
 
 void 
-do_hwc_interrupt (struct pt_regs *regs, __u16 code)
+hwc_do_interrupt (u32 ext_int_param)
 {
+	u32 finished_hwcb = ext_int_param & HWC_EXT_INT_PARAM_ADDR;
+	u32 evbuf_pending = ext_int_param & HWC_EXT_INT_PARAM_PEND;
+
+	if (hwc_data.flags & HWC_PTIMER_RUNS) {
+		del_timer (&hwc_data.poll_timer);
+		hwc_data.flags &= ~HWC_PTIMER_RUNS;
+	}
+	if (finished_hwcb) {
+
+		if ((unsigned long) hwc_data.current_hwcb != finished_hwcb) {
+			internal_print (
+					       DELAYED_WRITE,
+					       HWC_RW_PRINT_HEADER
+					       "interrupt: mismatch: "
+					       "ext. int param. (0x%x) vs. "
+					       "current HWCB (0x%x)\n",
+					       ext_int_param,
+					       hwc_data.current_hwcb);
+		} else {
+
+			switch (hwc_data.current_servc) {
+
+			case HWC_CMDW_WRITEMASK:
+
+				write_event_mask_2 (ext_int_param);
+				break;
+
+			case HWC_CMDW_WRITEDATA:
+
+				write_event_data_2 (ext_int_param);
+				break;
+
+			case HWC_CMDW_READDATA:
+
+				unconditional_read_2 (ext_int_param);
+				break;
+			default:
+			}
+		}
+	} else {
+
+		if (hwc_data.current_hwcb) {
+			internal_print (
+					       DELAYED_WRITE,
+					       HWC_RW_PRINT_HEADER
+					       "interrupt: mismatch: "
+					       "ext. int. param. (0x%x) vs. "
+					       "current HWCB (0x%x)\n",
+					       ext_int_param,
+					       hwc_data.current_hwcb);
+		}
+	}
+
+	if (evbuf_pending) {
+
+		unconditional_read_1 ();
+	} else {
+
+		write_event_data_1 ();
+	}
+
+	if (!hwc_data.calls || !hwc_data.calls->wake_up)
+		return;
+	(hwc_data.calls->wake_up) ();
+}
+
+void 
+hwc_interrupt_handler (struct pt_regs *regs, __u16 code)
+{
+	u32 ext_int_param = hwc_ext_int_param ();
+	int cpu = smp_processor_id ();
+
+	irq_enter (cpu, 0x2401);
 
 	if (hwc_data.flags & HWC_INIT) {
 
@@ -2115,46 +2187,16 @@ do_hwc_interrupt (struct pt_regs *regs, __u16 code)
 			internal_print (DELAYED_WRITE,
 					HWC_RW_PRINT_HEADER
 					"delayed HWC setup after"
-					" temporary breakdown\n");
+					" temporary breakdown"
+					" (ext. int. parameter=0x%x)\n",
+					ext_int_param);
 		}
 	} else {
 		spin_lock (&hwc_data.lock);
-
-		if (hwc_data.flags & HWC_PTIMER_RUNS) {
-			del_timer (&hwc_data.poll_timer);
-			hwc_data.flags &= ~HWC_PTIMER_RUNS;
-		}
-		if (!hwc_data.current_servc) {
-
-			unconditional_read_1 ();
-
-		} else {
-
-			switch (hwc_data.current_servc) {
-
-			case HWC_CMDW_WRITEMASK:
-
-				write_event_mask_2 ();
-				break;
-
-			case HWC_CMDW_WRITEDATA:
-
-				write_event_data_2 ();
-				break;
-
-			case HWC_CMDW_READDATA:
-
-				unconditional_read_2 ();
-				break;
-			}
-
-			write_event_data_1 ();
-		}
-		if (hwc_data.calls != NULL)
-			if (hwc_data.calls->wake_up != NULL)
-				(hwc_data.calls->wake_up) ();
+		hwc_do_interrupt (ext_int_param);
 		spin_unlock (&hwc_data.lock);
 	}
+	irq_exit (cpu, 0x2401);
 }
 
 void 

@@ -1747,15 +1747,43 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
     memset(&var, 0, sizeof(var));
 
 #ifdef CONFIG_FB_OF
-    /* New iBook */
-    if (default_vmode == VMODE_CHOOSE &&
-    	machine_is_compatible("PowerBook2,2"))
-        default_vmode = VMODE_800_600_60;
-        
-    if (default_vmode == VMODE_CHOOSE)
-        var = default_var;
-    else if (mac_vmode_to_var(default_vmode, default_cmode, &var))
-	var = default_var;
+    if (_machine == _MACH_Pmac) {
+        if (mode_option) {
+            if (mac_vmode_to_var(default_vmode, default_cmode, &var))
+                var = default_var;
+        } else {
+            if (default_vmode <= 0 || default_vmode > VMODE_MAX)
+                default_vmode = VMODE_1024_768_60;
+
+	    /* iBook SE */
+	    if (machine_is_compatible("PowerBook2,2"))
+		default_vmode = VMODE_800_600_60;
+
+	    /* iMacs and newer iBooks need to use 1024x768
+	     * PowerMac2,1 first r128 iMacs
+	     * PowerMac4,1 january 2001 iMacs "flower power"
+	     */
+	    if (machine_is_compatible("PowerMac2,1") || 
+		machine_is_compatible("PowerMac2,2") ||
+		machine_is_compatible("PowerMac4,1"))
+		default_vmode = VMODE_1024_768_75;
+
+	    /* PowerBook Firewire (Pismo) and iBook2 */
+	    if (machine_is_compatible("PowerBook3,1") ||
+		machine_is_compatible("PowerBook4,1"))
+		default_vmode = VMODE_1024_768_60;
+
+	    /* PowerBook Titanium */
+	    if (machine_is_compatible("PowerBook3,2"))
+		default_vmode = VMODE_1152_768_60;
+
+            if (default_cmode < CMODE_8 || default_cmode > CMODE_32)
+                default_cmode = CMODE_8;
+
+            if (mac_vmode_to_var(default_vmode, default_cmode, &var))
+                var = default_var;
+        }
+    } else
 #else /* CONFIG_FB_OF */
         var = default_var;
 #endif /* CONFIG_FB_OF */
@@ -2088,6 +2116,11 @@ aty128fb_of_init(struct device_node *dp)
     	dp = dp->parent;
     if (dp->name && !strcmp(dp->name, "ATY,RageM3pB"))
     	return;
+
+    if (dp->name && !strcmp(dp->name, "ATY,RageM3p12A") && dp->parent)
+	dp = dp->parent;
+    if (dp->name && !strcmp(dp->name, "ATY,RageM3p12B"))
+	return;
 
     switch (dp->n_addrs) {
     case 3:

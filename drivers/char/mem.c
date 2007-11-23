@@ -49,6 +49,9 @@ extern void prom_con_init(void);
 #ifdef CONFIG_MDA_CONSOLE
 extern void mda_console_init(void);
 #endif
+#ifdef CONFIG_S390_TAPE_CHAR
+extern void tapechar_init(void);
+#endif
      
 static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
 			    const char * buf, size_t count, loff_t *ppos)
@@ -655,6 +658,9 @@ __initfunc(int chr_dev_init(void))
 #endif
 #ifdef CONFIG_PHONE
 	telephony_init();
+#endif
+#if defined(CONFIG_S390_TAPE) && defined(CONFIG_S390_TAPE_CHAR)
+        tapechar_init();
 #endif
 	return 0;
 }

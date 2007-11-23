@@ -39,6 +39,11 @@ ip_fib_model - INTEGER
 
 IP Fragmentation:
 
+ip_always_defrag - BOOLEAN
+       0 - (DEFAULT) Normal setting for a normal router or host.
+       1 - Reassemble all fragments before processing. Useful for
+           a firewall or transparent proxying hosts.
+
 ipfrag_high_thresh - INTEGER
 	Maximum memory used to reassemble IP fragments. When 
 	ipfrag_high_thresh bytes of memory is allocated for this purpose,
