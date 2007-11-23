@@ -32,6 +32,9 @@
  * only in register addresses (eg because your registers are on 32-bit
  * word boundaries) then you can alter the constants in parport_pc.h to
  * accomodate this.
+ *
+ * Note that the ECP registers may not start at offset 0x400 for PCI cards,
+ * but rather will start at port->base_hi.
  */
 
 #include <linux/config.h>
@@ -43,6 +46,7 @@
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
+#include <linux/pci.h>
 
 #include <asm/io.h>
 
@@ -62,27 +66,27 @@ static void parport_pc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 void parport_pc_write_epp(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+EPPDATA);
+	outb(d, EPPDATA(p));
 }
 
 unsigned char parport_pc_read_epp(struct parport *p)
 {
-	return inb(p->base+EPPDATA);
+	return inb(EPPDATA(p));
 }
 
 void parport_pc_write_epp_addr(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+EPPADDR);
+	outb(d, EPPADDR(p));
 }
 
 unsigned char parport_pc_read_epp_addr(struct parport *p)
 {
-	return inb(p->base+EPPADDR);
+	return inb(EPPADDR(p));
 }
 
 int parport_pc_check_epp_timeout(struct parport *p)
 {
-	if (!(inb(p->base+STATUS) & 1))
+	if (!(inb(STATUS(p)) & 1))
 		return 0;
 	parport_pc_epp_clear_timeout(p);
 	return 1;
@@ -90,24 +94,24 @@ int parport_pc_check_epp_timeout(struct parport *p)
 
 unsigned char parport_pc_read_configb(struct parport *p)
 {
-	return inb(p->base+CONFIGB);
+	return inb(CONFIGB(p));
 }
 
 void parport_pc_write_data(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+DATA);
+	outb(d, DATA(p));
 }
 
 unsigned char parport_pc_read_data(struct parport *p)
 {
-	return inb(p->base+DATA);
+	return inb(DATA(p));
 }
 
 void parport_pc_write_control(struct parport *p, unsigned char d)
 {
 	struct parport_pc_private *priv = p->private_data;
 	priv->ctr = d;/* update soft copy */
-	outb(d, p->base+CONTROL);
+	outb(d, CONTROL(p));
 }
 
 unsigned char parport_pc_read_control(struct parport *p)
@@ -121,34 +125,34 @@ unsigned char parport_pc_frob_control(struct parport *p, unsigned char mask,  un
 	struct parport_pc_private *priv = p->private_data;
 	unsigned char ctr = priv->ctr;
 	ctr = (ctr & ~mask) ^ val;
-	outb (ctr, p->base+CONTROL);
+	outb (ctr, CONTROL(p));
 	return priv->ctr = ctr; /* update soft copy */
 }
 
 void parport_pc_write_status(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+STATUS);
+	outb(d, STATUS(p));
 }
 
 unsigned char parport_pc_read_status(struct parport *p)
 {
-	return inb(p->base+STATUS);
+	return inb(STATUS(p));
 }
 
 void parport_pc_write_econtrol(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+ECONTROL);
+	outb(d, ECONTROL(p));
 }
 
 unsigned char parport_pc_read_econtrol(struct parport *p)
 {
-	return inb(p->base+ECONTROL);
+	return inb(ECONTROL(p));
 }
 
 unsigned char parport_pc_frob_econtrol(struct parport *p, unsigned char mask,  unsigned char val)
 {
-	unsigned char old = inb(p->base+ECONTROL);
-	outb(((old & ~mask) ^ val), p->base+ECONTROL);
+	unsigned char old = inb(ECONTROL(p));
+	outb(((old & ~mask) ^ val), ECONTROL(p));
 	return old;
 }
 
@@ -159,12 +163,12 @@ void parport_pc_change_mode(struct parport *p, int m)
 
 void parport_pc_write_fifo(struct parport *p, unsigned char v)
 {
-	outb (v, p->base+CONFIGA);
+	outb (v, CONFIGA(p));
 }
 
 unsigned char parport_pc_read_fifo(struct parport *p)
 {
-	return inb (p->base+CONFIGA);
+	return inb (CONFIGA(p));
 }
 
 void parport_pc_disable_irq(struct parport *p)
@@ -183,7 +187,7 @@ void parport_pc_release_resources(struct parport *p)
 		free_irq(p->irq, p);
 	release_region(p->base, p->size);
 	if (p->modes & PARPORT_MODE_PCECR)
-		release_region(p->base+0x400, 3);
+		release_region(p->base_hi, 3);
 }
 
 int parport_pc_claim_resources(struct parport *p)
@@ -195,7 +199,7 @@ int parport_pc_claim_resources(struct parport *p)
 			return err;
 	request_region(p->base, p->size, p->name);
 	if (p->modes & PARPORT_MODE_PCECR)
-		request_region(p->base+0x400, 3, p->name);
+		request_region(p->base_hi, 3, p->name);
 	return 0;
 }
 
@@ -223,8 +227,8 @@ size_t parport_pc_epp_read_block(struct parport *p, void *buf, size_t length)
 {
 	size_t got = 0;
 	for (; got < length; got++) {
-		*((char*)buf)++ = inb (p->base+EPPDATA);
-		if (inb (p->base+STATUS) & 0x01)
+		*((char*)buf)++ = inb (EPPDATA(p));
+		if (inb (STATUS(p)) & 0x01)
 			break;
 	}
 	return got;
@@ -234,8 +238,8 @@ size_t parport_pc_epp_write_block(struct parport *p, void *buf, size_t length)
 {
 	size_t written = 0;
 	for (; written < length; written++) {
-		outb (*((char*)buf)++, p->base+EPPDATA);
-		if (inb (p->base+STATUS) & 0x01)
+		outb (*((char*)buf)++, EPPDATA(p));
+		if (inb (STATUS(p)) & 0x01)
 			break;
 	}
 	return written;
@@ -370,11 +374,11 @@ static int parport_SPP_supported(struct parport *pb)
 	 * allow reads, so read_control just returns a software
 	 * copy. Some ports _do_ allow reads, so bypass the software
 	 * copy here.  In addition, some bits aren't writable. */
-	r = inb (pb->base+CONTROL);
+	r = inb (CONTROL(pb));
 	if ((r & 0xf) == w) {
 		w = 0xe;
 		parport_pc_write_control (pb, w);
-		r = inb (pb->base+CONTROL);
+		r = inb (CONTROL(pb));
 		parport_pc_write_control (pb, 0xc);
 		if ((r & 0xf) == w)
 			return PARPORT_MODE_PCSPP;
@@ -754,13 +758,16 @@ out:
 
 /* --- Initialisation code -------------------------------- */
 
-static int probe_one_port(unsigned long int base, int irq, int dma)
+static int probe_one_port(unsigned long int base,
+			  unsigned long int base_hi,
+			  int irq, int dma)
 {
 	struct parport *p;
 	int probedirq = PARPORT_IRQ_NONE;
 	if (check_region(base, 3)) return 0;
 	if (!(p = parport_register_port(base, irq, dma, &parport_pc_ops)))
 		return 0;
+	p->base_hi = base_hi;
 	p->private_data = kmalloc (sizeof (struct parport_pc_private),
 				   GFP_KERNEL);
 	if (!p->private_data) {
@@ -770,16 +777,14 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 		return 0;
 	}
 	((struct parport_pc_private *) (p->private_data))->ctr = 0xc;
-	if (p->base != 0x3bc) {
-		if (!check_region(base+0x400,3)) {
-			p->modes |= parport_ECR_present(p);	
-			p->modes |= parport_ECP_supported(p);
-			p->modes |= parport_ECPPS2_supported(p);
-		}
-		if (!check_region(base+0x3, 5)) {
-			p->modes |= parport_EPP_supported(p);
-			p->modes |= parport_ECPEPP_supported(p);
-		}
+	if (base_hi && !check_region(base_hi,3)) {
+		p->modes |= parport_ECR_present(p);
+		p->modes |= parport_ECP_supported(p);
+		p->modes |= parport_ECPPS2_supported(p);
+	}
+	if (p->base != 0x3bc && !check_region(base+0x3, 5)) {
+		p->modes |= parport_EPP_supported(p);
+		p->modes |= parport_ECPEPP_supported(p);
 	}
 	if (!parport_SPP_supported(p)) {
 		/* No port. */
@@ -791,6 +796,8 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	p->size = (p->modes & (PARPORT_MODE_PCEPP 
 			       | PARPORT_MODE_PCECPEPP))?8:3;
 	printk(KERN_INFO "%s: PC-style at 0x%lx", p->name, p->base);
+	if (p->base_hi && (p->modes & PARPORT_MODE_PCECP))
+		printk(" (0x%lx)", p->base_hi);
 	if (p->irq == PARPORT_IRQ_AUTO) {
 		p->irq = PARPORT_IRQ_NONE;
 		parport_irq_probe(p);
@@ -844,6 +851,124 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	return 1;
 }
 
+/* Look for PCI parallel port cards. */
+static int parport_pc_init_pci (int irq, int dma)
+{
+	struct {
+		unsigned int vendor;
+		unsigned int device;
+		unsigned int numports;
+		struct {
+			unsigned long lo;
+			unsigned long hi; /* -ve if not there */
+		} addr[4];
+	} cards[] = {
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_550, 1,
+		  { { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_650, 1,
+		  { { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_850, 1,
+		  { { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_10x, 1,
+		  { { 2, 3 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_10x, 2,
+		  { { 2, 3 }, { 4, 5 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_550, 1,
+		  { { 4, 5 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_650, 1,
+		  { { 4, 5 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_10x_850, 1,
+		  { { 4, 5 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1P_20x, 1,
+		  { { 0, 1 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P_20x, 2,
+		  { { 0, 1 }, { 2, 3 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_550, 2,
+		  { { 1, 2 }, { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_650, 2,
+		  { { 1, 2 }, { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2P1S_20x_850, 2,
+		  { { 1, 2 }, { 3, 4 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_550, 1,
+		  { { 1, 2 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_650, 1,
+		  { { 1, 2 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_20x_850, 1,
+		  { { 1, 2 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_550, 1,
+		  { { 2, 3 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_650, 1,
+		  { { 2, 3 }, } },
+		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_2S1P_20x_850, 1,
+		  { { 2, 3 }, } },
+		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_PARALLEL, 1,
+		  { { 0, -1 }, } },
+		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_A, 1,
+		  { { 0, -1 }, } },
+		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_B, 1,
+		  { { 0, -1 }, } },
+		{ 0, }
+	};
+
+	struct pci_dev *pcidev;
+	int count = 0;
+	int i;
+
+	if (!pci_present ())
+		return 0;
+
+	for (i = 0; cards[i].vendor; i++) {
+		pcidev = NULL;
+		while ((pcidev = pci_find_device (cards[i].vendor,
+						  cards[i].device,
+						  pcidev)) != NULL) {
+			int n;
+			for (n = 0; n < cards[i].numports; n++) {
+				unsigned long lo = cards[i].addr[n].lo;
+				unsigned long hi = cards[i].addr[n].hi;
+				unsigned long io_lo, io_hi;
+				io_lo = pcidev->base_address[lo];
+				io_hi = ((hi < 0) ? 0 :
+					 pcidev->base_address[hi]);
+				io_lo &= PCI_BASE_ADDRESS_IO_MASK;
+				io_hi &= PCI_BASE_ADDRESS_IO_MASK;
+				if (irq == PARPORT_IRQ_AUTO) {
+					if (probe_one_port (io_lo,
+							    io_hi,
+							    pcidev->irq,
+							    dma))
+						count++;
+				} else if (probe_one_port (io_lo, io_hi,
+							   irq, dma))
+					count++;
+			}
+		}
+	}
+
+	/* Look for parallel controllers that we don't know about. */
+	for (pcidev = pci_devices; pcidev; pcidev = pcidev->next) {
+		const int class_noprogif = pcidev->class & ~0xff;
+		if (class_noprogif != (PCI_CLASS_COMMUNICATION_PARALLEL << 8))
+			continue;
+
+		for (i = 0; cards[i].vendor; i++)
+			if ((cards[i].vendor == pcidev->vendor) &&
+			    (cards[i].device == pcidev->device))
+				break;
+		if (cards[i].vendor)
+			/* We know about this one. */
+			continue;
+
+		printk (KERN_INFO
+			"Unknown PCI parallel I/O card (%04x/%04x)\n"
+			"Please send 'lspci' output to "
+			"tim@cyberelk.demon.co.uk\n",
+			pcidev->vendor, pcidev->device);
+	}
+
+	return count;
+}
+
 int parport_pc_init(int *io, int *irq, int *dma)
 {
 	int count = 0, i = 0;
@@ -851,13 +976,16 @@ int parport_pc_init(int *io, int *irq, int *dma)
 		/* Only probe the ports we were given. */
 		user_specified = 1;
 		do {
-			count += probe_one_port(*(io++), *(irq++), *(dma++));
+			unsigned long int io_hi = 0x400 + *io;
+			count += probe_one_port(*(io++), io_hi,
+						*(irq++), *(dma++));
 		} while (*io && (++i < PARPORT_PC_MAX_PORTS));
 	} else {
 		/* Probe all the likely ports. */
-		count += probe_one_port(0x3bc, irq[0], dma[0]);
-		count += probe_one_port(0x378, irq[0], dma[0]);
-		count += probe_one_port(0x278, irq[0], dma[0]);
+		count += probe_one_port(0x3bc, 0x7bc, irq[0], dma[0]);
+		count += probe_one_port(0x378, 0x778, irq[0], dma[0]);
+		count += probe_one_port(0x278, 0x678, irq[0], dma[0]);
+		count += parport_pc_init_pci (irq[0], dma[0]);
 	}
 
 	return count;

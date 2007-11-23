@@ -119,7 +119,9 @@ EXPORT_SYMBOL(irda_debug);
 EXPORT_SYMBOL(irda_notify_init);
 EXPORT_SYMBOL(irmanager_notify);
 EXPORT_SYMBOL(irda_lock);
+#ifdef CONFIG_PROC_FS
 EXPORT_SYMBOL(proc_irda);
+#endif
 
 /* IrIAP/IrIAS */
 EXPORT_SYMBOL(iriap_getvaluebyclass_request);

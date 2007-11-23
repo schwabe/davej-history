@@ -122,6 +122,7 @@ Returns: 0 if no Promise card present at this io_base
 */
 int init_pdc4030 (void)
 {
+	ide_startstop_t startstop;
 	ide_hwif_t *hwif = hwif_required;
         ide_drive_t *drive;
 	ide_hwif_t *second_hwif;
@@ -143,7 +144,7 @@ int init_pdc4030 (void)
 	if(pdc4030_cmd(drive,PROMISE_GET_CONFIG)) {
 	    return 0;
 	}
-	if(ide_wait_stat(drive,DATA_READY,BAD_W_STAT,WAIT_DRQ)) {
+	if(ide_wait_stat(&startstop,drive,DATA_READY,BAD_W_STAT,WAIT_DRQ)) {
 	    printk("%s: Failed Promise read config!\n",hwif->name);
 	    return 0;
 	}
@@ -195,7 +196,7 @@ int init_pdc4030 (void)
 /*
  * promise_read_intr() is the handler for disk read/multread interrupts
  */
-static void promise_read_intr (ide_drive_t *drive)
+static ide_startstop_t promise_read_intr (ide_drive_t *drive)
 {
 	byte stat;
 	int i;
@@ -203,8 +204,7 @@ static void promise_read_intr (ide_drive_t *drive)
 	struct request *rq;
 
 	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
-		ide_error(drive, "promise_read_intr", stat);
-		return;
+		return ide_error(drive, "promise_read_intr", stat);
 	}
 
 read_again:
@@ -240,17 +240,18 @@ read_next:
 		    goto read_again;
 		if(stat & BUSY_STAT) {
 		    ide_set_handler (drive, &promise_read_intr, WAIT_CMD);
-		    return;
+		    return ide_started;;
 		}
 		printk("Ah! promise read intr: sectors left !DRQ !BUSY\n");
-		ide_error(drive, "promise read intr", stat);
+		return ide_error(drive, "promise read intr", stat);
 	}
+	return ide_stopped;
 }
 
 /*
  * promise_write_pollfunc() is the handler for disk write completion polling.
  */
-static void promise_write_pollfunc (ide_drive_t *drive)
+static ide_startstop_t promise_write_pollfunc (ide_drive_t *drive)
 {
 	int i;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
@@ -259,20 +260,20 @@ static void promise_write_pollfunc (ide_drive_t *drive)
         if (IN_BYTE(IDE_NSECTOR_REG) != 0) {
             if (time_before(jiffies, hwgroup->poll_timeout)) {
                 ide_set_handler (drive, &promise_write_pollfunc, 1);
-                return; /* continue polling... */
+                return ide_started; /* continue polling... */
             }
             printk("%s: write timed-out!\n",drive->name);
-            ide_error (drive, "write timeout", GET_STAT());
-            return;
+            return ide_error (drive, "write timeout", GET_STAT());
         }
         
-	ide_multwrite(drive, 4);
+	if (ide_multwrite(drive, 4))
+		return ide_stopped;
         rq = hwgroup->rq;
         for (i = rq->nr_sectors; i > 0;) {
             i -= rq->current_nr_sectors;
             ide_end_request(1, hwgroup);
         }
-        return;
+        return ide_stopped;
 }
 
 /*
@@ -283,24 +284,27 @@ static void promise_write_pollfunc (ide_drive_t *drive)
  * how it's done in the drivers for other O/Ses. There is no interrupt
  * generated on writes, which is why we have to do it like this.
  */
-static void promise_write (ide_drive_t *drive)
+static ide_startstop_t promise_write (ide_drive_t *drive)
 {
     ide_hwgroup_t *hwgroup = HWGROUP(drive);
     struct request *rq = &hwgroup->wrq;
     int i;
 
     if (rq->nr_sectors > 4) {
-        ide_multwrite(drive, rq->nr_sectors - 4);
+        if (ide_multwrite(drive, rq->nr_sectors - 4))
+		return ide_stopped;
         hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
         ide_set_handler (drive, &promise_write_pollfunc, 1);
-        return;
+        return ide_started;
     } else {
-        ide_multwrite(drive, rq->nr_sectors);
+        if (ide_multwrite(drive, rq->nr_sectors))
+		return ide_stopped;
         rq = hwgroup->rq;
         for (i = rq->nr_sectors; i > 0;) {
             i -= rq->current_nr_sectors;
             ide_end_request(1, hwgroup);
         }
+	return ide_stopped;
     }
 }
 
@@ -309,7 +313,7 @@ static void promise_write (ide_drive_t *drive)
  * already set up. It issues a READ or WRITE command to the Promise
  * controller, assuming LBA has been used to set up the block number.
  */
-void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
+ide_startstop_t do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 {
 	unsigned long timeout;
 	byte stat;
@@ -330,28 +334,29 @@ void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
                     disable_irq(HWIF(drive)->irq);
 		    ide_intr(HWIF(drive)->irq,HWGROUP(drive),NULL);
                     enable_irq(HWIF(drive)->irq);
-		    return;
+		    return ide_stopped;
 		}
 		if(IN_BYTE(IDE_SELECT_REG) & 0x01)
-		    return;
+		    return ide_started;
 		udelay(1);
 	    } while (time_before(jiffies, timeout));
 	    printk("%s: reading: No DRQ and not waiting - Odd!\n",
 		   drive->name);
-	    return;
+	    return ide_started;
 	}
 	if (rq->cmd == WRITE) {
+	    ide_startstop_t startstop;
 	    OUT_BYTE(PROMISE_WRITE, IDE_COMMAND_REG);
-	    if (ide_wait_stat(drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
+	    if (ide_wait_stat(&startstop, drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
 		printk("%s: no DRQ after issuing PROMISE_WRITE\n", drive->name);
-		return;
+		return startstop;
 	    }
 	    if (!drive->unmask)
 		__cli();	/* local CPU only */
 	    HWGROUP(drive)->wrq = *rq; /* scratchpad */
-	    promise_write(drive);
-	    return;
+	    return promise_write(drive);
 	}
 	printk("%s: bad command: %d\n", drive->name, rq->cmd);
 	ide_end_request(0, HWGROUP(drive));
+	return ide_stopped;
 }

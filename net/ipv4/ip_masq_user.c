@@ -100,7 +100,7 @@ static int ip_masq_user_maddr(struct ip_masq_user *ums)
 		return ret;
 	}
 	dev = rt->u.dst.dev;
-	ums->maddr = ip_masq_select_addr(dev, rt->rt_gateway, RT_SCOPE_UNIVERSE);
+	ums->maddr = rt->rt_src;  /* Per Alexey */
 
 	IP_MASQ_DEBUG(1-debug, "did setup maddr=%lX\n", ntohl(ums->maddr));
 	ip_rt_put(rt);

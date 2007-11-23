@@ -72,6 +72,7 @@
 #define FB_ACCEL_SUN_BWTWO	23	/* Sun bwtwo			 */
 #define FB_ACCEL_SUN_CGTHREE	24	/* Sun cgthree			 */
 #define FB_ACCEL_SUN_TCX	25	/* Sun tcx			 */
+#define FB_ACCEL_MATROX_MGAG400 26	/* Matrox G400                   */
 
 struct fb_fix_screeninfo {
 	char id[16];			/* identification string eg "TT Builtin" */

@@ -987,7 +987,7 @@ found_page:
 	if (no_share && !new_page) {
 		new_page = page_cache_alloc();
 		if (!new_page)
-			goto failure;
+			goto release_and_oom;
 	}
 
 	if (PageLocked(page))
@@ -1035,7 +1035,7 @@ no_cached_page:
 	if (!new_page)
 		new_page = page_cache_alloc();
 	if (!new_page)
-		goto no_page;
+		goto oom;
 
 	/*
 	 * During getting the above page we might have slept,
@@ -1089,6 +1089,11 @@ failure:
 		page_cache_free(new_page);
 no_page:
 	return 0;
+
+release_and_oom:
+	page_cache_release(page);
+oom:
+	return -1;
 }
 
 /*

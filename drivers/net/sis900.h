@@ -246,7 +246,7 @@ enum sis900_eeprom_command {
 #define TRUE            1
 #define FALSE           0
 
-/* PCI stuff, should be move to pic.h */
+/* PCI stuff, should be move to pci.h */
 #define PCI_DEVICE_ID_SI_900	0x900   
 #define PCI_DEVICE_ID_SI_7016	0x7016  
 

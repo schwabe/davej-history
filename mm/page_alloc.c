@@ -388,7 +388,7 @@ void swapin_readahead(unsigned long entry)
  * Also, don't bother to add to the swap cache if this page-in
  * was due to a write access.
  */
-void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
+int swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	pte_t * page_table, unsigned long entry, int write_access)
 {
 	unsigned long page;
@@ -401,14 +401,10 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	if (pte_val(*page_table) != entry) {
 		if (page_map)
 			free_page_and_swap_cache(page_address(page_map));
-		return;
+		return 1;
 	}
-	if (!page_map) {
-		set_pte(page_table, BAD_PAGE);
-		swap_free(entry);
-		oom(tsk);
-		return;
-	}
+	if (!page_map)
+		return -1;
 
 	page = page_address(page_map);
 	vma->vm_mm->rss++;
@@ -417,7 +413,7 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 
 	if (!write_access || is_page_shared(page_map)) {
 		set_pte(page_table, mk_pte(page, vma->vm_page_prot));
-		return;
+		return 1;
 	}
 
 	/*
@@ -427,5 +423,5 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	 */
 	delete_from_swap_cache(page_map);
 	set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot))));
-  	return;
+  	return 1;
 }

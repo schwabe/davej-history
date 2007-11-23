@@ -522,7 +522,7 @@ typedef struct idetape_packet_command_s {
 	int b_count;
 	byte *buffer;				/* Data buffer */
 	byte *current_position;			/* Pointer into the above buffer */
-	void (*callback) (ide_drive_t *);	/* Called when this packet command is completed */
+	ide_startstop_t (*callback) (ide_drive_t *);	/* Called when this packet command is completed */
 	byte pc_buffer[IDETAPE_PC_BUFFER_SIZE];	/* Temporary buffer */
 	unsigned int flags;			/* Status/Action bit flags */
 } idetape_pc_t;
@@ -1656,7 +1656,7 @@ static void idetape_analyze_error (ide_drive_t *drive,idetape_request_sense_resu
 	}
 }
 
-static void idetape_request_sense_callback (ide_drive_t *drive)
+static ide_startstop_t idetape_request_sense_callback (ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
 
@@ -1670,6 +1670,7 @@ static void idetape_request_sense_callback (ide_drive_t *drive)
 		printk (KERN_ERR "Error in REQUEST SENSE itself - Aborting request!\n");
 		idetape_end_request (0,HWGROUP (drive));
 	}
+	return ide_stopped;
 }
 
 /*
@@ -1701,7 +1702,7 @@ static void idetape_create_request_sense_cmd (idetape_pc_t *pc)
  *	last packet command. We queue a request sense packet command in
  *	the head of the request list.
  */
-static void idetape_retry_pc (ide_drive_t *drive)
+static ide_startstop_t idetape_retry_pc (ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	idetape_pc_t *pc;
@@ -1714,6 +1715,7 @@ static void idetape_retry_pc (ide_drive_t *drive)
 	idetape_create_request_sense_cmd (pc);
 	set_bit (IDETAPE_IGNORE_DSC, &tape->flags);
 	idetape_queue_pc_head (drive, pc, rq);
+	return ide_stopped;
 }
 
 /*
@@ -1724,7 +1726,7 @@ static void idetape_retry_pc (ide_drive_t *drive)
  *	algorithm described before idetape_issue_packet_command.
  *
  */
-static void idetape_pc_intr (ide_drive_t *drive)
+static ide_startstop_t idetape_pc_intr (ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	idetape_status_reg_t status;
@@ -1780,11 +1782,9 @@ static void idetape_pc_intr (ide_drive_t *drive)
 #endif /* IDETAPE_DEBUG_LOG */
 			if (pc->c[0] == IDETAPE_REQUEST_SENSE_CMD) {
 				printk (KERN_ERR "ide-tape: I/O error in request sense command\n");
-				ide_do_reset (drive);
-				return;
+				return ide_do_reset (drive);
 			}
-			idetape_retry_pc (drive);				/* Retry operation */
-			return;
+			return idetape_retry_pc (drive);		/* Retry operation */
 		}
 		pc->error = 0;
 		if (test_bit (PC_WAIT_FOR_DSC, &pc->flags) && !status.b.dsc) {	/* Media access command */
@@ -1792,20 +1792,18 @@ static void idetape_pc_intr (ide_drive_t *drive)
 			tape->dsc_polling_frequency = IDETAPE_DSC_MA_FAST;
 			tape->dsc_timeout = jiffies + IDETAPE_DSC_MA_TIMEOUT;
 			idetape_postpone_request (drive);		/* Allow ide.c to handle other requests */
-			return;
+			return ide_stopped;
 		}
 		if (tape->failed_pc == pc)
 			tape->failed_pc=NULL;
-		pc->callback(drive);			/* Command finished - Call the callback function */
-		return;
+		return pc->callback(drive);			/* Command finished - Call the callback function */
 	}
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-tape: The tape wants to issue more interrupts in DMA mode\n");
 		printk (KERN_ERR "ide-tape: DMA disabled, reverting to PIO\n");
 		(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 	bcount.b.high=IN_BYTE (IDE_BCOUNTH_REG);			/* Get the number of bytes to transfer */
@@ -1814,14 +1812,12 @@ static void idetape_pc_intr (ide_drive_t *drive)
 
 	if (ireason.b.cod) {
 		printk (KERN_ERR "ide-tape: CoD != 0 in idetape_pc_intr\n");
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 	if (ireason.b.io == test_bit (PC_WRITING, &pc->flags)) {	/* Hopefully, we will never get here */
 		printk (KERN_ERR "ide-tape: We wanted to %s, ", ireason.b.io ? "Write":"Read");
 		printk (KERN_ERR "but the tape wants us to %s !\n",ireason.b.io ? "Read":"Write");
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 	if (!test_bit (PC_WRITING, &pc->flags)) {			/* Reading - Check that we have enough space */
 		temp = pc->actually_transferred + bcount.all;
@@ -1830,7 +1826,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 				printk (KERN_ERR "ide-tape: The tape wants to send us more data than expected - discarding data\n");
 				idetape_discard_data (drive,bcount.all);
 				ide_set_handler (drive,&idetape_pc_intr,IDETAPE_WAIT_CMD);
-				return;
+				return ide_started;
 			}
 #if IDETAPE_DEBUG_LOG
 			printk (KERN_NOTICE "ide-tape: The tape wants to send us more data than expected - allowing transfer\n");
@@ -1852,6 +1848,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 	pc->current_position+=bcount.all;
 
 	ide_set_handler (drive,&idetape_pc_intr,IDETAPE_WAIT_CMD);		/* And set the interrupt handler again */
+	return ide_started;
 }
 
 /*
@@ -1897,16 +1894,17 @@ static void idetape_pc_intr (ide_drive_t *drive)
  *
  */
 
-static void idetape_transfer_pc(ide_drive_t *drive)
+static ide_startstop_t idetape_transfer_pc(ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	idetape_pc_t *pc = tape->pc;
 	idetape_ireason_reg_t ireason;
 	int retries = 100;
+	ide_startstop_t startstop;
 
-	if (ide_wait_stat (drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) {
+	if (ide_wait_stat(&startstop,drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) {
 		printk (KERN_ERR "ide-tape: Strange, packet command initiated yet DRQ isn't asserted\n");
-		return;
+		return startstop;
 	}
 	ireason.all=IN_BYTE (IDE_IREASON_REG);
 	while (retries-- && (!ireason.b.cod || ireason.b.io)) {
@@ -1921,14 +1919,14 @@ static void idetape_transfer_pc(ide_drive_t *drive)
 	}
 	if (!ireason.b.cod || ireason.b.io) {
 		printk (KERN_ERR "ide-tape: (IO,CoD) != (0,1) while issuing a packet command\n");
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	}
 	ide_set_handler(drive, &idetape_pc_intr, IDETAPE_WAIT_CMD);	/* Set the interrupt routine */
 	atapi_output_bytes (drive,pc->c,12);			/* Send the actual packet */
+	return ide_started;
 }
 
-static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
+static ide_startstop_t idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	idetape_bcount_reg_t bcount;
@@ -1957,8 +1955,7 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 			pc->error = IDETAPE_ERROR_GENERAL;		/* Giving up */
 		}
 		tape->failed_pc=NULL;
-		pc->callback(drive);
-		return;
+		return pc->callback(drive);
 	}
 #if IDETAPE_DEBUG_LOG
 	printk (KERN_INFO "Retry number - %d\n",pc->retries);
@@ -1992,13 +1989,14 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 	if (test_bit(IDETAPE_DRQ_INTERRUPT, &tape->flags)) {
 		ide_set_handler(drive, &idetape_transfer_pc, IDETAPE_WAIT_CMD);
 		OUT_BYTE(WIN_PACKETCMD, IDE_COMMAND_REG);
+		return ide_started;
 	} else {
 		OUT_BYTE(WIN_PACKETCMD, IDE_COMMAND_REG);
-		idetape_transfer_pc(drive);
+		return idetape_transfer_pc(drive);
 	}
 }
 
-static void idetape_media_access_finished (ide_drive_t *drive)
+static ide_startstop_t idetape_media_access_finished (ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	idetape_pc_t *pc = tape->pc;
@@ -2008,8 +2006,7 @@ static void idetape_media_access_finished (ide_drive_t *drive)
 	if (status.b.dsc) {
 		if (status.b.check) {					/* Error detected */
 			printk (KERN_ERR "ide-tape: %s: I/O error, ",tape->name);
-			idetape_retry_pc (drive);			/* Retry operation */
-			return;
+			return idetape_retry_pc (drive);		/* Retry operation */
 		}
 		pc->error = 0;
 		if (tape->failed_pc == pc)
@@ -2018,13 +2015,13 @@ static void idetape_media_access_finished (ide_drive_t *drive)
 		pc->error = IDETAPE_ERROR_GENERAL;
 		tape->failed_pc = NULL;
 	}
-	pc->callback (drive);
+	return pc->callback (drive);
 }
 
 /*
  *	General packet command callback function.
  */
-static void idetape_pc_callback (ide_drive_t *drive)
+static ide_startstop_t idetape_pc_callback (ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	
@@ -2033,9 +2030,10 @@ static void idetape_pc_callback (ide_drive_t *drive)
 #endif /* IDETAPE_DEBUG_LOG */
 
 	idetape_end_request (tape->pc->error ? 0:1, HWGROUP(drive));
+	return ide_stopped;
 }
 
-static void idetape_rw_callback (ide_drive_t *drive)
+static ide_startstop_t idetape_rw_callback (ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	struct request *rq = HWGROUP(drive)->rq;
@@ -2052,6 +2050,7 @@ static void idetape_rw_callback (ide_drive_t *drive)
 		idetape_end_request (1, HWGROUP (drive));
 	else
 		idetape_end_request (tape->pc->error, HWGROUP (drive));
+	return ide_stopped;
 }
 
 static void idetape_create_locate_cmd (idetape_pc_t *pc, unsigned int block, byte partition)
@@ -2170,7 +2169,7 @@ static void idetape_create_write_cmd (idetape_tape_t *tape, idetape_pc_t *pc, un
 		set_bit (PC_DMA_RECOMMENDED, &pc->flags);
 }
 
-static void idetape_read_position_callback (ide_drive_t *drive)
+static ide_startstop_t idetape_read_position_callback (ide_drive_t *drive)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	idetape_read_position_result_t *result;
@@ -2200,6 +2199,7 @@ static void idetape_read_position_callback (ide_drive_t *drive)
 		}
 	} else
 		idetape_end_request (0,HWGROUP (drive));
+	return ide_stopped;
 }
 
 static void idetape_create_read_position_cmd (idetape_pc_t *pc)
@@ -2213,7 +2213,7 @@ static void idetape_create_read_position_cmd (idetape_pc_t *pc)
 /*
  *	idetape_do_request is our request handling function.	
  */
-static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned long block)
+static ide_startstop_t idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	idetape_pc_t *pc;
@@ -2229,24 +2229,23 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 		/*
 		 *	We do not support buffer cache originated requests.
 		 */
-		printk (KERN_NOTICE "ide-tape: %s: Unsupported command in request queue\n", drive->name);
+		printk (KERN_NOTICE "ide-tape: %s: Unsupported command in request queue (%d)\n", drive->name, rq->cmd);
 		ide_end_request (0,HWGROUP (drive));			/* Let the common code handle it */
-		return;
+		return ide_stopped;
 	}
 
 	/*
 	 *	Retry a failed packet command
 	 */
 	if (tape->failed_pc != NULL && tape->pc->c[0] == IDETAPE_REQUEST_SENSE_CMD) {
-		idetape_issue_packet_command (drive, tape->failed_pc);
-		return;
+		return idetape_issue_packet_command (drive, tape->failed_pc);
 	}
 #if IDETAPE_DEBUG_BUGS
 	if (postponed_rq != NULL)
 		if (rq != postponed_rq) {
 			printk (KERN_ERR "ide-tape: ide-tape.c bug - Two DSC requests were queued\n");
 			idetape_end_request (0,HWGROUP (drive));
-			return;
+			return ide_stopped;
 		}
 #endif /* IDETAPE_DEBUG_BUGS */
 
@@ -2266,15 +2265,16 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 			tape->dsc_timeout = jiffies + IDETAPE_DSC_RW_TIMEOUT;
 		} else if ((signed long) (jiffies - tape->dsc_timeout) > 0) {
 			printk (KERN_ERR "ide-tape: %s: DSC timeout\n", tape->name);
-			if (rq->cmd == IDETAPE_PC_RQ2)
+			if (rq->cmd == IDETAPE_PC_RQ2) {
 				idetape_media_access_finished (drive);
-			else
-				ide_do_reset (drive);
-			return;
+				return ide_stopped;
+			} else {
+				return ide_do_reset (drive);
+			}
 		} else if (jiffies - tape->dsc_polling_start > IDETAPE_DSC_MA_THRESHOLD)
 			tape->dsc_polling_frequency = IDETAPE_DSC_MA_SLOW;
 		idetape_postpone_request (drive);
-		return;
+		return ide_stopped;
 	}
 	switch (rq->cmd) {
 		case IDETAPE_READ_RQ:
@@ -2289,20 +2289,20 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 			rq->cmd = IDETAPE_WRITE_RQ;
 			rq->errors = IDETAPE_ERROR_EOD;
 			idetape_end_request (1, HWGROUP(drive));
-			return;
+			return ide_stopped;
 		case IDETAPE_PC_RQ1:
 			pc=(idetape_pc_t *) rq->buffer;
 			rq->cmd = IDETAPE_PC_RQ2;
 			break;
 		case IDETAPE_PC_RQ2:
 			idetape_media_access_finished (drive);
-			return;
+			return ide_stopped;
 		default:
 			printk (KERN_ERR "ide-tape: bug in IDETAPE_RQ_CMD macro\n");
 			idetape_end_request (0,HWGROUP (drive));
-			return;
+			return ide_stopped;
 	}
-	idetape_issue_packet_command (drive, pc);
+	return idetape_issue_packet_command (drive, pc);
 }
 
 /*

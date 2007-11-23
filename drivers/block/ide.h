@@ -353,14 +353,22 @@ typedef struct hwif_s {
 	} ide_hwif_t;
 
 /*
+ * Status returned from various ide_ functions
+ */
+typedef enum {
+	ide_stopped,	/* no drive operation was started */
+	ide_started	/* a drive operation was started, and a handler was set up */
+} ide_startstop_t;
+
+/*
  *  internal ide interrupt handler type
  */
-typedef void (ide_handler_t)(ide_drive_t *);
+typedef ide_startstop_t (ide_handler_t)(ide_drive_t *);
 
 typedef struct hwgroup_s {
-	spinlock_t		spinlock; /* protects "busy" and "handler" */
 	ide_handler_t		*handler;/* irq handler, if active */
-	int			busy;	/* BOOL: protects all fields below */
+	volatile int		busy;	/* BOOL: protects all fields below */
+	int			sleeping; /* BOOL: wake us up on timer expiry */
 	ide_drive_t		*drive;	/* current drive */
 	ide_hwif_t		*hwif;	/* ptr to current hwif in linked-list */
 	struct request		*rq;	/* current request */
@@ -443,13 +451,14 @@ read_proc_t proc_ide_read_geometry;
 #define PROC_IDE_READ_RETURN(page,start,off,count,eof,len) return 0;
 #endif
 
+
 /*
  * Subdrivers support.
  */
 #define IDE_SUBDRIVER_VERSION	1
 
 typedef int	(ide_cleanup_proc)(ide_drive_t *);
-typedef void 	(ide_do_request_proc)(ide_drive_t *, struct request *, unsigned long);
+typedef ide_startstop_t (ide_do_request_proc)(ide_drive_t *, struct request *, unsigned long);
 typedef void	(ide_end_request_proc)(byte, ide_hwgroup_t *);
 typedef int 	(ide_ioctl_proc)(ide_drive_t *, struct inode *, struct file *, unsigned int, unsigned long);
 typedef int	(ide_open_proc)(struct inode *, struct file *, ide_drive_t *);
@@ -457,7 +466,7 @@ typedef void 	(ide_release_proc)(struct inode *, struct file *, ide_drive_t *);
 typedef int	(ide_check_media_change_proc)(ide_drive_t *);
 typedef void	(ide_pre_reset_proc)(ide_drive_t *);
 typedef unsigned long (ide_capacity_proc)(ide_drive_t *);
-typedef void	(ide_special_proc)(ide_drive_t *);
+typedef ide_startstop_t (ide_special_proc)(ide_drive_t *);
 typedef void	(ide_setting_proc)(ide_drive_t *);
 
 typedef struct ide_driver_s {
@@ -545,9 +554,9 @@ byte ide_dump_status (ide_drive_t *drive, const char *msg, byte stat);
 
 /*
  * ide_error() takes action based on the error returned by the controller.
- * The calling function must return afterwards, to restart the request.
+ * The caller should return immediately after invoking this.
  */
-void ide_error (ide_drive_t *drive, const char *msg, byte stat);
+ide_startstop_t ide_error (ide_drive_t *drive, const char *msg, byte stat);
 
 /*
  * Issue a simple drive command
@@ -567,10 +576,11 @@ void ide_fixstring (byte *s, const int bytecount, const int byteswap);
  * This routine busy-waits for the drive status to be not "busy".
  * It then checks the status for all of the "good" bits and none
  * of the "bad" bits, and if all is okay it returns 0.  All other
- * cases return 1 after invoking ide_error() -- caller should return.
- *
+ * cases return 1 after doing "*startstop = ide_error()", and the
+ * caller should return the updated value of "startstop" in this case.
+ * "startstop" is unchanged when the function returns 0;
  */
-int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeout);
+int ide_wait_stat (ide_startstop_t *startstop, ide_drive_t *drive, byte good, byte bad, unsigned long timeout);
 
 /*
  * This routine is called from the partition-table code in genhd.c
@@ -594,7 +604,7 @@ int ide_xlate_1024 (kdev_t, int, const char *);
  * Start a reset operation for an IDE interface.
  * The caller should return immediately after invoking this.
  */
-void ide_do_reset (ide_drive_t *);
+ide_startstop_t ide_do_reset (ide_drive_t *);
 
 /*
  * This function is intended to be used prior to invoking ide_do_drive_cmd().
@@ -661,7 +671,7 @@ int ide_system_bus_speed (void);
  * ide_multwrite() transfers a block of up to mcount sectors of data
  * to a drive as part of a disk multwrite operation.
  */
-void ide_multwrite (ide_drive_t *drive, unsigned int mcount);
+int ide_multwrite (ide_drive_t *drive, unsigned int mcount);
 
 /*
  * ide_stall_queue() can be used by a drive to give excess bandwidth back
@@ -751,7 +761,7 @@ void ide_scan_pcibus (void) __init;
 #define BAD_DMA_DRIVE		0
 #define GOOD_DMA_DRIVE		1
 int ide_build_dmatable (ide_drive_t *drive);
-void ide_dma_intr  (ide_drive_t *drive);
+ide_startstop_t ide_dma_intr  (ide_drive_t *drive);
 int check_drive_lists (ide_drive_t *drive, int good_bad);
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);
 int ide_release_dma (ide_hwif_t *hwif);

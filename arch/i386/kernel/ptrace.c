@@ -80,12 +80,17 @@ static unsigned long get_long(struct task_struct * tsk,
 	pmd_t * pgmiddle;
 	pte_t * pgtable;
 	unsigned long page;
+	int fault;
 
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (pgd_none(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 0);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, current);
+		return 0;
 	}
 	if (pgd_bad(*pgdir)) {
 		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
@@ -94,8 +99,12 @@ repeat:
 	}
 	pgmiddle = pmd_offset(pgdir, addr);
 	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 0);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, current);
+		return 0;
 	}
 	if (pmd_bad(*pgmiddle)) {
 		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
@@ -104,8 +113,12 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 0);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, current);
+		return 0;
 	}
 	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
@@ -131,12 +144,17 @@ static void put_long(struct task_struct * tsk, struct vm_area_struct * vma, unsi
 	pmd_t *pgmiddle;
 	pte_t *pgtable;
 	unsigned long page;
+	int fault;
 
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (!pgd_present(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 1);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, current);
+		return;
 	}
 	if (pgd_bad(*pgdir)) {
 		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
@@ -145,8 +163,12 @@ repeat:
 	}
 	pgmiddle = pmd_offset(pgdir, addr);
 	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 1);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, current);
+		return;
 	}
 	if (pmd_bad(*pgmiddle)) {
 		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
@@ -155,13 +177,21 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 1);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, current);
+		return;
 	}
 	page = pte_page(*pgtable);
 	if (!pte_write(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 1);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, current);
+		return;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
 	if (MAP_NR(page) < max_mapnr)

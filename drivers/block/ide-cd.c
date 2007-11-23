@@ -519,7 +519,7 @@ static void cdrom_end_request (int uptodate, ide_drive_t *drive)
 
 /* Returns 0 if the request should be continued.
    Returns 1 if the request was ended. */
-static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
+static int cdrom_decode_status (ide_startstop_t *startstop, ide_drive_t *drive, int good_stat,
 				int *stat_ret)
 {
 	struct request *rq = HWGROUP(drive)->rq;
@@ -551,7 +551,7 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 				                      rq->buffer;
 			pc->stat = 1;
 			cdrom_end_request (1, drive);
-			ide_error (drive, "request sense failure", stat);
+			*startstop = ide_error (drive, "request sense failure", stat);
 			return 1;
 
 		} else if (cmd == PACKET_COMMAND) {
@@ -633,7 +633,7 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 			} else if ((err & ~ABRT_ERR) != 0) {
 				/* Go to the default handler
 				   for other errors. */
-				ide_error (drive, "cdrom_decode_status", stat);
+				*startstop = ide_error (drive, "cdrom_decode_status", stat);
 				return 1;
 			} else if ((++rq->errors > ERROR_MAX)) {
 				/* We've racked up too many retries.  Abort. */
@@ -649,6 +649,7 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 	}
 
 	/* Retry, or handle the next request. */
+	*startstop = ide_stopped;
 	return 1;
 }
 
@@ -660,13 +661,15 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
    called when the interrupt from the drive arrives.  Otherwise, HANDLER
    will be called immediately after the drive is prepared for the transfer. */
 
-static int cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
+static ide_startstop_t cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
 				       ide_handler_t *handler)
 {
+	ide_startstop_t startstop;
 	struct cdrom_info *info = drive->driver_data;
 
 	/* Wait for the controller to be idle. */
-	if (ide_wait_stat (drive, 0, BUSY_STAT, WAIT_READY)) return 1;
+	if (ide_wait_stat (&startstop, drive, 0, BUSY_STAT, WAIT_READY))
+		return startstop;
 
 	if (info->dma)
 		info->dma = !HWIF(drive)->dmaproc(ide_dma_read, drive);
@@ -686,12 +689,11 @@ static int cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
 	if (CDROM_CONFIG_FLAGS (drive)->drq_interrupt) {
 		ide_set_handler (drive, handler, WAIT_CMD);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG); /* packet command */
+		return ide_started;
 	} else {
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG); /* packet command */
-		(*handler) (drive);
+		return (*handler) (drive);
 	}
-
-	return 0;
 }
 
 
@@ -700,7 +702,7 @@ static int cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
    by cdrom_start_packet_command.
    HANDLER is the interrupt handler to call when the command completes
    or there's data ready. */
-static int cdrom_transfer_packet_command (ide_drive_t *drive,
+static ide_startstop_t cdrom_transfer_packet_command (ide_drive_t *drive,
                                           char *cmd_buf, int cmd_len,
 					  ide_handler_t *handler)
 {
@@ -708,14 +710,16 @@ static int cdrom_transfer_packet_command (ide_drive_t *drive,
 		/* Here we should have been called after receiving an interrupt
 		   from the device.  DRQ should how be set. */
 		int stat_dum;
+		ide_startstop_t startstop;
 
 		/* Check for errors. */
-		if (cdrom_decode_status (drive, DRQ_STAT, &stat_dum))
-			return 1;
+		if (cdrom_decode_status (&startstop, drive, DRQ_STAT, &stat_dum))
+			return startstop;
 	} else {
+		ide_startstop_t startstop;
 		/* Otherwise, we must wait for DRQ to get set. */
-		if (ide_wait_stat (drive, DRQ_STAT, BUSY_STAT, WAIT_READY))
-			return 1;
+		if (ide_wait_stat (&startstop, drive, DRQ_STAT, BUSY_STAT, WAIT_READY))
+			return startstop;
 	}
 
 	/* Arm the interrupt handler. */
@@ -724,7 +728,7 @@ static int cdrom_transfer_packet_command (ide_drive_t *drive,
 	/* Send the command to the device. */
 	atapi_output_bytes (drive, cmd_buf, cmd_len);
 
-	return 0;
+	return ide_started;
 }
 
 
@@ -826,12 +830,13 @@ int cdrom_read_check_ireason (ide_drive_t *drive, int len, int ireason)
 /*
  * Interrupt routine.  Called when a read request has completed.
  */
-static void cdrom_read_intr (ide_drive_t *drive)
+static ide_startstop_t cdrom_read_intr (ide_drive_t *drive)
 {
 	int stat;
 	int ireason, len, sectors_to_transfer, nskip;
 	struct cdrom_info *info = drive->driver_data;
 	int i, dma = info->dma, dma_error = 0;
+	ide_startstop_t startstop;
 
 	struct request *rq = HWGROUP(drive)->rq;
 
@@ -842,8 +847,8 @@ static void cdrom_read_intr (ide_drive_t *drive)
 			HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
 
-	if (cdrom_decode_status (drive, 0, &stat))
-		return;
+	if (cdrom_decode_status (&startstop, drive, 0, &stat))
+		return startstop;
  
 	if (dma) {
 		if (!dma_error) {
@@ -851,9 +856,9 @@ static void cdrom_read_intr (ide_drive_t *drive)
 				i -= rq->current_nr_sectors;
 				ide_end_request(1, HWGROUP(drive));
 			}
+			return ide_stopped;
 		} else
-			ide_error (drive, "dma error", stat);
-		return;
+			return ide_error (drive, "dma error", stat);
 	}
 
 	/* Read the interrupt reason and the transfer length. */
@@ -870,11 +875,12 @@ static void cdrom_read_intr (ide_drive_t *drive)
 			cdrom_end_request (0, drive);
 		} else
 			cdrom_end_request (1, drive);
-		return;
+		return ide_stopped;
 	}
 
 	/* Check that the drive is expecting to do the same thing we are. */
-	if (cdrom_read_check_ireason (drive, len, ireason)) return;
+	if (cdrom_read_check_ireason (drive, len, ireason))
+		return ide_stopped;
 
 	/* Assume that the drive will always provide data in multiples
 	   of at least SECTOR_SIZE, as it gets hairy to keep track
@@ -889,7 +895,7 @@ static void cdrom_read_intr (ide_drive_t *drive)
 			CDROM_CONFIG_FLAGS (drive)->limit_nframes = 1;
 		}
 		cdrom_end_request (0, drive);
-		return;
+		return ide_stopped;
 	}
 
 	/* The number of sectors we need to read from the drive. */
@@ -952,6 +958,7 @@ static void cdrom_read_intr (ide_drive_t *drive)
 	/* Done moving data!
 	   Wait for another interrupt. */
 	ide_set_handler (drive, &cdrom_read_intr, WAIT_CMD);
+	return ide_started;
 }
 
 
@@ -1019,7 +1026,7 @@ static int cdrom_read_from_buffer (ide_drive_t *drive)
  * However, for drq_interrupt devices, it is called from an interrupt
  * when the drive is ready to accept the command.
  */
-static void cdrom_start_read_continuation (ide_drive_t *drive)
+static ide_startstop_t cdrom_start_read_continuation (ide_drive_t *drive)
 {
 	struct packet_command pc;
 	struct request *rq = HWGROUP(drive)->rq;
@@ -1046,7 +1053,7 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
 			printk ("%s: cdrom_start_read_continuation: buffer botch (%ld)\n",
 				drive->name, rq->current_nr_sectors);
 			cdrom_end_request (0, drive);
-			return;
+			return ide_stopped;
 		}
 
 		sector -= nskip;
@@ -1072,22 +1079,22 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
 	put_unaligned(htonl (frame), (unsigned int *) &pc.c[2]);
 
 	/* Send the command to the drive and return. */
-	(void) cdrom_transfer_packet_command (drive, pc.c, sizeof (pc.c),
-					      &cdrom_read_intr);
+	return cdrom_transfer_packet_command (drive, pc.c, sizeof (pc.c), &cdrom_read_intr);
 }
 
 #define IDECD_SEEK_THRESHOLD	(1000)			/* 1000 blocks */
 #define IDECD_SEEK_TIMER	(2 * WAIT_MIN_SLEEP)	/* 40 ms */
 #define IDECD_SEEK_TIMEOUT     WAIT_CMD                /* 10 sec */
 
-static void cdrom_seek_intr (ide_drive_t *drive)
+static ide_startstop_t cdrom_seek_intr (ide_drive_t *drive)
 {
 	struct cdrom_info *info = drive->driver_data;
 	int stat;
 	static int retry = 10;
+	ide_startstop_t startstop;
 
-	if (cdrom_decode_status (drive, 0, &stat))
-		return;
+	if (cdrom_decode_status (&startstop, drive, 0, &stat))
+		return startstop;
 	CDROM_CONFIG_FLAGS(drive)->seeking = 1;
 
 	if (retry && jiffies - info->start_seek > IDECD_SEEK_TIMER) {
@@ -1096,9 +1103,10 @@ static void cdrom_seek_intr (ide_drive_t *drive)
 			drive->dsc_overlap = 0;
 		}
 	}
+	return ide_stopped;
 }
 
-static void cdrom_start_seek_continuation (ide_drive_t *drive)
+static ide_startstop_t cdrom_start_seek_continuation (ide_drive_t *drive)
 {
 	struct packet_command pc;
 	struct request *rq = HWGROUP(drive)->rq;
@@ -1113,22 +1121,22 @@ static void cdrom_start_seek_continuation (ide_drive_t *drive)
 	memset (&pc.c, 0, sizeof (pc.c));
 	pc.c[0] = SEEK;
 	put_unaligned(htonl (frame), (unsigned int *) &pc.c[2]);
-	(void) cdrom_transfer_packet_command (drive, pc.c, sizeof (pc.c), &cdrom_seek_intr);
+	return cdrom_transfer_packet_command (drive, pc.c, sizeof (pc.c), &cdrom_seek_intr);
 }
 
-static void cdrom_start_seek (ide_drive_t *drive, unsigned int block)
+static ide_startstop_t cdrom_start_seek (ide_drive_t *drive, unsigned int block)
 {
 	struct cdrom_info *info = drive->driver_data;
 
 	info->dma = 0;
 	info->start_seek = jiffies;
-	cdrom_start_packet_command (drive, 0, cdrom_start_seek_continuation);
+	return cdrom_start_packet_command (drive, 0, cdrom_start_seek_continuation);
 }
 
 /*
  * Start a read request from the CD-ROM.
  */
-static void cdrom_start_read (ide_drive_t *drive, unsigned int block)
+static ide_startstop_t cdrom_start_read (ide_drive_t *drive, unsigned int block)
 {
 	struct cdrom_info *info = drive->driver_data;
 	struct request *rq = HWGROUP(drive)->rq;
@@ -1148,7 +1156,7 @@ static void cdrom_start_read (ide_drive_t *drive, unsigned int block)
 
 	/* Satisfy whatever we can of this request from our cached sector. */
 	if (cdrom_read_from_buffer (drive))
-		return;
+		return ide_stopped;
 
 	/* Clear the local sector buffer. */
 	info->nsectors_buffered = 0;
@@ -1159,8 +1167,7 @@ static void cdrom_start_read (ide_drive_t *drive, unsigned int block)
 		info->dma = 0;
 
 	/* Start sending the read request to the drive. */
-	cdrom_start_packet_command (drive, 32768,
-				    cdrom_start_read_continuation);
+	return cdrom_start_packet_command (drive, 32768, cdrom_start_read_continuation);
 }
 
 
@@ -1178,15 +1185,16 @@ cdrom_lockdoor (ide_drive_t *drive, int lockflag,
 
 
 /* Interrupt routine for packet command completion. */
-static void cdrom_pc_intr (ide_drive_t *drive)
+static ide_startstop_t cdrom_pc_intr (ide_drive_t *drive)
 {
 	int ireason, len, stat, thislen;
 	struct request *rq = HWGROUP(drive)->rq;
 	struct packet_command *pc = (struct packet_command *)rq->buffer;
+	ide_startstop_t startstop;
 
 	/* Check for errors. */
-	if (cdrom_decode_status (drive, 0, &stat))
-		return;
+	if (cdrom_decode_status (&startstop, drive, 0, &stat))
+		return startstop;
 
 	/* Read the interrupt reason and the transfer length. */
 	ireason = IN_BYTE (IDE_NSECTOR_REG);
@@ -1219,7 +1227,7 @@ static void cdrom_pc_intr (ide_drive_t *drive)
 			pc->stat = 1;
 			cdrom_end_request (1, drive);
 		}
-		return;
+		return ide_stopped;
 	}
 
 	/* Figure out how much data to transfer. */
@@ -1288,21 +1296,21 @@ static void cdrom_pc_intr (ide_drive_t *drive)
 
 	/* Now we wait for another interrupt. */
 	ide_set_handler (drive, &cdrom_pc_intr, WAIT_CMD);
+	return ide_started;
 }
 
 
-static void cdrom_do_pc_continuation (ide_drive_t *drive)
+static ide_startstop_t cdrom_do_pc_continuation (ide_drive_t *drive)
 {
 	struct request *rq = HWGROUP(drive)->rq;
 	struct packet_command *pc = (struct packet_command *)rq->buffer;
 
 	/* Send the command to the drive and return. */
-	cdrom_transfer_packet_command (drive, pc->c,
-				       sizeof (pc->c), &cdrom_pc_intr);
+	return cdrom_transfer_packet_command (drive, pc->c, sizeof (pc->c), &cdrom_pc_intr);
 }
 
 
-static void cdrom_do_packet_command (ide_drive_t *drive)
+static ide_startstop_t cdrom_do_packet_command (ide_drive_t *drive)
 {
 	int len;
 	struct request *rq = HWGROUP(drive)->rq;
@@ -1317,7 +1325,7 @@ static void cdrom_do_packet_command (ide_drive_t *drive)
 	pc->stat = 0;
 
 	/* Start sending the command to the drive. */
-	cdrom_start_packet_command (drive, len, cdrom_do_pc_continuation);
+	return cdrom_start_packet_command (drive, len, cdrom_do_pc_continuation);
 }
 
 
@@ -1401,19 +1409,20 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 /****************************************************************************
  * cdrom driver request routine.
  */
-static
-void ide_do_rw_cdrom (ide_drive_t *drive, struct request *rq, unsigned long block)
+static ide_startstop_t
+ide_do_rw_cdrom (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
 	if (rq -> cmd == PACKET_COMMAND || rq -> cmd == REQUEST_SENSE_COMMAND)
-		cdrom_do_packet_command (drive);
+		return cdrom_do_packet_command (drive);
 	else if (rq -> cmd == RESET_DRIVE_COMMAND) {
 		cdrom_end_request (1, drive);
-		ide_do_reset (drive);
-		return;
+		return ide_do_reset (drive);
 	} else if (rq -> cmd != READ) {
 		printk ("ide-cd: bad cmd %d\n", rq -> cmd);
 		cdrom_end_request (0, drive);
+		return ide_stopped;
 	} else {
+		ide_startstop_t action;
 		struct cdrom_info *info = drive->driver_data;
 
 		if (CDROM_CONFIG_FLAGS(drive)->seeking) {
@@ -1423,17 +1432,18 @@ void ide_do_rw_cdrom (ide_drive_t *drive, struct request *rq, unsigned long bloc
 			if ((stat & SEEK_STAT) != SEEK_STAT) {
 				if (elpased < IDECD_SEEK_TIMEOUT) {
 					ide_stall_queue (drive, IDECD_SEEK_TIMER);
-					return;
+					return ide_stopped;
 				}
 				printk ("%s: DSC timeout\n", drive->name);
 			}
 			CDROM_CONFIG_FLAGS(drive)->seeking = 0;
 		}
 		if (IDE_LARGE_SEEK(info->last_block, block, IDECD_SEEK_THRESHOLD) && drive->dsc_overlap)
-			cdrom_start_seek (drive, block);
+			action = cdrom_start_seek (drive, block);
 		else
-			cdrom_start_read (drive, block);
+			action = cdrom_start_read (drive, block);
 		info->last_block = block;
+		return action;
 	}
 }
 
@@ -2890,8 +2900,11 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		struct atapi_capabilities_page cap;
 	} buf;
 
-	if (CDROM_CONFIG_FLAGS (drive)->nec260)
+	if (CDROM_CONFIG_FLAGS (drive)->nec260) {
+		CDROM_CONFIG_FLAGS (drive)->no_eject = 0;
+		CDROM_CONFIG_FLAGS (drive)->audio_play = 1;
 		return nslots;
+	}
 
 	do {	/* we seem to get stat=0x01,err=0x00 the first time (??) */
 		if (attempts-- <= 0)

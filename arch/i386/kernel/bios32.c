@@ -1095,9 +1095,8 @@ static void __init pcibios_scan_buglist(struct pci_bus *b)
  * for buggy PCI BIOS'es :-[).
  */
 
-extern int skip_ioapic_setup;
-
 extern int skip_ioapic_setup;	/* defined in arch/i386/kernel/smp.c */
+
 static void __init pcibios_fixup_devices(void)
 {
 	struct pci_dev *dev;

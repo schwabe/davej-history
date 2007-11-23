@@ -17,6 +17,9 @@
  *
  *  IDT Winchip tweaks, misc clean ups.
  *	Dave Jones <dave@powertweak.com>, August 1999
+ *
+ *	Added proper L2 cache detection for Coppermine
+ *	Dragan Stancevic <visitor@valinux.com>, October 1999
  */
 
 /*
@@ -838,6 +841,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 					break;
 
 				case 0x42:
+				case 0x82: /*Detect 256-Kbyte cache on Coppermine*/ 
 					cache_size = 256;
 					break;
 

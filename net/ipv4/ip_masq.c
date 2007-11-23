@@ -10,6 +10,9 @@
  *	See ip_fw.c for original log
  *
  * Fixes:
+ *	Joseph Gooch		:	Modified ip_fw_masquerade() to do a ip_route_output()
+ *	 (help by Dan Drown)	:	to choose the proper local address.
+ *	 (and Alexey)		:
  *	Juan Jose Ciarlante	:	Modularized application masquerading (see ip_masq_app.c)
  *	Juan Jose Ciarlante	:	New struct ip_masq_seq that holds output/input delta seq.
  *	Juan Jose Ciarlante	:	Added hashed lookup by proto,maddr,mport and proto,saddr,sport
@@ -1139,6 +1142,22 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 		 *	invalid packets.
 		 */
 		return -1;
+	}
+
+	/* Lets determine our maddr now, shall we? */
+	if (maddr == 0) {
+		struct rtable *rt;
+		struct rtable *skb_rt = (struct rtable*)skb->dst;
+		struct device *skb_dev = skb_rt->u.dst.dev;
+
+		if (ip_route_output(&rt, iph->daddr, 0, RT_TOS(iph->tos)|RTO_CONN, skb_dev?skb_dev->ifindex:0)) {
+			/* Fallback on old method */
+			maddr = inet_select_addr(skb_dev, skb_rt->rt_gateway, RT_SCOPE_UNIVERSE);
+		} else {
+			/* Route lookup succeeded */
+			maddr = rt->rt_src;
+			ip_rt_put(rt);
+		}
 	}
 
 	switch (iph->protocol) {

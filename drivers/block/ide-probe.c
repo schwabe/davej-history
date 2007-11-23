@@ -560,10 +560,6 @@ static int init_irq (ide_hwif_t *hwif)
 		hwgroup->handler  = NULL;
 		hwgroup->drive    = NULL;
 		hwgroup->busy     = 0;
-		hwgroup->spinlock = (spinlock_t)SPIN_LOCK_UNLOCKED;
-#if (DEBUG_SPINLOCK > 0)
-		printk("hwgroup(%s) spinlock is %p\n", hwif->name,  &hwgroup->spinlock);	/* FIXME */
-#endif
 		init_timer(&hwgroup->timer);
 		hwgroup->timer.function = &ide_timer_expiry;
 		hwgroup->timer.data = (unsigned long) hwgroup;

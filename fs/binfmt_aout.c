@@ -296,6 +296,8 @@ static unsigned long * create_aout_tables(char * p, struct linux_binprm * bprm)
 	return sp;
 }
 
+static int warnings = 0;
+
 /*
  * These are the functions used to load a.out style executables and shared
  * libraries.  There is no binary dependent code anywhere else.
@@ -311,7 +313,6 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	unsigned long fd_offset;
 	unsigned long rlim;
 	int retval;
-	static int warnings = 0;
 
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
@@ -327,15 +328,6 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	if (N_MAGIC(ex) == ZMAGIC && fd_offset != BLOCK_SIZE) {
 		if(warnings++<10)
 			printk(KERN_NOTICE "N_TXTOFF != BLOCK_SIZE. See a.out.h.\n");
-		return -ENOEXEC;
-	}
-
-	if (N_MAGIC(ex) == ZMAGIC && ex.a_text &&
-	    bprm->dentry->d_inode->i_op &&
-	    bprm->dentry->d_inode->i_op->bmap &&
-	    (fd_offset < bprm->dentry->d_inode->i_sb->s_blocksize)) {
-		if(warnings++<10)
-			printk(KERN_NOTICE "N_TXTOFF < BLOCK_SIZE. Please convert binary.\n");
 		return -ENOEXEC;
 	}
 #endif
@@ -415,11 +407,17 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 		fd = open_dentry(bprm->dentry, O_RDONLY);
 		if (fd < 0)
 			return fd;
-		file = fcheck(fd);
+		file = fget(fd);
 
-		if (!file->f_op || !file->f_op->mmap) {
+		if (!file->f_op || !file->f_op->mmap ||
+		    fd_offset & (bprm->dentry->d_inode->i_sb->s_blocksize-1)) {
+			if (warnings++<10)
+				printk(KERN_NOTICE
+				       "fd_offset is not blocksize aligned. Loading %s in anonymous memory.\n",
+				       file->f_dentry->d_name.name);
+			fput(file);
 			sys_close(fd);
-			do_mmap(NULL, 0, ex.a_text+ex.a_data,
+			do_mmap(NULL, N_TXTADDR(ex), ex.a_text+ex.a_data,
 				PROT_READ|PROT_WRITE|PROT_EXEC,
 				MAP_FIXED|MAP_PRIVATE, 0);
 			read_exec(bprm->dentry, fd_offset,
@@ -436,6 +434,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 			fd_offset);
 
 		if (error != N_TXTADDR(ex)) {
+			fput(file);
 			sys_close(fd);
 			send_sig(SIGKILL, current, 0);
 			return error;
@@ -445,6 +444,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 				PROT_READ | PROT_WRITE | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 				fd_offset + ex.a_text);
+		fput(file);
 		sys_close(fd);
 		if (error != N_DATADDR(ex)) {
 			send_sig(SIGKILL, current, 0);
@@ -499,7 +499,6 @@ do_load_aout_library(int fd)
 	unsigned long error;
 	int retval;
 	loff_t offset = 0;
-	static int warnings = 0;
 	struct exec ex;
 
 	retval = -EACCES;
@@ -525,13 +524,6 @@ do_load_aout_library(int fd)
 		goto out_putf;
 	}
 
-	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) &&
-	    (N_TXTOFF(ex) < inode->i_sb->s_blocksize)) {
-	    	if(warnings++<10)
-			printk("N_TXTOFF < BLOCK_SIZE. Please convert library\n");
-		goto out_putf;
-	}
-
 	if (N_FLAGS(ex))
 		goto out_putf;
 
@@ -540,6 +532,20 @@ do_load_aout_library(int fd)
 
 	start_addr =  ex.a_entry & 0xfffff000;
 
+	if (N_TXTOFF(ex) & (inode->i_sb->s_blocksize-1)) {
+		if (warnings++<10)
+			printk(KERN_NOTICE
+			       "N_TXTOFF is not blocksize aligned. Loading library %s in anonymous memory.\n",
+			       file->f_dentry->d_name.name);
+		do_mmap(NULL, start_addr, ex.a_text + ex.a_data,
+			PROT_READ | PROT_WRITE | PROT_EXEC,
+			MAP_FIXED| MAP_PRIVATE, 0);
+		read_exec(file->f_dentry, N_TXTOFF(ex),
+			  (char *)start_addr, ex.a_text + ex.a_data, 0);
+		flush_icache_range((unsigned long) start_addr,
+				   (unsigned long) start_addr + ex.a_text + ex.a_data);
+		goto map_bss;
+	}
 	/* Now use mmap to map the library into memory. */
 	error = do_mmap(file, start_addr, ex.a_text + ex.a_data,
 			PROT_READ | PROT_WRITE | PROT_EXEC,
@@ -549,6 +555,7 @@ do_load_aout_library(int fd)
 	if (error != start_addr)
 		goto out_putf;
 
+ map_bss:
 	len = PAGE_ALIGN(ex.a_text + ex.a_data);
 	bss = ex.a_text + ex.a_data + ex.a_bss;
 	if (bss > len) {

@@ -50,7 +50,14 @@ good_area:
 	start &= PAGE_MASK;
 
 	for (;;) {
-		handle_mm_fault(current,vma, start, 1);
+	survive:
+		{
+			int fault = handle_mm_fault(current,vma, start, 1);
+			if (!fault)
+				goto do_sigbus;
+			if (fault < 0)
+				goto out_of_memory;
+		}
 		if (!size)
 			break;
 		size--;
@@ -73,6 +80,19 @@ check_stack:
 
 bad_area:
 	return 0;
+
+do_sigbus:
+	force_sig(SIGBUS, current);
+	goto bad_area;
+
+out_of_memory:
+	if (current->pid == 1)
+	{
+		current->policy |= SCHED_YIELD;
+		schedule();
+		goto survive;
+	}
+	goto bad_area;
 }
 
 asmlinkage void do_invalid_op(struct pt_regs *, unsigned long);
@@ -162,8 +182,14 @@ good_area:
 	 * make sure we exit gracefully rather than endlessly redo
 	 * the fault.
 	 */
-	if (!handle_mm_fault(tsk, vma, address, write))
-		goto do_sigbus;
+survive:
+	{
+		int fault = handle_mm_fault(tsk, vma, address, write);
+		if (!fault)
+			goto do_sigbus;
+		if (fault < 0)
+			goto out_of_memory;
+	}
 
 	/*
 	 * Did it hit the DOS screen memory VA from vm86 mode?
@@ -255,6 +281,34 @@ no_context:
  * We ran out of memory, or some other thing happened to us that made
  * us unable to handle the page fault gracefully.
  */
+out_of_memory:
+	if (tsk->pid == 1)
+	{
+		tsk->policy |= SCHED_YIELD;
+		schedule();
+		goto survive;
+	}
+	up(&mm->mmap_sem);
+	if (error_code & 4)
+	{
+		if (!((regs->eflags >> 12) & 3))
+		{
+			printk("VM: killing process %s\n", tsk->comm);
+			do_exit(SIGKILL);
+		}
+		else
+		{
+			/*
+			 * The task is running with privilegies and so we
+			 * trust it and we give it a chance to die gracefully.
+			 */
+			printk("VM: terminating process %s\n", tsk->comm);
+			force_sig(SIGTERM, current);
+			return;
+		}
+	}
+	goto no_context;
+
 do_sigbus:
 	up(&mm->mmap_sem);
 

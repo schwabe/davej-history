@@ -1341,7 +1341,6 @@ int dquot_transfer(struct dentry *dentry, struct iattr *iattr, uid_t initiator)
 		dquot_incr_blocks(transfer_to[cnt], blocks);
 
 		unlock_dquot(transfer_from[cnt]);
-		dqput(transfer_from[cnt]);
 		if (inode->i_dquot[cnt] != NODQUOT) {
 			struct dquot *temp = inode->i_dquot[cnt];
 			inode->i_dquot[cnt] = transfer_to[cnt];
@@ -1351,20 +1350,20 @@ int dquot_transfer(struct dentry *dentry, struct iattr *iattr, uid_t initiator)
 			unlock_dquot(transfer_to[cnt]);
 			dqput(transfer_to[cnt]);
 		}
+		dqput(transfer_from[cnt]);
 	}
 
 	return 0;
 put_all:
 	for (disc = 0; disc < cnt; disc++) {
 		/* There should be none or both pointers set but... */
-		if (transfer_to[disc] != NODQUOT) {
+		if (transfer_to[disc] != NODQUOT)
 			unlock_dquot(transfer_to[disc]);
-			dqput(transfer_to[disc]);
-		}
-		if (transfer_from[disc] != NODQUOT) {
+		if (transfer_from[disc] != NODQUOT)
 			unlock_dquot(transfer_from[disc]);
-			dqput(transfer_from[disc]);
-		}
+		/* dqput() tests for NODQUOT itself... */
+		dqput(transfer_from[disc]);
+		dqput(transfer_to[disc]);
 	}
 	return error;
 }

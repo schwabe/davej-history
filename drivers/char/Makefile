@@ -380,9 +380,11 @@ endif
 
 ifeq ($(CONFIG_VIDEO_ZORAN),y)
 L_OBJS += buz.o
+L_I2C=y
 else
   ifeq ($(CONFIG_VIDEO_ZORAN),m)
     M_OBJS += buz.o
+    M_I2C=y
   endif
 endif
 

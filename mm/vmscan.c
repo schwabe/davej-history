@@ -308,7 +308,8 @@ static int swap_out_process(struct task_struct * p, int gfp_mask)
 static int swap_out(unsigned int priority, int gfp_mask)
 {
 	struct task_struct * p, * pbest;
-	int counter, assign, max_cnt;
+	int assign = 0, counter;
+	unsigned long max_cnt;
 
 	/* 
 	 * We make one or two passes through the task list, indexed by 
@@ -327,11 +328,8 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	counter = nr_tasks / (priority+1);
 	if (counter < 1)
 		counter = 1;
-	if (counter > nr_tasks)
-		counter = nr_tasks;
 
 	for (; counter >= 0; counter--) {
-		assign = 0;
 		max_cnt = 0;
 		pbest = NULL;
 	select:
@@ -343,7 +341,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	 		if (p->mm->rss <= 0)
 				continue;
 			/* Refresh swap_cnt? */
-			if (assign)
+			if (assign == 1)
 				p->mm->swap_cnt = p->mm->rss;
 			if (p->mm->swap_cnt > max_cnt) {
 				max_cnt = p->mm->swap_cnt;
@@ -351,6 +349,8 @@ static int swap_out(unsigned int priority, int gfp_mask)
 			}
 		}
 		read_unlock(&tasklist_lock);
+		if (assign == 1)
+			assign = 2;
 		if (!pbest) {
 			if (!assign) {
 				assign = 1;
@@ -435,7 +435,7 @@ void __init kswapd_setup(void)
        printk ("Starting kswapd v%.*s\n", i, s);
 }
 
-static struct task_struct *kswapd_process;
+static struct wait_queue * kswapd_wait = NULL;
 
 /*
  * The background pageout daemon, started as a kernel thread
@@ -455,7 +455,6 @@ int kswapd(void *unused)
 {
 	struct task_struct *tsk = current;
 
-	kswapd_process = tsk;
 	tsk->session = 1;
 	tsk->pgrp = 1;
 	strcpy(tsk->comm, "kswapd");
@@ -484,16 +483,18 @@ int kswapd(void *unused)
 		 * the processes needing more memory will wake us
 		 * up on a more timely basis.
 		 */
-		do {
-			if (nr_free_pages >= freepages.high)
-				break;
-
-			if (!do_try_to_free_pages(GFP_KSWAPD))
-				break;
-		} while (!tsk->need_resched);
-		run_task_queue(&tq_disk);
-		tsk->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(HZ);
+		interruptible_sleep_on_timeout(&kswapd_wait, HZ);
+		while (nr_free_pages < freepages.high)
+		{
+			if (do_try_to_free_pages(GFP_KSWAPD))
+			{
+				if (tsk->need_resched)
+					schedule();
+				continue;
+			}
+			tsk->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(10*HZ);
+		}
 	}
 }
 
@@ -516,7 +517,7 @@ int try_to_free_pages(unsigned int gfp_mask)
 {
 	int retval = 1;
 
-	wake_up_process(kswapd_process);
+	wake_up_interruptible(&kswapd_wait);
 	if (gfp_mask & __GFP_WAIT)
 		retval = do_try_to_free_pages(gfp_mask);
 	return retval;

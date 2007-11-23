@@ -130,15 +130,17 @@ void swap_free(unsigned long entry)
 	offset = SWP_OFFSET(entry);
 	if (offset >= p->max)
 		goto bad_offset;
-	if (offset < p->lowest_bit)
-		p->lowest_bit = offset;
-	if (offset > p->highest_bit)
-		p->highest_bit = offset;
 	if (!p->swap_map[offset])
 		goto bad_free;
 	if (p->swap_map[offset] < SWAP_MAP_MAX) {
 		if (!--p->swap_map[offset])
+		{
+			if (offset < p->lowest_bit)
+				p->lowest_bit = offset;
+			if (offset > p->highest_bit)
+				p->highest_bit = offset;
 			nr_swap_pages++;
+		}
 	}
 #ifdef DEBUG_SWAP
 	printk("DebugVM: swap_free(entry %08lx, count now %d)\n",

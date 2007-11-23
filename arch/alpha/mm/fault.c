@@ -120,9 +120,18 @@ good_area:
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	}
-	handle_mm_fault(current, vma, address, cause > 0);
+survive:
+	{
+		int fault = handle_mm_fault(current, vma, address, cause > 0);
+		if (!fault)
+			goto do_sigbus;
+		if (fault < 0)
+			goto out_of_memory;
+	}
 	up(&mm->mmap_sem);
-	goto out;
+ out_unlock:
+	unlock_kernel();
+	return;
 
 /*
  * Something tried to access memory that isn't in our memory map..
@@ -133,9 +142,10 @@ bad_area:
 
 	if (user_mode(regs)) {
 		force_sig(SIGSEGV, current);
-		goto out;
+		goto out_unlock;
 	}
 
+no_context:
 	/* Are we prepared to handle this fault as an exception?  */
 	if ((fixup = search_exception_table(regs->pc)) != 0) {
 		unsigned long newpc;
@@ -143,7 +153,7 @@ bad_area:
 		printk("%s: Exception at [<%lx>] (%lx)\n",
 		       current->comm, regs->pc, newpc);
 		regs->pc = newpc;
-		goto out;
+		goto out_unlock;
 	}
 
 /*
@@ -154,7 +164,37 @@ bad_area:
 	       "virtual address %016lx\n", address);
 	die_if_kernel("Oops", regs, cause, (unsigned long*)regs - 16);
 	do_exit(SIGKILL);
- out:
-	unlock_kernel();
-}
 
+/*
+ * We ran out of memory, or some other thing happened to us that made
+ * us unable to handle the page fault gracefully.
+ */
+out_of_memory:
+	if (current->pid == 1)
+	{
+		current->policy |= SCHED_YIELD;
+		schedule();
+		goto survive;
+	}
+	up(&mm->mmap_sem);
+	if (user_mode(regs))
+	{
+		printk("VM: killing process %s\n", current->comm);
+		do_exit(SIGKILL);
+	}
+	goto no_context;
+
+do_sigbus:
+	up(&mm->mmap_sem);
+
+	/*
+	 * Send a sigbus, regardless of whether we were in kernel
+	 * or user mode.
+	 */
+	force_sig(SIGBUS, current);
+
+	/* Kernel mode? Handle exceptions or die */
+	if (!user_mode(regs))
+		goto no_context;
+	goto out_unlock;
+}

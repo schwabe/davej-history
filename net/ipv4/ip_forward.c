@@ -10,6 +10,7 @@
  * Authors:	see ip.c
  *
  * Fixes:
+ *		Joseph Gooch	:	Removed maddr selection for ip_masq, now done in ip_masq.c
  *		Many		:	Split from ip.c , see ip_input.c for 
  *					history.
  *		Dave Gregorich	:	NULL ip_rt_put fix for multicast 
@@ -168,7 +169,6 @@ int ip_forward(struct sk_buff *skb)
 		 *	and skip the firewall checks
 		 */
 		if (iph->protocol == IPPROTO_ICMP) {
-			__u32 maddr;
 #ifdef CONFIG_IP_MASQUERADE_ICMP
 			struct icmphdr *icmph = (struct icmphdr *)((char*)iph + (iph->ihl << 2));
 			if ((icmph->type==ICMP_DEST_UNREACH)||
@@ -187,7 +187,7 @@ int ip_forward(struct sk_buff *skb)
 					/* ICMP matched - skip firewall */
 					goto skip_call_fw_firewall;
 #ifdef CONFIG_IP_MASQUERADE_ICMP
-			       }
+			}
 #endif				
 		}
 		if (rt->rt_flags&RTCF_MASQ)
