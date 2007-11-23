@@ -692,7 +692,7 @@ void dquot_initialize(struct inode *inode, short type)
 	short cnt;
 	struct dquot *tmp;
 
-	if (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode)) {
+	if (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode) || S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
 		for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
 			if (type != -1 && cnt != type)
 				continue;
@@ -843,6 +843,15 @@ int dquot_transfer(struct inode *inode, struct iattr *iattr, char direction)
 		blocks = isize_to_blocks(inode->i_size, BLOCK_SIZE);
 	else
 		blocks = (inode->i_blocks / 2);
+		
+		
+	/*
+	 *	This shouldnt be needed but the goal is to fix 2.0 not
+	 *	do things in best of Torvalds style. Thats for 2.1...
+	 */
+	 
+	if(S_ISFIFO(inode->i_mode)||S_ISSOCK(inode->i_mode))
+		blocks = 0;
 
 	/*
 	 * Build the transfer_from and transfer_to lists and check quotas to see

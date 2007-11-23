@@ -167,9 +167,6 @@ int ext2_sync_file (struct inode * inode, struct file * file)
 {
 	int wait, err = 0;
 
-	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
-	     S_ISLNK(inode->i_mode)))
-		return -EINVAL;
 	if (S_ISLNK(inode->i_mode) && !(inode->i_blocks))
 		/*
 		 * Don't sync fast links!

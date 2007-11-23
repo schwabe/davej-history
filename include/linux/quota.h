@@ -169,6 +169,8 @@ struct dquot {
    kdev_t dq_dev;                /* Device this applies to */
    short dq_flags;		/* see DQ_* */
    short dq_count;		/* reference count */
+   short dq_locknest;   	/* lock nesting */	
+   struct task_struct *dq_lockproc;	/* process holding the lock */
    struct vfsmount *dq_mnt;     /* vfsmountpoint this applies to */
    struct dqblk dq_dqb;         /* diskquota usage */
    struct wait_queue *dq_wait;	/* pointer to waitqueue */
