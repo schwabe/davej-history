@@ -820,6 +820,7 @@ void tcp_send_synack_probe(unsigned long saddr, unsigned long daddr, struct tcph
 	t1->urg = 0;
 	t1->rst = 0;
 	t1->psh = 0;
+	t1->fin = 0;		/* In case someone sent us a SYN|FIN frame! */
 	t1->doff = sizeof(*t1)/4;
 
 	tcp_send_check(t1, saddr, daddr, sizeof(*t1), buff);

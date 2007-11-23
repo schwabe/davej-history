@@ -261,6 +261,7 @@ sb16_set_dma_hw (sb_devc * devc)
   return 1;
 }
 
+#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
 static void
 sb16_set_mpu_port(sb_devc *devc, struct address_info *hw_config)
 {
@@ -283,6 +284,7 @@ sb16_set_mpu_port(sb_devc *devc, struct address_info *hw_config)
 		printk("SB16: Invalid MIDI I/O port %x\n", hw_config->io_base);
 	}
 }
+#endif
 
 static int
 sb16_set_irq_hw (sb_devc * devc, int level)

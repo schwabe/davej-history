@@ -143,7 +143,7 @@ extern void enable_irq(unsigned int);
 	"movl "SYMBOL_NAME_STR(apic_reg)", %edx\n\t" \
 	"movl 32(%edx), %eax\n\t" \
 	"shrl $24,%eax\n\t" \
-	"andb $0x0F,%al\n"
+	"andl $0x0F,%eax\n"
 
 #define	ENTER_KERNEL \
 	"pushl %eax\n\t" \
@@ -165,10 +165,10 @@ extern void enable_irq(unsigned int);
 	"movb $1, "SYMBOL_NAME_STR(smp_blocked_interrupt_pending)"\n\t" \
 	"2: " \
         SMP_PROF_INT_SPINS \
-	"btl %al, "SYMBOL_NAME_STR(smp_invalidate_needed)"\n\t" \
+	"btl %eax, "SYMBOL_NAME_STR(smp_invalidate_needed)"\n\t" \
 	"jnc 5f\n\t" \
 	"lock\n\t" \
-	"btrl %al, "SYMBOL_NAME_STR(smp_invalidate_needed)"\n\t" \
+	"btrl %eax, "SYMBOL_NAME_STR(smp_invalidate_needed)"\n\t" \
 	"jnc 5f\n\t" \
 	"movl %cr3,%edx\n\t" \
 	"movl %edx,%cr3\n" \

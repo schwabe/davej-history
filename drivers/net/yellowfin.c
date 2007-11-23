@@ -16,7 +16,7 @@
 	http://cesdis.gsfc.nasa.gov/linux/drivers/yellowfin.html
 */
 
-static const char *version = "yellowfin.c:v0.11 1/21/97 becker@cesdis.gsfc.nasa.gov\n";
+static const char *version = "yellowfin.c:v0.99 1/21/98 becker@cesdis.gsfc.nasa.gov\n";
 
 /* A few user-configurable values. */
 

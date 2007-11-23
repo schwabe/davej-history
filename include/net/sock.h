@@ -260,8 +260,7 @@ struct sock
 						   'timed out' */
 	unsigned char		protocol;
 	volatile unsigned char	state;
-	unsigned char		ack_backlog;
-	unsigned char		max_ack_backlog;
+	unsigned short		ack_backlog;
 	unsigned char		priority;
 	unsigned char		debug;
 	int			rcvbuf;
@@ -340,7 +339,12 @@ struct sock
 	void			(*data_ready)(struct sock *sk,int bytes);
 	void			(*write_space)(struct sock *sk);
 	void			(*error_report)(struct sock *sk);
-  
+
+  /*
+   *	Moved solely for 2.0 to keep binary module compatibility stuff straight.
+   */
+   
+	unsigned short		max_ack_backlog;  
 };
 
 /*

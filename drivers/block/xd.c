@@ -163,6 +163,8 @@ static u_char xd_override = 0, xd_type = 0;
 static u_short xd_iobase = 0x320;
 static int xd_geo[XD_MAXDRIVES*3] = { 0,0,0,0,0,0 };
 
+static int xd[5];
+
 static volatile int xdc_busy = 0;
 static struct wait_queue *xdc_wait = NULL;
 
@@ -204,6 +206,7 @@ static u_char xd_detect (u_char *controller,u_char **address)
 		for (j = 1; j < (sizeof(xd_sigs) / sizeof(xd_sigs[0])) && !found; j++)
 			if (!memcmp(xd_bases[i] + xd_sigs[j].offset,xd_sigs[j].string,strlen(xd_sigs[j].string))) {
 				*controller = j;
+				xd_type = j;
 				*address = xd_bases[i];
 				found++;
 			}
@@ -703,9 +706,10 @@ static void xd_dtc_init_controller (u_char *address)
 	switch ((u_long) address) {
 		case 0x00000:
 		case 0xC8000:	break;			/*initial: 0x320 */
-		case 0xCA000:	xd_iobase = 0x324; break;
+		case 0xCA000:	if (xd[3]<=0) xd_iobase = 0x324; 
+				break;
 		case 0xD0000:				/*5150CX*/
-		case 0xD8000:	break;			/*5150CX*/
+		case 0xD8000:	break;			/*5150CX & 5150XL*/
 		default:        printk("xd_dtc_init_controller: unsupported BIOS address %p\n",address);
 				break;
 	}

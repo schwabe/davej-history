@@ -397,6 +397,8 @@ int     ppa_detect( Scsi_Host_Template * host )
 {       struct  Scsi_Host       *hreg;
         int     rs;
 
+        host->proc_dir = &proc_scsi_ppa;
+
         /* can we have the ports ? */
 
         if (check_region(ppa_base,3)) {
@@ -416,8 +418,6 @@ int     ppa_detect( Scsi_Host_Template * host )
         }
 
         /* now the glue ... */
-
-        host->proc_dir = &proc_scsi_ppa;
 
         request_region(ppa_base,3,"ppa");
 

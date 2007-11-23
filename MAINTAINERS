@@ -418,6 +418,12 @@ M:	hpa@zytor.com
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+WD7000 SCSI DRIVER
+P:	Miroslav Zagorac
+M:	zaga@fly.cc.fer.hr
+L:	linux-scsi@vger.rutgers.edu
+S:	Maintained
+
 REST:
 P:	Linus Torvalds
 S:	Buried alive in email

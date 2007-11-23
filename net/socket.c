@@ -588,7 +588,7 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 	if ((fd = get_fd(SOCK_INODE(sock))) < 0) 
 	{
 		sock_release(sock);
-		return(-EINVAL);
+		return fd;
 	}
 
 	sock->file=current->files->fd[fd];

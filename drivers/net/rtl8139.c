@@ -1,6 +1,6 @@
 /* rtl8139.c: A RealTek RTL8129/8139 Fast Ethernet driver for Linux. */
 /*
-	Written 1997 by Donald Becker.
+	Written 1997-1998 by Donald Becker.
 
 	This software may be used and distributed according to the terms
 	of the GNU Public License, incorporated herein by reference.
@@ -18,7 +18,7 @@
 */
 
 static const char *version =
-"rtl8139.c:v0.13 10/27/97 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/rtl8139.html\n";
+"rtl8139.c:v0.99A 2/7/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/rtl8139.html\n";
 
 /* A few user-configurable values. */
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
@@ -41,7 +41,7 @@ static int max_interrupt_work = 10;
 
 /* Operational parameters that usually are not changed. */
 /* Time in jiffies before concluding the transmitter is hung. */
-#define TX_TIMEOUT  ((2000*HZ)/1000)
+#define TX_TIMEOUT  ((4000*HZ)/1000)
 
 #include <linux/config.h>
 #ifdef MODULE
@@ -75,38 +75,9 @@ static int max_interrupt_work = 10;
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-/* Kernel compatibility defines, common to David Hind's PCMCIA package.
-   This is only in the support-all-kernels source code. */
-#include <linux/version.h>		/* Evil, but neccessary */
-
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x10300
-#define RUN_AT(x) (x)			/* What to put in timer->expires.  */
-#define DEV_ALLOC_SKB(len) alloc_skb(len, GFP_ATOMIC)
-#define virt_to_bus(addr)  ((unsigned long)addr)
-#define bus_to_virt(addr) ((void*)addr)
-
-#else  /* 1.3.0 and later */
 #define RUN_AT(x) (jiffies + (x))
-#define DEV_ALLOC_SKB(len) dev_alloc_skb(len + 2)
-#endif
 
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x10338
-#ifdef MODULE
-#if !defined(CONFIG_MODVERSIONS) && !defined(__NO_VERSION__)
-char kernel_version[] = UTS_RELEASE;
-#endif
-#else
-#undef MOD_INC_USE_COUNT
-#define MOD_INC_USE_COUNT
-#undef MOD_DEC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
-#endif /* 1.3.38 */
-
-#if (LINUX_VERSION_CODE >= 0x10344)
-#define NEW_MULTICAST
 #include <linux/delay.h>
-#endif
 
 #ifdef SA_SHIRQ
 #define FREE_IRQ(irqnum, dev) free_irq(irqnum, dev)
@@ -234,7 +205,11 @@ struct rtl8129_private {
 	struct device *next_module;
 	int chip_id;
 	int chip_revision;
+#if LINUX_VERSION_CODE > 0x20139
+	struct net_device_stats stats;
+#else
 	struct enet_statistics stats;
+#endif
 	struct timer_list timer;	/* Media selection timer. */
 	unsigned int cur_rx, cur_tx;		/* The next free and used entries */
 	unsigned int dirty_rx, dirty_tx;
@@ -245,6 +220,7 @@ struct rtl8129_private {
 	unsigned char *tx_bufs;				/* Tx bounce buffer region. */
 	unsigned char mc_filter[8];			/* Current multicast filter. */
 	char phys[4];						/* MII device addresses. */
+	int in_interrupt;					/* Alpha need word-wide lock. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Full-duplex operation requested. */
 	unsigned int default_port:4;		/* Last dev->if_port value. */
@@ -280,12 +256,7 @@ static int rtl8129_rx(struct device *dev);
 static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 static int rtl8129_close(struct device *dev);
 static struct enet_statistics *rtl8129_get_stats(struct device *dev);
-#ifdef NEW_MULTICAST
 static void set_rx_mode(struct device *dev);
-#else
-static void set_rx_mode(struct device *dev, int num_addrs, void *addrs);
-#endif
-
 
 
 #ifdef MODULE
@@ -307,9 +278,9 @@ int rtl8139_probe(struct device *dev)
 		unsigned char pci_bus, pci_device_fn;
 
 		for (;pci_index < 0xff; pci_index++) {
-			unsigned char pci_irq_line, pci_latency;
-			unsigned short pci_command, vendor, device;
-			unsigned int pci_ioaddr;
+			u8 pci_irq_line, pci_latency;
+			u16 pci_command, new_command, vendor, device;
+			u32 pci_ioaddr;
 
 			if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8,
 #ifdef REVERSE_PROBE_ORDER
@@ -336,12 +307,24 @@ int rtl8139_probe(struct device *dev)
 
 			if (device != PCI_DEVICE_ID_REALTEK_8129
 				&&  device != PCI_DEVICE_ID_REALTEK_8139) {
-				printk("Unknown RealTek PCI ethernet chip type %4.4x detected:"
-					   " not configured.\n", device);
+				printk(KERN_NOTICE "Unknown RealTek PCI ethernet chip type "
+					   "%4.4x detected: not configured.\n", device);
 				continue;
 			}
 			if (check_region(pci_ioaddr, RTL8129_TOTAL_SIZE))
 				continue;
+
+			/* Activate the card: fix for brain-damaged Win98 BIOSes. */
+			pcibios_read_config_word(pci_bus, pci_device_fn,
+									 PCI_COMMAND, &pci_command);
+			new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
+			if (pci_command != new_command) {
+				printk(KERN_INFO "  The PCI BIOS has not enabled this"
+					   " device!  Updating PCI config %4.4x->%4.4x.\n",
+					   pci_command, new_command);
+				pcibios_write_config_word(pci_bus, pci_device_fn,
+										  PCI_COMMAND, new_command);
+			}
 
 #ifdef MODULE
 			dev = rtl8129_probe1(dev, pci_ioaddr, pci_irq_line, device,
@@ -352,24 +335,16 @@ int rtl8139_probe(struct device *dev)
 #endif
 
 			if (dev) {
-				/* Get and check the bus-master and latency values. */
-				pcibios_read_config_word(pci_bus, pci_device_fn,
-										 PCI_COMMAND, &pci_command);
-				if ( ! (pci_command & PCI_COMMAND_MASTER)) {
-					printk("  PCI Master Bit has not been set! Setting...\n");
-					pci_command |= PCI_COMMAND_MASTER;
-					pcibios_write_config_word(pci_bus, pci_device_fn,
-											  PCI_COMMAND, pci_command);
-				}
 				pcibios_read_config_byte(pci_bus, pci_device_fn,
 										 PCI_LATENCY_TIMER, &pci_latency);
-				if (pci_latency < 10) {
-					printk("  PCI latency timer (CFLT) is unreasonably low "
-						   "at %d.  Setting to 64 clocks.\n", pci_latency);
+				if (pci_latency < 32) {
+					printk(KERN_NOTICE"  PCI latency timer (CFLT) is "
+						   "unreasonably low at %d.  Setting to 64 clocks.\n",
+						   pci_latency);
 					pcibios_write_config_byte(pci_bus, pci_device_fn,
 											  PCI_LATENCY_TIMER, 64);
 				} else if (rtl8129_debug > 1)
-					printk("  PCI latency timer (CFLT) is %#x.\n",
+					printk(KERN_INFO"  PCI latency timer (CFLT) is %#x.\n",
 						   pci_latency);
 				dev = 0;
 				cards_found++;
@@ -392,11 +367,11 @@ static struct device *rtl8129_probe1(struct device *dev, int ioaddr, int irq,
 	int i;
 
 	if (rtl8129_debug > 0  &&  did_version++ == 0)
-		printk(version);
+		printk(KERN_INFO "%s", version);
 
 	dev = init_etherdev(dev, 0);
 
-	printk("%s: RealTek RTL%x at %#3x, IRQ %d, ",
+	printk(KERN_INFO "%s: RealTek RTL%x at %#3x, IRQ %d, ",
 		   dev->name, chip_id, ioaddr, irq);
 
 	/* Bring the chip out of low-power mode. */
@@ -411,9 +386,10 @@ static struct device *rtl8129_probe1(struct device *dev, int ioaddr, int irq,
 	printk("%2.2x.\n", dev->dev_addr[i]);
 
 	if (rtl8129_debug > 1) {
-		printk("%s: EEPROM contents\n", dev->name);
+		printk(KERN_INFO "%s: EEPROM contents\n", dev->name);
 		for (i = 0; i < 64; i++)
-			printk(" %4.4x%s", read_eeprom(ioaddr, i), i%16 == 15 ? "\n" : "");
+			printk(" %4.4x%s", read_eeprom(ioaddr, i),
+				   i%16 == 15 ? "\n"KERN_INFO : "");
 	}
 
 	/* We do a request_region() to register /proc/ioports info. */
@@ -445,12 +421,13 @@ static struct device *rtl8129_probe1(struct device *dev, int ioaddr, int irq,
 
 			if (mii_status != 0xffff  && mii_status != 0x0000) {
 				tp->phys[phy_idx++] = phy;
-				printk("%s: MII transceiver found at address %d.\n",
+				printk(KERN_INFO "%s: MII transceiver found at address %d.\n",
 					   dev->name, phy);
 			}
 		}
 		if (phy_idx == 0) {
-			printk("%s: No MII transceivers found!  Assuming SYM transceiver.\n",
+			printk(KERN_INFO "%s: No MII transceivers found!  Assuming SYM "
+				   "transceiver.\n",
 				   dev->name);
 			tp->phys[0] = -1;
 		}
@@ -499,12 +476,13 @@ static struct device *rtl8129_probe1(struct device *dev, int ioaddr, int irq,
 #define EE_ENB			(0x80 | EE_CS)
 
 /* Delay between EEPROM clock transitions.
-   The 1.2 code is a "nasty" timing loop, but PC compatible machines are
-   *supposed* to delay an ISA-compatible period for the SLOW_DOWN_IO macro.  */
+   No extra delay is needed with 33Mhz PCI, but 66Mhz is untested.
+ */
+
 #ifdef _LINUX_DELAY_H
-#define eeprom_delay(nanosec)	udelay((nanosec + 999)/1000)
+#define eeprom_delay(nanosec)	udelay(1)
 #else
-#define eeprom_delay(nanosec)	do { int _i = 3; while (--_i > 0) { __SLOW_DOWN_IO; }} while (0)
+#define eeprom_delay(nanosec)	do { ; } while (0)
 #endif
 
 /* The EEPROM commands include the alway-set leading bit. */
@@ -515,8 +493,8 @@ static struct device *rtl8129_probe1(struct device *dev, int ioaddr, int irq,
 static int read_eeprom(int ioaddr, int location)
 {
 	int i;
-	unsigned short retval = 0;
-	short ee_addr = ioaddr + Cfg9346;
+	unsigned retval = 0;
+	int ee_addr = ioaddr + Cfg9346;
 	int read_cmd = location | EE_READ_CMD;
 
 	outb(EE_ENB & ~EE_CS, ee_addr);
@@ -524,7 +502,7 @@ static int read_eeprom(int ioaddr, int location)
 
 	/* Shift the read command bits out. */
 	for (i = 10; i >= 0; i--) {
-		short dataval = (read_cmd & (1 << i)) ? EE_DATA_WRITE : 0;
+		int dataval = (read_cmd & (1 << i)) ? EE_DATA_WRITE : 0;
 		outb(EE_ENB | dataval, ee_addr);
 		eeprom_delay(100);
 		outb(EE_ENB | dataval | EE_SHIFT_CLK, ee_addr);
@@ -549,7 +527,10 @@ static int read_eeprom(int ioaddr, int location)
 
 /* MII serial management: mostly bogus for now. */
 /* Read and write the MII management registers using software-generated
-   serial MDIO protocol.  The maxium data clock rate is 2.5 Mhz. */
+   serial MDIO protocol.
+   The maximum data clock rate is 2.5 Mhz.  The minimum timing is usually
+   met by back-to-back PCI I/O cycles, but we insert a delay to avoid
+   "overclocking" issues. */
 #define MDIO_DIR		0x80
 #define MDIO_DATA_OUT	0x04
 #define MDIO_DATA_IN	0x02
@@ -557,7 +538,7 @@ static int read_eeprom(int ioaddr, int location)
 #ifdef _LINUX_DELAY_H
 #define mdio_delay()	udelay(1) /* Really 400ns. */
 #else
-#define mdio_delay()	__SLOW_DOWN_IO;
+#define mdio_delay()	do { ; } while (0)
 #endif
 
 /* Syncronize the MII management interface by shifting 32 one bits out. */
@@ -615,19 +596,10 @@ rtl8129_open(struct device *dev)
 	/* Soft reset the chip. */
 	outb(CmdReset, ioaddr + ChipCmd);
 
-#ifdef SA_SHIRQ
 	if (request_irq(dev->irq, &rtl8129_interrupt, SA_SHIRQ,
 					"RealTek RTL8129/39 Fast Ethernet", dev)) {
 		return -EAGAIN;
 	}
-#else
-	if (irq2dev_map[dev->irq] != NULL
-		|| (irq2dev_map[dev->irq] = dev) == NULL
-		|| dev->irq == 0
-		|| request_irq(dev->irq, &rtl8129_interrupt, 0, "RTL8129")) {
-		return -EAGAIN;
-	}
-#endif
 
 	MOD_INC_USE_COUNT;
 
@@ -637,26 +609,16 @@ rtl8129_open(struct device *dev)
 		if (tp->tx_bufs)
 			kfree(tp->tx_bufs);
 		if (rtl8129_debug > 0)
-			printk("%s: Couldn't allocate a %d byte receive ring.\n",
+			printk(KERN_ERR "%s: Couldn't allocate a %d byte receive ring.\n",
 				   dev->name, RX_BUF_LEN);
 		return -ENOMEM;
 	}
 	rtl8129_init_ring(dev);
 
-#ifndef final_version
-	/* Used to monitor rx ring overflow. */
-	memset(tp->rx_ring + RX_BUF_LEN, 0xcc, 16);
-#endif
-
 	/* Check that the chip has finished the reset. */
 	for (i = 1000; i > 0; i--)
 		if ((inb(ioaddr + ChipCmd) & CmdReset) == 0)
 			break;
-#ifndef final_version
-	if (rtl8129_debug > 2)
-		printk("%s: reset finished with status %2.2x after %d loops.\n",
-			   dev->name, inb(ioaddr + ChipCmd), 1000-i);
-#endif
 
 	for (i = 0; i < 6; i++)
 		outb(dev->dev_addr[i], ioaddr + MAC0 + i);
@@ -665,7 +627,7 @@ rtl8129_open(struct device *dev)
 	outb(CmdRxEnb | CmdTxEnb, ioaddr + ChipCmd);
 	outl((RX_FIFO_THRESH << 13) | (RX_BUF_LEN_IDX << 11) | (RX_DMA_BURST<<8),
 		 ioaddr + RxConfig);
-	outl((TX_DMA_BURST<<8), ioaddr + TxConfig);
+	outl((TX_DMA_BURST<<8)|0x03000000, ioaddr + TxConfig);
 
 	full_duplex = tp->full_duplex;
 	if (tp->phys[0] >= 0  ||  tp->chip_id == 0x8139) {
@@ -680,7 +642,7 @@ rtl8129_open(struct device *dev)
 				 || (mii_reg5 & 0x00C0) == 0x0040)
 			full_duplex = 1;
 		if (rtl8129_debug > 1)
-			printk("%s: Setting %s%s-duplex based on"
+			printk(KERN_INFO"%s: Setting %s%s-duplex based on"
 				   " auto-negotiated partner ability %4.4x.\n", dev->name,
 				   mii_reg5 == 0 ? "" :
 				   (mii_reg5 & 0x0180) ? "100mbps " : "10mbps ",
@@ -698,13 +660,6 @@ rtl8129_open(struct device *dev)
 	set_rx_mode(dev);
 
 	outb(CmdRxEnb | CmdTxEnb, ioaddr + ChipCmd);
-#ifndef final_version
-	if (rtl8129_debug > 1)
-		printk("%s:  In rtl8129_open() Tx/Rx Config %8.8x/%8.8x"
-			   " Chip Config %2.2x/%2.2x.\n",
-			   dev->name, inl(ioaddr + TxConfig), inl(ioaddr + RxConfig),
-			   inb(ioaddr + Config0), inb(ioaddr + Config1));
-#endif
 
 	dev->tbusy = 0;
 	dev->interrupt = 0;
@@ -715,7 +670,8 @@ rtl8129_open(struct device *dev)
 		| TxErr | TxOK | RxErr | RxOK, ioaddr + IntrMask);
 
 	if (rtl8129_debug > 1)
-		printk("%s: rtl8129_open() ioaddr %4.4x IRQ %d GP Pins %2.2x %s-duplex.\n",
+		printk(KERN_DEBUG"%s: rtl8129_open() ioaddr %4.4x IRQ %d"
+			   " GP Pins %2.2x %s-duplex.\n",
 			   dev->name, ioaddr, dev->irq, inb(ioaddr + GPPinData),
 			   full_duplex ? "full" : "half");
 
@@ -744,26 +700,26 @@ static void rtl8129_timer(unsigned long data)
 			if ( ! tp->full_duplex) {
 				tp->full_duplex = 1;
 				if (rtl8129_debug > 0)
-					printk("%s: Switching to full-duplex based on link "
-						   "partner ability of %4.4x.\n",
+					printk(KERN_INFO "%s: Switching to full-duplex based on "
+						   "link partner ability of %4.4x.\n",
 						   dev->name, mii_reg5);
 				outb(0xC0, ioaddr + Cfg9346);
-				outb(full_duplex ? 0x60 : 0x20, ioaddr + Config1);
+				outb(tp->full_duplex ? 0x60 : 0x20, ioaddr + Config1);
 				outb(0x00, ioaddr + Cfg9346);
 			}
 	}
 	if (rtl8129_debug > 2) {
 		if (tp->chip_id == 0x8129)
-			printk("%s: Media selection tick, general purpose pins %2.2x.\n",
+			printk(KERN_DEBUG"%s: Media selection tick, GP pins %2.2x.\n",
 				   dev->name, inb(ioaddr + GPPinData));
 		else
-			printk("%s: Media selection tick, Link partner %4.4x.\n",
+			printk(KERN_DEBUG"%s: Media selection tick, Link partner %4.4x.\n",
 				   dev->name, inw(ioaddr + NWayLPAR));
-		printk("%s:  Other registers are IntMask %4.4x IntStatus %4.4x"
+		printk(KERN_DEBUG"%s:  Other registers are IntMask %4.4x IntStatus %4.4x"
 			   " RxStatus %4.4x.\n",
 			   dev->name, inw(ioaddr + IntrMask), inw(ioaddr + IntrStatus),
 			   inl(ioaddr + RxEarlyStatus));
-		printk("%s:  Chip config %2.2x %2.2x.\n",
+		printk(KERN_DEBUG"%s:  Chip config %2.2x %2.2x.\n",
 			   dev->name, inb(ioaddr + Config0), inb(ioaddr + Config1));
 	}
 
@@ -779,15 +735,38 @@ static void rtl8129_tx_timeout(struct device *dev)
 	int ioaddr = dev->base_addr;
 	int i;
 
-	if (rtl8129_debug > 1)
-		printk("%s: Transmit timeout using MII device.\n", dev->name);
+	if (rtl8129_debug > 0)
+		printk(KERN_WARNING "%s: Transmit timeout, status %2.2x %4.4x.\n",
+			   dev->name, inb(ioaddr + ChipCmd), inw(ioaddr + IntrStatus));
+	/* Emit info to figure out what went wrong. */
 	for (i = 0; i < NUM_TX_DESC; i++)
-		printk("%s:  Tx descriptor %d is %8.8x.%s\n",
-			   dev->name, i, inl(ioaddr + TxStat0),
-			   i == tp->dirty_tx ? " (queue head)" : "");
-	/* Perhaps stop and restart the chip's Tx processes . */
+		printk(KERN_DEBUG"%s:  Tx descriptor %d is %8.8x.%s\n",
+			   dev->name, i, inl(ioaddr + TxStat0 + i*4),
+			   i == tp->dirty_tx % NUM_TX_DESC ? " (queue head)" : "");
+	if (tp->chip_id == 0x8129) {
+		int mii_reg;
+		printk(KERN_DEBUG"%s: MII #%d registers are:", dev->name, tp->phys[0]);
+		for (mii_reg = 0; mii_reg < 8; mii_reg++)
+			printk(" %4.4x", mdio_read(ioaddr, tp->phys[0], mii_reg));
+		printk(".\n");
+	} else {
+		printk(KERN_DEBUG"%s: MII status register is %4.4x.\n",
+			   dev->name, inw(ioaddr + BMSR));
+	}
 
-	/* Todo: We should figure out what went wrong. */
+#ifdef notdef
+	/* Soft reset the chip. */
+	outb(CmdReset, ioaddr + ChipCmd);
+	for (i = 0; i < 6; i++)
+		outb(dev->dev_addr[i], ioaddr + MAC0 + i);
+#endif
+
+	/* Must enable Tx/Rx before setting transfer thresholds! */
+	set_rx_mode(dev);
+	outb(CmdRxEnb | CmdTxEnb, ioaddr + ChipCmd);
+	outl((RX_FIFO_THRESH << 13) | (RX_BUF_LEN_IDX << 11) | (RX_DMA_BURST<<8),
+		 ioaddr + RxConfig);
+	outl((TX_DMA_BURST<<8), ioaddr + TxConfig);
 
 	dev->trans_start = jiffies;
 	tp->stats.tx_errors++;
@@ -818,15 +797,6 @@ rtl8129_start_xmit(struct sk_buff *skb, struct device *dev)
 	struct rtl8129_private *tp = (struct rtl8129_private *)dev->priv;
 	int ioaddr = dev->base_addr;
 	int entry;
-
-#ifndef final_version
-	if (skb == NULL || skb->len <= 0) {
-		printk("%s: Obsolete driver layer request made: skbuff==NULL.\n",
-			   dev->name);
-		dev_tint(dev);
-		return 0;
-	}
-#endif
 
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
@@ -859,7 +829,7 @@ rtl8129_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	dev->trans_start = jiffies;
 	if (rtl8129_debug > 4)
-		printk("%s: Queued Tx packet at %p size %ld to slot %d.\n",
+		printk(KERN_DEBUG"%s: Queued Tx packet at %p size %ld to slot %d.\n",
 			   dev->name, skb->data, skb->len, entry);
 
 	return 0;
@@ -869,25 +839,23 @@ rtl8129_start_xmit(struct sk_buff *skb, struct device *dev)
    after the Tx thread. */
 static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *regs)
 {
-#ifdef SA_SHIRQ
 	struct device *dev = (struct device *)dev_instance;
-#else
-	struct device *dev = (struct device *)(irq2dev_map[irq]);
-#endif
 	struct rtl8129_private *tp;
 	int ioaddr, boguscnt = max_interrupt_work;
 	int status;
 
 	if (dev == NULL) {
-		printk ("rtl8129_interrupt(): irq %d for unknown device.\n", irq);
+		printk (KERN_ERR"rtl8139_interrupt(): IRQ %d for unknown device.\n",
+				irq);
 		return;
 	}
 
 	ioaddr = dev->base_addr;
 	tp = (struct rtl8129_private *)dev->priv;
-	if (dev->interrupt)
-		printk("%s: Re-entering the interrupt handler.\n", dev->name);
-
+	if (test_and_set_bit(0, (void*)&tp->in_interrupt)) {
+		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
+		return;
+	}
 	dev->interrupt = 1;
 
 	do {
@@ -896,7 +864,7 @@ static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *r
 		outw(status, ioaddr + IntrStatus);
 
 		if (rtl8129_debug > 4)
-			printk("%s: interrupt  status=%#4.4x new intstat=%#4.4x.\n",
+			printk(KERN_DEBUG"%s: interrupt  status=%#4.4x new intstat=%#4.4x.\n",
 				   dev->name, status, inw(ioaddr + IntrStatus));
 
 		if ((status & (PCIErr|PCSTimeout|RxUnderrun|RxOverflow|RxFIFOOver
@@ -907,7 +875,7 @@ static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *r
 			rtl8129_rx(dev);
 
 		if (status & (TxOK | TxErr)) {
-			int dirty_tx;
+			unsigned int dirty_tx;
 
 			for (dirty_tx = tp->dirty_tx; dirty_tx < tp->cur_tx; dirty_tx++) {
 				int entry = dirty_tx % NUM_TX_DESC;
@@ -921,11 +889,14 @@ static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *r
 					/* There was an major error, log it. */
 #ifndef final_version
 					if (rtl8129_debug > 1)
-						printk("%s: Transmit error, Tx status %8.8x.\n",
+						printk(KERN_NOTICE"%s: Transmit error, Tx status %8.8x.\n",
 							   dev->name, txstatus);
 #endif
 					tp->stats.tx_errors++;
-					if (txstatus&TxAborted) tp->stats.tx_aborted_errors++;
+					if (txstatus&TxAborted) {
+						tp->stats.tx_aborted_errors++;
+						outl((TX_DMA_BURST<<8)|0x03000001, ioaddr + TxConfig);
+					}
 					if (txstatus&TxCarrierLost) tp->stats.tx_carrier_errors++;
 					if (txstatus&TxOutOfWindow) tp->stats.tx_window_errors++;
 #ifdef ETHER_STATS
@@ -941,6 +912,9 @@ static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *r
 						tp->stats.tx_fifo_errors++;
 					}
 					tp->stats.collisions += (txstatus >> 24) & 15;
+#if LINUX_VERSION_CODE > 0x20119
+					tp->stats.tx_bytes += txstatus & 0x7ff;
+#endif
 					tp->stats.tx_packets++;
 				}
 
@@ -951,7 +925,7 @@ static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *r
 
 #ifndef final_version
 			if (tp->cur_tx - dirty_tx > NUM_TX_DESC) {
-				printk("%s: Out-of-sync dirty pointer, %d vs. %d, full=%d.\n",
+				printk(KERN_ERR"%s: Out-of-sync dirty pointer, %d vs. %d, full=%d.\n",
 					   dev->name, dirty_tx, tp->cur_tx, tp->tx_full);
 				dirty_tx += NUM_TX_DESC;
 			}
@@ -988,7 +962,8 @@ static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *r
 			/* Error sources cleared above. */
 		}
 		if (--boguscnt < 0) {
-			printk("%s: Too much work at interrupt, IntrStatus=0x%4.4x.\n",
+			printk(KERN_WARNING"%s: Too much work at interrupt, "
+				   "IntrStatus=0x%4.4x.\n",
 				   dev->name, status);
 			/* Clear all interrupt sources. */
 			outw(0xffff, ioaddr + IntrStatus);
@@ -997,20 +972,11 @@ static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *r
 	} while (1);
 
 	if (rtl8129_debug > 3)
-		printk("%s: exiting interrupt, intr_status=%#4.4x.\n",
+		printk(KERN_DEBUG"%s: exiting interrupt, intr_status=%#4.4x.\n",
 			   dev->name, inl(ioaddr + IntrStatus));
 
-	/* Code that should never be run!  Perhaps remove after testing.. */
-	{
-		static int stopit = 10;
-		if (dev->start == 0  &&  --stopit < 0) {
-			printk("%s: Emergency stop, looping startup interrupt.\n",
-				   dev->name);
-			FREE_IRQ(irq, dev);
-		}
-	}
-
 	dev->interrupt = 0;
+	tp->in_interrupt = 0;
 	return;
 }
 
@@ -1025,34 +991,34 @@ rtl8129_rx(struct device *dev)
 	u16 cur_rx = tp->cur_rx;
 
 	if (rtl8129_debug > 4)
-		printk("%s: In rtl8129_rx(), current %4.4x BufAddr %4.4x,"
+		printk(KERN_DEBUG"%s: In rtl8129_rx(), current %4.4x BufAddr %4.4x,"
 			   " free to %4.4x, Cmd %2.2x.\n",
 			   dev->name, cur_rx, inw(ioaddr + RxBufAddr),
 			   inw(ioaddr + RxBufPtr), inb(ioaddr + ChipCmd));
 
 	while ((inb(ioaddr + ChipCmd) & 1) == 0) {
-		u16 ring_offset = cur_rx % RX_BUF_LEN;
+		int ring_offset = cur_rx % RX_BUF_LEN;
 		u32 rx_status = *(u32*)(rx_ring + ring_offset);
-		u16 rx_size = rx_status >> 16;
+		int rx_size = rx_status >> 16;
 
 		if (rtl8129_debug > 4) {
 			int i;
-			printk("%s:  rtl8129_rx() status %4.4x, size %4.4x, cur %4.4x.\n",
+			printk(KERN_DEBUG"%s:  rtl8129_rx() status %4.4x, size %4.4x, cur %4.4x.\n",
 				   dev->name, rx_status, rx_size, cur_rx);
-			printk("%s: Frame contents ", dev->name);
+			printk(KERN_DEBUG"%s: Frame contents ", dev->name);
 			for (i = 0; i < 70; i++)
 				printk(" %2.2x", rx_ring[ring_offset + i]);
 			printk(".\n");
 		}
 		if (rx_status & RxTooLong) {
 			if (rtl8129_debug > 0)
-				printk("%s: Oversized Ethernet frame, status %4.4x!\n",
+				printk(KERN_NOTICE"%s: Oversized Ethernet frame, status %4.4x!\n",
 					   dev->name, rx_status);
 			tp->stats.rx_length_errors++;
 		} else if (rx_status &
 				   (RxBadSymbol|RxRunt|RxTooLong|RxCRCErr|RxBadAlign)) {
 			if (rtl8129_debug > 1)
-				printk("%s: Ethernet frame had errors,"
+				printk(KERN_DEBUG"%s: Ethernet frame had errors,"
 					   " status %4.4x.\n", dev->name, rx_status);
 			tp->stats.rx_errors++;
 			if (rx_status & (RxBadSymbol|RxBadAlign))
@@ -1064,9 +1030,10 @@ rtl8129_rx(struct device *dev)
 			/* Omit the four octet CRC from the length. */
 			struct sk_buff *skb;
 
-			skb = DEV_ALLOC_SKB(rx_size + 2);
+			skb = dev_alloc_skb(rx_size + 2);
 			if (skb == NULL) {
-				printk("%s: Memory squeeze, deferring packet.\n", dev->name);
+				printk(KERN_WARNING"%s: Memory squeeze, deferring packet.\n",
+					   dev->name);
 				/* We should check that some rx space is free.
 				   If not, free one and mark stats->rx_dropped++. */
 				tp->stats.rx_dropped++;
@@ -1082,7 +1049,8 @@ rtl8129_rx(struct device *dev)
 					   rx_size-semi_count);
 				if (rtl8129_debug > 4) {
 					int i;
-					printk("%s:  Frame wrap @%d", dev->name, semi_count);
+					printk(KERN_DEBUG"%s:  Frame wrap @%d",
+						   dev->name, semi_count);
 					for (i = 0; i < 16; i++)
 						printk(" %2.2x", rx_ring[i]);
 					printk(".\n");
@@ -1091,12 +1059,11 @@ rtl8129_rx(struct device *dev)
 			} else
 				memcpy(skb_put(skb, rx_size), &rx_ring[ring_offset + 4],
 					   rx_size);
-#if LINUX_VERSION_CODE >= 0x10300
 			skb->protocol = eth_type_trans(skb, dev);
-#else
-			skb->len = rx_size;
-#endif
 			netif_rx(skb);
+#if LINUX_VERSION_CODE > 0x20119
+			tp->stats.rx_bytes += rx_size;
+#endif
 			tp->stats.rx_packets++;
 		}
 
@@ -1105,7 +1072,7 @@ rtl8129_rx(struct device *dev)
 		outw(cur_rx - 16, ioaddr + RxBufPtr);
 	}
 	if (rtl8129_debug > 4)
-		printk("%s: Done rtl8129_rx(), current %4.4x BufAddr %4.4x,"
+		printk(KERN_DEBUG"%s: Done rtl8129_rx(), current %4.4x BufAddr %4.4x,"
 			   " free to %4.4x, Cmd %2.2x.\n",
 			   dev->name, cur_rx, inw(ioaddr + RxBufAddr),
 			   inw(ioaddr + RxBufPtr), inb(ioaddr + ChipCmd));
@@ -1124,7 +1091,7 @@ rtl8129_close(struct device *dev)
 	dev->tbusy = 1;
 
 	if (rtl8129_debug > 1)
-		printk("%s: Shutting down ethercard, status was 0x%4.4x.\n",
+		printk(KERN_DEBUG"%s: Shutting down ethercard, status was 0x%4.4x.\n",
 			   dev->name, inw(ioaddr + IntrStatus));
 
 	/* Disable interrupts by clearing the interrupt mask. */
@@ -1139,24 +1106,7 @@ rtl8129_close(struct device *dev)
 
 	del_timer(&tp->timer);
 
-#ifdef SA_SHIRQ
 	free_irq(dev->irq, dev);
-#else
-	free_irq(dev->irq);
-	irq2dev_map[dev->irq] = 0;
-#endif
-
-#ifndef final_version
-	/* Used to monitor rx ring overflow. */
-	for (i = 0; i < 16; i++)
-		if (tp->rx_ring[RX_BUF_LEN+i] != 0xcc) {
-			printk("%s: Rx ring overflowed!  Values are ", dev->name);
-			for (i = 0; i < 16; i++)
-				printk(" %2.2x", tp->rx_ring[RX_BUF_LEN + i]);
-			printk(".\n");
-			break;
-		}
-#endif
 
 	for (i = 0; i < NUM_TX_DESC; i++) {
 		if (tp->tx_skbuff[i])
@@ -1217,12 +1167,7 @@ static inline unsigned ether_crc_le(int length, unsigned char *data)
 }
 
 
-static void
-#ifdef NEW_MULTICAST
-set_rx_mode(struct device *dev)
-#else
-static void set_rx_mode(struct device *dev, int num_addrs, void *addrs);
-#endif
+static void set_rx_mode(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct rtl8129_private *tp = (struct rtl8129_private *)dev->priv;
@@ -1231,7 +1176,7 @@ static void set_rx_mode(struct device *dev, int num_addrs, void *addrs);
 
 	if (dev->flags & IFF_PROMISC) {			/* Set promiscuous. */
 		/* Unconditionally log net taps. */
-		printk("%s: Promiscuous mode enabled.\n", dev->name);
+		printk(KERN_NOTICE"%s: Promiscuous mode enabled.\n", dev->name);
 		memset(mc_filter, 0xff, sizeof(mc_filter));
 		outb(0x0F, ioaddr + RxConfig);
 	} else if ((dev->mc_count > 1000)  ||  (dev->flags & IFF_ALLMULTI)) {
@@ -1257,7 +1202,7 @@ static void set_rx_mode(struct device *dev, int num_addrs, void *addrs);
 		memcpy(tp->mc_filter, mc_filter, sizeof(mc_filter));
 	}
 	if (rtl8129_debug > 3)
-		printk("%s:   set_rx_mode(%4.4x) done -- Rx config %8.8x.\n",
+		printk(KERN_DEBUG"%s:   set_rx_mode(%4.4x) done -- Rx config %8.8x.\n",
 			   dev->name, dev->flags, inl(ioaddr + RxConfig));
 	return;
 }

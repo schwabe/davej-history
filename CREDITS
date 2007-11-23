@@ -89,10 +89,12 @@ S: Rainweg 15
 S: Germany
 
 N: Fred Baumgarten
-E: dc6iq@insu1.etec.uni-karlsruhe.de
+E: dc6iq@insl1.etec.uni-karlsruhe.de
+E: dc6iq@adacom.org
+E: dc6iq@db0ais.#hes.deu.eu (packet radio)
 D: NET-2 & netstat(8)
-S: Kandelstrasse 27
-S: 76297 Stutensee
+S: Soevener Strasse 11
+S: 53773 Hennef
 S: Germany
 
 N: Donald Becker
@@ -402,11 +404,12 @@ S: 26506 Norden
 S: Germany
 
 N: Jeremy Fitzhardinge
-E: jeremy@sw.oz.au
+E: jeremy@zip.com.au
 D: Improved mmap and munmap handling
 D: General mm minor tidyups
-S: 99 Albermarle Street
-S: Newtown 2042
+S: 67 Surrey St.
+S: Darlinghurst, Sydney
+S: NSW 2010
 S: Australia
 
 N: Ralf Flaxa
@@ -618,6 +621,7 @@ S: United Kingdom
 N: Ron Holt
 E: ron@caldera.com
 W: http://www.holt.org/
+P: 1024/1FD44539 DF 4B EB 9F 5B 68 38 9A  40 E3 FB 71 D1 C8 0B 56
 D: Kernel development
 D: Minor kernel modifications to support Wabi and Wine
 S: Caldera, Inc.
@@ -681,7 +685,7 @@ S: Chapel Hill, North Carolina 27514-4818
 S: USA
 
 N: Bernhard Kaindl
-E: bkaindl@netway.at
+E: bernhard.kaindl@gmx.net
 E: edv@bartelt.via.at
 D: Author of a menu based configuration tool, kmenu, which 
 D: is the predecessor of 'make menuconfig' and 'make xconfig'.
@@ -715,9 +719,11 @@ S: Germany
 
 N: Ian Kluft
 E: ikluft@thunder.sbay.org
-D: Smail binary packages for Slackware and Debian
-S: 2200 Monroe Street #1509
-S: Santa Clara, California 95050-3452
+W: http://www.kluft.com/~ikluft/
+D: NET-1 beta testing & minor patches, original Smail binary packages for
+D: Slackware and Debian, vote-taker for 2nd comp.os.linux reorganization
+S: PO Box 611311
+S: San Jose, CA 95161-1311
 S: USA
 
 N: Alain L. Knaff
@@ -765,8 +771,8 @@ S: Germany
 N: Bas Laarhoven
 E: bas@vimec.nl
 D: Loadable modules and ftape driver
-S: Mr. v. Boemellaan 39
-S: NL-5237 KA 's-Hertogenbosch
+S: J. Obrechtstr 23
+S: NL-5216 GP 's-Hertogenbosch
 S: The Netherlands
 
 N: Savio Lam
@@ -806,6 +812,14 @@ S: USA
 N: Martin von Loewis
 E: loewis@informatik.hu-berlin.de
 D: script binary format
+
+N: Jamie Lokier
+E: jamie@imbolc.ucc.ie
+D: Reboot-through-BIOS for broken 486 motherboards
+S: 26 Oatlands Road
+S: Oxford
+S: OX2 0ET
+S: United Kingdom
 
 N: Mark Lord
 E: mlord@pobox.com
@@ -915,8 +929,8 @@ S: USA
 N: Dirk Melchers
 E: dirk@merlin.nbg.sub.org
 D: 8 bit XT hard disk driver for OMTI5520
-S: Heidackerstrass 19
-S: D-91056 Erlangen
+S: Schloessleinsgasse 31
+S: D-90453 Nuernberg
 S: Germany
 
 N: Michael Meskes
@@ -969,6 +983,7 @@ S: USA
 
 N: Rick Miller
 E: rdmiller@execpc.com
+W: http://www.execpc.com/~rdmiller/
 D: Original Linux Device Registrar (Major/minor numbers)
 D: au-play, bwBASIC
 S: S78 W16203 Woods Road
@@ -1102,8 +1117,12 @@ E: Frederic.Potter@masi.ibp.fr
 D: Some PCI kernel support
 
 N: Stefan Probst
-E: snprobst@immd4.informatik.uni-erlangen.de
-D: The Linux Support Team Erlangen
+E: sp@caldera.de
+D: The Linux Support Team Erlangen, 1993-97
+S: Caldera (Deutschland) GmbH
+S: Lazarettstrasse 8
+S: 91054 Erlangen
+S: Germany
 
 N: Daniel Quinlan
 E: quinlan@pathname.com
@@ -1428,6 +1447,14 @@ D: Author of a German book on Linux
 S: Obere Heerbergstrasse 17
 S: 97078 Wuerzburg
 S: Germany
+
+N: Greg Ungerer
+E: gerg@stallion.com
+D: Author of Stallion multiport serial drivers
+S: Stallion Technologies
+S: 33 Woodstock Rd
+S: Toowong, QLD. 4066
+S: Australia
 
 N: Jeffrey A. Uphoff
 E: juphoff@nrao.edu

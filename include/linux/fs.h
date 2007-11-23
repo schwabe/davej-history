@@ -306,6 +306,7 @@ struct inode {
 	struct inode *i_mount;
 	unsigned long i_count;	/* needs to be > (address_space * tasks)>>pagebits */
 	unsigned short i_flags;
+	unsigned short i_writecount;
 	unsigned char i_lock;
 	unsigned char i_dirt;
 	unsigned char i_pipe;
@@ -313,7 +314,6 @@ struct inode {
 	unsigned char i_seek;
 	unsigned char i_update;
 	unsigned char i_condemned;
-	unsigned short i_writecount;
 	union {
 		struct pipe_inode_info pipe_i;
 		struct minix_inode_info minix_i;

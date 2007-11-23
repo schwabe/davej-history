@@ -33,9 +33,6 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-#include <linux/fs.h>
-#include <linux/ext2_fs.h>
-
 static int ext2_file_write (struct inode *, struct file *, const char *, int);
 static void ext2_release_file (struct inode *, struct file *);
 

@@ -118,7 +118,8 @@ static int print_unex=1;
 static int FLOPPY_IRQ=6;
 static int FLOPPY_DMA=2;
 static int allowed_drive_mask = 0x33;
- 
+
+static int irqdma_allocated = 0; 
 
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -743,6 +744,9 @@ static int set_dor(int fdc, char mask, char data)
 			UDRS->select_date = jiffies;
 		}
 	}
+	
+	/* FIXME: we should be more graceful here */
+	
 	if (newdor & FLOPPY_MOTOR_MASK)
 		floppy_grab_irq_and_dma();
 	if (olddor & FLOPPY_MOTOR_MASK)
@@ -802,10 +806,11 @@ static int lock_fdc(int drive, int interruptible)
 	unsigned long flags;
 
 	if (!usage_count){
-		printk("trying to lock fdc while usage count=0\n");
+		printk(KERN_ERR "trying to lock fdc while usage count=0\n");
 		return -1;
 	}
-	floppy_grab_irq_and_dma();
+	if(floppy_grab_irq_and_dma()==-1)
+		return -EBUSY;
 	INT_OFF;
 	while (fdc_busy && NO_SIGNAL)
 		interruptible_sleep_on(&fdc_wait);
@@ -4084,6 +4089,7 @@ static int floppy_grab_irq_and_dma(void)
 			fd_outb(FDCS->dor, FD_DOR);
 	fdc = 0;
 	fd_enable_irq();
+	irqdma_allocated=1;
 	return 0;
 }
 
@@ -4102,10 +4108,14 @@ static void floppy_release_irq_and_dma(void)
 		return;
 	}
 	INT_ON;
-	fd_disable_dma();
-	fd_free_dma();
-	fd_disable_irq();
-	fd_free_irq();
+	if(irqdma_allocated)
+	{
+		fd_disable_dma();
+		fd_free_dma();
+		fd_disable_irq();
+		fd_free_irq();
+		irqdma_allocated=0;
+	}
 
 	set_dor(0, ~0, 8);
 #if N_FDC > 1
@@ -4248,10 +4258,12 @@ void cleanup_module(void)
 void floppy_eject(void)
 {
 	int dummy;
-	floppy_grab_irq_and_dma();
-	lock_fdc(MAXTIMEOUT,0);
-	dummy=fd_eject(0);
-	process_fd_request();
-	floppy_release_irq_and_dma();
+	if(floppy_grab_irq_and_dma()==0)
+	{
+		lock_fdc(MAXTIMEOUT,0);
+		dummy=fd_eject(0);
+		process_fd_request();
+		floppy_release_irq_and_dma();
+	}
 }
 #endif

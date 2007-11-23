@@ -114,6 +114,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PCI_NE2000),y)
+L_OBJS += ne2k-pci.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_PCI_NE2000),m)
+  CONFIG_8390_MODULE = y
+  M_OBJS += ne2k-pci.o
+  endif
+endif
+
 ifeq ($(CONFIG_HPLAN),y)
 L_OBJS += hp.o
 CONFIG_8390_BUILTIN = y
@@ -248,7 +258,7 @@ endif
 ifeq ($(CONFIG_LANCE),y)
 L_OBJS += lance.o
   ifeq ($(CONFIG_LANCE32),y)
-  L_OBJS += lance32.o
+  L_OBJS += pcnet32.o
   endif
 endif
 
@@ -293,6 +303,14 @@ L_OBJS += 3c509.o
 else
   ifeq ($(CONFIG_EL3),m)
   M_OBJS += 3c509.o
+  endif
+endif
+
+ifeq ($(CONFIG_CORKSCREW),y)
+L_OBJS += 3c515.o
+else
+  ifeq ($(CONFIG_CORKSCREW),m)
+  M_OBJS += 3c515.o
   endif
 endif
 

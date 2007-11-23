@@ -822,6 +822,9 @@ isdn_net_log_packet(u_char * buf, isdn_net_local * lp)
 
 	addinfo[0] = '\0';
 	switch (lp->p_encap) {
+                case ISDN_NET_ENCAP_SYNCPPP:
+                        p = &buf[IPPP_MAX_HEADER];
+                        break;
 		case ISDN_NET_ENCAP_IPTYP:
 			proto = ntohs(*(unsigned short *) &buf[0]);
 			p = &buf[2];
@@ -1344,6 +1347,7 @@ isdn_net_header(struct sk_buff *skb, struct device *dev, unsigned short type,
 	isdn_net_local *lp = dev->priv;
 	ushort len = 0;
 
+	skb->mac.raw = skb->data;
 	switch (lp->p_encap) {
 		case ISDN_NET_ENCAP_ETHER:
 			len = my_eth_header(skb, dev, type, daddr, saddr, plen);
@@ -2256,6 +2260,7 @@ isdn_net_setcfg(isdn_net_ioctl_cfg * cfg)
 			p->local.chargeint = cfg->chargeint * HZ;
 		}
 		if (cfg->p_encap != p->local.p_encap) {
+			/* FIXME: What if there are alias devices too? */
 			if (cfg->p_encap == ISDN_NET_ENCAP_RAWIP) {
 				p->dev.hard_header = NULL;
 #if (LINUX_VERSION_CODE < 0x02010F)
@@ -2282,7 +2287,7 @@ isdn_net_setcfg(isdn_net_ioctl_cfg * cfg)
 					p->dev.hard_header_cache = NULL;
 #endif
 					p->dev.header_cache_update = NULL;
-					p->dev.flags = IFF_NOARP;
+					p->dev.flags = IFF_NOARP | IFF_SOFTHEADERS;
 				}
 			}
 		}

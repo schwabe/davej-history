@@ -48,12 +48,10 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate '3c507 support' CONFIG_EL16
     fi
     tristate '3c509/3c579 support' CONFIG_EL3
+    tristate '3c515 support' CONFIG_CORKSCREW
     tristate '3c590/3c900 series (592/595/597/900/905) "Vortex/Boomerang" support' CONFIG_VORTEX
   fi
-  bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
-  if [ "$CONFIG_LANCE" = "y" ]; then
-    bool 'AMD PCInet32 (VLB and PCI) support' CONFIG_LANCE32
-  fi  
+  tristate 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
   bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC
   if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
     tristate 'WD80*3 support' CONFIG_WD80x3
@@ -95,11 +93,13 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
+    tristate 'AMD PCInet32 (VLB and PCI) support' CONFIG_LANCE32
     tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT
     tristate 'DE425, DE434, DE435, DE450, DE500 support' CONFIG_DE4X5
     tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
     tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
     tristate 'Intel EtherExpress/Pro 100B support' CONFIG_EEXPRESS_PRO100B
+    tristate 'NE2000 PCI support' CONFIG_PCI_NE2000
     tristate 'RTL 8139 support' CONFIG_RTL8139
     tristate 'SMC EtherPower II support' CONFIG_SMC_EPIC
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

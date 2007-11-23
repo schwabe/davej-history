@@ -20,6 +20,10 @@
  *	support for external PPS signal, error checking in adjtimex()
  *	Updated NTP code according to technical memorandum Jan '96
  *	"A Kernel Model for Precision Timekeeping" by Dave Mills
+ * 1998-03-05	Ulrich Windl
+ *	Allow time_constant larger than MAXTC(6) for NTP v4
+ *	(debated with and blessed by Dave Mills, despite of earlier work
+ *	and words)
  */
 
 #include <linux/errno.h>
@@ -270,7 +274,7 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	    }
 
 	    if (txc.modes & ADJ_TIMECONST) {	/* p. 24 */
-		if (txc.constant < 0 || txc.constant > MAXTC) {
+		if (txc.constant < 0) {		/* NTP v4 uses values > 6 */
 		    error = -EINVAL;
 		    goto leave;
 		}

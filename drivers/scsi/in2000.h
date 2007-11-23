@@ -2,7 +2,7 @@
  *    in2000.h -  Linux device driver definitions for the
  *                Always IN2000 ISA SCSI card.
  *
- *    IMPORTANT: This file is for version 1.31 - 06/Jul/1997
+ *    IMPORTANT: This file is for version 1.32 - 28/Mar/1998
  *
  * Copyright (c) 1996 John Shifflett, GeoLog Consulting
  *    john@geolog.com

@@ -491,6 +491,8 @@ static int nfs_mkdir(struct inode *dir, const char *name, int len, int mode)
 			nfs_lookup_cache_add(dir, name, &fhandle, &fattr);
 	}
 	iput(dir);
+	/* The parent dir link count may have changed */
+	nfs_lookup_cache_remove( NULL, dir, NULL);
 	return error;
 }
 
@@ -693,7 +695,17 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 		return;
 	}
 	was_empty = (inode->i_mode == 0);
-	inode->i_mode = fattr->mode;
+	
+	/*
+	 * Some (broken?) NFS servers return 0 as the file type.
+	 * We'll assume that 0 means the file type has not changed.
+	 */
+	if(!(fattr->mode & S_IFMT)){
+		inode->i_mode = (inode->i_mode & S_IFMT) |
+				(fattr->mode & ~S_IFMT);
+	}else{
+		inode->i_mode = fattr->mode;
+	}
 	inode->i_nlink = fattr->nlink;
 	inode->i_uid = fattr->uid;
 	inode->i_gid = fattr->gid;

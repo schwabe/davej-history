@@ -65,6 +65,10 @@ void cmd640_dump_regs (void);
  *  "No user-serviceable parts" beyond this point  :)
  *****************************************************************************/
 
+#if defined(CONFIG_BLK_DEV_IDESCSI) && !defined(CONFIG_SCSI)
+#error "SCSI must also be selected"
+#endif
+
 typedef unsigned char	byte;	/* used everywhere */
 
 /*

@@ -1,6 +1,7 @@
 /* eepro.c: Intel EtherExpress Pro/10 device driver for Linux. */
 /*
 	Written 1994, 1995,1996 by Bao C. Ha.
+	Last Update, 2/7/98, Phillip R. Jaenke
 
 	Copyright (C) 1994, 1995,1996 by Bao C. Ha.
 
@@ -10,6 +11,9 @@
 
 	The author may be reached at bao.ha@srs.gov 
 	or 418 Hastings Place, Martinez, GA 30907.
+
+	Phillip R. Jaenke may be reached at prj@nls.net
+	or P.O. Box 413, Twinsburg, OH 44087, ATTN: Linux
 
 	Things remaining to do:
 	Better record keeping of errors.
@@ -23,6 +27,9 @@
 	This is a compatibility hardware problem.
 
 	Versions:
+	
+	0.10	Added several I/O addresses previously not included.
+		(PRJ, 2/7/98)
 
 	0.09	Fixed a race condition in the transmit algorithm,
 		which causes crashes under heavy load with fast
@@ -60,7 +67,7 @@
 */
 
 static const char *version =
-	"eepro.c: v0.09 7/31/96 Bao C. Ha (bao.ha@srs.gov)\n";
+	"eepro.c: v0.10 7/31/96 Bao C. Ha (bao.ha@srs.gov)\n";
 
 #include <linux/module.h>
 
@@ -110,7 +117,7 @@ static const char *version =
 /* First, a few definitions that the brave might change. */
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int eepro_portlist[] =
-   { 0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0x360, 0};
+   { 0x200, 0x240, 0x260, 0x280, 0x2C0, 0x300, 0x310, 0x320, 0x340, 0x360, 0};
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifndef NET_DEBUG

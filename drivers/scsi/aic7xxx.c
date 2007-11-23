@@ -3595,7 +3595,7 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
         	scb->sense_cmd[1] = (cmd->lun << 5);
         	scb->sense_cmd[4] = sizeof(cmd->sense_buffer);
 
-        	scb->sg_list[0].address = VIRT_TO_BUS(&cmd->sense_buffer);
+        	scb->sg_list[0].address = VIRT_TO_BUS(&cmd->sense_buffer[0]);
         	scb->sg_list[0].length = sizeof(cmd->sense_buffer);
         	cmd->cmd_len = COMMAND_SIZE(cmd->cmnd[0]);
 
@@ -3618,10 +3618,14 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
         	hscb->data_count &= 0xFF000000;
   		hscb->data_count |= scb->sg_list[0].length;
 
-        	addr = VIRT_TO_BUS(scb->sense_cmd);
+        	addr = VIRT_TO_BUS(&scb->sense_cmd[0]);
         	memcpy(&hscb->SCSI_cmd_pointer, &addr,
         	       sizeof(hscb->SCSI_cmd_pointer));
         	hscb->SCSI_cmd_length = COMMAND_SIZE(scb->sense_cmd[0]);
+                hscb->residual_SG_segment_count = 0;
+                hscb->residual_data_count[0] = 0;
+                hscb->residual_data_count[1] = 0;
+                hscb->residual_data_count[2] = 0;
 
                 scb->sg_count = hscb->SG_segment_count;
         	scb->flags |= SCB_SENSE;
@@ -7677,9 +7681,11 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
   switch (action)
   {
     case RESET_DELAY:
+      restore_flags(processor_flags);
       return(SCSI_RESET_PENDING);
       break;
     case FAIL:
+      restore_flags(processor_flags);
       return(SCSI_RESET_ERROR);
       break;
     case DEVICE_RESET:

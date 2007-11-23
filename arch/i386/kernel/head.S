@@ -138,15 +138,15 @@ checkCPUtype:
 	 *	do all this with interrupts off.
 	 */
 #define setCx86(reg, val) \
-	movb reg,%ax;	\
-	outb %ax,$0x22;	\
-	movb val,%ax;	\
-	outb %ax,$0x23
+	movb reg,%al;	\
+	outb %al,$0x22;	\
+	movb val,%al;	\
+	outb %al,$0x23
 
 #define getCx86(reg) \
-	movb reg,%ax;	\
-	outb %ax,$0x22;	\
-	inb $0x23,%ax
+	movb reg,%al;	\
+	outb %al,$0x22;	\
+	inb $0x23,%al
 
 	/*
  	 *	Cyrix screwed this up. You have to do the basic cyrix
@@ -165,27 +165,27 @@ checkCPUtype:
 
 	cli
 	getCx86($0xc3)		# get CCR3
-	movb %ax,%cx		# Save old value
-	movb %ax,%bx
-	andb $0x0f,%bx		# Enable access to all config registers
-	orb $0x10,%bx		# by setting bit 4
-	setCx86($0xc3,%bx)
+	movb %al,%cl		# Save old value
+	movb %al,%bl
+	andb $0x0f,%bl		# Enable access to all config registers
+	orb $0x10,%bl		# by setting bit 4
+	setCx86($0xc3,%bl)
 
 	getCx86($0xe8)		# now we can get CCR4
-	orb $0x80,%ax		# and set bit 7 (CPUIDEN)
-	movb %ax,%bx		# to enable CPUID execution
-	setCx86($0xe8,%bx)
+	orb $0x80,%al		# and set bit 7 (CPUIDEN)
+	movb %al,%bl		# to enable CPUID execution
+	setCx86($0xe8,%bl)
 
         getCx86($0xfe)          # DIR0 : let's check this is a 6x86(L)
-        andb $0xf0,%ax		# should be 3xh
-	cmpb $0x30,%ax		# 
+        andb $0xf0,%al		# should be 3xh
+	cmpb $0x30,%al		# 
 	jne n6x86
         getCx86($0xe9)          # CCR5 : we reset the SLOP bit
-        andb $0xfd,%ax		# so that udelay calculation
-        movb %ax,%bx		# is correct on 6x86(L) CPUs
-        setCx86($0xe9,%bx)
+        andb $0xfd,%al		# so that udelay calculation
+        movb %al,%bl		# is correct on 6x86(L) CPUs
+        setCx86($0xe9,%bl)
 
-n6x86:	setCx86($0xc3,%cx)	# Restore old CCR3
+n6x86:	setCx86($0xc3,%cl)	# Restore old CCR3
 	sti
 
 ncyrix:	movl $3, SYMBOL_NAME(x86)
@@ -218,11 +218,15 @@ isnew:	pushl %ecx		# restore original EFLAGS
 	 */
 	/* get processor type */
 	movl $1, %eax		# Use the CPUID instruction to 
+#ifdef GAS_KNOWS_CPUID
+	cpuid			# check the processor type
+#else
 	.byte 0x0f, 0xa2	# check the processor type
+#endif
 	movb %al, %cl		# save reg for future use
 	andb $0x0f,%ah		# mask processor family
 	movb %ah,SYMBOL_NAME(x86)
-	andb $0xf0, %eax	# mask model
+	andb $0xf0, %al		# mask model
 	shrb $4, %al
 	movb %al,SYMBOL_NAME(x86_model)
 	andb $0x0f, %cl		# mask mask revision
@@ -234,10 +238,10 @@ isnew:	pushl %ecx		# restore original EFLAGS
  	 *	This trips some PPro/PII's and overwrites the mask
 	 *	with crap. Removed until the Linux/Cyrix guys fix it.
 	 */
-	xor %ax,%ax		# test again for Cyrix CPU
+	xorl %eax,%eax		# test again for Cyrix CPU
 	sahf
-	movb $5,%ax
-	movb $2,%bx
+	movb $5,%al
+	movb $2,%bl
 	div %bl
 	lahf
 	cmpb $2,%ah
@@ -247,7 +251,11 @@ isnew:	pushl %ecx		# restore original EFLAGS
 #endif
 	/* get vendor info */
 ncyrx2:	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
+#ifdef GAS_KNOWS_CPUID
+	cpuid
+#else
 	.byte 0x0f, 0xa2		# CPUID
+#endif
 	movl %ebx,SYMBOL_NAME(x86_vendor_id)	# lo 4 chars
 	movl %edx,SYMBOL_NAME(x86_vendor_id)+4	# next 4 chars
 	movl %ecx,SYMBOL_NAME(x86_vendor_id)+8	# last 4 chars
@@ -270,8 +278,8 @@ is386:	pushl %ecx		# restore original EFLAGS
 2:	movl %eax,%cr0
 	call check_x87
 #ifdef __SMP__
-	movb ready,%eax
-	orb %eax,%eax
+	movb ready,%al
+	orb %al,%al
 	jz 3f	
 	movl $ SYMBOL_NAME(swapper_pg_dir), %eax
 	movl %eax, %cr3

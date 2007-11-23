@@ -2,7 +2,7 @@
 /*
 	This is a driver for the SMC Ultra and SMC EtherEZ ISA ethercards.
 
-	Written 1993-1996 by Donald Becker.
+	Written 1993-1998 by Donald Becker.
 
 	Copyright 1993 United States Government as represented by the
 	Director, National Security Agency.
@@ -14,7 +14,7 @@
 	Center of Excellence in Space Data and Information Sciences
 		Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
-	This driver uses the cards in the 8390-compatible, shared memory mode.
+	This driver uses the cards in the 8390-compatible mode.
 	Most of the run-time complexity is handled by the generic code in
 	8390.c.  The code in this file is responsible for
 
@@ -27,6 +27,8 @@
 
 		ultra_block_input()		Routines for reading and writing blocks of
 		ultra_block_output()	packet buffer memory.
+		ultra_pio_input()
+		ultra_pio_output()
 
 	This driver enables the shared memory only when doing the actual data
 	transfers to avoid a bug in early version of the card that corrupted
@@ -34,7 +36,7 @@
 
 	This driver now supports the programmed-I/O (PIO) data transfer mode of
 	the EtherEZ. It does not use the non-8390-compatible "Altego" mode.
-	That support (if available) is smc-ez.c.
+	That support (if available) is in smc-ez.c.
 
 	Changelog:
 
@@ -44,8 +46,7 @@
 */
 
 static const char *version =
-	"smc-ultra.c:v2.00 6/6/96 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
-
+	"smc-ultra.c:v2.02 2/3/98 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/module.h>
 
@@ -69,18 +70,18 @@ int ultra_probe1(struct device *dev, int ioaddr);
 
 static int ultra_open(struct device *dev);
 static void ultra_reset_8390(struct device *dev);
-static void ultra_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+static void ultra_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page);
 static void ultra_block_input(struct device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
 static void ultra_block_output(struct device *dev, int count,
 							const unsigned char *buf, const start_page);
-static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page);
 static void ultra_pio_input(struct device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
 static void ultra_pio_output(struct device *dev, int count,
-							const unsigned char *buf, const start_page);
+							 const unsigned char *buf, const start_page);
 static int ultra_close_card(struct device *dev);
 
 
@@ -151,11 +152,8 @@ int ultra_probe1(struct device *dev, int ioaddr)
 	if ((checksum & 0xff) != 0xFF)
 		return ENODEV;
 
-	/* We should have a "dev" from Space.c or the static module table. */
-	if (dev == NULL) {
-		printk("smc-ultra.c: Passed a NULL device.\n");
+	if (dev == NULL)
 		dev = init_etherdev(0, 0);
-	}
 
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
@@ -201,7 +199,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 		printk (", no memory for dev->priv.\n");
                 return -ENOMEM;
         }
- 
+
 	/* OK, we are certain this is going to work.  Setup the device. */
 	request_region(ioaddr, ULTRA_IO_EXTENT, model_name);
 
@@ -251,12 +249,19 @@ static int
 ultra_open(struct device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
+	unsigned char irq2reg[] = {0, 0, 0x04, 0x08, 0, 0x0C, 0, 0x40,
+							   0, 0x04, 0x44, 0x48, 0, 0, 0, 0x4C, };
 
-	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, NULL))
+	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name, dev))
 		return -EAGAIN;
 
 	outb(0x00, ioaddr);	/* Disable shared memory for safety. */
 	outb(0x80, ioaddr + 5);
+	/* Set the IRQ line. */
+	outb(inb(ioaddr + 4) | 0x80, ioaddr + 4);
+	outb((inb(ioaddr + 13) & ~0x4C) | irq2reg[dev->irq], ioaddr + 13);
+	outb(inb(ioaddr + 4) & 0x7f, ioaddr + 4);
+
 	if (ei_status.block_input == &ultra_pio_input) {
 		outb(0x11, ioaddr + 6);		/* Enable interrupts and PIO. */
 		outb(0x01, ioaddr + 0x19);  	/* Enable ring read auto-wrap. */
@@ -354,10 +359,10 @@ ultra_block_output(struct device *dev, int count, const unsigned char *buf,
    byte-sequentially to IOPA, with no intervening I/O operations, and the
    data is read or written to the IOPD data port.
    The only potential complication is that the address register is shared
-   must be always be rewritten between each read/write direction change.
+   and must be always be rewritten between each read/write direction change.
    This is no problem for us, as the 8390 code ensures that we are single
    threaded. */
-static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
@@ -375,12 +380,8 @@ static void ultra_pio_input(struct device *dev, int count,
 	/* For now set the address again, although it should already be correct. */
 	outb(ring_offset, ioaddr + IOPA);	/* Set the address, LSB first. */
 	outb(ring_offset >> 8, ioaddr + IOPA);
+	/* We know skbuffs are padded to at least word alignment. */
 	insw(ioaddr + IOPD, buf, (count+1)>>1);
-#ifdef notdef
-	/* We don't need this -- skbuffs are padded to at least word alignment. */
-	if (count & 0x01) {
-		buf[count-1] = inb(ioaddr + IOPD);
-#endif
 }
 
 static void ultra_pio_output(struct device *dev, int count,
@@ -389,6 +390,7 @@ static void ultra_pio_output(struct device *dev, int count,
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
 	outb(0x00, ioaddr + IOPA);	/* Set the address, LSB first. */
 	outb(start_page, ioaddr + IOPA);
+	/* An extra odd byte is OK here as well. */
 	outsw(ioaddr + IOPD, buf, (count+1)>>1);
 }
 
@@ -404,7 +406,7 @@ ultra_close_card(struct device *dev)
 		printk("%s: Shutting down ethercard.\n", dev->name);
 
 	outb(0x00, ioaddr + 6);		/* Disable interrupts. */
-	free_irq(dev->irq, NULL);
+	free_irq(dev->irq, dev);
 	irq2dev_map[dev->irq] = 0;
 
 	NS8390_init(dev, 0);
@@ -488,6 +490,7 @@ cleanup_module(void)
  *  version-control: t
  *  kept-new-versions: 5
  *  c-indent-level: 4
+ *  c-basic-offset: 4
  *  tab-width: 4
  * End:
  */

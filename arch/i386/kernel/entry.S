@@ -182,10 +182,10 @@ ENOSYS = 38
 	cmpb SYMBOL_NAME(active_kernel_processor), %al; \
 	je 4f; \
 2:	SMP_PROF_B \
-	btl %al, SYMBOL_NAME(smp_invalidate_needed); \
+	btl %eax, SYMBOL_NAME(smp_invalidate_needed); \
 	jnc 5f; \
 	lock; \
-	btrl %al, SYMBOL_NAME(smp_invalidate_needed); \
+	btrl %eax, SYMBOL_NAME(smp_invalidate_needed); \
 	jnc 5f; \
 	movl %cr3,%edx; \
 	movl %edx,%cr3; \
