@@ -1308,6 +1308,8 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		break;		
 
 	case HDLCDRVCTL_CALIBRATE:
+		if (!suser())
+			return -EACCES;
 		bc->hdlctx.calibrate = hi.data.calibrate * bc->bitrate / 8;
 		return 0;
 

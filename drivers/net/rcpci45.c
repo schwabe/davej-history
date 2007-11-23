@@ -1152,6 +1152,9 @@ static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
     printk("RCioctl: cmd = 0x%x\n", cmd);
 #endif
  
+    if(!capable(CAP_NET_ADMIN))
+    	return -EPERM;
+    	
     switch (cmd)  {
  
     case RCU_PROTOCOL_REV:
@@ -1165,17 +1168,8 @@ static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     case RCU_COMMAND:
     {
-#ifdef LINUX_2_1
         if(copy_from_user(&RCuser, rq->ifr_data, sizeof(RCuser)))
              return -EFAULT;
-#else
-        int error;
-        error=verify_area(VERIFY_WRITE, rq->ifr_data, sizeof(RCuser));
-        if (error)  {
-            return error;
-        }
-        memcpy_fromfs(&RCuser, rq->ifr_data, sizeof(RCuser));
-#endif
         
 #ifdef RCDEBUG
         printk("RCioctl: RCuser_cmd = 0x%x\n", RCuser.cmd);
@@ -1284,11 +1278,8 @@ static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
             RCUD_DEFAULT -> rc = 0x11223344;
             break;
         }
-#ifdef LINUX_2_1
-        copy_to_user(rq->ifr_data, &RCuser, sizeof(RCuser));
-#else
-        memcpy_tofs(rq->ifr_data, &RCuser, sizeof(RCuser));
-#endif
+        if(copy_to_user(rq->ifr_data, &RCuser, sizeof(RCuser)))
+        	return -EFAULT;
         break;
     }   /* RCU_COMMAND */ 
 

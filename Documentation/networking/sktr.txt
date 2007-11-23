@@ -46,6 +46,11 @@ tr2: SK NET TR 4/16 ISA found at 0xa20, using IRQ 10 and DMA 5.
 Now just setup the device via ifconfig and set and routes you may have. After
 this you are ready to start sending some tokens.
 
+Parameters:
+The driver supports the usual parameters irq and dma (for ISA-adapters only).
+Additional, there is a parameter for setting the connection speed (4 MBits/sec
+or 16 MBit/sec). Default is 16, use "rate=4" to force 4 MBit.
+
 Errata:
 For anyone wondering where to pick up the SysKonnect adapters please browse
 to http://www.syskonnect.com

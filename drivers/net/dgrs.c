@@ -861,6 +861,8 @@ static int dgrs_ioctl(struct device *devN, struct ifreq *ifr, int cmd)
 				return -EFAULT;
 			return (0);
 		case DGRS_SETFILTER:
+			if (!suser())
+				return -EPERM;
 			if (ioc.port > privN->bcomm->bc_nports)
 				return -EINVAL;
 			if (ioc.filter >= NFILTERS)
@@ -1198,7 +1200,7 @@ dgrs_probe1(struct device *dev))
 	priv->intrcnt = 0;
 	for (i = jiffies + 2*HZ + HZ/2; time_after(i, jiffies); )
 	{
-		rmb();		/* gcc 2.95 needs this */
+		barrier();		/* gcc 2.95 needs this */
 		if (priv->intrcnt >= 2)
 			break;
 	}

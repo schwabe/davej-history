@@ -33,6 +33,13 @@
  *
  * Revision history:
  * $Log: sx.c,v $
+ * Revision 1.32  2000/03/07 90:00:00  wolff,pvdl
+ * - Fixed some sx_dprintk typos
+ * - added detection for an invalid board/module configuration
+ *
+ * Revision 1.31  2000/03/06 12:00:00  wolff,pvdl
+ * - Added support for EISA
+ *
  * Revision 1.30  2000/01/21 17:43:06  wolff
  * - Added support for SX+
  *
@@ -188,8 +195,8 @@
  * */
 
 
-#define RCS_ID "$Id: sx.c,v 1.30 2000/01/21 17:43:06 wolff Exp $"
-#define RCS_REV "$Revision: 1.30 $"
+#define RCS_ID "$Id: sx.c,v 1.32 2000/03/07 17:01:02 wolff, pvdl Exp $"
+#define RCS_REV "$Revision: 1.32 $"
 
 
 #include <linux/module.h>
@@ -291,7 +298,7 @@ static int sx_chars_in_buffer (void * ptr);
 static int sx_init_board (struct sx_board *board);
 static int sx_init_portstructs (int nboards, int nports);
 static int sx_fw_ioctl (struct inode *inode, struct file *filp,
-		         unsigned int cmd, unsigned long arg);
+                        unsigned int cmd, unsigned long arg);
 static int sx_fw_open(struct inode *inode, struct file *filp);
 static INT sx_fw_release(struct inode *inode, struct file *filp);
 static int sx_init_drivers(void);
@@ -330,11 +337,13 @@ int sx_slowpoll = 0;
 int sx_maxints = 100;
 
 /* These are the only open spaces in my computer. Yours may have more
-   or less.... */
+   or less.... -- REW 
+   duh: Card at 0xa0000 is possible on HP Netserver?? -- pvdl
+*/
 int sx_probe_addrs[]= {0xc0000, 0xd0000, 0xe0000, 
                        0xc8000, 0xd8000, 0xe8000};
 int si_probe_addrs[]= {0xc0000, 0xd0000, 0xe0000, 
-                       0xc8000, 0xd8000, 0xe8000};
+                       0xc8000, 0xd8000, 0xe8000, 0xa0000};
 
 #define NR_SX_ADDRS (sizeof(sx_probe_addrs)/sizeof (int))
 #define NR_SI_ADDRS (sizeof(si_probe_addrs)/sizeof (int))
@@ -346,6 +355,8 @@ int sx_irqmask = -1;
 
 #ifndef TWO_ZERO
 #ifdef MODULE
+MODULE_PARM(sx_probe_addrs, "i");
+MODULE_PARM(si_probe_addrs, "i");
 MODULE_PARM(sx_poll, "i");
 MODULE_PARM(sx_slowpoll, "i");
 MODULE_PARM(sx_maxints, "i");
@@ -581,6 +592,8 @@ int sx_reset (struct sx_board *board)
 			printk (KERN_INFO "sx: Card doesn't respond to reset....\n");
 			return 0;
 		}
+	} else if (IS_EISA_BOARD(board)) {
+		outb(board->irq<<4, board->eisa_base+0xc02);
 	} else {
 		/* Gory details of the SI/ISA board */
 		write_sx_byte (board, SI2_ISA_RESET,    SI2_ISA_RESET_SET);
@@ -652,6 +665,9 @@ int sx_start_board (struct sx_board *board)
 {
 	if (IS_SX_BOARD (board)) {
 		write_sx_byte (board, SX_CONFIG, SX_CONF_BUSEN);
+	} else if (IS_EISA_BOARD(board)) {
+		write_sx_byte(board, SI2_EISA_OFF, SI2_EISA_VAL);
+		outb((board->irq<<4)|4, board->eisa_base+0xc02);
 	} else {
 		/* Don't bug me about the clear_set. 
 		   I haven't the foggiest idea what it's about -- REW */
@@ -675,6 +691,8 @@ int sx_start_interrupts (struct sx_board *board)
 		write_sx_byte (board, SX_CONFIG, SX_IRQ_REG_VAL (board) | 
 		                                 SX_CONF_BUSEN | 
 		                                 SX_CONF_HOSTIRQ);
+	} else if (IS_EISA_BOARD(board)) {
+		inb(board->eisa_base+0xc03);  
 	} else {
 		switch (board->irq) {
 		case 11:write_sx_byte (board, SI2_ISA_IRQ11, SI2_ISA_IRQ11_SET);break;
@@ -740,6 +758,18 @@ int mod_compat_type (int module_type)
 	return module_type >> 4;
 }
 
+static void sx_reconfigure_port(struct sx_port *port)
+{
+	if (sx_read_channel_byte (port, hi_hstat) == HS_IDLE_OPEN) {
+		if (sx_send_command (port, HS_CONFIG, -1, HS_IDLE_OPEN) != 1) {
+			printk (KERN_WARNING "sx: Sent reconfigure command, but card didn't react.\n");
+		}
+	} else {
+		sx_dprintk (SX_DEBUG_TERMIOS, 
+		            "sx: Not sending reconfigure: port isn't open (%02x).\n", 
+		            sx_read_channel_byte (port, hi_hstat));
+	}	
+}
 
 static void sx_setsignals (struct sx_port *port, int dtr, int rts)
 {
@@ -914,16 +944,7 @@ static int sx_set_real_termios (void *ptr)
 	sx_write_channel_byte (port, hi_txoff, STOP_CHAR  (port->gs.tty));
 	sx_write_channel_byte (port, hi_rxoff, STOP_CHAR  (port->gs.tty));
 
-	if (sx_read_channel_byte (port, hi_hstat) == HS_IDLE_OPEN) {
-		if (sx_send_command (port, HS_CONFIG, -1, HS_IDLE_OPEN) != 1) {
-			printk (KERN_WARNING "sx: Sent reconfigure command, but card didn't react.\n");
-		}
-	} else {
-		sx_dprintk (SX_DEBUG_TERMIOS, 
-		            "sx: Not sending reconfigure: port isn't open (%02x).\n", 
-		            sx_read_channel_byte (port, hi_hstat));
-	}
-
+	sx_reconfigure_port(port);
 
 	/* Tell line discipline whether we will do input cooking */
 	if(I_OTHER(port->gs.tty)) {
@@ -1238,6 +1259,9 @@ static void sx_interrupt (int irq, void *ptr, struct pt_regs *regs)
 		sx_write_board_word (board, cc_int_pending, 0);
 		if (IS_SX_BOARD (board)) {
 			write_sx_byte (board, SX_RESET_IRQ, 1);
+		} else if (IS_EISA_BOARD(board)) {
+			inb(board->eisa_base+0xc03);
+			write_sx_word(board, 8, 0); 
 		} else {
 			write_sx_byte (board, SI2_ISA_INTCLEAR, SI2_ISA_INTCLEAR_CLEAR);
 			write_sx_byte (board, SI2_ISA_INTCLEAR, SI2_ISA_INTCLEAR_SET);
@@ -1381,6 +1405,7 @@ static void sx_shutdown_port (void * ptr)
 	port->gs.flags &= ~ GS_ACTIVE;
 	if (port->gs.tty && port->gs.tty->termios->c_cflag & HUPCL) {
 		sx_setsignals (port, 0, 0);
+		sx_reconfigure_port(port);
 	}
 
 	func_exit();
@@ -1661,10 +1686,11 @@ static int sx_fw_ioctl (struct inode *inode, struct file *filp,
 		board = &boards[arg];
 		break;
 	case SXIO_GET_TYPE:
-		rc = -1; /* If we manage to miss one, return error. */
+		rc = -ENOENT; /* If we manage to miss one, return error. */
 		if (IS_SX_BOARD (board)) rc = SX_TYPE_SX;
 		if (IS_CF_BOARD (board)) rc = SX_TYPE_CF;
 		if (IS_SI_BOARD (board)) rc = SX_TYPE_SI;
+		if (IS_EISA_BOARD (board)) rc = SX_TYPE_SI;
 		sx_dprintk (SX_DEBUG_FIRMWARE, "returning type= %d\n", rc);
 		break;
 	case SXIO_DO_RAMTEST:
@@ -1799,6 +1825,7 @@ static int sx_ioctl (struct tty_struct * tty, struct file * filp,
 			Get_user(ival, (unsigned int *) arg);
 			sx_setsignals(port, ((ival & TIOCM_DTR) ? 1 : -1),
 			                     ((ival & TIOCM_RTS) ? 1 : -1));
+			sx_reconfigure_port(port);
 		}
 		break;
 	case TIOCMBIC:
@@ -1807,6 +1834,7 @@ static int sx_ioctl (struct tty_struct * tty, struct file * filp,
 			Get_user(ival, (unsigned int *) arg);
 			sx_setsignals(port, ((ival & TIOCM_DTR) ? 0 : -1),
 			                     ((ival & TIOCM_RTS) ? 0 : -1));
+			sx_reconfigure_port(port);
 		}
 		break;
 	case TIOCMSET:
@@ -1815,6 +1843,7 @@ static int sx_ioctl (struct tty_struct * tty, struct file * filp,
 			Get_user(ival, (unsigned int *) arg);
 			sx_setsignals(port, ((ival & TIOCM_DTR) ? 1 : 0),
 			                     ((ival & TIOCM_RTS) ? 1 : 0));
+			sx_reconfigure_port(port);
 		}
 		break;
 
@@ -1967,7 +1996,8 @@ static int sx_init_board (struct sx_board *board)
 			chans=0;
 			break;
 		}
-		if (IS_SI_BOARD(board) && (mod_compat_type(type) == 4)) {
+		if ((IS_EISA_BOARD(board) || 
+		     IS_SI_BOARD(board)) && (mod_compat_type(type) == 4)) {
 			printk (KERN_ERR "sx: This is an invalid configuration.\n"
 			        "Don't use SXDCs on an SI/XIO adapter.\n");
 			chans=0;
@@ -2146,9 +2176,11 @@ int probe_si (struct sx_board *board)
 	if (sx_debug & SX_DEBUG_PROBE)
 		my_hd ((char *)(board->base + SI2_ISA_ID_BASE), 0x8);
 
-	for (i=0;i<8;i++) {
-		if ((read_sx_byte (board, SI2_ISA_ID_BASE+7-i) & 7) != i) {
-			return 0;
+	if (!IS_EISA_BOARD(board)) {
+		for (i=0;i<8;i++) {
+			if ((read_sx_byte (board, SI2_ISA_ID_BASE+7-i) & 7) != i) {
+				return 0;
+			}
 		}
 	}
 
@@ -2370,7 +2402,7 @@ void fix_sx_pci (PDEV, struct sx_board *board)
 	unsigned int t;
 
 #define CNTRL_REG_OFFSET        0x50
-#define CNTRL_REG_GOODVALUE     0x00260000
+#define CNTRL_REG_GOODVALUE     0x18260000
 
 	pci_read_config_dword(pdev, PCI_BASE_ADDRESS_0, &hwbase);
 	hwbase &= PCI_BASE_ADDRESS_MEM_MASK;
@@ -2393,6 +2425,7 @@ int sx_init(void)
 {
 	int i;
 	int found = 0;
+	int eisa_slot;
 	struct sx_board *board;
 
 #ifdef CONFIG_PCI
@@ -2481,6 +2514,7 @@ int sx_init(void)
 	for (i=0;i<NR_SX_ADDRS;i++) {
 		board = &boards[found];
 		board->hw_base = sx_probe_addrs[i];
+		board->base2 =
 		board->base = (ulong) ioremap(board->hw_base, SX_WINDOW_LEN);
 		board->flags &= ~SX_BOARD_TYPE;
 		board->flags |=	SX_ISA_BOARD;
@@ -2496,6 +2530,7 @@ int sx_init(void)
 	for (i=0;i<NR_SI_ADDRS;i++) {
 		board = &boards[found];
 		board->hw_base = si_probe_addrs[i];
+		board->base2 =
 		board->base = (ulong) ioremap(board->hw_base, SI2_ISA_WINDOW_LEN);
 		board->flags &= ~SX_BOARD_TYPE;
 		board->flags |=  SI_ISA_BOARD;
@@ -2508,6 +2543,34 @@ int sx_init(void)
 		}
 	}
 
+        sx_dprintk(SX_DEBUG_PROBE, "Probing for EISA cards\n");
+        for(eisa_slot=0x1000; eisa_slot<0x10000; eisa_slot+=0x1000)
+        {
+                if((inb(eisa_slot+0xc80)==0x4d) &&
+                   (inb(eisa_slot+0xc81)==0x98))
+                {
+			sx_dprintk(SX_DEBUG_PROBE, "%s : Signature found in EISA slot %d, Product %d Rev %d\n",
+			                        "XIO", (eisa_slot>>12), inb(eisa_slot+0xc82), inb(eisa_slot+0xc83));
+
+			board = &boards[found];
+			board->eisa_base = eisa_slot;
+			board->flags &= ~SX_BOARD_TYPE;
+			board->flags |= SI_EISA_BOARD;
+
+			board->hw_base = (((inb(0xc01+eisa_slot) << 8) + inb(0xc00+eisa_slot)) << 16);
+			board->base2 =
+			board->base = (ulong) ioremap(board->hw_base, SI2_EISA_WINDOW_LEN);
+
+			sx_dprintk(SX_DEBUG_PROBE, "IO hw_base address: %x\n", board->hw_base);
+			sx_dprintk(SX_DEBUG_PROBE, "base: %x\n", board->base);
+			board->irq = inb(board->eisa_base+0xc02)>>4; 
+			sx_dprintk(SX_DEBUG_PROBE, "IRQ: %d\n", board->irq);
+			
+			probe_si(board);
+
+			found++;
+		}
+	}
 	if (found) {
 		printk (KERN_INFO "sx: total of %d boards detected.\n", found);
 
@@ -2557,27 +2620,3 @@ void cleanup_module(void)
 	func_exit();
 }
 #endif
-
-
-
-
-/*
- * Anybody who knows why this doesn't work for me, please tell me -- REW.
- * Snatched from scsi.c (fixed one spelling error):
- * Overrides for Emacs so that we follow Linus' tabbing style.
- * Emacs will notice this stuff at the end of the file and automatically
- * adjust the settings for this buffer only.  This must remain at the end
- * of the file.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-indent-level: 4
- * c-brace-imaginary-offset: 0
- * c-brace-offset: -4
- * c-argdecl-indent: 4
- * c-label-offset: -4
- * c-continued-statement-offset: 4
- * c-continued-brace-offset: 0
- * indent-tabs-mode: nil
- * tab-width: 8
- * End:
- */

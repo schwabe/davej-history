@@ -6785,6 +6785,8 @@ CONFIG_SKTR
   This is support for all SysKonnect Token Ring cards, specifically
   SysKonnect TR4/16(+) ISA (SK-4190), SysKonnect TR4/16(+) PCI
   (SK-4590), SysKonnect TR4/16 PCI (SK-4591) adapters.
+  It also supports Compaq PCI Token Ring adapters and Proteon ISA
+  Token Ring adapters (1392 and 1392+).
 
   If you have such an adapter and would like to use it, say Y or M and
   read the Token-Ring mini-HOWTO, available via FTP (user: anonymous)

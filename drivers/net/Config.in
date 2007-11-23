@@ -129,7 +129,9 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     fi
     tristate 'Apricot Xen-II on board Ethernet' CONFIG_APRICOT
     tristate 'CS89x0 support' CONFIG_CS89x0
-    tristate 'DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
+    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
+    fi
     tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
     tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
     if [ "$CONFIG_DEC_ELCP" != "y" ]; then
@@ -318,14 +320,16 @@ fi
 if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
   bool 'WAN drivers' CONFIG_WAN_DRIVERS 
   if [ "$CONFIG_WAN_DRIVERS" = "y" ]; then
-    dep_tristate 'Sangoma WANPIPE(tm) multi-prot cards: (select M not Y !)' CONFIG_VENDOR_SANGOMA $CONFIG_WAN_DRIVERS 
+    dep_tristate 'Sangoma WANPIPE(tm) multi-port cards: (select M not Y !)' CONFIG_VENDOR_SANGOMA $CONFIG_WAN_DRIVERS 
+    if [ "$CONFIG_INET" != "n" ]; then
     if [ "$CONFIG_VENDOR_SANGOMA" != "n" ]; then
-      int  '  Maximum number of cards' CONFIG_WANPIPE_CARDS 1
-      #bool '  WANPIPE X.25 support' CONFIG_WANPIPE_X25
-      bool '  WANPIPE Frame Relay support' CONFIG_WANPIPE_FR
-      bool '  WANPIPE PPP support' CONFIG_WANPIPE_PPP
-      bool '  WANPIPE Cisco HDLC support' CONFIG_WANPIPE_CHDLC
-    fi
+        int  '  Maximum number of cards' CONFIG_WANPIPE_CARDS 1
+        #bool '  WANPIPE X.25 support' CONFIG_WANPIPE_X25
+        bool '  WANPIPE Frame Relay support' CONFIG_WANPIPE_FR
+        bool '  WANPIPE PPP support' CONFIG_WANPIPE_PPP
+        bool '  WANPIPE Cisco HDLC support' CONFIG_WANPIPE_CHDLC
+      fi
+    fi 
   fi
 fi
 

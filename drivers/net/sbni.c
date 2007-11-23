@@ -1223,6 +1223,8 @@ static int sbni_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		}
 		case SIOCDEVRESINSTATS:
 		{
+			if(!capable(CAP_NET_ADMIN))
+				return -EPERM;
 			DP( printk("%s: SIOCDEVRESINSTATS\n",dev->name); )
 			lp->in_stats.all_rx_number = 0;
 			lp->in_stats.bad_rx_number = 0;

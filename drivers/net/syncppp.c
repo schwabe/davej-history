@@ -326,7 +326,7 @@ static int sppp_hard_header(struct sk_buff *skb, struct device *dev, __u16 type,
 	h=(struct ppp_header *)skb->data;
 	if(sp->pp_flags&PP_CISCO)
 	{
-		h->address = CISCO_MULTICAST;
+		h->address = CISCO_UNICAST;
 		h->control = 0;
 	}
 	else

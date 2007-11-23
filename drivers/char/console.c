@@ -358,7 +358,7 @@ static u8 build_attr(int currcons, u8 _color, u8 _intensity, u8 _blink, u8 _unde
 static void update_attr(int currcons)
 {
 	attr = build_attr(currcons, color, intensity, blink, underline, reverse ^ decscnm);
-	video_erase_char = (build_attr(currcons, color, 1, 0, 0, decscnm) << 8) | ' ';
+	video_erase_char = (build_attr(currcons, color, 1, blink, 0, decscnm) << 8) | ' ';
 }
 
 /* Note: inverting the screen twice should revert to the original state */
@@ -506,9 +506,6 @@ static void set_cursor(int currcons)
 {
     if (!IS_FG || console_blanked || vcmode == KD_GRAPHICS)
 	return;
-	
-    disable_bh(CONSOLE_BH);
-    
     if (deccm) {
 	if (currcons == sel_cons)
 		clear_selection();
@@ -517,8 +514,6 @@ static void set_cursor(int currcons)
 	    sw->con_cursor(vc_cons[currcons].d,CM_DRAW);
     } else
 	hide_cursor(currcons);
-	
-    enable_bh(CONSOLE_BH);
 }
 
 static void set_origin(int currcons)
@@ -1817,12 +1812,11 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	himask = hi_font_mask;
 	charmask = himask ? 0x1ff : 0xff;
 
-	disable_bh(CONSOLE_BH);
-
 	/* undraw cursor first */
 	if (IS_FG)
 		hide_cursor(currcons);
 
+	disable_bh(CONSOLE_BH);
 	while (!tty->stopped && count) {
 		enable_bh(CONSOLE_BH);
 		if (from_user)

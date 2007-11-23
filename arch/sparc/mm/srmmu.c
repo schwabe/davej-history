@@ -2424,7 +2424,15 @@ __initfunc(static void init_swift(void))
 	BTFIXUPSET_CALL(set_pte, srmmu_set_pte_nocache_swift, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(init_new_context, swift_init_new_context, BTFIXUPCALL_NORM);
 
+#if 1
+	/* If granular flushes are ever cured and reenabled in
+	 * swift.S, revert this setting back to non-global iommu
+	 * cache flushes. -DaveM
+	 */
+	flush_page_for_dma_global = 1;
+#else
 	flush_page_for_dma_global = 0;
+#endif
 
 	/* Are you now convinced that the Swift is one of the
 	 * biggest VLSI abortions of all time?  Bravo Fujitsu!

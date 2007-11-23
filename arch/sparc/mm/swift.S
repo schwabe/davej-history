@@ -41,10 +41,10 @@ swift_flush_chunk:
 swift_flush_page_to_ram:
 	sethi	%hi(0x2000), %o0
 1:	subcc	%o0, 0x10, %o0
-	sta	%g0, [%o0] ASI_M_TXTC_TAG
+	add	%o0, %o0, %o1
 	sta	%g0, [%o0] ASI_M_DATAC_TAG
 	bne	1b
-	 nop
+	 sta	%g0, [%o1] ASI_M_TXTC_TAG
 	retl
 	 nop
 #else

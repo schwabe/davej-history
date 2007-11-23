@@ -1198,6 +1198,8 @@ plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		pc->nibble  = nl->nibble;
 		break;
 	case PLIP_SET_TIMEOUT:
+		if(!capable(CAP_NET_ADMIN))
+			return -EPERM;
 		nl->trigger = pc->trigger;
 		nl->nibble  = pc->nibble;
 		break;

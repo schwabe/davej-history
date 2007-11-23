@@ -91,7 +91,7 @@ struct proc_dir_entry tw_scsi_proc_entry = {
 };
 
 /* Globals */
-char *tw_driver_version="1.0.000";
+char *tw_driver_version="1.1.000";
 TW_Device_Extension *tw_device_extension_list[TW_MAX_SLOT];
 int tw_device_extension_count = 0;
 
@@ -2053,7 +2053,7 @@ int tw_scsiop_read_write(TW_Device_Extension *tw_dev, int request_id)
 	command_packet->status = 0;
 	command_packet->flags = 0;
 
-        if ((srb->cmnd[0] == WRITE_6) || (srb->cmnd[0] == WRITE_10)) {
+        if (srb->cmnd[0] == WRITE_10) {
 	  if ((srb->cmnd[1] & 0x8) || (srb->cmnd[1] & 0x10))
 	    command_packet->flags = 1;
         }

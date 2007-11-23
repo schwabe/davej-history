@@ -484,10 +484,10 @@ extern void scsi_unregister_module(int, void *);
 #ifdef CONFIG_SCSI_PLUTO_MODULE
 #define SD_EXTRA_DEVS 40
 #else
-#define SD_EXTRA_DEVS 4
+#define SD_EXTRA_DEVS 16
 #endif
 #define ST_EXTRA_DEVS 2
-#define SR_EXTRA_DEVS 2
+#define SR_EXTRA_DEVS 4
 #define SG_EXTRA_DEVS (SD_EXTRA_DEVS + SR_EXTRA_DEVS + ST_EXTRA_DEVS)
 
 #endif

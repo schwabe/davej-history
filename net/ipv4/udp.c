@@ -857,6 +857,7 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		sin->sin_family = AF_INET;
 		sin->sin_port = skb->h.uh->source;
 		sin->sin_addr.s_addr = skb->nh.iph->saddr;
+		memset(sin->sin_zero, 0, sizeof(sin->sin_zero));
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 		if (flags&MSG_PROXY)
 		{

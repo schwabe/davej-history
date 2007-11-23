@@ -13,6 +13,8 @@
  *	- SysKonnect TR4/16(+) ISA	(SK-4190)
  *	- SysKonnect TR4/16(+) PCI	(SK-4590)
  *	- SysKonnect TR4/16 PCI		(SK-4591)
+ *	- Compact TR PCI adapters
+ *	- Proteon TR ISA adapters	(1392, 1392+)
  *
  *  Sources:
  *  	- The hardware related parts of this driver are take from
@@ -23,9 +25,12 @@
  *  	  as samples for some tasks.
  *
  *  Maintainer(s):
- *    JS        Jay Schulist            jschlst@samba.anu.edu.au
+ *    retired: JS        Jay Schulist            jschlst@samba.anu.edu.au
  *    CG	Christoph Goos          cgoos@syskonnect.de
  *    AF	Adam Fritzler		mid@auk.cx
+ *
+ *  Contributor(s):
+ *    AB	Alexander Bech		Initiated Proteon works
  *
  *  Modification History:
  *	29-Aug-97	CG	Created
@@ -38,14 +43,17 @@
  *	21-Sep-99	AF	Added multicast changes recommended by 
  *				  Jochen Friedrich <jochen@nwe.de> (untested)
  *				Added detection of compatible Compaq PCI card  
+ *	04-Jan-2000	CG	Fixed tx-send/release synchronization
+ *	04-Mar-2000	CG	Added detection/init of Proteon ISA card
+ *	05-Mar-2000	CG	Added line speed setting (parameter "rate")
  *
  *  To do:
- *    1. Selectable 16 Mbps or 4Mbps
+ *    1. Selectable 16 Mbps or 4Mbps (CG: done)
  *    2. Multi/Broadcast packet handling (might be done)
  *
  */
 
-static const char *version = "sktr.c: v1.01 08/29/97 by Christoph Goos\n";
+static const char *version = "sktr.c: v1.02 08/29/97 by Christoph Goos\n";
 
 #ifdef MODULE
 #include <linux/module.h>
@@ -71,6 +79,7 @@ static const char *version = "sktr.c: v1.01 08/29/97 by Christoph Goos\n";
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/delay.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -82,7 +91,11 @@ static const char *version = "sktr.c: v1.01 08/29/97 by Christoph Goos\n";
 
 /* A zero-terminated list of I/O addresses to be probed. */
 static unsigned int sktr_portlist[] __initdata = {
-	0x0A20, 0x1A20, 0x0B20, 0x1B20, 0x0980, 0x1980, 0x0900, 0x1900,
+	0x0A20, 0x1A20, 0x0B20, 0x1B20, 0x0980, 0x1980, 0x0900, 0x1900,// SK
+	0x0A20, 0x0E20, 0x1A20, 0x1E20, 0x2A20, 0x2E20, 0x3A20, 0x3E20,// Prot.
+	0x4A20, 0x4E20, 0x5A20, 0x5E20, 0x6A20, 0x6E20, 0x7A20, 0x7E20,// Prot.
+	0x8A20, 0x8E20, 0x9A20, 0x9E20, 0xAA20, 0xAE20, 0xBA20, 0xBE20,// Prot.
+	0xCA20, 0xCE20, 0xDA20, 0xDE20, 0xEA20, 0xEE20, 0xFA20, 0xFE20,// Prot.
 	0
 };
 
@@ -100,10 +113,27 @@ static int sktr_dmalist[] __initdata = {
 	0
 };
 
+static unsigned short proteon_irqlist[] = {
+	7, 6, 5, 4, 3, 12, 11, 10, 9,
+	0
+};
+static int proteon_dmalist[] __initdata = {
+	5, 6, 7,
+	0
+};
+
+
 /* Card names */
 static char *pci_cardname = "SK NET TR 4/16 PCI\0";
 static char *isa_cardname = "SK NET TR 4/16 ISA\0";
+static char *proteon_cardname = "Proteon 1392\0";
 static char *AdapterName;
+
+static int AdapterNum = 0;
+
+#ifdef MODULE
+static int rate[SKTR_MAX_ADAPTERS] 	= { SPEED_16,  };
+#endif
 
 /* Use 0 for production, 1 for verification, 2 for debug, and
  * 3 for very verbose debug.
@@ -152,8 +182,10 @@ static void 	sktr_init_ipb(struct net_local *tp);
 static void 	sktr_init_net_local(struct device *dev);
 static void 	sktr_init_opb(struct net_local *tp);
 static void 	sktr_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static int 	sktr_isa_chk_card(struct device *dev, int ioaddr);
+static int 	sktr_isa_chk_card(struct device *dev, int ioaddr,
+			int *cardtype);
 static int      sktr_isa_chk_ioaddr(int ioaddr);
+static int      prot_isa_chk_ioaddr(int ioaddr);
 /* "O" */
 static int 	sktr_open(struct device *dev);
 static void	sktr_open_adapter(struct device *dev);
@@ -170,6 +202,8 @@ static void 	sktr_read_ram(struct device *dev, unsigned char *Data,
 static int 	sktr_reset_adapter(struct device *dev);
 static void 	sktr_reset_interrupt(struct device *dev);
 static void 	sktr_ring_status_irq(struct device *dev);
+static void	sktr_reg_setup(struct device *dev);
+static void	prot_reg_setup(struct device *dev);
 /* "S" */
 static int 	sktr_send_packet(struct sk_buff *skb, struct device *dev);
 static void 	sktr_set_multicast_list(struct device *dev);
@@ -304,16 +338,32 @@ __initfunc(static int sktr_pci_chk_card(struct device *dev))
 }
 
 /*
- * Detect and setup the ISA SysKonnect TR cards.
+ * Detect and setup the ISA Proteon and SysKonnect TR cards.
  */
-__initfunc(static int sktr_isa_chk_card(struct device *dev, int ioaddr))
+__initfunc(static int sktr_isa_chk_card(struct device *dev, int ioaddr,
+int *cardtype))
 {
 	int i, err;
 	unsigned long flags;
+	unsigned short *irqlist;
+	int *dmalist;
 
-	err = sktr_isa_chk_ioaddr(ioaddr);
-	if(err < 0)
-		return (-ENODEV);
+	err = prot_isa_chk_ioaddr(ioaddr);
+	if (err < 0) {
+		err = sktr_isa_chk_ioaddr(ioaddr);
+		if(err < 0)
+			return (-ENODEV);
+		AdapterName = isa_cardname;
+		*cardtype = SK_ISA;
+		irqlist = sktr_irqlist;
+		dmalist = sktr_dmalist;
+	} else {
+		AdapterName = proteon_cardname;
+		*cardtype = PROT_ISA;
+		irqlist = proteon_irqlist;
+		dmalist = proteon_dmalist;
+	}
+
 
         if(virt_to_bus((void*)((unsigned long)dev->priv+sizeof(struct net_local)))
 		> ISA_MAX_ADDRESS)
@@ -323,8 +373,6 @@ __initfunc(static int sktr_isa_chk_card(struct device *dev, int ioaddr))
                 return (-EAGAIN);
         }
 
-	AdapterName = isa_cardname;
-
         /* Grab the region so that no one else tries to probe our ioports. */
         request_region(ioaddr, SKTR_IO_EXTENT, AdapterName);
         dev->base_addr = ioaddr;
@@ -332,15 +380,15 @@ __initfunc(static int sktr_isa_chk_card(struct device *dev, int ioaddr))
         /* Autoselect IRQ and DMA if dev->irq == 0 */
         if(dev->irq == 0)
         {
-                for(i = 0; sktr_irqlist[i] != 0; i++)
+                for(i = 0; irqlist[i] != 0; i++)
                 {
-                        dev->irq = sktr_irqlist[i];
+                        dev->irq = irqlist[i];
                         err = request_irq(dev->irq, &sktr_interrupt, 0, AdapterName, dev);
                         if(!err)
 				break;
                 }
 
-                if(sktr_irqlist[i] == 0)
+                if(irqlist[i] == 0)
                 {
                         printk("%s: AutoSelect no IRQ available\n", dev->name);
                         return (-EAGAIN);
@@ -359,9 +407,9 @@ __initfunc(static int sktr_isa_chk_card(struct device *dev, int ioaddr))
         /* Always allocate the DMA channel after IRQ and clean up on failure */
         if(dev->dma == 0)
         {
-                for(i = 0; sktr_dmalist[i] != 0; i++)
+                for(i = 0; dmalist[i] != 0; i++)
                 {
-			dev->dma = sktr_dmalist[i];
+			dev->dma = dmalist[i];
                         err = request_dma(dev->dma, AdapterName);
                         if(!err)
                                 break;
@@ -416,10 +464,9 @@ __initfunc(static int sktr_probe1(struct device *dev, int ioaddr))
 	err = sktr_pci_chk_card(dev);
 	if(err < 0)
 	{
-		err = sktr_isa_chk_card(dev, ioaddr);
+		err = sktr_isa_chk_card(dev, ioaddr, &DeviceType);
 		if(err < 0)
 			return (-ENODEV);
-		DeviceType = SK_ISA;
 	}
 
 	/* Setup this devices private information structure */
@@ -428,6 +475,12 @@ __initfunc(static int sktr_probe1(struct device *dev, int ioaddr))
 		return (-ENOMEM);
 	memset(tp, 0, sizeof(struct net_local));
 	tp->DeviceType = DeviceType;
+	if(DeviceType == SK_ISA || DeviceType == PROT_ISA)
+		tp->BusType = BUS_TYPE_ISA;
+	else
+		tp->BusType = BUS_TYPE_PCI;
+	tp->DataRate = rate[AdapterNum];
+	AdapterNum++;
 
 	dev->priv		= tp;
 	dev->init               = sktr_init_card;
@@ -486,6 +539,28 @@ __initfunc(static int sktr_isa_chk_ioaddr(int ioaddr))
 }
 
 /*
+ * This function tests if a proteon adapter is really installed at the
+ * given I/O address. Return negative if no adapter at IO addr.
+ */
+__initfunc(static int prot_isa_chk_ioaddr(int ioaddr))
+{
+	unsigned char chk1, chk2;
+	int i;
+
+	chk1 = inb(ioaddr + 0x1f);	/* Get Proteon ID reg 1 */
+	if (chk1 != 0x1f)
+		return (-1);
+	chk1 = inb(ioaddr + 0x1e) & 0x07;	/* Get Proteon ID reg 0 */
+	for (i=0; i<16; i++) {
+		chk2 = inb(ioaddr + 0x1e) & 0x07;
+		if (((chk1 + 1) & 0x07) != chk2)
+			return (-1);
+		chk1 = chk2;
+	}
+	return (0);
+}
+
+/*
  * Open/initialize the board. This is called sometime after
  * booting when the 'ifconfig' program is run.
  *
@@ -502,7 +577,7 @@ static int sktr_open(struct device *dev)
 	err = sktr_chipset_init(dev);
 	if(err)
 	{
-		printk(KERN_INFO "%s: Chipset initialization error\n", 
+		printk("%s: Chipset initialization error\n", 
 			dev->name);
 		return (-1);
 	}
@@ -574,14 +649,90 @@ static void sktr_timer_end_wait(unsigned long data)
 	return;
 }
 
+/* setup non-standard registers for SK ISA adapters */
+static void sktr_reg_setup(struct device *dev)
+{
+	struct net_local *tp = (struct net_local *)dev->priv;
+	unsigned char PosReg, Tmp;
+	int i;
+	unsigned short *irqlist;
+
+	irqlist = sktr_irqlist;
+	PosReg = 0;
+	for(i = 0; irqlist[i] != 0; i++)
+	{
+		if(irqlist[i] == dev->irq)
+			break;
+	}
+
+	/* Choose default cycle time, 500 nsec   */
+	PosReg |= CYCLE_TIME << 2;
+	PosReg |= i << 4;
+	i = dev->dma - 5;
+	PosReg |= i;
+
+	if(tp->DataRate == SPEED_4)
+		PosReg |= LINE_SPEED_BIT;
+	else
+		PosReg &= ~LINE_SPEED_BIT;
+
+	outb(PosReg, dev->base_addr + POSREG);
+	Tmp = inb(dev->base_addr + POSREG);
+	if((Tmp & ~CYCLE_TIME) != (PosReg & ~CYCLE_TIME))
+		printk("%s: POSREG error\n", dev->name);
+
+	return;
+}
+
+/* setup non-standard registers for Proteon ISA adapters */
+static void prot_reg_setup(struct device *dev)
+{
+	struct net_local *tp = (struct net_local *)dev->priv;
+	unsigned char PosReg;
+	int i;
+	unsigned short *irqlist;
+
+	/* Proteon reset sequence */
+	outb(0, dev->base_addr + 0x11);
+	mdelay(20);
+	outb(0x04, dev->base_addr + 0x11);
+	mdelay(20);
+	outb(0, dev->base_addr + 0x11);
+	mdelay(100);
+
+	/* set control/status reg */
+	PosReg = inb(dev->base_addr + 0x11);
+	PosReg |= 0x78;
+	PosReg &= 0xf9;
+	if(tp->DataRate == SPEED_4)
+		PosReg |= 0x20;
+	else
+		PosReg &= ~0x20;
+
+	outb(PosReg, dev->base_addr + 0x11);
+	outb(0xff, dev->base_addr + 0x12);
+	irqlist = proteon_irqlist;
+	for(i = 0; irqlist[i] != 0; i++)
+	{
+		if(irqlist[i] == dev->irq)
+			break;
+	}
+
+	PosReg = i;
+	i = (7 - dev->dma) << 4;
+	PosReg |= i;
+	outb(PosReg, dev->base_addr + 0x13);
+
+	return;
+}
+
 /*
  * Initialize the chipset
  */
 static int sktr_chipset_init(struct device *dev)
 {
 	struct net_local *tp = (struct net_local *)dev->priv;
-	unsigned char PosReg, Tmp;
-	int i, err;
+	int err;
 
 	sktr_init_ipb(tp);
 	sktr_init_opb(tp);
@@ -590,43 +741,28 @@ static int sktr_chipset_init(struct device *dev)
 	/* Set pos register: selects irq and dma channel.
 	 * Only for ISA bus adapters.
 	 */
-	if(dev->dma > 0)
-	{
-		PosReg = 0;
-		for(i = 0; sktr_irqlist[i] != 0; i++)
-		{
-			if(sktr_irqlist[i] == dev->irq)
-				break;
-		}
-
-		/* Choose default cycle time, 500 nsec   */
-		PosReg |= CYCLE_TIME << 2;
-		PosReg |= i << 4;
-		i = dev->dma - 5;
-		PosReg |= i;
-
-		if(tp->DataRate == SPEED_4)
-			PosReg |= LINE_SPEED_BIT;
-		else
-			PosReg &= ~LINE_SPEED_BIT;
-
-		outb(PosReg, dev->base_addr + POSREG);
-		Tmp = inb(dev->base_addr + POSREG);
-		if((Tmp & ~CYCLE_TIME) != (PosReg & ~CYCLE_TIME))
-			printk(KERN_INFO "%s: POSREG error\n", dev->name);
-	}
+	if (tp->DeviceType == SK_ISA)
+		sktr_reg_setup(dev);
+	else if (tp->DeviceType == PROT_ISA)
+		prot_reg_setup(dev);
 
 	err = sktr_reset_adapter(dev);
-	if(err < 0)
+	if(err < 0) {
+		printk("sktr_reset_adapter failed\n");
 		return (-1);
+	}
 
 	err = sktr_bringup_diags(dev);
-	if(err < 0)
+	if(err < 0) {
+		printk("sktr_bringup_diag failed\n");
 		return (-1);
+	}
 
 	err = sktr_init_adapter(dev);
-	if(err < 0)
+	if(err < 0) {
+		printk("sktr_init_adapter failed\n");
 		return (-1);
+	}
 
 	return (0);
 }
@@ -660,9 +796,10 @@ static void sktr_init_net_local(struct device *dev)
 	tp->LobeWireFaultLogged	= 0;
 	tp->LastOpenStatus	= 0;
 	tp->MaxPacketSize	= DEFAULT_PACKET_SIZE;
+	tp->Sending		= 0;
 
 	skb_queue_head_init(&tp->SendSkbQueue);
-	tp->QueueSkb = MAX_TX_QUEUE;
+	atomic_set(&tp->QueueSkb, MAX_TX_QUEUE);
 
 	/* Create circular chain of transmit lists */
 	for (i = 0; i < TPL_NUM; i++)
@@ -704,12 +841,14 @@ static void sktr_init_net_local(struct device *dev)
 			skb_put(tp->Rpl[i].Skb, tp->MaxPacketSize);
 
 			/* data unreachable for DMA ? then use local buffer */
-			if(tp->DeviceType == SK_ISA &&
+			if(tp->BusType == BUS_TYPE_ISA &&
 				virt_to_bus(tp->Rpl[i].Skb->data) +
 				tp->MaxPacketSize > ISA_MAX_ADDRESS)
 			{
 				tp->Rpl[i].SkbStat = SKB_DATA_COPY;
-				tp->Rpl[i].FragList[0].DataAddr = htonl(virt_to_bus(tp->LocalRxBuffers[i]));
+				tp->Rpl[i].FragList[0].DataAddr =
+					htonl(virt_to_bus(
+					tp->LocalRxBuffers[i]));
 				tp->Rpl[i].MData = tp->LocalRxBuffers[i];
 			}
 			else	/* DMA directly in skb->data */
@@ -880,13 +1019,13 @@ static int sktr_send_packet(struct sk_buff *skb, struct device *dev)
 		return (1);
 	}
 
-	if(tp->QueueSkb == 0)
+	if(atomic_read(&tp->QueueSkb) == 0)
 		return (1);	/* Return with tbusy set: queue full */
 
-	tp->QueueSkb--;
+	atomic_dec(&tp->QueueSkb);
 	skb_queue_tail(&tp->SendSkbQueue, skb);
 	sktr_hardware_send_packet(dev, tp);
-	if(tp->QueueSkb > 0)
+	if(atomic_read(&tp->QueueSkb) > 0)
 		dev->tbusy = 0;
 
 	return (0);
@@ -903,6 +1042,7 @@ static void sktr_hardware_send_packet(struct device *dev, struct net_local* tp)
 	struct sk_buff *skb;
 	int i;
     
+	tp->Sending = 1;
 	for(;;)
 	{
 		/* Try to get a free TPL from the chain.
@@ -912,18 +1052,21 @@ static void sktr_hardware_send_packet(struct device *dev, struct net_local* tp)
 		 */
 		if(tp->TplFree->NextTPLPtr->BusyFlag)	/* No free TPL */
 		{
-			printk(KERN_INFO "%s: No free TPL\n", dev->name);
+			// printk("%s: No free TPL\n", dev->name);
+			tp->Sending = 0;
 			return;
 		}
 
 		/* Send first buffer from queue */
 		skb = skb_dequeue(&tp->SendSkbQueue);
-		if(skb == NULL)
+		if(skb == NULL) {
+			tp->Sending = 0;
 			return;
+		}
 
-		tp->QueueSkb++;
+		atomic_inc(&tp->QueueSkb);
 		/* Is buffer reachable for Busmaster-DMA? */
-		if(tp->DeviceType == SK_ISA && 
+		if(tp->BusType == BUS_TYPE_ISA && 
 			virt_to_bus((void*)(((long) skb->data) + skb->len))
 			> ISA_MAX_ADDRESS)
 		{
@@ -946,6 +1089,7 @@ static void sktr_hardware_send_packet(struct device *dev, struct net_local* tp)
 
 		tp->LastSendTime	= jiffies;
 		tpl 			= tp->TplFree;	/* Get the "free" TPL */
+		tpl->Status		= 0;		/* set to INVALID */
 		tpl->BusyFlag 		= 1;		/* Mark TPL as busy */
 		tp->TplFree 		= tpl->NextTPLPtr;
     
@@ -967,6 +1111,7 @@ static void sktr_hardware_send_packet(struct device *dev, struct net_local* tp)
 		sktr_exec_sifcmd(dev, CMD_TX_VALID);
 	}
 
+	tp->Sending = 0;
 	return;
 }
 
@@ -1012,7 +1157,8 @@ static void sktr_timer_chk(unsigned long data)
 
 	sktr_chk_outstanding_cmds(dev);
 	if(time_before(tp->LastSendTime + SEND_TIMEOUT, jiffies)
-		&& (tp->QueueSkb < MAX_TX_QUEUE || tp->TplFree != tp->TplBusy))
+		&& (atomic_read(&tp->QueueSkb) < MAX_TX_QUEUE ||
+		tp->TplFree != tp->TplBusy))
 	{
 		/* Anything to send, but stalled to long */
 		tp->LastSendTime = jiffies;
@@ -1059,7 +1205,8 @@ static void sktr_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		if(!sktr_chk_ssb(tp, irq_type))
 		{
-			printk(KERN_INFO "%s: DATA LATE occurred\n", dev->name);
+			printk(KERN_DEBUG "%s: DATA LATE occurred\n",
+				dev->name);
 			break;
 		}
 
@@ -1107,7 +1254,7 @@ static void sktr_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				break;
 
 			default:
-				printk(KERN_INFO "Unknown Token Ring IRQ\n");
+				printk(KERN_DEBUG "Unknown Token Ring IRQ\n");
 				break;
 		}
 
@@ -1255,19 +1402,19 @@ static void sktr_cmd_status_irq(struct device *dev)
 		else 	/* The adapter did not open. */
 		{
 	    		if(ssb_parm_0 & NODE_ADDR_ERROR)
-				printk(KERN_INFO "%s: Node address error\n",
+				printk("%s: Node address error\n",
 					dev->name);
 	    		if(ssb_parm_0 & LIST_SIZE_ERROR)
-				printk(KERN_INFO "%s: List size error\n",
+				printk("%s: List size error\n",
 					dev->name);
 	    		if(ssb_parm_0 & BUF_SIZE_ERROR)
-				printk(KERN_INFO "%s: Buffer size error\n",
+				printk("%s: Buffer size error\n",
 					dev->name);
 	    		if(ssb_parm_0 & TX_BUF_COUNT_ERROR)
-				printk(KERN_INFO "%s: Tx buffer count error\n",
+				printk("%s: Tx buffer count error\n",
 					dev->name);
 	    		if(ssb_parm_0 & INVALID_OPEN_OPTION)
-				printk(KERN_INFO "%s: Invalid open option\n",
+				printk("%s: Invalid open option\n",
 					dev->name);
 	    		if(ssb_parm_0 & OPEN_ERROR)
 			{
@@ -1278,7 +1425,7 @@ static void sktr_cmd_status_irq(struct device *dev)
 						if(!tp->LobeWireFaultLogged)
 						{
 							tp->LobeWireFaultLogged = 1;
-							printk(KERN_INFO "%s: %s Lobe wire fault (check cable !).\n", dev->name, open_err);
+							printk("%s: %s Lobe wire fault (check cable !).\n", dev->name, open_err);
 		    				}
 						tp->ReOpenInProgress	= 1;
 						tp->AdapterOpenFlag 	= 0;
@@ -1287,27 +1434,27 @@ static void sktr_cmd_status_irq(struct device *dev)
 						return;
 
 					case PHYSICAL_INSERTION:
-						printk(KERN_INFO "%s: %s Physical insertion.\n", dev->name, open_err);
+						printk("%s: %s Physical insertion.\n", dev->name, open_err);
 						break;
 
 					case ADDRESS_VERIFICATION:
-						printk(KERN_INFO "%s: %s Address verification.\n", dev->name, open_err);
+						printk("%s: %s Address verification.\n", dev->name, open_err);
 						break;
 
 					case PARTICIPATION_IN_RING_POLL:
-						printk(KERN_INFO "%s: %s Participation in ring poll.\n", dev->name, open_err);
+						printk("%s: %s Participation in ring poll.\n", dev->name, open_err);
 						break;
 
 					case REQUEST_INITIALISATION:
-						printk(KERN_INFO "%s: %s Request initialisation.\n", dev->name, open_err);
+						printk("%s: %s Request initialisation.\n", dev->name, open_err);
 						break;
 
 					case FULLDUPLEX_CHECK:
-						printk(KERN_INFO "%s: %s Full duplex check.\n", dev->name, open_err);
+						printk("%s: %s Full duplex check.\n", dev->name, open_err);
 						break;
 
 					default:
-						printk(KERN_INFO "%s: %s Unknown open phase\n", dev->name, open_err);
+						printk("%s: %s Unknown open phase\n", dev->name, open_err);
 						break;
 				}
 
@@ -1315,61 +1462,61 @@ static void sktr_cmd_status_irq(struct device *dev)
 				switch(ssb_parm_0 & OPEN_ERROR_CODES_MASK)
 				{
 					case OPEN_FUNCTION_FAILURE:
-						printk(KERN_INFO "%s: %s OPEN_FUNCTION_FAILURE", dev->name, code_err);
+						printk("%s: %s OPEN_FUNCTION_FAILURE", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_FUNCTION_FAILURE;
 						break;
 
 					case OPEN_SIGNAL_LOSS:
-						printk(KERN_INFO "%s: %s OPEN_SIGNAL_LOSS\n", dev->name, code_err);
+						printk("%s: %s OPEN_SIGNAL_LOSS\n", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_SIGNAL_LOSS;
 						break;
 
 					case OPEN_TIMEOUT:
-						printk(KERN_INFO "%s: %s OPEN_TIMEOUT\n", dev->name, code_err);
+						printk("%s: %s OPEN_TIMEOUT\n", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_TIMEOUT;
 						break;
 
 					case OPEN_RING_FAILURE:
-						printk(KERN_INFO "%s: %s OPEN_RING_FAILURE\n", dev->name, code_err);
+						printk("%s: %s OPEN_RING_FAILURE\n", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_RING_FAILURE;
 						break;
 
 					case OPEN_RING_BEACONING:
-						printk(KERN_INFO "%s: %s OPEN_RING_BEACONING\n", dev->name, code_err);
+						printk("%s: %s OPEN_RING_BEACONING\n", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_RING_BEACONING;
 						break;
 
 					case OPEN_DUPLICATE_NODEADDR:
-						printk(KERN_INFO "%s: %s OPEN_DUPLICATE_NODEADDR\n", dev->name, code_err);
+						printk("%s: %s OPEN_DUPLICATE_NODEADDR\n", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_DUPLICATE_NODEADDR;
 						break;
 
 					case OPEN_REQUEST_INIT:
-						printk(KERN_INFO "%s: %s OPEN_REQUEST_INIT\n", dev->name, code_err);
+						printk("%s: %s OPEN_REQUEST_INIT\n", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_REQUEST_INIT;
 						break;
 
 					case OPEN_REMOVE_RECEIVED:
-						printk(KERN_INFO "%s: %s OPEN_REMOVE_RECEIVED", dev->name, code_err);
+						printk("%s: %s OPEN_REMOVE_RECEIVED", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_REMOVE_RECEIVED;
 						break;
 
 					case OPEN_FULLDUPLEX_SET:
-						printk(KERN_INFO "%s: %s OPEN_FULLDUPLEX_SET\n", dev->name, code_err);
+						printk("%s: %s OPEN_FULLDUPLEX_SET\n", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_FULLDUPLEX_SET;
 						break;
 
 					default:
-						printk(KERN_INFO "%s: %s Unknown open err code", dev->name, code_err);
+						printk("%s: %s Unknown open err code", dev->name, code_err);
 						tp->LastOpenStatus =
 							OPEN_FUNCTION_FAILURE;
 						break;
@@ -1646,7 +1793,7 @@ static int sktr_bringup_diags(struct device *dev)
 	do {
 		retry_cnt--;
 		if(sktr_debug > 3)
-			printk(KERN_INFO "BUD-Status: \n");
+			printk("BUD-Status: \n");
 		loop_cnt = BUD_MAX_LOOPCNT;	/* maximum: three seconds*/
 		do {			/* Inspect BUD results */
 			loop_cnt--;
@@ -1655,7 +1802,7 @@ static int sktr_bringup_diags(struct device *dev)
 			Status &= STS_MASK;
 
 			if(sktr_debug > 3)
-				printk(KERN_INFO " %04X \n", Status);
+				printk(" %04X \n", Status);
 			/* BUD successfully completed */
 			if(Status == STS_INITIALIZE)
 				return (1);
@@ -1666,7 +1813,7 @@ static int sktr_bringup_diags(struct device *dev)
 		/* Error preventing completion of BUD */
 		if(retry_cnt > 0)
 		{
-			printk(KERN_INFO "%s: Adapter Software Reset.\n", 
+			printk("%s: Adapter Software Reset.\n", 
 				dev->name);
 			sktr_exec_sifcmd(dev, EXEC_SOFT_RESET);
 			sktr_wait(HALF_SECOND);
@@ -1676,7 +1823,7 @@ static int sktr_bringup_diags(struct device *dev)
 	Status = inw(ioaddr + SIFSTS);
 	Status &= STS_ERROR_MASK;	/* Hardware error occurred! */
 
-	printk(KERN_INFO "%s: Bring Up Diagnostics Error (%04X) occurred\n",
+	printk("%s: Bring Up Diagnostics Error (%04X) occurred\n",
 		dev->name, Status);
 
 	return (-1);
@@ -1977,56 +2124,57 @@ static void sktr_ring_status_irq(struct device *dev)
 	/* First: fill up statistics */
 	if(tp->ssb.Parm[0] & SIGNAL_LOSS)
 	{
-		printk(KERN_INFO "%s: Signal Loss\n", dev->name);
+		printk("%s: Signal Loss\n", dev->name);
 		tp->MacStat.line_errors++;
 	}
 
 	/* Adapter is closed, but initialized */
 	if(tp->ssb.Parm[0] & LOBE_WIRE_FAULT)
 	{
-		printk(KERN_INFO "%s: Lobe Wire Fault, Reopen Adapter\n", 
+		printk("%s: Lobe Wire Fault, Reopen Adapter\n", 
 			dev->name);
 		tp->MacStat.line_errors++;
 	}
 
 	if(tp->ssb.Parm[0] & RING_RECOVERY)
-		printk(KERN_INFO "%s: Ring Recovery\n", dev->name);
+		printk("%s: Ring Recovery\n", dev->name);
 
 	/* Counter overflow: read error log */
 	if(tp->ssb.Parm[0] & COUNTER_OVERFLOW)
 	{
-		printk(KERN_INFO "%s: Counter Overflow\n", dev->name);
+		printk("%s: Counter Overflow\n", dev->name);
 		sktr_exec_cmd(dev, OC_READ_ERROR_LOG);
 	}
 
 	/* Adapter is closed, but initialized */
 	if(tp->ssb.Parm[0] & REMOVE_RECEIVED)
-		printk(KERN_INFO "%s: Remove Received, Reopen Adapter\n", 
+		printk("%s: Remove Received, Reopen Adapter\n", 
 			dev->name);
 
 	/* Adapter is closed, but initialized */
 	if(tp->ssb.Parm[0] & AUTO_REMOVAL_ERROR)
-		printk(KERN_INFO "%s: Auto Removal Error, Reopen Adapter\n", 
+		printk("%s: Auto Removal Error, Reopen Adapter\n", 
 			dev->name);
 
 	if(tp->ssb.Parm[0] & HARD_ERROR)
-		printk(KERN_INFO "%s: Hard Error\n", dev->name);
+		printk("%s: Hard Error\n", dev->name);
 
 	if(tp->ssb.Parm[0] & SOFT_ERROR)
-		printk(KERN_INFO "%s: Soft Error\n", dev->name);
+		printk("%s: Soft Error\n", dev->name);
 
 	if(tp->ssb.Parm[0] & TRANSMIT_BEACON)
-		printk(KERN_INFO "%s: Transmit Beacon\n", dev->name);
+		printk("%s: Transmit Beacon\n", dev->name);
 
 	if(tp->ssb.Parm[0] & SINGLE_STATION)
-		printk(KERN_INFO "%s: Single Station\n", dev->name);
+		printk("%s: Single Station\n", dev->name);
 
 	/* Check if adapter has been closed */
 	if(tp->ssb.Parm[0] & ADAPTER_CLOSED)
 	{
-		printk(KERN_INFO "%s: Adapter closed (Reopening)," 
+		printk("%s: Adapter closed (Reopening)," 
 			"QueueSkb %d, CurrentRingStat %x\n",
-			dev->name, tp->QueueSkb, tp->CurrentRingStatus);
+			dev->name, atomic_read(&tp->QueueSkb),
+			tp->CurrentRingStatus);
 		tp->AdapterOpenFlag = 0;
 		sktr_open_adapter(dev);
 	}
@@ -2067,69 +2215,69 @@ static void sktr_chk_irq(struct device *dev)
 	switch(AdapterCheckBlock[0])
 	{
 		case DIO_PARITY:
-			printk(KERN_INFO "%s: DIO parity error\n", dev->name);
+			printk("%s: DIO parity error\n", dev->name);
 			break;
 
 		case DMA_READ_ABORT:
-			printk(KERN_INFO "%s DMA read operation aborted:\n",
+			printk("%s DMA read operation aborted:\n",
 				dev->name);
 			switch (AdapterCheckBlock[1])
 			{
 				case 0:
-					printk(KERN_INFO "Timeout\n");
-					printk(KERN_INFO "Address: %04X %04X\n",
+					printk("Timeout\n");
+					printk("Address: %04X %04X\n",
 						AdapterCheckBlock[2],
 						AdapterCheckBlock[3]);
 					break;
 
 				case 1:
-					printk(KERN_INFO "Parity error\n");
-					printk(KERN_INFO "Address: %04X %04X\n",
+					printk("Parity error\n");
+					printk("Address: %04X %04X\n",
 						AdapterCheckBlock[2], 
 						AdapterCheckBlock[3]);
 					break;
 
 				case 2: 
-					printk(KERN_INFO "Bus error\n");
-					printk(KERN_INFO "Address: %04X %04X\n",
+					printk("Bus error\n");
+					printk("Address: %04X %04X\n",
 						AdapterCheckBlock[2], 
 						AdapterCheckBlock[3]);
 					break;
 
 				default:
-					printk(KERN_INFO "Unknown error.\n");
+					printk("Unknown error.\n");
 					break;
 			}
 			break;
 
 		case DMA_WRITE_ABORT:
-			printk(KERN_INFO "%s: DMA write operation aborted: \n",
+			printk("%s: DMA write operation aborted: \n",
 				dev->name);
 			switch (AdapterCheckBlock[1])
 			{
 				case 0: 
-					printk(KERN_INFO "Timeout\n");
-					printk(KERN_INFO "Address: %04X %04X\n",
+					printk("Timeout\n");
+					printk("Address: %04X %04X\n",
 						AdapterCheckBlock[2], 
 						AdapterCheckBlock[3]);
 					break;
 
 				case 1: 
-					printk(KERN_INFO "Parity error\n");
-					printk(KERN_INFO "Address: %04X %04X\n",
+					printk("Parity error\n");
+					printk("Address: %04X %04X\n",
 						AdapterCheckBlock[2], 
 						AdapterCheckBlock[3]);
 					break;
 
 				case 2: 
-					printk(KERN_INFO "Bus error\n");
-					printk(KERN_INFO "Address: %04X %04X\n",
+					printk("Bus error\n");
+					printk("Address: %04X %04X\n",
 						AdapterCheckBlock[2], 
 						AdapterCheckBlock[3]);
 					break;
 
 				default:
-					printk(KERN_INFO "Unknown error.\n");
+					printk("Unknown error.\n");
 					break;
 			}
 			break;
@@ -2207,7 +2355,7 @@ static void sktr_read_ptr(struct device *dev)
 	sktr_read_ram(dev, (unsigned char *)&adapterram,
 			(unsigned short)SWAPB(tp->intptrs.AdapterRAMPtr), 2);
 
-	printk(KERN_INFO "%s: Adapter RAM size: %d K\n", 
+	printk("%s: Adapter RAM size: %d K\n", 
 		dev->name, SWAPB(adapterram));
 
 	return;
@@ -2301,7 +2449,7 @@ static void sktr_cancel_tx_queue(struct net_local* tp)
 		sktr_write_tpl_status(tpl, 0);	/* Clear VALID bit */
 		tpl->BusyFlag = 0;		/* "free" TPL */
 
-		printk(KERN_INFO "Cancel tx (%08lXh).\n", (unsigned long)tpl);
+		printk("Cancel tx (%08lXh).\n", (unsigned long)tpl);
 
 		dev_kfree_skb(tpl->Skb);
 	}
@@ -2311,7 +2459,7 @@ static void sktr_cancel_tx_queue(struct net_local* tp)
 		skb = skb_dequeue(&tp->SendSkbQueue);
 		if(skb == NULL)
 			break;
-		tp->QueueSkb++;
+		atomic_inc(&tp->QueueSkb);
 		dev_kfree_skb(skb);
 	}
 
@@ -2360,7 +2508,7 @@ static void sktr_tx_status_irq(struct device *dev)
 
 			if((HighAc != LowAc) || (HighAc == AC_NOT_RECOGNIZED))
 			{
-				printk(KERN_INFO "%s: (DA=%08lX not recognized)",
+				printk("%s: (DA=%08lX not recognized)",
 					dev->name,
 					*(unsigned long *)&tpl->MData[2+2]);
 			}
@@ -2387,7 +2535,7 @@ static void sktr_tx_status_irq(struct device *dev)
 	}
 
 	dev->tbusy = 0;
-	if(tp->QueueSkb < MAX_TX_QUEUE)
+	if(atomic_read(&tp->QueueSkb) < MAX_TX_QUEUE && !tp->Sending)
 		sktr_hardware_send_packet(dev, tp);
 
 	return;
@@ -2529,12 +2677,14 @@ static void sktr_rcv_status_irq(struct device *dev)
 			skb_put(rpl->Skb, tp->MaxPacketSize);
 
 			/* Data unreachable for DMA ? then use local buffer */
-			if(tp->DeviceType == SK_ISA &&
+			if(tp->BusType == BUS_TYPE_ISA &&
 				virt_to_bus(rpl->Skb->data) + tp->MaxPacketSize
 				> ISA_MAX_ADDRESS)
 			{
 				rpl->SkbStat = SKB_DATA_COPY;
-				rpl->FragList[0].DataAddr = htonl(virt_to_bus(tp->LocalRxBuffers[rpl->RPLIndex]));
+				rpl->FragList[0].DataAddr = 
+					htonl(virt_to_bus(
+					tp->LocalRxBuffers[rpl->RPLIndex]));
 				rpl->MData = tp->LocalRxBuffers[rpl->RPLIndex];
 			}
 			else
@@ -2637,13 +2787,14 @@ static void sktr_dump(unsigned char *Data, int length)
 #ifdef MODULE
 
 static struct device* dev_sktr[SKTR_MAX_ADAPTERS];
-static int io[SKTR_MAX_ADAPTERS]	= { 0, 0 };
-static int irq[SKTR_MAX_ADAPTERS] 	= { 0, 0 };
-static int mem[SKTR_MAX_ADAPTERS] 	= { 0, 0 };
+static int io[SKTR_MAX_ADAPTERS]	= { 0,  };
+static int irq[SKTR_MAX_ADAPTERS] 	= { 0,  };
+static int dma[SKTR_MAX_ADAPTERS] 	= { 0,  };
 
 MODULE_PARM(io,  "1-" __MODULE_STRING(SKTR_MAX_ADAPTERS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(SKTR_MAX_ADAPTERS) "i");
-MODULE_PARM(mem, "1-" __MODULE_STRING(SKTR_MAX_ADAPTERS) "i");
+MODULE_PARM(dma, "1-" __MODULE_STRING(SKTR_MAX_ADAPTERS) "i");
+MODULE_PARM(rate, "1-" __MODULE_STRING(SKTR_MAX_ADAPTERS) "i");
 
 int init_module(void)
 {
@@ -2651,8 +2802,6 @@ int init_module(void)
 
 	for(i = 0; i < SKTR_MAX_ADAPTERS; i++)
 	{
-                irq[i] = 0;
-                mem[i] = 0;
                 dev_sktr[i] = NULL;
                 dev_sktr[i] = init_trdev(dev_sktr[i], 0);
                 if(dev_sktr[i] == NULL)
@@ -2660,7 +2809,7 @@ int init_module(void)
 
 		dev_sktr[i]->base_addr = io[i];
                 dev_sktr[i]->irq       = irq[i];
-                dev_sktr[i]->mem_start = mem[i];
+                dev_sktr[i]->dma       = dma[i];
                 dev_sktr[i]->init      = &sktr_probe;
 
                 if(register_trdev(dev_sktr[i]) != 0)

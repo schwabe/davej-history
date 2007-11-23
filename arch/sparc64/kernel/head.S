@@ -262,7 +262,16 @@ sun4u_init:
 
 	/* Setup "Linux Current Register", thanks Sun 8-) */
 	wr	%g0, 0x1, %pcr
-	wr	%g6, 0x0, %pic
+
+	/* Blackbird errata workaround.  See commentary in
+	 * smp.c:smp_percpu_timer_interrupt() for more
+	 * information.
+	 */
+	ba,pt	%xcc, 99f
+	 nop
+	.align	64
+99:	wr	%g6, %g0, %pic
+	rd	%pic, %g0
 #endif
 
 	mov	1, %g5

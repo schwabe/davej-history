@@ -131,7 +131,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 		/* Skip I/O spaces */
 		if(!(dev->base_address[i]&PCI_BASE_ADDRESS_SPACE))
 		{
-			memptr=dev->base_address[i]&~3;
+			memptr=dev->base_address[i]&~15;
 			break;
 		}
 	}

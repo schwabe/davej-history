@@ -59,6 +59,10 @@
 #include <linux/kmod.h>
 #endif
 
+#ifndef CONFIG_PROC_FS
+#error For now, COMX really needs the /proc filesystem
+#endif
+
 #include "comx.h"
 #include "syncppp.h"
 
