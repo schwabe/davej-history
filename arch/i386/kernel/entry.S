@@ -63,7 +63,9 @@ OLDESP		= 0x34
 OLDSS		= 0x38
 
 CF_MASK		= 0x00000001
+TF_MASK		= 0x00000100
 IF_MASK		= 0x00000200
+DF_MASK		= 0x00000400
 NT_MASK		= 0x00004000
 VM_MASK		= 0x00020000
 
@@ -139,6 +141,9 @@ ENTRY(lcall7)
 	movl CS(%esp),%edx	# this is eip..
 	movl EFLAGS(%esp),%ecx	# and this is cs..
 	movl %eax,EFLAGS(%esp)	#
+	andl $~(NT_MASK|TF_MASK|DF_MASK), %eax
+	pushl %eax
+	popfl
 	movl %edx,EIP(%esp)	# Now we move them to their "normal" places
 	movl %ecx,CS(%esp)	#
 	movl %esp,%ebx
@@ -256,6 +261,9 @@ ENTRY(divide_error)
 	pushl $ SYMBOL_NAME(do_divide_error)
 	ALIGN
 error_code:
+	pushfl
+	andl $~(NT_MASK|TF_MASK|DF_MASK), (%esp)
+	popfl
 	pushl %ds
 	pushl %eax
 	xorl %eax,%eax
@@ -266,7 +274,6 @@ error_code:
 	decl %eax			# eax = -1
 	pushl %ecx
 	pushl %ebx
-	cld
 	movl %es,%cx
 	movl ORIG_EAX(%esp), %esi	# get the error code
 	movl ES(%esp), %edi		# get the function address

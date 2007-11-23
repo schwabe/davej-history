@@ -419,7 +419,7 @@ clear_dr7:
 	return;
 
 clear_TF:
-	regs->eflags &= ~TF_MASK;
+	regs->eflags &= ~(TF_MASK|NT_MASK);
 	return;
 }
 
