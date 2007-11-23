@@ -142,7 +142,8 @@ struct tcp_tw_bucket {
 				nonagle;
 
 	/* And these are ours. */
-	__u32			rcv_nxt,snd_nxt;
+	__u32			rcv_nxt, snd_nxt;
+	__u16			window;
 	struct tcp_func		*af_specific;
 	struct tcp_bind_bucket	*tb;
 	struct tcp_tw_bucket	*next_death;

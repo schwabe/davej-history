@@ -897,7 +897,7 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 		}
 		if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI))
 		{
-			if (devc->irq > 0);
+			if (devc->irq > 0)
 				free_irq(devc->irq, devc);
 
 			sound_unload_mixerdev(devc->my_mixerdev);

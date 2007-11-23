@@ -3,8 +3,6 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/sched.h>
-#include <linux/module.h>
-
 #include "usb.h"
 
 static int usb_audio_probe(struct usb_device *dev);
@@ -26,7 +24,7 @@ static struct usb_driver usb_audio_driver =
 };
 
 
-static int usb_audio_irq(int state, void *buffer, int len, void *dev_id)
+static int usb_audio_irq(int state, void *buffer, void *dev_id)
 {
 	struct usb_audio *aud = (struct usb_audio*) dev_id;
 	return 1;
@@ -41,7 +39,7 @@ static int usb_audio_probe(struct usb_device *dev)
 	int i;
 	int na=0;
 	
-	interface = &dev->config[0].altsetting[0].interface[0];
+	interface = &dev->config[0].interface[0];
 
 	for(i=0;i<dev->config[0].bNumInterfaces;i++)
 	{
@@ -81,10 +79,7 @@ static int usb_audio_probe(struct usb_device *dev)
 
 		endpoint = &interface->endpoint[0];
 
-//        	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-//			printk (KERN_INFO " Failed usb_set_configuration: Audio\n");
-//			break;
-//		}
+//        	usb_set_configuration(dev, dev->config[0].bConfigurationValue);
 //        	usb_set_protocol(dev, 0);
 //        	usb_set_idle(dev, 0, 0);
         
@@ -95,13 +90,8 @@ static int usb_audio_probe(struct usb_device *dev)
                         aud);
 
 		list_add(&aud->list, &usb_audio_list);
-		
-		return 0;
 	}
-	
-	if (aud)
-		kfree (aud);
-	return -1;
+	return 0;
 }
 
 static void usb_audio_disconnect(struct usb_device *dev)
@@ -134,15 +124,3 @@ void usb_audio_endpoint(struct usb_endpoint_descriptor *interface, u8 *data)
 {
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return usb_audio_init();
-}
-
-void cleanup_module(void)
-{
-	usb_deregister(&usb_audio_driver);
-}
-
-#endif

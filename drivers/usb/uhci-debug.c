@@ -12,8 +12,6 @@
 
 void show_td(struct uhci_td * td)
 {
-	char *spid;
-
 	printk("%08x ", td->link);
 	printk("%se%d %s%s%s%s%s%s%s%s%s%sLength=%x ",
 		((td->status >> 29) & 1) ? "SPD " : "",
@@ -29,27 +27,12 @@ void show_td(struct uhci_td * td)
 		((td->status >> 18) & 1) ? "CRC/Timeo " : "",
 		((td->status >> 17) & 1) ? "BitStuff " : "",
 		td->status & 0x7ff);
-	switch (td->info & 0xff) {
-	case 0x2d:
-		spid = "SETUP";
-		break;
-	case 0xe1:
-		spid = "OUT";
-		break;
-	case 0x69:
-		spid = "IN";
-		break;
-	default:
-		spid = "?";
-		break;
-	}
-	printk("MaxLen=%x DT%d EndPt=%x Dev=%x, PID=%x(%s) ",
+	printk("MaxLen=%x %sEndPt=%x Dev=%x, PID=%x ",
 		td->info >> 21,
-		 ((td->info >> 19) & 1),
+		 ((td->info >> 19) & 1) ? "DT " : "",
 		 (td->info >> 15) & 15,
 		 (td->info >> 8) & 127,
-		 (td->info & 0xff),
-		 spid);
+		 td->info & 0xff);
 	printk("(buf=%08x)\n", td->buffer);
 }
 
@@ -131,7 +114,7 @@ void show_queue(struct uhci_qh *qh)
 #if 0
 	printk("    link = %p, element = %p\n", qh->link, qh->element);
 #endif
-	if(!(qh->element & ~0xF)) {
+	if(!qh->element) {
 		printk("    td 0 = NULL\n");
 		return;
 	}
@@ -147,9 +130,9 @@ void show_queue(struct uhci_qh *qh)
 int is_skeleton_qh(struct uhci *uhci, struct uhci_qh *qh)
 {
 	int j;
-	struct uhci_device * root_hub=usb_to_uhci(uhci->bus->root_hub);
+
 	for (j = 0; j < UHCI_MAXQH; j++)
-		if (qh == root_hub->qh + j)
+		if (qh == uhci->root_hub->qh + j)
 			return 1;
 
 	return 0;
@@ -165,16 +148,15 @@ void show_queues(struct uhci *uhci)
 {
 	int i;
 	struct uhci_qh *qh;
-	struct uhci_device * root_hub=usb_to_uhci(uhci->bus->root_hub);
 
 	for (i = 0; i < UHCI_MAXQH; ++i) {
 		printk("  %s:\n", qh_names[i]);
 #if 0
-		printk("  qh #%d, %p\n", i, virt_to_bus(root_hub->qh + i));
+		printk("  qh #%d, %p\n", i, virt_to_bus(uhci->root_hub->qh + i));
 		show_queue(uhci->root_hub->qh + i);
 #endif
 
-		qh = uhci_link_to_qh(root_hub->qh[i].link);
+		qh = uhci_link_to_qh(uhci->root_hub->qh[i].link);
 		for (; qh; qh = uhci_link_to_qh(qh->link)) {
 			if (is_skeleton_qh(uhci, qh))
 				break;
@@ -183,3 +165,4 @@ void show_queues(struct uhci *uhci)
 		}
 	}
 }
+

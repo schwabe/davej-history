@@ -2,8 +2,6 @@
  * USB HID boot protocol mouse support based on MS BusMouse driver, psaux 
  * driver, and Linus's skeleton USB mouse driver. Fixed up a lot by Linus.
  *
- * N.B. this driver can't cope if more than one mouse is connected! - paulus
- *
  * Brad Keryan 4/3/1999
  *
  * version 0.20: Linus rewrote read_mouse() to do PS/2 and do it
@@ -35,7 +33,6 @@
 #include <linux/poll.h>
 #include <linux/init.h>
 #include <linux/malloc.h>
-#include <linux/module.h>
 
 #include <asm/spinlock.h>
 
@@ -51,23 +48,17 @@ struct mouse_state {
 	int present; /* this mouse is plugged in */
 	int active; /* someone is has this mouse's device open */
 	int ready; /* the mouse has changed state since the last read */
-	wait_queue_head_t wait; /* for polling */
+	struct wait_queue *wait; /* for polling */
 	struct fasync_struct *fasync;
 	/* later, add a list here to support multiple mice */
 	/* but we will also need a list of file pointers to identify it */
-
-	/* FIXME: move these to a per-mouse structure */
-	struct usb_device *dev;  /* host controller this mouse is on */
-	void* irq_handle;  /* host controller's IRQ transfer handle */
-	__u8 bEndpointAddress;  /* these are from the endpoint descriptor */
-	__u8 bInterval;		/* ...  used when calling usb_request_irq */
 };
 
 static struct mouse_state static_mouse_state;
 
 spinlock_t usb_mouse_lock = SPIN_LOCK_UNLOCKED;
 
-static int mouse_irq(int state, void *__buffer, int len, void *dev_id)
+static int mouse_irq(int state, void *__buffer, void *dev_id)
 {
 	signed char *data = __buffer;
 	/* finding the mouse is easy when there's only one */
@@ -82,7 +73,7 @@ static int mouse_irq(int state, void *__buffer, int len, void *dev_id)
 	mouse->buttons = data[0] & 0x07;
 	mouse->dx += data[1]; /* data[] is signed, so this works */
 	mouse->dy -= data[2]; /* y-axis is reversed */
-	mouse->dz -= data[3];
+	mouse->dz += data[3];
 	mouse->ready = 1;
 
 	add_mouse_randomness((mouse->buttons << 24) + (mouse->dz << 16 ) + 
@@ -111,16 +102,8 @@ static int release_mouse(struct inode * inode, struct file * file)
 	struct mouse_state *mouse = &static_mouse_state;
 
 	fasync_mouse(-1, file, 0);
-
-	MOD_DEC_USE_COUNT;
-
-	if (--mouse->active == 0) {
-		/* stop polling the mouse while its not in use */
-	    	usb_release_irq(mouse->dev, mouse->irq_handle);
-		/* never keep a reference to a released IRQ! */
-		mouse->irq_handle = NULL;
-	}
-
+	if (--mouse->active)
+		return 0;
 	return 0;
 }
 
@@ -134,13 +117,6 @@ static int open_mouse(struct inode * inode, struct file * file)
 		return 0;
 	/* flush state */
 	mouse->buttons = mouse->dx = mouse->dy = mouse->dz = 0;
-
-	/* prevent the driver from being unloaded while its in use */
-	MOD_INC_USE_COUNT;
-
-	/* start the usb controller's polling of the mouse */
-	mouse->irq_handle = usb_request_irq(mouse->dev, usb_rcvctrlpipe(mouse->dev, mouse->bEndpointAddress), mouse_irq, mouse->bInterval, NULL);
-
 	return 0;
 }
 
@@ -196,30 +172,6 @@ static ssize_t read_mouse(struct file * file, char * buffer, size_t count, loff_
 			buffer++;
 			retval++;
 			state = 0;
-			if (!--count)
-				break;
-		}
-
-		/*
-		 * SUBTLE:
-		 *
-		 * The only way to get here is to do a read() of
-		 * more than 3 bytes: if you read a byte at a time
-		 * you will just ever see states 0-2, for backwards
-		 * compatibility.
-		 *
-		 * So you can think of this as a packet interface,
-		 * where you have arbitrary-sized packets, and you
-		 * only ever see the first three bytes when you read
-		 * them in small chunks.
-		 */
-		{ /* fallthrough - dz */
-			int dz = mouse->dz;
-			mouse->dz = 0;
-			put_user(dz, buffer);
-			buffer++;
-			retval++;
-			state = 0;
 		}
 		break;
 		}
@@ -271,7 +223,7 @@ static int mouse_probe(struct usb_device *dev)
 		return -1;
 
 	/* Is it a mouse interface? */
-	interface = &dev->config[0].altsetting[0].interface[0];
+	interface = &dev->config[0].interface[0];
 	if (interface->bInterfaceClass != 3)
 		return -1;
 	if (interface->bInterfaceSubClass != 1)
@@ -293,17 +245,11 @@ static int mouse_probe(struct usb_device *dev)
 	if ((endpoint->bmAttributes & 3) != 3)
 		return -1;
 
-	printk(KERN_INFO "USB mouse found\n");
+	printk("USB mouse found\n");
 
-	if (usb_set_configuration(dev, dev->config[0].bConfigurationValue)) {
-		printk (KERN_INFO " Failed usb_set_configuration: mouse\n");
-		return -1;
-	}
+	usb_set_configuration(dev, dev->config[0].bConfigurationValue);
 
-	/* these are used to request the irq when the mouse is opened */
-	mouse->dev = dev;
-	mouse->bEndpointAddress = endpoint->bEndpointAddress;
-	mouse->bInterval = endpoint->bInterval;
+	usb_request_irq(dev, usb_rcvctrlpipe(dev, endpoint->bEndpointAddress), mouse_irq, endpoint->bInterval, NULL);
 
 	mouse->present = 1;
 	return 0;
@@ -313,18 +259,8 @@ static void mouse_disconnect(struct usb_device *dev)
 {
 	struct mouse_state *mouse = &static_mouse_state;
 
-	/* stop the usb interrupt transfer */
-	if (mouse->present) {
-	    	usb_release_irq(mouse->dev, mouse->irq_handle);
-		/* never keep a reference to a released IRQ! */
-		mouse->irq_handle = NULL;
-	}
-
-	mouse->irq_handle = NULL;
-
 	/* this might need work */
 	mouse->present = 0;
-	printk(KERN_INFO "Mouse disconnected\n");
 }
 
 static struct usb_driver mouse_driver = {
@@ -338,42 +274,20 @@ int usb_mouse_init(void)
 {
 	struct mouse_state *mouse = &static_mouse_state;
 
-	mouse->present = mouse->active = 0;
-	mouse->irq_handle = NULL;
-	init_waitqueue_head(&mouse->wait);
-	mouse->fasync = NULL;
-
 	misc_register(&usb_mouse);
 
+	mouse->present = mouse->active = 0;
+	mouse->wait = NULL;
+	mouse->fasync = NULL;
+
 	usb_register(&mouse_driver);
-	printk(KERN_INFO "USB HID boot protocol mouse driver registered.\n");
+	printk(KERN_INFO "USB HID boot protocol mouse registered.\n");
 	return 0;
 }
 
 void usb_mouse_cleanup(void)
 {
-	struct mouse_state *mouse = &static_mouse_state;
-
-	/* stop the usb interrupt transfer */
-	if (mouse->present) {
-	    	usb_release_irq(mouse->dev, mouse->irq_handle);
-		/* never keep a reference to a released IRQ! */
-		mouse->irq_handle = NULL;
-	}
-
 	/* this, too, probably needs work */
 	usb_deregister(&mouse_driver);
 	misc_deregister(&usb_mouse);
 }
-
-#ifdef MODULE
-int init_module(void)
-{
-	return usb_mouse_init();
-}
-
-void cleanup_module(void)
-{
-	usb_mouse_cleanup();
-}
-#endif

@@ -8,7 +8,6 @@ difficult to maintain, add yourself with a patch if desired.
   Johannes Erdfelt <jerdfelt@sventech.com>
   ham <ham@unsuave.com>
   Bradley M Keryan <keryan@andrew.cmu.edu>
-  Paul Mackerras <paulus@cs.anu.edu.au>
   Vojtech Pavlik <vojtech@twilight.ucw.cz>
   Gregory P. Smith <greg@electricrain.com>
   Linus Torvalds <torvalds@transmeta.com>
@@ -29,11 +28,7 @@ of hardware, support, time and development (this is from the original
 THANKS file in Inaky's driver):
 
         The following corporations have helped us in the development
-        of Linux USB / UUSBD:
-
-	- 3Com GmbH for donating a ISDN Pro TA and supporting me
-	  in technical questions and with test equipment. I'd never 
-	  expect such a great help.
+of Linux USB / UUSBD:
 
         - USAR Systems provided us with one of their excellent USB
           Evaluation Kits. It allows us to test the Linux-USB driver

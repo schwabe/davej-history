@@ -7,6 +7,8 @@
 #
 # Note 2! The CFLAGS definitions are now inherited from the
 # parent makes..
+#
+# This isn't actually supported yet. Don't try to use it.
 
 SUB_DIRS     :=
 MOD_SUB_DIRS := $(SUB_DIRS)
@@ -15,127 +17,59 @@ ALL_SUB_DIRS := $(SUB_DIRS)
 L_TARGET := usb.a
 M_OBJS   :=
 L_OBJS   :=
-
-ifeq ($(CONFIG_USB),y)
-  L_OBJS +=usbcore.o
-endif
-ifeq ($(CONFIG_USB),m)
-  M_OBJS +=usbcore.o
-  MIX_OBJS +=usb.o usb-debug.o usb-core.o
-  ifeq ($(CONFIG_USB_PROC),y)
-    MIX_OBJS += proc_usb.o
-  endif
-endif
-
-ifeq ($(CONFIG_USB_UHCI),y)
-    L_OBJS += uhci.o uhci-debug.o
-endif
-
-ifeq ($(CONFIG_USB_UHCI),m)
-      M_OBJS += usb-uhci.o
-    MIX_OBJS += uhci.o uhci-debug.o
-endif
-
-ifeq ($(CONFIG_USB_OHCI),y)
-    L_OBJS += ohci.o ohci-debug.o
-endif
-ifeq ($(CONFIG_USB_OHCI),m)
-      M_OBJS += usb-ohci.o
-      MIX_OBJS += ohci.o ohci-debug.o
-endif
-
-ifeq ($(CONFIG_USB_OHCI_HCD),y)
-    L_OBJS += ohci-hcd.o ohci-root-hub.o
-endif
-ifeq ($(CONFIG_USB_OHCI_HCD),m)
-      M_OBJS += usb-ohci-hcd.o
-      MIX_OBJS += ohci-hcd.o ohci-root-hub.o
-endif
+LX_OBJS  :=
+USBX_OBJS := usb.o hub.o usb-debug.o
 
 ifeq ($(CONFIG_USB_MOUSE),y)
-  L_OBJS += mouse.o
-endif
-ifeq ($(CONFIG_USB_MOUSE),m)
-  M_OBJS  +=mouse.o	
-  MIX_OBJS +=mouse.o
-endif
-
-ifeq ($(CONFIG_USB_HUB),y)
-  L_OBJS += hub.o
-endif
-ifeq ($(CONFIG_USB_HUB),m)
-  M_OBJS  +=hub.o
-  MIX_OBJS +=hub.o	
-endif
-
-ifeq ($(CONFIG_USB_ACM),y)
-  L_OBJS += acm.o
-endif
-ifeq ($(CONFIG_USB_ACM),m)
-  M_OBJS += acm.o
-  MIX_OBJS +=acm.o
-endif
-
-ifeq ($(CONFIG_USB_PRINTER),y)
-  L_OBJS += printer.o
-endif
-
-ifeq ($(CONFIG_USB_PRINTER),m)
-  M_OBJS += printer.o
-  MIX_OBJS += printer.o  
+  USBX_OBJS += mouse.o
 endif
 
 ifeq ($(CONFIG_USB_KBD),y)
-  ifneq ($(CONFIG_MAC_KEYBOARD),y)
-    L_OBJS += keyboard.o keymap.o
-  else
-    L_OBJS += keyboard.o keymap-mac.o
-  endif
-endif
-
-ifeq ($(CONFIG_USB_KBD),m)
-  M_OBJS += usb-keyboard.o
-  ifneq ($(CONFIG_MAC_KEYBOARD),y)
-    MIX_OBJS += keyboard.o keymap.o
-  else
-    MIX_OBJS += keyboard.o keymap-mac.o
-  endif
+  USBX_OBJS += keyboard.o keymap.o
 endif
 
 ifeq ($(CONFIG_USB_AUDIO),y)
-  L_OBJS += audio.o
+  USBX_OBJS += audio.o
 endif
 
-ifeq ($(CONFIG_USB_AUDIO),m)
-  M_OBJS += audio.o
-  MIX_OBJS += audio.o
+ifeq ($(CONFIG_USB), y)
+  L_OBJS += $(USBX_OBJS)
 endif
 
-ifeq ($(CONFIG_USB_CPIA),y)
-  L_OBJS += cpia.o
-endif
-
-ifeq ($(CONFIG_USB_CPIA),m)
-  M_OBJS += cpia.o
-  MIX_OBJS += cpia.o
-endif
-
-ifeq ($(CONFIG_USB_SCSI),y)
-  L_OBJS += usb_scsi.o
-  ifeq ($(CONFIG_USB_SCSI_DEBUG),y)
-    L_OBJS += usb_scsi_debug.o
+ifeq ($(CONFIG_USB_UHCI),y)
+  ifeq ($(CONFIG_USB), y)
+    L_OBJS += uhci.o uhci-debug.o
+  else
+    ifeq ($(CONFIG_USB),m)
+      M_OBJS += usb-uhci.o
+      MIX_OBJS += $(USBX_OBJS)
+    endif
   endif
 endif
 
-ifeq ($(CONFIG_USB_EZUSB),y)
-  L_OBJS += ezusb.o
+ifeq ($(CONFIG_USB_OHCI),y)
+  ifeq ($(CONFIG_USB), y)
+    L_OBJS += ohci.o ohci-debug.o
+  else
+    ifeq ($(CONFIG_USB),m)
+      USBO_OBJS += ohci.o ohci-debug.o
+      M_OBJS += usb-ohci.o
+      MIX_OBJS += $(USBX_OBJS)
+    endif
+  endif
 endif
 
-ifeq ($(CONFIG_USB_EZUSB),m)
-  M_OBJS += ezusb.o
-  MIX_OBJS += ezusb.o
+ifeq ($(CONFIG_USB_OHCI_HCD),y)
+  ifeq ($(CONFIG_USB), y)
+    L_OBJS += ohci-hcd.o ohci-root-hub.o
+  else
+    ifeq ($(CONFIG_USB),m)
+      USBO_OBJS += ohci-hcd.o ohci-root-hub.o
+      M_OBJS += usb-ohci-hcd.o
+      MIX_OBJS += $(USBX_OBJS)
+    endif
+  endif
 endif
-
 include $(TOPDIR)/Rules.make
 
 keymap.o: keymap.c
@@ -143,31 +77,12 @@ keymap.o: keymap.c
 keymap.c: maps/serial.map maps/usb.map maps/fixup.map
 	./mkmap > $@
 
-keymap-mac.o: keymap-mac.c
-keymap-mac.c: maps/mac.map maps/usb.map
-	./mkmap.adb > $@
+usb-uhci.o: uhci.o uhci-debug.o $(USBX_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@  uhci.o uhci-debug.o $(USBX_OBJS)
 
-ifneq ($(CONFIG_MAC_KEYBOARD),y)
-usb-keyboard.o: keymap.o keyboard.o
-	$(LD) $(LD_RFLAG) -r -o $@  keymap.o keyboard.o 
-else
-usb-keyboard.o: keymap-mac.o keyboard.o
-	$(LD) $(LD_RFLAG) -r -o $@  keymap-mac.o keyboard.o 
-endif
+usb-ohci.o: ohci.o ohci-debug.o $(USBX_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ ohci.o ohci-debug.o $(USBX_OBJS)
 
-usb-uhci.o: uhci.o uhci-debug.o 
-	$(LD) $(LD_RFLAG) -r -o $@  uhci.o uhci-debug.o 
-
-usb-ohci.o: ohci.o ohci-debug.o 
-	$(LD) $(LD_RFLAG) -r -o $@ ohci.o ohci-debug.o 
+usb-ohci-hcd.o: ohci-hcd.o ohci-root-hub.o $(USBX_OBJS)
+	$(LD) $(LD_RFLAG) -r -o $@ ohci-hcd.o ohci-root-hub.o $(USBX_OBJS)
        
-usb-ohci-hcd.o: ohci-hcd.o ohci-root-hub.o 
-	$(LD) $(LD_RFLAG) -r -o $@ ohci-hcd.o ohci-root-hub.o 
-       
-ifeq ($(CONFIG_USB_PROC),y)
-usbcore.o: usb.o usb-debug.o usb-core.o proc_usb.o
-	$(LD) $(LD_RFLAG) -r -o $@ usb.o usb-debug.o usb-core.o proc_usb.o
-else
-usbcore.o: usb.o usb-debug.o usb-core.o
-	$(LD) $(LD_RFLAG) -r -o $@ usb.o usb-debug.o usb-core.o
-endif

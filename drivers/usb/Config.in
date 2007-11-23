@@ -5,39 +5,25 @@
 # Right now hubs, mice and keyboards work - at least with UHCI.
 # But that may be more a lucky coincidence than anything else..
 #
+# This was all developed modularly, but I've been lazy in cleaning
+# it up, so right now they are all bools. 
+#
 mainmenu_option next_comment
 comment 'USB drivers - not for the faint of heart'
 
-tristate 'Support for USB (EXPERIMENTAL!)' CONFIG_USB
-if [ ! "$CONFIG_USB" = "n" ]; then
-  dep_tristate 'UHCI (intel PIIX4 and others) support' CONFIG_USB_UHCI \
-	$CONFIG_USB
-    dep_tristate 'OHCI (mac, compaq and others) support' CONFIG_USB_OHCI \
-	$CONFIG_USB
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Support for USB (EXPERIMENTAL!)' CONFIG_USB
+  if [ ! "$CONFIG_USB" = "n" ]; then
+    bool 'UHCI (intel PIIX4 and others) support?' CONFIG_USB_UHCI
+    bool 'OHCI (compaq and some others) support?' CONFIG_USB_OHCI
+    bool 'OHCI-HCD (other OHCI opt. Virt. Root Hub) support?' CONFIG_USB_OHCI_HCD
+    if [ "$CONFIG_USB_OHCI_HCD" = "y" ]; then
+       bool 'OHCI-HCD Virtual Root Hub' CONFIG_USB_OHCI_VROOTHUB
+    fi
 
-  if [ "$CONFIG_USB_OHCI" != "n" ]; then
-     bool '  Enable tons of OHCI debugging output' CONFIG_USB_OHCI_DEBUG
-  fi
-  dep_tristate 'OHCI-HCD (other OHCI opt. Virt. Root Hub) support' \
-		CONFIG_USB_OHCI_HCD $CONFIG_USB
-  if [ "$CONFIG_USB_OHCI_HCD" != "n" ]; then
-#     	bool '  OHCI-HCD Virtual Root Hub' CONFIG_USB_OHCI_VROOTHUB
-	define_bool CONFIG_USB_OHCI_VROOTHUB y
-  fi
-
-  dep_tristate 'USB hub support' CONFIG_USB_HUB $CONFIG_USB
-  dep_tristate 'USB mouse support' CONFIG_USB_MOUSE $CONFIG_USB
-  dep_tristate 'USB keyboard support' CONFIG_USB_KBD $CONFIG_USB
-  dep_tristate 'USB audio parsing support' CONFIG_USB_AUDIO $CONFIG_USB
-  dep_tristate 'USB Abstract Control Model support' CONFIG_USB_ACM $CONFIG_USB
-  dep_tristate 'USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB
-  dep_tristate 'USB SCSI Support' CONFIG_USB_SCSI $CONFIG_USB
-  if [ "$CONFIG_USB_SCSI" != "n" ]; then
-	  dep_tristate '  USB SCSI verbose debug' CONFIG_USB_SCSI_DEBUG $CONFIG_USB_SCSI
-  fi
-  dep_tristate 'EZUSB Firmware downloader' CONFIG_USB_EZUSB $CONFIG_USB
-  if [ "$CONFIG_PROC_FS" != "n" ]; then
-  	bool 'Preliminary /proc/bus/usb support' CONFIG_USB_PROC
+    bool 'USB mouse support' CONFIG_USB_MOUSE
+    bool 'USB keyboard support' CONFIG_USB_KBD
+    bool 'USB audio parsing support' CONFIG_USB_AUDIO
   fi
 fi
 

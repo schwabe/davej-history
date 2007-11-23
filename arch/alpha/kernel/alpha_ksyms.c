@@ -14,8 +14,6 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/pci.h>
-#include <linux/tty.h>
-#include <linux/mm.h>
 
 #include <asm/io.h>
 #include <asm/hwrpb.h>
@@ -25,10 +23,6 @@
 #include <linux/interrupt.h>
 #include <asm/softirq.h>
 #include <asm/fpu.h>
-#include <asm/irq.h>
-#include <asm/machvec.h>
-#include <asm/pgtable.h>
-#include <asm/semaphore.h>
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
@@ -47,14 +41,8 @@ extern void __remlu (void);
 extern void __divqu (void);
 extern void __remqu (void);
 
-EXPORT_SYMBOL(alpha_mv);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
-EXPORT_SYMBOL(enable_irq);
-EXPORT_SYMBOL(disable_irq);
-EXPORT_SYMBOL(disable_irq_nosync);
-EXPORT_SYMBOL(screen_info);
-EXPORT_SYMBOL(perf_irq);
 
 /* platform dependent support */
 EXPORT_SYMBOL(_inb);
@@ -71,7 +59,7 @@ EXPORT_SYMBOL(_writew);
 EXPORT_SYMBOL(_writel);
 EXPORT_SYMBOL(_memcpy_fromio);
 EXPORT_SYMBOL(_memcpy_toio);
-EXPORT_SYMBOL(_memset_c_io);
+EXPORT_SYMBOL(_memset_io);
 EXPORT_SYMBOL(insb);
 EXPORT_SYMBOL(insw);
 EXPORT_SYMBOL(insl);
@@ -88,14 +76,12 @@ EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strncat);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(strtok);
-EXPORT_SYMBOL(strpbrk);
 EXPORT_SYMBOL(strchr);
 EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(memcmp);
 EXPORT_SYMBOL(memmove);
 EXPORT_SYMBOL(__memcpy);
 EXPORT_SYMBOL(__memset);
-EXPORT_SYMBOL(__memsetw);
 EXPORT_SYMBOL(__constant_c_memset);
 
 EXPORT_SYMBOL(dump_thread);
@@ -129,9 +115,7 @@ EXPORT_SYMBOL(csum_ipv6_magic);
 
 #ifdef CONFIG_MATHEMU_MODULE
 extern long (*alpha_fp_emul_imprecise)(struct pt_regs *, unsigned long);
-extern long (*alpha_fp_emul) (unsigned long pc);
 EXPORT_SYMBOL(alpha_fp_emul_imprecise);
-EXPORT_SYMBOL(alpha_fp_emul);
 #endif
 
 /*
@@ -141,44 +125,6 @@ EXPORT_SYMBOL_NOVERS(__copy_user);
 EXPORT_SYMBOL_NOVERS(__do_clear_user);
 EXPORT_SYMBOL(__strncpy_from_user);
 EXPORT_SYMBOL(__strlen_user);
-
-/*
- * The following are specially called from the semaphore assembly stubs.
- */
-EXPORT_SYMBOL_NOVERS(__down_failed);
-EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
-EXPORT_SYMBOL_NOVERS(__up_wakeup);
-
-/* 
- * SMP-specific symbols.
- */
-
-#ifdef __SMP__
-EXPORT_SYMBOL(synchronize_irq);
-EXPORT_SYMBOL(flush_tlb_all);
-EXPORT_SYMBOL(flush_tlb_mm);
-EXPORT_SYMBOL(flush_tlb_page);
-EXPORT_SYMBOL(flush_tlb_range);
-EXPORT_SYMBOL(cpu_data);
-EXPORT_SYMBOL(cpu_number_map);
-EXPORT_SYMBOL(global_bh_lock);
-EXPORT_SYMBOL(global_bh_count);
-EXPORT_SYMBOL(synchronize_bh);
-EXPORT_SYMBOL(global_irq_holder);
-EXPORT_SYMBOL(__global_cli);
-EXPORT_SYMBOL(__global_sti);
-EXPORT_SYMBOL(__global_save_flags);
-EXPORT_SYMBOL(__global_restore_flags);
-#if DEBUG_SPINLOCK
-EXPORT_SYMBOL(spin_unlock);
-EXPORT_SYMBOL(debug_spin_lock);
-EXPORT_SYMBOL(debug_spin_trylock);
-#endif
-#if DEBUG_RWLOCK
-EXPORT_SYMBOL(write_lock);
-EXPORT_SYMBOL(read_lock);
-#endif
-#endif /* __SMP__ */
 
 /*
  * The following are special because they're not called
