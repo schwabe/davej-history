@@ -891,6 +891,7 @@ int fs_may_remount_ro(struct super_block *sb)
 
 void update_atime (struct inode *inode)
 {
+    if ( inode->i_atime == CURRENT_TIME ) return;
     if ( IS_NOATIME (inode) ) return;
     if ( IS_NODIRATIME (inode) && S_ISDIR (inode->i_mode) ) return;
     if ( IS_RDONLY (inode) ) return;

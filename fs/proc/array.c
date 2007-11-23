@@ -457,7 +457,7 @@ static int get_array(struct task_struct *p, unsigned long start, unsigned long e
 	int size = 0, result = 0;
 	char c;
 
-	if (start >= end)
+	if (!start || start >= end)
 		return result;
 	for (;;) {
 		addr = get_phys_addr(p, start);
@@ -1540,8 +1540,7 @@ static ssize_t array_read(struct file * file, char * buf,
 	start = NULL;
 	dp = (struct proc_dir_entry *) inode->u.generic_ip;
 	
-	if (pid && process_unauthorized(type, pid))
-	{
+	if (pid && process_unauthorized(type, pid)) {
 		free_page(page);
 		return -EIO;
 	}
@@ -1555,6 +1554,10 @@ static ssize_t array_read(struct file * file, char * buf,
 	if (length < 0) {
 		free_page(page);
 		return length;
+	}
+	if (pid && process_unauthorized(type, pid)) {
+		free_page(page);
+		return -EIO;
 	}
 	if (start != NULL) {
 		/* We have had block-adjusting processing! */

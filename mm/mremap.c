@@ -90,7 +90,6 @@ static int move_page_tables(struct mm_struct * mm,
 	unsigned long offset = len;
 
 	flush_cache_range(mm, old_addr, old_addr + len);
-	flush_tlb_range(mm, old_addr, old_addr + len);
 
 	/*
 	 * This is not the clever way to do this, but we're taking the
@@ -102,6 +101,7 @@ static int move_page_tables(struct mm_struct * mm,
 		if (move_one_page(mm, old_addr + offset, new_addr + offset))
 			goto oops_we_failed;
 	}
+	flush_tlb_range(mm, old_addr, old_addr + len);
 	return 0;
 
 	/*
@@ -140,6 +140,7 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 				new_vma->vm_ops->open(new_vma);
 			insert_vm_struct(current->mm, new_vma);
 			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
+			/* XXX: possible errors masked, mapping might remain */
 			do_munmap(addr, old_len);
 			current->mm->total_vm += new_len >> PAGE_SHIFT;
 			if (new_vma->vm_flags & VM_LOCKED) {
@@ -172,15 +173,25 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	old_len = PAGE_ALIGN(old_len);
 	new_len = PAGE_ALIGN(new_len);
 
+	if (old_len > TASK_SIZE || addr > TASK_SIZE - old_len)
+		goto out;
+
+	if (addr >= TASK_SIZE)
+		goto out;
+
 	/*
 	 * Always allow a shrinking remap: that just unmaps
 	 * the unnecessary pages..
 	 */
-	ret = addr;
 	if (old_len >= new_len) {
-		do_munmap(addr+new_len, old_len - new_len);
+		ret = do_munmap(addr+new_len, old_len - new_len);
+		if (!ret || old_len == new_len)
+			ret = addr;
 		goto out;
 	}
+
+	if (new_len > TASK_SIZE || addr > TASK_SIZE - new_len)
+		goto out;
 
 	/*
 	 * Ok, we need to grow..

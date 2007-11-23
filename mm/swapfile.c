@@ -367,14 +367,11 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	for (type = swap_list.head; type >= 0; type = swap_info[type].next) {
 		p = swap_info + type;
 		if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
-			if (p->swap_file) {
-				if (p->swap_file == dentry)
-				  break;
-			} else {
-				if (S_ISBLK(dentry->d_inode->i_mode)
-				    && (p->swap_device == dentry->d_inode->i_rdev))
-				  break;
-			}
+			if (p->swap_file == dentry)
+				break;
+			if (S_ISBLK(dentry->d_inode->i_mode) &&
+			    p->swap_device == dentry->d_inode->i_rdev)
+				break;
 		}
 		prev = type;
 	}

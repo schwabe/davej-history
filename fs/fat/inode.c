@@ -852,7 +852,8 @@ retry:
 	i_pos = MSDOS_I(inode)->i_location;
 	if (inode->i_ino == MSDOS_ROOT_INO || !i_pos) return;
 	if (!(bh = fat_bread(sb, ((unsigned long long) i_pos) >> MSDOS_DPB_BITS))) {
-		printk("dev = %s, ino = %ld\n", kdevname(inode->i_dev), i_pos);
+		printk("dev = %s, ino = %ld\n",
+			kdevname(inode->i_dev), (long)i_pos);
 		fat_fs_panic(sb, "msdos_write_inode: unable to read i-node block");
 		return;
 	}

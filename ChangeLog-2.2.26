@@ -1,0 +1,36 @@
+Kernel 2.2.xx Mainline
+----------------------
+Person:		Marc-Christian Petersen
+EMail:		m.c.p@wolk-project.de
+Mailinglist:	linux-kernel@vger.kernel.org
+Website:	http://www.kernel.org/pub/linux/kernel/people/mcp/
+Status:		Maintained
+Employed by:	Linux-Systeme GmbH, http://www.linux-systeme.de/
+
+
+    Thanks to Alan Cox 8-)
+
+
+-------------------------------------------------------------------------
+If you need a more secured, more stable, even faster, better SMP support,
+IDE LBA48 support, LFS support, IPSec support, HTB support, IPVS support
+etc. enabled kernel with many more features and important fixes, please
+use my 2.2-secure tree.
+You may find more informations about it at http://www.wolk-project.de.
+-------------------------------------------------------------------------
+
+
+
+2.2.26
+------
+o	CAN-2004-0077: behave safely in case of do_munmap()	(Solar Designer)
+	  failures in mremap(2)
+o	CAN-2003-0984: /dev/rtc can leak parts of kernel	(Solar Designer)
+	  memory to unprivileged users (2.4 backport)
+o	CAN-2003-0244: hashing exploits in network stack	(David S. Miller)
+o	update_atime() performance improvement (2.4 backport)	(Solar Designer)
+o	ability to swapoff after a device file might		(Solar Designer)
+	  have been re-created
+o	MAINTAINERS correction for Kernel 2.2 and 2.2 fixes	(me)
+o	fixed some typos					(Solar Designer, me)
+

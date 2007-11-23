@@ -561,11 +561,11 @@ L:	linux-hams@vger.kernel.org
 S:	Maintained
 
 KERNEL  (2.2.XX TREE)
-P:      Alan Cox
-M:	Alan.Cox@linux.org
-L:      linux-kernel@vger.kernel.org
-W:      http://www.kernel.org/pub/linux/kernel/alan/
-S:      Maintained
+P:	Marc-Christian Petersen
+M:	m.c.p@wolk-project.de
+L:	linux-kernel@vger.kernel.org
+W:	http://www.kernel.org/pub/linux/kernel/people/mcp/
+S:	Maintained
 
 KERNEL AUTOMOUNTER (AUTOFS)
 P:	H. Peter Anvin
@@ -1172,8 +1172,8 @@ W:	http://cvs.conectiva.com.br/drivers/ZFL-watchdog/
 S:	Maintained
 
 LINUX 2.2 FIXES
-P:	Alan Cox
-M:	alan@lxorguk.ukuu.org.uk
+P:	Marc-Christian Petersen
+M:	m.c.p@wolk-project.de
 S:	Maintained
 
 THE REST

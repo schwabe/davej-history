@@ -1060,6 +1060,7 @@ static struct proc_dir_entry proc_net_udp = {
 
 extern void tcp_init(void);
 extern void tcp_v4_init(struct net_proto_family *);
+extern void ipfrag_init(void);
 
 
 /*
@@ -1168,4 +1169,6 @@ __initfunc(void inet_proto_init(struct net_proto *pro))
 	proc_net_register(&proc_net_tcp);
 	proc_net_register(&proc_net_udp);
 #endif		/* CONFIG_PROC_FS */
+
+	ipfrag_init();
 }

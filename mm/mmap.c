@@ -610,7 +610,7 @@ int do_munmap(unsigned long addr, size_t len)
 	struct mm_struct * mm;
 	struct vm_area_struct *mpnt, *prev, **npp, *free, *extra;
 
-	if ((addr & ~PAGE_MASK) || addr > TASK_SIZE || len > TASK_SIZE-addr)
+	if ((addr & ~PAGE_MASK) || addr >= TASK_SIZE || len > TASK_SIZE-addr)
 		return -EINVAL;
 
 	if ((len = PAGE_ALIGN(len)) == 0)

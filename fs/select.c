@@ -265,7 +265,7 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 	fd_set_bits fds;
 	char *bits;
 	long timeout;
-	int ret, size;
+	int ret, size, max_fdset;
 
 	timeout = MAX_SCHEDULE_TIMEOUT;
 	if (tvp) {
@@ -299,8 +299,11 @@ sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 	 
 	if (n < 0)
 		goto out_nofds;
-	if (n > current->files->max_fdset)
-		n = current->files->max_fdset;
+	max_fdset = current->files->max_fdset;
+	if (n > max_fdset)
+		n = max_fdset;
+	if (n > NR_OPEN)
+		n = NR_OPEN;
 		
 	/*
 	 * We need 6 bitmaps (in/out/ex for both incoming and outgoing),
@@ -412,7 +415,7 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 	lock_kernel();
 	/* Do a sanity check on nfds ... */
 	err = -EINVAL;
-	if (nfds > current->files->max_fds || nfds > 0x100000)
+	if (nfds > current->files->max_fds || nfds > NR_OPEN)
 		goto out;
 
 	if (timeout) {

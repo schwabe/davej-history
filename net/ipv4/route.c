@@ -82,6 +82,8 @@
 #include <linux/igmp.h>
 #include <linux/pkt_sched.h>
 #include <linux/mroute.h>
+#include <linux/random.h>
+#include <linux/jhash.h>
 #include <net/protocol.h>
 #include <net/ip.h>
 #include <net/route.h>
@@ -112,7 +114,7 @@ int ip_rt_error_cost = HZ;
 int ip_rt_error_burst = 5*HZ;
 int ip_rt_gc_elasticity = 8;
 int ip_rt_mtu_expires = 10*60*HZ;
-
+int ip_rt_secret_interval = 10*60*HZ;
 static unsigned long rt_deadline = 0;
 
 #define RTprint(a...)	printk(KERN_DEBUG a)
@@ -122,6 +124,8 @@ static void rt_run_flush(unsigned long dummy);
 static struct timer_list rt_flush_timer =
 	{ NULL, NULL, 0, 0L, rt_run_flush };
 static struct timer_list rt_periodic_timer =
+	{ NULL, NULL, 0, 0L, NULL };
+static struct timer_list rt_secret_timer =
 	{ NULL, NULL, 0, 0L, NULL };
 
 /*
@@ -174,16 +178,14 @@ __u8 ip_tos2prio[16] = {
  * Route cache.
  */
 
-struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
+struct rtable		*rt_hash_table[RT_HASH_DIVISOR];
+static unsigned int	rt_hash_rnd;
 
 static int rt_intern_hash(unsigned hash, struct rtable * rth, struct rtable ** res);
 
-static __inline__ unsigned rt_hash_code(u32 daddr, u32 saddr, u8 tos)
+static unsigned rt_hash_code(u32 daddr, u32 saddr, u8 tos)
 {
-	unsigned hash = ((daddr&0xF0F0F0F0)>>4)|((daddr&0x0F0F0F0F)<<4);
-	hash = hash^saddr^tos;
-	hash = hash^(hash>>16);
-	return (hash^(hash>>8)) & 0xFF;
+	return (jhash_3words(daddr, saddr, (u32) tos, rt_hash_rnd) & 0xFF);
 }
 
 #ifdef CONFIG_PROC_FS
@@ -341,6 +343,8 @@ static void rt_run_flush(unsigned long dummy)
 
 	rt_deadline = 0;
 
+	get_random_bytes(&rt_hash_rnd, 4);
+
 	start_bh_atomic();
 	for (i=0; i<RT_HASH_DIVISOR; i++) {
 		if ((rth = xchg(&rt_hash_table[i], NULL)) == NULL)
@@ -397,6 +401,14 @@ void rt_cache_flush(int delay)
 	rt_flush_timer.expires = now + delay;
 	add_timer(&rt_flush_timer);
 	end_bh_atomic();
+}
+
+static void rt_secret_rebuild(unsigned long dummy)
+{
+	unsigned long now = jiffies;
+
+	rt_cache_flush(0);
+	mod_timer(&rt_secret_timer, now + ip_rt_secret_interval);
 }
 
 /*
@@ -1987,6 +1999,9 @@ ctl_table ipv4_route_table[] = {
 	{NET_IPV4_ROUTE_MTU_EXPIRES, "mtu_expires",
          &ip_rt_mtu_expires, sizeof(int), 0644, NULL,
          &proc_dointvec_jiffies, &sysctl_jiffies},
+	{NET_IPV4_ROUTE_SECRET_INTERVAL, "secret_interval",
+         &ip_rt_secret_interval, sizeof(int), 0644, NULL,
+         &proc_dointvec_jiffies, &sysctl_jiffies},
 	 {0}
 };
 #endif
@@ -2034,12 +2049,17 @@ __initfunc(void ip_rt_init(void))
 	devinet_init();
 	ip_fib_init();
 	rt_periodic_timer.function = rt_check_expire;
+	rt_secret_timer.function = rt_secret_rebuild;
 	/* All the timers, started at system startup tend
 	   to synchronize. Perturb it a bit.
 	 */
 	rt_periodic_timer.expires = jiffies + net_random()%ip_rt_gc_interval
 		+ ip_rt_gc_interval;
 	add_timer(&rt_periodic_timer);
+
+	rt_periodic_timer.expires = jiffies + net_random()%ip_rt_secret_interval
+		+ ip_rt_secret_interval;
+	add_timer(&rt_secret_timer);
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {

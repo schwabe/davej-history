@@ -105,7 +105,7 @@ sgi_graphics_ioctl (struct inode *inode, struct file *file, unsigned int cmd, un
 
 		if (board >= boards)
 			return -EINVAL;
-		if (max_len < sizeof (struct gfx_getboardinfo_args))
+		if (max_len < (int)sizeof (struct gfx_getboardinfo_args))
 			return -EINVAL;
 		if (max_len > cards [board].g_board_info_len)
 			max_len = cards [boards].g_board_info_len;

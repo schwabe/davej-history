@@ -389,7 +389,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 			goto clear_TF;
 	}
 
-	/* Mast out spurious debug traps due to lazy DR7 setting */
+	/* Mask out spurious debug traps due to lazy DR7 setting */
 	if (condition & (DR_TRAP0|DR_TRAP1|DR_TRAP2|DR_TRAP3)) {
 		if (!tsk->tss.debugreg[7])
 			goto clear_dr7;
