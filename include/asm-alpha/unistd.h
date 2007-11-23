@@ -315,7 +315,7 @@
 #define __NR_mincore			375	/* implemented in 2.3 */
 #define __NR_pciconfig_iobase		376
 
-#if defined(__LIBRARY__) && defined(__GNUC__)
+#if defined(__GNUC__)
 
 #define _syscall_return(type)						\
 	return (_sc_err ? errno = _sc_ret, _sc_ret = -1L : 0), (type) _sc_ret
@@ -495,7 +495,7 @@ type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5, type6 arg6)\
 	_syscall_return(type);						\
 }
 
-#endif /* __LIBRARY__ && __GNUC__ */
+#endif /* __GNUC__ */
 
 #ifdef __KERNEL_SYSCALLS__
 

@@ -1583,8 +1583,12 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		 * Note. ddp-> becomes invalid at the realloc.
 		 */
 		if(skb_headroom(skb) < 22)
+		{
 			/* 22 bytes - 12 ether, 2 len, 3 802.2 5 snap */
-			skb = skb_realloc_headroom(skb, 32);
+			struct sk_buff *nskb = skb_realloc_headroom(skb, 32);
+			kfree(skb);
+			skb=nskb;
+		}
 		else
 			skb = skb_unshare(skb, GFP_ATOMIC);
 		

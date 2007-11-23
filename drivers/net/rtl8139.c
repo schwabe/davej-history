@@ -1265,8 +1265,8 @@ static int rtl8129_rx(struct device *dev)
 			} else {
 #if 1  /* USE_IP_COPYSUM */
 				eth_copy_and_sum(skb, &rx_ring[ring_offset + 4],
-								 rx_size, 0);
-				skb_put(skb, rx_size);
+						 rx_size - 4, 0);
+				skb_put(skb, rx_size - 4);
 #else
 				memcpy(skb_put(skb, rx_size), &rx_ring[ring_offset + 4],
 					   rx_size);

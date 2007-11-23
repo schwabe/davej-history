@@ -5755,6 +5755,34 @@ CONFIG_WANXL
 
   If unsure, say N here.
 
+Cyclades-PC300 support
+CONFIG_PC300
+  This is a driver for the Cyclades-PC300 synchronous communication
+  boards. These boards provide synchronous serial interfaces to your
+  Linux box. All protocols supported by the HDLC generic driver
+  (currently synchronous PPP, Cisco HDLC and Frame Relay) are available
+  by default. If you wish to support other protocols, please select one
+  of the available options below this one.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called pc300.o.
+
+  If unsure, say N here.
+
+Cyclades-PC300 X.25 Support
+CONFIG_PC300_X25
+  Say Y to this option if you intend to use the Cyclades-PC300 to
+  provide X.25 interfaces to your Linux box.
+
+  IMPORTANT: Additional X.25 support must be enabled in the kernel
+  for this support to be functional (say Y to "CCITT X.25 Packet Layer"
+  and "LAPB Data Link Driver", in the "Networking Options"
+  configuration section).
+
+  If unsure, say N here.
+
 Ethernet (10 or 100Mbit)
 CONFIG_NET_ETHERNET
   Ethernet (also called IEEE 802.3 or ISO 8802-2) is the most common

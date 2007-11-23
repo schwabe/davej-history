@@ -1003,6 +1003,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PC300),y)
+L_OBJS += pc300.o
+else
+  ifeq ($(CONFIG_PC300),m)
+  M_OBJS += pc300.o
+  endif
+endif
+
 # If anything built-in uses syncppp, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
 

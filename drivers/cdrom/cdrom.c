@@ -214,15 +214,19 @@
   that case switch block size and issue plain READ_10 again, then switch
   back.
 
-  3.09 Jun 10, 2000 - Jens Axboe <axboe@suse.de>
+  3.10 Jun 10, 2000 - Jens Axboe <axboe@suse.de>
   -- Fix volume control on CD's - old SCSI-II drives now use their own
   code, as doing MODE6 stuff in here is really not my intention.
   -- Use READ_DISC_INFO for more reliable end-of-disc.
+
+  3.11 Jun 12, 2000 - Jens Axboe <axboe@suse.de>
+  -- Fix bug in getting rpc phase 2 region info.
+  -- Reinstate "correct" CDROMPLAYTRKIND
  
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 3.10"
-#define VERSION "Id: cdrom.c 3.10 2000/06/10"
+#define REVISION "Revision: 3.11"
+#define VERSION "Id: cdrom.c 3.11 2000/06/12"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -1101,8 +1105,8 @@ static int dvd_do_auth(struct cdrom_device_info *cdi, dvd_authinfo *ai)
 	case DVD_LU_SEND_RPC_STATE:
 		cdinfo(CD_DVD, "entering DVD_LU_SEND_RPC_STATE\n");
 		setup_report_key(&cgc, 0, 8);
+		memset(&rpc_state, 0, sizeof(rpc_state_t));
 
-		init_cdrom_command(&cgc, &rpc_state, 0);
 		if ((ret = cdo->generic_packet(cdi, &cgc)))
 			return ret;
 
@@ -1113,7 +1117,7 @@ static int dvd_do_auth(struct cdrom_device_info *cdi, dvd_authinfo *ai)
 		ai->lrpcs.rpc_scheme = rpc_state.rpc_scheme;
 		break;
 
-		/* Set region settings */
+	/* Set region settings */
 	case DVD_HOST_SEND_RPC_STATE:
 		cdinfo(CD_DVD, "entering DVD_HOST_SEND_RPC_STATE\n");
 		setup_send_key(&cgc, 0, 6);
@@ -1964,36 +1968,15 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		}
 	case CDROMPLAYTRKIND: {
 		struct cdrom_ti ti;
-		struct cdrom_tocentry entry;
-		struct cdrom_tochdr tochdr;
 
 		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYTRKIND\n");
 		IOCTL_IN(arg, struct cdrom_ti, ti);
-		entry.cdte_format = CDROM_MSF;
 
-		/* get toc entry for start and end track */
-		if (cdo->audio_ioctl(cdi, CDROMREADTOCHDR, &tochdr))
-			return -EINVAL;
-		if ((entry.cdte_track = ti.cdti_trk0) > tochdr.cdth_trk1)
-			return -EINVAL;
-		if (cdo->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
-			return -EINVAL;
-
-		cgc.cmd[3] = entry.cdte_addr.msf.minute;
-		cgc.cmd[4] = entry.cdte_addr.msf.second;
-		cgc.cmd[5] = entry.cdte_addr.msf.frame;
-
-		entry.cdte_track = ti.cdti_trk1 + 1;
-		if (entry.cdte_track > tochdr.cdth_trk1)
-			entry.cdte_track = CDROM_LEADOUT;
-
-		if (cdo->audio_ioctl(cdi, CDROMREADTOCENTRY, &entry))
-			return -EINVAL;
-
-		cgc.cmd[6] = entry.cdte_addr.msf.minute;
-		cgc.cmd[7] = entry.cdte_addr.msf.second;
-		cgc.cmd[8] = entry.cdte_addr.msf.frame;
-		cgc.cmd[0] = GPCMD_PLAY_AUDIO_MSF;
+		cgc.cmd[0] = GPCMD_PLAY_AUDIO_TI;
+		cgc.cmd[4] = ti.cdti_trk0;
+		cgc.cmd[5] = ti.cdti_ind0;
+		cgc.cmd[7] = ti.cdti_trk1;
+		cgc.cmd[8] = ti.cdti_ind1;
 		return cdo->generic_packet(cdi, &cgc);
 		}
 	case CDROMPLAYMSF: {

@@ -220,6 +220,12 @@ M:	ivan@cyclades.com
 W:	http://www.cyclades.com/
 S:	Supported
 
+CYCLADES PC300 DRIVER
+P:	Ivan Passos
+M:	ivan@cyclades.com
+W:	http://www.cyclades.com/
+S:	Supported
+
 DAMA SLAVE for AX.25
 P:	Joerg Reuter
 M:	jreuter@poboxes.com
@@ -261,6 +267,14 @@ M:	rick@remotepoint.com
 L:	linux-net@vger.rutgers.edu
 W:	http://www.dgii.com/linux/
 S:	Maintained
+
+DISK GEOMETRY AND PARTITION HANDLING
+P:     Andries Brouwer
+M:     aeb@veritas.com
+W:     http://www.win.tue.nl/~aeb/linux/Large-Disk.html
+W:     http://www.win.tue.nl/~aeb/linux/zip/zip-1.html
+W:     http://www.win.tue.nl/~aeb/partitions/partition_types-1.html
+S:     Maintained
 
 DISKQUOTA:
 P:	Marco van Wieringen

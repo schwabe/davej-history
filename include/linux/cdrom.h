@@ -443,6 +443,7 @@ struct cdrom_generic_command
 #define GPCMD_PAUSE_RESUME		    0x4b
 #define GPCMD_PLAY_AUDIO_10		    0x45
 #define GPCMD_PLAY_AUDIO_MSF		    0x47
+#define GPCMD_PLAY_AUDIO_TI		    0x48
 #define GPCMD_PLAY_CD			    0xbc
 #define GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL  0x1e
 #define GPCMD_READ_10			    0x28

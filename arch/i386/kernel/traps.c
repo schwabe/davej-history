@@ -367,6 +367,9 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 
 	__asm__ __volatile__("movl %%db6,%0" : "=r" (condition));
 
+	/* Ensure the debug status register is visible to ptrace (or the process itself) */
+	tsk->tss.debugreg[6] = condition;
+
 	/* Mask out spurious TF errors due to lazy TF clearing */
 	if (condition & DR_STEP) {
 		/*

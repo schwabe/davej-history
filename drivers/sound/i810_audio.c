@@ -46,6 +46,18 @@
  *	There is no midi support, no synth support. Use timidity. To get
  *	esd working you need to use esd -r 48000 as it won't probe 48KHz
  *	by default. mpg123 can't handle 48Khz only audio so use xmms.
+ *
+ *	Fix The Sound On Dell
+ *
+ *	Not everyone uses 48KHz. We know of no way to detect this reliably
+ *	and certainly not to get the right data. If your i810 audio sounds
+ *	stupid you may need to investigate other speeds. According to Analog
+ *	they tend to use a 14.318MHz clock which gives you a base rate of
+ *	41194Hz.
+ *
+ *	This is available via the 'ftsodell=1' option. 
+ *
+ *	If you need to force a specific rate set the clocking= option
  */
  
 #include <linux/module.h>
@@ -74,9 +86,15 @@
 #ifndef PCI_DEVICE_ID_INTEL_82901
 #define PCI_DEVICE_ID_INTEL_82901	0x2425
 #endif
+#ifndef PCI_DEVICE_ID_INTEL_ICH2
+#define PCI_DEVICE_ID_INTEL_ICH2	0x2445
+#endif
 #ifndef PCI_DEVICE_ID_INTEL_440MX
 #define PCI_DEVICE_ID_INTEL_440MX	0x7195
 #endif
+
+static int ftsodell=0;
+static int clocking=48000;
 
 #define ADC_RUNNING	1
 #define DAC_RUNNING	2
@@ -180,7 +198,8 @@ static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 enum {
 	ICH82801AA = 0,
 	ICH82901AB,
-	INTEL440MX
+	INTEL440MX,
+	INTELICH2
 };
 
 /* "software" or virtual channel, an instance of opened /dev/dsp */
@@ -345,14 +364,26 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 	
 	if(!(state->card->ac97_features&0x0001))
 	{
-		dmabuf->rate=48000;
-		return 48000;
+		dmabuf->rate=clocking;
+		return clocking;
 	}
 			
 	if (rate > 48000)
 		rate = 48000;
-	if (rate < 4000)
-		rate = 4000;
+	if (rate < 8000)
+		rate = 8000;
+	
+	/*
+	 *	Adjust for misclocked crap
+	 */
+	 
+	rate = ( rate * clocking)/48000;
+	
+	/* Analog codecs can go lower via magic registers but others
+	   might not */
+	   
+	if(rate < 8000)
+		rate = 8000;
 
 	/* Power down the DAC */
 	dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
@@ -365,7 +396,7 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 //	printk("DAC rate set to %d Returned %d\n", 
 //		rate, (int)rp);
 		
-	rate=rp;
+	rate=(rp*48000) / clocking;
 		
 	/* Power it back up */
 	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
@@ -387,14 +418,26 @@ static unsigned int i810_set_adc_rate(struct i810_state * state, unsigned int ra
 	
 	if(!(state->card->ac97_features&0x0001))
 	{
-		dmabuf->rate = 48000;
-		return 48000;
+		dmabuf->rate = clocking;
+		return clocking;
 	}
 			
 	if (rate > 48000)
 		rate = 48000;
-	if (rate < 4000)
-		rate = 4000;
+	if (rate < 8000)
+		rate = 8000;
+
+	/*
+	 *	Adjust for misclocked crap
+	 */
+	 
+	rate = ( rate * clocking)/48000;
+	
+	/* Analog codecs can go lower via magic registers but others
+	   might not */
+	   
+	if(rate < 8000)
+		rate = 8000;
 
 	/* Power down the ADC */
 	dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
@@ -407,7 +450,7 @@ static unsigned int i810_set_adc_rate(struct i810_state * state, unsigned int ra
 //	printk("ADC rate set to %d Returned %d\n", 
 //		rate, (int)rp);
 		
-	rate=rp;
+	rate = (rp * 48000) / clocking;
 		
 	/* Power it back up */
 	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
@@ -1806,6 +1849,8 @@ static void i810_remove(struct i810_card *card)
 
 MODULE_AUTHOR("Assorted");
 MODULE_DESCRIPTION("Intel 810 audio support");
+MODULE_PARM(ftsodell, "i");
+MODULE_PARM(clocking, "i");
 
 int __init i810_probe(void)
 {
@@ -1815,6 +1860,9 @@ int __init i810_probe(void)
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
 
+	if(ftsodell=1)
+		clocking=41194;
+		
 	printk(KERN_INFO "Intel 810 + AC97 Audio, version "
 	       DRIVER_VERSION ", " __TIME__ " " __DATE__ "\n");
 
@@ -1828,6 +1876,11 @@ int __init i810_probe(void)
 	}
 	while( (pcidev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_440MX, pcidev))!=NULL ) {
 		if (i810_install(pcidev, INTEL440MX, "Intel 440MX")==0)
+			foundone++;
+	}
+
+	while( (pcidev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_ICH2, pcidev))!=NULL ) {
+		if (i810_install(pcidev, INTELICH2, "Intel ICH2")==0)
 			foundone++;
 	}
 

@@ -227,7 +227,7 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		}
 
 		/* Do we have to help kswapd or can we proceed? */
-		if (nr_free_pages < (freepages.low + freepages.low) / 2) {
+		if (nr_free_pages < (freepages.min + freepages.low) / 2) {
 			wake_up_interruptible(&kswapd_wait);
 
 			/* Help kswapd a bit... */

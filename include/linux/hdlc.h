@@ -38,6 +38,8 @@
 #define LINE_X21	3
 #define LINE_LOOPBACK	4	/* On-card loopback */
 #define LINE_NOLOOPBACK	5
+#define LINE_T1		6
+#define LINE_E1		7
 #define LINE_MIN_CLOCK 75	/* This & higher values are real clock rates */
 
 

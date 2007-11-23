@@ -319,6 +319,10 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 
     if [ "$CONFIG_PCI" != "n" ]; then
       dep_tristate '  SBE wanXL support' CONFIG_WANXL $CONFIG_HDLC
+      dep_tristate '  Cyclades-PC300 support' CONFIG_PC300 $CONFIG_HDLC
+      if [ "$CONFIG_PC300" != "n" ]; then
+        bool '    Cyclades-PC300 X.25 support (please read help)' CONFIG_PC300_X25
+      fi
     fi
   fi
 fi

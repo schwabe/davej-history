@@ -125,7 +125,18 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	 * This function must not run from an irq handler so we don' t need
 	 * to clear irq on the local CPU. -arca
 	 */
+
 	spin_lock(&parportlist_lock);
+
+	/* We are locked against anyone else performing alterations, but
+	 * because of parport_enumerate people can still _read_ the list
+	 * while we are changing it, so be careful..
+	 *
+	 * It's okay to have portlist_tail a little bit out of sync
+	 * since it's only used for changing the list, not for reading
+	 * from it.
+	 */
+
 	if (portlist_tail)
 		portlist_tail->next = tmp;
 	portlist_tail = tmp;
@@ -144,6 +155,10 @@ void parport_unregister_port(struct parport *port)
 	struct parport *p;
 
 	spin_lock(&parportlist_lock);
+
+	/* We are protected from other people changing the list, but
+	 * they can still see it (using parport_enumerate).  So be
+	 * careful about the order of writes.. */
 	if (portlist == port) {
 		if ((portlist = port->next) == NULL)
 			portlist_tail = NULL;
@@ -212,17 +227,25 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 		}
 	}
 
+	/* We up our own module reference count, and that of the port
+           on which a device is to be registered, to ensure that
+           neither of us gets unloaded while we sleep in (e.g.)
+           kmalloc.  To be absolutely safe, we have to require that
+           our caller doesn't sleep in between parport_enumerate and
+           parport_register_device.. */
+	inc_parport_count ();
+	port->ops->inc_use_count ();
+
 	tmp = kmalloc(sizeof(struct pardevice), GFP_KERNEL);
 	if (tmp == NULL) {
 		printk(KERN_WARNING "%s: memory squeeze, couldn't register %s.\n", port->name, name);
-		return NULL;
+		goto out;
 	}
 
 	tmp->state = kmalloc(sizeof(struct parport_state), GFP_KERNEL);
 	if (tmp->state == NULL) {
 		printk(KERN_WARNING "%s: memory squeeze, couldn't register %s.\n", port->name, name);
-		kfree(tmp);
-		return NULL;
+		goto out_free_pardevice;
 	}
 
 	/* We may need to claw back the port hardware. */
@@ -231,9 +254,7 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 			printk(KERN_WARNING
 			       "%s: unable to get hardware to register %s.\n",
 			       port->name, name);
-			kfree (tmp->state);
-			kfree (tmp);
-			return NULL;
+			goto out_free_all;
 		}
 		port->flags &= ~PARPORT_FLAG_COMA;
 	}
@@ -259,17 +280,18 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	if (flags & PARPORT_DEV_EXCL) {
 		if (port->devices) {
 			spin_unlock (&port->pardevice_lock);
-			kfree (tmp->state);
-			kfree (tmp);
 			printk (KERN_DEBUG
 				"%s: cannot grant exclusive access for "
 				"device %s\n", port->name, name);
-			return NULL;
+			goto out_free_all;
 		}
 		port->flags |= PARPORT_FLAG_EXCL;
 	}
 
 	tmp->next = port->devices;
+	wmb(); /* Make sure that tmp->next is written before it's
+                  added to the list; see comments marked 'no locking
+                  required' */
 	if (port->devices)
 		port->devices->prev = tmp;
 	port->devices = tmp;
@@ -283,11 +305,21 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	tmp->waitnext = tmp->waitprev = NULL;
 
 	return tmp;
+
+ out_free_all:
+	kfree (tmp->state);
+ out_free_pardevice:
+	kfree (tmp);
+ out:
+	dec_parport_count ();
+	port->ops->dec_use_count ();
+	return NULL;
 }
 
 void parport_unregister_device(struct pardevice *dev)
 {
 	struct parport *port;
+	unsigned long flags;
 
 #ifdef PARPORT_PARANOID
 	if (dev == NULL) {
@@ -298,11 +330,14 @@ void parport_unregister_device(struct pardevice *dev)
 
 	port = dev->port;
 
+	read_lock_irqsave (&port->cad_lock, flags);
 	if (port->cad == dev) {
+		read_unlock_irqrestore (&port->cad_lock, flags);
 		printk(KERN_DEBUG "%s: %s forgot to release port\n",
 		       port->name, dev->name);
 		parport_release (dev);
 	}
+	read_unlock_irqrestore (&port->cad_lock, flags);
 
 	spin_lock(&port->pardevice_lock);
 	if (dev->next)
@@ -336,14 +371,17 @@ int parport_claim(struct pardevice *dev)
 	struct parport *port = dev->port;
 	unsigned long flags;
 
+	read_lock_irqsave (&port->cad_lock, flags);
 	if (port->cad == dev) {
+		read_unlock_irqrestore (&port->cad_lock, flags);
 		printk(KERN_INFO "%s: %s already owner\n",
 			   dev->port->name,dev->name);
 		return 0;
 	}
+	read_unlock_irqrestore (&port->cad_lock, flags);
 
-try_again:
 	/* Preempt any current device */
+	write_lock_irqsave (&port->cad_lock, flags);
 	if ((oldcad = port->cad) != NULL) {
 		if (oldcad->preempt) {
 			if (oldcad->preempt(oldcad->private))
@@ -366,7 +404,7 @@ try_again:
 		dev->waiting = 0;
 
 		/* Take ourselves out of the wait list again.  */
-		spin_lock_irqsave (&port->waitlist_lock, flags);
+		spin_lock_irq (&port->waitlist_lock);
 		if (dev->waitprev)
 			dev->waitprev->waitnext = dev->waitnext;
 		else
@@ -375,7 +413,7 @@ try_again:
 			dev->waitnext->waitprev = dev->waitprev;
 		else
 			port->waittail = dev->waitprev;
-		spin_unlock_irqrestore (&port->waitlist_lock, flags);
+		spin_unlock_irq (&port->waitlist_lock);
 		dev->waitprev = dev->waitnext = NULL;
 	}
 
@@ -399,6 +437,7 @@ try_again:
 
 	/* Restore control registers */
 	port->ops->restore_state(port, dev->state);
+	write_unlock_irqrestore (&port->cad_lock, flags);
 	dev->time = jiffies;
 	return 0;
 
@@ -406,13 +445,10 @@ blocked:
 	/* If this is the first time we tried to claim the port, register an
 	   interest.  This is only allowed for devices sleeping in
 	   parport_claim_or_block(), or those with a wakeup function.  */
+
+	/* The cad_lock is still held for writing here */
 	if (dev->waiting & 2 || dev->wakeup) {
-		spin_lock_irqsave (&port->waitlist_lock, flags);
-		if (port->cad == NULL) {
-			/* The port got released in the meantime. */
-			spin_unlock_irqrestore (&port->waitlist_lock, flags);
-			goto try_again;
-		}
+		spin_lock (&port->waitlist_lock);
 		if (test_and_set_bit(0, &dev->waiting) == 0) {
 			/* First add ourselves to the end of the wait list. */
 			dev->waitnext = NULL;
@@ -423,8 +459,9 @@ blocked:
 			} else
 				port->waithead = port->waittail = dev;
 		}
-		spin_unlock_irqrestore (&port->waitlist_lock, flags);
+		spin_unlock (&port->waitlist_lock);
 	}
+	write_unlock_irqrestore (&port->cad_lock, flags);
 	return -EAGAIN;
 }
 
@@ -474,12 +511,14 @@ void parport_release(struct pardevice *dev)
 	unsigned long flags;
 
 	/* Make sure that dev is the current device */
+	write_lock_irqsave (&port->cad_lock, flags);
 	if (port->cad != dev) {
+		write_unlock_irqrestore (&port->cad_lock, flags);
 		printk(KERN_WARNING "%s: %s tried to release parport "
 		       "when not owner\n", port->name, dev->name);
 		return;
 	}
-	write_lock_irqsave(&port->cad_lock, flags);
+
 	port->cad = NULL;
 	write_unlock_irqrestore(&port->cad_lock, flags);
 
@@ -503,7 +542,7 @@ void parport_release(struct pardevice *dev)
 			return;
 		} else if (pd->wakeup) {
 			pd->wakeup(pd->private);
-			if (dev->port->cad)
+			if (dev->port->cad) /* racy but no matter */
 				return;
 		} else {
 			printk(KERN_ERR "%s: don't know how to wake %s\n", port->name, pd->name);
@@ -511,7 +550,7 @@ void parport_release(struct pardevice *dev)
 	}
 
 	/* Nobody was waiting, so walk the list to see if anyone is
-	   interested in being woken up.  */
+	   interested in being woken up. (Note: no locking required) */
 	for (pd = port->devices; (port->cad == NULL) && pd; pd = pd->next) {
 		if (pd->wakeup && pd != dev)
 			pd->wakeup(pd->private);

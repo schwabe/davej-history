@@ -896,6 +896,9 @@ static int sx_set_real_termios (void *ptr)
 
 	func_enter2();
 
+	if (!port->gs.tty)
+		return 0;
+
 	/* What is this doing here? -- REW
 	   Ha! figured it out. It is to allow you to get DTR active again
 	   if you've dropped it with stty 0. Moved to set_baud, where it
@@ -1545,7 +1548,34 @@ static int sx_open  (struct tty_struct * tty, struct file * filp)
    exit minicom.  I expect an "oops".  -- REW */
 static void sx_hungup (void *ptr)
 {
+/*
 	func_enter ();
+	MOD_DEC_USE_COUNT;
+	func_exit ();
+*/
+	/* 
+	 * Got this from the 2.4.0-test1 serie. The port was closed before
+	 * the lines were set in the proper condition. -- pvdl
+	 */
+	struct sx_port *port = ptr; 
+	func_enter ();
+
+	/* 
+	 *  Set the lines in the proper codition before closing the port.
+	 *  Got the from 2.4.0-test1 series. -- pvdl
+	 */
+	sx_setsignals (port, 0, 0);
+	sx_reconfigure_port(port);	
+	sx_send_command (port, HS_CLOSE, -1, HS_IDLE_CLOSED);
+
+	if (sx_read_channel_byte (port, hi_hstat) != HS_IDLE_CLOSED) {
+		if (sx_send_command (port, HS_FORCE_CLOSED, -1, HS_IDLE_CLOSED) != 1) {
+			printk (KERN_ERR 
+			        "sx: sent the force_close command, but card didn't react\n");
+		} else
+			sx_dprintk (SX_DEBUG_CLOSE, "sent the force_close command.\n");
+	}
+
 	MOD_DEC_USE_COUNT;
 	func_exit ();
 }
@@ -1558,6 +1588,9 @@ static void sx_close (void *ptr)
 	int to = 5 * HZ; 
 
 	func_enter ();
+
+	sx_setsignals (port, 0, 0);
+	sx_reconfigure_port(port);	
 	sx_send_command (port, HS_CLOSE, 0, 0);
 
 	while (to-- && (sx_read_channel_byte (port, hi_hstat) != HS_IDLE_CLOSED)) {
@@ -1920,7 +1953,10 @@ static int sx_init_board (struct sx_board *board)
 	func_enter();
 
 	/* This is preceded by downloading the download code. */
-
+	/* 
+	 * The board should be set to initialized to make sure 
+	 * we can boot the other cards. --pvdl
+	 */ 
 	board->flags |= SX_BOARD_INITIALIZED;
 
 	if (read_sx_byte (board, 0))

@@ -884,7 +884,12 @@ static int hdlc_open(struct device *dev)
 		dev->do_ioctl = hdlc_ioctl;
 		hdlc->pppdev.sppp.pp_flags&=~PP_CISCO;
 		dev->type=ARPHRD_PPP;
-		sppp_open(dev);
+		result = sppp_open(dev);
+		if (result) {
+			sppp_detach(dev);
+			hdlc->close(hdlc);
+			return result;
+		}
 	}
 
 	return 0;

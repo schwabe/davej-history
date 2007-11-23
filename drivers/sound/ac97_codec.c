@@ -530,6 +530,11 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	/* probing AC97 codec, AC97 2.0 says that bit 15 of register 0x00 (reset) should 
 	   be read zero. Probing of AC97 in this way is not reliable, it is not even SAFE !! */
 	codec->codec_write(codec, AC97_RESET, 0L);
+	
+	/* We need a codec->codec_reset() function here but the delay is a
+	   reasonable hack for the moment */
+	   
+	schedule_timeout((5*HZ)/100);
 	if ((audio = codec->codec_read(codec, AC97_RESET)) & 0x8000) {
 		printk(KERN_ERR "ac97_codec: %s ac97 codec not present\n",
 		       codec->id ? "Secondary" : "Primary");

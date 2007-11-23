@@ -9021,7 +9021,7 @@ fail:
 **	code will get more complex later).
 */
 
-#ifdef SCSI_NCR_USE_64BIT_DAC
+#if BITS_PER_LONG > 32
 #define SCATTER_ONE(data, badd, len)					\
 	(data)->addr = cpu_to_scr(badd);				\
 	(data)->size = cpu_to_scr((((badd) >> 8) & 0xff000000) + len);
