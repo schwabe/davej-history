@@ -40,11 +40,10 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
-#define CONFIG_NFS_SNAPSHOT 1
 #define NFSDBG_FACILITY		NFSDBG_VFS
 #define NFS_PARANOIA 1
 
-static struct inode * __nfs_fhget(struct super_block *, struct nfs_fattr *);
+static struct inode * __nfs_fhget(struct super_block *, struct nfs_fh *, struct nfs_fattr *);
 
 static void nfs_read_inode(struct inode *);
 static void nfs_put_inode(struct inode *);
@@ -53,8 +52,6 @@ static int  nfs_notify_change(struct dentry *, struct iattr *);
 static void nfs_put_super(struct super_block *);
 static int  nfs_statfs(struct super_block *, struct statfs *, int);
 static void nfs_umount_begin(struct super_block *);
-static struct nfs_file *nfs_file_alloc(void);
-static void nfs_file_free(struct nfs_file *p);
 
 static struct super_operations nfs_sops = { 
 	nfs_read_inode,		/* read inode */
@@ -256,7 +253,7 @@ nfs_get_root(struct super_block *sb, struct nfs_fh *rootfh)
 		return NULL;
 	}
 
-	inode = __nfs_fhget(sb, &fattr);
+	inode = __nfs_fhget(sb, rootfh, &fattr);
 	return inode;
 }
 
@@ -273,9 +270,7 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	struct nfs_server	*server;
 	struct rpc_xprt		*xprt = 0;
 	struct rpc_clnt		*clnt = 0;
-	struct nfs_fh		*root_fh = NULL,
-				*root = &data->root,
-				fh;
+	struct nfs_fh		fh;
 	struct inode		*root_inode = NULL;
 	unsigned int		authflavor;
 	struct sockaddr_in	srvaddr;
@@ -290,7 +285,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto failure;
 	}
 
-	memset(&fh, 0, sizeof(fh));
 	if (data->version != NFS_MOUNT_VERSION) {
 		printk(KERN_WARNING "nfs warning: mount version %s than kernel\n",
 			data->version < NFS_MOUNT_VERSION ? "older" : "newer");
@@ -298,12 +292,21 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 			data->namlen = 0;
 		if (data->version < 3)
 			data->bsize  = 0;
-		if (data->version < 4) {
+		if (data->version < 4)
 			data->flags &= ~NFS_MOUNT_VER3;
-			root = &fh;
-			root->size = NFS2_FHSIZE;
-			memcpy(root->data, data->old_root.data, NFS2_FHSIZE);
+	}
+
+	memset(&fh, 0, sizeof(fh));
+	if (data->version < 4) {
+		fh.size = NFS2_FHSIZE;
+		memcpy(fh.data, data->old_root.data, NFS2_FHSIZE);
+	} else {
+		fh.size = (data->flags & NFS_MOUNT_VER3) ? data->root.size : NFS2_FHSIZE;
+		if (fh.size > sizeof(fh.data)) {
+			printk(KERN_WARNING "NFS: mount program passes invalid filehandle!\n");
+			goto failure;
 		}
+		memcpy(fh.data, data->root.data, fh.size);
 	}
 
 	/* We now require that the mount process passes the remote address */
@@ -351,19 +354,15 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (data->flags & NFS_MOUNT_VER3) {
 #ifdef CONFIG_NFS_V3
 		server->rpc_ops = &nfs_v3_clientops;
-		NFS_SB_FHSIZE(sb) = sizeof(unsigned short) + NFS3_FHSIZE;
+		NFS_SB_FHSIZE(sb) = NFS3_FHSIZE;
 		version = 3;
-		if (data->version < 4) {
-			printk(KERN_NOTICE "NFS: NFSv3 not supported by mount program.\n");
-			goto failure_unlock;
-		}
 #else
 		printk(KERN_NOTICE "NFS: NFSv3 not supported.\n");
 		goto failure_unlock;
 #endif
 	} else {
 		server->rpc_ops = &nfs_v2_clientops;
-		NFS_SB_FHSIZE(sb) = sizeof(unsigned short) + NFS2_FHSIZE;
+		NFS_SB_FHSIZE(sb) = NFS2_FHSIZE;
 		version = 2;
 	}
 
@@ -419,17 +418,12 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 	 * Keep the super block locked while we try to get 
 	 * the root fh attributes.
 	 */
-	root_fh = nfs_fh_alloc();
-	if (!root_fh)
-		goto out_no_fh;
-	memcpy((u8*)root_fh, (u8*)root, sizeof(*root_fh));
-
 	/* Did getting the root inode fail? */
-	if ((root->size > NFS_SB_FHSIZE(sb)
-	     || ! (root_inode = nfs_get_root(sb, root)))
+	if ((fh.size > NFS_SB_FHSIZE(sb)
+	     || ! (root_inode = nfs_get_root(sb, &fh)))
 	    && (data->flags & NFS_MOUNT_VER3)) {
 		data->flags &= ~NFS_MOUNT_VER3;
-		nfs_fh_free(root_fh);
+		fh.size = NFS2_FHSIZE;
 		rpciod_down();
 		rpc_shutdown_client(server->client);
 		goto nfsv3_try_again;
@@ -441,11 +435,9 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto failure_put_root;
 
 	sb->s_root->d_op = &nfs_dentry_operations;
-	sb->s_root->d_fsdata = root_fh;
-	sb->u.nfs_sb.s_root = root_fh;
 
 	/* Get some general file system info */
-	if (server->rpc_ops->statfs(server, root, &fsinfo) >= 0) {
+	if (server->rpc_ops->statfs(server, &fh, &fsinfo) >= 0) {
 		if (server->namelen == 0)
 			server->namelen = fsinfo.namelen;
 	} else {
@@ -518,9 +510,6 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
  failure_put_root:
 	if (root_inode)
 		iput(root_inode);
-	if (root_fh)
-		nfs_fh_free(root_fh);
- out_no_fh:
 	rpciod_down();
 
  failure_unlock:
@@ -552,7 +541,7 @@ nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	struct nfs_fsinfo	res;
 	struct statfs		tmp;
 
-	error = server->rpc_ops->statfs(server, NFS_FH(sb->s_root), &res);
+	error = server->rpc_ops->statfs(server, NFS_FH(sb->s_root->d_inode), &res);
 	if (error) {
 		printk(KERN_NOTICE "nfs_statfs: statfs error = %d\n", -error);
 		memset(&res, 0, sizeof(res));
@@ -590,46 +579,6 @@ int nfs_remountfs(struct super_block *sb, int *flags, char *data)
 #endif
 
 /*
- * Free all unused dentries in an inode's alias list.
- *
- * Subtle note: we have to be very careful not to cause
- * any IO operations with the stale dentries, as this
- * could cause file corruption. But since the dentry
- * count is 0 and all pending IO for a dentry has been
- * flushed when the count went to 0, we're safe here.
- * Also returns the number of unhashed dentries
- */
-static int
-nfs_free_dentries(struct inode *inode)
-{
-	struct list_head *tmp, *head = &inode->i_dentry;
-	int unhashed;
-
-restart:
-	tmp = head->next;
-	unhashed = 0;
-	while (tmp != head) {
-		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
-		dget(dentry);
-		if (!list_empty(&dentry->d_subdirs))
-			shrink_dcache_parent(dentry);
-		dprintk("nfs_free_dentries: found %s/%s, d_count=%d, hashed=%d\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name,
-			dentry->d_count, !list_empty(&dentry->d_hash));
-		if (dentry->d_count == 1) {
-			d_drop(dentry);
-			dput(dentry);
-			goto restart;
-		}
-		if (list_empty(&dentry->d_hash))
-			unhashed++;
-		tmp = tmp->next;
-		dput(dentry);
-	}
-	return unhashed;
-}
-
-/*
  * Zap the caches.
  */
 void nfs_zap_caches(struct inode *inode)
@@ -657,7 +606,7 @@ nfs_invalidate_inode(struct inode *inode)
  * Fill in inode information from the fattr.
  */
 static void
-nfs_fill_inode(struct inode *inode, struct nfs_fattr *fattr)
+nfs_fill_inode(struct inode *inode, struct nfs_fh *fh, struct nfs_fattr *fattr)
 {
 	/*
 	 * Check whether the mode has been set, as we only want to
@@ -697,25 +646,15 @@ nfs_fill_inode(struct inode *inode, struct nfs_fattr *fattr)
 		NFS_CACHE_ISIZE(inode) = fattr->size;
 		NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
 		NFS_ATTRTIMEO_UPDATE(inode) = jiffies;
+		memcpy(&inode->u.nfs_i.fh, fh, sizeof(inode->u.nfs_i.fh));
 	}
 	nfs_refresh_inode(inode, fattr);
 }
 
-static struct inode *
-nfs_make_new_inode(struct super_block *sb, struct nfs_fattr *fattr)
-{
-	struct inode *inode = get_empty_inode();
-
-	if (!inode)
-		return NULL;	
-	inode->i_sb = sb;
-	inode->i_dev = sb->s_dev;
-	inode->i_flags = 0;
-	inode->i_ino = nfs_fattr_to_ino_t(fattr);
-	nfs_read_inode(inode);
-	nfs_fill_inode(inode, fattr);
-	return inode;
-}
+struct nfs_find_desc {
+	struct nfs_fh		*fh;
+	struct nfs_fattr	*fattr;
+};
 
 /*
  * In NFSv3 we can have 64bit inode numbers. In order to support
@@ -726,50 +665,39 @@ nfs_make_new_inode(struct super_block *sb, struct nfs_fattr *fattr)
 static int
 nfs_find_actor(struct inode *inode, unsigned long ino, void *opaque)
 {
-	struct nfs_fattr *fattr = (struct nfs_fattr *)opaque;
+	struct nfs_find_desc	*desc = (struct nfs_find_desc *)opaque;
+	struct nfs_fh		*fh = desc->fh;
+	struct nfs_fattr	*fattr = desc->fattr;
+
 	if (NFS_FSID(inode) != fattr->fsid)
 		return 0;
 	if (NFS_FILEID(inode) != fattr->fileid)
 		return 0;
-	if (inode->i_mode &&
-	    (fattr->mode & S_IFMT) != (inode->i_mode & S_IFMT))
-		return 0;
-	if (is_bad_inode(inode))
-		return 0;
-	if (NFS_FLAGS(inode) & NFS_INO_STALE)
+	if (memcmp(&inode->u.nfs_i.fh, fh, sizeof(inode->u.nfs_i.fh)) != 0)
 		return 0;
 	return 1;
 }
 
-static int
-nfs_inode_is_stale(struct inode *inode, struct nfs_fattr *fattr)
+int
+nfs_inode_is_stale(struct inode *inode, struct nfs_fh *fh, struct nfs_fattr *fattr)
 {
-	int unhashed;
-	int is_stale = 0;
 
-	if (inode->i_mode &&
-	    (fattr->mode & S_IFMT) != (inode->i_mode & S_IFMT))
-		is_stale = 1;
+	/* Empty inodes are not stale */
+	if (!inode->i_mode)
+		return 0;
+
+	if ((fattr->mode & S_IFMT) != (inode->i_mode & S_IFMT))
+		return 1;
 
 	if (is_bad_inode(inode))
-		is_stale = 1;
+		return 1;
 
-	/*
-	 * If the inode seems stale, free up cached dentries.
-	 */
-	unhashed = nfs_free_dentries(inode);
+	/* Has the filehandle changed? If so is the old one stale? */
+	if (memcmp(&inode->u.nfs_i.fh, fh, sizeof(inode->u.nfs_i.fh)) != 0 &&
+	    __nfs_revalidate_inode(NFS_SERVER(inode),inode) == -ESTALE)
+		return 1;
 
-	/* Assume we're holding an i_count
-	 *
-	 * NB: sockets sometimes have volatile file handles
-	 *     don't invalidate their inodes even if all dentries are
-	 *     unhashed.
-	 */
-	if (unhashed && inode->i_count == unhashed + 1
-	    && !S_ISSOCK(inode->i_mode) && !S_ISFIFO(inode->i_mode))
-		is_stale = 1;
-
-	return is_stale;
+	return 0;
 }
 
 /*
@@ -778,8 +706,6 @@ nfs_inode_is_stale(struct inode *inode, struct nfs_fattr *fattr)
  * the vfs read_inode function because there is no way to pass the
  * file handle or current attributes into the read_inode function.
  *
- * We provide a special check for NetApp .snapshot directories to avoid
- * inode aliasing problems. All snapshot inodes are anonymous (unhashed).
  */
 struct inode *
 nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
@@ -791,40 +717,16 @@ nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		(long long) fattr->fileid);
 
-	/* Install the file handle in the dentry */
-	memcpy(NFS_FH(dentry), (u8*)fhandle, sizeof(*fhandle));
-
-#ifdef CONFIG_NFS_SNAPSHOT
-	/*
-	 * Check for NetApp snapshot dentries, and get an 
-	 * unhashed inode to avoid aliasing problems.
-	 */
-	if ((dentry->d_parent->d_inode->u.nfs_i.flags & NFS_IS_SNAPSHOT) ||
-	    (dentry->d_name.len == 9 &&
-	     memcmp(dentry->d_name.name, ".snapshot", 9) == 0)) {
-		struct inode *inode = nfs_make_new_inode(sb, fattr);
-		if (!inode)
-			goto out;
-		inode->u.nfs_i.flags |= NFS_IS_SNAPSHOT;
-		dprintk("NFS: nfs_fhget(snapshot ino=%ld)\n", inode->i_ino);
-	out:
-		return inode;
-	}
-#endif
-	return __nfs_fhget(sb, fattr);
+	return __nfs_fhget(sb, fhandle, fattr);
 }
 
 /*
  * Look up the inode by super block and fattr->fileid.
- *
- * Note carefully the special handling of busy inodes (i_count > 1).
- * With the kernel 2.1.xx dcache all inodes except hard links must
- * have i_count == 1 after iget(). Otherwise, it indicates that the
- * server has reused a fileid (i_ino) and we have a stale inode.
  */
 static struct inode *
-__nfs_fhget(struct super_block *sb, struct nfs_fattr *fattr)
+__nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr)
 {
+	struct nfs_find_desc desc = { fh, fattr };
 	struct inode	*inode = NULL;
 	unsigned long	ino;
 
@@ -833,34 +735,12 @@ __nfs_fhget(struct super_block *sb, struct nfs_fattr *fattr)
 
 	ino = nfs_fattr_to_ino_t(fattr);
 
-	while((inode = iget4(sb, ino, nfs_find_actor, fattr)) != NULL) {
-
-		/*
-		 * Check for busy inodes, and attempt to get rid of any
-		 * unused local references. If successful, we release the
-		 * inode and try again.
-		 *
-		 * Note that the busy test uses the values in the fattr,
-		 * as the inode may have become a different object.
-		 * (We can probably handle modes changes here, too.)
-		 */
-		if (!nfs_inode_is_stale(inode,fattr))
-			break;
-
-		dprintk("__nfs_fhget: inode %ld still busy, i_count=%d\n",
-		       inode->i_ino, inode->i_count);
-		/* Mark the inode as being stale */
-		NFS_FLAGS(inode) |= NFS_INO_STALE;
-		nfs_zap_caches(inode);
-		iput(inode);
-	}
-
-	if (!inode)
+	if (!(inode = iget4(sb, ino, nfs_find_actor, &desc)))
 		goto out_no_inode;
 
-	nfs_fill_inode(inode, fattr);
-	dprintk("NFS: __nfs_fhget(%x/%ld ct=%d)\n",
-		inode->i_dev, inode->i_ino, inode->i_count);
+	nfs_fill_inode(inode, fh, fattr);
+	dprintk("NFS: __nfs_fhget(%x/%Ld ct=%d)\n",
+		inode->i_dev, (long long)NFS_FILEID(inode), inode->i_count);
 
 out:
 	return inode;
@@ -896,7 +776,7 @@ nfs_notify_change(struct dentry *dentry, struct iattr *attr)
 		goto out;
 
 	/* Now perform the setattr call */
-	error = NFS_CALL(setattr, inode, (dentry, &fattr, attr));
+	error = NFS_PROTO(inode)->setattr(inode, &fattr, attr);
 	if (error || !(fattr.valid & NFS_ATTR_FATTR)) {
 		nfs_zap_caches(inode);
 		goto out;
@@ -954,52 +834,27 @@ nfs_wait_on_inode(struct inode *inode, int flag)
 int
 nfs_revalidate(struct dentry *dentry)
 {
-	return nfs_revalidate_inode(dentry);
-}
-
-static __inline__ struct nfs_file *nfs_file_alloc(void)
-{
-	struct nfs_file	*p;
-	p = kmalloc(sizeof(*p), GFP_KERNEL);
-	if (p) {
-		memset(p, 0, sizeof(*p));
-		p->magic = NFS_FILE_MAGIC;
-	}
-	return p;
-}
-
-static __inline__ void nfs_file_free(struct nfs_file *p)
-{
-	if (p->magic == NFS_FILE_MAGIC) {
-		p->magic = 0;
-		kfree(p);
-	} else
-		printk(KERN_ERR "NFS: extra file info corrupted!\n");
+	struct inode *inode = dentry->d_inode;
+	return nfs_revalidate_inode(NFS_SERVER(inode), inode);
 }
 
 int nfs_open(struct inode *inode, struct file *filp)
 {
 	struct rpc_auth	*auth = NFS_CLIENT(inode)->cl_auth;
-	struct nfs_file	*data;
+	struct rpc_cred	*cred = rpcauth_lookupcred(auth, 0);
 
-	data = nfs_file_alloc();
-	if (!data)
-		return -ENOMEM;
-	data->cred = rpcauth_lookupcred(auth, 0);
-	filp->private_data = data;
+	filp->private_data = cred;
 	return 0;
 }
 
 int nfs_release(struct inode *inode, struct file *filp)
 {
-	struct nfs_file	*data = NFS_FILE(filp);
 	struct rpc_auth	*auth = NFS_CLIENT(inode)->cl_auth;
 	struct rpc_cred	*cred;
 
 	cred = nfs_file_cred(filp);
 	if (cred)
 		rpcauth_releasecred(auth, cred);
-	nfs_file_free(data);
 	return 0;
 }
 
@@ -1008,17 +863,15 @@ int nfs_release(struct inode *inode, struct file *filp)
  * the cached attributes have to be refreshed.
  */
 int
-__nfs_revalidate_inode(struct dentry *dentry)
+__nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
 {
-	struct inode	*inode = dentry->d_inode;
 	struct nfs_fattr fattr;
 	int		 status = 0;
 
-	dfprintk(PAGECACHE, "NFS: revalidating %s/%s, ino=%ld\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name,
-		inode->i_ino);
+	dfprintk(PAGECACHE, "NFS: revalidating (%x/%Ld)\n",
+		inode->i_dev, (long long)NFS_FILEID(inode));
 
-	if (!inode || is_bad_inode(inode))
+	if (!inode || is_bad_inode(inode) || NFS_STALE(inode))
 		return -ESTALE;
 
 	while (NFS_REVALIDATING(inode)) {
@@ -1026,58 +879,30 @@ __nfs_revalidate_inode(struct dentry *dentry)
 		if (status < 0)
 			return status;
 		if (time_before(jiffies,NFS_READTIME(inode)+NFS_ATTRTIMEO(inode)))
-			return 0;
+			return NFS_STALE(inode) ? -ESTALE : 0;
 	}
 	NFS_FLAGS(inode) |= NFS_INO_REVALIDATING;
 
-	status = NFS_CALL(getattr, inode, (dentry, &fattr));
+	status = NFS_PROTO(inode)->getattr(inode, &fattr);
 	if (status) {
-		int error;
-		u32 *fh;
-		struct dentry *dir = dentry->d_parent;
-		struct nfs_fh fhandle;
-		struct nfs_fattr dir_attr;
-
-		dfprintk(PAGECACHE, "nfs_revalidate_inode: %s/%s getattr failed, ino=%ld, error=%d\n",
-		       dentry->d_parent->d_name.name, dentry->d_name.name,
-		       inode->i_ino, status);
-		nfs_zap_caches(inode);
-
-		if (status != -ESTALE)
-			goto out;
-
-		/*
-		 * A "stale filehandle" error ... show the current fh
-		 * and find out what the filehandle should be.
-		 */
-		fh = (u32 *) NFS_FH(dentry);
-		dfprintk(PAGECACHE, "NFS: bad fh %08x%08x%08x%08x%08x%08x%08x%08x\n",
-			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
-		error = NFS_CALL(lookup, dir->d_inode, (dir, &dir_attr, 
-					&dentry->d_name, &fhandle, &fattr));
-		nfs_refresh_inode(dir->d_inode, &dir_attr);
-		if (error) {
-			dfprintk(PAGECACHE, "NFS: lookup failed, error=%d\n", error);
-			goto out;
+		dfprintk(PAGECACHE, "nfs_revalidate_inode: (%x/%Ld) getattr failed, error=%d\n",
+			 inode->i_dev, (long long)NFS_FILEID(inode), status);
+		if (status == -ESTALE) {
+			NFS_FLAGS(inode) |= NFS_INO_STALE;
+			remove_inode_hash(inode);
 		}
-		fh = (u32 *) &fhandle;
-		dfprintk(PAGECACHE, "            %08x%08x%08x%08x%08x%08x%08x%08x\n",
-			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
-		if (!IS_ROOT(dentry) && !have_submounts(dentry))
-			d_drop(dentry);
 		goto out;
 	}
 
 	status = nfs_refresh_inode(inode, &fattr);
 	if (status) {
-		dfprintk(PAGECACHE, "nfs_revalidate_inode: %s/%s refresh failed, ino=%ld, error=%d\n",
-			 dentry->d_parent->d_name.name, dentry->d_name.name,
-			 inode->i_ino, status);
+		dfprintk(PAGECACHE, "nfs_revalidate_inode: (%x/%Ld) refresh failed, error=%d\n",
+			 inode->i_dev, (long long)NFS_FILEID(inode), status);
 		goto out;
 	}
+	dfprintk(PAGECACHE, "NFS: (%x/%Ld) revalidation complete\n",
+		 inode->i_dev, (long long)NFS_FILEID(inode));
 
-	dfprintk(PAGECACHE, "NFS: %s/%s revalidation complete\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name);
 out:
 	NFS_FLAGS(inode) &= ~NFS_INO_REVALIDATING;
 	wake_up(&inode->i_wait);

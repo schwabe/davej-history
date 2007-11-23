@@ -1,6 +1,7 @@
 #ifndef _NFS_FS_i
 #define _NFS_FS_I
 
+#include <linux/list.h>
 #include <linux/nfs.h>
 #include <linux/pipe_fs_i.h>
 
@@ -20,6 +21,11 @@ struct nfs_inode_info {
 	 */
 	__u64 fsid;
 	__u64 fileid;
+
+	/*
+	 * NFS file handle
+	 */
+	struct nfs_fh		fh;
 
 	/*
 	 * Various flags
@@ -79,12 +85,10 @@ struct nfs_inode_info {
 /*
  * Legal inode flag values
  */
-#define NFS_INO_LOCKED          0x0001          /* locked for revalidation */
+#define NFS_INO_STALE		0x0001		/* We suspect inode is stale */
 #define NFS_INO_ADVISE_RDPLUS   0x0002          /* advise readdirplus */
 #define NFS_INO_REVALIDATING    0x0004          /* in nfs_revalidate() */
-#define NFS_INO_INVALIDATE      0x0008          /* zap cache on next occasion */
 #define NFS_IS_SNAPSHOT		0x0010		/* a snapshot file */
-#define NFS_INO_STALE		0x0020		/* We suspect inode is stale */
 #define NFS_INO_FLUSH		0x0040		/* inode is due for flushing */
 
 /*

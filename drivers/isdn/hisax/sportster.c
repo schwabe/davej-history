@@ -10,6 +10,7 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
@@ -181,8 +182,8 @@ Sportster_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-get_io_range(struct IsdnCardState *cs))
+static int __init
+get_io_range(struct IsdnCardState *cs)
 {
 	int i, j, adr;
 	

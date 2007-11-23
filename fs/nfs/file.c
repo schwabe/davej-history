@@ -111,13 +111,14 @@ static ssize_t
 nfs_file_read(struct file * file, char * buf, size_t count, loff_t *ppos)
 {
 	struct dentry * dentry = file->f_dentry;
+	struct inode  * inode = dentry->d_inode;
 	ssize_t result;
 
 	dfprintk(VFS, "nfs: read(%s/%s, %lu@%lu)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		(unsigned long) count, (unsigned long) *ppos);
 
-	result = nfs_revalidate_inode(dentry);
+	result = nfs_revalidate_inode(NFS_SERVER(inode), inode);
 	if (!result)
 		result = generic_file_read(file, buf, count, ppos);
 	return result;
@@ -127,12 +128,13 @@ static int
 nfs_file_mmap(struct file * file, struct vm_area_struct * vma)
 {
 	struct dentry *dentry = file->f_dentry;
+	struct inode *inode = dentry->d_inode;
 	int	status;
 
 	dfprintk(VFS, "nfs: mmap(%s/%s)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 
-	status = nfs_revalidate_inode(dentry);
+	status = nfs_revalidate_inode(NFS_SERVER(inode), inode);
 	if (!status)
 		status = generic_file_mmap(file, vma);
 	return status;
@@ -182,10 +184,8 @@ static int nfs_sync_page(struct page *page)
 	rpages = NFS_SERVER(inode)->rpages;
 	result = nfs_pagein_inode(inode, index, rpages);
 	if (result < 0)
-		goto out_bad;
+		return result;
 	return 0;
- out_bad:
-	return result;
 }
 
 /* 
@@ -205,7 +205,7 @@ nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	result = -EBUSY;
 	if (IS_SWAPFILE(inode))
 		goto out_swapfile;
-	result = nfs_revalidate_inode(dentry);
+	result = nfs_revalidate_inode(NFS_SERVER(inode), inode);
 	if (result)
 		goto out;
 
@@ -265,7 +265,9 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
 	 * Flush all pending writes before doing anything
 	 * with locks..
 	 */
+	down(&inode->i_sem);
 	status = nfs_wb_all(inode);
+	up(&inode->i_sem);
 	if (status < 0)
 		goto out_unlock;
 
@@ -280,8 +282,10 @@ nfs_lock(struct file *filp, int cmd, struct file_lock *fl)
  out_unlock:
  out_ok:
 	if ((cmd == F_SETLK || cmd == F_SETLKW) && fl->fl_type != F_UNLCK) {
+		down(&inode->i_sem);
 		nfs_wb_all(inode);	/* we may have slept */
 		nfs_zap_caches(inode);
+		up(&inode->i_sem);
 	}
 	return status;
 }

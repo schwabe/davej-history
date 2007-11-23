@@ -55,8 +55,8 @@ static void	call_refresh(struct rpc_task *task);
 static void	call_refreshresult(struct rpc_task *task);
 static void	call_timeout(struct rpc_task *task);
 static void	call_reconnect(struct rpc_task *task);
-static u32 *	call_header(struct rpc_task *task);
-static u32 *	call_verify(struct rpc_task *task);
+static void	call_ping(struct rpc_task *task);
+static void	call_pingresult(struct rpc_task *task);
 
 
 /*
@@ -487,7 +487,7 @@ call_encode(struct rpc_task *task)
 
 	/* Encode header and provided arguments */
 	encode = rpcproc_encode(clnt, task->tk_msg.rpc_proc);
-	if (!(p = call_header(task))) {
+	if (!(p = rpc_call_header(task))) {
 		printk(KERN_INFO "RPC: call_header failed, exit EIO\n");
 		rpc_exit(task, -EIO);
 	} else
@@ -592,11 +592,10 @@ call_status(struct rpc_task *task)
 			task->tk_action = call_reconnect;
 			break;
 		}
-		/*
-		 * Sleep and dream of an open connection
-		 */
-		task->tk_timeout = 5 * HZ;
-		rpc_sleep_on(&xprt->sending, task, NULL, NULL);
+		if (RPCXPRT_SUPERCONGESTED(clnt->cl_xprt)) {
+			task->tk_action = call_ping;
+			break;
+		}
 	case -ENOMEM:
 	case -EAGAIN:
 		task->tk_action = call_transmit;
@@ -620,6 +619,7 @@ call_timeout(struct rpc_task *task)
 {
 	struct rpc_clnt	*clnt = task->tk_client;
 	struct rpc_rqst	*req = task->tk_rqstp;
+	int major = 0;
 
 	if (req) {
 		struct rpc_timeout *to = &req->rq_timeout;
@@ -644,16 +644,7 @@ call_timeout(struct rpc_task *task)
 		rpc_exit(task, -EIO);
 		return;
 	}
-
-	if (clnt->cl_chatty && !(task->tk_flags & RPC_CALL_MAJORSEEN)) {
-		task->tk_flags |= RPC_CALL_MAJORSEEN;
-		printk(KERN_NOTICE "%s: server %s not responding, timed out\n",
-		       clnt->cl_protname, clnt->cl_server);
-	} else if (clnt->cl_chatty) {
-		printk(KERN_NOTICE "%s: server %s not responding, still trying\n",
-		       clnt->cl_protname, clnt->cl_server);
-	}
-
+	major = 1;
 	if (clnt->cl_autobind)
 		clnt->cl_port = 0;
 
@@ -666,6 +657,8 @@ minor_timeout:
 	} else if (clnt->cl_xprt->stream && !xprt_connected(clnt->cl_xprt)) {
 		task->tk_action = call_reconnect;
 		clnt->cl_stats->rpcretrans++;
+	} else if (major && RPCXPRT_SUPERCONGESTED(clnt->cl_xprt)) {
+		task->tk_action = call_ping;
 	} else {
 		task->tk_action = call_transmit;
 		clnt->cl_stats->rpcretrans++;
@@ -687,21 +680,20 @@ call_decode(struct rpc_task *task)
 	dprintk("RPC: %4d call_decode (status %d)\n", 
 				task->tk_pid, task->tk_status);
 
-	if (clnt->cl_chatty && (task->tk_flags & RPC_CALL_MAJORSEEN)) {
-		printk(KERN_NOTICE "%s: server %s OK\n",
-			clnt->cl_protname, clnt->cl_server);
-		task->tk_flags &= ~RPC_CALL_MAJORSEEN;
-	}
-
 	if (task->tk_status < 12) {
-		printk(KERN_WARNING "%s: too small RPC reply size (%d bytes)\n",
-			clnt->cl_protname, task->tk_status);
-		rpc_exit(task, -EIO);
+		if (!clnt->cl_softrtry) {
+			task->tk_action = call_transmit;
+			clnt->cl_stats->rpcretrans++;
+		} else {
+			printk(KERN_WARNING "%s: too small RPC reply size (%d bytes)\n",
+				clnt->cl_protname, task->tk_status);
+			rpc_exit(task, -EIO);
+		}
 		return;
 	}
 
 	/* Verify the RPC header */
-	if (!(p = call_verify(task)))
+	if (!(p = rpc_call_verify(task)))
 		return;
 
 	/*
@@ -760,8 +752,8 @@ call_refreshresult(struct rpc_task *task)
 /*
  * Call header serialization
  */
-static u32 *
-call_header(struct rpc_task *task)
+u32 *
+rpc_call_header(struct rpc_task *task)
 {
 	struct rpc_clnt *clnt = task->tk_client;
 	struct rpc_xprt *xprt = clnt->cl_xprt;
@@ -781,10 +773,61 @@ call_header(struct rpc_task *task)
 }
 
 /*
+ * Ping a non-responding server
+ */
+static void
+call_ping(struct rpc_task *task)
+{
+	task->tk_action = call_pingresult;
+	rpc_ping(task);
+}
+
+/*
+ * Interpret the result from ping
+ */
+static void
+call_pingresult(struct rpc_task *task)
+{
+	struct rpc_clnt	*clnt = task->tk_client;
+	struct rpc_xprt	*xprt = clnt->cl_xprt;
+	int		status = task->tk_status;
+
+	task->tk_status = 0;
+	if (status >= 0) {
+		task->tk_action = call_transmit;
+		return;
+	}
+	switch(status) {
+	case -ECONNREFUSED:
+	case -ENOTCONN:
+		if (clnt->cl_autobind || !clnt->cl_port) {
+			clnt->cl_port = 0;
+			task->tk_action = call_bind;
+			break;
+		}
+		if (xprt->stream) {
+			task->tk_action = call_reconnect;
+			break;
+		}
+	case -ENOMEM:
+	case -ENOBUFS:
+		rpc_delay(task, HZ >> 4);
+	case -ETIMEDOUT:
+		task->tk_action = call_ping;
+		break;
+	default:
+		if (clnt->cl_chatty)
+			printk("%s: RPC call returned error %d\n",
+			       clnt->cl_protname, -status);
+		rpc_exit(task,status);
+	}
+}
+
+/*
  * Reply header verification
  */
-static u32 *
-call_verify(struct rpc_task *task)
+u32 *
+rpc_call_verify(struct rpc_task *task)
 {
 	u32	*p = task->tk_rqstp->rq_rvec[0].iov_base, n;
 

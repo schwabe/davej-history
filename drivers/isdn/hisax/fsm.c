@@ -10,13 +10,13 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 
 #define FSM_TIMER_DEBUG 0
 
-HISAX_INITFUNC(void
-FsmNew(struct Fsm *fsm,
-       struct FsmNode *fnlist, int fncount))
+void __init
+FsmNew(struct Fsm *fsm, struct FsmNode *fnlist, int fncount)
 {
 	int i;
 

@@ -787,8 +787,8 @@ struct te_hw {
 	unsigned char *sfifo_e;
 	int sfifo_cnt;
 	unsigned int stat;
-	struct wait_queue *rwaitq;
-	struct wait_queue *swaitq;
+	wait_queue_head_t rwaitq;
+	wait_queue_head_t swaitq;
 };
 #endif
 
@@ -808,7 +808,7 @@ struct isac_chip {
 	int mon_rxp;
 	struct arcofi_msg *arcofi_list;
 	struct timer_list arcofitimer;
-	struct wait_queue *arcofi_wait;
+	wait_queue_head_t arcofi_wait;
 	u_char arcofi_bc;
 	u_char arcofi_state;
 	u_char mocr;
@@ -840,7 +840,7 @@ struct icc_chip {
 	int mon_rxp;
 	struct arcofi_msg *arcofi_list;
 	struct timer_list arcofitimer;
-	struct wait_queue *arcofi_wait;
+	wait_queue_head_t arcofi_wait;
 	u_char arcofi_bc;
 	u_char arcofi_state;
 	u_char mocr;
@@ -995,17 +995,6 @@ struct IsdnCardState {
 #undef ISDN_CHIP_ISAC
 #endif
 
-#ifndef __initfunc
-#define __initfunc(__arginit) __arginit
-#endif
-
-#ifndef __initdata
-#define __initdata
-#endif
-
-#define HISAX_INITFUNC(__arginit) __initfunc(__arginit)
-#define HISAX_INITDATA __initdata
-
 #ifdef	CONFIG_HISAX_16_0
 #define  CARD_TELES0 1
 #ifndef ISDN_CHIP_ISAC
@@ -1065,10 +1054,6 @@ struct IsdnCardState {
 #ifndef ISDN_CHIP_ISAC
 #define ISDN_CHIP_ISAC 1
 #endif
-#undef HISAX_INITFUNC
-#define HISAX_INITFUNC(__arginit) __arginit
-#undef HISAX_INITDATA
-#define HISAX_INITDATA
 #else
 #define  CARD_ELSA  0
 #endif

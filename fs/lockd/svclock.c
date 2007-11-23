@@ -53,9 +53,15 @@ nlmsvc_insert_block(struct nlm_block *block, unsigned long when)
 	dprintk("lockd: nlmsvc_insert_block(%p, %ld)\n", block, when);
 	if (block->b_queued)
 		nlmsvc_remove_block(block);
-	for (bp = &nlm_blocked; (b = *bp); bp = &b->b_next)
-		if (when < b->b_when)
-			break;
+	bp = &nlm_blocked;
+	if (when != NLM_NEVER) {
+		if ((when += jiffies) == NLM_NEVER)
+			when ++;
+		while ((b = *bp) && time_before_eq(b->b_when,when))
+			bp = &b->b_next;
+	} else
+		while ((b = *bp))
+			bp = &b->b_next;
 
 	block->b_queued = 1;
 	block->b_when = when;
@@ -159,8 +165,7 @@ nlmsvc_create_block(struct svc_rqst *rqstp, struct nlm_file *file,
 	struct nlm_rqst		*call;
 
 	/* Create host handle for callback */
-	host = nlmclnt_lookup_host(&rqstp->rq_addr,
-				rqstp->rq_prot, rqstp->rq_vers);
+	host = nlmsvc_lookup_host(rqstp);
 	if (host == NULL)
 		return NULL;
 
@@ -169,10 +174,11 @@ nlmsvc_create_block(struct svc_rqst *rqstp, struct nlm_file *file,
 		goto failed;
 	memset(block, 0, sizeof(*block));
 
-	/* Set notifier function for VFS, and init args */
-	lock->fl.fl_notify = nlmsvc_notify_blocked;
 	if (!nlmclnt_setgrantargs(&block->b_call, lock))
 		goto failed_free;
+
+	/* Set notifier function for VFS, and init args */
+	block->b_call.a_args.lock.fl.fl_notify = nlmsvc_notify_blocked;
 	block->b_call.a_args.cookie = *cookie;	/* see above */
 
 	dprintk("lockd: created block %p...\n", block);
@@ -263,12 +269,12 @@ nlmsvc_traverse_blocks(struct nlm_host *host, struct nlm_file *file, int action)
 	down(&file->f_sema);
 	for (block = file->f_blocks; block; block = next) {
 		next = block->b_fnext;
+		if (host && block->b_host != host)
+			continue;
 		if (action == NLM_ACT_MARK)
 			block->b_host->h_inuse = 1;
-		else if (action == NLM_ACT_UNLOCK) {
-			if (host == NULL || host == block->b_host)
-				nlmsvc_delete_block(block, 1);
-		}
+		else if (action == NLM_ACT_UNLOCK)
+			nlmsvc_delete_block(block, 1);
 	}
 	up(&file->f_sema);
 	return 0;
@@ -455,8 +461,8 @@ nlmsvc_notify_blocked(struct file_lock *fl)
 	posix_unblock_lock(fl);
 	for (bp = &nlm_blocked; (block = *bp); bp = &block->b_next) {
 		if (nlm_compare_locks(&block->b_call.a_args.lock.fl, fl)) {
-			svc_wake_up(block->b_daemon);
 			nlmsvc_insert_block(block, 0);
+			svc_wake_up(block->b_daemon);
 			return;
 		}
 	}
@@ -516,7 +522,7 @@ nlmsvc_grant_blocked(struct nlm_block *block)
 	if ((error = posix_lock_file(&file->f_file, &lock->fl, 0)) < 0) {
 		printk(KERN_WARNING "lockd: unexpected error %d in %s!\n",
 				-error, __FUNCTION__);
-		nlmsvc_insert_block(block, jiffies + 10 * HZ);
+		nlmsvc_insert_block(block, 10 * HZ);
 		up(&file->f_sema);
 		return;
 	}
@@ -528,7 +534,7 @@ callback:
 	block->b_incall  = 1;
 
 	/* Schedule next grant callback in 30 seconds */
-	nlmsvc_insert_block(block, jiffies + 30 * HZ);
+	nlmsvc_insert_block(block, 30 * HZ);
 
 	/* Call the client */
 	nlm_get_host(block->b_call.a_host);
@@ -566,13 +572,13 @@ nlmsvc_grant_callback(struct rpc_task *task)
 	 * can be done, though. */
 	if (task->tk_status < 0) {
 		/* RPC error: Re-insert for retransmission */
-		timeout = jiffies + 10 * HZ;
+		timeout = 10 * HZ;
 	} else if (block->b_done) {
 		/* Block already removed, kill it for real */
 		timeout = 0;
 	} else {
 		/* Call was successful, now wait for client callback */
-		timeout = jiffies + 60 * HZ;
+		timeout = 60 * HZ;
 	}
 	nlmsvc_insert_block(block, timeout);
 	svc_wake_up(block->b_daemon);
@@ -600,7 +606,7 @@ nlmsvc_grant_reply(struct nlm_cookie *cookie, u32 status)
 	if ((block = nlmsvc_find_block(cookie)) != NULL) {
 		if (status == NLM_LCK_DENIED_GRACE_PERIOD) {
 			/* Try again in a couple of seconds */
-			nlmsvc_insert_block(block, jiffies + 10 * HZ);
+			nlmsvc_insert_block(block, 10 * HZ);
 			block = NULL;
 		} else {
 			/* Lock is now held by client, or has been rejected.
@@ -631,7 +637,11 @@ nlmsvc_retry_blocked(void)
 	dprintk("nlmsvc_retry_blocked(%p, when=%ld)\n",
 			nlm_blocked,
 			nlm_blocked? nlm_blocked->b_when : 0);
-	while ((block = nlm_blocked) && block->b_when <= jiffies) {
+	while ((block = nlm_blocked)) {
+		if (block->b_when == NLM_NEVER)
+			break;
+		if (time_after(block->b_when,jiffies))
+			break;
 		dprintk("nlmsvc_retry_blocked(%p, when=%ld, done=%d)\n",
 			block, block->b_when, block->b_done);
 		if (block->b_done)

@@ -1,4 +1,4 @@
-/* $Id: isdn_v110.c,v 1.5 2000/05/11 22:29:21 kai Exp $
+/* $Id: isdn_v110.c,v 1.5.6.1 2001/01/23 17:45:02 kai Exp $
 
  * Linux ISDN subsystem, V.110 related functions (linklevel).
  *
@@ -30,7 +30,7 @@
 
 #undef ISDN_V110_DEBUG
 
-char *isdn_v110_revision = "$Revision: 1.5 $";
+char *isdn_v110_revision = "$Revision: 1.5.6.1 $";
 
 #define V110_38400 255
 #define V110_19200  15
@@ -102,7 +102,7 @@ isdn_v110_open(unsigned char key, int hdrlen, int maxsize)
 	int i;
 	isdn_v110_stream *v;
 
-	if ((v = kmalloc(sizeof(isdn_v110_stream), GFP_KERNEL)) == NULL)
+	if ((v = kmalloc(sizeof(isdn_v110_stream), GFP_ATOMIC)) == NULL)
 		return NULL;
 	memset(v, 0, sizeof(isdn_v110_stream));
 	v->key = key;
@@ -134,7 +134,7 @@ isdn_v110_open(unsigned char key, int hdrlen, int maxsize)
 	v->b = 0;
 	v->skbres = hdrlen;
 	v->maxsize = maxsize - hdrlen;
-	if ((v->encodebuf = kmalloc(maxsize, GFP_KERNEL)) == NULL) {
+	if ((v->encodebuf = kmalloc(maxsize, GFP_ATOMIC)) == NULL) {
 		kfree(v);
 		return NULL;
 	}

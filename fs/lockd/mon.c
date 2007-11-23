@@ -47,7 +47,7 @@ nsm_mon_unmon(struct nlm_host *host, u32 proc, struct nsm_res *res)
 
 	args.addr = host->h_addr.sin_addr.s_addr;
 	args.prog = NLM_PROGRAM;
-	args.vers = 1;
+	args.vers = host->h_version;
 	args.proc = NLMPROC_NSM_NOTIFY;
 	memset(res, 0, sizeof(*res));
 
@@ -76,8 +76,10 @@ nsm_monitor(struct nlm_host *host)
 
 	if (status < 0 || res.status != 0)
 		printk(KERN_NOTICE "lockd: cannot monitor %s\n", host->h_name);
-	else
+	else {
 		host->h_monitored = 1;
+		host->h_nsmstate = res.state;
+	}
 	return status;
 }
 

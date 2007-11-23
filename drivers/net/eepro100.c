@@ -778,7 +778,7 @@ static struct net_device *speedo_found1(struct pci_dev *pdev, int pci_bus,
 		/* The self-test results must be paragraph aligned. */
 		s32 str[6], *volatile self_test_results;
 		int boguscnt = 16000;	/* Timeout for set-test. */
-		if (eeprom[3] & 0x03)
+		if ((eeprom[3] & 0x03) != 0x03)
 			printk(KERN_INFO "  Receiver lock-up bug exists -- enabling"
 				   " work-around.\n");
 		printk(KERN_INFO "  Board assembly %4.4x%2.2x-%3.3d, Physical"

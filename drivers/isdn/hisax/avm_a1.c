@@ -8,6 +8,7 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
@@ -171,8 +172,8 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_avm_a1(struct IsdnCard *card))
+int __init
+setup_avm_a1(struct IsdnCard *card)
 {
 	u_char val;
 	struct IsdnCardState *cs = card->cs;

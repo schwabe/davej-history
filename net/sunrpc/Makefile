@@ -11,7 +11,7 @@ O_TARGET := sunrpc.o
 O_OBJS   := clnt.o xprt.o sched.o \
 	    auth.o auth_null.o auth_unix.o \
 	    svc.o svcsock.o svcauth.o \
-	    pmap_clnt.o xdr.o sysctl.o
+	    pmap_clnt.o ping.o xdr.o sysctl.o
 OX_OBJS  := sunrpc_syms.o
 
 ifeq ($(CONFIG_PROC_FS),y)

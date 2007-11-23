@@ -340,8 +340,6 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 			shp->u.shm_perm.mode |= SHM_DEST;
 			if (shp->u.shm_nattch <= 0)
 				killseg (id);
-			/* Do not find it any more */
-			shp->u.shm_perm.key = IPC_PRIVATE;
 			break;
 		}
 		err = -EPERM;

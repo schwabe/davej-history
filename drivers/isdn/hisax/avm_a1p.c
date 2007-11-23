@@ -10,6 +10,7 @@
  *  This file is (c) under GNU PUBLIC LICENSE
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
@@ -244,8 +245,8 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return 0;
 }
 
-__initfunc(int
-setup_avm_a1_pcmcia(struct IsdnCard *card))
+int 
+setup_avm_a1_pcmcia(struct IsdnCard *card)
 {
 	u_char model, vers;
 	struct IsdnCardState *cs = card->cs;

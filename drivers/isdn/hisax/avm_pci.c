@@ -10,6 +10,7 @@
  */
 #define __NO_VERSION__
 #include <linux/config.h>
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "isdnl1.h"
@@ -642,8 +643,8 @@ setstack_hdlc(struct PStack *st, struct BCState *bcs)
 	return (0);
 }
 
-HISAX_INITFUNC(void
-clear_pending_hdlc_ints(struct IsdnCardState *cs))
+void __init
+clear_pending_hdlc_ints(struct IsdnCardState *cs)
 {
 	u_int val;
 
@@ -672,8 +673,8 @@ clear_pending_hdlc_ints(struct IsdnCardState *cs))
 	}
 }
 
-HISAX_INITFUNC(void
-inithdlc(struct IsdnCardState *cs))
+void __init
+inithdlc(struct IsdnCardState *cs)
 {
 	cs->bcs[0].BC_SetStack = setstack_hdlc;
 	cs->bcs[1].BC_SetStack = setstack_hdlc;
@@ -757,10 +758,10 @@ AVM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static 	struct pci_dev *dev_avm __initdata = NULL;
+static struct pci_dev *dev_avm __initdata = NULL;
 
-__initfunc(int
-setup_avm_pcipnp(struct IsdnCard *card))
+int __init
+setup_avm_pcipnp(struct IsdnCard *card)
 {
 	u_int val, ver;
 	struct IsdnCardState *cs = card->cs;

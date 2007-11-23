@@ -136,7 +136,7 @@
 #endif
 
 #ifdef CONFIG_SCSI_AIC7XXX
-#include "aic7xxx.h"
+#include "aic7xxx/aic7xxx.h"
 #endif
 
 #ifdef CONFIG_SCSI_IPS

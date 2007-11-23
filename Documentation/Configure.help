@@ -6314,6 +6314,18 @@ CONFIG_NET_SB1000
 
   If you don't have this card, of course say N.
 
+Adaptec Starfire support (EXPERIMENTAL)
+CONFIG_ADAPTEC_STARFIRE
+  Say Y here if you have an Adaptec Starfire (or DuraLAN) PCI network
+  adapter. The DuraLAN chip is used on the 64 bit PCI boards from
+  Adaptec e.g. the ANA-6922A. The older 32 bit boards use the tulip
+  driver.
+  
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
+  The module will be called starfire.o.
+  
 Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support
 CONFIG_ACENIC
   Say Y here if you have an Alteon AceNIC or 3Com 3C985 PCI Gigabit

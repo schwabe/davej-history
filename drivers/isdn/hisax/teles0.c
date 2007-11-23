@@ -13,6 +13,7 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isdnl1.h"
 #include "isac.h"
@@ -258,8 +259,8 @@ Teles_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-__initfunc(int
-setup_teles0(struct IsdnCard *card))
+int __init
+setup_teles0(struct IsdnCard *card)
 {
 	u_char val;
 	struct IsdnCardState *cs = card->cs;

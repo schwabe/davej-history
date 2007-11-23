@@ -259,7 +259,7 @@ __rpc_make_runnable(struct rpc_task *task)
 		printk(KERN_ERR "RPC: task w/ running timer in rpc_make_runnable!!\n");
 		return;
 	}
-	task->tk_running = 1;
+	rpc_set_running(task);
 	if (RPC_IS_ASYNC(task)) {
 		if (RPC_IS_SLEEPING(task)) {
 			int status;
@@ -267,12 +267,13 @@ __rpc_make_runnable(struct rpc_task *task)
 			if (status < 0) {
 				printk(KERN_WARNING "RPC: failed to add task to queue: error: %d!\n", status);
 				task->tk_status = status;
-			} else
-				task->tk_sleeping = 0;
+				return;
+			}
+			rpc_clear_sleeping(task);
+			wake_up(&rpciod_idle);
 		}
-		wake_up(&rpciod_idle);
 	} else {
-		task->tk_sleeping = 0;
+		rpc_clear_sleeping(task);
 		wake_up(&task->tk_wait);
 	}
 }
@@ -287,7 +288,7 @@ __rpc_schedule_run(struct rpc_task *task)
 	if (RPC_IS_ACTIVATED(task))
 		return;
 	task->tk_active = 1;
-	task->tk_sleeping = 1;
+	rpc_set_sleeping(task);
 	__rpc_make_runnable(task);
 }
 
@@ -327,7 +328,7 @@ __rpc_sleep_on(struct rpc_wait_queue *q, struct rpc_task *task,
 	/* Mark the task as being activated if so needed */
 	if (!RPC_IS_ACTIVATED(task)) {
 		task->tk_active = 1;
-		task->tk_sleeping = 1;
+		rpc_set_sleeping(task);
 	}
 
 	status = __rpc_add_wait_queue(q, task);
@@ -335,7 +336,7 @@ __rpc_sleep_on(struct rpc_wait_queue *q, struct rpc_task *task,
 		printk(KERN_WARNING "RPC: failed to add task to queue: error: %d!\n", status);
 		task->tk_status = status;
 	} else {
-		task->tk_running = 0;
+		rpc_clear_running(task);
 		task->tk_callback = action;
 		__rpc_add_timer(task, timer);
 	}
@@ -609,21 +610,15 @@ restarted:
 
 		/*
 		 * Check whether task is sleeping.
-		 * Note that if the task goes to sleep in tk_action,
-		 * and the RPC reply arrives before we get here, it will
-		 * have state RUNNING, but will still be on schedq.
-		 * 27/9/99: The above has been attempted fixed by
-		 *          introduction of task->tk_sleeping.
 		 */
 		spin_lock_irqsave(&rpc_queue_lock, oldflags);
 		if (!RPC_IS_RUNNING(task)) {
-			task->tk_sleeping = 1;
+			rpc_set_sleeping(task);
 			if (RPC_IS_ASYNC(task)) {
 				spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
 				return 0;
 			}
-		} else
-			task->tk_sleeping = 0;
+		}
 		spin_unlock_irqrestore(&rpc_queue_lock, oldflags);
 
 		while (RPC_IS_SLEEPING(task)) {
@@ -689,18 +684,23 @@ restarted:
 int
 rpc_execute(struct rpc_task *task)
 {
+	int status = -EIO;
 	if (rpc_inhibit) {
 		printk(KERN_INFO "RPC: execution inhibited!\n");
-		return -EIO;
+		goto out_release;
 	}
-	task->tk_running = 1;
 	if (task->tk_active) {
 		printk(KERN_ERR "RPC: active task was run twice!\n");
-		return -EWOULDBLOCK;
+		goto out_err;
 	}
 	task->tk_active = 1;
+	rpc_set_running(task);
 	
 	return __rpc_execute(task);
+ out_release:
+	rpc_release_task(task);
+ out_err:
+	return status;
 }
 
 /*

@@ -321,48 +321,43 @@ struct nfs_rpc_ops {
 
 	int	(*getroot)(struct nfs_server *,
 			struct nfs_fh *, struct nfs_fattr *);
-	int	(*getattr)(struct dentry *, struct nfs_fattr *);
-	int	(*setattr)(struct dentry *, struct nfs_fattr *, struct iattr *);
-	int	(*lookup)(struct dentry *, struct nfs_fattr *, struct qstr *,
+	int	(*getattr)(struct inode *, struct nfs_fattr *);
+	int	(*setattr)(struct inode *, struct nfs_fattr *, struct iattr *);
+	int	(*lookup)(struct inode *, struct qstr *,
 			struct nfs_fh *, struct nfs_fattr *);
-	int	(*access)(struct dentry *, int fmode, struct nfs_fattr *, int);
-	int	(*readlink)(struct dentry *, struct nfs_fattr *,
-			void *buffer, unsigned int buflen);
-	int	(*read)(struct dentry *, struct nfs_fattr *,
-			struct rpc_cred *,
+	int	(*access)(struct inode *, int, int);
+	int	(*readlink)(struct inode *, void *buffer, unsigned int buflen);
+	int	(*read)(struct inode *, struct rpc_cred *,
+			struct nfs_fattr *,
 			int flags, unsigned long offset,
 			unsigned int count, void *buffer, int *eofp);
-	int	(*write)(struct dentry *, struct nfs_fattr *,
-			struct rpc_cred *,
+	int	(*write)(struct inode *, struct rpc_cred *,
+			struct nfs_fattr *,
 			int flags, unsigned long offset,
 			unsigned int count, void *buffer,
 			struct nfs_writeverf *verfp);
-	int	(*commit)(struct dentry *, struct nfs_fattr *,
+	int	(*commit)(struct inode *, struct nfs_fattr *,
 			struct rpc_cred *,
 			unsigned long, unsigned int);
-	int	(*create)(struct dentry *, struct nfs_fattr *,
-			struct qstr *, struct iattr *, int flags,
-			struct nfs_fh *, struct nfs_fattr *);
-	int	(*remove)(struct dentry *, struct nfs_fattr *, struct qstr *);
+	int	(*create)(struct inode *, struct qstr *, struct iattr *,
+			  int, struct nfs_fh *, struct nfs_fattr *);
+	int	(*remove)(struct inode *, struct qstr *);
 	int	(*unlink_setup)	(struct rpc_message *,
 			struct dentry *, struct qstr *);
 	void	(*unlink_done)	(struct dentry *, struct rpc_message *);
-	int	(*rename)(struct dentry *, struct nfs_fattr *, struct qstr *,
-			struct dentry *, struct nfs_fattr *, struct qstr *);
-	int	(*link)(struct dentry *, struct nfs_fattr *,
-			struct dentry *, struct nfs_fattr *, struct qstr *);
-	int	(*symlink)(struct dentry *, struct nfs_fattr *, struct qstr *,
-			struct qstr *, struct iattr *,
-			struct nfs_fh *, struct nfs_fattr *);
-	int	(*mkdir)(struct dentry *, struct nfs_fattr *, struct qstr *,
-			struct iattr *, struct nfs_fh *, struct nfs_fattr *);
-	int	(*rmdir)(struct dentry *, struct nfs_fattr *, struct qstr *);
-	int	(*readdir)(struct dentry *, struct nfs_fattr *,
-			struct rpc_cred *,
-			__u64 cookie, void *, unsigned int size, int plus);
-	int	(*mknod)(struct dentry *, struct nfs_fattr *, struct qstr *,
-			struct iattr *, dev_t,
-			struct nfs_fh *, struct nfs_fattr *);
+	int	(*rename)(struct inode *, struct qstr *,
+			struct inode *, struct qstr *);
+	int	(*link)(struct inode *, struct inode *, struct qstr *);
+	int	(*symlink)(struct inode *, struct qstr *, struct qstr *,
+			   struct iattr *, struct nfs_fh *,
+			   struct nfs_fattr *);
+	int	(*mkdir)(struct inode *, struct qstr *,	struct iattr *,
+			 struct nfs_fh *, struct nfs_fattr *);
+	int	(*rmdir)(struct inode *, struct qstr *);
+	int	(*readdir)(struct inode *, struct rpc_cred *,
+			__u64, void *, unsigned int, int);
+	int	(*mknod)(struct inode *, struct qstr *,	struct iattr *,
+			 dev_t,	struct nfs_fh *, struct nfs_fattr *);
 	int	(*statfs)(struct nfs_server *, struct nfs_fh *,
 			struct nfs_fsinfo *);
 	__u32 *	(*decode_dirent)(__u32 *, struct nfs_entry *, int plus);

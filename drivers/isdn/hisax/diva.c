@@ -13,6 +13,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include <linux/config.h>
 #include "hisax.h"
 #include "isac.h"
@@ -819,12 +820,12 @@ Diva_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static 	struct pci_dev *dev_diva __initdata = NULL;
-static 	struct pci_dev *dev_diva_u __initdata = NULL;
-static 	struct pci_dev *dev_diva201 __initdata = NULL;
+static struct pci_dev *dev_diva __initdata = NULL;
+static struct pci_dev *dev_diva_u __initdata = NULL;
+static struct pci_dev *dev_diva201 __initdata = NULL;
 
-__initfunc(int
-setup_diva(struct IsdnCard *card))
+int __init
+setup_diva(struct IsdnCard *card)
 {
 	int bytecnt;
 	u_char val;

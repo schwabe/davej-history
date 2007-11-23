@@ -11,7 +11,7 @@
  */
 
 #define __NO_VERSION__
-#include <linux/config.h>
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
@@ -801,8 +801,8 @@ setstack_tiger(struct PStack *st, struct BCState *bcs)
 }
 
  
-__initfunc(void
-inittiger(struct IsdnCardState *cs))
+void __init
+inittiger(struct IsdnCardState *cs)
 {
 	if (!(cs->bcs[0].hw.tiger.send = kmalloc(NETJET_DMA_TXSIZE * sizeof(unsigned int),
 		GFP_KERNEL | GFP_DMA))) {

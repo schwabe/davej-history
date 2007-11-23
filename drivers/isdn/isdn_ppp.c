@@ -233,8 +233,7 @@ isdn_ppp_wakeup_daemon(isdn_net_local * lp)
 
 	ippp_table[lp->ppp_slot]->state = IPPP_OPEN | IPPP_CONNECT | IPPP_NOBLOCK;
 
-	if (ippp_table[lp->ppp_slot]->wq)
-		wake_up_interruptible(&ippp_table[lp->ppp_slot]->wq);
+	wake_up_interruptible(&ippp_table[lp->ppp_slot]->wq);
 }
 
 /*
@@ -251,7 +250,7 @@ isdn_ppp_closewait(int slot)
 		return 0;
 	is = ippp_table[slot];
 
-	if (is->state && is->wq)
+	if (is->state)
 		wake_up_interruptible(&is->wq);
 
 	is->state = IPPP_CLOSEWAIT;
@@ -312,7 +311,7 @@ isdn_ppp_open(int min, struct file *file)
 	is->mru = 1524;         /* MRU, default 1524 */
 	is->maxcid = 16;        /* VJ: maxcid */
 	is->tk = current;
-	is->wq = NULL;          /* read() wait queue */
+	init_waitqueue_head(&is->wq);
 	is->first = is->rq + NUM_RCV_BUFFS - 1;	/* receive queue */
 	is->last = is->rq;
 	is->minor = min;
@@ -676,8 +675,7 @@ isdn_ppp_fill_rq(unsigned char *buf, int len, int proto, int slot)
 	is->last = bl->next;
 	restore_flags(flags);
 
-	if (is->wq)
-		wake_up_interruptible(&is->wq);
+	wake_up_interruptible(&is->wq);
 
 	return len;
 }
@@ -1139,9 +1137,9 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 			proto = PPP_IPX;	/* untested */
 			break;
 		default:
-			dev_kfree_skb(skb);
 			printk(KERN_ERR "isdn_ppp: skipped unsupported protocol: %#x.\n", 
 			       skb->protocol);
+			dev_kfree_skb(skb);
 			return 0;
 	}
 

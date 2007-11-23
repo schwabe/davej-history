@@ -15,11 +15,12 @@
 #include "arcofi.h"
 #include "isdnl1.h"
 #include <linux/interrupt.h>
+#include <linux/init.h>
 
 #define DBUSY_TIMER_VALUE 80
 #define ARCOFI_USE 1
 
-static char *ISACVer[] HISAX_INITDATA =
+static char *ISACVer[]  =
 {"2086/2186 V1.1", "2085 B1", "2085 B2",
  "2085 V2.3"};
 
@@ -620,8 +621,8 @@ dbusy_timer_handler(struct IsdnCardState *cs)
 	}
 }
 
-HISAX_INITFUNC(void
-initisac(struct IsdnCardState *cs))
+void 
+initisac(struct IsdnCardState *cs)
 {
 	cs->tqueue.routine = (void *) (void *) isac_bh;
 	cs->setstack_d = setstack_isac;
@@ -656,8 +657,8 @@ initisac(struct IsdnCardState *cs))
 	cs->writeisac(cs, ISAC_MASK, 0x0);
 }
 
-HISAX_INITFUNC(void
-clear_pending_isac_ints(struct IsdnCardState *cs))
+void 
+clear_pending_isac_ints(struct IsdnCardState *cs)
 {
 	int val, eval;
 

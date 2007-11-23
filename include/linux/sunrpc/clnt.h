@@ -111,6 +111,8 @@ int		rpc_destroy_client(struct rpc_clnt *);
 void		rpc_release_client(struct rpc_clnt *);
 void		rpc_getport(struct rpc_task *, struct rpc_clnt *);
 int		rpc_register(u32, u32, int, unsigned short, int *);
+u32 *		rpc_call_header(struct rpc_task *task);
+u32 *		rpc_call_verify(struct rpc_task *task);
 
 void		rpc_call_setup(struct rpc_task *, struct rpc_message *, int);
 
@@ -143,6 +145,11 @@ extern void rpciod_wake_up(void);
  * Helper function for NFSroot support
  */
 int		rpc_getport_external(struct sockaddr_in *, __u32, __u32, int);
+
+/*
+ * Ping function
+ */
+void		rpc_ping(struct rpc_task *task);
 
 #endif /* __KERNEL__ */
 #endif /* _LINUX_SUNRPC_CLNT_H */

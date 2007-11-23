@@ -817,7 +817,7 @@ static ssize_t cosa_read(struct file *file,
 	up(&chan->rsem);
 
 	if (copy_to_user(buf, kbuf, count)) {
-		kfree(buf);
+		kfree(kbuf);
 		return -EFAULT;
 	}
 	kfree(kbuf);

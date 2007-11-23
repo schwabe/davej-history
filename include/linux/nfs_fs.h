@@ -54,8 +54,7 @@
 /*
  * Convenience macros
  */
-#define NFS_FH(dentry)			((struct nfs_fh *) ((dentry)->d_fsdata))
-#define NFS_DSERVER(dentry)		(&(dentry)->d_sb->u.nfs_sb.s_server)
+#define NFS_FH(inode)			(&(inode)->u.nfs_i.fh)
 #define NFS_SERVER(inode)		(&(inode)->i_sb->u.nfs_sb.s_server)
 #define NFS_CLIENT(inode)		(NFS_SERVER(inode)->client)
 #define NFS_PROTO(inode)		(NFS_SERVER(inode)->rpc_ops)
@@ -84,11 +83,10 @@ do { \
 
 #define NFS_FLAGS(inode)		((inode)->u.nfs_i.flags)
 #define NFS_REVALIDATING(inode)		(NFS_FLAGS(inode) & NFS_INO_REVALIDATING)
+#define NFS_STALE(inode)		(NFS_FLAGS(inode) & NFS_INO_STALE)
 
 #define NFS_FILEID(inode)	((inode)->u.nfs_i.fileid)
 #define NFS_FSID(inode)		((inode)->u.nfs_i.fsid)
-
-#define NFS_FILE(file)		((struct nfs_file *)(file)->private_data)
 
 /* Inode Flags */
 #define NFS_USE_READDIRPLUS(inode)	((NFS_FLAGS(inode) & NFS_INO_ADVISE_RDPLUS) ? 1 : 0)
@@ -114,24 +112,6 @@ do { \
 #define FLUSH_STABLE		4	/* commit to stable storage */
 
 
-/*
- * Structure for file->private_data;
- */
-struct nfs_file {
-	unsigned long		magic;		/* Magic number */
-	struct rpc_cred*	cred;		/* RPC Credentials */
-};
-
-static inline int
-nfs_check_file(struct file *file)
-{
-	if (NFS_FILE(file)->magic != NFS_FILE_MAGIC) {
-		printk(KERN_ERR "NFS: corrupt file structure!\n");
-		return 0;
-	}
-	return 1;
-}
-
 static inline
 unsigned long nfs_page_offset(struct page *page)
 {
@@ -147,6 +127,8 @@ unsigned long page_index(struct page *page)
 /*
  * linux/fs/nfs/inode.c
  */
+extern int nfs_inode_is_stale(struct inode *, struct nfs_fh *,
+			       struct nfs_fattr *);
 extern struct inode *nfs_fhget(struct dentry *, struct nfs_fh *,
 			       struct nfs_fattr *);
 extern struct super_block *nfs_read_super(struct super_block *, void *, int);
@@ -155,7 +137,7 @@ extern void	nfs_zap_caches(struct inode *);
 extern int	nfs_revalidate(struct dentry *);
 extern int	nfs_open(struct inode *, struct file *);
 extern int	nfs_release(struct inode *, struct file *);
-extern int	__nfs_revalidate_inode(struct dentry *);
+extern int	__nfs_revalidate_inode(struct nfs_server *, struct inode *);
 extern int	nfs_refresh_inode(struct inode *, struct nfs_fattr *);
 extern int	nfs_wait_on_inode(struct inode *, int flag);
 extern void	nfs_unlock_inode(struct inode *);
@@ -286,19 +268,18 @@ extern u32 *nfs3_decode_dirent(u32 *, struct nfs_entry *, int);
  * linux/fs/mount_clnt.c
  * (Used only by nfsroot module)
  */
-extern int  nfs_mount(struct sockaddr_in *, char *, struct nfs_fh *);
-extern int  nfs3_mount(struct sockaddr_in *, char *, struct nfs_fh *);
+extern int  nfs_mount(struct sockaddr_in *, char *, struct nfs3_fh *);
+extern int  nfs3_mount(struct sockaddr_in *, char *, struct nfs3_fh *);
 
 /*
  * inline functions
  */
 static inline int
-nfs_revalidate_inode(struct dentry *dentry)
+nfs_revalidate_inode(struct nfs_server *server, struct inode *inode)
 {
-	struct inode *inode = dentry->d_inode;
 	if (time_before(jiffies,NFS_READTIME(inode)+NFS_ATTRTIMEO(inode)))
 		return 0;
-	return __nfs_revalidate_inode(dentry);
+	return __nfs_revalidate_inode(server, inode);
 }
 
 static inline off_t
@@ -325,11 +306,7 @@ nfs_time_to_secs(__u64 time)
 static __inline__ struct rpc_cred *
 nfs_file_cred(struct file *file)
 {
-	if (!NFS_FILE(file) || !nfs_check_file(file)) {
-		printk("nfs_file_cred: invalid file!\n");
-		return NULL;
-	}
-	return NFS_FILE(file)->cred;
+	return (struct rpc_cred *)(file->private_data);
 }
 
 /* NFS root */

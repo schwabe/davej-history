@@ -179,8 +179,8 @@ comment 'Mac device drivers'
 
 bool 'Use input layer for ADB keyboard and mouse' CONFIG_INPUT_ADBHID
 if [ "$CONFIG_INPUT_ADBHID" = "y" ]; then
-  define_bool CONFIG_INPUT_KEYBDEV $CONFIG_INPUT_ADBHID $CONFIG_VT
-  define_bool CONFIG_INPUT_MOUSEDEV $CONFIG_INPUT_ADBHID
+  define_bool CONFIG_INPUT_KEYBDEV $CONFIG_VT
+  define_bool CONFIG_INPUT_MOUSEDEV y
   define_bool CONFIG_MAC_HID y
   bool '  Support for ADB raw keycodes' CONFIG_MAC_ADBKEYCODES
   bool '  Support for mouse button 2+3 emulation' CONFIG_MAC_EMUMOUSEBTN

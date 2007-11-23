@@ -30,7 +30,7 @@
  * ino/dev of the exported inode.
  */
 struct nfs_fhbase {
-	struct dentry *	fb_dentry;	/* dentry cookie */
+	__u32		fb_dcookie;	/* dentry cookie */
 	__u32		fb_ino;		/* our inode number */
 	__u32		fb_dirino;	/* dir inode number */
 	__u32		fb_dev;		/* our device */
@@ -45,7 +45,7 @@ struct knfs_fh {
 	__u8			fh_cookie[NFS_FH_PADDING];
 };
 
-#define fh_dcookie		fh_base.fb_dentry
+#define fh_dcookie		fh_base.fb_dcookie
 #define fh_ino			fh_base.fb_ino
 #define fh_dirino		fh_base.fb_dirino
 #define fh_dev			fh_base.fb_dev

@@ -136,6 +136,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   if [ "$CONFIG_NET_EISA" = "y" ]; then
     tristate 'AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'Adaptec Starfire support (EXPERIMENTAL)' CONFIG_ADAPTEC_STARFIRE
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
     tristate 'Apricot Xen-II on board Ethernet' CONFIG_APRICOT

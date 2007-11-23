@@ -41,12 +41,14 @@
  * Come Linux 2.3, we'll handle fragments directly.
  */
 #define RPC_MAXCONG		16
-#define RPC_MAXREQS		(RPC_MAXCONG + 1)
+#define RPC_MAXREQS		(RPC_MAXCONG + 2)
 #define RPC_CWNDSCALE		256
 #define RPC_MAXCWND		(RPC_MAXCONG * RPC_CWNDSCALE)
 #define RPC_INITCWND		RPC_CWNDSCALE
 #define RPCXPRT_CONGESTED(xprt) \
 	((xprt)->cong >= (xprt)->cwnd)
+#define RPCXPRT_SUPERCONGESTED(xprt) \
+				((xprt)->cwnd < 2*RPC_CWNDSCALE)
 
 /* Default timeout values */
 #define RPC_MAX_UDP_TIMEOUT	(60*HZ)
@@ -98,7 +100,7 @@ struct rpc_rqst {
 	struct rpc_task *	rq_task;	/* RPC task data */
 	__u32			rq_xid;		/* request XID */
 	struct rpc_rqst *	rq_next;	/* free list */
-	volatile unsigned char	rq_received : 1;/* receive completed */
+	unsigned char		rq_received : 1;/* receive completed */
 
 	/*
 	 * For authentication (e.g. auth_des)
@@ -138,10 +140,10 @@ struct rpc_xprt {
 	struct rpc_wait_queue	pending;	/* requests in flight */
 	struct rpc_wait_queue	backlog;	/* waiting for slot */
 	struct rpc_wait_queue	reconn;		/* waiting for reconnect */
+	struct rpc_wait_queue	pingwait;	/* waiting on ping() */
 	struct rpc_rqst *	free;		/* free slots */
 	struct rpc_rqst		slot[RPC_MAXREQS];
-	volatile unsigned char	connected   : 1,/* TCP: connected */
-				write_space : 1;/* TCP: can send */
+	unsigned int		sockstate;	/* Socket state */
 	unsigned char		nocong	    : 1,/* no congestion control */
 				stream      : 1,/* TCP */
 				shutdown    : 1,/* being shut down */
@@ -185,12 +187,14 @@ void			xprt_set_timeout(struct rpc_timeout *, unsigned int,
 					unsigned long);
 
 int			xprt_reserve(struct rpc_task *);
+int			xprt_ping_reserve(struct rpc_task *);
 int			xprt_down_transmit(struct rpc_task *);
 void			xprt_transmit(struct rpc_task *);
 void			xprt_up_transmit(struct rpc_task *);
 void			xprt_receive(struct rpc_task *);
 int			xprt_adjust_timeout(struct rpc_timeout *);
 void			xprt_release(struct rpc_task *);
+void			xprt_ping_release(struct rpc_task *);
 void			xprt_reconnect(struct rpc_task *);
 void			__rpciod_tcp_dispatcher(void);
 
@@ -209,23 +213,30 @@ void rpciod_tcp_dispatcher(void)
 		__rpciod_tcp_dispatcher();
 }
 
-static inline
-int xprt_connected(struct rpc_xprt *xprt)
-{
-	return xprt->connected;
-}
+#define	XPRT_WSPACE	0
+#define XPRT_CONNECT	1
+#define XPRT_PING	2
+#define XPRT_NORESPOND	3
 
-static inline
-void xprt_set_connected(struct rpc_xprt *xprt)
-{
-	xprt->connected = 1;
-}
+#define xprt_wspace(xp)			(test_bit(XPRT_WSPACE, &(xp)->sockstate))
+#define xprt_test_and_set_wspace(xp)	(test_and_set_bit(XPRT_WSPACE, &(xp)->sockstate))
+#define xprt_clear_wspace(xp)		(clear_bit(XPRT_WSPACE, &(xp)->sockstate))
 
-static inline
-void xprt_clear_connected(struct rpc_xprt *xprt)
-{
-	xprt->connected = 0;
-}
+#define xprt_connected(xp)		(!(xp)->stream || test_bit(XPRT_CONNECT, &(xp)->sockstate))
+#define xprt_set_connected(xp)		(set_bit(XPRT_CONNECT, &(xp)->sockstate))
+#define xprt_test_and_set_connected(xp)	(test_and_set_bit(XPRT_CONNECT, &(xp)->sockstate))
+#define xprt_clear_connected(xp)	(clear_bit(XPRT_CONNECT, &(xp)->sockstate))
+
+#define xprt_pinging(xp)		(test_bit(XPRT_PING, &(xp)->sockstate))
+#define xprt_set_pinging(xp)		(set_bit(XPRT_PING, &(xp)->sockstate))
+#define xprt_test_and_set_pinging(xp)	(test_and_set_bit(XPRT_PING, &(xp)->sockstate))
+#define xprt_clear_pinging(xp)		(clear_bit(XPRT_PING, &(xp)->sockstate))
+
+#define xprt_norespond(xp)		(test_bit(XPRT_NORESPOND, &(xp)->sockstate))
+#define xprt_test_and_set_norespond(xp)	(test_and_set_bit(XPRT_NORESPOND, &(xp)->sockstate))
+#define xprt_clear_norespond(xp)	(clear_bit(XPRT_NORESPOND, &(xp)->sockstate))
+
+
 
 #endif /* __KERNEL__*/
 

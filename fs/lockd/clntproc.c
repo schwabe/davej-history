@@ -46,13 +46,11 @@ nlmclnt_setlockargs(struct nlm_rqst *req, struct file_lock *fl)
 {
 	struct nlm_args	*argp = &req->a_args;
 	struct nlm_lock	*lock = &argp->lock;
-	struct dentry   *dentry = fl->fl_file->f_dentry;
-	struct nfs_fh   *fh = NFS_FH(dentry);
 
 	memset(argp, 0, sizeof(*argp));
 	nlmclnt_next_cookie(&argp->cookie);
 	argp->state   = nsm_local_state;
-	memcpy(&lock->fh, fh, sizeof(*fh));
+	memcpy(&lock->fh, NFS_FH(fl->fl_file->f_dentry->d_inode), sizeof(lock->fh));
 	lock->caller  = system_utsname.nodename;
 	lock->oh.data = req->a_owner;
 	lock->oh.len  = sprintf(req->a_owner, "%d@%s",

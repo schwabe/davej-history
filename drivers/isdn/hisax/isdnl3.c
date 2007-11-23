@@ -13,11 +13,12 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 2.17 $";
+const char *l3_revision = "$Revision: 2.17.6.1 $";
 
 static struct Fsm l3fsm;
 
@@ -520,7 +521,7 @@ lc_release_cnf(struct FsmInst *fi, int event, void *arg)
 
 
 /* *INDENT-OFF* */
-static struct FsmNode L3FnList[] HISAX_INITDATA =
+static struct FsmNode L3FnList[] __initdata =
 {
 	{ST_L3_LC_REL,		EV_ESTABLISH_REQ,	lc_activate},
 	{ST_L3_LC_REL,		EV_ESTABLISH_IND,	lc_connect},
@@ -575,8 +576,8 @@ l3_msg(struct PStack *st, int pr, void *arg)
 	}
 }
 
-HISAX_INITFUNC(void
-Isdnl3New(void))
+void __init
+Isdnl3New(void)
 {
 	l3fsm.state_count = L3_STATE_COUNT;
 	l3fsm.event_count = L3_EVENT_COUNT;

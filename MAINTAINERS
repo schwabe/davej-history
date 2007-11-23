@@ -938,6 +938,11 @@ M:	support@stallion.oz.au
 W:	http://www.stallion.com
 S:	Supported
 
+STARFIRE/DURALAN NETWORK DRIVER
+P:	Ion Badulescu
+M:	ionut@cs.columbia.edu
+S:	Maintained
+
 STARMODE RADIO IP (STRIP) PROTOCOL DRIVER
 W:	http://mosquitonet.Stanford.EDU/strip.html
 S:	Unsupported ?

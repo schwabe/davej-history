@@ -24,6 +24,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "hfc_sx.h"
 #include "isdnl1.h"
@@ -1415,8 +1416,8 @@ hfcsx_bh(struct IsdnCardState *cs)
 /********************************/
 /* called for card init message */
 /********************************/
-__initfunc(void
-	   inithfcsx(struct IsdnCardState *cs))
+void 
+inithfcsx(struct IsdnCardState *cs)
 {
 	cs->setstack_d = setstack_hfcsx;
 	cs->dbusytimer.function = (void *) hfcsx_dbusy_timer;
@@ -1472,8 +1473,8 @@ hfcsx_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 
 
 
-__initfunc(int
-	   setup_hfcsx(struct IsdnCard *card))
+int 
+setup_hfcsx(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];

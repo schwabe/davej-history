@@ -681,7 +681,7 @@ add_new_inode:
 static inline unsigned long hash(struct super_block *sb, unsigned long i_ino)
 {
 	unsigned long tmp = i_ino | (unsigned long) sb;
-	tmp = tmp + (tmp >> HASH_BITS) + (tmp >> HASH_BITS*2);
+	tmp = tmp + (tmp >> HASH_BITS);
 	return tmp & HASH_MASK;
 }
 

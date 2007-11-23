@@ -742,6 +742,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ADAPTEC_STARFIRE),y)
+L_OBJS += starfire.o
+else
+  ifeq ($(CONFIG_ADAPTEC_STARFIRE),m)
+  M_OBJS += starfire.o
+  endif
+endif
+
 ifeq ($(CONFIG_AC3200),y)
 L_OBJS += ac3200.o
 CONFIG_8390_BUILTIN = y

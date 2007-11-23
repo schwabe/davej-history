@@ -291,11 +291,7 @@ ITloop:
 
 	mov	A, LASTPHASE;
 
-	if ((p->features & AHC_ULTRA2) != 0) {
-		test	A, ~P_DATAIN	jz u2_p_data;
-	} else {
-		test	A, ~P_DATAIN	jz p_data;
-	}
+	test	A, ~P_DATAIN	jz p_data;
 	cmp	A,P_COMMAND	je p_command;
 	cmp	A,P_MESGOUT	je p_mesgout;
 	cmp	A,P_STATUS	je p_status;
@@ -336,73 +332,130 @@ clear_target_state:
 	/* clear target specific flags */
 	clr	SEQ_FLAGS ret;
 
- 	if ((p->features & AHC_ULTRA2) != 0) {
 
-
-
-u2_data_phase_reinit:
+data_phase_reinit:
 /*
  * If we re-enter the data phase after going through another phase, the
  * STCNT may have been cleared, so restore it from the residual field.
  * On Ultra2, we have to put it into the HCNT field because we have to
  * drop the data down into the shadow layer via the preload ability.
  */
+ 	if ((p->features & AHC_ULTRA2) != 0) {
 		bmov	HADDR, SHADDR, 4;
 		bmov    HCNT, SCB_RESID_DCNT, 3;
-		jmp	u2_data_phase_loop;
-u2_p_data:
+	}
+	if ((p->chip & AHC_CHIPID_MASK) == AHC_AIC7895) {
+		bmov    STCNT, SCB_RESID_DCNT, 3;
+	}
+	if ((p->features & AHC_CMD_CHAN) == 0) {
+		mvi	DINDEX, STCNT;
+		mvi	SCB_RESID_DCNT	call bcopy_3;
+	}
+	jmp	data_phase_loop;
+p_data:
+ 	if ((p->features & AHC_ULTRA2) != 0) {
 		mvi	DMAPARAMS, PRELOADEN|SCSIEN|HDMAEN;
-		test	LASTPHASE, IOI jnz . + 2;
-		or	DMAPARAMS, DIRECTION;
-		call	assert;		/*
-					 * Ensure entering a data
-					 * phase is okay - seen identify, etc.
-					 */
+	} else {
+		mvi	DMAPARAMS, WIDEODD|SCSIEN|SDMAEN|HDMAEN|FIFORESET;
+	}
+	test	LASTPHASE, IOI jnz . + 2;
+	or	DMAPARAMS, DIRECTION;
+	call	assert;		/*
+				 * Ensure entering a data
+				 * phase is okay - seen identify, etc.
+				 */
+	if ((p->features & AHC_CMD_CHAN) != 0) {
 		mvi	CCSGADDR, CCSGADDR_MAX;
-		test	SEQ_FLAGS, DPHASE	jnz u2_data_phase_reinit;
-		or	SEQ_FLAGS, DPHASE;	/* we've seen a data phase */
-		/*
-		 * Initialize the DMA address and counter from the SCB.
-		 * Also set SG_COUNT and SG_NEXT in memory since we cannot
-		 * modify the values in the SCB itself until we see a
-		 * save data pointers message.
-		 */
+	}
+
+	test	SEQ_FLAGS, DPHASE	jnz data_phase_reinit;
+	or	SEQ_FLAGS, DPHASE;	/* we've seen a data phase */
+	/*
+	 * Initialize the DMA address and counter from the SCB.
+	 * Also set SG_COUNT and SG_NEXT in memory since we cannot
+	 * modify the values in the SCB itself until we see a
+	 * save data pointers message.
+	 */
+	if ((p->features & AHC_CMD_CHAN) != 0) {
 		bmov	HADDR, SCB_DATAPTR, 7;
 		bmov    SG_COUNT, SCB_SGCOUNT, 5;
-u2_data_phase_loop:
-		/* Guard against overruns */
-		test	SG_COUNT, 0xff jnz u2_data_phase_inbounds;
+		if ((p->features & AHC_ULTRA2) == 0) {
+			bmov    STCNT, HCNT, 3;
+		}
+	} else {
+		mvi	DINDEX, HADDR;
+		mvi	SCB_DATAPTR	call bcopy_7;
+		call	set_stcnt_from_hcnt;
+		mvi	DINDEX, SG_COUNT;
+		mvi	SCB_SGCOUNT	call bcopy_5;
+	}
+data_phase_loop:
+	/* Guard against overruns */
+	test	SG_COUNT, 0xff jnz data_phase_inbounds;
 /*
  * Turn on 'Bit Bucket' mode, set the transfer count to
  * 16meg and let the target run until it changes phase.
  * When the transfer completes, notify the host that we
  * had an overrun.
  */
-		or	SXFRCTL1,BITBUCKET;
-		and	DMAPARAMS, DIRECTION;
+	or	SXFRCTL1,BITBUCKET;
+	and	DMAPARAMS, ~(HDMAEN|SDMAEN);
+	if ((p->features & AHC_ULTRA2) != 0) {
 		bmov	HCNT, ALLONES, 3;
-u2_data_phase_inbounds:
+	}
+	if ((p->chip & AHC_CHIPID_MASK) == AHC_AIC7895) {
+		bmov	STCNT, ALLONES, 3;
+	}
+	if ((p->features & AHC_CMD_CHAN) == 0) {
+		mvi	STCNT[0], 0xFF;
+		mvi	STCNT[1], 0xFF;
+		mvi	STCNT[2], 0xFF;
+	}
+
+data_phase_inbounds:
 /* If we are the last SG block, tell the hardware. */
+	if ((p->features & AHC_ULTRA2) != 0) {
 		shl	A, 2, SG_COUNT;
-		cmp	SG_COUNT,0x01 jne u2_data_phase_lastseg;
+		cmp	SG_COUNT,0x01 jne data_phase_wideodd;
 		or	A, LAST_SEG;
-u2_data_phase_lastseg:
+	} else {
+		cmp	SG_COUNT,0x01 jne data_phase_wideodd;
+		and	DMAPARAMS, ~WIDEODD;
+	}
+data_phase_wideodd:
+	if ((p->features & AHC_ULTRA2) != 0) {	
 		mov	SG_CACHEPTR, A;
 		mov	DFCNTRL, DMAPARAMS; /* start the operation */
-		test	SXFRCTL1, BITBUCKET jnz u2_data_phase_overrun;
+		test	SXFRCTL1, BITBUCKET jnz data_phase_overrun;
 u2_preload_wait:
 		test	SSTAT1, PHASEMIS jnz u2_phasemis;
 		test	DFSTATUS, PRELOAD_AVAIL jz u2_preload_wait;
+	} else {
+		mov	DMAPARAMS  call dma;
+data_phase_dma_done:
+/* Go tell the host about any overruns */
+		test	SXFRCTL1,BITBUCKET jnz data_phase_overrun;
+
+/* Exit if we had an underrun.  dma clears SINDEX in this case. */
+		test	SINDEX,0xff	jz data_phase_finish;
+	}
 /*
  * Advance the scatter-gather pointers 
  */
-u2_sg_advance:
+sg_advance:
+	if ((p->features & AHC_ULTRA2) != 0) {
 		cmp	SG_COUNT, 0x01	je u2_data_phase_finish;
+	} else {
+		dec	SG_COUNT;
+		test	SG_COUNT, 0xff	jz data_phase_finish;
+	}
+
+	if ((p->features & AHC_CMD_CHAN) != 0) {
 
 		/*
 		 * Do we have any prefetch left???
 		 */
-		cmp	CCSGADDR, CCSGADDR_MAX jne u2_prefetch_avail;
+		cmp	CCSGADDR, CCSGADDR_MAX jne prefetch_avail;
 
 		/*
 		 * Fetch MIN(CCSGADDR_MAX, (SG_COUNT * 8)) bytes.
@@ -418,18 +471,48 @@ u2_sg_advance:
 		and	CCSGCTL, ~CCSGEN;
 		test	CCSGCTL, CCSGEN jnz .;
 		mvi	CCSGCTL, CCSGRESET;
-u2_prefetch_avail:
-		/* Test for a phasemis before we drop the stuff into the
-		 * host regs.  We might have actually missed the phasemis
-		 * while doing the dma of the sg segs.
-		 */
-		test	SSTAT1, PHASEMIS jnz u2_phasemis;
-		dec	SG_COUNT;	      /* one less segment to go */
-		bmov 	HADDR, CCSGRAM, 8;    /* drop the address in place */
-		clr	A;		      /* Advance the SG pointer by */
-		add	SG_NEXT[0],SG_SIZEOF; /* adding SG_SIZEOF to addr0 */
-		adc	SG_NEXT[1],A;         /* and adding any carry to */
-		jmp	u2_data_phase_loop;   /* addr1 */
+prefetch_avail:
+		bmov 	HADDR, CCSGRAM, 8;
+		if ((p->features & AHC_ULTRA2) == 0) {
+			bmov    STCNT, HCNT, 3;
+		} else {
+			dec	SG_COUNT;
+		}
+	} else {
+		mvi	DINDEX, HADDR;
+		mvi	SG_NEXT	call bcopy_4;
+
+		mvi	HCNT[0],SG_SIZEOF;
+		clr	HCNT[1];
+		clr	HCNT[2];
+
+		or	DFCNTRL, HDMAEN|DIRECTION|FIFORESET;
+
+		call	dma_finish;
+
+/*
+ * Copy data from FIFO into SCB data pointer and data count.
+ * This assumes that the SG segments are of the form:
+ * struct ahc_dma_seg {
+ *	u_int32_t	addr;	four bytes, little-endian order
+ *	u_int32_t	len;	four bytes, little endian order
+ * };
+ */
+ 		mvi	DINDEX, HADDR;
+		call	dfdat_in_7;
+		call	set_stcnt_from_hcnt;
+	}
+/* Advance the SG pointer */
+	clr	A;		/* add sizeof(struct scatter) */
+	add	SG_NEXT[0],SG_SIZEOF;
+	adc	SG_NEXT[1],A;
+
+	if ((p->features & AHC_ULTRA2) != 0) {
+		jmp	data_phase_loop;
+	} else {
+		test    SSTAT1, REQINIT jz .;
+		test	SSTAT1,PHASEMIS	jz data_phase_loop;
+	}
 
 
 /*
@@ -438,23 +521,24 @@ u2_prefetch_avail:
  * we'll get a phasemis if we do finish, all we really need to do is wait
  * for a phasemis then check if we did actually complete all the segments.
  */
+	if ((p->features & AHC_ULTRA2) != 0) {
 u2_data_phase_finish:
 		test	SSTAT1, PHASEMIS jnz u2_phasemis;
 		test	SG_CACHEPTR, LAST_SEG_DONE jz u2_data_phase_finish;
 		clr	SG_COUNT;
 		test	SSTAT1, REQINIT	jz .;
-		test	SSTAT1, PHASEMIS jz u2_data_phase_loop;
+		test	SSTAT1, PHASEMIS jz data_phase_loop;
 u2_phasemis:
 		call	ultra2_dmafinish;
-		test	SG_CACHEPTR, LAST_SEG_DONE jnz u2_phasemis_end;
+		test	SG_CACHEPTR, LAST_SEG_DONE jnz data_phase_finish;
 		test	SSTAT2, SHVALID jnz u2_fixup_residual;
 		mvi	INTSTAT, SEQ_SG_FIXUP;
-		jmp	u2_phasemis_end;
+		jmp	data_phase_finish;
 u2_fixup_residual:
 		shr	ARG_1, 2, SG_CACHEPTR;
 u2_phasemis_loop:
 		and	A, 0x3f, SG_COUNT;
-		cmp	ARG_1, A je u2_phasemis_end;
+		cmp	ARG_1, A je data_phase_finish;
 /*
  * Subtract SG_SIZEOF from the SG_NEXT pointer and add 1 to the SG_COUNT
  */
@@ -463,11 +547,44 @@ u2_phasemis_loop:
 		adc	SG_NEXT[1], 0xff;
 		inc	SG_COUNT;
 		jmp	u2_phasemis_loop;
-u2_phasemis_end:
-		bmov	SCB_RESID_DCNT, STCNT, 3;
+	}
+
+data_phase_finish:
+/*
+ * After a DMA finishes, save the SG and STCNT residuals back into the SCB
+ * We use STCNT instead of HCNT, since it's a reflection of how many bytes 
+ * were transferred on the SCSI (as opposed to the host) bus.
+ */
+	if ((p->features & AHC_CMD_CHAN) != 0) {
+		bmov    SCB_RESID_DCNT, STCNT, 3;
 		mov	SCB_RESID_SGCNT, SG_COUNT;
-		or	SXFRCTL0, CLRSTCNT|CLRCHN;
-		jmp	ITloop;
+		if ((p->features & AHC_ULTRA2) != 0) {
+			or	SXFRCTL0, CLRSTCNT|CLRCHN;
+		}
+	} else {
+		mov	SCB_RESID_DCNT[0],STCNT[0];
+		mov	SCB_RESID_DCNT[1],STCNT[1];
+		mov	SCB_RESID_DCNT[2],STCNT[2];
+		mov	SCB_RESID_SGCNT, SG_COUNT;
+	}
+
+	jmp	ITloop;
+
+data_phase_overrun:
+/*
+ * Turn off BITBUCKET mode and notify the host
+ */
+	if ((p->features & AHC_ULTRA2) != 0) {
+/*
+ * Wait for the target to quit transferring data on the SCSI bus
+ */
+ 		test	SSTAT1, PHASEMIS jz .;
+		call	ultra2_dmafinish;
+	}
+	and	SXFRCTL1, ~BITBUCKET;
+	mvi	INTSTAT,DATA_OVERRUN;
+	jmp	ITloop;
+
 
 
 
@@ -478,6 +595,7 @@ u2_phasemis_end:
  * brought into the data phase again (or are still in it after our last
  * segment) that we will properly signal an overrun to the kernel.
  */
+	if ((p->features & AHC_ULTRA2) != 0) {
 ultra2_dmafinish:
 		test	DFCNTRL, DIRECTION jnz ultra2_dmahalt;
 		and	DFCNTRL, ~SCSIEN;
@@ -515,196 +633,6 @@ ultra2_dmahalt:
 		and     DFCNTRL, ~(HDMAEN|SCSIEN);
 		test	DFCNTRL, (HDMAEN|SCSIEN) jnz .;
 		ret;
-
-u2_data_phase_overrun:
-/*
- * Wait for the target to quit transferring data on the SCSI bus
- */
- 		test	SSTAT1, PHASEMIS jz .;
-		call	ultra2_dmafinish;
-/*
- * Turn off BITBUCKET mode and notify the host
- */
-		and	SXFRCTL1, ~BITBUCKET;
-		mvi	INTSTAT,DATA_OVERRUN;
-		jmp	ITloop;
-
-
-
-	} else {  /* NOT Ultra2 */
-
-
-
-data_phase_reinit:
-/*
- * If we re-enter the data phase after going through another phase, the
- * STCNT may have been cleared, so restore it from the residual field.
- */
-		if ((p->features & AHC_CMD_CHAN) != 0) {
-			bmov    STCNT, SCB_RESID_DCNT, 3;
-		} else {
-			mvi	DINDEX, STCNT;
-			mvi	SCB_RESID_DCNT	call bcopy_3;
-		}
-		jmp	data_phase_loop;
-p_data:
-		mvi	DMAPARAMS, WIDEODD|SCSIEN|SDMAEN|HDMAEN|FIFORESET;
-		test	LASTPHASE, IOI jnz . + 2;
-		or	DMAPARAMS, DIRECTION;
-		call	assert;		/*
-					 * Ensure entering a data
-					 * phase is okay - seen identify, etc.
-					 */
-		if ((p->features & AHC_CMD_CHAN) != 0) {
-			mvi	CCSGADDR, CCSGADDR_MAX;
-		}
-		test	SEQ_FLAGS, DPHASE	jnz data_phase_reinit;
-		or	SEQ_FLAGS, DPHASE;	/* we've seen a data phase */
-		/*
-		 * Initialize the DMA address and counter from the SCB.
-		 * Also set SG_COUNT and SG_NEXT in memory since we cannot
-		 * modify the values in the SCB itself until we see a
-		 * save data pointers message.
-		 */
-		if ((p->features & AHC_CMD_CHAN) != 0) {
-			bmov	HADDR, SCB_DATAPTR, 7;
-			bmov    STCNT, HCNT, 3;
-			bmov    SG_COUNT, SCB_SGCOUNT, 5;
-		} else {
-			mvi	DINDEX, HADDR;
-			mvi	SCB_DATAPTR	call bcopy_7;
-			call	set_stcnt_from_hcnt;
-			mvi	DINDEX, SG_COUNT;
-			mvi	SCB_SGCOUNT	call bcopy_5;
-		}
-data_phase_loop:
-		/* Guard against overruns */
-		test	SG_COUNT, 0xff jnz data_phase_inbounds;
-/*
- * Turn on 'Bit Bucket' mode, set the transfer count to
- * 16meg and let the target run until it changes phase.
- * When the transfer completes, notify the host that we
- * had an overrun.
- */
-		or	SXFRCTL1,BITBUCKET;
-		and	DMAPARAMS, ~(HDMAEN|SDMAEN);
-		if ((p->features & AHC_CMD_CHAN) != 0) {
-			bmov	STCNT, ALLONES, 3;
-		} else {
-			mvi	STCNT[0], 0xFF;
-			mvi	STCNT[1], 0xFF;
-			mvi	STCNT[2], 0xFF;
-		}
-
-data_phase_inbounds:
-/* If we are the last SG block, tell the hardware. */
-		cmp	SG_COUNT,0x01 jne data_phase_wideodd;
-		and	DMAPARAMS, ~WIDEODD;
-data_phase_wideodd:
-		mov	DMAPARAMS  call dma;
-data_phase_dma_done:
-/* Go tell the host about any overruns */
-		test	SXFRCTL1,BITBUCKET jnz data_phase_overrun;
-
-/* Exit if we had an underrun.  dma clears SINDEX in this case. */
-		test	SINDEX,0xff	jz data_phase_finish;
-/*
- * Advance the scatter-gather pointers if needed 
- */
-sg_advance:
-		cmp	SG_COUNT, 0x01	je data_phase_finish; /* Are we done? */
-		dec	SG_COUNT;	/* one less segment to go */
-/*
- * Load a struct scatter and set up the data address and length.
- * If the working value of the SG count is nonzero, then
- * we need to load a new set of values.
- *
- * This, like all DMA's, assumes little-endian host data storage.
- */
-sg_load:
-		if ((p->features & AHC_CMD_CHAN) != 0) {
-			/*
-			 * Do we have any prefetch left???
-			 */
-			cmp	CCSGADDR, CCSGADDR_MAX jne prefetch_avail;
-
-			/*
-			 * Fetch MIN(CCSGADDR_MAX, (SG_COUNT * 8)) bytes.
-			 */
-			add	A, -(CCSGRAM_MAXSEGS + 1), SG_COUNT;
-			mvi	A, CCSGADDR_MAX;
-			jc	. + 2;
-			shl	A, 3, SG_COUNT;
-			mov	CCHCNT, A;
-			bmov	CCHADDR, SG_NEXT, 4;
-			mvi	CCSGCTL, CCSGEN|CCSGRESET;
-			test	CCSGCTL, CCSGDONE jz .;
-			and	CCSGCTL, ~CCSGEN;
-			test	CCSGCTL, CCSGEN jnz .;
-			mvi	CCSGCTL, CCSGRESET;
-prefetch_avail:
-			bmov 	HADDR, CCSGRAM, 8;
-			bmov    STCNT, HCNT, 3;
-		} else {
-			mvi	DINDEX, HADDR;
-			mvi	SG_NEXT	call bcopy_4;
-
-			mvi	HCNT[0],SG_SIZEOF;
-			clr	HCNT[1];
-			clr	HCNT[2];
-
-			or	DFCNTRL, HDMAEN|DIRECTION|FIFORESET;
-
-			call	dma_finish;
-
-/*
- * Copy data from FIFO into SCB data pointer and data count.
- * This assumes that the SG segments are of the form:
- * struct ahc_dma_seg {
- *	u_int32_t	addr;	four bytes, little-endian order
- *	u_int32_t	len;	four bytes, little endian order
- * };
- */
-			mvi	HADDR	call dfdat_in_7;
-			call	set_stcnt_from_hcnt;
-		}
-/* Advance the SG pointer */
-		clr	A;		/* add sizeof(struct scatter) */
-		add	SG_NEXT[0],SG_SIZEOF;
-		adc	SG_NEXT[1],A;
-
-		test    SSTAT1, REQINIT jz .;
-		test	SSTAT1,PHASEMIS	jz data_phase_loop;
-
-data_phase_finish:
-/*
- * After a DMA finishes, save the SG and STCNT residuals back into the SCB
- * We use STCNT instead of HCNT, since it's a reflection of how many bytes 
- * were transferred on the SCSI (as opposed to the host) bus.
- */
-		clr	SG_COUNT;
-		if ((p->features & AHC_CMD_CHAN) != 0) {
-			bmov    SCB_RESID_DCNT, STCNT, 3;
-			mov	SCB_RESID_SGCNT, SG_COUNT;
-		} else {
-			mov	SCB_RESID_DCNT[0],STCNT[0];
-			mov	SCB_RESID_DCNT[1],STCNT[1];
-			mov	SCB_RESID_DCNT[2],STCNT[2];
-			mov	SCB_RESID_SGCNT, SG_COUNT;
-		}
-
-		jmp	ITloop;
-
-data_phase_overrun:
-/*
- * Turn off BITBUCKET mode and notify the host
- */
-		and	SXFRCTL1, ~BITBUCKET;
-		mvi	INTSTAT,DATA_OVERRUN;
-		jmp	ITloop;
-
-
-
 	}
 
 /*
@@ -1437,21 +1365,25 @@ dma_scb_tohost:
 			bmov	CCSCBRAM, SCB_CONTROL, 32;
 			or	CCSCBCTL, CCSCBEN|CCSCBRESET;
 			test	CCSCBCTL, CCSCBDONE jz .;
-		} else if ((p->bugs & AHC_BUG_SCBCHAN_UPLOAD) != 0) {
-                        mvi     CCSCBCTL, CCARREN|CCSCBRESET;
-			cmp     CCSCBCTL, ARRDONE|CCARREN jne .;
-                        mvi     CCHCNT, 32;
-			mvi     CCSCBCTL, CCSCBEN|CCSCBRESET;
-			cmp     CCSCBCTL, CCSCBDONE|CCSCBEN jne .;
-		} else {
-			mvi	CCSCBCTL, CCARREN|CCSCBEN|CCSCBRESET;
-			cmp	CCSCBCTL, CCSCBDONE|ARRDONE|CCARREN|CCSCBEN jne .;
+		}
+		if ((p->features & AHC_ULTRA2) != 0) {
+			if ((p->bugs & AHC_BUG_SCBCHAN_UPLOAD) != 0) {
+				mvi     CCSCBCTL, CCARREN|CCSCBRESET;
+				cmp     CCSCBCTL, ARRDONE|CCARREN jne .;
+                        	mvi     CCHCNT, 32;
+				mvi     CCSCBCTL, CCSCBEN|CCSCBRESET;
+				cmp     CCSCBCTL, CCSCBDONE|CCSCBEN jne .;
+			} else {
+				mvi	CCSCBCTL, CCARREN|CCSCBEN|CCSCBRESET;
+				cmp	CCSCBCTL, CCSCBDONE|ARRDONE|CCARREN|CCSCBEN jne .;
+			}
 		}
 dma_scb_finish:
 		clr	CCSCBCTL;
 		test	CCSCBCTL, CCARREN|CCSCBEN jnz .;
 		ret;
-	} else {
+	}
+	if ((p->features & AHC_CMD_CHAN) == 0) {
 		mvi	DINDEX, HADDR;
 		mvi	HSCB_ADDR call set_32byte_addr;
 		mvi	HCNT[0], 32;

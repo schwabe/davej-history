@@ -12,6 +12,7 @@
 #define __NO_VERSION__
 
 #include <linux/config.h>
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "ipac.h"
@@ -268,8 +269,8 @@ BKM_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return (0);
 }
 
-__initfunc(int
-sct_alloc_io(u_int adr, u_int len))
+int __init
+sct_alloc_io(u_int adr, u_int len)
 {
 	if (check_region(adr, len)) {
 		printk(KERN_WARNING
@@ -291,8 +292,8 @@ static u_char pci_irq __initdata = 0;
 
 #endif /* CONFIG_PCI */
 
-__initfunc(int
-setup_sct_quadro(struct IsdnCard *card))
+int __init
+setup_sct_quadro(struct IsdnCard *card)
 {
 #if CONFIG_PCI
 	struct IsdnCardState *cs = card->cs;
@@ -463,6 +464,5 @@ setup_sct_quadro(struct IsdnCard *card))
 	return (1);
 #else
 	printk(KERN_ERR "HiSax: bkm_a8 only supported on PCI Systems\n");
-	return (0);
 #endif /* CONFIG_PCI */
 }

@@ -10,6 +10,7 @@
 #include <linux/stddef.h>
 #include <linux/timer.h>
 #include <linux/config.h>
+#include <linux/init.h>
 #include "hisax.h"
 #include <linux/module.h>
 #include <linux/kernel_stat.h>
@@ -383,8 +384,8 @@ extern char *l3_revision;
 extern char *lli_revision;
 extern char *tei_revision;
 
-HISAX_INITFUNC(char *
-HiSax_getrev(const char *revision))
+char *
+HiSax_getrev(const char *revision)
 {
 	char *rev;
 	char *p;
@@ -398,8 +399,8 @@ HiSax_getrev(const char *revision))
 	return rev;
 }
 
-HISAX_INITFUNC(void
-HiSaxVersion(void))
+void __init
+HiSaxVersion(void)
 {
 	char tmp[64];
 
@@ -849,7 +850,8 @@ closecard(int cardnr)
 	ll_unload(csta);
 }
 
-HISAX_INITFUNC(static int init_card(struct IsdnCardState *cs))
+static int 
+init_card(struct IsdnCardState *cs)
 {
 	int irq_cnt, cnt = 3;
 	long flags;
@@ -896,8 +898,8 @@ HISAX_INITFUNC(static int init_card(struct IsdnCardState *cs))
 	return(3);
 }
 
-HISAX_INITFUNC(static int
-checkcard(int cardnr, char *id, int *busy_flag))
+static int 
+checkcard(int cardnr, char *id, int *busy_flag)
 {
 	long flags;
 	int ret = 0;
@@ -1170,7 +1172,6 @@ checkcard(int cardnr, char *id, int *busy_flag))
 	cs->tx_skb = NULL;
 	cs->tx_cnt = 0;
 	cs->event = 0;
-	cs->tqueue.next = 0;
 	cs->tqueue.sync = 0;
 	cs->tqueue.data = cs;
 
@@ -1194,8 +1195,8 @@ checkcard(int cardnr, char *id, int *busy_flag))
 	return (1);
 }
 
-HISAX_INITFUNC(void
-HiSax_shiftcards(int idx))
+void 
+HiSax_shiftcards(int idx)
 {
 	int i;
 
@@ -1203,8 +1204,8 @@ HiSax_shiftcards(int idx))
 		memcpy(&cards[i], &cards[i + 1], sizeof(cards[i]));
 }
 
-HISAX_INITFUNC(int
-HiSax_inithardware(int *busy_flag))
+int 
+HiSax_inithardware(int *busy_flag)
 {
 	int foundcards = 0;
 	int i = 0;

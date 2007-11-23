@@ -40,6 +40,7 @@
 */
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include <linux/config.h>
 #include "hisax.h"
 #include "isac.h"
@@ -528,10 +529,10 @@ Sedl_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static 	struct pci_dev *dev_sedl __initdata = NULL;
+static 	struct pci_dev *dev_sedl  = NULL;
 
-__initfunc(int
-setup_sedlbauer(struct IsdnCard *card))
+int 
+setup_sedlbauer(struct IsdnCard *card)
 {
 	int bytecnt, ver, val;
 	struct IsdnCardState *cs = card->cs;

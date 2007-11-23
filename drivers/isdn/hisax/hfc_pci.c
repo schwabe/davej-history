@@ -24,6 +24,7 @@
  *
  */
 
+#include <linux/init.h>
 #include <linux/config.h>
 #define __NO_VERSION__
 #include "hisax.h"
@@ -1571,8 +1572,8 @@ hfcpci_bh(struct IsdnCardState *cs)
 /********************************/
 /* called for card init message */
 /********************************/
-__initfunc(void
-	   inithfcpci(struct IsdnCardState *cs))
+void __init
+inithfcpci(struct IsdnCardState *cs)
 {
 	cs->setstack_d = setstack_hfcpci;
 	cs->dbusytimer.function = (void *) hfcpci_dbusy_timer;
@@ -1632,8 +1633,7 @@ static struct pci_dev *dev_hfcpci __initdata = NULL;
 
 #endif				/* CONFIG_PCI */
 
-__initfunc(int
-	   setup_hfcpci(struct IsdnCard *card))
+int __init setup_hfcpci(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	unsigned short cmd;

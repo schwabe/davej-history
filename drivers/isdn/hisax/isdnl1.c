@@ -18,6 +18,7 @@
 const char *l1_revision = "$Revision: 2.41.6.1 $";
 
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isdnl1.h"
 
@@ -342,7 +343,6 @@ init_bcstate(struct IsdnCardState *cs,
 
 	bcs->cs = cs;
 	bcs->channel = bc;
-	bcs->tqueue.next = 0;
 	bcs->tqueue.sync = 0;
 	bcs->tqueue.routine = (void *) (void *) BChannel_bh;
 	bcs->tqueue.data = bcs;
@@ -579,7 +579,7 @@ l1_activate_no(struct FsmInst *fi, int event, void *arg)
 	}
 }
 
-static struct FsmNode L1SFnList[] HISAX_INITDATA =
+static struct FsmNode L1SFnList[] __initdata =
 {
 	{ST_L1_F3, EV_PH_ACTIVATE, l1_activate_s},
 	{ST_L1_F6, EV_PH_ACTIVATE, l1_activate_no},
@@ -664,7 +664,7 @@ l1_activate_u(struct FsmInst *fi, int event, void *arg)
 	st->l1.l1hw(st, HW_INFO1 | REQUEST, NULL);
 }
 
-static struct FsmNode L1UFnList[] HISAX_INITDATA =
+static struct FsmNode L1UFnList[] __initdata =
 {
 	{ST_L1_RESET, EV_DEACT_IND, l1_deact_req_u},
 	{ST_L1_DEACT, EV_DEACT_IND, l1_deact_req_u},
@@ -726,7 +726,7 @@ l1b_timer_deact(struct FsmInst *fi, int event, void *arg)
 	st->l2.l2l1(st, PH_DEACTIVATE | CONFIRM, NULL);
 }
 
-static struct FsmNode L1BFnList[] HISAX_INITDATA =
+static struct FsmNode L1BFnList[] __initdata =
 {
 	{ST_L1_NULL, EV_PH_ACTIVATE, l1b_activate},
 	{ST_L1_WAIT_ACT, EV_TIMER_ACT, l1b_timer_act},
@@ -736,7 +736,8 @@ static struct FsmNode L1BFnList[] HISAX_INITDATA =
 
 #define L1B_FN_COUNT (sizeof(L1BFnList)/sizeof(struct FsmNode))
 
-HISAX_INITFUNC(void Isdnl1New(void))
+void __init 
+Isdnl1New(void)
 {
 #ifdef HISAX_UINTERFACE
 	l1fsm_u.state_count = L1U_STATE_COUNT;

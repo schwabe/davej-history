@@ -11,8 +11,8 @@
  *              Fritz Elfert
  *
  */
-
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "../avmb1/capicmd.h"  /* this should be moved in a common place */
 
@@ -780,7 +780,7 @@ lli_failure_a(struct FsmInst *fi, int event, void *arg)
 }
 
 /* *INDENT-OFF* */
-static struct FsmNode fnlist[] HISAX_INITDATA =
+static struct FsmNode fnlist[] __initdata =
 {
         {ST_NULL,               EV_DIAL,                lli_prep_dialout},
         {ST_NULL,               EV_RESUME,              lli_resume},
@@ -850,8 +850,8 @@ static struct FsmNode fnlist[] HISAX_INITDATA =
 
 #define FNCOUNT (sizeof(fnlist)/sizeof(struct FsmNode))
 
-HISAX_INITFUNC(void
-CallcNew(void))
+void __init
+CallcNew(void)
 {
 	callcfsm.state_count = STATE_COUNT;
 	callcfsm.event_count = EVENT_COUNT;

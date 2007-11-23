@@ -150,6 +150,7 @@ nlm_traverse_locks(struct nlm_host *host, struct nlm_file *file, int action)
 	struct inode	 *inode = nlmsvc_file_inode(file);
 	struct file_lock *fl;
 	struct nlm_host	 *lockhost;
+	int		 status = 0;
 
 again:
 	file->f_locks = 0;
@@ -160,29 +161,27 @@ again:
 		/* update current lock count */
 		file->f_locks++;
 		lockhost = (struct nlm_host *) fl->fl_owner;
+		if (host && lockhost != host)
+			continue;
 		if (action == NLM_ACT_MARK)
 			lockhost->h_inuse = 1;
 		else if (action == NLM_ACT_CHECK)
-			return 1;
+			status = 1;
 		else if (action == NLM_ACT_UNLOCK) {
-			struct file_lock lock = *fl;
+			struct file_lock lock;
 
-			if (host && lockhost != host)
-				continue;
-
+			lock = *fl;
 			lock.fl_type  = F_UNLCK;
-			lock.fl_start = 0;
-			lock.fl_end   = NLM_OFFSET_MAX;
 			if (posix_lock_file(&file->f_file, &lock, 0) < 0) {
 				printk("lockd: unlock failure in %s:%d\n",
 						__FILE__, __LINE__);
-				return 1;
-			}
-			goto again;
+				status = 1;
+			} else
+				goto again;
 		}
 	}
 
-	return 0;
+	return status;
 }
 
 /*
@@ -211,6 +210,7 @@ nlm_traverse_files(struct nlm_host *host, int action)
 {
 	struct nlm_file	*file, **fp;
 	int		i;
+	int		res = 0;
 
 	down(&nlm_file_sema);
 	for (i = 0; i < FILE_NRHASH; i++) {
@@ -218,24 +218,21 @@ nlm_traverse_files(struct nlm_host *host, int action)
 		while ((file = *fp) != NULL) {
 			/* Traverse locks, blocks and shares of this file
 			 * and update file->f_locks count */
-			if (nlm_inspect_file(host, file, action)) {
-				up(&nlm_file_sema);
-				return 1;
-			}
+			if (nlm_inspect_file(host, file, action))
+				res = 1;
 
-			/* No more references to this file. Let go of it. */
-			if (!file->f_blocks && !file->f_locks
-			 && !file->f_shares && !file->f_count) {
-				*fp = file->f_next;
-				nlmsvc_ops->fclose(&file->f_file);
-				kfree(file);
-			} else {
+			if (file->f_blocks || file->f_locks
+			    || file->f_shares || file->f_count) {
 				fp = &file->f_next;
+				continue;
 			}
+			*fp = file->f_next;
+			nlmsvc_ops->fclose(&file->f_file);
+			kfree(file);
 		}
 	}
 	up(&nlm_file_sema);
-	return 0;
+	return res;
 }
 
 /*
@@ -301,7 +298,7 @@ nlmsvc_invalidate_client(struct svc_client *clnt)
 	if ((host = nlm_lookup_host(clnt, NULL, 0, 0)) != NULL) {
 		dprintk("lockd: invalidating client for %s\n", host->h_name);
 		nlmsvc_free_host_resources(host);
-		host->h_expires = 0;
+		host->h_expires = jiffies;
 		nlm_release_host(host);
 	}
 }

@@ -40,7 +40,7 @@
 ulong if_used = 0;		/* number of interface users */
 static struct divert_info *divert_info_head = NULL;	/* head of queue */
 static struct divert_info *divert_info_tail = NULL;	/* pointer to last entry */
-static struct wait_queue *rd_queue = 0;		/* Queue IO */
+static wait_queue_head_t rd_queue;
 
 /*********************************/
 /* put an info buffer into queue */
@@ -305,6 +305,7 @@ int
 divert_dev_init(void)
 {
 
+	init_waitqueue_head(&rd_queue);
 
 #ifdef CONFIG_PROC_FS
 	isdn_proc_entry = create_proc_entry("isdn", S_IFDIR | S_IRUGO | S_IXUGO, proc_net);

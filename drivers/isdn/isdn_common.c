@@ -64,7 +64,7 @@ static char *isdn_audio_revision = ": none $";
 extern char *isdn_v110_revision;
 
 #ifdef CONFIG_ISDN_DIVERSION
-isdn_divert_if *divert_if; /* interface to diversion module */
+static isdn_divert_if *divert_if; /* = NULL */
 #endif CONFIG_ISDN_DIVERSION
 
 
@@ -73,11 +73,10 @@ static void set_global_features(void);
 static int isdn_wildmat(char *s, char *p);
 
 void
-isdn_MOD_INC_USE_COUNT(void)
+isdn_lock_drivers(void)
 {
 	int i;
 
-	MOD_INC_USE_COUNT;
 	for (i = 0; i < dev->drivers; i++) {
 		isdn_ctrl cmd;
 
@@ -90,11 +89,17 @@ isdn_MOD_INC_USE_COUNT(void)
 }
 
 void
-isdn_MOD_DEC_USE_COUNT(void)
+isdn_MOD_INC_USE_COUNT(void)
+{
+	MOD_INC_USE_COUNT;
+	isdn_lock_drivers();
+}
+
+void
+isdn_unlock_drivers(void)
 {
 	int i;
 
-	MOD_DEC_USE_COUNT;
 	for (i = 0; i < dev->drivers; i++)
 		if (dev->drv[i]->locks > 0) {
 			isdn_ctrl cmd;
@@ -105,6 +110,13 @@ isdn_MOD_DEC_USE_COUNT(void)
 			isdn_command(&cmd);
 			dev->drv[i]->locks--;
 		}
+}
+
+void
+isdn_MOD_DEC_USE_COUNT(void)
+{
+	MOD_DEC_USE_COUNT;
+	isdn_unlock_drivers();
 }
 
 #if defined(ISDN_DEBUG_NET_DUMP) || defined(ISDN_DEBUG_MODEM_DUMP)
@@ -791,7 +803,7 @@ isdn_getnum(char **p)
  * of the mapping (di,ch)<->minor, happen during the sleep? --he 
  */
 int
-isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, struct wait_queue **sleep)
+isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, wait_queue_head_t *sleep)
 {
 	int left;
 	int count;
@@ -1488,7 +1500,7 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
 					int i;
 
 					if ((ret = verify_area(VERIFY_READ, (void *) arg,
-					(ISDN_MODEM_NUMREG + ISDN_MSNLEN)
+					(ISDN_MODEM_NUMREG + ISDN_MSNLEN + ISDN_LMSNLEN)
 						   * ISDN_MAX_CHANNELS)))
 						return ret;
 
@@ -1497,6 +1509,9 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
 						     ISDN_MODEM_NUMREG))
 							return -EFAULT;
 						p += ISDN_MODEM_NUMREG;
+						if (copy_from_user(dev->mdm.info[i].emu.plmsn, p, ISDN_LMSNLEN))
+							return -EFAULT;
+						p += ISDN_LMSNLEN;
 						if (copy_from_user(dev->mdm.info[i].emu.pmsn, p, ISDN_MSNLEN))
 							return -EFAULT;
 						p += ISDN_MSNLEN;
@@ -1632,8 +1647,6 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
 
 /*
  * Open the device code.
- * MOD_INC_USE_COUNT make sure that the driver memory is not freed
- * while the device is in use.
  */
 static int
 isdn_open(struct inode *ino, struct file *filep)
@@ -1641,52 +1654,62 @@ isdn_open(struct inode *ino, struct file *filep)
 	uint minor = MINOR(ino->i_rdev);
 	int drvidx;
 	int chidx;
+	int retval = -ENODEV;
+
+	MOD_INC_USE_COUNT;
 
 	if (minor == ISDN_MINOR_STATUS) {
 		infostruct *p;
 
 		if ((p = (infostruct *) kmalloc(sizeof(infostruct), GFP_KERNEL))) {
-			MOD_INC_USE_COUNT;
 			p->next = (char *) dev->infochain;
 			p->private = (char *) &(filep->private_data);
 			dev->infochain = p;
 			/* At opening we allow a single update */
 			filep->private_data = (char *) 1;
-			return 0;
-		} else
-			return -ENOMEM;
+			retval = 0;
+			goto out;
+		} else {
+			retval = -ENOMEM;
+			goto out;
+		}
 	}
 	if (!dev->channels)
-		return -ENODEV;
+		goto out;
 	if (minor < ISDN_MINOR_CTRL) {
 		printk(KERN_WARNING "isdn_open minor %d obsolete!\n", minor);
 		drvidx = isdn_minor2drv(minor);
 		if (drvidx < 0)
-			return -ENODEV;
+			goto out;
 		chidx = isdn_minor2chan(minor);
 		if (!(dev->drv[drvidx]->flags & DRV_FLAG_RUNNING))
-			return -ENODEV;
+			goto out;
 		if (!(dev->drv[drvidx]->online & (1 << chidx)))
-			return -ENODEV;
-		isdn_MOD_INC_USE_COUNT();
-		return 0;
+			goto out;
+		isdn_lock_drivers();
+		retval = 0;
+		goto out;
 	}
 	if (minor <= ISDN_MINOR_CTRLMAX) {
 		drvidx = isdn_minor2drv(minor - ISDN_MINOR_CTRL);
 		if (drvidx < 0)
-			return -ENODEV;
-		isdn_MOD_INC_USE_COUNT();
-		return 0;
+			goto out;
+		isdn_lock_drivers();
+		retval = 0;
+		goto out;
 	}
 #ifdef CONFIG_ISDN_PPP
 	if (minor <= ISDN_MINOR_PPPMAX) {
-		int ret;
-		if (!(ret = isdn_ppp_open(minor - ISDN_MINOR_PPP, filep)))
-			isdn_MOD_INC_USE_COUNT();
-		return ret;
+		retval = isdn_ppp_open(minor - ISDN_MINOR_PPP, filep);
+		if (retval == 0)
+			isdn_lock_drivers();
+		goto out;
 	}
 #endif
-	return -ENODEV;
+ out:
+	if (retval)
+		MOD_DEC_USE_COUNT;
+	return retval;
 }
 
 static int
@@ -1698,7 +1721,6 @@ isdn_close(struct inode *ino, struct file *filep)
 		infostruct *p = dev->infochain;
 		infostruct *q = NULL;
 
-		MOD_DEC_USE_COUNT;
 		while (p) {
 			if (p->private == (char *) &(filep->private_data)) {
 				if (q)
@@ -1706,26 +1728,29 @@ isdn_close(struct inode *ino, struct file *filep)
 				else
 					dev->infochain = (infostruct *) (p->next);
 				kfree(p);
-				return 0;
+				goto out;
 			}
 			q = p;
 			p = (infostruct *) (p->next);
 		}
 		printk(KERN_WARNING "isdn: No private data while closing isdnctrl\n");
-		return 0;
+		goto out;
 	}
-	isdn_MOD_DEC_USE_COUNT();
+	isdn_unlock_drivers();
 	if (minor < ISDN_MINOR_CTRL)
-		return 0;
+		goto out;
 	if (minor <= ISDN_MINOR_CTRLMAX) {
 		if (dev->profd == current)
 			dev->profd = NULL;
-		return 0;
+		goto out;
 	}
 #ifdef CONFIG_ISDN_PPP
 	if (minor <= ISDN_MINOR_PPPMAX)
 		isdn_ppp_release(minor - ISDN_MINOR_PPP, filep);
 #endif
+
+ out:
+	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -1983,6 +2008,7 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 	int j, k, m;
 	ulong flags;
 
+ 	init_waitqueue_head(&d->st_waitq);
 	if (d->flags & DRV_FLAG_RUNNING)
 		return -1;
        	if (n < 1) return 0;
@@ -2032,8 +2058,9 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 
 	if ((adding) && (d->rcv_waitq))
 		kfree(d->rcv_waitq);
-	if (!(d->rcv_waitq = (struct wait_queue **)
-	      kmalloc(sizeof(struct wait_queue *) * m, GFP_KERNEL))) {
+	d->rcv_waitq = (wait_queue_head_t *)
+		kmalloc(sizeof(wait_queue_head_t) * 2 * m, GFP_KERNEL);
+	if (!d->rcv_waitq) {
 		printk(KERN_WARNING "register_isdn: Could not alloc rcv_waitq\n");
 		if (!adding) {
 			kfree(d->rpqueue);
@@ -2042,22 +2069,11 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 		}
 		return -1;
 	}
-	memset((char *) d->rcv_waitq, 0, sizeof(struct wait_queue *) * m);
-
-	if ((adding) && (d->snd_waitq))
-		kfree(d->snd_waitq);
-	if (!(d->snd_waitq = (struct wait_queue **)
-	      kmalloc(sizeof(struct wait_queue *) * m, GFP_KERNEL))) {
-		printk(KERN_WARNING "register_isdn: Could not alloc snd_waitq\n");
-		if (!adding) {
-			kfree(d->rcv_waitq);
-			kfree(d->rpqueue);
-			kfree(d->rcvcount);
-			kfree(d->rcverr);
-		}
-		return -1;
+	d->snd_waitq = d->rcv_waitq + m;
+	for (j = 0; j < m; j++) {
+		init_waitqueue_head(&d->rcv_waitq[j]);
+		init_waitqueue_head(&d->snd_waitq[j]);
 	}
-	memset((char *) d->snd_waitq, 0, sizeof(struct wait_queue *) * m);
 
 	dev->channels += n;
 	save_flags(flags);
@@ -2093,7 +2109,6 @@ set_global_features(void)
 }
 
 #ifdef CONFIG_ISDN_DIVERSION
-extern isdn_divert_if *divert_if;
 
 static char *map_drvname(int di)
 {
@@ -2253,12 +2268,15 @@ isdn_init(void)
 	memset((char *) dev, 0, sizeof(isdn_dev));
 	init_timer(&dev->timer);
 	dev->timer.function = isdn_timer_funct;
-	dev->sem = MUTEX;
+	init_MUTEX(&dev->sem);
+	init_waitqueue_head(&dev->info_waitq);
 	for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
 		dev->drvmap[i] = -1;
 		dev->chanmap[i] = -1;
 		dev->m_idx[i] = -1;
 		strcpy(dev->num[i], "???");
+		init_waitqueue_head(&dev->mdm.info[i].open_wait);
+		init_waitqueue_head(&dev->mdm.info[i].close_wait);
 	}
 	if (register_chrdev(ISDN_MAJOR, "isdn", &isdn_fops)) {
 		printk(KERN_WARNING "isdn: Could not register control devices\n");

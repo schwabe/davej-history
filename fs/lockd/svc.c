@@ -77,9 +77,7 @@ lockd(struct svc_rqst *rqstp)
 	nlmsvc_pid = current->pid;
 	up(&lockd_start);
 
-	exit_mm(current);
-	current->session = 1;
-	current->pgrp = 1;
+	daemonize();
 	sprintf(current->comm, "lockd");
 
 	/* Process request with signals blocked.  */
@@ -105,12 +103,8 @@ lockd(struct svc_rqst *rqstp)
 #ifdef RPC_DEBUG
 	nlmsvc_grace_period = 10 * HZ;
 #else
-	if (nlm_grace_period) {
-		nlmsvc_grace_period += (1 + nlm_grace_period / nlm_timeout)
-						* nlm_timeout * HZ;
-	} else {
-		nlmsvc_grace_period += 5 * nlm_timeout * HZ;
-	}
+	nlmsvc_grace_period = (1 + nlm_grace_period / nlm_timeout)
+				* nlm_timeout * HZ;
 #endif
 
 	grace_period_expire = nlmsvc_grace_period + jiffies;
@@ -138,8 +132,11 @@ lockd(struct svc_rqst *rqstp)
 		 */
 		if (!nlmsvc_grace_period) {
 			timeout = nlmsvc_retry_blocked();
-		} else if (time_before(nlmsvc_grace_period, jiffies))
+		} else if (time_before(grace_period_expire, jiffies)) {
 			nlmsvc_grace_period = 0;
+			continue;
+		} else
+			timeout = nlmsvc_timeout;
 
 		/*
 		 * Find a socket with data available and call its
@@ -349,7 +346,7 @@ cleanup_module(void)
  * Define NLM program and procedures
  */
 static struct svc_version	nlmsvc_version1 = {
-	1, 16, nlmsvc_procedures, NULL
+	1, 17, nlmsvc_procedures, NULL
 };
 static struct svc_version	nlmsvc_version3 = {
 	3, 24, nlmsvc_procedures, NULL

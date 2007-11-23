@@ -12,6 +12,7 @@
  *
  */
 #define __NO_VERSION__
+#include <linux/init.h>
 #include "hisax.h"
 #include "isdnl2.h"
 
@@ -1533,7 +1534,7 @@ l2_frame_error_reest(struct FsmInst *fi, int event, void *arg)
 	test_and_clear_bit(FLG_L3_INIT, &st->l2.flag);
 }
 
-static struct FsmNode L2FnList[] HISAX_INITDATA =
+static struct FsmNode L2FnList[] __initdata =
 {
 	{ST_L2_1, EV_L2_DL_ESTABLISH_REQ, l2_mdl_assign},
 	{ST_L2_2, EV_L2_DL_ESTABLISH_REQ, l2_go_st3},
@@ -1830,8 +1831,8 @@ releasestack_transl2(struct PStack *st)
 {
 }
 
-HISAX_INITFUNC(void
-Isdnl2New(void))
+void __init
+Isdnl2New(void)
 {
 	l2fsm.state_count = L2_STATE_COUNT;
 	l2fsm.event_count = L2_EVENT_COUNT;

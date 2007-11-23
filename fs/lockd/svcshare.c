@@ -95,14 +95,16 @@ nlmsvc_traverse_shares(struct nlm_host *host, struct nlm_file *file, int action)
 
 	shpp = &file->f_shares;
 	while ((share = *shpp) !=  NULL) {
+		if (host && host != share->s_host) {
+			shpp = &share->s_next;
+			continue;
+		}
 		if (action == NLM_ACT_MARK)
 			share->s_host->h_inuse = 1;
 		else if (action == NLM_ACT_UNLOCK) {
-			if (host == NULL || host == share->s_host) {
-				*shpp = share->s_next;
-				kfree(share);
-				continue;
-			}
+			*shpp = share->s_next;
+			kfree(share);
+			continue;
 		}
 		shpp = &share->s_next;
 	}

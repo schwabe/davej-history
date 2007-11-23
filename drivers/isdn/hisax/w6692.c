@@ -10,6 +10,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
 #define __NO_VERSION__
 #include "hisax.h"
 #include "w6692.h"
@@ -857,7 +858,7 @@ setstack_w6692(struct PStack *st, struct BCState *bcs)
 	return (0);
 }
 
-HISAX_INITFUNC(void initW6692(struct IsdnCardState *cs, int part))
+void __init initW6692(struct IsdnCardState *cs, int part)
 {
 	if (part & 1) {
 		cs->tqueue.routine = (void *) (void *) W6692_bh;

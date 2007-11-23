@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.140.6.1 2000/12/10 22:01:04 kai Exp $
+/* $Id: isdn_net.c,v 1.140.6.3 2001/02/07 11:31:30 kai Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -154,6 +154,7 @@ static __inline__ void isdn_net_dec_frame_cnt(isdn_net_local *lp)
 	if (!(isdn_net_device_busy(lp))) {
 		if (!skb_queue_empty(&lp->super_tx_queue)) {
 			queue_task(&lp->tqueue, &tq_immediate);
+			mark_bh(IMMEDIATE_BH);
 		} else {
 			isdn_net_device_wake_queue(lp);
 		}
@@ -181,7 +182,7 @@ static __inline__ void isdn_net_zero_frame_cnt(isdn_net_local *lp)
 int isdn_net_force_dial_lp(isdn_net_local *);
 static int isdn_net_start_xmit(struct sk_buff *, struct device *);
 
-char *isdn_net_revision = "$Revision: 1.140.6.1 $";
+char *isdn_net_revision = "$Revision: 1.140.6.3 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -986,6 +987,7 @@ void isdn_net_write_super(isdn_net_local *lp, struct sk_buff *skb)
 		// so we just queue the packet
 		skb_queue_tail(&lp->super_tx_queue, skb); 
 		queue_task(&lp->tqueue, &tq_immediate);
+ 		mark_bh(IMMEDIATE_BH);
 		return;
 	}
 
@@ -1340,7 +1342,7 @@ isdn_net_close(struct device *dev)
 /*
  * Get statistics
  */
-static struct enet_statistics *
+static struct net_device_stats *
 isdn_net_get_stats(struct device *dev)
 {
 	isdn_net_local *lp = (isdn_net_local *) dev->priv;
@@ -2312,6 +2314,7 @@ isdn_net_new(char *name, struct device *master)
 	memset(netdev, 0, sizeof(isdn_net_dev));
 	if (!(netdev->local = (isdn_net_local *) kmalloc(sizeof(isdn_net_local), GFP_KERNEL))) {
 		printk(KERN_WARNING "isdn_net: Could not allocate device locals\n");
+		kfree(netdev);
 		return NULL;
 	}
 	memset(netdev->local, 0, sizeof(isdn_net_local));
@@ -2353,7 +2356,7 @@ isdn_net_new(char *name, struct device *master)
 	netdev->local->netdev = netdev;
 	netdev->local->next = netdev->local;
 
-	memset(&netdev->local->tqueue, 0, sizeof(struct tq_struct));
+	netdev->local->tqueue.sync = 0;
 	netdev->local->tqueue.routine = isdn_net_softint;
 	netdev->local->tqueue.data = netdev->local;
 	spin_lock_init(&netdev->local->xmit_lock);

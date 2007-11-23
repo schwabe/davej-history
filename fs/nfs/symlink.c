@@ -57,19 +57,16 @@ struct inode_operations nfs_symlink_inode_operations = {
 /* Symlink caching in the page cache is even more simplistic
  * and straight-forward than readdir caching.
  */
-static int nfs_symlink_filler(struct dentry *dentry, struct page *page)
+static int nfs_symlink_filler(struct inode *inode, struct page *page)
 {
-	struct inode *inode = dentry->d_inode;
-	struct nfs_fattr fattr;
 	void * buffer = (void *)page_address(page);
 	unsigned int error;
 
 	/* We place the length at the beginning of the page,
 	 * in client byte order, followed by the string.
 	 */
-	error = NFS_CALL(readlink, inode, (dentry, &fattr, buffer,
-					   PAGE_CACHE_SIZE-sizeof(u32)-4));
-	nfs_refresh_inode(inode, &fattr);
+	error = NFS_PROTO(inode)->readlink(inode, buffer,
+					   PAGE_CACHE_SIZE-sizeof(u32)-4);
 	if (error < 0)
 		goto error;
 	flush_dcache_page(page_address(page)); /* Is this correct? */
@@ -90,7 +87,7 @@ static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 
 	/* Caller revalidated the directory inode already. */
 	page = read_cache_page(inode, 0,
-				(filler_t *)nfs_symlink_filler, dentry);
+				(filler_t *)nfs_symlink_filler, inode);
 	if (IS_ERR(page))
 		goto read_failed;
 
@@ -115,7 +112,7 @@ nfs_follow_link(struct dentry *dentry, struct dentry *base, unsigned int follow)
 
 	/* Caller revalidated the directory inode already. */
 	page = read_cache_page(inode, 0,
-				(filler_t *)nfs_symlink_filler, dentry);
+				(filler_t *)nfs_symlink_filler, inode);
 	if (IS_ERR(page))
 		goto read_failed;
 

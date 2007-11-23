@@ -679,7 +679,7 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 	fhp->fh_handle.fh_dev    = kdev_t_to_u32(parent->d_inode->i_dev);
 	fhp->fh_handle.fh_xdev   = kdev_t_to_u32(exp->ex_dev);
 	fhp->fh_handle.fh_xino   = ino_t_to_u32(exp->ex_ino);
-	fhp->fh_handle.fh_dcookie = (struct dentry *)0xfeebbaca;
+	fhp->fh_handle.fh_dcookie = 0xfeebbaca;
 	if (inode) {
 		fhp->fh_handle.fh_ino = ino_t_to_u32(inode->i_ino);
 		fhp->fh_handle.fh_generation = inode->i_generation;

@@ -138,18 +138,15 @@ nlmclnt_grant(struct nlm_lock *lock)
 void
 nlmclnt_recovery(struct nlm_host *host, u32 newstate)
 {
-	if (!host->h_reclaiming++) {
+	if (host->h_reclaiming++) {
 		if (host->h_nsmstate == newstate)
 			return;
 		printk(KERN_WARNING
 			"lockd: Uh-oh! Interfering reclaims for host %s",
 			host->h_name);
-		host->h_monitored = 0;
 		host->h_nsmstate = newstate;
 		host->h_state++;
-		nlm_release_host(host);
 	} else {
-		host->h_monitored = 0;
 		host->h_nsmstate = newstate;
 		host->h_state++;
 		nlm_get_host(host);
@@ -168,7 +165,11 @@ reclaimer(void *ptr)
 	/* This one ensures that our parent doesn't terminate while the
 	 * reclaim is in progress */
 	lock_kernel();
+	daemonize();
+
 	lockd_up();
+
+	exit_files(current);
 
 	/* First, reclaim all locks that have been granted previously. */
 	do {

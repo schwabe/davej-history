@@ -14,6 +14,7 @@
 
 #define __NO_VERSION__
 #include <linux/config.h>
+#include <linux/init.h>
 #include "hisax.h"
 #include "isac.h"
 #include "hscx.h"
@@ -234,10 +235,10 @@ niccy_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-static 	struct pci_dev *niccy_dev __initdata = NULL;
+static struct pci_dev *niccy_dev __initdata = NULL;
 
-__initfunc(int
-setup_niccy(struct IsdnCard *card))
+int __init
+setup_niccy(struct IsdnCard *card)
 {
 	struct IsdnCardState *cs = card->cs;
 	char tmp[64];
