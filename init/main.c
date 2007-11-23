@@ -610,6 +610,7 @@ static void parse_root_dev(char * line)
 		const int num;
 	} devices[] = {
 		{ "nfs",     0x00ff },
+		{ "loop",    0x0700 },
 		{ "hda",     0x0300 },
 		{ "hdb",     0x0340 },
 		{ "hdc",     0x1600 },

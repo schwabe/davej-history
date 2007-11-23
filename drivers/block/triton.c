@@ -523,5 +523,5 @@ void ide_init_promise (byte bus, byte fn, ide_hwif_t *hwif0, ide_hwif_t *hwif1, 
 	init_triton_dma(hwif1, bmiba + 0x08);
 	return;
 abort:
-	printk("ide: Promise/33 not configured correctly (BIOS)\n");
+	printk(KERN_WARNING "ide: Promise/33 not configured correctly (BIOS)\n");
 }

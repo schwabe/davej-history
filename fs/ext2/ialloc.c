@@ -294,7 +294,10 @@ struct inode * ext2_new_inode (const struct inode * dir, int mode, int * err)
 	struct ext2_super_block * es;
 
 	if (!dir || !(inode = get_empty_inode ()))
+	{
+		*err=-ENOMEM;
 		return NULL;
+	}
 	sb = dir->i_sb;
 	inode->i_sb = sb;
 	inode->i_flags = sb->s_flags;

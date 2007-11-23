@@ -265,14 +265,15 @@ static int swap_out_process(struct task_struct * p, int dma, int wait, int can_d
 	 * Go through process' page directory.
 	 */
 	address = p->swap_address;
-	p->swap_address = 0;
 
 	/*
 	 * Find the proper vm-area
 	 */
 	vma = find_vma(p->mm, address);
-	if (!vma)
+	if (!vma) {
+		p->swap_address = 0;
 		return 0;
+	}
 	if (address < vma->vm_start)
 		address = vma->vm_start;
 

@@ -374,6 +374,7 @@ ret_from_sys_call:
 	jne signal_return
 2:	RESTORE_ALL
 	ALIGN
+	.globl signal_return
 signal_return:
 	movl %esp,%ecx
 	pushl %ecx

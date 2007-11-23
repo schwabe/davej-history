@@ -925,6 +925,15 @@ void rt_free(struct rtable * rt)
 static __inline__ void rt_kick_free_queue(void)
 {
 	struct rtable *rt, **rtp;
+#if RT_CACHE_DEBUG >= 2
+	static int in = 0;
+
+	if(in) {
+		printk("Attempted multiple entry: rt_kick_free_queue\n");
+		return;
+	}
+	in++;
+#endif
 
 	ip_rt_bh_mask &= ~RT_BH_FREE;
 
@@ -952,6 +961,9 @@ static __inline__ void rt_kick_free_queue(void)
 		}
 		rtp = &rt->rt_next;
 	}
+#if RT_CACHE_DEBUG >= 2
+	in--;
+#endif
 }
 
 void ip_rt_run_bh()
@@ -974,8 +986,11 @@ void ip_rt_run_bh()
 			ip_rt_fast_unlock();
 		}
 
-		if (ip_rt_bh_mask & RT_BH_FREE)
+		if (ip_rt_bh_mask & RT_BH_FREE) {
+			ip_rt_fast_lock();
 			rt_kick_free_queue();
+			ip_rt_fast_unlock();
+		}
 	}
 	restore_flags(flags);
 }
@@ -1528,12 +1543,10 @@ struct rtable * ip_rt_slow_route (__u32 daddr, int local, struct device *dev)
 
 void ip_rt_put(struct rtable * rt)
 {
-	if (rt)
-		atomic_dec(&rt->rt_refcnt);
-	
-	/* If this rtable entry is not in the cache, we'd better free it once the
-	 * refcnt goes to zero, because nobody else will... */
-	if ( rt && (rt->rt_flags & RTF_NOTCACHED) && (!rt->rt_refcnt) )
+	/* If this rtable entry is not in the cache, we'd better free
+	 * it once the refcnt goes to zero, because nobody else will.
+	 */
+	if (rt&&atomic_dec_and_test(&rt->rt_refcnt)&&(rt->rt_flags&RTF_NOTCACHED))
 		rt_free(rt);
 }
 

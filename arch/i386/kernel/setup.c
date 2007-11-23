@@ -50,7 +50,7 @@ char x86_vendor_id[13] = "unknown";
 
 unsigned char Cx86_step = 0;
 static const char *Cx86_type[] = {
-	"unknown", "1.3", "1.4", "2.4", "2.5", "2.6", "2.7 or 3.7", "4.2"
+	"unknown", "1.3", "1.4", "1.5", "1.6", "2.4", "2.5", "2.6", "2.7 or 3.7", "4.2"
 	};
 
 char ignore_irq13 = 0;		/* set if exception 16 works */

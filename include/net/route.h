@@ -131,12 +131,10 @@ extern __inline__ unsigned ip_rt_hash_code(__u32 addr)
 extern __inline__ void ip_rt_put(struct rtable * rt)
 #ifndef MODULE
 {
-	if (rt)
-		atomic_dec(&rt->rt_refcnt);
-
-	/* If this rtable entry is not in the cache, we'd better free it once the
-	 * refcnt goes to zero, because nobody else will... */
-	if ( rt && (rt->rt_flags & RTF_NOTCACHED) && (!rt->rt_refcnt) )
+	/* If this rtable entry is not in the cache, we'd better free
+	 * it once the refcnt goes to zero, because nobody else will.
+	 */
+	if (rt&&atomic_dec_and_test(&rt->rt_refcnt)&&(rt->rt_flags&RTF_NOTCACHED))
 		rt_free(rt);
 }
 #else
