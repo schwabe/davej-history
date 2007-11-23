@@ -8,6 +8,8 @@
 #ifndef _NCPLIB_H
 #define _NCPLIB_H
 
+#include <linux/config.h>
+
 #include <linux/fs.h>
 #include <linux/ncp.h>
 #include <linux/ncp_fs.h>
@@ -22,6 +24,9 @@
 
 #include <linux/ncp.h>
 
+int
+ncp_negotiate_size_and_options(struct ncp_server *server, int size,
+ 			  int options, int *ret_size, int *ret_options);
 int
 ncp_negotiate_buffersize(struct ncp_server *server, int size,
 			 int *target);
@@ -165,5 +170,22 @@ ncp_ren_or_mov_file_or_subdir(struct ncp_server *server,
 			      struct nw_info_struct *old_dir, char *old_name,
 			      struct nw_info_struct *new_dir, char *new_name);
 
+#ifdef CONFIG_NCPFS_IOCTL_LOCKING
+int
+ncp_LogPhysicalRecord(struct ncp_server *server,
+		      const char *file_id, __u8 locktype,
+		      __u32 offset, __u32 length, __u16 timeout);
+
+int
+ncp_ClearPhysicalRecord(struct ncp_server *server,
+			const char *file_id,
+			__u32 offset, __u32 length);
+#endif	/* CONFIG_NCPFS_IOCTL_LOCKING */
+
+#ifdef CONFIG_NCPFS_MOUNT_SUBDIR
+int
+ncp_mount_subdir(struct ncp_server* server, __u8 volNumber, 
+		 __u8 srcNS, __u32 srcDirEntNum);
+#endif	/* CONFIG_NCPFS_MOUNT_SUBDIR */
 
 #endif /* _NCPLIB_H */

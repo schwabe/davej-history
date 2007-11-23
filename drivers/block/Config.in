@@ -11,6 +11,9 @@ if [ "$CONFIG_BLK_DEV_IDE" = "n" ]; then
   bool 'Old harddisk (MFM/RLL/IDE) driver' CONFIG_BLK_DEV_HD_ONLY
 else
   bool '   Use old disk-only driver on primary interface' CONFIG_BLK_DEV_HD_IDE
+  if [ "$CONFIG_BLK_DEV_HD_IDE" != "n" ]; then
+    bool '     Use multi-mode by default' CONFIG_IDEDISK_MULTI_MODE
+  fi
   bool '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD
   bool '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE
   bool '   Include IDE/ATAPI FLOPPY support (new)' CONFIG_BLK_DEV_IDEFLOPPY
@@ -60,7 +63,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
   bool 'Mylex DAC960 PCI RAID Controller support' CONFIG_BLK_DEV_DAC960
 fi
 
-bool 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
+tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
 if [ "$CONFIG_BLK_CPQ_DA" = "y" -o "$CONFIG_BLK_CPQ_DA" = "m" ]; then
   bool '   Support for PCI SMART-2 Controllers' CONFIG_BLK_CPQ_DA_PCI
   bool '   Support for EISA SMART-2 Controllers' CONFIG_BLK_CPQ_DA_EISA

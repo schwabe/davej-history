@@ -35,6 +35,7 @@
 #include <linux/proc_fs.h>
 #include <linux/hdreg.h>
 #include <asm/io.h>
+#include <asm/bitops.h>
 
 #ifdef MODULE
 #include <linux/module.h>
@@ -42,10 +43,9 @@
 #else
 #define MOD_INC_USE_COUNT
 #define MOD_DEC_USE_COUNT
-extern struct inode_operations proc_diskarray_inode_operations;
 #endif
 
-#define DRIVER_NAME "Compaq SMART2 Driver (v 0.9.7)"
+#define DRIVER_NAME "Compaq SMART2 Driver (v 0.9.8)"
 
 #define MAJOR_NR COMPAQ_SMART2_MAJOR
 #include <linux/blk.h>
@@ -57,6 +57,7 @@ extern struct inode_operations proc_diskarray_inode_operations;
 #include "ida_ioctl.h"
 
 #define READ_AHEAD	128
+#define NR_CMDS	64
 
 #define MAX_CTLR	8
 #define CTLR_SHIFT	8
@@ -70,6 +71,15 @@ static
 #endif
 int eisa[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
+
+static char *product_names[] = {
+	"Unknown",
+	"SMART-2/E",
+	"SMART-2/P", /* or SMART-2DH */
+	"SMART-2SL",
+	"SMART-3200",
+	"SMART-3100ES",
+};
 
 static struct hd_struct * ida;
 static int * ida_sizes;
@@ -88,12 +98,6 @@ static struct gendisk ida_gendisk[MAX_CTLR];
 #define DBGP(s) s
 /* Debug Extra Paranoid... */
 #define DBGPX(s)
-
-#undef PROFILE_REQUESTS
-#ifdef PROFILE_REQUESTS
-#define PF_REQ_SCALE	200000000UL
-#endif /* PROFILE_REQUESTS */
-
 
 void cpqarray_init(void);
 #ifdef CONFIG_BLK_CPQ_DA_PCI
@@ -230,10 +234,10 @@ struct file_operations ida_fops  = {
 
 
 /*
- * Get us a file in /proc that says something about each controller.  Right
- * now, we add entries to /proc, but in the future we should probably get
- * our own subdir in /proc (/proc/array/ida) and put our stuff in there.
+ * Place some files in /proc/array/* that contain some information about
+ * each controller.  There really isn't much useful in there now.
  */
+extern struct inode_operations proc_diskarray_inode_operations;
 struct proc_dir_entry *proc_array = NULL;
 static void ida_procinit(int i)
 {
@@ -292,9 +296,9 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset, int lengt
 	if ((h = hba[ctlr]) == NULL)
 		return 0;
 
-	size = sprintf(buffer, "%s:  Compaq SMART/2 Disk Array Controller\n"
+	size = sprintf(buffer, "%s:  Compaq %s Disk Array Controller\n"
 		"       Board ID: %08lx\n"
-		"       Firmware Revision: %08lx\n"
+		"       Firmware Revision: %c%c%c%c\n"
 		"       Controller Sig: %08lx\n"
 		"       Memory Address: %08lx\n"
 		"       I/O Port: %04x\n"
@@ -302,14 +306,15 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset, int lengt
 		"       Logical drives: %d\n"
 		"       Physical drives: %d\n\n"
 		"       Current Q depth: %d\n"
-		"       Max Q depth: %d\n"
 		"       Max Q depth since init: %d\n\n",
-		h->devname, (unsigned long)h->board_id,
-		(unsigned long)h->firm_rev,
+		h->devname,
+		product_names[h->product],
+		(unsigned long)h->board_id,
+		h->firm_rev[0], h->firm_rev[1], h->firm_rev[2], h->firm_rev[3],
 		(unsigned long)h->ctlr_sig, (unsigned long)h->vaddr,
 		(unsigned int) h->ioaddr, (unsigned int)h->intr,
 		h->log_drives, h->phys_drives,
-		h->Qdepth, h->maxQ, h->maxQsinceinit);
+		h->Qdepth, h->maxQsinceinit);
 
 	pos += size; len += size;
 	
@@ -347,15 +352,6 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset, int lengt
 
 	size = sprintf(buffer+len, "\n"); pos += size; len += size;
 #endif
-#ifdef PROFILE_REQUESTS
-	size = sprintf(buffer+len,
-			"Request latencies (min/avg/max) = (%d, %d, %d) %d requests\n",
-			(h->min_latency),
-			(h->avg_latency),
-			(h->max_latency),
-			h->nr_requests);
-	pos += size; len += size;
-#endif /* PROFILE_REQUESTS */
 	size = sprintf(buffer+len,"nr_allocs = %d\nnr_frees = %d\n",
 			h->nr_allocs, h->nr_frees);
 	pos += size; len += size;
@@ -370,7 +366,6 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset, int lengt
 #ifdef MODULE
 /* This is a hack... */
 #include "proc_array.c"
-
 int init_module(void)
 {
 	int i, j;
@@ -396,9 +391,11 @@ void cleanup_module(void)
 		free_irq(hba[i]->intr, hba[i]);
 		vfree((void*)hba[i]->vaddr);
 		unregister_blkdev(MAJOR_NR+i, hba[i]->devname);
+		del_timer(&hba[i]->timer);
 		proc_unregister(proc_array,
 			((struct proc_dir_entry*)hba[i]->proc)->low_ino);
-		del_timer(&hba[i]->timer);
+		kfree(hba[i]->cmd_pool);
+		kfree(hba[i]->cmd_pool_bits);
 
 		if (gendisk_head == &ida_gendisk[i]) {
 			gendisk_head = ida_gendisk[i].next;
@@ -498,15 +495,18 @@ void cpqarray_init(void)
 			continue;
 		}
 
-		printk("Finding drives on %s\n", hba[i]->devname);
+		hba[i]->cmd_pool = (cmdlist_t*)kmalloc(
+				NR_CMDS*sizeof(cmdlist_t), GFP_KERNEL);
+		hba[i]->cmd_pool_bits = (__u32*)kmalloc(
+				((NR_CMDS+31)/32)*sizeof(__u32), GFP_KERNEL);
+		memset(hba[i]->cmd_pool, 0, NR_CMDS*sizeof(cmdlist_t));
+		memset(hba[i]->cmd_pool_bits, 0, ((NR_CMDS+31)/32)*sizeof(__u32));
+
+		printk("Finding drives on %s", hba[i]->devname);
 		getgeometry(i);
 
 		smart2_write(FIFO_NOT_EMPTY, hba[i], INTR_MASK);
 
-		hba[i]->maxQ = 32;
-#ifdef PROFILE_REQUESTS
-		hba[i]->min_latency=0xffffffff;
-#endif
 		ida_procinit(i);
 
 		ida_gendisk[i].major = MAJOR_NR + i;
@@ -555,6 +555,11 @@ static int cpqarray_pci_detect(void)
 			break;
 
 		if (index == 1000000) break;
+		if (nr_ctlr == 8) {
+			printk("This driver supports a maximum of "
+				"8 controllers.\n");
+			break;
+		}
 		
 		hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
 		memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
@@ -664,6 +669,11 @@ static int cpqarray_eisa_detect(void)
 
 	while(i<16 && eisa[i]) {
 		if (inl(eisa[i]+0xC80) == 0x3040110e) {
+			if (nr_ctlr == 8) {
+				printk("This driver supports a maximum of "
+					"8 controllers.\n");
+				break;
+			}
 			hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
 			memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
 			hba[nr_ctlr]->ioaddr = eisa[i];
@@ -785,15 +795,11 @@ void do_ida_request(int ctlr)
 		goto doreq_done;
 	}
 
-	if (h->Qdepth >= h->maxQ)
-		goto doreq_done;
-
 	if ((c = cmd_alloc(h, 1)) == NULL)
 		goto doreq_done;
 
 	blk_dev[MAJOR_NR+ctlr].current_request = creq->next;
 	creq->rq_status = RQ_INACTIVE;
-	wake_up(&wait_for_request);
 
 	bh = creq->bh;
 
@@ -831,15 +837,13 @@ void do_ida_request(int ctlr)
 
 	c->req.hdr.cmd = (creq->cmd == READ) ? IDA_READ : IDA_WRITE;
 	c->type = CMD_RWREQ;
-#ifdef PROFILE_REQUESTS
-	c->start_time = rdtsc();
-#endif /* PROFILE_REQUESTS */
 
 	/* Put the request on the tail of the request queue */
 	addQ(&h->reqQ, c);
 	h->Qdepth++;
 	if (h->Qdepth > h->maxQsinceinit) h->maxQsinceinit = h->Qdepth;
 
+	wake_up(&wait_for_request);
 doreq_done:
 	start_io(h);
 }
@@ -958,13 +962,6 @@ void do_ida_intr(int irq, void *dev_id, struct pt_regs *regs)
 			if (c->busaddr == a) {
 				removeQ(&h->cmpQ, c);
 				if (c->type == CMD_RWREQ) {
-#ifdef PROFILE_REQUESTS
-	unsigned int finish = (rdtsc() - c->start_time);
-	if (finish < h->min_latency) h->min_latency = finish;
-	if (finish > h->max_latency) h->max_latency = finish;
-	h->avg_latency = (h->avg_latency*h->nr_requests + finish) /
-				++h->nr_requests;
-#endif /* PROFILE_REQUESTS */
 					complete_command(c, 0);
 					cmd_free(h, c);
 				} else if (c->type == CMD_IOCTL_PEND) {
@@ -1201,13 +1198,15 @@ ioctl_err_exit:
 cmdlist_t * cmd_alloc(ctlr_info_t *h, int intr)
 {
 	cmdlist_t * c;
+	int i;
 
-	if (h->nr_allocs - h->nr_frees > 128)
-		return NULL;
+	do {
+		i = find_first_zero_bit(h->cmd_pool_bits, NR_CMDS);
+		if (i == NR_CMDS)
+			return NULL;
+	} while(set_bit(i%32, h->cmd_pool_bits+(i/32)) != 0);
 
-	c = kmalloc(sizeof(cmdlist_t), (intr) ? GFP_ATOMIC : GFP_KERNEL);
-	if (c == NULL)
-		return NULL;
+	c = h->cmd_pool + i;
 	memset(c, 0, sizeof(cmdlist_t));
 	c->busaddr = virt_to_bus(c);
 	h->nr_allocs++;
@@ -1216,8 +1215,9 @@ cmdlist_t * cmd_alloc(ctlr_info_t *h, int intr)
 
 void cmd_free(ctlr_info_t *h, cmdlist_t *c)
 {
+	int i = c - h->cmd_pool;
+	clear_bit(i%32, h->cmd_pool_bits+(i/32));
 	h->nr_frees++;
-	kfree(c);
 }
 
 /***********************************************************************
@@ -1539,8 +1539,34 @@ void getgeometry(int ctlr)
 		goto geo_ret;	/* release the buf and return */
 	}
 	info_p->log_drives = id_ctlr_buf->nr_drvs;;
-	info_p->firm_rev = id_ctlr_buf->firm_rev;
+	*(__u32*)(info_p->firm_rev) = *(__u32*)(id_ctlr_buf->firm_rev);
 	info_p->ctlr_sig = id_ctlr_buf->cfg_sig;
+	info_p->board_id = id_ctlr_buf->board_id;
+
+	switch(info_p->board_id) {
+		case 0x0E114030: /* SMART-2/E */
+			info_p->product = 1;
+			break;
+		case 0x40300E11: /* SMART-2/P or SMART-2DH */
+			info_p->product = 2;
+			break;
+		case 0x40310E11: /* SMART-2SL */
+			info_p->product = 3;
+			break;
+		case 0x40320E11: /* SMART-3200 */
+			info_p->product = 4;
+			break;
+		case 0x40330E11: /* SMART-3100ES */
+			info_p->product = 5;
+			break;
+		default:  
+			/*
+			 * Well, its a SMART-2 or better, don't know which
+			 * kind.
+ 			 */
+			info_p->product = 0;
+	}
+	printk(" (%s)\n", product_names[info_p->product]);
 	/*
 	 * Initialize logical drive map to zero
 	 */
@@ -1551,6 +1577,11 @@ void getgeometry(int ctlr)
 	/*
 	 * Get drive geometry for all logical drives
 	 */
+	if (id_ctlr_buf->nr_drvs > 16)
+		printk("ida%d:  This driver supports 16 logical drives "
+			"per controller.  Additional drives will not be "
+			"detected.\n", ctlr);
+
 	for (log_unit = 0;
 	     (log_index < id_ctlr_buf->nr_drvs)
 	     && (log_unit < NWD);

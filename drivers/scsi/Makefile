@@ -427,11 +427,8 @@ tmscsim.o : tmscsim.c
 g_NCR5380.o: g_NCR5380.c
 	$(CC) $(CFLAGS) -DGENERIC_NCR5380_OVERRIDE="{{(NCR5380_map_type)0x350,5,0, BOARD_NCR53C400}};" -c g_NCR5380.c
 
-initio.o: ini9100u.c i91uscsi.c
-	$(CC) $(CFLAGS) -c ini9100u.c -o ini9100u.o
-	$(CC) $(CFLAGS) -c i91uscsi.c -o i91uscsi.o
+initio.o: ini9100u.o i91uscsi.o
 	$(LD) -r -o initio.o ini9100u.o i91uscsi.o
-	rm -f ini9100u.o i91uscsi.o
 
 megaraid.o: megaraid.c
 	$(CC) $(CFLAGS) -c megaraid.c

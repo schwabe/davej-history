@@ -173,6 +173,15 @@ CONFIG_BLK_DEV_HD_IDE
   addresses.  Normally, just say N here; you will then use the new
   driver for all 4 interfaces.
 
+Use multi-mode by default
+CONFIG_IDEDISK_MULTI_MODE
+  If you get this error, try to enable this option.
+
+  hda: set_multmode: status=0x51 { DriveReady SeekComplete Error }
+  hda: set_multmode: error=0x04 { DriveStatusError }
+
+  If in doubt, say N.
+
 Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
   If you have a CDROM drive using the ATAPI protocol, say Y.  ATAPI is
@@ -3912,15 +3921,61 @@ CONFIG_SMB_WIN95
 NCP filesystem support (to mount NetWare volumes)
 CONFIG_NCP_FS
   NCP (NetWare Core Protocol) is a protocol that runs over IPX and is
-  used by Novel NetWare clients to talk to file servers. It is to IPX
-  what NFS is to TCP/IP, if that helps. Enabling this option allows
-  you to mount NetWare file server volumes and to access them just
-  like any other Unix directory. For details, please read the file
+  used by Novell NetWare clients to talk to file servers. It is to IPX
+  what NFS is to TCP/IP, if that helps. Saying Y here allows you to
+  mount NetWare file server volumes and to access them just like any
+  other Unix directory. For details, please read the file
   Documentation/filesystems/ncpfs.txt in the kernel source and the
-  IPX-HOWTO on sunsite.unc.edu:/pub/Linux/docs/howto.  If you want to
-  compile this as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt.
+  IPX-HOWTO on ftp://sunsite.unc.edu:/pub/Linux/docs/howto.
+  You do not have to say Y here if you want your Linux box to act as a
+  file *server* for Novell NetWare clients.
+  General information about how to connect Linux, Windows machines and
+  Macs is on the WWW at http://www.eats.com/linux_mac_win.html (to
+  browse the WWW, you need to have access to a machine on the Internet
+  that has a program like lynx or netscape).
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called ncpfs.o. Say N unless you are connected to a Novell network.
+
+Packet signatures
+CONFIG_NCPFS_PACKET_SIGNING
+  NCP allows packets to be signed for stronger security. If you want
+  security, say Y. Normal users can leave it off. To be able to use
+  packet signing you must use ncpfs > 2.0.12.
+
+Proprietary file locking
+CONFIG_NCPFS_IOCTL_LOCKING
+  Allows locking of records on remote volumes. Say N unless you have
+  special applications which are able to utilize this locking scheme.
+
+Clear remove/delete inhibit when needed
+CONFIG_NCPFS_STRONG
+  Allows manipulation of files flagged as Delete or Rename Inhibit. To
+  use this feature you must mount volumes with the ncpmount parameter
+  "-s" (ncpfs-2.0.12 and newer). Say Y unless you are not mounting
+  volumes with -f 444.
+
+Use NFS namespace when available
+CONFIG_NCPFS_NFS_NS
+  Allows you to utilize NFS namespace on NetWare servers. It brings
+  you case sensitive filenames. Say Y. You can disable it at
+  mount-time with the `-N nfs' parameter of ncpmount.
+
+Use OS2/LONG namespace when available
+CONFIG_NCPFS_OS2_NS
+  Allows you to utilize OS2/LONG namespace on NetWare servers.
+  Filenames in this namespace are limited to 255 characters, they are
+  case insensitive, and case in names is preserved. Say Y. You can
+  disable it at mount time with the -N os2 parameter of ncpmount.
+
+Allow mounting of volume subdirectories
+CONFIG_NCPFS_MOUNT_SUBDIR
+  Allows you to mount not only whole servers or whole volumes, but
+  also subdirectories from a volume. It can be used to reexport data
+  and so on. There is no reason to say N, so Y is recommended unless
+  you count every byte.
+  To utilize this feature you must use ncpfs-2.0.12 or newer.
 
 Amiga FFS filesystem support (EXPERIMENTAL)
 CONFIG_AFFS_FS

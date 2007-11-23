@@ -1,0 +1,1 @@
+st.o sr_mod.o sg.o advansys.o ppa.o qlogicfas.o qlogicisp.o atp870u.o initio.o aha152x.o aha1542.o aha1740.o aic7xxx.o tmscsim.o AM53C974.o eata_dma.o eata_pio.o u14-34f.o gdth.o fdomain.o in2000.o g_NCR5380.o 53c7,8xx.o ncr53c8xx.o pas16.o seagate.o wd7000.o t128.o dtc.o ultrastor.o eata.o NCR53c406a.o sym53c416.o megaraid.o

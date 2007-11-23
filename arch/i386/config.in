@@ -22,7 +22,7 @@ mainmenu_option next_comment
 comment 'General setup'
 
 bool 'Kernel math emulation' CONFIG_MATH_EMULATION
-choice 'Nemory configuration' \
+choice 'Memory configuration' \
 	"Standard	CONFIG_MEM_STD	\
 	 Enterprise	CONFIG_MEM_ENT	\
 	 Custom		CONFIG_MEM_SPECIAL" Standard

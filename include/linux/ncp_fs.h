@@ -29,7 +29,7 @@ struct ncp_ioctl_request {
 struct ncp_fs_info {
 	int    version;
 	struct sockaddr_ipx addr;
-	uid_t  mounted_uid;
+	__kernel_uid_t  mounted_uid;
 	int    connection;	/* Connection number the server assigned us */
 	int    buffer_size;	/* The negotiated buffer size, to be
 				   used for read/write requests! */
@@ -38,13 +38,50 @@ struct ncp_fs_info {
 	__u32  directory_id;
 };	
 
+struct ncp_sign_init
+{
+	char sign_root[8];
+	char sign_last[16];
+};
+
+struct ncp_lock_ioctl
+{
+#define NCP_LOCK_LOG	0
+#define NCP_LOCK_SH	1
+#define NCP_LOCK_EX	2
+#define NCP_LOCK_CLEAR	256
+	int		cmd;
+	int		origin;
+	unsigned int	offset;
+	unsigned int	length;
+#define NCP_LOCK_DEFAULT_TIMEOUT	18
+#define NCP_LOCK_MAX_TIMEOUT		180
+	int		timeout;
+};
+
+struct ncp_setroot_ioctl
+{
+	int		volNumber;
+	int		namespace;
+	__u32		dirEntNum;
+};
+
 #define	NCP_IOC_NCPREQUEST		_IOR('n', 1, struct ncp_ioctl_request)
-#define	NCP_IOC_GETMOUNTUID		_IOW('n', 2, uid_t)
+#define	NCP_IOC_GETMOUNTUID		_IOW('n', 2, __kernel_uid_t)
+#define NCP_IOC_GETMOUNTUID_INT		_IOW('n', 2, unsigned int)
 #define NCP_IOC_CONN_LOGGED_IN          _IO('n', 3)
 
 #define NCP_GET_FS_INFO_VERSION (1)
 #define NCP_IOC_GET_FS_INFO             _IOWR('n', 4, struct ncp_fs_info)
 
+#define NCP_IOC_SIGN_INIT		_IOR('n', 5, struct ncp_sign_init)
+#define NCP_IOC_SIGN_WANTED		_IOR('n', 6, int)
+#define NCP_IOC_SET_SIGN_WANTED		_IOW('n', 6, int)
+
+#define NCP_IOC_LOCKUNLOCK		_IOR('n', 7, struct ncp_lock_ioctl)
+
+#define NCP_IOC_GETROOT			_IOW('n', 8, struct ncp_setroot_ioctl)
+#define NCP_IOC_SETROOT			_IOR('n', 8, struct ncp_setroot_ioctl)
 /*
  * The packet size to allocate. One page should be enough.
  */
@@ -142,6 +179,7 @@ int ncp_ioctl (struct inode * inode, struct file * filp,
                unsigned int cmd, unsigned long arg);
 
 /* linux/fs/ncpfs/inode.c */
+int ncp_notify_change(struct inode *inode, struct iattr *attr);
 struct super_block *ncp_read_super(struct super_block *sb,
                                    void *raw_data, int silent);
 extern int init_ncp_fs(void);

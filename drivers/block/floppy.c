@@ -522,7 +522,7 @@ static unsigned char current_drive = 0;
 static long current_count_sectors = 0;
 static unsigned char sector_t; /* sector in track */
 static unsigned char in_sector_offset; /* offset within physical sector,
-										* expressed in units of 512 bytes */
+                                        * expressed in units of 512 bytes */
 
 #ifndef fd_eject
 #define fd_eject(x) -EINVAL

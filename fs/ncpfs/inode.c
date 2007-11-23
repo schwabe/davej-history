@@ -32,7 +32,6 @@ static void ncp_put_inode(struct inode *);
 static void ncp_read_inode(struct inode *);
 static void ncp_put_super(struct super_block *);
 static void ncp_statfs(struct super_block *sb, struct statfs *buf, int bufsiz);
-static int ncp_notify_change(struct inode *inode, struct iattr *attr);
 
 static struct super_operations ncp_sops = {
 	ncp_read_inode,         /* read inode */
@@ -83,6 +82,9 @@ ncp_read_inode(struct inode *inode)
 	else
 	{
                 inode->i_mode = NCP_SERVER(inode)->m.file_mode;
+#if 1
+                if (NCP_ISTRUCT(inode)->attributes & /* 0x60001 incl. DiRi */ 1) inode->i_mode &= ~0222;
+#endif
 		inode->i_size = NCP_ISTRUCT(inode)->dataStreamSize;
 	}
 
@@ -144,10 +146,11 @@ ncp_put_inode(struct inode *inode)
 	 */
 	lock_super(sb);
 
-	if (inode->i_count > 1) {
-printk("ncp_put_inode: inode in use device %s, inode %ld, count=%ld\n", 
-kdevname(inode->i_dev), inode->i_ino, inode->i_count);
-		goto unlock;
+	if (inode->i_count > 1)
+        {
+                printk("ncp_put_inode: inode in use device %s, inode %ld, count=%ld\n", 
+                       kdevname(inode->i_dev), inode->i_ino, inode->i_count);
+                goto unlock;
 	}
 	
 	DDPRINTK("ncp_put_inode: put %s\n",
@@ -198,6 +201,9 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	struct file *msg_filp;
 	kdev_t dev = sb->s_dev;
 	int error;
+#ifdef CONFIG_NCPFS_PACKET_SIGNING
+	int options;
+#endif
 
 	if (data == NULL)
 	{
@@ -274,7 +280,10 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
         server->packet      = NULL;
 	server->buffer_size = 0;
 	server->conn_status = 0;
-
+#ifdef CONFIG_NCPFS_PACKET_SIGNING
+	server->sign_wanted = 0;
+	server->sign_active = 0;
+#endif
         server->m = *data;
 	server->m.file_mode = (server->m.file_mode &
 			       (S_IRWXU|S_IRWXG|S_IRWXO)) | S_IFREG;
@@ -342,6 +351,29 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
                 goto disconnect;
 	}
 
+#ifdef CONFIG_NCPFS_PACKET_SIGNING
+	if (ncp_negotiate_size_and_options(server, NCP_DEFAULT_BUFSIZE,
+		NCP_DEFAULT_OPTIONS, &(server->buffer_size), &options) == 0)
+	{
+		if (options != NCP_DEFAULT_OPTIONS)
+		{
+			if (ncp_negotiate_size_and_options(server, 
+				NCP_DEFAULT_BUFSIZE,
+				options & 2, 
+				&(server->buffer_size), &options) != 0)
+				
+			{
+				sb->s_dev = 0;
+				printk("ncp_read_super: "
+					"could not set options\n");
+				goto disconnect;
+			}
+		}
+		if (options & 2)
+			server->sign_wanted = 1;
+	}
+	else 
+#endif	/* CONFIG_NCPFS_PACKET_SIGNING */
 	if (ncp_negotiate_buffersize(server, NCP_DEFAULT_BUFSIZE,
 				     &(server->buffer_size)) != 0)
 	{
@@ -449,7 +481,7 @@ ncp_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	memcpy_tofs(buf, &tmp, bufsiz);
 }
 
-static int
+int
 ncp_notify_change(struct inode *inode, struct iattr *attr)
 {
 	int result = 0;
@@ -479,6 +511,33 @@ ncp_notify_change(struct inode *inode, struct iattr *attr)
 
 	info_mask = 0;
 	memset(&info, 0, sizeof(info));
+
+#if 1 
+        if ((attr->ia_valid & ATTR_MODE) != 0)
+        {
+                if (NCP_ISTRUCT(inode)->attributes & aDIR)
+                {
+                        return -EPERM;
+                }
+                else
+                {
+			umode_t newmode;
+
+                        info_mask |= DM_ATTRIBUTES;
+                        newmode=attr->ia_mode;
+                        newmode &= NCP_SERVER(inode)->m.file_mode;
+
+                        if (newmode & 0222) /* any write bit set */
+                        {
+                                info.attributes &= ~0x60001;
+                        }
+                        else
+                        {
+                                info.attributes |= 0x60001;
+                        }
+                }
+        }
+#endif
 
 	if ((attr->ia_valid & ATTR_CTIME) != 0)
 	{

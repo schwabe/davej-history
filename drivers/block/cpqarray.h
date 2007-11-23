@@ -63,7 +63,8 @@ typedef struct {
 	__u32	drv_spare_map;
 	__u32	mp_failed_drv_map;
 
-	int	firm_rev;
+	char	firm_rev[4];
+	int	product;
 	int	ctlr_sig;
 
 	int	log_drives;
@@ -80,13 +81,11 @@ typedef struct {
 
 	cmdlist_t *reqQ;
 	cmdlist_t *cmpQ;
+	cmdlist_t *cmd_pool;
+	__u32	*cmd_pool_bits;
 	unsigned int Qdepth;
-	unsigned int maxQ;
 	unsigned int maxQsinceinit;
 
-	unsigned int min_latency;
-	unsigned int avg_latency;
-	unsigned int max_latency;
 	unsigned int nr_requests;
 	unsigned int nr_allocs;
 	unsigned int nr_frees;

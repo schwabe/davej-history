@@ -14,6 +14,7 @@
 #ifdef __KERNEL__
 
 #define NCP_DEFAULT_BUFSIZE 1024
+#define NCP_DEFAULT_OPTIONS 0		/* 2 for packet signatures */
 
 struct ncp_server {
 
@@ -57,6 +58,12 @@ struct ncp_server {
 
         struct ncp_inode_info root;
 	char       root_path;	/* '\0' */
+
+/* info for packet signing */
+	int sign_wanted;        /* 1=Server needs signed packets */
+	int sign_active;        /* 0=don't do signing, 1=do */
+	char sign_root[8];	/* generated from password and encr. key */
+	char sign_last[16];	
 };
 
 static inline int

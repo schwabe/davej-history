@@ -622,15 +622,6 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 		id->cyls = lba_sects / (16 * 63); /* correct cyls */
 		return 1;	/* lba_capacity is our only option */
 	}
-	/*
-	 * very large drives (8GB+) may lie about the number of cylinders
-	 * This is a split test for drives less than 8 Gig only.
-	 */
-	if ((id->lba_capacity < 16514064) && (lba_sects > chs_sects) &&
-	    (id->heads == 16) && (id->sectors == 63)) {
-		id->cyls = lba_sects / (16 * 63); /* correct cyls */
-		return 1;	/* lba_capacity is our only option */
-	}	
 	/* perform a rough sanity check on lba_sects:  within 10% is "okay" */
 	if ((lba_sects - chs_sects) < _10_percent)
 		return 1;	/* lba_capacity is good */
@@ -2618,7 +2609,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	 * by correcting bios_cyls:
 	 */
 	if ((capacity >= (id->cyls * id->heads * id->sectors)) &&
-	    (!drive->forced_geom)) {
+	    (!drive->forced_geom) && drive->bios_sect && drive->bios_head) {
 		drive->bios_cyl = (capacity / drive->bios_sect) / drive->bios_head;
 #ifdef DEBUG
 		printk("FDISK Fixing Geometry :: CHS=%d/%d/%d to CHS=%d/%d/%d\n",
@@ -2639,39 +2630,39 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	    drive->select.b.lba)
 		drive->no_geom = 1;
 
-	printk ("%s: %.40s, %ldMB w/%dkB Cache, CHS=%d/%d/%d",
-		drive->name, id->model,
-		capacity/2048L, id->buf_size/2,
-		drive->bios_cyl, drive->bios_head, drive->bios_sect);
-
 	drive->mult_count = 0;
 	if (id->max_multsect) {
-#if 1	/* original, pre IDE-NFG, per request of AC */
+#ifdef CONFIG_IDEDISK_MULTI_MODE
+		id->multsect = ((id->max_multsect/2) > 1) ? id->max_multsect : 0;
+		id->multsect_valid = id->multsect ? 1 : 0;
+		drive->mult_req = id->multsect_valid ? id->max_multsect : INITIAL_MULT_COUNT;
+		drive->special.b.set_multmode = drive->mult_req ? 1 : 0;
+#else	/* original, pre IDE-NFG, per request of AC */
 		drive->mult_req = INITIAL_MULT_COUNT;
 		if (drive->mult_req > id->max_multsect)
 			drive->mult_req = id->max_multsect;
 		if (drive->mult_req || ((id->multsect_valid & 1) && id->multsect))
 			drive->special.b.set_multmode = 1;
-#else
-		id->multsect = ((id->max_multsect/2) > 1) ? id->max_multsect : 0;
-		id->multsect_valid = id->multsect ? 1 : 0;
-		drive->mult_req = id->multsect_valid ? id->max_multsect : INITIAL_MULT_COUNT;
-		drive->special.b.set_multmode = drive->mult_req ? 1 : 0;
-
 #endif
 	}
 
 	drive->no_io_32bit = id->dword_io ? 1 : 0;
 
 	if (drive->autotune != 2 && HWIF(drive)->dmaproc != NULL) {
-		if (!(HWIF(drive)->dmaproc(ide_dma_check, drive))) {
-			if ((id->field_valid & 4) && (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
-				printk(", UDMA");	/* UDMA BIOS-enabled! */
-			} else if (id->field_valid & 4) {
-				printk(", (U)DMA");	/* Can be BIOS-enabled! */
-			} else {
-				printk(", DMA");
-			}
+		(void) HWIF(drive)->dmaproc(ide_dma_check, drive);
+	}
+
+	printk ("%s: %.40s, %ldMB w/%dkB Cache, CHS=%d/%d/%d",
+		drive->name, id->model,
+		capacity/2048L, id->buf_size/2,
+		drive->bios_cyl, drive->bios_head, drive->bios_sect);
+	if (drive->using_dma) {
+		if ((id->field_valid & 4) && (id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
+			printk(", UDMA");	/* UDMA BIOS-enabled! */
+		} else if (id->field_valid & 4) {
+			printk(", (U)DMA");	/* Can be BIOS-enabled! */
+		} else {
+			printk(", DMA");
 		}
 	}
 	printk("\n");

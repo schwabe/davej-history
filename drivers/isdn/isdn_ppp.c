@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.28.2.2 1998/11/03 14:31:23 fritz Exp $
+/* $Id: isdn_ppp.c,v 1.28.2.3 1998/12/30 17:49:00 paul Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
+ * Revision 1.28.2.3  1998/12/30 17:49:00  paul
+ * fixed syncPPP callback out
+ *
  * Revision 1.28.2.2  1998/11/03 14:31:23  fritz
  * Reduced stack usage in various functions.
  * Adapted statemachine to work with certified HiSax.
@@ -181,7 +184,7 @@ static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
 static void isdn_ppp_free_mpqueue(isdn_net_dev *);
 #endif
 
-char *isdn_ppp_revision = "$Revision: 1.28.2.2 $";
+char *isdn_ppp_revision = "$Revision: 1.28.2.3 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 static struct isdn_ppp_compressor *ipc_head = NULL;
@@ -303,7 +306,8 @@ isdn_ppp_bind(isdn_net_local * lp)
 		}
 	} else {
 		for (i = 0; i < ISDN_MAX_CHANNELS; i++)
-			if (ippp_table[i]->minor == lp->pppbind && ippp_table[i]->state == IPPP_OPEN)
+			if (ippp_table[i]->minor == lp->pppbind &&
+			    (ippp_table[i]->state & IPPP_OPEN) == IPPP_OPEN)
 				break;
 	}
 

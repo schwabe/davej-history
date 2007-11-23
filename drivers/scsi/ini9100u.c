@@ -93,6 +93,12 @@
  *		- Remove cli() locking for kernels >= 2.1.95. This uses
  *		  spinlocks to serialize access to the pSRB_head and
  *		  pSRB_tail members of the HCS structure.
+ * 09/01/99 bv	- v1.03d
+ *		- Fixed a deadlock problem in SMP.
+ * 21/01/99 bv	- v1.03e
+ *		- Add support for the Domex 3192U PCI SCSI
+ *		  This is a slightly modified patch by
+ *		  Brian Macy <bmacy@sunshinecomputing.com>
  **************************************************************************/
 
 #define CVT_LINUX_VERSION(V,P,S)        (V * 65536 + P * 256 + S)
@@ -173,7 +179,7 @@ Scsi_Host_Template driver_template = INI9100U;
 char *i91uCopyright = "Copyright (C) 1996-98";
 char *i91uInitioName = "by Initio Corporation";
 char *i91uProductName = "INI-9X00U/UW";
-char *i91uVersion = "v1.03b";
+char *i91uVersion = "v1.03e";
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 struct proc_dir_entry proc_scsi_ini9100u =
@@ -244,6 +250,14 @@ extern int tul_reset_scsi_bus(HCS * pCurHcb);
 extern int tul_device_reset(HCS * pCurHcb, ULONG pSrb, unsigned int target, unsigned int ResetFlags);
 				/* ---- EXTERNAL VARIABLES ---- */
 extern HCS tul_hcs[];
+
+const PCI_ID i91u_pci_devices[] = {
+	{ INI_VENDOR_ID, I950_DEVICE_ID },
+	{ INI_VENDOR_ID, I940_DEVICE_ID },
+	{ INI_VENDOR_ID, I935_DEVICE_ID },
+	{ INI_VENDOR_ID, I920_DEVICE_ID },
+	{ DMX_VENDOR_ID, I920_DEVICE_ID },
+};
 
 /*
  *  queue services:
@@ -336,64 +350,26 @@ int tul_NewReturnNumberOfAdapters(void)
 	int iAdapters = 0;
 	long dRegValue;
 	WORD wBIOS;
+	int i = 0;
 
 	init_i91uAdapter_table();
 
-	while ((pDev = pci_find_device(INI_VENDOR_ID, I950_DEVICE_ID, pDev)) != NULL) {
-		pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
-		wBIOS = (UWORD) (dRegValue & 0xFF);
-		if (((dRegValue & 0xFF00) >> 8) == 0xFF)
-			dRegValue = 0;
-		wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
-		if (Addi91u_into_Adapter_table(wBIOS,
-					(pDev->base_address[0] & 0xFFFE),
-					       pDev->irq,
-					       pDev->bus->number,
-					       (pDev->devfn >> 3)
-		    ) == 0)
-			iAdapters++;
-	}
-	while ((pDev = pci_find_device(INI_VENDOR_ID, I940_DEVICE_ID, pDev)) != NULL) {
-		pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
-		wBIOS = (UWORD) (dRegValue & 0xFF);
-		if (((dRegValue & 0xFF00) >> 8) == 0xFF)
-			dRegValue = 0;
-		wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
-		if (Addi91u_into_Adapter_table(wBIOS,
-					(pDev->base_address[0] & 0xFFFE),
-					       pDev->irq,
-					       pDev->bus->number,
-					       (pDev->devfn >> 3)
-		    ) == 0)
-			iAdapters++;
-	}
-	while ((pDev = pci_find_device(INI_VENDOR_ID, I935_DEVICE_ID, pDev)) != NULL) {
-		pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
-		wBIOS = (UWORD) (dRegValue & 0xFF);
-		if (((dRegValue & 0xFF00) >> 8) == 0xFF)
-			dRegValue = 0;
-		wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
-		if (Addi91u_into_Adapter_table(wBIOS,
-					(pDev->base_address[0] & 0xFFFE),
-					       pDev->irq,
-					       pDev->bus->number,
-					       (pDev->devfn >> 3)
-		    ) == 0)
-			iAdapters++;
-	}
-	while ((pDev = pci_find_device(INI_VENDOR_ID, 0x0002, pDev)) != NULL) {
-		pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
-		wBIOS = (UWORD) (dRegValue & 0xFF);
-		if (((dRegValue & 0xFF00) >> 8) == 0xFF)
-			dRegValue = 0;
-		wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
-		if (Addi91u_into_Adapter_table(wBIOS,
-					(pDev->base_address[0] & 0xFFFE),
-					       pDev->irq,
-					       pDev->bus->number,
-					       (pDev->devfn >> 3)
-		    ) == 0)
-			iAdapters++;
+	for (i = 0; i < TULSZ(i91u_pci_devices); i++)
+	{
+		while ((pDev = pci_find_device(i91u_pci_devices[i].vendor_id, i91u_pci_devices[i].device_id, pDev)) != NULL) {
+			pci_read_config_dword(pDev, 0x44, (u32 *) & dRegValue);
+			wBIOS = (UWORD) (dRegValue & 0xFF);
+			if (((dRegValue & 0xFF00) >> 8) == 0xFF)
+				dRegValue = 0;
+			wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
+			if (Addi91u_into_Adapter_table(wBIOS,
+							(pDev->base_address[0] & 0xFFFE),
+					       		pDev->irq,
+					       		pDev->bus->number,
+					       		(pDev->devfn >> 3)
+		    		) == 0)
+				iAdapters++;
+		}
 	}
 
 	return (iAdapters);
@@ -416,17 +392,6 @@ int tul_ReturnNumberOfAdapters(void)
 	unsigned short command;
 	WORD wBIOS, wBASE;
 	BYTE bPCIBusNum, bInterrupt, bPCIDeviceNum;
-	struct {
-		unsigned short vendor_id;
-		unsigned short device_id;
-	} const i91u_pci_devices[] =
-	{
-		{INI_VENDOR_ID, I935_DEVICE_ID},
-		{INI_VENDOR_ID, I940_DEVICE_ID},
-		{INI_VENDOR_ID, I950_DEVICE_ID},
-		{INI_VENDOR_ID, I920_DEVICE_ID}
-	};
-
 
 	iAdapters = 0;
 	/*

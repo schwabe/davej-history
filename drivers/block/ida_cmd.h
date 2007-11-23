@@ -89,17 +89,15 @@ typedef struct cmdlist {
 	struct cmdlist *prev;
 	struct cmdlist *next;
 	struct buffer_head *bh;
-	unsigned int type;
-	unsigned int expires;
-	unsigned long long start_time;
+	int type;
 } cmdlist_t;
 	
 #define ID_CTLR		0x11
 typedef struct {
 	__u8	nr_drvs;
 	__u32	cfg_sig;
-	__u32	firm_rev;
-	__u32	rom_rev;
+	__u8	firm_rev[4];
+	__u8	rom_rev[4];
 	__u8	hw_rev;
 	__u32	bb_rev;
 	__u32	drv_present_map;

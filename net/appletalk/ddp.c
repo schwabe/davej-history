@@ -509,7 +509,7 @@ static struct atalk_iface *atalk_find_interface(int net, int node)
 	struct atalk_iface *iface;
 	for(iface=atalk_iface_list;iface!=NULL;iface=iface->next)
 	{
-		if((node==ATADDR_BCAST || iface->address.s_node==node) 
+		if((node==ATADDR_BCAST || node==ATADDR_ANYNODE || iface->address.s_node==node) 
 			&& iface->address.s_net==net && !(iface->status&ATIF_PROBE))
 			return iface;
 	}
@@ -1544,7 +1544,10 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	/* Which socket - atalk_search_socket() looks for a *full match*
 	   of the <net,node,port> tuple */
 	tosat.sat_addr.s_net = ddp->deh_dnet;
-	tosat.sat_addr.s_node = ddp->deh_dnode;
+	if (ddp->deh_dnode == ATADDR_ANYNODE)
+		tosat.sat_addr.s_node = atif->address.s_node;
+	else
+		tosat.sat_addr.s_node = ddp->deh_dnode;
 	tosat.sat_port = ddp->deh_dport;
 
 	sock=atalk_search_socket( &tosat, atif );
