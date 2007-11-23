@@ -97,6 +97,9 @@ struct screen_info {
  * This is set up by the setup-routine at boot-time
  */
 #define EXT_MEM_K (*(unsigned short *)0x90002)
+#ifndef STANDARD_MEMORY_BIOS_CALL
+#define ALT_MEM_K (*(unsigned long *) 0x901e0)
+#endif
 #define DRIVE_INFO (*(struct drive_info *)0x90080)
 #define SCREEN_INFO (*(struct screen_info *)0x90000)
 #define RAMDISK_SIZE (*(unsigned short *)0x901F8)
@@ -313,7 +316,11 @@ struct {
 
 void setup_normal_output_buffer()
 {
+#ifdef STANDARD_MEMORY_BIOS_CALL
 	if (EXT_MEM_K < 1024) error("Less than 2MB of memory.\n");
+#else
+	if ((ALT_MEM_K > EXT_MEM_K ? ALT_MEM_K : EXT_MEM_K) < 1024) error("Less than 2MB of memory.\n");
+#endif
 	output_data = (char *)0x100000; /* Points to 1M */
 }
 
@@ -325,7 +332,11 @@ struct moveparams {
 void setup_output_buffer_if_we_run_high(struct moveparams *mv)
 {
 	high_buffer_start = (uch *)(((ulg)&end) + HEAP_SIZE);
+#ifdef STANDARD_MEMORY_BIOS_CALL
 	if (EXT_MEM_K < (3*1024)) error("Less than 4MB of memory.\n");
+#else
+	if ((ALT_MEM_K > EXT_MEM_K ? ALT_MEM_K : EXT_MEM_K) < (3*1024)) error("Less than 4MB of memory.\n");
+#endif
 	mv->low_buffer_start = output_data = (char *)LOW_BUFFER_START;
 	high_loaded = 1;
 	free_mem_end_ptr = (long)high_buffer_start;

@@ -53,6 +53,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SHAPER),y)
+L_OBJS += shaper.o
+else
+  ifeq ($(CONFIG_SHAPER),m)
+  M_OBJS += shaper.o
+  endif
+endif
+
 ifeq ($(CONFIG_SK_G16),y)
 L_OBJS += sk_g16.o
 endif

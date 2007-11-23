@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.c,v 1.41 1997/05/27 15:17:31 fritz Exp $
+/* $Id: isdn_tty.c,v 1.41.2.7 1998/06/07 13:48:08 fritz Exp $
 
  * Linux ISDN subsystem, tty functions and AT-command emulator (linklevel).
  *
@@ -20,6 +20,34 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.c,v $
+ * Revision 1.41.2.7  1998/06/07 13:48:08  fritz
+ * ABC cleanup
+ *
+ * Revision 1.41.2.5  1998/04/08 21:42:35  keil
+ * Blocksize default 1024
+ *
+ * Revision 1.41.2.4  1998/03/19 17:58:55  detabc
+ * remove 2 debug-messages (no longer needed) bug was fixed
+ *
+ * Revision 1.41.2.3  1998/03/07 23:35:20  detabc
+ * added the abc-extension to the linux isdn-kernel
+ * for kernel-version 2.0.xx
+ * DO NOT USE FOR HIGHER KERNELS-VERSIONS
+ * all source-lines are switched with the define  CONFIG_ISDN_WITH_ABC
+ * (make config and answer ABC-Ext. Support (Compress,TCP-Keepalive ...) with yes
+ *
+ * you need also a modified isdnctrl-source the switch on the
+ * features of the abc-extension
+ *
+ * please use carefully. more detail will be follow.
+ * thanks
+ *
+ * Revision 1.41.2.2  1998/03/07 23:02:51  tsbogend
+ * fixed kernel unaligned traps on Linux/Alpha
+ *
+ * Revision 1.41.2.1  1997/08/21 15:56:11  fritz
+ * Synchronized 2.0.X branch with 2.0.31-pre7
+ *
  * Revision 1.41  1997/05/27 15:17:31  fritz
  * Added changes for recent 2.1.x kernels:
  *   changed return type of isdn_close
@@ -199,6 +227,7 @@
 #define VBUFX (VBUF/16)
 #endif
 
+
 /* Prototypes */
 
 static int isdn_tty_edit_at(const char *, int, modem_info *, int);
@@ -223,7 +252,7 @@ static int bit2si[8] =
 static int si2bit[8] =
 {4, 1, 4, 4, 4, 4, 4, 4};
 
-char *isdn_tty_revision = "$Revision: 1.41 $";
+char *isdn_tty_revision = "$Revision: 1.41.2.7 $";
 
 #define DLE 0x10
 #define ETX 0x03
@@ -1270,7 +1299,7 @@ isdn_tty_get_lsr_info(modem_info * info, uint * value)
 	status = info->lsr;
 	restore_flags(flags);
 	result = ((status & UART_LSR_TEMT) ? TIOCSER_TEMT : 0);
-	put_user(result, (ulong *) value);
+	put_user(result, (uint *) value);
 	return 0;
 }
 
@@ -1294,7 +1323,7 @@ isdn_tty_get_modem_info(modem_info * info, uint * value)
 	    | ((status & UART_MSR_RI) ? TIOCM_RNG : 0)
 	    | ((status & UART_MSR_DSR) ? TIOCM_DSR : 0)
 	    | ((status & UART_MSR_CTS) ? TIOCM_CTS : 0);
-	put_user(result, (ulong *) value);
+	put_user(result, (uint *) value);
 	return 0;
 }
 
@@ -1443,7 +1472,6 @@ isdn_tty_ioctl(struct tty_struct *tty, struct file *file,
 				return error;
 			else
 				return isdn_tty_get_lsr_info(info, (uint *) arg);
-
 		default:
 #ifdef ISDN_DEBUG_MODEM_IOCTL
 			printk(KERN_DEBUG "UNKNOWN ioctl 0x%08x on ttyi%d\n", cmd, info->line);
@@ -1927,7 +1955,7 @@ isdn_tty_modem_init(void)
 #ifdef CONFIG_ISDN_AUDIO
 		skb_queue_head_init(&info->dtmf_queue);
 #endif
-		if (!(info->xmit_buf = kmalloc(ISDN_SERIAL_XMIT_SIZE + 5, GFP_KERNEL))) {
+		if (!(info->xmit_buf = kmalloc(ISDN_SERIAL_XMIT_MAX + 5, GFP_KERNEL))) {
 			printk(KERN_ERR "Could not allocate modem xmit-buffer\n");
 			return -3;
 		}
@@ -2534,7 +2562,7 @@ isdn_tty_cmd_ATand(char **p, modem_info * info)
 			/* &B - Set Buffersize */
 			p[0]++;
 			i = isdn_getnum(p);
-			if ((i < 0) || (i > ISDN_SERIAL_XMIT_SIZE))
+			if ((i < 0) || (i > ISDN_SERIAL_XMIT_MAX))
 				PARSE_ERROR1;
 #ifdef CONFIG_ISDN_AUDIO
 			if ((m->mdmreg[18] & 1) && (i > VBUF))
@@ -2643,7 +2671,7 @@ isdn_tty_check_ats(int mreg, int mval, modem_info * info, atemu * m)
 				return 1;
 			break;
 		case 16:
-			if ((mval * 16) > ISDN_SERIAL_XMIT_SIZE)
+			if ((mval * 16) > ISDN_SERIAL_XMIT_MAX)
 				return 1;
 #ifdef CONFIG_ISDN_AUDIO
 			if ((m->mdmreg[18] & 1) && (mval > VBUFX))
@@ -3095,7 +3123,7 @@ isdn_tty_parse_at(modem_info * info)
 				break;
 			case 'D':
 				/* D - Dial */
-				isdn_tty_getdial(++p, ds, sizeof(ds));
+				isdn_tty_getdial(++p, ds,sizeof(ds));
 				p += strlen(p);
 				if (!strlen(m->msn))
 					isdn_tty_modem_result(10, info);

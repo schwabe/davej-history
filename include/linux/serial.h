@@ -44,7 +44,8 @@ struct serial_struct {
 #define PORT_16550A	4
 #define PORT_CIRRUS     5
 #define PORT_16650	6
-#define PORT_MAX	6
+#define PORT_STARTECH	7
+#define PORT_MAX	7
 
 /*
  * Definitions for async_struct (and serial_struct) flags field

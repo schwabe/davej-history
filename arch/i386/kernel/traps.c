@@ -192,9 +192,9 @@ DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
 DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
 DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
 
-/* signal_return is directly after ret_from_sys_call in entry.S */
+/* divide_error is after ret_from_sys_call in entry.S */
 asmlinkage void ret_from_sys_call(void)	__asm__("ret_from_sys_call");
-asmlinkage void signal_return(void)	__asm__("signal_return");
+asmlinkage void divide_error(void)	__asm__("divide_error");
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
@@ -210,7 +210,7 @@ asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 	 */
 	if ((regs->cs & 3) != 3) {
 		if (regs->eip >= (unsigned long)ret_from_sys_call &&
-		    regs->eip < (unsigned long)signal_return) {
+		    regs->eip < (unsigned long)divide_error) {
 			static int moancount = 0;
 			if (moancount < 5) {
 				printk(KERN_INFO "Ignoring GPF attempt from program \"%s\" (pid %d).\n",

@@ -1,11 +1,45 @@
 /*
- * $Id: b1lli.c,v 1.1.2.1 1997/07/13 12:16:46 calle Exp $
+ * $Id: b1lli.c,v 1.1.2.10 1998/03/20 20:34:41 calle Exp $
  * 
  * ISDN lowlevel-module for AVM B1-card.
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1lli.c,v $
+ * Revision 1.1.2.10  1998/03/20 20:34:41  calle
+ * port valid check now only for T1, because of the PCI and PCMCIA cards.
+ *
+ * Revision 1.1.2.9  1998/03/20 14:38:20  calle
+ * capidrv: prepared state machines for suspend/resume/hold
+ * capidrv: fix bug in state machine if B1/T1 is out of nccis
+ * b1capi: changed some errno returns.
+ * b1capi: detect if you try to add same T1 to different io address.
+ * b1capi: change number of nccis depending on number of channels.
+ * b1lli: cosmetics
+ *
+ * Revision 1.1.2.8  1998/03/18 17:43:29  calle
+ * T1 with fastlink, bugfix for multicontroller support in capidrv.c
+ *
+ * Revision 1.1.2.7  1998/03/04 17:33:50  calle
+ * Changes for T1.
+ *
+ * Revision 1.1.2.6  1998/02/27 15:40:44  calle
+ * T1 running with slow link. bugfix in capi_release.
+ *
+ * Revision 1.1.2.5  1998/02/13 16:28:28  calle
+ * first step for T1
+ *
+ * Revision 1.1.2.4  1998/01/27 16:12:51  calle
+ * Support for PCMCIA B1/M1/M2 ready.
+ *
+ * Revision 1.1.2.3  1998/01/15 15:33:37  calle
+ * print cardtype, d2 protocol and linetype after load.
+ *
+ * Revision 1.1.2.2  1997/11/26 10:46:55  calle
+ * prepared for M1 (Mobile) and T1 (PMX) cards.
+ * prepared to set configuration after load to support other D-channel
+ * protocols, point-to-point and leased lines.
+ *
  * Revision 1.1.2.1  1997/07/13 12:16:46  calle
  * bug fix for more than one controller in connect_req.
  *
@@ -20,6 +54,7 @@
  *
  * 
  */
+/* #define FASTLINK_DEBUG */
 
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
@@ -33,6 +68,8 @@
 #include "compat.h"
 #include "capicmd.h"
 #include "capiutil.h"
+
+extern int showcapimsgs;
 
 /*
  * LLI Messages to the ISDN-ControllerISDN Controller 
@@ -68,6 +105,11 @@
 					   * MsgLength capi-data ... int32
 					   * B3Length data .... 
 					 */
+
+#define SEND_CONFIG		0x21    /*
+                                         */
+
+#define SEND_POLLACK		0x73    /* T1 Watchdog */
 
 /*
  * LLI Messages from the ISDN-ControllerISDN Controller 
@@ -112,6 +154,13 @@
 #define RECEIVE_RELEASE		0x26	/*
 					   * int32 AppllID int32 0xffffffff 
 					 */
+#define RECEIVE_TASK_READY	0x31	/*
+					   * int32 tasknr
+					   * int32 Length Taskname ...
+					 */
+
+#define WRITE_REGISTER		0x00
+#define READ_REGISTER		0x01
 
 /*
  * port offsets
@@ -124,6 +173,44 @@
 #define B1_RESET		0x10
 #define B1_ANALYSE		0x04
 
+/* Hema card T1 */
+
+#define T1_FASTLINK		0x00
+#define T1_SLOWLINK		0x08
+
+#define T1_READ			B1_READ
+#define T1_WRITE		B1_WRITE
+#define T1_INSTAT		B1_INSTAT
+#define T1_OUTSTAT		B1_OUTSTAT
+#define T1_IRQENABLE		0x05
+#define T1_FIFOSTAT		0x06
+#define T1_RESETLINK		0x10
+#define T1_ANALYSE		0x11
+#define T1_IRQMASTER		0x12
+#define T1_IDENT		0x17
+#define T1_RESETBOARD		0x1f
+
+#define	T1F_IREADY		0x01
+#define	T1F_IHALF		0x02
+#define	T1F_IFULL		0x04
+#define	T1F_IEMPTY		0x08
+#define	T1F_IFLAGS		0xF0
+
+#define	T1F_OREADY		0x10
+#define	T1F_OHALF		0x20
+#define	T1F_OEMPTY		0x40
+#define	T1F_OFULL		0x80
+#define	T1F_OFLAGS		0xF0
+
+/* there are HEMA cards with 1k and 4k FIFO out */
+#define FIFO_OUTBSIZE		256
+#define FIFO_INPBSIZE		512
+
+#define HEMA_VERSION_ID		0
+#define HEMA_PAL_ID		0
+
+#define B1_STAT0(cardtype)  ((cardtype) == AVM_CARDTYPE_M1 ? 0x81200000l : 0x80A00000l)
+#define B1_STAT1(cardtype)  (0x80E00000l)
 
 
 static inline unsigned char b1outp(unsigned short base,
@@ -134,85 +221,26 @@ static inline unsigned char b1outp(unsigned short base,
 	return inb(base + B1_ANALYSE);
 }
 
-static int irq_table[16] =
-{0,
- 0,
- 0,
- 192,				/* irq 3 */
- 32,				/* irq 4 */
- 160,				/* irq 5 */
- 96,				/* irq 6 */
- 224,				/* irq 7 */
- 0,
- 64,				/* irq 9 */
- 80,				/* irq 10 */
- 208,				/* irq 11 */
- 48,				/* irq 12 */
- 0,
- 0,
- 112,				/* irq 15 */
-};
-
-int B1_valid_irq(unsigned irq)
+static inline void t1outp(unsigned short base,
+			  unsigned short offset,
+			  unsigned char value)
 {
-	return irq_table[irq] != 0;
+	outb(value, base + offset);
 }
 
-unsigned char B1_assign_irq(unsigned short base, unsigned irq)
+static inline unsigned char t1inp(unsigned short base,
+			          unsigned short offset)
 {
-	return b1outp(base, B1_RESET, irq_table[irq]);
+	return inb(base + offset);
 }
 
-unsigned char B1_enable_irq(unsigned short base)
+static inline int B1_isfastlink(unsigned short base)
 {
-	return b1outp(base, B1_INSTAT, 0x02);
+	return (inb(base + T1_IDENT) & ~0x82) == 1;
 }
-
-unsigned char B1_disable_irq(unsigned short base)
+static inline unsigned char B1_fifostatus(unsigned short base)
 {
-	return b1outp(base, B1_INSTAT, 0x00);
-}
-
-void B1_reset(unsigned short base)
-{
-	b1outp(base, B1_RESET, 0);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
-
-	b1outp(base, B1_RESET, 1);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
-
-	b1outp(base, B1_RESET, 0);
-	udelay(55 * 2 * 1000);	/* 2 TIC's */
-}
-
-int B1_detect(unsigned short base)
-{
-	/*
-	 * Statusregister 0000 00xx 
-	 */
-	if ((inb(base + B1_INSTAT) & 0xfc)
-	    || (inb(base + B1_OUTSTAT) & 0xfc))
-		return 1;
-
-	/*
-	 * Statusregister 0000 001x 
-	 */
-	b1outp(base, B1_INSTAT, 0x2);	/* enable irq */
-	b1outp(base, B1_OUTSTAT, 0x2);
-	if ((inb(base + B1_INSTAT) & 0xfe) != 0x2
-	    || (inb(base + B1_OUTSTAT) & 0xfe) != 0x2)
-		return 2;
-
-	/*
-	 * Statusregister 0000 000x 
-	 */
-	b1outp(base, B1_INSTAT, 0x0);	/* disable irq */
-	b1outp(base, B1_OUTSTAT, 0x0);
-	if ((inb(base + B1_INSTAT) & 0xfe)
-	    || (inb(base + B1_OUTSTAT) & 0xfe))
-		return 3;
-
-	return 0;
+	return inb(base + T1_FIFOSTAT);
 }
 
 static inline int B1_rx_full(unsigned short base)
@@ -222,11 +250,11 @@ static inline int B1_rx_full(unsigned short base)
 
 static inline unsigned char B1_get_byte(unsigned short base)
 {
-	unsigned long i = jiffies + 5 * HZ;	/* maximum wait time 5 sec */
+	unsigned long i = jiffies + 1 * HZ;	/* maximum wait time 1 sec */
 	while (!B1_rx_full(base) && i > jiffies);
 	if (B1_rx_full(base))
 		return inb(base + B1_READ);
-	printk(KERN_CRIT "b1lli: rx not full after 5 second\n");
+	printk(KERN_CRIT "b1lli(0x%x): rx not full after 1 second\n", base);
 	return 0;
 }
 
@@ -263,19 +291,363 @@ static inline unsigned int B1_get_slice(unsigned short base,
 					unsigned char *dp)
 {
 	unsigned int len, i;
+#ifdef FASTLINK_DEBUG
+	unsigned wcnt = 0, bcnt = 0;
+#endif
 
 	len = i = B1_get_word(base);
-	while (i-- > 0)
-		*dp++ = B1_get_byte(base);
+        if (B1_isfastlink(base)) {
+		int status;
+		while (i > 0) {
+			status = B1_fifostatus(base) & (T1F_IREADY|T1F_IHALF);
+			if (i >= FIFO_INPBSIZE) status |= T1F_IFULL;
+
+			switch (status) {
+				case T1F_IREADY|T1F_IHALF|T1F_IFULL:
+					insb(base+B1_READ, dp, FIFO_INPBSIZE);
+					dp += FIFO_INPBSIZE;
+					i -= FIFO_INPBSIZE;
+#ifdef FASTLINK_DEBUG
+					wcnt += FIFO_INPBSIZE;
+#endif
+					break;
+				case T1F_IREADY|T1F_IHALF: 
+					insb(base+B1_READ,dp, i);
+#ifdef FASTLINK_DEBUG
+					wcnt += i;
+#endif
+					dp += i;
+					i = 0;
+					if (i == 0)
+						break;
+					/* fall through */
+				default:
+					*dp++ = B1_get_byte(base);
+					i--;
+#ifdef FASTLINK_DEBUG
+					bcnt++;
+#endif
+					break;
+			}
+	    }
+#ifdef FASTLINK_DEBUG
+	    if (wcnt)
+	    printk(KERN_DEBUG "b1lli(0x%x): get_slice l=%d w=%d b=%d\n",
+				base, len, wcnt, bcnt);
+#endif
+	} else {
+		while (i-- > 0)
+			*dp++ = B1_get_byte(base);
+	}
 	return len;
 }
 
 static inline void B1_put_slice(unsigned short base,
 				unsigned char *dp, unsigned int len)
 {
-	B1_put_word(base, len);
-	while (len-- > 0)
-		B1_put_byte(base, *dp++);
+	unsigned i = len;
+	B1_put_word(base, i);
+        if (B1_isfastlink(base)) {
+		int status;
+		while (i > 0) {
+			status = B1_fifostatus(base) & (T1F_OREADY|T1F_OHALF);
+			if (i >= FIFO_OUTBSIZE) status |= T1F_OEMPTY;
+			switch (status) {
+				case T1F_OREADY|T1F_OHALF|T1F_OEMPTY: 
+					outsb(base+B1_WRITE, dp, FIFO_OUTBSIZE);
+					dp += FIFO_OUTBSIZE;
+					i -= FIFO_OUTBSIZE;
+					break;
+				case T1F_OREADY|T1F_OHALF: 
+					outsb(base+B1_WRITE, dp, i);
+					dp += i;
+					i = 0;
+				        break;
+				default:
+					B1_put_byte(base, *dp++);
+					i--;
+					break;
+			}
+		}
+	} else {
+		while (i-- > 0)
+			B1_put_byte(base, *dp++);
+	}
+}
+
+static void b1_wr_reg(unsigned short base,
+                      unsigned int reg,
+		      unsigned int value)
+{
+	B1_put_byte(base, WRITE_REGISTER);
+        B1_put_word(base, reg);
+        B1_put_word(base, value);
+}
+
+static inline unsigned int b1_rd_reg(unsigned short base,
+                                     unsigned int reg)
+{
+	B1_put_byte(base, READ_REGISTER);
+        B1_put_word(base, reg);
+        return B1_get_word(base);
+	
+}
+
+static inline void b1_set_test_bit(unsigned short base,
+				   int cardtype,
+				   int onoff)
+{
+    b1_wr_reg(base, B1_STAT0(cardtype), onoff ? 0x21 : 0x20);
+}
+
+static inline int b1_get_test_bit(unsigned short base,
+                                  int cardtype)
+{
+    return (b1_rd_reg(base, B1_STAT0(cardtype)) & 0x01) != 0;
+}
+
+static int irq_table[16] =
+{0,
+ 0,
+ 0,
+ 192,				/* irq 3 */
+ 32,				/* irq 4 */
+ 160,				/* irq 5 */
+ 96,				/* irq 6 */
+ 224,				/* irq 7 */
+ 0,
+ 64,				/* irq 9 */
+ 80,				/* irq 10 */
+ 208,				/* irq 11 */
+ 48,				/* irq 12 */
+ 0,
+ 0,
+ 112,				/* irq 15 */
+};
+
+static int hema_irq_table[16] =
+{0,
+ 0,
+ 0,
+ 0x80,				/* irq 3 */
+ 0,
+ 0x90,				/* irq 5 */
+ 0,
+ 0xA0,				/* irq 7 */
+ 0,
+ 0xB0,				/* irq 9 */
+ 0xC0,				/* irq 10 */
+ 0xD0,				/* irq 11 */
+ 0xE0,				/* irq 12 */
+ 0,
+ 0,
+ 0xF0,				/* irq 15 */
+};
+
+
+int B1_valid_irq(unsigned irq, int cardtype)
+{
+	switch (cardtype) {
+	   default:
+	   case AVM_CARDTYPE_M1:
+	   case AVM_CARDTYPE_M2:
+	   case AVM_CARDTYPE_B1:
+	   	return irq_table[irq & 0xf] != 0;
+	   case AVM_CARDTYPE_T1:
+	   	return hema_irq_table[irq & 0xf] != 0;
+	}
+}
+
+int B1_valid_port(unsigned port, int cardtype)
+{
+   switch (cardtype) {
+	   default:
+	   case AVM_CARDTYPE_M1:
+	   case AVM_CARDTYPE_M2:
+	   case AVM_CARDTYPE_B1:
+#if 0	/* problem with PCMCIA and PCI cards */
+		switch (port) {
+			case 0x150:
+			case 0x250:
+			case 0x300:
+			case 0x340:
+				return 1;
+		}
+		return 0;
+#else
+		return 1;
+#endif
+	   case AVM_CARDTYPE_T1:
+		return ((port & 0x7) == 0) && ((port & 0x30) != 0x30);
+   }
+}
+
+void B1_setinterrupt(unsigned short base,
+			         unsigned irq, int cardtype)
+{
+	switch (cardtype) {
+	   case AVM_CARDTYPE_T1:
+              t1outp(base, B1_INSTAT, 0x00);
+              t1outp(base, B1_INSTAT, 0x02);
+	      t1outp(base, T1_IRQMASTER, 0x08);
+	   default:
+	   case AVM_CARDTYPE_M1:
+	   case AVM_CARDTYPE_M2:
+	   case AVM_CARDTYPE_B1:
+	      b1outp(base, B1_INSTAT, 0x00);
+	      b1outp(base, B1_RESET, irq_table[irq]);
+	      b1outp(base, B1_INSTAT, 0x02);
+	 }
+}
+
+unsigned char B1_disable_irq(unsigned short base)
+{
+	return b1outp(base, B1_INSTAT, 0x00);
+}
+
+void T1_disable_irq(unsigned short base)
+{
+      t1outp(base, T1_IRQMASTER, 0x00);
+}
+
+void B1_reset(unsigned short base)
+{
+	b1outp(base, B1_RESET, 0);
+	udelay(55 * 2 * 1000);	/* 2 TIC's */
+
+	b1outp(base, B1_RESET, 1);
+	udelay(55 * 2 * 1000);	/* 2 TIC's */
+
+	b1outp(base, B1_RESET, 0);
+	udelay(55 * 2 * 1000);	/* 2 TIC's */
+}
+
+void T1_reset(unsigned short base)
+{
+        /* reset T1 Controller */
+        B1_reset(base);
+        /* disable irq on HEMA */
+        t1outp(base, B1_INSTAT, 0x00);
+        t1outp(base, B1_OUTSTAT, 0x00);
+        t1outp(base, T1_IRQMASTER, 0x00);
+        /* reset HEMA board configuration */
+	t1outp(base, T1_RESETBOARD, 0xf);
+}
+
+int B1_detect(unsigned short base, int cardtype)
+{
+	int onoff, i;
+
+	if (cardtype == AVM_CARDTYPE_T1)
+	   return 0;
+
+	/*
+	 * Statusregister 0000 00xx 
+	 */
+	if ((inb(base + B1_INSTAT) & 0xfc)
+	    || (inb(base + B1_OUTSTAT) & 0xfc))
+		return 1;
+	/*
+	 * Statusregister 0000 001x 
+	 */
+	b1outp(base, B1_INSTAT, 0x2);	/* enable irq */
+	/* b1outp(base, B1_OUTSTAT, 0x2); */
+	if ((inb(base + B1_INSTAT) & 0xfe) != 0x2
+	    /* || (inb(base + B1_OUTSTAT) & 0xfe) != 0x2 */)
+		return 2;
+	/*
+	 * Statusregister 0000 000x 
+	 */
+	b1outp(base, B1_INSTAT, 0x0);	/* disable irq */
+	b1outp(base, B1_OUTSTAT, 0x0);
+	if ((inb(base + B1_INSTAT) & 0xfe)
+	    || (inb(base + B1_OUTSTAT) & 0xfe))
+		return 3;
+        
+	for (onoff = !0, i= 0; i < 10 ; i++) {
+		b1_set_test_bit(base, cardtype, onoff);
+		if (b1_get_test_bit(base, cardtype) != onoff)
+		   return 4;
+		onoff = !onoff;
+	}
+
+	if (cardtype == AVM_CARDTYPE_M1)
+	   return 0;
+
+        if ((b1_rd_reg(base, B1_STAT1(cardtype)) & 0x0f) != 0x01)
+	   return 5;
+
+	return 0;
+}
+
+int T1_detectandinit(unsigned short base, unsigned irq, int cardnr)
+{
+	unsigned char cregs[8];
+	unsigned char reverse_cardnr;
+	unsigned long flags;
+	unsigned char dummy;
+	int i;
+
+	reverse_cardnr =   ((cardnr & 0x01) << 3) | ((cardnr & 0x02) << 1)
+		         | ((cardnr & 0x04) >> 1) | ((cardnr & 0x08) >> 3);
+	cregs[0] = (HEMA_VERSION_ID << 4) | (reverse_cardnr & 0xf);
+	cregs[1] = 0x00; /* fast & slow link connected to CON1 */
+	cregs[2] = 0x05; /* fast link 20MBit, slow link 20 MBit */
+	cregs[3] = 0;
+	cregs[4] = 0x11; /* zero wait state */
+	cregs[5] = hema_irq_table[irq & 0xf];
+	cregs[6] = 0;
+	cregs[7] = 0;
+
+	save_flags(flags);
+	cli();
+	/* board reset */
+	t1outp(base, T1_RESETBOARD, 0xf);
+	udelay(100 * 1000);
+	dummy = t1inp(base, T1_FASTLINK+T1_OUTSTAT); /* first read */
+
+	/* write config */
+	dummy = (base >> 4) & 0xff;
+	for (i=1;i<=0xf;i++) t1outp(base, i, dummy);
+	t1outp(base, HEMA_PAL_ID & 0xf, dummy);
+	t1outp(base, HEMA_PAL_ID >> 4, cregs[0]);
+	for(i=1;i<7;i++) t1outp(base, 0, cregs[i]);
+	t1outp(base, ((base >> 4)) & 0x3, cregs[7]);
+	restore_flags(flags);
+
+	udelay(100 * 1000);
+	t1outp(base, T1_FASTLINK+T1_RESETLINK, 0);
+	t1outp(base, T1_SLOWLINK+T1_RESETLINK, 0);
+	udelay(10 * 1000);
+	t1outp(base, T1_FASTLINK+T1_RESETLINK, 1);
+	t1outp(base, T1_SLOWLINK+T1_RESETLINK, 1);
+	udelay(100 * 1000);
+	t1outp(base, T1_FASTLINK+T1_RESETLINK, 0);
+	t1outp(base, T1_SLOWLINK+T1_RESETLINK, 0);
+	udelay(10 * 1000);
+	t1outp(base, T1_FASTLINK+T1_ANALYSE, 0);
+	udelay(5 * 1000);
+	t1outp(base, T1_SLOWLINK+T1_ANALYSE, 0);
+
+	if (t1inp(base, T1_FASTLINK+T1_OUTSTAT) != 0x1) /* tx empty */
+		return 1;
+	if (t1inp(base, T1_FASTLINK+T1_INSTAT) != 0x0) /* rx empty */
+		return 2;
+	if (t1inp(base, T1_FASTLINK+T1_IRQENABLE) != 0x0)
+		return 3;
+	if ((t1inp(base, T1_FASTLINK+T1_FIFOSTAT) & 0xf0) != 0x70)
+		return 4;
+	if ((t1inp(base, T1_FASTLINK+T1_IRQMASTER) & 0x0e) != 0)
+		return 5;
+	if ((t1inp(base, T1_FASTLINK+T1_IDENT) & 0x7d) != 1)
+		return 6;
+	if (t1inp(base, T1_SLOWLINK+T1_OUTSTAT) != 0x1) /* tx empty */
+		return 7;
+	if ((t1inp(base, T1_SLOWLINK+T1_IRQMASTER) & 0x0e) != 0)
+		return 8;
+	if ((t1inp(base, T1_SLOWLINK+T1_IDENT) & 0x7d) != 0)
+		return 9;
+        return 0;
 }
 
 extern int loaddebug;
@@ -319,6 +691,62 @@ int B1_load_t4file(unsigned short base, avmb1_t4file * t4file)
 	return 0;
 }
 
+int B1_load_config(unsigned short base, avmb1_t4file * config)
+{
+	/*
+	 * Data is in user space !!!
+	 */
+	unsigned char buf[256];
+	unsigned char *dp;
+	int i, j, left, retval;
+
+
+	dp = config->data;
+	left = config->len;
+	if (left) {
+		B1_put_byte(base, SEND_CONFIG);
+        	B1_put_word(base, 1);
+		B1_put_byte(base, SEND_CONFIG);
+        	B1_put_word(base, left);
+	}
+	while (left > sizeof(buf)) {
+		retval = copy_from_user(buf, dp, sizeof(buf));
+		if (retval)
+			return -EFAULT;
+		if (loaddebug)
+			printk(KERN_DEBUG "b1capi: conf load: %d bytes ..", sizeof(buf));
+		for (i = 0; i < sizeof(buf); ) {
+			B1_put_byte(base, SEND_CONFIG);
+			for (j=0; j < 4; j++) {
+				B1_put_byte(base, buf[i++]);
+			}
+		}
+		if (loaddebug)
+		   printk("ok\n");
+		left -= sizeof(buf);
+		dp += sizeof(buf);
+	}
+	if (left) {
+		retval = copy_from_user(buf, dp, left);
+		if (retval)
+			return -EFAULT;
+		if (loaddebug)
+			printk(KERN_DEBUG "b1capi: conf load: %d bytes ..", left);
+		for (i = 0; i < left; ) {
+			B1_put_byte(base, SEND_CONFIG);
+			for (j=0; j < 4; j++) {
+				if (i < left)
+					B1_put_byte(base, buf[i++]);
+				else
+					B1_put_byte(base, 0);
+			}
+		}
+		if (loaddebug)
+		   printk("ok\n");
+	}
+	return 0;
+}
+
 int B1_loaded(unsigned short base)
 {
 	int i;
@@ -331,7 +759,7 @@ int B1_loaded(unsigned short base)
 			break;
 	}
 	if (!B1_tx_empty(base)) {
-		printk(KERN_ERR "b1lli: B1_loaded: timeout tx\n");
+		printk(KERN_ERR "b1lli(0x%x): B1_loaded: timeout tx\n", base);
 		return 0;
 	}
 	B1_put_byte(base, SEND_POLL);
@@ -343,11 +771,12 @@ int B1_loaded(unsigned short base)
 					printk(KERN_DEBUG "b1capi: loaded: ok\n");
 				return 1;
 			}
-			printk(KERN_ERR "b1lli: B1_loaded: got 0x%x ???\n", ans);
+			printk(KERN_ERR "b1lli(0x%x): B1_loaded: got 0x%x ???\n",
+				base, ans);
 			return 0;
 		}
 	}
-	printk(KERN_ERR "b1lli: B1_loaded: timeout rx\n");
+	printk(KERN_ERR "b1lli(0x%x): B1_loaded: timeout rx\n", base);
 	return 0;
 }
 
@@ -410,8 +839,6 @@ void B1_send_release(unsigned short port,
 	B1_put_word(port, appid);
 	restore_flags(flags);
 }
-
-extern int showcapimsgs;
 
 void B1_send_message(unsigned short port, struct sk_buff *skb)
 {
@@ -479,6 +906,7 @@ void B1_handle_interrupt(avmb1_card * card)
 	unsigned NCCI;
 	unsigned WindowSize;
 
+t1retry:
 	if (!B1_rx_full(card->port))
 		return;
 
@@ -555,7 +983,7 @@ void B1_handle_interrupt(avmb1_card * card)
 		WindowSize = B1_get_word(card->port);
 
 		if (showcapimsgs)
-			printk(KERN_DEBUG "b1lli: NEW_NCCI app %u ncci 0x%x\n", ApplId, NCCI);
+			printk(KERN_DEBUG "b1lli(0x%x): NEW_NCCI app %u ncci 0x%x\n", card->port, ApplId, NCCI);
 
 		avmb1_handle_new_ncci(card, ApplId, NCCI, WindowSize);
 
@@ -567,19 +995,23 @@ void B1_handle_interrupt(avmb1_card * card)
 		NCCI = B1_get_word(card->port);
 
 		if (showcapimsgs)
-			printk(KERN_DEBUG "b1lli: FREE_NCCI app %u ncci 0x%x\n", ApplId, NCCI);
+			printk(KERN_DEBUG "b1lli(0x%x): FREE_NCCI app %u ncci 0x%x\n", card->port, ApplId, NCCI);
 
 		avmb1_handle_free_ncci(card, ApplId, NCCI);
 		break;
 
 	case RECEIVE_START:
+                if (card->cardtype == AVM_CARDTYPE_T1) {
+	           B1_put_byte(card->port, SEND_POLLACK);
+		   /* printk(KERN_DEBUG "b1lli: T1 watchdog\n"); */
+                }
 		if (card->blocked)
-			printk(KERN_DEBUG "b1lli: RESTART\n");
+			printk(KERN_DEBUG "b1lli(0x%x): RESTART\n", card->port);
 		card->blocked = 0;
 		break;
 
 	case RECEIVE_STOP:
-		printk(KERN_DEBUG "b1lli: STOP\n");
+		printk(KERN_DEBUG "b1lli(0x%x): STOP\n", card->port);
 		card->blocked = 1;
 		break;
 
@@ -588,14 +1020,24 @@ void B1_handle_interrupt(avmb1_card * card)
 		card->versionlen = B1_get_slice(card->port, card->versionbuf);
 		card->cardstate = CARD_ACTIVE;
 		parse_version(card);
-		printk(KERN_INFO "b1lli: %s-card (%s) with %s now active\n",
+		printk(KERN_INFO "b1lli(0x%x): %s-card (%s) now active\n",
+		       card->port,
 		       card->version[VER_CARDTYPE],
-		       card->version[VER_DRIVER],
-		       card->version[VER_PROTO]);
+		       card->version[VER_DRIVER]);
 		avmb1_card_ready(card);
 		break;
+        case RECEIVE_TASK_READY:
+		ApplId = (unsigned) B1_get_word(card->port);
+		MsgLen = B1_get_slice(card->port, card->msgbuf);
+		card->msgbuf[MsgLen] = 0;
+		printk(KERN_INFO "b1lli(0x%x): Task %d \"%s\" ready.\n",
+				card->port, ApplId, card->msgbuf);
+		break;
 	default:
-		printk(KERN_ERR "b1lli: B1_handle_interrupt: 0x%x ???\n", b1cmd);
+		printk(KERN_ERR "b1lli(0x%x): B1_handle_interrupt: 0x%x ???\n",
+				card->port, b1cmd);
 		break;
 	}
+	if (card->cardtype == AVM_CARDTYPE_T1) 
+		goto t1retry;
 }

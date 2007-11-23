@@ -232,6 +232,29 @@ loader_panic_mess:
 loader_ok:
 ! Get memory size (extended mem, kB)
 
+#ifndef STANDARD_MEMORY_BIOS_CALL
+	push	ebx
+
+        xor     ebx,ebx		! preload new memory slot with 0k
+        mov	[0x1e0], ebx
+
+        mov     ax,#0xe801
+	int     0x15
+	jc      oldstylemem
+
+	and     ebx, #0xffff    ! clear sign extend
+	shl     ebx, 6          ! and go from 64k to 1k chunks
+	mov     [0x1e0],ebx     ! store extended memory size
+
+	and     eax, #0xffff    ! clear sign extend
+ 	add     [0x1e0],eax     ! and add lower memory into total size.
+  
+	! and fall into the old memory detection code to populate the
+	! compatability slot.
+
+oldstylemem:
+	pop	ebx
+#endif
 	mov	ah,#0x88
 	int	0x15
 	mov	[2],ax

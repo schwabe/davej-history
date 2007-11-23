@@ -284,6 +284,7 @@ static struct dev_info device_list[] =
 {"NRC","MBR-7.4","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"REGAL","CDC-4X","*", BLIST_MAX5LUN | BLIST_SINGLELUN},
 {"NAKAMICH","MJ-4.8S","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"NAKAMICH","MJ-5.16S","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-600","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-602X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-604X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
@@ -687,6 +688,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   case TYPE_MOD:
   case TYPE_PROCESSOR:
   case TYPE_SCANNER:
+  case TYPE_MEDIUM_CHANGER:
     SDpnt->writeable = 1;
     break;
   case TYPE_WORM:

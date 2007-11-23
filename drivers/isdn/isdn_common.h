@@ -1,4 +1,4 @@
-/* $Id: isdn_common.h,v 1.6 1997/02/28 02:32:44 fritz Exp $
+/* $Id: isdn_common.h,v 1.6.2.1 1998/03/16 09:55:48 cal Exp $
 
  * header for Linux ISDN subsystem, common used functions and debugging-switches (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.h,v $
+ * Revision 1.6.2.1  1998/03/16 09:55:48  cal
+ * Merged in TimRu-patches. Still needs validation in conjunction with ABC-patches.
+ *
  * Revision 1.6  1997/02/28 02:32:44  fritz
  * Cleanup: Moved some tty related stuff from isdn_common.c
  *          to isdn_tty.c
@@ -76,6 +79,6 @@ extern void isdn_export_syms(void);
 #else
 #define isdn_export_syms()
 #endif
-#if defined(ISDN_DEBUG_NET_DUMP) || defined(ISDN_DEBUG_MODEM_DUMP)
+#if defined(ISDN_DEBUG_NET_DUMP) || defined(ISDN_DEBUG_MODEM_DUMP) || defined(CONFIG_ISDN_TIMEOUT_RULES)
 extern void isdn_dumppkt(char *, u_char *, int, int);
 #endif

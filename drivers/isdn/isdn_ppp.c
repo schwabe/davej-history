@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.28 1997/06/17 13:05:57 hipp Exp $
+/* $Id: isdn_ppp.c,v 1.28.2.1 1998/03/16 09:56:02 cal Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
+ * Revision 1.28.2.1  1998/03/16 09:56:02  cal
+ * Merged in TimRu-patches. Still needs validation in conjunction with ABC-patches.
+ *
  * Revision 1.28  1997/06/17 13:05:57  hipp
  * Applied Eric's underflow-patches (slightly modified)
  * more compression changes (but disabled at the moment)
@@ -173,7 +176,7 @@ static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
 static void isdn_ppp_free_mpqueue(isdn_net_dev *);
 #endif
 
-char *isdn_ppp_revision = "$Revision: 1.28 $";
+char *isdn_ppp_revision = "$Revision: 1.28.2.1 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 static struct isdn_ppp_compressor *ipc_head = NULL;
@@ -901,6 +904,7 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 				printk(KERN_DEBUG "ppp xmit: len %d\n", (int) skb->len);
 				isdn_ppp_frame_log("xmit", skb->data, skb->len, 32);
 			}
+
 			if ((cnt = isdn_writebuf_skb_stub(lp->isdn_device, lp->isdn_channel, skb)) != count) {
 				if (lp->sav_skb) {
 					dev_kfree_skb(lp->sav_skb, FREE_WRITE);
@@ -1264,10 +1268,10 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 			return;
 	}
 
-	netif_rx(skb);
-	/* net_dev->local.stats.rx_packets++; *//* done in isdn_net.c */
 	/* Reset hangup-timer */
 	lp->huptimer = 0;
+	netif_rx(skb);
+	/* net_dev->local.stats.rx_packets++; *//* done in isdn_net.c */
 
 	return;
 }
@@ -1376,10 +1380,10 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 	 */
 
 	/* Pull off the fake header we stuck on earlier to keep
-     * the fragemntation code happy.
-     * this will break the ISDN_SYNCPPP_READDRESS hack a few lines
-     * above. So, enabling this is no longer allowed
-     */
+	 * the fragemntation code happy.
+	 * this will break the ISDN_SYNCPPP_READDRESS hack a few lines
+	 * above. So, enabling this is no longer allowed
+	 */
 	skb_pull(skb,IPPP_MAX_HEADER);
 
 	if (ipt->debug & 0x4)

@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.45 1997/06/21 10:42:06 fritz Exp $
+ /* $Id: icn.c,v 1.45.2.3 1998/06/07 13:32:04 fritz Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,25 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
+ * Revision 1.45.2.3  1998/06/07 13:32:04  fritz
+ * Minor bugfixes for broken Switches.
+ *
+ * Revision 1.45.2.2  1998/03/07 23:35:36  detabc
+ * added the abc-extension to the linux isdn-kernel
+ * for kernel-version 2.0.xx
+ * DO NOT USE FOR HIGHER KERNELS-VERSIONS
+ * all source-lines are switched with the define  CONFIG_ISDN_WITH_ABC
+ * (make config and answer ABC-Ext. Support (Compress,TCP-Keepalive ...) with yes
+ *
+ * you need also a modified isdnctrl-source the switch on the
+ * features of the abc-extension
+ *
+ * please use carefully. more detail will be follow.
+ * thanks
+ *
+ * Revision 1.45.2.1  1997/08/21 15:56:50  fritz
+ * Synchronized 2.0.X branch with 2.0.31-pre7
+ *
  * Revision 1.45  1997/06/21 10:42:06  fritz
  * Added availability to select leased mode on only one channel.
  *
@@ -193,7 +212,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.45 $";
+*revision = "$Revision: 1.45.2.3 $";
 
 static int icn_addcard(int, char *, char *);
 
@@ -531,8 +550,13 @@ static icn_stat icn_stat_table[] =
 {
 	{"BCON_",          ISDN_STAT_BCONN, 1},	/* B-Channel connected        */
 	{"BDIS_",          ISDN_STAT_BHUP,  2},	/* B-Channel disconnected     */
-	{"DCON_",          ISDN_STAT_DCONN, 0},	/* D-Channel connected        */
-	{"DDIS_",          ISDN_STAT_DHUP,  0},	/* D-Channel disconnected     */
+#ifdef CONFIG_ISDN_WITH_ABC
+	{"DCON_",          ISDN_STAT_DCONN, 10}, /* D-Channel connected       */
+	{"DDIS_",          ISDN_STAT_DHUP,  11}, /* D-Channel disconnected    */
+#else
+	{"DCON_",          ISDN_STAT_DCONN, 0}, /* D-Channel connected        */
+	{"DDIS_",          ISDN_STAT_DHUP,  0}, /* D-Channel disconnected     */
+#endif
 	{"DCAL_I",         ISDN_STAT_ICALL, 3},	/* Incoming call dialup-line  */
 	{"DSCA_I",         ISDN_STAT_ICALL, 3},	/* Incoming call 1TR6-SPV     */
 	{"FCALL",          ISDN_STAT_ICALL, 4},	/* Leased line connection up  */
@@ -582,7 +606,41 @@ icn_parse_status(u_char * status, int channel, icn_card * card)
 	cmd.driver = card->myid;
 	cmd.arg = channel;
 	switch (action) {
+#ifdef CONFIG_ISDN_WITH_ABC
+	case 11:
+
+		save_flags(flags);
+		cli();
+		icn_free_queue(card,channel);
+		card->rcvidx[channel] = 0;
+
+		if( card->flags & 
+			((channel)?ICN_FLAGS_B2ACTIVE:ICN_FLAGS_B1ACTIVE)) {
+
+			isdn_ctrl ncmd;
+
+			printk(KERN_INFO "icn: D-Channel hangup before B-Channel hangup\n");
+
+			card->flags &= ~((channel)?
+					ICN_FLAGS_B2ACTIVE:ICN_FLAGS_B1ACTIVE);
+
+			memset(&ncmd,0,sizeof(ncmd));
+
+			ncmd.driver = card->myid;
+			ncmd.arg = channel;
+			ncmd.command = ISDN_STAT_BHUP;
+			restore_flags(flags);
+			card->interface.statcallb(&cmd);
+			dflag |= (channel+1);
+
+		} else restore_flags(flags);
+		
+		break;
+#endif
 		case 1:
+#ifdef CONFIG_ISDN_WITH_ABC
+			icn_free_queue(card,channel);
+#endif
 			card->flags |= (channel) ?
 			    ICN_FLAGS_B2ACTIVE : ICN_FLAGS_B1ACTIVE;
 			break;
@@ -601,17 +659,22 @@ icn_parse_status(u_char * status, int channel, icn_card * card)
 				char *t = status + 6;
 				char *s = strpbrk(t, ",");
 
+				memset(&cmd.parm.setup, 0, sizeof(cmd.parm.setup));
+				if (!s)
+					break;
 				*s++ = '\0';
 				strncpy(cmd.parm.setup.phone, t,
 					sizeof(cmd.parm.setup.phone));
-				s = strpbrk(t = s, ",");
+				if (!(s = strpbrk(t = s, ",")))
+					break;
 				*s++ = '\0';
 				if (!strlen(t))
 					cmd.parm.setup.si1 = 0;
 				else
 					cmd.parm.setup.si1 =
 					    simple_strtoul(t, NULL, 10);
-				s = strpbrk(t = s, ",");
+				if (!(s = strpbrk(t = s, ",")))
+					break;
 				*s++ = '\0';
 				if (!strlen(t))
 					cmd.parm.setup.si2 = 0;
@@ -621,8 +684,6 @@ icn_parse_status(u_char * status, int channel, icn_card * card)
 				strncpy(cmd.parm.setup.eazmsn, s,
 					sizeof(cmd.parm.setup.eazmsn));
 			}
-			cmd.parm.setup.plan = 0;
-			cmd.parm.setup.screen = 0;
 			break;
 		case 4:
 			sprintf(cmd.parm.setup.phone, "LEASED%d", card->myid);

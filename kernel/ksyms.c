@@ -310,6 +310,7 @@ struct symbol_table symbol_table = {
 	X(sys_call_table),
 	X(hard_reset_now),
 	X(_ctype),
+	X(_ctmp),
 	X(get_random_bytes),
 
 	/* Signal interfaces */
@@ -367,6 +368,10 @@ struct symbol_table symbol_table = {
 	/* binfmt_aout */
 	X(get_write_access),
 	X(put_write_access),
+
+#ifdef CONFIG_PROC_FS
+	X(proc_dir_inode_operations),
+#endif
 
 	/********************************************************
 	 * Do not add anything below this line,

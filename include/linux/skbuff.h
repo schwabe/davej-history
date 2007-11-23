@@ -112,6 +112,17 @@ struct sk_buff
 	unsigned char 	*end;			/* End pointer					*/
 	void 		(*destructor)(struct sk_buff *);	/* Destruct function		*/
 	__u16		redirport;		/* Redirect port				*/
+
+	/*
+	 *	Keep this at the end then we wont break stuff.
+	 */
+#if defined(CONFIG_SHAPER) || defined(CONFIG_SHAPER_MODULE)
+        __u32           shapelatency;           /* Latency on frame */
+        __u32           shapeclock;             /* Time it should go out */
+        __u32           shapelen;               /* Frame length in clocks */
+        __u32           shapestamp;             /* Stamp for shaper    */
+        __u16           shapepend;              /* Pending */
+#endif
 };
 
 #ifdef CONFIG_SKB_LARGE

@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.32 1997/08/21 09:49:46 fritz Exp $
+/* $Id: isdn.h,v 1.31.2.10 1998/06/07 13:48:30 fritz Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,8 +21,48 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
- * Revision 1.32  1997/08/21 09:49:46  fritz
- * Increased NET_DV
+ * Revision 1.31.2.10  1998/06/07 13:48:30  fritz
+ * ABC cleanup
+ *
+ * Revision 1.31.2.9  1998/06/02 12:12:49  detabc
+ * wegen einer einstweiliger verfuegung gegen DW ist zur zeit
+ * die abc-extension bis zur klaerung der rechtslage nicht verfuegbar
+ *
+ * Revision 1.31.2.8  1998/05/06 08:30:44  detabc
+ * add Item to stop icmp-unreach (max. 6 times of dialwait delay)
+ *
+ * Revision 1.31.2.7  1998/04/26 19:51:40  detabc
+ * removed unused code
+ *
+ * Revision 1.31.2.6  1998/04/26 11:10:46  detabc
+ * add items for the abc_tx_queus and the abc_delayed_hangup
+ * only used if the abc-extension is enabled
+ *
+ * Revision 1.31.2.5  1998/04/18 17:39:45  detabc
+ * remove some unused abc-lines
+ * added defines und items for abc-secure callback (only used with abc-extenrsion)
+ *
+ * Revision 1.31.2.4  1998/04/08 21:42:25  keil
+ * Blocksize default 1024
+ *
+ * Revision 1.31.2.3  1998/03/16 09:56:28  cal
+ * Merged in TimRu-patches. Still needs validation in conjunction with ABC-patches.
+ *
+ * Revision 1.31.2.2  1998/03/07 23:35:45  detabc
+ * added the abc-extension to the linux isdn-kernel
+ * for kernel-version 2.0.xx
+ * DO NOT USE FOR HIGHER KERNELS-VERSIONS
+ * all source-lines are switched with the define  CONFIG_ISDN_WITH_ABC
+ * (make config and answer ABC-Ext. Support (Compress,TCP-Keepalive ...) with yes
+ *
+ * you need also a modified isdnctrl-source the switch on the
+ * features of the abc-extension
+ *
+ * please use carefully. more detail will be follow.
+ * thanks
+ *
+ * Revision 1.31.2.1  1997/08/21 15:57:04  fritz
+ * Synchronized 2.0.X branch with 2.0.31-pre7
  *
  * Revision 1.31  1997/06/22 11:57:07  fritz
  * Added ability to adjust slave triggerlevel.
@@ -182,6 +222,12 @@
 #define IIOCGETCPS  _IO('I',21)
 #define IIOCGETDVR  _IO('I',22)
 
+#define IIOCNETARU  _IO('I',23)
+#define IIOCNETDRU  _IO('I',24)
+#define IIOCNETGRU  _IO('I',25)
+
+#define IIOCNETBUD  _IO('I',26)
+
 #define IIOCNETALN  _IO('I',32)
 #define IIOCNETDLN  _IO('I',33)
 
@@ -254,6 +300,9 @@ typedef struct {
   int  pppbind;      /* ippp device for bindings              */
   int  chargeint;    /* Use fixed charge interval length      */
   int  triggercps;   /* BogoCPS needed for triggering slave   */
+  int  dialtimeout;  /* Dial-Timeout                          */
+  int  dialwait;     /* Time to wait after failed dial        */
+  int  stopped;      /* Flag: Stopped                         */
 } isdn_net_ioctl_cfg;
 
 #ifdef __KERNEL__
@@ -364,6 +413,9 @@ typedef struct {
 #define ISDN_NET_TMP        0x10       /* tmp interface until getting an IP */
 #define ISDN_NET_DYNAMIC    0x20       /* this link is dynamically allocated */
 #endif
+
+#define ISDN_NET_STOPPED    0x40       /* this interface is stopped         */
+
 #define ISDN_NET_MAGIC      0x49344C02 /* for paranoia-checking             */
 
 /* Phone-list-element */
@@ -423,7 +475,7 @@ typedef struct isdn_net_local_s {
   int                    sqfull;       /* Flag: netdev-queue overloaded    */
   ulong                  sqfull_stamp; /* Start-Time of overload           */
   ulong                  slavedelay;   /* Dynamic bundling delaytime       */
-  int                    triggercps;   /* BogoCPS needed for trigger slave */
+  int  					triggercps;	/* BogoCPS needed for triggering slave   */
   struct device          *srobin;      /* Ptr to Master device for slaves  */
   isdn_net_phone         *phone[2];    /* List of remote-phonenumbers      */
 				       /* phone[0] = Incoming Numbers      */
@@ -460,6 +512,11 @@ typedef struct isdn_net_local_s {
 				    struct device *,
                                     unsigned char *);
   int  pppbind;                        /* ippp device for bindings         */
+  int					dialtimeout;	/* How long shall we try on dialing? (jiffies) */
+  int			dialwait;		/* How long shall we wait after failed attempt? (jiffies) */
+  ulong			dialstarted;	/* jiffies of first dialing-attempt */
+  ulong			dialwait_timer;	/* jiffies of earliest next dialing-attempt */
+  int			huptimeout;	/* How long will the connection be up? (seconds) */
 } isdn_net_local;
 
 #ifdef CONFIG_ISDN_PPP
@@ -502,7 +559,8 @@ typedef struct isdn_net_dev_s {
 #define ISDN_ASYNC_PGRP_LOCKOUT       0x0200 /* Lock cua opens on pgrp       */
 #define ISDN_ASYNC_CALLOUT_NOHUP      0x0400 /* No hangup for cui            */
 #define ISDN_ASYNC_SPLIT_TERMIOS      0x0008 /* Sep. termios for dialin/out  */
-#define ISDN_SERIAL_XMIT_SIZE           4000 /* Maximum bufsize for write    */
+#define ISDN_SERIAL_XMIT_SIZE           1024 /* default bufsize for write    */
+#define ISDN_SERIAL_XMIT_MAX            4000 /* Maximum bufsize for write    */
 #define ISDN_SERIAL_TYPE_NORMAL            1
 #define ISDN_SERIAL_TYPE_CALLOUT           2
 
@@ -624,7 +682,7 @@ struct sqqueue {
 struct mpqueue {
   struct mpqueue *next;
   struct mpqueue *last;
-  long sqno;
+  long    sqno;
   struct sk_buff *skb;
   int BEbyte;
   unsigned long time;
@@ -663,8 +721,12 @@ struct ippp_struct {
   struct slcompress *slcomp;
 #endif
   unsigned long debug;
-  struct isdn_ppp_compressor *compressor,*link_compressor;
+  struct isdn_ppp_compressor *compressor, *link_compressor;
   void *decomp_stat,*comp_stat,*link_decomp_stat,*link_comp_stat;
+#ifdef ISDN_SYNCPPP_READDRESS
+  unsigned long	old_pa_addr;
+  unsigned long	old_pa_dstaddr;
+#endif
 };
 
 #endif

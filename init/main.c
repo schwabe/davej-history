@@ -169,6 +169,9 @@ extern void atari_scsi_setup (char *str, int *ints);
 extern void wd33c93_setup (char *str, int *ints);
 extern void gvp11_setup (char *str, int *ints);
 
+#ifdef CONFIG_CYCLADES
+extern void cy_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_DIGI
 extern void pcxx_setup(char *str, int *ints);
 #endif
@@ -445,6 +448,9 @@ struct kernel_param bootsetups[] = {
 #endif
 #if defined(CONFIG_GVP11_SCSI)
 	{ "gvp11=", gvp11_setup },
+#endif
+#ifdef CONFIG_CYCLADES
+	{ "cyclades=", cy_setup },
 #endif
 #ifdef CONFIG_DIGI
 	{ "digi=", pcxx_setup },

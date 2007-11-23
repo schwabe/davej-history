@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.44 1997/05/27 15:17:23 fritz Exp $
+/* $Id: isdn_common.c,v 1.44.2.4 1998/06/07 13:47:44 fritz Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,25 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.44.2.4  1998/06/07 13:47:44  fritz
+ * ABC cleanup
+ *
+ * Revision 1.44.2.2  1998/03/16 09:55:44  cal
+ * Merged in TimRu-patches. Still needs validation in conjunction with ABC-patches.
+ *
+ * Revision 1.44.2.1  1998/03/07 23:35:03  detabc
+ * added the abc-extension to the linux isdn-kernel
+ * for kernel-version 2.0.xx
+ * DO NOT USE FOR HIGHER KERNELS-VERSIONS
+ * all source-lines are switched with the define  CONFIG_ISDN_WITH_ABC
+ * (make config and answer ABC-Ext. Support (Compress,TCP-Keepalive ...) with yes
+ *
+ * you need also a modified isdnctrl-source the switch on the
+ * features of the abc-extension
+ *
+ * please use carefully. more detail will be follow.
+ * thanks
+ *
  * Revision 1.44  1997/05/27 15:17:23  fritz
  * Added changes for recent 2.1.x kernels:
  *   changed return type of isdn_close
@@ -218,7 +237,7 @@
 
 isdn_dev *dev = (isdn_dev *) 0;
 
-static char *isdn_revision = "$Revision: 1.44 $";
+static char *isdn_revision = "$Revision: 1.44.2.4 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -329,6 +348,7 @@ isdn_timer_funct(ulong dummy)
 #endif
 		}
 	}
+
 	if (tf) {
 		int flags;
 
@@ -1199,6 +1219,7 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
 #define iocts iocpar.iocts
 #define phone iocpar.phone
 #define cfg   iocpar.cfg
+
 
 	if (minor == ISDN_MINOR_STATUS) {
 		switch (cmd) {

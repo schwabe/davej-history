@@ -179,7 +179,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 			if (locks_verify_locked(file->f_inode))
 				return -EAGAIN;
 			/* cevans -- whoops another append-only file flaw */
-			if (IS_APPEND(file->f_inode) && (prot & PROT_WRITE))
+			if (IS_APPEND(file->f_inode) && (file->f_mode & 2))
 				return -EACCES;
 			/* fall through */
 		case MAP_PRIVATE:

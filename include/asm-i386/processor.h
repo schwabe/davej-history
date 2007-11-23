@@ -27,6 +27,53 @@ extern char wp_works_ok;	/* doesn't work on a 386 */
 extern char hlt_works_ok;	/* problems on some 486Dx4's and old 386's */
 extern int  have_cpuid;		/* We have a CPUID */
 
+extern unsigned long cpu_hz;	/* CPU clock frequency from time.c */
+
+/*
+ *	Detection of CPU model (CPUID).
+ */
+extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
+{
+	__asm__("cpuid"
+		: "=a" (*eax),
+		  "=b" (*ebx),
+		  "=c" (*ecx),
+		  "=d" (*edx)
+		: "a" (op)
+		: "cc");
+}
+
+/*
+ * Cyrix CPU register indexes (use special macros to access these)
+ */
+#define CX86_CCR2 0xc2
+#define CX86_CCR3 0xc3
+#define CX86_CCR4 0xe8
+#define CX86_CCR5 0xe9
+#define CX86_DIR0 0xfe
+#define CX86_DIR1 0xff
+
+/*
+ * Cyrix CPU register access macros
+ */
+
+extern inline unsigned char getCx86(unsigned char reg)
+{
+	unsigned char data;
+
+	__asm__ __volatile__("movb %1,%%al\n\t"
+		      "outb %%al,$0x22\n\t"
+		      "inb $0x23,%%al" : "=a" (data) : "q" (reg));
+	return data;
+}
+
+extern inline void setCx86(unsigned char reg, unsigned char data)
+{
+	__asm__ __volatile__("outb %%al,$0x22\n\t"
+	     "movb %1,%%al\n\t"
+	     "outb %%al,$0x23" : : "a" (reg), "q" (data));
+}
+
 /*
  * Bus types (default is ISA, but people can check others with these..)
  * MCA_bus hardcoded to 0 for now.

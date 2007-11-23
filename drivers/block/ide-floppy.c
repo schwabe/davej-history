@@ -28,6 +28,7 @@
  *                       Issue START cmd only if TEST_UNIT_READY fails
  *                       Add CDROMEJECT ioctl
  *                       Clean up error messages a bit
+ * Ver 0.72  Jul  8 98   Limit max sectors only on IOMEGA ZIP 23.D
  */
 
 #include <linux/config.h>
@@ -1376,7 +1377,8 @@ void idefloppy_setup (ide_drive_t *drive)
 	if (gcw.drq_type == 1)
 		set_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags);
 	if (strcmp(drive->id->model, "IOMEGA ZIP 100 ATAPI") == 0 &&
-	    strcmp(drive->id->fw_rev, "21.D") == 0)
+	    ((strcmp(drive->id->fw_rev, "21.D") == 0) ||
+	     (strcmp(drive->id->fw_rev, "23.D") == 0)))
 		floppy->max_sectors = 64;
 	else
 		floppy->max_sectors = IDEFLOPPY_MAX_SECTORS;

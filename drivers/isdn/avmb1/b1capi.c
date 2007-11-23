@@ -1,11 +1,71 @@
 /*
- * $Id: b1capi.c,v 1.4.2.1 1997/07/12 08:18:59 calle Exp $
+ * $Id: b1capi.c,v 1.4.2.18 1998/03/20 20:34:37 calle Exp $
  * 
  * CAPI 2.0 Module for AVM B1-card.
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1capi.c,v $
+ * Revision 1.4.2.18  1998/03/20 20:34:37  calle
+ * port valid check now only for T1, because of the PCI and PCMCIA cards.
+ *
+ * Revision 1.4.2.17  1998/03/20 14:38:17  calle
+ * capidrv: prepared state machines for suspend/resume/hold
+ * capidrv: fix bug in state machine if B1/T1 is out of nccis
+ * b1capi: changed some errno returns.
+ * b1capi: detect if you try to add same T1 to different io address.
+ * b1capi: change number of nccis depending on number of channels.
+ * b1lli: cosmetics
+ *
+ * Revision 1.4.2.16  1998/03/20 09:01:08  calle
+ * Changes capi_register handling to get full support for 30 bchannels.
+ *
+ * Revision 1.4.2.15  1998/03/18 17:43:26  calle
+ * T1 with fastlink, bugfix for multicontroller support in capidrv.c
+ *
+ * Revision 1.4.2.14  1998/03/04 17:33:47  calle
+ * Changes for T1.
+ *
+ * Revision 1.4.2.13  1998/02/27 15:40:41  calle
+ * T1 running with slow link. bugfix in capi_release.
+ *
+ * Revision 1.4.2.12  1998/02/24 17:58:25  calle
+ * changes for T1.
+ *
+ * Revision 1.4.2.11  1998/01/27 16:12:49  calle
+ * Support for PCMCIA B1/M1/M2 ready.
+ *
+ * Revision 1.4.2.10  1998/01/26 14:53:30  calle
+ * interface change for pcmcia cards
+ *
+ * Revision 1.4.2.9  1998/01/23 16:49:27  calle
+ * added functions for pcmcia cards,
+ * avmb1_addcard returns now the controller number.
+ *
+ * Revision 1.4.2.8  1998/01/16 14:04:15  calle
+ * Decoding of manufacturer part of capi_profile, now show linetype and
+ * protocol if possible.
+ *
+ * Revision 1.4.2.7  1998/01/15 15:33:34  calle
+ * print cardtype, d2 protocol and linetype after load.
+ *
+ * Revision 1.4.2.6  1997/12/08 06:58:41  calle
+ * correct typo.
+ *
+ * Revision 1.4.2.5  1997/12/07 19:59:54  calle
+ * more changes for M1/T1/B1 + config
+ *
+ * Revision 1.4.2.4  1997/11/26 16:57:20  calle
+ * more changes for B1/M1/T1.
+ *
+ * Revision 1.4.2.3  1997/11/26 10:46:52  calle
+ * prepared for M1 (Mobile) and T1 (PMX) cards.
+ * prepared to set configuration after load to support other D-channel
+ * protocols, point-to-point and leased lines.
+ *
+ * Revision 1.4.2.2  1997/10/19 14:44:36  calle
+ * fixed capi_get_version.
+ *
  * Revision 1.4.2.1  1997/07/12 08:18:59  calle
  * Correct bug in CARD_NR macro, so now more than one card will work.
  * Allow card reset, even if card is in running state.
@@ -52,20 +112,16 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.4.2.1 $";
+static char *revision = "$Revision: 1.4.2.18 $";
 
 /* ------------------------------------------------------------- */
 
-int portbase = 0x150;
-int irq = 15;
 int showcapimsgs = 0;		/* used in lli.c */
 int loaddebug = 0;
 
 #ifdef HAS_NEW_SYMTAB
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
-MODULE_PARM(portbase, "i");
-MODULE_PARM(irq, "2-15i");
-MODULE_PARM(showcapimsgs, "0-3i");
+MODULE_PARM(showcapimsgs, "0-5i");
 MODULE_PARM(loaddebug, "0-1i");
 #endif
 
@@ -99,7 +155,7 @@ typedef struct avmb1_appl {
 
 /* ------------------------------------------------------------- */
 
-static struct capi_version driver_version = {2, 0, 0, 9};
+static struct capi_version driver_version = {2, 0, 1, 1<<4};
 static char driver_serial[CAPI_SERIAL_LEN] = "4711";
 static char capi_manufakturer[64] = "AVM Berlin";
 
@@ -111,7 +167,7 @@ static char capi_manufakturer[64] = "AVM Berlin";
 
 #define NCCI2CTRL(ncci)    (((ncci) >> 24) & 0x7f)
 
-#define VALID_CARD(c)	   ((c) > 0 && (c) <= ncards)
+#define VALID_CARD(c)	   ((c) > 0 && (c) <= CAPI_MAXCONTR)
 #define CARD(c)		   (&cards[(c)-1])
 #define CARDNR(cp)	   (((cp)-cards)+1)
 
@@ -127,6 +183,17 @@ static struct tq_struct tq_state_notify;
 static struct tq_struct tq_recv_notify;
 
 /* -------- util functions ------------------------------------ */
+
+static char *cardtype2str(int cardtype)
+{
+	switch (cardtype) {
+		default:
+		case AVM_CARDTYPE_B1: return "B1";
+		case AVM_CARDTYPE_M1: return "M1";
+		case AVM_CARDTYPE_M2: return "M2";
+		case AVM_CARDTYPE_T1: return "T1";
+	}
+}
 
 static inline int capi_cmd_valid(__u8 cmd)
 {
@@ -271,7 +338,7 @@ void avmb1_handle_free_ncci(avmb1_card * card,
 			}
 		}
 		APPL(appl)->releasing--;
-		if (APPL(appl)->releasing == 0) {
+		if (APPL(appl)->releasing <= 0) {
 	                APPL(appl)->signal = 0;
 			APPL_MARK_FREE(appl);
 			printk(KERN_INFO "b1capi: appl %d down\n", appl);
@@ -404,25 +471,36 @@ static void notify_handler(void *dummy)
 
 /* -------- card ready callback ------------------------------- */
 
+
 void avmb1_card_ready(avmb1_card * card)
 {
+        struct capi_profile *profp =
+			(struct capi_profile *)card->version[VER_PROFILE];
+	char *dversion = card->version[VER_DRIVER];
 	__u16 appl;
+	char *cardname, cname[20];
+	__u32 flag;
+        int nbchan = profp->nbchannel;
 
 	card->cversion.majorversion = 2;
 	card->cversion.minorversion = 0;
-	card->cversion.majormanuversion = (card->version[VER_DRIVER][0] - '0') << 4;
-	card->cversion.majormanuversion |= (card->version[VER_DRIVER][2] - '0');
-	card->cversion.minormanuversion = (card->version[VER_DRIVER][3] - '0') << 4;
-	card->cversion.minormanuversion |= (card->version[VER_DRIVER][5] - '0') * 10;
-	card->cversion.minormanuversion |= (card->version[VER_DRIVER][6] - '0');
+	card->cversion.majormanuversion = (((dversion[0] - '0') & 0xf) << 4);
+	card->cversion.majormanuversion |= ((dversion[2] - '0') & 0xf);
+	card->cversion.minormanuversion = (dversion[3] - '0') << 4;
+	card->cversion.minormanuversion |=
+		(dversion[5] - '0') * 10 + ((dversion[6] - '0') & 0xf);
 	card->cardstate = CARD_RUNNING;
-
 
 	for (appl = 1; appl <= CAPI_MAXAPPL; appl++) {
 		if (VALID_APPLID(appl) && !APPL(appl)->releasing) {
+			int nconn, want = APPL(appl)->rparam.level3cnt;
+
+			if (want > 0) nconn = want;
+			else nconn = nbchan * -want;
+			if (nconn == 0) nconn = nbchan;
+
 			B1_send_register(card->port, appl,
-				1024 * (APPL(appl)->rparam.level3cnt+1),
-				APPL(appl)->rparam.level3cnt,
+				1024 * (nconn+1), nconn,
 				APPL(appl)->rparam.datablkcnt,
 				APPL(appl)->rparam.datablklen);
 		}
@@ -430,10 +508,45 @@ void avmb1_card_ready(avmb1_card * card)
 
         set_bit(CARDNR(card), &notify_up_set);
         queue_task(&tq_state_notify, &tq_scheduler);
-        printk(KERN_NOTICE "b1capi: card %d ready.\n", CARDNR(card));
+
+        flag = ((__u8 *)(profp->manu))[1];
+        switch (flag) {
+	case 0: cardname = cardtype2str(card->cardtype); break;
+	case 3: cardname = "PCMCIA B"; break;
+	case 4: cardname = "PCMCIA M1"; break;
+	case 5: cardname = "PCMCIA M2"; break;
+	case 6: cardname = "B1 V3.0"; break;
+	case 7: cardname = "B1 PCI"; break;
+	default: cardname = cname; break;
+                 sprintf(cname, "AVM?%u", (unsigned int)flag);
+                 break;
+        }
+        printk(KERN_NOTICE "b1capi: card %d \"%s\" ready.\n",
+		CARDNR(card), cardname);
+        flag = ((__u8 *)(profp->manu))[3];
+        if (flag)
+		printk(KERN_NOTICE "b1capi: card %d Protocol:%s%s%s%s%s%s%s\n",
+			CARDNR(card),
+			(flag & 0x01) ? " DSS1" : "",
+			(flag & 0x02) ? " CT1" : "",
+			(flag & 0x04) ? " VN3" : "",
+			(flag & 0x08) ? " NI1" : "",
+			(flag & 0x10) ? " AUSTEL" : "",
+			(flag & 0x20) ? " ESS" : "",
+			(flag & 0x40) ? " 1TR6" : ""
+			);
+        flag = ((__u8 *)(profp->manu))[5];
+	if (flag)
+		printk(KERN_NOTICE "b1capi: card %d Linetype:%s%s%s%s\n",
+			CARDNR(card),
+			(flag & 0x01) ? " point to point" : "",
+			(flag & 0x02) ? " point to multipoint" : "",
+			(flag & 0x08) ? " leased line without D-channel" : "",
+			(flag & 0x04) ? " leased line with D-channel" : ""
+			);
 }
 
-static void avmb1_card_down(avmb1_card * card)
+static void avmb1_card_down(avmb1_card * card, int notify)
 {
 	__u16 appl;
 
@@ -460,52 +573,135 @@ static void avmb1_card_down(avmb1_card * card)
 
 /* ------------------------------------------------------------- */
 
-int avmb1_addcard(int port, int irq)
+
+int avmb1_registercard(int port, int irq, int cardtype, int allocio)
 {
 	struct avmb1_card *card;
-	int irqval;
+	int irqval,i;
 
 
-	card = &cards[ncards];
+	for (i=0; i < CAPI_MAXCONTR && cards[i].cardstate != CARD_FREE; i++) ;
+   
+	if (i == CAPI_MAXCONTR) {
+		printk(KERN_ERR "b1capi: out of controller slots\n");
+	   	return -ENFILE;
+	}
+
+	card = &cards[i];
 	memset(card, 0, sizeof(avmb1_card));
-	sprintf(card->name, "avmb1-%d", ncards + 1);
+	sprintf(card->name, "avmb1-%d", CARDNR(card));
 
-	request_region(port, AVMB1_PORTLEN, card->name);
+        if (allocio)
+		request_region(port, AVMB1_PORTLEN, card->name);
 
-	if ((irqval = request_irq(irq, avmb1_interrupt, SA_SHIRQ, card->name, card)) != 0) {
+	if ((irqval = request_irq(irq, avmb1_interrupt,
+				 SA_SHIRQ, card->name, card)) != 0) {
 		printk(KERN_ERR "b1capi: unable to get IRQ %d (irqval=%d).\n",
 		       irq, irqval);
 		release_region((unsigned short) port, AVMB1_PORTLEN);
-		return -EIO;
+		return -EBUSY;
 	}
+
+	card->cardstate = CARD_DETECTED;
 	ncards++;
-	card->cnr = ncards;
+	card->cnr = CARDNR(card);
 	card->port = port;
 	card->irq = irq;
-	card->cardstate = CARD_DETECTED;
-	return 0;
+	card->cardtype = cardtype;
+	return card->cnr;
 }
 
-int avmb1_probecard(int port, int irq)
+int avmb1_addcard(int port, int irq, int cardtype)
+{
+	return avmb1_registercard(port, irq, cardtype, 1);
+}
+
+int avmb1_detectcard(int port, int irq, int cardtype)
 {
 	int rc;
 
-	if (check_region((unsigned short) port, AVMB1_PORTLEN)) {
-		printk(KERN_WARNING
-		       "b1capi: ports 0x%03x-0x%03x in use.\n",
-		       portbase, portbase + AVMB1_PORTLEN);
-		return -EIO;
+	if (!B1_valid_irq(irq, cardtype)) {
+		printk(KERN_WARNING "b1capi: irq %d not valid for %s-card.\n",
+				irq, cardtype2str(cardtype));
+		return -EINVAL;
 	}
-	if (!B1_valid_irq(irq)) {
-		printk(KERN_WARNING "b1capi: irq %d not valid.\n", irq);
-		return -EIO;
+	if (!B1_valid_port(port, cardtype)) {
+		printk(KERN_WARNING "b1capi: port 0x%x not valid for %s-card.\n",
+				port, cardtype2str(cardtype));
+		return -EINVAL;
 	}
-	if ((rc = B1_detect(port)) != 0) {
-		printk(KERN_NOTICE "b1capi: NO card at 0x%x (%d)\n", port, rc);
+	B1_reset(port);
+	if ((rc = B1_detect(port, cardtype)) != 0) {
+		printk(KERN_NOTICE "b1capi: NO %s-card at 0x%x (%d)\n",
+					  cardtype2str(cardtype), port, rc);
 		return -EIO;
 	}
 	B1_reset(port);
-	printk(KERN_NOTICE "b1capi: AVM-B1-Controller detected at 0x%x\n", port);
+	switch (cardtype) {
+		default:
+	   	case AVM_CARDTYPE_M1:
+	   	case AVM_CARDTYPE_M2:
+	   	case AVM_CARDTYPE_B1:
+	    		printk(KERN_NOTICE "b1capi: AVM-%s-Controller detected at 0x%x\n", cardtype2str(cardtype), port);
+			break;
+	   	case AVM_CARDTYPE_T1:
+			break;
+	}
+
+	return 0;
+}
+
+int avmb1_probecard(int port, int irq, int cardtype)
+{
+	if (check_region((unsigned short) port, AVMB1_PORTLEN)) {
+		printk(KERN_WARNING
+		       "b1capi: ports 0x%03x-0x%03x in use.\n",
+		       port, port + AVMB1_PORTLEN);
+		return -EBUSY;
+	}
+        return avmb1_detectcard(port, irq, cardtype);
+}
+
+int avmb1_unregistercard(int cnr, int freeio)
+{
+	avmb1_card * card;
+   	if (!VALID_CARD(cnr)) 
+		return -ESRCH;
+	card = CARD(cnr);
+
+	if (card->cardstate == CARD_FREE)
+		return -ESRCH;
+	if (card->cardstate == CARD_RUNNING)
+		avmb1_card_down(card, freeio);
+
+	if (card->cardstate != CARD_FREE)
+		if (card->cardtype == AVM_CARDTYPE_T1)
+			T1_reset(card->port);
+
+	free_irq(card->irq, card);
+	if (freeio)
+		release_region(card->port, AVMB1_PORTLEN);
+	card->cardstate = CARD_FREE;
+	return 0;
+}
+
+int avmb1_resetcard(int cnr)
+{
+	avmb1_card * card;
+
+	if (!VALID_CARD(cnr))
+		return -ESRCH;
+	card = CARD(cnr);
+	if (card->cardstate == CARD_FREE)
+		return -ESRCH;
+
+	if (card->cardstate == CARD_RUNNING)
+		avmb1_card_down(card, 0);
+
+	B1_reset(card->port);
+	B1_reset(card->port);
+
+	card->cardstate = CARD_DETECTED;
 
 	return 0;
 }
@@ -517,7 +713,7 @@ int avmb1_probecard(int port, int irq)
 static int capi_installed(void)
 {
 	int i;
-	for (i = 0; i < ncards; i++) {
+	for (i = 0; i < CAPI_MAXCONTR; i++) {
 		if (cards[i].cardstate == CARD_RUNNING)
 			return 1;
 	}
@@ -526,6 +722,7 @@ static int capi_installed(void)
 
 static __u16 capi_register(capi_register_params * rparam, __u16 * applidp)
 {
+	int nconn, want = rparam->level3cnt;
 	int i;
 	int appl;
 
@@ -544,14 +741,21 @@ static __u16 capi_register(capi_register_params * rparam, __u16 * applidp)
 
 	memcpy(&APPL(appl)->rparam, rparam, sizeof(capi_register_params));
 
-	for (i = 0; i < ncards; i++) {
+	for (i = 0; i < CAPI_MAXCONTR; i++) {
+		struct capi_profile *profp =
+			(struct capi_profile *)cards[i].version[VER_PROFILE];
+
 		if (cards[i].cardstate != CARD_RUNNING)
 			continue;
+
+		if (want > 0) nconn = want;
+		else nconn = profp->nbchannel * -want;
+		if (nconn == 0) nconn = profp->nbchannel;
+
 		B1_send_register(cards[i].port, appl,
-			       1024 * (APPL(appl)->rparam.level3cnt + 1),
-				 APPL(appl)->rparam.level3cnt,
-				 APPL(appl)->rparam.datablkcnt,
-				 APPL(appl)->rparam.datablklen);
+			1024 * (nconn+1), nconn,
+			APPL(appl)->rparam.datablkcnt,
+			APPL(appl)->rparam.datablklen);
 	}
 	*applidp = appl;
 	printk(KERN_INFO "b1capi: appl %d up\n", appl);
@@ -564,20 +768,18 @@ static __u16 capi_release(__u16 applid)
 	struct sk_buff *skb;
 	int i;
 
-	if (ncards == 0)
-		return CAPI_REGNOTINSTALLED;
 	if (!VALID_APPLID(applid) || APPL(applid)->releasing)
 		return CAPI_ILLAPPNR;
 	while ((skb = skb_dequeue(&APPL(applid)->recv_queue)) != 0)
 		kfree_skb(skb, FREE_READ);
-	for (i = 0; i < ncards; i++) {
+	for (i = 0; i < CAPI_MAXCONTR; i++) {
 		if (cards[i].cardstate != CARD_RUNNING) {
 			continue;
 		}
 		APPL(applid)->releasing++;
 		B1_send_release(cards[i].port, applid);
 	}
-	if (APPL(applid)->releasing == 0) {
+	if (APPL(applid)->releasing <= 0) {
 	        APPL(applid)->signal = 0;
 		APPL_MARK_FREE(applid);
 		printk(KERN_INFO "b1capi: appl %d down\n", applid);
@@ -661,7 +863,7 @@ static __u16 capi_get_version(__u16 contr, struct capi_version *verp)
 	if (!VALID_CARD(contr) || CARD(contr)->cardstate != CARD_RUNNING) 
 		return 0x2002;
 
-	memcpy((void *) verp, CARD(contr)->version[VER_SERIAL],
+	memcpy((void *) verp, &CARD(contr)->cversion,
 	       sizeof(capi_version));
 	return CAPI_NOERROR;
 }
@@ -698,33 +900,87 @@ static __u16 capi_get_profile(__u16 contr, struct capi_profile *profp)
 static int capi_manufacturer(unsigned int cmd, void *data)
 {
 	unsigned long flags;
-	avmb1_loaddef ldef;
-	avmb1_carddef cdef;
+	avmb1_loadandconfigdef ldef;
+	avmb1_extcarddef cdef;
 	avmb1_resetdef rdef;
+	avmb1_getdef gdef;
 	avmb1_card *card;
 	int rc;
 
 	switch (cmd) {
 	case AVMB1_ADDCARD:
-		if ((rc = copy_from_user((void *) &cdef, data,
-					 sizeof(avmb1_carddef))))
-			return rc;
-		if (!B1_valid_irq(cdef.irq))
-			return -EINVAL;
+	case AVMB1_ADDCARD_WITH_TYPE:
+		if (cmd == AVMB1_ADDCARD) {
+		   if ((rc = copy_from_user((void *) &cdef, data,
+					    sizeof(avmb1_carddef))))
+			   return rc;
+		   cdef.cardtype = AVM_CARDTYPE_B1;
+		} else {
+		   if ((rc = copy_from_user((void *) &cdef, data,
+					    sizeof(avmb1_extcarddef))))
+			   return rc;
+		}
 
-		if ((rc = avmb1_probecard(cdef.port, cdef.irq)) != 0)
+		if ((rc = avmb1_probecard(cdef.port, cdef.irq, cdef.cardtype)) != 0)
 			return rc;
 
-		return avmb1_addcard(cdef.port, cdef.irq);
+                if (cdef.cardtype == AVM_CARDTYPE_T1) {
+			int i;
+		        for (i=0; i < CAPI_MAXCONTR; i++) {
+	        	    	if (   cards[i].cardstate != CARD_FREE
+				    && cards[i].cardtype == AVM_CARDTYPE_T1
+				    && cards[i].cardnr == cdef.cardnr) {
+					printk(KERN_ERR
+						"b1capi: T1-HEMA-card-%d already at 0x%x\n",
+						cdef.cardnr, cards[i].port);
+					return -EBUSY;
+				}
+                        }
+			rc = T1_detectandinit(cdef.port,cdef.irq,cdef.cardnr);
+			if (rc) {
+			        printk(KERN_NOTICE "b1capi: NO T1-HEMA-card-%d at 0x%x (%d)\n",
+					  cdef.cardnr, cdef.port, rc);
+				return -EIO;
+                        }
+			printk(KERN_NOTICE "b1capi: T1-HEMA-card-%d at 0x%x\n",
+				  cdef.cardnr, cdef.port);
+		}
+
+		rc = avmb1_addcard(cdef.port, cdef.irq, cdef.cardtype);
+		if (rc < 0)
+			return rc;
+		/* don't want to change interface t
+		   addcard/probecard/registercard */
+                if (cdef.cardtype == AVM_CARDTYPE_T1) {
+			int i;
+		        for (i=0; i < CAPI_MAXCONTR; i++) {
+	        	    	if (cards[i].cnr == rc) {
+					cards[i].cardnr = cdef.cardnr;
+					break;
+				}
+                        }
+		}
+		return rc;
 
 	case AVMB1_LOAD:
+	case AVMB1_LOAD_AND_CONFIG:
 
-		if ((rc = copy_from_user((void *) &ldef, data,
-					 sizeof(avmb1_loaddef))))
-			return rc;
-		if (!VALID_CARD(ldef.contr) || ldef.t4file.len <= 0) {
-			if (loaddebug)
-				printk(KERN_DEBUG "b1capi: load: invalid parameter contr=%d len=%d\n", ldef.contr, ldef.t4file.len);
+		if (cmd == AVMB1_LOAD) {
+			if ((rc = copy_from_user((void *) &ldef, data,
+						sizeof(avmb1_loaddef))))
+				return rc;
+			ldef.t4config.len = 0;
+			ldef.t4config.data = 0;
+		} else {
+			if ((rc = copy_from_user((void *) &ldef, data,
+					    	sizeof(avmb1_loadandconfigdef))))
+				return rc;
+		}
+		if (!VALID_CARD(ldef.contr))
+			return -ESRCH;
+
+		if (ldef.t4file.len <= 0) {
+			printk(KERN_DEBUG "b1capi: load: invalid parameter: length of t4file is %d ?\n", ldef.t4file.len);
 			return -EINVAL;
 		}
 
@@ -746,13 +1002,34 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 		}
 
 		B1_reset(card->port);
+
+		if (loaddebug) {
+			printk(KERN_DEBUG "b1capi: loading contr %d\n",
+				ldef.contr);
+		}
+
 		if ((rc = B1_load_t4file(card->port, &ldef.t4file))) {
 			B1_reset(card->port);
 			printk(KERN_ERR "b1capi: failed to load t4file!!\n");
 			card->cardstate = CARD_DETECTED;
 			return rc;
 		}
+
 		B1_disable_irq(card->port);
+
+		if (ldef.t4config.len > 0) { /* load config */
+		        if (loaddebug) {
+				printk(KERN_DEBUG "b1capi: loading config to contr %d\n",
+				   			ldef.contr);
+		   	}
+			if ((rc = B1_load_config(card->port, &ldef.t4config))) {
+				B1_reset(card->port);
+				printk(KERN_ERR "b1capi: failed to load config!!\n");
+				card->cardstate = CARD_DETECTED;
+				return rc;
+			}
+		}
+
 		if (loaddebug) {
 			printk(KERN_DEBUG "b1capi: load: ready contr %d: checking\n",
 				ldef.contr);
@@ -770,8 +1047,7 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 		card->cardstate = CARD_INITSTATE;
 		save_flags(flags);
 		cli();
-		B1_assign_irq(card->port, card->irq);
-		B1_enable_irq(card->port);
+		B1_setinterrupt(card->port, card->irq, card->cardtype);
 		restore_flags(flags);
 
 		if (loaddebug) {
@@ -782,7 +1058,14 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 		/*
 		 * init card
 		 */
-		B1_send_init(card->port, AVM_NAPPS, AVM_NNCCI, card->cnr - 1);
+                if (card->cardtype == AVM_CARDTYPE_T1)
+		   B1_send_init(card->port, AVM_NAPPS,
+					    AVM_NNCCI_PER_CHANNEL*30,
+				   	    card->cnr - 1);
+		else
+		   B1_send_init(card->port, AVM_NAPPS,
+					    AVM_NNCCI_PER_CHANNEL*2,
+				   	    card->cnr - 1);
 
 		if (loaddebug) {
 			printk(KERN_DEBUG "b1capi: load: waiting for init reply contr %d\n",
@@ -799,25 +1082,45 @@ static int capi_manufacturer(unsigned int cmd, void *data)
 				return -EINTR;
 		}
 		return 0;
+
 	case AVMB1_RESETCARD:
 		if ((rc = copy_from_user((void *) &rdef, data,
 					 sizeof(avmb1_resetdef))))
 			return rc;
 
+		return avmb1_resetcard(rdef.contr);
+
+	case AVMB1_GET_CARDINFO:
+		if ((rc = copy_from_user((void *) &gdef, data,
+					 sizeof(avmb1_getdef))))
+			return rc;
+
+		if (!VALID_CARD(gdef.contr))
+			return -ESRCH;
+
+		card = CARD(gdef.contr);
+
+		gdef.cardstate = card->cardstate;
+		gdef.cardtype = card->cardtype;
+
+		if ((rc = copy_to_user(data, (void *) &gdef,
+					 sizeof(avmb1_getdef))))
+			return rc;
+
+		return 0;
+	case AVMB1_REMOVECARD:
+		if ((rc = copy_from_user((void *) &rdef, data,
+					 sizeof(avmb1_resetdef))))
+			return rc;
 		if (!VALID_CARD(rdef.contr))
-			return -EINVAL;
+			return -ESRCH;
 
 		card = CARD(rdef.contr);
 
-		if (card->cardstate == CARD_RUNNING)
-			avmb1_card_down(card);
+		if (card->cardstate != CARD_DETECTED)
+			return -EBUSY;
 
-		card->cardstate = CARD_DETECTED;
-
-		B1_reset(card->port);
-		B1_reset(card->port);
-
-		return 0;
+		return avmb1_unregistercard(rdef.contr, 1);
 	}
 	return -EINVAL;
 }
@@ -855,6 +1158,7 @@ struct capi_interface *attach_capi_interface(struct capi_interface_user *userp)
 	userp->next = capi_users;
 	capi_users = userp;
 	MOD_INC_USE_COUNT;
+	printk(KERN_NOTICE "b1capi: %s attached\n", userp->name);
 
 	return &avmb1_interface;
 }
@@ -868,6 +1172,7 @@ int detach_capi_interface(struct capi_interface_user *userp)
 			*pp = userp->next;
 			userp->next = 0;
 			MOD_DEC_USE_COUNT;
+			printk(KERN_NOTICE "b1capi: %s detached\n", userp->name);
 			return 0;
 		}
 	}
@@ -884,6 +1189,10 @@ EXPORT_SYMBOL(attach_capi_interface);
 EXPORT_SYMBOL(detach_capi_interface);
 EXPORT_SYMBOL(avmb1_addcard);
 EXPORT_SYMBOL(avmb1_probecard);
+EXPORT_SYMBOL(avmb1_registercard);
+EXPORT_SYMBOL(avmb1_unregistercard);
+EXPORT_SYMBOL(avmb1_resetcard);
+EXPORT_SYMBOL(avmb1_detectcard);
 #else
 static struct symbol_table capidev_syms =
 {
@@ -892,6 +1201,10 @@ static struct symbol_table capidev_syms =
 	X(detach_capi_interface),
 	X(avmb1_addcard),
 	X(avmb1_probecard),
+	X(avmb1_registercard),
+	X(avmb1_unregistercard),
+	X(avmb1_resetcard),
+	X(avmb1_detectcard),
 #include <linux/symtab_end.h>
 };
 #endif
@@ -933,15 +1246,7 @@ int avmb1_init(void)
 		strcpy(rev, " ??? ");
 
 #ifdef MODULE
-	if (portbase) {
-	        int rc;
-		if ((rc = avmb1_probecard(portbase, irq)) != 0)
-			return rc;
-		if ((rc = avmb1_addcard(portbase, irq)) != 0)
-			return rc;
-	} else {
-		printk(KERN_NOTICE "AVM-B1-CAPI-driver Rev%s: loaded\n", rev);
-	}
+        printk(KERN_NOTICE "AVM-B1-CAPI-driver Rev%s: loaded\n", rev);
 #else
 	printk(KERN_NOTICE "AVM-B1-CAPI-driver Rev%s: started\n", rev);
 #endif
@@ -963,20 +1268,20 @@ void cleanup_module(void)
 		strcpy(rev, " ??? ");
 	}
 
-	for (i = 0; i < ncards; i++) {
-		/*
-		 * disable card
-		 */
-		B1_disable_irq(cards[i].port);
-		B1_reset(cards[i].port);
-		B1_reset(cards[i].port);
-		/*
-		 * free kernel resources
-		 */
-		free_irq(cards[i].irq, &cards[i]);
-		release_region(cards[i].port, AVMB1_PORTLEN);
-
+	for (i = 0; i < CAPI_MAXCONTR; i++) {
+		if (cards[i].cardstate != CARD_FREE) {
+			/*
+			 * disable card
+			 */
+			B1_disable_irq(cards[i].port);
+			avmb1_resetcard(i+1);
+			/*
+			 * free kernel resources
+			 */
+			avmb1_unregistercard(i+1, 1);
+		}
 	}
+	schedule(); /* execute queued tasks .... */
 	printk(KERN_NOTICE "AVM-B1-CAPI-driver Rev%s: unloaded\n", rev);
 }
 #endif

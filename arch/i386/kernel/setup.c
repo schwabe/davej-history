@@ -42,15 +42,21 @@ char x86 = 0;			/* set by kernel/head.S to 3..6 */
 char x86_model = 0;		/* set by kernel/head.S */
 char x86_mask = 0;		/* set by kernel/head.S */
 int x86_capability = 0;		/* set by kernel/head.S */
+int x86_ext_capability = 0;	/* newer CPUs have this */
 int fdiv_bug = 0;		/* set if Pentium(TM) with FP bug */
 int pentium_f00f_bug = 0;	/* set if Pentium(TM) with F00F bug */
 int have_cpuid = 0;             /* set if CPUID instruction works */
+int ext_cpuid = 0;		/* if != 0, highest available CPUID value */
 
-char x86_vendor_id[13] = "unknown";
+char x86_vendor_id[13] = "GenuineIntel";/* default */
 
-unsigned char Cx86_step = 0;
-static const char *Cx86_type[] = {
-	"unknown", "1.3", "1.4", "1.5", "1.6", "2.4", "2.5", "2.6", "2.7 or 3.7", "4.2"
+static char *Cx86_step = "unknown";	/* stepping info for Cyrix CPUs */
+
+static unsigned char Cx86_mult = 0;	/* clock multiplier for Cyrix CPUs */
+
+static const char *x86_clkmult[] = {
+	"unknown", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5", "5.5",
+	"6", "6.5", "7", "7.5", "8"
 	};
 
 char ignore_irq13 = 0;		/* set if exception 16 works */
@@ -89,6 +95,9 @@ extern char empty_zero_page[PAGE_SIZE];
  */
 #define PARAM	empty_zero_page
 #define EXT_MEM_K (*(unsigned short *) (PARAM+2))
+#ifndef STANDARD_MEMORY_BIOS_CALL
+#define ALT_MEM_K (*(unsigned long *) (PARAM+0x1e0))
+#endif
 #ifdef CONFIG_APM
 #define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+64))
 #endif
@@ -116,6 +125,9 @@ void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	unsigned long memory_start, memory_end;
+#ifndef STANDARD_MEMORY_BIOS_CALL
+	unsigned long memory_alt_end;
+#endif
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
 	static unsigned char smptrap=0;
@@ -134,6 +146,15 @@ void setup_arch(char **cmdline_p,
 #endif
 	aux_device_present = AUX_DEVICE_INFO;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
+#ifndef STANDARD_MEMORY_BIOS_CALL
+	memory_alt_end = (1<<20) + (ALT_MEM_K<<10);
+	if (memory_alt_end > memory_end) {
+	    printk("Memory: sized by int13 0e801h\n");
+	    memory_end = memory_alt_end;
+	}
+	else
+	    printk("Memory: sized by int13 088h\n");
+#endif
 	memory_end &= PAGE_MASK;
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
@@ -211,95 +232,107 @@ void setup_arch(char **cmdline_p,
 	request_region(0xf0,0x10,"npu");
 }
 
-static const char * i486model(unsigned int nr)
+static const char * IDTmodel(void)
+/* Right now IDT has a single CPU model in production: the C6.
+ * Adjust this when IDT/Centaur comes out with a new CPU model.
+ * Stepping information is correctly reported in x86_mask.
+ */
 {
 	static const char *model[] = {
-		"0","DX","SX","DX/2","4","SX/2","6","DX/2-WB","DX/4","DX/4-WB",
-		"10","11","12","13","Am5x86-WT","Am5x86-WB"
+		"C6", "C6-3D"
 	};
-	if (nr < sizeof(model)/sizeof(char *))
-		return model[nr];
-	return NULL;
-}
-
-static const char * i586model(unsigned int nr)
-{
-	static const char *model[] = {
-		"0", "Pentium 60/66","Pentium 75+","OverDrive PODP5V83",
-		"Pentium MMX", NULL, NULL, "Mobile Pentium 75+",
-		"Mobile Pentium MMX"
-	};
-	if (nr < sizeof(model)/sizeof(char *))
-		return model[nr];
-	return NULL;
+	return model[0];
 }
 
 static const char * Cx86model(void)
+/* We know our CPU is a Cyrix now (see bugs.h), so we can use the DIR0/DIR1
+ * mechanism to figure out the model, bus clock multiplier and stepping.
+ * For the newest CPUs (GXm and MXi) we use the Extended CPUID function.
+ */
 {
-	unsigned char nr6x86 = 0;
-	static const char *model[] = {
-		"unknown", "6x86", "6x86L", "6x86MX", "MII"
-	};
-	switch (x86) {
-		case 5:
-			nr6x86 = ((x86_capability & (1 << 8)) ? 2 : 1); /* cx8 flag only on 6x86L */
-			break;
-		case 6:
-			nr6x86 = 3;
-			break;
-		default:
-			nr6x86 = 0;
+    unsigned char nr6x86 = 0;
+    unsigned char cx_dir0 = 0;	/* Model and bus clock multiplier */
+    unsigned char cx_dir1 = 0;	/* Stepping info */
+    unsigned int flags;
+    static const char *model[] = {
+	"unknown", "Cx486", "5x86", "MediaGX", "6x86", "6x86L", "6x86MX",
+	"M II"
+    };
+    
+    if (x86_model == -1) {	/* is this an old Cx486 without DIR0/DIR1? */
+	nr6x86 = 1;		/* Cx486 */
+	Cx86_mult = 0;		/* unknown multiplier */
+    }
+    else {
+
+	/* Get DIR0, DIR1 since all other Cyrix CPUs have them */
+    
+	save_flags(flags);
+	cli();
+	cx_dir0 = getCx86(CX86_DIR0);	/* we use the access macros */
+	cx_dir1 = getCx86(CX86_DIR1);	/* defined in processor.h */
+	restore_flags(flags);
+	                                
+	/* Now cook; the recipe is by Channing Corn, from Cyrix.
+	 * We do the same thing for each generation: we work out
+	 * the model, multiplier and stepping.
+	 */
+	 
+	if (cx_dir0 < 0x20) {
+		nr6x86 = 1;				/* Cx486 */
+		Cx86_mult = 0;				/* unknown multiplier */
+		sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) + 1, cx_dir1 & 0x0f);
 	}
-
-	/* We must get the stepping number by reading DIR1 */
-	outb(0xff, 0x22); x86_mask=inb(0x23);
-
-	switch (x86_mask) {
-		case 0x03:
-			Cx86_step =  1;	/* 6x86MX Rev 1.3 */
-			break;
-		case 0x04:
-			Cx86_step =  2;	/* 6x86MX Rev 1.4 */
-			break;
-		case 0x05:
-			Cx86_step =  3;	/* 6x86MX Rev 1.5 */
-			break;
-		case 0x06:
-			Cx86_step =  4;	/* 6x86MX Rev 1.6 */
-			break;
-		case 0x14:
-			Cx86_step =  5;	/* 6x86 Rev 2.4 */
-			break;
-		case 0x15:
-			Cx86_step =  6;	/* 6x86 Rev 2.5 */
-			break;
-		case 0x16:
-			Cx86_step =  7;	/* 6x86 Rev 2.6 */
-			break;
-		case 0x17:
-			Cx86_step =  8;	/* 6x86 Rev 2.7 or 3.7 */
-			break;
-		case 0x22:
-			Cx86_step =  9;	/* 6x86L Rev 4.2 */
-			break;
-		default:
-			Cx86_step = 0;
+        
+        if ((cx_dir0 > 0x20) && (cx_dir0 < 0x30)) {
+		nr6x86 = 2;				/* 5x86 */
+		Cx86_mult = ((cx_dir0 & 0x04) ? 5 : 3);	/* either 3x or 2x */
+		sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) + 1, cx_dir1 & 0x0f);
 	}
-	return model[nr6x86];
-}
-
-static const char * i686model(unsigned int nr)
-{
-	static const char *model[] = {
-		"PPro A-step", "Pentium Pro"
-	};
-	if (nr < sizeof(model)/sizeof(char *))
-		return model[nr];
-	return NULL;
+        
+        if ((cx_dir0 >= 0x30) && (cx_dir0 < 0x38)) {
+		nr6x86 = ((x86_capability & (1 << 8)) ? 5 : 4);	/* 6x86(L) */
+		Cx86_mult = ((cx_dir0 & 0x04) ? 5 : 3);	/* either 3x or 2x */
+		sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 3), cx_dir1 & 0x0f);
+	}
+        
+        if ((cx_dir0 >= 0x40) && (cx_dir0 < 0x50)) {
+	    if (x86 == 4) { /* MediaGX */
+		nr6x86 = 3;
+		Cx86_mult = ((cx_dir0 & 0x01) ? 5 : 7);	/* either 3x or 4x */
+        	switch (cx_dir1 >> 4) {
+            		case (0) :
+            		case (1) :
+            			sprintf(Cx86_step, "2.%d", cx_dir1 & 0x0f);
+			break;
+            		case (2) :
+            			sprintf(Cx86_step, "1.%d", cx_dir1 & 0x0f);
+			break;
+                        default  :
+			break;
+                }
+            } /* endif MediaGX */
+            if (x86 == 5) { /* GXm */
+                char GXm_mult[8] = {7,11,7,11,13,15,13,9}; /* 4 to 8 */
+            	ext_cpuid = 0x80000005;	/* available */
+            	Cx86_mult = GXm_mult[cx_dir0 & 0x0f];
+            	sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) - 1, cx_dir1 & 0x0f);
+            } /* endif GXm */
+        }
+        
+        if ((cx_dir0 >= 0x50) && (cx_dir0 < 0x60)) {
+		nr6x86 = ((cx_dir1 > 7) ? 7 : 6);	/* 6x86Mx or M II */
+		Cx86_mult = (cx_dir0 & 0x07) + 2;	/* 2 to 5 in 0.5 steps */
+        	if (((cx_dir1 & 0x0f) > 4) || ((cx_dir1 >> 4) == 2)) cx_dir1 += 0x10;
+        	sprintf(Cx86_step, "%d.%d", (cx_dir1 >> 4) + 1, cx_dir1 & 0x0f);
+	}
+    }
+    x86_mask = 1;	/* we don't use it, but has to be set to something */
+    return model[nr6x86];
 }
 
 struct cpu_model_info {
-	int x86;
+	int cpu_x86;
 	char *model_names[16];
 };
 
@@ -308,10 +341,7 @@ static struct cpu_model_info amd_models[] = {
 	  { NULL, NULL, NULL, "DX/2", NULL, NULL, NULL, "DX/2-WB", "DX/4",
 	    "DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT", "Am5x86-WB" }},
 	{ 5,
-	  { "K5/SSA5 (PR-75, PR-90, PR-100)", "K5 (PR-120, PR-133)",
-	    "K5 (PR-166)", "K5 (PR-200)", NULL, NULL,
-	    "K6 (166 - 266)", "K6 (166 - 300)", "K6-2 (200 - 450)",
-	    "K6-3D-Plus (200 - 450)", NULL, NULL, NULL, NULL, NULL, NULL }},
+	  { "K5/SSA5 (PR-75, PR-90, PR-100)"}},
 };
 
 static const char * AMDmodel(void)
@@ -319,41 +349,81 @@ static const char * AMDmodel(void)
 	const char *p=NULL;
 	int i;
 	
-	if (x86_model < 16)
+	if ((x86_model == 0) || (x86 == 4)) {
 		for (i=0; i<sizeof(amd_models)/sizeof(struct cpu_model_info); i++)
-			if (amd_models[i].x86 == x86) {
+			if (amd_models[i].cpu_x86 == x86) {
 				p = amd_models[i].model_names[(int)x86_model];
 				break;
 			}
+	}
+	else ext_cpuid = 0x80000005;		/* available */
 	return p;
 }
 
-static const char * getmodel(int x86, int model)
+static struct cpu_model_info intel_models[] = {
+	{ 4,
+	  { "486 DX-25/33", "486 DX-50", "486 SX", "486 DX/2", "486 SL", 
+	    "486 SX/2", NULL, "486 DX/2-WB", "486 DX/4", "486 DX/4-WB", NULL, 
+	    NULL, NULL, NULL, NULL, NULL }},
+	{ 5,
+	  { "Pentium 60/66 A-step", "Pentium 60/66", "Pentium 75+",
+	    "OverDrive PODP5V83", "Pentium MMX", NULL, NULL,
+	    "Mobile Pentium 75+", "Mobile Pentium MMX", NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL }},
+	{ 6,
+	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II (Klamath)", 
+	    NULL, "Pentium II (Deschutes)", NULL, NULL, NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL }},
+};
+
+static const char * Intelmodel(void)
+{
+	const char *p = "386 SX/DX";	/* default to a 386 */
+	int i;
+	
+	for (i=0; i<sizeof(intel_models)/sizeof(struct cpu_model_info); i++)
+		if (intel_models[i].cpu_x86 == x86) {
+			p = intel_models[i].model_names[(int)x86_model];
+			break;
+		}
+	return p;
+}
+	
+/* Recent Intel CPUs have an EEPROM and a ROM with CPU information. We'll use
+ * this information in future versions of this code.
+ * AMD and more recently Cyrix have decided to standardize on an extended
+ * cpuid mechanism for their CPUs.
+ */
+ 
+static const char * get_cpu_mkt_name(void)
+{
+        static char mktbuf[48];
+        int dummy;
+	unsigned int *v;
+	v = (unsigned int *) mktbuf;
+	cpuid(0x80000002, &v[0], &v[1], &v[2], &v[3]);	/* name, flags */
+	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
+	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
+	cpuid(0x80000001, &dummy, &dummy, &dummy, &x86_ext_capability);
+	return mktbuf;
+}
+
+static const char * getmodel()
+/* Default is Intel. We disregard Nexgen and UMC processors. */
 {
         const char *p = NULL;
-        static char nbuf[12];
-	if (strncmp(x86_vendor_id, "Cyrix", 5) == 0)
-		p = Cx86model();
-	else if(strcmp(x86_vendor_id, "AuthenticAMD")==0)
+	if      (strncmp(x86_vendor_id, "Au", 2) == 0)	/* AuthenticAMD */
 		p = AMDmodel();
-	else {
-		switch (x86) {
-			case 4:
-				p = i486model(model);
-				break;
-			case 5:
-				p = i586model(model);
-				break;
-			case 6:
-				p = i686model(model);
-				break;
-		}
-	}
-        if (p)
+	else if (strncmp(x86_vendor_id, "Cy", 2) == 0)	/* CyrixInstead */
+		p = Cx86model();
+	else if (strncmp(x86_vendor_id, "Ce", 2) == 0)	/* CentaurHauls */
+		p = IDTmodel();
+	else /* default */
+		p = Intelmodel();
+	if (ext_cpuid)
+		return get_cpu_mkt_name();
+        else
                 return p;
-
-        sprintf(nbuf, "%d", model);
-        return nbuf;
 }
 
 int get_cpuinfo(char * buffer)
@@ -365,7 +435,13 @@ int get_cpuinfo(char * buffer)
                 "16", "17", "18", "19", "20", "21", "22", "mmx",
                 "24", "25", "26", "27", "28", "29", "30", "31"
         };
-        
+	static const char *x86_ext_cap_flags[] = {
+		   "fpu","vme", "de",   "pse", "tsc", "msr",  "6",   "mce",
+		   "cx8",  "9", "10", "syscr",  "12", "pge", "14",  "cmov",
+		"fpcmov", "17", "18",    "19",  "20",  "21", "22",   "mmx",
+		  "emmx", "25", "26",    "27",  "28",  "29", "30", "3dnow"
+	};
+         
 #ifdef __SMP__
         int n;
 
@@ -385,25 +461,30 @@ int get_cpuinfo(char * buffer)
 
                         len += sprintf(buffer+len,"processor\t: %d\n"
                                        "cpu\t\t: %c86\n"
-                                       "model\t\t: %s\n"
-                                       "vendor_id\t: %s\n",
+                                       "model\t\t: %s",
                                        CPUN,
                                        CD(x86)+'0',
-                                       CD(have_cpuid) ? 
-                                         getmodel(CD(x86), CD(x86_model)) :
-                                         "unknown",
-                                       CD(x86_vendor_id));
+                                       getmodel());
+			len += sprintf(buffer+len,
+                                       "\nvendor_id\t: %s\n",
+                                       x86_vendor_id);
         
-                        if (CD(x86_mask))
-                                if (strncmp(x86_vendor_id, "Cyrix", 5) != 0) {
+                        if (CD(x86_mask) || have_cpuid)
+                                if      ((strncmp(x86_vendor_id, "Au", 2) == 0)
+                                	&& (x86_model >= 6)) {
+                                	len += sprintf(buffer+len,
+                                        	       "stepping\t: %c\n",
+                                             	       x86_mask + 'A');
+                                }
+                                else if (strncmp(x86_vendor_id, "Cy", 2) == 0) {
+                                	len += sprintf(buffer+len,
+							"stepping\t: %s, core/bus clock ratio: %sx\n",
+                              				Cx86_step, x86_clkmult[Cx86_mult]);
+                                }
+                                else { 	
                                 	len += sprintf(buffer+len,
                                         	       "stepping\t: %d\n",
                                              	       CD(x86_mask));
-                                }
-                                else { 			/* we have a Cyrix */
-                                	len += sprintf(buffer+len,
-                                        	       "stepping\t: %s\n",
-                                             	       Cx86_type[Cx86_step]);
                                 }
                         else
                                 len += sprintf(buffer+len, 
@@ -431,6 +512,10 @@ int get_cpuinfo(char * buffer)
                                 if ( CD(x86_capability) & (1 << i) ) {
                                         len += sprintf(buffer+len, " %s",
                                                        x86_cap_flags[i]);
+                                }
+                                else if ( CD(x86_ext_capability) & (1 << i) ) {
+                                        len += sprintf(buffer+len, " %s",
+                                                       x86_ext_cap_flags[i]);
                                 }
                         }
                         len += sprintf(buffer+len,

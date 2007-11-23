@@ -7,6 +7,11 @@
  * Changed to support io= irq= by Alan Cox <Alan.Cox@linux.org>
  * Reworked 1995 by John Sullivan <js10039@cam.ac.uk>
  * More fixes by Philip Blundell <pjb27@cam.ac.uk>
+ * Added the Compaq LTE  Alan Cox <alan@redhat.com>
+ *
+ * Note - this driver is experimental still - it has problems on faster
+ * machines. Someone needs to sit down and go through it line by line with
+ * a databook...
  */
 
 /*
@@ -86,7 +91,8 @@
 
 static char version[] = 
 "eexpress.c: v0.10 04-May-95 John Sullivan <js10039@cam.ac.uk>\n"
-"            v0.14 19-May-96 Philip Blundell <phil@tazenda.demon.co.uk>\n";
+"            v0.14 19-May-96 Philip Blundell <phil@tazenda.demon.co.uk>\n"
+"            v0.15 04-Aug-98 Alan Cox <alan@redhat.com>\n";
 
 #include <linux/module.h>
 
@@ -701,11 +707,13 @@ static int eexp_hw_probe(struct device *dev, unsigned short ioaddr)
 	hw_addr[1] = eexp_hw_readeeprom(ioaddr,3);
 	hw_addr[2] = eexp_hw_readeeprom(ioaddr,4);
 
-	if (hw_addr[2]!=0x00aa || ((hw_addr[1] & 0xff00)!=0x0000)) 
+	/* Standard Address or Compaq LTE Address */
+	if (!((hw_addr[2]==0x00aa && ((hw_addr[1] & 0xff00)==0x0000)) ||
+	      (hw_addr[2]==0x0080 && ((hw_addr[1] & 0xff00)==0x5F00)))) 
 	{
 		printk("rejected: invalid address %04x%04x%04x\n",
 			hw_addr[2],hw_addr[1],hw_addr[0]);
-		return ENODEV;
+		return -ENODEV;
 	}
 
 	dev->base_addr = ioaddr;

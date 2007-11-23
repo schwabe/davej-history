@@ -29,7 +29,7 @@
  * Yves Arrouye      :  remove removal of trailing spaces in get_array.
  *			<Yves.Arrouye@marin.fdn.fr>
  *
- * Alan Cox	     :  security fixes. <Alan.Cox@linux.org>a
+ * Alan Cox	     :  security fixes. <Alan.Cox@linux.org>
  */
 
 #include <linux/types.h>

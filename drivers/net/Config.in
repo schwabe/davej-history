@@ -147,3 +147,6 @@ if [ "$CONFIG_ARCNET" != "n" ]; then
   bool '  Enable arc0s (ARCnet RFC1051 packet format)' CONFIG_ARCNET_1051
 fi
 
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Traffic Shaper (EXPERIMENTAL)' CONFIG_SHAPER
+fi

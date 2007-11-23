@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.20 1997/05/27 15:18:06 fritz Exp $
+/* $Id: isdnif.h,v 1.20.2.1 1998/03/07 23:00:50 tsbogend Exp $
  *
  * Linux ISDN subsystem
  *
@@ -22,6 +22,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.20.2.1  1998/03/07 23:00:50  tsbogend
+ * added defines for Linux/Alpha 2.0.x with alpha-patches
+ *
  * Revision 1.20  1997/05/27 15:18:06  fritz
  * Added changes for recent 2.1.x kernels:
  *   changed return type of isdn_close
@@ -382,9 +385,15 @@ static inline unsigned long copy_to_user(void *to, const void *from, unsigned lo
 }
 
 #define GET_USER(x, addr) ( x = get_user(addr) )
+#ifdef __alpha__ /* needed for 2.0.x with alpha-patches */
+#define RWTYPE long
+#define LSTYPE long
+#define RWARG unsigned long
+#else
 #define RWTYPE int
 #define LSTYPE int
 #define RWARG int
+#endif
 #define LSARG off_t
 #else
 #include <asm/uaccess.h>

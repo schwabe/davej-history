@@ -587,7 +587,7 @@ int isofs_bmap(struct inode * inode,int block)
 	int i;
 
 	if (block<0) {
-		printk("_isofs_bmap: block<0");
+		printk("_isofs_bmap: block<0\n");
 		return 0;
 	}
 
@@ -597,7 +597,8 @@ int isofs_bmap(struct inode * inode,int block)
 	 * If we are beyond the end of this file, don't give out any
 	 * blocks.
 	 */
-	if( b_off > inode->i_size )
+	if( (b_off > inode->i_size) || 
+		((b_off ==  inode->i_size) && (b_off & (PAGE_SIZE - 1))) )
 	  {
 	    off_t	max_legal_read_offset;
 
@@ -614,7 +615,7 @@ int isofs_bmap(struct inode * inode,int block)
 	    if( b_off >= max_legal_read_offset )
 	      {
 
-		printk("_isofs_bmap: block>= EOF(%d, %ld)", block, 
+		printk("_isofs_bmap: block>= EOF(%d, %ld)\n", block, 
 		       inode->i_size);
 	      }
 	    return 0;

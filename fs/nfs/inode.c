@@ -344,6 +344,9 @@ static int run_nfsiod(void *dummy)
 	current->session = 1;
 	current->pgrp = 1;
 	sprintf(current->comm, "nfsiod");
+#ifndef MODULE
+	current->blocked = ~0UL;
+#endif
 	ret = nfsiod();
 	MOD_DEC_USE_COUNT;
 	return ret;

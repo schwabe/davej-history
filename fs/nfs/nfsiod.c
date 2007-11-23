@@ -99,10 +99,14 @@ nfsiod(void)
 		/* Wait until user enqueues request */
 		dprintk("BIO: before: now %d nfsiod's active\n", active);
 		dprintk("BIO: nfsiod %d waiting\n", current->pid);
+#ifndef MODULE
+		current->signal = 0;
+#endif
 		interruptible_sleep_on(&req->rq_wait);
-
+#ifdef  MODULE
 		if (current->signal & ~current->blocked)
 			break;
+#endif
 		if (!req->rq_rpcreq.rq_slot)
 			continue;
 		dprintk("BIO: nfsiod %d woken up; calling nfs_rpc_doio.\n",
