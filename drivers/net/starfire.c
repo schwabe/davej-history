@@ -1046,25 +1046,22 @@ static void tx_timeout(struct net_device *dev)
 {
 	struct netdev_private *np = dev->priv;
 	long ioaddr = dev->base_addr;
+	int old_debug;
 
 	printk(KERN_WARNING "%s: Transmit timed out, status %8.8x,"
 	       " resetting...\n", dev->name, (int)readl(ioaddr + IntrStatus));
 
-#ifndef __alpha__
-	{
-		int i;
-		printk(KERN_DEBUG "  Rx ring %p: ", np->rx_ring);
-		for (i = 0; i < RX_RING_SIZE; i++)
-			printk(" %8.8x", (unsigned int)le32_to_cpu(np->rx_ring[i].rxaddr));
-		printk("\n"KERN_DEBUG"  Tx ring %p: ", np->tx_ring);
-		for (i = 0; i < TX_RING_SIZE; i++)
-			printk(" %4.4x", le32_to_cpu(np->tx_ring[i].status));
-		printk("\n");
-	}
-#endif
-
 	/* Perhaps we should reinitialize the hardware here. */
-	/* Stop and restart the chip's Tx processes . */
+
+	/*
+	 * Stop and restart the chip's Tx processes.
+	 * Cheat and increase the debug level temporarily.
+	 */
+	old_debug = debug;
+	debug = 2;
+	netdev_close(dev);
+	netdev_open(dev);
+	debug = old_debug;
 
 	/* Trigger an immediate transmit demand. */
 
@@ -1933,6 +1930,8 @@ static int netdev_close(struct net_device *dev)
 	writel(0, ioaddr + IntrEnable);
 
 	/* Stop the chip's Tx and Rx processes. */
+	writel(0, ioaddr + GenCtrl);
+	readl(ioaddr + GenCtrl);
 
 #ifdef __i386__
 	if (debug > 2) {

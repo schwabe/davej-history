@@ -1380,7 +1380,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 		case X86_VENDOR_AMD:
 			if(init_amd(c))
 				return;
-			return;
+			break;
 
 		case X86_VENDOR_CENTAUR:
 			init_centaur(c);
