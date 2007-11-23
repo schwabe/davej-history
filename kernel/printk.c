@@ -260,7 +260,7 @@ asmlinkage int printk(const char *fmt, ...)
 
 	spin_lock_irqsave(&console_lock, flags);
 	va_start(args, fmt);
-	i = _vsnprintf(buf + 3, sizeof(buf) - sizeof(buf) / 8 - 3, fmt, args);
+	i = vsnprintf(buf + 3, sizeof(buf) - sizeof(buf) / 8 - 3, fmt, args);
 	buf_end = buf + 3 + i;
 	va_end(args);
 	for (p = buf + 3; p < buf_end; p++) {

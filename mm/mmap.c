@@ -176,8 +176,13 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	struct vm_area_struct * vma;
 	int error;
 
-	if (file && (!file->f_op || !file->f_op->mmap))
-		return -ENODEV;
+	if (file) {
+		if (!file->f_op || !file->f_op->mmap)
+			return -ENODEV;
+
+		if ((prot & PROT_EXEC) && IS_NOEXEC(file->f_dentry->d_inode))
+			return -EPERM;
+	}
 
 	if ((len = PAGE_ALIGN(len)) == 0)
 		return addr;

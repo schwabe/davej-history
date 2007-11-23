@@ -11,13 +11,22 @@ Employed by:	Linux-Systeme GmbH, http://www.linux-systeme.com/
     Thanks to Alan Cox 8-)
 
 
--------------------------------------------------------------------------
+----------------------------------------------------------------------------
 If you need a more secured, more stable, even faster, better SMP support,
-IDE LBA48 support, IPSec support, HTB support, IPVS support etc. enabled
-kernel with many more features and important fixes, please use my
-2.2-secure tree.
+LFS support, Highmem support, IDE LBA48 support, IPSec support, HTB support,
+IPVS support etc. enabled kernel with many more features and important
+fixes, please use my 2.2-secure tree.
 You may find more informations about it at http://www.wolk-project.de/
--------------------------------------------------------------------------
+----------------------------------------------------------------------------
+
+
+
+2.2.27-pre2
+-----------
+o	A more correct fix to last mremap (2) bug		(Dan Yefimov/Solar Designer)
+o	renamed imho *bogus* _vsnprintf to vsnprintf		(me)
+o	fixed 'noexec' behaviour (2.4 backport)			(me)
+	  from Ulrich Drepper
 
 
 

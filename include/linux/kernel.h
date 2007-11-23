@@ -53,7 +53,7 @@ extern int sprintf(char *buf, const char *fmt, ...)
 	__attribute__ ((format (printf, 2, 3)));
 extern int vsprintf(char *buf, const char *, va_list)
 	__attribute__ ((format (printf, 2, 0)));
-extern int _vsnprintf(char *buf, int n, const char *, va_list)
+extern int vsnprintf(char *buf, int n, const char *, va_list)
 	__attribute__ ((format (printf, 3, 0)));
 
 extern int session_of_pgrp(int pgrp);

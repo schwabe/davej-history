@@ -9,115 +9,119 @@
 #include <linux/shm.h>
 #include <linux/mman.h>
 #include <linux/swap.h>
+#include <linux/file.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 
 extern int vm_enough_memory(long pages);
 
-static inline pte_t *get_one_pte(struct mm_struct *mm, unsigned long addr)
-{
-	pgd_t * pgd;
-	pmd_t * pmd;
-	pte_t * pte = NULL;
+#define PTE_TABLE_MASK ((PTRS_PER_PTE - 1) * sizeof(pte_t))
+#define PMD_TABLE_MASK ((PTRS_PER_PMD - 1) * sizeof(pmd_t))
 
-	pgd = pgd_offset(mm, addr);
-	if (pgd_none(*pgd))
-		goto end;
-	if (pgd_bad(*pgd)) {
-		printk("move_one_page: bad source pgd (%08lx)\n", pgd_val(*pgd));
-		pgd_clear(pgd);
-		goto end;
-	}
+/* Idea borrowed from copy_page_range(), see mm/memory.c */
 
-	pmd = pmd_offset(pgd, addr);
-	if (pmd_none(*pmd))
-		goto end;
-	if (pmd_bad(*pmd)) {
-		printk("move_one_page: bad source pmd (%08lx)\n", pmd_val(*pmd));
-		pmd_clear(pmd);
-		goto end;
-	}
-
-	pte = pte_offset(pmd, addr);
-	if (pte_none(*pte))
-		pte = NULL;
-end:
-	return pte;
-}
-
-static inline pte_t *alloc_one_pte(struct mm_struct *mm, unsigned long addr)
-{
-	pmd_t * pmd;
-	pte_t * pte = NULL;
-
-	pmd = pmd_alloc(pgd_offset(mm, addr), addr);
-	if (pmd)
-		pte = pte_alloc(pmd, addr);
-	return pte;
-}
-
-static inline int copy_one_pte(pte_t * src, pte_t * dst)
-{
-	int error = 0;
-	pte_t pte = *src;
-
-	if (!pte_none(pte)) {
-		error++;
-		if (dst) {
-			pte_clear(src);
-			set_pte(dst, pte);
-			error--;
-		}
-	}
-	return error;
-}
-
-static int move_one_page(struct mm_struct *mm, unsigned long old_addr, unsigned long new_addr)
-{
-	int error = 0;
-	pte_t * src;
-
-	src = get_one_pte(mm, old_addr);
-	if (src)
-		error = copy_one_pte(src, alloc_one_pte(mm, new_addr));
-	return error;
-}
-
-static int move_page_tables(struct mm_struct * mm,
+static int copy_page_tables(struct mm_struct * mm,
 	unsigned long new_addr, unsigned long old_addr, unsigned long len)
 {
-	unsigned long offset = len;
+	pgd_t * src_pgd, * dst_pgd;
+	pmd_t * dst_pmd;
+	register pte_t * dst_pte;
+	unsigned long src_addr, dst_addr, end;
 
-	flush_cache_range(mm, old_addr, old_addr + len);
+	dst_addr = (new_addr &= PAGE_MASK);
+	end = (src_addr = (old_addr &= PAGE_MASK)) + len;
+	src_pgd = pgd_offset(mm, src_addr);
+	dst_pgd = pgd_offset(mm, dst_addr);
+	if (!(dst_pmd = pmd_alloc(dst_pgd, dst_addr)) ||
+	    !(dst_pte = pte_alloc(dst_pmd, dst_addr)))
+		goto oops_we_failed;
 
-	/*
-	 * This is not the clever way to do this, but we're taking the
-	 * easy way out on the assumption that most remappings will be
-	 * only a few pages.. This also makes error recovery easier.
-	 */
-	while (offset) {
-		offset -= PAGE_SIZE;
-		if (move_one_page(mm, old_addr + offset, new_addr + offset))
-			goto oops_we_failed;
+	for (;; src_pgd++) {
+		pmd_t * src_pmd;
+
+		if (pgd_none(*src_pgd))
+			goto skip_copy_pmd_range;
+		if (pgd_bad(*src_pgd)) {
+			printk(KERN_ERR "copy_page_tables: bad source pgd (%08lx)\n", pgd_val(*src_pgd));
+			pgd_clear(src_pgd);
+skip_copy_pmd_range:
+			src_addr = (src_addr + PGDIR_SIZE) & PGDIR_MASK;
+			if (src_addr >= end)
+				return 0;
+			dst_addr = new_addr + (src_addr - old_addr);
+			dst_pgd = pgd_offset(mm, dst_addr);
+			if (!(dst_pmd = pmd_alloc(dst_pgd, dst_addr)) ||
+			    !(dst_pte = pte_alloc(dst_pmd, dst_addr)))
+				goto oops_we_failed;
+			continue;
+		}
+		src_pmd = pmd_offset(src_pgd, src_addr);
+		do {
+			register pte_t * src_pte;
+
+			if (pmd_none(*src_pmd))
+				goto skip_copy_pte_range;
+			if (pmd_bad(*src_pmd)) {
+				printk(KERN_ERR "copy_page_tables: bad source pmd (%08lx)\n", pmd_val(*src_pmd));
+				pmd_clear(src_pmd);
+skip_copy_pte_range:
+				src_addr = (src_addr + PMD_SIZE) & PMD_MASK;
+				if (src_addr >= end)
+					return 0;
+				dst_addr = new_addr + (src_addr - old_addr);
+				dst_pgd = pgd_offset(mm, dst_addr);
+				if (!(dst_pmd = pmd_alloc(dst_pgd, dst_addr)) ||
+				    !(dst_pte = pte_alloc(dst_pmd, dst_addr)))
+					goto oops_we_failed;
+				continue;
+			}
+			src_pte = pte_offset(src_pmd, src_addr);
+			do {
+				register pte_t pte = *src_pte;
+
+				if (!pte_none(pte)) {
+					if (!pte_present(pte))
+						swap_duplicate(pte_val(pte));
+					else {
+						register unsigned long page_nr =
+						    (pte_val(pte) >> PAGE_SHIFT);
+
+						if (!(page_nr >= max_mapnr || 
+						    PageReserved(mem_map+page_nr)))
+							atomic_inc(&mem_map[page_nr].count);
+					}
+					set_pte(dst_pte, pte);
+				}
+				if ((src_addr += PAGE_SIZE) >= end)
+					return 0;
+				dst_addr += PAGE_SIZE;
+				if (!((unsigned long) ++dst_pte & PTE_TABLE_MASK)) {
+					if (!((unsigned long) ++dst_pmd
+					      & PMD_TABLE_MASK) &&
+					    !(dst_pmd = pmd_alloc(++dst_pgd,
+								  dst_addr)))
+						goto oops_we_failed;
+					if (!(dst_pte = pte_alloc(dst_pmd,
+								  dst_addr)))
+						goto oops_we_failed;
+				}
+			} while ((unsigned long) ++src_pte & PTE_TABLE_MASK);
+		} while ((unsigned long) ++src_pmd & PMD_TABLE_MASK);
 	}
-	flush_tlb_range(mm, old_addr, old_addr + len);
 	return 0;
 
 	/*
-	 * Ok, the move failed because we didn't have enough pages for
+	 * Ok, the copy failed because we didn't have enough pages for
 	 * the new page table tree. This is unlikely, but we have to
-	 * take the possibility into account. In that case we just move
-	 * all the pages back (this will work, because we still have
-	 * the old page tables)
+	 * take the possibility into account. In that case we just remove
+	 * all the fresh copies of pages.
 	 */
 oops_we_failed:
 	flush_cache_range(mm, new_addr, new_addr + len);
-	while ((offset += PAGE_SIZE) < len)
-		move_one_page(mm, new_addr + offset, old_addr + offset);
 	zap_page_range(mm, new_addr, len);
 	flush_tlb_range(mm, new_addr, new_addr + len);
-	return -1;
+	return -ENOMEM;
 }
 
 static inline unsigned long move_vma(struct vm_area_struct * vma,
@@ -127,9 +131,11 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 
 	new_vma = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (new_vma) {
-		unsigned long new_addr = get_unmapped_area(addr, new_len);
+		unsigned long new_addr = get_unmapped_area(0, new_len);
 
-		if (new_addr && !move_page_tables(current->mm, new_addr, addr, old_len)) {
+		if (new_addr && !copy_page_tables(current->mm, new_addr, addr, old_len)) {
+			unsigned long ret;
+
 			*new_vma = *vma;
 			new_vma->vm_start = new_addr;
 			new_vma->vm_end = new_addr+new_len;
@@ -138,10 +144,19 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 				new_vma->vm_file->f_count++;
 			if (new_vma->vm_ops && new_vma->vm_ops->open)
 				new_vma->vm_ops->open(new_vma);
+			if ((ret = do_munmap(addr, old_len))) {
+				if (new_vma->vm_ops && new_vma->vm_ops->close)
+					new_vma->vm_ops->close(new_vma);
+				if (new_vma->vm_file)
+					fput(new_vma->vm_file);
+				flush_cache_range(current->mm, new_addr, new_addr + old_len);
+				zap_page_range(current->mm, new_addr, old_len);
+				flush_tlb_range(current->mm, new_addr, new_addr + old_len);
+				kmem_cache_free(vm_area_cachep, new_vma);
+				return ret;
+			}
 			insert_vm_struct(current->mm, new_vma);
 			merge_segments(current->mm, new_vma->vm_start, new_vma->vm_end);
-			/* XXX: possible errors masked, mapping might remain */
-			do_munmap(addr, old_len);
 			current->mm->total_vm += new_len >> PAGE_SHIFT;
 			if (new_vma->vm_flags & VM_LOCKED) {
 				current->mm->locked_vm += new_len >> PAGE_SHIFT;
@@ -168,30 +183,25 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 
 	down(&current->mm->mmap_sem);
 	lock_kernel();
-	if (addr & ~PAGE_MASK)
-		goto out;
-	old_len = PAGE_ALIGN(old_len);
-	new_len = PAGE_ALIGN(new_len);
-
-	if (old_len > TASK_SIZE || addr > TASK_SIZE - old_len)
-		goto out;
-
-	if (addr >= TASK_SIZE)
+	if ((addr & ~PAGE_MASK) || !(old_len = PAGE_ALIGN(old_len)) ||
+	    old_len > TASK_SIZE || addr > TASK_SIZE - old_len ||
+	    (new_len = PAGE_ALIGN(new_len)) > TASK_SIZE)
 		goto out;
 
 	/*
 	 * Always allow a shrinking remap: that just unmaps
 	 * the unnecessary pages..
 	 */
-	if (old_len >= new_len) {
-		ret = do_munmap(addr+new_len, old_len - new_len);
-		if (!ret || old_len == new_len)
+	if (old_len > new_len) {
+		if (!(ret = do_munmap(addr + new_len, old_len - new_len)))
 			ret = addr;
 		goto out;
 	}
 
-	if (new_len > TASK_SIZE || addr > TASK_SIZE - new_len)
+	if (old_len == new_len) {
+		ret = addr;
 		goto out;
+	}
 
 	/*
 	 * Ok, we need to grow..

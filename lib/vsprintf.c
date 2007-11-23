@@ -142,7 +142,7 @@ static char * number(char * str, long num, int base, int size, int precision
 /* Forward decl. needed for IP address printing stuff... */
 int sprintf(char * buf, const char *fmt, ...);
 
-int _vsnprintf(char *buf, int n, const char *fmt, va_list args)
+int vsnprintf(char *buf, int n, const char *fmt, va_list args)
 {
 	int len;
 	unsigned long num;
@@ -314,7 +314,7 @@ int _vsnprintf(char *buf, int n, const char *fmt, va_list args)
 
 int vsprintf(char *buf, const char *fmt, va_list args)
 {
-	return _vsnprintf(buf, -1, fmt, args);
+	return vsnprintf(buf, -1, fmt, args);
 }
 
 int sprintf(char * buf, const char *fmt, ...)
