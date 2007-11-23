@@ -75,7 +75,7 @@ static int copyin(struct openpromio *info, struct openpromio **opp_p)
 
 	get_user_ret(bufsize, &info->oprom_size, -EFAULT);
 
-	if (bufsize <= 0 || bufsize > OPROMMAXPARAM)
+	if (bufsize == 0 || bufsize > OPROMMAXPARAM)
 		return -EINVAL;
 
 	if (!(*opp_p = kmalloc(sizeof(int) + bufsize + 1, GFP_KERNEL)))

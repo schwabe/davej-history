@@ -432,7 +432,7 @@ nfs_readpage_result(struct rpc_task *task)
 		nfs_list_remove_request(req);
 
 		if (task->tk_status >= 0) {
-			char *p = page_address(page);
+			char *p = (char *)page_address(page);
 			if (count < PAGE_CACHE_SIZE) {
 				memset(p + count, 0, PAGE_CACHE_SIZE - count);
 				count = 0;

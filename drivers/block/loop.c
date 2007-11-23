@@ -334,8 +334,9 @@ static int create_missing_block(struct loop_device *lo, int block, int blksize)
 	set_fs(old_fs);
 
 	if (retval < 0) {
-		printk(KERN_WARNING "loop: cannot create block - FS write failed: code %d\n", 
-									retval);
+		printk(KERN_WARNING
+		    "loop: cannot create block - FS write failed: code %d\n",
+		    (int)retval);
 		return FALSE;
 	} else {
 		return TRUE;

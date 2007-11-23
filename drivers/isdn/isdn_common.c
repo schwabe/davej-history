@@ -1008,6 +1008,10 @@ isdn_read(struct file *file, char *buf, size_t count, loff_t * off)
 			goto out;
 		}
 		chidx = isdn_minor2chan(minor);
+		if (count > 131072) {
+			retval = -EINVAL;
+			goto out;
+		}
 		if (!(p = kmalloc(count, GFP_KERNEL))) {
 			retval = -ENOMEM;
 			goto out;

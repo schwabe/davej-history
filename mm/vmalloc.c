@@ -160,6 +160,10 @@ struct vm_struct * get_vm_area(unsigned long size)
 	if (!area)
 		return NULL;
 	size += PAGE_SIZE;
+	if (!size) {
+		kfree(area);
+		return NULL;
+	}
 	addr = VMALLOC_START;
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
 		if ((size + addr) < addr) {

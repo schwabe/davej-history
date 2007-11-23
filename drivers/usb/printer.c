@@ -324,7 +324,8 @@ static int usblp_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 static ssize_t usblp_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct usblp *usblp = file->private_data;
-	int timeout, err = 0, writecount = 0;
+	int timeout, err = 0;
+	size_t writecount = 0;
 
 	while (writecount < count) {
 
