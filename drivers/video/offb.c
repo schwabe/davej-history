@@ -346,6 +346,21 @@ __initfunc(void offb_init(void))
 		    dp->addrs[0].size = 0x01000000;
 		}
 	    }
+
+	    /*
+	     * The LTPro on the Lombard powerbook has no addresses
+	     * on the display nodes, they are on their parent.
+	     */
+	    if (dp->n_addrs == 0 && device_is_compatible(dp, "ATY,264LTPro")) {
+		int na;
+		unsigned int *ap = (unsigned int *)
+		    get_property(dp, "AAPL,address", &na);
+		if (ap != 0)
+		    for (na /= sizeof(unsigned int); na > 0; --na, ++ap)
+			if (*ap <= addr && addr < *ap + 0x1000000)
+			    goto foundit;
+	    }
+
 	    /*
 	     * See if the display address is in one of the address
 	     * ranges for this display.
@@ -356,6 +371,7 @@ __initfunc(void offb_init(void))
 		    break;
 	    }
 	    if (i < dp->n_addrs) {
+	    foundit:
 		printk(KERN_INFO "MacOS display is %s\n", dp->full_name);
 		macos_display = dp;
 		break;

@@ -139,13 +139,12 @@ __initfunc(int via_calibrate_decr(void))
 /*
  * Reset the time after a sleep.
  */
-static int time_sleep_notify(struct notifier_block *this, unsigned long event,
-			     void *x)
+static int time_sleep_notify(struct pmu_sleep_notifier *self, int when)
 {
 	static unsigned long time_diff;
 
-	switch (event) {
-	case PBOOK_SLEEP:
+	switch (when) {
+	case PBOOK_SLEEP_NOW:
 		time_diff = xtime.tv_sec - pmac_get_rtc_time();
 		break;
 	case PBOOK_WAKE:
@@ -155,11 +154,11 @@ static int time_sleep_notify(struct notifier_block *this, unsigned long event,
 		last_rtc_update = xtime.tv_sec;
 		break;
 	}
-	return NOTIFY_DONE;
+	return PBOOK_SLEEP_OK;
 }
 
-static struct notifier_block time_sleep_notifier = {
-	time_sleep_notify, NULL, 100
+static struct pmu_sleep_notifier time_sleep_notifier = {
+	time_sleep_notify, SLEEP_LEVEL_MISC,
 };
 #endif /* CONFIG_PMAC_PBOOK */
 
@@ -174,7 +173,7 @@ __initfunc(void pmac_calibrate_decr(void))
 	int freq, *fp, divisor;
 
 #ifdef CONFIG_PMAC_PBOOK
-	notifier_chain_register(&sleep_notifier_list, &time_sleep_notifier);
+	pmu_register_sleep_notifier(&time_sleep_notifier);
 #endif /* CONFIG_PMAC_PBOOK */
 
 	if (via_calibrate_decr())

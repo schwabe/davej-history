@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.83.2.6 1999/08/10 03:24:06 cort Exp $
+ * $Id: process.c,v 1.83.2.7 1999/08/16 01:44:58 paulus Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *

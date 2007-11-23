@@ -25,6 +25,9 @@ endif
 ifdef CONFIG_TOTALMP
 O_OBJS += totalmp.o
 endif
+ifdef CONFIG_PMAC_PBOOK
+O_OBJS += sleep.o
+endif
 
 ifeq ($(CONFIG_MBX),y)
 O_OBJS += mbx_setup.o mbx_pci.o softemu8xx.o i8259.o ppc8xx_pic.o

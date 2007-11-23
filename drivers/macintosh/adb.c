@@ -24,6 +24,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
+#include <linux/notifier.h>
 #include <asm/prom.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
@@ -39,13 +40,13 @@ EXPORT_SYMBOL(adb_hardware);
 struct adb_controller *adb_controller = NULL;
 struct notifier_block *adb_client_list = NULL;
 enum adb_hw adb_hardware = ADB_NONE;
+static int adb_got_sleep = 0;
 
 #ifdef CONFIG_PMAC_PBOOK
-static int adb_notify_sleep(struct notifier_block *, unsigned long, void *);
-static struct notifier_block adb_sleep_notifier = {
+static int adb_notify_sleep(struct pmu_sleep_notifier *self, int when);
+static struct pmu_sleep_notifier adb_sleep_notifier = {
 	adb_notify_sleep,
-	NULL,
-	0
+	SLEEP_LEVEL_ADB,
 };
 #endif
 
@@ -173,8 +174,7 @@ void adb_init(void)
 	{
 		adb_hardware = adb_controller->kind;
 #ifdef CONFIG_PMAC_PBOOK
-		notifier_chain_register(&sleep_notifier_list,
-					&adb_sleep_notifier);
+		pmu_register_sleep_notifier(&adb_sleep_notifier);
 #endif /* CONFIG_PMAC_PBOOK */
 
 		adb_reset_bus();
@@ -187,21 +187,31 @@ void adb_init(void)
  * notify clients before sleep and reset bus afterwards
  */
 int
-adb_notify_sleep(struct notifier_block *this, unsigned long code, void *x)
+adb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 {
 	int ret;
 	
-	switch (code) {
-	case PBOOK_SLEEP:
+	switch (when) {
+	case PBOOK_SLEEP_REQUEST:
+		adb_got_sleep = 1;
 		ret = notifier_call_chain(&adb_client_list, ADB_MSG_POWERDOWN, NULL);
 		if (ret & NOTIFY_STOP_MASK)
-			return -EBUSY;
+			return PBOOK_SLEEP_REFUSE;
+		break;
+	case PBOOK_SLEEP_REJECT:
+		if (adb_got_sleep) {
+			adb_got_sleep = 0;
+			adb_reset_bus();
+		}
+		break;
+		
+	case PBOOK_SLEEP_NOW:
 		break;
 	case PBOOK_WAKE:
 		adb_reset_bus();
 		break;
 	}
-	return NOTIFY_DONE;
+	return PBOOK_SLEEP_OK;
 }
 #endif /* CONFIG_PMAC_PBOOK */
 

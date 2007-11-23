@@ -1,3 +1,4 @@
+
 /*
  * Device driver for the via-pmu on Apple Powermacs.
  *
@@ -33,6 +34,7 @@
 #include <asm/irq.h>
 #include <asm/feature.h>
 #include <asm/uaccess.h>
+#include <asm/mmu_context.h>
 
 /* Misc minor number allocated for /dev/pmu */
 #define PMU_MINOR	154
@@ -71,6 +73,7 @@ static volatile unsigned char *via;
 #define IER_SET		0x80		/* set bits in IER */
 #define IER_CLR		0		/* clear bits in IER */
 #define SR_INT		0x04		/* Shift register full/empty */
+#define CB2_INT		0x08
 #define CB1_INT		0x10		/* transition on CB1 input */
 
 static enum pmu_state {
@@ -125,6 +128,16 @@ static struct adb_controller	pmu_controller = {
 	pmu_poll
 };
 
+extern void low_sleep_handler(void);
+extern void sleep_save_intrs(int);
+extern void sleep_restore_intrs(void);
+
+extern int grackle_pcibios_read_config_word(unsigned char bus,
+	unsigned char dev_fn, unsigned char offset, unsigned short *val);
+
+extern int grackle_pcibios_write_config_word(unsigned char bus,
+	unsigned char dev_fn, unsigned char offset, unsigned short val);
+
 /*
  * This table indicates for each PMU opcode:
  * - the number of data bytes to be sent with the command, or -1
@@ -168,13 +181,21 @@ static s8 pmu_data_len[256][2] __openfirmwaredata = {
 /*f8*/	{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},
 };
 
+static char *pbook_type[] = {
+	"Unknown PowerBook",
+	"PowerBook 2400/3400/3500(G3)",
+	"PowerBook G3 Series",
+	"1999 PowerBook G3",
+};
 
-void __openfirmware
+int __openfirmware
 find_via_pmu()
 {
+	if (via != 0)
+		return 1;
 	vias = find_devices("via-pmu");
 	if (vias == 0)
-		return;
+		return 0;
 	if (vias->next != 0)
 		printk(KERN_WARNING "Warning: only using 1st via-pmu\n");
 	
@@ -196,12 +217,14 @@ find_via_pmu()
 		printk(KERN_ERR "via-pmu: %d addresses, %d interrupts!\n",
 		       vias->n_addrs, vias->n_intrs);
 		if (vias->n_addrs < 1 || vias->n_intrs < 1)
-			return;
+			return 0;
 	}
 
 	if (vias->parent->name && ((strcmp(vias->parent->name, "ohare") == 0)
 	    || device_is_compatible(vias->parent, "ohare")))
 		pmu_kind = PMU_OHARE_BASED;
+	else if (device_is_compatible(vias->parent, "paddington"))
+		pmu_kind = PMU_PADDINGTON_BASED;
 	else if (device_is_compatible(vias->parent, "heathrow"))
 		pmu_kind = PMU_HEATHROW_BASED;
 	else
@@ -220,9 +243,9 @@ find_via_pmu()
 
 	if (via)
 		printk(KERN_INFO "PMU driver initialized for %s\n",
-		    (pmu_kind == PMU_OHARE_BASED) ? "PowerBook 2400/3400/3500(G3)" :
-		    ((pmu_kind == PMU_HEATHROW_BASED) ? "PowerBook G3 Series" :
-		    "Unknown PowerBook"));
+		       pbook_type[pmu_kind]);
+
+	return via != 0;
 }
 
 void __openfirmware
@@ -517,18 +540,24 @@ pmu_queue_request(struct adb_request *req)
 static void __openfirmware
 send_byte(int x)
 {
-	out_8(&via[ACR], 0x1c);
-	out_8(&via[SR], x);
-	out_8(&via[B], via[B] & ~0x10);		/* assert TREQ */
+	volatile unsigned char *v = via;
+
+	out_8(&v[ACR], in_8(&v[ACR]) | SR_OUT | SR_EXT);
+	out_8(&v[SR], x);
+	out_8(&v[B], in_8(&v[B]) & ~TREQ);		/* assert TREQ */
 }
 
 static void __openfirmware
 recv_byte()
 {
-	out_8(&via[ACR], 0x0c);
-	in_8(&via[SR]);		/* resets SR */
-	out_8(&via[B], via[B] & ~0x10);
+	volatile unsigned char *v = via;
+
+	out_8(&v[ACR], (in_8(&v[ACR]) & ~SR_OUT) | SR_EXT);
+	in_8(&v[SR]);		/* resets SR */
+	out_8(&v[B], in_8(&v[B]) & ~0x10);
 }
+
+static int disable_poll;
 
 static void __openfirmware
 pmu_start()
@@ -549,7 +578,9 @@ pmu_start()
 	data_len = pmu_data_len[req->data[0]][0];
 
 	/* set the shift register to shift out and send a byte */
+	++disable_poll;
 	send_byte(req->data[0]);
+	--disable_poll;
 
 out:
 	restore_flags(flags);
@@ -560,6 +591,8 @@ pmu_poll()
 {
 	int ie;
 
+	if (disable_poll)
+		return;
 	ie = _disable_interrupts();
 	if (via[IFR] & (SR_INT | CB1_INT))
 		via_pmu_interrupt(0, 0, 0);
@@ -572,6 +605,7 @@ via_pmu_interrupt(int irq, void *arg, struct pt_regs *regs)
 	int intr;
 	int nloop = 0;
 
+	++disable_poll;
 	while ((intr = in_8(&via[IFR])) != 0) {
 		if (++nloop > 1000) {
 			printk(KERN_DEBUG "PMU: stuck in intr loop, "
@@ -583,11 +617,9 @@ via_pmu_interrupt(int irq, void *arg, struct pt_regs *regs)
 		else if (intr & CB1_INT) {
 			adb_int_pending = 1;
 			out_8(&via[IFR], CB1_INT);
-		} else
-		{
-			/* -- Disabled printk, will happen _really_ often on
-				  PowerBooks ((CB2 interrupts) --
-			printk(KERN_DEBUG "PMU: spurrious interrupt intr=%x\n", intr); */
+		}
+		intr &= ~(SR_INT | CB1_INT);
+		if (intr != 0) {
 			out_8(&via[IFR], intr);
 		}
 	}
@@ -600,6 +632,7 @@ via_pmu_interrupt(int irq, void *arg, struct pt_regs *regs)
 			pmu_start();
 		}
 	}
+	--disable_poll;
 }
 
 static void __openfirmware
@@ -608,17 +641,17 @@ pmu_sr_intr(struct pt_regs *regs)
 	struct adb_request *req;
 	int bite, timeout;
 
+	if (via[B] & TREQ) {
+		printk(KERN_ERR "PMU: spurious SR intr (%x)\n", via[B]);
+		out_8(&via[IFR], SR_INT);
+		return;
+	}
 	if (via[B] & TACK)
-		printk(KERN_DEBUG "PMU: sr_intr but ack still high! (%x)\n",
+		printk(KERN_ERR "PMU: sr_intr but ack still high! (%x)\n",
 		       via[B]);
 
-	/* if reading grab the byte, and reset the interrupt */
-	if ((via[ACR] & SR_OUT) == 0)
-		bite = in_8(&via[SR]);
-	out_8(&via[IFR], SR_INT);
-
 	/* reset TREQ and wait for TACK to go high */
-	out_8(&via[B], via[B] | TREQ);
+	out_8(&via[B], in_8(&via[B]) | TREQ);
 	timeout = 3200;
 	while ((in_8(&via[B]) & TACK) == 0) {
 		if (--timeout < 0) {
@@ -627,6 +660,11 @@ pmu_sr_intr(struct pt_regs *regs)
 		}
 		udelay(10);
 	}
+
+	/* if reading grab the byte, and reset the interrupt */
+	if (pmu_state == reading || pmu_state == reading_intr)
+		bite = in_8(&via[SR]);
+	out_8(&via[IFR], SR_INT);
 
 	switch (pmu_state) {
 	case sending:
@@ -710,8 +748,6 @@ pmu_done(struct adb_request *req)
 static void __openfirmware
 pmu_handle_data(unsigned char *data, int len, struct pt_regs *regs)
 {
-	static int show_pmu_ints = 1;
-
 	asleep = 0;
 	if (len < 1) {
 		adb_int_pending = 0;
@@ -733,12 +769,23 @@ pmu_handle_data(unsigned char *data, int len, struct pt_regs *regs)
 			}
 			pmu_done(req);
 		} else {
+#ifdef CONFIG_XMON
+			if (len == 4 && data[1] == 0x2c) {
+				extern int xmon_wants_key, xmon_pmu_keycode;
+				if (xmon_wants_key) {
+					xmon_pmu_keycode = data[2];
+					return;
+				}
+			}
+#endif /* CONFIG_XMON */
 			/*
-			 * XXX the PMU gives us an up event for keycodes
-			 * 0x74 or 0x75 when the PC card eject buttons
-			 * are released, so we ignore those events.
+			 * XXX On the [23]400 the PMU gives us an up
+			 * event for keycodes 0x74 or 0x75 when the PC
+			 * card eject buttons are released, so we
+			 * ignore those events.
 			 */
-			if (!(len == 4 && data[1] == 0x2c && data[3] == 0xff
+			if (!(pmu_kind == PMU_OHARE_BASED && len == 4
+			      && data[1] == 0x2c && data[3] == 0xff
 			      && (data[2] & ~1) == 0xf4))
 				adb_input(data+1, len-1, regs, 1);
 		}
@@ -749,15 +796,6 @@ pmu_handle_data(unsigned char *data, int len, struct pt_regs *regs)
 	} else {
 #ifdef CONFIG_PMAC_PBOOK
 		pmu_pass_intr(data, len);
-#else
-		if (show_pmu_ints
-		    && !(data[0] == PMU_INT_TICK && len == 1)) {
-			int i;
-			printk(KERN_DEBUG "pmu intr");
-			for (i = 0; i < len; ++i)
-				printk(" %.2x", data[i]);
-			printk("\n");
-		}
 #endif
 	}
 }
@@ -773,38 +811,46 @@ pmu_enable_backlight(int on)
 	struct adb_request req;
 
 	if (vias == NULL)
-		return ;
+		return;
 		
-	if (on) {
-	    /* first call: get current backlight value */
-	    if (backlight_level < 0) {
-		switch(pmu_kind) {
-		    case PMU_OHARE_BASED:
+	/* first call: get current backlight value */
+	if (on && backlight_level < 0) {
+		switch (pmu_kind) {
+		case PMU_OHARE_BASED:
 			pmu_request(&req, NULL, 2, 0xd9, 0);
 			while (!req.complete)
 				pmu_poll();
 			backlight_level = req.reply[1] >> 3;
-			printk(KERN_DEBUG "pmu: controls returned bright: %d\n", (int)req.reply[1]);
 			break;
-		    case PMU_HEATHROW_BASED:
+		case PMU_HEATHROW_BASED:
+			/* We cannot use nvram_read_byte here (not yet initialized) */
 			pmu_request(&req, NULL, 3, PMU_READ_NVRAM, 0x14, 0xe);
 			while (!req.complete)
 				pmu_poll();
-			printk(KERN_DEBUG "pmu: nvram returned bright: %d\n", (int)req.reply[1]);
 			backlight_level = req.reply[1];
+			printk(KERN_DEBUG "pmu: nvram returned bright: %d\n", backlight_level);
 			break;
-		    default:
+		case PMU_PADDINGTON_BASED:
+			/* the G3 PB 1999 has a backlight node
+			   and chrp-structured nvram */
+			/* XXX should read macos's "blkt" property in nvram
+			   for this node.  For now this ensures that the
+			   backlight doesn't go off as soon as linux boots. */
+			backlight_level = 20;
+			break;
+		default:
 		        backlight_enabled = 0;
 		        return;
 		}
-	    }
-	    pmu_request(&req, NULL, 2, PMU_BACKLIGHT_BRIGHT,
-	    	LEVEL_TO_BRIGHT(backlight_level));
-	    while (!req.complete)
-		pmu_poll();
+	}
+	if (on) {
+		pmu_request(&req, NULL, 2, PMU_BACKLIGHT_BRIGHT,
+			    LEVEL_TO_BRIGHT(backlight_level));
+		while (!req.complete)
+			pmu_poll();
 	}
 	pmu_request(&req, NULL, 2, PMU_POWER_CTRL,
-	    PMU_POW_BACKLIGHT | (on ? PMU_POW_ON : PMU_POW_OFF));
+		    PMU_POW_BACKLIGHT | (on ? PMU_POW_ON : PMU_POW_OFF));
 	while (!req.complete)
 		pmu_poll();
 	backlight_enabled = on;
@@ -903,6 +949,68 @@ pmu_present(void)
 
 #ifdef CONFIG_PMAC_PBOOK
 
+static LIST_HEAD(sleep_notifiers);
+
+int
+pmu_register_sleep_notifier(struct pmu_sleep_notifier *n)
+{
+	struct list_head *list;
+	struct pmu_sleep_notifier *current;
+
+	for (list = sleep_notifiers.next; list != &sleep_notifiers;
+	     list = list->next) {
+		current = list_entry(list, struct pmu_sleep_notifier, list);
+		if (n->priority > current->priority)
+			break;
+	}
+	__list_add(&n->list, list->prev, list);
+	return 0;
+}
+
+int
+pmu_unregister_sleep_notifier(struct pmu_sleep_notifier* n)
+{
+	if (n->list.next == 0)
+		return -ENOENT;
+	list_del(&n->list);
+	n->list.next = 0;
+	return 0;
+}
+
+/* Sleep is broadcast last-to-first */
+static int
+broadcast_sleep(int when, int can_cancel)
+{
+	int ret = PBOOK_SLEEP_OK;
+	struct list_head *list;
+	struct pmu_sleep_notifier *current;
+
+	for (list = sleep_notifiers.prev; list != &sleep_notifiers;
+	     list = list->prev) {
+		current = list_entry(list, struct pmu_sleep_notifier, list);
+		ret = current->notifier_call(current, when);
+		if (can_cancel && (ret != PBOOK_SLEEP_OK))
+			return ret;
+	}
+	return ret;
+}
+
+/* Wake is broadcast first-to-last */
+static int
+broadcast_wake(void)
+{
+	int ret = PBOOK_SLEEP_OK;
+	struct list_head *list;
+	struct pmu_sleep_notifier *current;
+
+	for (list = sleep_notifiers.next; list != &sleep_notifiers;
+	     list = list->next) {
+		current = list_entry(list, struct pmu_sleep_notifier, list);
+		current->notifier_call(current, PBOOK_WAKE);
+	}
+	return ret;
+}
+
 /*
  * This struct is used to store config register values for
  * PCI devices which may get powered off when we sleep.
@@ -914,7 +1022,7 @@ static struct pci_save {
 } *pbook_pci_saves;
 static int n_pbook_pci_saves;
 
-static inline void __openfirmware
+static void __openfirmware
 pbook_pci_save(void)
 {
 	int npci;
@@ -941,7 +1049,7 @@ pbook_pci_save(void)
 	}
 }
 
-static inline void __openfirmware
+static void __openfirmware
 pbook_pci_restore(void)
 {
 	u16 cmd;
@@ -974,46 +1082,168 @@ pbook_pci_restore(void)
 	}
 }
 
+#if 0
+/* N.B. This doesn't work on the 3400 */
+void pmu_blink(int n)
+{
+	struct adb_request req;
+
+	for (; n > 0; --n) {
+		pmu_request(&req, NULL, 4, 0xee, 4, 0, 1);
+		while (!req.complete) pmu_poll();
+		udelay(50000);
+		pmu_request(&req, NULL, 4, 0xee, 4, 0, 0);
+		while (!req.complete) pmu_poll();
+		udelay(50000);
+	}
+	udelay(50000);
+}
+#endif
+
 /*
  * Put the powerbook to sleep.
  */
-#define IRQ_ENABLE	((unsigned int *)0xf3000024)
-#define MEM_CTRL	((unsigned int *)0xf8000070)
+ 
+#define FEATURE_CTRL(base)	((unsigned int *)(base + 0x38))
+#define	GRACKLE_PM	(1<<7)
+#define GRACKLE_DOZE	(1<<5)
+#define	GRACKLE_NAP	(1<<4)
+#define	GRACKLE_SLEEP	(1<<3)
 
-int __openfirmware powerbook_sleep(void)
+int __openfirmware powerbook_sleep_G3(void)
 {
-	int ret, i, x;
-	static int save_backlight;
-	static unsigned int save_irqen;
-	unsigned long msr;
-	unsigned int hid0;
-	unsigned long p, wait;
+	int ret;
+	unsigned long save_l2cr;
+	unsigned long save_fcr;
+	unsigned long wait;
+	unsigned short pmcr1;
 	struct adb_request sleep_req;
+	struct device_node *macio;
+	unsigned long macio_base = 0;
 
-	/* Notify device drivers */
-	ret = notifier_call_chain(&sleep_notifier_list, PBOOK_SLEEP, NULL);
-	if (ret & NOTIFY_STOP_MASK)
-		return -EBUSY;
+	macio = find_devices("mac-io");
+	if (macio != 0 && macio->n_addrs > 0)
+		macio_base = (unsigned long)
+			ioremap(macio->addrs[0].address, 0x40);
 
 	/* Sync the disks. */
 	/* XXX It would be nice to have some way to ensure that
 	 * nobody is dirtying any new buffers while we wait. */
 	fsync_dev(0);
 
-	/* Turn off the display backlight */
-	save_backlight = backlight_enabled;
-	if (save_backlight)
-		pmu_enable_backlight(0);
+	/* Notify device drivers */
+	ret = broadcast_sleep(PBOOK_SLEEP_REQUEST, 1);
+	if (ret != PBOOK_SLEEP_OK) {
+		broadcast_sleep(PBOOK_SLEEP_REJECT, 0);
+		printk("pmu: sleep rejected\n");
+		return -EBUSY;
+	}
+	broadcast_sleep(PBOOK_SLEEP_NOW, 0);
 
 	/* Give the disks a little time to actually finish writing */
 	for (wait = jiffies + (HZ/4); time_before(jiffies, wait); )
 		mb();
 
 	/* Disable all interrupts except pmu */
-	save_irqen = in_le32(IRQ_ENABLE);
-	for (i = 0; i < 32; ++i)
-		if (i != vias->intrs[0].line && (save_irqen & (1 << i)))
-			disable_irq(i);
+	sleep_save_intrs(vias->intrs[0].line);
+
+	/* Make sure the decrementer won't interrupt us */
+	asm volatile("mtdec %0" : : "r" (0x7fffffff));
+#if 0
+	/* Save the state of PCI config space for some slots */
+	pbook_pci_save();
+#endif
+	/* For 750, save backside cache setting and disable it */
+	save_l2cr = _get_L2CR();	/* (returns 0 if not 750) */
+	if (save_l2cr)
+		_set_L2CR(0);
+
+	if (macio_base != 0) {
+		save_fcr = in_le32(FEATURE_CTRL(macio_base));
+		/* Check if this is still valid on older powerbooks */
+		out_le32(FEATURE_CTRL(macio_base), save_fcr & ~(0x00000140UL));
+	}
+
+	if (current->tss.regs && (current->tss.regs->msr & MSR_FP) != 0)
+		giveup_fpu(current);
+
+	grackle_pcibios_read_config_word(0,0,0x70,&pmcr1);
+	/* Apparently, MacOS uses NAP mode for Grackle ??? */
+	pmcr1 &= ~(GRACKLE_DOZE|GRACKLE_SLEEP); 
+	pmcr1 |= GRACKLE_PM|GRACKLE_NAP;
+	grackle_pcibios_write_config_word(0, 0, 0x70, pmcr1);
+
+	/* Ask the PMU to put us to sleep */
+	pmu_request(&sleep_req, NULL, 5, PMU_SLEEP, 'M', 'A', 'T', 'T');
+	while (!sleep_req.complete)
+		mb();
+
+	cli();
+	while (pmu_state != idle)
+		pmu_poll();
+
+	/* Call low-level ASM sleep handler */
+	low_sleep_handler();
+
+	/* We're awake again, stop grackle PM */
+	grackle_pcibios_read_config_word(0, 0, 0x70, &pmcr1);
+	pmcr1 &= ~(GRACKLE_PM|GRACKLE_DOZE|GRACKLE_SLEEP|GRACKLE_NAP); 
+	grackle_pcibios_write_config_word(0, 0, 0x70, pmcr1);
+
+	sti();
+#if 0
+	/* According to someone from Apple, this should not be needed,
+	   at least not for all devices. Let's keep it for now until we
+	   have something that works. */
+	pbook_pci_restore();
+#endif
+	set_context(current->mm->context);
+
+	/* Restore L2 cache */
+	if (save_l2cr)
+		_set_L2CR(save_l2cr | 0x200000); /* set invalidate bit */
+	
+	/* reenable interrupts */
+	sleep_restore_intrs();
+
+	/* Notify drivers */
+	broadcast_wake();
+
+	return 0;
+}
+
+#define PB3400_MEM_CTRL		((unsigned int *)0xf8000070)
+
+int __openfirmware powerbook_sleep_3400(void)
+{
+	int ret, i, x;
+	unsigned long msr;
+	unsigned int hid0;
+	unsigned long p, wait;
+	struct adb_request sleep_req;
+
+	/* Sync the disks. */
+	/* XXX It would be nice to have some way to ensure that
+	 * nobody is dirtying any new buffers while we wait. */
+	fsync_dev(0);
+
+	/* Notify device drivers */
+	ret = broadcast_sleep(PBOOK_SLEEP_REQUEST, 1);
+	if (ret != PBOOK_SLEEP_OK) {
+		broadcast_sleep(PBOOK_SLEEP_REJECT, 0);
+		printk("pmu: sleep rejected\n");
+		return -EBUSY;
+	}
+	broadcast_sleep(PBOOK_SLEEP_NOW, 0);
+
+	/* Give the disks a little time to actually finish writing */
+	for (wait = jiffies + (HZ/4); time_before(jiffies, wait); )
+		mb();
+
+	/* Disable all interrupts except pmu */
+	sleep_save_intrs(vias->intrs[0].line);
+
+	/* Make sure the decrementer won't interrupt us */
 	asm volatile("mtdec %0" : : "r" (0x7fffffff));
 
 	/* Save the state of PCI config space for some slots */
@@ -1022,9 +1252,9 @@ int __openfirmware powerbook_sleep(void)
 	/* Set the memory controller to keep the memory refreshed
 	   while we're asleep */
 	for (i = 0x403f; i >= 0x4000; --i) {
-		out_be32(MEM_CTRL, i);
+		out_be32(PB3400_MEM_CTRL, i);
 		do {
-			x = (in_be32(MEM_CTRL) >> 16) & 0x3ff;
+			x = (in_be32(PB3400_MEM_CTRL) >> 16) & 0x3ff;
 		} while (x == 0);
 		if (x >= 0x100)
 			break;
@@ -1034,6 +1264,7 @@ int __openfirmware powerbook_sleep(void)
 	pmu_request(&sleep_req, NULL, 5, PMU_SLEEP, 'M', 'A', 'T', 'T');
 	while (!sleep_req.complete)
 		mb();
+
 	/* displacement-flush the L2 cache - necessary? */
 	for (p = KERNELBASE; p < KERNELBASE + 0x100000; p += 0x1000)
 		i = *(volatile int *)p;
@@ -1049,7 +1280,7 @@ int __openfirmware powerbook_sleep(void)
 	udelay(10);
 
 	/* OK, we're awake again, start restoring things */
-	out_be32(MEM_CTRL, 0x3f);
+	out_be32(PB3400_MEM_CTRL, 0x3f);
 	pbook_pci_restore();
 
 	/* wait for the PMU interrupt sequence to complete */
@@ -1057,21 +1288,10 @@ int __openfirmware powerbook_sleep(void)
 		mb();
 
 	/* reenable interrupts */
-	for (i = 0; i < 32; ++i)
-		if (i != vias->intrs[0].line && (save_irqen & (1 << i)))
-			enable_irq(i);
+	sleep_restore_intrs();
 
 	/* Notify drivers */
-	notifier_call_chain(&sleep_notifier_list, PBOOK_WAKE, NULL);
-
-	/* reenable ADB autopoll */
-	pmu_adb_autopoll(adb_dev_map);
-
-	/* Turn on the screen backlight, if it was on before */
-	if (save_backlight)
-		pmu_enable_backlight(1);
-
-	/* Wait for the hard disk to spin up */
+	broadcast_wake();
 
 	return 0;
 }
@@ -1224,7 +1444,7 @@ static int pmu_release(struct inode *inode, struct file *file)
 }
 
 /* Note: removed __openfirmware here since it causes link errors */
-static int /*__openfirmware*/ pmu_ioctl(struct inode * inode, struct file *filp,
+static int pmu_ioctl(struct inode * inode, struct file *filp,
 		     u_int cmd, u_long arg)
 {
 	int error;
@@ -1232,9 +1452,18 @@ static int /*__openfirmware*/ pmu_ioctl(struct inode * inode, struct file *filp,
 
 	switch (cmd) {
 	case PMU_IOC_SLEEP:
-	    	if (pmu_kind != PMU_OHARE_BASED)
-	    		return -ENOSYS;
-		return powerbook_sleep();
+		switch (pmu_kind) {
+		case PMU_OHARE_BASED:
+			error = powerbook_sleep_3400();
+			break;
+		case PMU_HEATHROW_BASED:
+		case PMU_PADDINGTON_BASED:
+			error = powerbook_sleep_G3();
+			break;
+		default:
+			error = ENOSYS;
+		}
+		return error;
 	case PMU_IOC_GET_BACKLIGHT:
 		return put_user(backlight_level, (__u32 *)arg);
 	case PMU_IOC_SET_BACKLIGHT:
@@ -1272,3 +1501,72 @@ void pmu_device_init(void)
 }
 #endif /* CONFIG_PMAC_PBOOK */
 
+#if 0
+static inline void polled_handshake(volatile unsigned char *via)
+{
+	via[B] &= ~TREQ; eieio();
+	while ((via[B] & TACK) != 0)
+		;
+	via[B] |= TREQ; eieio();
+	while ((via[B] & TACK) == 0)
+		;
+}
+
+static inline void polled_send_byte(volatile unsigned char *via, int x)
+{
+	xmon_printf("s%.2x", x);
+	via[ACR] |= SR_OUT | SR_EXT; eieio();
+	via[SR] = x; eieio();
+	polled_handshake(via);
+}
+
+static inline int polled_recv_byte(volatile unsigned char *via)
+{
+	int x;
+
+	via[ACR] = (via[ACR] & ~SR_OUT) | SR_EXT; eieio();
+	x = via[SR]; eieio();
+	polled_handshake(via);
+	x = via[SR]; eieio();
+	xmon_printf("r%.2x", x);
+	return x;
+}
+
+int
+pmu_polled_request(struct adb_request *req)
+{
+	unsigned long flags;
+	int i, l, c;
+	volatile unsigned char *v = via;
+
+	req->complete = 1;
+	c = req->data[0];
+	l = pmu_data_len[c][0];
+	if (l >= 0 && req->nbytes != l + 1)
+		return -EINVAL;
+
+	save_flags(flags); cli();
+	while (pmu_state != idle)
+		pmu_poll();
+
+	polled_send_byte(v, c);
+	if (l < 0) {
+		l = req->nbytes - 1;
+		polled_send_byte(v, l);
+	}
+	for (i = 1; i <= l; ++i)
+		polled_send_byte(v, req->data[i]);
+
+	l = pmu_data_len[c][1];
+	if (l < 0)
+		l = polled_recv_byte(v);
+	for (i = 0; i < l; ++i)
+		req->reply[i + req->reply_len] = polled_recv_byte(v);
+
+	if (req->done)
+		(*req->done)(req);
+
+	restore_flags(flags);
+	return 0;
+}
+#endif /* 0 */

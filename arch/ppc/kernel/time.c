@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.47.2.1 1999/05/29 19:10:23 cort Exp $
+ * $Id: time.c,v 1.47.2.2 1999/08/14 21:45:49 cort Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -110,15 +110,14 @@ void timer_interrupt(struct pt_regs * regs)
 			/*
 			 * update the rtc when needed
 			 */
-			if ( xtime.tv_sec > last_rtc_update + 660 )
+			if ( (time_status & STA_UNSYNC) &&
+			     (xtime.tv_sec > last_rtc_update + 660) )
 			{
-				if (ppc_md.set_rtc_time(xtime.tv_sec) == 0) {
+				if (ppc_md.set_rtc_time(xtime.tv_sec) == 0)
 					last_rtc_update = xtime.tv_sec;
-				}
-				else {
+				else
 					/* do it again in 60 s */
 					last_rtc_update = xtime.tv_sec - 60;
-				}
 			}
 		}
 	}
@@ -168,7 +167,6 @@ void do_settimeofday(struct timeval *tv)
 	int frac_tick;
 	
 	last_rtc_update = 0; /* so the rtc gets updated soon */
-	
 	frac_tick = tv->tv_usec % (1000000 / HZ);
 	save_flags(flags);
 	cli();
@@ -332,6 +330,3 @@ void to_tm(int tim, struct rtc_time * tm)
 	 */
 	GregorianDay(tm);
 }
-
-
-

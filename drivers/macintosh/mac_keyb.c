@@ -16,13 +16,14 @@
  *
  * - Standard 1 button mouse
  * - All standard Apple Extended protocol (handler ID 4)
- *   mice & trackballs
+ * - mouseman and trackman mice & trackballs 
  * - PowerBook Trackpad (default setup: enable tapping)
  * - MicroSpeed mouse & trackball (needs testing)
  * - CH Products Trackball Pro (needs testing)
  * - Contour Design (Contour Mouse)
  * - Hunter digital (NoHandsMouse)
  * - Kensignton TurboMouse 5 (needs testing)
+ * - Mouse Systems A3 mice and trackballs <aidan@kublai.com>
  *
  * To do:
  *
@@ -39,6 +40,7 @@
 #include <linux/init.h>
 #include <linux/tty_flip.h>
 #include <linux/config.h>
+#include <linux/notifier.h>
 
 #include <asm/bitops.h>
 #include <asm/adb.h>
@@ -239,6 +241,7 @@ static void init_trackpad(int id);
 static void init_trackball(int id);
 static void init_turbomouse(int id);
 static void init_microspeed(int id);
+static void init_ms_a3(int id);
 
 #ifdef CONFIG_ADBMOUSE
 /* XXX: Hook for mouse driver */
@@ -268,6 +271,7 @@ static struct adb_ids buttons_ids;
 #define ADBMOUSE_TURBOMOUSE5    5	/* Turbomouse 5 (previously req. mousehack) */
 #define ADBMOUSE_MICROSPEED	6	/* Microspeed mouse (&trackball ?), MacPoint */
 #define ADBMOUSE_TRACKBALLPRO	7	/* Trackball Pro (special buttons) */
+#define ADBMOUSE_MS_A3		8	/* Mouse systems A3 trackball (handler 3) */
 
 static int adb_mouse_kinds[16];
 
@@ -511,6 +515,11 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 			& ((data[3] & 0x08) << 4));
 		data[2] = (data[2] & 0x7f) | ((data[3] & 0x01) << 7);
 		data[3] = (data[3] & 0x77) | ((data[3] & 0x02) << 6);
+		break;
+	    case ADBMOUSE_MS_A3:
+		data[1] = (data[1] & 0x7f) | ((data[3] & 0x01) << 7);
+		data[2] = (data[2] & 0x7f) | ((data[3] & 0x02) << 6);
+		data[3] = ((data[3] & 0x04) << 5);
 		break;
 	}
 
@@ -760,10 +769,6 @@ mackeyb_probe(void)
 			printk("ADB mouse at %d, handler set to 4", id);
 			adb_mouse_kinds[id] = ADBMOUSE_EXTENDED;
 		}
-		else if (adb_try_handler_change(id, 2)) {
-			printk("ADB mouse at %d, handler set to 2", id);
-			adb_mouse_kinds[id] = ADBMOUSE_STANDARD_200;
-		}
 		else if (adb_try_handler_change(id, 0x2F)) {
 			printk("ADB mouse at %d, handler set to 0x2F", id);
 			adb_mouse_kinds[id] = ADBMOUSE_MICROSPEED;
@@ -780,6 +785,14 @@ mackeyb_probe(void)
 			printk("ADB mouse at %d, handler set to 0x5F", id);
 			adb_mouse_kinds[id] = ADBMOUSE_MICROSPEED;
 		}
+		else if (adb_try_handler_change(id, 3)) {
+			printk("ADB mouse at %d, handler set to 3", id);
+			adb_mouse_kinds[id] = ADBMOUSE_MS_A3;
+		}
+		else if (adb_try_handler_change(id, 2)) {
+			printk("ADB mouse at %d, handler set to 2", id);
+			adb_mouse_kinds[id] = ADBMOUSE_STANDARD_200;
+		}
 		else {
 			printk("ADB mouse at %d, handler 1", id);
 			adb_mouse_kinds[id] = ADBMOUSE_STANDARD_100;
@@ -788,6 +801,8 @@ mackeyb_probe(void)
 		if ((adb_mouse_kinds[id] == ADBMOUSE_TRACKBALLPRO)
 		    || (adb_mouse_kinds[id] == ADBMOUSE_MICROSPEED)) {
 			init_microspeed(id);
+		} else if (adb_mouse_kinds[id] == ADBMOUSE_MS_A3) {
+			init_ms_a3(id);	
 		}  else if (adb_mouse_kinds[id] ==  ADBMOUSE_EXTENDED) {
 			/*
 			 * Register 1 is usually used for device
@@ -799,7 +814,8 @@ mackeyb_probe(void)
 				    ADB_READREG(id, 1));
 
 			if ((req.reply_len) &&
-			    (req.reply[1] == 0x9a) && (req.reply[2] == 0x21))
+			    (req.reply[1] == 0x9a) && ((req.reply[2] == 0x21)
+			    	|| (req.reply[2] == 0x20)))
 				init_trackball(id);
 			else if ((req.reply_len >= 4) &&
 			    (req.reply[1] == 0x74) && (req.reply[2] == 0x70) &&
@@ -871,7 +887,7 @@ init_trackball(int id)
 {
 	struct adb_request req;
 	
-	printk(" (trackball)");
+	printk(" (trackman/mouseman)");
 	
 	adb_mouse_kinds[id] = ADBMOUSE_TRACKBALL;
 
@@ -977,3 +993,18 @@ init_microspeed(int id)
 
 	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(id));
 }
+
+static void
+init_ms_a3(int id)
+{
+	struct adb_request req;
+
+	printk(" (Mouse Systems A3 Mouse, or compatible)");
+	adb_request(&req, NULL, ADBREQ_SYNC, 3,
+	ADB_WRITEREG(id, 0x2),
+	    0x00,
+	    0x07);
+ 
+ 	adb_request(&req, NULL, ADBREQ_SYNC, 1, ADB_FLUSH(id));
+ }
+

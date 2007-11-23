@@ -360,3 +360,41 @@ pmac_pic_init(void))
 	request_irq(20, xmon_irq, 0, "NMI - XMON", 0);
 #endif	/* CONFIG_XMON */
 }
+
+#ifdef CONFIG_PMAC_PBOOK
+/*
+ * These procedures are used in implementing sleep on the powerbooks.
+ * sleep_save_intrs() saves the states of all interrupt enables
+ * and disables all interupts except for the nominated one.
+ * sleep_restore_intrs() restores the states of all interrupt enables.
+ */
+unsigned int sleep_save_mask[2];
+
+void
+sleep_save_intrs(int viaint)
+{
+	sleep_save_mask[0] = ppc_cached_irq_mask[0];
+	sleep_save_mask[1] = ppc_cached_irq_mask[1];
+	ppc_cached_irq_mask[0] = 0;
+	ppc_cached_irq_mask[1] = 0;
+	set_bit(viaint, ppc_cached_irq_mask);
+	out_le32(&pmac_irq_hw[0]->enable, ppc_cached_irq_mask[0]);
+	if (max_real_irqs > 32)
+		out_le32(&pmac_irq_hw[1]->enable, ppc_cached_irq_mask[1]);
+	mb();
+}
+
+void
+sleep_restore_intrs(void)
+{
+	int i;
+
+	out_le32(&pmac_irq_hw[0]->enable, 0);
+	if (max_real_irqs > 32)
+		out_le32(&pmac_irq_hw[1]->enable, 0);
+	mb();
+	for (i = 0; i < max_real_irqs; ++i)
+		if (test_bit(i, sleep_save_mask))
+			pmac_unmask_irq(i);
+}
+#endif /* CONFIG_PMAC_PBOOK */

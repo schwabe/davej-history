@@ -161,16 +161,24 @@ pmac_get_cpuinfo(char *buffer)
 	/* find ram info */
 	np = find_devices("memory");
 	if (np != 0) {
+		int n;
 		struct reg_property *reg = (struct reg_property *)
-			get_property(np, "reg", NULL);
+			get_property(np, "reg", &n);
+		
 		if (reg != 0) {
-			len += sprintf(buffer+len, "memory\t\t: %dMB\n",
-				       reg->size >> 20);
+			unsigned long total = 0;
+
+			for (n /= sizeof(struct reg_property); n > 0; --n)
+				total += (reg++)->size;
+			len += sprintf(buffer+len, "memory\t\t: %luMB\n",
+				       total >> 20);
 		}
 	}
 
 	/* Checks "l2cr-value" property in the registry */
 	np = find_devices("cpus");		
+	if (np == 0)
+		np = find_type_devices("cpu");		
 	if (np != 0) {
 		unsigned int *l2cr = (unsigned int *)
 			get_property(np, "l2cr-value", NULL);
@@ -261,6 +269,8 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	/* Checks "l2cr-value" property in the registry */
 	if ( (_get_PVR() >> 16) == 8) {
 		struct device_node *np = find_devices("cpus");		
+		if (np == 0)
+			np = find_type_devices("cpu");		
 		if (np != 0) {
 			unsigned int *l2cr = (unsigned int *)
 				get_property(np, "l2cr-value", NULL);

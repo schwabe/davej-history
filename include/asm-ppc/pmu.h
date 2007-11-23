@@ -33,20 +33,23 @@
 #define PMU_POW_ON		0x80	/* OR this to power ON the device */
 #define PMU_POW_OFF		0x00	/* leave bit 7 to 0 to power it OFF */
 #define PMU_POW_BACKLIGHT	0x01	/* backlight power */
-#define PMU_POW_IRLED		0x04	/* IR led power (on wallstreet) ??? */
+#define PMU_POW_IRLED		0x04	/* IR led power (on wallstreet) */
 
 /* Bits in PMU interrupt and interrupt mask bytes */
 #define PMU_INT_ADB_AUTO	0x04	/* ADB autopoll, when PMU_INT_ADB */
 #define PMU_INT_PCEJECT		0x04	/* PC-card eject buttons */
 #define PMU_INT_SNDBRT		0x08	/* sound/brightness up/down buttons */
 #define PMU_INT_ADB		0x10	/* ADB autopoll or reply data */
+#define PMU_INT_BATTERY		0x20
+#define PMU_INT_WAKEUP		0x40
 #define PMU_INT_TICK		0x80	/* 1-second tick interrupt */
 
 /* Kind of PMU (model) */
 enum {
-  PMU_UNKNOWN,
-  PMU_OHARE_BASED,
-  PMU_HEATHROW_BASED
+	PMU_UNKNOWN,
+	PMU_OHARE_BASED,	/* 2400, 3400, 3500 (old G3 powerbook) */
+	PMU_HEATHROW_BASED,	/* PowerBook G3 series */
+	PMU_PADDINGTON_BASED,	/* 1999 PowerBook G3 */
 };
 
 /*
@@ -65,7 +68,7 @@ enum {
 
 #ifdef __KERNEL__
 
-void find_via_pmu(void);
+int find_via_pmu(void);
 void via_pmu_init(void);
 
 int pmu_request(struct adb_request *req,
@@ -83,15 +86,49 @@ void pmu_shutdown(void);
 int pmu_present(void);
 int pmu_get_model(void);
 
+#ifdef CONFIG_PMAC_PBOOK
 /*
  * Stuff for putting the powerbook to sleep and waking it again.
+ *
  */
-#include <linux/notifier.h>
+#include <linux/list.h>
 
-extern struct notifier_block *sleep_notifier_list;
+struct pmu_sleep_notifier
+{
+	int (*notifier_call)(struct pmu_sleep_notifier *self, int when);
+	int priority;
+	struct list_head list;
+};
 
-/* code values for calling sleep/wakeup handlers */
-#define PBOOK_SLEEP	1
-#define PBOOK_WAKE	2
+/* Code values for calling sleep/wakeup handlers
+ *
+ * Note: If a sleep request got cancelled, all drivers will get
+ * the PBOOK_SLEEP_REJECT, even those who didn't get the PBOOK_SLEEP_REQUEST.
+ */
+#define PBOOK_SLEEP_REQUEST	1
+#define PBOOK_SLEEP_NOW		2
+#define PBOOK_SLEEP_REJECT	3
+#define PBOOK_WAKE		4
+
+/* Result codes returned by the notifiers */
+#define PBOOK_SLEEP_OK		0
+#define PBOOK_SLEEP_REFUSE	-1
+
+/* priority levels in notifiers */
+#define SLEEP_LEVEL_VIDEO	100	/* Video driver (first wake) */
+#define SLEEP_LEVEL_SOUND	90	/* Sound driver */
+#define SLEEP_LEVEL_MEDIABAY	80	/* Media bay driver */
+#define SLEEP_LEVEL_BLOCK	70	/* IDE, SCSI */
+#define SLEEP_LEVEL_NET		60	/* bmac */
+#define SLEEP_LEVEL_ADB		50	/* ADB */
+#define SLEEP_LEVEL_MISC	30	/* Anything */
+#define SLEEP_LEVEL_LAST	0	/* Anything */
+
+/* special register notifier functions */
+int pmu_register_sleep_notifier(struct pmu_sleep_notifier* notifier);
+int pmu_unregister_sleep_notifier(struct pmu_sleep_notifier* notifier);
+
+#endif /* CONFIG_PMAC_PBOOK */
+
 
 #endif	/* __KERNEL */

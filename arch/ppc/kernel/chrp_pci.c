@@ -300,11 +300,11 @@ chrp_pcibios_fixup(void)
 		}
 		/* the F50 identifies the amd as a trident */
 		if ( (dev->vendor == PCI_VENDOR_ID_TRIDENT) &&
-		      (dev->class == PCI_CLASS_NETWORK_ETHERNET) )
+		      (dev->class>>8 == PCI_CLASS_NETWORK_ETHERNET) )
 		{
 			dev->vendor = PCI_VENDOR_ID_AMD;
-			pcibios_write_config_word(dev->bus->number, dev->devfn,
-						   PCI_VENDOR_ID, PCI_VENDOR_ID_AMD);
+			pcibios_write_config_word(dev->bus->number,
+			  dev->devfn, PCI_VENDOR_ID, PCI_VENDOR_ID_AMD);
 		}
 	}
 }

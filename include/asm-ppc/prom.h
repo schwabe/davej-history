@@ -72,7 +72,8 @@ extern struct device_node *find_path_device(const char *path);
 extern struct device_node *find_compatible_devices(const char *type,
 						   const char *compat);
 extern struct device_node *find_phandle(phandle);
-extern int device_is_compatible(struct device_node *device, const char* compat);
+extern int device_is_compatible(struct device_node *device, const char *);
+extern int machine_is_compatible(const char *compat);
 extern unsigned char *get_property(struct device_node *node, const char *name,
 				   int *lenp);
 extern void print_properties(struct device_node *node);
