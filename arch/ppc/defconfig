@@ -252,7 +252,6 @@ CONFIG_BMAC=y
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_RTL8139 is not set
-# CONFIG_SIS900 is not set
 # CONFIG_YELLOWFIN is not set
 # CONFIG_NET_ISA is not set
 CONFIG_NET_EISA=y
@@ -271,6 +270,7 @@ CONFIG_DE4X5=y
 # CONFIG_NE2K_PCI is not set
 # CONFIG_TLAN is not set
 # CONFIG_VIA_RHINE is not set
+# CONFIG_SIS900 is not set
 # CONFIG_ES3210 is not set
 # CONFIG_EPIC100 is not set
 # CONFIG_ZNET is not set

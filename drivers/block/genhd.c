@@ -1055,7 +1055,8 @@ static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 	int dev_bsize, dev_pos, pos;
 	unsigned secsize;
 #ifdef CONFIG_PPC
-	int first_bootable = 1;
+	int found_root = 0;
+	int found_root_goodness = 0;
 #endif
 	struct mac_partition *part;
 	struct mac_driver_desc *md;
@@ -1113,16 +1114,36 @@ static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 		 * If this is the first bootable partition, tell the
 		 * setup code, in case it wants to make this the root.
 		 */
-		if ( (_machine == _MACH_Pmac) && first_bootable
-		    && (be32_to_cpu(part->status) & MAC_STATUS_BOOTABLE)
-		    && strcasecmp(part->processor, "powerpc") == 0) {
-			note_bootable_part(dev, blk);
-			first_bootable = 0;
+		if (_machine == _MACH_Pmac) {
+			int goodness = 0;
+		    
+			if ((be32_to_cpu(part->status) & MAC_STATUS_BOOTABLE)
+			    && strcasecmp(part->processor, "powerpc") == 0)
+				goodness++;
+
+			if (strcasecmp(part->type, "Apple_UNIX_SVR2") == 0) {
+				goodness++;
+				if ((strcmp(part->name, "/") == 0) ||
+				    (strstr(part->name, "root") != 0)) {
+					goodness++;
+				}
+				if (strncmp(part->name, "swap", 4) == 0)
+					goodness--;
+			}
+
+			if (goodness > found_root_goodness) {
+				found_root = blk;
+				found_root_goodness = goodness;
+			}
 		}
 #endif /* CONFIG_PPC */
 
 		++current_minor;
 	}
+#ifdef CONFIG_PPC
+	if (found_root_goodness)
+		note_bootable_part(dev, found_root);
+#endif
 	brelse(bh);
 	printk("\n");
 	return 1;

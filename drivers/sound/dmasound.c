@@ -3171,7 +3171,7 @@ static void PMacPlay(void)
 		out_le32(&awacs_txdma->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
 		out_le32(&awacs->control,
 			 (in_le32(&awacs->control) & ~0x1f00)
-			 || (awacs_rate_index << 8));
+			 | (awacs_rate_index << 8));
 		out_le32(&awacs->byteswap, sound.hard.format != AFMT_S16_BE);
 		beep_playing = 0;
 	}
@@ -3259,6 +3259,11 @@ static void awacs_nosound(unsigned long xx)
 	save_flags(flags); cli();
 	if (beep_playing) {
 		st_le16(&beep_dbdma_cmd->command, DBDMA_STOP);
+		out_le32(&awacs_txdma->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
+		out_le32(&awacs->control,
+			 (in_le32(&awacs->control) & ~0x1f00)
+			 | (awacs_rate_index << 8));
+		out_le32(&awacs->byteswap, sound.hard.format != AFMT_S16_BE);
 		beep_playing = 0;
 	}
 	restore_flags(flags);

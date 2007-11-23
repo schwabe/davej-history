@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.62.2.7 1999/10/09 06:03:20 davem Exp $
+/* $Id: ioctl32.c,v 1.62.2.8 1999/11/16 23:59:31 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -17,7 +17,6 @@
 #include <linux/if.h>
 #include <linux/malloc.h>
 #include <linux/hdreg.h>
-#include <linux/raid/md.h>
 #include <linux/kd.h>
 #include <linux/route.h>
 #include <linux/skbuff.h>
@@ -1998,23 +1997,23 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case BLKRASET:
 	
 	/* 0x09 */
-	case RAID_VERSION:
-	case GET_ARRAY_INFO:
-	case GET_DISK_INFO:
-	case CLEAR_ARRAY:
-	case ADD_NEW_DISK:
-	case HOT_REMOVE_DISK:
-	case SET_ARRAY_INFO:
-	case SET_DISK_INFO:
-	case WRITE_RAID_INFO:
-	case UNPROTECT_ARRAY:
-	case PROTECT_ARRAY:
-	case HOT_ADD_DISK:
-	case RUN_ARRAY:
-	case START_ARRAY:
-	case STOP_ARRAY:
-	case STOP_ARRAY_RO:
-	case RESTART_ARRAY_RW:
+	case /* RAID_VERSION */		_IOR (MD_MAJOR, 0x10, char[12]):
+	case /* GET_ARRAY_INFO */	_IOR (MD_MAJOR, 0x11, char[72]):
+	case /* GET_DISK_INFO */	_IOR (MD_MAJOR, 0x12, char[20]):
+	case /* CLEAR_ARRAY */		_IO (MD_MAJOR, 0x20):
+	case /* ADD_NEW_DISK */		_IOW (MD_MAJOR, 0x21, char[20]):
+	case /* HOT_REMOVE_DISK */	_IO (MD_MAJOR, 0x22):
+	case /* SET_ARRAY_INFO */	_IOW (MD_MAJOR, 0x23, char[72]):
+	case /* SET_DISK_INFO */	_IO (MD_MAJOR, 0x24):
+	case /* WRITE_RAID_INFO */	_IO (MD_MAJOR, 0x25):
+	case /* UNPROTECT_ARRAY */	_IO (MD_MAJOR, 0x26):
+	case /* PROTECT_ARRAY */	_IO (MD_MAJOR, 0x27):
+	case /* HOT_ADD_DISK */		_IO (MD_MAJOR, 0x28):
+	case /* RUN_ARRAY */		_IOW (MD_MAJOR, 0x30, char[12]):
+	case /* START_ARRAY */		_IO (MD_MAJOR, 0x31):
+	case /* STOP_ARRAY */		_IO (MD_MAJOR, 0x32):
+	case /* STOP_ARRAY_RO */	_IO (MD_MAJOR, 0x33):
+	case /* RESTART_ARRAY_RW */	_IO (MD_MAJOR, 0x34):
 
 	/* Big K */
 	case PIO_FONT:

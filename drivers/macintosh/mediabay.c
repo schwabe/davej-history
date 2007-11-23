@@ -433,14 +433,13 @@ mb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 			   in the middle of a wait loop */
 			if (bay->reset_timer)
 				bay->reset_timer = MB_RESET_COUNT;
+#ifdef CONFIG_BLK_DEV_IDE
 			if (bay->cd_timer)
 				bay->cd_timer = MB_IDE_WAIT;
+#endif
 		}
 		break;
 	}
 	return PBOOK_SLEEP_OK;
 }
 #endif /* CONFIG_PMAC_PBOOK */
-
-
-

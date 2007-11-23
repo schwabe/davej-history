@@ -266,8 +266,8 @@ setup_frame(struct pt_regs *regs, struct sigregs *frame,
 
 	if (verify_area(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto badframe;
-		if (regs->msr & MSR_FP)
-			giveup_fpu(current);
+	if (regs->msr & MSR_FP)
+		giveup_fpu(current);
 	if (__copy_to_user(&frame->gp_regs, regs, GP_REGS_SIZE)
 	    || __copy_to_user(&frame->fp_regs, current->tss.fpr,
 			      ELF_NFPREG * sizeof(double))
@@ -471,6 +471,8 @@ int do_signal(sigset_t *oldset, struct pt_regs *regs)
 
 		/* Whee!  Actually deliver the signal.  */
 		handle_signal(signr, ka, &info, oldset, regs, &newsp, frame);
+		setup_frame(regs, (struct sigregs *) frame, newsp);
+		return 1;
 	}
 
 	if (regs->trap == 0x0C00 /* System Call! */ &&
@@ -482,10 +484,7 @@ int do_signal(sigset_t *oldset, struct pt_regs *regs)
 		regs->result = 0;
 	}
 
-	if (newsp == frame)
-		return 0;		/* no signals delivered */
+	return 0;		/* no signals delivered */
 
-	setup_frame(regs, (struct sigregs *) frame, newsp);
-	return 1;
 }
 

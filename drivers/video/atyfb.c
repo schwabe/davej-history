@@ -89,7 +89,6 @@
  */
 #undef DEBUG
 
-
 #define GUI_RESERVE	0x00001000
 
 
@@ -3935,47 +3934,65 @@ aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
 {
 	struct fb_info_aty *info;
  	unsigned int pm;
- 	
+
 	for (info = first_display; info != NULL; info = info->next) {
 		struct fb_fix_screeninfo fix;
 		int nb;
-		
+
 		atyfb_get_fix(&fix, fg_console, (struct fb_info *)info);
 		nb = fb_display[fg_console].var.yres * fix.line_length;
 
 		switch (when) {
+		case PBOOK_SLEEP_REQUEST:
+			info->save_framebuffer = vmalloc(nb);
+			break;
+		case PBOOK_SLEEP_REJECT:
+			if (info->save_framebuffer) {
+				vfree(info->save_framebuffer);
+				info->save_framebuffer = 0;
+			}
+			break;
 		case PBOOK_SLEEP_NOW:
+			if (info->blitter_may_be_busy)
+				wait_for_idle(info);
 			/* Stop accel engine (stop bus mastering) */
 			if (info->current_par.accel_flags & FB_ACCELF_TEXT)
 				reset_engine(info);
-#if 1
+
 			/* Backup fb content */	
-			info->save_framebuffer = vmalloc(nb);
 			if (info->save_framebuffer)
 				memcpy(info->save_framebuffer,
 				       (void *)info->frame_buffer, nb);
-#endif
-			/* Blank display and LCD */				       
-			atyfbcon_blank(VESA_POWERDOWN+1, (struct fb_info *)info);			
-			
-			/* Set chip to "suspend" mode. Note: There's an HW bug in the
-			   chip which prevents proper resync on wakeup with automatic
-			   power management, we handle suspend manually using the
-			   following (weird) sequence described by ATI. Note2:
+
+			/* Blank display and LCD */
+			atyfbcon_blank(VESA_POWERDOWN+1, (struct fb_info *)info);
+
+			/* Set chip to "suspend" mode. Note: There's a HW bug
+			   in the chip which prevents proper resync on wakeup
+			   with automatic power management, we handle suspend
+			   manually using the following (weird) sequence
+			   described by ATI.
+			   Note2:
 			   We could enable this for all Rage LT Pro chip ids */
-			if ((Gx == LG_CHIP_ID) || (Gx == LT_CHIP_ID) || (Gx == LP_CHIP_ID)) {
+			if ((Gx == LG_CHIP_ID) || (Gx == LT_CHIP_ID)
+			    || (Gx == LP_CHIP_ID)) {
 				pm = aty_ld_le32(POWER_MANAGEMENT, info);
 				pm &= ~PWR_MGT_ON;
 				aty_st_le32(POWER_MANAGEMENT, pm, info);
 				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				mdelay(1);
 				pm &= ~(PWR_BLON | AUTO_PWR_UP);
 				pm |= SUSPEND_NOW;
 				aty_st_le32(POWER_MANAGEMENT, pm, info);
 				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				mdelay(1);
 				pm |= PWR_MGT_ON;
 				aty_st_le32(POWER_MANAGEMENT, pm, info);
 				do {
 					pm = aty_ld_le32(POWER_MANAGEMENT, info);
+					/* Fix a problem with revision 4c50 of the chip */
+					if (Gx == LP_CHIP_ID)
+						break;
 				} while ((pm & PWR_MGT_STATUS_MASK) != PWR_MGT_STATUS_SUSPEND);
 				mdelay(500);
 			}
@@ -3987,18 +4004,23 @@ aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
 				pm &= ~PWR_MGT_ON;
 				aty_st_le32(POWER_MANAGEMENT, pm, info);
 				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				mdelay(1);
 				pm |=  (PWR_BLON | AUTO_PWR_UP);
 				pm &= ~SUSPEND_NOW;
 				aty_st_le32(POWER_MANAGEMENT, pm, info);
 				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				mdelay(1);
 				pm |= PWR_MGT_ON;
 				aty_st_le32(POWER_MANAGEMENT, pm, info);
 				do {
 					pm = aty_ld_le32(POWER_MANAGEMENT, info);
+					/* Fix a problem with revision 4c50 of the chip */
+					if (Gx == LP_CHIP_ID)
+						break;
 				} while ((pm & PWR_MGT_STATUS_MASK) != 0);
 				mdelay(500);
 			}
-#if 1
+
 			/* Restore fb content */			
 			if (info->save_framebuffer) {
 				memcpy((void *)info->frame_buffer,
@@ -4006,7 +4028,7 @@ aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
 				vfree(info->save_framebuffer);
 				info->save_framebuffer = 0;
 			}
-#endif
+
 			/* Restore display */			
 			atyfb_set_par(&info->current_par, info);
 			atyfbcon_blank(0, (struct fb_info *)info);

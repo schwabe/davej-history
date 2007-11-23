@@ -1763,6 +1763,8 @@ struct ncb {
 	*/
 	u_short		device_id;	/* PCI device id		*/
 	u_char		revision_id;	/* PCI device revision id	*/
+	u_char		pci_bus;	/* PCI bus number		*/
+	u_char		pci_devfn;	/* PCI device and function	*/
 	u_long		port;		/* IO space base address	*/
 	u_int		irq;		/* IRQ level			*/
 	u_int		features;	/* Chip features map		*/
@@ -4393,6 +4395,8 @@ printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	sprintf(np->inst_name, "ncr53c%s-%d", np->chip_name, np->unit);
 	np->device_id	= device->chip.device_id;
 	np->revision_id	= device->chip.revision_id;
+	np->pci_bus	= device->slot.bus;
+	np->pci_devfn	= device->slot.device_fn;
 	np->features	= device->chip.features;
 	np->clock_divn	= device->chip.nr_divisor;
 	np->maxoffs	= device->chip.offset_max;
@@ -10088,7 +10092,15 @@ printk("ncr53c8xx_select_queue_depth: host=%d, id=%d, lun=%d, depth=%d\n",
 */
 const char *ncr53c8xx_info (struct Scsi_Host *host)
 {
+#ifdef __sparc__
+	/* Ok to do this on all archs? */
+	static char buffer[80];
+	ncb_p np = ((struct host_data *) host->hostdata)->ncb;
+	sprintf (buffer, "%s\nPCI bus %02x device %02x", SCSI_NCR_DRIVER_NAME, np->pci_bus, np->pci_devfn);
+	return buffer;
+#else
 	return SCSI_NCR_DRIVER_NAME;
+#endif
 }
 
 /*
@@ -10673,6 +10685,8 @@ static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
 	copy_info(&info, "  IO port address 0x%lx, ", (u_long) np->port);
 #ifdef __sparc__
 	copy_info(&info, "IRQ number %s\n", __irq_itoa(np->irq));
+	/* Ok to do this on all archs? */
+	copy_info(&info, "PCI bus %02x device %02x\n", np->pci_bus, np->pci_devfn);
 #else
 	copy_info(&info, "IRQ number %d\n", (int) np->irq);
 #endif

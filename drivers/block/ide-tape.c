@@ -346,6 +346,7 @@
 #include <asm/irq.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
+#include <asm/byteorder.h>
 #include <asm/unaligned.h>
 #include <asm/bitops.h>
 
@@ -524,7 +525,7 @@ typedef struct idetape_packet_command_s {
 	byte *current_position;			/* Pointer into the above buffer */
 	ide_startstop_t (*callback) (ide_drive_t *);	/* Called when this packet command is completed */
 	byte pc_buffer[IDETAPE_PC_BUFFER_SIZE];	/* Temporary buffer */
-	unsigned int flags;			/* Status/Action bit flags */
+	unsigned long flags;			/* Status/Action bit flags */
 } idetape_pc_t;
 
 /*
@@ -541,19 +542,55 @@ typedef struct idetape_packet_command_s {
  *	Capabilities and Mechanical Status Page
  */
 typedef struct {
-	unsigned	page_code	:6;	/* Page code - Should be 0x2a */
-	unsigned	reserved1_67	:2;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	u8	reserved1_67	:2;
+	u8	page_code	:6;	/* Page code - Should be 0x2a */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	u8	page_code	:6;	/* Page code - Should be 0x2a */
+	u8	reserved1_67	:2;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
 	u8		page_length;		/* Page Length - Should be 0x12 */
 	u8		reserved2, reserved3;
+
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	reserved4_67	:2;
+	unsigned	sprev		:1;	/* Supports SPACE in the reverse direction */
+	unsigned	reserved4_1234	:4;
+	unsigned	ro		:1;	/* Read Only Mode */
+
+	unsigned	reserved5_67	:2;
+	unsigned	qfa		:1;	/* Supports the QFA two partition formats */
+	unsigned	reserved5_4	:1;
+	unsigned	efmt		:1;	/* Supports ERASE command initiated formatting */
+	unsigned	reserved5_012	:3;
+
+	unsigned	cmprs		:1;	/* Supports data compression */
+	unsigned	ecc		:1;	/* Supports error correction */
+	unsigned	reserved6_45	:2;	/* Reserved */	
+	unsigned	eject		:1;	/* The device can eject the volume */
+	unsigned	prevent		:1;	/* The device defaults in the prevent state after power up */	
+	unsigned	locked		:1;	/* The volume is locked */
+	unsigned	lock		:1;	/* Supports locking the volume */
+
+	unsigned	slowb		:1;	/* The device restricts the byte count for PIO */
+	unsigned	reserved7_3_6	:4;
+	unsigned	blk1024		:1;	/* Supports 1024 bytes block size */
+	unsigned	blk512		:1;	/* Supports 512 bytes block size */
+	unsigned	reserved7_0	:1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	ro		:1;	/* Read Only Mode */
 	unsigned	reserved4_1234	:4;
 	unsigned	sprev		:1;	/* Supports SPACE in the reverse direction */
 	unsigned	reserved4_67	:2;
+
 	unsigned	reserved5_012	:3;
 	unsigned	efmt		:1;	/* Supports ERASE command initiated formatting */
 	unsigned	reserved5_4	:1;
 	unsigned	qfa		:1;	/* Supports the QFA two partition formats */
 	unsigned	reserved5_67	:2;
+
 	unsigned	lock		:1;	/* Supports locking the volume */
 	unsigned	locked		:1;	/* The volume is locked */
 	unsigned	prevent		:1;	/* The device defaults in the prevent state after power up */	
@@ -561,11 +598,13 @@ typedef struct {
 	unsigned	reserved6_45	:2;	/* Reserved */	
 	unsigned	ecc		:1;	/* Supports error correction */
 	unsigned	cmprs		:1;	/* Supports data compression */
+
 	unsigned	reserved7_0	:1;
 	unsigned	blk512		:1;	/* Supports 512 bytes block size */
 	unsigned	blk1024		:1;	/* Supports 1024 bytes block size */
 	unsigned	reserved7_3_6	:4;
 	unsigned	slowb		:1;	/* The device restricts the byte count for PIO */
+#endif
 						/* transfers for slow buffer memory ??? */
 	u16		max_speed;		/* Maximum speed supported in KBps */
 	u8		reserved10, reserved11;
@@ -695,7 +734,7 @@ typedef struct {
 	int pages_per_stage;
 	int excess_bh_size;			/* Wasted space in each stage */
 
-	unsigned int flags;			/* Status/Action flags */
+	unsigned long flags;			/* Status/Action flags */
 	spinlock_t spinlock;			/* protects the ide-tape queue */
 } idetape_tape_t;
 
@@ -787,6 +826,16 @@ typedef struct {
 typedef union {
 	unsigned all			:8;
 	struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+		unsigned bsy		:1;	/* The device has access to the command block */
+		unsigned drdy		:1;	/* Ignored for ATAPI commands (ready to accept ATA command) */
+		unsigned reserved5	:1;	/* Reserved */
+		unsigned dsc		:1;	/* Buffer availability / Media access command finished */
+		unsigned drq		:1;	/* Data is request by the device */
+		unsigned corr		:1;	/* Correctable error occurred */
+		unsigned idx		:1;	/* Reserved */
+		unsigned check		:1;	/* Error occurred */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned check		:1;	/* Error occurred */
 		unsigned idx		:1;	/* Reserved */
 		unsigned corr		:1;	/* Correctable error occurred */
@@ -795,6 +844,7 @@ typedef union {
 		unsigned reserved5	:1;	/* Reserved */
 		unsigned drdy		:1;	/* Ignored for ATAPI commands (ready to accept ATA command) */
 		unsigned bsy		:1;	/* The device has access to the command block */
+#endif
 	} b;
 } idetape_status_reg_t;
 
@@ -804,11 +854,19 @@ typedef union {
 typedef union {
 	unsigned all			:8;
 	struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+		unsigned sense_key	:4;	/* Sense key of the last failed packet command */
+		unsigned mcr		:1;	/* Media Change Requested - As defined by ATA */
+		unsigned abrt		:1;	/* Aborted command - As defined by ATA */
+		unsigned eom		:1;	/* End Of Media Detected */
+		unsigned ili		:1;	/* Illegal Length Indication */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned ili		:1;	/* Illegal Length Indication */
 		unsigned eom		:1;	/* End Of Media Detected */
 		unsigned abrt		:1;	/* Aborted command - As defined by ATA */
 		unsigned mcr		:1;	/* Media Change Requested - As defined by ATA */
 		unsigned sense_key	:4;	/* Sense key of the last failed packet command */
+#endif
 	} b;
 } idetape_error_reg_t;
 
@@ -818,10 +876,17 @@ typedef union {
 typedef union {
 	unsigned all			:8;
 	struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+		unsigned reserved7	:1;	/* Reserved */
+		unsigned reserved654	:3;	/* Reserved (Tag Type) */
+		unsigned reserved321	:3;	/* Reserved */
+		unsigned dma		:1;	/* Using DMA of PIO */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned dma		:1;	/* Using DMA of PIO */
 		unsigned reserved321	:3;	/* Reserved */
 		unsigned reserved654	:3;	/* Reserved (Tag Type) */
 		unsigned reserved7	:1;	/* Reserved */
+#endif
 	} b;
 } idetape_feature_reg_t;
 
@@ -831,8 +896,13 @@ typedef union {
 typedef union {
 	unsigned all			:16;
 	struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+		unsigned high		:8;	/* MSB */
+		unsigned low		:8;	/* LSB */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned low		:8;	/* LSB */
 		unsigned high		:8;	/* MSB */
+#endif
 	} b;
 } idetape_bcount_reg_t;
 
@@ -842,9 +912,15 @@ typedef union {
 typedef union {
 	unsigned all			:8;
 	struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+		unsigned reserved	:6;	/* Reserved */
+		unsigned io		:1;	/* The device requests us to read (1) or write (0) */
+		unsigned cod		:1;	/* Information transferred is command (1) or data (0) */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned cod		:1;	/* Information transferred is command (1) or data (0) */
 		unsigned io		:1;	/* The device requests us to read (1) or write (0) */
 		unsigned reserved	:6;	/* Reserved */
+#endif
 	} b;
 } idetape_ireason_reg_t;
 
@@ -854,11 +930,19 @@ typedef union {
 typedef union {	
 	unsigned all			:8;
 	struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+		unsigned one7		:1;	/* Should be set to 1 */
+		unsigned reserved6	:1;	/* Reserved */
+		unsigned one5		:1;	/* Should be set to 1 */
+		unsigned drv		:1;	/* The responding drive will be drive 0 (0) or drive 1 (1) */
+		unsigned sam_lun	:4;	/* Should be zero with ATAPI (not used) */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned sam_lun	:4;	/* Should be zero with ATAPI (not used) */
 		unsigned drv		:1;	/* The responding drive will be drive 0 (0) or drive 1 (1) */
 		unsigned one5		:1;	/* Should be set to 1 */
 		unsigned reserved6	:1;	/* Reserved */
 		unsigned one7		:1;	/* Should be set to 1 */
+#endif
 	} b;
 } idetape_drivesel_reg_t;
 
@@ -868,11 +952,19 @@ typedef union {
 typedef union {			
 	unsigned all			:8;
 	struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+		unsigned reserved4567	:4;	/* Reserved */
+		unsigned one3		:1;	/* Should be set to 1 */
+		unsigned srst		:1;	/* ATA software reset. ATAPI devices should use the new ATAPI srst. */
+		unsigned nien		:1;	/* Device interrupt is disabled (1) or enabled (0) */
+		unsigned zero0		:1;	/* Should be set to zero */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 		unsigned zero0		:1;	/* Should be set to zero */
 		unsigned nien		:1;	/* Device interrupt is disabled (1) or enabled (0) */
 		unsigned srst		:1;	/* ATA software reset. ATAPI devices should use the new ATAPI srst. */
 		unsigned one3		:1;	/* Should be set to 1 */
 		unsigned reserved4567	:4;	/* Reserved */
+#endif
 	} b;
 } idetape_control_reg_t;
 
@@ -890,6 +982,15 @@ typedef struct {
  *	the ATAPI IDENTIFY DEVICE command.
  */
 struct idetape_id_gcw {	
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned protocol		:2;	/* Protocol type */
+	unsigned reserved13		:1;	/* Reserved */
+	unsigned device_type		:5;	/* Device type */
+	unsigned removable		:1;	/* Removable media */
+	unsigned drq_type		:2;	/* Command packet DRQ type */
+	unsigned reserved234		:3;	/* Reserved */
+	unsigned packet_size		:2;	/* Packet Size */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned packet_size		:2;	/* Packet Size */
 	unsigned reserved234		:3;	/* Reserved */
 	unsigned drq_type		:2;	/* Command packet DRQ type */
@@ -897,23 +998,50 @@ struct idetape_id_gcw {
 	unsigned device_type		:5;	/* Device type */
 	unsigned reserved13		:1;	/* Reserved */
 	unsigned protocol		:2;	/* Protocol type */
+#endif
 };
 
 /*
  *	INQUIRY packet command - Data Format (From Table 6-8 of QIC-157C)
  */
 typedef struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	reserved0_765	:3;	/* Peripheral Qualifier - Reserved */
+	unsigned	device_type	:5;	/* Peripheral Device Type */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	device_type	:5;	/* Peripheral Device Type */
 	unsigned	reserved0_765	:3;	/* Peripheral Qualifier - Reserved */
+#endif
+
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	rmb		:1;	/* Removable Medium Bit */
+	unsigned	reserved1_6t0	:7;	/* Reserved */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	reserved1_6t0	:7;	/* Reserved */
 	unsigned	rmb		:1;	/* Removable Medium Bit */
+#endif
+
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	iso_version	:2;	/* ISO Version */
+	unsigned	ecma_version	:3;	/* ECMA Version */
+	unsigned	ansi_version	:3;	/* ANSI Version */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	ansi_version	:3;	/* ANSI Version */
 	unsigned	ecma_version	:3;	/* ECMA Version */
 	unsigned	iso_version	:2;	/* ISO Version */
+#endif
+
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	reserved3_7	:1;	/* AENC - Reserved */
+	unsigned	reserved3_6	:1;	/* TrmIOP - Reserved */
+	unsigned	reserved3_45	:2;	/* Reserved */
+	unsigned	response_format :4;	/* Response Data Format */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	response_format :4;	/* Response Data Format */
 	unsigned	reserved3_45	:2;	/* Reserved */
 	unsigned	reserved3_6	:1;	/* TrmIOP - Reserved */
 	unsigned	reserved3_7	:1;	/* AENC - Reserved */
+#endif
 	u8		additional_length;	/* Additional Length (total_length-4) */
 	u8		rsv5, rsv6, rsv7;	/* Reserved */
 	u8		vendor_id[8];		/* Vendor Identification */
@@ -928,11 +1056,19 @@ typedef struct {
  *	READ POSITION packet command - Data Format (From Table 6-57)
  */
 typedef struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	bop		:1;	/* Beginning Of Partition */
+	unsigned	eop		:1;	/* End Of Partition */
+	unsigned	reserved0_543	:3;	/* Reserved */
+	unsigned	bpu		:1;	/* Block Position Unknown */	
+	unsigned	reserved0_10	:2;	/* Reserved */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	reserved0_10	:2;	/* Reserved */
 	unsigned	bpu		:1;	/* Block Position Unknown */	
 	unsigned	reserved0_543	:3;	/* Reserved */
 	unsigned	eop		:1;	/* End Of Partition */
 	unsigned	bop		:1;	/* Beginning Of Partition */
+#endif
 	u8		partition;		/* Partition Number */
 	u8		reserved2, reserved3;	/* Reserved */
 	u32		first_block;		/* First Block Location */
@@ -946,22 +1082,41 @@ typedef struct {
  *	REQUEST SENSE packet command result - Data Format.
  */
 typedef struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	valid		:1;	/* The information field conforms to QIC-157C */
+	unsigned	error_code	:7;	/* Current of deferred errors */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	error_code	:7;	/* Current of deferred errors */
 	unsigned	valid		:1;	/* The information field conforms to QIC-157C */
+#endif
+
 	u8		reserved1	:8;	/* Segment Number - Reserved */
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	filemark 	:1;	/* Filemark */
+	unsigned	eom		:1;	/* End Of Medium */
+	unsigned	ili		:1;	/* Incorrect Length Indicator */
+	unsigned	reserved2_4	:1;	/* Reserved */
+	unsigned	sense_key	:4;	/* Sense Key */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	sense_key	:4;	/* Sense Key */
 	unsigned	reserved2_4	:1;	/* Reserved */
 	unsigned	ili		:1;	/* Incorrect Length Indicator */
 	unsigned	eom		:1;	/* End Of Medium */
 	unsigned	filemark 	:1;	/* Filemark */
+#endif
 	u32		information __attribute__ ((packed));
 	u8		asl;			/* Additional sense length (n-7) */
 	u32		command_specific;	/* Additional command specific information */
 	u8		asc;			/* Additional Sense Code */
 	u8		ascq;			/* Additional Sense Code Qualifier */
 	u8		replaceable_unit_code;	/* Field Replaceable Unit Code */
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	sksv		:1;	/* Sense Key Specific information is valid */
+	unsigned	sk_specific1 	:7;	/* Sense Key Specific */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	sk_specific1 	:7;	/* Sense Key Specific */
 	unsigned	sksv		:1;	/* Sense Key Specific information is valid */
+#endif
 	u8		sk_specific2;		/* Sense Key Specific */
 	u8		sk_specific3;		/* Sense Key Specific */
 	u8		pad[2];			/* Padding to 20 bytes */
@@ -1000,16 +1155,35 @@ typedef struct {
  *	The Data Compression Page, as returned by the MODE SENSE packet command.
  */
 typedef struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	ps		:1;
+	unsigned	reserved0	:1;	/* Reserved */
+	unsigned	page_code	:6;	/* Page Code - Should be 0xf */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	page_code	:6;	/* Page Code - Should be 0xf */
 	unsigned	reserved0	:1;	/* Reserved */
 	unsigned	ps		:1;
+#endif
 	u8		page_length;		/* Page Length - Should be 14 */
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	dce		:1;	/* Data Compression Enable */
+	unsigned	dcc		:1;	/* Data Compression Capable */
+	unsigned	reserved2	:6;	/* Reserved */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	reserved2	:6;	/* Reserved */
 	unsigned	dcc		:1;	/* Data Compression Capable */
 	unsigned	dce		:1;	/* Data Compression Enable */
+#endif
+
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	dde		:1;	/* Data Decompression Enable */
+	unsigned	red		:2;	/* Report Exception on Decompression */
+	unsigned	reserved3	:5;	/* Reserved */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	reserved3	:5;	/* Reserved */
 	unsigned	red		:2;	/* Report Exception on Decompression */
 	unsigned	dde		:1;	/* Data Decompression Enable */
+#endif
 	u32		ca;			/* Compression Algorithm */
 	u32		da;			/* Decompression Algorithm */
 	u8		reserved[4];		/* Reserved */
@@ -1019,17 +1193,31 @@ typedef struct {
  *	The Medium Partition Page, as returned by the MODE SENSE packet command.
  */
 typedef struct {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	ps		:1;
+	unsigned	reserved1_6	:1;	/* Reserved */
+	unsigned	page_code	:6;	/* Page Code - Should be 0x11 */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	page_code	:6;	/* Page Code - Should be 0x11 */
 	unsigned	reserved1_6	:1;	/* Reserved */
 	unsigned	ps		:1;
+#endif
 	u8		page_length;		/* Page Length - Should be 6 */
 	u8		map;			/* Maximum Additional Partitions - Should be 0 */
 	u8		apd;			/* Additional Partitions Defined - Should be 0 */
+#if defined(__BIG_ENDIAN_BITFIELD)
+	unsigned	fdp		:1;	/* Fixed Data Partitions */
+	unsigned	sdp		:1;	/* Should be 0 */
+	unsigned	idp		:1;	/* Should be 0 */
+	unsigned	psum		:2;	/* Should be 0 */
+	unsigned	reserved4_012	:3;	/* Reserved */
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
 	unsigned	reserved4_012	:3;	/* Reserved */
 	unsigned	psum		:2;	/* Should be 0 */
 	unsigned	idp		:1;	/* Should be 0 */
 	unsigned	sdp		:1;	/* Should be 0 */
 	unsigned	fdp		:1;	/* Fixed Data Partitions */
+#endif
 	u8		mfr;			/* Medium Format Recognition */
 	u8		reserved[2];		/* Reserved */
 } idetape_medium_partition_page_t;

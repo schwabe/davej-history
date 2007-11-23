@@ -120,7 +120,7 @@ __initfunc(int irda_device_init( void))
 #ifdef CONFIG_GIRBIL_DONGLE
 	girbil_init();
 #endif
-#ifdef CONFIG_GIRBIL_DONGLE
+#ifdef CONFIG_LITELINK_DONGLE
 	litelink_init();
 #endif
 

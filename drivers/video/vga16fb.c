@@ -295,10 +295,14 @@ static void vga16fb_set_disp(int con, struct vga16fb_info *info)
 	display->can_soft_blank = 1;
 	display->inverse = 0;
 
+#ifdef CONFIG_FBCON_VGA_PLANES
 	if (info->isVGA)
 		display->dispsw = &fbcon_vga_planes;
-	else
+	else	
 		display->dispsw = &fbcon_ega_planes;
+#else
+		display->dispsw = &fbcon_dummy;
+#endif	
 	display->scrollmode = SCROLL_YREDRAW;
 }
 

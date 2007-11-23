@@ -300,7 +300,7 @@ static inline struct xpt_quehead *xpt_remque_tail(struct xpt_quehead *head)
 **
 **==========================================================
 */
-#if	!defined(__i386__)
+#if	!defined(__i386__) && !defined(__sparc__)
 #define	SCSI_NCR_PCI_MEM_NOT_SUPPORTED
 #endif
 
@@ -586,10 +586,11 @@ spinlock_t sym53c8xx_lock;
 #endif
 
 #ifdef __sparc__
+#  include <asm/irq.h>
 #  define ioremap(base, size)		((u_long) __va(base))
 #  define iounmap(vaddr)
 #  define pcivtobus(p)			((p) & pci_dvma_mask)
-#  define memcpy_to_pci(a, b, c)	memcpy_toio((u_long) (a), (b), (c))
+#  define memcpy_to_pci(a, b, c)	memcpy_toio((void *) (a), (b), (c))
 #elif defined(__alpha__)
 #  define pcivtobus(p)			((p) & 0xfffffffful)
 #  define memcpy_to_pci(a, b, c)	memcpy_toio((a), (b), (c))
@@ -1819,6 +1820,8 @@ struct ncb {
 	*/
 	u_short		device_id;	/* PCI device id		*/
 	u_char		revision_id;	/* PCI device revision id	*/
+	u_char		pci_bus;	/* PCI bus number		*/
+	u_char		pci_devfn;	/* PCI device and function	*/
 	u_int		features;	/* Chip features map		*/
 	u_char		myaddr;		/* SCSI id of the adapter	*/
 	u_char		maxburst;	/* log base 2 of dwords burst	*/
@@ -4550,6 +4553,8 @@ printk(KERN_INFO NAME53C "%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n
 	sprintf(np->inst_name, NAME53C "%s-%d", np->chip_name, np->unit);
 	np->device_id	= device->chip.device_id;
 	np->revision_id	= device->chip.revision_id;
+	np->pci_bus	= device->slot.bus;
+	np->pci_devfn	= device->slot.device_fn;
 	np->features	= device->chip.features;
 	np->clock_divn	= device->chip.nr_divisor;
 	np->maxoffs	= device->chip.offset_max;
@@ -9476,6 +9481,8 @@ static void ncr_getclock (ncb_p np, int mult)
 	if (np->multiplier != mult || (scntl3 & 7) < 3 || !(scntl3 & 1)) {
 		unsigned f2;
 
+		OUTB(nc_istat, SRST); UDELAY (5); OUTB(nc_istat, 0);
+
 		(void) ncrgetfreq (np, 11);	/* throw away first result */
 		f1 = ncrgetfreq (np, 11);
 		f2 = ncrgetfreq (np, 11);
@@ -10261,6 +10268,8 @@ static int sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	if (!cache_line_size)
 		suggested_cache_line_size = 16;
 
+	driver_setup.pci_fix_up |= 0x7;
+
 #endif	/* __sparc__ */
 
 #if defined(__i386__) && !defined(MODULE)
@@ -10574,7 +10583,15 @@ printk("sym53c8xx_select_queue_depth: host=%d, id=%d, lun=%d, depth=%d\n",
 */
 const char *sym53c8xx_info (struct Scsi_Host *host)
 {
+#ifdef __sparc__
+	/* Ok to do this on all archs? */
+	static char buffer[80];
+	ncb_p np = ((struct host_data *) host->hostdata)->ncb;
+	sprintf (buffer, "%s\nPCI bus %02x device %02x", SCSI_NCR_DRIVER_NAME, np->pci_bus, np->pci_devfn);
+	return buffer;
+#else
 	return SCSI_NCR_DRIVER_NAME;
+#endif
 }
 
 /*
@@ -11159,7 +11176,13 @@ static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
 	copy_info(&info, "revision id 0x%x\n",	np->revision_id);
 
 	copy_info(&info, "  IO port address 0x%lx, ", (u_long) np->base_io);
+#ifdef __sparc__
+	copy_info(&info, "IRQ number %s\n", __irq_itoa(np->irq));
+	/* Ok to do this on all archs? */
+	copy_info(&info, "PCI bus %02x device %02x\n", np->pci_bus, np->pci_devfn);
+#else
 	copy_info(&info, "IRQ number %d\n", (int) np->irq);
+#endif
 
 #ifndef NCR_IOMAPPED
 	if (np->reg)

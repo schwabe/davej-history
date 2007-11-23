@@ -230,7 +230,6 @@ CONFIG_NCR885E=y
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_RTL8139 is not set
-# CONFIG_SIS900 is not set
 # CONFIG_YELLOWFIN is not set
 # CONFIG_NET_ISA is not set
 # CONFIG_NET_EISA is not set

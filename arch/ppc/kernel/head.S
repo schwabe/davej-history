@@ -1836,8 +1836,6 @@ start_here:
 	mr	r6,r28
 	mr	r7,r27
 	bl	identify_machine
-lis r20,0xc0000000@h
-stw	r20,0(r20)	
 	bl	MMU_init
 /*
  * Go back to running unmapped so we can load up new values

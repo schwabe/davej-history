@@ -726,9 +726,18 @@ chips_sleep_notify(struct pmu_sleep_notifier *self, int when)
 		int nb = p->var.yres * p->fix.line_length;
 
 		switch (when) {
+		case PBOOK_SLEEP_REQUEST:
+			p->save_framebuffer = vmalloc(nb);
+			break;
+		case PBOOK_SLEEP_REJECT:
+			if (p->save_framebuffer) {
+				vfree(p->save_framebuffer);
+				p->save_framebuffer = 0;
+			}
+			break;
+
 		case PBOOK_SLEEP_NOW:
 			chipsfb_blank(1, (struct fb_info *)p);
-			p->save_framebuffer = vmalloc(nb);
 			if (p->save_framebuffer)
 				memcpy(p->save_framebuffer,
 				       p->frame_buffer, nb);

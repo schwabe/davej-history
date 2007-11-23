@@ -1,4 +1,4 @@
-/*
+/* 
  * Device driver framework for the COMX line of synchronous serial boards
  * 
  * for Linux kernel 2.2.X
@@ -54,6 +54,10 @@
 
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
+#endif
+
+#ifndef CONFIG_PROC_FS
+#error For now, COMX really needs the /proc filesystem
 #endif
 
 #include "comx.h"

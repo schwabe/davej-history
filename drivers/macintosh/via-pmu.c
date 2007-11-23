@@ -1126,11 +1126,6 @@ int __openfirmware powerbook_sleep_G3(void)
 		macio_base = (unsigned long)
 			ioremap(macio->addrs[0].address, 0x40);
 
-	/* Sync the disks. */
-	/* XXX It would be nice to have some way to ensure that
-	 * nobody is dirtying any new buffers while we wait. */
-	fsync_dev(0);
-
 	/* Notify device drivers */
 	ret = broadcast_sleep(PBOOK_SLEEP_REQUEST, 1);
 	if (ret != PBOOK_SLEEP_OK) {
@@ -1138,6 +1133,15 @@ int __openfirmware powerbook_sleep_G3(void)
 		printk("pmu: sleep rejected\n");
 		return -EBUSY;
 	}
+
+	/* Sync the disks. */
+	/* XXX It would be nice to have some way to ensure that
+	 * nobody is dirtying any new buffers while we wait.
+	 * BenH: Moved to _after_ sleep request and changed video
+	 * drivers to vmalloc() during sleep request. This way, all
+	 * vmalloc's are done before actual sleep of block drivers */
+	fsync_dev(0);
+
 	broadcast_sleep(PBOOK_SLEEP_NOW, 0);
 
 	/* Give the disks a little time to actually finish writing */
@@ -1190,6 +1194,10 @@ int __openfirmware powerbook_sleep_G3(void)
 	pmcr1 &= ~(GRACKLE_PM|GRACKLE_DOZE|GRACKLE_SLEEP|GRACKLE_NAP); 
 	grackle_pcibios_write_config_word(0, 0, 0x70, pmcr1);
 
+	/* Make sure the PMU is idle */
+	while (pmu_state != idle)
+		pmu_poll();
+
 	sti();
 #if 0
 	/* According to someone from Apple, this should not be needed,
@@ -1201,7 +1209,7 @@ int __openfirmware powerbook_sleep_G3(void)
 
 	/* Restore L2 cache */
 	if (save_l2cr)
-		_set_L2CR(save_l2cr | 0x200000); /* set invalidate bit */
+ 		_set_L2CR(save_l2cr | 0x200000); /* set invalidate bit */
 	
 	/* reenable interrupts */
 	sleep_restore_intrs();
@@ -1222,11 +1230,6 @@ int __openfirmware powerbook_sleep_3400(void)
 	unsigned long p, wait;
 	struct adb_request sleep_req;
 
-	/* Sync the disks. */
-	/* XXX It would be nice to have some way to ensure that
-	 * nobody is dirtying any new buffers while we wait. */
-	fsync_dev(0);
-
 	/* Notify device drivers */
 	ret = broadcast_sleep(PBOOK_SLEEP_REQUEST, 1);
 	if (ret != PBOOK_SLEEP_OK) {
@@ -1234,6 +1237,15 @@ int __openfirmware powerbook_sleep_3400(void)
 		printk("pmu: sleep rejected\n");
 		return -EBUSY;
 	}
+
+	/* Sync the disks. */
+	/* XXX It would be nice to have some way to ensure that
+	 * nobody is dirtying any new buffers while we wait.
+	 * BenH: Moved to _after_ sleep request and changed video
+	 * drivers to vmalloc() during sleep request. This way, all
+	 * vmalloc's are done before actual sleep of block drivers */
+	fsync_dev(0);
+
 	broadcast_sleep(PBOOK_SLEEP_NOW, 0);
 
 	/* Give the disks a little time to actually finish writing */

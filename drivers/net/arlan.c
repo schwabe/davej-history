@@ -101,7 +101,7 @@ static  int	arlan_hw_config			(struct device * dev);
 static  void 	arlan_tx_done_interrupt		(struct device * dev, int status);
 static  void	arlan_rx_interrupt		(struct device * dev, u_char rxStatus, u_short, u_short);
 static  void	arlan_process_interrupt		(struct device * dev);
-static  int	arlan_command(struct device * dev, int command);
+int	arlan_command(struct device * dev, int command);
 
 EXPORT_SYMBOL(arlan_command);
 
@@ -190,7 +190,7 @@ extern inline int arlan_drop_tx(struct device *dev)
 };
 
 
-static int arlan_command(struct device *dev, int command_p)
+int arlan_command(struct device *dev, int command_p)
 {
 
 	volatile struct arlan_shmem *arlan = ((struct arlan_private *) dev->priv)->card;

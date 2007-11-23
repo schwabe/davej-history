@@ -1666,7 +1666,7 @@ __initfunc(int sdla_init(struct device *dev))
 	return(0);
 }
 
-__initfunc(void sdla_setup(void))
+__initfunc(void sdla_c_setup(void))
 {
 	printk("%s.\n", version);
 	register_frad(devname);
@@ -1679,7 +1679,7 @@ int init_module(void)
 {
 	int result;
 
-	sdla_setup();
+	sdla_c_setup();
 	if ((result = register_netdev(&sdla0)) != 0)
 		return result;
 	return 0;

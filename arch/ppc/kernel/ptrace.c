@@ -26,7 +26,7 @@
 #include <linux/ptrace.h>
 #include <linux/user.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -86,7 +86,6 @@ clear_single_step(struct task_struct *task)
  * tables. NOTE! You should check that the long isn't on a page boundary,
  * and that it is in the task area before calling this: this routine does
  * no checking.
- *
  */
 static unsigned long get_long(struct task_struct * tsk, 
 	struct vm_area_struct * vma, unsigned long addr)
@@ -95,22 +94,31 @@ static unsigned long get_long(struct task_struct * tsk,
 	pmd_t * pgmiddle;
 	pte_t * pgtable;
 	unsigned long page;
+	int fault;
 
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (pgd_none(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 0);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return 0;
 	}
 	if (pgd_bad(*pgdir)) {
 		printk("ptrace[1]: bad page directory %lx\n", pgd_val(*pgdir));
 		pgd_clear(pgdir);
 		return 0;
 	}
-	pgmiddle = pmd_offset(pgdir,addr);
+	pgmiddle = pmd_offset(pgdir, addr);
 	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 0);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return 0;
 	}
 	if (pmd_bad(*pgmiddle)) {
 		printk("ptrace[3]: bad pmd %lx\n", pmd_val(*pgmiddle));
@@ -119,8 +127,12 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 0);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return 0;
 	}
 	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
@@ -146,22 +158,31 @@ static void put_long(struct task_struct * tsk, struct vm_area_struct * vma,
 	pmd_t *pgmiddle;
 	pte_t *pgtable;
 	unsigned long page;
-		
+	int fault;
+
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (!pgd_present(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 1);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return;
 	}
 	if (pgd_bad(*pgdir)) {
 		printk("ptrace[2]: bad page directory %lx\n", pgd_val(*pgdir));
 		pgd_clear(pgdir);
 		return;
 	}
-	pgmiddle = pmd_offset(pgdir,addr);
+	pgmiddle = pmd_offset(pgdir, addr);
 	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 1);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return;
 	}
 	if (pmd_bad(*pgmiddle)) {
 		printk("ptrace[4]: bad pmd %lx\n", pmd_val(*pgmiddle));
@@ -170,13 +191,21 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 1);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return;
 	}
 	page = pte_page(*pgtable);
 	if (!pte_write(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, 1);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
 	if (MAP_NR(page) < max_mapnr) {
@@ -247,7 +276,7 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 		}
 		*result = low;
 	} else
-		*result = get_long(tsk, vma,addr);
+		*result = get_long(tsk, vma, addr);
 	return 0;
 }
 
@@ -299,7 +328,7 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 		put_long(tsk, vma,addr & ~(sizeof(long)-1),high);
 		put_long(tsk, vma_low,(addr+sizeof(long)) & ~(sizeof(long)-1),low);
 	} else
-		put_long(tsk, vma,addr,data);
+		put_long(tsk, vma, addr, data);
 	return 0;
 }
 
@@ -307,6 +336,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
 	int ret = -EPERM;
+	unsigned long flags;
 
 	lock_kernel();
 	if (request == PTRACE_TRACEME) {
@@ -318,34 +348,40 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		ret = 0;
 		goto out;
 	}
-	if (pid == 1)		/* you may not mess with init */
-		goto out;
 	ret = -ESRCH;
-	if (!(child = find_task_by_pid(pid)))
+	read_lock(&tasklist_lock);
+	child = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!!! */
+	if (!child)
 		goto out;
 	ret = -EPERM;
+	if (pid == 1)		/* you may not mess with init */
+		goto out;
 	if (request == PTRACE_ATTACH) {
 		if (child == current)
 			goto out;
 		if ((!child->dumpable ||
 		    (current->uid != child->euid) ||
-		    (current->uid != child->uid) ||
 		    (current->uid != child->suid) ||
+		    (current->uid != child->uid) ||
 	 	    (current->gid != child->egid) ||
-	 	    (current->gid != child->gid) ||
-		    (current->gid != child->sgid) ||
-		    (!cap_issubset(child->cap_permitted, current->cap_permitted)))
-		    && !capable(CAP_SYS_PTRACE))
+	 	    (current->gid != child->sgid) ||
+	 	    (!cap_issubset(child->cap_permitted, current->cap_permitted)) ||
+	 	    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
 			goto out;
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED)
 			goto out;
 		child->flags |= PF_PTRACED;
+
+		write_lock_irqsave(&tasklist_lock, flags);
 		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
 		}
+		write_unlock_irqrestore(&tasklist_lock, flags);
+
 		send_sig(SIGSTOP, child, 1);
 		ret = 0;
 		goto out;
@@ -369,11 +405,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			down(&child->mm->mmap_sem);
 			ret = read_long(child, addr, &tmp);
 			up(&child->mm->mmap_sem);
-			if (ret < 0)
-				goto out;
-			ret = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
-			if (!ret)
-				put_user(tmp, (unsigned long *) data);
+			if (ret >= 0)
+				ret = put_user(tmp,(unsigned long *) data);
 			goto out;
 		}
 
@@ -386,10 +419,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				goto out;
 			}
 			
-			ret = verify_area(VERIFY_WRITE, (void *) data,
-					  sizeof(long));
-			if (ret)
-				goto out;
 			tmp = 0;  /* Default return condition */
 			addr = addr >> 2; /* temporary hack. */
 			if (addr < PT_FPR0) {
@@ -403,7 +432,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			else
 				ret = -EIO;
 			if (!ret)
-				put_user(tmp,(unsigned long *) data);
+				ret = put_user(tmp, (unsigned long *) data);
 			goto out;
 		}
 
@@ -442,16 +471,16 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
 		case PTRACE_CONT: { /* restart after signal. */
 			ret = -EIO;
-			if ((unsigned long) data >= _NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
 			else
 				child->flags &= ~PF_TRACESYS;
 			child->exit_code = data;
-			wake_up_process(child);
 			/* make sure the single step bit is not set. */
 			clear_single_step(child);
+			wake_up_process(child);
 			ret = 0;
 			goto out;
 		}
@@ -465,38 +494,40 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			ret = 0;
 			if (child->state == TASK_ZOMBIE) /* already dead */
 				goto out;
-			wake_up_process(child);
 			child->exit_code = SIGKILL;
 			/* make sure the single step bit is not set. */
 			clear_single_step(child);
+			wake_up_process(child);
 			goto out;
 		}
 
 		case PTRACE_SINGLESTEP: {  /* set the trap flag. */
 			ret = -EIO;
-			if ((unsigned long) data >= _NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			child->flags &= ~PF_TRACESYS;
 			set_single_step(child);
-			wake_up_process(child);
 			child->exit_code = data;
 			/* give it a chance to run. */
+			wake_up_process(child);
 			ret = 0;
 			goto out;
 		}
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
 			ret = -EIO;
-			if ((unsigned long) data >= _NSIG)
+			if ((unsigned long) data > _NSIG)
 				goto out;
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
-			wake_up_process(child);
 			child->exit_code = data;
+			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
+			write_unlock_irqrestore(&tasklist_lock, flags);
 			/* make sure the single step bit is not set. */
 			clear_single_step(child);
+			wake_up_process(child);
 			ret = 0;
 			goto out;
 		}
@@ -512,10 +543,9 @@ out:
 
 asmlinkage void syscall_trace(void)
 {
-	lock_kernel();
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
 			!= (PF_PTRACED|PF_TRACESYS))
-		goto out;
+		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
 	notify_parent(current, SIGCHLD);
@@ -529,6 +559,4 @@ asmlinkage void syscall_trace(void)
 		send_sig(current->exit_code, current, 1);
 		current->exit_code = 0;
 	}
-out:
-	unlock_kernel();
 }

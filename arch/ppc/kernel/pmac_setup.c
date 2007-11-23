@@ -190,7 +190,7 @@ pmac_get_cpuinfo(char *buffer)
 	return len;
 }
 
-#ifdef CONFIG_SCSI
+#if defined(CONFIG_SCSI) && defined(CONFIG_BLK_DEV_SD)
 /* Find the device number for the disk (if any) at target tgt
    on host adaptor host.
    XXX this really really should be in drivers/scsi/sd.c. */
@@ -217,7 +217,7 @@ kdev_t sd_find_target(void *host, int tgt)
             return MKDEV_SD(i);
     return 0;
 }
-#endif
+#endif /* SCSI and BLK_DEV_SD */
 
 /*
  * Dummy mksound function that does nothing.
@@ -434,7 +434,7 @@ __initfunc(kdev_t find_ide_boot(void))
 
 __initfunc(void find_boot_device(void))
 {
-#ifdef CONFIG_SCSI
+#if defined(CONFIG_SCSI) && defined(CONFIG_BLK_DEV_SD)
 	if (boot_host != NULL) {
 		boot_dev = sd_find_target(boot_host, boot_target);
 		if (boot_dev != 0)
@@ -464,7 +464,7 @@ void note_bootable_part(kdev_t dev, int part)
 		find_boot_device();
 		found_boot = 1;
 	}
-	if (dev == boot_dev) {
+	if (boot_dev == 0 || dev == boot_dev) {
 		ROOT_DEV = MKDEV(MAJOR(dev), MINOR(dev) + part);
 		boot_dev = NODEV;
 		printk(" (root)");

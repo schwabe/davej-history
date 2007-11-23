@@ -3,12 +3,14 @@
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
+#include <linux/pci.h>
+#include <asm/pci-bridge.h>
 #include <asm/io.h>
 #include <asm/smp.h>
 #include <asm/prom.h>
 #include "pmac_pic.h"
 
-/* pmac */struct pmac_irq_hw {
+struct pmac_irq_hw {
         unsigned int    flag;
         unsigned int    enable;
         unsigned int    ack;
@@ -30,6 +32,12 @@ static int max_real_irqs;
 
 #define GATWICK_IRQ_POOL_SIZE        10
 static struct interrupt_info gatwick_int_pool[GATWICK_IRQ_POOL_SIZE];
+
+extern int pmac_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+                                      unsigned char offset, unsigned short *val);
+extern int pmac_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+                                      unsigned char offset, unsigned short val);
+
 
 static void __pmac pmac_mask_and_ack_irq(unsigned int irq_nr)
 {
@@ -108,7 +116,7 @@ struct hw_interrupt_type pmac_pic = {
 };
 
 struct hw_interrupt_type gatwick_pic = {
-	" GATWICK  ",
+        " PMAC-PI2 ",
 	NULL,
 	NULL,
 	NULL,
@@ -290,17 +298,67 @@ static void __init pmac_fix_gatwick_interrupts(struct device_node *gw, int irq_b
 	}
 }
 
+/*
+ * The PowerBook 3400/2400/3500 can have a combo ethernet/modem
+ * card which includes an ohare chip that acts as a second interrupt
+ * controller.  If we find this second ohare, set it up and fix the
+ * interrupt value in the device tree for the ethernet chip.
+ */
+static void __init enable_second_ohare(void)
+{
+	unsigned char bus, devfn;
+	unsigned short cmd;
+        unsigned long addr;
+	int second_irq;
+	struct device_node *irqctrler = find_devices("pci106b,7");
+	struct device_node *ether;
+
+	if (irqctrler == NULL || irqctrler->n_addrs <= 0)
+		return;
+	addr = (unsigned long) ioremap(irqctrler->addrs[0].address, 0x40);
+	pmac_irq_hw[1] = (volatile struct pmac_irq_hw *)(addr + 0x20);
+	max_irqs = 64;
+	if (pci_device_loc(irqctrler, &bus, &devfn) == 0) {
+		pmac_pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);
+		cmd |= PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER;
+		cmd &= ~PCI_COMMAND_IO;
+		pmac_pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
+	}
+
+	second_irq = irqctrler->intrs[0].line;
+	printk(KERN_INFO "irq: secondary controller on irq %d\n", second_irq);
+	request_irq(second_irq, gatwick_action, SA_INTERRUPT,
+		    "interrupt cascade", 0 );
+
+	/* Fix interrupt for the modem/ethernet combo controller. The number
+	   in the device tree (27) is bogus (correct for the ethernet-only
+	   board but not the combo ethernet/modem board).
+	   The real interrupt is 28 on the second controller -> 28+32 = 60.
+	*/
+	ether = find_devices("pci1011,14");
+	if (ether && ether->n_intrs > 0) {
+		ether->intrs[0].line = 60;
+		printk(KERN_INFO "irq: Fixed ethernet IRQ to %d\n",
+		       ether->intrs[0].line);
+	}
+}
+
 __initfunc(void
 pmac_pic_init(void))
 {
         int i;
         struct device_node *irqctrler;
-        unsigned long addr;
-	int second_irq = -999;
+        volatile struct pmac_irq_hw *addr;
+	int second_irq;
 
-
-	/* G3 powermacs have 64 interrupts, G3 Series PowerBook have 128, 
-	   others have 32 */
+	/*
+	 * G3 powermacs and 1999 G3 PowerBooks have 64 interrupts,
+	 * 1998 G3 Series PowerBooks have 128, 
+	 * other powermacs have 32.
+	 * The combo ethernet/modem card for the Powerstar powerbooks
+	 * (2400/3400/3500, ohare based) has a second ohare chip
+	 * effectively making a total of 64.
+	 */
 	max_irqs = max_real_irqs = 32;
 	irqctrler = find_devices("mac-io");
 	if (irqctrler)
@@ -317,23 +375,27 @@ pmac_pic_init(void))
 	/* get addresses of first controller */
 	if (irqctrler) {
 		if  (irqctrler->n_addrs > 0) {
-			addr = (unsigned long) 
-				ioremap(irqctrler->addrs[0].address, 0x40);
-			for (i = 0; i < 2; ++i)
-				pmac_irq_hw[i] = (volatile struct pmac_irq_hw*)
-					(addr + (2 - i) * 0x10);
+			addr = ioremap(irqctrler->addrs[0].address, 0x40);
+			addr += 2;
+			for (i = 0; i < 2; ++i, --addr)
+				pmac_irq_hw[i] = addr;
 		}
 		
 		/* get addresses of second controller */
-		irqctrler = (irqctrler->next) ? irqctrler->next : NULL;
+		irqctrler = irqctrler->next;
 		if (irqctrler && irqctrler->n_addrs > 0) {
-			addr = (unsigned long) 
-				ioremap(irqctrler->addrs[0].address, 0x40);
-			for (i = 2; i < 4; ++i)
-				pmac_irq_hw[i] = (volatile struct pmac_irq_hw*)
-					(addr + (4 - i) * 0x10);
+			addr = ioremap(irqctrler->addrs[0].address, 0x40);
+			addr += 2;
+			for (i = 2; i < 4; ++i, --addr)
+				pmac_irq_hw[i] = addr;
 		}
 	}
+
+	/* PowerBooks 3400 and 3500 can have a second controller in a second
+	   ohare chip, on the combo ethernet/modem card */
+	if (machine_is_compatible("AAPL,3400/2400")
+	     || machine_is_compatible("AAPL,3500"))
+		enable_second_ohare();
 
 	/* disable all interrupts in all controllers */
 	for (i = 0; i * 32 < max_irqs; ++i)
@@ -346,11 +408,11 @@ pmac_pic_init(void))
 			(int)second_irq);
 		if (device_is_compatible(irqctrler, "gatwick"))
 			pmac_fix_gatwick_interrupts(irqctrler, max_real_irqs);
-		for ( i = max_real_irqs ; i < max_irqs ; i++ )
-			irq_desc[i].ctl = &gatwick_pic;
 		request_irq( second_irq, gatwick_action, SA_INTERRUPT,
-			     "gatwick cascade", 0 );
+			     "interrupt cascade", 0 );
 	}
+	for (i = max_real_irqs; i < max_irqs; i++)
+		irq_desc[i].ctl = &gatwick_pic;
 	printk("System has %d possible interrupts\n", max_irqs);
 	if (max_irqs != max_real_irqs)
 		printk(KERN_DEBUG "%d interrupts on main controller\n",
@@ -381,6 +443,7 @@ sleep_save_intrs(int viaint)
 	out_le32(&pmac_irq_hw[0]->enable, ppc_cached_irq_mask[0]);
 	if (max_real_irqs > 32)
 		out_le32(&pmac_irq_hw[1]->enable, ppc_cached_irq_mask[1]);
+	(void)in_le32(&pmac_irq_hw[0]->flag);
 	mb();
 }
 
@@ -392,6 +455,7 @@ sleep_restore_intrs(void)
 	out_le32(&pmac_irq_hw[0]->enable, 0);
 	if (max_real_irqs > 32)
 		out_le32(&pmac_irq_hw[1]->enable, 0);
+	(void)in_le32(&pmac_irq_hw[0]->flag);
 	mb();
 	for (i = 0; i < max_real_irqs; ++i)
 		if (test_bit(i, sleep_save_mask))

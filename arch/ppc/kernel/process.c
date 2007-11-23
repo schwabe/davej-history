@@ -186,6 +186,18 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 
 	prev->last_processor = prev->processor;
 	current_set[smp_processor_id()] = new;
+#ifdef CONFIG_GEMINI	
+	/*
+	 * Force a context change on every processor switch for 750's.
+	 * This prevents some corruption problems I was finding on the gemini.
+	 *   -- Cort
+	 */
+	if ( /*(new->processor != new->last_processor) &&*/ ((_get_PVR()>>16) == 8) )
+	{
+		init_new_context(new->mm);
+		get_mmu_context(new);
+	}
+#endif /* CONFIG_GEMINI */	
 #endif /* __SMP__ */
 	new_tss = &new->tss;
 	old_tss = &current->tss;

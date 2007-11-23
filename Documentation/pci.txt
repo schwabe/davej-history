@@ -51,6 +51,30 @@ use symbolic names of locations and bits declared in <linux/pci.h>.
 config space. You should use the values in the pci_dev structure as they might
 have been remapped by the kernel.
 
+   If your PCI device uses PCI I/O space, you need to use the check_region(),
+request_region() and release_region() routines. These prevent devices from 
+having conflicting I/O regions. You access your registers using the inb(),
+inw(), inl(), outb(), outw(), or outl() routines passing the value of
+(struct pci_dev *) dev->base_address[] masked by PCI_BASE_ADDRESS_IO_MASK
+as the base address of your registers.
+
+   If your PCI device uses PCI memory space, use ioremap() to create a cookie 
+mapping to your PCI device. The mask (struct pci_dev *) dev->base_address[] 
+with PCI_BASE_ADDRESS_MEM_MASK before passing it into ioremap(). This cookie 
+is passed to the readb(), readw(), readl(), writeb(), writew(), and writel() 
+routines when accessing PCI space. You must always use these routines when 
+accessing PCI space from the kernel. Not all architectures allow direct access
+to PCI memory space from the kernel.
+
+   The IO-mapping.txt file has information about converting between the
+various address spaces. People writing DMA device drivers should pay special
+attention to this information.
+
+   PCI interrupt routines are always SA_SHIRQ and should use the value from
+(struct pci_dev *) dev->irq field for the interrupt number passed into 
+request_irq(). Since it is a shared interrupt, you must also always pass a 
+unique dev_id to request_irq().
+
 4. Obsolete functions
 ~~~~~~~~~~~~~~~~~~~~~
 <linux/bios32.h> is obsolete and should not be included in new code.
