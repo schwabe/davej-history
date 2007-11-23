@@ -2448,9 +2448,26 @@ CONFIG_IP_PNP_BOOTP
   special protocol designed for doing this job), say Y here. In case
   the boot ROM of your network card was designed for booting Linux and
   does BOOTP itself, providing all necessary information on the kernel
-  command line, you can say N here. If unsure, say Y. Note that if you
-  want to use BOOTP, a BOOTP server must be operating on your network.
-  Read Documentation/nfsroot.txt for details.
+  command line, you can say N here.
+
+  If unsure, say Y. Note that if you want to use BOOTP, a BOOTP server
+  must be operating on your network.  Read Documentation/nfsroot.txt
+  for details.
+
+DHCP support
+CONFIG_IP_PNP_DHCP
+  If you want your Linux box to mount its whole root filesystem (the
+  one containing the directory /) from some other computer over the
+  net via NFS and you want the IP address of your computer to be
+  discovered automatically at boot time using the DHCP protocol (a
+  special protocol designed for doing this job), say Y here. In case
+  the boot ROM of your network card was designed for booting Linux and
+  does DHCP itself, providing all necessary information on the kernel
+  command line, you can say N here.
+
+  If unsure, say Y. Note that if you want to use DHCP, a DHCP server
+  must be operating on your network.  Read Documentation/nfsroot.txt
+  for details.
 
 RARP support
 CONFIG_IP_PNP_RARP

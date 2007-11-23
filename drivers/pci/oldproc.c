@@ -716,6 +716,7 @@ static const char *pci_strclass (unsigned int class)
 	      case PCI_CLASS_SERIAL_SSA:		return "SSA";
 	      case PCI_CLASS_SERIAL_USB:		return "USB Controller";
 	      case PCI_CLASS_SERIAL_FIBER:		return "Fiber Channel";
+	      case PCI_CLASS_SERIAL_SMBUS:		return "SM Bus";
 
 	      case PCI_CLASS_HOT_SWAP_CONTROLLER:	return "Hot Swap Controller";
 

@@ -1807,7 +1807,7 @@ static void i810_remove(struct i810_card *card)
 MODULE_AUTHOR("Assorted");
 MODULE_DESCRIPTION("Intel 810 audio support");
 
-static int __init i810_probe(void)
+int __init i810_probe(void)
 {
 	struct pci_dev *pcidev = NULL;
 	int foundone=0;

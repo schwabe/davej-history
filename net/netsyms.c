@@ -449,8 +449,10 @@ EXPORT_SYMBOL(unregister_hdlc_device);
 /* Device callback registration */
 EXPORT_SYMBOL(register_netdevice_notifier);
 EXPORT_SYMBOL(unregister_netdevice_notifier);
+#ifdef CONFIG_INET
 EXPORT_SYMBOL(register_inetaddr_notifier);
 EXPORT_SYMBOL(unregister_inetaddr_notifier);
+#endif
 
 /* support for loadable net drivers */
 #ifdef CONFIG_NET

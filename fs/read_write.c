@@ -214,6 +214,9 @@ static ssize_t do_readv_writev(int type, struct file *file,
 	for (i = 0 ; i < count ; i++)
 		tot_len += iov[i].iov_len;
 
+	if((long) tot_len <0)
+		return -EINVAL;
+
 	inode = file->f_dentry->d_inode;
 	/* VERIFY_WRITE actually means a read, as we write to user space */
 	ret = locks_verify_area((type == VERIFY_WRITE

@@ -24,7 +24,7 @@ In order to use nfsroot you have to select support for NFS during
 kernel configuration. Note that NFS cannot be loaded as a module
 in this case. The configuration script will then ask you whether
 you want to use nfsroot, and if yes what kind of auto configuration
-system you want to use. Selecting both BOOTP and RARP is safe.
+system you want to use.  Selecting both DHCP/BOOTP and RARP is safe.
 
 
 
@@ -88,14 +88,14 @@ ip=<client-ip>:<server-ip>:<gw-ip>:<netmask>:<hostname>:<device>:<autoconf>
   If this parameter is missing from the kernel command line, all fields are
   assumed to be empty, and the defaults mentioned below apply. In general
   this means that the kernel tries to configure everything using both
-  RARP and BOOTP (depending on what has been enabled during kernel confi-
-  guration, and if both what protocol answer got in first).
+  RARP and DHCP/BOOTP (depending on what has been enabled during kernel
+  configuration, and if both what protocol answer got in first).
 
   <client-ip>	IP address of the client. If empty, the address will either
-		be determined by RARP or BOOTP. What protocol is used de-
-		pends on what has been enabled during kernel configuration
+		be determined by RARP or DHCP/BOOTP. What protocol is used
+		depends on what has been enabled during kernel configuration
 		and on the <autoconf> parameter. If this parameter is not
-		empty, neither RARP nor BOOTP will be used.
+		empty, neither RARP nor DHCP/BOOTP will be used.
 
   <server-ip>	IP address of the NFS server. If RARP is used to determine
 		the client address and this parameter is NOT empty only
@@ -103,31 +103,35 @@ ip=<client-ip>:<server-ip>:<gw-ip>:<netmask>:<hostname>:<device>:<autoconf>
 		different RARP and NFS server, specify your RARP server
 		here (or leave it blank), and specify your NFS server in
 		the `nfsroot' parameter (see above). If this entry is blank
-		the address of the server is used which answered the RARP
-		or BOOTP request.
+		the address of the server is used which answered the RARP,
+		or the server address in the DHCP/BOOTP reply.  (Note that
+		this may *not* be the DHCP/BOOTP server itself.)
 
   <gw-ip>	IP address of a gateway if the server is on a different
 		subnet. If this entry is empty no gateway is used and the
-		server is assumed to be on the local network, unless a
-		value has been received by BOOTP.
+		server is assumed to be on the local network, unless
+		overridden by DHCP/BOOTP reply.
 
   <netmask>	Netmask for local network interface. If this is empty,
 		the netmask is derived from the client IP address assuming
-		classful addressing, unless overridden in BOOTP reply.
+		classful addressing, unless overridden by DHCP/BOOTP reply.
 
   <hostname>	Name of the client. If empty, the client IP address is
-		used in ASCII notation, or the value received by BOOTP.
+		used in ASCII notation, unless overridden by DHCP/BOOTP
+		reply.
 
   <device>	Name of network device to use. If this is empty, all
 		devices are used for RARP and BOOTP requests, and the
 		first one we receive a reply on is configured. If you have
 		only one device, you can safely leave this blank.
 
-  <autoconf>	Method to use for autoconfiguration. If this is either
-		'rarp' or 'bootp', the specified protocol is used.
-		If the value is 'both' or empty, both protocols are used
-		so far as they have been enabled during kernel configura-
-		tion. 'off' means no autoconfiguration.
+  <autoconf>	Method to use for autoconfiguration. If this is 'dhcp',
+		'bootp', or 'rarp', the specified protocol is used.  If
+		the value is 'both' or empty, then both BOOTP and RARP are
+		used so far as they are configured into the kernel.  (For
+		backward compatibility, DHCP will not be used in this
+		case, unless BOOTP is not configured.)  If the value is
+		'off', no autoconfiguration of any kind occurs.
 
   The <autoconf> parameter can appear alone as the value to the `ip'
   parameter (without all the ':' characters before) in which case auto-
@@ -161,12 +165,13 @@ depend on what facilities are available:
 
 	You can then remove the dummy device /dev/boot255 again. There
 	is no real device available for it.
+
 	The other two kernel command line parameters cannot be substi-
-	tuted with rdev. Therefore, using this method the kernel will
-	by default use RARP and/or BOOTP, and if it gets an answer via
+	tuted with rdev. Therefore, using this method the kernel will by
+	default use DHCP/BOOTP and/or RARP, and if it gets an answer via
 	RARP will mount the directory /tftpboot/<client-ip>/ as its
-	root. If it got a BOOTP answer the directory name in that answer
-	is used.
+	root. If it gets a DHCP/BOOTP answer the directory name in that
+	answer is used.
 
 
 3.2) Using LILO

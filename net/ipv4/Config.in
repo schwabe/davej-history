@@ -17,6 +17,7 @@ if [ "$CONFIG_IP_ADVANCED_ROUTER" = "y" ]; then
 fi
 bool 'IP: kernel level autoconfiguration' CONFIG_IP_PNP
 if [ "$CONFIG_IP_PNP" = "y" ]; then
+  bool '      DHCP support' CONFIG_IP_PNP_DHCP
   bool '      BOOTP support' CONFIG_IP_PNP_BOOTP
   bool '      RARP support' CONFIG_IP_PNP_RARP
 # not yet ready..

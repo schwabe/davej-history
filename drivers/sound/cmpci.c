@@ -2348,6 +2348,8 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_VOLUME, 0x4040 },
 	{ SOUND_MIXER_WRITE_PCM, 0x4040 }
 };
+static int mpu_io = 0;
+static int synth_io = 0;
 
 #ifdef MODULE
 static int	spdif_loop = 0;
@@ -2356,8 +2358,6 @@ static int	rear_out = 0;
 MODULE_PARM(spdif_loop, "i");
 MODULE_PARM(four_ch, "i");
 MODULE_PARM(rear_out, "i");
-int mpu_io = 0;
-int synth_io = 0;
 MODULE_PARM(mpu_io, "i");
 MODULE_PARM(synth_io, "i");
 int  __init init_module(void)

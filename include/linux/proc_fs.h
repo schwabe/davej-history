@@ -146,6 +146,7 @@ enum net_directory_inos {
 	PROC_NET_IPFW_CHAIN_NAMES,
 	PROC_NET_AT_AARP,
 	PROC_NET_BRIDGE,
+	PROC_NET_PNP,
 	PROC_NET_LAST
 };
 
