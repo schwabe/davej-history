@@ -324,8 +324,8 @@ int fat_file_write(struct inode *inode,struct file *filp,const char *buf,int cou
 #else
 	if (count <= 0) return 0;
 #endif
-	if (filp->f_pos + count > 0x7FFFFFFFLL) {
-		count = 0x7FFFFFFFLL - filp->f_pos;
+	if (filp->f_pos + count > 0x7FFFFFFFL) {
+		count = 0x7FFFFFFFL - filp->f_pos;
 		if (!count)
 			return -EFBIG;
 	}

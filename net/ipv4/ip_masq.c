@@ -1515,32 +1515,35 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                 else
                 {
 			struct tcphdr *th;
-                        skb->csum = csum_partial((void *)(((struct tcphdr *)portptr) + 1),
+			if(len>=sizeof(struct tcphdr))
+			{
+	                        skb->csum = csum_partial((void *)(((struct tcphdr *)portptr) + 1),
                                                  len - sizeof(struct tcphdr), 0);
-                        tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,len,skb);
+                        	tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,len,skb);
 
-			/* Check if TCP FIN or RST */
-			th = (struct tcphdr *)portptr;
-			if (th->fin)
-			{
-				ms->flags |= IP_MASQ_F_SAW_FIN_IN;
-			}
-			if (th->rst)
-			{
-				ms->flags |= IP_MASQ_F_SAW_RST;
-			}
+				/* Check if TCP FIN or RST */
+				th = (struct tcphdr *)portptr;
+				if (th->fin)
+				{
+					ms->flags |= IP_MASQ_F_SAW_FIN_IN;
+				}
+				if (th->rst)
+				{
+					ms->flags |= IP_MASQ_F_SAW_RST;
+				}
 			
-			/* Now set the timeouts */
-			if (ms->flags & IP_MASQ_F_SAW_RST)
-			{
-				timeout = 1;
+				/* Now set the timeouts */
+				if (ms->flags & IP_MASQ_F_SAW_RST)
+				{
+					timeout = 1;
+				}
+				else if ((ms->flags & IP_MASQ_F_SAW_FIN) == IP_MASQ_F_SAW_FIN)
+				{
+					timeout = ip_masq_expire->tcp_fin_timeout;
+				}
+				else timeout = ip_masq_expire->tcp_timeout;
 			}
-			else if ((ms->flags & IP_MASQ_F_SAW_FIN) == IP_MASQ_F_SAW_FIN)
-			{
-				timeout = ip_masq_expire->tcp_fin_timeout;
-			}
-			else timeout = ip_masq_expire->tcp_timeout;
-                }
+                }	
 		ip_masq_set_expire(ms, timeout);
                 ip_send_check(iph);
 #ifdef DEBUG_CONFIG_IP_MASQUERADE

@@ -349,7 +349,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.2"
+#define AIC7XXX_C_VERSION  "5.1.3"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -9184,6 +9184,27 @@ aic7xxx_detect(Scsi_Host_Template *template)
               aic_outb(temp_p, (aic_inb(temp_p, DSCOMMAND0) |
                                 CACHETHEN | MPARCKEN) & ~DPARCKEN,
                        DSCOMMAND0);
+              aic7xxx_load_seeprom(temp_p, &sxfrctl1);
+              break;
+            case AHC_AIC7880:
+              /*
+               * Only set the DSCOMMAND0 register if this is a Rev B.
+               * chipset.  For those, we also enable Ultra mode by
+               * force due to brain-damage on the part of some BIOSes
+               * We overload the devconfig variable here since we can.
+               */
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92)
+              pci_read_config_dword(pdev, DEVCONFIG, &devconfig);
+#else
+              pcibios_read_config_dword(pci_bus, pci_devfn, DEVCONFIG,
+                                        &devconfig);
+#endif
+              if ((devconfig & 0xff) >= 1)
+              {
+                aic_outb(temp_p, (aic_inb(temp_p, DSCOMMAND0) |
+                                  CACHETHEN | MPARCKEN) & ~DPARCKEN,
+                         DSCOMMAND0);
+              }
               aic7xxx_load_seeprom(temp_p, &sxfrctl1);
               break;
           }
