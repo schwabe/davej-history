@@ -328,7 +328,7 @@ static struct {
       0, { 1, 0, 0, 0, 0, 0, 0, 0}, 3*HZ/2, 1 }, "360K PC" }, /*5 1/4 360 KB PC*/
 
 {{2,  500, 16, 16, 6000, 4*HZ/10, 3*HZ, 14, SEL_DLY, 6,  83, 3*HZ, 17, {3,1,2,0,2}, 0,
-      0, { 2, 5, 6,23,10,20,11, 0}, 3*HZ/2, 2 }, "1.2M" }, /*5 1/4 HD AT*/
+      0, { 2, 5, 6,23,10,20,12, 0}, 3*HZ/2, 2 }, "1.2M" }, /*5 1/4 HD AT*/
 
 {{3,  250, 16, 16, 3000,    1*HZ, 3*HZ,  0, SEL_DLY, 5,  83, 3*HZ, 20, {3,1,2,0,2}, 0,
       0, { 4,22,21,30, 3, 0, 0, 0}, 3*HZ/2, 4 }, "720k" }, /*3 1/2 DD*/
@@ -3989,6 +3989,8 @@ int floppy_init(void)
 #endif
 
 	if (floppy_grab_irq_and_dma()){
+		del_timer(&fd_timeout);
+		blk_dev[MAJOR_NR].request_fn = NULL;
 		unregister_blkdev(MAJOR_NR,"fd");
 		return -EBUSY;
 	}
@@ -4042,6 +4044,17 @@ int floppy_init(void)
 	initialising=0;
 	if (have_no_fdc) {
 		DPRINT("no floppy controllers found\n");
+		request_tq.routine = (void *)(void *) empty;
+		/*
+		 *	When we return we may be unloaded. This little
+		 *	trick forces the immediate_bh handler to have run
+		 *	before we unload it, lest we cause bad things.
+		 */
+		mark_bh(IMMEDIATE_BH);
+		schedule();
+		if (usage_count)
+			floppy_release_irq_and_dma();
+		blk_dev[MAJOR_NR].request_fn = NULL;
 		unregister_blkdev(MAJOR_NR,"fd");
 	}
 	return have_no_fdc;

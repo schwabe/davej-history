@@ -37,9 +37,11 @@ S: USA
 
 N: Andrea Arcangeli
 E: arcangeli@mbox.queen.it
-W: http://www.cs.unibo.it/~arcangel/
+W: http://e-mind.com/~andrea/
 P: 1024/CB4660B9 CC A0 71 81 F4 A0 63 AC  C0 4B 81 1D 8C 15 C8 E5
 D: Fixed a 2.0.33 mm bug that corrupts memory in linux/mm/vmalloc.c
+D: Author of lil (Linux Interrupt Latency benchmark)
+D: Fixed the shm swap deallocation at swapoff time
 S: Via Ciaclini 26
 S: Imola 40026
 S: Italy

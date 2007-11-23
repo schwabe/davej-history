@@ -169,6 +169,9 @@
 #define __NR_sched_rr_get_interval	161
 #define __NR_nanosleep		162
 #define __NR_mremap		163
+#define __NR_poll		168
+#define __NR_getpmsg		188
+#define __NR_putpmsg		189
 
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
 #define _syscall0(type,name) \

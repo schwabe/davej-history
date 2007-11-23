@@ -46,7 +46,7 @@
  * Linus noticed.  -- jrs
  */
 
-static void free_wait(select_table * p)
+void select_free_wait(select_table * p)
 {
 	struct select_table_entry * entry = p->entry + p->nr;
 
@@ -96,7 +96,7 @@ static void unlock_fd_bits(int n, int x)
  * and we aren't going to sleep on the select_table.  -- jrs
  */
 
-static int check(int flag, select_table * wait, struct file * file)
+int select_check(int flag, select_table * wait, struct file * file)
 {
 	struct inode * inode;
 	struct file_operations *fops;
@@ -180,17 +180,17 @@ repeat:
 		struct file * file = current->files->fd[i];
 		if (!file)
 			continue;
-		if (FD_ISSET(i,in) && check(SEL_IN,wait,file)) {
+		if (FD_ISSET(i,in) && select_check(SEL_IN,wait,file)) {
 			FD_SET(i, res_in);
 			count++;
 			wait = NULL;
 		}
-		if (FD_ISSET(i,out) && check(SEL_OUT,wait,file)) {
+		if (FD_ISSET(i,out) && select_check(SEL_OUT,wait,file)) {
 			FD_SET(i, res_out);
 			count++;
 			wait = NULL;
 		}
-		if (FD_ISSET(i,ex) && check(SEL_EX,wait,file)) {
+		if (FD_ISSET(i,ex) && select_check(SEL_EX,wait,file)) {
 			FD_SET(i, res_ex);
 			count++;
 			wait = NULL;
@@ -201,7 +201,7 @@ repeat:
 		schedule();
 		goto repeat;
 	}
-	free_wait(&wait_table);
+	select_free_wait(&wait_table);
 	free_page((unsigned long) entry);
 	current->state = TASK_RUNNING;
 bale:

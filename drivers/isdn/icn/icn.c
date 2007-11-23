@@ -199,6 +199,7 @@
  *
  */
 
+#include <linux/config.h> /* CONFIG_ISDN_WITH_ABC */ 
 #include "icn.h"
 
 /*

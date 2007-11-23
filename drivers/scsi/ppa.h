@@ -7,6 +7,7 @@
  *	All comments to David.
  */
 
+#include <linux/config.h> /* CONFIG_SCSI_PPA_HAVE_PEDANTIC */
 #ifndef _PPA_H
 #define _PPA_H
 

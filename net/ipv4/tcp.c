@@ -1976,8 +1976,15 @@ static void tcp_close(struct sock *sk, unsigned long timeout)
 
 	if(sk->state == TCP_LISTEN)
 	{
-		/* Special case */
+		/* 
+		 *	Special case 
+		 */
 		tcp_set_state(sk, TCP_CLOSE);
+		/*
+		 *	Our children must die before we do now that
+		 *	sk->listening exists. It was right anyway but
+		 *	dont break this assumption.
+		 */
 		tcp_close_pending(sk);
 		release_sock(sk);
 		sk->dead = 1;

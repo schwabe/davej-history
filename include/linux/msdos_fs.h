@@ -7,7 +7,6 @@
 #include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/fd.h>
-#include <linux/config.h>
 #include <asm/byteorder.h>
 
 #define MSDOS_ROOT_INO  1 /* == MINIX_ROOT_INO */

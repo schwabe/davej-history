@@ -30,7 +30,6 @@ static const char *version =
 #include <linux/modversions.h>
 #endif
 #include <linux/module.h>
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>

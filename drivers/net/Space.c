@@ -92,6 +92,8 @@ extern int lance_probe(struct device *);
 extern int atp_init(struct device *);
 extern int de600_probe(struct device *);
 extern int de620_probe(struct device *);
+/* The shaper hook */
+extern int shaper_probe(struct device *);
 
 static int
 ethif_probe(struct device *dev)
@@ -358,6 +360,13 @@ static struct device strip_bootstrap = {
     "strip_proto", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, strip_init_ctrl_dev, };
 #undef NEXT_DEV
 #define NEXT_DEV (&strip_bootstrap)
+#endif   /* STRIP */
+
+#if defined(CONFIG_SHAPER)
+static struct device shaper_bootstrap = {
+    "shaper", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, shaper_probe, };
+#undef NEXT_DEV
+#define NEXT_DEV (&shaper_bootstrap)
 #endif   /* STRIP */
 
 #if defined(CONFIG_PPP)

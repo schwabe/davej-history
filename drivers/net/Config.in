@@ -46,7 +46,6 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
   tristate 'Z8530 SCC KISS emulation driver for AX.25' CONFIG_SCC
   tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
   tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
-  tristate 'WIC Radio IP bridge (EXPERIMENTAL)' CONFIG_WIC
 fi
 #
 #	Ethernet

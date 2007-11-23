@@ -5,7 +5,6 @@
 #define MK_DEFS
 #include <stdio.h> 
 
-#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/head.h>

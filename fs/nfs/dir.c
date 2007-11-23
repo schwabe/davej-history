@@ -448,7 +448,7 @@ static int nfs_mknod(struct inode *dir, const char *name, int len,
 		iput(dir);
 		return -ENAMETOOLONG;
 	}
-	if (mode & S_IFIFO)
+	if (S_ISFIFO(mode))
 		sattr.mode = (mode & ~S_IFMT) | S_IFCHR;
 	else
 		sattr.mode = mode;
@@ -460,7 +460,7 @@ static int nfs_mknod(struct inode *dir, const char *name, int len,
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 		name, &sattr, &fhandle, &fattr);
-	if (error == -EINVAL && (mode & S_IFIFO)) {
+	if (error == -EINVAL && (S_ISFIFO(mode))) {
 		sattr.mode = mode;
 		error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 					name, &sattr, &fhandle, &fattr);

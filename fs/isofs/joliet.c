@@ -7,7 +7,6 @@
  */
 
 #include <linux/string.h>
-#include <linux/config.h>
 #include <linux/nls.h>
 #include <linux/malloc.h>
 #include <linux/iso_fs.h>
@@ -95,6 +94,13 @@ get_joliet_filename(struct iso_directory_record * de, struct inode * inode,
 	}
 	if ((len > 2) && (outname[len-2] == ';') && (outname[len-1] == '1')) {
 		len -= 2;
+	}
+
+	/*
+	 * Windows doesn't like periods at the end of a name
+	 */
+	while (len >= 2 && (outname[len-1] == '.')) {
+		len--;
 	}
 
         if (inode->i_sb->u.isofs_sb.s_name_check == 'r') {

@@ -17,6 +17,7 @@
 #include <linux/fs.h>
 #include <linux/swapctl.h>
 #include <linux/blkdev.h> /* for blk_size */
+#include <linux/shm.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -313,6 +314,7 @@ static int try_to_unuse(unsigned int type)
 		nr++;
 	}
 	free_page(page);
+	shm_unuse(type);
 	return 0;
 }
 

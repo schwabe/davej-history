@@ -980,7 +980,7 @@ byte ide_dump_status (ide_drive_t *drive, const char *msg, byte stat)
 #if FANCY_STATUS_DUMPS
 		if (drive->media == ide_disk) {
 			printk(" { ");
-			if (err & BBD_ERR)	printk("BadSector ");
+			if (err & ICRC_ERR)	printk((err & ABRT_ERR) ? "BadCRC " : "BadSector ");
 			if (err & ECC_ERR)	printk("UncorrectableError ");
 			if (err & ID_ERR)	printk("SectorIdNotFound ");
 			if (err & ABRT_ERR)	printk("DriveStatusError ");

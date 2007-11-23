@@ -1,3 +1,4 @@
+#include <linux/config.h> /* CONFIG_SERIAL_NOPAUSE_IO */
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
 

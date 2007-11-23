@@ -47,6 +47,7 @@
  *
  */
 
+#include <linux/config.h> /* CONFIG_ISDN_TIMEOUT_RULES */
 #undef  ISDN_DEBUG_MODEM_OPEN
 #undef  ISDN_DEBUG_MODEM_IOCTL
 #undef  ISDN_DEBUG_MODEM_WAITSENT

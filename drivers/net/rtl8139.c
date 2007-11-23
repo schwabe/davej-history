@@ -45,7 +45,6 @@ static int max_interrupt_work = 10;
 /* Time in jiffies before concluding the transmitter is hung. */
 #define TX_TIMEOUT  ((4000*HZ)/1000)
 
-#include <linux/config.h>
 #ifdef MODULE
 #ifdef MODVERSIONS
 #include <linux/modversions.h>

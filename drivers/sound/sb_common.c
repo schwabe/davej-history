@@ -1201,6 +1201,8 @@ probe_sbmpu (struct address_info *hw_config)
 	}
       hw_config->name = "Sound Blaster 16";
       hw_config->irq = -devc->irq;
+      hw_config->dma = -1;
+      hw_config->dma2 = -1;
       sb16_set_mpu_port(devc, hw_config);
       break;
 

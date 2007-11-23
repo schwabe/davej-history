@@ -360,7 +360,7 @@ cleanup_module(void)
 		if (dev->priv != NULL) {
 			kfree(dev->priv);
 			dev->priv = NULL;
-			free_irq(dev->irq, NULL);
+			free_dma(dev->dma);
 			release_region(dev->base_addr, LANCE_TOTAL_SIZE);
 			unregister_netdev(dev);
 		}

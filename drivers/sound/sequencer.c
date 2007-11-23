@@ -1149,7 +1149,10 @@ sequencer_open (int dev, struct fileinfo *file)
       }
 
   if (!max_synthdev && !max_mididev)
-    return -(ENXIO);
+    {
+      sequencer_busy = 0;
+      return -(ENXIO);
+    }
 
   synth_open_mask = 0;
 

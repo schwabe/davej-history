@@ -46,7 +46,6 @@ static int max_interrupt_work = 10;
 #define TX_FIFO_THRESH 128		/* Rounded down to 4 byte units. */
 #define RX_FIFO_THRESH 1		/* 0-3, 0==32, 64,96, or 3==128 bytes  */
 
-#include <linux/config.h>
 #ifdef MODULE
 #ifdef MODVERSIONS
 #include <linux/modversions.h>

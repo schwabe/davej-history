@@ -44,6 +44,8 @@
  *					then use it for ToS is even more 
  *					broken. 
  *					</RANT>
+ *	George Baeslack		:	SIGIO delivery on accept() bug that
+ *					affected sun jdk.
  */
 
 #include <linux/config.h>
@@ -772,6 +774,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->acked_seq = skb->seq + 1;
 	newsk->copied_seq = skb->seq + 1;
 	newsk->socket = NULL;
+	newsk->listening = sk;
 
 	/*
 	 *	Grab the ttl and tos values and use them 
@@ -1032,6 +1035,7 @@ static int tcp_conn_request_fake(struct sock *sk, struct sk_buff *skb,
 	newsk->acked_seq = skb->seq;
 	newsk->copied_seq = skb->seq;
 	newsk->socket = NULL;
+	newsk->listening = sk;
 
 	/*
 	 *	Grab the ttl and tos values and use them 
@@ -1663,6 +1667,19 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	if (sk->state==TCP_SYN_RECV)
 	{
 		tcp_set_state(sk, TCP_ESTABLISHED);
+		
+		/*
+		 *	We have a listening socket owning us. Wake it for
+		 *	the accept.
+		 */
+		 
+  		if ( sk->listening ) 
+  		{
+  			/* The listener may be sk->dead. Dont worry 
+  			   data_ready traps this */
+			sk->data_ready(sk->listening,0);
+			sk->listening = NULL;
+		}			
 
 		/* Must check for peer advertising zero sized window
 		 * or else we get a sk->{mtu,mss} of zero and thus bomb out

@@ -350,7 +350,8 @@ struct sock
    *	Moved solely for 2.0 to keep binary module compatibility stuff straight.
    */
    
-	unsigned short		max_ack_backlog;  
+	unsigned short		max_ack_backlog;
+	struct sock		*listening;
 };
 
 /*

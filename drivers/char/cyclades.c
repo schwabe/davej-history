@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.1.1.7 $$Date: 1998/08/10 17:01:45 $";
+"$Revision: 2.1.1.8 $$Date: 1998/08/20 17:04:54 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,6 +31,11 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.1.1.8  1998/08/20 17:04:54 ivan
+ * Fixed bug in cy_close function, which causes malfunction
+ * of one of the first 4 ports when a higher port is closed
+ * (Cyclom-Y only).
+ *
  * Revision 2.1.1.7  1998/08/10 17:01:45 ivan
  * Fixed Cyclom-4Yo hardware detection bug.
  *
@@ -2731,9 +2736,11 @@ cy_close(struct tty_struct * tty, struct file * filp)
 	tty_wait_until_sent(tty, info->closing_wait);
 
     if (!IS_CYC_Z(cy_card[info->card])) {
-        unsigned char *base_addr = (unsigned char *)
-                                        cy_card[info->card].base_addr;
-        int index = cy_card[info->card].bus_index;
+	int channel = info->line - cy_card[info->card].first_line;
+	int index = cy_card[info->card].bus_index;
+	unsigned char *base_addr = (unsigned char *)
+			(cy_card[info->card].base_addr +
+			 (cy_chip_offset[channel>>2] <<index));
         /* Stop accepting input */
         cy_writeb((u_long)base_addr+(CySRER<<index),
                         cy_readb(base_addr+(CySRER<<index)) & ~CyRxData);
@@ -3434,7 +3441,6 @@ set_line_char(struct cyclades_port * info)
 	    printk("cyc:set_line_char retval at %d was %x\n",
 	        __LINE__, retval);
 	}
-	cy_readl(&ch_ctrl->comm_baud);
 
 	if (info->tty){
 	    clear_bit(TTY_IO_ERROR, &info->tty->flags);

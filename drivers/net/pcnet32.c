@@ -27,7 +27,6 @@ static int max_interrupt_work = 20;
 #define PCNET_LOG_TX_BUFFERS 4
 #define PCNET_LOG_RX_BUFFERS 4
 
-#include <linux/config.h>
 #ifdef MODULE
 #ifdef MODVERSIONS
 #include <linux/modversions.h>

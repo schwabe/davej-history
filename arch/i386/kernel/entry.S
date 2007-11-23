@@ -699,5 +699,12 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_nanosleep)
 	.long SYMBOL_NAME(sys_mremap)
 	.long 0,0
-	.long SYMBOL_NAME(sys_vm86)
-	.space (NR_syscalls-166)*4
+	.long SYMBOL_NAME(sys_vm86)		/* 166 */
+	.long 0					/* 167 */
+	.long 0					/* 168 STREAMS poll */
+	.long 0					/* 169 */
+	.long 0,0,0,0,0,0,0,0,0,0		/* 170 - 179 */
+	.long 0,0,0,0,0,0,0,0			/* 180 - 187 */
+	.long 0					/* 188 STREAMS getpmsg */
+	.long 0					/* 189 STREAMS putpmsg */
+	.space (NR_syscalls-189)*4

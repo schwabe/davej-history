@@ -29,7 +29,6 @@
 #include <linux/tty.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
-#include <linux/config.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/irq.h>

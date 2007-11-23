@@ -78,6 +78,9 @@ extern void free_dma(unsigned int dmanr);
 
 extern void hard_reset_now(void);
 
+extern void select_free_wait(select_table * p);
+extern int select_check(int flag, select_table * wait, struct file * file);
+
 struct symbol_table symbol_table = {
 #include <linux/symtab_begin.h>
 #ifdef MODVERSIONS
@@ -160,6 +163,10 @@ struct symbol_table symbol_table = {
 	X(getblk),
 	X(bread),
 	X(breada),
+
+	X(select_check),
+	X(select_free_wait),
+
 	X(__brelse),
 	X(__bforget),
 	X(ll_rw_block),

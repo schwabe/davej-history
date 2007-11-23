@@ -41,7 +41,6 @@ static int max_interrupt_work = 20;
 /* Maximum number of multicast addresses to filter (vs. rx-all-multicast) */
 static int multicast_filter_limit = 64;
 
-#include <linux/config.h>
 #ifdef MODULE
 #ifdef MODVERSIONS
 #include <linux/modversions.h>

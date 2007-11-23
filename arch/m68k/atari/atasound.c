@@ -17,7 +17,6 @@ for more details.
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/major.h>
-#include <linux/config.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>
 #include <linux/mm.h>

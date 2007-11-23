@@ -26,7 +26,6 @@
 #include <asm/mc146818rtc.h>
 
 #include <linux/timex.h>
-#include <linux/config.h>
 
 extern int isBeBox[];
 

@@ -155,7 +155,12 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 	if (!file->f_op || !file->f_op->write)
 		goto out;
 	error = 0;
-	if (!count)
+	/*
+	 *	If this was a development kernel we'd just drop the test
+	 *	its not so we do this for stricter compatibility both to
+	 *	applications and drivers.
+	 */
+	if (!count && !IS_ZERO_WR(inode))
 		goto out;
 	error = locks_verify_area(FLOCK_VERIFY_WRITE,inode,file,file->f_pos,count);
 	if (error)
@@ -268,6 +273,10 @@ static int do_readv_writev(int type, struct inode * inode, struct file * file,
 	fn = file->f_op->read;
 	if (type == VERIFY_READ)
 		fn = (IO_fn_t) file->f_op->write;		
+		
+	if(fn==NULL)
+		return -EOPNOTSUPP;
+		
 	vector = iov;
 	while (count > 0) {
 		void * base;

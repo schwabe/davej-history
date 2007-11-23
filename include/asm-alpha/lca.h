@@ -1,3 +1,4 @@
+#include <linux/config.h> /* CONFIG_ALPHA_SRM_SETUP */
 #ifndef __ALPHA_LCA__H__
 #define __ALPHA_LCA__H__
 

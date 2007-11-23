@@ -6,7 +6,6 @@
  * be worked out to handle the differences.
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>

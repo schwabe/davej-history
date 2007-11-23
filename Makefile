@@ -368,6 +368,9 @@ endif
 
 depend dep: dep-files $(MODVERFILE)
 
+checkconfig:
+	perl -w scripts/checkconfig.pl `find * -name '*.[hcS]' -print | sort`
+
 ifdef CONFIGURATION
 ..$(CONFIGURATION):
 	@echo

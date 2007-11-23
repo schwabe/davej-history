@@ -39,7 +39,6 @@ static int max_interrupt_work = 20;
 #define RX_RING_SIZE	16
 #define PKT_BUF_SZ		1536			/* Size of each temporary Rx buffer.*/
 
-#include <linux/config.h>
 #ifdef MODULE
 #ifdef MODVERSIONS
 #include <linux/modversions.h>
