@@ -1045,12 +1045,12 @@ L:	linux-usb-devel@lists.sourceforge.net
 S:	Maintained
 
 USB OV511 DRIVER
-P:     Mark McClelland
-M:     mmcclelland@delphi.com
-L:     linux-usb-users@lists.sourceforge.net
-L:     linux-usb-devel@lists.sourceforge.net
-W:     http://alpha.dyndns.org/ov511/
-S:     Maintained
+P:	Mark McClelland
+M:	mmcclell@bigfoot.com
+L:	linux-usb-users@lists.sourceforge.net
+L:	linux-usb-devel@lists.sourceforge.net
+W:	http://alpha.dyndns.org/ov511/
+S:	Maintained
 
 USB PEGASUS DRIVER
 P:	Petko Manolov

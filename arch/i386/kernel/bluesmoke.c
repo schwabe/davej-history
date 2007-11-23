@@ -164,7 +164,7 @@ void __init intel_mcheck_init(struct cpuinfo_x86 *c)
 	if(l&(1<<8))
 		wrmsr(0x17b, 0xffffffff, 0xffffffff);
 	banks = l&0xff;
-	for(i=0;i<banks;i++)
+	for(i=1;i<banks;i++)
 	{
 		wrmsr(0x400+4*i, 0xffffffff, 0xffffffff); 
 	}

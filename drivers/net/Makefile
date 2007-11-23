@@ -1004,6 +1004,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_FARSYNC),y)
+L_OBJS += farsync.o
+CONFIG_SYNCPPP_BUILTIN=y
+else
+  ifeq ($(CONFIG_FARSYNC),m)
+  M_OBJS += farsync.o
+  CONFIG_SYNCPPP_MODULE=y
+  endif
+endif
+
 # If anything built-in uses Z85230, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
 

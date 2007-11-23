@@ -100,6 +100,7 @@ extern int plip_init(void);
 extern void n2_init(void);
 extern void c101_init(void);
 extern int wanxl_init(void);
+extern int fst_init(void);
 extern int cpc_init(void);
 extern void sync_ppp_init(void);
 
@@ -2098,6 +2099,9 @@ __initfunc(int net_dev_init(void))
 #endif
 #ifdef CONFIG_WANXL
 	wanxl_init();
+#endif
+#ifdef CONFIG_FARSYNC
+	fst_init();
 #endif
 #ifdef CONFIG_XPEED
 	xpdsl_init();

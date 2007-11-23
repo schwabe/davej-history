@@ -181,6 +181,7 @@ const char __module_device[] __attribute__((section(".modinfo"))) = 	   \
 	s	string
 */
 
+/* Dummy macro for 2.2/2.4 compatibility */
 #define MODULE_LICENSE(var)
 
 #define MODULE_PARM(var,type)			\
@@ -221,6 +222,7 @@ const char __module_using_checksums[] __attribute__((section(".modinfo"))) =
 #define MODULE_AUTHOR(name)
 #define MODULE_DESCRIPTION(desc)
 #define MODULE_SUPPORTED_DEVICE(name)
+#define MODULE_LICENSE(var)
 #define MODULE_PARM(var,type)
 #define MODULE_PARM_DESC(var,desc)
 #define THIS_MODULE		NULL

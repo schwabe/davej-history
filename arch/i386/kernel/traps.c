@@ -359,12 +359,17 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 {
 	unsigned int condition;
+	unsigned long eip = regs->eip;
 	struct task_struct *tsk = current;
 
 	if (regs->eflags & VM_MASK)
 		goto debug_vm86;
 
 	__asm__ __volatile__("movl %%db6,%0" : "=r" (condition));
+
+	/* If the user set TF, it's simplest to clear it right away. */
+	if ((eip >=PAGE_OFFSET) && (regs->eflags & TF_MASK))
+		goto clear_TF;
 
 	/* Ensure the debug status register is visible to ptrace (or the process itself) */
 	tsk->tss.debugreg[6] = condition;

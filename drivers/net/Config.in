@@ -304,6 +304,10 @@ dep_tristate 'Sealevel Systems 4021 support' CONFIG_SEALEVEL_4021 m
 #
 tristate 'SyncLink HDLC/SYNCPPP support' CONFIG_SYNCLINK_SYNCPPP
 
+# FarSite Communications' cards
+
+tristate 'FarSync T-Series X.21 (and V.35/V.24) cards' CONFIG_FARSYNC
+
 #
 # Lan Media's board. Currently 1000, 1200, 5200, 5245
 #

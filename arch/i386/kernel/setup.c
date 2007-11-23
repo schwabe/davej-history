@@ -1232,6 +1232,9 @@ static void __init init_intel(struct cpuinfo_x86 *c)
 				break;
 		}
 	}
+
+	if ( p )
+		strcpy(c->x86_model_id, p);
 }
 
 struct cpu_model_info {

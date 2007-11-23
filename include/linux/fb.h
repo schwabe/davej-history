@@ -404,7 +404,7 @@ struct fb_videomode {
 };
 
 
-/* drivers/char/fbmem.c */
+/* drivers/video/fbmem.c */
 extern int register_framebuffer(struct fb_info *fb_info);
 extern int unregister_framebuffer(const struct fb_info *fb_info);
 extern int fbmon_valid_timings(u_int pixclock, u_int htotal, u_int vtotal,
