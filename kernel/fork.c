@@ -136,7 +136,9 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 			exit_mmap(mm);
 			goto free_mm;
 		}
+		down(&mm->mmap_sem);
 		if (dup_mmap(mm)) {
+			up(&mm->mmap_sem);
 			tsk->mm = NULL;
 			exit_mmap(mm);
 			free_page_tables(mm);
@@ -144,6 +146,7 @@ free_mm:
 			kfree(mm);
 			return -ENOMEM;
 		}
+		up(&mm->mmap_sem);
 		return 0;
 	}
 	SET_PAGE_DIR(tsk, current->mm->pgd);

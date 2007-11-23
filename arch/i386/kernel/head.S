@@ -148,6 +148,21 @@ checkCPUtype:
 	outb %ax,$0x22;	\
 	inb $0x23,%ax
 
+	/*
+ 	 *	Cyrix screwed this up. You have to do the basic cyrix
+	 *	detect then pray its right in order to turn CPUID on
+	 *	to see if you have a Cyrix. If its a future non Cyrix
+	 *	chip that seems to be a cyrix but crashes on IO 0x22/0x23
+	 *	don't blame us...
+	 *
+	 *	If we don't set this minimal group however then it breaks
+	 *	our delay loops and stuff so we have to do something
+	 *	for this contraption. 
+	 *
+	 *	Note; We do the minimal here. The xchg bug and other stuff
+	 *	can be tweaked with user mode tools.
+	 */
+
 	cli
 	getCx86($0xc3)		# get CCR3
 	movb %ax,%cx		# Save old value
@@ -198,6 +213,9 @@ ncyrix:	movl $3, SYMBOL_NAME(x86)
 isnew:	pushl %ecx		# restore original EFLAGS
 	popfl
 	incl SYMBOL_NAME(have_cpuid)	# we have CPUID
+	/*
+ 	 *	Technically we should use CPUID 0 to see if we have CPUID 1!
+	 */
 	/* get processor type */
 	movl $1, %eax		# Use the CPUID instruction to 
 	.byte 0x0f, 0xa2	# check the processor type
@@ -211,6 +229,11 @@ isnew:	pushl %ecx		# restore original EFLAGS
 	movb %cl,SYMBOL_NAME(x86_mask)
 	movl %edx,SYMBOL_NAME(x86_capability)
 
+#ifdef SOMEONE_FIXED_ME
+	/*
+ 	 *	This trips some PPro/PII's and overwrites the mask
+	 *	with crap. Removed until the Linux/Cyrix guys fix it.
+	 */
 	xor %ax,%ax		# test again for Cyrix CPU
 	sahf
 	movb $5,%ax
@@ -221,7 +244,7 @@ isnew:	pushl %ecx		# restore original EFLAGS
 	jne ncyrx2		# skip if not Cyrix CPU
         getCx86($0xff)          # DIR1 : let's check the stepping
 	movb %al,SYMBOL_NAME(x86_mask)
-
+#endif
 	/* get vendor info */
 ncyrx2:	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
 	.byte 0x0f, 0xa2		# CPUID

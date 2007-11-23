@@ -370,9 +370,6 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-BusLogic.o: BusLogic.c
-	$(CC) $(CFLAGS) -c BusLogic.c -o BusLogic.o
-
 aha152x.o: aha152x.c
 	$(CC) $(CFLAGS) $(AHA152X) -c aha152x.c 
 
