@@ -113,10 +113,12 @@
 	1.02    GRG 1998.05.06  SMP spinlock changes, 
 				Added slave support
 	1.03    GRG 1998.06.16  Eliminate an Ugh.
+	1.04s   GRG 1998.09.24  Added jumbo support
+				Use HZ in loop timings, extra debugging
 
 */
 
-#define PD_VERSION      "1.03s"
+#define PD_VERSION      "1.04s"
 #define PD_MAJOR	45
 #define PD_NAME		"pd"
 #define PD_UNITS	4
@@ -218,7 +220,7 @@ void pd_setup( char *str, int *ints)
 #define PD_TMO          800             /* interrupt timeout in jiffies */
 #define PD_SPIN_DEL     50              /* spin delay in micro-seconds  */
 
-#define PD_SPIN         (10000/PD_SPIN_DEL)*PD_TMO  
+#define PD_SPIN         (1000000*PD_TMO)/(HZ*PD_SPIN_DEL)
 
 #define STAT_ERR        0x00001
 #define STAT_INDEX      0x00002
@@ -595,6 +597,12 @@ int     init_module(void)
 
 {       int     err, unit;
 
+#ifdef PARIDE_JUMBO
+       { extern paride_init();
+         paride_init();
+       } 
+#endif
+
         err = pd_init();
         if (err) return err;
 
@@ -653,7 +661,7 @@ static void pd_reset( int unit )    /* called only for MASTER drive */
 	udelay(250);
 }
 
-#define DBMSG(msg)	NULL
+#define DBMSG(msg)    ((verbose>1)?(msg):NULL)
 
 static int pd_wait_for( int unit, int w, char * msg )    /* polled wait */
 

@@ -1774,7 +1774,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	if(skb->pkt_type == PACKET_OTHERHOST)
 	{
 		kfree_skb(skb, FREE_READ);
-		return;
+		return 0;
 	}
 	
 /*

@@ -65,10 +65,11 @@
                         (default "pcd")
 
             verbose     This parameter controls the amount of logging
-                        that is done while the driver probes for
-                        devices.  Set it to 0 for a quiet load, or 1 to
-                        see all the progress messages.  (default 0)
-
+                        that the driver will do.  Set it to 0 for
+                        normal operation, 1 to see autoprobe progress
+                        messages, or 2 to see additional debugging
+                        output.  (default 0)
+  
             nice        This parameter controls the driver's use of
                         idle CPU time, at the expense of some speed.
  
@@ -95,10 +96,13 @@
 			        standard for clearing error status.
 				Use spinlocks. Eliminate sti().
 	1.03    GRG 1998.06.16  Eliminated an Ugh
+	1.04	GRG 1998.08.15  Added extra debugging, improvements to
+				pcd_completion, use HZ in loop timing
+	1.05s   GRG 1998.09.24  Added jumbo support, adjust reset timeout
 
 */
 
-#define	PCD_VERSION	"1.03s"
+#define	PCD_VERSION	"1.05s"
 #define PCD_MAJOR	46
 #define PCD_NAME	"pcd"
 #define PCD_UNITS	4
@@ -180,9 +184,9 @@ void pcd_setup( char *str, int *ints)
 #define PCD_RETRIES	     5
 #define PCD_TMO		   800		/* timeout in jiffies */
 #define PCD_DELAY           50          /* spin delay in uS */
-#define PCD_READY_TMO	    20
+#define PCD_READY_TMO	    20		/* in seconds */
 
-#define PCD_SPIN		(10000/PCD_DELAY)*PCD_TMO
+#define PCD_SPIN	(1000000*PCD_TMO)/(HZ*PCD_DELAY)
 
 #define IDE_ERR		0x01
 #define IDE_DRQ         0x08
@@ -245,6 +249,8 @@ static int pcd_busy = 0;		/* request being processed ? */
 static int pcd_sector;			/* address of next requested sector */
 static int pcd_count;			/* number of blocks still to do */
 static char * pcd_buf;			/* buffer for request in progress */
+
+static int pcd_warned = 0;		/* Have we logged a phase warning ? */
 
 /* kernel glue structures */
 
@@ -405,6 +411,12 @@ int	init_module(void)
 
 {	int	err;
 
+#ifdef PARIDE_JUMBO
+       { extern paride_init();
+         paride_init();
+       } 
+#endif
+
 	err = pcd_init();
 
 	return err;
@@ -479,23 +491,51 @@ static int pcd_command( int unit, char * cmd, int dlen, char * fun )
 
 static int pcd_completion( int unit, char * buf,  char * fun )
 
-{	int r, s, n;
+{	int r, d, p, n, k, j;
 
-	r = pcd_wait(unit,IDE_BUSY,IDE_DRQ|IDE_READY|IDE_ERR,fun,"completion");
+	r = -1; k = 0; j = 0;
 
-	if ((RR(0,2)&2) && (RR(0,7)&IDE_DRQ)) { 
-	        n = (((RR(0,4)+256*RR(0,5))+3)&0xfffc);
-	        pi_read_block(PI,buf,n);
+	if (!pcd_wait(unit,IDE_BUSY,IDE_DRQ|IDE_READY|IDE_ERR,
+						fun,"completion")) {
+	    r = 0;
+	    while (RR(0,7)&IDE_DRQ) {
+	        d = (RR(0,4)+256*RR(0,5));
+	        n = ((d+3)&0xfffc);
+	        p = RR(0,2)&3;
+
+	        if ((p == 2) && (n > 0) && (j == 0)) {
+		    pi_read_block(PI,buf,n);
+	            if (verbose > 1) 
+			printk("%s: %s: Read %d bytes\n",PCD.name,fun,n);
+		    r = 0; j++;
+	        } else {
+		    if (verbose > 1) 
+		        printk("%s: %s: Unexpected phase %d, d=%d, k=%d\n",
+					PCD.name,fun,p,d,k);
+		    if ((verbose < 2) && !pcd_warned) {
+	               	pcd_warned = 1;
+			printk("%s: WARNING: ATAPI phase errors\n",PCD.name);
+			}
+		    udelay(1000);
+	        } 
+		if (k++ > PCD_TMO) {
+			printk("%s: Stuck DRQ\n",PCD.name);
+			break;
+		}
+	        if (pcd_wait(unit,IDE_BUSY,IDE_DRQ|IDE_READY|IDE_ERR,
+				fun,"completion")) { 
+			r = -1;
+			break;
+		}
+	    }
 	}
-
-	s = pcd_wait(unit,IDE_BUSY,IDE_READY|IDE_ERR,fun,"data done");
-
+	
 	pi_disconnect(PI); 
 
-	return (r?r:s);
+	return r;
 }
 
-static void pcd_req_sense( int unit, int quiet )
+static void pcd_req_sense( int unit, char *fun )
 
 {	char	rs_cmd[12] = { 0x03,0,0,0,16,0,0,0,0,0,0,0 };
 	char	buf[16];
@@ -507,8 +547,8 @@ static void pcd_req_sense( int unit, int quiet )
 
 	PCD.last_sense = -1;
 	if (!r) {
-            if (!quiet) printk("%s: Sense key: %x, ASC: %x, ASQ: %x\n",
-	                       PCD.name,buf[2]&0xf,buf[12],buf[13]);
+            if (fun) printk("%s: %s: Sense key: %x, ASC: %x, ASQ: %x\n",
+	                       PCD.name,fun,buf[2]&0xf,buf[12],buf[13]);
 	    PCD.last_sense = (buf[2]&0xf) | ((buf[12]&0xff)<<8)
                                           | ((buf[13]&0xff)<<16) ;
         } 
@@ -521,12 +561,12 @@ static int pcd_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
 	r = pcd_command(unit,cmd,dlen,fun);
 	udelay(1000);
 	if (!r) r = pcd_completion(unit,buf,fun);
-	if (r) pcd_req_sense(unit,!fun);
+	if (r) pcd_req_sense(unit,fun);
 	
 	return r;
 }
 
-#define DBMSG(msg)	NULL
+#define DBMSG(msg)	((verbose>1)?(msg):NULL)
 
 static void pcd_lock(int unit)
 
@@ -558,7 +598,7 @@ static void pcd_eject( int unit)
 	pcd_atapi(unit,ej_cmd,0,pcd_scratch,"eject");
 }
 
-#define PCD_RESET_TMO	30		/* in tenths of a second */
+#define PCD_RESET_TMO	100		/* in tenths of a second */
 
 static void pcd_sleep( int cs )
 

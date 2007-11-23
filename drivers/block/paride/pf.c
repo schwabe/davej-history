@@ -111,10 +111,12 @@
 				Small change in pf_completion to round
 				up transfer size.
 	1.02    GRG 1998.06.16  Eliminated an Ugh
+	1.03s   GRG 1998.09.24  Added jumbo support
+				Use HZ in loop timings, extra debugging
 
 */
 
-#define PF_VERSION      "1.02s"
+#define PF_VERSION      "1.03s"
 #define PF_MAJOR	47
 #define PF_NAME		"pf"
 #define PF_UNITS	4
@@ -211,7 +213,7 @@ void pf_setup( char *str, int *ints)
 #define PF_TMO          800             /* interrupt timeout in jiffies */
 #define PF_SPIN_DEL     50              /* spin delay in micro-seconds  */
 
-#define PF_SPIN         (10000/PF_SPIN_DEL)*PF_TMO  
+#define PF_SPIN         (1000000*PF_TMO)/(HZ*PF_SPIN_DEL)
 
 #define STAT_ERR        0x00001
 #define STAT_INDEX      0x00002
@@ -495,6 +497,12 @@ int     init_module(void)
 
 {       int     err;
 
+#ifdef PARIDE_JUMBO
+       { extern paride_init();
+         paride_init();
+       } 
+#endif
+
         err = pf_init();
 
         return err;
@@ -616,7 +624,7 @@ static int pf_atapi( int unit, char * cmd, int dlen, char * buf, char * fun )
         return r;
 }
 
-#define DBMSG(msg)      NULL
+#define DBMSG(msg)      ((verbose>1)?(msg):NULL)
 
 static void pf_lock(int unit, int func)
 
