@@ -14,6 +14,11 @@
  *		Alan Cox	:	Support for TCP parameters.
  *		Alexey Kuznetsov:	Major changes for new routing code.
  *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
+ *		Wolfgang Walter,
+ *		Daniel Ryde,
+ *		Ingo Molinar	:	fixed bug in ip_rt_put introduced
+ *					by SO_BINDTODEVICE support causing
+ *					a memory leak
  *
  *	FIXME:
  *		Make atomic ops more generic and hide them in asm/...
@@ -98,6 +103,7 @@ extern void		ip_rt_run_bh(void);
 extern atomic_t	    	ip_rt_lock;
 extern unsigned		ip_rt_bh_mask;
 extern struct rtable 	*ip_rt_hash_table[RT_HASH_DIVISOR];
+extern void	 	rt_free(struct rtable * rt);
 
 extern __inline__ void ip_rt_fast_lock(void)
 {
@@ -127,6 +133,11 @@ extern __inline__ void ip_rt_put(struct rtable * rt)
 {
 	if (rt)
 		atomic_dec(&rt->rt_refcnt);
+
+	/* If this rtable entry is not in the cache, we'd better free it once the
+	 * refcnt goes to zero, because nobody else will... */
+	if ( rt && (rt->rt_flags & RTF_NOTCACHED) && (!rt->rt_refcnt) )
+		rt_free(rt);
 }
 #else
 ;

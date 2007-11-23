@@ -45,6 +45,7 @@
  *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
  *		Andi Kleen	:	Don't send multicast addresses to
  *					kerneld.	
+ *		Wolfgang Walter	:	make rt_free() non-static
  *
  *	Juan Jose Ciarlante     :	Added ip_rt_dev 
  *		This program is free software; you can redistribute it and/or
@@ -891,7 +892,7 @@ done:
 }
 
 
-static void rt_free(struct rtable * rt)
+void rt_free(struct rtable * rt)
 {
 	unsigned long flags;
 

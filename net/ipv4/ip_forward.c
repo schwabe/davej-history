@@ -16,6 +16,7 @@
  *					use output device for accounting.
  *		Jos Vos		:	Call forward firewall after routing
  *					(always use output device).
+ *		Philip Gladstone:	Add some missing ip_rt_put()
  */
 
 #include <linux/config.h>
@@ -113,7 +114,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	struct device *dev2;	/* Output device */
 	struct iphdr *iph;	/* Our header */
 	struct sk_buff *skb2;	/* Output packet */
-	struct rtable *rt;	/* Route we use */
+	struct rtable *rt = NULL;	/* Route we use */
 	unsigned char *ptr;	/* Data pointer */
 	unsigned long raddr;	/* Router IP address */
 	struct   options * opt	= (struct options*)skb->proto_priv;
@@ -301,6 +302,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
 			/* fall thru */
 		default:
+			if (rt)
+				ip_rt_put(rt);
 			return -1;
 		}
 
@@ -454,6 +457,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 				icmp_send(skb2, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
 			if (skb != skb2)
 				kfree_skb(skb2,FREE_WRITE);
+			if (rt)
+				ip_rt_put(rt);
 			return -1;
 		}
 #endif

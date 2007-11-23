@@ -5,6 +5,16 @@
  *	Copyright (C) Barak A. Pearlmutter.
  *	Released under the GPL version 2 or later.
  *
+ * 12/3/97 -- Flood
+ * Internal stack is only allocated one page.  On systems with NR_FILE
+ * > 1024, this makes it quite easy for a user-space program to open
+ * a large number of AF_UNIX domain sockets, causing the garbage
+ * collection routines to run up against the wall (and panic).
+ * Changed the MAX_STACK to be associated to the system-wide open file
+ * maximum, and use vmalloc() instead of get_free_page() [as more than
+ * one page may be necessary].  As noted below, this should ideally be
+ * done with a linked list.  
+ *
  * Chopped about by Alan Cox 22/3/96 to make it fit the AF_UNIX socket problem.
  * If it doesn't work blame me, it worked when Barak sent it.
  *
@@ -59,10 +69,9 @@
 
 /* Internal data structures and random procedures: */
 
-#define MAX_STACK 1000		/* Maximum depth of tree (about 1 page) */
 static unix_socket **stack;	/* stack of objects to mark */
 static int in_stack = 0;	/* first free entry in stack */
-
+static int max_stack;		/* Calculated in unix_gc() */
 
 extern inline unix_socket *unix_get_socket(struct file *filp)
 {
@@ -110,7 +119,7 @@ void unix_notinflight(struct file *fp)
  
 extern inline void push_stack(unix_socket *x)
 {
-	if (in_stack == MAX_STACK)
+	if (in_stack == max_stack)
 		panic("can't push onto full stack");
 	stack[in_stack++] = x;
 }
@@ -151,8 +160,14 @@ void unix_gc(void)
 	if(in_unix_gc)
 		return;
 	in_unix_gc=1;
-	
-	stack=(unix_socket **)get_free_page(GFP_KERNEL);
+
+	max_stack = max_files;
+
+	stack=(unix_socket **)vmalloc(max_stack * sizeof(unix_socket **));
+	if (!stack) {
+		in_unix_gc=0;
+		return;
+	}
 	
 	/*
 	 *	Assume everything is now unmarked 
@@ -276,5 +291,5 @@ tail:
 	
 	in_unix_gc=0;
 	
-	free_page((long)stack);
+	vfree(stack);
 }

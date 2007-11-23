@@ -55,6 +55,7 @@
  *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
  *	Willy Konynenberg	:	Transparent proxy adapted to new
  *					socket hash code.
+ *		Philip Gladstone:	Added missing ip_rt_put
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -874,6 +875,8 @@ int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	sk->daddr = usin->sin_addr.s_addr;
 	sk->dummy_th.dest = usin->sin_port;
 	sk->state = TCP_ESTABLISHED;
+	if (sk->ip_route_cache)
+	        ip_rt_put(sk->ip_route_cache);
 	sk->ip_route_cache = rt;
 	return(0);
 }
