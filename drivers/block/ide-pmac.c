@@ -462,8 +462,10 @@ static int idepmac_notify(struct pmu_sleep_notifier *self, int when)
 				continue;
 			/* Disable irq during sleep */
 			disable_irq(pmac_ide_irq[i]);
-			/* Put the disk to sleep */
-			idepmac_sleep_disk(i, base);
+			ret = check_media_bay_by_base(base, MB_CD);
+			if (ret == -ENODEV)
+				/* not media bay - put the disk to sleep */
+				idepmac_sleep_disk(i, base);
 		}
 		break;
 	case PBOOK_WAKE:

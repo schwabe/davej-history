@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.54.2.11 1999/08/30 19:29:19 cort Exp $
+ * $Id: prom.c,v 1.54.2.12 1999/09/10 01:08:04 paulus Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -134,7 +134,6 @@ static unsigned long inspect_node(phandle, struct device_node *, unsigned long,
 				  unsigned long, struct device_node ***);
 static unsigned long finish_node(struct device_node *, unsigned long,
 				 interpret_func *);
-static void relocate_nodes(void);
 static unsigned long check_display(unsigned long);
 static int prom_next_node(phandle *);
 static void *early_get_property(unsigned long, unsigned long, char *);
@@ -744,8 +743,6 @@ finish_device_tree(void)
 {
 	unsigned long mem = (unsigned long) klimit;
 
-	if (boot_infos)
-		relocate_nodes();
 	mem = finish_node(allnodes, mem, NULL);
 	printk(KERN_INFO "device tree used %lu bytes\n",
 	       mem - (unsigned long) allnodes);
@@ -839,7 +836,7 @@ finish_node(struct device_node *np, unsigned long mem_start,
  * This procedure updates the pointers.
  */
 __init
-static void relocate_nodes(void)
+void relocate_nodes(void)
 {
 	unsigned long base;
 	struct device_node *np;

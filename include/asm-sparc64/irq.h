@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.14 1998/12/19 11:05:41 davem Exp $
+/* $Id: irq.h,v 1.14.2.1 1999/09/04 17:49:32 davem Exp $
  * irq.h: IRQ registers on the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -86,6 +86,7 @@ static __inline__ char *__irq_itoa(unsigned int irq)
 #define NR_IRQS    15
 
 extern void disable_irq(unsigned int);
+#define disable_irq_nosync disable_irq
 extern void enable_irq(unsigned int);
 extern void init_timers(void (*lvl10_irq)(int, void *, struct pt_regs *),
 			unsigned long *);

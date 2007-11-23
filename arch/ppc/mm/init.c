@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.164.2.4 1999/06/17 19:05:21 cort Exp $
+ *  $Id: init.c,v 1.164.2.5 1999/09/07 00:59:22 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -88,8 +88,7 @@ extern unsigned long *find_end_of_memory(void);
 unsigned long *mbx_find_end_of_memory(void);
 #endif /* CONFIG_MBX */
 static void mapin_ram(void);
-void map_page(struct task_struct *, unsigned long va,
-		     unsigned long pa, int flags);
+void map_page(unsigned long va, unsigned long pa, int flags);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
@@ -161,10 +160,12 @@ void __bad_pte(pmd_t *pmd)
 
 pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 {
-        pte_t *pte/* = (pte_t *) __get_free_page(GFP_KERNEL)*/;
+        pte_t *pte;
 
         if (pmd_none(*pmd)) {
-		if ( (pte = (pte_t *) get_zero_page_fast()) == NULL  )
+		if (!mem_init_done)
+			pte = (pte_t *) MMU_get_page();
+		else if ((pte = (pte_t *) get_zero_page_fast()) == NULL)
 			if ((pte = (pte_t *) __get_free_page(GFP_KERNEL)))
 				clear_page((unsigned long)pte);
                 if (pte) {
@@ -174,7 +175,6 @@ pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
 		pmd_val(*pmd) = (unsigned long)BAD_PAGETABLE;
                 return NULL;
         }
-        /*free_page((unsigned long)pte);*/
         if (pmd_bad(*pmd)) {
                 __bad_pte(pmd);
                 return NULL;
@@ -403,7 +403,7 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 #endif /* CONFIG_8xx */
 	
 	for (i = 0; i < size; i += PAGE_SIZE)
-		map_page(&init_task, v+i, p+i, flags);
+		map_page(v+i, p+i, flags);
 out:	
 	return (void *) (v + (addr & ~PAGE_MASK));
 }
@@ -441,7 +441,7 @@ unsigned long iopa(unsigned long addr)
 		return 0;
 
 	/* Use upper 10 bits of addr to index the first level map */
-	pd = (pmd_t *) (init_task.mm->pgd + (addr >> PGDIR_SHIFT));
+	pd = pmd_offset(pgd_offset_k(addr), addr);
 	if (pmd_none(*pd))
 		return 0;
 
@@ -451,26 +451,18 @@ unsigned long iopa(unsigned long addr)
 }
 
 void
-map_page(struct task_struct *tsk, unsigned long va,
-	 unsigned long pa, int flags)
+map_page(unsigned long va, unsigned long pa, int flags)
 {
-	pmd_t *pd;
+	pmd_t *pd, oldpd;
 	pte_t *pg;
 	
-	if (tsk->mm->pgd == NULL) {
-		/* Allocate upper level page map */
-		tsk->mm->pgd = (pgd_t *) MMU_get_page();
-	}
 	/* Use upper 10 bits of VA to index the first level map */
-	pd = (pmd_t *) (tsk->mm->pgd + (va >> PGDIR_SHIFT));
-	if (pmd_none(*pd)) {
-		if ( v_mapped_by_bats(va) )
-			return;
-		pg = (pte_t *) MMU_get_page();
-		pmd_val(*pd) = (unsigned long) pg;
-	}
+	pd = pmd_offset(pgd_offset_k(va), va);
+	oldpd = *pd;
 	/* Use middle 10 bits of VA to index the second-level map */
-	pg = pte_offset(pd, va);
+	pg = pte_alloc(pd, va);
+	if (pmd_none(oldpd))
+		set_pgdir(va, *(pgd_t *)pd);
 	set_pte(pg, mk_pte_phys(pa & PAGE_MASK, __pgprot(flags)));
 #ifndef CONFIG_8xx
 	flush_hash_page(0, va);
@@ -936,7 +928,7 @@ __initfunc(static void mapin_ram(void))
                             if ((char *) v < _stext || (char *) v >= etext)
                                     f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
 #endif /* CONFIG_8xx */
-			map_page(&init_task, v, p, f);
+			map_page(v, p, f);
 			v += PAGE_SIZE;
 			p += PAGE_SIZE;
 		}

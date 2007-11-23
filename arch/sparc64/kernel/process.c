@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.92.2.1 1999/08/12 11:30:31 davem Exp $
+/*  $Id: process.c,v 1.92.2.2 1999/08/31 18:21:27 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -150,11 +150,6 @@ void machine_restart(char * cmd)
 		prom_reboot(reboot_command);
 	prom_reboot("");
 	panic("Reboot failed!");
-}
-
-void machine_power_off(void)
-{
-	machine_halt();
 }
 
 static void show_regwindow32(struct pt_regs *regs)

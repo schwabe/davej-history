@@ -65,6 +65,7 @@ typedef void (*prom_entry)(struct prom_args *);
 extern void abort(void);
 extern void prom_init(int, int, prom_entry);
 extern void prom_print(const char *msg);
+extern void relocate_nodes(void);
 extern void finish_device_tree(void);
 extern struct device_node *find_devices(const char *name);
 extern struct device_node *find_type_devices(const char *type);

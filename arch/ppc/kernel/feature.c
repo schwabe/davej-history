@@ -198,6 +198,7 @@ feature_set(struct device_node* device, enum system_feature f)
 	out_le32( controllers[controller].reg,
 		 in_le32(controllers[controller].reg) |
 		 controllers[controller].bits[f]);
+	(void)in_le32(controllers[controller].reg);
 	restore_flags(flags);
 	udelay(10);
 	
@@ -227,6 +228,7 @@ feature_clear(struct device_node* device, enum system_feature f)
 	out_le32( controllers[controller].reg,
 		 in_le32(controllers[controller].reg) &
 		 ~(controllers[controller].bits[f]));
+	(void)in_le32(controllers[controller].reg);
 	restore_flags(flags);
 	udelay(10);
 	

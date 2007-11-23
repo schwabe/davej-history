@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.106.2.2 1999/08/07 10:49:25 davem Exp $
+/*  $Id: atyfb.c,v 1.106.2.4 1999/09/02 06:34:46 paulus Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -232,7 +232,20 @@ struct fb_info_aty {
     int vtconsole;
     int consolecnt;
 #endif
+#ifdef CONFIG_PMAC_PBOOK
+    unsigned char *save_framebuffer;
+    unsigned long save_pll[64];
+    struct fb_info_aty* next;
+#endif
 };
+
+#ifdef CONFIG_PMAC_PBOOK
+  int aty_sleep_notify(struct pmu_sleep_notifier *self, int when);
+  static struct pmu_sleep_notifier aty_sleep_notifier = {
+  	aty_sleep_notify, SLEEP_LEVEL_VIDEO,
+  };
+  static struct fb_info_aty* first_display = NULL;
+#endif
 
 
     /*
@@ -3104,6 +3117,13 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
     struct fb_info_aty *info;
     int i;
 
+    if (device_is_compatible(dp, "ATY,264LTPro")) {
+	/* XXX kludge for now */
+	if (dp->name == 0 || strcmp(dp->name, "ATY,264LTProA") != 0
+	    || dp->parent == 0)
+	    return;
+	dp = dp->parent;
+    }
     switch (dp->n_addrs) {
 	case 1:
 	case 2:
@@ -3171,6 +3191,14 @@ __initfunc(void atyfb_of_init(struct device_node *dp))
 	kfree(info);
 	return;
     }
+
+#ifdef CONFIG_PMAC_PBOOK
+    if (first_display == NULL)
+	pmu_register_sleep_notifier(&aty_sleep_notifier);
+    info->next = first_display;
+    first_display = info;
+#endif
+	
 
 #ifdef CONFIG_FB_COMPAT_XPMAC
     if (!console_fb_info)
@@ -3870,3 +3898,95 @@ static struct display_switch fbcon_aty32 = {
     FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
+
+#ifdef CONFIG_PMAC_PBOOK
+/*
+ * Save the contents of the frame buffer when we go to sleep,
+ * and restore it when we wake up again.
+ */
+int
+aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
+{
+	struct fb_info_aty *info;
+ 	unsigned int pm;
+ 	
+	for (info = first_display; info != NULL; info = info->next) {
+		struct fb_fix_screeninfo fix;
+		int nb;
+		
+		atyfb_get_fix(&fix, fg_console, (struct fb_info *)info);
+		nb = fb_display[fg_console].var.yres * fix.line_length;
+
+		switch (when) {
+		case PBOOK_SLEEP_NOW:
+			/* Stop accel engine (stop bus mastering) */
+			if (info->current_par.accel_flags & FB_ACCELF_TEXT)
+				reset_engine(info);
+#if 1
+			/* Backup fb content */	
+			info->save_framebuffer = vmalloc(nb);
+			if (info->save_framebuffer)
+				memcpy(info->save_framebuffer,
+				       (void *)info->frame_buffer, nb);
+#endif
+			/* Blank display and LCD */				       
+			atyfbcon_blank(VESA_POWERDOWN+1, (struct fb_info *)info);			
+			
+			/* Set chip to "suspend" mode. Note: There's an HW bug in the
+			   chip which prevents proper resync on wakeup with automatic
+			   power management, we handle suspend manually using the
+			   following (weird) sequence described by ATI. Note2:
+			   We could enable this for all Rage LT Pro chip ids */
+			if ((Gx == LG_CHIP_ID) || (Gx == LT_CHIP_ID) || (Gx == LP_CHIP_ID)) {
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm &= ~PWR_MGT_ON;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm &= ~(PWR_BLON | AUTO_PWR_UP);
+				pm |= SUSPEND_NOW;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm |= PWR_MGT_ON;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				do {
+					pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				} while ((pm & PWR_MGT_STATUS_MASK) != PWR_MGT_STATUS_SUSPEND);
+				mdelay(500);
+			}
+			break;
+		case PBOOK_WAKE:
+			/* Wakeup chip */
+			if ((Gx == LG_CHIP_ID) || (Gx == LT_CHIP_ID) || (Gx == LP_CHIP_ID)) {
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm &= ~PWR_MGT_ON;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm |=  (PWR_BLON | AUTO_PWR_UP);
+				pm &= ~SUSPEND_NOW;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm |= PWR_MGT_ON;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				do {
+					pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				} while ((pm & PWR_MGT_STATUS_MASK) != 0);
+				mdelay(500);
+			}
+#if 1
+			/* Restore fb content */			
+			if (info->save_framebuffer) {
+				memcpy((void *)info->frame_buffer,
+				       info->save_framebuffer, nb);
+				vfree(info->save_framebuffer);
+				info->save_framebuffer = 0;
+			}
+#endif
+			/* Restore display */			
+			atyfb_set_par(&info->current_par, info);
+			atyfbcon_blank(0, (struct fb_info *)info);
+			break;
+		}
+	}
+	return PBOOK_SLEEP_OK;
+}
+#endif /* CONFIG_PMAC_PBOOK */

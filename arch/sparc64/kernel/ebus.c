@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.36 1999/05/04 03:21:42 davem Exp $
+/* $Id: ebus.c,v 1.36.2.2 1999/09/07 01:45:57 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -224,6 +224,7 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 }
 
 extern void clock_probe(void);
+extern void power_init(void);
 
 __initfunc(void ebus_init(void))
 {
@@ -409,4 +410,5 @@ __initfunc(void ebus_init(void))
 	flash_init();
 #endif
 	clock_probe();
+	power_init();
 }

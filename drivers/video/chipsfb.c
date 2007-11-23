@@ -103,9 +103,9 @@ struct fb_info_chips {
 static struct fb_info_chips *all_chips;
 
 #ifdef CONFIG_PMAC_PBOOK
-int chips_sleep_notify(struct notifier_block *, unsigned long, void *);
-static struct notifier_block chips_sleep_notifier = {
-	chips_sleep_notify, NULL, 0
+int chips_sleep_notify(struct pmu_sleep_notifier *self, int when);
+static struct pmu_sleep_notifier chips_sleep_notifier = {
+	chips_sleep_notify, SLEEP_LEVEL_VIDEO,
 };
 #endif
 
@@ -282,6 +282,14 @@ static void chipsfb_blank(int blank, struct fb_info *info)
 	// useful at blank = 1 too (saves battery, extends backlight life)
 	if (blank) {
 		pmu_enable_backlight(0);
+		/* get the palette from the chip */
+		for (i = 0; i < 256; ++i) {
+			out_8(p->io_base + 0x3c7, i);
+			udelay(1);
+			p->palette[i].red = in_8(p->io_base + 0x3c9);
+			p->palette[i].green = in_8(p->io_base + 0x3c9);
+			p->palette[i].blue = in_8(p->io_base + 0x3c9);
+		}
 		for (i = 0; i < 256; ++i) {
 			out_8(p->io_base + 0x3c8, i);
 			udelay(1);
@@ -291,7 +299,13 @@ static void chipsfb_blank(int blank, struct fb_info *info)
 		}
 	} else {
 		pmu_enable_backlight(1);
-		do_install_cmap(currcon, info);
+		for (i = 0; i < 256; ++i) {
+			out_8(p->io_base + 0x3c8, i);
+			udelay(1);
+			out_8(p->io_base + 0x3c9, p->palette[i].red);
+			out_8(p->io_base + 0x3c9, p->palette[i].green);
+			out_8(p->io_base + 0x3c9, p->palette[i].blue);
+		}
 	}
 }
 
@@ -329,8 +343,9 @@ static int chipsfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	out_8(p->io_base + 0x3c9, blue);
 
 #ifdef FBCON_HAS_CFB16
-	if (regno < 16)	p->fbcon_cfb16_cmap[regno] =
-		((red & 0xf8) << 7) | ((green & 0xf8) << 2) | ((blue & 0xf8) >> 3);
+	if (regno < 16)
+		p->fbcon_cfb16_cmap[regno] = ((red & 0xf8) << 7)
+			| ((green & 0xf8) << 2) | ((blue & 0xf8) >> 3);
 #endif
 
 	return 0;
@@ -638,8 +653,7 @@ __initfunc(static void init_chips(struct fb_info_chips *p))
 
 #ifdef CONFIG_PMAC_PBOOK
 	if (all_chips == NULL)
-		notifier_chain_register(&sleep_notifier_list,
-					&chips_sleep_notifier);
+		pmu_register_sleep_notifier(&chips_sleep_notifier);
 #endif /* CONFIG_PMAC_PBOOK */
 	p->next = all_chips;
 	all_chips = p;
@@ -704,15 +718,16 @@ __initfunc(void chips_of_init(struct device_node *dp))
  * and restore it when we wake up again.
  */
 int
-chips_sleep_notify(struct notifier_block *this, unsigned long code, void *x)
+chips_sleep_notify(struct pmu_sleep_notifier *self, int when)
 {
 	struct fb_info_chips *p;
 
 	for (p = all_chips; p != NULL; p = p->next) {
 		int nb = p->var.yres * p->fix.line_length;
 
-		switch (code) {
-		case PBOOK_SLEEP:
+		switch (when) {
+		case PBOOK_SLEEP_NOW:
+			chipsfb_blank(1, (struct fb_info *)p);
 			p->save_framebuffer = vmalloc(nb);
 			if (p->save_framebuffer)
 				memcpy(p->save_framebuffer,
@@ -725,9 +740,10 @@ chips_sleep_notify(struct notifier_block *this, unsigned long code, void *x)
 				vfree(p->save_framebuffer);
 				p->save_framebuffer = 0;
 			}
+			chipsfb_blank(0, (struct fb_info *)p);
 			break;
 		}
 	}
-	return NOTIFY_DONE;
+	return PBOOK_SLEEP_OK;
 }
 #endif /* CONFIG_PMAC_PBOOK */

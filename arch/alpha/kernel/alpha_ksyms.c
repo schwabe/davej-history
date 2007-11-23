@@ -16,6 +16,7 @@
 #include <linux/pci.h>
 #include <linux/tty.h>
 #include <linux/mm.h>
+#include <linux/smp_lock.h>
 
 #include <asm/io.h>
 #include <asm/hwrpb.h>
@@ -180,6 +181,7 @@ EXPORT_SYMBOL(debug_spin_trylock);
 EXPORT_SYMBOL(write_lock);
 EXPORT_SYMBOL(read_lock);
 #endif
+EXPORT_SYMBOL_NOVERS(kernel_flag);
 #endif /* __SMP__ */
 
 /*

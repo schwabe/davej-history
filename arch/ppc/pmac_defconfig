@@ -290,7 +290,7 @@ CONFIG_DE4X5=y
 # CONFIG_COPS is not set
 # CONFIG_IPDDP is not set
 # CONFIG_PLIP is not set
-CONFIG_PPP=m
+CONFIG_PPP=y
 
 #
 # CCP compressors for PPP are only built as modules.
@@ -302,6 +302,7 @@ CONFIG_PPP=m
 # Token ring devices
 #
 # CONFIG_TR is not set
+# CONFIG_NET_FC is not set
 # CONFIG_RCPCI is not set
 # CONFIG_SHAPER is not set
 
@@ -473,6 +474,7 @@ CONFIG_NLS_CODEPAGE_437=y
 # CONFIG_NLS_ISO8859_7 is not set
 # CONFIG_NLS_ISO8859_8 is not set
 # CONFIG_NLS_ISO8859_9 is not set
+# CONFIG_NLS_ISO8859_14 is not set
 CONFIG_NLS_ISO8859_15=y
 # CONFIG_NLS_KOI8_R is not set
 
@@ -483,6 +485,7 @@ CONFIG_SOUND=y
 CONFIG_DMASOUND=y
 # CONFIG_SOUND_ES1370 is not set
 # CONFIG_SOUND_ES1371 is not set
+# CONFIG_SOUND_ESSSOLO1 is not set
 # CONFIG_SOUND_SONICVIBES is not set
 # CONFIG_SOUND_MSNDCLAS is not set
 # CONFIG_SOUND_MSNDPIN is not set

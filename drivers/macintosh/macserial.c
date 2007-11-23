@@ -9,6 +9,7 @@
 
 #include <linux/config.h>
 #include <linux/errno.h>
+#include <linux/module.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -39,9 +40,16 @@
 #ifdef CONFIG_KGDB
 #include <asm/kgdb.h>
 #endif
-#include <asm/init.h>
 
 #include "macserial.h"
+
+#ifdef CONFIG_PMAC_PBOOK
+static int serial_notify_sleep(struct pmu_sleep_notifier *self, int when);
+static struct pmu_sleep_notifier serial_sleep_notifier = {
+	serial_notify_sleep,
+	SLEEP_LEVEL_MISC,
+};
+#endif
 
 /*
  * It would be nice to dynamically allocate everything that
@@ -116,7 +124,7 @@ static int serial_refcount;
 static void probe_sccs(void);
 static void change_speed(struct mac_serial *info, struct termios *old);
 static void rs_wait_until_sent(struct tty_struct *tty, int timeout);
-static void set_scc_power(struct mac_serial * info, int state);
+static int set_scc_power(struct mac_serial * info, int state);
 static int setup_scc(struct mac_serial * info);
 
 static struct tty_struct *serial_table[NUM_CHANNELS];
@@ -136,11 +144,12 @@ static struct termios *serial_termios_locked[NUM_CHANNELS];
  * buffer across all the serial ports, since it significantly saves
  * memory if large numbers of serial ports are open.
  */
-static unsigned char tmp_buf[4096]; /* This is cheating */
+static unsigned char *tmp_buf;
 static struct semaphore tmp_buf_sem = MUTEX;
 
+#ifndef MODULE
 __openfirmware
-
+#endif /* MODULE */
 static inline int serial_paranoia_check(struct mac_serial *info,
 					dev_t device, const char *routine)
 {
@@ -328,8 +337,8 @@ static _INLINE_ void receive_chars(struct mac_serial *info,
 			
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE) {
 			static int flip_buf_ovf;
-			++flip_buf_ovf;
-			printk("FB. overflow: %d\n", flip_buf_ovf);
+			if (++flip_buf_ovf <= 1)
+				printk("FB. overflow: %d\n", flip_buf_ovf);
 			break;
 		}
 		tty->flip.count++;
@@ -358,8 +367,12 @@ static _INLINE_ void receive_chars(struct mac_serial *info,
 
 static void transmit_chars(struct mac_serial *info)
 {
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
 	if ((read_zsreg(info->zs_channel, 0) & Tx_BUF_EMP) == 0)
-		return;
+		goto out;
 	info->tx_active = 0;
 
 	if (info->x_char) {
@@ -367,12 +380,12 @@ static void transmit_chars(struct mac_serial *info)
 		write_zsdata(info->zs_channel, info->x_char);
 		info->x_char = 0;
 		info->tx_active = 1;
-		return;
+		goto out;
 	}
 
 	if ((info->xmit_cnt <= 0) || info->tty->stopped || info->tx_stopped) {
 		write_zsreg(info->zs_channel, 0, RES_Tx_P);
-		return;
+		goto out;
 	}
 
 	/* Send char */
@@ -383,6 +396,9 @@ static void transmit_chars(struct mac_serial *info)
 
 	if (info->xmit_cnt < WAKEUP_CHARS)
 		rs_sched_event(info, RS_EVENT_WRITE_WAKEUP);
+
+ out:
+	restore_flags(flags);
 }
 
 static _INLINE_ void status_handle(struct mac_serial *info)
@@ -578,8 +594,10 @@ static void rs_timer(void)
 {
 }
 
-static int startup(struct mac_serial * info)
+static int startup(struct mac_serial * info, int can_sleep)
 {
+	int delay;
+
 #ifdef SERIAL_DEBUG_OPEN
 	printk("startup() (ttyS%d, irq %d)\n", info->line, info->irq);
 #endif
@@ -601,7 +619,7 @@ static int startup(struct mac_serial * info)
 	printk("starting up ttyS%d (irq %d)...\n", info->line, info->irq);
 #endif
 
-	set_scc_power(info, 1);
+	delay = set_scc_power(info, 1);
 	
 	setup_scc(info);
 
@@ -611,6 +629,15 @@ static int startup(struct mac_serial * info)
 
 	info->flags |= ZILOG_INITIALIZED;
 	enable_irq(info->irq);
+
+	if (delay) {
+		if (can_sleep) {
+			/* we need to wait a bit before using the port */
+			current->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(delay * HZ / 1000);
+		} else
+			mdelay(delay);
+	}
 
 	return 0;
 }
@@ -732,10 +759,18 @@ static void shutdown(struct mac_serial * info)
 	info->flags &= ~ZILOG_INITIALIZED;
 }
 
-static void set_scc_power(struct mac_serial * info, int state)
+/*
+ * Turn power on or off to the SCC and associated stuff
+ * (port drivers, modem, IR port, etc.)
+ * Returns the number of milliseconds we should wait before
+ * trying to use the port.
+ */
+static int set_scc_power(struct mac_serial * info, int state)
 {
+	int delay = 0;
+
 	if (feature_test(info->dev_node, FEATURE_Serial_enable) < 0)
-		return;		/* don't have serial power control */
+		return 0;	/* don't have serial power control */
 
 	/* The timings looks strange but that's the ones MacOS seems
 	   to use for the internal modem. I think we can use a lot faster
@@ -754,19 +789,18 @@ static void set_scc_power(struct mac_serial * info, int state)
 			feature_set(info->dev_node, FEATURE_Serial_IO_A);
 		else
 			feature_set(info->dev_node, FEATURE_Serial_IO_B);
-		mdelay(1);
+		delay = 1;
 		
 		if (info->is_cobalt_modem){
 			feature_set(info->dev_node, FEATURE_Modem_Reset);
-	   		mdelay(15);
+	   		mdelay(5);
 			feature_clear(info->dev_node, FEATURE_Modem_Reset);
-			/* XXX Note the big 250ms, we should probably replace this 
-			   by something better since we have irqs disabled here
-			 */
-			mdelay(250);
+			delay = 2500;	/* wait for 2.5s before using */
 		}
+#ifdef CONFIG_PMAC_PBOOK
 		if (info->is_pwbk_ir)
 			pmu_enable_irled(1);
+#endif /* CONFIG_PMAC_PBOOK */
 	} else {
 #ifdef SERIAL_DEBUG_POWER
 		printk(KERN_INFO "ttyS%02d: shutting down hardware\n", info->line);
@@ -776,7 +810,7 @@ static void set_scc_power(struct mac_serial * info, int state)
 #ifdef SERIAL_DEBUG_POWER
 			printk(KERN_INFO "        (canceled by KGDB)\n");
 #endif
-			return;
+			return 0;
 		}
 #endif
 #ifdef CONFIG_XMON
@@ -784,7 +818,7 @@ static void set_scc_power(struct mac_serial * info, int state)
 #ifdef SERIAL_DEBUG_POWER
 			printk(KERN_INFO "        (canceled by XMON)\n");
 #endif
-			return;
+			return 0;
 		}
 #endif
 		if (info->is_cobalt_modem) {
@@ -796,8 +830,10 @@ static void set_scc_power(struct mac_serial * info, int state)
 			feature_clear(info->dev_node, FEATURE_Modem_Reset);
 			mdelay(25);
 		}
+#ifdef CONFIG_PMAC_PBOOK
 		if (info->is_pwbk_ir)
 			pmu_enable_irled(0);
+#endif /* CONFIG_PMAC_PBOOK */
 			
 		if (info->zs_chan_a == info->zs_channel) {
 #ifdef SERIAL_DEBUG_POWER
@@ -823,6 +859,7 @@ static void set_scc_power(struct mac_serial * info, int state)
 			mdelay(5);
 		}
 	}
+	return delay;
 }
 
 
@@ -988,7 +1025,6 @@ static void change_speed(struct mac_serial *info, struct termios *old_termios)
 static void rs_flush_chars(struct tty_struct *tty)
 {
 	struct mac_serial *info = (struct mac_serial *)tty->driver_data;
-	unsigned long flags;
 
 	if (serial_paranoia_check(info, tty->device, "rs_flush_chars"))
 		return;
@@ -998,53 +1034,76 @@ static void rs_flush_chars(struct tty_struct *tty)
 		return;
 
 	/* Enable transmitter */
-	save_flags(flags); cli();
 	transmit_chars(info);
-	restore_flags(flags);
 }
 
 static int rs_write(struct tty_struct * tty, int from_user,
 		    const unsigned char *buf, int count)
 {
-	int	c, total = 0;
+	int	c, ret = 0;
 	struct mac_serial *info = (struct mac_serial *)tty->driver_data;
 	unsigned long flags;
 
 	if (serial_paranoia_check(info, tty->device, "rs_write"))
 		return 0;
 
-	if (!tty || !info->xmit_buf)
+	if (!tty || !info->xmit_buf || !tmp_buf)
 		return 0;
 
 	save_flags(flags);
-	while (1) {
-		cli();		
-		c = MIN(count, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
-				   SERIAL_XMIT_SIZE - info->xmit_head));
-		if (c <= 0)
-			break;
+	if (from_user) {
+		down(&tmp_buf_sem);
+		while (1) {
+			c = MIN(count,
+				MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
+				    SERIAL_XMIT_SIZE - info->xmit_head));
+			if (c <= 0)
+				break;
 
-		if (from_user) {
-			down(&tmp_buf_sem);
-			copy_from_user(tmp_buf, buf, c);
+			c -= copy_from_user(tmp_buf, buf, c);
+			if (!c) {
+				if (!ret)
+					ret = -EFAULT;
+				break;
+			}
+			cli();
 			c = MIN(c, MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
 				       SERIAL_XMIT_SIZE - info->xmit_head));
 			memcpy(info->xmit_buf + info->xmit_head, tmp_buf, c);
-			up(&tmp_buf_sem);
-		} else
+			info->xmit_head = ((info->xmit_head + c) &
+					   (SERIAL_XMIT_SIZE-1));
+			info->xmit_cnt += c;
+			restore_flags(flags);
+			buf += c;
+			count -= c;
+			ret += c;
+		}
+		up(&tmp_buf_sem);
+	} else {
+		while (1) {
+			cli();		
+			c = MIN(count,
+				MIN(SERIAL_XMIT_SIZE - info->xmit_cnt - 1,
+				    SERIAL_XMIT_SIZE - info->xmit_head));
+			if (c <= 0) {
+				restore_flags(flags);
+				break;
+			}
 			memcpy(info->xmit_buf + info->xmit_head, buf, c);
-		info->xmit_head = (info->xmit_head + c) & (SERIAL_XMIT_SIZE-1);
-		info->xmit_cnt += c;
-		restore_flags(flags);
-		buf += c;
-		count -= c;
-		total += c;
+			info->xmit_head = ((info->xmit_head + c) &
+					   (SERIAL_XMIT_SIZE-1));
+			info->xmit_cnt += c;
+			restore_flags(flags);
+			buf += c;
+			count -= c;
+			ret += c;
+		}
 	}
 	if (info->xmit_cnt && !tty->stopped && !info->tx_stopped
 	    && !info->tx_active)
 		transmit_chars(info);
 	restore_flags(flags);
-	return total;
+	return ret;
 }
 
 static int rs_write_room(struct tty_struct *tty)
@@ -1187,7 +1246,9 @@ static int get_serial_info(struct mac_serial * info,
 	tmp.close_delay = info->close_delay;
 	tmp.closing_wait = info->closing_wait;
 	tmp.custom_divisor = info->custom_divisor;
-	return copy_to_user(retinfo,&tmp,sizeof(*retinfo));
+	if (copy_to_user(retinfo,&tmp,sizeof(*retinfo)))
+		return -EFAULT;
+	return 0;
 }
 
 static int set_serial_info(struct mac_serial * info,
@@ -1197,9 +1258,8 @@ static int set_serial_info(struct mac_serial * info,
 	struct mac_serial old_info;
 	int 			retval = 0;
 
-	if (!new_info)
+	if (copy_from_user(&new_serial,new_info,sizeof(new_serial)))
 		return -EFAULT;
-	copy_from_user(&new_serial,new_info,sizeof(new_serial));
 	old_info = *info;
 
 	if (!capable(CAP_SYS_ADMIN)) {
@@ -1249,29 +1309,30 @@ check_and_exit:
 static int get_lsr_info(struct mac_serial * info, unsigned int *value)
 {
 	unsigned char status;
+	unsigned long flags;
 
-	cli();
+	save_flags(flags); cli();
 	status = read_zsreg(info->zs_channel, 0);
-	sti();
-	put_user(status,value);
-	return 0;
+	restore_flags(flags);
+	status = (status & Tx_BUF_EMP)? TIOCSER_TEMT: 0;
+	return put_user(status,value);
 }
 
 static int get_modem_info(struct mac_serial *info, unsigned int *value)
 {
 	unsigned char control, status;
 	unsigned int result;
+	unsigned long flags;
 
-	cli();
+	save_flags(flags); cli();
 	control = info->curregs[5];
 	status = read_zsreg(info->zs_channel, 0);
-	sti();
+	restore_flags(flags);
 	result =  ((control & RTS) ? TIOCM_RTS: 0)
 		| ((control & DTR) ? TIOCM_DTR: 0)
 		| ((status  & DCD) ? TIOCM_CAR: 0)
 		| ((status  & CTS) ? 0: TIOCM_CTS);
-	put_user(result,value);
-	return 0;
+	return put_user(result,value);
 }
 
 static int set_modem_info(struct mac_serial *info, unsigned int cmd,
@@ -1279,13 +1340,13 @@ static int set_modem_info(struct mac_serial *info, unsigned int cmd,
 {
 	int error;
 	unsigned int arg, bits;
+	unsigned long flags;
 
-	error = verify_area(VERIFY_READ, value, sizeof(int));
+	error = get_user(arg, value);
 	if (error)
 		return error;
-	get_user(arg, value);
 	bits = (arg & TIOCM_RTS? RTS: 0) + (arg & TIOCM_DTR? DTR: 0);
-	cli();
+	save_flags(flags); cli();
 	switch (cmd) {
 	case TIOCMBIS:
 		info->curregs[5] |= bits;
@@ -1297,12 +1358,12 @@ static int set_modem_info(struct mac_serial *info, unsigned int cmd,
 		info->curregs[5] = (info->curregs[5] & ~(DTR | RTS)) | bits;
 		break;
 	default:
-		sti();
+		restore_flags(flags);
 		return -EINVAL;
 	}
 	info->pendregs[5] = info->curregs[5];
 	write_zsreg(info->zs_channel, 5, info->curregs[5]);
-	sti();
+	restore_flags(flags);
 	return 0;
 }
 
@@ -1331,7 +1392,6 @@ static void rs_break(struct tty_struct *tty, int break_state)
 static int rs_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg)
 {
-	int error;
 	struct mac_serial * info = (struct mac_serial *)tty->driver_data;
 
 #ifdef CONFIG_KGDB
@@ -1342,48 +1402,31 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 		return -ENODEV;
 
 	if ((cmd != TIOCGSERIAL) && (cmd != TIOCSSERIAL) &&
-	    (cmd != TIOCSERCONFIG) && (cmd != TIOCSERGWILD)  &&
-	    (cmd != TIOCSERSWILD) && (cmd != TIOCSERGSTRUCT)) {
+	    (cmd != TIOCSERCONFIG) && (cmd != TIOCSERGSTRUCT)) {
 		if (tty->flags & (1 << TTY_IO_ERROR))
 		    return -EIO;
 	}
 	
 	switch (cmd) {
 		case TIOCMGET:
-			error = verify_area(VERIFY_WRITE, (void *) arg,
-				sizeof(unsigned int));
-			if (error)
-				return error;
 			return get_modem_info(info, (unsigned int *) arg);
 		case TIOCMBIS:
 		case TIOCMBIC:
 		case TIOCMSET:
 			return set_modem_info(info, cmd, (unsigned int *) arg);
 		case TIOCGSERIAL:
-			error = verify_area(VERIFY_WRITE, (void *) arg,
-						sizeof(struct serial_struct));
-			if (error)
-				return error;
 			return get_serial_info(info,
 					       (struct serial_struct *) arg);
 		case TIOCSSERIAL:
 			return set_serial_info(info,
 					       (struct serial_struct *) arg);
 		case TIOCSERGETLSR: /* Get line status register */
-			error = verify_area(VERIFY_WRITE, (void *) arg,
-				sizeof(unsigned int));
-			if (error)
-				return error;
-			else
-			    return get_lsr_info(info, (unsigned int *) arg);
+			return get_lsr_info(info, (unsigned int *) arg);
 
 		case TIOCSERGSTRUCT:
-			error = verify_area(VERIFY_WRITE, (void *) arg,
-						sizeof(struct mac_serial));
-			if (error)
-				return error;
-			copy_from_user((struct mac_serial *) arg,
-				       info, sizeof(struct mac_serial));
+			if (copy_to_user((struct mac_serial *) arg,
+					 info, sizeof(struct mac_serial)))
+				return -EFAULT;
 			return 0;
 			
 		default:
@@ -1728,6 +1771,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 {
 	struct mac_serial	*info;
 	int 			retval, line;
+	unsigned long		page;
 
 	line = MINOR(tty->device) - tty->driver.minor_start;
 	if ((line < 0) || (line >= zs_channels_found))
@@ -1749,6 +1793,16 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	tty->driver_data = info;
 	info->tty = tty;
 
+	if (!tmp_buf) {
+		page = get_free_page(GFP_KERNEL);
+		if (!page)
+			return -ENOMEM;
+		if (tmp_buf)
+			free_page(page);
+		else
+			tmp_buf = (unsigned char *) page;
+	}
+
 	/*
 	 * If the port is the middle of closing, bail out now
 	 */
@@ -1768,7 +1822,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	 * Start up serial port
 	 */
 
-	retval = startup(info);
+	retval = startup(info, 1);
 	if (retval)
 		return retval;
 
@@ -1819,6 +1873,7 @@ probe_sccs()
 	struct device_node *dev, *ch;
 	struct mac_serial **pp;
 	int n, lenp;
+	char *conn;
 
 	n = 0;
 	pp = &zs_chain;
@@ -1844,9 +1899,11 @@ probe_sccs()
 			zs_soft[n].zs_channel->parent = &zs_soft[n];
 			zs_soft[n].is_cobalt_modem = device_is_compatible(ch, "cobalt");
 
-			/* XXX tested only with wallstreet PowerBook, should do no harm anyway */	
-			zs_soft[n].is_pwbk_ir = (strcmp(get_property(ch, "AAPL,connector",
-				&lenp), "infrared") == 0);
+			/* XXX tested only with wallstreet PowerBook,
+			   should do no harm anyway */
+			conn = get_property(ch, "AAPL,connector", &lenp);
+			zs_soft[n].is_pwbk_ir =
+				conn && (strcmp(conn, "infrared") == 0);
 
 			/* XXX this assumes the prom puts chan A before B */
 			if (n & 1)
@@ -1861,6 +1918,10 @@ probe_sccs()
 	}
 	*pp = 0;
 	zs_channels_found = n;
+#ifdef CONFIG_PMAC_PBOOK
+	if (n)
+		pmu_register_sleep_notifier(&serial_sleep_notifier);
+#endif /* CONFIG_PMAC_PBOOK */
 }
 
 /* rs_init inits the driver */
@@ -2026,6 +2087,30 @@ int macserial_init(void)
 
 	return 0;
 }
+
+#ifdef MODULE
+int init_module(void)
+{
+	macserial_init();
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	int i;
+	unsigned long flags;
+	struct mac_serial *info;
+
+	for (info = zs_chain, i = 0; info; info = info->zs_next, i++)
+		set_scc_power(info, 0);
+	save_flags(flags); cli();
+	for (i = 0; i < zs_channels_found; ++i)
+		free_irq(zs_soft[i].irq, &zs_soft[i]);
+	restore_flags(flags);
+	tty_unregister_driver(&callout_driver);
+	tty_unregister_driver(&serial_driver);
+}
+#endif /* MODULE */
 
 #if 0
 /*
@@ -2398,3 +2483,43 @@ __initfunc(void zs_kgdb_hook(int tty_num))
 	set_debug_traps(); /* init stub */
 }
 #endif /* ifdef CONFIG_KGDB */
+
+#ifdef CONFIG_PMAC_PBOOK
+/*
+ * notify clients before sleep and reset bus afterwards
+ */
+int
+serial_notify_sleep(struct pmu_sleep_notifier *self, int when)
+{
+	int i;
+	
+	switch (when) {
+	case PBOOK_SLEEP_REQUEST:
+	case PBOOK_SLEEP_REJECT:
+		break;
+		
+	case PBOOK_SLEEP_NOW:
+		for (i=0; i<zs_channels_found; i++) {
+			struct mac_serial *info = &zs_soft[i];
+			if (info->flags & ZILOG_INITIALIZED) {
+				shutdown(info);
+				info->flags |= ZILOG_SLEEPING;
+			}
+		}
+		break;
+	case PBOOK_WAKE:
+		for (i=0; i<zs_channels_found; i++) {
+			struct mac_serial *info = &zs_soft[i];
+			if (info->flags & ZILOG_SLEEPING) {
+				info->flags &= ~ZILOG_SLEEPING;
+				startup(info, 0);
+			}
+		}
+		break;
+	}
+	return PBOOK_SLEEP_OK;
+}
+#endif /* CONFIG_PMAC_PBOOK */
+
+
+

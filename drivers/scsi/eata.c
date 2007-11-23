@@ -1,6 +1,10 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *       9 Sep 1999 Rev. 5.10 for linux 2.2.12 and 2.3.17
+ *        + 64bit cleanup for Linux/Alpha platform support
+ *          (contribution from H.J. Lu).
+ *
  *      22 Jul 1999 Rev. 5.00 for linux 2.2.10 and 2.3.11
  *        + Removed pre-2.2 source code compatibility.
  *        + Added call to pci_set_master.
@@ -211,6 +215,7 @@
  *  PM3021     -  SmartRAID Adapter for ISA
  *  PM3222     -  SmartRAID Adapter for EISA (PM3222W is 16-bit wide SCSI)
  *  PM3224     -  SmartRAID Adapter for PCI  (PM3224W is 16-bit wide SCSI)
+ *  PM33340UW  -  SmartRAID Adapter for PCI  ultra wide multichannel
  *
  *  The above list is just an indication: as a matter of fact all DPT
  *  boards using the EATA/DMA protocol are supported by this driver,
@@ -489,7 +494,10 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #define ASOK              0x00
 #define ASST              0x01
 
-#define ARRAY_SIZE(arr) (sizeof (arr) / sizeof (arr)[0])
+#if !defined(ARRAY_SIZE)
+#define ARRAY_SIZE(x) (sizeof (x) / sizeof((x)[0]))
+#endif
+
 #define YESNO(a) ((a) ? 'y' : 'n')
 #define TLDEV(type) ((type) == TYPE_DISK || (type) == TYPE_ROM)
 
@@ -503,8 +511,8 @@ struct proc_dir_entry proc_scsi_eata2x = {
 
 /* Board info structure */
 struct eata_info {
-   ulong  data_len;     /* Number of valid bytes after this field */
-   ulong  sign;         /* ASCII "EATA" signature */
+   u_int32_t data_len;  /* Number of valid bytes after this field */
+   u_int32_t sign;      /* ASCII "EATA" signature */
    unchar        :4,    /* unused low nibble */
           version:4;    /* EATA version, should be 0x1 */
    unchar  ocsena:1,    /* Overlap Command Support Enabled */
@@ -517,8 +525,8 @@ struct eata_info {
            haaval:1;    /* Host Adapter Address Valid */
    ushort cp_pad_len;   /* Number of pad bytes after cp_len */
    unchar host_addr[4]; /* Host Adapter SCSI ID for channels 3, 2, 1, 0 */
-   ulong  cp_len;       /* Number of valid bytes in cp */
-   ulong  sp_len;       /* Number of valid bytes in sp */
+   u_int32_t cp_len;    /* Number of valid bytes in cp */
+   u_int32_t sp_len;    /* Number of valid bytes in sp */
    ushort queue_size;   /* Max number of cp that can be queued */
    ushort unused;
    ushort scatt_size;   /* Max number of entries in scatter/gather table */
@@ -567,8 +575,8 @@ struct mssp {
                      eoc:1;    /* End Of Command (1 = command completed) */
    unchar target_status;       /* SCSI status received after data transfer */
    unchar unused[2];
-   ulong inv_res_len;          /* Number of bytes not transferred */
-   struct mscp *cpp;           /* Address set in cp */
+   u_int32_t inv_res_len;      /* Number of bytes not transferred */
+   u_int32_t cpp_index;        /* Index of address set in cp */
    char mess[12];
    };
 
@@ -603,13 +611,13 @@ struct mscp {
               one:1;     /* 1 */
    unchar mess[3];       /* Massage to/from Target */
    unchar cdb[12];       /* Command Descriptor Block */
-   ulong  data_len;      /* If sg=0 Data Length, if sg=1 sglist length */
-   struct mscp *cpp;     /* Address to be returned in sp */
-   ulong  data_address;  /* If sg=0 Data Address, if sg=1 sglist address */
-   ulong  sp_addr;       /* Address where sp is DMA'ed when cp completes */
-   ulong  sense_addr;    /* Address where Sense Data is DMA'ed on error */
+   u_int32_t data_len;   /* If sg=0 Data Length, if sg=1 sglist length */
+   u_int32_t cpp_index;  /* Index of address to be returned in sp */
+   u_int32_t data_address; /* If sg=0 Data Address, if sg=1 sglist address */
+   u_int32_t sp_addr;    /* Address where sp is DMA'ed when cp completes */
+   u_int32_t sense_addr; /* Address where Sense Data is DMA'ed on error */
+   /* Additional fields begin here. */
    Scsi_Cmnd *SCpnt;
-   unsigned int index;   /* cp index */
    struct sg_list *sglist;
    };
 
@@ -766,7 +774,7 @@ static inline int wait_on_busy(unsigned long iobase, unsigned int loop) {
    return FALSE;
 }
 
-static inline int do_dma(unsigned long iobase, unsigned int addr, unchar cmd) {
+static inline int do_dma(unsigned long iobase, unsigned long addr, unchar cmd) {
 
    if (wait_on_busy(iobase, (addr ? MAXLOOP * 100 : MAXLOOP))) return TRUE;
 
@@ -799,7 +807,7 @@ static inline int read_pio(unsigned long iobase, ushort *start, ushort *end) {
    return FALSE;
 }
 
-__initfunc (static inline void tune_pci_port(unsigned long port_base)) {
+static inline void tune_pci_port(unsigned long port_base) {
 
 #if defined(CONFIG_PCI)
 
@@ -811,6 +819,12 @@ __initfunc (static inline void tune_pci_port(unsigned long port_base)) {
    for (k = 0; k < MAX_PCI; k++) {
 
       if (!(dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) break;
+
+#if 0
+      /* Don't bother if PCI vendor and/or device don't match. */
+      if (dev->vendor != PCI_VENDOR_ID_DPT || dev->device != PCI_DEVICE_ID_DPT)
+		continue;
+#endif
 
       if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
 
@@ -831,8 +845,8 @@ __initfunc (static inline void tune_pci_port(unsigned long port_base)) {
    return;
 }
 
-__initfunc (static inline int
-            get_pci_irq(unsigned long port_base, unsigned char *apic_irq)) {
+static inline int
+            get_pci_irq(unsigned long port_base, unsigned char *apic_irq) {
 
 #if defined(CONFIG_PCI)
 
@@ -842,6 +856,12 @@ __initfunc (static inline int
    if (!pci_present()) return FALSE;
 
    while((dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) {
+
+#if 0
+      /* Don't bother if PCI vendor and/or device don't match. */
+      if (dev->vendor != PCI_VENDOR_ID_DPT || dev->device != PCI_DEVICE_ID_DPT)
+		continue;
+#endif
 
       if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
 
@@ -862,8 +882,8 @@ __initfunc (static inline int
    return FALSE;
 }
 
-__initfunc (static inline int port_detect \
-      (unsigned long port_base, unsigned int j, Scsi_Host_Template *tpnt)) {
+static inline int port_detect \
+      (unsigned long port_base, unsigned int j, Scsi_Host_Template *tpnt) {
    unsigned char irq, dma_channel, subversion, i;
    unsigned char protocol_rev, apic_irq;
    struct eata_info info;
@@ -877,7 +897,9 @@ __initfunc (static inline int port_detect \
    sprintf(name, "%s%d", driver_name, j);
 
    if(check_region(port_base, REGION_SIZE)) {
+#if defined(DEBUG_DETECT)
       printk("%s: address 0x%03lx in use, skipping probe.\n", name, port_base);
+#endif
       return FALSE;
       }
 
@@ -988,7 +1010,7 @@ __initfunc (static inline int port_detect \
    config.len = (ushort) htons((ushort)510);
    config.ocena = TRUE;
 
-   if (do_dma(port_base, (unsigned int)&config, SET_CONFIG_DMA)) {
+   if (do_dma(port_base, (unsigned long)&config, SET_CONFIG_DMA)) {
       printk("%s: busy timeout sending configuration, detaching.\n", name);
       return FALSE;
       }
@@ -1144,7 +1166,7 @@ __initfunc (static inline int port_detect \
    return TRUE;
 }
 
-__initfunc (void eata2x_setup(char *str, int *ints)) {
+void eata2x_setup(char *str, int *ints) {
    int i, argc = ints[0];
    char *cur = str, *pc;
 
@@ -1180,7 +1202,7 @@ __initfunc (void eata2x_setup(char *str, int *ints)) {
    return;
 }
 
-__initfunc (static void add_pci_ports(void)) {
+static void add_pci_ports(void) {
 
 #if defined(CONFIG_PCI)
 
@@ -1193,6 +1215,12 @@ __initfunc (static void add_pci_ports(void)) {
    for (k = 0; k < MAX_PCI; k++) {
 
       if (!(dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) break;
+
+#if 0
+      /* Don't bother if PCI vendor and/or device don't match. */
+      if (dev->vendor != PCI_VENDOR_ID_DPT || dev->device != PCI_DEVICE_ID_DPT)
+		continue;
+#endif
 
       if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
 
@@ -1214,7 +1242,7 @@ __initfunc (static void add_pci_ports(void)) {
    return;
 }
 
-__initfunc (int eata2x_detect(Scsi_Host_Template *tpnt)) {
+int eata2x_detect(Scsi_Host_Template *tpnt) {
    unsigned int j = 0, k;
 
    tpnt->proc_dir = &proc_scsi_eata2x;
@@ -1311,10 +1339,9 @@ static inline int do_qcomm(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    /* The EATA protocol uses Big Endian format */
    cpp->sp_addr = V2DEV(spp);
 
-   cpp->cpp = cpp;
    SCpnt->scsi_done = done;
-   cpp->index = i;
-   SCpnt->host_scribble = (unsigned char *) &cpp->index;
+   cpp->cpp_index = i;
+   SCpnt->host_scribble = (unsigned char *) &cpp->cpp_index;
 
    if (do_trace) printk("%s: qcomm, mbox %d, target %d.%d:%d, pid %ld.\n",
                         BN(j), i, SCpnt->channel, SCpnt->target,
@@ -1383,7 +1410,7 @@ static inline int do_qcomm(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       }
 
    /* Send control packet to the board */
-   if (do_dma(sh[j]->io_port, (unsigned int) cpp, SEND_CP_DMA)) {
+   if (do_dma(sh[j]->io_port, (unsigned long) cpp, SEND_CP_DMA)) {
       SCpnt->host_scribble = NULL;
       printk("%s: qcomm, target %d.%d:%d, pid %ld, adapter busy.\n",
              BN(j), SCpnt->channel, SCpnt->target, SCpnt->lun, SCpnt->pid);
@@ -1993,7 +2020,7 @@ static void flush_dev(Scsi_Device *dev, unsigned long cursec, unsigned int j,
    for (n = 0; n < n_ready; n++) {
       k = il[n]; cpp = &HD(j)->cp[k]; SCpnt = cpp->SCpnt;
 
-      if (do_dma(sh[j]->io_port, (unsigned int) cpp, SEND_CP_DMA)) {
+      if (do_dma(sh[j]->io_port, (unsigned long) cpp, SEND_CP_DMA)) {
          printk("%s: %s, target %d.%d:%d, pid %ld, mbox %d, adapter"\
                 " busy, will abort.\n", BN(j), (ihdlr ? "ihdlr" : "qcomm"),
                 SCpnt->channel, SCpnt->target, SCpnt->lun, SCpnt->pid, k);
@@ -2047,24 +2074,20 @@ static inline void ihdlr(int irq, unsigned int j) {
    if (spp->eoc == FALSE)
       printk("%s: ihdlr, spp->eoc == FALSE, irq %d, reg 0x%x, count %d.\n",
              BN(j), irq, reg, HD(j)->iocount);
-   if (spp->cpp == NULL)
-      printk("%s: ihdlr, spp->cpp == NULL,  irq %d, reg 0x%x, count %d.\n",
-             BN(j), irq, reg, HD(j)->iocount);
-   if (spp->eoc == FALSE || spp->cpp == NULL) return;
+   if (spp->cpp_index < 0 || spp->cpp_index >= sh[j]->can_queue)
+      printk("%s: ihdlr, bad spp->cpp_index %d, irq %d, reg 0x%x, count %d.\n",
+             BN(j), spp->cpp_index, irq, reg, HD(j)->iocount);
+   if (spp->eoc == FALSE || spp->cpp_index < 0
+                         || spp->cpp_index >= sh[j]->can_queue) return;
 
-   cpp = spp->cpp;
+   /* Find the mailbox to be serviced on this board */
+   i = spp->cpp_index;
+
+   cpp = &(HD(j)->cp[i]);
 
 #if defined(DEBUG_GENERATE_ABORTS)
    if ((HD(j)->iocount > 500) && ((HD(j)->iocount % 500) < 3)) return;
 #endif
-
-   /* Find the mailbox to be serviced on this board */
-   i = cpp - HD(j)->cp;
-
-   if (cpp < HD(j)->cp || cpp >= HD(j)->cp + sh[j]->can_queue
-                                     || i >= sh[j]->can_queue)
-      panic("%s: ihdlr, invalid mscp bus address %p, cp0 %p.\n", BN(j),
-            cpp, HD(j)->cp);
 
    if (HD(j)->cp_stat[i] == IGNORE) {
       HD(j)->cp_stat[i] = FREE;

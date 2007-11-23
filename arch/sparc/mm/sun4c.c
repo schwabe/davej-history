@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.173 1999/01/17 02:20:37 davem Exp $
+/* $Id: sun4c.c,v 1.173.2.1 1999/09/08 00:32:02 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -1203,14 +1203,16 @@ static void sun4c_quick_kernel_fault(unsigned long address)
         panic("sun4c kernel fault handler bolixed...");
 }
 
+#define NR_TASK_BUCKETS 512
+
 /* 2 page buckets for task struct and kernel stack allocation.
  *
  * TASK_STACK_BEGIN
  * bucket[0]
  * bucket[1]
  *   [ ... ]
- * bucket[NR_TASKS-1]
- * TASK_STACK_BEGIN + (sizeof(struct task_bucket) * NR_TASKS)
+ * bucket[NR_TASK_BUCKETS-1]
+ * TASK_STACK_BEGIN + (sizeof(struct task_bucket) * NR_TASK_BUCKETS)
  *
  * Each slot looks like:
  *
@@ -1218,7 +1220,7 @@ static void sun4c_quick_kernel_fault(unsigned long address)
  *  page 2 --  rest of kernel stack
  */
 
-union task_union *sun4c_bucket[NR_TASKS];
+union task_union *sun4c_bucket[NR_TASK_BUCKETS];
 
 static int sun4c_lowbucket_avail;
 
@@ -1305,10 +1307,10 @@ static struct task_struct *sun4c_alloc_task_struct(void)
 	if(!pages)
 		return (struct task_struct *) 0;
 
-	for(entry = sun4c_lowbucket_avail; entry < NR_TASKS; entry++)
+	for(entry = sun4c_lowbucket_avail; entry < NR_TASK_BUCKETS; entry++)
 		if(sun4c_bucket[entry] == BUCKET_EMPTY)
 			break;
-	if(entry == NR_TASKS) {
+	if(entry == NR_TASK_BUCKETS) {
 		free_pages(pages, TASK_STRUCT_ORDER);
 		return (struct task_struct *) 0;
 	}
@@ -1379,7 +1381,7 @@ __initfunc(static void sun4c_init_buckets(void))
 	if(sizeof(union task_union) != (PAGE_SIZE << TASK_STRUCT_ORDER)) {
 		prom_printf("task union not %d page(s)!\n", 1 << TASK_STRUCT_ORDER);
 	}
-	for(entry = 0; entry < NR_TASKS; entry++)
+	for(entry = 0; entry < NR_TASK_BUCKETS; entry++)
 		sun4c_bucket[entry] = BUCKET_EMPTY;
 	sun4c_lowbucket_avail = 0;
 }
@@ -1543,9 +1545,9 @@ __initfunc(static unsigned long sun4c_init_lock_areas(unsigned long start_mem))
 	sun4c_init_buckets();
 	sun4c_taskstack_start = SUN4C_LOCK_VADDR;
 	sun4c_taskstack_end = (sun4c_taskstack_start +
-			       (TASK_ENTRY_SIZE * NR_TASKS));
+			       (TASK_ENTRY_SIZE * NR_TASK_BUCKETS));
 	if(sun4c_taskstack_end >= SUN4C_LOCK_END) {
-		prom_printf("Too many tasks, decrease NR_TASKS please.\n");
+		prom_printf("Too many tasks, decrease NR_TASK_BUCKETS please.\n");
 		prom_halt();
 	}
 
@@ -2790,7 +2792,8 @@ __initfunc(unsigned long sun4c_paging_init(unsigned long start_mem, unsigned lon
 
 	max_user_taken_entries = num_segmaps - cnt - 40 - 1;
 
-	printk("SUN4C: %d mmu entries for the kernel\n", cnt);
+	printk("SUN4C: %d mmu entries for the kernel (out of %d)\n",
+	       cnt, num_segmaps);
 	return start_mem;
 }
 

@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.132.2.3 1999/08/24 21:13:51 cort Exp $
+ * $Id: setup.c,v 1.132.2.4 1999/09/10 01:08:08 paulus Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -360,33 +360,30 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		is_prep = 1;
 	} else {
 		char *model;
+		struct device_node *root;
 
 		have_of = 1;
-		
-		/* prom_init has already been called from __start */
-		finish_device_tree();
-		/* ask the OF info if we're a chrp or pmac */
-		model = get_property(find_path_device("/"), "device_type", NULL);
-		if ( model && !strncmp("chrp",model,4) )
-		{
-			_machine = _MACH_chrp;
-			is_chrp = 1;
-		}
-		else
-		{
-			model = get_property(find_path_device("/"),
-					     "model", NULL);
-			if ( model && !strncmp(model, "IBM", 3))
-			{
-				_machine = _MACH_chrp;
-				is_chrp = 1;
-			}
-			else
-			{
-				_machine = _MACH_Pmac;
-			}
-		}
 
+		/* prom_init has already been called from __start */
+		if (boot_infos)
+			relocate_nodes();
+
+		/* ask the OF info if we're a chrp or pmac */
+		/* we need to set _machine before calling finish_device_tree */
+		root = find_path_device("/");
+		if (root != 0) {
+			model = get_property(root, "device_type", NULL);
+			if (model && !strncmp("chrp", model, 4))
+				is_chrp = 1;
+			else {
+				model = get_property(root, "model", NULL);
+				if (model && !strncmp(model, "IBM", 3))
+					is_chrp = 1;
+			}
+		}
+		_machine = is_chrp? _MACH_chrp: _MACH_Pmac;
+
+		finish_device_tree();
 	}
 #else /* CONFIG_MACH_SPECIFIC */
 
