@@ -197,6 +197,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (mm->def_flags & VM_LOCKED) {
 		unsigned long locked = mm->locked_vm << PAGE_SHIFT;
 		locked += len;
+		if (locked < len)
+			return -EAGAIN;
 		if ((current->rlim[RLIMIT_MEMLOCK].rlim_cur < RLIM_INFINITY) &&
 		   (locked > current->rlim[RLIMIT_MEMLOCK].rlim_cur))
 			return -EAGAIN;
@@ -289,6 +291,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		goto free_vma;
 
 	/* Check against address space limit. */
+	if ((mm->total_vm << PAGE_SHIFT) + len < len)
+		goto free_vma;
 	if ((current->rlim[RLIMIT_AS].rlim_cur < RLIM_INFINITY) &&
 	    ((mm->total_vm << PAGE_SHIFT) + len
 	    > current->rlim[RLIMIT_AS].rlim_cur))

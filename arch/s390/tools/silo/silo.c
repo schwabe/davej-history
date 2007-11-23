@@ -3,8 +3,10 @@
  *
  *  S390 version
  *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
- *    Author(s): Holger Smolinski <linux390@de.ibm.com>
  *
+ *    Report bugs to: <linux390@de.ibm.com>
+ *
+ *    Author(s): Holger Smolinski <Holger.Smolinski@de.ibm.com>
  *               Fritz Elfert <felfert@to.com> contributed support for
  *                	/etc/silo.conf based on Intel's lilo
  */
@@ -37,6 +39,7 @@ CONFIG cf_options[] = {
   { cft_strg, "root",		NULL,		NULL,NULL },
   { cft_flag, "readonly",	NULL,		NULL,NULL },
   { cft_strg, "verbose",	NULL,		NULL,NULL },
+  { cft_strg, "testlevel",	NULL,		NULL,NULL },
   { cft_end,  NULL,		NULL,		NULL,NULL }
 };
   
@@ -46,6 +49,10 @@ CONFIG cf_options[] = {
 /* end */
 
 #define SILO_CFG "/etc/silo.conf"
+#define SILO_IMAGE "./image"
+#define SILO_BOOTMAP "./boot.map"
+#define SILO_PARMFILE "./parmfile"
+#define SILO_BOOTSECT "/boot/ipleckd.boot"
 
 #define PRINT_LEVEL(x,y...) if ( silo_options.verbosity >= x ) printf(y)
 #define ERROR_LEVEL(x,y...) if ( silo_options.verbosity >= x ) fprintf(stderr,y)
@@ -63,31 +70,26 @@ CONFIG cf_options[] = {
 struct silo_options
   {
     short int verbosity;
-    struct
-      {
-	unsigned char testonly;
-      }
-    flags;
+    short int testlevel;
     char *image;
     char *ipldevice;
     char *parmfile;
     char *ramdisk;
     char *bootsect;
     char *conffile;
+    char *bootmap;
   }
 silo_options =
 {
   1,				/* verbosity */
-  {
-    0,				/* testonly */
-  }
-  ,
-    "./image",			/* image */
+  2,				/* testlevel */
+    SILO_IMAGE,			/* image */
     NULL,			/* ipldevice */
-    NULL,			/* parmfile */
+    SILO_PARMFILE,		/* parmfile */
     NULL,			/* initrd */
-    "ipleckd.boot",		/* bootsector */
-    SILO_CFG                    /* silo.conf file */
+    SILO_BOOTSECT,		/* bootsector */
+    SILO_CFG,                   /* silo.conf file */
+    SILO_BOOTMAP,               /* boot.map */
 };
 
 struct blockdesc
@@ -114,9 +116,10 @@ usage (void)
   printf ("-p parmfile : set parameter file to parmfile\n");
   printf ("-b bootsect : set bootsector to bootsect\n");
   printf ("Additional options\n");
+  printf ("-B bootmap:\n");
   printf ("-v: increase verbosity level\n");
   printf ("-v#: set verbosity level to #\n");
-  printf ("-t: toggle testonly flag\n");
+  printf ("-t: decrease testing level\n");
   printf ("-h: print this message\n");
   printf ("-?: print this message\n");
   printf ("-V: print version\n");
@@ -125,45 +128,70 @@ usage (void)
 int
 read_cfg(struct silo_options *o)
 {
+	char *tmp;
 	if (access(o->conffile, R_OK) && (errno == ENOENT))
 		return 0;
 	/* If errno != ENOENT, let cfg_open report an error */
 	cfg_open(o->conffile);
 	cfg_parse(cf_options);
-	o->ipldevice = cfg_get_strg(cf_options, "ipldevice");
-	o->image = cfg_get_strg(cf_options, "image");
-	o->parmfile = cfg_get_strg(cf_options, "parmfile");
+	tmp = cfg_get_strg(cf_options, "ipldevice");
+	if ( ! o->ipldevice  && tmp ) 
+		o->ipldevice = tmp;
+	tmp = cfg_get_strg(cf_options, "image");
+	if ( ! strncmp(o-> image,SILO_IMAGE,strlen(SILO_IMAGE)) && tmp ) 
+		o->image = tmp;
+	tmp = cfg_get_strg(cf_options, "parmfile");
+	if ( !strncmp(o->parmfile,SILO_PARMFILE,strlen(SILO_PARMFILE)) && tmp) 
+		o->parmfile = tmp;
+	if ( ! o -> ramdisk ) 
 	o->ramdisk = cfg_get_strg(cf_options, "ramdisk");
-	o->bootsect = cfg_get_strg(cf_options, "bootsect");
-	if (cfg_get_strg(cf_options, "verbose")) {
+	tmp = cfg_get_strg(cf_options, "bootsect");
+	if ( !strncmp(o -> bootsect,SILO_BOOTSECT,strlen(SILO_BOOTSECT))&&tmp)
+		o->bootsect = tmp;
+	tmp = cfg_get_strg(cf_options, "map") ;
+	if ( !strncmp(o -> bootmap,SILO_BOOTMAP,strlen(SILO_BOOTMAP)) && tmp) 
+		o->bootmap = tmp; 
+	tmp = cfg_get_strg(cf_options, "verbose");
+	if ( tmp ) {
 		unsigned short v;
-		sscanf (cfg_get_strg(cf_options, "verbose"), "%hu", &v);
+		sscanf (tmp, "%hu", &v);
 		o->verbosity = v;
+	}
+	tmp = cfg_get_strg(cf_options, "testlevel");
+	if ( tmp ) {
+		unsigned short t;
+		sscanf (tmp, "%hu", &t);
+		o->testlevel += t;
 	}
 	return 1;
 }
 
 char *
-gen_tmpparm()
+gen_tmpparm( char *pfile )
 {
 	char *append = cfg_get_strg(cf_options, "append");
 	char *root = cfg_get_strg(cf_options, "root");
 	int ro = cfg_get_flag(cf_options, "readonly");
-	FILE *f;
+	FILE *f,*of;
 	char *fn;
+	char c;
 	char *tmpdir=NULL,*save=NULL;
 
 	if (!append && !root && !ro)
-		return NULL;
-
-	tmpdir=getenv("TMPDIR");
-        if (tmpdir) {
-          NTRY( save=(char*)malloc(strlen(tmpdir)));
-          NTRY( strcpy(save,tmpdir));
-        }
-        ITRY( setenv("TMPDIR",".",1));
+		return pfile;
+	of = fopen(pfile, "r");
+	if ( of ) {
 	NTRY( fn = tempnam(NULL,"parm."));
-	NTRY( f = fopen(fn, "w"));
+	} else {
+		fn = pfile;
+	}
+	NTRY( f = fopen(fn, "a+"));
+	if ( of ) {
+		while ( ! feof (of) ) {
+		  c=fgetc(of);
+	  	fputc(c,f);
+		}
+	}
 	if (root)
 		fprintf(f, "root=%s ", root);
 	if (ro)
@@ -172,8 +200,8 @@ gen_tmpparm()
 		fprintf(f, "%s", append);
 	fprintf(f, "\n");
 	fclose(f);
-        if ( save )
-          ITRY( setenv("TMPDIR",save,1)); 
+	fclose(of);
+	printf ("tempfile is %s\n",fn);
 	return strdup(fn);
 }
 
@@ -183,18 +211,13 @@ parse_options (struct silo_options *o, int argc, char *argv[])
   int rc = 0;
   int oc;
 
-  read_cfg(o);
-  while ((oc = getopt (argc, argv, "Vf:F:d:p:r:b:B:h?v::t")) != -1)
+  while ((oc = getopt (argc, argv, "Vf:F:d:p:r:b:B:h?v::t::")) != -1)
     {
       switch (oc)
 	{
 	case 'V':
 	  printf("silo version: %s\n",SILO_VERSION);
 	  exit(0);
-	case 't':
-	  TOGGLE (o->flags.testonly);
-	  PRINT_LEVEL (1, "Testonly flag is now %sactive\n", o->flags.testonly ? "" : "in");
-	  break;
 	case 'v':
 	  {
 	    unsigned short v;
@@ -203,6 +226,16 @@ parse_options (struct silo_options *o, int argc, char *argv[])
 	    else
 	      o->verbosity++;
 	    PRINT_LEVEL (1, "Verbosity value is now %hu\n", o->verbosity);
+	    break;
+	  }
+	case 't':
+	  {
+	    unsigned short t;
+	    if (optarg && sscanf (optarg, "%hu", &t))
+	      o->testlevel -= t;
+	    else
+	      o->testlevel--;
+            PRINT_LEVEL (1, "Testonly flag is now %d\n", o->testlevel);
 	    break;
 	  }
 	case 'h':
@@ -227,12 +260,14 @@ parse_options (struct silo_options *o, int argc, char *argv[])
 	case 'b':
 	  GETARG (o->bootsect);
 	  break;
+	case 'B':
+	  GETARG (o->bootmap);
 	default:
 	  rc = EINVAL;
 	  break;
 	}
     }
-
+  read_cfg(o);
   return rc;
 }
 
@@ -276,6 +311,7 @@ verify_file (char *name, int dev)
   struct stat st;
   int bs = 1024;
   int l;
+
   ITRY (stat (name, &dst));
   if (S_ISREG (dst.st_mode))
     {
@@ -309,11 +345,19 @@ verify_options (struct silo_options *o)
   int crc = 0;
   if (!o->ipldevice || !o->image || !o->bootsect)
     {
+     if (!o->ipldevice)
+       fprintf(stderr,"ipldevice\n");
+     if (!o->image)
+       fprintf(stderr,"image\n");
+     if (!o->bootsect)
+       fprintf(stderr,"bootsect\n");
+
       usage ();
       exit (1);
     }
-  PRINT_LEVEL (1, "IPL device is: '%s'", o->ipldevice);
+  PRINT_LEVEL (1, "Testlevel is set to %d\n",o->testlevel);
 
+  PRINT_LEVEL (1, "IPL device is: '%s'", o->ipldevice);
   ITRY (dev = verify_device (o->ipldevice));
   PRINT_LEVEL (2, "...ok...(%d/%d)", (unsigned short) MAJOR (dev), (unsigned short) MINOR (dev));
   PRINT_LEVEL (1, "\n");
@@ -323,18 +367,36 @@ verify_options (struct silo_options *o)
   PRINT_LEVEL (1, "...ok...");
   PRINT_LEVEL (0, "\n");
 
+  if ( o -> testlevel > 0  && 
+       ! strncmp( o->bootmap, SILO_BOOTMAP,strlen(SILO_BOOTMAP) )) {
+     NTRY( o -> bootmap = tempnam(NULL,"boot."));
+  }
+  PRINT_LEVEL (0, "bootmap is set to: '%s'", o->bootmap);
+  if ( access ( o->bootmap, O_RDWR ) == -1 ) {
+    if ( errno == ENOENT ) {
+      ITRY (creat ( o-> bootmap, O_RDWR ));
+    } else {
+      PRINT_LEVEL(1,"Cannot acces bootmap file '%s': %s\n",o->bootmap,
+		  strerror(errno));
+    }
+  }
+  ITRY (verify_file (o->bootmap, dev));
+  PRINT_LEVEL (1, "...ok...");
+  PRINT_LEVEL (0, "\n");
+
   PRINT_LEVEL (0, "Kernel image is: '%s'", o->image);
   ITRY (verify_file (o->image, dev));
   PRINT_LEVEL (1, "...ok...");
   PRINT_LEVEL (0, "\n");
 
-  if (o->parmfile)
-    {
-      PRINT_LEVEL (0, "parameterfile is: '%s'", o->parmfile);
+  PRINT_LEVEL (0, "original parameterfile is: '%s'", o->parmfile);
+  ITRY (verify_file (o->parmfile, dev));
+  PRINT_LEVEL (1, "...ok...");
+  o->parmfile = gen_tmpparm(o->parmfile);
+  PRINT_LEVEL (0, "final parameterfile is: '%s'", o->parmfile);
       ITRY (verify_file (o->parmfile, dev));
       PRINT_LEVEL (1, "...ok...");
       PRINT_LEVEL (0, "\n");
-    }
 
   if (o->ramdisk)
     {
@@ -411,35 +473,34 @@ add_file_to_blocklist (char *name, struct blocklist *lst, long addr)
 }
 
 int
-write_bootsect (char *ipldevice, char *bootsect, struct blocklist *blklst)
+write_bootsect (struct silo_options *o, struct blocklist *blklst)
 {
   int i;
   int s_fd, d_fd, b_fd, bd_fd;
   struct stat s_st, d_st, b_st;
   int rc=0;
   int bs, boots;
-  char *mapname;
   char *tmpdev;
   char buffer[4096]={0,};
-  ITRY (d_fd = open (ipldevice, O_RDWR | O_SYNC));
+  ITRY (d_fd = open (o->ipldevice, O_RDWR | O_SYNC));
   ITRY (fstat (d_fd, &d_st));
-  if (!(mapname = cfg_get_strg(cf_options, "map")))
-    mapname = "boot.map";
-  ITRY (s_fd = open (mapname, O_RDWR | O_TRUNC | O_CREAT | O_SYNC));
-  ITRY (verify_file (bootsect, d_st.st_rdev));
+  ITRY (s_fd = open (o->bootmap, O_RDWR | O_TRUNC | O_CREAT | O_SYNC));
+  ITRY (verify_file (o->bootsect, d_st.st_rdev));
   for (i = 0; i < blklst->ix; i++)
     {
       int offset = blklst->blk[i].off;
       int addrct = blklst->blk[i].addr | (blklst->blk[i].ct & 0xff);
       PRINT_LEVEL (1, "ix %i: offset: %06x count: %02x address: 0x%08x\n", i, offset, blklst->blk[i].ct & 0xff, blklst->blk[i].addr);
+	if ( o->testlevel <= 1 ) {
       NTRY (write (s_fd, &offset, sizeof (int)));
       NTRY (write (s_fd, &addrct, sizeof (int)));
     }
+    }
   ITRY (ioctl (s_fd,FIGETBSZ, &bs));
-  ITRY (stat (mapname, &s_st));
+  ITRY (stat (o->bootmap, &s_st));
   if (s_st.st_size > bs )
     {
-      ERROR_LEVEL (0,"%s is larger than one block\n", mapname);
+      ERROR_LEVEL (0,"%s is larger than one block\n", o->bootmap);
       rc = -1;
       errno = EINVAL;
     }
@@ -454,11 +515,11 @@ write_bootsect (char *ipldevice, char *bootsect, struct blocklist *blklst)
   close(s_fd);
   ITRY (unlink(tmpdev));
   /* Now patch the bootsector */
-  ITRY (b_fd = open (bootsect, O_RDONLY));
+  ITRY (b_fd = open (o->bootsect, O_RDONLY));
   NTRY (read (b_fd, buffer, 4096));
   memset (buffer + 0xe0, 0, 8);
   *(int *) (buffer + 0xe0) = boots;
-  if ( ! silo_options.flags.testonly ) {
+  if ( o -> testlevel <= 0 ) {
     NTRY (write (d_fd, buffer, 4096));
     NTRY (write (d_fd, buffer, 4096));
   }
@@ -471,7 +532,6 @@ int
 do_silo (struct silo_options *o)
 {
   int rc = 0;
-  char *tmp_parmfile = NULL;
 
   int device_fd;
   int image_fd;
@@ -482,19 +542,11 @@ do_silo (struct silo_options *o)
     {
       ITRY (add_file_to_blocklist (o->parmfile, &blklist, 0x00008000));
     }
-  else
-    {
-      if ((tmp_parmfile = gen_tmpparm()))
-          ITRY (add_file_to_blocklist (tmp_parmfile, &blklist, 0x00008000));
-    }
   if (o->ramdisk)
     {
       ITRY (add_file_to_blocklist (o->ramdisk, &blklist, 0x00800000));
     }
-  ITRY (write_bootsect (o->ipldevice, o->bootsect, &blklist));
-  if (tmp_parmfile)
-  	ITRY (remove (tmp_parmfile));
-
+  ITRY (write_bootsect (o, &blklist));
   return rc;
 }
 
@@ -502,8 +554,20 @@ int
 main (int argct, char *argv[])
 {
   int rc = 0;
+  char *save=NULL;
+  char *tmpdir=getenv("TMPDIR");
+  if (tmpdir) {
+    NTRY( save=(char*)malloc(strlen(tmpdir)+1));
+    NTRY( strncpy(save,tmpdir,strlen(tmpdir)+1));
+  }
+  ITRY( setenv("TMPDIR",".",1));
   ITRY (parse_options (&silo_options, argct, argv));
   ITRY (verify_options (&silo_options));
+  if ( silo_options.testlevel > 0 ) {
+    printf ("WARNING: silo does not modify your volume. Use -t2 to change IPL records\n");
+  }
   ITRY (do_silo (&silo_options));
+  if ( save )
+    ITRY( setenv("TMPDIR",save,1)); 
   return rc;
 }

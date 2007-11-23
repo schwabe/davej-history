@@ -12,31 +12,12 @@
 
 #include <linux/ioctl.h>
 
-#ifndef __HWC_RW_C__
+typedef struct {
 
-extern int hwc_init(unsigned long *);
+	void (*move_input) (unsigned char *, unsigned int);
 
-extern int hwc_write(int from_user, const unsigned char *, unsigned int);
-
-extern unsigned int hwc_chars_in_buffer(unsigned char);
-
-extern unsigned int hwc_write_room(unsigned char);
-
-extern void hwc_flush_buffer(unsigned char);
-
-extern signed int hwc_ioctl(unsigned int, unsigned long);
-
-extern void do_hwc_interrupt(void);
-
-extern int hwc_printk(const char *, ...);
-
-#else	
-
-extern void store_hwc_input(unsigned char*, unsigned int);
-
-extern void wake_up_hwc_tty(void);
-
-#endif
+	void (*wake_up) (void);
+} hwc_high_level_calls_t;
 
 #define IN_HWCB      1
 #define IN_WRITE_BUF 2
@@ -109,5 +90,31 @@ static hwc_ioctls_t _hwc_ioctls;
 
 #define CODE_ASCII              0x0
 #define CODE_EBCDIC             0x1
+
+#ifndef __HWC_RW_C__
+
+extern int hwc_init (unsigned long *);
+
+extern int hwc_write (int from_user, const unsigned char *, unsigned int);
+
+extern unsigned int hwc_chars_in_buffer (unsigned char);
+
+extern unsigned int hwc_write_room (unsigned char);
+
+extern void hwc_flush_buffer (unsigned char);
+
+extern void hwc_unblank (void);
+
+extern signed int hwc_ioctl (unsigned int, unsigned long);
+
+extern void do_hwc_interrupt (void);
+
+extern int hwc_printk (const char *,...);
+
+extern signed int hwc_register_calls (hwc_high_level_calls_t *);
+
+extern signed int hwc_unregister_calls (hwc_high_level_calls_t *);
+
+#endif
 
 #endif   

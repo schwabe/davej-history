@@ -3,6 +3,8 @@ extern dasd_chanq_t *cq_head;
 
 cqr_t *request_cqr (int, int);
 int release_cqr (cqr_t *);
+erp_t *request_er (void);
+int release_er (erp_t *);
 int dasd_chanq_enq (dasd_chanq_t *, cqr_t *);
 int dasd_chanq_deq (dasd_chanq_t *, cqr_t *);
 void cql_enq_head (dasd_chanq_t * q);

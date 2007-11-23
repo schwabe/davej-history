@@ -18,6 +18,10 @@
 typedef struct _ioinfo {
      unsigned int  irq;           /* aka. subchannel number */
      spinlock_t    irq_lock;      /* irq lock */
+
+     struct _ioinfo *prev;
+     struct _ioinfo *next;
+
      union {
         unsigned int info;
         struct {
@@ -41,27 +45,34 @@ typedef struct _ioinfo {
            unsigned int  consns    : 1;  /* concurrent sense is available */
            unsigned int  delsense  : 1;  /* delayed SENSE required */
            unsigned int  s_pend    : 1;  /* status pending condition */
-           unsigned int  unused    : 16; /* unused */
+           unsigned int  pgid      : 1;  /* "path group ID" is valid */
+           unsigned int  pgid_supp : 1;  /* "path group ID" command is supported */
+           unsigned int  esid      : 1;  /* Ext. SenseID supported by HW */
+           unsigned int  rcd       : 1;  /* RCD supported by HW */
+           unsigned int  repnone   : 1;  /* don't call IRQ handler on interrupt */
+           unsigned int  newreq    : 1;  /* new register interface */
+           unsigned int  dval      : 1;  /* device number valid */
+           unsigned int  unused    : (sizeof(unsigned int)*8 - 23); /* unused */
               } __attribute__ ((packed)) flags;
         } ui;
+
      unsigned long u_intparm;     /* user interruption parameter */
      senseid_t     senseid;       /* SenseID info */
      irq_desc_t    irq_desc;      /* irq descriptor */
-     unsigned int  lpm;           /* logical path mask to be used ... */
-                                  /* ... from do_IO() parms. Only ... */
-                                  /* ... valid if vlpm is set too.    */
+     not_oper_handler_func_t nopfunc; 	/* not oper handler */		
+     __u8          ulpm;          /* logical path mask used for I/O */
+     __u8          opm;           /* path mask of operational paths */
+     __u16         devno;         /* device number */
+     pgid_t        pgid;          /* path group ID */
      schib_t       schib;         /* subchannel information block */
      orb_t         orb;           /* operation request block */
      devstat_t     devstat;       /* device status */
      ccw1_t       *qcpa;          /* queued channel program */
      ccw1_t        senseccw;      /* ccw for sense command */
      unsigned int  stctl;         /* accumulated status control from irb */
-     unsigned int  qintparm;      /* queued interruption parameter  */
+     unsigned long qintparm;      /* queued interruption parameter  */
      unsigned long qflag;         /* queued flags */
-     unsigned char qlpm;          /* queued logical path mask */
-
-     struct _ioinfo *prev;
-     struct _ioinfo *next;
+     __u8          qlpm;          /* queued logical path mask */
 
    } __attribute__ ((aligned(8))) ioinfo_t;
 

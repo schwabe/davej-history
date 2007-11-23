@@ -94,7 +94,7 @@ typedef struct {
 
 extern inline void spin_lock(spinlock_t *lp)
 {
-	__asm__ __volatile("    lhi   1,-1\n"
+	__asm__ __volatile("    basr  1,0\n"
 			   "0:  slr   0,0\n"
 			   "    cs    0,1,%1\n"
 			   "    jl    0b"
@@ -106,10 +106,10 @@ extern inline int spin_trylock(spinlock_t *lp)
 {
 	unsigned long result;
 	__asm__ __volatile("    slr   %1,%1\n"
-			   "    lhi   0,-1\n"
-			   "0:  cs    %1,0,%0"
+			   "    basr  1,0\n"
+			   "0:  cs    %1,1,%0"
 			   : "=m" (lp->lock), "=&d" (result)
-			   : "0" (lp->lock) : "0");
+			   : "0" (lp->lock) : "1");
 	return !result;
 }
 

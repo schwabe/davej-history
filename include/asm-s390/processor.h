@@ -82,6 +82,8 @@ struct thread_struct
         /* perform syscall argument validation (get/set_fs) */
         mm_segment_t fs;
         per_struct per_info;/* Must be aligned on an 4 byte boundary*/
+	addr_t  ieee_instruction_pointer; 
+	/* Used to give failing instruction back to user for ieee exceptions */ 
 };
 
 typedef struct thread_struct thread_struct;
@@ -156,6 +158,7 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 #define PSW_PER_MASK            0x40000000UL
 #define USER_STD_MASK           0x00000080UL
 #define PSW_PROBLEM_STATE       0x00010000UL
+#define PSW_ENABLED_STATE       0x03000000UL
 
 /*
  * Function to drop a processor into disabled wait state

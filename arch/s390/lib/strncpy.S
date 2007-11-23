@@ -17,16 +17,14 @@ strncpy:
         LR      1,2            # don't touch address in R2
 	LTR     4,4
         JZ      strncpy_exit   # 0 bytes -> nothing to do
-        AHI     4,-1
 	SR      0,0
-        BASR    5,0
 strncpy_loop:
         ICM     0,1,0(3)       # ICM sets the cc, IC does not
 	LA      3,1(0,3)
         STC     0,0(0,1)
 	LA      1,1(0,1)
         JZ      strncpy_exit   # ICM inserted a 0x00
-        BCTR    4,5            # R4 -= 1, jump to strncpy_loop if >= 0
+        BRCT    4,strncpy_loop # R4 -= 1, jump to strncpy_loop if > 0
 strncpy_exit:
         BR      14
 

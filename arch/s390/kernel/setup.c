@@ -97,39 +97,60 @@ void cpu_init (void)
 }
 
 /*
+ * VM halt and poweroff setup routines
+ */
+char vmhalt_cmd[128] = "";
+char vmpoff_cmd[128] = "";
+
+static inline void strncpy_skip_quote(char *dst, char *src, int n)
+{
+        int sx, dx;
+
+        dx = 0;
+        for (sx = 0; src[sx] != 0; sx++) {
+                if (src[sx] == '"') continue;
+                dst[dx++] = src[sx];
+                if (dx >= n) break;
+        }
+}
+
+__initfunc(void vmhalt_setup(char *str, char *ints))
+{
+        strncpy_skip_quote(vmhalt_cmd, str, 127);
+        vmhalt_cmd[127] = 0;
+        return;
+}
+
+__initfunc(void vmpoff_setup(char *str, char *ints))
+{
+        strncpy_skip_quote(vmpoff_cmd, str, 127);
+        vmpoff_cmd[127] = 0;
+        return;
+}
+
+/*
  * Reboot, halt and power_off routines for non SMP.
  */
+
 #ifndef __SMP__
 void machine_restart(char * __unused)
 {
   reipl(S390_lowcore.ipl_device); 
-#if 0
-        if (MACHINE_IS_VM) {
-                cpcmd("IPL", NULL, 0);
-        } else {
-                /* FIXME: how to reipl ? */
-                disabled_wait(2);
-        }
-#endif
 }
 
 void machine_halt(void)
 {
-        if (MACHINE_IS_VM) {
-                cpcmd("IPL 200 STOP", NULL, 0);
-        } else {
+        if (MACHINE_IS_VM && strlen(vmhalt_cmd) > 0) 
+                cpcmd(vmhalt_cmd, NULL, 0);
                 disabled_wait(0);
         }
-}
 
 void machine_power_off(void)
 {
-        if (MACHINE_IS_VM) {
-                cpcmd("IPL CMS", NULL, 0);
-        } else {
+        if (MACHINE_IS_VM && strlen(vmpoff_cmd) > 0)
+                cpcmd(vmpoff_cmd, NULL, 0);
                 disabled_wait(0);
         }
-}
 #endif
 
 /*
@@ -208,7 +229,6 @@ __initfunc(void setup_arch(char **cmdline_p,
                  * memory size
                  */
                 if (c == ' ' && strncmp(from, "mem=", 4) == 0) {
-                        if (to != command_line) to--;
                         memory_end = simple_strtoul(from+4, &from, 0);
                         if ( *from == 'K' || *from == 'k' ) {
                                 memory_end = memory_end << 10;
@@ -218,10 +238,12 @@ __initfunc(void setup_arch(char **cmdline_p,
                                 from++;
                         }
                 }
+                /*
+                 * "ipldelay=XXX[sSmM]" waits for the specified time
+                 */
                 if (c == ' ' && strncmp(from, "ipldelay=", 9) == 0) {
                         unsigned long delay;
 
-			if (to != command_line) to--;
                         delay = simple_strtoul(from+9, &from, 0);
 			if (*from == 's' || *from == 'S') {
 				delay = delay*1000000;

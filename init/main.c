@@ -47,7 +47,11 @@
 #endif
 
 #ifdef CONFIG_DASD
-#include "../drivers/s390/block/dasd.h"
+#include <linux/dasd.h>
+#endif
+
+#ifdef CONFIG_BLK_DEV_XPRAM
+#include "../drivers/s390/block/xpram.h"
 #endif
 
 #ifdef CONFIG_MAC
@@ -190,14 +194,21 @@ extern void pcd_setup(char *str, int *ints);
 #ifdef CONFIG_3215
 extern void con3215_setup(char *str, int *ints);
 #endif
-#ifdef CONFIG_3215
-extern void con3215_setup(char *str, int *ints);
-#endif
 #ifdef CONFIG_MDISK
 extern void mdisk_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_DASD
 extern void dasd_setup(char *str, int *ints);
+#ifdef CONFIG_DASD_MDSK
+extern void dasd_mdsk_setup(char *str, int *ints);
+#endif
+#endif
+#ifdef CONFIG_BLK_DEV_XPRAM
+extern void xpram_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_ARCH_S390
+extern void vmhalt_setup(char *str, int *ints);
+extern void vmpoff_setup(char *str, int *ints);
 #endif
 extern void floppy_setup(char *str, int *ints);
 extern void st_setup(char *str, int *ints);
@@ -598,6 +609,58 @@ static struct dev_name_struct {
        { "dasdf", (DASD_MAJOR << MINORBITS) + (5 << 2) },
        { "dasdg", (DASD_MAJOR << MINORBITS) + (6 << 2) },
        { "dasdh", (DASD_MAJOR << MINORBITS) + (7 << 2) },
+       { "dasdi", (DASD_MAJOR << MINORBITS) + (8 << 2) },
+       { "dasdj", (DASD_MAJOR << MINORBITS) + (9 << 2) },
+       { "dasdk", (DASD_MAJOR << MINORBITS) + (11 << 2) },
+       { "dasdl", (DASD_MAJOR << MINORBITS) + (12 << 2) },
+       { "dasdm", (DASD_MAJOR << MINORBITS) + (13 << 2) },
+       { "dasdn", (DASD_MAJOR << MINORBITS) + (14 << 2) },
+       { "dasdo", (DASD_MAJOR << MINORBITS) + (15 << 2) },
+       { "dasdp", (DASD_MAJOR << MINORBITS) + (16 << 2) },
+       { "dasdq", (DASD_MAJOR << MINORBITS) + (17 << 2) },
+       { "dasdr", (DASD_MAJOR << MINORBITS) + (18 << 2) },
+       { "dasds", (DASD_MAJOR << MINORBITS) + (19 << 2) },
+       { "dasdt", (DASD_MAJOR << MINORBITS) + (20 << 2) },
+       { "dasdu", (DASD_MAJOR << MINORBITS) + (21 << 2) },
+       { "dasdv", (DASD_MAJOR << MINORBITS) + (22 << 2) },
+       { "dasdw", (DASD_MAJOR << MINORBITS) + (23 << 2) },
+       { "dasdx", (DASD_MAJOR << MINORBITS) + (24 << 2) },
+       { "dasdy", (DASD_MAJOR << MINORBITS) + (25 << 2) },
+       { "dasdz", (DASD_MAJOR << MINORBITS) + (26 << 2) },
+#endif
+#ifdef CONFIG_BLK_DEV_XPRAM
+       { "xpram0", (XPRAM_MAJOR << MINORBITS) },
+       { "xpram1", (XPRAM_MAJOR << MINORBITS) + 1 },
+       { "xpram2", (XPRAM_MAJOR << MINORBITS) + 2 },
+       { "xpram3", (XPRAM_MAJOR << MINORBITS) + 3 },
+       { "xpram4", (XPRAM_MAJOR << MINORBITS) + 4 },
+       { "xpram5", (XPRAM_MAJOR << MINORBITS) + 5 },
+       { "xpram6", (XPRAM_MAJOR << MINORBITS) + 6 },
+       { "xpram7", (XPRAM_MAJOR << MINORBITS) + 7 },
+       { "xpram8", (XPRAM_MAJOR << MINORBITS) + 8 },
+       { "xpram9", (XPRAM_MAJOR << MINORBITS) + 9 },
+       { "xpram10", (XPRAM_MAJOR << MINORBITS) + 10 },
+       { "xpram11", (XPRAM_MAJOR << MINORBITS) + 11 },
+       { "xpram12", (XPRAM_MAJOR << MINORBITS) + 12 },
+       { "xpram13", (XPRAM_MAJOR << MINORBITS) + 13 },
+       { "xpram14", (XPRAM_MAJOR << MINORBITS) + 14 },
+       { "xpram15", (XPRAM_MAJOR << MINORBITS) + 15 },
+       { "xpram16", (XPRAM_MAJOR << MINORBITS) + 16 },
+       { "xpram17", (XPRAM_MAJOR << MINORBITS) + 17 },
+       { "xpram18", (XPRAM_MAJOR << MINORBITS) + 18 },
+       { "xpram19", (XPRAM_MAJOR << MINORBITS) + 19 },
+       { "xpram20", (XPRAM_MAJOR << MINORBITS) + 20 },
+       { "xpram21", (XPRAM_MAJOR << MINORBITS) + 21 },
+       { "xpram22", (XPRAM_MAJOR << MINORBITS) + 22 },
+       { "xpram23", (XPRAM_MAJOR << MINORBITS) + 23 },
+       { "xpram24", (XPRAM_MAJOR << MINORBITS) + 24 },
+       { "xpram25", (XPRAM_MAJOR << MINORBITS) + 25 },
+       { "xpram26", (XPRAM_MAJOR << MINORBITS) + 26 },
+       { "xpram27", (XPRAM_MAJOR << MINORBITS) + 27 },
+       { "xpram28", (XPRAM_MAJOR << MINORBITS) + 28 },
+       { "xpram29", (XPRAM_MAJOR << MINORBITS) + 29 },
+       { "xpram30", (XPRAM_MAJOR << MINORBITS) + 30 },
+       { "xpram31", (XPRAM_MAJOR << MINORBITS) + 31 },
 #endif
 	{ NULL, 0 }
 };
@@ -653,6 +716,7 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "noapic", ioapic_setup },
 	{ "pirq=", ioapic_pirq_setup },
 #endif
+
 #endif
 #ifdef CONFIG_BLK_DEV_RAM
 	{ "ramdisk_start=", ramdisk_start_setup },
@@ -663,14 +727,13 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_BLK_DEV_INITRD
 	{ "noinitrd", no_initrd },
 #endif
+#endif
 
 #ifdef CONFIG_CTC
         { "ctc=", ctc_setup } ,
 #endif
 #ifdef CONFIG_IUCV
         { "iucv=", iucv_setup } ,
-#endif
-
 #endif
 
 #ifdef CONFIG_FB
@@ -1020,14 +1083,21 @@ static struct kernel_param raw_params[] __initdata = {
 #ifdef CONFIG_3215
 	{ "condev=", con3215_setup },
 #endif
-#ifdef CONFIG_3215
-	{ "condev=", con3215_setup },
-#endif
 #ifdef CONFIG_MDISK
         { "mdisk=", mdisk_setup },
 #endif
 #ifdef CONFIG_DASD
         { "dasd=", dasd_setup },
+#ifdef CONFIG_DASD_MDSK
+        { "dasd_force_diag=", dasd_mdsk_setup },
+#endif
+#endif
+#ifdef CONFIG_BLK_DEV_XPRAM
+        { "xpram_parts=", xpram_setup },
+#endif
+#ifdef CONFIG_ARCH_S390
+        { "vmhalt=", vmhalt_setup },
+        { "vmpoff=", vmpoff_setup },
 #endif
 	{ 0, 0 }
 };
@@ -1150,6 +1220,7 @@ void __init calibrate_delay(void)
 static void __init parse_options(char *line)
 {
 	char *next;
+        char *quote;
 	int args, envs;
 
 	if (!*line)
@@ -1158,8 +1229,25 @@ static void __init parse_options(char *line)
 	envs = 1;	/* TERM is set to 'linux' by default */
 	next = line;
 	while ((line = next) != NULL) {
-		if ((next = strchr(line,' ')) != NULL)
-			*next++ = 0;
+		/* On S/390 we want to be able to pass an options that
+                 * contains blanks. For example vmhalt="IPL CMS". 
+                 * To allow that I added code that prevents blanks in
+                 * quotes to be recognized as delimiter. -- Martin
+                 */
+                quote = strchr(line,'"');
+                next = strchr(line, ' ');
+                while (next != NULL && quote != NULL && quote < next) {
+                        /* we found a left quote before the next blank
+                         * now we have to find the matching right quote
+                         */
+                        next = strchr(quote+1, '"');
+                        if (next != NULL) {
+                                quote = strchr(next+1, '"');
+                                next = strchr(next+1, ' ');
+                        }
+                }
+                if (next != NULL)
+                        *next++ = 0;
 		/*
 		 * check for kernel options first..
 		 */
@@ -1454,7 +1542,9 @@ static void __init do_basic_setup(void)
 
 	/* Set up devices .. */
 	device_setup();
-
+#if  CONFIG_CHANDEV
+	chandev_init();
+#endif   
 	/* .. executable formats .. */
 	binfmt_setup();
 

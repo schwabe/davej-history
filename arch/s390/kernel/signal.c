@@ -61,7 +61,8 @@ asmlinkage int FASTCALL(do_signal(struct pt_regs *regs, sigset_t *oldset));
 /*
  * Atomically swap in the new signal mask, and wait for a signal.
  */
-asmlinkage int sys_sigsuspend(struct pt_regs * regs,int history0, int history1, old_sigset_t mask)
+asmlinkage int
+sys_sigsuspend(struct pt_regs * regs,int history0, int history1, old_sigset_t mask)
 {
 	sigset_t saveset;
 
@@ -73,8 +74,7 @@ asmlinkage int sys_sigsuspend(struct pt_regs * regs,int history0, int history1, 
 	spin_unlock_irq(&current->sigmask_lock);
 	regs->gprs[2] = -EINTR;
 
-	while (1) 
-	  {
+	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 		if (do_signal(regs, &saveset))
@@ -82,7 +82,8 @@ asmlinkage int sys_sigsuspend(struct pt_regs * regs,int history0, int history1, 
 	  }
 }
 
-asmlinkage int sys_rt_sigsuspend(struct pt_regs * regs,sigset_t *unewset, size_t sigsetsize)
+asmlinkage int
+sys_rt_sigsuspend(struct pt_regs * regs,sigset_t *unewset, size_t sigsetsize)
 {
 	sigset_t saveset, newset;
 
@@ -319,14 +320,17 @@ static void *setup_frame_common(int sig, struct k_sigaction *ka,
 static void setup_frame(int sig, struct k_sigaction *ka,
 			sigset_t *set, struct pt_regs * regs)
 {
+	sigframe *frame;
 
-	if(!setup_frame_common(sig,ka,set,regs,sizeof(sigframe),
-		    (S390_SYSCALL_OPCODE|__NR_sigreturn)))
+	if((frame=setup_frame_common(sig,ka,set,regs,sizeof(sigframe),
+		    (S390_SYSCALL_OPCODE|__NR_sigreturn)))==0)
 		goto give_sigsegv;
 #if DEBUG_SIG
 	printk("SIG deliver (%s:%d): sp=%p pc=%p ra=%p\n",
 		current->comm, current->pid, frame, regs->eip, frame->pretcode);
 #endif
+	/* Martin wants this for pthreads */
+	regs->gprs[3] = (addr_t)&frame->sc;
 	return;
 
 give_sigsegv:
@@ -355,8 +359,8 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	err |= __put_user(sas_ss_flags(orig_sp),
 			  &frame->uc.uc_stack.ss_flags);
 	err |= __put_user(current->sas_ss_size, &frame->uc.uc_stack.ss_size);
-	regs->gprs[3] = (u32)&frame->info;
-	regs->gprs[4] = (u32)&frame->uc;
+	regs->gprs[3] = (addr_t)&frame->info;
+	regs->gprs[4] = (addr_t)&frame->uc;
 
 	if (err)
 		goto give_sigsegv;

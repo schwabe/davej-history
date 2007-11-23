@@ -342,6 +342,7 @@ static void raw3215_softint(void *data)
 		    tty->ldisc.write_wakeup)
 			(tty->ldisc.write_wakeup)(tty);
 		wake_up_interruptible(&tty->write_wait);
+                wake_up_interruptible(&tty->poll_wait);
 	}
 }
 
@@ -445,22 +446,29 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
 			if (count >= TTY_FLIPBUF_SIZE - tty->flip.count)
 				count = TTY_FLIPBUF_SIZE - tty->flip.count - 1;
 			EBCASC(raw->inbuf, count);
-			if (count == 2 &&
-			    strncmp(raw->inbuf, "^c", 2) == 0) {
+			if (count == 2 && (
+			    /* hat is 0xb0 in codepage 037 (US etc.) and thus */
+			    /* converted to 0x5e in ascii ('^') */
+			    strncmp(raw->inbuf, "^c", 2) == 0 ||
+			    /* hat is 0xb0 in several other codepages (German,*/
+			    /* UK, ...) and thus converted to ascii octal 252 */
+			    strncmp(raw->inbuf, "\252c", 2) == 0) ) {
 				/* emulate a control C = break */
 				tty->flip.count++;
 				*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
 				*tty->flip.char_buf_ptr++ = INTR_CHAR(tty);
 				tty_flip_buffer_push(raw->tty);
-			} else if (count == 2 &&
-				   strncmp(raw->inbuf, "^d", 2) == 0) {
+			} else if (count == 2 && (
+				   strncmp(raw->inbuf, "^d", 2) == 0 ||
+				    strncmp(raw->inbuf, "\252d", 2) == 0) ) {
 				/* emulate a control D = end of file */
 				tty->flip.count++;
 				*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
 				*tty->flip.char_buf_ptr++ = EOF_CHAR(tty);
 				tty_flip_buffer_push(raw->tty);
-			} else if (count == 2 &&
-				   strncmp(raw->inbuf, "^z", 2) == 0) {
+			} else if (count == 2 && (
+				   strncmp(raw->inbuf, "^z", 2) == 0 ||
+				    strncmp(raw->inbuf, "\252z", 2) == 0) ) {
 				/* emulate a control Z = suspend */
 				tty->flip.count++;
 				*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
@@ -470,7 +478,8 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
 				memcpy(tty->flip.char_buf_ptr,
 				       raw->inbuf, count);
 				if (count < 2 ||
-				    strncmp(raw->inbuf+count-2, "^n", 2)) {
+				    (strncmp(raw->inbuf+count-2, "^n", 2) ||
+				    strncmp(raw->inbuf+count-2, "\252n", 2)) ) {
 					/* don't add the auto \n */
 					tty->flip.char_buf_ptr[count] = '\n';
 					memset(tty->flip.flag_buf_ptr,
@@ -660,6 +669,7 @@ static int raw3215_startup(raw3215_info *raw)
 		return -1;
 	raw->flags |= RAW3215_ACTIVE;
 	s390irq_spin_lock_irqsave(raw->irq, flags);
+        set_cons_dev(raw->irq);
 	raw3215_try_io(raw);
 	s390irq_spin_unlock_irqrestore(raw->irq, flags);
 
@@ -934,6 +944,7 @@ static void tty3215_flush_buffer(struct tty_struct *tty)
 	raw = (raw3215_info *) tty->driver_data;
 	raw3215_flush_buffer(raw);
 	wake_up_interruptible(&tty->write_wait);
+        wake_up_interruptible(&tty->poll_wait);
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
@@ -1029,8 +1040,6 @@ __initfunc (long con3215_init(long kmem_start, long kmem_end))
         if (MACHINE_IS_VM) {
 	cpcmd("TERM CONMODE 3215", NULL, 0);
 	cpcmd("TERM AUTOCR OFF", NULL, 0);
-	cpcmd("TERM HOLD OFF", NULL, 0);
-	cpcmd("TERM MORE 5 5", NULL, 0);
         }
 
 	kmem_start = (kmem_start + 7) & -8L;
@@ -1061,9 +1070,6 @@ __initfunc (long con3215_init(long kmem_start, long kmem_end))
 
 	if (raw->irq != -1) {
 		register_console(&con3215);
-		s390irq_spin_lock(raw->irq);
-		set_cons_dev(raw->irq);
-		s390irq_spin_unlock(raw->irq);
 	} else {
 		kmem_start = (long) raw;
 		raw3215[0] = NULL;

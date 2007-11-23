@@ -446,6 +446,8 @@ static int do_md_run (int minor, int repart)
   
   factor = min = 1 << FACTOR_SHIFT(FACTOR((md_dev+minor)));
   
+  md_blocksizes[minor] <<= FACTOR_SHIFT(FACTOR((md_dev+minor)));
+
   for (i=0; i<md_dev[minor].nb_dev; i++)
     if (md_dev[minor].devices[i].size<min)
     {

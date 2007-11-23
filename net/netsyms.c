@@ -438,6 +438,8 @@ EXPORT_SYMBOL(fc_freedev);
 /* Device callback registration */
 EXPORT_SYMBOL(register_netdevice_notifier);
 EXPORT_SYMBOL(unregister_netdevice_notifier);
+EXPORT_SYMBOL(register_inetaddr_notifier);
+EXPORT_SYMBOL(unregister_inetaddr_notifier);
 
 /* support for loadable net drivers */
 #ifdef CONFIG_NET

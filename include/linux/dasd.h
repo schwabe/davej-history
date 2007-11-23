@@ -5,16 +5,28 @@
 /* First of all the external stuff */
 #include <linux/ioctl.h>
 #include <linux/major.h>
+#include <linux/wait.h>
 
 #define IOCTL_LETTER 'D'
-#define BIODASDFORMAT  _IO(IOCTL_LETTER,0) /* Format the volume or an extent */
-#define BIODASDDISABLE _IO(IOCTL_LETTER,1) /* Disable the volume (for Linux) */
-#define BIODASDENABLE  _IO(IOCTL_LETTER,2) /* Enable the volume (for Linux) */
+/* Format the volume or an extent */
+#define BIODASDFORMAT  _IOW(IOCTL_LETTER,0,format_data_t) 
+/* Disable the volume (for Linux) */
+#define BIODASDDISABLE _IO(IOCTL_LETTER,1) 
+/* Enable the volume (for Linux) */
+#define BIODASDENABLE  _IO(IOCTL_LETTER,2) 
 /* Stuff for reading and writing the Label-Area to/from user space */
 #define BIODASDGTVLBL  _IOR(IOCTL_LETTER,3,dasd_volume_label_t)
 #define BIODASDSTVLBL  _IOW(IOCTL_LETTER,4,dasd_volume_label_t)
 #define BIODASDRWTB    _IOWR(IOCTL_LETTER,5,int)
 #define BIODASDRSID    _IOR(IOCTL_LETTER,6,senseid_t)
+#define BIODASDRLB     _IOR(IOCTL_LETTER,7,int)
+#define BLKGETBSZ      _IOR(IOCTL_LETTER,8,int)
+
+typedef struct {
+	int start_unit;
+	int stop_unit;
+	int blksize;
+} format_data_t;
 
 typedef
 union {
@@ -58,7 +70,6 @@ typedef union {
 	} __attribute__ ((packed)) output;
 } __attribute__ ((packed)) dasd_xlate_t;
 
-void dasd_setup (char *, int *);
 int dasd_init (void);
 #ifdef MODULE
 int init_module (void);
@@ -67,9 +78,14 @@ void cleanup_module (void);
 
 /* Definitions for blk.h */
 /* #define DASD_MAGIC 0x44415344  is ascii-"DASD" */
-/* #define dasd_MAGIC 0x64617364;  is ascii-"DASD" */
+/* #define dasd_MAGIC 0x64617364;  is ascii-"dasd" */
 #define DASD_MAGIC 0xC4C1E2C4 /* is ebcdic-"DASD" */
-#define dasd_MAGIC 0x8481A284 /* is ebcdic-"DASD" */
+#define dasd_MAGIC 0x8481A284 /* is ebcdic-"dasd" */
+#define MDSK_MAGIC 0xD4C4E2D2 /* is ebcdic-"MDSK" */
+#define mdsk_MAGIC 0x9484A292 /* is ebcdic-"mdsk" */
+#define ERP_MAGIC  0xC5D9D740 /* is ebcdic-"ERP" */
+#define erp_MAGIC  0x45999740 /* is ebcdic-"erp" */
+
 #define DASD_NAME "dasd"
 #define DASD_PARTN_BITS 2
 #define DASD_MAX_DEVICES (256>>DASD_PARTN_BITS)
@@ -79,7 +95,6 @@ void cleanup_module (void);
 
 #ifdef __KERNEL__
 /* Now lets turn to the internal sbtuff */
-
 /*
    define the debug levels:
    - 0 No debugging output to console or syslog

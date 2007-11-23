@@ -52,9 +52,12 @@ struct sppp
 
 struct ppp_device
 {	
-	struct device dev;	/* Network device */
+	struct device *dev;	/* Network device pointer */
 	struct sppp sppp;	/* Synchronous PPP */
 };
+
+#define sppp_of(dev)   \
+	    (&((struct ppp_device *)(*(unsigned long *)((dev)->priv)))->sppp)
 
 #define PP_KEEPALIVE    0x01    /* use keepalive protocol */
 #define PP_CISCO        0x02    /* use Cisco protocol instead of PPP */
@@ -86,6 +89,7 @@ void sppp_flush (struct device *dev);
 int sppp_open (struct device *dev);
 int sppp_reopen (struct device *dev);
 int sppp_close (struct device *dev);
+void sync_ppp_init (void);
 #endif
 
 #define SPPPIOCCISCO	(SIOCDEVPRIVATE)

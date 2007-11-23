@@ -149,6 +149,7 @@ typedef enum
 	ec_set_ctl,
 	ec_get_ctl,
 	ec_set_ctl_masked,
+        ec_ptlb,
         ec_cmd_last
 } ec_cmd_sig;
 

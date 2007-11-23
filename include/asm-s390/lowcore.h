@@ -32,8 +32,9 @@
 #define __LC_SUBCHANNEL_NR              0x0BA
 #define __LC_IO_INT_PARM                0x0BC
 #define __LC_MCCK_CODE                  0x0E8
-#define __LC_CREGS_SAVE_AREA            0x1C0
-#define __LC_AREGS_SAVE_AREA            0x120
+#define __LC_AREGS_SAVE_AREA            0x200
+#define __LC_CREGS_SAVE_AREA            0x240
+#define __LC_RETURN_PSW                 0x280
 
 #define __LC_SYNC_IO_WORD               0x400
 
@@ -51,24 +52,25 @@
 #define _EXT_PSW_MASK        0x04080000
 #define _PGM_PSW_MASK        0x04080000
 #define _SVC_PSW_MASK        0x04080000
-#define _MCCK_PSW_MASK       0x040A0000
+#define _MCCK_PSW_MASK       0x04080000
 #define _IO_PSW_MASK         0x04080000
-#define _USER_PSW_MASK       0x070DC000/* DAT, IO, EXT, Home-space         */
-#define _PSW_IO_WAIT         0x020A0000/* IO, Wait */
+#define _USER_PSW_MASK       0x0709C000/* DAT, IO, EXT, Home-space         */
 #define _WAIT_PSW_MASK       0x070E0000/* DAT, IO, EXT, Wait, Home-space   */
 #define _DW_PSW_MASK         0x000A0000/* disabled wait PSW mask           */
+
 #define _PRIMARY_MASK        0x0000    /* MASK for SACF                    */
 #define _SECONDARY_MASK      0x0100    /* MASK for SACF                    */
 #define _ACCESS_MASK         0x0200    /* MASK for SACF                    */
 #define _HOME_MASK           0x0300    /* MASK for SACF                    */
 
-#define _PSW_PRIM_SPACE_MODE 0x04000000
-#define _PSW_SEC_SPACE_MODE  0x04008000
-#define _PSW_ACC_REG_MODE    0x04004000
-#define _PSW_HOME_SPACE_MODE 0x0400C000
+#define _PSW_PRIM_SPACE_MODE 0x00000000
+#define _PSW_SEC_SPACE_MODE  0x00008000
+#define _PSW_ACC_REG_MODE    0x00004000
+#define _PSW_HOME_SPACE_MODE 0x0000C000
 
-#define _PSW_WAIT_MASK_BIT   0x00020000
-#define _PSW_IO_MASK_BIT     0x02000000
+#define _PSW_WAIT_MASK_BIT   0x00020000 /* Wait bit */
+#define _PSW_IO_MASK_BIT     0x02000000 /* IO bit */
+#define _PSW_IO_WAIT         0x02020000 /* IO & Wait bit */
 
 /* we run in 31 Bit mode */
 #define _ADDR_31             0x80000000
@@ -124,17 +126,19 @@ struct _lowcore
 	__u32        failing_storage_address;  /* 0x0f8 */
 	__u8         pad5[0x100-0xfc];         /* 0x0fc */
 	__u32        st_status_fixed_logout[4];/* 0x100 */
-	__u8         pad6[0x120-0x110];        /* 0x110 */
-	__u32        access_regs_save_area[16];/* 0x120 */
+	__u8         pad6[0x160-0x110];        /* 0x110 */
 	__u32        floating_pt_save_area[8]; /* 0x160 */
 	__u32        gpregs_save_area[16];     /* 0x180 */
-	__u32        cregs_save_area[16];      /* 0x1c0 */
+        __u8         pad7[0x200-0x1c0];        /* 0x1c0 */
 	
-	__u8         pad7[0x400-0x200];        /* 0x200 */
+        __u32        access_regs_save_area[16];/* 0x200 */
+        __u32        cregs_save_area[16];      /* 0x240 */
+        psw_t        return_psw;               /* 0x280 */
+	__u8         pad8[0x400-0x288];        /* 0x288 */
 
 	__u32        sync_io_word;	       /* 0x400 */
 
-        __u8         pad8[0xc00-0x404];        /* 0x404 */
+        __u8         pad9[0xc00-0x404];        /* 0x404 */
 
         /* System info area */
 	__u32        save_area[16];            /* 0xc00 */

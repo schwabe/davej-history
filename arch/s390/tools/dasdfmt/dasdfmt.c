@@ -26,18 +26,21 @@
 #include <string.h>
 #include <dirent.h>
 #include <mntent.h>
-#include "../../../drivers/s390/block/dasd.h" /* uses DASD_PARTN_BITS */
 #define __KERNEL__ /* we want to use kdev_t and not have to define it */
 #include <linux/kdev_t.h>
 #undef __KERNEL__
+
+#include <linux/fs.h>
+#include <linux/dasd.h>
 
 #define EXIT_MISUSE 1
 #define EXIT_BUSY 2
 #define TEMPFILENAME "/tmp/ddfXXXXXX"
 #define TEMPFILENAMECHARS 8  /* 8 characters are fixed in all temp filenames */
-#define IOCTL_COMMAND 'D' << 8
 #define SLASHDEV "/dev/"
 #define PROC_DASD_DEVICES "/proc/dasd/devices"
+#define PROC_MOUNTS "/proc/mounts"  /* _PATH_MOUNTED is /etc/mtab - maybe bad */
+#define PROC_SWAPS "/proc/swaps"
 #define DASD_DRIVER_NAME "dasd"
 #define PROC_LINE_LENGTH 80
 #define ERR_LENGTH 80
@@ -67,26 +70,24 @@
 		ERRMSG_EXIT(EXIT_MISUSE,"%s: " str " " \
 			"is in invalid format\n",prog_name);}
 
-typedef struct {
-	int start_unit;
-	int stop_unit;
-	int blksize;
-} format_data_t;
-
-char prog_name[]="dasd_format";
+char *prog_name;/*="dasdfmt";*/
 char tempfilename[]=TEMPFILENAME;
 
 void
 exit_usage(int exitcode)
 {
-	printf("Usage: %s [-htvyV] [-b blocksize] <range> <diskspec>\n\n",
+	printf("Usage: %s [-htvyV] [-b <blocksize>] [<range>] <diskspec>\n\n",
 	       prog_name);
-	printf("       where <range> is either\n");
-	printf("           -s start_track -e end_track\n");
+	printf("       -t means testmode\n");
+	printf("       -v means verbose mode\n");
+	printf("       -V means print version\n");
+	printf("       <blocksize> has to be power of 2 and at least 512\n");
+	printf("       <range> is either\n");
+	printf("           -s <start_track> -e <end_track>\n");
 	printf("       or\n");
-	printf("           -r start_track-end_track\n");
+	printf("           -r <start_track>-<end_track>\n");
 	printf("       and <diskspec> is either\n");
-	printf("           -f /dev/ddX\n");
+	printf("           -f /dev/dasdX\n");
 	printf("       or\n");
 	printf("           -n <s390-devnr>\n");
 	exit(exitcode);
@@ -321,8 +322,8 @@ check_mounted(int major, int minor)
 	/*
 	 * first, check filesystems
 	 */
-	if (!(f = fopen(_PATH_MOUNTED, "r")))
-		ERRMSG_EXIT(EXIT_FAILURE, "%s: %s\n", _PATH_MOUNTED,
+	if (!(f = fopen(PROC_MOUNTS, "r")))
+		ERRMSG_EXIT(EXIT_FAILURE, "%s: %s\n", PROC_MOUNTS,
 			strerror(errno));
 	while ((ment = getmntent(f))) {
 		if (stat(ment->mnt_fsname, &stbuf) == 0)
@@ -338,8 +339,8 @@ check_mounted(int major, int minor)
 	/*
 	 * second, check active swap spaces
 	 */
-	if (!(f = fopen("/proc/swaps", "r")))
-		ERRMSG_EXIT(EXIT_FAILURE, "/proc/swaps: %s", strerror(errno));
+	if (!(f = fopen(PROC_SWAPS, "r")))
+		ERRMSG_EXIT(EXIT_FAILURE, PROC_SWAPS " %s", strerror(errno));
 	/*
 	 * skip header line
 	 */
@@ -417,8 +418,8 @@ do_format_dasd(char *dev_name,format_data_t format_params,int testmode,
 		if (!withoutprompt) {
 			printf("\n--->> ATTENTION! <<---\n");
 			printf("All data in the specified range of that " \
-				"device will be lost.\nType yes to continue" \
-				", no will leave the disk untouched: ");
+				"device will be lost.\nType \"yes\" to " \
+				"continue, no will leave the disk untouched: ");
 			fgets(inp_buffer,sizeof(inp_buffer),stdin);
 			if (strcasecmp(inp_buffer,"yes") &&
 				strcasecmp(inp_buffer,"yes\n")) {
@@ -431,12 +432,19 @@ do_format_dasd(char *dev_name,format_data_t format_params,int testmode,
 		if ( !(  (withoutprompt)&&(verbosity<1) ))
 			printf("Formatting the device. This may take a " \
 				"while (get yourself a coffee).\n");
-		rc=ioctl(fd,IOCTL_COMMAND,format_params);
+		rc=ioctl(fd,BIODASDFORMAT,format_params);
 		if (rc)
 			ERRMSG_EXIT(EXIT_FAILURE,"%s: the dasd driver " \
 				"returned with the following error " \
 				"message:\n%s\n",prog_name,strerror(errno));
 		printf("Finished formatting the device.\n");
+
+		printf("Rereading the partition table... ");
+		rc=ioctl(fd,BLKRRPART,NULL);
+		if (rc) {
+			ERRMSG("%s: error during rereading the partition " \
+			       "table: %s.\n",prog_name,strerror(errno));
+		} else printf("done.\n");
 
 		break;
 	}
@@ -473,6 +481,7 @@ int main(int argc,char *argv[]) {
 	int devfile_specified,devno_specified,range_specified;
 
 	/******************* initialization ********************/
+	prog_name=argv[0];
 
 	endptr=NULL;
 
@@ -617,7 +626,7 @@ int main(int argc,char *argv[]) {
 	str=check_param(CHECK_ALL,format_params);
 	if (str!=NULL) ERRMSG_EXIT(EXIT_MISUSE,"%s: %s\n",prog_name,str);
 
-	/*************** issue the real command *****************/
+	/******* issue the real command and reread part table *******/
 	do_format_dasd(dev_name,format_params,testmode,verbosity,
 		withoutprompt);
 

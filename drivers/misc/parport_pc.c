@@ -904,6 +904,8 @@ static int parport_pc_init_pci (int irq, int dma)
 		  { { 0, -1 }, } },
 		{ PCI_VENDOR_ID_AFAVLAB, PCI_DEVICE_ID_AFAVLAB_TK9902, 1,
 		  { { 0, 1 }, } },
+		{ PCI_VENDOR_ID_TIMEDIA, PCI_DEVICE_ID_TIMEDIA_1889, 1,
+		  { { 2, -1 }, } },
 		{ 0, }
 	};
 

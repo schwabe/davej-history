@@ -761,6 +761,17 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	    }
 	}
 #endif
+        /*
+         * kernel module loader fixup 
+         * We don't try to load run modprobe in kernel space but at the
+         * same time kernel/kmod.c calls us with fs set to KERNEL_DS. This
+         * would cause us to explode messily on a split address space machine
+         * and its sort of lucky it ever worked before. Since the S/390 is
+         * such a split address space box we have to fix it..
+         */
+         
+        set_fs(USER_DS);
+
 	for (try=0; try<2; try++) {
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;

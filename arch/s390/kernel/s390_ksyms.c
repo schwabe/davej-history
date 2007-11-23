@@ -8,6 +8,14 @@
 #include <asm/irq.h>
 #include <asm/string.h>
 #include <asm/checksum.h>
+#include <asm/s390_ext.h>
+#if CONFIG_CHANDEV
+#include <asm/chandev.h>
+#endif
+#if CONFIG_IP_MULTICAST
+#include <net/arp.h>
+#endif
+
 
 /*
  * I/O subsystem
@@ -22,6 +30,12 @@ EXPORT_SYMBOL(get_irq_by_devno);
 EXPORT_SYMBOL(get_devno_by_irq);
 EXPORT_SYMBOL(get_irq_first);
 EXPORT_SYMBOL(get_irq_next);
+
+/*
+ * External interrupts
+ */
+EXPORT_SYMBOL(register_external_interrupt);
+EXPORT_SYMBOL(unregister_external_interrupt);
 
 /*
  * memory management
@@ -62,5 +76,14 @@ EXPORT_SYMBOL(kernel_flag);
 #endif
 EXPORT_SYMBOL(kernel_thread);
 EXPORT_SYMBOL(csum_fold);
-
+#if CONFIG_CHANDEV
+EXPORT_SYMBOL(chandev_register_and_probe);
+EXPORT_SYMBOL(chandev_unregister);
+EXPORT_SYMBOL(chandev_initdevice);
+EXPORT_SYMBOL(chandev_initnetdevice);
+#endif
+#if CONFIG_IP_MULTICAST
+/* Required for lcs gigibit ethernet multicast support */
+EXPORT_SYMBOL(arp_mc_map);
+#endif
 

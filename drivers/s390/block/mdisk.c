@@ -38,6 +38,7 @@ char kernel_version [] = UTS_RELEASE;
 
 	 /* Added statement HSM 12/03/99 */
 #include <asm/irq.h>
+#include <asm/s390_ext.h>
 
 #define MAJOR_NR MDISK_MAJOR /* force definitions on in blk.h */
 
@@ -637,7 +638,7 @@ void mdisk_request(void)
  * queues and marks a bottom half.
  *
  */
-void do_mdisk_interrupt(void)
+void do_mdisk_interrupt(struct pt_regs *regs, __u16 code)
 {
         u16 code;
 	mdisk_Dev *dev;
@@ -713,7 +714,7 @@ __initfunc(int mdisk_init(void))
 		       ,MAJOR_NR);
 		return MAJOR_NR;
 	}
-	
+	register_external_interrupt(0x2603,do_mdisk_interrupt);
 	/*
 	 * setup global major dependend structures
 	 */

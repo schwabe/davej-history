@@ -8,19 +8,16 @@
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 
-#ifdef MODULE
-#include <linux/module.h>
-#endif				/* MODULE */
-
 #include <linux/malloc.h>
+#include <linux/dasd.h>
+#include <linux/hdreg.h>	/* HDIO_GETGEO                      */
+
 #include <asm/io.h>
 
 #include <asm/irq.h>
 
 #include "dasd_types.h"
 #include "dasd_ccwstuff.h"
-
-#include "dasd.h"
 
 #ifdef PRINTK_HEADER
 #undef PRINTK_HEADER
@@ -270,16 +267,7 @@ typedef struct {
 
 eckd_home_t;
 
-/* eckd count area */
-typedef struct {
-	__u16 cyl;
-	__u16 head;
-	__u8 record;
-	__u8 kl;
-	__u16 dl;
-} __attribute__ ((packed))
-
-eckd_count_t;
+dasd_era_t dasd_eckd_erp_examine (cqr_t *, devstat_t *);
 
 static unsigned int
 round_up_multiple (unsigned int no, unsigned int mult)
@@ -401,7 +389,7 @@ define_extent (ccw1_t * de_ccw,
 	memset (de_ccw, 0, sizeof (ccw1_t));
 	de_ccw->cmd_code = CCW_DEFINE_EXTENT;
 	de_ccw->count = 16;
-	de_ccw->cda = (void *) virt_to_phys (data);
+	de_ccw->cda = (void *) __pa (data);
 
 	memset (data, 0, sizeof (DE_eckd_data_t));
 	switch (cmd) {
@@ -417,6 +405,7 @@ define_extent (ccw1_t * de_ccw,
 		break;
 	case DASD_ECKD_CCW_WRITE:
 	case DASD_ECKD_CCW_WRITE_MT:
+		data->mask.perm = 0x02;
                 data->attributes.operation = 0x3; /* enable seq. caching */
 		break;
 	case DASD_ECKD_CCW_WRITE_CKD:
@@ -458,7 +447,7 @@ locate_record (ccw1_t * lo_ccw,
 	memset (lo_ccw, 0, sizeof (ccw1_t));
 	lo_ccw->cmd_code = DASD_ECKD_CCW_LOCATE_RECORD;
 	lo_ccw->count = 16;
-	lo_ccw->cda = (void *) virt_to_phys (data);
+	lo_ccw->cda = (void *) __pa (data);
 
 	memset (data, 0, sizeof (LO_eckd_data_t));
 	switch (cmd) {
@@ -471,7 +460,7 @@ locate_record (ccw1_t * lo_ccw,
 		data->operation.operation = 0x16;
 		break;
 	case DASD_ECKD_CCW_WRITE_RECORD_ZERO:
-		data->operation.orientation = 0x3;
+		data->operation.orientation = 0x1;
 		data->operation.operation = 0x03;
 		data->count++;
 		break;
@@ -623,10 +612,10 @@ dasd_eckd_format_track (int di, int trk, int bs)
 		r0_data->record = 0;
 		r0_data->kl = 0;
 		r0_data->dl = 8;
-		last_ccw->cmd_code = 0x03;
+		last_ccw->cmd_code = DASD_ECKD_CCW_WRITE_RECORD_ZERO;
 		last_ccw->count = 8;
 		last_ccw->flags = CCW_FLAG_CC | CCW_FLAG_SLI;
-		last_ccw->cda = (void *) virt_to_phys (r0_data);
+		last_ccw->cda = (void *) __pa (r0_data);
 		last_ccw++;
 	}
 	/* write remaining records */
@@ -640,14 +629,14 @@ dasd_eckd_format_track (int di, int trk, int bs)
 		last_ccw->cmd_code = DASD_ECKD_CCW_WRITE_CKD;
 		last_ccw->flags = CCW_FLAG_CC | CCW_FLAG_SLI;
 		last_ccw->count = 8;
-		last_ccw->cda = (void *)
-                        virt_to_phys (ct_data + i);
+		last_ccw->cda = (void *) __pa (ct_data + i);
 	}
 	(last_ccw - 1)->flags &= ~(CCW_FLAG_CC | CCW_FLAG_DC);
         fcp -> devindex = di;
         fcp -> flags = DASD_DO_IO_SLEEP;
         do {
-                struct wait_queue wait = {current, NULL};
+		struct wait_queue wait =
+		{current, NULL};
                 unsigned long flags;
                 int irq;
                 int cs;
@@ -698,15 +687,11 @@ dasd_eckd_build_req (int devindex,
 	int blk_per_trk = recs_per_track (&(info->rdc_data->eckd),
 					  0, info->sizes.bp_block);
 	int byt_per_blk = info->sizes.bp_block;
-	int noblk = req-> nr_sectors >> info->sizes.s2b_shift;
 	int btrk = (req->sector >> info->sizes.s2b_shift) / blk_per_trk;
 	int etrk = ((req->sector + req->nr_sectors - 1) >>
 		    info->sizes.s2b_shift) / blk_per_trk;
-
-        if ( ! noblk ) {
-                PRINT_ERR("No blocks to write...returning\n");
-                return NULL;
-        }
+	int bhct;
+	long size;
 
 	if (req->cmd == READ) {
 		rw_cmd = DASD_ECKD_CCW_READ_MT;
@@ -724,7 +709,21 @@ dasd_eckd_build_req (int devindex,
 	}
 #endif				/* DASD_PARANOIA */
 	/* Build the request */
-	rw_cp = request_cqr (2 + noblk,
+#if 0
+	PRINT_INFO ("req %d %d %d %d\n", devindex, req->cmd, req->sector, req->nr_sectors);
+#endif
+	/* count bhs to prevent errors, when bh smaller than block */
+	bhct = 0;
+
+	for (bh = req->bh; bh; bh = bh->b_reqnext) {
+		if (bh->b_size > byt_per_blk)
+			for (size = 0; size < bh->b_size; size += byt_per_blk)
+				bhct++;
+		else
+			bhct++;
+	}
+
+	rw_cp = request_cqr (2 + bhct,
 			     sizeof (DE_eckd_data_t) +
 			     sizeof (LO_eckd_data_t));
         if ( ! rw_cp ) {
@@ -743,56 +742,36 @@ dasd_eckd_build_req (int devindex,
 		       req->nr_sectors >> info->sizes.s2b_shift,
 		       rw_cmd, info);
 	ccw->flags = CCW_FLAG_CC;
-	for (bh = req->bh; bh; bh = bh->b_reqnext) {
-                long size;
+	for (bh = req->bh; bh != NULL;) {
+		if (bh->b_size > byt_per_blk) {
 		for (size = 0; size < bh->b_size; size += byt_per_blk) {
                         ccw++;
                         ccw->flags = CCW_FLAG_CC;
                         ccw->cmd_code = rw_cmd;
                         ccw->count = byt_per_blk;
-                        ccw->cda = (void *) virt_to_phys (bh->b_data + size);
+				ccw->cda = (void *) __pa (bh->b_data + size);
+		}
+			bh = bh->b_reqnext;
+		} else {	/* group N bhs to fit into byt_per_blk */
+			for (size = 0; bh != NULL && size < byt_per_blk;) {
+				ccw++;
+				ccw->flags = CCW_FLAG_DC;
+				ccw->cmd_code = rw_cmd;
+				ccw->count = bh->b_size;
+				ccw->cda = (void *) __pa (bh->b_data);
+				size += bh->b_size;
+				bh = bh->b_reqnext;
+	}
+			if (size != byt_per_blk) {
+				PRINT_WARN ("Cannot fulfill small request %d vs. %d (%d sects)\n", size, byt_per_blk, req->nr_sectors);
+				release_cqr (rw_cp);
+		return NULL;
+	}
+			ccw->flags = CCW_FLAG_CC;
 		}
 	}
 	ccw->flags &= ~(CCW_FLAG_DC | CCW_FLAG_CC);
 	return rw_cp;
-}
-
-cqr_t *
-dasd_eckd_rw_label (int devindex, int rw, char *buffer)
-{
-	int cmd_code = 0x03;
-	dasd_information_t *info = dasd_info[devindex];
-	cqr_t *cqr;
-	ccw1_t *ccw;
-
-	switch (rw) {
-	case READ:
-		cmd_code = DASD_ECKD_CCW_READ;
-		break;
-	case WRITE:
-		cmd_code = DASD_ECKD_CCW_WRITE;
-		break;
-#if DASD_PARANOIA > 2
-	default:
-		INTERNAL_ERROR ("unknown cmd %d", rw);
-		return NULL;
-#endif				/* DASD_PARANOIA */
-	}
-	cqr = request_cqr (3, sizeof (DE_eckd_data_t) +
-			   sizeof (LO_eckd_data_t));
-	ccw = cqr->cpaddr;
-	define_extent (ccw, cqr->data, 0, 0, cmd_code, info);
-	ccw->flags |= CCW_FLAG_CC;
-	ccw++;
-	locate_record (ccw, cqr->data + 1, 0, 2, 1, cmd_code, info);
-	ccw->flags |= CCW_FLAG_CC;
-	ccw++;
-	ccw->cmd_code = cmd_code;
-	ccw->flags |= CCW_FLAG_SLI;
-	ccw->count = sizeof (dasd_volume_label_t);
-	ccw->cda = (void *) virt_to_phys ((void *) buffer);
-	return cqr;
-
 }
 
 void
@@ -886,27 +865,23 @@ dasd_eckd_format (int devindex, format_data_t * fdata)
 	return rc;
 }
 
-int
-dasd_eckd_read_count (int di)
+cqr_t *
+dasd_eckd_fill_sizes_first (int di)
 {
-	int rc;
 	cqr_t *rw_cp = NULL;
 	ccw1_t *ccw;
 	DE_eckd_data_t *DE_data;
 	LO_eckd_data_t *LO_data;
-	eckd_count_t *count_data;
-        int retries = 5;
-        unsigned long flags;
-        int irq;
-        int cs;
 	dasd_information_t *info = dasd_info[di];
+	eckd_count_t *count_data = &(info->private.eckd.count_data);
+
+	dasd_info[di]->sizes.label_block = 2;
+
 	rw_cp = request_cqr (3,
 			     sizeof (DE_eckd_data_t) +
-			     sizeof (LO_eckd_data_t) +
-			     sizeof (eckd_count_t));
+			     sizeof (LO_eckd_data_t));
 	DE_data = rw_cp->data;
 	LO_data = rw_cp->data + sizeof (DE_eckd_data_t);
-	count_data = (eckd_count_t*)((long)LO_data + sizeof (LO_eckd_data_t));
 	ccw = rw_cp->cpaddr;
 	define_extent (ccw, DE_data, 0, 0, DASD_ECKD_CCW_READ_COUNT, info);
 	ccw->flags = CCW_FLAG_CC;
@@ -916,43 +891,18 @@ dasd_eckd_read_count (int di)
 	ccw++;
 	ccw->cmd_code = DASD_ECKD_CCW_READ_COUNT;
 	ccw->count = 8;
-	ccw->cda = (void *) virt_to_phys (count_data);
+	ccw->cda = (void *) __pa (count_data);
 	rw_cp->devindex = di;
-        rw_cp -> options = DOIO_WAIT_FOR_INTERRUPT;
-        do {
-                irq = dasd_info[di]->info.irq;
-                s390irq_spin_lock_irqsave (irq, flags);
-                atomic_set(&rw_cp -> status, CQR_STATUS_QUEUED);
-                rc = dasd_start_IO ( rw_cp );
-                s390irq_spin_unlock_irqrestore (irq, flags);
-                retries --;
-                cs = atomic_read(&rw_cp->status);
-		if ( cs != CQR_STATUS_DONE && retries == 5 ) {
-			dasd_eckd_print_error(rw_cp->dstat);
-		}
-	} while ( ( ( cs != CQR_STATUS_DONE) || rc ) &&  retries );
-        if ( ( rc || cs != CQR_STATUS_DONE) ) {
-                if ( ( cs == CQR_STATUS_ERROR ) &&
-                     ( rw_cp -> dstat -> ii.sense.data[1] == 0x08 ) ) {
-                        rc = -EMEDIUMTYPE;
-                } else {
-                        dasd_eckd_print_error (rw_cp->dstat);
-                        rc = -EIO;
-                }
-        } else {
-                rc = count_data->dl;
-        }
-	release_cqr (rw_cp);
-	return rc;
+	atomic_set (&rw_cp->status, CQR_STATUS_FILLED);
+	return rw_cp;
 }
 
 int
-dasd_eckd_fill_sizes (int devindex)
+dasd_eckd_fill_sizes_last (int devindex)
 {
-	int bs = 0;
-	int sb;
+	int sb,rpt;
 	dasd_information_t *in = dasd_info[devindex];
-	bs = dasd_eckd_read_count (devindex);
+	int bs = in->private.eckd.count_data.dl;
 	if (bs <= 0) {
                 PRINT_INFO("Cannot figure out blocksize. did you format the disk?\n");
                 memset (&(in -> sizes), 0, sizeof(dasd_sizes_t ));
@@ -962,10 +912,10 @@ dasd_eckd_fill_sizes (int devindex)
 	}
 	in->sizes.bp_sector = in->sizes.bp_block;
         
-	in->sizes.b2k_shift = 0; /* bits to shift a block to get 1k */
-	for (sb = 1024; sb < bs; sb = sb << 1)
-                in->sizes.b2k_shift++;
-        
+	if (bs & 511) {
+		PRINT_INFO ("Probably no Linux formatted device!\n");
+		return -EMEDIUMTYPE;
+	}
 	in->sizes.s2b_shift = 0; /* bits to shift 512 to get a block */
 	for (sb = 512; sb < bs; sb = sb << 1)
                 in->sizes.s2b_shift++;
@@ -973,26 +923,42 @@ dasd_eckd_fill_sizes (int devindex)
 	in->sizes.blocks = in->rdc_data->eckd.no_cyl *
                 in->rdc_data->eckd.trk_per_cyl *
                 recs_per_track (&(in->rdc_data->eckd), 0, bs);
-	in->sizes.kbytes = in->sizes.blocks << in->sizes.b2k_shift;
+
+        in->sizes.kbytes = ( in->sizes.blocks << in->sizes.s2b_shift) >> 1;
+
+        rpt = recs_per_track (&(in->rdc_data->eckd), 0, in->sizes.bp_block),
         
 	PRINT_INFO ("Verified: %d B/trk %d B/Blk(%d B) %d Blks/trk %d kB/trk \n",
 		    bytes_per_track (&(in->rdc_data->eckd)),
-		    bytes_per_record (&(in->rdc_data->eckd), 0, in->sizes.bp_block),
+                    bytes_per_record (&(in->rdc_data->eckd), 0, 
+                                      in->sizes.bp_block),
                     in->sizes.bp_block,
-		    recs_per_track (&(in->rdc_data->eckd), 0, in->sizes.bp_block),
-		    (recs_per_track (&(in->rdc_data->eckd), 0, in->sizes.bp_block) <<
-                     in->sizes.b2k_shift ));
+                    rpt,
+                    (rpt << in->sizes.s2b_shift) >> 1);
                     return 0;
+}
+
+void
+dasd_eckd_fill_geometry (int di, struct hd_geometry *geo)
+{
+	dasd_information_t *info = dasd_info[di];
+	geo->cylinders = info->rdc_data->eckd.no_cyl;
+	geo->heads = info->rdc_data->eckd.trk_per_cyl;
+	geo->sectors = recs_per_track (&(info->rdc_data->eckd),
+				       0, info->sizes.bp_block);
+	geo->start = info->sizes.label_block + 1;
 }
 
 dasd_operations_t dasd_eckd_operations =
 {
-	dasd_eckd_ck_devinfo,
-	dasd_eckd_build_req,
-	dasd_eckd_rw_label,
-	dasd_eckd_ck_char,
-	dasd_eckd_fill_sizes,
-	dasd_eckd_format,
+	ck_devinfo:dasd_eckd_ck_devinfo,
+	get_req_ccw:dasd_eckd_build_req,
+	ck_characteristics:dasd_eckd_ck_char,
+	fill_sizes_first:dasd_eckd_fill_sizes_first,
+	fill_sizes_last:dasd_eckd_fill_sizes_last,
+	dasd_format:dasd_eckd_format,
+	fill_geometry:dasd_eckd_fill_geometry,
+	erp_examine:dasd_eckd_erp_examine
 };
 
 /*

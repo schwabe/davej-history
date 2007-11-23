@@ -26,6 +26,7 @@
 #include <asm/bitops.h>
 #include <asm/setup.h>
 #include <asm/page.h>
+#include <asm/s390_ext.h>
 
 #ifndef MIN
 #define MIN(a,b) ((a<b) ? a : b)
@@ -121,7 +122,10 @@ typedef u32 kmem_pages_t;
 #define MAX_KMEM_PAGES (sizeof(kmem_pages_t) << 3)
 
 #define HWC_TIMER_RUNS	1
-#define FLUSH_HWCBS	2
+#define HWC_FLUSH	2
+#define HWC_INIT	4
+#define HWC_BROKEN	8
+#define HWC_INTERRUPT	16
 
 static struct {
 
@@ -166,6 +170,8 @@ static struct {
 
 	unsigned char flags;
 
+	hwc_high_level_calls_t *calls;
+
 	spinlock_t lock;
 
 	struct timer_list write_timer;
@@ -206,20 +212,25 @@ static struct {
 	0,		
 	0,		
 	0,		
-	0		
+	    0,
+	    NULL
 
 };
+
+static unsigned long cr0 __attribute__ ((aligned (8)));
+static unsigned long cr0_save __attribute__ ((aligned (8)));
+static unsigned char psw_mask __attribute__ ((aligned (8)));
 
 #define DELAYED_WRITE 0
 #define IMMEDIATE_WRITE 1
 
-static signed int do_hwc_write(int from_user, const unsigned char *,
+static signed int do_hwc_write (int from_user, unsigned char *,
 					unsigned int,
 					unsigned char,
 					unsigned char);
 
 static asmlinkage int 
-internal_print (char write_time, const char *fmt,...)
+internal_print (char write_time, char *fmt,...)
 {
 	va_list args;
 	int i;
@@ -573,7 +584,7 @@ release_write_hwcb (void)
                 if (page >= hwc_data.kmem_start &&
                     page < hwc_data.kmem_end) {
 
-			memset((void *) page, 0, PAGE_SIZE);
+/*      memset((void *) page, 0, PAGE_SIZE); */
 
                         page_nr = (int) ((page - hwc_data.kmem_start) >> 12);
                         clear_bit(page_nr, &hwc_data.kmem_pages);
@@ -693,7 +704,7 @@ flush_hwcbs (void)
 
 	release_write_hwcb();
 
-	hwc_data.flags &= ~FLUSH_HWCBS;
+	hwc_data.flags &= ~HWC_FLUSH;
 }
 
 static int 
@@ -701,17 +712,28 @@ write_event_data_2 (void)
 {
 	write_hwcb_t *hwcb;
 	int retval;
+
+#ifdef DUMP_HWC_WRITE_ERROR
 	unsigned char *param;
 
 	param = ext_int_param();
-	if (param != hwc_data.current_hwcb)
+	if (param != hwc_data.current_hwcb) {
+		internal_print (
+				       DELAYED_WRITE,
+				       HWC_RW_PRINT_HEADER
+				       "write_event_mask_2 : "
+				       "HWCB address does not fit "
+				       "(expected: 0x%x, got: 0x%x).\n",
+				       hwc_data.current_hwcb,
+				       param);
 		return -EINVAL;
+	}
+#endif
 
 	hwcb = (write_hwcb_t *) OUT_HWCB;
 
-#ifdef DUMP_HWC_WRITE_ERROR 
-#if 0
-	if (((unsigned char *) hwcb) != param)
+#ifdef DUMP_HWC_WRITE_LIST_ERROR
+	if (((unsigned char *) hwcb) != hwc_data.current_hwcb) {
 		__asm__("LHI 1,0xe22\n\t"
 			"LRA 2,0(0,%0)\n\t"
 			"LRA 3,0(0,%1)\n\t"
@@ -722,33 +744,13 @@ write_event_data_2 (void)
 			:"a"(OUT_HWCB),
 			 "a"(hwc_data.current_hwcb),
 			 "a"(BUF_HWCB),
-			 "a"(param)
+			 "a" (hwcb)
 			:"1", "2", "3", "4", "5");
+	}
 #endif
-	if (hwcb->response_code != 0x0020)
-#if 0
-		internal_print(DELAYED_WRITE, HWC_RW_PRINT_HEADER
-		"\n************************ error in write_event_data_2()\n"
-		"OUT_HWCB:                    0x%x\n"
-		"BUF_HWCB:                    0x%x\n"
-		"response_code:               0x%x\n"
-		"hwc_data.hwcb_count:        %d\n"
-		"hwc_data.kmem_pages:        0x%x\n"
-		"hwc_data.ioctls.kmem_hwcb:   %d\n"
-		"hwc_data.ioctls.max_hwcb:    %d\n"
-		"hwc_data.kmem_start:        0x%x\n"
-		"hwc_data.kmem_end:          0x%x\n"
-		"*****************************************************\n",
-		OUT_HWCB,
-		BUF_HWCB,
-		hwcb->response_code,
-		hwc_data.hwcb_count,
-		hwc_data.kmem_pages,
-		hwc_data.ioctls.kmem_hwcb,
-		hwc_data.ioctls.max_hwcb,
-		hwc_data.kmem_start,
-		hwc_data.kmem_end);
-#endif
+
+#ifdef DUMP_HWC_WRITE_ERROR
+	if (hwcb->response_code != 0x0020) {
 		__asm__("LHI 1,0xe21\n\t"
 			"LRA 2,0(0,%0)\n\t"
 			"LRA 3,0(0,%1)\n\t"
@@ -761,19 +763,30 @@ write_event_data_2 (void)
 			 "a"(BUF_HWCB),
 			 "a"(&(hwc_data.hwcb_count))
 			:"1", "2", "3", "4", "5");
+	}
 #endif	
 
 	if (hwcb->response_code == 0x0020) {
 
 		retval = OUT_HWCB_CHAR;
 		release_write_hwcb();
-	} else
+	} else {
+		internal_print (
+				       DELAYED_WRITE,
+				       HWC_RW_PRINT_HEADER
+				       "write_event_data_2 : "
+				       "failed operation "
+				       "(response code: 0x%x "
+				       "HWCB address: 0x%x).\n",
+				       hwcb->response_code,
+				       hwcb);
 		retval = -EIO;
+	}
 
 	hwc_data.current_servc = 0;
 	hwc_data.current_hwcb = NULL;
 
-	if (hwc_data.flags & FLUSH_HWCBS)
+	if (hwc_data.flags & HWC_FLUSH)
 		flush_hwcbs();
 
 	return retval;
@@ -860,7 +873,7 @@ hwc_write_timeout (unsigned long data)
 static int 
 do_hwc_write (
 	int from_user,
-	const unsigned char *msg,
+		     unsigned char *msg,
 	unsigned int count,
 	unsigned char code,
 	unsigned char write_time)
@@ -891,7 +904,7 @@ do_hwc_write (
 		else
 			orig_ch = msg[i_msg];
 		if (code == CODE_EBCDIC)
-			ch = _ebcasc[orig_ch];
+			ch = (MACHINE_IS_VM ? _ebcasc[orig_ch] : _ebcasc_500[orig_ch]);
 		else
 			ch = orig_ch;
 
@@ -980,7 +993,10 @@ do_hwc_write (
 				hwc_data.obuf[hwc_data.obuf_start +
 						obuf_cursor++]
 					 = (code == CODE_ASCII) ?
-					   _ascebc[orig_ch]:orig_ch;
+				    (MACHINE_IS_VM ?
+				     _ascebc[orig_ch] :
+				     _ascebc_500[orig_ch]) :
+				    orig_ch;
 		}
 		if (obuf_cursor > obuf_count)
 			obuf_count = obuf_cursor;
@@ -1042,7 +1058,8 @@ hwc_write (int from_user, const unsigned char *msg, unsigned int count)
 	
 	spin_lock_irqsave(&hwc_data.lock, flags);
 
-	retval = do_hwc_write(from_user, msg, count, hwc_data.ioctls.code,
+	retval = do_hwc_write (from_user, (unsigned char *) msg,
+			       count, hwc_data.ioctls.code,
 							 IMMEDIATE_WRITE);
 
 	spin_unlock_irqrestore(&hwc_data.lock, flags);
@@ -1123,7 +1140,7 @@ hwc_flush_buffer (unsigned char flag)
 		if (hwc_data.current_servc != HWC_CMDW_WRITEDATA)
 			flush_hwcbs();
 		else
-			hwc_data.flags |= FLUSH_HWCBS;
+			hwc_data.flags |= HWC_FLUSH;
 	}
 	if (flag & IN_WRITE_BUF) {
 		hwc_data.obuf_cursor = 0;	
@@ -1302,10 +1319,15 @@ get_input (void *start, void *end)
 	if (hwc_data.ioctls.echo)
 		do_hwc_write(0, start, count, CODE_EBCDIC, IMMEDIATE_WRITE);
 
-	if (hwc_data.ioctls.code == CODE_ASCII)
+	if (hwc_data.ioctls.code == CODE_ASCII) {
+		if (MACHINE_IS_VM)
 		EBCASC(start, count);
-
-	store_hwc_input(start, count);
+		else
+			EBCASC_500 (start, count);
+	}
+	if (hwc_data.calls != NULL)
+		if (hwc_data.calls->move_input != NULL)
+			(hwc_data.calls->move_input) (start, count);
 
 	return count;
 }
@@ -1550,6 +1572,13 @@ unconditional_read_2 (void)
 
 	   case 0x60F0 :
 	   case 0x62F0 : 
+		internal_print (
+				       IMMEDIATE_WRITE,
+				       HWC_RW_PRINT_HEADER
+				       "unconditional read: "
+				     "got interrupt and tried to read input, "
+				  "but nothing found (response code=0x%x).\n",
+				       hwcb->response_code);
 		return 0;
 
 	   case 0x0100 :
@@ -1623,13 +1652,11 @@ write_event_mask_1 (void)
 	unsigned int condition_code;
 	int retval;
 	
-	memcpy(hwc_data.page, &init_hwcb_template, sizeof(init_hwcb_t));
-
 	condition_code = service_call(HWC_CMDW_WRITEMASK, hwc_data.page);
 
 #ifdef DUMP_HWC_INIT_ERROR
 
-	if (condition_code != HWC_COMMAND_INITIATED)
+	if (condition_code == HWC_NOT_OPERATIONAL)
 		__asm__("LHI 1,0xe10\n\t"
 			"L 2,0(0,%0)\n\t"
 			"LRA 3,0(0,%1)\n\t"
@@ -1667,12 +1694,18 @@ write_event_mask_2 (void)
 	if (hwcb->hwc_receive_mask & ET_PMsgCmd_Mask)
 		hwc_data.write_prio = 1;
 	
-	if (hwcb->hwc_send_mask & ET_OpCmd_Mask)
+	if (hwcb->hwc_send_mask & ET_OpCmd_Mask) {
+		internal_print (DELAYED_WRITE,
+				HWC_RW_PRINT_HEADER
+				"capable of receipt of commands\n");
 		hwc_data.read_nonprio = 1;
-	
-	if (hwcb->hwc_send_mask & ET_PMsgCmd_Mask)
+	}
+	if (hwcb->hwc_send_mask & ET_PMsgCmd_Mask) {
+		internal_print (DELAYED_WRITE,
+				HWC_RW_PRINT_HEADER
+				"capable of receipt of priority commands\n");
 		hwc_data.read_nonprio = 1;
-
+	}
 	if ((hwcb->response_code != 0x0020) ||
 	    (!hwc_data.write_nonprio) ||
 	    ((!hwc_data.read_nonprio) && (!hwc_data.read_prio)))
@@ -1685,7 +1718,7 @@ write_event_mask_2 (void)
 			:"a"(hwcb), "a"(&(hwcb->response_code))
 			:"1", "2", "3");
 #else
-		retval = -EIO
+		retval = -EIO;
 #endif	
 
 	hwc_data.current_servc = 0;
@@ -1771,9 +1804,56 @@ set_hwc_ioctls (hwc_ioctls_t * ioctls, char correct)
 }
 
 int 
+do_hwc_init (void)
+{
+	int retval;
+
+	memcpy (hwc_data.page, &init_hwcb_template, sizeof (init_hwcb_t));
+
+	do {
+
+		retval = write_event_mask_1 ();
+
+		if (retval == -EBUSY) {
+
+			hwc_data.flags |= HWC_INIT;
+
+			asm volatile ("STCTL 0,0,%0":"=m" (cr0));
+			cr0_save = cr0;
+			cr0 |= 0x00000200;
+			cr0 &= 0xFFFFF3AC;
+			asm volatile ("LCTL 0,0,%0"::"m" (cr0):"memory");
+
+			asm volatile ("STOSM %0,0x01"
+				      :"=m" (psw_mask)::"memory");
+
+			while (!(hwc_data.flags & HWC_INTERRUPT))
+				barrier ();
+
+			asm volatile ("STNSM %0,0xFE"
+				      :"=m" (psw_mask)::"memory");
+
+			asm volatile ("LCTL 0,0,%0"
+				      ::"m" (cr0_save):"memory");
+
+			hwc_data.flags &= ~HWC_INIT;
+		}
+	} while (retval == -EBUSY);
+
+	if (retval == -EIO) {
+		hwc_data.flags |= HWC_BROKEN;
+		printk (HWC_RW_PRINT_HEADER "HWC not operational\n");
+	}
+	return retval;
+}
+
+void do_hwc_interrupt (struct pt_regs *regs, __u16 code);
+
+int 
 hwc_init (unsigned long *kmem_start)
 {
 	int retval;
+
 #ifdef BUFFER_STRESS_TEST
 
 	init_hwcb_t *hwcb;
@@ -1781,16 +1861,10 @@ hwc_init (unsigned long *kmem_start)
 
 #endif
 
-#ifdef CONFIG_3215
-        if (MACHINE_IS_VM)
-                return kmem_start;
-#endif
+	if (register_external_interrupt (0x2401, do_hwc_interrupt) != 0)
+		panic ("Couldn't request external interrupts 0x2401");
 
 	spin_lock_init(&hwc_data.lock);
-
-	retval = write_event_mask_1();
-	if (retval < 0)
-		return retval;
 
 #ifdef USE_VM_DETECTION
 
@@ -1813,6 +1887,8 @@ hwc_init (unsigned long *kmem_start)
 	*kmem_start += hwc_data.ioctls.kmem_hwcb * PAGE_SIZE;
 	hwc_data.kmem_end = *kmem_start - 1;
 
+	retval = do_hwc_init ();
+
         ctl_set_bit(0, 9);
 
 #ifdef BUFFER_STRESS_TEST 
@@ -1834,13 +1910,52 @@ hwc_init (unsigned long *kmem_start)
 
 #endif	
 
-	return retval;
+	return /*retval */ 0;
+}
+
+signed int 
+hwc_register_calls (hwc_high_level_calls_t * calls)
+{
+	if (calls == NULL)
+		return -EINVAL;
+
+	if (hwc_data.calls != NULL)
+		return -EBUSY;
+
+	hwc_data.calls = calls;
+	return 0;
+}
+
+signed int 
+hwc_unregister_calls (hwc_high_level_calls_t * calls)
+{
+	if (hwc_data.calls == NULL)
+		return -EINVAL;
+
+	if (calls != hwc_data.calls)
+		return -EINVAL;
+
+	hwc_data.calls = NULL;
+	return 0;
 }
 
 void 
-do_hwc_interrupt (void)
+do_hwc_interrupt (struct pt_regs *regs, __u16 code)
 {
 
+	if (hwc_data.flags & HWC_INIT) {
+
+		hwc_data.flags |= HWC_INTERRUPT;
+	} else if (hwc_data.flags & HWC_BROKEN) {
+
+		if (!do_hwc_init ()) {
+			hwc_data.flags &= ~HWC_BROKEN;
+			internal_print (DELAYED_WRITE,
+					HWC_RW_PRINT_HEADER
+					"delayed HWC setup after"
+					" temporary breakdown\n");
+		}
+	} else {
 	spin_lock(&hwc_data.lock);
 
 	if (!hwc_data.current_servc) {
@@ -1869,10 +1984,34 @@ do_hwc_interrupt (void)
 
 		write_event_data_1();
 	}
+		if (hwc_data.calls != NULL)
+			if (hwc_data.calls->wake_up != NULL)
+				(hwc_data.calls->wake_up) ();
+		spin_unlock (&hwc_data.lock);
+	}
+}
 
-	wake_up_hwc_tty();
+void 
+hwc_unblank (void)
+{
 
+	spin_lock (&hwc_data.lock);
 	spin_unlock(&hwc_data.lock);
+
+	asm volatile ("STCTL 0,0,%0":"=m" (cr0));
+	cr0_save = cr0;
+	cr0 |= 0x00000200;
+	cr0 &= 0xFFFFF3AC;
+	asm volatile ("LCTL 0,0,%0"::"m" (cr0):"memory");
+
+	asm volatile ("STOSM %0,0x01":"=m" (psw_mask)::"memory");
+
+	while (ALL_HWCB_CHAR)
+		barrier ();
+
+	asm volatile ("STNSM %0,0xFE":"=m" (psw_mask)::"memory");
+
+	asm volatile ("LCTL 0,0,%0"::"m" (cr0_save):"memory");
 }
 
 int 

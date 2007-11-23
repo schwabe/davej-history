@@ -432,7 +432,7 @@ __copy_from_user_asm(void* to, const void* from,  long n)
 static inline long
 strncpy_from_user(char *dst, const char *src, long count)
 {
-        int len;
+        long len;
         __asm__ __volatile__ (  "   iac   1\n"
 				"   slr   %0,%0\n"
 				"   lr    2,%1\n"
@@ -471,7 +471,8 @@ strncpy_from_user(char *dst, const char *src, long count)
  *
  * Return 0 for error
  */
-static inline long strnlen_user(const char * src, long n)
+static inline unsigned long
+strnlen_user(const char * src, unsigned long n)
 {
 	__asm__ __volatile__ ("   iac   1\n"
                               "   alr   %0,%1\n"
@@ -500,7 +501,7 @@ static inline long strnlen_user(const char * src, long n)
 			      : "cc", "0", "1", "4" );
         return n;
 }
-#define strlen_user(str) strnlen_user(str, ~0UL >> 1)
+#define strlen_user(str) strnlen_user(str, ~0UL)
 
 /*
  * Zero Userspace
@@ -518,7 +519,7 @@ clear_user(void *to, unsigned long n)
                                 "0: mvcle 4,2,0\n"
                                 "   jo    0b\n"
                                 "1: sacf  0(1)\n"
-                                "   lr    %0,3\n"
+                                "   lr    %0,5\n"
 				".section __ex_table,\"a\"\n"
 				"   .align 4\n"
 				"   .long  0b,1b\n"

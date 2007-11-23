@@ -1,17 +1,12 @@
 /* 
  * File...........: linux/drivers/s390/block/dasd.c
  * Author(s)......: Holger Smolinski <Holger.Smolinski@de.ibm.com>
- *                : Utz Bacher <utz.bacher@de.ibm.com>
  * Bugreports.to..: <Linux390@de.ibm.com>
  * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999,2000
  */
 
 #include <linux/stddef.h>
 #include <linux/kernel.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#endif				/* MODULE */
 
 #include <linux/tqueue.h>
 #include <linux/timer.h>
@@ -27,16 +22,18 @@
 #include <asm/uaccess.h>
 
 #include <asm/irq.h>
+#include <asm/s390_ext.h>
 
-#include "dasd.h"
+#include <linux/dasd.h>
 #include <linux/blk.h>
 
+#include "dasd_erp.h"
 #include "dasd_types.h"
 #include "dasd_ccwstuff.h"
 
-#define PRINTK_HEADER DASD_NAME":"
+#include "../../../arch/s390/kernel/debug.h"
 
-#define CCW_READ_DEVICE_CHARACTERISTICS  0x64
+#define PRINTK_HEADER DASD_NAME":"
 
 #define DASD_SSCH_RETRIES 2
 
@@ -45,220 +42,107 @@
 (( info -> sid_data.cu_type  ct ) && ( info -> sid_data.cu_model cm )) && \
 (( info -> sid_data.dev_type dt ) && ( info -> sid_data.dev_model dm )) )
 
+#ifdef MODULE
+#include <linux/module.h>
+
+char *dasd[DASD_MAX_DEVICES] =
+{NULL,};
+#ifdef CONFIG_DASD_MDSK
+char *dasd_force_mdsk[DASD_MAX_DEVICES] =
+{NULL,};
+#endif
+
+kdev_t ROOT_DEV;
+
+EXPORT_NO_SYMBOLS;
+MODULE_AUTHOR ("Holger Smolinski <Holger.Smolinski@de.ibm.com>");
+MODULE_DESCRIPTION ("Linux on S/390 DASD device driver, Copyright 2000 IBM Corporation");
+MODULE_PARM (dasd, "1-" __MODULE_STRING (DASD_MAX_DEVICES) "s");
+#ifdef CONFIG_DASD_MDSK
+MODULE_PARM (dasd_force_mdsk, "1-" __MODULE_STRING (DASD_MAX_DEVICES) "s");
+#endif
+#endif
+
 /* Prototypes for the functions called from external */
-static ssize_t dasd_read (struct file *, char *, size_t, loff_t *);
-static ssize_t dasd_write (struct file *, const char *, size_t, loff_t *);
-static int dasd_ioctl (struct inode *, struct file *, unsigned int, unsigned long);
-static int dasd_open (struct inode *, struct file *);
-static int dasd_fsync (struct file *, struct dentry *);
-static int dasd_release (struct inode *, struct file *);
+void dasd_partn_detect (int di);
+int devindex_from_devno (int devno);
+int dasd_is_accessible (int devno);
+void dasd_add_devno_to_ranges (int devno);
+
+#ifdef CONFIG_DASD_MDSK
+extern int dasd_force_mdsk_flag[DASD_MAX_DEVICES];
+extern void do_dasd_mdsk_interrupt (struct pt_regs *regs, __u16 code);
+extern int dasd_parse_module_params (void);
+extern void (**ext_mdisk_int) (void);
+#endif
+
 void dasd_debug (unsigned long tag);
 void dasd_profile_add (cqr_t *cqr);
 void dasd_proc_init (void);
 
-static struct file_operations dasd_file_operations;
+static int dasd_format (int dev, format_data_t * fdata);
+
+static struct file_operations dasd_device_operations;
 
 spinlock_t dasd_lock;		/* general purpose lock for the dasd driver */
 
 /* All asynchronous I/O should waint on this wait_queue */
 struct wait_queue *dasd_waitq = NULL;
 
-static int dasd_autodetect = 1;
-static int dasd_devno[DASD_MAX_DEVICES] =
-{0,};
-static int dasd_count = 0;
-
 extern dasd_chanq_t *cq_head;
+extern int dasd_probeonly;
 
-static int
-dasd_get_hexdigit (char c)
-{
-	if ((c >= '0') && (c <= '9'))
-		return c - '0';
-	if ((c >= 'a') && (c <= 'f'))
-		return c + 10 - 'a';
-	if ((c >= 'A') && (c <= 'F'))
-		return c + 10 - 'A';
-	return -1;
-}
+debug_info_t *dasd_debug_info;
 
-/* sets the string pointer after the next comma */
-static void
-dasd_scan_for_next_comma (char **strptr)
-{
-	while (((**strptr) != ',') && ((**strptr)++))
-		(*strptr)++;
+extern dasd_information_t **dasd_information;
 
-	/* set the position AFTER the comma */
-	if (**strptr == ',')
-		(*strptr)++;
-}
-
-/*sets the string pointer after the next comma, if a parse error occured */
-static int
-dasd_get_next_int (char **strptr)
-{
-	int j, i = -1;		/* for cosmetic reasons first -1, then 0 */
-	if (isxdigit (**strptr)) {
-		for (i = 0; isxdigit (**strptr);) {
-			i <<= 4;
-			j = dasd_get_hexdigit (**strptr);
-			if (j == -1) {
-				PRINT_ERR ("no integer: skipping range.\n");
-				dasd_scan_for_next_comma (strptr);
-				i = -1;
-				break;
-			}
-			i += j;
-			(*strptr)++;
-			if (i > 0xffff) {
-				PRINT_ERR (" value too big, skipping range.\n");
-				dasd_scan_for_next_comma (strptr);
-				i = -1;
-				break;
-			}
-		}
-	}
-	return i;
-}
-
-static inline int
-devindex_from_devno (int devno)
-{
-	int i;
-	for (i = 0; i < dasd_count; i++) {
-		if (dasd_devno[i] == devno)
-			return i;
-	}
-	if (dasd_autodetect) {
-		if (dasd_count < DASD_MAX_DEVICES) {
-			dasd_devno[dasd_count] = devno;
-			return dasd_count++;
-		}
-		return -EOVERFLOW;
-	}
-	return -ENODEV;
-}
-
-/* returns 1, if dasd_no is in the specified ranges, otherwise 0 */
-static inline int
-dasd_is_accessible (int devno)
-{
-	return (devindex_from_devno (devno) >= 0);
-}
-
-/* dasd_insert_range skips ranges, if the start or the end is -1 */
-static void
-dasd_insert_range (int start, int end)
-{
-	int curr;
-	FUNCTION_ENTRY ("dasd_insert_range");
-	if (dasd_count >= DASD_MAX_DEVICES) {
-		PRINT_ERR (" too many devices specified, ignoring some.\n");
-		FUNCTION_EXIT ("dasd_insert_range");
-		return;
-	}
-	if ((start == -1) || (end == -1)) {
-		PRINT_ERR ("invalid format of parameter, skipping range\n");
-		FUNCTION_EXIT ("dasd_insert_range");
-		return;
-	}
-	if (end < start) {
-		PRINT_ERR (" ignoring range from %x to %x - start value " \
-			   "must be less than end value.\n", start, end);
-		FUNCTION_EXIT ("dasd_insert_range");
-		return;
-	}
-/* concurrent execution would be critical, but will not occur here */
-	for (curr = start; curr <= end; curr++) {
-		if (dasd_is_accessible (curr)) {
-			PRINT_WARN (" %x is already in list as device %d\n",
-				    curr, devindex_from_devno (curr));
-		}
-		dasd_devno[dasd_count] = curr;
-		dasd_count++;
-		if (dasd_count >= DASD_MAX_DEVICES) {
-			PRINT_ERR (" too many devices specified, ignoring some.\n");
-			break;
-		}
-	}
-	PRINT_INFO (" added dasd range from %x to %x.\n",
-		    start, dasd_devno[dasd_count - 1]);
-
-	FUNCTION_EXIT ("dasd_insert_range");
-}
+dasd_information_t *dasd_info[DASD_MAX_DEVICES] =
+{NULL,};
+static struct hd_struct dd_hdstruct[DASD_MAX_DEVICES << PARTN_BITS];
+static int dasd_blks[256] =
+{0,};
+static int dasd_secsize[256] =
+{0,};
+static int dasd_blksize[256] =
+{0,};
+static int dasd_maxsecs[256] =
+{0,};
 
 void
-dasd_setup (char *str, int *ints)
+dasd_geninit (struct gendisk *dd)
 {
-	int devno, devno2;
-
-	FUNCTION_ENTRY ("dasd_setup");
-	dasd_autodetect = 0;
-	while (*str && *str != 1) {
-		if (!isxdigit (*str)) {
-			str++;	/* to avoid looping on two commas */
-			PRINT_ERR (" kernel parameter in invalid format.\n");
-			continue;
-		}
-		devno = dasd_get_next_int (&str);
-
-		/* range was skipped? -> scan for comma has been done */
-		if (devno == -1)
-			continue;
-
-		if (*str == ',') {
-			str++;
-			dasd_insert_range (devno, devno);
-			continue;
-		}
-		if (*str == '-') {
-			str++;
-			devno2 = dasd_get_next_int (&str);
-			if (devno2 == -1) {
-				PRINT_ERR (" invalid character in " \
-					   "kernel parameters.");
-			} else {
-				dasd_insert_range (devno, devno2);
-			}
-			dasd_scan_for_next_comma (&str);
-			continue;
-		}
-		if (*str == 0) {
-			dasd_insert_range (devno, devno);
-			break;
-		}
-		PRINT_ERR (" unexpected character in kernel parameter, " \
-			   "skipping range.\n");
-	}
-	FUNCTION_EXIT ("dasd_setup");
 }
-
-static void
-dd_geninit (struct gendisk *ignored)
-{
-	FUNCTION_ENTRY ("dd_geninit");
-	FUNCTION_EXIT ("dd_geninit");
-}
-
-static struct hd_struct dd_hdstruct[DASD_MAX_DEVICES << PARTN_BITS];
-static int dd_blocksizes[DASD_MAX_DEVICES << PARTN_BITS];
 
 struct gendisk dd_gendisk =
 {
-	MAJOR_NR,		/* Major number */
-	"dd",			/* Major name */
-	PARTN_BITS,		/* Bits to shift to get real from partn */
-	1 << PARTN_BITS,	/* Number of partitions per real */
-	DASD_MAX_DEVICES,	/* maximum number of real */
-	dd_geninit,		/* init function */
-	dd_hdstruct,		/* hd struct */
-	dd_blocksizes,		/* block sizes */
-	0,			/* number */
-	NULL,			/* internal */
-	NULL			/* next */
-
+	major:MAJOR_NR,		/* Major number */
+	major_name:"dasd",	/* Major name */
+	minor_shift:PARTN_BITS,	/* Bits to shift to get real from partn */
+	max_p:1 << PARTN_BITS,	/* Number of partitions per real */
+	max_nr:0,		/* number */
+	init:dasd_geninit,
+	part:dd_hdstruct,	/* hd struct */
+	sizes:dasd_blks,	/* sizes in blocks */
+	nr_real:0,
+	real_devices:NULL,	/* internal */
+	next:NULL		/* next */
 };
+
+static atomic_t bh_scheduled = ATOMIC_INIT (0);
+
+void
+dasd_schedule_bh (void (*func) (void))
+{
+	static struct tq_struct dasd_tq =
+	{0,};
+	/* Protect against rescheduling, when already running */
+	if (atomic_compare_and_swap (0, 1, &bh_scheduled))
+		return;
+	dasd_tq.routine = (void *) (void *) func;
+	queue_task (&dasd_tq, &tq_immediate);
+	mark_bh (IMMEDIATE_BH);
+		return;
+	}
 
 void
 sleep_done (struct semaphore *sem)
@@ -288,104 +172,49 @@ sleep (int timeout)
 #ifdef CONFIG_DASD_ECKD
 extern dasd_operations_t dasd_eckd_operations;
 #endif				/* CONFIG_DASD_ECKD */
+#ifdef CONFIG_DASD_FBA
+extern dasd_operations_t dasd_fba_operations;
+#endif				/* CONFIG_DASD_FBA */
+#ifdef CONFIG_DASD_MDSK
+extern dasd_operations_t dasd_mdsk_operations;
+#endif				/* CONFIG_DASD_MDSK */
 
 dasd_operations_t *dasd_disciplines[] =
 {
 #ifdef CONFIG_DASD_ECKD
-	&dasd_eckd_operations
+	&dasd_eckd_operations,
 #endif				/* CONFIG_DASD_ECKD */
+#ifdef CONFIG_DASD_FBA
+	&dasd_fba_operations,
+#endif				/* CONFIG_DASD_FBA */
+#ifdef CONFIG_DASD_MDSK
+	&dasd_mdsk_operations,
+#endif				/* CONFIG_DASD_MDSK */
+#ifdef CONFIG_DASD_CKD
+	&dasd_ckd_operations,
+#endif				/* CONFIG_DASD_CKD */
+	NULL
 };
 
 char *dasd_name[] =
 {
 #ifdef CONFIG_DASD_ECKD
-	"ECKD"
+	"ECKD",
 #endif				/* CONFIG_DASD_ECKD */
+#ifdef CONFIG_DASD_FBA
+	"FBA",
+#endif				/* CONFIG_DASD_FBA */
+#ifdef CONFIG_DASD_MDSK
+	"MDSK",
+#endif				/* CONFIG_DASD_MDSK */
+#ifdef CONFIG_DASD_CKD
+	"CKD",
+#endif				/* CONFIG_DASD_CKD */
+	"END"
 };
 
-dasd_information_t *dasd_info[DASD_MAX_DEVICES] =
-{NULL,};
-
-static int dasd_blks[256] =
-{0,};
-static int dasd_secsize[256] =
-{0,};
-static int dasd_blksize[256] =
-{0,};
-static int dasd_maxsecs[256] =
-{0,};
-
-void
-fill_sizes (int di)
-{
-	int rc;
-	int minor;
-	rc = dasd_disciplines[dasd_info[di]->type]->fill_sizes (di);
-	switch (rc) {
-	case -EMEDIUMTYPE:
-		dasd_info[di]->flags |= DASD_NOT_FORMATTED;
-		break;
-	}
-	PRINT_INFO ("%ld kB <- 'soft'-block: %d, hardsect %d Bytes\n",
-		    dasd_info[di]->sizes.kbytes,
-		    dasd_info[di]->sizes.bp_block,
-		    dasd_info[di]->sizes.bp_sector);
-	switch (dasd_info[di]->type) {
-#ifdef CONFIG_DASD_ECKD
-	case dasd_eckd:
-		dasd_info[di]->sizes.first_sector =
-		    3 << dasd_info[di]->sizes.s2b_shift;
-		break;
-#endif				/* CONFIG_DASD_ECKD */
-	default:
-		INTERNAL_CHECK ("Unknown dasd type %d\n", dasd_info[di]->type);
-	}
-	minor = di << PARTN_BITS;
-	dasd_blks[minor] = dasd_info[di]->sizes.kbytes;
-	dasd_secsize[minor] = dasd_info[di]->sizes.bp_sector;
-	dasd_blksize[minor] = dasd_info[di]->sizes.bp_block;
-	dasd_maxsecs[minor] = 252<<dasd_info[di]->sizes.s2b_shift;
-	dasd_blks[minor + 1] = dasd_info[di]->sizes.kbytes -
-	    (dasd_info[di]->sizes.first_sector >> 1);
-	dasd_secsize[minor + 1] = dasd_info[di]->sizes.bp_sector;
-	dasd_blksize[minor + 1] = dasd_info[di]->sizes.bp_block;
-	dasd_maxsecs[minor+1] = 252<<dasd_info[di]->sizes.s2b_shift;
-}
-
-int
-dasd_format (int dev, format_data_t * fdata)
-{
-	int rc;
-	int devindex = DEVICE_NR (dev);
-	PRINT_INFO ("Format called with devno %x\n", dev);
-	if (MINOR (dev) & (0xff >> (8 - PARTN_BITS))) {
-		PRINT_WARN ("Can't format partition! minor %x %x\n",
-			    MINOR (dev), 0xff >> (8 - PARTN_BITS));
-		return -EINVAL;
-	}
-	down (&dasd_info[devindex]->sem);
-	if (dasd_info[devindex]->open_count == 1) {
-		rc = dasd_disciplines[dasd_info[devindex]->type]->
-		    dasd_format (devindex, fdata);
-		if (rc) {
-			PRINT_WARN ("Formatting failed rc=%d\n", rc);
-		}
-	} else {
-		PRINT_WARN ("device is open! %d\n", dasd_info[devindex]->open_count);
-		rc = -EINVAL;
-	}
-	if (!rc) {
-		fill_sizes (devindex);
-		dasd_info[devindex]->flags &= ~DASD_NOT_FORMATTED;
-	} else {
-		dasd_info[devindex]->flags |= DASD_NOT_FORMATTED;
-	}
-	up (&dasd_info[devindex]->sem);
-	return rc;
-}
-
-static inline int
-do_dasd_ioctl (struct inode *inp, unsigned int no, unsigned long data)
+static int
+do_dasd_ioctl (struct inode *inp, /* unsigned */ int no, unsigned long data)
 {
 	int rc;
 	int di;
@@ -415,14 +244,10 @@ do_dasd_ioctl (struct inode *inp, unsigned int no, unsigned long data)
 
 	switch (no) {
 	case BLKGETSIZE:{	/* Return device size */
-			unsigned long blocks;
-			if (inp->i_rdev & 0x01) {
-				blocks = (dev->sizes.blocks - 3) <<
-				    dev->sizes.s2b_shift;
-			} else {
-				blocks = dev->sizes.kbytes << dev->sizes.s2b_shift;
-			}
-			rc = copy_to_user ((long *) data, &blocks, sizeof (long));
+			int blocks = dasd_blks[MINOR (inp->i_rdev)] << 1;
+			rc = copy_to_user ((long *) data,
+					   &blocks,
+					   sizeof (long));
 			break;
 		}
 	case BLKFLSBUF:{
@@ -440,17 +265,30 @@ do_dasd_ioctl (struct inode *inp, unsigned int no, unsigned long data)
 			break;
 		}
 	case BLKRRPART:{
-			INTERNAL_CHECK ("BLKRPART not implemented%s", "");
-			rc = -EINVAL;
+			dasd_partn_detect (di);
+			rc = 0;
+			break;
+		}
+	case BIODASDRLB:{
+			rc = copy_to_user ((int *) data,
+					   &dasd_info[di]->sizes.label_block,
+					   sizeof (int));
+			break;
+		}
+	case BLKGETBSZ:{
+			rc = copy_to_user ((int *) data,
+					   &dasd_info[di]->sizes.bp_block,
+					   sizeof (int));
 			break;
 		}
 	case HDIO_GETGEO:{
-			INTERNAL_CHECK ("HDIO_GETGEO not implemented%s", "");
-			rc = -EINVAL;
+			struct hd_geometry geo;
+			dasd_disciplines[dev->type]->fill_geometry (di, &geo);
+			rc = copy_to_user ((struct hd_geometry *) data, &geo,
+					   sizeof (struct hd_geometry));
 			break;
 		}
 		RO_IOCTLS (inp->i_rdev, data);
-
 	case BIODASDRSID:{
 			rc = copy_to_user ((void *) data,
 					   &(dev->info.sid_data),
@@ -462,13 +300,17 @@ do_dasd_ioctl (struct inode *inp, unsigned int no, unsigned long data)
 			int xlt;
 			rc = copy_from_user (&xlt, (void *) data,
 					     sizeof (int));
+#if 0
                         PRINT_INFO("Xlating %d to",xlt);
+#endif
 			if (rc)
 				break;
-			if (MINOR (inp->i_rdev) & 1)
-				offset = 3;
+			offset = dd_gendisk.part[MINOR (inp->i_rdev)].start_sect >>
+			    dev->sizes.s2b_shift;
 			xlt += offset;
+#if 0
                         printk(" %d \n",xlt);
+#endif
 			rc = copy_to_user ((void *) data, &xlt,
 					   sizeof (int));
 			break;
@@ -476,6 +318,7 @@ do_dasd_ioctl (struct inode *inp, unsigned int no, unsigned long data)
 	case BIODASDFORMAT:{
 			/* fdata == NULL is a valid arg to dasd_format ! */
 			format_data_t *fdata = NULL;
+			PRINT_WARN ("called format ioctl\n");
 			if (data) {
 				fdata = kmalloc (sizeof (format_data_t),
 						 GFP_ATOMIC);
@@ -495,6 +338,7 @@ do_dasd_ioctl (struct inode *inp, unsigned int no, unsigned long data)
 			break;
 		}
 	default:
+		PRINT_WARN ("unknown ioctl number %08x %08lx\n", no, BIODASDFORMAT);
 		rc = -EINVAL;
 		break;
 	}
@@ -533,13 +377,58 @@ dasd_wakeup (void)
 	wake_up (&dasd_waitq);
 }
 
+
 int
-dasd_unregister_dasd (int irq, dasd_type_t dt, dev_info_t * info)
+dasd_watch_volume (int di)
+{
+        int rc = 0;
+
+        return rc;
+}
+
+void 
+dasd_watcher (void) 
+{
+        int i = 0;
+        int rc; 
+        do {
+                for ( i = 0; i < DASD_MAX_DEVICES; i++ ) {
+                        if ( dasd_info [i] ) {
+                                rc = dasd_watch_volume ( i );
+                        }
+                }
+                interruptible_sleep_on(&dasd_waitq);
+        } while(1);
+}
+
+int
+dasd_unregister_dasd (int di)
 {
 	int rc = 0;
-	FUNCTION_ENTRY ("dasd_unregister_dasd");
-	INTERNAL_CHECK ("dasd_unregister_dasd not implemented%s\n", "");
-	FUNCTION_EXIT ("dasd_unregister_dasd");
+	int minor;
+	int i;
+
+	minor = di << PARTN_BITS;
+	if (!dasd_info[di]) {	/* devindex is not free */
+		INTERNAL_CHECK ("trying to free unallocated device %d\n", di);
+		return -ENODEV;
+	}
+	/* delete all that partition stuff */
+	for (i = 0; i < (1 << PARTN_BITS); i++) {
+		dasd_blks[minor] = 0;
+		dasd_secsize[minor + i] = 0;
+		dasd_blksize[minor + i] = 0;
+		dasd_maxsecs[minor + i] = 0;
+	}
+	/* reset DASD to unknown statuss */
+	atomic_set (&dasd_info[di]->status, DASD_INFO_STATUS_UNKNOWN);
+
+	free_irq (dasd_info[di]->info.irq, &(dasd_info[di]->dev_status));
+	if (dasd_info[di]->rdc_data)
+		kfree (dasd_info[di]->rdc_data);
+	kfree (dasd_info[di]);
+	PRINT_INFO ("%04d deleted from list of valid DASDs\n",
+		    dasd_info[di]->info.devno);
 	return rc;
 }
 
@@ -548,8 +437,17 @@ static dasd_type_t
 check_type (dev_info_t * info)
 {
 	dasd_type_t type = dasd_none;
+	int di;
 
 	FUNCTION_ENTRY ("check_type");
+	di = devindex_from_devno (info->devno);
+
+#ifdef CONFIG_DASD_MDSK
+	if (MACHINE_IS_VM && dasd_force_mdsk_flag[di] == 1) {
+		type = dasd_mdsk;
+	} else
+#endif				/* CONFIG_DASD_MDSK */
+
 #ifdef CONFIG_DASD_ECKD
 	if (MATCH (info, == 0x3990, ||1, == 0x3390, ||1) ||
 	    MATCH (info, == 0x9343, ||1, == 0x9345, ||1) ||
@@ -557,9 +455,20 @@ check_type (dev_info_t * info)
 		type = dasd_eckd;
 	} else
 #endif				/* CONFIG_DASD_ECKD */
+#ifdef CONFIG_DASD_FBA
+	if (MATCH (info, == 0x6310, ||1, == 0x9336, ||1)) {
+		type = dasd_fba;
+	} else
+#endif				/* CONFIG_DASD_FBA */
+#ifdef CONFIG_DASD_MDSK
+	if (MACHINE_IS_VM) {
+		type = dasd_mdsk;
+	} else
+#endif				/* CONFIG_DASD_MDSK */
 	{
 		type = dasd_none;
 	}
+
 	FUNCTION_EXIT ("check_type");
 	return type;
 }
@@ -567,7 +476,7 @@ check_type (dev_info_t * info)
 static int
 dasd_read_characteristics (dasd_information_t * info)
 {
-	int rc;
+	int rc = 0;
 	int ct = 0;
 	dev_info_t *di;
 	dasd_type_t dt;
@@ -598,13 +507,25 @@ dasd_read_characteristics (dasd_information_t * info)
 #ifdef CONFIG_DASD_ECKD
 	case dasd_eckd:
 		ct = 64;
+		rc = read_dev_chars (info->info.irq,
+				     (void *) &(info->rdc_data), ct);
 		break;
 #endif				/*  CONFIG_DASD_ECKD */
+#ifdef CONFIG_DASD_FBA
+	case dasd_fba:
+		ct = 32;
+		rc = read_dev_chars (info->info.irq,
+				     (void *) &(info->rdc_data), ct);
+		break;
+#endif				/*  CONFIG_DASD_FBA */
+#ifdef CONFIG_DASD_MDSK
+	case dasd_mdsk:
+		ct = 0;
+		break;
+#endif				/*  CONFIG_DASD_FBA */
 	default:
 		INTERNAL_ERROR ("don't know dasd type %d\n", dt);
 	}
-	rc = read_dev_chars (info->info.irq,
-			     (void *) &(info->rdc_data), ct);
 	if (rc) {
 		PRINT_WARN ("RDC resulted in rc=%d\n", rc);
 	}
@@ -613,27 +534,11 @@ dasd_read_characteristics (dasd_information_t * info)
 }
 
 /* How many sectors must be in a request to dequeue it ? */
-#define QUEUE_BLOCKS 100
+#define QUEUE_BLOCKS 25
 #define QUEUE_SECTORS (QUEUE_BLOCKS << dasd_info[di]->sizes.s2b_shift)
 
 /* How often to retry an I/O before raising an error */
 #define DASD_MAX_RETRIES 5
-
-static atomic_t bh_scheduled = ATOMIC_INIT (0);
-
-static inline void
-schedule_bh (void (*func) (void))
-{
-	static struct tq_struct dasd_tq =
-	{0,};
-	/* Protect against rescheduling, when already running */
-	if (atomic_compare_and_swap (0, 1, &bh_scheduled))
-		return;
-	dasd_tq.routine = (void *) (void *) func;
-	queue_task (&dasd_tq, &tq_immediate);
-	mark_bh (IMMEDIATE_BH);
-	return;
-}
 
 static inline
  cqr_t *
@@ -652,8 +557,9 @@ dasd_cqr_from_req (struct request *req)
 	if (!info)
 		return NULL;
 	/* if applicable relocate block */
-	if (MINOR (req->rq_dev) & 0x1) {
-		req->sector += info->sizes.first_sector;
+	if (MINOR (req->rq_dev) & ((1 << PARTN_BITS) - 1)) {
+		req->sector +=
+		    dd_gendisk.part[MINOR (req->rq_dev)].start_sect;
 	}
 	/* Now check for consistency */
 	if (!req->nr_sectors) {
@@ -677,12 +583,7 @@ dasd_cqr_from_req (struct request *req)
 #ifdef DASD_PROFILE
 		asm volatile ("STCK %0":"=m" (cqr->buildclk));
 #endif				/* DASD_PROFILE */
-		if (atomic_compare_and_swap (CQR_STATUS_EMPTY,
-					     CQR_STATUS_FILLED,
-					     &cqr->status)) {
-			PRINT_WARN ("cqr from req stat changed %d\n",
-				    atomic_read (&cqr->status));
-		}
+		ACS (cqr->status, CQR_STATUS_EMPTY, CQR_STATUS_FILLED);
 	}
 	return cqr;
 }
@@ -694,24 +595,22 @@ dasd_start_IO (cqr_t * cqr)
 	int retries = DASD_SSCH_RETRIES;
 	int di, irq;
 
-	dasd_debug (cqr);	/* cqr */
+	dasd_debug ((unsigned long) cqr);	/* cqr */
 
 	if (!cqr) {
 		PRINT_WARN ("(start_IO) no cqr passed\n");
 		return -EINVAL;
 	}
-	if (cqr->magic != DASD_MAGIC) {
-		PRINT_WARN ("(start_IO) magic number mismatch\n");
+#ifdef CONFIG_DASD_MDSK
+	if (cqr->magic == MDSK_MAGIC) {
+		return dasd_mdsk_start_IO (cqr);
+	}
+#endif				/* CONFIG_DASD_MDSK */
+	if (cqr->magic != DASD_MAGIC && cqr->magic != ERP_MAGIC) {
+		PRINT_ERR ("(start_IO) magic number mismatch\n");
 		return -EINVAL;
 	}
-	if (atomic_compare_and_swap (CQR_STATUS_QUEUED,
-				     CQR_STATUS_IN_IO,
-				     &cqr->status)) {
-		PRINT_WARN ("start_IO: status changed %d\n",
-			    atomic_read (&cqr->status));
-		atomic_set (&cqr->status, CQR_STATUS_ERROR);
-		return -EINVAL;
-	}
+	ACS (cqr->status, CQR_STATUS_QUEUED, CQR_STATUS_IN_IO);
         di = cqr->devindex;
 	irq = dasd_info[di]->info.irq;
 	do {
@@ -732,10 +631,12 @@ dasd_start_IO (cqr_t * cqr)
 				    cqr, dasd_info[di]->info.devno, retries);
 			break;
 		case -EBUSY:	/* set up timer, try later */
+
 			PRINT_WARN ("cqr %p: 0x%04x busy, %d retries left\n",
 				    cqr, dasd_info[di]->info.devno, retries);
 			break;
 		default:
+
 			PRINT_WARN ("cqr %p: 0x%04x %d, %d retries left\n",
 				    cqr, rc, dasd_info[di]->info.devno,
                                     retries);
@@ -743,13 +644,7 @@ dasd_start_IO (cqr_t * cqr)
 		}
 	} while (rc && --retries);
 	if (rc) {
-		if (atomic_compare_and_swap (CQR_STATUS_IN_IO,
-					     CQR_STATUS_ERROR,
-					     &cqr->status)) {
-			PRINT_WARN ("start_IO:(done) status changed %d\n",
-				    atomic_read (&cqr->status));
-		        atomic_set (&cqr->status, CQR_STATUS_ERROR);
-		}
+		ACS (cqr->status, CQR_STATUS_IN_IO, CQR_STATUS_ERROR);
         }
 	return rc;
 }
@@ -773,8 +668,11 @@ void
 dasd_dump_sense (devstat_t * stat)
 {
 	int sl, sct;
+	if (!stat->flag | DEVSTAT_FLAG_SENSE_AVAIL) {
+		PRINT_INFO ("I/O status w/o sense data\n");
+	} else {
 	printk (KERN_INFO PRINTK_HEADER
-		"-------------------I/O resulted in unit check:-----------\n");
+			"-------------------I/O result:-----------\n");
 	for (sl = 0; sl < 4; sl++) {
 		printk (KERN_INFO PRINTK_HEADER "Sense:");
 		for (sct = 0; sct < 8; sct++) {
@@ -784,35 +682,65 @@ dasd_dump_sense (devstat_t * stat)
 		printk ("\n");
 	}
 }
+}
+
+int
+register_dasd_last (int di)
+{
+	int rc = 0;
+	int minor;
+	int i;
+
+	rc = dasd_disciplines[dasd_info[di]->type]->fill_sizes_last (di);
+	if (!rc) {
+		ACS (dasd_info[di]->status,
+		     DASD_INFO_STATUS_DETECTED, DASD_INFO_STATUS_FORMATTED);
+	} else {		/* -EMEDIUMTYPE: */
+		ACS (dasd_info[di]->status,
+		     DASD_INFO_STATUS_DETECTED, DASD_INFO_STATUS_ANALYSED);
+	}
+	PRINT_INFO ("%04X (dasd%c):%ld kB <- block: %d on sector %d B\n",
+		    dasd_info[di]->info.devno,
+		    'a' + di,
+		    dasd_info[di]->sizes.kbytes,
+		    dasd_info[di]->sizes.bp_block,
+		    dasd_info[di]->sizes.bp_sector);
+	minor = di << PARTN_BITS;
+	dasd_blks[minor] = dasd_info[di]->sizes.kbytes;
+	for (i = 0; i < (1 << PARTN_BITS); i++) {
+		dasd_secsize[minor + i] = dasd_info[di]->sizes.bp_sector;
+		dasd_blksize[minor + i] = dasd_info[di]->sizes.bp_block;
+		dasd_maxsecs[minor + i] = 252 << dasd_info[di]->sizes.s2b_shift;
+	}
+	return rc;
+}
+
+void
+dasd_partn_detect (int di)
+{
+        int minor = di << PARTN_BITS;
+	while (atomic_read (&dasd_info[di]->status) !=
+	       DASD_INFO_STATUS_FORMATTED) {
+                interruptible_sleep_on(&dasd_info[di]->wait_q);
+	}
+	dd_gendisk.part[minor].nr_sects = dasd_info[di]->sizes.kbytes << 1;
+	resetup_one_dev (&dd_gendisk, di);
+}
 
 void
 dasd_do_chanq (void)
 {
 	dasd_chanq_t *qp = NULL;
-	cqr_t *cqr;
+	cqr_t *cqr, *next;
         long flags;
         int irq;
         int tasks;
+
 	atomic_set (&bh_scheduled, 0);
 	dasd_debug (0xc4c40000);	/* DD */
-	while ((tasks = atomic_read(&chanq_tasks)) != 0) {
-/* initialization and wraparound */
-		if (qp == NULL) {
-			dasd_debug (0xc4c46df0);        /* DD_0 */
-			qp = cq_head;
-			if (!qp) {
-                          dasd_debug (0xc4c46ff1);        /* DD?1 */
-                          dasd_debug (tasks);      
-                          PRINT_ERR("Mismatch of NULL queue pointer and "
-                                    "still %d chanq_tasks to do!!\n"
-                                    "Please send output of /proc/dasd/debug "
-                                    "to Linux390@de.ibm.com\n", tasks);
-                          atomic_set(&chanq_tasks,0);
-                          break;
-			}
-		}
+	for (qp = cq_head; qp != NULL;) {
 /* Get first request */
-		dasd_debug (qp);        /* qp */
+		dasd_debug ((unsigned long) qp);
 		cqr = (cqr_t *) (qp->head);
 /* empty queue -> dequeue and proceed */
 		if (!cqr) {
@@ -823,9 +751,11 @@ dasd_do_chanq (void)
 		}
 /* process all requests on that queue */
 		do {
-			cqr_t *next;
+                        next = NULL;
 			dasd_debug ((unsigned long) cqr);	/* cqr */
-			if (cqr->magic != DASD_MAGIC) {
+			if (cqr->magic != DASD_MAGIC &&
+			    cqr->magic != MDSK_MAGIC &&
+			    cqr->magic != ERP_MAGIC) {
 				dasd_debug (0xc4c46ff2);	/* DD?2 */
 				panic ( PRINTK_HEADER "do_cq:"
 					"magic mismatch %p -> %x\n", 
@@ -837,51 +767,106 @@ dasd_do_chanq (void)
 			switch (atomic_read (&cqr->status)) {
 			case CQR_STATUS_IN_IO:
                                 dasd_debug (0xc4c4c9d6);	/* DDIO */
-                                cqr = NULL;
                                 break;
 			case CQR_STATUS_QUEUED:
                                 dasd_debug (0xc4c4e2e3);	/* DDST */
-                                if (dasd_start_IO (cqr) == 0) {
-                                        atomic_dec (&chanq_tasks);
-                                        cqr = NULL;
+				if (dasd_start_IO (cqr) != 0) {
+                                  PRINT_WARN("start_io failed\n");
                                 }
                                 break;
-			case CQR_STATUS_ERROR:
+			case CQR_STATUS_ERROR:{
                                 dasd_debug (0xc4c4c5d9);	/* DDER */
-                                dasd_dump_sense (cqr->dstat);
                                 if ( ++ cqr->retries  < 2 ) {
                                         atomic_set (&cqr->status,
                                                     CQR_STATUS_QUEUED);
-	                                dasd_debug (0xc4c4e2e3); /* DDST */
+                                        dasd_debug (0xc4c4e2e3);
                                         if (dasd_start_IO (cqr) == 0) {
-                                                atomic_dec (&chanq_tasks);
-                                                cqr = NULL;
+                                                atomic_dec (&qp->
+                                                            dirty_requests);
+                                                break;
                                         }
+                                }
+                                ACS (cqr->status,
+                                     CQR_STATUS_ERROR,
+                                     CQR_STATUS_FAILED);
+                                break;
+                        }
+			case CQR_STATUS_ERP_PEND:{
+					/* This case is entered, when an interrupt
+					   ended with a condittion */
+					dasd_erp_action_t erp_action;
+					erp_t *erp = NULL;
+
+                                        if ( cqr -> magic != ERP_MAGIC ) {
+                                                erp = request_er ();
+                                                if (erp == NULL) {
+                                                        PRINT_WARN ("No memory for ERP%s\n", "");
+                                                        break;
+                                                }
+                                                memset (erp, 0, sizeof (erp_t));
+                                                erp->cqr.magic = ERP_MAGIC;
+                                                erp->cqr.int4cqr = cqr;
+                                                erp->cqr.devindex= cqr->devindex;
+                                                erp_action = dasd_erp_action (cqr);
+                                                if (erp_action) {
+                                                        PRINT_WARN ("Taking ERP action %p\n", erp_action);
+                                                        erp_action (erp);
+                                                }
+                                                dasd_chanq_enq_head(qp, (cqr_t *) erp);
+                                                next = (cqr_t *) erp;
                                 } else {
-                                        atomic_set (&cqr->status,
+                                                PRINT_WARN("ERP_ACTION failed\n");
+                                                ACS (cqr->status,
+                                                     CQR_STATUS_ERP_PEND,
                                                     CQR_STATUS_FAILED);
                                 }
                                 break;
-			case CQR_STATUS_DONE:
+                        }
+			case CQR_STATUS_ERP_ACTIVE:
+				break;
+			case CQR_STATUS_DONE:{
                                 next = cqr->next;
-                                dasd_debug (0xc4c49692);	/* DDok */
+                                if (cqr->magic == DASD_MAGIC) {
+                                        dasd_debug (0xc4c49692);
+                                } else if (cqr->magic == ERP_MAGIC) {
+                                        dasd_erp_action_t erp_postaction;
+                                        erp_t *erp = (erp_t *) cqr;
+                                        erp_postaction =
+                                                dasd_erp_postaction (erp);
+                                        if (erp_postaction)
+                                                erp_postaction (erp);
+                                        atomic_dec (&qp->dirty_requests);
+                                } else if (cqr->magic == MDSK_MAGIC) {
+                                } else {
+                                        PRINT_WARN ("unknown magic%s\n", "");
+                                }
                                 dasd_end_cqr (cqr, 1);
-                                atomic_dec (&chanq_tasks);
-                                cqr = next;
                                 break;
-			case CQR_STATUS_FAILED:
+                        }
+			case CQR_STATUS_FAILED: {
                                 next = cqr->next;
-                                dasd_debug (0xc4c47a7a);	/* DD:: */
+                                if (cqr->magic == DASD_MAGIC) {
+                                        dasd_debug (0xc4c49692);
+                                } else if (cqr->magic == ERP_MAGIC) {
+                                        dasd_erp_action_t erp_postaction;
+                                        erp_t *erp = (erp_t *) cqr;
+                                        erp_postaction =
+                                                dasd_erp_postaction (erp);
+                                        if (erp_postaction)
+                                                erp_postaction (erp);
+                                } else if (cqr->magic == MDSK_MAGIC) {
+                                } else {
+                                        PRINT_WARN ("unknown magic%s\n", "");
+                                }
                                 dasd_end_cqr (cqr, 0);
-                                atomic_dec (&chanq_tasks);
-                                cqr = next;
+                                atomic_dec (&qp->dirty_requests);
                                 break;
+                        }
 			default:
                                 PRINT_WARN ("unknown cqrstatus\n");
-                                cqr = NULL;
 			}
                         s390irq_spin_unlock_irqrestore (irq, flags);
-		} while (cqr);
+		} while ((cqr = next) != NULL);
 		qp = qp->next_q;
 	}
 	spin_lock (&io_request_lock);
@@ -901,20 +886,15 @@ dasd_do_chanq (void)
 void
 do_dasd_request (void)
 {
-	struct request *req;
-	struct request *prev;
-	struct request *next;
-	char broken[DASD_MAX_DEVICES] =	{0,};
-	char busy[DASD_MAX_DEVICES] = {0,};
-	int di;
+	struct request *req, *next, *prev;
 	cqr_t *cqr;
-	long caller;
 	dasd_chanq_t *q;
 	long flags;
-        int irq;
+	int di, irq;
+	int broken, busy;
         
 	dasd_debug (0xc4d90000);	/* DR */
-	dasd_debug (__builtin_return_address(0));	/* calleraddres */
+	dasd_debug ((unsigned long) __builtin_return_address (0));
 	prev = NULL;
 	for (req = CURRENT; req != NULL; req = next) {
 		next = req->next;
@@ -926,12 +906,11 @@ do_dasd_request (void)
                 irq = dasd_info[di]->info.irq;
                 s390irq_spin_lock_irqsave (irq, flags);
                 q = &dasd_info[di]->queue;
-                busy[di] = busy[di]||(atomic_read(&q->flags)&DASD_CHANQ_BUSY);
-                if ( !busy[di] ||
-                     ((!broken[di]) && (req->nr_sectors >= QUEUE_SECTORS))) {
-#if 0
-			if ( q -> queued_requests < QUEUE_THRESHOLD ) {
-#endif
+		busy = atomic_read (&q->flags) & DASD_CHANQ_BUSY;
+		broken = atomic_read (&q->flags) & DASD_REQUEST_Q_BROKEN;
+		if (!busy ||
+		    (!broken &&
+		     (req->nr_sectors >= QUEUE_SECTORS))) {
                         if (prev) {
                                 prev->next = next;
                         } else {
@@ -950,24 +929,22 @@ do_dasd_request (void)
                         }
                         dasd_debug ((unsigned long) cqr);	/* cqr */
                         dasd_chanq_enq (q, cqr);
-                	        if (!(atomic_read (&q->flags) & 
-					DASD_CHANQ_ACTIVE)) {
+			if (!(atomic_read (&q->flags) & DASD_CHANQ_ACTIVE)) {
                                 cql_enq_head (q);
                         }
-                        if (!busy[di]) {
-                        	        dasd_debug (0xc4d9e2e3); /* DRST */
-	                                if (dasd_start_IO (cqr) != 0) {
-                                        atomic_inc (&chanq_tasks);
-					schedule_bh (dasd_do_chanq);
-                                        busy[di] = 1;
+			if (!busy) {
+				atomic_clear_mask (DASD_REQUEST_Q_BROKEN,
+						   &q->flags);
+				if ( atomic_read (&q->dirty_requests) == 0 ) {
+					if (dasd_start_IO (cqr) == 0) {
+					} else {
+						dasd_schedule_bh (dasd_do_chanq);
                                 }
                         }
-#if 0
 			}
-#endif
                 } else {
                         dasd_debug (0xc4d9c2d9);	/* DRBR */
-                        broken[di] = 1;
+			atomic_set_mask (DASD_REQUEST_Q_BROKEN, &q->flags);
 			prev = req;
 		}
         cont:
@@ -983,60 +960,88 @@ dasd_handler (int irq, void *ds, struct pt_regs *regs)
 	int ip;
 	cqr_t *cqr;
 	int done_fast_io = 0;
+	dasd_era_t era;
+        static int counter = 0; 
 
 	dasd_debug (0xc4c80000);	/* DH */
-	if (!stat)
+	if (!stat) {
 		PRINT_ERR ("handler called without devstat");
+		return;
+	}
 	ip = stat->intparm;
 	dasd_debug (ip);	/* intparm */
-	switch (ip) {		/* filter special intparms... */
-	case 0x00000000:	/* no intparm: unsolicited interrupt */
+	if (!ip) {		/* no intparm: unsolicited interrupt */
 		dasd_debug (0xc4c8a489);	/* DHui */
-		PRINT_INFO ("Unsolicited interrupt on device %04X\n",
+		PRINT_INFO ("%04X caught unsolicited interrupt\n",
 			    stat->devno);
-		dasd_dump_sense (stat);
 		return;
-	default:
+	}
 		if (ip & 0x80000001) {
 			dasd_debug (0xc4c8a489);	/* DHui */
-			PRINT_INFO ("Spurious interrupt %08x on device %04X\n",
-				    ip, stat->devno);
+		PRINT_INFO ("%04X  caught spurious interrupt with parm %08x\n",
+			    stat->devno, ip);
 			return;
 		}
 		cqr = (cqr_t *) ip;
-		if (cqr->magic != DASD_MAGIC) {
-			dasd_debug (0xc4c86ff1);	/* DH?1 */
-			PRINT_ERR ("handler:magic mismatch on %p %08x\n",
-				    cqr, cqr->magic);
-			return;
-		}
+	if (cqr->magic == DASD_MAGIC || cqr->magic == ERP_MAGIC) {
 		asm volatile ("STCK %0":"=m" (cqr->stopclk));
-		if (stat->cstat == 0x00 && stat->dstat == 0x0c) {
+		if ((stat->cstat == 0x00 &&
+		     stat->dstat == (DEV_STAT_CHN_END | DEV_STAT_DEV_END)) ||
+		    ((era = dasd_erp_examine (cqr, stat)) == dasd_era_none)) {
 			dasd_debug (0xc4c89692);	/* DHok */
-			if (atomic_compare_and_swap (CQR_STATUS_IN_IO,
-						     CQR_STATUS_DONE,
-						     &cqr->status)) {
-				PRINT_WARN ("handler: cqrstat changed%d\n",
-					    atomic_read (&cqr->status));
+#if 0
+                        if ( counter < 20 || cqr -> magic == ERP_MAGIC) {
+                                counter ++;
+#endif
+                                ACS (cqr->status, CQR_STATUS_IN_IO, CQR_STATUS_DONE);
+#if 0
+                        } else {
+                                counter=0;
+                                PRINT_WARN ("Faking I/O error\n");
+                                ACS (cqr->status, CQR_STATUS_IN_IO, CQR_STATUS_ERP_PEND);
+                                atomic_inc (&dasd_info[cqr->devindex]->
+                                            queue.dirty_requests);
+                        }
+#endif
+			if (atomic_read (&dasd_info[cqr->devindex]->status) ==
+			    DASD_INFO_STATUS_DETECTED) {
+				register_dasd_last (cqr->devindex);
+                                if ( dasd_info[cqr->devindex]->wait_q ) {
+                                        wake_up( &dasd_info[cqr->devindex]->
+                                                wait_q);
+                                }
 			}
-			if (cqr->next) {
+			if (cqr->next &&
+			    (atomic_read (&cqr->next->status) ==
+			     CQR_STATUS_QUEUED)) {
 				dasd_debug (0xc4c8e2e3);	/* DHST */
-				if (dasd_start_IO (cqr->next) == 0)
+				if (dasd_start_IO (cqr->next) == 0) {
 					done_fast_io = 1;
+				} else {
 			}
- 			break;
 		}
+		} else {	/* only visited in case of error ! */
 		dasd_debug (0xc4c8c5d9);	/* DHER */
+                        dasd_dump_sense (stat);
 		if (!cqr->dstat)
 			cqr->dstat = kmalloc (sizeof (devstat_t),
 					      GFP_ATOMIC);
 		if (cqr->dstat) {
 			memcpy (cqr->dstat, stat, sizeof (devstat_t));
 		} else {
-			PRINT_ERR ("no memory for dtstat\n");
+				PRINT_ERR ("no memory for dstat\n");
 		}
+                        atomic_inc (&dasd_info[cqr->devindex]->
+                                    queue.dirty_requests);
 		/* errorprocessing */
-			atomic_set (&cqr->status, CQR_STATUS_ERROR);
+			if (era == dasd_era_fatal) {
+				PRINT_WARN ("ERP returned fatal error\n");
+				ACS (cqr->status,
+				     CQR_STATUS_IN_IO, CQR_STATUS_FAILED);
+			} else {
+                                ACS (cqr->status,
+                                     CQR_STATUS_IN_IO, CQR_STATUS_ERP_PEND);
+                        }
 	}
 	if (done_fast_io == 0)
 		atomic_clear_mask (DASD_CHANQ_BUSY,
@@ -1048,13 +1053,76 @@ dasd_handler (int irq, void *ds, struct pt_regs *regs)
 		dasd_wakeup ();
 	} else if (! (cqr->options & DOIO_WAIT_FOR_INTERRUPT) ){
                 dasd_debug (0xc4c8a293);	/* DHsl */
-                atomic_inc (&chanq_tasks);
-                schedule_bh (dasd_do_chanq);
+                        dasd_schedule_bh (dasd_do_chanq);
 	} else {
                 dasd_debug (0x64686f6f);	/* DH_g */
                 dasd_debug (cqr->flags);	/* DH_g */
         }
+        } else {
+                dasd_debug (0xc4c86ff1);	/* DH?1 */
+                PRINT_ERR ("handler:magic mismatch on %p %08x\n",
+                           cqr, cqr->magic);
+                return;
+        }
 	dasd_debug (0xc4c86d6d);	/* DHwu */
+}
+
+static int
+dasd_format (int dev, format_data_t * fdata)
+{
+	int rc;
+	int devindex = DEVICE_NR (dev);
+	dasd_chanq_t *q;
+	cqr_t *cqr;
+	int irq;
+	long flags;
+	PRINT_INFO ("%04X called format on %x\n",
+		    dasd_info[devindex]->info.devno, dev);
+	if (MINOR (dev) & (0xff >> (8 - PARTN_BITS))) {
+		PRINT_WARN ("Can't format partition! minor %x %x\n",
+			    MINOR (dev), 0xff >> (8 - PARTN_BITS));
+		return -EINVAL;
+	}
+	down (&dasd_info[devindex]->sem);
+	atomic_set (&dasd_info[devindex]->status,
+		    DASD_INFO_STATUS_UNKNOWN);
+	if (dasd_info[devindex]->open_count == 1) {
+		rc = dasd_disciplines[dasd_info[devindex]->type]->
+		    dasd_format (devindex, fdata);
+		if (rc) {
+			PRINT_WARN ("Formatting failed rc=%d\n", rc);
+			up (&dasd_info[devindex]->sem);
+			return rc;
+		}
+	} else {
+		PRINT_WARN ("device is open! %d\n", dasd_info[devindex]->open_count);
+		up (&dasd_info[devindex]->sem);
+		return -EINVAL;
+	}
+#if DASD_PARANOIA > 1
+	if (!dasd_disciplines[dasd_info[devindex]->type]->fill_sizes_first) {
+		INTERNAL_CHECK ("No fill_sizes for dt=%d\n", dasd_info[devindex]->type);
+	} else
+#endif				/* DASD_PARANOIA */
+	{
+		ACS (dasd_info[devindex]->status,
+		     DASD_INFO_STATUS_UNKNOWN, DASD_INFO_STATUS_DETECTED);
+		irq = dasd_info[devindex]->info.irq;
+		PRINT_INFO ("%04X reacessing, irq %x, index %d\n",
+			    get_devno_by_irq (irq), irq, devindex);
+		s390irq_spin_lock_irqsave (irq, flags);
+		q = &dasd_info[devindex]->queue;
+		cqr = dasd_disciplines[dasd_info[devindex]->type]->
+		    fill_sizes_first (devindex);
+		dasd_chanq_enq (q, cqr);
+		if (!(atomic_read (&q->flags) & DASD_CHANQ_ACTIVE)) {
+			cql_enq_head (q);
+		}
+		dasd_schedule_bh (dasd_do_chanq);
+		s390irq_spin_unlock_irqrestore (irq, flags);
+	}
+	up (&dasd_info[devindex]->sem);
+	return rc;
 }
 
 static int
@@ -1062,6 +1130,9 @@ register_dasd (int irq, dasd_type_t dt, dev_info_t * info)
 {
 	int rc = 0;
 	int di;
+	unsigned long flags;
+	dasd_chanq_t *q;
+	cqr_t *cqr;
 	static spinlock_t register_lock = SPIN_LOCK_UNLOCKED;
 	spin_lock (&register_lock);
 	FUNCTION_ENTRY ("register_dasd");
@@ -1084,10 +1155,23 @@ register_dasd (int irq, dasd_type_t dt, dev_info_t * info)
 	memcpy (&(dasd_info[di]->info), info, sizeof (dev_info_t));
 	spin_lock_init (&dasd_info[di]->queue.f_lock);
 	spin_lock_init (&dasd_info[di]->queue.q_lock);
-	atomic_set (&dasd_info[di]->queue.flags, 0);
 	dasd_info[di]->type = dt;
 	dasd_info[di]->irq = irq;
 	dasd_info[di]->sem = MUTEX;
+#ifdef CONFIG_DASD_MDSK
+	if (dt == dasd_mdsk) {
+		dasd_info[di]->rdc_data = kmalloc (
+				 sizeof (dasd_characteristics_t), GFP_ATOMIC);
+		if (!dasd_info[di]->rdc_data) {
+			PRINT_WARN ("No memory for char on irq %d\n", irq);
+			goto unalloc;
+		}
+		dasd_info[di]->rdc_data->mdsk.dev_nr = dasd_info[di]->
+		    info.devno;
+		dasd_info[di]->rdc_data->mdsk.rdc_len =
+		    sizeof (dasd_mdsk_characteristics_t);
+	} else
+#endif				/* CONFIG_DASD_MDSK */
 	rc = dasd_read_characteristics (dasd_info[di]);
 	if (rc) {
 		PRINT_WARN ("RDC returned error %d\n", rc);
@@ -1106,30 +1190,52 @@ register_dasd (int irq, dasd_type_t dt, dev_info_t * info)
 		rc = -ENODEV;
 		goto unalloc;
 	}
+#ifdef CONFIG_DASD_MDSK
+	if (dt == dasd_mdsk) {
+
+	} else
+#endif				/* CONFIG_DASD_MDSK */
 	rc = request_irq (irq, dasd_handler, 0, "dasd",
 			  &(dasd_info[di]->dev_status));
+	ACS (dasd_info[di]->status,
+	     DASD_INFO_STATUS_UNKNOWN, DASD_INFO_STATUS_DETECTED);
 	if (rc) {
 #if DASD_PARANOIA > 0
 		printk (KERN_WARNING PRINTK_HEADER
 			"Cannot register irq %d, rc=%d\n",
 			irq, rc);
-#endif				/* DASD_DEBUG */
+#endif				/* DASD_PARANOIA */
 		rc = -ENODEV;
 		goto unalloc;
 	}
 #if DASD_PARANOIA > 1
-	if (!dasd_disciplines[dt]->fill_sizes) {
+	if (!dasd_disciplines[dt]->fill_sizes_first) {
 		INTERNAL_CHECK ("No fill_sizes for dt=%d\n", dt);
 		goto unregister;
 	}
 #endif				/* DASD_PARANOIA */
-	fill_sizes (di);
+	irq = dasd_info[di]->info.irq;
+	PRINT_INFO ("%04X trying to access, irq %x, index %d\n",
+		    get_devno_by_irq (irq), irq, di);
+	s390irq_spin_lock_irqsave (irq, flags);
+	q = &dasd_info[di]->queue;
+	cqr = dasd_disciplines[dt]->fill_sizes_first (di);
+	dasd_chanq_enq (q, cqr);
+	if (!(atomic_read (&q->flags) & DASD_CHANQ_ACTIVE)) {
+		cql_enq_head (q);
+	}
+	if (dasd_start_IO (cqr) != 0) {
+		dasd_schedule_bh (dasd_do_chanq);
+	}
+	s390irq_spin_unlock_irqrestore (irq, flags);
+
 	goto exit;
 
       unregister:
 	free_irq (irq, &(dasd_info[di]->dev_status));
       unalloc:
 	kfree (dasd_info[di]);
+	dasd_info[di] = NULL;
       exit:
 	spin_unlock (&register_lock);
 	FUNCTION_EXIT ("register_dasd");
@@ -1143,68 +1249,57 @@ probe_for_dasd (int irq)
 	dev_info_t info;
 	dasd_type_t dt;
 
-	FUNCTION_ENTRY ("probe_for_dasd");
-
 	rc = get_dev_info_by_irq (irq, &info);
+
 	if (rc == -ENODEV) {	/* end of device list */
 		return rc;
+	} else if ((info.status & DEVSTAT_DEVICE_OWNED)) {
+		return -EBUSY;
+	} else if ((info.status & DEVSTAT_NOT_OPER)) {
+		return -ENODEV;
 	}
 #if DASD_PARANOIA > 2
-	if (rc) {
+	else {
 		INTERNAL_CHECK ("unknown rc %d of get_dev_info", rc);
 		return rc;
 	}
 #endif				/* DASD_PARANOIA */
-	if ((info.status & DEVSTAT_NOT_OPER)) {
+
+	dt = check_type (&info);	/* make a first guess */
+
+	if (dt == dasd_none) {
 		return -ENODEV;
 	}
-	dt = check_type (&info);
-	switch (dt) {
-#ifdef CONFIG_DASD_ECKD
-	case dasd_eckd:
-#endif				/* CONFIG_DASD_ECKD */
-		FUNCTION_CONTROL ("Probing devno %d...\n", info.devno);
 		if (!dasd_is_accessible (info.devno)) {
-			FUNCTION_CONTROL ("out of range...skip%s\n", "");
 			return -ENODEV;
 		}
-		if (dasd_disciplines[dt]->ck_devinfo) {
-			rc = dasd_disciplines[dt]->ck_devinfo (&info);
-		}
-#if DASD_PARANOIA > 1
-		else {
+	if (!dasd_disciplines[dt]->ck_devinfo) {
 			INTERNAL_ERROR ("no ck_devinfo function%s\n", "");
 			return -ENODEV;
 		}
-#endif				/* DASD_PARANOIA */
-		if (rc == -ENODEV) {
+	rc = dasd_disciplines[dt]->ck_devinfo (&info);
+	if (rc) {
 			return rc;
 		}
-#if DASD_PARANOIA > 2
-		if (rc) {
-			INTERNAL_CHECK ("unknown error rc=%d\n", rc);
+	if (dasd_probeonly) {
+		PRINT_INFO ("%04X not enabled due to probeonly mode\n",
+			    info.devno);
+		dasd_add_devno_to_ranges (info.devno);
 			return -ENODEV;
-		}
-#endif				/* DASD_PARANOIA */
+	} else {
 		rc = register_dasd (irq, dt, &info);
+	}
 		if (rc) {
-			PRINT_INFO ("devno %x not enabled as minor %d  due to errors\n",
-				    info.devno,
-				    devindex_from_devno (info.devno) <<
-				    PARTN_BITS);
+		PRINT_WARN ("%04X not enabled due to errors\n",
+			    info.devno);
 		} else {
-			PRINT_INFO ("devno %x added as minor %d (%s)\n",
+		PRINT_INFO ("%04X is (dasd%c) minor %d (%s)\n",
 				    info.devno,
+			    'a' + devindex_from_devno (info.devno),
 			       devindex_from_devno (info.devno) << PARTN_BITS,
 				    dasd_name[dt]);
 		}
-	case dasd_none:
-		break;
-	default:
-		PRINT_DEBUG ("unknown device type\n");
-		break;
-	}
-	FUNCTION_EXIT ("probe_for_dasd");
+
 	return rc;
 }
 
@@ -1214,7 +1309,7 @@ register_major (int major)
 	int rc = 0;
 
 	FUNCTION_ENTRY ("register_major");
-	rc = register_blkdev (major, DASD_NAME, &dasd_file_operations);
+	rc = register_blkdev (major, DASD_NAME, &dasd_device_operations);
 #if DASD_PARANOIA > 1
 	if (rc) {
 		PRINT_WARN ("registering major -> rc=%d aborting... \n", rc);
@@ -1233,24 +1328,6 @@ register_major (int major)
    modifier is to make sure, that they are only called via the kernel's methods
  */
 
-static ssize_t
-dasd_read (struct file *filp, char *b, size_t s, loff_t * o)
-{
-	ssize_t rc;
-	FUNCTION_ENTRY ("dasd_read");
-	rc = block_read (filp, b, s, o);
-	FUNCTION_EXIT ("dasd_read");
-	return rc;
-}
-static ssize_t
-dasd_write (struct file *filp, const char *b, size_t s, loff_t * o)
-{
-	ssize_t rc;
-	FUNCTION_ENTRY ("dasd_write");
-	rc = block_write (filp, b, s, o);
-	FUNCTION_EXIT ("dasd_write");
-	return rc;
-}
 static int
 dasd_ioctl (struct inode *inp, struct file *filp,
 	    unsigned int no, unsigned long data)
@@ -1298,19 +1375,6 @@ dasd_open (struct inode *inp, struct file *filp)
 }
 
 static int
-dasd_fsync (struct file *filp, struct dentry *d)
-{
-	int rc = 0;
-	FUNCTION_ENTRY ("dasd_fsync");
-	if (!filp) {
-		return -EINVAL;
-	}
-	rc = block_fsync (filp, d);
-	FUNCTION_EXIT ("dasd_fsync");
-	return rc;
-}
-
-static int
 dasd_release (struct inode *inp, struct file *filp)
 {
 	int rc = 0;
@@ -1346,23 +1410,14 @@ dasd_release (struct inode *inp, struct file *filp)
 }
 
 static struct
-file_operations dasd_file_operations =
+file_operations dasd_device_operations =
 {
-	NULL,			/* loff_t(*llseek)(struct file *,loff_t,int); */
-	dasd_read,
-	dasd_write,
-	NULL,			/* int(*readdir)(struct file *,void *,filldir_t); */
-	NULL,			/* u int(*poll)(struct file *,struct poll_table_struct *); */
-	dasd_ioctl,
-	NULL,			/* int (*mmap) (struct file *, struct vm_area_struct *); */
-	dasd_open,
-	NULL,			/* int (*flush) (struct file *) */
-	dasd_release,
-	dasd_fsync,
-	NULL,			/* int (*fasync) (int, struct file *, int);
-				   int (*check_media_change) (kdev_t dev);
-				   int (*revalidate) (kdev_t dev);
-				   int (*lock) (struct file *, int, struct file_lock *); */
+	read:block_read,
+	write:block_write,
+	fsync:block_fsync,
+	ioctl:dasd_ioctl,
+	open:dasd_open,
+	release:dasd_release,
 };
 
 int
@@ -1371,20 +1426,29 @@ dasd_init (void)
 	int rc = 0;
 	int i;
 
-	FUNCTION_ENTRY ("dasd_init");
 	PRINT_INFO ("initializing...\n");
-	atomic_set (&chanq_tasks, 0);
 	atomic_set (&bh_scheduled, 0);
 	spin_lock_init (&dasd_lock);
+#ifdef CONFIG_DASD_MDSK
+	/*
+	 * enable service-signal external interruptions,
+	 * Control Register 0 bit 22 := 1
+	 * (besides PSW bit 7 must be set to 1 somewhere for external
+	 * interruptions)
+	 */
+	ctl_set_bit (0, 9);
+	register_external_interrupt (0x2603, do_dasd_mdsk_interrupt);
+#endif
+	dasd_debug_info = debug_register ("dasd", 1, 4);
 	/* First register to the major number */
+
 	rc = register_major (MAJOR_NR);
 #if DASD_PARANOIA > 1
 	if (rc) {
 		PRINT_WARN ("registering major_nr returned rc=%d\n", rc);
 		return rc;
 	}
-#endif	/* DASD_PARANOIA */ 
-        read_ahead[MAJOR_NR] = 8;
+#endif	/* DASD_PARANOIA */ read_ahead[MAJOR_NR] = 8;
         blk_size[MAJOR_NR] = dasd_blks;
 	hardsect_size[MAJOR_NR] = dasd_secsize;
 	blksize_size[MAJOR_NR] = dasd_blksize;
@@ -1393,17 +1457,14 @@ dasd_init (void)
 	dasd_proc_init ();
 #endif				/* CONFIG_PROC_FS */
 	/* Now scan the device list for DASDs */
-	FUNCTION_CONTROL ("entering detection loop%s\n", "");
 	for (i = 0; i < NR_IRQS; i++) {
 		int irc;	/* Internal return code */
-		LOOP_CONTROL ("Probing irq %d...\n", i);
 		irc = probe_for_dasd (i);
 		switch (irc) {
 		case 0:
-			LOOP_CONTROL ("Added DASD%s\n", "");
 			break;
 		case -ENODEV:
-			LOOP_CONTROL ("No DASD%s\n", "");
+		case -EBUSY:
 			break;
 		case -EMEDIUMTYPE:
 			PRINT_WARN ("DASD not formatted%s\n", "");
@@ -1413,33 +1474,64 @@ dasd_init (void)
 			break;
 		}
 	}
-	FUNCTION_CONTROL ("detection loop completed%s\n", "");
+	FUNCTION_CONTROL ("detection loop completed %s partn check...\n", "");
 /* Finally do the genhd stuff */
-#if 0				/* 2 b done */
 	dd_gendisk.next = gendisk_head;
 	gendisk_head = &dd_gendisk;
-	for (i = 0; i < DASD_MAXDEVICES; i++) {
-		LOOP_CONTROL ("Setting partitions of DASD %d\n", i);
-		resetup_one_dev (&dd_gendisk, i);
+	dasd_information = dasd_info;	/* to enable genhd to know about DASD */
+        tod_wait (1000000);
+
+	/* wait on root filesystem before detecting partitions */
+	if (MAJOR (ROOT_DEV) == DASD_MAJOR) {
+		int count = 10;
+		i = DEVICE_NR (ROOT_DEV);
+		if (dasd_info[i] == NULL) {
+			panic ("root device not accessible\n");
+		}
+                while ((atomic_read (&dasd_info[i]->status) !=
+                        DASD_INFO_STATUS_FORMATTED) &&
+                       count ) {
+                        PRINT_INFO ("Waiting on root volume...%d seconds left\n", count);
+			tod_wait (1000000);
+			count--;
+		}
+		if (count == 0) {
+			panic ("Waiting on root volume...giving up!\n");
+		}
 	}
-#endif				/* 0 */
-	FUNCTION_EXIT ("dasd_init");
+	for (i = 0; i < DASD_MAX_DEVICES; i++) {
+		if (dasd_info[i]) {
+			if (atomic_read (&dasd_info[i]->status) ==
+			    DASD_INFO_STATUS_FORMATTED) {
+				dasd_partn_detect (i);
+			} else {	/* start kernel thread for devices not ready now */
+				kernel_thread (dasd_partn_detect, (void *) i,
+                                               CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+			}
+		}
+	}
 	return rc;
 }
 
 #ifdef MODULE
+
 int
 init_module (void)
 {
 	int rc = 0;
 
-	FUNCTION_ENTRY ("init_module");
-	PRINT_INFO ("trying to load module\n");
+	PRINT_INFO ("Initializing module\n");
+	rc = dasd_parse_module_params ();
+	if (rc == 0) {
+		PRINT_INFO ("module parameters parsed successfully\n");
+	} else {
+		PRINT_WARN ("parsing parameters returned rc=%d\n", rc);
+	}
 	rc = dasd_init ();
 	if (rc == 0) {
-		PRINT_INFO ("module loaded successfully\n");
+		PRINT_INFO ("module initialized successfully\n");
 	} else {
-		PRINT_WARN ("warning: Module load returned rc=%d\n", rc);
+		PRINT_WARN ("initializing module returned rc=%d\n", rc);
 	}
 	FUNCTION_EXIT ("init_module");
 	return rc;
@@ -1449,19 +1541,32 @@ void
 cleanup_module (void)
 {
 	int rc = 0;
+	struct gendisk *genhd = gendisk_head, *prev = NULL;
 
-	FUNCTION_ENTRY ("cleanup_module");
 	PRINT_INFO ("trying to unload module \n");
 
-	/* FIXME: replace by proper unload functionality */
-	INTERNAL_ERROR ("Modules not yet implemented %s", "");
+	/* unregister gendisk stuff */
+	for (genhd = gendisk_head; genhd; prev = genhd, genhd = genhd->next) {
+		if (genhd == dd_gendisk) {
+			if (prev)
+				prev->next = genhd->next;
+			else {
+				gendisk_head = genhd->next;
+			}
+			break;
+		}
+	}
+	/* unregister devices */
+	for (i = 0; i = DASD_MAX_DEVICES; i++) {
+		if (dasd_info[i])
+			dasd_unregister_dasd (i);
+	}
 
 	if (rc == 0) {
 		PRINT_INFO ("module unloaded successfully\n");
 	} else {
 		PRINT_WARN ("module unloaded with errors\n");
 	}
-	FUNCTION_EXIT ("cleanup_module");
 }
 #endif				/* MODULE */
 

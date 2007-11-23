@@ -7,6 +7,7 @@
  */
 
 #include <linux/stddef.h>
+#include <linux/kernel.h>
 #include <asm/string.h>
 #include <asm/ebcdic.h>
 
@@ -40,14 +41,5 @@ void cpcmd(char *cmd, char *response, int rlen)
                               : "a" (obuffer), "d" (olen)
                               : "2", "3"  );
         }
-}
-
-int sys_msgcp(char *str)
-{
-        char buffer[256];
-
-        sprintf(buffer, "MSG * %s", str);
-        cpcmd(buffer, NULL, 0);
-        cpcmd("STOP", NULL, 0);
 }
 

@@ -890,12 +890,10 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	debug_file->write_proc = &comx_write_proc;
 	debug_file->nlink = 1;
 
-	/* struct ppp_device is a bit larger then struct device and the
-	   syncppp driver needs it */
-	if ((dev = kmalloc(sizeof(struct ppp_device), GFP_KERNEL)) == NULL) {
+	if ((dev = kmalloc(sizeof(struct device), GFP_KERNEL)) == NULL) {
 		return -ENOMEM;
 	}
-	memset(dev, 0, sizeof(struct ppp_device));
+	memset(dev, 0, sizeof(struct device));
 	dev->name = (char *)new_dir->name;
 	dev->init = comx_init_dev;
 
@@ -903,6 +901,11 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		return -EIO;
 	}
 	ch=dev->priv;
+	if((ch->if_ptr = (void *)kmalloc(sizeof(struct ppp_device),
+				 GFP_KERNEL)) == NULL) {
+		return -ENOMEM;
+	}
+	memset(ch->if_ptr, 0, sizeof(struct ppp_device));
 	ch->debug_file = debug_file; 
 	ch->procdir = new_dir;
 	new_dir->data = dev;

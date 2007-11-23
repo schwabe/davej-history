@@ -24,7 +24,7 @@ include $(TOPDIR)/Rules.make
 	$(OBJCOPY) -O binary $< $@
 
 image: $(CONFIGURE) $(TOPDIR)/vmlinux \
-	iplfba.boot ipleckd.boot 
+	iplfba.boot ipleckd.boot ipldump.boot
 	$(OBJCOPY) -O binary $(TOPDIR)/vmlinux image
 	$(NM) $(TOPDIR)/vmlinux | grep -v '\(compiled\)\|\( [aU] \)\|\(\.\)\|\(LASH[RL]DI\)' | sort > $(TOPDIR)/System.map
 
@@ -34,5 +34,5 @@ listing: ../../../vmlinux
 dep:
 
 clean:
-	rm -f image listing iplfba.boot ipleckd.boot
+	rm -f image listing iplfba.boot ipleckd.boot ipldump.boot
 

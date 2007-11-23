@@ -233,12 +233,16 @@ static void extended_partition(struct gendisk *hd, kdev_t dev, int sector_size)
 	unsigned long first_sector, first_size, this_sector, this_size;
 	int mask = (1 << hd->minor_shift) - 1;
 	int i;
+	int loopct = 0; 	/* number of links followed
+				   without finding a data partition */
 
 	first_sector = hd->part[MINOR(dev)].start_sect;
 	first_size = hd->part[MINOR(dev)].nr_sects;
 	this_sector = first_sector;
 
 	while (1) {
+		if (++loopct > 100)
+			return;
 		if ((current_minor & mask) == 0)
 			return;
 		if (!(bh = bread(dev,0,get_ptable_blocksize(dev))))
@@ -286,6 +290,7 @@ static void extended_partition(struct gendisk *hd, kdev_t dev, int sector_size)
 			current_minor++;
 			if ((current_minor & mask) == 0)
 				goto done;
+			loopct = 0;
 		}
 		/*
 		 * Next, process the (first) extended partition, if present.
@@ -321,6 +326,7 @@ solaris_x86_partition(struct gendisk *hd, kdev_t dev, long offset) {
 	struct buffer_head *bh;
 	struct solaris_x86_vtoc *v;
 	struct solaris_x86_slice *s;
+	int mask = (1 << hd->minor_shift) - 1;
 	int i;
 
 	if(!(bh = bread(dev, 0, get_ptable_blocksize(dev))))
@@ -337,10 +343,14 @@ solaris_x86_partition(struct gendisk *hd, kdev_t dev, long offset) {
 		return;
 	}
 	for(i=0; i<SOLARIS_X86_NUMSLICE; i++) {
+		if ((current_minor & mask) == 0)
+			break;
+
 		s = &v->v_slice[i];
 
 		if (s->s_size == 0)
 			continue;
+
 		printk(" [s%d]", i);
 		/* solaris partitions are relative to current MS-DOS
 		 * one but add_partition starts relative to sector
@@ -1365,6 +1375,114 @@ static int ultrix_partition(struct gendisk *hd, kdev_t dev, unsigned long first_
 
 #endif /* CONFIG_ULTRIX_PARTITION */
 
+#ifdef CONFIG_ARCH_S390
+#include <asm/ebcdic.h>
+#include "../s390/block/dasd_types.h"
+
+dasd_information_t **dasd_information = NULL;
+
+typedef enum {
+  ibm_partition_none = 0,
+  ibm_partition_lnx1 = 1,
+  ibm_partition_vol1 = 3,
+  ibm_partition_cms1 = 4
+} ibm_partition_t;
+
+static ibm_partition_t
+get_partition_type ( char * type )
+{
+        static char lnx[5]="LNX1";
+        static char vol[5]="VOL1";
+        static char cms[5]="CMS1";
+        if ( ! strncmp ( lnx, "LNX1",4 ) ) {
+                ASCEBC(lnx,4);
+                ASCEBC(vol,4);
+                ASCEBC(cms,4);
+        }
+        if ( ! strncmp (type,lnx,4) ||
+             ! strncmp (type,"LNX1",4) )
+                return ibm_partition_lnx1;
+        if ( ! strncmp (type,vol,4) )
+                return ibm_partition_vol1;
+        if ( ! strncmp (type,cms,4) )
+                return ibm_partition_cms1;
+        return ibm_partition_none;
+}
+
+int 
+ibm_partition (struct gendisk *hd, kdev_t dev, int first_sector)
+{
+	struct buffer_head *bh;
+	ibm_partition_t partition_type;
+	char type[5] = {0,};
+	char name[7] = {0,};
+        int di = MINOR(dev) >> hd->minor_shift;
+        if ( ! get_ptable_blocksize(dev) )
+		return 0;
+	if ( ! dasd_information )
+		return 0;
+	if ( ( bh = bread( dev, 
+			 dasd_information[di]->sizes.label_block, 
+			 dasd_information[di]->sizes.bp_sector ) ) != NULL ) {
+		strncpy ( type,bh -> b_data, 4);
+		strncpy ( name,bh -> b_data + 4, 6);
+        } else {
+		return 0;
+	}
+	if ( (*(char *)bh -> b_data) & 0x80 ) {
+		EBCASC(name,6);
+	}
+	switch ( partition_type = get_partition_type(type) ) {
+	case ibm_partition_lnx1:
+		printk ( "(LNX1)/%6s:",name);
+		add_partition( hd, MINOR(dev) + 1, 
+				  (dasd_information[di]->sizes.label_block + 1) <<
+				   dasd_information[di]->sizes.s2b_shift,
+				  (dasd_information [di]->sizes.blocks -
+				    dasd_information[di]->sizes.label_block - 1) <<
+				  dasd_information[di]->sizes.s2b_shift,0 );
+		break;
+	case ibm_partition_vol1:
+		printk ( "(VOL1)/%6s:",name);
+		break;
+	case ibm_partition_cms1:
+		printk ( "(CMS1)/%6s:",name);
+		if (* (((long *)bh->b_data) + 13) == 0) {
+			/* disk holds a CMS filesystem */
+			add_partition( hd, MINOR(dev) + 1, 
+				       (dasd_information [di]->sizes.label_block + 1) <<
+				       dasd_information [di]->sizes.s2b_shift,
+				       (dasd_information [di]->sizes.blocks -
+					dasd_information [di]->sizes.label_block) <<
+				       dasd_information [di]->sizes.s2b_shift,0 );
+			printk ("(CMS)");
+		} else {
+		  /* disk is reserved minidisk */
+                        long *label=(long*)bh->b_data;
+			int offset = label[13];
+			int size = (label[7]-1-label[13])*(label[3]>>9);
+			add_partition( hd, MINOR(dev) + 1, 
+				       offset << dasd_information [di]->sizes.s2b_shift,
+				       size<<dasd_information [di]->sizes.s2b_shift,0 );
+			printk ("(MDSK)");
+		}
+		break;
+	case ibm_partition_none:
+		printk ( "(nonl)/      :");
+		add_partition( hd, MINOR(dev) + 1, 
+				  (dasd_information [di]->sizes.label_block + 1) <<
+				  dasd_information [di]->sizes.s2b_shift,
+				  (dasd_information [di]->sizes.blocks -
+				   dasd_information [di]->sizes.label_block - 1) <<
+				  dasd_information [di]->sizes.s2b_shift,0 );
+		break;
+	}
+	printk ( "\n" );
+	bforget(bh);
+	return 1;
+}
+#endif
+
 static void check_partition(struct gendisk *hd, kdev_t dev)
 {
 	static int first_time = 1;
@@ -1416,6 +1534,10 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 #endif
 #ifdef CONFIG_ULTRIX_PARTITION
 	if(ultrix_partition(hd, dev, first_sector))
+		return;
+#endif
+#ifdef CONFIG_ARCH_S390
+	if (ibm_partition (hd, dev, first_sector))
 		return;
 #endif
 	printk(" unknown partition table\n");

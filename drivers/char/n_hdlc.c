@@ -9,7 +9,7 @@
  *	Al Longyear <longyear@netcom.com>, Paul Mackerras <Paul.Mackerras@cs.anu.edu.au>
  *
  * Original release 01/11/99
- * ==FILEDATE 19990901==
+ * ==FILEDATE 20000515==
  *
  * This code is released under the GNU General Public License (GPL)
  *
@@ -78,7 +78,7 @@
  */
 
 #define HDLC_MAGIC 0x239e
-#define HDLC_VERSION "1.11"
+#define HDLC_VERSION "1.15"
 
 #include <linux/version.h>
 #include <linux/config.h>
@@ -105,7 +105,6 @@
 #include <linux/malloc.h>
 #include <linux/tty.h>
 #include <linux/errno.h>
-#include <linux/sched.h>	/* to get the struct task_struct */
 #include <linux/string.h>	/* used in new tty drivers */
 #include <linux/signal.h>	/* used in new tty drivers */
 #include <asm/system.h>
@@ -172,6 +171,7 @@ do {									  \
 #if LINUX_VERSION_CODE < VERSION(2,1,0)
 #define __init
 typedef int spinlock_t;
+#define spin_lock_init(a)
 #define spin_lock_irqsave(a,b) {save_flags((b));cli();}
 #define spin_unlock_irqrestore(a,b) {restore_flags((b));}
 #define spin_lock(a)
@@ -465,9 +465,10 @@ static void n_hdlc_send_frames (struct n_hdlc *n_hdlc, struct tty_struct *tty)
 	register int actual;
 	unsigned long flags;
 	N_HDLC_BUF *tbuf;
-	
+
 	if (debuglevel >= DEBUG_LEVEL_INFO)	
 		printk("%s(%d)n_hdlc_send_frames() called\n",__FILE__,__LINE__);
+ check_again:
 		
 	save_flags(flags);
 	cli ();
@@ -477,6 +478,7 @@ static void n_hdlc_send_frames (struct n_hdlc *n_hdlc, struct tty_struct *tty)
 		return;
 	}
 	n_hdlc->tbusy = 1;
+	n_hdlc->woke_up = 0;
 	restore_flags(flags);
 
 	/* get current transmit buffer or get new transmit */
@@ -492,7 +494,6 @@ static void n_hdlc_send_frames (struct n_hdlc *n_hdlc, struct tty_struct *tty)
 				__FILE__,__LINE__,tbuf,tbuf->count);
 			
 		/* Send the next block of data to device */
-		n_hdlc->woke_up = 0;
 		tty->flags |= (1 << TTY_DO_WRITE_WAKEUP);
 		actual = tty->driver.write(tty, 0, tbuf->buf, tbuf->count);
 		    
@@ -514,6 +515,7 @@ static void n_hdlc_send_frames (struct n_hdlc *n_hdlc, struct tty_struct *tty)
 			
 			/* wait up sleeping writers */
 			wake_up_interruptible(&n_hdlc->write_wait);
+			wake_up_interruptible(&n_hdlc->poll_wait);
 	
 			/* get next pending transmit buffer */
 			tbuf = n_hdlc_buf_get(&n_hdlc->tx_buf_list);
@@ -523,11 +525,6 @@ static void n_hdlc_send_frames (struct n_hdlc *n_hdlc, struct tty_struct *tty)
 					__FILE__,__LINE__,tbuf);
 					
 			/* buffer not accepted by driver */
-			
-			/* check if wake up code called since last write call */
-			if (n_hdlc->woke_up)
-				continue;
-				
 			/* set this buffer as pending buffer */
 			n_hdlc->tbuf = tbuf;
 			break;
@@ -543,6 +540,9 @@ static void n_hdlc_send_frames (struct n_hdlc *n_hdlc, struct tty_struct *tty)
 	n_hdlc->tbusy = 0;
 	restore_flags(flags);
 	
+        if (n_hdlc->woke_up)
+	  goto check_again;
+
 	if (debuglevel >= DEBUG_LEVEL_INFO)	
 		printk("%s(%d)n_hdlc_send_frames() exit\n",__FILE__,__LINE__);
 		
@@ -570,11 +570,8 @@ static void n_hdlc_tty_wakeup (struct tty_struct *tty)
 		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 		return;
 	}
-	
-	if (!n_hdlc->tbuf)
-		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
-	else
-		n_hdlc_send_frames (n_hdlc, tty);
+
+	n_hdlc_send_frames (n_hdlc, tty);
 		
 }	/* end of n_hdlc_tty_wakeup() */
 
@@ -663,8 +660,11 @@ static void n_hdlc_tty_receive(struct tty_struct *tty,
 	wake_up_interruptible (&n_hdlc->read_wait);
 	wake_up_interruptible (&n_hdlc->poll_wait);
 	if (n_hdlc->tty->fasync != NULL)
+#if LINUX_VERSION_CODE < VERSION(2,3,0) 
 		kill_fasync (n_hdlc->tty->fasync, SIGIO);
-
+#else
+		kill_fasync (n_hdlc->tty->fasync, SIGIO, POLL_IN);
+#endif
 }	/* end of n_hdlc_tty_receive() */
 
 /* n_hdlc_tty_read()
@@ -788,33 +788,30 @@ static rw_ret_t n_hdlc_tty_write (struct tty_struct *tty, struct file *file,
 		count = maxframe;
 	}
 	
+	add_wait_queue(&n_hdlc->write_wait, &wait);
+	set_current_state(TASK_INTERRUPTIBLE);
+	
 	/* Allocate transmit buffer */
-	tbuf = n_hdlc_buf_get(&n_hdlc->tx_free_buf_list);
-	if (!tbuf) {
-		/* sleep until transmit buffer available */		
-		add_wait_queue(&n_hdlc->write_wait, &wait);
-		while (!tbuf) {
-			set_current_state(TASK_INTERRUPTIBLE);
-			schedule();
-
-			n_hdlc = tty2n_hdlc (tty);
-			if (!n_hdlc || n_hdlc->magic != HDLC_MAGIC || 
-			    tty != n_hdlc->tty) {
-				printk("n_hdlc_tty_write: %p invalid after wait!\n", n_hdlc);
-				error = -EIO;
-				break;
-			}
+	/* sleep until transmit buffer available */		
+	while (!(tbuf = n_hdlc_buf_get(&n_hdlc->tx_free_buf_list))) {
+		schedule();
 			
-			if (signal_pending(current)) {
-				error = -EINTR;
-				break;
-			}
-			
-			tbuf = n_hdlc_buf_get(&n_hdlc->tx_free_buf_list);
+		n_hdlc = tty2n_hdlc (tty);
+		if (!n_hdlc || n_hdlc->magic != HDLC_MAGIC || 
+		    tty != n_hdlc->tty) {
+			printk("n_hdlc_tty_write: %p invalid after wait!\n", n_hdlc);
+			error = -EIO;
+			break;
 		}
-		set_current_state(TASK_RUNNING);
-		remove_wait_queue(&n_hdlc->write_wait, &wait);
+			
+		if (signal_pending(current)) {
+			error = -EINTR;
+			break;
+		}
 	}
+
+	set_current_state(TASK_RUNNING);
+	remove_wait_queue(&n_hdlc->write_wait, &wait);
 
 	if (!error) {		
 		/* Retrieve the user's buffer */
@@ -991,7 +988,11 @@ static unsigned int n_hdlc_tty_poll (struct tty_struct *tty,
 	if (n_hdlc && n_hdlc->magic == HDLC_MAGIC && tty == n_hdlc->tty) {
 		/* queue current process into any wait queue that */
 		/* may awaken in the future (read and write) */
+#if LINUX_VERSION_CODE < VERSION(2,1,89)
+		poll_wait(&n_hdlc->poll_wait, wait);
+#else
 		poll_wait(filp, &n_hdlc->poll_wait, wait);
+#endif
 		/* set bits for operations that wont block */
 		if(n_hdlc->rx_buf_list.head)
 			mask |= POLLIN | POLLRDNORM;	/* readable */
@@ -1071,7 +1072,7 @@ static struct n_hdlc *n_hdlc_alloc (void)
 void n_hdlc_buf_list_init(N_HDLC_BUF_LIST *list)
 {
 	memset(list,0,sizeof(N_HDLC_BUF_LIST));
-		
+	spin_lock_init(&list->spinlock);
 }	/* end of n_hdlc_buf_list_init() */
 
 /* n_hdlc_buf_put()

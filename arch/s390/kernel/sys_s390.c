@@ -115,8 +115,9 @@ asmlinkage int old_select(struct sel_arg_struct *arg)
  * This is really horribly ugly.
  */
 asmlinkage int sys_ipc (uint call, int first, int second, 
-                        int third, void *ptr, long fifth)
+                        int third, void *ptr)
 {
+        struct ipc_kludge tmp;
 	int ret;
 
         switch (call) {
@@ -137,9 +138,13 @@ asmlinkage int sys_ipc (uint call, int first, int second,
                                    second, third);
 		break;
         case MSGRCV:
-                return sys_msgrcv (first, 
-                                   (struct msgbuf *) ptr,
-                                   second, fifth, third);
+                if (!ptr)
+                        return -EINVAL;
+                if (copy_from_user (&tmp, (struct ipc_kludge *) ptr,
+                                    sizeof (struct ipc_kludge)))
+                        return -EFAULT;
+                return sys_msgrcv (first, tmp.msgp,
+                                   second, tmp.msgtyp, third);
         case MSGGET:
                 return sys_msgget ((key_t) first, second);
         case MSGCTL:

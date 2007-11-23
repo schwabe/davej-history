@@ -27,14 +27,14 @@ typedef struct
 struct pt_regs 
 {
 	S390_REGS
-	long trap;
+	__u32 trap;
 };
 
 #if CONFIG_REMOTE_DEBUG
 typedef struct
 {
 	S390_REGS
-	long  trap;
+	__u32 trap;
 	__u32 crs[16];
 	s390_fp_regs fp_regs;
 } gdb_pt_regs;

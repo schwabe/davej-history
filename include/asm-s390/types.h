@@ -53,11 +53,12 @@ typedef unsigned long long u64;
 
 #define BITS_PER_LONG 32
 
-#endif                                 /* __KERNEL__                       */
 #ifndef TRUE
 #define TRUE 1
 #endif
 #ifndef FALSE
 #define FALSE 0
 #endif
+
+#endif                                 /* __KERNEL__                       */
 #endif

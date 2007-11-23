@@ -19,7 +19,6 @@
 #define __NR_write                4
 #define __NR_open                 5
 #define __NR_close                6
-#define __NR_waitpid              7
 #define __NR_creat                8
 #define __NR_link                 9
 #define __NR_unlink              10
@@ -29,8 +28,6 @@
 #define __NR_mknod               14
 #define __NR_chmod               15
 #define __NR_lchown              16
-#define __NR_break               17
-#define __NR_oldstat             18
 #define __NR_lseek               19
 #define __NR_getpid              20
 #define __NR_mount               21
@@ -40,14 +37,10 @@
 #define __NR_stime               25
 #define __NR_ptrace              26
 #define __NR_alarm               27
-#define __NR_oldfstat            28
 #define __NR_pause               29
 #define __NR_utime               30
-#define __NR_stty                31
-#define __NR_gtty                32
 #define __NR_access              33
 #define __NR_nice                34
-#define __NR_ftime               35
 #define __NR_sync                36
 #define __NR_kill                37
 #define __NR_rename              38
@@ -56,7 +49,6 @@
 #define __NR_dup                 41
 #define __NR_pipe                42
 #define __NR_times               43
-#define __NR_prof                44
 #define __NR_brk                 45
 #define __NR_setgid              46
 #define __NR_getgid              47
@@ -65,13 +57,9 @@
 #define __NR_getegid             50
 #define __NR_acct                51
 #define __NR_umount2             52
-#define __NR_lock                53
 #define __NR_ioctl               54
 #define __NR_fcntl               55
-#define __NR_mpx                 56
 #define __NR_setpgid             57
-#define __NR_ulimit              58
-#define __NR_oldolduname         59
 #define __NR_umask               60
 #define __NR_chroot              61
 #define __NR_ustat               62
@@ -80,8 +68,6 @@
 #define __NR_getpgrp             65
 #define __NR_setsid              66
 #define __NR_sigaction           67
-#define __NR_sgetmask            68
-#define __NR_ssetmask            69
 #define __NR_setreuid            70
 #define __NR_setregid            71
 #define __NR_sigsuspend          72
@@ -94,9 +80,7 @@
 #define __NR_settimeofday        79
 #define __NR_getgroups           80
 #define __NR_setgroups           81
-#define __NR_select              82
 #define __NR_symlink             83
-#define __NR_oldlstat            84
 #define __NR_readlink            85
 #define __NR_uselib              86
 #define __NR_swapon              87
@@ -110,7 +94,6 @@
 #define __NR_fchown              95
 #define __NR_getpriority         96
 #define __NR_setpriority         97
-#define __NR_profil              98
 #define __NR_statfs              99
 #define __NR_fstatfs            100
 #define __NR_ioperm             101
@@ -121,11 +104,8 @@
 #define __NR_stat               106
 #define __NR_lstat              107
 #define __NR_fstat              108
-#define __NR_olduname           109
-#define __NR_iopl               110
 #define __NR_vhangup            111
 #define __NR_idle               112
-#define __NR_vm86old            113
 #define __NR_wait4              114
 #define __NR_swapoff            115
 #define __NR_sysinfo            116
@@ -135,7 +115,6 @@
 #define __NR_clone              120
 #define __NR_setdomainname      121
 #define __NR_uname              122
-#define __NR_modify_ldt         123
 #define __NR_adjtimex           124
 #define __NR_mprotect           125
 #define __NR_sigprocmask        126
@@ -178,7 +157,6 @@
 #define __NR_mremap             163
 #define __NR_setresuid          164
 #define __NR_getresuid          165
-#define __NR_vm86               166
 #define __NR_query_module       167
 #define __NR_poll               168
 #define __NR_nfsservctl         169
@@ -200,8 +178,6 @@
 #define __NR_capset             185
 #define __NR_sigaltstack        186
 #define __NR_sendfile           187
-#define __NR_getpmsg		188	/* some people actually want streams */
-#define __NR_putpmsg		189	/* some people actually want streams */
 #define __NR_vfork		190
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-s390/errno.h> */
@@ -349,8 +325,14 @@ static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp)
 static inline _syscall3(int,open,const char *,file,int,flag,int,mode)
 static inline _syscall1(int,close,int,fd)
 static inline _syscall1(int,_exit,int,exitcode)
-static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options)
 static inline _syscall1(int,delete_module,const char *,name)
+static inline _syscall2(long,stat,char *,filename,struct stat *,statbuf)
+
+extern int sys_wait4(int, int *, int, struct rusage *);
+static inline pid_t waitpid(int pid, int * wait_stat, int flags)
+{
+        return sys_wait4(pid, wait_stat, flags, NULL);
+}
 
 static inline pid_t wait(int * wait_stat)
 {

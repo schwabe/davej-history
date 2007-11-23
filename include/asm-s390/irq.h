@@ -66,7 +66,7 @@ typedef struct {
                                    /*  ... per MSCH, however, if facility */
                                    /*  ... is not installed, this results */
                                    /*  ... in an operand exception.       */
-   } pmcw_t;
+   } __attribute__ ((packed)) pmcw_t;
 
 /*
  * subchannel status word
@@ -92,7 +92,7 @@ typedef struct {
       unsigned int   dstat : 8;    /* device status */
       unsigned int   cstat : 8;    /* subchannel status */
       unsigned int   count : 16;   /* residual count */
-   } scsw_t;
+   } __attribute__ ((packed)) scsw_t;
 
 #define SCSW_FCTL_CLEAR_FUNC     0x1
 #define SCSW_FCTL_HALT_FUNC      0x2
@@ -137,7 +137,7 @@ typedef struct {
       pmcw_t pmcw;             /* path management control word */
       scsw_t scsw;             /* subchannel status word */
       char mda[12];            /* model dependent area */
-   } schib_t;
+   } schib_t __attribute__ ((packed,aligned(4)));
 
 typedef struct {
       char            cmd_code;/* command code */
@@ -154,12 +154,15 @@ typedef struct {
 #define CCW_FLAG_IDA            0x04
 #define CCW_FLAG_SUSPEND        0x02
 
+#define CCW_CMD_READ_IPL        0x02
+#define CCW_CMD_NOOP            0x03
 #define CCW_CMD_BASIC_SENSE     0x04
 #define CCW_CMD_TIC             0x08
-#define CCW_CMD_SENSE_ID        0xE4
-#define CCW_CMD_NOOP            0x03
+#define CCW_CMD_SENSE_PGID      0x34
+#define CCW_CMD_SUSPEND_RECONN  0x5B
 #define CCW_CMD_RDC             0x64
-#define CCW_CMD_READ_IPL        0x02
+#define CCW_CMD_SET_PGID        0xAF
+#define CCW_CMD_SENSE_ID        0xE4
 
 #define SENSE_MAX_COUNT         0x20
 
@@ -290,22 +293,6 @@ typedef struct {
       unsigned int intparm;    /* interruption parameter */
    } tpi_info_t;
 
-
-/*
- * This is the "IRQ descriptor", which contains various information
- * about the irq, including what kind of hardware handling it has,
- * whether it is disabled etc etc.
- *
- * Pad this out to 32 bytes for cache and indexing reasons.
- */
-typedef struct {
-      unsigned int              status;    /* IRQ status - IRQ_INPROGRESS, IRQ_DISABLED */
-      struct hw_interrupt_type *handler;   /* handle/enable/disable functions */
-      struct irqaction         *action;    /* IRQ action list */
-      unsigned int              unused[3];
-      spinlock_t                irq_lock;
-   } irq_desc_t;
-
 //
 // command information word  (CIW) layout
 //
@@ -333,7 +320,7 @@ typedef struct {
       unsigned char  dev_model;    /* device model */
       unsigned char  unused;       /* padding byte */
   /* extended part */
-      ciw_t    ciw[62];            /* variable # of CIWs */
+      ciw_t    ciw[16];            /* variable # of CIWs */
    }  __attribute__ ((packed,aligned(4))) senseid_t;
 
 /*
@@ -374,23 +361,96 @@ typedef struct {
 #define DEVSTAT_START_FUNCTION     0x00000004
 #define DEVSTAT_HALT_FUNCTION      0x00000008
 #define DEVSTAT_STATUS_PENDING     0x00000010
+#define DEVSTAT_REVALIDATE         0x00000020
+#define DEVSTAT_DEVICE_GONE        0x00000040
 #define DEVSTAT_DEVICE_OWNED       0x00000080
+#define DEVSTAT_CLEAR_FUNCTION     0x00000100
 #define DEVSTAT_FINAL_STATUS       0x80000000
+
+#define INTPARM_STATUS_PENDING     0xFFFFFFFF
+
+typedef  void (* io_handler_func1_t) ( int  irq,
+                                       devstat_t *devstat,
+                                       struct pt_regs *rgs);
+
+typedef  void (* io_handler_func_t) ( int  irq,
+                                      __u32 intparm );
+
+typedef  void ( * not_oper_handler_func_t)( int irq,
+                                            int status );
+
+struct s390_irqaction {
+	io_handler_func_t  handler;
+	unsigned long      flags;
+	const char        *name;
+	devstat_t         *dev_id;
+};
+
+
+/*
+ * This is the "IRQ descriptor", which contains various information
+ * about the irq, including what kind of hardware handling it has,
+ * whether it is disabled etc etc.
+ *
+ * Pad this out to 32 bytes for cache and indexing reasons.
+ */
+typedef struct {
+      unsigned int              status;    /* IRQ status - IRQ_INPROGRESS, IRQ_DISABLED */
+      struct hw_interrupt_type *handler;   /* handle/enable/disable functions */
+      struct s390_irqaction    *action;    /* IRQ action list */
+   } irq_desc_t;
+
+typedef struct {
+	__u8  state1    :  2;   /* path state value 1 */
+	__u8  state2    :  2;   /* path state value 2 */
+	__u8  state3    :  1;   /* path state value 3 */
+	__u8  resvd     :  3;   /* reserved */
+	} __attribute__ ((packed)) path_state_t;
+
+typedef struct {
+   union {
+		__u8         fc;   /* SPID function code */
+		path_state_t ps;   /* SNID path state */
+	} inf;
+	__u32 cpu_addr  : 16;   /* CPU address */
+	__u32 cpu_id    : 24;   /* CPU identification */
+	__u32 cpu_model : 16;   /* CPU model */
+	__u32 tod_high;         /* high word TOD clock */
+	} __attribute__ ((packed)) pgid_t;
+
+#define SPID_FUNC_SINGLE_PATH      0x00
+#define SPID_FUNC_MULTI_PATH       0x80
+#define SPID_FUNC_ESTABLISH        0x00
+#define SPID_FUNC_RESIGN           0x40
+#define SPID_FUNC_DISBAND          0x20
+
+#define SNID_STATE1_RESET          0
+#define SNID_STATE1_UNGROUPED      2
+#define SNID_STATE1_GROUPED        3
+
+#define SNID_STATE2_NOT_RESVD      0
+#define SNID_STATE2_RESVD_ELSE     2
+#define SNID_STATE2_RESVD_SELF     3
+
+#define SNID_STATE3_MULTI_PATH     1
+#define SNID_STATE3_SINGLE_PATH    0
 
 /*
  * Flags used as input parameters for do_IO()
  */
-#define DOIO_EARLY_NOTIFICATION 0x01    /* allow for I/O completion ... */
+#define DOIO_EARLY_NOTIFICATION  0x0001 /* allow for I/O completion ... */
                                         /* ... notification after ... */
                                         /* ... primary interrupt status */
 #define DOIO_RETURN_CHAN_END       DOIO_EARLY_NOTIFICATION
-#define DOIO_VALID_LPM          0x02    /* LPM input parameter is valid */
-#define DOIO_WAIT_FOR_INTERRUPT 0x04    /* wait synchronously for interrupt */
-#define DOIO_REPORT_ALL         0x08    /* report all interrupt conditions */
-#define DOIO_ALLOW_SUSPEND      0x10    /* allow for channel prog. suspend */
-#define DOIO_DENY_PREFETCH      0x20    /* don't allow for CCW prefetch */
-#define DOIO_SUPPRESS_INTER     0x40    /* suppress intermediate inter. */
+#define DOIO_VALID_LPM           0x0002 /* LPM input parameter is valid */
+#define DOIO_WAIT_FOR_INTERRUPT  0x0004 /* wait synchronously for interrupt */
+#define DOIO_REPORT_ALL          0x0008 /* report all interrupt conditions */
+#define DOIO_ALLOW_SUSPEND       0x0010 /* allow for channel prog. suspend */
+#define DOIO_DENY_PREFETCH       0x0020 /* don't allow for CCW prefetch */
+#define DOIO_SUPPRESS_INTER      0x0040 /* suppress intermediate inter. */
                                         /* ... for suspended CCWs */
+#define DOIO_TIMEOUT             0x0080 /* 3 secs. timeout for sync. I/O */
+#define DOIO_DONT_CALL_INTHDLR   0x0100 /* don't call interrupt handler */
 
 /*
  * do_IO()
@@ -420,12 +480,17 @@ int start_IO( int            irq,       /* IRQ aka. subchannel number */
               unsigned char  lpm,       /* logical path mask */
               unsigned long  flag);     /* flags : see above */
 
+void do_crw_pending( void  );	         /* CRW handler */
+
 int resume_IO( int irq);                /* IRQ aka. subchannel number */
 
 int halt_IO( int           irq,      /* IRQ aka. subchannel number */
              unsigned long intparm,  /* dummy intparm */
-             unsigned int  flag);    /* possible DOIO_WAIT_FOR_INTERRUPT */
+             unsigned long flag);       /* possible DOIO_WAIT_FOR_INTERRUPT */
 
+int clear_IO( int           irq,         /* IRQ aka. subchannel number */
+              unsigned long intparm,     /* dummy intparm */
+              unsigned long flag);       /* possible DOIO_WAIT_FOR_INTERRUPT */
 
 int process_IRQ( struct pt_regs regs,
                  unsigned int   irq,
@@ -454,9 +519,18 @@ int get_irq_first( void );
 int get_irq_next ( int irq );
 
 int read_dev_chars( int irq, void **buffer, int length );
-int read_conf_data( int irq, void **buffer, int *length );
+int read_conf_data( int irq, void **buffer, int *length, __u8 lpm );
 
-extern int handle_IRQ_event(unsigned int, int cpu, struct pt_regs *);
+int s390_DevicePathVerification( int irq, __u8 domask );
+
+int s390_request_irq_special( int                      irq,
+                              io_handler_func_t        io_handler,
+                              not_oper_handler_func_t  not_oper_handler,
+                              unsigned long            irqflags,
+                              const char              *devname,
+                              void                    *dev_id);
+
+extern int handle_IRQ_event( unsigned int irq, int cpu, struct pt_regs *);
 
 extern int set_cons_dev(int irq);
 extern int reset_cons_dev(int irq);
@@ -722,14 +796,16 @@ static inline void s390_do_profile (unsigned long addr)
 #include <asm/s390io.h>
 
 #define s390irq_spin_lock(irq) \
-        spin_lock(&(ioinfo[irq]->irq_desc.irq_lock))
+        spin_lock(&(ioinfo[irq]->irq_lock))
 
 #define s390irq_spin_unlock(irq) \
-        spin_unlock(&(ioinfo[irq]->irq_desc.irq_lock))
+        spin_unlock(&(ioinfo[irq]->irq_lock))
 
 #define s390irq_spin_lock_irqsave(irq,flags) \
-        spin_lock_irqsave(&(ioinfo[irq]->irq_desc.irq_lock), flags)
+        spin_lock_irqsave(&(ioinfo[irq]->irq_lock), flags)
+
 #define s390irq_spin_unlock_irqrestore(irq,flags) \
-        spin_unlock_irqrestore(&(ioinfo[irq]->irq_desc.irq_lock), flags)
+        spin_unlock_irqrestore(&(ioinfo[irq]->irq_lock), flags)
+
 #endif
 

@@ -1751,6 +1751,13 @@ S: 21 Rue Carnot
 S: 95170 Deuil La Barre
 S: France
 
+N: Aristeu Sergio Rozanski Filho
+E: aris@conectiva.com.br
+D: Support for EtherExpress 10 ISA (i82595) in eepro driver
+S: Rua Tocantins, 89 - Cristo Rei
+S: 80050-430 - Curitiba - Parana
+S: Brazil
+
 N: Alessandro Rubini
 E: rubini@ipvvis.unipv.it
 D: the gpm mouse server and kernel support for it

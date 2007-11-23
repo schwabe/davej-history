@@ -2020,6 +2020,8 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case HDIO_SET_NICE:
 	case BLKROSET:
 	case BLKROGET:
+	case BLKELVGET:
+	case BLKELVSET:
 
 	/* 0x02 -- Floppy ioctls */
 	case FDMSGON:

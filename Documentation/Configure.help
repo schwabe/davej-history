@@ -3844,11 +3844,10 @@ CONFIG_AIC7XXX_RESET_DELAY
 IBM ServeRAID Support
 CONFIG_SCSI_IPS
   This is support for the IBM ServeRAID hardware RAID controllers.
-  Consult the SCSI-HOWTO, available via anonymous FTP from
-  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO, and the file
-  README.ips in drivers/scsi for more information.  If this driver
-  does not work correctly without modification please contact the
-  author by email at ipslinux@us.ibm.com.
+  See http://www.developer.ibm.com/welcome/netfinity/serveraid.html
+  for more information.  If this driver does not work correctly
+  without modification please contact the author by email at
+  ipslinux@us.ibm.com.
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
@@ -6320,9 +6319,10 @@ CONFIG_FMV18X
 
 EtherExpress PRO support
 CONFIG_EEXPRESS_PRO
-  If you have a network (Ethernet) card of this type, say Y. Note
-  however that the EtherExpress PRO/100 Ethernet card has its own
-  separate driver. Please read the Ethernet-HOWTO, available via FTP
+  If you have a network (Ethernet) card of this type, say Y. This
+  driver supports intel i82595{FX,TX} based boards. Note however 
+  that the EtherExpress PRO/100 Ethernet card has its own separate
+  driver. Please read the Ethernet-HOWTO, available via FTP
   (user: anonymous) in ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
 
   This driver is also available as a module ( = code which can be
@@ -12184,7 +12184,13 @@ CONFIG_DASD_CKD
 
 FBA devices
 CONFIG_DASD_FBA
-  FBA devices are currently unsupported.
+  FBA devices are e.g. the Vitual disk in storage under VM/ESA and others.
+
+Diag access to CMS formatted minidisk
+CONFIG_DASD_MDSK
+  By using this access method you can acess any disk supported by VM/ESA.
+  You have to format the disk using CMS and then specify the parameter
+  dasd_force_diag=<devno> in the parameter line of the kernel.
 
 Compaq SMART2 support
 CONFIG_BLK_CPQ_DA

@@ -403,7 +403,7 @@ S:	Maintained
 IBM ServeRAID RAID DRIVER
 P:      Keith Mitchell
 M:      ipslinux@us.ibm.com
-W:      http://www.developer.ibm.com/welcome/netfinity/serveraid_beta.html
+W:      http://www.developer.ibm.com/welcome/netfinity/serveraid.html
 S:      Supported 
 
 IDE DRIVER [GENERAL]

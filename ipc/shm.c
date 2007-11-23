@@ -12,6 +12,7 @@
 #include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/vmalloc.h>
+#include <linux/tasks.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -517,7 +518,7 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->vm_ops = &shm_vm_ops;
 
 	shp->u.shm_nattch++;            /* prevent destruction */
-	if ((err = shm_map (shmd))) {
+	if (shp->u.shm_nattch > 0xffff - NR_TASKS || (err = shm_map (shmd))) {
 		if (--shp->u.shm_nattch <= 0 && shp->u.shm_perm.mode & SHM_DEST)
 			killseg(id);
 		kmem_cache_free(vm_area_cachep, shmd);
@@ -549,8 +550,11 @@ static void shm_open (struct vm_area_struct *shmd)
 		printk("shm_open: unused id=%d PANIC\n", id);
 		return;
 	}
+	if (!++shp->u.shm_nattch) {
+		shp->u.shm_nattch--;
+		return; /* XXX: should be able to report failure */
+	}
 	insert_attach(shp,shmd);  /* insert shmd into shp->attaches */
-	shp->u.shm_nattch++;
 	shp->u.shm_atime = CURRENT_TIME;
 	shp->u.shm_lpid = current->pid;
 }

@@ -58,21 +58,6 @@
 #define __flush_tlb() \
 do {  __asm__ __volatile__("ptlb": : :"memory"); } while (0)
 
-
-static inline void __flush_global_tlb(void) 
-{
-	int cs1=0,dum=0;
-	int *adr;
-	long long dummy=0;
-	adr = (int*) (((int)(((int*) &dummy)+1) & 0xfffffffc)|1);
-	__asm__ __volatile__("lr    2,%0\n\t"
-			     "lr    3,%1\n\t"
-			     "lr    4,%2\n\t"
-			     ".long 0xb2500024" :
-			     : "d" (cs1), "d" (dum), "d" (adr)
-			     : "2", "3", "4");
-}
-
 static inline void __flush_tlb_one(struct mm_struct *mm,
                                    unsigned long addr);
 
@@ -94,11 +79,15 @@ static inline void flush_tlb_mm(struct mm_struct *mm)
         __flush_tlb();
 }
 
+#if 0 /* Arggh, ipte doesn't work correctly !! */
 static inline void flush_tlb_page(struct vm_area_struct *vma,
-        unsigned long addr)
+        unsigned long va)
 {
-        __flush_tlb_one(vma->vm_mm,addr);
+        __flush_tlb_one(vma->vm_mm,va);
 }
+#else
+#define flush_tlb_page(vma, va) flush_tlb_all()
+#endif
 
 static inline void flush_tlb_range(struct mm_struct *mm,
         unsigned long start, unsigned long end)
@@ -115,6 +104,28 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 
 #include <asm/smp.h>
 
+static inline void __flush_global_tlb_csp(void) 
+{
+	int cs1=0,dum=0;
+	int *adr;
+	long long dummy=0;
+	adr = (int*) (((int)(((int*) &dummy)+1) & 0xfffffffc)|1);
+	__asm__ __volatile__("lr    2,%0\n\t"
+			     "lr    3,%1\n\t"
+			     "lr    4,%2\n\t"
+			     "csp   2,4" :
+			     : "d" (cs1), "d" (dum), "d" (adr)
+			     : "2", "3", "4");
+}
+
+static inline void __flush_global_tlb(void)
+{
+        if (MACHINE_HAS_CSP)
+                __flush_global_tlb_csp();
+        else
+                smp_ext_call_sync_others(ec_ptlb, NULL);
+}
+
 #define local_flush_tlb() \
         __flush_tlb()
 
@@ -127,8 +138,9 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 
 static inline void flush_tlb_current_task(void)
 {
-	if ((atomic_read(&current->mm->count) != 1) ||
-	    (current->mm->cpu_vm_mask != (1UL << smp_processor_id()))) {
+	if ((smp_num_cpus > 1) &&
+	    ((atomic_read(&current->mm->count) != 1) ||
+	     (current->mm->cpu_vm_mask != (1UL << smp_processor_id())))) {
 		current->mm->cpu_vm_mask = (1UL << smp_processor_id());
 		__flush_global_tlb();
 	} else {                 
@@ -142,8 +154,9 @@ static inline void flush_tlb_current_task(void)
 
 static inline void flush_tlb_mm(struct mm_struct * mm)
 {
-	if ((atomic_read(&mm->count) != 1) ||
-	    (mm->cpu_vm_mask != (1UL << smp_processor_id()))) {
+	if ((smp_num_cpus > 1) &&
+            ((atomic_read(&mm->count) != 1) ||
+	     (mm->cpu_vm_mask != (1UL << smp_processor_id())))) {
 		mm->cpu_vm_mask = (1UL << smp_processor_id());
 		__flush_global_tlb();
 	} else {                 
@@ -151,17 +164,22 @@ static inline void flush_tlb_mm(struct mm_struct * mm)
 	}
 }
 
+#if 0 /* Arggh, ipte doesn't work correctly !! */
 static inline void flush_tlb_page(struct vm_area_struct * vma,
         unsigned long va)
 {
 	__flush_tlb_one(vma->vm_mm,va);
 }
+#else
+#define flush_tlb_page(vma, va) flush_tlb_all()
+#endif
 
 static inline void flush_tlb_range(struct mm_struct * mm,
 				   unsigned long start, unsigned long end)
 {
-	if ((atomic_read(&mm->count) != 1) ||
-	    (mm->cpu_vm_mask != (1UL << smp_processor_id()))) {
+        if ((smp_num_cpus > 1) &&
+            ((atomic_read(&mm->count) != 1) ||
+	     (mm->cpu_vm_mask != (1UL << smp_processor_id())))) {
 		mm->cpu_vm_mask = (1UL << smp_processor_id());
 		__flush_global_tlb();
 	} else {                 
@@ -290,8 +308,7 @@ static inline void flush_tlb_range(struct mm_struct * mm,
 /*
  * No mapping available
  */
-#define PAGE_NONE       __pgprot(_PAGE_INVALID )
-
+#define PAGE_NONE       __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_INVALID)
 #define PAGE_SHARED     __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED)
 #define PAGE_COPY       __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_RO)
 #define PAGE_READONLY   __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_RO)
@@ -386,7 +403,8 @@ do {                                                                            
 } while (0)
 
 
-extern inline int pte_none(pte_t pte)           { return ((pte_val(pte) & (_PAGE_INVALID | _PAGE_RO)) ==  
+extern inline int pte_none(pte_t pte)           { return ((pte_val(pte) & 
+							   (_PAGE_INVALID | _PAGE_RO | _PAGE_PRESENT)) ==  
 							  _PAGE_INVALID); } 
 extern inline int pte_present(pte_t pte)        { return pte_val(pte) & _PAGE_PRESENT; }
 extern inline void pte_clear(pte_t *ptep)       { pte_val(*ptep) = _PAGE_INVALID; }

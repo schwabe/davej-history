@@ -337,7 +337,8 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 
         tmp = start_mem;
         while (tmp < end_mem) {
-                if ((tmp & 0x3ff000) == 0 && test_access(tmp) == 0) {
+                if (tmp && (tmp & 0x3ff000) == 0 &&
+                    test_access(tmp) == 0) {
                         int i;
                         printk("4M Segment %lX not available\n",tmp);
                         for (i = 0;i<0x400;i++) {
@@ -404,7 +405,7 @@ void free_initmem(void)
                 atomic_set(&mem_map[MAP_NR(addr)].count, 1);
                 free_page(addr);
         }
-        printk ("Freeing unused kernel memory: %ldk freed\n", (&__init_end - &__init_begin) >> 10);
+        printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)

@@ -43,6 +43,7 @@
  *					number of socks to 2*max_files and
  *					the number of skb queueable in the
  *					dgram receiver.
+ *	      Malcolm Beattie   :	Set peercred for socketpair
  *
  * Known differences from reference BSD that was tested:
  *
@@ -814,6 +815,9 @@ static int unix_socketpair(struct socket *socka, struct socket *sockb)
 	unix_lock(skb);
 	unix_peer(ska)=skb;
 	unix_peer(skb)=ska;
+	ska->peercred.pid = skb->peercred.pid = current->pid;
+	ska->peercred.uid = skb->peercred.uid = current->euid;
+	ska->peercred.gid = skb->peercred.gid = current->egid;
 
 	if (ska->type != SOCK_DGRAM)
 	{

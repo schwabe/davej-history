@@ -86,9 +86,22 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 
 	if (PageSwapCache(page)) {
 		/* Make sure we are the only process doing I/O with this swap page. */
-		while (test_and_set_bit(offset,p->swap_lockmap)) {
-			run_task_queue(&tq_disk);
-			sleep_on(&lock_queue);
+		if (test_and_set_bit(offset, p->swap_lockmap))
+		{
+			struct wait_queue __wait;
+			
+			__wait.task = current;
+			add_wait_queue(&lock_queue, &__wait);
+			for (;;) {
+				current->state = TASK_UNINTERRUPTIBLE;
+				mb();
+				if (!test_and_set_bit(offset, p->swap_lockmap))
+					break;
+				run_task_queue(&tq_disk);
+				schedule();
+			}
+			current->state = TASK_RUNNING;
+			remove_wait_queue(&lock_queue, &__wait);
 		}
 
 		/* 

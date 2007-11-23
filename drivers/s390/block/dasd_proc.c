@@ -9,7 +9,8 @@
 
 #include <linux/proc_fs.h>
 
-#include "dasd.h"
+#include <linux/dasd.h>
+
 #include "dasd_types.h"
 
 int dasd_proc_read_devices ( char *, char **, off_t, int, int);
@@ -18,48 +19,61 @@ extern int dasd_proc_read_statistics ( char *, char **, off_t, int, int);
 extern int dasd_proc_read_debug ( char *, char **, off_t, int, int);
 #endif /* DASD_PROFILE */
 
-struct proc_dir_entry dasd_proc_root_entry = {
-	0,
-	4,"dasd",
-	S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
-	1,0,0,
-	0,
-	NULL,
+struct proc_dir_entry dasd_proc_root_entry =
+{
+	low_ino:0,
+	namelen:4,
+	name:"dasd",
+	mode:S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
+	nlink:1,
+	uid:0,
+	gid:0,
+	size:0
 };
 
-struct proc_dir_entry dasd_proc_devices_entry = {
-	0,
-	7,"devices",
-	S_IFREG | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
-	1,0,0,
-	0,
-	NULL,
-	&dasd_proc_read_devices,
+struct proc_dir_entry dasd_proc_devices_entry =
+{
+	low_ino:0,
+	namelen:7,
+	name:"devices",
+	mode:S_IFREG | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
+	nlink:1,
+	uid:0,
+	gid:0,
+	size:0,
+	get_info:&dasd_proc_read_devices,
 };
 
 #ifdef DASD_PROFILE
-struct proc_dir_entry dasd_proc_stats_entry = {
-	0,
-	10,"statistics",
-	S_IFREG | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
-	1,0,0,
-	0,
-	NULL,
-	&dasd_proc_read_statistics,
+struct proc_dir_entry dasd_proc_stats_entry =
+{
+	low_ino:0,
+	namelen:10,
+	name:"statistics",
+	mode:S_IFREG | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
+	nlink:1,
+	uid:0,
+	gid:0,
+	size:0,
+	get_info:&dasd_proc_read_statistics
 };
 
-struct proc_dir_entry dasd_proc_debug_entry = {
-	0,
-	5,"debug",
-	S_IFREG | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
-	1,0,0,
-	0,
-	NULL,
-	&dasd_proc_read_debug,
+struct proc_dir_entry dasd_proc_debug_entry =
+{
+	low_ino:0,
+	namelen:5,
+	name:"debug",
+	mode:S_IFREG | S_IRUGO | S_IXUGO | S_IWUSR | S_IWGRP,
+	nlink:1,
+	uid:0,
+	gid:0,
+	size:0,
+	get_info:&dasd_proc_read_debug
 };
 #endif /* DASD_PROFILE */
 
-struct proc_dir_entry dasd_proc_device_template = {
+struct proc_dir_entry dasd_proc_device_template =
+{
 	0,
 	6,"dd????",
 	S_IFBLK | S_IRUGO | S_IWUSR | S_IWGRP,
@@ -79,7 +93,6 @@ dasd_proc_init ( void )
 #endif /* DASD_PROFILE */
 }
 
-
 int 
 dasd_proc_read_devices ( char * buf, char **start, off_t off, int len, int d)
 {
@@ -97,17 +110,24 @@ dasd_proc_read_devices ( char * buf, char **start, off_t off, int len, int d)
 				 DASD_MAJOR,
 				 i << PARTN_BITS,
 				 'a' + i );
-                if (info->flags == DASD_NOT_FORMATTED) {
-			len += sprintf ( buf + len, "    n/a");
-		} else {
-			len += sprintf ( buf + len, " %6d", 
+		switch (atomic_read (&info->status)) {
+		case DASD_INFO_STATUS_UNKNOWN:
+			len += sprintf (buf + len, " unknown");
+			break;
+		case DASD_INFO_STATUS_DETECTED:
+			len += sprintf (buf + len, "   avail");
+			break;
+		case DASD_INFO_STATUS_ANALYSED:
+			len += sprintf (buf + len, "     n/f");
+			break;
+		default:
+			len += sprintf (buf + len, " %7d",
 					 info->sizes.bp_block);
 		}
 		len += sprintf ( buf + len, "\n");
 	} 
 	return len;
 }
-
 
 void 
 dasd_proc_add_node (int di) 

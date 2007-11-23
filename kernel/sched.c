@@ -498,17 +498,19 @@ static struct timer_vec * const tvecs[] = {
 	(struct timer_vec *)&tv1, &tv2, &tv3, &tv4, &tv5
 };
 
+static struct timer_list ** run_timer_list_running;
+
 #define NOOF_TVECS (sizeof(tvecs) / sizeof(tvecs[0]))
 
 static unsigned long timer_jiffies = 0;
 
 static inline void insert_timer(struct timer_list *timer,
-				struct timer_list **vec, int idx)
+				struct timer_list **vec)
 {
-	if ((timer->next = vec[idx]))
-		vec[idx]->prev = timer;
-	vec[idx] = timer;
-	timer->prev = (struct timer_list *)&vec[idx];
+	if ((timer->next = *vec))
+		(*vec)->prev = timer;
+	*vec = timer;
+	timer->prev = (struct timer_list *)vec;
 }
 
 static inline void internal_add_timer(struct timer_list *timer)
@@ -518,31 +520,36 @@ static inline void internal_add_timer(struct timer_list *timer)
 	 */
 	unsigned long expires = timer->expires;
 	unsigned long idx = expires - timer_jiffies;
+	struct timer_list ** vec;
 
-	if (idx < TVR_SIZE) {
+	if (run_timer_list_running)
+		vec = run_timer_list_running;
+	else if (idx < TVR_SIZE) {
 		int i = expires & TVR_MASK;
-		insert_timer(timer, tv1.vec, i);
+		vec = tv1.vec + i;
 	} else if (idx < 1 << (TVR_BITS + TVN_BITS)) {
 		int i = (expires >> TVR_BITS) & TVN_MASK;
-		insert_timer(timer, tv2.vec, i);
+		vec = tv2.vec + i;
 	} else if (idx < 1 << (TVR_BITS + 2 * TVN_BITS)) {
 		int i = (expires >> (TVR_BITS + TVN_BITS)) & TVN_MASK;
-		insert_timer(timer, tv3.vec, i);
+		vec = tv3.vec + i;
 	} else if (idx < 1 << (TVR_BITS + 3 * TVN_BITS)) {
 		int i = (expires >> (TVR_BITS + 2 * TVN_BITS)) & TVN_MASK;
-		insert_timer(timer, tv4.vec, i);
+		vec = tv4.vec + i;
 	} else if ((signed long) idx < 0) {
 		/* can happen if you add a timer with expires == jiffies,
 		 * or you set a timer to go off in the past
 		 */
-		insert_timer(timer, tv1.vec, tv1.index);
+		vec = tv1.vec + tv1.index;
 	} else if (idx <= 0xffffffffUL) {
 		int i = (expires >> (TVR_BITS + 3 * TVN_BITS)) & TVN_MASK;
-		insert_timer(timer, tv5.vec, i);
+		vec = tv5.vec + i;
 	} else {
 		/* Can only get here on architectures with 64-bit jiffies */
 		timer->next = timer->prev = timer;
+		return;
 	}
+	insert_timer(timer, vec);
 }
 
 spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
@@ -1128,13 +1135,14 @@ static inline void run_timer_list(void)
 {
 	spin_lock_irq(&timerlist_lock);
 	while ((long)(jiffies - timer_jiffies) >= 0) {
-		struct timer_list *timer;
+		struct timer_list *timer, * queued = NULL;
 		if (!tv1.index) {
 			int n = 1;
 			do {
 				cascade_timers(tvecs[n]);
 			} while (tvecs[n]->index == 1 && ++n < NOOF_TVECS);
 		}
+		run_timer_list_running = &queued;
 		while ((timer = tv1.vec[tv1.index])) {
 			void (*fn)(unsigned long) = timer->function;
 			unsigned long data = timer->data;
@@ -1144,8 +1152,15 @@ static inline void run_timer_list(void)
 			fn(data);
 			spin_lock_irq(&timerlist_lock);
 		}
+		run_timer_list_running = NULL;
 		++timer_jiffies; 
 		tv1.index = (tv1.index + 1) & TVR_MASK;
+		while (queued)
+		{
+			timer = queued;
+			queued = queued->next;
+			internal_add_timer(timer);
+		}			
 	}
 	spin_unlock_irq(&timerlist_lock);
 }

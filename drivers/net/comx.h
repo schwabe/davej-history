@@ -45,6 +45,7 @@ struct comx_hardware {
 	};
 
 struct comx_channel {
+	void		*if_ptr;	// General purpose pointer
 	struct device 	*dev;		// Where we belong to
 	struct device	*twin;		// On dual-port cards
 	struct proc_dir_entry *procdir;	// the directory

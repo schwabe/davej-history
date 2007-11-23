@@ -105,15 +105,16 @@ struct i810_channel
 	struct sg_item sg[SG_LEN];	/* 32*8 */
 	u32 offset;			/* 4 */
 	u32 port;			/* 4 */
-	u32 used;
-	u32 num;
+	u32 used;			/* 4 */
+	u32 num;			/* 4 */
 };
 
 /*
  * we have 3 seperate dma engines.  pcm in, pcm out, and mic.
  * each dma engine has controlling registers.  These goofy
  * names are from the datasheet, but make it easy to write
- * code while leafing through it.
+ * code while leafing through it. Right now we don't support
+ * the MIC input.
  */
 
 #define ENUM_ENGINE(PRE,DIG) 									\
@@ -660,8 +661,8 @@ static int prog_dmabuf(struct i810_state *state, unsigned rec)
 	fragsize = bufsize / SG_LEN;
 	
 	/*
-	 *	Load up 32 sg entries and take an interrupt at half
-	 *	way (we might want more interrupts later..) 
+	 *	Load up 32 sg entries and take an interrupt at each
+	 *	step (we might want less interrupts later..) 
 	 */
 	  
 	for(i=0;i<32;i++)
@@ -908,7 +909,10 @@ static void i810_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	status = inl(card->iobase + GLOB_STA);
 	if(!(status & INT_MASK)) 
+	{
+		spin_unlock(&card->lock);
 		return;  /* not for us */
+	}
 
 //	printk("Interrupt %X: ", status);
 	if(status & (INT_PO|INT_PI|INT_MC))
@@ -1687,6 +1691,10 @@ static int __init i810_ac97_init(struct i810_card *card)
 				
 		if(!(eid&0x0001))
 			printk(KERN_WARNING "i810_audio: only 48Khz playback available.\n");
+		else
+			/* Enable variable rate mode */
+			i810_ac97_set(codec, AC97_EXTENDED_STATUS, 
+				i810_ac97_get(codec,AC97_EXTENDED_STATUS)|1);
 			
 		if ((codec->dev_mixer = register_sound_mixer(&i810_mixer_fops, -1)) < 0) {
 			printk(KERN_ERR "i810_audio: couldn't register mixer!\n");

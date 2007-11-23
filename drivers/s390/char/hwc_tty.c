@@ -19,6 +19,7 @@
 #include <asm/uaccess.h>
 
 #include "hwc_rw.h"
+#include "hwc_tty.h"
 
 #define HWC_TTY_PRINT_HEADER "hwc tty driver: "
 
@@ -33,9 +34,14 @@ typedef struct {
 	unsigned short int buf_count;
 
 	spinlock_t lock;
+
+	hwc_high_level_calls_t calls;
+
+	hwc_tty_ioctl_t ioctl;
 } hwc_tty_data_struct;
 
-static hwc_tty_data_struct hwc_tty_data;
+static hwc_tty_data_struct hwc_tty_data =
+{ /* NULL/0 */ };
 static struct tty_driver hwc_tty_driver;
 static struct tty_struct * hwc_tty_table[1];
 static struct termios * hwc_tty_termios[1];
@@ -43,6 +49,9 @@ static struct termios * hwc_tty_termios_locked[1];
 static int hwc_tty_refcount = 0;
 
 extern struct termios  tty_std_termios;
+
+void hwc_tty_wake_up (void);
+void hwc_tty_input (unsigned char *, unsigned int);
 
 static int 
 hwc_tty_open (struct tty_struct *tty,
@@ -57,17 +66,14 @@ hwc_tty_open (struct tty_struct *tty,
 	hwc_tty_data.tty = tty;
 	tty->low_latency = 0;
 
+	hwc_tty_data.calls.wake_up = hwc_tty_wake_up;
+	hwc_tty_data.calls.move_input = hwc_tty_input;
+	hwc_register_calls (&(hwc_tty_data.calls));
+
 	return 0;
 }
 
-void 
-wake_up_hwc_tty (void)
-{
-	if ((hwc_tty_data.tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
-			hwc_tty_data.tty->ldisc.write_wakeup)
-		(hwc_tty_data.tty->ldisc.write_wakeup)(hwc_tty_data.tty);
-	wake_up_interruptible(&hwc_tty_data.tty->write_wait);
-}
+#if 0
 
 static void 
 hwc_tty_close (struct tty_struct *tty,
@@ -79,7 +85,10 @@ hwc_tty_close (struct tty_struct *tty,
 		return;
 	}
 	hwc_tty_data.tty = NULL;
+
+	hwc_unregister_calls (&(hwc_tty_data.calls));
 }
+#endif
 
 static int 
 hwc_tty_write_room (struct tty_struct *tty)
@@ -145,7 +154,7 @@ hwc_tty_chars_in_buffer (struct tty_struct *tty)
 static void 
 hwc_tty_flush_buffer (struct tty_struct *tty)
 {
-	wake_up_hwc_tty();
+	hwc_tty_wake_up ();
 }
 
 static int 
@@ -155,36 +164,119 @@ hwc_tty_ioctl (
 	unsigned int cmd,
 	unsigned long arg)
 {
+	unsigned long count;
+
         if (tty->flags & (1 << TTY_IO_ERROR))
                 return -EIO;
 
+	switch (cmd) {
+	case TIOCHWCTTYSINTRC:
+		count = strlen_user ((const char *) arg);
+		if (count > HWC_TTY_MAX_CNTL_SIZE)
+			return -EINVAL;
+		strncpy_from_user (hwc_tty_data.ioctl.intr_char,
+				   (const char *) arg, count);
+
+		hwc_tty_data.ioctl.intr_char_size = count - 1;
+		return count;
+
+	case TIOCHWCTTYGINTRC:
+		return copy_to_user ((void *) arg,
+				  (const void *) hwc_tty_data.ioctl.intr_char,
+				     (long) hwc_tty_data.ioctl.intr_char_size);
+
+	default:
 	return hwc_ioctl(cmd, arg);
+}
 }
 
 void 
-store_hwc_input (unsigned char *buf, unsigned int count)
+hwc_tty_wake_up (void)
+{
+	if (hwc_tty_data.tty == NULL)
+		return;
+	if ((hwc_tty_data.tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
+	    hwc_tty_data.tty->ldisc.write_wakeup)
+		(hwc_tty_data.tty->ldisc.write_wakeup) (hwc_tty_data.tty);
+	wake_up_interruptible (&hwc_tty_data.tty->write_wait);
+	wake_up_interruptible (&hwc_tty_data.tty->poll_wait);
+}
+
+void 
+hwc_tty_input (unsigned char *buf, unsigned int count)
 {
 	struct tty_struct *tty = hwc_tty_data.tty;
 
+#if 0
+
 	if (tty != NULL) {
 
-		if (count == 2 && strncmp(buf, "^c", 2) == 0) {
+		if (count == 2 && (
+
+					  strncmp (buf, "^c", 2) == 0 ||
+
+					  strncmp (buf, "\0252c", 2) == 0)) {
+			tty->flip.count++;
+			*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
+			*tty->flip.char_buf_ptr++ = INTR_CHAR (tty);
+		} else if (count == 2 && (
+						 strncmp (buf, "^d", 2) == 0 ||
+					   strncmp (buf, "\0252d", 2) == 0)) {
+			tty->flip.count++;
+			*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
+			*tty->flip.char_buf_ptr++ = EOF_CHAR (tty);
+		} else if (count == 2 && (
+						 strncmp (buf, "^z", 2) == 0 ||
+					   strncmp (buf, "\0252z", 2) == 0)) {
+			tty->flip.count++;
+			*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
+			*tty->flip.char_buf_ptr++ = SUSP_CHAR (tty);
+		} else {
+
+			memcpy (tty->flip.char_buf_ptr, buf, count);
+			if (count < 2 || (
+					 strncmp (buf + count - 2, "^n", 2) ||
+				    strncmp (buf + count - 2, "\0252n", 2))) {
+				tty->flip.char_buf_ptr[count] = '\n';
+				count++;
+			} else
+				count -= 2;
+			memset (tty->flip.flag_buf_ptr, TTY_NORMAL, count);
+			tty->flip.char_buf_ptr += count;
+			tty->flip.flag_buf_ptr += count;
+			tty->flip.count += count;
+		}
+		tty_flip_buffer_push (tty);
+		hwc_tty_wake_up ();
+	}
+#endif
+
+	if (tty != NULL) {
+
+		if (count == hwc_tty_data.ioctl.intr_char_size &&
+		    strncmp (buf, hwc_tty_data.ioctl.intr_char,
+			     hwc_tty_data.ioctl.intr_char_size) == 0) {
 			tty->flip.count++;
 			*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
 			*tty->flip.char_buf_ptr++ = INTR_CHAR(tty);
-		} else if (count == 2 && strncmp(buf, "^d", 2) == 0) {
+		} else if (count == 2 && (
+						 strncmp (buf, "^d", 2) == 0 ||
+					   strncmp (buf, "\0252d", 2) == 0)) {
 			tty->flip.count++;
 			*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
 			*tty->flip.char_buf_ptr++ = EOF_CHAR(tty);
-		} else if (count == 2 && strncmp(buf, "^z", 2) == 0) {
+		} else if (count == 2 && (
+						 strncmp (buf, "^z", 2) == 0 ||
+					   strncmp (buf, "\0252z", 2) == 0)) {
 			tty->flip.count++;
 			*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
 			*tty->flip.char_buf_ptr++ = SUSP_CHAR(tty);
 		} else {
 
 			memcpy(tty->flip.char_buf_ptr, buf, count);
-			if (count < 2 ||
-			    strncmp(buf + count - 2, "^n", 2)) {
+			if (count < 2 || (
+					 strncmp (buf + count - 2, "^n", 2) ||
+				    strncmp (buf + count - 2, "\0252n", 2))) {
 				tty->flip.char_buf_ptr[count] = '\n';
 				count++;
 			} else
@@ -195,7 +287,7 @@ store_hwc_input (unsigned char *buf, unsigned int count)
 			tty->flip.count += count;
 		}
 		tty_flip_buffer_push(tty);
-		wake_up_hwc_tty();
+		hwc_tty_wake_up ();
 	}
 }
 
@@ -203,6 +295,7 @@ void
 hwc_tty_init (void)
 {
 	memset (&hwc_tty_driver, 0, sizeof(struct tty_driver));
+	memset (&hwc_tty_data, 0, sizeof (hwc_tty_data_struct));
 	hwc_tty_driver.magic = TTY_DRIVER_MAGIC;
 	hwc_tty_driver.driver_name = "tty_hwc";
 	hwc_tty_driver.name = "ttyS";

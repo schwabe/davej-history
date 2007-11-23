@@ -2218,8 +2218,11 @@ int ide_cdrom_get_capabilities(ide_drive_t *drive, struct atapi_capabilities_pag
 	 * ACER50 (and others?) require the full spec length mode sense
 	 * page capabilities size, but older drives break.
 	 */
-	if (!(drive->id && !strcmp(drive->id->model,"ATAPI CD ROM DRIVE 50X MAX")))
-		size -= 4;
+	if (drive->id) {
+		if (!(!strcmp(drive->id->model, "ATAPI CD ROM DRIVE 50X MAX") ||
+		    !strcmp(drive->id->model, "WPI CDS-32X")))
+			size -= sizeof(cap->pad);
+	}
 
 	/* we have to cheat a little here. the packet will eventually
 	 * be queued with ide_cdrom_packet(), which extracts the

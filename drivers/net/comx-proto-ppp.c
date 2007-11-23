@@ -62,7 +62,7 @@ static void syncppp_status_timerfun(unsigned long d) {
 	struct device *dev=(struct device *)d;
 	struct comx_channel *ch=dev->priv;
 	struct syncppp_data *spch=ch->LINE_privdata;
-	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
+	struct sppp *sp = (struct sppp *)sppp_of(dev);
         
 	if(!(ch->line_status & PROTO_UP) && 
 	    (sp->pp_link_state==SPPP_LINK_UP)) {
@@ -202,10 +202,11 @@ static int syncppp_exit(struct device *dev)
 static int syncppp_init(struct device *dev)
 {
 	struct comx_channel *ch = dev->priv;
-	struct ppp_device *pppdev = (struct ppp_device*)dev;
+	struct ppp_device *pppdev = (struct ppp_device *)ch->if_ptr;
 
 	ch->LINE_privdata = kmalloc(sizeof(struct syncppp_data), GFP_KERNEL);
 
+	pppdev->dev = dev;
 	sppp_attach(pppdev);
 
 	if(ch->protocol == &hdlc_protocol) {

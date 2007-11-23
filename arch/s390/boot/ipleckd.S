@@ -140,17 +140,16 @@ _start: .globl _start
 	lr	%r15,%r4		# save number or blocks
 	slr	%r7,%r7
 	icm	%r7,3,.Lrdcdata+14      # load heads to r7
-	clc	.Lrdcdata+3(2),.L3390     
-	jne	.L010			# 3380 or 3390 ?
-	lhi	%r6,12			# setup r6 correct!
-	j	.L011
-.L010:	
-        clc     .Lrdcdata+3(2),.L9343
-        jne     .L013
         lhi     %r6,9
-        j       .L011
-.L013:
+	clc     .Lrdcdata+3(2),.L9343
+	je	.L011
 	lhi	%r6,10	
+	clc	.Lrdcdata+3(2),.L3380
+	je	.L011
+	lhi	%r6,12
+	clc	.Lrdcdata+3(2),.L3390     
+	je	.L011			
+        bras 	%r14,.Ldisab
 .L011:	
 	# loop for nbl times
 .Lrdloop:	
@@ -246,9 +245,12 @@ _start: .globl _start
 .L3390:
 	.word 	0x3390
 .L9343:
-	.word	0x9343
+	.word	0x934a
+.L3380:
+	.word	0x3380
 .Lnull:	
 	.long 0x00000000,0x00000000
+	.align 4
 .Lrdcdata:
 	.long 0x00000000,0x00000000
 	.long 0x00000000,0x00000000

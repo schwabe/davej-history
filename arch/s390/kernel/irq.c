@@ -372,7 +372,7 @@ int handle_IRQ_event(unsigned int irq, int cpu, struct pt_regs * regs)
 	if ( ioinfo[irq] == INVALID_STORAGE_AREA )
 		return( -ENODEV);
 
-	action = ioinfo[irq]->irq_desc.action;
+	action = (struct irqaction *) ioinfo[irq]->irq_desc.action;
 
 	if (action)
 	{
@@ -401,7 +401,7 @@ void enable_nop(int irq)
 {
 }
 
-unsigned long __init init_IRQ(unsigned long memory)
+__initfunc(unsigned long init_IRQ( unsigned long memory))
 {
 	return s390_init_IRQ( memory);
 }
@@ -420,5 +420,6 @@ int request_irq( unsigned int   irq,
                  void          *dev_id)
 {
 	return( s390_request_irq( irq, handler, irqflags, devname, dev_id ) );
+
 }
 

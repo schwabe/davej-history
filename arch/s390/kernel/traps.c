@@ -219,6 +219,15 @@ int do_debugger_trap(struct pt_regs *regs,int signal)
 	return(FALSE);
 }
 
+asmlinkage void default_trap_handler(struct pt_regs * regs, long error_code)
+{
+        if (check_for_fixup(regs) == 0) {
+                current->tss.error_code = error_code;
+                current->tss.trap_no = error_code;
+                force_sig(SIGSEGV, current); 
+                die("Unknown program exception",regs,error_code);
+        }
+}
 
 DO_ERROR(2, SIGILL, "privileged operation", privileged_op, current)
 DO_ERROR(3, SIGILL, "execute exception", execute_exception, current)

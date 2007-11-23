@@ -83,6 +83,11 @@
  *      Changes by Jochen Friedrich to enable RFC1469 Option 2 multicasting
  *      i.e. using functional address C0 00 00 04 00 00 to transmit and 
  *      receive multicast packets.
+ * 
+ *      Changes by Mike Sullivan (based on original sram patch by Dave Grothe
+ *      to support windowing into on adapter shared ram.
+ *      i.e. Use LANAID to setup a PnP configuration with 16K RAM. Paging
+ *      will shift this 16K window over the entire available shared RAM.
  */
 
 /* change the define of IBMTR_DEBUG_MESSAGES to a nonzero value 
@@ -102,7 +107,8 @@ in the event that chatty debug messages are desired - jjs 12/30/98 */
 
 #define NO_AUTODETECT 1
 #undef NO_AUTODETECT
-#undef ENABLE_PAGING
+//#undef ENABLE_PAGING
+#define ENABLE_PAGING 1
 
 
 #define FALSE 0
@@ -119,7 +125,8 @@ in the event that chatty debug messages are desired - jjs 12/30/98 */
 static char *version =
 "ibmtr.c: v1.3.57   8/ 7/94 Peter De Schrijver and Mark Swanson\n"
 "         v2.1.125 10/20/98 Paul Norton <pnorton@ieee.org>\n"
-"         v2.2.0   12/30/98 Joel Sloan <jjs@c-me.com>\n";
+"         v2.2.0   12/30/98 Joel Sloan <jjs@c-me.com>\n"
+"         v2.2.1   02/08/00 Mike Sullivan <sullivam@us.ibm.com>\n";
 
 static char pcchannelid[] = {
 	0x05, 0x00, 0x04, 0x09,
@@ -582,7 +589,7 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 		ti->mapped_ram_size = ti->avail_shared_ram;
 	} else {
 #ifdef ENABLE_PAGING
-		unsigned char pg_size;
+		unsigned char pg_size=0;
 #endif
 
 #if !TR_NEWFORMAT
@@ -602,15 +609,16 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 			pg_size=64;   /* 32KB page size */
 			break;
 		case 0xc:
-			ti->page_mask=(ti->mapped_ram_size==32) ? 0xc0 : 0;
-			ti->page_mask=(ti->mapped_ram_size==64) ? 0x80 : 0;
-			DPRINTK("Dual size shared RAM page (code=0xC), don't support it!\n");
-			/* nb/dwm: I did this because RRR (3,2) bits are documented as
-			   R/O and I can't find how to select which page size
-			   Also, the above conditional statement sequence is invalid
-			   as page_mask will always be set by the second stmt */
-			kfree_s(ti, sizeof(struct tok_info));
-			return -ENODEV;
+		        switch (ti->mapped_ram_size) {
+			  case 32:
+			    ti->page_mask=0xc0;
+                            pg_size=32;
+                            break;
+			  case 64:
+                            ti->page_mask=0x80;
+                            pg_size=64;
+                            break;
+                        }
 			break;
 		default:
 			DPRINTK("Unknown shared ram paging info %01X\n",ti->shared_ram_paging);
@@ -618,16 +626,23 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 			return -ENODEV;
 			break;
 	}
+
+ 	if (ibmtr_debug_trace & TRC_INIT)
+ 	  DPRINTK("Shared RAM paging code: "
+ 		 "%02X mapped RAM size: %dK shared RAM size: %dK page mask: %0xX\n:",
+ 		 ti->shared_ram_paging, ti->mapped_ram_size/2, ti->avail_shared_ram/2, ti->page_mask);
+
 	if (ti->page_mask) {
 		if (pg_size > ti->mapped_ram_size) {
 			DPRINTK("Page size (%d) > mapped ram window (%d), can't page.\n",
-				pg_size, ti->mapped_ram_size);
+				pg_size/2, ti->mapped_ram_size/2);
 				ti->page_mask = 0;    /* reset paging */
-		} else {
-			ti->mapped_ram_size=ti->avail_shared_ram;
-			DPRINTK("Shared RAM paging enabled. Page size : %uK\n",
-				((ti->page_mask^ 0xff)+1)>>2);
 		}
+	} else if (pg_size > ti->mapped_ram_size) {
+	                DPRINTK("Page size (%d) > mapped ram window (%d), can't page.\n",
+				pg_size/2, ti->mapped_ram_size/2);
+	}
+
 #endif
 	}
 	/* finish figuring the shared RAM address */
@@ -685,9 +700,17 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 	DPRINTK("Hardware address : %02X:%02X:%02X:%02X:%02X:%02X\n",
 		dev->dev_addr[0], dev->dev_addr[1], dev->dev_addr[2],
 		dev->dev_addr[3], dev->dev_addr[4], dev->dev_addr[5]);
+ 	if (ti->page_mask)
+ 	  DPRINTK("Shared RAM paging enabled. Page size: %uK Shared Ram size %dK\n",
+ 		  ((ti->page_mask ^ 0xff)+1)>>2,ti->avail_shared_ram/2);
+ 	else
+ 	  DPRINTK("Shared RAM paging disabled. ti->page_mask %x\n",ti->page_mask);
 #endif
 	/* Calculate the maximum DHB we can use */
-	switch (ti->mapped_ram_size) {
+	if (!ti->page_mask) {
+	  ti->avail_shared_ram=ti->mapped_ram_size;
+	}
+	switch (ti->avail_shared_ram) {
 	case  16 : /* 8KB shared RAM */
 		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 2048);
 		ti->rbuf_len4 = 1032;
@@ -697,34 +720,34 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 		ti->rbuf_cnt16 = 2;
 		break;
 	case  32 : /* 16KB shared RAM */
-		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
+		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 2048);
 		ti->rbuf_len4 = 520;
 		ti->rbuf_cnt4 = 9;
-		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 4096);
+		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 2048);
 		ti->rbuf_len16 = 1032; /* 1024 usable */
 		ti->rbuf_cnt16 = 4;
 		break;
 	case  64 : /* 32KB shared RAM */
-		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
+		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 2048);
 		ti->rbuf_len4 = 1032;
 		ti->rbuf_cnt4 = 6;
-		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 10240);
+		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 2048);
 		ti->rbuf_len16 = 1032;
 		ti->rbuf_cnt16 = 10;
 		break;
 	case 127 : /* 63KB shared RAM */
-		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
+		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 2048);
 		ti->rbuf_len4 = 1032;
 		ti->rbuf_cnt4 = 6;
-		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 16384);
+		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 2048);
 		ti->rbuf_len16 = 1032;
 		ti->rbuf_cnt16 = 16;
 		break;
 	case 128 : /* 64KB shared RAM */
-		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 4464);
+		ti->dhb_size4mb  = MIN(ti->dhb_size4mb, 2048);
 		ti->rbuf_len4 = 1032;
 		ti->rbuf_cnt4 = 6;
-		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 17960);
+		ti->dhb_size16mb = MIN(ti->dhb_size16mb, 2048);
 		ti->rbuf_len16 = 1032;
 		ti->rbuf_cnt16 = 18;
 		break;
@@ -763,7 +786,7 @@ __initfunc(static unsigned char get_sram_size(struct tok_info *adapt_info))
 	   'E' -- 8kb   'D' -- 16kb
 	   'C' -- 32kb  'A' -- 64KB
 	   'B' - 64KB less 512 bytes at top
-	   (WARNING ... must zero top bytes in INIT */
+   (WARNING ... must zero top bytes in INIT */
 
 	avail_sram_code=0xf-readb(adapt_info->mmio + AIPAVAILSHRAM);
 	if (avail_sram_code)
@@ -776,6 +799,7 @@ __initfunc(static int trdev_init(struct device *dev))
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
 
+	SET_PAGE(ti->srb_page);
 	ti->open_status		= CLOSED;
 
 	dev->init		= tok_init_card;
@@ -814,7 +838,7 @@ static void tok_set_multicast_list(struct device *dev)
 		address[3] |= mclist->dmi_addr[5];
 		mclist = mclist->next;
 	}
-	SET_PAGE(ti->srb);
+	SET_PAGE(ti->srb_page);
 	for (i=0; i<sizeof(struct srb_set_funct_addr); i++)
 		writeb(0, ti->srb+i);
 
@@ -862,6 +886,7 @@ static int tok_close(struct device *dev)
 
 	struct tok_info *ti=(struct tok_info *) dev->priv;
 
+	SET_PAGE(ti->srb_page);
 	writeb(DIR_CLOSE_ADAPTER,
 	       ti->srb + offsetof(struct srb_close_adapter, command));
 	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
@@ -870,6 +895,7 @@ static int tok_close(struct device *dev)
 
 	sleep_on(&ti->wait_for_tok_int);
 
+	SET_PAGE(ti->srb_page);
 	if (readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)))
 		DPRINTK("close adapter failed: %02X\n",
 			(int)readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)));
@@ -889,6 +915,9 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	unsigned char status;
 	struct tok_info *ti;
 	struct device *dev;
+#ifdef ENABLE_PAGING
+	unsigned char save_srpr;
+#endif
 
 	dev = dev_id;
 #if TR_VERBOSE
@@ -896,6 +925,9 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 #endif
 	ti  = (struct tok_info *) dev->priv;
 	spin_lock(&(ti->lock));
+#ifdef ENABLE_PAGING
+	save_srpr=readb(ti->mmio+ACA_OFFSET+ACA_RW+SRPR_EVEN);
+#endif
 
       	/* Disable interrupts till processing is finished */
 	dev->interrupt=1;
@@ -922,18 +954,16 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
     		if (status == 0xFF)
        		{
 		          DPRINTK("PCMCIA card removed.\n");
-			  spin_unlock(&(ti->lock));
-        		  dev->interrupt = 0;
-         		  return;
+			  dev->interrupt = 0;
+			  goto return_point;
        		}
 
     	        /* Check ISRP EVEN too. */
       	        if ( readb (ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN) == 0xFF)
     	        {
          		 DPRINTK("PCMCIA card removed.\n");
-			 spin_unlock(&(ti->lock));
          		 dev->interrupt = 0;
-         		 return;
+			 goto return_point;
       		 }
 #endif
 
@@ -942,8 +972,15 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 			int i;
 			__u32 check_reason;
+			__u8  check_reason_page=0;
 
-			check_reason=ti->mmio + ntohs(readw(ti->sram + ACA_OFFSET + ACA_RW +WWCR_EVEN));
+			check_reason=ntohs(readw(ti->sram + ACA_OFFSET + ACA_RW +WWCR_EVEN));
+			if (ti->page_mask) {
+			  check_reason_page=(check_reason>>8) & ti->page_mask;
+			  check_reason &= ~(ti->page_mask << 8);
+			}
+			check_reason += ti->sram;
+			SET_PAGE(check_reason_page);
 
 			DPRINTK("Adapter check interrupt\n");
 			DPRINTK("8 reason bytes follow: ");
@@ -970,6 +1007,12 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 			/* SRB, ASB, ARB or SSB response */
 
 			if (status & SRB_RESP_INT) { /* SRB response */
+           		        SET_PAGE(ti->srb_page);
+#if TR_VERBOSE
+ 				DPRINTK("SRB resp: cmd=%02X rsp=%02X\n",
+					readb(ti->srb),
+					readb(ti->srb + offsetof(struct srb_xmit, ret_code)));
+#endif
 
 				switch(readb(ti->srb)) { /* SRB command check */
 
@@ -1011,10 +1054,25 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 					      unsigned char open_ret_code;
 					      __u16 open_error_code;
 
-					      ti->srb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, srb_addr)));
-					      ti->ssb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, ssb_addr)));
-					      ti->arb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, arb_addr)));
-					      ti->asb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, asb_addr)));
+ 					      ti->srb=ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, srb_addr)));
+ 					      ti->ssb=ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, ssb_addr)));
+ 					      ti->arb=ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, arb_addr)));
+ 					      ti->asb=ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, asb_addr)));
+					      if (ti->page_mask) {
+						ti->srb_page=(ti->srb>>8) & ti->page_mask;
+						ti->srb &= ~(ti->page_mask<<8);
+						ti->ssb_page=(ti->ssb>>8) & ti->page_mask;
+						ti->ssb &= ~(ti->page_mask<<8);
+						ti->arb_page=(ti->arb>>8) & ti->page_mask;
+						ti->arb &= ~(ti->page_mask<<8);
+						ti->asb_page=(ti->asb>>8) & ti->page_mask;
+						ti->asb &= ~(ti->page_mask<<8);
+					      }
+					      ti->srb+=ti->sram;
+					      ti->ssb+=ti->sram;
+					      ti->arb+=ti->sram;
+					      ti->asb+=ti->sram;
+
 					      ti->current_skb=NULL;
 
 					      open_ret_code = readb(ti->init_srb +offsetof(struct srb_open_response, ret_code));
@@ -1143,6 +1201,10 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 			} /* SRB response */
 
 			if (status & ASB_FREE_INT) { /* ASB response */
+			        SET_PAGE(ti->asb_page);
+#if TR_VERBOSE
+ 				DPRINTK("ASB resp: cmd=%02X\n", readb(ti->asb));
+#endif
 
 				switch(readb(ti->asb)) { /* ASB command check */
 
@@ -1165,6 +1227,12 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 			} /* ASB response */
 
 			if (status & ARB_CMD_INT) { /* ARB response */
+            		        SET_PAGE(ti->arb_page);
+#if TR_VERBOSE 
+ 				DPRINTK("ARB resp: cmd=%02X rsp=%02X\n",
+ 					readb(ti->arb),
+ 					readb(ti->arb + offsetof(struct arb_dlc_status, status)));
+#endif
 
 				switch (readb(ti->arb)) { /* ARB command check */
 
@@ -1221,6 +1289,11 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 			if (status & SSB_RESP_INT) { /* SSB response */
 				unsigned char retcode;
+ 				SET_PAGE(ti->ssb_page);
+#if TR_VERBOSE
+ 				DPRINTK("SSB resp: cmd=%02X rsp=%02X\n",
+ 					readb(ti->ssb), readb(ti->ssb+2));
+#endif
 				switch (readb(ti->ssb)) { /* SSB command check */
 				      
 				      case XMIT_DIR_FRAME:
@@ -1234,6 +1307,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 				      case XMIT_XID_CMD:
 					DPRINTK("xmit xid ret_code: %02X\n", (int)readb(ti->ssb+2));
+					break;
 
 				      default:
 					DPRINTK("Unknown command %02X in ssb\n", (int)readb(ti->ssb));
@@ -1259,6 +1333,13 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 		DPRINTK("Unexpected interrupt from tr adapter\n");
 
 	}
+#ifdef PCMCIA
+ return_point:
+#endif
+#ifdef ENABLE_PAGING
+ 	writeb(save_srpr, ti->mmio+ACA_OFFSET+ACA_RW+SRPR_EVEN);
+#endif
+
 	spin_unlock(&(ti->lock));
 }
 
@@ -1281,9 +1362,26 @@ static void initial_tok_int(struct device *dev)
 		writeb(ti->sram_base, ti->mmio + ACA_OFFSET + ACA_RW + RRR_EVEN);
 		ti->sram=((__u32)ti->sram_base << 12);
 	}
-	ti->init_srb=ti->sram
-		+ntohs((unsigned short)readw(ti->mmio+ ACA_OFFSET + WRBR_EVEN));
-	SET_PAGE(ntohs((unsigned short)readw(ti->mmio+ACA_OFFSET + WRBR_EVEN)));
+ 	ti->init_srb=ntohs((unsigned short)readw(ti->mmio+ ACA_OFFSET + WRBR_EVEN));
+	if (ti->page_mask) {
+	  ti->init_srb_page=(ti->init_srb>>8)&ti->page_mask;
+	  ti->init_srb &= ~(ti->page_mask<<8);
+	}
+	ti->init_srb+=ti->sram;
+	
+	if (ti->avail_shared_ram == 127) {
+          int i;
+	  int last_512=0xfe00;
+ 	  if (ti->page_mask) {
+	    last_512 &= ~(ti->page_mask<<8);
+	  }
+	  // initialize high section of ram (if necessary) 
+	  SET_PAGE(0xc0);
+	  for (i=0; i<512; i++) {
+	    writeb(0,ti->sram+last_512+i);
+	  }
+	}  
+	SET_PAGE(ti->init_srb_page);
 
 	dev->mem_start = ti->sram;
 	dev->mem_end = ti->sram + (ti->mapped_ram_size<<9) - 1;
@@ -1291,7 +1389,7 @@ static void initial_tok_int(struct device *dev)
 #if TR_VERBOSE
 	{
 		int i;
-		DPRINTK("init_srb(%p):", ti->init_srb);
+		DPRINTK("init_srb(%lx):", (long)ti->init_srb);
 		for (i=0;i<17;i++) printk("%02X ", (int)readb(ti->init_srb+i));
 		printk("\n");
 	}
@@ -1344,10 +1442,6 @@ static int tok_init_card(struct device *dev)
 	/* Reset adapter */
 	dev->tbusy=1; /* nothing can be done before reset and open completed */
 
-#ifdef ENABLE_PAGING
-	if(ti->page_mask)
-		writeb(SRPR_ENABLE_PAGING, ti->mmio + ACA_OFFSET + ACA_RW + SRPR_EVEN);
-#endif
 
 	writeb(~INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
 
@@ -1358,6 +1452,10 @@ static int tok_init_card(struct device *dev)
 	outb(0, PIOaddr+ADAPTRESET);
 	for (i=jiffies+TR_RESET_INTERVAL; time_before_eq(jiffies, i);); /* wait 50ms */
 	outb(0,PIOaddr+ADAPTRESETREL);
+#ifdef ENABLE_PAGING
+	if(ti->page_mask)
+		writeb(SRPR_ENABLE_PAGING, ti->mmio + ACA_OFFSET + ACA_RW + SRPR_EVEN);
+#endif
 
 #if !TR_NEWFORMAT
 	DPRINTK("card reset\n");
@@ -1373,7 +1471,7 @@ static void open_sap(unsigned char type,struct device *dev)
 	int i;
 	struct tok_info *ti=(struct tok_info *) dev->priv;
 
-	SET_PAGE(ti->srb);
+	SET_PAGE(ti->srb_page);
 	for (i=0; i<sizeof(struct dlc_open_sap); i++)
 		writeb(0, ti->srb+i);
 
@@ -1432,10 +1530,16 @@ void tok_open_adapter(unsigned long dev_addr)
 	       ti->init_srb + offsetof(struct dir_open_adapter, num_dhb));
 	writeb(DLC_MAX_SAP,
 	       ti->init_srb + offsetof(struct dir_open_adapter, dlc_max_sap));
-	writeb(DLC_MAX_STA,
+	       writeb(DLC_MAX_STA,
 	       ti->init_srb + offsetof(struct dir_open_adapter, dlc_max_sta));
 
 	ti->srb=ti->init_srb; /* We use this one in the interrupt handler */
+	ti->srb_page=ti->init_srb_page;
+	DPRINTK("Opend adapter: Xmit bfrs: %d X %d, Rcv bfrs: %d X %d\n",
+		readb(ti->init_srb+offsetof(struct dir_open_adapter,num_dhb)),
+		ntohs(readw(ti->init_srb+offsetof(struct dir_open_adapter,dhb_length))),
+		ntohs(readw(ti->init_srb+offsetof(struct dir_open_adapter,num_rcv_buf))),
+		ntohs(readw(ti->init_srb+offsetof(struct dir_open_adapter,rcv_buf_len))) );
 
 	writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
 	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
@@ -1451,6 +1555,11 @@ static void tr_tx(struct device *dev)
 	unsigned char xmit_command;
 	int i;
 	struct trllc	*llc;
+	struct srb_xmit  xsrb;
+	__u8  dhb_page=0;
+	__u8  llc_ssap;
+ 
+	SET_PAGE(ti->asb_page);
 
 	if (readb(ti->asb + offsetof(struct asb_xmit_resp, ret_code))!=0xFF)
 		DPRINTK("ASB not free !!!\n");
@@ -1460,8 +1569,13 @@ static void tr_tx(struct device *dev)
 	   providing a shared memory address for us
 	   to stuff with data.  Here we compute the
 	   effective address where we will place data.*/
-	dhb=ti->sram
-		+ntohs(readw(ti->arb + offsetof(struct arb_xmit_req, dhb_address)));
+        SET_PAGE(ti->arb_page);
+ 	dhb=ntohs(readw(ti->arb + offsetof(struct arb_xmit_req, dhb_address)));
+        if (ti->page_mask) {
+	  dhb_page=(dhb >> 8) & ti->page_mask;
+	  dhb &= ~(ti->page_mask << 8);
+        }
+        dhb+=ti->sram;
 	
 	/* Figure out the size of the 802.5 header */
 	if (!(trhdr->saddr[0] & 0x80)) /* RIF present? */
@@ -1472,13 +1586,17 @@ static void tr_tx(struct device *dev)
 
 	llc = (struct trllc *)(ti->current_skb->data + hdr_len);
 
-	xmit_command = readb(ti->srb + offsetof(struct srb_xmit, command));
+	llc_ssap=llc->ssap;
+ 	SET_PAGE(ti->srb_page);
+ 	memcpy_fromio(&xsrb, ti->srb, sizeof(xsrb));
+ 	SET_PAGE(ti->asb_page);
+ 	xmit_command=xsrb.command;
 
 	writeb(xmit_command, ti->asb + offsetof(struct asb_xmit_resp, command));
-	writew(readb(ti->srb + offsetof(struct srb_xmit, station_id)),
+	writew(xsrb.station_id,
 	       ti->asb + offsetof(struct asb_xmit_resp, station_id));
-	writeb(llc->ssap, ti->asb + offsetof(struct asb_xmit_resp, rsap_value));
-	writeb(readb(ti->srb + offsetof(struct srb_xmit, cmd_corr)),
+	writeb(llc_ssap, ti->asb + offsetof(struct asb_xmit_resp, rsap_value));
+ 	writeb(xsrb.cmd_corr,
 	       ti->asb + offsetof(struct asb_xmit_resp, cmd_corr));
 	writeb(0, ti->asb + offsetof(struct asb_xmit_resp, ret_code));
 
@@ -1487,6 +1605,7 @@ static void tr_tx(struct device *dev)
 		writew(htons(0x11),
 		       ti->asb + offsetof(struct asb_xmit_resp, frame_length));
 		writeb(0x0e, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
+		SET_PAGE(dhb_page);
 		writeb(AC, dhb);
 		writeb(LLC_FRAME, dhb+1);
 
@@ -1521,6 +1640,7 @@ static void tr_rx(struct device *dev)
 {
 	struct tok_info *ti=(struct tok_info *) dev->priv;
 	__u32 rbuffer, rbufdata;
+	__u8  rbuffer_page=0;
 	__u32 llc;
 	unsigned char *data;
 	unsigned int rbuffer_len, lan_hdr_len, hdr_len, ip_len, length;
@@ -1529,31 +1649,41 @@ static void tr_rx(struct device *dev)
 	int	IPv4_p = 0;
 	unsigned int chksum = 0;
 	struct iphdr *iph;
+	struct arb_rec_req rarb;
 
-	rbuffer=(ti->sram
-		 +ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))))+2;
+	SET_PAGE(ti->arb_page);
+ 	memcpy_fromio(&rarb, ti->arb, sizeof(rarb));
+ 	rbuffer=ntohs(rarb.rec_buf_addr)+2;
+	if (ti->page_mask) {
+	  rbuffer_page=(rbuffer >> 8) & ti->page_mask;
+	  rbuffer &= ~(ti->page_mask<<8);
+	}
+	rbuffer += ti->sram;
+	
+	SET_PAGE(ti->asb_page);
  
 	if(readb(ti->asb + offsetof(struct asb_rec, ret_code))!=0xFF)
 		DPRINTK("ASB not free !!!\n");
 
 	writeb(REC_DATA,
 	       ti->asb + offsetof(struct asb_rec, command));
-	writew(readw(ti->arb + offsetof(struct arb_rec_req, station_id)),
+	writew(rarb.station_id,
 	       ti->asb + offsetof(struct asb_rec, station_id));
-	writew(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr)),
+	writew(rarb.rec_buf_addr,
 	       ti->asb + offsetof(struct asb_rec, rec_buf_addr));
 
-	lan_hdr_len=readb(ti->arb + offsetof(struct arb_rec_req, lan_hdr_len));
+	lan_hdr_len=rarb.lan_hdr_len;
 	hdr_len = lan_hdr_len + sizeof(struct trllc) + sizeof(struct iphdr);
 	
+	SET_PAGE(rbuffer_page);
 	llc=(rbuffer + offsetof(struct rec_buf, data) + lan_hdr_len);
 
 #if TR_VERBOSE
 	DPRINTK("offsetof data: %02X lan_hdr_len: %02X\n",
 		(unsigned int)offsetof(struct rec_buf,data), (unsigned int)lan_hdr_len);
-	DPRINTK("llc: %08X rec_buf_addr: %04X ti->sram: %p\n", llc,
-		ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))),
-		ti->sram);
+	DPRINTK("llc: %08X rec_buf_addr: %04X ti->sram: %lx\n", llc,
+		ntohs(rarb.rec_buf_addr),
+		(long)ti->sram);
 	DPRINTK("dsap: %02X, ssap: %02X, llc: %02X, protid: %02X%02X%02X, "
 		"ethertype: %04X\n",
 		(int)readb(llc + offsetof(struct trllc, dsap)),
@@ -1565,14 +1695,15 @@ static void tr_rx(struct device *dev)
 		(int)readw(llc + offsetof(struct trllc, ethertype)));
 #endif
 	if (readb(llc + offsetof(struct trllc, llc))!=UI_CMD) {
+                SET_PAGE(ti->asb_page);
 		writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
 		ti->tr_stats.rx_dropped++;
 		writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 		return;
 	}
 
-	length = ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
-       	if ((readb(llc + offsetof(struct trllc, dsap))==EXTENDED_SAP) &&
+	length = ntohs(rarb.frame_len);
+	if ((readb(llc + offsetof(struct trllc, dsap))==EXTENDED_SAP) &&
        	    (readb(llc + offsetof(struct trllc, ssap))==EXTENDED_SAP) &&
 		(length>=hdr_len)) {
        		IPv4_p = 1;
@@ -1605,7 +1736,7 @@ static void tr_rx(struct device *dev)
        	}
 #endif
 
-       	skb_size = length-lan_hdr_len+sizeof(struct trh_hdr)+sizeof(struct trllc);
+       	skb_size = length;
  
        	if (!(skb=dev_alloc_skb(skb_size))) {
        		DPRINTK("out of memory. frame dropped.\n");
@@ -1650,11 +1781,17 @@ static void tr_rx(struct device *dev)
 			break;
 		length -= rbuffer_len;
 		data += rbuffer_len;
+		if (ti->page_mask) {
+		  rbuffer_page=(rbuffer>>8) & ti->page_mask;
+		  rbuffer &= ~(ti->page_mask << 8);
+		}
 		rbuffer += ti->sram;
+		SET_PAGE(rbuffer_page);
 		rbuffer_len = ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)));
 		rbufdata = rbuffer + offsetof(struct rec_buf, data);
 	}
 
+	SET_PAGE(ti->asb_page);
        	writeb(0, ti->asb + offsetof(struct asb_rec, ret_code));
 
        	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
@@ -1696,6 +1833,7 @@ static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 
 		/* Save skb; we'll need it when the adapter asks for the data */
 		ti->current_skb=skb;
+		SET_PAGE(ti->srb_page);
 		writeb(XMIT_UI_FRAME, ti->srb + offsetof(struct srb_xmit, command));
 		writew(ti->exsap_station_id, ti->srb
 		       +offsetof(struct srb_xmit, station_id));
@@ -1721,6 +1859,7 @@ void ibmtr_readlog(struct device *dev) {
 	 ti=(struct tok_info *) dev->priv;
 
 	 ti->readlog_pending = 0;
+	 SET_PAGE(ti->srb_page);
 	 writeb(DIR_READ_LOG, ti->srb);
 	 writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
 	 writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);

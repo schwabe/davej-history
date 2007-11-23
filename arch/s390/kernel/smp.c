@@ -31,6 +31,7 @@
 #include <linux/mm.h>
 #include <asm/pgtable.h>
 #include <asm/string.h>
+#include <asm/s390_ext.h>
 
 #include "cpcmd.h"
 #include <asm/irq.h>
@@ -82,18 +83,14 @@ void __init smp_setup(char *str, int *ints)
 /*
  * Reboot, halt and power_off routines for SMP.
  */
+extern char vmhalt_cmd[];
+extern char vmpoff_cmd[];
+extern void reipl(int ipl_device);
+
 void do_machine_restart(void)
 {
         smp_send_stop();
 	reipl(S390_lowcore.ipl_device); 
-#if 0
-        if (MACHINE_IS_VM) {
-                cpcmd("IPL", NULL, 0);
-        } else {
-                /* FIXME: how to reipl ? */
-                disabled_wait(2);
-        }
-#endif
 }
 
 void machine_restart(char * __unused) 
@@ -108,12 +105,10 @@ void machine_restart(char * __unused)
 void do_machine_halt(void)
 {
         smp_send_stop();
-        if (MACHINE_IS_VM) {
-                cpcmd("IPL CMS", NULL, 0);
-        } else {
+        if (MACHINE_IS_VM && strlen(vmhalt_cmd) > 0) 
+                cpcmd(vmhalt_cmd, NULL, 0);
                 disabled_wait(0);
         }
-}
 
 void machine_halt(void)
 {
@@ -127,12 +122,10 @@ void machine_halt(void)
 void do_machine_power_off(void)
 {
         smp_send_stop();
-        if (MACHINE_IS_VM) {
-                cpcmd("IPL CMS", NULL, 0);
-        } else {
+        if (MACHINE_IS_VM && strlen(vmpoff_cmd) > 0)
+                cpcmd(vmpoff_cmd, NULL, 0);
                 disabled_wait(0);
         }
-}
 
 void machine_power_off(void)
 {
@@ -148,7 +141,7 @@ void machine_power_off(void)
  * cpus are handled.
  */
 
-void do_ext_call_interrupt(__u16 source_cpu_addr)
+void do_ext_call_interrupt(struct pt_regs *regs, __u16 source_cpu_addr)
 {
         ec_ext_call *ec, *next;
         int bits;
@@ -183,7 +176,7 @@ void do_ext_call_interrupt(__u16 source_cpu_addr)
                 return;   /* no command signals */
 
         /* Make a fifo out of the lifo */
-        next = ec;
+        next = ec->next;
         ec->next = NULL;
         while (next != NULL) {
                 ec_ext_call *tmp = next->next;
@@ -250,6 +243,11 @@ void do_ext_call_interrupt(__u16 source_cpu_addr)
                         atomic_set(&ec->status,ec_done);
                         return;
                 }
+		case ec_ptlb:
+			atomic_set(&ec->status, ec_executing);
+			__flush_tlb();
+			atomic_set(&ec->status, ec_done);
+		        return;
                 default:
                 }
                 ec = ec->next;
@@ -496,6 +494,7 @@ void smp_count_cpus(void)
  *      Activate a secondary processor.
  */
 extern void init_100hz_timer(void);
+extern void cpu_init (void);
 
 int __init start_secondary(void *cpuvoid)
 {
@@ -571,6 +570,9 @@ void __init smp_boot_cpus(void)
         int curr_cpu;
         int i;
         
+        /* request the 0x1202 external interrupt */
+        if (register_external_interrupt(0x1202, do_ext_call_interrupt) != 0)
+                panic("Couldn't request external interrupt 0x1202");
         smp_count_cpus();
         memset(lowcore_ptr,0,sizeof(lowcore_ptr));  
         

@@ -20,7 +20,8 @@ all: kernel.o head.o init_task.o
 O_TARGET := kernel.o
 O_OBJS   := lowcore.o entry.o bitmap.o traps.o time.o process.o irq.o \
             setup.o sys_s390.o ptrace.o signal.o cpcmd.o ebcdic.o \
-            s390fpu.o s390io.o reipl.o
+            s390fpu.o s390io.o reipl.o debug.o s390_ext.o s390dyn.o \
+            s390mach.o 
 
 OX_OBJS  := s390_ksyms.o
 MX_OBJS  :=

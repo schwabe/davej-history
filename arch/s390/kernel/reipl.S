@@ -12,6 +12,9 @@
 do_reipl:	basr	%r13,0
 .Lpg0:		lpsw	.Lnewpsw-.Lpg0(%r13)
 .Lpg1:		lctl	%c6,%c6,.Lall-.Lpg0(%r13)
+                stctl   %c0,%c0,.Lctlsave-.Lpg0(%r13)
+                ni      .Lctlsave-.Lpg0(%r13),0xef
+                lctl    %c0,%c0,.Lctlsave-.Lpg0(%r13)
                 lr      %r1,%r2
         	mvc     __LC_PGM_NEW_PSW(8,0),.Lpcnew-.Lpg0(%r13)
                 stsch   .Lschib-.Lpg0(%r13)                                    
@@ -41,8 +44,9 @@ do_reipl:	basr	%r13,0
 .Ldisab:	st      %r14,.Ldispsw+4-.Lpg0(%r13)
 		lpsw	.Ldispsw-.Lpg0(%r13)
                 .align 	8
-.Lall:		.long	0xff000000;
+.Lall:		.long	0xff000000
 .Lnull:		.long   0x00000000
+.Lctlsave:      .long   0x00000000
                 .align 	8
 .Lnewpsw:	.long   0x00080000,0x80000000+.Lpg1
 .Lpcnew:  	.long   0x00080000,0x80000000+.Lecs

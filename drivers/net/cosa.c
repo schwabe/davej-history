@@ -118,6 +118,7 @@ typedef struct wait_queue *wait_queue_head_t;
 /* Per-channel data structure */
 
 struct channel_data {
+	void *if_ptr;	/* General purpose pointer (used by SPPP) */
 	int usage;	/* Usage count; >0 for chrdev, -1 for netdev */
 	int num;	/* Number of the channel */
 	struct cosa_data *cosa;	/* Pointer to the per-card structure */
@@ -572,8 +573,10 @@ bad1:		release_region(cosa->datareg,is_8bit(cosa)?2:4);
 static void sppp_channel_init(struct channel_data *chan)
 {
 	struct device *d;
+	chan->if_ptr = &chan->pppdev;
+	chan->pppdev.dev = kmalloc(sizeof(struct device), GFP_KERNEL);
 	sppp_attach(&chan->pppdev);
-	d=&chan->pppdev.dev;
+	d=chan->pppdev.dev;
 	d->name = chan->name;
 	d->base_addr = chan->cosa->datareg;
 	d->irq = chan->cosa->irq;
@@ -588,15 +591,15 @@ static void sppp_channel_init(struct channel_data *chan)
 	dev_init_buffers(d);
 	if (register_netdev(d) == -1) {
 		printk(KERN_WARNING "%s: register_netdev failed.\n", d->name);
-		sppp_detach(&chan->pppdev.dev);
+		sppp_detach(chan->pppdev.dev);
 		return;
 	}
 }
 
 static void sppp_channel_delete(struct channel_data *chan)
 {
-	sppp_detach(&chan->pppdev.dev);
-	unregister_netdev(&chan->pppdev.dev);
+	sppp_detach(chan->pppdev.dev);
+	unregister_netdev(chan->pppdev.dev);
 }
 
 
@@ -707,7 +710,7 @@ static char *sppp_setup_rx(struct channel_data *chan, int size)
 		chan->stats.rx_dropped++;
 		return NULL;
 	}
-	chan->pppdev.dev.trans_start = jiffies;
+	chan->pppdev.dev->trans_start = jiffies;
 	return skb_put(chan->rx_skb, size);
 }
 
@@ -721,13 +724,13 @@ static int sppp_rx_done(struct channel_data *chan)
 		return 0;
 	}
 	chan->rx_skb->protocol = htons(ETH_P_WAN_PPP);
-	chan->rx_skb->dev = &chan->pppdev.dev;
+	chan->rx_skb->dev = chan->pppdev.dev;
 	chan->rx_skb->mac.raw = chan->rx_skb->data;
 	chan->stats.rx_packets++;
 	chan->stats.rx_bytes += chan->cosa->rxsize;
 	netif_rx(chan->rx_skb);
 	chan->rx_skb = 0;
-	chan->pppdev.dev.trans_start = jiffies;
+	chan->pppdev.dev->trans_start = jiffies;
 	return 0;
 }
 
@@ -745,7 +748,7 @@ static int sppp_tx_done(struct channel_data *chan, int size)
 	chan->tx_skb = 0;
 	chan->stats.tx_packets++;
 	chan->stats.tx_bytes += size;
-	chan->pppdev.dev.tbusy = 0;
+	chan->pppdev.dev->tbusy = 0;
 	mark_bh(NET_BH);
 	return 1;
 }

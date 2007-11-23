@@ -481,10 +481,7 @@ iplstart:
         .org  0x10000
         .globl start
 start:  basr  %r13,0                     # get base
-.LPG1:  lctl  %c1,%c1,.Lpstd-.LPG1(%r13) # load pstd
-        lctl  %c7,%c7,.Lpstd-.LPG1(%r13) # load sstd
-        lctl  %c13,%c13,.Lpstd-.LPG1(%r13) # load hstd
-        lctl  %c0,%c0,.Lcr0-.LPG1(%r13)  # set CR0
+.LPG1:  lctl  %c0,%c15,.Lctl-.LPG1(%r13) # load all control registers
 	l     %r12,.Lparm1-.LPG1(%r13)   # pointer to parameter area
 
 #
@@ -529,15 +526,40 @@ start:  basr  %r13,0                     # get base
         adbr   %f0,%f2                  # test IEEE add instruction
         oi     MACHINE_FLAGS+3-PARMAREA(%r12),2    # set IEEE fpu flag
 .Lchkfpu:
+#
+# find out if we have the CSP instruction
+#
+       mvc    104(8,0),.Lpccsp-.LPG1(%r13) # setup program check handler
+       la     %r0,0
+       lr     %r1,%r0
+       la     %r2,.Lflt0-.LPG1(%r13)
+       csp    %r0,%r2                   # Test CSP instruction
+       oi     MACHINE_FLAGS+3-PARMAREA(%r12),8 # set CSP flag
+.Lchkcsp:
 
         lpsw  .Lentry-.LPG1(13)         # jump to _stext in primary-space,
                                         # virtual and never return ...
         .align 8
 .Lentry:.long  0x04080000,0x80000000 + _stext
-.Lpstd: .long  .Lpgd+0x7F               # segment-table
-.Lcr0:  .long  0x04b50002
+.Lctl:  .long  0x04b50002               # cr0: various things
+        .long  .Lpgd+0x7f               # cr1: primary space segment table
+        .long  0                        # cr2: access register translation
+        .long  0                        # cr3: instruction authorization
+        .long  0                        # cr4: instruction authorization
+        .long  0                        # cr5:  various things
+        .long  0                        # cr6:  I/O interrupts
+        .long  .Lpgd+0x7f               # cr7:  secondary space segment table
+        .long  0                        # cr8:  access registers translation
+        .long  0                        # cr9:  tracing off
+        .long  0                        # cr10: tracing off
+        .long  0                        # cr11: tracing off
+        .long  0                        # cr12: tracing off
+        .long  .Lpgd+0x7f               # cr13: home space segment table
+        .long  0xc0000000               # cr14: machine check handling off
+        .long  0                        # cr15: linkage stack operations
 .Lpcmem:.long  0x00080000,0x80000000 + .Lchkmem
 .Lpcfpu:.long  0x00080000,0x80000000 + .Lchkfpu
+.Lpccsp:.long  0x00080000,0x80000000 + .Lchkcsp
 .Lflt0: .double 0
 .Lparm1:.long  PARMAREA
 .L4malign:.long 0xffc00000
@@ -600,9 +622,8 @@ _stext:	basr  %r13,0                    # get base
         jo    .-4                       # branch back, if not finish
 # check control registers
         stctl  %c0,%c15,0(%r15)
-        l     %r0,0(%r15)
-        o     %r0,.Lcr0or-.LPG2(%r13)   # enable sigp external ints.
-        st    %r0,0(%r15)
+        oc     2(1,%r15),.Locbits+5-.LPG2(%r13) # enable sigp external ints.
+        oc     0(1,%r15),.Locbits+4-.LPG2(%r13) # low addresss proctection
         lctl   %c0,%c15,0(%r15)
 
 #
@@ -621,7 +642,7 @@ _stext:	basr  %r13,0                    # get base
 .Linittu:   .long  init_task_union
 .Lbss_bgn:  .long  __bss_start
 .Lbss_end:  .long  _end
-.Lcr0or:    .long  0x00002000
+.Locbits:   .long  0x01020408,0x10204080
             .align 4
 .Laregs:    .long  0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0
 	    .align 8

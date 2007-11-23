@@ -2303,6 +2303,10 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			drive->nice1 = (arg >> IDE_NICE_1) & 1;
 			return 0;
 
+		case BLKELVGET:
+		case BLKELVSET:
+ 			return blkelv_ioctl(inode->i_rdev, cmd, arg);
+
 		RO_IOCTLS(inode->i_rdev, arg);
 
 		default:

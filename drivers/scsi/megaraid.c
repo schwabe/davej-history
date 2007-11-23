@@ -1677,7 +1677,7 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
 "megaraid: to protect your data, please upgrade your firmware to version\n"
 "megaraid: 3.10 or later, available from the Dell Technical Support web\n"
 "megaraid: site at\n"
-"http://support.dell.com/us/en/filelib/download/index.asp?fileid=2489\n");
+"http://support.dell.com/us/en/filelib/download/index.asp?fileid=2940\n");
 	megaraid_release (host);
 #ifdef MODULE	
 	continue;

@@ -679,21 +679,26 @@ void set_blocksize(kdev_t dev, int size)
 			bhnext = bh->b_next_free;
 			if (bh->b_dev != dev || bh->b_size == size)
 				continue;
-			if (buffer_dirty(bh))
-				printk(KERN_ERR "set_blocksize: dev %s buffer_dirty %lu size %lu\n", kdevname(dev), bh->b_blocknr, bh->b_size);
 			if (buffer_locked(bh))
 			{
 				slept = 1;
 				wait_on_buffer(bh);
 			}
+			if (buffer_dirty(bh))
+				printk(KERN_WARNING "set_blocksize: dev %s buffer_dirty %lu size %lu\n", kdevname(dev), bh->b_blocknr, bh->b_size);
 			if (!bh->b_count)
 				put_last_free(bh);
 			else
-				printk(KERN_ERR
+			{
+				mark_buffer_clean(bh);
+				clear_bit(BH_Uptodate, &bh->b_state);
+				clear_bit(BH_Req, &bh->b_state);
+				printk(KERN_WARNING
 				       "set_blocksize: "
-				       "b_count %d, dev %s, block %lu!\n",
+				       "b_count %d, dev %s, block %lu, from %p\n",
 				       bh->b_count, bdevname(bh->b_dev),
-				       bh->b_blocknr);
+				       bh->b_blocknr, __builtin_return_address(0));
+			}
 			if (slept)
 				goto again;
 		}
@@ -708,6 +713,7 @@ static void refill_freelist(int size)
 	if (!grow_buffers(size)) {
 		wakeup_bdflush(1);
 		current->policy |= SCHED_YIELD;
+		current->state = TASK_RUNNING;
 		schedule();
 	}
 }

@@ -20,6 +20,7 @@
 
 #include <linux/module.h>
 #include <linux/config.h>
+#include <linux/kmod.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/ioport.h>
@@ -334,6 +335,9 @@ int pi_init(PIA *pi, int autoprobe, int port, int mode,
 	int lpts[7] = {0x3bc,0x378,0x278,0x268,0x27c,0x26c,0};
 
 	s = protocol; e = s+1;
+
+	if (!protocols[0])
+		request_module ("paride_protocol");
 
 	if (autoprobe) {
 		s = 0; 

@@ -1031,6 +1031,9 @@
 #define PCI_DEVICE_ID_LAVA_DUAL_PAR_A	0x8002 /* The Lava Dual Parallel is */
 #define PCI_DEVICE_ID_LAVA_DUAL_PAR_B	0x8003 /* two PCI devices on a card */
 
+#define PCI_VENDOR_ID_TIMEDIA		0x1409
+#define PCI_DEVICE_ID_TIMEDIA_1889	0x7168
+
 #define PCI_VENDOR_ID_AFAVLAB		0x14db
 #define PCI_DEVICE_ID_AFAVLAB_TK9902	0x2120
 

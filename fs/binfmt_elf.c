@@ -376,6 +376,9 @@ static unsigned long load_aout_interp(struct exec * interp_ex,
 		goto out;
 	}
 
+	if ((unsigned long)addr + text_data < text_data)
+		goto out;
+
 	do_mmap(NULL, 0, text_data,
 		PROT_READ|PROT_WRITE|PROT_EXEC, MAP_FIXED|MAP_PRIVATE, 0);
 	retval = read_exec(interpreter_dentry, offset, addr, text_data, 0);

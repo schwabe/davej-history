@@ -1,7 +1,9 @@
+
 #include <linux/mm.h>
 #include <asm/spinlock.h>
 
-#include "dasd.h"
+#include <linux/dasd.h>
+
 #include "dasd_types.h"
 
 #define PRINTK_HEADER "dasd_profile:"
@@ -141,7 +143,9 @@ struct {
 	} __attribute__ ((packed)) u;
 	unsigned long caller_address;
 	unsigned long tag;
-} __attribute__ ((packed)) dasd_debug_entry;
+} __attribute__ ((packed))
+
+dasd_debug_entry;
 
 static dasd_debug_entry *dasd_debug_area = NULL;
 static dasd_debug_entry *dasd_debug_actual;
@@ -155,7 +159,7 @@ dasd_debug ( unsigned long tag )
 	/* initialize in first call ... */
 	if ( ! dasd_debug_area ) {
 		dasd_debug_actual = dasd_debug_area = 
-			get_free_page (GFP_ATOMIC);
+		    (dasd_debug_entry *) get_free_page (GFP_ATOMIC);
 		if ( ! dasd_debug_area ) {
 			PRINT_WARN("No debug area allocated\n");
 			return;
@@ -174,7 +178,7 @@ dasd_debug ( unsigned long tag )
 	__asm__ __volatile__ ( "STCK  %0"
 			       :"=m" (d->u.clock));
 	d->tag = tag;
-	d -> caller_address = __builtin_return_address(0);
+	d->caller_address = (unsigned long) __builtin_return_address (0);
 	d->u.s.cpu = smp_processor_id();
 }
 
@@ -183,7 +187,8 @@ dasd_proc_read_debug ( char * buf, char **start,
 		       off_t off, int len, int dd)
 {
 	dasd_debug_entry *d;
-	char tag[9] = { 0, };
+	char tag[9] =
+	{0,};
 	long flags;
 	spin_lock_irqsave(&debug_lock,flags);
 	len = 0;
@@ -193,13 +198,12 @@ dasd_proc_read_debug ( char * buf, char **start,
 		if ( *(char*)(&d->tag) == 'D' ) {
 			memcpy(tag,&(d->tag),4);
 			tag[4]=0;
-		}
-		else {
-			sprintf(tag,"%08x",d->tag);
+		} else {
+			sprintf (tag, "%08lx", d->tag);
 			tag[8]=0;
 		}
 		len += sprintf ( buf+len,
-				 "%lx %08x%05x %08lx (%8s)\n",
+				"%x %08x%05x %08lx (%8s)\n",
 				 d->u.s.cpu, d->u.s.ts1, d->u.s.ts2,
 				 d->caller_address,tag);
 	}

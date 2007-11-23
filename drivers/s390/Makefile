@@ -16,7 +16,7 @@ M_OBJS   :=
 
 SUBDIRS := $(SUBDIRS) arch/s390/drivers/block arch/s390/drivers/char \
 	arch/s390/drivers/misc  arch/s390/drivers/net
-MOD_SUB_DIRS += ./net
+MOD_SUB_DIRS += ./net ./block
 
 O_OBJS := block/s390-block.o \
   char/s390-char.o \

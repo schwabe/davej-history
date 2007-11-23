@@ -1,3 +1,4 @@
+
 /*
  * File...........: linux/drivers/s390/block/dasd_types.h
  * Author.........: Holger Smolinski <Holger.Smolinski@de.ibm.com>
@@ -21,11 +22,21 @@
 #ifndef DASD_TYPES_H
 #define DASD_TYPES_H
 
-#include "dasd.h"
+#include <linux/dasd.h>
 
 #include <linux/blkdev.h>
 
+#include <linux/hdreg.h>
+
 #include <asm/irq.h>
+
+#include "dasd_mdsk.h"
+
+#define ACS(where,from,to) if (atomic_compare_and_swap (from, to, &where)) {\
+	PRINT_WARN ("%s/%d atomic %s from %d(%s) to %d(%s) failed, was %d\n",\
+		    __FILE__,__LINE__,#where,from,#from,to,#to,\
+                    atomic_read (&where));\
+        atomic_set(&where,to);}
 
 #define CCW_DEFINE_EXTENT 0x63
 #define CCW_LOCATE_RECORD 0x43
@@ -34,15 +45,19 @@
 typedef
 enum {
 	dasd_none = -1,
+#ifdef CONFIG_DASD_ECKD
+	dasd_eckd,
+#endif				/* CONFIG_DASD_ECKD */
 #ifdef CONFIG_DASD_FBA
 	dasd_fba,
 #endif				/* CONFIG_DASD_FBA */
+#ifdef CONFIG_DASD_MDSK
+	dasd_mdsk,
+#endif				/* CONFIG_DASD_MDSK */
 #ifdef CONFIG_DASD_CKD
 	dasd_ckd,
 #endif				/* CONFIG_DASD_CKD */
-#ifdef CONFIG_DASD_ECKD
-	dasd_eckd
-#endif				/* CONFIG_DASD_ECKD */
+	dasd_end
 } dasd_type_t;
 
 typedef
@@ -158,19 +173,38 @@ struct {
 
 dasd_eckd_characteristics_t;
 
+typedef struct {
+	u16 dev_nr;
+	u16 rdc_len;
+	u8 vdev_class;
+	u8 vdev_type;
+	u8 vdev_status;
+	u8 vdev_flags;
+	u8 rdev_class;
+	u8 rdev_type;
+	u8 rdev_model;
+	u8 rdev_features;
+} __attribute__ ((packed, aligned (32)))
+
+dasd_mdsk_characteristics_t;
+
+/* eckd count area */
+typedef struct {
+	__u16 cyl;
+	__u16 head;
+	__u8 record;
+	__u8 kl;
+	__u16 dl;
+} __attribute__ ((packed))
+
+eckd_count_t;
+
 #ifdef CONFIG_DASD_CKD
 struct dasd_ckd_characteristics {
 	char info[64];
 };
 
 #endif				/* CONFIG_DASD_CKD */
-
-#ifdef CONFIG_DASD_ECKD
-struct dasd_eckd_characteristics {
-	char info[64];
-};
-
-#endif				/* CONFIG_DASD_ECKD */
 
 typedef
 union {
@@ -184,6 +218,9 @@ union {
 #ifdef CONFIG_DASD_ECKD
 	dasd_eckd_characteristics_t eckd;
 #endif				/* CONFIG_DASD_ECKD */
+#ifdef CONFIG_DASD_MDSK
+	dasd_mdsk_characteristics_t mdsk;
+#endif				/* CONFIG_DASD_ECKD */
 } __attribute__ ((aligned (32))) 
 
 dasd_characteristics_t;
@@ -193,10 +230,10 @@ dasd_characteristics_t;
 #define CQR_STATUS_QUEUED 0x02
 #define CQR_STATUS_IN_IO  0x04
 #define CQR_STATUS_DONE   0x08
-#define CQR_STATUS_RETRY  0x10
-#define CQR_STATUS_ERROR  0x20
-#define CQR_STATUS_FAILED 0x40
-#define CQR_STATUS_SLEEP  0x80
+#define CQR_STATUS_ERROR  0x10
+#define CQR_STATUS_ERP_PEND  0x20
+#define CQR_STATUS_ERP_ACTIVE  0x40
+#define CQR_STATUS_FAILED 0x80
 
 #define CQR_FLAGS_SLEEP   0x01
 #define CQR_FLAGS_WAIT    0x02
@@ -225,6 +262,7 @@ struct cqr_t {
 	spinlock_t lock;
 	int options;
 } __attribute__ ((packed)) 
+
 cqr_t;
 
 typedef
@@ -234,12 +272,13 @@ struct {
 	unsigned int bp_block;
 	unsigned int blocks;
 	unsigned int s2b_shift;
-	unsigned int b2k_shift;
-	unsigned int first_sector;
+	unsigned int label_block;
 } dasd_sizes_t;
 
 #define DASD_CHANQ_ACTIVE 0x01
 #define DASD_CHANQ_BUSY 0x02
+#define DASD_REQUEST_Q_BROKEN 0x04
+
 typedef
 struct dasd_chanq_t {
 	volatile cqr_t *head;
@@ -248,9 +287,17 @@ struct dasd_chanq_t {
 	spinlock_t f_lock;	/* lock for flag operations */
 	int queued_requests;
 	atomic_t flags;
+	atomic_t dirty_requests;
 	struct dasd_chanq_t *next_q;	/* pointer to next queue */
 } __attribute__ ((packed, aligned (16))) 
+
 dasd_chanq_t;
+
+#define DASD_INFO_STATUS_UNKNOWN 0x00	/* nothing known about DASD */
+#define DASD_INFO_STATUS_DETECTED 0x01	/* DASD identified as DASD, irq taken */
+#define DASD_INFO_STATUS_ANALYSED 0x02	/* first block read, filled sizes */
+#define DASD_INFO_STATUS_FORMATTED 0x04		/* identified valid format */
+#define DASD_INFO_STATUS_PARTITIONED 0x08	/* identified partitions */
 
 typedef
 struct dasd_information_t {
@@ -264,38 +311,49 @@ struct dasd_information_t {
 	int open_count;
 	spinlock_t lock;
 	struct semaphore sem;
-	unsigned long flags;
+	atomic_t status;
 	int irq;
+	mdsk_setup_data_t *mdsk_setup;
 	struct proc_dir_entry *proc_device;
 	union {
+		struct {
+			eckd_count_t count_data;
+		} eckd;
 		struct {
 			char dummy;
 		} fba;
 		struct {
+			mdsk_init_io_t iib;
+			mdsk_rw_io_t iob;
+			mdsk_setup_data_t setup;
+			long *label;
+		} mdsk;
+		struct {
 			char dummy;
 		} ckd;
-		struct {
-			int blk_per_trk;
-		} eckd;
 	} private;
+	struct wait_queue *wait_q;
 } dasd_information_t;
 
-typedef struct {
-	int start_unit;
-	int stop_unit;
-	int blksize;
-} format_data_t;
+extern dasd_information_t *dasd_info[];
+
+#include "dasd_erp.h"
 
 typedef
 struct {
 	int (*ck_devinfo) (dev_info_t *);
 	cqr_t *(*get_req_ccw) (int, struct request *);
-	cqr_t *(*rw_label) (int, int, char *);
 	int (*ck_characteristics) (dasd_characteristics_t *);
-	int (*fill_sizes) (int);
+	cqr_t *(*fill_sizes_first) (int);
+	int (*fill_sizes_last) (int);
 	int (*dasd_format) (int, format_data_t *);
+	void (*fill_geometry) (int, struct hd_geometry *);
+	 dasd_era_t (*erp_examine) (cqr_t *, devstat_t *);
 } dasd_operations_t;
 
-extern dasd_information_t *dasd_info[];
+extern dasd_operations_t *dasd_disciplines[];
+
+/* Prototypes */
+int dasd_start_IO (cqr_t * cqr);
 
 #endif				/* DASD_TYPES_H */

@@ -19,6 +19,7 @@ tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
   bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
 fi
+tristate 'XPRAM disk support' CONFIG_BLK_DEV_XPRAM
 
 bool 'Support for VM minidisk (VM only)' CONFIG_MDISK
 if [ "$CONFIG_MDISK" = "y" ]; then
@@ -29,15 +30,21 @@ tristate 'Support for DASD devices' CONFIG_DASD
 if [ "$CONFIG_DASD" != "n"  ]; then
   comment 'DASD disciplines'
   bool '   Support for ECKD Disks' CONFIG_DASD_ECKD
+  bool '   Support for FBA Disks' CONFIG_DASD_FBA
+#  bool '   Support for CKD Disks (unsupported)' CONFIG_DASD_CKD
+  if [ "$CONFIG_MDISK" = "n" ]; then
+    bool '   Support for DIAG access to CMS formatted Disks' CONFIG_DASD_MDSK
+  fi
 fi
 
 #menu_option next_comment
+#  comment 'S/390-SCSI support'
+#  tristate 'S/390-SCSI support' CONFIG_SCSI
 #endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
   mainmenu_option next_comment
   comment 'S/390 Network device support'
-
   bool 'Network device support' CONFIG_NETDEVICES
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
     menu_option next_comment

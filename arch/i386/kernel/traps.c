@@ -163,7 +163,7 @@ static void show_registers(struct pt_regs *regs)
 		}
 		printk("\nCall Trace: ");
 		if (!esp || (esp & 3))
-			printk("<INVALID ESP!>");
+			printk("Bad EIP value.");
 		else {
 			stack = (unsigned long *) esp;
 			i = 1;
@@ -192,7 +192,7 @@ static void show_registers(struct pt_regs *regs)
 		}
 		printk("\nCode: ");
 		if (!regs->eip || regs->eip==-1)
-			printk("<INVALID EIP!>");
+			printk("Bad EIP value.");
 		else {
 			for(i=0;i<20;i++)
 			printk("%02x ", ((unsigned char *)regs->eip)[i]);

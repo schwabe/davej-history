@@ -9,9 +9,9 @@
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <asm/spinlock.h>
+#include <linux/dasd.h>
 #include <asm/atomic.h>
 
-#include "dasd.h"
 #include "dasd_types.h"
 
 #define PRINTK_HEADER "dasd_ccw:"
@@ -148,7 +148,6 @@ request_cpa (int index)
 	}
 #endif				/* DASD_PARANOIA */
       exit:
-	FUNCTION_EXIT ("request_cpa");
 	return freeblk;
 }
 
@@ -263,6 +262,69 @@ release_cq (cqr_t * cqr)
 	return;
 }
 
+/* ---------------------------------------------------------- */
+
+static erp_t *erpp = NULL;
+#ifdef __SMP__
+static spinlock_t erp_lock = SPIN_LOCK_UNLOCKED;
+#endif				/* __SMP__ */
+
+void
+erf_enq (erp_t * cqf)
+{
+	*(erp_t **) cqf = erpp;
+	erpp = cqf;
+}
+
+erp_t *
+erf_deq (void)
+{
+	erp_t *erp = erpp;
+	erpp = *(erp_t **) erpp;
+	return erp;
+}
+
+erp_t *
+request_er (void)
+{
+	erp_t *erp = NULL;
+	int i;
+	erp_t *area;
+
+	spin_lock (&erp_lock);
+	while (erpp == NULL) {
+		do {
+			area = (erp_t *) get_free_page (GFP_ATOMIC);
+			if (area == NULL) {
+				printk (KERN_WARNING PRINTK_HEADER
+					"No memory for chanq area\n");
+			}
+		} while (!area);
+		memset (area, 0, PAGE_SIZE);
+		if (dasd_page_count + 1 >= MAX_DASD_PAGES) {
+			PRINT_WARN ("Requesting too many pages...");
+		} else {
+			dasd_page[dasd_page_count++] =
+			    (long) area;
+		}
+		for (i = 0; i < 4096 / sizeof (erp_t); i++) {
+			erf_enq (area + i);
+		}
+	}
+	erp = erf_deq ();
+	spin_unlock (&erp_lock);
+	return erp;
+}
+
+void
+release_er (erp_t * erp)
+{
+	spin_lock (&erp_lock);
+	erf_enq (erp);
+	spin_unlock (&erp_lock);
+	return;
+}
+
 /* ----------------------------------------------------------- */
 cqr_t *
 request_cqr (int cpsize, int datasize)
@@ -296,8 +358,6 @@ request_cqr (int cpsize, int datasize)
 		memset (cqr->data,0,datasize);
 	}
 	goto exit;
- nodata:
-	release_cp (cqr->cplength, cqr->cpaddr);
       nocp:
 	release_cq (cqr);
 	cqr = NULL;
@@ -327,6 +387,59 @@ release_cqr (cqr_t * cqr)
 	return rc;
 }
 
+/* ----------------------------------------------------------- */
+erp_t *
+allloc_erp (erp_t * erp, int cpsize, int datasize)
+{
+	if (cpsize) {
+		erp->cqr.cpaddr = request_cp (cpsize);
+		if (erp->cqr.cpaddr == NULL) {
+			printk (KERN_WARNING PRINTK_HEADER __FILE__
+				"No memory for channel program\n");
+			goto nocp;
+		}
+		erp->cqr.cplength = cpsize;
+	}
+	if (datasize) {
+		do {
+			erp->cqr.data = (char *) kmalloc (datasize, GFP_ATOMIC);
+			if (erp->cqr.data == NULL) {
+				printk (KERN_WARNING PRINTK_HEADER __FILE__
+					"No memory for ERP data area\n");
+			}
+		} while (!erp->cqr.data);
+		memset (erp->cqr.data, 0, datasize);
+	}
+	goto exit;
+      nocp:
+	release_er (erp);
+	erp = NULL;
+      exit:
+	return erp;
+}
+
+int
+release_erp (erp_t * erp)
+{
+	int rc = 0;
+	if (erp == NULL) {
+		rc = -ENOENT;
+		return rc;
+	}
+	if (erp->cqr.data) {
+		kfree (erp->cqr.data);
+	}
+	if (erp->cqr.dstat) {
+		kfree (erp->cqr.dstat);
+	}
+	if (erp->cqr.cpaddr) {
+		release_cp (erp->cqr.cplength, erp->cqr.cpaddr);
+	}
+	erp->cqr.magic = dasd_MAGIC;
+	release_er (erp);
+	return rc;
+}
+
 /* -------------------------------------------------------------- */
 void
 dasd_chanq_enq (dasd_chanq_t * q, cqr_t * cqr)
@@ -338,13 +451,18 @@ dasd_chanq_enq (dasd_chanq_t * q, cqr_t * cqr)
 	cqr->next = NULL;
 	q->tail = cqr;
 	q->queued_requests ++;
-	if (atomic_compare_and_swap(CQR_STATUS_FILLED,
-				    CQR_STATUS_QUEUED,
-				    &cqr->status)) {
-		PRINT_WARN ("q_cqr: %p status changed %d\n", 
-			    cqr,atomic_read(&cqr->status));
-		atomic_set(&cqr->status,CQR_STATUS_QUEUED);
+	ACS (cqr->status, CQR_STATUS_FILLED, CQR_STATUS_QUEUED);
 	}
+
+void
+dasd_chanq_enq_head (dasd_chanq_t * q, cqr_t * cqr)
+{
+	cqr->next = q->head;
+	q->head = cqr;
+	if (q->tail == NULL)
+		q->tail = cqr;
+	q->queued_requests++;
+	ACS (cqr->status, CQR_STATUS_FILLED, CQR_STATUS_QUEUED);
 }
 
 int
@@ -370,6 +488,9 @@ dasd_chanq_deq (dasd_chanq_t * q, cqr_t * cqr)
 	}
 	cqr->next = NULL;
 	q->queued_requests --;
+	if (cqr->magic == ERP_MAGIC)
+		return release_erp ((erp_t *) cqr);
+	else
 	return release_cqr(cqr);
 }
 
@@ -408,8 +529,7 @@ cql_deq (dasd_chanq_t * q)
 	spin_lock(&cq_lock);
 	if (! (atomic_read(&q->flags) & DASD_CHANQ_ACTIVE)) {
 		PRINT_WARN("Queue not active\n");
-	}
-	else if (cq_head == q) {
+	} else if (cq_head == q) {
 		cq_head = q->next_q;
 	} else {
 		c = cq_head;

@@ -495,7 +495,33 @@ sr_is_xa(int minor)
 int sr_dev_ioctl(struct cdrom_device_info *cdi,
                  unsigned int cmd, unsigned long arg)
 {
-    return scsi_ioctl(scsi_CDs[MINOR(cdi->dev)].device,cmd,(void *) arg);
+	switch (cmd) {
+	case BLKRAGET:
+		if (!arg)
+			return -EINVAL;
+		return put_user(read_ahead[MAJOR(cdi->dev)], (long *) arg);
+	case BLKRASET:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EACCES;
+		if (!(cdi->dev))
+			return -EINVAL;
+		if (arg > 0xff)
+			return -EINVAL;
+		read_ahead[MAJOR(cdi->dev)] = arg;
+		return 0;
+	case BLKSSZGET:
+		return put_user(blksize_size[MAJOR(cdi->dev)][MINOR(cdi->dev)], (int *) arg);
+	case BLKFLSBUF:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EACCES;
+		if (!(cdi->dev))
+			return -EINVAL;
+		fsync_dev(cdi->dev);
+		invalidate_buffers(cdi->dev);
+		return 0;
+	default:
+		return scsi_ioctl(scsi_CDs[MINOR(cdi->dev)].device,cmd,(void *) arg);
+	}
 }
 
 /*

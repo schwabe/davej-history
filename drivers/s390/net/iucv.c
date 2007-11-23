@@ -3,9 +3,14 @@
  *    Network driver for VM using iucv
  *
  *  S390 version
- *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Stefan Hegewald <hegewald@de.ibm.com>
  *               Hartmut Penner <hpenner@de.ibm.com> 
+ * 
+ *    2.3 Updates Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
+ *                Martin Schwidefsky (schwidefsky@de.ibm.com)
+ *                
+
  */
 
 #ifndef __KERNEL__
@@ -19,8 +24,8 @@
 #include <linux/errno.h>               /* error codes                      */
 #include <linux/types.h>               /* size_t                           */
 #include <linux/interrupt.h>           /* mark_bh                          */
-#include <linux/netdevice.h>           /* struct device, and other headers */
-#include <linux/inetdevice.h>          /* struct device, and other headers */
+#include <linux/netdevice.h>           /* struct net_device, and other headers */
+#include <linux/inetdevice.h>          /* struct net_device, and other headers */
 #include <linux/if_arp.h>
 #include <linux/rtnetlink.h>
 #include <linux/ip.h>                  /* struct iphdr                     */
@@ -31,8 +36,12 @@
 #include <asm/checksum.h>
 #include <asm/io.h>
 #include <asm/string.h>
+#include <asm/s390_ext.h>
 
 #include "iucv.h"
+
+
+
 
 #define DEBUG123
 #define MAX_DEVICES  10
@@ -47,7 +56,13 @@ static char iucv_ascii_userid[MAX_DEVICES][8];
 static int  iucv_pathid[MAX_DEVICES] = {0};
 static unsigned char iucv_ext_int_buffer[40] __attribute__((aligned (8))) ={0};
 static unsigned char glob_command_buffer[40] __attribute__((aligned (8)));
-struct device iucv_devs[];
+
+#if LINUX_VERSION_CODE>=0x20300
+typedef struct net_device  net_device;
+#else
+typedef struct device  net_device;
+#endif
+net_device iucv_devs[];
 
 
 /* This structure is private to each device. It is used to pass */
@@ -72,6 +87,50 @@ struct iucv_priv {
 struct iucv_header {
   short len;
 };
+
+
+
+static __inline__ int netif_is_busy(net_device *dev)
+{
+#if LINUX_VERSION_CODE<0x02032D
+	return(dev->tbusy);
+#else
+	return(test_bit(LINK_STATE_XOFF,&dev->flags));
+#endif
+}
+
+
+
+#if LINUX_VERSION_CODE<0x02032D
+#define netif_enter_interrupt(dev) dev->interrupt=1
+#define netif_exit_interrupt(dev) dev->interrupt=0
+#define netif_start(dev) dev->start=1
+#define netif_stop(dev) dev->start=0
+
+static __inline__ void netif_stop_queue(net_device *dev)
+{
+	dev->tbusy=1;
+}
+
+static __inline__ void netif_start_queue(net_device *dev)
+{
+	dev->tbusy=0;
+}
+
+static __inline__ void netif_wake_queue(net_device *dev)
+{
+	dev->tbusy=0;
+	mark_bh(NET_BH);
+}
+
+#else
+#define netif_enter_interrupt(dev)
+#define netif_exit_interrupt(dev)
+#define netif_start(dev)
+#define netif_stop(dev)
+#endif
+
+
 
 /*
  * Following the iucv primitives 
@@ -292,7 +351,7 @@ static void dumpit(char* buf, int len)
 /*--------------------------*/
 /* Get device from pathid   */
 /*--------------------------*/
-struct device * get_device_from_pathid(int pathid)
+net_device * get_device_from_pathid(int pathid)
 {
    int i;
     for (i=0;i<=MAX_DEVICES;i++)
@@ -309,10 +368,10 @@ struct device * get_device_from_pathid(int pathid)
 /*--------------------------*/
 /* Get device from userid   */
 /*--------------------------*/
-struct device * get_device_from_userid(char * userid)
+net_device * get_device_from_userid(char * userid)
 {
    int i;
-   struct device * dev;
+   net_device * dev;
    struct iucv_priv *privptr;
       for (i=0;i<=MAX_DEVICES;i++)
       {
@@ -329,7 +388,7 @@ struct device * get_device_from_userid(char * userid)
 /*--------------------------*/
 /* Open iucv Device Driver */
 /*--------------------------*/
-int iucv_open(struct device *dev)
+int iucv_open(net_device *dev)
 {
     int rc;
     unsigned short iucv_used_pathid;
@@ -344,8 +403,8 @@ int iucv_open(struct device *dev)
 
     privptr = (struct iucv_priv *)(dev->priv);
     if(privptr->pathid != -1) {
-       dev->start = 1;
-       dev->tbusy = 0;
+       netif_start(dev);
+       netif_start_queue(dev);
        return 0;
     }
     if ((rc = iucv_connect(privptr->command_buffer,
@@ -365,8 +424,8 @@ int iucv_open(struct device *dev)
     printk(  "iucv: iucv_connect ended with rc: %X\n",rc);
     printk(  "iucv[%d] pathid %X \n",(int)(dev-iucv_devs),privptr->pathid);
 #endif
-    dev->start = 1;
-    dev->tbusy = 0;
+    netif_start(dev);
+    netif_start_queue(dev);
     return 0;
 }
 
@@ -375,7 +434,7 @@ int iucv_open(struct device *dev)
 /*-----------------------------------------------------------------------*/
 /* Receive a packet: retrieve, encapsulate and pass over to upper levels */
 /*-----------------------------------------------------------------------*/
-void iucv_rx(struct device *dev, int len, unsigned char *buf)
+void iucv_rx(net_device *dev, int len, unsigned char *buf)
 {
 
   struct sk_buff *skb;
@@ -421,13 +480,13 @@ void iucv_rx(struct device *dev, int len, unsigned char *buf)
 /*----------------------------*/
 /* handle interrupts          */
 /*----------------------------*/
-void do_iucv_interrupt(void)
+void do_iucv_interrupt(struct pt_regs *regs, __u16 code)
 {
   int rc;
   struct in_device *indev;
   struct in_ifaddr *inaddr;
   unsigned long len=0;
-  struct device *dev=0;
+  net_device *dev=0;
   struct iucv_priv *privptr;
   INTERRUPT_T * extern_int_buffer;
   unsigned short iucv_data_len=0;
@@ -437,7 +496,7 @@ void do_iucv_interrupt(void)
   /* get own buffer: */
   extern_int_buffer = (INTERRUPT_T*) iucv_ext_int_buffer;
   
-  dev->interrupt = 1;        /* lock ! */
+  netif_enter_interrupt(dev);        /* lock ! */
   
 #ifdef DEBUG
   printk(  "iucv: do_iucv_interrupt %x received; pathid: %02X\n",
@@ -539,8 +598,7 @@ void do_iucv_interrupt(void)
       dev = get_device_from_pathid(extern_int_buffer->ippathid);
       privptr = (struct iucv_priv *)(dev->priv);
       privptr->stats.tx_packets++;
-      mark_bh(NET_BH);
-      dev->tbusy = 0;                 /* transmission is no longer busy*/
+      netif_wake_queue(dev);                /* transmission is no longer busy*/
       break;
       
       
@@ -602,7 +660,7 @@ void do_iucv_interrupt(void)
         iucv_data_len= *((unsigned short*)rcvptr);
 	
       } while (iucv_data_len != 0);
-      dev->tbusy = 0;                 /* transmission is no longer busy*/
+      netif_start_queue(dev);                 /* transmission is no longer busy*/
       break;
       
     default:
@@ -610,7 +668,7 @@ void do_iucv_interrupt(void)
       break;
       
     } /* end switch */
-  dev->interrupt = 0;                                       /* release lock*/
+  netif_exit_interrupt(dev);              /* release lock*/
   
 #ifdef DEBUG
   printk(  "iucv: leaving do_iucv_interrupt.\n");
@@ -623,7 +681,7 @@ void do_iucv_interrupt(void)
 /*-------------------------------------------*/
 /*   Transmit a packet (low level interface) */
 /*-------------------------------------------*/
-int iucv_hw_tx(char *send_buf, int len,struct device *dev)
+int iucv_hw_tx(char *send_buf, int len,net_device *dev)
 {
   /* This function deals with hw details.                         */
   /* This interface strips off the ethernet header details.       */
@@ -689,7 +747,7 @@ int iucv_hw_tx(char *send_buf, int len,struct device *dev)
 /*------------------------------------------*/
 /* Transmit a packet (called by the kernel) */
 /*------------------------------------------*/
-int iucv_tx(struct sk_buff *skb, struct device *dev)
+int iucv_tx(struct sk_buff *skb, net_device *dev)
 {
     int retval=0;
 
@@ -714,14 +772,14 @@ int iucv_tx(struct sk_buff *skb, struct device *dev)
     printk(  "iucv: enter iucv_tx, using %s\n",dev->name);
 #endif
 
-    if (dev->tbusy)                                   /* shouldn't happen*/
+    if (netif_is_busy(dev))                        /* shouldn't happen */
     {
       privptr->stats.tx_errors++;
       dev_kfree_skb(skb);
       printk("iucv: %s: transmit access conflict ! leaving iucv_tx.\n", dev->name);
     }
 
-    dev->tbusy = 1;                                   /* transmission is busy*/
+    netif_stop_queue(dev);                                   /* transmission is busy*/
     dev->trans_start = jiffies;                       /* save the timestamp*/
 
     /* actual deliver of data is device-specific, and not shown here */
@@ -744,14 +802,14 @@ int iucv_tx(struct sk_buff *skb, struct device *dev)
 /*---------------*/
 /* iucv_release */
 /*---------------*/
-int iucv_release(struct device *dev)
+int iucv_release(net_device *dev)
 {
     int rc =0;
     struct iucv_priv *privptr;
     privptr = (struct iucv_priv *) (dev->priv);
 
-    dev->start = 0;
-    dev->tbusy = 1;                              /* can't transmit any more*/
+    netif_stop(dev);
+    netif_stop_queue(dev);           /* can't transmit any more*/
     rc = iucv_sever(privptr->command_buffer);
     if (rc!=0)
     {
@@ -772,7 +830,7 @@ int iucv_release(struct device *dev)
 /*-----------------------------------------------*/
 /* Configuration changes (passed on by ifconfig) */
 /*-----------------------------------------------*/
-int iucv_config(struct device *dev, struct ifmap *map)
+int iucv_config(net_device *dev, struct ifmap *map)
 {
    if (dev->flags & IFF_UP)        /* can't act on a running interface*/
         return -EBUSY;
@@ -789,7 +847,7 @@ int iucv_config(struct device *dev, struct ifmap *map)
 /*----------------*/
 /* Ioctl commands */
 /*----------------*/
-int iucv_ioctl(struct device *dev, struct ifreq *rq, int cmd)
+int iucv_ioctl(net_device *dev, struct ifreq *rq, int cmd)
 {
 #ifdef DEBUG
     printk(  "iucv: device %s; iucv_ioctl\n",dev->name);
@@ -800,7 +858,7 @@ int iucv_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 /*---------------------------------*/
 /* Return statistics to the caller */
 /*---------------------------------*/
-struct net_device_stats *iucv_stats(struct device *dev)
+struct net_device_stats *iucv_stats(net_device *dev)
 {
     struct iucv_priv *priv = (struct iucv_priv *)dev->priv;
 #ifdef DEBUG
@@ -815,7 +873,7 @@ struct net_device_stats *iucv_stats(struct device *dev)
  * IUCV can handle MTU sizes from 576 to approx. 32000    
  */
 
-static int iucv_change_mtu(struct device *dev, int new_mtu)
+static int iucv_change_mtu(net_device *dev, int new_mtu)
 {
 #ifdef DEBUG
     printk(  "iucv: device %s; iucv_change_mtu\n",dev->name);
@@ -833,7 +891,7 @@ static int iucv_change_mtu(struct device *dev, int new_mtu)
 /* The init function (sometimes called probe).*/
 /* It is invoked by register_netdev()         */
 /*--------------------------------------------*/
-int iucv_init(struct device *dev)
+int iucv_init(net_device *dev)
 {
     int rc;
     struct iucv_priv *privptr;
@@ -841,6 +899,10 @@ int iucv_init(struct device *dev)
 #ifdef DEBUG
     printk(  "iucv: iucv_init, device: %s\n",dev->name);
 #endif
+
+    /* request the 0x4000 external interrupt */
+    if (register_external_interrupt(0x4000, do_iucv_interrupt) != 0)
+            panic("Couldn't request external interrupts 0x4000");
 
     dev->open            = iucv_open;
     dev->stop            = iucv_release;
@@ -926,12 +988,15 @@ int iucv_init(struct device *dev)
  * 
  * string passed: iucv=userid1,...,useridn 
  */
-
-__initfunc(int iucv_setup(char* str, int *ints))
+#if LINUX_VERSION_CODE>=0x020300
+static int  __init iucv_setup(char *str)
+#else
+__initfunc(void iucv_setup(char *str,int *ints))
+#endif
 {
     int result=0, i=0,j=0, k=0, device_present=0;
     char *s = str;
-    struct device * dev ={0};
+    net_device * dev ={0};
 
 #ifdef DEBUG
     printk(  "iucv: start registering device(s)... \n");
@@ -1006,18 +1071,24 @@ __initfunc(int iucv_setup(char* str, int *ints))
 #ifdef DEBUG
     printk(  "iucv: end register devices, %d devices present\n",device_present);
 #endif
-    return device_present ? 0 : -ENODEV;
+    /* return device_present ? 0 : -ENODEV; */
+#if LINUX_VERSION_CODE>=0x020300
+    return 1;
+#else
+    return;
+#endif
 }
 
-
-
+#if LINUX_VERSION_CODE>=0x020300
+__setup("iucv=", iucv_setup);
+#endif
 
 
 /*-------------*/
 /* The devices */
 /*-------------*/
 char iucv_names[MAX_DEVICES*8]; /* MAX_DEVICES eight-byte buffers */
-struct device iucv_devs[MAX_DEVICES] = {
+net_device iucv_devs[MAX_DEVICES] = {
     {
         iucv_names, /* name -- set at load time */
         0, 0, 0, 0,  /* shmem addresses */

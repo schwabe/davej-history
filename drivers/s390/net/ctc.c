@@ -3,8 +3,11 @@
  *    CTC / ESCON network driver
  *
  *  S390 version
- *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Dieter Wellerdiek (wel@de.ibm.com)
+ *
+ *     2.3 Updates Martin Schwidefsky (schwidefsky@de.ibm.com)
+ *                 Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
  *
  *
  *  Description of the Kernel Parameter
@@ -40,7 +43,8 @@
  *          - Possibility to switch the automatic selection off
  *          - Minor bug fixes 
  */
-
+#include <linux/version.h>
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
 #include <linux/errno.h>
@@ -161,6 +165,15 @@ struct buffer {
         struct block        *block;
 };
 
+#if LINUX_VERSION_CODE>=0x020300
+typedef struct net_device  net_device;
+#else
+typedef struct device  net_device;
+typedef struct wait_queue* wait_queue_head_t;
+#define DECLARE_WAITQUEUE(waitqname,waitqtask) struct wait_queue  waitqname = {waitqtask, NULL }
+#define init_waitqueue_head(nothing)
+#endif
+
 
 struct channel {
         unsigned int        devno;
@@ -172,8 +185,8 @@ struct channel {
         struct buffer       *free_anchor;
         struct buffer       *proc_anchor;
         devstat_t           *devstat;
-        struct device       *dev;      /* backward pointer to the network device */ 
-        struct wait_queue   *wait;
+        net_device   *dev;      /* backward pointer to the network device */ 
+	wait_queue_head_t   wait;
         struct tq_struct    tq;
         struct timer_list   timer;
         unsigned long       flag_a;    /* atomic flags */
@@ -186,7 +199,10 @@ struct channel {
 
 
 struct ctc_priv {                                                                    
-        struct enet_statistics   stats;
+        struct net_device_stats  stats;
+#if LINUX_VERSION_CODE>=0x02032D
+	int                      tbusy;
+#endif
         struct channel           channel[2]; 
         __u16                    protocol;
 };  
@@ -210,6 +226,99 @@ struct block {
         struct packet data;
 };
 
+#if LINUX_VERSION_CODE>=0x02032D
+#define ctc_protect_busy(dev) \
+s390irq_spin_lock(((struct ctc_priv *)dev->priv)->channel[WRITE].irq)
+#define ctc_unprotect_busy(dev) \
+s390irq_spin_unlock(((struct ctc_priv *)dev->priv)->channel[WRITE].irq)
+
+#define ctc_protect_busy_irqsave(dev,flags) \
+s390irq_spin_lock_irqsave(((struct ctc_priv *)dev->priv)->channel[WRITE].irq,flags)
+#define ctc_unprotect_busy_irqrestore(dev,flags) \
+s390irq_spin_unlock_irqrestore(((struct ctc_priv *)dev->priv)->channel[WRITE].irq,flags)
+
+static __inline__ void ctc_set_busy(net_device *dev)
+{
+	((struct ctc_priv *)dev->priv)->tbusy=1;
+	netif_stop_queue(dev);
+}
+
+static __inline__ void ctc_clear_busy(net_device *dev)
+{
+	((struct ctc_priv *)dev->priv)->tbusy=0;
+	netif_start_queue(dev);
+}
+
+static __inline__ int ctc_check_busy(net_device *dev)
+{
+	eieio();
+	return(((struct ctc_priv *)dev->priv)->tbusy);
+}
+
+
+static __inline__ void ctc_setbit_busy(int nr,net_device *dev)
+{
+	set_bit(nr,&(((struct ctc_priv *)dev->priv)->tbusy));
+	netif_stop_queue(dev);	
+}
+
+static __inline__ void ctc_clearbit_busy(int nr,net_device *dev)
+{
+	clear_bit(nr,&(((struct ctc_priv *)dev->priv)->tbusy));
+	if(((struct ctc_priv *)dev->priv)->tbusy==0)
+		netif_start_queue(dev);
+}
+
+static __inline__ int ctc_test_and_setbit_busy(int nr,net_device *dev)
+{
+	netif_stop_queue(dev);
+	return(test_and_set_bit(nr,&((struct ctc_priv *)dev->priv)->tbusy));
+}
+#else
+
+#define ctc_protect_busy(dev)
+#define ctc_unprotect_busy(dev)
+#define ctc_protect_busy_irqsave(dev,flags)
+#define ctc_unprotect_busy_irqrestore(dev,flags)
+
+static __inline__ void ctc_set_busy(net_device *dev)
+{
+	dev->tbusy=1;
+	eieio();
+}
+
+static __inline__ void ctc_clear_busy(net_device *dev)
+{
+	dev->tbusy=0;
+	eieio();
+}
+
+static __inline__ int ctc_check_busy(net_device *dev)
+{
+	eieio();
+	return(dev->tbusy);
+}
+
+
+static __inline__ void ctc_setbit_busy(int nr,net_device *dev)
+{
+	set_bit(nr,(void *)&dev->tbusy);
+}
+
+static __inline__ void ctc_clearbit_busy(int nr,net_device *dev)
+{
+	clear_bit(nr,(void *)&dev->tbusy);
+}
+
+static __inline__ int ctc_test_and_setbit_busy(int nr,net_device *dev)
+{
+	return(test_and_set_bit(nr,(void *)&dev->tbusy));
+}
+#endif
+
+
+
+
 
 /* Interrupt handler */
 static void ctc_irq_handler(int irq, void *initparm, struct pt_regs *regs);
@@ -219,16 +328,15 @@ static void ctc_write_retry (struct channel *ctc);
 
 
 /* Functions for the DEV methods */
-void ctc_setup(char *dev_name, int *ints);
-int ctc_probe(struct device *dev);
+int ctc_probe(net_device *dev);
  
 
-static int ctc_open(struct device *dev); 
+static int ctc_open(net_device *dev); 
 static void ctc_timer (struct channel *ctc);
-static int ctc_release(struct device *dev);
-static int ctc_tx(struct sk_buff *skb, struct device *dev);
-static int ctc_change_mtu(struct device *dev, int new_mtu);
-struct net_device_stats* ctc_stats(struct device *dev); 
+static int ctc_release(net_device *dev);
+static int ctc_tx(struct sk_buff *skb, net_device *dev);
+static int ctc_change_mtu(net_device *dev, int new_mtu);
+struct net_device_stats* ctc_stats(net_device *dev); 
 
 
 /*
@@ -573,17 +681,28 @@ static int inline ctc_buffer_swap(struct buffer **from, struct buffer **to) {
  *           0xnnnn is the cu number  write 
  *           ctcx can be ctc0 to ctc7 or escon0 to escon7 
  */
-void ctc_setup(char *dev_name, int *ints)
+#if LINUX_VERSION_CODE>=0x020300
+static int __init ctc_setup(char *dev_name)
+#else
+__initfunc(void ctc_setup(char *dev_name,int *ints))
+#endif
 {
         struct adapterlist tmp;
-
+#if  LINUX_VERSION_CODE>=0x020300
+	#define CTC_MAX_PARMS 4
+	int ints[CTC_MAX_PARMS+1];	
+	get_options(dev_name,CTC_MAX_PARMS,ints);
+	#define ctc_setup_return return(1)
+#else
+	#define ctc_setup_return return
+#endif
         ctc_tab_init();
         
         ctc_no_auto = 1;
 
         if (!strcmp(dev_name,"noauto")) { 
                 printk(KERN_INFO "ctc: automatic channel selection deactivated\n");
-                return;
+                ctc_setup_return;
         }
 
         tmp.devno[WRITE] = -ENODEV;
@@ -605,30 +724,32 @@ void ctc_setup(char *dev_name, int *ints)
                                 break;    
                         } else {
                                 printk(KERN_WARNING "%s: wrong Channel protocol type passed\n", dev_name);
-                                return;
+                                ctc_setup_return;
                         }
                         break;
 
                 default: 
                         printk(KERN_WARNING "ctc: wrong number of parameter passed\n");
-                        return;
+                        ctc_setup_return;
         }
         ctc_adapter[extract_channel_media(dev_name)][extract_channel_id(dev_name)] = tmp; 
 #ifdef DEBUG
         printk(DEBUG "%s: protocol=%x read=%04x write=%04x\n",
              dev_name, tmp.protocol, tmp.devno[READ], tmp.devno[WRITE]);
 #endif  
-        return;
+        ctc_setup_return;
         
 }
-
+#if LINUX_VERSION_CODE>=0x020300
+__setup("ctc=", ctc_setup);
+#endif
 
 /*
  *   ctc_probe 
  *      this function is called for each channel network device, 
  *      which is defined in the /init/main.c 
  */
-int ctc_probe(struct device *dev)
+int ctc_probe(net_device *dev)
 {       
         int                rc;
         int                c;
@@ -729,7 +850,7 @@ int ctc_probe(struct device *dev)
  *
  */
 
-static void inline ccw_check_return_code (struct device *dev, int return_code)
+static void inline ccw_check_return_code (net_device *dev, int return_code)
 {
         if (return_code != 0) {
                 switch (return_code) {
@@ -750,7 +871,7 @@ static void inline ccw_check_return_code (struct device *dev, int return_code)
 } 
 
 
-static void inline ccw_check_unit_check (struct device *dev, char sense)
+static void inline ccw_check_unit_check (net_device *dev, char sense)
 {
 #ifdef DEBUG
         printk(KERN_INFO "%s: Unit Check with sense code: %02x\n",
@@ -786,7 +907,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
         __u8              flags = 0x00;
         struct  channel   *ctc = NULL;
         struct  ctc_priv  *privptr = NULL;
-        struct  device    *dev = NULL;    
+        net_device        *dev = NULL;    
         
         ccw1_t            ccw_set_x_mode[2] = {{CCW_CMD_SET_EXTENDED, CCW_FLAG_SLI | CCW_FLAG_CC, 0, NULL},
                                                {CCW_CMD_NOOP, CCW_FLAG_SLI, 0, NULL}}; 
@@ -804,7 +925,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
         }
 
         ctc = (struct channel *) (devstat->intparm);
-        dev = (struct device *) ctc->dev;
+        dev = (net_device *) ctc->dev;
         privptr = dev->priv;
 
 #ifdef DEBUG
@@ -925,7 +1046,11 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
                                     (devstat->ii.sense.data[0] & 0x40) == 0x40 ||
                                     devstat->ii.sense.data[0] == 0               ) {
                                         privptr->stats.rx_errors++;
-                                        set_bit(TB_RETRY, (void *)&dev->tbusy);
+					/* Need protection here cos we are in the read irq */
+					/*  handler the tbusy is for the write subchannel */
+					ctc_protect_busy(dev);
+				        ctc_setbit_busy(TB_RETRY,dev);
+					ctc_unprotect_busy(dev);
                                         init_timer(&ctc->timer);
                                         ctc->timer.function = (void *)ctc_read_retry; 
                                         ctc->timer.data = (__u32)ctc;
@@ -938,9 +1063,9 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 
                         if(!devstat->flag & DEVSTAT_FINAL_STATUS)
                                 return; 
-
-                        clear_bit(TB_RETRY, (void *)&dev->tbusy);
-                        
+			ctc_protect_busy(dev);
+			ctc_clearbit_busy(TB_RETRY,dev);
+			ctc_unprotect_busy(dev);
                         ctc_buffer_swap(&ctc->free_anchor, &ctc->proc_anchor);
 
                         if (ctc->free_anchor != NULL) {  
@@ -999,8 +1124,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
 
                         ctc->proc_anchor->block->length = 0;
                         ctc_buffer_swap(&ctc->proc_anchor, &ctc->free_anchor);
-                        clear_bit(TB_NOBUFFER, (void *)&dev->tbusy);      
-
+                        ctc_clearbit_busy(TB_NOBUFFER,dev);      
                         if (ctc->proc_anchor != NULL) {  
 #ifdef DEBUG
                                 printk(KERN_DEBUG "%s: IRQ early swap buffer\n",dev->name); 
@@ -1017,9 +1141,10 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
                         }
 
                         if (ctc->free_anchor->block->length != 0) {
-                                if (test_and_set_bit(TB_TX, (void *)&dev->tbusy) == 0) {     /* set transmission to busy */
+                                if (ctc_test_and_setbit_busy(TB_TX,dev) == 0) {     
+                                       /* set transmission to busy */
                                         ctc_buffer_swap(&ctc->free_anchor, &ctc->proc_anchor);
-                                        clear_bit(TB_TX, (void *)&dev->tbusy);
+                                        ctc_clearbit_busy(TB_TX,dev);
 #ifdef DEBUG
                                         printk(KERN_DEBUG "%s: last buffer move in IRQ\n",dev->name); 
 #endif
@@ -1053,12 +1178,12 @@ static void ctc_irq_bh (struct channel *ctc)
 
         __u8               flags = 0x00;
         __u32              saveflags;
-        struct device      *dev;
+        net_device  *dev;
         struct ctc_priv    *privptr;             
         struct packet      *lp;
         struct sk_buff     *skb;
 
-        dev = (struct device *) ctc->dev; 
+        dev = (net_device *) ctc->dev; 
         privptr = (struct ctc_priv *) dev->priv; 
    
 #ifdef DEBUG
@@ -1113,9 +1238,9 @@ static void ctc_read_retry (struct channel *ctc)
         __u32              parm;
         __u8               flags = 0x00;
         __u32              saveflags;
-        struct device      *dev;
+        net_device  *dev;
 
-        dev = (struct device *) ctc->dev; 
+        dev = (net_device *) ctc->dev; 
    
 #ifdef DEBUG
         printk(KERN_DEBUG "%s: read retry - state-%02x\n" ,dev->name, ctc->state);
@@ -1137,9 +1262,9 @@ static void ctc_write_retry (struct channel *ctc)
         __u32              parm;
         __u8               flags = 0x00;
         __u32              saveflags;
-        struct device      *dev;
+        net_device  *dev;
 
-        dev = (struct device *) ctc->dev; 
+        dev = (net_device *) ctc->dev; 
    
 #ifdef DEBUG
         printk(KERN_DEBUG "%s: write retry - state-%02x\n" ,dev->name, ctc->state);
@@ -1161,7 +1286,7 @@ static void ctc_write_retry (struct channel *ctc)
  *   ctc_open
  *
  */
-static int ctc_open(struct device *dev)
+static int ctc_open(net_device *dev)
 {
         int                rc;
         int                i;
@@ -1170,12 +1295,11 @@ static int ctc_open(struct device *dev)
         __u32              saveflags;
         __u32              parm;
         struct ctc_priv    *privptr;
-        struct wait_queue  wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
         struct timer_list  timer;
 
 
-        dev->tbusy = 1;
-        dev->start = 0;
+        ctc_set_busy(dev);
 
         privptr = (struct ctc_priv *) (dev->priv);
         
@@ -1188,6 +1312,7 @@ static int ctc_open(struct device *dev)
                         if (rc != 0)
                                 return -ENOMEM;
                 }
+                init_waitqueue_head(&privptr->channel[i].wait);
                 privptr->channel[i].tq.next = NULL;
                 privptr->channel[i].tq.sync = 0;
                 privptr->channel[i].tq.routine = (void *)(void *)ctc_irq_bh;
@@ -1264,8 +1389,7 @@ static int ctc_open(struct device *dev)
         }
 
         printk(KERN_INFO "%s: connected with remote side\n",dev->name);
-        dev->start = 1;
-        dev->tbusy = 0;
+        ctc_clear_busy(dev);
         return 0;
 }
 
@@ -1273,9 +1397,9 @@ static int ctc_open(struct device *dev)
 static void ctc_timer (struct channel *ctc)
 {
 #ifdef DEBUG
-        struct device      *dev;
+        net_device  *dev;
 
-        dev = (struct device *) ctc->dev; 
+        dev = (net_device *) ctc->dev; 
         printk(KERN_DEBUG "%s: timer return\n" ,dev->name);
 #endif
         ctc->flag |= CTC_TIMER;
@@ -1287,7 +1411,7 @@ static void ctc_timer (struct channel *ctc)
  *   ctc_release 
  *
  */
-static int ctc_release(struct device *dev)
+static int ctc_release(net_device *dev)
 {   
         int                rc;
         int                i;
@@ -1296,13 +1420,13 @@ static int ctc_release(struct device *dev)
         __u32              saveflags;
         __u32              parm;
         struct ctc_priv    *privptr;
-        struct wait_queue  wait = { current, NULL }; 
+	DECLARE_WAITQUEUE(wait, current);
 
         privptr = (struct ctc_priv *) dev->priv;  
    
-        dev->start = 0;
-        set_bit(TB_STOP, (void *)&dev->tbusy);    
-        
+	ctc_protect_busy_irqsave(dev,saveflags);
+        ctc_setbit_busy(TB_STOP,dev);    
+	ctc_unprotect_busy_irqrestore(dev,flags);
         for (i = 0; i < 2;  i++) {
                 s390irq_spin_lock_irqsave(privptr->channel[i].irq, saveflags);
                 privptr->channel[i].state = CTC_STOP;
@@ -1339,14 +1463,15 @@ static int ctc_release(struct device *dev)
  *
  *
  */
-static int ctc_tx(struct sk_buff *skb, struct device *dev)
+static int ctc_tx(struct sk_buff *skb, net_device *dev)
 {
-        int                rc;
+        int                rc=0,rc2;
         __u32              parm;
         __u8               flags = 0x00;
         __u32              saveflags;
         struct ctc_priv    *privptr;
         struct packet      *lp;
+   
    
         privptr = (struct ctc_priv *) (dev->priv);
 
@@ -1356,25 +1481,27 @@ static int ctc_tx(struct sk_buff *skb, struct device *dev)
                 return -EIO;
         }
         
-        if (dev->tbusy != 0) {
-                return -EBUSY;
+        s390irq_spin_lock_irqsave(privptr->channel[WRITE].irq, saveflags);
+        if (ctc_check_busy(dev)) {
+                rc=-EBUSY;
+		goto Done;
         } 
 
-        if (test_and_set_bit(TB_TX, (void *)&dev->tbusy) != 0) {                /* set transmission to busy */
-                return -EBUSY;
+        if (ctc_test_and_setbit_busy(TB_TX,dev)) {                /* set transmission to busy */
+                rc=-EBUSY;
+		goto Done;
         } 
 
         if (65535 - privptr->channel[WRITE].free_anchor->block->length - PACKET_HEADER_LENGTH <= skb->len + PACKET_HEADER_LENGTH + 2) {
 #ifdef DEBUG
                 printk(KERN_DEBUG "%s: early swap\n", dev->name);
 #endif
-                s390irq_spin_lock_irqsave(privptr->channel[WRITE].irq, saveflags);
+               
                 ctc_buffer_swap(&privptr->channel[WRITE].free_anchor, &privptr->channel[WRITE].proc_anchor);
-                s390irq_spin_unlock_irqrestore(privptr->channel[WRITE].irq, saveflags);
                 if (privptr->channel[WRITE].free_anchor == NULL){
-                        set_bit(TB_NOBUFFER, (void *)&dev->tbusy);
-                        clear_bit(TB_TX, (void *)&dev->tbusy);
-                        return -EBUSY;
+                        ctc_setbit_busy(TB_NOBUFFER,dev);
+                        rc=-EBUSY;
+			goto Done2;
                 }
         }
         
@@ -1396,23 +1523,22 @@ static int ctc_tx(struct sk_buff *skb, struct device *dev)
         privptr->channel[WRITE].free_anchor->packets++;
 
         if (test_and_set_bit(0, (void *)&privptr->channel[WRITE].IO_active) == 0) {
-                s390irq_spin_lock_irqsave(privptr->channel[WRITE].irq, saveflags);
                 ctc_buffer_swap(&privptr->channel[WRITE].free_anchor,&privptr->channel[WRITE].proc_anchor); 
                 privptr->channel[WRITE].ccw[1].count = privptr->channel[WRITE].proc_anchor->block->length;
                 privptr->channel[WRITE].ccw[1].cda   = (char *)virt_to_phys(privptr->channel[WRITE].proc_anchor->block);
                 parm = (__u32) &privptr->channel[WRITE];  
-                rc = do_IO (privptr->channel[WRITE].irq, &privptr->channel[WRITE].ccw[0], parm, 0xff, flags );
-                if (rc != 0) 
-                        ccw_check_return_code(dev, rc);
+                rc2 = do_IO (privptr->channel[WRITE].irq, &privptr->channel[WRITE].ccw[0], parm, 0xff, flags );
+                if (rc2 != 0) 
+                        ccw_check_return_code(dev, rc2);
                 dev->trans_start = jiffies;
-                s390irq_spin_unlock_irqrestore(privptr->channel[WRITE].irq, saveflags);
         }
-
         if (privptr->channel[WRITE].free_anchor == NULL)
-                set_bit(TB_NOBUFFER, (void *)&dev->tbusy);
-
-        clear_bit(TB_TX, (void *)&dev->tbusy);
-        return 0;
+                ctc_setbit_busy(TB_NOBUFFER,dev);
+Done2:
+        ctc_clearbit_busy(TB_TX,dev);
+Done:
+	s390irq_spin_unlock_irqrestore(privptr->channel[WRITE].irq, saveflags);
+        return(rc);
 } 
 
 
@@ -1423,7 +1549,7 @@ static int ctc_tx(struct sk_buff *skb, struct device *dev)
  *                                   576 to 65527 for OS/390
  *
  */
-static int ctc_change_mtu(struct device *dev, int new_mtu)
+static int ctc_change_mtu(net_device *dev, int new_mtu)
 {
         if ((new_mtu < 576) || (new_mtu > 65528))
                 return -EINVAL;
@@ -1436,7 +1562,7 @@ static int ctc_change_mtu(struct device *dev, int new_mtu)
  *   ctc_stats
  *
  */
-struct net_device_stats *ctc_stats(struct device *dev)
+struct net_device_stats *ctc_stats(net_device *dev)
 {
          struct ctc_priv *privptr;
    

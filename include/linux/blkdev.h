@@ -32,10 +32,38 @@ struct request {
 	struct buffer_head * bh;
 	struct buffer_head * bhtail;
 	struct request * next;
+	int elevator_latency;
 };
 
 typedef void (request_fn_proc) (void);
 typedef struct request ** (queue_proc) (kdev_t dev);
+
+typedef struct elevator_s
+{
+	int read_latency;
+	int write_latency;
+	int max_bomb_segments;
+	unsigned int queue_ID;
+} elevator_t;
+
+#define ELEVATOR_DEFAULTS				\
+((elevator_t) {						\
+	128,			/* read_latency */	\
+	8192,			/* write_latency */	\
+	4,			/* max_bomb_segments */	\
+	})
+
+extern int blkelv_ioctl(kdev_t, unsigned long, unsigned long);
+
+typedef struct blkelv_ioctl_arg_s {
+	int queue_ID;
+	int read_latency;
+	int write_latency;
+	int max_bomb_segments;
+} blkelv_ioctl_arg_t;
+
+#define BLKELVGET   _IOR(0x12,106,sizeof(blkelv_ioctl_arg_t))
+#define BLKELVSET   _IOW(0x12,107,sizeof(blkelv_ioctl_arg_t))
 
 struct blk_dev_struct {
 	request_fn_proc		*request_fn;
@@ -47,6 +75,8 @@ struct blk_dev_struct {
 	struct request		*current_request;
 	struct request   plug;
 	struct tq_struct plug_tq;
+
+	elevator_t elevator;
 };
 
 struct sec_size {

@@ -1,0 +1,117 @@
+.TH SILO 8 "Thu Feb 17 2000"
+.UC 4
+.SH NAME
+silo \- preparing a DASD to become an IPL device
+.SH SYNOPSIS
+\fBsilo\fR -d \fIipldevice\fR [-hV?] [-t[\fI#\fR]] [-v[\fI#\fR]]
+ [-F \fIconfig-file\fR] [-b \fIbootsector\fR]
+ [-f \fIimage\fR] [-p \fIparameterfile\fR] [-B \fIbootmap\fR]
+.SH DESCRIPTION
+\fBsilo\fR makes a DASD an IPLable volume. All files needed for IPL must 
+reside on that volume, namely the \fIimage\fR, the \FIparameterline\fR and
+the bootmap. 
+Only one IPLable image per volume is supported. Currently we require an ECKD
+type DASD with a blocksize of at least 2048 bytes to IPL. By default silo
+does \fBnot\fR modify anything on your disk, but prints out its actions.
+
+\fBWARNING\fR: Incautious usage of \fBsilo\fR can leave your system in a 
+state that is not IPLable!
+
+There are some defaults for the most common parameters compiled into the
+binary. You can overwrite these defaults by your own using /etc/silo.conf
+or another config file specified by \fB-F\fR \fIconfig-file\fR. All values
+set by defaults or the config file can be overwritten using the commandline
+options of silo. 
+
+The config file recognizes the following statements:
+.TP
+\fBipldevice\fR=\fIdevicenode\fR
+sets the ipldevice to devicenode. The device node specified must be the node
+of the 'full' device and not one of a partition. 
+
+.TP
+\fBappend\fR=\fIlist of parameters\fR
+sets additional parameters to be added to the parmfile. These parameters are
+added to any parmfile specified on the command line. The old parameter file
+is preserved and a new one is created with a temporary name.
+
+.TP
+\fBimage\fR=\fIimage\fR
+sets the name of the image to be IPLed from that volume. The default name
+is \fI./image\fR.
+
+.TP
+\fBbootsect\fR=\fIbootsect\fR
+sets the name of the bootsector to be used as IPL record for that volume.
+The default name is \fI/boot/ipleckd.boot\fR.
+
+.TP
+\fBmap\fR=\fIbootmap\fR
+sets the name of the bootmap to hold the map information needen during IPL.
+The default name is \fI./boot.map\fR. In testonly mode this name is replaced
+by a temporary name.
+.TP
+\fBparmfile\fR=\fIparameter file\fR
+sets the name of the parameter file holding the kernel parameters to be used
+during setup of the kernel. The default name is \fI./parmfile\fR.
+
+.TP
+\fBramdisk\fR=\fIramdisk image\fR
+optionally sets the name of a ramdisk image to be used as an initial ramdisk.
+
+.TP
+\fBroot\fR=\fIdevice node\fR
+sets the device holding the root device of the IPLed system.
+
+.TP
+\fBreadonly\fR
+sets the flag to mount thedevice holding the root device of the IPLed system.
+in readonly mode, before the final mount is done by /etc/fstab.
+
+.TP
+\fBverbose\fR=\fIlevel\fR
+sets the level of verbosity to \fIlevel\fR.
+
+.TP
+\fBtestlevel\fR=\fIlevel\fR
+decreases the testing level (from 2) by \fIlevel\fR.
+
+.SH OPTIONS
+.TP
+\fB-t\fR [\fI#\fR]
+decreases the testing level by one, or \fi#\fR, rsp. By default the testing
+level is set to 2, which means that no modifications are made to the disk.
+A testing level of 1 means, that a bootmap is generated with a temporary
+filename, but the IPL records of the disk are not modified. Only with a
+testing level of 0 or below, the disk is really made IPLable.
+
+.TP
+\fB-v\fR [\fI#\fR]
+Increases verbosity, or sets verbosity to \fI#\fR, rsp.
+
+.TP
+\fB-V\fR 
+Print version number and exit.
+
+.SH FILES
+.TP
+\fI/etc/silo.conf\fR the default configuration file.
+\fI/boot/ipleckd.boot\fR the default bootsector for ECKD devices.
+\fI/boot/iplfba.boot\fR the bootsector for FBA devices.
+\fI./boot.map\fR the default name of the bootmap.
+\fI./image\fR the default name of the kernel image.
+\fI./parmfile\fR the default name of the parameter file.
+\fI/tmp/silodev\fR a device node which is created temporarily.
+
+.SH BUGS
+.TP
+IPL from FBA disks is not yet supported.
+.TP
+When \fBsilo\fR aborts it does not at all clean up its temporary files.
+.TP
+\fBsilo\fR must be run in a directory residing on the device you want to IPL.
+
+.SH AUTHOR
+.nf
+This man-page was written by Holger Smolinski <Holger.Smolinski@de.ibm.com>
+.fi

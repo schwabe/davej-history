@@ -26,6 +26,8 @@
 
 #include <asm/uaccess.h>
 #include <asm/delay.h>
+#include <asm/irq.h>
+#include <asm/s390_ext.h>
 
 #include <linux/mc146818rtc.h>
 #include <linux/timex.h>
@@ -147,7 +149,7 @@ void do_settimeofday(struct timeval *tv)
 extern __u16 boot_cpu_addr;
 #endif
 
-void do_timer_interrupt(struct pt_regs *regs,int error_code)
+void do_timer_interrupt(struct pt_regs *regs, __u16 error_code)
 {
         unsigned long flags;
 
@@ -240,6 +242,9 @@ __initfunc(void time_init(void))
                 printk("time_init: TOD clock stopped/non-operational\n");
                 break;
         }
+        /* request the 0x1004 external interrupt */
+        if (register_external_interrupt(0x1004, do_timer_interrupt) != 0)
+                panic("Couldn't request external interrupts 0x1004");
         init_100hz_timer();
         init_timer_cc = S390_lowcore.jiffy_timer_cc;
         init_timer_cc -= 0x8126d60e46000000LL -

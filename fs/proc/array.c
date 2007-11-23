@@ -276,7 +276,8 @@ static int get_kstat(char * buffer)
 		"disk_wblk %u %u %u %u\n"
 		"page %u %u\n"
 #ifdef CONFIG_ARCH_S390
-                "swap %u %u\n",
+                "swap %u %u\n"
+		"intr 1 0",
 #else
 		"swap %u %u\n"
 		"intr %u",
@@ -291,7 +292,8 @@ static int get_kstat(char * buffer)
 		"disk_wblk %u %u %u %u\n"
 		"page %u %u\n"
 #ifdef CONFIG_ARCH_S390           
-                "swap %u %u\n",   
+                "swap %u %u\n"
+		"intr 1 0",   
 #else                             
 		"swap %u %u\n"
 		"intr %u",
@@ -1464,7 +1466,7 @@ static int process_unauthorized(int type, int pid)
 		case PROC_PID_CPU:
 			return 0;	
 	}
-	if ((current->fsuid == euid && ok) || capable(CAP_DAC_OVERRIDE))
+	if(capable(CAP_DAC_OVERRIDE) || (current->fsuid == euid && ok))
 		return 0;
 	return 1;
 }
