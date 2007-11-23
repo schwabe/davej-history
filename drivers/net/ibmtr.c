@@ -439,9 +439,9 @@ int tok_probe(struct device *dev)
 	/* We must figure out how much shared memory space this adapter
 	   will occupy so that if there are two adapters we can fit both
 	   in.  Given a choice, we will limit this adapter to 32K.  The
-	   maximum space will will use for two adapters is 64K so if the
-	   adapter we are working on demands 64K (it also doesn't support
-	   paging), then only one adapter can be supported.  */
+	   maximum space will use for two adapters is 64K so if the adapter
+	   we are working on demands 64K (it also doesn't support paging),
+	   then only one adapter can be supported.  */
 	
 	/* determine how much of total RAM is mapped into PC space */
 	ti->mapped_ram_size=1<<((((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)) >>2) & 0x03) + 4);

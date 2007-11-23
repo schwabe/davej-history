@@ -11,7 +11,7 @@
  * the process. I'd like to clean it up for the i386 as well, but
  * it's so painful recognizing both the new and the old numbers..
  *
- * The same applies for for the MIPS ABI; in fact even the macros
+ * The same applies for the MIPS ABI; in fact even the macros
  * from Linux/Alpha fit almost perfectly.
  */
 

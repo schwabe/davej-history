@@ -18,7 +18,7 @@ iocharset=name-- Character set to use for converting between 8 bit characters
 		 know how to deal with Unicode. There is also an option of
 		 doing UTF8 translations with the utf8 option.
 utf8	      -- UTF8 is the filesystem safe version of Unicode that
-		 is used by the console.  It can be be enabled for the
+		 is used by the console.  It can be enabled for the
 		 filesystem with this option. If 'uni_xlate' gets set,
 		 UTF8 gets disabled.
 uni_xlate     -- Translate unhandled Unicode characters to special

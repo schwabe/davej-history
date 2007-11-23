@@ -935,16 +935,28 @@ CONFIG_BINFMT_JAVA
 
 Processor type
 CONFIG_M386
-  This is the processor type of your CPU. It is used for optimizing
-  purposes. In order to compile a kernel that can run on all CPU types
-  (albeit not optimally fast), you can specify "386" here.  If you
-  specify "486" or "Pentium" or "PPro", then the kernel will run on
-  486 and Pentium (=586) and Pentium Pro (=686) CPUs. In rare cases,
-  it can make sense to specify "Pentium" even if running a 486: the
-  kernel will be smaller but slower. On the other hand, if you use a
-  compiler before gcc 2.7 (say "gcc -v" to find out), then you have to
-  say "386" or "486" here even if running on a Pentium or PPro
-  machine. If you don't know what to do, say "386".
+  This is the processor type of your CPU.  It is used for optimizing
+  purposes.  In order to compile a kernel that can run on all CPU
+  types (albeit not optimally fast), you can specify "386" here.  If
+  you specify "486" or "Pentium" or "PPro", then the kernel will run
+  on all of these CPUs: 486 and Pentium (=586) and Pentium Pro (=686).
+  Here are the settings recommended for greatest speed:
+   - "386" for the AMD/Cyrix/Intel 386DX/DXL/SL/SLC/SX and
+     Cyrix/TI 486DLC/DLC2. Only "386" kernels will run on a 386 class
+     machine.
+   - "486" for the AMD/Cyrix/IBM/Intel DX4 or 486DX/DX2/SL/SX/SX2,
+     AMD/Cyrix 5x86, NexGen Nx586 and UMC U5D or U5S
+   - "Pentium" for the AMD K5, K6 and K6-3D, Cyrix MediaGX,
+     Cyrix/IBM/National Semiconductor 6x86 and GXm, IDT Centaur
+     WinChip C6, and Intel Pentium/Pentium MMX
+   - "PPro" for the Cyrix/IBM/National Semiconductor 6x86MX, MII and Intel
+     Pentium II/Pentium Pro
+  In rare cases, it can make sense to specify "Pentium" even if
+  running a 486: the kernel will be smaller but slightly slower.  On the other
+  hand, if you use a compiler before gcc 2.7 (say "gcc -v" to find
+  out), then you have to say "386" or "486" here even if running on
+  a Pentium or PPro machine.
+  If you don't know what to do, say "386".
 
 Compile the kernel into the ELF object format
 CONFIG_ELF_KERNEL

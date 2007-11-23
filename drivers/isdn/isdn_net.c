@@ -885,7 +885,7 @@ isdn_net_log_packet(u_char * buf, isdn_net_local * lp)
 
 /*
  * Generic routine to send out an skbuf.
- * If lowlevel-device does not support supports skbufs, use
+ * If lowlevel-device does not support skbufs, use
  * standard send-routine, else send directly.
  *
  * Return: 0 on success, !0 on failure.

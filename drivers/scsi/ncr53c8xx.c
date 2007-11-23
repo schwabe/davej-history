@@ -7655,7 +7655,7 @@ void ncr_int_sir (ncb_p np)
 **	field of the controller's struct ncb.
 **
 **	Possible cases:		   hs  sir   msg_in value  send   goto
-**	We try try to negotiate:
+**	We try to negotiate:
 **	-> target doesnt't msgin   NEG FAIL  noop   defa.  -      dispatch
 **	-> target rejected our msg NEG FAIL  reject defa.  -      dispatch
 **	-> target answered  (ok)   NEG SYNC  sdtr   set    -      clrack

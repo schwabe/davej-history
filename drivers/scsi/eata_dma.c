@@ -547,7 +547,7 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
 	ccb->DataIn = TRUE;	/* Input mode  */
     }
 
-    /* FIXME: This will will have to be changed once the midlevel driver 
+    /* FIXME: This will have to be changed once the midlevel driver 
      *        allows different HBA IDs on every channel.
      */
     if (cmd->target == sh->this_id) 

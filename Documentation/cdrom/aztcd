@@ -43,12 +43,12 @@ Contents of this file:
 1. NOTE 
 This software has been successfully in alpha and beta test and is part of
 the standard kernel since kernel 1.1.8x since December 1994. It works with
-with AZTECH CDA268-01A, ORCHID CDS-3110, ORCHID/WEARNES CDD110 and
-CONRAD TXC (Nr.99 31 23 -series 04) and has proven to be stable with kernel 
-versions 1.0.9 to 1.3.72. But with any software there still may be bugs in it. 
-So if you encounter problems, you are invited to help us improve this software. 
-Please send me a detailed bug report (see chapter BUG REPORTS). You are also 
-invited in helping us to increase the number of drives, which are supported.
+AZTECH CDA268-01A, ORCHID CDS-3110, ORCHID/WEARNES CDD110 and CONRAD TXC
+(Nr.99 31 23 -series 04) and has proven to be stable with kernel versions 1.0.9
+to 1.3.72. But with any software there still may be bugs in it. So if you
+encounter problems, you are invited to help us improve this software. Please
+send me a detailed bug report (see chapter BUG REPORTS). You are also invited
+in helping us to increase the number of drives, which are supported.
 
 Please read the README-files carefully and always keep a backup copy of your 
 old kernel, in order to reboot if something goes wrong!

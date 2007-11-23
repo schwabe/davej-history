@@ -245,7 +245,7 @@ struct	iwreq
 		/* Name : used to verify the presence of  wireless extensions.
 		 * Name of the protocol/provider... */
 
-		struct		/* network id (or domain) : used to to */
+		struct		/* network id (or domain) : used to */
 		{		/* create logical channels on the air */
 			__u32	nwid;		/* value */
 			__u8	on;		/* active/unactive nwid */

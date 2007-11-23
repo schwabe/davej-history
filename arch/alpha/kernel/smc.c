@@ -1967,7 +1967,7 @@ unsigned int SMC37c669_disable_device ( unsigned int func )
 **	the configuration is also updated.  If the device function
 **	is currently disabled, only the local shadow copy is 
 **	updated and the actual device function will be updated
-**	if/when is is enabled.
+**	if/when it is enabled.
 **
 **--
 */

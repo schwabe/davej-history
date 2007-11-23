@@ -2409,7 +2409,7 @@ tulip_rx(struct device *dev)
 			if (status & 0x0001) tp->stats.rx_fifo_errors++;
 		} else {
 			/* Omit the four octet CRC from the length. */
-			short pkt_len = (status >> 16) - 4;
+			short pkt_len = ((status >> 16) & 0x7FF) - 4;
 			struct sk_buff *skb;
 
 			/* Check if the packet is long enough to just accept without

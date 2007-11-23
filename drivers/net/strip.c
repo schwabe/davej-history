@@ -1712,7 +1712,7 @@ static int strip_rebuild_header(void *buff, struct device *dev,
 {
     struct strip *strip_info = (struct strip *)(dev->priv);
     STRIP_Header *header = (STRIP_Header *)buff;
-    /* Arp find returns zero if if knows the address, */
+    /* Arp find returns zero if it knows the address, */
     /* or if it doesn't know the address it sends an ARP packet and returns non-zero */
     int arp_result = arp_find(header->dst_addr.c, dst, dev, dev->pa_addr, skb);
 

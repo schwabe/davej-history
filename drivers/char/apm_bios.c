@@ -1110,6 +1110,16 @@ int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 }
 #endif
 
+static int apm_disabled = 0;
+
+void apm_setup(char *str, int *ints)
+{
+	if(strcmp(str,"off")==0)
+		apm_disabled=1;
+	if(strcmp(str,"on")==0)
+		apm_disabled=0;
+}
+
 void apm_bios_init(void)
 {
 	unsigned short	bx;
@@ -1118,6 +1128,12 @@ void apm_bios_init(void)
 	unsigned short	error;
 	char *		power_stat;
 	char *		bat_stat;
+	
+	if (apm_disabled == 1)
+	{
+		printk("APM disabled.\n");
+		return;
+	}
 
 	if (apm_bios_info.version == 0) {
 		printk("APM BIOS not found.\n");

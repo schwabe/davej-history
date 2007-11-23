@@ -516,7 +516,7 @@ static __inline__ int tcp_lport_inuse(int num)
  * load is kept track of, if it is zero there is a strong
  * likely hood that there is a zero length chain we will
  * find with a small amount of searching, else the load is
- * what we shoot for for when the chains all have at least
+ * what we shoot for when the chains all have at least
  * one entry.  The base helps us walk the chains in an
  * order such that a good chain is found as quickly as possible.  -DaveM
  */

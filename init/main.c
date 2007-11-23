@@ -107,6 +107,7 @@ extern void wd7000_setup(char *str, int *ints);
 extern void ppa_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
+extern void apm_setup(char *str, int *ints);
 extern void reboot_setup(char *str, int *ints);
 #ifdef CONFIG_CDU31A
 extern void cdu31a_setup(char *str, int *ints);
@@ -466,6 +467,9 @@ struct kernel_param bootsetups[] = {
 #endif
 #ifdef CONFIG_BAYCOM
 	{ "baycom=", baycom_setup },
+#endif
+#ifdef CONFIG_APM
+	{ "apm=", apm_setup },
 #endif
 	{ 0, 0 }
 };

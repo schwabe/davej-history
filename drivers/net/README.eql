@@ -257,9 +257,9 @@
   5.  Tester's Reports
 
   Some people have experimented with the eql device with newer kernels
-  kernels (than 1.1.75).  I have since updated the driver to patch
-  cleanly in newer kernels because of the removal of the old "slave-
-  balancing" driver config option.
+  (than 1.1.75).  I have since updated the driver to patch cleanly in
+  newer kernels because of the removal of the old "slave-balancing"
+  driver config option.
 
 
   o  icee from LinuxNET patched 1.1.86 without any rejects and was able

@@ -43,7 +43,8 @@ struct partition {
 	unsigned char end_cyl;		/* end cylinder */
 	unsigned int start_sect;	/* starting sector counting from 0 */
 	unsigned int nr_sects;		/* nr of sectors in partition */
-};
+} __attribute((packed));	/* Give a polite hint to egcs/alpha to generate
+				   unaligned operations */
 
 struct hd_struct {
 	long start_sect;

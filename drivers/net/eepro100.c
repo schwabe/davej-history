@@ -181,10 +181,10 @@ Note: Watch out for the potential race condition here: imagine
 	doing the CU_RESUME
 		the chip processes the next-yet-valid post-final-command.
 So blindly sending a CU_RESUME is only safe if we do it immediately after
-after erasing the previous CmdSuspend, without the possibility of an
-intervening delay.  Thus the resume command is always within the
-interrupts-disabled region.  This is a timing dependence, but handling this
-condition in a timing-independent way would considerably complicate the code.
+erasing the previous CmdSuspend, without the possibility of an intervening
+delay.  Thus the resume command is always within the interrupts-disabled
+region.  This is a timing dependence, but handling this condition in a
+timing-independent way would considerably complicate the code.
 
 Note: In previous generation Intel chips, restarting the command unit was a
 notoriously slow process.  This is presumably no longer true.

@@ -921,10 +921,7 @@ unsigned long flags;
 	skb->pkt_bridged = IS_BRIDGED;
 	skb->arp = 1;	/* do not resolve... */
 	skb->h.raw = skb->data + ETH_HLEN;
-	save_flags(flags);
-	cli();
-	skb_queue_tail(dev->buffs, skb);
-	restore_flags(flags);
+	dev_queue_xmit(dev,skb);
 	return(0);
 }
 
@@ -977,10 +974,8 @@ unsigned long flags;
 	skb->pkt_bridged = IS_BRIDGED;
 	skb->arp = 1;	/* do not resolve... */
 	skb->h.raw = skb->data + ETH_HLEN;
-	save_flags(flags);
-	cli();
-	skb_queue_tail(dev->buffs, skb);
-	restore_flags(flags);
+	
+	dev_queue_xmit(dev,skb);
 	return(0);
 }
 

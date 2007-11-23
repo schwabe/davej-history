@@ -238,7 +238,7 @@ BUILD_SET_CP0(cause,CP0_CAUSE)
 /*
  * Bitfields and bit numbers in the coprocessor 0 cause register.
  *
- * Refer to to your MIPS R4xx0 manual, chapter 5 for explanation.
+ * Refer to your MIPS R4xx0 manual, chapter 5 for explanation.
  */
 #define  CAUSEB_EXCCODE		2
 #define  CAUSEF_EXCCODE		(31  <<  2)

@@ -1771,6 +1771,12 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	unsigned char *sha,*tha;
 	u32 sip,tip;
 
+	if(skb->pkt_type == PACKET_OTHERHOST)
+	{
+		kfree_skb(skb, FREE_READ);
+		return;
+	}
+	
 /*
  *	The hardware length of the packet should match the hardware length
  *	of the device.  Similarly, the hardware types should match.  The

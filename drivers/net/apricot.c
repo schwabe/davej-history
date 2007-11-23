@@ -930,7 +930,7 @@ i596_close(struct device *dev)
     while (lp->scb.status, lp->scb.command)
 	if (--boguscnt == 0)
 	{
-	    printk("%s: close timed timed out with status %4.4x, cmd %4.4x.\n",
+	    printk("%s: close timed out with status %4.4x, cmd %4.4x.\n",
 		   dev->name, lp->scb.status, lp->scb.command);
 	    break;
     	}

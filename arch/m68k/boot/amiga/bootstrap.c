@@ -1,6 +1,6 @@
 /*
 ** bootstrap.c -- This program loads the Linux/68k kernel into an Amiga
-**                and and launches it.
+**                and launches it.
 **
 ** Copyright 1993,1994 by Hamish Macdonald, Greg Harp
 **

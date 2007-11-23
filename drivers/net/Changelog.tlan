@@ -69,7 +69,7 @@ TLan Device Driver change log.
 	  100Mbs should work now on 0xAE32.
 	- Fixed a small bug where heartbeat and PHY interrupts were
 	  always being enabled.
-	- Force the the driver into Unmanaged PHY mode for 0xF130 devices,
+	- Force the driver into Unmanaged PHY mode for 0xF130 devices,
 	  even if a managed (ie, the built-in one) PHY is detected.
 	- Moved the PHY initialization to after the onboard PHY is enabled,
 	  if selected.
