@@ -376,8 +376,9 @@ isdn_net_unreachable(struct device *dev, struct sk_buff *skb, char *reason)
 
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNKNOWN, 0
 #if (LINUX_VERSION_CODE < 0x02010f)	/* 2.1.15 */
-				,dev
+				, dev
 #endif
+				, 1
 				);
 		}
 	}
@@ -396,6 +397,7 @@ isdn_net_unreachable(struct device *dev, struct sk_buff *skb, char *reason)
 #if (LINUX_VERSION_CODE < 0x02010f)	/* 2.1.15 */
 					, dev
 #endif
+					, 1
 					);
 				}
 				dev_kfree_skb(skb, FREE_WRITE);

@@ -1555,9 +1555,14 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct device *dev )
 #endif
       return 0;
     }
-	
-  if ( skb->len <= 0 ) return 0;
-	
+
+  if (skb->len <= 0)
+	 return 0;
+
+  if (skb->len < ETH_ZLEN && lp->chip == HP100_CHIPID_SHASTA) {
+	  if (!(skb = skb_padto(skb, ETH_ZLEN)))
+		  return 0;
+  }
   /* Get Tx ring tail pointer */
   if( lp->txrtail->next==lp->txrhead )
     {

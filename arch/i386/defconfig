@@ -178,6 +178,7 @@ CONFIG_MSDOS_FS=y
 # CONFIG_NLS_ISO8859_9 is not set
 # CONFIG_NLS_KOI8_R is not set
 CONFIG_PROC_FS=y
+# CONFIG_UNSAFE_MMAP is not set
 CONFIG_NFS_FS=y
 # CONFIG_ROOT_NFS is not set
 # CONFIG_SMB_FS is not set

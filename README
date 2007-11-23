@@ -50,17 +50,23 @@ INSTALLING the kernel:
    latest kernel. If you use GNU tar, 
 
 		cd /usr/src
-		tar -xzvf linux-2.1.XX.tar.gz
+		tar -xzvf linux-2.0.XX.tar.gz
 
    is equivalent.
 
  - You can also upgrade between 2.0.xx releases by patching.  Each
    patch that is released for 2.0.xx contains only bugfixes.  No
-   new features will be added to the Linux kernel until the 2.1.xx
-   development effort begins.  To install by patching, get all the
-   newer patch files and do
+   new features will be added to the Linux kernel 2.0 any more. If
+   you are interested in new kernel features, you may want to
+   help developing a more recent kernel.
 
-		cd /usr/src
+   To patch to a newer 2.0 kernel version, get all the newer files
+   (you will find these patches at the kernel FTP servers:
+    <URL:ftp://ftp.xx.kernel.org/pub/linux/kernel/v2.0/>, replace
+    xx with your two letter country code here, e.g. se for Sweden),
+   then do:
+
+		cd /usr/src/linux
 		gzip -cd patchXX.gz | patch -p0
 
    (repeat xx for all versions bigger than the version of your current
@@ -96,7 +102,7 @@ CONFIGURING the kernel:
 
  - Alternate configuration commands are:
 	"make menuconfig"  Text based color menus, radiolists & dialogs.
-	"make xconfig"     X windows based configuration tool.
+	"make xconfig"     X window system based configuration tool.
    
 	NOTES on "make config":
 	- having unnecessary drivers will make the kernel bigger, and can
@@ -160,7 +166,7 @@ COMPILING the kernel:
 
    If you boot Linux from the hard drive, chances are you use LILO which
    uses the kernel image as specified in the file /etc/lilo.conf.  The
-   kernel image file is usually /vmlinuz, or /zImage, or /etc/zImage. 
+   kernel image file is usually /vmlinuz, /zImage, or /boot/vmlinuz. 
    To use the new kernel, copy the new image over the old one (save a
    backup of the original!).  Then, you MUST RERUN LILO to update the
    loading map!! If you don't, you won't be able to boot the new kernel
@@ -187,10 +193,8 @@ IF SOMETHING GOES WRONG:
    the file MAINTAINERS to see if there is a particular person associated
    with the part of the kernel that you are having trouble with. If there
    isn't anyone listed there, then the second best thing is to mail
-   them to me (Linus.Torvalds@Helsinki.FI), and possibly to any other
-   relevant mailing-list or to the newsgroup.  The mailing-lists are
-   useful especially for SCSI and NETworking problems, as I can't test
-   either of those personally anyway. 
+   them to me (David Weinehall, tao@kernel.org), and possibly to any other
+   relevant mailing-list or to the newsgroup.
 
  - In all bug-reports, *please* tell what kernel you are talking about,
    how to duplicate the problem, and what your setup is (use your common

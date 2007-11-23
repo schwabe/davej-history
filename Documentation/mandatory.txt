@@ -140,7 +140,7 @@ range of bytes.)
 
 Note 3: I may have overlooked some system calls that need mandatory lock
 checking in my eagerness to get this code out the door. Please let me know, or
-better still fix the system calls yourself and submit a patch to me or Linus.
+better still fix the system calls yourself and submit a patch to me or David.
 
 6. Warning!
 -----------

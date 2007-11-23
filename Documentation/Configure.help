@@ -3868,6 +3868,13 @@ CONFIG_PROC_FS
   the same IRQ). Several programs depend on this, so everyone should
   say Y here.
 
+Enable mmap on /proc/*/mem (UNSECURE!)
+CONFIG_UNSAFE_MMAP
+  As of linux-2.0.40, mmap on /proc/*/mem has been disabled due to
+  security problems.  If you need this functionality, and have no
+  (potentially hostile) local users, you can enable this option to
+  restore the old functionality. If unsure, say N.
+
 NFS file system support
 CONFIG_NFS_FS
   If you are connected to some other (usually local) Unix computer

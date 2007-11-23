@@ -4,6 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -17,7 +18,7 @@
 
 /*
  * mem_write isn't really a good idea right now. It needs
- * to check a lot more: if the process we try to write to 
+ * to check a lot more: if the process we try to write to
  * dies in the middle right now, mem_write will overwrite
  * kernel memory.. This disables it altogether.
  */
@@ -209,6 +210,7 @@ static int mem_lseek(struct inode * inode, struct file * file, off_t offset, int
 	}
 }
 
+#ifdef CONFIG_UNSAFE_MMAP
 /*
  * This isn't really reliable by any means..
  */
@@ -311,6 +313,7 @@ int mem_mmap(struct inode * inode, struct file * file,
 	flush_tlb_range(src_vma->vm_mm, src_vma->vm_start, src_vma->vm_end);
 	return 0;
 }
+#endif /* CONFIG_UNSAFE_MMAP */
 
 static struct file_operations proc_mem_operations = {
 	mem_lseek,
@@ -319,7 +322,11 @@ static struct file_operations proc_mem_operations = {
 	NULL,		/* mem_readdir */
 	NULL,		/* mem_select */
 	NULL,		/* mem_ioctl */
+#ifdef CONFIG_UNSAFE_MMAP
 	mem_mmap,	/* mmap */
+#else
+	NULL,		/* mmap */
+#endif /* CONFIG_UNSAFE_MMAP */
 	NULL,		/* no special open code */
 	NULL,		/* no special release code */
 	NULL		/* can't fsync */

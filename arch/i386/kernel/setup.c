@@ -50,13 +50,13 @@ int ext_cpuid = 0;		/* if != 0, highest available CPUID value */
 
 char x86_vendor_id[13] = "GenuineIntel";/* default */
 
-static char *Cx86_step = "unknown";	/* stepping info for Cyrix CPUs */
+static char Cx86_step[8] = "unknown";	/* stepping info for Cyrix CPUs */
 
 static unsigned char Cx86_mult = 0;	/* clock multiplier for Cyrix CPUs */
 
 static const char *x86_clkmult[] = {
-	"unknown", "1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5", "5.5",
-	"6", "6.5", "7", "7.5", "8"
+	"unknown", "1x", "1.5x", "2x", "2.5x", "3x", "3.5x", "4x", 
+	"4.5x", "5x", "5.5x", "6x", "6.5x", "7x", "7.5x", "8x"
 };
 
 char ignore_irq13 = 0;		/* set if exception 16 works */
@@ -500,7 +500,7 @@ int get_cpuinfo(char * buffer)
                                 }
                                 else if (strncmp(x86_vendor_id, "Cy", 2) == 0) {
 					len += sprintf(buffer+len,
-							"stepping\t: %s, core/bus clock ratio: %sx\n",
+							"stepping\t: %s, core/bus clock ratio: %s\n",
 							Cx86_step, x86_clkmult[Cx86_mult]);
                                 }
                                 else {

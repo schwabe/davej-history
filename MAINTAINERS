@@ -119,13 +119,6 @@ M:	dg2fef@afthd.tu-darmstadt.de
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 
-BUSLOGIC SCSI DRIVER
-P:	Leonard N. Zubkoff
-M:	Leonard N. Zubkoff <lnz@dandelion.com>
-L:	linux-scsi@vger.kernel.org
-W:	http://www.dandelion.com/Linux/
-S:	Maintained
-
 CREDITS FILE
 P:	John A. Martin
 M:	jam@acm.org
@@ -136,12 +129,6 @@ P:	Ivan Passos
 M:	ivan@cyclades.com
 W:	http://www.cyclades.com/
 S:	Supported
-
-DAC960 RAID DRIVER
-P:	Leonard N. Zubkoff
-M:	Leonard N. Zubkoff <lnz@dandelion.com>
-L:	linux-raid@vger.kernel.org
-S:	Maintained
 
 DAMA SLAVE for AX.25
 P:	Joerg Reuter
@@ -317,13 +304,6 @@ M:	tsbogend@alpha.franken.de
 L:	linux-net@vger.kernel.org
 S:	Maintained
 
-MCA-SUPPORT
-P:	David Weinehall
-M:	tao@acc.umu.se
-W:	http://www.acc.umu.se/~tao/
-L:	linux-kernel@vger.kernel.org
-S:	Maintained
-
 MENUCONFIG
 P:	William Roadcap
 M:	roadcapw@titus.org
@@ -488,6 +468,6 @@ S:	Maintained
 
 THE REST
 P:	David Weinehall
-M:	tao@acc.umu.se
+M:	tao@kernel.org
 L:	linux-kernel@vger.kernel.org
 S:	Maintained

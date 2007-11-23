@@ -275,6 +275,8 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		tbuf.shm_nattch = shp->shm_nattch;
 		memcpy_tofs (buf, &tbuf, sizeof(*buf));
 		return id;
+	default:
+		break;
 	}
 
 	shp = shm_segs[id = (unsigned int) shmid % SHMMNI];

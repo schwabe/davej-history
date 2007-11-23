@@ -3,7 +3,7 @@
  *      By Craig Southeren, Juha Laiho and Philip Blundell
  *
  * 3c505.c      This module implements an interface to the 3Com
- *              Etherlink Plus (3c505) ethernet card. Linux device 
+ *              Etherlink Plus (3c505) ethernet card. Linux device
  *              driver interface reverse engineered from the Linux 3C509
  *              device drivers. Some 3C505 information gleaned from
  *              the Crynwr packet driver. Still this driver would not
@@ -1092,8 +1092,9 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
 	adapter->current_dma.start_time = jiffies;
 
 	target = virt_to_bus(skb->data);
-	if ((target + nlen) >= MAX_DMA_ADDRESS) {
-		memcpy(adapter->dma_buffer, skb->data, nlen);
+	if ((target + nlen) >= MAX_DMA_ADDRESS || nlen != skb->len) {
+		memcpy(adapter->dma_buffer, skb->data, skb->len);
+		memset(adapter->dma_buffer + skb->len, 0, nlen - skb->len);
 		target = virt_to_bus(adapter->dma_buffer);
 	}
 	adapter->current_dma.skb = skb;
@@ -1132,7 +1133,7 @@ static int elp_start_xmit(struct sk_buff *skb, struct device *dev)
 	 */
 	if (dev->tbusy) {
 		elp_device *adapter = dev->priv;
-       		int tickssofar = jiffies - dev->trans_start;
+		int tickssofar = jiffies - dev->trans_start;
 		int stat;
 
 		if (tickssofar < 1000)

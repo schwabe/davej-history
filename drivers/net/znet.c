@@ -317,9 +317,16 @@ static int znet_open(struct device *dev)
 static int znet_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	int ioaddr = dev->base_addr;
+	short length = skb->len;
 
 	if (znet_debug > 4)
 		printk(KERN_DEBUG "%s: ZNet_send_packet(%ld).\n", dev->name, dev->tbusy);
+
+	if (length < ETH_ZLEN) {
+		if (!(skb = skb_padto(skb, ETH_ZLEN)))
+			return 0;
+		length = ETH_ZLEN;
+	}
 
 	/* Transmitter timeout, likely just recovery after suspending the machine. */
 	if (dev->tbusy) {
@@ -357,7 +364,6 @@ static int znet_send_packet(struct sk_buff *skb, struct device *dev)
 	if (set_bit(0, (void*)&dev->tbusy) != 0)
 		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
 	else {
-		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = (void *)skb->data;
 		ushort *tx_link = zn.tx_cur - 1;
 		ushort rnd_len = (length + 1)>>1;

@@ -36,7 +36,7 @@ static const char *version =
  *
  *	You should have received a copy of the GNU General Public License
  *	along with this program; if not, write to the Free Software
- *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  **************************************************************/
 /* Add another "; SLOW_DOWN_IO" here if your adapter won't work OK: */
@@ -400,6 +400,7 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 	int	len;
 	int	tickssofar;
 	byte	*buffer = skb->data;
+	int	i;
 
 	/*
 	 * If some higher layer thinks we've missed a
@@ -454,8 +455,10 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 #endif
 
 	de600_setup_address(transmit_from, RW_ADDR);
-	for ( ; len > 0; --len, ++buffer)
+	for (i = 0 ; i < skb->len; ++i, ++buffer)
 		de600_put_byte(*buffer);
+	for (; i < len; ++i)
+		de600_put_byte(0);
 
 	if (free_tx_pages-- == TX_PAGES) { /* No transmission going on */
 		dev->trans_start = jiffies;
@@ -468,9 +471,9 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 		dev->tbusy = !free_tx_pages;
 		select_prn();
 	}
-	
+
 	sti(); /* interrupts back on */
-	
+
 #ifdef FAKE_SMALL_MAX
 	/* This will "patch" the socket TCP proto at an early moment */
 	if (skb->sk && (skb->sk->protocol == IPPROTO_TCP) &&
@@ -812,7 +815,7 @@ de600_rspace(struct sock *sk)
 /*
  * Hack! You might want to play with commenting away the following line,
  * if you know what you do!
-  	sk->max_unacked = DE600_MAX_WINDOW - DE600_TCP_WINDOW_DIFF;
+	sk->max_unacked = DE600_MAX_WINDOW - DE600_TCP_WINDOW_DIFF;
  */
 
 	if (sk->rmem_alloc >= sk->rcvbuf-2*DE600_MIN_WINDOW) return(0);
@@ -823,7 +826,7 @@ de600_rspace(struct sock *sk)
   return(0);
 }
 #endif
-
+
 #ifdef MODULE
 static char nullname[8];
 static struct device de600_dev = {

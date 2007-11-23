@@ -97,12 +97,13 @@ static void ei_tx_err(struct device *dev);
 static void ei_receive(struct device *dev);
 static void ei_rx_overrun(struct device *dev);
 
+static char scratch[ETH_ZLEN];
+
 /* Routines generic to NS8390-based boards. */
 static void NS8390_trigger_send(struct device *dev, unsigned int length,
 								int start_page);
 static void set_multicast_list(struct device *dev);
 
-
 /* Open/initialize the board.  This routine goes all-out, setting everything
    up anew at each open, even though many of these registers should only
    need to be set once at boot.
@@ -238,8 +239,13 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
      * trigger the send later, upon receiving a Tx done interrupt.
      */
 
-    ei_block_output(dev, length, skb->data, output_page);
-    if (! ei_local->txing) {
+    if (length == send_length)
+	ei_block_output(dev, length, skb->data, output_page);
+    else {
+	memcpy(scratch, skb->data, skb->len);
+	ei_block_output(dev, ETH_ZLEN, scratch, output_page);
+    }
+    if (!ei_local->txing) {
 	ei_local->txing = 1;
 	NS8390_trigger_send(dev, send_length, output_page);
 	dev->trans_start = jiffies;
@@ -263,7 +269,12 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
      * reasonable hardware if you only use one Tx buffer.
      */
 
-    ei_block_output(dev, length, skb->data, ei_local->tx_start_page);
+    if (length == send_length)
+	ei_block_output(dev, length, skb->data, ei_local->tx_start_page);
+    else {
+	memcpy(scratch, skb->data, skb->len);
+	ei_block_output(dev, ETH_ZLEN, scratch, ei_local->tx_start_page);
+    }
     ei_local->txing = 1;
     NS8390_trigger_send(dev, send_length, ei_local->tx_start_page);
     dev->trans_start = jiffies;
@@ -754,7 +765,10 @@ void NS8390_init(struct device *dev, int startp)
     /* Clear the pending interrupts and mask. */
     outb_p(0xFF, e8390_base + EN0_ISR);
     outb_p(0x00,  e8390_base + EN0_IMR);
-    
+
+    /* Zerofill the padding buffer */
+    memset(scratch, 0, ETH_ZLEN);
+
     /* Copy the station address into the DS8390 registers,
        and set the multicast hash bitmap to receive all multicasts. */
     save_flags(flags);

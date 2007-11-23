@@ -558,10 +558,15 @@ static int smc_wait_to_send_packet( struct sk_buff * skb, struct device * dev )
 		printk(CARDNAME": Bad Craziness - sent packet while busy.\n" );
 		return 1;
 	}
+
+	if ((length = skb->len) < ETH_ZLEN) {
+		if (!(skb = skb_padto(skb, ETH_ZLEN))) {
+			return 0;
+		}
+		length = ETH_ZLEN;
+	}
 	lp->saved_skb = skb;
 
-	length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		
 	/*
 	. the MMU wants the number of pages to be the number of 256 bytes 
     	. 'pages', minus 1 ( since a packet can't ever have 0 pages :) ) 

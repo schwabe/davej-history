@@ -20,7 +20,7 @@ data to user space.
 The first argument to _IO, _IOW, _IOR, or _IOWR is an identifying letter
 or number from the table below.  If you are writing a driver for a new
 device and need a letter, pick an unused letter.  You can register the
-letter by patching this file and submitting the patch to Linus Torvalds.
+letter by patching this file and submitting the patch to David Weinehall.
 Or you can e-mail me at <mec@duracef.shout.net> and I'll register one
 for you.
 

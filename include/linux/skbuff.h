@@ -163,6 +163,7 @@ extern struct sk_buff *		dev_alloc_skb(unsigned int size);
 extern void			kfree_skbmem(struct sk_buff *skb);
 extern struct sk_buff *		skb_clone(struct sk_buff *skb, int priority);
 extern struct sk_buff *		skb_copy(struct sk_buff *skb, int priority);
+extern struct sk_buff *		skb_pad(struct sk_buff *skb, int pad);
 extern void			skb_device_lock(struct sk_buff *skb);
 extern void			skb_device_unlock(struct sk_buff *skb);
 extern void			dev_kfree_skb(struct sk_buff *skb, int mode);
@@ -197,19 +198,19 @@ extern __inline__ struct sk_buff *skb_peek(struct sk_buff_head *list_)
 /*
  *	Return the length of an sk_buff queue
  */
- 
+
 extern __inline__ __u32 skb_queue_len(struct sk_buff_head *list_)
 {
 	return(list_->qlen);
 }
 
 #if CONFIG_SKB_CHECK
-extern int 			skb_check(struct sk_buff *skb,int,int, char *);
-#define IS_SKB(skb)		skb_check((skb), 0, __LINE__,__FILE__)
-#define IS_SKB_HEAD(skb)	skb_check((skb), 1, __LINE__,__FILE__)
-#define IS_SKB_LINKED(skb)	skb_check((skb), 2, __LINE__,__FILE__)
-#define IS_SKB_UNLINKED(skb)	skb_check((skb), 3, __LINE__,__FILE__)
-/* Note: IS_SKB_LINKED will accept skb_heads in addition to linked-in 
+extern int skb_check(struct sk_buff *skb, int, int, char *);
+#define IS_SKB(skb)		skb_check((skb), 0, __LINE__, __FILE__)
+#define IS_SKB_HEAD(skb)	skb_check((skb), 1, __LINE__, __FILE__)
+#define IS_SKB_LINKED(skb)	skb_check((skb), 2, __LINE__, __FILE__)
+#define IS_SKB_UNLINKED(skb)	skb_check((skb), 3, __LINE__, __FILE__)
+/* Note: IS_SKB_LINKED will accept skb_heads in addition to linked-in
  * data skbs */
 
 extern void __skb_queue_head(struct sk_buff_head *list, struct sk_buff *newsk);
@@ -221,10 +222,10 @@ extern void __skb_insert(struct sk_buff *newsk,
 extern void __skb_unlink(struct sk_buff *skb, struct sk_buff_head *list);
 
 #else
-#define IS_SKB(skb)		
-#define IS_SKB_HEAD(skb)	
-#define IS_SKB_LINKED(skb)	
-#define IS_SKB_UNLINKED(skb)	
+#define IS_SKB(skb)
+#define IS_SKB_HEAD(skb)
+#define IS_SKB_LINKED(skb)
+#define IS_SKB_UNLINKED(skb)
 
 extern __inline__ void skb_queue_head_init(struct sk_buff_head *list)
 {
@@ -473,6 +474,14 @@ extern __inline__ void skb_trim(struct sk_buff *skb, int len)
 }
 
 #endif
+
+static inline struct sk_buff *skb_padto(struct sk_buff *skb, unsigned int len)
+{
+	unsigned int size = skb->len;
+	if (size >= len)
+		return skb;
+	return skb_pad(skb, len-size);
+}
 
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
 extern int			datagram_select(struct sock *sk, int sel_type, select_table *wait);

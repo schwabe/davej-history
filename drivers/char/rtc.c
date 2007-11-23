@@ -1,5 +1,5 @@
 /*
- *	Real Time Clock interface for Linux	
+ *	Real Time Clock interface for Linux
  *
  *	Copyright (C) 1996 Paul Gortmaker
  *
@@ -17,7 +17,7 @@
  *	has been received. If a RTC interrupt has already happened,
  *	it will output an unsigned long and then block. The output value
  *	contains the interrupt status in the low byte and the number of
- *	interrupts since the last read in the remaining high bytes. The 
+ *	interrupts since the last read in the remaining high bytes. The
  *	/dev/rtc interface can also be used with the select(2) call.
  *
  *	This program is free software; you can redistribute it and/or
@@ -37,7 +37,7 @@
 
 #define RTC_VERSION		"1.09"
 
-#define RTC_IRQ 	8	/* Can't see this changing soon.	*/
+#define RTC_IRQ		8	/* Can't see this changing soon.	*/
 #define RTC_IO_EXTENT	0x10	/* Only really two ports, but...	*/
 
 /*
@@ -110,7 +110,7 @@ unsigned long rtc_irq_data = 0;		/* our output to the world	*/
 
 static unsigned long epoch = 1900;	/* year corresponding to 0x00	*/
 
-unsigned char days_in_mo[] = 
+unsigned char days_in_mo[] =
 		{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
 /*
@@ -136,7 +136,7 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	rtc_irq_data += 0x100;
 	rtc_irq_data &= ~0xff;
 	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);
-	wake_up_interruptible(&rtc_wait);	
+	wake_up_interruptible(&rtc_wait);
 
 	if (rtc_status & RTC_TIMER_ON) {
 		del_timer(&rtc_irq_timer);
@@ -164,7 +164,7 @@ static int rtc_read(struct inode *inode, struct file *file, char *buf, int count
 #else
 	struct wait_queue wait = { current, NULL };
 	int retval;
-	
+
 	if (count < sizeof(unsigned long))
 		return -EINVAL;
 
@@ -175,7 +175,7 @@ static int rtc_read(struct inode *inode, struct file *file, char *buf, int count
 	add_wait_queue(&rtc_wait, &wait);
 
 	current->state = TASK_INTERRUPTIBLE;
-		
+
 	while (rtc_irq_data == 0) {
 		if (file->f_flags & O_NONBLOCK) {
 			retval = -EAGAIN;
@@ -279,7 +279,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			get_rtc_alm_time(&alm_tm);
 
 			memcpy_tofs((struct rtc_time*)arg, &alm_tm, sizeof(struct rtc_time));
-			
+
 			return 0;
 		}
 		case RTC_ALM_SET:	/* Store a time into the alarm */
@@ -303,23 +303,25 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			min = alm_tm.tm_min;
 			sec = alm_tm.tm_sec;
 
-			if (hrs >= 24)
-				hrs = 0xff;
-
-			if (min >= 60)
-				min = 0xff;
-
-			if (sec >= 60)
-				sec = 0xff;
-
 			save_flags(flags);
 			cli();
 			if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY) ||
 							RTC_ALWAYS_BCD)
 			{
-				BIN_TO_BCD(sec);
-				BIN_TO_BCD(min);
-				BIN_TO_BCD(hrs);
+				if (sec < 60)
+					BIN_TO_BCD(sec);
+				else
+					sec = 0xff;
+
+				if (min < 60)
+					BIN_TO_BCD(min);
+				else
+					min = 0xff;
+
+				if (hrs < 24)
+					BIN_TO_BCD(hrs);
+				else
+					hrs = 0xff;
 			}
 			CMOS_WRITE(hrs, RTC_HOURS_ALARM);
 			CMOS_WRITE(min, RTC_MINUTES_ALARM);
@@ -332,7 +334,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		{
 			int retval;
 			struct rtc_time rtc_tm;
-			
+
 			retval = verify_area(VERIFY_WRITE, (struct rtc_time*)arg, sizeof(struct rtc_time));
 			if (retval !=0 )
 				return retval;
@@ -349,12 +351,12 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			unsigned char save_control, save_freq_select;
 			unsigned int yrs;
 			unsigned long flags;
-			
+
 			if (!suser())
 				return -EACCES;
 
 			retval = verify_area(VERIFY_READ, (struct rtc_time*)arg, sizeof(struct rtc_time));
-			if (retval !=0 )
+			if (retval != 0)
 				return retval;
 
 			memcpy_fromfs(&rtc_tm, (struct rtc_time*)arg, sizeof(struct rtc_time));
@@ -376,7 +378,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 
 			if (day > (days_in_mo[mon] + ((mon == 2) && leap_yr)))
 				return -EINVAL;
-			
+
 			if ((hrs >= 24) || (min >= 60) || (sec >= 60))
 				return -EINVAL;
 
@@ -436,7 +438,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			int tmp = 0;
 			unsigned char val;
 
-			/* 
+			/*
 			 * The max we can do is 8192Hz.
 			 */
 			if ((arg < 2) || (arg > 8192))
@@ -482,7 +484,7 @@ static int rtc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		}
 		case RTC_EPOCH_SET:	/* Set the epoch.	*/
 		{
-			/* 
+			/*
 			 * There were no RTC clocks before 1900.
 			 */
 			if (arg < 1900)
@@ -656,14 +658,14 @@ int rtc_init(void)
 }
 
 /*
- * 	At IRQ rates >= 4096Hz, an interrupt may get lost altogether.
+ *	At IRQ rates >= 4096Hz, an interrupt may get lost altogether.
  *	(usually during an IDE disk interrupt, with IRQ unmasking off)
  *	Since the interrupt handler doesn't get called, the IRQ status
  *	byte doesn't get read, and the RTC stops generating interrupts.
  *	A timer is set, and will call this function if/when that happens.
  *	To get it out of this stalled state, we just read the status.
  *	At least a jiffy of interrupts (rtc_freq/HZ) will have been lost.
- *	(You *really* shouldn't be trying to use a non-realtime system 
+ *	(You *really* shouldn't be trying to use a non-realtime system
  *	for something that requires a steady > 1KHz signal anyways.)
  */
 
@@ -789,7 +791,7 @@ void get_rtc_time(struct rtc_time *rtc_tm)
 	 * can take just over 2ms. We wait 10 to 20ms. There is no need to
 	 * to poll-wait (up to 1s - eeccch) for the falling edge of RTC_UIP.
 	 * If you need to know *exactly* when a second has started, enable
-	 * periodic update complete interrupts, (via ioctl) and then 
+	 * periodic update complete interrupts, (via ioctl) and then
 	 * immediately read /dev/rtc which will block until you get the IRQ.
 	 * Once the read clears, read the RTC time (again via ioctl). Easy.
 	 */

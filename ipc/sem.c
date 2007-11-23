@@ -416,6 +416,8 @@ asmlinkage int sys_semctl(int semid, int semnum, int cmd, union semun arg)
 		tbuf.sem_nsems  = sma->sem_nsems;
 		memcpy_tofs(buf, &tbuf, sizeof (*buf));
 		return id;
+	default:
+		break;
 	}
 
 	id = (unsigned int) semid % SEMMNI;
@@ -436,6 +438,8 @@ asmlinkage int sys_semctl(int semid, int semnum, int cmd, union semun arg)
 		if (semnum >= nsems)
 			return -EINVAL;
 		curr = &sma->sem_base[semnum];
+		break;
+	default:
 		break;
 	}
 
@@ -489,6 +493,8 @@ asmlinkage int sys_semctl(int semid, int semnum, int cmd, union semun arg)
 		if ((i = verify_area(VERIFY_READ, buf, sizeof (*buf))))
 			return i;
 		memcpy_fromfs(&tbuf, buf, sizeof (*buf));
+		break;
+	default:
 		break;
 	}
 

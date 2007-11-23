@@ -1547,10 +1547,12 @@ D: The Linux Support Team Erlangen
 N: David Weinehall
 E: tao@acc.umu.se
 W: http://www.acc.umu.se/~tao/
+P: 1024D/DC47CA16 7ACE 0FB0 7A74 F994 9B36  E1D1 D14E 8526 DC47 CA16
+D: v2.0 kernel maintainer
 D: Miscellaneous fixes
 D: Cleanup of the Config-files
-S: Axtorpsvagen 40:20
-S: S-903 37  UMEA
+S: Västra Varmvattnet 63
+S: S-922 67  TAVELSJÖ
 S: Sweden
 
 N: Matt Welsh
@@ -1671,14 +1673,10 @@ S: D-73732 Esslingen
 S: Germany
 
 N: Leonard N. Zubkoff
-E: lnz@dandelion.com
-W: http://www.dandelion.com/Linux/
 D: BusLogic SCSI driver
 D: Mylex DAC960 PCI RAID driver
 D: Miscellaneous kernel fixes
-S: 3078 Sulphur Spring Court
-S: San Jose, California 95148
-S: USA
+D: Rest in peace
 
 N: Marc Zyngier
 E: maz@wild-wind.fr.eu.org

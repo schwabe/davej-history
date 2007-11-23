@@ -116,6 +116,7 @@ CONFIG_MSDOS_FS=y
 # CONFIG_VFAT_FS is not set
 # CONFIG_UMSDOS_FS is not set
 CONFIG_PROC_FS=y
+# CONFIG_UNSAFE_MMAP is not set
 CONFIG_NFS_FS=y
 # CONFIG_ROOT_NFS is not set
 # CONFIG_SMB_FS is not set

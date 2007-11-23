@@ -53,6 +53,9 @@ if [ "$CONFIG_NLS" = "y" -o "$CONFIG_NLS" = "m" ]; then
 fi
 
 bool '/proc filesystem support' CONFIG_PROC_FS
+if [ "$CONFIG_PROC_FS" = "y" ]; then
+   bool '  Enable mmap on /proc/*/mem (UNSECURE!)' CONFIG_UNSAFE_MMAP
+fi
 if [ "$CONFIG_INET" = "y" ]; then
    tristate 'NFS filesystem support' CONFIG_NFS_FS
    if [ "$CONFIG_NFS_FS" = "y" ]; then

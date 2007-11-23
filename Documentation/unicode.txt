@@ -50,6 +50,20 @@ omitted the scan 5 line, since it is also used as a block-graphics
 character, and hence has been coded as U+2500 FORMS LIGHT HORIZONTAL.
 However, I left U+F802 blank should the need arise.  
 
+<<Update: Unicode 3.2.0, released March 2002, introduced official
+characters for this purpose:
+
+U+23BA	HORIZONTAL SCAN LINE-1
+U+23BB	HORIZONTAL SCAN LINE-3
+U+23BC	HORIZONTAL SCAN LINE-7
+U+23BD	HORIZONTAL SCAN LINE-9
+
+However, to preserve backwards compatibility, the built-in VT100 mapping
+will not be changed in Linux 2.0.  It still uses the F80x codepoints.
+
+---- Michael Deutschmann <michael@talamasca.ocis.net>
+>>
+
 Klingon language support
 ------------------------
 

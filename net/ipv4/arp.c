@@ -1430,7 +1430,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 			 */
 			else
 			{
-				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
+				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev, 1);
 				skb_device_unlock(skb); /* else it is lost forever */
 				dev_kfree_skb(skb, FREE_WRITE);
 			}

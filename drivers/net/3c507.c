@@ -66,6 +66,7 @@ static const char *version =
 #define NET_DEBUG 1
 #endif
 static unsigned int net_debug = NET_DEBUG;
+static char padding[ETH_ZLEN];
 
 /* A zero-terminated list of common I/O addresses to be probed. */
 static unsigned int netcard_portlist[] =
@@ -285,10 +286,10 @@ static void el16_rx(struct device *dev);
 static int	el16_close(struct device *dev);
 static struct enet_statistics *el16_get_stats(struct device *dev);
 
-static void hardware_send_packet(struct device *dev, void *buf, short length);
+static void hardware_send_packet(struct device *dev, void *buf, short length,
+				 short pad);
 void init_82586_mem(struct device *dev);
 
-
 #ifdef HAVE_DEVLIST
 struct netdev_entry netcard_drv =
 {"3c507", el16_probe1, EL16_IO_EXTENT, netcard_portlist};
@@ -428,8 +429,6 @@ int el16_probe1(struct device *dev, int ioaddr)
 	return 0;
 }
 
-
-
 static int
 el16_open(struct device *dev)
 {
@@ -438,6 +437,7 @@ el16_open(struct device *dev)
 	/* Initialize the 82586 memory and start it. */
 	init_82586_mem(dev);
 
+	memset(padding, 0, ETH_ZLEN);
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
@@ -497,7 +497,7 @@ el16_send_packet(struct sk_buff *skb, struct device *dev)
 
 		/* Disable the 82586's input to the interrupt line. */
 		outb(0x80, ioaddr + MISC_CTRL);
-		hardware_send_packet(dev, buf, length);
+		hardware_send_packet(dev, buf, length, length - skb->len);
 		dev->trans_start = jiffies;
 		/* Enable the 82586 interrupt input. */
 		outb(0x84, ioaddr + MISC_CTRL);
@@ -509,7 +509,7 @@ el16_send_packet(struct sk_buff *skb, struct device *dev)
 
 	return 0;
 }
-
+
 /*	The typical workload of the driver:
 	Handle the network interface interrupts. */
 static void
@@ -759,7 +759,7 @@ init_82586_mem(struct device *dev)
 }
 
 static void
-hardware_send_packet(struct device *dev, void *buf, short length)
+hardware_send_packet(struct device *dev, void *buf, short length, short pad)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
@@ -767,14 +767,14 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 	ushort *write_ptr =	  (ushort *)(dev->mem_start + tx_block);
 
 	/* Set the write pointer to the Tx block, and put out the header. */
-	*write_ptr++ = 0x0000;				/* Tx status */
+	*write_ptr++ = 0x0000;			/* Tx status */
 	*write_ptr++ = CMD_INTR|CmdTx;		/* Tx command */
-	*write_ptr++ = tx_block+16;			/* Next command is a NoOp. */
-	*write_ptr++ = tx_block+8;			/* Data Buffer offset. */
+	*write_ptr++ = tx_block+16;		/* Next command is a NoOp. */
+	*write_ptr++ = tx_block+8;		/* Data Buffer offset. */
 
 	/* Output the data buffer descriptor. */
-	*write_ptr++ = length | 0x8000;		/* Byte count parameter. */
-	*write_ptr++ = -1;					/* No next data buffer. */
+	*write_ptr++ = (pad + length) | 0x8000;	/* Byte count parameter. */
+	*write_ptr++ = -1;			/* No next data buffer. */
 	*write_ptr++ = tx_block+22+SCB_BASE;/* Buffer follows the NoOp command. */
 	*write_ptr++ = 0x0000;				/* Buffer address high bits (always zero). */
 
@@ -785,6 +785,8 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 
 	/* Output the packet at the write pointer. */
 	memcpy(write_ptr, buf, length);
+	if (pad)
+		memcpy(write_ptr + length, padding, pad);
 
 	/* Set the old command link pointing to this send packet. */
 	*(ushort*)(dev->mem_start + lp->tx_cmd_link) = tx_block;
@@ -911,7 +913,6 @@ cleanup_module(void)
 	release_region(dev_3c507.base_addr, EL16_IO_EXTENT);
 }
 #endif /* MODULE */
-
 /*
  * Local variables:
  *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -I/usr/src/linux/drivers/net -Wall -Wstrict-prototypes -O6 -m486 -c 3c507.c"
