@@ -244,6 +244,8 @@ struct task_struct {
 	struct mm_struct *mm;
 /* signal handlers */
 	struct signal_struct *sig;
+/* privileged execution counters, for exit_signal permission checking */
+	int priv, ppriv;
 #ifdef __SMP__
 	int processor;
 	int last_processor;
@@ -309,6 +311,7 @@ struct task_struct {
 /* files */	&init_files, \
 /* mm */	&init_mm, \
 /* signals */	&init_signals, \
+/* priv */	0, 0, \
 }
 
 extern struct   mm_struct init_mm;

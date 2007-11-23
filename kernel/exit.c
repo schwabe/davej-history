@@ -118,7 +118,8 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 
 void notify_parent(struct task_struct * tsk, int signal)
 {
-	send_sig(signal, tsk->p_pptr, 1);
+	send_sig(signal, tsk->p_pptr, !signal || signal == SIGCHLD ||
+		tsk->p_pptr->priv == tsk->ppriv);
 	wake_up_interruptible(&tsk->p_pptr->wait_chldexit);
 }
 

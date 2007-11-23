@@ -1,8 +1,8 @@
 /*
  *
- *	Masquerading functionality
+ * 	Masquerading functionality
  *
- *	Copyright (c) 1994 Pauline Middelink
+ * 	Copyright (c) 1994 Pauline Middelink
  *
  *	See ip_fw.c for original log
  *
@@ -20,9 +20,8 @@
  *	Delian Delchev		:	Added support for ICMP requests and replys
  *	Nigel Metheringham	:	ICMP in ICMP handling, tidy ups, bug fixes, made ICMP optional
  *	Juan Jose Ciarlante	:	re-assign maddr if no packet received from outside
- *	John D. Hardin		:	Added PPTP and IPSEC protocols
- *	Rudolf Lippan		:	dest hashing bugfix
- *
+ * 	John D. Hardin		:	Added PPTP and IPSEC protocols
+ *	
  */
 
 #include <linux/config.h>
@@ -44,6 +43,8 @@
 #include <net/checksum.h>
 #include <net/ip_masq.h>
 #include <linux/ip_fw.h>
+
+#define IP_MASQ_TAB_SIZE 256    /* must be power of 2 */
 
 #ifdef CONFIG_IP_MASQUERADE_PPTP
 /*
@@ -300,10 +301,6 @@ static struct symbol_table ip_masq_syms = {
         X(ip_masq_set_expire),
         X(ip_masq_free_ports),
 	X(ip_masq_expire),
-#ifdef CONFIG_IP_MASQUERADE_IPSEC
-	X(ip_masq_hash),
-	X(ip_masq_unhash),
-#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 	X(ip_masq_out_get_2),
 #include <linux/symtab_end.h>
 };
@@ -448,10 +445,7 @@ ip_masq_hash_key(unsigned proto, __u32 addr, __u16 port)
  *	returns bool success.
  */
 
-#ifndef CONFIG_IP_MASQUERADE_IPSEC
-static
-#endif /* CONFIG_IP_MASQUERADE_IPSEC */
-__inline__ int
+static __inline__ int
 ip_masq_hash(struct ip_masq *ms)
 {
         unsigned hash;
@@ -501,10 +495,7 @@ ip_masq_hash(struct ip_masq *ms)
  *	returns bool success.
  */
 
-#ifndef CONFIG_IP_MASQUERADE_IPSEC
-static
-#endif /* CONFIG_IP_MASQUERADE_IPSEC */
-__inline__ int ip_masq_unhash(struct ip_masq *ms)
+static __inline__ int ip_masq_unhash(struct ip_masq *ms)
 {
         unsigned hash;
         struct ip_masq ** ms_p;
@@ -3167,38 +3158,16 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                  */
 
                 if ( ms->flags & IP_MASQ_F_NO_DPORT && ms->protocol == IPPROTO_TCP ) {
-#ifdef CONFIG_IP_MASQUERADE_IPSEC
-			unsigned long flags;
-			save_flags(flags);
-			cli();
-			ip_masq_unhash(ms);
-#endif /* CONFIG_IP_MASQUERADE_IPSEC */
                         ms->flags &= ~IP_MASQ_F_NO_DPORT;
                         ms->dport = portptr[0];
-#ifdef CONFIG_IP_MASQUERADE_IPSEC
-			ip_masq_hash(ms);
-			restore_flags(flags);
-#endif /* CONFIG_IP_MASQUERADE_IPSEC */
-
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
                         printk("ip_fw_demasquerade(): filled dport=%d\n",
                                ntohs(ms->dport));
 #endif
                 }
                 if (ms->flags & IP_MASQ_F_NO_DADDR && ms->protocol == IPPROTO_TCP)  {
-#ifdef CONFIG_IP_MASQUERADE_IPSEC
-			unsigned long flags;
-			save_flags(flags);
-			cli();
-			ip_masq_unhash(ms);
-#endif /* CONFIG_IP_MASQUERADE_IPSEC */
                         ms->flags &= ~IP_MASQ_F_NO_DADDR;
                         ms->daddr = iph->saddr;
-#ifdef CONFIG_IP_MASQUERADE_IPSEC
-			ip_masq_hash(ms);
-			restore_flags(flags);
-#endif /* CONFIG_IP_MASQUERADE_IPSEC */
-
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
                         printk("ip_fw_demasquerade(): filled daddr=%X\n",
                                ntohs(ms->daddr));

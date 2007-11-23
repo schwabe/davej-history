@@ -610,6 +610,7 @@ static int get_stat(int pid, char * buffer)
 			vsize += vma->vm_end - vma->vm_start;
 			vma = vma->vm_next;
 		}
+		if ((current->fsuid == tsk->euid && tsk->dumpable) || suser())
 		if (tsk->kernel_stack_page) {
 			eip = KSTK_EIP(tsk);
 			esp = KSTK_ESP(tsk);
@@ -1026,7 +1027,7 @@ static int process_unauthorized(int type, int pid)
 		case PROC_PID_CMDLINE:
 			return 0;	
 	}
-	if(suser() || current->fsuid == (*p)->euid)
+	if ((current->fsuid == (*p)->euid && (*p)->dumpable) || suser())
 		return 0;
 	return 1;
 }

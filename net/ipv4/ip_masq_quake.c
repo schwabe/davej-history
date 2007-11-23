@@ -85,6 +85,9 @@ masq_quake_done_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
 int
 masq_quake_in (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, struct device *dev)
 {
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+	unsigned long flags;
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 	struct sk_buff *skb;
 	struct iphdr *iph;
 	struct udphdr *uh;
@@ -155,7 +158,16 @@ masq_quake_in (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **sk
 
 	  memcpy(&udp_port, data, 2);
 
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+	  save_flags(flags);
+	  cli();
+	  ip_masq_unhash(ms);
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 	  ms->dport = htons(udp_port);
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+	  ip_masq_hash(ms);
+	  restore_flags(flags);
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
 #if DEBUG_CONFIG_IP_MASQ_QUAKE
 	  printk("Quake_in: in_rewrote UDP port %d \n", udp_port);

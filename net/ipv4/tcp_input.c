@@ -1186,6 +1186,15 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 *	then we can probably ignore it.
 	 */
 	 
+	if (sk->state == TCP_SYN_RECV) {
+		/*
+		 * Should be the exact sequence number for the handshake
+		 * to succeed, or sequence prediction gets a bit easier.
+		 * Also, "partially-established" connections are bad for
+		 * the rest of our code.
+		 */
+		if (ack != sk->sent_seq) goto uninteresting_ack;
+	} else
 	if (after(ack, sk->sent_seq) || before(ack, sk->rcv_ack_seq)) 
 		goto uninteresting_ack;
 

@@ -86,6 +86,7 @@ static int proc_lookupfd(struct inode * dir, const char * name, int len,
 	}
 	iput(dir);
 	fd = 0;
+	if (len > 1 && *name == '0') fd = 0xfffff; else
 	while (len-- > 0) {
 		c = *name - '0';
 		name++;

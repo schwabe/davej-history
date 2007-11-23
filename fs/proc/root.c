@@ -466,6 +466,7 @@ static int proc_root_lookup(struct inode * dir,const char * name, int len,
 		}
 		pid *= 10;
 		pid += c;
+		if (!pid) break;
 		if (pid & 0xffff0000) {
 			pid = 0;
 			break;

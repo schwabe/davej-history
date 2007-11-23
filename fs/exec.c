@@ -178,26 +178,51 @@ asmlinkage int sys_uselib(const char * library)
 
 /*
  * count() counts the number of arguments/envelopes
- *
- * We also do some limited EFAULT checking: this isn't complete, but
- * it does cover most cases. I'll have to do this correctly some day..
  */
-static int count(char ** argv)
+static int count(void *base, int size, int max)
 {
 	int error, i = 0;
-	char ** tmp, *p;
+	void *tmp = base;
+	unsigned long length = 0, chunk = size, limit;
+	int grow = 1;
 
-	if ((tmp = argv) != NULL) {
-		error = verify_area(VERIFY_READ, tmp, sizeof(char *));
-		if (error)
-			return error;
-		while ((p = get_user(tmp++)) != NULL) {
-			i++;
-			error = verify_area(VERIFY_READ, p, 1);
-			if (error)
-				return error;
+	if (!tmp) return 0;
+
+	limit = PAGE_SIZE - ((unsigned long)tmp & (PAGE_SIZE - 1));
+	error = verify_area(VERIFY_READ, tmp, limit);
+	if (error) limit = 0;
+
+	do {
+		if (length >= limit)
+		do {
+			if (!grow) {
+				if (chunk <= sizeof(char *))
+					return -EFAULT;
+				chunk >>= 1;
+			}
+			error = verify_area(VERIFY_READ, tmp, chunk);
+			if (error) grow = 0; else {
+				limit += chunk;
+				if (grow) chunk <<= 1;
+			}
+		} while (error);
+
+		if (size == 1) {
+			do {
+				if (!get_user(((char *)tmp)++)) goto out;
+				if (++i > max) return -E2BIG;
+			} while (i < limit);
+			length = i;
+		} else {
+			do {
+				if (!get_user(((char **)tmp)++)) goto out;
+				if ((length += size) > max) return -E2BIG;
+				i++;
+			} while (length < limit);
 		}
-	}
+	} while (1);
+
+out:
 	return i;
 }
 
@@ -221,12 +246,12 @@ static int count(char ** argv)
 unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		unsigned long p, int from_kmem)
 {
-	char *tmp, *tmp1, *pag = NULL;
+	char *tmp, *pag = NULL;
 	int len, offset = 0;
 	unsigned long old_fs, new_fs;
 
-	if (!p)
-		return 0;	/* bullet-proofing */
+	if ((long)p <= 0)
+		return p;	/* bullet-proofing */
 	new_fs = get_ds();
 	old_fs = get_fs();
 	if (from_kmem==2)
@@ -234,16 +259,16 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	while (argc-- > 0) {
 		if (from_kmem == 1)
 			set_fs(new_fs);
-		if (!(tmp1 = tmp = get_user(argv+argc)))
+		if (!(tmp = get_user(argv+argc)))
 			panic("VFS: argc is wrong");
 		if (from_kmem == 1)
 			set_fs(old_fs);
-		while (get_user(tmp++));
-		len = tmp - tmp1;
-		if (p < len) {	/* this shouldn't happen - 128kB */
+		len = count(tmp, 1, p);
+		if (len < 0 || len >= p) {	/* EFAULT or E2BIG */
 			set_fs(old_fs);
-			return 0;
+			return len < 0 ? len : -E2BIG;
 		}
+		tmp += ++len;
 		while (len) {
 			--p; --tmp; --len;
 			if (--offset < 0) {
@@ -253,7 +278,7 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 				if (!(pag = (char *) page[p/PAGE_SIZE]) &&
 				    !(pag = (char *) page[p/PAGE_SIZE] =
 				      (unsigned long *) get_free_page(GFP_USER))) 
-					return 0;
+					return -EFAULT;
 				if (from_kmem==2)
 					set_fs(new_fs);
 
@@ -559,6 +584,27 @@ int prepare_binprm(struct linux_binprm *bprm)
 			if (!suser())
 				return -EPERM;
 		}
+
+		/*
+		 * Increment the privileged execution counter, so that our
+		 * old children know not to send bad exit_signal's to us.
+		 */
+		if (!++current->priv) {
+			struct task_struct *p;
+
+			/*
+			 * The counter can't really overflow with real-world
+			 * programs (and it has to be the privileged program
+			 * itself that causes the overflow), but we handle
+			 * this case anyway, just for correctness.
+			 */
+			for_each_task(p) {
+				if (p->p_pptr == current) {
+					p->ppriv = 0;
+					current->priv = 1;
+				}
+			}
+		}
 	}
 
 	memset(bprm->buf,0,sizeof(bprm->buf));
@@ -601,6 +647,8 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 		bprm->dont_iput = 1;
 		remove_arg_zero(bprm);
 		bprm->p = copy_strings(1, dynloader, bprm->page, bprm->p, 2);
+		if ((long)bprm->p < 0)
+			return (long)bprm->p;
 		bprm->argc++;
 		bprm->loader = bprm->p;
 		retval = open_namei(dynloader[0], 0, 0, &bprm->inode, NULL);
@@ -673,9 +721,9 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	bprm.loader = 0;
 	bprm.exec = 0;
 	bprm.dont_iput = 0;
-	if ((bprm.argc = count(argv)) < 0)
+	if ((bprm.argc = count(argv, sizeof(char *), bprm.p)) < 0)
 		return bprm.argc;
-	if ((bprm.envc = count(envp)) < 0)
+	if ((bprm.envc = count(envp, sizeof(char *), bprm.p)) < 0)
 		return bprm.envc;
 
 	retval = prepare_binprm(&bprm);
@@ -685,8 +733,8 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 		bprm.exec = bprm.p;
 		bprm.p = copy_strings(bprm.envc,envp,bprm.page,bprm.p,0);
 		bprm.p = copy_strings(bprm.argc,argv,bprm.page,bprm.p,0);
-		if (!bprm.p)
-			retval = -E2BIG;
+		if ((long)bprm.p < 0)
+			retval = (long)bprm.p;
 	}
 
 	if(retval>=0)

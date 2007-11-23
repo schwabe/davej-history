@@ -24,6 +24,8 @@
 #define PORT_MASQ_BEGIN	61000
 #define PORT_MASQ_END	(PORT_MASQ_BEGIN+4096)
 
+#define IP_MASQ_TAB_SIZE 256	/* MUST be a power of 2 */
+
 /*
  * Default timeouts for masquerade functions The control channels now
  * expire the same as TCP channels (other than being updated by
@@ -112,6 +114,18 @@ extern struct ip_fw_masq *ip_masq_expire;
  */
 
 extern int ip_masq_free_ports[3];
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+/*
+ *	Any application support module that changes the destination
+ *	IP or port *must* rehash if IPsec masq is enabled
+ */
+extern struct ip_masq *ip_masq_m_tab[IP_MASQ_TAB_SIZE];
+extern struct ip_masq *ip_masq_s_tab[IP_MASQ_TAB_SIZE];
+extern struct ip_masq *ip_masq_d_tab[IP_MASQ_TAB_SIZE];
+extern __inline__ int ip_masq_hash(struct ip_masq *ms);
+extern __inline__ int ip_masq_unhash(struct ip_masq *ms);
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
 /*
  *	ip_masq initializer (registers symbols and /proc/net entries)

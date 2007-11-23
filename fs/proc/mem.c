@@ -17,17 +17,16 @@
 
 /*
  * mem_write isn't really a good idea right now. It needs
- * to check a lot more: if the process we try to write to
+ * to check a lot more: if the process we try to write to 
  * dies in the middle right now, mem_write will overwrite
  * kernel memory.. This disables it altogether.
  */
 #define mem_write NULL
 
-static ssize_t check_range(struct mm_struct * mm, unsigned long addr,
-			   size_t count)
+static int check_range(struct mm_struct * mm, unsigned long addr, int count)
 {
 	struct vm_area_struct *vma;
-	ssize_t retval;
+	int retval;
 
 	vma = find_vma(mm, addr);
 	if (!vma)
@@ -77,8 +76,7 @@ static struct task_struct * get_task(int pid)
 	return tsk;
 }
 
-static ssize_t mem_read(struct inode * inode, struct file * file,
-			char * buf, size_t count)
+static int mem_read(struct inode * inode, struct file * file,char * buf, int count)
 {
 	pgd_t *page_dir;
 	pmd_t *page_middle;
@@ -87,7 +85,7 @@ static ssize_t mem_read(struct inode * inode, struct file * file,
 	struct task_struct * tsk;
 	unsigned long addr;
 	char *tmp;
-	ssize_t scount, i;
+	int i;
 
 	if (count < 0)
 		return -EINVAL;
@@ -95,11 +93,11 @@ static ssize_t mem_read(struct inode * inode, struct file * file,
 	if (!tsk)
 		return -ESRCH;
 	addr = file->f_pos;
-	scount = check_range(tsk->mm, addr, count);
-	if (scount < 0)
-		return scount;
+	count = check_range(tsk->mm, addr, count);
+	if (count < 0)
+		return count;
 	tmp = buf;
-	while (scount > 0) {
+	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
 		page_dir = pgd_offset(tsk->mm,addr);
@@ -123,12 +121,12 @@ static ssize_t mem_read(struct inode * inode, struct file * file,
 			break;
 		page = (char *) pte_page(pte) + (addr & ~PAGE_MASK);
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
-		if (i > scount)
-			i = scount;
+		if (i > count)
+			i = count;
 		memcpy_tofs(tmp, page, i);
 		addr += i;
 		tmp += i;
-		scount -= i;
+		count -= i;
 	}
 	file->f_pos = addr;
 	return tmp-buf;
@@ -136,8 +134,7 @@ static ssize_t mem_read(struct inode * inode, struct file * file,
 
 #ifndef mem_write
 
-static ssize_t mem_write(struct inode * inode, struct file * file,
-			 char * buf, ssize_t count)
+static int mem_write(struct inode * inode, struct file * file,char * buf, int count)
 {
 	pgd_t *page_dir;
 	pmd_t *page_middle;
@@ -146,7 +143,7 @@ static ssize_t mem_write(struct inode * inode, struct file * file,
 	struct task_struct * tsk;
 	unsigned long addr;
 	char *tmp;
-	ssize_t i;
+	int i;
 
 	if (count < 0)
 		return -EINVAL;
@@ -198,8 +195,7 @@ static ssize_t mem_write(struct inode * inode, struct file * file,
 
 #endif
 
-static off_t mem_lseek(struct inode * inode, struct file * file,
-		       off_t offset, int orig)
+static int mem_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
 {
 	switch (orig) {
 		case 0:

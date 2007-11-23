@@ -228,10 +228,23 @@ static inline int copy_sighand(unsigned long clone_flags, struct task_struct * t
 int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 {
 	int nr;
-	int error = -ENOMEM;
+	int error = -EINVAL;
 	unsigned long new_stack;
 	struct task_struct *p;
 
+/*
+ * Disallow unknown clone(2) flags, as well as CLONE_PID, unless we are
+ * the boot up thread.
+ *
+ * Avoid taking any branches in the common case.
+ */
+	if (clone_flags &
+	    (-(signed long)current->pid >> (sizeof(long) * 8 - 1)) &
+	    ~(unsigned long)(CSIGNAL |
+	    CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND))
+		goto bad_fork;
+
+	error = -ENOMEM;
 	p = (struct task_struct *) kmalloc(sizeof(*p), GFP_KERNEL);
 	if (!p)
 		goto bad_fork;
@@ -264,6 +277,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->p_cptr = NULL;
 	init_waitqueue(&p->wait_chldexit);
 	p->signal = 0;
+	p->priv = 0;
+	p->ppriv = current->priv;
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
 	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;
 	init_timer(&p->real_timer);

@@ -698,10 +698,14 @@ slip_receive_buf(struct tty_struct *tty, const unsigned char *cp, char *fp, int 
 static int
 slip_open(struct tty_struct *tty)
 {
-	struct slip *sl = (struct slip *) tty->disc_data;
+	struct slip *sl;
 	int err;
 
+	if (!suser())
+		return -EPERM;
+
 	/* First make sure we're not already connected. */
+	sl = (struct slip *) tty->disc_data;
 	if (sl && sl->magic == SLIP_MAGIC) {
 		return -EEXIST;
 	}

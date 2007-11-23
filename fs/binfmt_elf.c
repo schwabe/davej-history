@@ -197,13 +197,13 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 	     interp_elf_ex->e_type != ET_DYN) ||
 	    !elf_check_arch(interp_elf_ex->e_machine) ||
 	    (!interpreter_inode->i_op ||
-	     !interpreter_inode->i_op->default_file_ops->mmap)) {
+	     !interpreter_inode->i_op->default_file_ops->mmap) ||
+	    interp_elf_ex->e_phentsize != sizeof(struct elf_phdr) ||
+	    interp_elf_ex->e_phnum < 1 ||
+	    interp_elf_ex->e_phnum > PAGE_SIZE / sizeof(struct elf_phdr)) {
 		return ~0UL;
 	}
 	/* Now read in all of the header information */
-
-	if (sizeof(struct elf_phdr) * interp_elf_ex->e_phnum > PAGE_SIZE)
-		 return ~0UL;
 
 	elf_phdata = (struct elf_phdr *)
 	    kmalloc(sizeof(struct elf_phdr) * interp_elf_ex->e_phnum,
@@ -211,14 +211,6 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 	if (!elf_phdata)
 		return ~0UL;
 
-	/*
-	 * If the size of this structure has changed, then punt, since
-	 * we will be doing the wrong thing.
-	 */
-	if (interp_elf_ex->e_phentsize != sizeof(struct elf_phdr)) {
-		kfree(elf_phdata);
-		return ~0UL;
-	}
 	retval = read_exec(interpreter_inode, interp_elf_ex->e_phoff,
 			   (char *) elf_phdata,
 		    sizeof(struct elf_phdr) * interp_elf_ex->e_phnum, 1);
@@ -306,6 +298,11 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 	kfree(elf_phdata);
 
 	*interp_load_addr = load_addr;
+	/*
+	 * AUDIT: is everything deallocated properly if this happens
+	 * to be ~0UL? We'd better switch to out-of-band error reporting.
+	 * Also for a.out.
+	 */
 	return ((unsigned long) interp_elf_ex->e_entry) + load_addr;
 }
 
@@ -397,7 +394,10 @@ static inline int do_load_elf_binary(struct linux_binprm *bprm, struct pt_regs *
 	     elf_ex.e_type != ET_DYN) ||
 	    (!elf_check_arch(elf_ex.e_machine)) ||
 	    (!bprm->inode->i_op || !bprm->inode->i_op->default_file_ops ||
-	     !bprm->inode->i_op->default_file_ops->mmap)) {
+	     !bprm->inode->i_op->default_file_ops->mmap) ||
+	    elf_ex.e_phentsize != sizeof(struct elf_phdr) ||
+	    elf_ex.e_phnum < 1 ||
+	    elf_ex.e_phnum > 0xfff0 / sizeof(struct elf_phdr)) {
 		return -ENOEXEC;
 	}
 	/* Now read in all of the header information */
@@ -434,12 +434,14 @@ static inline int do_load_elf_binary(struct linux_binprm *bprm, struct pt_regs *
 
 	for (i = 0; i < elf_ex.e_phnum; i++) {
 		if (elf_ppnt->p_type == PT_INTERP) {
-			if (elf_interpreter != NULL) {
+			if (elf_interpreter != NULL ||
+			    elf_ppnt->p_filesz < 2 ||
+			    elf_ppnt->p_filesz > PAGE_SIZE) {
 				iput(interpreter_inode);
 				kfree(elf_phdata);
 				kfree(elf_interpreter);
 				sys_close(elf_exec_fileno);
-				return -EINVAL;
+				return -ENOEXEC;
 			}
 			/* This is the program interpreter used for
 			 * shared libraries - for now assume that this
@@ -456,6 +458,7 @@ static inline int do_load_elf_binary(struct linux_binprm *bprm, struct pt_regs *
 			retval = read_exec(bprm->inode, elf_ppnt->p_offset,
 					   elf_interpreter,
 					   elf_ppnt->p_filesz, 1);
+			elf_interpreter[elf_ppnt->p_filesz - 1] = 0;
 			/* If the program interpreter is one of these two,
 			   then assume an iBCS2 image. Otherwise assume
 			   a native linux image. */
@@ -629,14 +632,17 @@ static inline int do_load_elf_binary(struct linux_binprm *bprm, struct pt_regs *
 						    &interp_load_addr);
 
 		iput(interpreter_inode);
-		kfree(elf_interpreter);
 
 		if (elf_entry == ~0UL) {
-			printk("Unable to load interpreter\n");
+			printk("Unable to load interpreter %.128s\n",
+				elf_interpreter);
+			kfree(elf_interpreter);
 			kfree(elf_phdata);
 			send_sig(SIGSEGV, current, 0);
 			return 0;
 		}
+
+		kfree(elf_interpreter);
 	}
 	kfree(elf_phdata);
 

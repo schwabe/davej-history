@@ -780,11 +780,16 @@ ppp_tty_close (struct tty_struct *tty)
 static int
 ppp_tty_open (struct tty_struct *tty)
 {
-	struct ppp *ppp = tty2ppp (tty);
+	struct ppp *ppp;
 	int indx;
+
+	if (!suser())
+		return -EPERM;
+
 /*
  * There should not be an existing table for this slot.
  */
+	ppp = tty2ppp (tty);
 	if (ppp) {
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_ERR

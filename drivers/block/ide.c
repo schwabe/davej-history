@@ -606,6 +606,9 @@ void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler, unsigned int t
  *
  * Returns:	1 if lba_capacity looks sensible
  *		0 otherwise
+ *
+ * Note: we must not change id->cyls here, otherwise a second call
+ * of this routine might no longer find lba_capacity ok.
  */
 static int lba_capacity_is_ok (struct hd_driveid *id)
 {
@@ -614,14 +617,15 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 	unsigned long _10_percent = chs_sects / 10;
 
 	/*
-	 * very large drives (8GB+) may lie about the number of cylinders
-	 * This is a split test for drives 8 Gig and Bigger only.
+	 * The ATA spec tells large drives to return
+	 * C/H/S = 16383/16/63 independent of their size.
+	 * Some drives can be jumpered to use 15 heads instead of 16.
 	 */
-	if ((id->lba_capacity >= 16514064) && (id->cyls == 0x3fff) &&
-	    (id->heads == 16) && (id->sectors == 63)) {
-		id->cyls = lba_sects / (16 * 63); /* correct cyls */
+	if (id->cyls == 16383 && id->sectors == 63 &&
+	    (id->heads == 15 || id->heads == 16) &&
+	    id->lba_capacity >= 16383*63*id->heads)
 		return 1;	/* lba_capacity is our only option */
-	}
+
 	/* perform a rough sanity check on lba_sects:  within 10% is "okay" */
 	if ((lba_sects - chs_sects) < _10_percent)
 		return 1;	/* lba_capacity is good */
@@ -638,11 +642,13 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 /*
  * current_capacity() returns the capacity (in sectors) of a drive
  * according to its current geometry/LBA settings.
+ *
+ * It also sets select.b.lba.
  */
 static unsigned long current_capacity (ide_drive_t  *drive)
 {
 	struct hd_driveid *id = drive->id;
-	unsigned long capacity = drive->cyl * drive->head * drive->sect;
+	unsigned long capacity;
 
 	if (!drive->present)
 		return 0;
@@ -652,22 +658,14 @@ static unsigned long current_capacity (ide_drive_t  *drive)
 #endif /* CONFIG_BLK_DEV_IDEFLOPPY */
 	if (drive->media != ide_disk)
 		return 0x7fffffff;	/* cdrom or tape */
+
 	drive->select.b.lba = 0;
 	/* Determine capacity, and use LBA if the drive properly supports it */
+	capacity = drive->cyl * drive->head * drive->sect;
 	if (id != NULL && (id->capability & 2) && lba_capacity_is_ok(id)) {
 		if (id->lba_capacity >= capacity) {
-			drive->cyl = id->lba_capacity / (drive->head * drive->sect);
 			capacity = id->lba_capacity;
 			drive->select.b.lba = 1;
-#if 0
-			/*
-			 * This is the correct place to perform this task;
-			 * however, we do this later for reporting.
-			 */
-			if (*(int *)&id->cur_capacity0 != id->lba_capacity) {
-				*(int *)&id->cur_capacity0 = id->lba_capacity;
-			}
-#endif
 		}
 	}
 	return (capacity - drive->sect0);
@@ -697,8 +695,9 @@ static void ide_geninit (struct gendisk *gd)
 			idefloppy_setup(drive);
 #endif /* CONFIG_BLK_DEV_IDEFLOPPY */
 		drive->part[0].nr_sects = current_capacity(drive);
-		if (!drive->present || (drive->media != ide_disk && drive->media != ide_floppy) ||
-		    !drive->part[0].nr_sects) {
+		if (!drive->present
+		    || (drive->media != ide_disk && drive->media != ide_floppy)
+		    || !drive->part[0].nr_sects) {
 			drive->part[0].start_sect = -1; /* skip partition check */
 		}
 	}
@@ -2127,7 +2126,8 @@ static int revalidate_disk(kdev_t i_rdev)
 	};
 
 	drive->part[0].nr_sects = current_capacity(drive);
-	if ((drive->media != ide_disk && drive->media != ide_floppy) || !drive->part[0].nr_sects)
+	if ((drive->media != ide_disk && drive->media != ide_floppy)
+	    || !drive->part[0].nr_sects)
 		drive->part[0].start_sect = -1;
 	resetup_one_dev(HWIF(drive)->gd, drive->select.b.unit);
 
@@ -2565,8 +2565,8 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		drive->sect    = drive->bios_sect = id->sectors;
 	}
 	/* Handle logical geometry translation by the drive */
-	if ((id->field_valid & 1) && id->cur_cyls &&
-		id->cur_heads && (id->cur_heads <= 16) && id->cur_sectors) {
+	if ((id->field_valid & 1) && id->cur_cyls && id->cur_heads
+	    && (id->cur_heads <= 16) && id->cur_sectors) {
 		/*
 		 * Extract the physical drive geometry for our use.
 		 * Note that we purposely do *not* update the bios info.
@@ -2593,12 +2593,9 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	/* Use physical geometry if what we have still makes no sense */
 	if ((!drive->head || drive->head > 16) &&
 	    id->heads && id->heads <= 16) {
-		if ((id->lba_capacity > 16514064) || (id->cyls == 0x3fff)) {
-			id->cyls = ((int)(id->lba_capacity/(id->heads * id->sectors)));
-		}
-		drive->cyl  = id->cur_cyls    = id->cyls;
-		drive->head = id->cur_heads   = id->heads;
-		drive->sect = id->cur_sectors = id->sectors;
+		drive->cyl  = id->cyls;
+		drive->head = id->heads;
+		drive->sect = id->sectors;
 	}
 
 	/* calculate drive capacity, and select LBA if possible */
@@ -2608,21 +2605,17 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	 * if possible, give fdisk access to more of the drive,
 	 * by correcting bios_cyls:
 	 */
-	if ((capacity >= (id->cyls * id->heads * id->sectors)) &&
-	    (!drive->forced_geom) && drive->bios_sect && drive->bios_head) {
-		drive->bios_cyl = (capacity / drive->bios_sect) / drive->bios_head;
-#ifdef DEBUG
-		printk("FDISK Fixing Geometry :: CHS=%d/%d/%d to CHS=%d/%d/%d\n",
-			drive->id->cur_cyls,
-			drive->id->cur_heads,
-			drive->id->cur_sectors,
-			drive->bios_cyl,
-			drive->bios_head,
-			drive->bios_sect);
-#endif
-		drive->id->cur_cyls    = drive->bios_cyl;
-		drive->id->cur_heads   = drive->bios_head;
-		drive->id->cur_sectors = drive->bios_sect;
+	if (capacity > drive->bios_cyl * drive->bios_head * drive->bios_sect
+	    && !drive->forced_geom && drive->bios_sect && drive->bios_head) {
+		int cyl = (capacity / drive->bios_sect) / drive->bios_head;
+		if (cyl <= 65535)
+			drive->bios_cyl = cyl;
+		else {
+			/* OK until 539 GB */
+			drive->bios_sect = 63;
+			drive->bios_head = 255;
+			drive->bios_cyl = capacity / (63*255);
+		}
 	}
 
 	if (!strncmp(id->model, "BMI ", 4) &&
@@ -2666,18 +2659,6 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		}
 	}
 	printk("\n");
-	if (drive->select.b.lba) {
-		if (*(int *)&id->cur_capacity0 != id->lba_capacity) {
-#ifdef DEBUG
-			printk("     CurSects=%d, LBASects=%d, ",
-				*(int *)&id->cur_capacity0, id->lba_capacity);
-#endif
-			*(int *)&id->cur_capacity0 = id->lba_capacity;
-#ifdef DEBUG
-			printk( "Fixed CurSects=%d\n", *(int *)&id->cur_capacity0);
-#endif
-		}
-	}
 }
 
 /*
@@ -3380,12 +3361,6 @@ done:
  * Returns 1 if the geometry translation was successful.
  */
 
-/*
- * We update the values if the current CHS as determined by the kernel.
- * This now allows for the hdparm tool to read the actual settings of the
- * being used by the kernel.  This removes the need for doing guess
- * translations based on the raw values of the drive.
- */
 int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 {
 	ide_drive_t *drive;
@@ -3397,47 +3372,13 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 	if (!drive)
 		return 0;
 
-	if (drive->forced_geom) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
+	if (drive->forced_geom)
 		return 0;
-	}
 
-	if (xparm > 1 && xparm <= drive->bios_head && drive->bios_sect == 63) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
+	if (xparm > 1 && xparm <= drive->bios_head && drive->bios_sect == 63)
 		return 0;		/* we already have a translation */
-	}
 
 	printk("%s ", msg);
-
-	if (xparm < 0 && (drive->bios_cyl * drive->bios_head * drive->bios_sect) < (1024 * 16 * 63)) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
-		return 0;		/* small disk: no translation needed */
-	}
-
-	if (drive->id) {
-		drive->cyl  = drive->id->cyls;
-		drive->head = drive->id->heads;
-		drive->sect = drive->id->sectors;
-	}
-	drive->bios_cyl  = drive->cyl;
-	drive->bios_head = drive->head;
-	drive->bios_sect = drive->sect;
-	drive->special.b.set_geometry = 1;
 
 	tracks = drive->bios_cyl * drive->bios_head * drive->bios_sect / 63;
 	drive->bios_sect = 63;
@@ -3466,12 +3407,6 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 	}
 	drive->part[0].nr_sects = current_capacity(drive);
 	printk("[%d/%d/%d]", drive->bios_cyl, drive->bios_head, drive->bios_sect);
-	/*
-	 * Update the current 3D drive values.
-	 */
-	drive->id->cur_cyls	= drive->bios_cyl;
-	drive->id->cur_heads	= drive->bios_head;
-	drive->id->cur_sectors	= drive->bios_sect;
 	return 1;
 }
 
