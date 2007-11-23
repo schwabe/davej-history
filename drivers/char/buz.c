@@ -3221,7 +3221,7 @@ static int zr36057_init(int i)
 	}
 	/* i2c */
 	memcpy(&zr->i2c, &zoran_i2c_bus_template, sizeof(struct i2c_bus));
-	sprintf(zr->i2c.name, "zoran%u%u", zr->id);
+	sprintf(zr->i2c.name, "zoran%u", zr->id);
 	zr->i2c.data = zr;
 	if (i2c_register_bus(&zr->i2c) < 0) {
 		kfree((void *) zr->stat_com);

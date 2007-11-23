@@ -506,21 +506,6 @@ static void nfs_dentry_delete(struct dentry *dentry)
 				dentry->d_name.name, error);
 	}
 
-#ifdef NFS_PARANOIA
-	/*
-	 * Sanity check: if the dentry has been unhashed and the
-	 * inode still has users, we could have problems ...
-	 */
-	if (list_empty(&dentry->d_hash) && dentry->d_inode) {
-		struct inode *inode = dentry->d_inode;
-		int max_count = (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink);
-		if (inode->i_count > max_count) {
-printk("nfs_dentry_delete: %s/%s: ino=%ld, count=%d, nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->i_ino, inode->i_count, inode->i_nlink);
-		}
-	}
-#endif
 }
 
 /*
@@ -595,14 +580,6 @@ static struct dentry *nfs_lookup(struct inode *dir, struct dentry * dentry)
 		error = -EACCES;
 		inode = nfs_fhget(dentry, &fhandle, &fattr);
 		if (inode) {
-#ifdef NFS_PARANOIA
-if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {
-printk("nfs_lookup: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->i_ino, inode->i_count, inode->i_nlink);
-show_dentry(&inode->i_dentry);
-}
-#endif
 	    no_entry:
 			d_add(dentry, inode);
 			nfs_renew_times(dentry);
@@ -624,14 +601,6 @@ static int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 
 	inode = nfs_fhget(dentry, fhandle, fattr);
 	if (inode) {
-#ifdef NFS_PARANOIA
-if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {
-printk("nfs_instantiate: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->i_ino, inode->i_count, inode->i_nlink);
-show_dentry(&inode->i_dentry);
-}
-#endif
 		d_instantiate(dentry, inode);
 		nfs_renew_times(dentry);
 		error = 0;
@@ -737,13 +706,6 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 
 	dfprintk(VFS, "NFS: rmdir(%x/%ld, %s\n",
 		dir->i_dev, dir->i_ino, dentry->d_name.name);
-
-#ifdef NFS_PARANOIA
-if (dentry->d_inode->i_count > 1)
-printk("nfs_rmdir: %s/%s inode busy?? i_count=%d, i_nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-dentry->d_inode->i_count, dentry->d_inode->i_nlink);
-#endif
 
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_rmdir(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
@@ -920,12 +882,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 #endif
 		goto out;
 	}
-#ifdef NFS_PARANOIA
-if (inode && inode->i_count > inode->i_nlink)
-printk("nfs_safe_remove: %s/%s inode busy?? i_count=%d, i_nlink=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->i_count, inode->i_nlink);
-#endif
 	/*
 	 * Unhash the dentry while we remove the file ...
 	 */

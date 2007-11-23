@@ -793,7 +793,7 @@ struct dentry * do_mknod(const char * filename, int mode, dev_t dev)
 	struct dentry *dentry, *retval;
 
 	mode &= ~current->fs->umask;
-	dentry = lookup_dentry(filename, NULL, LOOKUP_FOLLOW);
+	dentry = lookup_dentry(filename, NULL, 0);
 	if (IS_ERR(dentry))
 		return dentry;
 

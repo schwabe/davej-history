@@ -324,6 +324,10 @@ struct task_struct {
 	struct signal_queue *sigqueue, **sigqueue_tail;
 	unsigned long sas_ss_sp;
 	size_t sas_ss_size;
+	
+/* Thread group tracking */
+   	u32 parent_exec_id;
+   	u32 self_exec_id;
 };
 
 /*
@@ -390,6 +394,7 @@ struct task_struct {
 /* files */	&init_files, \
 /* mm */	&init_mm, \
 /* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
+/* exec cts */	0,0, \
 }
 
 union task_union {

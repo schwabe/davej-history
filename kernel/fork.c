@@ -679,6 +679,11 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	if (retval)
 		goto bad_fork_cleanup_mm;
 	p->semundo = NULL;
+	
+	/* Our parent execution domain becomes current domain
+	   These must match for thread signalling to apply */
+	   
+	p->parent_exec_id = p->self_exec_id;
 
 	/* ok, now we should be set up.. */
 	p->swappable = 1;

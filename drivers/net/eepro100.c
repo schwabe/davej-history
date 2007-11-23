@@ -823,6 +823,18 @@ speedo_open(struct device *dev)
 	dev->interrupt = 0;
 	dev->start = 1;
 
+	/*
+	 * Request the IRQ last, after we have set up all data structures.
+	 * It would be bad to get an interrupt before we're ready.
+	 *
+	 * Register ourself first before turn on the interrupt. Someone
+	 * else may share the same interrupt. H.J.
+	 */
+	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ,
+					"Intel EtherExpress Pro 10/100 Ethernet", dev)) {
+		return -EAGAIN;
+	}
+
 	/* Start the chip's Tx process and unmask interrupts. */
 	/* Todo: verify that we must wait for previous command completion. */
 	wait_for_cmd_done(ioaddr + SCBCmd);
@@ -843,15 +855,6 @@ speedo_open(struct device *dev)
 
 	wait_for_cmd_done(ioaddr + SCBCmd);
 	outw(CU_DUMPSTATS, ioaddr + SCBCmd);
-
-	/*
-	 * Request the IRQ last, after we have set up all data structures.
-	 * It would be bad to get an interrupt before we're ready.
-	 */
-	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ,
-					"Intel EtherExpress Pro 10/100 Ethernet", dev)) {
-		return -EAGAIN;
-	}
 
 	/* No need to wait for the command unit to accept here. */
 	if ((sp->phy[0] & 0x8000) == 0)

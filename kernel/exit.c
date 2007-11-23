@@ -146,7 +146,9 @@ static inline void forget_original_parent(struct task_struct * father)
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
 		if (p->p_opptr == father) {
+			/* We dont want people slaying init */
 			p->exit_signal = SIGCHLD;
+			p->self_exec_id++;
 			p->p_opptr = child_reaper; /* init */
 			if (p->pdeath_signal) send_sig(p->pdeath_signal, p, 0);
 		}
@@ -305,11 +307,20 @@ static void exit_notify(void)
 	 * Thread signals are configurable, but you aren't going to use
 	 * that to send signals to arbitary processes. 
 	 * That stops right now.
+	 *
+	 * If the parent exec id doesn't match the exec id we saved
+	 * when we started then we know the parent has changed security
+	 * domain.
+	 *
+	 * If our self_exec id doesn't match our parent_exec_id then
+	 * we have changed execution domain as these two values started
+	 * the same after a fork.
+	 *	
 	 */
 	
 	if(current->exit_signal != SIGCHLD &&
-	    (current->euid ^ t->suid) && (current->euid ^ t->uid)
-	    && (current->uid ^ t->suid) && (current->uid ^ t->uid)
+	    ( current->parent_exec_id != t->self_exec_id  ||
+	      current->self_exec_id != current->parent_exec_id) 
 	    && !capable(CAP_KILL))
 		current->exit_signal = SIGCHLD;
 

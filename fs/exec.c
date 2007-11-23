@@ -532,6 +532,8 @@ int flush_old_exec(struct linux_binprm * bprm)
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
 	    permission(bprm->dentry->d_inode,MAY_READ))
 		current->dumpable = 0;
+		
+	current->self_exec_id++;
 
 	flush_signal_handlers(current);
 	flush_old_files(current->files);

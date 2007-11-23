@@ -1693,7 +1693,7 @@ static int set_serial_info(struct async_struct * info,
 	if ((new_serial.type != state->type) ||
 	    (new_serial.xmit_fifo_size <= 0))
 		new_serial.xmit_fifo_size =
-			uart_config[state->type].dfl_xmit_fifo_size;
+			uart_config[new_serial.type].dfl_xmit_fifo_size;
 
 	/* Make sure address is not already in use */
 	if (new_serial.type) {

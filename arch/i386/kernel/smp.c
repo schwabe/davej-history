@@ -657,13 +657,14 @@ static unsigned long __init setup_trampoline(void)
 	return virt_to_phys(trampoline_base);
 }
 
+extern unsigned long i386_endbase __initdata;
 /*
  *	We are called very early to get the low memory for the
  *	SMP bootup trampoline page.
  */
 unsigned long __init smp_alloc_memory(unsigned long mem_base)
 {
-	if (virt_to_phys((void *)mem_base) >= 0x9F000)
+	if (mem_base + PAGE_SIZE > i386_endbase)
 		panic("smp_alloc_memory: Insufficient low memory for kernel trampoline 0x%lx.", mem_base);
 	trampoline_base = (void *)mem_base;
 	return mem_base + PAGE_SIZE;
@@ -930,6 +931,14 @@ extern struct {
 	unsigned short ss;
 } stack_start;
 
+static int __init fork_by_hand(void)
+{
+	struct pt_regs regs;
+	/* don't care about the eip and regs settings since we'll never
+	   reschedule the forked task. */
+	return do_fork(CLONE_VM|CLONE_PID, 0, &regs);
+}
+
 static void __init do_boot_cpu(int i)
 {
 	unsigned long cfg;
@@ -939,11 +948,11 @@ static void __init do_boot_cpu(int i)
 	int timeout, num_starts, j;
 	unsigned long start_eip;
 
-	/*
-	 *	We need an idle process for each processor.
-	 */
-	kernel_thread(start_secondary, NULL, CLONE_PID);
 	cpucount++;
+	/* We can't use kernel_thread since we must _avoid_ to reschedule
+	   the child. */
+	if (fork_by_hand() < 0)
+		panic("failed fork for CPU %d", i);
 
 	idle = task[cpucount];
 	if (!idle)

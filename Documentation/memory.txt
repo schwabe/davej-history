@@ -54,3 +54,11 @@ Other tricks:
 
 	* Try passing the "no-hlt" option to disable the potentially
           buggy HLT instruction in your CPU.
+
+	* Passing for example the "endbase=0x9F000" option to the kernel,
+	  you'll _force_ the kernel to not touch the memory between 0x9F000
+	  and 1Mbyte. As default the kernel reads the endbase limit from
+	  the BIOS. So you need to specify this option only if the BIOS
+	  does not provide the right information to the kernel (or if you
+	  don't have a BIOS at all :). You can discover the endbase value
+	  of your running kernel with this command `dmesg | grep endbase`.

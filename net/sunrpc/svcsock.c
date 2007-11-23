@@ -531,16 +531,18 @@ svc_tcp_accept(struct svc_sock *svsk)
 
 	ops = newsock->ops;
 	if ((err = ops->accept(sock, newsock, O_NONBLOCK)) < 0) {
-		printk(KERN_WARNING "%s: accept failed (err %d)!\n",
-					serv->sv_name, -err);
+		if (net_ratelimit())
+			printk(KERN_WARNING "%s: accept failed (err %d)!\n",
+				   serv->sv_name, -err);
 		goto failed;		/* aborted connection or whatever */
 	}
 
 	slen = sizeof(sin);
 	err = ops->getname(newsock, (struct sockaddr *) &sin, &slen, 1);
 	if (err < 0) {
-		printk(KERN_WARNING "%s: peername failed (err %d)!\n",
-					serv->sv_name, -err);
+		if (net_ratelimit())
+			printk(KERN_WARNING "%s: peername failed (err %d)!\n",
+				   serv->sv_name, -err);
 		goto failed;		/* aborted connection or whatever */
 	}
 
@@ -548,10 +550,11 @@ svc_tcp_accept(struct svc_sock *svsk)
 	 * hosts here, but we have no generic client tables. For now,
 	 * we just punt connects from unprivileged ports. */
 	if (ntohs(sin.sin_port) >= 1024) {
-		printk(KERN_WARNING
-			"%s: connect from unprivileged port: %s:%d",
-			serv->sv_name, 
-			in_ntoa(sin.sin_addr.s_addr), ntohs(sin.sin_port));
+		if (net_ratelimit())
+			printk(KERN_WARNING
+				   "%s: connect from unprivileged port: %s:%d",
+				   serv->sv_name, 
+				   in_ntoa(sin.sin_addr.s_addr), ntohs(sin.sin_port));
 		goto failed;
 	}
 

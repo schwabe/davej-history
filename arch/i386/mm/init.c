@@ -384,6 +384,8 @@ __initfunc(void test_wp_bit(void))
 		printk(".\n");
 }
 
+extern unsigned long i386_endbase __initdata;
+
 __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	unsigned long start_low_mem = PAGE_SIZE;
@@ -415,12 +417,7 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 #endif
 	start_mem = PAGE_ALIGN(start_mem);
 
-	/*
-	 * IBM messed up *AGAIN* in their thinkpad: 0xA0000 -> 0x9F000.
-	 * They seem to have done something stupid with the floppy
-	 * controller as well..
-	 */
-	while (start_low_mem < 0x9f000+PAGE_OFFSET) {
+	while (start_low_mem < i386_endbase) {
 		clear_bit(PG_reserved, &mem_map[MAP_NR(start_low_mem)].flags);
 		start_low_mem += PAGE_SIZE;
 	}
