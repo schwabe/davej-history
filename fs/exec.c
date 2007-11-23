@@ -257,7 +257,11 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 			set_fs(KERNEL_DS);
 		get_user(str, argv+argc);
 		if (!str)
-			panic("VFS: argc is wrong");
+		{
+			set_fs(old_fs);
+			return 0;
+//			panic("VFS: argc is wrong");
+		}
 		if (from_kmem == 1)
 			set_fs(old_fs);
 		len = strlen_user(str);	/* includes the '\0' */

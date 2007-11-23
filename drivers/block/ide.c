@@ -272,7 +272,8 @@ int drive_is_flashcard (ide_drive_t *drive)
 	if (drive->removable && id != NULL) {
 		if (!strncmp(id->model, "KODAK ATA_FLASH", 15)	/* Kodak */
 		 || !strncmp(id->model, "Hitachi CV", 10)		/* Hitachi */
-		 || !strncmp(id->model, "SunDisk SDCFB", 13))	/* SunDisk */
+		 || !strncmp(id->model, "SunDisk SDCFB", 13)	/* SunDisk */
+		 || !strncmp(id->model, "HAGIWARA HPC", 12))	/* Hagiwara */
 		{
 			return 1;	/* yes, it is a flash memory card */
 		}
@@ -1732,6 +1733,8 @@ void ide_unregister (unsigned int index)
 	sti();
 	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		drive = &hwif->drives[unit];
+		if (!drive->present)
+			continue;
 		minor = drive->select.b.unit << PARTN_BITS;
 		for (p = 0; p < (1<<PARTN_BITS); ++p) {
 			if (drive->part[p].nr_sects > 0) {
