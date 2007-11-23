@@ -228,7 +228,7 @@ static int in_egroup_p(gid_t grp)
 {
 	int	i;
 
-	if (grp == current->euid)
+	if (grp == current->egid)
 		return 1;
 
 	for (i = 0; i < NGROUPS; i++) {

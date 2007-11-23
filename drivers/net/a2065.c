@@ -536,7 +536,7 @@ static int a2065_start_xmit(struct sk_buff *skb, struct device *dev)
 
 		dev->tbusy = 0;
 		dev->trans_start = jiffies;
-
+		dev_kfree_skb(skb, FREE_WRITE);
 		return(0);
 	}
 

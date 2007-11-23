@@ -105,9 +105,8 @@ static struct symbol_table net_syms = {
 	X(arp_send),
 	X(ip_id_count),
 	X(ip_send_check),
-#ifdef CONFIG_IP_FORWARD
 	X(ip_forward),
-#endif
+	X(sysctl_ip_forward),
 
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \

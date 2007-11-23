@@ -21,6 +21,17 @@
  *
  * Fixes:	Eric Schenk	: avoid multiple retransmissions in one
  *				: round trip timeout.
+ *		Eric Schenk	: tcp rst and syn cookies to deal
+ *				: with synflooding attacks.
+ *		Eric Schenk	: If a simultaneous close occurred, and the
+ *				  connection was over an assymetric route, we
+ *				  would lose badly if we dropped our outgoing
+ *				  FIN because the route disappeared on us.
+ * 				  We now handle this case correctly.
+ *		Eric Schenk	: Handle the case where a route changes, and
+ *				  thus the outgoing device does as well, when
+ *				  skb's are on the retransmit queue which still
+ *				  refer to the old obsolete destination.
  */
 
 #include <linux/config.h>
@@ -28,7 +39,9 @@
 #include <linux/ip_fw.h>
 #include <linux/firewall.h>
 #include <linux/interrupt.h>
-
+#ifdef CONFIG_RST_COOKIES
+#include <linux/random.h>
+#endif
 
 /*
  * RFC 1122 says:
@@ -277,9 +290,12 @@ void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
 	sk->partial = skb;
 	init_timer(&sk->partial_timer);
 	/*
-	 *	Wait up to 1 second for the buffer to fill.
+	 *	Wait up to 30 second for the buffer to fill.
+	 *	( I have no idea why this timer is here!
+	 *	  It seems to be sillyness for interactive response. Linus?
+	 *	)
 	 */
-	sk->partial_timer.expires = jiffies+HZ/10;
+	sk->partial_timer.expires = jiffies+30*HZ;
 	sk->partial_timer.function = (void (*)(unsigned long)) tcp_send_partial;
 	sk->partial_timer.data = (unsigned long) sk;
 	add_timer(&sk->partial_timer);
@@ -383,8 +399,11 @@ void tcp_write_xmit(struct sock *sk)
 			/*
 			 *	IP manages our queue for some crazy reason
 			 */
-			 
+#ifndef NO_DAVEM_FIX			 
+			sk->prot->queue_xmit(sk, skb->dev, skb, 0);
+#else
 			sk->prot->queue_xmit(sk, skb->dev, skb, skb->free);
+#endif
 
 			clear_delayed_acks(sk);
 
@@ -498,6 +517,45 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		else
 		{
 			dev=rt->rt_dev;
+			if (skb->dev != dev && skb->link3 == 0
+			&& !skb_queue_empty(&sk->write_queue)) {
+			 	/* THIS IS UGLY. DON'T SHOW THIS TO YOUR MOTHER. --erics
+				 * Route shifted devices.
+				 * If this is the last packet in the
+				 * retransmit queue, then we should walk
+				 * the chain of packets in the write_queue
+				 * that have the same device and
+				 * fix routing on these packets as well.
+				 * If we fail to do this, then every packet
+				 * in the transmit queue will incurr a 
+				 * retransmit with the backed off retransmit
+				 * timeout. This is very bad.
+				 */
+				struct sk_buff *skb2 = sk->write_queue.next;
+				while (skb2 && skb2->dev == skb->dev) {
+					skb2->raddr=rt->rt_gateway;
+					skb2->dev = dev;
+					skb2->arp=1;
+					if (rt->rt_hh)
+					{
+						memcpy(skb_push(skb2,dev->hard_header_len),rt->rt_hh->hh_data,dev->hard_header_len);
+						if (!rt->rt_hh->hh_uptodate)
+						{
+							skb2->arp = 0;
+#if RT_CACHE_DEBUG >= 2
+							printk("tcp_do_retransmit(1): hh miss %08x via %08x\n", iph->daddr, rt->rt_gateway);
+#endif
+						}
+					}
+					else if (dev->hard_header)
+					{
+						if(dev->hard_header(skb2, dev, ETH_P_IP, NULL, NULL, skb2->len)<0)
+							skb2->arp=0;
+					}
+
+					skb2 = skb2->next;
+				}
+			}
 			skb->raddr=rt->rt_gateway;
 			skb->dev=dev;
 			skb->arp=1;
@@ -519,7 +577,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 				{
 					skb->arp = 0;
 #if RT_CACHE_DEBUG >= 2
-					printk("tcp_do_retransmit: hh miss %08x via %08x\n", iph->daddr, rt->rt_gateway);
+					printk("tcp_do_retransmit(2): hh miss %08x via %08x\n", iph->daddr, rt->rt_gateway);
 #endif
 				}
 			}
@@ -685,6 +743,73 @@ void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 	tcp_statistics.TcpOutSegs++;
 }
 
+#ifdef CONFIG_RST_COOKIES
+/*
+ *	This routine will send a bad SYNACK to the remote tcp
+ *	containing a secure sequence number.
+ *	This should evoke a reset with a cookie, so we can verify
+ *	the existence of the remote machine.
+ */
+ 
+void tcp_send_synack_probe(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
+	  struct proto *prot, struct options *opt, struct device *dev, int tos, int ttl)
+{
+	struct sk_buff *buff;
+	struct tcphdr *t1;
+	int tmp;
+	struct device *ndev=NULL;
+
+	/*
+	 * We need to grab some memory, and put together a SYNACK,
+	 * and then put it into the queue to be sent.
+	 */
+
+	buff = alloc_skb(MAX_SYN_SIZE, GFP_ATOMIC);
+	if (buff == NULL) 
+	  	return;
+
+	buff->sk = NULL;
+	buff->dev = dev;
+	buff->localroute = 0;
+	buff->csum = 0;
+
+	/*
+	 *	Put in the IP header and routing stuff. 
+	 */
+
+	tmp = prot->build_header(buff, saddr, daddr, &ndev, IPPROTO_TCP, opt,
+			   sizeof(struct tcphdr),tos,ttl,NULL);
+	if (tmp < 0) 
+	{
+  		buff->free = 1;
+		sock_wfree(NULL, buff);
+		return;
+	}
+
+	t1 = (struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
+
+	memcpy(t1, th, sizeof(*t1));
+	/*
+	 *	Swap the send and the receive. 
+	 */
+	t1->dest = th->source;
+	t1->source = th->dest;
+	t1->ack_seq = t1->seq = htonl(secure_tcp_probe_number(daddr,saddr,
+		ntohs(th->source),ntohs(th->dest),ntohl(th->seq),0));
+	t1->window = htons(1024);	/* make up a window here. */
+	t1->syn = 1;
+	t1->ack = 1;
+	t1->urg = 0;
+	t1->rst = 0;
+	t1->psh = 0;
+	t1->doff = sizeof(*t1)/4;
+
+	tcp_send_check(t1, saddr, daddr, sizeof(*t1), buff);
+	prot->queue_xmit(NULL, ndev, buff, 1);
+	tcp_statistics.TcpOutSegs++;
+}
+#endif
+
 /*
  *	Send a fin.
  */
@@ -724,21 +849,31 @@ void tcp_send_fin(struct sock *sk)
 			   sizeof(struct tcphdr),sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 	if (tmp < 0) 
 	{
-		int t;
-  		/*
-  		 *	Finish anyway, treat this as a send that got lost. 
-  		 *	(Not good).
-  		 */
-  		 
-	  	buff->free = 1;
-		sock_wfree(sk,buff);
-		sk->write_seq++;
-		t=del_timer(&sk->timer);
-		if(t)
-			add_timer(&sk->timer);
-		else
-			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
-		return;
+		/* Oh oh. We couldn't route the packet, and we can't afford
+		 * to drop it from the queue, since we will fail to retransmit
+		 * then, and we never try to initiate a close again.
+		 * Drop it onto the loopback device. The worst thing that
+		 * happens is that the send gets droped when it comes out the
+		 * the other side. If we get lucky it might even get forward
+		 * to its real destination.
+		 * WARNING: there are a few subtle points here.
+		 * 1) We assume that if we build the header using the
+		 *    loopback we can not fail. The only way this can happen
+	 	 *    right now is if someone marks the loopback as
+		 *    a gateway. This should never happen. Be careful
+		 *    not to change that without taking this case into account.
+		 * 2) If we fail to queue up the FIN packet here we get
+		 *    bitten later when we receive a simultaneous FIN.
+		 *    See the comments in tcp_fin().
+		 */
+		dev = &loopback_dev;
+		tmp = prot->build_header(buff,sk->saddr, sk->daddr, &dev,
+			   IPPROTO_TCP, sk->opt,
+			   sizeof(struct tcphdr),sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
+		if (tmp < 0) {
+			printk(KERN_CRIT "tcp_send_fin: Impossible loopback failure");
+			return;
+		}
 	}
 	
 	/*
@@ -782,7 +917,7 @@ void tcp_send_fin(struct sock *sk)
 }
 
 
-void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb)
+void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb, int destroy)
 {
 	struct tcphdr *t1;
 	unsigned char *ptr;
@@ -853,19 +988,33 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 	ptr[3] =(newsk->mtu) & 0xff;
 	buff->csum = csum_partial(ptr, 4, 0);
 	tcp_send_check(t1, newsk->saddr, newsk->daddr, sizeof(*t1)+4, buff);
-	newsk->prot->queue_xmit(newsk, ndev, buff, 0);
-	tcp_reset_xmit_timer(newsk, TIME_WRITE , TCP_TIMEOUT_INIT);
-	skb->sk = newsk;
+	newsk->prot->queue_xmit(newsk, ndev, buff, destroy);
 
-	/*
-	 *	Charge the sock_buff to newsk. 
-	 */
-	 
-	atomic_sub(skb->truesize, &sk->rmem_alloc);
-	atomic_add(skb->truesize, &newsk->rmem_alloc);
+
+#ifdef CONFIG_SYN_COOKIES
+	if (destroy) {
+		/*
+		 * Get rid of the newsk structure if this was a cookie.
+		 */
+		destroy_sock(newsk);
+		skb->sk = sk;
+		kfree_skb(skb, FREE_READ);
+	} else {
+#endif
+		tcp_reset_xmit_timer(newsk, TIME_WRITE , TCP_TIMEOUT_INIT);
+		skb->sk = newsk;
+
+		/*
+	 	 *	Charge the sock_buff to newsk. 
+	 	 */
+		atomic_sub(skb->truesize, &sk->rmem_alloc);
+		atomic_add(skb->truesize, &newsk->rmem_alloc);
 	
-	skb_queue_tail(&sk->receive_queue,skb);
-	sk->ack_backlog++;
+		skb_queue_tail(&sk->receive_queue,skb);
+		sk->ack_backlog++;
+#ifdef CONFIG_SYN_COOKIES
+	}
+#endif
 	tcp_statistics.TcpOutSegs++;
 }
 
@@ -976,10 +1125,9 @@ void tcp_send_ack(struct sock *sk)
 		sock_wfree(sk, buff);
 		return;
 	}
-#if 0	/* why does this result in problems? */
+
 #ifndef CONFIG_NO_PATH_MTU_DISCOVERY
 	buff->ip_hdr->frag_off |= htons(IP_DF);
-#endif
 #endif
 
 	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
@@ -1048,17 +1196,21 @@ void tcp_write_wakeup(struct sock *sk)
 #endif
 	
 		/*
-		 *	How many bytes can we send ?
-		 */
-		 
-		win_size = sk->window_seq - sk->sent_seq;
-
-		/*
 		 *	Recover the buffer pointers
 		 */
 		 
 	    	iph = (struct iphdr *)skb->ip_hdr;
 	    	th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
+
+		/*
+		 *	How many bytes can we send ?
+		 */
+		 
+		/* During window probes, don't try to send more than is
+		 * actually in the skb we've taken off the send queue here.
+		 */
+		win_size = skb->len - (((unsigned char *) th) - skb->data);
+		win_size -= th->doff * 4;
 
 		/*
 		 *	Grab the data for a temporary frame

@@ -30,6 +30,7 @@
  *		Alan Cox	:	Beginnings of mrouted support.
  *		Alan Cox	:	Added IP_HDRINCL option.
  *		Alan Cox	:	Skip broadcast check if BSDism set.
+ *		David S. Miller	:	New socket lookup architecture for ISS.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -58,11 +59,88 @@
 #include <net/sock.h>
 #include <net/icmp.h>
 #include <net/udp.h>
+#include <net/raw.h>
 #include <net/checksum.h>
 
 #ifdef CONFIG_IP_MROUTE
 struct sock *mroute_socket=NULL;
 #endif
+
+struct sock *raw_v4_htable[RAWV4_HTABLE_SIZE];
+
+static void raw_v4_hash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+
+	num &= (RAWV4_HTABLE_SIZE - 1);
+	skp = &raw_v4_htable[num];
+	SOCKHASH_LOCK();
+	sk->next = *skp;
+	*skp = sk;
+	sk->hashent = num;
+	SOCKHASH_UNLOCK();
+}
+
+static void raw_v4_unhash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+
+	num &= (RAWV4_HTABLE_SIZE - 1);
+	skp = &raw_v4_htable[num];
+
+	SOCKHASH_LOCK();
+	while(*skp != NULL) {
+		if(*skp == sk) {
+			*skp = sk->next;
+			break;
+		}
+		skp = &((*skp)->next);
+	}
+	SOCKHASH_UNLOCK();
+}
+
+static void raw_v4_rehash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+	int oldnum = sk->hashent;
+
+	num &= (RAWV4_HTABLE_SIZE - 1);
+	skp = &raw_v4_htable[oldnum];
+
+	SOCKHASH_LOCK();
+	while(*skp != NULL) {
+		if(*skp == sk) {
+			*skp = sk->next;
+			break;
+		}
+		skp = &((*skp)->next);
+	}
+	sk->next = raw_v4_htable[num];
+	raw_v4_htable[num] = sk;
+	sk->hashent = num;
+	SOCKHASH_UNLOCK();
+}
+
+/* Grumble... icmp and ip_input want to get at this... */
+struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
+			   unsigned long raddr, unsigned long laddr)
+{
+	struct sock *s = sk;
+
+	SOCKHASH_LOCK();
+	for(s = sk; s; s = s->next) {
+		if((s->num == num) 				&&
+		   !(s->dead && (s->state == TCP_CLOSE))	&&
+		   !(s->daddr && s->daddr != raddr) 		&&
+		   !(s->rcv_saddr && s->rcv_saddr != laddr))
+			break; /* gotcha */
+	}
+	SOCKHASH_UNLOCK();
+	return s;
+}
 
 static inline unsigned long min(unsigned long a, unsigned long b)
 {
@@ -134,6 +212,31 @@ static int raw_rcv_redo(struct sk_buff *skb, struct device *dev, struct options 
 	__u32 saddr, int redo, struct inet_protocol * protocol)
 {
 	raw_rcv_skb(skb->sk, skb);
+	return 0;
+}
+
+/* This gets rid of all the nasties in af_inet. -DaveM */
+static int raw_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
+{
+	struct sockaddr_in *addr = (struct sockaddr_in *) uaddr;
+	int chk_addr_ret;
+
+	if((sk->state != TCP_CLOSE) || (addr_len < sizeof(struct sockaddr_in)))
+		return -EINVAL;
+	chk_addr_ret = ip_chk_addr(addr->sin_addr.s_addr);
+	if(addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR &&
+	   chk_addr_ret != IS_MULTICAST && chk_addr_ret != IS_BROADCAST) {
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+		/* Superuser may bind to any address to allow transparent proxying. */
+		if(!suser())
+#endif
+			return -EADDRNOTAVAIL;
+	}
+	sk->rcv_saddr = sk->saddr = addr->sin_addr.s_addr;
+	if(chk_addr_ret == IS_MULTICAST || chk_addr_ret == IS_BROADCAST)
+		sk->saddr = 0;  /* Use device */
+	ip_rt_put(sk->ip_route_cache);
+	sk->ip_route_cache = NULL;
 	return 0;
 }
 
@@ -375,31 +478,38 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 
 
 struct proto raw_prot = {
-	raw_close,
-	ip_build_header,
-	udp_connect,
-	NULL,
-	ip_queue_xmit,
-	NULL,
-	NULL,
-	NULL,
-	raw_rcv_redo,
-	datagram_select,
+	(struct sock *)&raw_prot,	/* sklist_next */
+	(struct sock *)&raw_prot,	/* sklist_prev */
+	raw_close,			/* close */
+	ip_build_header,		/* build_header */
+	udp_connect,			/* connect */
+	NULL,				/* accept */
+	ip_queue_xmit,			/* queue_xmit */
+	NULL,				/* retransmit */
+	NULL,				/* write_wakeup */
+	NULL,				/* read_wakeup */
+	raw_rcv_redo,			/* rcv */
+	datagram_select,		/* select */
 #ifdef CONFIG_IP_MROUTE	
-	ipmr_ioctl,
+	ipmr_ioctl,			/* ioctl */
 #else
-	NULL,
+	NULL,				/* ioctl */
 #endif		
-	raw_init,
-	NULL,
-	ip_setsockopt,
-	ip_getsockopt,
-	raw_sendmsg,
-	raw_recvmsg,
-	NULL,		/* No special bind */
-	128,
-	0,
-	"RAW",
-	0, 0,
-	{NULL,}
+	raw_init,			/* init */
+	NULL,				/* shutdown */
+	ip_setsockopt,			/* setsockopt */
+	ip_getsockopt,			/* getsockopt */
+	raw_sendmsg,			/* sendmsg */
+	raw_recvmsg,			/* recvmsg */
+	raw_bind,			/* bind */
+	raw_v4_hash,			/* hash */
+	raw_v4_unhash,			/* unhash */
+	raw_v4_rehash,			/* rehash */
+	NULL,				/* good_socknum */
+	NULL,				/* verify_bind */
+	128,				/* max_header */
+	0,				/* retransmits */
+	"RAW",				/* name */
+	0,				/* inuse */
+	0				/* highestinuse */
 };

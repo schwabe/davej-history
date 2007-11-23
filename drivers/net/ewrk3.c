@@ -757,6 +757,7 @@ ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
 
       dev->tbusy=0;
       dev->trans_start = jiffies;
+      dev_kfree_skb(skb, FREE_WRITE);
     }
   } else if (skb == NULL) {
     dev_tint(dev);

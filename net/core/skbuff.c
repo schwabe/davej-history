@@ -584,12 +584,23 @@ void kfree_skb(struct sk_buff *skb, int rw)
 #if CONFIG_SKB_CHECK
 	IS_SKB(skb);
 #endif
-	if (skb->lock)
-	{
-		skb->free = 3;    /* Free when unlocked */
-		net_free_locked++;
-		return;
+	/* Check it twice, this is such a rare event and only occurs under
+	 * extremely high load, normal code path should not suffer from the
+	 * overhead of the cli.
+	 */
+	if (skb->lock) {
+		unsigned long flags;
+
+		save_flags(flags); cli();
+		if(skb->lock) {
+			skb->free = 3;    /* Free when unlocked */
+			net_free_locked++;
+			restore_flags(flags);
+			return;
+		}
+		restore_flags(flags);
   	}
+
   	if (skb->free == 2)
 		printk(KERN_WARNING "Warning: kfree_skb passed an skb that nobody set the free flag on! (from %p)\n",
 			__builtin_return_address(0));
@@ -831,21 +842,29 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 
 void skb_device_lock(struct sk_buff *skb)
 {
+	unsigned long flags;
+
+	save_flags(flags); cli();
 	if(skb->lock)
 		printk("double lock on device queue, lock=%d caller=%p\n",
 			skb->lock, (&skb)[-1]);
 	else
 		net_locked++;
 	skb->lock++;
+	restore_flags(flags);
 }
 
 void skb_device_unlock(struct sk_buff *skb)
 {
+	unsigned long flags;
+
+	save_flags(flags); cli();
 	if(skb->lock==0)
 		printk("double unlock on device queue!\n");
 	skb->lock--;
 	if(skb->lock==0)
 		net_locked--;
+	restore_flags(flags);
 }
 
 void dev_kfree_skb(struct sk_buff *skb, int mode)

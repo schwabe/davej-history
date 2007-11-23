@@ -276,7 +276,7 @@ static inline int DRIVE(kdev_t x) {
  * current disk size is unknown.
  * [Now it is rather a minimum]
  */
-#define MAX_DISK_SIZE 2 /* 3984*/
+#define MAX_DISK_SIZE 4 /* 3984*/
 
 #define K_64	0x10000		/* 64KB */
 
@@ -697,7 +697,7 @@ static int disk_change(int drive)
 				DPRINT("Disk type is undefined after "
 				       "disk change\n");
 			current_type[drive] = NULL;
-			floppy_sizes[TOMINOR(current_drive)] = MAX_DISK_SIZE;
+			floppy_sizes[TOMINOR(drive)] = MAX_DISK_SIZE;
 		}
 
 		/*USETF(FD_DISK_NEWCHANGE);*/
@@ -4123,9 +4123,11 @@ static void floppy_release_irq_and_dma(void)
 	}
 
 #ifdef FLOPPY_SANITY_CHECK
+#ifndef __sparc__
 	for (drive=0; drive < N_FDC * 4; drive++)
 		if (motor_off_timer[drive].next)
 			printk("motor off timer %d still active\n", drive);
+#endif
 
 	if (fd_timeout.next)
 		printk("floppy timer still active:%s\n", timeout_message);

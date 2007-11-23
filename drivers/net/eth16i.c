@@ -181,8 +181,8 @@ static char *version =
 #define BUFFER_WIDTH_8         BIT(4)       /* 1 = 8bit, 0 = 16bit */
 #define TBS1                   BIT(3)       
 #define TBS0                   BIT(2)
-#define BS1                    BIT(1)       /* 00=8kb,  01=16kb  */
-#define BS0                    BIT(0)       /* 10=32kb, 11=64kb  */
+#define _BS1                    BIT(1)       /* 00=8kb,  01=16kb  */
+#define _BS0                    BIT(0)       /* 10=32kb, 11=64kb  */
 
 #ifndef ETH16I_TX_BUF_SIZE                   /* 0 = 2kb, 1 = 4kb  */ 
 #define ETH16I_TX_BUF_SIZE     2             /* 2 = 8kb, 3 = 16kb */
@@ -453,7 +453,7 @@ static int eth16i_probe1(struct device *dev, short ioaddr)
   dev->stop               = eth16i_close;
   dev->hard_start_xmit    = eth16i_tx;
   dev->get_stats          = eth16i_get_stats;
-  dev->set_multicast_list = &eth16i_multicast;
+  dev->set_multicast_list = eth16i_multicast;
 
   /* Fill in the fields of the device structure with ethernet values. */
   ether_setup(dev);
@@ -505,10 +505,10 @@ static void eth16i_initialize(struct device *dev)
   if( (node_w & 0xFF00) == 0x0800)
     node_byte |= BUFFER_WIDTH_8;
 
-  node_byte |= BS1;
+  node_byte |= _BS1;
 
   if( (node_w & 0x00FF) == 64)
-    node_byte |= BS0;
+    node_byte |= _BS0;
   
   node_byte |= DLC_EN | SRAM_CYCLE_TIME_100NS | (ETH16I_TX_BUF_SIZE << 2);
 

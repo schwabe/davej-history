@@ -87,6 +87,9 @@
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
+#ifdef CONFIG_NET_RADIO
+#include <linux/wireless.h>
+#endif	/* CONFIG_NET_RADIO */
 
 /*
  *	The list of packet types we will receive (as opposed to discard)
@@ -657,13 +660,14 @@ void net_bh(void)
 		pt_prev = NULL;
 		for (ptype = ptype_all; ptype!=NULL; ptype=ptype->next)
 		{
-			if(pt_prev)
-			{
-				struct sk_buff *skb2=skb_clone(skb, GFP_ATOMIC);
-				if(skb2)
-					pt_prev->func(skb2,skb->dev, pt_prev);
+			if(!ptype->dev || ptype->dev == skb->dev) {
+				if(pt_prev) {
+					struct sk_buff *skb2=skb_clone(skb, GFP_ATOMIC);
+					if(skb2)
+						pt_prev->func(skb2,skb->dev, pt_prev);
+				}
+				pt_prev=ptype;
 			}
-			pt_prev=ptype;
 		}
 		
 		for (ptype = ptype_base[ntohs(type)&15]; ptype != NULL; ptype = ptype->next) 
@@ -938,6 +942,95 @@ int dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 	return len;
 }
 #endif	/* CONFIG_PROC_FS */
+
+
+#ifdef CONFIG_NET_RADIO
+#ifdef CONFIG_PROC_FS
+
+/*
+ * Print one entry of /proc/net/wireless
+ * This is a clone of /proc/net/dev (just above)
+ */
+static int
+sprintf_wireless_stats(char *		buffer,
+		       struct device *	dev)
+{
+	/* Get stats from the driver */
+	struct iw_statistics *stats = (dev->get_wireless_stats ?
+				       dev->get_wireless_stats(dev) :
+				       (struct iw_statistics *) NULL);
+	int size;
+	
+	if(stats != (struct iw_statistics *) NULL)
+		size = sprintf(buffer,
+			       "%6s: %02x  %3d%c %3d%c  %3d%c %5d %5d %5d\n",
+			       dev->name,
+			       stats->status,
+			       stats->qual.qual,
+			       stats->qual.updated & 1 ? '.' : ' ',
+			       stats->qual.level,
+			       stats->qual.updated & 2 ? '.' : ' ',
+			       stats->qual.noise,
+			       stats->qual.updated & 3 ? '.' : ' ',
+			       stats->discard.nwid,
+			       stats->discard.code,
+			       stats->discard.misc);
+	else
+		size = 0;
+
+	return size;
+}
+
+/*
+ * Print info for /proc/net/wireless (print all entries)
+ * This is a clone of /proc/net/dev (just above)
+ */
+int
+dev_get_wireless_info(char *	buffer,
+		      char **	start,
+		      off_t	offset,
+		      int	length,
+		      int	dummy)
+{
+	int		len = 0;
+	off_t		begin = 0;
+	off_t		pos = 0;
+	int		size;
+
+	struct device *	dev;
+
+	size = sprintf(buffer,
+		       "Inter-|sta|  Quality       |  Discarded packets\n"
+		       " face |tus|link level noise| nwid crypt  misc\n");
+	
+	pos+=size;
+	len+=size;
+
+
+	for(dev = dev_base; dev != NULL; dev = dev->next) 
+	{
+		size = sprintf_wireless_stats(buffer+len, dev);
+		len+=size;
+		pos=begin+len;
+
+		if(pos < offset)
+		{
+			len=0;
+			begin=pos;
+		}
+		if(pos > offset + length)
+			break;
+	}
+
+	*start = buffer + (offset - begin);	/* Start of wanted data */
+	len -= (offset - begin);		/* Start slop */
+	if(len > length)
+		len = length;		/* Ending slop */
+
+	return len;
+}
+#endif	/* CONFIG_PROC_FS */
+#endif	/* CONFIG_NET_RADIO */
 
 
 /*
@@ -1279,7 +1372,23 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				memcpy_tofs(arg,&ifr,sizeof(struct ifreq));
 				break;
 			}
-			
+
+#ifdef CONFIG_NET_RADIO
+			if((getset >= SIOCIWFIRST) &&
+			   (getset <= SIOCIWLAST))
+			{
+				if(dev->do_ioctl==NULL)
+					return -EOPNOTSUPP;
+				/* Perform the ioctl */
+				ret=dev->do_ioctl(dev, &ifr, getset);
+				/* If return args... */
+				if(IW_IS_GET(getset))
+					memcpy_tofs(arg, &ifr,
+						    sizeof(struct ifreq));
+				break;
+			}
+#endif	/* CONFIG_NET_RADIO */
+
 			ret = -EINVAL;
 	}
 	return(ret);
@@ -1355,6 +1464,15 @@ int dev_ioctl(unsigned int cmd, void *arg)
 			   (cmd <= (SIOCDEVPRIVATE + 15))) {
 				return dev_ifsioc(arg, cmd);
 			}
+#ifdef CONFIG_NET_RADIO
+			if((cmd >= SIOCIWFIRST) &&
+			   (cmd <= SIOCIWLAST))
+			{
+				if((IW_IS_SET(cmd)) && (!suser()))
+					return -EPERM;
+				return dev_ifsioc(arg, cmd);
+			}
+#endif	/* CONFIG_NET_RADIO */
 			return -EINVAL;
 	}
 }
@@ -1455,6 +1573,17 @@ int net_dev_init(void)
 		dev_get_info
 	});
 #endif
+
+#ifdef CONFIG_NET_RADIO
+#ifdef CONFIG_PROC_FS
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_WIRELESS, 8, "wireless",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		dev_get_wireless_info
+	});
+#endif	/* CONFIG_PROC_FS */
+#endif	/* CONFIG_NET_RADIO */
 
 	/*	
 	 *	Initialise net_alias engine 

@@ -97,6 +97,7 @@ struct __sysctl_args {
 #define NET_IPV4_ARP_CHECK_INTERVAL     5
 #define NET_IPV4_ARP_CONFIRM_INTERVAL   6
 #define NET_IPV4_ARP_CONFIRM_TIMEOUT	7
+#define NET_IPV4_FORWARD                8
 
 /* /proc/sys/net/ipx */
 

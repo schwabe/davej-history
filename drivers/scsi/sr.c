@@ -483,7 +483,7 @@ void sr_photocd(struct inode *inode)
 		    no_multi = 1;
 		}
 	    } else
-		printk(KERN_WARNING"sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
+		printk(KERN_INFO"sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
 	    break; /* if the first ioctl fails, we don't call the second one */
 	}
 	is_xa  = (rec[0] == 0x20);

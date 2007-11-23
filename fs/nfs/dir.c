@@ -633,6 +633,7 @@ static int nfs_link(struct inode *oldinode, struct inode *dir,
 		NFS_FH(dir), name);
 
 	nfs_lookup_cache_remove(dir, oldinode, NULL);
+	NFS_CACHEINV(oldinode);
 	iput(oldinode);
 	iput(dir);
 	return error;

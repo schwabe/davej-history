@@ -1206,6 +1206,7 @@ static int sd_init_onedisk(int i)
 		printk ("scsi : deleting disk entry.\n");
 		rscsi_disks[i].device = NULL;
 		sd_template.nr_dev--;
+		sd_gendisk.nr_real--;
 		return i;
 	    }
 	}

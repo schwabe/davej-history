@@ -134,6 +134,8 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
  */
  
 extern int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, __u32 target_addr);
+extern int sysctl_ip_forward; 
+
  
 /*
  *	Functions provided by ip_options.c

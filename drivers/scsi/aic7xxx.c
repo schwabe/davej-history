@@ -874,7 +874,7 @@ debug_config(struct aic7xxx_host_config *p)
 	 "        scsi id %d\n"
 	 "        scsi selection timeout %d ms\n"
 	 "        scsi bus reset at power-on %sabled\n",
-	 scsi_conf & 0x07,
+	 (p->bus_type & AIC_WIDE) ? (scsi_conf & 0x0f) : (scsi_conf & 0x07),
 	 SST[(scsi_conf >> 3) & 0x03],
 	 (scsi_conf & 0x40) ? "en" : "dis");
 

@@ -3138,6 +3138,7 @@ int dfx_xmt_queue_pkt(
 		printk("%s: Invalid packet length - %lu bytes\n", dev->name, skb->len);
 		bp->xmt_length_errors++;	/* bump error counter */
 		dev_tint(dev);				/* dequeue packets from xmt queue and send them */
+		dev_kfree_skb(skb, FREE_WRITE);
 		return(0);					/* return "success" */
 		}
 

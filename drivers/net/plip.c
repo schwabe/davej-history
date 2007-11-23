@@ -1,4 +1,4 @@
-/* $Id: plip.c,v 1.16 1996-04-06 15:36:57+09 gniibe Exp $ */
+/* $Id: plip.c,v 1.8.2.1 1997/03/09 02:14:32 davem Exp $ */
 /* PLIP: A parallel port "network" driver for Linux. */
 /* This driver is for parallel port with 5-bit cable (LapLink (R) cable). */
 /*
@@ -904,6 +904,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 	if (skb->len > dev->mtu + dev->hard_header_len) {
 		printk("%s: packet too big, %d.\n", dev->name, (int)skb->len);
 		dev->tbusy = 0;
+		dev_kfree_skb(skb, FREE_WRITE);
 		return 0;
 	}
 

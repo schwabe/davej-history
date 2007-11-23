@@ -40,7 +40,12 @@
 #include <linux/route.h>
 #include <net/route.h>
 
-#ifdef CONFIG_IP_FORWARD
+#ifdef CONFIG_IP_FORWARD /* set the default */
+int sysctl_ip_forward = 1; 
+#else
+int sysctl_ip_forward = 0; 
+#endif
+
 #ifdef CONFIG_IP_MROUTE
 
 /*
@@ -264,6 +269,13 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		 */
 		if (iph->protocol == IPPROTO_ICMP)
 		{
+#ifdef CONFIG_IP_MASQUERADE_ICMP
+#define icmph ((struct icmphdr *)((char *)iph + (iph->ihl<<2)))
+                     if ((icmph->type==ICMP_DEST_UNREACH)||
+                         (icmph->type==ICMP_SOURCE_QUENCH)||
+                         (icmph->type==ICMP_TIME_EXCEEDED))
+                       {
+#endif
 			if ((fw_res = ip_fw_masq_icmp(&skb, dev2)) < 0)
 			{
 				if (rt)
@@ -275,6 +287,9 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			if (fw_res)
 				/* ICMP matched - skip firewall */
 				goto skip_call_fw_firewall;
+#ifdef CONFIG_IP_MASQUERADE_ICMP
+                       }
+#endif				
 		}
 #endif
 		fw_res=call_fw_firewall(PF_INET, dev2, iph, NULL);
@@ -561,7 +576,6 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 }
 
 
-#endif
 
 
 

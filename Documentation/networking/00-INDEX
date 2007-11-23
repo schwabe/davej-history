@@ -14,6 +14,8 @@ ax25.txt
 	- info on using AX.25 and NET/ROM code for Linux
 framerelay.txt
 	- info on using Frame Relay/Data Link Connection Identifier (DLCI).
+masquerading.txt
+	- using IP masquerading, multiple machines using a single IP address.
 ncsa-telnet
 	- notes on how NCSA telnet (DOS) breaks with MTU discovery enabled.
 net-modules.txt

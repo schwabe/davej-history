@@ -323,7 +323,6 @@ struct symbol_table symbol_table = {
 	X(___strtok),
 	X(init_fifo),
 	X(super_blocks),
-	X(reuse_list),
 	X(fifo_inode_operations),
 	X(chrdev_inode_operations),
 	X(blkdev_inode_operations),

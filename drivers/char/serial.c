@@ -2959,5 +2959,9 @@ void cleanup_module(void)
 		if (rs_table[i].type != PORT_UNKNOWN)
 			release_region(rs_table[i].port, 8);
 	}
+	if (tmp_buf) {
+		free_page(tmp_buf);
+		tmp_buf = NULL;
+	}
 }
 #endif /* MODULE */

@@ -854,6 +854,8 @@ asmlinkage int sys_setrlimit(unsigned int resource, struct rlimit *rlim)
 	if (err)
 		return err;
 	memcpy_fromfs(&new_rlim, rlim, sizeof(*rlim));
+	if (new_rlim.rlim_cur < 0 || new_rlim.rlim_max < 0)
+		return -EINVAL;
 	old_rlim = current->rlim + resource;
 	if (((new_rlim.rlim_cur > old_rlim->rlim_max) ||
 	     (new_rlim.rlim_max > old_rlim->rlim_max)) &&

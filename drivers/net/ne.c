@@ -174,8 +174,10 @@ int ne_probe(struct device *dev)
 		/* Strip the I/O address out of the returned value */
 		pci_ioaddr &= PCI_BASE_ADDRESS_IO_MASK;
 		/* Avoid already found cards from previous ne_probe() calls */
-		if (check_region(pci_ioaddr, NE_IO_EXTENT))
+		if (check_region(pci_ioaddr, NE_IO_EXTENT)) {
+			pci_irq_line=0;
 			continue;
+		}
 		printk("ne.c: PCI BIOS reports ne2000 clone at i/o %#x, irq %d.\n",
 				pci_ioaddr, pci_irq_line);
 		if (ne_probe1(dev, pci_ioaddr) != 0) {	/* Shouldn't happen. */

@@ -11,6 +11,7 @@
 #include <linux/user.h>
 #include <linux/elfcore.h>
 #include <asm/io.h>
+#include <asm/checksum.h>
 #include <asm/hwrpb.h>
 
 extern void bcopy (const char *src, char *dst, int len);
@@ -26,6 +27,7 @@ extern void __remlu (void);
 extern void __divqu (void);
 extern void __remqu (void);
 
+extern void start_thread(struct pt_regs *, unsigned long, unsigned long);
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, elf_fpregset_t *);
 
@@ -56,9 +58,12 @@ static struct symbol_table arch_symbol_table = {
 	X(__remqu),
 	X(insl),
 	X(insw),
+	X(insb),
 	X(outsl),
 	X(outsw),
+	X(outsb),
 	X(strcat),
+	X(strncat),
 	X(strcmp),
 	X(strcpy),
 	X(strlen),
@@ -68,11 +73,17 @@ static struct symbol_table arch_symbol_table = {
 	X(strstr),
 	X(strtok),
 	X(strchr),
+	X(strrchr),
 	X(memcmp),
 	X(memmove),
 	X(__memcpy),
 	X(__constant_c_memset),
 
+	X(csum_tcpudp_magic),
+	X(ip_fast_csum),
+	X(ip_compute_csum),
+
+	X(start_thread),
 	X(dump_thread),
 	X(dump_fpu),
 	X(hwrpb),

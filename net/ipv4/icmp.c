@@ -826,10 +826,12 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 	 *	When using no routing protocol, we MAY follow redirects. (RFC 1812, 5.2.7.2)
 	 */
 
-#if defined(CONFIG_IP_FORWARD) && !defined(CONFIG_IP_DUMB_ROUTER)
+#if !defined(CONFIG_IP_DUMB_ROUTER)
+	if (sysctl_ip_forward) {
 	NETDEBUG(printk(KERN_INFO "icmp: ICMP redirect ignored. dest = %lX, "
 	       "orig gw = %lX, \"new\" gw = %lX, device = %s.\n", ntohl(ip),
 		ntohl(source), ntohl(icmph->un.gateway), dev->name));
+	}
 #else	
 	switch(icmph->code & 7) 
 	{
@@ -989,6 +991,10 @@ static void icmp_discard(struct icmphdr *icmph, struct sk_buff *skb, struct devi
  *	in udp.c or tcp.c...
  */
 
+/* This should work with the new hashes now. -DaveM */
+extern struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport);
+extern struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport);
+
 int icmp_chkaddr(struct sk_buff *skb)
 {
 	struct icmphdr *icmph=(struct icmphdr *)(skb->h.raw + skb->h.iph->ihl*4);
@@ -1003,8 +1009,7 @@ int icmp_chkaddr(struct sk_buff *skb)
 			{
 			struct tcphdr *th = (struct tcphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
 
-			sk = get_sock(&tcp_prot, th->source, iph->daddr,
-						th->dest, iph->saddr, 0, 0);
+			sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr, th->dest);
 			if (!sk) return 0;
 			if (sk->saddr != iph->saddr) return 0;
 			if (sk->daddr != iph->daddr) return 0;
@@ -1018,8 +1023,7 @@ int icmp_chkaddr(struct sk_buff *skb)
 			{
 			struct udphdr *uh = (struct udphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
 
-			sk = get_sock(&udp_prot, uh->source, iph->daddr,
-						uh->dest, iph->saddr, 0, 0);
+			sk = udp_v4_lookup(iph->saddr, uh->source, iph->daddr, uh->dest);
 			if (!sk) return 0;
 			if (sk->saddr != iph->saddr && ip_chk_addr(iph->saddr) != IS_MYADDR)
 				return 0;

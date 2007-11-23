@@ -1,3 +1,10 @@
+	This file contain the old documentation of the Wavelan
+driver. This is kept here for historical reason. Look the wavelan man
+page or in wavelan.p.h for a more up to date documentation...
+
+	Jean
+
+----------------------------
 Sun Jul  2 01:38:33 EST 1995
 
 1. At present the driver autoprobes for a WaveLAN card only at I/O address 0x390.

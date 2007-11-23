@@ -564,11 +564,14 @@ static __inline__ void fib_add_1(short flags, __u32 dst, __u32 mask,
 			f1 = fz->fz_list;
 			while (f1)
 			{
-				struct fib_node * next;
+				struct fib_node * next, **end;
 				unsigned hash = fz_hash_code(f1->fib_dst, logmask);
 				next = f1->fib_next;
-				f1->fib_next = ht[hash];
-				ht[hash] = f1;
+				f1->fib_next = NULL;
+				end = &ht[hash];
+				while(*end != NULL)
+					end = &(*end)->fib_next;
+				*end = f1;
 				f1 = next;
 			}
 			fz->fz_list = NULL;

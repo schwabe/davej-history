@@ -116,6 +116,7 @@ static void tcp_retransmit_time(struct sock *sk, int all)
 	if (sk->send_head)
 		tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
 	else
+		/* This should never happen! */
 		printk(KERN_ERR "send_head NULL in tcp_retransmit_time\n");
 }
 
@@ -167,9 +168,15 @@ static int tcp_write_timeout(struct sock *sk)
 	
 	/*
 	 *	Have we tried to SYN too many times (repent repent 8))
+	 *	NOTE: we must be careful to do this test for both
+	 *	the SYN_SENT and SYN_RECV states, otherwise we take
+	 *	23 minutes to timeout on the SYN_RECV state, which
+	 *	leaves us (more) open to denial of service attacks
+	 *	than we would like.
 	 */
 	 
-	if(sk->retransmits > TCP_SYN_RETRIES && sk->state==TCP_SYN_SENT)
+	if (sk->retransmits > TCP_SYN_RETRIES
+	&& (sk->state==TCP_SYN_SENT || sk->state==TCP_SYN_RECV))
 	{
 		if(sk->err_soft)
 			sk->err=sk->err_soft;

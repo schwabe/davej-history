@@ -61,6 +61,7 @@
  *		Stuart Cheshire	:	Metricom and grat arp fixes
  *					*** FOR 2.1 clean this up ***
  *		Lawrence V. Stefani: (08/12/96) Added FDDI support.
+ *		David S. Miller	:	Fix skb leakage in arp_find.
  */
 
 /* RFC1122 Status:
@@ -1430,6 +1431,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 			else
 			{
 				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
+				skb_device_unlock(skb); /* else it is lost forever */
 				dev_kfree_skb(skb, FREE_WRITE);
 			}
 		}
@@ -1439,8 +1441,10 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 
 	entry = arp_new_entry(paddr, dev, NULL, skb);
 
-	if (skb != NULL && !entry)
+	if (skb != NULL && !entry) {
+		skb_device_unlock(skb); /* else it is lost forever */
 		dev_kfree_skb(skb, FREE_WRITE);
+	}
 
 	arp_unlock();
 	return 1;
@@ -1804,7 +1808,18 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 #else
 	if (arp->ar_hln != dev->addr_len    || 
+#if CONFIG_AP1000
+	    /*
+	     * ARP from cafe-f was found to use ARPHDR_IEEE802 instead of
+	     * the expected ARPHDR_ETHER.
+	     */
+	    (strcmp(dev->name,"fddi") == 0 && 
+	     arp->ar_hrd != ARPHRD_ETHER && arp->ar_hrd != ARPHRD_IEEE802) ||
+	    (strcmp(dev->name,"fddi") != 0 &&
+	     dev->type != ntohs(arp->ar_hrd)) ||
+#else
 		dev->type != ntohs(arp->ar_hrd) ||
+#endif
 		dev->flags & IFF_NOARP          ||
 		arp->ar_pln != 4)
 	{

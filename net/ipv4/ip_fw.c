@@ -37,6 +37,8 @@
  *		Willy Konynenberg <willy@xos.nl> 10/5/96.
  *	Make separate accounting on incoming and outgoing packets possible.
  *		Jos Vos <jos@xos.nl> 18/5/1996.
+ *	Add timeout reprieve for idle control channels.
+ *		Keith Owens <kaos@audio.apana.org.au> 05/07/1996.
  *
  *
  * Masquerading functionality
@@ -885,6 +887,87 @@ int ip_acct_ctl(int stage, void *m, int len)
 	return(EINVAL);
 }
 #endif
+
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+
+int ip_autofw_add(struct ip_autofw * af)
+{
+	struct ip_autofw * newaf;
+	init_timer(&af->timer);
+	newaf = kmalloc( sizeof(struct ip_autofw), GFP_ATOMIC );
+	memcpy(newaf, af, sizeof(struct ip_autofw));
+	newaf->timer.data = (unsigned long) newaf;
+	newaf->timer.function = ip_autofw_expire;
+	newaf->timer.expires = 0;
+	newaf->lastcontact=0;
+	newaf->next=ip_autofw_hosts;
+	ip_autofw_hosts=newaf;
+	return(0);
+}
+
+int ip_autofw_del(struct ip_autofw * af)
+{
+	struct ip_autofw * prev, * curr;
+	prev=NULL;
+	curr=ip_autofw_hosts;
+	while (curr)
+	{
+		if (af->type     == curr->type &&
+		    af->low      == curr->low &&
+		    af->high     == curr->high &&
+		    af->hidden   == curr->hidden &&
+		    af->visible  == curr->visible &&
+		    af->protocol == curr->protocol &&
+		    af->where    == curr->where &&
+		    af->ctlproto == curr->ctlproto &&
+		    af->ctlport  == curr->ctlport)
+		{
+			if (prev)
+			{
+				prev->next=curr->next;
+	 			kfree_s(curr,sizeof(struct ip_autofw));
+				return(0);
+			}
+			else
+			{
+	 			kfree_s(ip_autofw_hosts,sizeof(struct ip_autofw));
+				ip_autofw_hosts=curr->next;
+				return(0);
+			}
+		}
+		prev=curr;
+		curr=curr->next;
+	}
+	return(EINVAL);
+}
+
+int ip_autofw_flush(void)
+{
+	struct ip_autofw * af;
+	while (ip_autofw_hosts)
+	{
+		af=ip_autofw_hosts;
+		ip_autofw_hosts=ip_autofw_hosts->next;
+		kfree_s(af,sizeof(struct ip_autofw));
+	}
+	return(0);
+}
+
+int ip_autofw_ctl(int stage, void *m, int len)
+{
+	if (stage == IP_AUTOFW_ADD)
+		return (ip_autofw_add((struct ip_autofw *) m));
+
+	if (stage == IP_AUTOFW_DEL)
+		return (ip_autofw_del((struct ip_autofw *) m));
+	
+	if (stage == IP_AUTOFW_FLUSH)
+		return (ip_autofw_flush());
+	
+	return(EINVAL);
+}
+
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 
 #ifdef CONFIG_IP_FIREWALL
 int ip_fw_ctl(int stage, void *m, int len)

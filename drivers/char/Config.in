@@ -63,9 +63,8 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
      if [ "$CONFIG_WDT_501" = "y" ]; then
          bool '       Fan Tachometer' CONFIG_WDT_501_FAN
      fi
-  else
-     tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   fi
+  tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
 fi
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC

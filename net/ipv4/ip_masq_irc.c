@@ -9,6 +9,7 @@
  *
  * Fixes:
  *	- set NO_DADDR flag in ip_masq_new().
+ *	- Added multiple port support (Nigel Metheringham)
  *
  * FIXME:
  *	- detect also previous "PRIVMSG" string ?.
@@ -17,6 +18,17 @@
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
+ *	
+ * Multiple Port Support
+ *	The helper can be made to handle up to MAX_MASQ_APP_PORTS (normally 12)
+ *	with the port numbers being defined at module load time.  The module
+ *	uses the symbol "ports" to define a list of monitored ports, which can
+ *	be specified on the insmod command line as
+ *		ports=x1,x2,x3...
+ *	where x[n] are integer port numbers.  This option can be put into
+ *	/etc/conf.modules (or /etc/modules.conf depending on your config)
+ *	where modload will pick it up should you use modload to load your
+ *	modules.
  *	
  */
 
@@ -32,7 +44,16 @@
 #include <net/tcp.h>
 #include <net/ip_masq.h>
 
+#ifndef DEBUG_CONFIG_IP_MASQ_IRC
 #define DEBUG_CONFIG_IP_MASQ_IRC 0
+#endif
+
+/* 
+ * List of ports (up to MAX_MASQ_APP_PORTS) to be handled by helper
+ * First port is set to the default port.
+ */
+int ports[MAX_MASQ_APP_PORTS] = {6667}; /* I rely on the trailing items being set to zero */
+struct ip_masq_app *masq_incarnations[MAX_MASQ_APP_PORTS];
 
 static int
 masq_irc_init_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
@@ -239,7 +260,29 @@ struct ip_masq_app ip_masq_irc = {
 
 int ip_masq_irc_init(void)
 {
-        return register_ip_masq_app(&ip_masq_irc, IPPROTO_TCP, 6667);
+	int i, j;
+
+	for (i=0; (i<MAX_MASQ_APP_PORTS); i++) {
+		if (ports[i]) {
+			if ((masq_incarnations[i] = kmalloc(sizeof(struct ip_masq_app),
+							    GFP_KERNEL)) == NULL)
+				return -ENOMEM;
+			memcpy(masq_incarnations[i], &ip_masq_irc, sizeof(struct ip_masq_app));
+			if ((j = register_ip_masq_app(masq_incarnations[i], 
+						      IPPROTO_TCP, 
+						      ports[i]))) {
+				return j;
+			}
+#if DEBUG_CONFIG_IP_MASQ_IRC
+			printk("Irc: loaded support on port[%d] = %d\n",
+			       i, ports[i]);
+#endif
+		} else {
+			/* To be safe, force the incarnation table entry to NULL */
+			masq_incarnations[i] = NULL;
+		}
+	}
+	return 0;
 }
 
 /*
@@ -248,8 +291,26 @@ int ip_masq_irc_init(void)
 
 int ip_masq_irc_done(void)
 {
-        return unregister_ip_masq_app(&ip_masq_irc);
+	int i, j, k;
+
+	k=0;
+	for (i=0; (i<MAX_MASQ_APP_PORTS); i++) {
+		if (masq_incarnations[i]) {
+			if ((j = unregister_ip_masq_app(masq_incarnations[i]))) {
+				k = j;
+			} else {
+				kfree(masq_incarnations[i]);
+				masq_incarnations[i] = NULL;
+#if DEBUG_CONFIG_IP_MASQ_IRC
+				printk("Irc: unloaded support on port[%d] = %d\n",
+				       i, ports[i]);
+#endif
+			}
+		}
+	}
+	return k;
 }
+
 
 #ifdef MODULE
 

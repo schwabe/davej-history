@@ -23,11 +23,11 @@ register char *tmp= (char *)dest;
 register char dummy;
 __asm__ __volatile__(
 	"\n1:\t"
-	"movb (%0),%2\n\t"
+	"movb (%0),%b2\n\t"
 	"incl %0\n\t"
-	"movb %2,(%1)\n\t"
+	"movb %b2,(%1)\n\t"
 	"incl %1\n\t"
-	"testb %2,%2\n\t"
+	"testb %b2,%b2\n\t"
 	"jne 1b"
 	:"=r" (src), "=r" (tmp), "=q" (dummy)
 	:"0" (src), "1" (tmp)
@@ -43,15 +43,15 @@ register char dummy;
 if (count) {
 __asm__ __volatile__(
 	"\n1:\t"
-	"movb (%0),%2\n\t"
+	"movb (%0),%b2\n\t"
 	"incl %0\n\t"
-	"movb %2,(%1)\n\t"
+	"movb %b2,(%1)\n\t"
 	"incl %1\n\t"
 	"decl %3\n\t"
 	"je 3f\n\t"
-	"testb %2,%2\n\t"
+	"testb %b2,%b2\n\t"
 	"jne 1b\n\t"
-	"2:\tmovb %2,(%1)\n\t"
+	"2:\tmovb %b2,(%1)\n\t"
 	"incl %1\n\t"
 	"decl %3\n\t"
 	"jne 2b\n\t"
@@ -101,7 +101,7 @@ __asm__ __volatile__(
 	"incl %1\n\t"
 	"testb %b0,%b0\n\t"
 	"jne 2b\n"
-	"3:\txorl %0,%0\n\t"
+	"3:\txorb %b0,%b0\n\t"
 	"movb %b0,(%1)\n\t"
 	:"=q" (dummy), "=r" (tmp), "=r" (src), "=r" (count)
 	:"1"  (tmp), "2"  (src), "3"  (count)
@@ -121,11 +121,11 @@ __asm__ __volatile__(
 	"incl %2\n\t"
 	"testb %b0,%b0\n\t"
 	"jne 1b\n\t"
-	"xorl %0,%0\n\t"
+	"xorl %k0,%k0\n\t"
 	"jmp 3f\n"
-	"2:\tmovl $1,%0\n\t"
+	"2:\tmovl $1,%k0\n\t"
 	"jb 3f\n\t"
-	"negl %0\n"
+	"negl %k0\n"
 	"3:"
 	:"=q" (__res), "=r" (cs), "=r" (ct)
 	:"1" (cs), "2" (ct)
@@ -147,11 +147,11 @@ __asm__ __volatile__(
 	"incl %2\n\t"
 	"testb %b0,%b0\n\t"
 	"jne 1b\n"
-	"2:\txorl %0,%0\n\t"
+	"2:\txorl %k0,%k0\n\t"
 	"jmp 4f\n"
-	"3:\tmovl $1,%0\n\t"
+	"3:\tmovl $1,%k0\n\t"
 	"jb 4f\n\t"
-	"negl %0\n"
+	"negl %k0\n"
 	"4:"
 	:"=q" (__res), "=r" (cs), "=r" (ct), "=r" (count)
 	:"1"  (cs), "2"  (ct),  "3" (count));
@@ -339,7 +339,9 @@ __asm__ __volatile__(
 	"cmpl $-1,%2\n\t"
 	"jne 1b\n"
 	"3:\tsubl %1,%0"
-	:"=a" (__res):"c" (s),"d" (count));
+	:"=a" (__res)
+	:"c" (s),"d" (count)
+	:"dx");
 return __res;
 }
 /* end of additional stuff */
@@ -414,9 +416,11 @@ return __res;
 
 #define __HAVE_ARCH_MEMCPY
 #define memcpy(d,s,count) \
-(__builtin_constant_p(count) ? \
- __memcpy_c((d),(s),(count)) : \
- __memcpy_g((d),(s),(count)))
+(count == 0 \
+ ? d \
+ : __builtin_constant_p(count) \
+   ? __memcpy_c((d),(s),(count)) \
+   : __memcpy_g((d),(s),(count)))
 
 /*
  *	These ought to get tweaked to do some cache priming.
@@ -436,7 +440,7 @@ __asm__ __volatile__ (
 	:"=r" (dummy1), "=r" (tmp), "=r" (from), "=r" (dummy2) 
 	:"1" (tmp), "2" (from), "3" (n/4)
 	:"memory");
-return (to);
+return to;
 }
 
 extern inline void * __memcpy_by2(void * to, const void * from, size_t n)
@@ -457,7 +461,7 @@ __asm__ __volatile__ (
 	:"=r" (dummy1), "=r" (tmp), "=r" (from), "=r" (dummy2) 
 	:"1" (tmp), "2" (from), "3" (n/2)
 	:"memory");
-return (to);
+return to;
 }
 
 extern inline void * __memcpy_g(void * to, const void * from, size_t n)
@@ -476,7 +480,7 @@ __asm__ __volatile__ (
 	: /* no output */
 	:"c" (n),"D" ((long) tmp),"S" ((long) from)
 	:"cx","di","si","memory");
-return (to);
+return to;
 }
 
 
@@ -497,6 +501,7 @@ __asm__ __volatile__ (
 	"std\n\t"
 	"rep\n\t"
 	"movsb\n\t"
+	"cld\n\t"
 	: /* no output */
 	:"c" (n), "S" (n-1+(const char *)src), "D" (n-1+(char *)tmp)
 	:"cx","si","di","memory");
@@ -553,13 +558,15 @@ return __res;
 
 #define __HAVE_ARCH_MEMSET
 #define memset(s,c,count) \
-(__builtin_constant_p(c) ? \
- (__builtin_constant_p(count) ? \
-  __memset_cc((s),(c),(count)) : \
-  __memset_cg((s),(c),(count))) : \
- (__builtin_constant_p(count) ? \
-  __memset_gc((s),(c),(count)) : \
-  __memset_gg((s),(c),(count))))
+(count == 0 \
+ ? s \
+ : __builtin_constant_p(c) \
+   ? __builtin_constant_p(count) \
+     ? __memset_cc((s),(c),(count)) \
+     : __memset_cg((s),(c),(count)) \
+   : __builtin_constant_p(count) \
+     ? __memset_gc((s),(c),(count)) \
+     : __memset_gg((s),(c),(count)))
 
 extern inline void * __memset_cc_by4(void * s, char c, size_t count)
 {
@@ -574,7 +581,7 @@ __asm__ __volatile__ (
 	"decl %1\n\t"
 	"jnz 1b"
 	:"=r" (tmp), "=r" (dummy)
-	:"q" (0x01010101UL * (unsigned char) c), "0" (tmp), "1" (count/4)
+	:"r" (0x01010101UL * (unsigned char) c), "0" (tmp), "1" (count/4)
 	:"memory");
 return s;
 }
@@ -592,7 +599,7 @@ __asm__ __volatile__ (
 	"jnz 1b\n"
 	"2:\tmovw %w2,(%0)"
 	:"=r" (tmp), "=r" (dummy)
-	:"q" (0x01010101UL * (unsigned char) c), "0" (tmp), "1" (count/2)
+	:"r" (0x01010101UL * (unsigned char) c), "0" (tmp), "1" (count/2)
 	:"memory");
 return s;
 }
@@ -604,9 +611,9 @@ register int dummy;
 __asm__ __volatile__ (
 	"movb %b0,%h0\n"
 	"pushw %w0\n\t"
-	"shll $16,%0\n\t"
+	"shll $16,%k0\n\t"
 	"popw %w0\n"
-	"1:\tmovl %0,(%1)\n\t"
+	"1:\tmovl %k0,(%1)\n\t"
 	"addl $4,%1\n\t"
 	"decl %2\n\t"
 	"jnz 1b\n"
@@ -625,9 +632,9 @@ __asm__ __volatile__ (
 	"shrl $1,%2\n\t"          /* may be divisible also by 4 */
 	"jz 2f\n\t"
 	"pushw %w0\n\t"
-	"shll $16,%0\n\t"
+	"shll $16,%k0\n\t"
 	"popw %w0\n"
-	"1:\tmovl %0,(%1)\n\t"
+	"1:\tmovl %k0,(%1)\n\t"
 	"addl $4,%1\n\t"
 	"decl %2\n\t"
 	"jnz 1b\n"
@@ -643,6 +650,7 @@ extern inline void * __memset_cg(void * s, char c, size_t count)
 register void *tmp = (void *)s;
 __asm__ __volatile__ (
 	"shrl $1,%%ecx\n\t"
+	"cld\n\t"
 	"rep\n\t"
 	"stosw\n\t"
 	"jnc 1f\n\t"
@@ -660,6 +668,7 @@ register void *tmp = (void *)s;
 __asm__ __volatile__ (
 	"movb %%al,%%ah\n\t"
 	"shrl $1,%%ecx\n\t"
+	"cld\n\t"
 	"rep\n\t"
 	"stosw\n\t"
 	"jnc 1f\n\t"

@@ -553,6 +553,7 @@ kdev_t get_unnamed_dev(void)
 		if (!set_bit(i,unnamed_dev_in_use))
 			return MKDEV(UNNAMED_MAJOR, i);
 	}
+	printk("VFS: Sorry, out of unnamed devices\n");
 	return 0;
 }
 
@@ -910,6 +911,8 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	}
 	retval = do_mount(dev,dev_name,dir_name,t,flags,(void *) page);
 	free_page(page);
+	if (retval && !fstype->requires_dev) 
+		put_unnamed_dev(dev);
 	if (retval && fops && fops->release)
 		fops->release(inode, NULL);
 	iput(inode);

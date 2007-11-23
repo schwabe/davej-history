@@ -12,9 +12,13 @@
  *	Juan Jose Ciarlante	:	Added hashed lookup by proto,maddr,mport and proto,saddr,sport
  *	Juan Jose Ciarlante	:	Fixed deadlock if free ports get exhausted
  *	Juan Jose Ciarlante	:	Added NO_ADDR status flag.
+ *	Richard Lynch		:	Added IP Autoforward
  *	Nigel Metheringham	:	Added ICMP handling for demasquerade
  *	Nigel Metheringham	:	Checksum checking of masqueraded data
  *	Nigel Metheringham	:	Better handling of timeouts of TCP conns
+ *	Keith Owens		:	Keep control channels alive if any related data entries.
+ *	Delian Delchev		:	Added support for ICMP requests and replys
+ *	Nigel Metheringham	:	ICMP in ICMP handling, tidy ups, bug fixes, made ICMP optional
  *
  *	
  */
@@ -37,6 +41,7 @@
 #include <net/udp.h>
 #include <net/checksum.h>
 #include <net/ip_masq.h>
+#include <linux/ip_fw.h>
 
 #define IP_MASQ_TAB_SIZE 256    /* must be power of 2 */
 
@@ -44,11 +49,54 @@
  *	Implement IP packet masquerading
  */
 
-static const char *strProt[] = {"UDP","TCP"};
+static const char *strProt[] = {"UDP","TCP","ICMP"};
 
-static __inline__ const char * masq_proto_name(unsigned proto)
+/*
+ * masq_proto_num returns 0 for UDP, 1 for TCP, 2 for ICMP
+ */
+
+static int masq_proto_num(unsigned proto)
 {
-        return strProt[proto==IPPROTO_TCP];
+   switch (proto)
+   {
+      case IPPROTO_UDP:  return (0); break;
+      case IPPROTO_TCP:  return (1); break;
+      case IPPROTO_ICMP: return (2); break;
+      default:           return (-1); break;
+   }
+}
+
+#ifdef CONFIG_IP_MASQUERADE_ICMP
+/*
+ * Converts an ICMP reply code into the equivalent request code
+ */
+static __inline__ const __u8 icmp_type_request(__u8 type)
+{
+   switch (type)
+   {
+      case ICMP_ECHOREPLY: return ICMP_ECHO; break;
+      case ICMP_TIMESTAMPREPLY: return ICMP_TIMESTAMP; break;
+      case ICMP_INFO_REPLY: return ICMP_INFO_REQUEST; break;
+      case ICMP_ADDRESSREPLY: return ICMP_ADDRESS; break;
+      default: return (255); break;
+   }
+}
+
+/*
+ * Helper macros - attempt to make code clearer! 
+ */
+
+/* ID used in ICMP lookups */
+#define icmp_id(icmph)		((icmph->un).echo.id)
+/* (port) hash value using in ICMP lookups for requests */
+#define icmp_hv_req(icmph)	((__u16)(icmph->code+(__u16)(icmph->type<<8)))
+/* (port) hash value using in ICMP lookups for replies */
+#define icmp_hv_rep(icmph)	((__u16)(icmph->code+(__u16)(icmp_type_request(icmph->type)<<8)))
+#endif
+
+static __inline__ const char *masq_proto_name(unsigned proto)
+{
+        return strProt[masq_proto_num(proto)];
 }
 
 /*
@@ -69,9 +117,10 @@ static __u16 masq_port = PORT_MASQ_BEGIN;
  *	
  */
 
-int ip_masq_free_ports[2] = {
+int ip_masq_free_ports[3] = {
         PORT_MASQ_END - PORT_MASQ_BEGIN, 	/* UDP */
-        PORT_MASQ_END - PORT_MASQ_BEGIN 	/* TCP */
+        PORT_MASQ_END - PORT_MASQ_BEGIN, 	/* TCP */
+        PORT_MASQ_END - PORT_MASQ_BEGIN		/* ICMP */
 };
 
 static struct symbol_table ip_masq_syms = {
@@ -103,12 +152,108 @@ static struct ip_fw_masq ip_masq_dummy = {
 
 struct ip_fw_masq *ip_masq_expire = &ip_masq_dummy;
 
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+/*
+ *	Auto-forwarding table
+ */
+
+struct ip_autofw * ip_autofw_hosts = NULL;
+
+/*
+ *	Check if a masq entry should be created for a packet
+ */
+
+struct ip_autofw * ip_autofw_check_range (__u32 where, __u16 port, __u16 protocol, int reqact)
+{
+	struct ip_autofw *af;
+	af=ip_autofw_hosts;
+	port=ntohs(port);
+	while (af)
+	{
+		if (af->type==IP_FWD_RANGE && 
+		     port>=af->low && 
+		     port<=af->high && 
+		     protocol==af->protocol && 
+		     /* it's ok to create masq entries after the timeout if we're in insecure mode */
+		     (af->flags & IP_AUTOFW_ACTIVE || !reqact || !(af->flags & IP_AUTOFW_SECURE)) &&  
+		     (!(af->flags & IP_AUTOFW_SECURE) || af->lastcontact==where || !reqact))
+			return(af);
+		af=af->next;
+	}
+	return(NULL);
+}
+
+struct ip_autofw * ip_autofw_check_port (__u16 port, __u16 protocol)
+{
+	struct ip_autofw *af;
+	af=ip_autofw_hosts;
+	port=ntohs(port);
+	while (af)
+	{
+		if (af->type==IP_FWD_PORT && port==af->visible && protocol==af->protocol)
+			return(af);
+		af=af->next;
+	}
+	return(NULL);
+}
+
+struct ip_autofw * ip_autofw_check_direct (__u16 port, __u16 protocol)
+{
+	struct ip_autofw *af;
+	af=ip_autofw_hosts;
+	port=ntohs(port);
+	while (af)
+	{
+		if (af->type==IP_FWD_DIRECT && af->low<=port && af->high>=port)
+			return(af);
+		af=af->next;
+	}
+	return(NULL);
+}
+
+void ip_autofw_update_out (__u32 who, __u32 where, __u16 port, __u16 protocol)
+{
+	struct ip_autofw *af;
+	af=ip_autofw_hosts;
+	port=ntohs(port);
+	while (af)
+	{
+		if (af->type==IP_FWD_RANGE && af->ctlport==port && af->ctlproto==protocol)
+		{
+			if (af->flags & IP_AUTOFW_USETIME)
+			{
+				if (af->timer.expires)
+					del_timer(&af->timer);
+				af->timer.expires=jiffies+IP_AUTOFW_EXPIRE;
+				add_timer(&af->timer);
+			}
+			af->flags|=IP_AUTOFW_ACTIVE;
+			af->lastcontact=where;
+			af->where=who;
+		}
+		af=af->next;
+	}
+}
+
+void ip_autofw_update_in (__u32 where, __u16 port, __u16 protocol)
+{
+/*	struct ip_autofw *af;
+	af=ip_autofw_check_range(where, port,protocol);
+	if (af)
+	{
+		del_timer(&af->timer);
+		af->timer.expires=jiffies+IP_AUTOFW_EXPIRE;
+		add_timer(&af->timer);
+	}*/
+}
+
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
+
 /*
  *	Returns hash value
  */
 
 static __inline__ unsigned
-
 ip_masq_hash_key(unsigned proto, __u32 addr, __u16 port)
 {
         return (proto^ntohl(addr)^ntohs(port)) & (IP_MASQ_TAB_SIZE-1);
@@ -219,7 +364,7 @@ ip_masq_in_get(struct iphdr *iph)
  *	broken out of the ip/tcp headers or directly supplied for those
  *	pathological protocols with address/port in the data stream
  *	(ftp, irc).  addresses and ports are in network order.
- *	called for pkts coming from INside-to-outside the firewall.
+ *	called for pkts coming from outside-to-INside the firewall.
  *
  * 	NB. Cannot check destination address, just for the incoming port.
  * 	reason: archie.doc.ac.uk has 6 interfaces, you send to
@@ -236,12 +381,33 @@ ip_masq_in_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d
 
         hash = ip_masq_hash_key(protocol, d_addr, d_port);
         for(ms = ip_masq_m_tab[hash]; ms ; ms = ms->m_link) {
- 		if ( protocol==ms->protocol &&
-		    (s_addr==ms->daddr || ms->flags & IP_MASQ_F_NO_DADDR) &&
-                    (s_port==ms->dport || ms->flags & IP_MASQ_F_NO_DPORT) &&
-                    (d_addr==ms->maddr && d_port==ms->mport))
+ 		if (protocol==ms->protocol &&
+		    ((s_addr==ms->daddr || ms->flags & IP_MASQ_F_NO_DADDR)
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+		     || (ms->dport==htons(1558))
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
+		     ) &&
+		    (s_port==ms->dport || ms->flags & IP_MASQ_F_NO_DPORT) &&
+		    (d_addr==ms->maddr && d_port==ms->mport)) {
+#ifdef DEBUG_IP_MASQUERADE_VERBOSE
+			printk("MASQ: look/in %d %08X:%04hX->%08X:%04hX OK\n",
+			       protocol,
+			       s_addr,
+			       s_port,
+			       d_addr,
+			       d_port);
+#endif
                         return ms;
+		}
         }
+#ifdef DEBUG_IP_MASQUERADE_VERBOSE
+	printk("MASQ: look/in %d %08X:%04hX->%08X:%04hX fail\n",
+	       protocol,
+	       s_addr,
+	       s_port,
+	       d_addr,
+	       d_port);
+#endif
         return NULL;
 }
 
@@ -274,6 +440,12 @@ ip_masq_out_get(struct iphdr *iph)
  *	pathological protocols with address/port in the data stream
  *	(ftp, irc).  addresses and ports are in network order.
  *	called for pkts coming from inside-to-OUTside the firewall.
+ *
+ *	Normally we know the source address and port but for some protocols
+ *	(e.g. ftp PASV) we do not know the source port initially.  Alas the
+ *	hash is keyed on source port so if the first lookup fails then try again
+ *	with a zero port, this time only looking at entries marked "no source
+ *	port".
  */
 
 struct ip_masq *
@@ -282,14 +454,48 @@ ip_masq_out_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 
         unsigned hash;
         struct ip_masq *ms;
 
+
         hash = ip_masq_hash_key(protocol, s_addr, s_port);
         for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
 		if (protocol == ms->protocol &&
 		    s_addr == ms->saddr && s_port == ms->sport &&
-                    d_addr == ms->daddr && d_port == ms->dport )
+                    d_addr == ms->daddr && d_port == ms->dport ) {
+#ifdef DEBUG_IP_MASQUERADE_VERBOSE
+			printk("MASQ: lk/out1 %d %08X:%04hX->%08X:%04hX OK\n",
+			       protocol,
+			       s_addr,
+			       s_port,
+			       d_addr,
+			       d_port);
+#endif
                         return ms;
+		}
         }
-
+        hash = ip_masq_hash_key(protocol, s_addr, 0);
+        for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
+		if (ms->flags & IP_MASQ_F_NO_SPORT &&
+		    protocol == ms->protocol &&
+		    s_addr == ms->saddr && 
+                    d_addr == ms->daddr && d_port == ms->dport ) {
+#ifdef DEBUG_IP_MASQUERADE_VERBOSE
+			printk("MASQ: lk/out2 %d %08X:%04hX->%08X:%04hX OK\n",
+			       protocol,
+			       s_addr,
+			       s_port,
+			       d_addr,
+			       d_port);
+#endif
+                        return ms;
+		}
+        }
+#ifdef DEBUG_IP_MASQUERADE_VERBOSE
+	printk("MASQ: lk/out1 %d %08X:%04hX->%08X:%04hX fail\n",
+	       protocol,
+	       s_addr,
+	       s_port,
+	       d_addr,
+	       d_port);
+#endif
         return NULL;
 }
 
@@ -315,26 +521,75 @@ ip_masq_getbym(int protocol, __u32 m_addr, __u16 m_port)
 
 static void masq_expire(unsigned long data)
 {
-	struct ip_masq *ms = (struct ip_masq *)data;
+	struct ip_masq *ms = (struct ip_masq *)data, *ms_data;
 	unsigned long flags;
 
+	if (ms->flags & IP_MASQ_F_CONTROL) {
+		/* a control channel is about to expire */
+		int idx = 0, reprieve = 0;
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
-	printk("Masqueraded %s %lX:%X expired\n",
-			masq_proto_name(ms->protocol),
-			ntohl(ms->saddr),ntohs(ms->sport));
+		printk("Masquerade control %s %lX:%X about to expire\n",
+				masq_proto_name(ms->protocol),
+				ntohl(ms->saddr),ntohs(ms->sport));
+#endif
+		save_flags(flags);
+		cli();
+
+		/*
+		 * If any other masquerade entry claims that the expiring entry
+		 * is its control channel then keep the control entry alive.
+		 * Useful for long running data channels with inactive control
+		 * links which we don't want to lose, e.g. ftp.
+		 * Assumption: loops such as a->b->a or a->a will never occur.
+		 */
+		for (idx = 0; idx < IP_MASQ_TAB_SIZE && !reprieve; idx++) {
+			for (ms_data = ip_masq_m_tab[idx]; ms_data ; ms_data = ms_data->m_link) {
+				if (ms_data->control == ms) {
+					reprieve = 1;	/* this control connection can live a bit longer */
+					ip_masq_set_expire(ms, ip_masq_expire->tcp_timeout);
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+					printk("Masquerade control %s %lX:%X expiry reprieved\n",
+							masq_proto_name(ms->protocol),
+							ntohl(ms->saddr),ntohs(ms->sport));
+#endif
+					break;
+				}
+			}
+		}
+		restore_flags(flags);
+		if (reprieve)
+			return;
+	}
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+	printk("Masqueraded %s %lX:%X expired\n",masq_proto_name(ms->protocol),ntohl(ms->saddr),ntohs(ms->sport));
 #endif
 	
 	save_flags(flags);
 	cli();
 
         if (ip_masq_unhash(ms)) {
-                ip_masq_free_ports[ms->protocol==IPPROTO_TCP]++;
-                ip_masq_unbind_app(ms);
+                ip_masq_free_ports[masq_proto_num(ms->protocol)]++;
+                if (ms->protocol != IPPROTO_ICMP)
+                             ip_masq_unbind_app(ms);
                 kfree_s(ms,sizeof(*ms));
         }
 
 	restore_flags(flags);
 }
+
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+void ip_autofw_expire(unsigned long data)
+{
+	struct ip_autofw * af;
+	af=(struct ip_autofw *) data;
+	af->flags&=0xFFFF ^ IP_AUTOFW_ACTIVE;
+	af->timer.expires=0;
+	af->lastcontact=0;
+	if (af->flags & IP_AUTOFW_SECURE)
+		af->where=0;
+}
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 
 /*
  * 	Create a new masquerade list entry, also allocate an
@@ -342,14 +597,14 @@ static void masq_expire(unsigned long data)
  * 	given boundaries MASQ_BEGIN and MASQ_END.
  */
 
-struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned mflags)
+struct ip_masq * ip_masq_new_enh(struct device *dev, int proto, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned mflags, __u16 matchport)
 {
         struct ip_masq *ms, *mst;
         int ports_tried, *free_ports_p;
 	unsigned long flags;
         static int n_fails = 0;
 
-        free_ports_p = &ip_masq_free_ports[proto==IPPROTO_TCP];
+        free_ports_p = &ip_masq_free_ports[masq_proto_num(proto)];
 
         if (*free_ports_p == 0) {
                 if (++n_fails < 5)
@@ -375,6 +630,7 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
         ms->dport	   = dport;
         ms->flags	   = mflags;
         ms->app_data	   = NULL;
+	ms->control	   = NULL;
 
         if (proto == IPPROTO_UDP)
                 ms->flags |= IP_MASQ_F_NO_DADDR;
@@ -389,8 +645,11 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
 		/*
                  *	Try the next available port number
                  */
-                
-		ms->mport = htons(masq_port++);
+                if (!matchport || ports_tried)
+			ms->mport = htons(masq_port++);
+		else
+			ms->mport = matchport;
+			
 		if (masq_port==PORT_MASQ_END) masq_port = PORT_MASQ_BEGIN;
                 
                 restore_flags(flags);
@@ -413,7 +672,8 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
                         
                         restore_flags(flags);
                         
-                        ip_masq_bind_app(ms);
+                        if (proto != IPPROTO_ICMP)
+                              ip_masq_bind_app(ms);
                         n_fails = 0;
                         return ms;
                 }
@@ -424,6 +684,11 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
                        masq_proto_name(ms->protocol), *free_ports_p);
         kfree_s(ms, sizeof(*ms));
         return NULL;
+}
+
+struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned mflags)
+{
+	return (ip_masq_new_enh(dev, proto, saddr, sport, daddr, dport, mflags, 0) );
 }
 
 /*
@@ -467,6 +732,8 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 	 * We may need to consider masq-ing some ICMP related to masq-ed protocols
 	 */
 
+        if (iph->protocol==IPPROTO_ICMP) 
+            return (ip_fw_masq_icmp(skb_ptr,dev));
 	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
 		return -1;
 
@@ -483,8 +750,36 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 #endif
 
         ms = ip_masq_out_get(iph);
-        if (ms!=NULL)
+	if (ms!=NULL) {
                 ip_masq_set_expire(ms,0);
+
+		/*
+		 *      Set sport if not defined yet (e.g. ftp PASV).  Because
+		 *	masq entries are hashed on sport, unhash with old value
+		 *	and hash with new.
+		 */
+
+		if ( ms->flags & IP_MASQ_F_NO_SPORT && ms->protocol == IPPROTO_TCP ) {
+			unsigned long flags;
+			ms->flags &= ~IP_MASQ_F_NO_SPORT;
+			save_flags(flags);
+			cli();
+			ip_masq_unhash(ms);
+			ms->sport = portptr[0];
+			ip_masq_hash(ms);	/* hash on new sport */
+			restore_flags(flags);
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+			printk("ip_fw_masquerade(): filled sport=%d\n",
+			       ntohs(ms->sport));
+#endif
+		}
+	}
+
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+	/* update any ipautofw entries .. */
+	ip_autofw_update_out(iph->saddr, iph->daddr, portptr[1], 
+			     iph->protocol);
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 
 	/*
 	 *	Nope, not found, create a new entry for it
@@ -492,10 +787,22 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 	
 	if (ms==NULL)
 	{
-                ms = ip_masq_new(dev, iph->protocol,
-                                 iph->saddr, portptr[0],
-                                 iph->daddr, portptr[1],
-                                 0);
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+		/* if the source port is supposed to match the masq port, then
+		   make it so */
+		if (ip_autofw_check_direct(portptr[1],iph->protocol))
+	                ms = ip_masq_new_enh(dev, iph->protocol,
+        	                         iph->saddr, portptr[0],
+                	                 iph->daddr, portptr[1],
+                        	         0,
+                        	         portptr[0]);
+                else
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
+	                ms = ip_masq_new_enh(dev, iph->protocol,
+        	                         iph->saddr, portptr[0],
+                	                 iph->daddr, portptr[1],
+                        	         0,
+                        	         0);
                 if (ms == NULL)
 			return -1;
  	}
@@ -530,7 +837,7 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  	 *	Adjust packet accordingly to protocol
  	 */
  	
- 	if (iph->protocol==IPPROTO_UDP)
+ 	if (masq_proto_num(iph->protocol)==0)
  	{
                 timeout = ip_masq_expire->udp_timeout;
  		recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
@@ -596,10 +903,61 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 	struct ip_masq	*ms;
 	unsigned short   len   = ntohs(iph->tot_len) - (iph->ihl * 4);
 
-#ifdef DEBUG_CONFIG_IP_MASQUERADE
- 	printk("Incoming forward ICMP (%d) %lX -> %lX\n",
-	        icmph->type,
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+ 	printk("Incoming forward ICMP (%d,%d) %lX -> %lX\n",
+	        icmph->type, ntohs(icmp_id(icmph)),
  		ntohl(iph->saddr), ntohl(iph->daddr));
+#endif
+
+#ifdef CONFIG_IP_MASQUERADE_ICMP		
+	if ((icmph->type == ICMP_ECHO ) ||
+	    (icmph->type == ICMP_TIMESTAMP ) ||
+	    (icmph->type == ICMP_INFO_REQUEST ) ||
+	    (icmph->type == ICMP_ADDRESS )) {
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+		printk("MASQ: icmp request rcv %lX->%lX id %d type %d\n",
+		       ntohl(iph->saddr),
+		       ntohl(iph->daddr),
+		       ntohs(icmp_id(icmph)),
+		       icmph->type);
+#endif
+		ms = ip_masq_out_get_2(iph->protocol,
+				       iph->saddr,
+				       icmp_id(icmph),
+				       iph->daddr,
+				       icmp_hv_req(icmph));
+		if (ms == NULL) {
+			ms = ip_masq_new(dev,
+					 iph->protocol,
+					 iph->saddr,
+					 icmp_id(icmph),
+					 iph->daddr,
+					 icmp_hv_req(icmph),
+					 0);
+			if (ms == NULL)
+				return (-1);
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+			printk("MASQ: Create new icmp entry\n");
+#endif	              
+		}
+		ip_masq_set_expire(ms, 0);
+		/* Rewrite source address */
+		iph->saddr = ms->maddr;
+		ip_send_check(iph);
+		/* Rewrite port (id) */
+		(icmph->un).echo.id = ms->mport;
+		icmph->checksum = 0;
+		icmph->checksum = ip_compute_csum((unsigned char *)icmph, len);
+		ip_masq_set_expire(ms, MASQUERADE_EXPIRE_ICMP);
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+		printk("MASQ: icmp request rwt %lX->%lX id %d type %d\n",
+		       ntohl(iph->saddr),
+		       ntohl(iph->daddr),
+		       ntohs(icmp_id(icmph)),
+		       icmph->type);
+#endif
+		return (1);
+	}
 #endif
 
 	/* 
@@ -618,6 +976,57 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 	/* Now find the contained IP header */
 	ciph = (struct iphdr *) (icmph + 1);
 
+#ifdef CONFIG_IP_MASQUERADE_ICMP
+	if (ciph->protocol == IPPROTO_ICMP) {
+		/*
+		 * This section handles ICMP errors for ICMP packets
+		 */
+		struct icmphdr  *cicmph = (struct icmphdr *)((char *)ciph + 
+							     (ciph->ihl<<2));
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+		printk("MASQ: fw icmp/icmp rcv %lX->%lX id %d type %d\n",
+		       ntohl(ciph->saddr),
+		       ntohl(ciph->daddr),
+		       ntohs(icmp_id(cicmph)),
+		       cicmph->type);
+#endif
+		ms = ip_masq_out_get_2(ciph->protocol, 
+				      ciph->daddr,
+				      icmp_id(cicmph),
+				      ciph->saddr,
+				      icmp_hv_rep(cicmph));
+
+		if (ms == NULL)
+			return 0;
+
+		/* Now we do real damage to this packet...! */
+		/* First change the source IP address, and recalc checksum */
+		iph->saddr = ms->maddr;
+		ip_send_check(iph);
+	
+		/* Now change the *dest* address in the contained IP */
+		ciph->daddr = ms->maddr;
+		ip_send_check(ciph);
+
+		/* Change the ID to the masqed one! */
+		(cicmph->un).echo.id = ms->mport;
+	
+		/* And finally the ICMP checksum */
+		icmph->checksum = 0;
+		icmph->checksum = ip_compute_csum((unsigned char *) icmph, len);
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+		printk("MASQ: fw icmp/icmp rwt %lX->%lX id %d type %d\n",
+		       ntohl(ciph->saddr),
+		       ntohl(ciph->daddr),
+		       ntohs(icmp_id(cicmph)),
+		       cicmph->type);
+#endif
+		return 1;
+	}
+#endif /* CONFIG_IP_MASQUERADE_ICMP */
+
 	/* We are only interested ICMPs generated from TCP or UDP packets */
 	if ((ciph->protocol != IPPROTO_UDP) && (ciph->protocol != IPPROTO_TCP))
 		return 0;
@@ -628,9 +1037,6 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 	 * (but reversed relative to outer IP header!)
 	 */
 	pptr = (__u16 *)&(((char *)ciph)[ciph->ihl*4]);
-	if (ntohs(pptr[1]) < PORT_MASQ_BEGIN ||
- 	    ntohs(pptr[1]) > PORT_MASQ_END)
- 		return 0;
 
 	/* Ensure the checksum is correct */
 	if (ip_compute_csum((unsigned char *) icmph, len)) 
@@ -642,13 +1048,17 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 	}
 
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
- 	printk("Handling forward ICMP for %lX:%X -> %lX:%X\n",
+	printk("Handling forward ICMP for %lX:%X -> %lX:%X\n",
 	       ntohl(ciph->saddr), ntohs(pptr[0]),
 	       ntohl(ciph->daddr), ntohs(pptr[1]));
 #endif
 
-	/* This is pretty much what ip_masq_in_get() does */
-	ms = ip_masq_in_get_2(ciph->protocol, ciph->saddr, pptr[0], ciph->daddr, pptr[1]);
+	/* This is pretty much what ip_masq_out_get() does */
+	ms = ip_masq_out_get_2(ciph->protocol, 
+			       ciph->daddr, 
+			       pptr[1], 
+			       ciph->saddr, 
+			       pptr[0]);
 
 	if (ms == NULL)
 		return 0;
@@ -670,7 +1080,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 	icmph->checksum = ip_compute_csum((unsigned char *) icmph, len);
 
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
- 	printk("Rewrote forward ICMP to %lX:%X -> %lX:%X\n",
+	printk("Rewrote forward ICMP to %lX:%X -> %lX:%X\n",
 	       ntohl(ciph->saddr), ntohs(pptr[0]),
 	       ntohl(ciph->daddr), ntohs(pptr[1]));
 #endif
@@ -695,22 +1105,124 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
 	struct ip_masq	*ms;
 	unsigned short   len   = ntohs(iph->tot_len) - (iph->ihl * 4);
 
-#ifdef DEBUG_CONFIG_IP_MASQUERADE
- 	printk("Incoming reverse ICMP (%d) %lX -> %lX\n",
-	        icmph->type,
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+ 	printk("MASQ: icmp in/rev (%d,%d) %lX -> %lX\n",
+	        icmph->type, ntohs(icmp_id(icmph)),
  		ntohl(iph->saddr), ntohl(iph->daddr));
 #endif
 
-	if ((icmph->type != ICMP_DEST_UNREACH) &&
-	    (icmph->type != ICMP_SOURCE_QUENCH) &&
-	    (icmph->type != ICMP_TIME_EXCEEDED))
-		return 0;
+#ifdef CONFIG_IP_MASQUERADE_ICMP		
+	if ((icmph->type == ICMP_ECHOREPLY) ||
+	    (icmph->type == ICMP_TIMESTAMPREPLY) ||
+	    (icmph->type == ICMP_INFO_REPLY) ||
+	    (icmph->type == ICMP_ADDRESSREPLY))	{
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+		printk("MASQ: icmp reply rcv %lX->%lX id %d type %d, req %d\n",
+		       ntohl(iph->saddr),
+		       ntohl(iph->daddr),
+		       ntohs(icmp_id(icmph)),
+		       icmph->type,
+		       icmp_type_request(icmph->type));
+#endif
+		ms = ip_masq_in_get_2(iph->protocol,
+				      iph->saddr,
+				      icmp_hv_rep(icmph),
+				      iph->daddr,
+				      icmp_id(icmph));
+		if (ms == NULL)
+			return 0;
 
-	/* Now find the contained IP header */
+		ip_masq_set_expire(ms,0);
+
+		/* Reset source address */
+		iph->daddr = ms->saddr;
+		/* Redo IP header checksum */
+		ip_send_check(iph);
+		/* Set ID to fake port number */
+		(icmph->un).echo.id = ms->sport;
+		/* Reset ICMP checksum and set expiry */
+		icmph->checksum=0;
+		icmph->checksum=ip_compute_csum((unsigned char *)icmph,len);
+		ip_masq_set_expire(ms, MASQUERADE_EXPIRE_ICMP);
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+		printk("MASQ: icmp reply rwt %lX->%lX id %d type %d\n",
+		       ntohl(iph->saddr),
+		       ntohl(iph->daddr),
+		       ntohs(icmp_id(icmph)),
+		       icmph->type);
+#endif
+		return 1;
+	} else {
+#endif
+		if ((icmph->type != ICMP_DEST_UNREACH) &&
+		    (icmph->type != ICMP_SOURCE_QUENCH) &&
+		    (icmph->type != ICMP_TIME_EXCEEDED))
+			return 0;
+#ifdef CONFIG_IP_MASQUERADE_ICMP
+	}
+#endif
+	/*
+	 * If we get here we have an ICMP error of one of the above 3 types
+	 * Now find the contained IP header
+	 */
 	ciph = (struct iphdr *) (icmph + 1);
 
+#ifdef CONFIG_IP_MASQUERADE_ICMP
+	if (ciph->protocol == IPPROTO_ICMP) {
+		/*
+		 * This section handles ICMP errors for ICMP packets
+		 *
+		 * First get a new ICMP header structure out of the IP packet
+		 */
+		struct icmphdr  *cicmph = (struct icmphdr *)((char *)ciph + 
+							     (ciph->ihl<<2));
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+		printk("MASQ: rv icmp/icmp rcv %lX->%lX id %d type %d\n",
+		       ntohl(ciph->saddr),
+		       ntohl(ciph->daddr),
+		       ntohs(icmp_id(cicmph)),
+		       cicmph->type);
+#endif
+		ms = ip_masq_in_get_2(ciph->protocol, 
+				      ciph->daddr, 
+				      icmp_hv_req(cicmph),
+				      ciph->saddr, 
+				      icmp_id(cicmph));
+
+		if (ms == NULL)
+			return 0;
+
+		/* Now we do real damage to this packet...! */
+		/* First change the dest IP address, and recalc checksum */
+		iph->daddr = ms->saddr;
+		ip_send_check(iph);
+	
+		/* Now change the *source* address in the contained IP */
+		ciph->saddr = ms->saddr;
+		ip_send_check(ciph);
+
+		/* Change the ID to the original one! */
+		(cicmph->un).echo.id = ms->sport;
+
+		/* And finally the ICMP checksum */
+		icmph->checksum = 0;
+		icmph->checksum = ip_compute_csum((unsigned char *) icmph, len);
+
+#ifdef DEBUG_CONFIG_IP_MASQUERADE_ICMP
+		printk("MASQ: rv icmp/icmp rwt %lX->%lX id %d type %d\n",
+		       ntohl(ciph->saddr),
+		       ntohl(ciph->daddr),
+		       ntohs(icmp_id(cicmph)),
+		       cicmph->type);
+#endif
+		return 1;
+	}
+#endif /* CONFIG_IP_MASQUERADE_ICMP */
+
 	/* We are only interested ICMPs generated from TCP or UDP packets */
-	if ((ciph->protocol != IPPROTO_UDP) && (ciph->protocol != IPPROTO_TCP))
+	if ((ciph->protocol != IPPROTO_UDP) && 
+	    (ciph->protocol != IPPROTO_TCP))
 		return 0;
 
 	/* 
@@ -738,7 +1250,11 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
 #endif
 
 	/* This is pretty much what ip_masq_in_get() does, except params are wrong way round */
-	ms = ip_masq_in_get_2(ciph->protocol, ciph->daddr, pptr[1], ciph->saddr, pptr[0]);
+	ms = ip_masq_in_get_2(ciph->protocol,
+			      ciph->daddr,
+			      pptr[1],
+			      ciph->saddr,
+			      pptr[0]);
 
 	if (ms == NULL)
 		return 0;
@@ -786,6 +1302,9 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
  	struct ip_masq	*ms;
 	unsigned short len;
 	unsigned long 	timeout;
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW 
+ 	struct ip_autofw *af;
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 
 	switch (iph->protocol) {
 	case IPPROTO_ICMP:
@@ -794,9 +1313,17 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 	case IPPROTO_UDP:
 		/* Make sure packet is in the masq range */
 		portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
-		if (ntohs(portptr[1]) < PORT_MASQ_BEGIN ||
-		    ntohs(portptr[1]) > PORT_MASQ_END)
+		if ((ntohs(portptr[1]) < PORT_MASQ_BEGIN ||
+		     ntohs(portptr[1]) > PORT_MASQ_END)
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW 
+		    && !ip_autofw_check_range(iph->saddr, portptr[1], 
+					      iph->protocol, 0)
+		    && !ip_autofw_check_direct(portptr[1], iph->protocol)
+		    && !ip_autofw_check_port(portptr[1], iph->protocol)
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
+			)
 			return 0;
+
 		/* Check that the checksum is OK */
 		len = ntohs(iph->tot_len) - (iph->ihl * 4);
 		if ((iph->protocol == IPPROTO_UDP) && (portptr[3] == 0))
@@ -836,8 +1363,31 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 
         ms = ip_masq_in_get(iph);
 
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW 
+        if (ms == NULL && (af=ip_autofw_check_range(iph->saddr, portptr[1],
+						    iph->protocol, 0))) {
+        	ms = ip_masq_new_enh(dev, iph->protocol,
+        			     af->where, portptr[1],
+        			     iph->saddr, portptr[0],
+        			     0,
+        			     portptr[1]);
+        }
+        if ( ms == NULL && (af=ip_autofw_check_port(portptr[1], 
+						    iph->protocol)) ) {
+        	ms = ip_masq_new_enh(dev, iph->protocol,
+        			     af->where, htons(af->hidden),
+        			     iph->saddr, portptr[0],
+        			     0,
+        			     htons(af->visible));
+        }
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
+
         if (ms != NULL)
         {
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW 
+        	ip_autofw_update_in(iph->saddr, portptr[1], iph->protocol);
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
+        	
 		/* Stop the timer ticking.... */
 		ip_masq_set_expire(ms,0);
 
@@ -848,7 +1398,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                 if ( ms->flags & IP_MASQ_F_NO_DPORT && ms->protocol == IPPROTO_TCP ) {
                         ms->flags &= ~IP_MASQ_F_NO_DPORT;
                         ms->dport = portptr[0];
-#if DEBUG_CONFIG_IP_MASQUERADE
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
                         printk("ip_fw_demasquerade(): filled dport=%d\n",
                                ntohs(ms->dport));
 #endif
@@ -856,7 +1406,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                 if (ms->flags & IP_MASQ_F_NO_DADDR && ms->protocol == IPPROTO_TCP)  {
                         ms->flags &= ~IP_MASQ_F_NO_DADDR;
                         ms->daddr = iph->saddr;
-#if DEBUG_CONFIG_IP_MASQUERADE
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
                         printk("ip_fw_demasquerade(): filled daddr=%X\n",
                                ntohs(ms->daddr));
 #endif
@@ -886,7 +1436,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 		 * timeouts.
 		 * If a TCP RST is seen collapse the tunnel (by using short timeout)!
                  */
-                if (iph->protocol==IPPROTO_UDP)
+                if (masq_proto_num(iph->protocol)==0)
 		{
                         recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,len);
 			timeout = ip_masq_expire->udp_timeout;
@@ -933,8 +1483,53 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 }
 
 /*
- *	/proc/net entry
+ *	/proc/net entries
  */
+
+
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+
+static int ip_autofw_procinfo(char *buffer, char **start, off_t offset,
+			      int length, int unused)
+{
+	off_t pos=0, begin=0;
+	struct ip_autofw * af;
+	int len=0;
+	
+	len=sprintf(buffer,"Type Prot Low  High Vis  Hid  Where    Last     CPto CPrt Timer Flags\n"); 
+        
+        for(af = ip_autofw_hosts; af ; af = af->next)
+	{
+		len+=sprintf(buffer+len,"%4X %4X %04X-%04X/%04X %04X %08lX %08lX %04X %04X %6lu %4X\n",
+					af->type,
+					af->protocol,
+					af->low,
+					af->high,
+					af->visible,
+					af->hidden,
+					ntohl(af->where),
+					ntohl(af->lastcontact),
+					af->ctlproto,
+					af->ctlport,
+					(af->timer.expires<jiffies ? 0 : af->timer.expires-jiffies), 
+					af->flags);
+
+		pos=begin+len;
+		if(pos<offset) 
+		{
+ 			len=0;
+			begin=pos;
+		}
+		if(pos>offset+length)
+			break;
+        }
+	*start=buffer+(offset-begin);
+	len-=(offset-begin);
+	if(len>length)
+		len=length;
+	return len;
+}
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 
 static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 			      int length, int unused)
@@ -1007,6 +1602,14 @@ int ip_masq_init(void)
 		0, &proc_net_inode_operations,
 		ip_msqhst_procinfo
 	});
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IPAUTOFW, 9, "ip_autofw",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ip_autofw_procinfo
+	});
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 #endif	
         ip_masq_app_init();
 

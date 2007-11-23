@@ -8,18 +8,37 @@
 #include <linux/types.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
+#include <linux/config.h>
+
+/*
+ * This define affects the number of ports that can be handled
+ * by each of the protocol helper modules.
+ */
+#define MAX_MASQ_APP_PORTS 12
 
 /*
  *	Linux ports don't normally get allocated above 32K.
  *	I used an extra 4K port-space
  */
- 
+
 #define PORT_MASQ_BEGIN	61000
 #define PORT_MASQ_END	(PORT_MASQ_BEGIN+4096)
 
+/*
+ * Default timeouts for masquerade functions The control channels now
+ * expire the same as TCP channels (other than being updated by
+ * packets on their associated data channels.
+ */
 #define MASQUERADE_EXPIRE_TCP     15*60*HZ
 #define MASQUERADE_EXPIRE_TCP_FIN  2*60*HZ
 #define MASQUERADE_EXPIRE_UDP      5*60*HZ
+/* 
+ * ICMP can no longer be modified on the fly using an ioctl - this
+ * define is the only way to change the timeouts 
+ */
+#define MASQUERADE_EXPIRE_ICMP      125*HZ
+
+#define IP_AUTOFW_EXPIRE	     15*HZ
 
 #define IP_MASQ_F_OUT_SEQ              	0x01	/* must do output seq adjust */
 #define IP_MASQ_F_IN_SEQ              	0x02	/* must do input seq adjust */
@@ -32,6 +51,9 @@
 #define IP_MASQ_F_SAW_FIN		(IP_MASQ_F_SAW_FIN_IN | \
 					 IP_MASQ_F_SAW_FIN_OUT)
 						/* tcp fin pkts seen */
+#define IP_MASQ_F_CONTROL		0x100 	/* this is a control channel */
+#define IP_MASQ_F_NO_SPORT    		0x200	/* no sport set yet */
+#define IP_MASQ_F_FTP_PASV	    	0x400	/* ftp PASV command just issued */
 
 #ifdef __KERNEL__
 
@@ -59,6 +81,7 @@ struct ip_masq {
 	struct ip_masq_app *app;	/* bound ip_masq_app object */
 	void		*app_data;	/* Application private data */
 	unsigned  flags;        	/* status flags */
+	struct ip_masq	*control;	/* Corresponding control connection */
 };
 
 /*
@@ -76,9 +99,10 @@ extern struct ip_fw_masq *ip_masq_expire;
 /*
  *	[0]: UDP free_ports
  *	[1]: TCP free_ports
+ *	[2]: ICMP free ids
  */
 
-extern int ip_masq_free_ports[2];
+extern int ip_masq_free_ports[3];
 
 /*
  *	ip_masq initializer (registers symbols and /proc/net entries)
@@ -98,6 +122,9 @@ extern int ip_fw_demasquerade(struct sk_buff **, struct device *);
 extern struct ip_masq *ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned flags);
 extern void ip_masq_set_expire(struct ip_masq *ms, unsigned long tout);
 
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+extern void ip_autofw_expire(unsigned long data);
+#endif
 
 /*
  * 	
@@ -166,6 +193,10 @@ extern int ip_masq_app_getinfo(char *buffer, char **start, off_t offset, int len
  *	a segment of skb.
  */
 extern struct sk_buff * ip_masq_skb_replace(struct sk_buff *skb, int pri, char *o_buf, int o_len, char *n_buf, int n_len);
+
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+extern struct ip_autofw * ip_autofw_hosts;
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 
 #endif /* __KERNEL__ */
 

@@ -25,3 +25,11 @@ ENTRY(up_wakeup)
 	call SYMBOL_NAME(__up)
 	popl %ecx
 	ret
+
+ENTRY(down_failed_interruptible)
+	pushl %eax
+	pushl %ecx
+	call SYMBOL_NAME(__down_interruptible)
+	popl %ecx
+	ret
+

@@ -1,4 +1,4 @@
-/* $Id: wic.c,v 1.0 1995/02/11 10:26:05 hayes Exp $ */
+/* $Id: wic.c,v 1.3.2.1 1997/03/09 02:14:40 davem Exp $ */
 /* WIC: A parallel port "network" driver for Linux. */
 /* based on the plip network driver */
 /* Modified for Linux 1.3.x by Alan Cox <Alan.Cox@linux.org> */
@@ -964,6 +964,7 @@ wic_tx_packet(struct sk_buff *skb, struct device *dev)
 	if (skb->len > dev->mtu) {
 		printk("%s: packet too big, %d.\n", dev->name, (int)skb->len);
 		dev->tbusy = 0;
+		dev_kfree_skb(skb, FREE_WRITE);
 		return 0;
 	}
 

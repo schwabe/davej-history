@@ -1345,6 +1345,139 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 	return (seq);
 }
 
+#ifdef CONFIG_RST_COOKIES
+/*
+ * TCP security probe sequence number picking. Losely based upon
+ * secure sequence number algorithm above.
+ */
+__u32 secure_tcp_probe_number(__u32 saddr, __u32 daddr,
+		 __u16 sport, __u16 dport, __u32 sseq, int validate)
+{
+	static int	is_init = 0;
+	static int	valid_secret[2];
+	static __u32	secret_timestamp[2];
+	static __u32	secret[2][16];
+	static int	offset = 0;
+	__u32 		tmp[16];
+	__u32		seq;
+
+	/*
+	 * Pick a random secret the first time we open a TCP
+	 * connection, and expire secretes older than 5 minutes.
+	 */
+	if (is_init == 0 || jiffies-secret_timestamp[offset] > 600*HZ) {
+		if (is_init == 0) valid_secret[0] = valid_secret[1] = 0;
+		else offset = (offset+1)%2;
+		get_random_bytes(&secret[offset], sizeof(secret[offset]));
+		valid_secret[offset] = 1;
+		secret_timestamp[offset] = jiffies;
+		is_init = 1;
+	}
+
+	memcpy(tmp, secret[offset], sizeof(tmp));
+	/*
+	 * Pick a unique starting offset for each
+	 * TCP connection endpoints (saddr, daddr, sport, dport)
+	 */
+	tmp[8]=saddr;
+	tmp[9]=daddr;
+	tmp[10]=(sport << 16) + dport;
+	HASH_TRANSFORM(tmp, tmp);
+	seq = tmp[1];
+
+	if (!validate) {
+		if (seq == sseq) seq++;
+#if 0
+		printk("init_seq(%lx, %lx, %d, %d, %d) = %d\n",
+		       saddr, daddr, sport, dport, sseq, seq);
+#endif
+		return (seq);
+	} else {
+		if (seq == sseq || (seq+1) == sseq) {
+			printk("validated probe(%lx, %lx, %d, %d, %d)\n",
+		       		saddr, daddr, sport, dport, sseq);
+			return 1;
+		}
+		if (jiffies-secret_timestamp[(offset+1)%2] <= 1200*HZ) {
+			memcpy(tmp, secret[(offset+1)%2], sizeof(tmp));
+			tmp[8]=saddr;
+			tmp[9]=daddr;
+			tmp[10]=(sport << 16) + dport;
+			HASH_TRANSFORM(tmp, tmp);
+			seq = tmp[1];
+			if (seq == sseq || (seq+1) == sseq) {
+#ifdef 0
+				printk("validated probe(%lx, %lx, %d, %d, %d)\n",
+		       			saddr, daddr, sport, dport, sseq);
+#endif
+				return 1;
+			}
+		}
+#ifdef 0
+		printk("failed validation on probe(%lx, %lx, %d, %d, %d)\n",
+			saddr, daddr, sport, dport, sseq);
+#endif
+		return 0;
+	}
+}
+#endif
+
+#ifdef CONFIG_SYN_COOKIES
+/*
+ * Secure SYN cookie computation. This is the algorithm worked out by
+ * Dan Bernstien and Eric Schenk.
+ *
+ * For linux I implement the 1 minute counter by looking at the jiffies clock.
+ * The count is passed in as a parameter;
+ *
+ */
+__u32 secure_tcp_syn_cookie(__u32 saddr, __u32 daddr,
+		 __u16 sport, __u16 dport, __u32 sseq, __u32 count)
+{
+	static int	is_init = 0;
+	static __u32	secret[2][16];
+	__u32 		tmp[16];
+	__u32		seq;
+
+	/*
+	 * Pick two random secret the first time we open a TCP connection.
+	 */
+	if (is_init == 0) {
+		get_random_bytes(&secret[0], sizeof(secret[0]));
+		get_random_bytes(&secret[1], sizeof(secret[1]));
+		is_init = 1;
+	}
+
+	/*
+	 * Compute the secure sequence number.
+	 * The output should be:
+   	 *   MD5(sec1,saddr,sport,daddr,dport,sec1) + their sequence number
+         *      + (count * 2^24)
+	 *      + (MD5(sec2,saddr,sport,daddr,dport,count,sec2) % 2^24).
+	 * Where count increases every minute by 1.
+	 */
+
+	memcpy(tmp, secret[0], sizeof(tmp));
+	tmp[8]=saddr;
+	tmp[9]=daddr;
+	tmp[10]=(sport << 16) + dport;
+	HASH_TRANSFORM(tmp, tmp);
+	seq = tmp[1];
+
+	memcpy(tmp, secret[1], sizeof(tmp));
+	tmp[8]=saddr;
+	tmp[9]=daddr;
+	tmp[10]=(sport << 16) + dport;
+	tmp[11]=count;	/* minute counter */
+	HASH_TRANSFORM(tmp, tmp);
+
+	seq += sseq + (count << 24) + (tmp[1] & 0x00ffffff);
+
+	/* Zap lower 3 bits to leave room for the MSS representation */
+	return (seq & 0xfffff8);
+}
+#endif
+
 #ifdef RANDOM_BENCHMARK
 /*
  * This is so we can do some benchmarking of the random driver, to see

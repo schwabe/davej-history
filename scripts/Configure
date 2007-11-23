@@ -42,6 +42,9 @@
 #
 # 200396 Tom Dyas (tdyas@eden.rutgers.edu) - when the module option is
 # chosen for an item, define the macro <option_name>_MODULE
+#
+# 090397 Axel Boldt (boldt@math.ucsb.edu) - avoid ? and + in regular 
+# expressions for GNU expr since version 1.15 and up use \? and \+.
 
 #
 # Make sure we're really running bash.
@@ -288,7 +291,7 @@ function int () {
 	def=${old:-$3}
 	while :; do
 	  readln "$1 ($2) [$def] " "$def" "$old"
-	  if expr "$ans" : '0$\|-?[1-9][0-9]*$' > /dev/null; then
+	  if expr "$ans" : '0$\|\(-[1-9]\|[1-9]\)[0-9]*$' > /dev/null; then
 	    define_int "$2" "$ans"
 	    break
 	  else
@@ -319,12 +322,12 @@ function hex () {
 	while :; do
 	  readln "$1 ($2) [$def] " "$def" "$old"
 	  ans=${ans#*[x,X]}
-	 if expr "$ans" : '[0-9a-fA-F]+$' > /dev/null; then
-	   define_hex "$2" "$ans"
-	   break
-	 else
+	  if expr "$ans" : '[0-9a-fA-F][0-9a-fA-F]*$' > /dev/null; then
+	    define_hex "$2" "$ans"
+	    break
+	  else
 	    help "$2"
-	 fi
+	  fi
 	done
 }
 
@@ -422,6 +425,7 @@ echo "#" >> $CONFIG
 echo "/*" > $CONFIG_H
 echo " * Automatically generated C config: don't edit" >> $CONFIG_H
 echo " */" >> $CONFIG_H
+echo "#define AUTOCONF_INCLUDED" >> $CONFIG_H
 
 DEFAULT=""
 if [ "$1" = "-d" ] ; then

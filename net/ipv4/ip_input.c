@@ -482,13 +482,13 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			{
 				opt->srr_is_hit = 1;
 				opt->is_changed = 1;
-#ifdef CONFIG_IP_FORWARD
-				if (ip_forward(skb, dev, is_frag, nexthop))
+				if (sysctl_ip_forward) {
+					if (ip_forward(skb, dev, is_frag, nexthop))
+						kfree_skb(skb, FREE_WRITE);
+				} else {
+					ip_statistics.IpInAddrErrors++;
 					kfree_skb(skb, FREE_WRITE);
-#else
-				ip_statistics.IpInAddrErrors++;
-				kfree_skb(skb, FREE_WRITE);
-#endif
+				}
 				return 0;
 			}
 		}
@@ -575,32 +575,34 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		 *	RFC 1122: SHOULD pass TOS value up to the transport layer.
 		 */
  
-		hash = iph->protocol & (SOCK_ARRAY_SIZE-1);
+		/* Note: See raw.c and net/raw.h, RAWV4_HTABLE_SIZE==MAX_INET_PROTOS */
+		hash = iph->protocol & (MAX_INET_PROTOS - 1);
 
 		/* 
 		 *	If there maybe a raw socket we must check - if not we don't care less 
 		 */
 		 
-		if((raw_sk=raw_prot.sock_array[hash])!=NULL)
-		{
-			struct sock *sknext=NULL;
+		if((raw_sk = raw_v4_htable[hash]) != NULL) {
+			struct sock *sknext = NULL;
 			struct sk_buff *skb1;
-			raw_sk=get_sock_raw(raw_sk, iph->protocol,  iph->saddr, iph->daddr);
-			if(raw_sk)	/* Any raw sockets */
-			{
-				do
-				{
+
+			raw_sk = raw_v4_lookup(raw_sk, iph->protocol,
+					       iph->saddr, iph->daddr);
+			if(raw_sk) {	/* Any raw sockets */
+				do {
 					/* Find the next */
-					sknext=get_sock_raw(raw_sk->next, iph->protocol, iph->saddr, iph->daddr);
+					sknext = raw_v4_lookup(raw_sk->next,
+							       iph->protocol,
+							       iph->saddr,
+							       iph->daddr);
 					if(sknext)
-						skb1=skb_clone(skb, GFP_ATOMIC);
+						skb1 = skb_clone(skb, GFP_ATOMIC);
 					else
 						break;	/* One pending raw socket left */
 					if(skb1)
 						raw_rcv(raw_sk, skb1, dev, iph->saddr,daddr);
-					raw_sk=sknext;
-				}
-				while(raw_sk!=NULL);
+					raw_sk = sknext;
+				} while(raw_sk!=NULL);
 				
 				/*
 				 *	Here either raw_sk is the last raw socket, or NULL if none 
@@ -616,7 +618,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		 *	skb->h.raw now points at the protocol beyond the IP header.
 		 */
 	
-		hash = iph->protocol & (MAX_INET_PROTOS -1);
 		for (ipprot = (struct inet_protocol *)inet_protos[hash];ipprot != NULL;ipprot=(struct inet_protocol *)ipprot->next)
 		{
 			struct sk_buff *skb2;
@@ -718,21 +719,21 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	The packet is for another target. Forward the frame
 	 */
 
-#ifdef CONFIG_IP_FORWARD
-	if (opt && opt->is_strictroute) 
-	{
-	      icmp_send(skb, ICMP_PARAMETERPROB, 0, 16, skb->dev);
-	      kfree_skb(skb, FREE_WRITE);
-	      return -1;
-	}
-	if (ip_forward(skb, dev, is_frag, iph->daddr))
-		kfree_skb(skb, FREE_WRITE);
-#else
+	if (sysctl_ip_forward) {
+		if (opt && opt->is_strictroute) 
+		{
+			icmp_send(skb, ICMP_PARAMETERPROB, 0, 16, skb->dev);
+			kfree_skb(skb, FREE_WRITE);
+			return -1;
+		}
+		if (ip_forward(skb, dev, is_frag, iph->daddr))
+			kfree_skb(skb, FREE_WRITE);
+	} else {
 /*	printk("Machine %lx tried to use us as a forwarder to %lx but we have forwarding disabled!\n",
 			iph->saddr,iph->daddr);*/
-	ip_statistics.IpInAddrErrors++;
-	kfree_skb(skb, FREE_WRITE);
-#endif
+		ip_statistics.IpInAddrErrors++;
+		kfree_skb(skb, FREE_WRITE);
+	}
 	return(0);
 }
 	

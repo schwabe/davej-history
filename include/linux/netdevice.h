@@ -193,7 +193,9 @@ struct device
   void			  (*header_cache_bind)(struct hh_cache **hhp, struct device *dev, unsigned short htype, __u32 daddr);
   void			  (*header_cache_update)(struct hh_cache *hh, struct device *dev, unsigned char *  haddr);
 #define HAVE_CHANGE_MTU
-  int			  (*change_mtu)(struct device *dev, int new_mtu);            
+  int			  (*change_mtu)(struct device *dev, int new_mtu);
+
+  struct iw_statistics*	  (*get_wireless_stats)(struct device *dev);
 };
 
 

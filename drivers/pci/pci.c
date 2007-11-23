@@ -87,7 +87,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( TRIDENT,	TRIDENT_9660,	"TG 9660"),
 	DEVICE( AI,		AI_M1435,	"M1435"),
 	DEVICE( MATROX,		MATROX_MGA_2,	"Atlas PX2085"),
-	DEVICE( MATROX,		MATROX_MIL     ,"Millennium"),
+	DEVICE( MATROX,		MATROX_MIL,	"Millennium"),
+	DEVICE( MATROX,		MATROX_MYS,	"Mystique"),
 	DEVICE( MATROX,		MATROX_MGA_IMP,	"MGA Impression"),
 	DEVICE( CT,		CT_65545,	"65545"),
 	DEVICE( CT,		CT_65548,	"65548"),
@@ -895,29 +896,47 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 			pcibios_write_config_word(bus->number, devfn,
 						  PCI_STATUS, 0xffff);
 			/*
-			 * Configure the bus numbers for this bridge:
+			 * Read the existing primary/secondary/subordinate bus
+			 * number configuration to determine if the PCI bridge
+			 * has already been configured by the system.  If so,
+			 * do not modify the configuration, merely note it.
 			 */
 			pcibios_read_config_dword(bus->number, devfn, 0x18,
 						  &buses);
-			buses &= 0xff000000;
-			buses |= (((unsigned int)(child->primary)     <<  0) |
-				  ((unsigned int)(child->secondary)   <<  8) |
-				  ((unsigned int)(child->subordinate) << 16));
-			pcibios_write_config_dword(bus->number, devfn, 0x18,
-						   buses);
-			/*
-			 * Now we can scan all subordinate buses:
-			 */
-			max = scan_bus(child, mem_startp);
-			/*
-			 * Set the subordinate bus number to its real
-			 * value:
-			 */
-			child->subordinate = max;
-			buses = (buses & 0xff00ffff)
-			  | ((unsigned int)(child->subordinate) << 16);
-			pcibios_write_config_dword(bus->number, devfn, 0x18,
-						   buses);
+			if ((buses & 0xFFFFFF) != 0)
+			  {
+			    child->primary = buses & 0xFF;
+			    child->secondary = (buses >> 8) & 0xFF;
+			    child->subordinate = (buses >> 16) & 0xFF;
+			    child->number = child->secondary;
+			    max = scan_bus(child, mem_startp);
+			  }
+			else
+			  {
+			    /*
+			     * Configure the bus numbers for this bridge:
+			     */
+			    buses &= 0xff000000;
+			    buses |=
+			      (((unsigned int)(child->primary)     <<  0) |
+			       ((unsigned int)(child->secondary)   <<  8) |
+			       ((unsigned int)(child->subordinate) << 16));
+			    pcibios_write_config_dword(bus->number, devfn, 0x18,
+						       buses);
+			    /*
+			     * Now we can scan all subordinate buses:
+			     */
+			    max = scan_bus(child, mem_startp);
+			    /*
+			     * Set the subordinate bus number to its real
+			     * value:
+			     */
+			    child->subordinate = max;
+			    buses = (buses & 0xff00ffff)
+			      | ((unsigned int)(child->subordinate) << 16);
+			    pcibios_write_config_dword(bus->number, devfn, 0x18,
+						       buses);
+			  }
 			pcibios_write_config_word(bus->number, devfn,
 						  PCI_COMMAND, cr);
 		}

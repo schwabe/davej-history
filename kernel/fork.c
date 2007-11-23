@@ -282,7 +282,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	/* ok, now we should be set up.. */
 	p->swappable = 1;
 	p->exit_signal = clone_flags & CSIGNAL;
-	p->counter = current->counter >> 1;
+	p->counter = (current->counter >>= 1);
 	wake_up_process(p);			/* do this last, just in case */
 	++total_forks;
 	return p->pid;

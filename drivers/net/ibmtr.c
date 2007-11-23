@@ -1460,9 +1460,10 @@ static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 	
-	if (set_bit(0,(void *)&dev->tbusy)!=0)
+	if (set_bit(0,(void *)&dev->tbusy)!=0) {
+		dev_kfree_skb(skb, FREE_WRITE);
 		DPRINTK("Transmitter access conflict\n");
-	else {
+	} else {
 		/* Save skb; we'll need it when the adapter asks for the data */
 		ti->current_skb=skb; 
 		writeb(XMIT_UI_FRAME, ti->srb + offsetof(struct srb_xmit, command));

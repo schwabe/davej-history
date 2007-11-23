@@ -775,15 +775,21 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 			/* Issue TX_RESET and TX_START commands. */
 			outw(TxReset, ioaddr + EL3_CMD);
 			for (i = 20; i >= 0 ; i--)
-				if ( ! inw(ioaddr + EL3_STATUS) & CmdInProgress)                                        break;
+				if ( ! inw(ioaddr + EL3_STATUS) & CmdInProgress)
+						break;
 			outw(TxEnable, ioaddr + EL3_CMD);
 			dev->trans_start = jiffies;
 			dev->tbusy = 0;
 			vp->stats.tx_errors++;
 			vp->stats.tx_dropped++;
+			dev_kfree_skb(skb, FREE_WRITE);
 			return 0;			/* Yes, silently *drop* the packet! */
 		}
-		dev->tbusy = 0;
+	}
+
+	if(skb == NULL) {
+		dev_tint(dev);
+		return NULL;
 	}
 
 	/* Block a timer-based transmit from overlapping.  This could better be

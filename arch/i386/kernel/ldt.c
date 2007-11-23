@@ -11,6 +11,7 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/ldt.h>
+#include <asm/ptrace.h>
 
 static int read_ldt(void * ptr, unsigned long bytecount)
 {
@@ -59,7 +60,7 @@ static inline int limits_ok(struct modify_ldt_ldt_s *ldt_info)
 	return (last >= first && last < TASK_SIZE);
 }
 
-static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
+static int write_ldt(struct pt_regs * regs, void * ptr, unsigned long bytecount, int oldmode)
 {
 	struct modify_ldt_ldt_s ldt_info;
 	unsigned long *lp;
@@ -101,6 +102,9 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 			&& ldt_info.limit_in_pages == 0
 			&& ldt_info.seg_not_present == 1
 			&& ldt_info.useable == 0 )) ) {
+		unsigned short sel =(ldt_info.entry_number <<3) | 7;
+		if (regs->fs == sel  || regs->gs == sel)
+			return -EBUSY;
 		*lp = 0;
 		*(lp+1) = 0;
 		return 0;
@@ -125,8 +129,8 @@ asmlinkage int sys_modify_ldt(int func, void *ptr, unsigned long bytecount)
 	if (func == 0)
 		return read_ldt(ptr, bytecount);
 	if (func == 1)
-		return write_ldt(ptr, bytecount, 1);
+		return write_ldt((struct pt_regs *) &func, ptr, bytecount, 1);
 	if (func == 0x11)
-		return write_ldt(ptr, bytecount, 0);
+		return write_ldt((struct pt_regs *) &func, ptr, bytecount, 0);
 	return -ENOSYS;
 }

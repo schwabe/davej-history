@@ -1,4 +1,4 @@
-/* $Id: eexpress.c,v 1.13 1996/05/19 15:59:51 phil Exp $
+/* $Id: eexpress.c,v 1.13.2.2 1997/03/11 05:52:32 davem Exp $
  *
  * Intel EtherExpress device driver for Linux
  *
@@ -447,6 +447,7 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 		}
 		dev_tint(dev);
 		outb(SIRQ_en|irqrmap[dev->irq],ioaddr+SET_IRQ);
+		dev_kfree_skb(buf, FREE_WRITE);
 		return 0;
 	}
 

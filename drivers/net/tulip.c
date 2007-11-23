@@ -817,6 +817,7 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 			if (!tp->port_fix) dev->if_port ++;
 			tp->port_select(dev);
 			dev->trans_start = jiffies;
+			dev_kfree_skb(skb, FREE_WRITE);
 			return(0);
 		}
 		printk("%s: transmit timed out, status %8.8x,"
@@ -846,6 +847,7 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 
 		dev->tbusy=0;
 		dev->trans_start = jiffies;
+		dev_kfree_skb(skb, FREE_WRITE);
 		return(0);
 	}
 

@@ -1133,6 +1133,7 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
       ni_attn586();
       WAIT_4_SCB_CMD();
       dev->trans_start = jiffies;
+      dev_kfree_skb(skb, FREE_WRITE);
       return 0;
     }
     else

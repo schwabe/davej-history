@@ -409,7 +409,6 @@ struct device eql_dev = {
 #endif 
 
 #ifdef CONFIG_NET_IPIP
-#ifdef CONFIG_IP_FORWARD
 	extern int tunnel_init(struct device *);
 	
 	static struct device tunnel_dev1 = 
@@ -442,22 +441,22 @@ struct device eql_dev = {
 #   undef	NEXT_DEV
 #   define	NEXT_DEV	(&tunnel_dev0)
 
-#endif 
 #endif
 
-#ifdef CONFIG_AP1000
+#ifdef CONFIG_APFDDI
     extern int apfddi_init(struct device *dev);
     static struct device fddi_dev = {
 	"fddi", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, apfddi_init };
 #   undef       NEXT_DEV
 #   define      NEXT_DEV        (&fddi_dev)
+#endif
 
+#ifdef CONFIG_APBIF
     extern int bif_init(struct device *dev);
     static struct device bif_dev = {
         "bif", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, bif_init };
 #   undef       NEXT_DEV
 #   define      NEXT_DEV        (&bif_dev)
-
 #endif
 	
 extern int loopback_init(struct device *dev);

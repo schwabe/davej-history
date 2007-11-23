@@ -105,6 +105,11 @@ L:	linux-net@vger.rutgers.edu
 W:	http://www.dgii.com/linux/
 S:	Maintained
 
+WAVELAN NETWORK DRIVER & WIRELESS EXTENSIONS
+P:	Jean Tourrilhes
+M:	jt@hplb.hpl.hp.com
+S:	Maintained
+
 APM DRIVER
 P:	Rik Faith & Stephen Rothwell
 M:	faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au
@@ -269,9 +274,15 @@ L:	linux-smp@vger.rutgers.edu
 S:	Maintained
 
 SPARC:
-P:	Eddie C. Dost
-M:	ecd@skynet.be
+P:	David S. Miller
+M:	davem@caip.rutgers.edu
 L:	sparclinux@vger.rutgers.edu
+S:	Maintained
+
+SCSI SUBSYSTEM
+P:	Leonard N. Zubkoff
+M:	Leonard N. Zubkoff <lnz@dandelion.com>
+L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 SVGA HANDLING:

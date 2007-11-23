@@ -658,8 +658,10 @@ static int sdla_transmit(struct sk_buff *skb, struct device *dev)
    if (skb == NULL) 
       return(0);
 
-   if (set_bit(0, (void*)&dev->tbusy) != 0)
+   if (set_bit(0, (void*)&dev->tbusy) != 0) {
       printk(KERN_WARNING "%s: transmitter access conflict.\n", dev->name);
+      dev_kfree_skb(skb, FREE_WRITE);
+   }
    else
    {
       /*

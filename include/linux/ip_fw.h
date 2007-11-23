@@ -57,6 +57,7 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/config.h>
 
 struct ip_fw 
 {
@@ -127,6 +128,9 @@ struct ip_fw
 #define IP_FW_OUT		2
 #define IP_FW_ACCT		3
 #define IP_FW_CHAINS		4	/* total number of ip_fw chains */
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+#define IP_FW_AUTOFW		5
+#endif
 
 #define IP_FW_INSERT		(IP_FW_BASE_CTL)
 #define IP_FW_APPEND		(IP_FW_BASE_CTL+1)
@@ -167,6 +171,12 @@ struct ip_fw
 #define IP_ACCT_FLUSH		(IP_FW_FLUSH  | (IP_FW_ACCT << IP_FW_SHIFT))
 #define IP_ACCT_ZERO		(IP_FW_ZERO   | (IP_FW_ACCT << IP_FW_SHIFT))
 
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+#define IP_AUTOFW_ADD		(IP_FW_APPEND | (IP_FW_AUTOFW << IP_FW_SHIFT))
+#define IP_AUTOFW_DEL		(IP_FW_DELETE | (IP_FW_AUTOFW << IP_FW_SHIFT))
+#define IP_AUTOFW_FLUSH  	(IP_FW_FLUSH  | (IP_FW_AUTOFW << IP_FW_SHIFT))
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
+
 struct ip_fwpkt
 {
 	struct iphdr fwp_iph;			/* IP header */
@@ -197,7 +207,6 @@ struct ip_fw_masq;
 #define IP_FW_MODE_ACCT_OUT	0x02	/* accounting (outgoing) */
 #define IP_FW_MODE_CHK		0x04	/* check requested by user */
 
-#include <linux/config.h>
 #ifdef CONFIG_IP_FIREWALL
 extern struct ip_fw *ip_fw_in_chain;
 extern struct ip_fw *ip_fw_out_chain;
@@ -206,6 +215,9 @@ extern int ip_fw_in_policy;
 extern int ip_fw_out_policy;
 extern int ip_fw_fwd_policy;
 extern int ip_fw_ctl(int, void *, int);
+#endif
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+extern int ip_autofw_ctl(int, void *, int);
 #endif
 #ifdef CONFIG_IP_ACCT
 extern struct ip_fw *ip_acct_chain;
@@ -216,4 +228,29 @@ extern int ip_fw_chk(struct iphdr *, struct device *, __u16 *, struct ip_fw *, i
 extern void ip_fw_init(void);
 #endif /* KERNEL */
 
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+#define IP_FWD_RANGE 		1
+#define IP_FWD_PORT		2
+#define IP_FWD_DIRECT		3
+
+#define IP_AUTOFW_ACTIVE	1
+#define IP_AUTOFW_USETIME	2
+#define IP_AUTOFW_SECURE	4
+
+struct ip_autofw {
+	struct ip_autofw * next;
+	__u16 type;
+	__u16 low;
+	__u16 hidden;
+	__u16 high;
+	__u16 visible;
+	__u16 protocol;
+	__u32 lastcontact;
+	__u32 where;
+	__u16 ctlproto;
+	__u16 ctlport;
+	__u16 flags;
+	struct timer_list timer;
+};
+#endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 #endif /* _IP_FW_H */

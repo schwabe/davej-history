@@ -49,6 +49,9 @@
  *		Mike Shaver	:	RFC1122 checks.
  *		Alan Cox	:	Nonblocking error fix.
  *	Willy Konynenberg	:	Transparent proxying support.
+ *		David S. Miller	:	New socket lookup architecture for ISS.
+ *					Last socket cache retained as it
+ *					does have a high hit rate.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -115,25 +118,265 @@
 
 struct udp_mib		udp_statistics;
 
-/*
- *	Cached last hit socket
- */
- 
-volatile unsigned long 	uh_cache_saddr,uh_cache_daddr;
-volatile unsigned short  uh_cache_dport, uh_cache_sport;
-volatile struct sock *uh_cache_sk;
+struct sock *udp_hash[UDP_HTABLE_SIZE];
 
-void udp_cache_zap(void)
+static int udp_v4_verify_bind(struct sock *sk, unsigned short snum)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
-	uh_cache_saddr=0;
-	uh_cache_daddr=0;
-	uh_cache_dport=0;
-	uh_cache_sport=0;
-	uh_cache_sk=NULL;
-	restore_flags(flags);
+	struct sock *sk2;
+	int retval = 0, sk_reuse = sk->reuse;
+
+	SOCKHASH_LOCK();
+	for(sk2 = udp_hash[snum & (UDP_HTABLE_SIZE - 1)]; sk2 != NULL; sk2 = sk2->next) {
+		if((sk2->num == snum) && (sk2 != sk)) {
+			int sk2_reuse = sk2->reuse;
+
+			if(!sk2->rcv_saddr || !sk->rcv_saddr) {
+				if((!sk2_reuse) || (!sk_reuse)) {
+					retval = 1;
+					break;
+				}
+			} else if(sk2->rcv_saddr == sk->rcv_saddr) {
+				if((!sk_reuse) || (!sk2_reuse)) {
+					retval = 1;
+					break;
+				}
+			}
+		}
+	}
+	SOCKHASH_UNLOCK();
+	return retval;
+}
+
+static inline int udp_lport_inuse(int num)
+{
+	struct sock *sk = udp_hash[num & (UDP_HTABLE_SIZE - 1)];
+
+	for(; sk != NULL; sk = sk->next) {
+		if(sk->num == num)
+			return 1;
+	}
+	return 0;
+}
+
+/* Shared by v4/v6 tcp. */
+unsigned short udp_good_socknum(void)
+{
+	static int start = 0;
+	unsigned short base;
+	int i, best = 0, size = 32767; /* a big num. */
+	int result;
+
+	base = PROT_SOCK + (start & 1023) + 1;
+
+	SOCKHASH_LOCK();
+	for(i = 0; i < UDP_HTABLE_SIZE; i++) {
+		struct sock *sk = udp_hash[i];
+		if(!sk) {
+			start = (i + 1 + start) & 1023;
+			result = i + base + 1;
+			goto out;
+		} else {
+			int j = 0;
+			do {
+				if(++j >= size)
+					goto next;
+			} while((sk = sk->next));
+			best = i;
+			size = j;
+		}
+	next:
+	}
+
+	while(udp_lport_inuse(base + best + 1))
+		best += UDP_HTABLE_SIZE;
+	result = (best + base + 1);
+out:
+	SOCKHASH_UNLOCK();
+	return result;
+}
+
+static void udp_v4_hash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+
+	num &= (UDP_HTABLE_SIZE - 1);
+	skp = &udp_hash[num];
+
+	SOCKHASH_LOCK();
+	sk->next = *skp;
+	*skp = sk;
+	sk->hashent = num;
+	SOCKHASH_UNLOCK();
+}
+
+static void udp_v4_unhash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+
+	num &= (UDP_HTABLE_SIZE - 1);
+	skp = &udp_hash[num];
+
+	SOCKHASH_LOCK();
+	while(*skp != NULL) {
+		if(*skp == sk) {
+			*skp = sk->next;
+			break;
+		}
+		skp = &((*skp)->next);
+	}
+	SOCKHASH_UNLOCK();
+}
+
+static void udp_v4_rehash(struct sock *sk)
+{
+	struct sock **skp;
+	int num = sk->num;
+	int oldnum = sk->hashent;
+
+	num &= (UDP_HTABLE_SIZE - 1);
+	skp = &udp_hash[oldnum];
+
+	SOCKHASH_LOCK();
+	while(*skp != NULL) {
+		if(*skp == sk) {
+			*skp = sk->next;
+			break;
+		}
+		skp = &((*skp)->next);
+	}
+	sk->next = udp_hash[num];
+	udp_hash[num] = sk;
+	sk->hashent = num;
+	SOCKHASH_UNLOCK();
+}
+
+/* UDP is nearly always wildcards out the wazoo, it makes no sense to try
+ * harder than this. -DaveM
+ */
+__inline__ struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport)
+{
+	struct sock *sk, *result = NULL;
+	unsigned short hnum = ntohs(dport);
+	int badness = -1;
+
+	for(sk = udp_hash[hnum & (UDP_HTABLE_SIZE - 1)]; sk != NULL; sk = sk->next) {
+		if((sk->num == hnum) && !(sk->dead && (sk->state == TCP_CLOSE))) {
+			int score = 0;
+			if(sk->rcv_saddr) {
+				if(sk->rcv_saddr != daddr)
+					continue;
+				score++;
+			}
+			if(sk->daddr) {
+				if(sk->daddr != saddr)
+					continue;
+				score++;
+			}
+			if(sk->dummy_th.dest) {
+				if(sk->dummy_th.dest != sport)
+					continue;
+				score++;
+			}
+			if(score == 3) {
+				result = sk;
+				break;
+			} else if(score > badness) {
+				result = sk;
+				badness = score;
+			}
+		}
+	}
+	return result;
+}
+
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+#define secondlist(hpnum, sk, fpass) \
+({ struct sock *s1; if(!(sk) && (fpass)--) \
+	s1 = udp_hash[(hpnum) & (TCP_HTABLE_SIZE - 1)]; \
+   else \
+	s1 = (sk); \
+   s1; \
+})
+
+#define udp_v4_proxy_loop_init(hnum, hpnum, sk, fpass) \
+	secondlist((hpnum), udp_hash[(hnum)&(TCP_HTABLE_SIZE-1)],(fpass))
+
+#define udp_v4_proxy_loop_next(hnum, hpnum, sk, fpass) \
+	secondlist((hpnum),(sk)->next,(fpass))
+
+struct sock *udp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
+				 unsigned short rnum, unsigned long laddr,
+				 unsigned long paddr, unsigned short pnum)
+{
+	struct sock *s, *result = NULL;
+	int badness = -1;
+	unsigned short hnum = ntohs(num);
+	unsigned short hpnum = ntohs(pnum);
+	int firstpass = 1;
+
+	SOCKHASH_LOCK();
+	for(s = udp_v4_proxy_loop_init(hnum, hpnum, s, firstpass);
+	    s != NULL;
+	    s = udp_v4_proxy_loop_next(hnum, hpnum, s, firstpass)) {
+		if(s->num == hnum || s->num == hpnum) {
+			int score = 0;
+			if(s->dead && (s->state == TCP_CLOSE))
+				continue;
+			if(s->rcv_saddr) {
+				if((s->num != hpnum || s->rcv_saddr != paddr) &&
+				   (s->num != hnum || s->rcv_saddr != laddr))
+					continue;
+				score++;
+			}
+			if(s->daddr) {
+				if(s->daddr != raddr)
+					continue;
+				score++;
+			}
+			if(s->dummy_th.dest) {
+				if(s->dummy_th.dest != rnum)
+					continue;
+				score++;
+			}
+			if(score == 3 && s->num == hnum) {
+				result = s;
+				break;
+			} else if(score > badness && (s->num == hpnum || s->rcv_saddr)) {
+					result = s;
+					badness = score;
+			}
+		}
+	}
+	SOCKHASH_UNLOCK();
+	return result;
+}
+
+#undef secondlist
+#undef udp_v4_proxy_loop_init
+#undef udp_v4_proxy_loop_next
+
+#endif
+
+static inline struct sock *udp_v4_mcast_next(struct sock *sk,
+					     unsigned short num,
+					     unsigned long raddr,
+					     unsigned short rnum,
+					     unsigned long laddr)
+{
+	struct sock *s = sk;
+	unsigned short hnum = ntohs(num);
+	for(; s; s = s->next) {
+		if ((s->num != hnum)					||
+		    (s->dead && (s->state == TCP_CLOSE))		||
+		    (s->daddr && s->daddr!=raddr)			||
+		    (s->dummy_th.dest != rnum && s->dummy_th.dest != 0) ||
+		    (s->rcv_saddr  && s->rcv_saddr != laddr))
+			continue;
+		break;
+  	}
+  	return s;
 }
 
 #define min(a,b)	((a)<(b)?(a):(b))
@@ -165,8 +408,7 @@ void udp_err(int type, int code, unsigned char *header, __u32 daddr,
 	
 	uh = (struct udphdr *)header;  
    
-	sk = get_sock(&udp_prot, uh->source, daddr, uh->dest, saddr, 0, 0);
-
+	sk = udp_v4_lookup(daddr, uh->dest, saddr, uh->source);
 	if (sk == NULL) 
 	  	return;	/* No socket for error */
   	
@@ -618,7 +860,6 @@ int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	sk->daddr = usin->sin_addr.s_addr;
 	sk->dummy_th.dest = usin->sin_port;
 	sk->state = TCP_ESTABLISHED;
-	udp_cache_zap();
 	sk->ip_route_cache = rt;
 	return(0);
 }
@@ -628,8 +869,6 @@ static void udp_close(struct sock *sk, unsigned long timeout)
 {
 	lock_sock(sk);
 	sk->state = TCP_CLOSE;
-	if(uh_cache_sk==sk)
-		udp_cache_zap();
 	release_sock(sk);
 	sk->dead = 1;
 	destroy_sock(sk);
@@ -679,12 +918,50 @@ int udp_chkaddr(struct sk_buff *skb)
 	struct udphdr *uh = (struct udphdr *)(skb->h.raw + iph->ihl*4);
 	struct sock *sk;
 
-	sk = get_sock(&udp_prot, uh->dest, iph->saddr, uh->source, iph->daddr, 0, 0);
-
-	if (!sk) return 0;
+	sk = udp_v4_lookup(iph->saddr, uh->source, iph->daddr, uh->dest);
+	if (!sk)
+		return 0;
 	/* 0 means accept all LOCAL addresses here, not all the world... */
-	if (sk->rcv_saddr == 0) return 0;
+	if (sk->rcv_saddr == 0)
+		return 0;
 	return 1;
+}
+#endif
+
+#ifdef CONFIG_IP_MULTICAST
+/*
+ *	Multicasts and broadcasts go to each listener.
+ */
+static int udp_v4_mcast_deliver(struct sk_buff *skb, struct udphdr *uh,
+				 u32 saddr, u32 daddr)
+{
+	struct sock *sk;
+	int given = 0;
+
+	SOCKHASH_LOCK();
+	sk = udp_hash[ntohs(uh->dest) & (UDP_HTABLE_SIZE - 1)];
+	sk = udp_v4_mcast_next(sk, uh->dest, saddr, uh->source, daddr);
+	if(sk) {
+		struct sock *sknext = NULL;
+
+		do {
+			struct sk_buff *skb1 = skb;
+
+			sknext = udp_v4_mcast_next(sk->next, uh->dest, saddr,
+						   uh->source, daddr);
+			if(sknext)
+				skb1 = skb_clone(skb, GFP_ATOMIC);
+
+			if(skb1)
+				udp_deliver(sk, skb1);
+			sk = sknext;
+		} while(sknext);
+		given = 1;
+	}
+	SOCKHASH_UNLOCK();
+	if(!given)
+		kfree_skb(skb, FREE_READ);
+	return 0;
 }
 #endif
 
@@ -784,46 +1061,15 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 #ifdef CONFIG_IP_MULTICAST
 	if (addr_type==IS_BROADCAST || addr_type==IS_MULTICAST)
-	{
-		/*
-		 *	Multicasts and broadcasts go to each listener.
-		 */
-		struct sock *sknext=NULL;
-		sk=get_sock_mcast(udp_prot.sock_array[ntohs(uh->dest)&(SOCK_ARRAY_SIZE-1)], uh->dest,
-				saddr, uh->source, daddr);
-		if(sk)
-		{		
-			do
-			{
-				struct sk_buff *skb1;
-
-				sknext=get_sock_mcast(sk->next, uh->dest, saddr, uh->source, daddr);
-				if(sknext)
-					skb1=skb_clone(skb,GFP_ATOMIC);
-				else
-					skb1=skb;
-				if(skb1)
-					udp_deliver(sk, skb1);
-				sk=sknext;
-			}
-			while(sknext!=NULL);
-		}
-		else
-			kfree_skb(skb, FREE_READ);
-		return 0;
-	}	
+		return udp_v4_mcast_deliver(skb, uh, saddr, daddr);
 #endif
-	if(saddr==uh_cache_saddr && daddr==uh_cache_daddr && uh->dest==uh_cache_dport && uh->source==uh_cache_sport)
-		sk=(struct sock *)uh_cache_sk;
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	if(skb->redirport)
+		sk = udp_v4_proxy_lookup(uh->dest, saddr, uh->source,
+					 daddr, dev->pa_addr, skb->redirport);
 	else
-	{
-	  	sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr, dev->pa_addr, skb->redirport);
-  		uh_cache_saddr=saddr;
-  		uh_cache_daddr=daddr;
-  		uh_cache_dport=uh->dest;
-  		uh_cache_sport=uh->source;
-  		uh_cache_sk=sk;
-	}
+#endif
+	sk = udp_v4_lookup(saddr, uh->source, daddr, uh->dest);
 	
 	if (sk == NULL) 
   	{
@@ -845,27 +1091,34 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 }
 
 struct proto udp_prot = {
-	udp_close,
-	ip_build_header,
-	udp_connect,
-	NULL,
-	ip_queue_xmit,
-	NULL,
-	NULL,
-	NULL,
-	udp_rcv,
-	datagram_select,
-	udp_ioctl,
-	NULL,
-	NULL,
-	ip_setsockopt,
-	ip_getsockopt,
-	udp_sendmsg,
-	udp_recvmsg,
-	NULL,		/* No special bind function */
-	128,
-	0,
-	"UDP",
-	0, 0,
-	{NULL,}
+	(struct sock *)&udp_prot,	/* sklist_next */
+	(struct sock *)&udp_prot,	/* sklist_prev */
+	udp_close,			/* close */
+	ip_build_header,		/* build_header */
+	udp_connect,			/* connect */
+	NULL,				/* accept */
+	ip_queue_xmit,			/* queue_xmit */
+	NULL,				/* retransmit */
+	NULL,				/* write_wakeup */
+	NULL,				/* read_wakeup */
+	udp_rcv,			/* rcv */
+	datagram_select,		/* select */
+	udp_ioctl,			/* ioctl */
+	NULL,				/* init */
+	NULL,				/* shutdown */
+	ip_setsockopt,			/* setsockopt */
+	ip_getsockopt,			/* getsockopt */
+	udp_sendmsg,			/* sendmsg */
+	udp_recvmsg,			/* recvmsg */
+	NULL,				/* bind */
+	udp_v4_hash,			/* hash */
+	udp_v4_unhash,			/* unhash */
+	udp_v4_rehash,			/* rehash */
+	udp_good_socknum,		/* good_socknum */
+	udp_v4_verify_bind,		/* verify_bind */
+	128,				/* max_header */
+	0,				/* retransmits */
+	"UDP",				/* name */
+	0,				/* inuse */
+	0				/* highestinuse */
 };

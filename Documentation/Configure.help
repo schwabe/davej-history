@@ -436,6 +436,35 @@ CONFIG_FIREWALL
   any machine being run as a router and not on a host. If unsure, say
   N.
 
+SYN flood protection
+CONFIG_SYN_COOKIES
+  Normal TCP/IP networking is open to an attack known as SYN flooding.
+  This attack prevents legitimate users from being able to connect to
+  your computer and requires very little work for the attacker.
+  SYN cookies provide protection against this type of attack. With
+  this option turned on the TCP/IP stack will use a cryptographic
+  challenge protocol known as SYN cookies to enable legitimate users
+  to continue to connect, even when your machine is under attack.
+  The RST_COOKIES option provides an alternative method to accomplish
+  the same end. SYN cookies use less space than RST cookies,
+  but have a small probability of introducing an non timed-out
+  failure to connect in the remote TCP. You can use both options
+  simultatenously.
+
+SYN flood protection
+CONFIG_RST_COOKIES
+  Normal TCP/IP networking is open to an attack known as SYN flooding.
+  This attack prevents legitimate users from being able to connect to
+  your computer and requires very little work for the attacker.
+  SYN cookies provide protection against this type of attack. With
+  this option turned on the TCP/IP stack will use a cryptographic
+  challenge protocol known as RST cookies to enable legitimate users
+  to continue to connect, even when your machine is under attack.
+  The SYN_COOKIES option provides an alternative method to accomplish
+  the same end. RST cookies use more space than SYN cookies on your
+  machine, but never increase the probability of a frozen connection
+  in a remote TCP. You can use both options simultatenously.
+
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
   This is support for floppy drives on Sun Sparc workstations. Say Y
@@ -452,7 +481,7 @@ CONFIG_ALPHA_AVANTI
   choices:
   ** Avanti: This is for Mustang (AS200), M3 (AS250), Avanti (AS400)
      and XL (a.k.a. "Windows NT Dream Machine" :-) AlphaStations.
-     These usually come with a TGA graphics adaptor, so you'll want to
+     These usually come with a TGA graphics adapter, so you'll want to
      say Y to "TGA Console support", below, if you have one of these.
   ** Jensen: a.k.a. DEC 2000 a.k.a. DECpc AXP 150, the oldest Alpha
      PC; it sports an EISA bus. The boot process on Jensen machines is
@@ -528,7 +557,7 @@ TGA Console Support
 CONFIG_TGA_CONSOLE
   Many Alpha systems (e.g the Multia) are shipped with a graphics card
   that implements the TGA interface (much like the VGA standard, but
-  older TGA adaptors are *not* VGA compatible).  On such systems, this
+  older TGA adapters are *not* VGA compatible).  On such systems, this
   option needs to be enabled so that the TGA driver rather than the
   standard VGA driver is used.  Note that, at this time, there is no X
   server for these systems. If unsure, try N.
@@ -893,7 +922,7 @@ CONFIG_IP_TRANSPARENT_PROXY
   rules (using the ipfwadm utility) and/or by doing an appropriate
   bind() system call.
 
-IP: masquerading (EXPERIMENTAL)
+IP: masquerading
 CONFIG_IP_MASQUERADE
   If one of the computers on your local network for which your Linux
   box acts as a firewall wants to send something to the outside, your
@@ -912,8 +941,28 @@ CONFIG_IP_MASQUERADE
   from ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/].)
   Details on how to set things up are contained in the
   IP Masquerading FAQ, available at http://www.indyramp.com/masq/
-  This is EXPERIMENTAL code, which means that it need not be completely
-  stable. If you want this, say Y.
+  To use masquerading you must also enable Network Firewalls, IP
+  forwarding/gatewaying, IP firewalling and (ideally, but optionally)
+  IP always defragment.
+  If you want this, say Y.
+
+IP: ipautofw masquerade support
+CONFIG_IP_MASQUERADE_IPAUTOFW
+  ipautofw is a program by Richard Lynch allowing additional
+  support for masquerading protocols which do not (as yet)
+  have additional protocol helpers.  
+  Information and source for ipautofw is available from
+  ftp://ftp.netis.com/pub/members/rlynch/
+  If you want this, say Y.
+
+IP: ICMP masquerading
+CONFIG_IP_MASQUERADE_ICMP
+  The basic masquerade code described for CONFIG_IP_MASQUERADE only
+  handles TCP or UDP packets (and ICMP errors for existing 
+  connections).  This option adds additional support for masquerading
+  ICMP packets, such as ping or the probes used by the Windows 95
+  tracert program.
+  If you want this, say Y.
 
 IP: always defragment 
 CONFIG_IP_ALWAYS_DEFRAG 
@@ -1199,7 +1248,7 @@ SCSI support?
 CONFIG_SCSI
   If you want to use a SCSI harddisk, SCSI tapedrive, SCSI CDROM or
   any other SCSI device under Linux, say Y and make sure that you know
-  the name of your SCSI host adaptor (the card inside your computer
+  the name of your SCSI host adapter (the card inside your computer
   that "speaks" the SCSI protocol), because you will be asked for
   it. You also need to say Y here if you want support for the parallel
   port version of the 100MB IOMEGA ZIP drive. Please read the
@@ -1263,11 +1312,12 @@ CONFIG_CHR_DEV_SG
 Probe all LUNs on each SCSI device
 CONFIG_SCSI_MULTI_LUN
   If you have a SCSI device that supports more than one LUN (Logical
-  Unit Number), e.g. a CD jukebox, you should say Y here so that all
-  will be found by the SCSI driver. An SCSI device with multiple LUNs
-  acts logically like multiple SCSI devices. The vast majority of SCSI
-  devices have only one LUN, and so most people can say N here and
-  should in fact do so, because it is safer.
+  Unit Number), e.g. a CD jukebox, and only one LUN is detected, you
+  can say Y here to force the SCSI driver to probe for multiple LUNs. 
+  A SCSI device with multiple LUNs acts logically like multiple SCSI
+  devices.  The vast majority of SCSI devices have only one LUN, and
+  so most people can say N here and should in fact do so, because it
+  is safer.
 
 Verbose SCSI error reporting (kernel size +=12K)
 CONFIG_SCSI_CONSTANTS
@@ -1277,7 +1327,7 @@ CONFIG_SCSI_CONSTANTS
 
 AdvanSys SCSI support
 CONFIG_SCSI_ADVANSYS
-  This is a driver for all SCSI host adaptors manufactured by
+  This is a driver for all SCSI host adapters manufactured by
   AdvanSys. It is documented in the kernel source in
   drivers/scsi/advansys.c. This driver is also available as a module (
   = code which can be inserted in and removed from the running kernel
@@ -1287,7 +1337,7 @@ CONFIG_SCSI_ADVANSYS
 Adaptec AHA152X/2825 support
 CONFIG_SCSI_AHA152X
   This is support for the AHA-1510, AHA-1520, AHA-1522, and AHA-2825
-  SCSI host adaptors. It is explained in section 3.3 of the
+  SCSI host adapters. It is explained in section 3.3 of the
   SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. You might also want to read
   the comments at the top of drivers/scsi/aha152x.c. This driver is
@@ -1298,7 +1348,7 @@ CONFIG_SCSI_AHA152X
 
 Adaptec AHA1542 support
 CONFIG_SCSI_AHA1542
-  This is support for a SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adapter. It is explained in section
   3.4 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  Note that Trantor was
   recently purchased by Adaptec, and some former Trantor products are
@@ -1310,7 +1360,7 @@ CONFIG_SCSI_AHA1542
  
 Adaptec AHA1740 support
 CONFIG_SCSI_AHA1740
-  This is support for a SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adapter. It is explained in section
   3.5 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
   the box, you may have to change some settings in
@@ -1321,7 +1371,7 @@ CONFIG_SCSI_AHA1740
 
 Adaptec AHA274X/284X/294X support
 CONFIG_SCSI_AIC7XXX
-  Information about this SCSI host adaptor is contained in
+  Information about this SCSI host adapter is contained in
   drivers/scsi/README.aic7xxx and in the SCSI-HOWTO, available via ftp
   (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it
   doesn't work out of the box, you may have to change some settings in
@@ -1331,23 +1381,25 @@ CONFIG_SCSI_AIC7XXX
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
-  This is support for BusLogic MultiMaster SCSI Host Adaptors.
-  Consult the SCSI-HOWTO, available via anonymous ftp from
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO and the file
-  drivers/scsi/README.BusLogic for more information. BusLogic
-  FlashPoint SCSI Host Adapters are not supported by this driver, but
-  BusLogic has initiated an upgrade program which allows you to get a
-  better adaptor for few $$. Read about it in
-  drivers/scsi/README.FlashPoint.  If this driver does not work
-  correctly without modification, please contact the author.  You can
-  build this driver also as a module ( = code which can be inserted in
-  and removed from the running kernel whenever you want), but only a
-  single instance may be loaded. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  This is support for BusLogic MultiMaster and FlashPoint SCSI Host Adapters.
+  Consult the SCSI-HOWTO, available via anonymous ftp from sunsite.unc.edu in
+  /pub/Linux/docs/HOWTO, and the files README.BusLogic and README.FlashPoint in
+  drivers/scsi for more information.  If this driver does not work correctly
+  without modification, please contact the author, Leonard N. Zubkoff, by email
+  to lnz@dandelion.com.  You can also build this driver as a module ( = code
+  which can be inserted in and removed from the running kernel whenever you
+  want), but only a single instance may be loaded.  If you want to compile it
+  as a module, say M here and read Documentation/modules.txt.
+
+Omit BusLogic SCSI FlashPoint support
+CONFIG_SCSI_OMIT_FLASHPOINT
+  This option allows you to omit the FlashPoint support from the BusLogic
+  SCSI driver.  The FlashPoint SCCB Manager code is substantial, so users of
+  MultiMaster Host Adapters may wish to omit it.
 
 DTC3180/3280 SCSI support
 CONFIG_SCSI_DTC3280
-  This is support for DTC 3180/3280 SCSI Host Adaptors.  Please read
+  This is support for DTC 3180/3280 SCSI Host Adapters.  Please read
   the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO and the file
   drivers/scsi/README.dtc3x80.  This driver is also available as a
@@ -1358,7 +1410,7 @@ CONFIG_SCSI_DTC3280
 EATA-DMA (DPT, NEC, AT&T, SNI, AST, Olivetti, Alphatronix) support
 CONFIG_SCSI_EATA_DMA
   This is support for the EATA-DMA protocol compliant SCSI Host
-  Adaptors like the SmartCache III/IV, SmartRAID controller families
+  Adapters like the SmartCache III/IV, SmartRAID controller families
   and the DPT PM2011B and PM2012B controllers.  Please read the
   SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
@@ -1369,8 +1421,8 @@ CONFIG_SCSI_EATA_DMA
 EATA-PIO (old DPT PM2001, PM2012A) support
 CONFIG_SCSI_EATA_PIO
   This driver supports all EATA-PIO protocol compliant SCSI Host
-  Adaptors like the DPT PM2001 and the PM2012A. EATA-DMA compliant
-  host adaptors could also use this driver but are discouraged from
+  Adapters like the DPT PM2001 and the PM2012A. EATA-DMA compliant
+  host adapters could also use this driver but are discouraged from
   doing so, since this driver only supports harddisks and lacks
   numerous features.  You might want to have a look at the SCSI-HOWTO,
   available via ftp (user: anonymous) at
@@ -1396,9 +1448,9 @@ CONFIG_SCSI_U14_34F
 
 Future Domain 16xx SCSI support
 CONFIG_SCSI_FUTURE_DOMAIN
-  This is support for Future Domain's 16-bit SCSI host adaptors
+  This is support for Future Domain's 16-bit SCSI host adapters
   (TMC-1660/1680, TMC-1650/1670, TMC-3260, TMC-1610M/MER/MEX) and other
-  adaptors based on the Future Domain chipsets (Quantum ISA-200S,
+  adapters based on the Future Domain chipsets (Quantum ISA-200S,
   ISA-250MG; Adaptec AHA-2920; and at least one IBM board).  It is
   explained in section 3.7 of the SCSI-HOWTO, available via ftp (user:
   anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is
@@ -1455,7 +1507,7 @@ CONFIG_SCSI_NCR53C7xx_sync
 allow FAST-SCSI [10MHz]
 CONFIG_SCSI_NCR53C7xx_FAST
   This will enable 10MHz FAST-SCSI transfers with your host
-  adaptor. Some systems have problems with that speed, so it's safest
+  adapter. Some systems have problems with that speed, so it's safest
   to say N here.
  
 allow DISCONNECT
@@ -1551,7 +1603,7 @@ CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
 
 Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
-  This is support for an ISA bus SCSI host adaptor. You'll find
+  This is support for an ISA bus SCSI host adapter. You'll find
   more information in drivers/scsi/in2000.readme. If it doesn't
   work out of the box, you may have to change the jumpers for IRQ
   or address selection. If you want to compile this as a module 
@@ -1561,7 +1613,7 @@ CONFIG_SCSI_IN2000
 
 PAS16 SCSI support
 CONFIG_SCSI_PAS16
-  This is support for a SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adapter. It is explained in section
   3.10 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
   box, you may have to change some settings in drivers/scsi/pas16.h.
@@ -1582,7 +1634,7 @@ CONFIG_SCSI_QLOGIC_FAS
 
 Qlogic ISP SCSI support (EXPERIMENTAL)
 CONFIG_SCSI_QLOGIC_ISP
-  This driver works for all QLogic PCI SCSI host adaptors (IQ-PCI,
+  This driver works for all QLogic PCI SCSI host adapters (IQ-PCI,
   IQ-PCI-10, IQ_PCI-D) except for the PCI-basic card. (This latter
   card is supported by the "AM53/79C974 PCI SCSI" driver). If you say
   Y here, make sure to say Y to "PCI BIOS support" as well. More
@@ -1608,7 +1660,7 @@ CONFIG_SCSI_SEAGATE
 
 Trantor T128/T128F/T228 SCSI support
 CONFIG_SCSI_T128
-  This is support for a SCSI host adaptor. It is explained in section
+  This is support for a SCSI host adapter. It is explained in section
   3.11 of the SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
   the box, you may have to change some settings in
@@ -1619,7 +1671,7 @@ CONFIG_SCSI_T128
 UltraStor SCSI support
 CONFIG_SCSI_ULTRASTOR
   This is support for the UltraStor 14F, 24F and 34F SCSI-2 host
-  adaptor family. This driver is explained in section 3.12 of the
+  adapter family. This driver is explained in section 3.12 of the
   SCSI-HOWTO, available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
   box, you may have to change some settings in
@@ -1631,7 +1683,7 @@ CONFIG_SCSI_ULTRASTOR
  
 7000FASST SCSI support
 CONFIG_SCSI_7000FASST
-  This driver supports the Western Digital 7000 SCSI host adaptor.
+  This driver supports the Western Digital 7000 SCSI host adapter.
   Some information is in the source: drivers/scsi/wd7000.c.  This
   driver is also available as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want). If you
@@ -2363,7 +2415,7 @@ CONFIG_PT
   drivers/net/README.pt.  NOTE: The card is capable of DMA and full
   duplex but neither of these have been coded in the driver as yet.
 
-WaveLAN support
+AT&T WaveLAN & DEC RoamAbout DS support
 CONFIG_WAVELAN
   These are cards for wireless ethernet-like networking. Supported are
   AT&T GIS and NCR WaveLAN cards. If you want to use a card of this
@@ -2548,10 +2600,10 @@ CONFIG_ZNET
   by this driver. Read the Ethernet-HOWTO, available via ftp (user:
   anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.
 
-Pocket and portable adaptors
+Pocket and portable adapters
 CONFIG_NET_POCKET
   Cute little network (ethernet) devices which attach to the parallel
-  port ("pocket adaptors"), commonly used with laptops. If you have
+  port ("pocket adapters"), commonly used with laptops. If you have
   one of those, say Y and read the Ethernet-HOWTO, available via ftp
   (user: anonymous) from sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you
   want to plug a network card into the PCMCIA slot of your laptop
@@ -2565,10 +2617,10 @@ CONFIG_NET_POCKET
   plan to use more than one network device under linux, read the
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini. If you intend to use an
-  adaptor attaching to the parallel port as well as a parallel
+  adapter attaching to the parallel port as well as a parallel
   printer, you should compile both drivers as modules (if possible).
 
-AT-LAN-TEC/RealTek pocket adaptor support
+AT-LAN-TEC/RealTek pocket adapter support
 CONFIG_ATP
   This is a network (ethernet) device which attaches to your parallel
   port. Read drivers/net/atp.c as well as the Ethernet-HOWTO,
@@ -2580,7 +2632,7 @@ CONFIG_ATP
   this driver, you should have said N to the Parallel Printer support,
   because the two drivers don't like each other.
 
-D-Link DE600 pocket adaptor support
+D-Link DE600 pocket adapter support
 CONFIG_DE600
   This is a network (ethernet) device which attaches to your parallel
   port. Read drivers/net/README.DLINK as well as the Ethernet-HOWTO,
@@ -2589,12 +2641,12 @@ CONFIG_DE600
   you want to compile this as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
   here and read Documentation/modules.txt. If you intend to use this
-  pocket adaptor as well as a parallel printer, you should compile
+  pocket adapter as well as a parallel printer, you should compile
   both drivers as modules. If you plan to use more than one network
   card under linux, read the Multiple-Ethernet-mini-HOWTO, available
   from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
-D-Link DE620 pocket adaptor support
+D-Link DE620 pocket adapter support
 CONFIG_DE620
   This is a network (ethernet) device which attaches to your parallel
   port. Read drivers/net/README.DLINK as well as the Ethernet-HOWTO,
@@ -2603,7 +2655,7 @@ CONFIG_DE620
   you want to compile this as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
   here and read Documentation/modules.txt. If you intend to use this
-  pocket adaptor as well as a parallel printer, you should compile
+  pocket adapter as well as a parallel printer, you should compile
   both drivers as modules. If you plan to use more than one network
   card under linux, read the Multiple-Ethernet-mini-HOWTO, available
   from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
@@ -2615,7 +2667,7 @@ CONFIG_TR
   ring network and want to use your Token Ring card under Linux, say Y.
   Most people can say N here.
 
-IBM Tropic chipset based adaptor support
+IBM Tropic chipset based adapter support
 CONFIG_IBMTR
   This is support for all IBM Token Ring cards that don't use DMA. If
   you have such a beast, say Y, otherwise N. Warning: this driver will
@@ -3792,6 +3844,20 @@ CONFIG_AP1000
   machine see http://cap.anu.edu.au/cap/projects/linux or mail to
   hackers@cafe.anu.edu.au
 
+Sparc ESP SCSI support
+CONFIG_SCSI_SUNESP
+  This is the driver for the Sun ESP SCSI host adapter. The ESP
+  chipset is present in most SPARC-based computers.
+
+Sparc /dev/openprom compatibility driver
+CONFIG_SUN_OPENPROMIO
+  This driver provides user programs with an interface to the Sparc
+  PROM device tree. The driver implements a SunOS-compatible
+  interface and a NetBSD-compatible interface. If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M and read
+  Documentation/modules.txt. If unsure, say Y.
+
 # need an empty line after last entry, for sed script in Configure.
 
 #
@@ -3879,4 +3945,9 @@ CONFIG_AP1000
 # LocalWords:  mgetty sendfax gert greenie muc lowlevel Lasermate LanManager io
 # LocalWords:  OOPSes trackball binghamton mobileip ncr IOMAPPED settags ns ser
 # LocalWords:  setsync NEGO MPARITY autotuning prefetch PIIX cdwrite utils rc
-# LocalWords:  PCWATCHDOG berkprod bitgate
+# LocalWords:  PCWATCHDOG berkprod bitgate Boldt boldt ucsb jf kyoto jp euc ntt
+# LocalWords:  Tetsuyasu YAMADA tetsu cauchy nslab nevod perm su doc kaf kheops
+# LocalWords:  traduc Bourgin dbourgin wsc helptext menuconfig kfill READMEs DS
+# LocalWords:  HOWTOs firewalls SYN RST QMAGIC ZMAGIC ipautofw netis rlynch syr
+# LocalWords:  ICMP tracert Xterminal Xkernel jmwobus comfaqs dhcp radio's tapr
+# LocalWords:  pkthome lnxbay RoamAbout mconv sed LocalWords

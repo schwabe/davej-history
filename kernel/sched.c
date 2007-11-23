@@ -4,6 +4,9 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  1996-04-21	Modified by Ulrich Windl to make NTP work
+ *  1996-12-23  Modified by Dave Grothe to fix bugs in semaphores and
+ *              make semaphores SMP safe
+ *  1997-01-28  Modified by Finn Arne Gangstad to make timers scale better.
  */
 
 /*
@@ -482,32 +485,47 @@ bad:
 	printk("       *q = %p\n",*q);
 }
 
+
 /*
  * Semaphores are implemented using a two-way counter:
  * The "count" variable is decremented for each process
- * that tries to sleep, while the "waiting" variable is
- * incremented _while_ the process is sleeping on that
- * semaphore. 
+ * that tries to sleep, while the "waking" variable is
+ * incremented when the "up()" code goes to wake up waiting
+ * processes.
  *
  * Notably, the inline "up()" and "down()" functions can
  * efficiently test if they need to do any extra work (up
  * needs to do something only if count was negative before
  * the increment operation.
+ *
+ * This routine must execute atomically.
  */
-static inline void normalize_semaphore(struct semaphore *sem)
+static inline int waking_non_zero(struct semaphore *sem)
 {
-	atomic_add(xchg(&sem->waiting,0), &sem->count);
+	int	ret ;
+	long	flags ;
+
+	get_buzz_lock(&sem->lock) ;
+	save_flags(flags) ;
+	cli() ;
+
+	if ((ret = (sem->waking > 0)))
+		sem->waking-- ;
+
+	restore_flags(flags) ;
+	give_buzz_lock(&sem->lock) ;
+	return(ret) ;
 }
 
 /*
  * When __up() is called, the count was negative before
- * incrementing it, and we need to wake up somebody. In
- * most cases "waiting" will be positive, and the normalization
- * will allow things to continue. However, if somebody has
- * /just/ done a down(), it may be that count was negative
- * without waiting being positive (or in the generic case
- * "count is more negative than waiting is positive"), and
- * the waiter needs to check this itself (see __down).
+ * incrementing it, and we need to wake up somebody.
+ *
+ * This routine adds one to the count of processes that need to
+ * wake up and exit.  ALL waiting processes actually wake up but
+ * only the one that gets to the "waking" field first will gate
+ * through and acquire the semaphore.  The others will go back
+ * to sleep.
  *
  * Note that these functions are only called when there is
  * contention on the lock, and as such all this is the
@@ -517,54 +535,85 @@ static inline void normalize_semaphore(struct semaphore *sem)
  */
 void __up(struct semaphore *sem)
 {
-	normalize_semaphore(sem);
+	atomic_inc(&sem->waking) ;
 	wake_up(&sem->wait);
 }
 
-void __down(struct semaphore * sem)
+/*
+ * Perform the "down" function.  Return zero for semaphore acquired,
+ * return negative for signalled out of the function.
+ *
+ * If called from __down, the return is ignored and the wait loop is
+ * not interruptible.  This means that a task waiting on a semaphore
+ * using "down()" cannot be killed until someone does an "up()" on
+ * the semaphore.
+ *
+ * If called from __down_interruptible, the return value gets checked
+ * upon return.  If the return value is negative then the task continues
+ * with the negative value in the return register (it can be tested by
+ * the caller).
+ *
+ * Either form may be used in conjunction with "up()".
+ *
+ */
+int __do_down(struct semaphore * sem, int task_state)
 {
 	struct task_struct *tsk = current;
 	struct wait_queue wait = { tsk, NULL };
+	int		  ret = 0 ;
 
-	/*
-	 * The order here is important. We add ourselves to the
-	 * wait queues and mark ourselves sleeping _first_. That
-	 * way, if a "up()" comes in here, we'll either get
-	 * woken up (up happens after the wait queues are set up)
-	 * OR we'll have "waiting > 0".
-	 */
-	tsk->state = TASK_UNINTERRUPTIBLE;
+	tsk->state = task_state;
 	add_wait_queue(&sem->wait, &wait);
-	atomic_inc(&sem->waiting);
 
 	/*
-	 * Ok, we're set up. The only race here is really that
-	 * an "up()" might have incremented count before we got
-	 * here, so we check "count+waiting". If that is larger
-	 * than zero, we shouldn't sleep, but re-try the lock.
+	 * Ok, we're set up.  sem->count is known to be less than zero
+	 * so we must wait.
+	 *
+	 * We can let go the lock for purposes of waiting.
+	 * We re-acquire it after awaking so as to protect
+	 * all semaphore operations.
+	 *
+	 * If "up()" is called before we call waking_non_zero() then
+	 * we will catch it right away.  If it is called later then
+	 * we will have to go through a wakeup cycle to catch it.
+	 *
+	 * Multiple waiters contend for the semaphore lock to see
+	 * who gets to gate through and who has to wait some more.
 	 */
-	if (sem->count+sem->waiting <= 0) {
-		/*
-		 * If "count+waiting" <= 0, we have to wait
-		 * for a up(), which will normalize the count.
-		 * Remember, at this point we have decremented
-		 * count, and incremented up, so if count is
-		 * zero or positive we need to return to re-try
-		 * the lock.  It _may_ be that both count and
-		 * waiting is zero and that it is still locked,
-		 * but we still want to re-try the lock in that
-		 * case to make count go negative again so that
-		 * the optimized "up()" wake_up sequence works.
-		 */
-		do {
-			schedule();
-			tsk->state = TASK_UNINTERRUPTIBLE;
-		} while (sem->count < 0);
+	for (;;)
+	{
+		if (waking_non_zero(sem))	/* are we waking up?  */
+		    break ;			/* yes, exit loop */
+
+		if (   task_state == TASK_INTERRUPTIBLE
+		    && (tsk->signal & ~tsk->blocked)	/* signalled */
+		   )
+		{
+		    ret = -EINTR ;		/* interrupted */
+		    atomic_inc(&sem->count) ;	/* give up on down operation */
+		    break ;
+		}
+
+		schedule();
+		tsk->state = task_state;
 	}
+
 	tsk->state = TASK_RUNNING;
 	remove_wait_queue(&sem->wait, &wait);
-	normalize_semaphore(sem);
+	return(ret) ;
+
+} /* __do_down */
+
+void __down(struct semaphore * sem)
+{
+	__do_down(sem,TASK_UNINTERRUPTIBLE) ; 
 }
+
+int __down_interruptible(struct semaphore * sem)
+{
+	return(__do_down(sem,TASK_INTERRUPTIBLE)) ; 
+}
+
 
 static inline void __sleep_on(struct wait_queue **p, int state)
 {
@@ -596,70 +645,170 @@ void sleep_on(struct wait_queue **p)
 	__sleep_on(p,TASK_UNINTERRUPTIBLE);
 }
 
-/*
- * The head for the timer-list has a "expires" field of MAX_UINT,
- * and the sorting routine counts on this..
- */
-static struct timer_list timer_head = { &timer_head, &timer_head, ~0, 0, NULL };
+#define TVN_BITS 6
+#define TVR_BITS 8
+#define TVN_SIZE (1 << TVN_BITS)
+#define TVR_SIZE (1 << TVR_BITS)
+#define TVN_MASK (TVN_SIZE - 1)
+#define TVR_MASK (TVR_SIZE - 1)
+
 #define SLOW_BUT_DEBUGGING_TIMERS 0
 
-void add_timer(struct timer_list * timer)
+struct timer_vec {
+        int index;
+        struct timer_list *vec[TVN_SIZE];
+};
+
+struct timer_vec_root {
+        int index;
+        struct timer_list *vec[TVR_SIZE];
+};
+
+static struct timer_vec tv5 = { 0 };
+static struct timer_vec tv4 = { 0 };
+static struct timer_vec tv3 = { 0 };
+static struct timer_vec tv2 = { 0 };
+static struct timer_vec_root tv1 = { 0 };
+
+static struct timer_vec * const tvecs[] = {
+	(struct timer_vec *)&tv1, &tv2, &tv3, &tv4, &tv5
+};
+
+#define NOOF_TVECS (sizeof(tvecs) / sizeof(tvecs[0]))
+
+static unsigned long timer_jiffies = 0;
+
+static inline void insert_timer(struct timer_list *timer,
+				struct timer_list **vec, int idx)
+{
+	if ((timer->next = vec[idx]))
+		vec[idx]->prev = timer;
+	vec[idx] = timer;
+	timer->prev = (struct timer_list *)&vec[idx];
+}
+
+static inline void internal_add_timer(struct timer_list *timer)
+{
+	/*
+	 * must be cli-ed when calling this
+	 */
+	unsigned long expires = timer->expires;
+	unsigned long idx = expires - timer_jiffies;
+
+	if (idx < TVR_SIZE) {
+		int i = expires & TVR_MASK;
+		insert_timer(timer, tv1.vec, i);
+	} else if (idx < 1 << (TVR_BITS + TVN_BITS)) {
+		int i = (expires >> TVR_BITS) & TVN_MASK;
+		insert_timer(timer, tv2.vec, i);
+	} else if (idx < 1 << (TVR_BITS + 2 * TVN_BITS)) {
+		int i = (expires >> (TVR_BITS + TVN_BITS)) & TVN_MASK;
+		insert_timer(timer, tv3.vec, i);
+	} else if (idx < 1 << (TVR_BITS + 3 * TVN_BITS)) {
+		int i = (expires >> (TVR_BITS + 2 * TVN_BITS)) & TVN_MASK;
+		insert_timer(timer, tv4.vec, i);
+	} else if (expires < timer_jiffies) {
+		/* can happen if you add a timer with expires == jiffies,
+		 * or you set a timer to go off in the past
+		 */
+		insert_timer(timer, tv1.vec, tv1.index);
+	} else if (idx < 0xffffffffUL) {
+		int i = (expires >> (TVR_BITS + 3 * TVN_BITS)) & TVN_MASK;
+		insert_timer(timer, tv5.vec, i);
+	} else {
+		/* Can only get here on architectures with 64-bit jiffies */
+		timer->next = timer->prev = timer;
+	}
+}
+
+void add_timer(struct timer_list *timer)
 {
 	unsigned long flags;
-	struct timer_list *p;
-
-#if SLOW_BUT_DEBUGGING_TIMERS
-	if (timer->next || timer->prev) {
-		printk("add_timer() called with non-zero list from %p\n",
-			__builtin_return_address(0));
-		return;
-	}
-#endif
-	p = &timer_head;
 	save_flags(flags);
 	cli();
-	do {
-		p = p->next;
-	} while (timer->expires > p->expires);
-	timer->next = p;
-	timer->prev = p->prev;
-	p->prev = timer;
-	timer->prev->next = timer;
+#if SLOW_BUT_DEBUGGING_TIMERS
+        if (timer->next || timer->prev) {
+                printk("add_timer() called with non-zero list from %p\n",
+		       __builtin_return_address(0));
+		goto out;
+        }
+#endif
+	internal_add_timer(timer);
+#if SLOW_BUT_DEBUGGING_TIMERS
+out:
+#endif
 	restore_flags(flags);
 }
 
-int del_timer(struct timer_list * timer)
+static inline int detach_timer(struct timer_list *timer)
 {
 	int ret = 0;
-	if (timer->next) {
-		unsigned long flags;
-		struct timer_list * next;
-		save_flags(flags);
-		cli();
-		if ((next = timer->next) != NULL) {
-			(next->prev = timer->prev)->next = next;
-			timer->next = timer->prev = NULL;
-			ret = 1;
-		}
-		restore_flags(flags);
+	struct timer_list *next, *prev;
+	next = timer->next;
+	prev = timer->prev;
+	if (next) {
+		next->prev = prev;
+	}
+	if (prev) {
+		ret = 1;
+		prev->next = next;
 	}
 	return ret;
 }
 
+
+int del_timer(struct timer_list * timer)
+{
+	int ret;
+	unsigned long flags;
+	save_flags(flags);
+	cli();
+	ret = detach_timer(timer);
+	timer->next = timer->prev = 0;
+	restore_flags(flags);
+	return ret;
+}
+
+static inline void cascade_timers(struct timer_vec *tv)
+{
+        /* cascade all the timers from tv up one level */
+        struct timer_list *timer;
+        timer = tv->vec[tv->index];
+        /*
+         * We are removing _all_ timers from the list, so we don't  have to
+         * detach them individually, just clear the list afterwards.
+         */
+        while (timer) {
+                struct timer_list *tmp = timer;
+                timer = timer->next;
+                internal_add_timer(tmp);
+        }
+        tv->vec[tv->index] = NULL;
+        tv->index = (tv->index + 1) & TVN_MASK;
+}
+
 static inline void run_timer_list(void)
 {
-	struct timer_list * timer;
-
 	cli();
-	while ((timer = timer_head.next) != &timer_head && timer->expires <= jiffies) {
-		void (*fn)(unsigned long) = timer->function;
-		unsigned long data = timer->data;
-		timer->next->prev = timer->prev;
-		timer->prev->next = timer->next;
-		timer->next = timer->prev = NULL;
-		sti();
-		fn(data);
-		cli();
+	while ((long)(jiffies - timer_jiffies) >= 0) {
+		struct timer_list *timer;
+		if (!tv1.index) {
+			int n = 1;
+			do {
+				cascade_timers(tvecs[n]);
+			} while (tvecs[n]->index == 1 && ++n < NOOF_TVECS);
+		}
+		while ((timer = tv1.vec[tv1.index])) {
+			void (*fn)(unsigned long) = timer->function;
+			unsigned long data = timer->data;
+			detach_timer(timer);
+			timer->next = timer->prev = NULL;
+			sti();
+			fn(data);
+			cli();
+		}
+		++timer_jiffies; 
+		tv1.index = (tv1.index + 1) & TVR_MASK;
 	}
 	sti();
 }
@@ -1255,8 +1404,7 @@ static int setscheduler(pid_t pid, int policy,
 	if (p->next_run)
 		move_last_runqueue(p);
 	sti();
-	schedule();
-
+	need_resched = 1;
 	return 0;
 }
 
@@ -1313,6 +1461,7 @@ asmlinkage int sys_sched_yield(void)
 	cli();
 	move_last_runqueue(current);
 	sti();
+	need_resched = 1;
 	return 0;
 }
 

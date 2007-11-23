@@ -2,12 +2,12 @@
  *		IP_MASQ_RAUDIO  - Real Audio masquerading module
  *
  *
- * Version:	@(#)$Id: ip_masq_raudio.c,v 1.3 1996/05/20 13:24:26 nigel Exp $
+ * Version:	@(#)$Id: ip_masq_raudio.c,v 1.1.2.1 1997/03/04 12:04:53 davem Exp $
  *
  * Author:	Nigel Metheringham
  *		[strongly based on ftp module by Juan Jose Ciarlante & Wouter Gadeyne]
  *		[Real Audio information taken from Progressive Networks firewall docs]
- *
+ *		[Kudos to Progressive Networks for making the protocol specs available]
  *
  *
  *
@@ -34,6 +34,23 @@
  *	When the link is up there appears to be enough control data 
  *	crossing the control link to keep it open even if a long audio
  *	piece is playing.
+ *
+ *	The Robust UDP support added in RealAudio 3.0 is supported, but due
+ *	to servers/clients not making great use of this has not been greatly
+ *	tested.  RealVideo (as used in the Real client version 4.0beta1) is
+ *	supported but again is not greatly tested (bandwidth requirements
+ *	appear to exceed that available at the sites supporting the protocol).
+ *
+ * Multiple Port Support
+ *	The helper can be made to handle up to MAX_MASQ_APP_PORTS (normally 12)
+ *	with the port numbers being defined at module load time.  The module
+ *	uses the symbol "ports" to define a list of monitored ports, which can
+ *	be specified on the insmod command line as
+ *		ports=x1,x2,x3...
+ *	where x[n] are integer port numbers.  This option can be put into
+ *	/etc/conf.modules (or /etc/modules.conf depending on your config)
+ *	where modload will pick it up should you use modload to load your
+ *	modules.
  *	
  */
 
@@ -55,9 +72,18 @@
 struct raudio_priv_data {
 	/* Associated data connection - setup but not used at present */
 	struct	ip_masq *data_conn;
+	/* UDP Error correction connection - setup but not used at present */
+	struct	ip_masq *error_conn;
 	/* Have we seen and performed setup */
 	short	seen_start;
 };
+
+/* 
+ * List of ports (up to MAX_MASQ_APP_PORTS) to be handled by helper
+ * First port is set to the default port.
+ */
+int ports[MAX_MASQ_APP_PORTS] = {7070}; /* I rely on the trailing items being set to zero */
+struct ip_masq_app *masq_incarnations[MAX_MASQ_APP_PORTS];
 
 static int
 masq_raudio_init_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
@@ -72,6 +98,7 @@ masq_raudio_init_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
 			(struct raudio_priv_data *)ms->app_data;
 		priv->seen_start = 0;
 		priv->data_conn = NULL;
+		priv->error_conn = NULL;
 	}
         return 0;
 }
@@ -106,7 +133,7 @@ masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **
         th = (struct tcphdr *)&(((char *)iph)[iph->ihl*4]);
         data = (char *)&th[1];
 
-        data_limit = skb->h.raw + skb->len - 18;
+        data_limit = skb->h.raw + skb->len;
 
 	/* Check to see if this is the first packet with protocol ID */
 	if (memcmp(data, "PNA", 3)) {
@@ -133,15 +160,26 @@ masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **
 	}
 
 	data += 2;
-	while (data < data_limit) {
+	while (data+4 < data_limit) {
 		memcpy(&msg_id, data, 2);
 		data += 2;
 		memcpy(&msg_len, data, 2);
 		data += 2;
+		if (ntohs(msg_id) == 0) {
+			/* The zero tag indicates the end of options */
+#if DEBUG_CONFIG_IP_MASQ_RAUDIO
+			printk("RealAudio: packet end tag seen\n");
+#endif
+			return 0;
+		}
 #if DEBUG_CONFIG_IP_MASQ_RAUDIO
 		printk("RealAudio: msg %d - %d byte\n",
 		       ntohs(msg_id), ntohs(msg_len));
 #endif
+		if (ntohs(msg_id) == 0) {
+			/* The zero tag indicates the end of options */
+			return 0;
+		}
 		p = data;
 		data += ntohs(msg_len);
 		if (data > data_limit)
@@ -149,9 +187,26 @@ masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **
 			printk(KERN_INFO "RealAudio: Packet too short for data\n");
 			return 0;
 		}
-		if (ntohs(msg_id) == 1) {
-			/* This is a message detailing the UDP port to be used */
+		if ((ntohs(msg_id) == 1) || (ntohs(msg_id) == 7)) {
+			/* 
+			 * MsgId == 1
+			 * Audio UDP data port on client
+			 *
+			 * MsgId == 7
+			 * Robust UDP error correction port number on client
+			 *
+			 * Since these messages are treated just the same, they
+			 * are bundled together here....
+			 */
 			memcpy(&udp_port, p, 2);
+
+			/* 
+			 * Sometimes a server sends a message 7 with a zero UDP port
+			 * Rather than do anything with this, just ignore it!
+			 */
+			if (udp_port == 0)
+				continue;
+
 			n_ms = ip_masq_new(dev, IPPROTO_UDP,
 					   ms->saddr, udp_port,
 					   ms->daddr, 0,
@@ -162,24 +217,19 @@ masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **
 
 			memcpy(p, &(n_ms->mport), 2);
 #if DEBUG_CONFIG_IP_MASQ_RAUDIO
-			printk("RealAudio: rewrote UDP port %d -> %d\n",
-			       ntohs(udp_port), ntohs(n_ms->mport));
+			printk("RealAudio: rewrote UDP port %d -> %d in msg %d\n",
+			       ntohs(udp_port), ntohs(n_ms->mport), ntohs(msg_id));
 #endif
 			ip_masq_set_expire(n_ms, ip_masq_expire->udp_timeout);
 
 			/* Make ref in application data to data connection */
-			if (priv)
-				priv->data_conn = n_ms;
-
-			/* 
-			 * There is nothing else useful we can do
-			 * Maybe a development could do more, but for now
-			 * we exit gracefully!
-			 */
-			return 0;
-
-		} else if (ntohs(msg_id) == 0)
-			return 0;
+			if (priv) {
+				if (ntohs(msg_id) == 1)
+					priv->data_conn = n_ms;
+				else
+					priv->error_conn = n_ms;
+			}
+		}
 	}
 	return 0;
 }
@@ -201,7 +251,29 @@ struct ip_masq_app ip_masq_raudio = {
 
 int ip_masq_raudio_init(void)
 {
-        return register_ip_masq_app(&ip_masq_raudio, IPPROTO_TCP, 7070);
+	int i, j;
+
+	for (i=0; (i<MAX_MASQ_APP_PORTS); i++) {
+		if (ports[i]) {
+			if ((masq_incarnations[i] = kmalloc(sizeof(struct ip_masq_app),
+							    GFP_KERNEL)) == NULL)
+				return -ENOMEM;
+			memcpy(masq_incarnations[i], &ip_masq_raudio, sizeof(struct ip_masq_app));
+			if ((j = register_ip_masq_app(masq_incarnations[i], 
+						      IPPROTO_TCP, 
+						      ports[i]))) {
+				return j;
+			}
+#if DEBUG_CONFIG_IP_MASQ_RAUDIO
+			printk("RealAudio: loaded support on port[%d] = %d\n",
+			       i, ports[i]);
+#endif
+		} else {
+			/* To be safe, force the incarnation table entry to NULL */
+			masq_incarnations[i] = NULL;
+		}
+	}
+	return 0;
 }
 
 /*
@@ -210,7 +282,24 @@ int ip_masq_raudio_init(void)
 
 int ip_masq_raudio_done(void)
 {
-        return unregister_ip_masq_app(&ip_masq_raudio);
+	int i, j, k;
+
+	k=0;
+	for (i=0; (i<MAX_MASQ_APP_PORTS); i++) {
+		if (masq_incarnations[i]) {
+			if ((j = unregister_ip_masq_app(masq_incarnations[i]))) {
+				k = j;
+			} else {
+				kfree(masq_incarnations[i]);
+				masq_incarnations[i] = NULL;
+#if DEBUG_CONFIG_IP_MASQ_RAUDIO
+				printk("RealAudio: unloaded support on port[%d] = %d\n",
+				       i, ports[i]);
+#endif
+			}
+		}
+	}
+	return k;
 }
 
 #ifdef MODULE

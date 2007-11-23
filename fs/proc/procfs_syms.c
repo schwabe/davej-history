@@ -19,7 +19,6 @@ static struct symbol_table procfs_syms = {
 	X(proc_unregister),
 	X(proc_root),
 	X(in_group_p),
-	X(generate_cluster),
 	X(proc_net_inode_operations),
 	X(proc_net),
 

@@ -14,6 +14,7 @@ static struct symbol_table arch_symbol_table = {
 	X(dump_thread),
 	X(dump_fpu),
 	XNOVERS(down_failed),
+	XNOVERS(down_failed_interruptible),
 	XNOVERS(up_wakeup),
 #ifdef __SMP__
 	X(apic_reg),		/* Needed internally for the I386 inlines */

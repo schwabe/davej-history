@@ -62,7 +62,6 @@
 */
 
 #include <linux/module.h>
-#include <linux/config.h>	/* for CONFIG_IP_FORWARD */
 
 /* Only two headers!! :-) */
 #include <net/ip.h>
@@ -303,9 +302,10 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 	 *	If ip_forward() made a copy, it will return 1 so we can free.
 	 */
 
-#ifdef CONFIG_IP_FORWARD
-	if (ip_forward(skb, dev, IPFWD_NOTTLDEC, target))
-#endif
+	if (sysctl_ip_forward) {
+		if (ip_forward(skb, dev, IPFWD_NOTTLDEC, target))
+			kfree_skb(skb, FREE_WRITE);
+	} else
 		kfree_skb(skb, FREE_WRITE);
 
 	/*
