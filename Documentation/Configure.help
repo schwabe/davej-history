@@ -3481,12 +3481,11 @@ CONFIG_BRIDGE
   other third party bridge products. 
 
   In order to use this, you'll need the bridge configuration tools
-  available via FTP (user: anonymous) from
-  ftp://shadow.cabi.net/pub/Linux. Please read the Bridge mini-HOWTO
-  for more information. Note that if your box acts as a bridge, it
-  probably contains several Ethernet devices, but the kernel is not
-  able to recognize more than one at boot time without help; for
-  details read the Ethernet-HOWTO, available via FTP (user: anonymous)
+  available from http://lrp.plain.co.nz/tarballs/bridgex-0.30.tar.gz
+  Note that if your box acts as a bridge, it probably contains several
+  Ethernet devices, but the kernel is not able to recognize more than 
+  one ISA ethernet card at boot time without help; for  details read 
+  the Ethernet-HOWTO, available via FTP (user: anonymous)
   in ftp://metalab.unc.edu/pub/Linux/docs/HOWTO. The Bridging code is
   still in test. If unsure, say N.
 

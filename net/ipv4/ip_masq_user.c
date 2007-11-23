@@ -2,7 +2,7 @@
  *	IP_MASQ_USER user space control module
  *
  *
- *	$Id: ip_masq_user.c,v 1.1.2.3 1999/11/16 06:33:51 davem Exp $
+ *	$Id: ip_masq_user.c,v 1.1.2.4 2000/02/29 23:50:24 davem Exp $
  */
 
 #include <linux/config.h>
@@ -186,8 +186,10 @@ static int ip_masq_user_del(struct ip_masq_user *ums)
 				ums->saddr, ums->sport,
 				ums->daddr, ums->dport);
 		end_bh_atomic();
-	} else
+	} else {
+		end_bh_atomic();
 		return EINVAL;	
+	}
 	
 	if (ms == NULL) {
 		return ESRCH;
@@ -224,8 +226,10 @@ static struct ip_masq * ip_masq_user_locked_get (struct ip_masq_user *ums, int *
 				ums->saddr, ums->sport,
 				ums->daddr, ums->dport);
 		end_bh_atomic();
-	} else
+	} else {
+		end_bh_atomic();
 		*err = EINVAL;	
+	}
 	
 	if (ms == NULL) *err = ESRCH;
 	return ms;

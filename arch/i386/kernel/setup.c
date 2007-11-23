@@ -445,13 +445,14 @@ __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
 	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
 	c->x86_model_id[48] = 0;
+
 	/*  Set MTRR capability flag if appropriate  */
-	if(boot_cpu_data.x86 !=5)
-		return 1;
-	if((boot_cpu_data.x86_model == 9) ||
-	   ((boot_cpu_data.x86_model == 8) && 
-	    (boot_cpu_data.x86_mask >= 8)))
-		c->x86_capability |= X86_FEATURE_MTRR;
+	if(boot_cpu_data.x86 == 5) {
+		if((boot_cpu_data.x86_model == 9) ||
+		   ((boot_cpu_data.x86_model == 8) && 
+		    (boot_cpu_data.x86_mask >= 8)))
+			c->x86_capability |= X86_FEATURE_MTRR;
+	}
 
 	if (n >= 0x80000005){
 		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Oct  9 09:22:27 1999
- * Modified at:   Sun Jan 23 09:16:36 2000
+ * Modified at:   Wed Mar  1 11:00:34 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
@@ -46,6 +46,7 @@
 #include <asm/segment.h>
 #include <asm/uaccess.h>
 #include <asm/dma.h>
+#include <asm/io.h>
 
 #include <net/pkt_sched.h>
 
