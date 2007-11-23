@@ -303,10 +303,9 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	if (scsi_blk_major(major))
 		(dev->request_fn)();
 
-#ifdef CONFIG_BLK_DEV_DAC960
-	if (major >= DAC960_MAJOR+0 && major <= DAC960_MAJOR+7)
+	if ( (major >= DAC960_MAJOR+0 && major <= DAC960_MAJOR+7) ||
+	     (major >= COMPAQ_SMART2_MAJOR+0 && major <= COMPAQ_SMART2_MAJOR+7))
 	  (dev->request_fn)();
-#endif
 
 	sti();
 }
@@ -465,6 +464,14 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	     case DAC960_MAJOR+5:
 	     case DAC960_MAJOR+6:
 	     case DAC960_MAJOR+7:
+	     case COMPAQ_SMART2_MAJOR+0:
+	     case COMPAQ_SMART2_MAJOR+1:
+	     case COMPAQ_SMART2_MAJOR+2:
+	     case COMPAQ_SMART2_MAJOR+3:
+	     case COMPAQ_SMART2_MAJOR+4:
+	     case COMPAQ_SMART2_MAJOR+5:
+	     case COMPAQ_SMART2_MAJOR+6:
+	     case COMPAQ_SMART2_MAJOR+7:
 		do {
 			if (req->sem)
 				continue;

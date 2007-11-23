@@ -328,6 +328,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( TRUEVISION,	TRUEVISION_T1000,"TARGA 1000"),
 	DEVICE( INIT,		INIT_320P,	"320 P"),
 	DEVICE( INIT,		INIT_360P,	"360 P"),
+	DEVICE(	TTI,		TTI_HPT343,	"HPT343"),
 	DEVICE( VIA,		VIA_82C505,	"VT 82C505"),
 	DEVICE( VIA,		VIA_82C561,	"VT 82C561"),
 	DEVICE( VIA,		VIA_82C586_1,	"VT 82C586 Apollo IDE"),
@@ -527,6 +528,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ADAPTEC,	ADAPTEC_7850,	"AIC-7850"),
 	DEVICE( ADAPTEC,	ADAPTEC_7855,	"AIC-7855"),
 	DEVICE( ADAPTEC,	ADAPTEC_5800,	"AIC-5800"),
+	DEVICE( ADAPTEC,	ADAPTEC_1480A,	"AIC-1480A"),
 	DEVICE( ADAPTEC,	ADAPTEC_7860,	"AIC-7860"),
 	DEVICE( ADAPTEC,	ADAPTEC_7861,	"AIC-7861"),
 	DEVICE( ADAPTEC,	ADAPTEC_7870,	"AIC-7870"),
@@ -544,6 +546,7 @@ struct pci_dev_info dev_info[] = {
   DEVICE( ADAPTEC2, ADAPTEC2_2940U2, "AHA-2940U2"),
   DEVICE( ADAPTEC2, ADAPTEC2_7890, "AIC-7890/1"),
   DEVICE( ADAPTEC2, ADAPTEC2_3940U2, "AHA-3940U2"),
+  DEVICE( ADAPTEC2, ADAPTEC2_3950U2D, "AHA-3950U2D"),
   DEVICE( ADAPTEC2, ADAPTEC2_7896, "AIC-7896/7"),
   	DEVICE( ATRONICS,	ATRONICS_2015,	"IDE-2015PL"),
 	DEVICE( TIGERJET,	TIGERJET_300,	"Tiger300 ISDN"),
@@ -810,6 +813,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_REALTEK:	return "Realtek";
 	      case PCI_VENDOR_ID_TRUEVISION:	return "Truevision";
 	      case PCI_VENDOR_ID_INIT:		return "Initio Corp";
+	      case PCI_VENDOR_ID_TTI:		return "Triones Technologies, Inc.";
 	      case PCI_VENDOR_ID_VIA:		return "VIA Technologies";
 	      case PCI_VENDOR_ID_SMC2:          return "SMC";
 	      case PCI_VENDOR_ID_VORTEX:	return "VORTEX";
@@ -825,6 +829,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_RENDITION:	return "Rendition";
 	      case PCI_VENDOR_ID_TOSHIBA:	return "Toshiba";
 	      case PCI_VENDOR_ID_RICOH:		return "Ricoh";
+	      case PCI_VENDOR_ID_ARTOP:	return "Artop Electronics";
 	      case PCI_VENDOR_ID_ZEITNET:	return "ZeitNet";
 	      case PCI_VENDOR_ID_OMEGA:		return "Omega Micro";
 	      case PCI_VENDOR_ID_NP:		return "Network Peripherals";

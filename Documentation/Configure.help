@@ -491,6 +491,16 @@ CONFIG_PARIDE_FIT3
   be called fit3.o.  You must also have a high-level driver for the
   type of device that you want to support.
 
+Freecom IQ ASIC-2 protocol
+CONFIG_PARIDE_FRIQ
+  This option enables support for version 2 of the Freecom IQ parallel
+  port IDE adapter.  This adapter is used by the Maxell Superdisk 
+  drive.  If you chose to build PARIDE support into your kernel, you
+  may answer Y here to build in the protocol driver, otherwise you
+  should answer M to build it as a loadable module. The module will be
+  called friq.o. You must also have a high-level driver for the type
+  of device that you want to support. 
+
 FreeCom power protocol
 CONFIG_PARIDE_FRPW
   This option enables support for the Freecom power parallel port IDE
@@ -836,15 +846,33 @@ CONFIG_PCI_OPTIMIZE
   certain BIOSes if your computer uses a PCI bus system. This is
   recommended; say Y.
 
-Intel 82371 PIIX (Triton I/II) DMA support
+Generic IDE (U)DMA support
 CONFIG_BLK_DEV_TRITON
-  If your PCI system uses an IDE hard drive (as opposed to SCSI, say)
-  and includes the Intel Triton I/II IDE interface chipset (i82371FB,
+  If your PCI system uses an EIDE hard disk (as opposed to SCSI, say)
+  and includes one of the Intel (U)DMA IDE Southbridge ICs (i82371FB,
   i82371SB or i82371AB), you will want to enable this option to allow
-  use of bus-mastering DMA data transfers. Read the comments at the
-  beginning of drivers/block/triton.c and Documentation/ide.txt.
+  use of bus-mastering DMA data transfers. This increases transfer
+  rates and reduces latencies and CPU utilization. Read the comments in
+  Documentation/ide.txt and Documentation/udma.txt.
   Check the file Documentation/Changes for location and latest version
-  of the hdparm utility. It is safe to say Y to this question.
+  of the hdparm utility. There are now several more chipsets added, to
+  include offboard PCI-IDE-UDMA cards and newer SiS and VIA chipsets.
+  It is safe to say Y to this question, as long as your PCI bus is
+  operating within specs (33MHz recommended).
+
+Boot off-board chipsets first support
+CONFIG_BLK_DEV_OFFBOARD
+  Normally, IDE controllers built into the motherboard (on-board
+  controllers) are assigned to ide0 and ide1 while those on add-in
+  PCI cards (off-board controllers) are relegated to ide2 and ide3.
+  Saying Y to here will reverse the situation, with off-board
+  controllers on ide0/1 and on-board controllers on ide2/3. This
+  can improve the usability of some boot managers such as LILO
+  when booting from a drive on an off-board controller.
+  Note that this will rearrange the order of the hd* devices and
+  may require modification of fstab and other files.
+  Check the file Documentation/udma.txt
+  If in doubt, say N.
 
 System V IPC
 CONFIG_SYSVIPC
@@ -4721,6 +4749,16 @@ CONFIG_MTRR
   registers in the chips up correctly as the specification and Intel
   rules require. If you have a PPro or later SMP and one or more CPU's
   report a value of about 2-3 bogomips enable this.
+
+Nemory configuration
+CONFIG_MEM_STD
+  There are three memory configurations available. The standard
+  configuration allows use of just under 1GB of RAM with 3GB of
+  virtual space per process. The enterprise configuration allows
+  2Gigabytes of physical memory but limits the per process address
+  space to 2Gigabytes. The custom option allows you to specify the
+  split subject to kernel constraints. If you don't know how it works
+  don't pick it.
 
 # need an empty line after last entry, for sed script in Configure.
 

@@ -871,6 +871,7 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			restore_flags(flags);
 			return err;
 
+		case HDIO_OBSOLETE_IDENTITY:
 		case HDIO_GET_IDENTITY:
 			if (!arg)  return -EINVAL;
 			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;

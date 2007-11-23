@@ -132,7 +132,8 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
   {
     for (lun = 0; lun < MAX_LUNS; lun++)
     {
-      if (p->stats[target][lun].r_total != 0)
+      if ( ((lun == 0) && (p->dev_flags[target] & DEVICE_PRESENT)) ||
+           (p->stats[target][lun].r_total != 0) )
 #ifdef AIC7XXX_PROC_STATS
         size += 512;
 #else
@@ -278,7 +279,8 @@ aic7xxx_proc_info ( char *buffer, char **start, off_t offset, int length,
     for (lun = 0; lun < MAX_LUNS; lun++)
     {
       sp = &p->stats[target][lun];
-      if (sp->r_total == 0)
+      if ( (!(p->dev_flags[target] & DEVICE_PRESENT)) ||
+           ((p->stats[target][lun].r_total == 0) && (lun != 0)) )
       {
         continue;
       }

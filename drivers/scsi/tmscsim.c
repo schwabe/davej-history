@@ -7,9 +7,9 @@
  ***********************************************************************/
 /* (C) Copyright: put under GNU GPL in 10/96				*
 *************************************************************************/
-/* $Id: tmscsim.c,v 2.5 1998/11/05 10:16:43 garloff Exp $		*/
+/* $Id: tmscsim.c,v 2.16 1998/12/25 17:54:44 garloff Exp $		*/
 /*	Enhancements and bugfixes by					*
- *	Kurt Garloff <K.Garloff@ping.de>				*
+ *	Kurt Garloff <kurt@garloff.de>					*
  ***********************************************************************/
 /*	HISTORY:							*
  *									*
@@ -92,7 +92,11 @@
  *				bios_param() now respects part. table.	*
  *	2.0b  98/10/24	KG	Docu fixes. Timeout Msg in DMA Blast.	*
  *				Disallow illegal idx in INQUIRY/REMOVE	*
- *	2.0b1 98/11/05	KG	Cleaned up detection/initialization	*
+ *	2.0c  98/11/19	KG	Cleaned up detect/init for SMP boxes, 	*
+ *				Write Erase DMA (1.20t) caused problems	*
+ *	2.0d  98/12/25	KG	Christmas release ;-) Message handling  *
+ *				competely reworked. Handle target ini-	*
+ *				tiated SDTR correctly.			*
  ***********************************************************************/
 
 /* Uncomment SA_INTERRUPT, if the driver refuses to share its IRQ with other devices */
@@ -368,9 +372,8 @@ void dc390_DoingSRB_Done( PACB pACB );
 static void dc390_ScsiRstDetect( PACB pACB );
 static void dc390_ResetSCSIBus( PACB pACB );
 static void __inline__ dc390_RequestSense( PACB pACB, PDCB pDCB, PSRB pSRB );
-static void __inline__ dc390_EnableMsgOut2( PACB pACB, PSRB pSRB );
-static void __inline__ dc390_EnableMsgOut( PACB pACB, PSRB pSRB );
 static void __inline__ dc390_InvalidCmd( PACB pACB );
+static void __inline__ dc390_EnableMsgOut_Abort (PACB, PSRB);
 static void dc390_remove_dev (PACB pACB, PDCB pDCB);
 void do_DC390_Interrupt( int, void *, struct pt_regs *);
 
@@ -678,7 +681,7 @@ static PDCB __inline__ dc390_findDCB ( PACB pACB, Scsi_Cmnd *cmd)
 	pDCB = pDCB->pNextDCB;
 	if (pDCB == pACB->pLinkDCB)
 	  {
-	     printk (KERN_ERR "DC390: DCB not found (DCB=%08x, DCBmap[%2x]=%2x)\n",
+	     printk (KERN_WARNING "DC390: DCB not found (DCB=%08x, DCBmap[%2x]=%2x)\n",
 		     (int)pDCB, cmd->target, pACB->DCBmap[cmd->target]);
 	     return 0;
 	  }
@@ -762,7 +765,7 @@ static void dc390_RewaitSRB( PDCB pDCB, PSRB pSRB )
     UCHAR  bval;
 
     pDCB->GoingSRBCnt--; pDCB->pDCBACB->SelLost++;
-    DEBUG0(printk("DC390: RewaitSRB (%p, %p) pid = %li\n", pDCB, pSRB, pSRB->pcmd->pid);)
+    DEBUG0(printk(KERN_INFO "DC390: RewaitSRB (%p, %p) pid = %li\n", pDCB, pSRB, pSRB->pcmd->pid);)
     psrb1 = pDCB->pGoingSRB;
     if( pSRB == psrb1 )
     {
@@ -989,7 +992,7 @@ int DC390_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *))
 
 
     DEBUG0(/*  if(pACB->scan_devices) */	\
-	printk(KERN_DEBUG "DC390: Queue Cmd=%02x,ID=%d,LUN=%d (pid=%li)\n",\
+	printk(KERN_INFO "DC390: Queue Cmd=%02x,ID=%d,LUN=%d (pid=%li)\n",\
 		cmd->cmnd[0],cmd->target,cmd->lun,cmd->pid);)
 
     DC390_LOCK_ACB;
@@ -1255,15 +1258,17 @@ void dc390_dumpinfo (PACB pACB, PDCB pDCB, PSRB pSRB)
     printk ("   %02x   %02x   %02x   %02x   %02x   %02x\n",
 	    DC390_read8(INT_Status), DC390_read8(Current_Fifo), DC390_read8(CtrlReg1),
 	    DC390_read8(CtrlReg2), DC390_read8(CtrlReg3), DC390_read8(CtrlReg4));
+    DC390_write32 (DMA_ScsiBusCtrl, WRT_ERASE_DMA_STAT | EN_INT_ON_PCI_ABORT);
     printk ("DC390: Register dump: DMA engine:\n");
     printk ("DC390: Cmd   STrCnt    SBusA    WrkBC    WrkAC Stat SBusCtrl\n");
     printk ("DC390:  %02x %08x %08x %08x %08x   %02x %08x\n",
 	    DC390_read8(DMA_Cmd), DC390_read32(DMA_XferCnt), DC390_read32(DMA_XferAddr),
 	    DC390_read32(DMA_Wk_ByteCntr), DC390_read32(DMA_Wk_AddrCntr),
 	    DC390_read8(DMA_Status), DC390_read32(DMA_ScsiBusCtrl));
+    DC390_write32 (DMA_ScsiBusCtrl, EN_INT_ON_PCI_ABORT);
     PDEVSET1; PCI_READ_CONFIG_WORD(PDEV, PCI_STATUS, &pstat);
     printk ("DC390: Register dump: PCI Status: %04x\n", pstat);
-    printk ("DC390: Please report driver trouble to K.Garloff@ping.de\n");
+    printk ("DC390: In case of driver trouble read linux/drivers/scsi/README.tmscsim\n");
 };
 
 
@@ -1719,7 +1724,7 @@ void __init dc390_initACB (PSH psh, ULONG io_port, UCHAR Irq, UCHAR index)
     pACB->IOPortBase = (USHORT) io_port;
     pACB->IRQLevel = Irq;
 
-    DEBUG0(printk (KERN_DEBUG "DC390: Adapter index %i, ID %i, IO 0x%08x, IRQ 0x%02x\n",	\
+    DEBUG0(printk (KERN_INFO "DC390: Adapter index %i, ID %i, IO 0x%08x, IRQ 0x%02x\n",	\
 	    index, psh->this_id, (int)io_port, Irq);)
    
     psh->max_id = 8;
@@ -1743,6 +1748,8 @@ void __init dc390_initACB (PSH psh, ULONG io_port, UCHAR Irq, UCHAR index)
     pACB->TagMaxNum = 2 << dc390_eepromBuf[index][EE_TAG_CMD_NUM];
     pACB->ACBFlag = 0;
     pACB->scan_devices = 1;
+    pACB->MsgLen = 0;
+    pACB->Ignore_IRQ = 0;
     pACB->Gmode2 = dc390_eepromBuf[index][EE_MODE2];
     dc390_linkSRB( pACB );
     pACB->pTmpSRB = &pACB->TmpSRB;
@@ -1840,7 +1847,7 @@ int __init dc390_initAdapter (PSH psh, ULONG io_port, UCHAR Irq, UCHAR index)
 		(dc390_eepromBuf[index][EE_MODE2] & ACTIVE_NEGATION) ? NEGATE_REQACKDATA : 0);	/* Negation */
     DC390_write8 (DMA_Cmd, DMA_IDLE_CMD);
     DC390_write8 (ScsiCmd, CLEAR_FIFO_CMD);
-    DC390_write32 (DMA_ScsiBusCtrl, WRT_ERASE_DMA_STAT | EN_INT_ON_PCI_ABORT);
+    DC390_write32 (DMA_ScsiBusCtrl, EN_INT_ON_PCI_ABORT);
     dstate = DC390_read8 (DMA_Status);
     DC390_write8 (DMA_Status, dstate);	/* clear */
 
@@ -1910,8 +1917,8 @@ static int __init DC390_init (PSHT psht, ULONG io_port, UCHAR Irq, PDEVDECL, UCH
     }
 #endif
 
-    DEBUG0(printk("DC390: pSH = %8x,", (UINT) psh);)
-    DEBUG0(printk("DC390: Index %02i,", index);)
+    DEBUG0(printk(KERN_INFO "DC390: pSH = %8x,", (UINT) psh);)
+    DEBUG0(printk(" Index %02i,", index);)
 
     dc390_initACB( psh, io_port, Irq, index );
     pACB = (PACB) psh->hostdata;
@@ -1920,7 +1927,7 @@ static int __init DC390_init (PSHT psht, ULONG io_port, UCHAR Irq, PDEVDECL, UCH
 
     if( !dc390_initAdapter( psh, io_port, Irq, index ) )
     {
-	DEBUG0(printk("DC390: pACB = %8x, pDCBmap = %8x, pSRB_array = %8x\n",\
+	DEBUG0(printk("\nDC390: pACB = %8x, pDCBmap = %8x, pSRB_array = %8x\n",\
 		(UINT) pACB, (UINT) pACB->DCBmap, (UINT) pACB->SRB_array);)
 	DEBUG0(printk("DC390: ACB size= %4x, DCB size= %4x, SRB size= %4x\n",\
 		sizeof(DC390_ACB), sizeof(DC390_DCB), sizeof(DC390_SRB) );)
@@ -2003,7 +2010,7 @@ int __init DC390_detect (Scsi_Host_Template *psht)
 	{
 	    DC390_LOCK_IO;		/* Remove this when going to new eh */
 	    PCI_GET_IO_AND_IRQ;
-	    DEBUG0(printk(KERN_DEBUG "DC390(%i): IO_PORT=%04x,IRQ=%x\n", dc390_adapterCnt, (UINT) io_port, irq);)
+	    DEBUG0(printk(KERN_INFO "DC390(%i): IO_PORT=%04x,IRQ=%x\n", dc390_adapterCnt, (UINT) io_port, irq);)
 
 	    if( !DC390_init(psht, io_port, irq, PDEV, dc390_adapterCnt))
 	    {
@@ -2249,7 +2256,7 @@ int dc390_set_info (char *buffer, int length, PACB pACB)
       /* NegoPeriod */
       if (*pos != '-')
 	{
-	  SCANF (pos, p0, dum, 76, 800); 
+	  SCANF (pos, p0, dum, 72, 800); 
 	  pDCB->NegoPeriod = dum >> 2;
 	  if (pDCB->NegoPeriod != olddevmode) needs_inquiry++;
 	  if (!pos) goto ok;
@@ -2572,7 +2579,7 @@ int DC390_release(struct Scsi_Host *host)
 	}
 	if (irq_count == 1)
 	 {
-	    DEBUG0(printk(KERN_DEBUG "DC390: Free IRQ %i\n",host->irq);)
+	    DEBUG0(printk(KERN_INFO "DC390: Free IRQ %i\n",host->irq);)
 	    free_irq(host->irq,NULL);
 	 }
     }

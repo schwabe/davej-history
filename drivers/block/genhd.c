@@ -99,6 +99,18 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	    return buf;
 	  }
 #endif
+#if defined(CONFIG_BLK_CPQ_DA) || defined(CONFIG_BLK_CPQ_DA_MODULE)
+	if (hd->major >= COMPAQ_SMART2_MAJOR && hd->major <= COMPAQ_SMART2_MAJOR+7) {
+		int ctlr = hd->major - COMPAQ_SMART2_MAJOR;
+		int disk = minor >> hd->minor_shift;
+		int part = minor & (( 1 << hd->minor_shift) - 1);
+		if (part == 0)
+			sprintf(buf, "%s/c%dd%d", maj, ctlr, disk);
+		else
+			sprintf(buf, "%s/c%dd%dp%d", maj, ctlr, disk, part);
+		return buf;
+	}
+#endif
 	part = minor & ((1 << hd->minor_shift) - 1);
 	if (part)
 		sprintf(buf, "%s%c%d", maj, unit, part);
@@ -114,6 +126,11 @@ static void add_partition (struct gendisk *hd, int minor, int start, int size)
 	hd->part[minor].nr_sects   = size;
 #ifdef CONFIG_BLK_DEV_DAC960
 	if (hd->major >= DAC960_MAJOR+0 && hd->major <= DAC960_MAJOR+7)
+		printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
+	else
+#endif
+#if defined(CONFIG_BLK_CPQ_DA) || defined(CONFIG_BLK_CPQ_DA_MODULE)
+	if (hd->major >= COMPAQ_SMART2_MAJOR && hd->major <= COMPAQ_SMART2_MAJOR+7) 
 		printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
 	else
 #endif
@@ -353,7 +370,9 @@ check_table:
 				   && (q->sector & 63) == 1
 				   && (q->end_sector & 63) == 63) {
 					unsigned int heads = q->end_head + 1;
-					if (heads == 32 || heads == 64 || heads == 128 || heads == 255) {
+					if (heads == 32 || heads == 64 ||
+					    heads == 128 || heads == 240 ||
+					    heads == 255) {
 
 						(void) ide_xlate_1024(dev, heads, " [PTBL]");
 						break;
@@ -754,6 +773,7 @@ static void setup_dev(struct gendisk *dev)
 void device_setup(void)
 {
 	extern void console_map_init(void);
+	extern void cpqarray_init(void);
 	struct gendisk *p;
 	int nr=0;
 
@@ -765,6 +785,9 @@ void device_setup(void)
 #endif
 #ifdef CONFIG_SCSI
 	scsi_dev_init();
+#endif
+#ifdef CONFIG_BLK_CPQ_DA
+	cpqarray_init();
 #endif
 #ifdef CONFIG_INET
 	net_dev_init();

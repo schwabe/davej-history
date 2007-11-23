@@ -87,7 +87,6 @@ unsigned long prof_shift = 0;
 #define _S(nr) (1<<((nr)-1))
 
 extern void mem_use(void);
-extern unsigned long get_wchan(struct task_struct *);
 
 static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
 unsigned long init_user_stack[1024] = { STACK_MAGIC, };
@@ -1664,6 +1663,56 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 		return -EINTR;
 	}
 
+	return 0;
+}
+
+/* Used in fs/proc/array.c */
+unsigned long get_wchan(struct task_struct *p)
+{
+	if (!p || p == current || p->state == TASK_RUNNING)
+		return 0;
+#if defined(__i386__)
+	{
+		unsigned long ebp, eip;
+		unsigned long stack_page;
+		int count = 0;
+
+		stack_page = p->kernel_stack_page;
+		if (!stack_page)
+			return 0;
+		ebp = p->tss.ebp;
+		do {
+			if (ebp < stack_page || ebp >= 4092+stack_page)
+				return 0;
+			eip = *(unsigned long *) (ebp+4);
+			if (eip < (unsigned long) interruptible_sleep_on
+			    || eip >= (unsigned long) add_timer)
+				return eip;
+			ebp = *(unsigned long *) ebp;
+		} while (count++ < 16);
+	}
+#elif defined(__alpha__)
+	/*
+	 * This one depends on the frame size of schedule().  Do a
+	 * "disass schedule" in gdb to find the frame size.  Also, the
+	 * code assumes that sleep_on() follows immediately after
+	 * interruptible_sleep_on() and that add_timer() follows
+	 * immediately after interruptible_sleep().  Ugly, isn't it?
+	 * Maybe adding a wchan field to task_struct would be better,
+	 * after all...
+	 */
+	{
+	    unsigned long schedule_frame;
+	    unsigned long pc;
+
+	    pc = thread_saved_pc(&p->tss);
+	    if (pc >= (unsigned long) interruptible_sleep_on && pc < (unsigned long) add_timer) {
+		schedule_frame = ((unsigned long *)p->tss.ksp)[6];
+		return ((unsigned long *)schedule_frame)[12];
+	    }
+	    return pc;
+	}
+#endif
 	return 0;
 }
 

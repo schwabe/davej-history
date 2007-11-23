@@ -153,6 +153,7 @@ else
   endif
 endif
 
+
 ifeq ($(CONFIG_SCSI_INITIO),y)
 L_OBJS += initio.o
 else

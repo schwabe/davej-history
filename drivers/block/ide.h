@@ -429,7 +429,7 @@ typedef void (ide_selectproc_t) (ide_drive_t *);
 typedef enum {	ide_unknown,	ide_generic,	ide_triton,
 		ide_cmd640,	ide_dtc2278,	ide_ali14xx,
 		ide_qd6580,	ide_umc8672,	ide_ht6560b,
-		ide_promise,	ide_promise_udma }
+		ide_promise,	ide_udma }
 	hwif_chipset_t;
 
 typedef struct hwif_s {
@@ -743,5 +743,4 @@ void idescsi_ide_release (struct inode *inode, struct file *filp, ide_drive_t *d
 
 #ifdef CONFIG_BLK_DEV_TRITON
 void ide_init_triton (byte, byte);
-void ide_init_promise (byte bus, byte fn, ide_hwif_t *hwif0, ide_hwif_t *hwif1, unsigned short dma);
 #endif /* CONFIG_BLK_DEV_TRITON */

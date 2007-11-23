@@ -32,6 +32,13 @@
  */
 #define IGNORE_WRONG_MULTI_VOLUME_SPECS
 
+/*
+ * A home-burnt Joliet level 3 cd-rom with a 100 MB zip file had more than
+ * 100 file sections, so the limit should be larger than that.  What does the
+ * ISO9660 standard say?  (Ulrik Dickow <ukd@kampsax.dk>)
+ */
+#define MAX_FILE_SECTIONS 1000
+
 #ifdef LEAK_CHECK
 static int check_malloc = 0;
 static int check_bread = 0;
@@ -646,8 +653,9 @@ int isofs_bmap(struct inode * inode,int block)
 			nextino = ino->u.isofs_i.i_next_section_ino;
 			iput(ino);
 		
-			if(++i > 100) {
-				printk("isofs_bmap: More than 100 file sections ?!?, aborting...\n");
+			if(++i > MAX_FILE_SECTIONS) {
+				printk("isofs_bmap: More than %d file sections ?!?, aborting...\n",
+				       MAX_FILE_SECTIONS);
 				printk("isofs_bmap: ino=%lu block=%d firstext=%u size=%u nextino=%lu\n",
 				       inode->i_ino, block, firstext, (unsigned)size, nextino);
 				return 0;
@@ -688,9 +696,10 @@ static int isofs_read_level3_size(struct inode * inode)
 	ino = inode->i_ino;
 	i = 0;
 	do {
-		if(i > 100) {
-			printk("isofs_read_level3_size: More than 100 file sections ?!?, aborting...\n"
-			       "isofs_read_level3_size: inode=%lu ino=%lu\n", inode->i_ino, ino);
+		if(i > MAX_FILE_SECTIONS) {
+			printk("isofs_read_level3_size: More than %d file sections ?!?, aborting...\n"
+			       "isofs_read_level3_size: inode=%lu ino=%lu\n", MAX_FILE_SECTIONS,
+			       inode->i_ino, ino);
 			return 0;
 		}
 
