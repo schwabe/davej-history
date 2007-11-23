@@ -182,7 +182,6 @@ do { unsigned long size = 1 << high; \
 unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 {
 	unsigned long flags;
-	static unsigned long last_woke_kswapd = 0;
 	static atomic_t free_before_allocate = ATOMIC_INIT(0);
 
 	if (order >= NR_MEM_LISTS)
@@ -208,41 +207,41 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		int freed;
 		extern struct wait_queue * kswapd_wait;
 
-		if (nr_free_pages > freepages.high)
-			goto ok_to_allocate;
-		
-		/* Maybe wake up kswapd for background swapping. */
-		if (time_before(last_woke_kswapd + HZ, jiffies)) {
-			last_woke_kswapd = jiffies;
-			wake_up_interruptible(&kswapd_wait);
-		}
-
 		/* Somebody needs to free pages so we free some of our own. */
 		if (atomic_read(&free_before_allocate)) {
 			current->flags |= PF_MEMALLOC;
-			freed = try_to_free_pages(gfp_mask);
+			try_to_free_pages(gfp_mask);
 			current->flags &= ~PF_MEMALLOC;
-			if (freed)
-				goto ok_to_allocate;
 		}
 
-		/* Do we have to help kswapd or can we proceed? */
-		if (nr_free_pages < (freepages.min + freepages.low) / 2) {
+		if (nr_free_pages > freepages.low)
+			goto ok_to_allocate;
+
+		if (waitqueue_active(&kswapd_wait))
 			wake_up_interruptible(&kswapd_wait);
 
-			/* Help kswapd a bit... */
-			current->flags |= PF_MEMALLOC;
-			atomic_inc(&free_before_allocate);
-			freed = try_to_free_pages(gfp_mask);
-			atomic_dec(&free_before_allocate);
-			current->flags &= ~PF_MEMALLOC;
+		/* Do we have to block or can we proceed? */
+		if (nr_free_pages > freepages.min)
+			goto ok_to_allocate;
 
-			if (nr_free_pages > freepages.min)
-				goto ok_to_allocate;
+		current->flags |= PF_MEMALLOC;
+		atomic_inc(&free_before_allocate);
+		freed = try_to_free_pages(gfp_mask);
+		atomic_dec(&free_before_allocate);
+		current->flags &= ~PF_MEMALLOC;
 
-			if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
-				goto nopage;
-		}
+		/*
+		 * Re-check we're still low on memory after we blocked
+		 * for some time. Somebody may have released lots of
+		 * memory from under us while we was trying to free
+		 * the pages. We check against pages_high to be sure
+		 * to succeed only if lots of memory is been released.
+		 */
+		if (nr_free_pages > freepages.high)
+			goto ok_to_allocate;
+
+		if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
+			goto nopage;
 	}
 ok_to_allocate:
 	spin_lock_irqsave(&page_alloc_lock, flags);

@@ -356,7 +356,8 @@ static void tcp_v4_unhash(struct sock *sk)
 		*sk->pprev = sk->next;
 		sk->pprev = NULL;
 		tcp_reg_zap(sk);
-		__tcp_put_port(sk);
+		if (sk->prev != NULL)
+			__tcp_put_port(sk);
 	}
 	SOCKHASH_UNLOCK();
 }

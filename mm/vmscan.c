@@ -333,7 +333,6 @@ static int swap_out(unsigned int priority, int gfp_mask)
 
 	for (; counter >= 0; counter--) {
 		max_cnt = 0;
-		assign = 0;
 		pbest = NULL;
 	select:
 		read_lock(&tasklist_lock);
@@ -378,17 +377,10 @@ out:
  * cluster them so that we get good swap-out behaviour. See
  * the "free_memory()" macro for details.
  */
-#define FLUSH_COUNT	8
 static int do_try_to_free_pages(unsigned int gfp_mask)
 {
-	int priority, count, swapcount;
-	int flushcount = FLUSH_COUNT;
-	int ret = 0;
-
-	/* Kswapd does nothing but freeing pages so we can do big bites. */
-	if (gfp_mask == GFP_KSWAPD)
-		flushcount = SWAP_CLUSTER_MAX;
-	count = flushcount;
+	int priority;
+	int count = SWAP_CLUSTER_MAX;
 
 	lock_kernel();
 
@@ -398,7 +390,6 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 	priority = 6;
 	do {
 		while (shrink_mmap(priority, gfp_mask)) {
-			ret = 1;
 			if (!--count)
 				goto done;
 		}
@@ -406,36 +397,27 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 		/* Try to get rid of some shared memory pages.. */
 		if (gfp_mask & __GFP_IO) {
 			while (shm_swap(priority, gfp_mask)) {
-				ret = 1;
 				if (!--count)
 					goto done;
 			}
 		}
 
 		/* Then, try to page stuff out.. */
-		swapcount = flushcount;
 		while (swap_out(priority, gfp_mask)) {
-			if (!--swapcount)
-				break;
+			if (!--count)
+				goto done;
 		}
 
 		shrink_dcache_memory(priority, gfp_mask);
 	} while (--priority >= 0);
-
-	/* End with a shrink_mmap() to make sure we free something. */
-	while (shrink_mmap(0, gfp_mask)) {
-		ret = 1;
-		if (!--count)
-			goto done;
-	}
 done:
 	unlock_kernel();
 
-	if (!ret)
+	if (priority < 0)
 		printk("VM: do_try_to_free_pages failed for %s...\n",
 				current->comm);
 	/* Return success if we freed a page. */
-	return ret;
+	return priority >= 0;
 }
 
 /*
@@ -507,18 +489,11 @@ int kswapd(void *unused)
 		 * the processes needing more memory will wake us
 		 * up on a more timely basis.
 		 */
-		int failed = 0;
-sleep:
 		interruptible_sleep_on(&kswapd_wait);
-		/* Enough free pages? -> call do_try_to_free_pages only once. */
-		if (nr_free_pages > freepages.low) {
-			do_try_to_free_pages(GFP_KSWAPD);
-			goto sleep;
-		}
-		/* Not enough free pages? -> free pages agressively. */
+
 		while (nr_free_pages < freepages.high)
 		{
-			if (do_try_to_free_pages(GFP_KSWAPD) && failed++ < 10)
+			if (do_try_to_free_pages(GFP_KSWAPD))
 			{
 				if (tsk->need_resched)
 					schedule();

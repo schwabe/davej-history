@@ -1047,6 +1047,12 @@ __initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
 		/* Emulate MTRRs using Centaur's MCR. */
 		c->x86_capability |= X86_FEATURE_MTRR;
 
+		/* Disable TSC on C6 as per errata. */
+		if (c->x86_model ==4) {
+			printk ("Disabling bugged TSC.\n");
+			c->x86_capability &= ~X86_FEATURE_TSC;
+		}
+
 		/* Set 3DNow! on Winchip 2 and above. */
 		if (c->x86_model >=8)
 		    c->x86_capability |= X86_FEATURE_AMD3D;

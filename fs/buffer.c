@@ -1464,6 +1464,25 @@ static int grow_buffers(int size)
 #define BUFFER_BUSY_BITS	((1<<BH_Dirty) | (1<<BH_Lock) | (1<<BH_Protected))
 #define buffer_busy(bh)		((bh)->b_count || ((bh)->b_state & BUFFER_BUSY_BITS))
 
+static inline int sync_page_buffers(struct buffer_head * bh)
+{
+	struct buffer_head * tmp = bh;
+
+	do {
+		if (buffer_dirty(tmp) && !buffer_locked(tmp))
+			ll_rw_block(WRITE, 1, &tmp);
+		tmp = tmp->b_this_page;
+	} while (tmp != bh);
+
+	do {
+		if (buffer_busy(tmp))
+			return 1;
+		tmp = tmp->b_this_page;
+	} while (tmp != bh);
+
+	return 0;
+}
+
 /*
  * try_to_free_buffers() checks if all the buffers on this particular page
  * are unused, and free's the page if so.
@@ -1477,16 +1496,12 @@ int try_to_free_buffers(struct page * page_map)
 
 	tmp = bh;
 	do {
-		struct buffer_head * p = tmp;
-
+		if (buffer_busy(tmp))
+			goto busy;
 		tmp = tmp->b_this_page;
-		if (!buffer_busy(p))
-			continue;
-
-		wakeup_bdflush(0);
-		return 0;
 	} while (tmp != bh);
 
+ succeed:
 	tmp = bh;
 	do {
 		struct buffer_head * p = tmp;
@@ -1504,6 +1519,17 @@ int try_to_free_buffers(struct page * page_map)
 	page_map->buffers = NULL;
 	__free_page(page_map);
 	return 1;
+
+ busy:
+	if (!sync_page_buffers(bh))
+		/*
+		 * We can jump after the busy check because
+		 * we rely on the kernel lock.
+		 */
+		goto succeed;
+
+	wakeup_bdflush(0);
+	return 0;
 }
 
 /* ================== Debugging =================== */

@@ -145,6 +145,7 @@ int shrink_mmap(int priority, int gfp_mask)
 	/* Make sure we scan all pages twice at priority 0. */
 	count = (limit << 1) >> priority;
 
+ refresh_clock:
 	page = mem_map + clock;
 	do {
 		int referenced;
@@ -198,8 +199,12 @@ int shrink_mmap(int priority, int gfp_mask)
 		if (page->buffers) {
 			if (buffer_under_min())
 				continue;
+			/*
+			 * We can sleep if we need to do some write
+			 * throttling.
+			 */
 			if (!try_to_free_buffers(page))
-				continue;
+				goto refresh_clock;
 			return 1;
 		}
 
