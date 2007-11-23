@@ -28,7 +28,7 @@ choice 'Memory configuration' \
 	 Custom		CONFIG_MEM_SPECIAL" Standard
 
 if [ "$CONFIG_MEM_SPECIAL" = "y" ]; then
-	int ' Max physical memory in MB' CONFIG_MAX_MEMSIZE 1024
+	int ' Max physical memory in MB (must be a multiple of 4)' CONFIG_MAX_MEMSIZE 1024
 fi
 if [ "$CONFIG_MEM_ENT" = "y" ]; then
 	define_int CONFIG_MAX_MEMSIZE 2048

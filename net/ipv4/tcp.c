@@ -1236,7 +1236,7 @@ static int do_tcp_sendmsg(struct sock *sk,
 					 *	this frame.
 					 */
 					 
-					if (copy <= 0)
+					if (tcp_size >= sk->mss)
 					{
 						/*
 						 *	Send the now forced complete frame out. 

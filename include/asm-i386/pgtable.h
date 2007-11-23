@@ -210,6 +210,10 @@ static inline void flush_tlb_range(struct mm_struct *mm,
  * pgd entries used up by user/kernel:
  */
 
+#if CONFIG_MAX_MEMSIZE & 3
+#error Invalid max physical memory size requested
+#endif
+
 #define USER_PGD_PTRS ((unsigned long)__PAGE_OFFSET >> PGDIR_SHIFT)
 #define KERNEL_PGD_PTRS (PTRS_PER_PGD-USER_PGD_PTRS)
 #define __USER_PGD_PTRS (__PAGE_OFFSET >> PGDIR_SHIFT)

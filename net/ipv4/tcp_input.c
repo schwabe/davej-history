@@ -1759,7 +1759,14 @@ uninteresting_ack:
 		if(sk->ip_xmit_timeout==TIME_KEEPOPEN)
 			tcp_reset_xmit_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 	}
-	return 1;
+
+	/*
+	 * A zero return from tcp_ack(), while in SYN_RECV, means that the
+	 * handshake has failed, and an RST packet should be generated. We
+	 * really have to generate an RST here, or a blind spoofing attack
+	 * would be possible.
+	 */
+	return sk->state != TCP_SYN_RECV;
 }
 
 
@@ -2297,6 +2304,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	struct tcphdr *th;
 	struct sock *sk;
 	__u32 seq;
+	int was_ack;
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	int r;
 #endif
@@ -2308,6 +2316,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 * etc).
 	 */
 	th = skb->h.th;
+	was_ack = th->ack; /* Remember for later when we've freed the skb */
 	sk = skb->sk;
 #ifdef CONFIG_RST_COOKIES
 	if (th->rst && secure_tcp_probe_number(saddr,daddr,ntohs(th->source),ntohs(th->dest),ntohl(th->seq),1)) {
@@ -2789,7 +2798,7 @@ rfc_step6:
 	 *	If we had a partial packet being help up due to
 	 *	application of Nagle's rule we are now free to send it.
 	 */
-	if (th->ack
+	if (was_ack
 	    && sk->packets_out == 0
 	    && sk->partial != NULL
 	    && skb_queue_empty(&sk->write_queue)

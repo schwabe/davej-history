@@ -491,7 +491,7 @@ gdt_descr:
 
 #define lower_seg(type,dpl,base,limit) \
         (((base) & 0x0000ffff)<<16) | \
-        ((limit) & 0x0ffff)
+        (((limit)>>12) & 0x0ffff)
 
 #define x86_seg(type,dpl,base,limit) \
 	.long lower_seg(type,dpl,base,limit); \
