@@ -155,7 +155,7 @@ struct dqstats {
  * Maximum length of a message generated in the quota system,
  * that needs to be kicked onto the tty.
  */
-#define MAX_QUOTA_MESSAGE 75
+#define MAX_QUOTA_MESSAGE (PAGE_SIZE + 256)
 
 #define DQ_LOCKED     0x01	/* locked for update */
 #define DQ_WANT       0x02	/* wanted for update */

@@ -568,12 +568,11 @@ flush_failed:
 }
 
 /*
- * We mustn't allow tracing of suid binaries, unless
- * the tracer has the capability to trace anything..
+ * We mustn't allow tracing of suid binaries, no matter what.
  */
 static inline int must_not_trace_exec(struct task_struct * p)
 {
-	return (p->ptrace & PT_PTRACED) && !cap_raised(p->p_pptr->cap_effective, CAP_SYS_PTRACE);
+	return (p->ptrace & PT_PTRACED);
 }
 
 /* 

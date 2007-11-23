@@ -1,4 +1,4 @@
-/* $Id: cgfourteenfb.c,v 1.4.2.1 1999/09/28 15:59:58 davem Exp $
+/* $Id: cgfourteenfb.c,v 1.4.2.2 2001/07/27 09:44:41 davem Exp $
  * cgfourteenfb.c: CGfourteen frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -234,6 +234,8 @@ static void cg14_setcursor (struct fb_info_sbusfb *fb)
 	spin_lock_irqsave(&fb->lock, flags);
 	if (c->enable)
 		cur->ccr |= CG14_CCR_ENABLE;
+	else
+		cur->ccr &= ~CG14_CCR_ENABLE;
 	cur->cursx = ((c->cpos.fbx - c->chot.fbx) & 0xfff);
 	cur->cursy = ((c->cpos.fby - c->chot.fby) & 0xfff);
 	spin_unlock_irqrestore(&fb->lock, flags);

@@ -31,6 +31,7 @@ struct cs4215 {
 #define CS4215_MLB	(1<<4)	/* 1: Microphone: 20dB gain disabled */
 #define CS4215_RSRVD_1  (1<<5)
 
+#define CS4215_STATUS_MASK	0xe4	/* Status bits */
 
 /* Time Slot 2, Data Format Register */
 #define CS4215_DFR_LINEAR16	0
@@ -45,7 +46,7 @@ static struct {
 } CS4215_FREQ[] = {
 	{	 8000,	(1<<4),	(0<<3)	},
 	{	16000,	(1<<4),	(1<<3)	},
-	{	27429,	(1<<4),	(2<<3)	},	/* Actually 24428.57 */
+	{	27429,	(1<<4),	(2<<3)	},	/* Actually 27428.57 */
 	{	32000,	(1<<4),	(3<<3)	},
 	/* {	 NA,	(1<<4),	(4<<3)	}, */
 	/* {	 NA,	(1<<4),	(5<<3)	}, */
@@ -63,7 +64,8 @@ static struct {
 };
 #define CS4215_HPF	(1<<7)	/* High Pass Filter, 1: Enabled */
 
-#define CS4215_12_MASK	0xfcbf	/* Mask off reserved bits in slot 1 & 2 */
+#define CS4215_FREQ_MASK	0x38	/* Frequency selection bits */
+#define CS4215_12_MASK		0xfcbf	/* Mask off reserved bits in slot 1 & 2 */
 
 /* Time Slot 3, Serial Port Control register */
 #define CS4215_XEN	(1<<0)	/* 0: Enable serial output */
@@ -76,6 +78,8 @@ static struct {
 #define CS4215_MCK_XTL2 (2<<4)	/* 16.9344 MHz clock source */
 #define CS4215_MCK_CLK1 (3<<4)	/* Clockin, 256 x Fs */
 #define CS4215_MCK_CLK2 (4<<4)	/* Clockin, see DFR */
+
+#define CS4215_CLOCK_MASK	0x70	/* Clock source selection bits */
 
 /* Time Slot 4, Test Register */
 #define CS4215_DAD	(1<<0)	/* 0:Digital-Dig loop, 1:Dig-Analog-Dig loop */

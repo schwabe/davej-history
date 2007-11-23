@@ -1066,16 +1066,16 @@ S: USA
 
 N: Dave Jones
 E: davej@suse.de
-E: dave@powertweak.com
-E: djones2@glam.ac.uk
-W: http://powertweak.sourceforge.net
-D: Userspace PCI bridge tuning (Powertweak).
-D: Centaur/IDT Winchip/Winchip 2 tweaks.
-D: Misc clean ups and other random hacking.
-S: 28 Laura Street,
-S: Treforest, Pontypridd,
-S: Mid Glamorgan, CF37 1NW,
-S: Wales, United Kingdom
+W: http://www.suse.de/~davej
+D: Moved PCI bridge tuning to userspace (Powertweak).
+D: Various x86 (& clones) setup code hacking.
+D: Various Janitorial hacks. (kernel-janitor.sourceforge.net)
+S: c/o SuSE Linux UK Ltd
+S: The Kinetic Centre
+S: Theobald Street
+S: Borehamwood
+S: Herts, WD6 4PJ
+S: United Kingdom
 
 N: Bernhard Kaindl
 E: bkaindl@netway.at
@@ -2079,14 +2079,13 @@ S: Sunyvale, CA 94086
 S: USA
 
 N: Henrik Storner
-E: storner@image.dk
-W: http://www.image.dk/~storner/
+E: henrik@storner.dk
 W: http://www.sslug.dk/
 D: Configure script: Invented tristate for module-configuration
 D: vfat/msdos integration, kerneld docs, Linux promotion
 D: Miscellaneous bug-fixes
-S: Chr. Winthersvej 1 B, st.th.
-S: DK-1860 Frederiksberg C
+S: Raunstrupvej 13
+S: DK-2720 Vanloese
 S: Denmark
 
 N: Drew Sullivan

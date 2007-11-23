@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.140.6.6 2001/06/11 22:08:37 kai Exp $
+/* $Id: isdn_net.c,v 1.140.6.8 2001/08/14 14:04:21 kai Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -191,7 +191,7 @@ static int isdn_net_start_xmit(struct sk_buff *, struct device *);
 static void isdn_net_ciscohdlck_connected(isdn_net_local *lp);
 static void isdn_net_ciscohdlck_disconnected(isdn_net_local *lp);
 
-char *isdn_net_revision = "$Revision: 1.140.6.6 $";
+char *isdn_net_revision = "$Revision: 1.140.6.8 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -1431,7 +1431,7 @@ isdn_net_ciscohdlck_alloc_skb(isdn_net_local *lp, int len)
 }
 
 /* cisco hdlck device private ioctls */
-static int
+int
 isdn_ciscohdlck_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {
 	isdn_net_local *lp = (isdn_net_local *) dev->priv;
@@ -1743,6 +1743,11 @@ isdn_net_ciscohdlck_receive(isdn_net_local *lp, struct sk_buff *skb)
 	case CISCO_TYPE_SLARP:
 		isdn_net_ciscohdlck_slarp_in(lp, skb);
 		goto out_free;
+	case CISCO_TYPE_CDP:
+		if (lp->cisco_debserint)
+			printk(KERN_DEBUG "%s: Received CDP packet. use "
+				"\"no cdp enable\" on cisco.\n", lp->name);
+		goto out_free;
 	default:
 		printk(KERN_WARNING "%s: Unknown Cisco type 0x%04x\n",
 		       lp->name, type);
@@ -2016,17 +2021,8 @@ isdn_net_init(struct device *ndev)
 {
 	ushort max_hlhdr_len = 0;
 	isdn_net_local *lp = (isdn_net_local *) ndev->priv;
-	int drvidx,
-	 i;
+	int drvidx, i;
 
-	if (ndev == NULL) {
-		printk(KERN_WARNING "isdn_net_init: dev = NULL!\n");
-		return -ENODEV;
-	}
-	if (ndev->priv == NULL) {
-		printk(KERN_WARNING "isdn_net_init: dev->priv = NULL!\n");
-		return -ENODEV;
-	}
 	ether_setup(ndev);
 	lp->org_hhc = ndev->hard_header_cache;
 	lp->org_hcu = ndev->header_cache_update;

@@ -277,6 +277,15 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name, i
 		result->d_op->d_revalidate(result, flags);
 	return result;
 }
+/*
+ * Yes, this really increments the link_count by 5, and
+ * decrements it by 4. Together with checking against 25,
+ * this limits recursive symlink follows to 5, while
+ * limiting consecutive symlinks to 25.
+ *
+ * Without that kind of total limit, nasty chains of consecutive
+ * symlinks can cause almost arbitrarily long lookups.
+ */
 
 static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry, unsigned int follow)
 {
@@ -284,13 +293,17 @@ static struct dentry * do_follow_link(struct dentry *base, struct dentry *dentry
 
 	if ((follow & LOOKUP_FOLLOW)
 	    && inode && inode->i_op && inode->i_op->follow_link) {
-		if (current->link_count < 5) {
+		if (current->link_count < 25) {
 			struct dentry * result;
 
-			current->link_count++;
+			if (current->need_resched) {
+				current->state = TASK_RUNNING;	
+				schedule();
+			}
+			current->link_count += 5;
 			/* This eats the base */
-			result = inode->i_op->follow_link(dentry, base, follow);
-			current->link_count--;
+			result = inode->i_op->follow_link(dentry, base, follow|LOOKUP_INSYMLINK);
+			current->link_count -= 4;
 			dput(dentry);
 			return result;
 		}
@@ -324,6 +337,8 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 	struct dentry * dentry;
 	struct inode *inode;
 
+	if (!(lookup_flags & LOOKUP_INSYMLINK))
+		current->link_count=0;
 	if (*name == '/') {
 		if (base)
 			dput(base);

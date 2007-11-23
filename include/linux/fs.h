@@ -872,6 +872,7 @@ extern ino_t find_inode_number(struct dentry *, struct qstr *);
 #define LOOKUP_DIRECTORY	(2)
 #define LOOKUP_SLASHOK		(4)
 #define LOOKUP_CONTINUE		(8)
+#define LOOKUP_INSYMLINK	(16)
 
 extern struct dentry * lookup_dentry(const char *, struct dentry *, unsigned int);
 extern struct dentry * __namei(const char *, unsigned int);

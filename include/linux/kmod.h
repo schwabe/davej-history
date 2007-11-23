@@ -15,7 +15,7 @@ extern char hotplug_path[];
 
 static inline int request_module(const char *name)
 {
-	return -EINVAL;
+	return -ENOSYS;
 }
 static inline int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 {

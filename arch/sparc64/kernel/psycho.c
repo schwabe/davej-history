@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.85.2.13 2001/06/28 01:31:12 davem Exp $
+/* $Id: psycho.c,v 1.85.2.14 2001/08/12 13:17:25 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -412,6 +412,7 @@ void __init sabre_init(int pnode)
 			pbm = &sabre->pbm_A;
 
 		pbm->parent = sabre;
+		pbm->pci_first_slot = 1;
 		pbm->IO_assignments = NULL;
 		pbm->MEM_assignments = NULL;
 		pbm->prom_node = node;
@@ -586,9 +587,17 @@ void __init pcibios_init(void)
 			pbm = &psycho->pbm_B;
 
 		pbm->parent = psycho;
+		pbm->pci_first_slot = 1;
 		pbm->IO_assignments = NULL;
 		pbm->MEM_assignments = NULL;
 		pbm->prom_node = node;
+
+		if (!is_pbm_a) {
+			prom_getstring(prom_root_node, "name",
+				       namebuf, sizeof(namebuf));
+			if (!strcmp(namebuf, "SUNW,Ultra-1-Engine"))
+				pbm->pci_first_slot = 2;
+		}
 
 		prom_getstring(node, "name", namebuf, sizeof(namebuf));
 		strcpy(pbm->prom_name, namebuf);
@@ -1908,12 +1917,12 @@ static void __init fixup_irq(struct pci_dev *pdev,
 		 * ranges. -DaveM
 		 */
 		if(pdev->bus->number == pbm->pci_first_busno) {
-			slot = (pdev->devfn >> 3) - 1;
+			slot = (pdev->devfn >> 3) - pbm->pci_first_slot;
 		} else {
 			/* Underneath a bridge, use slot number of parent
 			 * bridge.
 			 */
-			slot = (pdev->bus->self->devfn >> 3) - 1;
+			slot = (pdev->bus->self->devfn >> 3) - pbm->pci_first_slot;
 
 			/* Use low slot number bits of child as IRQ line. */
 			line = (pdev->devfn >> 3) & 0x03;

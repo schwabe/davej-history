@@ -26,6 +26,7 @@
 #include <linux/version.h>
 #include <linux/poll.h>
 #include <linux/isdn.h>
+#include <linux/isdn_compat.h>
 #include <linux/ppp-comp.h>
 
 #include "isdn_common.h"

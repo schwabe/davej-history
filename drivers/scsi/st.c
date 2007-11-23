@@ -8,10 +8,10 @@
   order) Klaus Ehrenfried, Wolfgang Denk, Steve Hirsch, Andreas Koppenh"ofer,
   Michael Leodolter, Eyal Lebedinsky, J"org Weule, and Eric Youngdale.
 
-  Copyright 1992 - 2000 Kai Makisara
+  Copyright 1992 - 2001 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Tue Sep  5 23:17:08 2000 by makisara@kai.makisara.local
+  Last modified: Wed Sep 12 09:16:22 2001 by makisara@abies.metla.fi
   Some small formal changes - aeb, 950809
 */
 
@@ -59,9 +59,13 @@
 
 #ifdef MODULE
 MODULE_PARM(buffer_kbs, "i");
+MODULE_PARM_DESC(buffer_kbs, "Default driver buffer size (KB; 32)");
 MODULE_PARM(write_threshold_kbs, "i");
+MODULE_PARM_DESC(write_threshold_kbs, "Asynchronous write threshold (KB; 30)");
 MODULE_PARM(max_buffers, "i");
+MODULE_PARM_DESC(max_buffers, "Maximum number of buffer allocated at initialisation (4)");
 MODULE_PARM(max_sg_segs, "i");
+MODULE_PARM_DESC(max_sg_segs, "Maximum number of scatter/gather segments to use (32)");
 static int buffer_kbs = 0;
 static int write_threshold_kbs = 0;
 static int max_buffers = 0;
@@ -225,38 +229,33 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
   int remainder;
   Scsi_Tape * STp;
 
-  if ((st_nbr = TAPE_NR(SCpnt->request.rq_dev)) < st_template.nr_dev) {
-    STp = &(scsi_tapes[st_nbr]);
-    if ((STp->buffer)->writing &&
-	(SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
-	(SCpnt->sense_buffer[2] & 0x40)) {
-      /* EOM at write-behind, has all been written? */
-      if ((SCpnt->sense_buffer[0] & 0x80) != 0)
-	remainder = (SCpnt->sense_buffer[3] << 24) |
+  st_nbr = TAPE_NR(SCpnt->request.rq_dev);
+  STp = &(scsi_tapes[st_nbr]);
+  if ((STp->buffer)->writing &&
+      (SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
+      (SCpnt->sense_buffer[2] & 0x40)) {
+    /* EOM at write-behind, has all been written? */
+    if ((SCpnt->sense_buffer[0] & 0x80) != 0)
+      remainder = (SCpnt->sense_buffer[3] << 24) |
 	      (SCpnt->sense_buffer[4] << 16) |
-		(SCpnt->sense_buffer[5] << 8) | SCpnt->sense_buffer[6];
-      else
-	remainder = 0;
-      if ((SCpnt->sense_buffer[2] & 0x0f) == VOLUME_OVERFLOW ||
-	  remainder > 0)
-	(STp->buffer)->last_result = SCpnt->result; /* Error */
-      else
-	(STp->buffer)->last_result = INT_MAX; /* OK */
-    }
+	      (SCpnt->sense_buffer[5] << 8) | SCpnt->sense_buffer[6];
     else
-      (STp->buffer)->last_result = SCpnt->result;
-    SCpnt->request.rq_status = RQ_SCSI_DONE;
-    (STp->buffer)->last_SCpnt = SCpnt;
+      remainder = 0;
+    if ((SCpnt->sense_buffer[2] & 0x0f) == VOLUME_OVERFLOW ||
+	remainder > 0)
+      (STp->buffer)->last_result = SCpnt->result; /* Error */
+    else
+      (STp->buffer)->last_result = INT_MAX; /* OK */
+  }
+  else
+    (STp->buffer)->last_result = SCpnt->result;
+  SCpnt->request.rq_status = RQ_SCSI_DONE;
+  (STp->buffer)->last_SCpnt = SCpnt;
 
 #if DEBUG
-    STp->write_pending = 0;
+  STp->write_pending = 0;
 #endif
-    up(SCpnt->request.sem);
-  }
-#if DEBUG
-  else if (debugging)
-    printk(KERN_ERR "st?: Illegal interrupt device %x\n", st_nbr);
-#endif
+  up(SCpnt->request.sem);
 }
 
 
@@ -2324,6 +2323,8 @@ st_int_ioctl(struct inode * inode,
 	 return (-EINVAL);
        }
        cmd[0] = MODE_SELECT;
+       if ((STp->use_pf & USE_PF))
+	 cmd[1] = 0x10;
        cmd[4] = datalen = 12;
 
        memset((STp->buffer)->b_data, 0, 12);
@@ -2501,6 +2502,20 @@ st_int_ioctl(struct inode * inode,
        STps->drv_file = (-1);
        STps->drv_block = (-1);
        STps->eof = ST_EOD;
+     }
+     else if (cmd_in == MTSETBLK ||
+              cmd_in == MTSETDENSITY ||
+              cmd_in == MTSETDRVBUFFER ||
+              cmd_in == SET_DENS_AND_BLK) {
+       if ((SCpnt->sense_buffer[2] & 0x0f) == ILLEGAL_REQUEST &&
+           !(STp->use_pf & PF_TESTED)) {
+         /* Try the other possible state of Page Format if not
+            already tried */
+         STp->use_pf = !STp->use_pf | PF_TESTED;
+         scsi_release_command(SCpnt);
+         SCpnt = NULL;
+         return st_int_ioctl(inode, cmd_in, arg);
+       }
      }
      else if (chg_eof)
        STps->eof = ST_NOEOF;
@@ -3467,6 +3482,7 @@ static int st_attach(Scsi_Device * SDp){
    tpnt->in_use = 0;
    tpnt->drv_buffer = 1;  /* Try buffering if no mode sense */
    tpnt->restr_dma = (SDp->host)->unchecked_isa_dma;
+   tpnt->use_pf = (SDp->scsi_level >= SCSI_2);
    tpnt->density = 0;
    tpnt->do_auto_lock = ST_AUTO_LOCK;
    tpnt->can_bsr = ST_IN_FILE_POS;

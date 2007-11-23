@@ -904,7 +904,7 @@ net_rx(struct device *dev)
 		lp->stats.rx_dropped++;
 		return;
 	}
-	skb->len = length;
+	skb_put(skb, length);
 	skb->dev = dev;
 
         insw(ioaddr + RX_FRAME_PORT, skb->data, length >> 1);

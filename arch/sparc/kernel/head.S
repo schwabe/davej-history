@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.95.2.6 2000/01/21 01:05:39 davem Exp $
+/* $Id: head.S,v 1.95.2.7 2001/08/12 10:56:22 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -157,7 +157,7 @@ t_sunos:SUNOS_SYSCALL_TRAP                  /* SunOS System Call             */
 t_sunos:SUNOS_NO_SYSCALL_TRAP		    /* No SunOS emulation	     */
 #endif
 t_sbkpt:BREAKPOINT_TRAP                     /* Software Breakpoint/KGDB      */
-t_divz:	BAD_TRAP(0x82)                      /* Divide by zero trap           */
+t_divz:	TRAP_ENTRY(0x82, do_hw_divzero)     /* Divide by zero trap           */
 t_flwin:TRAP_ENTRY(0x83, do_flush_windows)  /* Flush Windows Trap            */
 t_clwin:BAD_TRAP(0x84)                      /* Clean Windows Trap            */
 t_rchk:	BAD_TRAP(0x85)                      /* Range Check                   */
@@ -246,7 +246,7 @@ C_LABEL(trapbase_cpu1):
 	SUNOS_NO_SYSCALL_TRAP	/* No SunOS emulation */
 #endif
 	BREAKPOINT_TRAP
-	BAD_TRAP(0x82)
+	TRAP_ENTRY(0x82, do_hw_divzero)
 	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
 	BAD_TRAP(0x86) BAD_TRAP(0x87) SOLARIS_SYSCALL_TRAP
 	NETBSD_SYSCALL_TRAP BAD_TRAP(0x8a) BAD_TRAP(0x8b) BAD_TRAP(0x8c)
@@ -318,7 +318,7 @@ C_LABEL(trapbase_cpu2):
 	SUNOS_NO_SYSCALL_TRAP	/* No SunOS emulation */
 #endif
 	BREAKPOINT_TRAP
-	BAD_TRAP(0x82)
+	TRAP_ENTRY(0x82, do_hw_divzero)
 	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
 	BAD_TRAP(0x86) BAD_TRAP(0x87) SOLARIS_SYSCALL_TRAP
 	NETBSD_SYSCALL_TRAP BAD_TRAP(0x8a) BAD_TRAP(0x8b) BAD_TRAP(0x8c)
@@ -390,7 +390,7 @@ C_LABEL(trapbase_cpu3):
 	SUNOS_NO_SYSCALL_TRAP	/* No SunOS emulation */
 #endif
 	BREAKPOINT_TRAP
-	BAD_TRAP(0x82)
+	TRAP_ENTRY(0x82, do_hw_divzero)
 	TRAP_ENTRY(0x83, do_flush_windows) BAD_TRAP(0x84) BAD_TRAP(0x85)
 	BAD_TRAP(0x86) BAD_TRAP(0x87) SOLARIS_SYSCALL_TRAP
 	NETBSD_SYSCALL_TRAP BAD_TRAP(0x8a) BAD_TRAP(0x8b) BAD_TRAP(0x8c)

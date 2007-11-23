@@ -104,6 +104,7 @@
    		flags that aren't... Restarting the DPLL does not help
    		either, it resynchronizes too slow and the first received
    		frame gets lost.
+   2001-10-05   Set skb to NULL when it is freed in scc_spint. (PE1RXQ)
 
    Thanks to all who contributed to this driver with ideas and bug
    reports!
@@ -618,6 +619,7 @@ static inline void scc_spint(struct scc_channel *scc)
 		if (skb != NULL) 
 			kfree_skb(skb);
 		scc->rx_buff = NULL;
+		skb=NULL;                        /* prevent reuse of skb */
 	}
 
 	if(status & END_FR && skb != NULL)	/* end of frame */

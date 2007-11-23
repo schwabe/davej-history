@@ -23,6 +23,8 @@
 	This is a compatibility hardware problem.
 
 	Versions:
+	0.12d	tottaly isolated old code to new code (blue cards).
+		(aris, 12/27/2000)
 	0.12c	fixed other multiple cards bug and other cleanups
 		(aris, 08/21/2000)
 	0.12b	added reset when the tx interrupt is called and TX isn't done
@@ -103,7 +105,7 @@
 */
 
 static const char *version =
-	"eepro.c: v0.12b 06/20/2000 aris@conectiva.com.br\n";
+	"eepro.c: v0.12d 12/27/2000 aris@conectiva.com.br\n";
 
 #include <linux/module.h>
 
@@ -149,47 +151,28 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
-
 #include <linux/version.h>
-
-/* For linux 2.1.xx */
-#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x20155
 
 #include <asm/spinlock.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 
-#define compat_dev_kfree_skb( skb, mode ) dev_kfree_skb( (skb) )
 /* I had reports of looong delays with SLOW_DOWN defined as udelay(2) */
 #define SLOW_DOWN inb(0x80)
-/* udelay(2) */
-#define compat_init_func(X)  __initfunc(X)
-#define compat_init_data     __initdata
 
-#else 
-/* for 2.x */
-
-#define compat_dev_kfree_skb( skb, mode ) dev_kfree_skb( (skb), (mode) )
-#define test_and_set_bit(a,b) set_bit((a),(b))
-#define SLOW_DOWN SLOW_DOWN_IO
-#define compat_init_func(X) X
-#define compat_init_data
-
-#endif
-
-
-/* First, a few definitions that the brave might change. */
-/* A zero-terminated list of I/O addresses to be probed. */
-static unsigned int eepro_portlist[] compat_init_data =
+/* First, a few definitions that the brave might change.
+ * A zero-terminated list of I/O addresses to be probed.
+ * note: 0x300 is default, the 595FX supports ALL IO Ports 
+ * from 0x000 to 0x3F0, some of which are reserved in PCs
+ */
+static unsigned eepro_portlist[] __initdata =
 	{ 0x300, 0x210, 0x240, 0x280, 0x2C0, 0x200, 0x320, 0x340, 0x360, 0};
-/* note: 0x300 is default, the 595FX supports ALL IO Ports 
-  from 0x000 to 0x3F0, some of which are reserved in PCs */
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifndef NET_DEBUG
 #define NET_DEBUG 0
 #endif
-static unsigned int net_debug = NET_DEBUG;
+static unsigned net_debug = NET_DEBUG;
 
 /* The number of low I/O ports used by the ethercard. */
 #define EEPRO_IO_EXTENT	16
@@ -204,16 +187,17 @@ static unsigned int net_debug = NET_DEBUG;
 struct eepro_local {
 	struct enet_statistics stats;
 	unsigned rx_start;
-	unsigned tx_start; /* start of the transmit chain */
-	int tx_last;  /* pointer to last packet in the transmit chain */
-	unsigned tx_end;   /* end of the transmit chain (plus 1) */
-	int eepro;	/* 1 for the EtherExpress Pro/10,
-			   2 for the EtherExpress Pro/10+,
-			   0 for other 82595-based lan cards. */
-	int version;	/* a flag to indicate if this is a TX or FX
-				   version of the 82595 chip. */
+	unsigned tx_start; 	/* start of the transmit chain */
+	int tx_last;		/* pointer to last packet in the transmit chain */
+	unsigned tx_end;	/* end of the transmit chain (plus 1) */
+	int eepro;		/* 1 for the EtherExpress Pro/10,
+				 * 2 for the EtherExpress Pro/10+,
+				 * 3 for the blue cards,
+				 * 0 for other 82595-based lan cards. */
+	int version;		/* a flag to indicate if this is a TX or FX
+				 * version of the 82595 chip. */
 	int stepping;
-	spinlock_t lock; /* Serializing lock  */ 
+	spinlock_t lock;	/* Serializing lock  */ 
 	unsigned rcv_ram;
 	unsigned rcv_start;
 	unsigned xmt_bar;
@@ -322,7 +306,7 @@ static struct enet_statistics *eepro_get_stats(struct device *dev);
 static void     set_multicast_list(struct device *dev);
 
 static int read_eeprom(int ioaddr, int location, struct device *dev);
-static void hardware_send_packet(struct device *dev, void *buf, short length);
+static int 	hardware_send_packet(struct device *dev, void *buf, short length);
 static int	eepro_grab_irq(struct device *dev);
 
 /*
@@ -518,8 +502,10 @@ buffer (transmit-buffer = 32K - receive-buffer).
 /* set diagnose flag */
 #define eepro_diag(ioaddr) outb(DIAGNOSE_CMD, ioaddr)
 
+#ifdef ANSWER_TX_AND_RX
 /* ack for rx/tx int */
 #define eepro_ack_rxtx(ioaddr) outb (RX_INT | TX_INT, ioaddr + STATUS_REG)
+#endif
 
 /* ack for rx int */
 #define eepro_ack_rx(ioaddr) outb (RX_INT, ioaddr + STATUS_REG)
@@ -548,14 +534,7 @@ buffer (transmit-buffer = 32K - receive-buffer).
    If dev->base_addr == 2, allocate space for the device and return success
    (detachable devices only).
    */
-#ifdef HAVE_DEVLIST
-	/* Support for an alternate probe manager, which will eliminate the
-   							boilerplate below. */
-struct netdev_entry netcard_drv =
-		{"eepro", eepro_probe1, EEPRO_IO_EXTENT, eepro_portlist};
-#else
-compat_init_func(int eepro_probe(struct device *dev))
-{
+__initfunc(int eepro_probe(struct device *dev)) {
 	int i;
 	int base_addr = dev ? dev->base_addr : 0;
 	if (base_addr > 0x1ff)		/* Check a single specified location. */
@@ -575,7 +554,6 @@ compat_init_func(int eepro_probe(struct device *dev))
 	
 	return ENODEV;
 }
-#endif
 
 static void printEEPROMInfo(short ioaddr, struct device *dev)
 {
@@ -732,6 +710,7 @@ int eepro_probe1(struct device *dev, short ioaddr)
 
 			dev->mem_start = (RCV_LOWER_LIMIT << 8);
 
+			/* received mem_end as argument */
 			if ((dev->mem_end & 0x3f) < 3 ||	/* RX buffer must be more than 3K */
 				(dev->mem_end & 0x3f) > 29)	/* and less than 29K */
 				dev->mem_end = (RCV_UPPER_LIMIT << 8);
@@ -1055,6 +1034,8 @@ static int eepro_open(struct device *dev)
 	}
 	
 	eepro_sel_reset(ioaddr);
+	SLOW_DOWN;
+	SLOW_DOWN;
 
 	lp->tx_start = lp->tx_end = (XMT_LOWER_LIMIT << 8);
 	lp->tx_last = 0;
@@ -1112,19 +1093,16 @@ static int eepro_send_packet(struct sk_buff *skb, struct device *dev)
 	} else {
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		unsigned char *buf = skb->data;
-		int discard = lp->stats.tx_dropped;
 
 		lp->stats.tx_bytes+=skb->len;
-		hardware_send_packet(dev, buf, length);
-
-		if (lp->stats.tx_dropped != discard)
+		if (hardware_send_packet(dev, buf, length))
 			return 1;
 		
 		dev->trans_start = jiffies;
 
 	}
 
-	compat_dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 
 	/* You might need to clean up and record Tx statistics here. */
 	/* lp->stats.tx_aborted_errors++; */
@@ -1175,9 +1153,11 @@ eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	while (((status = inb(ioaddr + STATUS_REG)) & 0x06) && (boguscount--)) 
 	{
 		switch (status & (RX_INT | TX_INT)) {
+#ifdef ANSWER_TX_AND_RX
 			case (RX_INT | TX_INT):
 				eepro_ack_rxtx(ioaddr);
 				break;
+#endif
 			case RX_INT:
 				eepro_ack_rx(ioaddr);
 				break;
@@ -1190,6 +1170,9 @@ eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 			/* Get the received packets */
 			eepro_rx(dev);
+#ifndef ANSWER_TX_AND_RX
+			continue;
+#endif
 		}
 		if (status & TX_INT) {
 			if (net_debug > 4)
@@ -1385,7 +1368,11 @@ set_multicast_list(struct device *dev)
 		eepro_en_int(ioaddr);
 	
 	}
-	eepro_complete_selreset(ioaddr);
+	if (lp->eepro == LAN595FX_10ISA) {
+		eepro_complete_selreset(ioaddr);
+	}
+	else
+		eepro_en_rx(ioaddr);
 }
 
 /* The horrible routine to read a word from the serial EEPROM. */
@@ -1445,7 +1432,7 @@ read_eeprom(int ioaddr, int location, struct device *dev)
 	return retval;
 }
 
-static void
+static int
 hardware_send_packet(struct device *dev, void *buf, short length)
 {
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
@@ -1557,13 +1544,16 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 
 		if (net_debug > 5)
 			printk(KERN_DEBUG "%s: exiting hardware_send_packet routine.\n", dev->name);
-		return;
-	}
 
-	dev->tbusy = 1;
+		return 0;
+	}
+	if (lp->eepro == LAN595FX_10ISA)
+		dev->tbusy = 1;
 
 	if (net_debug > 5)
 		printk(KERN_DEBUG "%s: exiting hardware_send_packet routine.\n", dev->name);
+
+	return 1;
 }
 
 static void
@@ -1681,9 +1671,13 @@ eepro_transmit_interrupt(struct device *dev)
 		xmt_status = inw(ioaddr+IO_PORT);
 
 		if ((xmt_status & TX_DONE_BIT) == 0) {
-			udelay(40);
-			boguscount--;
-			continue;
+			if (lp->eepro == LAN595FX_10ISA) {
+				udelay(40);
+				boguscount--;
+				continue;
+			}
+			else
+				break;
 		}
 
 
@@ -1757,7 +1751,7 @@ eepro_transmit_interrupt(struct device *dev)
 	 * interrupt again for tx. in other words: tx timeout what will take
 	 * a lot of time to happen, so we'll do a complete selreset.
 	 */
-	if (!boguscount)
+	if (!boguscount && lp->eepro == LAN595FX_10ISA)
 		eepro_complete_selreset(ioaddr);
 }
 

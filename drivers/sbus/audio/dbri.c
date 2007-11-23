@@ -1490,7 +1490,7 @@ static int mmcodec_setctrl(struct dbri *dbri)
          */
 
         i = 64;
-        while (((dbri->mm.status & 0xe4) != 0x20) && --i) udelay(125);
+        while (((dbri->mm.status & CS4215_STATUS_MASK) != CS4215_RSRVD_1) && --i) udelay(125);
         if (i == 0) {
 		return 0;
         }
@@ -1914,9 +1914,9 @@ static int dbri_set_output_rate(struct sparcaudio_driver *drv, int rate)
                 return -1;
         }
 
-        dbri->mm.ctrl[1] &= ~ 0x38;
+        dbri->mm.ctrl[1] &= ~ CS4215_FREQ_MASK;
         dbri->mm.ctrl[1] |= CS4215_FREQ[i].csval;
-        dbri->mm.ctrl[2] &= ~ 0x70;
+        dbri->mm.ctrl[2] &= ~ CS4215_CLOCK_MASK;
         dbri->mm.ctrl[2] |= CS4215_FREQ[i].xtal;
 
         dbri->perchip_info.play.sample_rate = rate;
@@ -2443,7 +2443,7 @@ static int dbri_attach(struct sparcaudio_driver *drv,
 
 	printk(KERN_INFO "audio%d at 0x%lx (irq %d) is DBRI(%c)+CS4215(%d)\n",
 	       num_drivers, (unsigned long)dbri->regs,
-	       dbri->irq, dbri->dbri_version, dbri->mm.version);
+	       dbri->irq, dbri->dbri_version, dbri->mm.version & CS4215_VERSION_MASK);
 	
 	return 0;
 }

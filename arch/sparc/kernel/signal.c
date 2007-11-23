@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.91.2.4 2001/06/19 16:49:41 davem Exp $
+/*  $Id: signal.c,v 1.91.2.5 2001/08/12 10:56:22 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -659,10 +659,45 @@ new_setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 		switch (signr) {
 		case SIGSEGV:
 		case SIGILL:
-		case SIGFPE:
 		case SIGBUS:
 		case SIGEMT:
 			info->si_code = current->tss.sig_desc;
+			info->si_addr = (void *)current->tss.sig_address;
+			info->si_trapno = 0;
+			break;
+		case SIGFPE:
+			switch (current->tss.sig_desc) {
+			case SUBSIG_FPDISABLED:
+				info->si_code = FPE_FLTSUB;
+				break;
+			case SUBSIG_FPERROR:
+				info->si_code = FPE_FLTSUB;
+				break;
+			case SUBSIG_FPINTOVFL:
+				info->si_code = FPE_INTOVF;
+				break;
+			case SUBSIG_FPSTSIG:
+				info->si_code = FPE_FLTSUB;
+				break;
+			case SUBSIG_IDIVZERO:
+				info->si_code = FPE_INTDIV;
+				break;
+			case SUBSIG_FPINEXACT:
+				info->si_code = FPE_FLTRES;
+				break;
+			case SUBSIG_FPDIVZERO:
+				info->si_code = FPE_FLTDIV;
+				break;
+			case SUBSIG_FPUNFLOW:
+				info->si_code = FPE_FLTUND;
+				break;
+			case SUBSIG_FPOPERROR:
+				info->si_code = FPE_FLTINV;
+				break;
+			case SUBSIG_FPOVFLOW:
+				info->si_code = FPE_FLTOVF;
+				break;
+			}
 			info->si_addr = (void *)current->tss.sig_address;
 			info->si_trapno = 0;
 			break;

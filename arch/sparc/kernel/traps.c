@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.59 1999/03/06 12:07:31 anton Exp $
+/* $Id: traps.c,v 1.59.2.2 2001/08/23 17:36:12 davem Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -328,6 +328,18 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	       
 	fpt->tss.sig_address = pc;
 	fpt->tss.sig_desc = SUBSIG_FPERROR; /* as good as any */
+	if ((fpt->tss.fsr & 0x1c000) == (1 << 14)) {
+		if (fpt->tss.fsr & 0x01)
+			fpt->tss.sig_desc = SUBSIG_FPINEXACT;
+		else if (fpt->tss.fsr & 0x02)
+			fpt->tss.sig_desc = SUBSIG_FPDIVZERO;
+		else if (fpt->tss.fsr & 0x04)
+			fpt->tss.sig_desc = SUBSIG_FPUNFLOW;
+		else if (fpt->tss.fsr & 0x08)
+			fpt->tss.sig_desc = SUBSIG_FPOVFLOW;
+		else if (fpt->tss.fsr & 0x10)
+			fpt->tss.sig_desc = SUBSIG_FPINTOVFL;
+	}
 #ifdef __SMP__
 	fpt->flags &= ~PF_USEDFPU;
 #endif
@@ -417,8 +429,15 @@ void handle_cp_exception(struct pt_regs *regs, unsigned long pc, unsigned long n
 void handle_hw_divzero(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		       unsigned long psr)
 {
+#ifndef __SMP__
+	struct task_struct *fpt = last_task_used_math;
+#else
+	struct task_struct *fpt = current;
+#endif
 	lock_kernel();
-	send_sig(SIGILL, current, 1);
+	fpt->tss.sig_address = pc;
+	fpt->tss.sig_desc = SUBSIG_IDIVZERO;
+	send_sig(SIGFPE, fpt, 1);
 	unlock_kernel();
 }
 
