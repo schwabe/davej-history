@@ -273,6 +273,9 @@ void lance32_probe1(struct device *dev, char *chipname, int pci_irq_line)
         outw(0x0002, ioaddr+LANCE_ADDR);
 	outw(0x0002, ioaddr+LANCE_BUS_IF);
 
+	/* Reset the LANCE - this should prevent any more interrupts from arriving */
+	inw(ioaddr+LANCE_RESET);
+
 	if (lance32_debug > 0)
 		printk(version);
 
@@ -451,7 +454,7 @@ lance32_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Transmitter timeout, serious problems. */
 	if (dev->tbusy) {
 		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 20)
+		if (tickssofar < 60)		/* It can take this long to run through the 16 retries */
 			return 1;
 		outw(0, ioaddr+LANCE_ADDR);
 		printk("%s: transmit timed out, status %4.4x, resetting.\n",
@@ -469,8 +472,9 @@ lance32_start_xmit(struct sk_buff *skb, struct device *dev)
 					   lp->rx_ring[i].base, -lp->rx_ring[i].buf_length,
 					   lp->rx_ring[i].msg_length);
 			for (i = 0 ; i < TX_RING_SIZE; i++)
-				printk("%s %08x %04x %04x", i & 0x3 ? "" : "\n ",
+				printk("%s %08x %04x %04x %08x  ", i & 0x1 ? "" : "\n ",
 					   lp->tx_ring[i].base, -lp->tx_ring[i].length,
+					   lp->tx_ring[i].status,
 					   lp->tx_ring[i].misc);
 			printk("\n");
 		}
@@ -633,6 +637,9 @@ lance32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				dirty_tx += TX_RING_SIZE;
 			}
 #endif
+
+			if (dev->tbusy)
+				dev->trans_start = jiffies; /* We are just starting the next transmit */
 
 			if (lp->tx_full && dev->tbusy
 				&& dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {

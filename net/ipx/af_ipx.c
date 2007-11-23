@@ -468,7 +468,60 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 	ipx_socket	*sock1 = NULL, *sock2 = NULL;
 	struct sk_buff	*skb1 = NULL, *skb2 = NULL;
 
-	sock1 = ipxitf_find_socket(intrfc, ipx->ipx_dest.sock);
+	if (intrfc == ipx_primary_net
+	  && ntohs(ipx->ipx_dest.sock) == 0x451) 
+	{
+	  /* 
+	   * The packet's target is a NCP connection handler. We want to
+	   * hand it to the correct socket directly within the kernel,
+	   * so that the mars_nwe packet distribution process
+	   * does not have to do it. Here we only care about NCP and
+	   * BURST packets.
+	   * You might call this a hack, but believe me, you do not
+	   * want a complete NCP layer in the kernel, and this is
+	   * VERY fast as well.
+	   */
+	  int connection = 0;
+
+	  if (    *((char*)(ipx+1))   == 0x22
+	      &&  *((char*)(ipx+1)+1) == 0x22) 
+	  {
+	  	/*
+		 * The packet is a NCP request
+		 */
+		 connection = ( ((int) *((char*)(ipx+1)+5)) << 8 )
+		 	       | (int) *((char*)(ipx+1)+3);
+	  } 
+	  else if (    *((char*)(ipx+1))   == 0x77
+		   &&  *((char*)(ipx+1)+1) == 0x77) 
+	  {
+		/*
+		 * The packet is a BURST packet
+		 */
+		 connection = ( ((int) *((char*)(ipx+1)+9)) << 8 )
+		 	       | (int) *((char*)(ipx+1)+8);
+	  }
+
+          if (connection) 
+	  {
+	    /*
+	     * Now we have to look for a special NCP connection handling
+	     * socket. Only these sockets have ipx_ncp_conn != 0, set
+	     * by SIOCIPXNCPCONN.
+	     */
+            for (sock1=intrfc->if_sklist;
+		(sock1 != NULL) &&
+		(sock1->protinfo.af_ipx.ipx_ncp_conn != connection);
+		sock1=sock1->next);;
+          }
+        }
+        if (sock1 == NULL) 
+	{
+		/* No special socket found, forward the packet the
+		 * normal way.
+		 */
+		sock1 = ipxitf_find_socket(intrfc, ipx->ipx_dest.sock);
+	}
 
 	/*
 	 *	We need to check if there is a primary net and if
@@ -1723,6 +1776,7 @@ static int ipx_create(struct socket *sock, int protocol)
 	}
 	sk->rcvbuf=SK_RMEM_MAX;
 	sk->sndbuf=SK_WMEM_MAX;
+	sk->allocation=GFP_KERNEL;
 	sk->prot=NULL;	/* So we use default free mechanisms */
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->write_queue);
@@ -2242,6 +2296,21 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 			if(err) return err;
 			return(ipxcfg_get_config_data((void *)arg));
 		}
+
+		case SIOCIPXNCPCONN:
+                {
+		  /*
+		   * This socket wants to take care of the NCP connection
+		   * handed to us in arg.
+		   */
+                  if (!suser()) return(-EPERM);
+                  err = verify_area(VERIFY_READ, (void *)arg,
+                                sizeof(unsigned short));
+                  if (err) return err;
+                  sk->protinfo.af_ipx.ipx_ncp_conn = get_fs_word(arg);
+                  return 0;
+                }
+
 		case SIOCGSTAMP:
 			if (sk)
 			{

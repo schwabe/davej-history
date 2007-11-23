@@ -14,6 +14,7 @@ See description later on below for handling BIG IDE drives with >1024 cyls.
 
 Major features of ide.c & ide-cd.c ("NEW!" marks changes since 1.2.13):
 
+NEW!	- support for IDE ATAPI *floppy* drives
 NEW!	- support for IDE ATAPI *tape* drives, courtesy of Gadi Oxman
 		(re-run MAKEDEV.ide to create the tape device entries in /dev/)
 NEW!	- support for up to *four* IDE interfaces on one or more IRQs
@@ -111,12 +112,12 @@ shell script:   /usr/src/linux/scripts/MAKEDEV.ide
 Apparently many releases of Slackware 2.2/2.3 have incorrect entries
 in /dev for hdc* and hdd* -- this can also be corrected by running MAKEDEV.ide
 
-ide.c automatically probes for the primary and secondary interfaces,
+ide.c automatically probes for the standard four IDE interfaces,
 for the drives/geometries attached to those interfaces, and for the
-IRQ numbers being used by the interfaces (normally IRQ14 & IRQ15).
+IRQ numbers being used by the interfaces (normally 14, 15, 11 and 10).
 
-Interfaces beyond the first two are not normally probed for, but may be
-specified using kernel "command line" options.  For example,
+For special cases, interfaces may be specified using kernel "command line"
+options.  For example,
 
 	ide3=0x168,0x36e,10	/* ioports 0x168-0x16f,0x36e, irq 10 */
 

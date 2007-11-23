@@ -125,7 +125,8 @@
  *                          you must define IHAVEADOLPHIN)
  *                        Added identifier so new Sanyo CD-changer works
  *                        Better detection if door locking isn't supported 
- *                         
+ * 3.21  Jun 16,1997  -- Add work-around for GCD-R580B
+ *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
  *
@@ -1140,6 +1141,11 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
 
 	/* Number of sectors to transfer. */
 	nsect = rq->nr_sectors;
+
+#if !STANDARD_ATAPI
+	if (nsect > drive->cdrom_info.max_sectors)
+		nsect = drive->cdrom_info.max_sectors;
+#endif /* not STANDARD_ATAPI */
 
 	/* Starting sector. */
 	sector = rq->sector;
@@ -2674,6 +2680,8 @@ void ide_cdrom_setup (ide_drive_t *drive)
 		CDROM_CONFIG_FLAGS (drive)->drq_interrupt = 0;
 
 #if ! STANDARD_ATAPI
+	drive->cdrom_info.max_sectors = 252;
+
 	CDROM_CONFIG_FLAGS (drive)->old_readcd = 0;
 	CDROM_CONFIG_FLAGS (drive)->toctracks_as_bcd = 0;
 	CDROM_CONFIG_FLAGS (drive)->tocaddr_as_bcd = 0;
@@ -2698,6 +2706,9 @@ void ide_cdrom_setup (ide_drive_t *drive)
 			/* Vertos 600 ESD. */
 			CDROM_CONFIG_FLAGS (drive)->toctracks_as_bcd = 1;
 		}
+
+		else if (strcmp (drive->id->model, "GCD-R580B") == 0)
+			drive->cdrom_info.max_sectors = 124;
 
 		else if (strcmp (drive->id->model,
 				 "NEC CD-ROM DRIVE:260") == 0 &&

@@ -41,18 +41,7 @@ struct page * page_hash_table[PAGE_HASH_SIZE];
  * Simple routines for both non-shared and shared mappings.
  */
 
-/*
- * This is a special fast page-free routine that _only_ works
- * on page-cache pages that we are currently using. We can
- * just decrement the page count, because we know that the page
- * has a count > 1 (the page cache itself counts as one, and
- * we're currently using it counts as one). So we don't need
- * the full free_page() stuff..
- */
-static inline void release_page(struct page * page)
-{
-	atomic_dec(&page->count);
-}
+#define release_page(page) __free_page((page))
 
 /*
  * Invalidate the pages of an inode, removing all pages that aren't
@@ -100,7 +89,7 @@ repeat:
 		/* page wholly truncated - free it */
 		if (offset >= start) {
 			if (PageLocked(page)) {
-				wait_on_page(page);
+				__wait_on_page(page);
 				goto repeat;
 			}
 			inode->i_nrpages--;
@@ -169,8 +158,12 @@ int shrink_mmap(int priority, int dma)
 		switch (page->count) {
 			case 1:
 				/* If it has been referenced recently, don't free it */
-				if (clear_bit(PG_referenced, &page->flags))
+				if (clear_bit(PG_referenced, &page->flags)) {
+					/* age this page potential used */
+					if (priority < 4)
+						age_page(page);
 					break;
+				}
 
 				/* is it a page cache page? */
 				if (page->inode) {
@@ -448,7 +441,7 @@ static void profile_readahead(int async, struct file *filp)
 
 #define PageAlignSize(size) (((size) + PAGE_SIZE -1) & PAGE_MASK)
 
-#if 0  /* small readahead */
+#ifdef CONFIG_READA_SMALL  /* small readahead */
 #define MAX_READAHEAD PageAlignSize(4096*7)
 #define MIN_READAHEAD PageAlignSize(4096*2)
 #else /* large readahead */
@@ -784,8 +777,15 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 found_page:
 	/*
 	 * Ok, found a page in the page cache, now we need to check
-	 * that it's up-to-date
+	 * that it's up-to-date.  First check whether we'll need an
+	 * extra page -- better to overlap the allocation with the I/O.
 	 */
+	if (no_share && !new_page) {
+		new_page = __get_free_page(GFP_KERNEL);
+		if (!new_page)
+			goto failure;
+	}
+
 	if (PageLocked(page))
 		goto page_locked_wait;
 	if (!PageUptodate(page))
@@ -810,13 +810,8 @@ success:
 	}
 
 	/*
-	 * Check that we have another page to copy it over to..
+	 * No sharing ... copy to the new page.
 	 */
-	if (!new_page) {
-		new_page = __get_free_page(GFP_KERNEL);
-		if (!new_page)
-			goto failure;
-	}
 	memcpy((void *) new_page, (void *) old_page, PAGE_SIZE);
 	flush_page_to_ram(new_page);
 	release_page(page);
@@ -880,6 +875,8 @@ page_read_error:
 	 */
 failure:
 	release_page(page);
+	if (new_page)
+		free_page(new_page);
 no_page:
 	return 0;
 }
@@ -1003,6 +1000,8 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 	unsigned long page;
 	int error;
 
+	if (pte_none(pte))
+		return 0;
 	if (!(flags & MS_INVALIDATE)) {
 		if (!pte_present(pte))
 			return 0;
@@ -1015,8 +1014,6 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 		page = pte_page(pte);
 		mem_map[MAP_NR(page)].count++;
 	} else {
-		if (pte_none(pte))
-			return 0;
 		flush_cache_page(vma, address);
 		pte_clear(ptep);
 		flush_tlb_page(vma, address);

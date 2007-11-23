@@ -11,6 +11,7 @@
 
 #include <linux/mm.h>
 #include <linux/fs.h>
+#include <linux/swapctl.h>
 
 static inline unsigned long page_address(struct page * page)
 {
@@ -20,7 +21,7 @@ static inline unsigned long page_address(struct page * page)
 #define PAGE_HASH_BITS 11
 #define PAGE_HASH_SIZE (1 << PAGE_HASH_BITS)
 
-#define PAGE_AGE_VALUE 16
+#define PAGE_AGE_VALUE ((PAGE_INITIAL_AGE)+(PAGE_ADVANCE))
 
 extern unsigned long page_cache_size; /* # of pages currently in the hash table */
 extern struct page * page_hash_table[PAGE_HASH_SIZE];

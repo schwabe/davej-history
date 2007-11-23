@@ -264,11 +264,11 @@ unsigned long free_area_init(unsigned long start_mem, unsigned long end_mem)
 
 	/*
 	 * select nr of pages we try to keep free for important stuff
-	 * with a minimum of 16 pages. This is totally arbitrary
+	 * with a minimum of 24 pages. This is totally arbitrary
 	 */
 	i = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT+7);
-	if (i < 16)
-		i = 16;
+	if (i < 24)
+		i = 24;
 	min_free_pages = i;
 	free_pages_low = i + (i>>1);
 	free_pages_high = i + i;
@@ -311,7 +311,8 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long page = __get_free_page(GFP_KERNEL);
 
 	if (pte_val(*page_table) != entry) {
-		free_page(page);
+		if (page)
+			free_page(page);
 		return;
 	}
 	if (!page) {
@@ -327,6 +328,11 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	}
 	vma->vm_mm->rss++;
 	tsk->maj_flt++;
+
+	/* Give the physical reallocated page a bigger start */
+	if (vma->vm_mm->rss < (MAP_NR(high_memory) >> 2))
+		mem_map[MAP_NR(page)].age = (PAGE_INITIAL_AGE + PAGE_ADVANCE);
+
 	if (!write_access && add_to_swap_cache(MAP_NR(page), entry)) {
 		/* keep swap page allocated for the moment (swap cache) */
 		set_pte(page_table, mk_pte(page, vma->vm_page_prot));

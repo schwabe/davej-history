@@ -1015,10 +1015,15 @@ start_up:
 			goto end_rename;
 	}
 	retval = -EPERM;
-	if (new_inode && (new_dir->i_mode & S_ISVTX) &&
-	    current->fsuid != new_inode->i_uid &&
-	    current->fsuid != new_dir->i_uid && !fsuser())
-		goto end_rename;
+	if (new_inode) {
+		if ((new_dir->i_mode & S_ISVTX) &&
+		    current->fsuid != new_inode->i_uid &&
+		    current->fsuid != new_dir->i_uid && !fsuser())
+			goto end_rename;
+		if (IS_APPEND(new_inode) || IS_IMMUTABLE(new_inode))
+			goto end_rename;
+	}
+	
 	if (S_ISDIR(old_inode->i_mode)) {
 		retval = -ENOTDIR;
 		if (new_inode && !S_ISDIR(new_inode->i_mode))

@@ -13,6 +13,7 @@
 #include <linux/stat.h>
 #include <linux/malloc.h>
 #include <linux/swap.h>
+#include <linux/swapctl.h>
 
 #include <asm/segment.h>
 #include <asm/pgtable.h>
@@ -672,6 +673,11 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 			shm_swp--;
 		}
 		shm_rss++;
+
+		/* Give the physical reallocated page a bigger start */
+		if (shm_rss < (MAP_NR(high_memory) >> 3))
+			mem_map[MAP_NR(page)].age = (PAGE_INITIAL_AGE + PAGE_ADVANCE);
+
 		pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
 		shp->shm_pages[idx] = pte_val(pte);
 	} else

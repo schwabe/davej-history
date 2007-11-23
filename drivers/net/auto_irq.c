@@ -54,17 +54,23 @@ static void autoirq_probe(int irq, void *dev_id, struct pt_regs * regs)
 {
 	irq_number = irq;
 	set_bit(irq, (void *)&irq_bitmap);	/* irq_bitmap |= 1 << irq; */
-	disable_irq(irq);
+	/* This code used to disable the irq. However, the interrupt stub
+	 * would then re-enable the interrupt with (potentially) disastrous
+	 * consequences
+	 */
+	free_irq(irq, dev_id);
 	return;
 }
 
 int autoirq_setup(int waittime)
 {
-	int i, mask;
+	int i;
 	int timeout = jiffies + waittime;
 	int boguscount = (waittime*loops_per_sec) / 100;
 
 	irq_handled = 0;
+	irq_bitmap = 0;
+
 	for (i = 0; i < 16; i++) {
 		if (test_bit(i, &irqs_busy) == 0
 			&& request_irq(i, autoirq_probe, SA_INTERRUPT, "irq probe", NULL) == 0)
@@ -72,22 +78,15 @@ int autoirq_setup(int waittime)
 	}
 	/* Update our USED lists. */
 	irqs_used |= ~irq_handled;
-	irq_number = 0;
-	irq_bitmap = 0;
 
 	/* Hang out at least <waittime> jiffies waiting for bogus IRQ hits. */
 	while (timeout > jiffies  &&  --boguscount > 0)
 		;
 
-	for (i = 0, mask = 0x01; i < 16; i++, mask <<= 1) {
-		if (irq_bitmap & irq_handled & mask) {
-			irq_handled &= ~mask;
-#ifdef notdef
-			printk(" Spurious interrupt on IRQ %d\n", i);
-#endif
-			free_irq(i, NULL);
-		}
-	}
+	irq_handled &= ~irq_bitmap;
+
+	irq_number = 0;	/* We are interested in new interrupts from now on */
+
 	return irq_handled;
 }
 
@@ -102,6 +101,8 @@ int autoirq_report(int waittime)
 	while (timeout > jiffies  &&  --boguscount > 0)
 		if (irq_number)
 			break;
+
+	irq_handled &= ~irq_bitmap;	/* This eliminates the already reset handlers */
 
 	/* Retract the irq handlers that we installed. */
 	for (i = 0; i < 16; i++) {

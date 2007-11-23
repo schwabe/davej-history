@@ -373,7 +373,6 @@ smb_receive_trans2(struct smb_server *server,
 	int total_data = 0;
 	int total_param = 0;
 	int result;
-	unsigned char *inbuf = server->packet;
 	unsigned char *rcv_buf;
 	int buf_len;
 	int data_len = 0;
@@ -389,8 +388,8 @@ smb_receive_trans2(struct smb_server *server,
 		*ldata = *lparam = 0;
 		return 0;
 	}
-	total_data = WVAL(inbuf, smb_tdrcnt);
-	total_param = WVAL(inbuf, smb_tprcnt);
+	total_data = WVAL(server->packet, smb_tdrcnt);
+	total_param = WVAL(server->packet, smb_tprcnt);
 
 	DDPRINTK("smb_receive_trans2: td=%d,tp=%d\n", total_data, total_param);
 
@@ -415,6 +414,8 @@ smb_receive_trans2(struct smb_server *server,
 
 	while (1)
 	{
+		unsigned char *inbuf = server->packet;
+
 		if (WVAL(inbuf, smb_prdisp) + WVAL(inbuf, smb_prcnt)
 		    > total_param)
 		{

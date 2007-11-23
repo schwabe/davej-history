@@ -524,7 +524,9 @@ void set_blocksize(kdev_t dev, int size)
 			if (bh->b_size == size)
 				 continue;
 			
+			bhnext->b_count++;
 			wait_on_buffer(bh);
+			bhnext->b_count--;
 			if (bh->b_dev == dev && bh->b_size != size) {
 				clear_bit(BH_Dirty, &bh->b_state);
 				clear_bit(BH_Uptodate, &bh->b_state);
@@ -546,7 +548,7 @@ static inline int can_reclaim(struct buffer_head *bh, int size)
 			 
 	if (mem_map[MAP_NR((unsigned long) bh->b_data)].count != 1 ||
 	    buffer_dirty(bh)) {
-		refile_buffer(bh);
+		/* WSH: don't attempt to refile here! */
 		return 0;
 	}
 
@@ -569,6 +571,8 @@ static struct buffer_head *find_candidate(struct buffer_head *list,int *list_len
 			   of other sizes, this is necessary now that we
 			   no longer have the lav code. */
 			try_to_free_buffer(bh,&bh,1);
+			if (!bh)
+				break;
 			continue;
 		}
 
@@ -612,13 +616,14 @@ static void refill_freelist(int size)
 	}
 
 repeat:
+	if(needed <= 0)
+		return;
+
 	/* OK, we cannot grow the buffer cache, now try to get some
 	   from the lru list */
 
 	/* First set the candidate pointers to usable buffers.  This
 	   should be quick nearly all of the time. */
-
-	if(needed <= 0) return;
 
 	for(i=0; i<BUF_DIRTY; i++){
 		buffers[i] = nr_buffers_type[i];
@@ -652,11 +657,8 @@ repeat:
 			if (candidate[i] && !can_reclaim(candidate[i],size))
 				candidate[i] = find_candidate(candidate[i],&buffers[i], size);
 		}
-		if (needed >= 0)
-			goto repeat;
+		goto repeat;
 	}
-	
-	if(needed <= 0) return;
 	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
 	
@@ -670,6 +672,8 @@ repeat:
 	/* and repeat until we find something good */
 	if (!grow_buffers(GFP_ATOMIC, size))
 		wakeup_bdflush(1);
+
+	/* decrease needed even if there is no success */
 	needed -= PAGE_SIZE;
 	goto repeat;
 }
@@ -919,6 +923,34 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 	wake_up(&buffer_wait);
 }
 
+/* 
+ * We can't put completed temporary IO buffer_heads directly onto the
+ * unused_list when they become unlocked, since the device driver
+ * end_request routines still expect access to the buffer_head's
+ * fields after the final unlock.  So, the device driver puts them on
+ * the reuse_list instead once IO completes, and we recover these to
+ * the unused_list here.
+ *
+ * The reuse_list receives buffers from interrupt routines, so we need
+ * to be IRQ-safe here (but note that interrupts only _add_ to the
+ * reuse_list, never take away. So we don't need to worry about the
+ * reuse_list magically emptying).
+ */
+static inline void recover_reusable_buffer_heads(void)
+{
+	if (reuse_list) {
+		struct buffer_head *head;
+
+		head = xchg(&reuse_list, NULL);
+	
+		do {
+			struct buffer_head *bh = head;
+			head = head->b_next_free;
+			put_unused_buffer_head(bh);
+		} while (head);
+	}
+}
+
 static void get_more_buffer_heads(void)
 {
 	struct buffer_head * bh;
@@ -946,36 +978,12 @@ static void get_more_buffer_heads(void)
 		 */
 		run_task_queue(&tq_disk);
 		sleep_on(&buffer_wait);
+		/*
+		 * After we wake up, check for released async buffer heads.
+		 */
+		recover_reusable_buffer_heads();
 	}
 
-}
-
-/* 
- * We can't put completed temporary IO buffer_heads directly onto the
- * unused_list when they become unlocked, since the device driver
- * end_request routines still expect access to the buffer_head's
- * fields after the final unlock.  So, the device driver puts them on
- * the reuse_list instead once IO completes, and we recover these to
- * the unused_list here.
- *
- * The reuse_list receives buffers from interrupt routines, so we need
- * to be IRQ-safe here (but note that interrupts only _add_ to the
- * reuse_list, never take away. So we don't need to worry about the
- * reuse_list magically emptying).
- */
-static inline void recover_reusable_buffer_heads(void)
-{
-	if (reuse_list) {
-		struct buffer_head *head;
-
-		head = xchg(&reuse_list, NULL);
-	
-		do {
-			struct buffer_head *bh = head;
-			head = head->b_next_free;
-			put_unused_buffer_head(bh);
-		} while (head);
-	}
 }
 
 static struct buffer_head * get_unused_buffer_head(void)
@@ -1158,6 +1166,8 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 		free_async_buffers(bh);
 		restore_flags(flags);
 		after_unlock_page(page);
+		if (waitqueue_active(&buffer_wait))
+			wake_up(&buffer_wait);
 	}
 	++current->maj_flt;
 	return 0;
@@ -1520,6 +1530,7 @@ asmlinkage int sync_old_buffers(void)
 				 ndirty++;
 				 if(bh->b_flushtime > jiffies) continue;
 				 nwritten++;
+				 next->b_count++;
 				 bh->b_count++;
 				 bh->b_flushtime = 0;
 #ifdef DEBUG
@@ -1527,8 +1538,10 @@ asmlinkage int sync_old_buffers(void)
 #endif
 				 ll_rw_block(WRITE, 1, &bh);
 				 bh->b_count--;
+				 next->b_count--;
 			 }
 	}
+	run_task_queue(&tq_disk);
 #ifdef DEBUG
 	if (ncount) printk("sync_old_buffers: %d dirty buffers not on dirty list\n", ncount);
 	printk("Wrote %d/%d buffers\n", nwritten, ndirty);
@@ -1660,6 +1673,7 @@ int bdflush(void * unused)
 					     currently dirty buffers are not shared, so it does not matter */
 					  if (refilled && major == LOOP_MAJOR)
 						   continue;
+					  next->b_count++;
 					  bh->b_count++;
 					  ndirty++;
 					  bh->b_flushtime = 0;
@@ -1675,6 +1689,7 @@ int bdflush(void * unused)
 					  if(nlist != BUF_DIRTY) ncount++;
 #endif
 					  bh->b_count--;
+					  next->b_count--;
 				  }
 		 }
 #ifdef DEBUG

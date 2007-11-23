@@ -266,6 +266,7 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 		if(sk->daddr		== saddr		&& /* remote address */
 		   sk->dummy_th.dest	== sport		&& /* remote port    */
 		   sk->num		== hnum			&& /* local port     */
+		   sk->state 		!= TCP_CLOSE		&& /* comment above is false */
 		   sk->rcv_saddr	== daddr)		   /* local address  */
 			goto hit; /* You sunk my battleship! */
 	sk = tcp_v4_lookup_longway(daddr, hnum);

@@ -201,7 +201,7 @@ int do_sysctl (int *name, int nlen,
 	do {
 		context = 0;
 		error = parse_table(name, nlen, oldval, oldlenp, 
-				    newval, newlen, tmp->clt_table, &context);
+				    newval, newlen, tmp->ctl_table, &context);
 		if (context)
 			kfree(context);
 		if (error != -ENOTDIR)

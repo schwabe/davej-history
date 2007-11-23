@@ -5,7 +5,7 @@ mainmenu_option next_comment
 comment 'Floppy, IDE, and other block devices'
 
 tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
-bool 'Enhanced IDE/MFM/RLL disk/cdrom/tape support' CONFIG_BLK_DEV_IDE
+bool 'Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
 comment 'Please see Documentation/ide.txt for help/info on IDE drives'
 if [ "$CONFIG_BLK_DEV_IDE" = "n" ]; then
   bool 'Old harddisk (MFM/RLL/IDE) driver' CONFIG_BLK_DEV_HD_ONLY
@@ -13,6 +13,8 @@ else
   bool '   Use old disk-only driver on primary interface' CONFIG_BLK_DEV_HD_IDE
   bool '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD
   bool '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE
+  bool '   Include IDE/ATAPI FLOPPY support (new)' CONFIG_BLK_DEV_IDEFLOPPY
+  bool '   SCSI emulation support' CONFIG_BLK_DEV_IDESCSI
   bool '   Support removable IDE interfaces (PCMCIA)' CONFIG_BLK_DEV_IDE_PCMCIA
   bool '   CMD640 chipset bugfix/support' CONFIG_BLK_DEV_CMD640
   if [ "$CONFIG_BLK_DEV_CMD640" = "y" ]; then

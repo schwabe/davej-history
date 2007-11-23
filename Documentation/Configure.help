@@ -124,18 +124,18 @@ CONFIG_BLK_DEV_LOOP
   nothing to do with the loopback device used for network connections
   from the machine to itself.  Most users will answer N here.
 
-Enhanced IDE/MFM/RLL disk/cdrom/tape support
+Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support
 CONFIG_BLK_DEV_IDE 
-  This will use the full-featured IDE driver to control up to four IDE
-  interfaces, for a combination of up to eight IDE disk/cdrom/tape
-  drives.  Useful information about large (>540MB) IDE disks,
-  soundcard IDE ports, and other topics, is all contained in
-  Documentation/ide.txt.  If you have one or more IDE drives, say Y
-  here.  If your system has no IDE drives, or if memory requirements
-  are really tight, you could say N here, and select the Old harddisk
-  driver instead to save about 13kB of memory in the kernel.  To
-  fine-tune IDE drive/interface parameters for improved performance,
-  look for the hdparm package at
+  This will use the full-featured IDE driver to control up to four
+  IDE interfaces, for a combination of up to eight IDE
+  disk/cdrom/tape/floppy drives.  Useful information about large
+  (>540MB) IDE disks, soundcard IDE ports, and other topics, is all
+  contained in Documentation/ide.txt.  If you have one or more IDE
+  drives, say Y here.  If your system has no IDE drives, or if memory
+  requirements are really tight, you could say N here, and select
+  the Old harddisk driver instead to save about 13kB of memory in
+  the kernel.  To fine-tune IDE drive/interface parameters for
+  improved performance, look for the hdparm package at
   sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/
 
 Old harddisk (MFM/RLL/IDE) driver
@@ -190,8 +190,31 @@ CONFIG_BLK_DEV_IDETAPE
   ATAPI is a new protocol used by IDE TAPE and ATAPI drives,
   similar to the SCSI protocol.  At boot time, the TAPE drive will
   be identified along with other IDE devices, as "hdb" or "hdc",
-  or something similar.  Be sure to consult the drivers/block/ide-tape.c
+  or something similar, and will be mapped to a character device
+  such as "ht0".  Be sure to consult the drivers/block/ide-tape.c
   and Documentation/ide.txt files for usage information.
+
+Include IDE/ATAPI FLOPPY support (new)
+CONFIG_BLK_DEV_IDEFLOPPY
+  If you have an IDE floppy which uses the ATAPI protocol, say Y.
+  ATAPI is a new protocol used by IDE cdrom/tape/floppy drives,
+  similar to the SCSI protocol.  IDE floppy drives include the
+  LS-120 and the ATAPI ZIP (ATAPI PD-CD drives are not supported
+  by this driver; support for PD-CD drives is available through
+  the SCSI emulation).  At boot time, the FLOPPY drive will be
+  identified along with other IDE devices, as "hdb" or "hdc", or
+  something similar.
+
+SCSI emulation support
+CONFIG_BLK_DEV_IDESCSI
+  This will provide SCSI host adapter emulation for IDE ATAPI devices,
+  and will allow you to use a SCSI device driver instead of a native
+  ATAPI driver. This is useful if you have an ATAPI device for which
+  no native driver has been written (for example, an ATAPI PD-CD
+  drive); you can then use this emulation together with an appropriate
+  SCSI device driver. If both this SCSI emulation and native ATAPI
+  support are compiled into the kernel, the native support will be
+  used.  Normally, say N.
 
 Support removable IDE interfaces (PCMCIA)
 CONFIG_BLK_DEV_IDE_PCMCIA
@@ -589,10 +612,11 @@ CONFIG_PCI_OPTIMIZE
 Intel 82371 PIIX (Triton I/II) DMA support
 CONFIG_BLK_DEV_TRITON
   If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
-  and includes the Intel 430FX PCI Triton chipset, you will want to
-  enable this option to allow use of bus-mastering DMA data transfers.
-  Read the comments at the beginning of drivers/block/triton.c.  Check
-  the file Documentation/Changes for location and latest version of
+  and includes the Intel Triton I/II IDE interface chipset (i82371FB,
+  i82371SB or i82371AB), you will want to enable this option to allow
+  use of bus-mastering DMA data transfers. Read the comments at the
+  beginning of drivers/block/triton.c and Documentation/ide.txt.
+  Check the file Documentation/Changes for location and latest version of
   the hdparm utility. It is safe to say Y to this question.
 
 System V IPC

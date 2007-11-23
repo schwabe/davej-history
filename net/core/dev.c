@@ -1427,7 +1427,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCGIFMTU:
 		case SIOCGIFMEM:
 		case SIOCGIFHWADDR:
-		case SIOCSIFHWADDR:
 		case SIOCGIFSLAVE:
 		case SIOCGIFMAP:
 			return dev_ifsioc(arg, cmd);
@@ -1444,6 +1443,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCSIFMETRIC:
 		case SIOCSIFMTU:
 		case SIOCSIFMEM:
+		case SIOCSIFHWADDR:
 		case SIOCSIFMAP:
 		case SIOCSIFSLAVE:
 		case SIOCADDMULTI:

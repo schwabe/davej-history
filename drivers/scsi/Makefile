@@ -348,6 +348,11 @@ else
   endif
 endif
 
+
+ifeq ($(CONFIG_BLK_DEV_IDESCSI),y)
+L_OBJS += ide-scsi.o
+endif
+
 include $(TOPDIR)/Rules.make
 
 BusLogic.o: BusLogic.c FlashPoint.c
@@ -359,12 +364,8 @@ BusLogic.o: BusLogic.c FlashPoint.c
 aha152x.o: aha152x.c
 	$(CC) $(CFLAGS) $(AHA152X) -c aha152x.c 
 
-aic7xxx_asm:	aic7xxx_asm.c
-	$(HOSTCC) -o $@ aic7xxx_asm.c
-
-aic7xxx.c: aic7xxx_seq.h
-aic7xxx_seq.h:	aic7xxx_asm aic7xxx.seq
-	./aic7xxx_asm -o $@ aic7xxx.seq
+aic7xxx.o: aic7xxx.c aic7xxx_seq.h aic7xxx_reg.h
+	$(CC) $(CFLAGS) -c -o $@ aic7xxx.c
 
 seagate.o: seagate.c
 	$(CC) $(CFLAGS) -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -c seagate.c 

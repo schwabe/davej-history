@@ -319,7 +319,6 @@ clean:	archclean
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
 	rm -f drivers/sound/local.h drivers/sound/.defines
-	rm -f drivers/scsi/aic7xxx_asm drivers/scsi/aic7xxx_seq.h
 	rm -f drivers/char/uni_hash.tbl drivers/char/conmakehash
 	rm -f .version .config* config.in config.old
 	rm -f scripts/tkparse scripts/kconfig.tk scripts/kconfig.tmp

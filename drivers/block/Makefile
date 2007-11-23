@@ -97,6 +97,10 @@ ifeq ($(CONFIG_BLK_DEV_IDETAPE),y)
 L_OBJS += ide-tape.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_IDEFLOPPY),y)
+L_OBJS += ide-floppy.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_XD),y)
 L_OBJS += xd.o
 else

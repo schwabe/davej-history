@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.52  Sep  24, 1996
+ *  linux/drivers/block/ide.c	Version 5.53  Jun  24, 1997
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -261,6 +261,17 @@
  *			change delay_10ms() to delay_50ms() to fix problems
  * Version 5.52		fix incorrect invalidation of removable devices
  *			add "hdx=slow" command line option
+ * Version 5.53		add ATAPI floppy drive support
+ *			change default media for type 0 to floppy
+ *			add support for Exabyte Nest
+ *			add missing set_blocksize() in revalidate_disk()
+ *			handle bad status bit sequencing in ide_wait_stat()
+ *			support partition table translations with 255 heads
+ *			probe all interfaces by default
+ *			add probe for the i82371AB chipset
+ *			acknowledge media change on removable drives
+ *			add work-around for BMI drives
+ *			remove "LBA" from boot messages
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -367,7 +378,6 @@ static void init_hwif_data (unsigned int index)
 
 	/* fill in any non-zero initial values */
 	hwif->index     = index;
-	hwif->noprobe	= (index > 1);
 	hwif->io_base	= default_io_base[index];
 	hwif->ctl_port	= hwif->io_base ? hwif->io_base+0x206 : 0x000;
 #ifdef CONFIG_BLK_DEV_HD
@@ -536,6 +546,29 @@ void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 }
 
 /*
+ * The following routines are mainly used by the ATAPI drivers.
+ *
+ * These routines will round up any request for an odd number of bytes,
+ * so if an odd bytecount is specified, be sure that there's at least one
+ * extra byte allocated for the buffer.
+ */
+void atapi_input_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecount)
+{
+	++bytecount;
+	ide_input_data (drive, buffer, bytecount / 4);
+	if ((bytecount & 0x03) >= 2)
+		insw (IDE_DATA_REG, ((byte *)buffer) + (bytecount & ~0x03), 1);
+}
+
+void atapi_output_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecount)
+{
+	++bytecount;
+	ide_output_data (drive, buffer, bytecount / 4);
+	if ((bytecount & 0x03) >= 2)
+		outsw (IDE_DATA_REG, ((byte *)buffer) + (bytecount & ~0x03), 1);
+}
+
+/*
  * This should get invoked any time we exit the driver to
  * wait for an interrupt response from a drive.  handler() points
  * at the appropriate code to handle the next interrupt, and a
@@ -593,6 +626,10 @@ static unsigned long current_capacity (ide_drive_t  *drive)
 
 	if (!drive->present)
 		return 0;
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+	if (drive->media == ide_floppy)
+		return idefloppy_capacity(drive);
+#endif /* CONFIG_BLK_DEV_IDEFLOPPY */
 	if (drive->media != ide_disk)
 		return 0x7fffffff;	/* cdrom or tape */
 	drive->select.b.lba = 0;
@@ -625,8 +662,13 @@ static void ide_geninit (struct gendisk *gd)
 		if (drive->present && drive->media == ide_tape)
 			idetape_setup(drive);
 #endif /* CONFIG_BLK_DEV_IDETAPE */
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+		if (drive->present && drive->media == ide_floppy)
+			idefloppy_setup(drive);
+#endif /* CONFIG_BLK_DEV_IDEFLOPPY */
 		drive->part[0].nr_sects = current_capacity(drive);
-		if (!drive->present || drive->media != ide_disk) {
+		if (!drive->present || (drive->media != ide_disk && drive->media != ide_floppy) ||
+		    !drive->part[0].nr_sects) {
 			drive->part[0].start_sect = -1; /* skip partition check */
 		}
 	}
@@ -1005,6 +1047,8 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 				rq->errors = ERROR_MAX;
 			else if (err & TRK0_ERR)	/* help it find track zero */
 				rq->errors |= ERROR_RECAL;
+			else if (err & MC_ERR)
+				drive->special.b.mc = 1;
 		}
 		if ((stat & DRQ_STAT) && rq->cmd != WRITE)
 			try_to_flush_leftover_data(drive);
@@ -1017,9 +1061,20 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 		if (drive->media == ide_tape) {
 			rq->errors = 0;
 			idetape_end_request(0, HWGROUP(drive));
-		}
-		else
+		} else
 #endif /* CONFIG_BLK_DEV_IDETAPE */
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+		if (drive->media == ide_floppy) {
+			rq->errors = 0;
+			idefloppy_end_request(0, HWGROUP(drive));
+		} else
+#endif /* CONFIG_BLK_DEV_IDEFLOPPY */
+#ifdef CONFIG_BLK_DEV_IDESCSI
+		if (drive->media == ide_scsi) {
+			rq->errors = 0;
+			idescsi_end_request(0, HWGROUP(drive));
+		} else
+#endif /* CONFIG_BLK_DEV_IDESCSI */
  		ide_end_request(0, HWGROUP(drive));
 	}
 	else {
@@ -1230,6 +1285,19 @@ static void recal_intr (ide_drive_t *drive)
 }
 
 /*
+ * mc_intr() is invoked on completion of a WIN_ACKMC cmd.
+ */
+static void mc_intr (ide_drive_t *drive)
+{
+	byte stat = GET_STAT();
+
+	sti();
+	if (!OK_STAT(stat,READY_STAT,BAD_STAT))
+		ide_error(drive, "mc_intr", stat);
+	drive->special.b.mc = 0;
+}
+
+/*
  * drive_cmd_intr() is invoked on completion of a special DRIVE_CMD.
  */
 static void drive_cmd_intr (ide_drive_t *drive)
@@ -1265,7 +1333,7 @@ static inline void do_special (ide_drive_t *drive)
 #endif
 	if (s->b.set_geometry) {
 		s->b.set_geometry = 0;
-		if (drive->media == ide_disk) {
+		if (drive->media == ide_disk && !drive->no_geom) {
 			OUT_BYTE(drive->sect,IDE_SECTOR_REG);
 			OUT_BYTE(drive->cyl,IDE_LCYL_REG);
 			OUT_BYTE(drive->cyl>>8,IDE_HCYL_REG);
@@ -1291,6 +1359,10 @@ static inline void do_special (ide_drive_t *drive)
 				ide_cmd(drive, WIN_SETMULT, drive->mult_req, &set_multmode_intr);
 		} else
 			drive->mult_req = 0;
+	} else if (s->b.mc) {
+		s->b.mc = 0;
+		if (drive->media == ide_disk && !IS_PROMISE_DRIVE)
+			ide_cmd(drive, WIN_ACKMC, drive->sect, &mc_intr);
 	} else if (s->all) {
 		int special = s->all;
 		s->all = 0;
@@ -1314,27 +1386,24 @@ int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeou
 	byte stat;
 	unsigned long flags;
 
-test:
-	udelay(1);	/* spec allows drive 400ns to change "BUSY" */
-	if (OK_STAT((stat = GET_STAT()), good, bad))
-		return 0;	/* fast exit for most frequent case */
-	if (!(stat & BUSY_STAT)) {
-		ide_error(drive, "status error", stat);
-		return 1;
-	}
-
-	save_flags(flags);
-	sti();
-	timeout += jiffies;
-	do {
-		if (!((stat = GET_STAT()) & BUSY_STAT)) {
-			restore_flags(flags);
-			goto test;
+	udelay(1);	/* spec allows drive 400ns to assert "BUSY" */
+	if ((stat = GET_STAT()) & BUSY_STAT) {
+		save_flags(flags);
+		sti();
+		timeout += jiffies;
+		while ((stat = GET_STAT()) & BUSY_STAT) {
+			if (jiffies > timeout) {
+				restore_flags(flags);
+				ide_error(drive, "status timeout", stat);
+				return 1;
+			}
 		}
-	} while (jiffies <= timeout);
-
-	restore_flags(flags);
-	ide_error(drive, "status timeout", GET_STAT());
+		restore_flags(flags);
+	}
+	udelay(1);	/* allow status to settle, then read it again */
+	if (OK_STAT((stat = GET_STAT()), good, bad))
+		return 0;
+	ide_error(drive, "status error", stat);
 	return 1;
 }
 
@@ -1532,6 +1601,16 @@ static inline void do_request (ide_hwif_t *hwif, struct request *rq)
 				idetape_do_request (drive, rq, block);
 				return;
 #endif /* CONFIG_BLK_DEV_IDETAPE */
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+			case ide_floppy:
+				idefloppy_do_request (drive, rq, block);
+				return;
+#endif /* CONFIG_BLK_DEV_IDEFLOPPY */
+#ifdef CONFIG_BLK_DEV_IDESCSI
+			case ide_scsi:
+				idescsi_do_request (drive, rq, block);
+				return;
+#endif /* CONFIG_BLK_DEV_IDESCSI */
 
 			default:
 				printk("%s: media type %d not supported\n",
@@ -1588,6 +1667,7 @@ void ide_do_request (ide_hwgroup_t *hwgroup)
 				if (rq != NULL && rq->rq_status != RQ_INACTIVE)
 					goto got_rq;
 			} while ((hwif = hwif->next) != hwgroup->next_hwif);
+			hwgroup->active = 0;
 			return;		/* no work left for this hwgroup */
 		}
 	got_rq:	
@@ -1612,6 +1692,7 @@ static void do_hwgroup_request (ide_hwgroup_t *hwgroup)
 	if (hwgroup->handler == NULL) {
 		ide_hwif_t *hgif = hwgroup->hwif;
 		ide_hwif_t *hwif = hgif;
+		hwgroup->active = 1;
 		do {
 			disable_irq(hwif->irq);
 		} while ((hwif = hwif->next) != hgif);
@@ -1859,13 +1940,8 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	if (cur_rq == NULL || action == ide_preempt) {
 		rq->next = cur_rq;
 		bdev->current_request = rq;
-		if (action == ide_preempt) {
+		if (action == ide_preempt)
 			HWGROUP(drive)->rq = NULL;
-		} else
-		if (HWGROUP(drive)->rq == NULL) {  /* is this necessary (?) */
-			bdev->request_fn();
-			cli();
-		}
 	} else {
 		if (action == ide_wait || action == ide_end) {
 			while (cur_rq->next != NULL)	/* find end of list */
@@ -1873,6 +1949,10 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 		}
 		rq->next = cur_rq->next;
 		cur_rq->next = rq;
+	}
+	if (!HWGROUP(drive)->active) {
+		do_hwgroup_request(HWGROUP(drive));
+		cli();
 	}
 	if (action == ide_wait  && rq->rq_status != RQ_INACTIVE)
 		down(&sem);	/* wait for it to be serviced */
@@ -1901,6 +1981,14 @@ static int ide_open(struct inode * inode, struct file * filp)
 	if (drive->media == ide_tape)
 		return idetape_blkdev_open (inode, filp, drive);
 #endif	/* CONFIG_BLK_DEV_IDETAPE */
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+	if (drive->media == ide_floppy)
+		return idefloppy_open (inode, filp, drive);
+#endif	/* CONFIG_BLK_DEV_IDEFLOPPY */
+#ifdef CONFIG_BLK_DEV_IDESCSI
+	if (drive->media == ide_scsi)
+		return idescsi_open (inode, filp, drive);
+#endif	/* CONFIG_BLK_DEV_IDESCSI */
 	if (drive->removable && drive->usage == 1) {
 		byte door_lock[] = {WIN_DOORLOCK,0,0,0};
 		struct request rq;
@@ -1940,6 +2028,18 @@ static void ide_release(struct inode * inode, struct file * file)
 			return;
 		}
 #endif	/* CONFIG_BLK_DEV_IDETAPE */
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+		if (drive->media == ide_floppy) {
+			idefloppy_release (inode, file, drive);
+			return;
+		}
+#endif	/* CONFIG_BLK_DEV_IDEFLOPPY */
+#ifdef CONFIG_BLK_DEV_IDESCSI
+		if (drive->media == ide_scsi) {
+			idescsi_ide_release (inode, file, drive);
+			return;
+		}
+#endif	/* CONFIG_BLK_DEV_IDESCSI */
 		if (drive->removable && !drive->usage) {
 			byte door_unlock[] = {WIN_DOORUNLOCK,0,0,0};
 			struct request rq;
@@ -1985,13 +2085,14 @@ static int revalidate_disk(kdev_t i_rdev)
 			fsync_dev          (devp);
 			invalidate_inodes  (devp);
 			invalidate_buffers (devp);
+			set_blocksize(devp, 1024);
 		}
 		drive->part[p].start_sect = 0;
 		drive->part[p].nr_sects   = 0;
 	};
 
 	drive->part[0].nr_sects = current_capacity(drive);
-	if (drive->media != ide_disk)
+	if ((drive->media != ide_disk && drive->media != ide_floppy) || !drive->part[0].nr_sects)
 		drive->part[0].start_sect = -1;
 	resetup_one_dev(HWIF(drive)->gd, drive->select.b.unit);
 
@@ -2029,7 +2130,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		case HDIO_GETGEO:
 		{
 			struct hd_geometry *loc = (struct hd_geometry *) arg;
-			if (!loc || drive->media != ide_disk) return -EINVAL;
+			if (!loc || (drive->media != ide_disk && drive->media != ide_floppy)) return -EINVAL;
 			err = verify_area(VERIFY_WRITE, loc, sizeof(*loc));
 			if (err) return err;
 			put_user(drive->bios_head, (byte *) &loc->heads);
@@ -2223,6 +2324,14 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			if (drive->media == ide_tape)
 				return idetape_blkdev_ioctl(drive, inode, file, cmd, arg);
 #endif /* CONFIG_BLK_DEV_IDETAPE */
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+			if (drive->media == ide_floppy)
+				return idefloppy_ioctl(drive, inode, file, cmd, arg);
+#endif /* CONFIG_BLK_DEV_IDEFLOPPY */
+#ifdef CONFIG_BLK_DEV_IDESCSI
+			if (drive->media == ide_scsi)
+				return idescsi_ioctl(drive, inode, file, cmd, arg);
+#endif /* CONFIG_BLK_DEV_IDESCSI */
 			return -EPERM;
 	}
 }
@@ -2237,6 +2346,10 @@ static int ide_check_media_change (kdev_t i_rdev)
 	if (drive->media == ide_cdrom)
 		return ide_cdrom_check_media_change (drive);
 #endif	/* CONFIG_BLK_DEV_IDECD */
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+	if (drive->media == ide_floppy)
+		return idefloppy_media_change (drive);
+#endif	/* CONFIG_BLK_DEV_IDEFLOPPY */
 	if (drive->removable) /* for disks */
 		return 1;	/* always assume it was changed */
 	return 0;
@@ -2307,6 +2420,9 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	ide_fixstring (id->fw_rev,    sizeof(id->fw_rev),    bswap);
 	ide_fixstring (id->serial_no, sizeof(id->serial_no), bswap);
 
+	if (strstr(id->model, "E X A B Y T E N E S T"))
+		return;
+
 #ifdef CONFIG_BLK_DEV_IDEATAPI
 	/*
 	 * Check for an ATAPI device
@@ -2322,7 +2438,22 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		}
 #endif /* CONFIG_BLK_DEV_PROMISE */
 		switch (type) {
-			case 0:		/* Early cdrom models used zero */
+			case 0:
+				if (!strstr(id->model, "oppy") && !strstr(id->model, "poyp") && !strstr(id->model, "ZIP"))
+					printk("cdrom or floppy?, assuming ");
+				if (drive->media != ide_cdrom) {
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+					printk("FLOPPY drive\n");
+					drive->media = ide_floppy;
+					if (idefloppy_identify_device(drive, id))
+						drive->present = 1;
+					return;
+#else
+					printk("FLOPPY ");
+					break;
+#endif /* CONFIG_BLK_DEV_IDEFLOPPY */
+				}
+				/* Early cdrom models used zero */
 			case 5:
 #ifdef CONFIG_BLK_DEV_IDECD
 				printk ("CDROM drive\n");
@@ -2361,8 +2492,15 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 				printk("Type %d - Unknown device\n", type);
 				return;
 		}
+#ifdef CONFIG_BLK_DEV_IDESCSI
+		printk("drive - enabling SCSI emulation\n");
+		drive->media = ide_scsi;
+		drive->present = 1;
+		idescsi_setup(drive);
+#else
 		drive->present = 0;
 		printk("- not supported by this kernel\n");
+#endif /* CONFIG_BLK_DEV_IDESCSI */
 		return;
 	}
 #endif /* CONFIG_BLK_DEV_IDEATAPI */
@@ -2381,7 +2519,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		    return;
 		}
 	}
-	
+
 	drive->media = ide_disk;
 	/* Extract geometry if we did not already have one for the drive */
 	if (!drive->present) {
@@ -2431,9 +2569,13 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 
 	(void) current_capacity (drive); /* initialize LBA selection */
 
-	printk ("%s: %.40s, %ldMB w/%dkB Cache, %sCHS=%d/%d/%d",
+	if (!strncmp(id->model, "BMI ", 4) &&
+	    strstr(id->model, " ENHANCED IDE ") &&
+	    drive->select.b.lba)
+		drive->no_geom = 1;
+
+	printk ("%s: %.40s, %ldMB w/%dkB Cache, CHS=%d/%d/%d",
 	 drive->name, id->model, current_capacity(drive)/2048L, id->buf_size/2,
-	 drive->select.b.lba ? "LBA, " : "",
 	 drive->bios_cyl, drive->bios_head, drive->bios_sect);
 
 	drive->mult_count = 0;
@@ -2607,6 +2749,34 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 	return rc;
 }
 
+static void enable_nest (ide_drive_t *drive)
+{
+	unsigned long timeout;
+
+	printk("%s: enabling %s -- ", HWIF(drive)->name, drive->id->model);
+	SELECT_DRIVE(HWIF(drive), drive);
+	delay_50ms();
+	OUT_BYTE(EXABYTE_ENABLE_NEST, IDE_COMMAND_REG);
+	timeout = jiffies + WAIT_WORSTCASE;
+	do {
+		if (jiffies > timeout) {
+			printk("failed (timeout)\n");
+			return;
+		}
+		delay_50ms();
+	} while (GET_STAT() & BUSY_STAT);
+	delay_50ms();
+	if (!OK_STAT(GET_STAT(), 0, BAD_STAT))
+		printk("failed (status = 0x%02x)\n", GET_STAT());
+	else
+		printk("success\n");
+	if (do_probe(drive, WIN_IDENTIFY) >= 2) { /* if !(success||timed-out) */
+#ifdef CONFIG_BLK_DEV_IDEATAPI
+		(void) do_probe(drive, WIN_PIDENTIFY); /* look for ATAPI device */
+#endif	/* CONFIG_BLK_DEV_IDEATAPI */
+	}
+}
+
 /*
  * probe_for_drive() tests for existence of a given drive using do_probe().
  *
@@ -2622,6 +2792,8 @@ static inline byte probe_for_drive (ide_drive_t *drive)
 		(void) do_probe(drive, WIN_PIDENTIFY); /* look for ATAPI device */
 #endif	/* CONFIG_BLK_DEV_IDEATAPI */
 	}
+	if (drive->id && strstr(drive->id->model, "E X A B Y T E N E S T"))
+		enable_nest(drive);
 	if (!drive->present)
 		return 0;			/* drive not found */
 	if (drive->id == NULL) {		/* identification failed? */
@@ -3250,6 +3422,7 @@ static int init_irq (ide_hwif_t *hwif)
 		else
 			hwgroup->drive = &hwif->drives[1];
 		hwgroup->poll_timeout = 0;
+		hwgroup->active = 0;
 		init_timer(&hwgroup->timer);
 		hwgroup->timer.function = &timer_expiry;
 		hwgroup->timer.data = (unsigned long) hwgroup;
@@ -3353,6 +3526,7 @@ static void probe_for_hwifs (void)
 		 */
 		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371_0, &ide_init_triton, 1);
 		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_1, &ide_init_triton, 0);
+		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB, &ide_init_triton, 0);
 #endif /* CONFIG_BLK_DEV_TRITON */
 	}
 #endif /* CONFIG_PCI */

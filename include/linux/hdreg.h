@@ -53,6 +53,7 @@
 
 #define WIN_DOORLOCK		0xde	/* lock door on removable drives */
 #define WIN_DOORUNLOCK		0xdf	/* unlock door on removable drives */
+#define WIN_ACKMC		0xdb	/* acknowledge media change */
 
 #define WIN_MULTREAD		0xC4	/* read sectors using multiple mode */
 #define WIN_MULTWRITE		0xC5	/* write sectors using multiple mode */
@@ -67,11 +68,15 @@
 #define WIN_SRST		0x08	/* ATAPI soft reset command */
 #define WIN_PACKETCMD		0xa0	/* Send a packet command. */
 
+/* Non-standard commands */
+#define EXABYTE_ENABLE_NEST	0xf0
+
 /* Bits for HD_ERROR */
 #define MARK_ERR	0x01	/* Bad address mark */
 #define TRK0_ERR	0x02	/* couldn't find track 0 */
 #define ABRT_ERR	0x04	/* Command aborted */
 #define ID_ERR		0x10	/* ID field not found */
+#define MC_ERR		0x20	/* media changed */
 #define ECC_ERR		0x40	/* Uncorrectable ECC error */
 #define	BBD_ERR		0x80	/* block marked bad */
 

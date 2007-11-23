@@ -1704,7 +1704,7 @@ void arp_send(int type, int ptype, u32 dest_ip,
 	skb->arp = 1;
 	skb->dev = dev;
 	skb->free = 1;
-	skb->protocol = htons (ETH_P_IP);
+	skb->protocol = htons (ETH_P_ARP);
 
 	/*
 	 *	Fill the device header for the ARP frame

@@ -51,7 +51,8 @@ void cmd640_dump_regs (void);
 #endif
 #endif  /* CONFIG_BLK_DEV_CMD640 */
 
-#if defined(CONFIG_BLK_DEV_IDECD) || defined(CONFIG_BLK_DEV_IDETAPE)
+#if	defined(CONFIG_BLK_DEV_IDECD) || defined(CONFIG_BLK_DEV_IDETAPE) || \
+	defined(CONFIG_BLK_DEV_IDEFLOPPY) || defined(CONFIG_BLK_DEV_IDESCSI)
 #define CONFIG_BLK_DEV_IDEATAPI 1
 #endif
 
@@ -110,6 +111,9 @@ typedef unsigned char	byte;	/* used everywhere */
 #define IDE_FEATURE_REG		IDE_ERROR_REG
 #define IDE_COMMAND_REG		IDE_STATUS_REG
 #define IDE_ALTSTATUS_REG	IDE_CONTROL_REG
+#define IDE_IREASON_REG		IDE_NSECTOR_REG
+#define IDE_BCOUNTL_REG		IDE_LCYL_REG
+#define IDE_BCOUNTH_REG		IDE_HCYL_REG
 
 #ifdef REALLY_FAST_IO
 #define OUT_BYTE(b,p)		outb((b),(p))
@@ -126,7 +130,7 @@ typedef unsigned char	byte;	/* used everywhere */
 #define BAD_W_STAT		(BAD_R_STAT  | WRERR_STAT)
 #define BAD_STAT		(BAD_R_STAT  | DRQ_STAT)
 #define DRIVE_READY		(READY_STAT  | SEEK_STAT)
-#define DATA_READY		(DRIVE_READY | DRQ_STAT)
+#define DATA_READY		(DRQ_STAT)
 
 /*
  * Some more useful definitions
@@ -285,6 +289,8 @@ struct cdrom_info {
 	/* The result of the last successful request sense command
 	   on this device. */
 	struct atapi_request_sense sense_data;
+
+	int max_sectors;
 };
 
 #endif /* CONFIG_BLK_DEV_IDECD */
@@ -293,7 +299,7 @@ struct cdrom_info {
  * Now for the data we need to maintain per-drive:  ide_drive_t
  */
 
-typedef enum {ide_disk, ide_cdrom, ide_tape} ide_media_t;
+typedef enum {ide_disk, ide_cdrom, ide_tape, ide_floppy, ide_scsi} ide_media_t;
 
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */
@@ -302,7 +308,8 @@ typedef union {
 		unsigned recalibrate	: 1;	/* seek to cyl 0      */
 		unsigned set_multmode	: 1;	/* set multmode count */
 		unsigned set_tune	: 1;	/* tune interface for drive */
-		unsigned reserved	: 4;	/* unused */
+		unsigned mc		: 1;	/* acknowledge media change */
+		unsigned reserved	: 3;	/* unused */
 		} b;
 	} special_t;
 
@@ -335,7 +342,8 @@ typedef struct ide_drive_s {
 #if FAKE_FDISK_FOR_EZDRIVE
 	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
 #endif /* FAKE_FDISK_FOR_EZDRIVE */
-	ide_media_t	media;		/* disk, cdrom, tape */
+	unsigned no_geom	: 1;	/* flag: do not set geometry */
+	ide_media_t	media;		/* disk, cdrom, tape, floppy */
 	select_t	select;		/* basic drive/head select reg value */
 	byte		ctl;		/* "normal" value for IDE_CONTROL_REG */
 	byte		ready_stat;	/* min status value for drive ready */
@@ -363,6 +371,12 @@ typedef struct ide_drive_s {
 #ifdef CONFIG_BLK_DEV_IDETAPE
 	idetape_tape_t	tape;		/* for ide-tape.c */
 #endif /* CONFIG_BLK_DEV_IDETAPE */
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+	void *floppy;			/* for ide-floppy.c */
+#endif /* CONFIG_BLK_DEV_IDEFLOPPY */
+#ifdef CONFIG_BLK_DEV_IDESCSI
+	void *scsi;			/* for ide-scsi.c */
+#endif /* CONFIG_BLK_DEV_IDESCSI */
 	} ide_drive_t;
 
 /*
@@ -465,6 +479,7 @@ typedef struct hwgroup_s {
 	struct timer_list	timer;	/* failsafe timer */
 	struct request		wrq;	/* local copy of current write rq */
 	unsigned long		poll_timeout;	/* timeout value during long polls */
+	int			active; /* set when servicing requests */
 	} ide_hwgroup_t;
 
 /*
@@ -501,6 +516,12 @@ void ide_input_data (ide_drive_t *drive, void *buffer, unsigned int wcount);
  * This is used for (nearly) all data transfers to the IDE interface
  */
 void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount);
+
+/*
+ * This is used for (nearly) all ATAPI data transfers from/to the IDE interface
+ */
+void atapi_input_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecount);
+void atapi_output_bytes (ide_drive_t *drive, void *buffer, unsigned int bytecount);
 
 /*
  * This is used on exit from the driver, to designate the next irq handler
@@ -692,6 +713,28 @@ void idetape_blkdev_release (struct inode *inode, struct file *filp, ide_drive_t
 void idetape_register_chrdev (void);
 
 #endif /* CONFIG_BLK_DEV_IDETAPE */
+
+#ifdef CONFIG_BLK_DEV_IDEFLOPPY
+int idefloppy_identify_device (ide_drive_t *drive,struct hd_driveid *id);
+void idefloppy_setup (ide_drive_t *drive);
+void idefloppy_do_request (ide_drive_t *drive, struct request *rq, unsigned long block);
+void idefloppy_end_request (byte uptodate, ide_hwgroup_t *hwgroup);
+int idefloppy_ioctl (ide_drive_t *drive, struct inode *inode, struct file *file,
+			unsigned int cmd, unsigned long arg);
+int idefloppy_open (struct inode *inode, struct file *filp, ide_drive_t *drive);
+void idefloppy_release (struct inode *inode, struct file *filp, ide_drive_t *drive);
+int idefloppy_media_change (ide_drive_t *drive);
+unsigned long idefloppy_capacity (ide_drive_t *drive);
+#endif /* CONFIG_BLK_DEV_IDEFLOPPY */
+
+#ifdef CONFIG_BLK_DEV_IDESCSI
+void idescsi_setup (ide_drive_t *drive);
+void idescsi_do_request (ide_drive_t *drive, struct request *rq, unsigned long block);
+void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup);
+int idescsi_ioctl (ide_drive_t *drive, struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg);
+int idescsi_open (struct inode *inode, struct file *filp, ide_drive_t *drive);
+void idescsi_ide_release (struct inode *inode, struct file *filp, ide_drive_t *drive);
+#endif /* CONFIG_BLK_DEV_IDESCSI */
 
 #ifdef CONFIG_BLK_DEV_TRITON
 void ide_init_triton (byte, byte);

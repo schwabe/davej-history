@@ -59,6 +59,7 @@ extern int console_loglevel;
 static int init(void *);
 extern int bdflush(void *);
 extern int kswapd(void *);
+extern void kswapd_setup(void);
 
 extern void init_IRQ(void);
 extern void init_modules(void);
@@ -920,6 +921,7 @@ static int init(void * unused)
 	/* Launch bdflush from here, instead of the old syscall way. */
 	kernel_thread(bdflush, NULL, 0);
 	/* Start the background pageout daemon. */
+	kswapd_setup();
 	kernel_thread(kswapd, NULL, 0);
 
 #ifdef CONFIG_BLK_DEV_INITRD

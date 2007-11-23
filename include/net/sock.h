@@ -109,7 +109,11 @@ struct ipx_opt
  * know the connection this socket belongs to. 
  */
 	struct ncp_server       *ncp_server;
-	
+/* 
+ * To handle special ncp connection-handling sockets for mars_nwe,
+ * the connection number must be stored in the socket.
+ */
+	unsigned short		ipx_ncp_conn;
 };
 #endif
 
