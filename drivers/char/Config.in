@@ -106,6 +106,7 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
          bool '       Fan Tachometer' CONFIG_WDT_501_FAN
      fi
   fi
+  tristate '   WDT PCI Watchdog timer' CONFIG_WDTPCI
   tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
   tristate '   Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
@@ -119,6 +120,9 @@ tristate '/dev/nvram support' CONFIG_NVRAM
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC
 if [ "$CONFIG_ALPHA_BOOK1" = "y" ]; then
   bool 'Tadpole ANA H8 Support'  CONFIG_H8
+fi
+if [ "$CONFIG_PCI" = "y" ]; then
+  tristate 'Intel i8x0 Random Number Generator support' CONFIG_INTEL_RNG
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

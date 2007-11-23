@@ -64,6 +64,7 @@ static int max_interrupt_work = 10;
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/delay.h>	/* for udelay() */
+#include <linux/init.h>
 
 #include <asm/spinlock.h>
 #include <asm/bitops.h>
@@ -156,7 +157,7 @@ struct el3_mca_adapters_struct {
 	int id;
 };
 
-struct el3_mca_adapters_struct el3_mca_adapters[] = {
+static struct el3_mca_adapters_struct el3_mca_adapters[] __initdata = {
 	{ "3Com 3c529 EtherLink III (10base2)", 0x627c },
 	{ "3Com 3c529 EtherLink III (10baseT)", 0x627d },
 	{ "3Com 3c529 EtherLink III (test mode)", 0x62db },
@@ -166,7 +167,7 @@ struct el3_mca_adapters_struct el3_mca_adapters[] = {
 };
 #endif
 
-int el3_probe(struct device *dev)
+int __init el3_probe(struct device *dev)
 {
 	short lrs_state = 0xff, i;
 	int ioaddr, irq, if_port;
@@ -396,7 +397,7 @@ int el3_probe(struct device *dev)
 /* Read a word from the EEPROM using the regular EEPROM access register.
    Assume that we are in register window zero.
  */
-static ushort read_eeprom(int ioaddr, int index)
+static ushort __init read_eeprom(int ioaddr, int index)
 {
 	outw(EEPROM_READ + index, ioaddr + 10);
 	/* Pause for at least 162 us. for the read to take place. */
@@ -405,7 +406,7 @@ static ushort read_eeprom(int ioaddr, int index)
 }
 
 /* Read a word from the EEPROM when in the ISA ID probe state. */
-static ushort id_read_eeprom(int index)
+static ushort __init id_read_eeprom(int index)
 {
 	int bit, word = 0;
 

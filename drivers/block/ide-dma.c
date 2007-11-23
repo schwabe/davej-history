@@ -433,6 +433,12 @@ __initfunc(unsigned long ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, c
 			request_region(dma_base+16, extra, name);
 		dma_base += hwif->channel ? 8 : 0;
 		hwif->dma_extra = extra;
+		
+		/* ====== ALI M5229 ================================*/
+		if( hwif->pci_dev->device == PCI_DEVICE_ID_AL_M5229)
+			outb(inb(dma_base+2) & 0x60, dma_base+2);           
+		/* =================================================*/
+		
 		if (inb(dma_base+2) & 0x80) {
 			printk("%s: simplex device:  DMA disabled\n", name);
 			dma_base = 0;

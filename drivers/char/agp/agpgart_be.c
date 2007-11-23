@@ -23,7 +23,6 @@
  * OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#define EXPORT_SYMTAB 1
 #include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
@@ -790,6 +789,8 @@ void agp_enable(u32 mode)
 
 /* End - Generic Agp routines */
 
+#ifdef CONFIG_AGP_I810
+
 static aper_size_info_fixed intel_i810_sizes[] =
 {
 	{64, 16384, 4},
@@ -950,11 +951,13 @@ static int intel_i810_remove_entries(agp_memory * mem, off_t pg_start,
 {
 	int i;
 
+   	CACHE_FLUSH();
 	for (i = pg_start; i < (mem->page_count + pg_start); i++) {
 		OUTREG32(intel_i810_private.registers,
 			 I810_PTE_BASE + (i * 4),
 			 agp_bridge.scratch_page);
 	}
+   	CACHE_FLUSH();
 
 	agp_bridge.tlb_flush(mem);
 	return 0;
@@ -1062,6 +1065,7 @@ static int __init intel_i810_setup(struct pci_dev *i810_dev)
 	return 0;
 }
 
+#endif /* CONFIG_AGP_I810 */
 
 #ifdef CONFIG_AGP_INTEL
 
@@ -2197,7 +2201,7 @@ static int __init agp_find_supported_device(void)
 	agp_bridge.dev = dev;
 
 	/* Need to test for I810 here */
-
+#ifdef CONFIG_AGP_I810
 	if (dev->vendor == PCI_VENDOR_ID_INTEL) {
 		struct pci_dev *i810_dev;
 
@@ -2271,7 +2275,7 @@ static int __init agp_find_supported_device(void)
 			break;
 		}
 	}
-
+#endif /* CONFIG_AGP_I810 */
 
 	/* find capndx */
 	pci_read_config_dword(dev, 0x04, &scratch);

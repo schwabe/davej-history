@@ -2,7 +2,7 @@ This file contains brief information about the SCSI tape driver.
 The driver is currently maintained by Kai M{kisara (email
 Kai.Makisara@metla.fi)
 
-Last modified: Sun Apr 18 13:24:43 1999 by makisara@home
+Last modified: Tue Aug 15 15:54:46 2000 by makisara@kai.makisara.local
 
 
 BASICS
@@ -67,7 +67,7 @@ non-rewind devices (minor is 128 + device number) are implemented.
 In variable block mode, the byte count in write() determines the size
 of the physical block on tape. When reading, the drive reads the next
 tape block and returns to the user the data if the read() byte count
-is at least the block size. Otherwise the data is truncated.
+is at least the block size. Otherwise an error is returned.
 
 In fixed block mode, the data transfer between the drive and the
 driver is in multiples of the block size. The write() byte count must

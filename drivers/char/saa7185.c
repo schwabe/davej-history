@@ -85,7 +85,7 @@ static int saa7185_write(struct saa7185 *dev, unsigned char subaddr, unsigned ch
 
 static int saa7185_write_block(struct saa7185 *dev, unsigned const char *data, unsigned int len)
 {
-	int ack;
+	int ack=0;
 	unsigned subaddr;
 	unsigned long flags;
 

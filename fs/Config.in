@@ -92,7 +92,10 @@ if [ "$CONFIG_INET" = "y" ]; then
   fi
   tristate 'SMB filesystem support (to mount WfW shares etc.)' CONFIG_SMB_FS
   if [ "$CONFIG_SMB_FS" != "n" ]; then
-     string 'Default Remote NLS Option' CONFIG_SMB_NLS_REMOTE ""
+     bool '   Use a default NLS' CONFIG_SMB_NLS_DEFAULT
+     if [ "$CONFIG_SMB_NLS_DEFAULT" = "y" ]; then
+        string '  Default Remote NLS Option' CONFIG_SMB_NLS_REMOTE "cp437"
+     fi
   fi   
 fi
 if [ "$CONFIG_IPX" != "n" -o "$CONFIG_INET" != "n" ]; then

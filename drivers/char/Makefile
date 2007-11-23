@@ -350,6 +350,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_WDTPCI),y)
+O_OBJS += wdt_pci.o
+else
+  ifeq ($(CONFIG_WDTPCI),m)
+    M_OBJS += wdt_pci.o
+  endif
+endif
+
 ifeq ($(CONFIG_RTC),y)
 O_OBJS += rtc.o
 endif
@@ -374,6 +382,14 @@ else
   ifeq ($(CONFIG_AGP),m)
   ALL_SUB_DIRS += agp
   MOD_SUB_DIRS += agp
+  endif
+endif
+
+ifeq ($(CONFIG_INTEL_RNG),y)
+L_OBJS += i810_rng.o
+else
+  ifeq ($(CONFIG_INTEL_RNG),m)
+  M_OBJS += i810_rng.o
   endif
 endif
     

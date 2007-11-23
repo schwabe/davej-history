@@ -39,20 +39,6 @@
 #define __devexit
 #define __devexitdata
 
-/* Not sure what version aliases were introduced in, but certainly in 2.91.66.  */
-#ifdef MODULE
-  #if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
-    #define module_init(x)      int init_module(void) __attribute__((alias(#x)));
-    #define module_exit(x)      void cleanup_module(void) __attribute__((alias(#x)));
-  #else
-    #define module_init(x)      int init_module(void) { return x(); }
-    #define module_exit(x)      void cleanup_module(void) { x(); }
-  #endif
-#else
-  #define module_init(x)
-  #define module_exit(x)
-#endif
-
 #define MODULE_DEVICE_TABLE(foo,bar)
 
 #define pci_dma_supported(dev, mask) 1
@@ -110,7 +96,7 @@ pci_alloc_consistent(struct pci_dev *hwdev,
 
         if (hwdev == NULL)
                 gfp |= GFP_DMA;
-        ret = (void *)__get_free_pages(gfp, compat_get_order(size));
+        ret = (void *)__get_free_pages(gfp, get_order(size));
 
         if (ret != NULL) {
                 memset(ret, 0, size);
@@ -123,7 +109,7 @@ extern __inline__ void
 pci_free_consistent(struct pci_dev *hwdev, size_t size,
                     void *vaddr, dma_addr_t dma_handle)
 {
-        free_pages((unsigned long)vaddr, compat_get_order(size));
+        free_pages((unsigned long)vaddr, get_order(size));
 }
 
 static inline int pci_module_init(struct pci_driver *drv)

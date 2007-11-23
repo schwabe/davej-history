@@ -43,10 +43,6 @@
 #  include <asm/mtrr.h>
 #endif
 
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
-
 #ifdef CONFIG_DASD
 #include <asm/dasd.h>
 #endif
@@ -1096,9 +1092,6 @@ static struct kernel_param raw_params[] __initdata = {
 #ifdef CONFIG_PARIDE_PG
         { "pg.", pg_setup },
 #endif
-#ifdef CONFIG_APM
-	{ "apm=", apm_setup },
-#endif
 #ifdef CONFIG_N2
 	{ "n2=", n2_setup },
 #endif
@@ -1180,15 +1173,14 @@ static int __init checksetup(char *line)
 
 	/* Now handle new-style __setup parameters */
 	p = &__setup_start;
-	do {
+	while (p < &__setup_end) {
 		int n = strlen(p->str);
 		if (!strncmp(line,p->str,n)) {
 			if (p->setup_func(line+n))
 				return 1;
 		}
 		p++;
-	} while (p < &__setup_end);
-
+	}
 	return 0;
 }
 
@@ -1493,10 +1485,12 @@ static void __init do_initcalls(void)
 	initcall_t *call;
 
 	call = &__initcall_start;
-	do {
+	
+	while (call < &__initcall_end)
+	{
 		(*call)();
 		call++;
-	} while (call < &__initcall_end);
+	} 
 }
 
 

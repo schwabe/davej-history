@@ -298,7 +298,7 @@ int ntfs_dupmap2uni(ntfs_volume *vol, char* in, int in_len, ntfs_u16 **out,
 	if(!result)return ENOMEM;
 	*out_len=in_len;
 	for(i=o=0;i<in_len;i++, o++){
-		unsigned short cl,ch;
+		unsigned short cl=0,ch=0;
 		if(in[i]!=':' || (vol->nct & nct_uni_xlate)==0){
 			int len;
 			unsigned char clc=cl, chc=ch;

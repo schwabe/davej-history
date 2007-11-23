@@ -30,6 +30,7 @@
 #define DEVID_PIIX3	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371SB_1})
 #define DEVID_PIIX4	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371AB})
 #define DEVID_VP_IDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C586_1})
+#define DEVID_VP_OLDIDE	((ide_pci_devid_t){PCI_VENDOR_ID_VIA,     PCI_DEVICE_ID_VIA_82C586_0})
 #define DEVID_PDC20246	((ide_pci_devid_t){PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246})
 #define DEVID_RZ1000	((ide_pci_devid_t){PCI_VENDOR_ID_PCTECH,  PCI_DEVICE_ID_PCTECH_RZ1000})
 #define DEVID_RZ1001	((ide_pci_devid_t){PCI_VENDOR_ID_PCTECH,  PCI_DEVICE_ID_PCTECH_RZ1001})
@@ -39,6 +40,7 @@
 #define DEVID_OPTI621	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    PCI_DEVICE_ID_OPTI_82C621})
 #define DEVID_OPTI621V	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    PCI_DEVICE_ID_OPTI_82C558})
 #define DEVID_OPTI621X	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    0xd568})  /* from datasheets */
+#define DEVID_ALI15X3   ((ide_pci_devid_t){PCI_VENDOR_ID_AL,      PCI_DEVICE_ID_AL_M5229})
 #define DEVID_TRM290	((ide_pci_devid_t){PCI_VENDOR_ID_TEKRAM,  PCI_DEVICE_ID_TEKRAM_DC290})
 #define DEVID_NS87410	((ide_pci_devid_t){PCI_VENDOR_ID_NS,      PCI_DEVICE_ID_NS_87410})
 #define DEVID_NS87415	((ide_pci_devid_t){PCI_VENDOR_ID_NS,      PCI_DEVICE_ID_NS_87415})
@@ -51,6 +53,13 @@
 #define DEVID_CS5530	((ide_pci_devid_t){PCI_VENDOR_ID_CYRIX,   PCI_DEVICE_ID_CYRIX_5530_IDE})
 
 #define IDE_IGNORE	((void *)-1)
+
+#ifdef CONFIG_BLK_DEV_ALI15X3
+extern void ide_init_ali15x3(ide_hwif_t *);
+#define INIT_ALI15X3  &ide_init_ali15x3
+#else
+#define INIT_ALI15X3  NULL
+#endif
 
 #ifdef CONFIG_BLK_DEV_TRM290
 extern void ide_init_trm290(ide_hwif_t *);
@@ -145,6 +154,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_HT6565,	"HT6565",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_OPTI621,	"OPTI621",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_OPTI621X,"OPTI621X",	INIT_OPTI621,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
+	{DEVID_ALI15X3, "ALI15X3",  INIT_ALI15X3,   {{0x00,0x00,0x00}, {0x00,0x00,0x00}},   ON_BOARD,   0 },
 	{DEVID_TRM290,	"TRM290",	INIT_TRM290,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_NS87415,	"NS87415",	INIT_NS87415,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_AEC6210,	"AEC6210",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	OFF_BOARD,	0 },
@@ -451,6 +461,19 @@ __initfunc(void ide_scan_pcibus (void))
 		devid.vid = dev->vendor;
 		devid.did = dev->device;
 		if (IDE_PCI_DEVID_EQ(devid, DEVID_450NX)) {
+			autodma_default = 0;
+			break;
+		}
+		/*
+		 *	Don't try and tune a VIA 82C586 or 586A
+		 */
+		if (IDE_PCI_DEVID_RQ(devid, DEVID_VP_IDE))
+		{
+			autodma_default = 0;
+			break;
+		}
+		if (IDE_PCI_DEVID_RQ(devid, DEVID_VP_OLDIDE))
+		{
 			autodma_default = 0;
 			break;
 		}

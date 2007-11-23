@@ -624,6 +624,11 @@ CONFIG_BLK_DEV_PS2
   say M here and read Documentation/modules.txt. The module will be
   called ps2esdi.o.
 
+ALI M15X3 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_ALI15X3
+  This driver ensures (U)DMA support for ALI 1543 and 1543C,
+  1535, 1535D onboard chipsets.
+
 Tekram TRM290 chipset support (EXPERIMENTAL)
 CONFIG_BLK_DEV_TRM290
   This driver adds support for bus master DMA transfers
@@ -7947,6 +7952,13 @@ CONFIG_SMB_FS
   can be inserted in and removed from the running kernel whenever you
   want), say M here and read Documentation/modules.txt. The module
   will be called smbfs.o. Most people say N, however.
+
+use nls by default
+CONFIG_SMB_NLS_DEFAULT
+  Enabling this will make smbfs use nls translations by default. You
+  need to specify the local charset (CONFIG_NLS_DEFAULT) in the nls
+  settings and you need to give the default nls for the SMB server as
+  CONFIG_SMB_NLS_REMOTE.
 
 nls support setting
 CONFIG_SMB_NLS_REMOTE

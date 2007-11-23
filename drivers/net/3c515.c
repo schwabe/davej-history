@@ -62,6 +62,7 @@ static int max_interrupt_work = 20;
 
 #define NEW_MULTICAST
 #include <linux/delay.h>
+#include <linux/init.h>
 
 /* Kernel version compatibility functions. */
 #define RUN_AT(x) (jiffies + (x))
@@ -399,7 +400,7 @@ init_module(void)
 }
 
 #else
-int tc515_probe(struct device *dev)
+int __init tc515_probe(struct device *dev)
 {
 	int cards_found = 0;
 
@@ -412,7 +413,7 @@ int tc515_probe(struct device *dev)
 }
 #endif  /* not MODULE */
 
-static int vortex_scan(struct device *dev)
+static int __init vortex_scan(struct device *dev)
 {
 	int cards_found = 0;
 	static int ioaddr = 0x100;
@@ -452,7 +453,7 @@ static int vortex_scan(struct device *dev)
 	return cards_found;
 }
 
-static struct device *vortex_found_device(struct device *dev, int ioaddr,
+static struct device * __init vortex_found_device(struct device *dev, int ioaddr,
 										  int irq, int product_index,
 										  int options)
 {
@@ -517,7 +518,7 @@ static struct device *vortex_found_device(struct device *dev, int ioaddr,
 	return dev;
 }
 
-static int vortex_probe1(struct device *dev)
+static int __init vortex_probe1(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;

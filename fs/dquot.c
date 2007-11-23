@@ -1337,12 +1337,15 @@ int dquot_transfer(struct dentry *dentry, struct iattr *iattr, uid_t initiator)
 	else
 		blocks = (inode->i_blocks / 2);
 	for (cnt = 0; cnt < MAXQUOTAS; cnt++)
+	{
+		if (transfer_to[cnt] == NODQUOT)
+			continue;
 		if (check_idq(transfer_to[cnt], cnt, 1, initiator, tty) == NO_QUOTA ||
 		    check_bdq(transfer_to[cnt], cnt, blocks, initiator, tty, 0) == NO_QUOTA) {
 			cnt = MAXQUOTAS;
 			goto put_all;
 		}
-
+}
 	if ((error = notify_change(dentry, iattr)))
 		goto put_all; 
 	/*

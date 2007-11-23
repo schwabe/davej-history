@@ -81,6 +81,7 @@ extern volatile int smp_msg_id;
 #define kernel_lock()
 #define cpu_logical_map(cpu)			0
 #define smp_call_function(func,info,retry,wait)	({0;})
+#define cpu_online_map 1
 
 #endif
 #endif

@@ -546,6 +546,7 @@ extern int ext2_check_dir_entry (const char *, struct inode *,
 /* file.c */
 extern int ext2_read (struct inode *, struct file *, char *, int);
 extern int ext2_write (struct inode *, struct file *, char *, int);
+extern void ext2_remove_suid (struct inode *); 
 
 /* fsync.c */
 extern int ext2_sync_file (struct file *, struct dentry *);

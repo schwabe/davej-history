@@ -388,6 +388,8 @@ void ext2_truncate (struct inode * inode)
 		return;
 	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
 		return;
+	
+	ext2_remove_suid(inode); 
 	ext2_discard_prealloc(inode);
 	while (1) {
 		retry = trunc_direct(inode);

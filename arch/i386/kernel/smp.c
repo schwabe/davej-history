@@ -658,7 +658,7 @@ static unsigned long __init setup_trampoline(void)
 	return virt_to_phys(trampoline_base);
 }
 
-extern unsigned long i386_endbase __initdata;
+extern unsigned long i386_endbase;
 /*
  *	We are called very early to get the low memory for the
  *	SMP bootup trampoline page.

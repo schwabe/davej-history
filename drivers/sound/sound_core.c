@@ -88,6 +88,8 @@ extern int cs_probe(void);
 #ifdef CONFIG_SOUND_EMU10K1
 extern int init_emu10k1(void);
 #endif
+extern int cs4281_probe(void);
+
 
 /*
  *	Low level list operator. Scan the ordered list, find a hole and

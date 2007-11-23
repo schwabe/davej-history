@@ -126,6 +126,7 @@ static int csr0 = 0x00A00000 | 0x4800;
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -320,7 +321,7 @@ struct pci_id_info {
 							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
 };
 #ifndef CARDBUS
-static struct pci_id_info pci_tbl[] = {
+static struct pci_id_info pci_tbl[] __initdata = {
   { "Digital DC21040 Tulip",
 	0x1011, 0x0002, 0xffff, PCI_ADDR0_IO, 128, 32, tulip_probe1 },
   { "Digital DC21041 Tulip",
@@ -571,7 +572,7 @@ static void set_rx_mode(struct device *dev);
 static struct device *root_tulip_dev = NULL;
 
 #ifndef CARDBUS
-int tulip_probe(struct device *dev)
+int __init tulip_probe(struct device *dev)
 {
 	int cards_found = 0;
 	int pci_index = 0;

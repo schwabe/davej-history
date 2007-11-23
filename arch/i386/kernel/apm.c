@@ -170,10 +170,6 @@
 #include <asm/desc.h>
 #include <asm/softirq.h>
 
-/* 2.2-2.3 Compatability defines */
-#define __setup(x, y)
-#define module_init(x)
-
 EXPORT_SYMBOL(apm_register_callback);
 EXPORT_SYMBOL(apm_unregister_callback);
 
@@ -1430,7 +1426,7 @@ static int __init apm(void *unused)
 	return 0;
 }
 
-void __init apm_setup(char *str, int *dummy)
+static int __init apm_setup(char *str)
 {
 	int	invert;
 
@@ -1450,6 +1446,7 @@ void __init apm_setup(char *str, int *dummy)
 		if (str != NULL)
 			str += strspn(str, ", \t");
 	}
+	return 1;
 }
 
 __setup("apm=", apm_setup);
@@ -1468,13 +1465,12 @@ static struct miscdevice apm_device = {
 	&apm_bios_fops
 };
 
-#define APM_INIT_ERROR_RETURN	return
 
-void __init apm_init(void)
+static int __init apm_init(void)
 {
 	if (apm_bios_info.version == 0) {
 		printk(KERN_INFO "apm: BIOS not found.\n");
-		APM_INIT_ERROR_RETURN;
+		return -ENODEV;
 	}
 	printk(KERN_INFO
 		"apm: BIOS version %d.%d Flags 0x%02x (Driver version %s)\n",
@@ -1484,7 +1480,7 @@ void __init apm_init(void)
 		driver_version);
 	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) == 0) {
 		printk(KERN_INFO "apm: no 32 bit BIOS support\n");
-		APM_INIT_ERROR_RETURN;
+		return -ENODEV;
 	}
 
 	/*
@@ -1513,11 +1509,11 @@ void __init apm_init(void)
 
 	if (apm_disabled) {
 		printk(KERN_NOTICE "apm: disabled on user request.\n");
-		APM_INIT_ERROR_RETURN;
+		return -ENODEV;
 	}
 	if ((smp_num_cpus > 1) && !power_off_enabled) {
 		printk(KERN_NOTICE "apm: disabled - APM is not SMP safe.\n");
-		APM_INIT_ERROR_RETURN;
+		return -ENODEV;
 	}
 
 	/*
@@ -1565,7 +1561,7 @@ void __init apm_init(void)
 	if (smp_num_cpus > 1) {
 		printk(KERN_NOTICE
 		   "apm: disabled - APM is not SMP safe (power off active).\n");
-		APM_INIT_ERROR_RETURN;
+		return 0;
 	}
 
 	init_timer(&apm_timer);
@@ -1578,6 +1574,7 @@ void __init apm_init(void)
 #ifdef CONFIG_APM_CPU_IDLE
 	acpi_idle = apm_cpu_idle;
 #endif
+	return 0;
 }
 
 module_init(apm_init)

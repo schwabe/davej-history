@@ -136,7 +136,7 @@ static long long ext2_file_lseek(
 	return offset;
 }
 
-static inline void remove_suid(struct inode *inode)
+inline void ext2_remove_suid(struct inode *inode)
 {
 	unsigned int mode;
 
@@ -190,7 +190,7 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 			      inode->i_mode);
 		return -EINVAL;
 	}
-	remove_suid(inode);
+	ext2_remove_suid(inode);
 
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;

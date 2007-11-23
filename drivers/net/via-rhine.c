@@ -77,6 +77,7 @@ static const int multicast_filter_limit = 32;
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/init.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -261,7 +262,7 @@ static struct device *via_probe1(int pci_bus, int pci_devfn,
 								 struct device *dev, long ioaddr, int irq,
 								 int chp_idx, int fnd_cnt);
 
-static struct pci_id_info pci_tbl[] = {
+static struct pci_id_info pci_tbl[] __initdata = {
 	{ "VIA VT86C100A Rhine-II", 0x1106, 0x6100, 0xffff,
 	  PCI_USES_MEM|PCI_USES_IO|PCI_USES_MEM|PCI_USES_MASTER, 128, via_probe1},
 	{ "VIA VT3043 Rhine", 0x1106, 0x3043, 0xffff,
@@ -275,7 +276,7 @@ enum chip_capability_flags {CanHaveMII=1, };
 struct chip_info {
 	int io_size;
 	int flags;
-} static cap_tbl[] = {
+} static cap_tbl[] __initdata = {
 	{128, CanHaveMII, },
 	{128, CanHaveMII, },
 };
@@ -398,7 +399,7 @@ static struct device *root_net_dev = NULL;
    well when dynamically adding drivers.  So instead we detect just the
    cards we know about in slot order. */
 
-static int pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
+static int __init pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
 {
 	int cards_found = 0;
 	int pci_index = 0;
@@ -506,7 +507,7 @@ static int pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
 }
 
 #ifndef MODULE
-int via_rhine_probe(struct device *dev)
+int __init via_rhine_probe(struct device *dev)
 {
 	static int did_version = 0;
 	if (!did_version++)
@@ -515,7 +516,7 @@ int via_rhine_probe(struct device *dev)
 }
 #endif
 
-static struct device *via_probe1(int pci_bus, int pci_devfn,
+static struct device * __init via_probe1(int pci_bus, int pci_devfn,
 								 struct device *dev, long ioaddr, int irq,
 								 int chip_id, int card_idx)
 {

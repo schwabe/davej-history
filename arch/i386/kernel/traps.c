@@ -399,6 +399,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 	/* Ok, finally something we can handle */
 	tsk->tss.trap_no = 1;
 	tsk->tss.error_code = error_code;
+	tsk->tss.debugreg[DR_STATUS] = condition;
 	force_sig(SIGTRAP, tsk);
 	return;
 

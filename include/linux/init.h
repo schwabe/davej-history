@@ -17,7 +17,7 @@
  *    extern int z; z = x * y;
  * }
  *
- * Depricated: you can surround the whole function declaration 
+ * Deprecated: you can surround the whole function declaration 
  * just before function body into __initfunc() macro, like:
  *
  * __initfunc (static void initme(int x, int y))
@@ -65,6 +65,8 @@
 #define __initlocaldata
 #endif
 
+
+#ifndef __ASSEMBLY__
 
 /*
  * Used for kernel command line parameter setup
@@ -127,5 +129,5 @@ typedef void (*__cleanup_module_func_t)(void);
 #define module_exit(x)	__exitcall(x);
 #endif
 
-
+#endif /* __ASSEMBLY __ */
 #endif

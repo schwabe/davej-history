@@ -11,7 +11,7 @@
   Copyright 1992 - 2000 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Sat Jun 17 17:29:35 2000 by makisara@kai.makisara.local
+  Last modified: Tue Sep  5 23:17:08 2000 by makisara@kai.makisara.local
   Some small formal changes - aeb, 950809
 */
 
@@ -1459,8 +1459,11 @@ read_tape(struct inode *inode, long count, Scsi_Cmnd **aSCpnt)
 
 		if (SCpnt->sense_buffer[2] & 0x20) { /* ILI */
 		    if (STp->block_size == 0) {
-			if (transfer <= 0)
-			    transfer = 0;
+			if (transfer < 0) {
+			    if (STps->drv_block >= 0)
+				STps->drv_block += 1;
+			    return (-ENOMEM);
+			}
 			(STp->buffer)->buffer_bytes = bytes - transfer;
 		    }
 		    else {
@@ -2932,6 +2935,8 @@ st_ioctl(struct inode * inode,struct file * file,
 	   i = mtc.mt_op == MTREW || mtc.mt_op == MTOFFL ||
 	       mtc.mt_op == MTRETEN || mtc.mt_op == MTEOM ||
 	       mtc.mt_op == MTLOCK || mtc.mt_op == MTLOAD ||
+	       mtc.mt_op == MTFSF || mtc.mt_op == MTFSFM ||
+	       mtc.mt_op == MTBSF || mtc.mt_op == MTBSFM ||
 	       mtc.mt_op == MTCOMPRESSION;
        }
        i = flush_buffer(inode, file, i);
@@ -3099,6 +3104,51 @@ st_ioctl(struct inode * inode,struct file * file,
 }
 
 
+/* The following two functions are nearly identical to scsi_init_malloc and
+   scsi_init_free. The only difference is that the GFP_DMA flag is not set
+   by default. */
+static void * st_malloc(unsigned int size, int gfp_mask)
+{
+    void * retval;
+
+    /*
+     * For buffers used by the DMA pool, we assume page aligned 
+     * structures.
+     */
+    if ((size % PAGE_SIZE) == 0) {
+	int order, a_size;
+	for (order = 0, a_size = PAGE_SIZE;
+             a_size < size; order++, a_size <<= 1)
+            ;
+	retval = (void *) __get_free_pages(gfp_mask, order);
+    } else
+	retval = kmalloc(size, gfp_mask);
+
+    if (retval)
+	memset(retval, 0, size);
+    return retval;
+}
+
+
+static void st_free(char * ptr, unsigned int size)
+{
+    /*
+     * We need this special code here because the DMA pool assumes
+     * page aligned data.  Besides, it is wasteful to allocate
+     * page sized chunks with kmalloc.
+     */
+    if ((size % PAGE_SIZE) == 0) {
+    	int order, a_size;
+
+	for (order = 0, a_size = PAGE_SIZE;
+	     a_size < size; order++, a_size <<= 1)
+	    ;
+	free_pages((unsigned long)ptr, order);
+    } else
+	kfree(ptr);
+}
+
+
 /* Try to allocate a new tape buffer */
 	static ST_buffer *
 new_tape_buffer( int from_initialization, int need_dma )
@@ -3115,7 +3165,7 @@ new_tape_buffer( int from_initialization, int need_dma )
     priority = GFP_KERNEL;
 
   i = sizeof(ST_buffer) + (st_max_sg_segs - 1) * sizeof(struct scatterlist);
-  tb = (ST_buffer *)scsi_init_malloc(i, priority);
+  tb = (ST_buffer *)st_malloc(i, priority);
   if (tb) {
     tb->this_size = i;
     if (need_dma)
@@ -3128,7 +3178,7 @@ new_tape_buffer( int from_initialization, int need_dma )
 	b_size /= 2;
     for ( ; b_size >= PAGE_SIZE; b_size /= 2) {
 	tb->sg[0].address =
-	    (unsigned char *)scsi_init_malloc(b_size, priority);
+	    (unsigned char *)st_malloc(b_size, priority);
 	if (tb->sg[0].address != NULL) {
 	    tb->sg[0].alt_address = NULL;
 	    tb->sg[0].length = b_size;
@@ -3136,7 +3186,7 @@ new_tape_buffer( int from_initialization, int need_dma )
 	}
     }
     if (tb->sg[segs].address == NULL) {
-	scsi_init_free((char *)tb, tb->this_size);
+	st_free((char *)tb, tb->this_size);
 	tb = NULL;
     }
     else {  /* Got something, continue */
@@ -3148,7 +3198,7 @@ new_tape_buffer( int from_initialization, int need_dma )
 	for (segs=1, got=tb->sg[0].length;
 	     got < st_buffer_size && segs < ST_FIRST_SG; ) {
 	    tb->sg[segs].address =
-		(unsigned char *)scsi_init_malloc(b_size, priority);
+		(unsigned char *)st_malloc(b_size, priority);
 	    if (tb->sg[segs].address == NULL) {
 		if (st_buffer_size - got <=
 		    (ST_FIRST_SG - segs) * b_size / 2) {
@@ -3156,8 +3206,8 @@ new_tape_buffer( int from_initialization, int need_dma )
 		    continue;
 		}
 		for (i=0; i < segs - 1; i++)
-		    scsi_init_free(tb->sg[i].address, tb->sg[i].length);
-		scsi_init_free((char *)tb, tb->this_size);
+		    st_free(tb->sg[i].address, tb->sg[i].length);
+		st_free((char *)tb, tb->this_size);
 		tb = NULL;
 		break;
 	    }
@@ -3220,7 +3270,7 @@ enlarge_buffer(ST_buffer *STbuffer, int new_size, int need_dma)
   for (segs=STbuffer->sg_segs, got=STbuffer->buffer_size;
        segs < max_segs && got < new_size; ) {
       STbuffer->sg[segs].address =
-	  (unsigned char *)scsi_init_malloc(b_size, priority);
+	  (unsigned char *)st_malloc(b_size, priority);
       if (STbuffer->sg[segs].address == NULL) {
 	  if (new_size - got <= (max_segs - segs) * b_size / 2) {
 	      b_size /= 2;  /* Large enough for the rest of the buffers */
@@ -3256,7 +3306,7 @@ normalize_buffer(ST_buffer *STbuffer)
   int i;
 
   for (i=STbuffer->orig_sg_segs; i < STbuffer->sg_segs; i++) {
-      scsi_init_free(STbuffer->sg[i].address, STbuffer->sg[i].length);
+      st_free(STbuffer->sg[i].address, STbuffer->sg[i].length);
       STbuffer->buffer_size -= STbuffer->sg[i].length;
   }
 #if DEBUG
@@ -3489,7 +3539,7 @@ static int st_init()
   if (st_template.dev_max > 128 / ST_NBR_MODES)
     printk(KERN_INFO "st: Only %d tapes accessible.\n", 128 / ST_NBR_MODES);
   scsi_tapes =
-    (Scsi_Tape *) scsi_init_malloc(st_template.dev_max * sizeof(Scsi_Tape),
+    (Scsi_Tape *) st_malloc(st_template.dev_max * sizeof(Scsi_Tape),
 				   GFP_ATOMIC);
   if (scsi_tapes == NULL) {
     printk(KERN_ERR "Unable to allocate descriptors for SCSI tapes.\n");
@@ -3506,7 +3556,7 @@ static int st_init()
   for (i=0; i < st_template.dev_max; ++i) {
     STp = &(scsi_tapes[i]);
     STp->capacity = 0xfffff;
-    STp->mt_status = (struct mtget *) scsi_init_malloc(sizeof(struct mtget),
+    STp->mt_status = (struct mtget *) st_malloc(sizeof(struct mtget),
 						       GFP_ATOMIC);
     /* Initialize status */
     memset((void *) scsi_tapes[i].mt_status, 0, sizeof(struct mtget));
@@ -3514,12 +3564,12 @@ static int st_init()
 
   /* Allocate the buffers */
   st_buffers =
-    (ST_buffer **) scsi_init_malloc(st_template.dev_max * sizeof(ST_buffer *),
+    (ST_buffer **) st_malloc(st_template.dev_max * sizeof(ST_buffer *),
 				    GFP_ATOMIC);
   if (st_buffers == NULL) {
     printk(KERN_ERR "Unable to allocate tape buffer pointers.\n");
     unregister_chrdev(SCSI_TAPE_MAJOR, "st");
-    scsi_init_free((char *) scsi_tapes,
+    st_free((char *) scsi_tapes,
 		   st_template.dev_max * sizeof(Scsi_Tape));
     return 1;
   }
@@ -3532,6 +3582,8 @@ static int st_init()
     target_nbr = ST_EXTRA_DEVS;
   if (target_nbr > st_max_buffers)
     target_nbr = st_max_buffers;
+  if (target_nbr > st_template.dev_noticed)
+    target_nbr = st_template.dev_noticed;
 
   for (i=st_nbr_buffers=0; i < target_nbr; i++) {
     if (!new_tape_buffer(TRUE, TRUE)) {
@@ -3539,9 +3591,9 @@ static int st_init()
 #if 0
 	printk(KERN_ERR "Can't continue without at least one tape buffer.\n");
 	unregister_chrdev(SCSI_TAPE_MAJOR, "st");
-	scsi_init_free((char *) st_buffers,
+	st_free((char *) st_buffers,
 		       st_template.dev_max * sizeof(ST_buffer *));
-	scsi_init_free((char *) scsi_tapes,
+	st_free((char *) scsi_tapes,
 		       st_template.dev_max * sizeof(Scsi_Tape));
 	return 1;
 #else
@@ -3608,19 +3660,19 @@ void cleanup_module( void)
   unregister_chrdev(SCSI_TAPE_MAJOR, "st");
   st_registered--;
   if(scsi_tapes != NULL) {
-    scsi_init_free((char *) scsi_tapes,
+    st_free((char *) scsi_tapes,
 		   st_template.dev_max * sizeof(Scsi_Tape));
 
     if (st_buffers != NULL) {
       for (i=0; i < st_nbr_buffers; i++)
 	if (st_buffers[i] != NULL) {
 	  for (j=0; j < st_buffers[i]->sg_segs; j++)
-	      scsi_init_free((char *) st_buffers[i]->sg[j].address,
+	      st_free((char *) st_buffers[i]->sg[j].address,
 			     st_buffers[i]->sg[j].length);
-	  scsi_init_free((char *) st_buffers[i], st_buffers[i]->this_size);
+	  st_free((char *) st_buffers[i], st_buffers[i]->this_size);
 	}
 
-      scsi_init_free((char *) st_buffers,
+      st_free((char *) st_buffers,
 		     st_template.dev_max * sizeof(ST_buffer *));
     }
   }

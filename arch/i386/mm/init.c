@@ -384,7 +384,7 @@ __initfunc(void test_wp_bit(void))
 		printk(".\n");
 }
 
-extern unsigned long i386_endbase __initdata;
+extern unsigned long i386_endbase;
 
 __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
