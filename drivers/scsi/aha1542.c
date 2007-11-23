@@ -560,7 +560,9 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       done(SCpnt); return 0;});
     
     if(*cmd == REQUEST_SENSE){
-#ifndef DEBUG
+#if 0
+      /* scsi_request_sense() provides a buffer of size 256,
+         so there is no reason to expect equality */
       if (bufflen != sizeof(SCpnt->sense_buffer)) {
 	printk("Wrong buffer length supplied for request sense (%d)\n",bufflen);
       };

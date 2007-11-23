@@ -26,6 +26,11 @@
 #define clear_page(page)        memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)      memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 
+#define BUG() do { \
+	printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
+	__asm__ __volatile__(".word 0x0000"); \
+} while (0)
+
 extern __inline__ int get_order(unsigned long size)
 {
         int order;
@@ -103,7 +108,6 @@ typedef unsigned long pgprot_t;
 #define __pa(x)                 ((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)                 ((void *)((unsigned long)(x)+PAGE_OFFSET))
 #define MAP_NR(addr)            (__pa(addr) >> PAGE_SHIFT)
-
 
 #endif                                 /* __KERNEL__                       */
 

@@ -2179,7 +2179,11 @@ int s390_process_IRQ( unsigned int irq )
 		chnchk = 1;
 
 	} /* endif */
-	if (    (dp->ii.irb.scsw.stctl == SCSW_STCTL_STATUS_PEND)
+	if( dp->ii.irb.scsw.ectl==0)
+	{
+		issense=0;
+	}
+	else if (    (dp->ii.irb.scsw.stctl == SCSW_STCTL_STATUS_PEND)
 	     &&	(dp->ii.irb.scsw.eswf  == 0                     ))
 	{
 		issense = 0;

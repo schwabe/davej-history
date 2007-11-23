@@ -241,8 +241,8 @@ S: Marrickville NSW 2204
 S: Australia
 
 N: Hugh Blemings
-E: hugh@linuxcare.com
-W: http://www.linuxcare.com.au/hugh/
+E: hugh@misc.nu
+W: http://misc.nu/hugh
 D: Author and maintainer of the Keyspan USB to Serial drivers
 S: Po Box 234
 S: Belconnen ACT 2616
@@ -1744,15 +1744,15 @@ S: Harrison, Arkansas  72602-1815
 S: USA
 
 N: Kai Petzke
-E: wpp@marie.physik.tu-berlin.de
-W: http://physik.tu-berlin.de/~wpp
-P: 1024/B42868C1 D9 59 B9 98 BB 93 05 38  2E 3E 31 79 C3 65 5D E1 
+E: petzke@teltarif.de
+W: http://www.teltarif.de/
+P: 1024/B42868C1 D9 59 B9 98 BB 93 05 38  2E 3E 31 79 C3 65 5D E1
 D: Driver for Laser Magnetic Storage CD-ROM
 D: Some kernel bug fixes
 D: Port of the database Postgres
-D: "Unix fuer Jedermann" a German introduction to linux (see my web page)
-S: M"ullerstr. 69
-S: 13349 Berlin
+D: Book: "Linux verstehen und anwenden" (Hanser-Verlag)
+S: Triftstra=DFe 55
+S: 13353 Berlin
 S: Germany
 
 N: Ken Pizzini

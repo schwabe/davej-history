@@ -898,6 +898,7 @@ dasd_eckd_dump_sense(struct dasd_device_t *device, ccw_req_t *req)
 dasd_discipline_t dasd_eckd_discipline = {
 	name :                          "ECKD",
 	ebcname :                       "ECKD",
+	max_blocks:			255,
         id_check:                       dasd_eckd_id_check,          
         check_characteristics:          dasd_eckd_check_characteristics,
         init_analysis:                  dasd_eckd_init_analysis,

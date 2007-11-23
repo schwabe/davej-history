@@ -533,6 +533,7 @@ dasd_diag_dump_sense(struct dasd_device_t *device, ccw_req_t *req)
 dasd_discipline_t dasd_diag_discipline = {
 	name :                          "DIAG",
 	ebcname :                       "DIAG",
+	max_blocks:			PAGE_SIZE/sizeof(diag_bio_t),
         check_characteristics:          dasd_diag_check_characteristics,
         do_analysis:                    dasd_diag_do_analysis,          
         fill_geometry:                  dasd_diag_fill_geometry,

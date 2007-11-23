@@ -111,7 +111,8 @@ struct usb_hub {
 	/* Interrupt polling pipe */
 	struct urb *urb;
 
-	char buffer[USB_MAXCHILDREN / 8];
+	char buffer[(USB_MAXCHILDREN + 1 + 7) / 8]; /* add 1 bit for hub status change */
+					/* and add 7 bits to round up to byte boundary */
 
 	/* List of hubs */
 	struct list_head hub_list;

@@ -120,6 +120,11 @@ extern void trap_init(void);
 extern signed long FASTCALL(schedule_timeout(signed long timeout));
 asmlinkage void schedule(void);
 
+extern int schedule_task(struct tq_struct *task);
+extern void flush_scheduled_tasks(void);
+extern int start_context_thread(void);
+extern int current_is_keventd(void);
+
 /*
  * The default fd array needs to be at least BITS_PER_LONG,
  * as this is the granularity returned by copy_fdset().
@@ -515,6 +520,13 @@ extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 
 #define wake_up(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
 #define wake_up_interruptible(x)	__wake_up((x),TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
+
+#define __set_task_state(tsk, state_value)	do { (tsk)->state = state_value; } while (0)
+#ifdef __SMP__
+#define set_task_state(tsk, state_value)	do { __set_task_state(tsk, state_value); mb(); } while (0)
+#else
+#define set_task_state(tsk, state_value)	__set_task_state(tsk, state_value)
+#endif
 
 #define __set_current_state(state_value)	do { current->state = state_value; } while (0)
 #ifdef __SMP__

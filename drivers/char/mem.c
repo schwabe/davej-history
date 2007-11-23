@@ -34,9 +34,6 @@ void dmasound_init(void);
 #ifdef CONFIG_SPARCAUDIO
 extern int sparcaudio_init(void);
 #endif
-#ifdef CONFIG_ISDN
-int isdn_init(void);
-#endif
 #ifdef CONFIG_PHONE
 extern int telephony_init(void);
 #endif
@@ -646,9 +643,6 @@ __initfunc(int chr_dev_init(void))
 #endif	
 #if CONFIG_QIC02_TAPE
 	qic02_tape_init();
-#endif
-#if CONFIG_ISDN
-	isdn_init();
 #endif
 #ifdef CONFIG_FTAPE
 	ftape_init();

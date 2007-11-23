@@ -353,6 +353,7 @@ dasd_fba_dump_sense(struct dasd_device_t *device, ccw_req_t *req)
 dasd_discipline_t dasd_fba_discipline = {
 	name :                          "FBA ",
 	ebcname :                       "FBA ",
+	max_blocks:			PAGE_SIZE/sizeof(ccw1_t),
         id_check:                       dasd_fba_id_check,          
         check_characteristics:          dasd_fba_check_characteristics,
         do_analysis:                    dasd_fba_do_analysis,          

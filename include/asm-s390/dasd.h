@@ -125,6 +125,7 @@ typedef char *(*dasd_dump_sense_fn_t)(struct dasd_device_t *,ccw_req_t *);
 typedef struct dasd_discipline_t {
 	char ebcname[8]; /* a name used for tagging and printks */
         char name[8];		/* a name used for tagging and printks */
+	int max_blocks; /* how many blocks are allowed to be chained */
 
 	struct dasd_discipline_t *next;	/* used for list of disciplines */
 

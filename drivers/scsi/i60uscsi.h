@@ -78,6 +78,14 @@
 #define U32     unsigned long
 #endif
 
+#ifndef VIRT_TO_BUS
+#define VIRT_TO_BUS(x)           (unsigned long)virt_to_bus((void *) x)
+#endif
+
+#ifndef VIRT_TO_BUS
+#define VIRT_TO_BUS(x)           (unsigned int)virt_to_bus((void *) x)
+#endif
+
 #ifndef NULL
 #define NULL     0		/* zero          */
 #endif

@@ -324,11 +324,13 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 
     if(*cmd == REQUEST_SENSE)
     {
+#if 0
 	if (bufflen != sizeof(SCpnt->sense_buffer))
 	{
 	    printk("Wrong buffer length supplied for request sense (%d)\n",
 		   bufflen);
 	}
+#endif	
 	SCpnt->result = 0;
 	done(SCpnt); 
 	return 0;

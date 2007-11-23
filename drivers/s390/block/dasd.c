@@ -40,6 +40,8 @@
  * 01/17/01 fixed PL020234MVE problem accessing DASD 68-127, 133-191,...
  * 01/23/01 fixed sleep_on_request to terminate when signal_pending
  * 01/25/01 added code for error recovery with PAC'0x1D' = long busy
+ * 02/08/01 fixed PL020237RMI
+ * 02/08/01 fixed PL020265TDI
  */
 
 #include <linux/module.h>
@@ -1213,7 +1215,7 @@ dasd_do_chanq (void)
                                         delta = cqr->expires - cqr->startclk;
                                         printk (KERN_ERR PRINTK_HEADER
                                                 " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-                                                " I/O operation outstanding longer than 0x%08x%08x usecs on req %p\n",
+                                                " I/O operation outstanding longer than 0x%08lx%08lx usecs on req %p\n",
                                                 devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, (long)(delta >> 44), (long)(delta >> 12), cqr);
                                         cqr->expires += delta;
 #if 0
@@ -1842,7 +1844,7 @@ dasd_format (dasd_device_t * device, format_data_t * fdata)
                 while ((!rc                                                               ) &&
                        ((req = device->discipline->format_device (device, &temp)) != NULL )   ) {
 
-                        if ( rc=sleep_on_req(req) ) {
+                        if ( (rc=sleep_on_req(req)) != 0 ) {
                                 printk (KERN_WARNING PRINTK_HEADER
                                         " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
                                         " Formatting failed with rc = %d\n",
@@ -2620,7 +2622,7 @@ dasd_set_device_level (unsigned int irq, int desired_level,
                                 if (major_info->blksize_size[minor + i] < 1024 )
                                         major_info->blksize_size[minor + i] = 1024;
                                 
-				major_info->max_sectors[minor + i] = 200 << device->sizes.s2b_shift;	/* FIXME !!! */
+				major_info->max_sectors[minor + i] = device->discipline->max_blocks << device->sizes.s2b_shift;	
 			}
 			atomic_compare_and_swap_debug (&device->level,
                                                        DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
@@ -3081,9 +3083,7 @@ dasd_init (void)
                         dasd_unregister_major(major_info);
                 }
         }
- emergency_failed:
         dasd_cleanup_emergency_req();
- failed:
         printk (KERN_INFO PRINTK_HEADER "initialization not performed due to errors\n");
  out:
         printk (KERN_INFO PRINTK_HEADER "initialization finished\n");

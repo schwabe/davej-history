@@ -1595,6 +1595,9 @@ static void __init do_basic_setup(void)
 	else mount_initrd =0;
 #endif
 
+	/* Start the event daemon thread */
+	start_context_thread();
+
 	/* Set up devices .. */
 	device_setup();
 
