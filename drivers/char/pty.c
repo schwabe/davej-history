@@ -121,6 +121,7 @@ static void pty_unthrottle(struct tty_struct * tty)
 	    o_tty->ldisc.write_wakeup)
 		(o_tty->ldisc.write_wakeup)(o_tty);
 	wake_up_interruptible(&o_tty->write_wait);
+	wake_up_interruptible(&o_tty->poll_wait);
 	set_bit(TTY_THROTTLED, &tty->flags);
 }
 
