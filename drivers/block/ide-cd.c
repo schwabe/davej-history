@@ -1827,6 +1827,20 @@ static int cdrom_select_speed(ide_drive_t *drive, int speed,
 	return cdrom_queue_packet_command(drive, &pc);
 }
 
+static int cdrom_play_audio(ide_drive_t *drive, int lba_start, int lba_end)
+{
+	struct request_sense sense;
+	struct packet_command pc;
+
+	memset(&pc, 0, sizeof (pc));
+	pc.sense = &sense;
+
+	pc.c[0] = GPCMD_PLAY_AUDIO_10;
+	put_unaligned(cpu_to_be32(lba_start), (unsigned int *) &pc.c[2]);
+	put_unaligned(cpu_to_be16(lba_end - lba_start), (unsigned int *) &pc.c[7]);
+
+	return cdrom_queue_packet_command(drive, &pc);
+}
 
 static int cdrom_get_toc_entry(ide_drive_t *drive, int track,
 				struct atapi_toc_entry **ent)
@@ -1932,6 +1946,34 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 	struct cdrom_info *info = drive->driver_data;
 
 	switch (cmd) {
+	/*
+	 * emulate PLAY_AUDIO_TI command with PLAY_AUDIO_10, since
+	 * atapi doesn't support it
+	 */
+	case CDROMPLAYTRKIND: {
+		int stat, lba_start, lba_end;
+		struct cdrom_ti *ti = (struct cdrom_ti *)arg;
+		struct atapi_toc_entry *first_toc, *last_toc;
+
+		stat = cdrom_get_toc_entry(drive, ti->cdti_trk0, &first_toc);
+		if (stat)
+			return stat;
+
+		stat = cdrom_get_toc_entry(drive, ti->cdti_trk1, &last_toc);
+		if (stat)
+			return stat;
+
+		if (ti->cdti_trk1 != CDROM_LEADOUT)
+			++last_toc;
+		lba_start = first_toc->addr.lba;
+		lba_end   = last_toc->addr.lba;
+
+		if (lba_end <= lba_start)
+			return -EINVAL;
+
+		return cdrom_play_audio(drive, lba_start, lba_end);
+	}
+
 	case CDROMREADTOCHDR: {
 		int stat;
 		struct cdrom_tochdr *tochdr = (struct cdrom_tochdr *) arg;
@@ -2275,7 +2317,7 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		CDROM_CONFIG_FLAGS (drive)->dvd_ram = 1;
 	if (cap.audio_play)
 		CDROM_CONFIG_FLAGS (drive)->audio_play = 1;
-	if (cap.mechtype == 0)
+	if (cap.mechtype == mechtype_caddy || cap.mechtype == mechtype_popup)
 		CDROM_CONFIG_FLAGS (drive)->close_tray = 0;
 
 #if ! STANDARD_ATAPI

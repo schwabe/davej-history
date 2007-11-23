@@ -828,6 +828,7 @@ layout_bus(struct pci_bus *bus)
 
 	for (dev = bus->devices; dev; dev = dev->sibling) {
 		if ((dev->class >> 16 != PCI_BASE_CLASS_BRIDGE) ||
+		    (dev->class >> 8 == PCI_CLASS_BRIDGE_OTHER) ||
 		    (dev->class >> 8 == PCI_CLASS_BRIDGE_PCMCIA)) {
 			disable_dev(dev);
 		}
@@ -840,6 +841,7 @@ layout_bus(struct pci_bus *bus)
 
 	for (dev = bus->devices; dev; dev = dev->sibling) {
 		if ((dev->class >> 16 != PCI_BASE_CLASS_BRIDGE) ||
+		    (dev->class >> 8 == PCI_CLASS_BRIDGE_OTHER) ||
 		    (dev->class >> 8 == PCI_CLASS_BRIDGE_PCMCIA)) {
 			layout_dev(dev);
 		}
@@ -1081,6 +1083,7 @@ common_pci_fixup(int (*map_irq)(struct pci_dev *dev, int slot, int pin),
 	 */
 	for (dev = pci_devices; dev; dev = dev->next) {
 		if ((dev->class >> 16 == PCI_BASE_CLASS_BRIDGE) &&
+		    (dev->class >> 8 != PCI_CLASS_BRIDGE_OTHER) &&
 		    (dev->class >> 8 != PCI_CLASS_BRIDGE_PCMCIA))
 			continue;
 

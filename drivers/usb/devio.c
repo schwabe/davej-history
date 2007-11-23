@@ -962,19 +962,22 @@ static int processcompl(struct async *as)
 		if (copy_to_user(as->userbuffer, as->urb.transfer_buffer, as->urb.transfer_buffer_length))
 			return -EFAULT;
 	if (put_user(as->urb.status,
-		     &((struct usbdevfs_urb *)as->userurb)->status) ||
-	    __put_user(as->urb.actual_length,
-		       &((struct usbdevfs_urb *)as->userurb)->actual_length) ||
-	    __put_user(as->urb.error_count,
-		       &((struct usbdevfs_urb *)as->userurb)->error_count))
+		     &((struct usbdevfs_urb *)as->userurb)->status))
+		return -EFAULT;
+	if (put_user(as->urb.actual_length,
+		     &((struct usbdevfs_urb *)as->userurb)->actual_length))
+		return -EFAULT;
+	if (put_user(as->urb.error_count,
+		     &((struct usbdevfs_urb *)as->userurb)->error_count))
 		return -EFAULT;
 	if (!(usb_pipeisoc(as->urb.pipe)))
 		return 0;
 	for (i = 0; i < as->urb.number_of_packets; i++) {
 		if (put_user(as->urb.iso_frame_desc[i].actual_length, 
-			     &((struct usbdevfs_urb *)as->userurb)->iso_frame_desc[i].actual_length) ||
-		    __put_user(as->urb.iso_frame_desc[i].status, 
-			       &((struct usbdevfs_urb *)as->userurb)->iso_frame_desc[i].status))
+			     &((struct usbdevfs_urb *)as->userurb)->iso_frame_desc[i].actual_length))
+			return -EFAULT;
+		if (put_user(as->urb.iso_frame_desc[i].status, 
+			     &((struct usbdevfs_urb *)as->userurb)->iso_frame_desc[i].status))
 			return -EFAULT;
 	}
 	return 0;

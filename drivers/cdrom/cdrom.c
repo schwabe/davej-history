@@ -1604,7 +1604,7 @@ static int cdrom_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 			return -EDRIVE_CANT_DO_THIS;
 		keeplocked = arg ? 1 : 0;
 		/* don't unlock the door on multiple opens */
-		if ((cdi->use_count != 1) && !arg)
+		if ((cdi->use_count != 1) && !arg && !capable(CAP_SYS_ADMIN))
 			return -EBUSY;
 		return cdo->lock_door(cdi, arg);
 		}
@@ -1965,19 +1965,6 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		IOCTL_OUT(arg, struct cdrom_subchnl, q);
 		/* cdinfo(CD_DO_IOCTL, "CDROMSUBCHNL successful\n"); */ 
 		return 0;
-		}
-	case CDROMPLAYTRKIND: {
-		struct cdrom_ti ti;
-
-		cdinfo(CD_DO_IOCTL, "entering CDROMPLAYTRKIND\n");
-		IOCTL_IN(arg, struct cdrom_ti, ti);
-
-		cgc.cmd[0] = GPCMD_PLAY_AUDIO_TI;
-		cgc.cmd[4] = ti.cdti_trk0;
-		cgc.cmd[5] = ti.cdti_ind0;
-		cgc.cmd[7] = ti.cdti_trk1;
-		cgc.cmd[8] = ti.cdti_ind1;
-		return cdo->generic_packet(cdi, &cgc);
 		}
 	case CDROMPLAYMSF: {
 		struct cdrom_msf msf;

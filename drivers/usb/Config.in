@@ -83,7 +83,9 @@ comment 'USB HID'
    fi
    dep_tristate '  Wacom Intuos/Graphire tablet support' CONFIG_USB_WACOM $CONFIG_USB
    dep_tristate '  Logitech WingMan Force joystick support' CONFIG_USB_WMFORCE $CONFIG_USB
-   dep_tristate '  Keyboard support' CONFIG_INPUT_KEYBDEV $CONFIG_USB
+   if [ "$CONFIG_VT" = "y" ]; then
+      dep_tristate '  Keyboard support' CONFIG_INPUT_KEYBDEV $CONFIG_USB 
+   fi
    dep_tristate '  Mouse support' CONFIG_INPUT_MOUSEDEV $CONFIG_USB
    if [ "$CONFIG_INPUT_MOUSEDEV" != "n" ]; then
       int '   Horizontal screen resolution' CONFIG_INPUT_MOUSEDEV_SCREEN_X 1024

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.107.2.12 2000/09/02 01:59:51 davem Exp $
+/* $Id: sys_sparc32.c,v 1.107.2.13 2000/09/14 10:39:24 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -1380,7 +1380,7 @@ struct ncp_mount_data32 {
 
 static void *do_ncp_super_data_conv(void *raw_data)
 {
-	struct ncp_mount_data *n = (struct ncp_mount_data *)raw_data;
+	struct ncp_mount_data news, *n = &news; 
 	struct ncp_mount_data32 *n32 = (struct ncp_mount_data32 *)raw_data;
 
 	n->dir_mode = n32->dir_mode;
@@ -1390,6 +1390,7 @@ static void *do_ncp_super_data_conv(void *raw_data)
 	memmove (n->mounted_vol, n32->mounted_vol, (sizeof (n32->mounted_vol) + 3 * sizeof (unsigned int)));
 	n->wdog_pid = n32->wdog_pid;
 	n->mounted_uid = n32->mounted_uid;
+	memcpy(raw_data, n, sizeof(struct ncp_mount_data)); 
 	return raw_data;
 }
 
@@ -1404,7 +1405,7 @@ struct smb_mount_data32 {
 
 static void *do_smb_super_data_conv(void *raw_data)
 {
-	struct smb_mount_data *s = (struct smb_mount_data *)raw_data;
+	struct smb_mount_data news, *s = &news;
 	struct smb_mount_data32 *s32 = (struct smb_mount_data32 *)raw_data;
 
 	s->version = s32->version;
@@ -1413,6 +1414,7 @@ static void *do_smb_super_data_conv(void *raw_data)
 	s->gid = s32->gid;
 	s->file_mode = s32->file_mode;
 	s->dir_mode = s32->dir_mode;
+	memcpy(raw_data, s, sizeof(struct smb_mount_data)); 
 	return raw_data;
 }
 

@@ -32,7 +32,7 @@ SECTIONS
   .setup.init : { *(.setup.init) }
   __setup_end = .;
 
-  . = ALIGN(8)
+  . = ALIGN(8);
   __initcall_start = .;		/* the init functions to be called */
   .initcall.init : { *(.initcall.init) }
   __initcall_end = .;

@@ -171,9 +171,7 @@ if (debug >= level) info("[" __PRETTY_FUNCTION__ ":%d] " fmt, __LINE__ , ## args
 #define OV7610_REG_COM_K         0x38	/* misc registers */
 
 
-#define STREAM_BUF_SIZE	(PAGE_SIZE * 4)
-
-#define SCRATCH_BUF_SIZE 384
+#define SCRATCH_BUF_SIZE 512
 
 #define FRAMES_PER_DESC		10	/* FIXME - What should this be? */
 #define FRAME_SIZE_PER_DESC	993	/* FIXME - Deprecated */
@@ -185,6 +183,9 @@ if (debug >= level) info("[" __PRETTY_FUNCTION__ ":%d] " fmt, __LINE__ , ## args
 // FIXME - these can vary between specific models
 #define OV7610_I2C_WRITE_ID 0x42
 #define OV7610_I2C_READ_ID  0x43
+#define OV6xx0_I2C_WRITE_ID 0xC0
+#define OV6xx0_I2C_READ_ID  0xC1
+
 #define OV511_I2C_CLOCK_PRESCALER 0x03
 
 /* Prototypes */
@@ -205,12 +206,20 @@ enum {
 	SEN_OV7610,
 	SEN_OV7620,
 	SEN_OV7620AE,
+	SEN_OV6620,
 };
 
 enum {
 	STATE_SCANNING,		/* Scanning for start */
 	STATE_HEADER,		/* Parsing header */
 	STATE_LINES,		/* Parsing lines */
+};
+
+/* Buffer states */
+enum {
+	BUF_NOT_ALLOCATED,
+	BUF_ALLOCATED,
+	BUF_PEND_DEALLOC,	/* ov511->buf_timer is set */
 };
 
 struct usb_device;
@@ -249,7 +258,7 @@ struct ov511_frame {
 	int hdrheight;		/* Height */
 
 	int sub_flag;		/* Sub-capture mode for this frame? */
-	int format;		/* Format for this frame */
+	unsigned int format;	/* Format for this frame */
 	int segsize;		/* How big is each segment from the camera? */
 
 	volatile int grabstate;	/* State of grabbing */
@@ -279,6 +288,10 @@ struct usb_ov511 {
 	int customid;
 	int desc;
 	unsigned char iface;
+
+	/* Determined by sensor type */
+	int maxwidth;
+	int maxheight;
 
 	int brightness;
 	int colour;
@@ -324,6 +337,11 @@ struct usb_ov511 {
 				/* proc interface */
 	struct semaphore param_lock;	/* params lock for this camera */
 	struct proc_dir_entry *proc_entry;	/* /proc/ov511/videoX */
+	
+	/* Framebuffer/sbuf management */
+	int buf_state;
+	struct semaphore buf_lock;
+	struct timer_list buf_timer;
 };
 
 struct cam_list {
@@ -346,7 +364,6 @@ struct mode_list {
 	u8 lndv;		/* line divisor */
 	u8 m420;
 	u8 common_A;
-	u8 common_C;
 	u8 common_L;
 };
 

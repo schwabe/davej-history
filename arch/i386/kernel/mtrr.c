@@ -442,10 +442,10 @@ static unsigned int get_num_var_ranges (void)
 	/*  Cyrix have 8 ARRs  */
       case X86_VENDOR_CENTAUR:
         /*  and Centaur has 8 MCR's  */
-	if(boot_cpu.x86==5)
+	if(boot_cpu_data.x86==5)
 		return 8;
 	/*  the cyrix III has intel compatible MTRR */
-	if(boot_cpu.x86==6)
+	if(boot_cpu_data.x86==6)
 	{
 		rdmsr (MTRRcap_MSR, config, dummy);
 		return (config & 0xff);
@@ -474,7 +474,6 @@ static int have_wrcomb (void)
 	return (config & (1<<10));
 	/*break;*/
       case X86_VENDOR_CYRIX:
-      case X86_VENDOR_CENTAUR:
 	return 1;
 	/*break;*/
     }
