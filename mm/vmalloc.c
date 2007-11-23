@@ -143,10 +143,8 @@ static inline int alloc_area_pmd(pmd_t * pmd, unsigned long address, unsigned lo
 		pte_t * pte = pte_alloc_kernel(pmd, address);
 		if (!pte)
 			return -ENOMEM;
-		if (alloc_area_pte(pte, address, end - address)) {
-			pte_free_kernel(pte);
+		if (alloc_area_pte(pte, address, end - address))
 			return -ENOMEM;
-		}
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	}
@@ -164,10 +162,8 @@ static int alloc_area_pages(unsigned long address, unsigned long size)
 		pmd_t *pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)
 			return -ENOMEM;
-		if (alloc_area_pmd(pmd, address, end - address)) {
-			pmd_free_kernel(pmd);
+		if (alloc_area_pmd(pmd, address, end - address))
 			return -ENOMEM;
-		}
 		set_pgdir(address, *dir);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
@@ -228,10 +224,8 @@ static int remap_area_pages(unsigned long address, unsigned long offset, unsigne
 		pmd_t *pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)
 			return -ENOMEM;
-		if (remap_area_pmd(pmd, address, end - address, offset + address)) {
-			pmd_free_kernel(pmd);
+		if (remap_area_pmd(pmd, address, end - address, offset + address))
 			return -ENOMEM;
-		}
 		set_pgdir(address, *dir);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;

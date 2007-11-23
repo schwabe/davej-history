@@ -83,6 +83,10 @@ extern int hydra_probe(struct device *);
 extern int yellowfin_probe(struct device *);
 extern int epic100_probe(struct device *);
 extern int rtl8139_probe(struct device *);
+extern int tlan_probe(struct device *);
+extern int isa515_probe(struct device *);
+extern int pcnet32_probe(struct device *);
+extern int lance_probe(struct device *);
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
 extern int de600_probe(struct device *);
@@ -231,6 +235,18 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_SUNLANCE
 	&& sparc_lance_probe(dev)
+#endif
+#ifdef CONFIG_TLAN
+	&& tlan_probe(dev)
+#endif
+#ifdef CONFIG_LANCE32
+	&& pcnet32_probe(dev)
+#endif
+#ifdef CONFIG_CORKSCREW
+	&& isa515_probe(dev)
+#endif
+#ifdef CONFIG_LANCE
+	&& lance_probe(dev)
 #endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */

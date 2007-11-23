@@ -355,6 +355,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_TLAN),y)
+L_OBJS += tlan.o
+else
+  ifeq ($(CONFIG_TLAN),m)
+  M_OBJS += tlan.o
+  endif
+endif
+
 ifeq ($(CONFIG_ZNET),y)
 L_OBJS += znet.o
 endif

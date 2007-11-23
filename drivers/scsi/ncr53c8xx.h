@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 2.4a"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 2.5f"
 
 /*
 **	Check supported Linux versions
@@ -125,7 +125,7 @@
  * For Ultra2 SCSI support option, use special features and allow 40Mhz 
  * synchronous data transfers.
  */
-#define	SCSI_NCR_SETUP_SPECIAL_FEATURES		(1)
+#define	SCSI_NCR_SETUP_SPECIAL_FEATURES		(3)
 #define SCSI_NCR_SETUP_ULTRA_SCSI		(2)
 #define SCSI_NCR_MAX_SYNC			(40)
 
@@ -155,9 +155,11 @@
 #endif
 
 /*
- * Use normal IO if configured. Forced for alpha.
+ * Use normal IO if configured. Forced for alpha and ppc.
  */
-#if defined(CONFIG_SCSI_NCR53C8XX_IOMAPPED) || defined(__alpha__)
+#if defined(CONFIG_SCSI_NCR53C8XX_IOMAPPED)
+#define	SCSI_NCR_IOMAPPED
+#elif defined(__alpha__) || defined(__powerpc__)
 #define	SCSI_NCR_IOMAPPED
 #endif
 
@@ -288,32 +290,88 @@ int ncr53c8xx_release(struct Scsi_Host *);
 #define ncr53c8xx_release NULL
 #endif
 
-#if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
+#if	LINUX_VERSION_CODE >= LinuxVersionCode(2,1,75)
 
-#define NCR53C8XX {NULL,NULL,NULL,NULL,SCSI_NCR_DRIVER_NAME, ncr53c8xx_detect,\
-    	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
-	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
-        NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\
-	/* id */ 7, SCSI_NCR_SG_TABLESIZE /* SG */, /* cmd per lun */ SCSI_NCR_CMD_PER_LUN, 		\
-        /* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
+#define NCR53C8XX {     name:           SCSI_NCR_DRIVER_NAME,	\
+			detect:         ncr53c8xx_detect,	\
+			release:        ncr53c8xx_release,	\
+			queuecommand:   ncr53c8xx_queue_command,\
+			abort:          ncr53c8xx_abort,	\
+			reset:          ncr53c8xx_reset,	\
+			bios_param:     scsicam_bios_param,	\
+			can_queue:      SCSI_NCR_CAN_QUEUE,	\
+			this_id:        7,			\
+			sg_tablesize:   SCSI_NCR_SG_TABLESIZE,	\
+			cmd_per_lun:    SCSI_NCR_CMD_PER_LUN,	\
+			use_clustering: DISABLE_CLUSTERING} 
+  
+#elif	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
 
+#define NCR53C8XX {	NULL, NULL, NULL, NULL,				\
+			SCSI_NCR_DRIVER_NAME,	ncr53c8xx_detect,	\
+    			ncr53c8xx_release,	NULL,	NULL,		\
+			ncr53c8xx_queue_command,ncr53c8xx_abort,	\
+			ncr53c8xx_reset, NULL,	scsicam_bios_param,	\
+			SCSI_NCR_CAN_QUEUE,	7,			\
+			SCSI_NCR_SG_TABLESIZE,	SCSI_NCR_CMD_PER_LUN,	\
+			0,	0,	DISABLE_CLUSTERING} 
 
 #else
 
+#define NCR53C8XX {	NULL, NULL,					\
+			SCSI_NCR_DRIVER_NAME,	ncr53c8xx_detect,	\
+			ncr53c8xx_release,	NULL, 	NULL, 		\
+			ncr53c8xx_queue_command,ncr53c8xx_abort,	\
+			ncr53c8xx_reset, NULL,	scsicam_bios_param,	\
+			SCSI_NCR_CAN_QUEUE,	7,			\
+			SCSI_NCR_SG_TABLESIZE,	SCSI_NCR_CMD_PER_LUN,	\
+			0,	0,	DISABLE_CLUSTERING} 
 
-#define NCR53C8XX {NULL, NULL, SCSI_NCR_DRIVER_NAME, ncr53c8xx_detect,\
-    	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
-	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
-        NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\
-	/* id */ 7, SCSI_NCR_SG_TABLESIZE /* SG */, /* cmd per lun */ SCSI_NCR_CMD_PER_LUN, 		\
-        /* present */ 0, /* unchecked isa dma */ 0, DISABLE_CLUSTERING} 
-
-#endif /* LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0) */
+#endif /* LINUX_VERSION_CODE */
 
 #endif /* defined(HOSTS_C) || defined(MODULE) */ 
 
 
 #ifndef HOSTS_C
+
+/*
+**	IO functions definition for big/little endian support.
+**	For now, the NCR is only supported in little endian addressing mode, 
+**	and big endian byte ordering is only supported for the PPC.
+**	MMIO is not used on PPC.
+*/
+
+#ifdef	__BIG_ENDIAN
+
+#if	LINUX_VERSION_CODE < LinuxVersionCode(2,1,0)
+#error	"BIG ENDIAN byte ordering needs kernel version >= 2.1.0"
+#endif
+
+#ifdef	__powerpc__
+#define	inw_l2b		inw
+#define	inl_l2b		inl
+#define	outw_b2l	outw
+#define	outl_b2l	outl
+#else
+#error	"Support for BIG ENDIAN is only available for the PowerPC"
+#endif
+
+#else	/* Assumed x86 or alpha */
+
+#define	inw_raw		inw
+#define	inl_raw		inl
+#define	outw_raw	outw
+#define	outl_raw	outl
+#define	readw_raw	readw
+#define	readl_raw	readl
+#define	writew_raw	writew
+#define	writel_raw	writel
+
+#endif
+
+#ifdef	SCSI_NCR_BIG_ENDIAN
+#error	"The NCR in BIG ENDIAN adressing mode is not (yet) supported"
+#endif
 
 /*
 **	NCR53C8XX Device Ids
@@ -395,6 +453,19 @@ typedef struct {
 #define FE_SPECIAL_SET	(FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM)
 } ncr_chip;
 
+/*
+**	DEL 397 - 53C875 Rev 3 - Part Number 609-0392410 - ITEM 3.
+**	Memory Read transaction terminated by a retry followed by 
+**	Memory Read Line command.
+*/
+#define FE_CACHE0_SET	(FE_CACHE_SET & ~FE_ERL)
+
+/*
+**	DEL 397 - 53C875 Rev 3 - Part Number 609-0392410 - ITEM 5.
+**	On paper, this errata is harmless. But it is a good reason for 
+**	using a shorter programmed burst length (64 DWORDS instead of 128).
+*/
+
 #define SCSI_NCR_CHIP_TABLE						\
 {									\
  {PCI_DEVICE_ID_NCR_53C810, 0x0f, "810",  4,  8, 4,			\
@@ -412,23 +483,23 @@ typedef struct {
  {PCI_DEVICE_ID_NCR_53C825, 0x0f, "825",  4,  8, 4,			\
  FE_WIDE|FE_ERL|FE_BOF}							\
  ,									\
- {PCI_DEVICE_ID_NCR_53C825, 0xff, "825a", 7,  8, 4,			\
- FE_WIDE|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}		\
+ {PCI_DEVICE_ID_NCR_53C825, 0xff, "825a", 6,  8, 4,			\
+ FE_WIDE|FE_CACHE0_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}		\
  ,									\
  {PCI_DEVICE_ID_NCR_53C860, 0xff, "860",  4,  8, 5,			\
  FE_ULTRA|FE_CLK80|FE_CACHE_SET|FE_BOF|FE_LDSTR|FE_PFEN}		\
  ,									\
- {PCI_DEVICE_ID_NCR_53C875, 0x01, "875",  7, 16, 5,			\
- FE_WIDE|FE_ULTRA|FE_CLK80|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
+ {PCI_DEVICE_ID_NCR_53C875, 0x01, "875",  6, 16, 5,			\
+ FE_WIDE|FE_ULTRA|FE_CLK80|FE_CACHE0_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
  ,									\
- {PCI_DEVICE_ID_NCR_53C875, 0xff, "875",  7, 16, 5,			\
- FE_WIDE|FE_ULTRA|FE_DBLR|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
+ {PCI_DEVICE_ID_NCR_53C875, 0xff, "875",  6, 16, 5,			\
+ FE_WIDE|FE_ULTRA|FE_DBLR|FE_CACHE0_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
  ,									\
- {PCI_DEVICE_ID_NCR_53C875J, 0xff, "875J",  7, 16, 5,			\
- FE_WIDE|FE_ULTRA|FE_DBLR|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
+ {PCI_DEVICE_ID_NCR_53C875J,0xff, "875J", 6, 16, 5,			\
+ FE_WIDE|FE_ULTRA|FE_DBLR|FE_CACHE0_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
  ,									\
- {PCI_DEVICE_ID_NCR_53C885, 0xff, "885",  7, 16, 5,			\
- FE_WIDE|FE_ULTRA|FE_DBLR|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
+ {PCI_DEVICE_ID_NCR_53C885, 0xff, "885",  6, 16, 5,			\
+ FE_WIDE|FE_ULTRA|FE_DBLR|FE_CACHE0_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
  ,									\
  {PCI_DEVICE_ID_NCR_53C895, 0xff, "895",  7, 31, 7,			\
  FE_WIDE|FE_ULTRA2|FE_QUAD|FE_CACHE_SET|FE_BOF|FE_DFS|FE_LDSTR|FE_PFEN|FE_RAM}\
@@ -478,7 +549,8 @@ typedef struct {
 	1,					\
 	SCSI_NCR_SETUP_SETTLE_TIME,		\
 	SCSI_NCR_SETUP_DIFF_SUPPORT,		\
-	0					\
+	0,					\
+	1					\
 }
 
 /*
@@ -505,6 +577,7 @@ typedef struct {
 	0,					\
 	0,					\
 	10,					\
+	1,					\
 	1,					\
 	1					\
 }

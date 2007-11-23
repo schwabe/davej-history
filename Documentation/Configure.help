@@ -2751,6 +2751,14 @@ CONFIG_ETH16I
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
+TI ThunderLAN support (EXPERIMENTAL)
+CONFIG_TLAN
+  If you have a TLAN based network card which is supported by this
+  driver, say Y and read the Ethernet-HOWTO.  Devices currently supported
+  are the Compaq Netelligent 10, Netelligent 10/100, and Internal
+  NetFlex 3.  This driver is also available as a module.  Please email
+  feedback to james.banks@caldera.com.
+
 Zenith Z-Note support
 CONFIG_ZNET
   The Zenith Z-Note notebook computer has a built-in network

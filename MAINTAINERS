@@ -98,6 +98,12 @@ M:	phil@tazenda.demon.co.uk
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
+TLAN NETWORK DRIVER
+P:	James Banks
+M:	james.banks@caldera.com
+L:	linux-net@vger.rutgers.edu
+S:	Supported
+
 DIGI RIGHTSWITCH NETWORK DRIVER
 P:	Rick Richardson
 M:	rick@dgii.com

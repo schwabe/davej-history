@@ -1529,9 +1529,6 @@ int net_dev_init(void)
 	 *
 	 * Some devices want to be initialized early..
 	 */
-#if defined(CONFIG_LANCE)
-	lance_init();
-#endif
 #if defined(CONFIG_PI)
 	pi_init();
 #endif	

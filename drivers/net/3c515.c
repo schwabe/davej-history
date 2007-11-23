@@ -408,7 +408,7 @@ init_module(void)
 }
 
 #else
-int tc59x_probe(struct device *dev)
+int isa515_probe(struct device *dev)
 {
 	int cards_found = 0;
 

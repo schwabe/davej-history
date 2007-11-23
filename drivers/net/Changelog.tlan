@@ -1,0 +1,133 @@
+TLan Device Driver change log.
+
+0.42	- Coverted tranceiver from misused per-tranceiver functions
+	  to a timer-oriented path that covers four possible classes
+	  of tranceivers:
+		1. Unmanaged
+		2. Manual configuration
+		3. Autonegotiation w/ manual configuration
+		4. Autonegotiation w/ auto configuration
+	- Added ability to force speed and duplex settings.
+	- Made speed, duplex, sa_int, etc, to be set per adapter with
+	  ether= command.
+	- Added support for Olicom OC-2326
+
+0.41	- Added non-bounce buffer paths.  Added TLan_FreeLists to
+	  dispose of unused sk_buff's at device close time.
+	- Discovered inlined functions aren't being inlined, or at
+	  least take up more space than macros would.
+
+0.40	- Refined polarity checking to handle case when polarity
+	  changes to normal from abnormal.
+	- Cleaned up TLan_Probe routine.
+	- Added an option for the SA_INTERRUPT flag to be set.
+	- Created FAQ.
+	- Removed all C++ style comments.
+	- Added error message if devices busmastering is inactive.
+	  Also will now skip device.
+	- Put cli and sti back into TLan_HandleInterrupt.  It makes
+	  me feel better.
+	- Moved the code that checks for boot parameter options to 
+	  tlan_probe.
+
+0.39	- Minor cosmetic cleanups (especially variable declarations).
+	- Changes low level TLAN functions to use dev structures instead
+	  individual data elements.
+        - Changed low level TLAN functions not to play with sti and cli
+	  if in an interrupt routine.
+	- Removed cli and sti from TLan_HandleInterrupt.
+
+0.38	- Added code to isolate the external PHY if the internal PHY is
+	  being used for AUI/BNC connectivity.  Also set the aui and
+	  debug variables from mem_start and mem_end if the driver is
+	  built into the kernel.
+
+0.37	- Added TLAN_PHY_ACTIVITY flag for Unmanaged PHY.
+        - If aui is selected and the card is not a 0xF130 (unmanaged phy),
+	  select the builtin PHY and put it in AUI mode.  I don't know if
+	  this will work, but it is my best guess as to how AUI/BNC
+	  functionality is being provided for the external managed PHYs,
+	  which don't support AUI/BNC.
+	- If aui is set and the card is a 0xF130, set the MTXD1 bit in
+	  the ACOMMIT register, to select AUI mode on the unmanaged PHY.
+	  I don't know if this is necessary.
+
+0.36	- Changed AN_ADV register to not advertise full duplex modes.
+	  100Mbs should work now on 0xAE32.
+	- Fixed a small bug where heartbeat and PHY interrupts were
+	  always being enabled.
+	- Force the the driver into Unmanaged PHY mode for 0xF130 devices,
+	  even if a managed (ie, the built-in one) PHY is detected.
+	- Moved the PHY initialization to after the onboard PHY is enabled,
+	  if selected.
+
+0.35	- Added entry for Level One LXT970 PHY.
+	- Commented out instruction to set phyOnline to 1 in DP Check.
+
+0.34	- Revised Reset routine.
+	- Added support for 0xF130 device.
+	- Added entry for NS DP83840A Rev 0 PHY.
+
+0.33	- Major Reformatting of comments to fit in 80 columns.
+	- Changed tabs to 8 spaces, reformatted accordingly.
+	- Added code to check and change polarity.
+	- Added caveats to README.
+	- Small fix to Makefile to make unversioned modules correctly.
+	- Redid PhySelect to list all phy ids then choose one.
+
+0.32	- Put in another change for BNC stuff that I mistakenly
+	  omitted in 0.31.
+
+0.31	- Completed BNC changes (at least one person had it working).
+	- Added another device id.
+	- Changed debugging messages to hopefully be more useful.
+
+0.30	- Added PCI device IDs provided by Don Dupuis of Compaq.
+	- Turned of MINTEN when using 10/100 PHY.
+	- Added ability to select AUI at insmod time.  What will this do
+	  for BNC, if anything?
+	- Tweaked with names.  
+
+0.29	Fixed problem with older TLAN chips (pre-PG3.0 didn't have
+	EOC bit in lists nor INTDIS register).  Added support for NetFlex
+	card.
+
+0.28	Changed a lot of commented out printfs to debugging statements.
+	Added detail to product names.  Added 2nd reset to open command.
+	Don't know why, just have to, at least for Netelligent 10 card.
+
+0.27	Created a tlan_probe function for compiled-in-kernel use.
+	Also added debugging macro, which could be reviewed.  Is there
+	a kernel variable which stores desired verbosity/debug level?
+
+0.26	Change Invalid interrupt handler to return 0, not print out debug
+	message.  This was causing lots of messages to be printed out with
+	shared interrupts.
+
+0.25
+	Added IDs for integrated NetFlex-3 controller.  Not sure if it is even
+	TLAN yet, but we'll see.
+
+0.24
+	Increased second delay in internal PHY check routine, as driver wasn't
+	starting on the first insmod.
+
+0.23
+	Added documentation to function preambles.
+	Removed some commented out printk's.
+	Tested Rx and Tx busy frequency with current queue sizes (no busies).
+
+0.22
+	Cleared tbusy flag at adapter check.
+	Removed some commented out printk's.
+	Added TLan_SetMulticastList routine.
+
+0.21
+	Got all virt_to_bus calls in place for 2.1 kernels.
+
+0.20
+	Rewrote buffer/list subsystem to use bounce buffers as DMA
+	  doesn't work over 16 Meg.  Why?  This is PCI not ISA.
+	Fixed a problem with buffers stalling due to a race condition
+	  in the kernel.
+

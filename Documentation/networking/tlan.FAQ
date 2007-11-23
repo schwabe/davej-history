@@ -1,0 +1,28 @@
+1.	Q. Ifconfig reports "10Mbs Ethernet" for my 10/100Mbs card.  How do
+	   I get my card to run in 100Mbs mode?
+
+	A. The "10Mbs Ethernet" is poorly named.  What this is really saying
+	   is that this device is some kind of Ethernet device (ie, uses
+	   ethernet style frames at the link layer).  Recent versions of
+	   ifconfig report this as simply "Ethernet".
+
+	   The TLAN driver is designed to autodetect 10Mbs vs. 100Mbs
+	   connections, and choose the higher speed.  The most sure way
+	   to determine what speed you are running at is to look at the
+	   100Mbs LED on the card, if your device has one.
+
+
+2.	Q. My network card is using the same interrupt as my SCSI card.
+
+	A. Some Compaqs set all PCI devices to the same interrupt by default.
+	   You can either change the interrupt used by one of the device
+	   with your Compaq configuration utility, or you can have the TLAN
+	   driver use the same type of interrupt handler:
+
+	   a. For module based use, add 'sa_int=1' to the command line, eg.:
+		insmod tlan.o sa_int=1
+
+	   b. For compiled in kernel, set the 0x2 bit in the third part
+	      for the boot parameter for that device, eg.:
+		ether=0,0,0x2,0,eth0
+

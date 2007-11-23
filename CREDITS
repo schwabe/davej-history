@@ -35,6 +35,15 @@ S: 4390 Albany Dr. #46
 S: San Jose, California 95129
 S: USA
 
+N: Andrea Arcangeli
+E: arcangeli@mbox.queen.it
+W: http://www.cs.unibo.it/~arcangel/
+P: 1024/CB4660B9 CC A0 71 81 F4 A0 63 AC  C0 4B 81 1D 8C 15 C8 E5
+D: Fixed a 2.0.33 mm bug that corrupts memory in linux/mm/vmalloc.c
+S: Via Ciaclini 26
+S: Imola 40026
+S: Italy
+
 N: Derek Atkins
 E: warlord@MIT.EDU
 D: Linux-AFS Port, random kernel hacker,
@@ -79,6 +88,14 @@ D: Contributed ESDI driver routines needed to port LINUX to the PS/2 MCA.
 S: Department of Computer Science & Eng.
 S: University of Notre Dame
 S: Notre Dame, Indiana
+S: USA
+
+N: James Banks
+E: james.banks@caldera.com
+D: TLAN network driver
+S: Caldera, Inc.
+S: 633 South 550 East
+S: Provo, UT 84606
 S: USA
 
 N: Peter Bauer

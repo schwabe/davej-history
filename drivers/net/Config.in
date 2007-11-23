@@ -103,6 +103,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate 'RTL 8139 support' CONFIG_RTL8139
     tristate 'SMC EtherPower II support' CONFIG_SMC_EPIC
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate 'TI ThunderLAN support (EXPERIMENTAL)' CONFIG_TLAN
       bool 'Zenith Z-Note support (EXPERIMENTAL)' CONFIG_ZNET
     fi
   fi
