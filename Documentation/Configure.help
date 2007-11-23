@@ -10084,6 +10084,12 @@ CONFIG_SOUND_NM256
 
   See Documentation/sound/NM256 for further information.
 
+ESS Maestro sound chipsets
+CONFIG_SOUND_MAESTRO
+  Say Y or M if you have a sound system driven by ESS's Maestro line
+  of PCI sound chips.  These include the Maestro 1, Maestro 2, and
+  Maestro 2E.  See Documentation/sound/Maestro for more details.
+
 Are you using a crosscompiler
 CONFIG_CROSSCOMPILE
   Say Y here if you are compiling the kernel on a different

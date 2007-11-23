@@ -855,12 +855,12 @@ static int probe_one_port(unsigned long int base,
 static int parport_pc_init_pci (int irq, int dma)
 {
 	struct {
-		unsigned int vendor;
-		unsigned int device;
-		unsigned int numports;
+		unsigned short vendor;
+		unsigned short device;
+		int numports;
 		struct {
-			unsigned long lo;
-			unsigned long hi; /* -ve if not there */
+			int lo;
+			int hi; /* -ve if not there */
 		} addr[4];
 	} cards[] = {
 		{ PCI_VENDOR_ID_SIIG, PCI_DEVICE_ID_SIIG_1S1P_10x_550, 1,
@@ -924,8 +924,8 @@ static int parport_pc_init_pci (int irq, int dma)
 						  pcidev)) != NULL) {
 			int n;
 			for (n = 0; n < cards[i].numports; n++) {
-				unsigned long lo = cards[i].addr[n].lo;
-				unsigned long hi = cards[i].addr[n].hi;
+				int lo = cards[i].addr[n].lo;
+				int hi = cards[i].addr[n].hi;
 				unsigned long io_lo, io_hi;
 				io_lo = pcidev->base_address[lo];
 				io_hi = ((hi < 0) ? 0 :

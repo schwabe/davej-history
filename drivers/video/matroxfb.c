@@ -63,6 +63,9 @@
  *               "Mark Vojkovich" <mvojkovi@ucsd.edu>
  *                     G400 support
  *
+ *               "Samuel Hocevar" <sam@via.ecp.fr>
+ *                     Fixes
+ *
  * (following author is not in any relation with this code, but his code
  *  is included in this driver)
  *
@@ -5022,7 +5025,7 @@ static struct { int xres, yres, left, right, upper, lower, hslen, vslen, vfreq; 
 static struct { struct fb_bitfield red, green, blue, transp; int bits_per_pixel; } colors[] __initdata = {
 	{ {  0, 8, 0}, { 0, 8, 0}, { 0, 8, 0}, {  0, 0, 0},  8 },
 	{ { 10, 5, 0}, { 5, 5, 0}, { 0, 5, 0}, { 15, 1, 0}, 16 },
-	{ { 11, 5, 0}, { 6, 5, 0}, { 0, 5, 0}, {  0, 0, 0}, 16 },
+	{ { 11, 5, 0}, { 5, 6, 0}, { 0, 5, 0}, {  0, 0, 0}, 16 },
 	{ { 16, 8, 0}, { 8, 8, 0}, { 0, 8, 0}, { 24, 8, 0}, 32 },
 	{ {  0, 8, 0}, { 0, 8, 0}, { 0, 8, 0}, {  0, 0, 0},  4 },
 	{ { 16, 8, 0}, { 8, 8, 0}, { 0, 8, 0}, {  0, 0, 0}, 24 },

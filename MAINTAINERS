@@ -501,6 +501,12 @@ M:    linux.LVM@ez-darmstadt.telekom.de
 W:    http://linux.msede.com/lvm
 S:    Maintained
 
+MAESTRO PCI SOUND DRIVER
+P:	Zach Brown
+M:	zab@redhat.com
+W:	http://people.redhat.com/zab/maestro/
+S:	Supported
+
 M68K
 P:	Jes Sorensen
 M:	Jes.Sorensen@cern.ch

@@ -523,7 +523,7 @@ static void ixj_timeout(unsigned long ptr)
 			}
 			if (!j->flags.ringing) {
 				if (ixj_hookstate(board)) {
-					if (j->dsp.low == 0x21 &&
+					if ((j->dsp.low == 0x21 || j->dsp.low == 0x22 )&&
 					    j->pld_slicr.bits.state != PLD_SLIC_STATE_ACTIVE)
                // Internet LineJACK
 					{
@@ -539,7 +539,7 @@ static void ixj_timeout(unsigned long ptr)
 							kill_fasync(j->async_queue, SIGIO);	// Send apps notice of change
 					}
 				} else {
-					if (j->dsp.low == 0x21 &&
+					if ((j->dsp.low == 0x21 || j->dsp.low == 0x22) &&
 					    j->pld_slicr.bits.state == PLD_SLIC_STATE_ACTIVE)
                // Internet LineJACK
 					{
