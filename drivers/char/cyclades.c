@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.1.1.9 $$Date: 1998/09/02 14:47:01 $";
+"$Revision: 2.1.1.10 $$Date: 1998/11/12 16:08:23 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,6 +31,10 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision: 2.1.1.10  1998/11/12 16:08:23 ivan
+ * cy_close function now resets (correctly) the tty->closing flag;
+ * JIFFIES_DIFF macro fixed.
+ *
  * Revision 2.1.1.9  1998/09/02 14:47:01 ivan
  * Fixed bug in cy_close function, which was not informing HW of
  * which port should have the reception disabled before doing so;
@@ -611,7 +615,7 @@ static char rcsid[] =
 #define SERIAL_TYPE_NORMAL  1
 #define SERIAL_TYPE_CALLOUT 2
 
-#define	JIFFIES_DIFF(n, j)	((n) - (j))
+#define	JIFFIES_DIFF(n, j)	((j) - (n))
 
 DECLARE_TASK_QUEUE(tq_cyclades);
 
@@ -2015,7 +2019,7 @@ startup(struct cyclades_port * info)
 	base_addr = (unsigned char*)
 		   (cy_card[card].base_addr + (cy_chip_offset[chip]<<index));
 
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
 	printk("cyc startup card %d, chip %d, channel %d, base_addr %lx\n",
 	     card, chip, channel, (long)base_addr);/**/
 #endif
@@ -2033,7 +2037,7 @@ startup(struct cyclades_port * info)
 	    cy_writeb((ulong)base_addr+(CyMSVR1<<index), CyRTS);
 	    cy_writeb((ulong)base_addr+(CyMSVR2<<index), CyDTR);
 
-#ifdef SERIAL_DEBUG_DTR
+#ifdef CY_DEBUG_DTR
 	    printk("cyc:startup raising DTR\n");
 	    printk("     status: 0x%x, 0x%x\n",
 		   cy_readb(base_addr+(CyMSVR1<<index)), 
@@ -2073,7 +2077,7 @@ startup(struct cyclades_port * info)
 	board_ctrl = &zfw_ctrl->board_ctrl;
 	ch_ctrl = zfw_ctrl->ch_ctrl;
 
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
 	printk("cyc startup Z card %d, channel %d, base_addr %lx\n",
 	     card, channel, (long)base_addr);/**/
 #endif
@@ -2101,7 +2105,7 @@ startup(struct cyclades_port * info)
 	if (retval != 0){
 	    printk("cyc:startup(2) retval was %x\n", retval);
 	}
-#ifdef SERIAL_DEBUG_DTR
+#ifdef CY_DEBUG_DTR
 	    printk("cyc:startup raising Z DTR\n");
 #endif
 
@@ -2118,7 +2122,7 @@ startup(struct cyclades_port * info)
 	info->idle_stats.xmit_idle = jiffies;
     }
 
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
 	printk(" cyc startup done\n");
 #endif
 	return 0;
@@ -2178,7 +2182,7 @@ shutdown(struct cyclades_port * info)
 		       (cy_card[card].base_addr
 		       + (cy_chip_offset[chip]<<index));
 
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
     printk("cyc shutdown Y card %d, chip %d, channel %d, base_addr %lx\n",
 		card, chip, channel, (long)base_addr);
 #endif
@@ -2195,7 +2199,7 @@ shutdown(struct cyclades_port * info)
 	    if (!info->tty || (info->tty->termios->c_cflag & HUPCL)) {
 		cy_writeb((u_long)base_addr+(CyMSVR1<<index), ~CyRTS);
 		cy_writeb((u_long)base_addr+(CyMSVR2<<index), ~CyDTR);
-#ifdef SERIAL_DEBUG_DTR
+#ifdef CY_DEBUG_DTR
 		printk("cyc shutdown dropping DTR\n");
 		printk("     status: 0x%x, 0x%x\n",
 		    cy_readb(base_addr+(CyMSVR1<<index)), 
@@ -2219,7 +2223,7 @@ shutdown(struct cyclades_port * info)
       int retval;
 
 	base_addr = (unsigned char*) (cy_card[card].base_addr);
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
     printk("cyc shutdown Z card %d, channel %d, base_addr %lx\n",
 		card, channel, (long)base_addr);
 #endif
@@ -2253,7 +2257,7 @@ shutdown(struct cyclades_port * info)
 		if (retval != 0){
 		    printk("cyc:shutdown retval (2) was %x\n", retval);
 		}
-#ifdef SERIAL_DEBUG_DTR
+#ifdef CY_DEBUG_DTR
 		printk("cyc:shutdown dropping Z DTR\n");
 #endif
 	    }
@@ -2266,7 +2270,7 @@ shutdown(struct cyclades_port * info)
 	restore_flags(flags);
     }
 
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
     printk(" cyc shutdown done\n");
 #endif
     return;
@@ -2349,7 +2353,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
      */
     retval = 0;
     add_wait_queue(&info->open_wait, &wait);
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
     printk("cyc block_til_ready before block: ttyC%d, count = %d\n",
            info->line, info->count);/**/
 #endif
@@ -2357,7 +2361,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
     if (!tty_hung_up_p(filp))
 	info->count--;
     restore_flags(flags);
-#ifdef SERIAL_DEBUG_COUNT
+#ifdef CY_DEBUG_COUNT
     printk("cyc block_til_ready: (%d): decrementing count to %d\n",
         current->pid, info->count);
 #endif
@@ -2378,7 +2382,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 		    cy_writeb((u_long)base_addr+(CyCAR<<index), (u_char)channel);
 		    cy_writeb((u_long)base_addr+(CyMSVR1<<index), CyRTS);
 		    cy_writeb((u_long)base_addr+(CyMSVR2<<index), CyDTR);
-#ifdef SERIAL_DEBUG_DTR
+#ifdef CY_DEBUG_DTR
 		    printk("cyc:block_til_ready raising DTR\n");
 		    printk("     status: 0x%x, 0x%x\n",
 			cy_readb(base_addr+(CyMSVR1<<index)), 
@@ -2410,7 +2414,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 		retval = -ERESTARTSYS;
 		break;
 	    }
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
 	    printk("cyc block_til_ready blocking: ttyC%d, count = %d\n",
 		   info->line, info->count);/**/
 #endif
@@ -2444,7 +2448,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	    if (retval != 0){
 		printk("cyc:block_til_ready retval was %x\n", retval);
 	    }
-#ifdef SERIAL_DEBUG_DTR
+#ifdef CY_DEBUG_DTR
 		    printk("cyc:block_til_ready raising Z DTR\n");
 #endif
 
@@ -2468,7 +2472,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 		retval = -ERESTARTSYS;
 		break;
 	    }
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
 	    printk("cyc block_til_ready blocking: ttyC%d, count = %d\n",
 		   info->line, info->count);/**/
 #endif
@@ -2479,13 +2483,13 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
     remove_wait_queue(&info->open_wait, &wait);
     if (!tty_hung_up_p(filp)){
 	info->count++;
-#ifdef SERIAL_DEBUG_COUNT
+#ifdef CY_DEBUG_COUNT
 	printk("cyc:block_til_ready (%d): incrementing count to %d\n",
 	    current->pid, info->count);
 #endif
     }
     info->blocked_open--;
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
     printk("cyc:block_til_ready after blocking: ttyC%d, count = %d\n",
 	   info->line, info->count);/**/
 #endif
@@ -2533,18 +2537,18 @@ cy_open(struct tty_struct *tty, struct file * filp)
 	    return -ENODEV;
 	}
     }
-#ifdef SERIAL_DEBUG_OTHER
+#ifdef CY_DEBUG_OTHER
     printk("cyc:cy_open ttyC%d\n", info->line); /* */
 #endif
     if (serial_paranoia_check(info, tty->device, "cy_open")){
         return -ENODEV;
     }
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
     printk("cyc:cy_open ttyC%d, count = %d\n",
         info->line, info->count);/**/
 #endif
     info->count++;
-#ifdef SERIAL_DEBUG_COUNT
+#ifdef CY_DEBUG_COUNT
     printk("cyc:cy_open (%d): incrementing count to %d\n",
         current->pid, info->count);
 #endif
@@ -2578,7 +2582,7 @@ cy_open(struct tty_struct *tty, struct file * filp)
 
     retval = block_til_ready(tty, filp, info);
     if (retval) {
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
         printk("cyc:cy_open returning after block_til_ready with %d\n",
                retval);
 #endif
@@ -2588,7 +2592,7 @@ cy_open(struct tty_struct *tty, struct file * filp)
     info->session = current->session;
     info->pgrp = current->pgrp;
 
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
     printk(" cyc:cy_open done\n");/**/
 #endif
 
@@ -2674,7 +2678,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
   struct cyclades_port * info = (struct cyclades_port *)tty->driver_data;
   unsigned long flags;
 
-#ifdef SERIAL_DEBUG_OTHER
+#ifdef CY_DEBUG_OTHER
     printk("cyc:cy_close ttyC%d\n", info->line);
 #endif
 
@@ -2682,7 +2686,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
     || serial_paranoia_check(info, tty->device, "cy_close")){
         return;
     }
-#ifdef SERIAL_DEBUG_OPEN
+#ifdef CY_DEBUG_OPEN
     printk("cyc:cy_close ttyC%d, count = %d\n", info->line, info->count);
 #endif
 
@@ -2707,12 +2711,12 @@ cy_close(struct tty_struct * tty, struct file * filp)
            "info->count is %d\n", info->count);
         info->count = 1;
     }
-#ifdef SERIAL_DEBUG_COUNT
+#ifdef CY_DEBUG_COUNT
     printk("cyc:cy_close at (%d): decrementing count to %d\n",
         current->pid, info->count - 1);
 #endif
     if (--info->count < 0) {
-#ifdef SERIAL_DEBUG_COUNT
+#ifdef CY_DEBUG_COUNT
     printk("cyc:cyc_close setting count to 0\n");
 #endif
         info->count = 0;
@@ -2784,6 +2788,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
         tty->driver.flush_buffer(tty);
     if (tty->ldisc.flush_buffer)
         tty->ldisc.flush_buffer(tty);
+    tty->closing = 0;
     info->event = 0;
     info->tty = 0;
     if (info->blocked_open) {
@@ -2798,13 +2803,12 @@ cy_close(struct tty_struct * tty, struct file * filp)
                      ASYNC_CLOSING);
     wake_up_interruptible(&info->close_wait);
 
-#ifdef SERIAL_DEBUG_OTHER
+#ifdef CY_DEBUG_OTHER
     printk(" cyc:cy_close done\n");
 #endif
 
     MOD_DEC_USE_COUNT;
     restore_flags(flags);
-    return;
 } /* cy_close */
 
 

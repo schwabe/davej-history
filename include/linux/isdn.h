@@ -253,12 +253,6 @@
 #define IIOCGETCPS  _IO('I',21)
 #define IIOCGETDVR  _IO('I',22)
 
-#define IIOCNETARU  _IO('I',23)
-#define IIOCNETDRU  _IO('I',24)
-#define IIOCNETGRU  _IO('I',25)
-
-#define IIOCNETBUD  _IO('I',26)
-
 #define IIOCNETALN  _IO('I',32)
 #define IIOCNETDLN  _IO('I',33)
 

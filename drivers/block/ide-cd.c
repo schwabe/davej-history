@@ -6,6 +6,7 @@
  *
  * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
  * Copyright (C) 1996, 1997  Erik Andersen <andersee@debian.org>
+ * Copyright (C) 1998  Jens Axboe and Chris Zwilling
  *
  * May be copied or modified under the terms of the GNU General Public License
  * see linux/COPYING for more information.
@@ -126,6 +127,10 @@
  *                        Added identifier so new Sanyo CD-changer works
  *                        Better detection if door locking isn't supported 
  * 3.21  Jun 16,1997  -- Add work-around for GCD-R580B
+ *
+ * 3.22  Nov 13, 1998 -- New ide-cd maintainers:
+ *                           Jens Axboe <axboe@image.dk>
+ *                           Chris Zwilling <chris@cloudnet.com>
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
