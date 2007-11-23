@@ -8,8 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := ncpfs.o
-O_OBJS   := dir.o file.o inode.o ioctl.o mmap.o ncplib_kernel.o sock.o \
-		ncpsign_kernel.o
+O_OBJS   := dir.o file.o inode.o ioctl.o mmap.o ncplib_kernel.o sock.o
 M_OBJS   := $(O_TARGET)
 
 # If you want debugging output, please uncomment the following line

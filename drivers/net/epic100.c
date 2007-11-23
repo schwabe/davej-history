@@ -1,6 +1,6 @@
 /* epic100.c: A SMC 83c170 EPIC/100 Fast Ethernet driver for Linux. */
 /*
-	Written/copyright 1997-1998 by Donald Becker.
+	Written 1997-1998 by Donald Becker.
 
 	This software may be used and distributed according to the terms
 	of the GNU Public License, incorporated herein by reference.
@@ -10,15 +10,15 @@
 	SMC EtherPower II 9432 PCI adapter, and several CardBus cards.
 
 	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
-	USRA Center of Excellence in Space Data and Information Sciences
+	Center of Excellence in Space Data and Information Sciences
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
-	Information and updates available at
+	Support and updates available at
 	http://cesdis.gsfc.nasa.gov/linux/drivers/epic100.html
 */
 
 static const char *version =
-"epic100.c:v1.04 8/23/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/epic100.html\n";
+"epic100.c:v1.03 8/7/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/epic100.html\n";
 
 /* A few user-configurable values. */
 
@@ -118,7 +118,6 @@ MODULE_PARM(max_interrupt_work, "i");
 /* The I/O extent. */
 #define EPIC_TOTAL_SIZE 0x100
 
-#define epic_debug debug
 static int epic_debug = 1;
 
 /*
@@ -156,8 +155,7 @@ IVc. Errata
 /* The rest of these values should never change. */
 
 static struct device *epic_probe1(int pci_bus, int pci_devfn,
-								  struct device *dev, long ioaddr, int irq,
-								  int chip_id, int card_idx);
+									 struct device *dev, int card_idx);
 
 enum pci_flags_bit {
 	PCI_USES_IO=1, PCI_USES_MEM=2, PCI_USES_MASTER=4,
@@ -168,11 +166,9 @@ struct chip_info {
 	u16	vendor_id, device_id, device_id_mask, pci_flags;
 	int io_size, min_latency;
 	struct device *(*probe1)(int pci_bus, int pci_devfn, struct device *dev,
-							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
+							 int chip_idx);
 } chip_tbl[] = {
-	{"SMSC EPIC/100 83c170", 0x10B8, 0x0005, 0x7fff,
-	 PCI_USES_IO|PCI_USES_MASTER|PCI_ADDR0, EPIC_TOTAL_SIZE, 32, epic_probe1},
-	{"SMSC EPIC/C 83c175", 0x10B8, 0x0006, 0x7fff,
+	{"SMSC EPIC/100", 0x10B8, 0x0005, 0x7fff,
 	 PCI_USES_IO|PCI_USES_MASTER|PCI_ADDR0, EPIC_TOTAL_SIZE, 32, epic_probe1},
 	{0,},
 };
@@ -280,7 +276,7 @@ static struct device *root_epic_dev = NULL;
 int epic100_probe(struct device *dev)
 {
 	int cards_found = 0;
-	int chip_idx, irq;
+	int chip_idx;
 	u16 pci_command, new_command;
 	unsigned char pci_bus, pci_device_fn;
 
@@ -302,7 +298,6 @@ int epic100_probe(struct device *dev)
 			continue;
 		pci_bus = pcidev->bus->number;
 		pci_device_fn = pcidev->devfn;
-		irq = pcidev->irq;
 #else
 	int pci_index;
 
@@ -310,7 +305,6 @@ int epic100_probe(struct device *dev)
 		return -ENODEV;
 
 	for (pci_index = 0; pci_index < 0xff; pci_index++) {
-		u8 pci_irq_line;
 		u16 vendor, device;
 		u32 pci_ioaddr;
 
@@ -333,11 +327,8 @@ int epic100_probe(struct device *dev)
 
 		pcibios_read_config_dword(pci_bus, pci_device_fn,
 								  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-		pcibios_read_config_byte(pci_bus, pci_device_fn,
-								 PCI_INTERRUPT_LINE, &pci_irq_line);
 		/* Remove I/O space marker in bit 0. */
 		pci_ioaddr &= ~3;
-		irq = pci_irq_line;
 
 		if (check_region(pci_ioaddr, chip_tbl[chip_idx].io_size))
 			continue;
@@ -359,8 +350,8 @@ int epic100_probe(struct device *dev)
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = chip_tbl[chip_idx].probe1(pci_bus, pci_device_fn, dev, pci_ioaddr,
-									   irq, chip_idx, cards_found);
+		dev = chip_tbl[chip_idx].probe1(pci_bus, pci_device_fn,
+										dev, cards_found);
 
 		/* Check the latency timer. */
 		if (dev) {
@@ -384,12 +375,17 @@ int epic100_probe(struct device *dev)
 }
 #endif  /* not CARDBUS */
 
-static struct device *epic_probe1(int pci_bus, int pci_devfn,
-								  struct device *dev, long ioaddr, int irq,
-								  int chip_idx, int card_idx)
+static struct device *epic_probe1(int bus, int devfn, struct device *dev,
+									 int card_idx)
 {
+	static int did_version = 0;			/* Already printed version info. */
 	struct epic_private *ep;
 	int i, option = 0, duplex = 0;
+	u16 chip_id;
+	u32 ioaddr;
+
+	if (epic_debug > 0  &&  did_version++ == 0)
+		printk(KERN_INFO "%s", version);
 
 	if (dev && dev->mem_start) {
 		option = dev->mem_start;
@@ -403,10 +399,26 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
 
 	dev = init_etherdev(dev, 0);
 
+	{		/* Grrrr, badly consider interface change. */
+#if defined(PCI_SUPPORT_VER2)
+		struct pci_dev *pdev = pci_find_slot(bus, devfn);
+		ioaddr = pdev->base_address[0] & ~3;
+		dev->irq = pdev->irq;
+		chip_id = pdev->device;
+#else
+		u8 irq;
+		u32 ioaddr0;
+		pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &ioaddr0);
+		pcibios_read_config_byte(bus, devfn, PCI_INTERRUPT_LINE, &irq);
+		pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &chip_id);
+		ioaddr = ioaddr0 & ~3;
+		dev->irq = irq;
+#endif
+	}
+
 	dev->base_addr = ioaddr;
-	dev->irq = irq;
-	printk(KERN_INFO "%s: SMC EPIC/100 at %#lx, IRQ %d, ",
-		   dev->name, ioaddr, dev->irq);
+	printk(KERN_INFO "%s: SMC EPIC/100 (chip ID %4.4x) at %#3x, IRQ %d, ",
+		   dev->name, chip_id, ioaddr, dev->irq);
 
 	/* Bring the chip out of low-power mode. */
 	outl(0x4200, ioaddr + GENCTL);
@@ -415,7 +427,7 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
 
 	/* Turn on the MII transceiver. */
 	outl(0x12, ioaddr + MIICfg);
-	if (chip_idx == 1)
+	if (chip_id == 6)
 		outl((inl(ioaddr + NVCTL) & ~0x003C) | 0x4800, ioaddr + NVCTL);
 	outl(0x0200, ioaddr + GENCTL);
 
@@ -435,7 +447,7 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
 	}
 
 	/* We do a request_region() to register /proc/ioports info. */
-	request_region(ioaddr, EPIC_TOTAL_SIZE, dev->name);
+	request_region(ioaddr, EPIC_TOTAL_SIZE, "SMC EPIC/100");
 
 	/* The data structures must be quadword aligned. */
 	ep = kmalloc(sizeof(*ep), GFP_KERNEL | GFP_DMA);
@@ -445,13 +457,9 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
 	ep->next_module = root_epic_dev;
 	root_epic_dev = dev;
 
-	ep->pci_bus = pci_bus;
-	ep->pci_dev_fn = pci_devfn;
-#if defined(PCI_SUPPORT_VER2)
-	ep->chip_id = pci_find_slot(pci_bus, pci_devfn)->device;
-#else
-	ep->chip_id = chip_tbl[chip_idx].device_id;
-#endif
+	ep->pci_bus = bus;
+	ep->pci_dev_fn = devfn;
+	ep->chip_id = chip_id;
 
 	/* Find the connected MII xcvrs.
 	   Doing this in open() would allow detecting external xcvrs later, but
@@ -537,6 +545,7 @@ static int read_eeprom(long ioaddr, int location)
 	int read_cmd = location |
 		(inl(ee_addr) & 0x40) ? EE_READ64_CMD : EE_READ256_CMD;
 
+	printk("EEctrl is %x.\n", inl(ee_addr));
 	outl(EE_ENB & ~EE_CS, ee_addr);
 	outl(EE_ENB, ee_addr);
 
@@ -921,9 +930,11 @@ epic_start_xmit(struct sk_buff *skb, struct device *dev)
 static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)dev_instance;
-	struct epic_private *ep = (struct epic_private *)dev->priv;
-	long ioaddr = dev->base_addr;
-	int status, boguscnt = max_interrupt_work;
+	struct epic_private *ep;
+	int status, ioaddr, boguscnt = max_interrupt_work;
+
+	ioaddr = dev->base_addr;
+	ep = (struct epic_private *)dev->priv;
 
 #if defined(__i386__)
 	/* A lock to prevent simultaneous entry bug on Intel SMP machines. */
@@ -1329,18 +1340,12 @@ static dev_node_t *epic_attach(dev_locator_t *loc)
 
 	if (loc->bus != LOC_PCI) return NULL;
 	bus = loc->b.pci.bus; devfn = loc->b.pci.devfn;
-	printk(KERN_DEBUG "epic_attach(bus %d, function %d)\n", bus, devfn);
+	printk(KERN_INFO "epic_attach(bus %d, function %d)\n", bus, devfn);
 	pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
 	pcibios_read_config_byte(bus, devfn, PCI_INTERRUPT_LINE, &irq);
 	pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &dev_id);
 	io &= ~3;
-	if (io == 0 || irq == 0) {
-		printk(KERN_ERR "The EPIC/C CardBus Ethernet interface was not "
-			   "assigned an %s.\n" KERN_ERR "  It will not be activated.\n",
-			   io == 0 ? "I/O address" : "IRQ");
-		return NULL;
-	}
-	dev = epic_probe1(bus, devfn, NULL, io, irq, 2, -1);
+	dev = epic_probe1(bus, devfn, NULL, -1);
 	if (dev) {
 		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
 		strcpy(node->dev_name, dev->name);
@@ -1405,10 +1410,14 @@ struct driver_operations epic_ops = {
 
 #ifdef MODULE
 
-int init_module(void)
+/* An additional parameter that may be passed in... */
+static int debug = -1;
+
+int
+init_module(void)
 {
-	if (epic_debug)
-		printk(KERN_INFO "%s", version);
+	if (debug >= 0)
+		epic_debug = debug;
 
 #ifdef CARDBUS
 	register_driver(&epic_ops);
@@ -1418,7 +1427,8 @@ int init_module(void)
 #endif
 }
 
-void cleanup_module(void)
+void
+cleanup_module(void)
 {
 	struct device *next_dev;
 
@@ -1428,13 +1438,11 @@ void cleanup_module(void)
 
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_epic_dev) {
-		struct epic_private *ep = (struct epic_private *)root_epic_dev->priv;
-		next_dev = ep->next_module;
+		next_dev = ((struct epic_private *)root_epic_dev->priv)->next_module;
 		unregister_netdev(root_epic_dev);
 		release_region(root_epic_dev->base_addr, EPIC_TOTAL_SIZE);
 		kfree(root_epic_dev);
 		root_epic_dev = next_dev;
-		kfree(ep);
 	}
 }
 

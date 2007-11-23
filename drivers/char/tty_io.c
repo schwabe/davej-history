@@ -1932,9 +1932,8 @@ int tty_unregister_driver(struct tty_driver *driver)
 {
 	int	retval;
 	struct tty_driver *p;
-	int	i, found = 0;
+	int	found = 0;
 	const char *othername = NULL;
-	struct termios *tp;
 	
 	if (*driver->refcount)
 		return -EBUSY;
@@ -1964,18 +1963,6 @@ int tty_unregister_driver(struct tty_driver *driver)
 	if (driver->next)
 		driver->next->prev = driver->prev;
 
-	for (i = 0; i < driver->num; i++) {
-		tp = driver->termios[i];
-		if (tp != NULL) {
-			kfree_s(tp, sizeof(struct termios));
-			driver->termios[i] = NULL;
-		}
-		tp = driver->termios_locked[i];
-		if (tp != NULL) {
-			kfree_s(tp, sizeof(struct termios));
-			driver->termios_locked[i] = NULL;
-		}
-	}
 	return 0;
 }
 

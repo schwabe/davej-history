@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.48.2.28 1998/11/27 15:38:12 paul Exp $
+/* $Id: isdn_net.c,v 1.48.2.27 1998/11/05 22:11:53 fritz Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,9 +21,6 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
- * Revision 1.48.2.28  1998/11/27 15:38:12  paul
- * Also huptimeout with dialmode == manual
- *
  * Revision 1.48.2.27  1998/11/05 22:11:53  fritz
  * Changed mail-address.
  *
@@ -353,11 +350,11 @@ static int isdn_net_start_xmit(struct sk_buff *, struct device *);
 static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
 static void dev_purge_queues(struct device *dev);	/* move this to net/core/dev.c */
 
-char *isdn_net_revision = "$Revision: 1.48.2.28 $";
+char *isdn_net_revision = "$Revision: 1.48.2.27 $";
 
-/*
- * Code for raw-networking over ISDN
- */
+ /*
+  * Code for raw-networking over ISDN
+  */
 
 static void
 isdn_net_unreachable(struct device *dev, struct sk_buff *skb, char *reason)
@@ -365,6 +362,7 @@ isdn_net_unreachable(struct device *dev, struct sk_buff *skb, char *reason)
 	int i;
 
 	if(skb != NULL) {
+	
 		u_short proto = ntohs(skb->protocol);
 
 		printk(KERN_DEBUG "isdn_net: %s: %s, send ICMP %s\n",
@@ -540,14 +538,13 @@ isdn_net_autohup()
 		if ((l->flags & ISDN_NET_CONNECTED) && (!l->dialstate)) {
 			anymore = 1;
 			l->huptimer++;
-			/*
-			 * if there is some dialmode where timeout-hangup
-			 * should _not_ be done, check for that here and
-			 * 35 lines below (ifdef CONFIG_ISDN_BUDGET)
-			 * eg: (ISDN_NET_DIALMODE(*l) != ISDN_NET_DM_NOTIMEOUT)
-			 */
-			if ((l->onhtime) &&
-			    (l->huptimer > l->onhtime))
+ 			/*
+ 			 * only do timeout-hangup
+ 			 * if interface is configured as AUTO
+ 			 */
+  			if ((ISDN_NET_DIALMODE(*l) == ISDN_NET_DM_AUTO) &&
+ 			    (l->onhtime) &&
+ 			    (l->huptimer > l->onhtime))
 				if (l->hupflags & ISDN_MANCHARGE &&
 				    l->hupflags & ISDN_CHARGEHUP) {
 					while (jiffies - l->chargetime > l->chargeint)

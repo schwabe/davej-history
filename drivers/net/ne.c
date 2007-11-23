@@ -43,7 +43,6 @@ static const char *version =
 #include <linux/bios32.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <linux/delay.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -98,7 +97,6 @@ bad_clone_list[] = {
     {"ET-100","ET-200", {0x00, 0x45, 0x54}}, /* YANG and YA clone */
     {"COMPEX","COMPEX16",{0x00,0x80,0x48}}, /* Broken ISA Compex cards */
     {"E-LAN100", "E-LAN200", {0x00, 0x00, 0x5d}}, /* Broken ne1000 clones */
-    {"PCM-4823", "PCM-4823", {0x00, 0xc0, 0x6c}}, /* Broken Advantech MoBo */
     {0,}
 };
 #endif
@@ -424,7 +422,6 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	outb_p(0x00, ioaddr + EN0_RCNTLO);
 	outb_p(0x00, ioaddr + EN0_RCNTHI);
 	outb_p(E8390_RREAD+E8390_START, ioaddr); /* Trigger it... */
-	udelay(10000);		/* wait 10ms for interrupt to propagate */
 	outb_p(0x00, ioaddr + EN0_IMR); 		/* Mask it again. */
 	dev->irq = autoirq_report(0);
 	if (ei_debug > 2)
@@ -678,7 +675,9 @@ ne_block_output(struct device *dev, int count,
     outb_p(0x00, nic_base + EN0_RSARHI);
     outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
     /* Make certain that the dummy read has occurred. */
-    udelay(6);
+    SLOW_DOWN_IO;
+    SLOW_DOWN_IO;
+    SLOW_DOWN_IO;
 #endif
 
     outb_p(ENISR_RDC, nic_base + EN0_ISR);

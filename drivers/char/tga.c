@@ -40,7 +40,6 @@
 
 extern void register_console(void (*proc)(const char *));
 extern void console_print(const char *);
-extern void set_palette (void); /* vga.c */
 
 /* TGA hardware description (minimal) */
 /*
@@ -485,6 +484,11 @@ tga_console_find(void)
 	tga_init_video();
 	tga_clear_screen();
 
+#ifdef CONFIG_VGA_CONSOLE
+	/* if both are configured, we are using a dispatch table,
+	   so we must set the index */
+	curr_cons = 1;
+#endif
 }
 
 unsigned char PLLbits[7] = { 0x80, 0x04, 0x00, 0x24, 0x44, 0x80, 0xb8 };

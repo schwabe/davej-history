@@ -57,7 +57,7 @@
 #include <asm/bitops.h>
 
 static char *serial_name = "Serial driver";
-static char *serial_version = "4.13p1";
+static char *serial_version = "4.13p";
 
 DECLARE_TASK_QUEUE(tq_serial);
 
@@ -1806,26 +1806,6 @@ static int do_autoconfig(struct async_struct * info)
 
 
 /*
- * rs_break() --- routine which turns the break handling on or off
- * adapted from 2.1.124
- */
-static void rs_break(struct async_struct * info, int break_state)
-{
-        unsigned long flags;
-        
-        if (!info->port)
-                return;
-        save_flags(flags);cli();
-        if (break_state == -1)
-                serial_out(info, UART_LCR,
-                           serial_inp(info, UART_LCR) | UART_LCR_SBC);
-        else
-                serial_out(info, UART_LCR,
-                           serial_inp(info, UART_LCR) & ~UART_LCR_SBC);
-        restore_flags(flags);
-}
-
-/*
  * This routine sends a break character out the serial port.
  */
 static void send_break(	struct async_struct * info, int duration)
@@ -2017,20 +1997,6 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	}
 	
 	switch (cmd) {
-                case TIOCSBRK:  /* Turn break on, unconditionally */
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			tty_wait_until_sent(tty, 0);
-			rs_break(info,-1);
-			return 0;
-                case TIOCCBRK:  /* Turn break off, unconditionally */
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			tty_wait_until_sent(tty, 0);
-			rs_break(info,0);
-			return 0;
 		case TCSBRK:	/* SVID version: non-zero arg --> no break */
 			retval = tty_check_change(tty);
 			if (retval)

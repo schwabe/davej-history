@@ -38,7 +38,6 @@
 #include <linux/bios32.h>
 #include <asm/io.h>
 #include <asm/irq.h>
-#include <asm/segment.h>
 #include "DAC960.h"
 
 

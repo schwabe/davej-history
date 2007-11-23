@@ -123,8 +123,8 @@ L:      linux-net@vger.rutgers.edu
 S:      Maintained
 
 APM DRIVER
-P:	Stephen Rothwell
-M:	Stephen.Rothwell@canb.auug.org.au
+P:	Rik Faith & Stephen Rothwell
+M:	faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au
 L:	linux-laptop@vger.rutgers.edu
 S:	Maintained
 
@@ -172,8 +172,8 @@ S:	Supported
 
 DC390/AM53C974 SCSI driver
 P:	Kurt Garloff
-M:	kurt@garloff.de
-W:	http://www.garloff.de/kurt/linux/dc390/
+M:	K.Garloff@ping.de
+W:	ftp://student.physik.uni-dortmund.de/pub/linux/kernel/dc390/
 S:	Maintained
 
 DAC960 RAID DRIVER
@@ -291,9 +291,9 @@ S:	Maintained
 
 NCP FILESYSTEM:
 P:	Volker Lendecke
-M:	vl@kki.org
+M:	lendecke@namu01.Num.Math.Uni-Goettingen.de
 L:	linware@sh.cvut.cz
-S:	Odd Fixes
+S:	Maintained
 
 NETROM NETWORK LAYER
 P:	Jon Naylor
@@ -327,7 +327,7 @@ S:	Maintained
 
 SMB FILESYSTEM:
 P:	Volker Lendecke
-M:	vl@kki.org
+M:	lendecke@namu01.Num.Math.Uni-Goettingen.de
 L:	samba@listproc.anu.edu.au
 S:	Odd Fixes
 

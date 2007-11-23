@@ -11,9 +11,6 @@ if [ "$CONFIG_BLK_DEV_IDE" = "n" ]; then
   bool 'Old harddisk (MFM/RLL/IDE) driver' CONFIG_BLK_DEV_HD_ONLY
 else
   bool '   Use old disk-only driver on primary interface' CONFIG_BLK_DEV_HD_IDE
-  if [ "$CONFIG_BLK_DEV_HD_IDE" != "n" ]; then
-    bool '     Use multi-mode by default' CONFIG_IDEDISK_MULTI_MODE
-  fi
   bool '   Include IDE/ATAPI CDROM support' CONFIG_BLK_DEV_IDECD
   bool '   Include IDE/ATAPI TAPE support' CONFIG_BLK_DEV_IDETAPE
   bool '   Include IDE/ATAPI FLOPPY support (new)' CONFIG_BLK_DEV_IDEFLOPPY
@@ -26,9 +23,6 @@ else
   if [ "$CONFIG_PCI" = "y" ]; then
     bool '   RZ1000 chipset bugfix/support' CONFIG_BLK_DEV_RZ1000
     bool '   Intel 82371 PIIX (Triton I/II) DMA support' CONFIG_BLK_DEV_TRITON
-    if [ "$CONFIG_BLK_DEV_TRITON" = "y" ]; then
-      bool '     Boot off-board chipsets first support' CONFIG_BLK_DEV_OFFBOARD
-    fi
   fi
   bool '   Other IDE chipset support' CONFIG_IDE_CHIPSETS
   if [ "$CONFIG_IDE_CHIPSETS" = "y" ]; then
@@ -61,12 +55,6 @@ fi
 tristate 'XT harddisk support' CONFIG_BLK_DEV_XD
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'Mylex DAC960 PCI RAID Controller support' CONFIG_BLK_DEV_DAC960
-fi
-
-tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
-if [ "$CONFIG_BLK_CPQ_DA" = "y" -o "$CONFIG_BLK_CPQ_DA" = "m" ]; then
-  bool '   Support for PCI SMART-2 Controllers' CONFIG_BLK_CPQ_DA_PCI
-  bool '   Support for EISA SMART-2 Controllers' CONFIG_BLK_CPQ_DA_EISA
 fi
 
 tristate 'Parallel port IDE device support' CONFIG_PARIDE 

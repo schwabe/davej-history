@@ -116,7 +116,6 @@ static int ISILoad_open(struct inode *inode, struct file *filp)
 #ifdef ISICOM_DEBUG	
 	printk(KERN_DEBUG "ISILoad:Firmware loader Opened!!!\n");
 #endif	
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -125,7 +124,6 @@ static void ISILoad_release(struct inode *inode, struct file *filp)
 #ifdef ISICOM_DEBUG
 	printk(KERN_DEBUG "ISILoad:Firmware loader Close(Release)d\n",);
 #endif	
-	MOD_DEC_USE_COUNT;
 }
 
 static int ISILoad_ioctl(struct inode *inode, struct file *filp,

@@ -11,12 +11,10 @@
 
 	1.01	GRG 1998.05.03	Use spinlocks
 	1.02	GRG 1998.05.05  init_proto, release_proto, ktti
-	1.03    GRG 1998.08.15  eliminate compiler warning
-	1.04    GRG 1998.11.28  added support for FRIQ
 
 */
 
-#define PI_VERSION      "1.04"
+#define PI_VERSION      "1.02"
 
 #include <linux/module.h>
 #include <linux/config.h>
@@ -451,11 +449,6 @@ void	paride_init( void )
           pi_register(&frpw);
         };
 #endif
-#ifdef CONFIG_PARIDE_FRIQ
-        { extern struct pi_protocol friq;
-          pi_register(&friq);
-        };
-#endif 
 #ifdef CONFIG_PARIDE_FIT2
         { extern struct pi_protocol fit2;
           pi_register(&fit2);

@@ -7,8 +7,6 @@
  *
  */
 
-#include <linux/config.h>
-
 #include <linux/sched.h>
 #include <linux/ncp_fs.h>
 #include <linux/errno.h>
@@ -27,7 +25,6 @@
 #include <linux/ncp_fs_sb.h>
 #include <net/sock.h>
 
-#include "ncpsign_kernel.h"
 
 #define _S(nr) (1<<((nr)-1))
 static int _recvfrom(struct socket *sock, unsigned char *ubuf,
@@ -565,12 +562,7 @@ ncp_do_request(struct ncp_server *server, int size)
 		printk("ncpfs: Server not locked!\n");
 		return -EIO;
 	}
-#ifdef CONFIG_NCPFS_PACKET_SIGNING
-	if (server->sign_active)
-	{
-		sign_packet(server, &size);
-	}
-#endif /* CONFIG_NCPFS_PACKET_SIGNING */
+
 	if (!ncp_conn_valid(server))
 	{
 		return -EIO;

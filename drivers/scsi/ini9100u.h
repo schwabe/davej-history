@@ -1,3 +1,4 @@
+
 /**************************************************************************
  * Initio 9100 device driver for Linux.
  *
@@ -59,13 +60,7 @@
  * 06/18/96 Harry Chen, Initial Version 1.00A (Beta)
  * 06/23/98 hc	- v1.01k
  *		- Get it work for kernel version >= 2.1.75
- * 12/09/98 bv	- v1.03a
- *		- Removed unused code
- * 12/13/98 bv	- v1.03b
- *		- Add spinlocks to HCS structure.
- * 21/01/99 bv	- v1.03e
- *		- Added PCI_ID structure
- **************************************************************************/
+*******************************************************************************/
 
 #ifndef	CVT_LINUX_VERSION
 #define	CVT_LINUX_VERSION(V,P,S)	(((V) * 65536) + ((P) * 256) + (S))
@@ -77,20 +72,20 @@
 
 #include "sd.h"
 
-extern int i91u_detect(Scsi_Host_Template *);
-extern int i91u_command(Scsi_Cmnd *);
-extern int i91u_queue(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
-extern int i91u_abort(Scsi_Cmnd *);
-extern int i91u_reset(Scsi_Cmnd *, unsigned int);
+extern int        i91u_detect(Scsi_Host_Template *);
+extern int        i91u_command(Scsi_Cmnd *);
+extern int        i91u_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
+extern int        i91u_abort(Scsi_Cmnd *);
+extern int        i91u_reset(Scsi_Cmnd *, unsigned int);
 
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1, 3, 0)
-extern int i91u_biosparam(Scsi_Disk *, kdev_t, int *);	/*for linux v2.0 */
+extern int        i91u_biosparam(Scsi_Disk *, kdev_t, int *); /*for linux v2.0*/
 extern struct proc_dir_entry proc_scsi_ini9100u;
 #else
-extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
+extern int        i91u_biosparam(Disk *, int, int *);  /*for linux v1.13 */
 #endif
 
-#define i91u_REVID "Initio INI-9X00U/UW SCSI device driver; Revision: 1.03f"
+#define i91u_REVID "Initio INI-9X00U/UW SCSI device driver; Revision: 1.03"
 
 #if LINUX_VERSION_CODE < CVT_LINUX_VERSION(1, 3, 0)
 #define INI9100U	{ \
@@ -140,7 +135,7 @@ extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 		0, \
 		ENABLE_CLUSTERING \
 }
-#else				/* Version >= 2.1.75 */
+#else		/* Version >= 2.1.75 */
 #define INI9100U	{ \
 	next:		NULL,						\
 	module:		NULL,						\
@@ -191,72 +186,63 @@ extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 #endif
 
 #ifndef NULL
-#define NULL     0		/* zero          */
+#define NULL     0            /* zero          */
 #endif
 #ifndef TRUE
-#define TRUE     (1)		/* boolean true  */
+#define TRUE     (1)          /* boolean true  */
 #endif
 #ifndef FALSE
-#define FALSE    (0)		/* boolean false */
+#define FALSE    (0)          /* boolean false */
 #endif
 #ifndef FAILURE
 #define FAILURE  (-1)
 #endif
 
-#define i91u_MAXQUEUE		2
+#define i91u_MAXQUEUE		2 
 #define TOTAL_SG_ENTRY		32
 #define MAX_TARGETS		16
 #define SENSE_SIZE		14
 
-#define INI_VENDOR_ID   0x1101	/* Initio's PCI vendor ID       */
-#define DMX_VENDOR_ID	0x134a	/* Domex's PCI vendor ID	*/
-#define I950_DEVICE_ID	0x9500	/* Initio's inic-950 product ID   */
-#define I940_DEVICE_ID	0x9400	/* Initio's inic-940 product ID   */
-#define I935_DEVICE_ID	0x9401	/* Initio's inic-935 product ID   */
-#define I920_DEVICE_ID	0x0002	/* Initio's other product ID      */
-
-/************************************************************************/
-/*              Vendor ID/Device ID Pair Structure			*/
-/************************************************************************/
-typedef struct PCI_ID_Struc {
-	unsigned short vendor_id;
-	unsigned short device_id;
-} PCI_ID;
+#define INI_VENDOR_ID   0x1101          /* Initio's PCI vendor ID       */
+#define I950_DEVICE_ID	0x9500          /* Initio's inic-950 product ID	*/
+#define I940_DEVICE_ID	0x9400          /* Initio's inic-940 product ID	*/
+#define I935_DEVICE_ID	0x9401          /* Initio's inic-935 product ID	*/
+#define I920_DEVICE_ID	0x0002          /* Initio's other product ID	*/
 
 /************************************************************************/
 /*              Scatter-Gather Element Structure                        */
 /************************************************************************/
-typedef struct SG_Struc {
-	U32 SG_Ptr;		/* Data Pointer */
-	U32 SG_Len;		/* Data Length */
+typedef struct SG_Struc         {
+	U32   SG_Ptr;         /* Data Pointer */
+	U32   SG_Len;         /* Data Length */
 } SG;
 
 /***********************************************************************
 		SCSI Control Block
 ************************************************************************/
-typedef struct Scsi_Ctrl_Blk {
-	U32 SCB_InitioReserved[9];	/* 0 */
+typedef struct Scsi_Ctrl_Blk            {
+	U32	SCB_InitioReserved[9]; /* 0 */
 
-	UBYTE SCB_Opcode;	/*24 SCB command code */
-	UBYTE SCB_Flags;	/*25 SCB Flags */
-	UBYTE SCB_Target;	/*26 Target Id */
-	UBYTE SCB_Lun;		/*27 Lun */
-	U32 SCB_BufPtr;		/*28 Data Buffer Pointer */
-	U32 SCB_BufLen;		/*2C Data Allocation Length */
-	UBYTE SCB_SGLen;	/*30 SG list # */
-	UBYTE SCB_SenseLen;	/*31 Sense Allocation Length */
-	UBYTE SCB_HaStat;	/*32 */
-	UBYTE SCB_TaStat;	/*33 */
-	UBYTE SCB_CDBLen;	/*34 CDB Length */
-	UBYTE SCB_Ident;	/*35 Identify */
-	UBYTE SCB_TagMsg;	/*36 Tag Message */
-	UBYTE SCB_TagId;	/*37 Queue Tag */
-	UBYTE SCB_CDB[12];	/*38 */
-	U32 SCB_SGPAddr;	/*44 SG List/Sense Buf phy. Addr. */
-	U32 SCB_SensePtr;	/*48 Sense data pointer */
-	void (*SCB_Post) (BYTE *, BYTE *);	/*4C POST routine */
-	Scsi_Cmnd *SCB_Srb;	/*50 SRB Pointer */
-	SG SCB_SGList[TOTAL_SG_ENTRY];	/*54 Start of SG list */
+	UBYTE   SCB_Opcode;     /*24 SCB command code */
+	UBYTE   SCB_Flags;      /*25 SCB Flags */
+	UBYTE   SCB_Target;     /*26 Target Id */
+	UBYTE   SCB_Lun;        /*27 Lun */
+	U32   SCB_BufPtr;     /*28 Data Buffer Pointer */
+	U32   SCB_BufLen;     /*2C Data Allocation Length */
+	UBYTE   SCB_SGLen;      /*30 SG list # */
+	UBYTE   SCB_SenseLen;   /*31 Sense Allocation Length */
+	UBYTE   SCB_HaStat;     /*32 */
+	UBYTE   SCB_TaStat;     /*33 */
+	UBYTE   SCB_CDBLen;     /*34 CDB Length */
+	UBYTE   SCB_Ident;      /*35 Identify */
+	UBYTE   SCB_TagMsg;     /*36 Tag Message */ 
+	UBYTE   SCB_TagId;      /*37 Queue Tag */
+	UBYTE   SCB_CDB[12];    /*38 */
+	U32   SCB_SGPAddr;    /*44 SG List/Sense Buf phy. Addr. */
+	U32   SCB_SensePtr;   /*48 Sense data pointer */
+	void    (* SCB_Post)(BYTE *, BYTE *);  /*4C POST routine */
+	Scsi_Cmnd       *SCB_Srb;       /*50 SRB Pointer */
+	SG      SCB_SGList[TOTAL_SG_ENTRY];     /*54 Start of SG list */
 } SCB;
 
 /* Opcodes of SCB_Opcode */
@@ -299,11 +285,11 @@ typedef struct Scsi_Ctrl_Blk {
 **********************************************************************/
 
 typedef struct Tar_Ctrl_Struc {
-	ULONG TCS_InitioReserved;	/* 0 */
+	ULONG	TCS_InitioReserved;	/* 0 */
 
-	UWORD TCS_DrvFlags;	/* 4 */
-	UBYTE TCS_DrvHead;	/* 6 */
-	UBYTE TCS_DrvSector;	/* 7 */
+	UWORD   TCS_DrvFlags;           /* 4 */
+	UBYTE   TCS_DrvHead;            /* 6 */
+	UBYTE   TCS_DrvSector;          /* 7 */
 } TCS;
 
 /***********************************************************************
@@ -316,30 +302,26 @@ typedef struct Tar_Ctrl_Struc {
 	      Host Adapter Control Structure
 ************************************************************************/
 typedef struct Ha_Ctrl_Struc {
-	UWORD HCS_Base;		/* 00 */
-	UWORD HCS_BIOS;		/* 02 */
-	UBYTE HCS_Intr;		/* 04 */
-	UBYTE HCS_SCSI_ID;	/* 05 */
-	UBYTE HCS_MaxTar;	/* 06 */
-	UBYTE HCS_NumScbs;	/* 07 */
+	UWORD   HCS_Base;       /* 00 */
+	UWORD   HCS_BIOS;       /* 02 */
+	UBYTE   HCS_Intr;       /* 04 */
+	UBYTE   HCS_SCSI_ID;    /* 05 */
+	UBYTE   HCS_MaxTar;     /* 06 */
+	UBYTE   HCS_NumScbs;    /* 07 */
 
-	UBYTE HCS_Flags;	/* 08 */
-	UBYTE HCS_Index;	/* 09 */
-	UBYTE HCS_Reserved[2];	/* 0a */
-	ULONG HCS_InitioReserved[27];	/* 0C */
-	TCS HCS_Tcs[16];	/* 78 -> 16 Targets */
-	Scsi_Cmnd *pSRB_head;	/* SRB save queue header     */
-	Scsi_Cmnd *pSRB_tail;	/* SRB save queue tail       */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spinlock_t HCS_AvailLock;
-	spinlock_t HCS_SemaphLock;
-	spinlock_t pSRB_lock;
-#endif
+	UBYTE   HCS_Flags;      /* 08 */
+	UBYTE	HCS_Index;	/* 09 */
+	UBYTE	HCS_Reserved[2];	/* 0a */
+	ULONG	HCS_InitioReserved[27];	/* 0C */
+
+	TCS     HCS_Tcs[16];	/* 78 -> 16 Targets */
+	Scsi_Cmnd       *pSRB_head;     /* SRB save queue header     */
+	Scsi_Cmnd       *pSRB_tail;     /* SRB save queue tail       */
 } HCS;
 
 /* Bit Definition for HCB_Flags */
 #define HCF_EXPECT_RESET        0x10
 
 /* SCSI related definition                                              */
-#define DISC_NOT_ALLOW          0x80	/* Disconnect is not allowed    */
-#define DISC_ALLOW              0xC0	/* Disconnect is allowed        */
+#define DISC_NOT_ALLOW          0x80    /* Disconnect is not allowed    */
+#define DISC_ALLOW              0xC0    /* Disconnect is allowed        */

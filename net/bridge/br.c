@@ -91,8 +91,6 @@ static struct notifier_block br_dev_notifier={
 
 void transmit_config(int port_no)			  /* (4.6.1)	 */
 {
-	if(!(br_stats.flags & BR_UP))
-		return; /* this should not happen but happens */
 	if (hold_timer[port_no].active) {	  /* (4.6.1.3.1)	 */
 		port_info[port_no].config_pending = TRUE;	/* (4.6.1.3.1)	 */
 	} else {				  /* (4.6.1.3.2)	 */
@@ -873,12 +871,11 @@ int hold_timer_expired(int port_no)
 
 int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 {
-	struct sk_buff *skb;
-	struct device *dev = port_info[port_no].dev;
-	int size;
+struct sk_buff *skb;
+struct device *dev = port_info[port_no].dev;
+int size;
+unsigned long flags;
 	
-	if(!(br_stats.flags & BR_UP))
-		return(-1); /* this should not happen but happens */
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_config_bpdu: port %i not valid\n",port_no);
 		return(-1);
@@ -930,12 +927,11 @@ int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 
 int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
 {
-	struct sk_buff *skb;
-	struct device *dev = port_info[port_no].dev;
-	int size;
+struct sk_buff *skb;
+struct device *dev = port_info[port_no].dev;
+int size;
+unsigned long flags;
 	
-	if(!(br_stats.flags & BR_UP))
-		return(-1); /* this should not happen but happens */
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_tcn_bpdu: port %i not valid\n",port_no);
 		return(-1);
@@ -1051,6 +1047,7 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 {
 	int port;
+	int i;
 	
 	if (br_stats.flags & BR_DEBUG)
 		printk("br_receive_frame: ");

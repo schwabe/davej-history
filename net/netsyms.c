@@ -12,7 +12,6 @@
 #include <linux/net.h>
 #include <linux/netdevice.h>
 #include <linux/trdevice.h>
-#include <linux/fddidevice.h>
 #include <linux/ioport.h>
 #include <net/sock.h>
 
@@ -111,8 +110,6 @@ static struct symbol_table net_syms = {
 	X(ip_id_count),
 	X(ip_send_check),
 	X(ip_forward),
-	X(ip_queue_xmit),
-	X(ip_fragment),
 	X(sysctl_ip_forward),
 
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
@@ -132,11 +129,6 @@ static struct symbol_table net_syms = {
 #ifdef CONFIG_TR
 	X(tr_setup),
 	X(tr_type_trans),
-#endif
-                          
-#ifdef CONFIG_FDDI
-	X(fddi_setup),
-	X(fddi_type_trans),
 #endif
                           
 #ifdef CONFIG_NET_ALIAS

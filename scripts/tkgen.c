@@ -280,7 +280,6 @@ void generate_if(struct kconfig * item,
    */
   switch(item->tok)
     {
-    case tok_define_int:
     case tok_define:
       printf("} then { set %s %s } \n",  item->optionname, item->value);
       break;
@@ -465,9 +464,6 @@ void generate_if_for_outfile(struct kconfig * item,
    */
   switch(item->tok)
     {
-    case tok_define_int:
-      printf("} then {write_int $cfg $autocfg %s %s $notmod }\n", item->optionname, item->value);
-      break;
     case tok_define:
       printf("} then {write_tristate $cfg $autocfg %s %s $notmod }\n", item->optionname, item->value);
       break;
@@ -576,8 +572,7 @@ static void end_proc(int menu_num)
        * Skip items not for this menu, or ones having no conditions.
        */
       if (cfg->menu_number != menu_num ) continue;
-      if (cfg->tok != tok_define && cfg->tok != tok_define_int)
-      	continue;
+      if (cfg->tok != tok_define) continue;
       /*
        * Clear all of the booleans that are defined in this menu.
        */
@@ -722,7 +717,6 @@ void dump_tk_script(struct kconfig *scfg)
 	  cfg->menu_line = menu_line++;
 	  break;
 	case tok_define:
-	case tok_define_int:
 	  cfg->menu_number = -1;
 	case tok_choice:
 	default:
@@ -929,7 +923,7 @@ void dump_tk_script(struct kconfig *scfg)
       /*
        * Skip items not for this menu, or ones having no conditions.
        */
-      if( cfg->tok != tok_define && cfg->tok != tok_define_int) continue;
+      if( cfg->tok != tok_define) continue;
       if (cfg->cond != NULL ) 
 	generate_if(cfg, cfg->cond, menu_num, cfg->menu_line);
       else
@@ -994,7 +988,6 @@ void dump_tk_script(struct kconfig *scfg)
 	case tok_tristate:
 	case tok_dep_tristate:
 	case tok_define:
-	case tok_define_int:
 	case tok_choose:
 	  if(!(cfg->flags & GLOBAL_WRITTEN))
 	    {
@@ -1026,7 +1019,7 @@ void dump_tk_script(struct kconfig *scfg)
 		  printf("\twrite_comment $cfg $autocfg \"%s\"\n", cfg->label);
 		}
 #if 0
-	      else if(cfg->tok == tok_define || cfg->tok == tok_define_int)
+	      else if(cfg->tok == tok_define)
 		{
 		  printf("\twrite_define %s %s\n", cfg->optionname,
 			 cfg->value);
@@ -1045,12 +1038,6 @@ void dump_tk_script(struct kconfig *scfg)
 		    }
 		}
 	      else if (cfg->tok == tok_int )
-	        {
-		  printf("\twrite_int $cfg $autocfg %s $%s $notmod\n",
-			 cfg->optionname,
-			 cfg->optionname);
-	        }
-	      else if (cfg->tok == tok_define_int )
 	        {
 		  printf("\twrite_int $cfg $autocfg %s $%s $notmod\n",
 			 cfg->optionname,
@@ -1122,14 +1109,13 @@ void dump_tk_script(struct kconfig *scfg)
   clear_globalflags(config);
   for(cfg = scfg; cfg != NULL; cfg = cfg->next)
     {
-      if( cfg->tok != tok_define && cfg->tok != tok_define_int ) 
-      	continue;
+      if( cfg->tok != tok_define ) continue;
       printf("\tglobal %s; set %s 0\n",  cfg->optionname,  cfg->optionname);
       cfg->flags |= GLOBAL_WRITTEN;
     }
   for(cfg = scfg; cfg != NULL; cfg = cfg->next)
     {
-      if( cfg->tok != tok_define && cfg->tok != tok_define_int ) continue;
+      if( cfg->tok != tok_define ) continue;
       if (cfg->cond != NULL ) 
 	generate_if(cfg, cfg->cond, -1, 0);
       else

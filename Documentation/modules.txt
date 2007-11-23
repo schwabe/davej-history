@@ -22,7 +22,7 @@ file linux/README.  It generally goes like:
 	make config
 	make dep
 	make clean
-	make zImage or make bzImage or make zlilo
+	make zImage or make zlilo
 
 In "make config", you select what you want to include in the "resident"
 kernel and what features you want to have available as loadable modules.

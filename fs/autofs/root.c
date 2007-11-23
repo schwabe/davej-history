@@ -108,10 +108,6 @@ static int autofs_root_lookup(struct inode *dir, const char *name, int len,
 	*result = NULL;
 	if (!dir)
 		return -ENOENT;
-		
-	if (len > NAME_MAX)
-		return -ENOENT;
-		
 	if (!S_ISDIR(dir->i_mode)) {
 		iput(dir);
 		return -ENOTDIR;
@@ -198,9 +194,6 @@ static int autofs_root_symlink(struct inode *dir, const char *name, int len, con
 		iput(dir);
 		return -EPERM;
 	}
-	if ( len > NAME_MAX)
-		return -ENAMETOOLONG;
-		
 	if ( autofs_hash_lookup(dh,hash,name,len) ) {
 		iput(dir);
 		return -EEXIST;
@@ -259,9 +252,6 @@ static int autofs_root_unlink(struct inode *dir, const char *name, int len)
 
 	if ( !autofs_oz_mode(sbi) )
 		return -EPERM;
-		
-	if(len > NAME_MAX)
-		return -ENAMETOOLONG;
 
 	ent = autofs_hash_lookup(dh,hash,name,len);
 	if ( !ent )

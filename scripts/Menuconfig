@@ -77,14 +77,6 @@ function define_bool () {
 }
 
 #
-# Define an int to a specific value.
-#
-
-function define_int () {
-	eval $1=$2
-}
-
-#
 # Create a boolean (Yes/No) function for our current menu
 # which calls our local bool function.
 #
@@ -962,13 +954,6 @@ save_configuration () {
                 	;;
         	esac
 	}
-
-	function define_int () {
-		eval $1="$2"
-		echo "$1=$2" >>$CONFIG
-		echo "#define $1 $2" >>$CONFIG_H
-	}
-
 
 	function choice () {
 		#

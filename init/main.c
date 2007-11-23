@@ -39,9 +39,6 @@
 #ifdef CONFIG_MTRR
 #include <asm/mtrr.h>
 #endif
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
 
 #include <asm/bugs.h>
 
@@ -106,7 +103,6 @@ extern void u14_34f_setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
 extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
-extern void sym53c416_setup(char *str, int *ints);
 extern void wd7000_setup(char *str, int *ints);
 extern void dc390_setup(char* str, int *ints);
 extern void ppa_setup(char *str, int *ints);
@@ -208,11 +204,6 @@ extern void pg_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_PARIDE_PCD
 extern void pcd_setup(char *str, int *ints);
-#endif
-#ifdef CONFIG_BLK_CPQ_DA
-#ifdef CONFIG_BLK_CPQ_DA_EISA
-extern void cpqarray_setup(char *str, int *ints);
-#endif
 #endif
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
@@ -382,9 +373,6 @@ struct kernel_param bootsetups[] = {
 #ifdef CONFIG_SCSI_NCR53C406A
 	{ "ncr53c406a=", NCR53c406a_setup},
 #endif
-#ifdef CONFIG_SCSI_SYM53C416
-	{ "sym53c416=", sym53c416_setup}, 
-#endif
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 	{ "fdomain=", fdomain_setup},
 #endif
@@ -484,10 +472,8 @@ struct kernel_param bootsetups[] = {
 #ifdef CONFIG_BAYCOM
 	{ "baycom=", baycom_setup },
 #endif
-#ifdef CONFIG_BLK_CPQ_DA
-#ifdef CONFIG_BLK_CPQ_DA_EISA
-       { "smart2=", cpqarray_setup },
-#endif
+#ifdef CONFIG_APM
+	{ "apm=", apm_setup },
 #endif
 	{ 0, 0 }
 };
@@ -508,9 +494,6 @@ static struct kernel_param raw_params[] = {
 #endif
 #ifdef CONFIG_PARIDE_PG
        { "pg.", pg_setup },
-#endif
-#ifdef CONFIG_APM
-	{ "apm=", apm_setup },
 #endif
        { 0, 0 }
 } ;

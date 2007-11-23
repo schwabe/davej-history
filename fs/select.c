@@ -347,8 +347,10 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		(fd_set *) &res_out,
 		(fd_set *) &res_ex,
 		(fd_set *) &locked);
-	timeout = current->timeout?current->timeout - jiffies - 1:0;
+	timeout = current->timeout - jiffies - 1;
 	current->timeout = 0;
+	if ((long) timeout < 0)
+		timeout = 0;
 	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
 		put_user(timeout/HZ, &tvp->tv_sec);
 		timeout %= HZ;

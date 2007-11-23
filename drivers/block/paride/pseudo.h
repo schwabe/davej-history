@@ -16,21 +16,19 @@
 	when either it returns true, or timeout jiffies have passed,
 	continuation() will be invoked.
 
-	If nice is 1, the test will done approximately once a
+	If nice is true, the test will done approximately once a
 	jiffy.  If nice is 0, the test will also be done whenever
-	the scheduler runs (by adding it to a task queue).  If
-	nice is greater than 1, the test will be done once every
-	(nice-1) jiffies. 
+	the scheduler runs (by adding it to a task queue).
 
 */
 
 /* Changes:
 
 	1.01	1998.05.03	Switched from cli()/sti() to spinlocks
-	1.02    1998.12.14      Added support for nice > 1
+
 */
 	
-#define PS_VERSION	"1.02"
+#define PS_VERSION	"1.01"
 
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -39,13 +37,13 @@
 static void ps_timer_int( unsigned long data);
 static void ps_tq_int( void *data);
 
+static int ps_use_tq = 1;
 static void (* ps_continuation)(void);
 static int (* ps_ready)(void);
 static int ps_then;
 static int ps_timeout;
 static int ps_timer_active = 0;
 static int ps_tq_active = 0;
-static int ps_nice = 0;
 
 /* static spinlock_t ps_spinlock = SPIN_LOCK_UNLOCKED; */
 
@@ -64,9 +62,9 @@ static void ps_set_intr( void (*continuation)(void),
 	ps_ready = ready;
         ps_then = jiffies;
 	ps_timeout = jiffies + timeout;
-	ps_nice = nice;
+	ps_use_tq = !nice;
 
-        if (!ps_nice && !ps_tq_active) {
+        if (ps_use_tq && !ps_tq_active) {
 #ifdef HAVE_DISABLE_HLT
                 disable_hlt();
 #endif
@@ -76,7 +74,7 @@ static void ps_set_intr( void (*continuation)(void),
 
         if (!ps_timer_active) {
 		ps_timer_active = 1;
-                ps_timer.expires = jiffies + (ps_nice>0)?(ps_nice-1):0;
+                ps_timer.expires = jiffies;
                 add_timer(&ps_timer);
         }
 
@@ -138,7 +136,7 @@ static void ps_timer_int( unsigned long data)
 		return;
 		}
 	ps_timer_active = 1;
-        ps_timer.expires = jiffies + (ps_nice>0)?(ps_nice-1):0;
+        ps_timer.expires = jiffies;
         add_timer(&ps_timer);
         spin_unlock_irqrestore(&ps_spinlock,flags);
 }

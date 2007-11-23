@@ -595,6 +595,7 @@ net_rx(struct device *dev)
 /* The inverse routine to net_open(). */
 static int net_close(struct device *dev)
 {
+	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 
 	dev->tbusy = 1;
@@ -604,6 +605,14 @@ static int net_close(struct device *dev)
 	outb(0xda, ioaddr + CONFIG_0);
 
 	/* No statistic counters on the chip to update. */
+
+#if 0
+	/* Disable the IRQ on boards where it is feasible. */
+	if (lp->jumpered) {
+		outb(0x00, ioaddr + IOCONFIG1);
+		free_irq(dev->irq, dev);
+	}
+#endif
 
 	/* Power-down the chip.  Green, green, green! */
 	outb(0x00, ioaddr + CONFIG_1);

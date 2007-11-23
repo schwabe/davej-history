@@ -70,10 +70,6 @@ static int dummy_close(struct device *dev)
 	return 0;
 }
 
-static int dummy_rebuild(void *eth, struct device *dev, unsigned long raddr, struct sk_buff *skb)
-{
-	return 0;
-}
 
 int dummy_init(struct device *dev)
 {
@@ -98,7 +94,6 @@ int dummy_init(struct device *dev)
 	/* Fill in the fields of the device structure with ethernet-generic values. */
 	ether_setup(dev);
 	dev->flags |= IFF_NOARP;
-	dev->rebuild_header = dummy_rebuild;
 
 	return 0;
 }

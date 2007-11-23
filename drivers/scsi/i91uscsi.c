@@ -2,7 +2,6 @@
  * Initio 9100 device driver for Linux.
  *
  * Copyright (c) 1994-1998 Initio Corporation
- * Copyright (c) 1998 Bas Vermeulen <bvermeul@blackstar.xs4all.nl>
  * All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -65,13 +64,6 @@
 	07/08/98 hc, Support 0002134A
         07/23/98 wh, Change the abort_srb routine.
 	09/16/98 hl, Support ALPHA, Rewrite the returnNumberAdapters	<01>
-	12/09/98 bv, Removed unused code, changed tul_se2_wait to
-		     use udelay(30) and tul_do_pause to enable 
-		     interrupts for >= 2.1.95
-	12/13/98 bv, Use spinlocks instead of cli() for serialized
-		     access to HCS_Semaph, HCS_FirstAvail and HCS_LastAvail
-		     members of the HCS structure.
-	01/09/98 bv, Fix a deadlock on SMP system.
 **********************************************************************/
 
 #define DEBUG_INTERRUPT 0
@@ -83,104 +75,119 @@
 #ifndef CVT_LINUX_VERSION
 #define	CVT_LINUX_VERSION(V,P,S)	(V * 65536 + P * 256 + S)
 #endif
-
-#ifndef LINUX_VERSION_CODE
-#include <linux/version.h>
-#endif
-
-#include <linux/sched.h>
-#include <linux/delay.h>
-#include <linux/blk.h>
+#if 0
+#include "../block/blk.h"
 #include <asm/io.h>
-
+#include "scsi.h"
+#include "hosts.h"
+#include "constants.h"
 #include "i91uscsi.h"
 
+#endif
+#if 1
+#include <linux/sched.h>
+/*#include <linux/blk.h>*/
+#include <asm/io.h>
+/*#include "hosts.h"*/
+/*#include "scsi.h"*/
+#include "i91uscsi.h"
+#endif
+
 /*--- external functions --*/
-static void tul_se2_wait(void);
+static void     tul_se2_wait(void);
+/*extern void   tul_do_pause(unsigned int);*/
 
 /*--- forward refrence ---*/
-static SCB *tul_find_busy_scb(HCS * pCurHcb, WORD tarlun);
-static SCB *tul_find_done_scb(HCS * pCurHcb);
+static SCB      *tul_find_busy_scb(HCS *pCurHcb, WORD tarlun);
+static SCB      *tul_find_done_scb(HCS *pCurHcb);
 
-static int tulip_main(HCS * pCurHcb);
+static int      tulip_main(HCS *pCurHcb);
+/* static int      init_tulip(HCS *pCurHcb, SCB *pCurScb, int ch_idx);*/
 
-static int tul_next_state(HCS * pCurHcb);
-static int tul_state_1(HCS * pCurHcb);
-static int tul_state_2(HCS * pCurHcb);
-static int tul_state_3(HCS * pCurHcb);
-static int tul_state_4(HCS * pCurHcb);
-static int tul_state_5(HCS * pCurHcb);
-static int tul_state_6(HCS * pCurHcb);
-static int tul_state_7(HCS * pCurHcb);
-static int tul_xfer_data_in(HCS * pCurHcb);
-static int tul_xfer_data_out(HCS * pCurHcb);
-static int tul_xpad_in(HCS * pCurHcb);
-static int tul_xpad_out(HCS * pCurHcb);
-static int tul_status_msg(HCS * pCurHcb);
+static int      tul_next_state(HCS *pCurHcb);
+static int      tul_state_1(HCS *pCurHcb);
+static int      tul_state_2(HCS *pCurHcb);
+static int      tul_state_3(HCS *pCurHcb);
+static int      tul_state_4(HCS *pCurHcb);
+static int      tul_state_5(HCS *pCurHcb);
+static int      tul_state_6(HCS *pCurHcb);
+static int      tul_state_7(HCS *pCurHcb);
+static int      tul_xfer_data_in(HCS *pCurHcb);
+static int      tul_xfer_data_out(HCS *pCurHcb);
+static int      tul_xpad_in(HCS *pCurHcb);
+static int      tul_xpad_out(HCS *pCurHcb);
+static int      tul_status_msg(HCS *pCurHcb);
+/*static int      tul_bad_seq(HCS *pCurHcb);	10/13/97	*/
 
-static int tul_msgin(HCS * pCurHcb);
-static int tul_msgin_sync(HCS * pCurHcb);
-static int tul_msgin_accept(HCS * pCurHcb);
-static int tul_msgout_reject(HCS * pCurHcb);
-static int tul_msgin_extend(HCS * pCurHcb);
+static int      tul_msgin(HCS *pCurHcb);
+static int      tul_msgin_sync(HCS *pCurHcb);
+static int      tul_msgin_accept(HCS *pCurHcb);
+static int      tul_msgout_reject(HCS *pCurHcb);
+static int      tul_msgin_extend(HCS *pCurHcb);
 
-static int tul_msgout_ide(HCS * pCurHcb);
-static int tul_msgout_abort_targ(HCS * pCurHcb);
-static int tul_msgout_abort_tag(HCS * pCurHcb);
+static	int      tul_msgout_ide(HCS *pCurHcb);
+static	int      tul_msgout_abort_targ(HCS *pCurHcb);
+static	int      tul_msgout_abort_tag(HCS *pCurHcb);
 
-static int tul_bus_device_reset(HCS * pCurHcb);
-static void tul_select_atn(HCS * pCurHcb, SCB * pCurScb);
-static void tul_select_atn3(HCS * pCurHcb, SCB * pCurScb);
-static void tul_select_atn_stop(HCS * pCurHcb, SCB * pCurScb);
-static int int_tul_busfree(HCS * pCurHcb);
-int int_tul_scsi_rst(HCS * pCurHcb);
-static int int_tul_bad_seq(HCS * pCurHcb);
-static int int_tul_resel(HCS * pCurHcb);
-static int tul_sync_done(HCS * pCurHcb);
-static int wdtr_done(HCS * pCurHcb);
-static int wait_tulip(HCS * pCurHcb);
-static int tul_wait_done_disc(HCS * pCurHcb);
-static int tul_wait_disc(HCS * pCurHcb);
-static void tulip_scsi(HCS * pCurHcb);
-static int tul_post_scsi_rst(HCS * pCurHcb);
+static	int      tul_bus_device_reset(HCS *pCurHcb);
+static	void     tul_select_atn(HCS *pCurHcb, SCB *pCurScb);
+static	void     tul_select_atn3(HCS *pCurHcb, SCB *pCurScb);
+static	void     tul_select_atn_stop(HCS *pCurHcb, SCB *pCurScb);
+//static	int      tul_reset_scsi(HCS *pCurHcb, int seconds);
+static	int      int_tul_busfree(HCS *pCurHcb);
+#if 0
+static	int      int_tul_scsi_rst(HCS *pCurHcb);
+#else
+int      int_tul_scsi_rst(HCS *pCurHcb);
+#endif
+static	int      int_tul_bad_seq(HCS *pCurHcb);
+static	int      int_tul_resel(HCS *pCurHcb);
+static	int      tul_sync_done(HCS *pCurHcb);
+static	int      wdtr_done(HCS *pCurHcb);
+static	int      wait_tulip(HCS *pCurHcb);
+static	int      tul_wait_done_disc(HCS *pCurHcb);
+static	int      tul_wait_disc(HCS *pCurHcb);
+/*static int    tul_msgin_par_err(HCS *pCurHcb);*/
+static	void     tulip_scsi(HCS *pCurHcb);
+static	int      tul_post_scsi_rst(HCS *pCurHcb);
 
-static void tul_se2_ew_en(WORD CurBase);
-static void tul_se2_ew_ds(WORD CurBase);
-static int tul_se2_rd_all(WORD CurBase);
-static void tul_se2_update_all(WORD CurBase);	/* setup default pattern */
-static void tul_read_eeprom(WORD CurBase);
+static	void     tul_se2_ew_en(WORD CurBase);
+static	void     tul_se2_ew_ds(WORD CurBase);
+static	int      tul_se2_rd_all(WORD CurBase);
+static	void     tul_se2_update_all(WORD CurBase);       /* setup default pattern */
+static	void     tul_read_eeprom(WORD CurBase);
 
 				/* ---- EXTERNAL VARIABLES ---- */
-HCS tul_hcs[MAX_SUPPORTED_ADAPTERS];
+HCS      	tul_hcs[MAX_SUPPORTED_ADAPTERS];
 				/* ---- INTERNAL VARIABLES ---- */
-static INI_ADPT_STRUCT i91u_adpt[MAX_SUPPORTED_ADAPTERS];
+static	INI_ADPT_STRUCT i91u_adpt[MAX_SUPPORTED_ADAPTERS];
 
-/*NVRAM nvram, *nvramp = &nvram; */
+/*NVRAM nvram, *nvramp = &nvram;*/
 static NVRAM i91unvram;
 static NVRAM *i91unvramp;
 
 
+/* HCSINFO HcsInfo[ MAX_PCI_DEVICES * MAX_PCI_CHANL ]; ??? */
+/*HCSINFO HcsInfo[ MAX_PCI_CHANL ];*/
 
-static UCHAR i91udftNvRam[64] =
-{
-/*----------- header -----------*/
-	0x25, 0xc9,		/* Signature    */
-	0x40,			/* Size         */
-	0x01,			/* Revision     */
+static UCHAR i91udftNvRam[64] = {               /*----------- header -----------*/
+	0x25, 0xc9,             /* Signature    */
+	0x40,                   /* Size         */
+	0x01,                   /* Revision     */
 	/* -- Host Adapter Structure -- */
-	0x95,			/* ModelByte0   */
-	0x00,			/* ModelByte1   */
-	0x00,			/* ModelInfo    */
-	0x01,			/* NumOfCh      */
-	NBC1_DEFAULT,		/* BIOSConfig1  */
-	0,			/* BIOSConfig2  */
-	0,			/* HAConfig1    */
-	0,			/* HAConfig2    */
+	0x95,                   /* ModelByte0   */
+	0x00,                   /* ModelByte1   */
+	0x00,                   /* ModelInfo    */
+	0x01,                   /* NumOfCh      */
+	NBC1_DEFAULT,           /* BIOSConfig1  */
+	0,                      /* BIOSConfig2  */
+	0,                      /* HAConfig1    */
+	0,                      /* HAConfig2    */
 	/* SCSI channel 0 and target Structure  */
-	7,			/* SCSIid       */
-	NCC1_DEFAULT,		/* SCSIconfig1  */
-	0,			/* SCSIconfig2  */
-	0x10,			/* NumSCSItarget */
+	7,                      /* SCSIid       */
+	NCC1_DEFAULT,           /* SCSIconfig1  */
+	0,                      /* SCSIconfig2  */
+	0x10,                   /* NumSCSItarget*/
 
 	NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT,
 	NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT,
@@ -188,82 +195,112 @@ static UCHAR i91udftNvRam[64] =
 	NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT,
 
 	/* SCSI channel 1 and target Structure  */
-	7,			/* SCSIid       */
-	NCC1_DEFAULT,		/* SCSIconfig1  */
-	0,			/* SCSIconfig2  */
-	0x10,			/* NumSCSItarget */
+	7,                      /* SCSIid       */
+	NCC1_DEFAULT,           /* SCSIconfig1  */
+	0,                      /* SCSIconfig2  */
+	0x10,                   /* NumSCSItarget*/
 
 	NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT,
 	NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT,
 	NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT,
 	NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT, NTC_DEFAULT,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	0, 0};			/*      - CheckSum -            */
+	0, 0 };                         /*      - CheckSum -            */
 
 
-static UCHAR tul_rate_tbl[8] =	/* fast 20      */
-{
+static UCHAR    tul_rate_tbl[8] =       /* fast 20      */
+		{
 				/* nanosecond devide by 4 */
-	12,			/* 50ns,  20M   */
-	18,			/* 75ns,  13.3M */
-	25,			/* 100ns, 10M   */
-	31,			/* 125ns, 8M    */
-	37,			/* 150ns, 6.6M  */
-	43,			/* 175ns, 5.7M  */
-	50,			/* 200ns, 5M    */
-	62			/* 250ns, 4M    */
-};
+			12,     /* 50ns,  20M   */
+			18,     /* 75ns,  13.3M */
+			25,     /* 100ns, 10M   */
+			31,     /* 125ns, 8M    */
+			37,     /* 150ns, 6.6M  */
+			43,     /* 175ns, 5.7M  */
+			50,     /* 200ns, 5M    */
+			62      /* 250ns, 4M    */
+		};
 
-extern int tul_num_ch;
-
-
-static void tul_do_pause(unsigned amount)
-{				/* Pause for amount*10 milliseconds */
-	unsigned long the_time = jiffies + amount;	/* 0.01 seconds per jiffy */
-
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	while (time_before_eq(jiffies, the_time));
-#else
-	while (jiffies < the_time);
+#if 0 			/*	<01>  */
+static UCHAR    bi91uPCI_mechanism = 0;     /* The mechanism used by read PCI */
 #endif
+extern	int	tul_num_ch;
+
+
+#if 1
+static void tul_do_pause( unsigned amount ) /* Pause for amount*10 milliseconds */
+{
+    unsigned long the_time = jiffies + amount; /* 0.01 seconds per jiffy */
+
+    while (jiffies < the_time)
+     ;
 }
+#endif
 
 /*-- forward reference --*/
+#if 0
+static void tul_snapdump(ULONG *ptr, int length)
+{
+    int col, row;
+    int i, idx;
+
+    row = length / 16 + ((length % 16) ? 1 : 0);
+    idx = 0;
+    printk("\n\r");
+    for (i = 0; i < row; i++)
+	{
+	printk("Offset %04x at %08lx :  ", idx, (ULONG) ptr);
+	for (col = 0; (col < 2) & (idx < length); col++, idx+=4)
+	    {
+	    printk(" %08lx", *ptr++);
+	    }
+	printk(" -");
+	for (col = 0; (col < 2) & (idx < length); col++, idx+=4)
+	    {
+	    printk(" %08lx", *ptr++);
+	    }
+	printk("\n\r");
+	}
+}
+#endif
+/*--- forward reference ---*/
 
 /*******************************************************************
 	Use memeory refresh time        ~ 15us * 2
 ********************************************************************/
 void tul_se2_wait()
 {
-#if 1
-	udelay(30);
+#if 0
+    ULONG i;
+    i = jiffies + (30 * HZ / 100000);
+    while (jiffies , i++);
 #else
-	UCHAR readByte;
+    UCHAR readByte;
 
-	readByte = TUL_RD(0, 0x61);
-	if ((readByte & 0x10) == 0x10) {
-		for (;;) {
-			readByte = TUL_RD(0, 0x61);
-			if ((readByte & 0x10) == 0x10)
-				break;
-		}
-		for (;;) {
-			readByte = TUL_RD(0, 0x61);
-			if ((readByte & 0x10) != 0x10)
-				break;
-		}
-	} else {
-		for (;;) {
-			readByte = TUL_RD(0, 0x61);
-			if ((readByte & 0x10) == 0x10)
-				break;
-		}
-		for (;;) {
-			readByte = TUL_RD(0, 0x61);
-			if ((readByte & 0x10) != 0x10)
-				break;
-		}
+    readByte = TUL_RD( 0, 0x61 );
+    if ( (readByte & 0x10) == 0x10) {
+	for (; ;) {
+	    readByte = TUL_RD( 0, 0x61 );
+	    if ( (readByte & 0x10) == 0x10)
+		break;
 	}
+	for (;;) {
+	    readByte = TUL_RD( 0, 0x61 );
+	    if ( (readByte & 0x10) != 0x10)
+		break;
+	}
+    } else {
+	for (; ; ) {
+	    readByte = TUL_RD( 0, 0x61 );
+	    if ( (readByte & 0x10) == 0x10)
+		break;
+	}
+	for (; ; ) {
+	    readByte = TUL_RD( 0, 0x61 );
+	    if ( (readByte & 0x10) != 0x10)
+		break;
+	}
+    }
 #endif
 }
 
@@ -300,28 +337,28 @@ void tul_se2_wait()
 ******************************************************************/
 void tul_se2_instr(WORD CurBase, UCHAR instr)
 {
-	int i;
-	UCHAR b;
+    int i;
+    UCHAR b;
 
-	TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2DO);	/* cs+start bit */
-	tul_se2_wait();
-	TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2CLK | SE2DO);	/* +CLK */
-	tul_se2_wait();
+    TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2DO);     /* cs+start bit */
+    tul_se2_wait();
+    TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2CLK | SE2DO); /* +CLK */
+    tul_se2_wait();
 
-	for (i = 0; i < 8; i++) {
-		if (instr & 0x80)
-			b = SE2CS | SE2DO;	/* -CLK+dataBit */
-		else
-			b = SE2CS;	/* -CLK */
-		TUL_WR(CurBase + TUL_NVRAM, b);
-		tul_se2_wait();
-		TUL_WR(CurBase + TUL_NVRAM, b | SE2CLK);	/* +CLK */
-		tul_se2_wait();
-		instr <<= 1;
-	}
-	TUL_WR(CurBase + TUL_NVRAM, SE2CS);	/* -CLK */
+    for ( i = 0; i < 8; i++) {
+	if (instr & 0x80)
+	    b =  SE2CS | SE2DO;         /* -CLK+dataBit */
+	else
+	    b =  SE2CS ;                /* -CLK */
+	TUL_WR(CurBase + TUL_NVRAM, b);
 	tul_se2_wait();
-	return;
+	TUL_WR(CurBase + TUL_NVRAM, b | SE2CLK);        /* +CLK */
+	tul_se2_wait();
+	instr <<= 1;
+    }
+    TUL_WR(CurBase + TUL_NVRAM, SE2CS );                /* -CLK */
+    tul_se2_wait();
+    return;
 }
 
 
@@ -331,10 +368,10 @@ void tul_se2_instr(WORD CurBase, UCHAR instr)
 ******************************************************************/
 void tul_se2_ew_en(WORD CurBase)
 {
-	tul_se2_instr(CurBase, 0x30);	/* EWEN */
-	TUL_WR(CurBase + TUL_NVRAM, 0);		/* -CS  */
-	tul_se2_wait();
-	return;
+    tul_se2_instr(CurBase, 0x30);                       /* EWEN */
+    TUL_WR(CurBase + TUL_NVRAM, 0);     /* -CS  */
+    tul_se2_wait();
+    return;
 }
 
 
@@ -343,10 +380,10 @@ void tul_se2_ew_en(WORD CurBase)
 *************************************************************************/
 void tul_se2_ew_ds(WORD CurBase)
 {
-	tul_se2_instr(CurBase, 0);	/* EWDS */
-	TUL_WR(CurBase + TUL_NVRAM, 0);		/* -CS  */
-	tul_se2_wait();
-	return;
+    tul_se2_instr(CurBase,  0);         /* EWDS */
+    TUL_WR(CurBase + TUL_NVRAM, 0);     /* -CS  */
+    tul_se2_wait();
+    return;
 }
 
 
@@ -356,29 +393,29 @@ void tul_se2_ew_ds(WORD CurBase)
 *******************************************************************/
 USHORT tul_se2_rd(WORD CurBase, ULONG adr)
 {
-	UCHAR instr, readByte;
-	USHORT readWord;
-	int i;
+    UCHAR instr, readByte;
+    USHORT readWord;
+    int i;
 
-	instr = (UCHAR) (adr | 0x80);
-	tul_se2_instr(CurBase, instr);	/* READ INSTR */
-	readWord = 0;
+    instr = (UCHAR)(  adr  | 0x80 );
+    tul_se2_instr(CurBase, instr);                       /* READ INSTR */
+    readWord = 0;
 
-	for (i = 15; i >= 0; i--) {
-		TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2CLK);	/* +CLK */
-		tul_se2_wait();
-		TUL_WR(CurBase + TUL_NVRAM, SE2CS);	/* -CLK */
+    for ( i = 15; i >= 0; i--) {
+	TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2CLK );    /* +CLK */
+	tul_se2_wait();
+	TUL_WR(CurBase + TUL_NVRAM, SE2CS );             /* -CLK */
 
 		/* sample data after the following edge of clock  */
-		readByte = TUL_RD(CurBase, TUL_NVRAM);
-		readByte &= SE2DI;
-		readWord += (readByte << i);
-		tul_se2_wait();	/* 6/20/95 */
-	}
+	readByte = TUL_RD(CurBase, TUL_NVRAM);
+	readByte &= SE2DI;
+	readWord += (readByte << i);
+	tul_se2_wait();                                        /* 6/20/95 */
+    }
 
-	TUL_WR(CurBase + TUL_NVRAM, 0);		/* no chip select */
-	tul_se2_wait();
-	return readWord;
+    TUL_WR(CurBase + TUL_NVRAM, 0 );    /* no chip select */
+    tul_se2_wait();
+    return readWord;
 }
 
 
@@ -387,40 +424,40 @@ USHORT tul_se2_rd(WORD CurBase, ULONG adr)
 *******************************************************************/
 void tul_se2_wr(WORD CurBase, UCHAR adr, USHORT writeWord)
 {
-	UCHAR readByte;
-	UCHAR instr;
-	int i;
+    UCHAR readByte;
+    UCHAR instr;
+    int i;
 
-	instr = (UCHAR) (adr | 0x40);
-	tul_se2_instr(CurBase, instr);	/* WRITE INSTR */
-	for (i = 15; i >= 0; i--) {
-		if (writeWord & 0x8000)
-			TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2DO);	/* -CLK+dataBit 1 */
-		else
-			TUL_WR(CurBase + TUL_NVRAM, SE2CS);	/* -CLK+dataBit 0 */
-		tul_se2_wait();
-		TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2CLK);	/* +CLK */
-		tul_se2_wait();
-		writeWord <<= 1;
-	}
-	TUL_WR(CurBase + TUL_NVRAM, SE2CS);	/* -CLK */
+    instr = (UCHAR)(  adr  | 0x40 );
+    tul_se2_instr(CurBase, instr);                      /* WRITE INSTR */
+    for ( i = 15; i >= 0; i--) {
+	if (writeWord & 0x8000)
+	    TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2DO); /* -CLK+dataBit 1 */
+	else
+	    TUL_WR(CurBase + TUL_NVRAM, SE2CS );                  /* -CLK+dataBit 0 */
 	tul_se2_wait();
-	TUL_WR(CurBase + TUL_NVRAM, 0);		/* -CS  */
+	TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2CLK );   /* +CLK */
 	tul_se2_wait();
+	writeWord <<= 1;
+    }
+    TUL_WR(CurBase + TUL_NVRAM, SE2CS); /* -CLK */
+    tul_se2_wait();
+    TUL_WR(CurBase + TUL_NVRAM, 0);     /* -CS  */
+    tul_se2_wait();
 
-	TUL_WR(CurBase + TUL_NVRAM, SE2CS);	/* +CS  */
-	tul_se2_wait();
+    TUL_WR(CurBase + TUL_NVRAM, SE2CS); /* +CS  */
+    tul_se2_wait();
 
-	for (;;) {
-		TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2CLK);	/* +CLK */
-		tul_se2_wait();
-		TUL_WR(CurBase + TUL_NVRAM, SE2CS);	/* -CLK */
-		tul_se2_wait();
-		if ((readByte = TUL_RD(CurBase, TUL_NVRAM)) & SE2DI)
-			break;	/* write complete */
-	}
-	TUL_WR(CurBase + TUL_NVRAM, 0);		/* -CS */
-	return;
+    for (; ; ) {
+	TUL_WR(CurBase + TUL_NVRAM, SE2CS | SE2CLK);       /* +CLK */
+	tul_se2_wait();
+	TUL_WR(CurBase + TUL_NVRAM, SE2CS );               /* -CLK */
+	tul_se2_wait();
+	if ((readByte = TUL_RD(CurBase, TUL_NVRAM )) & SE2DI )
+	    break;                      /* write complete */
+    }
+    TUL_WR(CurBase + TUL_NVRAM, 0);     /* -CS */
+    return;
 }
 
 
@@ -429,56 +466,61 @@ void tul_se2_wr(WORD CurBase, UCHAR adr, USHORT writeWord)
 ************************************************************************/
 int tul_se2_rd_all(WORD CurBase)
 {
-	int i;
-	ULONG chksum = 0;
-	USHORT *np;
+    int i;
+    ULONG chksum = 0;
+    USHORT *np;
 
-	i91unvramp = &i91unvram;
-	np = (USHORT *) i91unvramp;
-	for (i = 0; i < 32; i++) {
-		*np++ = tul_se2_rd(CurBase, i);
-	}
+    i91unvramp = &i91unvram;
+    np = (USHORT * )i91unvramp;
+    for ( i = 0; i < 32; i++) {
+	*np++ = tul_se2_rd(CurBase, i);
+    }
 
-/*--------------------Is signature "ini" ok ? ----------------*/
-	if (i91unvramp->NVM_Signature != INI_SIGNATURE)
-		return -1;
-/*---------------------- Is ckecksum ok ? ----------------------*/
-	np = (USHORT *) i91unvramp;
-	for (i = 0; i < 31; i++)
-		chksum += *np++;
-	if (i91unvramp->NVM_CheckSum != (USHORT) chksum)
-		return -1;
-	return 1;
+	/*--------------------Is signature "ini" ok ? ----------------*/
+    if ( i91unvramp->NVM_Signature != INI_SIGNATURE )
+	return - 1;
+#if 0
+	/*--------------------Is Model# byte 1 "91" ok ? ----------------*/
+//    if ( i91unvramp->ModelByte0 != 0x91)      /* 4:   Model number (byte 0)  */
+//      return - 1;
+#endif
+	/*---------------------- Is ckecksum ok ? ----------------------*/
+    np = (USHORT * )i91unvramp;
+    for ( i = 0; i < 31; i++)
+	chksum += *np++;
+    if ( i91unvramp->NVM_CheckSum != (USHORT)chksum )
+	return - 1;
+    return 1;
 }
 
 
 /***********************************************************************
  Update SCSI H/A configuration parameters from serial EEPROM
 ************************************************************************/
-void tul_se2_update_all(WORD CurBase)
-{				/* setup default pattern */
-	int i;
-	ULONG chksum = 0;
-	USHORT *np, *np1;
+void tul_se2_update_all(WORD CurBase)   /* setup default pattern */
+{
+    int i;
+    ULONG chksum = 0;
+    USHORT * np, *np1;
 
-	i91unvramp = &i91unvram;
+    i91unvramp = &i91unvram;
 	/* Calculate checksum first */
-	np = (USHORT *) i91udftNvRam;
-	for (i = 0; i < 31; i++)
-		chksum += *np++;
-	*np = (USHORT) chksum;
-	tul_se2_ew_en(CurBase);	/* Enable write  */
+    np = (USHORT * )i91udftNvRam;
+    for ( i = 0; i < 31; i++)
+	chksum += *np++;
+    *np = (USHORT)chksum;
+    tul_se2_ew_en(CurBase);                     /* Enable write  */
 
-	np = (USHORT *) i91udftNvRam;
-	np1 = (USHORT *) i91unvramp;
-	for (i = 0; i < 32; i++, np++, np1++) {
-		if (*np != *np1) {
-			tul_se2_wr(CurBase, i, *np);
-		}
+    np = (USHORT * )i91udftNvRam;
+    np1 = (USHORT * )i91unvramp;
+    for ( i = 0; i < 32; i++, np++, np1++) {
+	if (*np != *np1) {
+	    tul_se2_wr(CurBase, i, *np);
 	}
+    }
 
-	tul_se2_ew_ds(CurBase);	/* Disable write   */
-	return;
+    tul_se2_ew_ds(CurBase);                     /* Disable write   */
+    return;
 }
 
 /*************************************************************************
@@ -486,1897 +528,2297 @@ void tul_se2_update_all(WORD CurBase)
 **************************************************************************/
 void tul_read_eeprom(WORD CurBase)
 {
-	UCHAR gctrl;
+    UCHAR gctrl;
 
-	i91unvramp = &i91unvram;
-/*------Enable EEProm programming ---*/
-	gctrl = TUL_RD(CurBase, TUL_GCTRL);
-	TUL_WR(CurBase + TUL_GCTRL, gctrl | TUL_GCTRL_EEPROM_BIT);
-	if (tul_se2_rd_all(CurBase) != 1) {
-		tul_se2_update_all(CurBase);	/* setup default pattern */
-		tul_se2_rd_all(CurBase);	/* load again  */
-	}
-/*------ Disable EEProm programming ---*/
-	gctrl = TUL_RD(CurBase, TUL_GCTRL);
-	TUL_WR(CurBase + TUL_GCTRL, gctrl & ~TUL_GCTRL_EEPROM_BIT);
-}				/* read_eeprom */
+    i91unvramp = &i91unvram;
+	/*------Enable EEProm programming ---*/
+    gctrl = TUL_RD(CurBase, TUL_GCTRL);
+    TUL_WR(CurBase + TUL_GCTRL, gctrl | TUL_GCTRL_EEPROM_BIT );
+    if ( tul_se2_rd_all(CurBase) != 1 )  {
+	tul_se2_update_all(CurBase);    /* setup default pattern */
+	tul_se2_rd_all(CurBase);                        /* load again  */
+    }
+	/*------ Disable EEProm programming ---*/
+    gctrl = TUL_RD(CurBase, TUL_GCTRL);
+    TUL_WR(CurBase + TUL_GCTRL, gctrl & ~TUL_GCTRL_EEPROM_BIT );
+} /* read_eeprom */
 
-int Addi91u_into_Adapter_table(WORD wBIOS, WORD wBASE, BYTE bInterrupt,
-			       BYTE bBus, BYTE bDevice)
+
+#if 0			/* <01> */
+static UBYTE   i91uGetPCIMechanism(void)
 {
-	int i, j;
+    int                 bus, device;
+    unsigned long       lConfigAddress, lConfigData;
 
-	for (i = 0; i < MAX_SUPPORTED_ADAPTERS; i++) {
-		if (i91u_adpt[i].ADPT_BIOS < wBIOS)
-			continue;
-		if (i91u_adpt[i].ADPT_BIOS == wBIOS) {
-			if (i91u_adpt[i].ADPT_BASE == wBASE) {
-				if (i91u_adpt[i].ADPT_Bus != 0xFF)
-					return (FAILURE);
-			} else if (i91u_adpt[i].ADPT_BASE < wBASE)
-					continue;
-		}
-		for (j = MAX_SUPPORTED_ADAPTERS - 1; j > i; j--) {
-			i91u_adpt[j].ADPT_BASE = i91u_adpt[j - 1].ADPT_BASE;
-			i91u_adpt[j].ADPT_INTR = i91u_adpt[j - 1].ADPT_INTR;
-			i91u_adpt[j].ADPT_BIOS = i91u_adpt[j - 1].ADPT_BIOS;
-			i91u_adpt[j].ADPT_Bus = i91u_adpt[j - 1].ADPT_Bus;
-			i91u_adpt[j].ADPT_Device = i91u_adpt[j - 1].ADPT_Device;
-		}
-		i91u_adpt[i].ADPT_BASE = wBASE;
-		i91u_adpt[i].ADPT_INTR = bInterrupt;
-		i91u_adpt[i].ADPT_BIOS = wBIOS;
-		i91u_adpt[i].ADPT_Bus = bBus;
-		i91u_adpt[i].ADPT_Device = bDevice;
-		return (SUCCESSFUL);
+    lConfigAddress = 0x80000000;
+    for (bus = 0; bus < 255; bus++)
+	{
+	lConfigAddress &= 0xFFFF0000;
+	for (device = 0; device < 21; device++)
+	    {
+	    outl(lConfigAddress, 0xCF8);        /*Write config_address,enable*/
+	    lConfigData = inl(0xCFC);           /* Read config_data     */
+	    if ((lConfigData & 0xFFFF) == 0x1101)
+		return (1);                     /* Mechanism 1          */
+	    if ((lConfigData & 0xFFFF) == 0x134A)
+		return (1);                     /* Mechanism 1          */
+	    lConfigAddress += 0x800;
+	    }
+	lConfigAddress += 0x10000;
 	}
-	return (FAILURE);
+    return (2);                                 /* Mechanism 2          */
+}
+
+#if 1
+
+/*****************************************************************************/
+static unsigned long i91uReadPCIConfig( unsigned char BusNum,
+				unsigned char DeviceNum,
+				unsigned char RegNum)
+{
+    HOST_ADR            HostAdr;
+    CONFIG_ADR          ConfigAdr;
+    unsigned long       ConfigData;
+
+#if BIOS32
+    REGS                Regs;
+
+    if (CallBIOS32)
+	{                               /* PCI BIOS32 exists, use it    */
+	Regs.eax.byte.ah = PCI_FUNCTION_ID;
+	Regs.eax.byte.al = READ_CONFIG_DWORD;
+	Regs.ebx.byte.bh = BusNum;
+	Regs.ebx.byte.bl = DeviceNum & 0xFC;
+	Regs.edi.word.di = RegNum;
+	if (PCIBIOS32Call(CallBIOS32, &Regs))
+	    {
+	    return(-1);                 /* Read configuration error     */
+	    }
+	if (Regs.eax.byte.ah != SUCCESSFUL)
+	    {                           /* Check return code            */
+	    return(-1);                 /* Read configuration error     */
+	    }
+	return(Regs.ecx.ecx);
+	}
+#endif
+    if (bi91uPCI_mechanism == 0)
+	bi91uPCI_mechanism = i91uGetPCIMechanism();
+    if (bi91uPCI_mechanism == 1)
+	{                               /* Mechanism #1                 */
+	ConfigAdr.lConfigAdr = 0;
+	ConfigAdr.sConfigAdr.RegNum = RegNum & 0xFC; /* Get rid of bit 0&1 */
+	ConfigAdr.sConfigAdr.DeviceNum = DeviceNum;
+	ConfigAdr.sConfigAdr.BusNum = BusNum;
+	ConfigAdr.sConfigAdr.Enable = 1;
+	outl(ConfigAdr.lConfigAdr, 0xCF8);      /*Write config_address,enable*/
+	ConfigData = inl(0xCFC);                /* Read config_data     */
+	ConfigAdr.lConfigAdr = 0;
+	outl(ConfigAdr.lConfigAdr, 0xCF8);      /*Write config_address,disable*/
+	/*if (ConfigData != -1)         Read success                    */
+	return(ConfigData);
+	}
+    else
+	{                               /* Mechanism #2                 */
+	if (DeviceNum >= 16)            /* Mechanism #2 only support 16 */
+	    return(-1);                 /*      devices C000- CF00      */
+	HostAdr.sHostAdr.RegNum = RegNum & 0xFC; /* Get rid of bit 0&1  */
+	HostAdr.sHostAdr.DeviceNum = 0xC0 | (DeviceNum & 0xF);
+	HostAdr.sHostAdr.Reserved = 0x0000;
+	outb(BusNum, 0xCFA);/* Setup forward address    */
+	outb(0xC0, 0xCF8);      /* Configuration mapping enable */
+/*      outb(0xC0, 0xCFA);       Configuration mapping enable   */
+	ConfigData = inl(HostAdr.lHostAdr);/* Read configuration data   */
+	outb(0, 0xCFA);                 /* Setup forward address        */
+	outb(0, 0xCF8);                 /* Configuration mapping disable*/
+	return(ConfigData);
+	}
+}
+
+#else
+
+/*************************************************************************
+ Function name  : ReadPCIConfig
+ Description    : This function return configuration space's register value.
+ Input    :
+		  BusNum        - Bus number
+		  DeviceNum     - Device number
+		  RegNum        - Register number
+ Output   : None.
+ Return   : Register value
+**************************************************************************/
+unsigned long   ReadPCIConfig(  unsigned char BusNum,
+				unsigned char DeviceNum,
+				unsigned char RegNum)
+{
+    HOST_ADR            HostAdr;
+    CONFIG_ADR          ConfigAdr;
+    unsigned long       ConfigData;
+
+    if (bPCI_mechanism == 1) {
+	/*------------------  Mechanism #1      ------------------------- */
+	ConfigAdr.lConfigAdr = 0;
+	ConfigAdr.sConfigAdr.RegNum = RegNum & 0xFC; /* Get rid of bit 0&1      */
+	ConfigAdr.sConfigAdr.DeviceNum = DeviceNum;
+	ConfigAdr.sConfigAdr.BusNum = BusNum;
+	ConfigAdr.sConfigAdr.Enable = 1;
+	outpl( 0xCF8, ConfigAdr.lConfigAdr);    /* Write config_address, enable */
+
+	ConfigData = inpl( 0xCFC );             /* Read config_data             */
+	ConfigAdr.lConfigAdr = 0;
+	outpl( 0xCF8, ConfigAdr.lConfigAdr);    /* Write config_address, disable*/
+	return(ConfigData);
+    } else {
+	/*------------------  Mechanism #2      ------------------------- */
+	if (DeviceNum >= 16)            /* Mechanism #2 only support 16 */
+	    return(0);                          /*      devices C000- CF00      */
+	HostAdr.lHostAdr = 0;
+	HostAdr.sHostAdr.RegNum = RegNum & 0xFC; /* Get rid of bit 0&1  */
+	HostAdr.sHostAdr.DeviceNum = 0xC0 | (DeviceNum & 0xF);
+	outp(0xCFA, BusNum);            /* Setup forward address        */
+	outp(0xCF8, 0xC0);                      /* Configuration mapping enable */
+	ConfigData = inpl(HostAdr.lHostAdr);    /* Read configuration data      */
+	outp(0xCFA, 0);                 /* Setup forward address        */
+	outp(0xCF8, 0);                 /* Configuration mapping disable*/
+	return(ConfigData);
+    }
+}
+#endif
+#endif
+
+int     Addi91u_into_Adapter_table(WORD wBIOS, WORD wBASE, BYTE bInterrupt, 
+			  BYTE bBus, BYTE bDevice)
+{
+    int i, j;
+
+    for (i = 0; i < MAX_SUPPORTED_ADAPTERS; i++)
+	{
+	if (i91u_adpt[i].ADPT_BIOS < wBIOS)
+	    continue;
+	if (i91u_adpt[i].ADPT_BIOS == wBIOS)
+	    {
+	    if (i91u_adpt[i].ADPT_BASE == wBASE)
+		if (i91u_adpt[i].ADPT_Bus != 0xFF)
+		    return(FAILURE);
+	    else
+		if (i91u_adpt[i].ADPT_BASE < wBASE)
+		    continue;
+	    }
+	for (j = MAX_SUPPORTED_ADAPTERS - 1; j > i; j--)
+	    {
+	    i91u_adpt[j].ADPT_BASE      = i91u_adpt[j-1].ADPT_BASE;
+	    i91u_adpt[j].ADPT_INTR      = i91u_adpt[j-1].ADPT_INTR;
+	    i91u_adpt[j].ADPT_BIOS      = i91u_adpt[j-1].ADPT_BIOS;
+	    i91u_adpt[j].ADPT_Bus       = i91u_adpt[j-1].ADPT_Bus;
+	    i91u_adpt[j].ADPT_Device    = i91u_adpt[j-1].ADPT_Device;
+	    }
+	i91u_adpt[i].ADPT_BASE  = wBASE;
+	i91u_adpt[i].ADPT_INTR  = bInterrupt;
+	i91u_adpt[i].ADPT_BIOS  = wBIOS;
+	i91u_adpt[i].ADPT_Bus   = bBus;
+	i91u_adpt[i].ADPT_Device        = bDevice;
+	return(SUCCESSFUL);
+	}
+    return(FAILURE);
 }
 
 void init_i91uAdapter_table(void)
 {
-	int i;
+    int         i;
 
-	for (i = 0; i < MAX_SUPPORTED_ADAPTERS; i++) {	/* Initialize adapter structure */
-		i91u_adpt[i].ADPT_BIOS = 0xffff;
-		i91u_adpt[i].ADPT_BASE = 0xffff;
-		i91u_adpt[i].ADPT_INTR = 0xff;
-		i91u_adpt[i].ADPT_Bus = 0xff;
-		i91u_adpt[i].ADPT_Device = 0xff;
+    for (i = 0; i < MAX_SUPPORTED_ADAPTERS; i++)
+	{                               /* Initialize adapter structure */
+	i91u_adpt[i].ADPT_BIOS  = 0xffff;
+	i91u_adpt[i].ADPT_BASE  = 0xffff;
+	i91u_adpt[i].ADPT_INTR  = 0xff;
+	i91u_adpt[i].ADPT_Bus   = 0xff;
+	i91u_adpt[i].ADPT_Device        = 0xff;
 	}
-	return;
+    return;
 }
 
-void tul_stop_bm(HCS * pCurHcb)
+#if 0				/* <01> */
+int tul_ReturnNumberOfAdapters(void)
 {
+    long        dRegValue;
+    int         i, iAdapters;
+    BYTE        bPCIBusNum, bTotalBusNum, bInterrupt, bPCIDeviceNum;
+    WORD        wBIOS, wBASE;
 
-	if (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & XPEND) {	/* if DMA xfer is pending, abort DMA xfer */
-		TUL_WR(pCurHcb->HCS_Base + TUL_XCmd, TAX_X_ABT | TAX_X_CLR_FIFO);
-		/* wait Abort DMA xfer done */
-		while ((TUL_RD(pCurHcb->HCS_Base, TUL_Int) & XABT) == 0);
+    for (i = 0; i < MAX_SUPPORTED_ADAPTERS; i++)
+	{                               /* Initialize adapter structure */
+	i91u_adpt[i].ADPT_BIOS  = 0xffff;
+	i91u_adpt[i].ADPT_BASE  = 0xffff;
+	i91u_adpt[i].ADPT_INTR  = 0xff;
+	i91u_adpt[i].ADPT_Bus   = 0xff;
+	i91u_adpt[i].ADPT_Device        = 0xff;
 	}
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-}
 
-/***************************************************************************/
-void get_tulipPCIConfig(HCS * pCurHcb, int ch_idx)
-{
-	pCurHcb->HCS_Base = i91u_adpt[ch_idx].ADPT_BASE;	/* Supply base address  */
-	pCurHcb->HCS_BIOS = i91u_adpt[ch_idx].ADPT_BIOS;	/* Supply BIOS address  */
-	pCurHcb->HCS_Intr = i91u_adpt[ch_idx].ADPT_INTR;	/* Supply interrupt line */
-	return;
-}
+    bTotalBusNum = 0xFF;                /* Search 255 buses             */
 
-/***************************************************************************/
-int tul_reset_scsi(HCS * pCurHcb, int seconds)
-{
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_RST_BUS);
+/*    bi91uPCI_mechanism = 1;              02/05/95                     */
 
-	while (!((pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base, TUL_SInt)) & TSS_SCSIRST_INT));
-	/* reset tulip chip */
-
-	TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, 0);
-
-	/* Stall for a while, wait for target's firmware ready,make it 2 sec ! */
-	/* SONY 5200 tape drive won't work if only stall for 1 sec */
-	tul_do_pause(seconds * 100);
-
-	TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
-
-	return (SCSI_RESET_SUCCESS);
-}
-
-/***************************************************************************/
-int init_tulip(HCS * pCurHcb, SCB * scbp, int tul_num_scb, BYTE * pbBiosAdr, int seconds)
-{
-	int i;
-	WORD *pwFlags;
-	BYTE *pbHeads;
-	SCB *pTmpScb, *pPrevScb = NULL;
-
-	pCurHcb->HCS_NumScbs = tul_num_scb;
-	pCurHcb->HCS_Semaph = 1;
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	pCurHcb->HCS_SemaphLock = SPIN_LOCK_UNLOCKED;
+    for (bPCIBusNum = 0, iAdapters = 0; bPCIBusNum < bTotalBusNum; bPCIBusNum++)
+	{                               /* Scan all the buses           */
+	for (bPCIDeviceNum=0; bPCIDeviceNum < MAX_PCI_DEVICES; bPCIDeviceNum++)
+	    {                           /* Find all jasmine devices     */
+	    if (iAdapters >= MAX_SUPPORTED_ADAPTERS)
+		break;                  /* Never greater than maximum   */
+	    dRegValue = i91uReadPCIConfig(bPCIBusNum, bPCIDeviceNum, TUL_PVID);
+	    if ((dRegValue & 0xFFFF) != INI_VENDOR_ID)
+		{
+#if 1
+		if ((dRegValue & 0xFFFF) != 0x134A)	/* 07/08/98	*/
+		    continue;
+#else
+		if (bPCI_MechanismDone)
+		    continue;
+		bi91uPCI_mechanism = 2; /* 02/05/95                     */
+		dRegValue =i91uReadPCIConfig(bPCIBusNum,bPCIDeviceNum,TUL_PVID);
+		if ((dRegValue & 0xFFFF) != INI_VENDOR_ID)
+		    {
+		    bi91uPCI_mechanism = 1;     /* 02/05/95             */
+		    continue;           /* Wrong vendor ID              */
+		    }
 #endif
-	pCurHcb->HCS_JSStatus0 = 0;
-	pCurHcb->HCS_Scb = scbp;
-	pCurHcb->HCS_NxtPend = scbp;
-	pCurHcb->HCS_NxtAvail = scbp;
-	for (i = 0, pTmpScb = scbp; i < tul_num_scb; i++, pTmpScb++) {
-		pTmpScb->SCB_TagId = i;
-		if (i != 0)
-			pPrevScb->SCB_NxtScb = pTmpScb;
-		pPrevScb = pTmpScb;
+		}
+/*	    bPCI_MechanismDone = 1;*/
+	    if ((((dRegValue >> 16) & 0xFF00) != I950_DEVICE_ID) &&
+	 	(((dRegValue >> 16) & 0xFF00) != I940_DEVICE_ID) &&
+	 	(((dRegValue >> 16) & 0xFF00) != 0x0002) && /* 07/08/98	*/
+		(((dRegValue >> 16) & 0xFF00) != I935_DEVICE_ID))
+		continue;               /* Wrong device ID              */
+					/* Read base address            */
+	    dRegValue = i91uReadPCIConfig(bPCIBusNum, bPCIDeviceNum, TUL_PBAD);
+	    if (dRegValue == -1)
+		{                       /* Check return code            */
+		printk("\n\ri91u: Jasmine read configuration error.\n");
+		return(0);              /* Read configuration space error  */
+		}
+	    if ((dRegValue & 0x01) == 0)
+		{                       /* Base address for memory      */
+		printk("\n\ri91u: Wrong base address setting at -> Bus: %d; Device: %d", bPCIBusNum, bPCIDeviceNum);
+		continue;               /* PCI configuration setup error*/
+		}
+
+	    wBASE = (WORD) (dRegValue & 0xFFFE);
+					/* Now read the BIOS address    */
+	    dRegValue = i91uReadPCIConfig(bPCIBusNum, bPCIDeviceNum, TUL_SDCFG0);
+	    wBIOS = (UWORD) (dRegValue & 0xFF);
+	    if (((dRegValue & 0xFF00) >> 8) == 0xFF)
+		dRegValue = 0;
+	    wBIOS = (wBIOS << 8) + ((UWORD) ((dRegValue & 0xFF00) >> 8));
+					/* Now read the interrupt line  */
+	    dRegValue = i91uReadPCIConfig(bPCIBusNum, bPCIDeviceNum, TUL_PINTL);
+	    bInterrupt = dRegValue & 0xFF;/* Assign interrupt line      */
+
+	    if (Addi91u_into_Adapter_table(wBIOS, wBASE, bInterrupt, bPCIBusNum,
+					  bPCIDeviceNum) == SUCCESSFUL)
+		iAdapters++;
+	    }
 	}
-	pPrevScb->SCB_NxtScb = NULL;
-	pCurHcb->HCS_ScbEnd = pTmpScb;
-	pCurHcb->HCS_FirstAvail = scbp;
-	pCurHcb->HCS_LastAvail = pPrevScb;
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	pCurHcb->HCS_AvailLock = SPIN_LOCK_UNLOCKED;
+    return (iAdapters);
+}
 #endif
-	pCurHcb->HCS_FirstPend = NULL;
-	pCurHcb->HCS_LastPend = NULL;
-	pCurHcb->HCS_FirstBusy = NULL;
-	pCurHcb->HCS_LastBusy = NULL;
-	pCurHcb->HCS_FirstDone = NULL;
-	pCurHcb->HCS_LastDone = NULL;
-	pCurHcb->HCS_ActScb = NULL;
-	pCurHcb->HCS_ActTcs = NULL;
 
-	tul_read_eeprom(pCurHcb->HCS_Base);
-/*---------- get H/A configuration -------------*/
-	if (i91unvramp->NVM_SCSIInfo[0].NVM_NumOfTarg == 8)
-		pCurHcb->HCS_MaxTar = 8;
-	else
-		pCurHcb->HCS_MaxTar = 16;
+void tul_stop_bm(HCS *pCurHcb)
+{
 
-	pCurHcb->HCS_Config = i91unvramp->NVM_SCSIInfo[0].NVM_ChConfig1;
+    if (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & XPEND)
+	{                       /* if DMA xfer is pending, abort DMA xfer */
+	TUL_WR(pCurHcb->HCS_Base+ TUL_XCmd, TAX_X_ABT | TAX_X_CLR_FIFO);
+				/* wait Abort DMA xfer done */
+	while ((TUL_RD(pCurHcb->HCS_Base, TUL_Int) & XABT) == 0);
+	}
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
+}
 
-	pCurHcb->HCS_SCSI_ID = i91unvramp->NVM_SCSIInfo[0].NVM_ChSCSIID;
-	pCurHcb->HCS_IdMask = ~(1 << pCurHcb->HCS_SCSI_ID);
+/***************************************************************************/
+void get_tulipPCIConfig(HCS *pCurHcb, int ch_idx)
+{
+    pCurHcb->HCS_Base = i91u_adpt[ch_idx].ADPT_BASE; /* Supply base address  */
+    pCurHcb->HCS_BIOS = i91u_adpt[ch_idx].ADPT_BIOS; /* Supply BIOS address  */
+    pCurHcb->HCS_Intr = i91u_adpt[ch_idx].ADPT_INTR; /* Supply interrupt line*/
+    return;
+}
+
+/***************************************************************************/
+int     tul_reset_scsi(HCS *pCurHcb, int seconds)
+{
+#if 0
+  printk("i91u: enter tul_reset_scsi.\n");
+#endif
+
+  TUL_WR( pCurHcb->HCS_Base + TUL_SCtrl0, TSC_RST_BUS);
+
+  while(!((pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base,TUL_SInt)) & TSS_SCSIRST_INT));
+	 /* reset tulip chip */
+
+  TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, 0);
+
+  /* Stall for a while, wait for target's firmware ready,make it 2 sec ! */
+  /* SONY 5200 tape drive won't work if only stall for 1 sec */
+#if 1
+  tul_do_pause(seconds*100);
+#else
+  for (i = 0; i < 66666; i++)         /* wait 2 sec                   */
+	 tul_se2_wait();                 /* wait 30 us                   */
+#endif
+
+  TUL_RD(pCurHcb->HCS_Base,TUL_SInt);
+
+#if 0
+  TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0,TSC_RST_CHIP);
+	 /* program HBA's SCSI ID */
+  TUL_WR( hcsp->Base+TUL_SScsiId,hcsp->HaId << 4);
+	
+	 /* Enable Initiator Mode ,phase latch,alternate sync period mode,
+	 disable SCSI reset */
+	 if (hcsp->Config & HCC_EN_PAR)
+		 TUL_WR(hcsp->Base+TUL_SConfig, TSC_INITDEFAULT | TSC_EN_SCSI_PAR);
+	 else
+		 TUL_WR(hcsp->Base+TUL_SConfig, TSC_INITDEFAULT );
+
+	 /*Synchronous data transfer rate
+	   Sync. period 0 -> 100 ns for 10 MHz
+	   Sync. offset 0 -> Async. operation    */
+	 /* Initialize the sync. xfer register values to an narrow, async. xfer */
+  TUL_WR(hcsp->Base+TUL_SPeriodOffset, 0x70);
+
+	 /* selection time out = 250 ms */
+	 TUL_WR(hcsp->Base+TUL_STimeOut, 153);
+
+#if 1
+	 /* Initialize the sync. xfer register values to an async. xfer */
+	 tcsp = &hcsp->HCS_Tcs[0];
+	 for (i = 0; i < pCurHcb->HCS_MaxTar; tcsp++, i++)   {
+	   tcsp->Flags &=  ~(TCF_SYNC_DONE|TCF_WDTR_DONE);
+	   } /* for */
+#endif
+
+	 if (hwInitialized) {
+		 /* Post_scsi_rst: clean up active SCB */
+		 /* clear sync done flag */
+		 dbgPrint0(0,"tul_reset_scsi:call tul_post_scsi_rst\n");
+		 tul_post_scsi_rst(hcsp);
+		 }
+	
+#if NEWCHIP_BUG0
+	 TUL_WR(hcsp->Base+TUL_STest1, 0x22);
+#endif  
+
+  return;
+
+	 /* Post_scsi_rst: clean up active SCB */
+	 pCurHcb->HCS_ActScb = 0;
+	 pCurHcb->HCS_ActTcs = 0;
+
+	 while ((pCurScb = tul_pop_busy_scb(pCurHcb)) != NULL)
+	   {
+//	 pCurScb->SCB_Status = SCB_DONE;
+	   pCurScb->SCB_HaStat = HOST_BAD_PHAS;
+	   tul_append_done_scb(pCurHcb, pCurScb);
+	   }
+	 /* clear sync done flag */
+	 pCurTcb = &pCurHcb->HCS_Tcs[0];
+	 for (i = 0; i < 8; pCurTcb++,  i++)   {
+	   pCurTcb->TCS_Flags &= (BYTE)~(TCF_SYNC_DONE|TCF_WDTR_DONE);
+		 /* Initialize the sync. xfer register values to an asyn xfer */
+	   pCurTcb->TCS_JS_Period = 5; /* Async xfer before nego.      */
+	   pCurTcb->TCS_JS_Offset = 0x0;       /* Async xfer before nego.      */
+	   pCurTcb->TCS_JS_Config3 = 0x8;      /* Fast clock                   */
+	   } /* for */
+
+#endif
+  return (SCSI_RESET_SUCCESS);
+}
+
+/***************************************************************************/
+int init_tulip(HCS *pCurHcb, SCB *scbp, int tul_num_scb, BYTE *pbBiosAdr, int seconds)
+{
+    int         i;
+    WORD        *pwFlags;
+    BYTE        *pbHeads;
+    SCB         *pTmpScb, *pPrevScb = NULL;
+
+    pCurHcb->HCS_NumScbs = tul_num_scb;
+    pCurHcb->HCS_Semaph = 1;
+    pCurHcb->HCS_JSStatus0 = 0;
+    pCurHcb->HCS_Scb = scbp;
+    pCurHcb->HCS_NxtPend = scbp;
+    pCurHcb->HCS_NxtAvail = scbp;
+    for (i = 0, pTmpScb = scbp; i < tul_num_scb; i++, pTmpScb++)
+	{
+	pTmpScb->SCB_TagId = i;
+	if (i != 0)
+	    pPrevScb->SCB_NxtScb = pTmpScb;
+	pPrevScb = pTmpScb;
+	}
+    pPrevScb->SCB_NxtScb = NULL;
+    pCurHcb->HCS_ScbEnd = pTmpScb;
+    pCurHcb->HCS_FirstAvail = scbp;
+    pCurHcb->HCS_LastAvail = pPrevScb;
+    pCurHcb->HCS_FirstPend = NULL;
+    pCurHcb->HCS_LastPend = NULL;
+    pCurHcb->HCS_FirstBusy = NULL;
+    pCurHcb->HCS_LastBusy = NULL;
+    pCurHcb->HCS_FirstDone = NULL;
+    pCurHcb->HCS_LastDone = NULL;
+    pCurHcb->HCS_ActScb = NULL;
+    pCurHcb->HCS_ActTcs = NULL;
+
+    tul_read_eeprom( pCurHcb->HCS_Base );
+			/*---------- get H/A configuration -------------*/
+    if (i91unvramp->NVM_SCSIInfo[0].NVM_NumOfTarg == 8)
+	pCurHcb->HCS_MaxTar = 8;
+    else
+	pCurHcb->HCS_MaxTar = 16;
+
+    pCurHcb->HCS_Config = i91unvramp->NVM_SCSIInfo[0].NVM_ChConfig1;
+
+    pCurHcb->HCS_SCSI_ID = i91unvramp->NVM_SCSIInfo[0].NVM_ChSCSIID;
+    pCurHcb->HCS_IdMask = ~(1 << pCurHcb->HCS_SCSI_ID);
 
 #if CHK_PARITY
-	/* Enable parity error response */
-	TUL_WR(pCurHcb->HCS_Base + TUL_PCMD, TUL_RD(pCurHcb->HCS_Base, TUL_PCMD) | 0x40);
+					/* Enable parity error response */
+    TUL_WR(pCurHcb->HCS_Base + TUL_PCMD, TUL_RD(pCurHcb->HCS_Base, TUL_PCMD) | 0x40);
 #endif
 
-	/* Mask all the interrupt       */
-	TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
+					/* Mask all the interrupt       */
+    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
 
-	tul_stop_bm(pCurHcb);
-	/* --- Initialize the tulip --- */
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_RST_CHIP);
-
-	/* program HBA's SCSI ID        */
-	TUL_WR(pCurHcb->HCS_Base + TUL_SScsiId, pCurHcb->HCS_SCSI_ID << 4);
+    tul_stop_bm(pCurHcb);
+					/* --- Initialize the tulip --- */
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_RST_CHIP);
+	
+					/* program HBA's SCSI ID        */
+    TUL_WR(pCurHcb->HCS_Base + TUL_SScsiId, pCurHcb->HCS_SCSI_ID << 4);
 
 	/* Enable Initiator Mode ,phase latch,alternate sync period mode,
-	   disable SCSI reset */
-	if (pCurHcb->HCS_Config & HCC_EN_PAR)
-		pCurHcb->HCS_SConf1 = (TSC_INITDEFAULT | TSC_EN_SCSI_PAR);
-	else
-		pCurHcb->HCS_SConf1 = (TSC_INITDEFAULT);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, pCurHcb->HCS_SConf1);
+	disable SCSI reset */
+    if (pCurHcb->HCS_Config & HCC_EN_PAR)
+	pCurHcb->HCS_SConf1 = (TSC_INITDEFAULT | TSC_EN_SCSI_PAR);
+    else
+	pCurHcb->HCS_SConf1 = (TSC_INITDEFAULT);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, pCurHcb->HCS_SConf1);
 
-	/* Enable HW reselect           */
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);
+					/* Enable HW reselect           */
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT );
 
-	TUL_WR(pCurHcb->HCS_Base + TUL_SPeriod, 0);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SPeriod, 0);
 
 	/* selection time out = 250 ms */
-	TUL_WR(pCurHcb->HCS_Base + TUL_STimeOut, 153);
+    TUL_WR(pCurHcb->HCS_Base + TUL_STimeOut, 153);
 
-/*--------- Enable SCSI terminator -----*/
-	TUL_WR(pCurHcb->HCS_Base + TUL_XCtrl, (pCurHcb->HCS_Config & (HCC_ACT_TERM1 | HCC_ACT_TERM2)));
-	TUL_WR(pCurHcb->HCS_Base + TUL_GCTRL1,
-	       ((pCurHcb->HCS_Config & HCC_AUTO_TERM) >> 4) | (TUL_RD(pCurHcb->HCS_Base, TUL_GCTRL1) & 0xFE));
+	/*--------- Enable SCSI terminator -----*/
+    TUL_WR(pCurHcb->HCS_Base + TUL_XCtrl, (pCurHcb->HCS_Config & (HCC_ACT_TERM1 | HCC_ACT_TERM2)));
+    TUL_WR(pCurHcb->HCS_Base + TUL_GCTRL1,
+	  ((pCurHcb->HCS_Config & HCC_AUTO_TERM) >> 4) | (TUL_RD(pCurHcb->HCS_Base, TUL_GCTRL1) & 0xFE));
 
-	for (i = 0,
-	     pwFlags = (WORD *) & (i91unvramp->NVM_SCSIInfo[0].NVM_Targ0Config),
-	     pbHeads = pbBiosAdr + 0x180;
-	     i < pCurHcb->HCS_MaxTar;
-	     i++, pwFlags++) {
-		pCurHcb->HCS_Tcs[i].TCS_Flags = *pwFlags & ~(TCF_SYNC_DONE | TCF_WDTR_DONE);
-		if (pCurHcb->HCS_Tcs[i].TCS_Flags & TCF_EN_255)
-			pCurHcb->HCS_Tcs[i].TCS_DrvFlags = TCF_DRV_255_63;
-		else
-			pCurHcb->HCS_Tcs[i].TCS_DrvFlags = 0;
-		pCurHcb->HCS_Tcs[i].TCS_JS_Period = 0;
-		pCurHcb->HCS_Tcs[i].TCS_SConfig0 = pCurHcb->HCS_SConf1;
-		pCurHcb->HCS_Tcs[i].TCS_DrvHead = *pbHeads++;
-		if (pCurHcb->HCS_Tcs[i].TCS_DrvHead == 255)
-			pCurHcb->HCS_Tcs[i].TCS_DrvFlags = TCF_DRV_255_63;
-		else
-			pCurHcb->HCS_Tcs[i].TCS_DrvFlags = 0;
-		pCurHcb->HCS_Tcs[i].TCS_DrvSector = *pbHeads++;
-		pCurHcb->HCS_Tcs[i].TCS_Flags &= ~TCF_BUSY;
-		pCurHcb->HCS_ActTags[i] = 0;
-		pCurHcb->HCS_MaxTags[i] = 0xFF;
-	}			/* for                          */
-	printk("i91u: PCI Base=0x%04X, IRQ=%d, BIOS=0x%04X0, SCSI ID=%d\n",
-	       pCurHcb->HCS_Base, pCurHcb->HCS_Intr,
-	       pCurHcb->HCS_BIOS, pCurHcb->HCS_SCSI_ID);
-/*------------------- reset SCSI Bus ---------------------------*/
-	if (pCurHcb->HCS_Config & HCC_SCSI_RESET) {
-		printk("i91u: Reset SCSI Bus ... \n");
-		tul_reset_scsi(pCurHcb, seconds);
-	}
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCFG1, 0x17);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SIntEnable, 0xE9);
-	return (0);
-}
-
-/***************************************************************************/
-SCB *tul_alloc_scb(HCS * hcsp)
-{
-	SCB *pTmpScb;
-	ULONG flags;
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_lock_irqsave(&(hcsp->HCS_AvailLock), flags);
-#else
-	save_flags(flags);
-	cli();
-#endif
-	if ((pTmpScb = hcsp->HCS_FirstAvail) != NULL) {
-#if DEBUG_QUEUE
-		printk("find scb at %08lx\n", (ULONG) pTmpScb);
-#endif
-		if ((hcsp->HCS_FirstAvail = pTmpScb->SCB_NxtScb) == NULL)
-			hcsp->HCS_LastAvail = NULL;
-		pTmpScb->SCB_NxtScb = NULL;
-		pTmpScb->SCB_Status = SCB_RENT;
-	}
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_unlock_irqrestore(&(hcsp->HCS_AvailLock), flags);
-#else
-	restore_flags(flags);
-#endif
-	return (pTmpScb);
-}
-
-/***************************************************************************/
-void tul_release_scb(HCS * hcsp, SCB * scbp)
-{
-	ULONG flags;
-
-#if DEBUG_QUEUE
-	printk("Release SCB %lx; ", (ULONG) scbp);
-#endif
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_lock_irqsave(&(hcsp->HCS_AvailLock), flags);
-#else
-	save_flags(flags);
-	cli();
-#endif
-	scbp->SCB_Srb = 0;
-	scbp->SCB_Status = 0;
-	scbp->SCB_NxtScb = NULL;
-	if (hcsp->HCS_LastAvail != NULL) {
-		hcsp->HCS_LastAvail->SCB_NxtScb = scbp;
-		hcsp->HCS_LastAvail = scbp;
-	} else {
-		hcsp->HCS_FirstAvail = scbp;
-		hcsp->HCS_LastAvail = scbp;
-	}
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_unlock_irqrestore(&(hcsp->HCS_AvailLock), flags);
-#else
-	restore_flags(flags);
-#endif
-}
-
-/***************************************************************************/
-void tul_append_pend_scb(HCS * pCurHcb, SCB * scbp)
-{
-
-#if DEBUG_QUEUE
-	printk("Append pend SCB %lx; ", (ULONG) scbp);
-#endif
-	scbp->SCB_Status = SCB_PEND;
-	scbp->SCB_NxtScb = NULL;
-	if (pCurHcb->HCS_LastPend != NULL) {
-		pCurHcb->HCS_LastPend->SCB_NxtScb = scbp;
-		pCurHcb->HCS_LastPend = scbp;
-	} else {
-		pCurHcb->HCS_FirstPend = scbp;
-		pCurHcb->HCS_LastPend = scbp;
-	}
-}
-
-/***************************************************************************/
-void tul_push_pend_scb(HCS * pCurHcb, SCB * scbp)
-{
-
-#if DEBUG_QUEUE
-	printk("Push pend SCB %lx; ", (ULONG) scbp);
-#endif
-	scbp->SCB_Status = SCB_PEND;
-	if ((scbp->SCB_NxtScb = pCurHcb->HCS_FirstPend) != NULL) {
-		pCurHcb->HCS_FirstPend = scbp;
-	} else {
-		pCurHcb->HCS_FirstPend = scbp;
-		pCurHcb->HCS_LastPend = scbp;
-	}
-}
-
-/***************************************************************************/
-SCB *tul_find_first_pend_scb(HCS * pCurHcb)
-{
-	SCB *pFirstPend;
-
-
-	pFirstPend = pCurHcb->HCS_FirstPend;
-	while (pFirstPend != NULL) {
-		if (pFirstPend->SCB_Opcode != ExecSCSI) {
-			return (pFirstPend);
-		}
-		if (pFirstPend->SCB_TagMsg == 0) {
-			if ((pCurHcb->HCS_ActTags[pFirstPend->SCB_Target] == 0) &&
-			    !(pCurHcb->HCS_Tcs[pFirstPend->SCB_Target].TCS_Flags & TCF_BUSY)) {
-				return (pFirstPend);
-			}
-		} else {
-			if ((pCurHcb->HCS_ActTags[pFirstPend->SCB_Target] >=
-			  pCurHcb->HCS_MaxTags[pFirstPend->SCB_Target]) |
-			    (pCurHcb->HCS_Tcs[pFirstPend->SCB_Target].TCS_Flags & TCF_BUSY)) {
-				pFirstPend = pFirstPend->SCB_NxtScb;
-				continue;
-			}
-			return (pFirstPend);
-		}
-		pFirstPend = pFirstPend->SCB_NxtScb;
-	}
-
-
-	return (pFirstPend);
-}
-/***************************************************************************/
-SCB *tul_pop_pend_scb(HCS * pCurHcb)
-{
-	SCB *pTmpScb;
-
-	if ((pTmpScb = pCurHcb->HCS_FirstPend) != NULL) {
-		if ((pCurHcb->HCS_FirstPend = pTmpScb->SCB_NxtScb) == NULL)
-			pCurHcb->HCS_LastPend = NULL;
-		pTmpScb->SCB_NxtScb = NULL;
-	}
-#if DEBUG_QUEUE
-	printk("Pop pend SCB %lx; ", (ULONG) pTmpScb);
-#endif
-	return (pTmpScb);
-}
-
-
-/***************************************************************************/
-void tul_unlink_pend_scb(HCS * pCurHcb, SCB * pCurScb)
-{
-	SCB *pTmpScb, *pPrevScb;
-
-#if DEBUG_QUEUE
-	printk("unlink pend SCB %lx; ", (ULONG) pCurScb);
-#endif
-
-	pPrevScb = pTmpScb = pCurHcb->HCS_FirstPend;
-	while (pTmpScb != NULL) {
-		if (pCurScb == pTmpScb) {	/* Unlink this SCB              */
-			if (pTmpScb == pCurHcb->HCS_FirstPend) {
-				if ((pCurHcb->HCS_FirstPend = pTmpScb->SCB_NxtScb) == NULL)
-					pCurHcb->HCS_LastPend = NULL;
-			} else {
-				pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
-				if (pTmpScb == pCurHcb->HCS_LastPend)
-					pCurHcb->HCS_LastPend = pPrevScb;
-			}
-			pTmpScb->SCB_NxtScb = NULL;
-			break;
-		}
-		pPrevScb = pTmpScb;
-		pTmpScb = pTmpScb->SCB_NxtScb;
-	}
-	return;
-}
-/***************************************************************************/
-void tul_append_busy_scb(HCS * pCurHcb, SCB * scbp)
-{
-
-#if DEBUG_QUEUE
-	printk("append busy SCB %lx; ", (ULONG) scbp);
-#endif
-	if (scbp->SCB_TagMsg)
-		pCurHcb->HCS_ActTags[scbp->SCB_Target]++;
+//    dBiosAdr += 0x180;
+    for (i = 0,
+	 pwFlags = (WORD *) &(i91unvramp->NVM_SCSIInfo[0].NVM_Targ0Config),
+//	 pbHeads = (BYTE *)(dBiosAdr);
+	 pbHeads = pbBiosAdr+0x180;
+	 i < pCurHcb->HCS_MaxTar;
+	 i++, pwFlags++)
+	{
+	pCurHcb->HCS_Tcs[i].TCS_Flags = *pwFlags & ~(TCF_SYNC_DONE | TCF_WDTR_DONE);
+	if (pCurHcb->HCS_Tcs[i].TCS_Flags & TCF_EN_255)
+	    pCurHcb->HCS_Tcs[i].TCS_DrvFlags = TCF_DRV_255_63;
 	else
-		pCurHcb->HCS_Tcs[scbp->SCB_Target].TCS_Flags |= TCF_BUSY;
-	scbp->SCB_Status = SCB_BUSY;
-	scbp->SCB_NxtScb = NULL;
-	if (pCurHcb->HCS_LastBusy != NULL) {
-		pCurHcb->HCS_LastBusy->SCB_NxtScb = scbp;
-		pCurHcb->HCS_LastBusy = scbp;
-	} else {
-		pCurHcb->HCS_FirstBusy = scbp;
-		pCurHcb->HCS_LastBusy = scbp;
+	    pCurHcb->HCS_Tcs[i].TCS_DrvFlags = 0;
+	pCurHcb->HCS_Tcs[i].TCS_JS_Period = 0;
+	pCurHcb->HCS_Tcs[i].TCS_SConfig0 = pCurHcb->HCS_SConf1;
+	pCurHcb->HCS_Tcs[i].TCS_DrvHead = *pbHeads++;
+	if (pCurHcb->HCS_Tcs[i].TCS_DrvHead == 255)
+	    pCurHcb->HCS_Tcs[i].TCS_DrvFlags = TCF_DRV_255_63;
+	else
+	    pCurHcb->HCS_Tcs[i].TCS_DrvFlags = 0;
+	pCurHcb->HCS_Tcs[i].TCS_DrvSector = *pbHeads++;
+	pCurHcb->HCS_Tcs[i].TCS_Flags &= ~TCF_BUSY;
+	pCurHcb->HCS_ActTags[i] = 0;
+	pCurHcb->HCS_MaxTags[i] = 0xFF;
+	}                               /* for                          */
+#if 1
+    printk("i91u: PCI Base=0x%04X, IRQ=%d, BIOS=0x%04X0, SCSI ID=%d\n",
+		pCurHcb->HCS_Base, pCurHcb->HCS_Intr,
+		pCurHcb->HCS_BIOS, pCurHcb->HCS_SCSI_ID);
+#endif
+	/*------------------- reset SCSI Bus ---------------------------*/
+    if (pCurHcb->HCS_Config & HCC_SCSI_RESET)
+	{
+#if 1
+	printk("i91u: Reset SCSI Bus ... \n");
+#endif
+	tul_reset_scsi(pCurHcb, seconds);
+	}
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCFG1, 0x17);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SIntEnable, 0xE9);
+    return(0);
+}
+
+/***************************************************************************/
+SCB *tul_alloc_scb(HCS *hcsp)
+{
+    SCB         *pTmpScb;
+    ULONG       flags;
+
+    save_flags(flags);
+    cli();
+    if ((pTmpScb = hcsp->HCS_FirstAvail) != NULL)
+	{
+#if DEBUG_QUEUE
+	printk("find scb at %08lx\n", (ULONG) pTmpScb);
+#endif
+	if ((hcsp->HCS_FirstAvail = pTmpScb->SCB_NxtScb) == NULL)
+	    hcsp->HCS_LastAvail = NULL;
+	pTmpScb->SCB_NxtScb = NULL;
+	pTmpScb->SCB_Status = SCB_RENT;
+	}
+    restore_flags(flags);
+    return (pTmpScb);
+}
+
+/***************************************************************************/
+void tul_release_scb(HCS *hcsp, SCB *scbp)
+{
+    ULONG       flags;
+
+#if DEBUG_QUEUE
+printk("Release SCB %lx; ", (ULONG) scbp);
+#endif
+    save_flags(flags);
+    cli();
+    scbp->SCB_Srb = 0;
+    scbp->SCB_Status = 0;
+    scbp->SCB_NxtScb = NULL;
+    if (hcsp->HCS_LastAvail != NULL)
+	{
+	hcsp->HCS_LastAvail->SCB_NxtScb = scbp;
+	hcsp->HCS_LastAvail = scbp;
+	}
+    else
+	{
+	hcsp->HCS_FirstAvail = scbp;
+	hcsp->HCS_LastAvail = scbp;
+	}
+    restore_flags(flags);
+}
+
+/***************************************************************************/
+void tul_append_pend_scb(HCS *pCurHcb, SCB *scbp)
+{
+
+#if DEBUG_QUEUE
+printk("Append pend SCB %lx; ", (ULONG) scbp);
+#endif
+    scbp->SCB_Status = SCB_PEND;
+    scbp->SCB_NxtScb = NULL;
+    if (pCurHcb->HCS_LastPend != NULL)
+	{
+	pCurHcb->HCS_LastPend->SCB_NxtScb = scbp;
+	pCurHcb->HCS_LastPend = scbp;
+	}
+    else
+	{
+	pCurHcb->HCS_FirstPend = scbp;
+	pCurHcb->HCS_LastPend = scbp;
 	}
 }
 
 /***************************************************************************/
-SCB *tul_pop_busy_scb(HCS * pCurHcb)
+void tul_push_pend_scb(HCS *pCurHcb, SCB *scbp)
 {
-	SCB *pTmpScb;
+
+#if DEBUG_QUEUE
+printk("Push pend SCB %lx; ", (ULONG) scbp);
+#endif
+    scbp->SCB_Status = SCB_PEND;
+    if ((scbp->SCB_NxtScb = pCurHcb->HCS_FirstPend) != NULL)
+	{
+	pCurHcb->HCS_FirstPend = scbp;
+	}
+    else
+	{
+	pCurHcb->HCS_FirstPend = scbp;
+	pCurHcb->HCS_LastPend = scbp;
+	}
+}
+
+/***************************************************************************/
+SCB *tul_find_first_pend_scb(HCS *pCurHcb)
+{
+    SCB		*pFirstPend;
 
 
-	if ((pTmpScb = pCurHcb->HCS_FirstBusy) != NULL) {
+    pFirstPend = pCurHcb->HCS_FirstPend;
+    while (pFirstPend != NULL) {
+        if (pFirstPend->SCB_Opcode != ExecSCSI) {
+		return (pFirstPend);
+	}
+
+	if (pFirstPend->SCB_TagMsg == 0)
+	    {
+	    if ((pCurHcb->HCS_ActTags[pFirstPend->SCB_Target] == 0) &&
+	        !(pCurHcb->HCS_Tcs[pFirstPend->SCB_Target].TCS_Flags & TCF_BUSY))
+		{
+		return (pFirstPend);
+		}
+	    }
+	else
+	    {
+	    if ((pCurHcb->HCS_ActTags[pFirstPend->SCB_Target] >=
+	    	 pCurHcb->HCS_MaxTags[pFirstPend->SCB_Target]) |
+	        (pCurHcb->HCS_Tcs[pFirstPend->SCB_Target].TCS_Flags & TCF_BUSY))
+		{
+		pFirstPend = pFirstPend->SCB_NxtScb;
+		continue;
+		}
+	    return (pFirstPend);
+	    }
+	pFirstPend = pFirstPend->SCB_NxtScb;
+	}
+
+
+    return (pFirstPend);
+}
+/***************************************************************************/
+SCB *tul_pop_pend_scb(HCS *pCurHcb)
+{
+    SCB         *pTmpScb;
+
+    if ((pTmpScb = pCurHcb->HCS_FirstPend) != NULL)
+	{
+	if ((pCurHcb->HCS_FirstPend = pTmpScb->SCB_NxtScb) == NULL)
+	    pCurHcb->HCS_LastPend = NULL;
+	pTmpScb->SCB_NxtScb = NULL;
+	}
+#if DEBUG_QUEUE
+printk("Pop pend SCB %lx; ", (ULONG) pTmpScb);
+#endif
+    return (pTmpScb);
+}
+
+
+/***************************************************************************/
+void tul_unlink_pend_scb(HCS *pCurHcb, SCB *pCurScb)
+{
+    SCB         *pTmpScb, *pPrevScb;
+
+#if DEBUG_QUEUE
+printk("unlink pend SCB %lx; ", (ULONG) pCurScb);
+#endif
+
+    pPrevScb = pTmpScb = pCurHcb->HCS_FirstPend;
+    while (pTmpScb != NULL)
+	{
+	if (pCurScb == pTmpScb)
+	    {                           /* Unlink this SCB              */
+	    if (pTmpScb == pCurHcb->HCS_FirstPend)
+		{
+		if ((pCurHcb->HCS_FirstPend = pTmpScb->SCB_NxtScb) == NULL)
+		    pCurHcb->HCS_LastPend = NULL;
+		}
+	    else
+		{
+		pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
+		if (pTmpScb == pCurHcb->HCS_LastPend)
+		    pCurHcb->HCS_LastPend = pPrevScb;
+		}
+	    pTmpScb->SCB_NxtScb = NULL;
+	    break;
+	    }
+	pPrevScb = pTmpScb;
+	pTmpScb = pTmpScb->SCB_NxtScb;
+	}
+    return;
+}
+/***************************************************************************/
+void tul_append_busy_scb(HCS *pCurHcb, SCB *scbp)
+{
+
+#if DEBUG_QUEUE
+printk("append busy SCB %lx; ", (ULONG) scbp);
+#endif
+    if (scbp->SCB_TagMsg)
+	pCurHcb->HCS_ActTags[scbp->SCB_Target]++;
+    else
+	pCurHcb->HCS_Tcs[scbp->SCB_Target].TCS_Flags |= TCF_BUSY;
+    scbp->SCB_Status = SCB_BUSY;
+    scbp->SCB_NxtScb = NULL;
+    if (pCurHcb->HCS_LastBusy != NULL)
+	{
+	pCurHcb->HCS_LastBusy->SCB_NxtScb = scbp;
+	pCurHcb->HCS_LastBusy = scbp;
+	}
+    else
+	{
+	pCurHcb->HCS_FirstBusy = scbp;
+	pCurHcb->HCS_LastBusy = scbp;
+	}
+}
+
+/***************************************************************************/
+SCB *tul_pop_busy_scb(HCS *pCurHcb)
+{
+    SCB         *pTmpScb;
+
+
+    if ((pTmpScb = pCurHcb->HCS_FirstBusy) != NULL)
+	{
+	if ((pCurHcb->HCS_FirstBusy = pTmpScb->SCB_NxtScb) == NULL)
+	    pCurHcb->HCS_LastBusy = NULL;
+	pTmpScb->SCB_NxtScb = NULL;
+	if (pTmpScb->SCB_TagMsg)
+	    pCurHcb->HCS_ActTags[pTmpScb->SCB_Target]--;
+	else
+	    pCurHcb->HCS_Tcs[pTmpScb->SCB_Target].TCS_Flags &= ~TCF_BUSY;
+	}
+#if DEBUG_QUEUE
+printk("Pop busy SCB %lx; ", (ULONG) pTmpScb);
+#endif
+    return (pTmpScb);
+}
+
+/***************************************************************************/
+void tul_unlink_busy_scb(HCS *pCurHcb, SCB *pCurScb)
+{
+    SCB         *pTmpScb, *pPrevScb;
+
+#if DEBUG_QUEUE
+printk("unlink busy SCB %lx; ", (ULONG) pCurScb);
+#endif
+
+    pPrevScb = pTmpScb = pCurHcb->HCS_FirstBusy;
+    while (pTmpScb != NULL)
+	{
+	if (pCurScb == pTmpScb)
+	    {                           /* Unlink this SCB              */
+	    if (pTmpScb == pCurHcb->HCS_FirstBusy)
+		{
 		if ((pCurHcb->HCS_FirstBusy = pTmpScb->SCB_NxtScb) == NULL)
-			pCurHcb->HCS_LastBusy = NULL;
-		pTmpScb->SCB_NxtScb = NULL;
-		if (pTmpScb->SCB_TagMsg)
-			pCurHcb->HCS_ActTags[pTmpScb->SCB_Target]--;
-		else
-			pCurHcb->HCS_Tcs[pTmpScb->SCB_Target].TCS_Flags &= ~TCF_BUSY;
-	}
-#if DEBUG_QUEUE
-	printk("Pop busy SCB %lx; ", (ULONG) pTmpScb);
-#endif
-	return (pTmpScb);
-}
-
-/***************************************************************************/
-void tul_unlink_busy_scb(HCS * pCurHcb, SCB * pCurScb)
-{
-	SCB *pTmpScb, *pPrevScb;
-
-#if DEBUG_QUEUE
-	printk("unlink busy SCB %lx; ", (ULONG) pCurScb);
-#endif
-
-	pPrevScb = pTmpScb = pCurHcb->HCS_FirstBusy;
-	while (pTmpScb != NULL) {
-		if (pCurScb == pTmpScb) {	/* Unlink this SCB              */
-			if (pTmpScb == pCurHcb->HCS_FirstBusy) {
-				if ((pCurHcb->HCS_FirstBusy = pTmpScb->SCB_NxtScb) == NULL)
-					pCurHcb->HCS_LastBusy = NULL;
-			} else {
-				pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
-				if (pTmpScb == pCurHcb->HCS_LastBusy)
-					pCurHcb->HCS_LastBusy = pPrevScb;
-			}
-			pTmpScb->SCB_NxtScb = NULL;
-			if (pTmpScb->SCB_TagMsg)
-				pCurHcb->HCS_ActTags[pTmpScb->SCB_Target]--;
-			else
-				pCurHcb->HCS_Tcs[pTmpScb->SCB_Target].TCS_Flags &= ~TCF_BUSY;
-			break;
+		    pCurHcb->HCS_LastBusy = NULL;
 		}
-		pPrevScb = pTmpScb;
-		pTmpScb = pTmpScb->SCB_NxtScb;
+	    else
+		{
+		pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
+		if (pTmpScb == pCurHcb->HCS_LastBusy)
+		    pCurHcb->HCS_LastBusy = pPrevScb;
+		}
+	    pTmpScb->SCB_NxtScb = NULL;
+	    if (pTmpScb->SCB_TagMsg)
+		pCurHcb->HCS_ActTags[pTmpScb->SCB_Target]--;
+	    else
+		pCurHcb->HCS_Tcs[pTmpScb->SCB_Target].TCS_Flags &= ~TCF_BUSY;
+	    break;
+	    }
+	pPrevScb = pTmpScb;
+	pTmpScb = pTmpScb->SCB_NxtScb;
 	}
-	return;
+    return;
 }
 
 /***************************************************************************/
-SCB *tul_find_busy_scb(HCS * pCurHcb, WORD tarlun)
+SCB *tul_find_busy_scb(HCS *pCurHcb, WORD tarlun)
 {
-	SCB *pTmpScb, *pPrevScb;
-	WORD scbp_tarlun;
+    SCB         *pTmpScb, *pPrevScb;
+    WORD        scbp_tarlun;
 
 
-	pPrevScb = pTmpScb = pCurHcb->HCS_FirstBusy;
-	while (pTmpScb != NULL) {
-		scbp_tarlun = (pTmpScb->SCB_Lun << 8) | (pTmpScb->SCB_Target);
-		if (scbp_tarlun == tarlun) {	/* Unlink this SCB              */
-			break;
+    pPrevScb = pTmpScb = pCurHcb->HCS_FirstBusy;
+    while (pTmpScb != NULL)
+	{
+	scbp_tarlun = (pTmpScb->SCB_Lun << 8) | (pTmpScb->SCB_Target);
+	if (scbp_tarlun == tarlun)
+	    {                           /* Unlink this SCB              */
+#if 0
+	    if (pTmpScb == pCurHcb->HCS_FirstBusy)
+		{
+		if ((pCurHcb->HCS_FirstBusy = pTmpScb->SCB_NxtScb) == NULL)
+		    pCurHcb->HCS_LastBusy = NULL;
 		}
-		pPrevScb = pTmpScb;
-		pTmpScb = pTmpScb->SCB_NxtScb;
+	    else
+		{
+		pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
+		if (pTmpScb == pCurHcb->HCS_LastBusy)
+		    pCurHcb->HCS_LastBusy = pPrevScb;
+		}
+	    pTmpScb->SCB_NxtScb = NULL;
+#endif
+	    break;
+	    }
+	pPrevScb = pTmpScb;
+	pTmpScb = pTmpScb->SCB_NxtScb;
 	}
 #if DEBUG_QUEUE
-	printk("find busy SCB %lx; ", (ULONG) pTmpScb);
+printk("find busy SCB %lx; ", (ULONG) pTmpScb);
 #endif
-	return (pTmpScb);
+    return (pTmpScb);
 }
 
 /***************************************************************************/
-void tul_append_done_scb(HCS * pCurHcb, SCB * scbp)
+void tul_append_done_scb(HCS *pCurHcb, SCB *scbp)
 {
 
 #if DEBUG_QUEUE
-	printk("append done SCB %lx; ", (ULONG) scbp);
+printk("append done SCB %lx; ", (ULONG) scbp);
 #endif
+/*    tul_unlink_busy_scb(pCurHcb, scbp);*/
 
-	scbp->SCB_Status = SCB_DONE;
-	scbp->SCB_NxtScb = NULL;
-	if (pCurHcb->HCS_LastDone != NULL) {
-		pCurHcb->HCS_LastDone->SCB_NxtScb = scbp;
-		pCurHcb->HCS_LastDone = scbp;
-	} else {
-		pCurHcb->HCS_FirstDone = scbp;
-		pCurHcb->HCS_LastDone = scbp;
+    scbp->SCB_Status = SCB_DONE;
+    scbp->SCB_NxtScb = NULL;
+    if (pCurHcb->HCS_LastDone != NULL)
+	{
+	pCurHcb->HCS_LastDone->SCB_NxtScb = scbp;
+	pCurHcb->HCS_LastDone = scbp;
+	}
+    else
+	{
+	pCurHcb->HCS_FirstDone = scbp;
+	pCurHcb->HCS_LastDone = scbp;
 	}
 }
 
 /***************************************************************************/
-SCB *tul_find_done_scb(HCS * pCurHcb)
+SCB *tul_find_done_scb(HCS *pCurHcb)
 {
-	SCB *pTmpScb;
+    SCB         *pTmpScb;
 
 
-	if ((pTmpScb = pCurHcb->HCS_FirstDone) != NULL) {
-		if ((pCurHcb->HCS_FirstDone = pTmpScb->SCB_NxtScb) == NULL)
-			pCurHcb->HCS_LastDone = NULL;
-		pTmpScb->SCB_NxtScb = NULL;
+    if ((pTmpScb = pCurHcb->HCS_FirstDone) != NULL)
+	{
+	if ((pCurHcb->HCS_FirstDone = pTmpScb->SCB_NxtScb) == NULL)
+	    pCurHcb->HCS_LastDone = NULL;
+	pTmpScb->SCB_NxtScb = NULL;
 	}
 #if DEBUG_QUEUE
-	printk("find done SCB %lx; ", (ULONG) pTmpScb);
+printk("find done SCB %lx; ", (ULONG) pTmpScb);
 #endif
-	return (pTmpScb);
+    return (pTmpScb);
 }
 
 /***************************************************************************/
-int tul_abort_srb(HCS * pCurHcb, ULONG srbp)
+int tul_abort_srb(HCS *pCurHcb, ULONG srbp)
 {
-	ULONG flags;
-	SCB *pTmpScb, *pPrevScb;
+    ULONG       flags;
+    SCB         *pTmpScb, *pPrevScb;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	save_flags(flags);
-	cli();
-#endif
+    save_flags(flags);
+    cli();
 
-	if ((pCurHcb->HCS_Semaph == 0) && (pCurHcb->HCS_ActScb == NULL)) {
-		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
-		/* disable Jasmin SCSI Int        */
+    if ((pCurHcb->HCS_Semaph == 0) && (pCurHcb->HCS_ActScb == NULL)) {
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
+					/* disable Jasmin SCSI Int        */
+	    tulip_main(pCurHcb);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-                spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
+	    pCurHcb->HCS_Semaph = 1;
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
 
-		tulip_main(pCurHcb);
+	    restore_flags(flags);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-        	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
+	    return SCSI_ABORT_SNOOZE;
+    }
 
-		pCurHcb->HCS_Semaph = 1;
-		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
-
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-		spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-		restore_flags(flags);
-#endif
-
-		return SCSI_ABORT_SNOOZE;
+    pPrevScb = pTmpScb = pCurHcb->HCS_FirstPend;   /* Check Pend queue */
+    while (pTmpScb != NULL)
+	{
+	/* 07/27/98 */
+	if (pTmpScb->SCB_Srb == (unsigned char *)srbp) {
+	    if (pTmpScb == pCurHcb->HCS_ActScb) {
+	      restore_flags(flags);
+	      return SCSI_ABORT_BUSY;
+	    }
+	    else if (pTmpScb == pCurHcb->HCS_FirstPend) {
+		if ((pCurHcb->HCS_FirstPend = pTmpScb->SCB_NxtScb) == NULL)
+		    pCurHcb->HCS_LastPend = NULL;
+	    }
+	    else {
+		pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
+		if (pTmpScb == pCurHcb->HCS_LastPend)
+		    pCurHcb->HCS_LastPend = pPrevScb;
+	    }
+	    pTmpScb->SCB_HaStat = HOST_ABORTED;
+	    pTmpScb->SCB_Flags |= SCF_DONE;
+	    if (pTmpScb->SCB_Flags & SCF_POST)
+		(*pTmpScb->SCB_Post)((BYTE *) pCurHcb, (BYTE *) pTmpScb);
+	    restore_flags(flags);
+	    return SCSI_ABORT_SUCCESS ;
 	}
-	pPrevScb = pTmpScb = pCurHcb->HCS_FirstPend;	/* Check Pend queue */
-	while (pTmpScb != NULL) {
-		/* 07/27/98 */
-		if (pTmpScb->SCB_Srb == (unsigned char *) srbp) {
-			if (pTmpScb == pCurHcb->HCS_ActScb) {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-				spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-				restore_flags(flags);
-#endif
-				return SCSI_ABORT_BUSY;
-			} else if (pTmpScb == pCurHcb->HCS_FirstPend) {
-				if ((pCurHcb->HCS_FirstPend = pTmpScb->SCB_NxtScb) == NULL)
-					pCurHcb->HCS_LastPend = NULL;
-			} else {
-				pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
-				if (pTmpScb == pCurHcb->HCS_LastPend)
-					pCurHcb->HCS_LastPend = pPrevScb;
-			}
-			pTmpScb->SCB_HaStat = HOST_ABORTED;
-			pTmpScb->SCB_Flags |= SCF_DONE;
-			if (pTmpScb->SCB_Flags & SCF_POST)
-				(*pTmpScb->SCB_Post) ((BYTE *) pCurHcb, (BYTE *) pTmpScb);
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-			spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-			restore_flags(flags);
-#endif
-			return SCSI_ABORT_SUCCESS;
+	pPrevScb = pTmpScb;
+	pTmpScb = pTmpScb->SCB_NxtScb;
+    }
+
+    pPrevScb = pTmpScb = pCurHcb->HCS_FirstBusy;   /* Check Busy queue */
+    while (pTmpScb != NULL) {
+
+	if (pTmpScb->SCB_Srb == (unsigned char *)srbp) {
+
+	    if (pTmpScb == pCurHcb->HCS_ActScb) {
+	      restore_flags(flags);
+	      return SCSI_ABORT_BUSY;
+	    }
+	    else if (pTmpScb->SCB_TagMsg == 0) {
+	        restore_flags(flags);
+	        return SCSI_ABORT_BUSY;
+	    }
+	    else {
+	        pCurHcb->HCS_ActTags[pTmpScb->SCB_Target]--;
+	        if (pTmpScb == pCurHcb->HCS_FirstBusy) {
+		    if ((pCurHcb->HCS_FirstBusy = pTmpScb->SCB_NxtScb) == NULL)
+		        pCurHcb->HCS_LastBusy = NULL;
 		}
-		pPrevScb = pTmpScb;
-		pTmpScb = pTmpScb->SCB_NxtScb;
-	}
-
-	pPrevScb = pTmpScb = pCurHcb->HCS_FirstBusy;	/* Check Busy queue */
-	while (pTmpScb != NULL) {
-
-		if (pTmpScb->SCB_Srb == (unsigned char *) srbp) {
-
-			if (pTmpScb == pCurHcb->HCS_ActScb) {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-				spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-				restore_flags(flags);
-#endif
-				return SCSI_ABORT_BUSY;
-			} else if (pTmpScb->SCB_TagMsg == 0) {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-				spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-				restore_flags(flags);
-#endif
-				return SCSI_ABORT_BUSY;
-			} else {
-				pCurHcb->HCS_ActTags[pTmpScb->SCB_Target]--;
-				if (pTmpScb == pCurHcb->HCS_FirstBusy) {
-					if ((pCurHcb->HCS_FirstBusy = pTmpScb->SCB_NxtScb) == NULL)
-						pCurHcb->HCS_LastBusy = NULL;
-				} else {
-					pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
-					if (pTmpScb == pCurHcb->HCS_LastBusy)
-						pCurHcb->HCS_LastBusy = pPrevScb;
-				}
-				pTmpScb->SCB_NxtScb = NULL;
-
-
-				pTmpScb->SCB_HaStat = HOST_ABORTED;
-				pTmpScb->SCB_Flags |= SCF_DONE;
-				if (pTmpScb->SCB_Flags & SCF_POST)
-					(*pTmpScb->SCB_Post) ((BYTE *) pCurHcb, (BYTE *) pTmpScb);
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-				spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-				restore_flags(flags);
-#endif
-				return SCSI_ABORT_SUCCESS;
-			}
+	        else {
+		    pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
+		    if (pTmpScb == pCurHcb->HCS_LastBusy)
+		        pCurHcb->HCS_LastBusy = pPrevScb;
 		}
-		pPrevScb = pTmpScb;
-		pTmpScb = pTmpScb->SCB_NxtScb;
+	        pTmpScb->SCB_NxtScb = NULL;
+
+
+	        pTmpScb->SCB_HaStat = HOST_ABORTED;
+	        pTmpScb->SCB_Flags |= SCF_DONE;
+	        if (pTmpScb->SCB_Flags & SCF_POST)
+		    (*pTmpScb->SCB_Post)((BYTE *) pCurHcb, (BYTE *) pTmpScb);
+	        restore_flags(flags);
+	        return SCSI_ABORT_SUCCESS ;
+	    }
 	}
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	restore_flags(flags);
-#endif
-	return (SCSI_ABORT_NOT_RUNNING);
+	pPrevScb = pTmpScb;
+	pTmpScb = pTmpScb->SCB_NxtScb;
+    }
+    restore_flags(flags);
+    return (SCSI_ABORT_NOT_RUNNING);
 }
 
 /***************************************************************************/
-int tul_bad_seq(HCS * pCurHcb)
+int     tul_bad_seq(HCS *pCurHcb)
 {
-	SCB *pCurScb;
+    SCB *pCurScb;
 
-	printk("tul_bad_seg c=%d\n", pCurHcb->HCS_Index);
-
-	if ((pCurScb = pCurHcb->HCS_ActScb) != NULL) {
-		tul_unlink_busy_scb(pCurHcb, pCurScb);
-		pCurScb->SCB_HaStat = HOST_BAD_PHAS;
-		pCurScb->SCB_TaStat = 0;
-		tul_append_done_scb(pCurHcb, pCurScb);
+#if 1
+printk("tul_bad_seg c=%d\n", pCurHcb->HCS_Index);
+#endif
+    if ((pCurScb = pCurHcb->HCS_ActScb) != NULL)
+	{
+	tul_unlink_busy_scb(pCurHcb, pCurScb);
+	pCurScb->SCB_HaStat = HOST_BAD_PHAS;
+	pCurScb->SCB_TaStat = 0;
+//	pCurScb->SCB_Status = SCB_DONE; /* Done                         */
+	tul_append_done_scb(pCurHcb, pCurScb);
 	}
-	tul_stop_bm(pCurHcb);
 
-	tul_reset_scsi(pCurHcb, 8);	/* 7/29/98 */
+    tul_stop_bm(pCurHcb);
 
-	return (tul_post_scsi_rst(pCurHcb));
+    tul_reset_scsi(pCurHcb, 8);		/* 7/29/98 */
+
+    return (tul_post_scsi_rst(pCurHcb));
 }
 
 /************************************************************************/
-int tul_device_reset(HCS * pCurHcb, ULONG pSrb, unsigned int target, unsigned int ResetFlags)
+int tul_device_reset(HCS *pCurHcb, ULONG pSrb, unsigned int target, unsigned int ResetFlags)
 {
-	ULONG flags;
-	SCB *pScb;
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	save_flags(flags);
-	cli();
+    ULONG       flags;
+    SCB         *pScb;
+
+#if 0
+printk("tul_device_reset c=%d %d \n", pCurHcb->HCS_Index, pCurHcb->HCS_Semaph);
 #endif
 
-	if (ResetFlags & SCSI_RESET_ASYNCHRONOUS) {
+    save_flags(flags);
+    cli();
 
-		if ((pCurHcb->HCS_Semaph == 0) && (pCurHcb->HCS_ActScb == NULL)) {
-			TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
-			/* disable Jasmin SCSI Int        */
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-        		spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
+    if (ResetFlags & SCSI_RESET_ASYNCHRONOUS) {
 
-			tulip_main(pCurHcb);
+        if ((pCurHcb->HCS_Semaph == 0) && (pCurHcb->HCS_ActScb == NULL)) {
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
+					/* disable Jasmin SCSI Int        */
+	    tulip_main(pCurHcb);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-        		spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
+	    pCurHcb->HCS_Semaph = 1;
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
 
-			pCurHcb->HCS_Semaph = 1;
-			TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
+	    restore_flags(flags);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-			spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-			restore_flags(flags);
-#endif
+	    return SCSI_RESET_SNOOZE ;
+        }
 
-			return SCSI_RESET_SNOOZE;
-		}
-		pScb = pCurHcb->HCS_FirstBusy;	/* Check Busy queue */
-		while (pScb != NULL) {
-			if (pScb->SCB_Srb == (unsigned char *) pSrb)
-				break;
-			pScb = pScb->SCB_NxtScb;
-		}
-		if (pScb == NULL) {
-			printk("Unable to Reset - No SCB Found\n");
-
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-			spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-			restore_flags(flags);
-#endif
-			return SCSI_RESET_NOT_RUNNING;
-		}
+	pScb = pCurHcb->HCS_FirstBusy;   /* Check Busy queue */
+	while (pScb != NULL) {
+	    if (pScb->SCB_Srb == (unsigned char *)pSrb) 
+	        break;
+	    pScb = pScb->SCB_NxtScb;
 	}
-	if ((pScb = tul_alloc_scb(pCurHcb)) == NULL) {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-		spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-		restore_flags(flags);
-#endif
-		return SCSI_RESET_NOT_RUNNING;
+        if (pScb == NULL) {
+	  printk("Unable to Reset - No SCB Found\n");
+
+	  restore_flags(flags);
+	  return SCSI_RESET_NOT_RUNNING;
 	}
-	pScb->SCB_Opcode = BusDevRst;
-	pScb->SCB_Flags = SCF_POST;
-	pScb->SCB_Target = target;
-	pScb->SCB_Mode = 0;
+    }
+    if ((pScb = tul_alloc_scb(pCurHcb)) == NULL) {
+	  restore_flags(flags);
+	  return SCSI_RESET_NOT_RUNNING;
+    }
+    pScb->SCB_Opcode = BusDevRst;
+    pScb->SCB_Flags = SCF_POST;
+    pScb->SCB_Target = target;
+    pScb->SCB_Mode = 0;
 
-	pScb->SCB_Srb = 0;
-	if (ResetFlags & SCSI_RESET_SYNCHRONOUS) {
-		pScb->SCB_Srb = (unsigned char *) pSrb;
+    pScb->SCB_Srb = 0;
+    if (ResetFlags & SCSI_RESET_SYNCHRONOUS)
+    {
+        pScb->SCB_Srb = (unsigned char *)pSrb;
+    }
+    tul_push_pend_scb(pCurHcb,pScb); /* push this SCB to Pending queue */
+
+    if (pCurHcb->HCS_Semaph == 1) {
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
+					/* disable Jasmin SCSI Int        */
+	    pCurHcb->HCS_Semaph = 0;
+
+	    tulip_main(pCurHcb);
+
+	    pCurHcb->HCS_Semaph = 1;
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
 	}
-	tul_push_pend_scb(pCurHcb, pScb);	/* push this SCB to Pending queue */
+    restore_flags(flags);
+    return SCSI_RESET_PENDING;
 
-	if (pCurHcb->HCS_Semaph == 1) {
-		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
-		/* disable Jasmin SCSI Int        */
-		pCurHcb->HCS_Semaph = 0;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-        	spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
-
-		tulip_main(pCurHcb);
-
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-                spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
-
-		pCurHcb->HCS_Semaph = 1;
-		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
-	}
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	restore_flags(flags);
-#endif
-	return SCSI_RESET_PENDING;
 }
 
-int tul_reset_scsi_bus(HCS * pCurHcb)
+int tul_reset_scsi_bus(HCS *pCurHcb)
 {
-	ULONG flags;
+    ULONG       flags;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	save_flags(flags);
-	cli();
-#endif
-	TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
-	pCurHcb->HCS_Semaph = 0;
-
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	restore_flags(flags);
+#if 0
+printk("tul_reset_scsi_bus c=%d %d \n", pCurHcb->HCS_Index, pCurHcb->HCS_Semaph);
 #endif
 
-	tul_stop_bm(pCurHcb);
+    save_flags(flags);
+    cli();
+    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
+    pCurHcb->HCS_Semaph = 0;
 
-	tul_reset_scsi(pCurHcb, 2);	/* 7/29/98 */
+    restore_flags(flags);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	save_flags(flags);
-	cli();
-#endif
-	tul_post_scsi_rst(pCurHcb);
+    tul_stop_bm(pCurHcb);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-        spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
+    tul_reset_scsi(pCurHcb, 2);		/* 7/29/98 */
 
-	tulip_main(pCurHcb);
+    save_flags(flags);
+    cli();
+    tul_post_scsi_rst(pCurHcb);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-        spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
+//    tul_do_pause(7*100);
 
-	pCurHcb->HCS_Semaph = 1;
-	TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	restore_flags(flags);
-#endif
-	return (SCSI_RESET_SUCCESS | SCSI_RESET_HOST_RESET);
+    tulip_main(pCurHcb);
+
+    pCurHcb->HCS_Semaph = 1;
+    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
+    restore_flags(flags);
+    return (SCSI_RESET_SUCCESS | SCSI_RESET_HOST_RESET);
 }
 
 /************************************************************************/
-void tul_exec_scb(HCS * pCurHcb, SCB * pCurScb)
+void tul_exec_scb(HCS *pCurHcb, SCB *pCurScb)
 {
-	ULONG flags;
+    ULONG       flags;
 
+/*    printk("Enter tul_exec_scb");*/
+
+
+
+/*      pCurScb->SCB_Status = SCB_PEND;		7/22/98 */
 	pCurScb->SCB_Mode = 0;
 
 	pCurScb->SCB_SGIdx = 0;
 	pCurScb->SCB_SGMax = pCurScb->SCB_SGLen;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	save_flags(flags);
-	cli();
-#endif
+    save_flags(flags);
+    cli();
 
-	tul_append_pend_scb(pCurHcb, pCurScb);	/* Append this SCB to Pending queue */
+    tul_append_pend_scb(pCurHcb,pCurScb); /* Append this SCB to Pending queue */
 
 /* VVVVV 07/21/98 */
-	if (pCurHcb->HCS_Semaph == 1) {
-		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
-		/* disable Jasmin SCSI Int        */
-		pCurHcb->HCS_Semaph = 0;
+    if (pCurHcb->HCS_Semaph == 1) {
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
+					/* disable Jasmin SCSI Int        */
+	    pCurHcb->HCS_Semaph = 0;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-        	spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
+	    tulip_main(pCurHcb);
 
-		tulip_main(pCurHcb);
-
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-        	spin_lock_irqsave(&(pCurHcb->HCS_SemaphLock), flags);
-#endif
-
-		pCurHcb->HCS_Semaph = 1;
-		TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
+	    pCurHcb->HCS_Semaph = 1;
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
 	}
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
-	spin_unlock_irqrestore(&(pCurHcb->HCS_SemaphLock), flags);
-#else
-	restore_flags(flags);
-#endif
-	return;
+    restore_flags(flags);
+    return;
 }
 
 /***************************************************************************/
-int tul_isr(HCS * pCurHcb)
+int tul_isr(HCS *pCurHcb)
 {
-	/* Enter critical section       */
+/*    printk("Enter i91u_isr\n");*/
+					/* Enter critical section       */
 
-	if (TUL_RD(pCurHcb->HCS_Base, TUL_Int) & TSS_INT_PENDING) {
-		if (pCurHcb->HCS_Semaph == 1) {
-			TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
-			/* Disable Tulip SCSI Int */
-			pCurHcb->HCS_Semaph = 0;
+    if (TUL_RD(pCurHcb->HCS_Base, TUL_Int) & TSS_INT_PENDING)
+	{
+	if (pCurHcb->HCS_Semaph == 1)
+	    {
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x1F);
+	    			      /* Disable Tulip SCSI Int */
+	    pCurHcb->HCS_Semaph = 0;
 
-			tulip_main(pCurHcb);
+	    tulip_main(pCurHcb);
 
-			pCurHcb->HCS_Semaph = 1;
-			TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
-			return (1);
-		}
+	    pCurHcb->HCS_Semaph = 1;
+	    TUL_WR(pCurHcb->HCS_Base + TUL_Mask, 0x0F);
+	    return (1);
+	    }
 	}
-	return (0);
+    return (0);
 }
 
 /***************************************************************************/
-int tulip_main(HCS * pCurHcb)
+int tulip_main(HCS *pCurHcb)
 {
-	SCB *pCurScb;
+    SCB *pCurScb;
+//    ULONG       flags;
 
-	for (;;) {
+/*printk("Enter tulip_main\n");*/
 
-		tulip_scsi(pCurHcb);	/* Call tulip_scsi              */
+    for (;;)
+	{
 
-		while ((pCurScb = tul_find_done_scb(pCurHcb)) != NULL) {	/* find done entry */
-			if (pCurScb->SCB_TaStat == QUEUE_FULL) {
-				pCurHcb->HCS_MaxTags[pCurScb->SCB_Target] =
-				    pCurHcb->HCS_ActTags[pCurScb->SCB_Target] - 1;
-				pCurScb->SCB_TaStat = 0;
-				tul_append_pend_scb(pCurHcb, pCurScb);
-				continue;
-			}
-			if (!(pCurScb->SCB_Mode & SCM_RSENS)) {		/* not in auto req. sense mode */
-				if (pCurScb->SCB_TaStat == 2) {
+//	save_flags(flags);		/* wh 07/21/98		*/
+//	sti();
 
-					/* clr sync. nego flag */
+	tulip_scsi(pCurHcb);            /* Call tulip_scsi              */
 
-					if (pCurScb->SCB_Flags & SCF_SENSE) {
-						BYTE len;
-						len = pCurScb->SCB_SenseLen;
-						if (len == 0)
-							len = 1;
-						pCurScb->SCB_BufLen = pCurScb->SCB_SenseLen;
-						pCurScb->SCB_BufPtr = pCurScb->SCB_SensePtr;
-						pCurScb->SCB_Flags &= ~(SCF_SG | SCF_DIR);	/* for xfer_data_in */
-/*                      pCurScb->SCB_Flags |= SCF_NO_DCHK;      */
-						/* so, we won't report worng direction in xfer_data_in,
-						   and won't report HOST_DO_DU in state_6 */
-						pCurScb->SCB_Mode = SCM_RSENS;
-						pCurScb->SCB_Ident &= 0xBF;	/* Disable Disconnect */
-						pCurScb->SCB_TagMsg = 0;
-						pCurScb->SCB_TaStat = 0;
-						pCurScb->SCB_CDBLen = 6;
-						pCurScb->SCB_CDB[0] = SCSICMD_RequestSense;
-						pCurScb->SCB_CDB[1] = 0;
-						pCurScb->SCB_CDB[2] = 0;
-						pCurScb->SCB_CDB[3] = 0;
-						pCurScb->SCB_CDB[4] = len;
-						pCurScb->SCB_CDB[5] = 0;
-						tul_push_pend_scb(pCurHcb, pCurScb);
-						break;
-					}
-				}
-			} else {	/* in request sense mode */
+//	restore_flags(flags);		/* Addedby hc 07/21/98	*/
 
-				if (pCurScb->SCB_TaStat == 2) {		/* check contition status again after sending
-									   requset sense cmd 0x3 */
-					pCurScb->SCB_HaStat = HOST_BAD_PHAS;
-				}
-				pCurScb->SCB_TaStat = 2;
-			}
-			pCurScb->SCB_Flags |= SCF_DONE;
-			if (pCurScb->SCB_Flags & SCF_POST) {
-				(*pCurScb->SCB_Post) ((BYTE *) pCurHcb, (BYTE *) pCurScb);
-			}
-		}		/* while */
-
-		/* find_active: */
-		if (TUL_RD(pCurHcb->HCS_Base, TUL_SStatus0) & TSS_INT_PENDING)
-			continue;
-
-		if (pCurHcb->HCS_ActScb) {	/* return to OS and wait for xfer_done_ISR/Selected_ISR */
-			return 1;	/* return to OS, enable interrupt */
+	while ((pCurScb = tul_find_done_scb(pCurHcb)) != NULL)
+	    {/* find done entry */
+	    if (pCurScb->SCB_TaStat == QUEUE_FULL)
+		{
+		pCurHcb->HCS_MaxTags[pCurScb->SCB_Target] =
+			pCurHcb->HCS_ActTags[pCurScb->SCB_Target] - 1;
+		pCurScb->SCB_TaStat = 0;
+//		pCurScb->SCB_Status = SCB_PEND;
+		tul_append_pend_scb(pCurHcb, pCurScb);
+		continue;
 		}
-		/* Check pending SCB            */
-		if (tul_find_first_pend_scb(pCurHcb) == NULL) {
-			return 1;	/* return to OS, enable interrupt */
+
+	    if (!(pCurScb->SCB_Mode & SCM_RSENS))
+		{                       /* not in auto req. sense mode*/
+		if (pCurScb->SCB_TaStat == 2)
+		    {
+		
+//	            pCurHcb->HCS_Tcs[pCurScb->SCB_Target].TCS_Flags
+//			 &= ~(TCF_SYNC_DONE | TCF_WDTR_DONE);
+			  /* clr sync. nego flag */
+
+		    if (pCurScb->SCB_Flags & SCF_SENSE)
+			{
+			BYTE   len;
+			len = pCurScb->SCB_SenseLen;
+			if (len == 0)
+			    len = 1;
+			pCurScb->SCB_BufLen = pCurScb->SCB_SenseLen;
+			pCurScb->SCB_BufPtr = pCurScb->SCB_SensePtr;
+			pCurScb->SCB_Flags &= ~(SCF_SG|SCF_DIR); /* for xfer_data_in */
+/*			pCurScb->SCB_Flags |= SCF_NO_DCHK;	*/
+		/* so, we won't report worng direction in xfer_data_in,
+				and won't report HOST_DO_DU in state_6 */
+			pCurScb->SCB_Mode = SCM_RSENS;
+			pCurScb->SCB_Ident &= 0xBF;	/* Disable Disconnect */
+			pCurScb->SCB_TagMsg = 0;
+			pCurScb->SCB_TaStat = 0;
+			pCurScb->SCB_CDBLen = 6;
+			pCurScb->SCB_CDB[0] = SCSICMD_RequestSense;
+			pCurScb->SCB_CDB[1] = 0;
+			pCurScb->SCB_CDB[2] = 0;
+			pCurScb->SCB_CDB[3] = 0;
+			pCurScb->SCB_CDB[4] = len;
+			pCurScb->SCB_CDB[5] = 0;
+			tul_push_pend_scb(pCurHcb, pCurScb);
+			break;
+			}
+		    }
 		}
-	}			/* End of for loop */
+	    else {                       /* in request sense mode */
+
+		if (pCurScb->SCB_TaStat == 2)
+		    {/* check contition status again after sending
+					requset sense cmd 0x3*/
+		    pCurScb->SCB_HaStat = HOST_BAD_PHAS;
+		    }
+		pCurScb->SCB_TaStat = 2;
+		}
+	    pCurScb->SCB_Flags |= SCF_DONE;
+	    if (pCurScb->SCB_Flags & SCF_POST)
+		{
+//		restore_flags(flags);	/* Addedby hc 07/08/98		*/
+//		sti();
+		(*pCurScb->SCB_Post)((BYTE *) pCurHcb, (BYTE *) pCurScb);
+//		save_flags(flags);	/* Addedby hc 07/08/98	*/
+		}
+	    }                           /* while */
+
+					/* find_active: */
+	if (TUL_RD(pCurHcb->HCS_Base, TUL_SStatus0) & TSS_INT_PENDING)
+	    continue;
+
+	if (pCurHcb->HCS_ActScb)        /* return to OS and wait for xfer_done_ISR/Selected_ISR */
+	    {
+	    return 1; /* return to OS, enable interrupt */
+	    }
+					/* Check pending SCB            */
+	if (tul_find_first_pend_scb(pCurHcb) == NULL)
+	    {
+	    return 1;                   /* return to OS, enable interrupt */
+	    }
+	}       /* End of for loop */
 	/* statement won't reach here */
 }
 
 
 
 
-/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 /***************************************************************************/
 /***************************************************************************/
 /***************************************************************************/
 /***************************************************************************/
 
 /***************************************************************************/
-void tulip_scsi(HCS * pCurHcb)
+void tulip_scsi(HCS *pCurHcb)
 {
-	SCB *pCurScb;
-	TCS *pCurTcb;
+    SCB         *pCurScb;
+    TCS         *pCurTcb;
 
+/*    printk("Enter tulip_scsi()\n");*/
 	/* make sure to service interrupt asap */
 
-	if ((pCurHcb->HCS_JSStatus0 = TUL_RD(pCurHcb->HCS_Base, TUL_SStatus0)) & TSS_INT_PENDING) {
-
-		pCurHcb->HCS_Phase = pCurHcb->HCS_JSStatus0 & TSS_PH_MASK;
-		pCurHcb->HCS_JSStatus1 = TUL_RD(pCurHcb->HCS_Base, TUL_SStatus1);
-		pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
-		if (pCurHcb->HCS_JSInt & TSS_SCSIRST_INT) {	/* SCSI bus reset detected      */
-			int_tul_scsi_rst(pCurHcb);
-			return;
-		}
-		if (pCurHcb->HCS_JSInt & TSS_RESEL_INT) {	/* if selected/reselected interrupt */
-			if (int_tul_resel(pCurHcb) == 0)
-				tul_next_state(pCurHcb);
-			return;
-		}
-		if (pCurHcb->HCS_JSInt & TSS_SEL_TIMEOUT) {
-			int_tul_busfree(pCurHcb);
-			return;
-		}
-		if (pCurHcb->HCS_JSInt & TSS_DISC_INT) {	/* BUS disconnection            */
-			int_tul_busfree(pCurHcb);	/* unexpected bus free or sel timeout */
-			return;
-		}
-		if (pCurHcb->HCS_JSInt & (TSS_FUNC_COMP | TSS_BUS_SERV)) {	/* func complete or Bus service */
-			if ((pCurScb = pCurHcb->HCS_ActScb) != NULL)
-				tul_next_state(pCurHcb);
-			return;
-		}
+    if ((pCurHcb->HCS_JSStatus0 = TUL_RD(pCurHcb->HCS_Base, TUL_SStatus0)) & TSS_INT_PENDING)
+	{
+	
+	pCurHcb->HCS_Phase = pCurHcb->HCS_JSStatus0 & TSS_PH_MASK;
+	pCurHcb->HCS_JSStatus1 = TUL_RD(pCurHcb->HCS_Base, TUL_SStatus1);
+	pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
+/*    printk("SCSI status = %x\n", pCurHcb->HCS_JSStatus0 );
+    printk("SCSI status 1 = %x\n", pCurHcb->HCS_JSStatus1);
+    printk("SCSI interrupt = %x\n", pCurHcb->HCS_JSInt);*/
+	if (pCurHcb->HCS_JSInt & TSS_SCSIRST_INT)
+	    {                           /* SCSI bus reset detected      */
+	    int_tul_scsi_rst(pCurHcb);
+	    return;
+	    }
+	if (pCurHcb->HCS_JSInt & TSS_RESEL_INT)
+	    {                           /* if selected/reselected interrupt */
+	    if (int_tul_resel(pCurHcb) == 0)
+    		tul_next_state(pCurHcb);
+	    return;
+	    }
+	if (pCurHcb->HCS_JSInt & TSS_SEL_TIMEOUT)
+	    {
+	    int_tul_busfree(pCurHcb) ;
+	    return;
+	    }
+	if (pCurHcb->HCS_JSInt & TSS_DISC_INT)
+	    {                           /* BUS disconnection            */
+	    int_tul_busfree(pCurHcb); /* unexpected bus free or sel timeout */
+	    return;
+	    }
+	if (pCurHcb->HCS_JSInt & (TSS_FUNC_COMP | TSS_BUS_SERV))
+	    {                           /* func complete or Bus service */
+	    if ((pCurScb = pCurHcb->HCS_ActScb) != NULL)
+		tul_next_state(pCurHcb);
+	    return;
+	    }
 	}
-	if (pCurHcb->HCS_ActScb != NULL)
-		return;
 
-	if ((pCurScb = tul_find_first_pend_scb(pCurHcb)) == NULL)
-		return;
+    if (pCurHcb->HCS_ActScb != NULL)
+	return;
 
-	/* program HBA's SCSI ID & target SCSI ID */
-	TUL_WR(pCurHcb->HCS_Base + TUL_SScsiId,
-	     (pCurHcb->HCS_SCSI_ID << 4) | (pCurScb->SCB_Target & 0x0F));
-	if (pCurScb->SCB_Opcode == ExecSCSI) {
-		pCurTcb = &pCurHcb->HCS_Tcs[pCurScb->SCB_Target];
+/*    if ((pCurScb = pCurHcb->HCS_FirstPend) == NULL)*/
+    if ((pCurScb = tul_find_first_pend_scb(pCurHcb)) == NULL)
+	return;
 
+			/* program HBA's SCSI ID & target SCSI ID */    
+    TUL_WR( pCurHcb->HCS_Base + TUL_SScsiId,
+			(pCurHcb->HCS_SCSI_ID << 4) | (pCurScb->SCB_Target & 0x0F) );
+    if (pCurScb->SCB_Opcode == ExecSCSI) {
+	pCurTcb = &pCurHcb->HCS_Tcs[pCurScb->SCB_Target];
+
+	if (pCurScb->SCB_TagMsg)
+	    pCurTcb->TCS_DrvFlags |= TCF_DRV_EN_TAG;
+	else
+	    pCurTcb->TCS_DrvFlags &= ~TCF_DRV_EN_TAG;
+
+	TUL_WR(pCurHcb->HCS_Base + TUL_SPeriod, pCurTcb->TCS_JS_Period);
+/*printk("TCS_Flags = %x\n", pCurTcb->TCS_Flags);
+do_pause(15000);*/
+	if ((pCurTcb->TCS_Flags & (TCF_WDTR_DONE | TCF_NO_WDTR)) == 0)
+	    {                           /* do wdtr negotiation          */
+	    tul_select_atn_stop(pCurHcb, pCurScb);
+	    }
+	else
+	    {
+	    if ((pCurTcb->TCS_Flags & (TCF_SYNC_DONE | TCF_NO_SYNC_NEGO)) == 0)
+		{                       /* do sync negotiation          */
+		tul_select_atn_stop(pCurHcb, pCurScb);
+		}
+	    else
+		{
 		if (pCurScb->SCB_TagMsg)
-			pCurTcb->TCS_DrvFlags |= TCF_DRV_EN_TAG;
+		    tul_select_atn3(pCurHcb, pCurScb);
 		else
-			pCurTcb->TCS_DrvFlags &= ~TCF_DRV_EN_TAG;
+		    tul_select_atn(pCurHcb, pCurScb);
+		}
+	    }
+	if (pCurScb->SCB_Flags & SCF_POLL)
+	    {
+	    while (wait_tulip(pCurHcb) != -1)
+		{
+		if (tul_next_state(pCurHcb) == -1)
+		    break;
+		}
+	    }
+	}
+    else if (pCurScb->SCB_Opcode == BusDevRst) {
+	tul_select_atn_stop(pCurHcb, pCurScb);
+	pCurScb->SCB_NxtStat = 8;
+	if (pCurScb->SCB_Flags & SCF_POLL)
+		{
+		while (wait_tulip(pCurHcb) != -1)
+		    {
+		    if (tul_next_state(pCurHcb) == -1)
+			break;
+		    }
+		}
+        }
+    else if (pCurScb->SCB_Opcode == AbortCmd ) {
+	ULONG srbp;
 
-		TUL_WR(pCurHcb->HCS_Base + TUL_SPeriod, pCurTcb->TCS_JS_Period);
-		if ((pCurTcb->TCS_Flags & (TCF_WDTR_DONE | TCF_NO_WDTR)) == 0) {	/* do wdtr negotiation          */
-			tul_select_atn_stop(pCurHcb, pCurScb);
-		} else {
-			if ((pCurTcb->TCS_Flags & (TCF_SYNC_DONE | TCF_NO_SYNC_NEGO)) == 0) {	/* do sync negotiation          */
-				tul_select_atn_stop(pCurHcb, pCurScb);
-			} else {
-				if (pCurScb->SCB_TagMsg)
-					tul_select_atn3(pCurHcb, pCurScb);
-				else
-					tul_select_atn(pCurHcb, pCurScb);
-			}
+	srbp = (ULONG)pCurScb->SCB_Srb;
+/* 08/03/98 */
+	if (tul_abort_srb(pCurHcb, srbp) != 0) {
+	
+
+		tul_unlink_pend_scb(pCurHcb, pCurScb);
+
+		tul_release_scb(pCurHcb, pCurScb);
 		}
-		if (pCurScb->SCB_Flags & SCF_POLL) {
-			while (wait_tulip(pCurHcb) != -1) {
-				if (tul_next_state(pCurHcb) == -1)
-					break;
-			}
-		}
-	} else if (pCurScb->SCB_Opcode == BusDevRst) {
+	else {
+		pCurScb->SCB_Opcode = BusDevRst;
 		tul_select_atn_stop(pCurHcb, pCurScb);
 		pCurScb->SCB_NxtStat = 8;
-		if (pCurScb->SCB_Flags & SCF_POLL) {
-			while (wait_tulip(pCurHcb) != -1) {
-				if (tul_next_state(pCurHcb) == -1)
-					break;
-			}
 		}
-	} else if (pCurScb->SCB_Opcode == AbortCmd) {
-		ULONG srbp;
-
-		srbp = (ULONG) pCurScb->SCB_Srb;
+	    
 /* 08/03/98 */
-		if (tul_abort_srb(pCurHcb, srbp) != 0) {
-
-
-			tul_unlink_pend_scb(pCurHcb, pCurScb);
-
-			tul_release_scb(pCurHcb, pCurScb);
-		} else {
-			pCurScb->SCB_Opcode = BusDevRst;
-			tul_select_atn_stop(pCurHcb, pCurScb);
-			pCurScb->SCB_NxtStat = 8;
-		}
-
-/* 08/03/98 */
-	} else {
-		tul_unlink_pend_scb(pCurHcb, pCurScb);
-		pCurScb->SCB_HaStat = 0x16;	/* bad command */
-		tul_append_done_scb(pCurHcb, pCurScb);
-	}
-	return;
+        }
+    else {
+	tul_unlink_pend_scb(pCurHcb, pCurScb);
+//	pCurScb->SCB_Status = SCB_DONE;        /* done */
+	pCurScb->SCB_HaStat = 0x16;    /* bad command */
+	tul_append_done_scb(pCurHcb, pCurScb);
+        }
+    return;
 }
 
 
 /***************************************************************************/
-int tul_next_state(HCS * pCurHcb)
+int     tul_next_state(HCS *pCurHcb)
 {
-	int next;
+    int next;
 
-	next = pCurHcb->HCS_ActScb->SCB_NxtStat;
-	for (;;) {
-		switch (next) {
-		case 1:
-			next = tul_state_1(pCurHcb);
-			break;
-		case 2:
-			next = tul_state_2(pCurHcb);
-			break;
-		case 3:
-			next = tul_state_3(pCurHcb);
-			break;
-		case 4:
-			next = tul_state_4(pCurHcb);
-			break;
-		case 5:
-			next = tul_state_5(pCurHcb);
-			break;
-		case 6:
-			next = tul_state_6(pCurHcb);
-			break;
-		case 7:
-			next = tul_state_7(pCurHcb);
-			break;
-		case 8:
-			return (tul_bus_device_reset(pCurHcb));
-		default:
-			return (tul_bad_seq(pCurHcb));
-		}
-		if (next <= 0)
-			return next;
+    next = pCurHcb->HCS_ActScb->SCB_NxtStat;
+    for (;;) {
+	switch (next) {
+	    case 1:
+		next = tul_state_1(pCurHcb);
+		break;
+	    case 2:
+		next = tul_state_2(pCurHcb);
+		break;
+	    case 3:
+		next = tul_state_3(pCurHcb);
+		break;
+	    case 4:
+		next = tul_state_4(pCurHcb);
+		break;
+	    case 5:
+		next = tul_state_5(pCurHcb);
+		break;
+	    case 6:
+		next = tul_state_6(pCurHcb);
+		break;
+	    case 7:
+		next = tul_state_7(pCurHcb);
+		break;
+	    case 8:
+		return (tul_bus_device_reset(pCurHcb));
+	    default:
+		return (tul_bad_seq(pCurHcb));
 	}
+	if (next <= 0)
+	    return next;
+    }
 }
 
 
 /***************************************************************************/
 /* sTate after selection with attention & stop */
-int tul_state_1(HCS * pCurHcb)
+int     tul_state_1(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
-	TCS *pCurTcb = pCurHcb->HCS_ActTcs;
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
+    TCS *pCurTcb = pCurHcb->HCS_ActTcs;
 #if DEBUG_STATE
-	printk("-s1-");
+printk("-s1-");
 #endif
 
-	tul_unlink_pend_scb(pCurHcb, pCurScb);
-	tul_append_busy_scb(pCurHcb, pCurScb);
+    tul_unlink_pend_scb(pCurHcb, pCurScb);
+    tul_append_busy_scb(pCurHcb, pCurScb);
 
-	TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, pCurTcb->TCS_SConfig0);
-	/* ATN on */
-	if (pCurHcb->HCS_Phase == MSG_OUT) {
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SConfig, pCurTcb->TCS_SConfig0);
+					/* ATN on */
+    if (pCurHcb->HCS_Phase == MSG_OUT) {
 
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, (TSC_EN_BUS_IN | TSC_HW_RESELECT));
+/*printk("MSG OUT\n");*/
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SCtrl1, (TSC_EN_BUS_IN | TSC_HW_RESELECT));
 
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_Ident);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurScb->SCB_Ident);
 
-		if (pCurScb->SCB_TagMsg) {
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_TagMsg);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_TagId);
-		}
-		if ((pCurTcb->TCS_Flags & (TCF_WDTR_DONE | TCF_NO_WDTR)) == 0) {
+	if (pCurScb->SCB_TagMsg)
+	    {
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurScb->SCB_TagMsg);
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurScb->SCB_TagId);
+	    }
 
-			pCurTcb->TCS_Flags |= TCF_WDTR_DONE;
+	if ((pCurTcb->TCS_Flags & (TCF_WDTR_DONE | TCF_NO_WDTR)) == 0) {
 
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_EXTEND);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 2);	/* Extended msg length */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 3);	/* Sync request */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 1);	/* Start from 16 bits */
-		} else if ((pCurTcb->TCS_Flags & (TCF_SYNC_DONE | TCF_NO_SYNC_NEGO)) == 0) {
+	    pCurTcb->TCS_Flags |= TCF_WDTR_DONE;
 
-			pCurTcb->TCS_Flags |= TCF_SYNC_DONE;
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, MSG_EXTEND);
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, 2);    /* Extended msg length*/    
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, 3);    /* Sync request*/
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, 1);    /* Start from 16 bits */
+	    }
+	else if ((pCurTcb->TCS_Flags & (TCF_SYNC_DONE|TCF_NO_SYNC_NEGO)) == 0) {
 
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_EXTEND);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 3);	/* extended msg length */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 1);	/* sync request */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, tul_rate_tbl[pCurTcb->TCS_Flags & TCF_SCSI_RATE]);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MAX_OFFSET);	/* REQ/ACK offset */
-		}
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-		if (wait_tulip(pCurHcb) == -1)
-			return (-1);
+	    pCurTcb->TCS_Flags |= TCF_SYNC_DONE;
+
+	    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, MSG_EXTEND);
+	    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, 3); /* extended msg length */
+	    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, 1); /* sync request */
+	    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, tul_rate_tbl[pCurTcb->TCS_Flags & TCF_SCSI_RATE]);
+	    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, MAX_OFFSET); /* REQ/ACK offset */
+	    }
+
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_OUT);
+	if (wait_tulip(pCurHcb) == -1)
+		return(-1);
 	}
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
+
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SCtrl0, TSC_FLUSH_FIFO);
 	TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, (TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)));
-	return (3);
+	return(3);
 }
 
 
 /***************************************************************************/
 /* state after selection with attention */
 /* state after selection with attention3 */
-int tul_state_2(HCS * pCurHcb)
+int     tul_state_2(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
-	TCS *pCurTcb = pCurHcb->HCS_ActTcs;
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
+    TCS *pCurTcb = pCurHcb->HCS_ActTcs;
 #if DEBUG_STATE
-	printk("-s2-");
+printk("-s2-");
 #endif
 
-	tul_unlink_pend_scb(pCurHcb, pCurScb);
-	tul_append_busy_scb(pCurHcb, pCurScb);
+    tul_unlink_pend_scb(pCurHcb, pCurScb);
+    tul_append_busy_scb(pCurHcb, pCurScb);
 
-	TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, pCurTcb->TCS_SConfig0);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, pCurTcb->TCS_SConfig0);
 
-	if (pCurHcb->HCS_JSStatus1 & TSS_CMD_PH_CMP) {
-		return (4);
-	}
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, (TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)));
-	return (3);
+    if ( pCurHcb->HCS_JSStatus1 & TSS_CMD_PH_CMP) {
+	return (4);
+    }
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, (TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)));
+    return (3);
 }
 
 /***************************************************************************/
 /* state before CDB xfer is done */
-int tul_state_3(HCS * pCurHcb)
+int     tul_state_3(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
-	TCS *pCurTcb = pCurHcb->HCS_ActTcs;
-	int i;
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
+    TCS *pCurTcb = pCurHcb->HCS_ActTcs;
+    int i;
 
 #if DEBUG_STATE
-	printk("-s3-");
+printk("-s3-");
 #endif
-	for (;;) {
-		switch (pCurHcb->HCS_Phase) {
-		case CMD_OUT:	/* Command out phase            */
-			for (i = 0; i < (int) pCurScb->SCB_CDBLen; i++)
-				TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_CDB[i]);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-			if (wait_tulip(pCurHcb) == -1)
-				return (-1);
-			if (pCurHcb->HCS_Phase == CMD_OUT) {
-				return (tul_bad_seq(pCurHcb));
-			}
-			return (4);
-
-		case MSG_IN:	/* Message in phase             */
-			pCurScb->SCB_NxtStat = 3;
-			if (tul_msgin(pCurHcb) == -1)
-				return (-1);
-			break;
-
-		case STATUS_IN:	/* Status phase                 */
-			if (tul_status_msg(pCurHcb) == -1)
-				return (-1);
-			break;
-
-		case MSG_OUT:	/* Message out phase            */
-			if (pCurTcb->TCS_Flags & (TCF_SYNC_DONE | TCF_NO_SYNC_NEGO)) {
-
-				TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_NOP);		/* msg nop */
-				TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-				if (wait_tulip(pCurHcb) == -1)
-					return (-1);
-
-			} else {
-				pCurTcb->TCS_Flags |= TCF_SYNC_DONE;
-
-				TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_EXTEND);
-				TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 3);	/* ext. msg len */
-				TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 1);	/* sync request */
-				TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, tul_rate_tbl[pCurTcb->TCS_Flags & TCF_SCSI_RATE]);
-				TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MAX_OFFSET);	/* REQ/ACK offset */
-				TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-				if (wait_tulip(pCurHcb) == -1)
-					return (-1);
-				TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-				TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7));
-
-			}
-			break;
-
-		default:
-			return (tul_bad_seq(pCurHcb));
+    for (;;) {
+	switch (pCurHcb->HCS_Phase)
+	    {
+	    case CMD_OUT:               /* Command out phase            */
+/*printk("Command Out Phase\n");*/
+		for ( i = 0; i < (int) pCurScb->SCB_CDBLen; i++)
+		    TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_CDB[i]);
+		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
+		if (wait_tulip(pCurHcb) == -1)
+		    return (-1);
+		if (pCurHcb->HCS_Phase == CMD_OUT) {
+		    return (tul_bad_seq(pCurHcb));
 		}
+		return(4);
+
+	    case MSG_IN:                /* Message in phase             */
+/*printk("Message In Phase\n");*/
+		pCurScb->SCB_NxtStat = 3;
+		if (tul_msgin(pCurHcb) == -1)
+		    return (-1);
+		break;
+
+	    case STATUS_IN:             /* Status phase                 */
+/*printk("Status Phase\n");*/
+		if (tul_status_msg(pCurHcb) == -1)
+		    return (-1);
+		break;
+
+	    case MSG_OUT:               /* Message out phase            */
+/*printk("Message Out Phase\n");*/
+		if (pCurTcb->TCS_Flags & (TCF_SYNC_DONE | TCF_NO_SYNC_NEGO)) {
+
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, MSG_NOP); /* msg nop */
+		    TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
+		    if (wait_tulip(pCurHcb) == -1)
+			return(-1);
+
+		} else {
+		    pCurTcb->TCS_Flags |= TCF_SYNC_DONE;
+
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, MSG_EXTEND);
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, 3); /* ext. msg len */
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, 1); /* sync request */
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, tul_rate_tbl[pCurTcb->TCS_Flags & TCF_SCSI_RATE]);
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, MAX_OFFSET); /* REQ/ACK offset */
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SCmd, TSC_XF_FIFO_OUT);
+		    if (wait_tulip(pCurHcb) == -1)
+			return(-1);
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SCtrl0,  TSC_FLUSH_FIFO);
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SSignal, TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7));
+
+		}
+		break;
+
+	    default:
+		return (tul_bad_seq(pCurHcb));
+	    }
 	}
 }
 
 
 /***************************************************************************/
-int tul_state_4(HCS * pCurHcb)
+int     tul_state_4(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
 
 #if DEBUG_STATE
-	printk("-s4-");
+printk("-s4-");
 #endif
-	if ((pCurScb->SCB_Flags & SCF_DIR) == SCF_NO_XF) {
-		return (6);	/* Go to state 6                */
-	}
-	for (;;) {
-		if (pCurScb->SCB_BufLen == 0)
-			return (6);	/* Go to state 6                */
+    if ((pCurScb->SCB_Flags & SCF_DIR) == SCF_NO_XF) {
+	return (6);                     /* Go to state 6                */
+    }
 
-		switch (pCurHcb->HCS_Phase) {
+    for (;;) {
+	if (pCurScb->SCB_BufLen == 0)
+	    return (6);                 /* Go to state 6                */
 
-		case STATUS_IN:	/* Status phase                 */
-			if ((pCurScb->SCB_Flags & SCF_DIR) != 0) {	/* if direction bit set then report data underrun */
-				pCurScb->SCB_HaStat = HOST_DO_DU;
-			}
-			if ((tul_status_msg(pCurHcb)) == -1)
-				return (-1);
-			break;
+	switch (pCurHcb->HCS_Phase) {
 
-		case MSG_IN:	/* Message in phase             */
-			pCurScb->SCB_NxtStat = 0x4;
-			if (tul_msgin(pCurHcb) == -1)
-				return (-1);
-			break;
+	    case STATUS_IN:             /* Status phase                 */
+		if ((pCurScb->SCB_Flags & SCF_DIR) != 0)
+		    { /* if direction bit set then report data underrun */
+		    pCurScb->SCB_HaStat = HOST_DO_DU;
+		    }
+		if ((tul_status_msg(pCurHcb)) == -1)
+		    return (-1);
+		break;
 
-		case MSG_OUT:	/* Message out phase            */
-			if (pCurHcb->HCS_JSStatus0 & TSS_PAR_ERROR) {
-				pCurScb->SCB_BufLen = 0;
-				pCurScb->SCB_HaStat = HOST_DO_DU;
-				if (tul_msgout_ide(pCurHcb) == -1)
-					return (-1);
-				return (6);	/* Go to state 6                */
-			} else {
-				TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_NOP);		/* msg nop */
-				TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-				if (wait_tulip(pCurHcb) == -1)
-					return (-1);
-			}
-			break;
+	    case MSG_IN:                /* Message in phase             */
+		pCurScb->SCB_NxtStat = 0x4;
+		if (tul_msgin(pCurHcb) == -1)
+		    return (-1);
+		break;
 
-		case DATA_IN:	/* Data in phase                */
-			return (tul_xfer_data_in(pCurHcb));
-
-		case DATA_OUT:	/* Data out phase               */
-			return (tul_xfer_data_out(pCurHcb));
-
-		default:
-			return (tul_bad_seq(pCurHcb));
+	    case MSG_OUT:               /* Message out phase            */
+		if (pCurHcb->HCS_JSStatus0 & TSS_PAR_ERROR) {
+		    pCurScb->SCB_BufLen = 0;
+		    pCurScb->SCB_HaStat = HOST_DO_DU;
+		    if (tul_msgout_ide(pCurHcb) == -1)
+			return (-1);
+		    return (6);         /* Go to state 6                */
+		} else {
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SFifo, MSG_NOP); /* msg nop */
+		    TUL_WR(pCurHcb->HCS_Base+TUL_SCmd, TSC_XF_FIFO_OUT);
+		    if (wait_tulip(pCurHcb) == -1)
+		        return (-1);
 		}
+		break;
+
+	    case DATA_IN:               /* Data in phase                */
+		return (tul_xfer_data_in(pCurHcb));
+
+	    case DATA_OUT:              /* Data out phase               */
+		return (tul_xfer_data_out(pCurHcb));
+
+	    default:
+		return (tul_bad_seq(pCurHcb));
 	}
+    }
 }
 
 
 /***************************************************************************/
 /* state after dma xfer done or phase change before xfer done */
-int tul_state_5(HCS * pCurHcb)
+int     tul_state_5(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
-	long cnt, xcnt;		/* cannot use unsigned !! code: if (xcnt < 0) */
+    SCB         *pCurScb = pCurHcb->HCS_ActScb;
+    long        cnt, xcnt;  /* cannot use unsigned !! code: if (xcnt < 0) */
 
 #if DEBUG_STATE
-	printk("-s5-");
+printk("-s5-");
 #endif
-/*------ get remaining count -------*/
+	/*------ get remaining count -------*/
 
-	cnt = TUL_RDLONG(pCurHcb->HCS_Base, TUL_SCnt0) & 0x0FFFFFF;
+    cnt = TUL_RDLONG(pCurHcb->HCS_Base, TUL_SCnt0) & 0x0FFFFFF;
 
-	if (TUL_RD(pCurHcb->HCS_Base, TUL_XCmd) & 0x20) {
-		/* ----------------------- DATA_IN ----------------------------- */
+/*printk("Remaining SCSI Count = %lx\n", cnt);*/
+    if (TUL_RD(pCurHcb->HCS_Base, TUL_XCmd) & 0x20)
+	{
+	/* ----------------------- DATA_IN -----------------------------*/
 		/* check scsi parity error */
-		if (pCurHcb->HCS_JSStatus0 & TSS_PAR_ERROR) {
-			pCurScb->SCB_HaStat = HOST_DO_DU;
-		}
-		if (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & XPEND) {	/* DMA xfer pending, Send STOP  */
+	if (pCurHcb->HCS_JSStatus0 & TSS_PAR_ERROR)
+	    {
+	    pCurScb->SCB_HaStat = HOST_DO_DU;
+	    }
+
+	if (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & XPEND)
+	    {                           /* DMA xfer pending, Send STOP  */
 			/* tell Hardware  scsi xfer has been terminated */
-			TUL_WR(pCurHcb->HCS_Base + TUL_XCtrl, TUL_RD(pCurHcb->HCS_Base, TUL_XCtrl) | 0x80);
+	    TUL_WR(pCurHcb->HCS_Base + TUL_XCtrl, TUL_RD(pCurHcb->HCS_Base, TUL_XCtrl) | 0x80);
 			/* wait until DMA xfer not pending */
-			while (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & XPEND);
+	    while (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & XPEND );
+	    }
+	}
+    else
+	{                               /*-------- DATA OUT -----------*/
+	if ((TUL_RD(pCurHcb->HCS_Base, TUL_SStatus1) & TSS_XFER_CMP) == 0)
+	    {
+	    if (pCurHcb->HCS_ActTcs->TCS_JS_Period & TSC_WIDE_SCSI)
+		cnt += (TUL_RD(pCurHcb->HCS_Base, TUL_SFifoCnt) & 0x1F) << 1;
+	    else
+		cnt += (TUL_RD(pCurHcb->HCS_Base, TUL_SFifoCnt) & 0x1F);
+	    }
+	if (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & XPEND)
+	    {                   /* if DMA xfer is pending, abort DMA xfer */
+	    TUL_WR(pCurHcb->HCS_Base + TUL_XCmd, TAX_X_ABT);
+				/* wait Abort DMA xfer done */
+	    while ((TUL_RD(pCurHcb->HCS_Base, TUL_Int) & XABT) == 0);
+	    }
+	if ((cnt == 1) && (pCurHcb->HCS_Phase == DATA_OUT))
+	    {
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_OUT);
+	    if (wait_tulip(pCurHcb) == -1)
+		{
+		return (-1);
 		}
-	} else {
-/*-------- DATA OUT -----------*/
-		if ((TUL_RD(pCurHcb->HCS_Base, TUL_SStatus1) & TSS_XFER_CMP) == 0) {
-			if (pCurHcb->HCS_ActTcs->TCS_JS_Period & TSC_WIDE_SCSI)
-				cnt += (TUL_RD(pCurHcb->HCS_Base, TUL_SFifoCnt) & 0x1F) << 1;
-			else
-				cnt += (TUL_RD(pCurHcb->HCS_Base, TUL_SFifoCnt) & 0x1F);
-		}
-		if (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & XPEND) {	/* if DMA xfer is pending, abort DMA xfer */
-			TUL_WR(pCurHcb->HCS_Base + TUL_XCmd, TAX_X_ABT);
-			/* wait Abort DMA xfer done */
-			while ((TUL_RD(pCurHcb->HCS_Base, TUL_Int) & XABT) == 0);
-		}
-		if ((cnt == 1) && (pCurHcb->HCS_Phase == DATA_OUT)) {
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-			if (wait_tulip(pCurHcb) == -1) {
-				return (-1);
-			}
-			cnt = 0;
-		} else {
-			if ((TUL_RD(pCurHcb->HCS_Base, TUL_SStatus1) & TSS_XFER_CMP) == 0)
-				TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-		}
+	    cnt = 0;
+	    }
+	else
+	    {
+	    if ((TUL_RD(pCurHcb->HCS_Base, TUL_SStatus1) & TSS_XFER_CMP) == 0)
+		TUL_WR(pCurHcb->HCS_Base+ TUL_SCtrl0, TSC_FLUSH_FIFO);
+	    }
 	}
 
-	if (cnt == 0) {
-		pCurScb->SCB_BufLen = 0;
-		return (6);	/* Go to state 6                */
+    if (cnt == 0)
+	{
+	pCurScb->SCB_BufLen = 0;
+	return (6);                     /* Go to state 6                */
 	}
-	/* Update active data pointer */
-	xcnt = (long) pCurScb->SCB_BufLen - cnt;	/* xcnt== bytes already xferred */
-	pCurScb->SCB_BufLen = (U32) cnt;	/* cnt == bytes left to be xferred */
-	if (pCurScb->SCB_Flags & SCF_SG) {
-		register SG *sgp;
-		ULONG i;
+					/* Update active data pointer */
+    xcnt = (long)pCurScb->SCB_BufLen - cnt;   /* xcnt== bytes already xferred */
+    pCurScb->SCB_BufLen = (U32)cnt;          /* cnt == bytes left to be xferred */
+    if (pCurScb->SCB_Flags & SCF_SG)
+	{
+	register SG *sgp;
+	ULONG       i;
 
-		sgp = &pCurScb->SCB_SGList[pCurScb->SCB_SGIdx];
-		for (i = pCurScb->SCB_SGIdx; i < pCurScb->SCB_SGMax; sgp++, i++) {
-			xcnt -= (long) sgp->SG_Len;
-			if (xcnt < 0) {		/* this sgp xfer half done */
-				xcnt += (long) sgp->SG_Len;	/* xcnt == bytes xferred in this sgp */
-				sgp->SG_Ptr += (U32) xcnt;	/* new ptr to be xfer */
-				sgp->SG_Len -= (U32) xcnt;	/* new len to be xfer */
-				pCurScb->SCB_BufPtr += ((U32) (i - pCurScb->SCB_SGIdx) << 3);
-				/* new SG table ptr */
-				pCurScb->SCB_SGLen = (BYTE) (pCurScb->SCB_SGMax - i);
-				/* new SG table len */
-				pCurScb->SCB_SGIdx = (WORD) i;
-				/* for next disc and come in this loop */
-				return (4);	/* Go to state 4                */
-			}
+	sgp = &pCurScb->SCB_SGList[pCurScb->SCB_SGIdx];
+	for (i = pCurScb->SCB_SGIdx; i < pCurScb->SCB_SGMax; sgp++, i++)
+	    {
+	    xcnt -= (long)sgp->SG_Len;
+	    if (xcnt < 0)
+		{               /* this sgp xfer half done */
+		xcnt += (long)sgp->SG_Len;   /* xcnt == bytes xferred in this sgp */
+		sgp->SG_Ptr += (U32)xcnt;   /* new ptr to be xfer */
+		sgp->SG_Len -= (U32)xcnt;   /* new len to be xfer */
+		pCurScb->SCB_BufPtr += ((U32)(i - pCurScb->SCB_SGIdx) << 3);
+					/* new SG table ptr */
+		pCurScb->SCB_SGLen = (BYTE)(pCurScb->SCB_SGMax - i);
+					/* new SG table len */
+		pCurScb->SCB_SGIdx = (WORD)i;
+					/* for next disc and come in this loop*/
+		return (4);             /* Go to state 4                */
+		}
 			/* else (xcnt >= 0 , i.e. this sgp already xferred */
-		}		/* for */
-		return (6);	/* Go to state 6                */
-	} else {
-		pCurScb->SCB_BufPtr += (U32) xcnt;
+	    } /* for */
+	return (6);                     /* Go to state 6                */
 	}
-	return (4);		/* Go to state 4                */
+     else
+	{
+	pCurScb->SCB_BufPtr += (U32)xcnt;
+	}
+    return (4);                         /* Go to state 4                */
 }
 
 /***************************************************************************/
 /* state after Data phase */
-int tul_state_6(HCS * pCurHcb)
+int     tul_state_6(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
 
 #if DEBUG_STATE
-	printk("-s6-");
+printk("-s6-");
 #endif
-	for (;;) {
-		switch (pCurHcb->HCS_Phase) {
-		case STATUS_IN:	/* Status phase                 */
-			if ((tul_status_msg(pCurHcb)) == -1)
-				return (-1);
-			break;
+    for (;;) {
+	switch (pCurHcb->HCS_Phase) {
+	    case STATUS_IN:             /* Status phase                 */
+		if ((tul_status_msg(pCurHcb)) == -1)
+		    return (-1);
+		break;
 
-		case MSG_IN:	/* Message in phase             */
-			pCurScb->SCB_NxtStat = 6;
-			if ((tul_msgin(pCurHcb)) == -1)
-				return (-1);
-			break;
+	    case MSG_IN:                /* Message in phase             */
+		pCurScb->SCB_NxtStat = 6;
+		if ((tul_msgin(pCurHcb)) == -1)
+		    return (-1);
+		break;
 
-		case MSG_OUT:	/* Message out phase            */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_NOP);		/* msg nop */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-			if (wait_tulip(pCurHcb) == -1)
-				return (-1);
-			break;
+	    case MSG_OUT:               /* Message out phase            */
+		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_NOP); /* msg nop */
+		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
+		if (wait_tulip(pCurHcb) == -1)
+		    return (-1);
+		break;
 
-		case DATA_IN:	/* Data in phase                */
-			return (tul_xpad_in(pCurHcb));
+	    case DATA_IN:               /* Data in phase                */
+		return (tul_xpad_in(pCurHcb));
 
-		case DATA_OUT:	/* Data out phase               */
-			return (tul_xpad_out(pCurHcb));
+	    case DATA_OUT:              /* Data out phase               */
+		return (tul_xpad_out(pCurHcb));
 
-		default:
-			return (tul_bad_seq(pCurHcb));
-		}
+	    default:
+		return (tul_bad_seq(pCurHcb));
 	}
+    }
 }
 
 /***************************************************************************/
-int tul_state_7(HCS * pCurHcb)
+int     tul_state_7(HCS *pCurHcb)
 {
-	int cnt, i;
+    int cnt, i;
 
 #if DEBUG_STATE
-	printk("-s7-");
+printk("-s7-");
 #endif
 	/* flush SCSI FIFO */
-	cnt = TUL_RD(pCurHcb->HCS_Base, TUL_SFifoCnt) & 0x1F;
-	if (cnt) {
-		for (i = 0; i < cnt; i++)
-			TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
-	}
-	switch (pCurHcb->HCS_Phase) {
-	case DATA_IN:		/* Data in phase                */
-	case DATA_OUT:		/* Data out phase               */
-		return (tul_bad_seq(pCurHcb));
+    cnt = TUL_RD(pCurHcb->HCS_Base, TUL_SFifoCnt) & 0x1F;
+    if (cnt) {
+	for (i = 0; i < cnt; i++)
+	    TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
+    }
+
+    switch (pCurHcb->HCS_Phase) {
+	case DATA_IN:           /* Data in phase                */
+	case DATA_OUT:          /* Data out phase               */
+	    return (tul_bad_seq(pCurHcb));
 	default:
-		return (6);	/* Go to state 6                */
-	}
+	    return (6);         /* Go to state 6                */
+    }
 }
 
 /***************************************************************************/
-int tul_xfer_data_in(HCS * pCurHcb)
+int     tul_xfer_data_in(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
 
-	if ((pCurScb->SCB_Flags & SCF_DIR) == SCF_DOUT) {
-		return (6);	/* wrong direction */
-	}
-	TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, pCurScb->SCB_BufLen);
+/*printk("\nEnter xfer data in; ptr = %lx; cnt = %lx\n", pCurScb->SCB_BufPtr,
+							pCurScb->SCB_BufLen);*/
+    if ((pCurScb->SCB_Flags & SCF_DIR) ==  SCF_DOUT)  {
+	return (6);       /* wrong direction */
+    }
+    TUL_WRLONG(pCurHcb->HCS_Base+ TUL_SCnt0, pCurScb->SCB_BufLen);
 
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_DMA_IN);	/* 7/25/95 */
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_DMA_IN);          /* 7/25/95 */
 
-	if (pCurScb->SCB_Flags & SCF_SG) {	/* S/G xfer */
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_XCntH, ((ULONG) pCurScb->SCB_SGLen) << 3);
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_XAddH, pCurScb->SCB_BufPtr);
-		TUL_WR(pCurHcb->HCS_Base + TUL_XCmd, TAX_SG_IN);
-	} else {
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_XCntH, pCurScb->SCB_BufLen);
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_XAddH, pCurScb->SCB_BufPtr);
-		TUL_WR(pCurHcb->HCS_Base + TUL_XCmd, TAX_X_IN);
-	}
-	pCurScb->SCB_NxtStat = 0x5;
-	return (0);		/* return to OS, wait xfer done , let jas_isr come in */
-}
-
-
-/***************************************************************************/
-int tul_xfer_data_out(HCS * pCurHcb)
-{
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
-
-	if ((pCurScb->SCB_Flags & SCF_DIR) == SCF_DIN) {
-		return (6);	/* wrong direction */
-	}
-	TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, pCurScb->SCB_BufLen);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_DMA_OUT);
-
-	if (pCurScb->SCB_Flags & SCF_SG) {	/* S/G xfer */
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_XCntH, ((ULONG) pCurScb->SCB_SGLen) << 3);
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_XAddH, pCurScb->SCB_BufPtr);
-		TUL_WR(pCurHcb->HCS_Base + TUL_XCmd, TAX_SG_OUT);
-	} else {
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_XCntH, pCurScb->SCB_BufLen);
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_XAddH, pCurScb->SCB_BufPtr);
-		TUL_WR(pCurHcb->HCS_Base + TUL_XCmd, TAX_X_OUT);
-	}
-
-	pCurScb->SCB_NxtStat = 0x5;
-	return (0);		/* return to OS, wait xfer done , let jas_isr come in */
+    if (pCurScb->SCB_Flags & SCF_SG) {           /* S/G xfer */
+	TUL_WRLONG(pCurHcb->HCS_Base+ TUL_XCntH, ((ULONG)pCurScb->SCB_SGLen) << 3);
+	TUL_WRLONG(pCurHcb->HCS_Base+ TUL_XAddH, pCurScb->SCB_BufPtr);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_XCmd, TAX_SG_IN);
+    } else {
+	TUL_WRLONG(pCurHcb->HCS_Base+ TUL_XCntH, pCurScb->SCB_BufLen);
+	TUL_WRLONG(pCurHcb->HCS_Base+ TUL_XAddH, pCurScb->SCB_BufPtr);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_XCmd, TAX_X_IN);
+    }
+    pCurScb->SCB_NxtStat = 0x5;
+    return (0);  /* return to OS, wait xfer done , let jas_isr come in */
 }
 
 
 /***************************************************************************/
-int tul_xpad_in(HCS * pCurHcb)
+int     tul_xfer_data_out(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
-	TCS *pCurTcb = pCurHcb->HCS_ActTcs;
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
 
-	if ((pCurScb->SCB_Flags & SCF_DIR) != SCF_NO_DCHK) {
-		pCurScb->SCB_HaStat = HOST_DO_DU;	/* over run             */
-	}
-	for (;;) {
-		if (pCurTcb->TCS_JS_Period & TSC_WIDE_SCSI)
-			TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 2);
-		else
-			TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
+/*printk("Enter xfer data out\n");*/
+    if ((pCurScb->SCB_Flags & SCF_DIR) ==  SCF_DIN) {
+	return (6);       /* wrong direction */
+    }
 
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
-		if ((wait_tulip(pCurHcb)) == -1) {
-			return (-1);
-		}
-		if (pCurHcb->HCS_Phase != DATA_IN) {
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-			return (6);
-		}
-		TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
-	}
-}
+    TUL_WRLONG(pCurHcb->HCS_Base+ TUL_SCnt0, pCurScb->SCB_BufLen);
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_DMA_OUT);
 
-int tul_xpad_out(HCS * pCurHcb)
-{
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
-	TCS *pCurTcb = pCurHcb->HCS_ActTcs;
+    if (pCurScb->SCB_Flags & SCF_SG) {           /* S/G xfer */
+	TUL_WRLONG(pCurHcb->HCS_Base+ TUL_XCntH, ((ULONG)pCurScb->SCB_SGLen) << 3);
+	TUL_WRLONG(pCurHcb->HCS_Base+ TUL_XAddH, pCurScb->SCB_BufPtr);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_XCmd, TAX_SG_OUT);
+    } else {
+	TUL_WRLONG(pCurHcb->HCS_Base+ TUL_XCntH, pCurScb->SCB_BufLen);
+	TUL_WRLONG(pCurHcb->HCS_Base+ TUL_XAddH, pCurScb->SCB_BufPtr);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_XCmd, TAX_X_OUT);
+    }
 
-	if ((pCurScb->SCB_Flags & SCF_DIR) != SCF_NO_DCHK) {
-		pCurScb->SCB_HaStat = HOST_DO_DU;	/* over run             */
-	}
-	for (;;) {
-		if (pCurTcb->TCS_JS_Period & TSC_WIDE_SCSI)
-			TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 2);
-		else
-			TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
-
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 0);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-		if ((wait_tulip(pCurHcb)) == -1) {
-			return (-1);
-		}
-		if (pCurHcb->HCS_Phase != DATA_OUT) {	/* Disable wide CPU to allow read 16 bits */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-			return (6);
-		}
-	}
+    pCurScb->SCB_NxtStat = 0x5;
+    return (0);  /* return to OS, wait xfer done , let jas_isr come in */
 }
 
 
 /***************************************************************************/
-int tul_status_msg(HCS * pCurHcb)
-{				/* status & MSG_IN */
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
-	BYTE msg;
+int     tul_xpad_in(HCS *pCurHcb)
+{
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
+    TCS *pCurTcb = pCurHcb->HCS_ActTcs;
 
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_CMD_COMP);
-	if ((wait_tulip(pCurHcb)) == -1) {
-		return (-1);
-	}
+    if ((pCurScb->SCB_Flags & SCF_DIR) != SCF_NO_DCHK)  {
+	pCurScb->SCB_HaStat = HOST_DO_DU;       /* over run             */
+    }
+    for (;;) {
+	if (pCurTcb->TCS_JS_Period & TSC_WIDE_SCSI)
+	    TUL_WRLONG(pCurHcb->HCS_Base+ TUL_SCnt0, 2);
+	else
+	    TUL_WRLONG(pCurHcb->HCS_Base+ TUL_SCnt0, 1);
+
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_IN);
+	if ((wait_tulip(pCurHcb)) == -1)
+	    {
+	    return (-1);
+	    }
+	if (pCurHcb->HCS_Phase != DATA_IN)
+	    {
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SCtrl0, TSC_FLUSH_FIFO);
+	    return (6);
+	    }
+	TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
+    }
+}
+
+int     tul_xpad_out(HCS *pCurHcb)
+{
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
+    TCS *pCurTcb = pCurHcb->HCS_ActTcs;
+
+    if ((pCurScb->SCB_Flags & SCF_DIR) != SCF_NO_DCHK)  {
+	pCurScb->SCB_HaStat = HOST_DO_DU;       /* over run             */
+    }
+    for (;;) {
+	if (pCurTcb->TCS_JS_Period & TSC_WIDE_SCSI)
+	    TUL_WRLONG(pCurHcb->HCS_Base+ TUL_SCnt0, 2);
+	else
+	    TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
+
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, 0);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_OUT);
+	if ((wait_tulip(pCurHcb)) == -1)
+	    {
+	    return (-1);
+	    }
+	if (pCurHcb->HCS_Phase != DATA_OUT)
+	    {                   /* Disable wide CPU to allow read 16 bits */
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SCtrl1, TSC_HW_RESELECT);
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SCtrl0, TSC_FLUSH_FIFO);
+	    return (6);
+	    }
+    }
+}
+
+
+/***************************************************************************/
+int     tul_status_msg(HCS *pCurHcb)    /* status & MSG_IN */
+{
+    SCB         *pCurScb = pCurHcb->HCS_ActScb;
+    BYTE        msg;
+
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_CMD_COMP);
+    if ((wait_tulip(pCurHcb)) == -1) {
+	return (-1);
+    }
 	/* get status */
-	pCurScb->SCB_TaStat = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
+    pCurScb->SCB_TaStat = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
 
-	if (pCurHcb->HCS_Phase == MSG_OUT) {
-		if (pCurHcb->HCS_JSStatus0 & TSS_PAR_ERROR) {
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_PARITY);
-		} else {
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_NOP);
-		}
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-		return (wait_tulip(pCurHcb));
+    if (pCurHcb->HCS_Phase == MSG_OUT)
+	{
+	if (pCurHcb->HCS_JSStatus0 & TSS_PAR_ERROR)
+	    {
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, MSG_PARITY);
+	    }
+	else
+	    {
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, MSG_NOP);
+	    }
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_OUT);
+	return (wait_tulip(pCurHcb));
 	}
-	if (pCurHcb->HCS_Phase == MSG_IN) {
-		msg = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
-		if (pCurHcb->HCS_JSStatus0 & TSS_PAR_ERROR) {	/* Parity error                 */
-			if ((tul_msgin_accept(pCurHcb)) == -1)
-				return (-1);
-			if (pCurHcb->HCS_Phase != MSG_OUT)
-				return (tul_bad_seq(pCurHcb));
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_PARITY);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-			return (wait_tulip(pCurHcb));
-		}
-		if (msg == 0) {	/* Command complete             */
+    if (pCurHcb->HCS_Phase == MSG_IN)
+	{
+	msg = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
+	if (pCurHcb->HCS_JSStatus0 & TSS_PAR_ERROR)
+	    {                           /* Parity error                 */
+	    if ((tul_msgin_accept(pCurHcb)) == -1)
+		return (-1);
+	    if (pCurHcb->HCS_Phase != MSG_OUT)
+		return (tul_bad_seq(pCurHcb));
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, MSG_PARITY);
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_OUT);
+	    return (wait_tulip(pCurHcb));
+	    }
+	if (msg == 0) {                       /* Command complete             */
 
-			if ((pCurScb->SCB_TaStat & 0x18) == 0x10) {	/* No link support              */
-				return (tul_bad_seq(pCurHcb));
-			}
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_MSG_ACCEPT);
-			return tul_wait_done_disc(pCurHcb);
+	    if ((pCurScb->SCB_TaStat & 0x18) == 0x10)
+		{                       /* No link support              */
+		return (tul_bad_seq(pCurHcb));
+		}
 
-		}
-		if ((msg == MSG_LINK_COMP) || (msg == MSG_LINK_FLAG)) {
-			if ((pCurScb->SCB_TaStat & 0x18) == 0x10)
-				return (tul_msgin_accept(pCurHcb));
-		}
+
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SCtrl0, TSC_FLUSH_FIFO);
+	    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_MSG_ACCEPT);
+	    return tul_wait_done_disc(pCurHcb);
+
+	    }
+	if ((msg ==  MSG_LINK_COMP) || (msg == MSG_LINK_FLAG))
+	    {
+	    if ((pCurScb->SCB_TaStat & 0x18) == 0x10)
+		return (tul_msgin_accept(pCurHcb));
+	    }
 	}
-	return (tul_bad_seq(pCurHcb));
+    return (tul_bad_seq(pCurHcb));
 }
 
 
 /***************************************************************************/
 /* scsi bus free */
-int int_tul_busfree(HCS * pCurHcb)
+int     int_tul_busfree(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
+    SCB *pCurScb = pCurHcb->HCS_ActScb;
 
-	if (pCurScb != NULL) {
-		if (pCurScb->SCB_Status & SCB_SELECT) {		/* selection timeout */
-			tul_unlink_pend_scb(pCurHcb, pCurScb);
-			pCurScb->SCB_HaStat = HOST_SEL_TOUT;
-			tul_append_done_scb(pCurHcb, pCurScb);
-		} else {	/* Unexpected bus free          */
-			tul_unlink_busy_scb(pCurHcb, pCurScb);
-			pCurScb->SCB_HaStat = HOST_BUS_FREE;
-			tul_append_done_scb(pCurHcb, pCurScb);
-		}
-		pCurHcb->HCS_ActScb = NULL;
-		pCurHcb->HCS_ActTcs = NULL;
+    if (pCurScb != NULL)
+	{
+	if (pCurScb->SCB_Status & SCB_SELECT)
+	    { /* selection timeout */
+#if 0
+//	    if (pCurScb != tul_pop_pend_scb(pCurHcb))
+//		{
+//		printk("Differnet SCB\n");
+//		}
+#endif
+	    tul_unlink_pend_scb(pCurHcb, pCurScb);
+//	    pCurScb->SCB_Status = SCB_DONE;
+	    pCurScb->SCB_HaStat = HOST_SEL_TOUT;
+	    tul_append_done_scb(pCurHcb, pCurScb);
+	    }
+	else
+	    {                           /* Unexpected bus free          */
+	    tul_unlink_busy_scb(pCurHcb, pCurScb);
+//	    pCurScb->SCB_Status = SCB_DONE;
+	    pCurScb->SCB_HaStat = HOST_BUS_FREE;
+	    tul_append_done_scb(pCurHcb, pCurScb);
+	    }
+	pCurHcb->HCS_ActScb = NULL;
+	pCurHcb->HCS_ActTcs = NULL;
 	}
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);		/* Flush SCSI FIFO  */
-	TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);	/* Enable HW reselect       */
-	return (-1);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO); /* Flush SCSI FIFO  */
+    TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);/* Enable HW reselect       */
+    return (-1);
+/*    return (1);*/
 }
 
 
 /***************************************************************************/
 /* scsi bus reset */
-int int_tul_scsi_rst(HCS * pCurHcb)
+int     int_tul_scsi_rst(HCS *pCurHcb)
 {
-	SCB *pCurScb;
-	int i;
+    SCB *pCurScb;
+    int i;
 
 	/* if DMA xfer is pending, abort DMA xfer */
-	if (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & 0x01) {
-		TUL_WR(pCurHcb->HCS_Base + TUL_XCmd, TAX_X_ABT | TAX_X_CLR_FIFO);
+    if (TUL_RD(pCurHcb->HCS_Base, TUL_XStatus) & 0x01)
+	{
+	TUL_WR(pCurHcb->HCS_Base + TUL_XCmd, TAX_X_ABT | TAX_X_CLR_FIFO);
 		/* wait Abort DMA xfer done */
-		while ((TUL_RD(pCurHcb->HCS_Base, TUL_Int) & 0x04) == 0);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
+	while ((TUL_RD(pCurHcb->HCS_Base, TUL_Int) & 0x04) == 0)
+			;
+	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
 	}
-	/* Abort all active & disconnected scb */
-	while ((pCurScb = tul_pop_busy_scb(pCurHcb)) != NULL) {
-		pCurScb->SCB_HaStat = HOST_BAD_PHAS;
-		tul_append_done_scb(pCurHcb, pCurScb);
+			/* Abort all active & disconnected scb */
+    while ((pCurScb = tul_pop_busy_scb(pCurHcb)) != NULL)
+	{
+//	pCurScb->SCB_Status = SCB_DONE;
+	pCurScb->SCB_HaStat = HOST_BAD_PHAS;
+	tul_append_done_scb(pCurHcb, pCurScb);
 	}
-	pCurHcb->HCS_ActScb = NULL;
-	pCurHcb->HCS_ActTcs = NULL;
+    pCurHcb->HCS_ActScb = NULL;
+    pCurHcb->HCS_ActTcs = NULL;
 
 	/* clr sync nego. done flag */
-	for (i = 0; i < pCurHcb->HCS_MaxTar; i++) {
-		pCurHcb->HCS_Tcs[i].TCS_Flags &= ~(TCF_SYNC_DONE | TCF_WDTR_DONE);
+    for (i = 0; i < pCurHcb->HCS_MaxTar; i++)
+	{
+	pCurHcb->HCS_Tcs[i].TCS_Flags &= ~(TCF_SYNC_DONE | TCF_WDTR_DONE);
 	}
-	return (-1);
+    return(-1);
 }
 
 
 /***************************************************************************/
 /* scsi reselection */
-int int_tul_resel(HCS * pCurHcb)
+int     int_tul_resel(HCS *pCurHcb)
 {
-	SCB *pCurScb;
-	TCS *pCurTcb;
-	BYTE tag, msg = 0;
-	BYTE tar, lun;
+    SCB         *pCurScb;
+    TCS         *pCurTcb;
+    BYTE        tag, msg = 0;
+    BYTE        tar, lun;
 
-	if ((pCurScb = pCurHcb->HCS_ActScb) != NULL) {
-		if (pCurScb->SCB_Status & SCB_SELECT) {		/* if waiting for selection complete */
-			pCurScb->SCB_Status &= ~SCB_SELECT;
-		}
-		pCurHcb->HCS_ActScb = NULL;
+    if ((pCurScb = pCurHcb->HCS_ActScb) != NULL)
+	{
+	if (pCurScb->SCB_Status & SCB_SELECT)
+	    {                           /* if waiting for selection complete*/
+	    pCurScb->SCB_Status &= ~SCB_SELECT;
+	    }
+	pCurHcb->HCS_ActScb = NULL;
 	}
+
 	/* --------- get target id---------------------- */
-	tar = TUL_RD(pCurHcb->HCS_Base, TUL_SBusId);
+    tar =  TUL_RD(pCurHcb->HCS_Base, TUL_SBusId);
 	/* ------ get LUN from Identify message----------- */
-	lun = TUL_RD(pCurHcb->HCS_Base, TUL_SIdent) & 0x0F;
-	/* 07/22/98 from 0x1F -> 0x0F */
-	pCurTcb = &pCurHcb->HCS_Tcs[tar];
-	pCurHcb->HCS_ActTcs = pCurTcb;
-	TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, pCurTcb->TCS_SConfig0);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SPeriod, pCurTcb->TCS_JS_Period);
+    lun = TUL_RD(pCurHcb->HCS_Base, TUL_SIdent) & 0x0F;
+				/* 07/22/98 from 0x1F -> 0x0F */
+    pCurTcb = &pCurHcb->HCS_Tcs[tar];
+    pCurHcb->HCS_ActTcs = pCurTcb;
+    TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, pCurTcb->TCS_SConfig0);
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SPeriod, pCurTcb->TCS_JS_Period);
 
 
 	/* ------------- tag queueing ? ------------------- */
-	if (pCurTcb->TCS_DrvFlags & TCF_DRV_EN_TAG) {
-		if ((tul_msgin_accept(pCurHcb)) == -1)
-			return (-1);
-		if (pCurHcb->HCS_Phase != MSG_IN)
-			goto no_tag;
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
-		if ((wait_tulip(pCurHcb)) == -1)
-			return (-1);
-		msg = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);	/* Read Tag Message    */
+    if (pCurTcb->TCS_DrvFlags & TCF_DRV_EN_TAG)
+	{
+/*printk("Tag enabled\n");*/
+	if ((tul_msgin_accept(pCurHcb)) == -1)
+	    return (-1);
+	if (pCurHcb->HCS_Phase != MSG_IN)
+	    goto no_tag;
+	TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_IN);
+	if ((wait_tulip(pCurHcb)) == -1)
+	    return (-1);
+	msg = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);    /* Read Tag Message    */
 
-		if ((msg < MSG_STAG) || (msg > MSG_OTAG))	/* Is simple Tag      */
-			goto no_tag;
+	if ((msg < MSG_STAG) || (msg > MSG_OTAG)) /* Is simple Tag      */
+	    goto no_tag;
 
-		if ((tul_msgin_accept(pCurHcb)) == -1)
-			return (-1);
+	if ((tul_msgin_accept(pCurHcb)) == -1)
+	    return (-1);
 
-		if (pCurHcb->HCS_Phase != MSG_IN)
-			goto no_tag;
+	if (pCurHcb->HCS_Phase != MSG_IN)
+	    goto no_tag;
 
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
-		if ((wait_tulip(pCurHcb)) == -1)
-			return (-1);
-		tag = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);	/* Read Tag ID       */
-		pCurScb = pCurHcb->HCS_Scb + tag;
-		if ((pCurScb->SCB_Target != tar) || (pCurScb->SCB_Lun != lun)) {
-			return tul_msgout_abort_tag(pCurHcb);
-		}
-		if (pCurScb->SCB_Status != SCB_BUSY) {	/* 03/24/95             */
-			return tul_msgout_abort_tag(pCurHcb);
-		}
-		pCurHcb->HCS_ActScb = pCurScb;
-		if ((tul_msgin_accept(pCurHcb)) == -1)
-			return (-1);
-	} else {		/* No tag               */
-	      no_tag:
-		if ((pCurScb = tul_find_busy_scb(pCurHcb, tar | (lun << 8))) == NULL) {
-			return tul_msgout_abort_targ(pCurHcb);
-		}
-		pCurHcb->HCS_ActScb = pCurScb;
-		if (!(pCurTcb->TCS_DrvFlags & TCF_DRV_EN_TAG)) {
-			if ((tul_msgin_accept(pCurHcb)) == -1)
-				return (-1);
-		}
+	TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
+	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
+	if ((wait_tulip(pCurHcb)) == -1)
+	    return (-1);
+	tag = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);     /* Read Tag ID       */
+	pCurScb = pCurHcb->HCS_Scb + tag;
+	if ((pCurScb->SCB_Target != tar) || (pCurScb->SCB_Lun != lun))
+	    {
+	    return tul_msgout_abort_tag(pCurHcb);
+	    }
+	if (pCurScb->SCB_Status != SCB_BUSY)
+	    {                                   /* 03/24/95             */
+	    return tul_msgout_abort_tag(pCurHcb);
+	    }
+	pCurHcb->HCS_ActScb = pCurScb;
+	if ((tul_msgin_accept(pCurHcb)) == -1)
+	    return (-1);
 	}
-	return 0;
-}
-
-
-/***************************************************************************/
-int int_tul_bad_seq(HCS * pCurHcb)
-{				/* target wrong phase           */
-	SCB *pCurScb;
-	int i;
-
-	tul_reset_scsi(pCurHcb, 10);
-
-	while ((pCurScb = tul_pop_busy_scb(pCurHcb)) != NULL) {
-		pCurScb->SCB_HaStat = HOST_BAD_PHAS;
-		tul_append_done_scb(pCurHcb, pCurScb);
-	}
-	for (i = 0; i < pCurHcb->HCS_MaxTar; i++) {
-		pCurHcb->HCS_Tcs[i].TCS_Flags &= ~(TCF_SYNC_DONE | TCF_WDTR_DONE);;
-	}
-	return (-1);
-}
-
-
-/***************************************************************************/
-int tul_msgout_abort_targ(HCS * pCurHcb)
-{
-
-	TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
-	if (tul_msgin_accept(pCurHcb) == -1)
+    else                                        /* No tag               */
+	{
+no_tag:
+	if ((pCurScb = tul_find_busy_scb(pCurHcb, tar | (lun << 8))) == NULL)
+	    {
+/*printk("SCB pointer = NULL\n");*/
+	    return tul_msgout_abort_targ(pCurHcb);
+	    }
+	pCurHcb->HCS_ActScb = pCurScb;
+	if (!(pCurTcb->TCS_DrvFlags & TCF_DRV_EN_TAG))
+	    {
+	    if ((tul_msgin_accept(pCurHcb)) == -1)
 		return (-1);
-	if (pCurHcb->HCS_Phase != MSG_OUT)
-		return (tul_bad_seq(pCurHcb));
-
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_ABORT);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-
-	return tul_wait_disc(pCurHcb);
-}
-
-/***************************************************************************/
-int tul_msgout_abort_tag(HCS * pCurHcb)
-{
-
-	TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
-	if (tul_msgin_accept(pCurHcb) == -1)
-		return (-1);
-	if (pCurHcb->HCS_Phase != MSG_OUT)
-		return (tul_bad_seq(pCurHcb));
-
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_ABORT_TAG);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-
-	return tul_wait_disc(pCurHcb);
-
-}
-
-/***************************************************************************/
-int tul_msgin(HCS * pCurHcb)
-{
-	TCS *pCurTcb;
-
-	for (;;) {
-
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
-		if ((wait_tulip(pCurHcb)) == -1)
-			return (-1);
-
-		switch (TUL_RD(pCurHcb->HCS_Base, TUL_SFifo)) {
-		case MSG_DISC:	/* Disconnect msg */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_MSG_ACCEPT);
-
-			return tul_wait_disc(pCurHcb);
-
-		case MSG_SDP:
-		case MSG_RESTORE:
-		case MSG_NOP:
-			tul_msgin_accept(pCurHcb);
-			break;
-
-		case MSG_REJ:	/* Clear ATN first              */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SSignal,
-			       (TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)));
-			pCurTcb = pCurHcb->HCS_ActTcs;
-			if ((pCurTcb->TCS_Flags & (TCF_SYNC_DONE | TCF_NO_SYNC_NEGO)) == 0) {	/* do sync nego */
-				TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
-			}
-			tul_msgin_accept(pCurHcb);
-			break;
-
-		case MSG_EXTEND:	/* extended msg */
-			tul_msgin_extend(pCurHcb);
-			break;
-
-		case MSG_IGNOREWIDE:
-			tul_msgin_accept(pCurHcb);
-			break;
-
-			/* get */
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
-			if (wait_tulip(pCurHcb) == -1)
-				return -1;
-
-			TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 0);	/* put pad  */
-			TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);	/* get IGNORE field */
-			TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);	/* get pad */
-
-			tul_msgin_accept(pCurHcb);
-			break;
-
-		case MSG_COMP:
-			{
-				TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-				TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_MSG_ACCEPT);
-				return tul_wait_done_disc(pCurHcb);
-			}
-		default:
-			tul_msgout_reject(pCurHcb);
-			break;
-		}
-		if (pCurHcb->HCS_Phase != MSG_IN)
-			return (pCurHcb->HCS_Phase);
+	    }
 	}
+    return 0;
+}
+
+
+/***************************************************************************/
+int     int_tul_bad_seq(HCS *pCurHcb)   /* target wrong phase           */
+{
+    SCB *pCurScb;
+    int i;
+
+    tul_reset_scsi(pCurHcb, 10);
+
+    while ((pCurScb = tul_pop_busy_scb(pCurHcb)) != NULL)
+	{
+//	pCurScb->SCB_Status = SCB_DONE;
+	pCurScb->SCB_HaStat = HOST_BAD_PHAS;
+	tul_append_done_scb(pCurHcb, pCurScb);
+	}
+    for (i = 0; i < pCurHcb->HCS_MaxTar; i++)
+	{
+	pCurHcb->HCS_Tcs[i].TCS_Flags &= ~(TCF_SYNC_DONE | TCF_WDTR_DONE);;
+	}
+    return (-1);
+}
+
+
+/***************************************************************************/
+int     tul_msgout_abort_targ(HCS *pCurHcb)
+{
+
+    TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
+    if (tul_msgin_accept(pCurHcb) == -1)
+	return(-1);
+    if (pCurHcb->HCS_Phase != MSG_OUT)
+	return(tul_bad_seq(pCurHcb));
+
+    TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_ABORT);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
+
+    return  tul_wait_disc(pCurHcb);
+}
+
+/***************************************************************************/
+int     tul_msgout_abort_tag(HCS *pCurHcb)
+{
+
+    TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
+    if (tul_msgin_accept(pCurHcb) == -1)
+	return(-1);
+    if (pCurHcb->HCS_Phase != MSG_OUT)
+	return(tul_bad_seq(pCurHcb));
+
+    TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_ABORT_TAG);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
+
+    return  tul_wait_disc(pCurHcb);
+
+}
+
+/***************************************************************************/
+int     tul_msgin(HCS *pCurHcb)
+{
+    TCS         *pCurTcb;
+
+    for (;;) {
+
+	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
+
+	TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
+	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
+	if ((wait_tulip(pCurHcb)) == -1)
+	    return (-1);
+
+	switch (TUL_RD(pCurHcb->HCS_Base, TUL_SFifo)) {
+	    case MSG_DISC:               /* Disconnect msg */
+		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_MSG_ACCEPT);
+
+		return tul_wait_disc(pCurHcb);
+
+	    case MSG_SDP:
+	    case MSG_RESTORE:
+	    case MSG_NOP:
+		tul_msgin_accept(pCurHcb);
+		break;
+
+	    case MSG_REJ:               /* Clear ATN first              */
+		TUL_WR(pCurHcb->HCS_Base + TUL_SSignal,
+		 (TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)));
+                pCurTcb = pCurHcb->HCS_ActTcs;
+		if ((pCurTcb->TCS_Flags & (TCF_SYNC_DONE | TCF_NO_SYNC_NEGO)) == 0)
+		    {                   /* do sync nego */
+		    TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
+		    }
+		tul_msgin_accept(pCurHcb);
+		break;
+
+	    case MSG_EXTEND:               /* extended msg */
+		tul_msgin_extend(pCurHcb);
+		break;
+
+	    case MSG_IGNOREWIDE:
+		tul_msgin_accept(pCurHcb);
+		break;
+
+	/* get */
+		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
+		if (wait_tulip(pCurHcb) == -1)
+			return -1;
+
+		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 0);         /* put pad  */
+		TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);     /* get IGNORE field */
+		TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);       /* get pad */
+
+		tul_msgin_accept(pCurHcb);
+		break;
+
+	    case MSG_COMP:
+		{
+		    TUL_WR(pCurHcb->HCS_Base+ TUL_SCtrl0, TSC_FLUSH_FIFO);
+		    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_MSG_ACCEPT);
+		    return tul_wait_done_disc(pCurHcb);
+		}
+	    default:
+		tul_msgout_reject(pCurHcb);
+		break;
+	}
+	if (pCurHcb->HCS_Phase != MSG_IN)
+	    return (pCurHcb->HCS_Phase);
+    }
 	/* statement won't reach here */
 }
 
@@ -2384,425 +2826,507 @@ int tul_msgin(HCS * pCurHcb)
 
 
 /***************************************************************************/
-int tul_msgout_reject(HCS * pCurHcb)
+int     tul_msgout_reject(HCS *pCurHcb)
 {
 
-	TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
+    TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
 
-	if ((tul_msgin_accept(pCurHcb)) == -1)
-		return (-1);
+    if ((tul_msgin_accept(pCurHcb)) == -1)
+	return(-1);
 
-	if (pCurHcb->HCS_Phase == MSG_OUT) {
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_REJ);		/* Msg reject           */
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-		return (wait_tulip(pCurHcb));
+    if (pCurHcb->HCS_Phase == MSG_OUT)
+	{
+	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_REJ); /* Msg reject           */
+	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
+	return (wait_tulip(pCurHcb));
 	}
+    return (pCurHcb->HCS_Phase);
+}
+
+
+
+/***************************************************************************/
+int     tul_msgout_ide(HCS *pCurHcb)
+{
+    TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_IDE); /* Initiator Detected Error */
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
+    return (wait_tulip(pCurHcb));
+}
+
+
+/***************************************************************************/
+int     tul_msgin_extend(HCS *pCurHcb)
+{
+    BYTE        len, idx;
+
+    if (tul_msgin_accept(pCurHcb) != MSG_IN)
 	return (pCurHcb->HCS_Phase);
-}
 
+					/* Get extended msg length      */
+    TUL_WRLONG(pCurHcb->HCS_Base+ TUL_SCnt0, 1);
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_IN);
+    if (wait_tulip(pCurHcb) == -1)
+	return (-1);
 
+    len = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
+    pCurHcb->HCS_Msg[0] = len;
+    for (idx = 1 ; len != 0; len--) {
 
-/***************************************************************************/
-int tul_msgout_ide(HCS * pCurHcb)
-{
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_IDE);		/* Initiator Detected Error */
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-	return (wait_tulip(pCurHcb));
-}
-
-
-/***************************************************************************/
-int tul_msgin_extend(HCS * pCurHcb)
-{
-	BYTE len, idx;
-
-	if (tul_msgin_accept(pCurHcb) != MSG_IN)
-		return (pCurHcb->HCS_Phase);
-
-	/* Get extended msg length      */
-	TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
+	if ((tul_msgin_accept(pCurHcb)) != MSG_IN)
+	    return (pCurHcb->HCS_Phase);
+	TUL_WRLONG(pCurHcb->HCS_Base+ TUL_SCnt0, 1);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_IN);
 	if (wait_tulip(pCurHcb) == -1)
-		return (-1);
-
-	len = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
-	pCurHcb->HCS_Msg[0] = len;
-	for (idx = 1; len != 0; len--) {
-
-		if ((tul_msgin_accept(pCurHcb)) != MSG_IN)
-			return (pCurHcb->HCS_Phase);
-		TUL_WRLONG(pCurHcb->HCS_Base + TUL_SCnt0, 1);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_IN);
-		if (wait_tulip(pCurHcb) == -1)
-			return (-1);
-		pCurHcb->HCS_Msg[idx++] = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
+	    return (-1);
+	pCurHcb->HCS_Msg[idx++]  = TUL_RD(pCurHcb->HCS_Base, TUL_SFifo);
 	}
-	if (pCurHcb->HCS_Msg[1] == 1) {		/* if it's synchronous data transfer request */
-		if (pCurHcb->HCS_Msg[0] != 3)	/* if length is not right */
-			return (tul_msgout_reject(pCurHcb));
-		if (pCurHcb->HCS_ActTcs->TCS_Flags & TCF_NO_SYNC_NEGO) {	/* Set OFFSET=0 to do async, nego back */
-			pCurHcb->HCS_Msg[3] = 0;
-		} else {
-			if ((tul_msgin_sync(pCurHcb) == 0) &&
-			    (pCurHcb->HCS_ActTcs->TCS_Flags & TCF_SYNC_DONE)) {
-				tul_sync_done(pCurHcb);
-				return (tul_msgin_accept(pCurHcb));
-			}
-		}
-
-		TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
-		if ((tul_msgin_accept(pCurHcb)) != MSG_OUT)
-			return (pCurHcb->HCS_Phase);
-		/* sync msg out */
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
-
+    if (pCurHcb->HCS_Msg[1] == 1)
+	{                       /* if it's synchronous data transfer request */
+	if (pCurHcb->HCS_Msg[0] != 3)        /* if length is not right */
+	    return (tul_msgout_reject(pCurHcb));
+	if (pCurHcb->HCS_ActTcs->TCS_Flags & TCF_NO_SYNC_NEGO)
+	    {                   /* Set OFFSET=0 to do async, nego back */
+	    pCurHcb->HCS_Msg[3] = 0;
+	    }
+	else
+	    {
+	    if ((tul_msgin_sync(pCurHcb) == 0) && 
+		(pCurHcb->HCS_ActTcs->TCS_Flags & TCF_SYNC_DONE))
+		{
 		tul_sync_done(pCurHcb);
-
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_EXTEND);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 3);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 1);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurHcb->HCS_Msg[2]);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurHcb->HCS_Msg[3]);
-
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
-		return (wait_tulip(pCurHcb));
-	}
-	if ((pCurHcb->HCS_Msg[0] != 2) || (pCurHcb->HCS_Msg[1] != 3))
-		return (tul_msgout_reject(pCurHcb));
-	/* if it's WIDE DATA XFER REQ   */
-	if (pCurHcb->HCS_ActTcs->TCS_Flags & TCF_NO_WDTR) {
-		pCurHcb->HCS_Msg[2] = 0;
-	} else {
-		if (pCurHcb->HCS_Msg[2] > 2)	/* > 32 bits            */
-			return (tul_msgout_reject(pCurHcb));
-		if (pCurHcb->HCS_Msg[2] == 2) {		/* == 32                */
-			pCurHcb->HCS_Msg[2] = 1;
-		} else {
-			if ((pCurHcb->HCS_ActTcs->TCS_Flags & TCF_NO_WDTR) == 0) {
-				wdtr_done(pCurHcb);
-				if ((pCurHcb->HCS_ActTcs->TCS_Flags & (TCF_SYNC_DONE | TCF_NO_SYNC_NEGO)) == 0)
-					TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
-				return (tul_msgin_accept(pCurHcb));
-			}
+		return (tul_msgin_accept(pCurHcb));
 		}
-	}
-	TUL_WR(pCurHcb->HCS_Base + TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
+	    }
 
-	if (tul_msgin_accept(pCurHcb) != MSG_OUT)
-		return (pCurHcb->HCS_Phase);
-	/* WDTR msg out                 */
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_EXTEND);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 2);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, 3);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurHcb->HCS_Msg[2]);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
+	if ((tul_msgin_accept(pCurHcb)) != MSG_OUT)
+	    return (pCurHcb->HCS_Phase);
+					/* sync msg out */
+	TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);
+/*      TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, TSC_FLUSH_FIFO);            */
+
+	tul_sync_done(pCurHcb);
+
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, MSG_EXTEND);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, 3);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, 1);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurHcb->HCS_Msg[2]);
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurHcb->HCS_Msg[3]);
+
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_OUT);
 	return (wait_tulip(pCurHcb));
+	}
+
+    if ((pCurHcb->HCS_Msg[0] != 2) || (pCurHcb->HCS_Msg[1] != 3))
+	return  (tul_msgout_reject(pCurHcb));
+					/* if it's WIDE DATA XFER REQ   */
+    if (pCurHcb->HCS_ActTcs->TCS_Flags & TCF_NO_WDTR)
+	{
+	pCurHcb->HCS_Msg[2] = 0;
+	}
+    else
+	{
+	if (pCurHcb->HCS_Msg[2] > 2)    /* > 32 bits            */
+	    return  (tul_msgout_reject(pCurHcb));
+	if (pCurHcb->HCS_Msg[2] == 2)   /* == 32                */
+	    {
+	    pCurHcb->HCS_Msg[2] = 1;
+	    }
+	else
+	    {
+	    if ((pCurHcb->HCS_ActTcs->TCS_Flags & TCF_NO_WDTR) == 0)
+		{
+		wdtr_done(pCurHcb);
+		if ((pCurHcb->HCS_ActTcs->TCS_Flags & (TCF_SYNC_DONE | TCF_NO_SYNC_NEGO)) == 0)
+		    TUL_WR(pCurHcb->HCS_Base+ TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
+		return  (tul_msgin_accept(pCurHcb));
+		}
+	    }
+	}
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SSignal, ((TUL_RD(pCurHcb->HCS_Base, TUL_SSignal) & (TSC_SET_ACK | 7)) | TSC_SET_ATN));
+
+    if (tul_msgin_accept(pCurHcb) != MSG_OUT)
+	return (pCurHcb->HCS_Phase);
+					/* WDTR msg out                 */
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, MSG_EXTEND);
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, 2);
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, 3);
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurHcb->HCS_Msg[2]);
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_XF_FIFO_OUT);
+    return (wait_tulip(pCurHcb));
 }
 
 /***************************************************************************/
-int tul_msgin_sync(HCS * pCurHcb)
+int     tul_msgin_sync(HCS *pCurHcb)
 {
-	char default_period;
+    char default_period;
 
-	default_period = tul_rate_tbl[pCurHcb->HCS_ActTcs->TCS_Flags & TCF_SCSI_RATE];
-	if (pCurHcb->HCS_Msg[3] > MAX_OFFSET) {
-		pCurHcb->HCS_Msg[3] = MAX_OFFSET;
-		if (pCurHcb->HCS_Msg[2] < default_period) {
-			pCurHcb->HCS_Msg[2] = default_period;
-			return 1;
-		}
-		if (pCurHcb->HCS_Msg[2] >= 59) {	/* Change to async              */
-			pCurHcb->HCS_Msg[3] = 0;
-		}
-		return 1;
-	}
-	/* offset requests asynchronous transfers ? */
-	if (pCurHcb->HCS_Msg[3] == 0) {
-		return 0;
-	}
-	if (pCurHcb->HCS_Msg[2] < default_period) {
-		pCurHcb->HCS_Msg[2] = default_period;
-		return 1;
-	}
-	if (pCurHcb->HCS_Msg[2] >= 59) {
-		pCurHcb->HCS_Msg[3] = 0;
-		return 1;
-	}
-	return 0;
-}
-
-
-/***************************************************************************/
-int wdtr_done(HCS * pCurHcb)
-{
-	pCurHcb->HCS_ActTcs->TCS_Flags &= ~TCF_SYNC_DONE;
-	pCurHcb->HCS_ActTcs->TCS_Flags |= TCF_WDTR_DONE;
-
-	pCurHcb->HCS_ActTcs->TCS_JS_Period = 0;
-	if (pCurHcb->HCS_Msg[2]) {	/* if 16 bit */
-		pCurHcb->HCS_ActTcs->TCS_JS_Period |= TSC_WIDE_SCSI;
-	}
-	pCurHcb->HCS_ActTcs->TCS_SConfig0 &= ~TSC_ALT_PERIOD;
-	TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, pCurHcb->HCS_ActTcs->TCS_SConfig0);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SPeriod, pCurHcb->HCS_ActTcs->TCS_JS_Period);
-
+    default_period = tul_rate_tbl[pCurHcb->HCS_ActTcs->TCS_Flags & TCF_SCSI_RATE];
+    if (pCurHcb->HCS_Msg[3] > MAX_OFFSET)
+	{
+	pCurHcb->HCS_Msg[3] = MAX_OFFSET;
+	if (pCurHcb->HCS_Msg[2] < default_period)
+	    {
+	    pCurHcb->HCS_Msg[2] = default_period;
+	    return 1;
+	    }                                                                                    
+	if (pCurHcb->HCS_Msg[2] >= 59)
+	    {                           /* Change to async              */
+	    pCurHcb->HCS_Msg[3] = 0;
+	    }
 	return 1;
+	}
+
+		/* offset requests asynchronous transfers ? */
+    if (pCurHcb->HCS_Msg[3] == 0)
+	{
+	return 0;
+	}
+    if (pCurHcb->HCS_Msg[2] < default_period)
+	{
+	pCurHcb->HCS_Msg[2] = default_period;
+	return 1;
+	}
+
+    if (pCurHcb->HCS_Msg[2] >= 59)
+	{
+	pCurHcb->HCS_Msg[3] = 0;
+	return 1;
+	}
+    return 0;
+}
+
+
+/***************************************************************************/
+int  wdtr_done(HCS *pCurHcb)            
+{
+    pCurHcb->HCS_ActTcs->TCS_Flags &= ~TCF_SYNC_DONE;
+    pCurHcb->HCS_ActTcs->TCS_Flags |= TCF_WDTR_DONE;
+
+    pCurHcb->HCS_ActTcs->TCS_JS_Period = 0;
+    if (pCurHcb->HCS_Msg[2])
+	{                               /* if 16 bit */
+	pCurHcb->HCS_ActTcs->TCS_JS_Period |= TSC_WIDE_SCSI;
+	}
+    pCurHcb->HCS_ActTcs->TCS_SConfig0 &= ~TSC_ALT_PERIOD;
+    TUL_WR(pCurHcb->HCS_Base+TUL_SConfig, pCurHcb->HCS_ActTcs->TCS_SConfig0);
+    TUL_WR(pCurHcb->HCS_Base+TUL_SPeriod, pCurHcb->HCS_ActTcs->TCS_JS_Period);
+
+    return 1;
 }
 
 /***************************************************************************/
-int tul_sync_done(HCS * pCurHcb)
+int     tul_sync_done(HCS *pCurHcb)
 {
-	int i;
+    int i;
 
-	pCurHcb->HCS_ActTcs->TCS_Flags |= TCF_SYNC_DONE;
+    pCurHcb->HCS_ActTcs->TCS_Flags |= TCF_SYNC_DONE;
 
-	if (pCurHcb->HCS_Msg[3]) {
-		pCurHcb->HCS_ActTcs->TCS_JS_Period |= pCurHcb->HCS_Msg[3];
-		for (i = 0; i < 8; i++) {
-			if (tul_rate_tbl[i] >= pCurHcb->HCS_Msg[2])	/* pick the big one */
-				break;
-		}
-		pCurHcb->HCS_ActTcs->TCS_JS_Period |= (i << 4);
-		pCurHcb->HCS_ActTcs->TCS_SConfig0 |= TSC_ALT_PERIOD;
+    if (pCurHcb->HCS_Msg[3])
+	{
+	pCurHcb->HCS_ActTcs->TCS_JS_Period |= pCurHcb->HCS_Msg[3];
+	for (i = 0; i < 8; i++)
+	    {
+	    if (tul_rate_tbl[i] >= pCurHcb->HCS_Msg[2])  /* pick the big one */
+		break;
+	    }
+	pCurHcb->HCS_ActTcs->TCS_JS_Period |= (i << 4);
+	pCurHcb->HCS_ActTcs->TCS_SConfig0 |= TSC_ALT_PERIOD;
 	}
-	TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, pCurHcb->HCS_ActTcs->TCS_SConfig0);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SPeriod, pCurHcb->HCS_ActTcs->TCS_JS_Period);
+    TUL_WR(pCurHcb->HCS_Base+TUL_SConfig, pCurHcb->HCS_ActTcs->TCS_SConfig0);
+    TUL_WR(pCurHcb->HCS_Base+TUL_SPeriod, pCurHcb->HCS_ActTcs->TCS_JS_Period);
 
-	return (-1);
+    return (-1);
 }
 
 
-int tul_post_scsi_rst(HCS * pCurHcb)
+int     tul_post_scsi_rst(HCS *pCurHcb)
 {
-	SCB *pCurScb;
-	TCS *pCurTcb;
-	int i;
+    SCB *pCurScb;
+    TCS *pCurTcb;
+    int i;
 
-	pCurHcb->HCS_ActScb = 0;
-	pCurHcb->HCS_ActTcs = 0;
-	pCurHcb->HCS_Flags = 0;
+    pCurHcb->HCS_ActScb = 0;
+    pCurHcb->HCS_ActTcs = 0;
+    pCurHcb->HCS_Flags = 0;
 
-	while ((pCurScb = tul_pop_busy_scb(pCurHcb)) != NULL) {
-		pCurScb->SCB_HaStat = HOST_BAD_PHAS;
-		tul_append_done_scb(pCurHcb, pCurScb);
+    while ((pCurScb = tul_pop_busy_scb(pCurHcb)) != NULL)
+	{
+//	pCurScb->SCB_Status = SCB_DONE;
+	pCurScb->SCB_HaStat = HOST_BAD_PHAS;
+	tul_append_done_scb(pCurHcb, pCurScb);
 	}
-	/* clear sync done flag         */
-	pCurTcb = &pCurHcb->HCS_Tcs[0];
-	for (i = 0; i < pCurHcb->HCS_MaxTar; pCurTcb++, i++) {
-		pCurTcb->TCS_Flags &= ~(TCF_SYNC_DONE | TCF_WDTR_DONE);
+					/* clear sync done flag         */
+    pCurTcb = &pCurHcb->HCS_Tcs[0];
+    for (i = 0; i < pCurHcb->HCS_MaxTar; pCurTcb++,  i++)
+	{
+	pCurTcb->TCS_Flags &= ~(TCF_SYNC_DONE | TCF_WDTR_DONE);
 		/* Initialize the sync. xfer register values to an asyn xfer */
-		pCurTcb->TCS_JS_Period = 0;
-		pCurTcb->TCS_SConfig0 = pCurHcb->HCS_SConf1;
-		pCurHcb->HCS_ActTags[0] = 0;	/* 07/22/98 */
-		pCurHcb->HCS_Tcs[i].TCS_Flags &= ~TCF_BUSY;	/* 07/22/98 */
-	}			/* for */
+	pCurTcb->TCS_JS_Period = 0;
+	pCurTcb->TCS_SConfig0 = pCurHcb->HCS_SConf1;
+	pCurHcb->HCS_ActTags[0] = 0;			/* 07/22/98 */
+	pCurHcb->HCS_Tcs[i].TCS_Flags &= ~TCF_BUSY; 	/* 07/22/98 */
+	} /* for */
 
-	return (-1);
+//    pCurHcb->HCS_Semaph = 1;     /* 07/29/98  */
+    return (-1);
 }
 
 /***************************************************************************/
-void tul_select_atn_stop(HCS * pCurHcb, SCB * pCurScb)
+void    tul_select_atn_stop(HCS *pCurHcb, SCB *pCurScb)
 {
-	pCurScb->SCB_Status |= SCB_SELECT;
-	pCurScb->SCB_NxtStat = 0x1;
-	pCurHcb->HCS_ActScb = pCurScb;
-	pCurHcb->HCS_ActTcs = &pCurHcb->HCS_Tcs[pCurScb->SCB_Target];
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_SELATNSTOP);
-	return;
+    pCurScb->SCB_Status |= SCB_SELECT;
+    pCurScb->SCB_NxtStat = 0x1;
+    pCurHcb->HCS_ActScb = pCurScb;
+    pCurHcb->HCS_ActTcs = &pCurHcb->HCS_Tcs[pCurScb->SCB_Target];
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_SELATNSTOP);
+    return;
 }
 
 
 /***************************************************************************/
-void tul_select_atn(HCS * pCurHcb, SCB * pCurScb)
+void    tul_select_atn(HCS *pCurHcb, SCB *pCurScb)
 {
-	int i;
+    int i;
 
-	pCurScb->SCB_Status |= SCB_SELECT;
-	pCurScb->SCB_NxtStat = 0x2;
+    pCurScb->SCB_Status |= SCB_SELECT;
+    pCurScb->SCB_NxtStat = 0x2;
 
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_Ident);
-	for (i = 0; i < (int) pCurScb->SCB_CDBLen; i++)
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_CDB[i]);
-	pCurHcb->HCS_ActTcs = &pCurHcb->HCS_Tcs[pCurScb->SCB_Target];
-	pCurHcb->HCS_ActScb = pCurScb;
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_SEL_ATN);
-	return;
+    TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_Ident);
+    for (i = 0; i < (int)pCurScb->SCB_CDBLen; i++)
+	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_CDB[i]);
+    pCurHcb->HCS_ActTcs = &pCurHcb->HCS_Tcs[pCurScb->SCB_Target];
+    pCurHcb->HCS_ActScb = pCurScb;
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_SEL_ATN);
+    return;
 }
 
 /***************************************************************************/
-void tul_select_atn3(HCS * pCurHcb, SCB * pCurScb)
+void    tul_select_atn3(HCS *pCurHcb, SCB *pCurScb)
 {
-	int i;
+    int         i;
 
-	pCurScb->SCB_Status |= SCB_SELECT;
-	pCurScb->SCB_NxtStat = 0x2;
+    pCurScb->SCB_Status |= SCB_SELECT;
+    pCurScb->SCB_NxtStat = 0x2;
 
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_Ident);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_TagMsg);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_TagId);
-	for (i = 0; i < (int) pCurScb->SCB_CDBLen; i++)
-		TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, pCurScb->SCB_CDB[i]);
-	pCurHcb->HCS_ActTcs = &pCurHcb->HCS_Tcs[pCurScb->SCB_Target];
-	pCurHcb->HCS_ActScb = pCurScb;
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_SEL_ATN3);
-	return;
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurScb->SCB_Ident);
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurScb->SCB_TagMsg);
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurScb->SCB_TagId);
+    for (i = 0; i < (int) pCurScb->SCB_CDBLen; i++)
+	TUL_WR(pCurHcb->HCS_Base+ TUL_SFifo, pCurScb->SCB_CDB[i]);
+    pCurHcb->HCS_ActTcs = &pCurHcb->HCS_Tcs[pCurScb->SCB_Target];
+    pCurHcb->HCS_ActScb = pCurScb;
+    TUL_WR(pCurHcb->HCS_Base+ TUL_SCmd, TSC_SEL_ATN3);
+    return;
 }
 
 /***************************************************************************/
 /* SCSI Bus Device Reset */
-int tul_bus_device_reset(HCS * pCurHcb)
+int     tul_bus_device_reset(HCS *pCurHcb)
 {
-	SCB *pCurScb = pCurHcb->HCS_ActScb;
-	TCS *pCurTcb = pCurHcb->HCS_ActTcs;
-	SCB *pTmpScb, *pPrevScb;
-	BYTE tar;
+    SCB         *pCurScb = pCurHcb->HCS_ActScb;
+    TCS         *pCurTcb = pCurHcb->HCS_ActTcs;
+    SCB         *pTmpScb, *pPrevScb;
+    BYTE        tar;
 
-	if (pCurHcb->HCS_Phase != MSG_OUT) {
-		return (int_tul_bad_seq(pCurHcb));	/* Unexpected phase             */
+    if (pCurHcb->HCS_Phase != MSG_OUT)
+	{
+	return (int_tul_bad_seq(pCurHcb));      /* Unexpected phase             */
 	}
-	tul_unlink_pend_scb(pCurHcb, pCurScb);
-	tul_release_scb(pCurHcb, pCurScb);
+
+    tul_unlink_pend_scb(pCurHcb, pCurScb);
+#if 0
+    pCurScb->SCB_HaStat = 0;
+    pCurScb->SCB_Status = SCB_DONE;     /* command done                 */
+    tul_append_done_scb(pCurHcb, pCurScb);
+#else
+    tul_release_scb(pCurHcb, pCurScb);
+#endif
 
 
-	tar = pCurScb->SCB_Target;	/* target                       */
-	pCurTcb->TCS_Flags &= ~(TCF_SYNC_DONE | TCF_WDTR_DONE | TCF_BUSY);
-	/* clr sync. nego & WDTR flags  07/22/98 */
+    tar = pCurScb->SCB_Target;          /* target                       */
+    pCurTcb->TCS_Flags &= ~(TCF_SYNC_DONE|TCF_WDTR_DONE|TCF_BUSY);
+		   /* clr sync. nego & WDTR flags  07/22/98 */
 
 	/* abort all SCB with same target */
-	pPrevScb = pTmpScb = pCurHcb->HCS_FirstBusy;	/* Check Busy queue */
-	while (pTmpScb != NULL) {
+    pPrevScb = pTmpScb = pCurHcb->HCS_FirstBusy;        /* Check Busy queue */
+    while (pTmpScb != NULL) {
 
-		if (pTmpScb->SCB_Target == tar) {
-			/* unlink it */
-			if (pTmpScb == pCurHcb->HCS_FirstBusy) {
-				if ((pCurHcb->HCS_FirstBusy = pTmpScb->SCB_NxtScb) == NULL)
-					pCurHcb->HCS_LastBusy = NULL;
-			} else {
-				pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
-				if (pTmpScb == pCurHcb->HCS_LastBusy)
-					pCurHcb->HCS_LastBusy = pPrevScb;
-			}
-			pTmpScb->SCB_HaStat = HOST_ABORTED;
-			tul_append_done_scb(pCurHcb, pTmpScb);
+	if (pTmpScb->SCB_Target == tar)
+	    {
+	    /* unlink it */
+	    if (pTmpScb == pCurHcb->HCS_FirstBusy)
+		{
+		if ((pCurHcb->HCS_FirstBusy = pTmpScb->SCB_NxtScb) == NULL)
+		    pCurHcb->HCS_LastBusy = NULL;
 		}
-		/* Previous haven't change      */
-		else {
-			pPrevScb = pTmpScb;
+	    else
+		{
+		pPrevScb->SCB_NxtScb = pTmpScb->SCB_NxtScb;
+		if (pTmpScb == pCurHcb->HCS_LastBusy)
+		    pCurHcb->HCS_LastBusy = pPrevScb;
 		}
-		pTmpScb = pTmpScb->SCB_NxtScb;
+	    pTmpScb->SCB_HaStat = HOST_ABORTED;
+	    tul_append_done_scb(pCurHcb, pTmpScb);
+	    }                           /* Previous haven't change      */
+	else
+	    {
+	    pPrevScb = pTmpScb;
+	    }
+	pTmpScb = pTmpScb->SCB_NxtScb;
 	}
 
-	TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_DEVRST);
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SFifo, MSG_DEVRST);
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_XF_FIFO_OUT);
 
-	return tul_wait_disc(pCurHcb);
+    return  tul_wait_disc(pCurHcb);
 
 }
 
 /***************************************************************************/
-int tul_msgin_accept(HCS * pCurHcb)
+int     tul_msgin_accept(HCS *pCurHcb)
 {
-	TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_MSG_ACCEPT);
-	return (wait_tulip(pCurHcb));
+    TUL_WR(pCurHcb->HCS_Base + TUL_SCmd, TSC_MSG_ACCEPT);
+    return (wait_tulip(pCurHcb));
 }
 
 /***************************************************************************/
-int wait_tulip(HCS * pCurHcb)
+int     wait_tulip(HCS *pCurHcb)
 {
+/*    register BYTE s;
+    int phase;*/
+//    ULONG       flags;
 
-	while (!((pCurHcb->HCS_JSStatus0 = TUL_RD(pCurHcb->HCS_Base, TUL_SStatus0))
-		 & TSS_INT_PENDING));
+//    pCurHcb->HCS_Flags &= ~HCF_RESET;
 
-	pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
-	pCurHcb->HCS_Phase = pCurHcb->HCS_JSStatus0 & TSS_PH_MASK;
-	pCurHcb->HCS_JSStatus1 = TUL_RD(pCurHcb->HCS_Base, TUL_SStatus1);
+    while (!((pCurHcb->HCS_JSStatus0 = TUL_RD(pCurHcb->HCS_Base,TUL_SStatus0))
+			 & TSS_INT_PENDING)) {
+//	save_flags(flags);		/* wh 07/21/98		*/
+//	sti();
+//	restore_flags(flags);		/* Addedby hc 07/21/98	*/
 
-	if (pCurHcb->HCS_JSInt & TSS_RESEL_INT) {	/* if SCSI bus reset detected   */
-		return (int_tul_resel(pCurHcb));
+//	if (pCurHcb->HCS_Flags & HCF_RESET) {
+//	    return -1;
+//	}
+    }
+
+    pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
+    pCurHcb->HCS_Phase = pCurHcb->HCS_JSStatus0 & TSS_PH_MASK;
+    pCurHcb->HCS_JSStatus1 = TUL_RD(pCurHcb->HCS_Base, TUL_SStatus1);   
+	
+/*    stat2 = TUL_RD(pCurHcb->HCS_Base,TUL_SStatus2);
+    printk("SCSI int status = %x", pCurHcb->HCS_JSInt);*/
+
+    if (pCurHcb->HCS_JSInt & TSS_RESEL_INT)
+	{                               /* if SCSI bus reset detected   */
+	return (int_tul_resel(pCurHcb));
 	}
-	if (pCurHcb->HCS_JSInt & TSS_SEL_TIMEOUT) {	/* if selected/reselected timeout interrupt */
-		return (int_tul_busfree(pCurHcb));
+
+    if (pCurHcb->HCS_JSInt & TSS_SEL_TIMEOUT)
+	{                               /* if selected/reselected timeout interrupt */
+	return (int_tul_busfree(pCurHcb));
 	}
-	if (pCurHcb->HCS_JSInt & TSS_SCSIRST_INT) {	/* if SCSI bus reset detected   */
-		return (int_tul_scsi_rst(pCurHcb));
+
+    if (pCurHcb->HCS_JSInt & TSS_SCSIRST_INT)
+	{                               /* if SCSI bus reset detected   */
+	return (int_tul_scsi_rst(pCurHcb));
 	}
-	if (pCurHcb->HCS_JSInt & TSS_DISC_INT) {	/* BUS disconnection            */
-		if (pCurHcb->HCS_Flags & HCF_EXPECT_DONE_DISC) {
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);		/* Flush SCSI FIFO  */
-			tul_unlink_busy_scb(pCurHcb, pCurHcb->HCS_ActScb);
-			pCurHcb->HCS_ActScb->SCB_HaStat = 0;
-			tul_append_done_scb(pCurHcb, pCurHcb->HCS_ActScb);
-			pCurHcb->HCS_ActScb = NULL;
-			pCurHcb->HCS_ActTcs = NULL;
-			pCurHcb->HCS_Flags &= ~HCF_EXPECT_DONE_DISC;
-			TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);	/* Enable HW reselect       */
-			return (-1);
-		}
-		if (pCurHcb->HCS_Flags & HCF_EXPECT_DISC) {
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);		/* Flush SCSI FIFO  */
-			pCurHcb->HCS_ActScb = NULL;
-			pCurHcb->HCS_ActTcs = NULL;
-			pCurHcb->HCS_Flags &= ~HCF_EXPECT_DISC;
-			TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
-			TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);	/* Enable HW reselect       */
-			return (-1);
-		}
-		return (int_tul_busfree(pCurHcb));
+
+    if (pCurHcb->HCS_JSInt & TSS_DISC_INT)
+	{                               /* BUS disconnection            */
+	if (pCurHcb->HCS_Flags & HCF_EXPECT_DONE_DISC)
+	    {
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO); /* Flush SCSI FIFO  */
+	    tul_unlink_busy_scb(pCurHcb, pCurHcb->HCS_ActScb);
+//	    pCurHcb->HCS_ActScb->SCB_Status = SCB_DONE;
+	    pCurHcb->HCS_ActScb->SCB_HaStat = 0;
+	    tul_append_done_scb(pCurHcb, pCurHcb->HCS_ActScb);
+	    pCurHcb->HCS_ActScb = NULL;
+	    pCurHcb->HCS_ActTcs = NULL;
+	    pCurHcb->HCS_Flags &= ~HCF_EXPECT_DONE_DISC;
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);/* Enable HW reselect       */
+	    return (-1);
+	    }
+	if (pCurHcb->HCS_Flags & HCF_EXPECT_DISC)
+	    {
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO); /* Flush SCSI FIFO  */
+	    pCurHcb->HCS_ActScb = NULL;
+	    pCurHcb->HCS_ActTcs = NULL;
+	    pCurHcb->HCS_Flags &= ~HCF_EXPECT_DISC;
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);/* Enable HW reselect       */
+	    return (-1);
+	    }
+	return (int_tul_busfree(pCurHcb));
 	}
-	if (pCurHcb->HCS_JSInt & (TSS_FUNC_COMP | TSS_BUS_SERV)) {
-		return (pCurHcb->HCS_Phase);
-	}
+
+    if (pCurHcb->HCS_JSInt & (TSS_FUNC_COMP | TSS_BUS_SERV))
+	{
 	return (pCurHcb->HCS_Phase);
+	}
+
+    return (pCurHcb->HCS_Phase);
 }
 /***************************************************************************/
-int tul_wait_disc(HCS * pCurHcb)
+int     tul_wait_disc(HCS *pCurHcb)
 {
 
-	while (!((pCurHcb->HCS_JSStatus0 = TUL_RD(pCurHcb->HCS_Base, TUL_SStatus0))
-		 & TSS_INT_PENDING));
+    while (!((pCurHcb->HCS_JSStatus0 = TUL_RD(pCurHcb->HCS_Base,TUL_SStatus0))
+			 & TSS_INT_PENDING)) 
+	    ;
+    
 
+    pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
 
-	pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
-
-	if (pCurHcb->HCS_JSInt & TSS_SCSIRST_INT) {	/* if SCSI bus reset detected   */
-		return (int_tul_scsi_rst(pCurHcb));
+    if (pCurHcb->HCS_JSInt & TSS_SCSIRST_INT)
+	{                               /* if SCSI bus reset detected   */
+	return (int_tul_scsi_rst(pCurHcb));
 	}
-	if (pCurHcb->HCS_JSInt & TSS_DISC_INT) {	/* BUS disconnection            */
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);		/* Flush SCSI FIFO  */
-		TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);	/* Enable HW reselect       */
-		pCurHcb->HCS_ActScb = NULL;
-		return (-1);
+
+    if (pCurHcb->HCS_JSInt & TSS_DISC_INT)
+	{                               /* BUS disconnection            */
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO); /* Flush SCSI FIFO  */
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);/* Enable HW reselect       */
+	    pCurHcb->HCS_ActScb = NULL;
+	    return (-1);
 	}
-	return (tul_bad_seq(pCurHcb));
+
+    return (tul_bad_seq(pCurHcb));
 }
 
 /***************************************************************************/
-int tul_wait_done_disc(HCS * pCurHcb)
+int     tul_wait_done_disc(HCS *pCurHcb)
 {
 
 
-	while (!((pCurHcb->HCS_JSStatus0 = TUL_RD(pCurHcb->HCS_Base, TUL_SStatus0))
-		 & TSS_INT_PENDING));
+    while (!((pCurHcb->HCS_JSStatus0 = TUL_RD(pCurHcb->HCS_Base,TUL_SStatus0))
+			 & TSS_INT_PENDING)) 
+	;
 
-	pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
+    pCurHcb->HCS_JSInt = TUL_RD(pCurHcb->HCS_Base, TUL_SInt);
+	
 
-
-	if (pCurHcb->HCS_JSInt & TSS_SCSIRST_INT) {	/* if SCSI bus reset detected   */
-		return (int_tul_scsi_rst(pCurHcb));
+    if (pCurHcb->HCS_JSInt & TSS_SCSIRST_INT)
+	{                               /* if SCSI bus reset detected   */
+	return (int_tul_scsi_rst(pCurHcb));
 	}
-	if (pCurHcb->HCS_JSInt & TSS_DISC_INT) {	/* BUS disconnection            */
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO);		/* Flush SCSI FIFO  */
-		TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
-		TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);	/* Enable HW reselect       */
-		tul_unlink_busy_scb(pCurHcb, pCurHcb->HCS_ActScb);
 
-		tul_append_done_scb(pCurHcb, pCurHcb->HCS_ActScb);
-		pCurHcb->HCS_ActScb = NULL;
-		return (-1);
+    if (pCurHcb->HCS_JSInt & TSS_DISC_INT)
+	{                               /* BUS disconnection            */
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl0, TSC_FLUSH_FIFO); /* Flush SCSI FIFO  */
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SConfig, TSC_INITDEFAULT);
+	    TUL_WR(pCurHcb->HCS_Base + TUL_SCtrl1, TSC_HW_RESELECT);/* Enable HW reselect       */
+	    tul_unlink_busy_scb(pCurHcb, pCurHcb->HCS_ActScb);
+
+	    tul_append_done_scb(pCurHcb, pCurHcb->HCS_ActScb);
+	    pCurHcb->HCS_ActScb = NULL;
+	    return (-1);
 	}
-	return (tul_bad_seq(pCurHcb));
+
+
+    return (tul_bad_seq(pCurHcb));
 }
 
 /**************************** EOF *********************************/

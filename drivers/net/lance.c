@@ -334,17 +334,14 @@ int init_module(void)
 		dev->base_addr = io[this_dev];
 		dev->dma = dma[this_dev];
 		dev->init = lance_probe;
-#if NO_AUTOPROBE_MODULE
 		if (io[this_dev] == 0)  {
 			if (this_dev != 0) break; /* only complain once */
 			printk(KERN_NOTICE "lance.c: Module autoprobing not allowed. Append \"io=0xNNN\" value(s).\n");
 			return -EPERM;
 		}
-#endif
 		if (register_netdev(dev) != 0) {
-			if (found != 0)
-				return 0;	/* Got at least one. */
-			printk(KERN_WARNING "lance.c: No PCnet/LANCE card found\n");
+			printk(KERN_WARNING "lance.c: No PCnet/LANCE card found (i/o = 0x%x).\n", io[this_dev]);
+			if (found != 0) return 0;	/* Got at least one. */
 			return -ENXIO;
 		}
 		found++;
@@ -353,7 +350,8 @@ int init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+void
+cleanup_module(void)
 {
 	int this_dev;
 
@@ -392,21 +390,15 @@ int lance_probe(struct device *dev)
 			unsigned short pci_command;
 
 			if (pcibios_find_device (PCI_VENDOR_ID_AMD,
-						 PCI_DEVICE_ID_AMD_LANCE, pci_index,
-						 &pci_bus, &pci_device_fn) != 0)
+									 PCI_DEVICE_ID_AMD_LANCE, pci_index,
+									 &pci_bus, &pci_device_fn) != 0)
 				break;
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
-						 PCI_INTERRUPT_LINE, &pci_irq_line);
+									 PCI_INTERRUPT_LINE, &pci_irq_line);
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
-						  PCI_BASE_ADDRESS_0, &pci_ioaddr);
+									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
 			/* Remove I/O space marker in bit 0. */
 			pci_ioaddr &= ~3;
-	    
-			/* Avoid already found cards from previous calls
-			 */
-			if (check_region(pci_ioaddr, LANCE_TOTAL_SIZE))
-				continue;
-	    
 			/* PCI Spec 2.1 states that it is either the driver or PCI card's
 	 		 * responsibility to set the PCI Master Enable Bit if needed.
 			 *	(From Mark Stockton <marks@schooner.sys.hou.compaq.com>)

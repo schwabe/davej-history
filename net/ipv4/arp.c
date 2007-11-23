@@ -1784,15 +1784,13 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *	is not from an IP number.  We can't currently handle this, so toss
  *	it. 
  */  
-#if defined(CONFIG_NET_ETHERNET) || defined(CONFIG_FDDI)
-	if (dev->type == ARPHRD_ETHER || dev->type == ARPHRD_FDDI)
+#ifdef CONFIG_FDDI
+	if (dev->type == ARPHRD_FDDI)
 	{
 		/*
 		 * According to RFC 1390, FDDI devices should accept ARP hardware types
 		 * of 1 (Ethernet).  However, to be more robust, we'll accept hardware
 		 * types of either 1 (Ethernet) or 6 (IEEE 802.2).
-		 *
-		 * ETHERNET devices will accept both hardware types, too. (RFC 1042)
 		 */
 		if (arp->ar_hln != dev->addr_len    || 
 			((ntohs(arp->ar_hrd) != ARPHRD_ETHER) && (ntohs(arp->ar_hrd) != ARPHRD_IEEE802)) ||

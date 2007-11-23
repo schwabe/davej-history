@@ -200,6 +200,7 @@ else
 endif
 
 ifdef CONFIG_APM
+LX_OBJS += apm_bios.o
 M = y
 endif
 

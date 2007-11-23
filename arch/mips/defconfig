@@ -75,6 +75,7 @@ CONFIG_PROC_FS=y
 # CONFIG_MS_BUSMOUSE is not set
 # CONFIG_ATIXL_BUSMOUSE is not set
 # CONFIG_QIC02_TAPE is not set
+# CONFIG_APM is not set
 # CONFIG_SERIAL is not set
 
 #

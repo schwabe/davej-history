@@ -107,7 +107,6 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
-#include <linux/file.h>
 #include <linux/fcntl.h>
 
 #include <asm/segment.h>
@@ -256,25 +255,17 @@ asmlinkage int sys_flock(unsigned int fd, unsigned int cmd)
 {
 	struct file_lock file_lock;
 	struct file *filp;
-	int err = -EINVAL;
-	
-	filp = fget(fd);
-	if(filp==NULL)
-		return -EBADF;
-	
+
+	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
+		return (-EBADF);
 
 	if (!flock_make_lock(filp, &file_lock, cmd))
-		goto out;
-
+		return (-EINVAL);
+	
 	if ((file_lock.fl_type != F_UNLCK) && !(filp->f_mode & 3))
-	{
-		err = -EBADF;
-		goto out;
-	}
-	err=flock_lock_file(filp, &file_lock, (cmd & (LOCK_UN | LOCK_NB)) ? 0 : 1);
-out:
-	fput(filp, filp->f_inode);
-	return err;	
+		return (-EBADF);
+
+	return (flock_lock_file(filp, &file_lock, (cmd & (LOCK_UN | LOCK_NB)) ? 0 : 1));
 }
 
 /* Report the first existing lock that would conflict with l.
@@ -287,27 +278,19 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	struct file *filp;
 	struct file_lock *fl,file_lock;
 
+	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
+		return (-EBADF);
 	error = verify_area(VERIFY_WRITE, l, sizeof(*l));
 	if (error)
 		return (error);
 
-	filp = fget(fd);
-	if(filp==NULL)
-		return -EBADF;
-
 	memcpy_fromfs(&flock, l, sizeof(flock));
 	if ((flock.l_type != F_RDLCK) && (flock.l_type != F_WRLCK))
-	{
-		error = -EINVAL;
-		goto out;
-	}
+		return (-EINVAL);
 
 	if (!filp->f_inode || !posix_make_lock(filp, &file_lock, &flock))
-	{
-		error = -EINVAL;
-		goto out;
-	}
-	
+		return (-EINVAL);
+
 	flock.l_type = F_UNLCK;
 	for (fl = filp->f_inode->i_flock; fl != NULL; fl = fl->fl_next) {
 		if (!(fl->fl_flags & FL_POSIX))
@@ -324,9 +307,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	}
 
 	memcpy_tofs(l, &flock, sizeof(flock));
-out:
-	fput(filp, filp->f_inode);
-	return error;
+	return (0);
 }
 
 /* Apply the lock described by l to an open file descriptor.
@@ -345,20 +326,19 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	/* Get arguments and validate them ...
 	 */
 
+	if ((fd >= NR_OPEN) || !(filp = current->files->fd[fd]))
+		return (-EBADF);
+	
 	error = verify_area(VERIFY_READ, l, sizeof(*l));
 	if (error)
 		return (error);
-		
-	filp = fget(fd);
-	if(filp==NULL)
-		return -EBADF;
-
-	inode = filp->f_inode;
-		
+	
+	if (!(inode = filp->f_inode))
+		return (-EINVAL);
+	
 	/*
 	 * This might block, so we do it before checking the inode.
 	 */
-
 	memcpy_fromfs(&flock, l, sizeof(flock));
 
 	/* Don't allow mandatory locks on files that may be memory mapped
@@ -370,34 +350,22 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 		struct vm_area_struct *vma = inode->i_mmap;
 		do {
 			if (vma->vm_flags & VM_MAYSHARE)
-			{
-				error = -EAGAIN;
-				goto out;
-			}
+				return (-EAGAIN);
 			vma = vma->vm_next_share;
 		} while (vma != inode->i_mmap);
 	}
 
 	if (!posix_make_lock(filp, &file_lock, &flock))
-	{
-		error = -EINVAL;
-		goto out;
-	}
+		return (-EINVAL);
 	
 	switch (flock.l_type) {
 	case F_RDLCK:
 		if (!(filp->f_mode & 1))
-		{
-			error = -EBADF;
-			goto out;
-		}
+			return (-EBADF);
 		break;
 	case F_WRLCK:
 		if (!(filp->f_mode & 2))
-		{
-			error = -EBADF;
-			goto out;
-		}
+			return (-EBADF);
 		break;
 	case F_UNLCK:
 		break;
@@ -416,19 +384,13 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 }
 #endif
 		if (!(filp->f_mode & 3))
-		{
-			error = -EBADF;
-			goto out;
-		}
+			return (-EBADF);
 		break;
 	default:
 		return (-EINVAL);
 	}
 	
-	error = posix_lock_file(filp, &file_lock, cmd == F_SETLKW);
-out:
-	fput(filp, filp->f_inode);
-	return error;
+	return (posix_lock_file(filp, &file_lock, cmd == F_SETLKW));
 }
 
 /* This function is called when the file is closed.

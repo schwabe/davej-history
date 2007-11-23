@@ -5,8 +5,6 @@
  *
  */
 
-#include <linux/config.h>
-
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
@@ -105,14 +103,7 @@ ncp_namespace(struct inode *i)
 static inline int
 ncp_preserve_case(struct inode *i)
 {
-	return
-#ifdef CONFIG_NCPFS_OS2_NS
-	(ncp_namespace(i) == NW_NS_OS2) || 
-#endif	/* CONFIG_NCPFS_OS2_NS */
-#ifdef CONFIG_NCPFS_NFS_NS
-	(ncp_namespace(i) == NW_NS_NFS) ||
-#endif	/* CONFIG_NCPFS_NFS_NS */
-	0;
+	return (ncp_namespace(i) == NW_NS_OS2);
 }
 
 static struct file_operations ncp_dir_operations = {
@@ -166,7 +157,7 @@ inline ino_t
 ncp_info_ino(struct ncp_server *server, struct ncp_inode_info *info)
 {
 	return ncp_single_volume(server)
-		? (info->finfo.i.dirEntNum == server->root.finfo.i.dirEntNum)?0:info->finfo.i.dirEntNum: (ino_t)info;
+		? info->finfo.i.dirEntNum : (ino_t)info;
 }
 
 static inline int
@@ -946,7 +937,6 @@ ncp_create(struct inode *dir, const char *name, int len, int mode,
 {
 	struct nw_file_info finfo;
 	__u8 _name[len+1];
-	int error;
 
 	*result = NULL;
 
@@ -971,18 +961,15 @@ ncp_create(struct inode *dir, const char *name, int len, int mode,
 	}
 
 	lock_super(dir->i_sb);
-	if ((error = ncp_open_create_file_or_subdir(NCP_SERVER(dir),
+	if (ncp_open_create_file_or_subdir(NCP_SERVER(dir),
 					   NCP_ISTRUCT(dir), _name,
 					   OC_MODE_CREATE|OC_MODE_OPEN|
 					   OC_MODE_REPLACE,
 					   0, AR_READ|AR_WRITE,
-					   &finfo)) != 0)
+					   &finfo) != 0)
 	{
 		unlock_super(dir->i_sb);
 		iput(dir);
-		if (error == 0x87) {
-			return -ENAMETOOLONG;
-		} 
 		return -EACCES;
 	}
 
@@ -1108,65 +1095,6 @@ ncp_rmdir(struct inode *dir, const char *name, int len)
 	return error;
 }
 
-
-#ifdef CONFIG_NCPFS_STRONG
-/* try to delete a readonly file (NW R bit set) */
-
-static int
-ncp_force_unlink(struct inode *dir,char *name,int len)
-{
-        int res=0x9c,res2;
-        struct inode *_inode;
-        struct iattr ia;
-
-        /* remove the Read-Only flag on the NW server */
-
-        dir->i_count++;
-        res2=ncp_lookup(dir,name,len,&_inode);
-        if (res2)
-        {
-                goto leave_me; /* abort operation */
-        }
-        memset(&ia,0,sizeof(struct iattr));
-        ia.ia_mode = _inode->i_mode;
-        ia.ia_mode |= NCP_SERVER(dir)->m.file_mode & 0222;  /* set write bits */
-        ia.ia_valid = ATTR_MODE;
-
-        res2=ncp_notify_change(_inode,&ia);
-        if (res2)
-        {
-                iput(_inode);
-                goto leave_me;
-        }
-
-        /* now try again the delete operation */
-
-        res2 = ncp_del_file_or_subdir(NCP_SERVER(dir),NCP_ISTRUCT(dir),name);
-
-        res=res2; /* save status to use as return value */
-
-        res=res2;
-        if (res2)  /* delete failed, set R bit again */
-        {
-                memset(&ia,0,sizeof(struct iattr));
-                ia.ia_mode = _inode->i_mode;
-                ia.ia_mode &= ~(NCP_SERVER(dir)->m.file_mode & 0222);  /* clear write bits */
-                ia.ia_valid = ATTR_MODE;
-
-                res2=ncp_notify_change(_inode,&ia);
-                if (res2)
-                {
-                        iput(_inode);
-                        goto leave_me;
-                }
-        }
-        iput(_inode);
-
- leave_me:
-        return(res);
-}
-#endif	/* CONFIG_NCPFS_STRONG */
-
 static int
 ncp_unlink(struct inode *dir, const char *name, int len)
 {
@@ -1198,104 +1126,20 @@ ncp_unlink(struct inode *dir, const char *name, int len)
 			str_upper(_name);
 		}
 
-                error = ncp_del_file_or_subdir(NCP_SERVER(dir),
-                                               NCP_ISTRUCT(dir),
-                                               _name);
-#ifdef CONFIG_NCPFS_STRONG
-		if (error == 0x9c && NCP_SERVER(dir)->m.flags & NCP_MOUNT_STRONG)  /* readonly */
+                if ((error = ncp_del_file_or_subdir(NCP_SERVER(dir),
+						    NCP_ISTRUCT(dir),
+						    _name)) == 0)
 		{
-			error = ncp_force_unlink(dir,_name,len); /* special treatment */
+                        ncp_invalid_dir_cache(dir);
 		}
-#endif	/* CONFIG_NCPFS_STRONG */
-
-		if (error == 0) {
-			ncp_invalid_dir_cache(dir);
-		} else if (error == 0xFF) {
-			error = -ENOENT;
-		} else {
+		else
+		{
 			error = -EACCES;
 		}
         }
 	iput(dir);
 	return error;
 }
-
-#ifdef CONFIG_NCPFS_STRONG
-static int
-ncp_force_rename(struct inode *old_dir, const char *old_name, char *_old_name, int old_len,
-                 struct inode *new_dir, const char *new_name, char *_new_name, int new_len)
-{
-        int res=0x90,res2;
-        char _rename_old[old_len+1];
-        char _rename_new[new_len+1];
-        struct inode *_inode,*x_dir;
-        struct iattr ia;
-
-        strncpy(_rename_old,old_name,old_len);
-        _rename_old[old_len] = 0;
-        strncpy(_rename_new,new_name,new_len);
-        _rename_new[new_len] = 0;
-
-        /* remove the Read-Only flag on the NW server */
-
-        old_dir->i_count++;
-        res2=ncp_lookup(old_dir,_rename_old,old_len,&_inode);
-        if (res2)
-        {
-                goto leave_me;
-        }
-        memset(&ia,0,sizeof(struct iattr));
-        ia.ia_mode = _inode->i_mode;
-        ia.ia_mode |= NCP_SERVER(old_dir)->m.file_mode & 0222;  /* set write bits */
-        ia.ia_valid = ATTR_MODE;
-
-        res2=ncp_notify_change(_inode,&ia);
-        if (res2)
-        {
-                iput(_inode);
-                goto leave_me;
-        }
-
-        /* now try again the rename operation */
-        res2 = ncp_ren_or_mov_file_or_subdir(NCP_SERVER(old_dir),
-                                             NCP_ISTRUCT(old_dir), _old_name,
-                                             NCP_ISTRUCT(new_dir), _new_name);
-
-        res=res2;
-        if (!res2)  /* rename succeeded, get a new inode for the new file */
-        {
-                x_dir=new_dir;
-                new_dir->i_count++;
-                iput(_inode);
-                res2=ncp_lookup(new_dir,_rename_new,new_len,&_inode);
-                if (res2)
-                {
-                        goto leave_me;
-                }
-        }
-        else
-        {
-                x_dir=old_dir;
-        }
-
-        memset(&ia,0,sizeof(struct iattr));
-        ia.ia_mode = _inode->i_mode;
-        ia.ia_mode &= ~(NCP_SERVER(x_dir)->m.file_mode & 0222);  /* clear write bits */
-        ia.ia_valid = ATTR_MODE;
-
-        res2=ncp_notify_change(_inode,&ia);
-        iput(_inode);
-        if (res2)
-        {
-                printk(KERN_INFO "ncpfs: ncp_notify_change (2) failed: %08x\n",res2);
-                goto leave_me;
-        }
-
- leave_me:
-        return(res);
-}
-#endif	/* CONFIG_NCPFS_STRONG */
-
 
 static int
 ncp_rename(struct inode *old_dir, const char *old_name, int old_len,
@@ -1353,26 +1197,14 @@ ncp_rename(struct inode *old_dir, const char *old_name, int old_len,
 					    NCP_ISTRUCT(old_dir), _old_name,
 					    NCP_ISTRUCT(new_dir), _new_name);
 
-#ifdef CONFIG_NCPFS_STRONG
-	if (res == 0x90 && NCP_SERVER(old_dir)->m.flags & NCP_MOUNT_STRONG) /* file is readonly */
+        if (res == 0)
 	{
-		res=ncp_force_rename(old_dir,old_name,_old_name,old_len,new_dir,new_name,_new_name,new_len);
-	}
-#endif	/* CONFIG_NCPFS_STRONG */
-
-	if (res == 0)
-	{
-		ncp_invalid_dir_cache(old_dir);
-		ncp_invalid_dir_cache(new_dir);
-	}
+                ncp_invalid_dir_cache(old_dir);
+                ncp_invalid_dir_cache(new_dir);
+        }
 	else
 	{
-		if (res == 0x9E)
-			res = -ENAMETOOLONG;
-		else if (res == 0xFF)
-			res = -ENOENT;
-		else
-			res = -EACCES;
+		res = -EACCES;
 	}
 	
  finished:

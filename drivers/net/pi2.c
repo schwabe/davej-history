@@ -1452,7 +1452,7 @@ static int pi_probe(struct device *dev, int card_type)
 static int pi_open(struct device *dev)
 {
     unsigned long flags;
-    static int first_time = 1;
+    static first_time = 1;
 
     struct pi_local *lp = (struct pi_local *) dev->priv;
 

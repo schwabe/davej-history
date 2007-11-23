@@ -164,7 +164,7 @@ typedef struct {
 } Signature;
 	
 static const Signature signatures[] = {
-#if defined(CONFIG_SCSI_SEAGATE) || defined(CONFIG_SCSI_SEAGATE_MODULE)
+#ifdef CONFIG_SCSI_SEAGATE
 {"ST01 v1.7  (C) Copyright 1987 Seagate", 15, 37, SEAGATE},
 {"SCSI BIOS 2.00  (C) Copyright 1987 Seagate", 15, 40, SEAGATE},
 

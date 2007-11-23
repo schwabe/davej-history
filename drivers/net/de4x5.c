@@ -404,12 +404,11 @@
 			   alignment for Alpha's and avoid their unaligned
 			   access traps. This flag is merely for log messages:
 			   should do something more definitive though...
-      0.5352 30-Dec-98    Fix driver recognition of the newer DECchips.
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:V0.5352 1998/12/30 davies@maniac.ultranet.com\n";
+static const char *version = "de4x5.c:V0.5351 1998/10/4 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -770,7 +769,7 @@ struct de4x5_private {
     int tx_new, tx_old;                     /* TX descriptor ring pointers  */
     char setup_frame[SETUP_FRAME_LEN];      /* Holds MCA and PA info.       */
     char frame[64];                         /* Min sized packet for loopback*/
-    struct net_device_stats stats;          /* Public stats                 */
+    struct net_device_stats stats;           /* Public stats                 */
     struct {
 	u_int bins[DE4X5_PKT_STAT_SZ];      /* Private stats counters       */
 	u_int unicast;
@@ -1357,6 +1356,7 @@ de4x5_open(struct device *dev)
     ** Re-initialize the DE4X5... 
     */
     status = de4x5_init(dev);
+    
     lp->state = OPEN;
     de4x5_dbg_open(dev);
     
@@ -1599,7 +1599,7 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     DISABLE_IRQs;                        /* Ensure non re-entrancy */
 
     if (test_and_set_bit(MASK_INTERRUPTS, (void*) &lp->interrupt))
-        printk("%s: Re-entering the interrupt handler.\n", dev->name);
+	printk("%s: Re-entering the interrupt handler.\n", dev->name);
 
 #if	LINUX_VERSION_CODE >= ((2 << 16) | (1 << 8))
     synchronize_irq();
@@ -2075,9 +2075,7 @@ eisa_probe(struct device *dev, u_long ioaddr))
 	    irq = inb(EISA_REG0);
 	    irq = de4x5_irq[(irq >> 1) & 0x03];
 
-	    if (is_DC2114x) {
-		device = ((cfrv & CFRV_RN) < DC2114x_BRK ? DC21142 : DC21143);
-	    }
+	    if (is_DC2114x) device |= (cfrv & CFRV_RN);
 	    lp->chipset = device;
 
 	    /* Write the PCI Configuration Registers */
@@ -2182,9 +2180,7 @@ pci_probe(struct device *dev, u_long ioaddr))
 	    lp->bus_num = pb;
 	    
 	    /* Set the chipset information */
-	    if (is_DC2114x) {
-		device = ((cfrv & CFRV_RN) < DC2114x_BRK ? DC21142 : DC21143);
-	    }
+	    if (is_DC2114x) device |= (cfrv & CFRV_RN);
 	    lp->chipset = device;
 
 	    /* Get the board I/O address (64 bits on sparc64) */
@@ -2295,9 +2291,7 @@ srom_search(int index))
 	lp->bus_num = pb;
 	    
 	/* Set the chipset information */
-	if (is_DC2114x) {
-	    device = ((cfrv & CFRV_RN) < DC2114x_BRK ? DC21142 : DC21143);
-	}
+	if (is_DC2114x) device |= (cfrv & CFRV_RN);
 	lp->chipset = device;
 
 	/* Get the board I/O address (64 bits on sparc64) */
@@ -5663,7 +5657,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	cli();
 	copy_to_user(ioc->data, &lp->pktStats, ioc->len); 
 	sti();
-
+	
 	break;
     case DE4X5_CLR_STATS:            /* Zero out the driver statistics */
 	if (suser()) {
@@ -5836,12 +5830,6 @@ init_module(void)
 	if (!mdev) mdev = p;
 
 	if (register_netdev(p) != 0) {
-	    struct de4x5_private *lp = (struct de4x5_private *)p->priv;
-	    if (lp) {
-		release_region(p->base_addr, (lp->bus == PCI ? 
-					      DE4X5_PCI_TOTAL_SIZE :
-					      DE4X5_EISA_TOTAL_SIZE));
-	    }
 	    kfree(p);
 	} else {
 	    status = 0;                 /* At least one adapter will work */

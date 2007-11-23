@@ -201,9 +201,6 @@ audio_write (int dev, struct fileinfo *file, const char *buf, int count)
   p = 0;
   c = count;
 
-  if (count < 0)
-    return -EINVAL;
-
   if ((audio_mode[dev] & AM_READ) && !(audio_devs[dev]->flags & DMA_DUPLEX))
     {				/* Direction change */
     }

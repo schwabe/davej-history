@@ -3,7 +3,7 @@
 ;*		    TEKRAM DC-390(T) PCI SCSI Bus Master Host Adapter  *
 ;*		    Device Driver				       *
 ;***********************************************************************/
-/* $Id: tmscsim.h,v 2.4 1998/12/25 17:33:27 garloff Exp $ */
+/* $Id: tmscsim.h,v 2.1 1998/10/14 10:31:48 garloff Exp $ */
 
 #ifndef _TMSCSIM_H
 #define _TMSCSIM_H
@@ -95,13 +95,15 @@ UCHAR		MsgOutBuf[6];
 /* 0x48: */
 SGL		Segmentx;	/* make a one entry of S/G list table */
 
+PUCHAR		pMsgPtr;
+
 UCHAR		ScsiCmdLen;
 UCHAR		ScsiPhase;
 
 UCHAR		AdaptStatus;
 UCHAR		TargetStatus;
 
-/* 0x58: */
+/* 0x5c: */
 UCHAR		MsgCnt;
 UCHAR		EndMessage;
 UCHAR		RetryCnt;
@@ -113,7 +115,7 @@ UCHAR		SGIndex;
 UCHAR		SRBStatus;
   //UCHAR		IORBFlag;	/*;81h-Reset, 2-retry */
 
-/* 0x60: */
+/* 0x64: */
 };
 
 
@@ -216,16 +218,14 @@ spinlock_t	lock;
 UCHAR		sel_timeout;
 UCHAR		glitch_cfg;
 
-UCHAR		MsgLen;
-UCHAR		Ignore_IRQ;	/* Not used */
+UCHAR		reserved[2];	/* alignment */
 
 PDEVDECL1;			/* Pointer to PCI cfg. space */
-/* 0x40/0x3c: */
+/* 0x44/0x40: */
 ULONG		Cmds;
 ULONG		CmdInQ;
 ULONG		CmdOutOfSRB;
 ULONG		SelLost;
-
 	
 /* 0x50/0x4c: */	
 DC390_SRB	TmpSRB;

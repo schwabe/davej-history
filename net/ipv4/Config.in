@@ -16,22 +16,9 @@ if [ "$CONFIG_FIREWALL" = "y" ]; then
         comment 'Protocol-specific masquerading support will be built as modules.'
         if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then	
           bool 'IP: ipautofw masquerading (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_IPAUTOFW
-          bool 'IP: MS PPTP masq support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_PPTP
+          bool 'IP: MS PPTP client masq support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_PPTP
           if [ "$CONFIG_IP_MASQUERADE_PPTP" = "y" ]; then	
-            bool 'IP: MS PPTP Call ID masq support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
             bool 'IP: MS PPTP masq debugging' DEBUG_IP_MASQUERADE_PPTP
-            if [ "$DEBUG_IP_MASQUERADE_PPTP" = "y" ]; then	
-              bool 'IP: MS PPTP masq verbose debugging' DEBUG_IP_MASQUERADE_PPTP_VERBOSE
-            fi
-          fi
-          bool 'IP: IPSEC ESP & ISAKMP masq support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_IPSEC
-          if [ "$CONFIG_IP_MASQUERADE_IPSEC" = "y" ]; then	
-            int 'IP: IPSEC masq table lifetime (minutes)' CONFIG_IP_MASQUERADE_IPSEC_EXPIRE 30
-            bool 'IP: Disable inbound ESP destination guessing' CONFIG_IP_MASQUERADE_IPSEC_NOGUESS
-            bool 'IP: IPSEC masq debugging' DEBUG_IP_MASQUERADE_IPSEC
-            if [ "$DEBUG_IP_MASQUERADE_IPSEC" = "y" ]; then	
-              bool 'IP: IPSEC masq verbose debugging' DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
-            fi
           fi
         fi
         bool 'IP: ICMP masquerading' CONFIG_IP_MASQUERADE_ICMP

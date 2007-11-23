@@ -153,10 +153,6 @@
 #include "NCR53c406a.h"
 #endif
 
-#ifdef CONFIG_SCSI_SYM53C416 
-#include "sym53c416.h" 
-#endif
-
 #ifdef CONFIG_SCSI_DC390T
 #include "dc390.h"
 #endif
@@ -191,26 +187,6 @@
 
 #ifdef CONFIG_SCSI_INITIO
 #include "ini9100u.h"
-#endif
-
-#ifdef CONFIG_SCSI_TC2550
-#include "tripace.h"
-#endif
-
-#ifdef CONFIG_SCSI_INIA100
-#include "inia100.h"
-#endif
-
-#ifdef CONFIG_SCSI_PCI2000
-#include "pci2000.h"
-#endif
-
-#ifdef CONFIG_SCSI_PCI2220I
-#include "pci2220i.h"
-#endif
-
-#ifdef CONFIG_SCSI_PSI240I
-#include "psi240i.h"
 #endif
 
 #ifdef CONFIG_SCSI_DEBUG
@@ -306,9 +282,6 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_NCR53C406A	/* 53C406A should come before QLOGIC */
     NCR53c406a,
 #endif
-#ifdef CONFIG_SCSI_SYM53C416 
-    SYM53C416, 
-#endif 
 #ifdef CONFIG_SCSI_QLOGIC_FAS
     QLOGICFAS,
 #endif
@@ -354,9 +327,6 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_MEGARAID
     MEGARAID,
 #endif
-#ifdef CONFIG_SCSI_INIA100
-    INIA100,
-#endif
 #ifdef CONFIG_SCSI_PPA
     PPA,
 #endif
@@ -371,15 +341,6 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_INITIO
     INI9100U,
-#endif
-#ifdef CONFIG_SCSI_PCI2000
-    PCI2000,
-#endif
-#ifdef CONFIG_SCSI_PCI2220I
-    PCI2220I,
-#endif
-#ifdef CONFIG_SCSI_PSI240I
-    PSI240I,
 #endif
 #ifdef CONFIG_BLK_DEV_IDESCSI
     IDESCSI,

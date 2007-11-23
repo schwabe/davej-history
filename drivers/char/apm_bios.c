@@ -1,9 +1,7 @@
 /* -*- linux-c -*-
  * APM BIOS driver for Linux
- * Copyright 1994-1999 Stephen Rothwell
- *                     (Stephen.Rothwell@canb.auug.org.au)
- * Development of this driver was funded by NEC Australia P/L
- *	and NEC Corporation
+ * Copyright 1994, 1995, 1996 Stephen Rothwell
+ *                           (Stephen.Rothwell@canb.auug.org.au)
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -14,6 +12,8 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
+ *
+ * $Id: apm_bios.c,v 0.22 1995/03/09 14:12:02 sfr Exp $
  *
  * October 1995, Rik Faith (faith@cs.unc.edu):
  *    Minor enhancements and updates (to the patch set) for 1.3.x

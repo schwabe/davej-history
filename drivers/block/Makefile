@@ -156,15 +156,7 @@ else
   M_OBJS += raid5.o
   endif
 endif
-endif
 
-ifeq ($(CONFIG_BLK_CPQ_DA),y)
-L_OBJS += cpqarray.o proc_array.o
-else 
-  ifeq ($(CONFIG_BLK_CPQ_DA),m)
-  M_OBJS += cpqarray.o
-  endif
 endif
-
 
 include $(TOPDIR)/Rules.make

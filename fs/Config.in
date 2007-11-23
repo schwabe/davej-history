@@ -19,8 +19,6 @@ if [ "$CONFIG_NLS" = "y" -o "$CONFIG_NLS" = "m" ]; then
   dep_tristate 'MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
   dep_tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
   dep_tristate 'VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
-  mainmenu_option next_comment
-  comment 'Select available code pages'
   dep_tristate 'Codepage 437 (United States, Canada)'	CONFIG_NLS_CODEPAGE_437 $CONFIG_NLS
   dep_tristate 'Codepage 737 (Greek)'			CONFIG_NLS_CODEPAGE_737 $CONFIG_NLS
   dep_tristate 'Codepage 775 (Baltic Rim)'		CONFIG_NLS_CODEPAGE_775 $CONFIG_NLS
@@ -46,9 +44,7 @@ if [ "$CONFIG_NLS" = "y" -o "$CONFIG_NLS" = "m" ]; then
   dep_tristate 'NLS ISO 8859-7 (Modern Greek)'    CONFIG_NLS_ISO8859_7    $CONFIG_NLS
   dep_tristate 'NLS ISO 8859-8 (Hebrew)'    CONFIG_NLS_ISO8859_8    $CONFIG_NLS
   dep_tristate 'NLS ISO 8859-9 (Latin 5; Turkey)'    CONFIG_NLS_ISO8859_9    $CONFIG_NLS
-  dep_tristate 'NLS ISO 8859-15 (Latin 9; Western European Languages with Euro)' CONFIG_NLS_ISO8859_15 $CONFIG_NLS
   dep_tristate 'NLS KOI8-R (Russian)'        CONFIG_NLS_KOI8_R       $CONFIG_NLS
-  endmenu
 fi
 
 bool '/proc filesystem support' CONFIG_PROC_FS
@@ -68,9 +64,6 @@ if [ "$CONFIG_INET" = "y" ]; then
 fi
 if [ "$CONFIG_IPX" != "n" ]; then
   tristate 'NCP filesystem support (to mount NetWare volumes)' CONFIG_NCP_FS
-  if [ "$CONFIG_NCP_FS" != "n" ]; then
-    source fs/ncpfs/Config.in
-  fi
 fi
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS

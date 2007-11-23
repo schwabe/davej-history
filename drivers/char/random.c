@@ -1004,17 +1004,7 @@ static int extract_entropy(struct random_bucket *r, char * buf,
 		buf += i;
 		add_timer_randomness(r, &extract_timer_state, nbytes);
 		if (to_user && need_resched)
-		{
-			if(current->signal & ~current->blocked)
-			{
-				if(nbytes==0)
-					ret = -ERESTARTSYS;
-				else
-					ret -= nbytes;
-				break;
-			}
 			schedule();
-		}
 	}
 
 	/* Wipe data from memory */

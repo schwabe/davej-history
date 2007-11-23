@@ -8,7 +8,6 @@
 
 #include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/file.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/stat.h>
@@ -60,57 +59,50 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
 	int on;
-	int retval = 0;
 
-	filp = fget(fd);
-	
-	if(filp==NULL)
+	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
 		return -EBADF;
-		
 	switch (cmd) {
 		case FIOCLEX:
 			FD_SET(fd, &current->files->close_on_exec);
-			break;
+			return 0;
 
 		case FIONCLEX:
 			FD_CLR(fd, &current->files->close_on_exec);
-			break;
+			return 0;
 
 		case FIONBIO:
-			retval = verify_area(VERIFY_READ, (unsigned int *)arg,
+			on = verify_area(VERIFY_READ, (unsigned int *)arg,
 				sizeof(unsigned int));
-			if(!retval)	
-			{
-				on = get_user((unsigned int *) arg);
-				if (on)
-					filp->f_flags |= O_NONBLOCK;
-				else
-					filp->f_flags &= ~O_NONBLOCK;
-			}
-			break;
+			if(on)	
+				return on;
+			on = get_user((unsigned int *) arg);
+			if (on)
+				filp->f_flags |= O_NONBLOCK;
+			else
+				filp->f_flags &= ~O_NONBLOCK;
+			return 0;
 
 		case FIOASYNC: /* O_SYNC is not yet implemented,
 				  but it's here for completeness. */
-			retval = verify_area(VERIFY_READ, (unsigned int *)arg,
+			on = verify_area(VERIFY_READ, (unsigned int *)arg,
 				sizeof(unsigned int));
-			if(!retval)	
-			{
-				on = get_user ((unsigned int *) arg);
-				if (on)
-					filp->f_flags |= O_SYNC;
-				else
-					filp->f_flags &= ~O_SYNC;
-			}
-			break;
+			if(on)	
+				return on;
+			on = get_user ((unsigned int *) arg);
+			if (on)
+				filp->f_flags |= O_SYNC;
+			else
+				filp->f_flags &= ~O_SYNC;
+			return 0;
 
 		default:
 			if (filp->f_inode && S_ISREG(filp->f_inode->i_mode))
-				retval = file_ioctl(filp, cmd, arg);
-			else if (filp->f_op && filp->f_op->ioctl)
-				retval = filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
-			else 
-				retval = -ENOTTY;
+				return file_ioctl(filp, cmd, arg);
+
+			if (filp->f_op && filp->f_op->ioctl)
+				return filp->f_op->ioctl(filp->f_inode, filp, cmd, arg);
+
+			return -ENOTTY;
 	}
-	fput(filp, filp->f_inode);
-	return retval;
 }
