@@ -32,7 +32,7 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 	int error;
 
 	if (set) {
-		error = verify_area(VERIFY_READ, set, sizeof(sigset_t));
+		error = verify_area(VERIFY_READ, set, sizeof (sigset_t));
 		if (error)
 			return error;
 		new_set = get_user(set) & _BLOCKABLE;
@@ -51,7 +51,7 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 		}
 	}
 	if (oset) {
-		error = verify_area(VERIFY_WRITE, oset, sizeof(sigset_t));
+		error = verify_area(VERIFY_WRITE, oset, sizeof (sigset_t));
 		if (error)
 			return error;
 		put_user(old_set, oset);
@@ -81,7 +81,7 @@ asmlinkage int sys_sigpending(sigset_t *set)
 {
 	int error;
 	/* fill in "set" with signals pending but blocked. */
-	error = verify_area(VERIFY_WRITE, set, sizeof(sigset_t));
+	error = verify_area(VERIFY_WRITE, set, sizeof (sigset_t));
 	if (!error)
 		put_user(current->blocked & current->signal, set);
 	return error;
@@ -112,11 +112,12 @@ static inline void check_pending(int signum)
 		return;
 	}
 	if (p->sa_handler == SIG_DFL) {
-		if (signum != SIGCONT && signum != SIGCHLD && signum != SIGWINCH)
+		if (signum != SIGCONT && signum != SIGCHLD &&
+		    signum != SIGURG && signum != SIGWINCH)
 			return;
 		current->signal &= ~_S(signum);
 		return;
-	}	
+	}
 }
 
 #ifndef __alpha__
@@ -128,16 +129,16 @@ asmlinkage unsigned long sys_signal(int signum, __sighandler_t handler)
 	int err;
 	struct sigaction tmp;
 
-	if (signum<1 || signum>32)
+	if (signum < 1 || signum > 32)
 		return -EINVAL;
-	if (signum==SIGKILL || signum==SIGSTOP)
+	if (signum == SIGKILL || signum == SIGSTOP)
 		return -EINVAL;
 	if (handler != SIG_DFL && handler != SIG_IGN) {
 		err = verify_area(VERIFY_READ, handler, 1);
 		if (err)
 			return err;
 	}
-	memset(&tmp, 0, sizeof(tmp));
+	memset(&tmp, 0, sizeof (tmp));
 	tmp.sa_handler = handler;
 	tmp.sa_flags = SA_ONESHOT | SA_NOMASK;
 	handler = current->sig->action[signum-1].sa_handler;
@@ -152,16 +153,16 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 {
 	struct sigaction new_sa, *p;
 
-	if (signum<1 || signum>32)
+	if (signum < 1 || signum > 32)
 		return -EINVAL;
 	p = signum - 1 + current->sig->action;
 	if (action) {
-		int err = verify_area(VERIFY_READ, action, sizeof(*action));
+		int err = verify_area(VERIFY_READ, action, sizeof (*action));
 		if (err)
 			return err;
-		if (signum==SIGKILL || signum==SIGSTOP)
+		if (signum == SIGKILL || signum == SIGSTOP)
 			return -EINVAL;
-		memcpy_fromfs(&new_sa, action, sizeof(struct sigaction));
+		memcpy_fromfs(&new_sa, action, sizeof (struct sigaction));
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
 			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
 			if (err)
@@ -169,10 +170,10 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 		}
 	}
 	if (oldaction) {
-		int err = verify_area(VERIFY_WRITE, oldaction, sizeof(*oldaction));
+		int err = verify_area(VERIFY_WRITE, oldaction, sizeof (*oldaction));
 		if (err)
 			return err;
-		memcpy_tofs(oldaction, p, sizeof(struct sigaction));
+		memcpy_tofs(oldaction, p, sizeof (struct sigaction));
 	}
 	if (action) {
 		*p = new_sa;

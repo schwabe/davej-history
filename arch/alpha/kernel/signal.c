@@ -320,7 +320,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 			if (current->pid == 1)
 				continue;
 			switch (signr) {
-			case SIGCONT: case SIGCHLD: case SIGWINCH:
+			case SIGCONT: case SIGCHLD: case SIGWINCH: case SIGURG:
 				continue;
 
 			case SIGTSTP: case SIGTTIN: case SIGTTOU:
