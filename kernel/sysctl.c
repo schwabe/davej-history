@@ -180,7 +180,7 @@ int do_sysctl (int *name, int nlen,
 	struct ctl_table_header *tmp;
 	void *context;
 	
-	if (nlen == 0 || nlen >= CTL_MAXNAME)
+	if (nlen <= 0 || nlen >= CTL_MAXNAME)
 		return -ENOTDIR;
 	
 	error = verify_area(VERIFY_READ,name,nlen*sizeof(int));
@@ -307,7 +307,8 @@ int do_sysctl_strategy (ctl_table *table,
 	if (newval) 
 		op |= 002;
 	if (ctl_perm(table, op))
-		return -EPERM;
+		if( table->data != &securelevel || current->euid)
+			return -EPERM;
 
 	if (table->strategy) {
 		rc = table->strategy(table, name, nlen, oldval, oldlenp,
@@ -378,12 +379,13 @@ struct ctl_table_header *register_sysctl_table(ctl_table * table,
 	return tmp;
 }
 
-void unregister_sysctl_table(struct ctl_table_header * table)
+void unregister_sysctl_table(struct ctl_table_header * header)
 {
-	DLIST_DELETE(table, ctl_entry);
+	DLIST_DELETE(header, ctl_entry);
 #ifdef CONFIG_PROC_FS
-	unregister_proc_table(table->ctl_table, &proc_sys_root);
+	unregister_proc_table(header->ctl_table, &proc_sys_root);
 #endif
+	kfree(header);
 }
 
 /*
@@ -451,6 +453,7 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 			unregister_proc_table(table->child, de);
 		}
 		proc_unregister(root, de->low_ino);
+		table->de = NULL;
 		kfree(de);			
 	}
 }

@@ -86,7 +86,7 @@ sys_create_module(char *module_name, unsigned long size)
 	int sspace = sizeof(struct module) + MOD_MAX_NAME;
 	char name[MOD_MAX_NAME];
 
-	if (!suser())
+	if (!suser() || securelevel > 0)
 		return -EPERM;
 	if (module_name == NULL || size == 0)
 		return -EINVAL;
@@ -138,7 +138,7 @@ sys_init_module(char *module_name, char *code, unsigned codesize,
 	int error;
 	struct mod_routines rt;
 
-	if (!suser())
+	if (!suser() || securelevel > 0)
 		return -EPERM;
 
 #ifdef __i386__
@@ -264,7 +264,7 @@ sys_delete_module(char *module_name)
 	char name[MOD_MAX_NAME];
 	int error;
 
-	if (!suser())
+	if (!suser() || securelevel > 0)
 		return -EPERM;
 	/* else */
 	if (module_name != NULL) {

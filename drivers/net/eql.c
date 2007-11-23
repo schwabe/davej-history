@@ -375,7 +375,6 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 	equalizer_t *eql = (equalizer_t *) dev->priv;
 	struct device *slave_dev = 0;
 	slave_t *slave;
-	struct sk_buff *skb2;
 
 	if (skb == NULL)
 		return 0;

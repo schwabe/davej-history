@@ -333,6 +333,14 @@ static int memory_open(struct inode * inode, struct file * filp)
 {
 	switch (MINOR(inode->i_rdev)) {
 		case 0:
+		case 1:
+		case 2:
+		case 4:
+			if(securelevel>0)
+				return -EPERM;
+	}
+	switch (MINOR(inode->i_rdev)) {
+		case 0:
 			filp->f_op = &ram_fops;
 			break;
 		case 1:

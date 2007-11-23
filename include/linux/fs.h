@@ -304,7 +304,7 @@ struct inode {
 	struct inode *i_hash_next, *i_hash_prev;
 	struct inode *i_bound_to, *i_bound_by;
 	struct inode *i_mount;
-	unsigned short i_count;
+	unsigned long i_count;	/* needs to be > (address_space * tasks)>>pagebits */
 	unsigned short i_flags;
 	unsigned char i_lock;
 	unsigned char i_dirt;

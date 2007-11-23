@@ -63,7 +63,7 @@ void sysv_free_inode(struct inode * inode)
 		return;
 	}
 	if (inode->i_count != 1) {
-		printk("sysv_free_inode: inode has count=%d\n", inode->i_count);
+		printk("sysv_free_inode: inode has count=%ld\n", inode->i_count);
 		return;
 	}
 	if (inode->i_nlink) {

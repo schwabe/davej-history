@@ -225,7 +225,7 @@ struct device *dev_get(const char *name)
 
 extern __inline__ void dev_load(const char *name)
 {
-	if(!dev_get(name)) {
+	if(!dev_get(name) && suser()) {
 #ifdef CONFIG_NET_ALIAS
 		const char *sptr;
  
@@ -1113,6 +1113,8 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			{
 				int old_flags = dev->flags;
 				
+				if(securelevel>0)
+					ifr.ifr_flags&=~IFF_PROMISC;
 				/*
 				 *	We are not allowed to potentially close/unload
 				 *	a device until we get this lock.
@@ -1191,6 +1193,8 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			{
 				if(dev->set_mac_address==NULL)
 					return -EOPNOTSUPP;
+				if(securelevel>0)
+					return -EPERM;
 				ret=dev->set_mac_address(dev,&ifr.ifr_addr);
 			}
 			else
@@ -1336,6 +1340,8 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 		case SIOCSIFHWADDR:
 			if(dev->set_mac_address==NULL)
 				return -EOPNOTSUPP;
+			if(securelevel > 0)
+				return -EPERM;
 			if(ifr.ifr_hwaddr.sa_family!=dev->type)
 				return -EINVAL;
 			ret=dev->set_mac_address(dev,&ifr.ifr_hwaddr);

@@ -15,6 +15,7 @@
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
 
+#include <asm/system.h>
 #include <asm/segment.h>
 
 #define _S(nr) (1<<((nr)-1))
@@ -80,13 +81,40 @@ static void restore_i387(struct _fpstate *buf)
 asmlinkage int sys_sigreturn(unsigned long __unused)
 {
 #define COPY(x) regs->x = context.x
+#define CHECK_DATA(x, mask, value) \
+__asm__("larw %0,%%ax\n\t" \
+	"jnz asm_badframe\n\t" \
+	"andl $" mask ",%%eax\n\t" \
+	"cmpl $" value ",%%eax\n\t" \
+	"jne asm_badframe" \
+	: \
+	: "g" (context.x) \
+	: "ax", "cc");
+#define CHECK_CODE(x, y) \
+__asm__("larw %0,%%ax\n\t" \
+	"jnz asm_badframe\n\t" \
+	"andl $0x9800,%%eax\n\t" \
+	"cmpl $0x9800,%%eax\n\t" /* Allow present code segments only */ \
+	"jne asm_badframe\n\t" \
+	"lsll %0,%%eax\n\t" \
+	"cmp %1,%%eax\n\t" /* Check context.eip against the segment limit */ \
+	"jb asm_badframe" \
+	: \
+	: "g" (context.x), "g" (context.y) \
+	: "ax", "cc");
 #define COPY_SEG(x) \
+CHECK_DATA(x, "0x9800", "0x9000") /* Allow present data segments only */ \
 if (   (context.x & 0xfffc)     /* not a NULL selectors */ \
     && (context.x & 0x4) != 0x4 /* not a LDT selector */ \
     && (context.x & 3) != 3     /* not a RPL3 GDT selector */ \
    ) goto badframe; COPY(x);
-#define COPY_SEG_STRICT(x) \
+#define COPY_STACK(x) \
+CHECK_DATA(x, "0x9A00", "0x9200") /* Stack segment should not be read-only */ \
 if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
+#define COPY_CODE(x, y) \
+CHECK_CODE(x, y) \
+if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; \
+COPY(x); COPY(y);
 	struct sigcontext_struct context;
 	struct pt_regs * regs;
 
@@ -99,9 +127,8 @@ if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
 	COPY_SEG(es);
 	COPY_SEG(fs);
 	COPY_SEG(gs);
-	COPY_SEG_STRICT(ss);
-	COPY_SEG_STRICT(cs);
-	COPY(eip);
+	COPY_STACK(ss);
+	COPY_CODE(cs, eip);
 	COPY(ecx); COPY(edx);
 	COPY(ebx);
 	COPY(esp); COPY(ebp);
@@ -117,6 +144,11 @@ if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
 	}
 	return context.eax;
 badframe:
+	do_exit(SIGSEGV);
+}
+
+void asm_badframe(void)
+{
 	do_exit(SIGSEGV);
 }
 

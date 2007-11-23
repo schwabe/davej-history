@@ -1723,7 +1723,7 @@ uninteresting_ack:
 		if(sk->ip_xmit_timeout==TIME_KEEPOPEN)
 			tcp_reset_xmit_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 	}
-	return 1;
+	return 0;
 }
 
 

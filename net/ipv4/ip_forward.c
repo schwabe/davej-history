@@ -323,7 +323,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #ifdef CONFIG_IP_MASQUERADE
 		__u32	premasq_saddr = iph->saddr;
 		__u16	premasq_sport = 0;
-		__u16	*portptr;
+		__u16	*portptr=NULL;
 		long	premasq_len_diff = skb->len;
 
 		if (iph->protocol==IPPROTO_UDP ||

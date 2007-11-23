@@ -97,7 +97,9 @@ int unregister_cdrom(int major, char *name)
 
 /* We need our own cdrom error types! This is a temporary solution. */
 
+#ifndef ENOMEDIUM
 #define ENOMEDIUM EAGAIN				/* no medium in removable device */
+#endif
 
 /* We use the open-option O_NONBLOCK to indicate that the
  * purpose of opening is only for subsequent ioctl() calls; no device

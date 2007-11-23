@@ -905,7 +905,7 @@ void rt_free(struct rtable * rt)
 		restore_flags(flags);
 		if (hh && atomic_dec_and_test(&hh->hh_refcnt))
 			kfree_s(hh, sizeof(struct hh_cache));
-		kfree_s(rt, sizeof(struct rt_table));
+		kfree_s(rt, sizeof(struct rtable));
 		return;
 	}
 	rt->rt_next = rt_free_queue;
@@ -943,7 +943,7 @@ static __inline__ void rt_kick_free_queue(void)
 			sti();
 			if (hh && atomic_dec_and_test(&hh->hh_refcnt))
 				kfree_s(hh, sizeof(struct hh_cache));
-			kfree_s(rt, sizeof(struct rt_table));
+			kfree_s(rt, sizeof(struct rtable));
 #if RT_CACHE_DEBUG >= 2
 			printk("rt_kick_free_queue: %08x is free\n", daddr);
 #endif

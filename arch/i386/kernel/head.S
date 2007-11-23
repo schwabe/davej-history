@@ -109,7 +109,71 @@ checkCPUtype:
  * apply at our cpl of 0 and the stack ought to be aligned already, and
  * we don't need to preserve eflags.
  */
-	movl $3, SYMBOL_NAME(x86)
+	/*
+	 * A Cyrix/IBM 6x86(L) preserves flags after dividing 5 by 2
+	 * (and it _must_ be 5 divided by 2) while other CPUs change
+	 * them in undefined ways. We need to know this since we may
+	 * need to enable the CPUID instruction at least.
+	 */
+	xor %ax,%ax
+	sahf
+	movb $5,%ax
+	movb $2,%bx
+	div %bl
+	lahf
+	cmpb $2,%ah
+	jne ncyrix
+
+	/*
+	 * It behaves like a Cyrix/IBM 6x86(L) so put "Cyrix" in the 
+	 * vendor id field. It may be overwritten later with the 
+	 * real thing if CPUID works.
+	 */
+	movl $0x69727943,SYMBOL_NAME(x86_vendor_id)	# low 4 chars
+	movl $0x00000078,SYMBOL_NAME(x86_vendor_id)+4	# next 4 chars
+
+	/*
+	 * N.B. The pattern of accesses to 0x22 and 0x23 is *essential*
+	 *      so do not try to "optimize" it! For the same reason we
+	 *	do all this with interrupts off.
+	 */
+#define setCx86(reg, val) \
+	movb reg,%ax;	\
+	outb %ax,$0x22;	\
+	movb val,%ax;	\
+	outb %ax,$0x23
+
+#define getCx86(reg) \
+	movb reg,%ax;	\
+	outb %ax,$0x22;	\
+	inb $0x23,%ax
+
+	cli
+	getCx86($0xc3)		# get CCR3
+	movb %ax,%cx		# Save old value
+	movb %ax,%bx
+	andb $0x0f,%bx		# Enable access to all config registers
+	orb $0x10,%bx		# by setting bit 4
+	setCx86($0xc3,%bx)
+
+	getCx86($0xe8)		# now we can get CCR4
+	orb $0x80,%ax		# and set bit 7 (CPUIDEN)
+	movb %ax,%bx		# to enable CPUID execution
+	setCx86($0xe8,%bx)
+
+        getCx86($0xfe)          # DIR0 : let's check this is a 6x86(L)
+        andb $0xf0,%ax		# should be 3xh
+	cmpb $0x30,%ax		# 
+	jne n6x86
+        getCx86($0xe9)          # CCR5 : we reset the SLOP bit
+        andb $0xfd,%ax		# so that udelay calculation
+        movb %ax,%bx		# is correct on 6x86(L) CPUs
+        setCx86($0xe9,%bx)
+
+n6x86:	setCx86($0xc3,%cx)	# Restore old CCR3
+	sti
+
+ncyrix:	movl $3, SYMBOL_NAME(x86)
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
 	movl %eax,%ecx		# save original EFLAGS
@@ -146,8 +210,20 @@ isnew:	pushl %ecx		# restore original EFLAGS
 	andb $0x0f, %cl		# mask mask revision
 	movb %cl,SYMBOL_NAME(x86_mask)
 	movl %edx,SYMBOL_NAME(x86_capability)
+
+	xor %ax,%ax		# test again for Cyrix CPU
+	sahf
+	movb $5,%ax
+	movb $2,%bx
+	div %bl
+	lahf
+	cmpb $2,%ah
+	jne ncyrx2		# skip if not Cyrix CPU
+        getCx86($0xff)          # DIR1 : let's check the stepping
+	movb %al,SYMBOL_NAME(x86_mask)
+
 	/* get vendor info */
-	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
+ncyrx2:	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
 	.byte 0x0f, 0xa2		# CPUID
 	movl %ebx,SYMBOL_NAME(x86_vendor_id)	# lo 4 chars
 	movl %edx,SYMBOL_NAME(x86_vendor_id)+4	# next 4 chars

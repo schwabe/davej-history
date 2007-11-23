@@ -740,16 +740,8 @@ void tcp_err(int type, int code, unsigned char *header, __u32 daddr,
 
 	if (type == ICMP_SOURCE_QUENCH)
 	{
-		/*
-		 * FIXME:
-		 * Follow BSD for now and just reduce cong_window to 1 again.
-		 * It is possible that we just want to reduce the
-		 * window by 1/2, or that we want to reduce ssthresh by 1/2
-		 * here as well.
-		 */
-		sk->cong_window = 1;
-		sk->cong_count = 0;
-		sk->high_seq = sk->sent_seq;
+		/* Current practice says these frames are bad, plus the drops
+		   will account right anyway. If we act on this we stall doubly */
 		return;
 	}
 

@@ -47,6 +47,11 @@ int have_cpuid = 0;             /* set if CPUID instruction works */
 
 char x86_vendor_id[13] = "unknown";
 
+unsigned char Cx86_step = 0;
+static const char *Cx86_type[] = {
+	"unknown", "1.3", "1.4", "2.4", "2.5", "2.6", "2.7 or 3.7", "4.2"
+	};
+
 char ignore_irq13 = 0;		/* set if exception 16 works */
 char wp_works_ok = -1;		/* set if paging hardware honours WP */ 
 char hlt_works_ok = 1;		/* set if the "hlt" instruction works */
@@ -226,6 +231,50 @@ static const char * i586model(unsigned int nr)
 	return NULL;
 }
 
+static const char * Cx86model(void)
+{
+	unsigned char nr6x86 = 0;
+	static const char *model[] = {
+		"unknown", "6x86", "6x86L", "6x86MX", "6x86MXi"
+	};
+	switch (x86) {
+		case 5:
+			nr6x86 = ((x86_capability & (1 << 8)) ? 2 : 1); /* cx8 flag only on 6x86L */
+			break;
+		case 6:
+			nr6x86 = 3;
+			break;
+		default:
+			nr6x86 = 0;
+	}
+	switch (x86_mask) {
+		case 0x03:
+			Cx86_step =  1;	/* 6x86MX Rev 1.3 */
+			break;
+		case 0x04:
+			Cx86_step =  2;	/* 6x86MX Rev 1.4 */
+			break;
+		case 0x14:
+			Cx86_step =  3;	/* 6x86 Rev 2.4 */
+			break;
+		case 0x15:
+			Cx86_step =  4;	/* 6x86 Rev 2.5 */
+			break;
+		case 0x16:
+			Cx86_step =  5;	/* 6x86 Rev 2.6 */
+			break;
+		case 0x17:
+			Cx86_step =  6;	/* 6x86 Rev 2.7 or 3.7 */
+			break;
+		case 0x22:
+			Cx86_step =  7;	/* 6x86L Rev 4.2 */
+			break;
+		default:
+			Cx86_step = 0;
+	}
+	return model[nr6x86];
+}
+
 static const char * i686model(unsigned int nr)
 {
 	static const char *model[] = {
@@ -240,16 +289,20 @@ static const char * getmodel(int x86, int model)
 {
         const char *p = NULL;
         static char nbuf[12];
-	switch (x86) {
-		case 4:
-			p = i486model(model);
-			break;
-		case 5:
-			p = i586model(model);
-			break;
-		case 6:
-			p = i686model(model);
-			break;
+	if (strncmp(x86_vendor_id, "Cyrix", 5) == 0)
+		p = Cx86model();
+	else {
+		switch (x86) {
+			case 4:
+				p = i486model(model);
+				break;
+			case 5:
+				p = i586model(model);
+				break;
+			case 6:
+				p = i686model(model);
+				break;
+		}
 	}
         if (p)
                 return p;
@@ -297,9 +350,16 @@ int get_cpuinfo(char * buffer)
                                        CD(x86_vendor_id));
         
                         if (CD(x86_mask))
-                                len += sprintf(buffer+len,
-                                               "stepping\t: %d\n",
-                                               CD(x86_mask));
+                                if (strncmp(x86_vendor_id, "Cyrix", 5) != 0) {
+                                	len += sprintf(buffer+len,
+                                        	       "stepping\t: %d\n",
+                                             	       CD(x86_mask));
+                                }
+                                else { 			/* we have a Cyrix */
+                                	len += sprintf(buffer+len,
+                                        	       "stepping\t: %s\n",
+                                             	       Cx86_type[Cx86_step]);
+                                }
                         else
                                 len += sprintf(buffer+len, 
                                                "stepping\t: unknown\n");

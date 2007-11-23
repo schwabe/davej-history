@@ -267,7 +267,7 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 
 		/* Tack on our header */
 		new_skb->h.iph = (struct iphdr *) skb_push(new_skb, tunnel_hlen);
-		new_skb->mac.raw = new_skb->ip_hdr;
+		new_skb->mac.raw = (void *)new_skb->ip_hdr;
 
 		/* Free the old packet, we no longer need it */
 		dev_kfree_skb(skb, FREE_WRITE);

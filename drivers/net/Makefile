@@ -148,7 +148,7 @@ ifeq ($(CONFIG_ULTRA32),y)
 L_OBJS += smc-ultra32.o
 CONFIG_8390_BUILTIN = y
 else
-  ifeq ($(CONFIG_ULTRA),m)
+  ifeq ($(CONFIG_ULTRA32),m)
   CONFIG_8390_MODULE = y
   M_OBJS += smc-ultra32.o
   endif
@@ -530,6 +530,30 @@ L_OBJS += dgrs.o
 else
   ifeq ($(CONFIG_DGRS),m)
   M_OBJS += dgrs.o
+  endif
+endif
+
+ifeq ($(CONFIG_YELLOWFIN),y)
+L_OBJS += yellowfin.o
+else
+  ifeq ($(CONFIG_YELLOWFIN),m)
+  M_OBJS += yellowfin.o
+  endif
+endif
+
+ifeq ($(CONFIG_SMC_EPIC),y)
+L_OBJS += epic100.o
+else
+  ifeq ($(CONFIG_SMC_EPIC),m)
+  M_OBJS += epic100.o
+  endif
+endif
+
+ifeq ($(CONFIG_RTL8139),y)
+L_OBJS += rtl8139.o
+else
+  ifeq ($(CONFIG_RTL8139),m)
+  M_OBJS += rtl8139.o
   endif
 endif
 

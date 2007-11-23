@@ -332,7 +332,7 @@ static int eth16i_close(struct device *dev);
 static int eth16i_tx(struct sk_buff *skb, struct device *dev);
 static void eth16i_rx(struct device *dev);
 static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void eth16i_multicast(struct device *dev, int num_addrs, void *addrs); 
+static void eth16i_multicast(struct device *dev); 
 static void eth16i_select_regbank(unsigned char regbank, short ioaddr);
 static void eth16i_initialize(struct device *dev);
 static struct enet_statistics *eth16i_get_stats(struct device *dev);
@@ -1152,7 +1152,7 @@ static void eth16i_interrupt(int irq, void *dev_id, struct pt_regs *regs)
   return;
 }
 
-static void eth16i_multicast(struct device *dev, int num_addrs, void *addrs)
+static void eth16i_multicast(struct device *dev)
 {
   short ioaddr = dev->base_addr;
   

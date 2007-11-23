@@ -80,7 +80,9 @@ extern int atarilance_probe(struct device *);
 extern int a2065_probe(struct device *);
 extern int ariadne_probe(struct device *);
 extern int hydra_probe(struct device *);
-
+extern int yellowfin_probe(struct device *);
+extern int epic100_probe(struct device *);
+extern int rtl8139_probe(struct device *);
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
 extern int de600_probe(struct device *);
@@ -95,6 +97,15 @@ ethif_probe(struct device *dev)
 	return 1;		/* ENXIO */
 
     if (1
+#ifdef CONFIG_SMC_EPIC
+	&& epic100_probe(dev)
+#endif
+#ifdef CONFIG_YELLOWFIN
+	&& yellowfin_probe(dev)
+#endif
+#ifdef CONFIG_RTL8139
+	&& rtl8139_probe(dev)
+#endif
 #ifdef CONFIG_DGRS
 	&& dgrs_probe(dev)
 #endif

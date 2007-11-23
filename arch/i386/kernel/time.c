@@ -475,29 +475,30 @@ void time_init(void)
 				/* Don't use them if a suspend/resume could
                                    corrupt the timer value.  This problem
                                    needs more debugging. */
-	if (x86_capability & 16) {
-		do_gettimeoffset = do_fast_gettimeoffset;
+	if (x86_capability & 16)
+		if (strncmp(x86_vendor_id, "Cyrix", 5) != 0) {
+			do_gettimeoffset = do_fast_gettimeoffset;
 
-		if( strcmp( x86_vendor_id, "AuthenticAMD" ) == 0 ) {
-			if( x86 == 5 ) {
-				if( x86_model == 0 ) {
-					/* turn on cycle counters during power down */
-					__asm__ __volatile__ (" movl $0x83, %%ecx \n \
-								.byte 0x0f,0x32 \n \
-								orl $1,%%eax \n \
-								.byte 0x0f,0x30 \n " 
-                                                                : : : "ax", "cx", "dx" );
-					udelay(500);
+			if( strcmp( x86_vendor_id, "AuthenticAMD" ) == 0 ) {
+				if( x86 == 5 ) {
+					if( x86_model == 0 ) {
+						/* turn on cycle counters during power down */
+						__asm__ __volatile__ (" movl $0x83, %%ecx \n \
+									.byte 0x0f,0x32 \n \
+									orl $1,%%eax \n \
+									.byte 0x0f,0x30 \n " 
+                                                                	: : : "ax", "cx", "dx" );
+						udelay(500);
+					}
 				}
-			}
-		}
+			}	
 
-		/* read Pentium cycle counter */
-		__asm__(".byte 0x0f,0x31"
-			:"=a" (init_timer_cc.low),
-			 "=d" (init_timer_cc.high));
-		irq0.handler = pentium_timer_interrupt;
-	}
+			/* read Pentium cycle counter */
+			__asm__(".byte 0x0f,0x31"
+				:"=a" (init_timer_cc.low),
+			 	"=d" (init_timer_cc.high));
+			irq0.handler = pentium_timer_interrupt;
+		}
 #endif
 	setup_x86_irq(0, &irq0);
 }

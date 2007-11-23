@@ -663,7 +663,8 @@ asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
 	int i;
 	int * groups;
 
-	if (gidsetsize < 0)
+	/* Avoid an integer overflow on systems with 32 bit gid_t (Alpha) */
+	if (gidsetsize & ~0x3FFFFFFF)
 		return -EINVAL;
 	groups = current->groups;
 	for (i = 0 ; i < NGROUPS ; i++) {

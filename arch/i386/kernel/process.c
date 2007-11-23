@@ -421,8 +421,9 @@ void flush_thread(void)
 	int i;
 
 	if (current->ldt) {
-		free_page((unsigned long) current->ldt);
+		void * ldt = current->ldt;
 		current->ldt = NULL;
+		vfree(ldt);
 		for (i=1 ; i<NR_TASKS ; i++) {
 			if (task[i] == current)  {
 				set_ldt_desc(gdt+(i<<1)+

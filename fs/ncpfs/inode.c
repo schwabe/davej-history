@@ -145,7 +145,7 @@ ncp_put_inode(struct inode *inode)
 	lock_super(sb);
 
 	if (inode->i_count > 1) {
-printk("ncp_put_inode: inode in use device %s, inode %ld, count=%d\n", 
+printk("ncp_put_inode: inode in use device %s, inode %ld, count=%ld\n", 
 kdevname(inode->i_dev), inode->i_ino, inode->i_count);
 		goto unlock;
 	}

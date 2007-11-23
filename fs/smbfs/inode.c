@@ -99,7 +99,7 @@ smb_put_inode(struct inode *inode)
 	__u32 mtime = inode->i_mtime;
 
 	if (inode->i_count > 1) {
-		printk("smb_put_inode: in use device %s, inode %ld count=%d\n",
+		printk("smb_put_inode: in use device %s, inode %ld count=%ld\n",
 			kdevname(inode->i_dev), inode->i_ino, inode->i_count);
 		return;
 	}

@@ -698,7 +698,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 	if(mtu<8)
 	{
 		/* It's wrong but it's better than nothing */
-		icmp_send(skb,ICMP_DEST_UNREACH,ICMP_FRAG_NEEDED,dev->mtu, dev);
+		icmp_send(skb,ICMP_DEST_UNREACH,ICMP_FRAG_NEEDED,htons(dev->mtu), dev);
 		ip_statistics.IpFragFails++;
 		return;
 	}

@@ -196,7 +196,7 @@ void ext2_free_inode (struct inode * inode)
 		return;
 	}
 	if (inode->i_count > 1) {
-		printk ("ext2_free_inode: inode has count=%d\n",
+		printk ("ext2_free_inode: inode has count=%ld\n",
 			inode->i_count);
 		return;
 	}

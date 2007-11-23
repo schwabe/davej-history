@@ -118,7 +118,9 @@ bad_clone_list[] = {
 static unsigned char pci_irq_line = 0;
 
 int ne_probe(struct device *dev);
+#ifdef CONFIG_PCI
 static int ne_probe_pci(struct device *dev);
+#endif
 static int ne_probe1(struct device *dev, int ioaddr);
 
 static int ne_open(struct device *dev);

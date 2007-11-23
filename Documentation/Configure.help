@@ -976,16 +976,12 @@ CONFIG_IP_MASQUERADE
   IP always defragment.
   If you want this, say Y.
 
-IP: ipautofw masquerade support
-CONFIG_IP_MASQUERADE_IPAUTOFW (Experimental)
-  ipautofw is a program by Richard Lynch allowing additional
-  support for masquerading protocols which do not (as yet)
-  have additional protocol helpers.  
-  Information and source for ipautofw is available from
-  ftp://ftp.netis.com/pub/members/rlynch/
-  The ipautofw code is still under development and so is currently
-  marked EXPERIMENTAL.
-  If you want this, say Y.
+IP: ipautofw masquerading (EXPERIMENTAL)
+CONFIG_IP_MASQUERADE_IPAUTOFW
+  Richard Lynch's ipautofw allows masquerading to work with protocols
+  which do not (as yet) have specific protocol helpers.  Its source, and
+  other information, is available at
+  ftp://ftp.netis.com/pub/members/rlynch/. 
 
 IP: ICMP masquerading
 CONFIG_IP_MASQUERADE_ICMP
