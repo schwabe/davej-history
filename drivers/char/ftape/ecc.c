@@ -33,8 +33,7 @@
  */
 
 #include <linux/ftape.h>
-#include <stdio.h>
-#include <sys/errno.h>
+#include <asm/errno.h>
 
 #include "tracing.h"
 #include "ecc.h"

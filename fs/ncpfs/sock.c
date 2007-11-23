@@ -608,7 +608,7 @@ ncp_request(struct ncp_server *server, int function)
 	h->sequence  = server->sequence;
 	h->conn_low  = (server->connection) & 0xff;
 	h->conn_high = ((server->connection) & 0xff00) >> 8;
-	h->task      = (current->pid) & 0xff;
+	h->task      = 2;
 	h->function  = function;
 
 	if ((result = ncp_do_request(server, request_size + sizeof(*h))) < 0)
@@ -644,7 +644,7 @@ ncp_connect(struct ncp_server *server)
 	h->sequence  = server->sequence;
 	h->conn_low  = 0xff;
 	h->conn_high = 0xff;
-	h->task      = (current->pid) & 0xff;
+	h->task      = 2;
 	h->function  = 0;
 
 	if ((result = ncp_do_request(server, sizeof(*h))) < 0)
@@ -669,7 +669,7 @@ ncp_disconnect(struct ncp_server *server)
 	h->sequence  = server->sequence;
 	h->conn_low  = (server->connection) & 0xff;
 	h->conn_high = ((server->connection) & 0xff00) >> 8;
-	h->task      = (current->pid) & 0xff;
+	h->task      = 2;
 	h->function  = 0;
 
 	return ncp_do_request(server, sizeof(*h));

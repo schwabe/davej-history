@@ -1439,10 +1439,13 @@ int vfat_rename(struct inode *old_dir,const char *old_name,int old_len,
 			PRINTK(("vfat_rename 8\n"));
 			if (res < 0) goto rename_done;
 		} else {
-			PRINTK(("vfat_rename 9\n"));
-			res = vfat_unlinkx(new_dir,new_name,new_len,1);
-			PRINTK(("vfat_rename 10\n"));
-			if (res < 0) goto rename_done;
+			/* Is this the same file, different case? */
+			if (new_inode != old_inode) {
+				PRINTK(("vfat_rename 9\n"));
+				res = vfat_unlinkx(new_dir,new_name,new_len,1);
+				PRINTK(("vfat_rename 10\n"));
+				if (res < 0) goto rename_done;
+			}
 		}
 	}
 
