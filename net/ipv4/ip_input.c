@@ -302,8 +302,10 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 */
 
 #ifdef CONFIG_NET_ALIAS
-	if (iph->daddr != skb->dev->pa_addr && net_alias_has(skb->dev)) 
-		skb->dev = dev = net_alias_dev_rcv_sel32(skb->dev, AF_INET, iph->saddr, iph->daddr);
+	if (iph->daddr != skb->dev->pa_addr && net_alias_has(skb->dev)) {
+		if (ip_chk_addr(iph->daddr) == IS_MYADDR)
+			skb->dev = dev = net_alias_dev_rcv_sel32(skb->dev, AF_INET, iph->saddr, iph->daddr);
+	}
 #endif
 
 	if (iph->ihl > 5) 

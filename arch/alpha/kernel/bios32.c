@@ -24,6 +24,7 @@
  * within the United States, $35 abroad.
  */
 #include <linux/config.h>
+#include <linux/kernel.h>
 
 #if 0
 # define DBG_DEVS(args)		printk args
@@ -48,7 +49,6 @@ asmlinkage int sys_pciconfig_write()
 
 #else /* CONFIG_PCI */
 
-#include <linux/kernel.h>
 #include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/malloc.h>

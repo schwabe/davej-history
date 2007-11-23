@@ -1,5 +1,14 @@
+/* #define VERBOSE_IDE_CD_ERRORS 1 */
 /*
  * linux/drivers/block/ide-cd.c
+ * ATAPI cd-rom driver.  To be used with ide.c.
+ * See Documentation/cdrom/ide-cd for usage information.
+ *
+ * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
+ * Copyright (C) 1996, 1997  Erik Andersen <andersee@debian.org>
+ *
+ * May be copied or modified under the terms of the GNU General Public License
+ * see linux/COPYING for more information.
  *
  * 1.00  Oct 31, 1994 -- Initial version.
  * 1.01  Nov  2, 1994 -- Fixed problem with starting request in
@@ -109,15 +118,30 @@
  * 3.17  Sep 17, 1996 -- Tweak audio reads for some drives.
  *                       Start changing CDROMLOADFROMSLOT to CDROM_SELECT_DISC.
  *
+ * 3.19  Nov 5, 1996  -- New ide-cd maintainer:
+ *                                 Erik B. Andersen <andersee@debian.org>
+ * 3.20  Jan 13,1997  -- Bug Fixes:
+ *                        Fix errors on CDROMSTOP (If you have a "Dolphin",
+ *                          you must define IHAVEADOLPHIN)
+ *                        Added identifier so new Sanyo CD-changer works
+ *                        Better detection if door locking isn't supported 
+ *                         
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
  *
- * ATAPI cd-rom driver.  To be used with ide.c.
- * See Documentation/cdrom/ide-cd for usage information.
+ * ALSO NOTE:
  *
- * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
- * May be copied or modified under the terms of the GNU General Public License
- * (../../COPYING).
+ *  The ide cdrom driver has undergone extensive changes for the
+ *       latest development kernel.  If you wish to add new features to
+ *       this driver, make your changes to the latest version in the
+ *       development kernel.  Only Bug fixes will be accepted for this
+ *       version.
+ *
+ *       For those wishing to work on this driver, please be sure you download
+ *       and comply with the latest ATAPI standard.  This document can be
+ *       obtained by anonymous ftp from fission.dt.wdc.com in directory:
+ *       /pub/standards/atapi/spec/SFF8020-r2.6/PDF/8020r26.pdf
+ *
  */
 
 
@@ -1555,7 +1579,7 @@ cdrom_lockdoor (ide_drive_t *drive, int lockflag,
 		/* If we got an illegal field error, the drive
 		   probably cannot lock the door. */
 		if (reqbuf->sense_key == ILLEGAL_REQUEST &&
-		    reqbuf->asc == 0x24) {
+		    (reqbuf->asc == 0x24 || reqbuf->asc == 0x20)) {
 			printk ("%s: door locking not supported\n",
 				drive->name);
 			CDROM_CONFIG_FLAGS (drive)->no_doorlock = 1;
@@ -2065,13 +2089,18 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 		return cdrom_startstop (drive, 1, NULL);
 
 	case CDROMSTOP: {
+#ifdef IHAVEADOLPHIN
+		/*  Certain Drives require this.  Most don't
+		    and will produce errors upon CDROMSTOP
+		    pit says the Dolphin needs this.  If you
+		    own a dolphin, just define IHAVEADOLPHIN somewhere */
 		int stat;
-
 		stat = cdrom_startstop (drive, 0, NULL);
 		if (stat) return stat;
-		/* pit says the Dolphin needs this. */
 		return cdrom_eject (drive, 1, NULL);
-      }
+#endif /* end of IHAVEADOLPHIN  */
+		return cdrom_startstop (drive, 0, NULL);
+	}
 
 	case CDROMPLAYMSF: {
 		struct cdrom_msf msf;
@@ -2694,14 +2723,15 @@ void ide_cdrom_setup (ide_drive_t *drive)
 			CDROM_CONFIG_FLAGS (drive)->subchan_as_bcd = 1;
 		}
 
-		/* Sanyo 3 CD changer uses a non-standard command 
-                   for CD changing */
-                else if ((strcmp(drive->id->model, "CD-ROM CDR-C3 G") == 0) ||
-                         (strcmp(drive->id->model, "CD-ROM CDR-C3G") == 0)) {
-			/* uses CD in slot 0 when value is set to 3 */
-			CDROM_STATE_FLAGS (drive)->sanyo_slot = 3;
-		}
-
+                /* Sanyo 3 CD changer uses a non-standard command
+                    for CD changing */
+                 else if ((strcmp(drive->id->model, "CD-ROM CDR-C3 G") == 0) ||
+                         (strcmp(drive->id->model, "CD-ROM CDR-C3G") == 0) ||
+                         (strcmp(drive->id->model, "CD-ROM CDR_C36") == 0)) {
+                        /* uses CD in slot 0 when value is set to 3 */
+                        CDROM_STATE_FLAGS (drive)->sanyo_slot = 3;
+                }
+                
 	}
 #endif /* not STANDARD_ATAPI */
 
