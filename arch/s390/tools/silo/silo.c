@@ -57,7 +57,7 @@ CONFIG cf_options[] = {
 #define PRINT_LEVEL(x,y...) if ( silo_options.verbosity >= x ) printf(y)
 #define ERROR_LEVEL(x,y...) if ( silo_options.verbosity >= x ) fprintf(stderr,y)
 #define TOGGLE(x) ((x)=((x)?(0):(1)))
-#define GETARG(x) {int len=strlen(optarg);x=malloc(len);strncpy(x,optarg,len);PRINT_LEVEL(1,"%s set to %s\n",#x,optarg);}
+#define GETARG(x) {int len=strlen(optarg);x=malloc(len+1);strncpy(x,optarg,len+1);PRINT_LEVEL(1,"%s set to %s\n",#x,optarg);}
 
 #define ITRY(x) if ( (x) == -1 ) { ERROR_LEVEL(0,"%s (line:%d) '%s' returned %d='%s'\n", __FILE__,__LINE__,#x,errno,strerror(errno)); usage(); exit(1); }
 #define NTRY(x) if ( (x) == 0 ) { ERROR_LEVEL(0,"%s (line:%d) '%s' returned %d='%s'\n", __FILE__,__LINE__,#x,errno,strerror(errno)); usage(); exit(1); }

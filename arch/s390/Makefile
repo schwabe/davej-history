@@ -1,5 +1,5 @@
 
-# i386/Makefile
+# s390/Makefile
 #
 # This file is included by the global makefile so that you can add your own
 # architecture-specific flags and dependencies. Remember to do have actions

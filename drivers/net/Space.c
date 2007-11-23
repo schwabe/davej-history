@@ -637,6 +637,12 @@ static int fcif_probe(struct device *dev)
 #   define NEXT_DEV	(&tap0_dev)
 #endif
 
+#ifdef CONFIG_BONDING
+static struct device bonding_dev = { "bond0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, bond_init, };
+#    undef NEXT_DEV
+#    define NEXT_DEV    (&bonding_dev)
+#endif
+
 #ifdef CONFIG_LANMEDIA
 static struct device lmc_dev = { "lmc_dev", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, lmc_probe_fake, };
 #    undef NEXT_DEV

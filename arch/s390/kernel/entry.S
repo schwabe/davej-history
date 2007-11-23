@@ -300,7 +300,7 @@ ret_from_fork:
         stosm   24(%r15),0x03     # reenable interrupts
         sr      %r0,%r0           # child returns 0
         st      %r0,SP_R2(%r15)   # store return value (change R2 on stack)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
         l       %r1,BASED(.Lschedtail)
 	la      %r14,BASED(sysc_return)
         br      %r1               # call schedule_tail, return to sysc_return
@@ -787,7 +787,7 @@ mcck_int_handler:
 mcck_return:
         RESTORE_ALL
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 /*
  * Restart interruption handler, kick starter for additional CPUs
  */
@@ -862,6 +862,6 @@ restart_go:
 .Ltrace:       .long  syscall_trace
 .Lvfork:       .long  sys_vfork
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 .Lschedtail:   .long  schedule_tail
 #endif

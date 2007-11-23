@@ -119,9 +119,9 @@ void s390_init_machine_check( void )
 
 	down( &s_sem[0]);
 
-	smp_ctl_clear_bit( 14, 25 );  // disable damage MCH 	
+	ctl_clear_bit( 14, 25 );  // disable damage MCH 	
 #if 1
-  	smp_ctl_set_bit( 14, 28 );		// enable channel report MCH
+  	ctl_set_bit( 14, 28 );		// enable channel report MCH
 #endif
 
 #ifdef S390_MACHCHK_DEBUG

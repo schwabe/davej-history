@@ -52,7 +52,8 @@ typedef struct _ioinfo {
            unsigned int  repnone   : 1;  /* don't call IRQ handler on interrupt */
            unsigned int  newreq    : 1;  /* new register interface */
            unsigned int  dval      : 1;  /* device number valid */
-           unsigned int  unused    : (sizeof(unsigned int)*8 - 23); /* unused */
+           unsigned int  unknown   : 1;  /* unknown device - if SenseID failed */
+           unsigned int  unused    : (sizeof(unsigned int)*8 - 24); /* unused */
               } __attribute__ ((packed)) flags;
         } ui;
 

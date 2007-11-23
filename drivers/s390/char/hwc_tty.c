@@ -73,8 +73,6 @@ hwc_tty_open (struct tty_struct *tty,
 	return 0;
 }
 
-#if 0
-
 static void 
 hwc_tty_close (struct tty_struct *tty,
                            struct file *filp)
@@ -84,11 +82,13 @@ hwc_tty_close (struct tty_struct *tty,
 			"do not close hwc tty because of wrong device number");
 		return;
 	}
+	if (tty->count > 1)
+		return;
+
 	hwc_tty_data.tty = NULL;
 
 	hwc_unregister_calls (&(hwc_tty_data.calls));
 }
-#endif
 
 static int 
 hwc_tty_write_room (struct tty_struct *tty)
@@ -316,7 +316,7 @@ hwc_tty_init (void)
 	hwc_tty_driver.termios_locked = hwc_tty_termios_locked;
 
 	hwc_tty_driver.open = hwc_tty_open;
-	hwc_tty_driver.close = NULL /* hwc_tty_close */;
+	hwc_tty_driver.close = hwc_tty_close;
 	hwc_tty_driver.write = hwc_tty_write;
 	hwc_tty_driver.put_char = hwc_tty_put_char;
 	hwc_tty_driver.flush_chars = hwc_tty_flush_chars;

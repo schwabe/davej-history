@@ -238,6 +238,97 @@ noritake_primo_pci_fixup(void)
 	common_pci_fixup(noritake_map_irq, noritake_swizzle);
 }
 
+#if defined(CONFIG_ALPHA_GENERIC) || !defined(CONFIG_ALPHA_PRIMO)
+static void
+noritake_apecs_machine_check(unsigned long vector, unsigned long la_ptr,
+		     struct pt_regs * regs)
+{
+#define MCHK_NO_DEVSEL 0x205U
+#define MCHK_NO_TABT 0x204U
+
+	struct el_common *mchk_header;
+	struct el_apecs_procdata *mchk_procdata;
+	struct el_apecs_mikasa_sysdata_mcheck *mchk_sysdata;
+	unsigned long *ptr;
+	unsigned int code; /* workaround EGCS problem */
+	int i;
+
+	mchk_header = (struct el_common *)la_ptr;
+
+	mchk_procdata = (struct el_apecs_procdata *)
+		(la_ptr + mchk_header->proc_offset
+		 - sizeof(mchk_procdata->paltemp));
+
+	mchk_sysdata = (struct el_apecs_mikasa_sysdata_mcheck *)
+		(la_ptr + mchk_header->sys_offset);
+
+#ifdef DEBUG
+	printk("noritake_apecs_machine_check: vector=0x%lx la_ptr=0x%lx\n",
+	       vector, la_ptr);
+	printk("        pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
+	       regs->pc, mchk_header->size, mchk_header->proc_offset,
+	       mchk_header->sys_offset);
+	printk("noritake_apecs_machine_check: expected %d DCSR 0x%lx"
+	       " PEAR 0x%lx\n", apecs_mcheck_expected,
+	       mchk_sysdata->epic_dcsr, mchk_sysdata->epic_pear);
+	ptr = (unsigned long *)la_ptr;
+	for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
+		printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
+	}
+#endif
+
+	/*
+	 * Check if machine check is due to a badaddr() and if so,
+	 * ignore the machine check.
+	 */
+
+	code = mchk_header->code; /* workaround EGCS problem */
+
+	if (apecs_mcheck_expected &&
+	    (code == MCHK_NO_DEVSEL || code == MCHK_NO_TABT))
+	{
+		apecs_mcheck_expected = 0;
+		apecs_mcheck_taken = 1;
+		mb();
+		mb(); /* magic */
+		apecs_pci_clr_err();
+		wrmces(0x7);
+		mb();
+		draina();
+	}
+	else if (vector == 0x620 || vector == 0x630) {
+		/* Disable correctable from now on.  */
+		wrmces(0x1f);
+		mb();
+		draina();
+		printk("noritake_apecs_machine_check: HW correctable (0x%lx)\n",
+		       vector);
+	}
+	else {
+		printk(KERN_CRIT "NORITAKE APECS machine check:\n");
+		printk(KERN_CRIT "  vector=0x%lx la_ptr=0x%lx code=0x%x\n",
+		       vector, la_ptr, code);
+		printk(KERN_CRIT
+		       "  pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
+		       regs->pc, mchk_header->size, mchk_header->proc_offset,
+		       mchk_header->sys_offset);
+		printk(KERN_CRIT "  expected %d DCSR 0x%lx PEAR 0x%lx\n",
+		       apecs_mcheck_expected, mchk_sysdata->epic_dcsr,
+		       mchk_sysdata->epic_pear);
+
+		ptr = (unsigned long *)la_ptr;
+		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
+			printk(KERN_CRIT " +%lx %lx %lx\n",
+			       i*sizeof(long), ptr[i], ptr[i+1]);
+		}
+#if 0
+		/* doesn't work with MILO */
+		show_regs(regs);
+#endif
+	}
+}
+#endif
+
 
 /*
  * The System Vectors
@@ -250,7 +341,7 @@ struct alpha_machine_vector noritake_mv __initmv = {
 	DO_DEFAULT_RTC,
 	DO_APECS_IO,
 	DO_APECS_BUS,
-	machine_check:		apecs_machine_check,
+	machine_check:		noritake_apecs_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
 
 	nr_irqs:		48,

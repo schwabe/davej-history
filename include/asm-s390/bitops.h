@@ -79,8 +79,8 @@ extern __inline__ void set_bit_cs(int nr, volatile void * addr)
              "   nr    1,%0\n"         /* make shift value */
              "   xr    %0,1\n"
              "   srl   %0,3\n"
-             "   la    %1,0(%0,%1)\n"  /* calc. address for CS */
              "   lhi   2,1\n"
+             "   la    %1,0(%0,%1)\n"  /* calc. address for CS */
              "   sll   2,0(1)\n"       /* make OR mask */
              "   l     %0,0(%1)\n"
              "0: lr    1,%0\n"         /* CS loop starts here */
@@ -109,8 +109,8 @@ extern __inline__ void clear_bit_cs(int nr, volatile void * addr)
              "   nr    1,%0\n"         /* make shift value */
              "   xr    %0,1\n"
              "   srl   %0,3\n"
-             "   la    %1,0(%0,%1)\n"  /* calc. address for CS */
              "   lhi   2,1\n"
+             "   la    %1,0(%0,%1)\n"  /* calc. address for CS */
              "   sll   2,0(1)\n"
              "   x     2,%2\n"         /* make AND mask */
              "   l     %0,0(%1)\n"
@@ -139,8 +139,8 @@ extern __inline__ void change_bit_cs(int nr, volatile void * addr)
              "   nr    1,%0\n"         /* make shift value */
              "   xr    %0,1\n"
              "   srl   %0,3\n"
-             "   la    %1,0(%0,%1)\n"  /* calc. address for CS */
              "   lhi   2,1\n"
+             "   la    %1,0(%0,%1)\n"  /* calc. address for CS */
              "   sll   2,0(1)\n"       /* make XR mask */
              "   l     %0,0(%1)\n"
              "0: lr    1,%0\n"         /* CS loop starts here */
@@ -168,8 +168,8 @@ extern __inline__ int test_and_set_bit_cs(int nr, volatile void * addr)
              "   nr    1,%0\n"         /* make shift value */
              "   xr    %0,1\n"
              "   srl   %0,3\n"
-             "   la    %1,0(%0,%1)\n"  /* calc. address for CS */
              "   lhi   2,1\n"
+             "   la    %1,0(%0,%1)\n"  /* calc. address for CS */
              "   sll   2,0(1)\n"       /* make OR mask */
              "   l     %0,0(%1)\n"
              "0: lr    1,%0\n"         /* CS loop starts here */
@@ -788,7 +788,6 @@ extern int __inline__ ffs (int x)
 #define ext2_test_bit(nr, addr)      test_bit((nr)^24, addr)
 extern __inline__ int ext2_find_first_zero_bit(void *vaddr, unsigned size)
 {
-        static const int mask = 0xffL;
         int res;
 
         if (!size)
@@ -806,6 +805,7 @@ extern __inline__ int ext2_find_first_zero_bit(void *vaddr, unsigned size)
                 "   j    4f\n"
                 "1: l    1,0(2,%2)\n"
                 "   sll  2,3(0)\n"
+                "   lhi  0,0xff\n"
                 "   ahi  2,24\n"
                 "   tmh  1,0xFFFF\n"
                 "   jo   2f\n"
@@ -815,13 +815,12 @@ extern __inline__ int ext2_find_first_zero_bit(void *vaddr, unsigned size)
                 "   jo   3f\n"
                 "   ahi  2,-8\n"
                 "   srl  1,8\n"
-                "3: n    1,%3\n"
-                "   ic   1,0(1,%4)\n"
-                "   n    1,%3\n"
+                "3: nr   1,0\n"
+                "   ic   1,0(1,%3)\n"
                 "   ar   2,1\n"
                 "4: lr   %0,2"
                 : "=d" (res) : "a" (size), "a" (vaddr),
-                  "m" (mask), "a" (&_zb_findmap)
+                  "a" (&_zb_findmap)
                   : "cc", "0", "1", "2" );
         return (res < size) ? res : size;
 }
@@ -829,17 +828,6 @@ extern __inline__ int ext2_find_first_zero_bit(void *vaddr, unsigned size)
 extern __inline__ int 
 ext2_find_next_zero_bit(void *vaddr, unsigned size, unsigned offset)
 {
-        static const int mask = 0xffL;
-        static unsigned long orword[32] = {
-		0x00000000, 0x01000000, 0x03000000, 0x07000000,
-		0x0f000000, 0x1f000000, 0x3f000000, 0x7f000000,
-		0xff000000, 0xff010000, 0xff030000, 0xff070000,
-                0xff0f0000, 0xff1f0000, 0xff3f0000, 0xff7f0000,
-		0xffff0000, 0xffff0100, 0xffff0300, 0xffff0700,
-		0xffff0f00, 0xffff1f00, 0xffff3f00, 0xffff7f00,
-		0xffffff00, 0xffffff01, 0xffffff03, 0xffffff07,
-		0xffffff0f, 0xffffff1f, 0xffffff3f, 0xffffff7f
-	};
         unsigned long *addr = vaddr;
         unsigned long *p = addr + (offset >> 5);
         unsigned long word;
@@ -849,23 +837,29 @@ ext2_find_next_zero_bit(void *vaddr, unsigned size, unsigned offset)
                 return size;
 
         if (bit) {
-		word = *p | orword[bit];
+                __asm__("   ic   %0,0(%1)\n"
+                        "   icm  %0,2,1(%1)\n"
+                        "   icm  %0,4,2(%1)\n"
+                        "   icm  %0,8,3(%1)"
+                        : "=&a" (word) : "a" (p) );
+		word >>= bit;
+                res = bit;
                 /* Look for zero in first longword */
-                __asm__("   lhi  %0,24\n"
-                	"   tmh  %1,0xFFFF\n"
-                	"   jo   0f\n"
-                	"   ahi  %0,-16\n"
+                __asm__("   lhi  0,0xff\n"
+                        "   tml  %1,0xffff\n"
+                	"   jno   0f\n"
+                	"   ahi  %0,16\n"
                 	"   srl  %1,16\n"
-                	"0: tml  %1,0xFF00\n"
-                	"   jo   1f\n"
-                	"   ahi  %0,-8\n"
+                	"0: tml  %1,0x00ff\n"
+                	"   jno  1f\n"
+                	"   ahi  %0,8\n"
                 	"   srl  %1,8\n"
-                	"1: n    %1,%2\n"
-                	"   ic   %1,0(%1,%3)\n"
+                	"1: nr   %1,0\n"
+                	"   ic   %1,0(%1,%2)\n"
                 	"   alr  %0,%1"
-                	: "=&d" (res), "+&d" (word)
-                  	: "m" (mask), "a" (&_zb_findmap)
-                	: "cc" );
+                	: "+&d" (res), "+&d" (word)
+                  	: "a" (&_zb_findmap)
+                	: "cc", "0" );
                 if (res < 32)
 			return (p - addr)*32 + res;
                 p++;

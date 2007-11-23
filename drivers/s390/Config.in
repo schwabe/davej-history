@@ -15,6 +15,7 @@ fi
 if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
   bool '      Boot support (linear, striped)' CONFIG_MD_BOOT
 fi
+
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" -o "$CONFIG_BLK_DEV_RAM" = "m" ]; then
   int '   Default RAM disk size' CONFIG_BLK_DEV_RAM_SIZE 8192
@@ -50,7 +51,6 @@ if [ "$CONFIG_NET" = "y" ]; then
   comment 'S/390 Network device support'
   bool 'Network device support' CONFIG_NETDEVICES
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
-    menu_option next_comment
     comment 'S390 Network devices'
     bool 'CTC device support' CONFIG_CTC
     bool 'IUCV device support (VM only)' CONFIG_IUCV

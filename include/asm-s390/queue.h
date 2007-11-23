@@ -70,6 +70,15 @@ static __inline__ void add_to_list(list **lhead,list *member)
 	*lhead=member;
 }
 
+static __inline__ list *remove_listhead(list **lhead)
+{
+	list *oldhead=*lhead;
+
+	if(oldhead)
+		*lhead=(*lhead)->next;
+	return(oldhead);
+}
+
 static __inline__ void add_to_list_tail(list **lhead,list *member)
 {
 	list *curr,*prev;

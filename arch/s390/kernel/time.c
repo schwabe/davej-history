@@ -145,7 +145,7 @@ void do_settimeofday(struct timeval *tv)
  * as well as call the "do_timer()" routine every clocktick
  */
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 extern __u16 boot_cpu_addr;
 #endif
 
@@ -160,7 +160,7 @@ void do_timer_interrupt(struct pt_regs *regs, __u16 error_code)
  
         save_flags(flags);
         cli();
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if(S390_lowcore.cpu_data.cpu_addr==boot_cpu_addr) {
 		write_lock(&xtime_lock);
 		last_timer_cc = S390_lowcore.jiffy_timer_cc;
@@ -177,7 +177,7 @@ void do_timer_interrupt(struct pt_regs *regs, __u16 error_code)
  * profiling, except when we simulate SMP mode on a uniprocessor
  * system, in that case we have to call the local interrupt handler.
  */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
         /* when SMP, do smp_local_timer_interrupt for *all* CPUs,
            but only do the rest for the boot CPU */
         smp_local_timer_interrupt(regs);
@@ -186,12 +186,12 @@ void do_timer_interrupt(struct pt_regs *regs, __u16 error_code)
                 s390_do_profile(regs->psw.addr);
 #endif
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	if(S390_lowcore.cpu_data.cpu_addr==boot_cpu_addr)
 #endif
 	{
 		do_timer(regs);
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		write_unlock(&xtime_lock);
 #endif
 	}

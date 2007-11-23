@@ -86,7 +86,7 @@ int get_irq_list(char *buf)
 			continue;
 
 		p += sprintf(p, "%3d: ",i);
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 		p += sprintf(p, "%10u ", kstat_irqs(i));
 #else
 		for (j=0; j<smp_num_cpus; j++)
@@ -107,7 +107,7 @@ int get_irq_list(char *buf)
 	} /* endfor */
 
 	p += sprintf(p, "NMI: %10u\n", atomic_read(&nmi_counter));
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	p += sprintf(p, "IPI: %10u\n", atomic_read(&ipi_count));
 #endif
 
@@ -119,7 +119,7 @@ int get_irq_list(char *buf)
  * Global interrupt locks for SMP. Allow interrupts to come in on any
  * CPU, yet make cli/sti act globally to protect critical regions..
  */
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 atomic_t global_irq_holder = ATOMIC_INIT(NO_PROC_ID);
 atomic_t global_irq_lock;
 atomic_t global_irq_count = ATOMIC_INIT(0);

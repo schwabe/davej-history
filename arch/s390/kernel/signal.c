@@ -231,15 +231,12 @@ badframe:
 asmlinkage int sys_rt_sigreturn(struct pt_regs *regs)
 {
 	rt_sigframe *frame = (rt_sigframe *)regs->gprs[15];
-	stack_t st;
 
 	if (sigreturn_common(regs,sizeof(rt_sigframe)))
 			goto badframe;
-	if (__copy_from_user(&st, &frame->uc.uc_stack, sizeof(st)))
-		goto badframe;
 	/* It is more difficult to avoid calling this function than to
 	   call it and ignore errors.  */
-	do_sigaltstack(&st, NULL, regs->gprs[15]);
+	do_sigaltstack(&frame->uc.uc_stack, NULL, regs->gprs[15]);
 	return regs->gprs[2];
 
 badframe:
@@ -359,6 +356,7 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 	err |= __put_user(sas_ss_flags(orig_sp),
 			  &frame->uc.uc_stack.ss_flags);
 	err |= __put_user(current->sas_ss_size, &frame->uc.uc_stack.ss_size);
+	err |= __put_user(&frame->sc,&frame->uc.sc);
 	regs->gprs[3] = (addr_t)&frame->info;
 	regs->gprs[4] = (addr_t)&frame->uc;
 

@@ -167,13 +167,33 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 static inline void disabled_wait(unsigned long code)
 {
         char psw_buffer[2*sizeof(psw_t)];
+        char ctl_buf[4];
         psw_t *dw_psw = (psw_t *)(((unsigned long) &psw_buffer+sizeof(psw_t)-1)
                                   & -sizeof(psw_t));
 
         dw_psw->mask = 0x000a0000;
         dw_psw->addr = code;
-        /* load disabled wait psw, the processor is dead afterwards */
-        asm volatile ("lpsw 0(%0)" : : "a" (dw_psw));
+        /* 
+         * Store status and then load disabled wait psw,
+         * the processor is dead afterwards
+         */
+
+        asm volatile ("    stctl 0,0,0(%1)\n"
+                      "    ni    0(%1),0xef\n" /* switch off protection */
+                      "    lctl  0,0,0(%1)\n"
+                      "    stpt  0xd8\n"       /* store timer */
+                      "    stckc 0xe0\n"       /* store clock comparator */
+                      "    stpx  0x108\n"      /* store prefix register */
+                      "    stam  0,15,0x120\n" /* store access registers */
+                      "    std   0,0x160\n"    /* store f0 */
+                      "    std   2,0x168\n"    /* store f2 */
+                      "    std   4,0x170\n"    /* store f4 */
+                      "    std   6,0x178\n"    /* store f6 */
+                      "    stm   0,15,0x180\n" /* store general registers */
+                      "    stctl 0,15,0x1c0\n" /* store control registers */
+                      "    oi    0x1c0,0x10\n" /* fake protection bit */
+                      "    lpsw 0(%0)"
+                      : : "a" (dw_psw), "a" (&ctl_buf));
 }
 
 #endif                                 /* __ASM_S390_PROCESSOR_H           */

@@ -57,7 +57,7 @@ asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
 
 static psw_t wait_psw;
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 static
 #endif
 int cpu_idle(void *unused)
@@ -69,7 +69,12 @@ int cpu_idle(void *unused)
 	wait_psw.mask = _WAIT_PSW_MASK;
 	wait_psw.addr = (unsigned long) &&idle_wakeup | 0x80000000L;
 	while(1) {
+#ifdef CONFIG_SMP
+                if (atomic_read(&global_bh_lock) == 0 &&
+                    (bh_mask & bh_active)) {
+#else
                 if (bh_mask & bh_active) {
+#endif
                         do_bottom_half();
                         continue;
                 }

@@ -7,8 +7,10 @@
  *    Author(s): Stefan Hegewald <hegewald@de.ibm.com>
  *               Hartmut Penner <hpenner@de.ibm.com> 
  * 
+ *    
  *    2.3 Updates Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
  *                Martin Schwidefsky (schwidefsky@de.ibm.com)
+ *                Alan Altmark (Alan_Altmark@us.ibm.com)
  *                
 
  */
@@ -42,9 +44,9 @@
 
 
 
-
 #define DEBUG123
 #define MAX_DEVICES  10
+
 
 extern char _ascebc[];
 
@@ -496,14 +498,20 @@ void do_iucv_interrupt(struct pt_regs *regs, __u16 code)
   /* get own buffer: */
   extern_int_buffer = (INTERRUPT_T*) iucv_ext_int_buffer;
   
-  netif_enter_interrupt(dev);        /* lock ! */
-  
 #ifdef DEBUG
   printk(  "iucv: do_iucv_interrupt %x received; pathid: %02X\n",
 	   extern_int_buffer->iptype,extern_int_buffer->ippathid);
   printk(   "iucv: extern_int_buffer:\n");
   dumpit((char *)&extern_int_buffer[0],40);
 #endif
+  
+  if (extern_int_buffer->iptype == 0x01)
+    dev = get_device_from_userid(&((char*) extern_int_buffer)[8]);
+  else
+    dev = get_device_from_pathid(extern_int_buffer->ippathid);
+
+  netif_enter_interrupt(dev);        /* lock ! */
+  privptr = (struct iucv_priv *)(dev->priv);
   
   switch (extern_int_buffer->iptype)
     {
@@ -519,11 +527,7 @@ void do_iucv_interrupt(struct pt_regs *regs, __u16 code)
 	iucv_retrieve_buffer(glob_command_buffer);
 	break;
       }
-#ifdef DEBUG
-      dumpit(&((char *)extern_int_buffer)[8],8);
-#endif
-      dev = get_device_from_userid(&((char*)extern_int_buffer)[8]);
-      privptr = (struct iucv_priv *)(dev->priv);
+
       privptr->pathid =  extern_int_buffer->ippathid;
       
 #ifdef DEBUG
@@ -542,8 +546,6 @@ void do_iucv_interrupt(struct pt_regs *regs, __u16 code)
       if( extern_int_buffer->ipmsgtag !=0)
 	{
 	  /* get ptr's to kernel struct with local & broadcast address */
-	  dev = get_device_from_pathid(extern_int_buffer->ippathid);
-	  privptr = (struct iucv_priv *)(dev->priv);
 	  indev = dev->ip_ptr;
 	  inaddr = (struct in_ifaddr*) indev->ifa_list;
 	}
@@ -595,8 +597,6 @@ void do_iucv_interrupt(struct pt_regs *regs, __u16 code)
 		   (unsigned int)extern_int_buffer->ipaudit);
 	}
       /* a transmission is over: tell we are no more busy */
-      dev = get_device_from_pathid(extern_int_buffer->ippathid);
-      privptr = (struct iucv_priv *)(dev->priv);
       privptr->stats.tx_packets++;
       netif_wake_queue(dev);                /* transmission is no longer busy*/
       break;
@@ -607,8 +607,6 @@ void do_iucv_interrupt(struct pt_regs *regs, __u16 code)
 #ifdef DEBUG
       printk(  "message pending.\n");
 #endif
-      dev = get_device_from_pathid(extern_int_buffer->ippathid);
-      privptr = (struct iucv_priv *)(dev->priv);
       rcvptr = &privptr->receive_buffer[0];
       
       /* re-set receive buffer */

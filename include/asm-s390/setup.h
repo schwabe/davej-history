@@ -44,6 +44,7 @@
 #define MACHINE_HAS_CSP  (MACHINE_FLAGS & 8)
 
 #define RAMDISK_ORIGIN            0x800000
+#define RAMDISK_SIZE              0x800000
 #define RAMDISK_BLKSIZE           0x1000
 #define RAMDISK_IMAGE_START_MASK  0x07FF
 #define RAMDISK_PROMPT_FLAG       0x8000

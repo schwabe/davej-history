@@ -74,24 +74,14 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
         down(&mm->mmap_sem);
 
         vma = find_vma(mm, address);
-        if (!vma) {
-	        printk("no vma for address %lX\n",address);
+        if (!vma)
                 goto bad_area;
-        }
         if (vma->vm_start <= address) 
                 goto good_area;
-        if (!(vma->vm_flags & VM_GROWSDOWN)) {
-                printk("VM_GROWSDOWN not set, but address %lX \n",address);
-                printk("not in vma %p (start %lX end %lX)\n",vma,
-                       vma->vm_start,vma->vm_end);
+        if (!(vma->vm_flags & VM_GROWSDOWN))
                 goto bad_area;
-        }
-        if (expand_stack(vma, address)) {
-                printk("expand of vma failed address %lX\n",address);
-                printk("vma %p (start %lX end %lX)\n",vma,
-                       vma->vm_start,vma->vm_end);
+        if (expand_stack(vma, address))
                 goto bad_area;
-        }
 /*
  * Ok, we have a good vm_area for this memory access, so
  * we can handle it..
@@ -104,13 +94,8 @@ good_area:
                         break;
                 case 0x10:                                   /* not present*/
                 case 0x11:                                   /* not present*/
-                        if (!(vma->vm_flags & (VM_READ | VM_EXEC | VM_WRITE))) {
-                                printk("flags %X of vma for address %lX wrong \n",
-                                       vma->vm_flags,address);
-                                printk("vma %p (start %lX end %lX)\n",vma,
-                                       vma->vm_start,vma->vm_end);
+                        if (!(vma->vm_flags & (VM_READ | VM_EXEC | VM_WRITE)))
                                 goto bad_area;
-                        }
                         break;
                 default:
                        printk("code should be 4, 10 or 11 (%lX) \n",error_code&0xFF);  

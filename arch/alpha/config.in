@@ -149,22 +149,26 @@ then
 	define_bool CONFIG_ALPHA_IRONGATE y
 fi
 
+if [ "$CONFIG_ALPHA_JENSEN" = "y" -o "$CONFIG_ALPHA_MIKASA" = "y" \
+        -o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_NORITAKE" = "y" \
+        -o "$CONFIG_ALPHA_DP264" = "y" -o "$CONFIG_ALPHA_RAWHIDE" = "y" \
+        -o "$CONFIG_ALPHA_EIGER" = "y" ]
+then
+        define_bool CONFIG_ALPHA_SRM y
+fi
 if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
-	-o "$CONFIG_ALPHA_EB64P" = "y" -o "$CONFIG_ALPHA_JENSEN" = "y" \
-	-o "$CONFIG_ALPHA_TAKARA" = "y" -o "$CONFIG_ALPHA_EB164" = "y" \
-	-o "$CONFIG_ALPHA_MIKASA" = "y" -o "$CONFIG_ALPHA_ALCOR" = "y" \
-	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_MIATA" = "y" \
-	-o "$CONFIG_ALPHA_NORITAKE" = "y" -o "$CONFIG_ALPHA_PC164" = "y" \
-	-o "$CONFIG_ALPHA_LX164" = "y" -o "$CONFIG_ALPHA_SX164" = "y" \
-	-o "$CONFIG_ALPHA_DP264" = "y" -o "$CONFIG_ALPHA_RAWHIDE" = "y" \
-	-o "$CONFIG_ALPHA_EIGER" = "y" -o "$CONFIG_ALPHA_NAUTILUS" = "y" ]
+        -o "$CONFIG_ALPHA_EB64P" = "y"  -o "$CONFIG_ALPHA_PC164" = "y" \
+        -o "$CONFIG_ALPHA_TAKARA" = "y" -o "$CONFIG_ALPHA_EB164" = "y" \
+        -o "$CONFIG_ALPHA_ALCOR" = "y"  -o "$CONFIG_ALPHA_MIATA" = "y" \
+        -o "$CONFIG_ALPHA_LX164" = "y"  -o "$CONFIG_ALPHA_SX164" = "y" \
+	-o "$CONFIG_ALPHA_NAUTILUS" = "y" ]
 then
   bool 'Use SRM as bootloader' CONFIG_ALPHA_SRM
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    if [ "$CONFIG_ALPHA_SRM" = "y" ]; then
-      bool '  Use SRM PCI setup' CONFIG_ALPHA_SRM_SETUP
-    fi
-  fi
+#  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+#    if [ "$CONFIG_ALPHA_SRM" = "y" ]; then
+#      bool '  Use SRM PCI setup' CONFIG_ALPHA_SRM_SETUP
+#    fi
+#  fi
 fi
 if [ "$CONFIG_ALPHA_ALCOR" = "y" -o "$CONFIG_ALPHA_MIKASA" = "y" \
 	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_NORITAKE" = "y" \

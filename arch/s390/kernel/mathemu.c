@@ -17,6 +17,18 @@
 #include <asm/uaccess.h>
 #include <asm/mathemu.h>
 
+static void display_emulation_not_implemented(char *instr)
+{
+	struct pt_regs *regs=current->tss.regs;
+	printk("%s not implemented\n",instr);
+	printk("Process with %s instruction %s (pid: %d, stackpage=%08X)\n",
+	       instr,
+                current->comm, current->pid, 4096+(addr_t)current);
+	printk("%s's PSW:    %08lx %08lx\n",instr,
+                (unsigned long) regs->psw.mask,
+                (unsigned long) regs->psw.addr);
+}
+
 static void set_CC_df(__u64 val1,__u64 val2) {
         int rc;
         rc = __cmpdf2(val1,val2);
@@ -69,7 +81,7 @@ static void emu_aebr (int rx, int ry) {
 }
 
 static void emu_axbr (int rx, int ry) {
-        printk("axbr emulation not implemented!\n");
+        display_emulation_not_implemented("axbr");
 }
 
 static void emu_cdb (int rx, __u64 val) {
@@ -109,15 +121,15 @@ static void emu_cfebr (int rx, int ry, int mask) {
 }
 
 static void emu_cfxbr (int rx, int ry, int mask) {
-        printk("cfxbr emulation not implemented!\n");
+        display_emulation_not_implemented("cfxbr");
 }
 
 static void emu_cxbr (int rx, int ry) {
-        printk("cxbr emulation not implemented!\n");
+        display_emulation_not_implemented("cxbr");
 }
 
 static void emu_cxfbr (int rx, int ry) {
-        printk("cxfbr emulation not implemented!\n");
+        display_emulation_not_implemented("cxfbr");
 }
 
 static void emu_ddb (int rx, __u64 val) {
@@ -143,51 +155,51 @@ static void emu_debr (int rx, int ry) {
 }
 
 static void emu_didbr (int rx, int ry, int mask) {
-        printk("didbr emulation not implemented!\n");
+        display_emulation_not_implemented("didbr");
 }
 
 static void emu_diebr (int rx, int ry, int mask) {
-        printk("diebr emulation not implemented!\n");
+        display_emulation_not_implemented("diebr");
 }
 
 static void emu_dxbr (int rx, int ry) {
-        printk("dxbr emulation not implemented!\n");
+        display_emulation_not_implemented("dxbr");
 }
 
 static void emu_efpc (int rx, int ry) {
-        printk("efpc emulation not implemented!\n");
+        display_emulation_not_implemented("efpc");
 }
 
 static void emu_fidbr (int rx, int ry, int mask) {
-        printk("fidbr emulation not implemented!\n");
+        display_emulation_not_implemented("fidbr");
 }
 
 static void emu_fiebr (int rx, int ry, int mask) {
-        printk("fiebr emulation not implemented!\n");
+        display_emulation_not_implemented("fiebr");
 }
 
 static void emu_fixbr (int rx, int ry, int mask) {
-        printk("fixbr emulation not implemented!\n");
+        display_emulation_not_implemented("fixbr");
 }
 
 static void emu_kdb (int rx, __u64 val) {
-        printk("kdb emulation not implemented!\n");
+        display_emulation_not_implemented("kdb");
 }
 
 static void emu_kdbr (int rx, int ry) {
-        printk("kdbr emulation not implemented!\n");
+        display_emulation_not_implemented("kdbr");
 }
 
 static void emu_keb (int rx, __u32 val) {
-        printk("keb emulation not implemented!\n");
+        display_emulation_not_implemented("keb");
 }
 
 static void emu_kebr (int rx, int ry) {
-        printk("kebr emulation not implemented!\n");
+        display_emulation_not_implemented("kebr");
 }
 
 static void emu_kxbr (int rx, int ry) {
-        printk("kxbr emulation not implemented!\n");
+        display_emulation_not_implemented("kxbr");
 }
 
 static void emu_lcdbr (int rx, int ry) {
@@ -203,7 +215,7 @@ static void emu_lcebr (int rx, int ry) {
 }
 
 static void emu_lcxbr (int rx, int ry) {
-        printk("lcxbr emulation not implemented!\n");
+        display_emulation_not_implemented("lcxbr");
 }
 
 static void emu_ldeb (int rx, __u32 val) {
@@ -216,7 +228,7 @@ static void emu_ldebr (int rx, int ry) {
 }
 
 static void emu_ldxbr (int rx, int ry) {
-        printk("ldxbr emulation not implemented!\n");
+        display_emulation_not_implemented("ldxbr");
 }
 
 static void emu_ledbr (int rx, int ry) {
@@ -225,19 +237,19 @@ static void emu_ledbr (int rx, int ry) {
 }
 
 static void emu_lexbr (int rx, int ry) {
-        printk("lexbr emulation not implemented!\n");
+        display_emulation_not_implemented("lexbr");
 }
 
 static void emu_lndbr (int rx, int ry) {
-        printk("lndbr emulation not implemented!\n");
+        display_emulation_not_implemented("lndbr");
 }
 
 static void emu_lnebr (int rx, int ry) {
-        printk("lnebr emulation not implemented!\n");
+        display_emulation_not_implemented("lnebr");
 }
 
 static void emu_lnxbr (int rx, int ry) {
-        printk("lnxbr emulation not implemented!\n");
+        display_emulation_not_implemented("lnxbr");
 }
 
 static void emu_lpdbr (int rx, int ry) {
@@ -251,7 +263,7 @@ static void emu_lpebr (int rx, int ry) {
 }
 
 static void emu_lpxbr (int rx, int ry) {
-        printk("lpxbr emulation not implemented!\n");
+        display_emulation_not_implemented("lpxbr");
 }
 
 static void emu_ltdbr (int rx, int ry) {
@@ -265,39 +277,39 @@ static void emu_ltebr (int rx, int ry) {
 }
 
 static void emu_ltxbr (int rx, int ry) {
-        printk("ltxbr emulation not implemented!\n");
+        display_emulation_not_implemented("ltxbr");
 }
 
 static void emu_lxdb (int rx, __u64 val) {
-        printk("lxdb emulation not implemented!\n");
+        display_emulation_not_implemented("lxdb");
 }
 
 static void emu_lxdbr (int rx, int ry) {
-        printk("lxdbr emulation not implemented!\n");
+        display_emulation_not_implemented("lxdbr");
 }
 
 static void emu_lxeb (int rx, __u32 val) {
-        printk("lxeb emulation not implemented!\n");
+        display_emulation_not_implemented("lxeb");
 }
 
 static void emu_lxebr (int rx, int ry) {
-        printk("lxebr emulation not implemented!\n");
+        display_emulation_not_implemented("lxebr");
 }
 
 static void emu_madb (int rx, __u64 val, int mask) {
-        printk("madb emulation not implemented!\n");
+        display_emulation_not_implemented("madb");
 }
 
 static void emu_madbr (int rx, int ry, int mask) {
-        printk(" emulation not implemented!\n");
+        display_emulation_not_implemented("madbr");
 }
 
 static void emu_maeb (int rx, __u32 val, int mask) {
-        printk("maeb emulation not implemented!\n");
+        display_emulation_not_implemented("maeb");
 }
 
 static void emu_maebr (int rx, int ry, int mask) {
-        printk("maebr emulation not implemented!\n");
+        display_emulation_not_implemented("maebr");
 }
 
 static void emu_mdb (int rx, __u64 val) {
@@ -312,11 +324,11 @@ static void emu_mdbr (int rx, int ry) {
 }
 
 static void emu_mdeb (int rx, __u32 val) {
-        printk("mdeb emulation not implemented!\n");
+        display_emulation_not_implemented("mdeb");
 }
 
 static void emu_mdebr (int rx, int ry) {
-        printk("mdebr emulation not implemented!\n");
+        display_emulation_not_implemented("mdebr");
 }
 
 static void emu_meeb (int rx, __u32 val) {
@@ -332,31 +344,31 @@ static void emu_meebr (int rx, int ry) {
 }
 
 static void emu_msdb (int rx, __u64 val, int mask) {
-        printk("msdb emulation not implemented!\n");
+        display_emulation_not_implemented("msdb");
 }
 
 static void emu_msdbr (int rx, int ry, int mask) {
-        printk("msdbr emulation not implemented!\n");
+        display_emulation_not_implemented("msdbr");
 }
 
 static void emu_mseb (int rx, __u32 val, int mask) {
-        printk("mseb emulation not implemented!\n");
+        display_emulation_not_implemented("mseb");
 }
 
 static void emu_msebr (int rx, int ry, int mask) {
-        printk("msebr emulation not implemented!\n");
+        display_emulation_not_implemented("msebr");
 }
 
 static void emu_mxbr (int rx, int ry) {
-        printk("mxbr emulation not implemented!\n");
+        display_emulation_not_implemented("mxbr");
 }
 
 static void emu_mxdb (int rx, __u64 val) {
-        printk("mxdb emulation not implemented!\n");
+        display_emulation_not_implemented("mxdb");
 }
 
 static void emu_mxdbr (int rx, int ry) {
-        printk("mxdbr emulation not implemented!\n");
+        display_emulation_not_implemented("mxdbr");
 }
 
 static void emu_sdb (int rx, __u64 val) {
@@ -384,43 +396,43 @@ static void emu_sebr (int rx, int ry) {
 }
 
 static void emu_sfpc (int rx, int ry) {
-        printk("sfpc emulation not implemented!\n");
+        display_emulation_not_implemented("sfpc");
 }
 
 static void emu_sqdb (int rx, __u64 val) {
-        printk("sqdb emulation not implemented!\n");
+        display_emulation_not_implemented("sqdb");
 }
 
 static void emu_sqdbr (int rx, int ry) {
-        printk("sqdbr emulation not implemented!\n");
+        display_emulation_not_implemented("sqdbr");
 }
 
 static void emu_sqeb (int rx, __u32 val) {
-        printk("sqeb emulation not implemented!\n");
+        display_emulation_not_implemented("sqeb");
 }
 
 static void emu_sqebr (int rx, int ry) {
-        printk("sqebr emulation not implemented!\n");
+        display_emulation_not_implemented("sqebr");
 }
 
 static void emu_sqxbr (int rx, int ry) {
-        printk("sqxbr emulation not implemented!\n");
+        display_emulation_not_implemented("sqxbr");
 }
 
 static void emu_sxbr (int rx, int ry) {
-        printk("sxbr emulation not implemented!\n");
+        display_emulation_not_implemented("sxbr");
 }
 
 static void emu_tcdb (int rx, __u64 val) {
-        printk("tcdb emulation not implemented!\n");
+        display_emulation_not_implemented("tcdb");
 }
 
 static void emu_tceb (int rx, __u32 val) {
-        printk("tceb emulation not implemented!\n");
+        display_emulation_not_implemented("tceb");
 }
 
 static void emu_tcxb (int rx, __u64 val) {
-        printk("tcxb emulation not implemented!\n");
+        display_emulation_not_implemented("tcxb");
 }
 
 

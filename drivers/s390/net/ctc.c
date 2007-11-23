@@ -35,7 +35,7 @@
  *    0.50  Initial release shipped
  *    0.51  Bug fixes
  *          - CTC / ESCON network device can now handle up to 64 channels 
- *          - 3088-61 info message supperssed - CISCO 7206 - CLAW - ESCON 
+ *          - 3088-61 info message suppressed - CISCO 7206 - CLAW - ESCON 
  *          - 3088-62 info message suppressed - OSA/D   
  *          - channel: def ffffffed ... error message suppressed 
  *          - CTC / ESCON device was not recoverable after a lost connection with 
@@ -45,6 +45,19 @@
  *    0.52  Bug fixes 
  *          - Subchannel check message enhanced 
  *          - Read / Write retry routine check for CTC_STOP added  
+ *    0.53  Enhancement 
+ *          - Connect time changed from 150 to 300 seconds
+ *            This gives more a better chance to connect during IPL 
+ *    0.54  Bug fixes 
+ *          - Out of memory message enhanced 
+ *          - Zero buffer problem in ctc_irq_hb solved
+ *            A zero buffer could bring the ctc_irq_bh into a sk buffer allocation loop,
+ *            which could end in a out of memory situation.  
+ *    0.55  Bug fixes 
+ *          - Connect problems with systems which IPL later
+ *            SystemA is IPLed and issues a IFCONFIG ctcx against systemB which is currently
+ *            not available. When systemB comes up it is nearly inpossible to setup a 
+ *            connection.  
  */
 #include <linux/version.h>
 #include <linux/init.h>
@@ -617,6 +630,7 @@ static int ctc_buffer_alloc(struct channel *ctc) {
                         kfree(p);
                         return -ENOMEM;
                 }
+                p->block->length = 0; 
         }
    
         if (ctc->free_anchor == NULL) 
@@ -912,8 +926,13 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
         struct  ctc_priv  *privptr = NULL;
         net_device        *dev = NULL;    
         
-        ccw1_t            ccw_set_x_mode[2] = {{CCW_CMD_SET_EXTENDED, CCW_FLAG_SLI | CCW_FLAG_CC, 0, NULL},
+       /* ccw1_t            ccw_set_x_mode[2] = {{CCW_CMD_SET_EXTENDED, CCW_FLAG_SLI | CCW_FLAG_CC, 0, NULL},
+                                               {CCW_CMD_NOOP, CCW_FLAG_SLI, 0, NULL}};    */
+                                               
+       ccw1_t            ccw_set_x_mode[2] = {{CCW_CMD_SET_EXTENDED, CCW_FLAG_SLI , 0, NULL},
                                                {CCW_CMD_NOOP, CCW_FLAG_SLI, 0, NULL}}; 
+
+
 
         devstat_t *devstat = ((devstat_t *)initparm);
 
@@ -990,6 +1009,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
                 case CTC_START_SELECT:
                         if (!ctc->flag & CTC_WRITE) {
                                 ctc->state = CTC_START_READ_TEST;
+                                ctc->free_anchor->block->length = 0;    
                                 ctc->ccw[1].cda  = (char *)virt_to_phys(ctc->free_anchor->block);
                                 parm = (__u32) ctc;
                                 rc = do_IO (ctc->irq, &ctc->ccw[0], parm, 0xff, flags );
@@ -1000,7 +1020,8 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
                         } else {
                                 ctc->state = CTC_START_WRITE_TEST;
                                 /* ADD HERE THE RIGHT PACKET TO ISSUE A ROUND TRIP - PART 1 */
-                                ctc->ccw[1].count = 0;
+                                ctc->free_anchor->block->length = 0;    
+                                ctc->ccw[1].count = 2;              /* Transfer only length */
                                 ctc->ccw[1].cda  = (char *)virt_to_phys(ctc->free_anchor->block);
                                 parm = (__u32) ctc; 
                                 rc = do_IO (ctc->irq, &ctc->ccw[0], parm, 0xff, flags);
@@ -1072,6 +1093,7 @@ static void ctc_irq_handler (int irq, void *initparm, struct pt_regs *regs)
                         ctc_buffer_swap(&ctc->free_anchor, &ctc->proc_anchor);
 
                         if (ctc->free_anchor != NULL) {  
+                                ctc->free_anchor->block->length = 0;
                                 ctc->ccw[1].cda  = (char *)virt_to_phys(ctc->free_anchor->block);
                                 parm = (__u32) ctc;
                                 rc = do_IO (ctc->irq, &ctc->ccw[0], parm, 0xff, flags );
@@ -1195,8 +1217,9 @@ static void ctc_irq_bh (struct channel *ctc)
 
         while (ctc->proc_anchor != NULL) { 
 
-                lp = &ctc->proc_anchor->block->data;
+                if (ctc->proc_anchor->block->length != 0) {
 
+                        lp = &ctc->proc_anchor->block->data;
                 while ((__u8 *) lp < (__u8 *) &ctc->proc_anchor->block->length + ctc->proc_anchor->block->length) {
                         data_len = lp->length - PACKET_HEADER_LENGTH;
                         skb = dev_alloc_skb(data_len); 
@@ -1210,9 +1233,10 @@ static void ctc_irq_bh (struct channel *ctc)
                                 privptr->stats.rx_packets++;
                         } else {
                                 privptr->stats.rx_dropped++; 
-                                printk(KERN_WARNING "%s: is low on memory\n",dev->name);
+                                        printk(KERN_WARNING "%s: is low on memory (sk buffer)\n",dev->name);
                         }
                         (__u8 *)lp += lp->length;
+                }
                 }
 
                 s390irq_spin_lock_irqsave(ctc->irq, saveflags);
@@ -1251,6 +1275,7 @@ static void ctc_read_retry (struct channel *ctc)
         if (ctc->state == CTC_STOP)
                 return;
         s390irq_spin_lock_irqsave(ctc->irq, saveflags);
+        ctc->free_anchor->block->length = 0;
         ctc->ccw[1].cda  = (char *)virt_to_phys(ctc->free_anchor->block);
         parm = (__u32) ctc; 
         rc = do_IO (ctc->irq, &ctc->ccw[0], parm, 0xff, flags );
@@ -1276,8 +1301,15 @@ static void ctc_write_retry (struct channel *ctc)
 #endif 
         if (ctc->state == CTC_STOP)
                 return;
+ 
+        while (ctc->proc_anchor != NULL) { 
+                ctc->proc_anchor->block->length = 0;
+                ctc_buffer_swap(&ctc->proc_anchor, &ctc->free_anchor);
+        } 
+
+        ctc_buffer_swap(&ctc->free_anchor, &ctc->proc_anchor);
         s390irq_spin_lock_irqsave(ctc->irq, saveflags);
-        ctc->ccw[1].count = 0;
+        ctc->ccw[1].count = 2;
         ctc->ccw[1].cda  = (char *)virt_to_phys(ctc->proc_anchor->block);
         parm = (__u32) ctc; 
         rc = do_IO (ctc->irq, &ctc->ccw[0], parm, 0xff, flags );
@@ -1354,7 +1386,7 @@ static int ctc_open(net_device *dev)
                 init_timer(&timer);
                 timer.function = (void *)ctc_timer; 
                 timer.data = (__u32)&privptr->channel[i];
-                timer.expires = jiffies + 150*HZ;                        /* time to connect with the remote side */
+                timer.expires = jiffies + 300*HZ;                        /* time to connect with the remote side */
                 add_timer(&timer);
 
                 s390irq_spin_lock_irqsave(privptr->channel[i].irq, saveflags);
@@ -1382,13 +1414,13 @@ static int ctc_open(net_device *dev)
                 printk(KERN_INFO "%s: remote side is currently not ready\n", dev->name);
                 
                 for (i = 0; i < 2;  i++) {
-                        s390irq_spin_lock_irqsave(privptr->channel[i].irq, saveflags);
+                     /* s390irq_spin_lock_irqsave(privptr->channel[i].irq, saveflags);
                         parm = (unsigned long) &privptr->channel[i];
                         privptr->channel[i].state = CTC_STOP;
-                        rc = halt_IO(privptr->channel[i].irq, parm, flags);
+                        rc = halt_IO(privptr->channel[i].irq, parm, flags); /
                         s390irq_spin_unlock_irqrestore(privptr->channel[i].irq, saveflags);
                         if (rc != 0)
-                                ccw_check_return_code(dev, rc);
+                                ccw_check_return_code(dev, rc);     */
                         for (j = 0; j < CTC_BLOCKS;  j++) 
                                 ctc_buffer_free(&privptr->channel[i]);
                 }
@@ -1421,7 +1453,6 @@ static void ctc_timer (struct channel *ctc)
 static int ctc_release(net_device *dev)
 {   
         int                rc;
-        int                x; 
         int                i;
         int                j;
         __u8               flags = 0x00;

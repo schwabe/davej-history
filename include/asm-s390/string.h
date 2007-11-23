@@ -46,14 +46,15 @@ extern inline void * memchr(const void * cs,int c,size_t count)
     void *ptr;
 
     __asm__ __volatile__ ("   lr    0,%2\n"
+                          "   lr    1,%1\n"
                           "   la    %0,0(%3,%1)\n"
-                          "0: srst  %0,%1\n"
+                          "0: srst  %0,1\n"
                           "   jo    0b\n"
                           "   brc   13,1f\n"
                           "   slr   %0,%0\n"
                           "1:"
-                          : "=a" (ptr) : "a" (cs), "d" (c), "d" (count)
-                          : "cc", "0" );
+                          : "=&a" (ptr) : "a" (cs), "d" (c), "d" (count)
+                          : "cc", "0", "1" );
     return ptr;
 }
 

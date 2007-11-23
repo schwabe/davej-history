@@ -12,7 +12,7 @@
 #include <stdio.h>
 
 /* everything about the HWC terminal driver ioctl-commands */
-#include "../../../../drivers/s390/char/sclp_tty.h"
+#include "../../../../drivers/s390/char/hwc_tty.h"
 
 /* standard input, should be our HWC tty */
 #define DESCRIPTOR 0

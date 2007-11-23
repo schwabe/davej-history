@@ -94,12 +94,13 @@ typedef struct {
 
 extern inline void spin_lock(spinlock_t *lp)
 {
-	__asm__ __volatile("    basr  1,0\n"
-			   "0:  slr   0,0\n"
+        __asm__ __volatile("    bras  1,1f\n"
+                           "0:  diag  0,0,68\n"
+                           "1:  slr   0,0\n"
 			   "    cs    0,1,%1\n"
-			   "    jl    0b"
+                           "    jl    0b\n"
 			   : "=m" (lp->lock)
-			   : "0" (lp->lock) : "0", "1");
+                           : "0" (lp->lock) : "0", "1", "cc" );
 }
 
 extern inline int spin_trylock(spinlock_t *lp)
@@ -109,7 +110,7 @@ extern inline int spin_trylock(spinlock_t *lp)
 			   "    basr  1,0\n"
 			   "0:  cs    %1,1,%0"
 			   : "=m" (lp->lock), "=&d" (result)
-			   : "0" (lp->lock) : "1");
+			   : "0" (lp->lock) : "1", "cc" );
 	return !result;
 }
 
@@ -119,7 +120,7 @@ extern inline void spin_unlock(spinlock_t *lp)
 {
 	__asm__ __volatile("    xc 0(4,%0),0(%0)\n"
                            "    bcr 15,0"
-			   : /* no output */ : "a" (lp) );
+			   : /* no output */ : "a" (lp) : "memory", "cc" );
 }
 		
 #define spin_lock_irq(lock) \
@@ -156,37 +157,43 @@ extern void _write_unlock(rwlock_t *rw);
 
 #define read_lock(rw)   \
         asm volatile("   l     2,%0\n"   \
-                     "0: sll   2,1\n"    \
-                     "   srl   2,1\n"     /* clear high (=write) bit */ \
-                     "   lr    3,2\n"    \
-                     "   ahi   3,1\n"     /* one more reader */ \
+                     "   j     1f\n"     \
+                     "0: diag  0,0,68\n" \
+                     "1: la    2,0(2)\n"  /* clear high (=write) bit */ \
+                     "   la    3,1(2)\n"  /* one more reader */ \
                      "   cs    2,3,%0\n"  /* try to write new value */ \
                      "   jl    0b"       \
-                     : "+m" ((rw)->lock) : : "2", "3" );
+                     : "+m" ((rw)->lock) : : "2", "3", "cc" );
 
 #define read_unlock(rw) \
         asm volatile("   l     2,%0\n"   \
-                     "0: lr    3,2\n"    \
+                     "   j     1f\n"     \
+                     "0: diag  0,0,68\n" \
+                     "1: lr    3,2\n"    \
                      "   ahi   3,-1\n"    /* one less reader */ \
                      "   cs    2,3,%0\n" \
                      "   jl    0b"       \
-                     : "+m" ((rw)->lock) : : "2", "3" );
+                     : "+m" ((rw)->lock) : : "2", "3", "cc" );
 
 #define write_lock(rw) \
         asm volatile("   lhi   3,1\n"    \
                      "   sll   3,31\n"    /* new lock value = 0x80000000 */ \
-                     "0: slr   2,2\n"     /* old lock value must be 0 */ \
+                     "   j     1f\n"     \
+                     "0: diag  0,0,68\n" \
+                     "1: slr   2,2\n"     /* old lock value must be 0 */ \
                      "   cs    2,3,%0\n" \
                      "   jl    0b"       \
-                     : "+m" ((rw)->lock) : : "2", "3" );
+                     : "+m" ((rw)->lock) : : "2", "3", "cc" );
 
 #define write_unlock(rw) \
         asm volatile("   slr   3,3\n"     /* new lock value = 0 */ \
-                     "0: lhi   2,1\n"    \
+                     "   j     1f\n"     \
+                     "0: diag  0,0,68\n" \
+                     "1: lhi   2,1\n"    \
                      "   sll   2,31\n"    /* old lock value must be 0x80000000 */ \
                      "   cs    2,3,%0\n" \
                      "   jl    0b"       \
-                     : "+m" ((rw)->lock) : : "2", "3" );
+                     : "+m" ((rw)->lock) : : "2", "3", "cc" );
 
 #define read_lock_irq(lock)	do { __cli(); read_lock(lock); } while (0)
 #define read_unlock_irq(lock)	do { read_unlock(lock); __sti(); } while (0)
@@ -204,12 +211,4 @@ extern void _write_unlock(rwlock_t *rw);
 
 #endif /* SMP */
 #endif /* __ASM_SPINLOCK_H */
-
-
-
-
-
-
-
-
 

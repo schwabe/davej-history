@@ -1,68 +1,51 @@
+/* 
+ * File...........: linux/drivers/s390/block/dasd_fba.c
+ * Author(s)......: Holger Smolinski <Holger.Smolinski@de.ibm.com>
+ * Bugreports.to..: <Linux390@de.ibm.com>
+ * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999,2000
+ */
 
 #include <linux/stddef.h>
 #include <linux/kernel.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#endif				/* MODULE */
+#include <asm/debug.h>
 
 #include <linux/malloc.h>
-#include <linux/dasd.h>
 #include <linux/hdreg.h>	/* HDIO_GETGEO                      */
+#include <linux/blk.h>
+#include <asm/ccwcache.h>
+#include <asm/dasd.h>
 
+#include <asm/ebcdic.h>
 #include <asm/io.h>
-
 #include <asm/irq.h>
 
-#include "dasd_types.h"
-#include "dasd_ccwstuff.h"
+#include "dasd.h"
+#include "dasd_fba.h"
 
-#define DASD_FBA_CCW_LOCATE 0x43
-#define DASD_FBA_CCW_READ   0x42
-#define DASD_FBA_CCW_WRITE  0x41
 
 #ifdef PRINTK_HEADER
 #undef PRINTK_HEADER
 #endif				/* PRINTK_HEADER */
-#define PRINTK_HEADER "dasd(fba):"
+#define PRINTK_HEADER DASD_NAME"(fba):"
 
-typedef
-struct {
-	struct {
-		unsigned char perm:2;	/* Permissions on this extent */
-		unsigned char zero:2;	/* Must be zero */
-		unsigned char da:1;	/* usually zero */
-		unsigned char diag:1;	/* allow diagnose */
-		unsigned char zero2:2;	/* zero */
-	} __attribute__ ((packed)) mask;
-	unsigned char zero;	/* Must be zero */
-	unsigned short blk_size;	/* Blocksize */
-	unsigned long ext_loc;	/* Extent locator */
-	unsigned long ext_beg;	/* logical number of block 0 in extent */
-	unsigned long ext_end;	/* logocal number of last block in extent */
-} __attribute__ ((packed, aligned (32)))
+#define DASD_FBA_CCW_WRITE 0x41
+#define DASD_FBA_CCW_READ 0x42
+#define DASD_FBA_CCW_LOCATE 0x43
+#define DASD_FBA_CCW_DEFINE_EXTENT 0x63
 
-DE_fba_data_t;
+dasd_discipline_t dasd_fba_discipline;
 
-typedef
-struct {
-	struct {
-		unsigned char zero:4;
-		unsigned char cmd:4;
-	} __attribute__ ((packed)) operation;
-	unsigned char auxiliary;
-	unsigned short blk_ct;
-	unsigned long blk_nr;
-} __attribute__ ((packed, aligned (32)))
+typedef struct
+dasd_fba_private_t {
+        dasd_fba_characteristics_t rdc_data;
+} dasd_fba_private_t;
 
-LO_fba_data_t;
-
-static void
+static inline void
 define_extent (ccw1_t * ccw, DE_fba_data_t * DE_data, int rw,
 	       int blksize, int beg, int nr)
 {
 	memset (DE_data, 0, sizeof (DE_fba_data_t));
-	ccw->cmd_code = CCW_DEFINE_EXTENT;
+	ccw->cmd_code = DASD_FBA_CCW_DEFINE_EXTENT;
 	ccw->count = 16;
 	ccw->cda = (void *) __pa (DE_data);
 	if (rw == WRITE)
@@ -76,7 +59,7 @@ define_extent (ccw1_t * ccw, DE_fba_data_t * DE_data, int rw,
 	DE_data->ext_end = nr - 1;
 }
 
-static void
+static inline void
 locate_record (ccw1_t * ccw, LO_fba_data_t * LO_data, int rw, int block_nr,
 	       int block_ct)
 {
@@ -94,46 +77,174 @@ locate_record (ccw1_t * ccw, LO_fba_data_t * LO_data, int rw, int block_nr,
 	LO_data->blk_ct = block_ct;
 }
 
-int
-dasd_fba_ck_devinfo (dev_info_t * info)
+
+static int 
+dasd_fba_id_check ( dev_info_t *info )
 {
+	if ( info->sid_data.cu_type == 0x3880 ) 
+                if ( info->sid_data.dev_type == 0x3370 )
+                        return 0;
+        if ( info->sid_data.cu_type == 0x6310 )
+                if ( info->sid_data.dev_type == 0x9336 )
 	return 0;
+        return -ENODEV;
 }
 
-cqr_t *
-dasd_fba_build_req (int devindex,
-		    struct request * req)
+static int
+dasd_fba_check_characteristics (struct dasd_device_t *device)
 {
-	cqr_t *rw_cp = NULL;
-	ccw1_t *ccw;
+        int rc = -ENODEV;
+        void *rdc_data;
+        dasd_fba_private_t *private;
 
+        if ( device == NULL ) {
+                printk ( KERN_WARNING PRINTK_HEADER
+                         "Null device pointer passed to characteristics checker\n");
+                return -ENODEV;
+        }
+        if ( device->private == NULL ) {
+		device->private = kmalloc(sizeof(dasd_fba_private_t),GFP_KERNEL);
+		if ( device->private == NULL ) {
+			printk ( KERN_WARNING PRINTK_HEADER
+				 "memory allocation failed for private data\n");
+			return -ENOMEM;
+		}
+        }
+        private = (dasd_fba_private_t *)device->private;
+        rdc_data = (void *)&(private->rdc_data);
+        rc = read_dev_chars (device->devinfo.irq, &rdc_data , 32);
+        if ( rc ) {
+                printk ( KERN_WARNING PRINTK_HEADER
+                         "Read device characteristics returned error %d\n",rc);
+                return rc;
+        }
+	printk ( KERN_INFO PRINTK_HEADER 
+		 "%04X on sch %d: %04X/%02X(CU:%04X/%02X) %dMB at(%d B/blk)\n",
+                 device->devinfo.devno, device->devinfo.irq,
+                 device->devinfo.sid_data.dev_type, device->devinfo.sid_data.dev_model,
+                 device->devinfo.sid_data.cu_type, device->devinfo.sid_data.cu_model,
+		 (private->rdc_data.blk_bdsa * 
+		  (private->rdc_data.blk_size >> 9)) >> 11,
+		 private->rdc_data.blk_size);
+        return 0;
+}
+
+static int
+dasd_fba_do_analysis (struct dasd_device_t *device)
+{
+	int rc = 0;
+	int sb;
+        dasd_fba_private_t *private = (dasd_fba_private_t *)device->private;
+	int bs = private->rdc_data.blk_size;
+
+        memset (&(device->sizes), 0, sizeof (dasd_sizes_t));
+        switch ( bs ) {
+        case 512:
+        case 1024:
+        case 2048:
+        case 4096:
+		device->sizes.bp_block = bs;
+                break;
+        default:
+                printk ( KERN_INFO PRINTK_HEADER 
+                         "/dev/%s (%04X): unknown blocksize %d\n",
+                         device->name, device->devinfo.devno,bs);
+		return -EMEDIUMTYPE;
+	}
+	device->sizes.s2b_shift = 0;	/* bits to shift 512 to get a block */
+	for (sb = 512; sb < bs; sb = sb << 1)
+		device->sizes.s2b_shift++;
+	
+	device->sizes.blocks = (private->rdc_data.blk_bdsa);
+
+	return rc;
+}
+
+static int
+dasd_fba_fill_geometry(struct dasd_device_t *device, struct hd_geometry *geo)
+{
+        int rc = 0;
+	unsigned long sectors = device->sizes.blocks << device->sizes.s2b_shift;
+	unsigned long tracks = sectors >> 6;
+	unsigned long trk_rem = sectors & ((1<<6)-1);
+	unsigned long cyls = tracks >> 4;
+	unsigned long cyls_rem = tracks & ((1<<4)-1);
+
+        switch(device->sizes.bp_block) {
+        case 512:
+        case 1024:
+        case 2048:
+        case 4096:
+                break;
+        default:
+                return -EINVAL;
+        }
+	geo->cylinders = cyls;
+	geo->heads = 16;
+	geo->sectors = 128 >> device->sizes.s2b_shift;
+	geo->start = 1;
+        return rc;
+}
+
+static dasd_era_t
+dasd_fba_examine_error  (ccw_req_t *cqr, devstat_t * stat)
+{
+        dasd_device_t *device = (dasd_device_t *)cqr->device;
+        if (stat->cstat == 0x00 &&
+	    stat->dstat == (DEV_STAT_CHN_END | DEV_STAT_DEV_END))
+		return dasd_era_none;
+        
+	switch (device->devinfo.sid_data.dev_model) {
+	case 0x3370:
+		return dasd_3370_erp_examine (cqr, stat);
+	case 0x9336:
+		return dasd_9336_erp_examine (cqr, stat);
+	default:
+		return dasd_era_recover;
+	}
+}
+
+static dasd_erp_action_fn_t 
+dasd_fba_erp_action ( ccw_req_t * cqr ) 
+{
+        return default_erp_action;
+}
+
+static dasd_erp_postaction_fn_t
+dasd_fba_erp_postaction (ccw_req_t * cqr)
+{
+        if ( cqr -> function == default_erp_action)
+                return default_erp_postaction;
+        printk ( KERN_WARNING PRINTK_HEADER
+                 "unknown ERP action %p\n",
+                 cqr -> function);
+	return NULL;
+}
+
+static ccw_req_t *
+dasd_fba_build_cp_from_req (dasd_device_t *device, struct request *req)
+{
+        ccw_req_t *rw_cp = NULL;
+	int rw_cmd;
+	int bhct;
+	long size;
+        ccw1_t *ccw;
 	DE_fba_data_t *DE_data;
 	LO_fba_data_t *LO_data;
 	struct buffer_head *bh;
-	int rw_cmd;
-	int byt_per_blk = dasd_info[devindex]->sizes.bp_block;
-	int bhct;
-	long size;
+        dasd_fba_private_t *private = (dasd_fba_private_t *)device->private;
+	int byt_per_blk = device->sizes.bp_block;
 
-	if (!req->nr_sectors) {
-		PRINT_ERR ("No blocks to write...returning\n");
-		return NULL;
-	}
 	if (req->cmd == READ) {
 		rw_cmd = DASD_FBA_CCW_READ;
-	} else
-#if DASD_PARANOIA > 2
-	if (req->cmd == WRITE)
-#endif				/* DASD_PARANOIA */
-	{
+	} else if (req->cmd == WRITE) {
 		rw_cmd = DASD_FBA_CCW_WRITE;
-	}
-#if DASD_PARANOIA > 2
-	else {
+	} else {
 		PRINT_ERR ("Unknown command %d\n", req->cmd);
 		return NULL;
 	}
-#endif				/* DASD_PARANOIA */
+	/* Build the request */
+	/* count bhs to prevent errors, when bh smaller than block */
 	bhct = 0;
 	for (bh = req->bh; bh; bh = bh->b_reqnext) {
 		if (bh->b_size > byt_per_blk)
@@ -143,8 +254,8 @@ dasd_fba_build_req (int devindex,
 			bhct++;
 	}
 
-	/* Build the request */
-	rw_cp = request_cqr (2 + bhct,
+	rw_cp = dasd_alloc_request (dasd_fba_discipline.name,
+                                   2 + bhct,
 			     sizeof (DE_fba_data_t) +
 			     sizeof (LO_fba_data_t));
 	if (!rw_cp) {
@@ -160,11 +271,12 @@ dasd_fba_build_req (int devindex,
 	ccw++;
 	locate_record (ccw, LO_data, req->cmd, 0, req->nr_sectors);
 	ccw->flags = CCW_FLAG_CC;
+
 	for (bh = req->bh; bh;) {
 		if (bh->b_size > byt_per_blk) {
 			for (size = 0; size < bh->b_size; size += byt_per_blk) {
 				ccw++;
-				if (dasd_info[devindex]->rdc_data->fba.mode.bits.data_chain) {
+				if (private->rdc_data.mode.bits.data_chain) {
 					ccw->flags = CCW_FLAG_DC;
 				} else {
 					ccw->flags = CCW_FLAG_CC;
@@ -177,11 +289,11 @@ dasd_fba_build_req (int devindex,
 		} else {	/* group N bhs to fit into byt_per_blk */
 			for (size = 0; bh != NULL && size < byt_per_blk;) {
 				ccw++;
-				if (dasd_info[devindex]->rdc_data->fba.mode.bits.data_chain) {
+				if (private->rdc_data.mode.bits.data_chain) {
 					ccw->flags = CCW_FLAG_DC;
 				} else {
 					PRINT_WARN ("Cannot chain chunks smaller than one block\n");
-					release_cqr (rw_cp);
+					ccw_free_request (rw_cp);
 					return NULL;
 				}
 				ccw->cmd_code = rw_cmd;
@@ -193,164 +305,80 @@ dasd_fba_build_req (int devindex,
 			ccw->flags = CCW_FLAG_CC;
 			if (size != byt_per_blk) {
 				PRINT_WARN ("Cannot fulfill request smaller than block\n");
-				release_cqr (rw_cp);
+				ccw_free_request (rw_cp);
 				return NULL;
 			}
 		}
 	}
 	ccw->flags &= ~(CCW_FLAG_DC | CCW_FLAG_CC);
+
+        rw_cp->device = device;
+        rw_cp->expires = 5 * 0xf424000; /* 5 seconds */
+        rw_cp->req = req;
+        atomic_compare_and_swap_debug(&rw_cp->status,CQR_STATUS_EMPTY,CQR_STATUS_FILLED);
 	return rw_cp;
 }
 
-void
-dasd_fba_print_char (dasd_characteristics_t * ct)
+static char *
+dasd_fba_dump_sense(struct dasd_device_t *device, ccw_req_t *req)
 {
-	dasd_fba_characteristics_t *c =
-	(dasd_fba_characteristics_t *) ct;
-	PRINT_INFO ("%d blocks of %d bytes %d MB\n",
-		    c->blk_bdsa, c->blk_size,
-		    (c->blk_bdsa * (c->blk_size >> 9)) >> 11);
-	PRINT_INFO ("%soverrun, %s mode, data chains %sallowed\n"
-		    "%sremovable, %sshared\n",
-		    (c->mode.bits.overrunnable ? "" : "no "),
-		    (c->mode.bits.burst_byte ? "burst" : "byte"),
-		    (c->mode.bits.data_chain ? "" : "not "),
-		    (c->features.bits.removable ? "" : "not "),
-		    (c->features.bits.shared ? "" : "not "));
+        char *page = (char *)get_free_page(GFP_KERNEL);
+        int len;
+        if ( page == NULL ) {
+                return NULL;
+}
+
+        len = sprintf ( page, KERN_WARNING PRINTK_HEADER 
+                        "device %04X on irq %d: I/O status report:\n",
+                        device->devinfo.devno,device->devinfo.irq);
+                        
+
+        return page;
+}
+
+dasd_discipline_t dasd_fba_discipline = {
+	name :                          "FBA ",
+	ebcname :                       "FBA ",
+        id_check:                       dasd_fba_id_check,          
+        check_characteristics:          dasd_fba_check_characteristics,
+        do_analysis:                    dasd_fba_do_analysis,          
+        fill_geometry:                  dasd_fba_fill_geometry,
+        start_IO:                       dasd_start_IO,           
+        examine_error:                  dasd_fba_examine_error,          
+        erp_action:                     dasd_fba_erp_action,             
+        erp_postaction:                 dasd_fba_erp_postaction,         
+        build_cp_from_req:              dasd_fba_build_cp_from_req,      
+        dump_sense:                     dasd_fba_dump_sense,            
+        int_handler:                    dasd_int_handler            
 };
 
 int
-dasd_fba_ck_char (dasd_characteristics_t * rdc)
-{
+dasd_fba_init( void ) {
 	int rc = 0;
-	dasd_fba_print_char (rdc);
-	return rc;
-}
-
-cqr_t *
-dasd_fba_fill_sizes_first (int di)
-{
-	cqr_t *rw_cp = NULL;
-	ccw1_t *ccw;
-	DE_fba_data_t *DE_data;
-	LO_fba_data_t *LO_data;
-	dasd_information_t *info = dasd_info[di];
-	static char buffer[8];
-
-	dasd_info[di]->sizes.label_block = 1;
-
-	rw_cp = request_cqr (3,
-			     sizeof (DE_fba_data_t) +
-			     sizeof (LO_fba_data_t));
-	DE_data = rw_cp->data;
-	LO_data = rw_cp->data + sizeof (DE_fba_data_t);
-	ccw = rw_cp->cpaddr;
-	define_extent (ccw, DE_data, READ, info->sizes.bp_block, 1, 1);
-	ccw->flags = CCW_FLAG_CC;
-	ccw++;
-	locate_record (ccw, LO_data, READ, 0, 1);
-	ccw->flags = CCW_FLAG_CC;
-	ccw++;
-	ccw->cmd_code = DASD_FBA_CCW_READ;
-	ccw->flags = CCW_FLAG_SLI;
-	ccw->count = 8;
-	ccw->cda = (void *) __pa (buffer);
-	rw_cp->devindex = di;
-	atomic_set (&rw_cp->status, CQR_STATUS_FILLED);
-	return rw_cp;
-}
-
-int
-dasd_fba_fill_sizes_last (int devindex)
-{
-	int rc = 0;
-	int sb;
-	dasd_information_t *info = dasd_info[devindex];
-
-	info->sizes.bp_sector = info->rdc_data->fba.blk_size;
-	info->sizes.bp_block = info->sizes.bp_sector;
-
-	info->sizes.s2b_shift = 0;	/* bits to shift 512 to get a block */
-	for (sb = 512; sb < info->sizes.bp_sector; sb = sb << 1)
-		info->sizes.s2b_shift++;
-
-	info->sizes.blocks = (info->rdc_data->fba.blk_bdsa);
-
-	if (info->sizes.s2b_shift >= 1)
-		info->sizes.kbytes = info->sizes.blocks <<
-		    (info->sizes.s2b_shift - 1);
-	else
-		info->sizes.kbytes = info->sizes.blocks >>
-		    (-(info->sizes.s2b_shift - 1));
+        printk ( KERN_INFO PRINTK_HEADER
+                 "%s discipline initializing\n", dasd_fba_discipline.name);
+        ASCEBC(dasd_fba_discipline.ebcname,4);
+        dasd_discipline_enq(&dasd_fba_discipline);
 
 	return rc;
 }
+/*
+ * Overrides for Emacs so that we follow Linus's tabbing style.
+ * Emacs will notice this stuff at the end of the file and automatically
+ * adjust the settings for this buffer only.  This must remain at the end
+ * of the file.
+ * ---------------------------------------------------------------------------
+ * Local variables:
+ * c-indent-level: 4 
+ * c-brace-imaginary-offset: 0
+ * c-brace-offset: -4
+ * c-argdecl-indent: 4
+ * c-label-offset: -4
+ * c-continued-statement-offset: 4
+ * c-continued-brace-offset: 0
+ * indent-tabs-mode: nil
+ * tab-width: 8
+ * End:
+ */
 
-int
-dasd_fba_format (int devindex, format_data_t * fdata)
-{
-	int rc = 0;
-	return rc;
-}
 
-void
-dasd_fba_fill_geometry (int di, struct hd_geometry *geo)
-{
-	int bfactor, nr_sectors, sec_size;
-	int trk_cap, trk_low, trk_high, tfactor, nr_trks, trk_size;
-	int cfactor, nr_cyls, cyl_size;
-	int remainder;
-
-	dasd_information_t *info = dasd_info[di];
-	PRINT_INFO ("FBA has no geometry! Faking one...\n%s", "");
-
-	/* determine the blocking factor of sectors */
-	for (bfactor = 8; bfactor > 0; bfactor--) {
-		remainder = info->rdc_data->fba.blk_bdsa % bfactor;
-		PRINT_INFO ("bfactor %d remainder %d\n", bfactor, remainder);
-		if (!remainder)
-			break;
-	}
-	nr_sectors = info->rdc_data->fba.blk_bdsa / bfactor;
-	sec_size = info->rdc_data->fba.blk_size * bfactor;
-	
-	geo -> sectors = bfactor;
-
-	/* determine the nr of sectors per track */
-	trk_cap = (64 * 1 << 10) / sec_size;	/* 64k in sectors */
-	trk_low = trk_cap * 2 / 3;
-	trk_high = trk_cap * 4 / 3;
-	for (tfactor = trk_high; tfactor > trk_low; tfactor--) {
-		PRINT_INFO ("remainder %d\n", remainder);
-		remainder = nr_sectors % bfactor;
-		if (!remainder)
-			break;
-	}
-	nr_trks = nr_sectors / tfactor;
-	trk_size = sec_size * tfactor;
-
-	/* determine the nr of trks per cylinder */
-	for (cfactor = 31; cfactor > 0; cfactor--) {
-		PRINT_INFO ("remainder %d\n", remainder);
-		remainder = nr_trks % bfactor;
-		if (!remainder)
-			break;
-	}
-	nr_cyls = nr_trks / cfactor;
-	sec_size = info->rdc_data->fba.blk_size * bfactor;
-
-	geo -> heads = nr_trks;
-	geo -> cylinders = nr_cyls;
-	geo -> start = info->sizes.label_block + 1;
-}
-
-dasd_operations_t dasd_fba_operations =
-{
-	ck_devinfo:dasd_fba_ck_devinfo,
-	get_req_ccw:dasd_fba_build_req,
-	ck_characteristics:dasd_fba_ck_char,
-	fill_sizes_first:dasd_fba_fill_sizes_first,
-	fill_sizes_last:dasd_fba_fill_sizes_last,
-	dasd_format:dasd_fba_format,
-	fill_geometry:dasd_fba_fill_geometry
-};

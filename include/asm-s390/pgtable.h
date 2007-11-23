@@ -86,7 +86,7 @@ static inline void flush_tlb_page(struct vm_area_struct *vma,
         __flush_tlb_one(vma->vm_mm,va);
 }
 #else
-#define flush_tlb_page(vma, va) flush_tlb_all()
+#define flush_tlb_page(vma, va) flush_tlb_mm(vma->vm_mm)
 #endif
 
 static inline void flush_tlb_range(struct mm_struct *mm,
@@ -171,7 +171,7 @@ static inline void flush_tlb_page(struct vm_area_struct * vma,
 	__flush_tlb_one(vma->vm_mm,va);
 }
 #else
-#define flush_tlb_page(vma, va) flush_tlb_all()
+#define flush_tlb_page(vma, va) flush_tlb_mm(vma->vm_mm)
 #endif
 
 static inline void flush_tlb_range(struct mm_struct * mm,
@@ -281,6 +281,7 @@ static inline void flush_tlb_range(struct mm_struct * mm,
 #define _PAGE_PRESENT   0x001          /* Software                         */
 #define _PAGE_ACCESSED  0x002          /* Software accessed                */
 #define _PAGE_DIRTY     0x004          /* Software dirty                   */
+#define _PAGE_WRITE     0x008          /* Software write-access allowed    */
 #define _PAGE_RO        0x200          /* HW read-only                     */
 #define _PAGE_INVALID   0x400          /* HW invalid                       */
 
@@ -305,19 +306,21 @@ static inline void flush_tlb_range(struct mm_struct * mm,
 
 #define _SEGMENT_TABLE  (_USER_SEG_TABLE_LEN|0x80000000)
 #define _KERNSEG_TABLE  (_KERNEL_SEG_TABLE_LEN)
+
 /*
  * No mapping available
  */
 #define PAGE_NONE       __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_INVALID)
-#define PAGE_SHARED     __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED)
+#define PAGE_SHARED     __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_WRITE | _PAGE_RO)
 #define PAGE_COPY       __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_RO)
 #define PAGE_READONLY   __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_RO)
-#define PAGE_KERNEL     __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_DIRTY)
+#define PAGE_KERNEL     __pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_WRITE | _PAGE_DIRTY)
 
 /*
  * The S390 can't do page protection for execute, and considers that the same are read.
  * Also, write permissions imply read permissions. This is the closest we can get..
  */
+         /*xwr*/
 #define __P000  PAGE_NONE
 #define __P001  PAGE_READONLY
 #define __P010  PAGE_COPY
@@ -434,7 +437,7 @@ extern inline void pgd_clear(pgd_t * pgdp)      { }
  * The following only work if pte_present() is true.
  * Undefined behaviour if not..
  */
-extern inline int pte_write(pte_t pte)          { return !(pte_val(pte) & _PAGE_RO); }
+extern inline int pte_write(pte_t pte)          { return pte_val(pte) & _PAGE_WRITE; }
 extern inline int pte_dirty(pte_t pte)          { return pte_val(pte) & _PAGE_DIRTY; }
 extern inline int pte_young(pte_t pte)          { return pte_val(pte) & _PAGE_ACCESSED; }
 
@@ -447,11 +450,17 @@ extern inline pte_t pte_mkread(pte_t pte)       { pte_val(pte) &= _PAGE_INVALID;
 extern inline pte_t pte_mkexec(pte_t pte)       { pte_val(pte) &= _PAGE_INVALID; return pte; }
 */
 
-extern inline pte_t pte_wrprotect(pte_t pte)    { pte_val(pte) |= _PAGE_RO; return pte; }
-extern inline pte_t pte_mkwrite(pte_t pte)      { pte_val(pte) &= ~_PAGE_RO ; return pte; }
+extern inline int __pte_set_ro(int pte)         { if ((pte & (_PAGE_WRITE|_PAGE_DIRTY)) == (_PAGE_WRITE|_PAGE_DIRTY))
+                                                      pte &= ~_PAGE_RO;
+                                                  else
+                                                      pte |= _PAGE_RO;
+                                                  return pte; }
 
-extern inline pte_t pte_mkclean(pte_t pte)      { pte_val(pte) &= ~_PAGE_DIRTY; return pte; }
-extern inline pte_t pte_mkdirty(pte_t pte)      { pte_val(pte) |= _PAGE_DIRTY; return pte; }
+extern inline pte_t pte_wrprotect(pte_t pte)    { pte_val(pte) = __pte_set_ro(pte_val(pte) & ~_PAGE_WRITE); return pte; }
+extern inline pte_t pte_mkwrite(pte_t pte)      { pte_val(pte) = __pte_set_ro(pte_val(pte) | _PAGE_WRITE); return pte; }
+
+extern inline pte_t pte_mkclean(pte_t pte)      { pte_val(pte) = __pte_set_ro(pte_val(pte) & ~_PAGE_DIRTY); return pte; }
+extern inline pte_t pte_mkdirty(pte_t pte)      { pte_val(pte) = __pte_set_ro(pte_val(pte) | _PAGE_DIRTY); return pte; }
 
 extern inline pte_t pte_mkold(pte_t pte)        { pte_val(pte) &= ~_PAGE_ACCESSED; return pte; }
 extern inline pte_t pte_mkyoung(pte_t pte)      { pte_val(pte) |= _PAGE_ACCESSED; return pte; }

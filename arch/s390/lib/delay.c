@@ -20,25 +20,30 @@
 
 void __delay(unsigned long loops)
 {
+        /*
+         * To end the bloody studid and useless discussion about the
+         * BogoMips number I took the liberty to define the __delay
+         * function in a way that that resulting BogoMips number will
+         * yield the megahertz number of the cpu. The important function
+         * is udelay and that is done using the tod clock. -- martin.
+         */
 	__asm__ __volatile__(
-                "0: ahi  %0,-1\n"
-                "   jnm  0b"
-                : /* no outputs */ : "r" (loops) );
+                "0: brct %0,0b"
+                : /* no outputs */ : "r" (loops/2) );
 }
 
-inline void __const_udelay(unsigned long xloops)
-{
-
-	__asm__("LR    3,%1\n\t"
-		"MR    2,%2\n\t"
-		"LR    %0,2\n\t"
-		: "=r" (xloops)
-		: "r" (xloops) , "r"  (loops_per_sec)
-		: "2" , "3");
-        __delay(xloops);
-}
-
+/*
+ * Waits for 'usecs' microseconds using the tod clock
+ */
 void __udelay(unsigned long usecs)
 {
-	__const_udelay(usecs * 0x000010c6);  /* 2**32 / 1000000 */
+        uint64_t start_cc, end_cc;
+
+        if (usecs == 0)
+                return;
+        asm volatile ("STCK %0" : "=m" (start_cc));
+        do {
+                asm volatile ("STCK %0" : "=m" (end_cc));
+        } while (((end_cc - start_cc)/4096) < usecs);
 }
+

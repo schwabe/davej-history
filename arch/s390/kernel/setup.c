@@ -43,6 +43,7 @@
 __u16 boot_cpu_addr;
 int cpus_initialized = 0;
 unsigned long cpu_initialized = 0;
+volatile int __cpu_logical_map[NR_CPUS]; /* logical cpu to cpu address */
 
 /*
  * Setup options
@@ -75,6 +76,7 @@ static char command_line[COMMAND_LINE_SIZE] = { 0, };
 void cpu_init (void)
 {
         int nr = smp_processor_id();
+        int addr = hard_smp_processor_id();
 
         if (test_and_set_bit(nr,&cpu_initialized)) {
                 printk("CPU#%d ALREADY INITIALIZED!!!!!!!!!\n", nr);
@@ -86,7 +88,7 @@ void cpu_init (void)
          * Store processor id in lowcore (used e.g. in timer_interrupt)
          */
         asm volatile ("stidp %0": "=m" (S390_lowcore.cpu_data.cpu_id));
-        S390_lowcore.cpu_data.cpu_addr = hard_smp_processor_id();
+        S390_lowcore.cpu_data.cpu_addr = addr;
         S390_lowcore.cpu_data.cpu_nr = nr;
 
         /*
@@ -132,7 +134,7 @@ __initfunc(void vmpoff_setup(char *str, char *ints))
  * Reboot, halt and power_off routines for non SMP.
  */
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 void machine_restart(char * __unused)
 {
   reipl(S390_lowcore.ipl_device); 
@@ -142,14 +144,14 @@ void machine_halt(void)
 {
         if (MACHINE_IS_VM && strlen(vmhalt_cmd) > 0) 
                 cpcmd(vmhalt_cmd, NULL, 0);
-                disabled_wait(0);
+        signal_processor(smp_processor_id(), sigp_stop_and_store_status);
         }
 
 void machine_power_off(void)
 {
         if (MACHINE_IS_VM && strlen(vmpoff_cmd) > 0)
                 cpcmd(vmpoff_cmd, NULL, 0);
-                disabled_wait(0);
+        signal_processor(smp_processor_id(), sigp_stop_and_store_status);
         }
 #endif
 
@@ -190,6 +192,7 @@ __initfunc(void setup_arch(char **cmdline_p,
          */
         cpu_init();
         boot_cpu_addr = S390_lowcore.cpu_data.cpu_addr;
+        __cpu_logical_map[0] = boot_cpu_addr;
 
         /*
          * print what head.S has found out about the machine 
@@ -259,11 +262,14 @@ __initfunc(void setup_arch(char **cmdline_p,
 				delay = delay*60*1000000;
 				from++;
 			}
-			tod_wait(delay);
+			/* now wait for the requested amount of time */
+			udelay(delay);
                 }
                 cn = *(from++);
                 if (!cn)
                         break;
+                if (cn == '\n')
+                        cn = ' ';  /* replace newlines with space */
                 if (cn == ' ' && c == ' ')
                         continue;  /* remove additional spaces */
                 c = cn;
@@ -271,6 +277,7 @@ __initfunc(void setup_arch(char **cmdline_p,
                         break;
                 *(to++) = c;
         }
+        if (c == ' ' && to > command_line) to--;
         *to = '\0';
         *cmdline_p = command_line;
         memory_end += PAGE_OFFSET;
@@ -298,12 +305,12 @@ __initfunc(void setup_arch(char **cmdline_p,
 void print_cpu_info(struct cpuinfo_S390 *cpuinfo)
 {
    printk("cpu %d "
-#ifdef __SMP__
+#ifdef CONFIG_SMP
            "phys_idx=%d "
 #endif
            "vers=%02X ident=%06X machine=%04X unused=%04X\n",
            cpuinfo->cpu_nr,
-#ifdef __SMP__
+#ifdef CONFIG_SMP
            cpuinfo->cpu_addr,
 #endif
            cpuinfo->cpu_id.version,

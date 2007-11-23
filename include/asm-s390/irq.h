@@ -1,6 +1,7 @@
 #ifndef __irq_h
 #define __irq_h
 
+#ifdef __KERNEL__
 #include <asm/hardirq.h>
 
 /*
@@ -8,6 +9,8 @@
  */
 #define __MAX_SUBCHANNELS 65536
 #define NR_IRQS           __MAX_SUBCHANNELS
+
+#define LPM_ANYPATH 0xff /* doesn't really belong here, Ingo? */
 
 #define INVALID_STORAGE_AREA ((void *)(-1 - 0x3FFF ))
 
@@ -67,6 +70,8 @@ typedef struct {
                                    /*  ... is not installed, this results */
                                    /*  ... in an operand exception.       */
    } __attribute__ ((packed)) pmcw_t;
+
+#endif /* __KERNEL__ */
 
 /*
  * subchannel status word
@@ -130,6 +135,8 @@ typedef struct {
 #define SCHN_STAT_INTF_CTRL_CHK  0x02
 #define SCHN_STAT_CHAIN_CHECK    0x01
 
+#ifdef __KERNEL__
+
 /*
  * subchannel information block
  */
@@ -138,6 +145,8 @@ typedef struct {
       scsw_t scsw;             /* subchannel status word */
       char mda[12];            /* model dependent area */
    } schib_t __attribute__ ((packed,aligned(4)));
+
+#endif /* __KERNEL__ */
 
 typedef struct {
       char            cmd_code;/* command code */
@@ -163,6 +172,8 @@ typedef struct {
 #define CCW_CMD_RDC             0x64
 #define CCW_CMD_SET_PGID        0xAF
 #define CCW_CMD_SENSE_ID        0xE4
+
+#ifdef __KERNEL__
 
 #define SENSE_MAX_COUNT         0x20
 
@@ -196,6 +207,8 @@ typedef struct {
       unsigned int   zero : 7; /* reserved zeros */
       ccw1_t        *cpa;      /* channel program address */
    }  __attribute__ ((packed,aligned(4))) orb_t;
+
+#endif /* __KERNEL__ */
 
 typedef struct {
       unsigned int res0  : 4;  /* reserved */
@@ -284,6 +297,8 @@ typedef struct {
       char   ecw[32];          /* extended control word */
    } irb_t __attribute__ ((aligned(4)));
 
+#ifdef __KERNEL__
+
 /*
  * TPI info structure
  */
@@ -323,6 +338,8 @@ typedef struct {
       ciw_t    ciw[16];            /* variable # of CIWs */
    }  __attribute__ ((packed,aligned(4))) senseid_t;
 
+#endif /* __KERNEL__ */
+
 /*
  * sense data
  */
@@ -330,6 +347,7 @@ typedef struct {
       unsigned char res[32];   /* reserved   */
       unsigned char data[32];  /* sense data */
    } sense_t;
+
 
 /*
  * device status area, to be provided by the device driver
@@ -367,16 +385,20 @@ typedef struct {
 #define DEVSTAT_CLEAR_FUNCTION     0x00000100
 #define DEVSTAT_PCI                0x00000200
 #define DEVSTAT_SUSPENDED          0x00000400
+#define DEVSTAT_UNKNOWN_DEV        0x00000800
 #define DEVSTAT_FINAL_STATUS       0x80000000
 
 #define INTPARM_STATUS_PENDING     0xFFFFFFFF
+
+#ifdef __KERNEL__
 
 typedef  void (* io_handler_func1_t) ( int  irq,
                                        devstat_t *devstat,
                                        struct pt_regs *rgs);
 
 typedef  void (* io_handler_func_t) ( int  irq,
-                                      __u32 intparm );
+                                      void           *devstat,
+                                      struct pt_regs *rgs);
 
 typedef  void ( * not_oper_handler_func_t)( int irq,
                                             int status );
@@ -777,7 +799,7 @@ static inline void irq_exit(int cpu, unsigned int irq)
  * x86 profiling function, SMP safe. We might want to do this in
  * assembly totally?
  */
-extern unsigned long _stext;
+extern char _stext;
 static inline void s390_do_profile (unsigned long addr)
 {
         if (prof_buffer && current->pid) {
@@ -808,6 +830,7 @@ static inline void s390_do_profile (unsigned long addr)
 
 #define s390irq_spin_unlock_irqrestore(irq,flags) \
         spin_unlock_irqrestore(&(ioinfo[irq]->irq_lock), flags)
+#endif /* __KERNEL__ */
 
 #endif
 

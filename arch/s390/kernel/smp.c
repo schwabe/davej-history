@@ -43,6 +43,7 @@ extern void update_one_process( struct task_struct *p,
 extern int cpu_idle(void * unused);
 
 extern __u16 boot_cpu_addr;
+extern volatile int __cpu_logical_map[];
 
 /*
  * An array with a pointer the lowcore of every CPU.
@@ -53,7 +54,6 @@ struct _lowcore *lowcore_ptr[NR_CPUS];
 unsigned int     prof_multiplier[NR_CPUS];
 unsigned int     prof_counter[NR_CPUS];
 volatile int     cpu_number_map[NR_CPUS];
-volatile int     __cpu_logical_map[NR_CPUS]; /* logical cpu to cpu address */
 cycles_t         cacheflush_time=0;
 int              smp_threads_ready=0;      /* Set when the idlers are all forked. */
 unsigned long    ipi_count=0;              /* Number of IPIs delivered. */
@@ -107,7 +107,7 @@ void do_machine_halt(void)
         smp_send_stop();
         if (MACHINE_IS_VM && strlen(vmhalt_cmd) > 0) 
                 cpcmd(vmhalt_cmd, NULL, 0);
-                disabled_wait(0);
+        signal_processor(smp_processor_id(), sigp_stop_and_store_status);
         }
 
 void machine_halt(void)
@@ -124,7 +124,7 @@ void do_machine_power_off(void)
         smp_send_stop();
         if (MACHINE_IS_VM && strlen(vmpoff_cmd) > 0)
                 cpcmd(vmpoff_cmd, NULL, 0);
-                disabled_wait(0);
+        signal_processor(smp_processor_id(), sigp_stop_and_store_status);
         }
 
 void machine_power_off(void)
@@ -417,7 +417,7 @@ int smp_signal_others(sigp_order_code order_code, u32 parameter,
 
 void smp_send_stop(void)
 {
-        smp_signal_others(sigp_stop, 0, TRUE, NULL);
+        smp_signal_others(sigp_stop_and_store_status, 0, TRUE, NULL);
 }
 
 /*
@@ -472,7 +472,6 @@ void smp_count_cpus(void)
 {
         int curr_cpu;
 
-        __cpu_logical_map[0] = boot_cpu_addr;
         current->processor = 0;
         smp_num_cpus = 1;
         for (curr_cpu = 0;
@@ -498,11 +497,16 @@ extern void cpu_init (void);
 
 int __init start_secondary(void *cpuvoid)
 {
+        /* Setup the cpu */
         cpu_init();
+        /* Print info about this processor */
         print_cpu_info(&safe_get_cpu_lowcore(smp_processor_id()).cpu_data);
+        /* Wait for completion of smp startup */
         while (!atomic_read(&smp_commenced))
                 /* nothing */ ;
+        /* init per CPU 100 hz timer */
         init_100hz_timer();
+        /* cpu_idle will call schedule for us */
         return cpu_idle(NULL);
 }
 

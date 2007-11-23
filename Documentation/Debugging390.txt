@@ -520,9 +520,46 @@ main(int argc,char *argv[])
 }
 
 
+New compiler changes
+====================
+
+main(int argc,char *argv[])
+{
+  4004fc:	90 7f f0 1c       	stm	%r7,%r15,28(%r15)
+  400500:	a7 d5 00 04       	bras	%r13,400508 <main+0xc>
+  400504:	00 40 04 f4       	.long	0x004004f4 
+  # compiler now puts constant pool in code to so it saves an instruction 
+  400508:	18 0f             	lr	%r0,%r15
+  40050a:	a7 fa ff a0       	ahi	%r15,-96
+  40050e:	50 00 f0 00       	st	%r0,0(%r15)
+	return(test(5));
+  400512:	58 10 d0 00       	l	%r1,0(%r13)
+  400516:	a7 28 00 05       	lhi	%r2,5
+  40051a:	0d e1             	basr	%r14,%r1
+  # compiler adds 1 extra instruction to epilogue this is done to
+  # avoid processor pipeline stalls owing to data dependencies on g5 &
+  # above as register 14 in the old code was needed directly after being loaded 
+  # by the lm	%r11,%r15,140(%r15) for the br %14.
+  40051c:	58 40 f0 98       	l	%r4,152(%r15)
+  400520:	98 7f f0 7c       	lm	%r7,%r15,124(%r15)
+  400524:	07 f4             	br	%r4
+}
+
+Hartmut ( our compiler developer ) also has been threatening to take out the
+stack backchain in optimised code as this also causes pipeline stalls, you
+have been warned.
+
+
+
 Compiling programs for debugging on Linux for S390
 ==================================================
-Make sure that the gcc is compiling & linking with the -g flag on.
+Make sure that the gcc is compiling & linking with the -g flag on
+this generates plain old gnu stabs, don't use
+-ggdb, -gxcoff+ or any other silly option these other options more than
+likely don't work ( we haven't tested them ), -gstabs is supposed to add
+extra extensions to the debugging info for debugging c++ we haven't got
+round to testing this yet.
+
 This is typically done adding/appending the flags -g to the 
 CFLAGS & LDFLAGS variables Makefile of the program concerned.
 
@@ -693,6 +730,39 @@ extern inline void spin_lock(spinlock_t *lp)
 } 
 
 6) If debugging under VM go down to that section in the document for more info.
+
+
+I now have a tool which takes the pain out of --adjust-vma
+& you are able to do something like
+make /arch/s390/kernel/traps.lst
+& it automatically generates the correctly relocated entries for
+the text segment in traps.lst.
+
+Add the following lines to you Rules.make
+%.lst: %.c
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -g -c -o $*.o $<
+	$(TOPDIR)/scripts/makelst $* $(TOPDIR) $(OBJDUMP)
+
+Copy the code snippet below into the scripts directory in a file called makelst
+it is'nt very pretty but it works & dont forget to chmod 755 makelst
+to make it an executable.
+#	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -g -c -o $*.o $<
+#	$(TOPDIR)/scripts/makelst $* $(TOPDIR) $(OBJDUMP)
+#
+#    Copyright (C) 2000 IBM Corporation
+#    Author(s): DJ Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com) 
+#
+
+t1=`$3 --syms $2/$1.o | grep .text | grep " F " | head -n 1`
+t2=`echo $t1 | gawk '{ print $6 }'`
+t3=`grep $t2 $2/System.map`
+t4=`echo $t3 | gawk '{ print $1 }'`
+t5=`echo $t1 | gawk '{ print $1 }'`
+t6=`echo $t4 - $t5 | sed s/a/A/ | sed s/b/B/ | sed s/c/C/ | sed s/d/D/ | sed s/e/E/ | sed s/f/F/`
+t7=`( echo  ibase=16 ; echo $t6 ) | bc`
+$3 --source --adjust-vma=$t7 $2/$1.o > $2/$1.lst
+
+
 
 
 strace:
@@ -941,6 +1011,9 @@ TR BR <INTO OR FROM> will trace branches into or out of an address.
 e.g.
 TR BR INTO 0 is often quite useful if a program is getting awkward & deciding
 to branch to 0 & crashing as this will stop at the address before in jumps to 0.
+TR I R <address range> RUN cmd d g
+single steps a range of addresses but stays running &
+displays the gprs on each step.
 
 
 
@@ -992,6 +1065,9 @@ script with breakpoints on every kernel procedure, this isn't a good idea
 because there are thousands of these routines & VM can only set 255 breakpoints
 at a time so you nearly had to spend as long pruning the file down as you would 
 entering the msg's by hand ),however, the trick might be useful for a single object file.
+On linux'es 3270 emulator x3270 there is a very useful option under the file ment
+Save Screens In File this is very good of keeping a copy of traces. 
+
 
 
 Tracing Program Exceptions
@@ -1436,9 +1512,9 @@ Ingo's favourite trick is tracing all the IO's & CCWS & spooling them into the r
 VM guest so he can ftp the logfile back to his own machine.I'll do a small bit of this & give you
  a look at the output.
 
-1) Spool stdout to VM guest linux4's reader
-SP PRT TO * 
-2) Fill linux4's reader with the trace
+1) Spool stdout to VM reader
+SP PRT TO (another vm guest ) or * for the local vm guest
+2) Fill the reader with the trace
 TR IO 7c08-7c09 INST INT CCW PRT RUN
 3) Start up linux 
 i 00c  
@@ -1775,7 +1851,9 @@ Breakpoint 2 at 0x4d87a4: file top.c, line 2609.
 
 LDD
 ===
-This is a program which lists the shared libraries which a library needs.
+This is a program which lists the shared libraries which a library needs,
+Note you also get the relocations of the shared library text segments which
+help when using objdump --source.
 e.g.
  ldd ./gdb
 outputs
@@ -1783,6 +1861,21 @@ libncurses.so.4 => /usr/lib/libncurses.so.4 (0x40018000)
 libm.so.6 => /lib/libm.so.6 (0x4005e000)
 libc.so.6 => /lib/libc.so.6 (0x40084000)
 /lib/ld-linux.so.2 => /lib/ld-linux.so.2 (0x40000000)
+
+
+Debugging shared libraries
+==========================
+Most programs use shared libraries, however it can be very painful
+when you single step instruction into a function like printf for the 
+first time & you end up in functions like _dl_runtime_resolve this is
+the ld.so doing lazy binding, lazy binding is a concept in ELF where 
+shared library functions are not loaded into memory unless they are 
+actually used, great for saving memory but a pain to debug.
+To get around this either relink the program -static or exit gdb type 
+export LD_BIND_NOW=true this will stop lazy binding & restart the gdb'ing 
+the program in question.
+ 
+
 
 Debugging modules
 =================

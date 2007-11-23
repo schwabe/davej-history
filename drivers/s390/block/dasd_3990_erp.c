@@ -6,10 +6,13 @@
  * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 2000
  */
 
-#include <linux/dasd.h>
-#include "dasd_erp.h"
+#include <asm/ccwcache.h>
+#include <asm/dasd.h>
 
+#ifdef PRINTK_HEADER
+#undef PRINTK_HEADER
 #define PRINTK_HEADER "dasd_erp(3990)"
+#endif /* PRINTK_HEADER */
 
 /*
  * DASD_3990_ERP_EXAMINE_32 
@@ -95,7 +98,7 @@ dasd_3990_erp_examine_24 (char *sense)
  *   dasd_era_recover   for all others.
  */
 dasd_era_t
-dasd_3990_erp_examine (cqr_t * cqr, devstat_t * stat)
+dasd_3990_erp_examine (ccw_req_t * cqr, devstat_t * stat)
 {
 
 	char *sense = stat->ii.sense.data;

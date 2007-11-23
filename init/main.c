@@ -47,7 +47,7 @@
 #endif
 
 #ifdef CONFIG_DASD
-#include <linux/dasd.h>
+#include <asm/dasd.h>
 #endif
 
 #ifdef CONFIG_BLK_DEV_XPRAM
@@ -199,9 +199,6 @@ extern void mdisk_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_DASD
 extern void dasd_setup(char *str, int *ints);
-#ifdef CONFIG_DASD_MDSK
-extern void dasd_mdsk_setup(char *str, int *ints);
-#endif
 #endif
 #ifdef CONFIG_BLK_DEV_XPRAM
 extern void xpram_setup(char *str, int *ints);
@@ -1098,9 +1095,6 @@ static struct kernel_param raw_params[] __initdata = {
 #endif
 #ifdef CONFIG_DASD
         { "dasd=", dasd_setup },
-#ifdef CONFIG_DASD_MDSK
-        { "dasd_force_diag=", dasd_mdsk_setup },
-#endif
 #endif
 #ifdef CONFIG_BLK_DEV_XPRAM
         { "xpram_parts=", xpram_setup },
@@ -1414,6 +1408,9 @@ asmlinkage void __init start_kernel(void)
 	vma_init();
 	buffer_init(memory_end-memory_start);
  	page_cache_init(memory_end-memory_start);
+#ifdef CONFIG_ARCH_S390
+	ccwcache_init();
+#endif
 	signals_init();
 	inode_init();
 	file_table_init();
@@ -1552,9 +1549,7 @@ static void __init do_basic_setup(void)
 
 	/* Set up devices .. */
 	device_setup();
-#if  CONFIG_CHANDEV
-	chandev_init();
-#endif   
+
 	/* .. executable formats .. */
 	binfmt_setup();
 

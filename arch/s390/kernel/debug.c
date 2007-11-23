@@ -3,6 +3,7 @@
 #include <linux/errno.h>
 #include <linux/malloc.h>
 #include <asm/ebcdic.h>
+#include <asm/debug.h>
 
 #ifdef MODULE
 #include <linux/module.h>
@@ -10,9 +11,7 @@
 
 #include <asm/ebcdic.h>
 
-#include "debug.h"
-
-debug_info_t debug_areas[MAX_DEBUG_AREAS];
+debug_info_t debug_areas[MAX_DEBUG_AREAS] = { {NULL, },};
 debug_info_t *free_area = 0;
 static int initialized = 0;
 
@@ -38,6 +37,7 @@ debug_register (char *name, int page_order, int nr_areas)
   rc = free_area;
   free_area = *((debug_info_t **) rc);
 
+  memset(rc, 0, nr_areas * sizeof(debug_info_t));
   rc->areas = (debug_entry_t **) kmalloc (nr_areas *
 					  sizeof (debug_entry_t *),
 					  GFP_ATOMIC);
@@ -59,14 +59,16 @@ debug_register (char *name, int page_order, int nr_areas)
 	  goto nopages;
 	}
     }
-
   rc->page_order = page_order;
   rc->nr_areas = nr_areas;
   rc->name = kmalloc (strlen (name) + 1, GFP_ATOMIC);
   strncpy (rc->name, name, strlen (name));
+  ASCEBC(rc->name, strlen (name));
   rc->name[strlen (name)] = 0;
+
   rc->active_entry = kmalloc (nr_areas, GFP_ATOMIC);
   memset(rc->active_entry, 0, nr_areas * sizeof(int));
+  rc->level=3;
   printk (KERN_INFO "reserved %d areas of %d pages for debugging %s\n",
 	  nr_areas, 1 << page_order, name);
   goto exit;
