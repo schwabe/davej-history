@@ -37,6 +37,9 @@
 #ifdef CONFIG_ISDN_AUDIO
 #include "isdn_audio.h"
 #endif
+#ifdef CONFIG_ISDN_DIVERSION_MODULE
+#define CONFIG_ISDN_DIVERSION
+#endif
 #ifdef CONFIG_ISDN_DIVERSION
 #include <linux/isdn_divertif.h>
 #endif CONFIG_ISDN_DIVERSION
@@ -47,7 +50,7 @@
 
 isdn_dev *dev;
 
-static char *isdn_revision = "$Revision: 1.113 $";
+static char *isdn_revision = "$Revision: 1.114.6.7 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -740,7 +743,6 @@ isdn_status_callback(isdn_ctrl * c)
 				isdn_free_queue(&dev->drv[di]->rpqueue[i]);
 			kfree(dev->drv[di]->rpqueue);
 			kfree(dev->drv[di]->rcv_waitq);
-			kfree(dev->drv[di]->snd_waitq);
 			kfree(dev->drv[di]);
 			dev->drv[di] = NULL;
 			dev->drvid[di][0] = '\0';
@@ -1084,7 +1086,7 @@ isdn_read(struct file *file, char *buf, size_t count, loff_t * off)
 	}
 #endif
 	retval = -ENODEV;
-out:
+ out:
 	return retval;
 }
 
@@ -1993,22 +1995,12 @@ isdn_writebuf_skb_stub(int drvidx, int chan, int ack, struct sk_buff *skb)
 }
 
 int
-register_isdn_module(isdn_module *m) {
-	return 0;
-}
-
-int
-unregister_isdn_module(isdn_module *m) {
-	return 0;
-}
-
-int
 isdn_add_channels(driver *d, int drvidx, int n, int adding)
 {
 	int j, k, m;
 	ulong flags;
 
- 	init_waitqueue_head(&d->st_waitq);
+	init_waitqueue_head(&d->st_waitq);
 	if (d->flags & DRV_FLAG_RUNNING)
 		return -1;
        	if (n < 1) return 0;
@@ -2161,8 +2153,6 @@ EXPORT_SYMBOL(DIVERT_REG_NAME);
 
 
 EXPORT_SYMBOL(register_isdn);
-EXPORT_SYMBOL(register_isdn_module);
-EXPORT_SYMBOL(unregister_isdn_module);
 #ifdef CONFIG_ISDN_PPP
 EXPORT_SYMBOL(isdn_ppp_register_compressor);
 EXPORT_SYMBOL(isdn_ppp_unregister_compressor);

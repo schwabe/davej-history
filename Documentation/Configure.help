@@ -13209,6 +13209,10 @@ CONFIG_IRDA
   it as a module, say M here and read Documentation/modules.txt. The
   module will be called 
 
+IrDA protocol options
+CONFIG_IRDA_OPTIONS
+  Say Y here if you want to configure any of the following IrDA options.
+
 IrDA Cache last LSAP
 CONFIG_IRDA_CACHE_LAST_LSAP
   Say Y here if you want IrLMP to cache the last LSAP used. This makes

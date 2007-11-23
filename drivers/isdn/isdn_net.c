@@ -30,6 +30,7 @@
 #include <net/dst.h>
 #include <net/pkt_sched.h>
 #include <linux/inetdevice.h>
+#include <linux/isdn_compat.h>
 #include "isdn_common.h"
 #include "isdn_net.h"
 #ifdef CONFIG_ISDN_PPP

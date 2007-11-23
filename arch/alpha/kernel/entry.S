@@ -272,7 +272,11 @@ __kernel_execve:
 	stq	$26,0($30)
 	stq	$19,8($30)
 	.prologue 1
+#ifdef __SMP__	
+	jsr	$26,___kernel_execve
+#else
 	jsr	$26,do_execve
+#endif	/* __SMP__ */
 	bne	$0,1f		/* error! */
 	ldq	$30,8($30)
 	br	$31,ret_from_sys_call

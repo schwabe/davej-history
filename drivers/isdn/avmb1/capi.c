@@ -1,11 +1,14 @@
 /*
- * $Id: capi.c,v 1.44.6.4 2001/02/10 14:41:20 kai Exp $
+ * $Id: capi.c,v 1.44.6.5 2001/02/13 11:43:29 kai Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.44.6.5  2001/02/13 11:43:29  kai
+ * more compatility changes for 2.2.19
+ *
  * Revision 1.44.6.4  2001/02/10 14:41:20  kai
  * Changes from kernel tree
  *
@@ -255,7 +258,7 @@
 #include "capifs.h"
 #endif
 
-static char *revision = "$Revision: 1.44.6.4 $";
+static char *revision = "$Revision: 1.44.6.5 $";
 
 MODULE_AUTHOR("Carsten Paeth (calle@calle.in-berlin.de)");
 
@@ -1694,7 +1697,13 @@ int capinc_tty_chars_in_buffer(struct tty_struct *tty)
 int capinc_tty_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg)
 {
-	return -ENOIOCTLCMD;
+	int error = 0;
+	switch (cmd) {
+	default:
+		error = n_tty_ioctl (tty, file, cmd, arg);
+		break;
+	}
+	return error;
 }
 
 void capinc_tty_set_termios(struct tty_struct *tty, struct termios * old)
@@ -1882,7 +1891,6 @@ static int proc_capidev_read_proc(char *page, char **start, off_t off,
 {
         struct capidev *cdev;
 	int len = 0;
-	off_t begin = 0;
 
 	for (cdev=capidev_openlist; cdev; cdev = cdev->next) {
 		len += sprintf(page+len, "%d %d %lu %lu %lu %lu\n",
@@ -1892,20 +1900,20 @@ static int proc_capidev_read_proc(char *page, char **start, off_t off,
 			cdev->nrecvdatapkt,
 			cdev->nsentctlpkt,
 			cdev->nsentdatapkt);
-		if (len+begin > off+count)
-			goto endloop;
-		if (len+begin < off) {
-			begin += len;
+		if (len <= off) {
+			off -= len;
 			len = 0;
+		} else {
+			if (len-off > count)
+				goto endloop;
 		}
 	}
 endloop:
-	if (cdev == 0)
+	if (len < count)
 		*eof = 1;
-	if (off >= len+begin)
-		return 0;
-	*start = page + (off-begin);
-	return ((count < begin+len-off) ? count : begin+len-off);
+	if (len>count) len = count;
+	if (len<0) len = 0;
+	return len;
 }
 
 /*
@@ -1918,7 +1926,6 @@ static int proc_capincci_read_proc(char *page, char **start, off_t off,
         struct capidev *cdev;
         struct capincci *np;
 	int len = 0;
-	off_t begin = 0;
 
 	for (cdev=capidev_openlist; cdev; cdev = cdev->next) {
 		for (np=cdev->nccis; np; np = np->next) {
@@ -1930,21 +1937,22 @@ static int proc_capincci_read_proc(char *page, char **start, off_t off,
 #else /* CONFIG_ISDN_CAPI_MIDDLEWARE */
 				np->minorp && np->minorp->file ? " open" : "");
 #endif /* CONFIG_ISDN_CAPI_MIDDLEWARE */
-			if (len+begin > off+count)
-				goto endloop;
-			if (len+begin < off) {
-				begin += len;
+			if (len <= off) {
+				off -= len;
 				len = 0;
+			} else {
+				if (len-off > count)
+					goto endloop;
 			}
 		}
 	}
 endloop:
-	if (cdev == 0)
+	*start = page+off;
+	if (len < count)
 		*eof = 1;
-	if (off >= len+begin)
-		return 0;
-	*start = page + (begin-off);
-	return ((count < begin+len-off) ? count : begin+len-off);
+	if (len>count) len = count;
+	if (len<0) len = 0;
+	return len;
 }
 
 static struct procfsentries {

@@ -563,6 +563,14 @@ _GLOBAL(_set_HID0)
 	isync /* Handle erratas in some cases */
 	blr
 
+_GLOBAL(_get_ICTC)
+       mfspr   r3,ICTC
+       blr
+
+_GLOBAL(_set_ICTC)
+       mtspr   ICTC,r3
+       blr
+
 /*
 	L2CR functions
 	Copyright © 1997-1998 by PowerLogix R & D, Inc.

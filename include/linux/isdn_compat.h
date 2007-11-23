@@ -44,5 +44,38 @@ static inline struct pci_dev * pci_find_subsys(unsigned int vendor, unsigned int
 	return NULL;
 }
 
+#include <linux/netdevice.h>
+
+/*
+ * Tell upper layers that the network device is ready to xmit more frames.
+ */
+static void __inline__ netif_wake_queue(struct device * dev)
+{
+	dev->tbusy = 0;
+	mark_bh(NET_BH);
+}
+
+/*
+ * called during net_device open()
+ */
+static void __inline__ netif_start_queue(struct device * dev)
+{
+	dev->tbusy = 0;
+	/* actually, we never use the interrupt flag at all */
+	dev->interrupt = 0;
+	dev->start = 1;
+}
+
+/*
+ * Ask upper layers to temporarily cease passing us more xmit frames.
+ */
+static void __inline__ netif_stop_queue(struct device * dev)
+{
+	dev->tbusy = 1;
+}
+
+
+
+
 #endif /* __KERNEL__ */
 #endif /* _LINUX_ISDN_COMPAT_H */

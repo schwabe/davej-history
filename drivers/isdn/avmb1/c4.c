@@ -1,11 +1,14 @@
 /*
- * $Id: c4.c,v 1.20.6.1 2000/11/28 12:02:45 kai Exp $
+ * $Id: c4.c,v 1.20.6.2 2001/02/13 11:43:29 kai Exp $
  * 
  * Module for AVM C4 card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: c4.c,v $
+ * Revision 1.20.6.2  2001/02/13 11:43:29  kai
+ * more compatility changes for 2.2.19
+ *
  * Revision 1.20.6.1  2000/11/28 12:02:45  kai
  * MODULE_DEVICE_TABLE for 2.4
  *
@@ -106,7 +109,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.20.6.1 $";
+static char *revision = "$Revision: 1.20.6.2 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
@@ -1370,14 +1373,6 @@ static int __init c4_init(void)
 		param.irq = dev->irq;
 		param.membase = dev->base_address[ 0] & PCI_BASE_ADDRESS_MEM_MASK;
 
-		retval = pci_enable_device (dev);
-		if (retval != 0) {
-		        printk(KERN_ERR
-			"%s: failed to enable AVM-C4 at i/o %#x, irq %d, mem %#x err=%d\n",
-			driver->name, param.port, param.irq, param.membase, retval);
-			MOD_DEC_USE_COUNT;
-			return -EIO;
-		}
 
 		printk(KERN_INFO
 			"%s: PCI BIOS reports AVM-C4 at i/o %#x, irq %d, mem %#x\n",
@@ -1387,6 +1382,7 @@ static int __init c4_init(void)
 		        printk(KERN_ERR
 			"%s: no AVM-C4 at i/o %#x, irq %d detected, mem %#x\n",
 			driver->name, param.port, param.irq, param.membase);
+    			detach_capi_driver(driver);
 			MOD_DEC_USE_COUNT;
 			return retval;
 		}
@@ -1399,6 +1395,7 @@ static int __init c4_init(void)
 		return 0;
 	}
 	printk(KERN_ERR "%s: NO C4 card detected\n", driver->name);
+	detach_capi_driver(driver);
 	MOD_DEC_USE_COUNT;
 	return -ESRCH;
 #else

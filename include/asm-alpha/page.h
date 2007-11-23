@@ -120,6 +120,10 @@ typedef unsigned long pgprot_t;
 #endif /* STRICT_MM_TYPECHECKS */
 #endif /* !ASSEMBLY */
 
+#if !defined(BUG)
+#define BUG()		__asm__ __volatile__("call_pal 129 # bugchk")
+#endif
+
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 

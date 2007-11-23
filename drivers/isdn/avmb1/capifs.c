@@ -1,11 +1,14 @@
 /*
- * $Id: capifs.c,v 1.14.6.2 2001/02/10 14:41:20 kai Exp $
+ * $Id: capifs.c,v 1.14.6.3 2001/02/13 11:43:29 kai Exp $
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.de)
  *
  * Heavily based on devpts filesystem from H. Peter Anvin
  * 
  * $Log: capifs.c,v $
+ * Revision 1.14.6.3  2001/02/13 11:43:29  kai
+ * more compatility changes for 2.2.19
+ *
  * Revision 1.14.6.2  2001/02/10 14:41:20  kai
  * Changes from kernel tree
  *
@@ -96,7 +99,7 @@
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.de>");
 
-static char *revision = "$Revision: 1.14.6.2 $";
+static char *revision = "$Revision: 1.14.6.3 $";
 
 struct capifs_ncci {
 	struct inode *inode;
@@ -490,10 +493,8 @@ static void capifs_read_inode(struct inode *inode)
 	ino_t ino = inode->i_ino;
 	struct capifs_sb_info *sbi = SBI(inode->i_sb);
 
-	inode->i_op = NULL;
 	inode->i_mode = 0;
 	inode->i_nlink = 0;
-	inode->i_size = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_blocks = 0;
 	inode->i_blksize = 1024;
@@ -505,7 +506,6 @@ static void capifs_read_inode(struct inode *inode)
 		inode->i_nlink = 2;
 		return;
 	} 
-
 
 	ino -= 2;
 	if ( ino >= sbi->max_ncci )

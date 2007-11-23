@@ -1,17 +1,17 @@
    Linux Driver for Mylex DAC960/AcceleRAID/eXtremeRAID PCI RAID Controllers
 
-			Version 2.2.9 for Linux 2.2.17
-			Version 2.4.9 for Linux 2.4.0
+			Version 2.2.10 for Linux 2.2.18
+			Version 2.4.10 for Linux 2.4.1
 
 			      PRODUCTION RELEASE
 
-			       7 September 2000
+			       1 February 2001
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
 			       lnz@dandelion.com
 
-	 Copyright 1998-2000 by Leonard N. Zubkoff <lnz@dandelion.com>
+	 Copyright 1998-2001 by Leonard N. Zubkoff <lnz@dandelion.com>
 
 
 				 INTRODUCTION
@@ -197,19 +197,19 @@ actually function correctly.  Similarly, not all motherboards have a BIOS that
 properly initializes the AcceleRAID 250, AcceleRAID 200, AcceleRAID 150,
 DAC960PJ, and DAC960PG because the Intel i960RD/RP is a multi-function device.
 If in doubt, contact Mylex RAID Technical Support (support@mylex.com) to verify
-compatibility.  Mylex makes available a hard disk compatibility list by FTP at
-ftp://ftp.mylex.com/pub/dac960/diskcomp.html.
+compatibility.  Mylex makes available a hard disk compatibility list at
+http://www.mylex.com/support/hdcomp/hd-lists.html.
 
 
 			      DRIVER INSTALLATION
 
-This distribution was prepared for Linux kernel version 2.2.17 or 2.4.0.
+This distribution was prepared for Linux kernel version 2.2.18 or 2.4.1.
 
 To install the DAC960 RAID driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf DAC960-2.2.9.tar.gz (or DAC960-2.4.9.tar.gz)
+  tar -xvzf DAC960-2.2.10.tar.gz (or DAC960-2.4.10.tar.gz)
   mv README.DAC960 linux/Documentation
   mv DAC960.[ch] linux/drivers/block
   patch -p0 < DAC960.patch (if DAC960.patch is included)

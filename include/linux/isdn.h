@@ -196,7 +196,7 @@ typedef struct {
 #include <asm/io.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
-#include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/timer.h>
 #include <linux/wait.h>
 #include <linux/tty.h>
@@ -318,7 +318,7 @@ typedef struct {
 typedef struct isdn_net_local_s {
   ulong                  magic;
   char                   name[10];     /* Name of device                   */
-  struct enet_statistics stats;        /* Ethernet Statistics              */
+  struct net_device_stats stats;       /* Ethernet Statistics              */
   int                    isdn_device;  /* Index to isdn-device             */
   int                    isdn_channel; /* Index to isdn-channel            */
   int			 ppp_slot;     /* PPPD device slot number          */
@@ -589,23 +589,6 @@ typedef struct {
 	char *private;
 } infostruct;
 
-typedef struct isdn_module {
-	struct isdn_module *prev;
-	struct isdn_module *next;
-	char *name;
-	int (*get_free_channel)(int, int, int, int, int);
-	int (*free_channel)(int, int, int);
-	int (*status_callback)(isdn_ctrl *);
-	int (*command)(isdn_ctrl *);
-	int (*receive_callback)(int, int, struct sk_buff *);
-	int (*writebuf_skb)(int, int, int, struct sk_buff *);
-	int (*net_start_xmit)(struct sk_buff *, struct device *);
-	int (*net_receive)(struct device *, struct sk_buff *);
-	int (*net_open)(struct device *);
-	int (*net_close)(struct device *);
-	int priority;
-} isdn_module;
-
 #define DRV_FLAG_RUNNING 1
 #define DRV_FLAG_REJBUS  2
 #define DRV_FLAG_LOADED  4
@@ -616,7 +599,7 @@ typedef struct {
 	ulong               flags;            /* Misc driver Flags                */
 	int                 locks;            /* Number of locks for this driver  */
 	int                 channels;         /* Number of channels               */
-	struct wait_queue  *st_waitq;         /* Wait-Queue for status-read's     */
+	wait_queue_head_t   st_waitq;         /* Wait-Queue for status-read's     */
 	int                 maxbufsize;       /* Maximum Buffersize supported     */
 	unsigned long       pktcount;         /* Until now: unused                */
 	int                 stavail;          /* Chars avail on Status-device     */
@@ -627,8 +610,8 @@ typedef struct {
 	unsigned long      DLEflag;           /* Flags: Insert DLE at next read   */
 #endif
 	struct sk_buff_head *rpqueue;         /* Pointers to start of Rcv-Queue   */
-	struct wait_queue  **rcv_waitq;       /* Wait-Queues for B-Channel-Reads  */
-	struct wait_queue  **snd_waitq;       /* Wait-Queue for B-Channel-Send's  */
+	wait_queue_head_t  *rcv_waitq;       /* Wait-Queues for B-Channel-Reads  */
+	wait_queue_head_t  *snd_waitq;       /* Wait-Queue for B-Channel-Send's  */
 	char               msn2eaz[10][ISDN_MSNLEN];  /* Mapping-Table MSN->EAZ   */
 } driver;
 
@@ -644,7 +627,7 @@ typedef struct isdn_devt {
 	/*  see ISDN_TIMER_..defines  */
 	int               global_flags;
 	infostruct        *infochain;                /* List of open info-devs.    */
-	struct wait_queue *info_waitq;               /* Wait-Queue for isdninfo    */
+	wait_queue_head_t info_waitq;               /* Wait-Queue for isdninfo    */
 	struct timer_list timer;		       /* Misc.-function Timer       */
 	int               chanmap[ISDN_MAX_CHANNELS];/* Map minor->device-channel  */
 	int               drvmap[ISDN_MAX_CHANNELS]; /* Map minor->driver-index    */
@@ -665,51 +648,14 @@ typedef struct isdn_devt {
 	atomic_t          v110use[ISDN_MAX_CHANNELS];/* Usage-Semaphore for stream */
 	isdn_v110_stream  *v110[ISDN_MAX_CHANNELS];  /* V.110 private data         */
 	struct semaphore  sem;                       /* serialize list access*/
-	isdn_module       *modules;
 	unsigned long     global_features;
 } isdn_dev;
 
 extern isdn_dev *dev;
 
 
-
 /* Utility-Macros */
 #define MIN(a,b) ((a<b)?a:b)
 #define MAX(a,b) ((a>b)?a:b)
-/*
- * Tell upper layers that the network device is ready to xmit more frames.
- */
-static void __inline__ netif_wake_queue(struct device * dev)
-{
-	dev->tbusy = 0;
-	mark_bh(NET_BH);
-}
-
-/*
- * called during net_device open()
- */
-static void __inline__ netif_start_queue(struct device * dev)
-{
-	dev->tbusy = 0;
-	/* actually, we never use the interrupt flag at all */
-	dev->interrupt = 0;
-	dev->start = 1;
-}
-
-/*
- * Ask upper layers to temporarily cease passing us more xmit frames.
- */
-static void __inline__ netif_stop_queue(struct device * dev)
-{
-	dev->tbusy = 1;
-}
-
-struct pci_dev;
-
-static int __inline__ pci_enable_device(struct pci_dev * pdev)
-{
-	return 0;
-}
-
 #endif /* __KERNEL__ */
 #endif /* isdn_h */

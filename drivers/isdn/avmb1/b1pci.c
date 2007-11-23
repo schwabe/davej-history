@@ -508,14 +508,6 @@ static int add_card(struct pci_dev *dev)
 		param.port = dev->base_address[ 2] & PCI_BASE_ADDRESS_IO_MASK;
 		param.irq = dev->irq;
 
-		retval = pci_enable_device (dev);
-		if (retval != 0) {
-		        printk(KERN_ERR
-			"%s: failed to enable AVM-B1 V4 at i/o %#x, irq %d, mem %#x err=%d\n",
-			driver->name, param.port, param.irq, param.membase, retval);
-			MOD_DEC_USE_COUNT;
-			return -EIO;
-		}
 
 		printk(KERN_INFO
 		"%s: PCI BIOS reports AVM-B1 V4 at i/o %#x, irq %d, mem %#x\n",
@@ -535,14 +527,6 @@ static int add_card(struct pci_dev *dev)
 		param.port = dev->base_address[ 1] & PCI_BASE_ADDRESS_IO_MASK;
 		param.irq = dev->irq;
 
-		retval = pci_enable_device (dev);
-		if (retval != 0) {
-		        printk(KERN_ERR
-			"%s: failed to enable AVM-B1 at i/o %#x, irq %d, err=%d\n",
-			driver->name, param.port, param.irq, retval);
-			MOD_DEC_USE_COUNT;
-			return -EIO;
-		}
 		printk(KERN_INFO
 		"%s: PCI BIOS reports AVM-B1 at i/o %#x, irq %d\n",
 		driver->name, param.port, param.irq);
@@ -619,6 +603,10 @@ static int __init b1pci_init(void)
 	while ((dev = pci_find_device(PCI_VENDOR_ID_AVM, PCI_DEVICE_ID_AVM_B1, dev))) {
 		retval = add_card(dev);
 		if (retval != 0) {
+    			detach_capi_driver(driver);
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
+    			detach_capi_driver(driverv4);
+#endif
 			MOD_DEC_USE_COUNT;
 			return retval;
 		}
@@ -631,6 +619,10 @@ static int __init b1pci_init(void)
 		return 0;
 	}
 	printk(KERN_ERR "%s: NO B1-PCI card detected\n", driver->name);
+	detach_capi_driver(driver);
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
+	detach_capi_driver(driverv4);
+#endif
 	MOD_DEC_USE_COUNT;
 	return -ESRCH;
 #else

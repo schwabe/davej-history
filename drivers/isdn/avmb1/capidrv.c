@@ -1,11 +1,14 @@
 /*
- * $Id: capidrv.c,v 1.39.6.1 2001/02/10 14:41:20 kai Exp $
+ * $Id: capidrv.c,v 1.39.6.2 2001/02/13 11:43:29 kai Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.39.6.2  2001/02/13 11:43:29  kai
+ * more compatility changes for 2.2.19
+ *
  * Revision 1.39.6.1  2001/02/10 14:41:20  kai
  * Changes from kernel tree
  *
@@ -222,7 +225,7 @@
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.39.6.1 $";
+static char *revision = "$Revision: 1.39.6.2 $";
 static int debugmode = 0;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
