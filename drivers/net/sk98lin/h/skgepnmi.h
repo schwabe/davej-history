@@ -2,8 +2,8 @@
  *
  * Name:	skgepnmi.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.37 $
- * Date:	$Date: 1999/09/14 14:25:32 $
+ * Version:	$Revision: 1.39 $
+ * Date:	$Date: 1999/12/06 10:09:47 $
  * Purpose:	Defines for Private Network Management Interface
  *
  ****************************************************************************/
@@ -27,6 +27,12 @@
  * History:
  *
  *	$Log: skgepnmi.h,v $
+ *	Revision 1.39  1999/12/06 10:09:47  rwahl
+ *	Added new error log message.
+ *	
+ *	Revision 1.38  1999/11/22 13:57:55  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.37  1999/09/14 14:25:32  rwahl
  *	Set MDB version for 1000Base-T (sensors, Master/Slave) changes.
  *	
@@ -559,6 +565,8 @@
 #define SK_PNMI_ERR050MSG	"MacUpdate: Cannot update statistic counter"
 #define SK_PNMI_ERR051		(SK_ERRBASE_PNMI + 51)
 #define SK_PNMI_ERR051MSG	"SkPnmiEvent: Port switch suspicious"
+#define SK_PNMI_ERR052		(SK_ERRBASE_PNMI + 52)
+#define SK_PNMI_ERR052MSG	"MacPrivateConf: SK_HWEV_SET_ROLE returned not 0"
 
 /*
  * Management counter macros called by the driver

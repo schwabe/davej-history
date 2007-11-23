@@ -1943,6 +1943,7 @@ static void initialize_tty_struct(struct tty_struct *tty)
 	tty->tq_hangup.data = tty;
 	sema_init(&tty->atomic_read, 1);
 	sema_init(&tty->atomic_write, 1);
+	spin_lock_init(&tty->read_lock);
 }
 
 /*

@@ -304,6 +304,7 @@ struct tty_struct {
 	unsigned int canon_column;
 	struct semaphore atomic_read;
 	struct semaphore atomic_write;
+	spinlock_t read_lock;
 };
 
 /* tty magic number */

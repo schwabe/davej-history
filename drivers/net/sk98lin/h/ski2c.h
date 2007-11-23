@@ -2,8 +2,8 @@
  *
  * Name:	ski2c.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.27 $
- * Date:	$Date: 1999/05/20 09:23:10 $
+ * Version:	$Revision: 1.28 $
+ * Date:	$Date: 1999/11/22 13:55:46 $
  * Purpose:	Defines to access Voltage and Temperature Sensor
  *		(taken from Monalisa (taken from Concentrator))
  *
@@ -28,6 +28,9 @@
  * History:
  *
  *	$Log: ski2c.h,v $
+ *	Revision 1.28  1999/11/22 13:55:46  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.27  1999/05/20 09:23:10  cgoos
  *	Changes for 1000Base-T (Fan sensors).
  *	

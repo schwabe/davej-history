@@ -400,6 +400,14 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
+#elif (MAJOR_NR == I2O_MAJOR)
+
+#define DEVICE_NAME "I2O block"
+#define DEVICE_REQUEST do_i2ob_request
+#define DEVICE_NR(device) (MINOR(device)>>4)
+#define DEVICE_ON(device) 
+#define DEVICE_OFF(device)
+
 #endif /* MAJOR_NR == whatever */
 
 #if (MAJOR_NR != SCSI_TAPE_MAJOR)

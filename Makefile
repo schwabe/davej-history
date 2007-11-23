@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 15
-EXTRAVERSION = pre9
+EXTRAVERSION = pre10
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -200,6 +200,10 @@ endif
 
 ifeq ($(CONFIG_IRDA),y)
 DRIVERS := $(DRIVERS) drivers/net/irda/irda_drivers.a
+endif
+
+ifeq ($(CONFIG_I2O),y)
+DRIVERS := $(DRIVERS) drivers/i2o/i2o.a
 endif
 
 ifeq ($(CONFIG_PHONE),y)

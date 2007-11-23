@@ -2,8 +2,8 @@
  *
  * Name:	skdrv2nd.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.7 $
- * Date:	$Date: 1999/09/28 12:38:21 $
+ * Version:	$Revision: 1.9 $
+ * Date:	$Date: 2000/02/21 10:39:55 $
  * Purpose:	Second header file for driver and all other modules
  *
  ******************************************************************************/
@@ -27,6 +27,13 @@
  * History:
  *
  *	$Log: skdrv2nd.h,v $
+ *	Revision 1.9  2000/02/21 10:39:55  cgoos
+ *	Added flag for jumbo support usage.
+ *	
+ *	Revision 1.8  1999/11/22 13:50:44  cgoos
+ *	Changed license header to GPL.
+ *	Fixed two comments.
+ *	
  *	Revision 1.7  1999/09/28 12:38:21  cgoos
  *	Added CheckQueue to SK_AC.
  *	
@@ -411,7 +418,7 @@ struct s_AC  {
 	int		RxBufSize;	/* length of receive buffers */
         struct net_device_stats stats;	/* linux 'netstat -i' statistics */
 	int		Index;		/* internal board index number */
-	SK_BOOL		JumboActivated; /* jumbo support ever activated */
+	SK_BOOL		JumboActivated;	/* jumbo support ever activated */
 
 	/* adapter RAM sizes for queues of active port */
 	int		RxQueueSize;	/* memory used for receive queue */

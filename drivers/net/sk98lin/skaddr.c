@@ -2,8 +2,8 @@
  *
  * Name:	skaddr.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.33 $
- * Date:	$Date: 1999/05/28 10:56:06 $
+ * Version:	$Revision: 1.34 $
+ * Date:	$Date: 1999/11/22 13:23:44 $
  * Purpose:	Manage Addresses (Multicast and Unicast) and Promiscuous Mode
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,9 @@
  * History:
  *
  *	$Log: skaddr.c,v $
+ *	Revision 1.34  1999/11/22 13:23:44  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.33  1999/05/28 10:56:06  rassmann
  *	Editorial changes.
  *	
@@ -164,7 +165,7 @@
 
 #ifndef	lint
 static const char SysKonnectFileId[] =
-	"@(#) $Id: skaddr.c,v 1.33 1999/05/28 10:56:06 rassmann Exp $ (C) SysKonnect.";
+	"@(#) $Id: skaddr.c,v 1.34 1999/11/22 13:23:44 cgoos Exp $ (C) SysKonnect.";
 #endif	/* !defined(lint) */
 
 #define __SKADDR_C

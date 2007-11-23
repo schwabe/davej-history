@@ -2,8 +2,8 @@
  *
  * Name:	ski2c.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.41 $
- * Date:	$Date: 1999/09/14 14:11:30 $
+ * Version:	$Revision: 1.42 $
+ * Date:	$Date: 1999/11/22 13:35:12 $
  * Purpose:	Funktions to access Voltage and Temperature Sensor
  *		(taken from Monalisa (taken from Concentrator))
  *
@@ -13,8 +13,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -30,6 +28,9 @@
  * History:
  *
  *	$Log: ski2c.c,v $
+ *	Revision 1.42  1999/11/22 13:35:12  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.41  1999/09/14 14:11:30  malthoff
  *	The 1000BT Dual Link adapter has got only one Fan.
  *	The second Fan has been removed.
@@ -175,7 +176,7 @@
 	i2C Protocol
 */
 static const char SysKonnectFileId[] =
-	"$Id: ski2c.c,v 1.41 1999/09/14 14:11:30 malthoff Exp $" ;
+	"$Id: ski2c.c,v 1.42 1999/11/22 13:35:12 cgoos Exp $" ;
 
 #include "h/skdrv1st.h"		/* Driver Specific Definitions */
 #include "h/lm80.h"

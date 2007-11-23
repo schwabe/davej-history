@@ -2,8 +2,8 @@
  *
  * Name:	skgehw.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.33 $
- * Date:	$Date: 1999/08/27 11:17:10 $
+ * Version:	$Revision: 1.34 $
+ * Date:	$Date: 1999/11/22 13:53:40 $
  * Purpose:	Defines and Macros for the Gigabit Ethernet Adapter Product
  *		Family
  *
@@ -27,6 +27,9 @@
  *
  * History:
  * $Log: skgehw.h,v $
+ * Revision 1.34  1999/11/22 13:53:40  cgoos
+ * Changed license header to GPL.
+ *
  * Revision 1.33  1999/08/27 11:17:10  malthoff
  * It's more savely to put bracket around marco parameters.
  * Brackets added for PHY_READ and PHY_WRITE.

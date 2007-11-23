@@ -2,8 +2,8 @@
  *
  * Name:	skaddr.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.19 $
- * Date:	$Date: 1999/05/28 10:56:07 $
+ * Version:	$Revision: 1.20 $
+ * Date:	$Date: 1999/11/22 13:46:14 $
  * Purpose:	Header file for Address Management (MC, UC, Prom)
  *
  ******************************************************************************/
@@ -27,6 +27,10 @@
  * History:
  *
  *	$Log: skaddr.h,v $
+ *	Revision 1.20  1999/11/22 13:46:14  cgoos
+ *	Changed license header to GPL.
+ *	Allowing overwrite for SK_ADDR_EQUAL.
+ *	
  *	Revision 1.19  1999/05/28 10:56:07  rassmann
  *	Editorial changes.
  *	

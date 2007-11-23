@@ -1087,8 +1087,12 @@ void fbcon_redraw_bmove(struct display *p, int sy, int sx, int dy, int dx, int h
 
 static inline void fbcon_softback_note(struct vc_data *conp, int t, int count)
 {
-    unsigned short *p = (unsigned short *)
-    	(conp->vc_origin + t * conp->vc_size_row);
+    unsigned short *p;
+    
+    if (conp->vc_num != fg_console)
+    	return;
+    p = (unsigned short *)(conp->vc_origin + t * conp->vc_size_row);
+
     while (count) {
     	scr_memcpyw((u16 *)softback_in, p, conp->vc_size_row);
     	count--;

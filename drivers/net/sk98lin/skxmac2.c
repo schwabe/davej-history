@@ -2,8 +2,8 @@
  *
  * Name:	skxmac2.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.49 $
- * Date:	$Date: 1999/11/22 08:12:13 $
+ * Version:	$Revision: 1.50 $
+ * Date:	$Date: 1999/11/22 13:40:14 $
  * Purpose:	Contains functions to initialize the XMAC II
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,9 @@
  * History:
  *
  *	$Log: skxmac2.c,v $
+ *	Revision 1.50  1999/11/22 13:40:14  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.49  1999/11/22 08:12:13  malthoff
  *	Add workaround for power consumption feature of Bcom C0 chip.
  *	
@@ -224,7 +225,7 @@
 /* local variables ************************************************************/
 
 static const char SysKonnectFileId[] =
-	"@(#)$Id: skxmac2.c,v 1.49 1999/11/22 08:12:13 malthoff Exp $ (C) SK ";
+	"@(#)$Id: skxmac2.c,v 1.50 1999/11/22 13:40:14 cgoos Exp $ (C) SK ";
 
 /* BCOM PHY magic pattern list */
 typedef struct s_PhyHack {

@@ -2,8 +2,8 @@
  *
  * Name:	skgepnm2.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.24 $
- * Date:	$Date: 1999/04/13 15:11:11 $
+ * Version:	$Revision: 1.25 $
+ * Date:	$Date: 1999/11/22 13:57:41 $
  * Purpose:	Defines for Private Network Management Interface
  *
  ****************************************************************************/
@@ -27,6 +27,10 @@
  * History:
  *
  *	$Log: skgepnm2.h,v $
+ *	Revision 1.25  1999/11/22 13:57:41  cgoos
+ *	Changed license header to GPL.
+ *	Allowing overwrite for SK_PNMI_STORE/_READ defines.
+ *	
  *	Revision 1.24  1999/04/13 15:11:11  mhaveman
  *	Changed copyright.
  *	

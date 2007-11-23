@@ -649,6 +649,7 @@ static unsigned short eexp_start_irq(struct device *dev,
 			ack_cmd |= SCB_RUstart;
 			scb_wrrfa(dev, lp->rx_buf_start);
 			lp->rx_ptr = lp->rx_buf_start;
+			lp->started |= STARTED_RU;
 		}
 		ack_cmd |= SCB_CUstart | 0x2000;
 	}

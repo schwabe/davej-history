@@ -858,7 +858,7 @@ static void ace_dump_trace(struct ace_private *ap)
 {
 #if 0
 	if (!ap->trace_buf)
-		if (!(ap->trace_buf = kmalloc(ACE_TRACE_SIZE, GFP_KERNEL)));
+		if (!(ap->trace_buf = kmalloc(ACE_TRACE_SIZE, GFP_KERNEL)))
 		    return;
 #endif
 }

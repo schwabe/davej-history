@@ -2,8 +2,8 @@
  *
  * Name:	skcsum.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.3 $
- * Date:	$Date: 1999/05/10 08:39:33 $
+ * Version:	$Revision: 1.6 $
+ * Date:	$Date: 2000/02/21 12:35:10 $
  * Purpose:	Store/verify Internet checksum in send/receive packets.
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,19 @@
  * History:
  *
  *	$Log: skcsum.c,v $
+ *	Revision 1.6  2000/02/21 12:35:10  cgoos
+ *	Fixed license header comment.
+ *	
+ *	Revision 1.5  2000/02/21 11:05:19  cgoos
+ *	Merged changes back to common source.
+ *	Fixed rx path for BIG ENDIAN architecture.
+ *	
+ *	Revision 1.1  1999/07/26 15:28:12  mkarl
+ *	added return SKCS_STATUS_IP_CSUM_ERROR_UDP and
+ *	SKCS_STATUS_IP_CSUM_ERROR_TCP to pass the NidsTester
+ *	changed from common source to windows specific source
+ *	therefore restarting with v1.0
+ *	
  *	Revision 1.3  1999/05/10 08:39:33  mkarl
  *	prevent overflows in SKCS_HTON16
  *	fixed a bug in pseudo header checksum calculation
@@ -48,7 +59,7 @@
 
 #ifndef lint
 static const char SysKonnectFileId[] = "@(#)"
-	"$Id: skcsum.c,v 1.3 1999/05/10 08:39:33 mkarl Exp $"
+	"$Id: skcsum.c,v 1.6 2000/02/21 12:35:10 cgoos Exp $"
 	" (C) SysKonnect.";
 #endif	/* !lint */
 
@@ -557,16 +568,24 @@ unsigned	Checksum2)	/* Hardware checksum 2. */
 	 * not want us to do so because we cannot do any further processing of
 	 * the packet without a valid IP checksum.
 	 */
+	
+	/* Get the next level protocol identifier. */
+	
+	NextLevelProtocol = *(SK_U8 *)
+		SKCS_IDX(pIpHeader, SKCS_OFS_IP_NEXT_LEVEL_PROTOCOL);
 
 	if (IpHeaderChecksum != 0xFFFF) {
 		pAc->Csum.ProtoStats[SKCS_PROTO_STATS_IP].RxErrCts++;
+		/* the NDIS tester wants to know the upper level protocol too */
+		if (NextLevelProtocol == SKCS_PROTO_ID_TCP) {
+			return(SKCS_STATUS_IP_CSUM_ERROR_TCP);
+		}
+		else if (NextLevelProtocol == SKCS_PROTO_ID_UDP) {
+			return(SKCS_STATUS_IP_CSUM_ERROR_UDP);
+		}
 		return (SKCS_STATUS_IP_CSUM_ERROR);
 	}
 
-	/* Get the next level protocol identifier. */
-
-	NextLevelProtocol =
-		*(SK_U8 *) SKCS_IDX(pIpHeader, SKCS_OFS_IP_NEXT_LEVEL_PROTOCOL);
 
 	/*
 	 * Check if this is a TCP or UDP frame and if we should calculate the
@@ -617,6 +636,7 @@ unsigned	Checksum2)	/* Hardware checksum 2. */
 	/*
 	 * Calculate the TCP/UDP checksum.
 	 */
+
 	/* Get total length of IP header and data. */
 
 	IpDataLength =
@@ -642,6 +662,7 @@ unsigned	Checksum2)	/* Hardware checksum 2. */
 		(unsigned long) SKCS_HTON16(IpDataLength) +
 
 		/* Add the TCP/UDP header checksum. */
+
 		(unsigned long) IpDataChecksum;
 
 	/* Add-in any carries. */

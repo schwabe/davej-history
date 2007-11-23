@@ -2,6 +2,18 @@
  *	Video4Linux Colour QuickCam driver
  *	Copyright 1997-1998 Philip Blundell <philb@gnu.org>
  *
+ *    Module parameters:
+ *
+ *	parport=0         -- parport0 becomes qcam1
+ *	parport=auto      -- probe all parports (default)
+ *	parport=2,0,1     -- parports 2,0,1 are tried in that order
+ *
+ * The parport parameter controls which parports will be scanned.
+ * Scanning all parports causes some printers to print a garbage page.
+ *       -- March 14, 1999  Billy Donahue <billy@escape.com> 
+ *      
+ *      detect=heartbeat  -- watches for changes in the status register
+ *      detect=none       -- do no detection, assume a camera      
  */
 
 #include <linux/module.h>
@@ -30,6 +42,9 @@ struct qcam_device {
 	unsigned int bidirectional;
 };
 
+/* cameras maximum */
+#define MAX_CAMS 4
+
 /* The three possible QuickCam modes */
 #define QC_MILLIONS	0x18
 #define QC_BILLIONS	0x10
@@ -39,6 +54,22 @@ struct qcam_device {
 #define QC_DECIMATION_1		0
 #define QC_DECIMATION_2		2
 #define QC_DECIMATION_4		4
+
+/* several possible detection modes */
+enum DetectionModes {NONE, HEARTBEAT};  
+
+#ifdef MODULE
+MODULE_DESCRIPTION("Connectix Color Quickcam for video4linux");
+MODULE_PARM_DESC(parport,"parport=<auto|n[,n]...> for port detection method \n\
+detect=<none|heartbeat>  # for camera detection method");
+
+static char *parport[MAX_CAMS] = { NULL, };
+static char *detect  = { NULL, };
+MODULE_PARM(parport, "1-" __MODULE_STRING(MAX_CAMS) "s");
+MODULE_PARM(detect,  "s");
+#endif
+
+
 
 static inline void qcam_set_ack(struct qcam_device *qcam, unsigned int i)
 {
@@ -153,25 +184,34 @@ static inline int qcam_get(struct qcam_device *qcam, unsigned int cmd)
 	return qcam_read_data(qcam);
 }
 
-static int qc_detect(struct qcam_device *qcam)
+static int qc_detect(struct qcam_device *qcam, enum DetectionModes detectmode)
 {
 	unsigned int stat, ostat, i, count = 0;
 
 	parport_write_control(qcam->pport, 0xc);
 
-	/* look for a heartbeat */
-	ostat = stat = parport_read_status(qcam->pport);
-	for (i=0; i<250; i++) 
-	{
-		mdelay(1);
-		stat = parport_read_status(qcam->pport);
-		if (ostat != stat) 
+	switch (detectmode) {
+	case HEARTBEAT: {	/* look for a heartbeat */
+	  ostat = stat = parport_read_status(qcam->pport);
+	  for (i=0; i<250; i++) 
+	    {
+	      mdelay(1);
+	      stat = parport_read_status(qcam->pport);
+	      if (ostat != stat) 
 		{
-			if (++count >= 3) return 1;
-			ostat = stat;
+		  if (++count >= 3) return 1;
+		  ostat = stat;
 		}
+	    }
+	  break;
 	}
-
+	case NONE: {
+	  return 1;
+	}
+	default : {
+	  printk(KERN_ERR "c-qcam/qc_detect: bad detectmode\n");
+	}
+	}
 	/* no (or flatline) camera, give up */
 	return 0;
 }
@@ -671,11 +711,10 @@ static struct qcam_device *qcam_init(struct parport *port)
 	return q;
 }
 
-#define MAX_CAMS 4
 static struct qcam_device *qcams[MAX_CAMS];
 static unsigned int num_cams = 0;
 
-int init_cqcam(struct parport *port)
+int init_cqcam(struct parport *port, int detectmode)
 {
 	struct qcam_device *qcam;
 
@@ -693,7 +732,7 @@ int init_cqcam(struct parport *port)
 
 	qc_reset(qcam);
 	
-	if (qc_detect(qcam)==0)
+	if (qc_detect(qcam, detectmode)==0)
 	{
 		parport_release(qcam->pdev);
 		parport_unregister_device(qcam->pdev);
@@ -730,14 +769,54 @@ void close_cqcam(struct qcam_device *qcam)
 #define BANNER "Connectix Colour Quickcam driver v0.02\n"
 
 #ifdef MODULE
+
 int init_module(void)
 {
+	int n;
 	struct parport *port;
+	enum DetectionModes detectmode = HEARTBEAT;
 
 	printk(BANNER);
 
+        if(detect != NULL )  { /* a detect=xx parameter */
+	  if ( strncmp(detect,"none",4) == 0)
+		      detectmode=NONE;
+	  else if (strncmp(detect,"heartbeat",9) == 0)
+			   detectmode=HEARTBEAT;
+	  else { 
+	    printk(KERN_ERR
+		   "c-qcam: bad detection mode \"detect=%s\"\n",
+		   detect);
+	    
+	  }
+
+	} 
+
+
+	if(parport[0] && strncmp(parport[0], "auto", 4)){
+		/* user gave parport parameters */
+		for(n=0; parport[n] && n<MAX_CAMS; n++){
+			char *ep;
+			unsigned long r;
+			r = simple_strtoul(parport[n], &ep, 0);
+			if(ep == parport[n]){
+				printk(KERN_ERR
+					"c-qcam: bad port specifier \"%s\"\n",
+					parport[n]);
+				continue;
+			}
+			for (port=parport_enumerate(); port; port=port->next){
+				if(r!=port->number)
+					continue;
+				init_cqcam(port,detectmode);
+				break;
+			}
+		}
+		return (num_cams)?0:-ENODEV;
+	} 
+	/* no parameter or "auto" */
 	for (port = parport_enumerate(); port; port=port->next)
-		init_cqcam(port);
+		init_cqcam(port,detectmode);
 
 	return (num_cams)?0:-ENODEV;
 }
@@ -756,7 +835,7 @@ __initfunc(int init_colour_qcams(struct video_init *unused))
 	printk(BANNER);
 
 	for (port = parport_enumerate(); port; port=port->next)
-		init_cqcam(port);
+		init_cqcam(port,HEARTBEAT);
 	return 0;
 }
 #endif

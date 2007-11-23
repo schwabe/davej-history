@@ -2,8 +2,8 @@
  *
  * Name:	skgeinit.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.54 $
- * Date:	$Date: 1999/10/26 07:32:54 $
+ * Version:	$Revision: 1.55 $
+ * Date:	$Date: 1999/11/22 13:32:26 $
  * Purpose:	Contains functions to initialize the GE HW
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,9 @@
  * History:
  *
  *	$Log: skgeinit.c,v $
+ *	Revision 1.55  1999/11/22 13:32:26  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.54  1999/10/26 07:32:54  malthoff
  *	Initialize PHWLinkUp with SK_FALSE. Required for Diagnostics.
  *	
@@ -275,7 +276,7 @@
 /* local variables ************************************************************/
 
 static const char SysKonnectFileId[] =
-	"@(#)$Id: skgeinit.c,v 1.54 1999/10/26 07:32:54 malthoff Exp $ (C) SK ";
+	"@(#)$Id: skgeinit.c,v 1.55 1999/11/22 13:32:26 cgoos Exp $ (C) SK ";
 
 struct s_QOffTab {
 	int	RxQOff;		/* Receive Queue Address Offset */

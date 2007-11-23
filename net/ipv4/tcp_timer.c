@@ -387,12 +387,14 @@ static void tcp_keepalive(unsigned long data)
 	for(i = chain_start; i < (chain_start + ((tcp_ehash_size/2) >> 2)); i++) {
 		struct sock *sk = tcp_ehash[i];
 		while(sk) {
+			struct sock *sk_next = sk->next;
+
 			if(!atomic_read(&sk->sock_readers) && sk->keepopen) {
 				count += tcp_keepopen_proc(sk);
 				if(count == sysctl_tcp_max_ka_probes)
 					goto out;
 			}
-			sk = sk->next;
+			sk = sk_next;
 		}
 	}
 out:

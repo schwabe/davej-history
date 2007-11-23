@@ -725,9 +725,9 @@ static int nsc_ircc_setup(chipio_t *info)
 	switch_bank(iobase, BANK2);
 	outb(EXCR2_RFSIZ|EXCR2_TFSIZ, iobase+EXCR2);
 
-	/* IRCR2: FEND_MD is set */
+	/* IRCR2: FEND_MD is not set */
 	switch_bank(iobase, BANK5);
- 	outb(0x2a, iobase+4);
+ 	outb(0x02, iobase+4);
 
 	/* Make sure that some defaults are OK */
 	switch_bank(iobase, BANK6);
@@ -1448,8 +1448,10 @@ static int nsc_ircc_dma_receive_complete(struct nsc_ircc_cb *self, int iobase)
 		/* We must empty the status FIFO no matter what */
 		len = inb(iobase+RFLFL) | ((inb(iobase+RFLFH) & 0x1f) << 8);
 
-		if (st_fifo->tail >= MAX_RX_WINDOW)
+		if (st_fifo->tail >= MAX_RX_WINDOW) {
+			IRDA_DEBUG(0, __FUNCTION__ "(), window is full!\n");
 			continue;
+		}
 			
 		st_fifo->entries[st_fifo->tail].status = status;
 		st_fifo->entries[st_fifo->tail].len = len;
@@ -1509,7 +1511,18 @@ static int nsc_ircc_dma_receive_complete(struct nsc_ircc_cb *self, int iobase)
 					st_fifo->pending_bytes += len;
 					st_fifo->entries[st_fifo->head].status = status;
 					st_fifo->entries[st_fifo->head].len = len;
-				
+					/*  
+					 * DMA not finished yet, so try again 
+					 * later, set timer value, resolution 
+					 * 125 us 
+					 */
+					switch_bank(iobase, BANK4);
+					outb(0x02, iobase+TMRL); /* x 125 us */
+					outb(0x00, iobase+TMRH);
+
+					/* Start timer */
+					outb(IRCR1_TMR_EN, iobase+IRCR1);
+
 					/* Restore bank register */
 					outb(bank, iobase+BSR);
 					
@@ -1667,21 +1680,12 @@ static void nsc_ircc_fir_interrupt(struct nsc_ircc_cb *self, int iobase,
 	
 	/* Status FIFO event*/
 	if (eir & EIR_SFIF_EV) {
+		/* Check if DMA has finished */
 		if (nsc_ircc_dma_receive_complete(self, iobase)) {
 			/* Wait for next status FIFO interrupt */
 			self->ier = IER_SFIF_IE;
 		} else {
-			/* 
-			 * DMA not finished yet, so try again later, set 
-			 * timer value, resolution 125 us 
-			 */
-			switch_bank(iobase, BANK4);
-			outb(0x02, iobase+TMRL); /* 2 * 125 us */
-			outb(0x00, iobase+TMRH);
-
-			/* Start timer */
-			outb(IRCR1_TMR_EN, iobase+IRCR1);
-			self->ier = IER_TMR_IE | IER_SFIF_IE;
+			self->ier = IER_SFIF_IE | IER_TMR_IE;
 		}
 	} else if (eir & EIR_TMR_EV) { /* Timer finished */
 		/* Disable timer */
@@ -1696,15 +1700,17 @@ static void nsc_ircc_fir_interrupt(struct nsc_ircc_cb *self, int iobase,
 		if (self->io.direction == IO_XMIT) {
 			nsc_ircc_dma_xmit(self, iobase);
 
-			/*  Interrupt on DMA */
+			/* Interrupt on DMA */
 			self->ier = IER_DMA_IE;
 		} else {
-			/* Check if DMA has now finished */
-			nsc_ircc_dma_receive_complete(self, iobase);
-
-			self->ier = IER_SFIF_IE;
+			/* Check (again) if DMA has finished */
+			if (nsc_ircc_dma_receive_complete(self, iobase)) {
+				self->ier = IER_SFIF_IE;
+			} else {
+				self->ier = IER_SFIF_IE | IER_TMR_IE;
+			}
 		}
-	} else if (eir & EIR_DMA_EV) { 
+	} else if (eir & EIR_DMA_EV) {
 		/* Finished with all transmissions? */
 		if (nsc_ircc_dma_xmit_complete(self)) {		
 			/* Check if there are more frames to be transmitted */

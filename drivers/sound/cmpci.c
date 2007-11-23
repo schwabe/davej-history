@@ -2316,7 +2316,7 @@ static int	four_ch = 0;
 #ifdef CONFIG_SOUND_CMPCI_REAR
 static int	rear_out = 1;
 #else
-static int	read_out = 0;
+static int	rear_out = 0;
 #endif
 
 int __init init_cmpci(void)

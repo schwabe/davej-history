@@ -1143,9 +1143,7 @@ u32 TLan_HandleTxEOF( struct device *dev, u16 host_int )
 		printk( "TLAN:  Received interrupt for uncompleted TX frame.\n" );
 	}
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
 	priv->stats.tx_bytes += head_list->frameSize;
-#endif
 
 	head_list->cStat = TLAN_CSTAT_UNUSED;
 	dev->tbusy = 0;
@@ -1263,9 +1261,7 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 			skb_reserve( skb, 2 );
 			t = (void *) skb_put( skb, head_list->frameSize );
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
 			priv->stats.rx_bytes += head_list->frameSize;
-#endif
 
 			memcpy( t, head_buffer, head_list->frameSize );
 			skb->protocol = eth_type_trans( skb, dev );
@@ -1287,9 +1283,8 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 			skb = (struct sk_buff *) head_list->buffer[9].address;
 			head_list->buffer[9].address = 0;
 			skb_trim( skb, head_list->frameSize );
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
+
 			priv->stats.rx_bytes += head_list->frameSize;
-#endif
 
 			skb->protocol = eth_type_trans( skb, dev );
 			netif_rx( skb );

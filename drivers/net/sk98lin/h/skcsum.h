@@ -1,9 +1,9 @@
 /******************************************************************************
  *
  * Name:	skcsum.h
- * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.2 $
- * Date:	$Date: 1998/09/04 12:16:34 $
+ * Project:	GEnesis - SysKonnect SK-NET Gigabit Ethernet (SK-98xx)
+ * Version:	$Revision: 1.5 $
+ * Date:	$Date: 2000/02/21 12:10:05 $
  * Purpose:	Store/verify Internet checksum in send/receive packets.
  *
  ******************************************************************************/
@@ -27,6 +27,18 @@
  * History:
  *
  *	$Log: skcsum.h,v $
+ *	Revision 1.5  2000/02/21 12:10:05  cgoos
+ *	Fixed license comment.
+ *	
+ *	Revision 1.4  2000/02/21 11:08:37  cgoos
+ *	Merged changes back into common source.
+ *	
+ *	Revision 1.1  1999/07/26 14:47:49  mkarl
+ *	changed from common source to windows specific source
+ *	added return SKCS_STATUS_IP_CSUM_ERROR_UDP and
+ *	SKCS_STATUS_IP_CSUM_ERROR_TCP to pass the NidsTester
+ *	changes for Tx csum offload
+ *	
  *	Revision 1.2  1998/09/04 12:16:34  mhaveman
  *	Checked in for Stephan to allow compilation.
  *	-Added definition SK_CSUM_EVENT_CLEAR_PROTO_STATS to clear statistic
@@ -116,6 +128,9 @@
 #define SKCS_STATUS_UDP_CSUM_ERROR	6
 #define SKCS_STATUS_TCP_CSUM_OK		7
 #define SKCS_STATUS_UDP_CSUM_OK		8
+// needed for Microsoft
+#define SKCS_STATUS_IP_CSUM_ERROR_UDP	9
+#define SKCS_STATUS_IP_CSUM_ERROR_TCP	10
 #endif	/* !SKCS_OVERWRITE_STATUS */
 
 /* Clear protocol statistics event. */
@@ -158,7 +173,7 @@ typedef struct s_CsProtocolStatistics {
 	SK_U64 RxUnableCts;	/* Unable to verify receive checksum. */
 	SK_U64 RxErrCts;	/* Receive checksum error. */
 	SK_U64 TxOkCts;		/* Transmit checksum ok. */
-	SK_U64 TxUnableCts;	/* Unable to verify transmit checksum. */
+	SK_U64 TxUnableCts;	/* Unable to calculate checksum in hw. */
 } SKCS_PROTO_STATS;
 
 /*
@@ -167,6 +182,9 @@ typedef struct s_CsProtocolStatistics {
 typedef struct s_Csum {
 	/* Enabled receive SK_PROTO_XXX bit flags. */
 	unsigned ReceiveFlags;
+#ifdef TX_CSUM
+	unsigned TransmitFlags;
+#endif // TX_CSUM
 
 	/* The protocol statistics structure; one per supported protocol. */
 	SKCS_PROTO_STATS ProtoStats[SKCS_NUM_PROTOCOLS];

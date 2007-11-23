@@ -2,8 +2,8 @@
  *
  * Name:	skgesirq.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.46 $
- * Date:	$Date: 1999/09/16 10:30:07 $
+ * Version:	$Revision: 1.49 $
+ * Date:	$Date: 1999/12/17 11:02:50 $
  * Purpose:	Special IRQ module
  *
  ******************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,15 @@
  * History:
  *
  *	$Log: skgesirq.c,v $
+ *	Revision 1.49  1999/12/17 11:02:50  gklug
+ *	fix: read PHY_STAT of Broadcom chip more often to assure good status
+ *	
+ *	Revision 1.48  1999/12/06 10:01:17  cgoos
+ *	Added SET function for Role.
+ *	
+ *	Revision 1.47  1999/11/22 13:34:24  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.46  1999/09/16 10:30:07  cgoos
  *	Removed debugging output statement from Linux.
  *	
@@ -215,7 +222,7 @@
 
 */
 static const char SysKonnectFileId[] =
-	"$Id: skgesirq.c,v 1.46 1999/09/16 10:30:07 cgoos Exp $" ;
+	"$Id: skgesirq.c,v 1.49 1999/12/17 11:02:50 gklug Exp $" ;
 
 #include "h/skdrv1st.h"		/* Driver Specific Definitions */
 #include "h/skgepnmi.h"		/* PNMI Definitions */
@@ -1338,7 +1345,7 @@ int	Port)		/* Which port should be checked */
 
 	pPrt->PIsave = 0;
 
-	/* Now wait for each ports link */
+	/* Now wait for each port's link */
 	if (pPrt->PLinkMode == SK_LMODE_HALF ||
 	    pPrt->PLinkMode == SK_LMODE_FULL) {
 		AutoNeg = SK_FALSE;
@@ -1355,13 +1362,43 @@ int	Port)		/* Which port should be checked */
 	PHY_READ(IoC, pPrt, Port, PHY_BCOM_STAT, &PhyStat);
 
 	SkXmAutoNegLipaBcom(pAC, IoC, Port, PhyStat);
-	if ((PhyStat & PHY_ST_LSYNC) == 0){
-		return(SK_HW_PS_NONE) ; 
+	
+	SK_DBG_MSG(pAC, SK_DBGMOD_HWM, SK_DBGCAT_CTRL,
+		("AutoNeg:%d, PhyStat: %Xh.\n", AutoNeg, PhyStat));
+
+	PHY_READ(IoC, pPrt, Port, PHY_BCOM_1000T_STAT, &ResAb);
+
+	if ((PhyStat & PHY_ST_LSYNC) == 0) {
+		if (ResAb & (PHY_B_1000S_MSF)) {
+			/* Error */
+			SK_DBG_MSG(pAC,SK_DBGMOD_HWM,SK_DBGCAT_CTRL,
+				("Master/Slave Fault port %d\n", Port));
+			pPrt->PAutoNegFail = SK_TRUE;
+			pPrt->PMSStatus = SK_MS_STAT_FAULT;
+			return (SK_AND_OTHER);
+		}
+		return (SK_HW_PS_NONE);
 	}
+	
+	if (ResAb & (PHY_B_1000S_MSF)) {
+		/* Error */
+		SK_DBG_MSG(pAC,SK_DBGMOD_HWM,SK_DBGCAT_CTRL,
+			("Master/Slave Fault port %d\n", Port));
+		pPrt->PAutoNegFail = SK_TRUE;
+		pPrt->PMSStatus = SK_MS_STAT_FAULT;
+		return (SK_AND_OTHER);
+	} else if (ResAb & PHY_B_1000S_MSR) {
+		pPrt->PMSStatus = SK_MS_STAT_MASTER;
+	} else {
+		pPrt->PMSStatus = SK_MS_STAT_SLAVE;
+	}
+	
+	SK_DBG_MSG(pAC, SK_DBGMOD_HWM, SK_DBGCAT_CTRL,
+		("AutoNeg:%d, PhyStat: %Xh.\n", AutoNeg, PhyStat));
 
 	if (AutoNeg) {
 		if (PhyStat & PHY_ST_AN_OVER) {
-			SkHWLinkUp(pAC, IoC, Port) ;
+			SkHWLinkUp(pAC, IoC, Port);
 			Done = SkXmAutoNegDone(pAC,IoC,Port);
 			if (Done != SK_AND_OK) {
 				/* Get PHY parameters, for debuging only */
@@ -1400,6 +1437,8 @@ int	Port)		/* Which port should be checked */
 				Port));
 		}
 #endif
+
+#if 0
 		PHY_READ(IoC, pPrt, Port, PHY_BCOM_1000T_STAT, &ResAb);
 		if (ResAb & (PHY_B_1000S_MSF)) {
 			/* Error */
@@ -1413,6 +1452,7 @@ int	Port)		/* Which port should be checked */
 		} else {
 			pPrt->PMSStatus = SK_MS_STAT_SLAVE ;
 		}
+#endif	/* 0 */
 
 
 		/*
@@ -1753,6 +1793,18 @@ SK_EVPARA	Para)		/* Event specific Parameter */
 		if (pAC->GIni.GP[Port].PFlowCtrlMode != Val8) {
 			/* Set New Flow Control mode */
 			pAC->GIni.GP[Port].PFlowCtrlMode = Val8;
+
+			/* Restart Port */
+			SkEventQueue(pAC, SKGE_HWAC, SK_HWEV_PORT_STOP, Para);
+			SkEventQueue(pAC, SKGE_HWAC, SK_HWEV_PORT_START, Para);
+		}
+		break;
+
+	case SK_HWEV_SET_ROLE:
+		Val8 = (SK_U8) Para.Para32[1];
+		if (pAC->GIni.GP[Port].PMSMode != Val8) {
+			/* Set New link mode */
+			pAC->GIni.GP[Port].PMSMode = Val8;
 
 			/* Restart Port */
 			SkEventQueue(pAC, SKGE_HWAC, SK_HWEV_PORT_STOP, Para);

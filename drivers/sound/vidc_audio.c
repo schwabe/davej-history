@@ -79,7 +79,7 @@ static int vidc_audio_set_rate(int rate)
 			newsize = 208;
 		if (newsize > 4096)
 			newsize = 4096;
-		for (new2size = 128; new2size < newsize; new2size <<= 1);
+		for (new2size = 128; new2size < newsize; new2size <<= 1)
 			if (new2size - newsize > newsize - (new2size >> 1))
 				new2size >>= 1;
 		dma_bufsize = new2size;

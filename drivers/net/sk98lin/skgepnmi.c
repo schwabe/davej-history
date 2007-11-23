@@ -2,8 +2,8 @@
  *
  * Name:	skgepnmi.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.69 $
- * Date:	$Date: 1999/10/18 11:42:15 $
+ * Version:	$Revision: 1.72 $
+ * Date:	$Date: 1999/12/06 16:15:53 $
  * Purpose:	Private Network Management Interface
  *
  ****************************************************************************/
@@ -12,8 +12,6 @@
  *
  *	(C)Copyright 1998,1999 SysKonnect,
  *	a business unit of Schneider & Koch & Co. Datensysteme GmbH.
- *
- *	See the file "skge.c" for further information.
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -29,6 +27,15 @@
  * History:
  *
  *	$Log: skgepnmi.c,v $
+ *	Revision 1.72  1999/12/06 16:15:53  rwahl
+ *	Fixed problem of instance range for current and factory MAC address.
+ *	
+ *	Revision 1.71  1999/12/06 10:14:20  rwahl
+ *	Fixed bug 10476; set operation for PHY_OPERATION_MODE.
+ *	
+ *	Revision 1.70  1999/11/22 13:33:34  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.69  1999/10/18 11:42:15  rwahl
  *	Added typecasts for checking event dependent param (debug only).
  *	
@@ -297,7 +304,8 @@
 
 
 static const char SysKonnectFileId[] =
-	"@(#) $Id: skgepnmi.c,v 1.69 1999/10/18 11:42:15 rwahl Exp $ (C) SysKonnect.";
+	"@(#) $Id: skgepnmi.c,v 1.72 1999/12/06 16:15:53 rwahl Exp $"
+	" (C) SysKonnect.";
 
 #include "h/skdrv1st.h"
 #include "h/sktypes.h"
@@ -3245,7 +3253,7 @@ unsigned int TableIndex) /* Index to the Id table */
 
 	if ((Instance != (SK_U32)(-1))) {
 		
-		if ((Instance < 1) || (Instance > SKCS_NUM_PROTOCOLS)) {
+		if ((Instance < 1) || (Instance > LogPortMax)) {
 
 			*pLen = 0;
 			return (SK_PNMI_ERR_UNKNOWN_INST);
@@ -5622,6 +5630,7 @@ unsigned int TableIndex) /* Index to the Id table */
 
 	case OID_SKGE_LINK_MODE:
 	case OID_SKGE_FLOWCTRL_MODE:
+	case OID_SKGE_PHY_OPERATION_MODE:
 		if (*pLen < Limit - LogPortIndex) {
 
 			*pLen = Limit - LogPortIndex;
@@ -5795,6 +5804,82 @@ unsigned int TableIndex) /* Index to the Id table */
 					return (SK_PNMI_ERR_GENERAL);
 				}
 			}
+			Offset += sizeof(char);
+			break;
+
+		case OID_SKGE_PHY_OPERATION_MODE :
+			/* Check the value range */
+			Val8 = *(pBuf + Offset);
+			if (Val8 == 0) {
+				/* mode of this port remains unchanged */
+				Offset += sizeof(char);
+				break;
+			}
+			if (Val8 < SK_MS_MODE_AUTO ||
+				Val8 > SK_MS_MODE_SLAVE) {
+
+				*pLen = 0;
+				return (SK_PNMI_ERR_BAD_VALUE);
+			}
+
+			/* The preset ends here */
+			if (Action == SK_PNMI_PRESET) {
+
+				return (SK_PNMI_ERR_OK);
+			}
+
+			if (LogPortIndex == 0) {
+
+				/*
+				 * The virtual port consists of all currently
+				 * active ports. Find them and send an event
+				 * with new master/slave (role) mode to SIRQ.
+				 */
+				for (PhysPortIndex = 0;
+					PhysPortIndex < PhysPortMax;
+					PhysPortIndex ++) {
+
+					if (!pAC->Pnmi.Port[PhysPortIndex].
+						ActiveFlag) {
+
+						continue;
+					}
+
+					EventParam.Para32[0] = PhysPortIndex;
+					EventParam.Para32[1] = (SK_U32)Val8;
+					if (SkGeSirqEvent(pAC, IoC,
+						SK_HWEV_SET_ROLE,
+						EventParam) > 0) {
+
+						SK_ERR_LOG(pAC, SK_ERRCL_SW,
+							SK_PNMI_ERR052,
+							SK_PNMI_ERR052MSG);
+
+						*pLen = 0;
+						return (SK_PNMI_ERR_GENERAL);
+					}
+				}
+			}
+			else {
+				/*
+				 * Send an event with the new master/slave
+				 * (role) mode to the SIRQ module.
+				 */
+				EventParam.Para32[0] = SK_PNMI_PORT_LOG2PHYS(
+					pAC, LogPortIndex);
+				EventParam.Para32[1] = (SK_U32)Val8;
+				if (SkGeSirqEvent(pAC, IoC,
+					SK_HWEV_SET_ROLE, EventParam) > 0) {
+
+					SK_ERR_LOG(pAC, SK_ERRCL_SW,
+						SK_PNMI_ERR052,
+						SK_PNMI_ERR052MSG);
+
+					*pLen = 0;
+					return (SK_PNMI_ERR_GENERAL);
+				}
+			}
+			
 			Offset += sizeof(char);
 			break;
 

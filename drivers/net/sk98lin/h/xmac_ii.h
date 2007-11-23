@@ -2,8 +2,8 @@
  *
  * Name:	xmac_ii.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.25 $
- * Date:	$Date: 1999/08/12 19:19:38 $
+ * Version:	$Revision: 1.26 $
+ * Date:	$Date: 1999/11/22 14:03:00 $
  * Purpose:	Defines and Macros for XaQti's Gigabit Ethernet Controller
  *
  ******************************************************************************/
@@ -27,6 +27,9 @@
  * History:
  *
  *	$Log: xmac_ii.h,v $
+ *	Revision 1.26  1999/11/22 14:03:00  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.25  1999/08/12 19:19:38  malthoff
  *	Add PHY_B_AC_TX_TST bit according to BCOM A1 errata sheet.
  *	

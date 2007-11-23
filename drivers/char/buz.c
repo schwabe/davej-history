@@ -3167,11 +3167,15 @@ static int zr36057_init(int i)
 			mdelay(10);
 			zr36060_reset(zr);
 			mdelay(10);
-			zr36060_sleep(zr, 1);
-			mdelay(10);
+//			zr36060_sleep(zr, 1);
+//			mdelay(10);
 	
 			/* display codec revision */
 			if ((rev=zr36060_read_8(zr, 0x022)) == 0x33) {
+				printk(KERN_INFO "%s: Zoran ZR36060 (rev %d)\n",
+			       zr->name, zr36060_read_8(zr, 0x023));
+			}
+			else if ((rev=zr36060_read_8(zr, 0x022)) == 0xA2) {
 				printk(KERN_INFO "%s: Zoran ZR36060 (rev %d)\n",
 			       zr->name, zr36060_read_8(zr, 0x023));
 			} else {
@@ -3205,8 +3209,8 @@ static int zr36057_init(int i)
 			udelay(3000);
 			zr36060_reset(zr);
 			udelay(3000);
-			zr36060_sleep(zr, 1);
-			udelay(3000);
+//			zr36060_sleep(zr, 1);
+//			udelay(3000);
 
 			/* display codec revision */
 			if ((rev=zr36060_read_8(zr, 0x022)) == 0x33) {

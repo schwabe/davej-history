@@ -902,6 +902,8 @@ static int parport_pc_init_pci (int irq, int dma)
 		  { { 0, -1 }, } },
 		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_B, 1,
 		  { { 0, -1 }, } },
+		{ PCI_VENDOR_ID_AFAVLAB, PCI_DEVICE_ID_AFAVLAB_TK9902, 1,
+		  { { 0, 1 }, } },
 		{ 0, }
 	};
 

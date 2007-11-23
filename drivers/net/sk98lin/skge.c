@@ -2,8 +2,8 @@
  *
  * Name:      	skge.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.27 $
- * Date:       	$Date: 1999/11/25 09:06:28 $
+ * Version:	$Revision: 1.29 $
+ * Date:       	$Date: 2000/02/21 13:31:56 $
  * Purpose:	The main driver source module
  *
  ******************************************************************************/
@@ -46,6 +46,16 @@
  * History:
  *
  *	$Log: skge.c,v $
+ *	Revision 1.29  2000/02/21 13:31:56  cgoos
+ *	Fixed "unused" warning for UltraSPARC change.
+ *	
+ *	Revision 1.28  2000/02/21 10:32:36  cgoos
+ *	Added fixes for UltraSPARC.
+ *	Now printing RlmtMode and PrefPort setting at startup.
+ *	Changed XmitFrame return value.
+ *	Fixed rx checksum calculation for BIG ENDIAN systems.
+ *	Fixed rx jumbo frames counted as ierrors.
+ *	
  *	Revision 1.27  1999/11/25 09:06:28  cgoos
  *	Changed base_addr to unsigned long.
  *	
@@ -348,7 +358,9 @@ int		version_disp = 0;
 SK_AC		*pAC;
 struct pci_dev	*pdev = NULL;
 unsigned long	base_address;
+#ifdef __sparc_v9__
 unsigned short	tmp;
+#endif
 
 	if (probed)
 		return -ENODEV;

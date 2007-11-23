@@ -1197,8 +1197,11 @@ dgrs_probe1(struct device *dev))
 
 	priv->intrcnt = 0;
 	for (i = jiffies + 2*HZ + HZ/2; time_after(i, jiffies); )
+	{
+		rmb();		/* gcc 2.95 needs this */
 		if (priv->intrcnt >= 2)
 			break;
+	}
 	if (priv->intrcnt < 2)
 	{
 		printk("%s: Not interrupting on IRQ %d (%d)\n",

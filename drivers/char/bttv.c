@@ -1455,6 +1455,7 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 {
 	unsigned int *ro, *re;
 	unsigned int *vbuf;
+	unsigned long flags;
 	
 	if(btv->fbuffer==NULL)
 	{
@@ -1506,6 +1507,9 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 	re=ro+2048;
         make_vrisctab(btv, ro, re, vbuf, mp->width, mp->height, mp->format);
 	/* bt848_set_risc_jmps(btv); */
+	
+	save_flags(flags);
+	cli();
         btv->frame_stat[mp->frame] = GBUFFER_GRABBING;
         if (btv->grabbing) {
 		btv->gfmt_next=palette2fmt[mp->format];
@@ -1529,6 +1533,7 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 		}
 		btv->risc_jmp[12]=cpu_to_le32(BT848_RISC_JUMP|(0x8<<16)|BT848_RISC_IRQ);
         }
+        restore_flags(flags);
 	btor(3, BT848_CAP_CTL);
 	btor(3, BT848_GPIO_DMA_CTL);
 	/* interruptible_sleep_on(&btv->capq); */

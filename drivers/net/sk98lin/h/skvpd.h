@@ -2,8 +2,8 @@
  *
  * Name:	skvpd.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.8 $
- * Date:	$Date: 1999/03/11 14:26:40 $
+ * Version:	$Revision: 1.9 $
+ * Date:	$Date: 1999/11/22 14:02:27 $
  * Purpose:	Defines and Macros for VPD handling
  *
  ******************************************************************************/
@@ -27,6 +27,9 @@
  * History:
  *
  *	$Log: skvpd.h,v $
+ *	Revision 1.9  1999/11/22 14:02:27  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.8  1999/03/11 14:26:40  malthoff
  *	Replace __STDC__ with SK_KR_PROTO.
  *	

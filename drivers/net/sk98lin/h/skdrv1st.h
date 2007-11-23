@@ -2,8 +2,8 @@
  *
  * Name:	skdrv1st.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.6 $
- * Date:	$Date: 1999/07/27 08:03:33 $
+ * Version:	$Revision: 1.8 $
+ * Date:	$Date: 2000/02/21 12:19:18 $
  * Purpose:	First header file for driver and all other modules
  *
  ******************************************************************************/
@@ -27,6 +27,15 @@
  * History:
  *
  *	$Log: skdrv1st.h,v $
+ *	Revision 1.8  2000/02/21 12:19:18  cgoos
+ *	Added default for SK_DEBUG_CHKMOD/_CHKCAT
+ *	
+ *	Revision 1.7  1999/11/22 13:50:00  cgoos
+ *	Changed license header to GPL.
+ *	Added overwrite for several functions.
+ *	Removed linux 2.0.x definitions.
+ *	Removed PCI vendor ID definition (now in kernel).
+ *	
  *	Revision 1.6  1999/07/27 08:03:33  cgoos
  *	Changed SK_IN/OUT macros to readX/writeX instead of memory
  *	accesses (necessary for ALPHA).

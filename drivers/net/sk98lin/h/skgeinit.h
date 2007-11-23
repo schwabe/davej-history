@@ -2,8 +2,8 @@
  *
  * Name:	skgeinit.h
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.44 $
- * Date:	$Date: 1999/10/26 07:34:15 $
+ * Version:	$Revision: 1.45 $
+ * Date:	$Date: 1999/11/22 13:56:19 $
  * Purpose:	Structures and prototypes for the GE Init Module
  *
  ******************************************************************************/
@@ -27,6 +27,9 @@
  * History:
  *
  *	$Log: skgeinit.h,v $
+ *	Revision 1.45  1999/11/22 13:56:19  cgoos
+ *	Changed license header to GPL.
+ *	
  *	Revision 1.44  1999/10/26 07:34:15  malthoff
  *	The define SK_LNK_ON has been lost in v1.41.
  *	

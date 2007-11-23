@@ -19,6 +19,7 @@
 #include <linux/init.h>
 
 #include <asm/pgtable.h>
+extern int low_on_memory;
 
 /*
  * The swap-out functions return 1 if they successfully
@@ -495,8 +496,17 @@ int kswapd(void *unused)
 		 */
 		while (nr_free_pages < freepages.high)
 		{
-			if (!do_try_to_free_pages(GFP_KSWAPD))
-				break;
+			if (!do_try_to_free_pages(GFP_KSWAPD)) {
+				/* out of memory? we can't do much */
+				low_on_memory = jiffies;
+				if (nr_free_pages < freepages.min) {
+					run_task_queue(&tq_disk);
+					tsk->state = TASK_INTERRUPTIBLE;
+					schedule_timeout(HZ);
+				} else {	
+					break;
+				}
+			}
 			if (tsk->need_resched)
 				schedule();
 		}

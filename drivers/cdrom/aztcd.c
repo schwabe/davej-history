@@ -1732,10 +1732,9 @@ __initfunc(int aztcd_init(void))
 	               { printk("aztcd: no AZTECH CD-ROM drive found\n");
                          return -EIO;
 	               } 
-	            for (count = 0; count < AZT_TIMEOUT; count++); 
-	               { count=count*2;          /* delay a bit */
-	                 count=count/2;
-	               }                        
+	            
+	            for (count = 0; count < AZT_TIMEOUT; count++);
+	            
 	            if ((st=getAztStatus())==-1)
 	               { printk("aztcd: Drive Status Error Status=%x\n",st);
                          return -EIO;
