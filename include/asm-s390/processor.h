@@ -90,7 +90,7 @@ typedef struct thread_struct thread_struct;
 
 #define INIT_MMAP \
 { &init_mm, 0, 0, NULL, PAGE_SHARED, \
-VM_READ | VM_WRITE | VM_EXEC, 1, NULL, &init_mm.mmap }
+VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
 #define INIT_TSS  { (struct pt_regs *) 0,                         \
                     { 0,{{0},{0},{0},{0},{0},{0},{0},{0},{0},{0}, \

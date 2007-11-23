@@ -71,7 +71,7 @@ void timer_interrupt(struct pt_regs * regs)
 {
 	int dval, d;
 	unsigned long cpu = smp_processor_id();
-	
+
 	hardirq_enter(cpu);
 #ifdef __SMP__
 	{
@@ -192,10 +192,10 @@ void do_settimeofday(struct timeval *tv)
 
 __initfunc(void time_init(void))
 {
+	long time_offset = 0;
+
         if (ppc_md.time_init != NULL)
-        {
-                ppc_md.time_init();
-        }
+                time_offset = ppc_md.time_init();
 
 	if ((_get_PVR() >> 16) == 1) {
 		/* 601 processor: dec counts down by 128 every 128ns */
@@ -208,6 +208,12 @@ __initfunc(void time_init(void))
 
         xtime.tv_sec = ppc_md.get_rtc_time();
         xtime.tv_usec = 0;
+        if (time_offset) {
+        	struct timezone tz;
+        	tz.tz_minuteswest = time_offset/60;
+        	tz.tz_dsttime = 0; /* Not handled correctly by the kernel anyway */
+        	do_sys_settimeofday(NULL, &tz);
+        }
 
 	set_dec(decrementer_count);
 	/* allow updates right away */

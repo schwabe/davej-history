@@ -5,6 +5,10 @@
  * ...............: by Hartmunt Penner <hpenner@de.ibm.com>
  * Bugreports.to..: <Linux390@de.ibm.com>
  * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999,2000
+	
+ * History of changes
+ * 07/13/00 Added fixup sections for diagnoses ans saved some registers
+ * 07/14/00 fixed constraints in newly generated inline asm
  */
 
 #include <linux/stddef.h>
@@ -20,6 +24,7 @@
 #include <asm/ebcdic.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/s390dyn.h>
 
 #include "dasd.h"
 #include "dasd_diag.h"
@@ -47,13 +52,24 @@ dia210 (void *devchar)
 {
 	int rc;
 
-	__asm__ __volatile__ ("    lr    2,%1\n"
-                              "    .long 0x83200210\n"
+	__asm__ __volatile__ ("    diag  %1,0,0x210\n"
                               "0:  ipm   %0\n"
-                              "    srl   %0,28"
+                              "    srl   %0,28\n"
+                              "1:\n"
+                              ".section .fixup,\"ax\"\n"
+                              "2:  lhi   %0,3\n"
+                              "    bras  1,3f\n"
+                              "    .long 1b\n"
+                              "3:  l     1,0(1)\n"
+                              "    br    1\n"
+                              ".previous\n"
+                              ".section __ex_table,\"a\"\n"
+                              "    .align 4\n"
+                              "    .long 0b,2b\n"
+                              ".previous\n"
                               :"=d" (rc)
                               :"d" ((void *) __pa (devchar))
-                              :"2");
+                              :"1");
 	return rc;
 }
 
@@ -62,13 +78,23 @@ dia250 (void *iob, int cmd)
 {
 	int rc;
 
-	__asm__ __volatile__ ("    lr    2,%1\n"
-                              "    lr    3,%2\n"
-                              "    .long 0x83230250\n"
-                              "    lr    %0,3"
-                              :"=d" (rc)
-                              :"d" ((void *) __pa (iob)), "d" (cmd)
-                              :"2", "3");
+	__asm__ __volatile__ ("    lr    1,%1\n"
+                              "    diag  1,%2,0x250\n"
+                              "1:\n"
+                              ".section .fixup,\"ax\"\n"
+                              "2:  lhi   %0,3\n"
+                              "    bras  1,3f\n"
+                              "    .long 1b\n"
+                              "3:  l     1,0(1)\n"
+                              "    br    1\n"
+                              ".previous\n"
+                              ".section __ex_table,\"a\"\n"
+                              "    .align 4\n"
+                              "    .long 1b,2b\n"
+                              ".previous\n"
+                              : "=d" (rc)
+                              : "d" ((void *) __pa (iob)), "0" (cmd)
+                              : "1" );
 	return rc;
 }
 
@@ -528,6 +554,23 @@ dasd_diag_init( void ) {
           ctl_set_bit (0, 9);
           register_external_interrupt (0x2603, dasd_ext_handler);
           dasd_discipline_enq(&dasd_diag_discipline);
+        } else {
+          printk ( KERN_INFO PRINTK_HEADER
+                   "Machine is not VM: %s discipline not initializing\n", dasd_diag_discipline.name);
+          rc = -EINVAL;
+        }
+        return rc;
+}
+
+void
+dasd_diag_cleanup( void ) {
+        int rc = 0;
+        if ( MACHINE_IS_VM ) {
+          printk ( KERN_INFO PRINTK_HEADER
+                   "%s discipline cleaning up\n", dasd_diag_discipline.name);
+          dasd_discipline_deq(&dasd_diag_discipline);
+          unregister_external_interrupt (0x2603, dasd_ext_handler);
+          ctl_clear_bit (0, 9);
         } else {
           printk ( KERN_INFO PRINTK_HEADER
                    "Machine is not VM: %s discipline not initializing\n", dasd_diag_discipline.name);

@@ -11,6 +11,8 @@
 # FIXME:	 should insert zeroes into memory when filling holes
 # FIXME:	 calculate blkpertrack from rdc data and blksize
 
+# change 09/20/00       removed obsolete store of ipldevice to textesegment
+
 # Usage of registers
 # r1:	ipl subchannel ( general use, dont overload without save/restore !)
 # r10:
@@ -44,10 +46,10 @@ _start: .globl _start
 	stsch	.Lrdcdata
 	oi      .Lrdcdata+5,0x84        # enable ssch and multipath mode
 .Lecs:  xi	.Lrdcdata+27,0x01	# enable concurrent sense
-	msch	.Lrdcdata	
+	msch	.Lrdcdata
         xi      .Lprgn,6                # restore Wait and d/a bit in PCnew PSW
 	l	%r2,.Lparm
-	mvc     0x0(8,%r2),.Lnull       # set parmarea to null
+	mvc     0x0(8,%r2),.Lnull	# set parmarea to null
 	lctl	%c6,%c6,.Lc6     	# enable all interrupts
 .Lrdc:					# read device characteristics
 	la	%r6,.Lrdcccw     
@@ -94,7 +96,7 @@ _start: .globl _start
 .Lzeroes:
 	lr	%r2,%r3
 .L001:	slr	%r3,%r3
-	icm	%r3,3,.Lcountarea+6     # get blocksize
+	icm	%r3,3,.Lcountarea+6	# get blocksize
 	slr	%r5,%r5			# no bytes to move
 .L008:	mvcle	%r2,%r4,0   		# fill zeroes to storage
 	jo	.L008			# until block is filled
@@ -111,10 +113,10 @@ _start: .globl _start
 	mvc	0x600(256,%r3),0x180(%r4)
 	mvc	0x700(256,%r3),0x280(%r4)
 .Lrunkern:
-	lhi	%r2,17
-	sll	%r2,12
-	st	%r1,0xc6c(%r2)		# store iplsubchannel to lowcore
-	st	%r1,0xc6c		# store iplsubchannel to lowcore
+#	lhi	%r2,17
+#	sll	%r2,12
+#	st	%r1,0xc6c(%r2)		# store iplsubchannel to lowcore
+#	st	%r1,0xc6c		# store iplsubchannel to lowcore
 	br	%r3
 # This function does the start IO
 # r2:	number of first block to read ( input by caller )
@@ -140,8 +142,8 @@ _start: .globl _start
 	lr	%r15,%r4		# save number or blocks
 	slr	%r7,%r7
 	icm	%r7,3,.Lrdcdata+14      # load heads to r7
-	lhi     %r6,9
-	clc     .Lrdcdata+3(2),.L9345
+	lhi	%r6,9
+	clc	.Lrdcdata+3(2),.L9345
 	je	.L011
 	lhi	%r6,10
 	clc	.Lrdcdata+3(2),.L3380
@@ -149,7 +151,7 @@ _start: .globl _start
 	lhi	%r6,12
 	clc	.Lrdcdata+3(2),.L3390     
 	je	.L011			
-        bras 	%r14,.Ldisab
+	bras 	%r14,.Ldisab
 .L011:	
 	# loop for nbl times
 .Lrdloop:	

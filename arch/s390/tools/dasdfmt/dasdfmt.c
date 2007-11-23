@@ -458,12 +458,11 @@ check_mounted(int major, int minor)
 void
 do_format_dasd(char *dev_name,format_data_t format_params,int testmode,
 	int verbosity,int writenolabel,int labelspec,
-	char *label,int withoutprompt)
+	char *label,int withoutprompt,int devno)
 {
 	int fd,rc;
 	struct stat stat_buf;
 	kdev_t minor_no,major_no;
-	int devno;
 	int new_blksize;
 	unsigned int label_position;
 	struct hd_geometry new_geometry;
@@ -489,7 +488,7 @@ do_format_dasd(char *dev_name,format_data_t format_params,int testmode,
 		minor_no=MINOR(stat_buf.st_rdev);
 	}
 	check_mounted(major_no, minor_no);
-	
+
 	if ((!writenolabel) && (!labelspec)) {
 		sprintf(label,"LNX1 x%04x",devno);
 	}
@@ -645,9 +644,10 @@ int main(int argc,char *argv[]) {
 	endptr=NULL;
 
 	/* set default values */
-	format_params.start_unit=0;
-	format_params.stop_unit=-1;
-	format_params.blksize=4096;
+	format_params.start_unit=DASD_FORMAT_DEFAULT_START_UNIT;
+	format_params.stop_unit=DASD_FORMAT_DEFAULT_STOP_UNIT;
+	format_params.blksize=DASD_FORMAT_DEFAULT_BLOCKSIZE;
+	format_params.intensity=DASD_FORMAT_DEFAULT_INTENSITY;
 	testmode=0;
 	verbosity=0;
 	withoutprompt=0;
@@ -811,7 +811,7 @@ int main(int argc,char *argv[]) {
 
 	/******* issue the real command and reread part table *******/
 	do_format_dasd(dev_name,format_params,testmode,verbosity,
-		writenolabel,labelspec,label,withoutprompt);
+		writenolabel,labelspec,label,withoutprompt,devno);
 
 	/*************** cleanup ********************************/
 	if (strncmp(dev_name,TEMPFILENAME,TEMPFILENAMECHARS)==0) {

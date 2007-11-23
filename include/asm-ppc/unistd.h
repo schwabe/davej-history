@@ -195,10 +195,10 @@
 #define __NR_putpmsg		188	/* some people actually want streams */
 #define __NR_vfork		189
 
-#define __NR_sys_pciconfig_read         198
-#define __NR_sys_pciconfig_write        199
-#define __NR_sys_pciconfig_iobase       200
-#define __NR_multiplexer                201
+#define __NR_pciconfig_read     198
+#define __NR_pciconfig_write    199
+#define __NR_pciconfig_iobase   200
+#define __NR_multiplexer        201
 
 #define __NR(n)	#n
 

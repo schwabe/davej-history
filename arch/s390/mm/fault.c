@@ -48,6 +48,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
         int write;
         unsigned long psw_mask;
         unsigned long psw_addr;
+	int kernel_address = 0;
 
         /*
          *  get psw mask of Program old psw to find out,
@@ -70,6 +71,49 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 
         if (atomic_read(&S390_lowcore.local_irq_count))
                 die("page fault from irq handler",regs,error_code);
+
+	/*
+	 * Check which address space the address belongs to
+	 */
+	switch (S390_lowcore.trans_exc_code & 3)
+	{
+	case 0: /* Primary Segment Table Descriptor */
+		kernel_address = 1;
+		goto no_context;
+
+	case 1: /* STD determined via access register */
+		if (S390_lowcore.exc_access_id == 0)
+		{
+			kernel_address = 1;
+			goto no_context;
+		}
+		if (regs && S390_lowcore.exc_access_id < NUM_ACRS)
+		{
+			if (regs->acrs[S390_lowcore.exc_access_id] == 0)
+			{
+				kernel_address = 1;
+				goto no_context;
+			}
+			if (regs->acrs[S390_lowcore.exc_access_id] == 1)
+			{
+				/* user space address */
+				break;
+			}
+		}
+		die("page fault via unknown access register", regs, error_code);
+		break;
+
+	case 2: /* Secondary Segment Table Descriptor */
+	case 3: /* Home Segment Table Descriptor */
+		/* user space address */
+		break;
+	}
+
+
+	/*
+	 * When we get here, the fault happened in the current
+	 * task's user address space, so we search the VMAs
+	 */
 
         down(&mm->mmap_sem);
 
@@ -129,12 +173,12 @@ bad_area:
         /* User mode accesses just cause a SIGSEGV */
         if (psw_mask & PSW_PROBLEM_STATE) {
                 tsk->tss.prot_addr = address;
-                tsk->tss.error_code = error_code;
-                tsk->tss.trap_no = 14;
-
+                tsk->tss.trap_no = error_code;
+#ifdef CONFIG_PROCESS_DEBUG
                 printk("User process fault: interruption code 0x%lX\n",error_code);
                 printk("failing address: %lX\n",address);
-		show_crashed_task_info();
+		show_regs(regs);
+#endif
                 force_sig(SIGSEGV, tsk);
                 return;
 	}
@@ -149,14 +193,13 @@ bad_area:
 /*
  * Oops. The kernel tried to access some bad page. We'll have to
  * terminate things with extreme prejudice.
- *
- * First we check if it was the bootup rw-test, though..
  */
-        if (address < PAGE_SIZE)
-                printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
+        if (kernel_address)
+                printk(KERN_ALERT "Unable to handle kernel pointer dereference"
+        	       " at virtual kernel address %08lx\n", address);
         else
-                printk(KERN_ALERT "Unable to handle kernel paging request");
-        printk(" at virtual address %08lx\n",address);
+                printk(KERN_ALERT "Unable to handle kernel paging request"
+		       " at virtual user address %08lx\n", address);
 /*
  * need to define, which information is useful here
  */
@@ -171,17 +214,17 @@ bad_area:
  */
 out_of_memory:
 	if (tsk->pid == 1)
-                {
+	{
 		tsk->policy |= SCHED_YIELD;
 		schedule();
 		goto survive;
-		    }
+	}
 	up(&mm->mmap_sem);
 	if (psw_mask & PSW_PROBLEM_STATE)
 	{
 		printk("VM: killing process %s\n", tsk->comm);
 		do_exit(SIGKILL);
-                }
+	}
 	goto no_context;
 
 do_sigbus:
@@ -192,8 +235,7 @@ do_sigbus:
 	 * or user mode.
 	 */
         tsk->tss.prot_addr = address;
-        tsk->tss.error_code = error_code;
-        tsk->tss.trap_no = 14;
+        tsk->tss.trap_no = error_code;
 	force_sig(SIGBUS, tsk);
 
 	/* Kernel mode? Handle exceptions or die */

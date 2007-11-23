@@ -364,13 +364,20 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 					(struct mpc_config_ioapic *)mpt;
 				if (m->mpc_flags&MPC_APIC_USABLE)
 				{
-					ioapics++;
-					printk("I/O APIC #%d Version %d at 0x%lX.\n",
-						m->mpc_apicid,m->mpc_apicver,
-						m->mpc_apicaddr);
-					mp_apics [mp_apic_entries] = *m;
-					if (++mp_apic_entries > MAX_IO_APICS)
-						--mp_apic_entries;
+					if(m->mpc_apicaddr == 0)
+					{
+						printk(KERN_ERR "Error - Non MP compliant BIOS. Skipping invalid io-apic!\n");
+					}
+					else
+					{
+						ioapics++;
+						printk("I/O APIC #%d Version %d at 0x%lX.\n",
+							m->mpc_apicid,m->mpc_apicver,
+							m->mpc_apicaddr);
+						mp_apics [mp_apic_entries] = *m;
+						if (++mp_apic_entries > MAX_IO_APICS)
+							--mp_apic_entries;
+					}
 				}
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);
@@ -405,6 +412,12 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 	if (ioapics > MAX_IO_APICS)
 	{
 		printk("Warning: Max I/O APICs exceeded (max %d, found %d).\n", MAX_IO_APICS, ioapics);
+		printk("Warning: switching to non APIC mode.\n");
+		skip_ioapic_setup=1;
+	}
+	if (ioapics == 0)
+	{
+		printk("Warning: BIOS table gives no I/O APIC.\n");
 		printk("Warning: switching to non APIC mode.\n");
 		skip_ioapic_setup=1;
 	}

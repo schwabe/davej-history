@@ -27,7 +27,7 @@ void __delay(unsigned long loops)
          * yield the megahertz number of the cpu. The important function
          * is udelay and that is done using the tod clock. -- martin.
          */
-	__asm__ __volatile__(
+        __asm__ __volatile__(
                 "0: brct %0,0b"
                 : /* no outputs */ : "r" (loops/2) );
 }

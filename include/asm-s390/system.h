@@ -31,7 +31,7 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
                         asm volatile (
                                 "   lhi   1,3\n"
                                 "   nr    1,%0\n"     /* isolate last 2 bits */
-                                "   xr    1,%0\n"     /* align ptr */
+                                "   xr    %0,1\n"     /* align ptr */
                                 "   bras  2,0f\n"
                                 "   icm   1,8,%1\n"   /* for ptr&3 == 0 */
                                 "   stcm  0,8,%1\n"
@@ -43,13 +43,13 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
                                 "   stcm  0,1,%1\n"
                                 "0: sll   1,3\n"
                                 "   la    2,0(1,2)\n" /* r2 points to an icm */
-                                "   l     0,%1\n"     /* get fullword */
+                                "   l     0,0(%0)\n"  /* get fullword */
                                 "1: lr    1,0\n"      /* cs loop */
                                 "   ex    0,0(2)\n"   /* insert x */
-                                "   cs    0,1,%1\n"
+                                "   cs    0,1,0(%0)\n"
                                 "   jl    1b\n"
                                 "   ex    0,4(2)"     /* store *ptr to x */
-                                : "+a&" (ptr) : "m" (x)
+                                : "+a&" (ptr), "+m" (x) :
                                 : "memory", "0", "1", "2");
                 case 2:
                         if(((__u32)ptr)&1)
@@ -57,7 +57,7 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
                         asm volatile (
                                 "   lhi   1,2\n"
                                 "   nr    1,%0\n"     /* isolate bit 2^1 */
-                                "   xr    1,%0\n"     /* align ptr */
+                                "   xr    %0,1\n"     /* align ptr */
                                 "   bras  2,0f\n"
                                 "   icm   1,12,%1\n"   /* for ptr&2 == 0 */
                                 "   stcm  0,12,%1\n"
@@ -65,13 +65,13 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
                                 "   stcm  0,3,%1\n"
                                 "0: sll   1,2\n"
                                 "   la    2,0(1,2)\n" /* r2 points to an icm */
-                                "   l     0,%1\n"     /* get fullword */
+                                "   l     0,0(%0)\n"  /* get fullword */
                                 "1: lr    1,0\n"      /* cs loop */
                                 "   ex    0,0(2)\n"   /* insert x */
-                                "   cs    0,1,%1\n"
+                                "   cs    0,1,0(%0)\n"
                                 "   jl    1b\n"
                                 "   ex    0,4(2)"     /* store *ptr to x */
-                                : "+a&" (ptr) : "m" (x)
+                                : "+a&" (ptr), "+m" (x) :
                                 : "memory", "0", "1", "2");
                         break;
                 case 4:
@@ -198,7 +198,6 @@ extern int save_fp_regs1(s390_fp_regs *fpregs);
 extern void save_fp_regs(s390_fp_regs *fpregs);
 extern int restore_fp_regs1(s390_fp_regs *fpregs);
 extern void restore_fp_regs(s390_fp_regs *fpregs);
-extern void show_crashed_task_info(void);
 #endif
 
 #define switch_to(prev,next,last) do {                                       \

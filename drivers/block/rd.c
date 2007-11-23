@@ -614,8 +614,10 @@ __initfunc(static void rd_load_disk(int n))
 #ifdef CONFIG_MAC_FLOPPY
 		if(MAJOR(ROOT_DEV) == FLOPPY_MAJOR)
 			swim3_fd_eject(MINOR(ROOT_DEV));
+#ifdef CONFIG_BLK_DEV_INITRD
 		else if(MAJOR(real_root_dev) == FLOPPY_MAJOR)
 			swim3_fd_eject(MINOR(real_root_dev));
+#endif
 #endif
 		printk(KERN_NOTICE
 		       "VFS: Insert root floppy disk to be loaded into RAM disk and press ENTER\n");

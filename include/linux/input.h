@@ -210,7 +210,7 @@ struct input_event {
 #define KEY_F22			121		
 #define KEY_F23			122		
 #define KEY_F24			123		
-#define KEY_JPN			124		
+#define KEY_KPCOMMA		124
 #define KEY_LEFTMETA		125		
 #define KEY_RIGHTMETA		126		
 #define KEY_COMPOSE		127		
@@ -266,8 +266,29 @@ struct input_event {
 #define KEY_EDIT		176
 #define KEY_SCROLLUP		177
 #define KEY_SCROLLDOWN		178
+#define KEY_KPLEFTPAREN		179
+#define KEY_KPRIGHTPAREN	180
 
-#define KEY_UNKNOWN		180
+#define KEY_INTL1		181
+#define KEY_INTL2		182
+#define KEY_INTL3		183
+#define KEY_INTL4		184
+#define KEY_INTL5		185
+#define KEY_INTL6		186
+#define KEY_INTL7		187
+#define KEY_INTL8		188
+#define KEY_INTL9		189
+#define KEY_LANG1		190
+#define KEY_LANG2		191
+#define KEY_LANG3		192
+#define KEY_LANG4		193
+#define KEY_LANG5		194
+#define KEY_LANG6		195
+#define KEY_LANG7		196
+#define KEY_LANG8		197
+#define KEY_LANG9		198
+
+#define KEY_UNKNOWN		200
 
 #define BTN_MISC		0x100
 #define BTN_0			0x100
@@ -423,6 +444,7 @@ struct input_event {
 #define BUS_GAMEPORT		0x14
 #define BUS_PARPORT		0x15
 #define BUS_AMIGA		0x16
+#define BUS_ADB			0x17
 
 #ifdef __KERNEL__
 

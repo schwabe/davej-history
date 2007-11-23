@@ -36,20 +36,40 @@ endif
 
 ifeq ($(CONFIG_MBX),y)
 O_OBJS += mbx_setup.o mbx_pci.o softemu8xx.o i8259.o ppc8xx_pic.o
-else
+endif
 ifeq ($(CONFIG_APUS),y)
 O_OBJS += apus_setup.o prom.o openpic.o
-else
-ifneq ($(CONFIG_MBX),y)
-O_OBJS += prep_time.o pmac_time.o chrp_time.o \
-	  pmac_setup.o pmac_support.o \
-	  prep_pci.o pmac_pci.o chrp_pci.o \
-	  residual.o prom.o openpic.o feature.o \
-	  prep_nvram.o open_pic.o i8259.o pmac_pic.o indirect_pci.o \
-	  gemini_pci.o gemini_prom.o gemini_setup.o
-OX_OBJS += chrp_setup.o prep_setup.o
 endif
+
+PMAC_OBJS = pmac_time.o pmac_setup.o pmac_support.o pmac_pci.o pmac_pic.o \
+	feature.o openpic.o open_pic.o prom.o
+CHRP_OBJS = $(PMAC_OBJS) chrp_time.o chrp_pci.o i8259.o indirect_pci.o
+CHRPX_OBJS = chrp_setup.o
+PREP_OBJS = prep_time.o prep_pci.o residual.o prep_nvram.o i8259.o \
+	indirect_pci.o openpic.o open_pic.o prom.o
+PREPX_OBJS = prep_setup.o
+
+ifeq ($(CONFIG_ALL_PPC),y)
+O_OBJS += $(sort $(PMAC_OBJS) $(PREP_OBJS) $(CHRP_OBJS))
+OX_OBJS += $(PMACX_OBJS) $(PREPX_OBJS) $(CHRPX_OBJS)
 endif
+ifeq ($(CONFIG_PMAC),y)
+O_OBJS += $(PMAC_OBJS)
+OX_OBJS += $(PMACX_OBJS)
+endif
+ifeq ($(CONFIG_PREP),y)
+O_OBJS += $(PREP_OBJS)
+OX_OBJS += $(PREPX_OBJS)
+endif
+ifeq ($(CONFIG_CHRP),y)
+O_OBJS += $(CHRP_OBJS)
+OX_OBJS += $(CHRPX_OBJS)
+endif
+
+GEMINI_OBJS = $(PREP_OBJS) gemini_pci.o gemini_prom.o gemini_setup.o
+ifeq ($(CONFIG_GEMINI),y)
+O_OBJS += $(GEMINI_OBJS)
+OX_OBJS += $(PREPX_OBJS)
 endif
 
 ifdef CONFIG_SMP
@@ -75,7 +95,7 @@ find_name : find_name.c
 	$(HOSTCC) -o find_name find_name.c
 
 checks: checks.c
-	$(HOSTCC) ${CFLAGS} -D__KERNEL__ -o checks checks.c
+	$(HOSTCC) ${CFLAGS} -D__KERNEL__ -I../../../include -o checks checks.c
 	./checks
 
 include $(TOPDIR)/Rules.make

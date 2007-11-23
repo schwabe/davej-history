@@ -129,6 +129,9 @@ static int tty_fasync(int fd, struct file * filp, int on);
 extern long console_8xx_init(long, long);
 extern int rs_8xx_init(void);
 #endif /* CONFIG_8xx */
+#ifdef CONFIG_MAC_SERIAL
+extern long mac_scc_console_init(long, long);
+#endif
 #ifdef CONFIG_3215
 extern long con3215_init(long, long);
 #endif /* CONFIG_3215 */
@@ -2097,6 +2100,8 @@ long __init console_init(long kmem_start, long kmem_end)
 #ifdef CONFIG_SERIAL_CONSOLE
 #ifdef CONFIG_8xx
 	kmem_start = console_8xx_init(kmem_start, kmem_end);
+#elif defined(CONFIG_MAC_SERIAL)
+	kmem_start = mac_scc_console_init(kmem_start, kmem_end);
 #else 	
 	kmem_start = serial_console_init(kmem_start, kmem_end);
 #endif /* CONFIG_8xx */

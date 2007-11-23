@@ -8,6 +8,7 @@ define_bool CONFIG_ARCH_S390 y
 mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+bool 'Show crashed user process info' CONFIG_PROCESS_DEBUG
 endmenu
 
 mainmenu_option next_comment

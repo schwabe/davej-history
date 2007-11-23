@@ -5,6 +5,5 @@ void dasd_int_handler (int , void *, struct pt_regs *);
 ccw_req_t * dasd_alloc_request (char *, int , int ) ;
 void dasd_free_request(ccw_req_t *);
 int (*genhd_dasd_name)(char*,int,int,struct gendisk*);
-
-
+int dasd_oper_handler ( int irq, devreg_t *devreg );
 

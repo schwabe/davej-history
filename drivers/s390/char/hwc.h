@@ -1,13 +1,13 @@
 /*
  *  drivers/s390/char/hwc.h
- *
+ * 
  *
  *  S390 version
  *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Martin Peschke <peschke@fh-brandenburg.de>
  *
- *
- *
+ * 
+ * 
  */
 
 #ifndef __HWC_H__
@@ -109,29 +109,29 @@ typedef struct {
 
 go_t;
 
-typedef	struct {
-	go_t	go;
+typedef struct {
+	go_t go;
 } __attribute__ ((packed)) 
 
 mdb_body_t;
 
 typedef struct {
 	_MDB_HEADER
-	mdb_body_t	mdb_body;
+	mdb_body_t mdb_body;
 } __attribute__ ((packed)) 
 
 mdb_t;
 
 typedef struct {
 	_EBUF_HEADER
-	mdb_t		mdb;
+	mdb_t mdb;
 } __attribute__ ((packed)) 
 
 msgbuf_t;
 
 typedef struct {
 	_HWCB_HEADER
-	msgbuf_t	msgbuf;
+	msgbuf_t msgbuf;
 } __attribute__ ((packed)) 
 
 write_hwcb_t;
@@ -144,27 +144,27 @@ mto_t;
 
 static write_hwcb_t write_hwcb_template =
 {
-	sizeof(write_hwcb_t),				
-	0x00,						
+	sizeof (write_hwcb_t),
+	0x00,
 	{
 		0x00,
-		0x00,					
-		0x00					
+		0x00,
+		0x00
 	},
-	0x0000,						
-	{ 	
-		sizeof(msgbuf_t),			
-		ET_Msg,				
-		0x00,					
-		0x0000,					
-		{ 	
-			sizeof(mdb_t),			
+	0x0000,
+	{
+		sizeof (msgbuf_t),
+		ET_Msg,
+		0x00,
+		0x0000,
+		{
+			sizeof (mdb_t),
 			0x0001,
 			0xD4C4C240,
 			0x00000001,
-			{ 	
-				{ 	
-					sizeof(go_t),	
+			{
+				{
+					sizeof (go_t),
 					0x0001
 
 				}
@@ -175,38 +175,38 @@ static write_hwcb_t write_hwcb_template =
 
 static mto_t mto_template =
 {
-	sizeof(mto_t),
+	sizeof (mto_t),
 	0x0004,
-	LTF_EndText,	
-	0x00			
+	LTF_EndText,
+	0x00
 };
 
 typedef u32 _hwcb_mask_t;
 
 typedef struct {
 	_HWCB_HEADER
-	u16		_reserved;
-	u16		mask_length;
-	_hwcb_mask_t	cp_receive_mask;
-	_hwcb_mask_t	cp_send_mask;
-	_hwcb_mask_t	hwc_receive_mask;
-	_hwcb_mask_t	hwc_send_mask;
+	u16 _reserved;
+	u16 mask_length;
+	_hwcb_mask_t cp_receive_mask;
+	_hwcb_mask_t cp_send_mask;
+	_hwcb_mask_t hwc_receive_mask;
+	_hwcb_mask_t hwc_send_mask;
 } __attribute__ ((packed)) 
 
 init_hwcb_t;
 
 static init_hwcb_t init_hwcb_template =
 {
-	sizeof(init_hwcb_t),
+	sizeof (init_hwcb_t),
 	0x00,
 	{
 		0x00,
-		0x00,				
-		0x00				
+		0x00,
+		0x00
 	},
-	0x0000,					
-	0x0000,					
-	sizeof(_hwcb_mask_t),
+	0x0000,
+	0x0000,
+	sizeof (_hwcb_mask_t),
 	ET_OpCmd_Mask | ET_PMsgCmd_Mask,
 	ET_Msg_Mask
 };
@@ -238,12 +238,12 @@ read_hwcb_t;
 static read_hwcb_t read_hwcb_template =
 {
 	PAGE_SIZE,
-	0x00,		
+	0x00,
 	{
-		0x00,	
-		0x00,	
-		0x80	
+		0x00,
+		0x00,
+		0x80
 	}
 };
 
-#endif   /* __HWC_H__ */ 
+#endif				/* __HWC_H__ */

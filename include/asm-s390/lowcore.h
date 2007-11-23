@@ -130,7 +130,7 @@ struct _lowcore
 	__u32        floating_pt_save_area[8]; /* 0x160 */
 	__u32        gpregs_save_area[16];     /* 0x180 */
         __u8         pad7[0x200-0x1c0];        /* 0x1c0 */
-	
+
         __u32        access_regs_save_area[16];/* 0x200 */
         __u32        cregs_save_area[16];      /* 0x240 */
         psw_t        return_psw;               /* 0x280 */

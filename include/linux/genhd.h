@@ -256,6 +256,18 @@ struct unixware_disklabel {
 
 extern struct gendisk *gendisk_head;	/* linked list of disks */
 
+#ifdef CONFIG_ARCH_S390
+/*
+ * dasd_device_name(...)
+ * formats the devicename of the indicated disk
+ * into the supplied buffer, and returns a pointer
+ * to that same buffer (for convenience).
+ * Because the S390 DASDs span a larger namespace than other
+ * platforms we need our own function.
+ */
+int (*genhd_dasd_name)(char*,int,int,struct gendisk*); 
+#endif
+
 /*
  * disk_name() is used by genhd.c and md.c.
  * It formats the devicename of the indicated disk

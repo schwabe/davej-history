@@ -27,6 +27,10 @@
 #include <asm/io.h>
 #include <asm/bugs.h>
 
+#ifdef CONFIG_ARCH_S390
+#include <asm/s390mach.h>
+#endif
+
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
 #endif
@@ -1536,6 +1540,10 @@ static void __init do_basic_setup(void)
 	 * Ok, at this point all CPU's should be initialized, so
 	 * we can start looking into devices..
 	 */
+#ifdef CONFIG_ARCH_S390
+	s390_init_machine_check();
+#endif
+
 #ifdef CONFIG_PCI
 	pci_init();
 #endif

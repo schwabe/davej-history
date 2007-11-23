@@ -229,7 +229,7 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 	struct vm_area_struct * vma;
 	addr=ADDR_BITS_REMOVE(addr);
 	vma= find_extend_vma(tsk, addr);
-
+     
 	if (!vma)
 		return -EIO;
 	if ((addr & ~PAGE_MASK) > PAGE_SIZE-sizeof(long)) {
@@ -478,15 +478,15 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	/* ieee_instruction_pointer from the user structure DJB */
 	if(child!=current)
 	{
-	if (!(child->flags & PF_PTRACED))
-		goto out;
-	if (child->state != TASK_STOPPED) 
-	{
-		if (request != PTRACE_KILL)
+		if (!(child->flags & PF_PTRACED))
 			goto out;
-	}
-	if (child->p_pptr != current)
-		goto out;
+		if (child->state != TASK_STOPPED) 
+		{
+			if (request != PTRACE_KILL)
+				goto out;
+		}
+		if (child->p_pptr != current)
+			goto out;
 	}
 	switch (request) 
 	{

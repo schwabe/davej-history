@@ -2390,7 +2390,7 @@ static int zoran_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 	case VIDIOCSCHAN:
 		{
 			struct video_channel v;
-			int input;
+			int input, norm;
 			int on, res;
 
 			if (copy_from_user(&v, arg, sizeof(v))) {
@@ -2422,9 +2422,10 @@ static int zoran_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if (on)
 				zr36057_overlay(zr, 0);
 
+			norm = zr->params.norm;
 			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_INPUT, &input);
-			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_NORM, &zr->params.norm);
-			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEOENCODER, ENCODER_SET_NORM, &zr->params.norm);
+			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_NORM, &norm);
+			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEOENCODER, ENCODER_SET_NORM, &norm);
 
 			if (on)
 				zr36057_overlay(zr, 1);
@@ -2782,7 +2783,7 @@ static int zoran_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 	case BUZIOC_S_PARAMS:
 		{
 			struct zoran_params bp;
-			int input, on;
+			int input, on, norm;
 
 			if (zr->codec_mode != BUZ_MODE_IDLE) {
 				return -EINVAL;
@@ -2809,9 +2810,10 @@ static int zoran_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				zr36057_overlay(zr, 0);
 
 			input = zr->params.input == 0 ? 3 : 7;
+			norm = zr->params.norm;
 			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_INPUT, &input);
-			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_NORM, &zr->params.norm);
-			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEOENCODER, ENCODER_SET_NORM, &zr->params.norm);
+			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_NORM, &norm);
+			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEOENCODER, ENCODER_SET_NORM, &norm);
 
 			if (on)
 				zr36057_overlay(zr, 1);
@@ -2940,8 +2942,9 @@ static int zoran_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 
 			/* restore previous input and norm */
 			input = zr->params.input == 0 ? 3 : 7;
+			norm = zr->params.norm;
 			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_INPUT, &input);
-			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_NORM, &zr->params.norm);
+			i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_NORM, &norm);
 
 			if (copy_to_user(arg, &bs, sizeof(bs))) {
 				return -EFAULT;
@@ -3253,8 +3256,9 @@ static int zr36057_init(int i)
 
 	j = zr->params.input == 0 ? 3 : 7;
 	i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_INPUT, &j);
-	i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_NORM, &zr->params.norm);
-	i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEOENCODER, ENCODER_SET_NORM, &zr->params.norm);
+	j = zr->params.norm;
+	i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEODECODER, DECODER_SET_NORM, &j);
+	i2c_control_device(&zr->i2c, I2C_DRIVERID_VIDEOENCODER, ENCODER_SET_NORM, &j);
 
 	/* set individual interrupt enables (without GIRQ0)
 	   but don't global enable until zoran_open() */

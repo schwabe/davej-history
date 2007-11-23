@@ -31,6 +31,7 @@ typedef signed char ioctl_nl_t;
 typedef unsigned short int ioctl_obuf_t;
 typedef unsigned char ioctl_case_t;
 typedef unsigned char ioctl_delim_t;
+typedef unsigned long ioctl_meas_t;
 
 typedef struct {
 	ioctl_htab_t width_htab;
@@ -39,9 +40,12 @@ typedef struct {
 	ioctl_code_t code;
 	ioctl_nl_t final_nl;
 	ioctl_obuf_t max_hwcb;
-	ioctl_obuf_t kmem_hwcb;		
+	ioctl_obuf_t kmem_hwcb;
 	ioctl_case_t tolower;
 	ioctl_delim_t delim;
+	ioctl_meas_t measured_lines;
+	ioctl_meas_t measured_chars;
+	ioctl_meas_t measured_wcalls;
 } hwc_ioctls_t;
 
 static hwc_ioctls_t _hwc_ioctls;
@@ -64,6 +68,8 @@ static hwc_ioctls_t _hwc_ioctls;
 
 #define TIOCHWCSCASE	_IOW(HWC_IOCTL_LETTER, 7, _hwc_ioctls.tolower)
 
+#define TIOCHWCSMEAS	_IO(HWC_IOCTL_LETTER, 8)
+
 #define TIOCHWCSDELIM	_IOW(HWC_IOCTL_LETTER, 9, _hwc_ioctls.delim)
 
 #define TIOCHWCGHTAB	_IOR(HWC_IOCTL_LETTER, 10, _hwc_ioctls.width_htab)
@@ -82,11 +88,17 @@ static hwc_ioctls_t _hwc_ioctls;
 
 #define TIOCHWCGCASE	_IOR(HWC_IOCTL_LETTER, 17, _hwc_ioctls.tolower)
 
-#define TIOCHWCGDELIM	_IOR(HWC_IOCTL_LETTER, 19, _hwc_ioctls.delim)
+#define TIOCHWCGDELIM	_IOR(HWC_IOCTL_LETTER, 18, _hwc_ioctls.delim)
 
-#define TIOCHWCGKBUF	_IOR(HWC_IOCTL_LETTER, 20, _hwc_ioctls.max_hwcb)
+#define TIOCHWCGKBUF	_IOR(HWC_IOCTL_LETTER, 19, _hwc_ioctls.max_hwcb)
 
-#define TIOCHWCGCURR	_IOR(HWC_IOCTL_LETTER, 21, _hwc_ioctls)
+#define TIOCHWCGCURR	_IOR(HWC_IOCTL_LETTER, 20, _hwc_ioctls)
+
+#define TIOCHWCGMEASL	_IOR(HWC_IOCTL_LETTER, 21, _hwc_ioctls.measured_lines)
+
+#define TIOCHWCGMEASC  _IOR(HWC_IOCTL_LETTER, 22, _hwc_ioctls.measured_chars)
+
+#define TIOCHWCGMEASS	_IOR(HWC_IOCTL_LETTER, 23, _hwc_ioctls.measured_wcalls)
 
 #define CODE_ASCII              0x0
 #define CODE_EBCDIC             0x1
@@ -117,4 +129,4 @@ extern signed int hwc_unregister_calls (hwc_high_level_calls_t *);
 
 #endif
 
-#endif   
+#endif

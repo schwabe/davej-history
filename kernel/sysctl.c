@@ -58,6 +58,13 @@ extern int shmall_max;
 extern char reboot_command [];
 extern int stop_a_enabled;
 #endif
+
+#ifdef CONFIG_ARCH_S390
+#ifdef CONFIG_IEEEFPU_EMULATION
+extern int sysctl_ieee_emulation_warnings;
+#endif
+#endif
+
 #ifdef __powerpc__
 extern unsigned long htab_reclaim_on, zero_paged_on, powersave_nap;
 int proc_dol2crvec(ctl_table *table, int write, struct file *filp,
@@ -237,7 +244,13 @@ static ctl_table kern_table[] = {
 #ifdef CONFIG_MAGIC_SYSRQ
 	{KERN_SYSRQ, "sysrq", &sysrq_enabled, sizeof (int),
 	 0644, NULL, &proc_dointvec},
-#endif	 
+#endif
+#ifdef CONFIG_ARCH_S390
+#ifdef CONFIG_IEEEFPU_EMULATION
+	{KERN_IEEE_EMULATION_WARNINGS,"ieee_emulation_warnings",
+	 &sysctl_ieee_emulation_warnings,sizeof(int),0644,NULL,&proc_dointvec},
+#endif
+#endif 
 	{0}
 };
 

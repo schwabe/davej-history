@@ -248,12 +248,16 @@ bmac_reset_chip(struct device *dev)
 	dbdma_reset(rd);
 	dbdma_reset(td);
 
+	dbdma_st32((volatile unsigned long *)&rd->intr_sel, 0x40);
+	dbdma_st32((volatile unsigned long *)&rd->br_sel, 0x40);
+	dbdma_st32((volatile unsigned long *)&td->wait_sel, 0x20);
+
 	feature_set(bp->node, FEATURE_BMac_IO_enable);
-	udelay(10000);
+	mdelay(100);
 	feature_set(bp->node, FEATURE_BMac_reset);
-	udelay(10000);
+	mdelay(10);
 	feature_clear(bp->node, FEATURE_BMac_reset);
-	udelay(10000);
+	mdelay(10);
 }
 
 #define MIFDELAY	udelay(10)

@@ -1,57 +1,118 @@
+/*
+ *  include/asm-s390/debug.h
+ *   S/390 debug facility
+ *
+ *    Copyright (C) 1999, 2000 IBM Deutschland Entwicklung GmbH,
+ *                             IBM Corporation
+ */
+
 #ifndef DEBUG_H
 #define DEBUG_H
 
-#include <asm/spinlock.h>
-
 #ifdef __KERNEL__
 
-#define MAX_DEBUG_AREAS 16
+#include <asm/spinlock.h>
+#include <linux/kernel.h>
+#include <linux/time.h>
+#include <linux/proc_fs.h>
 
-#define STCK(x) asm volatile ("STCK %0":"=m" (x))
+#define DEBUG_MAX_AREAS            16 /* max number of allowed registers */
+#define DEBUG_MAX_LEVEL            6  /* debug levels range from 0 to 6 */
+#define DEBUG_MAX_VIEWS            10 /* max number of views in proc fs */
+#define DEBUG_MAX_PROCF_LEN        16 /* max length for a proc file name */
+#define DEBUG_DEFAULT_LEVEL        3  /* initial debug level */
 
-typedef struct
-{
-  union
-  {
-    struct
-    {
-      unsigned long long cpuid:4;
-      unsigned long long clock:60;
-    }
-    fields;
-    unsigned long long stck;
-  }
-  id;
-  void *caller;
-  union
-  {
-    unsigned long tag;
-    char text[4];
-  }
-  tag;
-}
-debug_entry_t;
+#define DEBUG_DIR_ROOT "s390dbf" /* name of debug root directory in proc fs */
 
-typedef struct
-{
-  char *name;
-  int level;
-  int nr_areas;
-  int page_order;
-  debug_entry_t **areas;
-  int active_area;
-  int *active_entry;
-  spinlock_t lock;
-}
-debug_info_t;
+#define STCK(x)	asm volatile ("STCK %0":"=m" (x))
 
-int debug_init (void);
-debug_info_t *debug_register (char *name, int pages_index, int nr_areas);
-void debug_unregister (debug_info_t * id, char *name);
-void debug_event (debug_info_t * id, int level, unsigned int tag);
-void debug_text_event (debug_info_t * id, int level, char tag[4]);
-void debug_exception (debug_info_t * id, int level, unsigned int tag);
-void debug_text_exception (debug_info_t * id, int level, char tag[4]);
+typedef struct {
+	union {
+		struct {
+			unsigned long long clock:52;
+			unsigned long long unused:2;
+			unsigned long long cpuid:8;
+			unsigned long long exception:1;
+			unsigned long long used:1;
+		} fields;
+
+		unsigned long long stck;
+	} id;
+	void* caller;
+	char data[4];
+} debug_entry_t;
+
+struct debug_view;
+
+typedef struct {	
+	atomic_t ref_count;
+	spinlock_t lock;			
+	int level;
+	int nr_areas;
+	int page_order;
+	int buf_size;
+	int entry_size;	
+	debug_entry_t** areas;
+	int active_area;
+	int active_entry[DEBUG_MAX_AREAS];
+	struct proc_dir_entry* proc_root_entry;
+	struct proc_dir_entry* proc_entries[DEBUG_MAX_VIEWS];
+	struct debug_view* views[DEBUG_MAX_VIEWS];	
+	char name[DEBUG_MAX_PROCF_LEN];
+} debug_info_t;
+
+typedef int (debug_header_proc_t) (debug_info_t* id,
+				   struct debug_view* view,
+				   int area,
+				   debug_entry_t* entry,
+				   char* out_buf);
+
+typedef int (debug_format_proc_t) (debug_info_t* id,
+				   struct debug_view* view, char* out_buf,
+				   const char* in_buf);
+typedef int (debug_prolog_proc_t) (debug_info_t* id,
+				   struct debug_view* view,
+				   char* out_buf);
+typedef int (debug_input_proc_t) (debug_info_t* id,
+				  struct debug_view* view,
+				  struct file* file, const char* user_buf,
+				  size_t in_buf_size, loff_t* offset);
+
+int debug_dflt_header_fn(debug_info_t* id, struct debug_view* view,
+		         int area, debug_entry_t* entry, char* out_buf);						
+				
+struct debug_view {
+	char name[DEBUG_MAX_PROCF_LEN];
+	debug_prolog_proc_t* prolog_proc;
+	debug_header_proc_t* header_proc;
+	debug_format_proc_t* format_proc;
+	debug_input_proc_t*  input_proc;
+};
+
+extern struct debug_view debug_ascii_view;
+extern struct debug_view debug_ebcdic_view;
+extern struct debug_view debug_hex_view;
+
+debug_info_t* debug_register(char* name, int pages_index, int nr_areas,
+			     int buf_size);
+void debug_unregister(debug_info_t* id);
+
+debug_entry_t* debug_event(debug_info_t* id, int level, void* data,
+			   int length);
+debug_entry_t* debug_int_event(debug_info_t* id, int level,
+			       unsigned int tag);
+debug_entry_t* debug_text_event(debug_info_t* id, int level,
+				const char* txt);
+
+debug_entry_t* debug_exception(debug_info_t* id, int level, void* data,
+			       int length);
+debug_entry_t* debug_int_exception(debug_info_t* id, int level,
+				   unsigned int tag);
+debug_entry_t* debug_text_exception(debug_info_t* id, int level,
+				    const char* txt);
+
+int debug_register_view(debug_info_t* id, struct debug_view* view);
+int debug_unregister_view(debug_info_t* id, struct debug_view* view);
 
 /*
    define the debug levels:

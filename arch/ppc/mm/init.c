@@ -1044,6 +1044,9 @@ __initfunc(void free_initmem(void))
  * still be merged.
  * -- Cort
  */
+#ifdef CONFIG_BOOTX_TEXT
+extern boot_infos_t *disp_bi;
+#endif
 __initfunc(void MMU_init(void))
 {
 #ifdef __SMP__
@@ -1092,7 +1095,13 @@ __initfunc(void MMU_init(void))
 			struct device_node *macio = find_devices("mac-io");
 			if (macio && macio->n_addrs)
 				base = macio->addrs[0].address;
-			setbat(0, base, base, 0x100000, IO_PAGE);
+			/* Hrm... we have it at 0x80000000 on some machines
+			 * and this is covered by the userland segment
+			 * registers. Isn't that bad ? Well, the BAT takes
+			 * precedence, but I don't like it. --BenH
+			 */
+			if (base >= 0xf0000000)
+				setbat(0, base, base, 0x100000, IO_PAGE);
 			ioremap_base = 0xf0000000;
 		}
 		break;
@@ -1131,6 +1140,10 @@ __initfunc(void MMU_init(void))
         ioremap(0x80000000, 0x4000);
         ioremap(0x81000000, 0x4000);
 #endif /* CONFIG_8xx */
+#ifdef CONFIG_BOOTX_TEXT
+	if (_machine == _MACH_Pmac)
+		map_bootx_text();
+#endif
 }
 
 /*

@@ -474,8 +474,11 @@ media_bay_step(int i)
 	    	} else if (MB_IDE_READY(i)) {
 			bay->timer = 0;
 			bay->state = mb_up;
-			if (bay->cd_index < 0)
+			if (bay->cd_index < 0) { 
+				pmu_suspend();
 				bay->cd_index = ide_register(bay->cd_base, 0, bay->cd_irq);
+				pmu_resume();
+			}
 			if (bay->cd_index == -1) {
 				/* We eventually do a retry */
 				bay->cd_retry++;
@@ -582,7 +585,7 @@ poll_media_bay(int which)
 
 #ifdef CONFIG_PMAC_PBOOK
 /*
- * notify clients before sleep and reset bus afterwards
+ * notify ents before sleep and reset bus afterwards
  */
 int
 mb_notify_sleep(struct pmu_sleep_notifier *self, int when)
@@ -611,7 +614,9 @@ mb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 			   they seem to help the 3400 get it right.
 			 */
 			feature_set(bay->dev_node, FEATURE_IOBUS_enable);
-			mdelay(MB_STABLE_DELAY);
+			/* Force MB power to 0 */
+			set_mb_power(i, 0);
+			mdelay(MB_POWER_DELAY);
 			if (!bay->pismo)
 				out_8(&bay->addr->contents, 0x70);
 			mdelay(MB_STABLE_DELAY);
@@ -621,7 +626,9 @@ mb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 			bay->last_value = bay->content_id;
 			bay->value_count = MS_TO_HZ(MB_STABLE_DELAY);
 			bay->timer = MS_TO_HZ(MB_POWER_DELAY);
+#ifdef CONFIG_BLK_DEV_IDE
 			bay->cd_retry = 0;
+#endif			
 			do {
 				mdelay(1000/HZ);
 				media_bay_step(i);

@@ -13,8 +13,6 @@
 #     http://www.traduc.org/kernelfr
 #   - Spanish, by Carlos Perelló Marín (fperllo@ehome.encis.es), at
 #     http://visar.csustan.edu/~carlos/
-#   - Italian, by Alessandro Rubini (rubini@linux.it), at
-#     ftp://ftp-pavia1.linux.it/pub/linux/Configure.help
 #   - Polish, by Cezar Cichocki (cezar@cs.net.pl), at
 #     http://www.cs.net.pl/~cezar/Kernel
 #   - German, by Jörg Strebel (jstrebel@suse.de) and Karl Eichwalder
@@ -13518,7 +13516,7 @@ CONFIG_DISPLAY7SEG
 #
 # LocalWords:  CONFIG coprocessor DX Pentium SX lilo loadlin HOWTO ftp metalab
 # LocalWords:  unc edu docs emu README kB BLK DEV FD Thinkpad fd MFM RLL IDE gz
-# LocalWords:  cdrom diskless netboot nfs xzvf ATAPI MB ide pavia rubini pl pd
+# LocalWords:  cdrom diskless netboot nfs xzvf ATAPI MB ide pavia pl pd
 # LocalWords:  HD CDROMs IDECD NEC MITSUMI filesystem XT XD PCI BIOS cezar ATEN
 # LocalWords:  ISA EISA Microchannel VESA BIOSes IPC SYSVIPC ipc Ctrl dmesg hlt
 # LocalWords:  BINFMT Linkable http ac uk jo html GCC SPARC AVANTI CABRIOLET EB

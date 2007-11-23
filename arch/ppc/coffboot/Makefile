@@ -7,11 +7,11 @@ HOSTCFLAGS = -O -I$(TOPDIR)/include
 
 CC	= $(CROSS_COMPILE)gcc
 LD	= $(CROSS_COMPILE)ld
-CFLAGS	= $(CPPFLAGS) -O -fno-builtin
+CFLAGS	= $(CPPFLAGS) -O -fno-builtin -I$(HPATH)
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O aixcoff-rs6000 -R .stab -R .stabstr -R .comment
 COFF_LD_ARGS = -e _start -T ld.script -Ttext 500000 -Tdata 510000 -Bstatic
-CHRP_LD_ARGS = -Ttext 0x00400000
+CHRP_LD_ARGS = -Ttext 0x01000000
 GZ = gzip -9
 
 COFFOBJS = coffcrt0.o start.o coffmain.o misc.o string.o zlib.o image.o
@@ -24,18 +24,13 @@ else
 MSIZE=
 endif
 
-ifeq ($(CONFIG_ALL_PPC),y)
-# yes, we want to build pmac stuff
-CONFIG_PMAC = y
-endif
-
 ifeq ($(CONFIG_SMP),y)
 TFTPIMAGE=/tftpboot/zImage.pmac.smp$(MSIZE)
 else
 TFTPIMAGE=/tftpboot/zImage.pmac$(MSIZE)
 endif
 
-ifeq ($(CONFIG_PMAC),y)
+ifeq ($(CONFIG_POWERMAC),y)
 hack-coff: hack-coff.c
 	$(HOSTCC) $(HOSTCFLAGS) -o hack-coff hack-coff.c
 

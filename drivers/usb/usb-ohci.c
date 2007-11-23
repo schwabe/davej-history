@@ -56,10 +56,13 @@
 
 #include <linux/pm.h>
 static int handle_pm_event (struct pm_dev *dev, pm_request_t rqst, void *data);
+static void dl_del_list (ohci_t  * ohci, unsigned int frame);
 
 #ifdef CONFIG_PMAC_PBOOK
+#include <asm/prom.h>
 #include <asm/adb.h>
 #include <asm/pmu.h>
+#include <asm/feature.h>
 #endif
 
 
@@ -540,6 +543,14 @@ static int sohci_unlink_urb (urb_t * urb)
 			urb_priv_t  * urb_priv = urb->hcpriv;
 			urb_priv->state = URB_DEL; 
 
+			/* we need to do this *before* we can possibly
+			 * get the interrupt which will wake us up. */
+			if (!(urb->transfer_flags & USB_ASYNC_UNLINK)
+			    && !in_interrupt() && !ohci->disabled) {
+				add_wait_queue (&op_wakeup, &wait);
+				current->state = TASK_UNINTERRUPTIBLE;
+			}
+
 			/* we want to delete the TDs of an URB from an ed 
 			 * request the deletion, it will be handled at the
 			 * next USB-frame */
@@ -549,13 +560,34 @@ static int sohci_unlink_urb (urb_t * urb)
 			urb_priv->ed->state |= ED_URB_DEL;
 			spin_unlock_irqrestore (&usb_ed_lock, flags);
 			if (!(urb->transfer_flags & USB_ASYNC_UNLINK)) {
-				usb_dec_dev_use (urb->dev);	
-				add_wait_queue (&op_wakeup, &wait);
-				current->state = TASK_UNINTERRUPTIBLE;
-				if (!schedule_timeout (HZ / 10)) /* wait until all TDs are deleted */
-					err("unlink URB timeout!");
-				remove_wait_queue (&op_wakeup, &wait); 
-				urb->status = -ENOENT;
+				if (ohci->disabled) {
+					/* Need to handle that case */
+				} else if (in_interrupt()) {
+					volatile u16* frame_p = (volatile u16*)&ohci->hcca.frame_no;
+					u16 frame_prev, frame, count;
+					count = 0;
+					writel (OHCI_INTR_SF, &ohci->regs->intrdisable);
+					frame_prev = le16_to_cpu(*frame_p) & 1;
+					do {
+						mb();
+						frame = le16_to_cpu(*frame_p) & 1;
+						if (frame != frame_prev) {
+							if (ohci->ed_rm_list[!frame] != NULL)
+								dl_del_list (ohci, !frame);
+							frame_prev = frame;
+							count++;
+						}			
+					} while(count < 2);
+					writel (OHCI_INTR_SF, &ohci->regs->intrenable);
+					urb->status = -ENOENT;
+					usb_dec_dev_use (urb->dev);
+				} else {
+					if (!schedule_timeout (HZ / 10)) /* wait until all TDs are deleted */
+						err("unlink URB timeout!");
+					remove_wait_queue (&op_wakeup, &wait); 
+					urb->status = -ENOENT;
+					usb_dec_dev_use (urb->dev);	
+				}
 			} else {
 				/* usb_dec_dev_use done in dl_del_list() */
 				urb->status = -EINPROGRESS;
@@ -718,10 +750,11 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 	volatile ed_t * ed = edi;
 	
 	ed->state = ED_OPER;
+	ed->hwNextED = 0;
+	wmb();
 	
 	switch (ed->type) {
 	case CTRL:
-		ed->hwNextED = 0;
 		if (ohci->ed_controltail == NULL) {
 			writel (virt_to_bus (ed), &ohci->regs->ed_controlhead);
 		} else {
@@ -732,7 +765,6 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 		break;
 		
 	case BULK:  
-		ed->hwNextED = 0;
 		if (ohci->ed_bulktail == NULL) {
 			writel (virt_to_bus (ed), &ohci->regs->ed_bulkhead);
 		} else {
@@ -748,7 +780,7 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 		ed->int_interval = interval;
 		int_branch = ep_int_ballance (ohci, interval, load);
 		ed->int_branch = int_branch;
-		
+
 		for (i = 0; i < ep_rev (6, interval); i += inter) {
 			inter = 1;
 			for (ed_p = &(ohci->hcca.int_table[ep_rev (5, i) + int_branch]); 
@@ -756,6 +788,7 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 				ed_p = &(((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->hwNextED)) 
 					inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->int_interval);
 			ed->hwNextED = *ed_p; 
+			wmb();
 			*ed_p = cpu_to_le32 (virt_to_bus (ed));
 		}
 #ifdef DEBUG
@@ -764,7 +797,6 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 		break;
 		
 	case ISO:
-		ed->hwNextED = 0;
 		ed->int_interval = 1;
 		if (ohci->ed_isotail != NULL) {
 			ohci->ed_isotail->hwNextED = cpu_to_le32 (virt_to_bus (ed));
@@ -774,7 +806,7 @@ static int ep_link (ohci_t * ohci, ed_t * edi)
 				inter = 1;
 				for (ed_p = &(ohci->hcca.int_table[ep_rev (5, i)]); 
 					*ed_p != 0; 
-					ed_p = &(((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->hwNextED)) 
+					ed_p = &(((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->hwNextED))
 						inter = ep_rev (6, ((ed_t *) bus_to_virt (le32_to_cpup (ed_p)))->int_interval);
 				*ed_p = cpu_to_le32 (virt_to_bus (ed));	
 			}	
@@ -1005,6 +1037,7 @@ static void td_fill (unsigned int info, void * data, int len, urb_t * urb, int i
 	td->hwNextTD = cpu_to_le32 (virt_to_bus (td_pt));
 	td->hwPSW [0] = cpu_to_le16 ((virt_to_bus (data) & 0x0FFF) | 0xE000);
 	td_pt->hwNextTD = 0;
+	wmb();
 	td->ed->hwTailP = td->hwNextTD;
    
 	td->next_dl_td = NULL; //td_pt;
@@ -1047,6 +1080,7 @@ static void td_submit_urb (urb_t * urb)
 				TD_CC | TD_DP_OUT : TD_CC | TD_R | TD_DP_IN ;
 			td_fill (info | (cnt? TD_T_TOGGLE:toggle), data, data_len, urb, cnt);
 			cnt++;
+			wmb();
 			writel (OHCI_BLF, &ohci->regs->cmdstatus); /* start bulk list */
 			break;
 
@@ -1067,6 +1101,7 @@ static void td_submit_urb (urb_t * urb)
 			info = usb_pipeout (urb->pipe)? 
  				TD_CC | TD_DP_IN | TD_T_DATA1: TD_CC | TD_DP_OUT | TD_T_DATA1;
 			td_fill (info, NULL, 0, urb, cnt++);
+			wmb();
 			writel (OHCI_CLF, &ohci->regs->cmdstatus); /* start Control list */
 			break;
 
@@ -1808,7 +1843,8 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 	}
   
 	if (ints & OHCI_INTR_WDH) {
-		writel (OHCI_INTR_WDH, &regs->intrdisable);	
+		writel (OHCI_INTR_WDH, &regs->intrdisable);
+		(void)readl(&regs->intrdisable); // PCI write posting will hurt you
 		dl_done_list (ohci, dl_reverse_done_list (ohci));
 		writel (OHCI_INTR_WDH, &regs->intrenable); 
 	}
@@ -1821,6 +1857,7 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 	if (ints & OHCI_INTR_SF) { 
 		unsigned int frame = le16_to_cpu (ohci->hcca.frame_no) & 1;
 		writel (OHCI_INTR_SF, &regs->intrdisable);	
+		(void)readl(&regs->intrdisable); // PCI write posting will hurt you
 		if (ohci->ed_rm_list[!frame] != NULL) {
 			dl_del_list (ohci, !frame);
 		}
@@ -1932,6 +1969,7 @@ static int hc_found_ohci (struct pci_dev *dev, int irq, void * mem_base)
 	if (!ohci) {
 		return -ENOMEM;
 	}
+	ohci->pci_dev = dev;
 
 	INIT_LIST_HEAD (&ohci->ohci_hcd_list);
 	list_add (&ohci->ohci_hcd_list, &ohci_hcd_list);
@@ -2004,19 +2042,43 @@ static int ohci_sleep_notify (struct pmu_sleep_notifier * self, int when)
 {
 	struct list_head * ohci_l;
 	ohci_t * ohci;
-       
-	for (ohci_l = ohci_hcd_list.next; ohci_l != &ohci_hcd_list; ohci_l = ohci_l->next) {
-	ohci = list_entry (ohci_l, ohci_t, ohci_hcd_list);
-
+   
+	for (ohci_l = ohci_hcd_list.next; ohci_l != &ohci_hcd_list;
+	     ohci_l = ohci_l->next) {
+		struct device_node* node;
+		ohci = list_entry (ohci_l, ohci_t, ohci_hcd_list);
+		node = find_pci_device_OFnode(ohci->pci_dev->bus->number,
+					      ohci->pci_dev->devfn);
 		switch (when) {
 		case PBOOK_SLEEP_NOW:
+			/* We should make sure processing of current frames have
+			 * finished and WDH has been porcessed
+			 */
+			dbg("USB suspend: %p", ohci->regs);
 			disable_irq (ohci->irq);
-			writel (ohci->hc_control = OHCI_USB_SUSPEND, &ohci->regs->control);
-			wait_ms (10);
+
+			ohci->hc_control &= ~(OHCI_CTRL_CLE | OHCI_CTRL_BLE | OHCI_CTRL_PLE | OHCI_CTRL_IE);
+			writel (ohci->hc_control, &ohci->regs->control); 
+			writel (OHCI_INTR_SF, &ohci->regs->intrstatus);
+			(void)readl(&ohci->regs->intrstatus);
+			mdelay(2);
+
+			ohci->hc_control = OHCI_USB_SUSPEND;
+			writel (ohci->hc_control, &ohci->regs->control);
+			mdelay (10);
+			ohci->disabled = 1;
+			if (node)
+				feature_set_usb_power(node, 0);
 			break;
 		case PBOOK_WAKE:
- 			writel (ohci->hc_control = OHCI_USB_RESUME, &ohci->regs->control);
-			wait_ms (20);
+			/* did we suspend, or were we powered off? */
+			if (node)
+				feature_set_usb_power(node, 1);
+			mdelay(100);
+			ohci->disabled = 0;
+			ohci->hc_control = OHCI_USB_RESUME;
+			writel (ohci->hc_control, &ohci->regs->control);
+			mdelay (35);
 			ohci->hc_control = OHCI_CONTROL_INIT | OHCI_USB_OPER;
 			writel (ohci->hc_control, &ohci->regs->control);
 			enable_irq (ohci->irq);
@@ -2027,7 +2089,7 @@ static int ohci_sleep_notify (struct pmu_sleep_notifier * self, int when)
 }
 
 static struct pmu_sleep_notifier ohci_sleep_notifier = {
-       ohci_sleep_notify, SLEEP_LEVEL_MISC,
+       ohci_sleep_notify, SLEEP_LEVEL_USB,
 };
 #endif /* CONFIG_PMAC_PBOOK */
 
@@ -2096,11 +2158,11 @@ static int __init ohci_hcd_init (void)
 {
 	int ret = -ENODEV;
 	struct pci_dev * dev = NULL;
- 
+
 	while ((dev = pci_find_class (PCI_CLASS_SERIAL_USB_OHCI, dev))) { 
 		if (hc_start_ohci(dev) >= 0) ret = 0;
 	}
-    
+
 #ifdef CONFIG_PMAC_PBOOK
 	pmu_register_sleep_notifier (&ohci_sleep_notifier);
 #endif  

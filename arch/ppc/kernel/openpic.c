@@ -175,7 +175,10 @@ static void openpic_safe_writefield(volatile u_int *addr, u_int mask,
  * Note: We might want to adjust priorities too.
  */
 
-__initfunc(void openpic_init(int main_pic))
+/* Not an init func, called on pbook wakeup --BenH */
+void
+__init
+openpic_init(int main_pic)
 {
 	u_int t, i;
 	u_int timerfreq;
@@ -227,7 +230,7 @@ __initfunc(void openpic_init(int main_pic))
 	    
 		/* Initialize IPI interrupts */
 		for (i = 0; i < OPENPIC_NUM_IPI; i++) {
-			openpic_initipi(i, 0/*10*/, OPENPIC_VEC_IPI+i);
+			openpic_initipi(i, 10+i, OPENPIC_VEC_IPI+i);
 		}
 	    
 		if (_machine != _MACH_Pmac) {
@@ -264,7 +267,7 @@ __initfunc(void openpic_init(int main_pic))
     				    	openpic_initirq(	np->intrs[j].line,
     				    				pri,
     				    				np->intrs[j].line,
-    				    				np->intrs[j].sense,
+    				    				0,
     				    				np->intrs[j].sense);
     				    	irq_desc[np->intrs[j].line].level = np->intrs[j].sense;
     				    }
@@ -309,6 +312,10 @@ void openpic_reset(void)
 {
 	openpic_setfield(&OpenPIC->Global.Global_Configuration0,
 			 OPENPIC_CONFIG_RESET);
+	/* Wait for reset to complete */
+	while(openpic_readfield(&OpenPIC->Global.Global_Configuration0,
+    			OPENPIC_CONFIG_RESET))
+    		;
 }
 
 
@@ -459,12 +466,12 @@ void do_openpic_setup_cpu(void)
 	
 	for ( i = 0; i < OPENPIC_NUM_IPI ; i++ )
 		  openpic_enable_IPI(i);
-#if 0	
+
 	/* let the openpic know we want intrs */
 	for ( i = 0; i < NumSources ; i++ )
 		openpic_mapirq(i, openpic_read(&OpenPIC->Source[i].Destination)
 			       | (1<<smp_processor_id()) );
-#endif	
+
 	openpic_set_priority(smp_processor_id(), 0);
 }    
 
@@ -500,7 +507,11 @@ void openpic_maptimer(u_int timer, u_int cpumask)
  */
 void openpic_enable_irq(u_int irq)
 {
-	check_arg_irq(irq);
+	/* on SMP, we get IPI vector numbers here, we should handle them
+	 * or at least ignore them.
+	 */
+	if (irq < 0 || irq >= NumSources)
+		return;
 	openpic_clearfield(&OpenPIC->Source[irq].Vector_Priority, OPENPIC_MASK);
 	/* make sure mask gets to controller before we return to user */
 	do {
@@ -509,15 +520,30 @@ void openpic_enable_irq(u_int irq)
 			OPENPIC_MASK));
 }
 
+u_int openpic_get_enable(u_int irq)
+{
+	if (irq < 0 || irq >= NumSources)
+		return 0;
+	return !openpic_readfield(&OpenPIC->Source[irq].Vector_Priority,
+			OPENPIC_MASK);
+}
+
 void openpic_disable_irq(u_int irq)
 {
-	check_arg_irq(irq);
+	u32 vp;
+	
+	/* on SMP, we get IPI vector numbers here, we should handle them
+	 * or at least ignore them.
+	 */
+	if (irq < 0 || irq >= NumSources)
+		return;
 	openpic_setfield(&OpenPIC->Source[irq].Vector_Priority, OPENPIC_MASK);
 	/* make sure mask gets to controller before we return to user */
 	do {
-		mb();
-	} while(!openpic_readfield(&OpenPIC->Source[irq].Vector_Priority,
-    			OPENPIC_MASK));
+		mb();  /* sync is probably useless here */
+		vp = openpic_readfield(&OpenPIC->Source[irq].Vector_Priority,
+    			OPENPIC_MASK | OPENPIC_ACTIVITY);
+	} while((vp & OPENPIC_ACTIVITY) && !(vp & OPENPIC_MASK));
 }
 
 /*
@@ -564,3 +590,50 @@ void openpic_set_sense(u_int irq, int sense)
 				OPENPIC_SENSE_LEVEL,
 				(sense ? OPENPIC_SENSE_LEVEL : 0));
 }
+
+#ifdef CONFIG_PMAC_PBOOK
+static u32 save_ipi_vp[OPENPIC_NUM_IPI];
+static u32 save_irq_src_vp[OPENPIC_MAX_SOURCES];
+static u32 save_irq_src_dest[OPENPIC_MAX_SOURCES];
+static u32 save_cpu_task_pri[OPENPIC_MAX_PROCESSORS];
+
+__pmac
+void
+openpic_sleep_save_intrs(void)
+{
+	int	i;
+
+	for (i=0; i<OPENPIC_NUM_IPI; i++)
+		save_ipi_vp[i] = openpic_read(&OpenPIC->Global.IPI_Vector_Priority(i));
+	for (i=0; i<NumSources; i++) {
+		save_irq_src_vp[i] = openpic_read(&OpenPIC->Source[i].Vector_Priority);
+		save_irq_src_dest[i] = openpic_read(&OpenPIC->Source[i].Destination);
+	}
+	for (i=0; i<NumProcessors; i++) {
+		save_cpu_task_pri[i] = openpic_read(&OpenPIC->Processor[i].Current_Task_Priority);
+		openpic_set_priority(i, 0xf);
+	}
+}
+
+__pmac
+void
+openpic_sleep_restore_intrs(void)
+{
+	int	i;
+
+	for (i = 0; i < OPENPIC_NUM_TIMERS; i++) {
+		openpic_inittimer(i, 0, OPENPIC_VEC_TIMER+i);
+		openpic_maptimer(i, 0);
+	}
+	for (i=0; i<OPENPIC_NUM_IPI; i++)
+		openpic_write(&OpenPIC->Global.IPI_Vector_Priority(i), save_ipi_vp[i]);
+	for (i=0; i<NumSources; i++) {
+		openpic_write(&OpenPIC->Source[i].Vector_Priority, save_irq_src_vp[i]);
+		openpic_write(&OpenPIC->Source[i].Destination, save_irq_src_dest[i]);
+	}
+	openpic_set_spurious(OPENPIC_VEC_SPURIOUS);
+	openpic_disable_8259_pass_through();
+	for (i=0; i<NumProcessors; i++)
+		openpic_write(&OpenPIC->Processor[i].Current_Task_Priority, save_cpu_task_pri[i]);
+}
+#endif /* CONFIG_PMAC_PBOOK */

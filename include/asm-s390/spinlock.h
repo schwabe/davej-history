@@ -97,9 +97,9 @@ extern inline void spin_lock(spinlock_t *lp)
         __asm__ __volatile("    bras  1,1f\n"
                            "0:  diag  0,0,68\n"
                            "1:  slr   0,0\n"
-			   "    cs    0,1,%1\n"
+                           "    cs    0,1,%1\n"
                            "    jl    0b\n"
-			   : "=m" (lp->lock)
+                           : "=m" (lp->lock)
                            : "0" (lp->lock) : "0", "1", "cc" );
 }
 

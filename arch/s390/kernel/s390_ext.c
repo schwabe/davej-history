@@ -13,7 +13,7 @@
 #include <asm/s390_ext.h>
 
 /*
- * Simple hash strategy: index = ((code >> 8) + code) & 0xff;
+ * Simple hash strategy: index = code & 0xff;
  * ext_int_hash[index] is the start of the list for all external interrupts
  * that hash to this index. With the current set of external interrupts 
  * (0x1202 external call, 0x1004 cpu timer, 0x2401 hwc console and 0x4000
@@ -27,7 +27,7 @@ int register_external_interrupt(__u16 code, ext_int_handler_t handler) {
         ext_int_info_t *p;
         int index;
 
-        index = (code + (code >> 8)) & 0xff;
+        index = code & 0xff;
         p = ext_int_hash[index];
         while (p != NULL) {
                 if (p->code == code)
@@ -54,7 +54,7 @@ int unregister_external_interrupt(__u16 code, ext_int_handler_t handler) {
         ext_int_info_t *p, *q;
         int index;
 
-        index = (code + (code >> 8)) & 0xff;
+        index = code & 0xff;
         q = NULL;
         p = ext_int_hash[index];
         while (p != NULL) {

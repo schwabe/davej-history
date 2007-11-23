@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 18
-EXTRAVERSION = pre20
+EXTRAVERSION = pre21
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -170,8 +170,8 @@ ifeq ($(CONFIG_NET_FC),y)
 DRIVERS := $(DRIVERS) drivers/net/fc/fc.a
 endif
 
-ifdef CONFIG_PPC
-DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.a
+ifdef CONFIG_POWERMAC
+DRIVERS := $(DRIVERS) drivers/macintosh/macintosh.o
 endif
 
 ifdef CONFIG_PNP

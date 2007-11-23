@@ -52,7 +52,7 @@ if [ "$CONFIG_NET" = "y" ]; then
   bool 'Network device support' CONFIG_NETDEVICES
   if [ "$CONFIG_NETDEVICES" = "y" ]; then
     comment 'S390 Network devices'
-    bool 'CTC device support' CONFIG_CTC
+    tristate 'CTC device support' CONFIG_CTC
     bool 'IUCV device support (VM only)' CONFIG_IUCV
     tristate 'Dummy net driver support' CONFIG_DUMMY
     bool 'Ethernet (10 or 100Mbit)' CONFIG_NET_ETHERNET

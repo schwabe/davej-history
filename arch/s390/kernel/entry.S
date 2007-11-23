@@ -21,11 +21,11 @@
 
 /*
  * stack layout for the system_call stack entry
- * Martin please don't modify these back to hard coded values 
- * You know how bad I'm at mental arithmetic DJB & it gives 
+ * Martin please don't modify these back to hard coded values
+ * You know how bad I'm at mental arithmetic DJB & it gives
  * me grief when I modify the pt_regs
  */
-SP_PTREGS    =  STACK_FRAME_OVERHEAD 
+SP_PTREGS    =  STACK_FRAME_OVERHEAD
 SP_PSW       =  SP_PTREGS
 SP_R0        =  (SP_PSW+PSW_MASK_SIZE+PSW_ADDR_SIZE)
 SP_R1        =  (SP_R0+GPR_SIZE)
@@ -51,13 +51,13 @@ SP_CRREGS    =  (SP_TRAP+4)
 /* fpu registers are saved & restored by the gdb stub itself */
 SP_FPC       =  (SP_CRREGS+(NUM_CRS*CR_SIZE))
 SP_FPRS      =  (SP_FPC+FPC_SIZE+FPC_PAD_SIZE)
-/* SP_PGM_OLD_ILC etc are not part of pt_regs & they are not 
+/* SP_PGM_OLD_ILC etc are not part of pt_regs & they are not
  defined in ptrace.h but space is needed for this too */
 SP_PGM_OLD_ILC= (SP_FPRS+(NUM_FPRS*FPR_SIZE))
 #else
 SP_PGM_OLD_ILC= (SP_TRAP+4)
 #endif
-SP_SVC_STEP   = (SP_PGM_OLD_ILC+4) 
+SP_SVC_STEP   = (SP_PGM_OLD_ILC+4)
 SP_SIZE      =  (SP_SVC_STEP+4)
 /*
  * these defines are offsets into the thread_struct
@@ -140,7 +140,7 @@ sysc_dn:
         stm     %r0,%r12,SP_R0(%r15)  ; /* store gprs 0-12 to kernel stack */ \
         st      %r2,SP_ORIG_R2(%r15)  ; /* store original content of gpr 2 */ \
         mvc     SP_RD(12,%r15),__LC_SAVE_AREA ; /* move R13-R15 to stack */ \
-        stam    %a0,%a15,SP_AREGS(%r15) ; /* store access registers to kst. */ \
+        stam    %a0,%a15,SP_AREGS(%r15) ; /* store access registers to kst. */\
 	mvc     SP_AREGS+8(12,%r15),__LC_SAVE_AREA+12 ; /* store ac. regs */ \
         mvc     SP_PSW(8,%r15),psworg ; /* move user PSW to stack */ \
         la      %r0,psworg            ; /* store trap indication */ \
@@ -150,10 +150,10 @@ sysc_dn:
 #define RESTORE_ALL \
         mvc     __LC_RETURN_PSW(8,0),SP_PSW(%r15) ; /* move user PSW to lowcore */ \
         lam     %a0,%a15,SP_AREGS(%r15) ; /* load the access registers */ \
-        lm      %r0,%r15,SP_R0(%r15)  ; /* load gprs 0-15 of user */ \
+        lm      %r0,%r15,SP_R0(%r15)      ; /* load gprs 0-15 of user */ \
         ni      __LC_RETURN_PSW+1(0),0xfd ; /* clear wait state bit */ \
         lpsw    __LC_RETURN_PSW             /* back to caller */
-	
+
 #define GET_CURRENT /* load pointer to task_struct to R9 */ \
 	lr      %r9,%r15 ;  \
 	n       %r9,BASED(.Lc0xffffe000)
@@ -170,12 +170,12 @@ resume:
 	basr    %r1,0                   # setup base pointer
 resume_base:
         l       %r4,_TSS_PTREGS(%r3)
-        tm      SP_PSW-SP_PTREGS(%r4),0x40 # is the new process using per ?
+        tm      SP_PSW-SP_PTREGS(%r4),0x40    # is the new process using per ?
         bz      resume_noper-resume_base(%r1) # if not we're fine
-        stctl   %r9,%r11,24(%r15)       # We are using per stuff
+        stctl   %r9,%r11,24(%r15)             # We are using per stuff
         clc     _TSS_PER(12,%r3),24(%r15)
         be      resume_noper-resume_base(%r1) # we got away w/o bashing TLB's
-        lctl    %c9,%c11,_TSS_PER(%r3)  # Nope we didn't
+        lctl    %c9,%c11,_TSS_PER(%r3)        # Nope we didn't
 resume_noper:
         stm     %r6,%r15,24(%r15)       # store resume registers of prev task
         st      %r15,_TSS_KSP(%r2) # store kernel stack ptr to prev->tss.ksp
@@ -248,7 +248,7 @@ sysc_leave:
 #
 # call do_signal before return
 #
-sysc_signal_return:     
+sysc_signal_return:
         la      %r2,SP_PTREGS(%r15) # load pt_regs
         sr      %r3,%r3           # clear *oldset
         l       %r1,BASED(.Ldo_signal)
@@ -276,7 +276,7 @@ sysc_tracesys:
 # call do_bottom_half and return from syscall, if interrupt-level
 # is zero
 #
-sysc_handle_bottom_half:        
+sysc_handle_bottom_half:
         l       %r1,BASED(.Ldo_bottom_half)
 	la      %r14,BASED(sysc_return_bh)
         br      %r1               # call do_bottom_half
@@ -284,7 +284,7 @@ sysc_handle_bottom_half:
 #
 # call schedule with sysc_return as return-address
 #
-sysc_reschedule:        
+sysc_reschedule:
         l       %r1,BASED(.Lschedule)
 	la      %r14,BASED(sysc_return)
         br      %r1               # call scheduler, return to sysc_return
@@ -293,7 +293,7 @@ sysc_reschedule:
 # a new process exits the kernel with ret_from_fork
 #
         .globl  ret_from_fork
-ret_from_fork:  
+ret_from_fork:
         basr    %r13,0
 	l       %r13,.Lentry_base-.(%r13)  # setup base pointer to &entry_base
         GET_CURRENT               # load pointer to task_struct to R9
@@ -314,23 +314,23 @@ ret_from_fork:
 # but are called with different parameter.
 # return-address is set up above
 #
-sys_clone_glue: 
+sys_clone_glue:
         la      %r2,SP_PTREGS(%r15)    # load pt_regs
         l       %r1,BASED(.Lclone)
         br      %r1                   # branch to sys_clone
 
-sys_fork_glue:  
+sys_fork_glue:
         la      %r2,SP_PTREGS(%r15)    # load pt_regs
         l       %r1,BASED(.Lfork)
         br      %r1                   # branch to sys_fork
 
-sys_vfork_glue: 
+sys_vfork_glue:
         la      %r2,SP_PTREGS(%r15)    # load pt_regs
         l       %r1,BASED(.Lvfork)
         br      %r1                   # branch to sys_vfork
 
-sys_execve_glue:        
-        la      %r2,SP_PTREGS(%r15)    # load pt_regs
+sys_execve_glue:
+        la      %r2,SP_PTREGS(%r15)   # load pt_regs
         l       %r1,BASED(.Lexecve)
 	lr      %r12,%r14             # save return address
         basr    %r14,%r1              # call sys_execve
@@ -339,12 +339,12 @@ sys_execve_glue:
         b       4(%r12)               # SKIP ST 2,SP_R2(15) after BASR 14,8
                                       # in system_call/sysc_tracesys
 
-sys_sigreturn_glue:     
+sys_sigreturn_glue:
         la      %r2,SP_PTREGS(%r15)   # load pt_regs as parameter
         l       %r1,BASED(.Lsigreturn)
         br      %r1                   # branch to sys_sigreturn
 
-sys_rt_sigreturn_glue:     
+sys_rt_sigreturn_glue:
         la      %r2,SP_PTREGS(%r15)   # load pt_regs as parameter
         l       %r1,BASED(.Lrt_sigreturn)
         br      %r1                   # branch to sys_sigreturn
@@ -352,11 +352,11 @@ sys_rt_sigreturn_glue:
 #
 # sigsuspend and rt_sigsuspend need pt_regs as an additional
 # parameter and they have to skip the store of %r2 into the
-# user register %r2 because the return value was set in 
+# user register %r2 because the return value was set in
 # sigsuspend and rt_sigsuspend already and must not be overwritten!
 #
 
-sys_sigsuspend_glue:    
+sys_sigsuspend_glue:
         lr      %r5,%r4               # move mask back
         lr      %r4,%r3               # move history1 parameter
         lr      %r3,%r2               # move history0 parameter
@@ -365,13 +365,19 @@ sys_sigsuspend_glue:
 	la      %r14,4(%r14)          # skip store of return value
         br      %r1                   # branch to sys_sigsuspend
 
-sys_rt_sigsuspend_glue: 
+sys_rt_sigsuspend_glue:
         lr      %r4,%r3               # move sigsetsize parameter
         lr      %r3,%r2               # move unewset parameter
         la      %r2,SP_PTREGS(%r15)   # load pt_regs as first parameter
         l       %r1,BASED(.Lrt_sigsuspend)
 	la      %r14,4(%r14)          # skip store of return value
         br      %r1                   # branch to sys_rt_sigsuspend
+
+sys_sigaltstack_glue:
+        la      %r4,SP_PTREGS(%r15)   # load pt_regs as parameter
+        l       %r1,BASED(.Lsigaltstack)
+        br      %r1                   # branch to sys_sigreturn
+
 
 	.globl  sys_call_table	
 sys_call_table:
@@ -561,13 +567,13 @@ sys_call_table:
         .long  sys_getcwd
         .long  sys_capget
         .long  sys_capset                /* 185 */
-        .long  sys_sigaltstack
+        .long  sys_sigaltstack_glue
         .long  sys_sendfile
         .long  sys_ni_syscall            /* streams1 */
         .long  sys_ni_syscall            /* streams2 */
         .long  sys_vfork_glue            /* 190 */
 	.rept  255-190
-        .long  sys_ni_syscall
+	.long  sys_ni_syscall
 	.endr
 
 /*
@@ -603,7 +609,7 @@ pgm_check_handler:
         be      BASED(pgm_svcper)
 # no interesting special case, ignore PER event
         lm      %r13,%r15,__LC_SAVE_AREA
-        lpsw    0x28
+	lpsw    0x28
 # it was a single stepped SVC that is causing all the trouble
 pgm_svcper:
         tm      0x21,0x01                # test problem state bit
@@ -622,7 +628,7 @@ pgm_svcper:
         la      %r0,0x20                 # store trap indication
         st      %r0,SP_TRAP(%r15)
         xc      0(4,%r15),0(%r15)        # clear back chain
-	mvi     SP_SVC_STEP(%r15),1 # make SP_SVC_STEP nonzero
+	mvi     SP_SVC_STEP(%r15),1      # make SP_SVC_STEP nonzero
 	mvc     SP_PGM_OLD_ILC(4,%r15),__LC_PGM_ILC # save program check information	
         b       BASED(pgm_system_call)   # now do the svc
 pgm_svcret:
@@ -723,7 +729,7 @@ io_leave:
 # call do_bottom_half and return from syscall, if interrupt-level
 # is zero
 #
-io_handle_bottom_half:        
+io_handle_bottom_half:
         l       %r1,BASED(.Ldo_bottom_half)
 	la      %r14,BASED(io_return_bh)
         br      %r1               # call do_bottom_half
@@ -731,7 +737,7 @@ io_handle_bottom_half:
 #
 # call schedule with io_return as return-address
 #
-io_reschedule:        
+io_reschedule:
         l       %r1,BASED(.Lschedule)
 	la      %r14,BASED(io_return)
         br      %r1               # call scheduler, return to io_return
@@ -739,7 +745,7 @@ io_reschedule:
 #
 # call do_signal before return
 #
-io_signal_return:     
+io_signal_return:
         la      %r2,SP_PTREGS(%r15) # load pt_regs
         sr      %r3,%r3           # clear *oldset
         l       %r1,BASED(.Ldo_signal)
@@ -755,9 +761,7 @@ ext_int_handler:
         SAVE_ALL(0x18)
         la      %r2,SP_PTREGS(%r15)    # address of register-save area
         lh      %r3,__LC_EXT_INT_CODE  # error code
-        lr      %r1,%r3                # calculate index
-        srl     %r1,8                  #  = (code + (code >> 8)) & 0xff
-        alr     %r1,%r3
+        lr      %r1,%r3                # calculate index = code & 0xff
         n       %r1,BASED(.Lc0xff)
         sll     %r1,2
 	l       %r9,BASED(.Lext_hash)
@@ -773,7 +777,7 @@ ext_int_loop:
 ext_int_found:
         l       %r9,4(%r9)             # get handler address
         la      %r14,BASED(io_return)
-	br      %r9               # branch to ext call handler
+        br      %r9                    # branch to ext call handler
 
 /*
  * Machine check handler routines
@@ -857,6 +861,7 @@ restart_go:
 .Lrt_sigreturn:.long  sys_rt_sigreturn
 .Lrt_sigsuspend:
 	       .long  sys_rt_sigsuspend
+.Lsigaltstack: .long  sys_sigaltstack
 .Lsigreturn:   .long  sys_sigreturn
 .Lsigsuspend:  .long  sys_sigsuspend
 .Ltrace:       .long  syscall_trace

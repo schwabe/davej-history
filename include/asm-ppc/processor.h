@@ -59,6 +59,15 @@
 #define HID0_BHTE	(1<<2)		/* Branch History Table Enable */
 #define HID0_BTCD	(1<<1)		/* Branch target cache disable */
 
+/* L2CR bits */
+#define L2CR_PIPE_LATEWR   (0x01800000)   /* late-write SRAM */
+#define L2CR_L2CTL         (0x00100000)   /* RAM control */
+#define L2CR_INST_DISABLE  (0x00400000)   /* disable for insn's */
+#define L2CR_L2I           (0x00200000)   /* global invalidate */
+#define L2CR_L2E           (0x80000000)   /* enable */
+#define L2CR_L2WT          (0x00080000)   /* write-through */
+
+ 
 /* fpscr settings */
 #define FPSCR_FX        (1<<31)
 #define FPSCR_FEX       (1<<30)

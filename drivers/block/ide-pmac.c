@@ -23,6 +23,7 @@
 #include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/cdrom.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/dbdma.h>
@@ -93,14 +94,14 @@ static pmac_ide_timing udma_timings[] =
 
 /* allow up to 256 DBDMA commands per xfer */
 #define MAX_DCMDS	256
-/* Wait 1.5s for disk to answer on IDE bus after
+/* Wait 2s for disk to answer on IDE bus after
  * enable operation.
  * NOTE: There is at least one case I know of a disk that needs about 10sec
  *       before anwering on the bus. I beleive we could add a kernel command
  *       line arg to override this delay for such cases.
  */
-#define IDE_WAKEUP_DELAY_MS	1500
-#define MAX_DCMDS	256	/* allow up to 256 DBDMA commands per xfer */
+#define IDE_WAKEUP_DELAY_MS	2000
+#define MAX_DCMDS		256	/* allow up to 256 DBDMA commands per xfer */
 
 static void pmac_ide_setup_dma(struct device_node *np, int ix);
 static int pmac_ide_dmaproc(ide_dma_action_t func, ide_drive_t *drive);
@@ -393,6 +394,7 @@ pmac_ide_probe(void))
 			 */
 			 feature_set(np, FEATURE_IDE0_enable);
 			 feature_set(np, FEATURE_IOBUS_enable);
+			 big_delay = 1; /* Poor old machines with crappy disks */
 		} else {
 			/* This is necessary to enable IDE when net-booting */
 			printk("pmac_ide: enabling IDE bus ID %d\n", pmac_ide[i].aapl_bus_id);
@@ -596,13 +598,13 @@ udma_bits_to_command(unsigned char bits)
 static __inline__ int
 wait_for_ready(ide_drive_t *drive)
 {
-	/* Timeout bumped for some powerbooks */
-	int timeout = 2000;
+	/* Timeout bumped (again) for some powerbooks with old disks */
+	int timeout = 10000;
 	byte stat;
 
 	while(--timeout) {
 		stat = GET_STAT();
-		if(!(stat & BUSY_STAT)) {
+		if (!(stat & BUSY_STAT)) {
 			if (drive->ready_stat == 0)
 				break;
 			else if((stat & drive->ready_stat) || (stat & ERR_STAT))
@@ -631,20 +633,31 @@ pmac_ide_do_setfeature(ide_drive_t *drive, byte command)
 	old_select = IN_BYTE(IDE_SELECT_REG);
 	OUT_BYTE(drive->select.all, IDE_SELECT_REG);
 	udelay(10);
-	OUT_BYTE(IDE_SETXFER, IDE_FEATURE_REG);
-	OUT_BYTE(command, IDE_NSECTOR_REG);
 	if(wait_for_ready(drive)) {
 		printk("pmac_ide_do_setfeature disk not ready before SET_FEATURE!\n");
 		goto out;
 	}
+	OUT_BYTE(IDE_SETXFER, IDE_FEATURE_REG);
+#if 0
+	/* That one cause the wallstreet to freeze, I don't know why yet. We'll have to leave with
+         * the bogus interrupt until I figure out what's up
+         */
+	/* Better not leave a dangling interrupt */
+	OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG);
+#endif	
+	OUT_BYTE(command, IDE_NSECTOR_REG);
 	OUT_BYTE(IDE_SETFEATURE, IDE_COMMAND_REG);
+	udelay(10);
 	result = wait_for_ready(drive);
 	if (result)
 		printk("pmac_ide_do_setfeature disk not ready after SET_FEATURE !\n");
+	/* May help kill the bogus interrupt */
+	mdelay(1);
+	(void)GET_STAT();
 out:
 	OUT_BYTE(old_select, IDE_SELECT_REG);
 	restore_flags(flags);
-	
+
 	return result;
 }
 
@@ -848,13 +861,15 @@ int pmac_ide_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 #endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
 
 #ifdef CONFIG_PMAC_PBOOK
-static void idepmac_sleep_disk(int i, unsigned long base)
+static void idepmac_sleep_device(ide_drive_t *drive, int i, unsigned base)
 {
-	struct device_node* np = pmac_ide[i].node;
 	int j;
-
-	/* FIXME: We only handle the master IDE */
-	if (ide_hwifs[i].drives[0].media == ide_disk) {
+	
+	/* FIXME: We only handle the master IDE disk, we shoud
+	 *        try to fix CD-ROMs here
+	 */
+	switch (drive->media) {
+	case ide_disk:
 		/* Spin down the drive */
 		outb(0xa0, base+0x60);
 		outb(0x0, base+0x30);
@@ -870,7 +885,60 @@ static void idepmac_sleep_disk(int i, unsigned long base)
 			if (!(status & BUSY_STAT) && (status & DRQ_STAT))
 				break;
 		}
+		break;
+	case ide_cdrom:
+		// todo
+		break;
+	case ide_floppy:
+		// todo
+		break;
 	}
+}
+
+static void idepmac_wake_device(ide_drive_t *drive, int used_dma)
+ {
+	unsigned long flags;
+
+	/* We force the IDE subdriver to check for a media change
+	 * This must be done first or we may lost the condition
+	 *
+	 * Problem: This can schedule. I moved the block device
+	 * wakeup almost late by priority because of that.
+	 */
+	DRIVER(drive)->media_change(drive);
+
+	/* We kick the VFS too (see fix in ide.c revalidate) */
+	check_disk_change(MKDEV(HWIF(drive)->major, (drive->select.b.unit) << PARTN_BITS));
+	
+#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
+	/* We re-enable DMA on the drive if it was active. */
+	/* This doesn't work with the CD-ROM in the media-bay, probably
+	 * because of a pending unit attention. The problem if that if I
+	 * clear the error, the filesystem dies.
+	 */
+	if (used_dma && !ide_spin_wait_hwgroup(drive, &flags)) {
+		/* Lock HW group */
+		HWGROUP(drive)->busy = 1;
+		pmac_ide_dma_onoff(drive, 1);
+		HWGROUP(drive)->busy = 0;
+		spin_unlock_irqrestore(&io_request_lock, flags);
+	}
+#endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
+}
+
+static void idepmac_sleep_interface(int i, unsigned base, int mediabay)
+{
+	struct device_node* np = pmac_ide[i].node;
+
+	/* We clear the timings */
+	pmac_ide[i].timings[0] = 0;
+	pmac_ide[i].timings[1] = 0;
+	
+	/* The media bay will handle itself just fine */
+	if (mediabay)
+		return;
+	
+	/* Disable and reset the bus */
 	feature_set(np, FEATURE_IDE0_reset);
 	feature_clear(np, FEATURE_IDE0_enable);
 	switch(pmac_ide[i].aapl_bus_id) {
@@ -886,83 +954,58 @@ static void idepmac_sleep_disk(int i, unsigned long base)
 		feature_set(np, FEATURE_IDE2_reset);
 		break;
 	}
-	pmac_ide[i].timings[0] = 0;
-	pmac_ide[i].timings[1] = 0;
 }
 
-static void idepmac_wake_disk(int i, unsigned long base)
+static void idepmac_wake_interface(int i, unsigned long base, int mediabay)
 {
 	struct device_node* np = pmac_ide[i].node;
-	int j;
 
-	/* Revive IDE disk and controller */
-	switch(pmac_ide[i].aapl_bus_id) {
-	    case 0:
-		feature_set(np, FEATURE_IDE0_reset);
-		feature_set(np, FEATURE_IOBUS_enable);
-		mdelay(10);
- 		feature_set(np, FEATURE_IDE0_enable);
-		mdelay(10);
-		feature_clear(np, FEATURE_IDE0_reset);
-		break;
-	    case 1:
-		feature_set(np, FEATURE_IDE1_reset);
-		feature_set(np, FEATURE_IOBUS_enable);
-		mdelay(10);
- 		feature_set(np, FEATURE_IDE1_enable);
-		mdelay(10);
-		feature_clear(np, FEATURE_IDE1_reset);
-		break;
-	    case 2:
-	    	/* This one exists only for KL, I don't know
-		   about any enable bit */
-		feature_set(np, FEATURE_IDE2_reset);
-		mdelay(10);
-		feature_clear(np, FEATURE_IDE2_reset);
-		break;
-	}
-	mdelay(IDE_WAKEUP_DELAY_MS);
-
-	/* Reset timings */
-	pmac_ide_selectproc(&ide_hwifs[i].drives[0]);
-	mdelay(10);
-
-	/* Wait up to 10 seconds (enough for recent drives) */
-	for (j = 0; j < 100; j++) {
-		int status;
-		mdelay(100);
-		status = inb(base + 0x70);
-		if (!(status & BUSY_STAT))
+	if (!mediabay) {
+		/* Revive IDE disk and controller */
+		switch(pmac_ide[i].aapl_bus_id) {
+		    case 0:
+			feature_set(np, FEATURE_IDE0_reset);
+			feature_set(np, FEATURE_IOBUS_enable);
+			mdelay(10);
+	 		feature_set(np, FEATURE_IDE0_enable);
+			mdelay(10);
+			feature_clear(np, FEATURE_IDE0_reset);
 			break;
+		    case 1:
+			feature_set(np, FEATURE_IDE1_reset);
+			feature_set(np, FEATURE_IOBUS_enable);
+			mdelay(10);
+	 		feature_set(np, FEATURE_IDE1_enable);
+			mdelay(10);
+			feature_clear(np, FEATURE_IDE1_reset);
+			break;
+		    case 2:
+		    	/* This one exists only for KL, I don't know
+			   about any enable bit */
+			feature_set(np, FEATURE_IDE2_reset);
+			mdelay(10);
+			feature_clear(np, FEATURE_IDE2_reset);
+			break;
+		}
 	}
-}
-
-/* Here we handle media bay devices */
-static void
-idepmac_wake_bay(int i, unsigned long base)
-{
-	int timeout;
-
+	
 	/* Reset timings */
 	pmac_ide_selectproc(&ide_hwifs[i].drives[0]);
 	mdelay(10);
-
-	timeout = 10000;
-	while ((inb(base + 0x70) & BUSY_STAT) && timeout) {
-		mdelay(1);
-		--timeout;
-	}
 }
 
 /* Note: We support only master drives for now. This will have to be
  * improved if we want to handle sleep on the iMacDV where the CD-ROM
  * is a slave
  */
+
 static int idepmac_notify_sleep(struct pmu_sleep_notifier *self, int when)
 {
 	int i, ret;
 	unsigned long base;
-
+	unsigned long flags;
+	int big_delay;
+	
 	switch (when) {
 	case PBOOK_SLEEP_REQUEST:
 		break;
@@ -970,37 +1013,108 @@ static int idepmac_notify_sleep(struct pmu_sleep_notifier *self, int when)
 		break;
 	case PBOOK_SLEEP_NOW:
 		for (i = 0; i < pmac_ide_count; ++i) {
+			ide_hwif_t *hwif;
+			ide_drive_t *drive;
+			int unlock = 0;
+
 			if ((base = pmac_ide[i].regbase) == 0)
-				continue;
+				continue;	
+
+			hwif = &ide_hwifs[i];
+			drive = &hwif->drives[0];
+			
+			if (drive->present) {
+				/* Wait for HW group to complete operations */
+				if (ide_spin_wait_hwgroup(drive, &flags)) {
+					// What can we do here ? Wake drive we had already
+					// put to sleep and return an error ?
+				} else {
+					unlock = 1;
+					/* Lock HW group */
+					HWGROUP(drive)->busy = 1;
+
+					/* Stop the device */
+					idepmac_sleep_device(drive, i, base);
+				
+				}
+			}
 			/* Disable irq during sleep */
-			disable_irq(pmac_ide[i].irq);
+			disable_irq(pmac_ide[i].irq);			
+			if (unlock)
+				spin_unlock_irqrestore(&io_request_lock, flags);
+			
+			/* Check if this is a media bay with an IDE device or not
+			 * a media bay.
+			 */
 			ret = check_media_bay_by_base(base, MB_CD);
-			if ((ret == -ENODEV) && ide_hwifs[i].drives[0].present)
-				/* not media bay - put the disk to sleep */
-				idepmac_sleep_disk(i, base);
+			if ((ret == 0) || (ret == -ENODEV))
+				idepmac_sleep_interface(i, base, (ret == 0));
 		}
 		break;
 	case PBOOK_WAKE:
+		big_delay = 0;
 		for (i = 0; i < pmac_ide_count; ++i) {
-			ide_hwif_t *hwif;
+
 			if ((base = pmac_ide[i].regbase) == 0)
 				continue;
-			hwif = &ide_hwifs[i];
-		        /* We don't handle media bay devices this way */
+				
+			/* Check if this is a media bay with an IDE device or not
+			 * a media bay
+			 */
 			ret = check_media_bay_by_base(base, MB_CD);
-			if ((ret == -ENODEV) && ide_hwifs[i].drives[0].present)
-				idepmac_wake_disk(i, base);
-			else if (ret == 0)
-				idepmac_wake_bay(i, base);
-			enable_irq(pmac_ide[i].irq);
+			if ((ret == 0) || (ret == -ENODEV)) {
+				idepmac_wake_interface(i, base, (ret == 0));				
+				big_delay = 1;
+			}
 
-#ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
-			if (hwif->drives[0].present && hwif->drives[0].using_dma)
-				pmac_ide_dma_onoff(&hwif->drives[0], 1);
-#endif				
+		}
+		/* Let hardware get up to speed */
+		if (big_delay)
+			mdelay(IDE_WAKEUP_DELAY_MS);
+	
+		for (i = 0; i < pmac_ide_count; ++i) {
+			ide_hwif_t *hwif;
+			ide_drive_t *drive;			
+			int j, used_dma;
+			
+			if ((base = pmac_ide[i].regbase) == 0)
+				continue;
+				
+			hwif = &ide_hwifs[i];
+			drive = &hwif->drives[0];
+
+			/* Wait for the drive to come up and set it's DMA */
+			if (drive->present) {
+				/* Wait up to 20 seconds */
+				for (j = 0; j < 200; j++) {
+					int status;
+					mdelay(100);
+					status = inb(base + 0x70);
+					if (!(status & BUSY_STAT))
+						break;
+				}
+			}
+			
+			/* We don't have re-configured DMA yet */
+			used_dma = drive->using_dma;
+			drive->using_dma = 0;
+
+			/* We resume processing on the HW group */
+			spin_lock_irqsave(&io_request_lock, flags);
+			enable_irq(pmac_ide[i].irq);
+			if (drive->present)
+				HWGROUP(drive)->busy = 0;
+			spin_unlock_irqrestore(&io_request_lock, flags);
+			
+			/* Wake the device
+			 * We could handle the slave here
+			 */
+			if (drive->present)
+				idepmac_wake_device(drive, used_dma);
 		}
 		break;
 	}
 	return PBOOK_SLEEP_OK;
 }
+
 #endif /* CONFIG_PMAC_PBOOK */

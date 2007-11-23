@@ -11,7 +11,7 @@
             Adapted request function to make it work on 2.4
  * 07/10/00 Added some code to the request function to dequeue requests
             that cannot be handled due to errors
- * 07/10/00 Moved linux/ccwcache.h to asm/
+ * 07/10/00 Moved linux/dasd.h and linux/ccwcache.h to asm/
  * 07/10/00 Fixed a bug when formatting a 'new' device       
  * 07/10/00 Removed an annoying message from dasd_format 
  * 07/11/00 Reanimated probeonly mode    
@@ -20,9 +20,25 @@
  * 07/12/00 fixed a bug in dasd_devices_open when having 'unknown' devices
  * 07/13/00 fixed error message when having no device
  * 07/13/00 added code for dynamic device recognition
+ * 07/14/00 reorganized the format process for better ERP
+ * 07/17/00 fixed a race condition when sleeping on a request
+ * 07/17/00 modified default ERP action to use TIC instead of NOP
+ * 07/20/00 fixed proc filesystem for 2.4
+ * 07/24/00 fixed missing interrupt handler
+ * 08/01/00 fixed a race condition when sleeping on a request 
+ * 09/15/00 fixed a race condition on dasd_do_chanq
+ * 09/15/00 got rid of some paranoia
+ * 09/18/00 fixed the state machine for duplicate devnos in dasd ranges
+ * 10/26/00 fixed ITPM PL020141RSC load module to a kernel with static driver 
+            are the fixes in dasd_init
+ * 10/26/00 fixed ITPM PL020062RSC formatting r/o volume 
+            are the fixes in dasd_format
+ * 10/26/00 fixed ITPM PL010261EPA race condition when formatting  
+            are the fixes in dasd_do_chanq
  */
 
 #include <linux/config.h>
+#include <linux/version.h>
 #include <linux/init.h>
 #include <linux/blkdev.h>
 #include <linux/stddef.h>
@@ -34,6 +50,12 @@
 #include <linux/hdreg.h>
 #include <linux/interrupt.h>
 #include <linux/ctype.h>
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
+#include <linux/spinlock.h>                      
+#else 
+#include <asm/spinlock.h>
+#endif     
+
 #include <asm/ccwcache.h>
 #include <asm/dasd.h>
 #include <linux/blk.h>
@@ -49,15 +71,15 @@
 #include <asm/atomic.h>
 #include <asm/delay.h>
 #include <asm/io.h>
-#if !(LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
-#include <asm/spinlock.h>
-#endif /* LINUX_IS_24 */
 #include <asm/semaphore.h>
 #include <asm/ebcdic.h>
 #include <asm/uaccess.h>
 #include <asm/irq.h>
 #include <asm/s390_ext.h>
 #include <asm/s390dyn.h>
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))      
+#include <asm/idals.h>
+#endif /* LINUX_IS_24 */                               
 
 #include "dasd.h"
 #ifdef CONFIG_DASD_ECKD
@@ -73,7 +95,7 @@
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
 static struct block_device_operations dasd_device_operations;
 #endif /* VERSION_CODE */
-
+  
 #ifdef MODULE
 #define EXPORT_SYMTAB
 #include <linux/module.h>
@@ -113,7 +135,6 @@ static void do_dasd_request (void);
 static void dasd_do_chanq (void);
 static void schedule_request_fn (void (*func) (void));
 static int dasd_set_device_level (unsigned int, int, dasd_discipline_t *, int);
-static int dasd_oper_handler ( int irq, devreg_t *devreg );
 
 /* SECTION: managing setup of dasd_driver */
 typedef struct dasd_range_t {
@@ -145,7 +166,7 @@ dasd_create_devreg ( int devno ) {
         }
         return r;
 }
-
+ 
 static void
 dasd_add_range (int from, int to)
 {
@@ -162,7 +183,7 @@ dasd_add_range (int from, int to)
         }  else {
                 range -> to = to;
         }
-
+        
         /* chain current range to end of list */
         if ( dasd_range_head == NULL ) {
                 dasd_range_head = range;
@@ -226,7 +247,7 @@ dasd_split_parm_string ( char * str )
                 count ++;
                 tmp = end;
         } while ( tmp != NULL && *tmp != '\0' );
-	}
+}
 
 static char dasd_parm_string[1024] = {0,};
 
@@ -239,12 +260,12 @@ dasd_setup (char *str)
                 *(dasd_parm_string+strlen(dasd_parm_string))=',';
         }  else {
                 first_time = 0;
-	}
+        }
         memcpy(dasd_parm_string+strlen(dasd_parm_string),str,strlen(str)+1);
         return 1;
 }
 #else
-void
+void 
 dasd_setup (char *str, int *ints) 
 {
         static int first_time = 1;
@@ -269,7 +290,7 @@ dasd_parse (char **str)
 {
 	char *temp;
 	int from, to;
-
+        
       	if ( *str ) { 
         dasd_probeonly = 0;
 	}
@@ -284,19 +305,19 @@ dasd_parse (char **str)
                 } else if ( strncmp ( *str,"probeonly",strlen("probeonly"))== 0) {
                         dasd_probeonly = 1;
                         printk (KERN_INFO "turning to probeonly mode\n");
-			break;
+                        break;
                 } else {
                         dasd_autodetect = 0;
                         from = dasd_strtoul (temp, &temp);          
                         if (*temp == '-') {
                                 temp++;
                                 to = dasd_strtoul (temp, &temp);
-		}
+                        }
                         dasd_add_range (from, to);
-		}
+                }
                 str ++;
-		}
-		}
+        }
+}
 
 int
 devindex_from_devno (int devno)
@@ -310,11 +331,11 @@ devindex_from_devno (int devno)
 			devindex += devno - temp -> from;
 			break;
 		}
-		}
+	}
         if ( temp == NULL ) 
                 return -ENODEV;
 	return devindex;
-		}
+}
 
 /* SECTION: ALl needed for multiple major numbers */
 
@@ -335,7 +356,7 @@ static major_info_t dasd_major_info[] =
 #endif /* LINUX_IS_24 */
 			nr_real:DASD_PER_MAJOR,
 		}
-		}
+	}
 #if 0
         ,
 	{
@@ -352,8 +373,8 @@ static major_info_t dasd_major_info[] =
 			max_nr:DASD_PER_MAJOR,
 #endif /* LINUX_IS_24 */
 			nr_real:DASD_PER_MAJOR,
-			}
 		}
+	}
 #endif
 };
 
@@ -361,7 +382,7 @@ static dasd_device_t *
 find_dasd_device (int devindex)
 {
 	major_info_t *major_info = dasd_major_info;
-	while (major_info && devindex > DASD_PER_MAJOR) {
+	while (major_info && devindex >= DASD_PER_MAJOR) {
 		devindex -= DASD_PER_MAJOR;
 		major_info = major_info->next;
 	}
@@ -374,12 +395,12 @@ static major_info_t *
 major_info_from_devindex (int devindex)
 {
 	major_info_t *major_info = dasd_major_info;
-	while (major_info && devindex > DASD_PER_MAJOR) {
+	while (major_info && devindex >= DASD_PER_MAJOR) {
 		devindex -= DASD_PER_MAJOR;
 		major_info = major_info->next;
 	}
 	return major_info;
-	}
+}
 
 int
 major_from_devindex (int devindex)
@@ -413,7 +434,7 @@ static spinlock_t discipline_lock;
  * void dasd_discipline_enq (dasd_discipline_t * d)
  */
 
-void 
+void
 dasd_discipline_enq (dasd_discipline_t * d)
 {
 	spin_lock (&discipline_lock);
@@ -473,14 +494,14 @@ dasd_chanq_enq (dasd_chanq_t * q, ccw_req_t * cqr)
 
 static void
 dasd_chanq_enq_head (dasd_chanq_t * q, ccw_req_t * cqr)
-	{
+{
 	cqr->next = q->head;
 	q->head = cqr;
 	if (q->tail == NULL)
 		q->tail = cqr;
 	q->queued_requests++;
 	atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_FILLED, CQR_STATUS_QUEUED);
-	}
+}
 
 /* 
  * int dasd_chanq_deq (dasd_chanq_t * q, ccw_req_t * cqr)
@@ -507,7 +528,7 @@ dasd_chanq_deq (dasd_chanq_t * q, ccw_req_t * cqr)
 		if (prev->next == NULL)
 			q->tail = prev;
 	}
-	cqr->next = NULL;
+/*	cqr->next = NULL; */
 	q->queued_requests--;
 	return 0;
 }
@@ -520,6 +541,8 @@ static spinlock_t cq_lock;		/* spinlock for cq_head */
 #else
 static spinlock_t cq_lock = SPIN_LOCK_UNLOCKED;		/* spinlock for cq_head */
 #endif /* LINUX_IS_24 */
+#else
+int cq_lock;
 #endif				/* __SMP__ */
 static dasd_chanq_t *qlist_head = NULL;		/* head of queue of queues */
 
@@ -532,18 +555,19 @@ static dasd_chanq_t *qlist_head = NULL;		/* head of queue of queues */
 static void
 qlist_enq (dasd_chanq_t * q)
 {
+	long flags;
 	if (q == NULL) {
 		printk (KERN_WARNING PRINTK_HEADER " NULL queue to be queued to queue of queues\n");
 		return;
 	}
-	spin_lock (&cq_lock);
+	spin_lock_irqsave (&cq_lock,flags);
 	if (atomic_read (&q->flags) & DASD_CHANQ_ACTIVE) {
 		printk (KERN_WARNING PRINTK_HEADER " Queue already active");
 	}
 	atomic_set_mask (DASD_CHANQ_ACTIVE, &q->flags);
 	q->next_q = qlist_head;
 	qlist_head = q;
-	spin_unlock (&cq_lock);
+	spin_unlock_irqrestore (&cq_lock,flags);
 }
 
 /* 
@@ -555,8 +579,8 @@ qlist_enq (dasd_chanq_t * q)
 static void
 qlist_deq (dasd_chanq_t * q)
 {
-
-	if (qlist_head == NULL) {
+	long flags;
+	if (qlist_head == NULL) {	
 		printk (KERN_ERR PRINTK_HEADER "Channel queue is empty%s\n", "");
 		return;
 	}
@@ -564,7 +588,7 @@ qlist_deq (dasd_chanq_t * q)
 		printk (KERN_WARNING PRINTK_HEADER " NULL queue to be dequeued from queue of queues\n");
 		return;
 	}
-	spin_lock (&cq_lock);
+	spin_lock_irqsave (&cq_lock,flags);
 	if (!(atomic_read (&q->flags) & DASD_CHANQ_ACTIVE)) {
 		printk (KERN_WARNING PRINTK_HEADER " Queue not active\n");
 	} else if (qlist_head == q) {
@@ -580,7 +604,7 @@ qlist_deq (dasd_chanq_t * q)
 	}
 	atomic_clear_mask (DASD_CHANQ_ACTIVE, &q->flags);
 	q->next_q = NULL;
-	spin_unlock (&cq_lock);
+	spin_unlock_irqrestore (&cq_lock,flags);
 }
 
 /* SECTION: All the gendisk stuff */
@@ -608,7 +632,7 @@ dasd_partn_detect (int devindex)
         resetup_one_dev(dd,minor>>DASD_PARTN_BITS);
 #endif /* LINUX_IS_24 */
 	return rc;
-	}
+}
 
 /* SECTION: Managing wrappers for ccwcache */
 
@@ -623,8 +647,8 @@ dasd_init_emergency_req ( void )
         int i;
         for ( i = 0; i < DASD_EMERGENCY_REQUESTS; i++) {
           dasd_emergency_req[i] = (ccw_req_t*)get_free_page(GFP_KERNEL);
-		}
         }
+}
 
 static void
 dasd_cleanup_emergency_req ( void ) 
@@ -654,6 +678,7 @@ dasd_alloc_request (char *magic, int cplength, int datasize)
                 if ( dasd_emergency_req[i] != NULL ) {
                         rv = dasd_emergency_req[i];
                         dasd_emergency_req[i] = NULL;
+			break;
                 }
         }
         spin_unlock(&dasd_emergency_req_lock);
@@ -670,15 +695,15 @@ dasd_alloc_request (char *magic, int cplength, int datasize)
         return rv;
 }
 
-void
+void 
 dasd_free_request (ccw_req_t * request)
 {
         if ( request -> cache >= (kmem_cache_t *)dasd_emergency_req &&
              request -> cache <= (kmem_cache_t *)(dasd_emergency_req + DASD_EMERGENCY_REQUESTS) ) {
                 *((ccw_req_t **)(request -> cache)) = request;
-	} else {
+        } else {
                 ccw_free_request(request);
-	}
+        }
 }
 
 /* SECTION: Managing the device queues etc. */
@@ -718,7 +743,7 @@ try_request_fn (void)
           major_info_t *mi;
           for (mi=dasd_major_info; mi != NULL; mi = mi->next ) {
             do_dasd_request(BLK_DEFAULT_QUEUE(mi->gendisk.major));
-	}
+          }
         }
 #else
         do_dasd_request ();
@@ -754,10 +779,10 @@ dasd_start_IO (ccw_req_t * cqr)
 	major_info_t *major_info;
 	struct request *req;
 
-		if (!cqr) {
+	if (!cqr) {
 		printk (KERN_WARNING PRINTK_HEADER "No request passed to start_io function");
 		return -EINVAL;
-		}
+	}
 	irq = device->devinfo.irq;
 	devno = device->devinfo.devno;
 	req = (struct request *) cqr->req;
@@ -776,39 +801,39 @@ dasd_start_IO (ccw_req_t * cqr)
 		return -EINVAL;
 	}
 	atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_QUEUED, CQR_STATUS_IN_IO);
-		do {
+	do {
 		asm volatile ("STCK %0":"=m" (cqr->startclk));
 		rc = do_IO (irq, cqr->cpaddr, (long) cqr, 0x00, cqr->options);
 		switch (rc) {
 		case 0:
                         if (!(cqr->options & DOIO_WAIT_FOR_INTERRUPT)) {
 				atomic_set_mask (DASD_CHANQ_BUSY, &device->queue.flags);
-			}
+                        }
                         if ( cqr->expires ) {
                                 cqr->expires += cqr->startclk;
-                                }
-                                break;
+                        }
+			break;
 		case -ENODEV:
 			printk (KERN_WARNING PRINTK_HEADER
 			    " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
 				" appears not to be present %d retries left\n",
 				devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS,
 				retries);
-                                break;
+			break;
 		case -EIO:
 			printk (KERN_WARNING PRINTK_HEADER
 			    " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
 				" I/O error %d retries left\n",
 				devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS,
 				retries);
-                                break;
+			break;
 		case -EBUSY:	/* set up timer, try later */
 			printk (KERN_WARNING PRINTK_HEADER
 			    " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
 				" is busy %d retries left\n",
 				devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS,
 				retries);
-				break;
+			break;
 		default:
 			printk (KERN_WARNING PRINTK_HEADER
 			    " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
@@ -816,26 +841,63 @@ dasd_start_IO (ccw_req_t * cqr)
 			  " Pls report this message to linux390@de.ibm.com\n",
 				devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS,
 				rc, retries);
-                                break;
-                        }
+			break;
+		}
 	} while (rc && retries--);
 	if (rc) {
                 atomic_compare_and_swap_debug (&cqr->status, 
                                                CQR_STATUS_IN_IO, 
                                                CQR_STATUS_ERROR);
-                                }
+	}
 	return rc;
-                        }
+}
+
+
+static int
+sleep_on_req ( ccw_req_t * req )
+{
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
+        DECLARE_WAITQUEUE (wait,current);
+#else
+        struct wait_queue wait = {current, NULL};
+#endif /* LINUX_VERSION_CODE */
+        unsigned long flags;
+        int cs;
+        int rc = 0;
+        dasd_device_t *device = (dasd_device_t *)req->device;
+        s390irq_spin_lock_irqsave (device->devinfo.irq, flags);
+        dasd_chanq_enq (&device->queue, req);
+        if (!(atomic_read (&device->queue.flags) & DASD_CHANQ_ACTIVE)) {
+                qlist_enq (&device->queue);
+        }
+        dasd_schedule_bh();
+        add_wait_queue (&device->wait_q, &wait);
+        do {
+                current->state = TASK_INTERRUPTIBLE;
+                s390irq_spin_unlock_irqrestore (device->devinfo.irq, flags);
+                schedule ();
+                s390irq_spin_lock_irqsave (device->devinfo.irq, flags);
+                cs = atomic_read (&req->status);
+        } while ( ! (cs & CQR_STATUS_FINISHED) );
+        /* was originally: while ((cs != CQR_STATUS_DONE) && (cs != CQR_STATUS_FAILED)); */ 
+        remove_wait_queue (&device->wait_q, &wait);
+        s390irq_spin_unlock_irqrestore (device->devinfo.irq, flags);
+        if  ( cs & CQR_STATUS_FAILED ) {
+                rc = -EIO;
+        }
+        return rc;
+}
+
 
 static void
 dasd_end_request (struct request *req, int uptodate)
 {
 	struct buffer_head *bh;
 	while ((bh = req->bh) != NULL) {
-		req->bh = bh->b_reqnext;
+                req->bh = bh->b_reqnext;
 		bh->b_reqnext = NULL;
 		bh->b_end_io (bh, uptodate);
-			}
+	}
 	if (!end_that_request_first (req, uptodate, DASD_NAME)) {
 #ifndef DEVICE_NO_RANDOM
 		add_blkdev_randomness (MAJOR (req->rq_dev));
@@ -871,7 +933,7 @@ do_dasd_request (void)
 	major_info_t *major_info;
 	int devno;
         int major;
-        
+
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
         {
@@ -894,34 +956,34 @@ do_dasd_request (void)
 #else
         for ( major_info = dasd_major_info; major_info != NULL; major_info = major_info->next ) {
                 major = major_info->gendisk.major;
-	prev = NULL;
-	for (req = CURRENT; req != NULL; req = next) {
-		next = req->next;
+                prev = NULL;
+                for (req = CURRENT; req != NULL; req = next) {
+                        next = req->next;
                         if (req == &blk_dev[major].plug) { /* remove plug if applicable */
                                 req->next = NULL;
-                        if (prev) {
-                                prev->next = next;
-                        } else {
-                                CURRENT = next;
-                        }
+                                if (prev) {
+                                        prev->next = next;
+                                } else {
+                                        CURRENT = next;
+                                }
                                 continue;
-			}
+                        }
 #endif /* LINUX_IS_24 */
                         devindex = devindex_from_kdev_t(req->rq_dev);
                         if ( devindex < 0 ) {
                                 printk ( KERN_WARNING PRINTK_HEADER 
                                          "requesting I/O on nonexistent device %d -> %d\n",
                                          devindex,req->rq_dev);
-				dasd_end_request (req, 0);
+                                dasd_end_request(req,0);
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
                                 blkdev_dequeue_request (req);
 #else
                                 req->next = NULL;
                                 if (prev) {
                                         prev->next = next;
-					} else {
+                                } else {
                                         CURRENT = next;
-                        }
+                                }
 #endif /* LINUX_IS_24 */
                                 continue;
                         }
@@ -1068,43 +1130,45 @@ dasd_do_chanq (void)
 	volatile int cqrstatus;
 
 	for (qp = qlist_head; qp != NULL; qp = nqp) {
+
+		device = (dasd_device_t *)((long)qp - (long)offsetof(dasd_device_t,queue));
+		irq = device->devinfo.irq;
+
+		s390irq_spin_lock_irqsave (irq, flags);
+
 		/* Get first request */
 		cqr = (ccw_req_t *) (qp->head);
 		nqp = qp->next_q;
 /* empty queue -> dequeue and proceed */
 		if (!cqr) {
 			qlist_deq (qp);
+			s390irq_spin_unlock_irqrestore(irq,flags);
 			continue;
 		}
+		s390irq_spin_unlock_irqrestore(irq,flags);
+ 
 /* process all requests on that queue */
 		do {
-			dasd_discipline_t *discipline;
+			dasd_discipline_t *discipline=device->discipline;
 			next = NULL;
-			/* Sanity check... walk through disciplines */
-			for (discipline = dasd_disciplines;
-			     discipline != NULL;
-			     discipline = discipline->next)
-				if (!strncmp ((char *) &cqr->magic, discipline->ebcname, 4))
-					break;
-			if (!discipline) {	/* 1st sanity check */
+
+			if (strncmp ((char *) &cqr->magic, discipline->ebcname, 4)) {
 				panic (PRINTK_HEADER
 				       "in dasd_do_chanq: magic no mismatch %p -> 0x%lX\n",
 				       cqr, cqr->magic);
 			}
-			device = (dasd_device_t *) (cqr->device);
-			if (discipline != device->discipline) {		/* 1st sanity check */
-				printk (KERN_WARNING PRINTK_HEADER
-					"in dasd_do_chanq: discipline mismatch %p -> 0x%lX\n",
-					cqr, cqr->magic);
-				discipline = device->discipline;
+			if ( device != cqr->device ) {
+                                panic (PRINTK_HEADER
+                                       "in dasd_do_chanq: device mismatch %p -> %p(qcr) vs. %p\n",
+                                       cqr, cqr->device,device);
 			}
-			irq = device->devinfo.irq;
 			devno = device->devinfo.devno;
 			devindex = devindex_from_devno (devno);
 
-			s390irq_spin_lock_irqsave (irq, flags);
-
+			s390irq_spin_lock_irqsave (irq, 
+                        	                   flags);
 			cqrstatus = atomic_read (&cqr->status);
+
 			switch (cqrstatus) {
 			case CQR_STATUS_QUEUED:
 				if (discipline->start_IO &&
@@ -1118,8 +1182,8 @@ dasd_do_chanq (void)
 					case EBUSY:
 						if (cqr->retries--) {
 							printk (KERN_WARNING PRINTK_HEADER
-								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-								" retrying %d retries left\n",
+								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d) busy:"
+								" retrying ... %d retries left\n",
 								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, cqr->retries);
 							break;
 						}
@@ -1128,24 +1192,29 @@ dasd_do_chanq (void)
 								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
 								" Giving up this request!\n",
 								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
-							atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_QUEUED, CQR_STATUS_FAILED);
+
+							atomic_compare_and_swap_debug (&cqr->status,
+                                                                                       CQR_STATUS_QUEUED,
+                                                                                       CQR_STATUS_FAILED | CQR_STATUS_FINISHED);
 							break;
 						}
 					}
 				}
 				break;
 			case CQR_STATUS_IN_IO:{
-					unsigned long long now;
-					unsigned long long delta;
-
+                                        unsigned long long now;
+                                        unsigned long long delta;
+                                        
 					asm volatile ("STCK %0":"=m" (now));
 					if (cqr->expires && cqr->startclk &&
 					    cqr->expires < now) {
                                                 delta = cqr->expires - cqr->startclk;
 						printk (KERN_ERR PRINTK_HEADER
 							" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-							" I/O operation outstanding longer than %Ld usecs on req %p\n",
-							devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, delta >> 12, cqr);
+							" I/O operation outstanding longer than 0x%08x%08x usecs on req %p\n",
+							devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, (long)(delta >> 44), (long)(delta >> 12), cqr);
+							cqr->expires += delta;
+#if 0
 						if ( cqr->retries-- ) {
 							printk (KERN_WARNING PRINTK_HEADER
 								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
@@ -1159,46 +1228,45 @@ dasd_do_chanq (void)
 								" You should disable that device by issueing '@#?!'\n",		/* FIXME */
 								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
 							atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_IN_IO, CQR_STATUS_FAILED);
+							halt_IO(irq,(unsigned long)cqr, DOIO_WAIT_FOR_INTERRUPT);
 							break;
 						}
+#endif
 					}
 					break;
-				}
+                        }
 			case CQR_STATUS_ERROR:{
-					dasd_erp_action_fn_t erp_action;
-					ccw_req_t *erp_cqr = NULL;
-					if (discipline->erp_action &&
-					    ((erp_action = discipline->erp_action (cqr)) != NULL)) {
-                                                printk (KERN_WARNING PRINTK_HEADER
-                                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-							" Taking error recovery action %p on req %p \n",
-							devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, erp_action,cqr);
-						erp_cqr = erp_action (cqr);
-					} else {
-						printk (KERN_WARNING PRINTK_HEADER
-							" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-                                                        " No error recovery action\n",
-							devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
-						atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_ERROR, CQR_STATUS_FAILED);
-					}
-					if ( erp_cqr != NULL ) {
-						dasd_chanq_enq_head (qp, erp_cqr);
-						next = erp_cqr;		/* prefer execution of erp ccw */
-					}
+                                        dasd_erp_action_fn_t erp_action;
+                                        ccw_req_t *erp_cqr = NULL;
+                                        
+ 					if (cqr->dstat->flag & DEVSTAT_HALT_FUNCTION) {
+ 						atomic_compare_and_swap_debug(&cqr->status,CQR_STATUS_ERROR,CQR_STATUS_FAILED);
+                                                next = cqr;
+                                        } else if ( cqr -> retries--  &&
+                                             cqr -> refers == NULL &&
+                                             discipline -> erp_action != NULL &&
+                                             (erp_action = discipline->erp_action (cqr)) != NULL &&
+                                             (erp_cqr = erp_action (cqr)) != NULL ) {
+                                                dasd_chanq_enq_head (qp, erp_cqr);
+                                                next = erp_cqr;		/* prefer execution of erp ccw */
+                                        } else {
+                                                atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_ERROR, CQR_STATUS_FAILED);
+                                                next = cqr;
+                                        }
 					break;
 				}
 			case CQR_STATUS_DONE:{
                                         dasd_erp_postaction_fn_t erp_postaction;
                                         next = cqr->next;
+                                        asm volatile ("STCK %0":"=m" (cqr->endclk));
 					if (cqr->refers && cqr->function) {	/* we deal with an ERP */
-						if (discipline->erp_postaction &&
-						    ((erp_postaction = discipline->erp_postaction (cqr)) != NULL)) {
+						if ( discipline->erp_postaction &&
+						     ((erp_postaction = discipline->erp_postaction (cqr)) != NULL)) {
 							printk (KERN_WARNING PRINTK_HEADER
 								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-								" postprocessing successful error recovery action %p\n",
+								" postprocessing successful error recovery action using %p\n",
 								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, erp_postaction);
 							erp_postaction (cqr, 1);
-                                                        atomic_dec (&device->queue.dirty_requests);
 						} else {
 							printk (KERN_WARNING PRINTK_HEADER
 								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
@@ -1207,68 +1275,93 @@ dasd_do_chanq (void)
 								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
 							atomic_compare_and_swap_debug (&cqr->refers->status, CQR_STATUS_ERROR, CQR_STATUS_FAILED);
 						}
+                                                atomic_dec (&device->queue.dirty_requests);
+                                                dasd_chanq_deq (&device->queue, cqr);
+                                                dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
 					} else if ( cqr->req ) {
-						asm volatile ("STCK %0":"=m" (cqr->endclk));
 						dasd_end_request (cqr->req, 1);
 #ifdef DASD_PROFILE
 						dasd_profile_add (cqr);
 #endif				/* DASD_PROFILE */
-					} 
-					dasd_chanq_deq (&device->queue, cqr);
-                                        dasd_free_request(cqr);
+                                                dasd_chanq_deq (&device->queue, cqr);
+                                                dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
+					} else {
+                                                /* during format we don't have the request structure */
+                                                /* notify sleeping task about finished postprocessing */
+                                                atomic_compare_and_swap_debug (&cqr->status, 
+                                                                               CQR_STATUS_DONE, 
+                                                                               CQR_STATUS_DONE | CQR_STATUS_FINISHED); 
+                                                dasd_chanq_deq (&device->queue, cqr);
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
+                                                wake_up (&device->wait_q);
+#else
+                                                if (device->wait_q) {
+                                                  wake_up (&device->wait_q);
+                                                }
+#endif /* LINUX_IS_24 */
+                                        }
 					break;
 				}
 			case CQR_STATUS_FAILED:{
 					dasd_erp_postaction_fn_t erp_postaction;
 					next = cqr->next;
+                                        asm volatile ("STCK %0":"=m" (cqr->endclk));
 					if (cqr->refers && cqr->function) {	/* we deal with an ERP */
-						if (discipline->erp_postaction &&
-						    ((erp_postaction = discipline->erp_postaction (cqr)) != NULL)) {
+						if ( discipline->erp_postaction &&
+                                                     ((erp_postaction = discipline->erp_postaction (cqr)) != NULL)) {
 							printk (KERN_WARNING PRINTK_HEADER
 								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-								" postprocessing unsuccessful error recovery action %p\n",
+								" postprocessing unsuccessful error recovery action using %p\n",
 								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, erp_postaction);
 							erp_postaction (cqr, 0);
-                                                        atomic_dec (&device->queue.dirty_requests);
-
 						} else {
 							printk (KERN_WARNING PRINTK_HEADER
 								" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
 								" No procedure to postprocess unsuccessful error recovery action"
-							 " giving up request",
+                                                                " giving up request",
 								devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
 							atomic_compare_and_swap_debug (&cqr->refers->status, CQR_STATUS_ERROR, CQR_STATUS_FAILED);
 						}
+                                                atomic_dec (&device->queue.dirty_requests);
+                                                dasd_chanq_deq (&device->queue, cqr);
+                                                dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
 					} else if (cqr->req) {
-						asm volatile ("STCK %0":"=m" (cqr->endclk));
 						dasd_end_request (cqr->req, 0);
 #ifdef DASD_PROFILE
 						dasd_profile_add (cqr);
 #endif				/* DASD_PROFILE */
+                                                dasd_chanq_deq (&device->queue, cqr);
+                                                dasd_free_request(cqr); /* Only free request if nobody is waiting on it */
 					} else {
-						printk (KERN_WARNING PRINTK_HEADER
-							"Internal error in " __FILE__ " on line %d."
-							" inconsistent content of ccw_req_t"
-							" refers = %p,function = %p, request = %p"
-							" Pls send this message and your System.map to"
-						     " linux390@de.ibm.com\n",
-							__LINE__, cqr->refers, cqr->function, cqr->req);
-					}
-					dasd_chanq_deq (&device->queue, cqr);
-                                        dasd_free_request(cqr);
+                                                /* during format we don't have the request structure */
+                                                /* notify sleeping task about finished postprocessing */
+                                                atomic_compare_and_swap_debug (&cqr->status, 
+                                                                               CQR_STATUS_FAILED, 
+                                                                               CQR_STATUS_FAILED | CQR_STATUS_FINISHED); 
+
+                                                dasd_chanq_deq (&device->queue, cqr);
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
+                                                wake_up (&device->wait_q);
+#else
+                                                if (device->wait_q) {
+                                                  wake_up (&device->wait_q);
+                                                }
+#endif /* LINUX_IS_24 */
+                                        } 
 					break;
 				}
+
 			default:{
 					printk (KERN_WARNING PRINTK_HEADER
 						"Internal error in " __FILE__ " on line %d."
-					  " inconsistent content of ccw_req_t"
+                                                " inconsistent content of ccw_req_t"
 						" cqrstatus = %d"
 						" Pls send this message and your System.map to"
 						" linux390@de.ibm.com\n",
 						__LINE__, cqrstatus);
+				}
 			}
-		}
-                s390irq_spin_unlock_irqrestore (irq, flags);
+			s390irq_spin_unlock_irqrestore (irq, flags);
 		} while ((cqr = next) != NULL);
 	}
 	schedule_request_fn (try_request_fn);
@@ -1286,9 +1379,9 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 	dasd_device_t *device;
 	int devno = -1, devindex = -1;
         
-#undef ERP_DEBUG
+#undef  ERP_DEBUG
 #ifdef ERP_DEBUG 
-        static int counter = 0; 
+        static int counter = 0;
 #endif
 
 	if (!stat) {
@@ -1301,11 +1394,11 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 			    stat->devno);
 		return;
 	}
-		if (ip & 0x80000001) {
+	if (ip & 0x80000001) {
 		PRINT_INFO ("%04X  caught spurious interrupt with parm %08x\n",
 			    stat->devno, ip);
-			return;
-		}
+		return;
+	}
 	cqr = (ccw_req_t *) ip;
 	device = (dasd_device_t *) cqr->device;
 	devno = device->devinfo.devno;
@@ -1341,10 +1434,11 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 			cqr->magic, *(int *) (&device->discipline->name));
 		return;
 	}
-		asm volatile ("STCK %0":"=m" (cqr->stopclk));
-		if ((stat->cstat == 0x00 &&
-		     stat->dstat == (DEV_STAT_CHN_END | DEV_STAT_DEV_END)) ||
-	    (device->discipline->examine_error &&
+	asm volatile ("STCK %0":"=m" (cqr->stopclk));
+	if ((!(stat->flag & DEVSTAT_HALT_FUNCTION) &&
+	     stat->cstat == 0x00 &&
+	     stat->dstat == (DEV_STAT_CHN_END | DEV_STAT_DEV_END)) ||
+ 	    (device->discipline->examine_error &&
 	     (era = device->discipline->examine_error (cqr, stat)) == dasd_era_none)) {
 #ifdef ERP_DEBUG
                 if ( ++counter % 137 == 0 ) {
@@ -1353,20 +1447,20 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
                         stat->flag |= DEVSTAT_FLAG_SENSE_AVAIL;
                         stat->dstat |= 0x02;
                         goto error_fake_done;
-                        }
+                }
 #endif
 		atomic_compare_and_swap_debug (&cqr->status, CQR_STATUS_IN_IO, CQR_STATUS_DONE);
                 atomic_compare_and_swap (DASD_DEVICE_LEVEL_ANALYSIS_PENDING,
 					 DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
                                          &device->level);
-			if (cqr->next &&
-			    (atomic_read (&cqr->next->status) ==
-			     CQR_STATUS_QUEUED)) {
-				if (dasd_start_IO (cqr->next) == 0) {
-					done_fast_io = 1;
+		if (cqr->next &&
+		    (atomic_read (&cqr->next->status) ==
+		     CQR_STATUS_QUEUED)) {
+			if (dasd_start_IO (cqr->next) == 0) {
+				done_fast_io = 1;
 			}
 		}
-		} else {	/* only visited in case of error ! */
+	} else {		/* only visited in case of error ! */
 #ifdef ERP_DEBUG
         error_fake_done:
 #endif
@@ -1375,7 +1469,7 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 		if (cqr->dstat) {
 			memcpy (cqr->dstat, stat, sizeof (devstat_t));
 		} else {
-				PRINT_ERR ("no memory for dstat\n");
+			PRINT_ERR ("no memory for dstat\n");
 		}
 		if (device->discipline &&
 		    device->discipline->dump_sense) {
@@ -1390,14 +1484,14 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 		}
 		atomic_inc (&device->queue.dirty_requests);
 		/* errorprocessing */
-			if (era == dasd_era_fatal) {
-				PRINT_WARN ("ERP returned fatal error\n");
+		if (era == dasd_era_fatal) {
+			PRINT_WARN ("ERP returned fatal error\n");
 			atomic_compare_and_swap_debug (&cqr->status,
-				     CQR_STATUS_IN_IO, CQR_STATUS_FAILED);
-			} else {
+                                                       CQR_STATUS_IN_IO, CQR_STATUS_FAILED);
+		} else {
 			atomic_compare_and_swap_debug (&cqr->status,
                                                        CQR_STATUS_IN_IO, CQR_STATUS_ERROR);
-                        }
+		}
 	}
 	if (done_fast_io == 0)
 		atomic_clear_mask (DASD_CHANQ_BUSY, &device->queue.flags);
@@ -1412,56 +1506,30 @@ dasd_int_handler (int irq, void *ds, struct pt_regs *regs)
 	dasd_schedule_bh ();
 }
 
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
-static wait_queue_head_t watcher_queue;
-#else
-static struct wait_queue watcher_queue_Qend = {NULL,};
-static struct wait_queue *watcher_queue = &watcher_queue_Qend;
-#endif /* LINUX_IS_24 */
-
-static void
-dasd_watcher (void)
-{
-	do {
-		dasd_schedule_bh ();
-		schedule_request_fn (try_request_fn);
-		interruptible_sleep_on_timeout (&watcher_queue, 5 * HZ);
-	} while (1);
-        }
-
 /* SECTION: Some stuff related to error recovery */
 
 ccw_req_t *
 default_erp_action (ccw_req_t * cqr)
 {
 	ccw_req_t *erp = ccw_alloc_request ((char *) &cqr->magic, 1, 0);
-
-	erp->cpaddr->cmd_code = CCW_CMD_NOOP;
+        
+	erp->cpaddr->cmd_code = CCW_CMD_TIC;
+        erp->cpaddr->cda = (__u32)cqr -> cpaddr;
 	erp->function = default_erp_action;
 	erp->refers = cqr;
 	erp->device = cqr->device;
         erp->magic = cqr->magic;
+        erp->retries = 16;
 	atomic_set (&erp->status, CQR_STATUS_FILLED);
-        if ( cqr->startclk && cqr->expires )
-                cqr->expires -= cqr->startclk;
-        
-	if (cqr->retries++ <= 16) {
-                atomic_compare_and_swap_debug (&cqr->status,
-                                               CQR_STATUS_ERROR,
-					       CQR_STATUS_QUEUED);
-        } else {
-		printk (KERN_WARNING PRINTK_HEADER "ERP retry count exceeded\n");
-		atomic_compare_and_swap_debug (&cqr->status,
-					       CQR_STATUS_ERROR,
-					       CQR_STATUS_FAILED);
+        if ( cqr->startclk && cqr->expires ) {
+         /*       cqr->expires -= cqr->startclk; */
 	}
-	return erp;
+        return erp;
 }
 
 int
 default_erp_postaction (ccw_req_t * cqr, int success)
 {
-	int rc = 0;
 	if (cqr->refers == NULL || cqr->function == NULL) {
 		printk (KERN_WARNING PRINTK_HEADER
 			"ERP postaction called for non ERP cqr\n");
@@ -1471,55 +1539,183 @@ default_erp_postaction (ccw_req_t * cqr, int success)
 		printk (KERN_WARNING PRINTK_HEADER
                         "default ERP postaction called for non default ERP cqr\n");
 		return -EINVAL;
-        }
-	return rc;
+	}
+        if ( success ) {
+		atomic_compare_and_swap_debug (&cqr->refers->status,
+					       CQR_STATUS_ERROR,
+					       CQR_STATUS_DONE);
+        } else {
+		atomic_compare_and_swap_debug (&cqr->refers->status,
+					       CQR_STATUS_ERROR,
+					       CQR_STATUS_FAILED);
+        } 
+	return 0;
 }
 
 /* SECTION: The helpers of the struct file_operations */
 
+/* 
+ * int dasd_format ( device* device, format_data_t *fdata )
+ * performs formatting of _device_ according to _fdata_
+ * Note: The discipline's format_function is assumed to deliver formatting
+ * commands to format a single unit of the device. In terms of the ECKD
+ * devices this means CCWs are generated to format a single track.
+ */
+
 static int
 dasd_format (dasd_device_t * device, format_data_t * fdata)
 {
-	int rc = 0;
-	int devno = device->devinfo.devno;
-	int irq = device->devinfo.irq;
-	int devindex = devindex_from_devno (devno);
-
+	int rc         = 0;
+	int devno      = device->devinfo.devno;
+	int irq        = device->devinfo.irq;
+	int devindex   = devindex_from_devno (devno);
+        ccw_req_t *req = NULL;
+        
 	if (device->open_count != 1) {
 		printk (KERN_WARNING PRINTK_HEADER
 			" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-		      " you shouldn't format a device that is already open\n",
-			devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS);
+                        " you shouldn't format a device that is already open\n",
+			devno, 
+                        irq, 
+                        device->name, 
+                        major_from_devindex (devindex), 
+                        devindex << DASD_PARTN_BITS);
 		return -EINVAL;
 	}
+        printk (KERN_WARNING PRINTK_HEADER
+                " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                " Starting format process\n",
+                        devno, 
+                        irq, 
+                        device->name, 
+                        major_from_devindex (devindex), 
+                        devindex << DASD_PARTN_BITS);
+        
         dasd_set_device_level( device->devinfo.irq,
                                DASD_DEVICE_LEVEL_RECOGNIZED,
                                device->discipline,
                                0);
-	if (device->discipline->format_device)
-          rc = device->discipline->format_device (device, fdata);
-		if (rc) {
+
+	if (device->discipline->format_device) {
+                format_data_t temp = { 
+                        fdata->start_unit, 
+                        fdata->stop_unit, 
+                        fdata->blksize, 
+                        fdata->intensity};
                 printk (KERN_WARNING PRINTK_HEADER
                         " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-			" Formatting failed with rc = %d\n",
-			devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, rc);
-			return rc;
-		}
-	printk (KERN_WARNING PRINTK_HEADER
-		" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-		" Formatting finished successfully rc = %d\n",
-		devno, irq, device->name, major_from_devindex (devindex), devindex << DASD_PARTN_BITS, rc);
+                        " invalidating disk...\n",
+                        devno, 
+                        irq, 
+                        device->name, 
+                        major_from_devindex (devindex), 
+                        devindex << DASD_PARTN_BITS);
+                
+                if ( fdata -> start_unit == DASD_FORMAT_DEFAULT_START_UNIT &&
+                     fdata -> stop_unit == DASD_FORMAT_DEFAULT_STOP_UNIT &&
+                     !(fdata -> intensity & 0x04)) {
+                        format_data_t temp2 = { 0,0,DASD_FORMAT_DEFAULT_BLOCKSIZE,0x04};
+                        req = device->discipline->format_device (device,&temp2);
+
+                        if ( req ) {
+                                rc = sleep_on_req(req);
+                                dasd_free_request(req); /* request is no longer used */
+                        } else {
+                                rc = -EINVAL;
+                        }
+                        if ( rc ) {
+                                printk (KERN_WARNING PRINTK_HEADER "Can't invalidate Track 0\n");
+                        }
+                        temp.start_unit++;
+                }
+                printk (KERN_WARNING PRINTK_HEADER
+                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                        " ...invalidation done.\n",
+                        devno, 
+                        irq, 
+                        device->name, 
+                        major_from_devindex (devindex), 
+                        devindex << DASD_PARTN_BITS);
+
+                while ((!rc                                                               ) &&
+                       ((req = device->discipline->format_device (device, &temp)) != NULL )   ) {
+
+                        if ( rc=sleep_on_req(req) ) {
+                                printk (KERN_WARNING PRINTK_HEADER
+                                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                                        " Formatting failed with rc = %d\n",
+                                        devno, 
+                                        irq, 
+                                        device->name, 
+                                        major_from_devindex (devindex), 
+                                        devindex << DASD_PARTN_BITS, 
+                                        rc);
+                                break;
+                        }
+                        dasd_free_request(req); /* request is no longer used */
+                        temp.start_unit++;
+                }  /* end if no more requests */
+                
+                printk (KERN_WARNING PRINTK_HEADER
+                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                        " revalidating disk...\n",
+                        devno, 
+                        irq, 
+                        device->name, 
+                        major_from_devindex (devindex), 
+                        devindex << DASD_PARTN_BITS);
+
+                if (!rc          &&
+                    req  == NULL   ) {
+                        if ( fdata -> start_unit == DASD_FORMAT_DEFAULT_START_UNIT &&
+                             fdata -> stop_unit == DASD_FORMAT_DEFAULT_STOP_UNIT &&
+                             !(fdata -> intensity & 0x04)) {
+                                format_data_t temp2 = { 0,0,fdata->blksize,fdata->intensity};
+                                
+                                req = device->discipline->format_device (device, 
+                                                                         &temp2);
+                                if ( req ) {
+                                        rc = sleep_on_req(req);
+                                        dasd_free_request(req); /* request is no longer used */
+                                } else {
+                                        rc = -EINVAL;
+                                }
+                                if ( rc ) {
+                                        printk (KERN_WARNING PRINTK_HEADER "Can't revalidate Track 0\n");
+                                }
+                        }
+                }
+                printk (KERN_WARNING PRINTK_HEADER
+                        " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                        " ...revalidation done\n",
+                        devno, 
+                        irq, 
+                        device->name, 
+                        major_from_devindex (devindex), 
+                        devindex << DASD_PARTN_BITS);
+        } /* end if discipline->format_device */
+        printk (KERN_WARNING PRINTK_HEADER
+                " devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
+                " Formatting finished successfully\n",
+                devno, 
+                irq, 
+                device->name, 
+                major_from_devindex (devindex), 
+                devindex << DASD_PARTN_BITS);
+        
         dasd_set_device_level( device->devinfo.irq,
-                               DASD_DEVICE_LEVEL_ANALYSIS_PENDING,
+                               DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
                                device->discipline,
                                0);
         udelay(1500000);
+        
         dasd_set_device_level( device->devinfo.irq,
                                DASD_DEVICE_LEVEL_ANALYSED,
                                device->discipline,
                                0);
+
 	return rc;
-}
+} /* end dasd_format */
 
 static int
 do_dasd_ioctl (struct inode *inp, /* unsigned */ int no, unsigned long data)
@@ -1617,15 +1813,14 @@ do_dasd_ioctl (struct inode *inp, /* unsigned */ int no, unsigned long data)
 	case BIODASDFORMAT:{
 			/* fdata == NULL is a valid arg to dasd_format ! */
 			int partn;
-			format_data_t *fdata = NULL;
+                        format_data_t fdata = { 
+                                DASD_FORMAT_DEFAULT_START_UNIT,
+                                DASD_FORMAT_DEFAULT_STOP_UNIT,
+                                DASD_FORMAT_DEFAULT_BLOCKSIZE,
+                                DASD_FORMAT_DEFAULT_INTENSITY };
+                        
 			if (data) {
-				fdata = kmalloc (sizeof (format_data_t),
-						 GFP_ATOMIC);
-				if (!fdata) {
-					rc = -ENOMEM;
-					break;
-				}
-				rc = copy_from_user (fdata, (void *) data,
+				rc = copy_from_user (&fdata, (void *) data,
 						     sizeof (format_data_t));
 				if (rc)
 					break;
@@ -1634,15 +1829,12 @@ do_dasd_ioctl (struct inode *inp, /* unsigned */ int no, unsigned long data)
 			if (partn != 0) {
 				printk (KERN_WARNING PRINTK_HEADER
 					" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
-				     " Cannot low-level format a partition\n",
+                                        " Cannot low-level format a partition\n",
 					device->devinfo.devno, device->devinfo.irq, device->name,
-				    MAJOR (inp->i_rdev), MINOR (inp->i_rdev));
+                                        MAJOR (inp->i_rdev), MINOR (inp->i_rdev));
 				return -EINVAL;
 			}
-			rc = dasd_format (device, fdata);
-			if (fdata) {
-				kfree (fdata);
-			}
+			rc = dasd_format (device, &fdata);
 			break;
 		}
 	case BIODASDEXCP:{
@@ -1675,11 +1867,11 @@ do_dasd_ioctl (struct inode *inp, /* unsigned */ int no, unsigned long data)
 static int
 dasd_ioctl (struct inode *inp, struct file *filp,
 	    unsigned int no, unsigned long data)
-	{
+{
 	int rc = 0;
 	if ((!inp) || !(inp->i_rdev)) {
 		return -EINVAL;
-		}
+	}
 	rc = do_dasd_ioctl (inp, no, data);
 	return rc;
 }
@@ -1719,7 +1911,7 @@ dasd_open (struct inode *inp, struct file *filp)
 		printk (KERN_WARNING PRINTK_HEADER
 			" devno 0x%04X on subchannel %d = /dev/%s (%d:%d)"
 			" Cannot open unrecognized device\n",
-		     device->devinfo.devno, device->devinfo.irq, device->name,
+                        device->devinfo.devno, device->devinfo.irq, device->name,
 			MAJOR (inp->i_rdev), MINOR (inp->i_rdev));
 		return -EINVAL;
 	}
@@ -1833,7 +2025,7 @@ dasd_register_major (major_info_t * major_info)
 	if (rc < 0) {
 		printk (KERN_WARNING PRINTK_HEADER
 		      "Cannot register to major no %d, rc = %d\n", major, rc);
-	return rc;
+		return rc;
 	} else if (rc > 0) {
 		if (major == 0) {
 			major = rc;
@@ -1950,11 +2142,11 @@ dasd_device_name (char *str, int index, int partition, struct gendisk *hd)
 
         if ( hd ) {
                 index = devindex_from_kdev_t (MKDEV(hd->major,index<<hd->minor_shift));
-}
+        }
         third = index % 26;
         second = (index / 26) % 27;
 	first = ((index / 26) / 27) % 27;
-
+        
 	len = sprintf (str, "dasd");
 	if (first) {
                 len += sprintf (str + len, "%c", first + 'a' - 1 );
@@ -1968,7 +2160,7 @@ dasd_device_name (char *str, int index, int partition, struct gendisk *hd)
 			return -EINVAL;
 		} else {
 			len += sprintf (str + len, "%d", partition);
-	}
+		}
 	}
 	str[len] = '\0';
 	return 0;
@@ -1976,25 +2168,40 @@ dasd_device_name (char *str, int index, int partition, struct gendisk *hd)
 
 static void
 dasd_not_oper_handler ( int irq, int status ) {
-        int devno,devindex;
-        dasd_device_t *device;
-        devno = get_devno_by_irq(irq);
+        dasd_device_t *device=NULL;
+        major_info_t * major_info;
+        int i,devno = -ENODEV;
+
+        for ( major_info = dasd_major_info; major_info != NULL; major_info = major_info->next ) {
+                for ( i = 0; i <= DASD_PER_MAJOR; i ++ ) {
+                        device = major_info->dasd_device[i];
+                        if ( device &&
+                             device -> devinfo.irq == irq ) {
+                                devno = device->devinfo.devno;
+                                break;
+                        }
+                }
+                if ( devno != -ENODEV )
+                        break;
+        }
         if ( devno < 0 ) {
-		printk (KERN_WARNING PRINTK_HEADER
-                         "not_oper_handler called on irq %d no devno!\n", irq);
-                return;
-	}
+          printk ( KERN_WARNING PRINTK_HEADER
+                   "not_oper_handler called on irq %d no devno!\n", irq);
+          return;
+        }
         printk ( KERN_INFO PRINTK_HEADER
                  "not_oper_handler called on irq %d devno %04X\n", irq,devno);
-        devindex = devindex_from_devno(devno);
-        device = find_dasd_device(devindex);
-        dasd_set_device_level( irq, DASD_DEVICE_LEVEL_UNKNOWN, NULL, 0 );
+	if ( device -> open_count != 0 ) {
+		printk (KERN_ALERT PRINTK_HEADER
+			"Device %04X detached has still been open. expect errors\n", devno);
 	}
+        dasd_set_device_level( irq, DASD_DEVICE_LEVEL_UNKNOWN, NULL, 0 );
+}
 
 static int
 dasd_enable_single_volume ( int irq ) {
         int rc = 0;
-        dasd_set_device_level (irq, DASD_DEVICE_LEVEL_ANALYSIS_PENDING,
+        dasd_set_device_level (irq, DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
                                NULL, 0);
 	printk (KERN_INFO PRINTK_HEADER "waiting for response...\n");
         {
@@ -2008,14 +2215,14 @@ dasd_enable_single_volume ( int irq ) {
         }
         dasd_set_device_level (irq, DASD_DEVICE_LEVEL_ANALYSED,
                                NULL, 0);
-	return rc;
+        return rc;
 }
 
-static int
+int
 dasd_oper_handler ( int irq, devreg_t *devreg ) {
         int devno;
         int devindex;
-	int rc;
+        int rc;
         devno = get_devno_by_irq(irq);
         if ( devno == -ENODEV )
                 return -ENODEV;
@@ -2024,12 +2231,12 @@ dasd_oper_handler ( int irq, devreg_t *devreg ) {
                 if ( dasd_autodetect ) {
                         dasd_add_range(devno,0);
                 } else {
-		return -ENODEV;
-	}
+                        return -ENODEV;
+                }
         } while ( devindex == -ENODEV );
         rc = dasd_enable_single_volume(irq);
-		return rc;
-	}
+        return rc;
+}
 
 /* 
  * int
@@ -2061,8 +2268,8 @@ dasd_set_device_level (unsigned int irq, int desired_level,
 	devindex = devindex_from_devno (devno);
 	if (devindex < 0) {
 		printk (KERN_WARNING PRINTK_HEADER " device %d is not in list of known DASDs\n", irq);
-			return -ENODEV;
-		}
+		return -ENODEV;
+	}
 	device = find_dasd_device (devindex);
         while ( (major_info = major_info_from_devindex (devindex)) == NULL ) {
                 if ((rc = dasd_register_major (major_info)) > 0) {
@@ -2072,8 +2279,8 @@ dasd_set_device_level (unsigned int irq, int desired_level,
                         printk (KERN_WARNING PRINTK_HEADER
                                 "Couldn't register successfully to another major no\n");
                         return -ERANGE;
-		}
-		}
+                }
+        }
         ind = devindex & (DASD_PER_MAJOR-1);
         device = major_info->dasd_device[ind];
         if (!device) {		/* allocate device descriptor */
@@ -2108,7 +2315,7 @@ dasd_set_device_level (unsigned int irq, int desired_level,
                                         if (temp->check_characteristics) {
                                                 if (temp->check_characteristics (device)) 
                                                         continue;
-	}
+                                        }
                                         discipline = temp;
                                         break;
                                 }
@@ -2119,17 +2326,25 @@ dasd_set_device_level (unsigned int irq, int desired_level,
 					devno, irq, discipline->name,
                                         device->name, major_from_devindex (devindex),
 					(devindex % 64) << DASD_PARTN_BITS);
-		} else {
+			} else {
 				break;
-		}
+			}
 			device->discipline = discipline;
 			if (device->discipline->int_handler) {
+#ifdef CONFIG_DASD_DYNAMIC
                                 s390_request_irq_special(irq, 
                                                          device->discipline->int_handler, 
                                                          dasd_not_oper_handler,
                                                          0, 
                                                          DASD_NAME, 
                                                          &device->dev_status);
+#else /* !defined(CONFIG_DASD_DYNAMIC) */                             
+                                request_irq(irq, 
+                                            device->discipline->int_handler, 
+                                            0, 
+                                            DASD_NAME, 
+                                            &device->dev_status);
+#endif /* CONFIG_DASD_DYNAMIC */                             
 			}
 			atomic_compare_and_swap_debug (&device->level,
                                                        DASD_DEVICE_LEVEL_UNKNOWN,
@@ -2149,13 +2364,13 @@ dasd_set_device_level (unsigned int irq, int desired_level,
                                                                                DASD_DEVICE_LEVEL_RECOGNIZED,
                                                                                DASD_DEVICE_LEVEL_ANALYSIS_PENDING);
                                                 s390irq_spin_unlock_irqrestore (irq, flags);
-}
+                                        }
                                 }
                         } else {
                                 atomic_compare_and_swap_debug (& device->level,DASD_DEVICE_LEVEL_RECOGNIZED,
                                                                DASD_DEVICE_LEVEL_ANALYSIS_PREPARED);
                         }
-			if (desired_level == DASD_DEVICE_LEVEL_ANALYSIS_PENDING)
+			if (desired_level >= DASD_DEVICE_LEVEL_ANALYSIS_PENDING)
 				break;
 		case DASD_DEVICE_LEVEL_ANALYSIS_PENDING:	/* Fallthrough ?? */
 			return -EAGAIN;
@@ -2170,7 +2385,7 @@ dasd_set_device_level (unsigned int irq, int desired_level,
 			case 4096:
 				break;
 			default:
-{
+                        {
 					printk (KERN_INFO PRINTK_HEADER
 						"/dev/%s (devno 0x%04X): Detected invalid blocksize of %d bytes"
 						" Did you format the drive?\n",
@@ -2220,19 +2435,6 @@ dasd_set_device_level (unsigned int irq, int desired_level,
 		}
 	} else 	if (desired_level < current_level) {		/* donwgrade device status */
 		switch (current_level) {
-		case DASD_DEVICE_LEVEL_PARTITIONED:	/* Fallthrough ?? */
-                        /* delete the partition information */
-			for (i = 0; i < (1 << DASD_PARTN_BITS); i++) {
-                                struct hd_struct *p = &major_info->gendisk.part[minor+i];
-                                p->start_sect = 0;
-                                p->nr_sects = 0;
-                                p->type = 0;
-                        }
-			atomic_compare_and_swap_debug (&device->level,
-                                                       DASD_DEVICE_LEVEL_PARTITIONED,
-                                                       DASD_DEVICE_LEVEL_ANALYSED);
-			if (desired_level == DASD_DEVICE_LEVEL_ANALYSED)
-				break;
 		case DASD_DEVICE_LEVEL_ANALYSED:	/* Fallthrough ?? */
 			atomic_compare_and_swap_debug (&device->level,
                                                        DASD_DEVICE_LEVEL_ANALYSED,
@@ -2315,7 +2517,7 @@ static struct proc_dir_entry dasd_proc_root_entry =
 #endif /* KERNEL_VERSION */
 static struct proc_dir_entry* dasd_devices_entry;
 
-
+	
 static int
 dasd_devices_open (struct inode* inode, struct file*  file )
 {
@@ -2331,7 +2533,7 @@ dasd_devices_open (struct inode* inode, struct file*  file )
                 return -ENOMEM;
 	} else {
                 file->private_data = (void *)info;
-	}
+        }
         while ( temp ) {
                 int i;
                 for ( i = 0; i < 1 << (MINORBITS - DASD_PARTN_BITS); i ++ ) {
@@ -2393,7 +2595,7 @@ dasd_devices_open (struct inode* inode, struct file*  file )
 		temp = temp->next;
 	}
         info->len=len;
-	return rc;
+        return rc;
 }
 
 #define MIN(a,b) ((a)<(b)?(a):(b))
@@ -2407,41 +2609,59 @@ dasd_devices_read (  struct  file *file, char*   user_buf,  size_t  user_len, lo
         if(*offset >= p_info->len)
         {
                 return 0; /* EOF */
-	}
+        }
         else
         {
                 len = MIN(user_len, (p_info->len - *offset));
                 copy_to_user(user_buf, &(p_info->data[*offset]), len);
                 (*offset) += len;
                 return len;  /* number of bytes "read" */
-	}
+        }
 }
 
-static int
+static ssize_t 
+dasd_devices_write (  struct  file *file, const char*   user_buf,  size_t  user_len, loff_t* offset )
+{
+        char * buffer = vmalloc(user_len);
+
+        if ( buffer == NULL)
+                return -ENOMEM;
+        copy_from_user ( buffer, user_buf, user_len);
+        buffer[user_len] = 0;
+        printk ( KERN_INFO PRINTK_HEADER "Now executing %s\n",buffer);
+	if ( ! strncmp(buffer,"add range",strlen("add_range"))) {
+
+	} else if ( ! strncmp(buffer,"enable device",strlen("enable device"))) {
+
+	} else if ( ! strncmp(buffer,"disable device",strlen("disable device"))) {
+
+	} else {
+		printk (KERN_WARNING PRINTK_HEADER "unknown command %s",
+			buffer );
+	}
+        vfree(buffer);
+        return user_len;
+}
+
+static int 
 dasd_devices_close (struct inode* inode, struct file*  file)
 {
-	int rc = 0;
+        int rc = 0;
         tempinfo_t* p_info = (tempinfo_t*)file->private_data;
         if ( p_info ) {
                 if ( p_info->data ) vfree(p_info->data);
                 vfree(p_info);
-	}
-	return rc;
+        }
+        return rc;
 }
 
 
 static struct file_operations dasd_devices_file_ops =
 {
-  NULL,          /* lseek */
-  dasd_devices_read,  /* read */
-  NULL, /* dasd_devices_write, */   /* write */
-  NULL,          /* readdir */
-  NULL,          /* select */
-  NULL,          /* ioctl */
-  NULL,          /* mmap */
-  dasd_devices_open,    /* open */
-  NULL,          /* flush */
-  dasd_devices_close,   /* close */
+  read: dasd_devices_read,  /* read */
+  write: dasd_devices_write,   /* write */
+  open: dasd_devices_open,    /* open */
+  release: dasd_devices_close,   /* close */
 };
 
 static struct inode_operations dasd_devices_inode_ops =
@@ -2451,16 +2671,17 @@ static struct inode_operations dasd_devices_inode_ops =
 #endif /* LINUX_IS_24 */
 };
 
-void
+int
 dasd_proc_init (void)
 {
+        int rc = 0;
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
-        dasd_proc_root_entry = create_proc_entry("dasd", 
-                                                 S_IFDIR | S_IRUGO | S_IXUGO | S_IWUSR,
-                                                 &proc_root);
+        dasd_proc_root_entry = proc_mkdir("dasd",&proc_root);
         dasd_devices_entry = create_proc_entry("devices", 
                                                S_IFREG | S_IRUGO | S_IWUSR,
                                                dasd_proc_root_entry);
+        dasd_devices_entry -> proc_fops = &dasd_devices_file_ops;
+        dasd_devices_entry -> proc_iops = &dasd_devices_inode_ops;
 #else
 	proc_register (&proc_root, &dasd_proc_root_entry);
 	dasd_devices_entry = (struct proc_dir_entry*)kmalloc(sizeof(struct proc_dir_entry), GFP_ATOMIC);
@@ -2479,6 +2700,7 @@ dasd_proc_init (void)
                 proc_register(&dasd_proc_root_entry, dasd_devices_entry);
         }
 #endif /* LINUX_IS_24 */
+        return rc;
 }
 
 void
@@ -2506,15 +2728,13 @@ dasd_init (void)
         dasd_range_t *range;
 
 	printk (KERN_INFO PRINTK_HEADER "initializing...\n");
-        genhd_dasd_name = dasd_device_name;
 #ifndef MODULE
         dasd_split_parm_string(dasd_parm_string);
 #endif /* ! MODULE */
         dasd_parse(dasd);
 
-        dasd_proc_init();
         dasd_init_emergency_req();
-
+       
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
         init_waitqueue_head(&watcher_queue);
         spin_lock_init(&cq_lock);
@@ -2527,72 +2747,115 @@ dasd_init (void)
 		} else {
 			printk (KERN_WARNING PRINTK_HEADER
 				"Couldn't register successfully to major no %d\n", major_info->gendisk.major);
-	}
+                        /* revert registration of major infos */
+                        goto major_failed;
 		}
+	}
+        rc = dasd_proc_init();
+        if ( rc ) {
+                goto proc_failed;
+        }
+
+        genhd_dasd_name = dasd_device_name;
         
 #ifdef CONFIG_DASD_ECKD
 	rc = dasd_eckd_init ();
 	if (rc==0)  {
 		printk (KERN_INFO PRINTK_HEADER
 			"Registered ECKD discipline successfully\n");
-	}
+	} else {
+                goto eckd_failed;
+        }
 #endif				/* CONFIG_DASD_ECKD */
 #ifdef CONFIG_DASD_FBA
 	rc = dasd_fba_init ();
 	if (rc == 0) {
 		printk (KERN_INFO PRINTK_HEADER
 			"Registered FBA discipline successfully\n");
+	} else {
+                goto fba_failed;
 	}
 #endif				/* CONFIG_DASD_FBA */
 #ifdef CONFIG_DASD_MDSK
-	rc = dasd_diag_init ();
-	if (rc == 0)  {
+        if ( MACHINE_IS_VM ) {
+            rc = dasd_diag_init ();
+            if (rc == 0)  {
 		printk (KERN_INFO PRINTK_HEADER
 			"Registered MDSK discipline successfully\n");
-	}
+            } else {
+                goto mdsk_failed;
+            }
+        }
 #endif				/* CONFIG_DASD_MDSK */
 	rc = 0;
 	for (range = dasd_range_head; range; range= range->next) {
 		for (j = range->from; j <= range->to; j++) {
 			irq = get_irq_by_devno (j);
 			if (irq >= 0)
-				dasd_set_device_level (irq, DASD_DEVICE_LEVEL_ANALYSIS_PENDING,
+				dasd_set_device_level (irq, DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
 						       NULL, 0);
+		}
 	}
-			}
         if ( dasd_autodetect ) {
                 for ( irq = get_irq_first(); irq != -ENODEV; irq = get_irq_next(irq) ) {
                         int devno = get_devno_by_irq(irq);
                         int index = devindex_from_devno(devno);
                         if ( index == -ENODEV ) { /* not included in ranges */
                                 dasd_add_range (devno,0);
-				dasd_set_device_level (irq, DASD_DEVICE_LEVEL_ANALYSIS_PENDING,
+				dasd_set_device_level (irq, DASD_DEVICE_LEVEL_ANALYSIS_PREPARED,
 						       NULL, 0);
-		}
-	}
-}
+                        }
+                }
+        }
 	printk (KERN_INFO PRINTK_HEADER "waiting for responses...\n");
-{
+        {
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
                 static wait_queue_head_t wait_queue;
                 init_waitqueue_head(&wait_queue);
 #else
                 static struct wait_queue *wait_queue = NULL;
 #endif /* LINUX_IS_24 */
-                interruptible_sleep_on_timeout (&wait_queue, (5 * HZ) >> 1 );
-	}
+                interruptible_sleep_on_timeout (&wait_queue,
+                                                (20 * HZ) >> 1 );
+        }
 	for (range = dasd_range_head; range; range= range->next) {
 		for (j = range->from; j <= range->to; j++) {
 			irq = get_irq_by_devno (j);
 			if (irq >= 0) {
 				dasd_set_device_level (irq, DASD_DEVICE_LEVEL_ANALYSED,
 						       NULL, 0);
-	}
+                        }
 		}
 	}
-
-	printk (KERN_INFO PRINTK_HEADER "initialization completed\n");
-	return rc;
+        goto out;
+#ifdef CONFIG_DASD_MDSK
+ mdsk_failed:
+	dasd_diag_cleanup ();
+#endif				/* CONFIG_DASD_MDSK */
+#ifdef CONFIG_DASD_FBA
+ fba_failed:
+	dasd_fba_cleanup ();
+#endif				/* CONFIG_DASD_FBA */
+#ifdef CONFIG_DASD_ECKD
+ eckd_failed:
+	dasd_eckd_cleanup ();
+#endif				/* CONFIG_DASD_ECKD */
+ proc_failed:
+        dasd_proc_cleanup();
+ major_failed: {
+                for (major_info = dasd_major_info; 
+                     major_info;
+                     major_info = major_info->next) {
+                        dasd_unregister_major(major_info);
+                }
+        }
+ emergency_failed:
+        dasd_cleanup_emergency_req();
+ failed:
+        printk (KERN_INFO PRINTK_HEADER "initialization not performed due to errors\n");
+ out:
+        printk (KERN_INFO PRINTK_HEADER "initialization finished\n");
+        return rc;
 }
 
 void
@@ -2615,7 +2878,7 @@ cleanup_dasd (void)
 				dasd_set_device_level (irq, DASD_DEVICE_LEVEL_UNKNOWN,
 						       NULL, 0);
                                 kfree(find_dasd_device(devindex_from_devno(j)));
-			}
+                        }
 		}
 	}
 	for (major_info = dasd_major_info; major_info; major_info = major_info->next) {
@@ -2634,19 +2897,19 @@ cleanup_dasd (void)
                 next = range -> next;
                 kfree (range);
                 if ( next == NULL )
-			break;
+                        break;
                 else
                         range = next;
-		}
+        } 
         dasd_range_head = NULL;
 
         while ( dasd_devreg_head ) {
                 reg = dasd_devreg_head->next;
                 kfree ( dasd_devreg_head );
                 dasd_devreg_head = reg;
-	}
+        }
 	printk (KERN_INFO PRINTK_HEADER "shutdown completed\n");
-	}
+}
 
 #ifdef MODULE
 int
@@ -2655,7 +2918,7 @@ init_module ( void )
         int rc=0;
         return dasd_init(); 
         return rc;
-	}
+}
 
 void 
 cleanup_module ( void ) 

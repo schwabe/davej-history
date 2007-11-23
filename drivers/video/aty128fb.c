@@ -50,6 +50,9 @@
 #include <asm/pci-bridge.h>
 #include <linux/nvram.h>
 #include <video/macmodes.h>
+#include <asm/adb.h>
+#include <asm/pmu.h>
+#include <asm/backlight.h>
 #endif
 
 #ifdef CONFIG_FB_COMPAT_XPMAC
@@ -261,6 +264,9 @@ struct fb_info_aty128 {
     struct display disp;
     struct display_switch dispsw;       /* for cursor and font */
     struct { u8 red, green, blue, pad; } palette[256];
+#ifdef CONFIG_PMAC_PBOOK
+    unsigned char *save_framebuffer;
+#endif
     union {
 #ifdef FBCON_HAS_CFB16
     u16 cfb16[16];
@@ -283,6 +289,15 @@ struct fb_info_aty128 {
 };
 
 static struct fb_info_aty128 *board_list = NULL;
+
+#ifdef CONFIG_PMAC_PBOOK
+  int aty128_sleep_notify(struct pmu_sleep_notifier *self, int when);
+  static struct pmu_sleep_notifier aty128_sleep_notifier = {
+  	aty128_sleep_notify, SLEEP_LEVEL_VIDEO,
+  };
+#endif
+
+
 
 #define round_div(n, d) ((n+(d/2))/d)
 
@@ -349,7 +364,9 @@ static int aty128_decode_var(struct fb_var_screeninfo *var,
                              const struct fb_info_aty128 *info);
 static struct fb_info_aty128 *aty128_board_list_add(struct fb_info_aty128
 				*board_list, struct fb_info_aty128 *new_node);
+#ifndef CONFIG_FB_OF
 static int aty128find_ROM(struct fb_info_aty128 *info);
+#endif
 #ifndef CONFIG_PPC
 static void aty128_get_pllinfo(struct fb_info_aty128 *info);
 #endif
@@ -402,6 +419,15 @@ static struct fb_ops aty128fb_ops = {
     aty128fb_set_cmap, aty128fb_pan_display, aty128fb_ioctl
 };
 
+#ifdef CONFIG_PPC
+static int aty128_set_backlight_enable(int on, int level, void* data);
+static int aty128_set_backlight_level(int level, void* data);
+
+static struct backlight_controller aty128_backlight_controller = {
+	aty128_set_backlight_enable,
+	aty128_set_backlight_level
+};
+#endif
 
     /*
      * Functions to read from/write to the mmio registers
@@ -1725,17 +1751,20 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
 #else
     memset(&var, 0, sizeof(var));
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_FB_OF
     if (default_vmode == VMODE_CHOOSE) {
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_FB_OF */
         var = default_var;
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_FB_OF
+	/* New iBook */
+	if (machine_is_compatible("PowerBook2,2"))
+		default_vmode = VMODE_800_600_60;
     } else {
 	if (mac_vmode_to_var(default_vmode, default_cmode, &var))
 	    var = default_var;
     }
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_FB_OF */
 
 #endif /* MODULE */
 
@@ -1773,6 +1802,14 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
 
     if (register_framebuffer(&info->fb_info) < 0)
 	return 0;
+
+#ifdef CONFIG_PPC
+    if (info->chip_gen == rage_M3)
+    	register_backlight_controller(&aty128_backlight_controller, info, "ati");
+#endif
+#ifdef CONFIG_PMAC_PBOOK
+    pmu_register_sleep_notifier(&aty128_sleep_notifier);
+#endif
 
     printk(KERN_INFO "fb%d: %s frame buffer device on %s\n",
 	   GET_FB_IDX(info->fb_info.node), aty128fb_name, name);
@@ -1905,6 +1942,7 @@ unmap_out:
 }
 #endif /* ! CONFIG_FB_OF */
 
+#ifndef CONFIG_FB_OF
 static int __init
 aty128find_ROM(struct fb_info_aty128 *info)
 {
@@ -1970,6 +2008,7 @@ aty128find_ROM(struct fb_info_aty128 *info)
 #endif /* !CONFIG_PPC */
     return (flag);
 }
+#endif /* CONFIG_FB_OF */
 
 #ifndef CONFIG_PPC
 static void __init
@@ -2051,13 +2090,10 @@ aty128fb_of_init(struct device_node *dp)
     u8 bus, devfn;
     u16 cmd;
 
-    if (device_is_compatible(dp, "ATY,RageM3p")) {
-	/* XXX kludge for now */
-	if (dp->name == 0 || strcmp(dp->name, "ATY,RageM3pA") != 0
-	    || dp->parent == 0)
-	    return;
-	dp = dp->parent;
-    }
+    if (dp->name && !strcmp(dp->name, "ATY,RageM3pA") && dp->parent)
+    	dp = dp->parent;
+    if (dp->name && !strcmp(dp->name, "ATY,RageM3pB"))
+    	return;
 
     switch (dp->n_addrs) {
     case 3:
@@ -2230,6 +2266,11 @@ aty128fbcon_blank(int blank, struct fb_info *fb)
     struct fb_info_aty128 *info = (struct fb_info_aty128 *)fb;
     u8 state = 0;
 
+#if defined(CONFIG_PPC)
+    if ((_machine == _MACH_Pmac) && blank)
+    	set_backlight_enable(0);
+#endif
+
     if (blank & VESA_VSYNC_SUSPEND)
 	state |= 2;
     if (blank & VESA_HSYNC_SUSPEND)
@@ -2238,6 +2279,11 @@ aty128fbcon_blank(int blank, struct fb_info *fb)
 	state |= 4;
 
     aty_st_8(CRTC_EXT_CNTL+1, state);
+
+#if defined(CONFIG_PPC)
+    if ((_machine == _MACH_Pmac) && !blank)
+    	set_backlight_enable(1);
+#endif
 }
 
 
@@ -2294,7 +2340,7 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
         int i;
 
         if (info->chip_gen == rage_M3)
-            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~PALETTE_ACCESS_CNTL);
+            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~DAC_PALETTE_ACCESS_CNTL);
 
         for (i=16; i<256; i++) {
             aty_st_8(PALETTE_INDEX, i);
@@ -2303,7 +2349,7 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
         }
 
         if (info->chip_gen == rage_M3) {
-            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | PALETTE_ACCESS_CNTL);
+            aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | DAC_PALETTE_ACCESS_CNTL);
 
             for (i=16; i<256; i++) {
                 aty_st_8(PALETTE_INDEX, i);
@@ -2316,7 +2362,7 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     /* initialize palette */
 
     if (info->chip_gen == rage_M3)
-        aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~PALETTE_ACCESS_CNTL);
+        aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) & ~DAC_PALETTE_ACCESS_CNTL);
 
     if (info->current_par.crtc.bpp == 16)
         aty_st_8(PALETTE_INDEX, (regno << 3));
@@ -2325,7 +2371,7 @@ aty128_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     col = (red << 16) | (green << 8) | blue;
     aty_st_le32(PALETTE_DATA, col);
     if (info->chip_gen == rage_M3) {
-    	aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | PALETTE_ACCESS_CNTL);
+    	aty_st_le32(DAC_CNTL, aty_ld_le32(DAC_CNTL) | DAC_PALETTE_ACCESS_CNTL);
         if (info->current_par.crtc.bpp == 16)
             aty_st_8(PALETTE_INDEX, (regno << 3));
         else
@@ -2375,6 +2421,42 @@ do_install_cmap(int con, struct fb_info *info)
     }
 }
 
+#ifdef CONFIG_PPC
+
+static int backlight_conv[] = {
+	0xff, 0xc0, 0xb5, 0xaa, 0x9f, 0x94, 0x89, 0x7e,
+	0x73, 0x68, 0x5d, 0x52, 0x47, 0x3c, 0x31, 0x24
+};
+
+static int
+aty128_set_backlight_enable(int on, int level, void* data)
+{
+	struct fb_info_aty128 *info = (struct fb_info_aty128 *)data;
+	unsigned int reg = aty_ld_le32(LVDS_GEN_CNTL);
+
+	reg |= LVDS_BL_MOD_EN | LVDS_BLON;
+	if (on && level > BACKLIGHT_OFF) {
+		reg |= LVDS_ON | LVDS_EN;
+		reg |= LVDS_BL_MOD_EN | LVDS_BLON;
+		reg &= ~LVDS_BL_MOD_LEVEL_MASK;
+		reg |= (backlight_conv[level] << LVDS_BL_MOD_LEVEL_SHIFT);
+	} else {
+		reg &= ~LVDS_BL_MOD_LEVEL_MASK;
+		reg |= (backlight_conv[0] << LVDS_BL_MOD_LEVEL_SHIFT);
+		reg &= ~(LVDS_ON | LVDS_EN);
+	}
+	aty_st_le32(LVDS_GEN_CNTL, reg);
+
+	return 0;
+}
+
+static int
+aty128_set_backlight_level(int level, void* data)
+{
+	return aty128_set_backlight_enable(1, level, data);
+}
+
+#endif
 
     /*
      *  Accelerated functions
@@ -2407,9 +2489,118 @@ aty128_rectcopy(int srcx, int srcy, int dstx, int dsty,
     wait_for_fifo(2, info);
     aty_st_le32(DP_DATATYPE, save_dp_datatype);
     aty_st_le32(DP_CNTL, save_dp_cntl); 
-
-    wait_for_idle(info);
 }
+
+
+#ifdef CONFIG_PMAC_PBOOK
+
+static void
+aty128_set_suspend(struct fb_info_aty128 *info, int suspend)
+{
+	u32	pmgt;
+	
+	/* Set the chip into the appropriate suspend mode (we use D2,
+	 * D3 would require a complete re-initialisation of the chip,
+	 * including PCI config registers, clocks, AGP configuration, ...)
+	 */
+	if (suspend) {
+		/* Set the power management mode to be PCI based */
+		pmgt = aty_ld_pll(POWER_MANAGEMENT);
+		pmgt &= ~PWR_MGT_MODE_MASK;
+		pmgt |= PWR_MGT_MODE_PCI | PWR_MGT_ON | PWR_MGT_AUTO_PWR_UP_EN;
+		aty_st_pll(POWER_MANAGEMENT, pmgt);
+
+		/* Switch PCI power management to D2 */
+		pci_write_config_word(info->pdev, 0x60, 2);
+		//mdelay(10);
+	} else {
+		/* Switch back PCI power management to D0 */
+		mdelay(100);
+		pci_write_config_word(info->pdev, 0x60, 0);
+		mdelay(100);
+		//aty128_set_backlight_enable(1,10,info);
+
+	}
+}
+
+/*
+ * Save the contents of the frame buffer when we go to sleep,
+ * and restore it when we wake up again.
+ */
+int
+aty128_sleep_notify(struct pmu_sleep_notifier *self, int when)
+{
+	struct fb_info_aty128 *info;
+ 	int result;
+
+	result = PBOOK_SLEEP_OK;
+
+	for (info = board_list; info != NULL; info = info->next) {
+		struct fb_fix_screeninfo fix;
+		int nb;
+
+		aty128fb_get_fix(&fix, fg_console, (struct fb_info *)info);
+		nb = fb_display[fg_console].var.yres * fix.line_length;
+
+		switch (when) {
+		case PBOOK_SLEEP_REQUEST:
+			if (!info->pdev)
+				return PBOOK_SLEEP_REFUSE;
+			if (info->chip_gen != rage_M3)
+				return PBOOK_SLEEP_REFUSE;
+			info->save_framebuffer = vmalloc(nb);
+			if (info->save_framebuffer == NULL)
+				return PBOOK_SLEEP_REFUSE;
+			break;
+		case PBOOK_SLEEP_REJECT:
+			if (info->save_framebuffer) {
+				vfree(info->save_framebuffer);
+				info->save_framebuffer = 0;
+			}
+			break;
+		case PBOOK_SLEEP_NOW:
+			wait_for_idle(info);
+			aty128_reset_engine(info);
+			wait_for_idle(info);
+
+			/* Backup fb content */	
+			if (info->save_framebuffer)
+				memcpy_fromio(info->save_framebuffer,
+				       (void *)info->frame_buffer, nb);
+
+			/* Blank display and LCD */
+			aty128fbcon_blank(VESA_POWERDOWN+1, (struct fb_info *)info);
+			
+			/* Sleep the chip */
+			aty128_set_suspend(info, 1);
+
+			break;
+		case PBOOK_WAKE:
+			/* Wake the chip */
+			aty128_set_suspend(info, 0);
+			
+			/* Test */
+			aty128fbcon_blank(0, (struct fb_info *)info);
+
+			aty128_reset_engine(info);
+			wait_for_idle(info);
+
+			/* Restore fb content */			
+			if (info->save_framebuffer) {
+				memcpy_toio((void *)info->frame_buffer,
+				       info->save_framebuffer, nb);
+				vfree(info->save_framebuffer);
+				info->save_framebuffer = 0;
+			}
+			/* Restore display */
+			aty128_set_par(&info->current_par, info);
+			aty128fbcon_blank(0, (struct fb_info *)info);
+			break;
+		}
+	}
+	return result;
+}
+#endif /* CONFIG_PMAC_PBOOK */
 
 
     /*

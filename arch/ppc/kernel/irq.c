@@ -61,7 +61,9 @@
 
 #include "local_irq.h"
 
-extern volatile unsigned long ipi_count;
+extern atomic_t ipi_recv;
+extern atomic_t ipi_sent;
+void enable_irq(unsigned int irq_nr);
 void enable_irq(unsigned int irq_nr);
 void disable_irq(unsigned int irq_nr);
 
@@ -137,20 +139,21 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	if (!handler)
 	{
 		/* Free */
-		for (p = &irq_desc[irq].action; (action = *p) != NULL; p = &action->next)
-		{
-			if (action->dev_id == dev_id)
-			{
-				/* Found it - now free it */
-				save_flags(flags);
-				cli();
-				*p = action->next;
-				restore_flags(flags);
-				irq_kfree(action);
-				return 0;
-			}
-		}
-		return -ENOENT;
+		p = &irq_desc[irq].action;
+		while ((action = *p) != NULL && action->dev_id != dev_id)
+			p = &action->next;
+		if (action == NULL)
+			return -ENOENT;
+
+		/* Found it - now free it */
+		save_flags(flags);
+		cli();
+		*p = action->next;
+		if (irq_desc[irq].action == NULL)
+			disable_irq(irq);
+		restore_flags(flags);
+		irq_kfree(action);
+		return 0;
 	}
 	
 	action = (struct irqaction *)
@@ -241,8 +244,10 @@ int get_irq_list(char *buf)
 	}
 #ifdef __SMP__
 	/* should this be per processor send/receive? */
-	len += sprintf(buf+len, "IPI: %10lu\n", ipi_count);
-#endif		
+  	/* should this be per processor send/receive? */
+ 	len += sprintf(buf+len, "IPI: (recv/sent) %10lu/%lu\n",
+ 			atomic_read(&ipi_recv), atomic_read(&ipi_sent));
+#endif /* __SMP__ */		
 	len += sprintf(buf+len, "BAD: %10u\n", ppc_spurious_interrupts);
 	return len;
 }
@@ -317,10 +322,14 @@ atomic_t global_irq_count;
 atomic_t global_bh_count;
 atomic_t global_bh_lock;
 
+extern unsigned long *_get_SP(void);
+
 static void show(char * str)
 {
+#if 0
 	int i;
 	unsigned long *stack;
+#endif
 	int cpu = smp_processor_id();
 
 	printk("\n%s, CPU %d:\n", str, cpu);
@@ -332,6 +341,10 @@ static void show(char * str)
 	       atomic_read(&global_bh_count),
 	       ppc_local_bh_count[0],
 	       ppc_local_bh_count[1]);
+#if 1
+	printk(" CPU: %d last CPU: %d\n", current->processor,current->last_processor);
+	print_backtrace (_get_SP());
+#else
 	stack = (unsigned long *) &str;
 	for (i = 40; i ; i--) {
 		unsigned long x = *++stack;
@@ -339,6 +352,7 @@ static void show(char * str)
 			printk("<[%08lx]> ", x);
 		}
 	}
+#endif
 }
 
 static inline void wait_on_bh(void)

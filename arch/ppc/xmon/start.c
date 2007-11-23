@@ -467,3 +467,15 @@ xmon_fgets(char *str, int nb, void *f)
     *p = 0;
     return str;
 }
+
+void
+xmon_enter(void)
+{
+	pmu_suspend();
+}
+
+void
+xmon_leave(void)
+{
+	pmu_resume();
+}

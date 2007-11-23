@@ -81,8 +81,10 @@ EXPORT_SYMBOL(pci_dram_offset);
 EXPORT_SYMBOL(ISA_DMA_THRESHOLD);
 EXPORT_SYMBOL(DMA_MODE_READ);
 EXPORT_SYMBOL(DMA_MODE_WRITE);
+#if defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC)
 EXPORT_SYMBOL(_prep_type);
 EXPORT_SYMBOL(ucSystemType);
+#endif
 
 EXPORT_SYMBOL(atomic_add);
 EXPORT_SYMBOL(atomic_sub);
@@ -188,23 +190,13 @@ EXPORT_SYMBOL(_read_lock);
 EXPORT_SYMBOL(_read_unlock);
 EXPORT_SYMBOL(_write_lock);
 EXPORT_SYMBOL(_write_unlock);
-#endif
+#endif /* __SMP__ */
 
 EXPORT_SYMBOL(_machine);
 EXPORT_SYMBOL(ppc_md);
-
-EXPORT_SYMBOL(adb_request);
-EXPORT_SYMBOL(adb_register);
-EXPORT_SYMBOL(cuda_request);
-EXPORT_SYMBOL(cuda_poll);
-EXPORT_SYMBOL(pmu_request);
-EXPORT_SYMBOL(pmu_poll);
-#ifdef CONFIG_PMAC_PBOOK
-EXPORT_SYMBOL(pmu_register_sleep_notifier);
-EXPORT_SYMBOL(pmu_unregister_sleep_notifier);
-EXPORT_SYMBOL(pmu_enable_irled);
-#endif CONFIG_PMAC_PBOOK
 EXPORT_SYMBOL(abort);
+
+#ifndef CONFIG_MBX
 EXPORT_SYMBOL(find_devices);
 EXPORT_SYMBOL(find_type_devices);
 EXPORT_SYMBOL(find_compatible_devices);
@@ -215,25 +207,43 @@ EXPORT_SYMBOL(machine_is_compatible);
 EXPORT_SYMBOL(find_pci_device_OFnode);
 EXPORT_SYMBOL(find_all_nodes);
 EXPORT_SYMBOL(get_property);
+#endif /* CONFIG_MBX */
+#ifdef CONFIG_POWERMAC
+EXPORT_SYMBOL(adb_request);
+EXPORT_SYMBOL(adb_register);
+EXPORT_SYMBOL(cuda_request);
+EXPORT_SYMBOL(cuda_poll);
+EXPORT_SYMBOL(pmu_request);
+EXPORT_SYMBOL(pmu_poll);
+#endif /* CONFIG_POWERMAC */
+#ifdef CONFIG_PMAC_PBOOK
+EXPORT_SYMBOL(pmu_register_sleep_notifier);
+EXPORT_SYMBOL(pmu_unregister_sleep_notifier);
+EXPORT_SYMBOL(pmu_enable_irled);
+#endif /* CONFIG_PMAC_PBOOK */
+#ifdef CONFIG_POWERMAC
 EXPORT_SYMBOL(pci_io_base);
+EXPORT_SYMBOL(pci_dev_io_base);
+EXPORT_SYMBOL(pci_dev_mem_base);
 EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(feature_set);
 EXPORT_SYMBOL(feature_clear);
 EXPORT_SYMBOL(feature_test);
-#ifdef CONFIG_SCSI
-EXPORT_SYMBOL(note_scsi_host);
-#endif
-EXPORT_SYMBOL(kd_mksound);
-/*#ifdef CONFIG_PMAC */
+EXPORT_SYMBOL(feature_set_gmac_power);
+EXPORT_SYMBOL(feature_set_gmac_phy_reset);
+EXPORT_SYMBOL(feature_set_usb_power);
+EXPORT_SYMBOL(feature_set_firewire_power);
 EXPORT_SYMBOL(nvram_read_byte);
 EXPORT_SYMBOL(nvram_write_byte);
 EXPORT_SYMBOL(pmac_xpram_read);
 EXPORT_SYMBOL(pmac_xpram_write);
-/*#endif*/ /* CONFIG_PMAC */
-#ifdef CONFIG_PPC_RTC
+#ifdef CONFIG_SCSI
+EXPORT_SYMBOL(note_scsi_host);
+#endif /* CONFIG_SCSI */
+#endif /* CONFIG_POWERMAC */
+EXPORT_SYMBOL(kd_mksound);
 EXPORT_SYMBOL(mktime);
 EXPORT_SYMBOL(to_tm);
-#endif
 
 EXPORT_SYMBOL(abs);
 

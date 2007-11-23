@@ -295,8 +295,8 @@ static int get_kstat(char * buffer)
                 "swap %u %u\n"
 		"intr 1 0",   
 #else                             
-		"swap %u %u\n"
-		"intr %u",
+                "swap %u %u\n"    
+                "intr %u",        
 #endif                            
 		kstat.cpu_user,
 		kstat.cpu_nice,
@@ -319,7 +319,7 @@ static int get_kstat(char * buffer)
 #ifdef CONFIG_ARCH_S390
 		kstat.pswpout);
 #else
-		kstat.pswpout,
+                kstat.pswpout, 
 		sum);
 	for (i = 0 ; i < NR_IRQS ; i++)
 		len += sprintf(buffer + len, " %u", kstat_irqs(i));
@@ -911,9 +911,6 @@ static int get_status(int pid, char * buffer)
 {
 	char * orig = buffer;
 	struct task_struct *tsk;
-#if  __s390__
-	int line,len;
-#endif
 
 	read_lock(&tasklist_lock);
 	tsk = find_task_by_pid(pid);
@@ -926,8 +923,7 @@ static int get_status(int pid, char * buffer)
 	buffer = task_sig(tsk, buffer);
 	buffer = task_cap(tsk, buffer);
 #if __s390__
-	for(line=0;(len=sprintf_regs(line,buffer,tsk,NULL,NULL))!=0;line++)
-		buffer+=len;
+	buffer = task_show_regs(tsk, buffer);
 #endif
 	return buffer - orig;
 }

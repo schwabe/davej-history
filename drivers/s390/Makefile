@@ -11,18 +11,17 @@ all: io.o
 
 CFLAGS += 
 O_TARGET := io.o
-O_OBJS   := ccwcache.o
+O_OBJS   := ccwcache.o idals.o
 M_OBJS   :=
 
 SUBDIRS := $(SUBDIRS) arch/s390/drivers/block arch/s390/drivers/char \
 	arch/s390/drivers/misc  arch/s390/drivers/net
 MOD_SUB_DIRS += ./net ./block
 
-O_OBJS := block/s390-block.o \
+O_OBJS += block/s390-block.o \
   char/s390-char.o \
   misc/s390-misc.o \
-  net/s390-net.o \
-  ccwcache.o
+  net/s390-net.o 
 
 io.o: $(O_OBJS)
 
@@ -37,6 +36,5 @@ misc/s390-misc.o: dummy
 
 net/s390-net.o: dummy
 	$(MAKE) -C net
-
 
 include $(TOPDIR)/Rules.make

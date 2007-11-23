@@ -50,6 +50,7 @@ static const char* version = "HDLC support routines revision: 1.0";
 #define CISCO_ADDR_REQ          0       /* Cisco address request */
 #define CISCO_ADDR_REPLY        1       /* Cisco address reply */
 #define CISCO_KEEPALIVE_REQ     2       /* Cisco keepalive request */
+#define CISCO_SYS_INFO		0x2000	/* Cisco interface/system info */
 
 static int hdlc_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
 
@@ -141,6 +142,11 @@ static void cisco_netif(hdlc_device *hdlc, struct sk_buff *skb)
 		return;
 #endif
 
+	case CISCO_SYS_INFO:
+		/* Packet is not needed, drop it. */
+		dev_kfree_skb(skb);
+		return;
+
 	case CISCO_KEEPALIVE:
 		if (skb->len != CISCO_PACKET_LEN && 
 		    skb->len != CISCO_BIG_PACKET_LEN) {
@@ -206,7 +212,7 @@ static void cisco_netif(hdlc_device *hdlc, struct sk_buff *skb)
 		} /* switch(keepalive type) */
 	} /* switch(protocol) */
 
-	printk(KERN_INFO "%s: Unusupported protocol %x\n", hdlc->name,
+	printk(KERN_INFO "%s: Unsupported protocol %x\n", hdlc->name,
 	       data->protocol);
 	hdlc->stats.rx_bytes+=skb->len;
 	hdlc->stats.rx_packets++;

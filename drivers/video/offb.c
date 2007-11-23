@@ -48,7 +48,8 @@ enum {
 	cmap_m64,	/* ATI Mach64 */
 	cmap_r128,	/* ATI Rage128 */
 	cmap_M3A,	/* ATI Rage Mobility M3 Head A */
-	cmap_M3B	/* ATI Rage Mobility M3 Head B */
+	cmap_M3B,	/* ATI Rage Mobility M3 Head B */
+	cmap_radeon	/* ATI Radeon */
 };
 
 struct fb_info_offb {
@@ -347,6 +348,10 @@ __initfunc(void offb_init(void))
 	/* find the device node corresponding to the macos display */
 	for (dp = displays; dp != NULL; dp = dp->next) {
 	    int i;
+	    
+	    if (!strcmp(dp->name, "offscreen-display"))
+	    	continue;
+	    
 	    /*
 	     * Grrr...  It looks like the MacOS ATI driver
 	     * munges the assigned-addresses property (but
@@ -426,6 +431,8 @@ __initfunc(void offb_init(void))
 
     if (!ofonly) {
 	for (dp = find_type_devices("display"); dp != NULL; dp = dp->next) {
+	    if (!strcmp(dp->name, "offscreen-display"))
+	    	continue;
 	    for (dpy = 0; dpy < prom_num_displays; dpy++)
 		if (strcmp(dp->full_name, prom_display_paths[dpy]) == 0)
 		    break;
@@ -439,12 +446,13 @@ __initfunc(static int offb_init_driver(struct device_node *dp))
 {
 #ifdef CONFIG_FB_ATY128
     if (!strncmp(dp->name, "ATY,Rage128", 11) ||
+    	!strncmp(dp->name, "ATY,RageM3p1", 12) ||
     	!strncmp(dp->name, "ATY,RageM3pA", 12)) {
 	aty128fb_of_init(dp);
 	return 1;
     }
     if (!strncmp(dp->name, "ATY,RageM3pB", 12))
-    	return 0;
+    	return 1;
 #endif /* CONFIG_FB_ATY128*/
 #ifdef CONFIG_FB_ATY
     if (!strncmp(dp->name, "ATY", 3)) {
@@ -591,7 +599,8 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
 		unsigned long regbase = dp->addrs[2].address;
 		info->cmap_adr = ioremap(regbase, 0x1FFF);
 		info->cmap_type = cmap_r128;
-	} else if (dp && !strncmp(name, "ATY,RageM3pA", 12)) {
+	} else if (dp && (!strncmp(name, "ATY,RageM3pA", 12) ||
+		!strncmp(name, "ATY,RageM3p1", 12))) {
 		unsigned long regbase = dp->parent->addrs[2].address;
 		info->cmap_adr = ioremap(regbase, 0x1FFF);
 		info->cmap_type = cmap_M3A;
@@ -599,6 +608,10 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
 		unsigned long regbase = dp->parent->addrs[2].address;
 		info->cmap_adr = ioremap(regbase, 0x1FFF);
 		info->cmap_type = cmap_M3B;
+	} else if (dp && !strncmp(name, "ATY,Rage6", 9)) {
+		unsigned long regbase = dp->addrs[1].address;
+		info->cmap_adr = ioremap(regbase, 0x1FFF);
+		info->cmap_type = cmap_radeon;
 	} else if (!strncmp(name, "ATY,", 4)) {
 		unsigned long base = address & 0xff000000UL;
 		info->cmap_adr = ioremap(base + 0x7ff000, 0x1000) + 0xcc0;
@@ -848,6 +861,10 @@ static void offbcon_blank(int blank, struct fb_info *info)
 	    	out_8(info2->cmap_adr + 0xb0, i);
 	    	out_le32((unsigned *)(info2->cmap_adr + 0xb4), 0);
 	    	break;
+	    case cmap_radeon:
+    	        out_8(info2->cmap_adr + 0xb0, i);
+	    	out_le32((unsigned *)(info2->cmap_adr + 0xb4), 0);
+	    	break;
 	    }
 	}
     else
@@ -928,6 +945,12 @@ static int offb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
   	out_le32((unsigned *)(info2->cmap_adr + 0xb4),
     		(red << 16 | green << 8 | blue));
     	break;
+    case cmap_radeon:
+	/* Set palette index & data (could be smarter) */
+	out_8(info2->cmap_adr + 0xb0, regno);
+  	out_le32((unsigned *)(info2->cmap_adr + 0xb4),
+    		(red << 16 | green << 8 | blue));
+	break;
     }
 
     if (regno < 16)

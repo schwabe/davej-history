@@ -71,8 +71,8 @@ static inline void kbd_init_hw(void)
 		ppc_md.kbd_init_hw();
 }
 
-#define kbd_sysrq_xlate	(ppc_md.kbd_sysrq_xlate)
-#define SYSRQ_KEY (ppc_md.SYSRQ_KEY)
+#define kbd_sysrq_xlate	(ppc_md.sysrq_xlate)
+extern unsigned long SYSRQ_KEY;
 
 /* resource allocation */
 #define kbd_request_region()

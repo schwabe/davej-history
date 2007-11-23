@@ -30,7 +30,7 @@ struct machdep_calls {
 	void		(*power_off)(void);
 	void		(*halt)(void);
 
-	void		(*time_init)(void); /* Optional, may be NULL */
+	long		(*time_init)(void); /* Optional, may be NULL */
 	int		(*set_rtc_time)(unsigned long nowtime);
 	unsigned long	(*get_rtc_time)(void);
 	void		(*calibrate_decr)(void);
@@ -49,8 +49,7 @@ struct machdep_calls {
 	void		(*kbd_leds)(unsigned char leds);
 	void		(*kbd_init_hw)(void);
 #ifdef CONFIG_MAGIC_SYSRQ
-	unsigned char 	*kbd_sysrq_xlate;
-	unsigned long	SYSRQ_KEY;
+	unsigned char 	*sysrq_xlate;
 #endif
 
 	/* PCI interfaces */
@@ -67,6 +66,11 @@ struct machdep_calls {
 	int (*pcibios_write_config_dword)(unsigned char bus,
 		unsigned char dev_fn, unsigned char offset, unsigned int val);
 	void (*pcibios_fixup)(void);
+
+	void* (*pci_dev_io_base)(unsigned char bus, unsigned char devfn, int physical);
+	void* (*pci_dev_mem_base)(unsigned char bus, unsigned char devfn);
+	int (*pci_dev_root_bridge)(unsigned char bus, unsigned char devfn);
+
 };
 
 extern struct machdep_calls ppc_md;

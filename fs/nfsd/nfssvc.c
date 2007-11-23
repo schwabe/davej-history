@@ -76,9 +76,11 @@ nfsd_svc(unsigned short port, int nrservs)
 	if (error < 0)
 		goto failure;
 
+#ifdef CONFIG_NFSD_TCP
 	error = svc_makesock(serv, IPPROTO_TCP, port);
 	if (error < 0)
 		goto failure;
+#endif
 
 	nfsd_racache_init();	/* Readahead param cache */
 

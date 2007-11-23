@@ -179,6 +179,9 @@ static int awacs_spkr_vol;
 static struct device_node* awacs_node;
 
 static int awacs_revision;
+int awacs_is_screamer = 0;
+int awacs_device_id = 0;
+int awacs_has_iic = 0;
 #define AWACS_BURGUNDY	100		/* fake revision # for burgundy */
 
 /*
@@ -191,7 +194,7 @@ static volatile struct dbdma_cmd *awacs_tx_cmds;
  * Cached values of AWACS registers (we can't read them).
  * Except on the burgundy. XXX
  */
-int awacs_reg[5];
+int awacs_reg[8];
 
 #define HAS_16BIT_TABLES
 #undef HAS_8BIT_TABLES
@@ -3400,6 +3403,11 @@ static int awacs_sleep_notify(struct pmu_sleep_notifier *self, int when)
 		awacs_write(awacs_reg[1] | MASK_ADDR1);
 		awacs_write(awacs_reg[2] | MASK_ADDR2);
 		awacs_write(awacs_reg[4] | MASK_ADDR4);
+		if (awacs_is_screamer) {
+			awacs_write(awacs_reg[5] + MASK_ADDR5);
+			awacs_write(awacs_reg[6] + MASK_ADDR6);
+			awacs_write(awacs_reg[7] + MASK_ADDR7);
+		}
 		out_le32(&awacs->byteswap, sound.hard.format != AFMT_S16_BE);
 		enable_irq(awacs_irq);
 		enable_irq(awacs_tx_irq);
@@ -4702,7 +4710,7 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			size = bufSize << 10;
 		sq_setup(numBufs, size, sound_buffers);
 		sq.max_active = nbufs;
-		return 0;
+		return IOCTL_OUT(arg,size | numBufs << 16);
 	case SNDCTL_DSP_GETOSPACE:
 		info.fragments = sq.max_active - sq.count;
 		info.fragstotal = sq.max_active;
@@ -4711,9 +4719,11 @@ static int sq_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		if (copy_to_user((void *)arg, &info, sizeof(info)))
 			return -EFAULT;
 		return 0;
-
-	default:
-		return mixer_ioctl(inode, file, cmd, arg);
+	case SNDCTL_DSP_GETCAPS:
+		data = 1;	/* Revision level of this ioctl() */
+		return IOCTL_OUT(arg, data);
+ 	default:
+ 		return mixer_ioctl(inode, file, cmd, arg);
 	}
 	return -EINVAL;
 }
@@ -5015,7 +5025,14 @@ void __init dmasound_init(void)
 				awacs_subframe = *prop;
 			if (device_is_compatible(sound, "burgundy"))
 				awacs_revision = AWACS_BURGUNDY;
-
+			/* This should be verified on older screamers */
+			if (device_is_compatible(sound, "screamer"))
+				awacs_is_screamer = 1;
+			prop = (unsigned int *)get_property(sound, "device-id", 0);
+			if (prop != 0)
+				awacs_device_id = *prop;
+			awacs_has_iic = (find_devices("perch") != NULL);
+			
 			/* look for a property saying what sample rates
 			   are available */
 			for (i = 0; i < 8; ++i)
@@ -5077,17 +5094,29 @@ void __init dmasound_init(void)
 		awacs_tx_cmds = (volatile struct dbdma_cmd *)
 			DBDMA_ALIGN(awacs_tx_cmd_space);
 		awacs_reg[0] = MASK_MUX_CD;
-		awacs_reg[1] = MASK_LOOPTHRU | MASK_PAROUT;
+		/* FIXME: Only machines with external SRS module need MASK_PAROUT */
+		awacs_reg[1] = MASK_LOOPTHRU;
+		if (awacs_has_iic || awacs_device_id == 0x5 || /*awacs_device_id == 0x8
+			|| */awacs_device_id == 0xb)
+			awacs_reg[1] |= MASK_PAROUT;
 		/* get default volume from nvram */
 		vol = (~nvram_read_byte(0x1308) & 7) << 1;
 		awacs_reg[2] = vol + (vol << 6);
 		awacs_reg[4] = vol + (vol << 6);
+		awacs_reg[5] = 0;
+		awacs_reg[6] = 0;
+		awacs_reg[7] = 0;
 		out_le32(&awacs->control, 0x11);
 		awacs_write(awacs_reg[0] + MASK_ADDR0);
 		awacs_write(awacs_reg[1] + MASK_ADDR1);
 		awacs_write(awacs_reg[2] + MASK_ADDR2);
 		awacs_write(awacs_reg[4] + MASK_ADDR4);
-
+		if (awacs_is_screamer) {
+			awacs_write(awacs_reg[5] + MASK_ADDR5);
+			awacs_write(awacs_reg[6] + MASK_ADDR6);
+			awacs_write(awacs_reg[7] + MASK_ADDR7);
+		}
+		
 		/* Initialize recent versions of the awacs */
 		if (awacs_revision == 0) {
 			awacs_revision =

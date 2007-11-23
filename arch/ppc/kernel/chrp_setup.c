@@ -48,6 +48,7 @@
 #include <asm/irq.h>
 #include <asm/adb.h>
 #include <asm/hydra.h>
+#include <asm/keyboard.h>
 
 #include <asm/time.h>
 #include "local_irq.h"
@@ -68,7 +69,7 @@ unsigned long chrp_get_rtc_time(void);
 int chrp_set_rtc_time(unsigned long nowtime);
 unsigned long rtas_event_scan_rate = 0, rtas_event_scan_ct = 0;
 void chrp_calibrate_decr(void);
-void chrp_time_init(void);
+long chrp_time_init(void);
 
 void chrp_setup_pci_ptrs(void);
 
@@ -95,6 +96,7 @@ kdev_t boot_dev;
 extern PTE *Hash, *Hash_end;
 extern unsigned long Hash_size, Hash_mask;
 extern int probingmem;
+extern unsigned long loops_per_jiffy;
 
 unsigned long empty_zero_page[1024];
 
@@ -357,81 +359,6 @@ chrp_irq_cannonicalize(u_int irq)
 	}
 }
 
-void
-chrp_do_IRQ(struct pt_regs *regs,
-	    int            cpu,
-            int            isfake)
-{
-        int irq;
-        unsigned long bits = 0;
-        int openpic_eoi_done = 0;
-
-#ifdef __SMP__
-        {
-                unsigned int loops = 1000000;
-                while (test_bit(0, &global_irq_lock)) {
-                        if (smp_processor_id() == global_irq_holder) {
-                                printk("uh oh, interrupt while we hold global irq lock!\n");
-#ifdef CONFIG_XMON
-                                xmon(0);
-#endif
-                                break;
-                        }
-                        if (loops-- == 0) {
-                                printk("do_IRQ waiting for irq lock (holder=%d)\n", global_irq_holder);
-#ifdef CONFIG_XMON
-                                xmon(0);
-#endif
-                        }
-                }
-        }
-#endif /* __SMP__ */
-	
-        irq = openpic_irq(smp_processor_id());
-        if (irq == IRQ_8259_CASCADE)
-        {
-                /*
-                 * This magic address generates a PCI IACK cycle.
-                 *
-                 * This should go in the above mask/ack code soon. -- Cort
-                 */
-		if ( chrp_int_ack_special )
-			irq = *chrp_int_ack_special;
-		else
-			irq = i8259_irq(0);
-                /*
-                 * Acknowledge as soon as possible to allow i8259
-                 * interrupt nesting                         */
-                openpic_eoi(smp_processor_id());
-                openpic_eoi_done = 1;
-        }
-        if (irq == OPENPIC_VEC_SPURIOUS)
-        {
-                /*
-                 * Spurious interrupts should never be
-                 * acknowledged
-                 */
-                ppc_spurious_interrupts++;
-                openpic_eoi_done = 1;
-		goto out;
-        }
-        bits = 1UL << irq;
-
-        if (irq < 0)
-        {
-                printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
-                       irq, regs->nip);
-                ppc_spurious_interrupts++;
-        }
-	else
-        {
-		ppc_irq_dispatch_handler( regs, irq );
-	}
-out:
-        if (!openpic_eoi_done)
-                openpic_eoi(smp_processor_id());
-}
-
 __initfunc(void
 	   chrp_init_IRQ(void))
 {
@@ -446,7 +373,7 @@ __initfunc(void
 			(*(unsigned long *)get_property(np,
 							"8259-interrupt-acknowledge", NULL));
 	}
-	open_pic.irq_offset = 16;
+	open_pic.irq_offset = NUM_8259_INTERRUPTS;
 	for ( i = 16 ; i < NR_IRQS ; i++ )
 		irq_desc[i].ctl = &open_pic;
 	openpic_init(1);
@@ -454,7 +381,7 @@ __initfunc(void
 		irq_desc[i].ctl = &i8259_pic;
 	i8259_init();
 #ifdef CONFIG_XMON
-	request_irq(openpic_to_irq(HYDRA_INT_ADB_NMI),
+	request_irq(HYDRA_INT_ADB_NMI+open_pic.irq_offset,
 		    xmon_irq, 0, "NMI", 0);
 #endif	/* CONFIG_XMON */
 #ifdef __SMP__
@@ -487,8 +414,8 @@ __initfunc(void
 		ppc_md.kbd_leds          = pckbd_leds;
 		ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
-		ppc_md.SYSRQ_KEY	 = 0x54;
+		ppc_md.sysrq_xlate	 = pckbd_sysrq_xlate;
+		SYSRQ_KEY		 = 0x54;
 #endif		
 	}
 	else
@@ -500,8 +427,8 @@ __initfunc(void
 		ppc_md.kbd_leds          = mackbd_leds;
 		ppc_md.kbd_init_hw       = mackbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
-		ppc_md.SYSRQ_KEY	 = 0x69;
+		ppc_md.sysrq_xlate	 = mackbd_sysrq_xlate;
+		SYSRQ_KEY		 = 0x69;
 #endif		
 	}
 #else
@@ -512,8 +439,8 @@ __initfunc(void
 	ppc_md.kbd_leds          = pckbd_leds;
 	ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
-	ppc_md.SYSRQ_KEY	 = 0x54;
+	ppc_md.sysrq_xlate	 = pckbd_sysrq_xlate;
+	SYSRQ_KEY		 = 0x54;
 #endif
 #endif
 #endif
@@ -643,7 +570,7 @@ __initfunc(void
 	ppc_md.get_cpuinfo    = chrp_get_cpuinfo;
 	ppc_md.irq_cannonicalize = chrp_irq_cannonicalize;
 	ppc_md.init_IRQ       = chrp_init_IRQ;
-	ppc_md.do_IRQ         = chrp_do_IRQ;
+	ppc_md.do_IRQ         = open_pic_do_IRQ;
 		
 	ppc_md.init           = chrp_init2;
 

@@ -32,6 +32,8 @@ struct uninorth_data {
 	struct device_node*	node;
 	volatile unsigned int*	cfg_addr;
 	volatile unsigned int*	cfg_data;
+	void*			iobase;
+	void*			iobase_phys;
 };
 
 static struct uninorth_data uninorth_bridges[3];
@@ -83,6 +85,81 @@ int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 	return 0;
 }
 
+/* This routines figures out on which root bridge a given PCI device
+ * is attached.
+ * 
+ * WARNING: When passed the address of the bridge itself (11), it must
+ *          return the AGP bus. Currently, it returns 0, which is by
+ *          chance the AGP one. We may have to improve that however...
+ */
+__pmac
+int
+pmac_pci_dev_root_bridge(unsigned char bus, unsigned char dev_fn)
+{
+	struct device_node *node, *bridge_node;
+	int bridge = uninorth_default;
+
+	if (uninorth_count == 0)
+		return 0;
+	if (bus == 0 && PCI_SLOT(dev_fn) < 11)
+		return 0;
+	
+	/* We look for the OF device corresponding to this bus/devfn pair. If we
+	 * don't find it, we default to the external PCI */
+	bridge_node = NULL;
+	node = find_pci_device_OFnode(bus, dev_fn & 0xf8);
+	if (node) {
+	    /* note: we don't stop on the first occurence since we need to go
+             * up to the root bridge */
+	    do {
+		if (node->type && !strcmp(node->type, "pci") 
+			&& device_is_compatible(node, "uni-north"))
+			bridge_node = node;
+		node=node->parent;
+	    } while (node);
+	}
+	if (bridge_node) {
+	    int i;
+	    for (i=0;i<uninorth_count;i++)
+		if (uninorth_bridges[i].node == bridge_node) {
+		    bridge = i;
+		    break;
+		}
+	}
+
+	if (bridge == -1) {
+		printk(KERN_WARNING "pmac_pci: no default bridge !\n");
+		return 0;
+	}
+
+	return bridge;	
+}
+
+__pmac
+void *
+pmac_pci_dev_io_base(unsigned char bus, unsigned char devfn, int physical)
+{
+	int bridge = -1;
+	if (uninorth_count != 0)
+		bridge = pmac_pci_dev_root_bridge(bus, devfn);
+	if (bridge == -1) {
+		struct bridge_data *bp;
+
+		if (bus > max_bus || (bp = bridges[bus]) == 0)
+			return 0;
+		return physical ? bp->io_base_phys : bp->io_base;
+	}
+	return physical ? uninorth_bridges[bridge].iobase_phys
+		: uninorth_bridges[bridge].iobase;
+}
+
+__pmac
+void *
+pmac_pci_dev_mem_base(unsigned char bus, unsigned char devfn)
+{
+	return 0;
+}
+
 /* This function only works for bus 0, uni-N uses a different mecanism for
  * other busses (see below)
  */
@@ -99,48 +176,20 @@ int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 	|1UL)
 	
 
-/* We should really use RTAS here, unfortunately, it's not available with BootX.
- * (one more reason for writing a beautiful OF booter). I'll do the RTAS stuff
- * later, once I have something that works enough with BootX.
- */
 __pmac static
 unsigned int
 uni_north_access_data(unsigned char bus, unsigned char dev_fn,
 				unsigned char offset)
 {
-	struct device_node *node, *bridge_node;
-	int bridge = uninorth_default;
+	int bridge;
 	unsigned int caddr;
 
-	if (bus == 0) {
-		if (PCI_SLOT(dev_fn) < 11) {
-			return 0;
-		}
-		/* We look for the OF device corresponding to this bus/devfn pair. If we
-		 * don't find it, we default to the external PCI */
-		bridge_node = NULL;
-		node = find_pci_device_OFnode(bus, dev_fn & 0xf8);
-		if (node) {
-                    /* note: we don't stop on the first occurence since we need to go
-                     * up to the root bridge */
-		    do {
-			if (!strcmp(node->type, "pci"))
-				bridge_node = node;
-			node=node->parent;
-		    } while (node);
-		}
-		if (bridge_node) {
-		    int i;
-		    for (i=0;i<uninorth_count;i++)
-			if (uninorth_bridges[i].node == bridge_node) {
-			    bridge = i;
-			    break;
-			}
-		}
+	bridge = pmac_pci_dev_root_bridge(bus, dev_fn);
+	if (bus == 0)
 		caddr = UNI_N_CFA0(dev_fn, offset);
-	} else
+	else
 		caddr = UNI_N_CFA1(bus, dev_fn, offset);
-
+	
 	if (bridge == -1) {
 		printk(KERN_WARNING "pmac_pci: no default bridge !\n");
 		return 0;
@@ -556,6 +605,50 @@ static inline void grackle_set_loop_snoop(struct bridge_data *bp, int enable)
 	out_le32((volatile unsigned int *)bp->cfg_data, val);
 }
 
+static int __init
+fixup_one_level_bus_range(struct device_node *node, int higher)
+{
+	for (; node != 0;node = node->sibling) {
+		int * bus_range;
+		unsigned int *class_code;			
+		int len;
+
+		/* For PCI<->PCI bridges or CardBus bridges, we go down */
+		class_code = (unsigned int *) get_property(node, "class-code", 0);
+		if (!class_code || ((*class_code >> 8) != PCI_CLASS_BRIDGE_PCI &&
+			(*class_code >> 8) != PCI_CLASS_BRIDGE_CARDBUS))
+			continue;
+		bus_range = (int *) get_property(node, "bus-range", &len);
+		if (bus_range != NULL && len > 2 * sizeof(int)) {
+			if (bus_range[1] > higher)
+				higher = bus_range[1];
+		}
+		higher = fixup_one_level_bus_range(node->child, higher);
+	}
+	return higher;
+}
+
+/* This routine fixes the "bus-range" property of all bridges in the
+ * system since they tend to have their "last" member wrong on macs
+ * 
+ * Note that the bus numbers manipulated here are OF bus numbers, they
+ * are not Linux bus numbers.
+ */
+static void __init
+fixup_bus_range(struct device_node *bridge)
+{
+	int * bus_range;
+	int len;
+	
+	/* Lookup the "bus-range" property for the hose */		
+	bus_range = (int *) get_property(bridge, "bus-range", &len);
+	if (bus_range == NULL || len < 2 * sizeof(int)) {
+		printk(KERN_WARNING "Can't get bus-range for %s\n",
+			       bridge->full_name);
+		return;
+	}
+	bus_range[1] = fixup_one_level_bus_range(bridge->child, bus_range[1]);
+}
 
 __initfunc(unsigned long pmac_find_bridges(unsigned long mem_start, unsigned long mem_end))
 {
@@ -596,6 +689,7 @@ __initfunc(static void add_bridges(struct device_node *dev, unsigned long *mem_p
 			       dev->full_name);
 			continue;
 		}
+		fixup_bus_range(dev);
 		bus_range = (int *) get_property(dev, "bus-range", &len);
 		if (bus_range == NULL || len < 2 * sizeof(int)) {
 			printk(KERN_WARNING "Can't get bus-range for %s\n",
@@ -613,6 +707,9 @@ __initfunc(static void add_bridges(struct device_node *dev, unsigned long *mem_p
 			uninorth_bridges[i].cfg_addr = ioremap(addr->address + 0x800000, 0x1000);
 			uninorth_bridges[i].cfg_data = ioremap(addr->address + 0xc00000, 0x1000);
 			uninorth_bridges[i].node = dev;
+			uninorth_bridges[i].iobase_phys = (void *)addr->address;
+			/* is 0x10000 enough for io space ? */
+			uninorth_bridges[i].iobase = (void *)ioremap(addr->address, 0x10000);
 			/* XXX This is the bridge with the PCI expansion bus. This is also the
 			 * address of the bus that will receive type 1 config accesses and io
 			 * accesses. Appears to be correct for iMac DV and G4 Sawtooth too.
@@ -630,8 +727,8 @@ __initfunc(static void add_bridges(struct device_node *dev, unsigned long *mem_p
 		if (device_is_compatible(dev, "uni-north")) {
 			bp->cfg_addr = 0;
 			bp->cfg_data = 0;
-			/* is 0x10000 enough for io space ? */
-			bp->io_base = (void *)ioremap(addr->address, 0x10000);
+			bp->io_base = uninorth_bridges[uninorth_count-1].iobase;
+			bp->io_base_phys = uninorth_bridges[uninorth_count-1].iobase_phys;
 		} else if (strcmp(dev->name, "pci") == 0) {
 			/* XXX assume this is a mpc106 (grackle) */
 			bp->cfg_addr = (volatile unsigned int *)
@@ -639,6 +736,7 @@ __initfunc(static void add_bridges(struct device_node *dev, unsigned long *mem_p
 			bp->cfg_data = (volatile unsigned char *)
 				ioremap(0xfee00000, 0x1000);
                         bp->io_base = (void *) ioremap(0xfe000000, 0x20000);
+                        bp->io_base_phys = (void *)0xfe000000;
                         if (machine_is_compatible("AAPL,PowerBook1998"))
                         	grackle_set_loop_snoop(bp, 1);
 #if 0 			/* Disabled for now, HW problems ??? */
@@ -651,6 +749,7 @@ __initfunc(static void add_bridges(struct device_node *dev, unsigned long *mem_p
 			bp->cfg_data = (volatile unsigned char *)
 				ioremap(addr->address + 0xc00000, 0x1000);
 			bp->io_base = (void *) ioremap(addr->address, 0x10000);
+			bp->io_base_phys = (void *)addr->address;
 		}
 		if (isa_io_base == 0)
 			isa_io_base = (unsigned long) bp->io_base;

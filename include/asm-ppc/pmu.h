@@ -10,7 +10,8 @@
 /*
  * PMU commands
  */
-#define PMU_POWER_CTRL		0x11	/* control power of some devices */
+#define PMU_POWER_CTRL0		0x10	/* control power of some devices */
+#define PMU_POWER_CTRL		0x11	/* control power of more devices */
 #define PMU_ADB_CMD		0x20	/* send ADB packet */
 #define PMU_ADB_POLL_OFF	0x21	/* disable ADB auto-poll */
 #define PMU_WRITE_NVRAM		0x33	/* write non-volatile RAM */
@@ -32,11 +33,18 @@
 #define PMU_GET_COVER		0xdc	/* report cover open/closed */
 #define PMU_SYSTEM_READY	0xdf	/* tell PMU we are awake */
 
+/* Bits to use with the PMU_POWER_CTRL0 command */
+#define PMU_POW0_ON		0x80	/* OR this to power ON the device */
+#define PMU_POW0_OFF		0x00	/* leave bit 7 to 0 to power it OFF */
+#define PMU_POW0_HARD_DRIVE	0x04	/* Hard drive power (on wallstreet/lombard ?) */
+
 /* Bits to use with the PMU_POWER_CTRL command */
 #define PMU_POW_ON		0x80	/* OR this to power ON the device */
 #define PMU_POW_OFF		0x00	/* leave bit 7 to 0 to power it OFF */
 #define PMU_POW_BACKLIGHT	0x01	/* backlight power */
+#define PMU_POW_CHARGER		0x02	/* battery charger power */
 #define PMU_POW_IRLED		0x04	/* IR led power (on wallstreet) */
+#define PMU_POW_MEDIABAY	0x08	/* media bay power (wallstreet/lombard ?) */
 
 /* Bits in PMU interrupt and interrupt mask bytes */
 #define PMU_INT_ADB_AUTO	0x04	/* ADB autopoll, when PMU_INT_ADB */
@@ -82,9 +90,9 @@ enum {
 
 /* no param */
 #define PMU_IOC_SLEEP		_IO('B', 0)
-/* out param: u32*	backlight value: 0 to 31 */
+/* out param: u32*	backlight value: 0 to 15 */
 #define PMU_IOC_GET_BACKLIGHT	_IOR('B', 1, sizeof(__u32*))
-/* in param: u32	backlight value: 0 to 31 */
+/* in param: u32	backlight value: 0 to 15 */
 #define PMU_IOC_SET_BACKLIGHT	_IOW('B', 2, sizeof(__u32))
 /* out param: u32*	PMU model */
 #define PMU_IOC_GET_MODEL	_IOR('B', 3, sizeof(__u32*))
@@ -93,23 +101,28 @@ enum {
 
 #ifdef __KERNEL__
 
-int find_via_pmu(void);
-void via_pmu_init(void);
+extern int find_via_pmu(void);
+extern int via_pmu_start(void);
 
-int pmu_request(struct adb_request *req,
+extern int pmu_request(struct adb_request *req,
 		void (*done)(struct adb_request *), int nbytes, ...);
-void pmu_poll(void);
 
-void pmu_enable_backlight(int on);
-void pmu_set_brightness(int level);
+extern void pmu_poll(void);
 
-void pmu_enable_irled(int on);
+/* For use before switching interrupts off for a long time;
+ * warning: not stackable
+ */
+extern void pmu_suspend(void);
+extern void pmu_resume(void);
 
-void pmu_restart(void);
-void pmu_shutdown(void);
+extern void pmu_enable_irled(int on);
 
-int pmu_present(void);
-int pmu_get_model(void);
+extern void pmu_restart(void);
+extern void pmu_shutdown(void);
+
+extern int pmu_present(void);
+extern int pmu_get_model(void);
+
 
 #ifdef CONFIG_PMAC_PBOOK
 /*
@@ -140,13 +153,14 @@ struct pmu_sleep_notifier
 #define PBOOK_SLEEP_REFUSE	-1
 
 /* priority levels in notifiers */
-#define SLEEP_LEVEL_VIDEO	100	/* Video driver (first wake) */
-#define SLEEP_LEVEL_SOUND	90	/* Sound driver */
-#define SLEEP_LEVEL_MEDIABAY	80	/* Media bay driver */
-#define SLEEP_LEVEL_BLOCK	70	/* IDE, SCSI */
-#define SLEEP_LEVEL_NET		60	/* bmac */
-#define SLEEP_LEVEL_ADB		50	/* ADB */
-#define SLEEP_LEVEL_MISC	30	/* Anything */
+#define SLEEP_LEVEL_VIDEO	100	/* Video driver */
+#define SLEEP_LEVEL_USB		95	/* USB */
+#define SLEEP_LEVEL_MEDIABAY	90	/* Media bay driver */
+#define SLEEP_LEVEL_NET		80	/* bmac/gmac */
+#define SLEEP_LEVEL_ADB		70	/* ADB */
+#define SLEEP_LEVEL_BLOCK	60	/* IDE, SCSI */
+#define SLEEP_LEVEL_SOUND	50	/* Sound driver */
+#define SLEEP_LEVEL_MISC	40	/* Anything */
 #define SLEEP_LEVEL_LAST	0	/* Anything */
 
 /* special register notifier functions */

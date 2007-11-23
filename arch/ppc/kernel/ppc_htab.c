@@ -587,9 +587,8 @@ int proc_dol2crvec(ctl_table *table, int write, struct file *filp,
 			buffer += len;
 			left -= len;
 			_set_L2CR(0);
-			_set_L2CR(val);
-			while ( _get_L2CR() & 0x1 )
-				/* wait for invalidate to finish */;
+			if (val)
+				_set_L2CR(val);
 			  
 		} else {
 			p = buf;

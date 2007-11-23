@@ -2,7 +2,7 @@ all: s390-block.o
 
 CFLAGS += 
 O_TARGET := s390-block.o
-O_OBJS   :=         
+O_OBJS   := 
 M_OBJS   :=
 D_OBJS   :=
 

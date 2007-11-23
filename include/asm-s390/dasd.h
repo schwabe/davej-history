@@ -3,11 +3,14 @@
 #define DASD_H
 
 /* First of all the external stuff */
+#include <linux/version.h>
 #include <linux/ioctl.h>
 #include <linux/major.h>
 #include <linux/wait.h>
 #include <asm/ccwcache.h>
-/* #include <linux/blkdev.h> */
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
+#include <linux/blkdev.h> 
+#endif
 #include <linux/genhd.h>
 #include <linux/hdreg.h>
 #include <linux/version.h>

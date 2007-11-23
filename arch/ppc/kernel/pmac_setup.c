@@ -57,19 +57,20 @@
 #include <asm/feature.h>
 #include <asm/ide.h>
 #include <asm/machdep.h>
-
+#include <asm/keyboard.h>
 #include <asm/time.h>
+
 #include "local_irq.h"
 #include "pmac_pic.h"
 
 #undef SHOW_GATWICK_IRQS
 
-void pmac_time_init(void);
-unsigned long pmac_get_rtc_time(void);
-int pmac_set_rtc_time(unsigned long nowtime);
-void pmac_read_rtc_time(void);
-void pmac_calibrate_decr(void);
-void pmac_setup_pci_ptrs(void);
+extern long pmac_time_init(void);
+extern unsigned long pmac_get_rtc_time(void);
+extern int pmac_set_rtc_time(unsigned long nowtime);
+extern void pmac_read_rtc_time(void);
+extern void pmac_calibrate_decr(void);
+extern void pmac_setup_pci_ptrs(void);
 
 extern int mackbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int mackbd_getkeycode(unsigned int scancode);
@@ -79,21 +80,28 @@ extern char mackbd_unexpected_up(unsigned char keycode);
 extern void mackbd_leds(unsigned char leds);
 extern void mackbd_init_hw(void);
 #ifdef CONFIG_MAGIC_SYSRQ
-unsigned char mackbd_sysrq_xlate[128];
+extern unsigned char mackbd_sysrq_xlate[128];
+extern unsigned char mac_hid_kbd_sysrq_xlate[128];
+extern unsigned char pckbd_sysrq_xlate[128];
 #endif /* CONFIG_MAGIC_SYSRQ */
-extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
-extern int pckbd_getkeycode(unsigned int scancode);
-extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,
-			   char raw_mode);
-extern char pckbd_unexpected_up(unsigned char keycode);
-extern void pckbd_leds(unsigned char leds);
-extern void pckbd_init_hw(void);
+extern int keyboard_sends_linux_keycodes;
+extern int mac_hid_kbd_translate(unsigned char scancode,
+				 unsigned char *keycode, char raw_mode);
+extern char mac_hid_kbd_unexpected_up(unsigned char keycode);
+extern void mac_hid_init_hw(void);
+
 extern void pmac_nvram_update(void);
+
+extern void *pmac_pci_dev_io_base(unsigned char bus, unsigned char devfn);
+extern void *pmac_pci_dev_mem_base(unsigned char bus, unsigned char devfn);
+extern int pmac_pci_dev_root_bridge(unsigned char bus, unsigned char devfn);
 
 unsigned char drive_info;
 
 int ppc_override_l2cr = 0;
 int ppc_override_l2cr_value;
+
+static int current_root_goodness = -1;
 
 extern char saved_command_line[];
 
@@ -104,7 +112,26 @@ extern int pmac_newworld;
 extern void zs_kgdb_hook(int tty_num);
 static void ohare_init(void);
 static void init_p2pbridge(void);
-static void init_uninorth(void);
+
+#ifdef CONFIG_SMP
+volatile static long int core99_l2_cache;
+void core99_init_l2(void)
+{
+ 	int cpu = smp_processor_id();
+ 
+	if ( (_get_PVR() >> 16) != 8 && (_get_PVR() >> 16) != 12 )
+		return;
+
+ 	if (cpu == 0){
+ 		core99_l2_cache = _get_L2CR();
+ 		printk("CPU0: L2CR is %lx\n", core99_l2_cache);
+ 	} else {
+ 		printk("CPU%d: L2CR was %lx\n", cpu, _get_L2CR());
+ 		_set_L2CR(core99_l2_cache);
+ 		printk("CPU%d: L2CR set to %lx\n", cpu, core99_l2_cache);
+ 	}
+}
+#endif /* CONFIG_SMP */
 
 __pmac
 int
@@ -247,7 +274,7 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	struct device_node *cpu;
 	int *fp;
 
-	/* Set loops_per_sec to a half-way reasonable value,
+	/* Set loops_per_jiffy to a half-way reasonable value,
 	   for use until calibrate_delay gets called. */
 	cpu = find_type_devices("cpu");
 	if (cpu != 0) {
@@ -260,13 +287,13 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 			case 10:	/* mach V (604ev5) */
 			case 12:	/* G4 */
 			case 20:	/* 620 */
-				loops_per_jiffy = (*fp)/HZ;
+				loops_per_jiffy = *fp / HZ;
 				break;
 			default:	/* 601, 603, etc. */
-				loops_per_jiffy = (*fp / 2)/HZ;
+				loops_per_jiffy = *fp / (2*HZ);
 			}
 		} else
-			loops_per_jiffy = 50000000/HZ;
+			loops_per_jiffy = 50000000 / HZ;
 	}
 
 	/* this area has the CPU identification register
@@ -277,9 +304,10 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 
 	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
 	init_p2pbridge();
-	init_uninorth();
 	
-	/* Checks "l2cr-value" property in the registry */
+	/* Checks "l2cr-value" property in the registry
+	 * And enable G3/G4 Dynamic Power Management
+	 */
 	if ( (_get_PVR() >> 16) == 8 || (_get_PVR() >> 16) == 12 ) {
 		struct device_node *np = find_devices("cpus");		
 		if (np == 0)
@@ -291,9 +319,11 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 				ppc_override_l2cr = 1;
 				ppc_override_l2cr_value = *l2cr;
 				_set_L2CR(0);
-				_set_L2CR(ppc_override_l2cr_value);
+				if (ppc_override_l2cr_value)
+					_set_L2CR(ppc_override_l2cr_value);
 			}
 		}
+		_set_HID0(_get_HID0() | HID0_DPM);
 	}
 
 	if (ppc_override_l2cr)
@@ -301,6 +331,10 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 			ppc_override_l2cr_value, (ppc_override_l2cr_value & 0x80000000)
 				? "enabled" : "disabled");
 	feature_init();
+
+#ifdef CONFIG_SMP
+	core99_init_l2();
+#endif
 
 #ifdef CONFIG_KGDB
 	zs_kgdb_hook(0);
@@ -365,38 +399,6 @@ __initfunc(static void ohare_init(void))
 				sysctrl_regs[4] |= 0x04000000;
 			printk(KERN_INFO "Level 2 cache enabled\n");
 		}
-	}
-}
-
-__initfunc(static void init_uninorth(void))
-{
-	/* 
-	 * Turns OFF the gmac clock. The gmac driver will turn
-	 * it back ON when the interface is enabled. This save
-	 * power on portables.
-	 * 
-	 * Note: We could also try to turn OFF the PHY. Since this
-	 * has to be done by both the gmac driver and this code,
-	 * I'll probably end-up moving some of this out of the
-	 * modular gmac driver into a non-modular stub containing
-	 * some basic PHY management and power management stuffs
-	 */
-	struct device_node* uni_n = find_devices("uni-n");
-	struct device_node* gmac = find_devices("ethernet");
-	unsigned long* addr;
-	
-	if (!uni_n || uni_n->n_addrs < 1)
-		return;
-	addr = ioremap(uni_n->addrs[0].address, 0x300);
-
-	while(gmac) {
-		if (device_is_compatible(gmac, "gmac"))
-			break;
-		gmac = gmac->next;
-	}
-	if (gmac) {
-		*(addr + 8) &= ~0x00000002UL;
-		eieio();
 	}
 }
 
@@ -481,13 +483,14 @@ __initfunc(void find_boot_device(void))
 
 /* can't be initfunc - can be called whenever a disk is first accessed */
 __pmac
-void note_bootable_part(kdev_t dev, int part)
+void note_bootable_part(kdev_t dev, int part, int goodness)
 {
 	static int found_boot = 0;
 	char *p;
 
 	/* Do nothing if the root has been set already. */
-	if (ROOT_DEV != to_kdev_t(DEFAULT_ROOT_DEVICE))
+	if ((goodness < current_root_goodness) &&
+		(ROOT_DEV != to_kdev_t(DEFAULT_ROOT_DEVICE)))
 		return;
 	p = strstr(saved_command_line, "root=");
 	if (p != NULL && (p == saved_command_line || p[-1] == ' '))
@@ -500,7 +503,7 @@ void note_bootable_part(kdev_t dev, int part)
 	if (boot_dev == 0 || dev == boot_dev) {
 		ROOT_DEV = MKDEV(MAJOR(dev), MINOR(dev) + part);
 		boot_dev = NODEV;
-		printk(" (root on %d)", part);
+		current_root_goodness = goodness;
 	}
 }
 
@@ -655,7 +658,8 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.get_rtc_time   = pmac_get_rtc_time;
 	ppc_md.calibrate_decr = pmac_calibrate_decr;
 
-#if defined(CONFIG_VT) && defined(CONFIG_MAC_KEYBOARD)
+#ifdef CONFIG_VT
+#ifdef CONFIG_MAC_KEYBOARD
 	ppc_md.kbd_setkeycode    = mackbd_setkeycode;
 	ppc_md.kbd_getkeycode    = mackbd_getkeycode;
 	ppc_md.kbd_translate     = mackbd_translate;
@@ -663,10 +667,30 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_leds          = mackbd_leds;
 	ppc_md.kbd_init_hw       = mackbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
-	ppc_md.SYSRQ_KEY	 = 0x69;
+	ppc_md.sysrq_xlate	 = mackbd_sysrq_xlate;
+	SYSRQ_KEY		 = 0x69;
 #endif
+#elif defined(CONFIG_INPUT_ADBHID)
+	ppc_md.kbd_setkeycode    = 0;
+	ppc_md.kbd_getkeycode    = 0;
+	ppc_md.kbd_translate     = mac_hid_kbd_translate;
+	ppc_md.kbd_unexpected_up = mac_hid_kbd_unexpected_up;
+	ppc_md.kbd_leds          = 0;
+	ppc_md.kbd_init_hw       = mac_hid_init_hw;
+#ifdef CONFIG_MAGIC_SYSRQ
+#ifdef CONFIG_MAC_ADBKEYCODES
+	if (!keyboard_sends_linux_keycodes) {
+		ppc_md.sysrq_xlate = mac_hid_kbd_sysrq_xlate;
+		SYSRQ_KEY = 0x69;
+	} else
+#endif /* CONFIG_MAC_ADBKEYCODES */
+	{
+		ppc_md.sysrq_xlate = pckbd_sysrq_xlate;
+		SYSRQ_KEY = 0x54;
+	}
 #endif
+#endif /* CONFIG_MAC_KEYBOARD */
+#endif /* CONFIG_VT */
 
 #if defined(CONFIG_BLK_DEV_IDE_PMAC)
         ppc_ide_md.insw = pmac_ide_insw;

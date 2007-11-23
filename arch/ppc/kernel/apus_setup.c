@@ -624,7 +624,7 @@ apus_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_unexpected_up = NULL;
 	ppc_md.kbd_leds          = NULL;
 	ppc_md.kbd_init_hw       = NULL;
-	ppc_md.kbd_sysrq_xlate	 = NULL;
+	ppc_md.sysrq_xlate	 = NULL;
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
         ppc_ide_md.insw = apus_ide_insw;

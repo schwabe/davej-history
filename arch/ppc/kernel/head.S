@@ -23,6 +23,10 @@
  *  modify it under the terms of the GNU General Public License
  *  as published by the Free Software Foundation; either version
  *  2 of the License, or (at your option) any later version.
+ *
+ *  2000-04-10.
+ *  Add sys_rt_sigreturn in DoSyscall Handler.
+ *  Giovanna Ambrosini (ambrosini@lightning.ch).
  *	
  */
 
@@ -258,66 +262,15 @@ __start:
 __secondary_start:
 /* Switch MMU off, clear BATs and flush TLB */
  	bl	mmu_off
+mmu_off_return:
 	bl	clear_bats
 	bl	flush_tlbs
-
-/* Use the first pair of BAT registers to map the 1st 16MB
- * of RAM to KERNELBASE.  From this point on we can't safely
- * call OF any more.
- */
-	lis	r11,KERNELBASE@h
-	mfspr	r9,PVR
-	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
-	cmpi	0,r9,1
-	bne	4f
-	ori	r11,r11,4		/* set up BAT registers for 601 */
-	li	r8,0x7f			/* valid, block length = 8MB */
-	oris	r9,r11,0x800000@h	/* set up BAT reg for 2nd 8M */
-	oris	r10,r8,0x800000@h	/* set up BAT reg for 2nd 8M */
-	mtspr	IBAT0U,r11		/* N.B. 601 has valid bit in */
-	mtspr	IBAT0L,r8		/* lower BAT register */
-	mtspr	IBAT1U,r9
-	mtspr	IBAT1L,r10
-	b	5f
-4:
-#ifdef CONFIG_APUS
-	ori	r11,r11,BL_8M<<2|0x2	/* set up an 8MB mapping */
-	ori	r11,r11,0xfe		/* set up an 8MB mapping */
-	lis	r8,CYBERBASEp@h
-	lwz	r8,0(r8)
-	addis	r8,r8,KERNELBASE@h
-	addi	r8,r8,2
-#else	
-	ori	r11,r11,BL_256M<<2|0x2	/* set up BAT registers for 604 */
-	li	r8,2			/* R/W access */
-	/*
-	 * If the MMU is off clear the bats.  See clear_bat() -- Cort
-	 */
-#ifndef CONFIG_GEMINI	
-	/* 
-	 * allow secondary cpus to get at all of ram in early bootup
-	 * since their init_task may be up there -- Cort
-	 */
-	oris	r18,r8,0x10000000@h
-	oris	r21,r11,(KERNELBASE+0x10000000)@h
-	mtspr	DBAT1L,r18		/* N.B. 6xx (not 601) have valid */
-	mtspr	DBAT1U,r21		/* bit in upper BAT register */
-	mtspr	IBAT1L,r18
-	mtspr	IBAT1U,r21
-	
-	oris	r18,r8,0x20000000@h
-	oris	r21,r11,(KERNELBASE+0x20000000)@h
-	mtspr	DBAT2L,r18		/* N.B. 6xx (not 601) have valid */
-	mtspr	DBAT2U,r21		/* bit in upper BAT register */
-	mtspr	IBAT2L,r18
-	mtspr	IBAT2U,r21
-#endif /* ndef CONFIG_GEMINI */	
+	bl	setup_init_bats
+#ifndef CONFIG_APUS
+#ifdef CONFIG_BOOTX_TEXT
+	bl	setup_disp_bat
 #endif
-	mtspr	DBAT0L,r8		/* N.B. 6xx (not 601) have valid */
-	mtspr	DBAT0U,r11		/* bit in upper BAT register */
-	mtspr	IBAT0L,r8
-	mtspr	IBAT0U,r11
-5:	isync
+#endif
 #ifdef CONFIG_APUS
 	/* Unfortunately the APUS specific instructions bloat the
 	 * code so it cannot fit in the 0x100 bytes available. We have
@@ -443,6 +396,15 @@ __secondary_start:
 #endif /* CONFIG_8xx */
 	b	turn_on_mmu
 
+/* Hack for sleep on Core99 machines
+ */
+#ifdef CONFIG_POWERMAC
+	. = 0x80
+SleepVector:
+	.long	0
+	.long	0	
+#endif /* CONFIG_POWERMAC */
+
 /*
  * GCC sometimes accesses words at negative offsets from the stack
  * pointer, although the SysV ABI says it shouldn't.  To cope with
@@ -515,7 +477,7 @@ label:						\
 #endif /* CONFIG_GEMINI */
 #else
 	STD_EXCEPTION(0x100, Reset, UnknownException)
-#endif	
+#endif
 
 /* Machine check */
 	STD_EXCEPTION(0x200, MachineCheck, MachineCheckException)
@@ -1383,11 +1345,7 @@ hash_page:
 	/* Construct the high word of the PPC-style PTE */
 	mfsrin	r5,r3			/* get segment reg for segment */
 	rlwinm	r5,r5,7,1,24		/* put VSID in 0x7fffff80 bits */
-	
-#ifndef __SMP__				/* do this later for SMP */
 	oris	r5,r5,0x8000		/* set V (valid) bit */
-#endif
-	
 	rlwimi	r5,r3,10,26,31		/* put in API (abbrev page index) */
 	/* Get the address of the primary PTE group in the hash table */
 	.globl	hash_page_patch_A
@@ -1499,6 +1457,7 @@ found_slot:
  */
 found_empty:
 found_slot:
+	clrlwi	r5,r5,1		/* clear valid bit (0x80000000) */
 	stw	r5,0(r3)	/* clear V (valid) bit in PTE */
 	sync
 	tlbsync
@@ -1819,14 +1778,8 @@ giveup_altivec:
 	blr
 #endif /* CONFIG_ALTIVEC */
 
-#else  /* CONFIG_8xx */
-	.globl	giveup_fpu
-giveup_fpu:
-	blr
-#endif /* CONFIG_8xx */
-
 mmu_off:
- 	addi	r4, r3, __secondary_start - _start
+ 	addi	r4, r3, mmu_off_return - _start
 	mfmsr	r3
 	andi.	r0,r3,MSR_DR|MSR_IR		/* MMU enabled? */
 	beqlr
@@ -1891,6 +1844,12 @@ copy_and_flush:
 	 */
 	. = 0x4000
 #endif
+
+#else  /* CONFIG_8xx */
+	.globl	giveup_fpu
+giveup_fpu:
+	blr
+#endif /* CONFIG_8xx */
 
 turn_on_mmu:
 	mfmsr	r0
@@ -1984,6 +1943,7 @@ start_here:
 	cror	14,14,18
 	bne	3,6f
 	ori	r11,r11,HID0_SGE|HID0_BHTE|HID0_BTIC|HID0_ABE /* for g3/g4, enable */
+	rlwinm	r11,r11,0,23,21		/* clear HID0_SPD */
  	li	r3,0
  	mtspr	ICTC,r3
 5:	mtspr	HID0,r11		/* superscalar exec & br history tbl */
@@ -2166,7 +2126,9 @@ DoSyscall:
 1:
 #endif /* SHOW_SYSCALLS */
 	cmpi	0,r0,0x7777	/* Special case for 'sys_sigreturn' */
+        cmpi    1,r0,0x6666     /* Special case for 'sys_rt_sigreturn' */
 	beq-	10f
+        beq-    cr1,16f
 	lwz	r10,TASK_FLAGS(r2)
 	andi.	r10,r10,PF_TRACESYS
 	bne-	50f
@@ -2213,6 +2175,12 @@ syscall_ret_1:
 /* sys_sigreturn */
 10:	addi	r3,r1,STACK_FRAME_OVERHEAD
 	bl	sys_sigreturn
+        cmpi    0,r3,0          /* Check for restarted system call */
+        bge     int_return
+        b       20b
+/* sys_rt_sigreturn */
+16:     addi    r3,r1,STACK_FRAME_OVERHEAD
+        bl      sys_rt_sigreturn
 	cmpi	0,r3,0		/* Check for restarted system call */
 	bge	int_return
 	b	20b
@@ -2883,30 +2851,6 @@ m8xx_gorom:
        mtlr    r4
        blr
 #endif /* CONFIG_8xx */
-	
-/*
- * We put a few things here that have to be page-aligned.
- * This stuff goes at the beginning of the data segment,
- * which is page-aligned.
- */
-	.data
-	.globl	sdata
-sdata:
-	.globl	empty_zero_page
-empty_zero_page:
-	.space	4096
-
-	.globl	swapper_pg_dir
-swapper_pg_dir:
-	.space	4096	
-
-/*
- * This space gets a copy of optional info passed to us by the bootstrap
- * Used to pass parameters into the kernel like root=/dev/sda1, etc.
- */	
-	.globl	cmd_line
-cmd_line:
-	.space	512
 
 /* 
  * An undocumented "feature" of 604e requires that the v bit
@@ -2951,4 +2895,117 @@ flush_tlbs:
 	blt	1b
 	sync
 	blr
+
+/* Use the first pair of BAT registers to map the 1st 16MB
+ * of RAM to KERNELBASE.  From this point on we can't safely
+ * call OF any more.
+ */
+setup_init_bats:
+	lis	r11,KERNELBASE@h
+	mfspr	r9,PVR
+	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
+	cmpi	0,r9,1
+	bne	4f
+	ori	r11,r11,4		/* set up BAT registers for 601 */
+	li	r8,0x7f			/* valid, block length = 8MB */
+	oris	r9,r11,0x800000@h	/* set up BAT reg for 2nd 8M */
+	oris	r10,r8,0x800000@h	/* set up BAT reg for 2nd 8M */
+	mtspr	IBAT0U,r11		/* N.B. 601 has valid bit in */
+	mtspr	IBAT0L,r8		/* lower BAT register */
+	mtspr	IBAT1U,r9
+	mtspr	IBAT1L,r10
+	b	5f
+4:
+#ifdef CONFIG_APUS
+	ori	r11,r11,BL_8M<<2|0x2	/* set up an 8MB mapping */
+	ori	r11,r11,0xfe		/* set up an 8MB mapping */
+	lis	r8,CYBERBASEp@h
+	lwz	r8,0(r8)
+	addis	r8,r8,KERNELBASE@h
+	addi	r8,r8,2
+#else	
+	ori	r11,r11,BL_256M<<2|0x2	/* set up BAT registers for 604 */
+	li	r8,2			/* R/W access */
+	/*
+	 * If the MMU is off clear the bats.  See clear_bat() -- Cort
+	 */
+#ifndef CONFIG_GEMINI	
+	/* 
+	 * allow secondary cpus to get at all of ram in early bootup
+	 * since their init_task may be up there -- Cort
+	 */
+	oris	r18,r8,0x10000000@h
+	oris	r21,r11,(KERNELBASE+0x10000000)@h
+	mtspr	DBAT1L,r18		/* N.B. 6xx (not 601) have valid */
+	mtspr	DBAT1U,r21		/* bit in upper BAT register */
+	mtspr	IBAT1L,r18
+	mtspr	IBAT1U,r21
 	
+	oris	r18,r8,0x20000000@h
+	oris	r21,r11,(KERNELBASE+0x20000000)@h
+	mtspr	DBAT2L,r18		/* N.B. 6xx (not 601) have valid */
+	mtspr	DBAT2U,r21		/* bit in upper BAT register */
+	mtspr	IBAT2L,r18
+	mtspr	IBAT2U,r21
+#endif /* ndef CONFIG_GEMINI */	
+#endif
+	mtspr	DBAT0L,r8		/* N.B. 6xx (not 601) have valid */
+	mtspr	DBAT0U,r11		/* bit in upper BAT register */
+	mtspr	IBAT0L,r8
+	mtspr	IBAT0U,r11
+5:	isync
+	blr
+	
+#ifdef CONFIG_BOOTX_TEXT
+setup_disp_bat:
+	/*
+	 * setup the display bat prepared for us in prom.c
+	 */
+	mflr	r8
+	bl	reloc_offset
+	mtlr	r8
+	lis	r8, disp_BATL@h
+	ori	r8, r8, disp_BATL@l
+	add	r8, r3, r8
+	lwz	r8, 0(r8)
+	lis	r11, disp_BATU@h
+	ori	r11, r11, disp_BATU@l
+	add	r11, r3, r11
+	lwz	r11, 0(r11)
+	mtspr	IBAT3L,r8
+	mtspr	IBAT3U,r11
+	mfspr	r9,PVR
+	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
+	cmpi	0,r9,1
+	beq	1f
+	mtspr	DBAT3L,r8
+	mtspr	DBAT3U,r11
+1:		
+	blr
+#endif
+	
+/*
+ * We put a few things here that have to be page-aligned.
+ * This stuff goes at the beginning of the data segment,
+ * which is page-aligned.
+ */
+	.data
+	.globl	sdata
+sdata:
+	.globl	empty_zero_page
+empty_zero_page:
+	.space	4096
+
+	.globl	swapper_pg_dir
+swapper_pg_dir:
+	.space	4096	
+
+/*
+ * This space gets a copy of optional info passed to us by the bootstrap
+ * Used to pass parameters into the kernel like root=/dev/sda1, etc.
+ */	
+	.globl	cmd_line
+cmd_line:
+	.space	512
+
+

@@ -108,7 +108,7 @@ void do_machine_halt(void)
         if (MACHINE_IS_VM && strlen(vmhalt_cmd) > 0) 
                 cpcmd(vmhalt_cmd, NULL, 0);
         signal_processor(smp_processor_id(), sigp_stop_and_store_status);
-        }
+}
 
 void machine_halt(void)
 {
@@ -125,7 +125,7 @@ void do_machine_power_off(void)
         if (MACHINE_IS_VM && strlen(vmpoff_cmd) > 0)
                 cpcmd(vmpoff_cmd, NULL, 0);
         signal_processor(smp_processor_id(), sigp_stop_and_store_status);
-        }
+}
 
 void machine_power_off(void)
 {
@@ -248,6 +248,14 @@ void do_ext_call_interrupt(struct pt_regs *regs, __u16 source_cpu_addr)
 			__flush_tlb();
 			atomic_set(&ec->status, ec_done);
 		        return;
+                case ec_callback: {
+                        ec_callback_parms *cbp;
+                        cbp = (ec_callback_parms *) ec->parms;
+                        atomic_set(&ec->status,ec_executing);
+                        (cbp->callback)(cbp->data);
+                        atomic_set(&ec->status,ec_done);
+                        return;
+                }
                 default:
                 }
                 ec = ec->next;
@@ -463,6 +471,19 @@ void smp_ctl_clear_bit(int cr, int bit) {
         __ctl_clear_bit(cr, bit);
 }
 
+/*
+ * Execute a callback function on all cpus
+ */
+void smp_do_callback_all(void (*callback)(void *), void *data) {
+        ec_callback_parms parms;
+
+        if (atomic_read(&smp_commenced) != 0) {
+                parms.callback = callback;
+                parms.data = data;
+                smp_ext_call_sync_others(ec_callback, &parms);
+        }
+        (callback)(data);
+}
 
 /*
  * Lets check how many CPUs we have.
@@ -573,7 +594,7 @@ void __init smp_boot_cpus(void)
         sigp_ccode   ccode;
         int curr_cpu;
         int i;
-        
+
         /* request the 0x1202 external interrupt */
         if (register_external_interrupt(0x1202, do_ext_call_interrupt) != 0)
                 panic("Couldn't request external interrupt 0x1202");

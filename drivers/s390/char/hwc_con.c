@@ -18,16 +18,16 @@
 
 #include "hwc_rw.h"
 
-extern void hwc_tty_init(void);
+extern void hwc_tty_init (void);
 
 #ifdef CONFIG_HWC_CONSOLE
 
-#define  hwc_console_major 4 
+#define  hwc_console_major 4
 #define  hwc_console_minor 0
-#define  hwc_console_name  "console" 
+#define  hwc_console_name  "console"
 
-void hwc_console_write(struct console *, const char *, unsigned int);
-kdev_t hwc_console_device(struct console *);
+void hwc_console_write (struct console *, const char *, unsigned int);
+kdev_t hwc_console_device (struct console *);
 void hwc_console_unblank (void);
 
 #define  HWC_CON_PRINT_HEADER "hwc console driver: "
@@ -39,36 +39,36 @@ struct console hwc_console =
 	hwc_console_write,
 	NULL,
 	hwc_console_device,
-	NULL,			
+	NULL,
 	hwc_console_unblank,
-	NULL,			
+	NULL,
 	CON_PRINTBUFFER,
 	0,
 	0,
 	NULL
 };
- 
+
 void 
 hwc_console_write (
-	struct console *console,
-	const char *message,
-	unsigned int count)
+			  struct console *console,
+			  const char *message,
+			  unsigned int count)
 {
 
 	if (console->device (console) != hwc_console.device (&hwc_console)) {
 
-		hwc_printk(KERN_WARNING HWC_CON_PRINT_HEADER
-				"hwc_console_write() called with wrong "
-				"device number");
+		hwc_printk (KERN_WARNING HWC_CON_PRINT_HEADER
+			    "hwc_console_write() called with wrong "
+			    "device number");
 		return;
 	}
-	hwc_write(0, message, count);
+	hwc_write (0, message, count);
 }
 
 kdev_t 
 hwc_console_device (struct console * c)
 {
-	return  MKDEV(hwc_console_major, hwc_console_minor);
+	return MKDEV (hwc_console_major, hwc_console_minor);
 }
 
 void 
@@ -77,26 +77,26 @@ hwc_console_unblank (void)
 	hwc_unblank ();
 }
 
-#endif	
+#endif
 
-__initfunc(unsigned long hwc_console_init(unsigned long kmem_start))
+__initfunc (unsigned long hwc_console_init (unsigned long kmem_start))
 {
 
 #ifdef CONFIG_3215
-        if (MACHINE_IS_VM)
-                return kmem_start;
+	if (MACHINE_IS_VM)
+		return kmem_start;
 #endif
 	if (MACHINE_IS_P390)
 		return kmem_start;
 
-	if (hwc_init(&kmem_start) == 0) {
+	if (hwc_init (&kmem_start) == 0) {
 
 		hwc_tty_init ();
 
 #ifdef CONFIG_HWC_CONSOLE
 
-		register_console(&hwc_console);
-#endif	
+		register_console (&hwc_console);
+#endif
 	} else
 		panic (HWC_CON_PRINT_HEADER "hwc initialisation failed !");
 

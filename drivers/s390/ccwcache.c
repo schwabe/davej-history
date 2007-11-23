@@ -1,5 +1,5 @@
 /* 
-   * File...........: linux/drivers/s390/block/ccwcache.c
+   * File...........: linux/drivers/s390/ccwcache.c
    * Author(s)......: Holger Smolinski <Holger.Smolinski@de.ibm.com>
    * Bugreports.to..: <Linux390@de.ibm.com>
    * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 2000a
@@ -14,7 +14,6 @@
 
 #include <asm/ebcdic.h>
 #include <asm/spinlock.h>
-
 
 #ifdef PRINTK_HEADER
 #undef PRINTK_HEADER
@@ -33,6 +32,7 @@ EXPORT_SYMBOL(ccw_free_request);
 
 /* pointer to list of allocated requests */
 static ccw_req_t *ccwreq_actual = NULL;
+static spinlock_t ccwchain_lock = SPIN_LOCK_UNLOCKED;
 
 /* pointer to debug area */
 static debug_info_t *debug_area = NULL;
@@ -56,12 +56,16 @@ static kmem_cache_t *ccw_cache[CCW_NUMBER_CACHES];
 static void 
 dechain ( ccw_req_t *request )
 {
+	long flags;
+
 	/* Sanity checks */
 	if ( request == NULL ) {
 		printk( KERN_WARNING PRINTK_HEADER
 			"Trying to deallocate NULL request\n");
 		return;
 	}
+
+	spin_lock_irqsave(&ccwchain_lock,flags);
 	/* first deallocate request from list of allocates requests */
 	if ( request -> int_next && request -> int_prev ) {
 		if ( request -> int_next == request -> int_prev ) {
@@ -75,6 +79,7 @@ dechain ( ccw_req_t *request )
 		}
 	} else if ( request -> int_next || request -> int_prev ) {
 	}
+	spin_unlock_irqrestore(&ccwchain_lock,flags);
 	return;
 }
 
@@ -90,13 +95,14 @@ ccw_alloc_request ( char *magic, int cplength, int datasize )
 	ccw_req_t * request = NULL;
 	int cachind = 0;
 	int size_needed = 0;
+	long flags;
 
 	debug_text_event ( debug_area, 1, "ALLC");
 	if ( magic ) {
 		debug_text_event ( debug_area, 1, magic);
 	}
-	debug_event ( debug_area, 1, cplength);
-	debug_event ( debug_area, 1, datasize);
+	debug_int_event ( debug_area, 1, cplength);
+	debug_int_event ( debug_area, 1, datasize);
 
 	/* Sanity checks */
 	if ( cplength == 0 ) {
@@ -140,7 +146,7 @@ ccw_alloc_request ( char *magic, int cplength, int datasize )
 	/* Try to fulfill the request from a cache */
 	while (  cachind < CCW_NUMBER_CACHES ) { /* Now try to get an entry from a cache above or equal to cachind */
 	  if ( ccw_cache[cachind] == NULL ){
-	    printk("cache=%p index %d\n",cachind,cachind);
+	    printk(KERN_WARNING PRINTK_HEADER "NULL cache found! cache=%p index %d\n",ccw_cache[cachind],cachind);
 	  }
 	  request = kmem_cache_alloc ( ccw_cache[cachind], GFP_ATOMIC );
 	  if ( request != NULL ) {
@@ -148,13 +154,13 @@ ccw_alloc_request ( char *magic, int cplength, int datasize )
 	    request->cache = ccw_cache[cachind];
 	    break;
 	  } else {
-	    printk (KERN_DEBUG PRINTK_HEADER "Proceeding to next cache");
+	    printk (KERN_DEBUG PRINTK_HEADER "Proceeding to next cache\n");
 	  }
  	  cachind++;
 	} 
 	/* if no success, fall back to kmalloc */
 	if ( request == NULL ) {
-	  printk (KERN_DEBUG PRINTK_HEADER "Falling back to kmalloc");
+	  printk (KERN_DEBUG PRINTK_HEADER "Falling back to kmalloc\n");
 		request = kmalloc ( sizeof(ccw_req_t), GFP_ATOMIC );
 		if ( request != NULL ) {
 			memset ( request, 0, sizeof(ccw_req_t));
@@ -162,7 +168,7 @@ ccw_alloc_request ( char *magic, int cplength, int datasize )
 	}
 	/* Initialize request */
 	if ( request == NULL ) {  
-		printk(KERN_WARNING PRINTK_HEADER "Couldn't allocate request");
+		printk(KERN_WARNING PRINTK_HEADER "Couldn't allocate request\n");
 	} else {
 		if ( request -> cache != NULL ) {
 			/* Three cases when coming from a cache */
@@ -215,6 +221,7 @@ ccw_alloc_request ( char *magic, int cplength, int datasize )
 		request -> cplength = cplength;
 		request -> datasize = datasize;
 		/* enqueue request to list of allocated requests */
+		spin_lock_irqsave(&ccwchain_lock,flags);
 		if ( ccwreq_actual == NULL ) { /* queue empty */
 			ccwreq_actual = request;
 			request->int_prev = ccwreq_actual;
@@ -225,8 +232,9 @@ ccw_alloc_request ( char *magic, int cplength, int datasize )
 			request->int_prev->int_next = request;
 			request->int_next->int_prev = request;
 		}
+		spin_unlock_irqrestore(&ccwchain_lock,flags);
 	}
-	debug_event ( debug_area, 1, (long)request);
+	debug_int_event ( debug_area, 1, (long)request);
 	return request;
 }
 
@@ -242,7 +250,7 @@ ccw_free_request ( ccw_req_t * request )
 	int slabsize;
 
 	debug_text_event ( debug_area, 1, "FREE");
-	debug_event ( debug_area, 1, (long)request);
+	debug_int_event ( debug_area, 1, (long)request);
 	/* Sanity checks */
 	if ( request == NULL ) {
 		printk(KERN_DEBUG PRINTK_HEADER"Trying to deallocate NULL request\n");
@@ -256,7 +264,7 @@ ccw_free_request ( ccw_req_t * request )
 		if ( request ->cpaddr ) {
 			kfree ( request -> cpaddr );
 		}
-		dechain ( request);
+		dechain (request);
 		kfree ( request );
 	} else {
 		/* Find which area has been allocated by kmalloc */
@@ -300,26 +308,28 @@ ccwcache_init (void)
 	int cachind;
 
 	/* allocate a debug area */
-	debug_area = debug_register( "ccwcache", 2, 4);
+	debug_area = debug_register( "ccwcache", 2, 4,4);
 	if ( ! debug_area ) {
 		printk ( KERN_WARNING PRINTK_HEADER"cannot allocate debug area\n" );
 	} else {
 		printk (KERN_DEBUG PRINTK_HEADER "debug area is 0x%8p\n", debug_area );
 	}
+        debug_register_view(debug_area,&debug_hex_view);
+        debug_register_view(debug_area,&debug_ebcdic_view);
 	debug_text_event ( debug_area, 0, "INIT");
 	
 	/* First allocate the kmem caches */
 	for ( cachind = 0; cachind < CCW_NUMBER_CACHES; cachind ++ ) {
 		int slabsize = SMALLEST_SLAB << cachind;
 		debug_text_event ( debug_area, 1, "allc");
-		debug_event ( debug_area, 1, slabsize);
+		debug_int_event ( debug_area, 1, slabsize);
 		sprintf ( ccw_cache_name[cachind], 
 			  "%s%d%c", ccw_name_template, slabsize, 0);
 		ccw_cache[cachind] = kmem_cache_create( ccw_cache_name[cachind], 
 							slabsize, 0,
 							SLAB_HWCACHE_ALIGN, 
 							NULL, NULL );
-		debug_event ( debug_area, 1, (long)ccw_cache[cachind]);
+		debug_int_event ( debug_area, 1, (long)ccw_cache[cachind]);
 		if ( ! ccw_cache [cachind] ) {
 			printk (KERN_WARNING PRINTK_HEADER "Allocation of CCW cache failed\n");
 		}
@@ -345,7 +355,7 @@ ccwcache_cleanup (void)
 			}
 		}
 	}
-	debug_unregister( debug_area ,"ccwcache");
+	debug_unregister( debug_area );
 }
 
 #ifdef MODULE

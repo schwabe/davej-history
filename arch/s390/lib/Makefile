@@ -11,7 +11,7 @@ else
 endif
 
 L_TARGET = lib.a
-L_OBJS = checksum.o delay.o memset.o strcmp.o strncpy.o
+L_OBJS = checksum.o delay.o memset.o strcmp.o strncpy.o uaccess.o
 
 include $(TOPDIR)/Rules.make
 

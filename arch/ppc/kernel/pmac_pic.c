@@ -10,6 +10,7 @@
 #include <asm/smp.h>
 #include <asm/prom.h>
 #include "pmac_pic.h"
+#include "open_pic.h"
 
 struct pmac_irq_hw {
         unsigned int    flag;
@@ -28,7 +29,8 @@ static volatile struct pmac_irq_hw *pmac_irq_hw[4] = {
 
 static int max_irqs;
 static int max_real_irqs;
-static int has_openpic = 0;
+
+extern u_int openpic_read(volatile u_int *addr);
 
 #define MAXCOUNT 10000000
 
@@ -106,18 +108,6 @@ static void __pmac pmac_unmask_irq(unsigned int irq_nr)
         pmac_set_irq_mask(irq_nr);
 }
 
-static void pmac_openpic_mask_irq(unsigned int irq_nr)
-{
-	openpic_disable_irq(irq_nr);
-}
-
-static void pmac_openpic_unmask_irq(unsigned int irq_nr)
-{
-	openpic_enable_irq(irq_nr);
-}
-
-
-
 struct hw_interrupt_type pmac_pic = {
         " PMAC-PIC ",
         NULL,
@@ -137,17 +127,6 @@ struct hw_interrupt_type gatwick_pic = {
 	pmac_unmask_irq,
 	pmac_mask_irq,
 	pmac_mask_and_ack_irq,
-	0
-};
-
-struct hw_interrupt_type pmac_open_pic = {
-	" OpenPIC  ",
-	NULL,
-	NULL,
-	NULL,
-	pmac_openpic_unmask_irq,
-	pmac_openpic_mask_irq,
-	NULL,/*pmac_openpic_mask_irq,*/
 	0
 };
 
@@ -179,6 +158,8 @@ pmac_do_IRQ(struct pt_regs *regs,
 	    int            cpu,
             int            isfake)
 {
+	extern void psurge_smp_message_recv(void);
+
 	int irq;
 	unsigned long bits = 0;
 
@@ -193,7 +174,7 @@ pmac_do_IRQ(struct pt_regs *regs,
                         if (xmon_2nd)
                                 xmon(regs);
 #endif
-                        pmac_smp_message_recv();
+                        psurge_smp_message_recv();
                         goto out;
                 }
                 /* could be here due to a do_fake_interrupt call but we don't
@@ -220,29 +201,6 @@ pmac_do_IRQ(struct pt_regs *regs,
                 }
         }
 #endif /* __SMP__ */
-
-	/* Yeah, I know, this could be a separate do_IRQ function */
-	if (has_openpic) {
-	    irq = openpic_irq(0);
-	    if (irq == OPENPIC_VEC_SPURIOUS) {
-                /* Spurious interrupts should never be ack'ed */
-                ppc_spurious_interrupts++;
-            } else {
-            	/* Can this happen ? (comes from CHRP code) */
-		if (irq < 0) {
-		    printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
-                       irq, regs->nip);
-		    ppc_spurious_interrupts++;
-		} else {
-		    if (!irq_desc[irq].level)
-	                openpic_eoi(0);
-		    ppc_irq_dispatch_handler( regs, irq );
-		    if (irq_desc[irq].level)
-	                openpic_eoi(0);
-		}
-            }
-            return;
-	}
 
         for (irq = max_real_irqs - 1; irq > 0; irq -= 32) {
                 int i = irq >> 5;
@@ -398,6 +356,8 @@ pmac_pic_init(void))
         struct device_node *irqctrler;
         volatile struct pmac_irq_hw *addr;
 	int second_irq;
+	u_int t;
+	int nr_irq;
 
 	/* We first try to detect Apple's new Core99 chipset, since mac-io
 	 * is quite different on those machines and contains an IBM MPIC2.
@@ -412,18 +372,38 @@ pmac_pic_init(void))
 		OpenPIC = (volatile struct OpenPIC *)
 			ioremap(irqctrler->addrs[0].address,
 			irqctrler->addrs[0].size);
-		for ( i = 0 ; i < NR_IRQS ; i++ ) {
-		    irq_desc[i].ctl = &pmac_open_pic;
+		/* from openpic.c code... --Troy
+		 * dynamically figure out how many interrupts 
+		 * We should really do something like panic
+		 * if nr_irq >= OPENPIC_VEC_IPI
+		 */
+		t = openpic_read(&OpenPIC->Global.Feature_Reporting0);
+                nr_irq = ((t & OPENPIC_FEATURE_LAST_SOURCE_MASK) >>
+                                OPENPIC_FEATURE_LAST_SOURCE_SHIFT) + 1;
+		
+		for ( i = 0 ; i < nr_irq ; i++ ) {
+		    irq_desc[i].ctl = &open_pic;
 		    irq_desc[i].level = 0;
 		}
+		ppc_md.do_IRQ = open_pic_do_IRQ;
+		open_pic.irq_offset = 0;
 		openpic_init(1);
-		has_openpic = 1;
 #ifdef CONFIG_XMON
 		pswitch = find_devices("programmer-switch");
 		if (pswitch && pswitch->n_intrs)
 			request_irq(pswitch->intrs[0].line, xmon_irq, 0,	
 				"NMI - XMON", 0);
 #endif	/* CONFIG_XMON */
+#ifdef __SMP__
+		request_irq(OPENPIC_VEC_IPI, openpic_ipi_action,
+			    0, "IPI0", 0);
+		request_irq(OPENPIC_VEC_IPI+1, openpic_ipi_action,
+			    0, "IPI1 (invalidate TLB)", 0);
+		request_irq(OPENPIC_VEC_IPI+2, openpic_ipi_action,
+			    0, "IPI2 (stop CPU)", 0);
+		request_irq(OPENPIC_VEC_IPI+3, openpic_ipi_action,
+			    0, "IPI3 (reschedule)", 0);
+#endif	/* __SMP__ */
 		return;
 	    }
 	    irqctrler = NULL;
@@ -507,17 +487,20 @@ pmac_pic_init(void))
  * sleep_save_intrs() saves the states of all interrupt enables
  * and disables all interupts except for the nominated one.
  * sleep_restore_intrs() restores the states of all interrupt enables.
+ * 
+ * TODO: Those should be sleep notifiers with high priority.
  */
 unsigned int sleep_save_mask[2];
 
 void
-sleep_save_intrs(int viaint)
+pmac_sleep_save_intrs(int viaint)
 {
 	sleep_save_mask[0] = ppc_cached_irq_mask[0];
 	sleep_save_mask[1] = ppc_cached_irq_mask[1];
 	ppc_cached_irq_mask[0] = 0;
 	ppc_cached_irq_mask[1] = 0;
-	set_bit(viaint, ppc_cached_irq_mask);
+	if (viaint > 0)
+		set_bit(viaint, ppc_cached_irq_mask);
 	out_le32(&pmac_irq_hw[0]->enable, ppc_cached_irq_mask[0]);
 	if (max_real_irqs > 32)
 		out_le32(&pmac_irq_hw[1]->enable, ppc_cached_irq_mask[1]);
@@ -526,9 +509,10 @@ sleep_save_intrs(int viaint)
 }
 
 void
-sleep_restore_intrs(void)
+pmac_sleep_restore_intrs(void)
 {
 	int i;
+
 
 	out_le32(&pmac_irq_hw[0]->enable, 0);
 	if (max_real_irqs > 32)

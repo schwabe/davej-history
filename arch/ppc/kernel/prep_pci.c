@@ -25,6 +25,7 @@
 #include <asm/machdep.h>
 
 #include "pci.h"
+#include "open_pic.h"
 
 #define MAX_DEVNR 22
 
@@ -41,8 +42,6 @@ void Powerplus_Map_Non0(struct pci_dev *);
 
 /* Used for Motorola to store system config register */
 static unsigned long	*ProcInfo;
-
-extern void chrp_do_IRQ(struct pt_regs *,int , int);
 
 /* Tables for known hardware */   
 
@@ -784,7 +783,7 @@ __initfunc(int raven_init(void))
 	OpenPIC_InitSenses = mvme2600_openpic_initsenses;
 	OpenPIC_NumInitSenses = sizeof(mvme2600_openpic_initsenses);
 
-	ppc_md.do_IRQ = chrp_do_IRQ;
+	ppc_md.do_IRQ = open_pic_do_IRQ;
 	
 	/* If raven is present on Motorola store the system config register
 	 * for later use.
@@ -1131,7 +1130,7 @@ int motopenpic_to_irq(int n)
        if (n & 0xF0) {
                return (n & 0x0F);
        } else {
-               return(openpic_to_irq(n));
+               return(n+open_pic.irq_offset);
        }
 }
 
@@ -1168,6 +1167,17 @@ struct pci_dev *dev = NULL;
 			short_reg = 0x0000;
 			pcibios_write_config_word(dev->bus->number, 
 					dev->devfn, 0x44, short_reg);
+		}
+	}
+	if ((dev = pci_find_device(PCI_VENDOR_ID_WINBOND,
+				   PCI_DEVICE_ID_WINBOND_82C105, dev))){
+		if (OpenPIC){
+			/* Disable LEGIRQ mode so PCI INTs are routed to
+			   the 8259 */
+			pci_write_config_dword(dev, 0x40, 0x10ff00a1);
+		} else {
+			/* Enable LEGIRQ for PCI INT -> 8259 IRQ routing */
+			pci_write_config_dword(dev, 0x40, 0x10ff08a1);
 		}
 	}
 }

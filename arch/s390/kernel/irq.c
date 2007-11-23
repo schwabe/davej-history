@@ -36,13 +36,13 @@
 #include <asm/delay.h>
 #include <asm/lowcore.h>
 
-unsigned long s390_init_IRQ(unsigned long);
-void s390_free_irq(unsigned int irq, void *dev_id);
-int  s390_request_irq( unsigned int   irq,
-                       void           (*handler)(int, void *, struct pt_regs *),
-                       unsigned long  irqflags,
-                       const char    *devname,
-                       void          *dev_id);
+unsigned long s390_init_IRQ   ( unsigned long);
+void          s390_free_irq   ( unsigned int irq, void *dev_id);
+int           s390_request_irq( unsigned int irq,
+                     void           (*handler)(int, void *, struct pt_regs *),
+                     unsigned long  irqflags,
+                     const char    *devname,
+                     void          *dev_id);
 
 atomic_t nmi_counter;
 
@@ -82,7 +82,7 @@ int get_irq_list(char *buf)
 
 		action = ioinfo[i]->irq_desc.action;
 		
-		if (!action)
+  		if (!action)
 			continue;
 
 		p += sprintf(p, "%3d: ",i);
@@ -90,8 +90,8 @@ int get_irq_list(char *buf)
 		p += sprintf(p, "%10u ", kstat_irqs(i));
 #else
 		for (j=0; j<smp_num_cpus; j++)
-			p += sprintf(p, "%10u ",
-				     kstat.irqs[cpu_logical_map(j)][i]);
+			p += sprintf( p, "%10u ",
+			              kstat.irqs[cpu_logical_map(j)][i]);
 #endif
 		p += sprintf(p, " %14s", ioinfo[i]->irq_desc.handler->typename);
 		p += sprintf(p, "  %s", action->name);
@@ -403,13 +403,16 @@ void enable_nop(int irq)
 
 __initfunc(unsigned long init_IRQ( unsigned long memory))
 {
-	return s390_init_IRQ( memory);
+	int result;
+
+	result=s390_init_IRQ(memory);
+	return result;
 }
 
 
 void free_irq(unsigned int irq, void *dev_id)
 {
-	s390_free_irq( irq, dev_id);
+   s390_free_irq( irq, dev_id);
 }
 
 
@@ -419,7 +422,7 @@ int request_irq( unsigned int   irq,
                  const char    *devname,
                  void          *dev_id)
 {
-	return( s390_request_irq( irq, handler, irqflags, devname, dev_id ) );
+   return( s390_request_irq( irq, handler, irqflags, devname, dev_id ) );
 
 }
 

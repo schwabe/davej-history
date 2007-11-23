@@ -528,21 +528,21 @@ startup:basr  %r13,0                     # get base
         lpsw  .Lentry-.LPG1(13)         # jump to _stext in primary-space,
                                         # virtual and never return ...
         .align 8
-.Lentry:.long  0x04080000,0x80000000 + _stext
+.Lentry:.long  0x00080000,0x80000000 + _stext
 .Lctl:  .long  0x04b50002               # cr0: various things
-        .long  .Lpgd+0x7f               # cr1: primary space segment table
+        .long  0                        # cr1: primary space segment table
         .long  0                        # cr2: access register translation
         .long  0                        # cr3: instruction authorization
         .long  0                        # cr4: instruction authorization
         .long  0                        # cr5:  various things
         .long  0                        # cr6:  I/O interrupts
-        .long  .Lpgd+0x7f               # cr7:  secondary space segment table
+        .long  0                        # cr7:  secondary space segment table
         .long  0                        # cr8:  access registers translation
         .long  0                        # cr9:  tracing off
         .long  0                        # cr10: tracing off
         .long  0                        # cr11: tracing off
         .long  0                        # cr12: tracing off
-        .long  .Lpgd+0x7f               # cr13: home space segment table
+        .long  0                        # cr13: home space segment table
         .long  0xc0000000               # cr14: machine check handling off
         .long  0                        # cr15: linkage stack operations
 .Lpcmem:.long  0x00080000,0x80000000 + .Lchkmem
@@ -630,43 +630,4 @@ _stext:	basr  %r13,0                    # get base
 	    .align 8
 .Ldw:	    .long  0x000a0000,0x00000000
 
-#
-#        tempory segment-table at 0x11000
-#
-        .org   0x11000
-.Lpgd:  .long  .Lpt0+0x1f               # 00000000-000fffff
-        .long  .Lpt1+0x1f               # 00100000-001fffff
-        .long  .Lpt2+0x1f               # 00200000-002fffff
-        .long  .Lpt3+0x1f               # 00300000-003fffff
-        .fill  2044,4,0x20              # 00400000-7fffffff
-
-#
-#        tempory page-tables at 0x12000-0x15fff
-#
-        .macro  mktable from,to
-        .long   \from*0x10000
-        .long   \from*0x10000+0x1000
-        .long   \from*0x10000+0x2000
-        .long   \from*0x10000+0x3000
-        .long   \from*0x10000+0x4000
-        .long   \from*0x10000+0x5000
-        .long   \from*0x10000+0x6000
-        .long   \from*0x10000+0x7000
-        .long   \from*0x10000+0x8000
-        .long   \from*0x10000+0x9000
-        .long   \from*0x10000+0xa000
-        .long   \from*0x10000+0xb000
-        .long   \from*0x10000+0xc000
-        .long   \from*0x10000+0xd000
-        .long   \from*0x10000+0xe000
-        .long   \from*0x10000+0xf000
-        .if     \to-\from
-        mktable "(\from+1)",\to
-        .endif
-        .endm
-
-.Lpt0:  mktable 0,15
-.Lpt1:  mktable 16,31
-.Lpt2:  mktable 32,47
-.Lpt3:  mktable 48,63
 

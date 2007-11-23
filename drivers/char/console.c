@@ -575,10 +575,12 @@ void redraw_screen(int new_console, int is_switch)
 	}
 
 	if (redraw) {
+		int update;
+		
 		set_origin(currcons);
+		update = sw->con_switch(vc_cons[currcons].d);
 		set_palette(currcons);
-		if (sw->con_switch(vc_cons[currcons].d) && vcmode != KD_GRAPHICS)
-			/* Update the screen contents */
+		if (update && vcmode != KD_GRAPHICS)
 			do_update_region(currcons, origin, screenbuf_size/2);
 	}
 	set_cursor(currcons);

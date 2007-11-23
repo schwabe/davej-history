@@ -43,7 +43,7 @@ SUB_DIRS += video
 MOD_SUB_DIRS += video
 endif
 
-ifdef CONFIG_PPC
+ifdef CONFIG_POWERMAC
 SUB_DIRS += macintosh
 MOD_SUB_DIRS += macintosh
 endif

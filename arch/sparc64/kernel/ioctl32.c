@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.62.2.16 2000/09/05 00:10:54 davem Exp $
+/* $Id: ioctl32.c,v 1.62.2.17 2000/11/08 09:43:04 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -2793,6 +2793,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case ENVCTRL_RD_ETHERNET_TEMPERATURE:
 	case ENVCTRL_RD_MTHRBD_TEMPERATURE:
 	case ENVCTRL_RD_CPU_VOLTAGE:
+	case ENVCTRL_RD_GLOBALADDRESS:
 	case D7SIOCWR:
 	/* case D7SIOCRD: Same value as ENVCTRL_RD_VOLTAGE_STATUS */
 	case D7SIOCTM:

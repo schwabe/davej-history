@@ -191,7 +191,7 @@ do {                                                         \
         return (type) (res);                                 \
 } while (0)
 
-#define _svc_clobber "cc", "memory"
+#define _svc_clobber "2", "cc", "memory"
 
 #define _syscall0(type,name)                                 \
 type name(void) {                                            \

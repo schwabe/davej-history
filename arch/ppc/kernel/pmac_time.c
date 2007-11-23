@@ -53,7 +53,7 @@
 extern struct timezone sys_tz;
 
 __init
-void pmac_time_init(void)
+long pmac_time_init(void)
 {
 	s32 delta = 0;
 	int dst;
@@ -66,16 +66,13 @@ void pmac_time_init(void)
 	dst = ((pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0x8) & 0x80) != 0);
 	printk("GMT Delta read from XPRAM: %d minutes, DST: %s\n", delta/60,
 		dst ? "on" : "off");
-	sys_tz.tz_minuteswest = -delta/60;
-	/* I _suppose_ this is 0:off, 1:on */
-	sys_tz.tz_dsttime = dst;
+	return -delta;
 }
 
 __pmac
 unsigned long pmac_get_rtc_time(void)
 {
 	struct adb_request req;
-	int offset = sys_tz.tz_minuteswest * 60;
 
 	/* Get the time from the RTC */
 	if (adb_controller == 0)
@@ -92,7 +89,7 @@ unsigned long pmac_get_rtc_time(void)
 			printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
 			       req.reply_len);
 		return (req.reply[3] << 24) + (req.reply[4] << 16)
-			+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET + offset;
+			+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET;
 	case ADB_VIAPMU:
 		if (pmu_request(&req, NULL, 1, PMU_READ_RTC) < 0) {
 			printk("pmac_read_rtc_time: pmu_request failed\n");
@@ -104,7 +101,7 @@ unsigned long pmac_get_rtc_time(void)
 			printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
 			       req.reply_len);
 		return (req.reply[1] << 24) + (req.reply[2] << 16)
-			+ (req.reply[3] << 8) + req.reply[4] - RTC_OFFSET + offset;
+			+ (req.reply[3] << 8) + req.reply[4] - RTC_OFFSET;
 	default:
 		return 0;
 	}
@@ -115,7 +112,7 @@ int pmac_set_rtc_time(unsigned long nowtime)
 	struct adb_request req;
 	int dst, delta;
 
-	nowtime += RTC_OFFSET - sys_tz.tz_minuteswest * 60;
+	nowtime += RTC_OFFSET;
 
 	/* Set the time in the RTC */
 	if (adb_controller == 0)
@@ -146,15 +143,6 @@ int pmac_set_rtc_time(unsigned long nowtime)
 	default:
 		return 0;
 	}
-
-	/* write the timezone offset back into the xpram */
-	delta = sys_tz.tz_minuteswest * -60;
-	pmac_xpram_write(PMAC_XPRAM_MACHINE_LOC + 0x9, delta >> 16);
-	pmac_xpram_write(PMAC_XPRAM_MACHINE_LOC + 0xa, delta >> 8);
-	pmac_xpram_write(PMAC_XPRAM_MACHINE_LOC + 0xb, delta);
-	dst = pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 8);
-	dst = sys_tz.tz_dsttime? (dst | 0x80): (dst & ~0x80);
-	pmac_xpram_write(PMAC_XPRAM_MACHINE_LOC + 8, dst);
 
 	return 1;
 }

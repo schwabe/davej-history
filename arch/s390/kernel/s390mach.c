@@ -4,7 +4,7 @@
  *            currently only channel-reports are supported
  *
  *  S390 version
- *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Ingo Adlung (adlung@de.ibm.com)
  */
 
@@ -20,16 +20,16 @@
 #include <asm/s390dyn.h>
 #include <asm/s390mach.h>
 
-#define S390_MACHCHK_DEBUG
+#undef S390_MACHCHK_DEBUG
 
-static int __init  s390_machine_check_handler( void * parm );
+static int         s390_machine_check_handler( void * parm );
 static void        s390_enqueue_mchchk( mache_t *mchchk );
 static mache_t    *s390_dequeue_mchchk( void );
 static void        s390_enqueue_free_mchchk( mache_t *mchchk );
 static mache_t    *s390_dequeue_free_mchchk( void );
 static int         s390_collect_crw_info( void );
 
-static struct semaphore   s_sem[2];
+static struct semaphore   s_sem;
 
 static mache_t           *mchchk_queue_head = NULL;
 static mache_t           *mchchk_queue_tail = NULL;
@@ -58,8 +58,7 @@ void s390_init_machine_check( void )
 	crwe_t  *pcrwe;	 /* CRW buffer element pointer */
 	mache_t *pmache;   /* machine check element pointer */
 
-	init_MUTEX_LOCKED( &s_sem[0] );
-	init_MUTEX_LOCKED( &s_sem[1] );
+	init_MUTEX_LOCKED( &s_sem );
 
 	pcrwe = kmalloc( MAX_CRW_PENDING * sizeof( crwe_t), GFP_KERNEL);
 
@@ -69,7 +68,7 @@ void s390_init_machine_check( void )
 
 		crw_buffer_anchor = pcrwe;
 
-		for ( i=0; i < MAX_CRW_PENDING; i++)
+		for ( i=0; i < MAX_CRW_PENDING-1; i++)
 		{
 			pcrwe->crwe_next = (crwe_t *)((unsigned long)pcrwe + sizeof(crwe_t));
    		pcrwe            = pcrwe->crwe_next;
@@ -108,16 +107,7 @@ void s390_init_machine_check( void )
 	printk( "init_mach : starting machine check handler\n");
 #endif	
 
-	kernel_thread( s390_machine_check_handler, s_sem, 0);
-
-	/*
-	 * wait for the machine check handler to be ready
-	 */
-#ifdef S390_MACHCHK_DEBUG
-	printk( "init_mach : waiting for machine check handler coming up ... \n");
-#endif	
-
-	down( &s_sem[0]);
+	kernel_thread( s390_machine_check_handler, &s_sem, 0);
 
 	ctl_clear_bit( 14, 25 );  // disable damage MCH 	
 #if 1
@@ -145,10 +135,10 @@ void s390_init_machine_check( void )
  * mchine check pre-processor, collecting the machine check info,
  *  queueing it and posting the machine check handler for processing.
  */
-void __init s390_do_machine_check( void )
+void        s390_do_machine_check( void )
 {
 	int      crw_count;
-   mcic_t   mcic;
+	mcic_t   mcic;
 
 #ifdef S390_MACHCHK_DEBUG
 	printk( "s390_do_machine_check : starting ...\n");
@@ -164,7 +154,7 @@ void __init s390_do_machine_check( void )
 
 		if ( crw_count )
 		{
-			up( &s_sem[1] );
+			up( &s_sem );
 
 		} /* endif */
 
@@ -183,7 +173,7 @@ void __init s390_do_machine_check( void )
  * machine check handler, dequeueing machine check entries
  *  and processing them
  */
-static int __init s390_machine_check_handler( void *parm)
+static int        s390_machine_check_handler( void *parm)
 {
 	struct semaphore *sem = parm;
 	int               flags;
@@ -191,11 +181,12 @@ static int __init s390_machine_check_handler( void *parm)
 
 	int               found = 0;
 
-#ifdef S390_MACHCHK_DEBUG
-	printk( "mach_handler : up\n");
-#endif	
+	/* set name to something sensible */
+        strncpy(current->comm,"kmcheck",15);
+        current->comm[15]=0;
 
-	up( &sem[0] );
+        /* block all signals */
+        sigfillset(&current->blocked);
 
 #ifdef S390_MACHCHK_DEBUG
 	printk( "mach_handler : ready\n");
@@ -207,14 +198,17 @@ static int __init s390_machine_check_handler( void *parm)
 		printk( "mach_handler : waiting for wakeup\n");
 #endif	
 
-		down_interruptible( &sem[1] );
+		down_interruptible( sem );
 
 #ifdef S390_MACHCHK_DEBUG
 		printk( "\nmach_handler : wakeup ... \n");
 #endif	
+		found = 0; /* init ... */
 
 		__save_flags( flags );
 		__cli();
+
+		do {
 
 		pmache = s390_dequeue_mchchk();
 
@@ -256,18 +250,19 @@ static int __init s390_machine_check_handler( void *parm)
 		}
 		else
 		{
-			found = 0;
 
 			// unconditional surrender ...
 #ifdef S390_MACHCHK_DEBUG
-			printk( "mach_handler : terminated \n");
+			printk( "mach_handler : nothing to do, sleeping\n");
 #endif	
 
 		} /* endif */	
 
+		} while ( pmache );
+
 		__restore_flags( flags );
 
-	} while ( found );
+	} while ( 1 );
 
 	return( 0);
 }

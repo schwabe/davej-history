@@ -251,6 +251,7 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
         unsigned long tmp;
         unsigned long address=0;
         unsigned long pgdir_k = (__pa(swapper_pg_dir) & PAGE_MASK) | _KERNSEG_TABLE;
+        static const int ssm_mask = 0x04000000L;
 
 	/* unmap whole virtual address space */
 
@@ -295,7 +296,9 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
         /* enable virtual mapping in kernel mode */
         __asm__ __volatile__("    LCTL  1,1,%0\n"
                              "    LCTL  7,7,%0\n"
-                             "    LCTL  13,13,%0" : :"m" (pgdir_k));
+                             "    LCTL  13,13,%0\n"
+                             "    SSM   %1"
+                             : : "m" (pgdir_k), "m" (ssm_mask));
 
         local_flush_tlb();
 

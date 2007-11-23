@@ -89,7 +89,7 @@ struct termio {
         get_user(tmp, &(termio)->c_lflag); \
         (termios)->c_lflag = (0xffff0000 & ((termios)->c_lflag)) | tmp; \
         get_user((termios)->c_line, &(termio)->c_line); \
-	copy_from_user((termios)->c_cc, (termio)->c_cc, NCC); \
+        copy_from_user((termios)->c_cc, (termio)->c_cc, NCC); \
 })
 
 /*

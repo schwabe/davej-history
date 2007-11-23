@@ -107,6 +107,7 @@ enum
 	KERN_SHMALL=41,		/* int: maximum size of shared memory */
 	KERN_SPARC_STOP_A=44,	/* int: Sparc Stop-A enable */
 	KERN_HOTPLUG=49,	/* string: path to hotplug policy agent */
+	KERN_IEEE_EMULATION_WARNINGS=50 /* int: unimplemented ieee instructions */
 };
 
 
@@ -433,7 +434,8 @@ enum
 /* CTL_DEV names: */
 enum {
 	DEV_CDROM=1,
-	DEV_HWMON=2
+	DEV_HWMON=2,
+	DEV_MAC_HID=3
 };
 
 /* /proc/sys/dev/cdrom */
@@ -444,6 +446,16 @@ enum {
 	DEV_CDROM_DEBUG=4,
 	DEV_CDROM_LOCK=5,
 	DEV_CDROM_CHECK_MEDIA=6
+};
+
+/* /proc/sys/dev/mac_hid */
+enum {
+	DEV_MAC_HID_KEYBOARD_SENDS_LINUX_KEYCODES=1,
+	DEV_MAC_HID_KEYBOARD_LOCK_KEYCODES=2,
+	DEV_MAC_HID_MOUSE_BUTTON_EMULATION=3,
+	DEV_MAC_HID_MOUSE_BUTTON2_KEYCODE=4,
+	DEV_MAC_HID_MOUSE_BUTTON3_KEYCODE=5,
+	DEV_MAC_HID_ADB_MOUSE_SENDS_KEYCODES=6
 };
 
 #ifdef __KERNEL__

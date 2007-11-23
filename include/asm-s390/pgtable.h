@@ -33,7 +33,7 @@
 #define flush_cache_page(vma, vmaddr)           do { } while (0)
 #define flush_page_to_ram(page)                 do { } while (0)
 #define flush_icache_range(start, end)          do { } while (0)
-#define flush_dcache_page(page)			do { } while (0)
+#define flush_dcache_page(page)                 do { } while (0)
 
 /*
  * TLB flushing:
@@ -80,7 +80,7 @@ static inline void flush_tlb_mm(struct mm_struct *mm)
 }
 
 #if 0 /* Arggh, ipte doesn't work correctly !! */
-static inline void flush_tlb_page(struct vm_area_struct *vma,
+static inline void flush_tlb_page(struct vm_area_struct * vma,
         unsigned long va)
 {
         __flush_tlb_one(vma->vm_mm,va);
@@ -304,7 +304,7 @@ static inline void flush_tlb_range(struct mm_struct * mm,
  * The Kernel segment-tables includes the User segment-table
  */
 
-#define _SEGMENT_TABLE  (_USER_SEG_TABLE_LEN|0x80000000)
+#define _SEGMENT_TABLE  (_USER_SEG_TABLE_LEN|0x80000000|0x100)
 #define _KERNSEG_TABLE  (_KERNEL_SEG_TABLE_LEN)
 
 /*
@@ -397,7 +397,7 @@ extern pte_t * __bad_pagetable(void);
 
 #define SET_PAGE_DIR(tsk,pgdir)                                                 \
 do {                                                                            \
-        unsigned long __pgdir = (__pa(pgdir) & PAGE_MASK ) | _SEGMENT_TABLE; \
+        unsigned long __pgdir = (__pa(pgdir) & PAGE_MASK ) | _SEGMENT_TABLE;  \
         (tsk)->tss.user_seg = __pgdir;                                        \
         if ((tsk) == current) {                                               \
                 __asm__ __volatile__("lctl  7,7,%0": :"m" (__pgdir));         \

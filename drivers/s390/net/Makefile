@@ -7,6 +7,10 @@ M_OBJS   :=
 
 ifeq ($(CONFIG_CTC),y)
   O_OBJS += ctc.o
+else
+  ifeq ($(CONFIG_CTC),m)
+  M_OBJS += ctc.o
+  endif
 endif
 
 ifeq ($(CONFIG_IUCV),y)

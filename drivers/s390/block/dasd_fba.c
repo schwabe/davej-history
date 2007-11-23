@@ -18,6 +18,7 @@
 #include <asm/ebcdic.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/s390dyn.h>
 
 #include "dasd.h"
 #include "dasd_fba.h"
@@ -39,6 +40,20 @@ typedef struct
 dasd_fba_private_t {
         dasd_fba_characteristics_t rdc_data;
 } dasd_fba_private_t;
+
+static
+devreg_t dasd_fba_known_devices[] = {
+        {
+                ci : { hc: { ctype: 0x6310, dtype: 0x9336 } },
+                flag: DEVREG_MATCH_CU_TYPE | DEVREG_MATCH_DEV_TYPE,
+                oper_func: dasd_oper_handler
+        },
+        {
+                ci : { hc: { ctype: 0x3880, dtype: 0x3370 } },
+                flag: DEVREG_MATCH_CU_TYPE | DEVREG_MATCH_DEV_TYPE,
+                oper_func: dasd_oper_handler
+        }
+};
 
 static inline void
 define_extent (ccw1_t * ccw, DE_fba_data_t * DE_data, int rw,
@@ -86,7 +101,7 @@ dasd_fba_id_check ( dev_info_t *info )
                         return 0;
         if ( info->sid_data.cu_type == 0x6310 )
                 if ( info->sid_data.dev_type == 0x9336 )
-	return 0;
+                        return 0;
         return -ENODEV;
 }
 
@@ -247,17 +262,17 @@ dasd_fba_build_cp_from_req (dasd_device_t *device, struct request *req)
 	/* count bhs to prevent errors, when bh smaller than block */
 	bhct = 0;
 	for (bh = req->bh; bh; bh = bh->b_reqnext) {
-		if (bh->b_size > byt_per_blk)
-			for (size = 0; size < bh->b_size; size += byt_per_blk)
+                if (bh->b_size > byt_per_blk)
+                        for (size = 0; size < bh->b_size; size += byt_per_blk)
 				bhct++;
 		else
 			bhct++;
 	}
-
+        
 	rw_cp = dasd_alloc_request (dasd_fba_discipline.name,
                                    2 + bhct,
-			     sizeof (DE_fba_data_t) +
-			     sizeof (LO_fba_data_t));
+                                   sizeof (DE_fba_data_t) +
+                                   sizeof (LO_fba_data_t));
 	if (!rw_cp) {
 		return NULL;
 	}
@@ -326,7 +341,7 @@ dasd_fba_dump_sense(struct dasd_device_t *device, ccw_req_t *req)
         int len;
         if ( page == NULL ) {
                 return NULL;
-}
+        }
 
         len = sprintf ( page, KERN_WARNING PRINTK_HEADER 
                         "device %04X on irq %d: I/O status report:\n",
@@ -352,15 +367,48 @@ dasd_discipline_t dasd_fba_discipline = {
         int_handler:                    dasd_int_handler            
 };
 
+
 int
 dasd_fba_init( void ) {
-	int rc = 0;
+        int rc = 0;
+	int i;
         printk ( KERN_INFO PRINTK_HEADER
                  "%s discipline initializing\n", dasd_fba_discipline.name);
         ASCEBC(dasd_fba_discipline.ebcname,4);
         dasd_discipline_enq(&dasd_fba_discipline);
+#ifdef CONFIG_DASD_DYNAMIC
+        for ( i=0; i<sizeof(dasd_fba_known_devices)/sizeof(devreg_t); i++) {
+                printk (KERN_INFO PRINTK_HEADER
+                        "We are interested in: CU %04X/%02x DEV: %04X/%02Xi\n",
+                        dasd_fba_known_devices[i].ci.hc.ctype,
+                        dasd_fba_known_devices[i].ci.hc.cmode,
+                        dasd_fba_known_devices[i].ci.hc.dtype,
+                        dasd_fba_known_devices[i].ci.hc.dmode);
+                s390_device_register(&dasd_fba_known_devices[i]);
+        }
+#endif /* CONFIG_DASD_DYNAMIC */
+        return rc;
+}
 
-	return rc;
+void
+dasd_fba_cleanup( void ) {
+        int rc = 0;
+	int i;
+        printk ( KERN_INFO PRINTK_HEADER
+                 "%s discipline cleaning up\n", dasd_fba_discipline.name);
+#ifdef CONFIG_DASD_DYNAMIC
+        for ( i=0; i<sizeof(dasd_fba_known_devices)/sizeof(devreg_t); i++) {
+                printk (KERN_INFO PRINTK_HEADER
+                        "We are interested in: CU %04X/%02x DEV: %04X/%02Xi\n",
+                        dasd_fba_known_devices[i].ci.hc.ctype,
+                        dasd_fba_known_devices[i].ci.hc.cmode,
+                        dasd_fba_known_devices[i].ci.hc.dtype,
+                        dasd_fba_known_devices[i].ci.hc.dmode);
+                s390_device_register(&dasd_fba_known_devices[i]);
+        }
+#endif /* CONFIG_DASD_DYNAMIC */
+        dasd_discipline_deq(&dasd_fba_discipline);
+        return rc;
 }
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

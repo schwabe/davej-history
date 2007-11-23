@@ -32,13 +32,6 @@ extern void xmon(struct pt_regs *excp);
 	__asm__ __volatile__ ("mfmsr %0" : "=r" ((flags)) : : "memory"); })
 #define __save_and_cli(flags)	({__save_flags(flags);__cli();})
 
-/* Data cache block flush - write out the cache line containing the
-   specified address and then invalidate it in the cache. */
-extern __inline__ void dcbf(void *line)
-{
-	asm("dcbf %0,%1; sync" : : "r" (line), "r" (0));
-}
-
 extern __inline__ void __restore_flags(unsigned long flags)
 {
         extern atomic_t ppc_n_lost_interrupts;
@@ -67,6 +60,10 @@ extern void poweroff_now(void);
 extern int _get_PVR(void);
 extern long _get_L2CR(void);
 extern void _set_L2CR(unsigned long);
+extern long _get_HID0(void);
+extern void _set_HID0(unsigned long);
+extern long _get_ICTC(void);
+extern void _set_ICTC(unsigned long);
 extern void via_cuda_init(void);
 extern void pmac_nvram_init(void);
 extern void read_rtc_time(void);

@@ -4165,7 +4165,7 @@ get_hw_addr(struct device *dev)
     /* If possible, try to fix a broken card - SMC only so far */
     srom_repair(dev, broken);
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_POWERMAC
     /* 
     ** If the address starts with 00 a0, we have to bit-reverse
     ** each byte of the address.
@@ -4178,7 +4178,7 @@ get_hw_addr(struct device *dev)
 	    dev->dev_addr[i] = ((x & 0x55) << 1) + ((x & 0xaa) >> 1);
 	}
     }
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_POWERMAC */
 
     /* Test for a bad enet address */
     status = test_bad_enet(dev, status);

@@ -233,7 +233,7 @@ void print_bits(unsigned int val, struct bits *bits)
 	printk("[");
 	for (; bits->bit != 0; ++bits) {
 		if (val & bits->bit) {
-			printk("%s", bits->name);
+			printk("%s%s", sep, bits->name);
 			sep = ", ";
 		}
 	}

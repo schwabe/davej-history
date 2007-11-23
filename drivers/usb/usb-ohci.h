@@ -410,6 +410,7 @@ typedef struct ohci {
 	struct usb_bus * bus;    
 	struct usb_device * dev[128];
 	struct virt_root_hub rh;
+	struct pci_dev *pci_dev;
 } ohci_t;
 
 

@@ -6,6 +6,12 @@
 
  * History of changes (starts July 2000)
  * 07/11/00 Enabled rotational position sensing
+ * 07/14/00 Reorganized the format process for better ERP
+ * 07/20/00 added experimental support for 2105 control unit (ESS)
+ * 07/24/00 increased expiration time and added the missing zero
+ * 08/07/00 added some bits to define_extent for ESS support
+ * 10/26/00 fixed ITPMPL020144ASC (problems when accesing a device formatted by VIF)
+ * 10/30/00 fixed ITPMPL010263EPA (erronoeous timeout messages)
  */
 
 #include <linux/stddef.h>
@@ -21,6 +27,7 @@
 #include <asm/ebcdic.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/s390dyn.h>
 
 #include "dasd.h"
 #include "dasd_eckd.h"
@@ -32,15 +39,15 @@
 #define PRINTK_HEADER DASD_NAME"(eckd):"
 
 #define ECKD_C0(i) (i->home_bytes)
-#define ECKD_F(i) (i -> formula)
+ #define ECKD_F(i) (i->formula)
 #define ECKD_F1(i) (ECKD_F(i)==0x01?(i->factors.f_0x01.f1):(i->factors.f_0x02.f1))
 #define ECKD_F2(i) (ECKD_F(i)==0x01?(i->factors.f_0x01.f2):(i->factors.f_0x02.f2))
 #define ECKD_F3(i) (ECKD_F(i)==0x01?(i->factors.f_0x01.f3):(i->factors.f_0x02.f3))
 #define ECKD_F4(i) (ECKD_F(i)==0x02?(i->factors.f_0x02.f4):0)
 #define ECKD_F5(i) (ECKD_F(i)==0x02?(i->factors.f_0x02.f5):0)
-#define ECKD_F6(i) (i -> factor6)
-#define ECKD_F7(i) (i -> factor7)
-#define ECKD_F8(i) (i -> factor8)
+#define ECKD_F6(i) (i->factor6)
+#define ECKD_F7(i) (i->factor7)
+#define ECKD_F8(i) (i->factor8)
 
 #define DASD_ECKD_CCW_WRITE 0x05
 #define DASD_ECKD_CCW_READ 0x06
@@ -66,6 +73,25 @@ dasd_eckd_private_t {
         dasd_eckd_confdata_t conf_data;
         eckd_count_t count_area;
 } dasd_eckd_private_t;
+
+static
+devreg_t dasd_eckd_known_devices[] = {
+	{
+		ci : { hc: { ctype: 0x3990, dtype: 0x3390 } }, 
+		flag: DEVREG_MATCH_CU_TYPE | DEVREG_MATCH_DEV_TYPE,
+		oper_func: dasd_oper_handler
+	},
+        {
+                ci : { hc: { ctype: 0x3990, dtype: 0x3380 } },
+                flag: DEVREG_MATCH_CU_TYPE | DEVREG_MATCH_DEV_TYPE,
+                oper_func: dasd_oper_handler
+        },
+        {
+                ci : { hc: { ctype: 0x9343, dtype: 0x9345 } },
+                flag: DEVREG_MATCH_CU_TYPE | DEVREG_MATCH_DEV_TYPE,
+                oper_func: dasd_oper_handler
+        }
+};
 
 static inline unsigned int
 round_up_multiple (unsigned int no, unsigned int mult)
@@ -133,15 +159,15 @@ recs_per_track (dasd_eckd_characteristics_t * rdc,
 {
 	int rpt = 0;
 	int dn;
-        switch ( rdc -> dev_type ) {
-	case 0x3380: 
+	switch (rdc->dev_type) {
+	case 0x3380:
 		if (kl)
 			return 1499 / (15 +
 				       7 + ceil_quot (kl + 12, 32) +
 				       ceil_quot (dl + 12, 32));
 		else
 			return 1499 / (15 + ceil_quot (dl + 12, 32));
-	case 0x3390: 
+	case 0x3390:
 		dn = ceil_quot (dl + 6, 232) + 1;
 		if (kl) {
 			int kn = ceil_quot (kl + 6, 232) + 1;
@@ -151,16 +177,16 @@ recs_per_track (dasd_eckd_characteristics_t * rdc,
 		} else
 			return 1729 / (10 +
 				       9 + ceil_quot (dl + 6 * dn, 34));
-	case 0x9345: 
-	        dn = ceil_quot (dl + 6, 232) + 1;
-                if (kl) {
-                        int kn = ceil_quot (kl + 6, 232) + 1;
-                        return 1420 / (18 +
-                                       7 + ceil_quot (kl + 6 * kn, 34) +
-                                       ceil_quot (dl + 6 * dn, 34));
-                } else
-                        return 1420 / (18 +
-                                       7 + ceil_quot (dl + 6 * dn, 34));
+	case 0x9345:
+		dn = ceil_quot (dl + 6, 232) + 1;
+		if (kl) {
+			int kn = ceil_quot (kl + 6, 232) + 1;
+			return 1420 / (18 +
+				       7 + ceil_quot (kl + 6 * kn, 34) +
+				       ceil_quot (dl + 6 * dn, 34));
+		} else
+			return 1420 / (18 +
+				       7 + ceil_quot (dl + 6 * dn, 34));
 	}
 	return rpt;
 }
@@ -186,7 +212,7 @@ define_extent (ccw1_t * de_ccw,
 	memset (de_ccw, 0, sizeof (ccw1_t));
 	de_ccw->cmd_code = DASD_ECKD_CCW_DEFINE_EXTENT;
 	de_ccw->count = 16;
-	de_ccw->cda = (void *) __pa (data);
+	de_ccw->cda = (__u32) __pa (data);
 
 	memset (data, 0, sizeof (DE_eckd_data_t));
 	switch (cmd) {
@@ -198,12 +224,12 @@ define_extent (ccw1_t * de_ccw,
 	case DASD_ECKD_CCW_READ_CKD_MT:
 	case DASD_ECKD_CCW_READ_COUNT:
 		data->mask.perm = 0x1;
-                data->attributes.operation = 0x3; /* enable seq. caching */
+		data->attributes.operation = 0x3;	/* enable seq. caching */
 		break;
 	case DASD_ECKD_CCW_WRITE:
 	case DASD_ECKD_CCW_WRITE_MT:
 		data->mask.perm = 0x02;
-                data->attributes.operation = 0x3; /* enable seq. caching */
+		data->attributes.operation = 0x3;	/* enable seq. caching */
 		break;
 	case DASD_ECKD_CCW_WRITE_CKD:
 	case DASD_ECKD_CCW_WRITE_CKD_MT:
@@ -220,6 +246,9 @@ define_extent (ccw1_t * de_ccw,
 		break;
 	}
 	data->attributes.mode = 0x3;
+	if ( private -> rdc_data.cu_type == 0x2105 ) {
+		data -> reserved |= 0x40;
+	}
 	data->beg_ext.cyl = beg.cyl;
 	data->beg_ext.head = beg.head;
 	data->end_ext.cyl = end.cyl;
@@ -233,19 +262,19 @@ locate_record (ccw1_t * lo_ccw,
 	       int rec_on_trk,
 	       int no_rec,
 	       int cmd,
-	       dasd_device_t * device)
+	       dasd_device_t * device,
+               int reclen)
 {
         dasd_eckd_private_t *private = (dasd_eckd_private_t *)device->private;
 	ch_t geo = {private->rdc_data.no_cyl,
                     private->rdc_data.trk_per_cyl};
 	ch_t seek ={trk / (geo.head), trk % (geo.head)};
-	int reclen = device->sizes.bp_block;
         int sector;
 
 	memset (lo_ccw, 0, sizeof (ccw1_t));
 	lo_ccw->cmd_code = DASD_ECKD_CCW_LOCATE_RECORD;
 	lo_ccw->count = 16;
-	lo_ccw->cda = (void *) __pa (data);
+	lo_ccw->cda = (__u32) __pa (data);
 
 	memset (data, 0, sizeof (LO_eckd_data_t));
 	switch (cmd) {
@@ -293,7 +322,7 @@ locate_record (ccw1_t * lo_ccw,
 		break;
 	case DASD_ECKD_CCW_READ_COUNT:
 		data->operation.operation = 0x06;
-                break;
+		break;
 	default:
 		INTERNAL_ERROR ("unknown opcode 0x%x\n", cmd);
 	}
@@ -325,17 +354,19 @@ locate_record (ccw1_t * lo_ccw,
 static int 
 dasd_eckd_id_check ( dev_info_t *info )
 {
-        if ( info->sid_data.cu_type == 0x3990 )
+        if ( info->sid_data.cu_type == 0x3990 ||
+	     info->sid_data.cu_type == 0x2105 )
                 if ( info->sid_data.dev_type == 0x3390 )
                         return 0;
-        if ( info->sid_data.cu_type == 0x3990 )
+        if ( info->sid_data.cu_type == 0x3990 ||
+	     info->sid_data.cu_type == 0x2105 )
                 if ( info->sid_data.dev_type == 0x3380 )
                         return 0;
         if ( info->sid_data.cu_type == 0x9343 )
                 if ( info->sid_data.dev_type == 0x9345 )
                         return 0;
         return -ENODEV;
-		}
+}
 
 static int
 dasd_eckd_check_characteristics (struct dasd_device_t *device)
@@ -366,7 +397,7 @@ dasd_eckd_check_characteristics (struct dasd_device_t *device)
                 printk ( KERN_WARNING PRINTK_HEADER
                          "Read device characteristics returned error %d\n",rc);
                 return rc;
-	}
+        }
 	printk ( KERN_INFO PRINTK_HEADER 
                  "%04X on sch %d: %04X/%02X(CU:%04X/%02X) Cyl:%d Head:%d Sec:%d\n",
                  device->devinfo.devno, device->devinfo.irq,
@@ -381,7 +412,7 @@ dasd_eckd_check_characteristics (struct dasd_device_t *device)
                 printk ( KERN_WARNING PRINTK_HEADER
                          "Read configuration data returned error %d\n",rc);
                 return rc;
-	}
+        }
         if ( conf_len != sizeof(dasd_eckd_confdata_t)) {
                 printk ( KERN_WARNING PRINTK_HEADER
                          "sizes of configuration data mismatch %d (read) vs %ld (expected)\n",
@@ -429,13 +460,14 @@ dasd_eckd_init_analysis (struct dasd_device_t *device)
 	define_extent (ccw, DE_data, 0, 0, DASD_ECKD_CCW_READ_COUNT, device);
 	ccw->flags = CCW_FLAG_CC;
 	ccw++;
-	locate_record (ccw, LO_data, 0, 1, 1, DASD_ECKD_CCW_READ_COUNT, device);
+	locate_record (ccw, LO_data, 0, 0, 1, DASD_ECKD_CCW_READ_COUNT, device,0);
 	ccw->flags = CCW_FLAG_CC;
 	ccw++;
 	ccw->cmd_code = DASD_ECKD_CCW_READ_COUNT;
 	ccw->count = 8;
-	ccw->cda = (void *) __pa (count_data);
+	ccw->cda = (__u32) __pa (count_data);
 	cqr->device = device;
+        cqr->retries = 0;
 	atomic_set (&cqr->status, CQR_STATUS_FILLED);
         
         return cqr;
@@ -511,10 +543,9 @@ dasd_eckd_fill_geometry(struct dasd_device_t *device, struct hd_geometry *geo)
         return rc;
 }
 
-static inline int
-dasd_eckd_format_track (dasd_device_t *device, int trk, int bs, int flags)
+static ccw_req_t *
+dasd_eckd_format_device (dasd_device_t *device, format_data_t *fdata)
 {
-	int rc = 0;
 	int i;
 	ccw_req_t *fcp = NULL;
 	DE_eckd_data_t *DE_data = NULL;
@@ -525,252 +556,177 @@ dasd_eckd_format_track (dasd_device_t *device, int trk, int bs, int flags)
 	ccw1_t *last_ccw = NULL;
         void * last_data = NULL;
         dasd_eckd_private_t *private = (dasd_eckd_private_t *)device->private;
-	int retries;
-
+        int trk = fdata -> start_unit;
+        int bs = fdata -> blksize == DASD_FORMAT_DEFAULT_BLOCKSIZE ? 4096 : fdata->blksize;
+        int flags = fdata -> intensity == DASD_FORMAT_DEFAULT_INTENSITY ? 0 : fdata -> intensity;
+        
 	int rpt = recs_per_track (&(private->rdc_data), 0, bs);
 	int cyl = trk / private->rdc_data.trk_per_cyl;
 	int head = trk % private->rdc_data.trk_per_cyl;
         int wrccws = rpt;
         int datasize = sizeof (DE_eckd_data_t) + sizeof (LO_eckd_data_t);
         
-        switch ( flags ) {
-        case 0x00:
-        case 0x01:
-        case 0x03:
-          break;
-        default:
-          return -EINVAL;
-        }
         
-        if ( flags & 0x1 ) {
-          wrccws++;
-          datasize += sizeof(eckd_count_t);
+        if ( ( (fdata -> stop_unit == DASD_FORMAT_DEFAULT_STOP_UNIT) &&
+               trk >= (private->rdc_data.no_cyl * private->rdc_data.trk_per_cyl ) ) ||
+             ( (fdata -> stop_unit != DASD_FORMAT_DEFAULT_STOP_UNIT) &&
+               trk > fdata->stop_unit ) ) {
+                printk (KERN_WARNING PRINTK_HEADER "Track %d reached...ending!\n",trk);
+                return NULL;
         }
-        if ( flags & 0x2 ) {
-          wrccws++;
-          datasize += sizeof(eckd_home_t);
-        }
-	fcp = ccw_alloc_request (dasd_eckd_discipline.name, 
-                                 wrccws + 2,
-                                 datasize+rpt*sizeof(eckd_count_t));
-	fcp->device = device;
-
-        last_data = fcp->data;
-	DE_data = (DE_eckd_data_t *) last_data;
-        last_data = (void*)(DE_data +1);
-	LO_data = (LO_eckd_data_t *) last_data;
-        last_data = (void*)(LO_data +1);
-        if ( flags & 0x2 ) {
-          ha_data = (eckd_home_t *) last_data;
-          last_data = (void*)(ha_data +1);
-        }
-        if ( flags & 0x1 ) {
-          r0_data = (eckd_count_t *) last_data;
-          last_data = (void*)(r0_data +1);
-        }
-	ct_data = (eckd_count_t *)last_data;
-
-	last_ccw = fcp->cpaddr;
-
-	switch (flags) {
-	case 0x03:
-		define_extent (last_ccw, DE_data, trk, trk,
-                               DASD_ECKD_CCW_WRITE_HOME_ADDRESS, device);
-		last_ccw->flags = CCW_FLAG_CC;
-		last_ccw++;
-		locate_record (last_ccw, LO_data, trk, 0, wrccws,
-			       DASD_ECKD_CCW_WRITE_HOME_ADDRESS, device);
-		last_ccw->flags = CCW_FLAG_CC;
-		last_ccw++;
-		break;
-	case 0x01:
-		define_extent (last_ccw, DE_data, trk, trk,
-			       DASD_ECKD_CCW_WRITE_RECORD_ZERO, device);
-		last_ccw->flags = CCW_FLAG_CC;
-		last_ccw++;
-		locate_record (last_ccw, LO_data, trk, 0, wrccws,
-			       DASD_ECKD_CCW_WRITE_RECORD_ZERO, device);
-		last_ccw->flags = CCW_FLAG_CC;
-		last_ccw++;
-		memset (r0_data, 0, sizeof (eckd_count_t));
-		break;
-	case 0x00:
-		define_extent (last_ccw, DE_data, trk, trk,
-			       DASD_ECKD_CCW_WRITE_CKD, device);
-		last_ccw->flags = CCW_FLAG_CC;
-		last_ccw++;
-		locate_record (last_ccw, LO_data, trk, 0, wrccws,
-			       DASD_ECKD_CCW_WRITE_CKD, device);
-                LO_data->length = bs;
-		last_ccw->flags = CCW_FLAG_CC;
-		last_ccw++;
-		break;
-	default:
-		PRINT_WARN ("Unknown format flags...%d\n", flags);
-		return -EINVAL;
-	}
-	if (flags & 0x02) {
-		PRINT_WARN ("Unsupported format flag...%d\n", flags);
-		return -EINVAL;
-	}
-	if (flags & 0x01) {	/* write record zero */
-		r0_data->cyl = cyl;
-		r0_data->head = head;
-		r0_data->record = 0;
-		r0_data->kl = 0;
-		r0_data->dl = 8;
-		last_ccw->cmd_code = DASD_ECKD_CCW_WRITE_RECORD_ZERO;
-		last_ccw->count = 8;
-		last_ccw->flags = CCW_FLAG_CC | CCW_FLAG_SLI;
-		last_ccw->cda = (void *) __pa (r0_data);
-		last_ccw++;
-	}
-	/* write remaining records */
-	for (i = 0; i < rpt; i++, last_ccw++) {
-		memset (ct_data + i, 0, sizeof (eckd_count_t));
-		(ct_data + i)->cyl = cyl;
-		(ct_data + i)->head = head;
-		(ct_data + i)->record = i + 1;
-		(ct_data + i)->kl = 0;
-		(ct_data + i)->dl = bs;
-		last_ccw->cmd_code = DASD_ECKD_CCW_WRITE_CKD;
-		last_ccw->flags = CCW_FLAG_CC | CCW_FLAG_SLI;
-		last_ccw->count = 8;
-		last_ccw->cda = (void *) __pa (ct_data + i);
-	}
-	(last_ccw - 1)->flags &= ~(CCW_FLAG_CC | CCW_FLAG_DC);
-	fcp->device = device;
-        do {
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
-                DECLARE_WAITQUEUE (wait,current);
-#else
-                struct wait_queue wait = {current, NULL};
-#endif /* LINUX_VERSION_CODE */
-                unsigned long flags;
-                int cs;
-
-                retries = 1;
-		s390irq_spin_lock_irqsave (device->devinfo.irq, flags);
-                atomic_set(&fcp->status,CQR_STATUS_QUEUED);
-                do {
-                        rc = dasd_eckd_discipline.start_IO (fcp);
-                } while ( rc && retries-- );
-                if ( rc && retries == 0 )
-                        break;
-#if !(LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
-		add_wait_queue (&device->wait_q, &wait);
-#endif /* LINUX_VERSION_CODE */
-		do {
-			current->state = TASK_INTERRUPTIBLE;
-			s390irq_spin_unlock_irqrestore (device->devinfo.irq, flags);
-                        schedule ();
-			s390irq_spin_lock_irqsave (device->devinfo.irq, flags);
-                        cs = atomic_read (&fcp->status);
-		} while ((cs != CQR_STATUS_DONE) && (cs != CQR_STATUS_ERROR));
-#if !(LINUX_VERSION_CODE > KERNEL_VERSION(2,3,98))
-		remove_wait_queue (&device->wait_q, &wait);
-#endif /* LINUX_VERSION_CODE */
-		s390irq_spin_unlock_irqrestore (device->devinfo.irq, flags);
-	} while ( (rc || (atomic_read(&fcp->status) != CQR_STATUS_DONE)) &&
-                 retries--);
-	if ( retries == 0 )
-                rc = -EIO;
-	ccw_free_request (fcp);
-	return rc;
-}
-
-static int
-dasd_eckd_format_device (struct dasd_device_t *device, struct format_data_t *fdata)
-{
-        int rc = 0;
-	int i;
-	format_data_t fd;
-        dasd_eckd_private_t *private = (dasd_eckd_private_t *)device->private;
-        int last_track =private->rdc_data.no_cyl*private->rdc_data.trk_per_cyl-1;
-        int intensity;
-        kdev_t kdev = device->kdev;
-        int nr_tracks, blocksize;
-
-	if (fdata==NULL) {
-		fd.start_unit = 0;
-		fd.stop_unit = last_track;
-		fd.blksize = 4096;
-	} else {
-		memcpy (&fd, fdata, sizeof (format_data_t));
-		if (fd.stop_unit == -1) {
-			fd.stop_unit = last_track;
-		}
-		if (fd.blksize == 0) {
-			fd.blksize = 4096;
-		}
-	}
-	if (fd.start_unit > fd.stop_unit) {
-		return -EINVAL;
-	}
-	if (fd.start_unit > last_track ) {
-		return -EINVAL;
-	}
-	if (fd.stop_unit > last_track ) {
-		return -EINVAL;
-	}
-        switch(fd.blksize) {
+        switch(bs) {
         case 512:
         case 1024:
         case 2048:
         case 4096:
                 break;
-        default:
-                return -EINVAL;
+        default: 
+                printk (KERN_WARNING PRINTK_HEADER "Invalid blocksize %d...terminating!\n",bs);
+                return NULL;
         }
-        fd.intensity = 0x0;
-        intensity = fd.intensity;
-        set_blocksize(kdev, fd.blksize);
-	printk (KERN_INFO PRINTK_HEADER
-                "Formatting device %04X from track %d to %d with bs %d\n",
-                device->devinfo.devno,fd.start_unit, fd.stop_unit, fd.blksize);
-        nr_tracks = fd.stop_unit-fd.start_unit+1;
-	for (i = 0; i <= nr_tracks; i++) {
-		/* print 20 messages per format cmd at all */
-                if ( i % (nr_tracks / 20) == 0 ) { 
-                        printk (KERN_INFO PRINTK_HEADER
-                                "Format %04X Cylinder: %d Track %d Intensity %d\n", 
-                                device->devinfo.devno,
-                                (i+fd.start_unit) / private->rdc_data.trk_per_cyl,
-                                (i+fd.start_unit) % private->rdc_data.trk_per_cyl,
-                                intensity);
+        switch ( flags ) {
+        case 0x00:
+        case 0x01:
+        case 0x03:
+        case 0x04: /* make track invalid */
+                break;
+        default:
+                printk (KERN_WARNING PRINTK_HEADER "Invalid flags 0x%x...terminating!\n",flags);
+                return NULL;
+        }
+
+        /* print status line */
+        if ( (private->rdc_data.no_cyl < 20          ) ?
+	     ( trk % private->rdc_data.no_cyl == 0   ) :
+             ( trk % private->rdc_data.no_cyl == 0 &&
+               (trk / private->rdc_data.no_cyl) % 
+	       (private->rdc_data.no_cyl / 20 )      )  ) {
+
+                printk (KERN_INFO PRINTK_HEADER
+                        "Format %04X Cylinder: %d Flags: %d\n", 
+                        device->devinfo.devno,
+                        trk / private->rdc_data.trk_per_cyl,
+                        flags);
+        }
+        
+        if ( flags & 0x04) {
+                rpt = 1;
+                wrccws = 1;
+        } else {
+                if ( flags & 0x1 ) {
+                        wrccws++;
+                        datasize += sizeof(eckd_count_t);
                 }
-                do {
-                        if ( i == 0 ) {
-                                blocksize = 8;
-                        } else {
-                                blocksize = fd.blksize;
-                        }
-                        rc = dasd_eckd_format_track (device, 
-                                                     (i % nr_tracks) + fd.start_unit , 
-                                                     blocksize, intensity);
-                                /* fix VM controlled minidisk */
-                        if ( rc ) {
-                                if ( intensity ) {
-                                        intensity = intensity >> 1;
-                                }
-                                printk (KERN_WARNING PRINTK_HEADER
-                                        "decreasing format intensity to %d\n", 
-                                        intensity);
-                        }
-                } while ( rc && intensity > 0);
-                if (rc) {
-                        printk (KERN_WARNING PRINTK_HEADER
-                                "Formatting of device %04X Cylinder %d Track %d failed...exiting\n",
-                                device->devinfo.devno,
-                                i / private->rdc_data.trk_per_cyl,
-                                i % private->rdc_data.trk_per_cyl);
+                if ( flags & 0x2 ) {
+                        wrccws++;
+                        datasize += sizeof(eckd_home_t);
+                }
+        }
+	fcp = ccw_alloc_request (dasd_eckd_discipline.name, 
+                                 wrccws + 2,
+                                 datasize+rpt*sizeof(eckd_count_t));
+        if ( fcp != NULL ) {
+                fcp->device = device;
+                last_data = fcp->data;
+                DE_data = (DE_eckd_data_t *) last_data;
+                last_data = (void*)(DE_data +1);
+                LO_data = (LO_eckd_data_t *) last_data;
+                last_data = (void*)(LO_data +1);
+                if ( flags & 0x2 ) {
+                        ha_data = (eckd_home_t *) last_data;
+                        last_data = (void*)(ha_data +1);
+                }
+                if ( flags & 0x1 ) {
+                        r0_data = (eckd_count_t *) last_data;
+                        last_data = (void*)(r0_data +1);
+                }
+                ct_data = (eckd_count_t *)last_data;
+                
+                last_ccw = fcp->cpaddr;
+                
+                switch (flags) {
+                case 0x03:
+                        define_extent (last_ccw, DE_data, trk, trk,
+                                       DASD_ECKD_CCW_WRITE_HOME_ADDRESS, device);
+                        last_ccw->flags = CCW_FLAG_CC;
+                        last_ccw++;
+                        locate_record (last_ccw, LO_data, trk, 0, wrccws,
+                                       DASD_ECKD_CCW_WRITE_HOME_ADDRESS, device,device->sizes.bp_block );
+                        last_ccw->flags = CCW_FLAG_CC;
+                        last_ccw++;
                         break;
-		}
-	}
-	printk ( KERN_INFO PRINTK_HEADER
-                 "Formatting of device %04X completed from track %d to %d with bs %d\n",
-                 device->devinfo.devno, fd.start_unit, fd.stop_unit, fd.blksize);
-        return rc;
+                case 0x01:
+                        define_extent (last_ccw, DE_data, trk, trk,
+			       DASD_ECKD_CCW_WRITE_RECORD_ZERO, device);
+                        last_ccw->flags = CCW_FLAG_CC;
+                        last_ccw++;
+                        locate_record (last_ccw, LO_data, trk, 0, wrccws,
+                                       DASD_ECKD_CCW_WRITE_RECORD_ZERO, device,device->sizes.bp_block);
+                        last_ccw->flags = CCW_FLAG_CC;
+                        last_ccw++;
+                        memset (r0_data, 0, sizeof (eckd_count_t));
+                        break;
+                case 0x04:
+                        define_extent (last_ccw, DE_data, trk, trk,
+                                       DASD_ECKD_CCW_WRITE_CKD, device);
+                        last_ccw->flags = CCW_FLAG_CC;
+                        last_ccw++;
+                        locate_record (last_ccw, LO_data, trk, 0, wrccws,
+                                       DASD_ECKD_CCW_WRITE_CKD, device,0);
+                        LO_data->length = bs;
+                        last_ccw->flags = CCW_FLAG_CC;
+                        last_ccw++;
+                        break;
+                case 0x00:
+                        define_extent (last_ccw, DE_data, trk, trk,
+                                       DASD_ECKD_CCW_WRITE_CKD, device);
+                        last_ccw->flags = CCW_FLAG_CC;
+                        last_ccw++;
+                        locate_record (last_ccw, LO_data, trk, 0, wrccws,
+                                       DASD_ECKD_CCW_WRITE_CKD, device,device->sizes.bp_block);
+                        LO_data->length = bs;
+                        last_ccw->flags = CCW_FLAG_CC;
+                        last_ccw++;
+                        break;
+                default:
+                        PRINT_WARN ("Unknown format flags...%d\n", flags);
+                        return NULL;
+                }
+                if (flags & 0x02 ) {
+                        PRINT_WARN ("Unsupported format flag...%d\n", flags);
+                        return NULL; 
+                }
+                if (flags & 0x01) {	/* write record zero */
+                        r0_data->cyl = cyl;
+                        r0_data->head = head;
+                        r0_data->record = 0;
+                        r0_data->kl = 0;
+                        r0_data->dl = 8;
+                        last_ccw->cmd_code = DASD_ECKD_CCW_WRITE_RECORD_ZERO;
+                        last_ccw->count = 8;
+                        last_ccw->flags = CCW_FLAG_CC | CCW_FLAG_SLI;
+                        last_ccw->cda = (__u32) __pa (r0_data);
+                        last_ccw++;
+                }
+                /* write remaining records */
+                for (i = 0; i < rpt; i++) {
+                        memset (ct_data + i, 0, sizeof (eckd_count_t));
+                        (ct_data + i)->cyl = cyl;
+                        (ct_data + i)->head = head;
+                        (ct_data + i)->record = i + 1;
+                        (ct_data + i)->kl = 0;
+                        (ct_data + i)->dl = bs;
+                        last_ccw->cmd_code = DASD_ECKD_CCW_WRITE_CKD;
+                        last_ccw->flags = CCW_FLAG_CC | CCW_FLAG_SLI;
+                        last_ccw->count = 8;
+                        last_ccw->cda = (__u32) __pa (ct_data + i);
+                        last_ccw ++;
+                }
+                (last_ccw-1)->flags &= ~(CCW_FLAG_CC | CCW_FLAG_DC);
+                fcp->device = device;
+                atomic_set(&fcp->status,CQR_STATUS_FILLED);
+        }
+	return fcp;
 }
 
 static dasd_era_t
@@ -781,8 +737,9 @@ dasd_eckd_examine_error  (ccw_req_t *cqr, devstat_t * stat)
 	    stat->dstat == (DEV_STAT_CHN_END | DEV_STAT_DEV_END))
 		return dasd_era_none;
         
-	switch (device->devinfo.sid_data.cu_model) {
+	switch (device->devinfo.sid_data.cu_type) {
 	case 0x3990:
+	case 0x2105:
 		return dasd_3990_erp_examine (cqr, stat);
 	case 0x9343:
 		return dasd_9343_erp_examine (cqr, stat);
@@ -838,20 +795,20 @@ dasd_eckd_build_cp_from_req (dasd_device_t *device, struct request *req)
 	/* count bhs to prevent errors, when bh smaller than block */
 	bhct = 0;
 	for (bh = req->bh; bh; bh = bh->b_reqnext) {
-		if (bh->b_size > byt_per_blk)
-			for (size = 0; size < bh->b_size; size += byt_per_blk)
+                if (bh->b_size > byt_per_blk)
+                        for (size = 0; size < bh->b_size; size += byt_per_blk)
 				bhct++;
 		else
 			bhct++;
 	}
-
+        
 	rw_cp = dasd_alloc_request (dasd_eckd_discipline.name,
                                    2 + bhct,
-			     sizeof (DE_eckd_data_t) +
-			     sizeof (LO_eckd_data_t));
-        if ( ! rw_cp ) {
-          return NULL;
-        }
+                                   sizeof (DE_eckd_data_t) +
+                                   sizeof (LO_eckd_data_t));
+	if (!rw_cp) {
+		return NULL;
+	}
 	DE_data = rw_cp->data;
 	LO_data = rw_cp->data + sizeof (DE_eckd_data_t);
 	ccw = rw_cp->cpaddr;
@@ -860,17 +817,17 @@ dasd_eckd_build_cp_from_req (dasd_device_t *device, struct request *req)
 	ccw->flags = CCW_FLAG_CC;
 	ccw++;
 	locate_record (ccw, LO_data, btrk, (req->sector >> shift) % blk_per_trk + 1,
-		       req->nr_sectors >> shift, rw_cmd, device);
+		       req->nr_sectors >> shift, rw_cmd, device,device->sizes.bp_block);
 	ccw->flags = CCW_FLAG_CC;
 	for (bh = req->bh; bh != NULL;) {
 		if (bh->b_size > byt_per_blk) {
-		for (size = 0; size < bh->b_size; size += byt_per_blk) {
-                        ccw++;
-                        ccw->flags = CCW_FLAG_CC;
-                        ccw->cmd_code = rw_cmd;
-                        ccw->count = byt_per_blk;
-				ccw->cda = (void *) __pa (bh->b_data + size);
-		}
+			for (size = 0; size < bh->b_size; size += byt_per_blk) {
+				ccw++;
+				ccw->flags = CCW_FLAG_CC;
+				ccw->cmd_code = rw_cmd;
+				ccw->count = byt_per_blk;
+				ccw->cda = (__u32) __pa (bh->b_data + size);
+			}
 			bh = bh->b_reqnext;
 		} else {	/* group N bhs to fit into byt_per_blk */
 			for (size = 0; bh != NULL && size < byt_per_blk;) {
@@ -878,22 +835,23 @@ dasd_eckd_build_cp_from_req (dasd_device_t *device, struct request *req)
 				ccw->flags = CCW_FLAG_DC;
 				ccw->cmd_code = rw_cmd;
 				ccw->count = bh->b_size;
-				ccw->cda = (void *) __pa (bh->b_data);
+				ccw->cda = (__u32) __pa (bh->b_data);
 				size += bh->b_size;
 				bh = bh->b_reqnext;
-	}
+			}
 			if (size != byt_per_blk) {
-				PRINT_WARN ("Cannot fulfill small request %d vs. %d (%d sects)\n", size, byt_per_blk, req->nr_sectors);
+				PRINT_WARN ("Cannot fulfill small request %ld vs. %d (%ld sects)\n", size, byt_per_blk, req->nr_sectors);
 				ccw_free_request (rw_cp);
-		return NULL;
-	}
+				return NULL;
+			}
 			ccw->flags = CCW_FLAG_CC;
 		}
 	}
 	ccw->flags &= ~(CCW_FLAG_DC | CCW_FLAG_CC);
         rw_cp->device = device;
-        rw_cp->expires = 5 * 0xf424000; /* 5 seconds */
+        rw_cp->expires = 60 * (unsigned long long)0xf4240000; /* 60 seconds */
         rw_cp->req = req;
+        rw_cp->retries = 2;
         atomic_compare_and_swap_debug(&rw_cp->status,CQR_STATUS_EMPTY,CQR_STATUS_FILLED);
 	return rw_cp;
 }
@@ -924,7 +882,7 @@ dasd_eckd_dump_sense(struct dasd_device_t *device, ccw_req_t *req)
                         for (sct = 0; sct < 8; sct++) {
                                 len += sprintf ( page + len," %2d:0x%02x",
                                                  8 * sl + sct, sense[8 * sl + sct]);
-        }
+                        }
                         len += sprintf ( page + len,"\n");
                 }
                 if (sense[27] & 0x80) {	
@@ -938,8 +896,8 @@ dasd_eckd_dump_sense(struct dasd_device_t *device, ccw_req_t *req)
                         len += sprintf ( page + len, KERN_WARNING PRINTK_HEADER 
                                          "32 Byte: Format: %x Exception class %x\n",
                                          sense[6] & 0x0f, sense[22] >> 4);
-		}
-	}
+                }
+        }
         return page;
 }
 
@@ -964,11 +922,43 @@ dasd_discipline_t dasd_eckd_discipline = {
 int
 dasd_eckd_init( void ) {
         int rc = 0;
+	int i;
         printk ( KERN_INFO PRINTK_HEADER
                  "%s discipline initializing\n", dasd_eckd_discipline.name);
         ASCEBC(dasd_eckd_discipline.ebcname,4);
         dasd_discipline_enq(&dasd_eckd_discipline);
-        
+#ifdef CONFIG_DASD_DYNAMIC
+        for ( i=0; i<sizeof(dasd_eckd_known_devices)/sizeof(devreg_t); i++) {
+		printk (KERN_INFO PRINTK_HEADER
+			"We are interested in: CU %04X/%02x DEV: %04X/%02Xi\n",
+			dasd_eckd_known_devices[i].ci.hc.ctype,
+			dasd_eckd_known_devices[i].ci.hc.cmode,
+			dasd_eckd_known_devices[i].ci.hc.dtype,
+			dasd_eckd_known_devices[i].ci.hc.dmode);
+		s390_device_register(&dasd_eckd_known_devices[i]);
+	} 
+#endif /* CONFIG_DASD_DYNAMIC */
+        return rc;
+}
+
+void
+dasd_eckd_cleanup( void ) {
+        int rc = 0;
+	int i;
+        printk ( KERN_INFO PRINTK_HEADER
+                 "%s discipline cleaning up\n", dasd_eckd_discipline.name);
+#ifdef CONFIG_DASD_DYNAMIC
+        for ( i=0; i<sizeof(dasd_eckd_known_devices)/sizeof(devreg_t); i++) {
+		printk (KERN_INFO PRINTK_HEADER
+			"We are interested in: CU %04X/%02x DEV: %04X/%02Xi\n",
+			dasd_eckd_known_devices[i].ci.hc.ctype,
+			dasd_eckd_known_devices[i].ci.hc.cmode,
+			dasd_eckd_known_devices[i].ci.hc.dtype,
+			dasd_eckd_known_devices[i].ci.hc.dmode);
+		s390_device_register(&dasd_eckd_known_devices[i]);
+	} 
+#endif /* CONFIG_DASD_DYNAMIC */
+        dasd_discipline_deq(&dasd_eckd_discipline);
         return rc;
 }
 

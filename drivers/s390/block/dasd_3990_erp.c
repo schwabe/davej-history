@@ -64,13 +64,22 @@ dasd_era_t
 dasd_3990_erp_examine_24 (char *sense)
 {
 
-	/* check for 'Command Recejct' which is always a fatal error  */
+	/* check for 'Command Recejct' whithout environmental data present  */
 	if (sense[0] & 0x80) {
-		return dasd_era_fatal;
-	}
-	/* check for 'Invalid Track Format'                           */
+                if (sense[2] &0x10){
+                        return dasd_era_recover;
+                } else {
+                        return dasd_era_fatal;
+                }
+        }
+	
+        /* check for 'Invalid Track Format' whithout environmental data present  */
 	if (sense[1] & 0x40) {
-		return dasd_era_fatal;
+                if (sense[2] &0x10){
+                        return dasd_era_recover;
+                } else {
+                        return dasd_era_fatal;
+                }
 	}
 	/* check for 'No Record Found'                                */
 	if (sense[1] & 0x08) {

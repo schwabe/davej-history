@@ -137,7 +137,7 @@ __initfunc(void vmpoff_setup(char *str, char *ints))
 #ifndef CONFIG_SMP
 void machine_restart(char * __unused)
 {
-  reipl(S390_lowcore.ipl_device); 
+        reipl(S390_lowcore.ipl_device); 
 }
 
 void machine_halt(void)
@@ -145,14 +145,14 @@ void machine_halt(void)
         if (MACHINE_IS_VM && strlen(vmhalt_cmd) > 0) 
                 cpcmd(vmhalt_cmd, NULL, 0);
         signal_processor(smp_processor_id(), sigp_stop_and_store_status);
-        }
+}
 
 void machine_power_off(void)
 {
         if (MACHINE_IS_VM && strlen(vmpoff_cmd) > 0)
                 cpcmd(vmpoff_cmd, NULL, 0);
         signal_processor(smp_processor_id(), sigp_stop_and_store_status);
-        }
+}
 #endif
 
 /*
@@ -177,7 +177,7 @@ void tod_wait(unsigned long delay)
 __initfunc(void setup_arch(char **cmdline_p,
         unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
-        static unsigned int smptrap=0;
+        static unsigned int smptrap = 0;
         unsigned long memory_start, memory_end;
         char c, cn, *to, *from;
 

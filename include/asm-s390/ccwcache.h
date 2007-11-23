@@ -57,13 +57,14 @@ typedef struct ccw_req_t {
 /* 
  * ccw_req_t -> status can be:
  */
-#define CQR_STATUS_EMPTY  0x00	/* request is empty */
-#define CQR_STATUS_FILLED 0x01	/* request is ready to be preocessed */
-#define CQR_STATUS_QUEUED 0x02	/* request is queued to be processed */
-#define CQR_STATUS_IN_IO  0x04	/* request is currently in IO */
-#define CQR_STATUS_DONE   0x08	/* request is completed sucessfully */
-#define CQR_STATUS_ERROR  0x10	/* request is completed with error */
-#define CQR_STATUS_FAILED 0x20	/* request is finally failed */
+#define CQR_STATUS_EMPTY    0x00	/* request is empty */
+#define CQR_STATUS_FILLED   0x01	/* request is ready to be preocessed */
+#define CQR_STATUS_QUEUED   0x02	/* request is queued to be processed */
+#define CQR_STATUS_IN_IO    0x04	/* request is currently in IO */
+#define CQR_STATUS_DONE     0x08	/* request is completed sucessfully */
+#define CQR_STATUS_ERROR    0x10	/* request is completed with error */
+#define CQR_STATUS_FAILED   0x20	/* request is finally failed */
+#define CQR_STATUS_FINISHED 0x40	/* request is ready for cleanup */
 
 #ifdef __KERNEL__
 #define SMALLEST_SLAB (sizeof(struct ccw_req_t) <= 128 ? 128 :\

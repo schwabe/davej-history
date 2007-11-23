@@ -144,7 +144,7 @@ read_cfg(struct silo_options *o)
 	if ( !strncmp(o->parmfile,SILO_PARMFILE,strlen(SILO_PARMFILE)) && tmp) 
 		o->parmfile = tmp;
 	if ( ! o -> ramdisk ) 
-	o->ramdisk = cfg_get_strg(cf_options, "ramdisk");
+		o->ramdisk = cfg_get_strg(cf_options, "ramdisk");
 	tmp = cfg_get_strg(cf_options, "bootsect");
 	if ( !strncmp(o -> bootsect,SILO_BOOTSECT,strlen(SILO_BOOTSECT))&&tmp)
 		o->bootsect = tmp;
@@ -181,7 +181,7 @@ gen_tmpparm( char *pfile )
 		return pfile;
 	of = fopen(pfile, "r");
 	if ( of ) {
-	NTRY( fn = tempnam(NULL,"parm."));
+		NTRY( fn = tempnam(NULL,"parm."));
 	} else {
 		fn = pfile;
 	}
@@ -193,11 +193,11 @@ gen_tmpparm( char *pfile )
 		}
 	}
 	if (root)
-		fprintf(f, "root=%s ", root);
+		fprintf(f, " root=%s", root);
 	if (ro)
-		fprintf(f, "ro ");
+		fprintf(f, " ro");
 	if (append)
-		fprintf(f, "%s", append);
+		fprintf(f, " %s", append);
 	fprintf(f, "\n");
 	fclose(f);
 	fclose(of);
@@ -312,7 +312,7 @@ verify_file (char *name, int dev)
   int bs = 1024;
   int l;
 
-  ITRY (stat (name, &dst));
+  ITRY(stat ( name, &dst ));
   if (S_ISREG (dst.st_mode))
     {
       if ((unsigned) MAJOR (dev) == (unsigned) MAJOR (dst.st_dev) && (unsigned) MINOR (dev) == (unsigned) (MINOR (dst.st_dev) & ~PARTN_MASK))
@@ -394,9 +394,9 @@ verify_options (struct silo_options *o)
   PRINT_LEVEL (1, "...ok...");
   o->parmfile = gen_tmpparm(o->parmfile);
   PRINT_LEVEL (0, "final parameterfile is: '%s'", o->parmfile);
-      ITRY (verify_file (o->parmfile, dev));
-      PRINT_LEVEL (1, "...ok...");
-      PRINT_LEVEL (0, "\n");
+  ITRY (verify_file (o->parmfile, dev));
+  PRINT_LEVEL (1, "...ok...");
+  PRINT_LEVEL (0, "\n");
 
   if (o->ramdisk)
     {
@@ -492,9 +492,9 @@ write_bootsect (struct silo_options *o, struct blocklist *blklst)
       int addrct = blklst->blk[i].addr | (blklst->blk[i].ct & 0xff);
       PRINT_LEVEL (1, "ix %i: offset: %06x count: %02x address: 0x%08x\n", i, offset, blklst->blk[i].ct & 0xff, blklst->blk[i].addr);
 	if ( o->testlevel <= 1 ) {
-      NTRY (write (s_fd, &offset, sizeof (int)));
-      NTRY (write (s_fd, &addrct, sizeof (int)));
-    }
+	      NTRY (write (s_fd, &offset, sizeof (int)));
+	      NTRY (write (s_fd, &addrct, sizeof (int)));
+	}
     }
   ITRY (ioctl (s_fd,FIGETBSZ, &bs));
   ITRY (stat (o->bootmap, &s_st));
@@ -508,7 +508,7 @@ write_bootsect (struct silo_options *o, struct blocklist *blklst)
   NTRY ( tmpdev = tmpnam(NULL) );
   ITRY (mknod (tmpdev, S_IFBLK | S_IRUSR | S_IWUSR, s_st.st_dev));
   ITRY (bd_fd = open (tmpdev, O_RDONLY));
-  ITRY ( ioctl(s_fd,FIBMAP,&boots));
+  ITRY (ioctl(s_fd,FIBMAP,&boots));
   ITRY (ioctl (bd_fd, BIODASDRWTB, &boots));
   PRINT_LEVEL (1, "Bootmap is in block no: 0x%08x\n", boots);
   close (bd_fd);

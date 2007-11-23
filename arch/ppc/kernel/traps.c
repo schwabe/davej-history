@@ -156,9 +156,52 @@ RunModeException(struct pt_regs *regs)
 	_exception(SIGTRAP, regs);	
 }
 
+/* Illegal instruction emulation support.  Originally written to
+ * provide the PVR to user applications using the mfspr rd, PVR.
+ * Return non-zero if we can't emulate, or EFAULT if the associated
+ * memory access caused an access fault.  Return zero on success.
+ *
+ * There are a couple of ways to do this, either "decode" the instruction
+ * or directly match lots of bits.  In this case, matching lots of
+ * bits is faster and easier.
+ *
+ */
+#define INST_MFSPR_PVR		0x7c1f42a6
+#define INST_MFSPR_PVR_MASK	0xfc1fffff
+
+static int
+emulate_instruction(struct pt_regs *regs)
+{
+	uint    instword;
+	uint    rd;
+	int    retval;
+
+	retval = EINVAL;
+	if (!user_mode(regs))
+		return retval;
+
+	retval = EFAULT;
+	if (get_user(instword, (uint *)(regs->nip)))
+		return retval;
+
+	/* Emulate the mfspr rD, PVR.
+	 */
+	retval = EINVAL;
+	if ((instword & INST_MFSPR_PVR_MASK) == INST_MFSPR_PVR) {
+		rd = (instword >> 21) & 0x1f;
+		regs->gpr[rd] = _get_PVR();
+		retval = 0;
+	}
+	if (retval == 0)
+		regs->nip += 4;
+	return(retval);
+}
+
 void
 ProgramCheckException(struct pt_regs *regs)
 {
+	int errcode;
+
 	if (regs->msr & 0x100000) {
 		/* IEEE FP exception */
 		_exception(SIGFPE, regs);
@@ -170,7 +213,13 @@ ProgramCheckException(struct pt_regs *regs)
 #endif
 		_exception(SIGTRAP, regs);
 	} else {
-		_exception(SIGILL, regs);
+		/* Try to emulate it if we should. */
+		if ((errcode = emulate_instruction(regs))) {
+			if (errcode == EFAULT)
+				_exception(SIGBUS, regs);
+			else
+				_exception(SIGILL, regs);
+		}
 	}
 }
 

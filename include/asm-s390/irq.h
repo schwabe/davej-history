@@ -22,7 +22,7 @@ extern int enable_irq(unsigned int);
  * to describe about the low-level hardware.
  */
 struct hw_interrupt_type {
-        const char   *typename;
+        const __u8   *typename;
         int         (*handle)(unsigned int irq,
                               int cpu,
                               struct pt_regs * regs);
@@ -43,60 +43,59 @@ struct hw_interrupt_type {
  * path management control word
  */
 typedef struct {
-      unsigned long  intparm;      /* interruption parameter */
-      unsigned int   res0 : 2;     /* reserved zeros */
-      unsigned int   isc  : 3;     /* interruption sublass */
-      unsigned int   res5 : 3;     /* reserved zeros */
-      unsigned int   ena  : 1;     /* enabled */
-      unsigned int   lm   : 2;     /* limit mode */
-      unsigned int   mme  : 2;     /* measurement-mode enable */
-      unsigned int   mp   : 1;     /* multipath mode */
-      unsigned int   tf   : 1;     /* timing facility */
-      unsigned int   dnv  : 1;     /* device number valid */
-      unsigned int   dev  : 16;    /* device number */
-      unsigned char  lpm;          /* logical path mask */
-      unsigned char  pnom;         /* path not operational mask */
-      unsigned char  lpum;         /* last path used mask */
-      unsigned char  pim;          /* path installed mask */
-      unsigned short mbi;          /* measurement-block index */
-      unsigned char  pom;          /* path operational mask */
-      unsigned char  pam;          /* path available mask */
-      unsigned char  chpid[8];     /* CHPID 0-7 (if available) */
-      unsigned int   unused1 : 8;  /* reserved zeros */
-      unsigned int   st      : 3;  /* subchannel type */
-      unsigned int   unused2 : 20; /* reserved zeros */
-      unsigned int   csense  : 1;  /* concurrent sense; can be enabled ...*/
-                                   /*  ... per MSCH, however, if facility */
-                                   /*  ... is not installed, this results */
-                                   /*  ... in an operand exception.       */
+      __u32 intparm;      /* interruption parameter */
+      __u32 res0 : 2;     /* reserved zeros */
+      __u32 isc  : 3;     /* interruption sublass */
+      __u32 res5 : 3;     /* reserved zeros */
+      __u32 ena  : 1;     /* enabled */
+      __u32 lm   : 2;     /* limit mode */
+      __u32 mme  : 2;     /* measurement-mode enable */
+      __u32 mp   : 1;     /* multipath mode */
+      __u32 tf   : 1;     /* timing facility */
+      __u32 dnv  : 1;     /* device number valid */
+      __u32 dev  : 16;    /* device number */
+      __u8  lpm;          /* logical path mask */
+      __u8  pnom;         /* path not operational mask */
+      __u8  lpum;         /* last path used mask */
+      __u8  pim;          /* path installed mask */
+      __u16 mbi;          /* measurement-block index */
+      __u8  pom;          /* path operational mask */
+      __u8  pam;          /* path available mask */
+      __u8  chpid[8];     /* CHPID 0-7 (if available) */
+      __u32 unused1 : 8;  /* reserved zeros */
+      __u32 st      : 3;  /* subchannel type */
+      __u32 unused2 : 20; /* reserved zeros */
+      __u32 csense  : 1;  /* concurrent sense; can be enabled ...*/
+                          /*  ... per MSCH, however, if facility */
+                          /*  ... is not installed, this results */
+                          /*  ... in an operand exception.       */
    } __attribute__ ((packed)) pmcw_t;
 
 #endif /* __KERNEL__ */
-
 /*
  * subchannel status word
  */
 typedef struct {
-      unsigned int   key  : 4; /* subchannel key */
-      unsigned int   sctl : 1; /* suspend control */
-      unsigned int   eswf : 1; /* ESW format */
-      unsigned int   cc   : 2; /* deferred condition code */
-      unsigned int   fmt  : 1; /* format */
-      unsigned int   pfch : 1; /* prefetch */
-      unsigned int   isic : 1; /* initial-status interruption control */
-      unsigned int   alcc : 1; /* address-limit checking control */
-      unsigned int   ssi  : 1; /* supress-suspended interruption */
-      unsigned int   zcc  : 1; /* zero condition code */
-      unsigned int   ectl : 1; /* extended control */
-      unsigned int   pno  : 1;     /* path not operational */
-      unsigned int   res  : 1;     /* reserved */
-      unsigned int   fctl : 3;     /* function control */
-      unsigned int   actl : 7;     /* activity control */
-      unsigned int   stctl : 5;    /* status control */
-      unsigned long  cpa;          /* channel program address */
-      unsigned int   dstat : 8;    /* device status */
-      unsigned int   cstat : 8;    /* subchannel status */
-      unsigned int   count : 16;   /* residual count */
+      __u32 key  : 4; /* subchannel key */
+      __u32 sctl : 1; /* suspend control */
+      __u32 eswf : 1; /* ESW format */
+      __u32 cc   : 2; /* deferred condition code */
+      __u32 fmt  : 1; /* format */
+      __u32 pfch : 1; /* prefetch */
+      __u32 isic : 1; /* initial-status interruption control */
+      __u32 alcc : 1; /* address-limit checking control */
+      __u32 ssi  : 1; /* supress-suspended interruption */
+      __u32 zcc  : 1; /* zero condition code */
+      __u32 ectl : 1; /* extended control */
+      __u32 pno  : 1;     /* path not operational */
+      __u32 res  : 1;     /* reserved */
+      __u32 fctl : 3;     /* function control */
+      __u32 actl : 7;     /* activity control */
+      __u32 stctl : 5;    /* status control */
+      __u32 cpa;          /* channel program address */
+      __u32 dstat : 8;    /* device status */
+      __u32 cstat : 8;    /* subchannel status */
+      __u32 count : 16;   /* residual count */
    } __attribute__ ((packed)) scsw_t;
 
 #define SCSW_FCTL_CLEAR_FUNC     0x1
@@ -136,24 +135,22 @@ typedef struct {
 #define SCHN_STAT_CHAIN_CHECK    0x01
 
 #ifdef __KERNEL__
-
 /*
  * subchannel information block
  */
 typedef struct {
       pmcw_t pmcw;             /* path management control word */
       scsw_t scsw;             /* subchannel status word */
-      char mda[12];            /* model dependent area */
-   } schib_t __attribute__ ((packed,aligned(4)));
-
+      __u8 mda[12];            /* model dependent area */
+   } __attribute__ ((packed,aligned(4))) schib_t;
 #endif /* __KERNEL__ */
 
 typedef struct {
-      char            cmd_code;/* command code */
-      char            flags;   /* flags, like IDA adressing, etc. */
-      unsigned short  count;   /* byte count */
-      void           *cda;     /* data address */
-   } ccw1_t __attribute__ ((aligned(8)));
+      __u8  cmd_code;/* command code */
+      __u8  flags;   /* flags, like IDA adressing, etc. */
+      __u16 count;   /* byte count */
+      __u32 cda;     /* data address */
+   } __attribute__ ((packed,aligned(8))) ccw1_t;
 
 #define CCW_FLAG_DC             0x80
 #define CCW_FLAG_CC             0x40
@@ -174,7 +171,6 @@ typedef struct {
 #define CCW_CMD_SENSE_ID        0xE4
 
 #ifdef __KERNEL__
-
 #define SENSE_MAX_COUNT         0x20
 
 /*
@@ -192,101 +188,100 @@ typedef struct {
  * operation request block
  */
 typedef struct {
-      unsigned long  intparm;  /* interruption parameter */
-      unsigned int   key  : 4; /* flags, like key, suspend control, etc. */
-      unsigned int   spnd : 1; /* suspend control */
-      unsigned int   res1 : 3; /* reserved */
-      unsigned int   fmt  : 1; /* format control */
-      unsigned int   pfch : 1; /* prefetch control */
-      unsigned int   isic : 1; /* initial-status-interruption control */
-      unsigned int   alcc : 1; /* address-limit-checking control */
-      unsigned int   ssic : 1; /* suppress-suspended-interr. control */
-      unsigned int   res2 : 3; /* reserved */
-      unsigned int   lpm  : 8; /* logical path mask */
-      unsigned int   ils  : 1; /* incorrect length */
-      unsigned int   zero : 7; /* reserved zeros */
-      ccw1_t        *cpa;      /* channel program address */
+      __u32 intparm;  /* interruption parameter */
+      __u32 key  : 4; /* flags, like key, suspend control, etc. */
+      __u32 spnd : 1; /* suspend control */
+      __u32 res1 : 3; /* reserved */
+      __u32 fmt  : 1; /* format control */
+      __u32 pfch : 1; /* prefetch control */
+      __u32 isic : 1; /* initial-status-interruption control */
+      __u32 alcc : 1; /* address-limit-checking control */
+      __u32 ssic : 1; /* suppress-suspended-interr. control */
+      __u32 res2 : 3; /* reserved */
+      __u32 lpm  : 8; /* logical path mask */
+      __u32 ils  : 1; /* incorrect length */
+      __u32 zero : 7; /* reserved zeros */
+      __u32 cpa;      /* channel program address */
    }  __attribute__ ((packed,aligned(4))) orb_t;
 
 #endif /* __KERNEL__ */
-
 typedef struct {
-      unsigned int res0  : 4;  /* reserved */
-      unsigned int pvrf  : 1;  /* path-verification-required flag */
-      unsigned int cpt   : 1;  /* channel-path timeout */
-      unsigned int fsavf : 1;  /* Failing storage address validity flag */
-      unsigned int cons  : 1;  /* concurrent-sense */
-      unsigned int res8  : 2;  /* reserved */
-      unsigned int scnt  : 6;  /* sense count if cons == 1 */
-      unsigned int res16 : 16; /* reserved */
-   } erw_t;
+      __u32 res0  : 4;  /* reserved */
+      __u32 pvrf  : 1;  /* path-verification-required flag */
+      __u32 cpt   : 1;  /* channel-path timeout */
+      __u32 fsavf : 1;  /* Failing storage address validity flag */
+      __u32 cons  : 1;  /* concurrent-sense */
+      __u32 res8  : 2;  /* reserved */
+      __u32 scnt  : 6;  /* sense count if cons == 1 */
+      __u32 res16 : 16; /* reserved */
+   } __attribute__ ((packed)) erw_t;
 
 /*
  * subchannel logout area
  */
 typedef struct {
-      unsigned int res0  : 1;  /* reserved */
-      unsigned int esf   : 7;  /* extended status flags */
-      unsigned int lpum  : 8;  /* last path used mask */
-      unsigned int res16 : 1;  /* reserved */
-      unsigned int fvf   : 5;  /* field-validity flags */
-      unsigned int sacc  : 2;  /* storage access code */
-      unsigned int termc : 2;  /* termination code */
-      unsigned int devsc : 1;  /* device-status check */
-      unsigned int serr  : 1;  /* secondary error */
-      unsigned int ioerr : 1;  /* i/o-error alert */
-      unsigned int seqc  : 3;  /* sequence code */
-   } sublog_t ;
+      __u32 res0  : 1;  /* reserved */
+      __u32 esf   : 7;  /* extended status flags */
+      __u32 lpum  : 8;  /* last path used mask */
+      __u32 res16 : 1;  /* reserved */
+      __u32 fvf   : 5;  /* field-validity flags */
+      __u32 sacc  : 2;  /* storage access code */
+      __u32 termc : 2;  /* termination code */
+      __u32 devsc : 1;  /* device-status check */
+      __u32 serr  : 1;  /* secondary error */
+      __u32 ioerr : 1;  /* i/o-error alert */
+      __u32 seqc  : 3;  /* sequence code */
+   } __attribute__ ((packed)) sublog_t ;
 
 /*
  * Format 0 Extended Status Word (ESW)
  */
 typedef struct {
-      sublog_t      sublog;    /* subchannel logout */
-      erw_t         erw;       /* extended report word */
-      void         *faddr;     /* failing address */
-      unsigned int  zeros[2];  /* 2 fullwords of zeros */
-   } esw0_t;
+      sublog_t sublog;    /* subchannel logout */
+      erw_t    erw;       /* extended report word */
+      __u32    faddr;     /* failing address */
+      __u32    zeros[2];  /* 2 fullwords of zeros */
+   } __attribute__ ((packed)) esw0_t;
 
 /*
  * Format 1 Extended Status Word (ESW)
  */
 typedef struct {
-      unsigned char  zero0;    /* reserved zeros */
-      unsigned char  lpum;     /* last path used mask */
-      unsigned short zero16;   /* reserved zeros */
-      erw_t          erw;      /* extended report word */
-      unsigned int   zeros[3]; /* 2 fullwords of zeros */
-   } esw1_t;
+      __u8  zero0;    /* reserved zeros */
+      __u8  lpum;     /* last path used mask */
+      __u16 zero16;   /* reserved zeros */
+      erw_t erw;      /* extended report word */
+      __u32 zeros[3]; /* 2 fullwords of zeros */
+   } __attribute__ ((packed)) esw1_t;
 
 /*
  * Format 2 Extended Status Word (ESW)
  */
 typedef struct {
-      unsigned char  zero0;    /* reserved zeros */
-      unsigned char  lpum;     /* last path used mask */
-      unsigned short dcti;     /* device-connect-time interval */
-      erw_t          erw;      /* extended report word */
-      unsigned int   zeros[3]; /* 2 fullwords of zeros */
-   } esw2_t;
+      __u8  zero0;    /* reserved zeros */
+      __u8  lpum;     /* last path used mask */
+      __u16 dcti;     /* device-connect-time interval */
+      erw_t erw;      /* extended report word */
+      __u32 zeros[3]; /* 2 fullwords of zeros */
+   } __attribute__ ((packed)) esw2_t;
 
 /*
  * Format 3 Extended Status Word (ESW)
  */
 typedef struct {
-      unsigned char  zero0;    /* reserved zeros */
-      unsigned char  lpum;     /* last path used mask */
-      unsigned short res;      /* reserved */
-      erw_t          erw;      /* extended report word */
-      unsigned int   zeros[3]; /* 2 fullwords of zeros */
-   } esw3_t;
+      __u8  zero0;    /* reserved zeros */
+      __u8  lpum;     /* last path used mask */
+      __u16 res;      /* reserved */
+      erw_t erw;      /* extended report word */
+      __u32 zeros[3]; /* 2 fullwords of zeros */
+   } __attribute__ ((packed)) esw3_t;
 
 typedef union {
       esw0_t esw0;
       esw1_t esw1;
       esw2_t esw2;
       esw3_t esw3;
-   } esw_t;
+   } __attribute__ ((packed)) esw_t;
 
 /*
  * interruption response block
@@ -294,30 +289,31 @@ typedef union {
 typedef struct {
       scsw_t scsw;             /* subchannel status word */
       esw_t  esw;              /* extended status word */
-      char   ecw[32];          /* extended control word */
-   } irb_t __attribute__ ((aligned(4)));
-
+      __u8   ecw[32];          /* extended control word */
+   } irb_t __attribute__ ((packed,aligned(4)));
 #ifdef __KERNEL__
 
 /*
  * TPI info structure
  */
 typedef struct {
-      unsigned int res : 16;   /* reserved 0x00000001 */
-      unsigned int irq : 16;   /* aka. subchannel number */
-      unsigned int intparm;    /* interruption parameter */
-   } tpi_info_t;
+      __u32 res : 16;   /* reserved 0x00000001 */
+      __u32 irq : 16;   /* aka. subchannel number */
+      __u32 intparm;    /* interruption parameter */
+   } __attribute__ ((packed)) tpi_info_t;
+
+
 
 //
 // command information word  (CIW) layout
 //
 typedef struct _ciw {
-   unsigned int et       :  2; // entry type
-   unsigned int reserved :  2; // reserved
-   unsigned int ct       :  4; // command type
-   unsigned int cmd      :  8; // command
-   unsigned int count    : 16; // count
-   } ciw_t;
+   __u32        et       :  2; // entry type
+   __u32        reserved :  2; // reserved
+   __u32        ct       :  4; // command type
+   __u32        cmd      :  8; // command
+   __u32        count    : 16; // count
+   } __attribute__ ((packed)) ciw_t;
 
 #define CIW_TYPE_RCD    0x0    // read configuration data
 #define CIW_TYPE_SII    0x1    // set interface identifier
@@ -328,26 +324,24 @@ typedef struct _ciw {
 //
 typedef struct {
   /* common part */
-      unsigned char  reserved;     /* always 0x'FF' */
-      unsigned short cu_type;      /* control unit type */
-      unsigned char  cu_model;     /* control unit model */
-      unsigned short dev_type;     /* device type */
-      unsigned char  dev_model;    /* device model */
-      unsigned char  unused;       /* padding byte */
+      __u8           reserved;     /* always 0x'FF' */
+      __u16          cu_type;      /* control unit type */
+      __u8           cu_model;     /* control unit model */
+      __u16          dev_type;     /* device type */
+      __u8           dev_model;    /* device model */
+      __u8           unused;       /* padding byte */
   /* extended part */
       ciw_t    ciw[16];            /* variable # of CIWs */
    }  __attribute__ ((packed,aligned(4))) senseid_t;
 
 #endif /* __KERNEL__ */
-
 /*
  * sense data
  */
 typedef struct {
-      unsigned char res[32];   /* reserved   */
-      unsigned char data[32];  /* sense data */
-   } sense_t;
-
+      __u8          res[32];   /* reserved   */
+      __u8          data[32];  /* sense data */
+   } __attribute__ ((packed)) sense_t;
 
 /*
  * device status area, to be provided by the device driver
@@ -359,15 +353,15 @@ typedef struct {
  */
 typedef struct {
      unsigned int  devno;    /* device number, aka. "cuu" from irb */
-     unsigned int  intparm;  /* interrupt parameter */
-     unsigned char cstat;    /* channel status - accumulated */
-     unsigned char dstat;    /* device status - accumulated */
-     unsigned char lpum;     /* last path used mask from irb */
-     unsigned char unused;   /* not used - reserved */
+     unsigned long intparm;  /* interrupt parameter */
+     __u8          cstat;    /* channel status - accumulated */
+     __u8          dstat;    /* device status - accumulated */
+     __u8          lpum;     /* last path used mask from irb */
+     __u8          unused;   /* not used - reserved */
      unsigned int  flag;     /* flag : see below */
-     unsigned long cpa;      /* CCW address from irb at primary status */
-     unsigned int  rescnt;   /* res. count from irb at primary status */
-     unsigned int  scnt;     /* sense count, if DEVSTAT_FLAG_SENSE_AVAIL */
+     __u32         cpa;      /* CCW address from irb at primary status */
+     __u32         rescnt;   /* res. count from irb at primary status */
+     __u32         scnt;     /* sense count, if DEVSTAT_FLAG_SENSE_AVAIL */
      union {
         irb_t   irb;         /* interruption response block */
         sense_t sense;       /* sense information */
@@ -389,27 +383,24 @@ typedef struct {
 #define DEVSTAT_FINAL_STATUS       0x80000000
 
 #define INTPARM_STATUS_PENDING     0xFFFFFFFF
-
 #ifdef __KERNEL__
 
-typedef  void (* io_handler_func1_t) ( int  irq,
-                                       devstat_t *devstat,
+typedef  void (* io_handler_func1_t) ( int             irq,
+                                       devstat_t      *devstat,
                                        struct pt_regs *rgs);
 
-typedef  void (* io_handler_func_t) ( int  irq,
+typedef  void (* io_handler_func_t) ( int             irq,
                                       void           *devstat,
                                       struct pt_regs *rgs);
 
 typedef  void ( * not_oper_handler_func_t)( int irq,
                                             int status );
-
 struct s390_irqaction {
 	io_handler_func_t  handler;
 	unsigned long      flags;
 	const char        *name;
 	devstat_t         *dev_id;
 };
-
 
 /*
  * This is the "IRQ descriptor", which contains various information
@@ -465,7 +456,7 @@ typedef struct {
 #define DOIO_EARLY_NOTIFICATION  0x0001 /* allow for I/O completion ... */
                                         /* ... notification after ... */
                                         /* ... primary interrupt status */
-#define DOIO_RETURN_CHAN_END       DOIO_EARLY_NOTIFICATION
+#define DOIO_RETURN_CHAN_END     DOIO_EARLY_NOTIFICATION
 #define DOIO_VALID_LPM           0x0002 /* LPM input parameter is valid */
 #define DOIO_WAIT_FOR_INTERRUPT  0x0004 /* wait synchronously for interrupt */
 #define DOIO_REPORT_ALL          0x0008 /* report all interrupt conditions */
@@ -494,22 +485,22 @@ typedef struct {
  */
 int do_IO( int            irq,          /* IRQ aka. subchannel number */
            ccw1_t        *cpa,          /* logical channel program address */
-           unsigned long  initparm,     /* interruption parameter */
-           unsigned char  lpm,          /* logical path mask */
+           unsigned long  intparm,      /* interruption parameter */
+           __u8           lpm,          /* logical path mask */
            unsigned long  flag);        /* flags : see above */
 
-int start_IO( int            irq,       /* IRQ aka. subchannel number */
-              ccw1_t        *cpa,       /* logical channel program address */
+int start_IO( int           irq,       /* IRQ aka. subchannel number */
+              ccw1_t       *cpa,       /* logical channel program address */
               unsigned long  intparm,   /* interruption parameter */
-              unsigned char  lpm,       /* logical path mask */
-              unsigned long  flag);     /* flags : see above */
+              __u8          lpm,       /* logical path mask */
+              unsigned int  flag);     /* flags : see above */
 
 void do_crw_pending( void  );	         /* CRW handler */
 
-int resume_IO( int irq);                /* IRQ aka. subchannel number */
+int resume_IO( int irq);               /* IRQ aka. subchannel number */
 
-int halt_IO( int           irq,      /* IRQ aka. subchannel number */
-             unsigned long intparm,  /* dummy intparm */
+int halt_IO( int           irq,         /* IRQ aka. subchannel number */
+             unsigned long intparm,     /* dummy intparm */
              unsigned long flag);       /* possible DOIO_WAIT_FOR_INTERRUPT */
 
 int clear_IO( int           irq,         /* IRQ aka. subchannel number */
@@ -545,7 +536,7 @@ int get_irq_next ( int irq );
 int read_dev_chars( int irq, void **buffer, int length );
 int read_conf_data( int irq, void **buffer, int *length, __u8 lpm );
 
-int s390_DevicePathVerification( int irq, __u8 domask );
+int  s390_DevicePathVerification( int irq, __u8 domask );
 
 int s390_request_irq_special( int                      irq,
                               io_handler_func_t        io_handler,
@@ -714,21 +705,35 @@ extern __inline__ int iac( void)
         return ccode;
 }
 
+extern __inline__ int rchp(int chpid)
+{
+        int ccode;
+
+        __asm__ __volatile__(
+                "LR 1,%1\n\t"
+                "RCHP\n\t"
+                "IPM %0\n\t"
+                "SRL %0,28\n\t"
+                : "=d" (ccode) : "r" (chpid)
+                : "cc", "1" );
+        return ccode;
+}
+
 typedef struct {
-     unsigned int vrdcdvno : 16;   /* device number (input) */
-     unsigned int vrdclen  : 16;   /* data block length (input) */
-     unsigned int vrdcvcla : 8;    /* virtual device class (output) */
-     unsigned int vrdcvtyp : 8;    /* virtual device type (output) */
-     unsigned int vrdcvsta : 8;    /* virtual device status (output) */
-     unsigned int vrdcvfla : 8;    /* virtual device flags (output) */
-     unsigned int vrdcrccl : 8;    /* real device class (output) */
-     unsigned int vrdccrty : 8;    /* real device type (output) */
-     unsigned int vrdccrmd : 8;    /* real device model (output) */
-     unsigned int vrdccrft : 8;    /* real device feature (output) */
+     __u16 vrdcdvno : 16;   /* device number (input) */
+     __u16 vrdclen  : 16;   /* data block length (input) */
+     __u32 vrdcvcla : 8;    /* virtual device class (output) */
+     __u32 vrdcvtyp : 8;    /* virtual device type (output) */
+     __u32 vrdcvsta : 8;    /* virtual device status (output) */
+     __u32 vrdcvfla : 8;    /* virtual device flags (output) */
+     __u32 vrdcrccl : 8;    /* real device class (output) */
+     __u32 vrdccrty : 8;    /* real device type (output) */
+     __u32 vrdccrmd : 8;    /* real device model (output) */
+     __u32 vrdccrft : 8;    /* real device feature (output) */
      } __attribute__ ((packed,aligned(4))) diag210_t;
 
-void VM_virtual_device_info( unsigned int  devno, /* device number */
-                             senseid_t    *ps );  /* ptr to senseID data */
+void VM_virtual_device_info( unsigned int devno, /* device number */
+                             senseid_t *ps );    /* ptr to senseID data */
 
 extern __inline__ int diag210( diag210_t * addr)
 {
@@ -758,7 +763,7 @@ void unmask_irq(unsigned int irq);
 
 extern spinlock_t irq_controller_lock;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 #include <asm/atomic.h>
 
@@ -779,28 +784,27 @@ static inline void irq_exit(int cpu, unsigned int irq)
 
 #else
 
-#define irq_enter(cpu, irq)     (++local_irq_count[cpu])
-#define irq_exit(cpu, irq)      (--local_irq_count[cpu])
+#define irq_enter(cpu, irq)     (++local_irq_count(cpu))
+#define irq_exit(cpu, irq)      (--local_irq_count(cpu))
 
 #endif
 
 #define __STR(x) #x
 #define STR(x) __STR(x)
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 /*
  *      SMP has a few special interrupts for IPI messages
  */
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 /*
  * x86 profiling function, SMP safe. We might want to do this in
  * assembly totally?
  */
-extern char _stext[];
-
+extern char _stext;
 static inline void s390_do_profile (unsigned long addr)
 {
         if (prof_buffer && current->pid) {
@@ -828,10 +832,8 @@ static inline void s390_do_profile (unsigned long addr)
 
 #define s390irq_spin_lock_irqsave(irq,flags) \
         spin_lock_irqsave(&(ioinfo[irq]->irq_lock), flags)
-
 #define s390irq_spin_unlock_irqrestore(irq,flags) \
         spin_unlock_irqrestore(&(ioinfo[irq]->irq_lock), flags)
 #endif /* __KERNEL__ */
-
 #endif
 

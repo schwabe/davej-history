@@ -76,7 +76,9 @@ int cpu_idle(void *unused)
                 if (bh_mask & bh_active) {
 #endif
                         do_bottom_half();
-                        continue;
+			__sti();
+	                if (!current->need_resched)
+	                        continue;
                 }
                 if (current->need_resched) {
                         schedule();
@@ -109,11 +111,13 @@ asmlinkage int sys_idle(void)
   0 returned you know you've got all the lines
  */
 
-int sprintf_regs(int line,char *buff,struct task_struct * task,struct thread_struct *tss,struct pt_regs * regs)
-{	
+static int sprintf_regs(int line, char *buff, struct task_struct *task, struct pt_regs *regs)
+{
 	int linelen=0;
 	int regno,chaincnt;
 	u32 backchain,prev_backchain,endchain;
+	u32 ksp = 0;
+	char *mode = "???";
 
 	enum
 	{
@@ -134,34 +138,36 @@ int sprintf_regs(int line,char *buff,struct task_struct * task,struct thread_str
 		sp_kern_backchain1
 	};
 
-	if(task)
-		tss=&task->tss;
-	if(tss)
-		regs=tss->regs;
+	if (task)
+		ksp = task->tss.ksp;
+	if (regs && !(regs->psw.mask & PSW_PROBLEM_STATE))
+		ksp = regs->gprs[15];
+
+	if (regs)
+		mode = (regs->psw.mask & PSW_PROBLEM_STATE)?
+		       "User" : "Kernel";
+
 	switch(line)
 	{
-	case sp_linefeed: linelen=sprintf(buff,"\n");
+	case sp_linefeed: 
+		linelen=sprintf(buff,"\n");
 		break;
 	case sp_psw:
 		if(regs)
-			linelen=sprintf(buff,"User PSW:    %08lx %08lx\n",
+			linelen=sprintf(buff, "%s PSW:    %08lx %08lx\n", mode,
 				(unsigned long) regs->psw.mask,
 				(unsigned long) regs->psw.addr);
 		else
 			linelen=sprintf(buff,"pt_regs=NULL some info unavailable\n");
 		break;
 	case sp_ksp:
-		if(task)
-			linelen+=sprintf(&buff[linelen],"task: %08x ",(addr_t)task);
-		if(tss)
-			linelen+=sprintf(&buff[linelen],"tss: %08x ksp: %08x ",
-					 (addr_t)tss,(addr_t)tss->ksp);
-		if(regs)
-			linelen+=sprintf(&buff[linelen],"pt_regs: %08x\n",(addr_t)regs);
+		linelen=sprintf(&buff[linelen],
+				"task: %08x ksp: %08x pt_regs: %08x\n",
+				(addr_t)task, (addr_t)ksp, (addr_t)regs);
 		break;
 	case sp_gprs:
 		if(regs)
-			linelen=sprintf(buff,"User GPRS:\n");
+			linelen=sprintf(buff, "%s GPRS:\n", mode);
 		break;
 	case sp_gprs1 ... sp_gprs4:
 		if(regs)
@@ -176,7 +182,7 @@ int sprintf_regs(int line,char *buff,struct task_struct * task,struct thread_str
 		break;
 	case sp_acrs:
 		if(regs)
-			linelen=sprintf(buff,"User ACRS:\n");
+			linelen=sprintf(buff, "%s ACRS:\n", mode);
 		break;	
         case sp_acrs1 ... sp_acrs4:
 		if(regs)
@@ -190,14 +196,14 @@ int sprintf_regs(int line,char *buff,struct task_struct * task,struct thread_str
 		}
 		break;
 	case sp_kern_backchain:
-		if(tss&&tss->ksp&&regs)
-			linelen=sprintf(buff,"Kernel BackChain  CallChain    BackChain  CallChain\n");
+		if (ksp)
+			linelen=sprintf(buff, "Kernel BackChain  CallChain\n");
 		break;
 	default:
-		if(tss&&tss->ksp&&regs)
+		if (ksp)
 		{
 			
-			backchain=(tss->ksp&PSW_ADDR_MASK);
+			backchain=ksp&PSW_ADDR_MASK;
 			endchain=((backchain&(-8192))+8192);
 			prev_backchain=backchain-1;
 			line-=sp_kern_backchain1;
@@ -206,32 +212,46 @@ int sprintf_regs(int line,char *buff,struct task_struct * task,struct thread_str
 				if((backchain==0)||(backchain>=endchain)
 				   ||(chaincnt>=8)||(prev_backchain>=backchain))
 					break;
-				if((chaincnt>>1)==line)
+				if(chaincnt==line)
 				{
-					linelen+=sprintf(&buff[linelen],"%s%08x   %08x     ",
-							 (chaincnt&1) ? "":"       ",
-							 backchain,*(u32 *)(backchain+56));
-				}
-				if((chaincnt>>1)>line)
+					linelen+=sprintf(&buff[linelen],"       %08x   [<%08x>]\n",
+							 backchain,
+							 *(u32 *)(backchain+56)&PSW_ADDR_MASK);
 					break;
+				}
 				prev_backchain=backchain;
 				backchain=(*((u32 *)backchain))&PSW_ADDR_MASK;
 			}
-			if(linelen)
-				linelen+=sprintf(&buff[linelen],"\n");
 		}
 	}
 	return(linelen);
 }
 
 
-void show_regs(struct task_struct * task,struct thread_struct *tss,struct pt_regs *regs)
+void show_regs(struct pt_regs *regs)
 {
 	char buff[80];
 	int line;
+
+        printk("CPU:    %d\n",smp_processor_id());
+        printk("Process %s (pid: %d, stackpage=%08X)\n",
+                current->comm, current->pid, 4096+(addr_t)current);
 	
-	for(line=0;sprintf_regs(line,buff,task,tss,regs);line++)
+	for (line = 0; sprintf_regs(line, buff, current, regs); line++)
 		printk(buff);
+}
+
+char *task_show_regs(struct task_struct *task, char *buffer)
+{
+	int line, len;
+
+	for (line = 0; ; line++)
+	{
+		len = sprintf_regs(line, buffer, task, task->tss.regs);
+		if (!len) break;
+		buffer += len;
+	}
+	return buffer;
 }
 
 int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
@@ -283,15 +303,15 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long new_stackp,
         struct task_struct * p, struct pt_regs * regs)
 {
         struct stack_frame
-          {
-            unsigned long back_chain;
-            unsigned long eos;
-            unsigned long glue1;
-            unsigned long glue2;
-            unsigned long scratch[2];
-            unsigned long gprs[10];    /* gprs 6 -15                       */
-            unsigned long fprs[4];     /* fpr 4 and 6                      */
-            unsigned long empty[4];
+	{
+		unsigned long back_chain;
+		unsigned long eos;
+		unsigned long glue1;
+		unsigned long glue2;
+		unsigned long scratch[2];
+		unsigned long gprs[10];    /* gprs 6 -15                       */
+		unsigned long fprs[4];     /* fpr 4 and 6                      */
+		unsigned long empty[4];
 #if CONFIG_REMOTE_DEBUG
 		gdb_pt_regs childregs;
 #else
@@ -344,7 +364,7 @@ asmlinkage int sys_clone(struct pt_regs regs)
 
         lock_kernel();
         clone_flags = regs.gprs[3];
-        newsp = regs.gprs[2];
+        newsp = regs.orig_gpr2;
         if (!newsp)
                 newsp = regs.gprs[15];
         ret = do_fork(clone_flags, newsp, &regs);
@@ -383,7 +403,19 @@ asmlinkage int sys_execve(struct pt_regs regs)
                 goto out;
         error = do_execve(filename, (char **) regs.gprs[3], (char **) regs.gprs[4], &regs);
 	if (error == 0)
+	{
 		current->flags &= ~PF_DTRACE;
+		current->tss.fp_regs.fpc=0;
+		if(MACHINE_HAS_IEEE)
+		{
+			__asm__ __volatile__
+			("sr  0,0\n\t"
+			 "sfpc 0,0\n\t"
+				:
+			        :
+                                :"0");
+		}
+	}
         putname(filename);
 out:
         unlock_kernel();

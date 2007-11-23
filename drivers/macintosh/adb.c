@@ -25,13 +25,13 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/notifier.h>
+#include <linux/init.h>
 #include <asm/prom.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/pmu.h>
 #include <asm/uaccess.h>
 #include <asm/hydra.h>
-#include <asm/init.h>
 
 EXPORT_SYMBOL(adb_controller);
 EXPORT_SYMBOL(adb_client_list);
@@ -390,7 +390,7 @@ adb_get_infos(int address, int *original_address, int *handler_id)
 
 #define ADB_MAJOR	56	/* major number for /dev/adb */
 
-extern void adbdev_init(void);
+extern int adbdev_init(void);
 
 struct adbdev_state {
 	spinlock_t	lock;
@@ -601,10 +601,19 @@ static struct file_operations adb_fops = {
 	adb_release
 };
 
-void adbdev_init()
+static int __init adbdev_init(void)
 {
-	if ( (_machine != _MACH_chrp) && (_machine != _MACH_Pmac) )
-		return;		
+	if (adb_controller == NULL)
+		return 0;
 	if (register_chrdev(ADB_MAJOR, "adb", &adb_fops))
 		printk(KERN_ERR "adb: unable to get major %d\n", ADB_MAJOR);
+	return 0;
 }
+
+static void adbdev_cleanup(void)
+{
+	unregister_chrdev(ADB_MAJOR, "adb");
+}
+
+module_init(adbdev_init);
+module_exit(adbdev_cleanup);

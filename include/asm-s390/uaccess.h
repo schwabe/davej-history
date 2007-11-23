@@ -203,80 +203,80 @@ extern inline int __put_user_asm_1(__u8 x, void *ptr)
 extern int __put_user_bad(void);
 
 
-#define __get_user_asm_4(x, ptr, err)                                   \
-({                                                                      \
-        __asm__ __volatile__ (  "   sr    %1,%1\n"                      \
-                                "   la    4,%2\n"                       \
-                                "   sacf  512\n"                        \
-                                "0: l     %0,0(4)\n"                    \
-                                "   sacf  0\n"                          \
-                                "1:\n"                                  \
-                                ".section .fixup,\"ax\"\n"              \
-                                "2: sacf  0\n"                          \
-                                "   lhi   %1,%h3\n"                     \
-                                "   bras  4,3f\n"                       \
-                                "   .long 1b\n"                         \
-                                "3: l     4,0(4)\n"                     \
-                                "   br    4\n"                          \
-                                ".previous\n"                           \
-                                ".section __ex_table,\"a\"\n"           \
-                                "   .align 4\n"                         \
-                                "   .long 0b,2b\n"                      \
-                                ".previous"                             \
-                                : "=d" (x) , "=&d" (err)                \
-                                : "m" (*(__u32*) ptr), "K" (-EFAULT)    \
-                                : "4" );                                \
+#define __get_user_asm_4(x, ptr, err)                                      \
+({                                                                         \
+        __asm__ __volatile__ (  "   sr    %1,%1\n"                         \
+                                "   la    4,%2\n"                          \
+                                "   sacf  512\n"                           \
+                                "0: l     %0,0(4)\n"                       \
+                                "   sacf  0\n"                             \
+                                "1:\n"                                     \
+                                ".section .fixup,\"ax\"\n"                 \
+                                "2: sacf  0\n"                             \
+                                "   lhi   %1,%h3\n"                        \
+                                "   bras  4,3f\n"                          \
+                                "   .long 1b\n"                            \
+                                "3: l     4,0(4)\n"                        \
+                                "   br    4\n"                             \
+                                ".previous\n"                              \
+                                ".section __ex_table,\"a\"\n"              \
+                                "   .align 4\n"                            \
+                                "   .long 0b,2b\n"                         \
+                                ".previous"                                \
+                                : "=d" (x) , "=&d" (err)                   \
+                                : "m" (*(const __u32*) ptr), "K" (-EFAULT) \
+                                : "4" );                                   \
 })
 
-#define __get_user_asm_2(x, ptr, err)                                   \
-({                                                                      \
-        __asm__ __volatile__ (  "   sr    %1,%1\n"                      \
-                                "   la    4,%2\n"                       \
-                                "   sacf  512\n"                        \
-                                "0: lh    %0,0(4)\n"                    \
-                                "   sacf  0\n"                          \
-                                "1:\n"                                  \
-                                ".section .fixup,\"ax\"\n"              \
-                                "2: sacf  0\n"                          \
-                                "   lhi   %1,%h3\n"                     \
-                                "   bras  4,3f\n"                       \
-                                "   .long 1b\n"                         \
-                                "3: l     4,0(4)\n"                     \
-                                "   br    4\n"                          \
-                                ".previous\n"                           \
-                                ".section __ex_table,\"a\"\n"           \
-                                "   .align 4\n"                         \
-                                "   .long 0b,2b\n"                      \
-                                ".previous"                             \
-                                : "=d" (x) , "=&d" (err)                \
-                                : "m" (*(__u16*) ptr), "K" (-EFAULT)    \
-                                : "4" );                                \
+#define __get_user_asm_2(x, ptr, err)                                      \
+({                                                                         \
+        __asm__ __volatile__ (  "   sr    %1,%1\n"                         \
+                                "   la    4,%2\n"                          \
+                                "   sacf  512\n"                           \
+                                "0: lh    %0,0(4)\n"                       \
+                                "   sacf  0\n"                             \
+                                "1:\n"                                     \
+                                ".section .fixup,\"ax\"\n"                 \
+                                "2: sacf  0\n"                             \
+                                "   lhi   %1,%h3\n"                        \
+                                "   bras  4,3f\n"                          \
+                                "   .long 1b\n"                            \
+                                "3: l     4,0(4)\n"                        \
+                                "   br    4\n"                             \
+                                ".previous\n"                              \
+                                ".section __ex_table,\"a\"\n"              \
+                                "   .align 4\n"                            \
+                                "   .long 0b,2b\n"                         \
+                                ".previous"                                \
+                                : "=d" (x) , "=&d" (err)                   \
+                                : "m" (*(const __u16*) ptr), "K" (-EFAULT) \
+                                : "4" );                                   \
 })
 
-#define __get_user_asm_1(x, ptr, err)                                   \
-({                                                                      \
-        __asm__ __volatile__ (  "   sr    %1,%1\n"                      \
-                                "   la    4,%2\n"                       \
-                                "   sr    %0,%0\n"                      \
-                                "   sacf  512\n"                        \
-                                "0: ic    %0,0(4)\n"                    \
-                                "   sacf  0\n"                          \
-                                "1:\n"                                  \
-                                ".section .fixup,\"ax\"\n"              \
-                                "2: sacf  0\n"                          \
-                                "   lhi   %1,%h3\n"                     \
-                                "   bras  4,3f\n"                       \
-                                "   .long 1b\n"                         \
-                                "3: l     4,0(4)\n"                     \
-                                "   br    4\n"                          \
-                                ".previous\n"                           \
-                                ".section __ex_table,\"a\"\n"           \
-                                "   .align 4\n"                         \
-                                "   .long 0b,2b\n"                      \
-                                ".previous"                             \
-                                : "=d" (x) , "=&d" (err)                \
-                                : "m" (*(__u8*) ptr), "K" (-EFAULT)     \
-                                : "4" );                                \
+#define __get_user_asm_1(x, ptr, err)                                     \
+({                                                                        \
+        __asm__ __volatile__ (  "   sr    %1,%1\n"                        \
+                                "   la    4,%2\n"                         \
+                                "   sr    %0,%0\n"                        \
+                                "   sacf  512\n"                          \
+                                "0: ic    %0,0(4)\n"                      \
+                                "   sacf  0\n"                            \
+                                "1:\n"                                    \
+                                ".section .fixup,\"ax\"\n"                \
+                                "2: sacf  0\n"                            \
+                                "   lhi   %1,%h3\n"                       \
+                                "   bras  4,3f\n"                         \
+                                "   .long 1b\n"                           \
+                                "3: l     4,0(4)\n"                       \
+                                "   br    4\n"                            \
+                                ".previous\n"                             \
+                                ".section __ex_table,\"a\"\n"             \
+                                "   .align 4\n"                           \
+                                "   .long 0b,2b\n"                        \
+                                ".previous"                               \
+                                : "=d" (x) , "=&d" (err)                  \
+                                : "m" (*(const __u8*) ptr), "K" (-EFAULT) \
+                                : "4" );                                  \
 })
 
 #define __get_user(x, ptr)                                      \
@@ -332,13 +332,19 @@ extern int __put_user_bad(void);
 extern int __get_user_bad(void);
 
 /*
+ * These two fixup routines have a special linkage. Not to be
+ * called directly.
+ */
+extern void __copy_from_user_fixup(void);
+extern void __copy_to_user_fixup(void);
+
+/*
  * access register are set up, that 4 points to secondary (user) , 2 to primary (kernel)
  */
 
 extern inline unsigned long
 __copy_to_user_asm(void* to, const void* from,  long n)
 {
-
         __asm__ __volatile__ (  "   lr    2,%2\n"
                                 "   lr    4,%1\n"
                                 "   lr    3,%0\n"
@@ -348,23 +354,12 @@ __copy_to_user_asm(void* to, const void* from,  long n)
                                 "   jo    0b\n"
                                 "   sacf  0\n"
                                 "1: lr    %0,3\n"
-                                ".section .fixup,\"ax\"\n"
-                                "2: lhi   5,-4096\n"
-                                "   n     5,0x90\n"
-                                "   sr    5,4\n"
-                                "   mvcle 4,2,0\n"
-                                "   sacf  0\n"
-                                "   basr  4,0\n"
-                                "   l     4,3f-.(4)\n"
-                                "   br    4\n"
-                                "3: .long 1b\n"
-                                ".previous\n"
 				".section __ex_table,\"a\"\n"
 				"   .align 4\n"
-				"   .long  0b,2b\n"
+				"   .long  0b,__copy_to_user_fixup\n"
 				".previous"
                                 : "+&d" (n) : "d" (to), "d" (from)
-                                : "2", "3", "4", "5" );
+                                : "1", "2", "3", "4", "5" );
         return n;
 }
 
@@ -397,23 +392,12 @@ __copy_from_user_asm(void* to, const void* from,  long n)
                                 "   jo    0b\n"
                                 "   sacf  0\n"
                                 "1: lr    %0,5\n"
-                                ".section .fixup,\"ax\"\n"
-                                "2: lhi   3,-4096\n"
-                                "   n     3,0x90\n"
-                                "   sr    3,4\n"
-                                "   mvcle 2,4,0\n"
-                                "   sacf  0\n"
-                                "   basr  4,0\n"
-                                "   l     4,3f-.(4)\n"
-                                "   br    4\n"
-                                "3: .long 1b\n"
-                                ".previous\n"
 				".section __ex_table,\"a\"\n"
 				"   .align 4\n"
-				"   .long  0b,2b\n"
+				"   .long  0b,__copy_from_user_fixup\n"
 				".previous"
                                 : "+&d" (n) : "d" (to), "d" (from)
-                                : "2", "3", "4", "5" );
+                                : "1", "2", "3", "4", "5" );
         return n;
 }
 
@@ -443,7 +427,7 @@ __copy_from_user_asm(void* to, const void* from,  long n)
  */
 
 static inline long
-strncpy_from_user(char *dst, const char *src, long count)
+__strncpy_from_user(char *dst, const char *src, long count)
 {
         long len;
         __asm__ __volatile__ (  "   slr   %0,%0\n"
@@ -463,7 +447,7 @@ strncpy_from_user(char *dst, const char *src, long count)
                                 "3: lhi   %0,%h4\n"
 				"   basr  3,0\n"
                                 "   l     3,4f-.(3)\n"
-				"   br    3\n"
+                                "   br    3\n"
 				"4: .long 2b\n"
 				".previous\n"
 				".section __ex_table,\"a\"\n"
@@ -472,10 +456,19 @@ strncpy_from_user(char *dst, const char *src, long count)
                                 "   .long  1b,3b\n"
 				".previous"
                                 : "=&a" (len)
-                                : "a"  (dst), "d" (src), "d" (count),
+                                : "a" (dst), "d" (src), "d" (count),
                                   "K" (-EFAULT)
                                 : "2", "3", "4", "memory" );
         return len;
+}
+
+static inline long
+strncpy_from_user(char *dst, const char *src, long count)
+{
+        long res = -EFAULT;
+        if (access_ok(VERIFY_READ, src, 1))
+                res = __strncpy_from_user(dst, src, count);
+        return res;
 }
 
 /*
@@ -519,7 +512,7 @@ strnlen_user(const char * src, unsigned long n)
  */
 
 static inline unsigned long
-clear_user(void *to, unsigned long n)
+__clear_user(void *to, unsigned long n)
 {
         __asm__ __volatile__ (  "   sacf  512\n"
                                 "   lr    4,%1\n"
@@ -530,24 +523,21 @@ clear_user(void *to, unsigned long n)
                                 "   jo    0b\n"
                                 "   sacf  0\n"
                                 "1: lr    %0,3\n"
-                                ".section .fixup,\"ax\"\n"
-                                "2: lhi   5,-4096\n"
-                                "   n     5,0x90\n"
-                                "   sr    5,4\n"
-                                "   mvcle 4,2,0\n"
-                                "   sacf  0\n"
-                                "   basr  4,0\n"
-                                "   l     4,3f-.(4)\n"
-                                "   br    4\n"
-                                "3: .long 1b\n"
-                                ".previous\n"
 				".section __ex_table,\"a\"\n"
 				"   .align 4\n"
-				"   .long  0b,2b\n"
+				"   .long  0b,__copy_to_user_fixup\n"
 				".previous"
                                 : "+&a" (n)
                                 : "a"   (to)
-                                : "cc", "2", "3", "4", "5" );
+                                : "cc", "1", "2", "3", "4", "5" );
+        return n;
+}
+
+static inline unsigned long
+clear_user(void *to, unsigned long n)
+{
+        if (access_ok(VERIFY_WRITE, to, n))
+                n = __clear_user(to, n);
         return n;
 }
 

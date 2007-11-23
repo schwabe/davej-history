@@ -5,6 +5,7 @@
  */
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/interrupt.h>
 #include <asm/debug.h>
 #include <linux/genhd.h>
 #include <asm/ccwcache.h>
@@ -16,9 +17,6 @@
 #include <asm/ebcdic.h>
 #include <asm/timex.h>
 #include <asm/delay.h>
-#if CONFIG_CHANDEV
-#include <asm/chandev.h>
-#endif
 #if CONFIG_IP_MULTICAST
 #include <net/arp.h>
 #endif
@@ -27,6 +25,7 @@
  * I/O subsystem
  */
 EXPORT_SYMBOL(halt_IO);
+EXPORT_SYMBOL(clear_IO);
 EXPORT_SYMBOL(do_IO);
 EXPORT_SYMBOL(resume_IO);
 EXPORT_SYMBOL(ioinfo);
@@ -42,21 +41,31 @@ EXPORT_SYMBOL(s390_request_irq_special);
 EXPORT_SYMBOL(s390_device_register);
 EXPORT_SYMBOL(s390_device_unregister);
 
+EXPORT_SYMBOL(s390_bh_lock);
+
 EXPORT_SYMBOL(ccw_alloc_request);
 EXPORT_SYMBOL(ccw_free_request);
 
 EXPORT_SYMBOL(register_external_interrupt);
 EXPORT_SYMBOL(unregister_external_interrupt);
 
-/*
+/* 
  * debug feature
  */
 EXPORT_SYMBOL(debug_register);
 EXPORT_SYMBOL(debug_unregister); 
+EXPORT_SYMBOL(debug_register_view);
+EXPORT_SYMBOL(debug_unregister_view);
 EXPORT_SYMBOL(debug_event);
+EXPORT_SYMBOL(debug_int_event);
 EXPORT_SYMBOL(debug_text_event);
 EXPORT_SYMBOL(debug_exception);
+EXPORT_SYMBOL(debug_int_exception);
 EXPORT_SYMBOL(debug_text_exception);
+EXPORT_SYMBOL(debug_hex_view);
+EXPORT_SYMBOL(debug_ascii_view);
+EXPORT_SYMBOL(debug_ebcdic_view);
+EXPORT_SYMBOL(debug_dflt_header_fn);
 
 /*
  * memory management
@@ -81,6 +90,7 @@ EXPORT_SYMBOL_NOVERS(strnlen);
 EXPORT_SYMBOL_NOVERS(strrchr);
 EXPORT_SYMBOL_NOVERS(strtok);
 EXPORT_SYMBOL_NOVERS(strpbrk);
+EXPORT_SYMBOL_NOVERS(strstr);
 
 EXPORT_SYMBOL_NOVERS(_ascebc_500);
 EXPORT_SYMBOL_NOVERS(_ebcasc_500);
@@ -92,6 +102,8 @@ EXPORT_SYMBOL_NOVERS(_ebc_toupper);
 /*
  * misc.
  */
+EXPORT_SYMBOL(__copy_from_user_fixup);
+EXPORT_SYMBOL(__copy_to_user_fixup);
 EXPORT_SYMBOL(__udelay);
 #ifdef CONFIG_SMP
 #include <asm/smplock.h>
@@ -104,12 +116,13 @@ EXPORT_SYMBOL(synchronize_bh);
 EXPORT_SYMBOL(kernel_flag);
 EXPORT_SYMBOL(smp_ctl_set_bit);
 EXPORT_SYMBOL(smp_ctl_clear_bit);
+EXPORT_SYMBOL(smp_do_callback_all);
 #endif
 EXPORT_SYMBOL(kernel_thread);
 EXPORT_SYMBOL(csum_fold);
 EXPORT_SYMBOL(genhd_dasd_name);
 
-#if CONFIG_IP_MULTICAST
+#ifdef CONFIG_IP_MULTICAST
 /* Required for lcs gigibit ethernet multicast support */
 EXPORT_SYMBOL(arp_mc_map);
 #endif

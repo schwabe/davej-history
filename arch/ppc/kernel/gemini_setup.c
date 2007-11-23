@@ -30,6 +30,7 @@
 #include <asm/io.h>
 #include <asm/m48t35.h>
 #include <asm/gemini.h>
+#include <asm/processor.h>
 
 #include <asm/time.h>
 #include "local_irq.h"
@@ -257,14 +258,6 @@ gemini_get_clock_speed(void)
 	return clock;
 }
 
-
-#define L2CR_PIPE_LATEWR   (0x01800000)   /* late-write SRAM */
-#define L2CR_L2CTL         (0x00100000)   /* RAM control */
-#define L2CR_INST_DISABLE  (0x00400000)   /* disable for insn's */
-#define L2CR_L2I           (0x00200000)   /* global invalidate */
-#define L2CR_L2E           (0x80000000)   /* enable */
-#define L2CR_L2WT          (0x00080000)   /* write-through */
-
 void __init gemini_init_l2(void)
 {
 	unsigned char reg;
@@ -338,8 +331,7 @@ void __init gemini_init_l2(void)
 			cache |= L2CR_L2WT;
 #endif
 		cache |= L2CR_PIPE_LATEWR|L2CR_L2CTL|L2CR_INST_DISABLE;
-		_set_L2CR(0);
-		_set_L2CR(cache|L2CR_L2I|L2CR_L2E);
+		_set_L2CR(cache|L2CR_L2E);
 	}
 }
 
@@ -389,7 +381,7 @@ void __init gemini_init_IRQ(void)
 #define gemini_rtc_write(val,x)  (writeb((val),(GEMINI_RTC+(x))))
 
 /* ensure that the RTC is up and running */
-void __init gemini_time_init(void)
+long __init gemini_time_init(void)
 {
 	unsigned char reg;
 
@@ -400,6 +392,7 @@ void __init gemini_time_init(void)
 		gemini_rtc_write((reg & ~(M48T35_RTC_STOPPED)), M48T35_RTC_CONTROL);
 		gemini_rtc_write((reg | M48T35_RTC_SET), M48T35_RTC_CONTROL);
 	}
+	return 0;
 }
 
 #undef DEBUG_RTC
@@ -570,6 +563,6 @@ void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_leds = NULL;
 	ppc_md.kbd_init_hw = NULL;
 #ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.kbd_sysrq_xlate = NULL;
+	ppc_md.sysrq_xlate = NULL;
 #endif
 }

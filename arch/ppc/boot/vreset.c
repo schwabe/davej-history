@@ -24,7 +24,7 @@
 extern char *vidmem;
 extern int lines, cols;
 /* estimate for delay */
-unsigned long loops_per_sec = 50000000;;
+unsigned long loops_per_jiffy = 50000000/HZ;
 /*
  * VGA Register  
  */

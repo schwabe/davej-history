@@ -31,6 +31,7 @@
 #endif
 #include <asm/bootx.h>
 #include <asm/machdep.h>
+#include <asm/uaccess.h>
 
 extern void pmac_init(unsigned long r3,
                       unsigned long r4,
@@ -68,9 +69,6 @@ extern void gemini_init(unsigned long r3,
                       unsigned long r6,
                       unsigned long r7);
 
-#ifdef CONFIG_BOOTX_TEXT
-extern void map_bootx_text(void);
-#endif
 #ifdef CONFIG_XMON
 extern void xmon_map_scc(void);
 #endif
@@ -98,6 +96,12 @@ int is_powerplus = 0;
 
 struct machdep_calls ppc_md;
 
+#ifdef CONFIG_MAGIC_SYSRQ
+unsigned long SYSRQ_KEY;
+#endif /* CONFIG_MAGIC_SYSRQ */
+#ifdef CONFIG_VGA_CONSOLE
+unsigned long vgacon_remap_base;
+#endif
 
 /* copy of the residual data */
 #ifndef CONFIG_MBX
@@ -313,18 +317,10 @@ int get_cpuinfo(char *buffer)
 			       (GET_PVR & 0xff00) >> 8, GET_PVR & 0xff);
 
 		len += sprintf(buffer+len, "bogomips\t: %lu.%02lu\n",
-			       (CD(loops_per_jiffy*HZ)+2500)/500000,
-			       (CD(loops_per_jiffy*HZ)+2500)/5000 % 100);
+			       (CD(loops_per_jiffy)+2500)/(500000/HZ),
+			       (CD(loops_per_jiffy)+2500)/(5000/HZ) % 100);
 		bogosum += CD(loops_per_jiffy);
 	}
-
-#ifdef __SMP__
-	if ( i )
-		len += sprintf(buffer+len, "\n");
-	len += sprintf(buffer+len,"total bogomips\t: %lu.%02lu\n",
-		       (bogosum+2500)/500000,
-		       (bogosum+2500)/5000 % 100);
-#endif /* __SMP__ */
 
 	/*
 	 * Ooh's and aah's info about zero'd pages in idle task
@@ -490,15 +486,21 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 
 	switch (_machine)
 	{
+#ifdef CONFIG_POWERMAC
 	case _MACH_Pmac:
                 pmac_init(r3, r4, r5, r6, r7);
 		break;
+#endif
+#if defined(CONFIG_ALL_PPC) || defined(CONFIG_PREP)
 	case _MACH_prep:
                 prep_init(r3, r4, r5, r6, r7);
 		break;
+#endif
+#if defined(CONFIG_ALL_PPC) || defined(CONFIG_CHRP)
 	case _MACH_chrp:
                 chrp_init(r3, r4, r5, r6, r7);
 		break;
+#endif
 #ifdef CONFIG_APUS
 	case _MACH_apus:
                 apus_init(r3, r4, r5, r6, r7);
@@ -557,7 +559,8 @@ void ppc_setup_l2cr(char *str, int *ints)
 		unsigned long val = simple_strtoul(str, NULL, 0);
 		printk(KERN_INFO "l2cr set to %lx\n", val);
 		_set_L2CR(0);
-		_set_L2CR(val);
+		if (val)
+			_set_L2CR(val);
 	}
 }
 
@@ -578,9 +581,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	extern unsigned long find_available_memory(void);
 	extern unsigned long *end_of_DRAM;
 
-#ifdef CONFIG_BOOTX_TEXT
-	map_bootx_text();
-#endif
 
 #ifdef CONFIG_XMON
 	{
@@ -610,7 +610,15 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_end_p = (unsigned long) end_of_DRAM;
 
 	ppc_md.setup_arch(memory_start_p, memory_end_p);
+
+	sort_exception_table();
 }
+
+#ifndef CONFIG_POWERMAC
+void note_bootable_part(kdev_t dev, int part, int goodness)
+{
+}
+#endif
 
 void ppc_generic_ide_fix_driveid(struct hd_driveid *id)
 {

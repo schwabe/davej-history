@@ -1,0 +1,133 @@
+XPRAM
+=====
+
+The S/390 architecture supports more RAM than can be accessed as main memory.
+The LINUX for S/390 main memory is limited to 2 GB. However, additional
+memory can be declared as expanded storage. The S/390 architecture allows
+applications to access up to 16 TB of expanded storage (although the current
+hardware can only be equipped with up to 32 GB memory). Memory in the
+expanded storage range can be copied in 4 KB blocks to, or from, the main
+memory.
+
+An interesting feature of expanded storage is that is persistent with respect 
+to IPLs (booting) but volatile with respect to IMLs (power off/on).
+
+The XPRAM device driver is a block device driver that supports LINUX for S/390
+allowing it to access the expanded storage. Thus XPRAM can be used as a basis 
+for fast swap devices and/or fast file systems.
+
+Features
+++++++++
+XPRAM automatically detects whether expanded storage is available on the
+system. The expanded storage can be subdivided into up to 32 partitions, the
+default being a single partition. The XPRAM device driver has major number 35.
+The partitions have minor numbers 0 through 31. The hard sector size of XPRAM
+is set to 4096 bytes.
+
+Limitations
++++++++++++
+If expanded storage is not available, XPRAM cannot be used. Its initialization
+fails gracefully with a log message reporting the lack of expanded storage.
+
+Configuration option
+++++++++++++++++++++
+
+CONFIG_XPRAM
+
+Module name
++++++++++++
+
+XPRAM can be used as module. Its moduel name is xpram.o.
+
+Kernel parameter syntax
++++++++++++++++++++++++
+The kernel parameter is optional. The default defines the whole expanded 
+storage to be one partition.
+
+xpram_parts=<number_of_partition>[,<partition_size>[,...]]
+
+where <number_of_partitions> defines how many partitions the expanded storage 
+is split into. The i-th <partition_size> defines the size of the i-th 
+partition. 
+
+The syntax for sizes is:
+
+[0x]<non-negative_integer>[k|K|m|M|g|G]
+
+If the 0x prefix is used the subsequent number is interpreted as a hexadecimal
+value, otherwise it is interpreted as a decimal value (default). The
+non-negative_integer value may be followed by a magnitude:
+
+- k or K for kilo (1024) is the default
+- m or M for Mega (1024*1024)
+- g or G for Giga (1024*1024*1024)
+
+The <non-negative_integer> value multiplied by its magnitude defines the
+partition's size in bytes. The default size is 0.
+
+Any partition defined with a non-zero size is allocated the amount of memory
+specified by its non-negative_integer parameter.
+
+You can automatically allocate the remaining memory between a set of partitions
+by specifying zero for the size of each partition in the set. The following 
+formula is used to calculate the size for each of these partitions:
+
+                (available exp. storage - sum of all non-zero sizes specified)
+computed size = --------------------------------------------------------------
+                number of partitions with zero sizes
+
+This formula is only a good approximation of the actual size allocated to each
+partition. Because of the requirement to assign blocks in multiples of 4K, 
+partitions can be larger or smaller than the estimate produced by the 
+calculation. In addition, there might be an amount of memory left as a "guard 
+space" between two partitions.
+
+Example
+-------
+
+xpram_parts=4,0x800M,0,0,0x1000M
+
+This allocates the extended storage into four partitions. Partition 1 has 2 GB,
+partition 4 has x 4 GB, and partitions 2 and 3 use equal parts of the remaining
+storage. If the total amount of extended storage was 16 GB, then partitions 3 
+and 4 would each have approximately 5 GB.
+
+Module parameter syntax
++++++++++++++++++++++++
+XPRAM may be used as module. The syntax of the module parameters passed to
+insmod differs from the kernel parameter syntax:
+
+[devs=<number_of_devices> [sizes=<size>[,<size>,...]]]
+
+where:
+- number_of_devices is used to define the number of partitions.
+- size is a non-negative integer that defines the partition's size. 
+  Only decimal values are allowed and no magnitudes are accepted. 
+  The size will be interpretedin KB.
+
+Example
+-------
+
+devs=4 sizes=2097152,8388608,4194304,2097152
+
+This allocates a total of 16 GB of extended storage into four partitions, of
+(respectively) size 2 GB, 8 GB, 4 GB, and 2 GB.
+
+Usage
++++++
+
+XPRAM is a block device driver with major 35.
+Using the  standard naming scheme (see devices.txt) the partitions of XPRAM
+can be accessed through /dev/slram0, ... , /dev/slram31.
+
+XPRAM  does not require any formatting. Partitioning is only possible during
+device initialization by kernel or module parameters. Note that if both the
+expanded storage and the partitioning parameters are left unchanged between
+two device initializations (even if LINUX was IPLed in the meantime) then
+XPRAM behaves like a persistent storage. This is not true if the system is 
+IMLed.
+
+You can make a files system on a XPRAM partition (e.g. mke2fs) with a block 
+size that is a multiple of 4096 byte and mount this file system.
+
+Alternativly an XPRAM partition can be used as a swap device (mkswap, swapon).

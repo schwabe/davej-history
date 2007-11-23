@@ -145,12 +145,8 @@ typedef struct pt_regs pt_regs;
 #ifdef __KERNEL__
 #define user_mode(regs) ((regs)->psw.mask & PSW_PROBLEM_STATE)
 #define instruction_pointer(regs) ((regs)->psw.addr)
-
-struct thread_struct;
-extern int sprintf_regs(int line,char *buff,struct task_struct * task,
-			struct thread_struct *tss,struct pt_regs * regs);
-extern void show_regs(struct task_struct * task,struct thread_struct *tss,
-		      struct pt_regs * regs);
+extern void show_regs(struct pt_regs * regs);
+extern char *task_show_regs(struct task_struct *task, char *buffer);
 #endif
 
 

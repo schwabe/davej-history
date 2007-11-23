@@ -31,18 +31,19 @@ static int nvram_as1 = NVRAM_AS1;
 static int nvram_as0 = NVRAM_AS0;
 static int nvram_data = NVRAM_DATA;
 
-__initfunc(void chrp_time_init(void))
+__initfunc(long chrp_time_init(void))
 {
 	struct device_node *rtcs;
 	int base;
 
 	rtcs = find_compatible_devices("rtc", "pnpPNP,b00");
 	if (rtcs == NULL || rtcs->addrs == NULL)
-		return;
+		return 0;
 	base = rtcs->addrs[0].address;
 	nvram_as1 = 0;
 	nvram_as0 = base;
 	nvram_data = base + 1;
+	return 0;
 }
 
 int chrp_cmos_clock_read(int addr)

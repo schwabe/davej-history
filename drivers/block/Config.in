@@ -53,7 +53,7 @@ else
           bool '   Winbond SL82c105 support' CONFIG_BLK_DEV_SL82C105
       fi
     fi
-    if [ "$CONFIG_PMAC" = "y" -o "$CONFIG_ALL_PPC" = "y" ]; then
+    if [ "$CONFIG_POWERMAC" = "y" ]; then
       bool '   Builtin PowerMac IDE support' CONFIG_BLK_DEV_IDE_PMAC
         if [ "$CONFIG_BLK_DEV_IDE_PMAC" != "n" ]; then
           bool '     PowerMac IDE DMA support' CONFIG_BLK_DEV_IDEDMA_PMAC

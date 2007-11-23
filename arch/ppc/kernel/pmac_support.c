@@ -24,6 +24,7 @@
 #include <asm/pmu.h>
 #include <asm/machdep.h>
 #include <asm/nvram.h>
+#include <asm/backlight.h>
 
 #undef DEBUG
 
@@ -66,6 +67,12 @@ static int nvram_mult, is_core_99;
 static int core99_bank = 0;
 static int nvram_partitions[3];
 
+static struct backlight_controller *backlighter = NULL;
+static void* backlighter_data = NULL;
+static int backlight_autosave = 0;
+static int backlight_level = BACKLIGHT_MAX;
+static int backlight_enabled = 1;
+
 /* FIXME: kmalloc fails to allocate the image now that I had to move it
  *        before time_init(). For now, I allocate a static buffer here
  *        but it's a waste of space on all but core99 machines
@@ -73,12 +80,12 @@ static int nvram_partitions[3];
 #if 0
 static char* nvram_image;
 #else
-__pmac static char nvram_image[NVRAM_SIZE];
+static char nvram_image[NVRAM_SIZE];
 #endif
 
 extern int pmac_newworld;
 
-static u8
+static u8 __pmac
 chrp_checksum(struct chrp_header* hdr)
 {
 	u8 *ptr;
@@ -90,7 +97,7 @@ chrp_checksum(struct chrp_header* hdr)
 	return sum;
 }
 
-static u32
+static u32 __pmac
 core99_calc_adler(u8 *buffer)
 {
 	int cnt;
@@ -113,7 +120,7 @@ core99_calc_adler(u8 *buffer)
 	return (high << 16) | low;
 }
 
-static u32
+static u32 __pmac
 core99_check(u8* datas)
 {
 	struct core99_header* hdr99 = (struct core99_header*)datas;
@@ -139,7 +146,7 @@ core99_check(u8* datas)
 	return hdr99->generation;
 }
 
-static int
+static int __pmac
 core99_erase_bank(int bank)
 {
 	int stat, i;
@@ -163,7 +170,7 @@ core99_erase_bank(int bank)
 	return 0;
 }
 
-static int
+static int __pmac
 core99_write_bank(int bank, u8* datas)
 {
 	int i, stat = 0;
@@ -191,7 +198,7 @@ core99_write_bank(int bank, u8* datas)
 	return 0;	
 }
 
-static void
+static void __pmac
 lookup_partitions(void)
 {
 	u8 buffer[17];
@@ -281,7 +288,8 @@ void pmac_nvram_init(void)
 	} else if (nvram_naddrs == 2) {
 		nvram_addr = ioremap(dp->addrs[0].address, dp->addrs[0].size);
 		nvram_data = ioremap(dp->addrs[1].address, dp->addrs[1].size);
-	} else if (nvram_naddrs == 0 && adb_controller->kind == ADB_VIAPMU) {
+	} else if (nvram_naddrs == 0 && adb_controller &&
+		adb_controller->kind == ADB_VIAPMU) {
 		nvram_naddrs = -1;
 	} else {
 		printk(KERN_ERR "Don't know how to access NVRAM with %d addresses\n",
@@ -290,7 +298,7 @@ void pmac_nvram_init(void)
 	lookup_partitions();
 }
 
-void
+void __pmac
 pmac_nvram_update(void)
 {
 	struct core99_header* hdr99;
@@ -317,7 +325,7 @@ pmac_nvram_update(void)
 		printk("nvram: Error writing bank %d\n", core99_bank);
 }
 
-unsigned char
+unsigned char __pmac
 nvram_read_byte(int addr)
 {
 	struct adb_request req;
@@ -342,7 +350,7 @@ nvram_read_byte(int addr)
 	return 0;
 }
 
-void
+void __pmac
 nvram_write_byte(unsigned char val, int addr)
 {
 	struct adb_request req;
@@ -373,13 +381,13 @@ nvram_write_byte(unsigned char val, int addr)
 	eieio();
 }
 
-int
+int __pmac
 pmac_get_partition(int partition)
 {
 	return nvram_partitions[partition];
 }
 
-u8
+u8 __pmac
 pmac_xpram_read(int xpaddr)
 {
 	int offset = nvram_partitions[pmac_nvram_XPRAM];
@@ -390,7 +398,7 @@ pmac_xpram_read(int xpaddr)
 	return nvram_read_byte(xpaddr + offset);
 }
 
-void
+void __pmac
 pmac_xpram_write(int xpaddr, u8 data)
 {
 	int offset = nvram_partitions[pmac_nvram_XPRAM];
@@ -399,5 +407,120 @@ pmac_xpram_write(int xpaddr, u8 data)
 		return;
 		
 	nvram_write_byte(xpaddr + offset, data);
+}
+
+void __pmac
+register_backlight_controller(struct backlight_controller *ctrler, void *data, char *type)
+{
+	struct device_node* bk_node;
+	char *prop;
+	int valid = 0;
+
+	bk_node = find_devices("backlight");
+	
+	/* Special case for the old PowerBooks, they don't yet have
+	 * the property we expect
+	 */
+	backlight_autosave = machine_is_compatible("AAPL,3400/2400")
+		|| machine_is_compatible("AAPL,3500");
+	if ((backlight_autosave
+		|| machine_is_compatible("AAPL,PowerBook1998")
+		|| machine_is_compatible("PowerBook1,1"))
+		&& !strcmp(type, "pmu"))
+		valid = 1;
+	else if (bk_node) {
+		prop = get_property(bk_node, "backlight-control", NULL);
+		if (prop && !strncmp(prop, type, strlen(type)))
+			valid = 1;
+	}
+	if (!valid)
+		return;
+	backlighter = ctrler;
+	backlighter_data = data;
+	
+	if (bk_node && !backlight_autosave)
+		prop = get_property(bk_node, "bklt", NULL);
+	else
+		prop = NULL;
+	if (prop) {
+		backlight_level = ((*prop)+1) >> 1;
+		if (backlight_level > BACKLIGHT_MAX)
+			backlight_level = BACKLIGHT_MAX;
+	}
+	
+	if (backlight_autosave) {
+		struct adb_request req;
+		pmu_request(&req, NULL, 2, 0xd9, 0);
+		while (!req.complete)
+			pmu_poll();
+		backlight_level = req.reply[1] >> 4;
+	}
+
+	if (!backlighter->set_enable(1, backlight_level, data))
+		backlight_enabled = 1;
+
+	printk(KERN_INFO "Registered \"%s\" backlight controller, level: %d/15\n",
+		type, backlight_level);
+}
+
+void __pmac
+unregister_backlight_controller(struct backlight_controller *ctrler, void *data)
+{
+	/* We keep the current backlight level (for now) */
+	if (ctrler == backlighter && data == backlighter_data)
+		backlighter = NULL;
+}
+
+int __pmac
+set_backlight_enable(int enable)
+{
+	int rc;
+	
+	if (!backlighter)
+		return -ENODEV;
+	rc = backlighter->set_enable(enable, backlight_level, backlighter_data);
+	if (!rc)
+		backlight_enabled = enable;
+	return rc;
+}
+
+int __pmac
+get_backlight_enable(void)
+{
+	if (!backlighter)
+		return -ENODEV;
+	return backlight_enabled;
+}
+
+int __pmac
+set_backlight_level(int level)
+{
+	int rc = 0;
+	
+	if (!backlighter)
+		return -ENODEV;
+	if (level < BACKLIGHT_MIN)
+		level = BACKLIGHT_OFF;
+	if (level > BACKLIGHT_MAX)
+		level = BACKLIGHT_MAX;
+	if (backlight_enabled)
+		rc = backlighter->set_level(level, backlighter_data);
+	if (!rc)
+		backlight_level = level;
+	if (!rc && !backlight_autosave) {
+		level <<=1;
+		if (level & 0x10)
+			level |= 0x01;
+		// -- todo: save to property "bklt"
+	}
+	return rc;
+}
+
+int __pmac
+get_backlight_level(void)
+{
+	if (!backlighter)
+		return -ENODEV;
+	return backlight_level;
 }
 

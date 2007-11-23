@@ -989,7 +989,7 @@ int xpram_init(void)
  fail_malloc:
 	read_ahead[major] = 0;
 	blk_dev[major].request_fn = NULL;
-	unregister_chrdev(major, "xpram");
+	unregister_blkdev(major, "xpram");
 	return result;
 }
 

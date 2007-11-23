@@ -10,7 +10,7 @@
 # modified by Cort (cort@cs.nmt.edu)
 #
 .c.s:
-	$(CC) $(CFLAGS) -S -o $*.s $<
+	$(CC) $(CFLAGS) -I$(HPATH) -S -o $*.s $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:

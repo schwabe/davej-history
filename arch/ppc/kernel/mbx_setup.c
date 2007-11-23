@@ -41,13 +41,24 @@
 #include <asm/ide.h>
 #include <asm/mbx.h>
 #include <asm/machdep.h>
-
+#include <asm/keyboard.h>
+#include <asm/8xx_immap.h>
 #include <asm/time.h>
+
 #include "local_irq.h"
 
 static int mbx_set_rtc_time(unsigned long time);
 unsigned long mbx_get_rtc_time(void);
 void mbx_calibrate_decr(void);
+
+extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
+extern int pckbd_getkeycode(unsigned int scancode);
+extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,
+			   char raw_mode);
+extern char pckbd_unexpected_up(unsigned char keycode);
+extern void pckbd_leds(unsigned char leds);
+extern void pckbd_init_hw(void);
+extern unsigned char pckbd_sysrq_xlate[128];
 
 extern int mackbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int mackbd_getkeycode(unsigned int scancode);
@@ -452,8 +463,8 @@ mbx_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_leds          = pckbd_leds;
 	ppc_md.kbd_init_hw       = pckbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
-	ppc_md.kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
-	ppc_md.SYSRQ_KEY	 = 0x54;
+	ppc_md.sysrq_xlate	 = pckbd_sysrq_xlate;
+	SYSRQ_KEY		 = 0x54;
 #endif
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)

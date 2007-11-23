@@ -37,6 +37,7 @@
 #include <asm/pci-bridge.h>
 #include <asm/adb.h>
 #include <asm/pmu.h>
+#include <asm/backlight.h>
 
 #include <video/fbcon.h>
 #include <video/fbcon-cfb8.h>
@@ -281,7 +282,7 @@ static void chipsfb_blank(int blank, struct fb_info *info)
 	// used to disable backlight only for blank > 1, but it seems
 	// useful at blank = 1 too (saves battery, extends backlight life)
 	if (blank) {
-		pmu_enable_backlight(0);
+		set_backlight_enable(0);
 		/* get the palette from the chip */
 		for (i = 0; i < 256; ++i) {
 			out_8(p->io_base + 0x3c7, i);
@@ -298,7 +299,7 @@ static void chipsfb_blank(int blank, struct fb_info *info)
 			out_8(p->io_base + 0x3c9, 0);
 		}
 	} else {
-		pmu_enable_backlight(1);
+		set_backlight_enable(1);
 		for (i = 0; i < 256; ++i) {
 			out_8(p->io_base + 0x3c8, i);
 			udelay(1);
@@ -417,7 +418,7 @@ static void chips_set_bitdepth(struct fb_info_chips *p, struct display* disp, in
 	disp->visual = fix->visual;
 	disp->var = *var;
 
-#if (defined(CONFIG_PMAC_PBOOK) || defined(CONFIG_FB_COMPAT_XPMAC))
+#ifdef CONFIG_FB_COMPAT_XPMAC
 	display_info.depth = bpp;
 	display_info.pitch = fix->line_length;
 #endif
@@ -707,7 +708,7 @@ __initfunc(void chips_of_init(struct device_node *dp))
 	memset(p->frame_buffer, 0, 0x100000);
 
 	/* turn on the backlight */
-	pmu_enable_backlight(1);
+	set_backlight_enable(1);
 
 	init_chips(p);
 }

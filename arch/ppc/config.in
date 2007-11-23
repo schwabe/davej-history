@@ -26,12 +26,12 @@ if [ "$CONFIG_6xx" = "y" ]; then
   bool 'Altivec (G4) support' CONFIG_ALTIVEC
 fi
 
-if [ "$CONFIG_ALL_PPC" != "y" ];then
+if [ "$CONFIG_ALL_PPC" != "y" ]; then
   define_bool CONFIG_MACH_SPECIFIC y
 fi
 
-if [ "$CONFIG_PPC64" != "y" ];then
-  define_bool CONFIG_6xx y
+if [ "$CONFIG_ALL_PPC" = "y" -o "$CONFIG_PMAC" = "y" -o "$CONFIG_CHRP" = "y" ]; then
+  define_bool CONFIG_POWERMAC y
 fi
 endmenu
 
@@ -82,16 +82,7 @@ fi
 
 bool 'Support for VGA Console' CONFIG_VGA_CONSOLE
 bool 'Support for frame buffer devices' CONFIG_FB
-
 bool 'Power management support for Apple PowerBooks' CONFIG_PMAC_PBOOK
-bool 'Support for PowerMac keyboard' CONFIG_MAC_KEYBOARD
-bool 'Support for PowerMac floppy' CONFIG_MAC_FLOPPY
-tristate 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
-if [ "$CONFIG_MAC_SERIAL" = "y" ]; then
-   bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
-fi
-tristate 'Support for /dev/rtc' CONFIG_PPC_RTC
-bool 'Support for PowerMac ADB mouse' CONFIG_ADBMOUSE
 bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
 bool 'Support for TotalImpact TotalMP' CONFIG_TOTALMP
 bool 'Support for early boot text console (BootX only)' CONFIG_BOOTX_TEXT
@@ -182,7 +173,27 @@ endmenu
 
 source drivers/char/Config.in
 source drivers/usb/Config.in
-source fs/Config.in
+
+mainmenu_option next_comment
+comment 'Mac device drivers'
+if [ "$CONFIG_INPUT_KEYBDEV" = "y" -o "$CONFIG_INPUT_MOUSEDEV" = "y" ]; then
+   bool 'Use input layer for ADB keyboard and mouse' CONFIG_INPUT_ADBHID
+fi
+if [ "$CONFIG_INPUT_ADBHID" = "y" ]; then
+   define_bool CONFIG_MAC_HID y
+   bool '  Support for ADB raw keycodes' CONFIG_MAC_ADBKEYCODES
+   bool '  Support for mouse button 2+3 emulation' CONFIG_MAC_EMUMOUSEBTN
+else
+   bool 'Support for ADB keyboard (old driver)' CONFIG_MAC_KEYBOARD
+   bool 'Support for ADB mouse (old driver)' CONFIG_ADBMOUSE
+fi
+tristate 'Support for /dev/rtc' CONFIG_PPC_RTC
+bool 'Support for PowerMac floppy' CONFIG_MAC_FLOPPY
+tristate 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
+if [ "$CONFIG_MAC_SERIAL" = "y" ]; then
+   bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
+fi
+endmenu
 
 mainmenu_option next_comment
 comment 'Sound'
@@ -193,6 +204,8 @@ if [ "$CONFIG_SOUND" != "n" ]; then
 fi
 
 endmenu
+
+source fs/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'

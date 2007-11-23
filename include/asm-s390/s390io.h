@@ -10,7 +10,7 @@
 #define __s390io_h
 
 /*
- * Private data structure used by do_IO()
+ * IRQ data structure used by I/O subroutines
  *
  * Note : If bit flags are added, the "unused" value must be
  *        decremented accordingly !

@@ -3,8 +3,7 @@
  *   S/390 data definitions for machine check processing
  *
  *  S390 version
- *    Copyright (C) 1999, 2000 IBM Deutschland Entwicklung GmbH,
- *                             IBM Corporation
+ *    Copyright (C) 2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Ingo Adlung (adlung@de.ibm.com)
  */
 
@@ -61,8 +60,8 @@ typedef struct _crw {
 #define CRW_ERC_PERRI    0x07 /* perm. error, facility init */
 #define CRW_ERC_PMOD     0x08 /* installed parameters modified */
 
-#define MAX_CRW_PENDING  100
-#define MAX_MACH_PENDING 100
+#define MAX_CRW_PENDING  1024
+#define MAX_MACH_PENDING 1024
 
 //
 // CRW Entry

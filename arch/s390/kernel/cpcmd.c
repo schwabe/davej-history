@@ -8,7 +8,7 @@
 
 #include <linux/stddef.h>
 #include <linux/kernel.h>
-#include <asm/string.h>
+#include <linux/string.h>
 #include <asm/ebcdic.h>
 
 void cpcmd(char *cmd, char *response, int rlen)

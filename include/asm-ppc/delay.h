@@ -12,6 +12,11 @@
  * 2 of the License, or (at your option) any later version.
  */
 
+extern unsigned long loops_per_jiffy;
+
+/* maximum permitted argument to udelay */
+#define __MAX_UDELAY	1000000
+
 extern __inline__ void __delay(unsigned int loops)
 {
 	if (loops != 0)
@@ -19,15 +24,30 @@ extern __inline__ void __delay(unsigned int loops)
 				     "r" (loops) : "ctr");
 }
 
-extern __inline__ void udelay(unsigned long usecs)
+/* N.B. the `secs' parameter here is a fixed-point number with
+   the binary point to the left of the most-significant bit. */
+extern __inline__ void __const_udelay(unsigned int secs)
 {
-	unsigned long loops;
+	unsigned int loops;
 
-	/* compute (usecs * 2^32 / 10^6) * (loops_per_jiffy*HZ) / 2^32 */
-	usecs *= 0x10c6;		/* 2^32 / 10^6 */
 	__asm__("mulhwu %0,%1,%2" : "=r" (loops) :
-		"r" (usecs), "r" (loops_per_jiffy*HZ));
-	__delay(loops);
+		"r" (secs), "r" (loops_per_jiffy));
+	__delay(loops * HZ);
 }
+
+/*
+ * note that 4294 == 2^32 / 10^6, multiplying by 4294 converts from
+ * microseconds to a 32-bit fixed-point number of seconds.
+ */
+extern __inline__ void __udelay(unsigned int usecs)
+{
+	__const_udelay(usecs * 4294);
+}
+
+extern void __bad_udelay(void);		/* deliberately undefined */
+
+#define udelay(n) (__builtin_constant_p(n)? \
+		   ((n) > __MAX_UDELAY? __bad_udelay(): __const_udelay((n) * 4294u)) : \
+		   __udelay(n))
 
 #endif /* defined(_PPC_DELAY_H) */

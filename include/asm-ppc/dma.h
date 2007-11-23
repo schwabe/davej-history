@@ -203,6 +203,7 @@ static __inline__ void enable_dma(unsigned int dmanr)
 	 */
 	unsigned char ucDmaCmd=0x00;
 
+#if defined(CONFIG_PREP) || defined(CONFIG_ALL_PPC)
 	if(_prep_type==_PREP_Radstone)
 	{
 		switch(ucSystemType)
@@ -227,6 +228,7 @@ static __inline__ void enable_dma(unsigned int dmanr)
 			}
 		}
 	}
+#endif /* CONFIG_PREP || CONFIG_ALL_PPC */
 
 	if (dmanr != 4)
 	{

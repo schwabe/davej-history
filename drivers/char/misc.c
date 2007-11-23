@@ -248,7 +248,7 @@ int __init misc_init(void)
 #ifdef CONFIG_BVME6000
 	rtc_DP8570A_init();
 #endif
-#if defined(CONFIG_RTC) || defined(CONFIG_SUN_MOSTEK_RTC)
+#if defined(CONFIG_RTC) || defined(CONFIG_PPC_RTC) || defined(CONFIG_SUN_MOSTEK_RTC)
 	rtc_init();
 #endif
 #ifdef CONFIG_ATARI_DSP56K

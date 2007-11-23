@@ -16,6 +16,8 @@
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/version.h>
+#include <linux/fs.h>
+#include <linux/console.h>
 #include <asm/spinlock.h>
 #include <asm/prom.h>
 #include <asm/page.h>
@@ -27,6 +29,10 @@
 #include <asm/system.h>
 #include <asm/gemini.h>
 #include <asm/linux_logo.h>
+#include <asm/mmu.h>
+#include <asm/pgtable.h>
+#include <asm/adb.h>
+#include <asm/pmu.h>
 
 /*
  * Properties whose value is longer than this get excluded from our
@@ -109,6 +115,12 @@ static struct device_node *allnodes = 0;
 
 #ifdef CONFIG_BOOTX_TEXT
 
+/*
+ * The VGA font is in the _pmac section. Can't this cause problems with CHRP
+ * using some of the prom_xxxx functions ?
+ * All this need to be moved in a separate source file anyway
+ */
+
 static void clearscreen(void);
 static void flushscreen(void);
 
@@ -116,6 +128,9 @@ void drawchar(char c);
 void drawstring(const char *c);
 void drawhex(unsigned long v);
 static void scrollscreen(void);
+static void prepare_disp_BAT(void);
+static void boot_console_write(struct console *co, const char *s,
+				 unsigned count);
 
 static void draw_byte(unsigned char c, long locX, long locY);
 static void draw_byte_32(unsigned char *bits, unsigned long *base, int rb);
@@ -128,9 +143,27 @@ static long				g_loc_Y = 0;
 static long				g_max_loc_X = 0;
 static long				g_max_loc_Y = 0; 
 
+unsigned long disp_BATL = 0;
+unsigned long disp_BATU = 0;
+
 #define cmapsz	(16*256)
 
 static unsigned char vga_font[cmapsz];
+
+static struct console boot_cons = {
+	"boot",
+	boot_console_write,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	CON_PRINTBUFFER,
+	0,
+	0,
+	NULL
+};
+static int boot_cons_registered = 0;
 
 #endif /* CONFIG_BOOTX_TEXT */
 
@@ -243,7 +276,7 @@ call_prom(const char *service, int nargs, int nret, ...)
 	return prom_args.args[nargs];
 }
 
-__init
+/*__init*/
 void
 prom_print(const char *msg)
 {
@@ -399,6 +432,7 @@ prom_init(int r3, int r4, prom_entry pp)
 		}
 		
 #ifdef CONFIG_BOOTX_TEXT
+		prepare_disp_BAT();
 		prom_print(RELOC("booting...\n"));
 		flushscreen();
 #endif
@@ -573,7 +607,11 @@ prom_init(int r3, int r4, prom_entry pp)
 	 * is in its holding pattern code.
 	 *
 	 * -- Cort
+	 * 
+	 * This code crashes on some pmacs since the memory at 8M is not
+	 * claim'ed and so can be unmapped. -- BenH
 	 */
+	if (chrp)
 	{
 		extern void __secondary_hold(void);
 		unsigned long i;
@@ -599,7 +637,7 @@ prom_init(int r3, int r4, prom_entry pp)
 	}
 
 	/* look for cpus */
-	for (node = 0; prom_next_node(&node);)
+	for (node = 0; chrp && prom_next_node(&node);)
 	{
 		type[0] = 0;
 		call_prom(RELOC("getprop"), 4, 1, node, RELOC("device_type"),
@@ -642,6 +680,7 @@ prom_init(int r3, int r4, prom_entry pp)
 	if (!chrp && RELOC(disp_bi)) {
 		RELOC(prom_stdout) = 0;
 		clearscreen();
+		prepare_disp_BAT();
 		prom_welcome(PTRRELOC(RELOC(disp_bi)), phys);
 	}
 #endif
@@ -692,9 +731,50 @@ void showvalue(char *str, unsigned long val)
 	drawhex(val);
 	drawstring("\n");
 }
+
+/* Calc BAT values for mapping the display and store them
+ * in disp_BATH and disp_BATL. Those values are then used
+ * from head.S to map the display during identify_machine()
+ * and MMU_Init()
+ * 
+ * For now, the display is mapped in place (1:1). This should
+ * be changed if the display physical address overlaps
+ * KERNELBASE, which is fortunately not the case on any machine
+ * I know of. This mapping is temporary and will disappear as
+ * soon as the setup done by MMU_Init() is applied
+ * 
+ * For now, we align the BAT and then map 8Mb on 601 and 16Mb
+ * on other PPCs. This may cause trouble if the framebuffer
+ * is really badly aligned, but I didn't encounter this case
+ * yet.
+ */
+__init
+static void
+prepare_disp_BAT(void)
+{
+	unsigned long offset = reloc_offset();
+	boot_infos_t* bi = PTRRELOC(RELOC(disp_bi));
+	unsigned long addr = (unsigned long)bi->dispDeviceBase;
+	
+	if ((_get_PVR() >> 16) != 1) {
+		/* 603, 604, G3, G4, ... */
+		addr &= 0xFF000000UL;
+		RELOC(disp_BATU) = addr | (BL_16M<<2) | 2;
+		RELOC(disp_BATL) = addr | (_PAGE_NO_CACHE | _PAGE_GUARDED | BPP_RW);		
+	} else {
+		/* 601 */
+		addr &= 0xFF800000UL;
+		RELOC(disp_BATU) = addr | (_PAGE_NO_CACHE | PP_RWXX) | 4;
+		RELOC(disp_BATL) = addr | BL_8M | 0x40;
+	}
+	bi->logicalDisplayBase = bi->dispDeviceBase;
+}
+
 #endif
 
-static int prom_set_color(ihandle ih, int i, int r, int g, int b)
+__init
+static int
+prom_set_color(ihandle ih, int i, int r, int g, int b)
 {
 	struct prom_args prom_args;
 	unsigned long offset = reloc_offset();
@@ -729,7 +809,7 @@ check_display(unsigned long mem)
 	ihandle ih;
 	int i;
 	unsigned long offset = reloc_offset();
-	char type[16], *path;
+	char type[16], *path, name[32];
 	static unsigned char default_colors[] = {
 		0x00, 0x00, 0x00,
 		0x00, 0x00, 0xaa,
@@ -757,6 +837,12 @@ check_display(unsigned long mem)
 			  type, sizeof(type));
 		if (strcmp(type, RELOC("display")) != 0)
 			continue;
+		name[0] = 0;
+		call_prom(RELOC("getprop"), 4, 1, node, RELOC("name"),
+			  name, sizeof(name));
+		if (!strcmp(name, RELOC("offscreen-display")))
+	    		continue;
+
 		/* It seems OF doesn't null-terminate the path :-( */
 		path = (char *) mem;
 		memset(path, 0, 256);
@@ -1189,7 +1275,7 @@ finish_node_interrupts(struct device_node *np, unsigned long mem_start)
 		    ((node->name && !strcmp(node->name, "open-pic")) ||
 		     !node->name)) {
 		    for (i = 0; i < np->n_intrs; ++i)
-			np->intrs[i].line = openpic_to_irq(np->intrs[i].line);
+			np->intrs[i].line = np->intrs[i].line + NUM_8259_INTERRUPTS;
 		}
 		return mem_start;
 	    }
@@ -1492,7 +1578,7 @@ interpret_macio_props(struct device_node *np, unsigned long mem_start)
 			/* CHRP machines */
 			np->n_intrs = l / (2 * sizeof(int));
 			for (i = 0; i < np->n_intrs; ++i) {
-				np->intrs[i].line = openpic_to_irq(*ip++);
+				np->intrs[i].line = (*ip++) + NUM_8259_INTERRUPTS;
 				np->intrs[i].sense = *ip++;
 			}
 		}
@@ -1637,9 +1723,17 @@ find_pci_device_OFnode(unsigned char bus, unsigned char dev_fn)
 	int l;
 	
 	for (np = allnodes; np != 0; np = np->allnext) {
-		char *pname = np->parent ?
-			(char *)get_property(np->parent, "name", &l) : 0;
-		if (pname && strcmp(pname, "mac-io") == 0)
+		int in_macio = 0;
+		struct device_node* parent = np->parent;
+		while(parent) {
+			char *pname = (char *)get_property(parent, "name", &l);
+			if (pname && strcmp(pname, "mac-io") == 0) {
+				in_macio = 1;
+				break;
+			}
+			parent = parent->parent;
+		}
+		if (in_macio)
 			continue;
 		reg = (unsigned int *) get_property(np, "reg", &l);
 		if (reg == 0 || l < sizeof(struct reg_property))
@@ -1757,7 +1851,7 @@ get_property(struct device_node *np, const char *name, int *lenp)
 	struct property *pp;
 
 	for (pp = np->properties; pp != 0; pp = pp->next)
-		if (strcmp(pp->name, name) == 0) {
+		if (pp->name && strcmp(pp->name, name) == 0) {
 			if (lenp != 0)
 				*lenp = pp->length;
 			return pp->value;
@@ -1901,11 +1995,30 @@ __init
 void
 map_bootx_text(void)
 {
+	unsigned long base, offset, size;
 	if (disp_bi == 0)
 		return;
-	disp_bi->logicalDisplayBase =
-		ioremap((unsigned long) disp_bi->dispDeviceBase,
-			disp_bi->dispDeviceRowBytes * disp_bi->dispDeviceRect[3]);
+	base = ((unsigned long) disp_bi->dispDeviceBase) & 0xFFFFF000UL;
+	offset = ((unsigned long) disp_bi->dispDeviceBase) - base;
+	size = disp_bi->dispDeviceRowBytes * disp_bi->dispDeviceRect[3] + offset
+		+ disp_bi->dispDeviceRect[0];
+	disp_bi->logicalDisplayBase = ioremap(base, size) + offset;
+}
+
+__init
+void
+install_boot_console(void)
+{
+	register_console(&boot_cons);
+	boot_cons_registered = 1;
+}
+
+void
+remove_boot_console(void)
+{
+	if (boot_cons_registered)
+		unregister_console(&boot_cons);
+	boot_cons_registered = 0;
 }
 
 /* Calc the base address of a given point (x,y) */
@@ -1981,7 +2094,11 @@ scrollscreen(void)
 	unsigned long width		= ((bi->dispDeviceRect[2] - bi->dispDeviceRect[0]) *
 						(bi->dispDeviceDepth >> 3)) >> 2;
 	int i,j;
-	
+
+#ifdef CONFIG_POWERMAC
+	pmu_suspend();
+#endif
+
 	for (i=0; i<(bi->dispDeviceRect[3] - bi->dispDeviceRect[1] - 16); i++)
 	{
 		unsigned long *src_ptr = src;
@@ -1998,6 +2115,10 @@ scrollscreen(void)
 			*(dst_ptr++) = 0;
 		dst += (bi->dispDeviceRowBytes >> 2);
 	}
+
+#ifdef CONFIG_POWERMAC
+	pmu_resume();
+#endif
 }
 
 __pmac
@@ -2041,6 +2162,16 @@ drawstring(const char *c)
 	while (*c)
 		drawchar(*c++);
 }
+
+#ifdef CONFIG_BOOTX_TEXT
+__pmac
+static void boot_console_write(struct console *co, const char *s,
+				 unsigned count)
+{
+	while(count--)
+		drawchar(*s++);
+}
+#endif
 
 __pmac
 void

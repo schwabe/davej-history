@@ -150,6 +150,7 @@ typedef enum
 	ec_get_ctl,
 	ec_set_ctl_masked,
         ec_ptlb,
+        ec_callback,
         ec_cmd_last
 } ec_cmd_sig;
 
@@ -186,6 +187,13 @@ typedef struct
 	__u32 orvals[16];
 	__u32 andvals[16];
 } ec_creg_mask_parms;
+
+/* parameter area for the callback signal */
+typedef struct
+{
+  void (*callback)(void *);
+  void *data;
+} ec_callback_parms;
 
 /*
  * Signal processor
@@ -249,6 +257,8 @@ signal_processor_ps(__u32 *statusptr, __u32 parameter,
 		);
    return ccode;
 }
+
+extern void smp_do_callback_all(void (*callback)(void *), void *data);
 
 #endif __SIGP__
 

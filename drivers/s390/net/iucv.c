@@ -504,11 +504,14 @@ void do_iucv_interrupt(struct pt_regs *regs, __u16 code)
   printk(   "iucv: extern_int_buffer:\n");
   dumpit((char *)&extern_int_buffer[0],40);
 #endif
-  
+
   if (extern_int_buffer->iptype == 0x01)
     dev = get_device_from_userid(&((char*) extern_int_buffer)[8]);
   else
     dev = get_device_from_pathid(extern_int_buffer->ippathid);
+
+  if (dev == NULL)
+    return;
 
   netif_enter_interrupt(dev);        /* lock ! */
   privptr = (struct iucv_priv *)(dev->priv);
@@ -608,7 +611,7 @@ void do_iucv_interrupt(struct pt_regs *regs, __u16 code)
       printk(  "message pending.\n");
 #endif
       rcvptr = &privptr->receive_buffer[0];
-      
+
       /* re-set receive buffer */
       memset(privptr->receive_buffer,0,privptr->receive_buffer_len);
       len = privptr->receive_buffer_len;

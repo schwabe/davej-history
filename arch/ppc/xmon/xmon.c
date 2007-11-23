@@ -86,6 +86,9 @@ extern int putchar(int ch);
 extern int setjmp(u_int *);
 extern void longjmp(u_int *, int);
 
+extern void xmon_enter(void);
+extern void xmon_leave(void);
+
 #define GETWORD(v)	(((v)[0] << 24) + ((v)[1] << 16) + ((v)[2] << 8) + (v)[3])
 
 static char *help_string = "\
@@ -139,6 +142,7 @@ xmon(struct pt_regs *excp)
 	msr = get_msr();
 	set_msr(msr & ~0x8000);	/* disable interrupts */
 	remove_bpts();
+	xmon_enter();
 	excprint(excp);
 	cmd = cmds(excp);
 	if (cmd == 's') {
@@ -151,6 +155,7 @@ xmon(struct pt_regs *excp)
 		xmon_trace = 0;
 		insert_bpts();
 	}
+	xmon_leave();
 	set_msr(msr);		/* restore interrupt enable */
 }
 

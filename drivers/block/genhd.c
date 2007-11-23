@@ -29,6 +29,10 @@
 #include <linux/blk.h>
 #include <linux/init.h>
 
+#ifdef CONFIG_ARCH_S390
+#include <asm/dasd.h>
+#endif /* CONFIG_ARCH_S390 */
+
 #include <asm/system.h>
 #include <asm/byteorder.h>
 
@@ -67,7 +71,7 @@ extern int scsi_dev_init(void);
 extern int net_dev_init(void);
 
 #ifdef CONFIG_PPC
-extern void note_bootable_part(kdev_t dev, int part);
+extern void note_bootable_part(kdev_t dev, int part, int goodness);
 #endif
 
 static char *raid_name (struct gendisk *hd, int minor, int major_base,
@@ -84,6 +88,10 @@ static char *raid_name (struct gendisk *hd, int minor, int major_base,
         return buf;
 }
 
+#ifdef CONFIG_ARCH_S390
+int (*genhd_dasd_name)(char*,int,int,struct gendisk*) = NULL;
+#endif
+
 /*
  * disk_name() is used by genhd.c and md.c.
  * It formats the devicename of the indicated disk
@@ -96,6 +104,14 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	const char *maj = hd->major_name;
 	int unit = (minor >> hd->minor_shift) + 'a';
 
+#ifdef CONFIG_ARCH_S390
+	if ( strncmp ( hd->major_name,"dasd",4) == 0 ){
+		part = minor & ((1 << hd->minor_shift) - 1);
+		if ( genhd_dasd_name )
+			genhd_dasd_name(buf,minor>>hd->minor_shift,part,hd);
+		return buf;
+	} 
+#endif
 	/*
 	 * IDE devices use multiple major numbers, but the drives
 	 * are named as:  {hda,hdb}, {hdc,hdd}, {hde,hdf}, {hdg,hdh}..
@@ -1179,7 +1195,8 @@ static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 				goodness++;
 
 			if (strcasecmp(part->type, "Apple_UNIX_SVR2") == 0
-			    || strcasecmp(part->type, "Linux_PPC") == 0) {
+			    || (strnicmp(part->type, "Linux", 5) == 0
+			        && strcasecmp(part->type, "Linux_swap") != 0)) {
 				int i, l;
 
 				goodness++;
@@ -1208,7 +1225,7 @@ static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 	}
 #ifdef CONFIG_PPC
 	if (found_root_goodness)
-		note_bootable_part(dev, found_root);
+		note_bootable_part(dev, found_root, found_root_goodness);
 #endif
 	brelse(bh);
 	printk("\n");
@@ -1402,10 +1419,11 @@ static int ultrix_partition(struct gendisk *hd, kdev_t dev, unsigned long first_
 #endif /* CONFIG_ULTRIX_PARTITION */
 
 #ifdef CONFIG_ARCH_S390
+#include <linux/malloc.h>
+#include <linux/hdreg.h>
+#include <linux/ioctl.h>
 #include <asm/ebcdic.h>
-#include "../s390/block/dasd_types.h"
-
-dasd_information_t **dasd_information = NULL;
+#include <asm/uaccess.h>
 
 typedef enum {
   ibm_partition_none = 0,
@@ -1442,14 +1460,45 @@ ibm_partition (struct gendisk *hd, kdev_t dev, int first_sector)
 	ibm_partition_t partition_type;
 	char type[5] = {0,};
 	char name[7] = {0,};
-        int di = MINOR(dev) >> hd->minor_shift;
-        if ( ! get_ptable_blocksize(dev) )
+	struct hd_geometry geo;
+	mm_segment_t old_fs;
+	int blocksize;
+	struct file *filp = NULL;
+	struct inode *inode = NULL;
+	int offset, size;
+	int rc;
+
+	blocksize = hardsect_size[MAJOR(dev)][MINOR(dev)];
+	if ( blocksize <= 0 ) {
 		return 0;
-	if ( ! dasd_information )
+	}
+	set_blocksize(dev, blocksize);  /* OUCH !! */
+
+	/* find out offset of volume label (partn table) */
+	filp = (struct file *)kmalloc (sizeof(struct file),GFP_KERNEL);
+	if ( filp == NULL ) {
+		printk (KERN_WARNING __FILE__ " ibm_partition: kmalloc failed for filp\n");
 		return 0;
-	if ( ( bh = bread( dev, 
-			 dasd_information[di]->sizes.label_block, 
-			 dasd_information[di]->sizes.bp_sector ) ) != NULL ) {
+	}
+	memset(filp,0,sizeof(struct file));
+	filp ->f_mode = 1; /* read only */
+	inode = get_empty_inode();
+	inode -> i_rdev = dev;
+	rc = blkdev_open(inode,filp);
+	if ( rc ) {
+		return 0;
+	}
+	old_fs=get_fs();
+	set_fs(KERNEL_DS);
+	rc = filp->f_op->ioctl (inode, filp, HDIO_GETGEO, (unsigned long)(&geo));
+	set_fs(old_fs);
+	if ( rc ) {
+		return 0;
+	}
+	blkdev_release(inode);
+	
+	size = hd -> sizes[MINOR(dev)]<<1;
+	if ( ( bh = bread( dev, geo.start, blocksize) ) != NULL ) {
 		strncpy ( type,bh -> b_data, 4);
 		strncpy ( name,bh -> b_data + 4, 6);
         } else {
@@ -1459,50 +1508,45 @@ ibm_partition (struct gendisk *hd, kdev_t dev, int first_sector)
 		EBCASC(name,6);
 	}
 	switch ( partition_type = get_partition_type(type) ) {
-	case ibm_partition_lnx1:
+	case ibm_partition_lnx1: 
+		offset = (geo.start + 1);
 		printk ( "(LNX1)/%6s:",name);
-		add_partition( hd, MINOR(dev) + 1, 
-				  (dasd_information[di]->sizes.label_block + 1) <<
-				   dasd_information[di]->sizes.s2b_shift,
-				  (dasd_information [di]->sizes.blocks -
-				    dasd_information[di]->sizes.label_block - 1) <<
-				  dasd_information[di]->sizes.s2b_shift,0 );
 		break;
 	case ibm_partition_vol1:
+		offset = 0;
+		size = 0;
 		printk ( "(VOL1)/%6s:",name);
 		break;
 	case ibm_partition_cms1:
 		printk ( "(CMS1)/%6s:",name);
 		if (* (((long *)bh->b_data) + 13) == 0) {
 			/* disk holds a CMS filesystem */
-			add_partition( hd, MINOR(dev) + 1, 
-				       (dasd_information [di]->sizes.label_block + 1) <<
-				       dasd_information [di]->sizes.s2b_shift,
-				       (dasd_information [di]->sizes.blocks -
-					dasd_information [di]->sizes.label_block) <<
-				       dasd_information [di]->sizes.s2b_shift,0 );
+			offset = (geo.start + 1);
 			printk ("(CMS)");
 		} else {
-		  /* disk is reserved minidisk */
-                        long *label=(long*)bh->b_data;
-			int offset = label[13];
-			int size = (label[7]-1-label[13])*(label[3]>>9);
-			add_partition( hd, MINOR(dev) + 1, 
-				       offset << dasd_information [di]->sizes.s2b_shift,
-				       size<<dasd_information [di]->sizes.s2b_shift,0 );
+			/* disk is reserved minidisk */
+			// mdisk_setup_data.size[i] =
+			// (label[7] - 1 - label[13]) *
+			// (label[3] >> 9) >> 1;
+			long *label=(long*)bh->b_data;
+			blocksize = label[3];
+			offset = label[13];
+			size = (label[7]-1)*(blocksize>>9); 
 			printk ("(MDSK)");
 		}
 		break;
 	case ibm_partition_none:
 		printk ( "(nonl)/      :");
-		add_partition( hd, MINOR(dev) + 1, 
-				  (dasd_information [di]->sizes.label_block + 1) <<
-				  dasd_information [di]->sizes.s2b_shift,
-				  (dasd_information [di]->sizes.blocks -
-				   dasd_information [di]->sizes.label_block - 1) <<
-				  dasd_information [di]->sizes.s2b_shift,0 );
+		offset = (geo.start+1);
 		break;
+	default:
+		offset = 0;
+		size = 0;
+		
 	}
+	add_partition( hd, MINOR(dev), 0,size,0);
+	add_partition( hd, MINOR(dev) + 1, offset * (blocksize >> 9),
+		       size-offset*(blocksize>>9) ,0 );
 	printk ( "\n" );
 	bforget(bh);
 	return 1;
@@ -1609,14 +1653,18 @@ static inline void setup_dev(struct gendisk *dev)
 		dev->part[i].start_sect = 0;
 		dev->part[i].nr_sects = 0;
 	}
-	dev->init(dev);	
+	if ( dev->init != NULL )
+		dev->init(dev);	
 	for (drive = 0 ; drive < dev->nr_real ; drive++) {
 		int first_minor	= drive << dev->minor_shift;
 		current_minor = 1 + first_minor;
-		check_partition(dev, MKDEV(dev->major, first_minor));
+		/* If we really have a device check partition table */
+		if ( blksize_size[dev->major] == NULL ||
+		     blksize_size[dev->major][current_minor])
+			check_partition(dev, MKDEV(dev->major, first_minor));
 	}
 	if (dev->sizes != NULL) {	/* optional safeguard in ll_rw_blk.c */
-		for (i = 0; i < end_minor; i++)
+		for (i = 0; i < end_minor; i++) 
 			dev->sizes[i] = dev->part[i].nr_sects >> (BLOCK_SIZE_BITS - 9);
 		blk_size[dev->major] = dev->sizes;
 	}

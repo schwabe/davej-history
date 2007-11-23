@@ -19,6 +19,7 @@
 #include <asm/machdep.h>
 
 #include "pci.h"
+#include "open_pic.h"
 
 /* LongTrail */
 #define pci_config_addr(bus, dev, offset) \
@@ -286,7 +287,7 @@ chrp_pcibios_fixup(void)
 	for( dev=pci_devices ; dev; dev=dev->next )
 	{
 		if ( dev->irq )
-			dev->irq = openpic_to_irq( dev->irq );
+			dev->irq = dev->irq + open_pic.irq_offset;
 		/* these need to be absolute addrs for OF and Matrox FB -- Cort */
 		if ( dev->vendor == PCI_VENDOR_ID_MATROX )
 		{
