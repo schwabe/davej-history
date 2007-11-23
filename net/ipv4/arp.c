@@ -739,7 +739,7 @@ static int arp_force_expire(void)
 	unsigned long now = jiffies;
 	int result = 0;
 
-	static last_index;
+	static int last_index;
 
 	if (ARP_LOCKED())
 		return 0;

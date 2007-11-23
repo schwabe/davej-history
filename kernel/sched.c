@@ -1547,7 +1547,8 @@ asmlinkage int sys_sched_yield(void)
 {
 	cli();
 	move_last_runqueue(current);
-	current->counter = 0;
+        if (current->counter)
+                current->counter--;
 	need_resched = 1;
 	sti();
 	return 0;

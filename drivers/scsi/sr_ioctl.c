@@ -523,35 +523,8 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
     case CDROMREADRAW:
     case CDROMREADMODE1:
     case CDROMREADMODE2:
-    {
-	unsigned char      *raw;
-        struct cdrom_msf   msf;
-        int                blocksize, lba, rc;
-
-        if (cmd == CDROMREADMODE1)
-                blocksize = CD_FRAMESIZE;       /* 2048 */
-        else if (cmd == CDROMREADMODE2)
-                blocksize = CD_FRAMESIZE_RAW0;  /* 2336 */
-        else
-		/* some SCSI drives do not allow this one */
-                blocksize = CD_FRAMESIZE_RAW;   /* 2352 */
-
-	if (copy_from_user(&msf,(void*)arg,sizeof(msf)))
-		return -EFAULT;
-	if (!(raw = scsi_malloc(2048+512)))
-        	return -ENOMEM;
-
-	lba = (((msf.cdmsf_min0 * CD_SECS) + msf.cdmsf_sec0)
-			* CD_FRAMES + msf.cdmsf_frame0) - CD_BLOCK_OFFSET;
-	rc = sr_read_sector(target, lba, blocksize, raw);
-	if (!rc)
-		if (copy_to_user((void*)arg, raw, blocksize))
-			rc = -EFAULT;
-
-	scsi_free(raw,2048+512);
-	return rc;
-    }
-
+	return -EINVAL;
+	
 	/* block-copy from ../block/sbpcd.c with some adjustments... */
     case CDROMMULTISESSION: /* tell start-of-last-session to user */
     {

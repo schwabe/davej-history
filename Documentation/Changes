@@ -40,11 +40,21 @@ http://jf.gee.kyoto-u.ac.jp/JF/v2.0/Changes-2.0.html ni arimasu.
    Voyez le site http://www.linux-kheops.com/traduc/kernels/ pour la
 traduction francaise (merci, David Bourgin).  (French translation)
 
-Last updated: August 14, 1997.
-Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
+   Per quelli che preferiscono avere una versione in Italiano di questo
+documento, si consulti la traduzione di Giovanni Bortolozzo reperibile a
+http://www.pluto.linux.it/ildp/kernel/Changes-2.0.html (Italian
+translation).
 
-Current Releases
-****************
+   The most current version should always be available from
+http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
+
+Last updated: February 16, 1998.
+Current Author: Chris Ricker (kaboom@gatech.edu).
+
+Current Releases (the latest necessary for basic functionality, not
+*******************************************************************
+
+   necessarily the latest and greatest)
 
 - Kernel modules	 2.0.0
 - PPP daemon		 2.2.0f
@@ -372,6 +382,12 @@ ip_masq_irc.o) if you are going to use FTP or IRC in combination with
 masquerading.  You'll need to get
 ftp://ftp.xos.nl/pub/linux/ipfwadm/ipfwadm-2.3.0.tar.gz to use this.
 
+   To enable IP forwarding, you may need to
+
+   echo 1 > /proc/sys/net/ipv4/ip_forwarding
+
+   as well.
+
 ISDN support
 ============
 
@@ -587,6 +603,14 @@ compiled on them.  If you need (or want) to compile your own copy,
 you'll need to get the latest version, currently available at
 ftp://tsx-11.mit.edu/pub/linux/packages/ext2fs/e2fsprogs-1.06.tar.gz.
 
+FlagShip and /dev/full
+======================
+
+   The behavior of /dev/full changed with kernel 2.0.31.  In addition to
+improving system security, the change broke executables created by the
+FlagShip database compiler.  Fixes can be found at http://www.fship.com
+via the "What's New" or "Support" buttons.
+
 How to know the version of the installed programs
 *************************************************
 
@@ -725,8 +749,7 @@ same directory that works well for many people.
 
 Please send info about any other packages that 2.0.x "broke" or about
 any new features of 2.0.x that require extra or new packages for use to
-Chris Ricker (gt1355b@prism.gatech.edu).  I generate this from a
-modified texinfo setup, so you don't need to bother generating a diff
-against the current version before you send the additional information
-to me.
+Chris Ricker <kaboom@gatech.edu>.  I generate this from a modified
+texinfo setup, so you don't need to bother generating a diff against
+the current version before you send the additional information to me.
 

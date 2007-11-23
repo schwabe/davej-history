@@ -171,7 +171,7 @@ asmlinkage int sys_prof(void)
 #endif
 
 extern void hard_reset_now(void);
-extern asmlinkage sys_kill(int, int);
+extern asmlinkage int sys_kill(int, int);
 
 /*
  * Reboot system call: for obvious reasons only root may call it,

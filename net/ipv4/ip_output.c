@@ -28,6 +28,8 @@
  *					output firewall rules)
  *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
  *		Juan Jose Ciarlante:	sk/skb source address rewriting
+ * 	Elena Apolinario Fdez de Sousa,:ipmr_forward never received multicast
+ *	Juan-Mariano de Goyeneche	traffic generated locally.
  */
 
 #include <asm/segment.h>
@@ -69,7 +71,9 @@
 
 /*
  *	Allows dynamic re-writing of packet's addresses.
- *	if value > 1, be verbose about addr rewriting.
+ *      value & 3    do rewrite
+ *      value & 2    be verbose
+ *      value & 4    rewrite connected sockets too
  *	Currently implemented:
  *		tcp_output.c   if sk->state!=TCP_SYN_SENT
  *		ip_masq.c      if no packet has been received by tunnel
@@ -79,7 +83,8 @@ int sysctl_ip_dynaddr = 0;
 /*
  *	Very Promisc source address re-assignation.
  *	ONLY acceptable if socket is NOT connected yet.
- *      Caller already checked sysctl_ip_dynaddr != 0 and consistent sk->state
+ *      Caller already checked sysctl_ip_dynaddr & 3 and EITHER
+ *      sysctl_ip_dynaddr & 4 OR consistent sk->state
  *	 (TCP_SYN_SENT for tcp, udp-connect sockets are set TCP_ESTABLISHED)
  */
 
@@ -107,12 +112,12 @@ int ip_rewrite_addrs (struct sock *sk, struct sk_buff *skb, struct device *dev)
         }
         
         /*
-         *	Be verbose if sysctl value > 1
+         *	Be verbose if sysctl value & 2
          */
-        if (sysctl_ip_dynaddr > 1) {
+        if (sysctl_ip_dynaddr & 2) {
                 printk(KERN_INFO "ip_rewrite_addrs(): shifting saddr from %s",
                        in_ntoa(skb->saddr));
-                printk(" to %s\n", in_ntoa(new_saddr));
+                printk(" to %s (state %d)\n", in_ntoa(new_saddr), sk->state);
         }
         
         iph = skb->ip_hdr;
@@ -121,7 +126,7 @@ int ip_rewrite_addrs (struct sock *sk, struct sk_buff *skb, struct device *dev)
                 iph->saddr = new_saddr;
                 skb->saddr = new_saddr;
                 ip_send_check(iph);
-        } else if (sysctl_ip_dynaddr > 1) {
+        } else if (sysctl_ip_dynaddr & 2) {
                 printk(KERN_WARNING "ip_rewrite_addrs(): skb already changed (???).\n");
                 return 0;
         }
@@ -134,7 +139,7 @@ int ip_rewrite_addrs (struct sock *sk, struct sk_buff *skb, struct device *dev)
                 sk->saddr = new_saddr;
                 sk->rcv_saddr = new_saddr;
                 sk->prot->rehash(sk);
-        } else if (sysctl_ip_dynaddr > 1)
+        } else if (sysctl_ip_dynaddr & 2)
                 printk(KERN_NOTICE "ip_rewrite_addrs(): no change needed for sock\n");
         return 1;
 }
@@ -996,6 +1001,22 @@ int ip_build_xmit(struct sock *sk,
 	 
 		if (MULTICAST(daddr) && !(dev->flags&IFF_LOOPBACK)) 
 		{
+#ifdef CONFIG_IP_MROUTE
+		/* We need this so that mrouted "hears" packets sent from the
+		   same host it is running on... (jmel) */
+                if (mroute_socket&&(iph->protocol!=IPPROTO_IGMP))
+                {
+			if((skb->ip_hdr->daddr&htonl(0xFFFFFF00))!=htonl(0xE0000000)) 
+			{ 
+				struct sk_buff* skb2=skb_clone(skb, GFP_ATOMIC);                                
+				if(skb2)
+                       		{
+                       		        skb2->free=1;
+                       		        ipmr_forward(skb2, 0);
+                       	 	}
+			}
+                }
+#endif
 			/*
 			 *	Loop back any frames. The check for IGMP_ALL_HOSTS is because
 			 *	you are always magically a member of this group.

@@ -146,7 +146,6 @@ CONFIG_SCSI_QLOGIC_ISP=y
 CONFIG_NETDEVICES=y
 CONFIG_DUMMY=m
 # CONFIG_EQUALIZER is not set
-# CONFIG_DLCI is not set
 # CONFIG_PLIP is not set
 # CONFIG_PPP is not set
 # CONFIG_SLIP is not set
@@ -162,7 +161,6 @@ CONFIG_DE4X5=y
 # CONFIG_DEC_ELCP is not set
 # CONFIG_DGRS is not set
 # CONFIG_NET_POCKET is not set
-# CONFIG_GIGAETHER is not set
 # CONFIG_TR is not set
 # CONFIG_FDDI is not set
 # CONFIG_ARCNET is not set

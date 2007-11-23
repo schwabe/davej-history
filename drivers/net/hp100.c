@@ -2,7 +2,7 @@
 ** hp100.c 
 ** HP CASCADE Architecture Driver for 100VG-AnyLan Network Adapters
 **
-** $Id: hp100.c,v 1.54 1997/06/12 10:37:07 perex Exp perex $
+** $Id: hp100.c,v 1.56 1998/03/04 15:23:59 perex Exp perex $
 **
 ** Based on the HP100 driver written by Jaroslav Kysela <perex@jcu.cz>
 ** Extended for new busmaster capable chipsets by 
@@ -17,6 +17,7 @@
 ** -- HP J2973  10 Mbit/s PCI 10base-T
 ** -- HP J2573  10/100 ISA
 ** -- Compex ReadyLink ENET100-VG4  10/100 Mbit/s PCI / EISA
+** -- Compex FreedomLine 100/VG  10/100 Mbit/s ISA / EISA / PCI
 ** 
 ** but it should also work with the other CASCADE based adapters.
 **
@@ -27,12 +28,25 @@
 **       -  To reduce interrupt load in busmaster, one could switch off
 **          the interrupts that are used to refill the queues whenever the
 **          queues are filled up to more than a certain threshold.
+**       -  some updates for EISA version of card
 **
 **
 ** This source/code is public free; you can distribute it and/or modify 
 ** it under terms of the GNU General Public License (published by the
 ** Free Software Foundation) either version two of this License, or any 
 ** later version.
+**
+** 1.55 -> 1.56
+**   - removed printk in misc. interrupt and update statistics to allow
+**     monitoring of card status
+**   - timing changes in xmit routines, relogin to 100VG hub added when
+**     driver does reset
+**   - included fix for Compex FreedomLine PCI adapter
+** 
+** 1.54 -> 1.55
+**   - fixed bad initialization in init_module
+**   - added Compex FreedomLine adapter
+**   - some fixes in card initialization
 **
 ** 1.53 -> 1.54
 **   - added hardware multicast filter support (doesn't work)
@@ -115,6 +129,12 @@ typedef struct net_device_stats hp100_stats_t;
 #ifndef PCI_DEVICE_ID_COMPEX_ENET100VG4
 #define PCI_DEVICE_ID_COMPEX_ENET100VG4 0x0112
 #endif
+#ifndef PCI_VENDOR_ID_COMPEX2
+#define PCI_VENDOR_ID_COMPEX2 0x101a
+#endif
+#ifndef PCI_DEVICE_ID_COMPEX2_100VG
+#define PCI_DEVICE_ID_COMPEX2_100VG 0x0005
+#endif
 
 #define HP100_REGION_SIZE  0x20 /* for ioports */
 
@@ -141,11 +161,17 @@ struct hp100_eisa_id {
   u_char bus;
 };
 
+struct hp100_pci_id {
+  u_short vendor;
+  u_short device;
+};
+
 struct hp100_private {
   struct hp100_eisa_id *id;
   u_short chip;
   u_short soft_model;
   u_int memory_size; 
+  u_int virt_memory_size;
   u_short rx_ratio;       /* 1 - 99 */
   u_short priority_tx;    /* != 0 - priority tx */
   u_short mode;           /* PIO, Shared Mem or Busmaster */
@@ -213,9 +239,34 @@ static struct hp100_eisa_id hp100_eisa_ids[] = {
   /* 10/100 EISA card from Compex */
   { 0x0103180e, "ReadyLink ENET100-VG4", HP100_BUS_EISA },
 
+  /* 10/100 EISA card from Compex - FreedomLine (sq5bpf) */
+  /* Note: plhbrod@mbox.vol.cz reported that same ID have ISA */
+  /*       version of adapter, too... */
+  { 0x0104180e, "FreedomLine 100/VG", HP100_BUS_EISA },
+
+  /* 10/100 PCI card from Compex - FreedomLine
+   *
+   * I think this card doesn't like aic7178 scsi controller, but
+   * I haven't tested this much. It works fine on diskless machines.
+   *                            Jacek Lipkowski <sq5bpf@acid.ch.pw.edu.pl>
+   */
+  { 0x021211f6, "FreedomLine 100/VG", HP100_BUS_PCI },
+  
   /* 10/100 PCI card from Compex (J2585A compatible) */
   { 0x011211f6, "ReadyLink ENET100-VG4", HP100_BUS_PCI }
+
 };
+
+#define HP100_EISA_IDS_SIZE	(sizeof(hp100_eisa_ids)/sizeof(struct hp100_eisa_id))
+
+static struct hp100_pci_id hp100_pci_ids[] = {
+  { PCI_VENDOR_ID_HP, 		PCI_DEVICE_ID_HP_J2585A },
+  { PCI_VENDOR_ID_HP,		PCI_DEVICE_ID_HP_J2585B },
+  { PCI_VENDOR_ID_COMPEX,	PCI_DEVICE_ID_COMPEX_ENET100VG4 },
+  { PCI_VENDOR_ID_COMPEX2,	PCI_DEVICE_ID_COMPEX2_100VG }
+};
+
+#define HP100_PCI_IDS_SIZE	(sizeof(hp100_pci_ids)/sizeof(struct hp100_pci_id))
 
 static int hp100_rx_ratio = HP100_DEFAULT_RX_RATIO;
 static int hp100_priority_tx = HP100_DEFAULT_PRIORITY_TX;
@@ -238,13 +289,14 @@ static int  hp100_start_xmit( struct sk_buff *skb, struct device *dev );
 static int  hp100_start_xmit_bm (struct sk_buff *skb, struct device *dev );
 static void hp100_rx( struct device *dev );
 static hp100_stats_t *hp100_get_stats( struct device *dev );
+static void hp100_misc_interrupt( struct device *dev );
 static void hp100_update_stats( struct device *dev );
 static void hp100_clear_stats( int ioaddr );
 static void hp100_set_multicast_list( struct device *dev);
 static void hp100_interrupt( int irq, void *dev_id, struct pt_regs *regs );
 static void hp100_start_interface( struct device *dev );
 static void hp100_stop_interface( struct device *dev );
-static void hp100_load_eeprom( struct device *dev );
+static void hp100_load_eeprom( struct device *dev, u_short ioaddr );
 static int  hp100_sense_lan( struct device *dev );
 static int  hp100_login_to_vg_hub( struct device *dev, u_short force_relogin );
 static int  hp100_down_vg_link( struct device *dev );
@@ -272,7 +324,7 @@ static void wait( void )
  *  These functions should - if possible - avoid doing write operations
  *  since this could cause problems when the card is not installed.
  */
-
+ 
 __initfunc(int hp100_probe( struct device *dev ))
 {
   int base_addr = dev ? dev -> base_addr : 0;
@@ -322,17 +374,16 @@ __initfunc(int hp100_probe( struct device *dev ))
         {
           u_char pci_bus, pci_device_fn;
           u_short pci_command;
+          int pci_id_index;
 
-          if ((pcibios_find_device( PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_J2585A,
-                                    pci_index, &pci_bus,
-                                    &pci_device_fn ) != 0 ) && 
-              (pcibios_find_device( PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_J2585B,
-                                    pci_index, &pci_bus,
-                                    &pci_device_fn ) != 0 ) &&
-              (pcibios_find_device( PCI_VENDOR_ID_COMPEX, PCI_DEVICE_ID_COMPEX_ENET100VG4,
-                                    pci_index, &pci_bus,
-                                    &pci_device_fn ) != 0 ) ) break; 
+	  for ( pci_id_index = 0; pci_id_index < HP100_PCI_IDS_SIZE; pci_id_index++ )
+            if ( pcibios_find_device( hp100_pci_ids[ pci_id_index ].vendor,
+            			      hp100_pci_ids[ pci_id_index ].device,
+                                      pci_index, &pci_bus,
+                                      &pci_device_fn ) == 0 ) goto __pci_found;
+          break;
 
+	  __pci_found:
           pcibios_read_config_dword( pci_bus, pci_device_fn,
                                      PCI_BASE_ADDRESS_0, &ioaddr );
 
@@ -342,6 +393,15 @@ __initfunc(int hp100_probe( struct device *dev ))
 
           pcibios_read_config_word( pci_bus, pci_device_fn,
                                     PCI_COMMAND, &pci_command );
+          if ( !( pci_command & PCI_COMMAND_IO ) )
+            {
+#ifdef HP100_DEBUG
+              printk( "hp100: %s: PCI I/O Bit has not been set. Setting...\n", dev->name );
+#endif
+              pci_command |= PCI_COMMAND_IO;
+              pcibios_write_config_word( pci_bus, pci_device_fn,
+                                         PCI_COMMAND, pci_command );
+            }
           if ( !( pci_command & PCI_COMMAND_MASTER ) )
             {
 #ifdef HP100_DEBUG
@@ -386,7 +446,7 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
   u_char uc, uc_1;
   u_int eisa_id;
   u_int chip;
-  u_int memory_size = 0;
+  u_int memory_size = 0, virt_memory_size = 0;
   u_short local_mode, lsw;
   short mem_mapped;
   u_int *mem_ptr_phys, *mem_ptr_virt;
@@ -443,14 +503,18 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
       return -ENODEV;
     }
 
-  for ( i=0; i<sizeof(hp100_eisa_ids)/sizeof(struct hp100_eisa_id); i++)
-    if ( ( hp100_eisa_ids[ i ].id & 0xf0ffffff ) == ( eisa_id & 0xf0ffffff ) )
+  for ( i=0; i < HP100_EISA_IDS_SIZE; i++)
+    if ( hp100_eisa_ids[ i ].id == eisa_id )
       break;
-  if ( i >= sizeof( hp100_eisa_ids ) / sizeof( struct hp100_eisa_id ) )
-    {
+  if ( i >= HP100_EISA_IDS_SIZE ) {
+    for ( i = 0; i < HP100_EISA_IDS_SIZE; i++)
+      if ( ( hp100_eisa_ids[ i ].id & 0xf0ffffff ) == ( eisa_id & 0xf0ffffff ) )
+        break;
+    if ( i >= HP100_EISA_IDS_SIZE ) {
       printk( "hp100_probe: %s: card at port 0x%x isn't known (id = 0x%x)\n", dev -> name, ioaddr, eisa_id );
-      return -ENODEV;
+        return -ENODEV;
     }
+  }
   eid = &hp100_eisa_ids[ i ];
   if ( ( eid->id & 0x0f000000 ) < ( eisa_id & 0x0f000000 ) )
     {
@@ -468,7 +532,13 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
       return -EIO;
     }
 
-  /* Determine driver operation mode
+  /* Make sure, that all registers are correctly updated... */
+
+  hp100_load_eeprom( dev, ioaddr );
+  wait();
+
+  /*
+   * Determine driver operation mode
    *
    * Use the variable "hp100_mode" upon insmod or as kernel parameter to
    * force driver modes:
@@ -477,6 +547,22 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
    * hp100_mode=3 -> force use of i/o mapped mode.
    * hp100_mode=4 -> same as 1, but re-set the enable bit on the card.
    */
+
+  /*
+   * LSW values:
+   *   0x2278 -> J2585B, PnP shared memory mode
+   *   0x2270 -> J2585B, shared memory mode, 0xdc000
+   *   0xa23c -> J2585B, I/O mapped mode
+   *   0x2240 -> EISA COMPEX, BusMaster (Shasta Chip)
+   *   0x2220 -> EISA HP, I/O (Shasta Chip)
+   *   0x2260 -> EISA HP, BusMaster (Shasta Chip)
+   */
+
+#if 0
+  local_mode = 0x2270;
+  hp100_outw(0xfefe,OPTION_LSW);
+  hp100_outw(local_mode|HP100_SET_LB|HP100_SET_HB,OPTION_LSW);
+#endif
 
   /* hp100_mode value maybe used in future by another card */
   local_mode=hp100_mode;
@@ -536,7 +622,8 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
       else
 	{
 #ifdef HP100_DEBUG
-	  printk("hp100: %s: Card not configured for BM or BM not supported with this card. Trying shared memory mode.\n", dev->name);
+	  printk("hp100: %s: Card not configured for BM or BM not supported with this card.\n", dev->name );
+	  printk("hp100: %s: Trying shared memory mode.\n", dev->name);
 #endif
 	  /* In this case, try shared memory mode */
 	  local_mode=2;
@@ -554,6 +641,7 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
   mem_mapped = (( hp100_inw( OPTION_LSW ) & ( HP100_MEM_EN ) ) != 0);
   mem_ptr_phys = mem_ptr_virt = NULL;
   memory_size = (8192<<( (hp100_inb(SRAM)>>5)&0x07));
+  virt_memory_size = 0;
 
   /* For memory mapped or busmaster mode, we want the memory address */
   if ( mem_mapped || (local_mode==1))
@@ -574,21 +662,21 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
       /* However in slave mode we need to remap high (>1GB) card memory  */
       if(local_mode!=1) /* = not busmaster */
 	{
-	  if ( bus == HP100_BUS_PCI )
+	  if ( bus == HP100_BUS_PCI && mem_ptr_phys >= (u_int *)0x100000 )
 	    {
 	      /* We try with smaller memory sizes, if ioremap fails */
-	      for(; memory_size>16383; memory_size=memory_size/2)
+	      for(virt_memory_size = memory_size; virt_memory_size>16383; virt_memory_size>>=1)
 		{
-		  if((mem_ptr_virt=ioremap((u_long)mem_ptr_phys,memory_size))==NULL)
+		  if((mem_ptr_virt=ioremap((u_long)mem_ptr_phys,virt_memory_size))==NULL)
 		    {
 #ifdef HP100_DEBUG
-		      printk( "hp100: %s: ioremap for 0x%x bytes high PCI memory at 0x%lx failed\n", dev->name, memory_size, (u_long)mem_ptr_phys );
+		      printk( "hp100: %s: ioremap for 0x%x bytes high PCI memory at 0x%lx failed\n", dev->name, virt_memory_size, (u_long)mem_ptr_phys );
 #endif
 		    }	
 		  else
 		    {
 #ifdef HP100_DEBUG
-		      printk( "hp100: %s: remapped 0x%x bytes high PCI memory at 0x%lx to 0x%lx.\n", dev->name, memory_size, (u_long)mem_ptr_phys, (u_long)mem_ptr_virt);
+		      printk( "hp100: %s: remapped 0x%x bytes high PCI memory at 0x%lx to 0x%lx.\n", dev->name, virt_memory_size, (u_long)mem_ptr_phys, (u_long)mem_ptr_virt);
 #endif
 		      break;
 		    }
@@ -598,7 +686,7 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
 		{
 		  printk("hp100: %s: Failed to ioremap the PCI card memory. Will have to use i/o mapped mode.\n", dev->name);
 		  local_mode=3;
-		  memory_size = (8192<<( (hp100_inb(SRAM)>>5)&0x07) );
+		  virt_memory_size = 0;
 		}
 	    }
 	}
@@ -637,6 +725,7 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
   dev->base_addr = ioaddr;
 
   lp->memory_size = memory_size;
+  lp->virt_memory_size = virt_memory_size;
   lp->rx_ratio = hp100_rx_ratio; /* can be conf'd with insmod */
 
   /* memory region for programmed i/o */
@@ -724,7 +813,8 @@ __initfunc(static int hp100_probe1( struct device *dev, int ioaddr, u_char bus, 
   if ( lp->mode==2 ) /* memory mapped */ 
     {
       printk( "hp100: %s: Memory area at 0x%lx-0x%lx",
-              dev->name,(u_long)mem_ptr_phys,(u_long)mem_ptr_phys+(u_long)lp->memory_size );
+              dev->name,(u_long)mem_ptr_phys,
+              ((u_long)mem_ptr_phys+(mem_ptr_phys>(u_int *)0x100000?(u_long)lp->memory_size:16*1024))-1 );
       if ( mem_ptr_virt )
 	printk( " (virtual base 0x%lx)", (u_long)mem_ptr_virt );
       printk( ".\n" );
@@ -786,7 +876,7 @@ static void hp100_hwinit( struct device *dev )
     }
 		
   /* Initiate EEPROM reload */
-  hp100_load_eeprom( dev );
+  hp100_load_eeprom( dev, 0 );
 		
   wait();
 		
@@ -1447,6 +1537,7 @@ static void hp100_BM_shutdown( struct device *dev )
 /* tx function for busmaster mode */
 static int hp100_start_xmit_bm( struct sk_buff *skb, struct device *dev )
 {
+  unsigned long flags;
   int i, ok_flag;
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
@@ -1459,7 +1550,9 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct device *dev )
 
   if ( skb==NULL )
     {
+#ifndef LINUX_2_1
       dev_tint( dev );
+#endif
       return 0;
     }
 	
@@ -1473,7 +1566,7 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct device *dev )
       printk("hp100: %s: start_xmit_bm: No TX PDL available.\n", dev->name);
 #endif
       /* not waited long enough since last tx? */
-      if ( jiffies - dev->trans_start < HZ/10 ) return -EAGAIN;
+      if ( jiffies - dev->trans_start < HZ ) return -EAGAIN;
 
       if ( lp->lan_type < 0 ) /* no LAN type detected yet? */
 	{
@@ -1519,6 +1612,8 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct device *dev )
 	      {
 		printk( "hp100: %s: interface reset\n", dev->name );
 		hp100_stop_interface( dev );
+		if ( lp->lan_type == HP100_LAN_100 )
+		  lp->hub_status = hp100_login_to_vg_hub( dev, FALSE );
 		hp100_start_interface( dev );
 	      }
 	}
@@ -1531,6 +1626,7 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct device *dev )
    * we have to turn int's off before modifying this, otherwise
    * a tx_pdl_cleanup could occur at the same time
    */
+  save_flags( flags );
   cli();
   ringptr=lp->txrtail;
   lp->txrtail=ringptr->next;
@@ -1557,7 +1653,7 @@ static int hp100_start_xmit_bm( struct sk_buff *skb, struct device *dev )
   hp100_outl( ringptr->pdl_paddr, TX_PDA_L ); /* Low Prio. Queue */
 	
   lp->txrcommit++;
-  sti();
+  restore_flags( flags );
 	
   /* Update statistics */	
   lp->stats.tx_packets++;
@@ -1606,7 +1702,11 @@ static void hp100_clean_txring( struct device *dev )
 	     hp100_inb(TX_PDL),
 	     donecount);
 #endif
+#ifdef LINUX_2_1
+      dev_kfree_skb( lp->txrhead->skb );
+#else
       dev_kfree_skb( lp->txrhead->skb, FREE_WRITE );
+#endif
       lp->txrhead->skb=(void *)NULL;
       lp->txrhead=lp->txrhead->next;
       lp->txrcommit--;
@@ -1627,6 +1727,16 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
   printk("hp100: %s: start_xmit\n", dev->name);
 #endif
 
+  if ( skb==NULL )
+    {
+#ifndef LINUX_2_1
+      dev_tint( dev );
+#endif
+      return 0;
+    }
+	
+  if ( skb->len <= 0 ) return 0;
+	
   if ( lp->lan_type < 0 ) /* no LAN type detected yet? */
     {
       hp100_stop_interface( dev );
@@ -1649,7 +1759,7 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
       printk( "hp100: %s: start_xmit: tx free mem = 0x%x\n", dev->name, i );
 #endif
       /* not waited long enough since last failed tx try? */
-      if ( jiffies - dev->trans_start < HZ/2 ) 
+      if ( jiffies - dev->trans_start < HZ ) 
 	{
 #ifdef HP100_DEBUG
 	  printk("hp100: %s: trans_start timing problem\n", dev->name);
@@ -1686,6 +1796,8 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
 	      {
 		printk( "hp100: %s: interface reset\n", dev->name );
 		hp100_stop_interface( dev );
+		if ( lp->lan_type == HP100_LAN_100 )
+		  lp->hub_status = hp100_login_to_vg_hub( dev, FALSE );
 		hp100_start_interface( dev );
 		udelay(1000);
 	      }
@@ -1721,13 +1833,14 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
       if ( lp->mem_ptr_virt ) /* high pci memory was remapped */
 	{
 	  /* Note: The J2585B needs alignment to 32bits here!  */
-	  memcpy( lp->mem_ptr_virt, skb->data, ( skb->len +3 ) & ~3 );
+	  memcpy( lp->mem_ptr_virt, skb->data, ( skb->len + 3 ) & ~3 );
 	  if ( !ok_flag )
 	    memset( lp->mem_ptr_virt, 0, HP100_MIN_PACKET_SIZE - skb->len );
 	}
       else
 	{
-	  memcpy_toio( lp->mem_ptr_phys, skb->data, skb->len );
+	  /* Note: The J2585B needs alignment to 32bits here!  */
+	  memcpy_toio( lp->mem_ptr_phys, skb->data, (skb->len + 3) & ~3 );
 	  if ( !ok_flag )
 	    memset_io( lp->mem_ptr_phys, 0, HP100_MIN_PACKET_SIZE - skb->len );
 	}
@@ -1749,7 +1862,11 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
   dev->trans_start=jiffies;
   hp100_ints_on();
 	
+#ifdef LINUX_2_1
+  dev_kfree_skb( skb );
+#else
   dev_kfree_skb( skb, FREE_WRITE );
+#endif
 	
 #ifdef HP100_DEBUG_TX
   printk( "hp100: %s: start_xmit: end\n", dev->name );
@@ -1814,7 +1931,7 @@ static void hp100_rx( struct device *dev )
       else /* programmed i/o */
         header = hp100_inl( DATA32 );
       
-      pkt_len = header & HP100_PKT_LEN_MASK;
+      pkt_len = ((header & HP100_PKT_LEN_MASK) + 3) & ~3;
 
 #ifdef HP100_DEBUG_RX
       printk( "hp100: %s: rx: new packet - length=%d, errors=0x%x, dest=0x%x\n",
@@ -1824,10 +1941,6 @@ static void hp100_rx( struct device *dev )
 #endif
     
       /* Now we allocate the skb and transfer the data into it. */  
-      /* NOTE! This (and the skb_put() below) depends on the skb-functions
-       * allocating more than asked (notably, aligning the request up to
-       * the next 16-byte length).
-       */
       skb = dev_alloc_skb( pkt_len );
       if ( skb == NULL ) /* Not enough memory->drop packet */
 	{
@@ -1849,13 +1962,13 @@ static void hp100_rx( struct device *dev )
 	  if ( lp->mode==2 )
             {
               if ( lp->mem_ptr_virt )
-                memcpy( ptr, lp->mem_ptr_virt, ( pkt_len + 3 ) & ~3 );
+                memcpy( ptr, lp->mem_ptr_virt, pkt_len );
               /* Note alignment to 32bit transfers */
               else
-                memcpy_fromio( ptr, lp->mem_ptr_phys, ( pkt_len + 3 ) & ~3 );
+                memcpy_fromio( ptr, lp->mem_ptr_phys, pkt_len );
             }
 	  else /* io mapped */
-	    insl( ioaddr + HP100_REG_DATA32, ptr, ( pkt_len + 3 ) >> 2 );
+	    insl( ioaddr + HP100_REG_DATA32, ptr, pkt_len >> 2 );
       
 	  skb->protocol = eth_type_trans( skb, dev );
 
@@ -1987,7 +2100,11 @@ static void hp100_rx_bm( struct device *dev )
           printk("hp100: %s: rx_bm: Received bad packet (length=%d)\n",dev->name,pkt_len);
 #endif
 	  if(ptr->skb!=NULL)
+#ifdef LINUX_2_1
+	    dev_kfree_skb( ptr->skb );
+#else
 	    dev_kfree_skb( ptr->skb, FREE_READ );					
+#endif
           lp->stats.rx_errors++;
         }
 						
@@ -2055,20 +2172,37 @@ static void hp100_update_stats( struct device *dev )
   hp100_page( PERFORMANCE );
 }
 
+static void hp100_misc_interrupt( struct device *dev )
+{
+  struct hp100_private *lp = (struct hp100_private *)dev->priv;
+
+#ifdef HP100_DEBUG_B
+  hp100_outw( 0x4216, TRACE );
+  printk("hp100: %s: misc_interrupt\n", dev->name);
+#endif
+
+  /* Note: Statistics counters clear when read. */
+  lp->stats.rx_errors++;
+  lp->stats.tx_errors++;
+}
+
 static void hp100_clear_stats( int ioaddr )
 {
+  unsigned long flags;
+
 #ifdef HP100_DEBUG_B
   hp100_outw( 0x4217, TRACE );
   printk("hp100: %s: clear_stats\n", dev->name);
 #endif
 
+  save_flags( flags );
   cli();
   hp100_page( MAC_CTRL );    /* get all statistics bytes */
   hp100_inw( DROPPED );
   hp100_inb( CRC );
   hp100_inb( ABORT );
   hp100_page( PERFORMANCE );
-  sti();
+  restore_flags( flags );
 }
 
 
@@ -2080,8 +2214,9 @@ static void hp100_clear_stats( int ioaddr )
  *  Set or clear the multicast filter for this adapter.
  */
                                                           
-static void hp100_set_multicast_list( struct device *dev)
+static void hp100_set_multicast_list( struct device *dev )
 {
+  unsigned long flags;
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
 
@@ -2090,6 +2225,7 @@ static void hp100_set_multicast_list( struct device *dev)
   printk("hp100: %s: set_mc_list\n", dev->name);
 #endif
 
+  save_flags( flags );
   cli();
   hp100_ints_off();
   hp100_page( MAC_CTRL );
@@ -2223,7 +2359,7 @@ static void hp100_set_multicast_list( struct device *dev)
 
   hp100_page( PERFORMANCE );
   hp100_ints_on();
-  sti();
+  restore_flags( flags );
 }
 
 
@@ -2354,12 +2490,15 @@ static void hp100_interrupt( int irq, void *dev_id, struct pt_regs *regs )
    */
   if ( val & HP100_MISC_ERROR ) /* New for J2585B */
     {
+#ifdef HP100_DEBUG_IRQ
       printk("hp100: %s: Misc. Error Interrupt - Check cabling.\n", dev->name);
+#endif
       if(lp->mode==1)
 	{
 	  hp100_clean_txring( dev );
 	  hp100_rxfill( dev );
 	}
+      hp100_misc_interrupt( dev );
     }
 	
   dev->interrupt = 0;
@@ -2373,6 +2512,7 @@ static void hp100_interrupt( int irq, void *dev_id, struct pt_regs *regs )
 
 static void hp100_start_interface( struct device *dev )
 {
+  unsigned long flags;
   int ioaddr = dev->base_addr;
   struct hp100_private *lp = (struct hp100_private *)dev->priv;
 
@@ -2381,6 +2521,7 @@ static void hp100_start_interface( struct device *dev )
   printk("hp100: %s: hp100_start_interface\n",dev->name);
 #endif
 
+  save_flags( flags );
   cli();
 
   /* Ensure the adapter does not want to request an interrupt when */
@@ -2430,8 +2571,9 @@ static void hp100_start_interface( struct device *dev )
     }
 	
   /* Enable MAC Tx and RX, set MAC modes, ... */
-  /* Note: This function also turns on the interrupts. */
   hp100_set_multicast_list( dev );
+
+  restore_flags( flags );
 }
 
 
@@ -2473,10 +2615,10 @@ static void hp100_stop_interface( struct device *dev )
 }
 
 
-static void hp100_load_eeprom( struct device *dev )
+static void hp100_load_eeprom( struct device *dev, u_short probe_ioaddr )
 {
   int i;
-  int ioaddr = dev->base_addr;
+  int ioaddr = probe_ioaddr > 0 ? probe_ioaddr : dev->base_addr;
 
 #ifdef HP100_DEBUG_B
   hp100_outw( 0x4222, TRACE );
@@ -2915,14 +3057,13 @@ static struct device *hp100_devlist[5] = { NULL, NULL, NULL, NULL, NULL };
 
 int init_module( void )
 {
-  int	i;
-  int	ret = 0;
+  int	i, cards;
 
   if (hp100_port == 0 && !EISA_bus && !pcibios_present())
     printk("hp100: You should not use auto-probing with insmod!\n");
 
   /* Loop on all possible base addresses */
-  i = -1;
+  i = -1; cards = 0;
   while((hp100_port[++i] != -1) && (i < 5))
     {
       /* Create device and set basics args */
@@ -2939,11 +3080,12 @@ int init_module( void )
 	  /* Note: if dev->priv is mallocated, there is no way to fail */
 	  kfree_s(hp100_devlist[i], sizeof(struct device));
 	  hp100_devlist[i] = (struct device *) NULL;
-	  ret = -EIO;
 	}
+       else
+        cards++;
     }			/* Loop over all devices */
 
-  return ret;
+  return cards > 0 ? 0 : -ENODEV;
 }
 
 void cleanup_module( void )

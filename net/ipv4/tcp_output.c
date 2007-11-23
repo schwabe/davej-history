@@ -546,7 +546,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 				struct sk_buff *skb2 = sk->write_queue.next;
 				while (skb2 && skb2->dev == skb->dev) {
 					skb2->raddr=rt->rt_gateway;
-                                        if (sk->state == TCP_SYN_SENT && sysctl_ip_dynaddr)
+                                        if (sysctl_ip_dynaddr & 4 || (sk->state == TCP_SYN_SENT && sysctl_ip_dynaddr & 3))
                                                 ip_rewrite_addrs (sk, skb2, dev);
 					skb_pull(skb2,((unsigned char *)skb2->ip_hdr)-skb2->data);
 					skb2->dev = dev;
@@ -572,7 +572,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 				}
 			}
 			skb->raddr=rt->rt_gateway;
-                        if (skb->dev !=dev && sk->state == TCP_SYN_SENT && sysctl_ip_dynaddr)
+			if ((skb->dev !=dev || skb->dev->pa_addr != skb->ip_hdr->saddr) && (sysctl_ip_dynaddr & 4 || (sk->state == TCP_SYN_SENT && sysctl_ip_dynaddr & 3)))
                                 ip_rewrite_addrs(sk, skb, dev);
 			skb->dev=dev;
 			skb->arp=1;

@@ -9,6 +9,9 @@
 #include <linux/config.h>
 #include <linux/fs.h>
 
+#ifdef CONFIG_NLS
+#include <linux/nls.h>
+#endif
 #include <linux/minix_fs.h>
 #include <linux/ext_fs.h>
 #include <linux/ext2_fs.h>

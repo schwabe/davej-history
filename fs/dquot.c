@@ -231,8 +231,13 @@ static void write_dquot(struct dquot *dquot)
 			unlock_dquot(dquot);
 			return;
 		}
-	} else
-		filp->f_pos = dqoff(dquot->dq_id);
+	}
+	else
+	{
+		int p = dqoff(dquot->dq_id);
+		if(p>=0)
+			filp->f_pos = p;
+	}
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 	if (filp->f_op->write(filp->f_inode, filp,

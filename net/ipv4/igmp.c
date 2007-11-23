@@ -64,6 +64,9 @@
  *		Alexey Kuznetsov:	Wrong group leaving behaviour, backport
  *					fix from pending 2.1.x patches.
  *		Alan Cox:		Forget to enable FDDI support earlier.
+ *     Elena Apolinario Fdez de Sousa,: IGMP Leave Messages must be sent to
+ *     Juan-Mariano de Goyeneche        the "all routers" group, not the group
+ *					group being left.
  */
 
 
@@ -424,7 +427,9 @@ void ip_mc_filter_del(struct device *dev, unsigned long addr)
 extern __inline__ void igmp_group_dropped(struct ip_mc_list *im)
 {
 	del_timer(&im->timer);
-	igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_LEAVE_MESSAGE);
+        /* It seems we have to send Leave Messages to 224.0.0.2 and not to
+           the group itself, to remain RFC 2236 compliant... (jmel) */
+        igmp_send_report(im->interface, IGMP_ALL_ROUTER, IGMP_HOST_LEAVE_MESSAGE);
 	ip_mc_filter_del(im->interface, im->multiaddr);
 }
 

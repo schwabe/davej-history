@@ -762,13 +762,16 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
                 ip_masq_set_expire(ms,0);
                 
                 /*
-                 *	If sysctl !=0 and no pkt has been received yet
-                 *	in this tunnel and routing iface address has changed...
-                 *	 "You are welcome, diald".
+                 *	If sysctl & 3 and either
+		 *        no pkt has been received yet
+		 *      or
+		 *        sysctl & 4
+                 *	in this tunnel ...
+                 *	 "You are welcome, diald, ipppd, pppd-3.3...".
                  */
-                if ( sysctl_ip_dynaddr && ms->flags & IP_MASQ_F_NO_REPLY && dev->pa_addr != ms->maddr) {
+                if ( (sysctl_ip_dynaddr & 3) && (ms->flags & IP_MASQ_F_NO_REPLY || sysctl_ip_dynaddr & 4) && dev->pa_addr != ms->maddr) {
                         unsigned long flags;
-                        if (sysctl_ip_dynaddr > 1) {
+                        if (sysctl_ip_dynaddr & 2) {
                                 printk(KERN_INFO "ip_fw_masquerade(): change maddr from %s",
                                        in_ntoa(ms->maddr));
                                 printk(" to %s\n", in_ntoa(dev->pa_addr));
@@ -971,11 +974,14 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 		/* Rewrite source address */
                 
                 /*
-                 *	If sysctl !=0 and no pkt has been received yet
-                 *	in this tunnel and routing iface address has changed...
-                 *	 "You are welcome, diald".
+                 *	If sysctl & 3 and either
+		 *        no pkt has been received yet
+		 *      or
+		 *        sysctl & 4
+                 *	in this tunnel ...
+                 *	 "You are welcome, diald, ipppd, pppd-3.3...".
                  */
-                if ( sysctl_ip_dynaddr && ms->flags & IP_MASQ_F_NO_REPLY && dev->pa_addr != ms->maddr) {
+                if ( (sysctl_ip_dynaddr & 3) && (ms->flags & IP_MASQ_F_NO_REPLY || sysctl_ip_dynaddr & 4) && dev->pa_addr != ms->maddr) {
                         unsigned long flags;
 #ifdef DEBUG_CONFIG_IP_MASQUERADE
                         printk(KERN_INFO "ip_fw_masq_icmp(): change masq.addr %s",

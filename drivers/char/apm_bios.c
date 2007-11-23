@@ -124,6 +124,11 @@ extern unsigned long get_cmos_time(void);
  * problems have been reported when using this option with gpm (if you'd
  * like to debug this, please do so).
  *
+ * CONFIG_APM_IGNORE_MULTIPLE_SUSPEND: The IBM TP560 bios seems to insist
+ * on returning multiple suspend/standby events whenever one occurs.  We
+ * really only need one at a time, so just ignore any beyond the first.
+ * This is probably safe on most laptops.
+ *
  * If you are debugging the APM support for your laptop, note that code for
  * all of these options is contained in this file, so you can #define or
  * #undef these on the next line to avoid recompiling the whole kernel.
@@ -330,6 +335,9 @@ static int			clock_slowed = 0;
 #endif
 static int			suspends_pending = 0;
 static int			standbys_pending = 0;
+#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+static int			waiting_for_resume = 0;
+#endif
 
 static long			clock_cmos_diff;
 static int			got_clock_diff = 0;
@@ -586,8 +594,15 @@ static int queue_event(apm_event_t event, struct apm_bios_struct *sender)
 		if (as == sender)
 			continue;
 		as->event_head = (as->event_head + 1) % APM_MAX_EVENTS;
-		if (as->event_head == as->event_tail)
+		if (as->event_head == as->event_tail) {
+			static int notified;
+
+			if (notified == 0) {
+			    printk( "apm_bios: an event queue overflowed\n" );
+			    notified = 1;
+			}
 			as->event_tail = (as->event_tail + 1) % APM_MAX_EVENTS;
+		}
 		as->events[as->event_head] = event;
 		if (!as->suser)
 			continue;
@@ -692,9 +707,23 @@ static void check_events(void)
 	apm_event_t	event;
 
 	while ((event = get_event()) != 0) {
+#ifdef APM_DEBUG
+		if (event <= NR_APM_EVENT_NAME)
+			printk("APM BIOS received %s notify\n",
+			       apm_event_name[event - 1]);
+		else
+			printk("APM BIOS received unknown event 0x%02x\n",
+			       event);
+#endif
 		switch (event) {
 		case APM_SYS_STANDBY:
 		case APM_USER_STANDBY:
+#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+			if (waiting_for_resume) {
+			    return;
+			}
+			waiting_for_resume = 1;
+#endif
 			send_event(event, APM_STANDBY_RESUME, NULL);
 			if (standbys_pending <= 0)
 				standby();
@@ -707,6 +736,12 @@ static void check_events(void)
 			break;
 #endif
 		case APM_SYS_SUSPEND:
+#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+			if (waiting_for_resume) {
+			    return;
+			}
+			waiting_for_resume = 1;
+#endif
 			send_event(event, APM_NORMAL_RESUME, NULL);
 			if (suspends_pending <= 0)
 				suspend();
@@ -715,6 +750,9 @@ static void check_events(void)
 		case APM_NORMAL_RESUME:
 		case APM_CRITICAL_RESUME:
 		case APM_STANDBY_RESUME:
+#ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
+			waiting_for_resume = 0;
+#endif
 			set_time();
 			send_event(event, 0, NULL);
 			break;
@@ -732,14 +770,6 @@ static void check_events(void)
 			suspend();
 			break;
 		}
-#ifdef APM_DEBUG
-		if (event <= NR_APM_EVENT_NAME)
-			printk("APM BIOS received %s notify\n",
-			       apm_event_name[event - 1]);
-		else
-			printk("APM BIOS received unknown event 0x%02x\n",
-			       event);
-#endif
 	}
 }
 

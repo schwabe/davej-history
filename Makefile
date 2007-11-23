@@ -38,7 +38,7 @@ CPP	=$(CC) -E
 AR	=$(CROSS_COMPILE)ar
 NM	=$(CROSS_COMPILE)nm
 STRIP	=$(CROSS_COMPILE)strip
-MAKE	=make -j3
+MAKE	=make
 
 all:	do-it-all
 
