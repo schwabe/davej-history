@@ -16,7 +16,14 @@
  *
  *	Port for Linux-2.1 by Jan "Yenya" Kasprzak <kas@fi.muni.cz>
  */
-
+ /*
+  Patched by Pavel Selivanov. 08 Aug. 2001
+  If we are using dev_queue_xmit, and we have a listeners,
+  we should set skb->nh.raw. If no, we'll get a lot of warnings in
+  /var/log/debug
+  Look at core/net/dev.c dev_queue_xmit_nit
+*/
+				
 /*
  * Synchronous PPP/Cisco link level subroutines.
  * Keepalive protocol implemented in both Cisco and PPP modes.
@@ -781,6 +788,8 @@ static void sppp_cp_send (struct sppp *sp, u16 proto, u8 type,
 	/* Control is high priority so it doesnt get queued behind data */
 	skb->priority=TC_PRIO_CONTROL;
 	skb->dev = dev;
+	skb->nh.raw = skb->data;
+	
 	dev_queue_xmit(skb);
 }
 
@@ -823,6 +832,8 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 	sp->obytes += skb->len;
 	skb->priority=TC_PRIO_CONTROL;
 	skb->dev = dev;
+	skb->nh.raw = skb->data;
+	
 	dev_queue_xmit(skb);
 }
 

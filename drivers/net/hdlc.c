@@ -19,6 +19,13 @@
  *
  * Use sethdlc utility to set line parameters, protocol and PVCs
  */
+ /*
+   Patched by Pavel Selivanov. 08 Aug. 2001
+   If we are using dev_queue_xmit, and we have a listeners,
+   we should set skb->nh.raw. If no, we'll get a lot of warnings in 
+   /var/log/debug
+   Look at core/net/dev.c dev_queue_xmit_nit  
+*/
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -103,6 +110,7 @@ static void cisco_keepalive_send(hdlc_device *hdlc, u32 type,
 	skb_put(skb, sizeof(cisco_packet));
 	skb->priority=TC_PRIO_CONTROL;
 	skb->dev = hdlc_to_dev(hdlc);
+	skb->nh.raw = skb->data;
 	
 	dev_queue_xmit(skb);
 }
@@ -384,7 +392,8 @@ static void fr_lmi_send(hdlc_device *hdlc, int fullrep)
 	skb_put(skb, i);
 	skb->priority=TC_PRIO_CONTROL;
 	skb->dev = hdlc_to_dev(hdlc);
-
+	skb->nh.raw = skb->data;
+	
 	dev_queue_xmit(skb);
 }
 
@@ -820,6 +829,7 @@ static int pvc_xmit(struct sk_buff *skb, struct device *dev)
 {
 	pvc_device *pvc=dev_to_pvc(dev);
 
+	skb->nh.raw = skb->data;
 	if (pvc->state & PVC_STATE_ACTIVE) {
 		skb->dev = hdlc_to_dev(pvc->master);
 		pvc->stats.tx_bytes+=skb->len;
