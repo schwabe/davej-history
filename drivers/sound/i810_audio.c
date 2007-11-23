@@ -14,6 +14,11 @@
  *	Analog Devices (A major AC97 codec maker)
  *	Intel Corp  (you've probably heard of them already)
  *
+ * AC97 clues and assistance provided by
+ *	Analog Devices
+ *	Zach 'Fufu' Brown
+ *	Jeff Garzik
+ *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
  *	the Free Software Foundation; either version 2 of the License, or
@@ -346,7 +351,7 @@ static struct i810_channel *i810_alloc_rec_pcm_channel(struct i810_card *card)
 	card->channel[0].used=1;
 	card->channel[0].offset = 0;
 	card->channel[0].port = 0x00;
-	card->channel[1].num=0;
+	card->channel[0].num=0;
 	return &card->channel[0];
 }
 
@@ -359,7 +364,7 @@ static void i810_free_pcm_channel(struct i810_card *card, int channel)
 static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int rate)
 {	
 	struct dmabuf *dmabuf = &state->dmabuf;
-	u16 dacp, rp;
+	u32 dacp, rp;
 	struct ac97_codec *codec=state->card->ac97_codec[0];
 	
 	if(!(state->card->ac97_features&0x0001))
@@ -384,7 +389,7 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 	   
 	if(rate < 8000)
 		rate = 8000;
-
+		
 	/* Power down the DAC */
 	dacp=i810_ac97_get(codec, AC97_POWER_CONTROL);
 	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp|0x0200);
@@ -393,11 +398,8 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 	i810_ac97_set(codec, AC97_PCM_FRONT_DAC_RATE, rate);
 	rp=i810_ac97_get(codec, AC97_PCM_FRONT_DAC_RATE);
 	
-//	printk("DAC rate set to %d Returned %d\n", 
-//		rate, (int)rp);
-		
 	rate=(rp*48000) / clocking;
-		
+	
 	/* Power it back up */
 	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp);
 	
@@ -413,7 +415,7 @@ static unsigned int i810_set_dac_rate(struct i810_state * state, unsigned int ra
 static unsigned int i810_set_adc_rate(struct i810_state * state, unsigned int rate)
 {
 	struct dmabuf *dmabuf = &state->dmabuf;
-	u16 dacp, rp;
+	u32 dacp, rp;
 	struct ac97_codec *codec=state->card->ac97_codec[0];
 	
 	if(!(state->card->ac97_features&0x0001))
@@ -1603,13 +1605,12 @@ static int i810_release(struct inode *inode, struct file *file)
 		state->card->free_pcm_channel(state->card, dmabuf->channel->num);
 	}
 
-	kfree(state->card->states[state->virt]);
-	state->card->states[state->virt] = NULL;
 	state->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 
 	/* we're covered by the open_sem */
 	up(&state->open_sem);
-
+	kfree(state->card->states[state->virt]);
+	state->card->states[state->virt] = NULL;
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -1630,20 +1631,35 @@ static /*const*/ struct file_operations i810_audio_fops = {
 static u16 i810_ac97_get(struct ac97_codec *dev, u8 reg)
 {
 	struct i810_card *card = dev->private_data;
-	int count = 100;
+	int count = 1000;
 
+	while(count-- && (inl(card->iobase + GLOB_STA) & 0x0100))
+		udelay(10);
+	if(!count)
+		printk("i810_audio: AC97 access failed.\n");
+	count=1000;
 	while(count-- && (inb(card->iobase + CAS) & 1)) 
-		udelay(1);
+		udelay(10);
+	if(!count)
+		printk("i810_audio: AC97 access failed.\n");
 	return inw(card->ac97base + (reg&0x7f));
 }
 
 static void i810_ac97_set(struct ac97_codec *dev, u8 reg, u16 data)
 {
 	struct i810_card *card = dev->private_data;
-	int count = 100;
+	int count = 1000;
 
+	while(count-- && (inl(card->iobase + GLOB_STA) & 0x0100))
+		udelay(10);
+	if(!count)
+		printk("i810_audio: AC97 write access failed.\n");
+
+	count=1000;
 	while(count-- && (inb(card->iobase + CAS) & 1)) 
-		udelay(1);
+		udelay(10);
+	if(!count)
+		printk("i810_audio: AC97 write access failed.\n");
 	outw(data, card->ac97base + (reg&0x7f));
 }
 
@@ -1700,10 +1716,25 @@ static int __init i810_ac97_init(struct i810_card *card)
 	int ready_2nd = 0;
 	struct ac97_codec *codec;
 	u16 eid;
+	int i=0;
 
-	outl(0, card->iobase + GLOB_CNT);
-	udelay(500);
-	outl(1<<1, card->iobase + GLOB_CNT);
+
+	outl(6 , card->iobase + GLOB_CNT);
+	while(i<10)
+	{
+		if((inl(card->iobase+GLOB_CNT)&4)==0)
+			break;
+		current->state = TASK_UNINTERRUPTIBLE;
+		schedule_timeout(HZ/20);
+		i++;
+	}
+	if(i==10)
+	{
+		printk(KERN_ERR "i810_audio: AC'97 reset failed.\n");
+		return 0;
+	}
+	
+	inw(card->ac97base);
 
 	for (num_ac97 = 0; num_ac97 < NR_AC97; num_ac97++) {
 		if ((codec = kmalloc(sizeof(struct ac97_codec), GFP_KERNEL)) == NULL)
@@ -1735,9 +1766,17 @@ static int __init i810_ac97_init(struct i810_card *card)
 		if(!(eid&0x0001))
 			printk(KERN_WARNING "i810_audio: only 48Khz playback available.\n");
 		else
+		{
 			/* Enable variable rate mode */
-			i810_ac97_set(codec, AC97_EXTENDED_STATUS, 
-				i810_ac97_get(codec,AC97_EXTENDED_STATUS)|1);
+			i810_ac97_set(codec, AC97_EXTENDED_STATUS, 9);
+			i810_ac97_set(codec,AC97_EXTENDED_STATUS,
+				i810_ac97_get(codec, AC97_EXTENDED_STATUS)|0xE800);
+			if(!(i810_ac97_get(codec, AC97_EXTENDED_STATUS)&1))
+			{
+				printk(KERN_WARNING "i810_audio: Codec refused to allow VRA, using 48Khz only.\n");
+				card->ac97_features&=~1;
+			}
+		}
 			
 		if ((codec->dev_mixer = register_sound_mixer(&i810_mixer_fops, -1)) < 0) {
 			printk(KERN_ERR "i810_audio: couldn't register mixer!\n");
@@ -1820,12 +1859,6 @@ static int __init i810_install(struct pci_dev *pci_dev, int type, char *name)
 		kfree(card);
 		return -ENODEV;
 	}
-
-//	printk("resetting codec?\n");
-	outl(0, card->iobase + GLOB_CNT);
-	udelay(500);
-//	printk("bringing it back?\n");
-	outl(1<<1, card->iobase + GLOB_CNT);
 	return 0;
 }
 
@@ -1860,7 +1893,7 @@ int __init i810_probe(void)
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
 
-	if(ftsodell=1)
+	if(ftsodell==1)
 		clocking=41194;
 		
 	printk(KERN_INFO "Intel 810 + AC97 Audio, version "

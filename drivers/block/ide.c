@@ -3131,6 +3131,8 @@ EXPORT_SYMBOL(ide_stall_queue);
 EXPORT_SYMBOL(ide_add_proc_entries);
 EXPORT_SYMBOL(ide_remove_proc_entries);
 EXPORT_SYMBOL(proc_ide_read_geometry);
+EXPORT_SYMBOL(proc_ide_create);
+EXPORT_SYMBOL(proc_ide_destroy);
 #endif
 EXPORT_SYMBOL(ide_add_setting);
 EXPORT_SYMBOL(ide_remove_setting);

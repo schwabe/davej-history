@@ -80,7 +80,10 @@ extern int msnd_pinnacle_init(void);
 extern int init_solo1(void);
 #endif
 #ifdef CONFIG_SOUND_YMPCI
-extern init_ymf7xxsb_module();
+extern int init_ymf7xxsb_module(void);
+#endif
+#ifdef CONFIG_SOUND_FUSION
+extern int cs_probe(void);
 #endif
 
 /*
@@ -442,6 +445,9 @@ int soundcore_init(void)
 #endif
 #ifdef CONFIG_SOUND_YMPCI
 	init_ymf7xxsb_module();
+#endif
+#ifdef CONFIG_SOUND_FUSION
+	cs_probe();
 #endif
 	return 0;
 }

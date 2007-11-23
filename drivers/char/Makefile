@@ -628,6 +628,16 @@ ifeq ($(CONFIG_DZ),y)
   L_OBJS += dz.o
 endif
 
+
+ifeq ($(CONFIG_TOSHIBA),y)
+L_OBJS += toshiba.o
+else
+  ifeq ($(CONFIG_TOSHIBA),m)
+  M_OBJS += toshiba.o
+  endif
+endif
+
+
 include $(TOPDIR)/Rules.make
 
 fastdep:

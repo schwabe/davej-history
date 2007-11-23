@@ -9841,8 +9841,8 @@ static void char2uni(unsigned char *rawstring, int *offset, unsigned char *uni1,
 	ch = rawstring[0];
 	cl = rawstring[1];
 	if (0xA1 <= ch && ch <= 0xDF){
-		*uni1 = 0xFF;
-		*uni2 = ch - 0x40;
+		*uni1 = ch - 0x40;
+		*uni2 = 0xFF;
 		*offset = 1;
 		return;
 	}
@@ -9921,8 +9921,8 @@ static void char2uni_euc_jp(unsigned char *rawstring, int *offset, unsigned char
 
 	if (rawstring[0] == 0x8E) {
 		if (0xA1 <= rawstring[1] && rawstring[1] <= 0xDF){
-			*uni1 = 0xFF;
-			*uni2 = rawstring[1] - 0x40;
+			*uni1 = rawstring[1] - 0x40;
+			*uni2 = 0xFF;
 			*offset = 2;
 			return;
 		}

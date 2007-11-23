@@ -92,7 +92,7 @@ if [ "$CONFIG_FB" = "y" ]; then
         bool '  G100/G200 support' CONFIG_FB_MATROX_G100
         bool '  Multihead support' CONFIG_FB_MATROX_MULTIHEAD
       fi
-      bool 'ATI Rage128 display support' CONFIG_FB_ATY128
+      #bool 'ATI Rage128 display support' CONFIG_FB_ATY128
     fi
   fi
   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then

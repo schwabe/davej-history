@@ -40,9 +40,6 @@ chrpboot(int a1, int a2, void *prom)
     void *dst;
     unsigned char *im;
     unsigned initrd_start, initrd_size;
-    extern char _start;
-    
-    printf("chrpboot starting: loaded at 0x%x\n\r", &_start);
 
     if (initrd_len) {
 	initrd_size = initrd_len;

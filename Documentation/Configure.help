@@ -9783,6 +9783,12 @@ CONFIG_SOUND_DMAP
 
   Say Y unless you have 16MB or less RAM or a PCI sound card.
 
+Crystal SoundFusion (CS461x)
+CONFIG_SOUND_FUSION
+  This module drives the Crystal SoundFusion devices (CS46xx series) when
+  wired as native sound drivers with AC97 codecs. If this driver does not
+  work try the CS4232 driver.
+
 Support for Aztech Sound Galaxy (non-PnP) cards
 CONFIG_SOUND_SGALAXY
   This module initializes the older non Plug and Play sound galaxy
@@ -12319,6 +12325,17 @@ CONFIG_PHONE_IXJ
 
   If you do not have any Quicknet telephony cards, you can safely
   ignore this option.
+
+Toshiba Laptop support
+CONFIG_TOSHIBA	
+  If you intend to run this the kernel on a Toshiba portable say yes
+  here. This adds a driver to safely access the System Management
+  Mode of the CPU on Toshiba portables. The System Management Mode
+  is used to set the BIOS and power saving options on Toshiba portables.
+
+  For information on utilities to make use of this driver see the
+  Toshiba Linux utilities website at:
+  http://www.buzzard.org.uk/toshiba/
  
 CPiA Video For Linux
 CONFIG_VIDEO_CPIA

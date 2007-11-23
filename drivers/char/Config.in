@@ -215,4 +215,6 @@ if [ "$CONFIG_FTAPE" != "n" ]; then
 fi
 endmenu
 
+tristate 'Toshiba Laptop support' CONFIG_TOSHIBA
+
 endmenu

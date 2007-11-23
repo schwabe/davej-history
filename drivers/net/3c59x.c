@@ -42,15 +42,20 @@
     - In vortex_error, do_tx_reset and vortex_tx_timeout(Vortex): clear
       tbusy and force a BH rerun to better recover from errors.
 
-    12Jun00 <2.2.16> andrewm
+    24Jun00 <2.2.16> andrewm
     - Better handling of shared interrupts
     - Reset the transmitter in vortex_error() on both maxcollisions and Tx reclaim error
+    - Split the ISR into vortex_interrupt and boomerang_interrupt.  This is
+      to fix once-and-for-all the dubious testing of vortex status bits on
+      boomerang/hurricane/cyclone/tornado NICs.
+    - Fixed crash under OOM during vortex_open() (Mark Hemment)
+    - Fix Rx cessation problem during OOM (help from Mark Hemment)
 
     - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.2 for more details.
 */
 
 static char *version =
-"3c59x.c:v0.99H 12Jun00 Donald Becker and others http://www.scyld.com/network/vortex.html\n";
+"3c59x.c:v0.99H 24Jun00 Donald Becker and others http://www.scyld.com/network/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -563,12 +568,15 @@ static int boomerang_start_xmit(struct sk_buff *skb, struct device *dev);
 static int vortex_rx(struct device *dev);
 static int boomerang_rx(struct device *dev);
 static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs);
+static void boomerang_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int vortex_close(struct device *dev);
 static void update_stats(long ioaddr, struct device *dev);
 static struct net_device_stats *vortex_get_stats(struct device *dev);
 static void set_rx_mode(struct device *dev);
 static int vortex_ioctl(struct device *dev, struct ifreq *rq, int cmd);
 
+
+/* #define dev_alloc_skb dev_alloc_skb_debug */
 
 /* This driver uses 'options' to pass the media type, full-duplex flag, etc. */
 /* Option count limit only -- unlimited interfaces are supported. */
@@ -1033,12 +1041,13 @@ static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 	request_region(ioaddr, pci_tbl[chip_idx].io_size, dev->name);
 
 	/* The 3c59x-specific entries in the device structure. */
-	dev->open = &vortex_open;
-	dev->hard_start_xmit = &vortex_start_xmit;
-	dev->stop = &vortex_close;
-	dev->get_stats = &vortex_get_stats;
-	dev->do_ioctl = &vortex_ioctl;
-	dev->set_multicast_list = &set_rx_mode;
+	dev->open = vortex_open;
+	dev->hard_start_xmit = vp->full_bus_master_tx ?
+				boomerang_start_xmit : vortex_start_xmit;
+	dev->stop = vortex_close;
+	dev->get_stats = vortex_get_stats;
+	dev->do_ioctl = vortex_ioctl;
+	dev->set_multicast_list = set_rx_mode;
 
 	return dev;
 }
@@ -1050,7 +1059,9 @@ vortex_open(struct device *dev)
 	long ioaddr = dev->base_addr;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	unsigned int config;
-	int i;
+	int i, retval;
+
+	MOD_INC_USE_COUNT;
 
 	/* Before initializing select the active media port. */
 	EL3WINDOW(3);
@@ -1071,12 +1082,6 @@ vortex_open(struct device *dev)
 			dev->if_port = media_tbl[dev->if_port].next;
 	} else
 		dev->if_port = vp->default_media;
-
-	init_timer(&vp->timer);
-	vp->timer.expires = RUN_AT(media_tbl[dev->if_port].wait);
-	vp->timer.data = (unsigned long)dev;
-	vp->timer.function = &vortex_timer;		/* timer handler */
-	add_timer(&vp->timer);
 
 	if (vortex_debug > 1)
 		printk(KERN_DEBUG "%s: Initial media type %s.\n",
@@ -1127,8 +1132,11 @@ vortex_open(struct device *dev)
 	outw(SetStatusEnb | 0x00, ioaddr + EL3_CMD);
 
 	/* Use the now-standard shared IRQ implementation. */
-	if (request_irq(dev->irq, &vortex_interrupt, SA_SHIRQ, dev->name, dev)) {
-		return -EAGAIN;
+	if ((retval = request_irq(dev->irq, vp->full_bus_master_tx ?
+					&boomerang_interrupt : &vortex_interrupt,
+					SA_SHIRQ, dev->name, dev))) {
+		printk(KERN_ERR "%s: Cannot allocate IRQ #%d\n", dev->name, dev->irq);
+		goto out;
 	}
 
 	if (vortex_debug > 1) {
@@ -1193,12 +1201,20 @@ vortex_open(struct device *dev)
 			vp->rx_ring[i].addr = virt_to_bus(skb->data);
 #endif
 		}
+		if (i != RX_RING_SIZE) {
+			int j;
+			for (j = 0; j < RX_RING_SIZE; j++) {
+				if (vp->rx_skbuff[j])
+					DEV_FREE_SKB(vp->rx_skbuff[j]);
+			}
+			retval = -ENOMEM;
+			goto out_free_irq;
+		}
 		/* Wrap the ring. */
 		vp->rx_ring[i-1].next = cpu_to_le32(virt_to_bus(&vp->rx_ring[0]));
 		outl(virt_to_bus(&vp->rx_ring[0]), ioaddr + UpListPtr);
 	}
 	if (vp->full_bus_master_tx) { 		/* Boomerang bus master Tx. */
-		dev->hard_start_xmit = &boomerang_start_xmit;
 		vp->cur_tx = vp->dirty_tx = 0;
 		outb(PKT_BUF_SZ>>8, ioaddr + TxFreeThreshold); /* Room for a packet. */
 		/* Clear the Tx ring. */
@@ -1232,9 +1248,18 @@ vortex_open(struct device *dev)
 	if (vp->cb_fn_base)			/* The PCMCIA people are idiots.  */
 		writel(0x8000, vp->cb_fn_base + 4);
 
-	MOD_INC_USE_COUNT;
+	init_timer(&vp->timer);
+	vp->timer.expires = RUN_AT(media_tbl[dev->if_port].wait);
+	vp->timer.data = (unsigned long)dev;
+	vp->timer.function = &vortex_timer;		/* timer handler */
+	add_timer(&vp->timer);
 
 	return 0;
+
+out_free_irq:
+	free_irq(dev->irq, dev);
+out:
+	return retval;
 }
 
 static void vortex_timer(unsigned long data)
@@ -1372,7 +1397,10 @@ static void vortex_tx_timeout(struct device *dev)
 			unsigned long flags;
 			__save_flags(flags);
 			__cli();
-			vortex_interrupt(dev->irq, dev, 0);
+			if (vp->full_bus_master_tx)
+				boomerang_interrupt(dev->irq, dev, 0);
+			else
+				vortex_interrupt(dev->irq, dev, 0);
 			__restore_flags(flags);
 		}
 	}
@@ -1606,10 +1634,10 @@ boomerang_start_xmit(struct sk_buff *skb, struct device *dev)
 		int i;
 
 		if (vortex_debug > 3)
-			printk(KERN_DEBUG "%s: Trying to send a packet, Tx index %d.\n",
+			printk(KERN_DEBUG "%s: Trying to send a boomerang packet, Tx index %d.\n",
 				   dev->name, vp->cur_tx);
 		if (vp->tx_full) {
-			if (vortex_debug >0)
+			if (vortex_debug > 0)
 				printk(KERN_WARNING "%s: Tx Ring full, refusing to send buffer.\n",
 					   dev->name);
 			return 1;
@@ -1623,7 +1651,7 @@ boomerang_start_xmit(struct sk_buff *skb, struct device *dev)
 		spin_lock_irqsave(&vp->lock, flags);
 		outw(DownStall, ioaddr + EL3_CMD);
 		/* Wait for the stall to complete. */
-		for (i = 4000; i >= 0 ; i--)
+		for (i = 4000; i >= 0; i--)
 			if ( (inw(ioaddr + EL3_STATUS) & CmdInProgress) == 0)
 				break;
 		prev_entry->next = cpu_to_le32(virt_to_bus(&vp->tx_ring[entry]));
@@ -1649,6 +1677,12 @@ boomerang_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The interrupt handler does all of the Rx thread work and cleans up
    after the Tx thread. */
+
+/*
+ * This is the ISR for the vortex series chips.
+ * full_bus_master_tx == 0 && full_bus_master_rx == 0
+ */
+
 static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = dev_id;
@@ -1660,8 +1694,11 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	ioaddr = dev->base_addr;
 	spin_lock(&vp->lock);
 	status = inw(ioaddr + EL3_STATUS);
-	if ((status & IntLatch) == 0)
+	if ((status & IntLatch) == 0) {
+		if (vortex_debug > 5)
+			printk(KERN_DEBUG "%s: no vortex interrupt pending\n", dev->name);
 		goto no_int;	/* Happens during shared interrupts */
+	}
 
 	if (status & IntReq) {
 		status |= vp->deferred;
@@ -1669,19 +1706,16 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 
 	if (vortex_debug > 4)
-		printk(KERN_DEBUG "%s: interrupt, status %4.4x, latency %d ticks.\n",
+		printk(KERN_DEBUG "%s: vortex_interrupt, status %4.4x, latency %d ticks.\n",
 			   dev->name, status, inb(ioaddr + Timer));
 
 	do {
 		if (vortex_debug > 5)
 				printk(KERN_DEBUG "%s: In interrupt loop, status %4.4x.\n",
 					   dev->name, status);
+
 		if (status & RxComplete)
 			vortex_rx(dev);
-		if (status & UpComplete) {
-			outw(AckIntr | UpComplete, ioaddr + EL3_CMD);
-			boomerang_rx(dev);
-		}
 
 		if (status & TxAvailable) {
 			if (vortex_debug > 5)
@@ -1690,6 +1724,93 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			outw(AckIntr | TxAvailable, ioaddr + EL3_CMD);
 			clear_bit(0, (void*)&dev->tbusy);
 			mark_bh(NET_BH);
+		}
+
+		if (status & DMADone) {
+			if (inw(ioaddr + Wn7_MasterStatus) & 0x1000) {
+				outw(0x1000, ioaddr + Wn7_MasterStatus); /* Ack the event. */
+				DEV_FREE_SKB(vp->tx_skb); /* Release the transfered buffer */
+				if (inw(ioaddr + TxFree) > 1536) {
+					clear_bit(0, (void*)&dev->tbusy);
+					mark_bh(NET_BH);
+				} else /* Interrupt when FIFO has room for max-sized packet. */
+					outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
+			}
+		}
+
+		/* Check for all uncommon interrupts at once. */
+		if (status & (HostError | RxEarly | StatsFull | TxComplete | IntReq)) {
+			if (status == 0xffff)
+				break;
+			vortex_error(dev, status);
+		}
+
+		if (--work_done < 0) {
+			printk(KERN_WARNING "%s: Too much work in interrupt, status "
+				   "%4.4x.\n", dev->name, status);
+			/* Disable all pending interrupts. */
+			do {
+				vp->deferred |= status;
+				outw(SetStatusEnb | (~vp->deferred & vp->status_enable),
+					 ioaddr + EL3_CMD);
+				outw(AckIntr | (vp->deferred & 0x7ff), ioaddr + EL3_CMD);
+			} while ((status = inw(ioaddr + EL3_CMD)) & IntLatch);
+			/* The timer will reenable interrupts. */
+			mod_timer(&vp->timer, RUN_AT(1));
+			break;
+		}
+
+		/* Acknowledge the IRQ. */
+		outw(AckIntr | IntReq | IntLatch, ioaddr + EL3_CMD);
+	} while ((status = inw(ioaddr + EL3_STATUS)) & (IntLatch | RxComplete));
+
+	if (vortex_debug > 4)
+		printk(KERN_DEBUG "%s: exiting interrupt, status %4.4x.\n",
+			   dev->name, status);
+
+no_int:
+	spin_unlock(&vp->lock);
+}
+
+/*
+ * This is the ISR for the boomerang/cyclone/hurricane/tornado series chips.
+ * full_bus_master_tx == 1 && full_bus_master_rx == 1
+ */
+
+static void boomerang_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct device *dev = dev_id;
+	struct vortex_private *vp = (struct vortex_private *)dev->priv;
+	long ioaddr;
+	int status;
+	int work_done = max_interrupt_work;
+
+	ioaddr = dev->base_addr;
+	spin_lock(&vp->lock);
+	status = inw(ioaddr + EL3_STATUS);
+	if ((status & IntLatch) == 0) {
+		if (vortex_debug > 5)
+			printk(KERN_DEBUG "%s: no boomerang interrupt pending\n", dev->name);
+		goto no_int;	/* Happens during shared interrupts */
+	}
+
+	if (status & IntReq) {
+		status |= vp->deferred;
+		vp->deferred = 0;
+	}
+
+	if (vortex_debug > 4)
+		printk(KERN_DEBUG "%s: interrupt, status %04x, latency %d, cur_rx %d, dirty_rx %d\n",
+			   dev->name, status, inb(ioaddr + Timer), vp->cur_rx, vp->dirty_rx);
+
+	do {
+		if (vortex_debug > 5)
+				printk(KERN_DEBUG "%s: In interrupt loop, status %4.4x.\n",
+					   dev->name, status);
+
+		if (status & UpComplete) {
+			outw(AckIntr | UpComplete, ioaddr + EL3_CMD);
+			boomerang_rx(dev);
 		}
 
 		if (status & DownComplete) {
@@ -1710,22 +1831,12 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			vp->dirty_tx = dirty_tx;
 			outw(AckIntr | DownComplete, ioaddr + EL3_CMD);
 			if (vp->tx_full && (vp->cur_tx - dirty_tx <= TX_RING_SIZE - 1)) {
-				vp->tx_full= 0;
+				vp->tx_full = 0;
 				clear_bit(0, (void*)&dev->tbusy);
 				mark_bh(NET_BH);
 			}
 		}
-		if (status & DMADone) {
-			if (inw(ioaddr + Wn7_MasterStatus) & 0x1000) {
-				outw(0x1000, ioaddr + Wn7_MasterStatus); /* Ack the event. */
-				DEV_FREE_SKB(vp->tx_skb); /* Release the transfered buffer */
-				if (inw(ioaddr + TxFree) > 1536) {
-					clear_bit(0, (void*)&dev->tbusy);
-					mark_bh(NET_BH);
-				} else /* Interrupt when FIFO has room for max-sized packet. */
-					outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
-			}
-		}
+
 		/* Check for all uncommon interrupts at once. */
 		if (status & (HostError | RxEarly | StatsFull | TxComplete | IntReq)) {
 			if (status == 0xffff)
@@ -1734,25 +1845,18 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		}
 
 		if (--work_done < 0) {
-			if ((status & (0x7fe - (UpComplete | DownComplete))) == 0) {
-				/* Just ack these and return. */
-				outw(AckIntr | UpComplete | DownComplete, ioaddr + EL3_CMD);
-			} else {
-				printk(KERN_WARNING "%s: Too much work in interrupt, status "
-					   "%4.4x.\n", dev->name, status);
-				/* Disable all pending interrupts. */
-				do {
-					vp->deferred |= status;
-					outw(SetStatusEnb | (~vp->deferred & vp->status_enable),
-						 ioaddr + EL3_CMD);
-					outw(AckIntr | (vp->deferred & 0x7ff), ioaddr + EL3_CMD);
-				} while ((status = inw(ioaddr + EL3_CMD)) & IntLatch);
-				/* The timer will reenable interrupts. */
-				del_timer(&vp->timer);
-				vp->timer.expires = RUN_AT(1);
-				add_timer(&vp->timer);
-				break;
-			}
+			printk(KERN_WARNING "%s: Too much work in interrupt, status "
+				   "%4.4x.\n", dev->name, status);
+			/* Disable all pending interrupts. */
+			do {
+				vp->deferred |= status;
+				outw(SetStatusEnb | (~vp->deferred & vp->status_enable),
+					 ioaddr + EL3_CMD);
+				outw(AckIntr | (vp->deferred & 0x7ff), ioaddr + EL3_CMD);
+			} while ((status = inw(ioaddr + EL3_CMD)) & IntLatch);
+			/* The timer will reenable interrupts. */
+			mod_timer(&vp->timer, RUN_AT(1));
+			break;
 		}
 
 		/* Acknowledge the IRQ. */
@@ -1760,7 +1864,15 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		if (vp->cb_fn_base)			/* The PCMCIA people are idiots.  */
 			writel(0x8000, vp->cb_fn_base + 4);
 
-	} while ((status = inw(ioaddr + EL3_STATUS)) & (IntLatch | RxComplete));
+	} while ((status = inw(ioaddr + EL3_STATUS)) & IntLatch);
+
+	/*
+	 * If we have totally run out to rx skb's due to persistent OOM,
+	 * we can use the Tx interrupt to retry the allocation.  Dirty
+	 * but expedient
+	 */
+	if ((vp->cur_rx - vp->dirty_rx) == RX_RING_SIZE)
+		boomerang_rx(dev);
 
 	if (vortex_debug > 4)
 		printk(KERN_DEBUG "%s: exiting interrupt, status %4.4x.\n",

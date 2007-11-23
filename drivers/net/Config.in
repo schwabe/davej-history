@@ -46,6 +46,9 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
   if [ "$CONFIG_PPC" = "y" ]; then
     tristate 'MACE (Power Mac ethernet) support' CONFIG_MACE
+    if [ "$CONFIG_MACE" != "n" ]; then
+      bool 'Use AAUI port instead of TP by default' CONFIG_MACE_AAUI_PORT
+    fi
     tristate 'BMAC (G3 ethernet) support' CONFIG_BMAC
     tristate 'GMAC (G4/iBook ethernet) support' CONFIG_GMAC
     tristate 'Symbios 53c885 (Synergy ethernet) support' CONFIG_NCR885E

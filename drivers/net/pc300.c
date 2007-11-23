@@ -1,6 +1,6 @@
 #define	USE_PCI_CLOCK
 static char rcsid[] =
-"$Revision: 3.1.0.0 $$Date: 2000/05/26 $";
+"$Revision: 3.1.0.1 $$Date: 2000/06/23 $";
 
 /*
  * pc300.c	Cyclades-PC300(tm) Driver.
@@ -15,7 +15,15 @@ static char rcsid[] =
  *	2 of the License, or (at your option) any later version.
  * 
  * $Log: pc300.c,v $
- * Revision 3.1.0.0 $$Date: 2000/05/26 ivan
+ * Revision 3.1.0.1 2000/06/23 ivan
+ * Revisited cpc_queue_xmit to prevent race conditions on Tx DMA buffer 
+ * handling when Tx timeouts occur.
+ * Revisited Rx statistics.
+ * Added support for loopback mode in the SCA-II.
+ * Fixed a bug in the SCA-II programming that would cause framing errors 
+ * when external clock was configured.
+ *
+ * Revision 3.1.0.0 2000/05/26 ivan
  * Added Frame-Relay support.
  * Driver now uses HDLC generic driver to provide protocol support.
  * Added logic in the SCA interrupt handler so that no board can monopolize 
@@ -23,7 +31,7 @@ static char rcsid[] =
  * Request PLX I/O region, although driver doesn't use it, to avoid
  * problems with other drivers accessing it.
  *
- * Revision 3.0.0.0 $$Date: 2000/05/15 ivan
+ * Revision 3.0.0.0 2000/05/15 ivan
  * Did some changes in the DMA programming implementation to avoid the 
  * occurrence of a SCA-II bug in the second channel.
  * Implemented workaround for PLX9050 bug that would cause a system lockup
@@ -38,7 +46,7 @@ static char rcsid[] =
  * Driver load messages are now device-centric, instead of board-centric.
  * Dynamic allocation of device structures.
  *
- * Revision 2.0.0.0 $$Date: 2000/04/15 ivan
+ * Revision 2.0.0.0 2000/04/15 ivan
  * Added support for the PC300/TE boards (T1/FT1/E1/FE1).
  *
  * Revision 1.1.0.0 2000/02/28 ivan
@@ -1310,6 +1318,11 @@ int cpc_queue_xmit(struct sk_buff *skb, struct device *dev)
 	cpc_writeb(&ptdescr->status, 0);
 	chan->tx_first_bd = (chan->tx_first_bd + 1) & (N_DMA_TX_BUF - 1);
     }
+    /* Clean up next free descriptor to avoid race problems with timeout
+       conditions */
+    ptdescr = (pcsca_bd_t *)
+		(card->hw.rambase + TX_BD_ADDR(ch, chan->tx_next_bd));
+    cpc_writeb(&ptdescr->status, 0);
 
     /* Write buffer to DMA buffers */
     if(dma_buf_write(card, ch, (ucchar *)skb->data, skb->len) != 0) {
@@ -1376,14 +1389,16 @@ cpc_net_rx(hdlc_device *hdlc)
 	if((rxb = dma_buf_read(card, ch, skb)) <= 0) {
 	    if (rxb < 0) {	/* Invalid frame */
 		rxb = -rxb;
-		stats->rx_errors++;
 		if (rxb & DST_OVR) {
+		    stats->rx_errors++;
 		    stats->rx_fifo_errors++;
 		}
 		if (rxb & DST_CRC) {
+		    stats->rx_errors++;
 		    stats->rx_crc_errors++;
 		}
 		if (rxb & (DST_RBIT | DST_SHRT | DST_ABT)) {
+		    stats->rx_errors++;
 		    stats->rx_frame_errors++;
 		}
 	    }
@@ -2066,6 +2081,20 @@ cpc_ioctl(hdlc_device *hdlc, struct ifreq *ifr, int cmd)
 	case HDLCSETLINE:
 	    value = ifr->ifr_ifru.ifru_ivalue;
 	    switch (value) {
+		case LINE_LOOPBACK:
+		    cpc_writeb(card->hw.scabase + M_REG(MD2, ch), 
+			       cpc_readb(card->hw.scabase + M_REG(MD2, ch)) | 
+			       MD2_LOOP_MIR);
+		    conf->loopback = 1;
+		    return 0;
+
+		case LINE_NOLOOPBACK:
+		    cpc_writeb(card->hw.scabase + M_REG(MD2, ch), 
+			       cpc_readb(card->hw.scabase + M_REG(MD2, ch)) & 
+			       ~MD2_LOOP_MIR);
+		    conf->loopback = 0;
+		    return 0;
+
 		case LINE_V35:
 		case LINE_X21:
 		case LINE_RS232:
@@ -2132,6 +2161,7 @@ ch_config(pc300dev_t *d)
     uclong plxbase = card->hw.plxbase;
     int ch = chan->channel;
     uclong clkrate = chan->conf.clkrate;
+    ucchar loopback = (conf->loopback ? MD2_LOOP_MIR : MD2_F_DUPLEX);
     int tmc, br;
 
     /* Reset the channel */
@@ -2141,7 +2171,7 @@ ch_config(pc300dev_t *d)
     cpc_writeb(scabase + M_REG(MD0, ch),
                 (MD0_CRC_CCITT|MD0_CRCC0|MD0_BIT_SYNC));
     cpc_writeb(scabase + M_REG(MD1, ch), 0);
-    cpc_writeb(scabase + M_REG(MD2, ch), (MD2_F_DUPLEX|MD2_ADPLL_X8|MD2_NRZ));
+    cpc_writeb(scabase + M_REG(MD2, ch), (loopback|MD2_ADPLL_X8|MD2_NRZ));
     cpc_writeb(scabase + M_REG(IDL, ch), 0x7e);
     cpc_writeb(scabase + M_REG(CTL, ch), CTL_URSKP|CTL_IDLC);
 
@@ -2185,7 +2215,7 @@ ch_config(pc300dev_t *d)
 		if (card->hw.type == PC300_X21)
 		    cpc_writeb(scabase + M_REG(GPO, ch), 0);
 	    }
-	    cpc_writeb(scabase + M_REG(EXS, ch), EXS_TES1|EXS_RES1);
+	    cpc_writeb(scabase + M_REG(EXS, ch), EXS_TES1);
 	    break;
 
 	case PC300_TE:
@@ -2697,6 +2727,7 @@ cpc_init(void))
 		chan->card = card;
 		chan->channel = j;
 		chan->conf.clkrate = 64000;
+		chan->conf.loopback = 0;
 		switch(card->hw.type) {
 		    case PC300_TE:
 			chan->conf.media = LINE_T1;

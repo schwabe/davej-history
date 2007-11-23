@@ -11,6 +11,13 @@
  *	2 of the License, or (at your option) any later version.
  *
  * $Log: pc300.h,v $
+ * Revision 2.2 2000/06/23 ivan
+ * Inclusion of 'loopback' field on structure 'pc300chconf', to allow 
+ * loopback mode operation.
+ * 
+ * Revision 2.1 2000/06/09 ivan
+ * Changes to use the new generic HDLC layer in the driver.
+ *
  * Revision 2.0 2000/03/27 ivan
  * Added support for the PC300/TE cards.
  *
@@ -261,6 +268,7 @@ typedef struct pc300chconf {
 	ucchar media;		/* HW media (RS232, V.35, etc.) */
 	uclong proto;		/* Protocol (PPP, X.25, etc.) */
 	uclong clkrate;		/* Clock rate (in bps, 0 = ext. clock) */
+	ucchar loopback;	/* Loopback mode */
 
 	/* TE-specific parameters */
 	ucchar lcode;		/* Line Code (AMI, B8ZS, etc.) */

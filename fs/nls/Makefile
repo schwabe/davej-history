@@ -135,10 +135,10 @@ else
 endif
 
 ifeq ($(CONFIG_NLS_CODEPAGE_932),y)
-NLS += nls_cp932_euc_jp.o
+NLS += nls_cp932.o
 else
   ifeq ($(CONFIG_NLS_CODEPAGE_932),m)
-  M_OBJS += nls_cp932_euc_jp.o
+  M_OBJS += nls_cp932.o
   endif
 endif
 

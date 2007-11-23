@@ -827,7 +827,12 @@ int init_module (void)
 	
 	for (index = 0; index < MAX_HWIFS; ++index)
 		ide_unregister(index);
-	return ideprobe_init();
+	ideprobe_init();
+#ifdef CONFIG_PROC_FS
+	proc_ide_destroy();	/* Avoid multiple entry in /proc */
+	proc_ide_create();
+#endif
+	return 0;
 }
 
 void cleanup_module (void)
