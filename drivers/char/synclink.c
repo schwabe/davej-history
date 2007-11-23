@@ -1280,6 +1280,7 @@ void mgsl_bh_transmit_data( struct mgsl_struct *info, unsigned short Datacount )
 			(tty->ldisc.write_wakeup)(tty);
 		}
 		wake_up_interruptible(&tty->write_wait);
+		wake_up_interruptible(&tty->poll_wait);
 	}
 
 	/* if transmitter idle and loopmode_send_done_requested
@@ -2478,6 +2479,7 @@ static void mgsl_flush_buffer(struct tty_struct *tty)
 	spin_unlock_irqrestore(&info->irq_spinlock,flags);
 	
 	wake_up_interruptible(&tty->write_wait);
+	wake_up_interruptible(&tty->poll_wait);
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);

@@ -434,6 +434,7 @@ void do_tty_hangup(void *data)
 
 	wake_up_interruptible(&tty->write_wait);
 	wake_up_interruptible(&tty->read_wait);
+	wake_up_interruptible(&tty->poll_wait);
 
 	/*
 	 * Shutdown the current line discipline, and reset it to
@@ -574,6 +575,7 @@ void stop_tty(struct tty_struct *tty)
 		tty->ctrl_status &= ~TIOCPKT_START;
 		tty->ctrl_status |= TIOCPKT_STOP;
 		wake_up_interruptible(&tty->link->read_wait);
+		wake_up_interruptible(&tty->link->poll_wait);
 	}
 	if (tty->driver.stop)
 		(tty->driver.stop)(tty);
@@ -588,6 +590,7 @@ void start_tty(struct tty_struct *tty)
 		tty->ctrl_status &= ~TIOCPKT_STOP;
 		tty->ctrl_status |= TIOCPKT_START;
 		wake_up_interruptible(&tty->link->read_wait);
+		wake_up_interruptible(&tty->link->poll_wait);
 	}
 	if (tty->driver.start)
 		(tty->driver.start)(tty);
@@ -595,6 +598,7 @@ void start_tty(struct tty_struct *tty)
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
 	wake_up_interruptible(&tty->write_wait);
+	wake_up_interruptible(&tty->poll_wait);
 }
 
 static ssize_t tty_read(struct file * file, char * buf, size_t count, 
@@ -1106,6 +1110,10 @@ static void release_dev(struct file * filp)
 				wake_up(&tty->read_wait);
 				do_sleep++;
 			}
+			if (waitqueue_active(&tty->poll_wait)) {
+				wake_up(&tty->poll_wait);
+				do_sleep++;
+			}
 			if (waitqueue_active(&tty->write_wait)) {
 				wake_up(&tty->write_wait);
 				do_sleep++;
@@ -1118,6 +1126,10 @@ static void release_dev(struct file * filp)
 			}
 			if (waitqueue_active(&o_tty->write_wait)) {
 				wake_up(&o_tty->write_wait);
+				do_sleep++;
+			}
+			if (waitqueue_active(&o_tty->poll_wait)) {
+				wake_up(&o_tty->poll_wait);
 				do_sleep++;
 			}
 		}
@@ -1448,7 +1460,7 @@ static int tty_fasync(int fd, struct file * filp, int on)
 		return retval;
 
 	if (on) {
-		if (!waitqueue_active(&tty->read_wait))
+		if (!waitqueue_active(&tty->read_wait) && !waitqueue_active(&tty->poll_wait))
 			tty->minimum_to_wake = 1;
 		if (filp->f_owner.pid == 0) {
 			filp->f_owner.pid = (-tty->pgrp) ? : current->pid;
@@ -1456,7 +1468,7 @@ static int tty_fasync(int fd, struct file * filp, int on)
 			filp->f_owner.euid = current->euid;
 		}
 	} else {
-		if (!tty->fasync && !waitqueue_active(&tty->read_wait))
+		if (!tty->fasync && !waitqueue_active(&tty->read_wait) && !waitqueue_active(&tty->poll_wait))
 			tty->minimum_to_wake = N_TTY_BUF_SIZE;
 	}
 	return 0;

@@ -1883,6 +1883,7 @@ static void stl_flushbuffer(struct tty_struct *tty)
 
 	stl_flush(portp);
 	wake_up_interruptible(&tty->write_wait);
+	wake_up_interruptible(&tty->poll_wait);
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
@@ -2267,6 +2268,7 @@ static void stl_offintr(void *private)
 		    tty->ldisc.write_wakeup)
 			(tty->ldisc.write_wakeup)(tty);
 		wake_up_interruptible(&tty->write_wait);
+		wake_up_interruptible(&tty->poll_wait);
 	}
 	if (test_bit(ASYI_DCDCHANGE, &portp->istate)) {
 		clear_bit(ASYI_DCDCHANGE, &portp->istate);

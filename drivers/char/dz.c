@@ -407,6 +407,7 @@ static void do_softint (void *private_data)
     if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
       (tty->ldisc.write_wakeup) (tty);
     wake_up_interruptible (&tty->write_wait);
+    wake_up_interruptible (&tty->poll_wait);
   }
 }
 
@@ -763,6 +764,7 @@ static void dz_flush_buffer (struct tty_struct *tty)
   sti ();
 
   wake_up_interruptible (&tty->write_wait);
+  wake_up_interruptible (&tty->poll_wait);
 
   if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
     (tty->ldisc.write_wakeup)(tty);

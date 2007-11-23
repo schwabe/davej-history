@@ -1011,6 +1011,7 @@ do_softint(void *private_)
             (tty->ldisc.write_wakeup)(tty);
         }
         wake_up_interruptible(&tty->write_wait);
+        wake_up_interruptible(&tty->poll_wait);
     }
 #ifdef Z_WAKE
     if (test_and_clear_bit(Cy_EVENT_SHUTDOWN_WAKEUP, &info->event)) {
@@ -4591,6 +4592,7 @@ cy_flush_buffer(struct tty_struct *tty)
 	CY_UNLOCK(info, flags);
     }
     wake_up_interruptible(&tty->write_wait);
+    wake_up_interruptible(&tty->poll_wait);
     if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP))
 	&& tty->ldisc.write_wakeup)
 	    (tty->ldisc.write_wakeup)(tty);

@@ -272,6 +272,7 @@ struct cm_state {
 	struct semaphore open_sem;
 	mode_t open_mode;
 	struct wait_queue *open_wait;
+	struct wait_queue *poll_wait;
 
 	struct dmabuf {
 		void *rawbuf;
@@ -303,6 +304,7 @@ struct cm_state {
 		unsigned ord, owr, ocnt;
 		struct wait_queue *iwait;
 		struct wait_queue *owait;
+		struct wait_queue *pollwait;
 		struct timer_list timer;
 		unsigned char ibuf[MIDIINBUF];
 		unsigned char obuf[MIDIOUTBUF];
@@ -751,7 +753,10 @@ static void cm_update_ptr(struct cm_state *s)
 		if (s->dma_dac.mapped) {
 			s->dma_dac.count += diff;
 			if (s->dma_dac.count >= (signed)s->dma_dac.fragsize)
+			{
 				wake_up(&s->dma_dac.wait);
+				wake_up(&s->poll_wait);
+			}
 		} else {
 			s->dma_dac.count -= diff;
 			if (s->dma_dac.count <= 0) {
@@ -763,7 +768,10 @@ static void cm_update_ptr(struct cm_state *s)
 				s->dma_dac.endcleared = 1;
 			}
 			if (s->dma_dac.count + (signed)s->dma_dac.fragsize <= (signed)s->dma_dac.dmasize)
+			{
 				wake_up(&s->dma_dac.wait);
+				wake_up(&s->poll_wait);
+			}
 		}
 	}
 }
@@ -785,7 +793,10 @@ static void cm_handle_midi(struct cm_state *s)
 		wake = 1;
 	}
 	if (wake)
+	{
 		wake_up(&s->midi.iwait);
+		wake_up(&s->midi.pollwait);
+	}
 	wake = 0;
 	while (!(inb(s->iomidi+1) & 0x40) && s->midi.ocnt > 0) {
 		outb(s->midi.obuf[s->midi.ord], s->iomidi);
@@ -795,7 +806,10 @@ static void cm_handle_midi(struct cm_state *s)
 			wake = 1;
 	}
 	if (wake)
+	{
 		wake_up(&s->midi.owait);
+		wake_up(&s->midi.pollwait);
+	}
 }
 
 static void cm_interrupt(int irq, void *dev_id, struct pt_regs *regs)
@@ -1380,10 +1394,8 @@ static unsigned int cm_poll(struct file *file, struct poll_table_struct *wait)
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_mode & FMODE_WRITE)
-		poll_wait(file, &s->dma_dac.wait, wait);
-	if (file->f_mode & FMODE_READ)
-		poll_wait(file, &s->dma_adc.wait, wait);
+	if (file->f_mode & (FMODE_WRITE|FMODE_READ))
+		poll_wait(file, &s->poll_wait, wait);
 	spin_lock_irqsave(&s->lock, flags);
 	cm_update_ptr(s);
 	if (file->f_mode & FMODE_READ) {
@@ -1955,10 +1967,8 @@ static unsigned int cm_midi_poll(struct file *file, struct poll_table_struct *wa
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_mode & FMODE_WRITE)
-		poll_wait(file, &s->midi.owait, wait);
-	if (file->f_mode & FMODE_READ)
-		poll_wait(file, &s->midi.iwait, wait);
+	if (file->f_mode & (FMODE_WRITE|FMODE_READ))
+		poll_wait(file, &s->midi.pollwait, wait);
 	spin_lock_irqsave(&s->lock, flags);
 	if (file->f_mode & FMODE_READ) {
 		if (s->midi.icnt > 0)
@@ -2368,10 +2378,12 @@ int __init init_cmpci(void)
 		}
 		memset(s, 0, sizeof(struct cm_state));
 		init_waitqueue(&s->dma_adc.wait);
+		init_waitqueue(&s->poll_wait);
 		init_waitqueue(&s->dma_dac.wait);
 		init_waitqueue(&s->open_wait);
 		init_waitqueue(&s->midi.iwait);
 		init_waitqueue(&s->midi.owait);
+		init_waitqueue(&s->midi.pollwait);
 		s->open_sem = MUTEX;
 		s->magic = CM_MAGIC;
 		s->iobase = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;

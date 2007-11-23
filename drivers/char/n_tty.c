@@ -122,6 +122,7 @@ void n_tty_flush_buffer(struct tty_struct * tty)
 	if (tty->link->packet) {
 		tty->ctrl_status |= TIOCPKT_FLUSHREAD;
 		wake_up_interruptible(&tty->link->read_wait);
+		wake_up_interruptible(&tty->link->poll_wait);
 	}
 }
 
@@ -441,6 +442,7 @@ static inline void n_tty_receive_break(struct tty_struct *tty)
 	}
 	put_tty_queue('\0', tty);
 	wake_up_interruptible(&tty->read_wait);
+	wake_up_interruptible(&tty->poll_wait);
 }
 
 static inline void n_tty_receive_overrun(struct tty_struct *tty)
@@ -471,6 +473,7 @@ static inline void n_tty_receive_parity_error(struct tty_struct *tty,
 	else
 		put_tty_queue(c, tty);
 	wake_up_interruptible(&tty->read_wait);
+	wake_up_interruptible(&tty->poll_wait);
 }
 
 static inline void n_tty_receive_char(struct tty_struct *tty, unsigned char c)
@@ -633,8 +636,11 @@ send_signal:
 			tty->canon_data++;
 			if (tty->fasync)
 				kill_fasync(tty->fasync, SIGIO);
-			if (tty->read_wait)
+			if (tty->read_wait || tty->poll_wait)
+			{
 				wake_up_interruptible(&tty->read_wait);
+				wake_up_interruptible(&tty->poll_wait);
+			}
 			return;
 		}
 	}
@@ -738,8 +744,11 @@ static void n_tty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 	if (!tty->icanon && (tty->read_cnt >= tty->minimum_to_wake)) {
 		if (tty->fasync)
 			kill_fasync(tty->fasync, SIGIO);
-		if (tty->read_wait)
+		if (tty->read_wait||tty->poll_wait)
+		{
 			wake_up_interruptible(&tty->read_wait);
+			wake_up_interruptible(&tty->poll_wait);
+		}
 	}
 
 	/*
@@ -947,7 +956,7 @@ do_it_again:
 		if (minimum) {
 			if (time)
 				tty->minimum_to_wake = 1;
-			else if (!waitqueue_active(&tty->read_wait) ||
+			else if ((!waitqueue_active(&tty->read_wait) && !waitqueue_active(&tty->poll_wait)) ||
 				 (tty->minimum_to_wake > minimum))
 				tty->minimum_to_wake = minimum;
 		} else {
@@ -1079,7 +1088,7 @@ do_it_again:
 	up(&tty->atomic_read);
 	remove_wait_queue(&tty->read_wait, &wait);
 
-	if (!waitqueue_active(&tty->read_wait))
+	if (!waitqueue_active(&tty->read_wait) && !waitqueue_active(&tty->poll_wait))
 		tty->minimum_to_wake = minimum;
 
 	current->state = TASK_RUNNING;
@@ -1171,8 +1180,7 @@ static unsigned int normal_poll(struct tty_struct * tty, struct file * file, pol
 {
 	unsigned int mask = 0;
 
-	poll_wait(file, &tty->read_wait, wait);
-	poll_wait(file, &tty->write_wait, wait);
+	poll_wait(file, &tty->poll_wait, wait);
 	if (input_available_p(tty, TIME_CHAR(tty) ? 0 : MIN_CHAR(tty)))
 		mask |= POLLIN | POLLRDNORM;
 	if (tty->packet && tty->link->ctrl_status)

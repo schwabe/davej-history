@@ -355,6 +355,7 @@ struct es1370_state {
 	struct semaphore open_sem;
 	mode_t open_mode;
 	wait_queue_head_t open_wait;
+	wait_queue_head_t poll_wait;
 
 	struct dmabuf {
 		void *rawbuf;
@@ -385,6 +386,7 @@ struct es1370_state {
 		unsigned ord, owr, ocnt;
 		wait_queue_head_t iwait;
 		wait_queue_head_t owait;
+		wait_queue_head_t pollwait;
 		unsigned char ibuf[MIDIINBUF];
 		unsigned char obuf[MIDIOUTBUF];
 	} midi;
@@ -671,7 +673,10 @@ static void es1370_update_ptr(struct es1370_state *s)
 		s->dma_adc.total_bytes += diff;
 		s->dma_adc.count += diff;
 		if (s->dma_adc.count >= (signed)s->dma_adc.fragsize) 
+		{
 			wake_up(&s->dma_adc.wait);
+			wake_up(&s->poll_wait);
+		}
 		if (!s->dma_adc.mapped) {
 			if (s->dma_adc.count > (signed)(s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1))) {
 				s->ctrl &= ~CTRL_ADC_EN;
@@ -711,6 +716,7 @@ static void es1370_update_ptr(struct es1370_state *s)
 			s->dma_dac2.count += diff;
 			if (s->dma_dac2.count >= (signed)s->dma_dac2.fragsize)
 				wake_up(&s->dma_dac2.wait);
+				wake_up(&s->poll_wait);
 		} else {
 			s->dma_dac2.count -= diff;
 			if (s->dma_dac2.count <= 0) {
@@ -723,7 +729,10 @@ static void es1370_update_ptr(struct es1370_state *s)
 				s->dma_dac2.endcleared = 1;
 			}
 			if (s->dma_dac2.count + (signed)s->dma_dac2.fragsize <= (signed)s->dma_dac2.dmasize)
+			{
 				wake_up(&s->dma_dac2.wait);
+				wake_up(&s->poll_wait);
+			}
 		}
 	}
 }
@@ -747,7 +756,10 @@ static void es1370_handle_midi(struct es1370_state *s)
 		wake = 1;
 	}
 	if (wake)
+	{
 		wake_up(&s->midi.iwait);
+		wake_up(&s->midi.pollwait);
+	}
 	wake = 0;
 	while ((inb(s->io+ES1370_REG_UART_STATUS) & USTAT_TXRDY) && s->midi.ocnt > 0) {
 		outb(s->midi.obuf[s->midi.ord], s->io+ES1370_REG_UART_DATA);
@@ -757,7 +769,10 @@ static void es1370_handle_midi(struct es1370_state *s)
 			wake = 1;
 	}
 	if (wake)
+	{
 		wake_up(&s->midi.owait);
+		wake_up(&s->midi.pollwait);
+	}
 	outb((s->midi.ocnt > 0) ? UCTRL_RXINTEN | UCTRL_ENA_TXINT : UCTRL_RXINTEN, s->io+ES1370_REG_UART_CONTROL);
 }
 
@@ -1295,10 +1310,8 @@ static unsigned int es1370_poll(struct file *file, struct poll_table_struct *wai
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_mode & FMODE_WRITE)
-		poll_wait(file, &s->dma_dac2.wait, wait);
-	if (file->f_mode & FMODE_READ)
-		poll_wait(file, &s->dma_adc.wait, wait);
+	if (file->f_mode & (FMODE_READ|FMODE_WRITE))
+		poll_wait(file, &s->poll_wait, wait);
 	spin_lock_irqsave(&s->lock, flags);
 	es1370_update_ptr(s);
 	if (file->f_mode & FMODE_READ) {
@@ -2286,10 +2299,8 @@ static unsigned int es1370_midi_poll(struct file *file, struct poll_table_struct
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_mode & FMODE_WRITE)
-		poll_wait(file, &s->midi.owait, wait);
-	if (file->f_mode & FMODE_READ)
-		poll_wait(file, &s->midi.iwait, wait);
+	if (file->f_mode & (FMODE_WRITE|FMODE_READ))
+		poll_wait(file, &s->midi.pollwait, wait);
 	spin_lock_irqsave(&s->lock, flags);
 	if (file->f_mode & FMODE_READ) {
 		if (s->midi.icnt > 0)
@@ -2478,9 +2489,11 @@ __initfunc(int init_es1370(void))
 		}
 		memset(s, 0, sizeof(struct es1370_state));
 		init_waitqueue_head(&s->dma_adc.wait);
+		init_waitqueue_head(&s->poll_wait);
 		init_waitqueue_head(&s->dma_dac1.wait);
 		init_waitqueue_head(&s->dma_dac2.wait);
 		init_waitqueue_head(&s->open_wait);
+		init_waitqueue_head(&s->midi.pollwait);
 		init_waitqueue_head(&s->midi.iwait);
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);

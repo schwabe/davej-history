@@ -1225,6 +1225,7 @@ static void pc_flush_buffer(struct tty_struct *tty)
 	restore_flags(flags);
 
 	wake_up_interruptible(&tty->write_wait);
+	wake_up_interruptible(&tty->poll_wait);
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
 
@@ -2445,7 +2446,7 @@ static void doevent(int crd)
 						  tty->ldisc.write_wakeup)
 						(tty->ldisc.write_wakeup)(tty);
 					wake_up_interruptible(&tty->write_wait);
-
+					wake_up_interruptible(&tty->poll_wait);
 				} /* End if LOWWAIT */
 
 			} /* End LOWTX_IND */
@@ -2465,6 +2466,7 @@ static void doevent(int crd)
 						(tty->ldisc.write_wakeup)(tty);
 
 					wake_up_interruptible(&tty->write_wait);
+					wake_up_interruptible(&tty->poll_wait);
 
 				} /* End if EMPTYWAIT */
 

@@ -2498,6 +2498,7 @@ static void stli_flushbuffer(struct tty_struct *tty)
 	restore_flags(flags);
 
 	wake_up_interruptible(&tty->write_wait);
+	wake_up_interruptible(&tty->poll_wait);
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
@@ -3034,6 +3035,7 @@ static inline int stli_hostcmd(stlibrd_t *brdp, stliport_t *portp)
 					EBRDENABLE(brdp);
 				}
 				wake_up_interruptible(&tty->write_wait);
+				wake_up_interruptible(&tty->poll_wait);
 			}
 		}
 

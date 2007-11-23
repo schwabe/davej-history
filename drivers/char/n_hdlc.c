@@ -239,6 +239,7 @@ struct n_hdlc {
 	/* Queues for select() functionality */
 	wait_queue_head_t read_wait;
 	wait_queue_head_t write_wait;
+	wait_queue_head_t poll_wait;
 
 	int		tbusy;		/* reentrancy flag for tx wakeup code */
 	int		woke_up;
@@ -317,6 +318,7 @@ static void n_hdlc_release (struct n_hdlc *n_hdlc)
 		
 	/* Ensure that the n_hdlcd process is not hanging on select()/poll() */
 	wake_up_interruptible (&n_hdlc->read_wait);
+	wake_up_interruptible (&n_hdlc->poll_wait);
 	wake_up_interruptible (&n_hdlc->write_wait);
 
 	if (tty != NULL && tty->disc_data == n_hdlc)
@@ -659,6 +661,7 @@ static void n_hdlc_tty_receive(struct tty_struct *tty,
 	
 	/* wake up any blocked reads and perform async signalling */
 	wake_up_interruptible (&n_hdlc->read_wait);
+	wake_up_interruptible (&n_hdlc->poll_wait);
 	if (n_hdlc->tty->fasync != NULL)
 		kill_fasync (n_hdlc->tty->fasync, SIGIO);
 
@@ -988,13 +991,7 @@ static unsigned int n_hdlc_tty_poll (struct tty_struct *tty,
 	if (n_hdlc && n_hdlc->magic == HDLC_MAGIC && tty == n_hdlc->tty) {
 		/* queue current process into any wait queue that */
 		/* may awaken in the future (read and write) */
-#if LINUX_VERSION_CODE < VERSION(2,1,89)
-		poll_wait(&n_hdlc->read_wait, wait);
-		poll_wait(&n_hdlc->write_wait, wait);
-#else
-		poll_wait(filp, &n_hdlc->read_wait, wait);
-		poll_wait(filp, &n_hdlc->write_wait, wait);
-#endif
+		poll_wait(filp, &n_hdlc->poll_wait, wait);
 		/* set bits for operations that wont block */
 		if(n_hdlc->rx_buf_list.head)
 			mask |= POLLIN | POLLRDNORM;	/* readable */
@@ -1057,6 +1054,7 @@ static struct n_hdlc *n_hdlc_alloc (void)
 
 	n_hdlc->flags  = 0;
 	init_waitqueue_head(&n_hdlc->read_wait);
+	init_waitqueue_head(&n_hdlc->poll_wait);
 	init_waitqueue_head(&n_hdlc->write_wait);
 	
 	return n_hdlc;

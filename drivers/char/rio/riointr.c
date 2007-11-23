@@ -254,6 +254,7 @@ char *		en;
     rio_dprint (RIO_DEBUG_INTR, ("(%d/%d)\n",
 		PortP->gs.wakeup_chars, PortP->gs.xmit_cnt)); 
     wake_up_interruptible(&PortP->gs.tty->write_wait);
+    wake_up_interruptible(&PortP->gs.tty->poll_wait);
   }
 
 }

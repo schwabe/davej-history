@@ -1204,6 +1204,7 @@ do_status( i2ChanStrPtr pCh )
 				goto skip_this;
 			}
 			wake_up_interruptible(&pCh->pTTY->read_wait);
+			wake_up_interruptible(&pCh->pTTY->poll_wait);
 		}
 #ifdef NEVER_HAPPENS_AS_SETUP_XXX
 	// and can't work because we don't know the_char

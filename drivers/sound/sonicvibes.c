@@ -321,6 +321,7 @@ struct sv_state {
 	struct semaphore open_sem;
 	mode_t open_mode;
 	wait_queue_head_t open_wait;
+	wait_queue_head_t poll_wait;
 
 	struct dmabuf {
 		void *rawbuf;
@@ -821,7 +822,10 @@ static void sv_update_ptr(struct sv_state *s)
 		s->dma_adc.total_bytes += diff;
 		s->dma_adc.count += diff;
 		if (s->dma_adc.count >= (signed)s->dma_adc.fragsize) 
+		{
 			wake_up(&s->dma_adc.wait);
+			wake_up(&s->poll_wait);
+		}
 		if (!s->dma_adc.mapped) {
 			if (s->dma_adc.count > (signed)(s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1))) {
 				s->enable &= ~SV_CENABLE_RE;
@@ -839,7 +843,10 @@ static void sv_update_ptr(struct sv_state *s)
 		if (s->dma_dac.mapped) {
 			s->dma_dac.count += diff;
 			if (s->dma_dac.count >= (signed)s->dma_dac.fragsize)
+			{
 				wake_up(&s->dma_dac.wait);
+				wake_up(&s->poll_wait);
+			}
 		} else {
 			s->dma_dac.count -= diff;
 			if (s->dma_dac.count <= 0) {
@@ -851,7 +858,10 @@ static void sv_update_ptr(struct sv_state *s)
 				s->dma_dac.endcleared = 1;
 			}
 			if (s->dma_dac.count + (signed)s->dma_dac.fragsize <= (signed)s->dma_dac.dmasize)
+			{
 				wake_up(&s->dma_dac.wait);
+				wake_up(&s->poll_wait);
+			}
 		}
 	}
 }
@@ -1489,10 +1499,8 @@ static unsigned int sv_poll(struct file *file, struct poll_table_struct *wait)
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_mode & FMODE_WRITE)
-		poll_wait(file, &s->dma_dac.wait, wait);
-	if (file->f_mode & FMODE_READ)
-		poll_wait(file, &s->dma_adc.wait, wait);
+	if (file->f_mode & (FMODE_WRITE|FMODE_READ))
+		poll_wait(file, &s->poll_wait, wait);
 	spin_lock_irqsave(&s->lock, flags);
 	sv_update_ptr(s);
 	if (file->f_mode & FMODE_READ) {
@@ -2462,6 +2470,7 @@ __initfunc(int init_sonicvibes(void))
 		init_waitqueue_head(&s->dma_adc.wait);
 		init_waitqueue_head(&s->dma_dac.wait);
 		init_waitqueue_head(&s->open_wait);
+		init_waitqueue_head(&s->poll_wait);
 		init_waitqueue_head(&s->midi.iwait);
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);

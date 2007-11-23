@@ -1064,6 +1064,7 @@ void sx_transmit_chars (struct sx_port *port)
 		sx_dprintk (SX_DEBUG_TRANSMIT, "Waking up.... ldisc (%d)....\n",
 		            port->gs.wakeup_chars); 
 		wake_up_interruptible(&port->gs.tty->write_wait);
+		wake_up_interruptible(&port->gs.tty->poll_wait);
 	}
 
 	clear_bit (SX_PORT_TRANSMIT_LOCK, &port->locks);

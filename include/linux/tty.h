@@ -277,6 +277,7 @@ struct tty_struct {
 	int alt_speed;		/* For magic substitution of 38400 bps */
 	struct wait_queue *write_wait;
 	struct wait_queue *read_wait;
+	struct wait_queue *poll_wait;
 	struct tq_struct tq_hangup;
 	void *disc_data;
 	void *driver_data;

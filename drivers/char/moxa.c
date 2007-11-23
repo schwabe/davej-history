@@ -743,6 +743,7 @@ static void moxa_flush_buffer(struct tty_struct *tty)
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup) (tty);
 	wake_up_interruptible(&tty->write_wait);
+	wake_up_interruptible(&tty->poll_wait);
 }
 
 static int moxa_chars_in_buffer(struct tty_struct *tty)
@@ -1000,6 +1001,7 @@ static void moxa_poll(unsigned long ignored)
 						  tp->ldisc.write_wakeup)
 							(tp->ldisc.write_wakeup) (tp);
 						wake_up_interruptible(&tp->write_wait);
+						wake_up_interruptible(&tp->poll_wait);
 					}
 				}
 			}
@@ -1190,6 +1192,7 @@ static void check_xmit_empty(unsigned long data)
 			    ch->tty->ldisc.write_wakeup)
 				(ch->tty->ldisc.write_wakeup) (ch->tty);
 			wake_up_interruptible(&ch->tty->write_wait);
+			wake_up_interruptible(&ch->tty->poll_wait);
 			return;
 		}
 		moxaEmptyTimer[ch->port].expires = jiffies + HZ;

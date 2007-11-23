@@ -396,6 +396,7 @@ struct ess_state {
 	/* only let 1 be opening at a time */
 	struct semaphore open_sem;
 	wait_queue_head_t open_wait;
+	wait_queue_head_t poll_wait;
 	mode_t open_mode;
 
 	/* soundcore stuff */
@@ -1815,7 +1816,10 @@ ess_update_ptr(struct ess_state *s)
 		s->dma_adc.total_bytes += diff;
 		s->dma_adc.count += diff;
 		if (s->dma_adc.count >= (signed)s->dma_adc.fragsize) 
+		{
 			wake_up(&s->dma_adc.wait);
+			wake_up(&s->poll_wait);
+		}
 		if (!s->dma_adc.mapped) {
 			if (s->dma_adc.count > (signed)(s->dma_adc.dmasize - ((3 * s->dma_adc.fragsize) >> 1))) {
 				/* FILL ME 
@@ -1846,6 +1850,7 @@ ess_update_ptr(struct ess_state *s)
 			s->dma_dac.count += diff;
 			if (s->dma_dac.count >= (signed)s->dma_dac.fragsize) {
 				wake_up(&s->dma_dac.wait);
+				wake_up(&s->poll_wait);
 			}
 		} else {
 			s->dma_dac.count -= diff;
@@ -1867,6 +1872,7 @@ ess_update_ptr(struct ess_state *s)
 			}
 			if (s->dma_dac.count + (signed)s->dma_dac.fragsize <= (signed)s->dma_dac.dmasize) {
 				wake_up(&s->dma_dac.wait);
+				wake_up(&s->poll_wait);
 /*				printk("waking up DAC count: %d sw: %d hw: %d\n",s->dma_dac.count, s->dma_dac.swptr, 
 					hwptr);*/
 			}
@@ -2403,10 +2409,8 @@ static unsigned int ess_poll(struct file *file, struct poll_table_struct *wait)
 	unsigned int mask = 0;
 
 	VALIDATE_STATE(s);
-	if (file->f_mode & FMODE_WRITE)
-		poll_wait(file, &s->dma_dac.wait, wait);
-	if (file->f_mode & FMODE_READ)
-		poll_wait(file, &s->dma_adc.wait, wait);
+	if (file->f_mode & (FMODE_WRITE|FMODE_READ))
+		poll_wait(file, &s->poll_wait, wait);
 	spin_lock_irqsave(&s->lock, flags);
 	ess_update_ptr(s);
 	if (file->f_mode & FMODE_READ) {
@@ -3359,6 +3363,7 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 		init_waitqueue_head(&s->dma_adc.wait);
 		init_waitqueue_head(&s->dma_dac.wait);
 		init_waitqueue_head(&s->open_wait);
+		init_waitqueue_head(&s->poll_wait);
 		spin_lock_init(&s->lock);
 		SILLY_INIT_SEM(s->open_sem);
 		s->magic = ESS_STATE_MAGIC;

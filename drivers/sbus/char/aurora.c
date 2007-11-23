@@ -1702,6 +1702,7 @@ printk("aurora_flush_buffer: start\n");
 	restore_flags(flags);
 	
 	wake_up_interruptible(&tty->write_wait);
+	wake_up_interruptible(&tty->poll_wait);
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	    tty->ldisc.write_wakeup)
 		(tty->ldisc.write_wakeup)(tty);
@@ -2197,6 +2198,7 @@ printk("do_softint: start\n");
 		    tty->ldisc.write_wakeup)
 			(tty->ldisc.write_wakeup)(tty);
 		wake_up_interruptible(&tty->write_wait);
+		wake_up_interruptible(&tty->poll_wait);
 	}
 #ifdef AURORA_DEBUG
 printk("do_softint: end\n");
