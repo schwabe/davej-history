@@ -221,12 +221,12 @@ static inline void mask_and_ack_8259A(unsigned int irq)
 	if (irq & 8) {
 		inb(0xA1);	/* DUMMY */
 		outb(cached_A1,0xA1);
+		outb(0x60+(irq&7),0xA0);/* Specific EOI to slave */
 		outb(0x62,0x20);	/* Specific EOI to cascade */
-		outb(0x20,0xA0);
 	} else {
 		inb(0x21);	/* DUMMY */
 		outb(cached_21,0x21);
-		outb(0x20,0x20);
+		outb(0x60+irq,0x20);	/* Specific EOI to master */
 	}
 }
 
@@ -442,6 +442,10 @@ int get_irq_list(char *buf)
  * Global interrupt locks for SMP. Allow interrupts to come in on any
  * CPU, yet make cli/sti act globally to protect critical regions..
  */
+#if defined (__SMP__) || DEBUG_SPINLOCKS > 0
+spinlock_t i386_bh_lock = SPIN_LOCK_UNLOCKED;
+#endif
+
 #ifdef __SMP__
 unsigned char global_irq_holder = NO_PROC_ID;
 unsigned volatile int global_irq_lock;
@@ -449,7 +453,6 @@ atomic_t global_irq_count;
 
 atomic_t global_bh_count;
 atomic_t global_bh_lock;
-spinlock_t i386_bh_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * "global_cli()" is a special case, in that it can hold the

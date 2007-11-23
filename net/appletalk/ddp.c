@@ -337,6 +337,7 @@ static int atif_probe_device(struct atalk_iface *atif)
 	int probe_net=ntohs(atif->address.s_net);
 	int probe_node=atif->address.s_node;
 	int netct, nodect;
+	struct device *dev = atif->dev;
 
 	/*
 	 * Offset the network we start probing with.
@@ -373,6 +374,13 @@ static int atif_probe_device(struct atalk_iface *atif)
 				 * Probe a proposed address.
 				 */
 				aarp_probe_network(atif);
+				
+				/*
+				 * The atif might have been deleted while
+				 * in aarp_probe_network!
+				 */
+				if (atalk_find_dev(dev) != atif)
+					return -ENODEV;
 
 				if(!(atif->status & ATIF_PROBE_FAIL)) {
 					atif->status &= ~ATIF_PROBE;
@@ -399,6 +407,7 @@ static int atif_proxy_probe_device(struct atalk_iface *atif, struct at_addr* pro
 	int probe_net=ntohs(atif->address.s_net);	// we probe the interface's network
 	int probe_node=ATADDR_ANYNODE;				// we'll take anything
 	int netct, nodect;
+	struct device *dev = atif->dev;
 
 	/*
 	 * Offset the network we start probing with.
@@ -435,6 +444,13 @@ static int atif_proxy_probe_device(struct atalk_iface *atif, struct at_addr* pro
 				 * Tell AARP to probe a proposed address.
 				 */
 				int probe_result = aarp_proxy_probe_network(atif, proxy_addr);
+
+				/*
+				 * The atif might have been deleted while
+				 * in aarp_proxy_probe_network!
+				 */
+				if (atalk_find_dev(dev) != atif)
+					return -ENODEV;
 
 				if (probe_result == 0)
 					return 0;

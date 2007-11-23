@@ -85,8 +85,19 @@ static void i2o_cfg_reply(struct i2o_handler *h, struct i2o_controller *c, struc
 {
 	u32 *msg = (u32 *)m;
 
-	if (msg[0] & (1<<13))
+//	if (msg[0] & (1<<13))
+        if (msg[0] & MSG_FAIL) {
+                u32 *preserved_msg = (u32*)(c->mem_offset + msg[7]);
+
 		printk(KERN_ERR "i2o_config: IOP failed to process the msg.\n");
+                /* Release the preserved msg frame by resubmitting it as a NOP */
+
+                preserved_msg[0] = THREE_WORD_MSG_SIZE | SGL_OFFSET_0;
+                preserved_msg[1] = I2O_CMD_UTIL_NOP << 24 | HOST_TID << 12 | 0;
+                preserved_msg[2] = 0;
+                i2o_post_message(c, msg[7]);
+        }
+
         
 	if (msg[4] >> 24)  // RegStatus != SUCCESS
 		i2o_report_status(KERN_INFO,"i2o_config",msg);
@@ -166,6 +177,9 @@ static void i2o_cfg_reply(struct i2o_handler *h, struct i2o_controller *c, struc
 struct i2o_handler cfg_handler=
 {
 	i2o_cfg_reply,
+	NULL,
+	NULL,
+	NULL,
 	"Configuration",
 	0,
 	0xffffffff	// All classes
@@ -416,7 +430,8 @@ static int ioctl_parms(unsigned long arg, unsigned int type)
         
 	if (len < 0) {
 		kfree(res);
-		return len; /* -DetailedStatus */
+		//return len; /* -DetailedStatus */
+		return -EAGAIN;
 	}
 
 	put_user(len, kcmd.reslen);
@@ -749,7 +764,7 @@ static int ioctl_evt_reg(unsigned long arg, struct file *fp)
 
 	/* Device exists? */
 	for(d = iop->devices; d; d = d->next)
-		if(d->lct_data->tid == kdesc.tid)
+		if(d->lct_data.tid == kdesc.tid)
 			break;
 
 	if(!d)

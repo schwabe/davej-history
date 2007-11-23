@@ -633,7 +633,7 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 
 	MSDOS_SB(sb)->nls_io = NULL;
 	if (MSDOS_SB(sb)->options.isvfat && !opts.utf8) {
-		p = opts.iocharset ? opts.iocharset : "iso8859-1";
+		p = opts.iocharset ? opts.iocharset : CONFIG_NLS_DEFAULT;
 		MSDOS_SB(sb)->nls_io = load_nls(p);
 		if (! MSDOS_SB(sb)->nls_io) {
 			/* Fail only if explicit charset specified */

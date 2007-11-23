@@ -916,7 +916,7 @@ static ide_startstop_t idefloppy_pc_intr (ide_drive_t *drive)
 			if (temp > pc->buffer_size) {
 				printk (KERN_ERR "ide-floppy: The floppy wants to send us more data than expected - discarding data\n");
 				idefloppy_discard_data (drive,bcount.all);
-				ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD);
+				ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD,NULL);
 				return ide_started;
 			}
 #if IDEFLOPPY_DEBUG_LOG
@@ -938,7 +938,7 @@ static ide_startstop_t idefloppy_pc_intr (ide_drive_t *drive)
 	pc->actually_transferred+=bcount.all;				/* Update the current position */
 	pc->current_position+=bcount.all;
 
-	ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD);		/* And set the interrupt handler again */
+	ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD,NULL);		/* And set the interrupt handler again */
 	return ide_started;
 }
 
@@ -957,7 +957,7 @@ static ide_startstop_t idefloppy_transfer_pc (ide_drive_t *drive)
 		printk (KERN_ERR "ide-floppy: (IO,CoD) != (0,1) while issuing a packet command\n");
 		return ide_do_reset (drive);
 	}
-	ide_set_handler (drive, &idefloppy_pc_intr, IDEFLOPPY_WAIT_CMD);	/* Set the interrupt routine */
+	ide_set_handler (drive, &idefloppy_pc_intr, IDEFLOPPY_WAIT_CMD, NULL);	/* Set the interrupt routine */
 	atapi_output_bytes (drive, floppy->pc->c, 12);		/* Send the actual packet */
 	return ide_started;
 }
@@ -1026,7 +1026,7 @@ static ide_startstop_t idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *p
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 
 	if (test_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags)) {
-		ide_set_handler (drive, &idefloppy_transfer_pc, IDEFLOPPY_WAIT_CMD);
+		ide_set_handler (drive, &idefloppy_transfer_pc, IDEFLOPPY_WAIT_CMD, NULL);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
 		return ide_started;
 	} else {

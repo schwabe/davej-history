@@ -119,7 +119,7 @@ smb_data_callback(void* ptr)
 		if (job->sk->dead)
 		{
 #ifdef SMBFS_PARANOIA
-			printk("smb_data_callback: sock dead!\n");
+			printk(KERN_DEBUG "smb_data_callback: sock dead!\n");
 #endif
 			break;
 		}
@@ -182,7 +182,7 @@ server_sock(struct smb_sb_info *server)
 	{
 #ifdef SMBFS_PARANOIA
 		if (!smb_valid_socket(file->f_dentry->d_inode))
-			printk("smb_server_sock: bad socket!\n");
+			printk(KERN_DEBUG "smb_server_sock: bad socket!\n");
 #endif
 		return &file->f_dentry->d_inode->u.socket_i;
 	}
@@ -201,7 +201,7 @@ smb_catch_keepalive(struct smb_sb_info *server)
 	socket = server_sock(server);
 	if (!socket)
 	{
-		printk("smb_catch_keepalive: did not get valid server!\n");
+		printk(KERN_DEBUG "smb_catch_keepalive: did not get valid server!\n");
 		server->data_ready = NULL;
 		goto out;
 	}
@@ -243,21 +243,21 @@ smb_dont_catch_keepalive(struct smb_sb_info *server)
 	socket = server_sock(server);
 	if (!socket)
 	{
-		printk("smb_dont_catch_keepalive: did not get valid server!\n");
+		printk(KERN_DEBUG "smb_dont_catch_keepalive: did not get valid server!\n");
 		goto out;
 	}
 
 	sk = socket->sk;
 	if (sk == NULL)
 	{
-		printk("smb_dont_catch_keepalive: sk == NULL");
+		printk(KERN_DEBUG "smb_dont_catch_keepalive: sk == NULL");
 		goto out;
 	}
 
 	/* Is this really an error?? */
 	if (server->data_ready == NULL)
 	{
-		printk("smb_dont_catch_keepalive: "
+		printk(KERN_DEBUG "smb_dont_catch_keepalive: "
 		       "server->data_ready == NULL\n");
 		goto out;
 	}
@@ -291,11 +291,11 @@ smb_close_socket(struct smb_sb_info *server)
 	if (file)
 	{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_close_socket: closing socket %p\n", server_sock(server));
+printk(KERN_DEBUG "smb_close_socket: closing socket %p\n", server_sock(server));
 #endif
 #ifdef SMBFS_PARANOIA
 if (server_sock(server)->sk->data_ready == smb_data_ready)
-printk("smb_close_socket: still catching keepalives!\n");
+printk(KERN_DEBUG "smb_close_socket: still catching keepalives!\n");
 #endif
 		server->sock_file = NULL;
 		fput(file);
@@ -372,7 +372,7 @@ smb_get_length(struct socket *socket, unsigned char *header)
 	if (result < 0)
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_get_length: recv error = %d\n", -result);
+printk(KERN_DEBUG "smb_get_length: recv error = %d\n", -result);
 #endif
 		return result;
 	}
@@ -388,7 +388,7 @@ printk("smb_get_length: recv error = %d\n", -result);
 
 	default:
 #ifdef SMBFS_PARANOIA
-printk("smb_get_length: Invalid NBT packet, code=%x\n", peek_buf[0]);
+printk(KERN_DEBUG "smb_get_length: Invalid NBT packet, code=%x\n", peek_buf[0]);
 #endif
 		return -EIO;
 	}
@@ -449,7 +449,7 @@ smb_receive(struct smb_sb_info *server)
 	if (result < 0)
 	{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_receive: receive error: %d\n", result);
+printk(KERN_DEBUG "smb_receive: receive error: %d\n", result);
 #endif
 		goto out;
 	}
@@ -458,7 +458,7 @@ printk("smb_receive: receive error: %d\n", result);
 
 #ifdef SMBFS_DEBUG_VERBOSE
 if (server->rcls != 0)
-printk("smb_receive: rcls=%d, err=%d\n", server->rcls, server->err);
+printk(KERN_DEBUG "smb_receive: rcls=%d, err=%d\n", server->rcls, server->err);
 #endif
 out:
 	return result;
@@ -522,7 +522,7 @@ smb_receive_trans2(struct smb_sb_info *server,
 			if (parm_count == parm_tot && data_count == data_tot)
 			{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_receive_trans2: fast track, parm=%u %u %u, data=%u %u %u\n",
+printk(KERN_DEBUG "smb_receive_trans2: fast track, parm=%u %u %u, data=%u %u %u\n",
 parm_disp, parm_offset, parm_count, data_disp, data_offset, data_count);
 #endif
 				*parm  = base + parm_offset;
@@ -562,7 +562,7 @@ parm_disp, parm_offset, parm_count, data_disp, data_offset, data_count);
 		memcpy(*data + data_disp, base + data_offset, data_count);
 
 #ifdef SMBFS_PARANOIA
-printk("smb_receive_trans2: copied, parm=%u of %u, data=%u of %u\n",
+printk(KERN_DEBUG "smb_receive_trans2: copied, parm=%u of %u, data=%u of %u\n",
 parm_len, parm_tot, data_len, data_tot);
 #endif
 		/*
@@ -587,7 +587,7 @@ parm_len, parm_tot, data_len, data_tot);
 	} else
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_receive_trans2: copying data, old size=%d, new size=%u\n",
+printk(KERN_DEBUG "smb_receive_trans2: copying data, old size=%d, new size=%u\n",
 server->packet_size, buf_len);
 #endif
 		memcpy(inbuf, rcv_buf, parm_len + data_len);
@@ -603,23 +603,23 @@ out:
 
 out_no_mem:
 #ifdef SMBFS_PARANOIA
-	printk("smb_receive_trans2: couldn't allocate data area\n");
+	printk(KERN_DEBUG "smb_receive_trans2: couldn't allocate data area\n");
 #endif
 	result = -ENOMEM;
 	goto out;
 out_too_long:
-	printk("smb_receive_trans2: data/param too long, data=%d, parm=%d\n",
+	printk(KERN_DEBUG "smb_receive_trans2: data/param too long, data=%d, parm=%d\n",
 		data_tot, parm_tot);
 	goto out_error;
 out_data_grew:
-	printk("smb_receive_trans2: data/params grew!\n");
+	printk(KERN_DEBUG "smb_receive_trans2: data/params grew!\n");
 	goto out_error;
 out_bad_parm:
-	printk("smb_receive_trans2: invalid parms, disp=%d, cnt=%d, tot=%d\n",
+	printk(KERN_DEBUG "smb_receive_trans2: invalid parms, disp=%d, cnt=%d, tot=%d\n",
 		parm_disp, parm_count, parm_tot);
 	goto out_error;
 out_bad_data:
-	printk("smb_receive_trans2: invalid data, disp=%d, cnt=%d, tot=%d\n",
+	printk(KERN_DEBUG "smb_receive_trans2: invalid data, disp=%d, cnt=%d, tot=%d\n",
 		data_disp, data_count, data_tot);
 out_error:
 	result = -EIO;
@@ -684,7 +684,7 @@ smb_request(struct smb_sb_info *server)
 		int result2 = smb_catch_keepalive(server);
 		if (result2 < 0)
 		{
-			printk("smb_request: catch keepalive failed\n");
+			printk(KERN_DEBUG "smb_request: catch keepalive failed\n");
 			result = result2;
 		}
 	}
@@ -696,7 +696,7 @@ smb_request(struct smb_sb_info *server)
 	if (server->rcls) {
 		int error = smb_errno(server);
 		if (error == EBADSLT) {
-			printk("smb_request: tree ID invalid\n");
+			printk(KERN_DEBUG "smb_request: tree ID invalid\n");
 			result = error;
 			goto bad_conn;
 		}
@@ -708,16 +708,16 @@ out:
 	
 bad_conn:
 #ifdef SMBFS_PARANOIA
-printk("smb_request: result %d, setting invalid\n", result);
+printk(KERN_DEBUG "smb_request: result %d, setting invalid\n", result);
 #endif
 	server->state = CONN_INVALID;
 	smb_invalidate_inodes(server);
 	goto out;		
 bad_no_packet:
-	printk("smb_request: no packet!\n");
+	printk(KERN_DEBUG "smb_request: no packet!\n");
 	goto out;
 bad_no_conn:
-	printk("smb_request: connection %d not valid!\n", server->state);
+	printk(KERN_DEBUG "smb_request: connection %d not valid!\n", server->state);
 	goto out;
 }
 
@@ -879,7 +879,7 @@ smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 	if (server->rcls) {
 		int error = smb_errno(server);
 		if (error == EBADSLT) {
-			printk("smb_request: tree ID invalid\n");
+			printk(KERN_DEBUG "smb_request: tree ID invalid\n");
 			result = error;
 			goto bad_conn;
 		}
@@ -890,7 +890,7 @@ out:
 
 bad_conn:
 #ifdef SMBFS_PARANOIA
-printk("smb_trans2_request: result=%d, setting invalid\n", result);
+printk(KERN_DEBUG "smb_trans2_request: result=%d, setting invalid\n", result);
 #endif
 	server->state = CONN_INVALID;
 	smb_invalidate_inodes(server);

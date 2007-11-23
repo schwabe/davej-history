@@ -6,11 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Mon Jan 17 09:07:36 2000
+ * Modified at:   Fri Apr 21 11:26:48 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>,
- *                        Thomas Davis <ratbert@radiks.net>
+ *     Copyright (c) 1998 Thomas Davis <ratbert@radiks.net>
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -374,6 +374,7 @@ static int irlap_state_ndm(struct irlap_cb *self, IRLAP_EVENT event,
 		self->s = info->s;
 		irlap_send_discovery_xid_frame(self, info->S, info->s, TRUE,
 					       info->discovery);
+		self->frame_sent = FALSE;
 		self->s++;
 
 		irlap_start_slot_timer(self, self->slot_timeout);
@@ -384,12 +385,8 @@ static int irlap_state_ndm(struct irlap_cb *self, IRLAP_EVENT event,
 
 		/* Assert that this is not the final slot */
 		if (info->s <= info->S) {
-			/* self->daddr = info->daddr;  */
 			self->slot = irlap_generate_rand_time_slot(info->S,
 								   info->s);
-			IRDA_DEBUG(4, "XID_CMD: S=%d, s=%d, slot %d\n", info->S, 
-			      info->s, self->slot);
-
 			if (self->slot == info->s) {
 				discovery_rsp = irlmp_get_discovery_response();
 				discovery_rsp->daddr = info->daddr;
@@ -455,7 +452,6 @@ static int irlap_state_ndm(struct irlap_cb *self, IRLAP_EVENT event,
 	default:
 		IRDA_DEBUG(2, __FUNCTION__ "(), Unknown event %s\n", 
 			   irlap_event[event]);
-		
 		if (skb)
 			dev_kfree_skb(skb);
 
@@ -504,6 +500,19 @@ static int irlap_state_query(struct irlap_cb *self, IRLAP_EVENT event,
 		dev_kfree_skb(skb);
 		break;
 	case SLOT_TIMER_EXPIRED:
+		/*
+		 * Wait a little longer if we detect an incomming frame. This
+		 * is not mentioned in the spec, but is a good thing to do, 
+		 * since we want to work even with devices that violate the
+		 * timing requirements.
+		 */
+		if (irda_device_is_receiving(self->netdev)) {
+			IRDA_DEBUG(1, __FUNCTION__ 
+				   "(), device is slow to answer, "
+				   "waiting some more!\n");
+			irlap_start_slot_timer(self, MSECS_TO_JIFFIES(10));
+			return ret;
+		}
 		if (self->s < self->S) {
 			irlap_send_discovery_xid_frame(self, self->S, 
 						       self->s, TRUE,
@@ -535,7 +544,6 @@ static int irlap_state_query(struct irlap_cb *self, IRLAP_EVENT event,
 	default:
 		IRDA_DEBUG(2, __FUNCTION__ "(), Unknown event %s\n", 
 			   irlap_event[event]);
-
 		if (skb)
 			dev_kfree_skb(skb);
 
@@ -571,9 +579,8 @@ static int irlap_state_reply(struct irlap_cb *self, IRLAP_EVENT event,
 		break;
 	case RECV_DISCOVERY_XID_CMD:
 		ASSERT(info != NULL, return -1;);
-		/*
-		 *  Last frame?
-		 */
+
+		/* Last frame?  */
 		if (info->s == 0xff) {
 			del_timer(&self->query_timer);
 			
@@ -864,7 +871,7 @@ static int irlap_state_xmit_p(struct irlap_cb *self, IRLAP_EVENT event,
 				 *  that is not possible since we must be sure
 				 *  that we poll the other side. Since we have
 				 *  used up our time, the poll timer should
-				 *  trigger anyway now,so we just wait for it
+				 *  trigger anyway now, so we just wait for it
 				 *  DB
 				 */
 				return -EPROTO;
@@ -1296,7 +1303,7 @@ static int irlap_state_nrm_p(struct irlap_cb *self, IRLAP_EVENT event,
 		 *  of receiving a frame (page 45, IrLAP). Check that
 		 *  we only do this once for each frame.
 		 */
-		if (irda_device_is_receiving(self->netdev) && 
+		if (irda_device_is_receiving(self->netdev) &&
 		    !self->add_wait) 
 		{
 			IRDA_DEBUG(1, "FINAL_TIMER_EXPIRED when receiving a "
@@ -1423,7 +1430,7 @@ static int irlap_state_reset_wait(struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_next_state( self, LAP_PCLOSE);
 		break;
 	default:
-		IRDA_DEBUG(1, __FUNCTION__ "(), Unknown event %s\n", 
+		IRDA_DEBUG(2, __FUNCTION__ "(), Unknown event %s\n", 
 			   irlap_event[event]);
 		if (skb)
 			dev_kfree_skb(skb);
@@ -1951,8 +1958,8 @@ static int irlap_state_nrm_s(struct irlap_cb *self, IRLAP_EVENT event,
 		dev_kfree_skb(skb);
 		break;
 	case RECV_TEST_CMD:
-		/* Remove test frame header */
-		skb_pull(skb, sizeof(struct test_frame));
+		/* Remove test frame header (only LAP header in NRM) */
+		skb_pull(skb, LAP_ADDR_HEADER + LAP_CTRL_HEADER);
 
 		irlap_wait_min_turn_around(self, &self->qos_tx);
 		irlap_start_wd_timer(self, self->wd_timeout);

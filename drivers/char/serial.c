@@ -2782,29 +2782,31 @@ static inline int line_info(char *buf, struct serial_state *state)
 	return ret;
 }
 
-int rs_read_proc(char *page, char **start, off_t off, int count,
+int rs_read_proc(char *page, char **start, off_t idx, ssize_t count,
 		 int *eof, void *data)
 {
-	int i, len = 0, l;
-	off_t	begin = 0;
+	int n;
 
-	len += sprintf(page, "serinfo:1.0 driver:%s\n", serial_version);
-	for (i = 0; i < NR_PORTS && len < 3900; i++) {
-		l = line_info(page + len, &rs_table[i]);
-		len += l;
-		if (len+begin > off+count)
-			goto done;
-		if (len+begin < off) {
-			begin += len;
-			len = 0;
-		}
+	*start = (char *) 1L;
+
+	if (!idx) {
+		n = sprintf(page, "serinfo:1.0 driver:%s\n", serial_version);
+		goto out;
 	}
-	*eof = 1;
-done:
-	if (off >= len+begin)
-		return 0;
-	*start = page + (begin-off);
-	return ((count < begin+len-off) ? count : begin+len-off);
+	idx--;
+
+	n = 0;
+	if (idx >= NR_PORTS || idx < 0)
+		goto out;
+
+	n = line_info(page, &rs_table[idx]);
+	if (idx + 1 == NR_PORTS)
+		*eof = 1;
+
+ out:
+	if (n > count)
+		n = 0;
+	return n;
 }
 
 /*

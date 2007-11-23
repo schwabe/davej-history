@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Sun Oct 31 19:41:24 1999
+ * Modified at:   Fri Apr 21 11:11:38 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -165,25 +165,23 @@ struct irlan_cb {
 
 	int    magic;
 	char   ifname[9];
-	struct device dev;        /* Ethernet device structure*/
-	struct enet_statistics stats;
+	struct device dev;         /* Ethernet device structure*/
+	struct net_device_stats stats;
 
-	__u32 saddr;              /* Source device address */
-	__u32 daddr;              /* Destination device address */
-	int   netdev_registered;
-	int   notify_irmanager;
+	__u32 saddr;               /* Source device address */
+	__u32 daddr;               /* Destination device address */
+	int   disconnect_reason;   /* Why we got disconnected */
+
+	int media;                 /* Media type */
+	__u8 version[2];           /* IrLAN version */
 	
-	int media;                /* Media type */
-	__u8 version[2];          /* IrLAN version */
-	
-	struct tsap_cb *tsap_data;
+	struct tsap_cb *tsap_data; /* Data TSAP */
 
-	int  master;              /* Master instance? */
-	int  use_udata;           /* Use Unit Data transfers */
+	int  use_udata;            /* Use Unit Data transfers */
 
-	__u8 stsap_sel_data;      /* Source data TSAP selector */
-	__u8 dtsap_sel_data;      /* Destination data TSAP selector */
-	__u8 dtsap_sel_ctrl;      /* Destination ctrl TSAP selector */
+	__u8 stsap_sel_data;       /* Source data TSAP selector */
+	__u8 dtsap_sel_data;       /* Destination data TSAP selector */
+	__u8 dtsap_sel_ctrl;       /* Destination ctrl TSAP selector */
 
 	struct irlan_client_cb   client;   /* Client specific fields */
 	struct irlan_provider_cb provider; /* Provider specific fields */
@@ -194,7 +192,7 @@ struct irlan_cb {
 	struct timer_list watchdog_timer;
 };
 
-struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr, int netdev);
+struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr);
 void irlan_close(struct irlan_cb *self);
 void irlan_close_tsaps(struct irlan_cb *self);
 void irlan_mod_inc_use_count(void);
@@ -202,7 +200,6 @@ void irlan_mod_dec_use_count(void);
 
 int  irlan_register_netdev(struct irlan_cb *self);
 void irlan_ias_register(struct irlan_cb *self, __u8 tsap_sel);
-void irlan_start_watchdog_timer(struct irlan_cb *self, int timeout);
 
 void irlan_open_data_tsap(struct irlan_cb *self);
 

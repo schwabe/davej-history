@@ -35,6 +35,8 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    dep_tristate 'ESS Solo1 (Experimental)' CONFIG_SOUND_ESSSOLO1 $CONFIG_SOUND
 fi
 
+dep_tristate 'Intel ICH (810, 820, 440MX...)' CONFIG_SOUND_ICH $CONFIG_SOUND
+
 dep_tristate 'S3 SonicVibes' CONFIG_SOUND_SONICVIBES $CONFIG_SOUND
 
 if [ "$CONFIG_VISWS" = "y" ]; then

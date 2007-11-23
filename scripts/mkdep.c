@@ -8,9 +8,20 @@
  * I make simple dependency lines for #include <*.h> and #include "*.h".
  * I also find instances of CONFIG_FOO and generate dependencies
  *    like include/config/foo.h.
+ *
+ * 1 August 1999, Michael Elizabeth Chastain, <mec@shout.net>
+ * - Keith Owens reported a bug in smart config processing.  There used
+ *   to be an optimization for "#define CONFIG_FOO ... #ifdef CONFIG_FOO",
+ *   so that the file would not depend on CONFIG_FOO because the file defines
+ *   this symbol itself.  But this optimization is bogus!  Consider this code:
+ *   "#if 0 \n #define CONFIG_FOO \n #endif ... #ifdef CONFIG_FOO".  Here
+ *   the definition is inactivated, but I still used it.  It turns out this
+ *   actually happens a few times in the kernel source.  The simple way to
+ *   fix this problem is to remove this particular optimization.
  */
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,7 +77,7 @@ void grow_config(int len)
 	while (len_config + len > size_config) {
 		str_config = realloc(str_config, size_config *= 2);
 		if (str_config == NULL)
-			{ perror("malloc"); exit(1); }
+			{ perror("malloc config"); exit(1); }
 	}
 }
 
@@ -93,22 +104,11 @@ int is_defined_config(const char * name, int len)
 /*
  * Add a new value to the configuration string.
  */
-void define_config(int convert, const char * name, int len)
+void define_config(const char * name, int len)
 {
 	grow_config(len + 1);
 
 	memcpy(str_config+len_config, name, len);
-
-	if (convert) {
-		int i;
-		for (i = 0; i < len; i++) {
-			char c = str_config[len_config+i];
-			if (isupper(c)) c = tolower(c);
-			if (c == '_')   c = '/';
-			str_config[len_config+i] = c;
-		}
-	}
-
 	len_config += len;
 	str_config[len_config++] = '\n';
 }
@@ -121,7 +121,56 @@ void define_config(int convert, const char * name, int len)
 void clear_config(void)
 {
 	len_config = 0;
-	define_config(0, "", 0);
+	define_config("", 0);
+}
+
+
+
+/*
+ * This records all the precious .h filenames.  No need for a hash,
+ * it's a long string of values enclosed in tab and newline.
+ */
+char * str_precious  = NULL;
+int    size_precious = 0;
+int    len_precious  = 0;
+
+
+
+/*
+ * Grow the precious string to a desired length.
+ * Usually the first growth is plenty.
+ */
+void grow_precious(int len)
+{
+	if (str_precious == NULL) {
+		len_precious  = 0;
+		size_precious = 4096;
+		str_precious  = malloc(4096);
+		if (str_precious == NULL)
+			{ perror("malloc precious"); exit(1); }
+	}
+
+	while (len_precious + len > size_precious) {
+		str_precious = realloc(str_precious, size_precious *= 2);
+		if (str_precious == NULL)
+			{ perror("malloc"); exit(1); }
+	}
+}
+
+
+
+/*
+ * Add a new value to the precious string.
+ */
+void define_precious(const char * filename)
+{
+	int len = strlen(filename);
+	grow_precious(len + 4);
+	*(str_precious+len_precious++) = '\t';
+	memcpy(str_precious+len_precious, filename, len);
+	len_precious += len;
+	memcpy(str_precious+len_precious, " \\\n", 3);
+	len_precious += 3;
 }
 
 
@@ -137,7 +186,7 @@ void handle_include(int type, const char * name, int len)
 		return;
 
 	if (len >= 7 && !memcmp(name, "config/", 7))
-		define_config(0, name+7, len-7-2);
+		define_config(name+7, len-7-2);
 
 	memcpy(path->buffer+path->len, name, len);
 	path->buffer[path->len+len] = '\0';
@@ -176,7 +225,7 @@ void use_config(const char * name, int len)
 	if (is_defined_config(pc, len))
 	    return;
 
-	define_config(0, pc, len);
+	define_config(pc, len);
 
 	if (!hasdep) {
 		hasdep = 1;
@@ -193,7 +242,8 @@ void use_config(const char * name, int len)
  * Thus, there is one memory access per sizeof(unsigned long) characters.
  */
 
-#if defined(__alpha__) || defined(__i386__) || defined(__MIPSEL__) || defined(__arm__)
+#if defined(__alpha__) || defined(__i386__) || defined(__ia64__) || defined(__MIPSEL__)	\
+    || defined(__arm__)
 #define LE_MACHINE
 #endif
 
@@ -360,7 +410,13 @@ pound_u:
 	GETNEXT NOTCASE('f', __start);
 	goto pound_define_undef;
 
-/* #\s*(define|undef)\s*CONFIG_(\w*) */
+/*
+ * #\s*(define|undef)\s*CONFIG_(\w*)
+ *
+ * this does not define the word, because it could be inside another
+ * conditional (#if 0).  But I do parse the word so that this instance
+ * does not count as a use.  -- mec
+ */
 pound_define_undef:
 	GETNEXT
 	CASE(' ',  pound_define_undef);
@@ -379,7 +435,6 @@ pound_define_undef_CONFIG_word:
 	GETNEXT
 	if (isalnum(current) || current == '_')
 		goto pound_define_undef_CONFIG_word;
-	define_config(1, map_dot, next - map_dot - 1);
 	goto __start;
 
 /* \<CONFIG_(\w*) */
@@ -458,8 +513,11 @@ void do_depend(const char * filename, const char * command)
 	hasdep = 0;
 	clear_config();
 	state_machine(map, map+st.st_size);
-	if (hasdep)
+	if (hasdep) {
 		puts(command);
+		if (*command)
+			define_precious(filename);
+	}
 
 	munmap(map, mapsize);
 	close(fd);
@@ -500,6 +558,10 @@ int main(int argc, char **argv)
 			}
 		}
 		do_depend(filename, command);
+	}
+	if (len_precious) {
+		*(str_precious+len_precious) = '\0';
+		printf(".PRECIOUS:%s\n", str_precious);
 	}
 	return 0;
 }

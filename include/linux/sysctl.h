@@ -435,7 +435,12 @@ enum {
 
 /* /proc/sys/dev/cdrom */
 enum {
-	DEV_CDROM_INFO=1
+	DEV_CDROM_INFO=1,
+	DEV_CDROM_AUTOCLOSE=2,
+	DEV_CDROM_AUTOEJECT=3,
+	DEV_CDROM_DEBUG=4,
+	DEV_CDROM_LOCK=5,
+	DEV_CDROM_CHECK_MEDIA=6
 };
 
 #ifdef __KERNEL__

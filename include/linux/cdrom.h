@@ -5,11 +5,13 @@
  *               1994, 1995   Eberhard Moenkeberg, emoenke@gwdg.de
  *               1996         David van Leeuwen, david@tm.tno.nl
  *               1997, 1998   Erik Andersen, andersee@debian.org
- *               1998, 1999   Jens Axboe, axboe@image.dk
+ *               1998-2000    Jens Axboe, axboe@suse.de
  */
  
 #ifndef	_LINUX_CDROM_H
 #define	_LINUX_CDROM_H
+
+#include <asm/byteorder.h>
 
 /*******************************************************
  * As of Linux 2.1.x, all Linux CD-ROM application programs will use this 
@@ -94,16 +96,26 @@
 #define CDROMPLAYBLK		0x5317	/* (struct cdrom_blk) */
 
 /* 
- * These ioctls are used only used in optcd.c
+ * These ioctls are only used in optcd.c
  */
 #define CDROMREADALL		0x5318	/* read all 2646 bytes */
-#define CDROMCLOSETRAY		0x5319	/* pendant of CDROMEJECT */
+
+/* 
+ * These ioctls are (now) only in ide-cd.c for controlling 
+ * drive spindown time.  They should be implemented in the
+ * Uniform driver, via generic packet commands, GPCMD_MODE_SELECT_10,
+ * GPCMD_MODE_SENSE_10 and the GPMODE_POWER_PAGE...
+ *  -Erik
+ */
+#define CDROMGETSPINDOWN        0x531d
+#define CDROMSETSPINDOWN        0x531e
 
 /* 
  * These ioctls are implemented through the uniform CD-ROM driver
  * They _will_ be adopted by all CD-ROM drivers, when all the CD-ROM
  * drivers are eventually ported to the uniform CD-ROM driver interface.
  */
+#define CDROMCLOSETRAY		0x5319	/* pendant of CDROMEJECT */
 #define CDROM_SET_OPTIONS	0x5320  /* Set behavior options */
 #define CDROM_CLEAR_OPTIONS	0x5321  /* Clear behavior options */
 #define CDROM_SELECT_SPEED	0x5322  /* Set the CD-ROM speed */
@@ -119,6 +131,15 @@
 /* This ioctl is only used by sbpcd at the moment */
 #define CDROMAUDIOBUFSIZ        0x5382	/* set the audio buffer size */
 
+/* DVD-ROM Specific ioctls */
+#define DVD_READ_STRUCT		0x5390  /* Read structure */
+#define DVD_WRITE_STRUCT	0x5391  /* Write structure */
+#define DVD_AUTH		0x5392  /* Authentication */
+
+#define CDROM_SEND_PACKET	0x5393	/* send a packet to the drive */
+#define CDROM_NEXT_WRITABLE	0x5394	/* get next writable block */
+#define CDROM_LAST_WRITTEN	0x5395	/* get last block written on disc */
+
 /*******************************************************
  * CDROM IOCTL structures
  *******************************************************/
@@ -126,9 +147,9 @@
 /* Address in MSF format */
 struct cdrom_msf0		
 {
-	u_char	minute;
-	u_char	second;
-	u_char	frame;
+	__u8	minute;
+	__u8	second;
+	__u8	frame;
 };
 
 /* Address in either MSF or logical format */
@@ -141,48 +162,48 @@ union cdrom_addr
 /* This struct is used by the CDROMPLAYMSF ioctl */ 
 struct cdrom_msf 
 {
-	u_char	cdmsf_min0;	/* start minute */
-	u_char	cdmsf_sec0;	/* start second */
-	u_char	cdmsf_frame0;	/* start frame */
-	u_char	cdmsf_min1;	/* end minute */
-	u_char	cdmsf_sec1;	/* end second */
-	u_char	cdmsf_frame1;	/* end frame */
+	__u8	cdmsf_min0;	/* start minute */
+	__u8	cdmsf_sec0;	/* start second */
+	__u8	cdmsf_frame0;	/* start frame */
+	__u8	cdmsf_min1;	/* end minute */
+	__u8	cdmsf_sec1;	/* end second */
+	__u8	cdmsf_frame1;	/* end frame */
 };
 
 /* This struct is used by the CDROMPLAYTRKIND ioctl */
 struct cdrom_ti 
 {
-	u_char	cdti_trk0;	/* start track */
-	u_char	cdti_ind0;	/* start index */
-	u_char	cdti_trk1;	/* end track */
-	u_char	cdti_ind1;	/* end index */
+	__u8	cdti_trk0;	/* start track */
+	__u8	cdti_ind0;	/* start index */
+	__u8	cdti_trk1;	/* end track */
+	__u8	cdti_ind1;	/* end index */
 };
 
 /* This struct is used by the CDROMREADTOCHDR ioctl */
 struct cdrom_tochdr 	
 {
-	u_char	cdth_trk0;	/* start track */
-	u_char	cdth_trk1;	/* end track */
+	__u8	cdth_trk0;	/* start track */
+	__u8	cdth_trk1;	/* end track */
 };
 
 /* This struct is used by the CDROMVOLCTRL and CDROMVOLREAD ioctls */
 struct cdrom_volctrl
 {
-	u_char	channel0;
-	u_char	channel1;
-	u_char	channel2;
-	u_char	channel3;
+	__u8	channel0;
+	__u8	channel1;
+	__u8	channel2;
+	__u8	channel3;
 };
 
 /* This struct is used by the CDROMSUBCHNL ioctl */
 struct cdrom_subchnl 
 {
-	u_char	cdsc_format;
-	u_char	cdsc_audiostatus;
-	u_char	cdsc_adr:	4;
-	u_char	cdsc_ctrl:	4;
-	u_char	cdsc_trk;
-	u_char	cdsc_ind;
+	__u8	cdsc_format;
+	__u8	cdsc_audiostatus;
+	__u8	cdsc_adr:	4;
+	__u8	cdsc_ctrl:	4;
+	__u8	cdsc_trk;
+	__u8	cdsc_ind;
 	union cdrom_addr cdsc_absaddr;
 	union cdrom_addr cdsc_reladdr;
 };
@@ -191,12 +212,12 @@ struct cdrom_subchnl
 /* This struct is used by the CDROMREADTOCENTRY ioctl */
 struct cdrom_tocentry 
 {
-	u_char	cdte_track;
-	u_char	cdte_adr	:4;
-	u_char	cdte_ctrl	:4;
-	u_char	cdte_format;
+	__u8	cdte_track;
+	__u8	cdte_adr	:4;
+	__u8	cdte_ctrl	:4;
+	__u8	cdte_format;
 	union cdrom_addr cdte_addr;
-	u_char	cdte_datamode;
+	__u8	cdte_datamode;
 };
 
 /* This struct is used by the CDROMREADMODE1, and CDROMREADMODE2 ioctls */
@@ -211,9 +232,9 @@ struct cdrom_read
 struct cdrom_read_audio
 {
 	union cdrom_addr addr; /* frame address */
-	u_char addr_format;    /* CDROM_LBA or CDROM_MSF */
+	__u8 addr_format;    /* CDROM_LBA or CDROM_MSF */
 	int nframes;           /* number of 2352-byte-frames to read at once */
-	u_char *buf;           /* frame buffer (size: nframes*2352 bytes) */
+	__u8 *buf;           /* frame buffer (size: nframes*2352 bytes) */
 };
 
 /* This struct is used with the CDROMMULTISESSION ioctl */
@@ -222,8 +243,8 @@ struct cdrom_multisession
 	union cdrom_addr addr; /* frame address: start-of-last-session 
 	                           (not the new "frame 16"!).  Only valid
 	                           if the "xa_flag" is true. */
-	u_char xa_flag;        /* 1: "is XA disk" */
-	u_char addr_format;    /* CDROM_LBA or CDROM_MSF */
+	__u8 xa_flag;        /* 1: "is XA disk" */
+	__u8 addr_format;    /* CDROM_LBA or CDROM_MSF */
 };
 
 /* This struct is used with the CDROM_GET_MCN ioctl.  
@@ -233,7 +254,7 @@ struct cdrom_multisession
  */  
 struct cdrom_mcn 
 {
-  u_char medium_catalog_number[14]; /* 13 ASCII digits, null-terminated */
+  __u8 medium_catalog_number[14]; /* 13 ASCII digits, null-terminated */
 };
 
 /* This is used by the CDROMPLAYBLK ioctl */
@@ -241,6 +262,19 @@ struct cdrom_blk
 {
 	unsigned from;
 	unsigned short len;
+};
+
+#define CDROM_PACKET_SIZE	12
+
+/* for CDROM_PACKET_COMMAND ioctl */
+struct cdrom_generic_command
+{
+	unsigned char 		cmd[CDROM_PACKET_SIZE];
+	unsigned char 		*buffer;
+	unsigned int 		buflen;
+	int			stat;
+	struct request_sense	*sense;
+	void			*reserved[3];
 };
 
 
@@ -321,14 +355,6 @@ struct cdrom_blk
 #define	CDROM_AUDIO_ERROR	0x14	/* audio play stopped due to error */
 #define	CDROM_AUDIO_NO_STATUS	0x15	/* no current audio status to return */
 
-/* CD-ROM-specific SCSI command opcodes */
-#define SCMD_READ_TOC		0x43	/* read table of contents */
-#define SCMD_PLAYAUDIO_MSF	0x47	/* play data at time offset */
-#define SCMD_PLAYAUDIO_TI	0x48	/* play data at track/index */
-#define SCMD_PAUSE_RESUME	0x4B	/* pause/resume audio */
-#define SCMD_READ_SUBCHANNEL	0x42	/* read SC info on playing disc */
-#define SCMD_PLAYAUDIO10	0x45	/* play data at logical block */
-
 /* capability flags used with the uniform CD-ROM driver */ 
 #define CDC_CLOSE_TRAY		0x1     /* caddy systems _can't_ close */
 #define CDC_OPEN_TRAY		0x2     /* but _can_ eject.  */
@@ -342,6 +368,12 @@ struct cdrom_blk
 #define CDC_RESET               0x200   /* hard reset device */
 #define CDC_IOCTLS              0x400   /* driver has non-standard ioctls */
 #define CDC_DRIVE_STATUS        0x800   /* driver implements drive status */
+#define CDC_GENERIC_PACKET	0x1000	/* driver implements generic packets */
+#define CDC_CD_R		0x2000	/* drive is a CD-R */
+#define CDC_CD_RW		0x4000	/* drive is a CD-RW */
+#define CDC_DVD			0x8000	/* drive is a DVD */
+#define CDC_DVD_R		0x10000	/* drive can write DVD-R */
+#define CDC_DVD_RAM		0x20000	/* drive can write DVD-RAM */
 
 /* drive status possibilities returned by CDROM_DRIVE_STATUS ioctl */
 #define CDS_NO_INFO		0	/* if not implemented */
@@ -370,7 +402,316 @@ struct cdrom_blk
 #define CDSL_NONE       	((int) (~0U>>1)-1)
 #define CDSL_CURRENT    	((int) (~0U>>1))
 
+/* For partition based multisession access. IDE can handle 64 partitions
+ * per drive - SCSI CD-ROM's use minors to differentiate between the
+ * various drives, so we can't do multisessions the same way there.
+ * Use the -o session=x option to mount on them.
+ */
+#define CD_PART_MAX		64
+#define CD_PART_MASK		(CD_PART_MAX - 1)
+
+/*********************************************************************
+ * Generic Packet commands, MMC commands, and such
+ *********************************************************************/
+
+ /* The generic packet command opcodes for CD/DVD Logical Units,
+ * From Table 57 of the SFF8090 Ver. 3 (Mt. Fuji) draft standard. */
+#define GPCMD_BLANK			    0xa1
+#define GPCMD_CLOSE_TRACK		    0x5b
+#define GPCMD_FLUSH_CACHE		    0x35
+#define GPCMD_FORMAT_UNIT		    0x04
+#define GPCMD_GET_CONFIGURATION		    0x46
+#define GPCMD_GET_EVENT_STATUS_NOTIFICATION 0x4a
+#define GPCMD_GET_PERFORMANCE		    0xac
+#define GPCMD_INQUIRY			    0x12
+#define GPCMD_LOAD_UNLOAD		    0xa6
+#define GPCMD_MECHANISM_STATUS		    0xbd
+#define GPCMD_MODE_SELECT_10		    0x55
+#define GPCMD_MODE_SENSE_10		    0x5a
+#define GPCMD_PAUSE_RESUME		    0x4b
+#define GPCMD_PLAY_AUDIO_10		    0x45
+#define GPCMD_PLAY_AUDIO_MSF		    0x47
+#define GPCMD_PLAY_CD			    0xbc
+#define GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL  0x1e
+#define GPCMD_READ_10			    0x28
+#define GPCMD_READ_12			    0xa8
+#define GPCMD_READ_CDVD_CAPACITY	    0x25
+#define GPCMD_READ_CD			    0xbe
+#define GPCMD_READ_CD_MSF		    0xb9
+#define GPCMD_READ_DISC_INFO		    0x51
+#define GPCMD_READ_DVD_STRUCTURE	    0xad
+#define GPCMD_READ_FORMAT_CAPACITIES	    0x23
+#define GPCMD_READ_HEADER		    0x44
+#define GPCMD_READ_TRACK_RZONE_INFO	    0x52
+#define GPCMD_READ_SUBCHANNEL		    0x42
+#define GPCMD_READ_TOC_PMA_ATIP		    0x43
+#define GPCMD_REPAIR_RZONE_TRACK	    0x58
+#define GPCMD_REPORT_KEY		    0xa4
+#define GPCMD_REQUEST_SENSE		    0x03
+#define GPCMD_RESERVE_RZONE_TRACK	    0x53
+#define GPCMD_SCAN			    0xba
+#define GPCMD_SEEK			    0x2b
+#define GPCMD_SEND_DVD_STRUCTURE	    0xad
+#define GPCMD_SEND_EVENT		    0xa2
+#define GPCMD_SEND_KEY			    0xa3
+#define GPCMD_SEND_OPC			    0x54
+#define GPCMD_SET_READ_AHEAD		    0xa7
+#define GPCMD_SET_STREAMING		    0xb6
+#define GPCMD_START_STOP_UNIT		    0x1b
+#define GPCMD_STOP_PLAY_SCAN		    0x4e
+#define GPCMD_TEST_UNIT_READY		    0x00
+#define GPCMD_VERIFY_10			    0x2f
+#define GPCMD_WRITE_10			    0x2a
+#define GPCMD_WRITE_AND_VERIFY_10	    0x2e
+/* This is listed as optional in ATAPI 2.6, but is (curiously) 
+ * missing from Mt. Fuji, Table 57.  It _is_ mentioned in Mt. Fuji
+ * Table 377 as an MMC command for SCSi devices though...  Most ATAPI
+ * drives support it. */
+#define GPCMD_SET_SPEED			    0xbb
+/* This seems to be a SCSI specific CD-ROM opcode 
+ * to play data at track/index */
+#define GPCMD_PLAYAUDIO_TI		    0x48
+
+/* Is this really used by anything?  I couldn't find these...*/
+#if 0
+/* MMC2/MTFuji Opcodes */
+#define ERASE			0x2c
+#define READ_BUFFER		0x3c
+#endif
+
+
+
+
+/* Mode page codes for mode sense/set */
+#define GPMODE_R_W_ERROR_PAGE		0x01
+#define GPMODE_WRITE_PARMS_PAGE		0x05
+#define GPMODE_AUDIO_CTL_PAGE		0x0e
+#define GPMODE_POWER_PAGE		0x1a
+#define GPMODE_FAULT_FAIL_PAGE		0x1c
+#define GPMODE_TO_PROTECT_PAGE		0x1d
+#define GPMODE_CAPABILITIES_PAGE	0x2a
+#define GPMODE_ALL_PAGES		0x3f
+/* Not in Mt. Fuji, but in ATAPI 2.6 -- depricated now in favor
+ * of MODE_SENSE_POWER_PAGE */
+#define GPMODE_CDROM_PAGE		0x0d
+
+
+
+/* DVD struct types */
+#define DVD_STRUCT_PHYSICAL	0x00
+#define DVD_STRUCT_COPYRIGHT	0x01
+#define DVD_STRUCT_DISCKEY	0x02
+#define DVD_STRUCT_BCA		0x03
+#define DVD_STRUCT_MANUFACT	0x04
+
+struct dvd_layer {
+	__u8 book_version	: 4;
+	__u8 book_type		: 4;
+	__u8 min_rate		: 4;
+	__u8 disc_size		: 4;
+	__u8 layer_type		: 4;
+	__u8 track_path		: 1;
+	__u8 nlayers		: 2;
+	__u8 track_density	: 4;
+	__u8 linear_density	: 4;
+	__u8 bca		: 1;
+	__u32 start_sector;
+	__u32 end_sector;
+	__u32 end_sector_l0;
+};
+
+struct dvd_physical {
+	__u8 type;
+	__u8 layer_num;
+	struct dvd_layer layer[4];
+};
+
+struct dvd_copyright {
+	__u8 type;
+
+	__u8 layer_num;
+	__u8 cpst;
+	__u8 rmi;
+};
+
+struct dvd_disckey {
+	__u8 type;
+
+	unsigned agid		: 2;
+	__u8 value[2048];
+};
+
+struct dvd_bca {
+	__u8 type;
+
+	int len;
+	__u8 value[188];
+};
+
+struct dvd_manufact {
+	__u8 type;
+
+	__u8 layer_num;
+	int len;
+	__u8 value[2048];
+};
+
+typedef union {
+	__u8 type;
+
+	struct dvd_physical	physical;
+	struct dvd_copyright	copyright;
+	struct dvd_disckey	disckey;
+	struct dvd_bca		bca;
+	struct dvd_manufact	manufact;
+} dvd_struct;
+
+/*
+ * DVD authentication ioctl
+ */
+
+/* Authentication states */
+#define DVD_LU_SEND_AGID	0
+#define DVD_HOST_SEND_CHALLENGE	1
+#define DVD_LU_SEND_KEY1	2
+#define DVD_LU_SEND_CHALLENGE	3
+#define DVD_HOST_SEND_KEY2	4
+
+/* Termination states */
+#define DVD_AUTH_ESTABLISHED	5
+#define DVD_AUTH_FAILURE	6
+
+/* Other functions */
+#define DVD_LU_SEND_TITLE_KEY	7
+#define DVD_LU_SEND_ASF		8
+#define DVD_INVALIDATE_AGID	9
+#define DVD_LU_SEND_RPC_STATE	10
+#define DVD_HOST_SEND_RPC_STATE	11
+
+/* State data */
+typedef __u8 dvd_key[5];		/* 40-bit value, MSB is first elem. */
+typedef __u8 dvd_challenge[10];	/* 80-bit value, MSB is first elem. */
+
+struct dvd_lu_send_agid {
+	__u8 type;
+	unsigned agid		: 2;
+};
+
+struct dvd_host_send_challenge {
+	__u8 type;
+	unsigned agid		: 2;
+
+	dvd_challenge chal;
+};
+
+struct dvd_send_key {
+	__u8 type;
+	unsigned agid		: 2;
+
+	dvd_key key;
+};
+
+struct dvd_lu_send_challenge {
+	__u8 type;
+	unsigned agid		: 2;
+
+	dvd_challenge chal;
+};
+
+#define DVD_CPM_NO_COPYRIGHT	0
+#define DVD_CPM_COPYRIGHTED	1
+
+#define DVD_CP_SEC_NONE		0
+#define DVD_CP_SEC_EXIST	1
+
+#define DVD_CGMS_UNRESTRICTED	0
+#define DVD_CGMS_SINGLE		2
+#define DVD_CGMS_RESTRICTED	3
+
+struct dvd_lu_send_title_key {
+	__u8 type;
+	unsigned agid		: 2;
+
+	dvd_key title_key;
+	int lba;
+	unsigned cpm		: 1;
+	unsigned cp_sec		: 1;
+	unsigned cgms		: 2;
+};
+
+struct dvd_lu_send_asf {
+	__u8 type;
+	unsigned agid		: 2;
+
+	unsigned asf		: 1;
+};
+
+struct dvd_host_send_rpcstate {
+	__u8 type;
+	__u8 pdrc;
+};
+
+struct dvd_lu_send_rpcstate {
+	__u8 type		: 2;
+	__u8 vra		: 3;
+	__u8 ucca		: 3;
+	__u8 region_mask;
+	__u8 rpc_scheme;
+};
+
+typedef union {
+	__u8 type;
+
+	struct dvd_lu_send_agid		lsa;
+	struct dvd_host_send_challenge	hsc;
+	struct dvd_send_key		lsk;
+	struct dvd_lu_send_challenge	lsc;
+	struct dvd_send_key		hsk;
+	struct dvd_lu_send_title_key	lstk;
+	struct dvd_lu_send_asf		lsasf;
+	struct dvd_host_send_rpcstate	hrpcs;
+	struct dvd_lu_send_rpcstate	lrpcs;
+} dvd_authinfo;
+
+struct request_sense {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 valid		: 1;
+	__u8 error_code		: 7;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 error_code		: 7;
+	__u8 valid		: 1;
+#endif
+	__u8 segment_number;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved1		: 2;
+	__u8 ili		: 1;
+	__u8 reserved2		: 1;
+	__u8 sense_key		: 4;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 sense_key		: 4;
+	__u8 reserved2		: 1;
+	__u8 ili		: 1;
+	__u8 reserved1		: 2;
+#endif
+	__u8 information[4];
+	__u8 add_sense_len;
+	__u8 command_info[4];
+	__u8 asc;
+	__u8 ascq;
+	__u8 fruc;
+	__u8 sks[3];
+	__u8 asb[46];
+};
+
 #ifdef __KERNEL__
+
+struct cdrom_write_settings {
+	unsigned char fpacket;		/* fixed/variable packets */
+	unsigned long packet_size;	/* write out this number of packets */
+	unsigned long nwa;		/* next writeable address */
+	unsigned char writeable;	/* cdrom is writeable */
+};
+
 /* Uniform cdrom data structures for cdrom.c */
 struct cdrom_device_info {
 	struct cdrom_device_ops  *ops;  /* link to device_ops */
@@ -382,11 +723,14 @@ struct cdrom_device_info {
 	int speed;			/* maximum speed for reading data */
 	int capacity;			/* number of discs in jukebox */
 /* device-related storage */
-	int options : 30;               /* options flags */
-	unsigned mc_flags : 2;          /* media change buffer flags */
+	int options		: 30;	/* options flags */
+	unsigned mc_flags	: 2;	/* media change buffer flags */
     	int use_count;                  /* number of times device opened */
     	char name[20];                  /* name of the device type */
-
+/* per-device flags */
+        __u8 sanyo_slot		: 2;	/* Sanyo 3 CD changer support */
+        __u8 reserved		: 6;	/* not used yet */
+	struct cdrom_write_settings write;
 };
 
 struct cdrom_device_ops {
@@ -413,6 +757,9 @@ struct cdrom_device_ops {
 /* driver specifications */
 	const int capability;   /* capability flags */
 	int n_minors;           /* number of active minor devices */
+	/* handle uniform packets for scsi type devices (scsi,atapi) */
+	int (*generic_packet) (struct cdrom_device_info *,
+			       struct cdrom_generic_command *);
 };
 
 /* the general file operations structure: */
@@ -420,6 +767,7 @@ extern struct file_operations cdrom_fops;
 
 extern int register_cdrom(struct cdrom_device_info *cdi);
 extern int unregister_cdrom(struct cdrom_device_info *cdi);
+
 typedef struct {
     int data;
     int audio;
@@ -427,7 +775,236 @@ typedef struct {
     int xa;
     long error;
 } tracktype;
+
 extern void cdrom_count_tracks(struct cdrom_device_info *cdi,tracktype* tracks);
+extern int cdrom_get_next_writable(kdev_t dev, long *next_writable);
+extern int cdrom_get_last_written(kdev_t dev, long *last_written);
+extern int cdrom_number_of_slots(struct cdrom_device_info *cdi);
+extern int cdrom_select_disc(struct cdrom_device_info *cdi, int slot);
+extern int cdrom_mode_select(struct cdrom_device_info *cdi,
+			     struct cdrom_generic_command *cgc);
+extern int cdrom_mode_sense(struct cdrom_device_info *cdi,
+			    struct cdrom_generic_command *cgc,
+			    int page_code, int page_control);
+extern void init_cdrom_command(struct cdrom_generic_command *cgc,
+			       void *buffer, int len);
+
+
+typedef struct {
+	__u16 disc_information_length;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved1			: 3;
+        __u8 erasable			: 1;
+        __u8 border_status		: 2;
+        __u8 disc_border		: 2;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+        __u8 disc_border		: 2;
+        __u8 border_status		: 2;
+        __u8 erasable			: 1;
+	__u8 reserved1			: 3;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
+	__u8 n_first_track;
+	__u8 n_sessions_lsb;
+	__u8 first_track_lsb;
+	__u8 last_track_lsb;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 did_v			: 1;
+        __u8 dbc_v			: 1;
+        __u8 uru			: 1;
+        __u8 reserved2			: 5;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+        __u8 reserved2			: 5;
+        __u8 uru			: 1;
+        __u8 dbc_v			: 1;
+	__u8 did_v			: 1;
+#endif
+	__u8 disc_type;
+	__u8 n_sessions_msb;
+	__u8 first_track_msb;
+	__u8 last_track_msb;
+	__u32 disc_id;
+	__u32 lead_in;
+	__u32 lead_out;
+	__u8 disc_bar_code[8];
+	__u8 reserved3;
+	__u8 n_opc;
+} disc_information;
+
+typedef struct {
+	__u16 track_information_length;
+	__u8 track_lsb;
+	__u8 session_lsb;
+	__u8 reserved1;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved2			: 2;
+        __u8 damage			: 1;
+        __u8 copy			: 1;
+        __u8 track_mode			: 4;
+	__u8 rt				: 1;
+	__u8 blank			: 1;
+	__u8 packet			: 1;
+	__u8 fp				: 1;
+	__u8 data_mode			: 4;
+	__u8 reserved3			: 6;
+	__u8 lra_v			: 1;
+	__u8 nwa_v			: 1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+        __u8 track_mode			: 4;
+        __u8 copy			: 1;
+        __u8 damage			: 1;
+	__u8 reserved2			: 2;
+	__u8 data_mode			: 4;
+	__u8 fp				: 1;
+	__u8 packet			: 1;
+	__u8 blank			: 1;
+	__u8 rt				: 1;
+	__u8 nwa_v			: 1;
+	__u8 lra_v			: 1;
+	__u8 reserved3			: 6;
+#endif
+	__u32 track_start;
+	__u32 next_writable;
+	__u32 free_blocks;
+	__u32 fixed_packet_size;
+	__u32 track_size;
+	__u32 last_rec_address;
+} track_information;
+
+/* The SCSI spec says there could be 256 slots. */
+#define CDROM_MAX_SLOTS	256
+
+struct cdrom_mechstat_header {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 fault         : 1;
+	__u8 changer_state : 2;
+	__u8 curslot       : 5;
+	__u8 mech_state    : 3;
+	__u8 door_open     : 1;
+	__u8 reserved1     : 4;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 curslot       : 5;
+	__u8 changer_state : 2;
+	__u8 fault         : 1;
+	__u8 reserved1     : 4;
+	__u8 door_open     : 1;
+	__u8 mech_state    : 3;
+#endif
+	__u8 curlba[3];
+	__u8 nslots;
+	__u16 slot_tablelen;
+};
+
+struct cdrom_slot {
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 disc_present : 1;
+	__u8 reserved1    : 6;
+	__u8 change       : 1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 change       : 1;
+	__u8 reserved1    : 6;
+	__u8 disc_present : 1;
+#endif
+	__u8 reserved2[3];
+};
+
+struct cdrom_changer_info {
+	struct cdrom_mechstat_header hdr;
+	struct cdrom_slot slots[CDROM_MAX_SLOTS];
+};
+
+typedef enum {
+	mechtype_caddy = 0,
+	mechtype_tray  = 1,
+	mechtype_popup = 2,
+	mechtype_individual_changer = 4,
+	mechtype_cartridge_changer  = 5
+} mechtype_t;
+
+struct mode_page_header {
+	__u16 mode_data_length;
+	__u8 medium_type;
+	__u8 reserved1;
+	__u8 reserved2;
+	__u8 reserved3;
+	__u16 desc_length;
+};
+
+typedef struct {
+	struct mode_page_header header;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 ps			: 1;
+	__u8 reserved1		: 1;
+	__u8 page_code		: 6;
+        __u8 page_length;
+	__u8 reserved2		: 1;
+	__u8 bufe		: 1;
+	__u8 ls_v		: 1;
+	__u8 test_write		: 1;
+        __u8 write_type		: 4;
+	__u8 multi_session	: 2; /* or border, DVD */
+	__u8 fp			: 1;
+	__u8 copy		: 1;
+	__u8 track_mode		: 4;
+	__u8 reserved3		: 4;
+	__u8 data_block_type	: 4;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 page_code		: 6;
+	__u8 reserved1		: 1;
+	__u8 ps			: 1;
+        __u8 page_length;
+        __u8 write_type		: 4;
+	__u8 test_write		: 1;
+	__u8 ls_v		: 1;
+	__u8 bufe		: 1;
+	__u8 reserved2		: 1;
+	__u8 track_mode		: 4;
+	__u8 copy		: 1;
+	__u8 fp			: 1;
+	__u8 multi_session	: 2; /* or border, DVD */
+	__u8 data_block_type	: 4;
+	__u8 reserved3		: 4;
+#endif
+	__u8 link_size;
+	__u8 reserved4;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved5		: 2;
+	__u8 app_code		: 6;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 app_code		: 6;
+	__u8 reserved5		: 2;
+#endif
+	__u8 session_format;
+	__u8 reserved6;
+	__u32 packet_size;
+	__u16 audio_pause;
+	__u8 mcn[16];
+	__u8 isrc[16];
+	__u8 subhdr0;
+	__u8 subhdr1;
+	__u8 subhdr2;
+	__u8 subhdr3;
+} __attribute__((packed)) write_param_page;
+
+typedef struct {
+	__u16 report_key_length;
+	__u8 reserved1;
+	__u8 reserved2;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 type_code			: 2;
+	__u8 vra			: 3;
+	__u8 ucca			: 3;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+	__u8 ucca			: 3;
+	__u8 vra			: 3;
+	__u8 type_code			: 2;
+#endif
+	__u8 region_mask;
+	__u8 rpc_scheme;
+	__u8 reserved3;
+} rpc_state_t;
+
 #endif  /* End of kernel only stuff */ 
 
 #endif  /* _LINUX_CDROM_H */

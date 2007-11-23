@@ -378,7 +378,8 @@ repeat:
 resume:
 	while (next != &this_parent->d_subdirs) {
 		struct list_head *tmp = next;
-		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);		next = tmp->next;
+		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
+		next = tmp->next;
 		/* Have we found a mount point ? */
 		if (dentry->d_mounts != dentry)
 			return 1;

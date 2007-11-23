@@ -204,7 +204,7 @@ smb_refresh_inode(struct dentry *dentry)
 			 * subsequent lookup validations will fail.
 			 */
 #ifdef SMBFS_PARANOIA
-printk("smb_refresh_inode: %s/%s changed mode, %07o to %07o\n",
+printk(KERN_DEBUG "smb_refresh_inode: %s/%s changed mode, %07o to %07o\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 inode->i_mode, fattr.f_mode);
 #endif
@@ -255,7 +255,7 @@ smb_revalidate_inode(struct dentry *dentry)
 	if (time_before(jiffies, inode->u.smbfs_i.oldmtime + HZ/10))
 	{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_revalidate_inode: up-to-date, jiffies=%lu, oldtime=%lu\n",
+printk(KERN_DEBUG "smb_revalidate_inode: up-to-date, jiffies=%lu, oldtime=%lu\n",
 jiffies, inode->u.smbfs_i.oldmtime);
 #endif
 		goto out;
@@ -270,14 +270,12 @@ jiffies, inode->u.smbfs_i.oldmtime);
 	if (error || inode->i_mtime != last_time)
 	{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_revalidate: %s/%s changed, old=%ld, new=%ld\n",
+printk(KERN_DEBUG "smb_revalidate: %s/%s changed, old=%ld, new=%ld\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 (long) last_time, (long) inode->i_mtime);
 #endif
 		if (!S_ISDIR(inode->i_mode))
 			invalidate_inode_pages(inode);
-		else
-			smb_invalid_dir_cache(inode);
 	}
 out:
 	return error;
@@ -304,7 +302,7 @@ smb_delete_inode(struct inode *ino)
 {
 	pr_debug("smb_delete_inode\n");
 	if (smb_close(ino))
-		printk("smb_delete_inode: could not close inode %ld\n",
+		printk(KERN_DEBUG "smb_delete_inode: could not close inode %ld\n",
 			ino->i_ino);
 	clear_inode(ino);
 }
@@ -381,13 +379,6 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	mnt->dir_mode  &= (S_IRWXU | S_IRWXG | S_IRWXO);
 	mnt->dir_mode  |= S_IFDIR;
 	sb->u.smbfs_sb.mnt = mnt;
-	/*
-	 * Display the enabled options
-	 */
-	if (mnt->version & SMB_FIX_OLDATTR)
-		printk("SMBFS: Using core getattr (Win 95 speedup)\n");
-	else if (mnt->version & SMB_FIX_DIRATTR)
-		printk("SMBFS: Using dir ff getattr\n");
 
 	/*
 	 * Keep the super block locked while we get the root inode.
@@ -419,7 +410,7 @@ out_wrong_data:
 	printk(KERN_ERR "SMBFS: need mount version %d\n", SMB_MOUNT_VERSION);
 	goto out_fail;
 out_no_data:
-	printk("smb_read_super: missing data argument\n");
+	printk(KERN_DEBUG "smb_read_super: missing data argument\n");
 out_fail:
 	sb->s_dev = 0;
 	MOD_DEC_USE_COUNT;
@@ -471,7 +462,7 @@ smb_notify_change(struct dentry *dentry, struct iattr *attr)
 	if ((attr->ia_valid & ATTR_SIZE) != 0)
 	{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_notify_change: changing %s/%s, old size=%ld, new size=%ld\n",
+printk(KERN_DEBUG "smb_notify_change: changing %s/%s, old size=%ld, new size=%ld\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 (long) inode->i_size, (long) attr->ia_size);
 #endif
@@ -510,9 +501,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 	if ((attr->ia_valid & ATTR_ATIME) != 0)
 	{
 		fattr.f_atime = attr->ia_atime;
-		/* Earlier protocols don't have an access time */
-		if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2)
-			changed = 1;
+		changed = 1;
 	}
 	if (changed)
 	{
@@ -529,8 +518,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 	if ((attr->ia_valid & ATTR_MODE) != 0)
 	{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_notify_change: %s/%s mode change, old=%x, new=%lx\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, fattr.f_mode,attr->ia_mode);
+		printk(KERN_DEBUG "smb_notify_change: %s/%s mode change, old=%x, new=%lx\n",
+		       dentry->d_parent->d_name.name, dentry->d_name.name, fattr.f_mode,attr->ia_mode);
 #endif
 		changed = 0;
 		if (attr->ia_mode & S_IWUSR)

@@ -1279,6 +1279,7 @@ static inline void check_timer(void)
 
 /* Patch to set the IO-APIC physical IDs based on the values stored in the MPC table */
 /* by Matt Domsch <Matt_Domsch@dell.com>  Tue Dec 21 12:25:05 CST 1999 */
+/* Hacked by Alan Cox to ignore drug induced BIOS tables */
 
 static void __init setup_ioapic_ids_from_mpc(void)
 {
@@ -1291,18 +1292,25 @@ static void __init setup_ioapic_ids_from_mpc(void)
 		/* Read the register 0 value */
 		*(int *)&reg_00 = io_apic_read(apic, 0);
 		
-		if(reg_00.ID != mp_apics[apic].mpc_apicid) {
-			/* Change the value */
-			printk("...changing IO-APIC physical APIC ID to %d\n", mp_apics[apic].mpc_apicid);
-			reg_00.ID = mp_apics[apic].mpc_apicid;
-			io_apic_write(apic, 0, *(int *)&reg_00);
+		if(reg_00.ID != mp_apics[apic].mpc_apicid)
+		{
+			if(mp_apics[apic].mpc_apicid>15)
+				printk(KERN_ERR "BIOS wants to set APIC ID to %d, ignoring and praying the BIOS setup is ok\n",
+					mp_apics[apic].mpc_apicid);
+			else
+			{
+				/* Change the value */			
+				printk("...changing IO-APIC physical APIC ID to %d\n", mp_apics[apic].mpc_apicid);
+				reg_00.ID = mp_apics[apic].mpc_apicid;
+				io_apic_write(apic, 0, *(int *)&reg_00);
 
-			/*
-			 * Sanity check
-			 */
-			*(int *)&reg_00 = io_apic_read(apic, 0);
-			if (reg_00.ID != mp_apics[apic].mpc_apicid)
-				panic("could not set ID");
+				/*
+				 * Sanity check
+				 */
+				*(int *)&reg_00 = io_apic_read(apic, 0);
+				if (reg_00.ID != mp_apics[apic].mpc_apicid)
+					panic("could not set ID");
+			}
 		}
 	}
 }

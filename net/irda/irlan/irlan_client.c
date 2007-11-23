@@ -6,13 +6,13 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Tue Dec 14 15:47:02 1999
+ * Modified at:   Fri Apr 21 14:57:47 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane, <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -99,13 +99,11 @@ void irlan_client_start_kick_timer(struct irlan_cb *self, int timeout)
 /*
  * Function irlan_client_wakeup (self, saddr, daddr)
  *
- *    Wake up client
- *
+ *    Wake up client. This function is called when a remote IrLAN device
+ *    is discovered, or ..
  */
 void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
-{
-	struct irmanager_event mgr_event;
-
+{	
 	IRDA_DEBUG(1, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
@@ -117,42 +115,32 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 	 */
 	if ((self->client.state != IRLAN_IDLE) || 
 	    (self->provider.access_type == ACCESS_DIRECT))
+	{
+		IRDA_DEBUG(0, __FUNCTION__ "(), already awake!\n");
 		return;
-
-	/* saddr may have changed! */
-	self->saddr = saddr;
-	
-	/* Before we try to connect, we check if network device is up. If it
-	 * is up, that means that the "user" really wants to connect. If not
-	 * we notify the user about the possibility of an IrLAN connection
-	 */
-	if (self->dev.start) {
-		/* Open TSAPs */
-		irlan_client_open_ctrl_tsap(self);
- 		irlan_open_data_tsap(self);
-		
-		irlan_do_client_event(self, IRLAN_DISCOVERY_INDICATION, NULL);
-	} else if (self->notify_irmanager) {
-		/* 
-		 * Tell irmanager that the device can now be 
-		 * configured but only if the device was not taken
-		 * down by the user
-		 */
-		mgr_event.event = EVENT_IRLAN_START;
-		sprintf(mgr_event.devname, "%s", self->ifname);
-		irmanager_notify(&mgr_event);
-		
-		/* 
-		 * We set this so that we only notify once, since if 
-		 * configuration of the network device fails, the user
-		 * will have to sort it out first anyway. No need to 
-		 * try again.
-		 */
-		self->notify_irmanager = FALSE;
 	}
-	/* Restart watchdog timer */
-	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
+
+	/* Addresses may have changed! */
+	self->saddr = saddr;
+	self->daddr = daddr;
+
+#if 0
+	if (!self->dev.start) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), not started yet\n");
+		return;
+	}	
+#endif
+	if (self->disconnect_reason == LM_USER_REQUEST) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), still stopped by user\n");
+		return;
+	}
 	
+	/* Open TSAPs */
+	irlan_client_open_ctrl_tsap(self);
+	irlan_open_data_tsap(self);
+	
+	irlan_do_client_event(self, IRLAN_DISCOVERY_INDICATION, NULL);
+
 	/* Start kick timer */
 	irlan_client_start_kick_timer(self, 2*HZ);
 }
@@ -176,29 +164,16 @@ void irlan_client_discovery_indication(discovery_t *discovery)
 	saddr = discovery->saddr;
 	daddr = discovery->daddr;
 
-	/* 
-	 *  Check if we already dealing with this provider.
-	 */
-	self = (struct irlan_cb *) hashbin_find(irlan, daddr, NULL);
+	/* Find instance */
+	self = (struct irlan_cb *) hashbin_get_first(irlan);
       	if (self) {
 		ASSERT(self->magic == IRLAN_MAGIC, return;);
-
+		
 		IRDA_DEBUG(1, __FUNCTION__ "(), Found instance (%08x)!\n",
-		      daddr);
+			   daddr);
 		
 		irlan_client_wakeup(self, saddr, daddr);
-
-		return;
 	}
-	
-	/* 
-	 * We have no instance for daddr, so start a new one
-	 */
-	IRDA_DEBUG(1, __FUNCTION__ "(), starting new instance!\n");
-	self = irlan_open(saddr, daddr, TRUE);
-
-	/* Restart watchdog timer */
-	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
 }
 	
 /*

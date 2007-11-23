@@ -1358,7 +1358,7 @@ static void __init do_boot_cpu(int i)
 }
 
 cycles_t cacheflush_time;
-extern unsigned long cpu_hz;
+extern unsigned long cpu_khz;
 
 static void smp_tune_scheduling (void)
 {
@@ -1374,7 +1374,7 @@ static void smp_tune_scheduling (void)
 	 *  the cache size)
 	 */
 
-	if (!cpu_hz) {
+	if (!cpu_khz) {
 		/*
 		 * this basically disables processor-affinity
 		 * scheduling on SMP without a TSC.
@@ -1386,12 +1386,12 @@ static void smp_tune_scheduling (void)
 		if (cachesize == -1)
 			cachesize = 8; /* Pentiums */
 
-		cacheflush_time = cpu_hz/1024*cachesize/5000;
+		cacheflush_time = cpu_khz/1024*cachesize/5;
 	}
 
 	printk("per-CPU timeslice cutoff: %ld.%02ld usecs.\n",
-		(long)cacheflush_time/(cpu_hz/1000000),
-		((long)cacheflush_time*100/(cpu_hz/1000000)) % 100);
+		(long)cacheflush_time/(cpu_khz/1000),
+		((long)cacheflush_time*100/(cpu_khz/1000)) % 100);
 }
 
 unsigned int prof_multiplier[NR_CPUS];

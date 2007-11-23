@@ -25,7 +25,7 @@ endif
 export-objs	:=  ad1848.o audio_syms.o midi_syms.o mpu401.o \
 		    msnd.o opl3.o sb_card.o sequencer_syms.o \
 		    sound_core.o sound_syms.o uart401.o ad1816.o \
-		    nm256_audio.o
+		    nm256_audio.o ac97_codec.o
 
 
 
@@ -83,6 +83,7 @@ obj-$(CONFIG_SOUND_CMPCI)	+= cmpci.o
 obj-$(CONFIG_SOUND_ES1370)	+= es1370.o
 obj-$(CONFIG_SOUND_ES1371)	+= es1371.o
 obj-$(CONFIG_SOUND_ESSSOLO1)	+= esssolo1.o
+obj-$(CONFIG_SOUND_ICH)		+= i810_audio.o ac97_codec.o
 obj-$(CONFIG_SOUND_MAESTRO)	+= maestro.o
 obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
 

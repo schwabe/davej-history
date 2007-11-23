@@ -486,6 +486,8 @@ void aarp_send_probe_phase1(struct atalk_iface *iface)
 
 void aarp_probe_network(struct atalk_iface *atif)
 {
+	struct device *dev = atif->dev;
+
 	if(atif->dev->type == ARPHRD_LOCALTLK || atif->dev->type == ARPHRD_PPP)
 		aarp_send_probe_phase1(atif);
 	else
@@ -501,6 +503,13 @@ void aarp_probe_network(struct atalk_iface *atif)
 			current->state = TASK_INTERRUPTIBLE;
 			schedule_timeout(HZ/10);
 							
+			/*
+			 * our atif may no longer be valid, if the device
+			 * was brought down while we waited!
+			 */
+			if (atalk_find_dev(dev) != atif)
+				return;
+						
 			if (atif->status & ATIF_PROBE_FAIL)
 				break;
 		}
@@ -512,6 +521,7 @@ int aarp_proxy_probe_network(struct atalk_iface *atif, struct at_addr *sa)
 	struct	aarp_entry	*entry;
 	unsigned int count;
 	int	hash;
+	struct device *dev = atif->dev;
 	
 	/*
 	 * we don't currently support LocalTalk or PPP for proxy AARP;
@@ -550,6 +560,13 @@ int aarp_proxy_probe_network(struct atalk_iface *atif, struct at_addr *sa)
 		 */
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(HZ/10);
+		
+		/*
+		 * our atif may no longer be valid, if the device was brought
+		 * down while we waited!
+		 */
+		if (atalk_find_dev(dev) != atif)
+			return -ENODEV;
 						
 		if (entry->status & ATIF_PROBE_FAIL)
 			break;

@@ -1437,11 +1437,21 @@ struct cdrom_read_audio32 {
 	__kernel_caddr_t32	buf;
 };
 
+struct cdrom_generic_command32 {
+	unsigned char		cmd[CDROM_PACKET_SIZE];
+	__kernel_caddr_t32	buffer;
+	unsigned int		buflen;
+	int			stat;
+	__kernel_caddr_t32	sense;
+	__kernel_caddr_t32	reserved[3];
+};
+
 static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	struct cdrom_read cdread;
 	struct cdrom_read_audio cdreadaudio;
+	struct cdrom_generic_command cgc;
 	__kernel_caddr_t32 addr;
 	char *data = 0;
 	void *karg;
@@ -1476,6 +1486,17 @@ static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long ar
 			return -ENOMEM;
 		cdreadaudio.buf = data;
 		break;
+	case CDROM_SEND_PACKET:
+		karg = &cgc;
+		err = copy_from_user(cgc.cmd, &((struct cdrom_generic_command32 *)arg)->cmd, sizeof(cgc.cmd));
+		err |= __get_user(addr, &((struct cdrom_generic_command32 *)arg)->buffer);
+		err |= __get_user(cgc.buflen, &((struct cdrom_generic_command32 *)arg)->buflen);
+		if (err)
+		return -EFAULT;
+		if ((data = kmalloc(cgc.buflen, GFP_KERNEL)) == NULL)
+			return -ENOMEM;
+		cgc.buffer = data;
+		break;
 	default:
 		do {
 			static int count = 0;
@@ -1501,11 +1522,14 @@ static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long ar
 	case CDROMREADAUDIO:
 		err = copy_to_user((char *)A(addr), data, cdreadaudio.nframes * 2352);
 		break;
+	case CDROM_SEND_PACKET:
+		err = copy_to_user((char *)A(addr), data, cgc.buflen);
 	default:
 		break;
 	}
-out:	if (data) kfree(data);
-	return err;
+out:	if (data)
+		kfree(data);
+	return err ? -EFAULT : 0;
 }
 
 struct loop_info32 {
@@ -2248,6 +2272,12 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case CDROM_LOCKDOOR:
 	case CDROM_DEBUG:
 	case CDROM_GET_CAPABILITY:
+	case DVD_READ_STRUCT:
+	case DVD_WRITE_STRUCT:
+	case DVD_AUTH:
+	case CDROM_SEND_PACKET:
+	case CDROM_NEXT_WRITABLE:
+	case CDROM_LAST_WRITTEN:
 	
 	/* Big L */
 	case LOOP_SET_FD:

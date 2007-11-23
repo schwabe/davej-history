@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:37:58 1998
- * Modified at:   Sun Jan 16 22:43:41 2000
+ * Modified at:   Fri Apr 21 14:54:42 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
@@ -47,7 +47,6 @@
  */
 int irlan_eth_init(struct device *dev)
 {
-	struct irmanager_event mgr_event;
 	struct irlan_cb *self;
 
 	IRDA_DEBUG(2, __FUNCTION__"()\n");
@@ -86,22 +85,6 @@ int irlan_eth_init(struct device *dev)
 		get_random_bytes(dev->dev_addr+5, 1);
 	}
 
-	/* 
-	 * Network device has now been registered, so tell irmanager about
-	 * it, so it can be configured with network parameters
-	 */
-	mgr_event.event = EVENT_IRLAN_START;
-	sprintf(mgr_event.devname, "%s", self->ifname);
-	irmanager_notify(&mgr_event);
-
-	/* 
-	 * We set this so that we only notify once, since if 
-	 * configuration of the network device fails, the user
-	 * will have to sort it out first anyway. No need to 
-	 * try again.
-	 */
-	self->notify_irmanager = FALSE;
-
 	return 0;
 }
 
@@ -124,13 +107,12 @@ int irlan_eth_open(struct device *dev)
 	ASSERT(self != NULL, return -1;);
 
 	/* Ready to play! */
-/* 	dev->tbusy = 0; */ /* Wait until data link is ready */
+ 	dev->tbusy = 1; /* Wait until data link is ready */
 	dev->interrupt = 0;
-	dev->start = 1;
-
-	self->notify_irmanager = TRUE;
+	dev->start = 0;
 
 	/* We are now open, so time to do some work */
+	self->disconnect_reason = 0;
 	irlan_client_wakeup(self, self->saddr, self->daddr);
 
 	irlan_mod_inc_use_count();
@@ -149,7 +131,8 @@ int irlan_eth_open(struct device *dev)
 int irlan_eth_close(struct device *dev)
 {
 	struct irlan_cb *self = (struct irlan_cb *) dev->priv;
-
+	struct sk_buff *skb;
+	
 	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	
 	/* Stop device */
@@ -159,19 +142,16 @@ int irlan_eth_close(struct device *dev)
 	irlan_mod_dec_use_count();
 
 	irlan_close_data_channel(self);
-
 	irlan_close_tsaps(self);
 
 	irlan_do_client_event(self, IRLAN_LMP_DISCONNECT, NULL);
 	irlan_do_provider_event(self, IRLAN_LMP_DISCONNECT, NULL);	
 	
-	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
-
-	/* Device closed by user! */
-	if (self->notify_irmanager)
-		self->notify_irmanager = FALSE;
-	else
-		self->notify_irmanager = TRUE;
+	/* Remove frames queued on the control channel */
+	while ((skb = skb_dequeue(&self->client.txq))) {
+		dev_kfree_skb(skb);
+	}
+	self->client.tx_busy = 0;
 
 	return 0;
 }
@@ -352,7 +332,7 @@ void irlan_eth_send_gratuitous_arp(struct device *dev)
 		 dev, 
 		 in_dev->ifa_list->ifa_address,
 		 NULL, dev->dev_addr, NULL);
-#endif /* CONFIG_INET */		 
+#endif /* CONFIG_INET */
 }
 
 /*

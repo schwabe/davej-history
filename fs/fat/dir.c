@@ -76,25 +76,21 @@ uni16_to_x8(unsigned char *ascii, unsigned char *uni, int uni_xlate,
 	op = ascii;
 
 	while (*ip || ip[1]) {
-		cl = *ip++;
-		ch = *ip++;
-
-		uni_page = nls->page_uni2charset[ch];
-		if (uni_page && uni_page[cl]) {
-			*op++ = uni_page[cl];
-		} else {
-			if (uni_xlate == 1) {
-				*op++ = ':';
-				val = (cl << 8) + ch;
-				op[2] = fat_uni2esc[val & 0x3f];
-				val >>= 6;
-				op[1] = fat_uni2esc[val & 0x3f];
-				val >>= 6;
-				*op = fat_uni2esc[val & 0x3f];
-				op += 3;
-			} else {
-				*op++ = '?';
-			}
+		int len;
+		nls->uni2char(ip[1], ip[0], op, 20, &len);
+		if (uni_xlate == 1 && len == 1 && op[0] == '?'){
+			*op++ = ':';
+			val = (ip[0] << 8) + ip[1];
+			op[2] = fat_uni2esc[val & 0x3f];
+			val >>= 6;
+			op[1] = fat_uni2esc[val & 0x3f];
+			val >>= 6;
+			op[0] = fat_uni2esc[val & 0x3f];
+			op += 3;
+		}
+		else{
+			ip += 2;
+			op += len;
 		}
 		/* We have some slack there, so it's OK */
 		if (op>ascii+256) {

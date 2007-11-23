@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Sun Jan 30 14:29:16 2000
+ * Modified at:   Fri Apr 14 00:30:04 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
@@ -375,7 +375,6 @@ static int irlap_param_baud_rate(void *instance, irda_param_t *param, int get)
 		self->qos_tx.baud_rate.bits = final;
 		self->qos_rx.baud_rate.bits = final;
 	}
-
 	return 0;
 }
 
@@ -626,6 +625,7 @@ int value_index(__u32 value, __u32 *array)
  *
  *    Returns value to index in array, easy!
  *
+
  */
 __u32 index_value(int index, __u32 *array) 
 {

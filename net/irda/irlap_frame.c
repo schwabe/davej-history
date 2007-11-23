@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Wed Jan  5 08:59:04 2000
+ * Modified at:   Thu Apr 13 02:40:49 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
@@ -1212,7 +1212,7 @@ void irlap_send_test_frame(struct irlap_cb *self, __u8 caddr, __u32 daddr,
 	struct test_frame *frame;
 	__u8 *info;
 
-	skb = dev_alloc_skb(32);
+	skb = dev_alloc_skb(cmd->len+sizeof(struct test_frame));
 	if (!skb)
 		return;
 
@@ -1225,10 +1225,10 @@ void irlap_send_test_frame(struct irlap_cb *self, __u8 caddr, __u32 daddr,
 		frame->saddr = cpu_to_le32(self->saddr);
 		frame->daddr = cpu_to_le32(daddr);
 	} else
-		frame = (struct test_frame *) skb_put(skb, LAP_MAX_HEADER);
+		frame = (struct test_frame *) skb_put(skb, LAP_ADDR_HEADER + LAP_CTRL_HEADER);
 
 	frame->caddr = caddr;
-	frame->control = TEST_RSP;
+	frame->control = TEST_RSP | PF_BIT;
 
 	/* Copy info */
 	info = skb_put(skb, cmd->len);

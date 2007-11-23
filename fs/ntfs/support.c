@@ -218,7 +218,7 @@ int ntfs_dupuni2map(ntfs_volume *vol, ntfs_u16 *in, int in_len, char **out,
   int *out_len)
 {
 	int i,o,val;
-	char *result,*buf;
+	char *result,*buf,tmp[20];
 	struct nls_table* nls=vol->nls_map;
 
 	result=ntfs_malloc(in_len+1);
@@ -237,11 +237,18 @@ int ntfs_dupuni2map(ntfs_volume *vol, ntfs_u16 *in, int in_len, char **out,
 				continue;
 			}
 		}else{
-			uni_page=nls->page_uni2charset[ch];
-			if(uni_page && uni_page[cl]){
-				result[o++]=uni_page[cl];
-				continue;
+			int len, i1;
+			nls->uni2char(ch, cl, tmp, 20, &len);
+			if (len > 1){
+				buf=ntfs_malloc(*out_len + len - 1);
+				memcpy(buf, result, o);
+				ntfs_free(result);
+				result=buf;
+				*out_len+=(len-1);
 			}
+			for (i1=0;i1<len;i1++)
+				result[o++] = tmp[i1];
+			continue;
 		}
 		if(!(vol->nct & nct_uni_xlate))goto inval;
 		/* realloc */
@@ -290,11 +297,16 @@ int ntfs_dupmap2uni(ntfs_volume *vol, char* in, int in_len, ntfs_u16 **out,
 	*out=result=ntfs_malloc(2*in_len);
 	if(!result)return ENOMEM;
 	*out_len=in_len;
-	for(i=o=0;i<in_len;i++,o++){
+	for(i=o=0;i<in_len;i++, o++){
 		unsigned short cl,ch;
 		if(in[i]!=':' || (vol->nct & nct_uni_xlate)==0){
-			cl=nls->charset2uni[(unsigned char)in[i]].uni1;
-			ch=nls->charset2uni[(unsigned char)in[i]].uni2;
+			int len;
+			unsigned char clc=cl, chc=ch;
+			nls->char2uni(&in[i], &len, &chc, &clc);
+			cl = chc;
+			ch = clc;
+			*out_len -= (len-1);
+			i += (len-1);
 		}else{
 			unsigned char c1,c2,c3;
 			*out_len-=3;

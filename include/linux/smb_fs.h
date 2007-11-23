@@ -192,6 +192,7 @@ struct cache_head {
 	int	entries;	/* total entries */
 	int	pages;		/* number of data pages */
 	int	idx;		/* index of current data page */
+	time_t  mtime;          /* the last mtime of our dir inode */
 	struct cache_index index[NINDEX];
 };
 

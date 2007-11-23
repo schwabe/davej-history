@@ -30,6 +30,7 @@
 #include <linux/fs.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
+#include <linux/delay.h>
 #include <linux/smp_lock.h>
 #include <linux/proc_fs.h>
 #include <linux/ctype.h>
@@ -435,6 +436,8 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 	 *            or we need to get more sophisticated. */
 
 	out += sprintf(out, "read-only\n-----------------------\n");
+	out += sprintf(out, "V4L Driver version:       %d.%d.%d\n",
+		       CPIA_MAJ_VER, CPIA_MIN_VER, CPIA_PATCH_VER);
 	out += sprintf(out, "CPIA Version:             %d.%02d (%d.%d)\n",
 	               cam->params.version.firmwareVersion,
 	               cam->params.version.firmwareRevision,
@@ -537,13 +540,13 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 		/* 1-02 firmware limits gain to 2 */
 		sprintf(tmpstr, "%8d  %8d", 1, 2);
 	} else {
-		sprintf(tmpstr, "1,2,4,8");
+		sprintf(tmpstr, "%8d  %8d", 1, 8);
 	}
 	if(cam->params.exposure.gainMode == 0) {
 		out += sprintf(out, "max_gain:                unknown  %18s"
-		               "  %8d\n", tmpstr, 2); 
+		               "  %8d  powers of 2\n", tmpstr, 2); 
 	} else {
-		out += sprintf(out, "max_gain:               %8d  %18s  %8d\n", 
+		out += sprintf(out, "max_gain:               %8d  %18s  %8d  powers of 2\n", 
 		               1<<(cam->params.exposure.gainMode-1), tmpstr, 2);
 	}
 	switch(cam->params.exposure.expMode) {
@@ -1423,10 +1426,11 @@ static void destroy_proc_cpia_cam(struct cam_data *cam)
 {
 	char name[7];
 	
-	if(cam->proc_entry == NULL) return;
+	if(cam == NULL || cam->proc_entry == NULL) return;
 	
 	sprintf(name, "video%d", cam->vdev.minor);
 	remove_proc_entry(name, cpia_proc_root);
+	cam->proc_entry = NULL;
 }
 
 static void proc_cpia_create(void)
@@ -1706,6 +1710,10 @@ static int do_command(struct cam_data *cam, u16 command, u8 a, u8 b, u8 c, u8 d)
 	retval = cam->ops->transferCmd(cam->lowlevel_data, cmd, data);
 	if(retval) {
 		LOG("%x - failed\n", command);
+		if (command == CPIA_COMMAND_GetColourParams ||
+		    command == CPIA_COMMAND_GetColourBalance ||
+		    command == CPIA_COMMAND_GetExposure)
+                	up(&cam->param_lock);
 	} else {
 		switch(command) {
 		case CPIA_COMMAND_GetCPIAVersion:
@@ -1895,6 +1903,7 @@ static int yuvconvert(unsigned char *yuv, unsigned char *rgb, int out_fmt,
 static int skipcount(int count, int fmt) {
 	switch(fmt) {
 	case VIDEO_PALETTE_GREY:
+		return count;
 	case VIDEO_PALETTE_RGB555:
 	case VIDEO_PALETTE_RGB565:
 	case VIDEO_PALETTE_YUV422:
@@ -2313,6 +2322,7 @@ static int goto_low_power(struct cam_data *cam)
 		return 0;
 	}
 	printstatus(cam);
+	mdelay(100);		/* windows driver does it too */
 	return -1;
 }
 
@@ -2530,7 +2540,8 @@ static int cpia_open(struct video_device *dev, int flags)
 	}
 	
 	/* Set ownership of /proc/cpia/videoX to current user */
-	cam->proc_entry->uid = current->uid;
+	if(cam->proc_entry != NULL)
+		cam->proc_entry->uid = current->uid;
 	
 	/* set mark for loading first frame uncompressed */
 	cam->first_frame = 1;
@@ -2585,7 +2596,8 @@ static void cpia_close(struct video_device *dev)
 	}
 	
 	/* Return ownership of /proc/cpia/videoX to root */
-	cam->proc_entry->uid = 0;
+	if(cam->proc_entry != NULL)
+		cam->proc_entry->uid = 0;
 	
 	/* save camera state for later open (developers guide ch 3.5.3) */
 	save_camera_state(cam);
@@ -3251,7 +3263,7 @@ int cpia_register_camera(struct cpia_camera_ops *ops)
 	unlock_kernel();
 	
 	/* FIXME */
-#if 1
+#if 0
 	cam = camera[i];
 	/* open cpia */
 	if (cam->ops->open(cam->index, &cam->lowlevel_data)) {

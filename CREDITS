@@ -1636,6 +1636,13 @@ N: Frederic Potter
 E: Frederic.Potter@masi.ibp.fr 
 D: Some PCI kernel support
 
+N: Peter Pregler
+E: Peter_Pregler@email.com
+D: V4L-Driver for the CPiA PPC2 driven parallel connected camera.
+P: 1024D/554D35AE 1314 1889 46A5 14F3 EE4D  1958 4A9C 2B10 554D 35AE
+S: (ask for current address)
+S: Austria
+
 N: Stefan Probst
 E: sp@caldera.de
 D: The Linux Support Team Erlangen, 1993-97

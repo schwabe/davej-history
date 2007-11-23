@@ -134,6 +134,38 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_NLS_CODEPAGE_932),y)
+NLS += nls_cp932.o
+else
+  ifeq ($(CONFIG_NLS_CODEPAGE_932),m)
+  M_OBJS += nls_cp932.o
+  endif
+endif
+
+ifeq ($(CONFIG_NLS_CODEPAGE_936),y)
+NLS += nls_cp936.o
+else
+  ifeq ($(CONFIG_NLS_CODEPAGE_936),m)
+  M_OBJS += nls_cp936.o
+  endif
+endif
+
+ifeq ($(CONFIG_NLS_CODEPAGE_949),y)
+NLS += nls_cp949.o
+else
+  ifeq ($(CONFIG_NLS_CODEPAGE_949),m)
+  M_OBJS += nls_cp949.o
+  endif
+endif
+
+ifeq ($(CONFIG_NLS_CODEPAGE_950),y)
+NLS += nls_cp950.o
+else
+  ifeq ($(CONFIG_NLS_CODEPAGE_950),m)
+  M_OBJS += nls_cp950.o
+  endif
+endif
+
 ifeq ($(CONFIG_NLS_CODEPAGE_1250),y)
 NLS += nls_cp1250.o
 else

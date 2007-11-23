@@ -363,6 +363,29 @@ static unsigned char *page_uni2charset[256] = {
 	page00
 };
 
+void uni2char(unsigned char ch, unsigned char cl, unsigned char *out, int boundlen, int *outlen)
+{
+	unsigned char *uni2charset;
+
+	if (boundlen <= 0)
+		return;
+
+	uni2charset = page_uni2charset[ch];
+	if (uni2charset && uni2charset[cl])
+		out[0] = uni2charset[cl];
+	else
+		out[0] = '?';
+	*outlen = 1;
+	return;
+}
+
+void char2uni(unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
+{
+	*uni1 = charset2uni[*rawstring].uni1;
+	*uni2 = charset2uni[*rawstring].uni2;
+	*offset = 1;
+	return;
+}
 
 void inc_use_count(void)
 {
@@ -374,8 +397,8 @@ void dec_use_count(void)
 
 static struct nls_table default_table = {
 	"default",
-	page_uni2charset,
-	charset2uni,
+	uni2char,
+	char2uni,
 	inc_use_count,
 	dec_use_count,
 	NULL
@@ -386,7 +409,13 @@ static struct nls_table default_table = {
 /* Returns a simple default translation table */
 struct nls_table *load_nls_default(void)
 {
-	return &default_table;
+	struct nls_table *default_nls;
+
+	default_nls = load_nls(CONFIG_NLS_DEFAULT);
+	if (default_nls != NULL)
+		return default_nls;
+	else
+		return &default_table;
 }
 
 EXPORT_SYMBOL(register_nls);
@@ -482,6 +511,18 @@ int init_nls(void)
 #endif
 #ifdef CONFIG_NLS_CODEPAGE_874
 	init_nls_cp874();
+#endif
+#ifdef CONFIG_NLS_CODEPAGE_932
+	init_nls_cp932();
+#endif
+#ifdef CONFIG_NLS_CODEPAGE_936
+	init_nls_cp936();
+#endif
+#ifdef CONFIG_NLS_CODEPAGE_949
+	init_nls_cp949();
+#endif
+#ifdef CONFIG_NLS_CODEPAGE_950
+	init_nls_cp950();
 #endif
 #ifdef CONFIG_NLS_KOI8_R
 	init_nls_koi8_r();

@@ -2013,7 +2013,7 @@ static ide_startstop_t idetape_pc_intr (ide_drive_t *drive)
 			if (temp > pc->buffer_size) {
 				printk (KERN_ERR "ide-tape: The tape wants to send us more data than expected - discarding data\n");
 				idetape_discard_data (drive,bcount.all);
-				ide_set_handler (drive,&idetape_pc_intr,IDETAPE_WAIT_CMD);
+				ide_set_handler (drive,&idetape_pc_intr,IDETAPE_WAIT_CMD,NULL);
 				return ide_started;
 			}
 #if IDETAPE_DEBUG_LOG
@@ -2035,7 +2035,7 @@ static ide_startstop_t idetape_pc_intr (ide_drive_t *drive)
 	pc->actually_transferred+=bcount.all;					/* Update the current position */
 	pc->current_position+=bcount.all;
 
-	ide_set_handler (drive,&idetape_pc_intr,IDETAPE_WAIT_CMD);		/* And set the interrupt handler again */
+	ide_set_handler (drive,&idetape_pc_intr,IDETAPE_WAIT_CMD,NULL);		/* And set the interrupt handler again */
 	return ide_started;
 }
 
@@ -2109,7 +2109,7 @@ static ide_startstop_t idetape_transfer_pc(ide_drive_t *drive)
 		printk (KERN_ERR "ide-tape: (IO,CoD) != (0,1) while issuing a packet command\n");
 		return ide_do_reset (drive);
 	}
-	ide_set_handler(drive, &idetape_pc_intr, IDETAPE_WAIT_CMD);	/* Set the interrupt routine */
+	ide_set_handler(drive, &idetape_pc_intr, IDETAPE_WAIT_CMD, NULL);	/* Set the interrupt routine */
 	atapi_output_bytes (drive,pc->c,12);			/* Send the actual packet */
 	return ide_started;
 }
@@ -2175,7 +2175,7 @@ static ide_startstop_t idetape_issue_packet_command (ide_drive_t *drive, idetape
 	}
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 	if (test_bit(IDETAPE_DRQ_INTERRUPT, &tape->flags)) {
-		ide_set_handler(drive, &idetape_transfer_pc, IDETAPE_WAIT_CMD);
+		ide_set_handler(drive, &idetape_transfer_pc, IDETAPE_WAIT_CMD, NULL);
 		OUT_BYTE(WIN_PACKETCMD, IDE_COMMAND_REG);
 		return ide_started;
 	} else {

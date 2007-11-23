@@ -6,11 +6,11 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 31 10:12:43 1998
- * Modified at:   Sat Dec 25 21:10:23 1999
+ * Modified at:   Tue Apr 11 19:06:24 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       af_netroom.c, af_ax25.c, af_rose.c, af_x25.c etc.
  * 
- *     Copyright (c) 1999 Dag Brattli <dagb@cs.uit.no>
+ *     Copyright (c) 1999-2000 Dag Brattli <dagb@cs.uit.no>
  *     Copyright (c) 1999 Jean Tourrilhes <jeant@rockfort.hpl.hp.com>
  *     All Rights Reserved.
  *
@@ -1907,6 +1907,9 @@ static int irda_getsockopt(struct socket *sock, int level, int optname,
 			return -EFAULT;
 		break;
 	case IRLMP_MAX_SDU_SIZE:
+		IRDA_DEBUG(2, __FUNCTION__ "(), max_data_size=%d\n", 
+			   self->max_data_size);
+
 		val = self->max_data_size;
 		len = sizeof(int);
 		if (put_user(len, optlen))

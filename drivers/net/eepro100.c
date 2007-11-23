@@ -24,11 +24,14 @@
 	The driver also contains updates by different kernel developers.
 	This driver clone is maintained by Andrey V. Savochkin <saw@saw.sw.com.sg>.
 	Please use this email address and linux-kernel mailing list for bug reports.
+	
+	Disabled FC and ER, to avoid lockups when when we get FCP interrupts.
+	Dragan Stancevic <visitor@valinux.com> March 24th, 2000.
 */
 
 static const char *version =
 "eepro100.c:v1.09j-t 9/29/99 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/eepro100.html\n"
-"eepro100.c: $Revision: 1.20.2.3 $ 2000/03/02 Modified by Andrey V. Savochkin <saw@saw.sw.com.sg> and others\n";
+"eepro100.c: $Revision: 1.20.2.4 $ 2000/03/25 Modified by Andrey V. Savochkin <saw@saw.sw.com.sg> and others\n";
 
 /* A few user-configurable values that apply to all boards.
    First set is undocumented and spelled per Intel recommendations. */
@@ -103,17 +106,8 @@ static int debug = -1;			/* The debug level */
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
-#ifdef HAS_PCI_NETIF
-#include "pci-netif.h"
-#else
 #include <linux/pci.h>
-#endif
-#include <linux/pci.h>
-#if LINUX_VERSION_CODE >= 0x20312
-#include <linux/spinlock.h>
-#else
 #include <asm/spinlock.h>
-#endif
 
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -144,21 +138,18 @@ MODULE_PARM(multicast_filter_limit, "i");
 #define virt_to_le32desc(addr)  cpu_to_le32(virt_to_bus(addr))
 #define le32desc_to_virt(addr)  bus_to_virt(le32_to_cpu(addr))
 
-#if LINUX_VERSION_CODE < 0x020314
 #define net_device              device
 #define pci_base_address(p, n)  (p)->base_address[n]
-#else
-#define pci_base_address(p, n)  (p)->resource[n].start
-#endif
 
 #define dev_free_skb(skb)       dev_kfree_skb(skb);
-#if ! defined(HAS_NETIF_QUEUE)
 #define netif_wake_queue(dev)   do { \
 									clear_bit(0, (void*)&dev->tbusy); \
 									mark_bh(NET_BH); \
 								} while(0)
 #define netif_start_queue(dev)  clear_bit(0, (void*)&dev->tbusy)
 #define netif_stop_queue(dev)   set_bit(0, (void*)&dev->tbusy)
+#ifndef PCI_DEVICE_ID_INTEL_82559ER
+#define PCI_DEVICE_ID_INTEL_82559ER 0x1209
 #endif
 
 /* The total I/O port extent of the board.
@@ -506,7 +497,7 @@ const char i82557_config_cmd[22] = {
 const char i82558_config_cmd[22] = {
 	22, 0x08, 0, 1,  0, 0, 0x22, 0x03,  1, /* 1=Use MII  0=Use AUI */
 	0, 0x2E, 0,  0x60, 0x08, 0x88,
-	0x68, 0, 0x40, 0xf2, 0xBD, 		/* 0xBD->0xFD=Force full-duplex */
+	0x68, 0, 0x40, 0xf2, 0x84,		/* Disable FC */
 	0x31, 0x05, };
 
 /* PHY media interface chips. */
@@ -1098,7 +1089,9 @@ static void speedo_resume(struct net_device *dev)
 	wait_for_cmd_done(ioaddr + SCBCmd);
 	outl(virt_to_bus(&sp->tx_ring[sp->dirty_tx % TX_RING_SIZE]),
 		 ioaddr + SCBPointer);
-	outw(CUStart, ioaddr + SCBCmd);
+	/* We are not ACK-ing FCP and ER in the interrupt handler yet so they should
+	   remain masked --Dragan */
+	outw(CUStart | SCBMaskEarlyRx | SCBMaskFlowCtl, ioaddr + SCBCmd);
 }
 
 /* Media monitoring and control. */
@@ -1495,6 +1488,8 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	do {
 		status = inw(ioaddr + SCBStatus);
 		/* Acknowledge all of the current interrupt sources ASAP. */
+		/* Will change from 0xfc00 to 0xff00 when we start handling
+		   FCP and ER interrupts --Dragan */
 		outw(status & 0xfc00, ioaddr + SCBStatus);
 
 		if (speedo_debug > 4)
@@ -1594,6 +1589,8 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			printk(KERN_ERR "%s: Too much work at interrupt, status=0x%4.4x.\n",
 				   dev->name, status);
 			/* Clear all interrupt sources. */
+			/* Will change from 0xfc00 to 0xff00 when we start handling
+			   FCP and ER interrupts --Dragan */
 			outl(0xfc00, ioaddr + SCBStatus);
 			break;
 		}
@@ -1995,7 +1992,10 @@ static void set_rx_mode(struct net_device *dev)
 		config_cmd_data[4] = rxdmacount;
 		config_cmd_data[5] = txdmacount + 0x80;
 		config_cmd_data[15] |= (new_rx_mode & 2) ? 1 : 0;
-		config_cmd_data[19] = sp->flow_ctrl ? 0xBD : 0x80;
+		/* 0x80 doesn't disable FC 0x84 does.
+		   Disable Flow control since we are not ACK-ing any FC interrupts
+		   for now. --Dragan */
+		config_cmd_data[19] = 0x84;
 		config_cmd_data[19] |= sp->full_duplex ? 0x40 : 0;
 		config_cmd_data[21] = (new_rx_mode & 1) ? 0x0D : 0x05;
 		if (sp->phy[0] & 0x8000) {			/* Use the AUI port instead. */

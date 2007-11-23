@@ -6,7 +6,7 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Fri Mar 10 11:53:26 2000
+ * Modified at:   Tue Apr 25 21:19:12 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>
@@ -56,6 +56,7 @@
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/byteorder.h>
+#include <asm/hardirq.h>
 
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
@@ -1969,8 +1970,15 @@ static int nsc_ircc_net_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	switch (cmd) {
 	case SIOCSBANDWIDTH: /* Set bandwidth */
-		if (!capable(CAP_NET_ADMIN))
+		/*
+		 * This function will also be used by IrLAP to change the
+		 * speed, so we still must allow for speed change within
+		 * interrupt context.
+		 */
+		if (!in_interrupt() && !capable(CAP_NET_ADMIN)) {
+			IRDA_DEBUG(0, __FUNCTION__ "(), not capable sysadm\n");
 			return -EPERM;
+		}
 		nsc_ircc_change_speed(self, irq->ifr_baudrate);
 		break;
 	case SIOCSMEDIABUSY: /* Set media busy */

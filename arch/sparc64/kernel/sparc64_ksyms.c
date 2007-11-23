@@ -234,7 +234,7 @@ EXPORT_SYMBOL(__prom_getsibling);
 /* sparc library symbols */
 EXPORT_SYMBOL(bcopy);
 EXPORT_SYMBOL(__strlen);
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 EXPORT_SYMBOL(strlen);
 #endif
 EXPORT_SYMBOL(strnlen);

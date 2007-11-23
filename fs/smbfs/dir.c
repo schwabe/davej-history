@@ -80,13 +80,28 @@ smb_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct dentry *dentry = filp->f_dentry;
 	struct inode *dir = dentry->d_inode;
-	struct cache_head *cachep;
+	struct cache_head *cachep = NULL;
 	int result;
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_readdir: reading %s/%s, f_pos=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, (int) filp->f_pos);
+	printk("smb_readdir: reading %s/%s, f_pos=%d\n",
+	       dentry->d_parent->d_name.name, dentry->d_name.name, (int) filp->f_pos);
 #endif
+
+	result = 0;
+	switch ((unsigned int) filp->f_pos)
+	{
+	case 0:
+		if (filldir(dirent, ".", 1, 0, dir->i_ino) < 0)
+			goto out;
+		filp->f_pos = 1;
+	case 1:
+		if (filldir(dirent, "..", 2, 1,
+				dentry->d_parent->d_inode->i_ino) < 0)
+			goto out;
+		filp->f_pos = 2;
+	}
+
 	/*
 	 * Make sure our inode is up-to-date.
 	 */
@@ -103,26 +118,16 @@ dentry->d_parent->d_name.name, dentry->d_name.name, (int) filp->f_pos);
 	/*
 	 * Make sure the cache is up-to-date.
 	 */
-	if (!cachep->valid)
+	if (!cachep->valid ||
+	    (cachep->mtime != dentry->d_inode->i_mtime &&
+	     filp->f_pos == 2))
 	{
 		result = smb_refill_dircache(cachep, dentry);
 		if (result)
-			goto out_free;
+			goto out;
 	}
 
 	result = 0;
-	switch ((unsigned int) filp->f_pos)
-	{
-	case 0:
-		if (filldir(dirent, ".", 1, 0, dir->i_ino) < 0)
-			goto out_free;
-		filp->f_pos = 1;
-	case 1:
-		if (filldir(dirent, "..", 2, 1,
-				dentry->d_parent->d_inode->i_ino) < 0)
-			goto out_free;
-		filp->f_pos = 2;
-	}
 
 	while (1)
 	{
@@ -152,9 +157,10 @@ dentry->d_parent->d_name.name, dentry->d_name.name, (int) filp->f_pos);
 	/*
 	 * Release the dircache.
 	 */
-out_free:
-	smb_free_dircache(cachep);
 out:
+	if (cachep) {
+		smb_free_dircache(cachep);
+	}
 	return result;
 }
 
@@ -172,16 +178,6 @@ smb_dir_open(struct inode *dir, struct file *file)
 printk("smb_dir_open: (%s/%s)\n", dentry->d_parent->d_name.name, 
 file->f_dentry->d_name.name);
 #endif
-	/*
-	 * Directory timestamps in the core protocol aren't updated
-	 * when a file is added, so we give them a very short TTL.
-	 */
-	if (server->opt.protocol < SMB_PROTOCOL_LANMAN2)
-	{
-		unsigned long age = jiffies - dir->u.smbfs_i.oldmtime;
-		if (age > 2*HZ)
-			smb_invalid_dir_cache(dir);
-	}
 
 	if (server->conn_pid)
 		error = smb_revalidate_inode(dentry);
@@ -231,8 +227,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name, age);
 		if (is_bad_inode(inode))
 		{
 #ifdef SMBFS_PARANOIA
-printk("smb_lookup_validate: %s/%s has dud inode\n", 
-dentry->d_parent->d_name.name, dentry->d_name.name);
+			printk(KERN_DEBUG "smb_lookup_validate: %s/%s has dud inode\n", 
+			       dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
 			valid = 0;
 		} else if (!valid)
@@ -295,8 +291,8 @@ smb_delete_dentry(struct dentry * dentry)
 		if (is_bad_inode(dentry->d_inode))
 		{
 #ifdef SMBFS_PARANOIA
-printk("smb_delete_dentry: bad inode, unhashing %s/%s\n", 
-dentry->d_parent->d_name.name, dentry->d_name.name);
+			printk(KERN_DEBUG "smb_delete_dentry: bad inode, unhashing %s/%s\n", 
+			       dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
 			d_drop(dentry);
 		}
@@ -337,9 +333,9 @@ smb_lookup(struct inode *dir, struct dentry *dentry)
 
 	error = smb_proc_getattr(dentry, &finfo);
 #ifdef SMBFS_PARANOIA
-if (error && error != -ENOENT)
-printk("smb_lookup: find %s/%s failed, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, error);
+	if (error && error != -ENOENT)
+		printk(KERN_DEBUG "smb_lookup: find %s/%s failed, error=%d\n",
+		       dentry->d_parent->d_name.name, dentry->d_name.name, error);
 #endif
 
 	inode = NULL;
@@ -404,8 +400,8 @@ out_close:
 	if (have_id)
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_instantiate: %s/%s failed, error=%d, closing %u\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, error, fileid);
+		printk(KERN_DEBUG "smb_instantiate: %s/%s failed, error=%d, closing %u\n",
+		       dentry->d_parent->d_name.name, dentry->d_name.name, error, fileid);
 #endif
 		smb_close_fileid(dentry, fileid);
 	}
@@ -424,7 +420,6 @@ printk("smb_create: creating %s/%s, mode=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 #endif
 
-	smb_invalid_dir_cache(dir);
 	error = smb_proc_create(dentry, 0, CURRENT_TIME, &fileid);
 	if (!error)
 	{
@@ -432,8 +427,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 	} else
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_create: %s/%s failed, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, error);
+		printk(KERN_DEBUG "smb_create: %s/%s failed, error=%d\n",
+		       dentry->d_parent->d_name.name, dentry->d_name.name, error);
 #endif
 	}
 	return error;
@@ -445,7 +440,6 @@ smb_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
 	int error;
 
-	smb_invalid_dir_cache(dir);
 	error = smb_proc_mkdir(dentry);
 	if (!error)
 	{
@@ -472,7 +466,6 @@ smb_rmdir(struct inode *dir, struct dentry *dentry)
 	if (!list_empty(&dentry->d_hash))
 		goto out;
 
-	smb_invalid_dir_cache(dir);
 	error = smb_proc_rmdir(dentry);
 
 out:
@@ -489,7 +482,6 @@ smb_unlink(struct inode *dir, struct dentry *dentry)
 	 */
 	smb_close(dentry->d_inode);
 
-	smb_invalid_dir_cache(dir);
 	error = smb_proc_unlink(dentry);
 	if (!error)
 	{
@@ -518,8 +510,8 @@ smb_rename(struct inode *old_dir, struct dentry *old_dentry,
 		if (error)
 		{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_rename: unlink %s/%s, error=%d\n",
-new_dentry->d_parent->d_name.name, new_dentry->d_name.name, error);
+			printk(KERN_DEBUG "smb_rename: unlink %s/%s, error=%d\n",
+			       new_dentry->d_parent->d_name.name, new_dentry->d_name.name, error);
 #endif
 			goto out;
 		}
@@ -527,8 +519,6 @@ new_dentry->d_parent->d_name.name, new_dentry->d_name.name, error);
 		d_delete(new_dentry);
 	}
 
-	smb_invalid_dir_cache(old_dir);
-	smb_invalid_dir_cache(new_dir);
 	error = smb_proc_mv(old_dentry, new_dentry);
 	if (!error)
 	{

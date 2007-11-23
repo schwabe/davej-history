@@ -7,7 +7,7 @@
    with the standard macros.  And since it can schedule, it does even
    better in the end.  */
 
-#if defined(__GNUC__) && __GNUC_MINOR__ < 91
+#if defined(__GNUC__) && __GNUC__ == 2 && __GNUC_MINOR__ < 91
 
 static __inline__ __const__ __u32 ___arch__swab32(__u32 x)
 {

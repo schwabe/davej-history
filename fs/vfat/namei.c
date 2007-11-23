@@ -675,10 +675,11 @@ xlate_to_uni(const char *name, int len, char *outname, int *outlen,
 					ip += 4;
 					i += 4;
 				} else {
-					*op++ = nls->charset2uni[*ip].uni1;
-					*op++ = nls->charset2uni[*ip].uni2;
-					ip++;
-					i++;
+ 					int llen;
+ 					nls->char2uni(ip, &llen, op, op+1);
+ 					op += 2;
+ 					ip += llen;
+					i += llen;
 				}
 			}
 		} else {

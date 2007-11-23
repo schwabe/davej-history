@@ -7,7 +7,7 @@
 #define CPP_ASMLINKAGE
 #endif
 
-#if defined __i386__ && (__GNUC__ > 2 || __GNUC_MINOR__ > 7)
+#if defined __i386__ && (__GNUC__ > 2 || __GNUC__ == 2 && __GNUC_MINOR__ > 7)
 #define asmlinkage CPP_ASMLINKAGE __attribute__((regparm(0)))
 #else
 #define asmlinkage CPP_ASMLINKAGE

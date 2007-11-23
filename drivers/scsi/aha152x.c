@@ -572,8 +572,11 @@ static struct signature {
 		"Adaptec AHA-1520 BIOS", 0x102e, 21
 	},			/* Adaptec 152x */
 	{
-		"Adaptec AHA-1520B", 0x0b, 19
+		"Adaptec AHA-1520B", 0x0b, 17
 	},			/* Adaptec 152x rev B */
+	{
+		"Adaptec AHA-1520B", 0x26, 17
+	},                      /* Iomega Jaz Jet ISA (AIC6370Q) */
 	{
 		"Adaptec ASW-B626 BIOS", 0x1029, 21
 	},			/* on-board controller */

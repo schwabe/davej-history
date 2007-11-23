@@ -62,7 +62,7 @@
 #include "irq.h"
 
 
-unsigned long cpu_hz;	/* Detected as we calibrate the TSC */
+unsigned long cpu_khz;	/* Detected as we calibrate the TSC */
 
 /* Number of usecs that the last interrupt was delayed */
 static int delay_at_last_interrupt;
@@ -665,12 +665,12 @@ __initfunc(void time_init(void))
 			 * The formula is (10^6 * 2^32) / (2^32 * 1 / (clocks/us)) =
 			 * clock/second. Our precision is about 100 ppm.
 			 */
-			{	unsigned long eax=0, edx=1000000;
+			{	unsigned long eax=0, edx=1000;
 				__asm__("divl %2"
-		       		:"=a" (cpu_hz), "=d" (edx)
+		       		:"=a" (cpu_khz), "=d" (edx)
         	       		:"r" (tsc_quotient),
 	                	"0" (eax), "1" (edx));
-				printk("Detected %ld Hz processor.\n", cpu_hz);
+				printk("Detected %ld kHz processor.\n", cpu_khz);
 			}
 		}
 	}

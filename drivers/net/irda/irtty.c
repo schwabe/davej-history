@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Sat Mar 11 07:43:30 2000
+ * Modified at:   Tue Apr 25 21:17:49 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -974,7 +974,12 @@ static int irtty_net_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	switch (cmd) {
 	case SIOCSBANDWIDTH: /* Set bandwidth */
-		if (!capable(CAP_NET_ADMIN))
+		/*
+		 * This function will also be used by IrLAP to change the
+		 * speed, so we still must allow for speed change within
+		 * interrupt context.
+		 */
+		if (!in_interrupt() && !capable(CAP_NET_ADMIN))
 			return -EPERM;
 		irda_task_execute(self, irtty_change_speed, NULL, NULL, 
 				  (void *) irq->ifr_baudrate);

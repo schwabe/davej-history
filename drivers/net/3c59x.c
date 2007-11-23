@@ -14,6 +14,29 @@
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
+/*
+    15Apr00, Andrew Morton <andrewm@uow.edu.au>
+    - Don't set RxComplete in boomerang interrupt enable reg
+    - Added standard spinlocking.
+    - Removed setting/clearing of dev->interrupt
+    - Removed vp->in_interrupt
+    - spinlock in vortex_timer to protect mdio functions
+    - disable local interrupts around call to vortex_interrupt in
+      vortex_tx_timeout() (So vortex_interrupt can use spin_lock())
+    - Removed global save/restore_flags() and cli() from get_stats
+      and vortex_start_xmit()
+    - Select window 3 in vortex_timer()'s write to Wn3_MAC_Ctrl
+    - In vortex_start_xmit(), move the lock to _after_ we've altered
+      vp->cur_tx and vp->tx_full.  This defeats the race between
+      vortex_start_xmit() and vortex_interrupt which was identified
+      by Bogdan Costescu.
+    - Merged back support for six new cards from various sources
+    - Tell it that 3c905C has NWAY
+    - Fix handling of SetStatusEnd in 'Too much work..' code, as
+      per 2.3.99's 3c575_cb (Dave Hinds).  Added vp->deferred for this.
+    - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.2 for more details.
+*/
+
 static char *version =
 "3c59x.c:v0.99H 11/17/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
@@ -241,12 +264,18 @@ static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 static struct pci_id_info pci_tbl[] = {
 	{"3c590 Vortex 10Mbps",			0x10B7, 0x5900, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
+	{"3c592 EISA 10mbps Demon/Vortex", 0x10B7, 0x5920, 0xffff,		/* AKPM: from Don's 3c59x_cb.c 0.49H */
+	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
+	{"3c597 EISA Fast Demon/Vortex", 0x10B7, 0x5970, 0xffff,		/* AKPM: from Don's 3c59x_cb.c 0.49H */
+	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
 	{"3c595 Vortex 100baseTx",		0x10B7, 0x5950, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
 	{"3c595 Vortex 100baseT4",		0x10B7, 0x5951, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
 	{"3c595 Vortex 100base-MII",	0x10B7, 0x5952, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_VORTEX, 32, vortex_probe1},
+
+#define EISA_TBL_OFFSET 6			/* AKPM: the offset of this entry */
 	{"3Com Vortex",					0x10B7, 0x5900, 0xff00,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, vortex_probe1},
 	{"3c900 Boomerang 10baseT",		0x10B7, 0x9000, 0xffff,
@@ -256,6 +285,10 @@ static struct pci_id_info pci_tbl[] = {
 	{"3c900 Cyclone 10Mbps Combo", 0x10B7, 0x9005, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
 	{"3c900B-FL Cyclone 10base-FL",	0x10B7, 0x900A, 0xffff,
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
+	{"3c900 Cyclone 10Mbps TPO",	0x10B7, 0x9004, 0xffff,			/* AKPM: from Don's 0.99M */
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
+	{"3c900 Cyclone 10Mbps TPC",	0x10B7, 0x9006, 0xffff,			/* AKPM: from Don's 0.99M */
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
 	{"3c905 Boomerang 100baseTx",	0x10B7, 0x9050, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, vortex_probe1},
@@ -268,7 +301,7 @@ static struct pci_id_info pci_tbl[] = {
 	{"3c905B-FX Cyclone 100baseFx",	0x10B7, 0x905A, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
 	{"3c905C Tornado",	0x10B7, 0x9200, 0xffff,
-	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY, 128, vortex_probe1},
 	{"3c980 Cyclone",	0x10B7, 0x9800, 0xfff0,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
 	{"3cSOHO100-TX Hurricane",	0x10B7, 0x7646, 0xffff,
@@ -283,8 +316,13 @@ static struct pci_id_info pci_tbl[] = {
 	{"3CCFE656 Cyclone CardBus",	0x10B7, 0x6560, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS,
 	 128, vortex_probe1},
+	{"3CCFEM656 Cyclone CardBus",	0x10B7, 0x6562, 0xffff,			/* AKPM: From the 2.3 driver ? */
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY|HAS_CB_FNS,
+	 128, vortex_probe1},
 	{"3c575 series CardBus (unknown version)", 0x10B7, 0x5057, 0xf0ff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, vortex_probe1},
+	{"3c450 Cyclone/unknown", 0x10B7, 0x4500, 0xffff,				/* AKPM: from Don's 0.99N */
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_NWAY, 128, vortex_probe1},
 	{"3Com Boomerang (unknown version)",	0x10B7, 0x9000, 0xff00,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG, 64, vortex_probe1},
 	{0,},						/* 0 terminated list. */
@@ -446,7 +484,6 @@ struct vortex_private {
 	int chip_id;
 
 	/* The remainder are related to chip state, mostly media selection. */
-	unsigned long in_interrupt;
 	struct timer_list timer;	/* Media selection timer. */
 	int options;				/* User-settable misc. driver options. */
 	unsigned int media_override:3, 			/* Passed-in media type. */
@@ -462,6 +499,9 @@ struct vortex_private {
 	u16 capabilities, info1, info2;		/* Various, from EEPROM. */
 	u16 advertising;					/* NWay media advertisement */
 	unsigned char phys[2];				/* MII device addresses. */
+	u16 deferred;						/* Resend these interrupts when we
+										 * bale from the ISR */
+	spinlock_t lock;
 };
 
 /* The action to take with a media selection timer tick.
@@ -765,7 +805,7 @@ static int vortex_scan(struct device *dev, struct pci_id_info pci_tbl[])
 			if ((device_id & 0xFF00) != 0x5900)
 				continue;
 			vortex_probe1(0, 0, dev, ioaddr, inw(ioaddr + 0xC88) >> 12,
-						  4, cards_found);
+						  EISA_TBL_OFFSET, cards_found);
 			dev = 0;
 			cards_found++;
 		}
@@ -814,6 +854,7 @@ static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 	vp->next_module = root_vortex_dev;
 	root_vortex_dev = dev;
 
+	spin_lock_init(&vp->lock);
 	vp->chip_id = chip_idx;
 	vp->pci_bus = pci_bus;
 	vp->pci_devfn = pci_devfn;
@@ -1151,9 +1192,7 @@ vortex_open(struct device *dev)
 	set_rx_mode(dev);
 	outw(StatsEnable, ioaddr + EL3_CMD); /* Turn on statistics. */
 
-	vp->in_interrupt = 0;
 	dev->tbusy = 0;
-	dev->interrupt = 0;
 	dev->start = 1;
 
 	outw(RxEnable, ioaddr + EL3_CMD); /* Enable the receiver. */
@@ -1163,7 +1202,8 @@ vortex_open(struct device *dev)
 		(vp->full_bus_master_tx ? DownComplete : TxAvailable) |
 		(vp->full_bus_master_rx ? UpComplete : RxComplete) |
 		(vp->bus_master ? DMADone : 0);
-	vp->intr_enable = SetIntrEnb | IntLatch | TxAvailable | RxComplete |
+	vp->intr_enable = SetIntrEnb | IntLatch | TxAvailable |
+		(vp->full_bus_master_rx ? 0 : RxComplete) |
 		StatsFull | HostError | TxComplete | IntReq
 		| (vp->bus_master ? DMADone : 0) | UpComplete | DownComplete;
 	outw(vp->status_enable, ioaddr + EL3_CMD);
@@ -1197,7 +1237,7 @@ static void vortex_timer(unsigned long data)
 	EL3WINDOW(4);
 	media_status = inw(ioaddr + Wn4_Media);
 	switch (dev->if_port) {
-	case XCVR_10baseT:  case XCVR_100baseTx:  case XCVR_100baseFx:
+	  case XCVR_10baseT:  case XCVR_100baseTx:  case XCVR_100baseFx:
 		if (media_status & Media_LnkBeat) {
 		  ok = 1;
 		  if (vortex_debug > 1)
@@ -1208,6 +1248,9 @@ static void vortex_timer(unsigned long data)
 				   dev->name, media_tbl[dev->if_port].name, media_status);
 		break;
 	  case XCVR_MII: case XCVR_NWAY:
+		{
+		  unsigned long flags;
+		  spin_lock_irqsave(&vp->lock, flags);
 		  mii_status = mdio_read(ioaddr, vp->phys[0], 1);
 		  ok = 1;
 		  if (debug > 1)
@@ -1225,6 +1268,7 @@ static void vortex_timer(unsigned long data)
 							 dev->name, vp->full_duplex ? "full" : "half",
 							 vp->phys[0], mii_reg5);
 					  /* Set the full-duplex bit. */
+					  EL3WINDOW(3);   /* AKPM */
 					  outb((vp->full_duplex ? 0x20 : 0) |
 						   (dev->mtu > 1500 ? 0x40 : 0),
 						   ioaddr + Wn3_MAC_Ctrl);
@@ -1232,10 +1276,12 @@ static void vortex_timer(unsigned long data)
 				  next_tick = 60*HZ;
 			  }
 		  }
-		  break;
+		  spin_unlock_irqrestore(&vp->lock, flags);
+		}
+		break;
 	  default:					/* Other media types handled by Tx timeouts. */
 		if (vortex_debug > 1)
-		  printk(KERN_DEBUG "%s: Media %s is has no indication, %x.\n",
+		  printk(KERN_DEBUG "%s: Media %s has no indication, %x.\n",
 				 dev->name, media_tbl[dev->if_port].name, media_status);
 		ok = 1;
 	}
@@ -1276,10 +1322,10 @@ static void vortex_timer(unsigned long data)
 	  printk(KERN_DEBUG "%s: Media selection timer finished, %s.\n",
 			 dev->name, media_tbl[dev->if_port].name);
 
-	if (next_tick) {
-		vp->timer.expires = RUN_AT(next_tick);
-		add_timer(&vp->timer);
-	}
+	vp->timer.expires = RUN_AT(next_tick);
+	add_timer(&vp->timer);
+	if (vp->deferred)
+		outw(FakeIntr, ioaddr + EL3_CMD);
 	return;
 }
 
@@ -1300,7 +1346,17 @@ static void vortex_tx_timeout(struct device *dev)
 		printk(KERN_ERR "%s: Interrupt posted but not delivered --"
 			   " IRQ blocked by another device?\n", dev->name);
 		/* Bad idea here.. but we might as well handle a few events. */
-		vortex_interrupt(dev->irq, dev, 0);
+		{
+			/*
+			 * AKPM: block interrupts because vortex_interrupt
+			 * does a bare spin_lock()
+			 */
+			unsigned long flags;
+			__save_flags(flags);
+			__cli();
+			vortex_interrupt(dev->irq, dev, 0);
+			__restore_flags(flags);
+		}
 	}
 	outw(TxReset, ioaddr + EL3_CMD);
 	for (j = 200; j >= 0 ; j--)
@@ -1344,7 +1400,7 @@ static void vortex_tx_timeout(struct device *dev)
 	/* Issue Tx Enable */
 	outw(TxEnable, ioaddr + EL3_CMD);
 	dev->trans_start = jiffies;
-	
+
 	/* Switch to register set 7 for normal use. */
 	EL3WINDOW(7);
 }
@@ -1537,8 +1593,7 @@ boomerang_start_xmit(struct sk_buff *skb, struct device *dev)
 		vp->tx_ring[entry].length = cpu_to_le32(skb->len | LAST_FRAG);
 		vp->tx_ring[entry].status = cpu_to_le32(skb->len | TxIntrUploaded);
 
-		save_flags(flags);
-		cli();
+		spin_lock_irqsave(&vp->lock, flags);
 		outw(DownStall, ioaddr + EL3_CMD);
 		/* Wait for the stall to complete. */
 		for (i = 600; i >= 0 ; i--)
@@ -1549,16 +1604,16 @@ boomerang_start_xmit(struct sk_buff *skb, struct device *dev)
 			outl(virt_to_bus(&vp->tx_ring[entry]), ioaddr + DownListPtr);
 			queued_packet++;
 		}
-		outw(DownUnstall, ioaddr + EL3_CMD);
-		restore_flags(flags);
 
 		vp->cur_tx++;
 		if (vp->cur_tx - vp->dirty_tx > TX_RING_SIZE - 1)
 			vp->tx_full = 1;
-		else {					/* Clear previous interrupt enable. */
+		else {		/* Clear previous interrupt enable. */
 			prev_entry->status &= cpu_to_le32(~TxIntrUploaded);
 			clear_bit(0, (void*)&dev->tbusy);
 		}
+		outw(DownUnstall, ioaddr + EL3_CMD);
+		spin_unlock_irqrestore(&vp->lock, flags);
 		dev->trans_start = jiffies;
 		vp->stats.tx_bytes += skb->len;
 		return 0;
@@ -1575,26 +1630,16 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	int latency, status;
 	int work_done = max_interrupt_work;
 
-#if defined(__i386__)
-	/* A lock to prevent simultaneous entry bug on Intel SMP machines. */
-	if (test_and_set_bit(0, (void*)&dev->interrupt)) {
-		printk(KERN_ERR"%s: SMP simultaneous entry of an interrupt handler.\n",
-			   dev->name);
-		dev->interrupt = 0;	/* Avoid halting machine. */
-		return;
-	}
-#else
-	if (dev->interrupt) {
-		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
-		return;
-	}
-	dev->interrupt = 1;
-#endif
+	spin_lock(&vp->lock);
 
-	dev->interrupt = 1;
 	ioaddr = dev->base_addr;
 	latency = inb(ioaddr + Timer);
 	status = inw(ioaddr + EL3_STATUS);
+
+	if (status & IntReq) {
+		status |= vp->deferred;
+		vp->deferred = 0;
+	}
 
 	if (vortex_debug > 4)
 		printk(KERN_DEBUG "%s: interrupt, status %4.4x, latency %d ticks.\n",
@@ -1666,15 +1711,22 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				outw(AckIntr | UpComplete | DownComplete, ioaddr + EL3_CMD);
 			} else {
 				printk(KERN_WARNING "%s: Too much work in interrupt, status "
-					   "%4.4x.  Temporarily disabling functions (%4.4x).\n",
-					   dev->name, status, SetStatusEnb | ((~status) & 0x7FE));
+					   "%4.4x.\n", dev->name, status);
 				/* Disable all pending interrupts. */
-				outw(SetStatusEnb | ((~status) & 0x7FE), ioaddr + EL3_CMD);
-				outw(AckIntr | 0x7FF, ioaddr + EL3_CMD);
+				do {
+					vp->deferred |= status;
+					outw(SetStatusEnb | (~vp->deferred & vp->status_enable),
+						 ioaddr + EL3_CMD);
+					outw(AckIntr | (vp->deferred & 0x7ff), ioaddr + EL3_CMD);
+				} while ((status = inw(ioaddr + EL3_CMD)) & IntLatch);
 				/* The timer will reenable interrupts. */
+				del_timer(&vp->timer);
+				vp->timer.expires = RUN_AT(1);
+				add_timer(&vp->timer);
 				break;
 			}
 		}
+
 		/* Acknowledge the IRQ. */
 		outw(AckIntr | IntReq | IntLatch, ioaddr + EL3_CMD);
 		if (vp->cb_fn_base)			/* The PCMCIA people are idiots.  */
@@ -1686,11 +1738,7 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		printk(KERN_DEBUG "%s: exiting interrupt, status %4.4x.\n",
 			   dev->name, status);
 
-#if defined(__i386__)
-	clear_bit(0, (void*)&dev->interrupt);
-#else
-	dev->interrupt = 0;
-#endif
+	spin_unlock(&vp->lock);
 	return;
 }
 
@@ -1702,7 +1750,7 @@ static int vortex_rx(struct device *dev)
 	short rx_status;
 
 	if (vortex_debug > 5)
-		printk(KERN_DEBUG"   In rx_packet(), status %4.4x, rx_status %4.4x.\n",
+		printk(KERN_DEBUG"   In vortex_rx(), status %4.4x, rx_status %4.4x.\n",
 			   inw(ioaddr+EL3_STATUS), inw(ioaddr+RxStatus));
 	while ((rx_status = inw(ioaddr + RxStatus)) > 0) {
 		if (rx_status & 0x4000) { /* Error, update stats. */
@@ -1929,10 +1977,9 @@ static struct net_device_stats *vortex_get_stats(struct device *dev)
 	unsigned long flags;
 
 	if (dev->start) {
-		save_flags(flags);
-		cli();
+		spin_lock_irqsave(&vp->lock, flags);
 		update_stats(dev->base_addr, dev);
-		restore_flags(flags);
+		spin_unlock_irqrestore(&vp->lock, flags);
 	}
 	return &vp->stats;
 }
@@ -1981,6 +2028,10 @@ static int vortex_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	long ioaddr = dev->base_addr;
 	u16 *data = (u16 *)&rq->ifr_data;
 	int phy = vp->phys[0] & 0x1f;
+	int retval;
+	unsigned long flags;
+
+	spin_lock_irqsave(&vp->lock, flags);
 
 	switch(cmd) {
 	case SIOCDEVPRIVATE:		/* Get the address of the PHY in use. */
@@ -1988,16 +2039,23 @@ static int vortex_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	case SIOCDEVPRIVATE+1:		/* Read the specified MII register. */
 		EL3WINDOW(4);
 		data[3] = mdio_read(ioaddr, data[0] & 0x1f, data[1] & 0x1f);
-		return 0;
+		retval = 0;
+		break;
 	case SIOCDEVPRIVATE+2:		/* Write the specified MII register */
-		if (!suser())
-			return -EPERM;
-		EL3WINDOW(4);
-		mdio_write(ioaddr, data[0] & 0x1f, data[1] & 0x1f, data[2]);
-		return 0;
+		if (!suser()) {
+			retval = -EPERM;
+		} else {
+			EL3WINDOW(4);
+			mdio_write(ioaddr, data[0] & 0x1f, data[1] & 0x1f, data[2]);
+			retval = 0;
+		}
+		break;
 	default:
-		return -EOPNOTSUPP;
+		retval = -EOPNOTSUPP;
 	}
+
+	spin_unlock_irqrestore(&vp->lock, flags);
+	return retval;
 }
 
 /* Pre-Cyclone chips have no documented multicast filter, so the only

@@ -411,7 +411,7 @@ static unsigned int isofs_get_last_session(kdev_t dev)
   struct inode inode_fake;
   struct file_operations *fops;
   extern struct file_operations * get_blkfops(unsigned int);
-  int i;
+  int i, session = 0;
 
   vol_desc_start=0;
   fops = get_blkfops(MAJOR(dev));
@@ -424,6 +424,27 @@ static unsigned int isofs_get_last_session(kdev_t dev)
       mm_segment_t old_fs=get_fs();
       inode_fake.i_rdev=dev;
       ms_info.addr_format=CDROM_LBA;
+      /* If a minor device was explicitly opened, set session to the
+       * minor number. For instance, if /dev/hdc1 is mounted, session
+       * 1 on the CD-ROM is selected. CD_PART_MAX gives access to
+       * a max of 64 sessions on IDE. SCSI drives must still use
+       * the session option to mount.
+       */
+      if ((MINOR(dev) % CD_PART_MAX) && (MAJOR(dev) != SCSI_CDROM_MAJOR))
+		session = MINOR(dev) % CD_PART_MAX;
+      if (session > 0 && session <= CD_PART_MAX) {
+		struct cdrom_tocentry entry;
+		entry.cdte_track=session;
+		entry.cdte_format=CDROM_LBA;
+		set_fs(KERNEL_DS);
+		i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
+			      NULL, CDROMREADTOCENTRY, (unsigned long) &entry);
+		set_fs(old_fs);
+		if(!i) printk(KERN_ERR"Session %d start %d type %d\n",session,entry.cdte_addr.lba,entry.cdte_ctrl&CDROM_DATA_TRACK);
+		if(i || (entry.cdte_ctrl & CDROM_DATA_TRACK) != 4)
+			printk(KERN_ERR"Invalid session number or type of track\n");
+		else return entry.cdte_addr.lba;
+      }
       set_fs(KERNEL_DS);
       i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
 				       NULL,
@@ -736,7 +757,7 @@ root_found:
 
 #ifdef CONFIG_JOLIET
 	if (joliet_level && opt.utf8 == 0) {
-		char * p = opt.iocharset ? opt.iocharset : "iso8859-1";
+		char * p = opt.iocharset ? opt.iocharset : CONFIG_NLS_DEFAULT;
 		s->u.isofs_sb.s_nls_iocharset = load_nls(p);
 		if (! s->u.isofs_sb.s_nls_iocharset) {
 			/* Fail only if explicit charset specified */

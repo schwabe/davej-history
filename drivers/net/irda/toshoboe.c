@@ -612,7 +612,12 @@ static int toshoboe_net_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	
 	switch (cmd) {
 	case SIOCSBANDWIDTH: /* Set bandwidth */
-		if (!capable(CAP_NET_ADMIN))
+		/*
+		 * This function will also be used by IrLAP to change the
+		 * speed, so we still must allow for speed change within
+		 * interrupt context.
+		 */
+		if (!in_interrupt() && !capable(CAP_NET_ADMIN))
 			return -EPERM;
 		/* toshoboe_setbaud(self, irq->ifr_baudrate); */
                 /* Just change speed once - inserted by Paul Bristow */

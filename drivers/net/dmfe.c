@@ -363,10 +363,9 @@ int dmfe_probe(struct device *dev)
 		pci_read_config_dword(net_dev, PCI_REVISION_ID, &dev_rev);
 
 		/* IO range check */
-		if (check_region(pci_iobase, CHK_IO_SIZE(pci_id, dev_rev))) {
-			printk(KERN_ERR "dmfe: I/O conflict : IO=%x Range=%x\n", pci_iobase, CHK_IO_SIZE(pci_id, dev_rev));
+		if (check_region(pci_iobase, CHK_IO_SIZE(pci_id, dev_rev))) 
 			continue;
-		}
+
 		/* Interrupt check */
 		if (pci_irqline == 0) {
 			printk(KERN_ERR "dmfe: Interrupt wrong : IRQ=%d\n", pci_irqline);

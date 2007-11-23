@@ -999,7 +999,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	if(block & 7) panic("sd.c:Bad block number requested");
 	if(this_count & 7) panic("sd.c:Bad block number requested");
 	block = block >> 3;
-	this_count = block >> 3;
+	this_count = this_count >> 3;
      }
 
      if (rscsi_disks[dev].sector_size == 2048){
@@ -1381,7 +1381,7 @@ static int sd_init_onedisk(int i)
 	    }
 	}
 
-        if( rscsi_disks[i].sector_size == 2048 )
+        if( rscsi_disks[i].sector_size > 1024 )
           {
             int m;
 
@@ -1393,7 +1393,7 @@ static int sd_init_onedisk(int i)
              */
             for (m=i<<4; m<((i+1)<<4); m++)
               {
-                sd_blocksizes[m] = 2048;
+                sd_blocksizes[m] = rscsi_disks[i].sector_size;
               }
           }
     {

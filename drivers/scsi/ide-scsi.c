@@ -364,7 +364,7 @@ static ide_startstop_t idescsi_pc_intr (ide_drive_t *drive)
 				pc->actually_transferred += temp;
 				pc->current_position += temp;
 				idescsi_discard_data (drive,bcount - temp);
-				ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));
+				ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc), NULL);
 				return ide_started;
 			}
 #if IDESCSI_DEBUG_LOG
@@ -388,7 +388,7 @@ static ide_startstop_t idescsi_pc_intr (ide_drive_t *drive)
 	pc->actually_transferred+=bcount;				/* Update the current position */
 	pc->current_position+=bcount;
 
-	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));	/* And set the interrupt handler again */
+	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc), NULL);	/* And set the interrupt handler again */
 	return ide_started;
 }
 
@@ -408,7 +408,7 @@ static ide_startstop_t idescsi_transfer_pc (ide_drive_t *drive)
 		printk (KERN_ERR "ide-scsi: (IO,CoD) != (0,1) while issuing a packet command\n");
 		return ide_do_reset (drive);
 	}
-	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));	/* Set the interrupt routine */
+	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc), NULL);	/* Set the interrupt routine */
 	atapi_output_bytes (drive, scsi->pc->c, 12);			/* Send the actual packet */
 	return ide_started;
 }
@@ -442,7 +442,7 @@ static ide_startstop_t idescsi_issue_pc (ide_drive_t *drive, idescsi_pc_t *pc)
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 	}
 	if (test_bit (IDESCSI_DRQ_INTERRUPT, &scsi->flags)) {
-		ide_set_handler (drive, &idescsi_transfer_pc, get_timeout(pc));
+		ide_set_handler (drive, &idescsi_transfer_pc, get_timeout(pc), NULL);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
 		return ide_started;
 	} else {

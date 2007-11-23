@@ -57,10 +57,10 @@ EXPORT_SYMBOL(__global_sti);
 EXPORT_SYMBOL(__global_save_flags);
 EXPORT_SYMBOL(__global_restore_flags);
 EXPORT_SYMBOL(global_bh_lock);
+EXPORT_SYMBOL(synchronize_bh);
 EXPORT_SYMBOL(kernel_flag);
 #endif
 EXPORT_SYMBOL(kernel_thread);
-EXPORT_SYMBOL(synchronize_bh);
 EXPORT_SYMBOL(csum_fold);
 
 

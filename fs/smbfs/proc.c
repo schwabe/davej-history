@@ -12,6 +12,11 @@
  *           - don't sleep every time with win95 on a FINDNEXT
  *           - fixed loop_count bug
  *           - got rid of resume_key
+ *  Jan 2000, cpg@aladdin.de
+ *           - added posix semantics for unlink
+ *  March 2000, tridge
+ *           - removed support for old protocol levels. It didn't work anyway and 
+ *             was cluttering things up a lot. 
  */
 
 #include <linux/types.h>
@@ -34,6 +39,7 @@
 /* #define SMBFS_DEBUG_TIMESTAMP 1 */
 /* #define SMBFS_DEBUG_VERBOSE 1 */
 /* #define pr_debug printk */
+#define SMBFS_POSIX_UNLINK 1
 
 #define SMB_VWV(packet)  ((packet) + SMB_HEADER_LEN)
 #define SMB_CMD(packet)  (*(packet+8))
@@ -49,39 +55,19 @@
 
 static int smb_proc_setattr_ext(struct smb_sb_info *, struct inode *,
 				struct smb_fattr *);
-static inline int
-min(int a, int b)
-{
-	return a < b ? a : b;
-}
+static int
+smb_proc_setattr_core(struct smb_sb_info *server, struct dentry *dentry,
+		      __u16 attr);
 
-static void
-str_upper(char *name, int len)
-{
-	while (len--)
-	{
-		if (*name >= 'a' && *name <= 'z')
-			*name -= ('a' - 'A');
-		name++;
-	}
-}
+static int
+smb_proc_do_getattr(struct dentry *dir, struct smb_fattr *fattr,struct smb_sb_info *server);
 
-static void
-str_lower(char *name, int len)
-{
-	while (len--)
-	{
-		if (*name >= 'A' && *name <= 'Z')
-			*name += ('a' - 'A');
-		name++;
-	}
-}
-
+/* reverse a string inline. This is used by the dircache walking routines */
 static void reverse_string(char *buf, int len) {
 	char c;
 	char *end = buf+len-1;
 
-	while(buf < end) {
+	while (buf < end) {
 		c = *buf;
 		*(buf++) = *end;
 		*(end--) = c;
@@ -163,12 +149,7 @@ out:
 static char *smb_encode_path(struct smb_sb_info *server, char *buf,
 			     struct dentry *dir, struct qstr *name)
 {
-	char *start = buf;
-
 	buf += smb_build_path(dir, name, buf);
-
-	if (server->opt.protocol <= SMB_PROTOCOL_COREPLUS)
-		str_upper(start, buf - start);
 
 	return buf;
 }
@@ -542,7 +523,7 @@ server->conn_pid);
 	if (server->state == CONN_VALID)
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_retry: new pid=%d, generation=%d\n",
+printk(KERN_DEBUG "smb_retry: new pid=%d, generation=%d\n",
 server->conn_pid, server->generation);
 #endif
 		result = 1;
@@ -587,7 +568,7 @@ smb_request_ok(struct smb_sb_info *s, int command, int wct, int bcc)
 	if (smb_valid_packet(s->packet) != 0)
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_request_ok: invalid packet!\n");
+printk(KERN_DEBUG "smb_request_ok: invalid packet!\n");
 #endif
 		goto out;
 	}
@@ -601,7 +582,7 @@ printk("smb_request_ok: invalid packet!\n");
 	{
 		result = -smb_errno(s);
 		if (!result)
-			printk("smb_request_ok: rcls=%d, err=%d mapped to 0\n",
+			printk(KERN_DEBUG "smb_request_ok: rcls=%d, err=%d mapped to 0\n",
 				s->rcls, s->err);
 		/*
 		 * Exit now even if the error was squashed ...
@@ -630,7 +611,7 @@ smb_newconn(struct smb_sb_info *server, struct smb_conn_opt *opt)
 	int error;
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_newconn: fd=%d, pid=%d\n", opt->fd, current->pid);
+printk(KERN_DEBUG "smb_newconn: fd=%d, pid=%d\n", opt->fd, current->pid);
 #endif
 	/*
 	 * Make sure we don't already have a pid ...
@@ -643,6 +624,11 @@ printk("smb_newconn: fd=%d, pid=%d\n", opt->fd, current->pid);
 	if (current->uid != server->mnt->mounted_uid && 
 	    !capable(CAP_SYS_ADMIN))
 		goto out;
+
+	if (opt->protocol < SMB_PROTOCOL_NT1) {
+		printk(KERN_NOTICE " smbfs: protocols older than NT1 are not suppported\n");
+		goto out;
+	}
 
 	error = -EBADF;
 	filp = fget(opt->fd);
@@ -666,17 +652,16 @@ printk("smb_newconn: fd=%d, pid=%d\n", opt->fd, current->pid);
 
 	/* now that we have an established connection we can detect the server
 	   type and enable bug workarounds */
-	if (server->opt.protocol == SMB_PROTOCOL_NT1 &&
-	    (server->opt.max_xmit < 0x1000) &&
+	if ((server->opt.max_xmit < 0x1000) &&
 	    !(server->opt.capabilities & SMB_CAP_NT_SMBS)) {
 		server->mnt->version |= SMB_FIX_WIN95;
 #ifdef SMBFS_DEBUG_VERBOSE
-		printk("smb_newconn: detected WIN95 server\n");
+		printk(KERN_NOTICE "smb_newconn: detected WIN95 server\n");
 #endif
 	}
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_newconn: protocol=%d, max_xmit=%d, pid=%d capabilities=0x%x\n",
+printk(KERN_DEBUG "smb_newconn: protocol=%d, max_xmit=%d, pid=%d capabilities=0x%x\n",
        server->opt.protocol, server->opt.max_xmit, server->conn_pid,
        server->opt.capabilities);
 #endif
@@ -701,7 +686,7 @@ smb_setup_header(struct smb_sb_info * server, __u8 command, __u16 wct, __u16 bcc
 	__u8 *buf = server->packet;
 
 if (xmit_len > server->packet_size)
-printk("smb_setup_header: Aieee, xmit len > packet! len=%d, size=%d\n",
+printk(KERN_DEBUG "smb_setup_header: Aieee, xmit len > packet! len=%d, size=%d\n",
 xmit_len, server->packet_size);
 
 	p = smb_encode_smb_length(p, xmit_len - 4);
@@ -721,11 +706,8 @@ xmit_len, server->packet_size);
 	WSET(buf, smb_uid, server->opt.server_uid);
 	WSET(buf, smb_mid, 1);
 
-	if (server->opt.protocol > SMB_PROTOCOL_CORE)
-	{
-		*(buf+smb_flg) = 0x8;
-		WSET(buf, smb_flg2, 0x3);
-	}
+	*(buf+smb_flg) = 0x8;
+	WSET(buf, smb_flg2, 0x3);
 	*p++ = wct;		/* wct */
 	p += 2 * wct;
 	WSET(p, 0, bcc);
@@ -784,7 +766,7 @@ smb_proc_open(struct smb_sb_info *server, struct dentry *dentry, int wish)
 		    (error == -EACCES || error == -ETXTBSY || error == -EROFS))
 		{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_open: %s/%s R/W failed, error=%d, retrying R/O\n",
+printk(KERN_DEBUG "smb_proc_open: %s/%s R/W failed, error=%d, retrying R/O\n",
        DENTRY_PATH(dentry), error);
 #endif
 			mode = read_only;
@@ -818,7 +800,7 @@ smb_open(struct dentry *dentry, int wish)
 	result = -ENOENT;
 	if (!inode)
 	{
-		printk("smb_open: no inode for dentry %s/%s\n",
+		printk(KERN_DEBUG "smb_open: no inode for dentry %s/%s\n",
 		       DENTRY_PATH(dentry));
 		goto out;
 	}
@@ -839,7 +821,7 @@ smb_open(struct dentry *dentry, int wish)
 		if (result)
 		{
 #ifdef SMBFS_PARANOIA
-printk("smb_open: %s/%s open failed, result=%d\n",
+printk(KERN_DEBUG "smb_open: %s/%s open failed, result=%d\n",
        DENTRY_PATH(dentry), result);
 #endif
 			goto out;
@@ -858,7 +840,7 @@ printk("smb_open: %s/%s open failed, result=%d\n",
 	    inode->u.smbfs_i.access != SMB_O_RDWR)
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_open: %s/%s access denied, access=%x, wish=%x\n",
+printk(KERN_DEBUG "smb_open: %s/%s access denied, access=%x, wish=%x\n",
        DENTRY_PATH(dentry), inode->u.smbfs_i.access, wish);
 #endif
 		result = -EACCES;
@@ -911,9 +893,7 @@ smb_proc_close_inode(struct smb_sb_info *server, struct inode * ino)
 		 * If the file is open with write permissions,
 		 * update the time stamps to sync mtime and atime.
 		 */
-		if ((server->opt.protocol >= SMB_PROTOCOL_LANMAN2) &&
-		    !(ino->u.smbfs_i.access == SMB_O_RDONLY))
-		{
+		if (ino->u.smbfs_i.access != SMB_O_RDONLY) {
 			struct smb_fattr fattr;
 			smb_get_inode_attr(ino, &fattr);
 			smb_proc_setattr_ext(server, ino, &fattr);
@@ -923,11 +903,8 @@ smb_proc_close_inode(struct smb_sb_info *server, struct inode * ino)
 						ino->i_mtime);
 		ino->u.smbfs_i.cache_valid &= ~SMB_F_LOCALWRITE;
 		/*
-		 * Force a revalidation after closing ... some servers
-		 * don't post the size until the file has been closed.
+		 * Force a revalidation after closing 
 		 */
-		if (server->opt.protocol < SMB_PROTOCOL_NT1)
-			ino->u.smbfs_i.oldmtime = 0;
 		ino->u.smbfs_i.closed = jiffies;
 	}
 	return result;
@@ -974,7 +951,7 @@ smb_close_dentry(struct dentry * dentry)
 			if (dentry->d_count <= 1)
 			{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_close_dentry: closing %s/%s, count=%d\n",
+printk(KERN_DEBUG "smb_close_dentry: closing %s/%s, count=%d\n",
        DENTRY_PATH(dentry), dentry->d_count);
 #endif
 				smb_proc_close_inode(server, ino);
@@ -982,7 +959,7 @@ printk("smb_close_dentry: closing %s/%s, count=%d\n",
 			smb_unlock_server(server);
 		}
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_close_dentry: closed %s/%s, count=%d\n",
+printk(KERN_DEBUG "smb_close_dentry: closed %s/%s, count=%d\n",
        DENTRY_PATH(dentry), dentry->d_count);
 #endif
 	}
@@ -1042,7 +1019,7 @@ smb_proc_read(struct dentry *dentry, off_t offset, int count, char *data)
 
 out:
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_read: file %s/%s, count=%d, result=%d\n",
+printk(KERN_DEBUG "smb_proc_read: file %s/%s, count=%d, result=%d\n",
        DENTRY_PATH(dentry), count, result);
 #endif
 	smb_unlock_server(server);
@@ -1057,7 +1034,7 @@ smb_proc_write(struct dentry *dentry, off_t offset, int count, const char *data)
 	__u8 *p;
 
 #if SMBFS_DEBUG_VERBOSE
-printk("smb_proc_write: file %s/%s, count=%d@%ld, packet_size=%d\n",
+printk(KERN_DEBUG "smb_proc_write: file %s/%s, count=%d@%ld, packet_size=%d\n",
        DENTRY_PATH(dentry), count, offset, server->packet_size);
 #endif
 	smb_lock_server(server);
@@ -1184,11 +1161,36 @@ smb_proc_rmdir(struct dentry *dentry)
 	return smb_proc_generic_command(dentry, SMBrmdir);
 }
 
+
+/*
+ * Note: called with the server locked.
+ * removes readonly attribute from a file. Used by unlink to give posix semantics
+ */
+static int
+smb_set_rw(struct dentry *dentry,struct smb_sb_info *server)
+{
+        int result;
+        struct smb_fattr fattr;
+
+        /* first get current attribute */
+
+        result = smb_proc_do_getattr(dentry, &fattr, server);
+        if (result < 0) return result;
+
+        /* if RONLY attribute is set, remove it */
+        if (fattr.attr & aRONLY) {  /* read only attribute is set */
+                fattr.attr &= ~aRONLY;
+                result = smb_proc_setattr_core(server, dentry, fattr.attr);
+        }
+        return result;
+}
+
 int
 smb_proc_unlink(struct dentry *dentry)
 {
 	struct smb_sb_info *server = server_from_dentry(dentry);
 	char *p;
+        int flag = 0;
 	int result;
 
 	smb_lock_server(server);
@@ -1202,6 +1204,27 @@ smb_proc_unlink(struct dentry *dentry)
 
 	if ((result = smb_request_ok(server, SMBunlink, 0, 0)) < 0)
 	{
+#if SMBFS_POSIX_UNLINK
+                if (result == -EACCES && !flag) {
+			/* Posix semantics is for the read-only state
+			   of a file to be ignored in unlink(). In the
+			   SMB world a unlink() is refused on a
+			   read-only file. To make things easier for
+			   unix users we try to override the files
+			   permission if the unlink fails with the
+			   right error.
+
+			   This introduces a race condition that could
+			   lead to a file being written by someone who
+			   shouldn't have access, but as far as I can
+			   tell that is unavoidable */
+                        result = smb_set_rw(dentry,server); /* remove RONLY attribute */
+                        if (result == 0) {
+                                flag = 1;
+                                goto retry;                 /* and try again */
+                        }
+                }
+#endif
 		if (smb_retry(server))
 			goto retry;
 		goto out;
@@ -1285,178 +1308,10 @@ smb_init_root_dirent(struct smb_sb_info *server, struct smb_fattr *fattr)
 	smb_finish_dirent(server, fattr);
 }
 
-/*
- * Note that we are now returning the name as a reference to avoid
- * an extra copy, and that the upper/lower casing is done in place.
- *
- * Bugs Noted:
- * (1) Pathworks servers may pad the name with extra spaces.
- */
-static __u8 *
-smb_decode_dirent(struct smb_sb_info *server, __u8 *p, 
-			struct cache_dirent *entry)
-{
-	int len;
-
-	/*
-	 * SMB doesn't have a concept of inode numbers ...
-	 */
-	entry->ino = 0;
-
-	p += SMB_STATUS_SIZE;	/* reserved (search_status) */
-	entry->name = p + 9;
-	len = strlen(entry->name);
-	if (len > 12)
-	{
-		len = 12;
-	}
-	/*
-	 * Trim trailing blanks for Pathworks servers
-	 */
-	while (len > 2 && entry->name[len-1] == ' ')
-		len--;
-	entry->len = len;
-
-	switch (server->opt.case_handling)
-	{
-	case SMB_CASE_UPPER:
-		str_upper(entry->name, len);
-		break;
-	case SMB_CASE_LOWER:
-		str_lower(entry->name, len);
-		break;
-	default:
-		break;
-	}
-	pr_debug("smb_decode_dirent: len=%d, name=%s\n", len, entry->name);
-	return p + 22;
-}
-
-/* This routine is used to read in directory entries from the network.
-   Note that it is for short directory name seeks, i.e.: protocol <
-   SMB_PROTOCOL_LANMAN2 */
-
-static int
-smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
-		       void *cachep)
-{
-	char *p;
-	int result;
-	int i, first, entries_seen, entries;
-	int entries_asked = (server->opt.max_xmit - 100) / SMB_DIRINFO_SIZE;
-	__u16 bcc;
-	__u16 count;
-	char status[SMB_STATUS_SIZE];
-	static struct qstr mask = { "*.*", 3, 0 };
-
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_readdir_short: %s/%s, pos=%d\n",
-       DENTRY_PATH(dir), fpos);
-#endif
-
-	smb_lock_server(server);
-
-	/* N.B. We need to reinitialize the cache to restart */
-      retry:
-	smb_init_dircache(cachep);
-	first = 1;
-	entries = 0;
-	entries_seen = 2; /* implicit . and .. */
-
-	while (1)
-	{
-		p = smb_setup_header(server, SMBsearch, 2, 0);
-		WSET(server->packet, smb_vwv0, entries_asked);
-		WSET(server->packet, smb_vwv1, aDIR);
-		*p++ = 4;
-		if (first == 1)
-		{
-			p = smb_encode_path(server, p, dir, &mask);
-			*p++ = 5;
-			WSET(p, 0, 0);
-			p += 2;
-			first = 0;
-		} else
-		{
-			*p++ = 0;
-			*p++ = 5;
-			WSET(p, 0, SMB_STATUS_SIZE);
-			p += 2;
-			memcpy(p, status, SMB_STATUS_SIZE);
-			p += SMB_STATUS_SIZE;
-		}
-
-		smb_setup_bcc(server, p);
-
-		result = smb_request_ok(server, SMBsearch, 1, -1);
-		if (result < 0)
-		{
-			if ((server->rcls == ERRDOS) && 
-			    (server->err  == ERRnofiles))
-				break;
-			if (smb_retry(server))
-				goto retry;
-			goto unlock_return;
-		}
-		p = SMB_VWV(server->packet);
-		count = WVAL(p, 0);
-		if (count <= 0)
-			break;
-
-		result = -EIO;
-		bcc = WVAL(p, 2);
-		if (bcc != count * SMB_DIRINFO_SIZE + 3)
-			goto unlock_return;
-		p += 7;
-
-		/* Read the last entry into the status field. */
-		memcpy(status,
-		       SMB_BUF(server->packet) + 3 +
-		       (count - 1) * SMB_DIRINFO_SIZE,
-		       SMB_STATUS_SIZE);
-
-		/* Now we are ready to parse smb directory entries. */
-
-		for (i = 0; i < count; i++)
-		{
-			struct cache_dirent this_ent, *entry = &this_ent;
-
-			p = smb_decode_dirent(server, p, entry);
-			if (entries_seen == 2 && entry->name[0] == '.')
-			{
-				if (entry->len == 1)
-					continue;
-				if (entry->name[1] == '.' && entry->len == 2)
-					continue;
-			}
-			if (entries_seen >= fpos)
-			{
-				pr_debug("smb_proc_readdir: fpos=%u\n", 
-					entries_seen);
-				smb_add_to_cache(cachep, entry, entries_seen);
-				entries++;
-			} else
-			{
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_readdir: skipped, seen=%d, i=%d, fpos=%d\n",
-entries_seen, i, fpos);
-#endif
-			}
-			entries_seen++;
-		}
-	}
-	result = entries;
-
-    unlock_return:
-	smb_unlock_server(server);
-	return result;
-}
 
 /*
- * Interpret a long filename structure using the specified info level:
- *   level 1 for anything below NT1 protocol
- *   level 260 for NT1 protocol
- *
+ * Interpret a long filename structure using info level 260
+
  * We return a reference to the name string to avoid copying, and perform
  * any needed upper/lower casing in place.  
 
@@ -1465,7 +1320,7 @@ entries_seen, i, fpos);
  */
 static char *
 smb_decode_long_dirent(struct smb_sb_info *server, char *p,
-			struct cache_dirent *entry, int level)
+		       struct cache_dirent *entry)
 {
 	char *result;
 	unsigned int len = 0;
@@ -1475,46 +1330,18 @@ smb_decode_long_dirent(struct smb_sb_info *server, char *p,
 	 */
 	entry->ino = 0;
 
-	switch (level)
-	{
-	case 1:
-		len = *((unsigned char *) p + 22);
-		entry->len = len;
-		entry->name = p + 23;
-		result = p + 24 + len;
-		break;
-
-	case 260: /* SMB_FIND_FILE_BOTH_DIRECTORY_INFO = 0x104 */
-		result = p + WVAL(p, 0);
-		len = DVAL(p, 60);
-		if (len > 255) len = 255;
-		/* NT4 null terminates */
-		entry->name = p + 94;
-		if (len && entry->name[len-1] == '\0')
-			len--;
-		entry->len = len;
+	result = p + WVAL(p, 0);
+	len = DVAL(p, 60);
+	if (len > 255) len = 255;
+	/* NT4 null terminates */
+	entry->name = p + 94;
+	if (len && entry->name[len-1] == '\0')
+		len--;
+	entry->len = len;
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_decode_long_dirent: info 260 at %p, len=%d, name=%s\n",
-       p, entry->len, entry->name);
+	printk(KERN_DEBUG "smb_decode_long_dirent: info 260 at %p, len=%d, name=%s\n",
+	       p, entry->len, entry->name);
 #endif
-		break;
-
-	default:
-		printk("smb_decode_long_dirent: Unknown level %d\n", level);
-		result = p + WVAL(p, 0);
-	}
-
-	switch (server->opt.case_handling)
-	{
-	case SMB_CASE_UPPER:
-		str_upper(entry->name, len);
-		break;
-	case SMB_CASE_LOWER:
-		str_lower(entry->name, len);
-		break;
-	default:
-		break;
-	}
 
 	return result;
 }
@@ -1539,8 +1366,6 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 	char *p, *mask, *param = server->temp_buf;
 	__u16 command;
 	int first, entries, entries_seen;
-
-	/* Both NT and OS/2 accept info level 1 (but see note below). */
 	int info_level = 260;
 	const int max_matches = 512;
 
@@ -1555,12 +1380,6 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 	int mask_len, i, result;
 	static struct qstr star = { "*", 1, 0 };
 
-	/*
-	 * use info level 1 for older servers that don't do 260
-	 */
-	if (server->opt.protocol < SMB_PROTOCOL_NT1)
-		info_level = 1;
-
 	smb_lock_server(server);
 
       retry:
@@ -1571,7 +1390,7 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 	mask_len = smb_encode_path(server, mask, dir, &star) - mask;
 	first = 1;
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_readdir_long: starting fpos=%d, mask=%s\n", fpos, mask);
+printk(KERN_DEBUG "smb_proc_readdir_long: starting fpos=%d, mask=%s\n", fpos, mask);
 #endif
 	/*
 	 * We must reinitialize the dircache when retrying.
@@ -1609,7 +1428,7 @@ printk("smb_proc_readdir_long: starting fpos=%d, mask=%s\n", fpos, mask);
 
 			command = TRANSACT2_FINDNEXT;
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_readdir_long: handle=0x%X, mask=%s\n",
+printk(KERN_DEBUG "smb_proc_readdir_long: handle=0x%X, mask=%s\n",
 ff_dir_handle, mask);
 #endif
 			WSET(param, 0, ff_dir_handle);	/* search handle */
@@ -1630,12 +1449,12 @@ ff_dir_handle, mask);
 			if (smb_retry(server))
 			{
 #ifdef SMBFS_PARANOIA
-printk("smb_proc_readdir_long: error=%d, retrying\n", result);
+printk(KERN_DEBUG "smb_proc_readdir_long: error=%d, retrying\n", result);
 #endif
 				goto retry;
 			}
 #ifdef SMBFS_PARANOIA
-printk("smb_proc_readdir_long: error=%d, breaking\n", result);
+printk(KERN_DEBUG "smb_proc_readdir_long: error=%d, breaking\n", result);
 #endif
 			entries = result;
 			break;
@@ -1653,7 +1472,7 @@ printk("smb_proc_readdir_long: error=%d, breaking\n", result);
 		if (server->rcls != 0)
 		{ 
 #ifdef SMBFS_PARANOIA
-printk("smb_proc_readdir_long: name=%s, entries=%d, rcls=%d, err=%d\n",
+printk(KERN_DEBUG "smb_proc_readdir_long: name=%s, entries=%d, rcls=%d, err=%d\n",
 mask, entries, server->rcls, server->err);
 #endif
 			entries = -smb_errno(server);
@@ -1685,8 +1504,7 @@ mask, entries, server->rcls, server->err);
 		{
 			struct cache_dirent this_ent, *entry = &this_ent;
 
-			p = smb_decode_long_dirent(server, p, entry,
-							info_level);
+			p = smb_decode_long_dirent(server, p, entry);
 
 			/* ignore . and .. from the server */
 			if (entries_seen == 2 && entry->name[0] == '.')
@@ -1705,7 +1523,7 @@ mask, entries, server->rcls, server->err);
 		}
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_readdir_long: received %d entries, eos=%d\n",
+printk(KERN_DEBUG "smb_proc_readdir_long: received %d entries, eos=%d\n",
        ff_searchcount, ff_eos);
 #endif
 		first = 0;
@@ -1722,98 +1540,7 @@ smb_proc_readdir(struct dentry *dir, int fpos, void *cachep)
 	struct smb_sb_info *server;
 
 	server = server_from_dentry(dir);
-	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2)
-		return smb_proc_readdir_long(server, dir, fpos, cachep);
-	else
-		return smb_proc_readdir_short(server, dir, fpos, cachep);
-}
-
-/*
- * This version uses the trans2 TRANSACT2_FINDFIRST message 
- * to get the attribute data.
- * Note: called with the server locked.
- *
- * Bugs Noted:
- */
-static int
-smb_proc_getattr_ff(struct smb_sb_info *server, struct dentry *dentry,
-			struct smb_fattr *fattr)
-{
-	char *param = server->temp_buf, *mask = param + 12;
-	__u16 date, time;
-	unsigned char *resp_data = NULL;
-	unsigned char *resp_param = NULL;
-	int resp_data_len = 0;
-	int resp_param_len = 0;
-	int mask_len, result;
-
-retry:
-	mask_len = smb_encode_path(server, mask, dentry, NULL) - mask;
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_getattr_ff: name=%s, len=%d\n", mask, mask_len);
-#endif
-	WSET(param, 0, aSYSTEM | aHIDDEN | aDIR);
-	WSET(param, 2, 1);	/* max count */
-	WSET(param, 4, 1);	/* close after this call */
-	WSET(param, 6, 1);	/* info_level */
-	DSET(param, 8, 0);
-
-	result = smb_trans2_request(server, TRANSACT2_FINDFIRST,
-				    0, NULL, 12 + mask_len + 1, param,
-				    &resp_data_len, &resp_data,
-				    &resp_param_len, &resp_param);
-	if (result < 0)
-	{
-		if (smb_retry(server))
-			goto retry;
-		goto out;
-	}
-	if (server->rcls != 0)
-	{ 
-		result = -smb_errno(server);
-#ifdef SMBFS_PARANOIA
-if (result != -ENOENT)
-printk("smb_proc_getattr_ff: error for %s, rcls=%d, err=%d\n",
-mask, server->rcls, server->err);
-#endif
-		goto out;
-	}
-	/* Make sure we got enough data ... */
-	result = -EINVAL;
-	if (resp_data_len < 22 || WVAL(resp_param, 2) != 1)
-	{
-#ifdef SMBFS_PARANOIA
-printk("smb_proc_getattr_ff: bad result for %s, len=%d, count=%d\n",
-mask, resp_data_len, WVAL(resp_param, 2));
-#endif
-		goto out;
-	}
-
-	/*
-	 * Decode the response into the fattr ...
-	 */
-	date = WVAL(resp_data, 0);
-	time = WVAL(resp_data, 2);
-	fattr->f_ctime = date_dos2unix(server, date, time);
-
-	date = WVAL(resp_data, 4);
-	time = WVAL(resp_data, 6);
-	fattr->f_atime = date_dos2unix(server, date, time);
-
-	date = WVAL(resp_data, 8);
-	time = WVAL(resp_data, 10);
-	fattr->f_mtime = date_dos2unix(server, date, time);
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_getattr_ff: name=%s, date=%x, time=%x, mtime=%ld\n",
-mask, date, time, fattr->f_mtime);
-#endif
-	fattr->f_size = DVAL(resp_data, 12);
-	/* ULONG allocation size */
-	fattr->attr = WVAL(resp_data, 20);
-	result = 0;
-
-out:
-	return result;
+	return smb_proc_readdir_long(server, dir, fpos, cachep);
 }
 
 /*
@@ -1839,12 +1566,21 @@ smb_proc_getattr_core(struct smb_sb_info *server, struct dentry *dir,
 		goto out;
 	}
 	fattr->attr    = WVAL(server->packet, smb_vwv0);
-	fattr->f_mtime = local2utc(server, DVAL(server->packet, smb_vwv1));
-	fattr->f_size  = DVAL(server->packet, smb_vwv3);
-	fattr->f_ctime = fattr->f_mtime; 
+	fattr->f_ctime = local2utc(server, DVAL(server->packet, smb_vwv1));
+
+	/* uggh. If its a directory then its a ctime, otherwise its a
+	   mtime.  In order for the dircache to work with Win9X we
+	   have to set the mtime to the current time for directories */
+	if (fattr->attr & aDIR) {
+		fattr->f_mtime = CURRENT_TIME;
+	} else {
+		fattr->f_mtime = fattr->f_ctime;
+	}
+
 	fattr->f_atime = fattr->f_mtime; 
+	fattr->f_size  = DVAL(server->packet, smb_vwv3);
 #ifdef SMBFS_DEBUG_TIMESTAMP
-printk("getattr_core: %s/%s, mtime=%ld\n",
+printk(KERN_DEBUG "getattr_core: %s/%s, mtime=%ld\n",
        DENTRY_PATH(dir), fattr->f_mtime);
 #endif
 	result = 0;
@@ -1890,7 +1626,7 @@ smb_proc_getattr_trans2(struct smb_sb_info *server, struct dentry *dir,
 	if (server->rcls != 0)
 	{
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_getattr_trans2: for %s: result=%d, rcls=%d, err=%d\n",
+printk(KERN_DEBUG "smb_proc_getattr_trans2: for %s: result=%d, rcls=%d, err=%d\n",
 &param[6], result, server->rcls, server->err);
 #endif
 		result = -smb_errno(server);
@@ -1900,7 +1636,7 @@ printk("smb_proc_getattr_trans2: for %s: result=%d, rcls=%d, err=%d\n",
 	if (resp_data_len < 22)
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_proc_getattr_trans2: not enough data for %s, len=%d\n",
+printk(KERN_DEBUG "smb_proc_getattr_trans2: not enough data for %s, len=%d\n",
 &param[6], resp_data_len);
 #endif
 		goto out;
@@ -1926,7 +1662,7 @@ printk("smb_proc_getattr_trans2: not enough data for %s, len=%d\n",
 	time = WVAL(resp_data, 8 + off_time);
 	attr->f_mtime = date_dos2unix(server, date, time);
 #ifdef SMBFS_DEBUG_TIMESTAMP
-printk("getattr_trans2: %s/%s, date=%x, time=%x, mtime=%ld\n",
+printk(KERN_DEBUG "getattr_trans2: %s/%s, date=%x, time=%x, mtime=%ld\n",
        DENTRY_PATH(dir), date, time, attr->f_mtime);
 #endif
 	attr->f_size = DVAL(resp_data, 12);
@@ -1937,6 +1673,33 @@ out:
 	return result;
 }
 
+/*
+ * Note: called with the server locked.
+ *
+ * get the file attribute
+ */
+static int
+smb_proc_do_getattr(struct dentry *dir, struct smb_fattr *fattr,struct smb_sb_info *server)
+{
+	int result;
+
+	smb_init_dirent(server, fattr);
+
+	/*
+	 * Select whether to use core or trans2 getattr.
+	 * Win 95 appears to break with the trans2 getattr.
+	 */
+	if (server->mnt->version & SMB_FIX_WIN95) {
+		result = smb_proc_getattr_core(server, dir, fattr);
+	} else {
+		result = smb_proc_getattr_trans2(server, dir, fattr);
+	}
+
+	smb_finish_dirent(server, fattr);
+	return result;
+}
+
+
 int
 smb_proc_getattr(struct dentry *dir, struct smb_fattr *fattr)
 {
@@ -1944,28 +1707,7 @@ smb_proc_getattr(struct dentry *dir, struct smb_fattr *fattr)
 	int result;
 
 	smb_lock_server(server);
-	smb_init_dirent(server, fattr);
-
-	/*
-	 * Select whether to use core or trans2 getattr.
- 	 */
-	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2) {
-		/*
-		 * Win 95 appears to break with the trans2 getattr.
- 	 	 */
-		if (server->mnt->version & (SMB_FIX_OLDATTR|SMB_FIX_WIN95))
-			goto core_attr;
-		if (server->mnt->version & SMB_FIX_DIRATTR)
-			result = smb_proc_getattr_ff(server, dir, fattr);
-		else
-			result = smb_proc_getattr_trans2(server, dir, fattr);
-	} else {
-	core_attr:
-		result = smb_proc_getattr_core(server, dir, fattr);
-	}
-
-	smb_finish_dirent(server, fattr);
-
+        result = smb_proc_do_getattr(dir, fattr, server);
 	smb_unlock_server(server);
 	return result;
 }
@@ -2029,7 +1771,7 @@ smb_proc_setattr(struct dentry *dir, struct smb_fattr *fattr)
 	int result;
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_setattr: setting %s/%s, open=%d\n", 
+printk(KERN_DEBUG "smb_proc_setattr: setting %s/%s, open=%d\n", 
        DENTRY_PATH(dir), smb_is_open(dir->d_inode));
 #endif
 	smb_lock_server(server);
@@ -2062,7 +1804,7 @@ smb_proc_setattr_ext(struct smb_sb_info *server,
 	WSET(server->packet, smb_vwv5, date);
 	WSET(server->packet, smb_vwv6, time);
 #ifdef SMBFS_DEBUG_TIMESTAMP
-printk("smb_proc_setattr_ext: date=%d, time=%d, mtime=%ld\n", 
+printk(KERN_DEBUG "smb_proc_setattr_ext: date=%d, time=%d, mtime=%ld\n", 
 date, time, fattr->f_mtime);
 #endif
 
@@ -2112,7 +1854,7 @@ smb_proc_setattr_trans2(struct smb_sb_info *server,
 	WSET(data, 8, date);
 	WSET(data, 10, time);
 #ifdef SMBFS_DEBUG_TIMESTAMP
-printk("setattr_trans2: %s/%s, date=%x, time=%x, mtime=%ld\n", 
+printk(KERN_DEBUG "setattr_trans2: %s/%s, date=%x, time=%x, mtime=%ld\n", 
        DENTRY_PATH(dir), date, time, fattr->f_mtime);
 #endif
 	DSET(data, 12, 0); /* size */
@@ -2159,13 +1901,12 @@ smb_proc_settime(struct dentry *dentry, struct smb_fattr *fattr)
 	int result;
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_settime: setting %s/%s, open=%d\n", 
+printk(KERN_DEBUG "smb_proc_settime: setting %s/%s, open=%d\n", 
        DENTRY_PATH(dentry), smb_is_open(inode));
 #endif
 	smb_lock_server(server);
 	/* setting the time on a Win95 server fails (tridge) */
-	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2 && 
-	    !(server->mnt->version & SMB_FIX_WIN95))
+	if (!(server->mnt->version & SMB_FIX_WIN95))
 	{
 		if (smb_is_open(inode) &&
 		    inode->u.smbfs_i.access != SMB_O_RDONLY)

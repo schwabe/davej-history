@@ -3448,6 +3448,7 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 				unregister_sound_dsp(s->dev_audio);
 		}
 		release_region(card->iobase, 256);		
+		unregister_reboot_notifier(&maestro_nb);
 		kfree(card);
 		return 0;
 	}

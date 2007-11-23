@@ -7929,6 +7929,18 @@ CONFIG_NCPFS_EXTRAS
   To use the new attributes, it is recommended to use the flags
   '-f 600 -d 755' on the ncpmount command line.
 
+nls default codepage
+CONFIG_NLS_DEFAULT
+  The default NLS used when mounting filesystem. Currently, the valid
+  values are cp437, cp737, cp775, cp850, cp852, cp855, cp857, cp860,
+  cp861, cp862, cp863, cp864, cp865, cp866, cp869, cp874, cp932, cp936,
+  cp949, cp950, iso8859-1, iso8859-2, iso8859-3, iso8859-4, iso8859-5,
+  iso8859-6, iso8859-7, iso8859-8, iso8859-9, iso8859-15, koi8-r. 
+  If you specify a wrong value, it will use the build-in NLS; compatible
+  with iso8859-1.
+
+  If unsure, specify it as "cp437".
+
 nls codepage 437
 CONFIG_NLS_CODEPAGE_437
   The Microsoft fat filesystem family can deal with filenames in
@@ -8106,6 +8118,48 @@ CONFIG_NLS_CODEPAGE_874
   DOS/Windows partitions correctly. This does apply to the filenames
   only, not to the file contents. You can include several codepages;
   say Y here if you want to include the DOS codepage for Thai.
+
+nls codepage 932
+CONFIG_NLS_CODEPAGE_932
+  The Microsoft fat filesystem family can deal with filenames in
+  native language character sets. These character sets are stored in
+  so-called DOS codepages. You need to include the appropriate
+  codepage if you want to be able to read/write these filenames on
+  DOS/Windows partitions correctly. This does apply to the filenames
+  only, not to the file contents. You can include several codepages;
+  say Y here if you want to include the DOS codepage for Shift-JIS.
+
+nls codepage 936
+CONFIG_NLS_CODEPAGE_936
+  The Microsoft fat filesystem family can deal with filenames in
+  native language character sets. These character sets are stored in
+  so-called DOS codepages. You need to include the appropriate
+  codepage if you want to be able to read/write these filenames on
+  DOS/Windows partitions correctly. This does apply to the filenames
+  only, not to the file contents. You can include several codepages;
+  say Y here if you want to include the DOS codepage for Simplified
+  Chinese(GBK).
+
+nls codepage 949
+CONFIG_NLS_CODEPAGE_949
+  The Microsoft fat filesystem family can deal with filenames in
+  native language character sets. These character sets are stored in
+  so-called DOS codepages. You need to include the appropriate
+  codepage if you want to be able to read/write these filenames on
+  DOS/Windows partitions correctly. This does apply to the filenames
+  only, not to the file contents. You can include several codepages;
+  say Y here if you want to include the DOS codepage for UHC.
+
+nls codepage 950
+CONFIG_NLS_CODEPAGE_950
+  The Microsoft fat filesystem family can deal with filenames in
+  native language character sets. These character sets are stored in
+  so-called DOS codepages. You need to include the appropriate
+  codepage if you want to be able to read/write these filenames on
+  DOS/Windows partitions correctly. This does apply to the filenames
+  only, not to the file contents. You can include several codepages;
+  say Y here if you want to include the DOS codepage for Traditional
+  Chinese(Big5).
 
 nls iso8859-1
 CONFIG_NLS_ISO8859_1
@@ -9348,6 +9402,18 @@ CONFIG_ACQUIRE_WDT
   The module is called pscwdt.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt. Most people
   will say N.
+
+SBC-60XX Watchdog Timer
+CONFIG_60XX_WDT
+ This driver can be used with the watchdog timer found on some
+ single board computers, namely the 6010 PII based computer.
+ It may well work with other cards.  It reads port 0x443 to enable
+ and re-set the watchdog timer, and reads port 0x45 to disable
+ the watchdog.  If you have a card that behave in similar ways,
+ you can probably make this driver work with your card as well.
+
+ You can compile this driver directly into the kernel, or use
+ it as a module.  The module will be called sbc60xxwdt.o.
 
 Enhanced Real Time Clock Support
 CONFIG_RTC

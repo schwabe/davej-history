@@ -299,6 +299,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_60XX_WDT),y)
+L_OBJS += sbc60xxwdt.o
+else
+  ifeq ($(CONFIG_60XX_WDT),m)
+  M_OBJS += sbc60xxwdt.o
+  endif
+endif
+
 ifeq ($(CONFIG_MIXCOMWD),y)
 L_OBJS += mixcomwd.o
 else

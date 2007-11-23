@@ -26,15 +26,10 @@ uni16_to_x8(unsigned char *ascii, unsigned char *uni, int len,
 	op = ascii;
 
 	while ((*ip || ip[1]) && len) {
-		ch = *ip++;
-		cl = *ip++;
-
-		uni_page = nls->page_uni2charset[ch];
-		if (uni_page && uni_page[cl]) {
-			*op++ = uni_page[cl];
-		} else {
-			*op++ = '?';
-		}
+		int llen;
+		nls->uni2char(ip[0], ip[1], op, 20, &llen);
+		op += llen;
+		ip += 2;
 		len--;
 	}
 	*op = 0;

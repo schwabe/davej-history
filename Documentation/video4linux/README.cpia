@@ -55,12 +55,12 @@ CONFIG_VIDEO_CPIA=m
 CONFIG_VIDEO_CPIA_PP=m
 CONFIG_VIDEO_CPIA_PP_DMA=y
 
-For autoloading of all those modules you need to tell kerneld some
-stuff. Add the following line to your kerneld config-file
+For autoloading of all those modules you need to tell modutils some
+stuff. Add the following line to your modutils config-file
 (e.g. /etc/modules.conf or wherever your distribution does store that
 stuff):
 
-options parport_pc dma=3 irq=7
+options parport_pc io=0x378 irq=7 dma=3
 alias char-major-81 cpia_pp
 
 The first line tells the dma/irq channels to use. Those _must_ match
@@ -124,7 +124,7 @@ TESTED APPLICATIONS:
 
 - a simple test application based on Xt is available at [3]
 - another test-application based on gqcam-0.4 (uses GTK)
-- gqcam-0.5 should work
+- gqcam-0.6 should work
 - xawtv-3.x (also the webcam)
 - xawtv-2.46
 - w3cam (cgi-interface and vidcat, e.g. you may try out 'vidcat  |xv
@@ -158,7 +158,7 @@ KNOWN PROBLEMS:
 ---------------------------------------------------------------------------
 TODO:
 
-- port to linux 2.3.X
++ port to linux 2.3.X
 - using ieee1284 support in the kernel (when it works)
 - multiple camera support (struct camera or something) - This should work,
   but hasn't been tested yet.
@@ -186,12 +186,14 @@ THANKS (in no particular order):
 - Scott J. Bertin <sbertin@mindspring.com> for cleanups, the proc-filesystem
   and much more
 - Jarl Totland <Jarl.Totland@bdc.no> for setting up the mailing list 
-  and maintaining the web-server[3]
+  and maintaining the original web-server and for registering the 
+  sourceforge project[3]
 - Manuel J. Petit de Gabriel <mpetit@dit.upm.es> for providing help
   with Isabel (http://isabel.dit.upm.es/)
 - Henry Bruce <whb@vvl.co.uk> for providing developers information about
   the CPiA chip, I wish all companies would treat Linux as seriously
-- FIXME for fixes related to the 1.02 firmware
+- Chris Whiteford <Chris@informinteractive.com> for fixes related to the
+  1.02 firmware
 - special kudos to all the tester whose machines crashed and/or
   will crash. :)
 
@@ -201,4 +203,4 @@ REFERENCES
    1. http://www.risc.uni-linz.ac.at/people/ppregler
       mailto:Peter_Pregler@email.com
    2. see the file COPYING in the top directory of the kernel tree
-   3. http://home.eunet.no/~jtotland/vision/
+   3. http://webcam.sourceforge.net

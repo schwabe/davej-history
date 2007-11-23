@@ -239,8 +239,8 @@ read_next:
 		if(stat & DRQ_STAT)
 		    goto read_again;
 		if(stat & BUSY_STAT) {
-		    ide_set_handler (drive, &promise_read_intr, WAIT_CMD);
-		    return ide_started;;
+		    ide_set_handler (drive, &promise_read_intr, WAIT_CMD, NULL);
+		    return ide_started;
 		}
 		printk("Ah! promise read intr: sectors left !DRQ !BUSY\n");
 		return ide_error(drive, "promise read intr", stat);
@@ -259,7 +259,7 @@ static ide_startstop_t promise_write_pollfunc (ide_drive_t *drive)
 
         if (IN_BYTE(IDE_NSECTOR_REG) != 0) {
             if (time_before(jiffies, hwgroup->poll_timeout)) {
-                ide_set_handler (drive, &promise_write_pollfunc, 1);
+                ide_set_handler (drive, &promise_write_pollfunc, 1, NULL);
                 return ide_started; /* continue polling... */
             }
             printk("%s: write timed-out!\n",drive->name);
@@ -294,7 +294,7 @@ static ide_startstop_t promise_write (ide_drive_t *drive)
         if (ide_multwrite(drive, rq->nr_sectors - 4))
 		return ide_stopped;
         hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-        ide_set_handler (drive, &promise_write_pollfunc, 1);
+        ide_set_handler (drive, &promise_write_pollfunc, 1, NULL);
         return ide_started;
     } else {
         if (ide_multwrite(drive, rq->nr_sectors))
@@ -304,8 +304,8 @@ static ide_startstop_t promise_write (ide_drive_t *drive)
             i -= rq->current_nr_sectors;
             ide_end_request(1, hwgroup);
         }
-	return ide_stopped;
     }
+    return ide_stopped;
 }
 
 /*
@@ -319,7 +319,7 @@ ide_startstop_t do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 	byte stat;
 
 	if (rq->cmd == READ) {
-	    ide_set_handler(drive, &promise_read_intr, WAIT_CMD);
+	    ide_set_handler(drive, &promise_read_intr, WAIT_CMD, NULL);
 	    OUT_BYTE(PROMISE_READ, IDE_COMMAND_REG);
 /* The card's behaviour is odd at this point. If the data is
    available, DRQ will be true, and no interrupt will be

@@ -38,7 +38,7 @@ extern __inline__ void st_le32(volatile unsigned *addr, unsigned val)
 /* alas, egcs sounds like it has a bug in this code that doesn't use the
    inline asm correctly, and can cause file corruption. Until I hear that
    it's fixed, I can live without the extra speed. I hope. */
-#if !(__GNUC__ >= 2 && __GNUC_MINOR__ >= 90)
+#if !((__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 90))
 #if 0
 #  define __arch_swab16(x) ld_le16(&x)
 #  define __arch_swab32(x) ld_le32(&x)

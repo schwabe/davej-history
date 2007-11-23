@@ -114,9 +114,9 @@ ncp_mount_subdir(struct ncp_server* server, __u8 volNumber,
 static inline void
 io2vol(struct ncp_server *server, char *name, int case_trans)
 {
-	unsigned char nc;
+	unsigned char nc[2];
 	unsigned char *np;
-	unsigned char *up;
+	int len;
 	struct nls_unicode uc;
 	struct nls_table *nls_in;
 	struct nls_table *nls_out;
@@ -127,11 +127,10 @@ io2vol(struct ncp_server *server, char *name, int case_trans)
 
 	while (*np)
 	{
-		nc = 0;
-		uc = nls_in->charset2uni[toupperif(*np, case_trans)];
-		up = nls_out->page_uni2charset[uc.uni2];
-		if (up != NULL)	nc = up[uc.uni1];
-		if (nc != 0) *np = nc;
+		nc[0] = toupperif(*np, case_trans);
+		nc[1] = 0x00;
+		nls_in->char2uni(nc, &len, &uc.uni2, &uc.uni1);
+		nls_out->uni2char(0x00, uc.uni2, np, 1, &len);
 		np++;
 	}
 }
@@ -139,9 +138,9 @@ io2vol(struct ncp_server *server, char *name, int case_trans)
 static inline void
 vol2io(struct ncp_server *server, char *name, int case_trans)
 {
-	unsigned char nc;
+	unsigned char nc[2];
 	unsigned char *np;
-	unsigned char *up;
+	int len;
 	struct nls_unicode uc;
 	struct nls_table *nls_in;
 	struct nls_table *nls_out;
@@ -152,12 +151,11 @@ vol2io(struct ncp_server *server, char *name, int case_trans)
 
 	while (*np)
 	{
-		nc = 0;
-		uc = nls_in->charset2uni[*np];
-		up = nls_out->page_uni2charset[uc.uni2];
-		if (up != NULL)	nc = up[uc.uni1];
-		if (nc == 0) nc = *np;
-		*np = tolowerif(nc, case_trans);
+		nc[0] = *np;
+		nc[1] = 0;
+		nls_in->char2uni(nc, &len, &uc.uni2, &uc.uni1);
+		nls_out->uni2char(0x00, uc.uni2, nc, 1, &len);
+		*np = tolowerif(nc[0], case_trans);
 		np++;
 	}
 }

@@ -467,7 +467,8 @@ void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup)
  * timer is started to prevent us from waiting forever in case
  * something goes wrong (see the ide_timer_expiry() handler later on).
  */
-void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler, unsigned int timeout)
+void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler,
+		      unsigned int timeout, ide_expiry_t *expiry)
 {
 	unsigned long flags;
 	ide_hwgroup_t *hwgroup = HWGROUP(drive);
@@ -477,8 +478,9 @@ void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler, unsigned int t
 		printk("%s: ide_set_handler: handler not null; old=%p, new=%p\n",
 			drive->name, hwgroup->handler, handler);
 	}
-	hwgroup->handler       = handler;
-	hwgroup->timer.expires = jiffies + timeout;
+	hwgroup->handler	= handler;
+	hwgroup->expiry		= expiry;
+	hwgroup->timer.expires	= jiffies + timeout;
 	add_timer(&hwgroup->timer);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 }
@@ -535,7 +537,7 @@ static ide_startstop_t atapi_reset_pollfunc (ide_drive_t *drive)
 		printk("%s: ATAPI reset complete\n", drive->name);
 	} else {
 		if (0 < (signed long)(hwgroup->poll_timeout - jiffies)) {
-			ide_set_handler (drive, &atapi_reset_pollfunc, HZ/20);
+			ide_set_handler (drive, &atapi_reset_pollfunc, HZ/20, NULL);
 			return ide_started;	/* continue polling */
 		}
 		hwgroup->poll_timeout = 0;	/* end of polling */
@@ -560,7 +562,7 @@ static ide_startstop_t reset_pollfunc (ide_drive_t *drive)
 
 	if (!OK_STAT(tmp=GET_STAT(), 0, BUSY_STAT)) {
 		if (0 < (signed long)(hwgroup->poll_timeout - jiffies)) {
-			ide_set_handler (drive, &reset_pollfunc, HZ/20);
+			ide_set_handler (drive, &reset_pollfunc, HZ/20, NULL);
 			return ide_started;	/* continue polling */
 		}
 		printk("%s: reset timed-out, status=0x%02x\n", hwif->name, tmp);
@@ -642,7 +644,7 @@ static ide_startstop_t do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 		udelay (20);
 		OUT_BYTE (WIN_SRST, IDE_COMMAND_REG);
 		hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-		ide_set_handler (drive, &atapi_reset_pollfunc, HZ/20);
+		ide_set_handler (drive, &atapi_reset_pollfunc, HZ/20, NULL);
 		__restore_flags (flags);	/* local CPU only */
 		return ide_started;
 	}
@@ -668,7 +670,7 @@ static ide_startstop_t do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 	OUT_BYTE(drive->ctl|2,IDE_CONTROL_REG);	/* clear SRST, leave nIEN */
 	udelay(10);			/* more than enough time */
 	hwgroup->poll_timeout = jiffies + WAIT_WORSTCASE;
-	ide_set_handler (drive, &reset_pollfunc, HZ/20);
+	ide_set_handler (drive, &reset_pollfunc, HZ/20, NULL);
 #endif	/* OK_TO_RESET_CONTROLLER */
 
 	__restore_flags (flags);	/* local CPU only */
@@ -858,7 +860,7 @@ ide_startstop_t ide_error (ide_drive_t *drive, const char *msg, byte stat)
  */
 void ide_cmd(ide_drive_t *drive, byte cmd, byte nsect, ide_handler_t *handler)
 {
-	ide_set_handler (drive, handler, WAIT_CMD);
+	ide_set_handler (drive, handler, WAIT_CMD, NULL);
 	OUT_BYTE(drive->ctl,IDE_CONTROL_REG);	/* clear nIEN */
 	OUT_BYTE(nsect,IDE_NSECTOR_REG);
 	OUT_BYTE(cmd,IDE_COMMAND_REG);
@@ -1287,7 +1289,9 @@ void ide_timer_expiry (unsigned long data)
 {
 	ide_hwgroup_t	*hwgroup = (ide_hwgroup_t *) data;
 	ide_handler_t	*handler;
+	ide_expiry_t	*expiry;
 	unsigned long	flags;
+	unsigned long	wait;
 
 	spin_lock_irqsave(&io_request_lock, flags);
 	del_timer(&hwgroup->timer);
@@ -1306,6 +1310,7 @@ void ide_timer_expiry (unsigned long data)
 		hwgroup->handler = NULL;
 		if (!drive) {
 			printk("ide_timer_expiry: hwgroup->drive was NULL\n");
+			hwgroup->handler = NULL;
 		} else {
 			ide_hwif_t *hwif;
 			ide_startstop_t startstop;
@@ -1313,6 +1318,17 @@ void ide_timer_expiry (unsigned long data)
 				hwgroup->busy = 1;	/* paranoia */
 				printk("%s: ide_timer_expiry: hwgroup->busy was 0 ??\n", drive->name);
 			}
+			if ((expiry = hwgroup->expiry) != NULL) {
+				/* continue */
+				if ((wait = expiry(drive)) != 0) {
+					/* reset timer */
+					hwgroup->timer.expires  = jiffies + wait;
+					add_timer(&hwgroup->timer);
+					spin_unlock_irqrestore(&io_request_lock, flags);
+					return;
+				}
+			}
+			hwgroup->handler = NULL;
 			/*
 			 * We need to simulate a real interrupt when invoking the handler()
 			 * function, which means we need to globally mask the specific IRQ:

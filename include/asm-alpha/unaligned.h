@@ -31,7 +31,7 @@ struct __una_u16 { __u16 x __attribute__((packed)); };
 
 extern inline unsigned long __uldq(const unsigned long * r11)
 {
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 	const struct __una_u64 *ptr = (const struct __una_u64 *) r11;
 	return ptr->x;
 #else
@@ -50,7 +50,7 @@ extern inline unsigned long __uldq(const unsigned long * r11)
 
 extern inline unsigned long __uldl(const unsigned int * r11)
 {
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 	const struct __una_u32 *ptr = (const struct __una_u32 *) r11;
 	return ptr->x;
 #else
@@ -69,7 +69,7 @@ extern inline unsigned long __uldl(const unsigned int * r11)
 
 extern inline unsigned long __uldw(const unsigned short * r11)
 {
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 	const struct __una_u16 *ptr = (const struct __una_u16 *) r11;
 	return ptr->x;
 #else
@@ -92,7 +92,7 @@ extern inline unsigned long __uldw(const unsigned short * r11)
 
 extern inline void __ustq(unsigned long r5, unsigned long * r11)
 {
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 	struct __una_u64 *ptr = (struct __una_u64 *) r11;
 	ptr->x = r5;
 #else
@@ -117,7 +117,7 @@ extern inline void __ustq(unsigned long r5, unsigned long * r11)
 
 extern inline void __ustl(unsigned long r5, unsigned int * r11)
 {
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 	struct __una_u32 *ptr = (struct __una_u32 *) r11;
 	ptr->x = r5;
 #else
@@ -142,7 +142,7 @@ extern inline void __ustl(unsigned long r5, unsigned int * r11)
 
 extern inline void __ustw(unsigned long r5, unsigned short * r11)
 {
-#if __GNUC__ > 2 || __GNUC_MINOR__ >= 91
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 	struct __una_u16 *ptr = (struct __una_u16 *) r11;
 	ptr->x = r5;
 #else

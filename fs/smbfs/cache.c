@@ -58,9 +58,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		 */
 		for (i = 0; i < cachep->pages; i++, index++) {
 #ifdef SMBFS_PARANOIA
-if (index->block)
-printk("smb_get_dircache: cache %s/%s has existing block!\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
+			if (index->block)
+				printk(KERN_DEBUG "smb_get_dircache: cache %s/%s has existing block!\n",
+				       dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
 			offset = PAGE_SIZE + (i << PAGE_SHIFT);
 			block = (struct cache_block *) get_cached_page(inode,
@@ -182,8 +182,8 @@ entry->name, len, fpos, cachep->entries);
 		goto out_full;
 	index++;
 #ifdef SMBFS_PARANOIA
-if (index->block)
-printk("smb_add_to_cache: new index already has block!\n");
+	if (index->block)
+		printk(KERN_DEBUG "smb_add_to_cache: new index already has block!\n");
 #endif
 
 	/*
@@ -257,8 +257,8 @@ smb_refill_dircache(struct cache_head * cachep, struct dentry *dentry)
 	int result;
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_refill_dircache: cache %s/%s, blocks=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, cachep->pages);
+	printk(KERN_DEBUG "smb_refill_dircache: cache %s/%s, blocks=%d\n",
+	       dentry->d_parent->d_name.name, dentry->d_name.name, cachep->pages);
 #endif
 	/*
 	 * Fill the cache, starting at position 2.
@@ -269,7 +269,7 @@ retry:
 	if (result < 0)
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_refill_dircache: readdir failed, result=%d\n", result);
+		printk(KERN_DEBUG "smb_refill_dircache: readdir failed, result=%d\n", result);
 #endif
 		goto out;
 	}
@@ -281,7 +281,7 @@ printk("smb_refill_dircache: readdir failed, result=%d\n", result);
 	if (!(inode->u.smbfs_i.cache_valid & SMB_F_CACHEVALID))
 	{
 #ifdef SMBFS_PARANOIA
-printk("smb_refill_dircache: cache invalidated, retrying\n");
+		printk(KERN_DEBUG "smb_refill_dircache: cache invalidated, retrying\n");
 #endif
 		goto retry;
 	}
@@ -290,6 +290,7 @@ printk("smb_refill_dircache: cache invalidated, retrying\n");
 	if (!result)
 	{
 		cachep->valid = 1;
+		cachep->mtime = dentry->d_inode->i_mtime;
 	}
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_refill_cache: cache %s/%s status=%d, entries=%d\n",

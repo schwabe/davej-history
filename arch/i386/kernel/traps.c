@@ -162,33 +162,41 @@ static void show_registers(struct pt_regs *regs)
 			printk("%08lx ", *stack++);
 		}
 		printk("\nCall Trace: ");
-		stack = (unsigned long *) esp;
-		i = 1;
-		module_start = PAGE_OFFSET + (max_mapnr << PAGE_SHIFT);
-		module_start = ((module_start + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
-		module_end = module_start + MODULE_RANGE;
-		while (((long) stack & 4095) != 0) {
-			addr = *stack++;
-			/*
-			 * If the address is either in the text segment of the
-			 * kernel, or in the region which contains vmalloc'ed
-			 * memory, it *may* be the address of a calling
-			 * routine; if so, print it so that someone tracing
-			 * down the cause of the crash will be able to figure
-			 * out the call path that was taken.
-			 */
-			if (((addr >= (unsigned long) &_stext) &&
-			     (addr <= (unsigned long) &_etext)) ||
-			    ((addr >= module_start) && (addr <= module_end))) {
-				if (i && ((i % 8) == 0))
-					printk("\n       ");
-				printk("[<%08lx>] ", addr);
-				i++;
+		if (!esp || (esp & 3))
+			printk("<INVALID ESP!>");
+		else {
+			stack = (unsigned long *) esp;
+			i = 1;
+			module_start = PAGE_OFFSET + (max_mapnr << PAGE_SHIFT);
+			module_start = ((module_start + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1));
+			module_end = module_start + MODULE_RANGE;
+			while (((long) stack & 4095) != 0) {
+				addr = *stack++;
+				/*
+				 * If the address is either in the text segment of the
+				 * kernel, or in the region which contains vmalloc'ed
+				 * memory, it *may* be the address of a calling
+				 * routine; if so, print it so that someone tracing
+				 * down the cause of the crash will be able to figure
+				 * out the call path that was taken.
+				 */
+				if (((addr >= (unsigned long) &_stext) &&
+				     (addr <= (unsigned long) &_etext)) ||
+				    ((addr >= module_start) && (addr <= module_end))) {
+					if (i && ((i % 8) == 0))
+						printk("\n       ");
+					printk("[<%08lx>] ", addr);
+					i++;
+				}
 			}
 		}
 		printk("\nCode: ");
-		for(i=0;i<20;i++)
+		if (!regs->eip || regs->eip==-1)
+			printk("<INVALID EIP!>");
+		else {
+			for(i=0;i<20;i++)
 			printk("%02x ", ((unsigned char *)regs->eip)[i]);
+		}
 	}
 	printk("\n");
 }	

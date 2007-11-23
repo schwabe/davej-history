@@ -198,9 +198,13 @@ proc_file_lseek(struct file * file, long long offset, int orig)
 {
     switch (orig) {
     case 0:
+	if (offset < 0)
+	    return -EINVAL;    
 	file->f_pos = offset;
 	return(file->f_pos);
     case 1:
+	if (offset + file->f_pos < 0)
+	    return -EINVAL;    
 	file->f_pos += offset;
 	return(file->f_pos);
     case 2:

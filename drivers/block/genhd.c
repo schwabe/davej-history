@@ -165,14 +165,6 @@ static inline int is_extended_partition(struct partition *p)
 		SYS_IND(p) == LINUX_EXTENDED_PARTITION);
 }
 
-static int sector_partition_scale(kdev_t dev)
-{
-       if (hardsect_size[MAJOR(dev)] != NULL)
-               return (hardsect_size[MAJOR(dev)][MINOR(dev)]/512);
-       else
-               return (1);
-}
-
 static unsigned int get_ptable_blocksize(kdev_t dev)
 {
 	int ret = 1024;
@@ -234,13 +226,12 @@ static unsigned int get_ptable_blocksize(kdev_t dev)
 
 #define MSDOS_LABEL_MAGIC		0xAA55
 
-static void extended_partition(struct gendisk *hd, kdev_t dev)
+static void extended_partition(struct gendisk *hd, kdev_t dev, int sector_size)
 {
 	struct buffer_head *bh;
 	struct partition *p;
 	unsigned long first_sector, first_size, this_sector, this_size;
 	int mask = (1 << hd->minor_shift) - 1;
-	int sector_size = sector_partition_scale(dev);
 	int i;
 
 	first_sector = hd->part[MINOR(dev)].start_sect;
@@ -486,7 +477,8 @@ static int msdos_partition(struct gendisk *hd, kdev_t dev, unsigned long first_s
 	struct partition *p;
 	unsigned char *data;
 	int mask = (1 << hd->minor_shift) - 1;
-	int sector_size = sector_partition_scale(dev);
+	int sector_size;
+        int disk_number_of_sects;
 #ifdef CONFIG_BSD_DISKLABEL
 	/* no bsd disklabel as a default */
 	kdev_t bsd_kdev = 0;
@@ -501,6 +493,15 @@ read_mbr:
 		printk(" unable to read partition table\n");
 		return -1;
 	}
+
+	/* in some cases (backwards compatibility) we'll adjust the
+         * sector_size below
+         */
+        if (hardsect_size[MAJOR(dev)] != NULL)
+               sector_size=hardsect_size[MAJOR(dev)][MINOR(dev)]/512;
+        else
+               sector_size=1;
+
 	data = bh->b_data;
 	/* In some cases we modify the geometry    */
 	/*  of the drive (below), so ensure that   */
@@ -585,6 +586,35 @@ check_table:
 	}
 #endif	/* CONFIG_BLK_DEV_IDE */
 
+	/*
+         * The Linux code now honours the rules the MO people set and
+         * is 'DOS compatible' - sizes are scaled by the media block
+	 * size not 512 bytes. The following is a backwards
+	 * compatibility check. If a 1k or greater sectorsize disk
+	 * (1024, 2048, etc) was created under a pre 2.2 kernel,
+	 * the partition table wrongly used units of 512 instead of
+         * units of sectorsize (1024, 2048, etc.) The below check attempts
+         * to detect a partition table created under the older kernel, and
+         * if so detected, it will reset the a sector scale factor to 1 (i.e.
+         * no scaling).
+	 */
+        disk_number_of_sects = NR_SECTS((&hd->part[MINOR(dev)]));
+	for (i = 0; i < 4; i++) {
+		struct partition *q = &p[i];
+		if (NR_SECTS(q)) {
+		        if (((first_sector+(START_SECT(q)+NR_SECTS(q))*sector_size) >
+                             (disk_number_of_sects+1)) &&
+		            ((first_sector+(START_SECT(q)+NR_SECTS(q)) <=
+                             disk_number_of_sects))) {
+	                        char buf[MAX_DISKNAME_LEN];
+	                        printk(" %s: RESETTINGING SECTOR SCALE from %d to 1",
+                                       disk_name(hd, MINOR(dev), buf), sector_size);
+		                sector_size=1;
+                                break;
+		        }
+		}
+	}
+
 	current_minor += 4;  /* first "extra" minor (for extended partitions) */
 	for (i=1 ; i<=4 ; minor++,i++,p++) {
 		if (!NR_SECTS(p))
@@ -601,7 +631,7 @@ check_table:
 			 */
 			hd->sizes[minor] = hd->part[minor].nr_sects 
 			  	>> (BLOCK_SIZE_BITS - 9);
-			extended_partition(hd, MKDEV(hd->major, minor));
+			extended_partition(hd, MKDEV(hd->major, minor), sector_size);
 			printk(" >");
 			/* prevent someone doing mkfs or mkswap on an
 			   extended partition, but leave room for LILO */
