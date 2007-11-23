@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.18.2.2 1999/08/09 21:07:41 ecd Exp $
+/* $Id: floppy.h,v 1.18.2.3 2000/01/09 18:29:32 ecd Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -574,7 +574,6 @@ __initfunc(static unsigned long sun_floppy_init(void))
 		struct linux_ebus_device *edev = 0;
 		unsigned long config = 0;
 		unsigned long auxio_reg;
-		unsigned char cfg;
 
 		for_each_ebus(ebus) {
 			for_each_ebusdev(edev, ebus) {
@@ -678,9 +677,7 @@ __initfunc(static unsigned long sun_floppy_init(void))
 			return sun_floppy_types[0];
 
 		/* Enable PC-AT mode. */
-		cfg = ns87303_readb(config, ASC);
-		cfg |= 0xc0;
-		ns87303_writeb(config, ASC, cfg);
+		ns87303_modify(config, ASC, 0, 0xc0);
 
 #ifdef PCI_FDC_SWAP_DRIVES
 		/*
@@ -691,15 +688,9 @@ __initfunc(static unsigned long sun_floppy_init(void))
 			 * Set the drive exchange bit in FCR on NS87303,
 			 * make shure other bits are sane before doing so.
 			 */
-			cfg = ns87303_readb(config, FER);
-			cfg &= ~(FER_EDM);
-			ns87303_writeb(config, FER, cfg);
-			cfg = ns87303_readb(config, ASC);
-			cfg &= ~(ASC_DRV2_SEL);
-			ns87303_writeb(config, ASC, cfg);
-			cfg = ns87303_readb(config, FCR);
-			cfg |= FCR_LDE;
-			ns87303_writeb(config, FCR, cfg);
+			ns87303_modify(config, FER, FER_EDM, 0);
+			ns87303_modify(config, ASC, ASC_DRV2_SEL, 0);
+			ns87303_modify(config, FCR, 0, FCR_LDE);
 
 			cfg = sun_floppy_types[0];
 			sun_floppy_types[0] = sun_floppy_types[1];

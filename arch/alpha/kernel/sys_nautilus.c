@@ -30,6 +30,7 @@
 #include <linux/pci.h>
 #include <linux/init.h>
 #include <linux/reboot.h>
+#include <linux/mc146818rtc.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>

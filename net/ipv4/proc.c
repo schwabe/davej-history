@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.34 1999/02/08 11:20:34 davem Exp $
+ * Version:	$Id: proc.c,v 1.34.2.1 2000/01/14 01:22:20 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -78,7 +78,7 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 {
 	unsigned long  dest, src;
 	unsigned short destp, srcp;
-	int timer_active, timer_active1, timer_active2;
+	int timer_active;
 	int tw_bucket = 0;
 	unsigned long timer_expires;
 	struct tcp_opt *tp = &sp->tp_pinfo.af_tcp;
@@ -105,27 +105,29 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 		int slot_dist;
 
 		tw_bucket	= 1;
-		timer_active1	= timer_active2 = 0;
 		timer_active	= 3;
 		slot_dist	= tw->death_slot;
-		if(slot_dist > tcp_tw_death_row_slot)
-			slot_dist = (TCP_TWKILL_SLOTS - slot_dist) + tcp_tw_death_row_slot;
+		if(slot_dist >= tcp_tw_death_row_slot)
+			slot_dist = slot_dist - tcp_tw_death_row_slot;
 		else
-			slot_dist = tcp_tw_death_row_slot - slot_dist;
+			slot_dist = (TCP_TWKILL_SLOTS - tcp_tw_death_row_slot) + slot_dist;
 		timer_expires	= jiffies + (slot_dist * TCP_TWKILL_PERIOD);
 	} else {
-		timer_active1 = del_timer(&tp->retransmit_timer);
-		timer_active2 = del_timer(&sp->timer);
-		if (!timer_active1) tp->retransmit_timer.expires=0;
-		if (!timer_active2) sp->timer.expires=0;
 		timer_active	= 0;
 		timer_expires	= (unsigned) -1;
 	}
-	if (timer_active1 && tp->retransmit_timer.expires < timer_expires) {
+	if (tp->retransmit_timer.prev != NULL &&
+	    tp->retransmit_timer.expires < timer_expires) {
 		timer_active	= 1;
 		timer_expires	= tp->retransmit_timer.expires;
 	}
-	if (timer_active2 && sp->timer.expires < timer_expires) {
+	if (tp->probe_timer.prev != NULL &&
+	    tp->probe_timer.expires < timer_expires) {
+		timer_active	= 4;
+		timer_expires	= tp->probe_timer.expires;
+	}
+	if (sp->timer.prev != NULL &&
+	    sp->timer.expires < timer_expires) {
 		timer_active	= 2;
 		timer_expires	= sp->timer.expires;
 	}
@@ -147,9 +149,6 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 		(!tw_bucket && sp->socket) ? sp->socket->inode->i_uid : 0,
 		(!tw_bucket && timer_active) ? sp->timeout : 0,
 		(!tw_bucket && sp->socket) ? sp->socket->inode->i_ino : 0);
-	
-	if (timer_active1) add_timer(&tp->retransmit_timer);
-	if (timer_active2) add_timer(&sp->timer);	
 }
 
 /*

@@ -20,6 +20,11 @@
 		http://cesdis.gsfc.nasa.gov/linux/misc/modules.html
 	There is a Majordomo mailing list based at
 		linux-eepro100@cesdis.gsfc.nasa.gov
+	
+	This driver also contains updates by Andrey Savochkin and others.
+	For this specific driver variant please use linux-kernel for 
+	bug reports.
+
 */
 
 static const char *version =

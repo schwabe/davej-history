@@ -740,11 +740,11 @@ sys_rt_sigtimedwait(const sigset_t *uthese, siginfo_t *uinfo,
 
 	if (copy_from_user(&these, uthese, sizeof(these)))
 		return -EFAULT;
-	else {
-		/* Invert the set of allowed signals to get those we
-		   want to block.  */
-		signotset(&these);
-	}
+	/* Invert the set of allowed signals to get those we
+	   want to block.  */
+
+	sigdelsetmask (&these, sigmask(SIGKILL)|sigmask(SIGSTOP));
+	signotset(&these);
 
 	if (uts) {
 		if (copy_from_user(&ts, uts, sizeof(ts)))

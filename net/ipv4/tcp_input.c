@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.164.2.8 1999/09/23 19:21:23 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164.2.11 2000/01/13 04:27:59 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -270,10 +270,12 @@ extern __inline__ int tcp_sequence(struct tcp_opt *tp, u32 seq, u32 end_seq)
 /* When we get a reset we do this. */
 static void tcp_reset(struct sock *sk)
 {
+	unsigned char orig_state = sk->state;
+
 	sk->zapped = 1;
 
 	/* We want the right error as BSD sees it (and indeed as we do). */
-	switch (sk->state) {
+	switch (orig_state) {
 		case TCP_SYN_SENT:
 			sk->err = ECONNREFUSED;
 			break;
@@ -284,6 +286,16 @@ static void tcp_reset(struct sock *sk)
 			sk->err = ECONNRESET;
 	};
 	tcp_set_state(sk, TCP_CLOSE);
+	if (orig_state == TCP_SYN_SENT) {
+		/* Back out identity changes done by connect.
+		 * The move to TCP_CLOSE has unhashed us and
+		 * killed the bind bucket reference, making this
+		 * safe. -DaveM
+		 */
+		sk->dport = 0;
+		sk->daddr = 0;
+		sk->num = 0;
+	}
 	sk->shutdown = SHUTDOWN_MASK;
 	if (!sk->dead) 
 		sk->state_change(sk);
@@ -988,7 +1000,7 @@ tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 	}
 
 	/* Check RST or SYN */
-	if(th->rst || th->syn) {
+	if(th->rst) {
 		/* This is TIME_WAIT assasination, in two flavors.
 		 * Oh well... nobody has a sufficient solution to this
 		 * protocol bug yet.
@@ -997,8 +1009,6 @@ tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 			tcp_tw_deschedule(tw);
 			tcp_timewait_kill(tw);
 		}
-		if(!th->rst)
-			return TCP_TW_RST; /* toss a reset back */
 		return 0;
 	} else {
 		/* In this case we must reset the TIMEWAIT timer. */
@@ -1129,11 +1139,6 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 
 	tcp_send_ack(sk);
 
-	if (!sk->dead) {
-		sk->state_change(sk);
-		sock_wake_async(sk->socket, 1);
-	}
-
 	switch(sk->state) {
 		case TCP_SYN_RECV:
 		case TCP_ESTABLISHED:
@@ -1177,6 +1182,11 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			printk("tcp_fin: Impossible, sk->state=%d\n", sk->state);
 			break;
 	};
+
+	if (!sk->dead) {
+		sk->state_change(sk);
+		sock_wake_async(sk->socket, 1);
+	}
 }
 
 /* These routines update the SACK block as out-of-order packets arrive or

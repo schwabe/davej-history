@@ -114,13 +114,13 @@ if [ "$CONFIG_NET" = "y" ]; then
 #			bool '   AX.25 DAMA Master support' CONFIG_AX25_DAMA_MASTER
 			dep_tristate '   Amateur Radio NET/ROM protocol' CONFIG_NETROM $CONFIG_AX25
 			dep_tristate '   Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
+
+			comment 'AX.25 network device drivers'
+			dep_tristate 'Serial port KISS driver' CONFIG_MKISS $CONFIG_AX25
+			dep_tristate 'Serial port 6PACK driver' CONFIG_6PACK $CONFIG_AX25
 		fi
 	fi
-	if [ "$CONFIG_AX25" != "n" ]; then
-		comment 'AX.25 network device drivers'
-		dep_tristate 'Serial port KISS driver' CONFIG_MKISS $CONFIG_AX25
-		dep_tristate 'Serial port 6PACK driver' CONFIG_6PACK $CONFIG_AX25
-	fi
+
 	endmenu
 fi
 
@@ -158,7 +158,7 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 	mainmenu_option next_comment
 	comment 'SCSI low-level drivers'
 
-	bool 'Sparc ESP Scsi Driver' CONFIG_SCSI_SUNESP $CONFIG_SCSI
+	tristate 'Sparc ESP Scsi Driver' CONFIG_SCSI_SUNESP $CONFIG_SCSI
 	tristate 'PTI Qlogic,ISP Driver' CONFIG_SCSI_QLOGICPTI $CONFIG_SCSI
 	endmenu
 fi

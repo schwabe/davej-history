@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.19 1998/08/23 05:41:46 ecd Exp $ */
+/* $Id: io.h,v 1.19.2.1 2000/01/14 03:55:36 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -120,12 +120,66 @@ extern void insw(unsigned long addr, void *dst, unsigned long count);
 extern void insl(unsigned long addr, void *dst, unsigned long count);
 
 /* Memory functions, same as I/O accesses on Ultra. */
-#define readb(addr)		inb((unsigned long)(addr))
-#define readw(addr)		inw((unsigned long)(addr))
-#define readl(addr)		inl((unsigned long)(addr))
-#define writeb(b, addr)		outb((b), (unsigned long)(addr))
-#define writew(w, addr)		outw((w), (unsigned long)(addr))
-#define writel(l, addr)		outl((l), (unsigned long)(addr))
+extern __inline__ unsigned int _readb(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduba [%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PL));
+
+	return ret;
+}
+
+extern __inline__ unsigned int _readw(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduha [%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PL));
+
+	return ret;
+}
+
+extern __inline__ unsigned int _readl(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduwa [%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PL));
+
+	return ret;
+}
+
+extern __inline__ void _writeb(unsigned char b, unsigned long addr)
+{
+	__asm__ __volatile__("stba %0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (b), "r" (addr), "i" (ASI_PL));
+}
+
+extern __inline__ void _writew(unsigned short w, unsigned long addr)
+{
+	__asm__ __volatile__("stha %0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (w), "r" (addr), "i" (ASI_PL));
+}
+
+extern __inline__ void _writel(unsigned int l, unsigned long addr)
+{
+	__asm__ __volatile__("stwa %0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (l), "r" (addr), "i" (ASI_PL));
+}
+
+#define readb(addr)		_readb((unsigned long)(addr))
+#define readw(addr)		_readw((unsigned long)(addr))
+#define readl(addr)		_readl((unsigned long)(addr))
+#define writeb(b, addr)		_writeb((b), (unsigned long)(addr))
+#define writew(w, addr)		_writew((w), (unsigned long)(addr))
+#define writel(l, addr)		_writel((l), (unsigned long)(addr))
 
 /*
  * Memcpy to/from I/O space is just a regular memory operation on

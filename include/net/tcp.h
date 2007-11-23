@@ -777,10 +777,16 @@ static __inline__ int tcp_packets_in_flight(struct tcp_opt *tp)
 	return tp->packets_out - tp->fackets_out + tp->retrans_out;
 }
 
+/* Is SKB at the tail of the write queue? */
+static __inline__ int tcp_skb_is_last(struct sock *sk, struct sk_buff *skb)
+{
+	return (skb->next == (struct sk_buff*)&sk->write_queue);
+}
+
 /* This checks if the data bearing packet SKB (usually tp->send_head)
  * should be put on the wire right now.
  */
-static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
+static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb, int tail)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	int nagle_check = 1;
@@ -796,20 +802,26 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 	 *	c) We are retransmiting [Nagle]
 	 *	d) We have too many packets 'in flight'
 	 *
-	 * 	Don't use the nagle rule for urgent data (or
-	 *	for the final FIN -DaveM).
+	 * 	FIN overrides nagle, even for the TCP_CORK
+	 *	case. -DaveM
+	 *
+	 *	Also, Nagle rule does not apply to frames, which
+	 *	sit in the middle of queue (they have no chances
+	 *	to get new data) and if room at tail of skb is
+	 *	not enough to save something seriously (<32 for now).
 	 */
-	if ((sk->nonagle == 2 && (skb->len < tp->mss_cache)) ||
-	    (!sk->nonagle &&
-	     skb->len < (tp->mss_cache >> 1) &&
-	     tp->packets_out &&
-	     !(TCP_SKB_CB(skb)->flags & (TCPCB_FLAG_URG|TCPCB_FLAG_FIN))))
-		nagle_check = 0;
+	if (!(TCP_SKB_CB(skb)->flags & (TCPCB_FLAG_URG|TCPCB_FLAG_FIN))) {
+		if ((sk->nonagle == 2 && (skb->len < tp->mss_cache)) ||
+		    (!sk->nonagle &&
+		     skb->len < (tp->mss_cache >> 1) &&
+		     tp->packets_out))
+			nagle_check = 0;
+	}
 
 	/* Don't be strict about the congestion window for the
 	 * final FIN frame.  -DaveM
 	 */
-	return (nagle_check &&
+	return ((!tail || nagle_check || skb_tailroom(skb) < 32) &&
 		((tcp_packets_in_flight(tp) < tp->snd_cwnd) ||
 		 (TCP_SKB_CB(skb)->flags & TCPCB_FLAG_FIN)) &&
 		!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una + tp->snd_wnd) &&
@@ -822,8 +834,10 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
  */
 static __inline__ void tcp_push_pending_frames(struct sock *sk, struct tcp_opt *tp)
 {
-	if(tp->send_head) {
-		if(tcp_snd_test(sk, tp->send_head))
+	struct sk_buff *skb = tp->send_head;
+
+	if(skb) {
+		if(tcp_snd_test(sk, skb, tcp_skb_is_last(sk, skb)))
 			tcp_write_xmit(sk);
 		else if(tp->packets_out == 0 && !tp->pending) {
 			/* We held off on this in tcp_send_skb() */

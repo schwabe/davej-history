@@ -861,12 +861,12 @@ static struct dentry *lookup_by_inode(struct dentry *parent, ino_t ino)
 	dirent.ino = ino;
 	error = get_parent_ino(parent, &dirent);
 	if (error) {
-#ifdef NFSD_PARANOIA
+#ifdef NFSD_PARANOIA_EXTREME
 printk("lookup_by_inode: ino %ld not found in %s\n", ino, parent->d_name.name);
 #endif
 		goto no_entry;
 	}
-#ifdef NFSD_PARANOIA
+#ifdef NFSD_PARANOIA_EXTREME
 printk("lookup_by_inode: found %s\n", dirent.name);
 #endif
 
@@ -874,13 +874,13 @@ printk("lookup_by_inode: found %s\n", dirent.name);
 	if (!IS_ERR(dentry)) {
 		if (dentry->d_inode && dentry->d_inode->i_ino == ino)
 			goto out;
-#ifdef NFSD_PARANOIA
+#ifdef NFSD_PARANOIA_EXTREME
 printk("lookup_by_inode: %s/%s inode mismatch??\n",
 parent->d_name.name, dentry->d_name.name);
 #endif
 		dput(dentry);
 	} else {
-#ifdef NFSD_PARANOIA
+#ifdef NFSD_PARANOIA_EXTREME
 printk("lookup_by_inode: %s lookup failed, error=%ld\n",
 dirent.name, PTR_ERR(dentry));
 #endif
@@ -1091,7 +1091,7 @@ out_five:
 	/*
 	 * Stage 5: Search the whole volume, Yea Right.
 	 */
-#ifdef NFSD_PARANOIA
+#ifdef NFSD_PARANOIA_EXTREME
 printk("find_fh_dentry: %s/%u dir/%u not found!\n",
        kdevname(u32_to_kdev_t(fh->fh_dev)), fh->fh_ino, fh->fh_dirino);
 #endif

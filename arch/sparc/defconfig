@@ -146,6 +146,11 @@ CONFIG_ATALK=m
 # CONFIG_NET_SCHED is not set
 
 #
+# Amateur Radio support
+#
+# CONFIG_HAMRADIO is not set
+
+#
 # ISDN subsystem
 #
 # CONFIG_ISDN is not set

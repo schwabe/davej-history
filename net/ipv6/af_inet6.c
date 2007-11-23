@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.43.2.1 1999/06/20 20:15:06 davem Exp $
+ *	$Id: af_inet6.c,v 1.43.2.2 2000/01/13 04:28:23 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -243,6 +243,7 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if(sk->prot->get_port(sk, snum) != 0)
 		return -EADDRINUSE;
 
+	sk->zapped = 0;
 	sk->sport = ntohs(sk->num);
 	sk->dport = 0;
 	sk->daddr = 0;

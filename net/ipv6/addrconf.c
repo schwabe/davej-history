@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.48.2.1 1999/06/28 10:39:39 davem Exp $
+ *	$Id: addrconf.c,v 1.48.2.2 1999/12/14 10:32:53 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License

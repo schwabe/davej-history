@@ -39,6 +39,8 @@
 #include <asm/idprom.h>
 #include <asm/spinlock.h>
 
+#include <linux/module.h>
+
 #define DEBUG_ESP
 /* #define DEBUG_ESP_HME */
 /* #define DEBUG_ESP_DATA */
@@ -4313,3 +4315,11 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 #endif
+
+#ifdef MODULE
+Scsi_Host_Template driver_template = SCSI_SPARC_ESP;
+
+#include "scsi_module.c"
+
+EXPORT_NO_SYMBOLS;
+#endif /* MODULE */

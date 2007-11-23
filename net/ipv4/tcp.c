@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.140.2.5 1999/09/23 19:21:16 davem Exp $
+ * Version:	$Id: tcp.c,v 1.140.2.7 2000/01/13 23:44:00 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1448,12 +1448,11 @@ void tcp_shutdown(struct sock *sk, int how)
 		return;
 
 	/* If we've already sent a FIN, or it's a closed state, skip this. */
-	if ((1 << sk->state) &
-	    (TCPF_ESTABLISHED|TCPF_SYN_SENT|TCPF_SYN_RECV|TCPF_CLOSE_WAIT)) {
+	if ((1 << sk->state) & (TCPF_ESTABLISHED|TCPF_SYN_RECV|TCPF_SYN_SENT)) {
 		lock_sock(sk);
 
 		/* Clear out any half completed packets.  FIN if needed. */
-		if (tcp_close_state(sk,0))
+		if (tcp_close_state(sk,sk->state == TCP_CLOSE_WAIT))
 			tcp_send_fin(sk);
 
 		release_sock(sk);

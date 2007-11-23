@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.87.2.5 1999/08/08 08:43:10 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.87.2.6 2000/01/13 04:28:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -309,6 +309,7 @@ int inet_listen(struct socket *sock, int backlog)
 				((struct tcp_bind_bucket*)sk->prev)->fastreuse = 0;
 		}
 
+		sk->zapped = 0;
 		dst_release(xchg(&sk->dst_cache, NULL));
 		sk->prot->hash(sk);
 		sk->socket->flags |= SO_ACCEPTCON;
@@ -546,6 +547,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (sk->prot->get_port(sk, snum) != 0)
 		return -EADDRINUSE;
 
+	sk->zapped = 0;
 	sk->sport = htons(sk->num);
 	sk->daddr = 0;
 	sk->dport = 0;
@@ -626,6 +628,7 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 		if (inet_autobind(sk) != 0)
 			return(-EAGAIN);
 
+		sk->zapped = 0;
 		err = sk->prot->connect(sk, uaddr, addr_len);
 		/* Note: there is a theoretical race here when an wake up
 		   occurred before inet_wait_for_connect is entered. In 2.3

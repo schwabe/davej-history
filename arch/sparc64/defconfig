@@ -176,6 +176,11 @@ CONFIG_ATALK=m
 # CONFIG_NET_SCHED is not set
 
 #
+# Amateur Radio support
+#
+# CONFIG_HAMRADIO is not set
+
+#
 # SCSI support
 #
 CONFIG_SCSI=y

@@ -1,6 +1,6 @@
 /* epic100.c: A SMC 83c170 EPIC/100 Fast Ethernet driver for Linux. */
 /*
-	Written/copyright 1997-1998 by Donald Becker.
+	Written/copyright 1997-1999 by Donald Becker.
 
 	This software may be used and distributed according to the terms
 	of the GNU Public License, incorporated herein by reference.
@@ -18,10 +18,26 @@
 */
 
 static const char *version =
-"epic100.c:v1.04 8/23/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/epic100.html\n";
+"epic100.c:v1.07h 8/18/99 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/epic100.html\n";
 
-/* A few user-configurable values. */
+/* User-tunable values. */
 
+static int debug = 1;
+#define epic_debug debug
+
+/* Used to pass the full-duplex flag, etc. */
+#define MAX_UNITS 8
+static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
+static int options[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
+
+/* Set the copy breakpoint for the copy-only-tiny-frames scheme.
+   Setting to > 1518 effectively disables this feature. */
+static int rx_copybreak = 200;
+
+/* Maximum events (Rx packets, etc.) to handle at each interrupt. */
+static int max_interrupt_work = 32;
+
+/* Operational parameters that usually are not changed. */
 /* Keep the ring sizes a power of two for efficiency.
    Making the Tx ring too large decreases the effectiveness of channel
    bonding and packet priority.
@@ -29,33 +45,19 @@ static const char *version =
 #define TX_RING_SIZE	16
 #define RX_RING_SIZE	32
 
-/* Set the copy breakpoint for the copy-only-tiny-frames scheme.
-   Setting to > 1518 effectively disables this feature. */
-static int rx_copybreak = 200;
-
-/* Maximum events (Rx packets, etc.) to handle at each interrupt. */
-static int max_interrupt_work = 10;
-
-/* Operational parameters that usually are not changed. */
 /* Time in jiffies before concluding the transmitter is hung. */
-#define TX_TIMEOUT  ((2000*HZ)/1000)
+#define TX_TIMEOUT  (2*HZ)
 
 #define PKT_BUF_SZ		1536			/* Size of each temporary Rx buffer.*/
 
 /* Bytes transferred to chip before transmission starts. */
-#define TX_FIFO_THRESH 256		/* Rounded down to 4 byte units. */
+/* Initial threshold, increased on underflow, rounded down to 4 byte units. */
+#define TX_FIFO_THRESH 256
 #define RX_FIFO_THRESH 1		/* 0-3, 0==32, 64,96, or 3==128 bytes  */
 
+#include <linux/config.h>
 #include <linux/version.h>		/* Evil, but neccessary */
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 #include <linux/module.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -65,16 +67,12 @@ static int max_interrupt_work = 10;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#if LINUX_VERSION_CODE >= 0x20155
-#define PCI_SUPPORT_VER2
-#else
-#include <linux/bios32.h>
-#endif
 #include <linux/delay.h>
 
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
+#include <asm/spinlock.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -89,7 +87,6 @@ static int max_interrupt_work = 10;
 
 #define RUN_AT(x) (jiffies + (x))
 
-#if defined(MODULE) && (LINUX_VERSION_CODE >= 0x20115)
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("SMC 83c170 EPIC series Ethernet driver");
 MODULE_PARM(debug, "i");
@@ -97,25 +94,11 @@ MODULE_PARM(options, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_copybreak, "i");
 MODULE_PARM(max_interrupt_work, "i");
-#endif
-#if LINUX_VERSION_CODE < 0x20123
-#define test_and_set_bit(val, addr) set_bit(val, addr)
-#endif
-#if LINUX_VERSION_CODE <= 0x20139
-#define	net_device_stats enet_statistics
-#define NETSTATS_VER2
-#endif
-#if LINUX_VERSION_CODE < 0x20159
-#define DEV_FREE_SKB(skb) dev_kfree_skb(skb, FREE_WRITE);
-#else  /* Grrr, unneeded incompatible change. */
-#define DEV_FREE_SKB(skb) dev_kfree_skb(skb);
-#endif
+
+static char kernel_version[] = UTS_RELEASE;
 
 /* The I/O extent. */
 #define EPIC_TOTAL_SIZE 0x100
-
-#define epic_debug debug
-static int epic_debug = 1;
 
 /*
 				Theory of Operation
@@ -154,6 +137,12 @@ IVc. Errata
 static struct device *epic_probe1(int pci_bus, int pci_devfn,
 								  struct device *dev, long ioaddr, int irq,
 								  int chip_id, int card_idx);
+#ifdef USE_IO
+#define EPIC_USE_IO
+#define EPIC_IOTYPE PCI_USES_MASTER|PCI_USES_IO|PCI_ADDR0
+#else
+#define EPIC_IOTYPE PCI_USES_MASTER|PCI_USES_MEM|PCI_ADDR1
+#endif
 
 enum pci_flags_bit {
 	PCI_USES_IO=1, PCI_USES_MEM=2, PCI_USES_MASTER=4,
@@ -166,13 +155,32 @@ struct chip_info {
 	int io_size, min_latency;
 	struct device *(*probe1)(int pci_bus, int pci_devfn, struct device *dev,
 							 long ioaddr, int irq, int chip_idx, int fnd_cnt);
-} chip_tbl[] = {
+} static chip_tbl[] = {
 	{"SMSC EPIC/100 83c170", 0x10B8, 0x0005, 0x7fff,
-	 PCI_USES_IO|PCI_USES_MASTER|PCI_ADDR0, EPIC_TOTAL_SIZE, 32, epic_probe1},
+	 EPIC_IOTYPE, EPIC_TOTAL_SIZE, 32, epic_probe1},
 	{"SMSC EPIC/C 83c175", 0x10B8, 0x0006, 0x7fff,
-	 PCI_USES_IO|PCI_USES_MASTER|PCI_ADDR0, EPIC_TOTAL_SIZE, 32, epic_probe1},
+	 EPIC_IOTYPE, EPIC_TOTAL_SIZE, 32, epic_probe1},
 	{0,},
 };
+
+/* This matches the table above. */
+static enum { MII_PWRDWN=1, TYPE2_INTR=2 } chip_features[] ={
+	TYPE2_INTR, TYPE2_INTR | MII_PWRDWN, };
+
+#ifndef USE_IO
+#undef inb
+#undef inw
+#undef inl
+#undef outb
+#undef outw
+#undef outl
+#define inb readb
+#define inw readw
+#define inl readl
+#define outb writeb
+#define outw writew
+#define outl writel
+#endif
 
 /* Offsets to registers, using the (ugh) SMC names. */
 enum epic_registers {
@@ -188,12 +196,20 @@ enum epic_registers {
 
 /* Interrupt register bits, using my own meaningful names. */
 enum IntrStatus {
-  TxIdle=0x40000, RxIdle=0x20000, IntrSummary=0x010000,
-  PCIBusErr170=0x7000, PCIBusErr175=0x1000, PhyEvent175=0x8000,
-  RxStarted=0x0800, RxEarlyWarn=0x0400, CntFull=0x0200, TxUnderrun=0x0100,
-  TxEmpty=0x0080, TxDone=0x0020, RxError=0x0010,
-  RxOverflow=0x0008, RxFull=0x0004, RxHeader=0x0002, RxDone=0x0001,
+	TxIdle=0x40000, RxIdle=0x20000, IntrSummary=0x010000,
+	PCIBusErr170=0x7000, PCIBusErr175=0x1000, PhyEvent175=0x8000,
+	RxStarted=0x0800, RxEarlyWarn=0x0400, CntFull=0x0200, TxUnderrun=0x0100,
+	TxEmpty=0x0080, TxDone=0x0020, RxError=0x0010,
+	RxOverflow=0x0008, RxFull=0x0004, RxHeader=0x0002, RxDone=0x0001,
 };
+enum CommandBits {
+	StopRx=1, StartRx=2, TxQueued=4, RxQueued=8,
+	StopTxDMA=0x20, StopRxDMA=0x40, RestartTx=0x80,
+};
+
+static u16 media2miictl[16] = {
+	0, 0x0C00, 0x0C00, 0x2000,  0x0100, 0x2100, 0, 0,
+	0, 0, 0, 0,  0, 0, 0, 0 };
 
 /* The EPIC100 Rx and Tx buffer descriptors. */
 
@@ -228,16 +244,22 @@ struct epic_private {
 	struct sk_buff* rx_skbuff[RX_RING_SIZE];
 
 	/* Ring pointers. */
-	unsigned int cur_rx, cur_tx;		/* The next free ring entry */
-	unsigned int dirty_rx, dirty_tx;	/* The ring entries to be free()ed. */
+	spinlock_t lock;				/* Group with Tx control cache line. */
+	unsigned int cur_tx, dirty_tx;
+	struct descriptor  *last_tx_desc;
+	unsigned int cur_rx, dirty_rx;
+	struct descriptor  *last_rx_desc;
+	long last_rx_time;				/* Last Rx, in jiffies. */
 
 	u8 pci_bus, pci_dev_fn;				/* PCI bus location. */
-	u16 chip_id;
+	u16 chip_flags;
 
 	struct net_device_stats stats;
 	struct timer_list timer;			/* Media selection timer. */
+	int tx_threshold;
 	unsigned char mc_filter[8];
 	signed char phys[4];				/* MII device addresses. */
+	int mii_phy_cnt;
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Current duplex setting. */
 	unsigned int force_fd:1;			/* Full-duplex operation requested. */
@@ -247,11 +269,6 @@ struct epic_private {
 	unsigned int mediasense:1;			/* Media sensing in progress. */
 	int pad0, pad1;						/* Used for 8-byte alignment */
 };
-
-/* Used to pass the full-duplex flag, etc. */
-#define MAX_UNITS 8
-static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
-static int options[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 static int epic_open(struct device *dev);
 static int read_eeprom(long ioaddr, int location);
@@ -273,19 +290,19 @@ static void set_rx_mode(struct device *dev);
 /* A list of all installed EPIC devices, for removing the driver module. */
 static struct device *root_epic_dev = NULL;
 
-#ifndef CARDBUS
+#if !defined(CARDBUS)  && !defined(HAS_PCI_NETIF)
 int epic100_probe(struct device *dev)
 {
 	int cards_found = 0;
-	int chip_idx, irq;
+	int chip_idx, irq, pci_flags;
 	u16 pci_command, new_command;
 	unsigned char pci_bus, pci_device_fn;
+	long ioaddr;
 
-#ifdef PCI_SUPPORT_VER2
 	struct pci_dev *pcidev = NULL;
 	while ((pcidev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pcidev))
 			!= NULL) {
-		long pci_ioaddr = pcidev->base_address[0] & ~3;
+		long pciaddr;
 		int vendor = pcidev->vendor;
 		int device = pcidev->device;
 
@@ -294,59 +311,33 @@ int epic100_probe(struct device *dev)
 				&& (device & chip_tbl[chip_idx].device_id_mask) ==
 				chip_tbl[chip_idx].device_id)
 				break;
-		if (chip_tbl[chip_idx].vendor_id == 0 		/* Compiled out! */
-			||	check_region(pci_ioaddr, chip_tbl[chip_idx].io_size))
+		if (chip_tbl[chip_idx].vendor_id == 0)		/* Compiled out! */
 			continue;
+
+		pci_flags = chip_tbl[chip_idx].pci_flags;
+		pciaddr = pcidev->base_address[pci_flags & PCI_ADDR0 ? 0 : 1];
 		pci_bus = pcidev->bus->number;
 		pci_device_fn = pcidev->devfn;
 		irq = pcidev->irq;
-#else
-	int pci_index;
 
-	if ( ! pcibios_present())
-		return -ENODEV;
-
-	for (pci_index = 0; pci_index < 0xff; pci_index++) {
-		u8 pci_irq_line;
-		u16 vendor, device;
-		u32 pci_ioaddr;
-
-		if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8,
-								pci_index, &pci_bus, &pci_device_fn)
-			!= PCIBIOS_SUCCESSFUL)
-			break;
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_DEVICE_ID, &device);
-
-		for (chip_idx = 0; chip_tbl[chip_idx].vendor_id; chip_idx++)
-			if (vendor == chip_tbl[chip_idx].vendor_id
-				&& (device & chip_tbl[chip_idx].device_id_mask) ==
-				chip_tbl[chip_idx].device_id)
-				break;
-		if (chip_tbl[chip_idx].vendor_id == 0) 		/* Compiled out! */
+		if ((pciaddr & PCI_BASE_ADDRESS_SPACE_IO)) {
+			ioaddr = pciaddr & PCI_BASE_ADDRESS_IO_MASK;
+			if (check_region(ioaddr, chip_tbl[chip_idx].io_size))
+				continue;
+		} else if ((ioaddr = (long)ioremap(pciaddr & PCI_BASE_ADDRESS_MEM_MASK,
+										   chip_tbl[chip_idx].io_size)) == 0) {
+			printk(KERN_INFO "Failed to map PCI address %#x.\n",
+				   (int)pciaddr);
 			continue;
-
-		pcibios_read_config_dword(pci_bus, pci_device_fn,
-								  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-		pcibios_read_config_byte(pci_bus, pci_device_fn,
-								 PCI_INTERRUPT_LINE, &pci_irq_line);
-		/* Remove I/O space marker in bit 0. */
-		pci_ioaddr &= ~3;
-		irq = pci_irq_line;
-
-		if (check_region(pci_ioaddr, chip_tbl[chip_idx].io_size))
-			continue;
-#endif
+		}
 
 		/* EPIC-specific code: Soft-reset the chip ere setting as master. */
-		outl(0x0001, pci_ioaddr + GENCTL);
+		outl(0x0001, ioaddr + GENCTL);
 
 		/* Activate the card: fix for brain-damaged Win98 BIOSes. */
 		pcibios_read_config_word(pci_bus, pci_device_fn,
 								 PCI_COMMAND, &pci_command);
-		new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
+		new_command = pci_command | (pci_flags & 7);
 		if (pci_command != new_command) {
 			printk(KERN_INFO "  The PCI BIOS has not enabled Ethernet"
 				   " device %4.4x-%4.4x."
@@ -356,9 +347,8 @@ int epic100_probe(struct device *dev)
 									  PCI_COMMAND, new_command);
 		}
 
-		dev = chip_tbl[chip_idx].probe1(pci_bus, pci_device_fn, dev, pci_ioaddr,
-									   irq, chip_idx, cards_found);
-
+		dev = chip_tbl[chip_idx].probe1(pci_bus, pci_device_fn, dev, ioaddr,
+										irq, chip_idx, cards_found);
 		/* Check the latency timer. */
 		if (dev) {
 			u8 pci_latency;
@@ -402,9 +392,12 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
 
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
-	printk(KERN_INFO "%s: SMC EPIC/100 at %#lx, IRQ %d, ",
-		   dev->name, ioaddr, dev->irq);
+	printk(KERN_INFO "%s: %s at %#lx, IRQ %d, ",
+		   dev->name, chip_tbl[chip_idx].name, ioaddr, dev->irq);
 
+#if defined(HAS_PCI_NETIF)
+	acpi_set_pwr_state(pci_bus, pci_devfn, ACPI_D0);
+#endif
 	/* Bring the chip out of low-power mode. */
 	outl(0x4200, ioaddr + GENCTL);
 	/* Magic?!  If we don't set this bit the MII interface won't work. */
@@ -418,13 +411,13 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
 
 	/* This could also be read from the EEPROM. */
 	for (i = 0; i < 3; i++)
-		((u16 *)dev->dev_addr)[i] = inw(ioaddr + LAN0 + i*4);
+		((u16 *)dev->dev_addr)[i] = le16_to_cpu(inw(ioaddr + LAN0 + i*4));
 
 	for (i = 0; i < 5; i++)
 		printk("%2.2x:", dev->dev_addr[i]);
 	printk("%2.2x.\n", dev->dev_addr[i]);
 
-	if (epic_debug > 1) {
+	if (epic_debug > 2) {
 		printk(KERN_DEBUG "%s: EEPROM contents\n", dev->name);
 		for (i = 0; i < 64; i++)
 			printk(" %4.4x%s", read_eeprom(ioaddr, i),
@@ -444,11 +437,7 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
 
 	ep->pci_bus = pci_bus;
 	ep->pci_dev_fn = pci_devfn;
-#if defined(PCI_SUPPORT_VER2)
-	ep->chip_id = pci_find_slot(pci_bus, pci_devfn)->device;
-#else
-	ep->chip_id = chip_tbl[chip_idx].device_id;
-#endif
+	ep->chip_flags = chip_features[chip_idx];
 
 	/* Find the connected MII xcvrs.
 	   Doing this in open() would allow detecting external xcvrs later, but
@@ -469,6 +458,7 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
 					   mdio_read(ioaddr, phy, 5));
 			}
 		}
+		ep->mii_phy_cnt = phy_idx;
 		if (phy_idx == 0) {
 			printk(KERN_WARNING "%s: ***WARNING***: No MII transceiver found!\n",
 				   dev->name);
@@ -478,13 +468,13 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
 	}
 
 	/* Turn off the MII xcvr (175 only!), leave the chip in low-power mode. */
-	if (ep->chip_id == 6)
+	if (ep->chip_flags & MII_PWRDWN)
 		outl(inl(ioaddr + NVCTL) & ~0x483C, ioaddr + NVCTL);
 	outl(0x0008, ioaddr + GENCTL);
 
 	/* The lower four bits are the media type. */
 	ep->force_fd = duplex;
-	ep->default_port = option;
+	dev->if_port = ep->default_port = option;
 	if (ep->default_port)
 		ep->medialock = 1;
 
@@ -514,11 +504,7 @@ static struct device *epic_probe1(int pci_bus, int pci_devfn,
    No extra delay is needed with 33Mhz PCI, but 66Mhz is untested.
  */
 
-#ifdef _LINUX_DELAY_H
-#define eeprom_delay(nanosec)	udelay(1)
-#else
-#define eeprom_delay(nanosec)	do { ; } while (0)
-#endif
+#define eeprom_delay()	inl(ee_addr)
 
 /* The EEPROM commands include the alway-set leading bit. */
 #define EE_WRITE_CMD	(5 << 6)
@@ -532,7 +518,7 @@ static int read_eeprom(long ioaddr, int location)
 	int retval = 0;
 	long ee_addr = ioaddr + EECTL;
 	int read_cmd = location |
-		(inl(ee_addr) & 0x40) ? EE_READ64_CMD : EE_READ256_CMD;
+		(inl(ee_addr) & 0x40 ? EE_READ64_CMD : EE_READ256_CMD);
 
 	outl(EE_ENB & ~EE_CS, ee_addr);
 	outl(EE_ENB, ee_addr);
@@ -541,18 +527,18 @@ static int read_eeprom(long ioaddr, int location)
 	for (i = 12; i >= 0; i--) {
 		short dataval = (read_cmd & (1 << i)) ? EE_WRITE_1 : EE_WRITE_0;
 		outl(EE_ENB | dataval, ee_addr);
-		eeprom_delay(100);
+		eeprom_delay();
 		outl(EE_ENB | dataval | EE_SHIFT_CLK, ee_addr);
-		eeprom_delay(150);
+		eeprom_delay();
 	}
 	outl(EE_ENB, ee_addr);
 
 	for (i = 16; i > 0; i--) {
 		outl(EE_ENB | EE_SHIFT_CLK, ee_addr);
-		eeprom_delay(100);
+		eeprom_delay();
 		retval = (retval << 1) | ((inl(ee_addr) & EE_DATA_READ) ? 1 : 0);
 		outl(EE_ENB, ee_addr);
-		eeprom_delay(100);
+		eeprom_delay();
 	}
 
 	/* Terminate the EEPROM access. */
@@ -594,13 +580,13 @@ epic_open(struct device *dev)
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int i;
-	int mii_reg5;
+
 	ep->full_duplex = ep->force_fd;
 
 	/* Soft reset the chip. */
 	outl(0x4001, ioaddr + GENCTL);
 
-	if (request_irq(dev->irq, &epic_interrupt, SA_SHIRQ, "SMC EPIC/100", dev))
+	if (request_irq(dev->irq, &epic_interrupt, SA_SHIRQ, dev->name, dev))
 		return -EAGAIN;
 
 	MOD_INC_USE_COUNT;
@@ -617,30 +603,49 @@ epic_open(struct device *dev)
 	   wiring on the Ositech CardBus card.
 	*/
 	outl(0x12, ioaddr + MIICfg);
-	if (ep->chip_id == 6)
+	if (ep->chip_flags & MII_PWRDWN)
 		outl((inl(ioaddr + NVCTL) & ~0x003C) | 0x4800, ioaddr + NVCTL);
 
 #if defined(__powerpc__) || defined(__sparc__)		/* Big endian */
+	outl(0x4432 | (RX_FIFO_THRESH<<8), ioaddr + GENCTL);
+	inl(ioaddr + GENCTL);
 	outl(0x0432 | (RX_FIFO_THRESH<<8), ioaddr + GENCTL);
 #else
+	outl(0x4412 | (RX_FIFO_THRESH<<8), ioaddr + GENCTL);
+	inl(ioaddr + GENCTL);
 	outl(0x0412 | (RX_FIFO_THRESH<<8), ioaddr + GENCTL);
 #endif
 
 	for (i = 0; i < 3; i++)
-		outl(((u16*)dev->dev_addr)[i], ioaddr + LAN0 + i*4);
+		outl(cpu_to_le16(((u16*)dev->dev_addr)[i]), ioaddr + LAN0 + i*4);
 
-	outl(TX_FIFO_THRESH, ioaddr + TxThresh);
+	
+	ep->tx_threshold = TX_FIFO_THRESH;
+	outl(ep->tx_threshold, ioaddr + TxThresh);
 
-	mii_reg5 = mdio_read(ioaddr, ep->phys[0], 5);
-	if (mii_reg5 != 0xffff) {
-		if ((mii_reg5 & 0x0100) || (mii_reg5 & 0x01C0) == 0x0040)
-			ep->full_duplex = 1;
-		else if (! (mii_reg5 & 0x4000))
-			mdio_write(ioaddr, ep->phys[0], 0, 0x1200);
-		if (epic_debug > 1)
-			printk(KERN_INFO "%s: Setting %s-duplex based on MII xcvr %d"
-				   " register read of %4.4x.\n", dev->name,
-				   ep->full_duplex ? "full" : "half", ep->phys[0], mii_reg5);
+	if (media2miictl[dev->if_port & 15]) {
+		if (ep->mii_phy_cnt)
+			mdio_write(ioaddr, ep->phys[0], 0, media2miictl[dev->if_port&15]);
+		if (dev->if_port == 1) {
+			if (epic_debug > 1)
+				printk(KERN_INFO "%s: Using the 10base2 transceiver, MII "
+					   "status %4.4x.\n",
+					   dev->name, mdio_read(ioaddr, ep->phys[0], 1));
+			outl(0x13, ioaddr + MIICfg);
+		}
+	} else {
+		int mii_reg5 = mdio_read(ioaddr, ep->phys[0], 5);
+		if (mii_reg5 != 0xffff) {
+			if ((mii_reg5 & 0x0100) || (mii_reg5 & 0x01C0) == 0x0040)
+				ep->full_duplex = 1;
+			else if (! (mii_reg5 & 0x4000))
+				mdio_write(ioaddr, ep->phys[0], 0, 0x1200);
+			if (epic_debug > 1)
+				printk(KERN_INFO "%s: Setting %s-duplex based on MII xcvr %d"
+					   " register read of %4.4x.\n", dev->name,
+					   ep->full_duplex ? "full" : "half",
+					   ep->phys[0], mii_reg5);
+		}
 	}
 
 	outl(ep->full_duplex ? 0x7F : 0x79, ioaddr + TxCtrl);
@@ -649,15 +654,15 @@ epic_open(struct device *dev)
 
 	/* Start the chip's Rx process. */
 	set_rx_mode(dev);
-	outl(0x000A, ioaddr + COMMAND);
+	outl(StartRx | RxQueued, ioaddr + COMMAND);
 
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
 
 	/* Enable interrupts by setting the interrupt mask. */
-	outl((ep->chip_id == 6 ? PCIBusErr175 : PCIBusErr170)
-		 | CntFull | TxUnderrun | TxDone
+	outl((ep->chip_flags & TYPE2_INTR ? PCIBusErr175 : PCIBusErr170)
+		 | CntFull | TxUnderrun | TxDone | TxEmpty
 		 | RxError | RxOverflow | RxFull | RxHeader | RxDone,
 		 ioaddr + INTMASK);
 
@@ -688,7 +693,7 @@ static void epic_pause(struct device *dev)
 	/* Disable interrupts by clearing the interrupt mask. */
 	outl(0x00000000, ioaddr + INTMASK);
 	/* Stop the chip's Tx and Rx DMA processes. */
-	outw(0x0061, ioaddr + COMMAND);
+	outw(StopRx | StopTxDMA | StopRxDMA, ioaddr + COMMAND);
 
 	/* Update the error counts. */
 	if (inw(ioaddr + COMMAND) != 0xffff) {
@@ -716,19 +721,20 @@ static void epic_restart(struct device *dev)
 	/* Duplicate code from epic_open(). */
 	outl(0x0008, ioaddr + TEST1);
 
-#if defined(__powerpc__)		/* Big endian */
+#if defined(__powerpc__) || defined(__sparc__)		/* Big endian */
 	outl(0x0432 | (RX_FIFO_THRESH<<8), ioaddr + GENCTL);
 #else
 	outl(0x0412 | (RX_FIFO_THRESH<<8), ioaddr + GENCTL);
 #endif
-	outl(0x12, ioaddr + MIICfg);
-	if (ep->chip_id == 6)
+	outl(dev->if_port == 1 ? 0x13 : 0x12, ioaddr + MIICfg);
+	if (ep->chip_flags & MII_PWRDWN)
 		outl((inl(ioaddr + NVCTL) & ~0x003C) | 0x4800, ioaddr + NVCTL);
 
 	for (i = 0; i < 3; i++)
-		outl(((u16*)dev->dev_addr)[i], ioaddr + LAN0 + i*4);
+		outl(cpu_to_le16(((u16*)dev->dev_addr)[i]), ioaddr + LAN0 + i*4);
 
-	outl(TX_FIFO_THRESH, ioaddr + TxThresh);
+	ep->tx_threshold = TX_FIFO_THRESH;
+	outl(ep->tx_threshold, ioaddr + TxThresh);
 	outl(ep->full_duplex ? 0x7F : 0x79, ioaddr + TxCtrl);
 	outl(virt_to_bus(&ep->rx_ring[ep->cur_rx%RX_RING_SIZE]), ioaddr + PRxCDAR);
 	outl(virt_to_bus(&ep->tx_ring[ep->dirty_tx%TX_RING_SIZE]),
@@ -736,11 +742,11 @@ static void epic_restart(struct device *dev)
 
 	/* Start the chip's Rx process. */
 	set_rx_mode(dev);
-	outl(0x000A, ioaddr + COMMAND);
+	outl(StartRx | RxQueued, ioaddr + COMMAND);
 
 	/* Enable interrupts by setting the interrupt mask. */
-	outl((ep->chip_id == 6 ? PCIBusErr175 : PCIBusErr170)
-		 | CntFull | TxUnderrun | TxDone
+	outl((ep->chip_flags & TYPE2_INTR ? PCIBusErr175 : PCIBusErr170)
+		 | CntFull | TxUnderrun | TxDone | TxEmpty
 		 | RxError | RxOverflow | RxFull | RxHeader | RxDone,
 		 ioaddr + INTMASK);
 	printk(KERN_DEBUG "%s: epic_restart() done, cmd status %4.4x, ctl %4.4x"
@@ -755,17 +761,25 @@ static void epic_timer(unsigned long data)
 	struct device *dev = (struct device *)data;
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	int next_tick = 0;
-	int mii_reg5 = mdio_read(ioaddr, ep->phys[0], 5);
+	int next_tick = 60*HZ;
+	int mii_reg5 = ep->mii_phy_cnt ? mdio_read(ioaddr, ep->phys[0], 5) : 0;
 
 	if (epic_debug > 3) {
-		printk(KERN_DEBUG "%s: Media selection tick, Tx status %8.8x.\n",
+		printk(KERN_DEBUG "%s: Media monitor tick, Tx status %8.8x.\n",
 			   dev->name, inl(ioaddr + TxSTAT));
 		printk(KERN_DEBUG "%s: Other registers are IntMask %4.4x "
 			   "IntStatus %4.4x RxStatus %4.4x.\n",
 			   dev->name, inl(ioaddr + INTMASK), inl(ioaddr + INTSTAT),
 			   inl(ioaddr + RxSTAT));
 	}
+
+	if (ep->cur_tx - ep->dirty_tx > TX_RING_SIZE/2  &&
+		jiffies - dev->trans_start > TX_TIMEOUT) {
+		printk(KERN_WARNING "%s: Tx hung, %d vs. %d.\n",
+			   dev->name, ep->cur_tx, ep->dirty_tx);
+		epic_tx_timeout(dev);
+	}
+
 	if (! ep->force_fd  &&  mii_reg5 != 0xffff) {
 		int duplex = (mii_reg5&0x0100) || (mii_reg5 & 0x01C0) == 0x0040;
 		if (ep->full_duplex != duplex) {
@@ -775,13 +789,10 @@ static void epic_timer(unsigned long data)
 				   ep->full_duplex ? "full" : "half", ep->phys[0], mii_reg5);
 			outl(ep->full_duplex ? 0x7F : 0x79, ioaddr + TxCtrl);
 		}
-		next_tick = 60*HZ;
 	}
 
-	if (next_tick) {
-		ep->timer.expires = RUN_AT(next_tick);
-		add_timer(&ep->timer);
-	}
+	ep->timer.expires = RUN_AT(next_tick);
+	add_timer(&ep->timer);
 }
 
 static void epic_tx_timeout(struct device *dev)
@@ -795,18 +806,16 @@ static void epic_tx_timeout(struct device *dev)
 			   dev->name, inw(ioaddr + TxSTAT));
 		if (epic_debug > 1) {
 			printk(KERN_DEBUG "%s: Tx indices: dirty_tx %d, cur_tx %d.\n",
-			 dev->name, ep->dirty_tx, ep->cur_tx);
+				   dev->name, ep->dirty_tx, ep->cur_tx);
 		}
 	}
 	if (inw(ioaddr + TxSTAT) & 0x10) {		/* Tx FIFO underflow. */
 		ep->stats.tx_fifo_errors++;
-		/* Restart the transmit process. */
-		outl(0x0080, ioaddr + COMMAND);
+		outl(RestartTx, ioaddr + COMMAND);
+	} else {
+		epic_restart(dev);
+		outl(TxQueued, dev->base_addr + COMMAND);
 	}
-
-	/* Perhaps stop and restart the chip's Tx processes . */
-	/* Trigger a transmit demand. */
-	outl(0x0004, dev->base_addr + COMMAND);
 
 	dev->trans_start = jiffies;
 	ep->stats.tx_errors++;
@@ -821,8 +830,10 @@ epic_init_ring(struct device *dev)
 	int i;
 
 	ep->tx_full = 0;
-	ep->cur_rx = ep->cur_tx = 0;
-	ep->dirty_rx = ep->dirty_tx = 0;
+	ep->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
+	ep->dirty_tx = ep->cur_tx = 0;
+	ep->cur_rx = ep->dirty_rx = 0;
+	ep->last_rx_time = jiffies;
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		ep->rx_ring[i].status = 0x8000;		/* Owned by Epic chip */
@@ -859,15 +870,15 @@ static int
 epic_start_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct epic_private *ep = (struct epic_private *)dev->priv;
-	int entry;
-	u32 flag;
+	int entry, free_count;
+	u32 ctrl_word;
+	long flags;
 
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		if (jiffies - dev->trans_start < TX_TIMEOUT)
-			return 1;
-		epic_tx_timeout(dev);
+		if (jiffies - dev->trans_start > TX_TIMEOUT)
+			epic_tx_timeout(dev);
 		return 1;
 	}
 
@@ -875,42 +886,41 @@ epic_start_xmit(struct sk_buff *skb, struct device *dev)
 	   with the "ownership" bits last. */
 
 	/* Calculate the next Tx descriptor entry. */
-	entry = ep->cur_tx % TX_RING_SIZE;
+	spin_lock_irqsave(&ep->lock, flags);
+	free_count = ep->cur_tx - ep->dirty_tx;
+	entry = ep->cur_tx++ % TX_RING_SIZE;
 
 	ep->tx_skbuff[entry] = skb;
 	ep->tx_ring[entry].txlength = (skb->len >= ETH_ZLEN ? skb->len : ETH_ZLEN);
 	ep->tx_ring[entry].bufaddr = virt_to_bus(skb->data);
 	ep->tx_ring[entry].buflength = skb->len;
 
-	/* tx_bytes counting -- Nolan Leake */	
-	ep->stats.tx_bytes += ep->tx_ring[entry].txlength;
-	
-	if (ep->cur_tx - ep->dirty_tx < TX_RING_SIZE/2) {/* Typical path */
-	  flag = 0x10; /* No interrupt */
-	  clear_bit(0, (void*)&dev->tbusy);
-	} else if (ep->cur_tx - ep->dirty_tx == TX_RING_SIZE/2) {
-	  flag = 0x14; /* Tx-done intr. */
-	  clear_bit(0, (void*)&dev->tbusy);
-	} else if (ep->cur_tx - ep->dirty_tx < TX_RING_SIZE - 2) {
-	  flag = 0x10; /* No Tx-done intr. */
-	  clear_bit(0, (void*)&dev->tbusy);
+	if (free_count < TX_RING_SIZE/2) {/* Typical path */
+		ctrl_word = 0x10; /* No interrupt */
+	} else if (free_count == TX_RING_SIZE/2) {
+		ctrl_word = 0x14; /* Tx-done intr. */
+	} else if (free_count < TX_RING_SIZE - 1) {
+		ctrl_word = 0x10; /* No Tx-done intr. */
 	} else {
-	  /* Leave room for two additional entries. */
-	  flag = 0x14; /* Tx-done intr. */
-	  ep->tx_full = 1;
+		/* Leave room for an additional entry. */
+		ctrl_word = 0x14; /* Tx-done intr. */
+		ep->tx_full = 1;
 	}
 
-	ep->tx_ring[entry].control = flag;
+	ep->tx_ring[entry].control = ctrl_word;
 	ep->tx_ring[entry].status = 0x8000;	/* Pass ownership to the chip. */
-	ep->cur_tx++;
+
+	if ( ! ep->tx_full)
+		clear_bit(0, (void*)&dev->tbusy);
+	spin_unlock_irqrestore(&ep->lock, flags);
 	/* Trigger an immediate transmit demand. */
-	outl(0x0004, dev->base_addr + COMMAND);
+	outl(TxQueued, dev->base_addr + COMMAND);
 
 	dev->trans_start = jiffies;
 	if (epic_debug > 4)
 		printk(KERN_DEBUG "%s: Queued Tx packet size %d to slot %d, "
 			   "flag %2.2x Tx status %8.8x.\n",
-			   dev->name, (int)skb->len, entry, flag,
+			   dev->name, (int)skb->len, entry, ctrl_word,
 			   inl(dev->base_addr + TxSTAT));
 
 	return 0;
@@ -947,19 +957,26 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 		outl(status & 0x00007fff, ioaddr + INTSTAT);
 
 		if (epic_debug > 4)
-			printk("%s: interrupt  interrupt=%#8.8x new intstat=%#8.8x.\n",
+			printk(KERN_DEBUG "%s: interrupt  interrupt=%#8.8x new "
+				   "intstat=%#8.8x.\n",
 				   dev->name, status, inl(ioaddr + INTSTAT));
 
 		if ((status & IntrSummary) == 0)
 			break;
 
-		if (status & (RxDone | RxStarted | RxEarlyWarn))
+		if (status & (RxDone | RxStarted | RxEarlyWarn | RxOverflow))
 			epic_rx(dev);
 
 		if (status & (TxEmpty | TxDone)) {
-			int dirty_tx;
+			unsigned int dirty_tx, cur_tx;
 
-			for (dirty_tx = ep->dirty_tx; dirty_tx < ep->cur_tx; dirty_tx++) {
+			/* Note: if this lock becomes a problem we can narrow the locked
+			   region at the cost of occasionally grabbing the lock more
+			   times. */
+			spin_lock(&ep->lock);
+			cur_tx = ep->cur_tx;
+			dirty_tx = ep->dirty_tx;
+			for (; cur_tx - dirty_tx > 0; dirty_tx++) {
 				int entry = dirty_tx % TX_RING_SIZE;
 				int txstatus = ep->tx_ring[entry].status;
 
@@ -987,34 +1004,35 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 #endif
 					ep->stats.collisions += (txstatus >> 8) & 15;
 					ep->stats.tx_packets++;
+					ep->stats.tx_bytes += ep->tx_ring[entry].txlength;
 				}
 
 				/* Free the original skb. */
-				DEV_FREE_SKB(ep->tx_skbuff[entry]);
+				dev_kfree_skb(ep->tx_skbuff[entry]);
 				ep->tx_skbuff[entry] = 0;
 			}
 
 #ifndef final_version
-			if (ep->cur_tx - dirty_tx > TX_RING_SIZE) {
+			if (cur_tx - dirty_tx > TX_RING_SIZE) {
 				printk("%s: Out-of-sync dirty pointer, %d vs. %d, full=%d.\n",
-					   dev->name, dirty_tx, ep->cur_tx, ep->tx_full);
+					   dev->name, dirty_tx, cur_tx, ep->tx_full);
 				dirty_tx += TX_RING_SIZE;
 			}
 #endif
-
-			if (ep->tx_full && dev->tbusy
-				&& dirty_tx > ep->cur_tx - TX_RING_SIZE + 2) {
+			ep->dirty_tx = dirty_tx;
+			if (ep->tx_full
+				&& cur_tx - dirty_tx < TX_RING_SIZE + 2) {
 				/* The ring is no longer full, clear tbusy. */
 				ep->tx_full = 0;
 				clear_bit(0, (void*)&dev->tbusy);
+				spin_unlock(&ep->lock);
 				mark_bh(NET_BH);
-			}
-
-			ep->dirty_tx = dirty_tx;
+			} else
+				spin_unlock(&ep->lock);
 		}
 
 		/* Check uncommon events all at once. */
-		if (status & (CntFull | TxUnderrun | RxOverflow |
+		if (status & (CntFull | TxUnderrun | RxOverflow | RxFull |
 					  PCIBusErr170 | PCIBusErr175)) {
 			if (status == 0xffffffff) /* Chip failed or removed (CardBus). */
 				break;
@@ -1025,13 +1043,15 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 			if (status & TxUnderrun) { /* Tx FIFO underflow. */
 				ep->stats.tx_fifo_errors++;
-				outl(1536, ioaddr + TxThresh);
+				outl(ep->tx_threshold += 128, ioaddr + TxThresh);
 				/* Restart the transmit process. */
-				outl(0x0080, ioaddr + COMMAND);
+				outl(RestartTx, ioaddr + COMMAND);
 			}
 			if (status & RxOverflow) {		/* Missed a Rx frame. */
 				ep->stats.rx_errors++;
 			}
+			if (status & (RxOverflow | RxFull))
+				outw(RxQueued, ioaddr + COMMAND);
 			if (status & PCIBusErr170) {
 				printk(KERN_ERR "%s: PCI Bus Error!  EPIC status %4.4x.\n",
 					   dev->name, status);
@@ -1067,17 +1087,20 @@ static int epic_rx(struct device *dev)
 {
 	struct epic_private *ep = (struct epic_private *)dev->priv;
 	int entry = ep->cur_rx % RX_RING_SIZE;
+	int rx_work_limit = ep->dirty_rx + RX_RING_SIZE - ep->cur_rx;
 	int work_done = 0;
 
 	if (epic_debug > 4)
 		printk(KERN_DEBUG " In epic_rx(), entry %d %8.8x.\n", entry,
 			   ep->rx_ring[entry].status);
 	/* If we own the next entry, it's a new packet. Send it up. */
-	while (ep->rx_ring[entry].status >= 0  &&  ep->rx_skbuff[entry]) {
+	while (ep->rx_ring[entry].status >= 0) {
 		int status = ep->rx_ring[entry].status;
 
 		if (epic_debug > 4)
 			printk(KERN_DEBUG "  epic_rx() status was %8.8x.\n", status);
+		if (--rx_work_limit < 0)
+			break;
 		if (status & 0x2006) {
 			if (status & 0x2000) {
 				printk(KERN_WARNING "%s: Oversized Ethernet frame spanned "
@@ -1092,6 +1115,12 @@ static int epic_rx(struct device *dev)
 			short pkt_len = ep->rx_ring[entry].rxlength - 4;
 			struct sk_buff *skb;
 
+			if (pkt_len > PKT_BUF_SZ - 4) {
+				printk(KERN_ERR "%s: Oversized Ethernet frame, status %x "
+					   "%d bytes.\n",
+					   dev->name, pkt_len, status);
+				pkt_len = 1514;
+			}
 			/* Check if the packet is long enough to accept without copying
 			   to a minimally-sized skbuff. */
 			if (pkt_len < rx_copybreak
@@ -1106,7 +1135,6 @@ static int epic_rx(struct device *dev)
 				memcpy(skb_put(skb, pkt_len),
 					   bus_to_virt(ep->rx_ring[entry].bufaddr), pkt_len);
 #endif
-				ep->rx_ring[entry].status = 0x8000;
 			} else {
 				skb_put(skb = ep->rx_skbuff[entry], pkt_len);
 				ep->rx_skbuff[entry] = NULL;
@@ -1114,8 +1142,9 @@ static int epic_rx(struct device *dev)
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
 			ep->stats.rx_packets++;
-			/* rx_bytes counting -- Nolan Leake */
+#if LINUX_VERSION_CODE > 0x20127
 			ep->stats.rx_bytes += pkt_len;
+#endif
 		}
 		work_done++;
 		entry = (++ep->cur_rx) % RX_RING_SIZE;
@@ -1152,18 +1181,8 @@ static int epic_close(struct device *dev)
 		printk(KERN_DEBUG "%s: Shutting down ethercard, status was %2.2x.\n",
 			   dev->name, inl(ioaddr + INTSTAT));
 
-	/* Disable interrupts by clearing the interrupt mask. */
-	outl(0x00000000, ioaddr + INTMASK);
-	/* Stop the chip's Tx and Rx DMA processes. */
-	outw(0x0061, ioaddr + COMMAND);
-
-	/* Update the error counts. */
-	ep->stats.rx_missed_errors += inb(ioaddr + MPCNT);
-	ep->stats.rx_frame_errors += inb(ioaddr + ALICNT);
-	ep->stats.rx_crc_errors += inb(ioaddr + CRCCNT);
-
+	epic_pause(dev);
 	del_timer(&ep->timer);
-
 	free_irq(dev->irq, dev);
 
 	/* Free all the skbuffs in the Rx queue. */
@@ -1177,21 +1196,19 @@ static int epic_close(struct device *dev)
 #if LINUX_VERSION_CODE < 0x20100
 			skb->free = 1;
 #endif
-			DEV_FREE_SKB(skb);
+			dev_kfree_skb(skb);
 		}
 	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (ep->tx_skbuff[i])
-			DEV_FREE_SKB(ep->tx_skbuff[i]);
+			dev_kfree_skb(ep->tx_skbuff[i]);
 		ep->tx_skbuff[i] = 0;
 	}
-
 
 	/* Green! Leave the chip in low-power mode. */
 	outl(0x0008, ioaddr + GENCTL);
 
 	MOD_DEC_USE_COUNT;
-
 	return 0;
 }
 
@@ -1292,14 +1309,14 @@ static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		}
 		data[3] = mdio_read(ioaddr, data[0] & 0x1f, data[1] & 0x1f);
 		if (! dev->start) {
-#ifdef notdef
+#ifdef notdef					/* Leave on if the ioctl() is used. */
 			outl(0x0008, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x483C) | 0x0000, ioaddr + NVCTL);
 #endif
 		}
 		return 0;
 	case SIOCDEVPRIVATE+2:		/* Write the specified MII register */
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		if (! dev->start) {
 			outl(0x0200, ioaddr + GENCTL);
@@ -1307,7 +1324,7 @@ static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		}
 		mdio_write(ioaddr, data[0] & 0x1f, data[1] & 0x1f, data[2]);
 		if (! dev->start) {
-#ifdef notdef
+#ifdef notdef					/* Leave on if the ioctl() is used. */
 			outl(0x0008, ioaddr + GENCTL);
 			outl((inl(ioaddr + NVCTL) & ~0x483C) | 0x0000, ioaddr + NVCTL);
 #endif
@@ -1319,122 +1336,29 @@ static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 }
 
 
-#ifdef CARDBUS
-
-#include <pcmcia/driver_ops.h>
-
-static dev_node_t *epic_attach(dev_locator_t *loc)
-{
-	struct device *dev;
-	u16 dev_id;
-	u32 io;
-	u8 bus, devfn, irq;
-
-	if (loc->bus != LOC_PCI) return NULL;
-	bus = loc->b.pci.bus; devfn = loc->b.pci.devfn;
-	printk(KERN_DEBUG "epic_attach(bus %d, function %d)\n", bus, devfn);
-	pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
-	pcibios_read_config_byte(bus, devfn, PCI_INTERRUPT_LINE, &irq);
-	pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &dev_id);
-	io &= ~3;
-	if (io == 0 || irq == 0) {
-		printk(KERN_ERR "The EPIC/C CardBus Ethernet interface was not "
-			   "assigned an %s.\n" KERN_ERR "  It will not be activated.\n",
-			   io == 0 ? "I/O address" : "IRQ");
-		return NULL;
-	}
-	dev = epic_probe1(bus, devfn, NULL, io, irq, 2, -1);
-	if (dev) {
-		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
-		strcpy(node->dev_name, dev->name);
-		node->major = node->minor = 0;
-		node->next = NULL;
-		MOD_INC_USE_COUNT;
-		return node;
-	}
-	return NULL;
-}
-
-static void epic_suspend(dev_node_t *node)
-{
-	struct device **devp, **next;
-	printk(KERN_INFO "epic_suspend(%s)\n", node->dev_name);
-	for (devp = &root_epic_dev; *devp; devp = next) {
-		next = &((struct epic_private *)(*devp)->priv)->next_module;
-		if (strcmp((*devp)->name, node->dev_name) == 0) break;
-	}
-	if (*devp) {
-		long ioaddr = (*devp)->base_addr;
-		epic_pause(*devp);
-		/* Put the chip into low-power mode. */
-		outl(0x0008, ioaddr + GENCTL);
-	}
-}
-static void epic_resume(dev_node_t *node)
-{
-	struct device **devp, **next;
-	printk(KERN_INFO "epic_resume(%s)\n", node->dev_name);
-	for (devp = &root_epic_dev; *devp; devp = next) {
-		next = &((struct epic_private *)(*devp)->priv)->next_module;
-		if (strcmp((*devp)->name, node->dev_name) == 0) break;
-	}
-	if (*devp) {
-		epic_restart(*devp);
-	}
-}
-static void epic_detach(dev_node_t *node)
-{
-	struct device **devp, **next;
-	printk(KERN_INFO "epic_detach(%s)\n", node->dev_name);
-	for (devp = &root_epic_dev; *devp; devp = next) {
-		next = &((struct epic_private *)(*devp)->priv)->next_module;
-		if (strcmp((*devp)->name, node->dev_name) == 0) break;
-	}
-	if (*devp) {
-		unregister_netdev(*devp);
-		kfree(*devp);
-		*devp = *next;
-		kfree(node);
-		MOD_DEC_USE_COUNT;
-	}
-}
-
-struct driver_operations epic_ops = {
-	"epic_cb", epic_attach, epic_suspend, epic_resume, epic_detach
-};
-
-#endif  /* Cardbus support */
-
-
 #ifdef MODULE
 
 int init_module(void)
 {
 	if (epic_debug)
 		printk(KERN_INFO "%s", version);
-
-#ifdef CARDBUS
-	register_driver(&epic_ops);
-	return 0;
-#else
 	return epic100_probe(0);
-#endif
 }
 
 void cleanup_module(void)
 {
 	struct device *next_dev;
 
-#ifdef CARDBUS
-	unregister_driver(&epic_ops);
-#endif
-
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */
 	while (root_epic_dev) {
 		struct epic_private *ep = (struct epic_private *)root_epic_dev->priv;
 		next_dev = ep->next_module;
 		unregister_netdev(root_epic_dev);
+#ifdef EPIC_USE_IO
 		release_region(root_epic_dev->base_addr, EPIC_TOTAL_SIZE);
+#else
+		iounmap((char *)root_epic_dev->base_addr);
+#endif
 		kfree(root_epic_dev);
 		root_epic_dev = next_dev;
 		kfree(ep);
@@ -1446,7 +1370,7 @@ void cleanup_module(void)
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c epic100.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
- *  cardbus-compile-command: "gcc -DCARDBUS -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c epic100.c -o epic_cb.o -I/usr/src/pcmcia-cs-3.0.5/include/"
+ *  cardbus-compile-command: "gcc -DCARDBUS -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c epic100.c -o epic_cb.o -I/usr/src/pcmcia-cs-3.0.13/include/"
  *  c-indent-level: 4
  *  c-basic-offset: 4
  *  tab-width: 4

@@ -134,7 +134,7 @@ asm_offsets: check_asm
 	./check_asm > $(TOPDIR)/include/asm-alpha/asm_offsets.h
 
 check_asm: check_asm.c
-	gcc -o $@ $< -I$(TOPDIR)/include -D__KERNEL__ -ffixed-8
+	$(CC) -o $@ $< -I$(TOPDIR)/include -D__KERNEL__ -ffixed-8
 
 clean::
 	rm -f check_asm

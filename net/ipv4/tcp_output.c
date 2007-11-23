@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.108.2.1 1999/05/14 23:07:36 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.108.2.5 2000/01/14 01:22:18 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -165,7 +165,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb, int force_queue)
 	tp->write_seq += (TCP_SKB_CB(skb)->end_seq - TCP_SKB_CB(skb)->seq);
 	__skb_queue_tail(&sk->write_queue, skb);
 
-	if (!force_queue && tp->send_head == NULL && tcp_snd_test(sk, skb)) {
+	if (!force_queue && tp->send_head == NULL && tcp_snd_test(sk, skb, 1)) {
 		/* Send it out now. */
 		TCP_SKB_CB(skb)->when = tcp_time_stamp;
 		tp->snd_nxt = TCP_SKB_CB(skb)->end_seq;
@@ -341,7 +341,8 @@ void tcp_write_xmit(struct sock *sk)
 		 * b) not exceeding our congestion window.
 		 * c) not retransmitting [Nagle]
 		 */
-		while((skb = tp->send_head) && tcp_snd_test(sk, skb)) {
+		while((skb = tp->send_head) &&
+		      tcp_snd_test(sk, skb, tcp_skb_is_last(sk, skb))) {
 			if (skb->len > mss_now) {
 				if (tcp_fragment(sk, skb, mss_now))
 					break;
@@ -1040,10 +1041,14 @@ void tcp_send_ack(struct sock *sk)
 			 *
 			 * This is the one possible way that we can delay an
 			 * ACK and have tp->ato indicate that we are in
-			 * quick ack mode, so clear it.
+			 * quick ack mode, so clear it.  It is also the only
+			 * possible way for ato to be zero, when ACK'ing a
+			 * SYNACK because we've taken no ATO measurement yet.
 			 */
-			if(tcp_in_quickack_mode(tp))
+			if (tcp_in_quickack_mode(tp))
 				tcp_exit_quickack_mode(tp);
+			if (!tp->ato)
+				tp->ato = tp->rto;
 			tcp_send_delayed_ack(tp, HZ/2);
 			return;
 		}

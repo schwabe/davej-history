@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.58.2.2 1999/12/01 23:55:43 davem Exp $
+/* $Id: traps.c,v 1.58.2.3 1999/12/19 23:59:28 davem Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -516,8 +516,22 @@ void do_fpe_common(struct pt_regs *regs)
 		regs->tpc = regs->tnpc;
 		regs->tnpc += 4;
 	} else {
+		unsigned long fsr = current->tss.xfsr[0];
+
 		current->tss.sig_address = regs->tpc;
 		current->tss.sig_desc = SUBSIG_FPERROR;
+		if ((fsr & 0x1c000) == (1 << 14)) {
+			if (fsr & 0x01)
+				current->tss.sig_desc = SUBSIG_FPINEXACT;
+			else if (fsr & 0x02)
+				current->tss.sig_desc = SUBSIG_FPDIVZERO;
+			else if (fsr & 0x04)
+				current->tss.sig_desc = SUBSIG_FPUNFLOW;
+			else if (fsr & 0x08)
+				current->tss.sig_desc = SUBSIG_FPOVFLOW;
+			else if (fsr & 0x10)
+				current->tss.sig_desc = SUBSIG_FPINTOVFL;
+		}
 		send_sig(SIGFPE, current, 1);
 	}
 }
@@ -561,7 +575,9 @@ void do_tof(struct pt_regs *regs)
 
 void do_div0(struct pt_regs *regs)
 {
-	send_sig(SIGILL, current, 1);
+	current->tss.sig_address = regs->tpc;
+	current->tss.sig_desc = SUBSIG_IDIVZERO;
+	send_sig(SIGFPE, current, 1);
 }
 
 void instruction_dump (unsigned int *pc)
@@ -686,10 +702,12 @@ void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long n
 	send_sig(SIGILL, current, 1);
 }
 
-void handle_hw_divzero(struct pt_regs *regs, unsigned long pc, unsigned long npc,
-		       unsigned long psr)
+void handle_hw_divzero(struct pt_regs *regs, unsigned long pc,
+		       unsigned long npc, unsigned long psr)
 {
-	send_sig(SIGILL, current, 1);
+	current->tss.sig_address = regs->tpc;
+	current->tss.sig_desc = SUBSIG_IDIVZERO;
+	send_sig(SIGFPE, current, 1);
 }
 
 /* Trap level 1 stuff or other traps we should never see... */

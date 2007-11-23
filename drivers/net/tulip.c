@@ -15,6 +15,10 @@
 
 	Support and updates available at
 	http://cesdis.gsfc.nasa.gov/linux/drivers/tulip.html
+	
+	This driver also contains updates by Wolfgang Walter and others.
+	For this specific driver variant please use linux-kernel for 
+	bug reports.
 */
 
 #define SMP_CHECK
