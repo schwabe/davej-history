@@ -10,7 +10,13 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- * $Log: falc.h,v $
+ * $Log: falc-lh.h,v $
+ * Revision 3.1  2001/06/15 12:41:10  regina
+ * upping major version number
+ *
+ * Revision 1.1.1.1  2001/06/13 20:24:36  daniela
+ * PC300 initial CVS version (3.4.0-pre1)
+ *
  * Revision 1.1 2000/05/15 ivan
  * Included DJA bits for the LIM2 register.
  *

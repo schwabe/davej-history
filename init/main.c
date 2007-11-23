@@ -357,6 +357,9 @@ extern void sm_setup(char *str, int *ints);
 #ifdef CONFIG_ADBMOUSE
 extern void adb_mouse_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_COMPUTONE
+extern void ip2_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_WDT
 extern void wdt_setup(char *str, int *ints);
 #endif
@@ -990,6 +993,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_SOUNDMODEM
 	{ "soundmodem=", sm_setup },
+#endif
+#ifdef CONFIG_COMPUTONE
+	{ "ip2=", ip2_setup };
 #endif
 #ifdef CONFIG_WDT
 	{ "wdt=", wdt_setup },

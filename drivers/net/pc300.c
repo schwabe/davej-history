@@ -1,6 +1,6 @@
 #define	USE_PCI_CLOCK
 static char rcsid[] =
-"$Revision: 3.1.0.6 $$Date: 2001/03/02 $";
+"Revision: 3.4.2 Date: 2001/10/11 ";
 
 /*
  * pc300.c	Cyclades-PC300(tm) Driver.
@@ -15,6 +15,27 @@ static char rcsid[] =
  *	2 of the License, or (at your option) any later version.
  * 
  * $Log: pc300.c,v $
+ * Revision 3.2 to 3.12  2001/10/11 20:26:04  daniela
+ * Fixes for noisy lines: return the size of bad frames in 
+ * dma_get_rx_frame_size, so that the Rx buffer descriptors can be cleaned by 
+ * dma_buf_read (called in cpc_net_rx); improved Rx statistics; created 
+ * rx_dma_start routine. 
+ * Changed file revision to the package revision, changed T1/E1 master clock 
+ * configuration, reviewed boot messages and default configuration. 
+ * Included new configuration parameters (line code, CRC calculation and clock)
+ * Changed the header of message trace to include the device name. New format:
+ * "hdlcX[R/T]: ".
+ *
+ * Revision 3.1  2001/06/15 12:41:10  regina
+ * upping major version number
+ *
+ * Revision 1.1.1.1  2001/06/13 20:24:25  daniela
+ * PC300 initial CVS version (3.4.0-pre1)
+ *
+ * Revision 3.1.0.7 2001/06/08 daniela
+ * Did some changes in the DMA programming implementation to avoid the 
+ * occurrence of a SCA-II bug when CDA is accessed during a DMA transfer.
+ *
  * Revision 3.1.0.6 2001/03/02 daniela
  * Changed SIOCGPC300CONF ioctl, to give hw information to pc300util.
  *
@@ -167,6 +188,7 @@ static char rcsid[] =
 #undef	PC300_DEBUG_INTR
 #undef	PC300_DEBUG_TX
 #undef	PC300_DEBUG_RX
+#undef	PC300_DEBUG_OTHER
 
 /* Hardware configuration options.
  * These are arrays of configuration options used by verification routines.
@@ -327,8 +349,11 @@ dma_get_rx_frame_size(pc300_t *card, int ch)
     while ((status = cpc_readb(&ptdescr->status)) & DST_OSB) {
 	rcvd += cpc_readw(&ptdescr->len);
 	first_bd = (first_bd + 1) & (N_DMA_RX_BUF - 1);
-	if (status & DST_EOM)
+	if ((status & DST_EOM) || (first_bd == card->chan[ch].rx_last_bd)) {
+	    /* Return the size of a good frame or incomplete bad frame 
+	     * (dma_buf_read will clean the buffer descriptors in this case). */
 	    return (rcvd);
+	}
 	ptdescr = (pcsca_bd_t *)(card->hw.rambase + cpc_readl(&ptdescr->next));
     }
     return (-1);
@@ -389,7 +414,10 @@ dma_buf_read(pc300_t *card, int ch, struct sk_buff *skb)
     ptdescr = (pcsca_bd_t *)(card->hw.rambase + 
 			     RX_BD_ADDR(ch, chan->rx_first_bd));
     while ((status = cpc_readb(&ptdescr->status)) & DST_OSB) {
-	if (status & (DST_OVR | DST_CRC | DST_RBIT | DST_SHRT | DST_ABT)) {
+	nchar = cpc_readw(&ptdescr->len);
+	if ((status & (DST_OVR | DST_CRC | DST_RBIT | DST_SHRT | DST_ABT)) ||
+							(nchar > BD_DEF_LEN)) {
+	    if (nchar > BD_DEF_LEN) status |= DST_RBIT;
 	    rcvd = -status;
 	    /* Discard remaining descriptors used by the bad frame */
 	    while(chan->rx_first_bd != chan->rx_last_bd) {
@@ -404,11 +432,13 @@ dma_buf_read(pc300_t *card, int ch, struct sk_buff *skb)
 	    }
 	    break;
 	}
-	if ((nchar = cpc_readw(&ptdescr->len)) != 0) {
-	    memcpy_fromio(skb_put(skb, nchar), 
-			  (void *)(card->hw.rambase + 
-				   cpc_readl(&ptdescr->ptbuf)), 
-			  nchar);
+	if (nchar != 0) {
+	    if (skb) {
+		memcpy_fromio(skb_put(skb, nchar), 
+			      (void *)(card->hw.rambase + 
+				       cpc_readl(&ptdescr->ptbuf)), 
+			      nchar);
+	    }
 	    rcvd += nchar;
 	}
 	cpc_writeb(&ptdescr->status, 0);
@@ -452,6 +482,29 @@ rx_dma_stop(pc300_t *card, int ch)
     /* Disable DMA */
     cpc_writeb(scabase + DRR, drr_ena_bit);
     cpc_writeb(scabase + DRR, drr_rst_bit & ~drr_ena_bit);
+}
+
+void 
+rx_dma_start(pc300_t *card, int ch)
+{
+    uclong scabase = card->hw.scabase;
+    pc300ch_t *chan = (pc300ch_t *)&card->chan[ch];
+
+    /* Start DMA */
+    cpc_writel(scabase + DRX_REG(CDAL, ch), 
+		RX_BD_ADDR(ch, chan->rx_first_bd));
+    if (cpc_readl(scabase + DRX_REG(CDAL,ch)) !=
+		   RX_BD_ADDR(ch, chan->rx_first_bd)) {
+	cpc_writel(scabase + DRX_REG(CDAL, ch),
+		    RX_BD_ADDR(ch, chan->rx_first_bd));
+    }
+    cpc_writel(scabase + DRX_REG(EDAL, ch), 
+		RX_BD_ADDR(ch, chan->rx_last_bd));
+    cpc_writew(scabase + DRX_REG(BFLL, ch), BD_DEF_LEN);
+    cpc_writeb(scabase + DSR_RX(ch), DSR_DE);
+    if (!(cpc_readb(scabase + DSR_RX(ch)) & DSR_DE)) {
+	cpc_writeb(scabase + DSR_RX(ch), DSR_DE);
+    }
 }
 
 /*************************/
@@ -684,7 +737,7 @@ falc_init_t1(pc300_t *card, int ch)
     cpc_writeb(falcbase + F_REG(SIC1, ch), SIC1_XBS0); 
 	
     /* Clock mode */
-    if (conf->clkrate) {	/* Master mode */
+    if (conf->clktype == PC300_CLOCK_INT) {	/* Master mode */
 	cpc_writeb(falcbase + F_REG(LIM0, ch), 
 		   cpc_readb(falcbase + F_REG(LIM0, ch)) | LIM0_MAS); 
     } else {	/* Slave mode */
@@ -851,7 +904,7 @@ falc_init_e1(pc300_t *card, int ch)
 	       cpc_readb(falcbase + F_REG(FMR1, ch)) & ~FMR1_PMOD);
 
     /* Clock mode */
-    if (conf->clkrate) {	/* Master mode */
+    if (conf->clktype == PC300_CLOCK_INT) {	/* Master mode */
 	cpc_writeb(falcbase + F_REG(LIM0, ch), 
 		   cpc_readb(falcbase + F_REG(LIM0, ch)) | LIM0_MAS); 
     } else {	/* Slave mode */
@@ -1620,27 +1673,31 @@ ucshort falc_pattern_test_error(pc300_t *card, int ch)
 /**********************************/
 /***   Net Interface Routines   ***/
 /**********************************/
+
 static void 
 cpc_trace (struct device *dev, struct sk_buff *skb_main, char rx_tx)
 {
     struct sk_buff *skb;
 
-    if ((skb = dev_alloc_skb(3 + skb_main->len)) == NULL) {
+    if ((skb = dev_alloc_skb(10 + skb_main->len)) == NULL) {
 	printk("%s: out of memory\n", dev->name);
 	return;
     }
-    skb_put (skb, 3 + skb_main->len);
+    skb_put (skb, 10 + skb_main->len);
     
     skb->dev = dev;
     skb->protocol = htons(ETH_P_CUST);
     skb->mac.raw  = skb->data;
     skb->pkt_type = PACKET_HOST;
-    skb->len = 3 + skb_main->len;
+    skb->len = 10 + skb_main->len;
 
-    skb->data[0] = rx_tx;
-    skb->data[1] = ':';
-    skb->data[2] = ' ';
-    memcpy(&skb->data[3], skb_main->data, skb_main->len);
+    memcpy(&skb->data[0], dev->name, 5);
+    skb->data[5] = '[';
+    skb->data[6] = rx_tx;
+    skb->data[7] = ']';
+    skb->data[8] = ':';
+    skb->data[9] = ' ';
+    memcpy(&skb->data[10], skb_main->data, skb_main->len);
 
     netif_rx(skb);
 }
@@ -1795,15 +1852,30 @@ cpc_net_rx(hdlc_device *hdlc)
     while (1) {
 	if ((rxb = dma_get_rx_frame_size(card, ch)) == -1)
 	    return;
-
-	skb = dev_alloc_skb(rxb);
-	if (skb == NULL) {
-	    printk("%s: Memory squeeze!!\n", dev->name);
-	    return;
+	
+	if (rxb > (dev->mtu + 40)) {
+	    printk("%s : MTU exceeded %d\n", dev->name, rxb); 
+	    skb = NULL;
+	} else {
+	    skb = dev_alloc_skb(rxb);
+	    if (skb == NULL) {
+		printk("%s: Memory squeeze!!\n", dev->name);
+	 	return;
+	    }
+	    skb->dev = dev;
 	}
-	skb->dev = dev;
 
-	if((rxb = dma_buf_read(card, ch, skb)) <= 0) {
+	if(((rxb = dma_buf_read(card, ch, skb)) <= 0) || (skb == NULL)) {
+#ifdef PC300_DEBUG_RX
+	    printk("%s: rxb = %x\n", dev->name, rxb);
+#endif
+	    if ((skb == NULL) && (rxb >= 0)) {
+		/* rxb > dev->mtu */
+		stats->rx_errors++;
+		stats->rx_length_errors++;
+		continue;
+	    }
+
 	    if (rxb < 0) {	/* Invalid frame */
 		rxb = -rxb;
 		if (rxb & DST_OVR) {
@@ -1819,7 +1891,9 @@ cpc_net_rx(hdlc_device *hdlc)
 		    stats->rx_frame_errors++;
 		}
 	    }
-	    dev_kfree_skb(skb);
+	    if (skb) {
+		dev_kfree_skb(skb);
+	    }
 	    continue;
 	}
 
@@ -2018,19 +2092,21 @@ sca_intr(pc300_t *card)
 		cpc_writeb(scabase + DSR_RX(ch), drx_stat | DSR_DWE);
 
 #ifdef PC300_DEBUG_INTR
-	        printk("sca_intr: RX intr (st=0x%08lx, dsr=0x%02x)\n", 
-		       status, drx_stat);
+	        printk("sca_intr: RX intr chan[%d] (st=0x%08lx, dsr=0x%02x)\n", 
+		       ch, status, drx_stat);
 #endif
 		if (status & IR0_DRX(IR0_DMIA, ch)) {
 		    if (drx_stat & DSR_BOF) {
+			if ((cpc_readb(scabase + DSR_RX(ch)) & DSR_DE)) {
+			    rx_dma_stop(card, ch);
+			}
+			cpc_net_rx(hdlc);
+			/* Discard invalid frames */
+			hdlc->stats.rx_errors++;
+			hdlc->stats.rx_over_errors++;
 			chan->rx_first_bd = 0;
 			chan->rx_last_bd = N_DMA_RX_BUF - 1;
-			cpc_writel(scabase + DRX_REG(CDAL, ch), 
-				   RX_BD_ADDR(ch, chan->rx_first_bd));
-			cpc_writel(scabase + DRX_REG(EDAL, ch), 
-				   RX_BD_ADDR(ch, chan->rx_last_bd));
-			cpc_writew(scabase + DRX_REG(BFLL, ch), BD_DEF_LEN);
-			cpc_writeb(scabase + DSR_RX(ch), DSR_DE);
+			rx_dma_start(card, ch);
 		    }
 		}
 		if (status & IR0_DRX(IR0_DMIB, ch)) {
@@ -2060,8 +2136,8 @@ sca_intr(pc300_t *card)
 		cpc_writeb(scabase + DSR_TX(ch), dtx_stat | DSR_DWE);
 
 #ifdef PC300_DEBUG_INTR
-	        printk("sca_intr: TX intr (st=0x%08lx, dsr=0x%02x)\n", 
-		       status, dtx_stat);
+	        printk("sca_intr: TX intr chan[%d] (st=0x%08lx, dsr=0x%02x)\n", 
+		       ch, status, dtx_stat);
 #endif
 		if (status & IR0_DTX(IR0_EFT, ch)) {
 		    if (dtx_stat & DSR_UDRF) {
@@ -2125,8 +2201,8 @@ sca_intr(pc300_t *card)
 		cpc_writeb(scabase + M_REG(ST1, ch), st1);
 		
 #ifdef PC300_DEBUG_INTR
-	        printk("sca_intr: MSCI intr (st=0x%08lx, st1=0x%02x)\n", 
-		       status, st1);
+	        printk("sca_intr: MSCI intr chan[%d] (st=0x%08lx, st1=0x%02x)\n"
+			,ch, status, st1);
 #endif
 		if (st1 & ST1_CDCD) { /* DCD changed */
 		    if (cpc_readb(scabase + M_REG(ST3, ch)) & ST3_DCD) {
@@ -2346,6 +2422,11 @@ cpc_intr(int irq, void *dev_id, struct pt_regs *regs)
 #ifdef PC300_DEBUG_INTR
         printk("cpc_intr: spurious intr %d\n", irq);
 #endif
+        return; /* spurious intr */
+    }
+
+    if (card->hw.rambase == 0) {
+        printk("cpc_intr: spurious intr2 %d\n", irq);
         return; /* spurious intr */
     }
 
@@ -2753,17 +2834,57 @@ ch_config(pc300dev_t *d)
     uclong plxbase = card->hw.plxbase;
     int ch = chan->channel;
     uclong clkrate = chan->conf.clkrate;
+    uclong clktype = chan->conf.clktype;
     ucchar loopback = (conf->loopback ? MD2_LOOP_MIR : MD2_F_DUPLEX);
+    ucshort encoding = chan->conf.encoding;
+    ucshort parity = chan->conf.parity;
     int tmc, br;
+    ucchar md0, md2;
 
     /* Reset the channel */
     cpc_writeb(scabase + M_REG(CMD, ch), CMD_CH_RST);
 
     /* Configure the SCA registers */
-    cpc_writeb(scabase + M_REG(MD0, ch),
-                (MD0_CRC_CCITT|MD0_CRCC0|MD0_BIT_SYNC));
+    switch (parity) {
+	case PC300_PARITY_NONE:
+	    md0 = MD0_BIT_SYNC;
+	    break;
+	case PC300_PARITY_CRC16_PR0:
+	    md0 = MD0_CRC16_0|MD0_CRCC0|MD0_BIT_SYNC;
+	    break;
+	case PC300_PARITY_CRC16_PR1:
+	    md0 = MD0_CRC16_1|MD0_CRCC0|MD0_BIT_SYNC;
+	    break;
+	case PC300_PARITY_CRC32_PR1_CCITT:
+	    md0 = MD0_CRC32|MD0_CRCC0|MD0_BIT_SYNC;
+	    break;
+	case PC300_PARITY_CRC16_PR1_CCITT:
+	default:
+	    md0 = MD0_CRC_CCITT|MD0_CRCC0|MD0_BIT_SYNC;
+	    break;
+    }
+    switch (encoding) {
+	case PC300_ENCODING_NRZI:
+	    md2 = loopback|MD2_ADPLL_X8|MD2_NRZI;
+	    break;
+	case PC300_ENCODING_FM_MARK:	/* FM1 */
+	    md2 = loopback|MD2_ADPLL_X8|MD2_FM|MD2_FM1;
+	    break;
+	case PC300_ENCODING_FM_SPACE:	/* FM0 */
+	    md2 = loopback|MD2_ADPLL_X8|MD2_FM|MD2_FM0;
+	    break;
+	case PC300_ENCODING_MANCHESTER: /* It's not working... */
+	    md2 = loopback|MD2_ADPLL_X8|MD2_FM|MD2_MANCH;
+	    break;
+	case PC300_ENCODING_NRZ:
+	default:
+	    md2 = loopback|MD2_ADPLL_X8|MD2_NRZ;
+	    break;
+    }
+
+    cpc_writeb(scabase + M_REG(MD0, ch), md0);
     cpc_writeb(scabase + M_REG(MD1, ch), 0);
-    cpc_writeb(scabase + M_REG(MD2, ch), (loopback|MD2_ADPLL_X8|MD2_NRZ));
+    cpc_writeb(scabase + M_REG(MD2, ch), md2);
     cpc_writeb(scabase + M_REG(IDL, ch), 0x7e);
     cpc_writeb(scabase + M_REG(CTL, ch), CTL_URSKP|CTL_IDLC);
 
@@ -2790,13 +2911,18 @@ ch_config(pc300dev_t *d)
     switch(card->hw.type) {
 	case PC300_RSV:
 	case PC300_X21:
-	    if (clkrate) {
+	    if (clktype == PC300_CLOCK_INT || clktype == PC300_CLOCK_TXINT) {
 		/* Calculate the clkrate parameters */
 		tmc = clock_rate_calc(clkrate, card->hw.clock, &br);
 		cpc_writeb(scabase + M_REG(TMCT, ch), tmc);
 		cpc_writeb(scabase + M_REG(TXS, ch), (TXS_DTRXC|TXS_IBRG|br));
-		cpc_writeb(scabase + M_REG(TMCR, ch), tmc);
-		cpc_writeb(scabase + M_REG(RXS, ch), (RXS_IBRG|br));
+		if (clktype == PC300_CLOCK_INT) {
+		    cpc_writeb(scabase + M_REG(TMCR, ch), tmc);
+		    cpc_writeb(scabase + M_REG(RXS, ch), (RXS_IBRG|br));
+		} else {
+		    cpc_writeb(scabase + M_REG(TMCR, ch), 1);
+		    cpc_writeb(scabase + M_REG(RXS, ch), 0);
+		}
 		if (card->hw.type == PC300_X21) {
 		    cpc_writeb(scabase + M_REG(GPO, ch), 1);
 		    cpc_writeb(scabase + M_REG(EXS, ch), EXS_TES1|EXS_RES1);
@@ -2805,7 +2931,11 @@ ch_config(pc300dev_t *d)
 		}
 	    } else {
 		cpc_writeb(scabase + M_REG(TMCT, ch), 1);
-		cpc_writeb(scabase + M_REG(TXS, ch), TXS_DTRXC);
+		if (clktype == PC300_CLOCK_EXT) {
+		    cpc_writeb(scabase + M_REG(TXS, ch), TXS_DTRXC);
+		} else {
+		    cpc_writeb(scabase + M_REG(TXS, ch), TXS_DTRXC|TXS_RCLK);
+		}
 		cpc_writeb(scabase + M_REG(TMCR, ch), 1);
 		cpc_writeb(scabase + M_REG(RXS, ch), 0);
 		if (card->hw.type == PC300_X21) {
@@ -2833,10 +2963,10 @@ ch_config(pc300dev_t *d)
 	       IR0_M(IR0_RXINTA, ch) |
 	       IR0_DRX(IR0_EFT|IR0_DMIA|IR0_DMIB, ch) |
 	       IR0_DTX(IR0_EFT|IR0_DMIA|IR0_DMIB, ch));
-    cpc_writel(scabase + M_REG(IE0, ch), 
-	       cpc_readl(scabase + M_REG(IE0, ch)) | IE0_RXINTA);
-    cpc_writel(scabase + M_REG(IE1, ch), 
-	       cpc_readl(scabase + M_REG(IE1, ch)) | IE1_CDCD);
+    cpc_writeb(scabase + M_REG(IE0, ch), 
+	       cpc_readb(scabase + M_REG(IE0, ch)) | IE0_RXINTA);
+    cpc_writeb(scabase + M_REG(IE1, ch), 
+	       cpc_readb(scabase + M_REG(IE1, ch)) | IE1_CDCD);
     return 0;
 }
 
@@ -2867,10 +2997,7 @@ rx_config(pc300dev_t *d)
     cpc_writeb(scabase + DIR_RX(ch), (DIR_EOM | DIR_BOF));
 
     /* Start DMA */
-    cpc_writel(scabase + DRX_REG(CDAL, ch), RX_BD_ADDR(ch, chan->rx_first_bd));
-    cpc_writel(scabase + DRX_REG(EDAL, ch), RX_BD_ADDR(ch, chan->rx_last_bd));
-    cpc_writew(scabase + DRX_REG(BFLL, ch), BD_DEF_LEN);
-    cpc_writeb(scabase + DSR_RX(ch), DSR_DE);
+    rx_dma_start(card, ch);
 
     return 0;
 }
@@ -2945,6 +3072,9 @@ cpc_closech(pc300dev_t *d)
     int ch = chan->channel;
 
     cpc_writeb(card->hw.scabase + M_REG(CMD, ch), CMD_CH_RST);
+    rx_dma_stop(card, ch);
+    tx_dma_stop(card, ch);
+    
     if (card->hw.type == PC300_TE) {
 	memset(pfalc, 0, sizeof(falc_t));
 	cpc_writeb(card->hw.falcbase + card->hw.cpld_reg2,
@@ -2968,6 +3098,10 @@ cpc_open(hdlc_device *hdlc)
     struct device *dev = hdlc_to_dev(hdlc);
     pc300dev_t *d = (pc300dev_t *)dev->priv;
     int err = -1;
+
+#ifdef	PC300_DEBUG_OTHER
+    printk("pc300: cpc_open");
+#endif
 
     err = cpc_opench(d);
     if (err)
@@ -3006,6 +3140,7 @@ cpc_open(hdlc_device *hdlc)
     dev->tbusy = 0;
     dev->interrupt = 0;
     dev->start = 1;
+
     MOD_INC_USE_COUNT;
     return 0;
 }
@@ -3018,6 +3153,10 @@ cpc_close(hdlc_device *hdlc)
     pc300ch_t *chan = (pc300ch_t *)d->chan;
     pc300_t *card = (pc300_t *)chan->card;
     uclong flags;
+
+#ifdef	PC300_DEBUG_OTHER
+    printk("pc300: cpc_close");
+#endif
 
     CPC_LOCK(card, flags);
     switch(hdlc->mode & ~MODE_SOFT) {
@@ -3319,8 +3458,8 @@ show_version(void)
     tmp = strchr(rcsvers, ' '); *tmp++ = '\0';
     rcsdate = strchr(tmp, ' '); rcsdate++;
     tmp = strrchr(rcsdate, ' '); *tmp = '\0';
-    printk("Cyclades-PC300 driver %s %s\n", rcsvers, rcsdate);
-    printk("        built %s %s\n", __DATE__, __TIME__);
+    printk(KERN_INFO "Cyclades-PC300 driver %s %s (built %s %s)\n", 
+		     rcsvers, rcsdate, __DATE__, __TIME__);
 } /* show_version */
 
 __initfunc(int 
@@ -3350,8 +3489,11 @@ cpc_init(void))
 
 		chan->card = card;
 		chan->channel = j;
-		chan->conf.clkrate = 64000;
+		chan->conf.clkrate = 0;
+		chan->conf.clktype = PC300_CLOCK_EXT;
 		chan->conf.loopback = 0;
+		chan->conf.encoding = PC300_ENCODING_NRZ;
+		chan->conf.parity = PC300_PARITY_CRC16_PR1_CCITT;
 		switch(card->hw.type) {
 		    case PC300_TE:
 			chan->conf.media = LINE_T1;
@@ -3368,7 +3510,7 @@ cpc_init(void))
 
 		    case PC300_RSV:
 		    default:
-			chan->conf.media = LINE_RS232;
+			chan->conf.media = LINE_V35;
 			break;
 		}
 		chan->tx_first_bd = 0;
@@ -3407,7 +3549,7 @@ cpc_init(void))
 
 		if(register_hdlc_device(hdlc) == 0) {
 		    dev->priv = d;	/* We need 'priv', hdlc doesn't */
-		    printk("%s: PC300/", hdlc->name);
+		    printk("%s: Cyclades-PC300/", hdlc->name);
 		    switch(card->hw.type) {
 			case PC300_TE:
 			    printk("TE ");
@@ -3455,6 +3597,10 @@ void cleanup_module (void)
 	pc300_t *card = &cpc_card[i];
 
         if (card->hw.rambase != 0) {
+	    /* Disable interrupts on the PCI bridge */
+	    cpc_writew(card->hw.plxbase+0x4c, 
+		cpc_readw(card->hw.plxbase+0x4c) & ~(0x0040));
+
 	    for(j = 0 ; j < card->hw.nchan ; j++) {
 		unregister_hdlc_device(card->chan[j].d.hdlc);
 	    }

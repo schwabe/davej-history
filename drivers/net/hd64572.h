@@ -12,6 +12,12 @@
  *	2 of the License, or (at your option) any later version.
  *
  * $Log: hd64572.h,v $
+ * Revision 3.1  2001/06/15 12:41:10  regina
+ * upping major version number
+ *
+ * Revision 1.1.1.1  2001/06/13 20:24:31  daniela
+ * PC300 initial CVS version (3.4.0-pre1)
+ *
  * Revision 1.0 2000/01/25 ivan
  * Initial version.
  *

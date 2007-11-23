@@ -306,6 +306,8 @@ struct tcp_opt {
 	struct open_request	**syn_wait_last;
 
 	int syn_backlog;	/* Backlog of received SYNs */
+
+ 	unsigned long last_synq_overflow; 
 };
 
  	

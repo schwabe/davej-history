@@ -11,6 +11,17 @@
  *	2 of the License, or (at your option) any later version.
  *
  * $Log: pc300.h,v $
+ * Revision 3.2 to 3.6  2001/09/28 13:16:03  daniela
+ * Included kernel version.
+ * New configuration parameters (line code, CRC calculation and clock).
+ * Increased DEF_MTU and TX_QUEUE_LEN.
+ *
+ * Revision 3.1  2001/06/15 12:41:10  regina
+ * upping major version number
+ *
+ * Revision 1.1.1.1  2001/06/13 20:24:38  daniela
+ * PC300 initial CVS version (3.4.0-pre1)
+ *
  * Revision 2.5 2001/03/02 daniela
  * Created struct pc300conf, to provide the hardware information to pc300util.
  * 
@@ -85,6 +96,8 @@ typedef	unsigned long	uclong;		/* 32 bits, unsigned */
 typedef	unsigned short	ucshort;	/* 16 bits, unsigned */
 typedef	unsigned char	ucchar;		/* 8 bits, unsigned */
 #endif /* CY_TYPES */
+
+#define PC300_KERNEL	"2.2.x"	/* Kernel supported by this driver */
 
 #define	PC300_DEVNAME	"hdlc"	/* Dev. name base (for hdlc0, hdlc1, etc.) */
 #define	PC300_MAXINDEX	100	/* Max dev. name index (the '0' in hdlc0) */
@@ -329,9 +342,12 @@ typedef struct pc300hw {
 typedef struct pc300chconf {
 	ucchar media;		/* HW media (RS232, V.35, etc.) */
 	uclong proto;		/* Protocol (PPP, X.25, etc.) */
+	uclong clktype;		/* Clock type (ext, int, txint, txfromrx) */
 	uclong clkrate;		/* Clock rate (in bps, 0 = ext. clock) */
 	ucchar loopback;	/* Loopback mode */
 	ucchar monitor;		/* Monitor mode (0 = off, !0 = on) */
+	ucshort encoding;	/* NRZ, NRZI, FM0, FM1 (FMi - only RSV/X.21) */
+	ucshort parity;		/* CRC calculation */
 
 	/* TE-specific parameters */
 	ucchar lcode;		/* Line Code (AMI, B8ZS, etc.) */
@@ -380,6 +396,7 @@ enum pc300_ioctl_cmds {
 	SIOCSPC300TRACE,
 	SIOCSPC300LOOPBACK,
 	SIOCSPC300PATTERNTEST,
+	SIOCGPC300HARDWARE,
 };
 
 /* Loopback types - PC300/TE boards */
@@ -395,6 +412,24 @@ enum pc300_loopback_cmds {
 #define	PC300_RSV	0x01
 #define	PC300_X21	0x02
 #define	PC300_TE	0x03
+
+#define PC300_CLOCK_EXT		0  /* External TX and RX clock - DTE */
+#define PC300_CLOCK_INT		1  /* Internal TX and RX clock - DCE */
+#define PC300_CLOCK_TXINT	2  /* Internal TX and external RX clock */
+#define PC300_CLOCK_TXFROMRX	3  /* TX clock derived from external RX clock */
+
+#define PC300_ENCODING_NRZ		0x0000
+#define PC300_ENCODING_NRZI		0x0001
+#define PC300_ENCODING_FM_MARK		0x0002
+#define PC300_ENCODING_FM_SPACE		0x0003
+#define PC300_ENCODING_MANCHESTER	0x0004
+
+#define PC300_PARITY_NONE		0x0000
+#define PC300_PARITY_CRC16_PR0		0x0001
+#define PC300_PARITY_CRC16_PR1		0x0002
+#define PC300_PARITY_CRC16_PR0_CCITT	0x0003
+#define PC300_PARITY_CRC16_PR1_CCITT	0x0004
+#define PC300_PARITY_CRC32_PR1_CCITT	0x0005
 
 #define PC300_LC_AMI	0x01
 #define PC300_LC_B8ZS	0x02
@@ -420,8 +455,8 @@ enum pc300_loopback_cmds {
 #define PC300_RX_SENS_LH	0x02
 
 #define PC300_TX_TIMEOUT	(2*HZ)
-#define PC300_TX_QUEUE_LEN	10
-#define	PC300_DEF_MTU		1500
+#define PC300_TX_QUEUE_LEN	100
+#define	PC300_DEF_MTU		1600
 
 #ifdef __KERNEL__
 /* Function Prototypes */
