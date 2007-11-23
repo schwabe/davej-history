@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.85.2.1 1999/07/01 10:41:16 davem Exp $
+/* $Id: psycho.c,v 1.85.2.2 1999/08/09 13:00:21 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -756,8 +756,8 @@ static void __init apb_init(struct linux_psycho *sabre)
 	struct pci_dev *pdev;
 	unsigned short stmp;
 	unsigned int itmp;
+	unsigned char btmp;
 
-#if 0
 	for(pdev = pci_devices; pdev; pdev = pdev->next) {
 		if(pdev->vendor == PCI_VENDOR_ID_SUN &&
 		   pdev->device == PCI_DEVICE_ID_SUN_SABRE) {
@@ -765,7 +765,7 @@ static void __init apb_init(struct linux_psycho *sabre)
 			break;
 		}
 	}
-#endif
+
 	for (pdev = sabre->pci_bus->devices; pdev; pdev = pdev->sibling) {
 		if (pdev->vendor == PCI_VENDOR_ID_SUN &&
 		    pdev->device == PCI_DEVICE_ID_SUN_SIMBA) {
@@ -797,14 +797,33 @@ static void __init apb_init(struct linux_psycho *sabre)
 			pci_read_config_dword(pdev, APB_PCI_CONTROL_LOW, &itmp);
 			itmp = APB_PCI_CTL_LOW_ERRINT_EN | 0x0f;
 			pci_write_config_dword(pdev, APB_PCI_CONTROL_LOW, itmp);
-#if 0
+
 			/* Don't mess with the retry limit and PIO/DMA latency
 			 * timer settings.  But do set primary and secondary
 			 * latency timers.
 			 */
 			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
 			pci_write_config_byte(pdev, PCI_SEC_LATENCY_TIMER, 64);
-#endif
+
+			/* Here is an overview of the behavior of various
+			 * revisions of APB wrt. write buffer full conditions:
+			 *
+			 * Revision 1.0: pre-FCS, always stalls
+			 * Revision 1.1: pre-FCS, always disconnects
+			 * Revision 1.2: same behavior as rev 1.1
+			 * Revision 1.3: behavior is determined by bit 4 of
+			 *               secondary control register
+			 *		 0: stall initially, but disconnect
+			 *		    if PCI latency timer expires
+			 *		 1: always disconnect
+			 *
+			 * By setting the bit, since it is reserved in previous
+			 * revisions of APB, we get all FCS hardware to have
+			 * identical behavior when APB's write buffer fills up.
+			 */
+			pci_read_config_byte(pdev, APB_SECONDARY_CONTROL, &btmp);
+			btmp |= APB_SECONDARY_CTL_DISCON_FULL;
+			pci_write_config_byte(pdev, APB_SECONDARY_CONTROL, btmp);
 		}
 	}
 }

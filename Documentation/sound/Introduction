@@ -239,7 +239,7 @@ twice, you need to do the following:
 
 1.  Copy the sound modules to a new name.  For example
     sb.o could be copied (or symlinked) to sb1.o for the
-    second SoundBlasster.
+    second SoundBlaster.
 
 2.  Make a second entry in /etc/conf.modules, for example,
     sound1 or sb1.  This second entry should refer to the

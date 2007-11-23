@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.140.2.3 1999/08/08 08:43:16 davem Exp $
+ * Version:	$Id: tcp.c,v 1.140.2.4 1999/08/09 03:13:12 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -731,7 +731,6 @@ static void wait_for_tcp_memory(struct sock * sk)
 static int wait_for_buffer(struct sock *sk) 
 { 
 	struct wait_queue wait = { current, NULL }; 
-	int success = 0; 
 
 	release_sock(sk); 
 	add_wait_queue(sk->sleep, &wait); 

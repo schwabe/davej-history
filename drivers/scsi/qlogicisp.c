@@ -1209,7 +1209,16 @@ static int isp1020_init(struct Scsi_Host *sh)
 	pci_write_config_word(pdev, PCI_COMMAND, command);
 	pci_read_config_word(pdev, PCI_COMMAND, &command);
 	pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 16);
-	pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
+	{
+		unsigned char min_gnt, latency_timer;
+
+		pci_read_config_byte(pdev, PCI_MIN_GNT, &min_gnt);
+		if (min_gnt == 0)
+			latency_timer = 64;
+		else
+			latency_timer = ((min_gnt << 3) & 0xff);
+		pci_write_config_byte(pdev, PCI_LATENCY_TIMER, latency_timer);
+	}
 #endif
 
 	if (command & PCI_COMMAND_IO && (io_base & 3) == 1)

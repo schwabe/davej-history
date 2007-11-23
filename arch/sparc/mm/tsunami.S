@@ -1,4 +1,4 @@
-/* $Id: tsunami.S,v 1.1 1997/05/03 05:09:09 davem Exp $
+/* $Id: tsunami.S,v 1.1.6.1 1999/08/09 13:00:16 davem Exp $
  * tsunami.S: High speed MicroSparc-I mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -68,6 +68,11 @@ tsunami_flush_tlb_range:
 tsunami_flush_tlb_all:
 	 mov	0x400, %o1
 	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
+	nop
+	nop
+	nop
+	nop
+	nop
 tsunami_flush_tlb_out:
 	retl
 	 nop
@@ -85,6 +90,11 @@ tsunami_flush_tlb_page:
 	 lda	[%g1] ASI_M_MMUREGS, %g5
 	sta	%o3, [%g1] ASI_M_MMUREGS
 	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
+	nop
+	nop
+	nop
+	nop
+	nop
 tsunami_flush_tlb_page_out:
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS

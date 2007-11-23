@@ -4446,6 +4446,7 @@ printk(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 
 	request_region(device->slot.io_port, 128, "ncr53c8xx");
 	np->port = device->slot.io_port;
+	np->myaddr = 255;
 
 #ifdef SCSI_NCR_NVRAM_SUPPORT
 	if (nvram) {
@@ -9739,9 +9740,15 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	}
 
 	if (!latency_timer) {
-		latency_timer = 64;
-		if (initverbose >= 2)
-			printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fixup)\n", latency_timer);
+		unsigned char min_gnt;
+
+		pcibios_read_config_byte(bus, device_fn,
+					 PCI_MIN_GNT, &min_gnt);
+		if (min_gnt == 0)
+			latency_timer = 128;
+		else
+			latency_timer = ((min_gnt << 3) & 0xff);
+		printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fixup)\n", latency_timer);
 		pcibios_write_config_byte(bus, device_fn,
 					  PCI_LATENCY_TIMER, latency_timer);
 		pcibios_read_config_byte(bus, device_fn,
