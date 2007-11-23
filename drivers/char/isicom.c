@@ -14,6 +14,12 @@
  *					Printk clean up
  */
 
+/*
+ *		Currently ISICOM_BH is hard coded to 16 in isicom.h, cannot
+ *		ask the kernel for a free slot as of 2.0.x - sameer
+ */
+
+
 #include <linux/config.h> 
 #include <linux/module.h>
 #include <linux/version.h>
@@ -31,7 +37,7 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include "isicom.h"
+#include <linux/isicom.h>
 
 static int isicom_refcount = 0;
 static int prev_card = 3;	/*	start servicing isi_card[0]	*/
@@ -108,7 +114,7 @@ extern inline int WaitTillCardIsFree(unsigned short base)
 static int ISILoad_open(struct inode *inode, struct file *filp)
 {
 #ifdef ISICOM_DEBUG	
-	printk(KERN_DEBUG "ISILoad:Card%d Opened!!!\n",MINOR(inode->i_rdev)+1);
+	printk(KERN_DEBUG "ISILoad:Firmware loader Opened!!!\n");
 #endif	
 	return 0;
 }
@@ -116,7 +122,7 @@ static int ISILoad_open(struct inode *inode, struct file *filp)
 static void ISILoad_release(struct inode *inode, struct file *filp)
 {
 #ifdef ISICOM_DEBUG
-	printk(KERN_DEBUG "ISILoad:Card%d Close(Release)d\n",MINOR(inode->i_rdev)+1);
+	printk(KERN_DEBUG "ISILoad:Firmware loader Close(Release)d\n",);
 #endif	
 }
 
@@ -128,15 +134,20 @@ static int ISILoad_ioctl(struct inode *inode, struct file *filp,
 	bin_frame frame;
 	/* exec_record exec_rec; */
 	
-	i=get_user((int *)arg);
-	if(i<0 || i >= BOARD_COUNT)
+	/*	Added this check to avoid oopses on an ioctl with no
+	 *	args - sameer
+	 */ 
+	error=verify_area(VERIFY_READ, (void *) arg, sizeof(int));
+	if (error)
+		return error;
+	card=get_user((int *)arg);
+	if(card < 0 || card >= BOARD_COUNT)
 		return -ENXIO;
 		
-	card=i;
 	base=isi_card[card].base;
 	
 	if(base==0)
-		return -ENXIO;
+		return -ENXIO;	/* disabled or not used */
 	
 	switch(cmd) {
 		case MIOCTL_RESET_CARD:
@@ -347,7 +358,7 @@ extern inline void schedule_bh(struct isi_port * port)
 static void isicom_tx(unsigned long _data)
 {
 	short count = (BOARD_COUNT-1), card, base;
-	short txcount, wait, wrd;
+	short txcount, wait, wrd, residue, word_count, cnt;
 	struct isi_port * port;
 	struct tty_struct * tty;
 	unsigned long flags;
@@ -357,11 +368,11 @@ static void isicom_tx(unsigned long _data)
 #endif	
 	
 	/*	find next active board	*/
-	card = (prev_card + 1) % 4;
+	card = (prev_card + 1) & 0x0003;
 	while(count-- > 0) {
 		if (isi_card[card].status & BOARD_ACTIVE) 
 			break;
-		card = (card + 1) % 4;	
+		card = (card + 1) & 0x0003;	
 	}
 	if (!(isi_card[card].status & BOARD_ACTIVE))
 		goto sched_again;
@@ -383,7 +394,7 @@ static void isicom_tx(unsigned long _data)
 			restore_flags(flags);
 			continue;
 		}
-		wait = 300;	
+		wait = 200;	
 		while(((inw(base+0x0e) & 0x01) == 0) && (wait-- > 0));
 		if (wait <= 0) {
 			restore_flags(flags);
@@ -407,6 +418,45 @@ static void isicom_tx(unsigned long _data)
 #endif	
 		outw((port->channel << isi_card[card].shift_count) | txcount
 					, base);
+		residue = NO;
+		wrd = 0;			
+		while (1) {
+			cnt = MIN(txcount, (SERIAL_XMIT_SIZE - port->xmit_tail));
+			if (residue == YES) {
+				residue = NO;
+				if (cnt > 0) {
+					wrd |= (port->xmit_buf[port->xmit_tail] << 8);
+					port->xmit_tail = (port->xmit_tail + 1) & (SERIAL_XMIT_SIZE - 1);
+					port->xmit_cnt--;
+					txcount--;
+					cnt--;
+					outw(wrd, base);			
+				}
+				else {
+					outw(wrd, base);
+					break;
+				}
+			}		
+			if (cnt <= 0) break;
+			word_count = cnt >> 1;
+			outsw(base, port->xmit_buf+port->xmit_tail, word_count);
+			port->xmit_tail = (port->xmit_tail + (word_count << 1)) &
+						(SERIAL_XMIT_SIZE - 1);
+			txcount -= (word_count << 1);
+			port->xmit_cnt -= (word_count << 1);
+			if (cnt & 0x0001) {
+				residue = YES;
+				wrd = port->xmit_buf[port->xmit_tail];
+				port->xmit_tail = (port->xmit_tail + 1) & (SERIAL_XMIT_SIZE - 1);
+				port->xmit_cnt--;
+				txcount--;
+			}
+		}
+/*
+ *	Replaced the code below with hopefully a faster loop - sameer
+ */
+
+/*					
 		while (1) {
 			wrd = port->xmit_buf[port->xmit_tail++];
 			port->xmit_tail = port->xmit_tail & (SERIAL_XMIT_SIZE - 1);
@@ -423,6 +473,7 @@ static void isicom_tx(unsigned long _data)
 				break;
 			}
 		}
+*/
 		InterruptTheCard(base);
 		if (port->xmit_cnt <= 0)
 			port->status &= ~ISI_TXOK;
@@ -436,7 +487,7 @@ sched_again:
 	if (!re_schedule)	
 		return;
 	init_timer(&tx);
-	tx.expires = jiffies + 1;
+	tx.expires = jiffies + HZ/100;
 	tx.data = 0;
 	tx.function = isicom_tx;
 	add_timer(&tx);
@@ -608,7 +659,7 @@ static void isicom_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 		insw(base, tty->flip.char_buf_ptr, word_count);
 		tty->flip.char_buf_ptr += (word_count << 1);		
 		byte_count -= (word_count << 1);
-		if (count % 2) {
+		if (count & 0x0001) {
 			*tty->flip.char_buf_ptr++ = (char)(inw(base) & 0xff);
 			byte_count -= 2;
 		}	
@@ -616,12 +667,13 @@ static void isicom_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 		tty->flip.flag_buf_ptr += count;
 		tty->flip.count += count;
 		
-		if (byte_count > 0)
+		if (byte_count > 0) {
 			printk(KERN_DEBUG "ISICOM: Intr(0x%x:%d): Flip buffer overflow! dropping bytes...\n",
 					base, channel+1);
-		while(byte_count > 0) { /* drain out unread xtra data */
-			inw(base);
-			byte_count -= 2;
+			while(byte_count > 0) { /* drain out unread xtra data */
+				inw(base);
+				byte_count -= 2;
+			}
 		}
 		queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
 	}
@@ -1305,7 +1357,8 @@ static int isicom_get_modem_info(struct isi_port * port, unsigned int * value)
 		((status & ISI_DTR) ? TIOCM_DTR : 0) |
 		((status & ISI_DCD) ? TIOCM_CAR : 0) |
 		((status & ISI_DSR) ? TIOCM_DSR : 0) |
-		((status & ISI_CTS) ? TIOCM_CTS : 0);
+		((status & ISI_CTS) ? TIOCM_CTS : 0) |
+		((status & ISI_RI ) ? TIOCM_RI  : 0);
 	put_user(info, (unsigned long *) value);
 	return 0;	
 }

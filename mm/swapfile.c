@@ -314,7 +314,9 @@ static int try_to_unuse(unsigned int type)
 		nr++;
 	}
 	free_page(page);
+#ifdef CONFIG_SYSVIPC	
 	shm_unuse(type);
+#endif
 	return 0;
 }
 

@@ -707,7 +707,7 @@ asmlinkage int sys_bind(int fd, struct sockaddr *umyaddr, int addrlen)
 		err = 0;
 out:		
 	sockfd_put(sock);
-	return(0);
+	return err;
 }
 
 

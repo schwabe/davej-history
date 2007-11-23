@@ -39,7 +39,8 @@ enum {
 	IMMEDIATE_BH,
 	KEYBOARD_BH,
 	CYCLADES_BH,
-	CM206_BH
+	CM206_BH,
+	ISICOM_BH
 };
 
 extern inline void init_bh(int nr, void (*routine)(void))

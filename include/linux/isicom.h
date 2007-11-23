@@ -1,23 +1,19 @@
-#ifndef ISICOM_H
-#define ISICOM_H
+#ifndef _LINUX_ISICOM_H
+#define _LINUX_ISICOM_H
 
 /*#define		ISICOM_DEBUG*/
 /*#define		ISICOM_DEBUG_DTR_RTS*/
 
 
-
 /*
  *	Firmware Loader definitions ...
  */
-
-#define		ISILOAD_MISC_MINOR	155	/* /dev/isctl */
-#define		ISILOAD_NAME		"ISILoad"
  
-#define		MultiTech		('M'<<8)
-#define		MIOCTL_LOAD_FIRMWARE	(MultiTech | 0x01)
-#define         MIOCTL_READ_FIRMWARE    (MultiTech | 0x02)
-#define         MIOCTL_XFER_CTRL	(MultiTech | 0x03)
-#define         MIOCTL_RESET_CARD	(MultiTech | 0x04)
+#define		__MultiTech		('M'<<8)
+#define		MIOCTL_LOAD_FIRMWARE	(__MultiTech | 0x01)
+#define         MIOCTL_READ_FIRMWARE    (__MultiTech | 0x02)
+#define         MIOCTL_XFER_CTRL	(__MultiTech | 0x03)
+#define         MIOCTL_RESET_CARD	(__MultiTech | 0x04)
 
 #define		DATA_SIZE	16
 
@@ -42,6 +38,12 @@ typedef	struct	{
 
 #ifdef __KERNEL__
 
+#define		YES	1
+#define		NO	0
+
+#define		ISILOAD_MISC_MINOR	155	/* /dev/isctl */
+#define		ISILOAD_NAME		"ISILoad"
+
 /*	
  *  ISICOM Driver definitions ...
  *
@@ -57,8 +59,6 @@ typedef	struct	{
 #define		ISICOM_CMAJOR	113	/* callout */
 #define		ISICOM_MAGIC	(('M' << 8) | 'T')
 
-#define		ISICOM_BH	16	/* bottom half entry # */ 
- 
 #define		WAKEUP_CHARS	256	/* hard coded for now	*/ 
 #define		TX_SIZE		254 
  

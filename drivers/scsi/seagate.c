@@ -689,7 +689,7 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 		return DID_BAD_TARGET;
 
 /*
- *	We work it differently depending on if this is is "the first time,"
+ *	We work it differently depending on if this is "the first time,"
  *	or a reconnect.  If this is a reselect phase, then SEL will 
  *	be asserted, and we must skip selection / arbitration phases.
  */

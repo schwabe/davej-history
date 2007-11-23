@@ -1500,7 +1500,7 @@ static inline unsigned long long get_clock_cnt(void)
 {
 	unsigned long low, high;
 	__asm__(".byte 0x0f,0x31" :"=a" (low), "=d" (high));
-	return (((unsigned long long) high << 31) | low); 
+	return (((unsigned long long) high << 32) | low); 
 }
 
 static void initialize_benchmark(struct random_benchmark *bench,

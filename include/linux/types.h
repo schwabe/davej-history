@@ -1,11 +1,12 @@
 #ifndef _LINUX_TYPES_H
 #define _LINUX_TYPES_H
 
-#ifdef __KERNEL__
+#if defined(__KERNEL__) && !defined(STDC_HEADERS)
 #if ((__GNUC_MINOR__ >= 8) || (__GNUC_MAJOR >=3))
 #warning "This code is tested with gcc 2.7.2.x only. Using egcs/gcc 2.8.x needs"
 #warning "additional patches that have not been sufficiently tested to include by"
 #warning "default."
+#warning "See http://www.suse.de/~florian/kernel+egcs.html for more information"
 #error "Remove this if you have applied the gcc 2.8/egcs patches and wish to use them"
 #endif
 #endif

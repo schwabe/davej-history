@@ -515,7 +515,7 @@ static int raw_scan_nonroot(struct super_block *sb,int start,const char *name,
 /*
  * raw_scan performs raw_scan_sector on any sector.
  *
- * NOTE: raw_scan must not be used on a directory that is is the process of
+ * NOTE: raw_scan must not be used on a directory that is the process of
  *       being created.
  */
 

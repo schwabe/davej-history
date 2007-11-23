@@ -1563,7 +1563,7 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     lp = (struct de4x5_private *)dev->priv;
     iobase = dev->base_addr;
 	
-    if (dev->interrupt)
+    if (test_and_set_bit(0, (void*) &dev->interrupt))
       printk("%s: Re-entering the interrupt handler.\n", dev->name);
 	
     DISABLE_IRQs;                        /* Ensure non re-entrancy */

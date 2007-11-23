@@ -424,8 +424,8 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	/* If we had an ILLEGAL REQUEST returned, then we may have
 	 * performed an unsupported command.  The only thing this should be 
 	 * would be a ten byte read where only a six byte read was supported.
-	 * Also, on a system where READ CAPACITY failed, we have have read 
-	 * past the end of the disk. 
+	 * Also, on a system where READ CAPACITY failed, we have read past
+	 * the end of the disk. 
 	 */
 
 	if (SCpnt->sense_buffer[2] == ILLEGAL_REQUEST) {

@@ -66,7 +66,7 @@ xOp2_not_denorm:
 	/* source 2 is always smaller than source 1 */
 	js	L_bugged_1
 
-	testl	$0x80000000,SIGH(%edi)	/* The args are assumed to be be normalized */
+	testl	$0x80000000,SIGH(%edi)	/* The args are assumed to be normalized */
 	je	L_bugged_2
 
 	testl	$0x80000000,SIGH(%esi)

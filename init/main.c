@@ -949,7 +949,7 @@ asmlinkage void start_kernel(void)
 	sti();
 	check_bugs();
 
-#ifdef CONFIG_MTRR
+#if defined(CONFIG_MTRR) && defined(__SMP__)
 	init_mtrr_config();
 #endif
 
