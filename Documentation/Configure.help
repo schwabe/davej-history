@@ -2532,6 +2532,8 @@ CONFIG_IP_MASQUERADE
 
   from a boot time script after the /proc filesystem has been mounted.
 
+  Enabling masquerading automagically enables ip_always_defrag too.
+
   Details on how to set things up are contained in the IP Masquerade
   mini-HOWTO, available via FTP (user: anonymous) from
   ftp://metalab.unc.edu/pub/Linux/docs/HOWTO/mini; there's also some
@@ -2642,25 +2644,6 @@ CONFIG_IP_MASQUERADE_MFW
   inserted in and removed from the running kernel whenever you want).
   The module will be called ip_masq_markfw.o. If you want to compile
   it as a module, say M here and read Documentation/modules.txt.
-
-IP: always defragment (required for masquerading)
-CONFIG_IP_ALWAYS_DEFRAG
-  If you say Y here, then all incoming fragments (parts of IP packets
-  that arose when some host between origin and destination decided
-  that the packets were too large and cut them into pieces) will be
-  reassembled (defragmented) before being processed, even if they are
-  about to be forwarded.
-
-  You must say Y here if you want to enable "IP: masquerading" or "IP:
-  transparent proxying".
-
-  When using "IP: firewalling" support, you might also want to say Y
-  here, to have a more reliable firewall (otherwise second and further
-  fragments must be dealt with by the firewall, which can be tricky).
-
-  Only say Y here if running either a firewall that is the sole link
-  to your network or a transparent proxy; never ever say Y here for a
-  normal router or host.
 
 IP: aliasing support
 CONFIG_IP_ALIAS
@@ -8884,9 +8867,15 @@ CONFIG_APM
   APM is a BIOS specification for saving power using several different
   techniques. This is mostly useful for battery powered laptops with
   APM compliant BIOSes. If you say Y here, the system time will be
-  reset after a USER RESUME operation, the /proc/apm device will
-  provide battery status information, and user-space programs will
-  receive notification of APM "events" (e.g., battery status change).
+  reset after a RESUME operation, the /proc/apm device will provide
+  battery status information, and user-space programs will receive
+  notification of APM "events" (e.g. battery status change).
+
+  If you select "Y" here, you can disable actual use of the APM
+  BIOS by passing the "apm=off" option to the kernel at boot time.
+
+  Note that the APM support is almost completely disabled for
+  machines with more than one CPU.
 
   Supporting software is available; for more information, read the
   Battery Powered Linux mini-HOWTO, available via FTP (user:
@@ -8899,9 +8888,7 @@ CONFIG_APM
   This driver does not support the TI 4000M TravelMate and the ACER
   486/DX4/75 because they don't have compliant BIOSes. Many "green"
   desktop machines also don't have compliant BIOSes, and this driver
-  will cause those machines to panic during the boot phase (typically,
-  these machines are using a data segment of 0040, which is reserved
-  for the Linux kernel). 
+  may cause those machines to panic during the boot phase.
 
   If you are running Linux on a laptop, you may also want to read the
   Linux Laptop home page on the WWW at

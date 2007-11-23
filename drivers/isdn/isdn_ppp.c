@@ -1540,7 +1540,13 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 		 * sk_buff. old call to dev_alloc_skb only reserved
 		 * 16 bytes, now we are looking what the driver want.
 		 */
-		hl = dev->drv[lp->isdn_device]->interface->hl_hdrlen;
+		hl = dev->drv[lp->isdn_device]->interface->hl_hdrlen + IPPP_MAX_HEADER;
+		/* 
+		 * Note: hl might still be insufficient because the method
+		 * above does not account for a possibible MPPP slave channel
+		 * which had larger HL header space requirements than the
+		 * master.
+		 */
 		new_skb = alloc_skb(hl+skb->len, GFP_ATOMIC);
 		if (new_skb) {
 			u_char *buf;
@@ -2667,9 +2673,10 @@ static struct sk_buff *isdn_ppp_compress(struct sk_buff *skb_in,int *proto,
 	}
 
 	/* Allow for at least 150 % expansion (for now) */
-	skb_out = dev_alloc_skb(skb_in->len + skb_in->len/2 + 32);
+	skb_out = dev_alloc_skb(skb_in->len + skb_in->len/2 + 32 + skb_headroom(skb_in));
 	if(!skb_out)
 		return skb_in;
+	skb_reserve(skb_out, skb_headroom(skb_in));
 
 	ret = (compressor->compress)(stat,skb_in,skb_out,*proto);
 	if(!ret) {

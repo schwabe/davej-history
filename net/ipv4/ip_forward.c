@@ -176,7 +176,7 @@ int ip_forward(struct sk_buff *skb)
 			    (icmph->type==ICMP_TIME_EXCEEDED))
 			{
 #endif
-				maddr = rt->rt_src;
+				u32 maddr = rt->rt_src;
 				fw_res = ip_fw_masq_icmp(&skb, maddr);
 			        if (fw_res < 0) {
 					kfree_skb(skb);

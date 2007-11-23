@@ -127,14 +127,13 @@ hfmodem_time_t hfmodem_refclock_current(struct hfmodem_state *dev, hfmodem_time_
 
 #ifdef __i386__
 	if (rdtsc_ok) {
-		unsigned int tmp0, tmp1;
-		unsigned int tmp2, tmp3;
+		unsigned int tmp0, tmp1, tmp2, tmp3, tmp4;
 		
 		__asm__("rdtsc;\n\t"
 			"subl %2,%%eax\n\t"
 			"sbbl %3,%%edx\n\t" : "=&a" (tmp0), "=&d" (tmp1) 
-			: "m" (dev->clk.starttime_lo), "m" (dev->clk.starttime_hi) : "ax", "dx");
-		__asm__("mull %1" : "=d" (tmp2) : "m" (scale_rdtsc), "a" (tmp0) : "ax");
+			: "m" (dev->clk.starttime_lo), "m" (dev->clk.starttime_hi));
+		__asm__("mull %2" : "=d" (tmp2), "=a" (tmp4) : "m" (scale_rdtsc), "1" (tmp0) : "ax");
 		__asm__("mull %1" : "=a" (tmp3) : "m" (scale_rdtsc), "a" (tmp1) : "dx");
 		curtime = tmp2 + tmp3;
 		goto time_known;

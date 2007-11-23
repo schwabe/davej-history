@@ -55,6 +55,9 @@ struct sound_unit
 #ifdef CONFIG_SOUND_SONICVIBES
 extern int init_sonicvibes(void);
 #endif
+#ifdef CONFIG_SOUND_MAESTRO
+extern int init_maestro(void);
+#endif
 #ifdef CONFIG_SOUND_ES1370
 extern int init_es1370(void);
 #endif
@@ -409,6 +412,9 @@ int soundcore_init(void)
 #endif
 #ifdef CONFIG_SOUND_ES1371
 	init_es1371();
+#endif
+#ifdef CONFIG_SOUND_MAESTRO
+	init_maestro();
 #endif
 #ifdef CONFIG_SOUND_MSNDCLAS
 	msnd_classic_init();

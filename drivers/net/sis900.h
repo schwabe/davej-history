@@ -1,5 +1,5 @@
 /* sis900.h Definitions for SiS ethernet controllers including 7014/7016 and 900 
- * Copyrigth 1999 Silicon Integrated System Corporation
+ * Copyright 1999 Silicon Integrated System Corporation
  * References:
  *   SiS 7016 Fast Ethernet PCI Bus 10/100 Mbps LAN Controller with OnNow Support,
  *	preliminary Rev. 1.0 Jan. 14, 1998
@@ -15,7 +15,7 @@
 #define SIS900_TOTAL_SIZE 0x100
 
 /* Symbolic offsets to registers. */
-enum SIS900_registers {
+enum sis900_registers {
 	cr=0x0,                 //Command Register
 	cfg=0x4,                //Configuration Register
 	mear=0x8,               //EEPROM Access Register
@@ -120,7 +120,7 @@ enum sis900_eeprom_address {
 
 /* The EEPROM commands include the alway-set leading bit. Refer to NM93Cxx datasheet */
 enum sis900_eeprom_command {
-	EEread = 0x0180, EEwrite = 0x0140, EEerase = 0x01C0, 
+	EEread     = 0x0180, EEwrite    = 0x0140, EEerase = 0x01C0, 
 	EEwriteEnable = 0x0130, EEwriteDisable = 0x0100,
 	EEeraseAll = 0x0120, EEwriteAll = 0x0110, 
 	EEaddrMask = 0x013F, EEcmdShift = 16
@@ -134,48 +134,34 @@ enum sis900_eeprom_command {
 #define MIIcmdLen       16
 #define MIIcmdShift     16
 
-/* Buffer Descriptor */
-#define OWN             0x80000000
-#define MORE            0x40000000
-#define INTR            0x20000000
-#define OK              0x08000000
-#define DSIZE           0x00000FFF
+/* Buffer Descriptor Status*/
+enum sis900_buffer_status {
+	OWN    = 0x80000000, MORE   = 0x40000000, INTR = 0x20000000,
+	SUPCRC = 0x10000000, INCCRC = 0x10000000,
+	OK     = 0x08000000, DSIZE  = 0x00000FFF
+};
+/* Status for TX Buffers */
+enum sis900_tx_buffer_status {
+	ABORT   = 0x04000000, UNDERRUN = 0x02000000, NOCARRIER = 0x01000000,
+	DEFERD  = 0x00800000, EXCDEFER = 0x00400000, OWCOLL    = 0x00200000,
+	EXCCOLL = 0x00100000, COLCNT   = 0x000F0000
+};
 
-#define SUPCRC          0x10000000
-#define ABORT           0x04000000
-#define UNDERRUN        0x02000000
-#define NOCARRIER       0x01000000
-#define DEFERD          0x00800000
-#define EXCDEFER        0x00400000
-#define OWCOLL          0x00200000
-#define EXCCOLL         0x00100000
-#define COLCNT          0x000F0000
-
-#define INCCRC          0x10000000
-//      ABORT           0x04000000
-#define OVERRUN         0x02000000
-#define DEST            0x01800000
-#define BCAST           0x01800000
-#define MCAST           0x01000000
-#define UNIMATCH        0x00800000
-#define TOOLONG         0x00400000
-#define RUNT            0x00200000
-#define RXISERR         0x00100000
-#define CRCERR          0x00080000
-#define FAERR           0x00040000
-#define LOOPBK          0x00020000
-#define RXCOL           0x00010000
-
-#define RXSTS_shift     18
+enum sis900_rx_bufer_status {
+	OVERRUN = 0x02000000, DEST = 0x00800000,     BCAST = 0x01800000,
+	MCAST   = 0x01000000, UNIMATCH = 0x00800000, TOOLONG = 0x00400000,
+	RUNT    = 0x00200000, RXISERR  = 0x00100000, CRCERR  = 0x00080000,
+	FAERR   = 0x00040000, LOOPBK   = 0x00020000, RXCOL   = 0x00010000
+};
 
 /* MII register offsets */
-#define MII_CONTROL             0x0000
-#define MII_STATUS              0x0001
-#define MII_PHY_ID0             0x0002
-#define MII_PHY_ID1             0x0003
-#define MII_ANAR                0x0004
-#define MII_ANLPAR              0x0005
-#define MII_ANER                0x0006
+enum mii_registers {
+	MII_CONTROL = 0x0000, MII_STATUS = 0x0001, MII_PHY_ID0 = 0x0002,
+	MII_PHY_ID1 = 0x0003, MII_ANADV  = 0x0004, MII_ANLPAR  = 0x0005,
+	MII_CONFIG1 = 0x0010, MII_CONFIG2 = 0x0011, MII_STSOUT = 0x0012,
+	MII_MASK    = 0x0013
+};
+
 /* MII Control register bit definitions. */
 #define MIICNTL_FDX             0x0100
 #define MIICNTL_RST_AUTO        0x0200
@@ -229,11 +215,12 @@ enum sis900_eeprom_command {
 #define ACCEPT_ALL_PHYS         0x01
 #define ACCEPT_ALL_MCASTS       0x02
 #define ACCEPT_ALL_BCASTS       0x04
+
 #define ACCEPT_ALL_ERRORS       0x08
 #define ACCEPT_CAM_QUALIFIED    0x10
+
 #define MAC_LOOPBACK            0x20
 
-//#define FDX_CAPABLE_FULL_SELECTED     4
 #define CRC_SIZE                4
 #define MAC_HEADER_SIZE         14
 
@@ -241,12 +228,12 @@ enum sis900_eeprom_command {
 #define RX_BUF_SIZE     1536
 
 #define NUM_TX_DESC     16      	/* Number of Tx descriptor registers. */
-#define NUM_RX_DESC     8       	/* Number of Rx descriptor registers. */
+#define NUM_RX_DESC     16       	/* Number of Rx descriptor registers. */
 
 #define TRUE            1
 #define FALSE           0
 
-/* PCI stuff, should be move to pci.h */
+/* PCI stuff, should be move to pic.h */
 #define PCI_DEVICE_ID_SI_900	0x900   
 #define PCI_DEVICE_ID_SI_7016	0x7016  
 

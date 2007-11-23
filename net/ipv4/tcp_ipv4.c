@@ -1617,7 +1617,8 @@ static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 			sk = tcp_check_req(sk, skb, req);
 		}
 #ifdef CONFIG_SYN_COOKIES
-		else if (flg == __constant_htonl(0x00120000))  {
+		else if ((flg & __constant_htonl(0x00120000))==__constant_htonl(0x00100000))
+		{
 			sk = cookie_v4_check(sk, skb, &(IPCB(skb)->opt));
 		}
 #endif

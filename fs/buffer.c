@@ -1512,7 +1512,7 @@ void __init buffer_init(unsigned long memory_size)
 	   fsync times (ext2) manageable, is the following */
 
 	memory_size >>= 20;
-	for (order = 5; (1UL << order) < memory_size; order++);
+	for (order = 0; (1UL << order) < memory_size; order++);
 
 	/* try to allocate something until we get it or we're asking
            for something that is really too small */
@@ -1579,7 +1579,6 @@ void wakeup_bdflush(int wait)
 		return;
 	wake_up(&bdflush_wait);
 	if (wait) {
-		run_task_queue(&tq_disk);
 		sleep_on(&bdflush_done);
 	}
 }

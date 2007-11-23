@@ -444,6 +444,13 @@ asmlinkage int sys_wait4(pid_t pid,unsigned int * stat_addr, int options, struct
 	add_wait_queue(&current->wait_chldexit,&wait);
 repeat:
 	flag = 0;
+
+	/* The interruptible state must be set before looking at the
+	   children. This because we want to catch any racy exit from
+	   the children as do_exit() may run under us. The following
+	   read_lock will enforce SMP ordering at the CPU level. */
+	current->state = TASK_INTERRUPTIBLE;
+
 	read_lock(&tasklist_lock);
  	for (p = current->p_cptr ; p ; p = p->p_osptr) {
 		if (pid>0) {
@@ -510,13 +517,13 @@ repeat:
 		retval = -ERESTARTSYS;
 		if (signal_pending(current))
 			goto end_wait4;
-		current->state=TASK_INTERRUPTIBLE;
 		schedule();
 		goto repeat;
 	}
 	retval = -ECHILD;
 end_wait4:
 	remove_wait_queue(&current->wait_chldexit,&wait);
+	current->state = TASK_RUNNING;
 	return retval;
 }
 

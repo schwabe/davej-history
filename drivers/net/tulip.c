@@ -18,7 +18,7 @@
 */
 
 #define SMP_CHECK
-static const char version[] = "tulip.c:v0.91g 7/16/99 becker@cesdis.gsfc.nasa.gov\n";
+static const char version[] = "tulip.c:v0.91g-ppc 7/16/99 becker@cesdis.gsfc.nasa.gov\n";
 
 /* A few user-configurable values. */
 
@@ -75,11 +75,7 @@ static int rx_copybreak = 100;
 
 #if defined(__alpha__)
 static int csr0 = 0x01A00000 | 0xE000;
-#elif defined(__powerpc__)
-static int csr0 = 0x01B00000 | 0x8000;
-#elif defined(__sparc__)
-static int csr0 = 0x01B00080 | 0x8000;
-#elif defined(__i386__)
+#elif defined(__i386__) || defined(__powerpc__) || defined(__sparc__)
 static int csr0 = 0x01A00000 | 0x8000;
 #else
 #warning Processor architecture undefined!
@@ -182,6 +178,10 @@ static char kernel_version[] = UTS_RELEASE;
 #if ! defined(HAS_NETIF_QUEUE)
 #define netif_wake_queue(dev)  mark_bh(NET_BH);
 #endif
+
+/* Condensed operations for readability. */
+#define virt_to_le32desc(addr)  cpu_to_le32(virt_to_bus(addr))
+#define le32desc_to_virt(addr)  bus_to_virt(le32_to_cpu(addr))
 
 #define tulip_debug debug
 #ifdef TULIP_DEBUG
@@ -1457,9 +1457,9 @@ tulip_open(struct device *dev)
 		*setup_frm++ = eaddrs[1]; *setup_frm++ = eaddrs[1];
 		*setup_frm++ = eaddrs[2]; *setup_frm++ = eaddrs[2];
 		/* Put the setup frame on the Tx list. */
-		tp->tx_ring[0].length = 0x08000000 | 192;
-		tp->tx_ring[0].buffer1 = virt_to_bus(tp->setup_frame);
-		tp->tx_ring[0].status = DescOwned;
+		tp->tx_ring[0].length = cpu_to_le32(0x08000000 | 192);
+		tp->tx_ring[0].buffer1 = virt_to_le32desc(tp->setup_frame);
+		tp->tx_ring[0].status = cpu_to_le32(DescOwned);
 
 		tp->cur_tx++;
 	}
@@ -1545,7 +1545,7 @@ media_picked:
 	} else if (tp->chip_id == MX98715 || tp->chip_id == MX98725) {
 		/* Provided by BOLO, Macronix - 12/10/1998. */
 		dev->if_port = 0;
-		tp->csr6 = 0x01880200;
+		tp->csr6 = 0x01a80200;
 		outl(0x0f370000 | inw(ioaddr + 0x80), ioaddr + 0x80);
 		outl(0x11000 | inw(ioaddr + 0xa0), ioaddr + 0xa0);
 	} else if (tp->chip_id == DC21143  &&
@@ -1558,7 +1558,7 @@ media_picked:
 		dev->if_port = 0;
 		tp->csr6 = 0x00040000;
 	} else if (tp->chip_id == AX88140) {
-		tp->csr6 = 0x00000100;
+		tp->csr6 = tp->mii_cnt ? 0x00040100 : 0x00000100;
 	} else
 		select_media(dev, 1);
 
@@ -2487,14 +2487,13 @@ static void tulip_init_ring(struct device *dev)
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		tp->rx_ring[i].status = 0x00000000;
-		tp->rx_ring[i].length = PKT_BUF_SZ;
-		tp->rx_ring[i].buffer2 = virt_to_bus(&tp->rx_ring[i+1]);
+		tp->rx_ring[i].length = cpu_to_le32(PKT_BUF_SZ);
+		tp->rx_ring[i].buffer2 = virt_to_le32desc(&tp->rx_ring[i+1]);
 		tp->rx_skbuff[i] = NULL;
 	}
 	/* Mark the last entry as wrapping the ring. */
-	tp->rx_ring[i-1].length = PKT_BUF_SZ | DESC_RING_WRAP;
-	tp->rx_ring[i-1].buffer2 = virt_to_bus(&tp->rx_ring[0]);
-
+	tp->rx_ring[i-1].length = cpu_to_le32(PKT_BUF_SZ | DESC_RING_WRAP);
+	tp->rx_ring[i-1].buffer2 = virt_to_le32desc(&tp->rx_ring[0]);
 
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		/* Note the receive buffer must be longword aligned.
@@ -2505,8 +2504,8 @@ static void tulip_init_ring(struct device *dev)
 		if (skb == NULL)
 			break;
 		skb->dev = dev;			/* Mark as being used by this device. */
-		tp->rx_ring[i].status = DescOwned;	/* Owned by Tulip chip */
-		tp->rx_ring[i].buffer1 = virt_to_bus(skb->tail);
+		tp->rx_ring[i].status = cpu_to_le32(DescOwned);	/* Owned by Tulip chip */
+		tp->rx_ring[i].buffer1 = virt_to_le32desc(skb->tail);
 	}
 	tp->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
 
@@ -2515,9 +2514,9 @@ static void tulip_init_ring(struct device *dev)
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		tp->tx_skbuff[i] = 0;
 		tp->tx_ring[i].status = 0x00000000;
-		tp->tx_ring[i].buffer2 = virt_to_bus(&tp->tx_ring[i+1]);
+		tp->tx_ring[i].buffer2 = virt_to_le32desc(&tp->tx_ring[i+1]);
 	}
-	tp->tx_ring[i-1].buffer2 = virt_to_bus(&tp->tx_ring[0]);
+	tp->tx_ring[i-1].buffer2 = virt_to_le32desc(&tp->tx_ring[0]);
 }
 
 static int
@@ -2536,14 +2535,14 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 1;
 	}
 
-	/* Caution: the write order is important here, set the base address
-	   with the "ownership" bits last. */
+	/* Caution: the write order is important here, set the field
+	   with the ownership bits last. */
 
 	/* Calculate the next Tx descriptor entry. */
 	entry = tp->cur_tx % TX_RING_SIZE;
 
 	tp->tx_skbuff[entry] = skb;
-	tp->tx_ring[entry].buffer1 = virt_to_bus(skb->data);
+	tp->tx_ring[entry].buffer1 = virt_to_le32desc(skb->data);
 
 	if (tp->cur_tx - tp->dirty_tx < TX_RING_SIZE/2) {/* Typical path */
 		flag = 0x60000000; /* No interrupt */
@@ -2556,10 +2555,10 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 		flag = 0xe0000000; /* Tx-done intr. */
 	}
 	if (entry == TX_RING_SIZE-1)
-		flag |= 0xe0000000 | DESC_RING_WRAP;
+		flag = 0xe0000000 | DESC_RING_WRAP;
 
-	tp->tx_ring[entry].length = skb->len | flag;
-	tp->tx_ring[entry].status = DescOwned;	/* Pass ownership to the chip. */
+	tp->tx_ring[entry].length = cpu_to_le32(skb->len | flag);
+	tp->tx_ring[entry].status = cpu_to_le32(DescOwned);
 	tp->cur_tx++;
 	if ( ! tp->tx_full)
 		clear_bit(0, (void*)&dev->tbusy);
@@ -2617,10 +2616,10 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			for (dirty_tx = tp->dirty_tx; tp->cur_tx - dirty_tx > 0;
 				 dirty_tx++) {
 				int entry = dirty_tx % TX_RING_SIZE;
-				int status = tp->tx_ring[entry].status;
+				int status = le32_to_cpu(tp->tx_ring[entry].status);
 
 				if (status < 0)
-					break;			/* It still hasn't been Txed */
+					break;			/* It still has not been Txed */
 				/* Check for Rx filter setup frames. */
 				if (tp->tx_skbuff[entry] == NULL)
 				  continue;
@@ -2647,7 +2646,7 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					if (status & 0x0001) tp->stats.tx_deferred++;
 #endif
 #if LINUX_VERSION_CODE > 0x20127
-					tp->stats.tx_bytes += tp->tx_ring[entry].length & 0x7ff;
+					tp->stats.tx_bytes += tp->tx_skbuff[entry]->len;
 #endif
 					tp->stats.collisions += (status >> 3) & 15;
 					tp->stats.tx_packets++;
@@ -2724,13 +2723,14 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			/* Acknowledge all interrupt sources. */
 			outl(0x8001ffff, ioaddr + CSR5);
 			/* Clear all interrupting sources, set timer to re-enable. */
-			outl(((~csr5) & 0x0001ebef) | 0x0800, ioaddr + CSR7);
+			outl(((~csr5) & 0x0001ebef) | AbnormalIntr | TimerInt,
+				 ioaddr + CSR7);
 			outl(12, ioaddr + CSR11);
 			break;
 		}
 	} while (1);
 
-	if (tulip_debug > 3)
+	if (tulip_debug > 4)
 		printk(KERN_DEBUG "%s: exiting interrupt, csr5=%#4.4x.\n",
 			   dev->name, inl(ioaddr + CSR5));
 
@@ -2742,8 +2742,7 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	return;
 }
 
-static int
-tulip_rx(struct device *dev)
+static int tulip_rx(struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int entry = tp->cur_rx % RX_RING_SIZE;
@@ -2753,13 +2752,13 @@ tulip_rx(struct device *dev)
 	if (tulip_debug > 4)
 		printk(KERN_DEBUG " In tulip_rx(), entry %d %8.8x.\n", entry,
 			   tp->rx_ring[entry].status);
-	/* If we own the next entry, it's a new packet. Send it up. */
-	while (tp->rx_ring[entry].status >= 0) {
-		s32 status = tp->rx_ring[entry].status;
+	/* If we own the next entry, it is a new packet. Send it up. */
+	while ( ! (tp->rx_ring[entry].status & cpu_to_le32(DescOwned))) {
+		s32 status = le32_to_cpu(tp->rx_ring[entry].status);
 
 		if (tulip_debug > 5)
-			printk(KERN_DEBUG " In tulip_rx(), entry %d %8.8x.\n", entry,
-				   tp->rx_ring[entry].status);
+			printk(KERN_DEBUG "%s: In tulip_rx(), entry %d %8.8x.\n",
+				   dev->name, entry, status);
 		if (--rx_work_limit < 0)
 			break;
 		if ((status & 0x38008300) != 0x0300) {
@@ -2803,22 +2802,22 @@ tulip_rx(struct device *dev)
 				skb->dev = dev;
 				skb_reserve(skb, 2);	/* 16 byte align the IP header */
 #if ! defined(__alpha__)
-				eth_copy_and_sum(skb, bus_to_virt(tp->rx_ring[entry].buffer1),
-								 pkt_len, 0);
+				eth_copy_and_sum(skb, tp->rx_skbuff[entry]->tail, pkt_len, 0);
 				skb_put(skb, pkt_len);
 #else
-				memcpy(skb_put(skb, pkt_len),
-					   bus_to_virt(tp->rx_ring[entry].buffer1), pkt_len);
+				memcpy(skb_put(skb, pkt_len), tp->rx_skbuff[entry]->tail,
+					   pkt_len);
 #endif
 				work_done++;
 			} else { 	/* Pass up the skb already on the Rx ring. */
 				char *temp = skb_put(skb = tp->rx_skbuff[entry], pkt_len);
 				tp->rx_skbuff[entry] = NULL;
 #ifndef final_version
-				if (bus_to_virt(tp->rx_ring[entry].buffer1) != temp)
+				if (le32desc_to_virt(tp->rx_ring[entry].buffer1) != temp)
 					printk(KERN_ERR "%s: Internal fault: The skbuff addresses "
 						   "do not match in tulip_rx: %p vs. %p / %p.\n",
-						   dev->name, bus_to_virt(tp->rx_ring[entry].buffer1),
+						   dev->name,
+						   le32desc_to_virt(tp->rx_ring[entry].buffer1),
 						   skb->head, temp);
 #endif
 			}
@@ -2842,17 +2841,16 @@ tulip_rx(struct device *dev)
 			if (skb == NULL)
 				break;
 			skb->dev = dev;			/* Mark as being used by this device. */
-			tp->rx_ring[entry].buffer1 = virt_to_bus(skb->tail);
+			tp->rx_ring[entry].buffer1 = virt_to_le32desc(skb->tail);
 			work_done++;
 		}
-		tp->rx_ring[entry].status = DescOwned;
+		tp->rx_ring[entry].status = cpu_to_le32(DescOwned);
 	}
 
 	return work_done;
 }
 
-static int
-tulip_close(struct device *dev)
+static int tulip_close(struct device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
@@ -2867,7 +2865,7 @@ tulip_close(struct device *dev)
 
 	/* Disable interrupts by clearing the interrupt mask. */
 	outl(0x00000000, ioaddr + CSR7);
-	/* Stop the chip's Tx and Rx processes. */
+	/* Stop the Tx and Rx processes. */
 	outl(inl(ioaddr + CSR6) & ~0x2002, ioaddr + CSR6);
 	/* 21040 -- Leave the card in 10baseT state. */
 	if (tp->chip_id == DC21040)
@@ -2943,7 +2941,6 @@ static int private_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 			data[0] = 1;
 		else
 			return -ENODEV;
-		return 0;
 	case SIOCDEVPRIVATE+1:		/* Read the specified MII register. */
 		if (data[0] == 32  &&  (tp->flags & HAS_NWAY143)) {
 			int csr12 = inl(ioaddr + CSR12);
@@ -3034,9 +3031,9 @@ static inline u32 ether_crc(int length, unsigned char *data)
 
 static void set_rx_mode(struct device *dev)
 {
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	long ioaddr = dev->base_addr;
 	int csr6 = inl(ioaddr + CSR6) & ~0x00D5;
-	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 
 	tp->csr6 &= ~0x00D5;
 	if (dev->flags & IFF_PROMISC) {			/* Set promiscuous. */
@@ -3126,9 +3123,9 @@ static void set_rx_mode(struct device *dev)
 				/* Avoid a chip errata by prefixing a dummy entry. */
 				tp->tx_skbuff[entry] = 0;
 				tp->tx_ring[entry].length =
-					(entry == TX_RING_SIZE-1) ? DESC_RING_WRAP : 0;
+					(entry == TX_RING_SIZE-1) ? cpu_to_le32(DESC_RING_WRAP) : 0;
 				tp->tx_ring[entry].buffer1 = 0;
-				tp->tx_ring[entry].status = DescOwned;
+				tp->tx_ring[entry].status = cpu_to_le32(DescOwned);
 				entry = tp->cur_tx++ % TX_RING_SIZE;
 			}
 
@@ -3136,9 +3133,9 @@ static void set_rx_mode(struct device *dev)
 			/* Put the setup frame on the Tx list. */
 			if (entry == TX_RING_SIZE-1)
 				tx_flags |= DESC_RING_WRAP;		/* Wrap ring. */
-			tp->tx_ring[entry].length = tx_flags;
-			tp->tx_ring[entry].buffer1 = virt_to_bus(tp->setup_frame);
-			tp->tx_ring[entry].status = DescOwned;
+			tp->tx_ring[entry].length = cpu_to_le32(tx_flags);
+			tp->tx_ring[entry].buffer1 = virt_to_le32desc(tp->setup_frame);
+			tp->tx_ring[entry].status = cpu_to_le32(DescOwned);
 			if (tp->cur_tx - tp->dirty_tx >= TX_RING_SIZE - 2) {
 				set_bit(0, (void*)&dev->tbusy);
 				tp->tx_full = 1;

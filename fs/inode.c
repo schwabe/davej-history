@@ -438,6 +438,10 @@ static struct inode * grow_inodes(void)
 			inode = list_entry(tmp, struct inode, i_list);
 			return inode;
 		}
+		spin_unlock(&inode_lock);
+		printk(KERN_WARNING
+		       "grow_inodes: inode-max limit reached\n");
+		return NULL;
 	}
 		
 	spin_unlock(&inode_lock);

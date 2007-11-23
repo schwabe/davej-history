@@ -18,7 +18,7 @@
    preliminary Rev. 1.0 Jan. 18, 1998
    http://www.sis.com.tw/support/databook.htm
    
-   Ollie Lho (ollie@sis.com.tw) 
+   Rev 1.05.05 Oct. 29 1999 Ollie Lho (ollie@sis.com.tw) Single buffer Tx/Rx  
    Chin-Shan Li (lcs@sis.com.tw) Added AMD Am79c901 HomePNA PHY support
    Rev 1.05 Aug. 7 1999 Jim Huang (cmhuang@sis.com.tw) Initial release
 */
@@ -35,6 +35,7 @@
 #include <linux/interrupt.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
+
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <asm/processor.h>      /* Processor type for cache alignment. */
@@ -45,7 +46,7 @@
 #include "sis900.h"
 
 static const char *version =
-"sis900.c:v1.05  8/07/99\n";
+"sis900.c:v1.05.05  10/29/99\n";
 
 static int max_interrupt_work = 20;
 #define sis900_debug debug
@@ -93,15 +94,11 @@ struct mii_phy {
 	u16 status;
 };
 
-typedef struct _EuphLiteDesc {
-        u32     llink;
-        unsigned char*  buf;
-        u32     physAddr;
-        /* Hardware sees the physical address of descriptor */
-        u32     plink;
+typedef struct _BufferDesc {
+        u32     link;
         u32     cmdsts;
-        u32     bufPhys;
-} EuphLiteDesc;
+        u32     bufptr;
+} BufferDesc;
 
 struct sis900_private {
         struct device *next_module;
@@ -111,17 +108,17 @@ struct sis900_private {
 	struct mac_chip_info * mac;
 	struct mii_phy * mii;
 
-        struct timer_list timer;        		/* Media selection timer. */
-        unsigned int cur_rx;			/* Index into the Rx buffer of next Rx pkt. */
-        unsigned int cur_tx, dirty_tx, tx_flag;
+        struct timer_list timer;        		/* Link status detection timer. */
+        unsigned int cur_rx, dirty_rx;		
+        unsigned int cur_tx, dirty_tx;
 
-        /* The saved address of a sent-in-place packet/buffer, for skfree(). */
-        struct sk_buff* tx_skbuff[NUM_TX_DESC];
-        EuphLiteDesc tx_buf[NUM_TX_DESC];       /* Tx bounce buffers */
-        EuphLiteDesc rx_buf[NUM_RX_DESC];
-        unsigned char *rx_bufs;
-	unsigned char *tx_bufs;                 	/* Tx bounce buffer region. */
+        /* The saved address of a sent/receive-in-place packet/buffer */
+        struct sk_buff *tx_skbuff[NUM_TX_DESC];
+	struct sk_buff *rx_skbuff[NUM_RX_DESC];
+	BufferDesc tx_ring[NUM_TX_DESC];	
+        BufferDesc rx_ring[NUM_RX_DESC];
         unsigned int tx_full;			/* The Tx queue is full.    */
+
 	int MediaSpeed;                         	/* user force speed         */
 	int MediaDuplex;                        	/* user force duplex        */
         int full_duplex;                        	/* Full/Half-duplex.        */
@@ -150,9 +147,11 @@ static u16 mdio_read(struct device *dev, int phy_id, int location);
 static void mdio_write(struct device *dev, int phy_id, int location, int val);
 static void sis900_timer(unsigned long data);
 static void sis900_tx_timeout(struct device *dev);
-static void sis900_init_ring(struct device *dev);
+static void sis900_init_tx_ring(struct device *dev);
+static void sis900_init_rx_ring(struct device *dev);
 static int sis900_start_xmit(struct sk_buff *skb, struct device *dev);
 static int sis900_rx(struct device *dev);
+static void sis900_finish_xmit (struct device *dev);
 static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
 static int sis900_close(struct device *dev);
 static int mii_ioctl(struct device *dev, struct ifreq *rq, int cmd);
@@ -227,10 +226,11 @@ static struct device * sis900_mac_probe (struct mac_chip_info * mac, struct pci_
 	if (did_version++ == 0)
 		printk(KERN_INFO "%s", version);
 
-	/* check to see if  we have sane EEPROM */
+	/* check to see if we have sane EEPROM */
 	signature = (u16) read_eeprom(ioaddr, EEPROMSignature);    
 	if (signature == 0xffff || signature == 0x0000) {
-		printk (KERN_INFO "Error EERPOM read %x\n", signature);
+		printk (KERN_INFO "%s: Error EERPOM read %x\n", 
+			net_dev->name, signature);
 		return NULL;
 	}
 
@@ -247,9 +247,10 @@ static struct device * sis900_mac_probe (struct mac_chip_info * mac, struct pci_
 		printk("%2.2x:", (u8)net_dev->dev_addr[i]);
 	printk("%2.2x.\n", net_dev->dev_addr[i]);
 
-	if ((net_dev->priv = kmalloc(sizeof(struct sis900_private), GFP_KERNEL)) == NULL)
-	    /* FIXME: possible mem leak here */
-	    return NULL;
+	if ((net_dev->priv = kmalloc(sizeof(struct sis900_private), GFP_KERNEL)) == NULL) {
+		unregister_netdevice(net_dev);
+		return NULL;
+	}
 
 	sis_priv = net_dev->priv;
 	memset(sis_priv, 0, sizeof(struct sis900_private));
@@ -263,8 +264,9 @@ static struct device * sis900_mac_probe (struct mac_chip_info * mac, struct pci_
 
 	/* probe for mii transciver */
 	if (sis900_mii_probe(net_dev) == 0) {
-		/* FIXME: how to clean up this */
-		release_region (ioaddr, mac->io_size);
+		unregister_netdev(net_dev);
+		kfree(sis_priv);
+		release_region(ioaddr, mac->io_size);
 		return NULL;
 	}
 
@@ -289,7 +291,7 @@ static int sis900_mii_probe (struct device * net_dev)
 	
 	sis_priv->mii = NULL;
 	
-	/* search for total of 32 possible mii phy address */
+	/* search for total of 32 possible mii phy addresses */
 	for (phy_addr = 0; phy_addr < 32; phy_addr++) {
 		u16 mii_status;
 		u16 phy_id0, phy_id1;
@@ -320,20 +322,23 @@ static int sis900_mii_probe (struct device * net_dev)
 					mii_phy->next = sis_priv->mii;
 					sis_priv->mii = mii_phy;
 				}
-				/* the current mii is on our mii_info_table, quit searching (table) */
+				/* the current mii is on our mii_info_table, 
+				   quit searching (table) */
 				break;
 			}
 	}
 	
 	if (sis_priv->mii == NULL) {
-		printk(KERN_INFO "%s: No MII transceivers found!\n", net_dev->name);
+		printk(KERN_INFO "%s: No MII transceivers found!\n", 
+		       net_dev->name);
 		return 0;
 	}
 
 	/* FIXME: AMD stuff should be added */
 	/* auto negotiate FIXME: not completed */
 	elSetCapability(net_dev, sis_priv->mii->phy_addr, 1, 100);
-	sis_priv->mii->status = elAutoNegotiate(net_dev, sis_priv->mii->phy_addr,
+	sis_priv->mii->status = elAutoNegotiate(net_dev, 
+						sis_priv->mii->phy_addr,
 						&sis_priv->full_duplex, 
 						&sis_priv->speeds);
 	
@@ -396,7 +401,6 @@ static u16 read_eeprom(long ioaddr, int location)
 /* Read and write the MII management registers using software-generated
    serial MDIO protocol. Note that the command bits and data bits are
    send out seperately */
-
 #define mdio_delay()    inl(mdio_addr)
 
 static void mdio_idle(long mdio_addr)
@@ -493,8 +497,6 @@ sis900_open(struct device *dev)
 {
         struct sis900_private *sis_priv = (struct sis900_private *)dev->priv;
         long ioaddr = dev->base_addr;
-	int i = 0;
-	u32 status = TxRCMP | RxRCMP;
 
         /* Soft reset the chip. */
 	sis900_reset(dev);
@@ -503,49 +505,19 @@ sis900_open(struct device *dev)
                 return -EAGAIN;
         }
 
-        MOD_INC_USE_COUNT;      
+        MOD_INC_USE_COUNT;
 
-        if ((sis_priv->tx_bufs = kmalloc(TX_BUF_SIZE * NUM_TX_DESC, GFP_KERNEL)) == NULL) {
-		printk(KERN_ERR "%s: Can't allocate a %d byte TX Bufs.\n",
-		       dev->name, TX_BUF_SIZE * NUM_TX_DESC);
-		return -ENOMEM;
-	}
-	if ((sis_priv->rx_bufs = kmalloc(RX_BUF_SIZE * NUM_RX_DESC, GFP_KERNEL)) == NULL) {
-		kfree (sis_priv->tx_buf);
-		printk(KERN_ERR "%s: Can't allocate a %d byte RX Bufs.\n",
-		       dev->name, RX_BUF_SIZE * NUM_RX_DESC);
-		return -ENOMEM;
-	}
-
+	/* FIXME: should this be move to set_rx_mode() ? */
 	sis900_init_rxfilter(dev);
 
-	sis900_reset_tx_ring(dev);
-	sis900_reset_rx_ring(dev);
-
-        if (sis900_debug > 4)
-                printk(KERN_INFO "%s: txdp:%8.8x\n", dev->name, inl(ioaddr + txdp));
-
-	/* Check that the chip has finished the reset. */
-	while (status && (i++ < 30000)) {
-		status ^= (inl(isr + ioaddr) & status);
-        }
-
-        outl(PESEL, ioaddr + cfg);
+	sis900_init_tx_ring(dev);
+	sis900_init_rx_ring(dev);
 
 	/* FIXME: should be removed, and replaced by AutoNeogotiate stuff */
         outl((RX_DMA_BURST << RxMXDMA_shift) | (RxDRNT_10 << RxDRNT_shift), 
 	     ioaddr + rxcfg);
         outl(TxATP | (TX_DMA_BURST << TxMXDMA_shift) | (TX_FILL_THRESH << TxFILLT_shift) | TxDRNT_10,
 	     ioaddr + txcfg);
-
-	if (sis_priv->LinkOn) {
-		printk(KERN_INFO "%s: Media Type %s%s-duplex.\n",
-		       dev->name, 
-		       sis_priv->speeds == HW_SPEED_100_MBPS ? "100mbps " : "10mbps ",
-		       sis_priv->full_duplex == FDX_CAPABLE_FULL_SELECTED ? "full" : "half");
-	} else {
-		printk(KERN_INFO "%s: Media Link Off\n", dev->name);
-	}
 
         set_rx_mode(dev);
 
@@ -554,14 +526,14 @@ sis900_open(struct device *dev)
         dev->start = 1;
 
         /* Enable all known interrupts by setting the interrupt mask. */
-        outl((RxRCMP|RxOK|RxERR|RxORN|RxSOVR|TxOK|TxERR|TxURN), ioaddr + imr);
+	outl((RxSOVR|RxORN|RxERR|RxOK|TxURN|TxERR|TxOK), ioaddr + imr);
         outl(RxENA, ioaddr + cr);
         outl(IE, ioaddr + ier);
 
         /* Set the timer to switch to check for link beat and perhaps switch
            to an alternate media type. */
         init_timer(&sis_priv->timer);
-        sis_priv->timer.expires = jiffies + 2*HZ;
+        sis_priv->timer.expires = jiffies + HZ;
         sis_priv->timer.data = (unsigned long)dev;
         sis_priv->timer.function = &sis900_timer;
         add_timer(&sis_priv->timer);
@@ -582,6 +554,7 @@ sis900_init_rxfilter (struct device * net_dev)
 	/* disable packet filtering before setting filter */
 	outl(rfcrSave & ~RFEN, rfcr);
 
+	/* load MAC addr to filter data register */
 	for (i = 0 ; i < 3 ; i++) {
 		u32 w;
 
@@ -589,12 +562,87 @@ sis900_init_rxfilter (struct device * net_dev)
 		outl((i << RFADDR_shift), ioaddr + rfcr);
 		outl(w, ioaddr + rfdr);
 
-		if (sis900_debug > 4) {
+		if (sis900_debug > 2) {
 			printk(KERN_INFO "%s: Receive Filter Addrss[%d]=%x\n",
 			       net_dev->name, i, inl(ioaddr + rfdr));
 		}
 	}
-	outl(rfcrSave, rfcr + ioaddr);
+
+	/* enable packet filitering */
+	outl(rfcrSave | RFEN, rfcr + ioaddr);
+}
+
+/* Initialize the Tx ring. */
+static void
+sis900_init_tx_ring(struct device *dev)
+{
+        struct sis900_private *tp = (struct sis900_private *)dev->priv;
+        long ioaddr = dev->base_addr; 
+        int i;
+	
+        tp->tx_full = 0;
+        tp->dirty_tx = tp->cur_tx = 0;
+	
+        for (i = 0; i < NUM_TX_DESC; i++) {
+		tp->tx_skbuff[i] = NULL;
+
+		tp->tx_ring[i].link = (u32) virt_to_bus(&tp->tx_ring[i+1]);
+                tp->tx_ring[i].cmdsts = 0;
+		tp->tx_ring[i].bufptr = 0;
+        }
+	tp->tx_ring[i-1].link = (u32) virt_to_bus(&tp->tx_ring[0]);
+
+	/* load Transmit Descriptor Register */
+        outl(virt_to_bus(&tp->tx_ring[0]), ioaddr + txdp); 
+	if (sis900_debug > 2)
+                printk(KERN_INFO "%s: TX descriptor register loaded with: %8.8x\n", 
+		       dev->name, inl(ioaddr + txdp));
+}
+
+/* Initialize the Rx descriptor ring, pre-allocate recevie buffers */ 
+static void 
+sis900_init_rx_ring(struct device *dev) 
+{ 
+        struct sis900_private *tp = (struct sis900_private *)dev->priv; 
+        long ioaddr = dev->base_addr; 
+        int i;
+ 
+        tp->cur_rx = 0; 
+	tp->dirty_rx = 0;
+
+	/* init RX descriptor */
+	for (i = 0; i < NUM_RX_DESC; i++) {
+		tp->rx_skbuff[i] = NULL;
+
+		tp->rx_ring[i].link = (u32) virt_to_bus(&tp->rx_ring[i+1]);
+		tp->rx_ring[i].cmdsts = 0;
+		tp->rx_ring[i].bufptr = 0;
+	}
+	tp->rx_ring[i-1].link = (u32) virt_to_bus(&tp->rx_ring[0]);
+
+        /* allocate sock buffers */
+	for (i = 0; i < NUM_RX_DESC; i++) {
+		struct sk_buff *skb;
+
+		if ((skb = dev_alloc_skb(RX_BUF_SIZE)) == NULL) {
+			/* not enough memory for skbuff, this makes a "hole"
+			   on the buffer ring, it is not clear how the 
+			   hardware will react to this kind of degenerated 
+			   buffer */
+			break;
+		}
+		skb->dev = dev;
+		tp->rx_skbuff[i] = skb;
+		tp->rx_ring[i].cmdsts = RX_BUF_SIZE;
+		tp->rx_ring[i].bufptr = virt_to_bus(skb->tail);
+	}
+	tp->dirty_rx = (unsigned int) (i - NUM_RX_DESC);
+
+	/* load Receive Descriptor Register */
+        outl(virt_to_bus(&tp->rx_ring[0]), ioaddr + rxdp);
+	if (sis900_debug > 2)
+                printk(KERN_INFO "%s: RX descriptor register loaded with: %8.8x\n", 
+		       dev->name, inl(ioaddr + rxdp));
 }
 
 static void sis900_timer(unsigned long data)
@@ -604,6 +652,7 @@ static void sis900_timer(unsigned long data)
         int next_tick = 2*HZ;
         u16 status;
 
+	/* FIXME: Should we check transmission time out here ? */
 	/* FIXME: call auto negotiate routine to detect link status */
         if (!tp->LinkOn) {
                 status = mdio_read(dev, tp->mii->phy_addr, MII_STATUS);
@@ -611,9 +660,12 @@ static void sis900_timer(unsigned long data)
                 	elPMDreadMode(dev, tp->mii->phy_addr,
 				      &tp->speeds, &tp->full_duplex);
 			tp->LinkOn = TRUE;
-                        printk(KERN_INFO "%s: Media Link On %s%s-duplex \n", dev->name,
-			       tp->speeds == HW_SPEED_100_MBPS ? "100mbps " : "10mbps ",
-			       tp->full_duplex == FDX_CAPABLE_FULL_SELECTED ? "full" : "half");
+                        printk(KERN_INFO "%s: Media Link On %s%s-duplex \n", 
+			       dev->name,
+			       tp->speeds == HW_SPEED_100_MBPS ? 
+			       "100mbps " : "10mbps ",
+			       tp->full_duplex == FDX_CAPABLE_FULL_SELECTED ?
+			       "full" : "half");
 		}
         } else { // previous link on
                 status = mdio_read(dev, tp->mii->phy_addr, MII_STATUS);
@@ -623,136 +675,31 @@ static void sis900_timer(unsigned long data)
 		}
         }
 
-        if (next_tick) {
-                tp->timer.expires = jiffies + next_tick;
-                add_timer(&tp->timer);
-        }
+	tp->timer.expires = jiffies + next_tick;
+	add_timer(&tp->timer);
 }
 
 static void sis900_tx_timeout(struct device *dev)
 {
         struct sis900_private *tp = (struct sis900_private *)dev->priv;
         long ioaddr = dev->base_addr;
-        int i;
 
-        if (sis900_debug > 0)
+        if (sis900_debug > 2)
                 printk(KERN_INFO "%s: Transmit timeout, status %2.2x %4.4x \n",
-                           dev->name, inl(ioaddr + cr), inl(ioaddr + isr));
-
+		       dev->name, inl(ioaddr + cr), inl(ioaddr + isr));
+	
         /* Disable interrupts by clearing the interrupt mask. */
         outl(0x0000, ioaddr + imr);
 
-        /* Emit info to figure out what went wrong. */
-	if (sis900_debug > 1) {
-	        printk(KERN_INFO "%s:Tx queue start entry %d dirty entry %d.\n",
-                		   dev->name, tp->cur_tx, tp->dirty_tx);
-        	for (i = 0; i < NUM_TX_DESC; i++) 
-                	printk(KERN_INFO "%s:  Tx descriptor %d is %8.8x.%s\n",
-                        	dev->name, i, (unsigned int)&tp->tx_buf[i],
-                     		i == tp->dirty_tx % NUM_TX_DESC ?
-                      		" (queue head)" : "");
-	}
-
-
-        tp->cur_rx = 0; 
-
-        {       /* Save the unsent Tx packets. */
-                struct sk_buff *saved_skb[NUM_TX_DESC], *skb;
-                int j;
-                for (j = 0; tp->cur_tx - tp->dirty_tx > 0 ; j++, tp->dirty_tx++)
-                        saved_skb[j]=tp->tx_skbuff[tp->dirty_tx % NUM_TX_DESC];
-                tp->dirty_tx = tp->cur_tx = 0;
-
-                for (i = 0; i < j; i++) {
-                        skb = tp->tx_skbuff[i] = saved_skb[i];
-                        /* Always alignment */
-                        memcpy((unsigned char*)(tp->tx_buf[i].buf),
-                                                skb->data, skb->len);
-                        tp->tx_buf[i].cmdsts = OWN | skb->len;
-                }
-                outl(TxENA, ioaddr + cr);
-                tp->cur_tx = i;
-                while (i < NUM_TX_DESC)
-                        tp->tx_skbuff[i++] = 0;
-                if (tp->cur_tx - tp->dirty_tx < NUM_TX_DESC) {/* Typical path */
-                        dev->tbusy = 0;
-                        tp->tx_full = 0;
-                } else {
-                        tp->tx_full = 1;
-                }
-        }
-
+        tp->cur_rx = 0;
         dev->trans_start = jiffies;
         tp->stats.tx_errors++;
+
+	/* FIXME: Should we restart the transmission thread here  ?? */
+
         /* Enable all known interrupts by setting the interrupt mask. */
-        outl((RxRCMP|RxOK|RxERR|RxORN|RxSOVR|TxOK|TxERR|TxURN), ioaddr + imr);
+        outl((RxSOVR|RxORN|RxERR|RxOK|TxURN|TxERR|TxOK), ioaddr + imr);
         return;
-}
-
-/* Reset (Initialize) the Tx rings, along with various 'dev' bits. */
-static void
-sis900_reset_tx_ring(struct device *dev)
-{
-        struct sis900_private *tp = (struct sis900_private *)dev->priv;
-        long ioaddr = dev->base_addr; 
-        int i;
-	
-        tp->tx_full = 0;
-        tp->dirty_tx = tp->cur_tx = 0;
-	
-        /* Tx Buffer */
-        for (i = 0; i < NUM_TX_DESC; i++) {
-		tp->tx_skbuff[i] = 0;
-		tp->tx_buf[i].buf = &tp->tx_bufs[i*TX_BUF_SIZE];
-                tp->tx_buf[i].bufPhys =
-			virt_to_bus(&tp->tx_bufs[i*TX_BUF_SIZE]);
-        }
-
-        /* Tx Descriptor */
-        for (i = 0; i< NUM_TX_DESC; i++) {
-                tp->tx_buf[i].llink = (u32)
-                        &(tp->tx_buf[((i+1) < NUM_TX_DESC) ? (i+1) : 0]);
-                tp->tx_buf[i].plink = (u32)
-                        virt_to_bus(&(tp->tx_buf[((i+1) < NUM_TX_DESC) ?
-                                (i+1) : 0].plink));
-                tp->tx_buf[i].physAddr=
-                                virt_to_bus(&(tp->tx_buf[i].plink));
-                tp->tx_buf[i].cmdsts=0;
-        }
-
-        outl((u32)tp->tx_buf[0].physAddr, ioaddr + txdp); 
-}
-
-/* Reset (Initialize) the Rx rings, along with various 'dev' bits. */ 
-static void 
-sis900_reset_rx_ring(struct device *dev) 
-{ 
-        struct sis900_private *tp = (struct sis900_private *)dev->priv; 
-        long ioaddr = dev->base_addr; 
-        int i; 
- 
-        tp->cur_rx = 0; 
-
-        /* Rx Buffer */
-        for (i = 0; i < NUM_RX_DESC; i++) {
-                tp->rx_buf[i].buf = &tp->rx_bufs[i*RX_BUF_SIZE];
-                tp->rx_buf[i].bufPhys =
-                                virt_to_bus(&tp->rx_bufs[i*RX_BUF_SIZE]);
-        }
-
-        /* Rx Descriptor */
-        for (i = 0; i< NUM_RX_DESC; i++) {
-                tp->rx_buf[i].llink = (u32)
-                        &(tp->rx_buf[((i+1) < NUM_RX_DESC) ? (i+1) : 0]);
-                tp->rx_buf[i].plink = (u32)
-                        virt_to_bus(&(tp->rx_buf[((i+1) < NUM_RX_DESC) ?
-                                (i+1) : 0].plink));
-                tp->rx_buf[i].physAddr=
-                                virt_to_bus(&(tp->rx_buf[i].plink));
-                tp->rx_buf[i].cmdsts=RX_BUF_SIZE;
-        }
-
-        outl((u32)tp->rx_buf[0].physAddr, ioaddr + rxdp); 
 }
 
 static int
@@ -760,54 +707,39 @@ sis900_start_xmit(struct sk_buff *skb, struct device *dev)
 {
         struct sis900_private *tp = (struct sis900_private *)dev->priv;
         long ioaddr = dev->base_addr;
-        int entry;
+        unsigned int  entry;
 
-        /* Block a timer-based transmit from overlapping.  This could better be
-           done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
+	/* test tbusy to see if we have timeout situation then set it */
         if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-                if (jiffies - dev->trans_start < TX_TIMEOUT)
-                        return 1;
-                sis900_tx_timeout(dev);
+                if (jiffies - dev->trans_start > TX_TIMEOUT)
+			sis900_tx_timeout(dev);
                 return 1;
         }
 
-        /* Calculate the next Tx descriptor entry. ????? */
+        /* Calculate the next Tx descriptor entry. */
         entry = tp->cur_tx % NUM_TX_DESC;
-
         tp->tx_skbuff[entry] = skb;
 
-        if (sis900_debug > 5) {
-                int i;
-                printk(KERN_INFO "%s: SKB Tx Frame contents:(len=%d)",
-                                                dev->name,skb->len);
-
-                for (i = 0; i < skb->len; i++) {
-                        printk("%2.2x ",
-                        (u8)skb->data[i]);
-                }
-                printk(".\n");
-        }
-
-        memcpy(tp->tx_buf[entry].buf,
-                                skb->data, skb->len);
-
-        tp->tx_buf[entry].cmdsts=(OWN | skb->len);
-
-        //tp->tx_buf[entry].plink = 0;
+	/* set the transmit buffer descriptor and enable Transmit State Machine */
+	tp->tx_ring[entry].bufptr = virt_to_bus(skb->data);
+        tp->tx_ring[entry].cmdsts = (OWN | skb->len);
         outl(TxENA, ioaddr + cr);
-        if (++tp->cur_tx - tp->dirty_tx < NUM_TX_DESC) {/* Typical path */
+
+        if (++tp->cur_tx - tp->dirty_tx < NUM_TX_DESC) {
+		/* Typical path, clear tbusy to indicate more 
+		   transmission is possible */
                 clear_bit(0, (void*)&dev->tbusy);
         } else {
+		/* no more transmit descriptor avaiable, tbusy remain set */
                 tp->tx_full = 1;
         }
 
-        /* Note: the chip doesn't have auto-pad! */
-
         dev->trans_start = jiffies;
-        if (sis900_debug > 4)
-                printk(KERN_INFO "%s: Queued Tx packet at "
-                                "%p size %d to slot %d.\n",
-                           dev->name, skb->data, (int)skb->len, entry);
+
+        if (sis900_debug > 3)
+                printk(KERN_INFO "%s: Queued Tx packet at %p size %d "
+		       "to slot %d.\n",
+		       dev->name, skb->data, (int)skb->len, entry);
 
         return 0;
 }
@@ -817,24 +749,22 @@ sis900_start_xmit(struct sk_buff *skb, struct device *dev)
 static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 {
         struct device *dev = (struct device *)dev_instance;
-        struct sis900_private *tp = (struct sis900_private *)dev->priv;
         int boguscnt = max_interrupt_work;
-        int status;
-        long ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
+	u32 status;
 
 #if defined(__i386__)
         /* A lock to prevent simultaneous entry bug on Intel SMP machines. */
-        if (test_and_set_bit(0, (void*)&dev->interrupt)
-) {
+        if (test_and_set_bit(0, (void*)&dev->interrupt)) {
                 printk(KERN_INFO "%s: SMP simultaneous entry of "
-                                "an interrupt handler.\n", dev->name);
+		       "an interrupt handler.\n", dev->name);
                 dev->interrupt = 0;     /* Avoid halting machine. */
                 return;
         }
 #else
         if (dev->interrupt) {
-                printk(KERN_INFO "%s: Re-entering the "
-                                "interrupt handler.\n", dev->name);
+                printk(KERN_INFO "%s: Re-entering the interrupt handler.\n", 
+		       dev->name);
                 return;
         }
         dev->interrupt = 1;
@@ -842,158 +772,45 @@ static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
         do {
                 status = inl(ioaddr + isr);
+		
+                if (sis900_debug > 3)
+			printk(KERN_INFO "%s: entering interrupt, "
+			       "original status = %#8.8x, "
+			       "new status = %#8.8x.\n",
+			       dev->name, status, inl(ioaddr + isr));
 
-                if (sis900_debug > 4)
-                        printk(KERN_INFO "%s: interrupt  status=%#4.4x "
-                                "new intstat=%#4.4x.\n",
-                                dev->name, status, inl(ioaddr + isr));
-
-                if ((status & (TxURN|TxERR|TxOK | RxORN|RxERR|RxOK)) == 0) {
+                if ((status & (HIBERR|TxURN|TxERR|TxOK|RxORN|RxERR|RxOK)) == 0)
 			/* nothing intresting happened */
                         break;
-                }
 
-                if (status & (RxOK|RxORN|RxERR)) /* Rx interrupt */
+		/* why dow't we break after Tx/Rx case ?? keyword: full-duplex */
+                if (status & (RxORN | RxERR | RxOK))
+			/* Rx interrupt */
                         sis900_rx(dev);
 
-                if (status & (TxOK | TxERR)) {
-                        unsigned int dirty_tx;
+                if (status & (TxURN | TxERR | TxOK))
+			/* Tx interrupt */
+			sis900_finish_xmit(dev);
 
-                        if (sis900_debug > 5) {
-                                printk(KERN_INFO "TxOK:tp->cur_tx:%d,"
-                                                "tp->dirty_tx:%x\n",
-                                        tp->cur_tx, tp->dirty_tx);
-                        }
-                        for (dirty_tx = tp->dirty_tx; dirty_tx < tp->cur_tx;
-                                dirty_tx++)
-                        {
-                                int i;
-                                int entry = dirty_tx % NUM_TX_DESC;
-                                int txstatus = tp->tx_buf[entry].cmdsts;
-
-                                if (sis900_debug > 4) {
-                                        printk(KERN_INFO "%s:     Tx Frame contents:"
-                                                "(len=%d)",
-                                                dev->name, (txstatus & DSIZE));
-
-                                        for (i = 0; i < (txstatus & DSIZE) ;
-                                                                        i++) {
-                                                printk("%2.2x ",
-                                                (u8)(tp->tx_buf[entry].buf[i]));
-                                        }
-                                        printk(".\n");
-                                }
-                                if ( ! (txstatus & (OK | UNDERRUN)))
-                                {
-                                        if (sis900_debug > 1)
-                                                printk(KERN_INFO "Tx NOT (OK,"
-                                                        "UnderRun)\n");
-                                        break;  /* It still hasn't been Txed */
-                                }
-
-                                /* Note: TxCarrierLost is always asserted
-                                                at 100mbps.                 */
-                                if (txstatus & (OWCOLL | ABORT)) {
-                                        /* There was an major error, log it. */
-                                        if (sis900_debug > 1)
-                                                printk(KERN_INFO "Tx Out of "
-                                                        " Window,Abort\n");
-#ifndef final_version
-                                        if (sis900_debug > 1)
-                                                printk(KERN_INFO "%s: Transmit "
-                                                    "error, Tx status %8.8x.\n",
-                                                           dev->name, txstatus);
-#endif
-                                        tp->stats.tx_errors++;
-                                        if (txstatus & ABORT) {
-                                                tp->stats.tx_aborted_errors++;
-                                        }
-                                        if (txstatus & NOCARRIER)
-                                                tp->stats.tx_carrier_errors++;
-                                        if (txstatus & OWCOLL)
-                                                tp->stats.tx_window_errors++;
-#ifdef ETHER_STATS
-                                        if ((txstatus & COLCNT)==COLCNT)
-                                                tp->stats.collisions16++;
-#endif
-                                } else {
-#ifdef ETHER_STATS
-                                        /* No count for tp->stats.tx_deferred */
-#endif
-                                        if (txstatus & UNDERRUN) {
-                                           if (sis900_debug > 2)
-                                             printk(KERN_INFO "Tx UnderRun\n");
-                                        }
-                                        tp->stats.collisions +=
-                                                        (txstatus >> 16) & 0xF;
-#if LINUX_VERSION_CODE > 0x20119
-                                        tp->stats.tx_bytes += txstatus & DSIZE;
-#endif
-                                        if (sis900_debug > 2)
-                                           printk(KERN_INFO "Tx Transmit OK\n");
-                                        tp->stats.tx_packets++;
-                                }
-
-                                /* Free the original skb. */
-                                if (sis900_debug > 2)
-                                        printk(KERN_INFO "Free original skb\n");
-                                dev_kfree_skb(tp->tx_skbuff[entry]);
-                                tp->tx_skbuff[entry] = 0;
-                        } // for dirty
-
-#ifndef final_version
-                        if (tp->cur_tx - dirty_tx > NUM_TX_DESC) {
-                                printk(KERN_INFO"%s: Out-of-sync dirty pointer,"
-                                                " %d vs. %d, full=%d.\n",
-                                                dev->name, dirty_tx,
-                                                tp->cur_tx, tp->tx_full);
-                                dirty_tx += NUM_TX_DESC;
-                        }
-#endif
-
-                        if (tp->tx_full && dirty_tx > tp->cur_tx-NUM_TX_DESC) {
-                                /* The ring is no longer full, clear tbusy. */
-				if (sis900_debug > 3)
-                                   printk(KERN_INFO "Tx Ring NO LONGER Full\n");
-                                tp->tx_full = 0;
-                                dev->tbusy = 0;
-                                mark_bh(NET_BH);
-                        }
-
-                        tp->dirty_tx = dirty_tx;
-                        if (sis900_debug > 2)
-                           printk(KERN_INFO "TxOK,tp->cur_tx:%d,tp->dirty:%d\n",
-                                                tp->cur_tx, tp->dirty_tx);
-                } // if (TxOK | TxERR)
-
-                /* Check uncommon events with one test. */
-                if (status & (RxORN | TxERR | RxERR)) {
-                        if (sis900_debug > 2)
-                                printk(KERN_INFO "%s: Abnormal interrupt,"
-                                        "status %8.8x.\n", dev->name, status);
-
-                        if (status == 0xffffffff)
-                                break;
-                        if (status & (RxORN | RxERR))
-                                tp->stats.rx_errors++;
-
-
-                        if (status & RxORN) {
-                                tp->stats.rx_over_errors++;
-                        }
-                }
+                /* something strange happened !!! */
+                if (status & HIBERR) {
+			printk(KERN_INFO "%s: Abnormal interrupt,"
+			       "status %#8.8x.\n", dev->name, status);
+			break;
+		}
                 if (--boguscnt < 0) {
                         printk(KERN_INFO "%s: Too much work at interrupt, "
-                                   "IntrStatus=0x%4.4x.\n",
-                                   dev->name, status);
+			       "interrupt Status = %#8.8x.\n",
+			       dev->name, status);
                         break;
                 }
         } while (1);
-
+	
         if (sis900_debug > 3)
-                printk(KERN_INFO "%s: exiting interrupt, intr_status=%#4.4x.\n",
-                           dev->name, inl(ioaddr + isr));
-
+                printk(KERN_INFO "%s: exiting interrupt, "
+		       "interrupt status = 0x%#8.8x.\n",
+		       dev->name, inl(ioaddr + isr));
+	
 #if defined(__i386__)
         clear_bit(0, (void*)&dev->interrupt);
 #else
@@ -1002,120 +819,158 @@ static void sis900_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
         return;
 }
 
+/* Process receive interrupt events, put buffer to higher layer and refill buffer pool 
+   Note: This fucntion is called by interrupt handler, don't do "too much" work here */
 static int sis900_rx(struct device *dev)
 {
         struct sis900_private *tp = (struct sis900_private *)dev->priv;
         long ioaddr = dev->base_addr;
-        u16 cur_rx = tp->cur_rx % NUM_RX_DESC;
-        int rx_status=tp->rx_buf[cur_rx].cmdsts;
+	unsigned int entry = tp->cur_rx % NUM_RX_DESC;
+        u32 rx_status = tp->rx_ring[entry].cmdsts;
 
-        if (sis900_debug > 4)
-                printk(KERN_INFO "%s: sis900_rx, current %4.4x,"
-                                " rx status=%8.8x\n",
-                                dev->name, cur_rx,
-                                rx_status);
-
+        if (sis900_debug > 3)
+                printk(KERN_INFO "sis900_rx, cur_rx:%4.4d, dirty_rx:%4.4d "
+                	"status:0x%8.8x\n",
+		        tp->cur_rx, tp->dirty_rx,rx_status);
+	
         while (rx_status & OWN) {
-                int rx_size = rx_status & DSIZE;
-                rx_size -= CRC_SIZE;
+                unsigned int rx_size;
+		
+		rx_size = (rx_status & DSIZE) - CRC_SIZE;
 
-                if (sis900_debug > 4) {
-                        int i;
-                        printk(KERN_INFO "%s:  sis900_rx, rx status %8.8x,"
-                                        " size %4.4x, cur %4.4x.\n",
-                                   dev->name, rx_status, rx_size, cur_rx);
-                        printk(KERN_INFO "%s: Rx Frame contents:", dev->name);
-
-                        for (i = 0; i < rx_size; i++) {
-                                printk("%2.2x ",
-                                (u8)(tp->rx_buf[cur_rx].buf[i]));
-                        }
-
-                        printk(".\n");
-                }
-                if (rx_status & TOOLONG) {
-                        if (sis900_debug > 1)
-                                printk(KERN_INFO "%s: Oversized Ethernet frame,"
-                                                " status %4.4x!\n",
-                                           dev->name, rx_status);
-                        tp->stats.rx_length_errors++;
-                } else if (rx_status & (RXISERR | RUNT | CRCERR | FAERR)) {
-                        if (sis900_debug > 1)
-                                printk(KERN_INFO"%s: Ethernet frame had errors,"
-                                        " status %4.4x.\n",
-                                        dev->name, rx_status);
+		if (rx_status & (ABORT|OVERRUN|TOOLONG|RUNT|RXISERR|CRCERR|FAERR)) {
+			/* corrupted packet received */
+                        if (sis900_debug > 3)
+                                printk(KERN_INFO "%s: Corrupted packet "
+				       "received, buffer status = 0x%8.8x.\n",
+				       dev->name, rx_status);
                         tp->stats.rx_errors++;
+			if (rx_status & OVERRUN)
+				tp->stats.rx_over_errors++;
+			if (rx_status & (TOOLONG|RUNT))
+                                tp->stats.rx_length_errors++;
                         if (rx_status & (RXISERR | FAERR))
                                 tp->stats.rx_frame_errors++;
-                        if (rx_status & (RUNT | TOOLONG))
-                                tp->stats.rx_length_errors++;
-                        if (rx_status & CRCERR) tp->stats.rx_crc_errors++;
+			if (rx_status & CRCERR) 
+				tp->stats.rx_crc_errors++;
+			/* reset buffer descriptor state */
+			tp->rx_ring[entry].cmdsts = RX_BUF_SIZE;
                 } else {
-                        /* Malloc up new buffer, compatible with net-2e. */
-                        /* Omit the four octet CRC from the length. */
-                        struct sk_buff *skb;
+			struct sk_buff * skb;
+			
+			if (tp->rx_skbuff[entry] == NULL) {
+				printk(KERN_INFO "%s: NULL pointer " 
+				       "encountered in Rx ring, skipping\n",
+				       dev->name);
+				break;			
+			}
+			skb = tp->rx_skbuff[entry];
+			tp->rx_skbuff[entry] = NULL;
+			/* reset buffer descriptor state */
+			tp->rx_ring[entry].cmdsts = 0;
+			tp->rx_ring[entry].bufptr = 0;
 
-                        skb = dev_alloc_skb(rx_size + 2);
-                        if (skb == NULL) {
-                                printk(KERN_INFO "%s: Memory squeeze,"
-                                                "deferring packet.\n",
-                                                dev->name);
-                                /* We should check that some rx space is free.
-                                   If not,
-                                   free one and mark stats->rx_dropped++. */
-                                tp->stats.rx_dropped++;
-                                tp->rx_buf[cur_rx].cmdsts = RX_BUF_SIZE;
-                                break;
-                        }
-                        skb->dev = dev;
-                        skb_reserve(skb, 2); /* 16 byte align the IP fields. */
-                        if (rx_size+CRC_SIZE > RX_BUF_SIZE) {
-                                /*
-                                int semi_count = RX_BUF_LEN - ring_offset - 4;
-                                memcpy(skb_put(skb, semi_count),
-                                        &rx_bufs[ring_offset + 4], semi_count);
-                                memcpy(skb_put(skb, rx_size-semi_count),
-                                        rx_bufs, rx_size - semi_count);
-                                if (sis900_debug > 4) {
-                                        int i;
-                                        printk(KERN_DEBUG"%s:  Frame wrap @%d",
-                                                   dev->name, semi_count);
-                                        for (i = 0; i < 16; i++)
-                                                printk(" %2.2x", rx_bufs[i]);
-                                        printk(".\n");
-                                        memset(rx_bufs, 0xcc, 16);
-                                }
-                                */
-                        } else {
-#if 0  /* USE_IP_COPYSUM */
-                                eth_copy_and_sum(skb,
-                                   tp->rx_buf[cur_rx].buf, rx_size, 0);
-                                skb_put(skb, rx_size);
-#else
-                                memcpy(skb_put(skb, rx_size),
-                                        tp->rx_buf[cur_rx].buf, rx_size);
-#endif
-                        }
+			skb_put(skb, rx_size);
                         skb->protocol = eth_type_trans(skb, dev);
                         netif_rx(skb);
-#if LINUX_VERSION_CODE > 0x20119
+
+			if (rx_status & MCAST)
+				tp->stats.multicast++;
                         tp->stats.rx_bytes += rx_size;
-#endif
                         tp->stats.rx_packets++;
                 }
-                tp->rx_buf[cur_rx].cmdsts = RX_BUF_SIZE;
-
-                cur_rx = ((cur_rx+1) % NUM_RX_DESC);
-                rx_status = tp->rx_buf[cur_rx].cmdsts;
+                tp->cur_rx++;
+		entry = tp->cur_rx % NUM_RX_DESC;
+                rx_status = tp->rx_ring[entry].cmdsts;
         } // while
-        if (sis900_debug > 4)
-                printk(KERN_INFO "%s: Done sis900_rx(), current %4.4x "
-                                "Cmd %2.2x.\n",
-                           dev->name, cur_rx,
-                           inb(ioaddr + cr));
-        tp->cur_rx = cur_rx;
-	outl( RxENA , ioaddr + cr );  /* LCS */
+
+	/* refill the Rx buffer, what if the rate of refilling is slower than 
+	   consuming ?? */
+	for (;tp->cur_rx - tp->dirty_rx > 0; tp->dirty_rx++) {
+		struct sk_buff *skb;
+
+		entry = tp->dirty_rx % NUM_RX_DESC;
+
+		if (tp->rx_skbuff[entry] == NULL) {
+			if ((skb = dev_alloc_skb(RX_BUF_SIZE)) == NULL) {
+				/* not enough memory for skbuff, this makes a "hole"
+				   on the buffer ring, it is not clear how the 
+				   hardware will react to this kind of degenerated 
+				   buffer */
+				printk(KERN_INFO "%s: Memory squeeze,"
+				       "deferring packet.\n",
+				       dev->name);
+				tp->stats.rx_dropped++;
+				break;
+			}
+			skb->dev = dev;
+			tp->rx_skbuff[entry] = skb;
+			tp->rx_ring[entry].cmdsts = RX_BUF_SIZE;
+			tp->rx_ring[entry].bufptr = virt_to_bus(skb->tail);
+		}
+	}
+	/* re-enable the potentially idle receive state matchine */
+	outl(RxENA , ioaddr + cr );
+
         return 0;
+}
+
+/* finish up transmission of packets, check for error condition and free skbuff etc.
+   Note: This fucntion is called by interrupt handler, don't do "too much" work here */
+static void sis900_finish_xmit (struct device *dev)
+{
+	struct sis900_private *tp = (struct sis900_private *)dev->priv;
+
+	for (; tp->dirty_tx < tp->cur_tx; tp->dirty_tx++) {
+		unsigned int entry;
+		u32 tx_status;
+
+		entry = tp->dirty_tx % NUM_TX_DESC;
+	        tx_status = tp->tx_ring[entry].cmdsts;
+
+		if (tx_status & OWN) {
+			/* The packet is not transmited yet (owned by hardware) ! */
+			break;
+		}
+
+		if (tx_status & (ABORT | UNDERRUN | OWCOLL)) {
+			/* packet unsuccessfully transmited */
+			if (sis900_debug > 3)
+				printk(KERN_INFO "%s: Transmit "
+				       "error, Tx status %8.8x.\n",
+				       dev->name, tx_status);
+			tp->stats.tx_errors++;
+			if (tx_status & UNDERRUN)
+				tp->stats.tx_fifo_errors++;
+			if (tx_status & ABORT)
+				tp->stats.tx_aborted_errors++;
+			if (tx_status & NOCARRIER)
+				tp->stats.tx_carrier_errors++;
+			if (tx_status & OWCOLL)
+				tp->stats.tx_window_errors++;
+		} else {
+			/* packet successfully transmited */
+			if (sis900_debug > 3)
+				printk(KERN_INFO "Tx Transmit OK\n");
+			tp->stats.collisions += (tx_status & COLCNT) >> 16;
+			tp->stats.tx_bytes += tx_status & DSIZE;
+			tp->stats.tx_packets++;
+		}
+		/* Free the original skb. */
+		dev_kfree_skb(tp->tx_skbuff[entry]);
+		tp->tx_skbuff[entry] = NULL;
+		tp->tx_ring[entry].bufptr = 0;
+		tp->tx_ring[entry].cmdsts = 0;
+	}
+
+	if (tp->tx_full && dev->tbusy && 
+	    tp->cur_tx - tp->dirty_tx < NUM_TX_DESC - 4) {
+		/* The ring is no longer full, clear tbusy, tx_full and schedule 
+		   more transmission by marking NET_BH */
+		tp->tx_full = 0;
+		clear_bit(0, (void *)&dev->tbusy);
+		mark_bh(NET_BH);
+	}
 }
 
 static int
@@ -1130,21 +985,26 @@ sis900_close(struct device *dev)
 
         /* Disable interrupts by clearing the interrupt mask. */
         outl(0x0000, ioaddr + imr);
+	outl(0x0000, ioaddr + ier);
 
-        /* Stop the chip's Tx and Rx DMA processes. */
-        outl(0x00, ioaddr + cr);
+        /* Stop the chip's Tx and Rx Status Machine */
+        outl(RxDIS | TxDIS, ioaddr + cr);
 
         del_timer(&tp->timer);
 
         free_irq(dev->irq, dev);
 
+	/* Free Tx and RX skbuff */
+	for (i = 0; i < NUM_RX_DESC; i++) {
+		if (tp->rx_skbuff[i] != NULL)
+			dev_kfree_skb(tp->rx_skbuff[i]);
+		tp->rx_skbuff[i] = 0;
+	}
         for (i = 0; i < NUM_TX_DESC; i++) {
-                if (tp->tx_skbuff[i])
+                if (tp->tx_skbuff[i] != NULL)
                         dev_kfree_skb(tp->tx_skbuff[i]);
                 tp->tx_skbuff[i] = 0;
         }
-        kfree(tp->rx_bufs);
-        kfree(tp->tx_bufs);
 
         /* Green! Put the chip in low-power mode. */
 
@@ -1241,7 +1101,7 @@ static u16 elPMDreadMode(struct device *dev,
         *duplex = FDX_CAPABLE_HALF_SELECTED;
 
         status = mdio_read(dev, phy_id, MII_ANLPAR);
-        OurCap = mdio_read(dev, phy_id, MII_ANAR);
+        OurCap = mdio_read(dev, phy_id, MII_ANADV);
 	if (sis900_debug > 1) {
 		printk(KERN_INFO "Link Part Status %4X\n", status);
 		printk(KERN_INFO "Our Status %4X\n", OurCap);
@@ -1255,8 +1115,8 @@ static u16 elPMDreadMode(struct device *dev,
 		if (sis900_debug > 1) {
 			printk(KERN_INFO "The other end NOT support NWAY...\n");
 		}
-                while (( status = mdio_read(dev, phy_id, 18)) & 0x4000) ;
-                while (( status = mdio_read(dev, phy_id, 18)) & 0x0020) ;
+                while (( status = mdio_read(dev, phy_id, MII_STSOUT)) & 0x4000) ;
+                while (( status = mdio_read(dev, phy_id, MII_STSOUT)) & 0x0020) ;
                 if (status & 0x80)
                         *speed = HW_SPEED_100_MBPS;
                 if (status & 0x40)
@@ -1344,7 +1204,7 @@ static void elSetCapability(struct device *dev, int phy_id,
 		}
 	}
 
-        mdio_write(dev, phy_id, MII_ANAR, cap);
+        mdio_write(dev, phy_id, MII_ANADV, cap);
 }
 
 static void elSetMediaType(struct device *dev, int speed, int duplex)
@@ -1412,9 +1272,7 @@ static void set_rx_mode(struct device *dev)
                 outl((u32)(0x00000004+i) << 16, ioaddr + rfcr);
                 outl(mc_filter[i], ioaddr + rfdr);
         }
-        /* We can safely update without stopping the chip. */
-        //rx_mode = ACCEPT_CAM_QUALIFIED | ACCEPT_ALL_BCASTS | ACCEPT_ALL_PHYS;
-        //rx_mode = ACCEPT_CAM_QUALIFIED | ACCEPT_ALL_BCASTS;
+
         outl(RFEN | ((rx_mode & (ACCEPT_ALL_MCASTS | ACCEPT_ALL_BCASTS |
                           ACCEPT_ALL_PHYS)) << RFAA_shift), ioaddr + rfcr);
 
@@ -1443,8 +1301,8 @@ static void set_rx_mode(struct device *dev)
         if (sis900_debug > 2) {
                 printk(KERN_INFO "After Set TxCfg=%8.8x\n",inl(ioaddr+txcfg));
                 printk(KERN_INFO "After Set RxCfg=%8.8x\n",inl(ioaddr+rxcfg));
-                printk(KERN_INFO "Receive Filter Register:%8.8x\n",
-                                                        inl(ioaddr + rfcr));
+                printk(KERN_INFO "Receive Filter Register:%8.8x\n", 
+		       inl(ioaddr + rfcr));
         }
         return;
 }
@@ -1452,15 +1310,21 @@ static void set_rx_mode(struct device *dev)
 static void sis900_reset(struct device *dev)
 {
         long ioaddr = dev->base_addr;
-	
+	int i = 0;
+	u32 status = TxRCMP | RxRCMP;
+
         outl(0, ioaddr + ier);
         outl(0, ioaddr + imr);
         outl(0, ioaddr + rfcr);
 
         outl(RxRESET | TxRESET | RESET, ioaddr + cr);
-        outl(PESEL, ioaddr + cfg);
 	
-        set_rx_mode(dev);
+	/* Check that the chip has finished the reset. */
+	while (status && (i++ < 1000)) {
+		status ^= (inl(isr + ioaddr) & status);
+        }
+
+        outl(PESEL, ioaddr + cfg);
 }
 
 #ifdef MODULE

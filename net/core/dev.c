@@ -57,6 +57,8 @@
  *					A network device unload needs to purge
  *					the backlog queue.
  *	Paul Rusty Russel	:	SIOCSIFNAME
+ *	Andrea Arcangeli	:	dev_clear_backlog() needs the
+ *					skb_queue_lock held.
  */
 
 #include <asm/uaccess.h>
@@ -711,7 +713,8 @@ static void netdev_wakeup(void)
 
 static void dev_clear_backlog(struct device *dev)
 {
-	struct sk_buff *prev, *curr;
+	struct sk_buff *curr;
+	unsigned long flags;
 
 	/*
 	 *
@@ -719,27 +722,24 @@ static void dev_clear_backlog(struct device *dev)
 	 *
 	 *  We are competing here both with netif_rx() and net_bh().
 	 *  We don't want either of those to mess with skb ptrs
-	 *  while we work on them, thus cli()/sti().
-	 *
-	 *  It looks better to use net_bh trick, at least
-	 *  to be sure, that we keep interrupt latency really low. --ANK (980727)
+	 *  while we work on them, thus we must grab the
+	 *  skb_queue_lock.
 	 */ 
 
 	if (backlog.qlen) {
-		start_bh_atomic();
-		curr = backlog.next;
-		while ( curr != (struct sk_buff *)(&backlog) ) {
-			unsigned long flags;
-			curr=curr->next;
-			if ( curr->prev->dev == dev ) {
-				prev = curr->prev;
-				spin_lock_irqsave(&skb_queue_lock, flags);
-				__skb_unlink(prev, &backlog);
+	repeat:
+		spin_lock_irqsave(&skb_queue_lock, flags);
+		for (curr = backlog.next;
+		     curr != (struct sk_buff *)(&backlog);
+		     curr = curr->next)
+			if (curr->dev == dev)
+			{
+				__skb_unlink(curr, &backlog);
 				spin_unlock_irqrestore(&skb_queue_lock, flags);
-				kfree_skb(prev);
+				kfree_skb(curr);
+				goto repeat;
 			}
-		}
-		end_bh_atomic();
+		spin_unlock_irqrestore(&skb_queue_lock, flags);
 #ifdef CONFIG_NET_HW_FLOWCONTROL
 		if (netdev_dropping)
 			netdev_wakeup();

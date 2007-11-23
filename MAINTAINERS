@@ -121,9 +121,10 @@ S:	Maintained
 
 APM DRIVER
 P:	Stephen Rothwell
-M:	Stephen.Rothwell@canb.auug.org.au
+M:	sfr@linuxcare.com
 L:	linux-laptop@vger.rutgers.edu
-S:	Maintained
+W:	http://www.linuxcare.com.au/apm/
+S:	Supported
 
 APPLETALK NETWORK LAYER
 P:	Jay Schulist

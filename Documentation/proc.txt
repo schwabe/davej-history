@@ -1041,6 +1041,21 @@ ip_masq_debug
 
 IP fragmentation settings
 
+ip_always_defrag
+   Replaces the former Kernel-Configuration option:
+	CONFIG_IP_ALWAYS_DEFRAG
+   All incoming fragments (parts of IP packets
+   that arose when some host between origin and destination decided
+   that the packets were too large and cut them into pieces) will be
+   reassembled (defragmented) before being processed, even if they are
+   about to be forwarded.
+
+   Only say Y here if running either a firewall that is the sole link
+   to your network or a transparent proxy; never ever say Y here for a
+   normal router or host.
+
+   This is automagically enabled when enabling masquerading.
+
 ipfrag_high_trash and ipfrag_low_trash
    Maximum memory used to reassemble IP fragments. When
    ipfrag_high_thresh bytes of memory is allocated for this purpose,

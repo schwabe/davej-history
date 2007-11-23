@@ -28,6 +28,9 @@ if [ "$CONFIG_SOUND_ES1371" = "y" ]; then
       hex 'Gameport I/O 200,208,210,218' CONFIG_SOUND_ES1371_GAMEPORT 200
    fi
 fi
+
+dep_tristate 'ESS Maestro' CONFIG_SOUND_MAESTRO $CONFIG_SOUND
+
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    dep_tristate 'ESS Solo1 (Experimental)' CONFIG_SOUND_ESSSOLO1 $CONFIG_SOUND
 fi
