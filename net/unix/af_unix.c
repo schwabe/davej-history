@@ -30,7 +30,7 @@
  *		Heiko EiBfeldt	:	Missing verify_area check
  *		Alan Cox	:	Shutdown() bug
  *	Michael Deutschmann	:	release was writing to the socket
- *					structure after  freeing it.
+ *					structure after freeing it.
  *
  * Known differences from reference BSD that was tested:
  *
@@ -157,8 +157,7 @@ static void unix_destroy_timer(unsigned long data)
 	unix_socket *sk=(unix_socket *)data;
 	if(sk->protinfo.af_unix.locks==0 && sk->wmem_alloc==0)
 	{
-		if(sk->protinfo.af_unix.name)
-			kfree(sk->protinfo.af_unix.name);
+		kfree(sk->protinfo.af_unix.name);
 		sk_free(sk);
 		return;
 	}
@@ -213,8 +212,7 @@ static void unix_destroy_socket(unix_socket *sk)
 
 	if(--sk->protinfo.af_unix.locks==0 && sk->wmem_alloc==0)
 	{
-		if(sk->protinfo.af_unix.name)
-			kfree(sk->protinfo.af_unix.name);
+		kfree(sk->protinfo.af_unix.name);
 		sk_free(sk);
 	}
 	else
@@ -698,6 +696,8 @@ static struct cmsghdr *unix_copyrights(void *userp, int len) /* AT&T ? */
 	if(len>256|| len <=0)
 		return NULL;
 	cm=kmalloc(len, GFP_KERNEL);
+	if(cm==NULL)
+		return NULL;
 	memcpy_fromfs(cm, userp, len);
 	return cm;
 }
@@ -831,16 +831,19 @@ static void unix_destruct_fds(struct sk_buff *skb)
 /*
  *	Attach the file descriptor array to an sk_buff
  */
-static void unix_attach_fds(int fpnum,struct file **fp,struct sk_buff *skb)
+static int unix_attach_fds(int fpnum,struct file **fp,struct sk_buff *skb)
 {
 
-	skb->h.filp = kmalloc(sizeof(long)+fpnum*sizeof(struct file *), 
+	skb->h.filp = kmalloc(sizeof(long)+fpnum*sizeof(struct file *),
 							GFP_KERNEL);
+	if(skb->h.filp==NULL)
+		return -ENOMEM;
 	/* number of descriptors starts block */
 	*(int *)skb->h.filp = fpnum;
 	/* actual  descriptors */
 	memcpy(skb->h.filp+sizeof(long),fp,fpnum*sizeof(struct file *));
 	skb->destructor = unix_destruct_fds;
+	return 0;
 }
 
 /*
@@ -969,7 +972,9 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 
 		if(fpnum)
 		{
-			unix_attach_fds(fpnum,fp,skb);
+			int err=unix_attach_fds(fpnum,fp,skb);
+			if(err)
+				return err;
 			fpnum=0;
 		}
 		else
@@ -1075,7 +1080,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 	{
 		cm=unix_copyrights(msg->msg_control,
 			msg->msg_controllen);
-		if(msg->msg_controllen<sizeof(struct cmsghdr)
+		if(cm==NULL || msg->msg_controllen<sizeof(struct cmsghdr)
 #if 0
 /*		investigate this further -- Stevens example doesn't seem to care */
 		||

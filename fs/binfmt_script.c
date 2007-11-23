@@ -15,7 +15,7 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
 	char *cp, *interp, *i_name, *i_arg;
 	int retval;
-	if ((bprm->buf[0] != '#') || (bprm->buf[1] != '!') || (bprm->sh_bang)) 
+	if ((bprm->buf[0] != '#') || (bprm->buf[1] != '!') || (bprm->sh_bang))
 		return -ENOEXEC;
 	/*
 	 * This section does the #! interpretation.
@@ -43,7 +43,7 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	interp = i_name = cp;
 	i_arg = 0;
 	for ( ; *cp && (*cp != ' ') && (*cp != '\t'); cp++) {
- 		if (*cp == '/')
+		if (*cp == '/')
 			i_name = cp+1;
 	}
 	while ((*cp == ' ') || (*cp == '\t'))
@@ -69,8 +69,8 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	}
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
-	if (!bprm->p) 
-		return -E2BIG;
+	if ((long)bprm->p < 0)
+		return (long)bprm->p;
 	/*
 	 * OK, now restart the process with the interpreter's inode.
 	 * Note that we use open_namei() as the name is now in kernel

@@ -672,7 +672,7 @@ Menuconfig has encountered a possible error in one of the kernel's
 configuration files and is unable to continue.
 
 Please report this to the author <roadcapw@titus.org>.  You may also
-send a problem report to linux-kernel@vger.rutgers.edu or post a
+send a problem report to linux-kernel@vger.kernel.org or post a
 message to the linux.dev.kernel news group.
 
 Please indicate the kernel version you are trying to configure and

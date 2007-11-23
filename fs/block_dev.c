@@ -27,7 +27,7 @@ int block_write(struct inode * inode, struct file * filp,
 	int block, blocks;
 	loff_t offset;
 	int chars;
-	int written = 0;
+	int written = 0, retval = 0;
 	struct buffer_head * bhlist[NBUF];
 	unsigned int size;
 	kdev_t dev;
@@ -57,8 +57,10 @@ int block_write(struct inode * inode, struct file * filp,
 	else
 		size = INT_MAX;
 	while (count>0) {
-		if (block >= size)
-			return written ? written : -ENOSPC;
+		if (block >= size) {
+			retval = -ENOSPC;
+			goto cleanup;
+		}
 		chars = blocksize - offset;
 		if (chars > count)
 			chars=count;
@@ -90,7 +92,8 @@ int block_write(struct inode * inode, struct file * filp,
 		      bhlist[i] = getblk (dev, block+i, blocksize);
 		      if(!bhlist[i]){
 			while(i >= 0) brelse(bhlist[i--]);
-			return written ? written : -EIO;
+			retval= -EIO;
+			goto cleanup;
 		      };
 		    };
 		    ll_rw_block(READ, blocks, bhlist);
@@ -101,8 +104,10 @@ int block_write(struct inode * inode, struct file * filp,
 		};
 #endif
 		block++;
-		if (!bh)
-			return written ? written : -EIO;
+		if (!bh) {
+			retval = -EIO;
+			goto cleanup;
+		}
 		p = offset + bh->b_data;
 		offset = 0;
 		filp->f_pos += chars;
@@ -130,6 +135,7 @@ int block_write(struct inode * inode, struct file * filp,
 		if(write_error)
 			break;
 	}
+	cleanup:
 	if ( buffercount ){
 		ll_rw_block(WRITE, buffercount, bufferlist);
 		for(i=0; i<buffercount; i++){
@@ -139,10 +145,11 @@ int block_write(struct inode * inode, struct file * filp,
 			brelse(bufferlist[i]);
 		}
 	}		
-	filp->f_reada = 1;
+	if(!retval)
+		filp->f_reada = 1;
 	if(write_error)
 		return -EIO;
-	return written;
+	return written ? written : retval;
 }
 
 int block_read(struct inode * inode, struct file * filp,

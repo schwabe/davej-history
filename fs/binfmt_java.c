@@ -62,8 +62,8 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 		i_name = bprm->buf;
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
-	if (!bprm->p) 
-		return -E2BIG;
+	if ((long)bprm->p < 0)
+		return (long)bprm->p;
 	/*
 	 * OK, now restart the process with the interpreter's inode.
 	 * Note that we use open_namei() as the name is now in kernel
@@ -117,8 +117,8 @@ static int do_load_applet(struct linux_binprm *bprm,struct pt_regs *regs)
 		i_name = bprm->buf;
 	bprm->p = copy_strings(1, &i_name, bprm->page, bprm->p, 2);
 	bprm->argc++;
-	if (!bprm->p) 
-		return -E2BIG;
+	if ((long)bprm->p < 0)
+		return (long)bprm->p;
 	/*
 	 * OK, now restart the process with the interpreter's inode.
 	 * Note that we use open_namei() as the name is now in kernel

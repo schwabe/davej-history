@@ -550,14 +550,14 @@ static inline int do_load_elf_binary(struct linux_binprm *bprm, struct pt_regs *
 				bprm->argc++;
 			}
 		}
-		if (!bprm->p) {
+		if ((long)bprm->p < 0) {
 			if (elf_interpreter) {
 				kfree(elf_interpreter);
 			}
 			iput(interpreter_inode);
 			kfree(elf_phdata);
 			sys_close(elf_exec_fileno);
-			return -E2BIG;
+			return (long)bprm->p;
 		}
 	}
 	if (flush_old_exec(bprm)) {
