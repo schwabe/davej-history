@@ -341,8 +341,8 @@ int uncached_readdir(nfs_readdir_descriptor_t *desc, void *dirent,
 	struct rpc_cred	*cred = nfs_file_cred(file);
 	struct page	*page = NULL;
 	unsigned long	cache_page;
-	u32		*p;
-	int		status = -EIO;
+	u32		*start, *p;
+	int		status = 0;
 
 	dfprintk(VFS, "NFS: uncached_readdir() searching for cookie %Lu\n", (long long)desc->target);
 	if (desc->page) {
@@ -356,21 +356,22 @@ int uncached_readdir(nfs_readdir_descriptor_t *desc, void *dirent,
 		goto out;
 	}
 	page = page_cache_entry(cache_page);
-	p = (u32 *)page_address(page);
-	status = NFS_PROTO(inode)->readdir(inode, cred, desc->target, p,
-					   NFS_SERVER(inode)->dtsize, 0);
-	if (status >= 0) {
-		p = desc->decode(p, desc->entry, 0);
+	start = (u32 *)page_address(page);
+	desc->error = NFS_PROTO(inode)->readdir(inode, cred, desc->target,
+					start, NFS_SERVER(inode)->dtsize, 0);
+	if (desc->error >= 0) {
+		p = desc->decode(start, desc->entry, 0);
 		if (IS_ERR(p))
 			status = PTR_ERR(p);
 		else
 			desc->entry->prev_cookie = desc->target;
-	}
+	} else
+		status = -EIO;
 	if (status < 0)
 		goto out_release;
 
 	desc->page_index = 0;
-	desc->page_offset = 0;
+	desc->page_offset = (char *)p - (char *)start;
 	desc->page = page;
 	status = nfs_do_filldir(desc, dirent, filldir);
 
@@ -421,16 +422,15 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		res = readdir_search_pagecache(desc);
 		if (res == -EBADCOOKIE) {
 			/* This means either end of directory */
-			if (desc->entry->cookie == desc->target) {
-				res = 0;
-				break;
+			if (desc->entry->cookie != desc->target) {
+				/* Or that the server has 'lost' a cookie */
+				res = uncached_readdir(desc, dirent, filldir);
+				if (res >= 0)
+					continue;
 			}
-			/* Or that the server has 'lost' a cookie */
-			res = uncached_readdir(desc, dirent, filldir);
-			if (res >= 0)
-				continue;
-		}
-		if (res < 0)
+			res = 0;
+			break;
+		} else if (res < 0)
 			break;
 
 		res = nfs_do_filldir(desc, dirent, filldir);
@@ -454,6 +454,9 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
  */
 static loff_t nfs_dir_llseek(struct file *file, loff_t offset, int origin)
 {
+	/* Glibc 2.0 backwards compatibility crap... */
+	if (origin == 1 && offset == 0)
+		return file->f_pos;
 	/* We disallow SEEK_CUR and SEEK_END */
 	if (origin != 0)
 		return -EINVAL;

@@ -307,6 +307,7 @@ static struct dev_info device_list[] =
 {"COMPAQ","LOGICAL VOLUME","*", BLIST_FORCELUN},
 {"NEC","PD-1 ODX654P","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"MATSHITA","PD-1","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"TEAC","PD-1","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"iomega","jaz 1GB","J.86", BLIST_NOTQ | BLIST_NOLUN},
 {"TOSHIBA","CDROM","*", BLIST_ISROM},
 {"MegaRAID", "LD", "*", BLIST_FORCELUN},     /* Multiple luns always safe (logical raid vols) */

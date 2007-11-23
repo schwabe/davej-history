@@ -1,4 +1,4 @@
-/* $Id: hysdn_net.c,v 1.8.6.1 2001/02/16 16:43:30 kai Exp $
+/* $Id: hysdn_net.c,v 1.8.6.3 2001/06/05 19:45:37 kai Exp $
 
  * Linux driver for HYSDN cards, net (ethernet type) handling routines.
  *
@@ -37,8 +37,11 @@
 
 #include "hysdn_defs.h"
 
+unsigned int hynet_enable = 0xffffffff; 
+MODULE_PARM(hynet_enable, "i");
+
 /* store the actual version for log reporting */
-char *hysdn_net_revision = "$Revision: 1.8.6.1 $";
+char *hysdn_net_revision = "$Revision: 1.8.6.3 $";
 
 #define MAX_SKB_BUFFERS 20	/* number of buffers for keeping TX-data */
 
@@ -272,8 +275,7 @@ hysdn_net_create(hysdn_card * card)
 	hysdn_net_release(card);	/* release an existing net device */
 	if ((dev = kmalloc(sizeof(struct net_local), GFP_KERNEL)) == NULL) {
 		printk(KERN_WARNING "HYSDN: unable to allocate mem\n");
-		if (card->debug_flags & LOG_NET_INIT)
-			return (-ENOMEM);
+		return (-ENOMEM);
 	}
 	memset(dev, 0, sizeof(struct net_local));	/* clean the structure */
 

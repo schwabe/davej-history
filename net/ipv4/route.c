@@ -1346,7 +1346,7 @@ martian_source:
 #ifdef CONFIG_IP_ROUTE_VERBOSE
 	if (IN_DEV_LOG_MARTIANS(in_dev) && net_ratelimit()) {
 		/*
-		 *	RFC1812 recommenadtion, if source is martian,
+		 *	RFC1812 recommendation, if source is martian,
 		 *	the only hint is MAC header.
 		 */
 		printk(KERN_WARNING "martian source %08x for %08x, dev %s\n", saddr, daddr, dev->name);

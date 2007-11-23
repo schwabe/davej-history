@@ -32,26 +32,9 @@ static struct dentry *nfs_follow_link(struct dentry *, struct dentry *, unsigned
  * symlinks can't do much...
  */
 struct inode_operations nfs_symlink_inode_operations = {
-	NULL,			/* no file-operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	nfs_readlink,		/* readlink */
-	nfs_follow_link,	/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
+	readlink:		nfs_readlink,
+	follow_link:		nfs_follow_link,
+	revalidate:		nfs_revalidate,
 };
 
 /* Symlink caching in the page cache is even more simplistic

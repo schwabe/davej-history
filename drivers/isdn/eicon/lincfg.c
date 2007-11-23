@@ -67,8 +67,8 @@ int DivasCardsDiscover(void)
 	
 	while (wDeviceIndex < 10)
 	{
-		wPCIConsultation = pcibios_find_device(HW_ID_EICON_PCI, 
-				HW_ID_DIVA_SERVER_Q, 
+		wPCIConsultation = pcibios_find_device(PCI_VENDOR_ID_EICON, 
+				PCI_DEVICE_ID_EICON_MAESTRAQ, 
 				wDeviceIndex, 
 				&byBus, &byFunc);
 
@@ -168,8 +168,8 @@ int DivasCardsDiscover(void)
 
 	while (wDeviceIndex < 10)
 	{
-		wPCIConsultation = pcibios_find_device(HW_ID_EICON_PCI, 
-				HW_ID_DIVA_SERVER_B_ST, 
+		wPCIConsultation = pcibios_find_device(PCI_VENDOR_ID_EICON, 
+				PCI_DEVICE_ID_EICON_MAESTRA, 
 				wDeviceIndex, 
 				&byBus, &byFunc);
 
@@ -226,8 +226,8 @@ int DivasCardsDiscover(void)
 			wNumCards++;
 		}
 
-		wPCIConsultation = pcibios_find_device(HW_ID_EICON_PCI, 
-				HW_ID_DIVA_SERVER_B_U, 
+		wPCIConsultation = pcibios_find_device(PCI_VENDOR_ID_EICON, 
+				PCI_DEVICE_ID_EICON_MAESTRAQ_U, 
 				wDeviceIndex, 
 				&byBus, &byFunc);
 
@@ -292,8 +292,8 @@ int DivasCardsDiscover(void)
 
 	while (wDeviceIndex < 10)
 	{
-		wPCIConsultation = pcibios_find_device(HW_ID_EICON_PCI, 
-				HW_ID_DIVA_SERVER_P, 
+		wPCIConsultation = pcibios_find_device(PCI_VENDOR_ID_EICON, 
+				PCI_DEVICE_ID_EICON_MAESTRAP, 
 				wDeviceIndex, 
 				&byBus, &byFunc);
 

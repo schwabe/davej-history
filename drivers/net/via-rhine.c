@@ -25,11 +25,15 @@
 
 	LK1.0.0:
 	- Urban Widmark: merges from Beckers 1.08b version and 2.4.0 (VT6102)
+
+	LK1.0.1
+	- Dennis Björklund: backport tx_timeout from 2.4.x to reset on timeout
+                        instead of stop working...
 */
 
 /* These identify the driver base version and may not be removed. */
 static const char version1[] =
-"via-rhine.c:v1.08b-LK1.0.0 12/14/2000  Written by Donald Becker\n";
+"via-rhine.c:v1.08b-LK1.0.1 12/14/2000  Written by Donald Becker\n";
 static const char version2[] =
 "  http://www.scyld.com/network/via-rhine.html\n";
 
@@ -95,9 +99,11 @@ static const int multicast_filter_limit = 32;
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/init.h>
+#include <linux/delay.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 
 /* Condensed bus+endian portability operations. */
 #define virt_to_le32desc(addr) cpu_to_le32(virt_to_bus(addr))
@@ -256,6 +262,13 @@ static struct device *via_probe1(int pci_bus, int pci_devfn,
 								 struct device *dev, long ioaddr, int irq,
 								 int chp_idx, int fnd_cnt);
 
+enum via_rhine_chips {
+	VT86C100A = 0,
+	VT6102,
+	VT3043,
+};
+
+/* directly indexed by enum via_rhine_chips, above */
 static struct pci_id_info pci_tbl[] __initdata = {
 	{ "VIA VT86C100A Rhine-II", 0x1106, 0x6100, 0xffff,
 	  RHINE_IOTYPE, 128, via_probe1},
@@ -379,7 +392,6 @@ static int  netdev_open(struct device *dev);
 static void check_duplex(struct device *dev);
 static void netdev_timer(unsigned long data);
 static void tx_timeout(struct device *dev);
-static void init_ring(struct device *dev);
 static int  start_tx(struct sk_buff *skb, struct device *dev);
 static void intr_handler(int irq, void *dev_instance, struct pt_regs *regs);
 static int  netdev_rx(struct device *dev);
@@ -394,6 +406,31 @@ static inline void clear_tally_counters(long ioaddr);
 
 /* A list of our installed devices, for removing the driver module. */
 static struct device *root_net_dev = NULL;
+
+static void wait_for_reset(struct device *dev, char *name)
+{
+	struct netdev_private *np = dev->priv;
+	long ioaddr = dev->base_addr;
+	int chip_id = np->chip_id;
+	int i;
+
+	/* 3043 may need long delay after reset (dlink) */
+	if (chip_id == VT3043 || chip_id == VT86C100A)
+		udelay(100);
+
+	i = 0;
+	do {
+		udelay(5);
+		i++;
+		if(i > 2000) {
+			printk(KERN_ERR "%s: reset did not complete in 10 ms.\n", name);
+			break;
+		}
+	} while(readw(ioaddr + ChipCmd) & CmdReset);
+	if (debug > 1)
+		printk(KERN_INFO "%s: reset finished after %d microseconds.\n",
+			   name, 5*i);
+}
 
 /* Ideally we would detect all network cards in slot order.  That would
    be best done a central PCI probe dispatch, which wouldn't work
@@ -594,6 +631,141 @@ static struct device * __init via_probe1(int pci_bus, int pci_devfn,
 	return dev;
 }
 
+static void alloc_rbufs(struct device *dev)
+{
+	struct netdev_private *np = (struct netdev_private *)dev->priv;
+	int i;
+
+	np->cur_rx = 0;
+	np->dirty_rx = 0;
+
+	np->rx_buf_sz = (dev->mtu <= 1500 ? PKT_BUF_SZ : dev->mtu + 32);
+	np->rx_head_desc = &np->rx_ring[0];
+
+	for (i = 0; i < RX_RING_SIZE; i++) {
+		np->rx_ring[i].rx_status = 0;
+		np->rx_ring[i].desc_length = cpu_to_le32(np->rx_buf_sz);
+		np->rx_ring[i].next_desc = virt_to_le32desc(&np->rx_ring[i+1]);
+		np->rx_skbuff[i] = 0;
+	}
+	/* Mark the last entry as wrapping the ring. */
+	np->rx_ring[i-1].next_desc = virt_to_le32desc(&np->rx_ring[0]);
+
+	/* Fill in the Rx buffers.  Handle allocation failure gracefully. */
+	for (i = 0; i < RX_RING_SIZE; i++) {
+		struct sk_buff *skb = dev_alloc_skb(np->rx_buf_sz);
+		np->rx_skbuff[i] = skb;
+		if (skb == NULL)
+			break;
+		skb->dev = dev;			/* Mark as being used by this device. */
+		np->rx_ring[i].addr = virt_to_le32desc(skb->tail);
+		np->rx_ring[i].rx_status = cpu_to_le32(DescOwn);
+	}
+	np->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
+}
+
+static void free_rbufs(struct device* dev)
+{
+	struct netdev_private *np = (struct netdev_private *)dev->priv;
+	int i;
+
+	/* Free all the skbuffs in the Rx queue. */
+	for (i = 0; i < RX_RING_SIZE; i++) {
+		np->rx_ring[i].rx_status = 0;
+		np->rx_ring[i].addr = 0xBADF00D0; /* An invalid address. */
+		if (np->rx_skbuff[i]) {
+#if LINUX_VERSION_CODE < 0x20100
+			np->rx_skbuff[i]->free = 1;
+#endif
+			dev_kfree_skb(np->rx_skbuff[i]);
+		}
+		np->rx_skbuff[i] = 0;
+	}
+}
+
+static void alloc_tbufs(struct device* dev)
+{
+	struct netdev_private *np = (struct netdev_private *)dev->priv;
+	int i;
+
+	np->tx_full = 0;
+	np->cur_tx = 0;
+	np->dirty_tx = 0;
+
+	for (i = 0; i < TX_RING_SIZE; i++) {
+		np->tx_skbuff[i] = 0;
+		np->tx_ring[i].tx_status = 0;
+		np->tx_ring[i].desc_length = cpu_to_le32(0x00e08000);
+		np->tx_ring[i].next_desc = virt_to_le32desc(&np->tx_ring[i+1]);
+		np->tx_buf[i] = kmalloc(PKT_BUF_SZ, GFP_KERNEL);
+	}
+	np->tx_ring[i-1].next_desc = virt_to_le32desc(&np->tx_ring[0]);
+}
+
+static void free_tbufs(struct device *dev)
+{
+	struct netdev_private *np = (struct netdev_private *)dev->priv;
+	int i;
+
+	for (i = 0; i < TX_RING_SIZE; i++) {
+		if (np->tx_skbuff[i])
+			dev_kfree_skb(np->tx_skbuff[i]);
+		np->tx_skbuff[i] = 0;
+		if (np->tx_buf[i]) {
+			kfree(np->tx_buf[i]);
+			np->tx_buf[i] = 0;
+		}
+	}
+}
+
+static void init_registers(struct device *dev)
+{
+	struct netdev_private *np = (struct netdev_private *)dev->priv;
+	long ioaddr = dev->base_addr;
+	int i;
+
+	for (i = 0; i < 6; i++)
+		writeb(dev->dev_addr[i], ioaddr + StationAddr + i);
+
+	/* Initialize other registers. */
+	writew(0x0006, ioaddr + PCIBusConfig);	/* Tune configuration??? */
+	/* Configure the FIFO thresholds. */
+	writeb(0x20, ioaddr + TxConfig);	/* Initial threshold 32 bytes */
+	np->tx_thresh = 0x20;
+	np->rx_thresh = 0x60;				/* Written in set_rx_mode(). */
+
+	if (dev->if_port == 0)
+		dev->if_port = np->default_port;
+
+	dev->tbusy = 0;
+	dev->interrupt = 0;
+
+	writel(virt_to_bus(np->rx_ring), ioaddr + RxRingPtr);
+	writel(virt_to_bus(np->tx_ring), ioaddr + TxRingPtr);
+
+	set_rx_mode(dev);
+
+	dev->start = 1;
+
+	/* Enable interrupts by setting the interrupt mask. */
+	writew(IntrRxDone | IntrRxErr | IntrRxEmpty| IntrRxOverflow| IntrRxDropped|
+		   IntrTxDone | IntrTxAbort | IntrTxUnderrun |
+		   IntrPCIErr | IntrStatsMax | IntrLinkChange | IntrMIIChange,
+		   ioaddr + IntrEnable);
+
+	np->chip_cmd = CmdStart|CmdTxOn|CmdRxOn|CmdNoTxPoll;
+	if (np->duplex_lock)
+		np->chip_cmd |= CmdFDuplex;
+	writew(np->chip_cmd, ioaddr + ChipCmd);
+
+	check_duplex(dev);
+	/* The LED outputs of various MII xcvrs should be configured.  */
+	/* For NS or Mison phys, turn on bit 1 in register 0x17 */
+	/* For ESI phys, turn on bit 7 in register 0x17. */
+	mdio_write(dev, np->phys[0], 0x17, mdio_read(dev, np->phys[0], 0x17) |
+			   (np->drv_flags & HasESIPhy) ? 0x0080 : 0x0001);
+}
+
 
 /* Read and write over the MII Management Data I/O (MDIO) interface. */
 
@@ -650,7 +822,6 @@ static int netdev_open(struct device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	long ioaddr = dev->base_addr;
-	int i;
 
 	/* Reset the chip. */
 	writew(CmdReset, ioaddr + ChipCmd);
@@ -666,48 +837,10 @@ static int netdev_open(struct device *dev)
 		printk(KERN_DEBUG "%s: netdev_open() irq %d.\n",
 			   dev->name, dev->irq);
 
-	init_ring(dev);
+	alloc_rbufs(dev);
+	alloc_tbufs(dev);
 
-	writel(virt_to_bus(np->rx_ring), ioaddr + RxRingPtr);
-	writel(virt_to_bus(np->tx_ring), ioaddr + TxRingPtr);
-
-	for (i = 0; i < 6; i++)
-		writeb(dev->dev_addr[i], ioaddr + StationAddr + i);
-
-	/* Initialize other registers. */
-	writew(0x0006, ioaddr + PCIBusConfig);	/* Tune configuration??? */
-	/* Configure the FIFO thresholds. */
-	writeb(0x20, ioaddr + TxConfig);	/* Initial threshold 32 bytes */
-	np->tx_thresh = 0x20;
-	np->rx_thresh = 0x60;				/* Written in set_rx_mode(). */
-
-	if (dev->if_port == 0)
-		dev->if_port = np->default_port;
-
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-
-	set_rx_mode(dev);
-
-	dev->start = 1;
-
-	/* Enable interrupts by setting the interrupt mask. */
-	writew(IntrRxDone | IntrRxErr | IntrRxEmpty| IntrRxOverflow| IntrRxDropped|
-		   IntrTxDone | IntrTxAbort | IntrTxUnderrun |
-		   IntrPCIErr | IntrStatsMax | IntrLinkChange | IntrMIIChange,
-		   ioaddr + IntrEnable);
-
-	np->chip_cmd = CmdStart|CmdTxOn|CmdRxOn|CmdNoTxPoll;
-	if (np->duplex_lock)
-		np->chip_cmd |= CmdFDuplex;
-	writew(np->chip_cmd, ioaddr + ChipCmd);
-
-	check_duplex(dev);
-	/* The LED outputs of various MII xcvrs should be configured.  */
-	/* For NS or Mison phys, turn on bit 1 in register 0x17 */
-	/* For ESI phys, turn on bit 7 in register 0x17. */
-	mdio_write(dev, np->phys[0], 0x17, mdio_read(dev, np->phys[0], 0x17) |
-			   (np->drv_flags & HasESIPhy) ? 0x0080 : 0x0001);
+	init_registers(dev);
 
 	if (debug > 2)
 		printk(KERN_DEBUG "%s: Done netdev_open(), status %4.4x "
@@ -775,6 +908,7 @@ static void netdev_timer(unsigned long data)
 static void tx_timeout(struct device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
+	struct pci_dev *pdev = pci_find_slot(np->pci_bus, np->pci_devfn);
 	long ioaddr = dev->base_addr;
 
 	printk(KERN_WARNING "%s: Transmit timed out, status %4.4x, PHY status "
@@ -782,60 +916,32 @@ static void tx_timeout(struct device *dev)
 		   dev->name, readw(ioaddr + IntrStatus),
 		   mdio_read(dev, np->phys[0], 1));
 
-	/* Perhaps we should reinitialize the hardware here. */
 	dev->if_port = 0;
-	/* Stop and restart the chip's Tx processes . */
 
-	/* Trigger an immediate transmit demand. */
+	/* protect against concurrent rx interrupts */
+	disable_irq(pdev->irq);
+
+	/* Reset the chip. */
+	writew(CmdReset, ioaddr + ChipCmd);
+
+	/* clear all descriptors */
+	free_tbufs(dev);
+	free_rbufs(dev);
+	alloc_tbufs(dev);
+	alloc_rbufs(dev);
+
+	/* Reinitialize the hardware. */
+	wait_for_reset(dev, dev->name);
+	init_registers(dev);
+
+	enable_irq(pdev->irq);
 
 	dev->trans_start = jiffies;
 	np->stats.tx_errors++;
-	return;
-}
 
-
-/* Initialize the Rx and Tx rings, along with various 'dev' bits. */
-static void init_ring(struct device *dev)
-{
-	struct netdev_private *np = (struct netdev_private *)dev->priv;
-	int i;
-
-	np->tx_full = 0;
-	np->cur_rx = np->cur_tx = 0;
-	np->dirty_rx = np->dirty_tx = 0;
-
-	np->rx_buf_sz = (dev->mtu <= 1500 ? PKT_BUF_SZ : dev->mtu + 32);
-	np->rx_head_desc = &np->rx_ring[0];
-
-	for (i = 0; i < RX_RING_SIZE; i++) {
-		np->rx_ring[i].rx_status = 0;
-		np->rx_ring[i].desc_length = cpu_to_le32(np->rx_buf_sz);
-		np->rx_ring[i].next_desc = virt_to_le32desc(&np->rx_ring[i+1]);
-		np->rx_skbuff[i] = 0;
-	}
-	/* Mark the last entry as wrapping the ring. */
-	np->rx_ring[i-1].next_desc = virt_to_le32desc(&np->rx_ring[0]);
-
-	/* Fill in the Rx buffers.  Handle allocation failure gracefully. */
-	for (i = 0; i < RX_RING_SIZE; i++) {
-		struct sk_buff *skb = dev_alloc_skb(np->rx_buf_sz);
-		np->rx_skbuff[i] = skb;
-		if (skb == NULL)
-			break;
-		skb->dev = dev;			/* Mark as being used by this device. */
-		np->rx_ring[i].addr = virt_to_le32desc(skb->tail);
-		np->rx_ring[i].rx_status = cpu_to_le32(DescOwn);
-	}
-	np->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
-
-	for (i = 0; i < TX_RING_SIZE; i++) {
-		np->tx_skbuff[i] = 0;
-		np->tx_ring[i].tx_status = 0;
-		np->tx_ring[i].desc_length = cpu_to_le32(0x00e08000);
-		np->tx_ring[i].next_desc = virt_to_le32desc(&np->tx_ring[i+1]);
-		np->tx_buf[i] = kmalloc(PKT_BUF_SZ, GFP_KERNEL);
-	}
-	np->tx_ring[i-1].next_desc = virt_to_le32desc(&np->tx_ring[0]);
+	/* wake queue */
+	clear_bit(0, (void*)&dev->tbusy);
+	mark_bh(NET_BH);
 
 	return;
 }
@@ -1233,7 +1339,6 @@ static int netdev_close(struct device *dev)
 {
 	long ioaddr = dev->base_addr;
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
-	int i;
 
 	dev->start = 0;
 	dev->tbusy = 1;
@@ -1255,27 +1360,8 @@ static int netdev_close(struct device *dev)
 
 	free_irq(dev->irq, dev);
 
-	/* Free all the skbuffs in the Rx queue. */
-	for (i = 0; i < RX_RING_SIZE; i++) {
-		np->rx_ring[i].rx_status = 0;
-		np->rx_ring[i].addr = 0xBADF00D0; /* An invalid address. */
-		if (np->rx_skbuff[i]) {
-#if LINUX_VERSION_CODE < 0x20100
-			np->rx_skbuff[i]->free = 1;
-#endif
-			dev_kfree_skb(np->rx_skbuff[i]);
-		}
-		np->rx_skbuff[i] = 0;
-	}
-	for (i = 0; i < TX_RING_SIZE; i++) {
-		if (np->tx_skbuff[i])
-			dev_kfree_skb(np->tx_skbuff[i]);
-		np->tx_skbuff[i] = 0;
-		if (np->tx_buf[i]) {
-			kfree(np->tx_buf[i]);
-			np->tx_buf[i] = 0;
-		}
-	}
+	free_rbufs(dev);
+	free_tbufs(dev);
 
 	MOD_DEC_USE_COUNT;
 

@@ -265,6 +265,7 @@ nlmsvc_proc_test_msg(struct svc_rqst *rqstp, struct nlm_args *argp,
 
 	dprintk("lockd: TEST_MSG      called\n");
 
+	memset(&res, 0, sizeof(res));
 	if ((stat = nlmsvc_proc_test(rqstp, argp, &res)) == 0)
 		stat = nlmsvc_callback(rqstp, NLMPROC_TEST_RES, &res);
 	return stat;

@@ -2,7 +2,7 @@
 #define _GDTH_IOCTL_H
 
 /* gdth_ioctl.h
- * $Id: gdth_ioctl.h,v 1.7 2000/10/11 08:43:35 achim Exp $
+ * $Id: gdth_ioctl.h,v 1.10 2001/05/22 06:28:59 achim Exp $
  */
 
 /* IOCTLs */
@@ -21,9 +21,9 @@
 #define GDTIOCTL_RESCAN     (GDTIOCTL_MASK |11) /* rescan host drives */
 #define GDTIOCTL_RESET_DRV  (GDTIOCTL_MASK |12) /* reset (remote) drv. res. */
 
-#define GDTIOCTL_MAGIC      0xaffe0003UL
+#define GDTIOCTL_MAGIC      0xaffe0004
 #define EVENT_SIZE          294 
-
+#define MAX_HDRIVES         100                     
 
 /* IOCTL structure (write) */
 typedef struct {
@@ -40,7 +40,7 @@ typedef struct {
         struct {
             unchar          lock;               /* lock/unlock */
             unchar          drive_cnt;          /* drive count */
-            ushort          drives[35];         /* drives */
+            ushort          drives[MAX_HDRIVES];/* drives */
         } lockdrv;
         struct {
             unchar          lock;               /* lock/unlock */
@@ -58,6 +58,10 @@ typedef struct {
             unchar          cmd_len;            /* command length */
             unchar          cmd[12];            /* SCSI command */
         } scsi;
+        struct {
+            ushort          hdr_no;             /* host drive number */
+            unchar          flag;               /* old meth./add/remove */
+        } rescan;
     } iu;
 } gdth_iowr_str;
 
@@ -79,6 +83,8 @@ typedef struct {
             ushort          bios_ver;           /* not used */
             ushort          access;             /* not used */
             ushort          ext_type;           /* extended type */
+            ushort          device_id;          /* device ID */
+            ushort          sub_device_id;      /* sub device ID */
         } ctrtype;
         struct {
             unchar          version;            /* OS version */
@@ -97,7 +103,7 @@ typedef struct {
             unchar          target;             /* target ID */
             unchar          lun;                /* LUN */
             unchar          cluster_type;       /* cluster properties */
-        } hdr_list[35];                         /* index is host drive number */
+        } hdr_list[MAX_HDRIVES];                /* index is host drive number */
     } iu;
 } gdth_iord_str;
 

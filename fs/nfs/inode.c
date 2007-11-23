@@ -115,6 +115,8 @@ nfs_read_inode(struct inode * inode)
 	inode->i_mode = 0;
 	inode->i_rdev = 0;
 	inode->i_op = NULL;
+	/* We can't support UPDATE_ATIME(), since the server will reset it */
+	inode->i_flags |= MS_NOATIME;
 	NFS_FILEID(inode) = 0;
 	NFS_FSID(inode) = 0;
 	INIT_LIST_HEAD(&inode->u.nfs_i.read);
@@ -435,6 +437,7 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto failure_put_root;
 
 	sb->s_root->d_op = &nfs_dentry_operations;
+	sb->s_root->d_time = jiffies;
 
 	/* Get some general file system info */
 	if (server->rpc_ops->statfs(server, &fh, &fsinfo) >= 0) {
@@ -642,7 +645,6 @@ nfs_fill_inode(struct inode *inode, struct nfs_fh *fh, struct nfs_fattr *fattr)
 		inode->i_ctime = nfs_time_to_secs(fattr->ctime);
 		NFS_CACHE_CTIME(inode) = fattr->ctime;
 		NFS_CACHE_MTIME(inode) = fattr->mtime;
-		NFS_CACHE_ATIME(inode) = fattr->atime;
 		NFS_CACHE_ISIZE(inode) = fattr->size;
 		NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
 		NFS_ATTRTIMEO_UPDATE(inode) = jiffies;
@@ -794,21 +796,6 @@ nfs_notify_change(struct dentry *dentry, struct iattr *attr)
 	error = nfs_refresh_inode(inode, &fattr);
 out:
 	return error;
-}
-
-int
-nfs_update_atime(struct dentry *dentry)
-{
-	struct iattr attr;
-	struct inode *inode = dentry->d_inode;
-
-	nfs_revalidate(dentry);
-	if (!inode || time_before(inode->i_atime,nfs_time_to_secs(NFS_CACHE_ATIME(inode))))
-		return 0;
-
-	attr.ia_valid = ATTR_ATIME|ATTR_ATIME_SET;
-	attr.ia_atime = inode->i_atime;
-	return nfs_notify_change(dentry, &attr);
 }
 
 /*
@@ -1025,12 +1012,8 @@ nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 
 	NFS_CACHE_CTIME(inode) = fattr->ctime;
 	inode->i_ctime = nfs_time_to_secs(fattr->ctime);
-	/* If we've been messing around with atime, don't
-	 * update it. Save the server value in NFS_CACHE_ATIME.
-	 */
-	NFS_CACHE_ATIME(inode) = fattr->atime;
-	if (time_before(inode->i_atime, nfs_time_to_secs(fattr->atime)))
-		inode->i_atime = nfs_time_to_secs(fattr->atime);
+
+	inode->i_atime = nfs_time_to_secs(fattr->atime);
 
 	NFS_CACHE_MTIME(inode) = new_mtime;
 	inode->i_mtime = nfs_time_to_secs(new_mtime);

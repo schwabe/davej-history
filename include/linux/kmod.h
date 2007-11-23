@@ -13,7 +13,10 @@ extern char hotplug_path[];
 #else
 #include <linux/errno.h>
 
-#define request_module(x) do {} while(0)
+static inline int request_module(const char *name)
+{
+	return -EINVAL;
+}
 static inline int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 {
         return -EACCES;

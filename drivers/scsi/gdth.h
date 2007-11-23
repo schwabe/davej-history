@@ -4,13 +4,13 @@
 /*
  * Header file for the GDT ISA/EISA/PCI Disk Array Controller driver for Linux
  * 
- * gdth.h Copyright (C) 1995-99 ICP vortex Computersysteme GmbH, Achim Leubner
+ * gdth.h Copyright (C) 1995-01 ICP vortex Computersysteme GmbH, Achim Leubner
  * See gdth.c for further informations and 
  * below for supported controller types
  *
  * <achim@vortex.de>
  *
- * $Id: gdth.h,v 1.35 2000/10/11 08:42:38 achim Exp $
+ * $Id: gdth.h,v 1.44 2001/08/21 11:19:05 achim Exp $
  */
 
 #include <linux/version.h>
@@ -29,12 +29,16 @@
 /* defines, macros */
 
 /* driver version */
-#define GDTH_VERSION_STR        "1.25"
-#define GDTH_VERSION            1
-#define GDTH_SUBVERSION         25
+#define GDTH_VERSION_STR        "2.03"
+#define GDTH_VERSION            2
+#define GDTH_SUBVERSION         3
 
 /* protocol version */
 #define PROTOCOL_VERSION        1
+
+/* OEM IDs */
+#define OEM_ID_ICP	0x941c
+#define OEM_ID_INTEL	0x8000
 
 /* controller classes */
 #define GDT_ISA         0x01                    /* ISA controller */
@@ -53,6 +57,9 @@
 /* these defines should already exist in <linux/pci.h> */
 #ifndef PCI_VENDOR_ID_VORTEX
 #define PCI_VENDOR_ID_VORTEX            0x1119  /* PCI controller vendor ID */
+#endif
+#ifndef PCI_VENDOR_ID_INTEL
+#define PCI_VENDOR_ID_INTEL             0x8086  
 #endif
 
 #ifndef PCI_DEVICE_ID_VORTEX_GDT60x0
@@ -123,6 +130,16 @@
 #ifndef PCI_DEVICE_ID_VORTEX_GDTMAXRP
 /* GDT_MPR, last device ID */
 #define PCI_DEVICE_ID_VORTEX_GDTMAXRP   0x2ff   
+#endif
+
+#ifndef PCI_DEVICE_ID_VORTEX_GDTNEWRX
+/* new GDT Rx Controller */
+#define PCI_DEVICE_ID_VORTEX_GDTNEWRX	0x300
+#endif
+	
+#ifndef PCI_DEVICE_ID_INTEL_SRC
+/* Intel Storage RAID Controller */
+#define PCI_DEVICE_ID_INTEL_SRC		0x600
 #endif
 
 /* limits */
@@ -202,6 +219,8 @@
 #define GDT_CLUST_INFO  22                      /* cluster info */
 #define GDT_RW_ATTRIBS  23                      /* R/W attribs (write thru,..)*/
 #define GDT_CLUST_RESET 24                      /* releases the cluster drives*/
+#define GDT_FREEZE_IO   25                      /* freezes all IOs */
+#define GDT_UNFREEZE_IO 26                      /* unfreezes all IOs */
 
 /* raw service commands */
 #define GDT_RESERVE     14                      /* reserve dev. to raw serv. */
@@ -843,7 +862,9 @@ typedef struct {
 #if LINUX_VERSION_CODE >= 0x02015C
     struct pci_dev      *pdev;
 #endif
+    ushort              vendor_id;              /* vendor (ICP, Intel, ..) */
     ushort              device_id;              /* device ID (0,..,9) */
+    ushort              subdevice_id;           /* sub device ID */
     unchar              bus;                    /* PCI bus */
     unchar              device_fn;              /* PCI device/function no. */
     ulong               dpmem;                  /* DPRAM address */
@@ -855,9 +876,11 @@ typedef struct {
 
 /* controller information structure */
 typedef struct {
+    ushort              oem_id;                 /* OEM */
     ushort              type;                   /* controller class */
     ushort              raw_feat;               /* feat. raw service (s/g,..) */
-    ulong32             stype;                  /* controller subtype */
+    ulong32             stype;                  /* subtype (PCI: device ID) */
+    ushort              subdevice_id;           /* sub device ID (PCI) */
     ushort              fw_vers;                /* firmware version */
     ushort              cache_feat;             /* feat. cache serv. (s/g,..) */
     ushort              bmic;                   /* BMIC address (EISA) */
@@ -891,7 +914,7 @@ typedef struct {
         unchar          ldr_no;                 /* log. drive no. */
         unchar          rw_attribs;             /* r/w attributes */
         unchar          cluster_type;           /* cluster properties */
-        unchar          media_changed;          /* Flag:MOUNT/UNMOUNT occurred */
+        unchar          media_changed;          /* Flag:MOUNT/UNMOUNT occured */
         ulong32         start_sec;              /* start sector */
     } hdr[MAX_LDRIVES];                         /* host drives */
     struct {
@@ -999,7 +1022,6 @@ typedef struct {
 
 int gdth_detect(Scsi_Host_Template *);
 int gdth_release(struct Scsi_Host *);
-int gdth_command(Scsi_Cmnd *);
 int gdth_queuecommand(Scsi_Cmnd *,void (*done)(Scsi_Cmnd *));
 int gdth_abort(Scsi_Cmnd *);
 #if LINUX_VERSION_CODE >= 0x010346
@@ -1022,7 +1044,7 @@ int gdth_eh_host_reset(Scsi_Cmnd *scp);
                detect:          gdth_detect,                     \
                release:         gdth_release,                    \
                info:            gdth_info,                       \
-               command:         gdth_command,                    \
+               command:         NULL,                            \
                queuecommand:    gdth_queuecommand,               \
                eh_abort_handler: gdth_eh_abort,                  \
                eh_device_reset_handler: gdth_eh_device_reset,    \
@@ -1054,7 +1076,7 @@ int gdth_eh_host_reset(Scsi_Cmnd *scp);
                detect:          gdth_detect,                     \
                release:         gdth_release,                    \
                info:            gdth_info,                       \
-               command:         gdth_command,                    \
+               command:         NULL,                            \
                queuecommand:    gdth_queuecommand,               \
                eh_abort_handler: gdth_eh_abort,                  \
                eh_device_reset_handler: gdth_eh_device_reset,    \
@@ -1083,7 +1105,7 @@ int gdth_proc_info(char *,char **,off_t,int,int,int);
                    gdth_detect,                         \
                    gdth_release,                        \
                    gdth_info,                           \
-                   gdth_command,                        \
+                   NULL,                                \
                    gdth_queuecommand,                   \
                    gdth_abort,                          \
                    gdth_reset,                          \
@@ -1104,7 +1126,7 @@ int gdth_bios_param(Disk *,int,int *);
                    gdth_detect,                         \
                    gdth_release,                        \
                    gdth_info,                           \
-                   gdth_command,                        \
+                   NULL,                                \
                    gdth_queuecommand,                   \
                    gdth_abort,                          \
                    gdth_reset,                          \

@@ -256,6 +256,7 @@ nlm4svc_proc_test_msg(struct svc_rqst *rqstp, struct nlm_args *argp,
 
 	dprintk("lockd: TEST_MSG      called\n");
 
+	memset(&res, 0, sizeof(res));
 	if ((stat = nlm4svc_proc_test(rqstp, argp, &res)) == 0)
 		stat = nlm4svc_callback(rqstp, NLMPROC_TEST_RES, &res);
 	return stat;
@@ -439,7 +440,7 @@ nlm4svc_proc_sm_notify(struct svc_rqst *rqstp, struct nlm_reboot *argp,
 	/* Obtain the host pointer for this NFS server and try to
 	 * reclaim all locks we hold on this server.
 	 */
-	saddr.sin_addr.s_addr = argp->addr;	
+	saddr.sin_addr.s_addr = htonl(argp->addr);
 	if ((host = nlmclnt_lookup_host(&saddr, prot, vers)) != NULL) {
 		nlmclnt_recovery(host, argp->state);
 		nlm_release_host(host);

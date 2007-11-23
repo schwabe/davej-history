@@ -1,4 +1,4 @@
-/* $Id: hycapi.c,v 1.8.6.1 2001/02/16 16:43:30 kai Exp $
+/* $Id: hycapi.c,v 1.8.6.3 2001/05/26 15:19:58 kai Exp $
  *
  * Linux driver for HYSDN cards, CAPI2.0-Interface.
  * written by Ulrich Albrecht (u.albrecht@hypercope.de) for Hypercope GmbH
@@ -41,7 +41,10 @@
 #include "hysdn_defs.h"
 #include <linux/kernelcapi.h>
 
-static char hycapi_revision[]="$Revision: 1.8.6.1 $";
+static char hycapi_revision[]="$Revision: 1.8.6.3 $";
+
+unsigned int hycapi_enable = 0xffffffff; 
+MODULE_PARM(hycapi_enable, "i");
 
 typedef struct _hycapi_appl {
 	unsigned int ctrl_mask;
@@ -542,15 +545,11 @@ hycapi_rx_capipkt(hysdn_card * card, uchar * buf, word len)
 	printk(KERN_NOTICE "hycapi_rx_capipkt\n");    
 #endif
 	if(!cinfo) {
-		printk(KERN_ERR "HYSDN Card%d: no HYCAPI-controller!\n",
-		       card->myid);
 		return;
 	}
 	ctrl = cinfo->capi_ctrl;
 	if(!ctrl)
 	{
-		printk(KERN_ERR "HYSDN Card%d: no CAPI-controller (1)!\n",
-		       card->myid);
 		return;
 	}
 	if(len < CAPI_MSG_BASELEN) {
@@ -644,8 +643,6 @@ void hycapi_tx_capiack(hysdn_card * card)
 	printk(KERN_NOTICE "hycapi_tx_capiack\n");    
 #endif
 	if(!cinfo) {
-		printk(KERN_ERR "HYSDN Card%d: no CAPI-controller (2)!\n",
-		       card->myid);
 		return;
 	}
 	spin_lock_irq(&cinfo->lock);
@@ -671,8 +668,6 @@ hycapi_tx_capiget(hysdn_card *card)
 {
 	hycapictrl_info *cinfo = card->hyctrlinfo;
 	if(!cinfo) {
-		printk(KERN_ERR "HYSDN Card%d: no CAPI-controller! (3)\n",
-		       card->myid);
 		return (struct sk_buff *)NULL;
 	}
 	if (!cinfo->sk_count)
@@ -739,7 +734,7 @@ hycapi_cleanup(void)
 	struct capi_driver *driver;
 	driver = &hycapi_driver;
 	if (!hy_di) {
-		printk(KERN_ERR "HYSDN: no capi-driver to detach (???)\n");
+		printk(KERN_ERR "HYSDN: no capi-driver to detach (?)\n");
 		return;
 	}
 	printk(KERN_NOTICE "HYSDN: Detaching capi-driver\n");
@@ -792,6 +787,9 @@ hycapi_capi_create(hysdn_card *card)
 #ifdef HYCAPI_PRINTFNAMES
 	printk(KERN_NOTICE "hycapi_capi_create\n");        
 #endif
+	if((hycapi_enable & (1 << card->myid)) == 0) {
+		return 1;
+	}
 	if (!card->hyctrlinfo) {
 		cinfo = (hycapictrl_info *) kmalloc(sizeof(hycapictrl_info), GFP_ATOMIC);
 		if (!cinfo) {

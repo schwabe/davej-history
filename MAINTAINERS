@@ -1172,6 +1172,13 @@ W:	http://www.qsl.net/dl1bke/
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 
+ZF MACHZ WATCHDOG
+P:	Fernando Fuganti
+M:	fuganti@conectiva.com.br
+M:	fuganti@netbank.com.br
+W:	http://cvs.conectiva.com.br/drivers/ZFL-watchdog/
+S:	Maintained
+
 THE REST
 P:	Linus Torvalds
 S:	Buried alive in reporters

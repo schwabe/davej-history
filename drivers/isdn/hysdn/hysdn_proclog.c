@@ -1,4 +1,4 @@
-/* $Id: hysdn_proclog.c,v 1.9 2000/11/25 17:01:01 kai Exp $
+/* $Id: hysdn_proclog.c,v 1.9.6.2 2001/08/13 07:46:15 kai Exp $
 
  * Linux driver for HYSDN cards, /proc/net filesystem log functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -227,7 +227,7 @@ hysdn_log_read(struct file *file, char *buf, size_t count, loff_t * off)
 	struct log_data *inf;
 	int len;
 	word ino;
-	struct procdata *pd;
+	struct procdata *pd = NULL;
 	hysdn_card *card;
 
 	if (!*((struct log_data **) file->private_data)) {
@@ -270,7 +270,7 @@ static int
 hysdn_log_open(struct inode *ino, struct file *filep)
 {
 	hysdn_card *card;
-	struct procdata *pd;
+	struct procdata *pd = NULL;
 	ulong flags;
 
 	MOD_INC_USE_COUNT;
@@ -378,7 +378,7 @@ hysdn_log_poll(struct file *file, poll_table * wait)
 	unsigned int mask = 0;
 	word ino;
 	hysdn_card *card;
-	struct procdata *pd;
+	struct procdata *pd = NULL;
 
 	if ((file->f_mode & (FMODE_READ | FMODE_WRITE)) == FMODE_WRITE)
 		return (mask);	/* no polling for write supported */

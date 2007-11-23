@@ -89,7 +89,7 @@ struct nfs_readres {
 #define NFS_WRITE_MAXIOV        8
 struct nfs_writeargs {
 	struct nfs_fh *		fh;
-	__u32			offset;
+	__u64			offset;
 	__u32			count;
 	enum nfs3_stable_how	stable;
 	unsigned int		nriov;

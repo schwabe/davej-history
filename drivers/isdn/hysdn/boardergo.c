@@ -1,4 +1,4 @@
-/* $Id: boardergo.c,v 1.5.6.3 2001/03/13 16:17:09 kai Exp $
+/* $Id: boardergo.c,v 1.5.6.5 2001/07/18 16:02:16 kai Exp $
 
  * Linux driver for HYSDN cards, specific routines for ergo type boards.
  *
@@ -35,6 +35,7 @@
 #include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
+#include <linux/vmalloc.h>
 
 #include "hysdn_defs.h"
 #include "boardergo.h"
@@ -386,7 +387,9 @@ ergo_waitpofready(struct HYSDN_CARD *card)
 			dpr->ToPcInt = 1;	/* interrupt to E1 for all cards */
 
 			restore_flags(flags);
-			if ((i = hysdn_net_create(card))) {
+			if ((hynet_enable & (1 << card->myid)) 
+			    && (i = hysdn_net_create(card))) 
+			{
 				ergo_stopcard(card);
 				card->state = CARD_STATE_BOOTERR;
 				return (i);

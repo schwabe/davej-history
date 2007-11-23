@@ -71,8 +71,8 @@ if [ "$CONFIG_ISDN_DRV_HISAX" != "n" ]; then
    bool '  Gazel cards' CONFIG_HISAX_GAZEL
    bool '  HFC PCI-Bus cards' CONFIG_HISAX_HFC_PCI
    bool '  Winbond W6692 based cards' CONFIG_HISAX_W6692
+   bool '  HFC-S+, HFC-SP, HFC-PCMCIA cards' CONFIG_HISAX_HFC_SX
    if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
-      bool '  HFC-S+, HFC-SP, HFC-PCMCIA cards' CONFIG_HISAX_HFC_SX
 #      bool '  TESTEMULATOR (EXPERIMENTAL)' CONFIG_HISAX_TESTEMU
       if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then
 	 bool '  Am7930' CONFIG_HISAX_AMD7930
@@ -94,7 +94,7 @@ dep_tristate       'IBM Active 2000 support' CONFIG_ISDN_DRV_ACT2000 $CONFIG_ISD
 bool               'Eicon active card support' CONFIG_ISDN_DRV_EICON
 if [ "$CONFIG_ISDN_DRV_EICON" != "n" ]; then
    if [ "$CONFIG_ISDN_DRV_EICON_OLD" != "y" ]; then
-      dep_tristate '  Build Eicon driver type standalone' CONFIG_ISDN_DRV_EICON_DIVAS $CONFIG_ISDN
+      dep_tristate '  Build Eicon driver type standalone' CONFIG_ISDN_DRV_EICON_DIVAS $CONFIG_ISDN $CONFIG_PCI
    fi
    if [ "$CONFIG_ISDN_DRV_EICON_DIVAS" != "y" ]; then
       dep_tristate '  Legacy Eicon driver' CONFIG_ISDN_DRV_EICON_OLD $CONFIG_ISDN
