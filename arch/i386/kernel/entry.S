@@ -623,7 +623,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_iopl)		/* 110 */
 	.long SYMBOL_NAME(sys_vhangup)
 	.long SYMBOL_NAME(sys_idle)
-	.long SYMBOL_NAME(sys_vm86)
+	.long SYMBOL_NAME(sys_vm86old)
 	.long SYMBOL_NAME(sys_wait4)
 	.long SYMBOL_NAME(sys_swapoff)		/* 115 */
 	.long SYMBOL_NAME(sys_sysinfo)
@@ -674,4 +674,6 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sched_rr_get_interval)
 	.long SYMBOL_NAME(sys_nanosleep)
 	.long SYMBOL_NAME(sys_mremap)
-	.space (NR_syscalls-163)*4
+	.long 0,0
+	.long SYMBOL_NAME(sys_vm86)
+	.space (NR_syscalls-166)*4

@@ -196,7 +196,7 @@ int ncr53c8xx_release(struct Scsi_Host *);
 
 #if	LINUX_VERSION_CODE >= LinuxVersionCode(1,3,0)
 
-#define NCR53C8XX {NULL,NULL,NULL,NULL,"ncr53c8xx (rel 1.12c)", ncr53c8xx_detect,\
+#define NCR53C8XX {NULL,NULL,NULL,NULL,"ncr53c8xx (rel 1.12d)", ncr53c8xx_detect,\
     	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
         NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\
@@ -207,7 +207,7 @@ int ncr53c8xx_release(struct Scsi_Host *);
 #else
 
 
-#define NCR53C8XX {NULL, NULL, "ncr53c8xx (rel 1.12c)", ncr53c8xx_detect,\
+#define NCR53C8XX {NULL, NULL, "ncr53c8xx (rel 1.12d)", ncr53c8xx_detect,\
     	ncr53c8xx_release, /* info */ NULL, /* command, deprecated */ NULL, 		\
 	ncr53c8xx_queue_command, ncr53c8xx_abort, ncr53c8xx_reset,	\
         NULL /* slave attach */, scsicam_bios_param, /* can queue */ SCSI_NCR_CAN_QUEUE,\
@@ -494,6 +494,8 @@ struct ncr_reg {
 /*4c*/  u_char    nc_stest0;
 
 /*4d*/  u_char    nc_stest1;
+	#define   DBLEN   0x08	/* clock doubler running		*/
+	#define   DBLSEL  0x04	/* clock doubler selected		*/
 
 /*4e*/  u_char    nc_stest2;
 	#define   ROF     0x40	/* reset scsi offset (after gross error!) */

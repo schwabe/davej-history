@@ -242,6 +242,10 @@ smb_receive_raw(struct socket *sock, unsigned char *target, int length)
 				   length - already_read, 0, 0,
 				   NULL, NULL);
 
+		if (result == 0)
+		{
+			return -EIO;
+		}
 		if (result < 0)
 		{
 			DPRINTK("smb_receive_raw: recvfrom error = %d\n",

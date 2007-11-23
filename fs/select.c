@@ -122,17 +122,20 @@ end_check:
 repeat:
 	current->state = TASK_INTERRUPTIBLE;
 	for (i = 0 ; i < n ; i++) {
-		if (FD_ISSET(i,in) && check(SEL_IN,wait,current->files->fd[i])) {
+		struct file * file = current->files->fd[i];
+		if (!file)
+			continue;
+		if (FD_ISSET(i,in) && check(SEL_IN,wait,file)) {
 			FD_SET(i, res_in);
 			count++;
 			wait = NULL;
 		}
-		if (FD_ISSET(i,out) && check(SEL_OUT,wait,current->files->fd[i])) {
+		if (FD_ISSET(i,out) && check(SEL_OUT,wait,file)) {
 			FD_SET(i, res_out);
 			count++;
 			wait = NULL;
 		}
-		if (FD_ISSET(i,ex) && check(SEL_EX,wait,current->files->fd[i])) {
+		if (FD_ISSET(i,ex) && check(SEL_EX,wait,file)) {
 			FD_SET(i, res_ex);
 			count++;
 			wait = NULL;

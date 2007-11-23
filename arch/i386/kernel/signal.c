@@ -81,7 +81,10 @@ asmlinkage int sys_sigreturn(unsigned long __unused)
 {
 #define COPY(x) regs->x = context.x
 #define COPY_SEG(x) \
-if ((context.x & 0xfffc) && (context.x & 3) != 3) goto badframe; COPY(x);
+if (   (context.x & 0xfffc)     /* not a NULL selectors */ \
+    && (context.x & 0x4) != 0x4 /* not a LDT selector */ \
+    && (context.x & 3) != 3     /* not a RPL3 GDT selector */ \
+   ) goto badframe; COPY(x);
 #define COPY_SEG_STRICT(x) \
 if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
 	struct sigcontext_struct context;
@@ -273,7 +276,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		 *	including volatiles for the inline function to get
 		 *	current combined with this gets it confused.
 		 */
-	        struct task_struct *t=current;
+		struct task_struct *t=current;
 		__asm__("bsf %3,%1\n\t"
 			"btrl %1,%0"
 			:"=m" (t->signal),"=r" (signr)

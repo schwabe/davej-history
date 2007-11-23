@@ -127,7 +127,10 @@ smb_encode_path(struct smb_server *server,
 		const char *name, const int len)
 {
 	byte *start = p;
-	p = smb_encode_parents(p, dir);
+	if (dir != NULL)
+	{
+		p = smb_encode_parents(p, dir);
+	}
 	p = smb_encode_this_name(p, name, len);
 	*p++ = 0;
 	if (server->protocol <= PROTOCOL_COREPLUS)
@@ -572,7 +575,6 @@ smb_proc_open(struct smb_server *server,
 	DPRINTK("smb_proc_open: name=%s\n", name);
 
 	smb_lock_server(server);
-	buf = server->packet;
 
 	if (entry->opened != 0)
 	{
@@ -581,6 +583,7 @@ smb_proc_open(struct smb_server *server,
 		return 0;
 	}
       retry:
+	buf = server->packet;
 	p = smb_setup_header(server, SMBopen, 2, 0);
 	WSET(buf, smb_vwv0, 0x42);	/* read/write */
 	WSET(buf, smb_vwv1, o_attr);
@@ -731,8 +734,8 @@ smb_proc_create(struct inode *dir, const char *name, int len,
 	__u16 fileid;
 
 	smb_lock_server(server);
-	buf = server->packet;
       retry:
+	buf = server->packet;
 	p = smb_setup_header(server, SMBcreate, 3, 0);
 	WSET(buf, smb_vwv0, attr);
 	DSET(buf, smb_vwv1, utc2local(ctime));
@@ -763,15 +766,13 @@ smb_proc_mv(struct inode *odir, const char *oname, const int olen,
 {
 	char *p;
 	struct smb_server *server = SMB_SERVER(odir);
-	char *buf;
 	int result;
 
 	smb_lock_server(server);
-	buf = server->packet;
 
       retry:
 	p = smb_setup_header(server, SMBmv, 1, 0);
-	WSET(buf, smb_vwv0, aSYSTEM | aHIDDEN);
+	WSET(server->packet, smb_vwv0, aSYSTEM | aHIDDEN);
 	*p++ = 4;
 	p = smb_encode_path(server, p, SMB_INOP(odir), oname, olen);
 	*p++ = 4;
@@ -824,7 +825,6 @@ smb_proc_rmdir(struct inode *dir, const char *name, const int len)
 
 	smb_lock_server(server);
 
-
       retry:
 	p = smb_setup_header(server, SMBrmdir, 0, 0);
 	*p++ = 4;
@@ -847,15 +847,13 @@ smb_proc_unlink(struct inode *dir, const char *name, const int len)
 {
 	char *p;
 	struct smb_server *server = SMB_SERVER(dir);
-	char *buf;
 	int result;
 
 	smb_lock_server(server);
-	buf = server->packet;
 
       retry:
 	p = smb_setup_header(server, SMBunlink, 1, 0);
-	WSET(buf, smb_vwv0, aSYSTEM | aHIDDEN);
+	WSET(server->packet, smb_vwv0, aSYSTEM | aHIDDEN);
 	*p++ = 4;
 	p = smb_encode_path(server, p, SMB_INOP(dir), name, len);
 	smb_setup_bcc(server, p);
@@ -879,9 +877,9 @@ smb_proc_trunc(struct smb_server *server, word fid, dword length)
 	int result;
 
 	smb_lock_server(server);
-	buf = server->packet;
 
       retry:
+	buf = server->packet;
 	p = smb_setup_header(server, SMBwrite, 5, 0);
 	WSET(buf, smb_vwv0, fid);
 	WSET(buf, smb_vwv1, 0);
@@ -1010,9 +1008,9 @@ smb_proc_readdir_short(struct smb_server *server, struct inode *dir, int fpos,
 	DPRINTK("SMB call  readdir %d @ %d\n", cache_size, fpos);
 
 	smb_lock_server(server);
-	buf = server->packet;
 
       retry:
+	buf = server->packet;
 	first = 1;
 	total_count = 0;
 	current_entry = entry;
@@ -1388,11 +1386,11 @@ smb_proc_getattr_core(struct inode *dir, const char *name, int len,
 	char *buf;
 
 	smb_lock_server(server);
-	buf = server->packet;
 
 	DDPRINTK("smb_proc_getattr: %s\n", name);
 
       retry:
+	buf = server->packet;
 	p = smb_setup_header(server, SMBgetatr, 0, 0);
 	*p++ = 4;
 	p = smb_encode_path(server, p, SMB_INOP(dir), name, len);
@@ -1511,9 +1509,9 @@ smb_proc_setattr_core(struct smb_server *server,
 	int result;
 
 	smb_lock_server(server);
-	buf = server->packet;
 
       retry:
+	buf = server->packet;
 	p = smb_setup_header(server, SMBsetatr, 8, 0);
 	WSET(buf, smb_vwv0, new_finfo->attr);
 	DSET(buf, smb_vwv1, utc2local(new_finfo->f_mtime));

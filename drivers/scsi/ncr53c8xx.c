@@ -5459,8 +5459,8 @@ void ncr_exception (ncb_p np)
 	**	Never test for an error condition you don't know how to handle.
 	*/
 
-	dstat = INB (nc_dstat);
-	sist  = INW (nc_sist) ;
+	dstat = (istat & DIP) ? INB (nc_dstat) : 0;
+	sist  = (istat & SIP) ? INW (nc_sist)  : 0;
 	np->profile.num_int++;
 
 	if (DEBUG_FLAGS & DEBUG_TINY)
@@ -7355,6 +7355,26 @@ static void ncr_getclock (ncb_p np, u_char scntl3)
 		printf ("%s: sclk=%d async=%d sync=%d (ns) scntl3=0x%x\n",
 		ncr_name (np), ns_clock, np->ns_async, np->ns_sync, np->rv_scntl3);
 #else
+	/*
+	 * If NCR53C875 chip with clock doubler enabled,
+	 *	disable clock doubler and assume 40 MHz clock.
+	 * If NCR53C860 chip assume 80 MHz clock.
+	 */
+
+	switch(np->device_id) {
+	case PCI_DEVICE_ID_NCR_53C875:
+		if ((INB(nc_stest1) & (DBLEN+DBLSEL)) == DBLEN+DBLSEL) {
+			if (bootverbose)
+				printf ("%s: disabling clock doubler\n", ncr_name(np));
+			OUTB(nc_stest1, 0);
+			scntl3	= 3;
+		}
+		break;
+	case PCI_DEVICE_ID_NCR_53C860:
+		scntl3	= 5;
+		break;
+	}
+
 	/*
 	 *	For now just preserve the BIOS setting ...
 	 */
