@@ -409,7 +409,7 @@ static int get_arg(int pid, char * buffer)
 	return get_array(p, (*p)->mm->arg_start, (*p)->mm->arg_end, buffer);
 }
 
-static unsigned long get_wchan(struct task_struct *p)
+unsigned long get_wchan(struct task_struct *p)
 {
 	if (!p || p == current || p->state == TASK_RUNNING)
 		return 0;

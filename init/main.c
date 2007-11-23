@@ -182,6 +182,21 @@ extern void specialix_setup(char *str, int *ints);
 extern void baycom_setup(char *str, int *ints);
 #endif
 
+#ifdef CONFIG_PARIDE_PD
+extern void pd_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_PARIDE_PF
+extern void pf_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_PARIDE_PT
+extern void pt_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_PARIDE_PG
+extern void pg_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_PARIDE_PCD
+extern void pcd_setup(char *str, int *ints);
+#endif
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 extern void ipc_init(void);
@@ -255,10 +270,12 @@ static void profile_setup(char *str, int *ints)
 #endif
 }
 
-struct {
+struct kernel_param {
 	const char *str;
 	void (*setup_func)(char *, int *);
-} bootsetups[] = {
+} ;
+
+struct kernel_param bootsetups[] = {
 	{ "reserve=", reserve_setup },
 	{ "profile=", profile_setup },
 #ifdef CONFIG_BLK_DEV_RAM
@@ -444,6 +461,27 @@ struct {
 	{ 0, 0 }
 };
 
+static struct kernel_param raw_params[] = {
+
+#ifdef CONFIG_PARIDE_PD
+       { "pd.", pd_setup },
+#endif
+#ifdef CONFIG_PARIDE_PCD
+       { "pcd.", pcd_setup },
+#endif
+#ifdef CONFIG_PARIDE_PF
+       { "pf.", pf_setup },
+#endif
+#ifdef CONFIG_PARIDE_PT
+       { "pt.", pt_setup },
+#endif
+#ifdef CONFIG_PARIDE_PG
+       { "pg.", pg_setup },
+#endif
+       { 0, 0 }
+} ;
+
+
 #ifdef CONFIG_BLK_DEV_RAM
 static void ramdisk_start_setup(char *str, int *ints)
 {
@@ -491,6 +529,15 @@ static int checksetup(char *line)
 		}
 		i++;
 	}
+
+        for (i=0; raw_params[i].str; i++) {
+                int n = strlen(raw_params[i].str);
+                if (!strncmp(line,raw_params[i].str,n)) {
+                        raw_params[i].setup_func(line+n, NULL);
+                        return 1;
+                }
+        }
+
 	return 0;
 }
 
@@ -599,6 +646,18 @@ static void parse_root_dev(char * line)
 		{ "gscd",    0x1000 },
 		{ "sbpcd",   0x1900 },
 		{ "sonycd",  0x1800 },
+#ifdef CONFIG_PARIDE_PD
+       		{ "pda",     0x2d00 },
+       		{ "pdb",     0x2d10 },
+       		{ "pdc",     0x2d20 },
+       		{ "pdd",     0x2d30 },
+#endif
+#ifdef CONFIG_PARIDE_PCD
+     	  	{ "pcd",     0x2e00 },
+#endif
+#ifdef CONFIG_PARIDE_PF
+	       	{ "pf",      0x2f00 },
+#endif
 		{ NULL, 0 }
 	};
 

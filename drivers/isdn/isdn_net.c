@@ -229,7 +229,7 @@ isdn_net_unreachable(struct device *dev, struct sk_buff *skb, char *reason)
 {
 	printk(KERN_DEBUG "isdn_net: %s: %s, send ICMP\n",
 	       dev->name, reason);
-	if(skb->proto==htons(ETH_P_IP))
+	if(skb->protocol==htons(ETH_P_IP))
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0
 #if (LINUX_VERSION_CODE < 0x02010f)	/* 2.1.15 */
 		  ,dev

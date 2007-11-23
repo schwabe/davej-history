@@ -44,7 +44,7 @@
 /*
  *      ftape-io.c defined global vars.
  */
-extern bad_sector_map_changed;
+extern int bad_sector_map_changed;
 
 /*
  *      ftape-io.c defined global functions.

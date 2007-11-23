@@ -389,6 +389,12 @@ M:	Juergen Fischer <fischer@et-inf.fho-emden.de>
 L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
+GSCD CDROM DRIVER
+P:	Oliver Raupach
+M:	oliver@mm.gop.de
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 SBPCD CDROM DRIVER
 P:	Eberhard Moenkeberg
 M:	emoenke@gwdg.de

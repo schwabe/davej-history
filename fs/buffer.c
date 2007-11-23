@@ -53,8 +53,8 @@ static struct buffer_head * lru_list[NR_LIST] = {NULL, };
 static struct buffer_head * free_list[NR_SIZES] = {NULL, };
 
 static struct buffer_head * unused_list = NULL;
-static struct buffer_head * reuse_list = NULL;
-static struct wait_queue * buffer_wait = NULL;
+static struct buffer_head * reuse_list  = NULL;
+struct wait_queue *         buffer_wait = NULL;
 
 static int nr_buffers = 0;
 static int nr_buffers_type[NR_LIST] = {0,};
@@ -462,6 +462,11 @@ static inline struct buffer_head * find_buffer(kdev_t dev, int block, int size)
 	return NULL;
 }
 
+struct buffer_head *efind_buffer(kdev_t dev, int block, int size)
+{
+	return find_buffer(dev, block, size);
+}
+
 /*
  * Why like this, I hear you say... The reason is race-conditions.
  * As we don't lock buffers (unless we are reading them, that is),
@@ -650,6 +655,9 @@ static void refill_freelist(int size)
 	/* If there are too many dirty buffers, we wake up the update process
 	   now so as to ensure that there are still clean buffers available
 	   for user processes to use (and dirty) */
+
+	if (nr_buffers_type[BUF_DIRTY] > nr_buffers * bdf_prm.b_un.nfract/100)
+		wakeup_bdflush(1);
 	
 	/* We are going to try to locate this much memory */
 	needed = bdf_prm.b_un.nrefill * size;  
@@ -1247,7 +1255,9 @@ void unlock_buffer(struct buffer_head * bh)
 	struct buffer_head *tmp;
 	struct page *page;
 
-	clear_bit(BH_Lock, &bh->b_state);
+	if (!clear_bit(BH_Lock, &bh->b_state))
+		printk ("unlock_buffer: already unlocked on %s\n",
+			kdevname(bh->b_dev));
 	wake_up(&bh->b_wait);
 	if (waitqueue_active(&buffer_wait))
 		wake_up(&buffer_wait);
@@ -1594,7 +1604,7 @@ asmlinkage int sync_old_buffers(void)
 	if (ncount) printk("sync_old_buffers: %d dirty buffers not on dirty list\n", ncount);
 	printk("Wrote %d/%d buffers\n", nwritten, ndirty);
 #endif
-	
+	run_task_queue(&tq_disk);
 	return 0;
 }
 

@@ -320,6 +320,220 @@ CONFIG_BLK_DEV_XD
   Documentation/modules.txt.
   It's pretty unlikely that you have one of these: say N.
 
+Parallel port IDE device support
+CONFIG_PARIDE
+  There are many external CD-ROM and disk devices that connect through
+  your computer's parallel port. Most of them are actually IDE devices
+  using a parallel port IDE adapter. This option enables the PARIDE
+  subsystem which contains drivers for many of these external drives.
+  Read linux/Documentation/paride.txt for more information.  If you 
+  built PARIDE support into your kernel,  you may still build the 
+  individual protocol modules and high-level drivers as loadable 
+  modules. If you build this support as a module, it will be called 
+  paride.o.  To use the PARIDE support, you must say Y or M here 
+  and also to at least one high-level driver (e.g. "Parallel port 
+  IDE disks", "Parallel port ATAPI CD-ROMs", "Parallel port ATAPI 
+  disks" etc.) and to at least one protocol driver (e.g. "ATEN 
+  EH-100 protocol", "MicroSolutions backpack protocol", "DataStor 
+  Commuter protocol" etc.).
+
+Parallel port IDE disks
+CONFIG_PARIDE_PD 
+  This option enables the high-level driver for IDE-type disk devices 
+  connected through a parallel port.  If you chose to build PARIDE 
+  support into your kernel, you may answer Y here to build in the 
+  parallel port IDE driver, otherwise you should answer M to build 
+  it as a loadable module.  The module will be called pd.o.  You 
+  must also have at least one parallel port protocol driver in your 
+  system.  Among the devices supported by this driver are the SyQuest 
+  EZ-135, EZ-230 and SparQ drives, the Avatar Shark and the backpack
+  hard drives from MicroSolutions.
+
+Parallel port ATAPI CD-ROMs
+CONFIG_PARIDE_PCD 
+  This option enables the high-level driver for ATAPI CD-ROM devices
+  connected through a parallel port. If you chose to build PARIDE
+  support into your kernel, you may answer Y here to build in the
+  parallel port ATAPI CD-ROM driver, otherwise you should answer M to
+  build it as a loadable module. The module will be called pcd.o. You
+  must also have at least one parallel port protocol driver in your
+  system. Among the devices supported by this driver are the
+  MicroSolutions backpack CD-ROM drives and the Freecom Power CD. If
+  you have such a CD-ROM drive, you should also say Y to "ISO9660
+  cdrom filesystem support" below, because that's the filesystem used
+  on CDROMs.
+
+Parallel port ATAPI disks
+CONFIG_PARIDE_PF 
+  This option enables the high-level driver for ATAPI disk devices
+  connected through a parallel port.  If you chose to build PARIDE
+  support into your kernel, you may answer Y here to build in the
+  parallel port ATAPI disk driver, otherwise you should answer M
+  to build it as a loadable module.  The module will be called pf.o.
+  You must also have at least one parallel port protocol driver in
+  your system.  Among the devices supported by this driver are the
+  MicroSolutions backpack PD/CD drive and the Imation Superdisk
+  LS-120 drive.
+
+Parallel port ATAPI tapes
+CONFIG_PARIDE_PT
+  This option enables the high-level driver for ATAPI tape devices
+  connected through a parallel port.  If you chose to build PARIDE
+  support into your kernel, you may answer Y here to build in the
+  parallel port ATAPI tape driver, otherwise you should answer M
+  to build it as a loadable module.  The module will be called pt.o.
+  You must also have at least one parallel port protocol driver in
+  your system.  Among the devices supported by this driver is the
+  parallel port version of the HP 5GB drive.
+
+Parallel port generic ATAPI devices
+CONFIG_PARIDE_PG
+  This option enables a special high-level driver for generic ATAPI
+  devices connected through a parallel port. The driver allows user
+  programs, such as cdrecord, to send ATAPI commands directly to a
+  device. If you chose to build PARIDE support into your kernel, you 
+  may answer Y here to build in the parallel port generic ATAPI driver, 
+  otherwise you should answer M to build it as a loadable module.
+  The module will be called pg.o.  You must also have at least one 
+  parallel port protocol driver in your system.  This driver 
+  implements an API loosely related to the generic SCSI driver.  
+  See /usr/include/linux/pg.h for details, or visit 
+  http://www.torque.net/parport/cdr.html for more information and
+  the required patches to cdrecord.
+
+ATEN EH-100 protocol
+CONFIG_PARIDE_ATEN 
+  This option enables support for the ATEN EH-100 parallel port IDE
+  protocol.  This protocol is used in some inexpensive low performance 
+  parallel port kits made in Hong Kong. If you chose to build PARIDE 
+  support into your kernel, you may answer Y here to build in the 
+  protocol driver, otherwise you should answer M to build it as a 
+  loadable module.  The module will be called aten.o.  You must also 
+  have a high-level driver for the type of device that you want to 
+  support.
+
+MicroSolutions backpack protocol
+CONFIG_PARIDE_BPCK 
+  This option enables support for the MicroSolutions backpack 
+  parallel port IDE protocol.  If you chose to build PARIDE support
+  into your kernel, you may answer Y here to build in the protocol
+  driver, otherwise you should answer M to build it as a loadable
+  module.  The module will be called bpck.o.  You must also have
+  a high-level driver for the type of device that you want to support.
+
+DataStor Commuter protocol
+CONFIG_PARIDE_COMM 
+  This option enables support for the Commuter parallel port IDE 
+  protocol from DataStor.  If you chose to build PARIDE support
+  into your kernel, you may answer Y here to build in the protocol
+  driver, otherwise you should answer M to build it as a loadable
+  module.  The module will be called comm.o.  You must also have
+  a high-level driver for the type of device that you want to support.
+
+DataStor EP-2000 protocol
+CONFIG_PARIDE_DSTR 
+  This option enables support for the EP-2000 parallel port IDE 
+  protocol from DataStor.  If you chose to build PARIDE support
+  into your kernel, you may answer Y here to build in the protocol
+  driver, otherwise you should answer M to build it as a loadable
+  module.  The module will be called dstr.o.  You must also have
+  a high-level driver for the type of device that you want to support.
+
+Shuttle EPAT/EPEZ protocol
+CONFIG_PARIDE_EPAT 
+  This option enables support for the EPAT parallel port IDE 
+  protocol.  EPAT is a parallel port IDE adapter manufactured by
+  Shuttle Technology and widely used in devices from major vendors
+  such as Hewlett-Packard, SyQuest, Imation and Avatar. If you 
+  chose to build PARIDE support into your kernel, you may answer Y 
+  here to build in the protocol driver, otherwise you should answer M 
+  to build it as a loadable module.  The module will be called epat.o.  
+  You must also have a high-level driver for the type of device that 
+  you want to support.
+
+Shuttle EPIA protocol
+CONFIG_PARIDE_EPIA 
+  This option enables support for the (obsolete) EPIA parallel port 
+  IDE protocol from Shuttle Technology.  This adapter can still be found
+  in some no-name kits. If you chose to build PARIDE support into your 
+  kernel, you may answer Y here to build in the protocol driver,
+  otherwise you should answer M to build it as a loadable module.  
+  The module will be called epia.o.  You must also have a high-level 
+  driver for the type of device that you want to support.
+
+FIT TD-2000 protocol
+CONFIG_PARIDE_FIT2
+  This option enables support for the TD-2000 parallel port IDE protocol
+  from Fidelity International Technology.  This is a simple (low speed) 
+  adapter that is used in some portable hard drives.  If you chose to 
+  build PARIDE support into your kernel, you may answer Y here to 
+  build in the protocol driver, otherwise you should answer M to 
+  build it as a loadable module.  The module will be called fit2.o.
+  You must also have a high-level driver for the type of device 
+  that you want to support.
+
+FIT TD-3000 protocol
+CONFIG_PARIDE_FIT3
+  This option enables support for the TD-3000 parallel port IDE protocol
+  from Fidelity International Technology. This protocol is used in newer
+  models of their portable disk, CD-ROM and PD/CD devices.   If you chose
+  to build PARIDE support into your kernel, you may answer Y here to
+  build in the protocol driver, otherwise you should answer M to
+  build it as a loadable module.  The module will be called fit3.o.
+  You must also have a high-level driver for the type of device
+  that you want to support.
+
+FreeCom power protocol
+CONFIG_PARIDE_FRPW 
+  This option enables support for the Freecom power parallel port IDE 
+  protocol.  If you chose to build PARIDE support into your kernel, you 
+  may answer Y here to build in the protocol driver, otherwise you 
+  should answer M to build it as a loadable module.  The module will be 
+  called frpw.o.  You must also have a high-level driver for the type 
+  of device that you want to support.
+
+KingByte KBIC-951A/971A protocols
+CONFIG_PARIDE_KBIC 
+  This option enables support for the KBIC-951A and KBIC-971A parallel 
+  port IDE protocols from KingByte Information Corp.  KingByte's adapters
+  appear in many no-name portable disk and CD-ROM products, especially 
+  in Europe. If you chose to build PARIDE support into your kernel, you 
+  may answer Y here to build in the protocol driver, otherwise you should 
+  answer M to build it as a loadable module.  The module will be called 
+  kbic.o.  You must also have a high-level driver for the type of device 
+  that you want to support.
+
+KT PHd protocol
+CONFIG_PARIDE_KTTI
+  This option enables support for the "PHd" parallel port IDE protocol
+  from KT Technology.  This is a simple (low speed) adapter that is
+  used in some 2.5" portable hard drives.  If you chose to build PARIDE 
+  support into your kernel, you may answer Y here to build in the 
+  protocol driver, otherwise you should answer M to build it as a 
+  loadable module.  The module will be called ktti.o.  You must also 
+  have a high-level driver for the type of device that you want to
+  support.
+
+OnSpec 90c20 protocol
+CONFIG_PARIDE_ON20 
+  This option enables support for the (obsolete) 90c20 parallel port 
+  IDE protocol from OnSpec (often marketed under the ValuStore brand
+  name).  If you chose to build PARIDE support into your kernel, you 
+  may answer Y here to build in the protocol driver, otherwise you 
+  should answer M to build it as a loadable module.  The module will 
+  be called on20.o.  You must also have a high-level driver for the 
+  type of device that you want to support.
+
+OnSpec 90c26 protocol
+CONFIG_PARIDE_ON26 
+  This option enables support for the 90c26 parallel port IDE protocol 
+  from OnSpec Electronics (often marketed under the ValuStore brand
+  name).  If you chose to build PARIDE support into your kernel, you 
+  may answer Y here to build in the protocol driver, otherwise you 
+  should answer M to build it as a loadable module.  The module will 
+  be called on26.o.  You must also have a high-level driver for the 
+  type of device that you want to support.
+
 Multiple devices driver support
 CONFIG_BLK_DEV_MD
   This driver lets you combine several harddisk partitions into one
@@ -348,6 +562,31 @@ CONFIG_MD_STRIPED
   you want to compile this as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
   here and read Documentation/modules.txt. If unsure, say Y.
+
+RAID-1 (mirroring) mode
+CONFIG_MD_MIRRORING
+  A RAID-1 set consists of several disk drives which are exact copies
+  of each other. In the event of a mirror failture, the RAID driver
+  will continue to use the operational mirrors in the set, providing
+  an error free MD device to the higher levels of the kernel. In
+  a set with N drives, the available space is the capacity of a single
+  drive, and the set protects against a failture of (N - 1) drives.
+  raidtools, a set of user-space tools which create and maintain
+  RAID1/4/5 sets, is available at:
+  http://luthien.nuclecu.unam.mx/~miguel/raid
+
+RAID-4/RAID-5 mode
+CONFIG_MD_RAID5
+  A RAID-5 set of N drives with a capacity of C MB per drive provides
+  the capacity of C * (N - 1) drives, and protects against a failture
+  of a single drive. For a given sector (row) number, (N - 1) drives
+  contain data sectors, and one drive contains the parity protection.
+  For a RAID-4 set, the parity blocks are present on a single drive,
+  while a RAID-5 set distributes the parity accross the drives in one
+  of the available parity distribution methods.
+  raidtools, a set of user-space tools which create and maintain
+  RAID1/4/5 sets, is available at:
+  http://luthien.nuclecu.unam.mx/~miguel/raid
 
 Support for Deskstation RPC44
 CONFIG_DESKSTATION_RPC44

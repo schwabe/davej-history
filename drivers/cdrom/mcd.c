@@ -311,7 +311,10 @@ mcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 	{
 		i = updateToc();
 		if (i < 0)
-			return i;	/* error reading TOC */
+			/* Hermann.Lauer@IWR.Uni-Heidelberg.De:
+		 	We _can_ open the door even without a CD */
+			if (cmd != CDROMEJECT)
+				return i;	/* error reading TOC */
 	}
 
 	switch (cmd)

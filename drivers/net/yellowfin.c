@@ -38,7 +38,7 @@ static int fifo_cfg = 0x0020;				/* Bypass external Tx FIFO. */
 
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
    Setting to > 1518 effectively disables this feature. */
-static const rx_copybreak = 100;
+static const int rx_copybreak = 100;
 
 /* Keep the ring sizes a power of two for efficiency.
    Making the Tx ring too large decreases the effectiveness of channel

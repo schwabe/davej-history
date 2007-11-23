@@ -27,6 +27,8 @@
 int nr_swap_pages = 0;
 int nr_free_pages = 0;
 
+extern struct wait_queue *buffer_wait;
+
 /*
  * Free area management
  *
@@ -120,6 +122,9 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 #undef list
 
 	restore_flags(flags);
+	if (!waitqueue_active(&buffer_wait))
+		return;
+	wake_up(&buffer_wait);
 }
 
 void __free_page(struct page *page)

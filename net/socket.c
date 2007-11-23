@@ -532,6 +532,12 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 	struct socket *sock;
 	struct proto_ops *ops;
 
+	if(family==AF_PACKET)
+	{
+		family=AF_INET;
+		type=SOCK_PACKET;
+	}
+	
 	/* Locate the correct protocol family. */
 	i = find_protocol_family(family);
 

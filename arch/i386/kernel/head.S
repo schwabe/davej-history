@@ -103,16 +103,17 @@ startup_32:
 checkCPUtype:
 #endif
 
-/* check if it is 486 or 386. */
+/* check Processor type: 386, 486, 6x86(L) or CPUID capable processor */
 /*
  * XXX - this does a lot of unnecessary setup.  Alignment checks don't
  * apply at our cpl of 0 and the stack ought to be aligned already, and
  * we don't need to preserve eflags.
  */
+
 	movl $3, SYMBOL_NAME(x86)
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
-	movl %eax,%ecx		# save original EFLAGS
+	movl %eax,%ecx		# save original EFLAGS in ecx
 	xorl $0x40000,%eax	# flip AC bit in EFLAGS
 	pushl %eax		# copy to EFLAGS
 	popfl			# set EFLAGS
@@ -127,10 +128,11 @@ checkCPUtype:
 	pushl %eax
 	popfl			# if we are on a straight 486DX, SX, or
 	pushfl			# 487SX we can't change it
-	popl %eax
-	xorl %ecx,%eax
+	popl %eax		# Also if we are on a Cyrix 6x86(L)
+	xorl %ecx,%eax		# OTOH 6x86MXs and MIIs check OK
 	andl $0x200000,%eax
-	je is486
+	je is486x
+
 isnew:	pushl %ecx		# restore original EFLAGS
 	popfl
 	incl SYMBOL_NAME(have_cpuid)	# we have CPUID
@@ -168,7 +170,72 @@ isnew:	pushl %ecx		# restore original EFLAGS
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $0x50022,%eax	# set AM, WP, NE and MP
 	jmp 2f
-is486:	pushl %ecx		# restore original EFLAGS
+
+/* Now we test if we have a Cyrix 6x86(L). We didn't test before to avoid
+ * clobbering the new BX chipset used with the Pentium II, which has a register
+ * at the same addresses as those used to access the Cyrix special configuration
+ * registers (CCRs).
+ */
+	/*
+	 * A Cyrix/IBM 6x86(L) preserves flags after dividing 5 by 2
+	 * (and it _must_ be 5 divided by 2) while other CPUs change
+	 * them in undefined ways. We need to know this since we may
+	 * need to enable the CPUID instruction at least.
+	 * We couldn't use this test before since the PPro and PII behave
+	 * like Cyrix chips in this respect.
+	 */
+is486x:	xor %ax,%ax
+	sahf
+	movb $5,%ax
+	movb $2,%bx
+	div %bl
+	lahf
+	cmpb $2,%ah
+	jne ncyrix
+	/*
+	 * N.B. The pattern of accesses to 0x22 and 0x23 is *essential*
+	 *      so do not try to "optimize" it! For the same reason we
+	 *	do all this with interrupts off.
+	 */
+#define setCx86(reg, val) \
+	movb reg,%ax;	\
+	outb %ax,$0x22;	\
+	movb val,%ax;	\
+	outb %ax,$0x23
+
+#define getCx86(reg) \
+	movb reg,%ax;	\
+	outb %ax,$0x22;	\
+	inb $0x23,%ax
+
+	cli
+	getCx86($0xc3)		# get CCR3
+	movb %ax,%cx		# Save old value
+	movb %ax,%bx
+	andb $0x0f,%bx		# Enable access to all config registers
+	orb $0x10,%bx		# by setting bit 4
+	setCx86($0xc3,%bx)
+
+	getCx86($0xe8)		# now we can get CCR4
+	orb $0x80,%ax		# and set bit 7 (CPUIDEN)
+	movb %ax,%bx		# to enable CPUID execution
+	setCx86($0xe8,%bx)
+
+        getCx86($0xfe)          # DIR0 : let's check this is a 6x86(L)
+        andb $0xf0,%ax		# should be 3xh
+	cmpb $0x30,%ax		# 
+	jne n6x86
+        getCx86($0xe9)          # CCR5 : we reset the SLOP bit
+        andb $0xfd,%ax		# so that udelay calculation
+        movb %ax,%bx		# is correct on 6x86(L) CPUs
+        setCx86($0xe9,%bx)
+	setCx86($0xc3,%cx)	# Restore old CCR3
+	sti
+	jmp isnew		# We enabled CPUID now
+
+n6x86:	setCx86($0xc3,%cx)	# Restore old CCR3
+	sti
+ncyrix:	pushl %ecx		# restore original EFLAGS
 	popfl
 	movl %cr0,%eax		# 486
 	andl $0x80000011,%eax	# Save PG,PE,ET

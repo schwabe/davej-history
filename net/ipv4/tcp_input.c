@@ -36,6 +36,14 @@
  *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
  *	Willy Konynenberg	:	Transparent proxy adapted to new
  *					socket hash code.
+ *	J Hadi Salim		:	We assumed that some idiot wasnt going
+ *	Alan Cox			to idly redefine bits of ToS in an
+ *					experimental protocol for other things
+ *					(ECN) - wrong!. Mask the bits off. Note
+ *					masking the bits if they dont use ECN
+ *					then use it for ToS is even more 
+ *					broken. 
+ *					</RANT>
  */
 
 #include <linux/config.h>
@@ -43,6 +51,12 @@
 #include <linux/random.h>
 #include <net/tcp.h>
 
+/*
+ *	Do we assume the IP ToS is entirely for its intended purpose
+ */
+ 
+#define TOS_VALID_MASK(x)		((x)&0x3F)
+ 
 /*
  *	Policy code extracted so it's now separate
  */
@@ -764,7 +778,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 */
 
 	newsk->ip_ttl=sk->ip_ttl;
-	newsk->ip_tos=skb->ip_hdr->tos;
+	newsk->ip_tos=TOS_VALID_MASK(skb->ip_hdr->tos);
 
 	/*
 	 *	Use 512 or whatever user asked for 
@@ -1024,7 +1038,7 @@ static int tcp_conn_request_fake(struct sock *sk, struct sk_buff *skb,
 	 */
 
 	newsk->ip_ttl=sk->ip_ttl;
-	newsk->ip_tos=skb->ip_hdr->tos;
+	newsk->ip_tos=TOS_VALID_MASK(skb->ip_hdr->tos);
 
 	rt = ip_rt_route(newsk->opt && newsk->opt->srr ? newsk->opt->faddr : saddr, 0,
 			 sk->bound_device);
@@ -2388,6 +2402,14 @@ retry_search:
 	 
 		if(sk->state==TCP_LISTEN)
 		{
+			/* Don't start connections with illegal address
+			   ranges. Trying to talk TCP to a broken dhcp host
+			   isnt good on a lan with broken SunOS 4.x boxes 
+			   who think its a broadcast */
+			   
+			if ((saddr | daddr) == 0)
+				goto discard_it;
+				
 			if (th->ack) {	/* These use the socket TOS.. might want to be the received TOS */
 #ifdef CONFIG_SYN_COOKIES
 				if (!th->syn && !th->rst) {

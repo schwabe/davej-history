@@ -290,7 +290,7 @@ const char *AM53C974_info(struct Scsi_Host *);
 int AM53C974_command(Scsi_Cmnd *SCpnt);
 int AM53C974_queue_command(Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *));
 int AM53C974_abort(Scsi_Cmnd *cmd);
-int AM53C974_reset (Scsi_Cmnd *cmd);
+int AM53C974_reset (Scsi_Cmnd *cmd, unsigned int flags);
 
 #define AM53C974_local_declare()	unsigned long io_port
 #define AM53C974_setio(instance)	io_port = instance->io_port

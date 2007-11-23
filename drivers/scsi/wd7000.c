@@ -508,7 +508,7 @@ typedef struct icbRevLvl {
 typedef struct icbUnsMask {	/* I'm totally guessing here */
     unchar op;
     volatile unchar mask[14];	/* mask bits                 */
-#ifdef 0
+#if 0
     unchar rsvd[12];		/* reserved                  */
 #endif
     volatile unchar vue;	/* vendor-unique error code  */
@@ -1686,7 +1686,7 @@ int wd7000_abort (Scsi_Cmnd *SCpnt)
 /*
  *  I also have no idea how to do a reset...
  */
-int wd7000_reset (Scsi_Cmnd *SCpnt)
+int wd7000_reset (Scsi_Cmnd *SCpnt, unsigned int flags)
 {
     return (SCSI_RESET_PUNT);
 }

@@ -109,6 +109,15 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PARIDE),y)
+SUB_DIRS        += paride
+MOD_SUB_DIRS    += paride
+else
+  ifeq ($(CONFIG_PARIDE),m)
+  MOD_SUB_DIRS  += paride
+  endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_MD),y)
 LX_OBJS += md.o
 
@@ -128,25 +137,21 @@ else
   endif
 endif
 
-#ifeq ($(CONFIG_MD_RAID1),y)
-#L_OBJS += raid1.o
-#else
-#  ifeq ($(CONFIG_MD_SUPPORT_RAID1),y)
-#    ifeq ($(CONFIG_MD_RAID1),m)
-#    M_OBJS += raid1.o
-#    endif
-#  endif
-#endif
-#
-#ifeq ($(CONFIG_MD_RAID5),y)
-#L_OBJS += raid5.o
-#else
-#  ifeq ($(CONFIG_MD_SUPPORT_RAID5),y)
-#    ifeq ($(CONFIG_MD_RAID5),m)
-#    M_OBJS += raid5.o
-#    endif
-#  endif
-#endif
+ifeq ($(CONFIG_MD_MIRRORING),y)
+L_OBJS += raid1.o
+else
+  ifeq ($(CONFIG_MD_MIRRORING),m)
+  M_OBJS += raid1.o
+  endif
+endif
+
+ifeq ($(CONFIG_MD_RAID5),y)
+L_OBJS += raid5.o
+else
+  ifeq ($(CONFIG_MD_RAID5),m)
+  M_OBJS += raid5.o
+  endif
+endif
 
 endif
 

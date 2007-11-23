@@ -59,7 +59,7 @@ asmlinkage extern void cleanup_module(void);
 /*      kernel global functions not (yet) standard accessible
  *      (linked at load time by modules package).
  */
-asmlinkage extern sys_sgetmask(void);
-asmlinkage extern sys_ssetmask(int);
+asmlinkage extern int sys_sgetmask(void);
+asmlinkage extern int sys_ssetmask(int);
 
 #endif

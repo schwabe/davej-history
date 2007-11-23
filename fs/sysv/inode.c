@@ -165,7 +165,6 @@ static struct super_block * detected_xenix (struct super_block *sb, struct buffe
 	sb->sv_sb_flc_blocks = &sbd1->s_free[0];
 	sb->sv_sb_total_free_blocks = &sbd2->s_tfree;
 	sb->sv_sb_time = &sbd2->s_time;
-	sb->sv_block_base = 0;
 	sb->sv_firstinodezone = 2;
 	sb->sv_firstdatazone = sbd1->s_isize;
 	sb->sv_nzones = sbd1->s_fsize;
@@ -223,7 +222,6 @@ static struct super_block * detected_sysv4 (struct super_block *sb, struct buffe
 	sb->sv_sb_total_free_blocks = &sbd->s_tfree;
 	sb->sv_sb_time = &sbd->s_time;
 	sb->sv_sb_state = &sbd->s_state;
-	sb->sv_block_base = 0;
 	sb->sv_firstinodezone = 2;
 	sb->sv_firstdatazone = sbd->s_isize;
 	sb->sv_nzones = sbd->s_fsize;
@@ -281,7 +279,6 @@ static struct super_block * detected_sysv2 (struct super_block *sb, struct buffe
 	sb->sv_sb_total_free_blocks = &sbd->s_tfree;
 	sb->sv_sb_time = &sbd->s_time;
 	sb->sv_sb_state = &sbd->s_state;
-	sb->sv_block_base = 0;
 	sb->sv_firstinodezone = 2;
 	sb->sv_firstdatazone = sbd->s_isize;
 	sb->sv_nzones = sbd->s_fsize;
@@ -328,7 +325,6 @@ static struct super_block * detected_coherent (struct super_block *sb, struct bu
 	sb->sv_sb_flc_blocks = &sbd->s_free[0];
 	sb->sv_sb_total_free_blocks = &sbd->s_tfree;
 	sb->sv_sb_time = &sbd->s_time;
-	sb->sv_block_base = 0;
 	sb->sv_firstinodezone = 2;
 	sb->sv_firstdatazone = sbd->s_isize;
 	sb->sv_nzones = from_coh_ulong(sbd->s_fsize);
@@ -355,6 +351,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	MOD_INC_USE_COUNT;
 	lock_super(sb);
 	set_blocksize(dev,BLOCK_SIZE);
+	sb->sv_block_base = 0;
 
 	/* Try to read Xenix superblock */
 	if ((bh = bread(dev, 1, BLOCK_SIZE)) != NULL) {

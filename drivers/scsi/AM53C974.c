@@ -2204,7 +2204,7 @@ return(SCSI_ABORT_NOT_RUNNING);
 * 
 * Returns : status (SCSI_ABORT_SUCCESS)
 **************************************************************************/
-int AM53C974_reset(Scsi_Cmnd *cmd)
+int AM53C974_reset(Scsi_Cmnd *cmd, unsigned int flags)
 {
 AM53C974_local_declare();
 int                      i;

@@ -101,7 +101,7 @@ static void e21_reset_8390(struct device *dev);
 static void e21_block_input(struct device *dev, int count,
 						   struct sk_buff *skb, int ring_offset);
 static void e21_block_output(struct device *dev, int count,
-							 const unsigned char *buf, const start_page);
+							 const unsigned char *buf, const int start_page);
 static void e21_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 							int ring_page);
 
@@ -330,7 +330,7 @@ e21_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
 
 static void
 e21_block_output(struct device *dev, int count, const unsigned char *buf,
-				 int start_page)
+				 const int start_page)
 {
 	short ioaddr = dev->base_addr;
 	volatile char *shared_mem = (char *)dev->mem_start;

@@ -203,6 +203,9 @@ struct symbol_table symbol_table = {
 	X(blkdev_release),
 	X(gendisk_head),
 	X(resetup_one_dev),
+	X(unplug_device),
+	X(make_request),
+	X(tq_disk),
 
 #ifdef CONFIG_SERIAL	
 	/* Module creation of serial units */

@@ -141,14 +141,15 @@ extern unsigned long name_cache_init(unsigned long start, unsigned long end);
 typedef char buffer_block[BLOCK_SIZE];
 
 /* bh state bits */
-#define BH_Uptodate	0	/* 1 if the buffer contains valid data */
-#define BH_Dirty	1	/* 1 if the buffer is dirty */
-#define BH_Lock		2	/* 1 if the buffer is locked */
-#define BH_Req		3	/* 0 if the buffer has been invalidated */
-#define BH_Touched	4	/* 1 if the buffer has been touched (aging) */
-#define BH_Has_aged	5	/* 1 if the buffer has been aged (aging) */
-#define BH_Protected	6	/* 1 if the buffer is protected */
-#define BH_FreeOnIO	7	/* 1 to discard the buffer_head after IO */
+#define BH_Uptodate		0	/* 1 if the buffer contains valid data */
+#define BH_Dirty		1	/* 1 if the buffer is dirty */
+#define BH_Lock			2	/* 1 if the buffer is locked */
+#define BH_Req			3	/* 0 if the buffer has been invalidated */
+#define BH_Touched		4	/* 1 if the buffer has been touched (aging) */
+#define BH_Has_aged		5	/* 1 if the buffer has been aged (aging) */
+#define BH_Protected		6	/* 1 if the buffer is protected */
+#define BH_FreeOnIO		7	/* 1 to discard the buffer_head after IO */
+#define BH_MD			8	/* 1 if the buffer is an MD request */
 
 /*
  * Try to keep the most commonly used fields in single cache lines (16
@@ -188,6 +189,13 @@ struct buffer_head {
 	struct buffer_head * b_prev;		/* doubly linked list of hash-queue */
 	struct buffer_head * b_prev_free;	/* doubly linked list of buffers */
 	struct buffer_head * b_reqnext;		/* request queue */
+
+/*
+ * Some MD stuff like RAID5 needs special event handlers and
+ * special private buffer_head fields:
+ */
+	void * personality;
+	void * private_bh;
 };
 
 static inline int buffer_uptodate(struct buffer_head * bh)

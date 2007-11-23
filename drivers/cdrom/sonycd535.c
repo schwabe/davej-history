@@ -31,6 +31,10 @@
  *  More changes to support CDU-510/515 series
  *      (Claudio Porfiri<C.Porfiri@nisms.tei.ericsson.se>)
  *
+ * 1997-11-18
+ *  Blocksize awareness
+ *      Dong Liu <qian!dliu@arrow.njit.edu>
+ *
  * Things to do:
  *  - handle errors and status better, put everything into a single word
  *  - use interrupts (code mostly there, but a big hole still missing)
@@ -589,11 +593,13 @@ set_drive_mode(int mode, Byte status[2])
  *    The routine returns number of bytes read in if successful, otherwise
  *  it returns one of the standard error returns.
  ***************************************************************************/
+
+static int sonycd535_block_size = 2048;
+
 static int
 seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 					   Byte **buff, int buf_size)
 {
-	const int block_size = 2048;
 	Byte cmd_buff[7];
 	int  i;
 	int  read_status;
@@ -601,7 +607,7 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 	Byte *data_buff;
 	int  sector_count = 0;
 
-	if (buf_size < ((long)block_size) * n_blocks)
+	if (buf_size < sonycd535_block_size * n_blocks)
 		return NO_ROOM;
 
 	set_drive_mode(SONY535_CDROM_DRIVE_MODE, status);
@@ -626,7 +632,7 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 			if ((read_status & SONY535_DATA_NOT_READY_BIT) == 0) {
 				/* data is ready, read it */
 				data_buff = buff[sector_count++];
-				for (i = 0; i < block_size; i++)
+				for (i = 0; i < sonycd535_block_size; i++)
 					*data_buff++ = inb(data_reg);	/* unrolling this loop does not seem to help */
 				break;			/* exit the timeout loop */
 			}
@@ -639,7 +645,7 @@ seek_and_read_N_blocks(Byte params[], int n_blocks, Byte status[2],
 	/* read all the data, now read the status */
 	if ((i = read_exec_status(status)) != 0)
 		return i;
-	return block_size * sector_count;
+	return sonycd535_block_size * sector_count;
 }	/* seek_and_read_N_blocks() */
 
 /****************************************************************************
@@ -1594,6 +1600,7 @@ sony535_init(void)
 					return -EIO;
 				}
 				blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+				blksize_size[MAJOR_NR] = &sonycd535_block_size;
 				read_ahead[MAJOR_NR] = 8;	/* 8 sector (4kB) read-ahead */
 
 				sony_toc = (struct s535_sony_toc *)

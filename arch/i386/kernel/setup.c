@@ -32,6 +32,7 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/smp.h>
+#include <asm/io.h>
 
 /*
  * Tell us the machine setup..
@@ -224,9 +225,7 @@ static const char * i486model(unsigned int nr)
 static const char * i586model(unsigned int nr)
 {
 	static const char *model[] = {
-		"0", "Pentium 60/66","Pentium 75+","OverDrive PODP5V83",
-		"Pentium MMX", NULL, NULL, "Mobile Pentium 75+", 
-		"Mobile Pentium MMX"
+		"0", "Pentium 60/66","Pentium 75+","OverDrive PODP5V83"
 	};
 	if (nr < sizeof(model)/sizeof(char *))
 		return model[nr];
@@ -237,7 +236,7 @@ static const char * Cx86model(void)
 {
 	unsigned char nr6x86 = 0;
 	static const char *model[] = {
-		"unknown", "6x86", "6x86L", "6x86MX", "6x86MXi"
+		"unknown", "6x86", "6x86L", "6x86MX", "MII"
 	};
 	switch (x86) {
 		case 5:
@@ -249,6 +248,10 @@ static const char * Cx86model(void)
 		default:
 			nr6x86 = 0;
 	}
+
+	/* We must get the stepping number by reading DIR1 */
+	outb(0xff, 0x22); x86_mask=inb(0x23);
+
 	switch (x86_mask) {
 		case 0x03:
 			Cx86_step =  1;	/* 6x86MX Rev 1.3 */
@@ -256,20 +259,26 @@ static const char * Cx86model(void)
 		case 0x04:
 			Cx86_step =  2;	/* 6x86MX Rev 1.4 */
 			break;
+		case 0x05:
+			Cx86_step =  3;	/* 6x86MX Rev 1.5 */
+			break;
+		case 0x06:
+			Cx86_step =  4;	/* 6x86MX Rev 1.6 */
+			break;
 		case 0x14:
-			Cx86_step =  3;	/* 6x86 Rev 2.4 */
+			Cx86_step =  5;	/* 6x86 Rev 2.4 */
 			break;
 		case 0x15:
-			Cx86_step =  4;	/* 6x86 Rev 2.5 */
+			Cx86_step =  6;	/* 6x86 Rev 2.5 */
 			break;
 		case 0x16:
-			Cx86_step =  5;	/* 6x86 Rev 2.6 */
+			Cx86_step =  7;	/* 6x86 Rev 2.6 */
 			break;
 		case 0x17:
-			Cx86_step =  6;	/* 6x86 Rev 2.7 or 3.7 */
+			Cx86_step =  8;	/* 6x86 Rev 2.7 or 3.7 */
 			break;
 		case 0x22:
-			Cx86_step =  7;	/* 6x86L Rev 4.2 */
+			Cx86_step =  9;	/* 6x86L Rev 4.2 */
 			break;
 		default:
 			Cx86_step = 0;

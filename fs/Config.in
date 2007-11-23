@@ -10,7 +10,7 @@ tristate 'Extended fs support' CONFIG_EXT_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 tristate 'xiafs filesystem support' CONFIG_XIA_FS
 
-tristate 'Native language support (Unicode, codepages)' CONFIG_NLS
+tristate 'Native language support (Needed for FAT and ISO9660)' CONFIG_NLS
 if [ "$CONFIG_NLS" = "y" -o "$CONFIG_NLS" = "m" ]; then
   dep_tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS $CONFIG_NLS
 

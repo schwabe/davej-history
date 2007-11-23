@@ -87,6 +87,7 @@ unsigned long prof_shift = 0;
 #define _S(nr) (1<<((nr)-1))
 
 extern void mem_use(void);
+extern unsigned long get_wchan(struct task_struct *);
 
 static unsigned long init_kernel_stack[1024] = { STACK_MAGIC, };
 unsigned long init_user_stack[1024] = { STACK_MAGIC, };
@@ -1681,11 +1682,13 @@ static void show_task(int nr,struct task_struct * p)
 		printk(" current  ");
 	else
 		printk(" %08lX ", thread_saved_pc(&p->tss));
+	printk("%08lX ", get_wchan(p));
 #else
 	if (p == current)
 		printk("   current task   ");
 	else
 		printk(" %016lx ", thread_saved_pc(&p->tss));
+	printk("%08lX ", get_wchan(p) & 0xffffffffL);
 #endif
 	for (free = 1; free < PAGE_SIZE/sizeof(long) ; free++) {
 		if (((unsigned long *)p->kernel_stack_page)[free])
@@ -1712,12 +1715,12 @@ void show_state(void)
 
 #if ((~0UL) == 0xffffffff)
 	printk("\n"
-	       "                         free                        sibling\n");
-	printk("  task             PC    stack   pid father child younger older\n");
+	       "                                  free                        sibling\n");
+	printk("  task             PC     wchan   stack   pid father child younger older\n");
 #else
 	printk("\n"
-	       "                                 free                        sibling\n");
-	printk("  task                 PC        stack   pid father child younger older\n");
+	       "                                           free                        sibling\n");
+	printk("  task                 PC         wchan    stack   pid father child younger older\n");
 #endif
 	for (i=0 ; i<NR_TASKS ; i++)
 		if (task[i])

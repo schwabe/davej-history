@@ -417,6 +417,55 @@ static unsigned long get_fpreg_word(struct task_struct *child,
 	return tmp;
 }
 
+static int putreg(struct task_struct *child,
+	unsigned long regno, unsigned long value)
+{
+	switch (regno >> 2) {
+		case ORIG_EAX:
+			return -EIO;
+		case FS:
+		case GS:
+		case DS:
+		case ES:
+			if (value && (value & 3) != 3)
+				return -EIO;
+			value &= 0xffff;
+			break;
+		case SS:
+		case CS:
+			if ((value & 3) != 3)
+				return -EIO;
+			value &= 0xffff;
+			break;
+		case EFL:
+			value &= FLAG_MASK;
+			value |= get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~FLAG_MASK;
+	}
+	put_stack_long(child, regno - sizeof(struct pt_regs), value);
+	return 0;
+}
+
+static unsigned long getreg(struct task_struct *child,
+	unsigned long regno)
+{
+	unsigned long retval = ~0UL;
+
+	switch (regno >> 2) {
+		case FS:
+		case GS:
+		case DS:
+		case ES:
+		case SS:
+		case CS:
+			retval = 0xffff;
+			/* fall through */
+		default:
+			regno = regno - sizeof(struct pt_regs);
+			retval &= get_stack_long(child, regno);
+	}
+	return retval;
+}
+
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
@@ -490,39 +539,23 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			unsigned long tmp;
 			int res;
 			
-  			if ((addr & 3 && 
-  			     (addr < (long) (&dummy->i387) ||
-  			      addr > (long) (&dummy->i387.st_space[20]) )) ||
-  			    addr < 0 || addr > sizeof(struct user) - 3)
+  			if ((addr & 3) || addr < 0
+			    || addr > sizeof(struct user) - 3)
 				return -EIO;
 			
 			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
 			if (res)
 				return res;
 			tmp = 0;  /* Default return condition */
-  			if (addr >= (long) (&dummy->i387) &&
-  			    addr < (long) (&dummy->i387.st_space[20]) ) {
-#ifndef CONFIG_MATH_EMULATION
-				if (!hard_math)
-					return -EIO;
-#endif /* defined(CONFIG_MATH_EMULATION) */
-				tmp = get_fpreg_word(child, addr);
-  			} 
-			if(addr < 17*sizeof(long)) {
-			  addr = addr >> 2; /* temporary hack. */
-
-			  tmp = get_stack_long(child, sizeof(long)*addr - MAGICNUMBER);
-			  if (addr == DS || addr == ES ||
-			      addr == FS || addr == GS ||
-			      addr == CS || addr == SS)
-			    tmp &= 0xffff;
-			};
-			if(addr >= (long) &dummy->u_debugreg[0] &&
-			   addr <= (long) &dummy->u_debugreg[7]){
+			if(addr < 17*sizeof(long))
+				tmp = getreg(child, addr);
+			else if(addr >= (long) &dummy->u_debugreg[0]
+				&& addr <= (long) &dummy->u_debugreg[7])
+			{
 				addr -= (long) &dummy->u_debugreg[0];
 				addr = addr >> 2;
 				tmp = child->debugreg[addr];
-			};
+			}
 			put_fs_long(tmp,(unsigned long *) data);
 			return 0;
 		}
@@ -533,50 +566,18 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			return write_long(child,addr,data);
 
 		case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
-			if ((addr & 3 &&
-			     (addr < (long) (&dummy->i387.st_space[0]) ||
-			      addr > (long) (&dummy->i387.st_space[20]) )) ||
-			    addr < 0 || 
-			    addr > sizeof(struct user) - 3)
+  			if ((addr & 3) || addr < 0
+			    || addr > sizeof(struct user) - 3)
 				return -EIO;
-				
-			if (addr >= (long) (&dummy->i387.st_space[0]) &&
-			    addr < (long) (&dummy->i387.st_space[20]) ) {
-#ifndef CONFIG_MATH_EMULATION
-				if (!hard_math)
-					return -EIO;
-#endif /* defined(CONFIG_MATH_EMULATION) */
-				return put_fpreg_word(child, addr, data);
-			}
-			addr = addr >> 2; /* temporary hack. */
-			
-			if (addr == ORIG_EAX)
-				return -EIO;
-			if (addr == DS || addr == ES ||
-			    addr == FS || addr == GS ||
-			    addr == CS || addr == SS) {
-			    	data &= 0xffff;
-			    	if (data && (data & 3) != 3)
-					return -EIO;
-			}
-			if (addr == EFL) {   /* flags. */
-				data &= FLAG_MASK;
-				data |= get_stack_long(child, EFL*sizeof(long)-MAGICNUMBER)  & ~FLAG_MASK;
-			}
-		  /* Do not allow the user to set the debug register for kernel
-		     address space */
-		  if(addr < 17){
-			  if (put_stack_long(child, sizeof(long)*addr-MAGICNUMBER, data))
-				return -EIO;
-			return 0;
-			};
+
+			if(addr < 17*sizeof(long))
+				return putreg(child, addr, data);
 
 		  /* We need to be very careful here.  We implicitly
 		     want to modify a portion of the task_struct, and we
 		     have to be selective about what portions we allow someone
 		     to modify. */
 
-		  addr = addr << 2;  /* Convert back again */
 		  if(addr >= (long) &dummy->u_debugreg[0] &&
 		     addr <= (long) &dummy->u_debugreg[7]){
 
@@ -665,6 +666,108 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
 			return 0;
 		}
+
+		case PTRACE_GETREGS: { /* Get all gp regs from the child. */
+#ifdef CONFIG_MATH_EMULATION
+			if (!hard_math)
+				/* Not supported. */
+				return -EIO;
+#endif
+
+			if (verify_area(VERIFY_WRITE, (void *) data,
+					17*sizeof(long)))
+			  return -EIO;
+			for (i = 0; i < 17*sizeof(long);
+			     i += sizeof(long), data += sizeof(long))
+			  put_fs_long (getreg(child, i), (unsigned long *) data);
+			return 0;
+		  };
+
+		case PTRACE_SETREGS: { /* Set all gp regs in the child. */
+			unsigned long tmp;
+
+#ifdef CONFIG_MATH_EMULATION
+			if (!hard_math)
+				/* Not supported. */
+				return -EIO;
+#endif
+
+			if (verify_area(VERIFY_READ, (void *) data,
+					17*sizeof(long)))
+			  return -EIO;
+			for (i = 0; i < 17*sizeof(long);
+			     i += sizeof(long), data += sizeof(long))
+			  {
+			    tmp = get_fs_long ((unsigned long *) data);
+			    putreg(child, i, tmp);
+			  }
+			return 0;
+		  };
+
+		case PTRACE_GETFPREGS: { /* Get the child FPU state. */
+			unsigned long *tmp;
+
+#ifdef CONFIG_MATH_EMULATION
+			if (!hard_math)
+				/* Not supported. */
+				return -EIO;
+#endif
+
+			if (verify_area(VERIFY_WRITE, (void *) data,
+					sizeof(struct user_i387_struct)))
+			  return -EIO;
+			if ( !child->used_math ) {
+			  /* Simulate an empty FPU. */
+			  child->tss.i387.hard.cwd = 0xffff037f;
+			  child->tss.i387.hard.swd = 0xffff0000;
+			  child->tss.i387.hard.twd = 0xffffffff;
+			}
+			if (last_task_used_math == child)
+			  {
+			    clts();
+			    __asm__("fnsave %0; fwait":"=m" (child->tss.i387.hard));
+			    last_task_used_math = NULL;
+			    stts();
+			  }
+			tmp = (unsigned long *) &child->tss.i387.hard;
+			for ( i = 0; i < sizeof(struct user_i387_struct); i += sizeof(long) )
+			  {
+			    put_fs_long (*tmp, (unsigned long *) data);
+			    data += sizeof(long);
+			    tmp++;
+			  }
+
+			return 0;
+		  };
+
+		case PTRACE_SETFPREGS: { /* Set the child FPU state. */
+			unsigned long *tmp;
+
+#ifdef CONFIG_MATH_EMULATION
+			if (!hard_math)
+				/* Not supported. */
+				return -EIO;
+#endif
+
+			if (verify_area(VERIFY_READ, (void *) data,
+					sizeof(struct user_i387_struct)))
+			  return -EIO;
+			child->used_math = 1;
+			if (last_task_used_math == child)
+			  {
+			    /* Discard the state of the FPU */
+			    last_task_used_math = NULL;
+			  }
+			tmp = (unsigned long *) &child->tss.i387.hard;
+			for ( i = 0; i < sizeof(struct user_i387_struct); i += sizeof(long) )
+			  {
+			    *tmp = get_fs_long ((unsigned long *) data);
+			    data += sizeof(long);
+			    tmp++;
+			  }
+			child->flags &= ~PF_USEDFPU;
+			return 0;
+		  };
 
 		default:
 			return -EIO;

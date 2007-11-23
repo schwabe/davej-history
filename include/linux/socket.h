@@ -64,6 +64,7 @@ struct msghdr
 #define AF_INET6	10	/* IP version 6			*/
 #endif
 #define AF_MAX		12	/* For now.. */
+#define AF_PACKET	17	/* Forward compat hook		*/
 
 /* Protocol families, same as address families. */
 #define PF_UNSPEC	AF_UNSPEC
@@ -80,7 +81,7 @@ struct msghdr
 #define PF_INET6	AF_INET6
 #endif
 #define PF_MAX		AF_MAX
-
+#define PF_PACKET	AF_PACKET
 /* Maximum queue length specifiable by listen.  */
 #define SOMAXCONN	128
 

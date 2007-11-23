@@ -984,7 +984,7 @@ static void ni52_rcv_int(struct device *dev)
   }
 #endif
 
-#ifdef 0
+#if 0
   if(!at_least_one)
   { 
     int i;

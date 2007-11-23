@@ -1,5 +1,10 @@
-Caldera TLAN driver for Linux, version 0.42
+TLAN driver for Linux, version 0.43
 README
+
+Note: I (James) am not maintaining this driver anymore, as I no longer
+	have the equipment to do so.  So it is available to anyone who
+	wishes to take it over ;)  If someone needs to reach me about
+	it, my new email address is james@sovereign.org.
 
 
 I.  Supported Devices.
@@ -8,20 +13,32 @@ I.  Supported Devices.
 
     Supported:
     Vendor ID	Device ID	Name
-    0e11	ae32		Compaq Netelligent 10/100 TX
-    0e11	ae34		Compaq Netelligent 10 T
+    0e11	ae32		Compaq Netelligent 10/100 TX PCI UTP
+    0e11	ae34		Compaq Netelligent 10 T PCI UTP
     0e11	ae35		Compaq Integrated NetFlex 3/P
-    0e11	ae43		Compaq ProLiant Integrated Netelligent 10/100 TX
-    0e11	ae40		Compaq Dual Port Netelligent 10/100 TX
-    0e11	b011		Compaq Deskpro 4000 5233MMX
+    0e11	ae40		Compaq Netelligent Dual 10/100 TX PCI UTP
+    0e11	ae43		Compaq Netelligent Integrated 10/100 TX UTP
+    0e11	b011		Compaq Netelligent 10/100 TX Embedded UTP
+    0e11	b012		Compaq Netelligent 10 T/2 PCI UTP/Coax
+    0e11	b030		Compaq Netelligent 10/100 TX UTP
     0e11	f130		Compaq NetFlex 3/P
     0e11	f150		Compaq NetFlex 3/P
+    108d	0012		Olicom OC-2325	
+    108d	0013		Olicom OC-2183
     108d	0014		Olicom OC-2326	
+
 
     Caveats:
     
-    I don't believe 100BaseTX daughterboards will work.  I am interested
-    in any reports.
+    I am not sure if 100BaseTX daughterboards (for those cards which
+    support such things) will work.  I haven't had any solid evidence
+    either way.
+
+    However, if a card supports 100BaseTx without requiring an add
+    on daughterboard, it should work with 100BaseTx.
+
+    The "Netelligent 10 T/2 PCI UTP/Coax" (b012) device is untested,
+    but I do not expect any problems.
     
 
 II.  Building the Driver.
@@ -77,6 +94,14 @@ III.  Driver Options
 	   device that does not have an AUI/BNC connector will probably
 	   cause it to not function correctly.)
 
+	4. You can set duplex=1 to force half duplex, and duplex=2 to
+	   force full duplex.
+
+	5. You can set speed=10 to force 10Mbs operation, and speed=100Mbs
+	   to force 100Mbs operation. (I'm not sure what will happen
+	   if a card which only supports 10Mbs is forced into 100Mbs
+	   mode.)
+
 	3. If the driver is built into the kernel, you can use the 3rd
 	   and 4th parameters to set aui and debug respectively.  For
 	   example:
@@ -90,6 +115,10 @@ III.  Driver Options
 
 		0x01 = aui
 		0x02 = use SA_INTERRUPT flag when reserving the irq.
+		0x04 = use half duplex
+		0x08 = use full duplex
+		0x10 = use 10BaseT
+		0x20 = use 100BaseTx
 
 
 IV.  Things to try if you have problems.
@@ -98,33 +127,8 @@ IV.  Things to try if you have problems.
 	1. Make sure routing is correct.
 	2. If you are using a 2.1.x kernel, try to duplicate the
 	   problem on a 2.0.x (preferably 2.0.29 or 2.0.30) kernel.
-	3. Set debug to 7, either in tlan.c or through insmod as in
-	   section III.1 above.
-	4. Make sure klog is running so the kernel messages are
-	   being recorded somewhere.
-	5. Run the following sequence of programs in order (you
-	   may want to do this within an xterm, as background
-	   traffic may cause a lot of TLAN RECEIVED: messages
-	   on the console):
 
-	   ifconfig eth0 your.ip.address netmask your.net.mask up
-	   route add -net local.net.address eth0
-	   ifconfig
-	   ping some.computer.on.local.net
-	   ifconfig eth0 down
-
-	6. Mail the log of what occurred to me.  Also include the
-	   kernel version and what media/connector type (eg,
-	   10 BaseT/RJ45, 100 BaseTX/RJ45, Thinnet/BNC, etc).
-
-
-
-Please e-mail me with any comments, successes, or failures.  Thanks.
 
 There is also a tlan mailing list which you can join by sending "subscribe tlan"
-in the body of an email to majordomo@vuser.vu.union.edu.  I will announce new
-releases of the TLAN driver there.
-
-James
-james.banks@caldera.com
+in the body of an email to majordomo@vuser.vu.union.edu.
 

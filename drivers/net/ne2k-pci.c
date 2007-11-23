@@ -45,7 +45,7 @@ static const char *version =
 #include "8390.h"
 
 /* Set statically or when loading the driver module. */
-static debug = 1;
+static int debug = 1;
 
 /* Some defines that people can play with if so inclined. */
 

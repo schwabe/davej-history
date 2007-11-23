@@ -146,6 +146,10 @@ ifdef CONFIG_SBUS
 DRIVERS := $(DRIVERS) drivers/sbus/sbus.a
 endif
 
+ifeq ($(CONFIG_PARIDE),y)
+DRIVERS := $(DRIVERS) drivers/block/paride/paride.a
+endif
+
 include arch/$(ARCH)/Makefile
 
 ifdef SMP

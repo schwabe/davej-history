@@ -34,6 +34,8 @@
  *				  refer to the old obsolete destination.
  *              Elliot Poger    : Added support for SO_BINDTODEVICE.
  *	Juan Jose Ciarlante	: Added sock dynamic source address rewriting
+ *		Alan Cox	: Clear reserved fields - bug reported by
+ *				  J Hadi Salim
  */
 
 #include <linux/config.h>
@@ -837,6 +839,8 @@ void tcp_send_synack_probe(unsigned long saddr, unsigned long daddr, struct tcph
 	t1->psh = 0;
 	t1->fin = 0;		/* In case someone sent us a SYN|FIN frame! */
 	t1->doff = sizeof(*t1)/4;
+	t1->res1 = 0;	/* RFC requires this, we upset ECN without it */
+	t1->res2 = 0;
 
 	tcp_send_check(t1, saddr, daddr, sizeof(*t1), buff);
 	prot->queue_xmit(NULL, ndev, buff, 1);
@@ -1017,6 +1021,8 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 	t1->psh = 0;
 	t1->ack_seq = htonl(newsk->acked_seq);
 	t1->doff = sizeof(*t1)/4+1;
+	t1->res1 = 0;
+	t1->res2 = 0;
 	ptr = skb_put(buff,4);
 	ptr[0] = 2;
 	ptr[1] = 4;

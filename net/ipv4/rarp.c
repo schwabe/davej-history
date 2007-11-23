@@ -97,7 +97,7 @@ static struct packet_type rarp_packet_type =
 	NULL
 };
 
-static initflag = 1;
+static int initflag = 1;
 
 
 /*

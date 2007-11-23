@@ -521,8 +521,23 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	    req->nr_sectors -= bh->b_size >> 9;
 	    req->sector += bh->b_size >> 9;
 	    bh->b_reqnext = NULL;
-	    mark_buffer_uptodate(bh, uptodate);
-	    unlock_buffer(bh);
+	    /*
+	     * This is our 'MD IO has finished' event handler.
+	     * note that b_state should be cached in a register
+	     * anyways, so the overhead if this checking is almost 
+	     * zero. But anyways .. we never get OO for free :)
+	     */
+	    if (test_bit(BH_MD, &bh->b_state)) {
+		struct md_personality * pers=(struct md_personality *)bh->personality;
+		pers->end_request(bh,uptodate);
+	    }
+	    /*
+	     * the normal (nonmirrored and no RAID5) case:
+	     */
+	    else {
+		mark_buffer_uptodate(bh, uptodate);
+		unlock_buffer(bh);
+	    }
 	    sectors -= bh->b_size >> 9;
 	    if ((bh = req->bh) != NULL) {
 		req->current_nr_sectors = bh->b_size >> 9;

@@ -280,7 +280,30 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	sti();
 }
 
-static void make_request(int major,int rw, struct buffer_head * bh)
+#define MAX_SECTORS 244
+
+static inline void attempt_merge (struct request *req)
+{
+	struct request *next = req->next;
+
+	if (!next)
+		return;
+	if (req->sector + req->nr_sectors != next->sector)
+		return;
+	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors >= MAX_SECTORS)
+		return;
+#if 0
+	printk ("%s: merge %ld, %ld + %ld == %ld\n", kdevname(req->rq_dev), req->sector, req->nr_sectors, next->nr_sectors, req->nr_sectors + next->nr_sectors);
+#endif	
+	req->bhtail->b_reqnext = next->bh;
+	req->bhtail = next->bhtail;
+	req->nr_sectors += next->nr_sectors;
+	next->rq_status = RQ_INACTIVE;
+	req->next = next->next;
+	wake_up (&wait_for_request);
+}
+
+void make_request(int major,int rw, struct buffer_head * bh)
 {
 	unsigned int sector, count;
 	struct request * req;
@@ -290,8 +313,12 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	sector = bh->b_rsector;
 
 	/* Uhhuh.. Nasty dead-lock possible here.. */
-	if (buffer_locked(bh))
+	if (buffer_locked(bh)) {
+#if 0
+		printk("make_request(): buffer already locked\n");
+#endif
 		return;
+	}
 	/* Maybe the above fixes it, and maybe it doesn't boot. Life is interesting */
 
 	lock_buffer(bh);
@@ -319,6 +346,9 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			rw = READ;	/* drop into READ */
 		case READ:
 			if (buffer_uptodate(bh)) {
+#if 0
+				printk ("make_request(): buffer uptodate for READ\n");
+#endif
 				unlock_buffer(bh); /* Hmmph! Already have it */
 				return;
 			}
@@ -330,6 +360,9 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			rw = WRITE;	/* drop into WRITE */
 		case WRITE:
 			if (!buffer_dirty(bh)) {
+#if 0
+				printk ("make_request(): buffer clean for WRITE\n");
+#endif
 				unlock_buffer(bh); /* Hmmph! Nothing to write */
 				return;
 			}
@@ -391,7 +424,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 				continue;
 			if (req->cmd != rw)
 				continue;
-			if (req->nr_sectors >= 244)
+			if (req->nr_sectors >= MAX_SECTORS)
 				continue;
 			if (req->rq_dev != bh->b_rdev)
 				continue;
@@ -399,6 +432,9 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			if (req->sector + req->nr_sectors == sector) {
 				req->bhtail->b_reqnext = bh;
 				req->bhtail = bh;
+			    	req->nr_sectors += count;
+				/* Can we now merge this req with the next? */
+				attempt_merge(req);
 			/* or to the beginning? */
 			} else if (req->sector - count == sector) {
 			    	bh->b_reqnext = req->bh;
@@ -406,10 +442,10 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			    	req->buffer = bh->b_data;
 			    	req->current_nr_sectors = count;
 			    	req->sector = sector;
+			    	req->nr_sectors += count;
 			} else
 				continue;
 
-		    	req->nr_sectors += count;
 			mark_buffer_clean(bh);
 		    	sti();
 		    	return;
@@ -512,6 +548,12 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	for (i = 0; i < nr; i++) {
 		if (bh[i]) {
 			set_bit(BH_Req, &bh[i]->b_state);
+#ifdef CONFIG_BLK_DEV_MD
+			if (MAJOR(bh[i]->b_dev) == MD_MAJOR) {
+				md_make_request(MINOR (bh[i]->b_dev), rw, bh[i]);
+				continue;
+			}
+#endif
 			make_request(MAJOR(bh[i]->b_rdev), rw, bh[i]);
 		}
 	}
@@ -645,6 +687,9 @@ int blk_dev_init(void)
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	xd_init();
+#endif
+#ifdef CONFIG_PARIDE
+        { extern void paride_init(void); paride_init(); };
 #endif
 #ifdef CONFIG_BLK_DEV_FD
 	floppy_init();
