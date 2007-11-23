@@ -409,8 +409,10 @@ int dmfe_reg_board(struct device *dev)
 		dev = 0;	/* NULL device */
 	}
 
+#ifdef MODULE
 	if (!dm9102_count)
 		printk(KERN_WARNING "dmfe: Can't find DM910X board\n");
+#endif		
 	return dm9102_count ? 0 : -ENODEV;
 }
 
@@ -1221,7 +1223,7 @@ static void parser_ctrl_info(struct dmfe_board_info *db)
 	}
 
 	if (i >= count) {
-		printk("Can't found Control Block\n");
+		printk("Can't find Control Block\n");
 		db->phy_addr = 1;
 	}
 }

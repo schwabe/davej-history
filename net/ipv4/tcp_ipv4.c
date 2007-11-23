@@ -525,7 +525,8 @@ gotit:
 
 static inline __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
 {
-	return secure_tcp_sequence_number(sk->saddr, sk->daddr,
+	return secure_tcp_sequence_number(skb->nh.iph->daddr,
+					  skb->nh.iph->saddr,
 					  skb->h.th->dest,
 					  skb->h.th->source);
 }

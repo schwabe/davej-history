@@ -645,7 +645,7 @@ typedef struct {
  * but possibly multiple TPLs for one frame) the length of the TPLs has to be
  * initialized in the OPL. (OPEN parameter list)
  */
-#define TPL_NUM		3	/* Number of Transmit Parameter Lists.
+#define TPL_NUM		9	/* Number of Transmit Parameter Lists.
 				 * !! MUST BE >= 3 !!
 				 */
 

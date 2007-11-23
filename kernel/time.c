@@ -247,7 +247,7 @@ int do_adjtimex(struct timex *txc)
 		if (txc->tick < 900000/HZ || txc->tick > 1100000/HZ)
 			return -EINVAL;
 
-	write_lock(&xtime_lock);
+	write_lock_irq(&xtime_lock);
 	result = time_state;	/* mostly `TIME_OK' */
 
 	/* Save for later - semantics of adjtime is to return old value */
