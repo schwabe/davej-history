@@ -1,7 +1,7 @@
-/* $Id: eicon_idi.c,v 1.41.6.1 2001/02/10 14:44:09 kai Exp $
+/* $Id: eicon_idi.c,v 1.1.2.1 2001/12/31 13:26:44 kai Exp $
  *
  * ISDN lowlevel-module for Eicon active cards.
- *        IDI interface 
+ * IDI interface 
  *
  * Copyright 1998-2000  by Armin Schindler (mac@melware.de)
  * Copyright 1999,2000  Cytronics & Melware (info@melware.de)
@@ -11,19 +11,8 @@
  *		capabilities with Diva Server cards.
  *		(dor@deutschemailbox.de)
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 
@@ -36,7 +25,7 @@
 
 #undef EICON_FULL_SERVICE_OKTETT
 
-char *eicon_idi_revision = "$Revision: 1.41.6.1 $";
+char *eicon_idi_revision = "$Revision: 1.1.2.1 $";
 
 eicon_manifbuf *manbuf;
 
@@ -3130,8 +3119,8 @@ eicon_idi_manage(eicon_card *card, eicon_manifbuf *mb)
 			return(ret); 
 		}
 
-	        timeout = jiffies + 50;
-        	while (timeout > jiffies) {
+	        timeout = jiffies + HZ / 2;
+        	while (time_before(jiffies, timeout)) {
 	                if (chan->e.B2Id) break;
         	        SLEEP(10);
 	        }
@@ -3192,8 +3181,8 @@ eicon_idi_manage(eicon_card *card, eicon_manifbuf *mb)
 
         eicon_schedule_tx(card);
 
-        timeout = jiffies + 50;
-        while (timeout > jiffies) {
+        timeout = jiffies + HZ / 2;
+        while (time_before(jiffies, timeout)) {
                 if (chan->fsm_state) break;
                 SLEEP(10);
         }

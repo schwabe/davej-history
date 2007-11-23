@@ -108,8 +108,8 @@ print_buttons( WINDOW *dialog, int height, int width, int selected)
     print_button (dialog, "Select", y, x, selected == 0);
     print_button (dialog, " Help ", y, x + 14, selected == 1);
 
-    /*    wmove(dialog, y, x+1 + 14*selected);
-    wrefresh (dialog);*/
+    /*    wmove(dialog, y, x+1 + 14*selected);*/
+    wrefresh (dialog);
 }
 
 /*

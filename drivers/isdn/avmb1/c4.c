@@ -1,9 +1,11 @@
-/*
- * $Id: c4.c,v 1.20.6.10 2001/06/09 15:14:15 kai Exp $
+/* $Id: c4.c,v 1.1.2.1 2001/12/31 13:26:39 kai Exp $
  * 
  * Module for AVM C4 & C2 card.
  * 
- * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
+ * Copyright 1999 by Carsten Paeth <calle@calle.de>
+ *
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 
@@ -28,7 +30,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.20.6.10 $";
+static char *revision = "$Revision: 1.1.2.1 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
@@ -37,7 +39,9 @@ static char *revision = "$Revision: 1.20.6.10 $";
 
 static int suppress_pollack;
 
-MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
+MODULE_DESCRIPTION("CAPI4Linux: Driver for AVM C2/C4 cards");
+MODULE_AUTHOR("Carsten Paeth");
+MODULE_LICENSE("GPL");
 MODULE_PARM(suppress_pollack, "0-1i");
 
 /* ------------------------------------------------------------- */
@@ -1362,7 +1366,7 @@ static int __init c4_init(void)
 		MOD_DEC_USE_COUNT;
 		return retval;
 	}
-	retval = search_cards(&c2_driver, 0x1100, 2);
+	retval = search_cards(&c2_driver, PCI_DEVICE_ID_AVM_C2, 2);
 	if (retval && ncards == 0) {
     		detach_capi_driver(&c2_driver);
     		detach_capi_driver(&c4_driver);

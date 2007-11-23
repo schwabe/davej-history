@@ -144,6 +144,96 @@ __initfunc(static void quirk_isa_dma_hangs(struct pci_dev *dev, int arg))
 	}
 }
 
+/*
+ *	VIA Apollo KT133 needs PCI latency patch
+ *	Made according to a windows driver based patch by George E. Breese
+ *	see PCI Latency Adjust on http://www.viahardware.com/download/viatweak.shtm
+ *      Also see http://home.tiscalinet.de/au-ja/review-kt133a-1-en.html for
+ *      the info on which Mr Breese based his work.
+ *
+ *	Updated based on further information from the site and also on
+ *	information provided by VIA 
+ */
+
+__initfunc(static void quirk_vialatency(struct pci_dev *dev, int arg))
+{
+	struct pci_dev *p;
+	u8 rev;
+	u8 busarb;
+	/* Ok we have a potential problem chipset here. Now see if we have
+	   a buggy southbridge */
+	   
+	p=pci_find_device(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C686, NULL);
+	if(p!=NULL)
+	{
+		pci_read_config_byte(p, PCI_CLASS_REVISION, &rev);
+		/* 0x40 - 0x4f == 686B, 0x10 - 0x2f == 686A; thanks Dan Hollis */
+		/* Check for buggy part revisions */
+		if (rev < 0x40 || rev > 0x42) 
+			return;
+	}
+	else
+	{
+		p = pci_find_device(PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_8231, NULL);
+		if(p==NULL)	/* No problem parts */
+			return;
+		pci_read_config_byte(p, PCI_CLASS_REVISION, &rev);
+		/* Check for buggy part revisions */
+		if (rev < 0x10 || rev > 0x12) 
+			return;
+	}
+	
+	/*
+	 *	Ok we have the problem. Now set the PCI master grant to 
+	 *	occur every master grant. The apparent bug is that under high
+	 *	PCI load (quite common in Linux of course) you can get data
+	 *	loss when the CPU is held off the bus for 3 bus master requests
+	 *	This happens to include the IDE controllers....
+	 *
+	 *	VIA only apply this fix when an SB Live! is present but under
+	 *	both Linux and Windows this isnt enough, and we have seen
+	 *	corruption without SB Live! but with things like 3 UDMA IDE
+	 *	controllers. So we ignore that bit of the VIA recommendation..
+	 */
+
+	pci_read_config_byte(dev, 0x76, &busarb);
+	/* Set bit 4 and bi 5 of byte 76 to 0x01 
+	   "Master priority rotation on every PCI master grant */
+	busarb &= ~(1<<5);
+	busarb |= (1<<4);
+	pci_write_config_byte(dev, 0x76, busarb);
+	printk(KERN_INFO "Applying VIA southbridge workaround.\n");
+}
+
+/*
+ * Fix some problems with 'movntq' copies on Athlons. We need to ensure the
+ * non functional memory stuff wasn't enabled by the BIOS (and thus fix
+ * crashes when we use 100% memory bandwidth)
+ *
+ * VIA 8363 chipset:
+ * VIA 8363,8622,8361 Northbridges:
+ *  - bits  5, 6, 7 at offset 0x55 need to be turned off
+ * VIA 8367 (KT266x) Northbridges:
+ *  - bits  5, 6, 7 at offset 0x95 need to be turned off
+ */
+
+__initfunc(static void pci_fixup_via_athlon_bug(struct pci_dev *d, int arg))
+{
+ 	u8 v;
+	int where = 0x55;
+
+	if (d->device == PCI_DEVICE_ID_VIA_8367_0) {
+	        where = 0x95; /* the memory write queue timer register is 
+                                different for the kt266x's: 0x95 not 0x55 */
+	}
+	pci_read_config_byte(d, where, &v);
+	if (v & 0xe0) {
+		printk("Trying to stomp on Athlon bug...\n");
+		v &= 0x1f; /* clear bits 5, 6, 7 */
+		pci_write_config_byte(d, where, v);
+	}
+}
+
 
 typedef void (*quirk_handler)(struct pci_dev *, int);
 
@@ -162,6 +252,7 @@ static struct quirk_name quirk_names[] __initdata = {
 #endif
 	{ quirk_passive_release,"Passive release enable" },
 	{ quirk_isa_dma_hangs,	"Work around ISA DMA hangs" },
+	{ pci_fixup_via_athlon_bug, "Athlon/VIA fixup" },
 };
 
 
@@ -201,7 +292,14 @@ static struct quirk_info quirk_list[] __initdata = {
 	 * This is the 82C586 variants.
 	 */
 	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_0,	quirk_isa_dma_hangs,	0x00 },
-	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C596_0,	quirk_isa_dma_hangs,	0x00 },
+	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C596,	quirk_isa_dma_hangs,	0x00 },
+	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8363_0,	pci_fixup_via_athlon_bug, 0x00 },
+	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8622,	        pci_fixup_via_athlon_bug, 0x00 },
+	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8361,	        pci_fixup_via_athlon_bug, 0x00 },
+	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8367_0,	pci_fixup_via_athlon_bug, 0x00 },
+	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8363_0,	quirk_vialatency, 0x00 },
+	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_8371_1,	quirk_vialatency, 0x00 },
+	{ PCI_VENDOR_ID_VIA,	0x3112	/* Not out yet ? */,	quirk_vialatency, 0x00 },
 };
 
 __initfunc(void pci_quirks_init(void))

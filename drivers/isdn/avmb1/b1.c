@@ -1,9 +1,11 @@
-/*
- * $Id: b1.c,v 1.20.6.6 2001/05/17 21:15:33 kai Exp $
+/* $Id: b1.c,v 1.1.2.1 2001/12/31 13:26:39 kai Exp $
  * 
  * Common module for AVM B1 cards.
  * 
- * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
+ * Copyright 1999 by Carsten Paeth <calle@calle.de>
+ *
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 
@@ -26,11 +28,13 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.20.6.6 $";
+static char *revision = "$Revision: 1.1.2.1 $";
 
 /* ------------------------------------------------------------- */
 
-MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
+MODULE_DESCRIPTION("CAPI4Linux: Common support for active AVM cards");
+MODULE_AUTHOR("Carsten Paeth");
+MODULE_LICENSE("GPL");
 
 /* ------------------------------------------------------------- */
 

@@ -366,7 +366,7 @@ ENTRY(page_fault)
 
 ENTRY(machine_check)
 	pushl $0
-	pushl $ SYMBOL_NAME(mcheck_fault)
+	pushl $ SYMBOL_NAME(do_machine_check)
 	jmp error_code
 
 ENTRY(spurious_interrupt_bug)

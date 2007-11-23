@@ -181,6 +181,8 @@ const char __module_device[] __attribute__((section(".modinfo"))) = 	   \
 	s	string
 */
 
+#define MODULE_LICENSE(var)
+
 #define MODULE_PARM(var,type)			\
 const char __module_parm_##var[]		\
 __attribute__((section(".modinfo"))) =		\

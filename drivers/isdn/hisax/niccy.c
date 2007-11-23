@@ -1,13 +1,15 @@
-/* $Id: niccy.c,v 1.15.6.4 2001/02/16 16:43:28 kai Exp $
+/* $Id: niccy.c,v 1.1.2.1 2001/12/31 13:26:45 kai Exp $
  *
- * niccy.c  low level stuff for Dr. Neuhaus NICCY PnP and NICCY PCI and
- *          compatible (SAGEM cybermodem)
+ * low level stuff for Dr. Neuhaus NICCY PnP and NICCY PCI and
+ * compatible (SAGEM cybermodem)
  *
- * Author   Karsten Keil
+ * Author       Karsten Keil
+ * Copyright    by Karsten Keil      <keil@isdn4linux.de>
  * 
- * Thanks to Dr. Neuhaus and SAGEM for informations
- *
- * This file is (c) under GNU General Public License
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
+ * 
+ * Thanks to Dr. Neuhaus and SAGEM for information
  *
  */
 
@@ -23,7 +25,7 @@
 #include <linux/isdn_compat.h>
 
 extern const char *CardType[];
-const char *niccy_revision = "$Revision: 1.15.6.4 $";
+const char *niccy_revision = "$Revision: 1.1.2.1 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)

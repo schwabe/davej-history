@@ -36,9 +36,13 @@
  *	Added Cyrix III initial detection code
  *	Alan Cox <alan@redhat.com>, Septembr 2000
  *
- *      Improve cache size calculation
- *      Asit Mallick <asit.k.mallick@intel.com>, October 2000
- *      Andrew Ip <aip@turbolinux.com>, October 2000
+ *	Improve cache size calculation
+ *	Asit Mallick <asit.k.mallick@intel.com>, October 2000
+ *	Andrew Ip <aip@turbolinux.com>, October 2000
+ *
+ *	Backport various workarounds from 2.4.16
+ *	Dave Jones <davej@suse.de>, December 2001
+ *
  */
 
 /*
@@ -114,9 +118,12 @@ extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
 #endif
 
+extern void mcheck_init(struct cpuinfo_x86 *c);
 extern int root_mountflags;
 extern int _etext, _edata, _end;
 extern unsigned long cpu_khz;
+
+static int disable_x86_serial_nr __initdata = 1;
 
 /*
  * This is set up by the setup-routine at boot-time
@@ -386,8 +393,8 @@ static void __init setup_memory_region(void)
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
 
-__initfunc(void setup_arch(char **cmdline_p,
-	unsigned long * memory_start_p, unsigned long * memory_end_p))
+void __init setup_arch(char **cmdline_p,
+	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	unsigned long memory_start, memory_end = 0;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
@@ -572,49 +579,52 @@ __initfunc(void setup_arch(char **cmdline_p,
 }
 
 
-__initfunc(static int get_model_name(struct cpuinfo_x86 *c))
+static int __init get_model_name(struct cpuinfo_x86 *c)
 {
-	unsigned int n, dummy, *v;
+	unsigned int *v;
+	char *p, *q;
 
-	/* 
-	 * Actually we must have cpuid or we could never have
-	 * figured out that this was AMD/Centaur/Cyrix/Transmeta
-	 * from the vendor info :-).
-	 */
-
-	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
-	if (n < 0x80000004)
+	if (cpuid_eax(0x80000000) < 0x80000004)
 		return 0;
-	cpuid(0x80000001, &dummy, &dummy, &dummy, &(c->x86_capability));
 	v = (unsigned int *) c->x86_model_id;
 	cpuid(0x80000002, &v[0], &v[1], &v[2], &v[3]);
 	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
 	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
 	c->x86_model_id[48] = 0;
-	
+
+	/* Intel chips right-justify this string for some dumb reason;
+	   undo that brain damage */
+	p = q = &c->x86_model_id[0];
+	while ( *p == ' ' )
+		p++;
+	if ( p != q ) {
+		while ( *p )
+			*q++ = *p++;
+		while ( q <= &c->x86_model_id[48] )
+			*q++ = '\0';  /* Zero-pad the rest */
+	}
 	return 1;
 }
 
 
-__initfunc (static void display_cacheinfo(struct cpuinfo_x86 *c))
+static void __init display_cacheinfo(struct cpuinfo_x86 *c)
 {
-	unsigned int n, dummy, ecx, edx;
+	unsigned int n, dummy, ecx, edx, l2size;
 
-	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
+	n = cpuid_eax(0x80000000);
 
 	if (n >= 0x80000005){
 		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
-			ecx>>24, edx>>24);
+		printk("CPU: L1 I Cache: %dK (%d bytes/line), D cache %dK (%d bytes/line)\n",
+			edx>>24, edx&0xFF, ecx>>24, ecx&0xFF);
 		c->x86_cache_size=(ecx>>24)+(edx>>24);
 	}
 
-	/* Yes this can occur - the CyrixIII just has a large L1 */
-	if (n < 0x80000006)
-		return;	/* No function to get L2 info */
+	if (n < 0x80000006)	/* Some chips just has a large L1. */
+		return;
 
-	cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-	c->x86_cache_size = ecx>>16;
+	ecx = cpuid_ecx(0x80000006);
+	l2size = ecx >> 16;
 
 	/* AMD errata T13 (order #21922) */
 	if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
@@ -622,15 +632,20 @@ __initfunc (static void display_cacheinfo(struct cpuinfo_x86 *c))
 		boot_cpu_data.x86_model== 3 &&
 		boot_cpu_data.x86_mask == 0)
 	{
-		c->x86_cache_size = 64;
+		l2size = 64;
 	}
 
-	printk("CPU: L2 Cache: %dK\n", c->x86_cache_size);
+	if (l2size == 0)
+		return;		/* Again, no L2 cache is possible */
+
+	c->x86_cache_size = l2size;
+
+	printk("CPU: L2 Cache: %dK (%d bytes/line)\n",
+		l2size, ecx & 0xFF);
 }
 
 
-
-__initfunc(static int amd_model(struct cpuinfo_x86 *c))
+static int __init init_amd(struct cpuinfo_x86 *c)
 {
 	u32 l, h;
 	unsigned long flags;
@@ -645,23 +660,24 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 	switch(c->x86)
 	{
 		case 5:
-			if( c->x86_model < 6 )
-			{
-				/* Anyone with a K5 want to fill this in */				
+			if( c->x86_model < 6 ) {
+				/* Based on AMD doc 20734R - June 2000 */
+				if ( c->x86_model == 0 ) {
+					c->x86_capability&=~X86_FEATURE_APIC;
+					c->x86_capability|=X86_FEATURE_PGE;
+				}
 				break;
 			}
 
 			/* K6 with old style WHCR */
-			if( c->x86_model < 8 ||
-				(c->x86_model== 8 && c->x86_mask < 8))
-			{
+			if (c->x86_model < 8 ||
+			   (c->x86_model== 8 && c->x86_mask < 8)) {
 				/* We can only write allocate on the low 508Mb */
 				if(mbytes>508)
 					mbytes=508;
-					
+
 				rdmsr(0xC0000082, l, h);
-				if((l&0x0000FFFF)==0)
-				{		
+				if((l&0x0000FFFF)==0) {		
 					l=(1<<0)|((mbytes/4)<<1);
 					save_flags(flags);
 					__cli();
@@ -670,20 +686,19 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 					restore_flags(flags);
 					printk(KERN_INFO "Enabling old style K6 write allocation for %d Mb\n",
 						mbytes);
-
 				}
 				break;
 			}
-			if (c->x86_model == 8 || c->x86_model == 9 || c->x86_model == 13)
-			{
+
+			if ((c->x86_model == 8 && c->x86_mask >7) ||
+			     c->x86_model == 9 || c->x86_model == 13) {
 				/* The more serious chips .. */
-				
+
 				if(mbytes>4092)
 					mbytes=4092;
 
 				rdmsr(0xC0000082, l, h);
-				if((l&0xFFFF0000)==0)
-				{
+				if((l&0xFFFF0000)==0) {
 					l=((mbytes>>2)<<22)|(1<<16);
 					save_flags(flags);
 					__cli();
@@ -695,35 +710,21 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 				}
 
 				/*  Set MTRR capability flag if appropriate  */
-				if((boot_cpu_data.x86_model == 13) ||
-				   (boot_cpu_data.x86_model == 9) ||
-				  ((boot_cpu_data.x86_model == 8) && 
-				   (boot_cpu_data.x86_mask >= 8)))
+				if (c->x86_model == 13 || c->x86_model == 9 ||
+				   (c->x86_model == 8 && c->x86_mask >= 8))
 					c->x86_capability |= X86_FEATURE_MTRR;
 				break;
 			}
 			break;
 
 		case 6:	/* An Athlon. We can trust the BIOS probably */
-		{
 			break;
-		}
 	}
 
 	display_cacheinfo(c);
 	return r;
 }
 
-__initfunc(static void intel_model(struct cpuinfo_x86 *c))
-{
-	unsigned int *v = (unsigned int *) c->x86_model_id;
-	cpuid(0x80000002, &v[0], &v[1], &v[2], &v[3]);
-	cpuid(0x80000003, &v[4], &v[5], &v[6], &v[7]);
-	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
-	c->x86_model_id[48] = 0;
-	printk("CPU: %s\n", c->x86_model_id);
-}
-			
 
 /*
  * Read Cyrix DEVID registers (DIR) to get more detailed info. about the CPU
@@ -784,7 +785,7 @@ static char Cx86_cb[] __initdata = "?.5x Core/Bus Clock";
 static char cyrix_model_mult1[] __initdata = "12??43";
 static char cyrix_model_mult2[] __initdata = "12233445";
 
-__initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
+static void __init init_cyrix(struct cpuinfo_x86 *c)
 {
 	unsigned char dir0, dir0_msn, dir0_lsn, dir1 = 0;
 	char *buf = c->x86_model_id;
@@ -860,6 +861,8 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
                 isa_dma_bridge_buggy = 2;
                   	                                                                     	        
 #endif
+		c->x86_cache_size=16;   /* Yep 16K integrated cache thats it */
+
 		/* GXm supports extended cpuid levels 'ala' AMD */
 		if (c->cpuid_level == 2) {
 			get_model_name(c);  /* get CPU marketing name */
@@ -875,8 +878,13 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 		break;
 
         case 5: /* 6x86MX/M II */
-		if (dir1 > 7) dir0_msn++;  /* M II */
-		else c->coma_bug = 1;      /* 6x86MX, it has the bug. */
+		if (dir1 > 7) {
+			dir0_msn++;  /* M II */
+			/* Enable MMX extensions (App note 108) */
+			setCx86(CX86_CCR7, getCx86(CX86_CCR7)|1);
+		} else {
+			c->coma_bug = 1;      /* 6x86MX, it has the bug. */
+		}
 		tmp = (!(dir0_lsn & 7) || dir0_lsn & 1) ? 2 : 0;
 		Cx86_cb[tmp] = cyrix_model_mult2[dir0_lsn & 7];
 		p = Cx86_cb+tmp;
@@ -897,8 +905,8 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 			dir0_msn = 0;
 			p = Cx486S_name[0];
 			break;
-		break;
 		}
+		break;
 
 	default:  /* unknown (shouldn't happen, we know everyone ;-) */
 		dir0_msn = 7;
@@ -909,7 +917,7 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 	return;
 }
 
-__initfunc(static void transmeta_model(struct cpuinfo_x86 *c))
+static void __init init_transmeta(struct cpuinfo_x86 *c)
 {
 	unsigned int cap_mask, uk, max, dummy;
 	unsigned int cms_rev1, cms_rev2;
@@ -974,7 +982,31 @@ __initfunc(static void transmeta_model(struct cpuinfo_x86 *c))
 }
 
 
-__initfunc(void get_cpu_vendor(struct cpuinfo_x86 *c))
+static void __init init_rise(struct cpuinfo_x86 *c)
+{
+	printk("CPU: Rise iDragon");
+	if (c->x86_model > 2)
+		printk(" II");
+	printk("\n");
+
+	/* Unhide possibly hidden capability flags
+	 * The mp6 iDragon family don't have MSRs
+	 * We switch on extra features with this cpuid weirdness: */
+	__asm__ (
+		"movl $0x6363452a, %%eax\n\t"
+		"movl $0x3231206c, %%ecx\n\t"
+		"movl $0x2a32313a, %%edx\n\t"
+		"cpuid\n\t"
+		"movl $0x63634523, %%eax\n\t"
+		"movl $0x32315f6c, %%ecx\n\t"
+		"movl $0x2333313a, %%edx\n\t"
+		"cpuid\n\t" : : : "eax", "ebx", "ecx", "edx"
+	);
+	c->x86_capability |= X86_FEATURE_CX8;
+}
+
+
+static void __init get_cpu_vendor(struct cpuinfo_x86 *c)
 {
 	char *v = c->x86_vendor_id;
 
@@ -998,250 +1030,8 @@ __initfunc(void get_cpu_vendor(struct cpuinfo_x86 *c))
 		c->x86_vendor = X86_VENDOR_UNKNOWN;
 }
 
-struct cpu_model_info {
-	int vendor;
-	int x86;
-	char *model_names[16];
-};
 
-static struct cpu_model_info cpu_models[] __initdata = {
-	{ X86_VENDOR_INTEL,	4,
-	  { "486 DX-25/33", "486 DX-50", "486 SX", "486 DX/2", "486 SL", 
-	    "486 SX/2", NULL, "486 DX/2-WB", "486 DX/4", "486 DX/4-WB", NULL, 
-	    NULL, NULL, NULL, NULL, NULL }},
-	{ X86_VENDOR_INTEL,	5,
-	  { "Pentium 60/66 A-step", "Pentium 60/66", "Pentium 75 - 200",
-	    "OverDrive PODP5V83", "Pentium MMX", NULL, NULL,
-	    "Mobile Pentium 75 - 200", "Mobile Pentium MMX", NULL, NULL, NULL,
-	    NULL, NULL, NULL, NULL }},
-	{ X86_VENDOR_INTEL,	6,
-	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II (Klamath)", 
-	    NULL, "Pentium II (Deschutes)", "Mobile Pentium II", 
-	    "Pentium III (Katmai)", "Pentium III (Coppermine)", NULL,
-	    "Pentium III (Cascades)", NULL, NULL, NULL, NULL, NULL }},
-	{ X86_VENDOR_AMD,	4,
-	  { NULL, NULL, NULL, "486 DX/2", NULL, NULL, NULL, "486 DX/2-WB",
-	    "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT",
-	    "Am5x86-WB" }},
-	{ X86_VENDOR_AMD,	5,
-	  { "K5/SSA5", "K5",
-	    "K5", "K5", NULL, NULL,
-	    "K6", "K6", "K6-2",
-	    "K6-3", NULL, NULL, NULL, NULL, NULL, NULL }},
-	{ X86_VENDOR_AMD,	6,
-	  { "Athlon", "Athlon",
-	    NULL, NULL, NULL, NULL,
-	    NULL, NULL, NULL,
-	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
-	{ X86_VENDOR_UMC,	4,
-	  { NULL, "U5D", "U5S", NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-	    NULL, NULL, NULL, NULL, NULL, NULL }},
-	{ X86_VENDOR_CENTAUR,	5,
-	  { NULL, NULL, NULL, NULL, "C6", NULL, NULL, NULL, "C6-2", NULL, NULL,
-	    NULL, NULL, NULL, NULL, NULL }},
-	{ X86_VENDOR_NEXGEN,	5,
-	  { "Nx586", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
-};
-
-__initfunc(void identify_cpu(struct cpuinfo_x86 *c))
-{
-	int i;
-	char *p = NULL;
-	extern void mcheck_init(void);
-	
-	c->loops_per_jiffy = loops_per_jiffy;
-	c->x86_cache_size = -1;
-
-	get_cpu_vendor(c);
-
-	if (c->x86_vendor == X86_VENDOR_UNKNOWN &&
-	    c->cpuid_level < 0)
-		return;
-
-	/* It should be possible for the user to override this. */
-	if(c->cpuid_level > 0 && 
-	   (c->x86_vendor == X86_VENDOR_INTEL || c->x86_vendor == X86_VENDOR_TRANSMETA) &&
-	   c->x86_capability&(1<<18)) {
-		/* Disable processor serial number */
-		unsigned long lo,hi;
-		rdmsr(0x119,lo,hi);
-		lo |= 0x200000;
-		wrmsr(0x119,lo,hi);
-		printk(KERN_INFO "CPU serial number disabled.\n");
-	}
-
-	mcheck_init();
-	
-	if (c->x86_vendor == X86_VENDOR_CYRIX) {
-		cyrix_model(c);
-		return;
-	}
-
-	if (c->x86_vendor == X86_VENDOR_AMD && amd_model(c))
-		return;
-		
-	if (c->x86_vendor == X86_VENDOR_TRANSMETA) {
-		transmeta_model(c);
-		return;
-	}
-	
-	if(c->x86_vendor == X86_VENDOR_CENTAUR && c->x86==6)
-	{
-		/* The Cyrix III supports model naming and cache queries */
-		get_model_name(c);
-		display_cacheinfo(c);
-		return;
-	}
-
-	if (c->cpuid_level > 1) {
-		/* supports eax=2  call */
-		int regs[4];
-		int l1c=0, l1d=0, l2=0, l3=0;	/* Cache sizes */
-
-		cpuid(2, &regs[0], &regs[1], &regs[2], &regs[3]);
-
-		/* Least significant byte of eax says how many times
-		 * to call cpuid with value 2 to get cache and TLB
-		 * info.
-		 */
-		if ((regs[0] & 0xFF) != 1 )
-			printk(KERN_WARNING "Multiple cache reports are not supported yet\n");
-
-		c->x86_cache_size = 0;
-
-		for ( i = 0 ; i < 4 ; i++ ) {
-
-			int j;
-
-			if ( regs[i] < 0 )
-				continue; /* no useful data */
-
-			/* look at all the bytes returned */
-
-			for ( j = ( i == 0 ? 8:0 ) ; j < 25 ; j+=8 ) {
-
-				unsigned char rh = regs[i]>>j;
-				unsigned char rl;
-
-				rl = rh & 0x0F;
-				rh >>=4;
-
-				switch(rh) {
-
-					case 2:
-						if(rl) {
-							printk("%dK L3 cache\n", (rl-1)*512);
-							l3 += (rl-1)*512;
-						}
-						break;
-
-					case 4:
-					case 8:
-						if(rl) {
-							printk("%dK L2 cache (%d way)\n",128<<(rl-1), rh);
-							l2 += 128<<(rl-1);
-						}
-						break;
-
-					/*
-					 *	L1 caches do not count for SMP switching weights,
-					 *	they are shadowed by L2.
-					 */
-
-					case 6:
-						if(rh==6 && rl > 5) {
-							printk("%dK L1 data cache\n", 8<<(rl - 6));
-							l1d+=8<<(rl-6);
-						}
-						break;
-
-					case 7:
-						printk("%dK L1 instruction cache\n",
-						rl?(16<<(rl-1)):12);
-						l1c+=rl?(16<<(rl-1)):12;
-						break;
-				}	              
-			}   			
-		}
-
-		if(l1c && l1d)
-			printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n", l1c, l1d);
-		if(l2)
-			printk("CPU: L2 Cache: %dK\n", l2);
-		if(l3)
-			printk("CPU: L3 Cache: %dK\n", l3);
-
-		/*
-		 *	Assuming L3 is shared. The L1 cache is shadowed by L2
-		 *	so doesn't need to be included.
-		 */
-
-		c->x86_cache_size += l2;
-	}
-
-	/*
-	 *	Intel finally adopted the AMD/Cyrix extended id naming
-	 *	stuff for the 'Pentium IV'
-	 */
-
-	if(c->x86_vendor ==X86_VENDOR_INTEL && c->x86 == 15)
-	{
-		intel_model(c);
-		return;
-	}
-
-	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
-		if (cpu_models[i].vendor == c->x86_vendor &&
-		    cpu_models[i].x86 == c->x86) {
-			if (c->x86_model <= 16)
-				p = cpu_models[i].model_names[c->x86_model];
-
-			/* Names for the Pentium II Celeron processors
-			   detectable only by also checking the cache size */
-			if ((cpu_models[i].vendor == X86_VENDOR_INTEL)
-			    && (cpu_models[i].x86 == 6)){ 
-				if(c->x86_model == 6 && c->x86_cache_size == 128) {
-					p = "Celeron (Mendocino)"; 
-				} else { 
-					if (c->x86_model == 5 && c->x86_cache_size == 0) {
-						p = "Celeron (Covington)";
-					}
-				}
-			}
-		}
-	}
-
-	if (p) {
-		strcpy(c->x86_model_id, p);
-		return;
-	}
-
-	sprintf(c->x86_model_id, "%02x/%02x", c->x86_vendor, c->x86_model);
-}
-
-/*
- *	Perform early boot up checks for a valid TSC. See arch/i386/kernel/time.c
- */
- 
-__initfunc(void dodgy_tsc(void))
-{
-	get_cpu_vendor(&boot_cpu_data);
-	
-	if(boot_cpu_data.x86_vendor != X86_VENDOR_CYRIX)
-	{
-		return;
-	}
-	cyrix_model(&boot_cpu_data);
-}
-	
-	
-
-static char *cpu_vendor_names[] __initdata = {
-	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur", "Rise", "Transmeta" };
-
-
-__initfunc(void setup_centaur(struct cpuinfo_x86 *c))
+static void __init init_centaur(struct cpuinfo_x86 *c)
 {
 	u32 hv,lv;
 	
@@ -1286,7 +1076,336 @@ __initfunc(void setup_centaur(struct cpuinfo_x86 *c))
 	}	
 }
 
-__initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
+
+static void __init init_intel(struct cpuinfo_x86 *c)
+{
+	char *p;
+	unsigned int l1i = 0, l1d = 0, l2 = 0, l3 = 0; /* Cache sizes */
+
+	if (c->cpuid_level > 1) {
+		/* supports eax=2  call */
+		int i, j, n;
+		int regs[4];
+		unsigned char *dp = (unsigned char *)regs;
+
+		/* Number of times to iterate */
+		n = cpuid_eax(2) & 0xFF;
+
+		for ( i = 0 ; i < n ; i++ ) {
+			cpuid(2, &regs[0], &regs[1], &regs[2], &regs[3]);
+			
+			/* If bit 31 is set, this is an unknown format */
+			for ( j = 0 ; j < 3 ; j++ ) {
+				if ( regs[j] < 0 ) regs[j] = 0;
+			}
+
+			/* Byte 0 is level count, not a descriptor */
+			for ( j = 1 ; j < 16 ; j++ ) {
+				unsigned char des = dp[j];
+				unsigned char dl, dh;
+				unsigned int cs;
+
+				dh = des >> 4;
+				dl = des & 0x0F;
+
+				/* Black magic... */
+
+				switch ( dh )
+				{
+				case 0:
+					switch ( dl ) {
+					case 6:
+						/* L1 I cache */
+						l1i += 8;
+						break;
+					case 8:
+						/* L1 I cache */
+						l1i += 16;
+						break;
+					case 10:
+						/* L1 D cache */
+						l1d += 8;
+						break;
+					case 12:
+						/* L1 D cache */
+						l1d += 16;
+						break;
+					default:;
+						/* TLB, or unknown */
+					}
+					break;
+				case 2:
+					if ( dl ) {
+						/* L3 cache */
+						cs = (dl-1) << 9;
+						l3 += cs;
+					}
+					break;
+				case 4:
+					if ( c->x86 > 6 && dl ) {
+						/* P4 family */
+						/* L3 cache */
+						cs = 128 << (dl-1);
+						l3 += cs;
+						break;
+					}
+					/* else same as 8 - fall through */
+				case 8:
+					if ( dl ) {
+						/* L2 cache */
+						cs = 128 << (dl-1);
+						l2 += cs;
+					}
+					break;
+				case 6:
+					if (dl > 5) {
+						/* L1 D cache */
+						cs = 8<<(dl-6);
+						l1d += cs;
+					}
+					break;
+				case 7:
+					if ( dl >= 8 ) 
+					{
+						/* L2 cache */
+						cs = 64<<(dl-8);
+						l2 += cs;
+					} else {
+						/* L0 I cache, count as L1 */
+						cs = dl ? (16 << (dl-1)) : 12;
+						l1i += cs;
+					}
+					break;
+				default:
+					/* TLB, or something else we don't know about */
+					break;
+				}
+			}
+		}
+		if ( l1i || l1d )
+			printk(KERN_INFO "CPU: L1 I cache: %dK, L1 D cache: %dK\n",
+			       l1i, l1d);
+		if ( l2 )
+			printk(KERN_INFO "CPU: L2 cache: %dK\n", l2);
+		if ( l3 )
+			printk(KERN_INFO "CPU: L3 cache: %dK\n", l3);
+
+		/*
+		 * This assumes the L3 cache is shared; it typically lives in
+		 * the northbridge.  The L1 caches are included by the L2
+		 * cache, and so should not be included for the purpose of
+		 * SMP switching weights.
+		 */
+		c->x86_cache_size = l2 ? l2 : (l1i+l1d);
+	}
+
+	/*
+	 *	Intel finally adopted the AMD/Cyrix extended id naming
+	 *	stuff for the 'Pentium IV'
+	 */
+
+	if (c->x86 == 15) {
+		get_model_name(c);
+		printk("CPU: %s\n", c->x86_model_id);
+		return;
+	}
+
+	/* Names for the Pentium II Celeron processors
+	   detectable only by also checking the cache size */
+    if (c->x86 == 6) { 
+		switch (c->x86_model) {
+			case 5:
+				if (c->x86_cache_size == 0)
+					p = "Celeron (Covington)";
+				if (c->x86_cache_size == 256)
+					p = "Mobile Pentium II (Dixon)";
+				break;
+			case 6:
+				if (c->x86_cache_size == 128)
+					p = "Celeron (Mendocino)";
+				break;
+			case 8:
+				if (c->x86_cache_size == 128)
+					p = "Celeron (Coppermine)";
+				break;
+		}
+	}
+}
+
+struct cpu_model_info {
+	int vendor;
+	int family;
+	char *model_names[16];
+};
+
+static struct cpu_model_info cpu_models[] __initdata = {
+	{ X86_VENDOR_INTEL,	4,
+	  { "486 DX-25/33", "486 DX-50", "486 SX", "486 DX/2", "486 SL", 
+	    "486 SX/2", NULL, "486 DX/2-WB", "486 DX/4", "486 DX/4-WB", NULL, 
+	    NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_INTEL,	5,
+	  { "Pentium 60/66 A-step", "Pentium 60/66", "Pentium 75 - 200",
+	    "OverDrive PODP5V83", "Pentium MMX", NULL, NULL,
+	    "Mobile Pentium 75 - 200", "Mobile Pentium MMX", NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_INTEL,	6,
+	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II (Klamath)", 
+	    NULL, "Pentium II (Deschutes)", "Mobile Pentium II", 
+	    "Pentium III (Katmai)", "Pentium III (Coppermine)", NULL,
+	    "Pentium III (Cascades)", NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_AMD,	4,
+	  { NULL, NULL, NULL, "486 DX/2", NULL, NULL, NULL, "486 DX/2-WB",
+	    "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT",
+	    "Am5x86-WB" }},
+	{ X86_VENDOR_AMD,	5,
+	  { "K5/SSA5", "K5",
+	    "K5", "K5", NULL, NULL,
+	    "K6", "K6", "K6-2",
+	    "K6-3", NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_AMD,	6,
+	  { "Athlon", "Athlon",
+	    NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_UMC,	4,
+	  { NULL, "U5D", "U5S", NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_CENTAUR,	5,
+	  { NULL, NULL, NULL, NULL, "C6", NULL, NULL, NULL, "C6-2", NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_NEXGEN,	5,
+	  { "Nx586", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_RISE,  5,
+	  { "iDragon", NULL, "iDragon", NULL, NULL, NULL, NULL,
+	    NULL, "iDragon II", "iDragon II", NULL, NULL, NULL, NULL, NULL, NULL }},
+};
+
+
+static char __init *table_lookup_model(struct cpuinfo_x86 *c)
+{
+	struct cpu_model_info *info = cpu_models;
+	int i;
+
+	if ( c->x86_model >= 16 )
+		return NULL;	/* Range check */
+
+	for ( i = 0 ; i < sizeof(cpu_models)/sizeof(struct cpu_model_info) ; i++ ) {
+		if ( info->vendor == c->x86_vendor &&
+			info->family == c->x86 ) {
+			return info->model_names[c->x86_model];
+		}
+		info++;
+	}
+	return NULL;	/* Not found */
+}
+
+
+static void __init squash_the_stupid_serial_number(struct cpuinfo_x86 *c)
+{
+	if (c->x86_capability&(X86_FEATURE_PN) && disable_x86_serial_nr) {
+		/* Disable processor serial number */
+		unsigned long lo,hi;
+		rdmsr(0x119,lo,hi);
+		lo |= 0x200000;
+		wrmsr(0x119,lo,hi);
+		printk(KERN_NOTICE "CPU serial number disabled.\n");
+		c->x86_capability &= ~X86_FEATURE_PN;
+		c->cpuid_level = cpuid_eax(0);
+	}
+}
+int __init x86_serial_nr_setup(char *s)
+{
+	disable_x86_serial_nr = 0;
+	return 1;
+}
+__setup("serialnumber", x86_serial_nr_setup);
+
+
+__initfunc(void identify_cpu(struct cpuinfo_x86 *c))
+{
+	c->loops_per_jiffy = loops_per_jiffy;
+	c->x86_cache_size = -1;
+
+	get_cpu_vendor(c);
+
+	switch (c->x86_vendor) {
+		case X86_VENDOR_UNKNOWN:
+		default:
+			/* Not much we can do here... */
+			/* Check if at least it has cpuid */
+			if (c->cpuid_level == -1) {
+				/* No cpuid. It must be an ancient CPU */
+				if (c->x86 == 4)
+					strcpy(c->x86_model_id, "486");
+				else if (c->x86 == 3)
+					strcpy(c->x86_model_id, "386");
+			}
+			break;
+
+		case X86_VENDOR_CYRIX:
+			init_cyrix(c);
+			return;
+
+		case X86_VENDOR_AMD:
+			init_amd(c);
+			return;
+
+		case X86_VENDOR_CENTAUR:
+			init_centaur(c);
+			return;
+
+		case X86_VENDOR_TRANSMETA:
+			init_transmeta(c);
+			return;
+
+		case X86_VENDOR_RISE:
+			init_rise(c);
+			break;
+
+		case X86_VENDOR_INTEL:
+			init_intel(c);
+			break;
+	}
+	
+	squash_the_stupid_serial_number(c);
+
+	mcheck_init(c);
+	
+	/* If the model name is still unset, do table lookup. */
+	if ( !c->x86_model_id[0] ) {
+		char *p;
+		p = table_lookup_model(c);
+		if ( p )
+			strcpy(c->x86_model_id, p);
+		else
+			/* Last resort... */
+			sprintf(c->x86_model_id, "%02x/%02x",
+				c->x86_vendor, c->x86_model);
+	}
+}
+
+/*
+ *	Perform early boot up checks for a valid TSC. See arch/i386/kernel/time.c
+ */
+ 
+void __init dodgy_tsc(void)
+{
+	get_cpu_vendor(&boot_cpu_data);
+	
+	if(boot_cpu_data.x86_vendor != X86_VENDOR_CYRIX)
+	{
+		return;
+	}
+	init_cyrix(&boot_cpu_data);
+}
+	
+
+static char *cpu_vendor_names[] __initdata = {
+	"Intel", "Cyrix", "AMD", "UMC", "NexGen", "Centaur", "Rise", "Transmeta" };
+
+
+void __init print_cpu_info(struct cpuinfo_x86 *c)
 {
 	char *vendor = NULL;
 
@@ -1307,11 +1426,8 @@ __initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
 		printk(" stepping %02x\n", c->x86_mask);
 	else
 		printk("\n");
-
-	if(c->x86_vendor == X86_VENDOR_CENTAUR) {
-		setup_centaur(c);
-	}
 }
+
 
 /*
  *	Get CPU information for use by the procfs.
@@ -1322,10 +1438,10 @@ int get_cpuinfo(char * buffer)
 	char *p = buffer;
 	int sep_bug;
 	static char *x86_cap_flags[] = {
-	        "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
-	        "cx8", "apic", "10", "sep", "mtrr", "pge", "mca", "cmov",
-	        "16", "pse36", "psn", "19", "20", "21", "22", "mmx",
-	        "24", "xmm", "26", "27", "28", "29", "30", "31"
+		"fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
+		"cx8", "apic", "10", "sep", "mtrr", "pge", "mca", "cmov",
+		"pat", "pse36", "pn", "clflush", "20", "dts", "acpi", "mmx",
+		"fxsr", "sse", "sse2", "ss", "28", "tm", "ia64", "31"
 	};
 	struct cpuinfo_x86 *c = cpu_data;
 	int i, n;

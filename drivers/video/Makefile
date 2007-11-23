@@ -102,6 +102,10 @@ endif
 
 ifeq ($(CONFIG_FB_ATY),y)
 L_OBJS += atyfb.o
+else
+  ifeq ($(CONFIG_FB_ATY),m)
+  M_OBJS += atyfb.o
+  endif
 endif
 
 ifeq ($(CONFIG_FB_ATY128),y)

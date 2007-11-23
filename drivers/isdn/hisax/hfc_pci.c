@@ -1,27 +1,17 @@
-/* $Id: hfc_pci.c,v 1.34.6.7 2001/07/27 09:08:27 kai Exp $
-
- * hfc_pci.c     low level driver for CCD´s hfc-pci based cards
+/* $Id: hfc_pci.c,v 1.1.2.1 2001/12/31 13:26:45 kai Exp $
  *
- * Author     Werner Cornelius (werner@isdn4linux.de)
- *            based on existing driver for CCD hfc ISA cards
- *            type approval valid for HFC-S PCI A based card 
+ * low level driver for CCD´s hfc-pci based cards
  *
- * Copyright 1999  by Werner Cornelius (werner@isdn-development.de)
- * Copyright 1999  by Karsten Keil (keil@isdn4linux.de)
+ * Author       Werner Cornelius
+ *              based on existing driver for CCD hfc ISA cards
+ * Copyright    by Werner Cornelius  <werner@isdn4linux.de>
+ *              by Karsten Keil      <keil@isdn4linux.de>
+ * 
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * For changes and modifications please read
+ * ../../../Documentation/isdn/HiSax.cert
  *
  */
 
@@ -37,7 +27,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcpci_revision = "$Revision: 1.34.6.7 $";
+static const char *hfcpci_revision = "$Revision: 1.1.2.1 $";
 
 /* table entry in the PCI devices list */
 typedef struct {
@@ -113,7 +103,7 @@ release_io_hfcpci(struct IsdnCardState *cs)
 static void
 reset_hfcpci(struct IsdnCardState *cs)
 {
-	long flags;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
@@ -481,7 +471,7 @@ hfcpci_empty_fifo_trans(struct BCState *bcs, bzfifo_type * bz, u_char * bdata)
 void
 main_rec_hfcpci(struct BCState *bcs)
 {
-	long flags;
+	unsigned long flags;
 	struct IsdnCardState *cs = bcs->cs;
 	int rcnt, real_fifo;
 	int receive, count = 5;
@@ -558,7 +548,7 @@ main_rec_hfcpci(struct BCState *bcs)
 static void
 hfcpci_fill_dfifo(struct IsdnCardState *cs)
 {
-	long flags;
+	unsigned long flags;
 	int fcnt;
 	int count, new_z1, maxlen;
 	dfifo_type *df;
@@ -873,7 +863,7 @@ hfcpci_auxcmd(struct IsdnCardState *cs, isdn_ctrl * ic)
 static void
 receive_emsg(struct IsdnCardState *cs)
 {
-	long flags;
+	unsigned long flags;
 	int rcnt;
 	int receive, count = 5;
 	bzfifo_type *bz;
@@ -983,7 +973,7 @@ hfcpci_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	u_char exval;
 	struct BCState *bcs;
 	int count = 15;
-	long flags;
+	unsigned long flags;
 	u_char val, stat;
 
 	if (!cs) {
@@ -1439,7 +1429,7 @@ static void
 hfcpci_l2l1(struct PStack *st, int pr, void *arg)
 {
 	struct sk_buff *skb = arg;
-	long flags;
+	unsigned long flags;
 
 	switch (pr) {
 		case (PH_DATA | REQUEST):
@@ -1652,7 +1642,7 @@ inithfcpci(struct IsdnCardState *cs)
 static int
 hfcpci_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 {
-	long flags;
+	unsigned long flags;
 
 	if (cs->debug & L1_DEB_ISAC)
 		debugl1(cs, "HFCPCI: card_msg %x", mt);

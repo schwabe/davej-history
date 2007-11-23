@@ -1,10 +1,12 @@
-/* $Id: arcofi.h,v 1.6.6.1 2001/02/16 16:43:25 kai Exp $
+/* $Id: arcofi.h,v 1.1.2.1 2001/12/31 13:26:45 kai Exp $
  *
- * arcofi.h   Ansteuerung ARCOFI 2165
+ * Ansteuerung ARCOFI 2165
  *
- * Author     Karsten Keil (keil@isdn4linux.de)
+ * Author       Karsten Keil
+ * Copyright    by Karsten Keil      <keil@isdn4linux.de>
  *
- * This file is (c) under GNU General Public License
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
  

@@ -1,7 +1,9 @@
-/*
- * $Id: avmcard.h,v 1.8.6.3 2001/05/17 21:15:33 kai Exp $
+/* $Id: avmcard.h,v 1.1.2.1 2001/12/31 13:26:39 kai Exp $
  *
- * Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
+ * Copyright 1999 by Carsten Paeth <calle@calle.de>
+ *
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 

@@ -1,4 +1,4 @@
-/* $Id: eicon_isa.c,v 1.16 2000/06/12 12:44:02 armin Exp $
+/* $Id: eicon_isa.c,v 1.1.2.1 2001/12/31 13:26:44 kai Exp $
  *
  * ISDN low-level module for Eicon active ISDN-Cards.
  * Hardware-specific code for old ISA cards.
@@ -7,19 +7,8 @@
  * Copyright 1998-2000 by Armin Schindler (mac@melware.de)
  * Copyright 1999,2000 Cytronics & Melware (info@melware.de)
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 
@@ -31,7 +20,7 @@
 #define release_shmem release_region
 #define request_shmem request_region
 
-char *eicon_isa_revision = "$Revision: 1.16 $";
+char *eicon_isa_revision = "$Revision: 1.1.2.1 $";
 
 #undef EICON_MCA_DEBUG
 
@@ -239,7 +228,7 @@ eicon_isa_bootload(eicon_isa_card *card, eicon_isa_codebuf *cb) {
 	boot = &card->shmem->boot;
 
 	/* Delay 0.2 sec. */
-	SLEEP(20);
+	SLEEP(HZ / 5);
 
 	/* Start CPU */
 	writeb(cbuf.boot_opt, &boot->ctrl);
@@ -252,10 +241,10 @@ eicon_isa_bootload(eicon_isa_card *card, eicon_isa_codebuf *cb) {
 #endif /* CONFIG_MCA */
 
 	/* Delay 0.2 sec. */
-	SLEEP(20);
+	SLEEP(HZ / 5);
 
 	timeout = jiffies + (HZ * 22);
-	while (timeout > jiffies) {
+	while (time_before(jiffies, timeout)) {
 		if (readb(&boot->ctrl) == 0)
 			break;
 		SLEEP(10);
@@ -370,8 +359,8 @@ eicon_isa_load(eicon_isa_card *card, eicon_isa_codebuf *cb) {
 	while (tmp--) {
 		memcpy_toio(&boot->b, p, 256);
 		writeb(1, &boot->ctrl);
-		timeout = jiffies + 10;
-		while (timeout > jiffies) {
+		timeout = jiffies + HZ / 10;
+		while (time_before(jiffies, timeout)) {
 			if (readb(&boot->ctrl) == 0)
 				break;
 			SLEEP(2);
@@ -394,7 +383,7 @@ eicon_isa_load(eicon_isa_card *card, eicon_isa_codebuf *cb) {
 	/* Start firmware, wait for signature */
 	writeb(2, &boot->ctrl);
 	timeout = jiffies + (5*HZ);
-	while (timeout > jiffies) {
+	while (time_before(jiffies, timeout)) {
 		if (readw(&boot->signature) == 0x4447)
 			break;
 		SLEEP(2);
@@ -418,8 +407,8 @@ eicon_isa_load(eicon_isa_card *card, eicon_isa_codebuf *cb) {
 		tmp = readb(&card->shmem->com.ReadyInt);
 		tmp ++;
 		writeb(tmp, &card->shmem->com.ReadyInt);
-		timeout = jiffies + 20;
-		while (timeout > jiffies) {
+		timeout = jiffies + HZ / 5;
+		while (time_before(jiffies, timeout)) {
 			if (card->irqprobe > 1)
 				break;
 			SLEEP(2);

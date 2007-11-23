@@ -1,13 +1,12 @@
-/* $Id: hisax.h,v 2.52.6.7 2001/07/18 16:02:15 kai Exp $
+/* $Id: hisax.h,v 1.1.2.1 2001/12/31 13:26:45 kai Exp $
  *
- *   Basic declarations, defines and prototypes
+ * Basic declarations, defines and prototypes
  *
- * This file is (c) under GNU General Public License
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 #include <linux/config.h>
-#include <linux/module.h>
-#include <linux/version.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/major.h>

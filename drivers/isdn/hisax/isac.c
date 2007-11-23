@@ -1,12 +1,16 @@
-/* $Id: isac.c,v 1.28.6.2 2001/06/09 15:14:17 kai Exp $
+/* $Id: isac.c,v 1.1.2.1 2001/12/31 13:26:45 kai Exp $
  *
- * isac.c   ISAC specific routines
+ * ISAC specific routines
  *
- * Author       Karsten Keil (keil@isdn4linux.de)
+ * Author       Karsten Keil
+ * Copyright    by Karsten Keil      <keil@isdn4linux.de>
+ * 
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
- *		This file is (c) under GNU General Public License
- *		For changes and modifications please read
- *		../../../Documentation/isdn/HiSax.cert
+ * For changes and modifications please read
+ * ../../../Documentation/isdn/HiSax.cert
+ *
  */
 
 #define __NO_VERSION__

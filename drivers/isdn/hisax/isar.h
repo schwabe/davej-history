@@ -1,10 +1,12 @@
-/* $Id: isar.h,v 1.9.6.1 2001/02/16 16:43:27 kai Exp $
+/* $Id: isar.h,v 1.1.2.1 2001/12/31 13:26:45 kai Exp $
  *
- * isar.h   ISAR (Siemens PSB 7110) specific defines
+ * ISAR (Siemens PSB 7110) specific defines
  *
- * Author Karsten Keil (keil@isdn4linux.de)
- *
- * This file is (c) under GNU General Public License
+ * Author       Karsten Keil
+ * Copyright    by Karsten Keil      <keil@isdn4linux.de>
+ * 
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
  

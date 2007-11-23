@@ -1,35 +1,20 @@
-/* $Id: isdn_net.c,v 1.140.6.8 2001/08/14 14:04:21 kai Exp $
-
+/* $Id: isdn_net.c,v 1.1.2.1 2001/12/31 13:26:34 kai Exp $
+ *
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
  * Copyright 1994-1998  by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    by Thinking Objects Software GmbH Wuerzburg
  * Copyright 1995,96    by Michael Hipp (Michael.Hipp@student.uni-tuebingen.de)
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- */
-
-/* Jan 2001: fix CISCO HDLC      Bjoern A. Zeeb <i4l@zabbadoz.net>
+ * Jan 2001: fix CISCO HDLC      Bjoern A. Zeeb <i4l@zabbadoz.net>
  *           for info on the protocol, see 
  *           http://i4l.zabbadoz.net/i4l/cisco-hdlc.txt
  */
 
 #include <linux/config.h>
-#define __NO_VERSION__
-#include <linux/module.h>
 #include <linux/isdn.h>
 #include <net/arp.h>
 #include <net/dst.h>
@@ -191,7 +176,7 @@ static int isdn_net_start_xmit(struct sk_buff *, struct device *);
 static void isdn_net_ciscohdlck_connected(isdn_net_local *lp);
 static void isdn_net_ciscohdlck_disconnected(isdn_net_local *lp);
 
-char *isdn_net_revision = "$Revision: 1.140.6.8 $";
+char *isdn_net_revision = "$Revision: 1.1.2.1 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -301,7 +286,7 @@ isdn_net_bind_channel(isdn_net_local * lp, int idx)
 static void
 isdn_net_unbind_channel(isdn_net_local * lp)
 {
-	ulong flags;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
@@ -349,7 +334,7 @@ isdn_net_autohup()
 	anymore = 0;
 	while (p) {
 		isdn_net_local *l = p->local;
-		if ((jiffies - last_jiffies) == 0)
+		if (jiffies == last_jiffies)
 			l->cps = l->transcount;
 		else
 			l->cps = (l->transcount * HZ) / (jiffies - last_jiffies);
@@ -368,9 +353,9 @@ isdn_net_autohup()
 			{
 				if (l->hupflags & ISDN_MANCHARGE &&
 				    l->hupflags & ISDN_CHARGEHUP) {
-					while (jiffies - l->chargetime > l->chargeint)
+					while (time_after(jiffies, l->chargetime + l->chargeint))
 						l->chargetime += l->chargeint;
-					if (jiffies - l->chargetime >= l->chargeint - 2 * HZ)
+					if (time_after(jiffies, l->chargetime + l->chargeint - 2 * HZ))
 						if (l->outgoing || l->hupflags & ISDN_INHUP)
 							isdn_net_hangup(&p->dev);
 				} else if (l->outgoing) {
@@ -379,7 +364,7 @@ isdn_net_autohup()
 							printk(KERN_DEBUG "isdn_net: Hupflags of %s are %X\n",
 							       l->name, l->hupflags);
 							isdn_net_hangup(&p->dev);
-						} else if (jiffies - l->chargetime > l->chargeint) {
+						} else if (time_after(jiffies, l->chargetime + l->chargeint)) {
 							printk(KERN_DEBUG
 							       "isdn_net: %s: chtime = %lu, chint = %d\n",
 							       l->name, l->chargetime, l->chargeint);
@@ -584,7 +569,7 @@ isdn_net_dial(void)
 	isdn_net_dev *p = dev->netdev;
 	int anymore = 0;
 	int i;
-	int flags;
+	unsigned long flags;
 	isdn_ctrl cmd;
 
 	while (p) {
@@ -615,7 +600,7 @@ isdn_net_dial(void)
 				anymore = 1;
 
 				if(lp->dialtimeout > 0)
-					if(lp->dialstarted == 0 || jiffies > (lp->dialstarted + lp->dialtimeout + lp->dialwait)) {
+					if(lp->dialstarted == 0 || time_after(jiffies, lp->dialstarted + lp->dialtimeout + lp->dialwait)) {
 						lp->dialstarted = jiffies;
 						lp->dialwait_timer = 0;
 					}
@@ -675,7 +660,7 @@ isdn_net_dial(void)
 					printk(KERN_INFO "%s: Open leased line ...\n", lp->name);
 				} else {
 					if(lp->dialtimeout > 0)
-						if(jiffies > (lp->dialstarted + lp->dialtimeout)) {
+						if (time_after(jiffies, lp->dialstarted + lp->dialtimeout)) {
 							restore_flags(flags);
 							lp->dialwait_timer = jiffies + lp->dialwait;
 							lp->dialstarted = 0;
@@ -1117,7 +1102,7 @@ isdn_net_xmit(struct device *ndev, struct sk_buff *skb)
 				lp->sqfull_stamp = jiffies;
 			} else {
 				/* subsequent overload: if slavedelay exceeded, start dialing */
-				if ((jiffies - lp->sqfull_stamp) > lp->slavedelay) {
+				if (time_after(jiffies, lp->sqfull_stamp + lp->slavedelay)) {
 					slp = lp->slave->priv;
 					if (!(slp->flags & ISDN_NET_CONNECTED)) {
 						isdn_net_force_dial_lp((isdn_net_local *) lp->slave->priv);
@@ -1126,7 +1111,7 @@ isdn_net_xmit(struct device *ndev, struct sk_buff *skb)
 			}
 		}
 	} else {
-		if (lp->sqfull && ((jiffies - lp->sqfull_stamp) > (lp->slavedelay + (10 * HZ)))) {
+		if (lp->sqfull && time_after(jiffies, lp->sqfull_stamp + lp->slavedelay + (10 * HZ))) {
 			lp->sqfull = 0;
 		}
 		/* this is a hack to allow auto-hangup for slaves on moderate loads */
@@ -1227,11 +1212,11 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 				cli();
 
 				if(lp->dialwait_timer <= 0)
-					if(lp->dialstarted > 0 && lp->dialtimeout > 0 && jiffies < lp->dialstarted + lp->dialtimeout + lp->dialwait)
+					if(lp->dialstarted > 0 && lp->dialtimeout > 0 && time_before(jiffies, lp->dialstarted + lp->dialtimeout + lp->dialwait))
 						lp->dialwait_timer = lp->dialstarted + lp->dialtimeout + lp->dialwait;
 
 				if(lp->dialwait_timer > 0) {
-					if(jiffies < lp->dialwait_timer) {
+					if(time_before(jiffies, lp->dialwait_timer)) {
 						isdn_net_unreachable(ndev, skb, "dial rejected: retry-time not reached");
 						dev_kfree_skb(skb);
 						restore_flags(flags);
@@ -2775,7 +2760,7 @@ isdn_net_setcfg(isdn_net_ioctl_cfg * cfg)
 			chidx = lp->pre_channel;
 		}
 		if (cfg->exclusive > 0) {
-			int flags;
+			unsigned long flags;
 
 			/* If binding is exclusive, try to grab the channel */
 			save_flags(flags);
@@ -3031,7 +3016,7 @@ isdn_net_delphone(isdn_net_ioctl_phone * phone)
 	int inout = phone->outgoing & 1;
 	isdn_net_phone *n;
 	isdn_net_phone *m;
-	int flags;
+	unsigned long flags;
 
 	if (p) {
 		save_flags(flags);
@@ -3067,7 +3052,7 @@ isdn_net_rmallphone(isdn_net_dev * p)
 {
 	isdn_net_phone *n;
 	isdn_net_phone *m;
-	int flags;
+	unsigned long flags;
 	int i;
 
 	save_flags(flags);
@@ -3116,7 +3101,7 @@ isdn_net_force_hangup(char *name)
 static int
 isdn_net_realrm(isdn_net_dev * p, isdn_net_dev * q)
 {
-	int flags;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
@@ -3202,7 +3187,7 @@ isdn_net_rm(char *name)
 int
 isdn_net_rmall(void)
 {
-	int flags;
+	unsigned long flags;
 	int ret;
 
 	/* Walk through netdev-chain */

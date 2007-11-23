@@ -1,5 +1,5 @@
 /*
- *	$Header: /home/cvsroot/Driver/osst.h,v 1.5.2.4 2001/01/26 01:30:56 riede Exp $
+ *	$Header: /home/cvsroot/Driver/osst.h,v 1.5.2.5 2001/10/11 00:28:20 riede Exp $
  */
 
 #include <linux/config.h>
@@ -517,3 +517,5 @@ extern Scsi_Tape * scsi_tapes;
 #define OS_WRITE_HEADER    4
 #define OS_WRITE_FILLER    5
 
+/* Additional rw state */
+#define OS_WRITING_COMPLETE 3

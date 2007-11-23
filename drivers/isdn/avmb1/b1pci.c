@@ -1,10 +1,12 @@
-/*
- * $Id: b1pci.c,v 1.29.6.4 2001/05/17 20:41:51 kai Exp $
+/* $Id: b1pci.c,v 1.1.2.1 2001/12/31 13:26:39 kai Exp $
  * 
  * Module for AVM B1 PCI-card.
  * 
- * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
+ * Copyright 1999 by Carsten Paeth <calle@calle.de>
  * 
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
+ *
  */
 
 #include <linux/config.h>
@@ -25,11 +27,13 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.29.6.4 $";
+static char *revision = "$Revision: 1.1.2.1 $";
 
 /* ------------------------------------------------------------- */
 
-MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
+MODULE_DESCRIPTION("CAPI4Linux: Driver for AVM B1 PCI card");
+MODULE_AUTHOR("Carsten Paeth");
+MODULE_LICENSE("GPL");
 
 /* ------------------------------------------------------------- */
 

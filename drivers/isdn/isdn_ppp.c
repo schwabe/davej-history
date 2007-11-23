@@ -1,31 +1,17 @@
-/* $Id: isdn_ppp.c,v 1.85.6.6 2001/07/27 09:08:27 kai Exp $
+/* $Id: isdn_ppp.c,v 1.1.2.1 2001/12/31 13:26:34 kai Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
  * Copyright 1995,96 by Michael Hipp (Michael.Hipp@student.uni-tuebingen.de)
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 
 #include <linux/config.h>
-#define __NO_VERSION__
-#include <linux/module.h>
-#include <linux/version.h>
-#include <linux/poll.h>
 #include <linux/isdn.h>
+#include <linux/poll.h>
 #include <linux/isdn_compat.h>
 #include <linux/ppp-comp.h>
 
@@ -84,7 +70,7 @@ static void isdn_ppp_mp_cleanup( isdn_net_local * lp );
 static int isdn_ppp_bundle(struct ippp_struct *, int unit);
 #endif	/* CONFIG_ISDN_MPP */
   
-char *isdn_ppp_revision = "$Revision: 1.85.6.6 $";
+char *isdn_ppp_revision = "$Revision: 1.1.2.1 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 
@@ -992,7 +978,7 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 		printk(KERN_DEBUG "push, skb %d %04x\n", (int) skb->len, proto);
 		isdn_ppp_frame_log("rpush", skb->data, skb->len, 32,is->unit,lp->ppp_slot);
 	}
-	if (is->compflags & SC_DECOMP_ON) {
+	if (mis->compflags & SC_DECOMP_ON) {
 		skb = isdn_ppp_decompress(skb, is, mis, &proto);
 		if (!skb) // decompression error
   			return;
@@ -1008,6 +994,10 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 				printk(KERN_DEBUG "isdn_ppp: IP\n");
 			skb->protocol = htons(ETH_P_IP);
 			break;
+		case PPP_COMP:
+		case PPP_COMPFRAG:
+			printk(KERN_INFO "isdn_ppp: unexpected compressed frame dropped\n");
+			goto drop_packet;
 #ifdef CONFIG_ISDN_PPP_VJ
 		case PPP_VJC_UNCOMP:
 			if (is->debug & 0x20)
@@ -1231,8 +1221,15 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 	/*
 	 * normal (single link) or bundle compression
 	 */
-	if(ipts->compflags & SC_COMP_ON)
-		skb = isdn_ppp_compress(skb,&proto,ipt,ipts,0);
+	if(ipts->compflags & SC_COMP_ON) {
+		/* We send compressed only if both down- und upstream
+		   compression is negotiated, that means, CCP is up */
+		if(ipts->compflags & SC_DECOMP_ON) {
+			skb = isdn_ppp_compress(skb,&proto,ipt,ipts,0);
+		} else {
+			printk(KERN_DEBUG "isdn_ppp: CCP not yet up - sending as-is\n");
+		}
+	}
 
 	if (ipt->debug & 0x24)
 		printk(KERN_DEBUG "xmit2 skb, len %d, proto %04x\n", (int) skb->len, proto);
@@ -2096,8 +2093,6 @@ static void isdn_ppp_ccp_timer_callback(unsigned long closure)
 	}
 	if(rs->ta && rs->state == CCPResetSentReq) {
 		/* We are correct here */
-		printk(KERN_DEBUG "ippp_ccp: CCP Reset timed out for id %d\n",
-		       rs->id);
 		if(!rs->expra) {
 			/* Hmm, there is no Ack really expected. We can clean
 			   up the state now, it will be reallocated if the
@@ -2106,6 +2101,8 @@ static void isdn_ppp_ccp_timer_callback(unsigned long closure)
 			isdn_ppp_ccp_reset_free_state(rs->is, rs->id);
 			return;
 		}
+		printk(KERN_DEBUG "ippp_ccp: CCP Reset timed out for id %d\n",
+		       rs->id);
 		/* Push it again */
 		isdn_ppp_ccp_xmit_reset(rs->is, PPP_CCP, CCP_RESETREQ, rs->id,
 					rs->data, rs->dlen);
@@ -2332,7 +2329,6 @@ static struct sk_buff *isdn_ppp_decompress(struct sk_buff *skb,struct ippp_struc
 		if (len <= 0) {
 			switch(len) {
 			case DECOMP_ERROR:
-				ri->pppcfg |= SC_DC_ERROR;
 				printk(KERN_INFO "ippp: decomp wants reset %s params\n",
 				       rsparm.valid ? "with" : "without");
 				
@@ -2467,10 +2463,15 @@ static void isdn_ppp_receive_ccp(isdn_net_dev *net_dev, isdn_net_local *lp,
 		/* if we RECEIVE an ackowledge we enable the decompressor */
 		if(is->debug & 0x10)
 			printk(KERN_DEBUG "Enable decompression here!\n");
-		if(proto == PPP_CCP)
+		if(proto == PPP_CCP) {
+			if (!mis->decompressor)
+				break;
 			mis->compflags |= SC_DECOMP_ON;
-		else
+		} else {
+			if (!is->decompressor)
+				break;
 			is->compflags |= SC_LINK_DECOMP_ON;
+		}
 		break;
 
 	case CCP_RESETACK:
@@ -2491,7 +2492,6 @@ static void isdn_ppp_receive_ccp(isdn_net_dev *net_dev, isdn_net_local *lp,
 					      len, NULL);
 			/* TODO: This is not easy to decide here */
 			mis->compflags &= ~SC_DECOMP_DISCARD;
-			mis->pppcfg &= ~SC_DC_ERROR;
 		}
 		else {
 			isdn_ppp_ccp_reset_ack_rcvd(is, skb->data[1]);
@@ -2504,7 +2504,6 @@ static void isdn_ppp_receive_ccp(isdn_net_dev *net_dev, isdn_net_local *lp,
 					      len, NULL);
 			/* TODO: neither here */
 			is->compflags &= ~SC_LINK_DECOMP_DISCARD;
-			is->pppcfg &= ~SC_DC_ERROR;
 		}
 		break;
 
@@ -2579,6 +2578,15 @@ static void isdn_ppp_receive_ccp(isdn_net_dev *net_dev, isdn_net_local *lp,
  * that's too big of a change now. --kai
  */
 
+/* Actually, we might turn this into an advantage: deal with the RFC in
+ * the old tradition of beeing generous on what we accept, but beeing
+ * strict on what we send. Thus we should just
+ * - accept compressed frames as soon as decompression is negotiated
+ * - send compressed frames only when decomp *and* comp are negotiated
+ * - drop rx compressed frames if we cannot decomp (instead of pushing them
+ *   up to ipppd)
+ * and I tried to modify this file according to that. --abp
+ */
 
 static void isdn_ppp_send_ccp(isdn_net_dev *net_dev, isdn_net_local *lp, struct sk_buff *skb)
 {
@@ -2634,10 +2642,15 @@ static void isdn_ppp_send_ccp(isdn_net_dev *net_dev, isdn_net_local *lp, struct 
 		/* if we SEND an ackowledge we can/must enable the compressor */
 		if(is->debug & 0x10)
 			printk(KERN_DEBUG "Enable compression here!\n");
-		if(proto == PPP_CCP)
+		if(proto == PPP_CCP) {
+			if (!is->compressor)
+				break;
 			is->compflags |= SC_COMP_ON;
-		else
+		} else {
+			if (!is->compressor)
+				break;
 			is->compflags |= SC_LINK_COMP_ON;
+		}
 		break;
 	case CCP_RESETACK:
 		/* If we send a ACK we should reset our compressor */

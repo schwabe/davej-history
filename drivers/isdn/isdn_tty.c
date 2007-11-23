@@ -1,30 +1,17 @@
-/* $Id: isdn_tty.c,v 1.94.6.5 2001/08/14 14:12:18 kai Exp $
-
+/* $Id: isdn_tty.c,v 1.1.2.1 2001/12/31 13:26:34 kai Exp $
+ *
  * Linux ISDN subsystem, tty functions and AT-command emulator (linklevel).
  *
  * Copyright 1994-1999  by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    by Thinking Objects Software GmbH Wuerzburg
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 #undef ISDN_TTY_STAT_DEBUG
 
-#define __NO_VERSION__
 #include <linux/config.h>
-#include <linux/module.h>
 #include <linux/isdn.h>
 #include "isdn_common.h"
 #include "isdn_tty.h"
@@ -66,7 +53,7 @@ static int bit2si[8] =
 static int si2bit[8] =
 {4, 1, 4, 4, 4, 4, 4, 4};
 
-char *isdn_tty_revision = "$Revision: 1.94.6.5 $";
+char *isdn_tty_revision = "$Revision: 1.1.2.1 $";
 
 
 /* isdn_tty_try_read() is called from within isdn_tty_rcv_skb()
@@ -2598,11 +2585,11 @@ isdn_tty_check_esc(const u_char * p, u_char plus, int count, int *pluscount,
 		if (*(p++) == plus) {
 			if ((*pluscount)++) {
 				/* Time since last '+' > 0.5 sec. ? */
-				if ((jiffies - *lastplus) > PLUSWAIT1)
+				if (time_after(jiffies, *lastplus + PLUSWAIT1))
 					*pluscount = 1;
 			} else {
 				/* Time since last non-'+' < 1.5 sec. ? */
-				if ((jiffies - *lastplus) < PLUSWAIT2)
+				if (time_before(jiffies, *lastplus + PLUSWAIT2))
 					*pluscount = 0;
 			}
 			if ((*pluscount == 3) && (count == 1))
@@ -3976,7 +3963,7 @@ isdn_tty_modem_escape(void)
 				if (info->online) {
 					ton = 1;
 					if ((info->emu.pluscount == 3) &&
-					    ((jiffies - info->emu.lastplus) > PLUSWAIT2)) {
+					    time_after(jiffies , info->emu.lastplus + PLUSWAIT2)) {
 						info->emu.pluscount = 0;
 						info->online = 0;
 						isdn_tty_modem_result(RESULT_OK, info);

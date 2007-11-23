@@ -1,8 +1,9 @@
-/*
- * $Id: b1lli.h,v 1.8.8.2 2001/05/17 20:41:52 kai Exp $
+/* $Id: $
  *
  * ISDN lowlevel-module for AVM B1-card.
  *
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  */

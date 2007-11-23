@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.17.6.3 2001/06/09 15:14:17 kai Exp $
+/* $Id: isar.c,v 1.1.2.1 2001/12/31 13:26:45 kai Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *

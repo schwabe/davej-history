@@ -1,32 +1,20 @@
-/* $Id: isdnif.h,v 1.37 2000/11/19 17:01:54 kai Exp $
-
- * Linux ISDN subsystem
+/* $Id: isdnif.h,v 1.1.2.1 2001/12/31 13:26:52 kai Exp $
  *
+ * Linux ISDN subsystem
  * Definition of the interface between the subsystem and its low-level drivers.
  *
  * Copyright 1994,95,96 by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    Thinking Objects Software GmbH Wuerzburg
  * 
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 
-#ifndef isdnif_h
-#define isdnif_h
+#ifndef __ISDNIF_H__
+#define __ISDNIF_H__
 
-#include <linux/config.h>
+#include <linux/isdn_compat.h>
 
 /*
  * Values for general protocol-selection
@@ -67,6 +55,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <linux/skbuff.h>
 
 /***************************************************************************/
@@ -560,4 +549,5 @@ extern int register_isdn(isdn_if*);
 #include <asm/uaccess.h>
 
 #endif /* __KERNEL__ */
-#endif /* isdnif_h */
+
+#endif /* __ISDNIF_H__ */

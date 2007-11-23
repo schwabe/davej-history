@@ -1,24 +1,13 @@
-/* $Id: isdn_common.c,v 1.114.6.12 2001/06/09 15:14:15 kai Exp $
-
+/* $Id: isdn_common.c,v 1.1.2.1 2001/12/31 13:26:34 kai Exp $
+ *
  * Linux ISDN subsystem, common used functions (linklevel).
  *
  * Copyright 1994-1999  by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    Thinking Objects Software GmbH Wuerzburg
  * Copyright 1995,96    by Michael Hipp (Michael.Hipp@student.uni-tuebingen.de)
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2, or (at your option)
- * any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * This software may be used and distributed according to the terms
+ * of the GNU General Public License, incorporated herein by reference.
  *
  */
 
@@ -48,9 +37,13 @@
 /* Debugflags */
 #undef ISDN_DEBUG_STATCALLB
 
+MODULE_DESCRIPTION("ISDN4Linux: link layer");
+MODULE_AUTHOR("Fritz Elfert");
+MODULE_LICENSE("GPL");
+
 isdn_dev *dev;
 
-static char *isdn_revision = "$Revision: 1.114.6.12 $";
+static char *isdn_revision = "$Revision: 1.1.2.1 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -277,7 +270,7 @@ isdn_timer_funct(ulong dummy)
 	}
 	if (tf) 
 	{
-		int flags;
+		unsigned long flags;
 
 		save_flags(flags);
 		cli();
@@ -289,7 +282,8 @@ isdn_timer_funct(ulong dummy)
 void
 isdn_timer_ctrl(int tf, int onoff)
 {
-	int flags, old_tflags;
+	unsigned long flags;
+	int old_tflags;
 
 	save_flags(flags);
 	cli();
@@ -1644,7 +1638,7 @@ isdn_open(struct inode *ino, struct file *filep)
 	if (minor == ISDN_MINOR_STATUS) {
 		infostruct *p;
 
-		if ((p = (infostruct *) kmalloc(sizeof(infostruct), GFP_KERNEL))) {
+		if ((p = kmalloc(sizeof(infostruct), GFP_KERNEL))) {
 			p->next = (char *) dev->infochain;
 			p->private = (char *) &(filep->private_data);
 			dev->infochain = p;
@@ -1996,7 +1990,7 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 
 	if ((adding) && (d->rcverr))
 		kfree(d->rcverr);
-	if (!(d->rcverr = (int *) kmalloc(sizeof(int) * m, GFP_KERNEL))) {
+	if (!(d->rcverr = kmalloc(sizeof(int) * m, GFP_KERNEL))) {
 		printk(KERN_WARNING "register_isdn: Could not alloc rcverr\n");
 		return -1;
 	}
@@ -2004,7 +1998,7 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 
 	if ((adding) && (d->rcvcount))
 		kfree(d->rcvcount);
-	if (!(d->rcvcount = (int *) kmalloc(sizeof(int) * m, GFP_KERNEL))) {
+	if (!(d->rcvcount = kmalloc(sizeof(int) * m, GFP_KERNEL))) {
 		printk(KERN_WARNING "register_isdn: Could not alloc rcvcount\n");
 		if (!adding) kfree(d->rcverr);
 		return -1;
@@ -2016,8 +2010,7 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 			skb_queue_purge(&d->rpqueue[j]);
 		kfree(d->rpqueue);
 	}
-	if (!(d->rpqueue =
-	      (struct sk_buff_head *) kmalloc(sizeof(struct sk_buff_head) * m, GFP_KERNEL))) {
+	if (!(d->rpqueue = kmalloc(sizeof(struct sk_buff_head) * m, GFP_KERNEL))) {
 		printk(KERN_WARNING "register_isdn: Could not alloc rpqueue\n");
 		if (!adding) {
 			kfree(d->rcvcount);
@@ -2031,8 +2024,7 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 
 	if ((adding) && (d->rcv_waitq))
 		kfree(d->rcv_waitq);
-	d->rcv_waitq = (wait_queue_head_t *)
-		kmalloc(sizeof(wait_queue_head_t) * 2 * m, GFP_KERNEL);
+	d->rcv_waitq = kmalloc(sizeof(wait_queue_head_t) * 2 * m, GFP_KERNEL);
 	if (!d->rcv_waitq) {
 		printk(KERN_WARNING "register_isdn: Could not alloc rcv_waitq\n");
 		if (!adding) {
@@ -2156,7 +2148,7 @@ register_isdn(isdn_if * i)
 		printk(KERN_WARNING "register_isdn: No write routine given.\n");
 		return 0;
 	}
-	if (!(d = (driver *) kmalloc(sizeof(driver), GFP_KERNEL))) {
+	if (!(d = kmalloc(sizeof(driver), GFP_KERNEL))) {
 		printk(KERN_WARNING "register_isdn: Could not alloc driver-struct\n");
 		return 0;
 	}
@@ -2297,7 +2289,7 @@ static int __init isdn_init(void)
  */
 static void  isdn_exit(void)
 {
-	int flags;
+	unsigned long flags;
 	int i;
 
 #ifdef CONFIG_ISDN_PPP
