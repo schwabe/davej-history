@@ -371,12 +371,12 @@ static int parport_SPP_supported(struct parport *pb)
 	 * copy. Some ports _do_ allow reads, so bypass the software
 	 * copy here.  In addition, some bits aren't writable. */
 	r = inb (pb->base+CONTROL);
-	if ((r & 0x3f) == w) {
+	if ((r & 0xf) == w) {
 		w = 0xe;
 		parport_pc_write_control (pb, w);
 		r = inb (pb->base+CONTROL);
 		parport_pc_write_control (pb, 0xc);
-		if ((r & 0x3f) == w)
+		if ((r & 0xf) == w)
 			return PARPORT_MODE_PCSPP;
 	}
 

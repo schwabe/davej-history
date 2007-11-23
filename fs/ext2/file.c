@@ -162,7 +162,7 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 	struct buffer_head * bh, *bufferlist[NBUF];
 	struct super_block * sb;
 	int err;
-	int i,buffercount,write_error;
+	int i,buffercount,write_error, new_buffer;
 
 	/* POSIX: mtime/ctime may not change for 0 count */
 	if (!count)
@@ -247,30 +247,59 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 		}
 		if (c > count)
 			c = count;
-		if (c != sb->s_blocksize && !buffer_uptodate(bh)) {
-			ll_rw_block (READ, 1, &bh);
-			wait_on_buffer (bh);
-			if (!buffer_uptodate(bh)) {
-				brelse (bh);
+
+		/* Tricky: what happens if we are writing the complete
+		 * contents of a block which is not currently
+		 * initialised?  We have to obey the same
+		 * synchronisation rules as the IO code, to prevent some
+		 * other process from stomping on the buffer contents by
+		 * refreshing them from disk while we are setting up the
+		 * buffer.  The copy_from_user() can page fault, after
+		 * all.  We also have to throw away partially successful
+		 * copy_from_users to such buffers, since we can't trust
+		 * the rest of the buffer_head in that case.  --sct */
+
+		new_buffer = (!buffer_uptodate(bh) && !buffer_locked(bh) &&
+			      c == sb->s_blocksize);
+
+		if (new_buffer) {
+			set_bit(BH_Lock, &bh->b_state);
+			c -= copy_from_user (bh->b_data + offset, buf, c);
+			if (c != sb->s_blocksize) {
+				c = 0;
+				unlock_buffer(bh);
+				brelse(bh);
 				if (!written)
-					written = -EIO;
+					written = -EFAULT;
 				break;
 			}
+			mark_buffer_uptodate(bh, 1);
+			unlock_buffer(bh);
+		} else {
+			if (!buffer_uptodate(bh)) {
+				ll_rw_block (READ, 1, &bh);
+				wait_on_buffer (bh);
+				if (!buffer_uptodate(bh)) {
+					brelse (bh);
+					if (!written)
+						written = -EIO;
+					break;
+				}
+			}
+			c -= copy_from_user (bh->b_data + offset, buf, c);
 		}
-		c -= copy_from_user (bh->b_data + offset, buf, c);
 		if (!c) {
 			brelse(bh);
 			if (!written)
 				written = -EFAULT;
 			break;
 		}
+		mark_buffer_dirty(bh, 0);
 		update_vm_cache(inode, pos, bh->b_data + offset, c);
 		pos += c;
 		written += c;
 		buf += c;
 		count -= c;
-		mark_buffer_uptodate(bh, 1);
-		mark_buffer_dirty(bh, 0);
 
 		if (filp->f_flags & O_SYNC)
 			bufferlist[buffercount++] = bh;

@@ -601,8 +601,6 @@ init_module(void)
 	smb_current_vmalloced = 0;
 #endif
 
-	read_semaphore = MUTEX;
-
 	return init_smb_fs();
 }
 
