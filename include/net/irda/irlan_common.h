@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Mon May 31 13:54:20 1999
+ * Modified at:   Sun Oct 31 19:41:24 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -127,6 +127,8 @@ struct irlan_client_cb {
 	int tx_busy;
 	struct sk_buff_head txq; /* Transmit control queue */
 
+	struct iriap_cb *iriap;
+
 	struct timer_list kick_timer;
 };
 
@@ -159,7 +161,7 @@ struct irlan_provider_cb {
  *  IrLAN control block
  */
 struct irlan_cb {
-	QUEUE queue; /* Must be first */
+	queue_t q; /* Must be first */
 
 	int    magic;
 	char   ifname[9];

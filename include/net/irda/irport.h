@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug  3 13:49:59 1997
- * Modified at:   Wed May 19 15:31:16 1999
+ * Modified at:   Fri Jan 14 10:21:10 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997, 1998-1999 Dag Brattli <dagb@cs.uit.no>
+ *     Copyright (c) 1997, 1998-2000 Dag Brattli <dagb@cs.uit.no>
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -29,6 +29,7 @@
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
 #include <linux/types.h>
+#include <asm/spinlock.h>
 
 #include <net/irda/irda_device.h>
 
@@ -49,14 +50,40 @@
 
 #define FRAME_MAX_SIZE 2048
 
-void irport_start(struct irda_device *idev, int iobase);
-void irport_stop(struct irda_device *idev, int iobase);
-int  irport_probe(int iobase);
+struct irport_cb {
+	struct device *netdev; /* Yes! we are some kind of netdevice */
+	struct net_device_stats stats;
 
-void irport_change_speed(struct irda_device *idev, int speed);
+	struct irlap_cb *irlap;    /* The link layer we are attached to */
+
+	chipio_t io;               /* IrDA controller information */
+	iobuff_t tx_buff;          /* Transmit buffer */
+	iobuff_t rx_buff;          /* Receive buffer */
+
+	struct qos_info qos;       /* QoS capabilities for this device */
+	dongle_t *dongle;          /* Dongle driver */
+
+ 	__u32 flags;               /* Interface flags */
+	__u32 new_speed;
+	int mode;
+	int index;                 /* Instance index */
+
+	spinlock_t lock;           /* For serializing operations */
+
+	/* For piggyback drivers */
+	void *priv;                
+	void (*change_speed)(void *priv, __u32 speed);
+	void (*interrupt)(int irq, void *dev_id, struct pt_regs *regs);
+};
+
+struct irport_cb *irport_open(int i, unsigned int iobase, unsigned int irq);
+int  irport_close(struct irport_cb *self);
+void irport_start(struct irport_cb *self);
+void irport_stop(struct irport_cb *self);
+void irport_change_speed(void *priv, __u32 speed);
 void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-
 int  irport_hard_xmit(struct sk_buff *skb, struct device *dev);
-void irport_wait_until_sent(struct irda_device *idev);
+int  irport_net_open(struct device *dev);
+int  irport_net_close(struct device *dev);
 
-#endif
+#endif /* IRPORT_H */

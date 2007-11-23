@@ -1,17 +1,16 @@
 /*********************************************************************
  *                
  * Filename:      irda_device.h
- * Version:       
- * Description:   
+ * Version:       0.9
+ * Description:   Contains various declarations used by the drivers
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Wed May 19 08:44:48 1999
+ * Modified at:   Fri Jan 14 10:46:56 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1999-2000 Dag Brattli, All Rights Reserved.
  *     Copyright (c) 1998 Thomas Davis, <ratbert@radiks.net>,
- *     Copyright (c) 1998 Haris Zukanovic, <haris@stud.cs.uit.no>
  *
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -35,12 +34,11 @@
 
 #include <linux/tty.h>
 #include <linux/netdevice.h>
-
 #include <asm/spinlock.h>
+#include <linux/irda.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/qos.h>
-#include <net/irda/dongle.h>
 #include <net/irda/irqueue.h>
 #include <net/irda/irlap_frame.h>
 
@@ -53,34 +51,97 @@
 #define IFF_DMA		0x0020 /* Supports DMA transfer of data */
 #define IFF_SHM         0x0040 /* Supports shared memory data transfers */
 #define IFF_DONGLE      0x0080 /* Interface has a dongle attached */
-#define IFF_AIR         0x0100 /* Supports A(dvanced)IR standards */
+#define IFF_AIR         0x0100 /* Supports Advanced IR (AIR) standards */
 
 #define IO_XMIT 0x01
 #define IO_RECV 0x02
 
-struct dongle_q {
-	QUEUE q;
-	struct dongle *dongle;
+typedef enum {
+	IRDA_IRLAP, /* IrDA mode, and deliver to IrLAP */
+	IRDA_RAW,   /* IrDA mode */
+	SHARP_ASK,
+	TV_REMOTE,  /* Also known as Consumer Electronics IR */
+} INFRARED_MODE;
+
+typedef enum {
+	IRDA_TASK_INIT,        /* All tasks are initialized with this state */
+	IRDA_TASK_DONE,        /* Signals that the task is finished */
+	IRDA_TASK_WAIT,
+	IRDA_TASK_WAIT1,
+	IRDA_TASK_WAIT2,
+	IRDA_TASK_WAIT3,
+	IRDA_TASK_CHILD_INIT,  /* Initializing child task */
+	IRDA_TASK_CHILD_WAIT,  /* Waiting for child task to finish */
+	IRDA_TASK_CHILD_DONE   /* Child task is finished */
+} TASK_STATE;
+
+struct irda_task;
+typedef int (*TASK_CALLBACK) (struct irda_task *task);
+
+struct irda_task {
+	queue_t q;
+	magic_t magic;
+
+	TASK_STATE state;
+	TASK_CALLBACK function;
+	TASK_CALLBACK finished;
+
+	struct irda_task *parent;
+	struct timer_list timer;
+
+	void *instance; /* Instance being called */
+	void *param;    /* Parameter to be used by instance */
+};
+
+/* Dongle info */
+struct dongle_reg;
+typedef struct {
+	struct dongle_reg *issue;     /* Registration info */
+	struct device *dev;           /* Device we are attached to */
+	struct irda_task *speed_task; /* Task handling speed change */
+	struct irda_task *reset_task; /* Task handling reset */
+	__u32 speed;                  /* Current speed */
+
+	/* Callbacks to the IrDA device driver */
+	int (*set_mode)(struct device *, int mode);
+	int (*read)(struct device *dev, __u8 *buf, int len);
+	int (*write)(struct device *dev, __u8 *buf, int len);
+	int (*set_dtr_rts)(struct device *dev, int dtr, int rts);
+} dongle_t;
+
+/* Dongle registration info */
+struct dongle_reg {
+	queue_t q;         /* Must be first */
+	IRDA_DONGLE type;
+
+	void (*open)(dongle_t *dongle, struct qos_info *qos);
+	void (*close)(dongle_t *dongle);
+	int  (*reset)(struct irda_task *task);
+	int  (*change_speed)(struct irda_task *task);
 };
 
 /* Chip specific info */
-struct chipio_t {
-        int iobase, iobase2;  /* IO base */
-        int io_ext, io_ext2;  /* Length of iobase */
-	int membase;          /* Shared memory base */
+typedef struct {
+	int cfg_base;         /* Config register IO base */
+        int sir_base;         /* SIR IO base */
+	int fir_base;         /* FIR IO base */
+	int mem_base;         /* Shared memory base */
+        int sir_ext;          /* Length of SIR iobase */
+	int fir_ext;          /* Length of FIR iobase */
         int irq, irq2;        /* Interrupts used */
+        int dma, dma2;        /* DMA channel(s) used */
         int fifo_size;        /* FIFO size */
-
-        int dma, dma2;        /* DMA channel used */
         int irqflags;         /* interrupt flags (ie, SA_SHIRQ|SA_INTERRUPT) */
 	int direction;        /* Link direction, used by some FIR drivers */
-
-	int baudrate;         /* Currently used baudrate */
+	int enabled;          /* Powered on? */
+	int suspended;        /* Suspended by APM */
+	__u32 speed;          /* Currently used speed */
+	__u32 new_speed;      /* Speed we must change to when Tx is finished */
 	int dongle_id;        /* Dongle or transceiver currently used */
-};
+} chipio_t;
 
 /* IO buffer specific info (inspired by struct sk_buff) */
-struct iobuff_t {
+typedef struct {
 	int state;            /* Receiving state (transmit state not used) */
 	int in_frame;         /* True if receiving frame */
 
@@ -91,78 +152,40 @@ struct iobuff_t {
 	int len;	      /* length of data */
 	int truesize;	      /* total size of buffer */
 	__u16 fcs;
-
-	int flags;            /* Allocation flags (GFP_KERNEL | GFP_DMA ) */
-};
-
-/* 
- * This structure contains data that _we_ would have liked to be in the device
- * structure, but we don't want to mess it up more than it is already. Better 
- * to keep the data in separate structures! This structure abstracts common 
- * stuff from IrDA port implementations.
- */
-struct irda_device {
-	QUEUE q;               /* Must be first */
-
-        int  magic;	       /* Our magic bullet */
-	char name[16];         /* Name of device "irda0" */
-	char description[32];  /* Something like "irda0 <-> ttyS0" */
-
-	struct irlap_cb *irlap; /* The link layer we are connected to  */
-	struct device netdev;   /* Yes! we are some kind of netdevice */
-	struct enet_statistics stats;
-
- 	int flags;            /* Interface flags (see defs above) */
-
- 	void *priv;           /* Pointer to low level implementation */
-
-	struct qos_info qos;  /* QoS capabilities for this device */
-
-	struct chipio_t io;
-	struct iobuff_t tx_buff;
-	struct iobuff_t rx_buff;
-
-	struct dongle *dongle; /* Dongle driver */
-
-	spinlock_t lock;       /* For serializing operations */
-	
-	/* Media busy stuff */
-	int media_busy;
-	struct timer_list media_busy_timer;
-
-	/* Callbacks for driver specific implementation */
-        void (*change_speed)(struct irda_device *idev, int baud);
- 	int  (*is_receiving)(struct irda_device *);    /* receiving? */
-	void (*set_dtr_rts)(struct irda_device *idev, int dtr, int rts);
-	int  (*raw_write)(struct irda_device *idev, __u8 *buf, int len);
-	void (*wait_until_sent)(struct irda_device *);
-	void (*set_caddr)(struct irda_device *);      /* Set connection addr */
-};
-
-extern hashbin_t *irda_device;
+} iobuff_t;
 
 /* Function prototypes */
 int  irda_device_init(void);
 void irda_device_cleanup(void);
 
-int  irda_device_open(struct irda_device *, char *name, void *priv);
-void irda_device_close(struct irda_device *);
-
 /* Interface to be uses by IrLAP */
-inline void irda_device_set_media_busy(struct irda_device *, int status);
-inline int  irda_device_is_media_busy(struct irda_device *);
-inline int  irda_device_is_receiving(struct irda_device *);
-inline void irda_device_change_speed(struct irda_device *, int);
+void irda_device_set_media_busy(struct device *dev, int status);
+int  irda_device_is_media_busy(struct device *dev);
+int  irda_device_is_receiving(struct device *dev);
 
-inline struct qos_info *irda_device_get_qos(struct irda_device *self);
-int irda_device_txqueue_empty(struct irda_device *self);
-void irda_device_init_dongle(struct irda_device *self, int type);
-void irda_device_unregister_dongle(struct dongle *dongle);
-int irda_device_register_dongle(struct dongle *dongle);
+/* Interface for internal use */
+int  irda_device_txqueue_empty(struct device *dev);
+int  irda_device_set_raw_mode(struct device* self, int status);
+int  irda_device_set_dtr_rts(struct device *dev, int dtr, int rts);
+int  irda_device_change_speed(struct device *dev, __u32 speed);
+int  irda_device_setup(struct device *dev);
 
-int irda_device_setup(struct device *dev);
+/* Dongle interface */
+void irda_device_unregister_dongle(struct dongle_reg *dongle);
+int  irda_device_register_dongle(struct dongle_reg *dongle);
+dongle_t *irda_device_dongle_init(struct device *dev, int type);
+int irda_device_dongle_cleanup(dongle_t *dongle);
 
 void setup_dma(int channel, char *buffer, int count, int mode);
+
+void irda_task_delete(struct irda_task *task);
+int  irda_task_kick(struct irda_task *task);
+struct irda_task *irda_task_execute(void *instance, TASK_CALLBACK function, 
+				    TASK_CALLBACK finished, 
+				    struct irda_task *parent, void *param);
+void irda_task_next_state(struct irda_task *task, TASK_STATE state);
+
+extern const char *infrared_mode[];
 
 /*
  * Function irda_get_mtt (skb)
@@ -170,37 +193,54 @@ void setup_dma(int channel, char *buffer, int count, int mode);
  *    Utility function for getting the minimum turnaround time out of 
  *    the skb, where it has been hidden in the cb field.
  */
+#define irda_get_mtt(skb) (                                                 \
+        IRDA_MIN(10000,                                                     \
+                  (((struct irda_skb_cb *) skb->cb)->magic == LAP_MAGIC) ?  \
+                          ((struct irda_skb_cb *)(skb->cb))->mtt : 10000    \
+                 )							    \
+)
+
+#if 0
 extern inline __u16 irda_get_mtt(struct sk_buff *skb)
 {
 	__u16 mtt;
 
-	if (((struct irlap_skb_cb *)(skb->cb))->magic != LAP_MAGIC)
+	if (((struct irda_skb_cb *)(skb->cb))->magic != LAP_MAGIC)
 		mtt = 10000;
 	else
-		mtt = ((struct irlap_skb_cb *)(skb->cb))->mtt;
+		mtt = ((struct irda_skb_cb *)(skb->cb))->mtt;
 
 	ASSERT(mtt <= 10000, return 10000;);
 	
 	return mtt;
 }
-
-extern inline void irda_device_set_dtr_rts(struct irda_device *self, int dtr,
-					   int rts)
-{
-	if (self->set_dtr_rts)
-		self->set_dtr_rts(self, dtr, rts);
-}
-
-extern inline int irda_device_raw_write(struct irda_device *self, __u8 *buf,
-					int len)
-{
-	int ret = -1;
-
-	if (self->raw_write)
-		ret = self->raw_write(self, buf, len);
-	return ret;
-}
-
 #endif
+
+/*
+ * Function irda_get_speed (skb)
+ *
+ *    Extact the speed this frame should be sent out with from the skb
+ *
+ */
+#define irda_get_speed(skb) (	                                        \
+	(((struct irda_skb_cb*) skb->cb)->magic == LAP_MAGIC) ? 	\
+                  ((struct irda_skb_cb *)(skb->cb))->speed : 9600 	\
+)
+
+#if 0
+extern inline __u32 irda_get_speed(struct sk_buff *skb)
+{
+	__u32 speed;
+
+	if (((struct irda_skb_cb *)(skb->cb))->magic != LAP_MAGIC)
+		speed = 9600;
+	else
+		speed = ((struct irda_skb_cb *)(skb->cb))->speed;
+
+	return speed;
+}
+#endif
+
+#endif /* IRDA_DEVICE_H */
 
 

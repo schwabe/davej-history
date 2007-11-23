@@ -12,7 +12,6 @@
 #define BOARD_QUARTZ            0x08000000L
 #define BOARD_40LD              0x04000000L
 
-#ifndef HOSTS_C
 #define SCB_FREE     0x0
 #define SCB_ACTIVE   0x1
 #define SCB_WAITQ    0x2
@@ -20,7 +19,6 @@
 #define SCB_COMPLETE 0x4
 #define SCB_ABORTED  0x5
 #define SCB_RESET    0x6
-#endif
 
 #define MEGA_CMD_TIMEOUT        10
 
@@ -109,6 +107,7 @@
 #define PCI_CONF_IRQ_OFFSET        0x3c
 #define PCI_CONF_AMISIG            0xa0
 #define AMI_SIGNATURE              0x3344
+#define AMI_SIGNATURE_471          0xCCCC
 
 #if LINUX_VERSION_CODE < 0x20100
 #define MEGARAID \

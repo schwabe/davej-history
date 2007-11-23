@@ -11,7 +11,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick
+ALL_SUB_DIRS := $(SUB_DIRS) rio ftape joystick
 
 #
 # This file contains the font map for the default (hardware) font
@@ -202,7 +202,18 @@ ifeq ($(CONFIG_SX),y)
 L_OBJS += sx.o generic_serial.o
 else
   ifeq ($(CONFIG_SX),m)
-  M_OBJS += sx.o
+  M_OBJS += sx.o  generic_serial.o
+  endif
+endif
+
+ifeq ($(CONFIG_RIO),y)
+L_OBJS += rio/rio.o  generic_serial.o
+SUB_DIRS += rio
+MOD_SUB_DIRS += rio
+else
+  ifeq ($(CONFIG_RIO),m)
+  M_OBJS += generic_serial.o
+  MOD_SUB_DIRS += rio
   endif
 endif
 

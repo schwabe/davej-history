@@ -21,34 +21,18 @@ else
 endif
 
 ifeq ($(CONFIG_IRPORT_SIR),y)
-L_OBJS += irport.o
+LX_OBJS += irport.o
 else
   ifeq ($(CONFIG_IRPORT_SIR),m)
-  M_OBJS += irport.o
-  endif
-endif
-
-ifeq ($(CONFIG_IRPORT_SIR),y)
-L_OBJS += irport.o
-else
-  ifeq ($(CONFIG_IRPORT_SIR),m)
-  M_OBJS += irport.o
-  endif
-endif
-
-ifeq ($(CONFIG_IRPORT_SIR),y)
-L_OBJS += irport.o
-else
-  ifeq ($(CONFIG_IRPORT_SIR),m)
-  M_OBJS += irport.o
+  MX_OBJS += irport.o
   endif
 endif
 
 ifeq ($(CONFIG_NSC_FIR),y)
-L_OBJS += pc87108.o
+L_OBJS += nsc-ircc.o
 else
   ifeq ($(CONFIG_NSC_FIR),m)
-  M_OBJS += pc87108.o
+  M_OBJS += nsc-ircc.o
   endif
 endif
 
@@ -57,14 +41,6 @@ L_OBJS += w83977af_ir.o
 else
   ifeq ($(CONFIG_WINBOND_FIR),m)
   M_OBJS += w83977af_ir.o
-  endif
-endif
-
-ifeq ($(CONFIG_SHARP_FIR),y)
-L_OBJS += uircc.o irport.o
-else
-  ifeq ($(CONFIG_SHARP_FIR),m)
-  M_OBJS += uircc.o irport.o
   endif
 endif
 
@@ -93,10 +69,12 @@ else
 endif
 
 ifeq ($(CONFIG_SMC_IRCC_FIR),y)
-L_OBJS += irport.o smc-ircc.o
+L_OBJS += smc-ircc.o
+LX_OBJS += irport.o
 else
   ifeq ($(CONFIG_SMC_IRCC_FIR),m)
-  M_OBJS += irport.o smc-ircc.o
+  M_OBJS += smc-ircc.o
+  MX_OBJS += irport.o
   endif
 endif
 
@@ -137,6 +115,14 @@ L_OBJS += litelink.o
 else
   ifeq ($(CONFIG_LITELINK_DONGLE),m)
   M_OBJS += litelink.o
+  endif
+endif
+
+ifeq ($(CONFIG_OLD_BELKIN_DONGLE),y)
+L_OBJS += old_belkin.o
+else
+  ifeq ($(CONFIG_OLD_BELKIN_DONGLE),m)
+  M_OBJS += old_belkin.o
   endif
 endif
 

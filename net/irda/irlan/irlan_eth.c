@@ -6,13 +6,13 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:37:58 1998
- * Modified at:   Mon May 31 19:57:08 1999
+ * Modified at:   Sun Jan 16 22:43:41 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
+ *     Copyright (c) 1998-2000 Dag Brattli, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -50,7 +50,7 @@ int irlan_eth_init(struct device *dev)
 	struct irmanager_event mgr_event;
 	struct irlan_cb *self;
 
-	DEBUG(2, __FUNCTION__"()\n");
+	IRDA_DEBUG(2, __FUNCTION__"()\n");
 
 	ASSERT(dev != NULL, return -1;);
        
@@ -115,7 +115,7 @@ int irlan_eth_open(struct device *dev)
 {
 	struct irlan_cb *self;
 	
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(dev != NULL, return -1;);
 
@@ -150,7 +150,7 @@ int irlan_eth_close(struct device *dev)
 {
 	struct irlan_cb *self = (struct irlan_cb *) dev->priv;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	
 	/* Stop device */
 	dev->tbusy = 1;
@@ -253,9 +253,6 @@ int irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb)
 
 	self = (struct irlan_cb *) instance;
 
-	ASSERT(self != NULL, return 0;);
-	ASSERT(self->magic == IRLAN_MAGIC, return 0;);
-
 	if (skb == NULL) {
 		++self->stats.rx_dropped; 
 		return 0;
@@ -282,7 +279,9 @@ int irlan_eth_receive(void *instance, void *sap, struct sk_buff *skb)
  * Function irlan_eth_flow (status)
  *
  *    Do flow control between IP/Ethernet and IrLAN/IrTTP. This is done by 
- *    controlling the dev->tbusy variable.
+ *    controlling the dev->tbusy variable. Currently not used, since we
+ *    just drop the frames instead of asking the client layer to buffer 
+ *    them.
  */
 void irlan_eth_flow_indication(void *instance, void *sap, LOCAL_FLOW flow)
 {
@@ -345,8 +344,8 @@ void irlan_eth_send_gratuitous_arp(struct device *dev)
 	 * is useful if we have changed access points on the same
 	 * subnet.  
 	 */
-#ifdef CONFIG_INET	 
-	DEBUG(4, "IrLAN: Sending gratuitous ARP\n");
+#ifdef CONFIG_INET
+	IRDA_DEBUG(4, "IrLAN: Sending gratuitous ARP\n");
 	in_dev = dev->ip_ptr;
 	arp_send(ARPOP_REQUEST, ETH_P_ARP, 
 		 in_dev->ifa_list->ifa_address,
@@ -369,14 +368,14 @@ void irlan_eth_set_multicast_list(struct device *dev)
 
  	self = dev->priv; 
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
  	ASSERT(self != NULL, return;); 
  	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 	/* Check if data channel has been connected yet */
 	if (self->client.state != IRLAN_DATA) {
-		DEBUG(1, __FUNCTION__ "(), delaying!\n");
+		IRDA_DEBUG(1, __FUNCTION__ "(), delaying!\n");
 		return;
 	}
 
@@ -386,20 +385,20 @@ void irlan_eth_set_multicast_list(struct device *dev)
 	} 
 	else if ((dev->flags & IFF_ALLMULTI) || dev->mc_count > HW_MAX_ADDRS) {
 		/* Disable promiscuous mode, use normal mode. */
-		DEBUG(4, __FUNCTION__ "(), Setting multicast filter\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), Setting multicast filter\n");
 		/* hardware_set_filter(NULL); */
 
 		irlan_set_multicast_filter(self, TRUE);
 	}
 	else if (dev->mc_count) {
-		DEBUG(4, __FUNCTION__ "(), Setting multicast filter\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), Setting multicast filter\n");
 		/* Walk the address list, and load the filter */
 		/* hardware_set_filter(dev->mc_list); */
 
 		irlan_set_multicast_filter(self, TRUE);
 	}
 	else {
-		DEBUG(4, __FUNCTION__ "(), Clearing multicast filter\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), Clearing multicast filter\n");
 		irlan_set_multicast_filter(self, FALSE);
 	}
 

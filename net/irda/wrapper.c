@@ -3,13 +3,15 @@
  * Filename:      wrapper.c
  * Version:       1.2
  * Description:   IrDA SIR async wrapper layer
- * Status:        Experimental.
+ * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Fri May 28 20:30:24 1999
+ * Modified at:   Sat Jan 15 13:32:27 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
+ * Modified at:   Fri May 28  3:11 CST 1999
+ * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
  * 
- *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>, 
  *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
@@ -24,6 +26,7 @@
  ********************************************************************/
 
 #include <linux/skbuff.h>
+#include <linux/string.h>
 #include <asm/byteorder.h>
 
 #include <net/irda/irda.h>
@@ -36,12 +39,21 @@
 
 static inline int stuff_byte(__u8 byte, __u8 *buf);
 
-static void state_outside_frame(struct irda_device *idev, __u8 byte);
-static void state_begin_frame(struct irda_device *idev, __u8 byte);
-static void state_link_escape(struct irda_device *idev, __u8 byte);
-static void state_inside_frame(struct irda_device *idev, __u8 byte);
+static void state_outside_frame(struct device *dev, 
+				struct net_device_stats *stats, 
+				iobuff_t *rx_buff, __u8 byte);
+static void state_begin_frame(struct device *dev, 
+			      struct net_device_stats *stats, 
+			      iobuff_t *rx_buff, __u8 byte);
+static void state_link_escape(struct device *dev, 
+			      struct net_device_stats *stats, 
+			      iobuff_t *rx_buff, __u8 byte);
+static void state_inside_frame(struct device *dev, 
+			       struct net_device_stats *stats, 
+			       iobuff_t *rx_buff, __u8 byte);
 
-static void (*state[])(struct irda_device *idev, __u8 byte) = 
+static void (*state[])(struct device *dev, struct net_device_stats *stats, 
+		       iobuff_t *rx_buff, __u8 byte) = 
 { 
 	state_outside_frame,
 	state_begin_frame,
@@ -50,16 +62,16 @@ static void (*state[])(struct irda_device *idev, __u8 byte) =
 };
 
 /*
- * Function async_wrap (skb, *tx_buff)
+ * Function async_wrap (skb, *tx_buff, buffsize)
  *
  *    Makes a new buffer with wrapping and stuffing, should check that 
  *    we don't get tx buffer overflow.
  */
 int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 {
+	int xbofs;
  	int i;
 	int n;
-	int xbofs;
 	union {
 		__u16 value;
 		__u8 bytes[2];
@@ -69,21 +81,28 @@ int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	fcs.value = INIT_FCS;
 	n = 0;
 
-	if (skb->len > 2048) {
-		DEBUG(0, __FUNCTION__ "Warning size=%d of sk_buff to big!\n", 
-		      (int) skb->len);
-		return 0;
-	}
-	
 	/*
 	 *  Send  XBOF's for required min. turn time and for the negotiated
 	 *  additional XBOFS
 	 */
-	if (((struct irlap_skb_cb *)(skb->cb))->magic != LAP_MAGIC) {
-		DEBUG(1, __FUNCTION__ "(), wrong magic in skb!\n");
+	if (((struct irda_skb_cb *)(skb->cb))->magic != LAP_MAGIC) {
+		/* 
+		 * This will happen for all frames sent from user-space.
+		 * Nothing to worry about, but we set the default number of 
+		 * BOF's
+		 */
+		IRDA_DEBUG(1, __FUNCTION__ "(), wrong magic in skb!\n");
 		xbofs = 10;
 	} else
-		xbofs = ((struct irlap_skb_cb *)(skb->cb))->xbofs;
+		xbofs = ((struct irda_skb_cb *)(skb->cb))->xbofs;
+
+	IRDA_DEBUG(4, __FUNCTION__ "(), xbofs=%d\n", xbofs);
+
+	/* Check that we never use more than 115 + 48 xbofs */
+	if (xbofs > 163) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), too many xbofs (%d)\n", xbofs);
+		xbofs = 163;
+	}
 
 	memset(tx_buff+n, XBOF, xbofs);
 	n += xbofs;
@@ -119,40 +138,6 @@ int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 }
 
 /*
- * Function async_bump (idev)
- *
- *    Got a frame, make a copy of it, and pass it up the stack!
- *
- */
-static inline void async_bump(struct irda_device *idev, __u8 *buf, int len)
-{
-       	struct sk_buff *skb;
-
-	skb = dev_alloc_skb(len+1);
-	if (!skb)  {
-		idev->stats.rx_dropped++;
-		return;
-	}
-
-	/*  Align IP header to 20 bytes */
-	skb_reserve(skb, 1);
-	
-        /* Copy data without CRC */
-	memcpy(skb_put(skb, len-2), buf, len-2); 
-	
-	/* 
-	 *  Feed it to IrLAP layer 
-	 */
-	skb->dev = &idev->netdev;
-	skb->mac.raw  = skb->data;
-	skb->protocol = htons(ETH_P_IRDA);
-
-	netif_rx(skb);
-	idev->stats.rx_packets++;
-	idev->stats.rx_bytes += skb->len;	
-}
-
-/*
  * Function stuff_byte (byte, buf)
  *
  *    Byte stuff one single byte and put the result in buffer pointed to by
@@ -179,36 +164,75 @@ static inline int stuff_byte(__u8 byte, __u8 *buf)
 }
 
 /*
- * Function async_unwrap (skb)
+ * Function async_bump (buf, len, stats)
+ *
+ *    Got a frame, make a copy of it, and pass it up the stack! We can try
+ *    to inline it since it's only called from state_inside_frame
+ */
+inline void async_bump(struct device *dev, struct net_device_stats *stats,
+		       __u8 *buf, int len)
+{
+       	struct sk_buff *skb;
+
+	skb = dev_alloc_skb(len+1);
+	if (!skb)  {
+		stats->rx_dropped++;
+		return;
+	}
+
+	/* Align IP header to 20 bytes */
+	skb_reserve(skb, 1);
+	
+        /* Copy data without CRC */
+	memcpy(skb_put(skb, len-2), buf, len-2); 
+	
+	/* Feed it to IrLAP layer */
+	skb->dev = dev;
+	skb->mac.raw  = skb->data;
+	skb->protocol = htons(ETH_P_IRDA);
+
+	netif_rx(skb);
+
+	stats->rx_packets++;
+	stats->rx_bytes += len;	
+}
+
+/*
+ * Function async_unwrap_char (dev, rx_buff, byte)
  *
  *    Parse and de-stuff frame received from the IrDA-port
  *
  */
-inline void async_unwrap_char(struct irda_device *idev, __u8 byte)
+inline void async_unwrap_char(struct device *dev, 
+			      struct net_device_stats *stats, 
+			      iobuff_t *rx_buff, __u8 byte)
 {
-	(*state[idev->rx_buff.state]) (idev, byte);
+	(*state[rx_buff->state])(dev, stats, rx_buff, byte);
 }
 	 
 /*
- * Function state_outside_frame (idev, byte)
+ * Function state_outside_frame (dev, rx_buff, byte)
  *
- *    
+ *    Not receiving any frame (or just bogus data)
  *
  */
-static void state_outside_frame(struct irda_device *idev, __u8 byte)
+static void state_outside_frame(struct device *dev, 
+				struct net_device_stats *stats, 
+				iobuff_t *rx_buff, __u8 byte)
 {
 	switch (byte) {
 	case BOF:
-		idev->rx_buff.state = BEGIN_FRAME;
-		idev->rx_buff.in_frame = TRUE;
+		rx_buff->state = BEGIN_FRAME;
+		rx_buff->in_frame = TRUE;
 		break;
 	case XBOF:
 		/* idev->xbofs++; */
 		break;
 	case EOF:
-		irda_device_set_media_busy( idev, TRUE);
+		irda_device_set_media_busy(dev, TRUE);
 		break;
 	default:
+		irda_device_set_media_busy(dev, TRUE);
 		break;
 	}
 }
@@ -219,58 +243,58 @@ static void state_outside_frame(struct irda_device *idev, __u8 byte)
  *    Begin of frame detected
  *
  */
-static void state_begin_frame(struct irda_device *idev, __u8 byte)
+static void state_begin_frame(struct device *dev, 
+			      struct net_device_stats *stats, 
+			      iobuff_t *rx_buff, __u8 byte)
 {
+	/* Time to initialize receive buffer */
+	rx_buff->data = rx_buff->head;
+	rx_buff->len = 0;
+	rx_buff->fcs = INIT_FCS;
+
 	switch (byte) {
 	case BOF:
 		/* Continue */
 		break;
 	case CE:
 		/* Stuffed byte */
-		idev->rx_buff.state = LINK_ESCAPE;
-
-		/* Time to initialize receive buffer */
-		idev->rx_buff.data = idev->rx_buff.head;
-		idev->rx_buff.len = 0;
+		rx_buff->state = LINK_ESCAPE;
 		break;
 	case EOF:
 		/* Abort frame */
-		idev->rx_buff.state = OUTSIDE_FRAME;
-		
-		idev->stats.rx_errors++;
-		idev->stats.rx_frame_errors++;
+		rx_buff->state = OUTSIDE_FRAME;
+		IRDA_DEBUG(1, __FUNCTION__ "(), abort frame\n");
+		stats->rx_errors++;
+		stats->rx_frame_errors++;
 		break;
-	default:	
-		/* Time to initialize receive buffer */
-		idev->rx_buff.data = idev->rx_buff.head;
-		idev->rx_buff.len = 0;
-
-		idev->rx_buff.data[idev->rx_buff.len++] = byte;
-		
-		idev->rx_buff.fcs = irda_fcs(INIT_FCS, byte);
-		idev->rx_buff.state = INSIDE_FRAME;
+	default:
+		rx_buff->data[rx_buff->len++] = byte;
+		rx_buff->fcs = irda_fcs(rx_buff->fcs, byte);
+		rx_buff->state = INSIDE_FRAME;
 		break;
 	}
 }
 
 /*
- * Function state_link_escape (idev, byte)
+ * Function state_link_escape (dev, byte)
  *
- *    
+ *    Found link escape character
  *
  */
-static void state_link_escape(struct irda_device *idev, __u8 byte)
+static void state_link_escape(struct device *dev, 
+			      struct net_device_stats *stats, 
+			      iobuff_t *rx_buff, __u8 byte)
 {
 	switch (byte) {
 	case BOF: /* New frame? */
-		idev->rx_buff.state = BEGIN_FRAME;
-		irda_device_set_media_busy(idev, TRUE);
+		rx_buff->state = BEGIN_FRAME;
+		irda_device_set_media_busy(dev, TRUE);
 		break;
 	case CE:
-		DEBUG(4, "WARNING: State not defined\n");
+		WARNING(__FUNCTION__ "(), state not defined\n");
 		break;
 	case EOF: /* Abort frame */
-		idev->rx_buff.state = OUTSIDE_FRAME;
+		rx_buff->state = OUTSIDE_FRAME;
 		break;
 	default:
 		/* 
@@ -278,59 +302,65 @@ static void state_link_escape(struct irda_device *idev, __u8 byte)
 		 *  following CE, IrLAP p.114 
 		 */
 		byte ^= IRDA_TRANS;
-		if (idev->rx_buff.len < idev->rx_buff.truesize)  {
-			idev->rx_buff.data[idev->rx_buff.len++] = byte;
-			idev->rx_buff.fcs = irda_fcs(idev->rx_buff.fcs, byte);
-			idev->rx_buff.state = INSIDE_FRAME;
+		if (rx_buff->len < rx_buff->truesize)  {
+			rx_buff->data[rx_buff->len++] = byte;
+			rx_buff->fcs = irda_fcs(rx_buff->fcs, byte);
+			rx_buff->state = INSIDE_FRAME;
 		} else {
-			DEBUG(1, __FUNCTION__ 
-			      "(), Rx buffer overflow, aborting\n");
-			idev->rx_buff.state = OUTSIDE_FRAME;
+			IRDA_DEBUG(1, __FUNCTION__ "(), rx buffer overflow\n");
+			rx_buff->state = OUTSIDE_FRAME;
 		}
 		break;
 	}
 }
 
 /*
- * Function state_inside_frame (idev, byte)
+ * Function state_inside_frame (dev, byte)
  *
  *    Handle bytes received within a frame
  *
  */
-static void state_inside_frame(struct irda_device *idev, __u8 byte)
+static void state_inside_frame(struct device *dev, 
+			       struct net_device_stats *stats,
+			       iobuff_t *rx_buff, __u8 byte)
 {
+	int ret = 0; 
+
 	switch (byte) {
 	case BOF: /* New frame? */
-		idev->rx_buff.state = BEGIN_FRAME;
-		irda_device_set_media_busy(idev, TRUE);
+		rx_buff->state = BEGIN_FRAME;
+		irda_device_set_media_busy(dev, TRUE);
 		break;
 	case CE: /* Stuffed char */
-		idev->rx_buff.state = LINK_ESCAPE;
+		rx_buff->state = LINK_ESCAPE;
 		break;
 	case EOF: /* End of frame */
-		idev->rx_buff.state = OUTSIDE_FRAME;
-		idev->rx_buff.in_frame = FALSE;
+		rx_buff->state = OUTSIDE_FRAME;
+		rx_buff->in_frame = FALSE;
 		
-		/* Test FCS and deliver frame if it's good */
-		if (idev->rx_buff.fcs == GOOD_FCS) {
-			async_bump(idev, idev->rx_buff.data, 
-				   idev->rx_buff.len);
+		/* Test FCS and signal success if the frame is good */
+		if (rx_buff->fcs == GOOD_FCS) {
+			/* Deliver frame */
+			async_bump(dev, stats, rx_buff->data, rx_buff->len);
+			ret = TRUE;
+			break;
 		} else {
 			/* Wrong CRC, discard frame!  */
-			irda_device_set_media_busy(idev, TRUE); 
-			
-			idev->stats.rx_errors++;
-			idev->stats.rx_crc_errors++;
+			irda_device_set_media_busy(dev, TRUE); 
+
+			IRDA_DEBUG(1, __FUNCTION__ "(), crc error\n");
+			stats->rx_errors++;
+			stats->rx_crc_errors++;
 		}			
 		break;
 	default: /* Must be the next byte of the frame */
-		if (idev->rx_buff.len < idev->rx_buff.truesize)  {
-			idev->rx_buff.data[idev->rx_buff.len++] = byte;
-			idev->rx_buff.fcs = irda_fcs(idev->rx_buff.fcs, byte);
+		if (rx_buff->len < rx_buff->truesize)  {
+			rx_buff->data[rx_buff->len++] = byte;
+			rx_buff->fcs = irda_fcs(rx_buff->fcs, byte);
 		} else {
-			DEBUG(1, __FUNCTION__ 
+			IRDA_DEBUG(1, __FUNCTION__ 
 			      "(), Rx buffer overflow, aborting\n");
-			idev->rx_buff.state = OUTSIDE_FRAME;
+			rx_buff->state = OUTSIDE_FRAME;
 		}
 		break;
 	}

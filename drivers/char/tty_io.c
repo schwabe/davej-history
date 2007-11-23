@@ -2205,6 +2205,9 @@ __initfunc(int tty_init(void))
 #ifdef CONFIG_SX
 	sx_init();
 #endif
+#ifdef CONFIG_RIO
+	rio_init();
+#endif
 #ifdef CONFIG_8xx
         rs_8xx_init();
 #endif /* CONFIG_8xx */

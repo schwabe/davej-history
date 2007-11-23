@@ -8,7 +8,7 @@
  * Author:        James McKenzie <james@fishsoup.dhs.org>
  * Created at:    Sat May 8  12:35:27 1999
  * 
- *     Copyright (c) 1999 James McKenzie, All Rights Reserved.
+ *     Copyright (c) 1999-2000 James McKenzie, All Rights Reserved.
  *      
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -22,16 +22,6 @@
  *     Applicable Models : Libretto 100CT. and many more
  *
  ********************************************************************/
-
-/*
- * $Log: toshoboe.h,v $
- * Revision 1.2  1999/05/09 01:43:08  root
- * *** empty log message ***
- *
- * Revision 1.1  1999/05/09 01:25:58  root
- * Initial revision
- *
- */
 
 #ifndef TOSHOBOE_H
 #define TOSHOBOE_H
@@ -148,7 +138,17 @@ struct OboeTaskFile
 
 struct toshoboe_cb
   {
-    struct irda_device idev;    /*IRDA device */
+    struct device *netdev;      /* Yes! we are some kind of netdevice */
+    struct net_device_stats stats;
+
+    struct irlap_cb    *irlap;  /* The link layer we are binded to */
+    struct qos_info     qos;    /* QoS capabilities for this device */
+
+    chipio_t io;                /* IrDA controller information */
+
+    __u32 flags;                /* Interface flags */
+    __u32 new_speed;
+
     struct pci_dev *pdev;       /*PCI device */
     int base;                   /*IO base */
     int txpending;              /*how many tx's are pending */
@@ -157,6 +157,8 @@ struct toshoboe_cb
     struct OboeTaskFile *taskfile;  /*The taskfile   */
     void *xmit_bufs[TX_SLOTS];  /*The buffers   */
     void *recv_bufs[RX_SLOTS];
+    int open;
+    int stopped;		/*Stopped by some or other APM stuff*/
   };
 
 

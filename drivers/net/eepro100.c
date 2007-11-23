@@ -620,6 +620,54 @@ int eepro100_init(void)
 			cards_found++;
 	}
 
+	for (; pci_index < 8; pci_index++) {
+		unsigned char pci_bus, pci_device_fn, pci_latency;
+		long ioaddr;
+		int irq;
+
+		u16 pci_command, new_command;
+
+		if (pcibios_find_device(PCI_VENDOR_ID_INTEL,
+					PCI_DEVICE_ID_INTEL_82559ER,
+					pci_index, &pci_bus,
+					&pci_device_fn))
+		    break;
+		{
+		    struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
+		    ioaddr = pdev->base_address[1];		/* Use [0] to mem-map */
+		    irq = pdev->irq;
+		}
+		/* Remove I/O space marker in bit 0. */
+		ioaddr &= ~3;
+		if (speedo_debug > 2)
+		    printk("Found Intel i82559ER PCI Speedo at I/O %#lx, IRQ %d.\n",
+			   ioaddr, irq);
+		
+		/* Get and check the bus-master and latency values. */
+		pcibios_read_config_word(pci_bus, pci_device_fn,
+					 PCI_COMMAND, &pci_command);
+		new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
+		if (pci_command != new_command) {
+		    printk(KERN_INFO "  The PCI BIOS has not enabled this"
+			   " device!  Updating PCI command %4.4x->%4.4x.\n",
+			   pci_command, new_command);
+		    pcibios_write_config_word(pci_bus, pci_device_fn,
+					      PCI_COMMAND, new_command);
+		}
+		pcibios_read_config_byte(pci_bus, pci_device_fn,
+					 PCI_LATENCY_TIMER, &pci_latency);
+		if (pci_latency < 32) {
+		    printk("  PCI latency timer (CFLT) is unreasonably low at %d."
+			   "  Setting to 32 clocks.\n", pci_latency);
+		    pcibios_write_config_byte(pci_bus, pci_device_fn,
+					      PCI_LATENCY_TIMER, 32);
+		} else if (speedo_debug > 1)
+			printk("  PCI latency timer (CFLT) is %#x.\n", pci_latency);
+		
+		if(speedo_found1(pci_bus, pci_device_fn, ioaddr, irq, 0, cards_found))
+			cards_found++;
+	}
+
 	return cards_found;
 }
 #endif

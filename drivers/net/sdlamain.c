@@ -133,7 +133,7 @@ static struct tq_struct sdla_tq =
 #ifdef MODULE
 int init_module (void)
 #else
-int wanpipe_init(void)
+int wanpipe_init2(void)
 #endif
 {
 	int cnt, err = 0;

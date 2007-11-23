@@ -1,25 +1,33 @@
 /*********************************************************************
  *                
+ *                
  * Filename:      irlap_event.h
  * Version:       0.1
  * Description:   
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Tue Apr  6 17:10:38 1999
+ * Modified at:   Tue Dec 21 11:20:30 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
  *     published by the Free Software Foundation; either version 2 of 
  *     the License, or (at your option) any later version.
- *
- *     Neither Dag Brattli nor University of Tromsø admit liability nor
- *     provide warranty for any of this software. This material is 
- *     provided "AS-IS" and at no charge.
- *
+ * 
+ *     This program is distributed in the hope that it will be useful,
+ *     but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *     GNU General Public License for more details.
+ * 
+ *     You should have received a copy of the GNU General Public License 
+ *     along with this program; if not, write to the Free Software 
+ *     Foundation, Inc., 59 Temple Place, Suite 330, Boston, 
+ *     MA 02111-1307 USA
+ *     
  ********************************************************************/
 
 #ifndef IRLAP_EVENT_H
@@ -62,6 +70,7 @@ typedef enum {
 
 	/* Send events */
 	SEND_I_CMD,
+	SEND_UI_FRAME,
 
 	/* Receive events */
 	RECV_DISCOVERY_XID_CMD,
@@ -71,14 +80,20 @@ typedef enum {
 	RECV_TEST_RSP,
 	RECV_UA_RSP,
 	RECV_DM_RSP,
+	RECV_RD_RSP,
 	RECV_I_CMD,
 	RECV_I_RSP,
 	RECV_UI_FRAME,
 	RECV_FRMR_RSP,
 	RECV_RR_CMD,
 	RECV_RR_RSP,
-	RECV_RNR_FRAME,
-	RECV_DISC_FRAME,
+	RECV_RNR_CMD,
+	RECV_RNR_RSP,
+	RECV_REJ_CMD,
+	RECV_REJ_RSP,
+	RECV_SREJ_CMD,
+	RECV_SREJ_RSP,
+	RECV_DISC_CMD,
 
 	/* Timer events */
 	SLOT_TIMER_EXPIRED,
@@ -115,9 +130,11 @@ struct irlap_info {
 
 extern const char *irlap_state[];
 
-void irlap_do_event( struct irlap_cb *self, IRLAP_EVENT event, 
-		     struct sk_buff *skb, struct irlap_info *info);
-void irlap_next_state( struct irlap_cb *self, IRLAP_STATE state);
-void irlap_print_event( IRLAP_EVENT event);
+void irlap_do_event(struct irlap_cb *self, IRLAP_EVENT event, 
+		    struct sk_buff *skb, struct irlap_info *info);
+void irlap_next_state(struct irlap_cb *self, IRLAP_STATE state);
+void irlap_print_event(IRLAP_EVENT event);
+
+extern int irlap_qos_negotiate(struct irlap_cb *self, struct sk_buff *skb);
 
 #endif

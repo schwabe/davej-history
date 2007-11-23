@@ -6,10 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Sun May  9 10:56:57 1999
+ * Modified at:   Sat Dec 25 16:42:09 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1997-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -57,9 +58,9 @@ typedef void (*CONFIRM_CALLBACK)(int result, __u16 obj_id,
 				 struct ias_value *value, void *priv);
 
 struct iriap_cb {
-	QUEUE queue; /* Must be first */
-	
-	int          magic;  /* Magic cookie */
+	queue_t q;      /* Must be first */	
+	magic_t magic;  /* Magic cookie */
+
 	int          mode;   /* Client or server */
 
 	__u32        saddr;
@@ -79,32 +80,38 @@ struct iriap_cb {
 	IRIAP_STATE r_connect_state;
 	
 	CONFIRM_CALLBACK confirm;
-	void *priv;
+	void *priv;                /* Used to identify client */
 
 	__u8 max_header_size;
+	__u32 max_data_size;
 	
 	struct timer_list watchdog_timer;
 };
 
 int  iriap_init(void);
 void iriap_cleanup(void);
-void iriap_getvaluebyclass_request( char *name, char *attr, 
-				    __u32 saddr, __u32 daddr,
-				    CONFIRM_CALLBACK callback, void *priv);
-void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb);
 
+struct iriap_cb *iriap_open(__u8 slsap_sel, int mode, void *priv, 
+			    CONFIRM_CALLBACK callback);
+void iriap_close(struct iriap_cb *self);
+
+int iriap_getvaluebyclass_request(struct iriap_cb *self, 
+				  __u32 saddr, __u32 daddr,
+				  char *name, char *attr);
+void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb);
+void iriap_connect_request(struct iriap_cb *self);
 void iriap_send_ack( struct iriap_cb *self);
 void iriap_call_indication(struct iriap_cb *self, struct sk_buff *skb);
 
 void iriap_register_server(void);
 
-void iriap_watchdog_timer_expired( unsigned long data);
+void iriap_watchdog_timer_expired(void *data);
 
-static inline void iriap_start_watchdog_timer( struct iriap_cb *self, 
-					       int timeout) 
+static inline void iriap_start_watchdog_timer(struct iriap_cb *self, 
+					      int timeout) 
 {
-	irda_start_timer( &self->watchdog_timer, timeout, 
-			  (unsigned long) self, iriap_watchdog_timer_expired);
+	irda_start_timer(&self->watchdog_timer, timeout, self, 
+			 iriap_watchdog_timer_expired);
 }
 
 #endif

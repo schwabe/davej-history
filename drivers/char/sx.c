@@ -222,139 +222,20 @@
 #include "sxboards.h"
 #include "sxwindow.h"
 
+#include <linux/compatmac.h>
+#include <linux/generic_serial.h>
+#include "sx.h"
+
 
 /* I don't think that this driver can handle more than 256 ports on
    one machine. You'll have to increase the number of boards in sx.h
    if you want more than 4 boards.  */
 
 
-/* ************************************************************** */
-/* * This section can be removed when 2.0 becomes outdated....  * */
-/* ************************************************************** */
-
-
-#if LINUX_VERSION_CODE < 0x020100    /* Less than 2.1.0 */
-#define TWO_ZERO
-#else
-#if LINUX_VERSION_CODE < 0x020200   /* less than 2.2.x */
-#warning "Please use a 2.2.x kernel. "
-#else
-#if LINUX_VERSION_CODE < 0x020300   /* less than 2.3.x */
-#define TWO_TWO
-#else
-#define TWO_THREE
-#endif
-#endif
-#endif
-
-#ifdef TWO_ZERO
-
-/* Here is the section that makes the 2.2 compatible driver source 
-   work for 2.0 too! We mostly try to adopt the "new thingies" from 2.2, 
-   and provide for compatibility stuff here if possible. */
-
-#include <linux/bios32.h>
-
-#define Get_user(a,b)                a = get_user(b)
-#define Put_user(a,b)                0,put_user(a,b)
-#define copy_to_user(a,b,c)          memcpy_tofs(a,b,c)
-
-static inline int copy_from_user(void *to,const void *from, int c) 
-{
-  memcpy_fromfs(to, from, c);
-  return 0;
-}
-
-#define pci_present                  pcibios_present
-#define pci_read_config_word         pcibios_read_config_word
-#define pci_read_config_dword        pcibios_read_config_dword
-
-static inline unsigned char get_irq (unsigned char bus, unsigned char fn)
-{
-	unsigned char t; 
-	pcibios_read_config_byte (bus, fn, PCI_INTERRUPT_LINE, &t);
-	return t;
-}
-
-static inline void *ioremap(unsigned long base, long length)
-{
-	if (base < 0x100000) return (void *)base;
-	return vremap (base, length);
-}
-
-#define my_iounmap(x, b)             (((long)x<0x100000)?0:vfree ((void*)x))
-
-#define capable(x)                   suser()
-
-#define queue_task                   queue_task_irq_off
-#define tty_flip_buffer_push(tty)    queue_task(&tty->flip.tqueue, &tq_timer)
-#define signal_pending(current)      (current->signal & ~current->blocked)
-#define schedule_timeout(to)         do {current->timeout = jiffies + (to);schedule ();} while (0)
-#define time_after(t1,t2)            (((long)t1-t2) > 0)
-
-
-#define test_and_set_bit(nr, addr)   set_bit(nr, addr)
-#define test_and_clear_bit(nr, addr) clear_bit(nr, addr)
-
-/* Not yet implemented on 2.0 */
-#define ASYNC_SPD_SHI  -1
-#define ASYNC_SPD_WARP -1
-
-
-/* Ugly hack: the driver_name doesn't exist in 2.0.x . So we define it
-   to the "name" field that does exist. As long as the assignments are
-   done in the right order, there is nothing to worry about. */
-#define driver_name           name 
-
-/* Should be in a header somewhere. They are in tty.h on 2.2 */
-#define TTY_HW_COOK_OUT       14 /* Flag to tell ntty what we can handle */
-#define TTY_HW_COOK_IN        15 /* in hardware - output and input       */
-
-/* The return type of a "close" routine. */
-#define INT                   void
-#define NO_ERROR              /* Nothing */
-
-#else
-
-/* The 2.2.x compatibility section. */
-#include <asm/uaccess.h>
-
-
-#define Get_user(a,b)         get_user(a,b)
-#define Put_user(a,b)         put_user(a,b)
-#define get_irq(pdev)         pdev->irq
-
-#define INT                   int
-#define NO_ERROR              0
-
-#define my_iounmap(x,b)       (iounmap((char *)(b)))
-
-#endif
-
-#ifndef TWO_THREE
-/* These are new in 2.3. The source now uses 2.3 syntax, and here is 
-   the compatibility define... */
-#define wait_queue_head_t struct wait_queue *
-#define DECLARE_MUTEX(name) struct semaphore name = MUTEX
-#define DECLARE_WAITQUEUE(wait, current) struct wait_queue wait = { current, NULL }
-
-#endif
-
-
-
-#include "generic_serial.h"
-#include "sx.h"
-
-
-/* ************************************************************** */
-/* *                End of compatibility section..              * */
-/* ************************************************************** */
-
-
-
 /* Why the hell am I defining these here? */
 #define SX_TYPE_NORMAL 1
 #define SX_TYPE_CALLOUT 2
+
 
 #ifndef SX_NORMAL_MAJOR
 /* This allows overriding on the compiler commandline, or in a "major.h" 
@@ -366,7 +247,6 @@ static inline void *ioremap(unsigned long base, long length)
 #ifndef PCI_DEVICE_ID_SPECIALIX_SX_XIO_IO8
 #define PCI_DEVICE_ID_SPECIALIX_SX_XIO_IO8 0x2000
 #endif
-
 
 
 /* Configurable options: 
@@ -408,7 +288,7 @@ static void sx_disable_rx_interrupts (void * ptr);
 static void sx_enable_rx_interrupts (void * ptr); 
 static int  sx_get_CD (void * ptr); 
 static void sx_shutdown_port (void * ptr);
-static void sx_set_real_termios (void  *ptr);
+static int  sx_set_real_termios (void  *ptr);
 static void sx_hungup (void  *ptr);
 static void sx_close (void  *ptr);
 static int sx_chars_in_buffer (void * ptr);
@@ -419,8 +299,6 @@ static int sx_fw_ioctl (struct inode *inode, struct file *filp,
 static int sx_fw_open(struct inode *inode, struct file *filp);
 static INT sx_fw_release(struct inode *inode, struct file *filp);
 static int sx_init_drivers(void);
-void my_hd (unsigned char *addr, int len);
-
 
 
 static struct tty_driver sx_driver, sx_callout_driver;
@@ -589,6 +467,27 @@ static inline int sx_paranoia_check(struct sx_port const * port,
 
 #define TIMEOUT_1 30
 #define TIMEOUT_2 1000000
+
+
+#ifdef DEBUG
+static void my_hd (unsigned char *addr, int len)
+{
+	int i, j, ch;
+
+	for (i=0;i<len;i+=16) {
+		printk ("%08x ", (int) addr+i);
+		for (j=0;j<16;j++) {
+			printk ("%02x %s", addr[j+i], (j==7)?" ":"");
+		}
+		for (j=0;j<16;j++) {
+			ch = addr[j+i];
+			printk ("%c", (ch < 0x20)?'.':((ch > 0x7f)?'.':ch));
+		}
+		printk ("\n");
+	}
+}
+#endif
+
 
 
 /* This needs redoing for Alpha -- REW -- Done. */
@@ -965,7 +864,7 @@ static void sx_set_baud (struct sx_port *port)
 /* Simon Allen's version of this routine was 225 lines long. 85 is a lot
    better. -- REW */
 
-static void sx_set_real_termios (void *ptr)
+static int sx_set_real_termios (void *ptr)
 {
 	struct sx_port *port = ptr;
 
@@ -1056,6 +955,7 @@ static void sx_set_real_termios (void *ptr)
 	            O_OTHER(port->gs.tty));
 	/* port->c_dcd = sx_get_CD (port); */
 	func_exit ();
+	return 0;
 }
 
 
@@ -2599,7 +2499,7 @@ int sx_init(void)
 }
 
 
-
+#ifdef MODULE
 void cleanup_module(void)
 {
 	int i; 
@@ -2633,33 +2533,9 @@ void cleanup_module(void)
 	kfree (sx_termios_locked);
 	func_exit();
 }
-
-
-#ifdef DEBUG
-void my_hd (unsigned char *addr, int len)
-{
-	int i, j, ch;
-
-	for (i=0;i<len;i+=16) {
-		printk ("%08x ", (int) addr+i);
-		for (j=0;j<16;j++) {
-			printk ("%02x %s", addr[j+i], (j==7)?" ":"");
-		}
-		for (j=0;j<16;j++) {
-			ch = addr[j+i];
-			printk ("%c", (ch < 0x20)?'.':((ch > 0x7f)?'.':ch));
-		}
-		printk ("\n");
-	}
-}
 #endif
 
-#ifdef MODULE
-#undef func_enter
-#undef func_exit
 
-#include "generic_serial.c"
-#endif
 
 
 /*

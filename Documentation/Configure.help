@@ -7539,11 +7539,11 @@ CONFIG_ROMFS_FS
   If you don't know whether you need it, then you don't need it:
   answer N.
 
-QNX filesystem support (EXPERIMENTAL)
+QNX4 filesystem support (EXPERIMENTAL)
 CONFIG_QNX4FS_FS  
   This is the filesystem used by the operating system QNX 4. Say Y if
   you intend to mount QNX hard disks or floppies. Unless you say Y to
-  "QNXFS read-write support" below, you will only be able to read
+  "QNX4FS write support" below, you will only be able to read
   these filesystems.
 
   This filesystem support is also available as a module ( = code which
@@ -7551,11 +7551,12 @@ CONFIG_QNX4FS_FS
   want). The module is called qnx4.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt. 
 
-  If unsure, say N.
+  If you don't know whether you need it, then you don't need it:
+  answer N.
 
-QNXFS read-write support (FOR TESTING ONLY)
+QNX4FS write support (DANGEROUS)
 CONFIG_QNX4FS_RW
-  Say Y if you want to test write support for QNX filesystems.
+  Say Y if you want to test write support for QNX4 filesystems.
 
 Kernel automounter support
 CONFIG_AUTOFS_FS
@@ -8364,6 +8365,37 @@ CONFIG_SPECIALIX_RTSCTS
   software handshake mode. If you say Y here or hardware handshake is
   on, it will always be RTS. Read the file Documentation/specialix.txt
   for more information.
+
+Specialix SX card support
+CONFIG_SX
+  This is a driver for the Specialix SX multiport card (both the
+  ISA and the PCI version of both the older SI/XIO and the newer SX
+  variants of the card) which gives you many serial ports. You
+  would need something like this to connect more than two modems to 
+  your Linux box, for instance in order to become a dial-in server.
+  You will also need the specialix_sxtools package to be able to 
+  initialize and use the SX system. This driver does NOT support 
+  the rev 1 cards (+/- 1990), or the EISA version of the card. Sorry.
+
+  If you have one of these cards, say Y here and read the file
+  Documentation/sx.txt. Also it's possible to say M here and
+  compile this driver as kernel loadable module which will be called
+  sx.o.
+
+Specialix RIO system support
+CONFIG_RIO
+  This is a driver for the Specialix RIO hostcard (both the
+  ISA and the PCI versions of the card). This hostcard allows you
+  to connect many remote terminal adapters, each supporting 8 or 16
+  serial ports. These cards are ideal if you have more than 100 
+  terminals that need to be connected to your server. (But don't 
+  worry if you have only 32 ports.... That works too). You will 
+  also need the specialix_riotools to be able to initialize and
+  configure your rio system.  
+
+  If you have one of these cards, say Y here. Also it's possible to 
+  say M here and compile this driver as kernel loadable module which 
+  will be called rio.o.
 
 Cyclades async mux support
 CONFIG_CYCLADES
@@ -11739,33 +11771,7 @@ CONFIG_IRCOMM
   and makes it possible to use all existing applications that
   understands TTY's with an infrared link. Thus you should be able to
   use application like PPP, minicom and others. Enabling this option
-  will create two modules called ircomm and ircomm_tty. For more
-  information go to http://www.pluto.dti.ne.jp/~thiguchi/irda/
-
-IrLPT Protocol
-CONFIG_IRLPT
-  Say Y here if you want to build support for the IrLPT protocol. If
-  you want to compile it as a module, say M here and read
-  Documentation/modules.txt. IrLPT makes it possible to print
-  documents to IrDA capable printers.
-
-IrLPT Client Protocol 
-CONFIG_IRLPT_CLIENT
-  Say Y here if you want to build support for the IrLPT client
-  protocol. If you want to compile it as a module, say M here and read
-  Documentation/modules.txt. The IrLPT client protocol can be used to
-  print documents to IrDA compatible printers like the HP-5MP, or
-  IrLPT printer adapters like the ACTiSYS IR-100M.
-
-IrLPT Server Protocol 
-CONFIG_IRLPT_SERVER
-  Say Y here if you want to build support for the IrLPT server
-  protocol. If you want to compile it as a module, say M here and read
-  Documentation/modules.txt. The IrLPT server protocol makes it
-  possible to use a Linux machine as an infrared printer server for
-  other laptops. So if your Linux machine has a cable connection to a
-  printer, then other laptops can use the Linux machine to print out 
-  documents using infrared communication.
+  will create two modules called ircomm and ircomm-tty.
 
 IrTTY IrDA Device Driver
 CONFIG_IRTTY_SIR
@@ -11802,20 +11808,12 @@ CONFIG_WINBOND_FIR
   used for the IrDA chipset in the Corel NetWinder. The driver
   supports SIR, MIR and FIR (4Mbps) speeds.
 
-NSC PC87108 IrDA Device Driver
+NSC IrDA Device Driver
 CONFIG_NSC_FIR
-  Say Y here if you want to build support for the NSC PC87108 IrDA
-  chipset. If you want to compile it as a module, say M here and
-  read Documentation/modules.txt. This drivers currently only supports
-  the ACTiSYS IR2000B ISA card and supports SIR, MIR and FIR (4Mbps)
-  speeds.
-
-Sharp UIRCC IrDA Device Driver
-CONFIG_SHARP_FIR
-  Say Y here if you want to build support for the Sharp UIRCC IrDA
-  chipset. If you want to compile it as a module, say M here and
-  read Documentation/modules.txt. This chipset is used by the Toshiba
-  Tecra laptops.
+  Say Y here if you want to build support for the NSC PC87108 and
+  PC87338 IrDA chipsets. If you want to compile it as a module, say M 
+  here and read Documentation/modules.txt. This driver supports SIR, 
+  MIR and FIR (4Mbps) speeds.
 
 Toshiba Type-O IR Port Device Driver
 CONFIG_TOSHIBA_FIR
@@ -11831,7 +11829,7 @@ CONFIG_ESI_DONGLE
   and read Documentation/modules.txt. The ESI dongle attaches to the
   normal 9-pin serial port connector, and can currently only be used
   by IrTTY. To activate support for ESI dongles you will have to
-  insert "irattach -d esi" in the /etc/irda/drivers script.
+  start irattach like this: "irattach -d esi".
 
 ACTiSYS IR-220L and IR220L+ dongle
 CONFIG_ACTISYS_DONGLE
@@ -11840,8 +11838,8 @@ CONFIG_ACTISYS_DONGLE
   say M here and read Documentation/modules.txt. The ACTiSYS dongles
   attaches to the normal 9-pin serial port connector, and can
   currently only be used by IrTTY. To activate support for ACTiSYS
-  dongles you will have to insert "irattach -d actisys" or
-  "irattach -d actisys_plus" in the/etc/irda/drivers script.
+  dongles you will have to start irattach like this: 
+  "irattach -d actisys" or "irattach -d actisys+".
 
 Tekram IrMate 210B dongle
 CONFIG_TEKRAM_DONGLE
@@ -11850,7 +11848,7 @@ CONFIG_TEKRAM_DONGLE
   and read Documentation/modules.txt. The Tekram dongle attaches to
   the normal 9-pin serial port connector, and can currently only be
   used by IrTTY. To activate support for Tekram dongles you will have
-  to insert "irattach -d tekram" in the /etc/irda/drivers script.
+  to start irattach like this: "irattach -d tekram".
 
 Greenwich GIrBIL dongle
 CONFIG_GIRBIL_DONGLE
@@ -11868,7 +11866,19 @@ CONFIG_LITELINK_DONGLE
   Documentation/modules.txt. The Parallax dongle attaches to the
   normal 9-pin serial port connector, and can currently only be used
   by IrTTY. To activate support for Parallax dongles you will have to
-  insert "irattach -d litelink" in the /etc/irda/drivers script.
+  start irattach like this "irattach -d litelink".
+
+Old Belking dongle
+CONFIG_OLD_BELKING_DONGLE
+  Say Y here if you want to build support for the old Belkin SmartBeam
+  dongle. If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. The Belkin SmartBeam dongle (F5F500) come 
+  in two variants. The only way to distinguish those is to open the 
+  dongle and check the presence of a jumper (the jumper, on the new 
+  dongle, toggle between IrDA and ASK modes). This driver only support 
+  the old dongle. The old dongle is also limited to 9600 b/s (which is 
+  not very fun). To activate support for old Belkin dongles you will 
+  have to start irattach like this: "irattach -d old_dongle".
 
 VME (Motorola and BVM) support
 CONFIG_VME
@@ -12268,6 +12278,6 @@ CONFIG_PHONE_IXJ
 # LocalWords:  ACTiSYS Dongle dongle dongles esi actisys IrMate tekram BVM MVME
 # LocalWords:  BVME BVME WRITETHROUGH copyback writethrough fwmark syncookie tu
 # LocalWords:  alphalinux GOBIOS csn chemnitz nat ACARD AMI MegaRAID megaraid
-# LocalWords:  QNXFS ISI isicom xterms Apollos VPN RCPCI rcpci sgi visws pcmcia
+# LocalWords:  QNX4FS ISI isicom xterms Apollos VPN RCPCI rcpci sgi visws pcmcia
 # LocalWords:  IrLPT UIRCC Tecra
 

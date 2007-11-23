@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      girbil.c
- * Version:       1.1
+ * Version:       1.2
  * Description:   Implementation for the Greenwich GIrBIL dongle
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Feb  6 21:02:33 1999
- * Modified at:   Tue Jun  1 08:47:41 1999
+ * Modified at:   Fri Dec 17 09:13:20 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -32,13 +32,11 @@
 #include <net/irda/irmod.h>
 #include <net/irda/irda_device.h>
 #include <net/irda/irtty.h>
-#include <net/irda/dongle.h>
 
-static void girbil_reset(struct irda_device *dev);
-static void girbil_open(struct irda_device *dev, int type);
-static void girbil_close(struct irda_device *dev);
-static void girbil_change_speed(struct irda_device *dev, int baud);
-static void girbil_init_qos(struct irda_device *idev, struct qos_info *qos);
+static int  girbil_reset(struct irda_task *task);
+static void girbil_open(dongle_t *self, struct qos_info *qos);
+static void girbil_close(dongle_t *self);
+static int  girbil_change_speed(struct irda_task *task);
 
 /* Control register 1 */
 #define GIRBIL_TXEN    0x01 /* Enable transmitter */
@@ -67,16 +65,16 @@ static void girbil_init_qos(struct irda_device *idev, struct qos_info *qos);
 /* Control register 2 (0x5) */
 #define GIRBIL_LOAD    0x51 /* Load the new baud rate value */
 
-static struct dongle dongle = {
-	GIRBIL_DONGLE,
+static struct dongle_reg dongle = {
+	Q_NULL,
+	IRDA_GIRBIL_DONGLE,
 	girbil_open,
 	girbil_close,
 	girbil_reset,
 	girbil_change_speed,
-	girbil_init_qos,
 };
 
-__initfunc(int girbil_init(void))
+int __init girbil_init(void)
 {
 	return irda_device_register_dongle(&dongle);
 }
@@ -86,20 +84,18 @@ void girbil_cleanup(void)
 	irda_device_unregister_dongle(&dongle);
 }
 
-static void girbil_open(struct irda_device *idev, int type)
+static void girbil_open(dongle_t *self, struct qos_info *qos)
 {
-	strcat(idev->description, " <-> girbil");
+	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
+	qos->min_turn_time.bits = 0x03;
 
-	idev->io.dongle_id = type;
-	idev->flags |= IFF_DONGLE;
-	
 	MOD_INC_USE_COUNT;
 }
 
-static void girbil_close(struct irda_device *idev)
+static void girbil_close(dongle_t *self)
 {
 	/* Power off dongle */
-	irda_device_set_dtr_rts(idev, FALSE, FALSE);
+	self->set_dtr_rts(self->dev, FALSE, FALSE);
 
 	MOD_DEC_USE_COUNT;
 }
@@ -107,108 +103,135 @@ static void girbil_close(struct irda_device *idev)
 /*
  * Function girbil_change_speed (dev, speed)
  *
- *    Set the speed for the Girbil type dongle. Warning, this 
- *    function must be called with a process context!
+ *    Set the speed for the Girbil type dongle.
  *
  */
-static void girbil_change_speed(struct irda_device *idev, int speed)
+static int girbil_change_speed(struct irda_task *task)
 {
+	dongle_t *self = (dongle_t *) task->instance;
+	__u32 speed = (__u32) task->param;
 	__u8 control[2];
-	
-	ASSERT(idev != NULL, return;);
-	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
-	
-	switch (speed) {
-	case 9600:
+	int ret = 0;
+
+	self->speed_task = task;
+
+	switch (task->state) {
+	case IRDA_TASK_INIT:
+		/* Need to reset the dongle and go to 9600 bps before
+                   programming */
+		if (irda_task_execute(self, girbil_reset, NULL, task, 
+				      (void *) speed))
+		{
+			/* Dongle need more time to reset */
+			irda_task_next_state(task, IRDA_TASK_CHILD_WAIT);
+
+			/* Give reset 1 sec to finish */
+			ret = MSECS_TO_JIFFIES(1000);
+		}
+		break;
+	case IRDA_TASK_CHILD_WAIT:
+		WARNING(__FUNCTION__ "(), resetting dongle timed out!\n");
+		ret = -1;
+		break;
+	case IRDA_TASK_CHILD_DONE:
+		/* Set DTR and Clear RTS to enter command mode */
+		self->set_dtr_rts(self->dev, FALSE, TRUE);
+
+		switch (speed) {
+		case 9600:
+		default:
+			control[0] = GIRBIL_9600;
+			break;
+		case 19200:
+			control[0] = GIRBIL_19200;
+			break;
+		case 34800:
+			control[0] = GIRBIL_38400;
+			break;
+		case 57600:
+			control[0] = GIRBIL_57600;
+			break;
+		case 115200:
+			control[0] = GIRBIL_115200;
+			break;
+		}
+		control[1] = GIRBIL_LOAD;
+		
+		/* Write control bytes */
+		self->write(self->dev, control, 2);
+		irda_task_next_state(task, IRDA_TASK_WAIT);
+		ret = MSECS_TO_JIFFIES(100);
+		break;
+	case IRDA_TASK_WAIT:
+		/* Go back to normal mode */
+		self->set_dtr_rts(self->dev, TRUE, TRUE);
+		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->speed_task = NULL;
+		break;
 	default:
-		control[0] = GIRBIL_9600;
-		break;
-	case 19200:
-		control[0] = GIRBIL_19200;
-		break;
-	case 34800:
-		control[0] = GIRBIL_38400;
-		break;
-	case 57600:
-		control[0] = GIRBIL_57600;
-		break;
-	case 115200:
-		control[0] = GIRBIL_115200;
+		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
+		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->speed_task = NULL;
+		ret = -1;
 		break;
 	}
-	control[1] = GIRBIL_LOAD;
-
-	/* Set DTR and Clear RTS to enter command mode */
-	irda_device_set_dtr_rts(idev, FALSE, TRUE);
-
-	/* Write control bytes */
-	irda_device_raw_write(idev, control, 2);
-
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(2);
-	
-	/* Go back to normal mode */
-	irda_device_set_dtr_rts(idev, TRUE, TRUE);
+	return ret;
 }
 
 /*
  * Function girbil_reset (driver)
  *
- *      This function resets the girbil dongle. Warning, this function 
- *      must be called with a process context!! 
+ *      This function resets the girbil dongle.
  *
  *      Algorithm:
  *    	  0. set RTS, and wait at least 5 ms 
  *        1. clear RTS 
  */
-void girbil_reset(struct irda_device *idev)
+static int girbil_reset(struct irda_task *task)
 {
+	dongle_t *self = (dongle_t *) task->instance;
 	__u8 control = GIRBIL_TXEN | GIRBIL_RXEN;
+	int ret = 0;
 
-	ASSERT(idev != NULL, return;);
-	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
-	
-	/* Reset dongle */
-	irda_device_set_dtr_rts(idev, TRUE, FALSE);
+	self->reset_task = task;
 
-	/* Sleep at least 5 ms */
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(20));
-	
-	/* Set DTR and clear RTS to enter command mode */
-	irda_device_set_dtr_rts(idev, FALSE, TRUE);
-
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(20));
-
-	/* Write control byte */
-	irda_device_raw_write(idev, &control, 1);
-
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(20));
-
-	/* Go back to normal mode */
-	irda_device_set_dtr_rts(idev, TRUE, TRUE);
-
-       	/* Make sure the IrDA chip also goes to defalt speed */
-	if (idev->change_speed)
-		idev->change_speed(idev, 9600);
-}
-
-/*
- * Function girbil_init_qos (qos)
- *
- *    Initialize QoS capabilities
- *
- */
-static void girbil_init_qos(struct irda_device *idev, struct qos_info *qos)
-{
-	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
-	qos->min_turn_time.bits &= 0x03;
+	switch (task->state) {
+	case IRDA_TASK_INIT:
+		/* Reset dongle */
+		self->set_dtr_rts(self->dev, TRUE, FALSE);
+		irda_task_next_state(task, IRDA_TASK_WAIT1);
+		/* Sleep at least 5 ms */
+		ret = MSECS_TO_JIFFIES(10);
+		break;
+	case IRDA_TASK_WAIT1:
+		/* Set DTR and clear RTS to enter command mode */
+		self->set_dtr_rts(self->dev, FALSE, TRUE);
+		irda_task_next_state(task, IRDA_TASK_WAIT2);
+		ret = MSECS_TO_JIFFIES(10);
+		break;
+	case IRDA_TASK_WAIT2:
+		/* Write control byte */
+		self->write(self->dev, &control, 1);
+		irda_task_next_state(task, IRDA_TASK_WAIT3);
+		ret = MSECS_TO_JIFFIES(20);
+		break;
+	case IRDA_TASK_WAIT3:
+		/* Go back to normal mode */
+		self->set_dtr_rts(self->dev, TRUE, TRUE);
+		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->reset_task = NULL;
+		break;
+	default:
+		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
+		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->reset_task = NULL;
+		ret = -1;
+		break;
+	}
+	return ret;
 }
 
 #ifdef MODULE
-
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");
 MODULE_DESCRIPTION("Greenwich GIrBIL dongle driver");
 	
@@ -233,5 +256,4 @@ void cleanup_module(void)
 {
         girbil_cleanup();
 }
-
 #endif /* MODULE */

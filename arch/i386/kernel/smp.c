@@ -795,6 +795,208 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 	return memory_start;
 }
 
+#ifdef CONFIG_X86_TSC
+/*
+ * TSC synchronization.
+ *
+ * We first check wether all CPUs have their TSC's synchronized,
+ * then we print a warning if not, and always resync.
+ */
+
+static atomic_t tsc_start_flag = ATOMIC_INIT(0);
+static atomic_t tsc_count_start = ATOMIC_INIT(0);
+static atomic_t tsc_count_stop = ATOMIC_INIT(0);
+static unsigned long long tsc_values[NR_CPUS] = { 0, };
+
+#define NR_LOOPS 5
+
+extern unsigned long fast_gettimeoffset_quotient;
+
+/*
+ * accurate 64-bit division, expanded to 32-bit divisions. Not terribly
+ * optimized but we need it at boot time only anyway.
+ *
+ * result == a / b
+ *        == (a1 + a2*(2^32)) / b
+ *        == a1/b + a2*(2^32/b)
+ *        == a1/b + a2*((2^32-1)/b) + a2/b + (a2*((2^32-1) % b))/b
+ *                    ^---- (this multiplication can overflow)
+ */
+
+unsigned long long div64 (unsigned long long a, unsigned long long b)
+{
+	unsigned int a1, a2, b0;
+	unsigned long long res;
+
+	if (b > 0x00000000ffffffffULL)
+		return 0;
+	if (!b)
+		panic("huh?\n");
+
+	b0 = (unsigned int) b;
+	a1 = ((unsigned int*)&a)[0];
+	a2 = ((unsigned int*)&a)[1];
+
+	res = a1/b0 +
+		(unsigned long long)a2 * (unsigned long long)(0xffffffff/b0) +
+		a2 / b0 +
+		(a2 * (0xffffffff % b0)) / b0;
+
+        return res;
+}
+
+
+static void __init synchronize_tsc_bp (void)
+{
+	int i;
+	unsigned long long t0;
+	unsigned long long sum, avg;
+	long long delta;
+	unsigned long one_usec;
+	int buggy = 0;
+
+	printk("checking TSC synchronization across CPUs: ");
+
+	one_usec = ((1<<30)/fast_gettimeoffset_quotient)*(1<<2);
+	
+	atomic_set(&tsc_start_flag, 1);
+	wmb();
+
+	/*
+	 * We loop a few times to get a primed instruction cache,
+	 * then the last pass is more or less synchronized and
+	 * the BP and APs set their cycle counters to zero all at
+	 * once. This reduces the chance of having random offsets
+	 * between the processors, and guarantees that the maximum
+	 * delay between the cycle counters is never bigger than
+	 * the latency of information-passing (cachelines) between
+	 * two CPUs.
+	 */
+	for (i = 0; i < NR_LOOPS; i++) {
+		/*
+		 * all APs synchronize but they loop on '== num_cpus'
+		 */
+		while (atomic_read(&tsc_count_start) != smp_num_cpus-1) mb();
+		atomic_set(&tsc_count_stop, 0);
+		wmb();
+		/*
+		 * this lets the APs save their current TSC:
+		 */
+		atomic_inc(&tsc_count_start);
+
+		rdtscll(tsc_values[smp_processor_id()]);
+		/*
+		 * We clear the TSC in the last loop:
+		 */
+		if (i == NR_LOOPS-1)
+			CLEAR_TSC;
+
+		/*
+		 * Wait for all APs to leave the synchronization point:
+		 */
+		while (atomic_read(&tsc_count_stop) != smp_num_cpus-1) mb();
+		atomic_set(&tsc_count_start, 0);
+		wmb();
+		atomic_inc(&tsc_count_stop);
+	}
+
+	sum = 0;
+	for (i = 0; i < NR_CPUS; i++) {
+		if (!(cpu_online_map & (1 << i)))
+			continue;
+
+		t0 = tsc_values[i];
+		sum += t0;
+	}
+	avg = div64(sum, smp_num_cpus);
+
+	sum = 0;
+	for (i = 0; i < NR_CPUS; i++) {
+		if (!(cpu_online_map & (1 << i)))
+			continue;
+
+		delta = tsc_values[i] - avg;
+		if (delta < 0)
+			delta = -delta;
+		/*
+		 * We report bigger than 2 microseconds clock differences.
+		 */
+		if (delta > 2*one_usec) {
+			long realdelta;
+			if (!buggy) {
+				buggy = 1;
+				printk("\n");
+			}
+			realdelta = div64(delta, one_usec);
+			if (tsc_values[i] < avg)
+				realdelta = -realdelta;
+		
+			printk("BIOS BUG: CPU#%d improperly initialized, has %ld usecs TSC skew! FIXED.\n",
+				i, realdelta);
+		}
+				
+		sum += delta;
+	}
+	if (!buggy)
+		printk("passed.\n");
+
+#if 0
+	printk("CPU%d read locks\n", smp_processor_id());
+	read_lock_irq(&tasklist_lock);
+
+	printk("CPU%d delays 2 secs\n", smp_processor_id());
+	mdelay(1000);
+
+	printk("CPU%d does IRQ0 ...\n", smp_processor_id());
+	asm volatile ("int $0x51");
+
+	printk("CPU%d back from IRQ0 ???\n", smp_processor_id());
+	read_unlock(&tasklist_lock);
+#endif
+}
+
+static void __init synchronize_tsc_ap (void)
+{
+	int i;
+
+	/*
+	 * smp_num_cpus is not necessarily known at the time
+	 * this gets called, so we first wait for the BP to
+	 * finish SMP initialization:
+	 */
+	while (!atomic_read(&tsc_start_flag)) mb();
+
+	for (i = 0; i < NR_LOOPS; i++) {
+		atomic_inc(&tsc_count_start);
+		while (atomic_read(&tsc_count_start) != smp_num_cpus) mb();
+
+		rdtscll(tsc_values[smp_processor_id()]);
+		if (i == NR_LOOPS-1)
+			CLEAR_TSC;
+
+		atomic_inc(&tsc_count_stop);
+		while (atomic_read(&tsc_count_stop) != smp_num_cpus) mb();
+	}
+
+#if 0
+	printk("CPU%d clis\n", smp_processor_id());
+	cli();
+
+	printk("CPU%d delays 4 secs\n", smp_processor_id());
+	mdelay(4000);
+
+	printk("CPU%d does write_lock ...\n", smp_processor_id());
+	write_lock_irq(&tasklist_lock);
+
+	printk("CPU%d back from write lock???\n", smp_processor_id());
+	write_unlock_irq(&tasklist_lock);
+	sti();
+#endif
+}
+#undef NR_LOOPS
+
+#endif
+
 extern void calibrate_delay(void);
 
 void __init smp_callin(void)
@@ -880,6 +1082,13 @@ void __init smp_callin(void)
 	 *	Allow the master to continue.
 	 */
 	set_bit(cpuid, (unsigned long *)&cpu_callin_map[0]);
+
+#ifdef CONFIG_X86_TSC
+	/*
+	 *	Synchronize the TSC with the BP
+	 */
+ 	synchronize_tsc_ap ();
+#endif
 }
 
 int cpucount = 0;
@@ -1401,7 +1610,9 @@ void __init smp_boot_cpus(void)
 		printk(KERN_WARNING "WARNING: SMP operation may be unreliable with B stepping processors.\n");
 	SMP_PRINTK(("Boot done.\n"));
 
+	ack_APIC_irq();
 	cache_APIC_registers();
+	ack_APIC_irq();
 #ifndef CONFIG_VISWS
 	/*
 	 * Here we can be sure that there is an IO-APIC in the system. Let's
@@ -1412,8 +1623,15 @@ void __init smp_boot_cpus(void)
 #endif
 
 smp_done:
-}
 
+#ifdef CONFIG_X86_TSC
+	/*
+	 * Synchronize the TSC with the AP
+	 */
+	if (cpucount)
+	 	synchronize_tsc_bp();
+#endif
+}
 
 /*
  * the following functions deal with sending IPIs between CPUs.

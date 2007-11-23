@@ -1432,6 +1432,10 @@ static void __init do_basic_setup(void)
 	/* .. filesystems .. */
 	filesystem_setup();
 
+#ifdef CONFIG_IRDA
+	irda_device_init(); /* Must be done after protocol initialization */
+#endif
+
 	/* Mount the root filesystem.. */
 	mount_root();
 

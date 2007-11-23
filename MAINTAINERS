@@ -694,6 +694,13 @@ M:	longyear@pobox.com
 L:	linux-ppp@vger.rutgers.edu
 S:	Maintained
 
+QNX4 FILESYSTEM
+P:	Anders Larsen
+M:	al@alarsen.net
+L:	linux-kernel@vger.rutgers.edu
+W:	http://www.alarsen.net/linux/qnx4fs/
+S:	Maintained
+
 REAL TIME CLOCK DRIVER
 P:	Paul Gortmaker
 M:	p_gortmaker@yahoo.com

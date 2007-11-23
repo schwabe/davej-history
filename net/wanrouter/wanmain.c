@@ -118,6 +118,7 @@ int wanrouter_init(void)
 {
 	int err;
 	extern void wanpipe_init(void);
+	extern void wanpipe_init2(void);
 
 	printk(KERN_INFO "%s v%u.%u %s\n",
 		fullname, ROUTER_VERSION, ROUTER_RELEASE, copyright);
@@ -132,6 +133,7 @@ int wanrouter_init(void)
 
 #ifdef CONFIG_VENDOR_SANGOMA
 	wanpipe_init();
+	wanpipe_init2();
 #endif	
  
 	return err;

@@ -150,8 +150,10 @@ no_context:
 	if ((fixup = search_exception_table(regs->pc)) != 0) {
 		unsigned long newpc;
 		newpc = fixup_exception(dpf_reg, fixup, regs->pc);
+#if 0
 		printk("%s: Exception at [<%lx>] (%lx)\n",
 		       current->comm, regs->pc, newpc);
+#endif
 		regs->pc = newpc;
 		goto out_unlock;
 	}

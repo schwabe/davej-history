@@ -270,7 +270,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.21"
+#define AIC7XXX_C_VERSION  "5.1.23"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -5141,7 +5141,7 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
         else if (scb->flags & SCB_MSGOUT_PPR)
         {
           unsigned int max_sync, period;
-          unsigned char options = p->transinfo[tindex].goal_options;
+          unsigned char options = 0;
 
           if (p->features & AHC_ULTRA2)
           {
@@ -5152,9 +5152,10 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
                   (p->dev_flags[tindex] & DEVICE_SCSI_3) &&
                   (p->transinfo[tindex].goal_width ==
                    MSG_EXT_WDTR_BUS_16_BIT) &&
-                  (options != 0) )
+                  (p->transinfo[tindex].goal_options != 0) )
               {
                 max_sync = AHC_SYNCRATE_ULTRA3;
+                options = p->transinfo[tindex].goal_options;
               }
               else
               {
@@ -5657,16 +5658,6 @@ aic7xxx_parse_msg(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
         struct aic7xxx_syncrate *syncrate;
         
         if (p->msg_buf[1] != MSG_EXT_PPR_LEN)
-        {
-          reject = TRUE;
-          break;
-        }
-
-        /*
-         * If we aren't on one of the new Ultra3 cards, then reject any PPR
-         * message since we can't support any option field other than 0
-         */
-        if( !(p->features & AHC_ULTRA3) )
         {
           reject = TRUE;
           break;
@@ -7329,10 +7320,16 @@ read_seeprom(struct aic7xxx_host *p, int offset,
   };
   struct seeprom_cmd seeprom_read = {3, {1, 1, 0}};
 
-#define CLOCK_PULSE(p) \
-  while ((aic_inb(p, SEECTL) & SEERDY) == 0)        \
-  {                                                \
-    ;  /* Do nothing */                                \
+#define CLOCK_PULSE(p)                                               \
+  {                                                                  \
+    int limit = 0;                                                   \
+    while (((aic_inb(p, SEECTL) & SEERDY) == 0) && (++limit < 1000)) \
+    {                                                                \
+      mb();                                                          \
+      pause_sequencer(p);  /* This is just to generate some PCI */   \
+                           /* so the PCI read is flushed */          \
+      udelay(10);  /* Do nothing */                                  \
+    }                                                                \
   }
 
   /*
@@ -8664,15 +8661,15 @@ aic7xxx_load_seeprom(struct aic7xxx_host *p, unsigned char *sxfrctl1)
       if (!have_seeprom)
       {
         p->sc_size = 128;
-        have_seeprom = read_seeprom(p, (p->flags & (AHC_CHNLB|AHC_CHNLC)),
+        have_seeprom = read_seeprom(p, 4*(p->flags & (AHC_CHNLB|AHC_CHNLC)),
                                     scarray, p->sc_size, p->sc_type);
         if (!have_seeprom)
         {
           if(p->sc_type == C46)
-            have_seeprom = read_seeprom(p, (p->flags & (AHC_CHNLB|AHC_CHNLC)),
+            have_seeprom = read_seeprom(p, 4*(p->flags & (AHC_CHNLB|AHC_CHNLC)),
                                         scarray, p->sc_size, C56_66);
           else
-            have_seeprom = read_seeprom(p, (p->flags & (AHC_CHNLB|AHC_CHNLC)),
+            have_seeprom = read_seeprom(p, 4*(p->flags & (AHC_CHNLB|AHC_CHNLC)),
                                         scarray, p->sc_size, C46);
         }
       }

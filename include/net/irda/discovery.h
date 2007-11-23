@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr  6 16:53:53 1999
- * Modified at:   Thu Apr 22 11:04:56 1999
+ * Modified at:   Tue Oct  5 10:05:10 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -39,28 +39,30 @@
 #define DISCOVERY_EXPIRE_TIMEOUT 6*HZ
 #define DISCOVERY_DEFAULT_SLOTS  0
 
+#define NICKNAME_MAX_LEN 21
+
 /*
  * The DISCOVERY structure is used for both discovery requests and responses
  */
 typedef struct {
-	QUEUE queue;             /* Must be first! */
+	queue_t q;               /* Must be first! */
 
 	__u32      saddr;        /* Which link the device was discovered */
 	__u32      daddr;        /* Remote device address */
 	LAP_REASON condition;    /* More info about the discovery */
 
 	__u16_host_order hints;  /* Discovery hint bits */
-	__u8       charset;
-	char       info[32];     /* Usually the name of the device */
-	__u8       info_len;     /* Length of device info field */
+	__u8       charset;      /* Encoding of nickname */
+	char       nickname[22]; /* The name of the device (21 bytes + \0) */
+	int        name_len;     /* Lenght of nickname */
 
 	int        gen_addr_bit; /* Need to generate a new device address? */
 	int        nslots;       /* Number of slots to use when discovering */
-	int        timestamp;    /* Time discovered */
+	unsigned long timestamp; /* Time discovered */
 } discovery_t;
 
 void irlmp_add_discovery(hashbin_t *cachelog, discovery_t *discovery);
 void irlmp_add_discovery_log(hashbin_t *cachelog, hashbin_t *log);
-void irlmp_expire_discoveries(hashbin_t *log, int saddr, int force);
+void irlmp_expire_discoveries(hashbin_t *log, __u32 saddr, int force);
 
 #endif

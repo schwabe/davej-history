@@ -54,7 +54,6 @@
 #include <linux/malloc.h>
 #include <linux/vmalloc.h> 
 #include <linux/errno.h>
-#include <linux/sched.h>	/* to get the struct task_struct */
 #include <linux/string.h>	/* used in new tty drivers */
 #include <linux/signal.h>	/* used in new tty drivers */
 
@@ -595,7 +594,7 @@ static struct compressor irda_deflate_draft = {
 	z_comp_stats,		/* decomp_stat */
 };
 
-__initfunc(int irda_deflate_init(void))
+int __init irda_deflate_init(void)
 {
         int answer = irda_register_compressor ( &irda_deflate);
         if (answer == 0)

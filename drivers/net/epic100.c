@@ -135,8 +135,14 @@ IVc. Errata
 /* The rest of these values should never change. */
 
 static struct device *epic_probe1(int pci_bus, int pci_devfn,
+
 								  struct device *dev, long ioaddr, int irq,
 								  int chip_id, int card_idx);
+								  
+/* For 2.2 resource management we are kind of stuck with this */
+#define USE_IO
+
+								  
 #ifdef USE_IO
 #define EPIC_USE_IO
 #define EPIC_IOTYPE PCI_USES_MASTER|PCI_USES_IO|PCI_ADDR0
