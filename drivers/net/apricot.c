@@ -147,14 +147,14 @@ struct i596_scp {
 };
 
 struct i596_private {
-    struct i596_scp scp;
-    struct i596_iscp iscp;
-    struct i596_scb scb;
-    struct i596_cmd set_add;
+    volatile struct i596_scp scp;
+    volatile struct i596_iscp iscp;
+    volatile struct i596_scb scb;
+    volatile struct i596_cmd set_add;
     char eth_addr[8];
-    struct i596_cmd set_conf;
+    volatile struct i596_cmd set_conf;
     char i596_config[16];
-    struct i596_cmd tdr;
+    volatile struct i596_cmd tdr;
     unsigned long stat;
     int last_restart;
     struct i596_rfd *rx_tail;

@@ -365,7 +365,7 @@ static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 	case LO_CRYPT_NONE:
 		break;
 	case LO_CRYPT_XOR:
-		if (info.lo_encrypt_key_size < 0)
+		if (info.lo_encrypt_key_size <= 0)
 			return -EINVAL;
 		break;
 #ifdef DES_AVAILABLE

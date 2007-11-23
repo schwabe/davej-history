@@ -660,7 +660,7 @@ void wd7000_setup (char *str, int *ints)
 	        configs[wd7000_card_num].bus_on = BUS_ON;
 	    }
 	    else
-	        configs[wd7000_card_num].bus_on = ints[4] / 125.0;
+	        configs[wd7000_card_num].bus_on = ints[4] / 125;
 	}
 	else
 	    configs[wd7000_card_num].bus_on = BUS_ON;
@@ -672,7 +672,7 @@ void wd7000_setup (char *str, int *ints)
 	        configs[wd7000_card_num].bus_off = BUS_OFF;
 	    }
 	    else
-	        configs[wd7000_card_num].bus_off = ints[5] / 125.0;
+	        configs[wd7000_card_num].bus_off = ints[5] / 125;
 	}
 	else
 	    configs[wd7000_card_num].bus_off = BUS_OFF;

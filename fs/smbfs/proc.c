@@ -1221,15 +1221,15 @@ smb_proc_readdir_long(struct smb_server *server, struct inode *dir, int fpos,
 			WSET(param, 10, 8 + 4 + 2);	/* resume required +
 							   close on end +
 							   continue */
-#ifdef CONFIG_SMB_WIN95
-			/* Windows 95 is not able to deliver answers
-			   to FIND_NEXT fast enough, so sleep 0.2 seconds */
-			current->timeout = jiffies + HZ / 5;
-			current->state = TASK_INTERRUPTIBLE;
-			schedule();
-			current->timeout = 0;
-#endif
 		}
+#ifdef CONFIG_SMB_WIN95
+		/* Windows 95 is not able to deliver answers
+		   to FIND_NEXT fast enough, so sleep 0.2 seconds */
+		current->timeout = jiffies + HZ / 5;
+		current->state = TASK_INTERRUPTIBLE;
+		schedule();
+		current->timeout = 0;
+#endif
 
 		result = smb_trans2_request(server, command,
 					    0, NULL, 12 + mask_len + 2, param,

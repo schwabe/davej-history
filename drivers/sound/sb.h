@@ -1,3 +1,7 @@
+#include <linux/config.h>
+#include "legacy.h"
+
+#ifdef CONFIG_SBDSP
 #define DSP_RESET	(devc->base + 0x6)
 #define DSP_READ	(devc->base + 0xA)
 #define DSP_WRITE	(devc->base + 0xC)
@@ -36,11 +40,16 @@
 #define MDL_SB201	3	/* SB2.01 */
 #define MDL_SBPRO	4	/* SB Pro */
 #define MDL_SB16	5	/* SB16/32/AWE */
+#define MDL_SBPNP 	6	/* SB16/32/AWE PnP */
 #define MDL_JAZZ	10	/* Media Vision Jazz16 */
 #define MDL_SMW		11	/* Logitech SoundMan Wave (Jazz16) */
 #define MDL_ESS		12	/* ESS ES688 and ES1688 */
 #define MDL_AZTECH	13	/* Aztech Sound Galaxy family */
+#define MDL_ES1868MIDI	14	/* MIDI port of ESS1868 */
+#define MDL_AEDSP	15	/* Audio Excel DSP 16 */
 
+#define SUBMDL_ALS007	42	/* ALS-007 differs from SB16 only in mixer */
+				/* register assignment */
 /*
  * Config flags
  */
@@ -83,11 +92,12 @@ typedef struct sb_devc {
 	   volatile int intr_active, irq_mode;
 
 	/* Mixer fields */
-	   unsigned short levels[SOUND_MIXER_NRDEVICES];
+	   int *levels;
 	   mixer_tab *iomap;
 	   int mixer_caps, recmask, supported_devices;
 	   int supported_rec_devices;
 	   int my_mixerdev;
+	   int sbmixnum;
 
 	/* Audio fields */
 	   unsigned long trg_buf;
@@ -101,11 +111,12 @@ typedef struct sb_devc {
 	/* MIDI fields */
 	   int my_mididev;
 	   int input_opened;
+	   int midi_broken;
 	   void (*midi_input_intr) (int dev, unsigned char data);
+	   void *midi_irq_cookie;	/* IRQ cookie for the midi */
 	} sb_devc;
 
 int sb_dsp_command (sb_devc *devc, unsigned char val);
-int sb_dsp_get_byte (sb_devc *devc);
 int sb_dsp_reset (sb_devc *devc);
 void sb_setmixer (sb_devc *devc, unsigned int port, unsigned int value);
 unsigned int sb_getmixer (sb_devc *devc, unsigned int port);
@@ -113,9 +124,14 @@ int sb_dsp_detect (struct address_info *hw_config);
 void sb_dsp_init (struct address_info *hw_config);
 void sb_dsp_unload(struct address_info *hw_config);
 int sb_mixer_init(sb_devc *devc);
+void sb_mixer_set_stereo (sb_devc *devc, int mode);
 void smw_mixer_init(sb_devc *devc);
 void sb_dsp_midi_init (sb_devc *devc);
 void sb_audio_init (sb_devc *devc, char *name);
 void sb_midi_interrupt (sb_devc *devc);
 int ess_write (sb_devc *devc, unsigned char reg, unsigned char data);
 int ess_read (sb_devc *devc, unsigned char reg);
+
+extern int acer;
+extern sb_devc *last_sb;
+#endif

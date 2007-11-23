@@ -552,6 +552,7 @@ extern int unregister_filesystem(struct file_system_type *);
 
 asmlinkage int sys_open(const char *, int, int);
 asmlinkage int sys_close(unsigned int);		/* yes, it's really unsigned */
+asmlinkage int sys_read(unsigned int, char *, int);
 
 extern void kill_fasync(struct fasync_struct *fa, int sig);
 

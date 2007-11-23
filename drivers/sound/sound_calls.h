@@ -5,72 +5,76 @@
 int DMAbuf_open(int dev, int mode);
 int DMAbuf_release(int dev, int mode);
 int DMAbuf_getwrbuffer(int dev, char **buf, int *size, int dontblock);
-int DMAbuf_get_curr_buffer(int dev, int *buff_no, char **dma_buf, int *buff_ptr, int *buff_size);
 int DMAbuf_getrdbuffer(int dev, char **buf, int *len, int dontblock);
 int DMAbuf_rmchars(int dev, int buff_no, int c);
 int DMAbuf_start_output(int dev, int buff_no, int l);
-int DMAbuf_set_count(int dev, int buff_no, int l);
-int DMAbuf_ioctl(int dev, unsigned int cmd, caddr_t arg, int local);
-void DMAbuf_init(void);
+int DMAbuf_move_wrpointer(int dev, int l);
+/* int DMAbuf_ioctl(int dev, unsigned int cmd, caddr_t arg, int local); */
+void DMAbuf_init(int dev, int dma1, int dma2);
+void DMAbuf_deinit(int dev);
 int DMAbuf_start_dma (int dev, unsigned long physaddr, int count, int dma_mode);
 int DMAbuf_open_dma (int dev);
 void DMAbuf_close_dma (int dev);
-void DMAbuf_reset_dma (int dev);
 void DMAbuf_inputintr(int dev);
 void DMAbuf_outputintr(int dev, int underflow_flag);
-int DMAbuf_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
+struct dma_buffparms;
+int DMAbuf_space_in_queue (int dev);
+int DMAbuf_activate_recording (int dev, struct dma_buffparms *dmap);
+int DMAbuf_get_buffer_pointer (int dev, struct dma_buffparms *dmap, int direction);
+void DMAbuf_launch_output(int dev, struct dma_buffparms *dmap);
+unsigned int DMAbuf_select(struct file *file, int dev, int sel_type, select_table *wait);
 void DMAbuf_start_devices(unsigned int devmask);
+void DMAbuf_reset (int dev);
+int DMAbuf_sync (int dev);
 
 /*
- *	System calls for /dev/dsp and /dev/audio
+ *	System calls for /dev/dsp and /dev/audio (audio.c)
  */
 
-int audio_read (int dev, struct fileinfo *file, char *buf, int count);
-int audio_write (int dev, struct fileinfo *file, const char *buf, int count);
-int audio_open (int dev, struct fileinfo *file);
-void audio_release (int dev, struct fileinfo *file);
-int audio_ioctl (int dev, struct fileinfo *file,
+int audio_read (int dev, struct file *file, char *buf, int count);
+int audio_write (int dev, struct file *file, const char *buf, int count);
+int audio_open (int dev, struct file *file);
+void audio_release (int dev, struct file *file);
+int audio_ioctl (int dev, struct file *file,
 	   unsigned int cmd, caddr_t arg);
-int audio_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
-void audio_init (void);
-
-int audio_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
+void audio_init_devices (void);
+void reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording);
+int dma_ioctl (int dev, unsigned int cmd, caddr_t arg);
 
 /*
  *	System calls for the /dev/sequencer
  */
 
-int sequencer_read (int dev, struct fileinfo *file, char *buf, int count);
-int sequencer_write (int dev, struct fileinfo *file, const char *buf, int count);
-int sequencer_open (int dev, struct fileinfo *file);
-void sequencer_release (int dev, struct fileinfo *file);
-int sequencer_ioctl (int dev, struct fileinfo *file,
-	   unsigned int cmd, caddr_t arg);
-int sequencer_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
+int sequencer_read (int dev, struct file *file, char *buf, int count);
+int sequencer_write (int dev, struct file *file, const char *buf, int count);
+int sequencer_open (int dev, struct file *file);
+void sequencer_release (int dev, struct file *file);
+int sequencer_ioctl (int dev, struct file *file, unsigned int cmd, caddr_t arg);
+unsigned int sequencer_select(int dev, struct file *file, int sel_type, select_table * wait);
+
 void sequencer_init (void);
+void sequencer_unload (void);
 void sequencer_timer(unsigned long dummy);
 int note_to_freq(int note_num);
-unsigned long compute_finetune(unsigned long base_freq, int bend, int range);
+unsigned long compute_finetune(unsigned long base_freq, int bend, int range,
+			       int vibrato_bend);
 void seq_input_event(unsigned char *event, int len);
 void seq_copy_to_input (unsigned char *event, int len);
-
-int sequencer_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
 
 /*
  *	System calls for the /dev/midi
  */
 
-int MIDIbuf_read (int dev, struct fileinfo *file, char *buf, int count);
-int MIDIbuf_write (int dev, struct fileinfo *file, const char *buf, int count);
-int MIDIbuf_open (int dev, struct fileinfo *file);
-void MIDIbuf_release (int dev, struct fileinfo *file);
-int MIDIbuf_ioctl (int dev, struct fileinfo *file,
-	   unsigned int cmd, caddr_t arg);
-int MIDIbuf_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
+int MIDIbuf_read (int dev, struct file *file, char *buf, int count);
+int MIDIbuf_write (int dev, struct file *file, const char *buf, int count);
+int MIDIbuf_open (int dev, struct file *file);
+void MIDIbuf_release (int dev, struct file *file);
+int MIDIbuf_ioctl (int dev, struct file *file, unsigned int cmd, caddr_t arg);
+unsigned int MIDIbuf_select(int dev, struct file *file, int sel_type, select_table * wait);
+int MIDIbuf_avail(int dev);
+
 void MIDIbuf_bytes_received(int dev, unsigned char *buf, int count);
 void MIDIbuf_init(void);
-
-int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
 
 /*
  *
@@ -78,29 +82,14 @@ int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, select_table_ha
  */
 
 /*	From soundcard.c	*/
-void soundcard_init(void);
-void tenmicrosec(int *osp);
 void request_sound_timer (int count);
 void sound_stop_timer(void);
-int snd_ioctl_return(int *addr, int value);
-int snd_set_irq_handler (int interrupt_level, void(*iproc)(int, void*, struct pt_regs *), char *name, int *osp);
-void snd_release_irq(int vect);
-void sound_dma_malloc(int dev);
-void sound_dma_free(int dev);
 void conf_printf(char *name, struct address_info *hw_config);
 void conf_printf2(char *name, int base, int irq, int dma, int dma2);
 
-/*	From sound_switch.c	*/
-int sound_read_sw (int dev, struct fileinfo *file, char *buf, int count);
-int sound_write_sw (int dev, struct fileinfo *file, const char *buf, int count);
-int sound_open_sw (int dev, struct fileinfo *file);
-void sound_release_sw (int dev, struct fileinfo *file);
-int sound_ioctl_sw (int dev, struct fileinfo *file,
-	     unsigned int cmd, caddr_t arg);
-
 /*	From opl3.c	*/
 int opl3_detect (int ioaddr, int *osp);
-void opl3_init(int ioaddr, int *osp);
+int opl3_init(int ioaddr, int *osp);
 
 /*	From sb_card.c	*/
 void attach_sb_card(struct address_info *hw_config);
@@ -153,9 +142,8 @@ int probe_gus_db16(struct address_info *hw_config);
 /*	From gus_wave.c */
 int gus_wave_detect(int baseaddr);
 void gus_wave_init(struct address_info *hw_config);
-void gus_wave_unload (void);
+void gus_wave_unload (struct address_info *hw_config);
 void gus_voice_irq(void);
-unsigned char gus_read8 (int reg);
 void gus_write8(int reg, unsigned int data);
 void guswave_dma_irq(void);
 void gus_delay(void);
@@ -163,7 +151,7 @@ int gus_default_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg);
 void gus_timer_command (unsigned int addr, unsigned int val);
 
 /*	From gus_midi.c */
-void gus_midi_init(void);
+void gus_midi_init(struct address_info *hw_config);
 void gus_midi_interrupt(int dummy);
 
 /*	From mpu401.c */
@@ -178,36 +166,30 @@ int probe_uart6850(struct address_info *hw_config);
 /*	From opl3.c */
 void enable_opl3_mode(int left, int right, int both);
 
-/*	From patmgr.c */
-int pmgr_open(int dev);
-void pmgr_release(int dev);
-int pmgr_read (int dev, struct fileinfo *file, char * buf, int count);
-int pmgr_write (int dev, struct fileinfo *file, const char * buf, int count);
-int pmgr_access(int dev, struct patmgr_info *rec);
-int pmgr_inform(int dev, int event, unsigned long parm1, unsigned long parm2,
-				    unsigned long parm3, unsigned long parm4);
-
 /* 	From ics2101.c */
-void ics2101_mixer_init(void);
+int ics2101_mixer_init(void);
 
 /*	From sound_timer.c */
 void sound_timer_interrupt(void);
 void sound_timer_syncinterval(unsigned int new_usecs);
 
 /*	From ad1848.c */
-void ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture, int share_dma, int *osp);
+int ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture, int share_dma, int *osp);
 void ad1848_unload (int io_base, int irq, int dma_playback, int dma_capture, int share_dma);
 
 int ad1848_detect (int io_base, int *flags, int *osp);
 #define AD_F_CS4231	0x0001	/* Returned if a CS4232 (or compatible) detected */
 #define AD_F_CS4248	0x0001	/* Returned if a CS4248 (or compatible) detected */
 
-void     ad1848_interrupt (int irq, void *dev_id, struct pt_regs * dummy);
+int	 ad1848_control(int cmd, int arg);
+#define		AD1848_SET_XTAL		1
+#define		AD1848_MIXER_REROUTE	2
+#define AD1848_REROUTE(oldctl, newctl) \
+		ad1848_control(AD1848_MIXER_REROUTE, ((oldctl)<<8)|(newctl))
+
+void adintr(int irq, void *dev_id, struct pt_regs * dummy);
 void attach_ms_sound(struct address_info * hw_config);
 int probe_ms_sound(struct address_info *hw_config);
-void attach_pnp_ad1848(struct address_info * hw_config);
-int probe_pnp_ad1848(struct address_info *hw_config);
-void unload_pnp_ad1848(struct address_info *hw_info);
 
 /* 	From pss.c */
 int probe_pss (struct address_info *hw_config);
@@ -222,15 +204,6 @@ int probe_sscape (struct address_info *hw_config);
 void attach_sscape (struct address_info *hw_config);
 int probe_ss_ms_sound (struct address_info *hw_config);
 void attach_ss_ms_sound(struct address_info * hw_config);
-
-int pss_read (int dev, struct fileinfo *file, char *buf, int count);
-int pss_write (int dev, struct fileinfo *file, char *buf, int count);
-int pss_open (int dev, struct fileinfo *file);
-void pss_release (int dev, struct fileinfo *file);
-int pss_ioctl (int dev, struct fileinfo *file,
-	   unsigned int cmd, caddr_t arg);
-int pss_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
-void pss_init(void);
 
 /* From aedsp16.c */
 int InitAEDSP16_SBPRO(struct address_info *hw_config);
@@ -253,7 +226,6 @@ void attach_mad16 (struct address_info *hw_config);
 int probe_mad16 (struct address_info *hw_config);
 void attach_mad16_mpu (struct address_info *hw_config);
 int probe_mad16_mpu (struct address_info *hw_config);
-int mad16_sb_dsp_detect (struct address_info *hw_config);
 
 /*	Unload routines from various source files*/
 void unload_pss(struct address_info *hw_info);
@@ -291,6 +263,48 @@ void attach_cs4232_mpu (struct address_info *hw_config);
 void attach_maui(struct address_info * hw_config);
 int probe_maui(struct address_info *hw_config);
 
-/*	From sound_pnp.c */
-void sound_pnp_init(int *osp);
-void sound_pnp_disconnect(void);
+/*	From v_midi.c */
+void attach_v_midi (struct address_info *hw_config);
+int probe_v_midi (struct address_info *hw_config);
+void unload_v_midi (struct address_info *hw_config);
+
+/*	From vidc.c */
+void attach_vidc(struct address_info *hw_config);
+int probe_vidc(struct address_info *hw_config);
+void unload_vidc(struct address_info *hw_config);
+
+/*      From wavefront.c */
+void attach_wavefront (struct address_info *hw_config);
+int probe_wavefront (struct address_info *hw_config);
+void unload_wavefront (struct address_info *hw_config);
+
+/*      From wf_midi.c */
+void attach_wf_mpu(struct address_info * hw_config);
+int probe_wf_mpu(struct address_info *hw_config);
+void unload_wf_mpu(struct address_info *hw_config);
+int virtual_midi_enable (int mididev, struct address_info *);
+void virtual_midi_disable (int mididev);
+
+/*      From wavefront.c */
+void attach_wavefront (struct address_info *hw_config);
+int probe_wavefront (struct address_info *hw_config);
+void unload_wavefront (struct address_info *hw_config);
+
+/*      From wf_midi.c */
+void attach_wf_mpu(struct address_info * hw_config);
+int probe_wf_mpu(struct address_info *hw_config);
+void unload_wf_mpu(struct address_info *hw_config);
+int virtual_midi_enable (int mididev, struct address_info *);
+void virtual_midi_disable (int mididev);
+
+/*      From wavefront.c */
+void attach_wavefront (struct address_info *hw_config);
+int probe_wavefront (struct address_info *hw_config);
+void unload_wavefront (struct address_info *hw_config);
+
+/*      From wf_midi.c */
+void attach_wf_mpu(struct address_info * hw_config);
+int probe_wf_mpu(struct address_info *hw_config);
+void unload_wf_mpu(struct address_info *hw_config);
+int virtual_midi_enable (int mididev, struct address_info *);
+void virtual_midi_disable (int mididev);

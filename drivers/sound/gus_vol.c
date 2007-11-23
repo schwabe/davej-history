@@ -1,10 +1,11 @@
+
 /*
  * gus_vol.c - Compute volume for GUS.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -33,88 +34,91 @@ extern int      gus_wave_volume;
  * we can give a big boost to very weak voices like nylon guitar and the
  * basses.  The normal value is 64.  Strings are assigned lower values.
  */
-unsigned short
-gus_adagio_vol (int vel, int mainv, int xpn, int voicev)
+
+unsigned short gus_adagio_vol(int vel, int mainv, int xpn, int voicev)
 {
-  int             i, m, n, x;
+	int i, m, n, x;
 
 
-  /*
-   * A voice volume of 64 is considered neutral, so adjust the main volume if
-   * something other than this neutral value was assigned in the patch
-   * library.
-   */
-  x = 256 + 6 * (voicev - 64);
+	/*
+	 * A voice volume of 64 is considered neutral, so adjust the main volume if
+	 * something other than this neutral value was assigned in the patch
+	 * library.
+	 */
+	x = 256 + 6 * (voicev - 64);
 
-  /*
-   * Boost expression by voice volume above neutral.
-   */
-  if (voicev > 65)
-    xpn += voicev - 64;
-  xpn += (voicev - 64) / 2;
+	/*
+	 * Boost expression by voice volume above neutral.
+	 */
+	 
+	if (voicev > 65)
+		xpn += voicev - 64;
+	xpn += (voicev - 64) / 2;
 
-  /*
-   * Combine multiplicative and level components.
-   */
-  x = vel * xpn * 6 + (voicev / 4) * x;
+	/*
+	 * Combine multiplicative and level components.
+	 */
+	x = vel * xpn * 6 + (voicev / 4) * x;
 
 #ifdef GUS_VOLUME
-  /*
-   * Further adjustment by installation-specific master volume control
-   * (default 60).
-   */
-  x = (x * GUS_VOLUME * GUS_VOLUME) / 10000;
+	/*
+	 * Further adjustment by installation-specific master volume control
+	 * (default 60).
+	 */
+	x = (x * GUS_VOLUME * GUS_VOLUME) / 10000;
 #endif
 
 #ifdef GUS_USE_CHN_MAIN_VOLUME
-  /*
-   * Experimental support for the channel main volume
-   */
+	/*
+	 * Experimental support for the channel main volume
+	 */
 
-  mainv = (mainv / 2) + 64;	/* Scale to 64 to 127 */
-  x = (x * mainv * mainv) / 16384;
+	mainv = (mainv / 2) + 64;	/* Scale to 64 to 127 */
+	x = (x * mainv * mainv) / 16384;
 #endif
 
-  if (x < 2)
-    return (0);
-  else if (x >= 65535)
-    return ((15 << 8) | 255);
+	if (x < 2)
+		return (0);
+	else if (x >= 65535)
+		return ((15 << 8) | 255);
 
-  /*
-   * Convert to GUS's logarithmic form with 4 bit exponent i and 8 bit
-   * mantissa m.
-   */
-  n = x;
-  i = 7;
-  if (n < 128)
-    {
-      while (i > 0 && n < (1 << i))
-	i--;
-    }
-  else
-    while (n > 255)
-      {
-	n >>= 1;
-	i++;
-      }
-  /*
-   * Mantissa is part of linear volume not expressed in exponent.  (This is
-   * not quite like real logs -- I wonder if it's right.)
-   */
-  m = x - (1 << i);
+	/*
+	 * Convert to GUS's logarithmic form with 4 bit exponent i and 8 bit
+	 * mantissa m.
+	 */
+	 
+	n = x;
+	i = 7;
+	if (n < 128)
+	{
+		  while (i > 0 && n < (1 << i))
+			  i--;
+	}
+	else
+	{
+		while (n > 255)
+		{
+			  n >>= 1;
+			  i++;
+		}
+	}
+	/*
+	 * Mantissa is part of linear volume not expressed in exponent.  (This is
+	 * not quite like real logs -- I wonder if it's right.)
+	 */
+	m = x - (1 << i);
 
-  /*
-   * Adjust mantissa to 8 bits.
-   */
-  if (m > 0)
-    {
-      if (i > 8)
-	m >>= i - 8;
-      else if (i < 8)
-	m <<= 8 - i;
-    }
-
-  return ((i << 8) + m);
+	/*
+	 * Adjust mantissa to 8 bits.
+	 */
+	if (m > 0)
+	{
+		if (i > 8)
+			m >>= i - 8;
+		else if (i < 8)
+			m <<= 8 - i;
+	}
+	return ((i << 8) + m);
 }
 
 /*
@@ -123,32 +127,30 @@ gus_adagio_vol (int vel, int mainv, int xpn, int voicev)
  * and the volume set by the mixer-device (default 60%).
  */
 
-unsigned short
-gus_linear_vol (int vol, int mainvol)
+unsigned short gus_linear_vol(int vol, int mainvol)
 {
-  int             mixer_mainvol;
+	int mixer_mainvol;
 
-  if (vol <= 0)
-    vol = 0;
-  else if (vol >= 127)
-    vol = 127;
+	if (vol <= 0)
+		vol = 0;
+	else if (vol >= 127)
+		vol = 127;
 
 #ifdef GUS_VOLUME
-  mixer_mainvol = GUS_VOLUME;
+	mixer_mainvol = GUS_VOLUME;
 #else
-  mixer_mainvol = 100;
+	mixer_mainvol = 100;
 #endif
 
 #ifdef GUS_USE_CHN_MAIN_VOLUME
-  if (mainvol <= 0)
-    mainvol = 0;
-  else if (mainvol >= 127)
-    mainvol = 127;
+	if (mainvol <= 0)
+		mainvol = 0;
+	else if (mainvol >= 127)
+		mainvol = 127;
 #else
-  mainvol = 127;
+	mainvol = 127;
 #endif
-
-  return gus_linearvol[(((vol * mainvol) / 127) * mixer_mainvol) / 100];
+	return gus_linearvol[(((vol * mainvol) / 127) * mixer_mainvol) / 100];
 }
 
 #endif

@@ -373,6 +373,9 @@ struct symbol_table symbol_table = {
 	X(proc_dir_inode_operations),
 #endif
 
+	/* Modular sound */
+	X(sys_open),
+	X(sys_read),
 	/********************************************************
 	 * Do not add anything below this line,
 	 * as the stacked modules depend on this!

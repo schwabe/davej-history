@@ -1,27 +1,95 @@
 /* sound_config.h
  *
- * A driver for Soundcards, misc configuration parameters.
+ * A driver for sound cards, misc. configuration parameters.
  */
 /*
- * Copyright (C) by Hannu Savolainen 1993-1996
+ * Copyright (C) by Hannu Savolainen 1993-1997
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
 
 
-#include "local.h"
+#ifndef  _SOUND_CONFIG_H_
+#define  _SOUND_CONFIG_H_
+
+#include <linux/config.h>
+#include <linux/fs.h>
+#include <linux/sound.h>
+
+#include "legacy.h"
 #include "os.h"
 #include "soundvers.h"
 
-#if defined(ISC) || defined(SCO) || defined(SVR42)
-#define GENERIC_SYSV
-#endif
+/*
+ *	2.0 compatibility functions
+ */
+ 
+extern inline int copy_from_user(void *to, const void *from, int len)
+{
+	if(verify_area(VERIFY_READ, from , len))
+		return len;
+	memcpy_fromfs(to,from,len);
+	return 0;
+}
 
+extern inline int copy_to_user(void *to, const void *from, int len)
+{
+	if(verify_area(VERIFY_WRITE, to , len))
+		return len;
+	memcpy_tofs(to,from,len);
+	return 0;
+}
 
+#define __copy_from_user	copy_from_user
+#define __copy_to_user		copy_to_user
 
+extern inline int access_ok(int type, void *ptr, int len)
+{
+	if(verify_area(type,ptr,len)==0)
+		return 1;
+	return 0;
+}
 
+#undef put_user
+#undef get_user
+
+typedef unsigned long mm_segment_t;
+
+#define MODULE_PARM(a,b)
+#define MODULE_PARM_DESC(a,b)
+#define MODULE_AUTHOR(a)
+#define MODULE_DESCRIPTION(a)
+
+extern inline int compat_put_user(void *from, size_t s, void *mem)
+{
+	if(verify_area(VERIFY_WRITE, mem, s))
+		return -EFAULT;
+	memcpy_tofs(mem, from, s);
+	return 0;
+}
+
+extern inline int compat_get_user(void *to, size_t s, void *mem)
+{
+	if(verify_area(VERIFY_READ, mem, s))
+		return -EFAULT;
+	memcpy_fromfs(to, mem, s);
+	return 0;
+}
+
+#define put_user(x,y)	compat_put_user(&(x), sizeof(x), y)
+#define get_user(x,y)	compat_get_user(&(x), sizeof(x), y)
+
+#define __get_user(x,y)	compat_get_user(&(x), sizeof(x), y)
+#define __put_user(x,y)	compat_put_user(&(x), sizeof(x), y)
+
+extern inline int signal_pending(struct task_struct *t)
+{
+	if(t->signal & ~t->blocked)
+		return 1;
+	return 0;
+}	
 
 
 #ifndef SND_DEFAULT_ENABLE
@@ -32,20 +100,11 @@
 #define MAX_REALTIME_FACTOR	4
 #endif
 
-/************* PCM DMA buffer sizes *******************/
-
-/* If you are using high playback or recording speeds, the default buffer size
-   is too small. DSP_BUFFSIZE must be 64k or less.
-
-   A rule of thumb is 64k for PAS16, 32k for PAS+, 16k for SB Pro and
-   4k for SB.
-
-   If you change the DSP_BUFFSIZE, don't modify this file.
-   Use the make config command instead. */
-
-#ifndef DSP_BUFFSIZE
-#define DSP_BUFFSIZE		(4096)
-#endif
+/*
+ * Use always 64k buffer size. There is no reason to use shorter.
+ */
+#undef DSP_BUFFSIZE
+#define DSP_BUFFSIZE		(64*1024)
 
 #ifndef DSP_BUFFCOUNT
 #define DSP_BUFFCOUNT		1	/* 1 is recommended. */
@@ -55,20 +114,20 @@
 
 #define FM_MONO		0x388	/* This is the I/O address used by AdLib */
 
-#ifndef PAS_BASE
-#define PAS_BASE	0x388
+#ifndef CONFIG_PAS_BASE
+#define CONFIG_PAS_BASE	0x388
 #endif
 
-#if defined(SB16_DMA) && !defined(SB_DMA2)
-#  define SB_DMA2 SB16_DMA
+#if defined(CONFIG_SB16_DMA) && !defined(CONFIG_SB_DMA2)
+#  define CONFIG_SB_DMA2 CONFIG_SB16_DMA
 #endif
 
-#if defined(SB16MIDI_BASE) && !defined(SB_MPU_BASE)
-#   define SB_MPU_BASE SB16MIDI_BASE
+#if defined(SB16MIDI_BASE) && !defined(CONFIG_SB_MPU_BASE)
+#   define CONFIG_SB_MPU_BASE SB16MIDI_BASE
 #endif
 
-#ifndef SB_MPU_IRQ
-#  define SB_MPU_IRQ SBC_IRQ
+#ifndef CONFIG_SB_MPU_IRQ
+#  define CONFIG_SB_MPU_IRQ CONFIG_SB_IRQ
 #endif
 
 /* SEQ_MAX_QUEUE is the maximum number of sequencer events buffered by the
@@ -103,20 +162,11 @@
 
 #define DSP_DEFAULT_SPEED	8000
 
-#define ON		1
-#define OFF		0
-
 #define MAX_AUDIO_DEV	5
 #define MAX_MIXER_DEV	5
-#define MAX_SYNTH_DEV	3
+#define MAX_SYNTH_DEV	5
 #define MAX_MIDI_DEV	6
-#define MAX_TIMER_DEV	3
-
-struct fileinfo {
-       	  int mode;	      /* Open mode */
-	  int flags;
-	  int dummy;     /* Reference to file-flags. OS-dependent. */
-       };
+#define MAX_TIMER_DEV	4
 
 struct address_info {
 	int io_base;
@@ -129,6 +179,8 @@ struct address_info {
 	int driver_use_2;	/* Driver defined field 2 */
 	int *osp;	/* OS specific info */
 	int card_subtype;	/* Driver specific. Usually 0 */
+	void *memptr;           /* Module memory chainer */
+	int slots[6];           /* To remember driver slot ids */
 };
 
 #define SYNTH_MAX_VOICES	32
@@ -145,6 +197,7 @@ struct voice_alloc_info {
 struct channel_info {
 		int pgm_num;
 		int bender_value;
+		int bender_range;
 		unsigned char controllers[128];
 	};
 
@@ -157,10 +210,29 @@ struct channel_info {
 #define WK_SIGNAL	0x04
 #define WK_SLEEP	0x08
 #define WK_SELECT	0x10
+#define WK_ABORT	0x20
 
 #define OPEN_READ	PCM_ENABLE_INPUT
 #define OPEN_WRITE	PCM_ENABLE_OUTPUT
 #define OPEN_READWRITE	(OPEN_READ|OPEN_WRITE)
+
+#if OPEN_READ == FMODE_READ && OPEN_WRITE == FMODE_WRITE
+
+extern __inline__ int translate_mode(struct file *file)
+{
+	return file->f_mode;
+}
+
+#else
+
+extern __inline__ int translate_mode(struct file *file)
+{
+	return ((file->f_mode & FMODE_READ) ? OPEN_READ : 0) |
+		((file->f_mode & FMODE_WRITE) ? OPEN_WRITE : 0);
+}
+
+#endif
+
 
 #include "sound_calls.h"
 #include "dev_table.h"
@@ -170,8 +242,18 @@ struct channel_info {
 #endif
 
 #ifndef DDB
-#define DDB(x)
+#define DDB(x) {}
+#endif
+
+#ifndef MDB
+#ifdef MODULE
+#define MDB(x) x
+#else
+#define MDB(x)
+#endif
 #endif
 
 #define TIMER_ARMED	121234
 #define TIMER_NOT_ARMED	1
+
+#endif

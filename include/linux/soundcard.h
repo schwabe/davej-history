@@ -1,7 +1,7 @@
 #ifndef SOUNDCARD_H
 #define SOUNDCARD_H
 /*
- * Copyright by Hannu Savolainen 1993-1996
+ * Copyright by Hannu Savolainen 1993-1997
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,9 +24,19 @@
  * SUCH DAMAGE.
  */
 
-#define SOUND_VERSION	350
-#define UNIX_SOUND_SYSTEM
 
+/*
+ * OSS interface version. With versions earlier than 3.6 this value is
+ * an integer with value less than 361. In versions 3.6 and later
+ * it's a six digit hexadecimal value. For example value
+ * of 0x030600 represents OSS version 3.6.0.
+ * Use ioctl(fd, OSS_GETVERSION, &int) to get the version number of
+ * the currently active driver.
+ */
+#define SOUND_VERSION	0x030802
+#define OPEN_SOUND_SYSTEM
+
+/* In Linux we need to be prepared for cross compiling */
 #include <linux/ioctl.h>
 
 /*
@@ -65,90 +75,134 @@
  * IOCTL Commands for /dev/sequencer
  */
 
-#ifndef _IOWR
-/*	@(#)ioctlp.h */
+#ifndef _SIOWR
+#if defined(_IOWR) && (defined(_AIX) || (!defined(sun) && !defined(sparc) && !defined(__INCioctlh) && !defined(__Lynx__)))
+/* Use already defined ioctl defines if they exist (except with Sun) */
+#define	SIOCPARM_MASK	IOCPARM_MASK
+#define	SIOC_VOID	IOC_VOID
+#define	SIOC_OUT	IOC_OUT
+#define	SIOC_IN		IOC_IN
+#define	SIOC_INOUT	IOC_INOUT
+#define _SIOC_SIZE	_IOC_SIZE
+#define _SIOC_DIR	_IOC_DIR
+#define _SIOC_NONE	_IOC_NONE
+#define _SIOC_READ	_IOC_READ
+#define _SIOC_WRITE	_IOC_WRITE
+#define	_SIO		_IO
+#define	_SIOR		_IOR
+#define	_SIOW		_IOW
+#define	_SIOWR		_IOWR
+#else
 
 /* Ioctl's have the command encoded in the lower word,
  * and the size of any in or out parameters in the upper
  * word.  The high 2 bits of the upper word are used
  * to encode the in/out status of the parameter; for now
- * we restrict parameters to at most 128 bytes.
+ * we restrict parameters to at most 8191 bytes.
  */
-/* #define	IOCTYPE		(0xff<<8) */
-#define	IOCPARM_MASK	0x7f		/* parameters must be < 128 bytes */
-#define	IOC_VOID	0x00000000	/* no parameters */
-#define	IOC_OUT		0x20000000	/* copy out parameters */
-#define	IOC_IN		0x40000000	/* copy in parameters */
-#define	IOC_INOUT	(IOC_IN|IOC_OUT)
+/* #define	SIOCTYPE		(0xff<<8) */
+#define	SIOCPARM_MASK	0x1fff		/* parameters must be < 8192 bytes */
+#define	SIOC_VOID	0x00000000	/* no parameters */
+#define	SIOC_OUT	0x20000000	/* copy out parameters */
+#define	SIOC_IN		0x40000000	/* copy in parameters */
+#define	SIOC_INOUT	(SIOC_IN|SIOC_OUT)
 /* the 0x20000000 is so we can distinguish new ioctl's from old */
-#define	_IO(x,y)	((int)(IOC_VOID|(x<<8)|y))
-#define	_IOR(x,y,t)	((int)(IOC_OUT|((sizeof(t)&IOCPARM_MASK)<<16)|(x<<8)|y))
-#define	_IOW(x,y,t)	((int)(IOC_IN|((sizeof(t)&IOCPARM_MASK)<<16)|(x<<8)|y))
-/* this should be _IORW, but stdio got there first */
-#define	_IOWR(x,y,t)	((int)(IOC_INOUT|((sizeof(t)&IOCPARM_MASK)<<16)|(x<<8)|y))
-#endif  /* !_IOWR */
+#define	_SIO(x,y)	((int)(SIOC_VOID|(x<<8)|y))
+#define	_SIOR(x,y,t)	((int)(SIOC_OUT|((sizeof(t)&SIOCPARM_MASK)<<16)|(x<<8)|y))
+#define	_SIOW(x,y,t)	((int)(SIOC_IN|((sizeof(t)&SIOCPARM_MASK)<<16)|(x<<8)|y))
+/* this should be _SIORW, but stdio got there first */
+#define	_SIOWR(x,y,t)	((int)(SIOC_INOUT|((sizeof(t)&SIOCPARM_MASK)<<16)|(x<<8)|y))
+#define _SIOC_SIZE(x)	((x>>16)&SIOCPARM_MASK)	
+#define _SIOC_DIR(x)	(x & 0xf0000000)
+#define _SIOC_NONE	SIOC_VOID
+#define _SIOC_READ	SIOC_OUT
+#define _SIOC_WRITE	SIOC_IN
+#  endif /* _IOWR */
+#endif  /* !_SIOWR */
 
-#define SNDCTL_SEQ_RESET		_IO  ('Q', 0)
-#define SNDCTL_SEQ_SYNC			_IO  ('Q', 1)
-#define SNDCTL_SYNTH_INFO		_IOWR('Q', 2, struct synth_info)
-#define SNDCTL_SEQ_CTRLRATE		_IOWR('Q', 3, int)	/* Set/get timer resolution (HZ) */
-#define SNDCTL_SEQ_GETOUTCOUNT		_IOR ('Q', 4, int)
-#define SNDCTL_SEQ_GETINCOUNT		_IOR ('Q', 5, int)
-#define SNDCTL_SEQ_PERCMODE		_IOW ('Q', 6, int)
-#define SNDCTL_FM_LOAD_INSTR		_IOW ('Q', 7, struct sbi_instrument)	/* Valid for FM only */
-#define SNDCTL_SEQ_TESTMIDI		_IOW ('Q', 8, int)
-#define SNDCTL_SEQ_RESETSAMPLES		_IOW ('Q', 9, int)
-#define SNDCTL_SEQ_NRSYNTHS		_IOR ('Q',10, int)
-#define SNDCTL_SEQ_NRMIDIS		_IOR ('Q',11, int)
-#define SNDCTL_MIDI_INFO		_IOWR('Q',12, struct midi_info)
-#define SNDCTL_SEQ_THRESHOLD		_IOW ('Q',13, int)
-#define SNDCTL_SEQ_TRESHOLD		SNDCTL_SEQ_THRESHOLD	/* there was once a typo */
-#define SNDCTL_SYNTH_MEMAVL		_IOWR('Q',14, int)	/* in=dev#, out=memsize */
-#define SNDCTL_FM_4OP_ENABLE		_IOW ('Q',15, int)	/* in=dev# */
-#define SNDCTL_PMGR_ACCESS		_IOWR('Q',16, struct patmgr_info)
-#define SNDCTL_SEQ_PANIC		_IO  ('Q',17)
-#define SNDCTL_SEQ_OUTOFBAND		_IOW ('Q',18, struct seq_event_rec)
+#define SNDCTL_SEQ_RESET		_SIO  ('Q', 0)
+#define SNDCTL_SEQ_SYNC			_SIO  ('Q', 1)
+#define SNDCTL_SYNTH_INFO		_SIOWR('Q', 2, struct synth_info)
+#define SNDCTL_SEQ_CTRLRATE		_SIOWR('Q', 3, int)	/* Set/get timer resolution (HZ) */
+#define SNDCTL_SEQ_GETOUTCOUNT		_SIOR ('Q', 4, int)
+#define SNDCTL_SEQ_GETINCOUNT		_SIOR ('Q', 5, int)
+#define SNDCTL_SEQ_PERCMODE		_SIOW ('Q', 6, int)
+#define SNDCTL_FM_LOAD_INSTR		_SIOW ('Q', 7, struct sbi_instrument)	/* Obsolete. Don't use!!!!!! */
+#define SNDCTL_SEQ_TESTMIDI		_SIOW ('Q', 8, int)
+#define SNDCTL_SEQ_RESETSAMPLES		_SIOW ('Q', 9, int)
+#define SNDCTL_SEQ_NRSYNTHS		_SIOR ('Q',10, int)
+#define SNDCTL_SEQ_NRMIDIS		_SIOR ('Q',11, int)
+#define SNDCTL_MIDI_INFO		_SIOWR('Q',12, struct midi_info)
+#define SNDCTL_SEQ_THRESHOLD		_SIOW ('Q',13, int)
+#define SNDCTL_SYNTH_MEMAVL		_SIOWR('Q',14, int)	/* in=dev#, out=memsize */
+#define SNDCTL_FM_4OP_ENABLE		_SIOW ('Q',15, int)	/* in=dev# */
+#define SNDCTL_SEQ_PANIC		_SIO  ('Q',17)
+#define SNDCTL_SEQ_OUTOFBAND		_SIOW ('Q',18, struct seq_event_rec)
+#define SNDCTL_SEQ_GETTIME		_SIOR ('Q',19, int)
+#define SNDCTL_SYNTH_ID			_SIOWR('Q',20, struct synth_info)
+#define SNDCTL_SYNTH_CONTROL		_SIOWR('Q',21, struct synth_control)
+#define SNDCTL_SYNTH_REMOVESAMPLE	_SIOWR('Q',22, struct remove_sample)
 
-	struct seq_event_rec {
-			unsigned char arr[8];
-		};
+typedef struct synth_control
+{
+	int devno;	/* Synthesizer # */
+	char data[4000]; /* Device spesific command/data record */
+}synth_control;
 
-#define SNDCTL_TMR_TIMEBASE		_IOWR('T', 1, int)
-#define SNDCTL_TMR_START		_IO  ('T', 2)
-#define SNDCTL_TMR_STOP			_IO  ('T', 3)
-#define SNDCTL_TMR_CONTINUE		_IO  ('T', 4)
-#define SNDCTL_TMR_TEMPO		_IOWR('T', 5, int)
-#define SNDCTL_TMR_SOURCE		_IOWR('T', 6, int)
+typedef struct remove_sample
+{
+	int devno;	/* Synthesizer # */
+	int bankno;	/* MIDI bank # (0=General MIDI) */
+	int instrno;	/* MIDI instrument number */
+} remove_sample;
+
+typedef struct seq_event_rec {
+		unsigned char arr[8];
+} seq_event_rec;
+
+#define SNDCTL_TMR_TIMEBASE		_SIOWR('T', 1, int)
+#define SNDCTL_TMR_START		_SIO  ('T', 2)
+#define SNDCTL_TMR_STOP			_SIO  ('T', 3)
+#define SNDCTL_TMR_CONTINUE		_SIO  ('T', 4)
+#define SNDCTL_TMR_TEMPO		_SIOWR('T', 5, int)
+#define SNDCTL_TMR_SOURCE		_SIOWR('T', 6, int)
 #	define TMR_INTERNAL		0x00000001
 #	define TMR_EXTERNAL		0x00000002
 #		define TMR_MODE_MIDI	0x00000010
 #		define TMR_MODE_FSK	0x00000020
 #		define TMR_MODE_CLS	0x00000040
 #		define TMR_MODE_SMPTE	0x00000080
-#define SNDCTL_TMR_METRONOME		_IOW ('T', 7, int)
-#define SNDCTL_TMR_SELECT		_IOW ('T', 8, int)
+#define SNDCTL_TMR_METRONOME		_SIOW ('T', 7, int)
+#define SNDCTL_TMR_SELECT		_SIOW ('T', 8, int)
 
 /*
- *	Endian aware patch key generation algorithm.
+ * Some big endian/little endian handling macros
  */
 
-#if defined(_AIX) || defined(AIX)
+#if defined(_AIX) || defined(AIX) || defined(sparc) || defined(HPPA) || defined(PPC)
+/* Big endian machines */
 #  define _PATCHKEY(id) (0xfd00|id)
+#  define AFMT_S16_NE AFMT_S16_BE
 #else
 #  define _PATCHKEY(id) ((id<<8)|0xfd)
+#  define AFMT_S16_NE AFMT_S16_LE
 #endif
 
 /*
  *	Sample loading mechanism for internal synthesizers (/dev/sequencer)
  *	The following patch_info structure has been designed to support
  *	Gravis UltraSound. It tries to be universal format for uploading
- *	sample based patches but is propably too limited.
+ *	sample based patches but is probably too limited.
+ *
+ *      (PBD) As Hannu guessed, the GUS structure is too limited for 
+ *      the WaveFront, but this is the right place for a constant definition.
  */
 
 struct patch_info {
-		unsigned short key;		/* Use GUS_PATCH here */
-#define GUS_PATCH	_PATCHKEY(0x04)
-#define OBSOLETE_GUS_PATCH	_PATCHKEY(0x02)
+		unsigned short key;		/* Use WAVE_PATCH here */
+#define WAVE_PATCH	   _PATCHKEY(0x04)
+#define GUS_PATCH	   WAVE_PATCH
+#define WAVEFRONT_PATCH    _PATCHKEY(0x06)
 
 		short device_no;	/* Synthesizer number */
 		short instr_no;		/* Midi pgm# */
@@ -165,12 +219,16 @@ struct patch_info {
 #define WAVE_LOOP_BACK	0x10	/* bit 4 = Set is looping backward. */
 #define WAVE_SUSTAIN_ON	0x20	/* bit 5 = Turn sustaining on. (Env. pts. 3)*/
 #define WAVE_ENVELOPES	0x40	/* bit 6 = Enable envelopes - 1 */
+#define WAVE_FAST_RELEASE 0x80	/* bit 7 = Shut off immediately after note off */
 				/* 	(use the env_rate/env_offs fields). */
 /* Linux specific bits */
 #define WAVE_VIBRATO	0x00010000	/* The vibrato info is valid */
 #define WAVE_TREMOLO	0x00020000	/* The tremolo info is valid */
 #define WAVE_SCALE	0x00040000	/* The scaling info is valid */
 #define WAVE_FRACTIONS	0x00080000	/* Fraction information is valid */
+/* Reserved bits */
+#define WAVE_ROM	0x40000000	/* For future use */
+#define WAVE_MULAW	0x20000000	/* For future use */
 /* Other bits must be zeroed */
 
 		int len;	/* Size of the wave data in bytes */
@@ -184,7 +242,7 @@ struct patch_info {
  *
  * The low_note and high_note fields define the minimum and maximum note
  * frequencies for which this sample is valid. It is possible to define
- * more than one samples for a instrument number at the same time. The
+ * more than one samples for an instrument number at the same time. The
  * low_note and high_note fields are used to select the most suitable one.
  *
  * The fields base_note, high_note and low_note should contain
@@ -224,102 +282,19 @@ struct patch_info {
 	
 	        int		volume;
 		int		fractions;
-	        int		spare[3];
+		int		reserved1;
+	        int		spare[2];
 		char data[1];	/* The waveform data starts here */
 	};
 
 struct sysex_info {
-		short key;		/* Use GUS_PATCH here */
+		short key;		/* Use SYSEX_PATCH or MAUI_PATCH here */
 #define SYSEX_PATCH	_PATCHKEY(0x05)
 #define MAUI_PATCH	_PATCHKEY(0x06)
 		short device_no;	/* Synthesizer number */
 		int len;	/* Size of the sysex data in bytes */
 		unsigned char data[1];	/* Sysex data starts here */
 	};
-
-/*
- * Patch management interface (/dev/sequencer, /dev/patmgr#)
- * Don't use these calls if you want to maintain compatibility with
- * the future versions of the driver.
- */
-
-#define 	PS_NO_PATCHES		0	/* No patch support on device */
-#define		PS_MGR_NOT_OK		1	/* Plain patch support (no mgr) */
-#define		PS_MGR_OK		2	/* Patch manager supported */
-#define		PS_MANAGED		3	/* Patch manager running */
-
-#define SNDCTL_PMGR_IFACE		_IOWR('P', 1, struct patmgr_info)
-
-/*
- * The patmgr_info is a fixed size structure which is used for two
- * different purposes. The intended use is for communication between
- * the application using /dev/sequencer and the patch manager daemon
- * associated with a synthesizer device (ioctl(SNDCTL_PMGR_ACCESS)).
- *
- * This structure is also used with ioctl(SNDCTL_PGMR_IFACE) which allows
- * a patch manager daemon to read and write device parameters. This
- * ioctl available through /dev/sequencer also. Avoid using it since it's
- * extremely hardware dependent. In addition access trough /dev/sequencer 
- * may confuse the patch manager daemon.
- */
-
-struct patmgr_info {
-	  unsigned int key;	/* Don't worry. Reserved for communication
-	  			   between the patch manager and the driver. */
-#define PM_K_EVENT		1 /* Event from the /dev/sequencer driver */
-#define PM_K_COMMAND		2 /* Request from a application */
-#define PM_K_RESPONSE		3 /* From patmgr to application */
-#define PM_ERROR		4 /* Error returned by the patmgr */
-	  int device;
-	  int command;
-
-/* 
- * Commands 0x000 to 0xfff reserved for patch manager programs 
- */
-#define PM_GET_DEVTYPE	1	/* Returns type of the patch mgr interface of dev */
-#define		PMTYPE_FM2	1	/* 2 OP fm */
-#define		PMTYPE_FM4	2	/* Mixed 4 or 2 op FM (OPL-3) */
-#define		PMTYPE_WAVE	3	/* Wave table synthesizer (GUS) */
-#define PM_GET_NRPGM	2	/* Returns max # of midi programs in parm1 */
-#define PM_GET_PGMMAP	3	/* Returns map of loaded midi programs in data8 */
-#define PM_GET_PGM_PATCHES 4	/* Return list of patches of a program (parm1) */
-#define PM_GET_PATCH	5	/* Return patch header of patch parm1 */
-#define PM_SET_PATCH	6	/* Set patch header of patch parm1 */
-#define PM_READ_PATCH	7	/* Read patch (wave) data */
-#define PM_WRITE_PATCH	8	/* Write patch (wave) data */
-
-/*
- * Commands 0x1000 to 0xffff are for communication between the patch manager
- * and the client
- */
-#define _PM_LOAD_PATCH	0x100
-
-/* 
- * Commands above 0xffff reserved for device specific use
- */
-
-	  int parm1;
-	  int parm2;
-	  int parm3;
-
-	  union {
-		unsigned char data8[4000];
-		unsigned short data16[2000];
-		unsigned int data32[1000];
-		struct patch_info patch;
-	  } data;
-	};
-
-/*
- * When a patch manager daemon is present, it will be informed by the
- * driver when something important happens. For example when the
- * /dev/sequencer is opened or closed. A record with key == PM_K_EVENT is
- * returned. The command field contains the event type:
- */
-#define PM_E_OPENED		1	/* /dev/sequencer opened */
-#define PM_E_CLOSED		2	/* /dev/sequencer closed */
-#define PM_E_PATCH_RESET	3	/* SNDCTL_RESETSAMPLES called */
-#define PM_E_PATCH_LOADED	4	/* A patch has been loaded by appl */
 
 /*
  * /dev/sequencer input events.
@@ -469,8 +444,8 @@ struct patmgr_info {
  *	Set the key field of the structure to FM_PATCH. The device field is used to
  *	route the patch to the corresponding device.
  *
- *	For Gravis UltraSound use struct patch_info. Initialize the key field
- *      to GUS_PATCH.
+ *	For wave table use struct patch_info. Initialize the key field
+ *      to WAVE_PATCH.
  */
 #define SEQ_PRIVATE		0xfe	/* Low level HW dependent events (8 bytes) */
 #define SEQ_EXTENDED		0xff	/* Extended events (8 bytes) OBSOLETE */
@@ -503,7 +478,9 @@ struct synth_info {	/* Read only */
 #define FM_TYPE_OPL3			0x01
 #define MIDI_TYPE_MPU401		0x401
 
-#define SAMPLE_TYPE_GUS			0x10
+#define SAMPLE_TYPE_BASIC		0x10
+#define SAMPLE_TYPE_GUS			SAMPLE_TYPE_BASIC
+#define SAMPLE_TYPE_WAVEFRONT           0x11
 
 		int	perc_mode;	/* No longer supported */
 		int	nr_voices;
@@ -540,30 +517,30 @@ typedef struct {
 		unsigned char data[30];
 	} mpu_command_rec;
 
-#define SNDCTL_MIDI_PRETIME		_IOWR('m', 0, int)
-#define SNDCTL_MIDI_MPUMODE		_IOWR('m', 1, int)
-#define SNDCTL_MIDI_MPUCMD		_IOWR('m', 2, mpu_command_rec)
+#define SNDCTL_MIDI_PRETIME		_SIOWR('m', 0, int)
+#define SNDCTL_MIDI_MPUMODE		_SIOWR('m', 1, int)
+#define SNDCTL_MIDI_MPUCMD		_SIOWR('m', 2, mpu_command_rec)
 
 /********************************************
  * IOCTL commands for /dev/dsp and /dev/audio
  */
 
-#define SNDCTL_DSP_RESET		_IO  ('P', 0)
-#define SNDCTL_DSP_SYNC			_IO  ('P', 1)
-#define SNDCTL_DSP_SPEED		_IOWR('P', 2, int)
-#define SNDCTL_DSP_STEREO		_IOWR('P', 3, int)
-#define SNDCTL_DSP_GETBLKSIZE		_IOWR('P', 4, int)
+#define SNDCTL_DSP_RESET		_SIO  ('P', 0)
+#define SNDCTL_DSP_SYNC			_SIO  ('P', 1)
+#define SNDCTL_DSP_SPEED		_SIOWR('P', 2, int)
+#define SNDCTL_DSP_STEREO		_SIOWR('P', 3, int)
+#define SNDCTL_DSP_GETBLKSIZE		_SIOWR('P', 4, int)
 #define SNDCTL_DSP_SAMPLESIZE		SNDCTL_DSP_SETFMT
-#define SNDCTL_DSP_CHANNELS		_IOWR('P', 6, int)
+#define SNDCTL_DSP_CHANNELS		_SIOWR('P', 6, int)
 #define SOUND_PCM_WRITE_CHANNELS	SNDCTL_DSP_CHANNELS
-#define SOUND_PCM_WRITE_FILTER		_IOWR('P', 7, int)
-#define SNDCTL_DSP_POST			_IO  ('P', 8)
-#define SNDCTL_DSP_SUBDIVIDE		_IOWR('P', 9, int)
-#define SNDCTL_DSP_SETFRAGMENT		_IOWR('P',10, int)
+#define SOUND_PCM_WRITE_FILTER		_SIOWR('P', 7, int)
+#define SNDCTL_DSP_POST			_SIO  ('P', 8)
+#define SNDCTL_DSP_SUBDIVIDE		_SIOWR('P', 9, int)
+#define SNDCTL_DSP_SETFRAGMENT		_SIOWR('P',10, int)
 
 /*	Audio data formats (Note! U8=8 and S16_LE=16 for compatibility) */
-#define SNDCTL_DSP_GETFMTS		_IOR ('P',11, int) /* Returns a mask */
-#define SNDCTL_DSP_SETFMT		_IOWR('P',5, int) /* Selects ONE fmt*/
+#define SNDCTL_DSP_GETFMTS		_SIOR ('P',11, int) /* Returns a mask */
+#define SNDCTL_DSP_SETFMT		_SIOWR('P',5, int) /* Selects ONE fmt*/
 #	define AFMT_QUERY		0x00000000	/* Return current fmt */
 #	define AFMT_MU_LAW		0x00000001
 #	define AFMT_A_LAW		0x00000002
@@ -588,10 +565,10 @@ typedef struct audio_buf_info {
 			/* Note! 'bytes' could be more than fragments*fragsize */
 		} audio_buf_info;
 
-#define SNDCTL_DSP_GETOSPACE		_IOR ('P',12, audio_buf_info)
-#define SNDCTL_DSP_GETISPACE		_IOR ('P',13, audio_buf_info)
-#define SNDCTL_DSP_NONBLOCK		_IO  ('P',14)
-#define SNDCTL_DSP_GETCAPS		_IOR ('P',15, int)
+#define SNDCTL_DSP_GETOSPACE		_SIOR ('P',12, audio_buf_info)
+#define SNDCTL_DSP_GETISPACE		_SIOR ('P',13, audio_buf_info)
+#define SNDCTL_DSP_NONBLOCK		_SIO  ('P',14)
+#define SNDCTL_DSP_GETCAPS		_SIOR ('P',15, int)
 #	define DSP_CAP_REVISION		0x000000ff	/* Bits for revision level (0 to 255) */
 #	define DSP_CAP_DUPLEX		0x00000100	/* Full duplex record/playback */
 #	define DSP_CAP_REALTIME		0x00000200	/* Real time capability */
@@ -605,8 +582,8 @@ typedef struct audio_buf_info {
 #	define DSP_CAP_TRIGGER		0x00001000	/* Supports SETTRIGGER */
 #	define DSP_CAP_MMAP		0x00002000	/* Supports mmap() */
 
-#define SNDCTL_DSP_GETTRIGGER		_IOR ('P',16, int)
-#define SNDCTL_DSP_SETTRIGGER		_IOW ('P',16, int)
+#define SNDCTL_DSP_GETTRIGGER		_SIOR ('P',16, int)
+#define SNDCTL_DSP_SETTRIGGER		_SIOW ('P',16, int)
 #	define PCM_ENABLE_INPUT		0x00000001
 #	define PCM_ENABLE_OUTPUT	0x00000002
 
@@ -616,22 +593,39 @@ typedef struct count_info {
 		int ptr;	/* Current DMA pointer value */
 	} count_info;
 
-#define SNDCTL_DSP_GETIPTR		_IOR ('P',17, count_info)
-#define SNDCTL_DSP_GETOPTR		_IOR ('P',18, count_info)
+#define SNDCTL_DSP_GETIPTR		_SIOR ('P',17, count_info)
+#define SNDCTL_DSP_GETOPTR		_SIOR ('P',18, count_info)
 
 typedef struct buffmem_desc {
 		unsigned *buffer;
 		int size;
 	} buffmem_desc;
-#define SNDCTL_DSP_MAPINBUF		_IOR ('P', 19, buffmem_desc)
-#define SNDCTL_DSP_MAPOUTBUF		_IOR ('P', 20, buffmem_desc)
-#define SNDCTL_DSP_SETSYNCRO		_IO  ('P', 21)
-#define SNDCTL_DSP_SETDUPLEX		_IO  ('P', 22)
+#define SNDCTL_DSP_MAPINBUF		_SIOR ('P', 19, buffmem_desc)
+#define SNDCTL_DSP_MAPOUTBUF		_SIOR ('P', 20, buffmem_desc)
+#define SNDCTL_DSP_SETSYNCRO		_SIO  ('P', 21)
+#define SNDCTL_DSP_SETDUPLEX		_SIO  ('P', 22)
+#define SNDCTL_DSP_GETODELAY		_SIOR ('P', 23, int)
 
-#define SOUND_PCM_READ_RATE		_IOR ('P', 2, int)
-#define SOUND_PCM_READ_CHANNELS		_IOR ('P', 6, int)
-#define SOUND_PCM_READ_BITS		_IOR ('P', 5, int)
-#define SOUND_PCM_READ_FILTER		_IOR ('P', 7, int)
+/*
+ * Application's profile defines the way how playback underrun situations should be handled.
+ * 
+ *	APF_NORMAL (the default) and APF_NETWORK make the driver to cleanup the
+ *	playback buffer whenever an underrun occurs. This consumes some time
+ *	preven's looping the existing buffer.
+ *	APF_CPUINTENS is intended to be set by CPU intensive applications which
+ *	are likely to run out of time occasionally. In this mode the buffer cleanup is
+ *	disabled which saves CPU time but also let's the previous buffer content to
+ *	be played during the "pause" after the underrun.
+ */
+#define SNDCTL_DSP_PROFILE		_SIOW ('P', 23, int)
+#define	  APF_NORMAL	0	/* Normal applications */
+#define	  APF_NETWORK	1	/* Underruns probably caused by an "external" delay */
+#define   APF_CPUINTENS 2	/* Underruns probably caused by "overheating" the CPU */
+
+#define SOUND_PCM_READ_RATE		_SIOR ('P', 2, int)
+#define SOUND_PCM_READ_CHANNELS		_SIOR ('P', 6, int)
+#define SOUND_PCM_READ_BITS		_SIOR ('P', 5, int)
+#define SOUND_PCM_READ_FILTER		_SIOR ('P', 7, int)
 
 /* Some alias names */
 #define SOUND_PCM_WRITE_BITS		SNDCTL_DSP_SETFMT
@@ -685,16 +679,16 @@ typedef struct copr_msg {
 		unsigned char data[4000];
 	} copr_msg;
 
-#define SNDCTL_COPR_RESET             _IO  ('C',  0)
-#define SNDCTL_COPR_LOAD	      _IOWR('C',  1, copr_buffer)
-#define SNDCTL_COPR_RDATA	      _IOWR('C',  2, copr_debug_buf)
-#define SNDCTL_COPR_RCODE	      _IOWR('C',  3, copr_debug_buf)
-#define SNDCTL_COPR_WDATA	      _IOW ('C',  4, copr_debug_buf)
-#define SNDCTL_COPR_WCODE	      _IOW ('C',  5, copr_debug_buf)
-#define SNDCTL_COPR_RUN		      _IOWR('C',  6, copr_debug_buf)
-#define SNDCTL_COPR_HALT	      _IOWR('C',  7, copr_debug_buf)
-#define SNDCTL_COPR_SENDMSG	      _IOWR('C',  8, copr_msg)
-#define SNDCTL_COPR_RCVMSG	      _IOR ('C',  9, copr_msg)
+#define SNDCTL_COPR_RESET             _SIO  ('C',  0)
+#define SNDCTL_COPR_LOAD	      _SIOWR('C',  1, copr_buffer)
+#define SNDCTL_COPR_RDATA	      _SIOWR('C',  2, copr_debug_buf)
+#define SNDCTL_COPR_RCODE	      _SIOWR('C',  3, copr_debug_buf)
+#define SNDCTL_COPR_WDATA	      _SIOW ('C',  4, copr_debug_buf)
+#define SNDCTL_COPR_WCODE	      _SIOW ('C',  5, copr_debug_buf)
+#define SNDCTL_COPR_RUN		      _SIOWR('C',  6, copr_debug_buf)
+#define SNDCTL_COPR_HALT	      _SIOWR('C',  7, copr_debug_buf)
+#define SNDCTL_COPR_SENDMSG	      _SIOWR('C',  8, copr_msg)
+#define SNDCTL_COPR_RCVMSG	      _SIOR ('C',  9, copr_msg)
 
 /*********************************************
  * IOCTL commands for /dev/mixer
@@ -709,7 +703,7 @@ typedef struct copr_msg {
  * the devices supported by the particular mixer.
  */
 
-#define SOUND_MIXER_NRDEVICES	17
+#define SOUND_MIXER_NRDEVICES	25
 #define SOUND_MIXER_VOLUME	0
 #define SOUND_MIXER_BASS	1
 #define SOUND_MIXER_TREBLE	2
@@ -733,6 +727,14 @@ typedef struct copr_msg {
 #define SOUND_MIXER_LINE1	14	/* Input source 1  (aux1) */
 #define SOUND_MIXER_LINE2	15	/* Input source 2  (aux2) */
 #define SOUND_MIXER_LINE3	16	/* Input source 3  (line) */
+#define SOUND_MIXER_DIGITAL1	17	/* Digital (input) 1 */
+#define SOUND_MIXER_DIGITAL2	18	/* Digital (input) 2 */
+#define SOUND_MIXER_DIGITAL3	19	/* Digital (input) 3 */
+#define SOUND_MIXER_PHONEIN	20	/* Phone input */
+#define SOUND_MIXER_PHONEOUT	21	/* Phone output */
+#define SOUND_MIXER_VIDEO	22	/* Video/TV (audio) in */
+#define SOUND_MIXER_RADIO	23	/* Radio in */
+#define SOUND_MIXER_MONITOR	24	/* Monitor (usually mic) volume */
 
 /* Some on/off settings (SOUND_SPECIAL_MIN - SOUND_SPECIAL_MAX) */
 /* Not counted to SOUND_MIXER_NRDEVICES, but use the same number space */
@@ -740,24 +742,26 @@ typedef struct copr_msg {
 #define SOUND_ONOFF_MAX		30
 
 /* Note!	Number 31 cannot be used since the sign bit is reserved */
-
+#define SOUND_MIXER_NONE	31
 
 /*
  * The following unsupported macros are no longer functional.
  * Use SOUND_MIXER_PRIVATE# macros in future.
  */
-#define SOUND_MIXER_ENHANCE	31
-#define SOUND_MIXER_MUTE	31
-#define SOUND_MIXER_LOUD	31
+#define SOUND_MIXER_ENHANCE	SOUND_MIXER_NONE
+#define SOUND_MIXER_MUTE	SOUND_MIXER_NONE
+#define SOUND_MIXER_LOUD	SOUND_MIXER_NONE
 
 
 #define SOUND_DEVICE_LABELS	{"Vol  ", "Bass ", "Trebl", "Synth", "Pcm  ", "Spkr ", "Line ", \
 				 "Mic  ", "CD   ", "Mix  ", "Pcm2 ", "Rec  ", "IGain", "OGain", \
-				 "Line1", "Line2", "Line3"}
+				 "Line1", "Line2", "Line3", "Digital1", "Digital2", "Digital3", \
+				 "PhoneIn", "PhoneOut", "Video", "Radio", "Monitor"}
 
 #define SOUND_DEVICE_NAMES	{"vol", "bass", "treble", "synth", "pcm", "speaker", "line", \
 				 "mic", "cd", "mix", "pcm2", "rec", "igain", "ogain", \
-				 "line1", "line2", "line3"}
+				 "line1", "line2", "line3", "dig1", "dig2", "dig3", \
+				 "phin", "phout", "video", "radio", "monitor"}
 
 /*	Device bitmask identifiers	*/
 
@@ -787,13 +791,21 @@ typedef struct copr_msg {
 #define SOUND_MASK_LINE1	(1 << SOUND_MIXER_LINE1)
 #define SOUND_MASK_LINE2	(1 << SOUND_MIXER_LINE2)
 #define SOUND_MASK_LINE3	(1 << SOUND_MIXER_LINE3)
+#define SOUND_MASK_DIGITAL1	(1 << SOUND_MIXER_DIGITAL1)
+#define SOUND_MASK_DIGITAL2	(1 << SOUND_MIXER_DIGITAL2)
+#define SOUND_MASK_DIGITAL3	(1 << SOUND_MIXER_DIGITAL3)
+#define SOUND_MASK_PHONEIN	(1 << SOUND_MIXER_PHONEIN)
+#define SOUND_MASK_PHONEOUT	(1 << SOUND_MIXER_PHONEOUT)
+#define SOUND_MASK_RADIO	(1 << SOUND_MIXER_RADIO)
+#define SOUND_MASK_VIDEO	(1 << SOUND_MIXER_VIDEO)
+#define SOUND_MASK_MONITOR	(1 << SOUND_MIXER_MONITOR)
 
 /* Obsolete macros */
 #define SOUND_MASK_MUTE		(1 << SOUND_MIXER_MUTE)
 #define SOUND_MASK_ENHANCE	(1 << SOUND_MIXER_ENHANCE)
 #define SOUND_MASK_LOUD		(1 << SOUND_MIXER_LOUD)
 
-#define MIXER_READ(dev)		_IOR('M', dev, int)
+#define MIXER_READ(dev)		_SIOR('M', dev, int)
 #define SOUND_MIXER_READ_VOLUME		MIXER_READ(SOUND_MIXER_VOLUME)
 #define SOUND_MIXER_READ_BASS		MIXER_READ(SOUND_MIXER_BASS)
 #define SOUND_MIXER_READ_TREBLE		MIXER_READ(SOUND_MIXER_TREBLE)
@@ -823,7 +835,7 @@ typedef struct copr_msg {
 #define SOUND_MIXER_READ_STEREODEVS	MIXER_READ(SOUND_MIXER_STEREODEVS)
 #define SOUND_MIXER_READ_CAPS		MIXER_READ(SOUND_MIXER_CAPS)
 
-#define MIXER_WRITE(dev)		_IOWR('M', dev, int)
+#define MIXER_WRITE(dev)		_SIOWR('M', dev, int)
 #define SOUND_MIXER_WRITE_VOLUME	MIXER_WRITE(SOUND_MIXER_VOLUME)
 #define SOUND_MIXER_WRITE_BASS		MIXER_WRITE(SOUND_MIXER_BASS)
 #define SOUND_MIXER_WRITE_TREBLE	MIXER_WRITE(SOUND_MIXER_TREBLE)
@@ -853,9 +865,18 @@ typedef struct mixer_info
 {
   char id[16];
   char name[32];
+  int  modify_counter;
+  int fillers[10];
 } mixer_info;
 
-#define SOUND_MIXER_INFO		_IOR ('M', 101, mixer_info)
+typedef struct _old_mixer_info /* Obsolete */
+{
+  char id[16];
+  char name[32];
+} _old_mixer_info;
+
+#define SOUND_MIXER_INFO		_SIOR ('M', 101, mixer_info)
+#define SOUND_OLD_MIXER_INFO		_SIOR ('M', 101, _old_mixer_info)
 
 /*
  * A mechanism for accessing "proprietary" mixer features. This method
@@ -865,17 +886,42 @@ typedef struct mixer_info
  */
 typedef unsigned char mixer_record[128];
 
-#define SOUND_MIXER_ACCESS		_IOWR('M', 102, mixer_record)
+#define SOUND_MIXER_ACCESS		_SIOWR('M', 102, mixer_record)
 
 /*
  * The SOUND_MIXER_PRIVATE# commands can be redefined by low level drivers.
  * These features can be used when accessing device specific features.
  */
-#define SOUND_MIXER_PRIVATE1		_IOWR('M', 111, int)
-#define SOUND_MIXER_PRIVATE2		_IOWR('M', 112, int)
-#define SOUND_MIXER_PRIVATE3		_IOWR('M', 113, int)
-#define SOUND_MIXER_PRIVATE4		_IOWR('M', 114, int)
-#define SOUND_MIXER_PRIVATE5		_IOWR('M', 115, int)
+#define SOUND_MIXER_PRIVATE1		_SIOWR('M', 111, int)
+#define SOUND_MIXER_PRIVATE2		_SIOWR('M', 112, int)
+#define SOUND_MIXER_PRIVATE3		_SIOWR('M', 113, int)
+#define SOUND_MIXER_PRIVATE4		_SIOWR('M', 114, int)
+#define SOUND_MIXER_PRIVATE5		_SIOWR('M', 115, int)
+
+/*
+ * SOUND_MIXER_GETLEVELS and SOUND_MIXER_SETLEVELS calls can be used
+ * for querying current mixer settings from the driver and for loading
+ * default volume settings _prior_ activating the mixer (loading
+ * doesn't affect current state of the mixer hardware). These calls
+ * are for internal use only.
+ */
+
+typedef struct mixer_vol_table {
+  int num;	/* Index to volume table */
+  char name[32];
+  int levels[32];
+} mixer_vol_table;
+
+#define SOUND_MIXER_GETLEVELS		_SIOWR('M', 116, mixer_vol_table)
+#define SOUND_MIXER_SETLEVELS		_SIOWR('M', 117, mixer_vol_table)
+
+/* 
+ * An ioctl for identifying the driver version. It will return value
+ * of the SOUND_VERSION macro used when compiling the driver.
+ * This call was introduced in OSS version 3.6 and it will not work
+ * with earlier versions (returns EINVAL).
+ */
+#define OSS_GETVERSION			_SIOR ('M', 118, int)
 
 /*
  * Level 2 event types for /dev/sequencer
@@ -950,10 +996,45 @@ typedef unsigned char mixer_record[128];
  *
  *	These macros define the API which should be used when possible.
  */
+#define SEQ_DECLAREBUF()		SEQ_USE_EXTBUF()
 
-#ifndef USE_SIMPLE_MACROS
 void seqbuf_dump(void);	/* This function must be provided by programs */
 
+extern int OSS_init(int seqfd, int buflen);
+extern void OSS_seqbuf_dump(int fd, unsigned char *buf, int buflen);
+extern void OSS_seq_advbuf(int len, int fd, unsigned char *buf, int buflen);
+extern void OSS_seq_needbuf(int len, int fd, unsigned char *buf, int buflen);
+extern void OSS_patch_caching(int dev, int chn, int patch,
+			      int fd, unsigned char *buf, int buflen);
+extern void OSS_drum_caching(int dev, int chn, int patch,
+			      int fd, unsigned char *buf, int buflen);
+extern void OSS_write_patch(int fd, unsigned char *buf, int len);
+extern int OSS_write_patch2(int fd, unsigned char *buf, int len);
+
+#define SEQ_PM_DEFINES int __foo_bar___
+#ifdef OSSLIB
+#  define SEQ_USE_EXTBUF() \
+		extern unsigned char *_seqbuf; \
+		extern int _seqbuflen;extern int _seqbufptr
+#  define SEQ_DEFINEBUF(len) SEQ_USE_EXTBUF();static int _requested_seqbuflen=len
+#  define _SEQ_ADVBUF(len) OSS_seq_advbuf(len, seqfd, _seqbuf, _seqbuflen)
+#  define _SEQ_NEEDBUF(len) OSS_seq_needbuf(len, seqfd, _seqbuf, _seqbuflen)
+#  define SEQ_DUMPBUF() OSS_seqbuf_dump(seqfd, _seqbuf, _seqbuflen)
+
+#  define SEQ_LOAD_GMINSTR(dev, instr) \
+		OSS_patch_caching(dev, -1, instr, seqfd, _seqbuf, _seqbuflen)
+#  define SEQ_LOAD_GMDRUM(dev, drum) \
+		OSS_drum_caching(dev, -1, drum, seqfd, _seqbuf, _seqbuflen)
+#else /* !OSSLIB */
+
+#  define SEQ_LOAD_GMINSTR(dev, instr)
+#  define SEQ_LOAD_GMDRUM(dev, drum)
+
+#  define SEQ_USE_EXTBUF() \
+		extern unsigned char _seqbuf[]; \
+		extern int _seqbuflen;extern int _seqbufptr
+
+#ifndef USE_SIMPLE_MACROS
 /* Sample seqbuf_dump() implementation:
  *
  *	SEQ_DEFINEBUF (2048);	-- Defines a buffer for 2048 bytes
@@ -974,9 +1055,6 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
  */
 
 #define SEQ_DEFINEBUF(len)		unsigned char _seqbuf[len]; int _seqbuflen = len;int _seqbufptr = 0
-#define SEQ_USE_EXTBUF()		extern unsigned char _seqbuf[]; extern int _seqbuflen;extern int _seqbufptr
-#define SEQ_DECLAREBUF()		SEQ_USE_EXTBUF()
-#define SEQ_PM_DEFINES			struct patmgr_info _pm_info
 #define _SEQ_NEEDBUF(len)		if ((_seqbufptr+(len)) > _seqbuflen) seqbuf_dump()
 #define _SEQ_ADVBUF(len)		_seqbufptr += len
 #define SEQ_DUMPBUF			seqbuf_dump
@@ -997,15 +1075,7 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
  */
 #define _SEQ_NEEDBUF(len)	/* empty */
 #endif
-
-#define PM_LOAD_PATCH(dev, bank, pgm)	(SEQ_DUMPBUF(), _pm_info.command = _PM_LOAD_PATCH, \
-					_pm_info.device=dev, _pm_info.data.data8[0]=pgm, \
-					_pm_info.parm1 = bank, _pm_info.parm2 = 1, \
-					ioctl(seqfd, SNDCTL_PMGR_ACCESS, &_pm_info))
-#define PM_LOAD_PATCHES(dev, bank, pgm) (SEQ_DUMPBUF(), _pm_info.command = _PM_LOAD_PATCH, \
-					_pm_info.device=dev, memcpy(_pm_info.data.data8, pgm, 128), \
-					_pm_info.parm1 = bank, _pm_info.parm2 = 128, \
-					ioctl(seqfd, SNDCTL_PMGR_ACCESS, &_pm_info))
+#endif /* !OSSLIB */
 
 #define SEQ_VOLUME_MODE(dev, mode)	{_SEQ_NEEDBUF(8);\
 					_seqbuf[_seqbufptr] = SEQ_EXTENDED;\
@@ -1073,18 +1143,30 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
  * cause fatal problems with some other devices (such as MPU401).
  */
 #define SEQ_SYSEX(dev, buf, len) \
-					{int i, l=(len); if (l>6)l=6;\
+					{int ii, ll=(len); \
+					 unsigned char *bufp=buf;\
+					 if (ll>6)ll=6;\
 					_SEQ_NEEDBUF(8);\
 					_seqbuf[_seqbufptr] = EV_SYSEX;\
-					for(i=0;i<l;i++)_seqbuf[_seqbufptr+i+1] = (buf)[i];\
-					for(i=l;i<6;i++)_seqbuf[_seqbufptr+i+1] = 0xff;\
+					_seqbuf[_seqbufptr+1] = (dev);\
+					for(ii=0;ii<ll;ii++)\
+					   _seqbuf[_seqbufptr+ii+2] = bufp[ii];\
+					for(ii=ll;ii<6;ii++)\
+					   _seqbuf[_seqbufptr+ii+2] = 0xff;\
 					_SEQ_ADVBUF(8);}
 
 #define SEQ_CHN_PRESSURE(dev, chn, pressure) \
 		_CHN_COMMON(dev, MIDI_CHN_PRESSURE, chn, pressure, 0, 0)
 
-#define SEQ_SET_PATCH(dev, chn, patch) \
+#define SEQ_SET_PATCH SEQ_PGM_CHANGE
+#ifdef OSSLIB
+#   define SEQ_PGM_CHANGE(dev, chn, patch) \
+		{OSS_patch_caching(dev, chn, patch, seqfd, _seqbuf, _seqbuflen); \
+		 _CHN_COMMON(dev, MIDI_PGM_CHANGE, chn, patch, 0, 0);}
+#else
+#   define SEQ_PGM_CHANGE(dev, chn, patch) \
 		_CHN_COMMON(dev, MIDI_PGM_CHANGE, chn, patch, 0, 0)
+#endif
 
 #define SEQ_CONTROL(dev, chn, controller, value) \
 		_CHN_COMMON(dev, MIDI_CTL_CHANGE, chn, controller, 0, value)
@@ -1162,10 +1244,19 @@ void seqbuf_dump(void);	/* This function must be provided by programs */
 /*
  * Patch loading.
  */
-#define SEQ_WRPATCH(patchx, len)		{if (_seqbufptr) seqbuf_dump();\
-					if (write(seqfd, (char*)(patchx), len)==-1) \
-					   perror("Write patch: /dev/sequencer");}
-#define SEQ_WRPATCH2(patchx, len)	(seqbuf_dump(), write(seqfd, (char*)(patchx), len))
+#ifdef OSSLIB
+#   define SEQ_WRPATCH(patchx, len) \
+		OSS_write_patch(seqfd, (char*)(patchx), len)
+#   define SEQ_WRPATCH2(patchx, len) \
+		OSS_write_patch2(seqfd, (char*)(patchx), len)
+#else
+#   define SEQ_WRPATCH(patchx, len) \
+		{if (_seqbufptr) SEQ_DUMPBUF();\
+		 if (write(seqfd, (char*)(patchx), len)==-1) \
+		    perror("Write patch: /dev/sequencer");}
+#   define SEQ_WRPATCH2(patchx, len) \
+		(SEQ_DUMPBUF(), write(seqfd, (char*)(patchx), len))
+#endif
 
 #endif
 #endif

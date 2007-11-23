@@ -1,6 +1,8 @@
 #ifndef _LINUX_KERNELD_H
 #define _LINUX_KERNELD_H
 
+#include <linux/posix_types.h>
+
 #define KERNELD_SYSTEM 1
 #define KERNELD_REQUEST_MODULE 2 /* "insmod" */
 #define KERNELD_RELEASE_MODULE 3 /* "rmmod" */

@@ -176,7 +176,7 @@ int dtc_detect(Scsi_Host_Template * tpnt) {
       base = NULL;
 
       if (overrides[current_override].address)
-	 base = overrides[current_override].address;
+	 base = (unsigned char *)overrides[current_override].address;
       else
 	 for (; !base && (current_base < NO_BASES); ++current_base) {
 #if (DTCDEBUG & DTCDEBUG_INIT)
@@ -184,9 +184,9 @@ int dtc_detect(Scsi_Host_Template * tpnt) {
 #endif
 	 for (sig = 0; sig < NO_SIGNATURES; ++sig)
 	    if (!bases[current_base].noauto && !memcmp
-	      (bases[current_base].address + signatures[sig].offset,
+	      ((unsigned char *)(bases[current_base].address + signatures[sig].offset),
 	      signatures[sig].string, strlen(signatures[sig].string))) {
-	    base = bases[current_base].address;
+	    base = (unsigned char *)bases[current_base].address;
 #if (DTCDEBUG & DTCDEBUG_INIT)
 	    printk("scsi-dtc : detected board.\n");
 #endif

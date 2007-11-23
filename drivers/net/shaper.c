@@ -125,7 +125,7 @@ static int shaper_clocks(struct shaper *shaper, struct sk_buff *skb)
   
 static void shaper_setspeed(struct shaper *shaper, int bitspersec)
 {
-	shaper->bitspersdc=bitspersec;
+	shaper->bitspersec=bitspersec;
 	shaper->bytespertick=(bitspersec/HZ)/8;
 	if(!shaper->bytespertick)
 		shaper->bytespertick++;

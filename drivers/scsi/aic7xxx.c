@@ -209,7 +209,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.0.19"
+#define AIC7XXX_C_VERSION  "5.0.20"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -1620,16 +1620,7 @@ aic7xxx_loadseq(struct aic7xxx_host *p)
 static void
 aic7xxx_delay(int seconds)
 {
-  unsigned int i;
-
-  /*                        
-   * Call udelay() for 1 millisecond inside a loop for  
-   * the requested amount of seconds.
-   */
-  for (i=0; i < seconds*1000; i++)
-  {
-    udelay(1000);  /* Delay for 1 millisecond. */
-  }
+  mdelay(seconds*1000);
 }
 
 /*+F*************************************************************************
@@ -3179,17 +3170,17 @@ aic7xxx_reset_current_bus(struct aic7xxx_host *p)
   scsiseq = aic_inb(p, SCSISEQ);
   aic_outb(p, scsiseq | SCSIRSTO, SCSISEQ);
 
-  udelay(5000);
+  mdelay(5);
 
   /* Turn off the bus reset. */
   aic_outb(p, scsiseq & ~SCSIRSTO, SCSISEQ);
 
-  aic7xxx_clear_intstat(p);
+  mdelay(2);
 
+  aic7xxx_clear_intstat(p);
   /* Re-enable reset interrupts. */
   aic_outb(p, aic_inb(p, SIMODE1) | ENSCSIRST, SIMODE1);
 
-  udelay(2000);
 }
 
 /*+F*************************************************************************
@@ -4816,17 +4807,8 @@ aic7xxx_handle_scsiint(struct aic7xxx_host *p, unsigned char intstat)
     Scsi_Cmnd *cmd;
 
     scbptr = aic_inb(p, WAITING_SCBH);
-    if (scbptr >= p->scb_data->maxhscbs)
-    {
-      scb_index = SCB_LIST_NULL;
-      printk(WARN_LEAD "Bad scbptr %d during SELTO.\n", 
-        p->host_no, -1, -1, -1, scbptr);
-    }
-    else
-    {
-      aic_outb(p, scbptr, SCBPTR);
-      scb_index = aic_inb(p, SCB_TAG);
-    }
+    aic_outb(p, scbptr, SCBPTR);
+    scb_index = aic_inb(p, SCB_TAG);
 
     scb = NULL;
     if (scb_index < p->scb_data->numscbs)
@@ -4892,6 +4874,7 @@ aic7xxx_handle_scsiint(struct aic7xxx_host *p, unsigned char intstat)
      * Restarting the sequencer will stop the selection and make sure devices
      * are allowed to reselect in.
      */
+    aic_outb(p, 0, SCSISEQ);
     aic_outb(p, aic_inb(p, SIMODE1) & ~ENREQINIT, SIMODE1);
     p->flags &= ~AHC_HANDLING_REQINITS;
     aic_outb(p, CLRSELTIMEO | CLRBUSFREE | CLRREQINIT, CLRSINT1);
@@ -5695,7 +5678,7 @@ acquire_seeprom(struct aic7xxx_host *p)
   while ((wait > 0) && ((aic_inb(p, SEECTL) & SEERDY) == 0))
   {
     wait--;
-    udelay(1000);  /* 1 msec */
+    mdelay(1);  /* 1 msec */
   }
   if ((aic_inb(p, SEECTL) & SEERDY) == 0)
   {
@@ -6727,7 +6710,7 @@ aic7xxx_chip_reset(struct aic7xxx_host *p)
   wait = 1000;  /* 1 second (1000 * 1000 usec) */
   while ((wait > 0) && ((aic_inb(p, HCNTRL) & CHIPRSTACK) == 0))
   {
-    udelay(1000);  /* 1 msec = 1000 usec */
+    mdelay(1);  /* 1 msec = 1000 usec */
     wait = wait - 1;
   }
 
@@ -9377,6 +9360,7 @@ aic7xxx_release(struct Scsi_Host *host)
   if(p->irq)
     free_irq(p->irq, p);
   release_region(p->base, MAXREG - MINREG);
+#ifdef MMAPIO
   if(p->maddr)
   {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,0)
@@ -9385,6 +9369,7 @@ aic7xxx_release(struct Scsi_Host *host)
     iounmap((void *) (((unsigned long) p->maddr) & PAGE_MASK));
 #endif
   }
+#endif /* MMAPIO */
   prev = NULL;
   next = first_aic7xxx;
   while(next != NULL)

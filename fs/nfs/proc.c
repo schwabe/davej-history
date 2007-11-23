@@ -24,6 +24,11 @@
  */
 
 /*
+ * Fixes:
+ *    Ion Badulescu <ionut@cs.columbia.edu>     : FIFO's need special handling in NFSv2
+ */
+
+/*
  * Defining NFS_PROC_DEBUG causes a lookup of a file named
  * "xyzzy" to toggle debugging.  Just cd to an NFS-mounted
  * filesystem and type 'ls xyzzy' to turn on debugging.
@@ -180,6 +185,11 @@ static int *xdr_decode_fattr(int *p, struct nfs_fattr *fattr)
 	fattr->mtime.useconds = ntohl(*p++);
 	fattr->ctime.seconds = ntohl(*p++);
 	fattr->ctime.useconds = ntohl(*p++);
+	if (fattr->type == NFCHR && fattr->rdev == NFS_FIFO_DEV) {
+		fattr->type = NFFIFO;
+		fattr->mode = (fattr->mode & ~S_IFMT) | S_IFIFO;
+		fattr->rdev = 0;
+	}
 	return p;
 }
 

@@ -390,7 +390,7 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 				return TIMEOUT;
 			}
 			c0 = inb(PAR_STATUS(dev));
-			printk("%s: transmit timeout(%d,%02x)\n",
+			printk(KERN_WARNING "%s: transmit timeout(%d,%02x)\n",
 			       dev->name, snd->state, c0);
 		}
 		nl->enet_stats.tx_errors++;
@@ -408,7 +408,7 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 				return TIMEOUT;
 			}
 			c0 = inb(PAR_STATUS(dev));
-			printk("%s: receive timeout(%d,%02x)\n",
+			printk(KERN_WARNING "%s: receive timeout(%d,%02x)\n",
 			       dev->name, rcv->state, c0);
 		}
 		nl->enet_stats.rx_dropped++;
@@ -538,13 +538,13 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 			return TIMEOUT;
 		if (rcv->length.h > dev->mtu + dev->hard_header_len
 		    || rcv->length.h < 8) {
-			printk("%s: bogus packet size %d.\n", dev->name, rcv->length.h);
+			printk(KERN_WARNING "%s: bogus packet size %d.\n", dev->name, rcv->length.h);
 			return ERROR;
 		}
 		/* Malloc up new buffer. */
 		rcv->skb = dev_alloc_skb(rcv->length.h);
 		if (rcv->skb == NULL) {
-			printk("%s: Memory squeeze.\n", dev->name);
+			printk(KERN_WARNING "%s: Memory squeeze.\n", dev->name);
 			return ERROR;
 		}
 		skb_put(rcv->skb,rcv->length.h);
@@ -668,7 +668,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 	unsigned int cx;
 
 	if (snd->skb == NULL || (lbuf = snd->skb->data) == NULL) {
-		printk("%s: send skb lost\n", dev->name);
+		printk(KERN_ERR "%s: send skb lost\n", dev->name);
 		snd->state = PLIP_PK_DONE;
 		snd->skb = NULL;
 		return ERROR;
@@ -811,7 +811,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	unsigned char c0;
 
 	if (dev == NULL) {
-		printk ("plip_interrupt: irq %d for unknown device.\n", irq);
+		printk (KERN_ERR "plip_interrupt: irq %d for unknown device.\n", irq);
 		return;
 	}
 
@@ -845,12 +845,12 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 	case PLIP_CN_RECEIVE:
 		sti();
-		printk("%s: receive interrupt when receiving packet\n", dev->name);
+		printk(KERN_WARNING "%s: receive interrupt when receiving packet\n", dev->name);
 		break;
 
 	case PLIP_CN_ERROR:
 		sti();
-		printk("%s: receive interrupt in error state\n", dev->name);
+		printk(KERN_WARNING "%s: receive interrupt in error state\n", dev->name);
 		break;
 	}
 }
@@ -868,7 +868,7 @@ plip_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 		return nl->orig_rebuild_header(buff, dev, dst, skb);
 
 	if (eth->h_proto != htons(ETH_P_IP)) {
-		printk("plip_rebuild_header: Don't know how to resolve type %d addresses?\n", (int)eth->h_proto);
+		printk(KERN_WARNING "plip_rebuild_header: Don't know how to resolve type %d addresses?\n", (int)eth->h_proto);
 		memcpy(eth->h_source, dev->dev_addr, dev->addr_len);
 		return 0;
 	}
@@ -897,12 +897,12 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 	}
 
 	if (set_bit(0, (void*)&dev->tbusy) != 0) {
-		printk("%s: Transmitter access conflict.\n", dev->name);
+		printk(KERN_ERR "%s: Transmitter access conflict.\n", dev->name);
 		return 1;
 	}
 
 	if (skb->len > dev->mtu + dev->hard_header_len) {
-		printk("%s: packet too big, %d.\n", dev->name, (int)skb->len);
+		printk(KERN_WARNING "%s: packet too big, %d.\n", dev->name, (int)skb->len);
 		dev->tbusy = 0;
 		dev_kfree_skb(skb, FREE_WRITE);
 		return 0;
@@ -940,13 +940,13 @@ plip_open(struct device *dev)
 	int i;
 
 	if (dev->irq == 0) {
-		printk("%s: IRQ is not set.  Please set it by ifconfig.\n", dev->name);
+		printk(KERN_INFO "%s: IRQ is not set.  Please set it by ifconfig.\n", dev->name);
 		return -EAGAIN;
 	}
 	cli();
 	if (request_irq(dev->irq , plip_interrupt, 0, dev->name, NULL) != 0) {
 		sti();
-		printk("%s: couldn't get IRQ %d.\n", dev->name, dev->irq);
+		printk(KERN_WARNING "%s: couldn't get IRQ %d.\n", dev->name, dev->irq);
 		return -EAGAIN;
 	}
 	irq2dev_map[dev->irq] = dev;
@@ -1029,7 +1029,7 @@ plip_config(struct device *dev, struct ifmap *map)
 
 	if (map->base_addr != (unsigned long)-1
 	    && map->base_addr != dev->base_addr)
-		printk("%s: You cannot change base_addr of this interface (ignored).\n", dev->name);
+		printk(KERN_WARNING "%s: You cannot change base_addr of this interface (ignored).\n", dev->name);
 
 	if (map->irq != (unsigned char)-1)
 		dev->irq = map->irq;

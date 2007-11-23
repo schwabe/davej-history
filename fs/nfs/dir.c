@@ -8,6 +8,11 @@
  * 10 Apr 1996	Added silly rename for unlink	--okir
  */
 
+/*
+ * Fixes:
+ *    Ion Badulescu <ionut@cs.columbia.edu>     : FIFO's need special handling in NFSv2
+ */
+
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/stat.h>
@@ -443,7 +448,10 @@ static int nfs_mknod(struct inode *dir, const char *name, int len,
 		iput(dir);
 		return -ENAMETOOLONG;
 	}
-	sattr.mode = mode;
+	if (mode & S_IFIFO)
+		sattr.mode = (mode & ~S_IFMT) | S_IFCHR;
+	else
+		sattr.mode = mode;
 	sattr.uid = sattr.gid = (unsigned) -1;
 	if (S_ISCHR(mode) || S_ISBLK(mode))
 		sattr.size = rdev; /* get out your barf bag */
@@ -452,6 +460,11 @@ static int nfs_mknod(struct inode *dir, const char *name, int len,
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 		name, &sattr, &fhandle, &fattr);
+	if (error == -EINVAL && (mode & S_IFIFO)) {
+		sattr.mode = mode;
+		error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
+					name, &sattr, &fhandle, &fattr);
+	}
 	if (!error)
 	{
 		nfs_lookup_cache_add(dir, name, &fhandle, &fattr);

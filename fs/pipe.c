@@ -413,7 +413,7 @@ int do_pipe(int *fd)
 	int error;
 	int i,j;
 
-	error = ENFILE;
+	error = -ENFILE;
 	f1 = get_empty_filp();
 	if (!f1)
 		goto no_files;

@@ -1,162 +1,288 @@
 # Makefile for the Linux sound card driver
 #
-# Note 2! The CFLAGS definitions are now inherited from the
-# parent makes. (hopefully)
-#
-#
+# 18 Apr 1998, Michael Elizabeth Chastain, <mailto:mec@shout.net>
+# Rewritten to use lists instead of if-statements.
 
-.PHONY: dummy
-SUB_DIRS	= lowlevel
-VERSION		= `head -1 .version`
-TARGET_OS	= linux
-USRINCDIR	= /usr/include
-MODULEDIR	= /lib/modules/misc
 
-FIXEDOBJS	= soundcard.o dev_table.o sound_switch.o
 
-ifndef NO_LOWLEVEL
-	FIXEDOBJS := $(FIXEDOBJS) lowlevel/lowlevel.o
+# My subdirectories.
+
+SUB_DIRS	:= 
+MOD_SUB_DIRS	:=
+MOD_IN_SUB_DIRS	:=
+ALL_SUB_DIRS	:= $(SUB_DIRS) lowlevel
+
+ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
+    ifeq ($(CONFIG_SOUND_OSS),y)
+	    SUB_DIRS		+= lowlevel
+    else
+	    MOD_SUB_DIRS	+= lowlevel
+    endif
+    MOD_IN_SUB_DIRS	+= lowlevel
 endif
 
-ifeq (.defines,$(wildcard .defines))
-include .defines
-include .objects
+
+
+# All of the (potential) objects that export symbols.
+# This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
+
+export-objs	:=  ad1848.o audio_syms.o midi_syms.o mpu401.o \
+		    msnd.o opl3.o sb_card.o sequencer_syms.o \
+		    sound_core.o sound_firmware.o sound_syms.o \
+		    uart401.o
+
+
+
+# Object file lists.
+
+obj-y		:=
+obj-m		:=
+obj-n		:=
+obj-		:=
+
+
+
+# Each configuration option enables a list of files.
+
+ifeq ($(ARCH),m68k)
+
+obj-$(CONFIG_DMASOUND)		+= dmasound.o
+
 else
-OBJS   = `cat .object_files`
+
+obj-$(CONFIG_SOUND)		+= soundcore.o
+obj-$(CONFIG_SOUND_OSS)		+= sound.o
+obj-$(CONFIG_SOUND_ADLIB)	+= adlib_card.o opl3.o
+obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o 
+
+# In theory, there's probably no reason to include the uart401 code
+# to support a WaveFront card's CS4232 module. However, it makes
+# reconfiguring things require a recompile, so just leave this
+# here and try not to worry about the extra uart401 module.
+
+obj-$(CONFIG_SOUND_CS4232)	+= uart401.o
+obj-$(CONFIG_SOUND_GUS)		+= gus.o ad1848.o
+obj-$(CONFIG_SOUND_MAD16)	+= mad16.o ad1848.o sb.o uart401.o
+obj-$(CONFIG_SOUND_MAUI)	+= maui.o mpu401.o
+obj-$(CONFIG_SOUND_MPU401)	+= mpu401.o
+obj-$(CONFIG_SOUND_MSNDCLAS)	+= msnd.o msnd_classic.o
+obj-$(CONFIG_SOUND_MSNDPIN)	+= msnd.o msnd_pinnacle.o
+obj-$(CONFIG_SOUND_MSS)		+= ad1848.o
+obj-$(CONFIG_SOUND_OPL3SA1)	+= opl3sa.o ad1848.o uart401.o
+obj-$(CONFIG_SOUND_PAS)		+= pas2.o sb.o uart401.o
+obj-$(CONFIG_SOUND_PSS)		+= pss.o ad1848.o mpu401.o
+obj-$(CONFIG_SOUND_SB)		+= sb.o uart401.o
+obj-$(CONFIG_SOUND_SOFTOSS)	+= softoss2.o
+obj-$(CONFIG_SOUND_SGALAXY)	+= sgalaxy.o
+obj-$(CONFIG_SOUND_SSCAPE)	+= sscape.o ad1848.o mpu401.o
+obj-$(CONFIG_SOUND_TRIX)	+= trix.o ad1848.o sb.o uart401.o
+obj-$(CONFIG_SOUND_UART6850)	+= uart6850.c
+obj-$(CONFIG_SOUND_VMIDI)	+= v_midi.o
+obj-$(CONFIG_SOUND_YM3812)	+= adlib_card.o opl3.o
+obj-$(CONFIG_SOUND_WAVEFRONT)	+= wavefront.o
+
+obj-$(CONFIG_SOUND_ES1370)	+= es1370.o
+obj-$(CONFIG_SOUND_ES1371)	+= es1371.o
+obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
+
 endif
 
-ifndef TOPDIR
-TOPDIR=/usr/src/linux
+
+
+# Declare multi-part drivers.
+
+list-multi	:= sound.o gus.o pas2.o sb.o softoss2.o soundcore.o wavefront.o
+
+sound-objs	:= 							\
+    dev_table.o soundcard.o sound_syms.o		\
+    audio.o audio_syms.o dmabuf.o					\
+    midi_syms.o midi_synth.o midibuf.o					\
+    sequencer.o sequencer_syms.o sound_timer.o sys_timer.o
+
+soundcore-objs	:= sound_core.o sound_firmware.o
+
+gus-objs	:= gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
+pas2-objs	:= pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
+sb-objs		:= sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o
+softoss2-objs	:= softoss.o softoss_rs.o
+wavefront-objs  := wavfront.o wf_midi.o yss225.o
+
+
+# Extract lists of the multi-part drivers.
+# The 'int-*' lists are the intermediate files used to build the multi's.
+
+multi-y		:= $(filter $(list-multi), $(obj-y))
+multi-m		:= $(filter $(list-multi), $(obj-m))
+int-y		:= $(sort $(foreach m, $(multi-y), $($(basename $(m))-objs)))
+int-m		:= $(sort $(foreach m, $(multi-m), $($(basename $(m))-objs)))
+
+
+
+# Files that are both resident and modular: remove from modular.
+
+obj-m		:= $(filter-out $(obj-y), $(obj-m))
+int-m		:= $(filter-out $(int-y), $(int-m))
+
+
+
+# Set flags for secondary drivers.
+# I have to do this before I reduce obj-y to components.
+
+EXTRA_CFLAGS	:= $(sort					\
+    $(patsubst ad1848.o,  -DCONFIG_SOUND_AD1848,		\
+    $(patsubst mpu401.o,  -DCONFIG_SOUND_MPU_EMU,		\
+    $(patsubst sb.o,      -DCONFIG_SOUND_SBDSP,			\
+    $(patsubst uart401.o, -DCONFIG_SOUND_UART401,		\
+	$(filter ad1848.o mpu401.o sb.o uart401.o, $(obj-y))	\
+    )))))
+
+
+
+# Take multi-part drivers out of obj-y and put components in.
+
+obj-y		:= $(filter-out $(list-multi), $(obj-y)) $(int-y)
+
+
+
+# Translate to Rules.make lists.
+
+L_TARGET	:= sound.a
+MOD_LIST_NAME	:= SOUND_MODULES
+
+L_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-y)))
+LX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-y)))
+M_OBJS		:= $(sort $(filter-out $(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter     $(export-objs), $(obj-m)))
+MI_OBJS		:= $(sort $(filter-out $(export-objs), $(int-m)))
+MIX_OBJS	:= $(sort $(filter     $(export-objs), $(int-m)))
+
+ifeq ($(CONFIG_LOWLEVEL_SOUND),y)
+    L_OBJS	+= lowlevel/lowlevel.o
 endif
 
-
-ifndef HOSTCC
-build:
-	@echo Compiling modularized sound driver
-	@make sound.o
-	@echo Sound module compiled.
-
-install:	sound.o
-	cp sound.o $(MODULEDIR)
-endif
-
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
-ifeq ($(CONFIG_SOUND),y)
-
-all:	local.h sound.a
-
-OBJS += $(FIXEDOBJS)
-
-else
-all:
-endif
-
-ifndef HOSTCC
-#
-#	Running outside the kernel build.
-#
-CC	= gcc
-HOSTCC	= gcc
-CFLAGS	= -O2 -D__KERNEL__ -DMODULE -I/usr/src/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -pipe -m486
-USE_DEPEND=y
-else
 include $(TOPDIR)/Rules.make
+
+
+
+# Link rules for multi-part drivers.
+
+sound.o: $(sound-objs)
+	$(LD) -r -o $@ $(sound-objs)
+
+soundcore.o: $(soundcore-objs)
+	$(LD) -r -o $@ $(soundcore-objs)
+
+gus.o: $(gus-objs)
+	$(LD) -r -o $@ $(gus-objs)
+
+pas2.o: $(pas2-objs)
+	$(LD) -r -o $@ $(pas2-objs)
+
+sb.o: $(sb-objs)
+	$(LD) -r -o $@ $(sb-objs)
+
+softoss2.o: $(softoss2-objs)
+	$(LD) -r -o $@ $(softoss2-objs)
+
+
+
+# Firmware files that need translation
+#
+# The translated files are protected by a file that keeps track
+# of what name was used to build them.  If the name changes, they
+# will be forced to be remade.
+#
+# First make the utilities.
+
+bin2hex: bin2hex.c
+	$(HOSTCC) $(HOSTCFLAGS) -o bin2hex bin2hex.c
+
+hex2hex: hex2hex.c
+	$(HOSTCC) $(HOSTCFLAGS) -o hex2hex hex2hex.c
+
+wavefront.o: $(wavefront-objs)
+	$(LD) -r -o $@ $(wavefront-objs)
+
+
+# Turtle Beach Maui / Tropez
+
+maui.o: maui_boot.h
+
+ifeq ($(CONFIG_MAUI_HAVE_BOOT),y)
+    maui_boot.h: $(patsubst "%", %, $(CONFIG_MAUI_BOOT_FILE)) bin2hex
+	./bin2hex maui_os < $(CONFIG_MAUI_BOOT_FILE) > $@
+else
+    maui_boot.h:
+	(							\
+	    echo 'static unsigned char * maui_os = NULL;';	\
+	    echo 'static int maui_osLen = 0;';			\
+	) > $@
+endif
+	@ ( \
+	    echo 'ifeq ($(strip $(CONFIG_MAUI_HAVE_BOOT) $(CONFIG_MAUI_BOOT_FILE)),$$(strip $$(CONFIG_MAUI_HAVE_BOOT) $$(CONFIG_MAUI_BOOT_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+
+
+
+# PSS (ECHO-ADI2111)
+
+pss.o: pss_boot.h
+
+ifeq ($(CONFIG_PSS_HAVE_BOOT),y)
+    pss_boot.h: $(patsubst "%", %, $(CONFIG_PSS_BOOT_FILE)) bin2hex
+	./bin2hex pss_synth < $(CONFIG_PSS_BOOT_FILE) > $@
+else
+    pss_boot.h:
+	(							\
+	    echo 'static unsigned char * pss_synth = NULL;';	\
+	    echo 'static int pss_synthLen = 0;';		\
+	) > $@
+endif
+	@ ( \
+	    echo 'ifeq ($(strip $(CONFIG_PSS_HAVE_BOOT) $(CONFIG_PSS_BOOT_FILE)),$$(strip $$(CONFIG_PSS_HAVE_BOOT) $$(CONFIG_PSS_BOOT_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+
+
+
+# MediaTrix AudioTrix Pro
+
+trix.o: trix_boot.h
+
+ifeq ($(CONFIG_TRIX_HAVE_BOOT),y)
+    trix_boot.h: $(patsubst "%", %, $(CONFIG_TRIX_BOOT_FILE)) hex2hex
+	hex2hex trix_boot < $(CONFIG_TRIX_BOOT_FILE) > $@
+else
+    trix_boot.h:
+	(							\
+	    echo 'static unsigned char * trix_boot = NULL;';	\
+	    echo 'static int trix_boot_len = 0;';		\
+	) > $@
+endif
+	@ ( \
+	    echo 'ifeq ($(strip $(CONFIG_TRIX_HAVE_BOOT) $(CONFIG_TRIX_BOOT_FILE)),$$(strip $$(CONFIG_TRIX_HAVE_BOOT) $$(CONFIG_TRIX_BOOT_FILE)))'; \
+	    echo 'FILES_BOOT_UP_TO_DATE += $@'; \
+	    echo 'endif' \
+	) > .$@.boot
+
+
+
+# Find boot files whose source file names have changed and force rebuild.
+
+FILES_BOOT_UP_TO_DATE :=
+
+FILES_BOOT_EXIST := $(wildcard .*.boot)
+ifneq ($(FILES_BOOT_EXIST),)
+include $(FILES_BOOT_EXIST)
 endif
 
-sound.a: $(OBJS) 
-	-rm -f sound.a
-	$(AR) rcs sound.a $(OBJS)
-	sync
+FILES_BOOT_CHANGED := $(strip \
+    $(filter-out $(FILES_BOOT_UP_TO_DATE), \
+	maui_boot.h pss_boot.h trix_boot.h))
 
-clean:
-	rm -f core core.* *.o *.a tmp_make *~ x y z *%
-	rm -f configure sound_stub.c objects/*.o 
-	cd lowlevel;make clean
-
-indent:
-	for n in *.c;do echo indent $$n;indent $$n;done
-
-local.h: 
-	$(MAKE) clean
-	$(MAKE) setup-$(TARGET_OS)
-	$(MAKE) oldconfig
-	$(MAKE) dep
-	@echo
-	@echo
-	@echo
-	@echo NOTE! Object file dependencies may not be up to date. Run
-	@echo make again if kernel/driver doesn''t link properly. Restarting
-	@echo it now may save some time.
-	@echo
-	@echo
-
-config: configure
-	@$(MAKE) setup-$(TARGET_OS)
-	@./configure > local.h
-	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
-	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
-#	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h 2>/dev/null
-#	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
-	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
-
-oldconfig: setup-$(TARGET_OS) configure
-	@./configure -o > local.h
-	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
-	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
-#	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h 2>/dev/null
-#	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
-	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
-
-kernelconfig: setup-$(TARGET_OS)
-	rm -f configure
-	$(HOSTCC) -o configure configure.c
-	./configure fixedlocal > local.h
-	./configure fixeddefines > .defines
-	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
-	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
-#	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h 2>/dev/null
-#	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
-	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
-
-mkscript: setup-$(TARGET_OS)
-	rm -f configure
-	$(HOSTCC) -o configure configure.c
-	./configure script > Config.in
-	cat lowlevel/Config.tmpl >> Config.in
-	./configure fixedlocal > local.h
-	./configure fixeddefines > .defines
-
-clrconf:
-	rm -f local.h .depend synth-ld.h trix_boot.h smw-midi0001.h maui_boot.h .defines
-
-configure: configure.c
-	$(HOSTCC) -o configure configure.c
-	@cat .blurb
-
-dep:
-	$(CPP) -M *.c > .depend
-
-setup-linux:
-	@echo Compiling Sound Driver v $(VERSION) for Linux
-
-sound.o: local.h $(FIXEDOBJS) sound.a
-	-rm -f sound.o
-	$(LD) -r -o sound.o $(FIXEDOBJS) sound.a
-
-modules: local.h sound.o
-	ln -fs `pwd`/sound.o $(TOPDIR)/modules/sound.o
-
-
-lowlevel/lowlevel.o: dummy
-		cd lowlevel;make
-
-ifdef USE_DEPEND
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+ifneq ($(FILES_BOOT_CHANGED),)
+$(FILES_BOOT_CHANGED): dummy
 endif
