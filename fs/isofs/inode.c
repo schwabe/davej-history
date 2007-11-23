@@ -954,7 +954,7 @@ int isofs_bmap(struct inode * inode,int block)
 	printk("isofs_bmap: mapped inode:block %x:%d to block %lu\n",
 		inode->i_ino, block, (b_off - offset + firstext) >> ISOFS_BUFFER_BITS(inode));
 #endif
-	return (b_off - offset + firstext) >> ISOFS_BUFFER_BITS(inode);
+	return firstext + ((b_off - offset) >> ISOFS_BUFFER_BITS(inode));
 }
 
 
@@ -1162,8 +1162,7 @@ void isofs_read_inode(struct inode * inode)
 	  iso_date(raw_inode->date, high_sierra);
 
 	inode->u.isofs_i.i_first_extent = (isonum_733 (raw_inode->extent) +
-					   isonum_711 (raw_inode->ext_attr_length))
-	  << inode -> i_sb -> u.isofs_sb.s_log_zone_size;
+					   isonum_711 (raw_inode->ext_attr_length));
 
 /* Now test for possible Rock Ridge extensions which will override some of
    these numbers in the inode structure. */

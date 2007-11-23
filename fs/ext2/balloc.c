@@ -603,6 +603,8 @@ got_block:
 		unlock_super (sb);
 		return 0;
 	}
+	if (!buffer_uptodate(bh))
+		wait_on_buffer(bh);
 	memset(bh->b_data, 0, sb->s_blocksize);
 	mark_buffer_uptodate(bh, 1);
 	mark_buffer_dirty(bh, 1);

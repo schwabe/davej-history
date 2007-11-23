@@ -34,6 +34,7 @@
 #include <asm/init.h>
 #include <asm/io.h>
 #include <asm/prom.h>
+#include <asm/gemini.h>
 
 #include "time.h"
 int first_cpu_booted = 0;
@@ -175,7 +176,7 @@ spinlock_t mesg_pass_lock = SPIN_LOCK_UNLOCKED;
 void smp_message_pass(int target, int msg, unsigned long data, int wait)
 {
 	int i;
-	if ( !(_machine & (_MACH_Pmac|_MACH_chrp|_MACH_prep)) )
+	if ( !(_machine & (_MACH_Pmac|_MACH_chrp|_MACH_prep|_MACH_gemini)) )
 		return;
 
 	spin_lock(&mesg_pass_lock);
@@ -296,6 +297,12 @@ void __init smp_boot_cpus(void)
 			cpu_nr = 2;
 			break;
 		}
+	case _MACH_gemini:
+		for ( i = 0; i < 4 ; i++ )
+			openpic_enable_IPI(i);
+                cpu_nr = (readb(GEMINI_CPUSTAT) & GEMINI_CPU_COUNT_MASK)>>2;
+                cpu_nr = (cpu_nr == 0) ? 4 : cpu_nr;
+		break;
 	default:
 		printk("SMP not supported on this machine.\n");
 		return;
@@ -356,6 +363,10 @@ void __init smp_boot_cpus(void)
 			*MotSave_SmpIar = (unsigned long)__secondary_start_psurge - KERNELBASE;
 			*MotSave_CpusState[1] = CPU_GOOD;
 			printk("CPU1 reset, waiting\n");
+			break;
+		case _MACH_gemini:
+			openpic_init_processor( 1<<i );
+			openpic_init_processor( 0 );
 			break;
 		}
 		

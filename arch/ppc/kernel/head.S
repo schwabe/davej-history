@@ -97,19 +97,6 @@ LG_CACHE_LINE_SIZE = 4
 	bdnz	0b
 #endif
 
-#ifdef CONFIG_PPC64
-#define LOAD_BAT(n, offset, reg, RA, RB) \
-	ld	RA,offset+0(reg);	\
-	ld	RB,offset+8(reg);	\
-	mtspr	IBAT##n##U,RA;		\
-	mtspr	IBAT##n##L,RB;		\
-	ld	RA,offset+16(reg);	\
-	ld	RB,offset+24(reg);	\
-	mtspr	DBAT##n##U,RA;		\
-	mtspr	DBAT##n##L,RB;		\
-	
-#else /* CONFIG_PPC64 */
-	
 /* 601 only have IBAT cr0.eq is set on 601 when using this macro */ 
 #define LOAD_BAT(n, offset, reg, RA, RB) \
 	/* see the comment for clear_bats() -- Cort */ \
@@ -126,7 +113,6 @@ LG_CACHE_LINE_SIZE = 4
 	mtspr	DBAT##n##U,RA;		\
 	mtspr	DBAT##n##L,RB;		\
 1:	
-#endif /* CONFIG_PPC64 */	 
 
 #ifndef CONFIG_APUS
 #define tophys(rd,rs,rt)	addis	rd,rs,-KERNELBASE@h
@@ -153,7 +139,15 @@ _stext:
 	.text
 	.globl	_start
 _start:
-	.long	TOPHYS(__start),0,0
+	/* 
+	 * These are here for legacy reasons, the kernel used to
+	 * need to look like a coff function entry for the pmac
+	 * but we're always started by some kind of bootloader now.
+	 *  -- Cort
+	 */
+	nop
+	nop
+	nop
 
 /* PMAC
  * Enter here with the kernel text, data and bss loaded starting at
@@ -224,16 +218,6 @@ _start:
 	
 	.globl	__start
 __start:
-#ifdef CONFIG_PPC64
-/* 
- * Go into 32-bit mode to boot.  OF should do this for
- * us already but just in case...
- * -- Cort 
- */
-	mfmsr	r10
-	clrldi	r10,r10,3
-	mtmsr	r10
-#endif	
 /*
  * We have to do any OF calls before we map ourselves to KERNELBASE,
  * because OF may have I/O devices mapped in in that area
@@ -255,7 +239,6 @@ __secondary_start:
  * call OF any more.
  */
 	lis	r11,KERNELBASE@h
-#ifndef CONFIG_PPC64
 	mfspr	r9,PVR
 	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
 	cmpi	0,r9,1
@@ -269,7 +252,6 @@ __secondary_start:
 	mtspr	IBAT1U,r9
 	mtspr	IBAT1L,r10
 	b	5f
-#endif /* CONFIG_PPC64 */
 4:
 #ifdef CONFIG_APUS
 	ori	r11,r11,BL_8M<<2|0x2	/* set up an 8MB mapping */
@@ -281,17 +263,10 @@ __secondary_start:
 #else	
 	ori	r11,r11,BL_256M<<2|0x2	/* set up BAT registers for 604 */
 	li	r8,2			/* R/W access */
-#ifdef CONFIG_PPC64
-	/* clear out the high 32 bits in the BAT */
-	clrldi	r11,r11,32
-	clrldi	r8,r8,32
-	/* turn off the pagetable mappings just in case */
-	clrldi	r16,r16,63
-	mtsdr1	r16
-#else /* CONFIG_PPC64 */
 	/*
 	 * If the MMU is off clear the bats.  See clear_bat() -- Cort
 	 */
+#ifndef CONFIG_GEMINI	
 	mfmsr	r20
 	andi.	r20,r20,MSR_DR
 	bne	100f
@@ -314,14 +289,13 @@ __secondary_start:
 	mtspr	DBAT2U,r21		/* bit in upper BAT register */
 	mtspr	IBAT2L,r18
 	mtspr	IBAT2U,r21
-#endif /* CONFIG_PPC64 */
+#endif /* ndef CONFIG_GEMINI */	
 #endif
 	mtspr	DBAT0L,r8		/* N.B. 6xx (not 601) have valid */
 	mtspr	DBAT0U,r11		/* bit in upper BAT register */
 	mtspr	IBAT0L,r8
 	mtspr	IBAT0U,r11
 5:	isync
-
 #ifdef CONFIG_APUS
 	/* Unfortunately the APUS specific instructions bloat the
 	 * code so it cannot fit in the 0x100 bytes available. We have
@@ -511,7 +485,12 @@ label:						\
 
 /* System reset */
 #ifdef CONFIG_SMP /* MVME/MTX start the secondary here */
+#ifdef CONFIG_GEMINI
+	. = 0x100
+	b	__secondary_start_gemini
+#else /* CONFIG_GEMINI */
 	STD_EXCEPTION(0x100, Reset, __secondary_start_psurge)
+#endif /* CONFIG_GEMINI */
 #else
 	STD_EXCEPTION(0x100, Reset, UnknownException)
 #endif	
@@ -1281,6 +1260,7 @@ Hash_msk = (((1 << Hash_bits) - 1) * 64)
 	.globl	hash_page
 hash_page:
 #ifdef __SMP__
+	SAVE_2GPRS(7,r21)
 	eieio
 	lis	r2,hash_table_lock@h
 	ori	r2,r2,hash_table_lock@l
@@ -1294,10 +1274,18 @@ hash_page:
 	bne-	12f
 	stwcx.	r0,0,r2
 	beq+	11f
-12:	cmpw	r6,r0
+	/* spin here a bit */
+12:	mfctr	r7
+	li	r8,1000
+	mtctr	r8
+13:
+	bdnz	13b
+	mtctr	r7
+	cmpw	r6,r0
 	bdnzf	2,10b
 	tw	31,31,31
 11:	eieio
+	REST_2GPRS(7, r21)
 #endif
 	/* Get PTE (linux-style) and check access */
 	lwz	r5,PG_TABLES(r5)		
@@ -1331,11 +1319,6 @@ hash_page:
 	stw	r6,0(r2)		/* update PTE (accessed/dirty bits) */
 
 	/* Convert linux-style PTE to low word of PPC-style PTE */
-#ifdef CONFIG_PPC64
-	/* clear the high 32 bits just in case */
-	clrldi	r6,r6,32
-	clrldi	r4,r4,32
-#endif /* CONFIG_PPC64 */
 	rlwinm	r4,r6,32-9,31,31	/* _PAGE_HWWRITE -> PP lsb */
 	rlwimi	r6,r6,32-1,31,31	/* _PAGE_USER -> PP (both bits now) */
 	ori	r4,r4,0xe04		/* clear out reserved bits */
@@ -1343,34 +1326,17 @@ hash_page:
 
 	/* Construct the high word of the PPC-style PTE */
 	mfsrin	r5,r3			/* get segment reg for segment */
-#ifdef CONFIG_PPC64
-	sldi	r5,r5,12
-#else /* CONFIG_PPC64 */
 	rlwinm	r5,r5,7,1,24		/* put VSID in 0x7fffff80 bits */
-#endif /* CONFIG_PPC64 */
 	
 #ifndef __SMP__				/* do this later for SMP */
-#ifdef CONFIG_PPC64
-	ori	r5,r5,1			/* set V (valid) bit */
-#else /* CONFIG_PPC64 */
 	oris	r5,r5,0x8000		/* set V (valid) bit */
-#endif /* CONFIG_PPC64 */
 #endif
 	
-#ifdef CONFIG_PPC64
-/* XXX:	 does this insert the api correctly? -- Cort */
-	rlwimi	r5,r3,17,21,25		/* put in API (abbrev page index) */
-#else /* CONFIG_PPC64 */
 	rlwimi	r5,r3,10,26,31		/* put in API (abbrev page index) */
-#endif /* CONFIG_PPC64 */
 	/* Get the address of the primary PTE group in the hash table */
 	.globl	hash_page_patch_A
 hash_page_patch_A:
 	lis	r4,Hash_base@h		/* base address of hash table */
-#ifdef CONFIG_PPC64
-	/* just in case */
-	clrldi	r4,r4,32
-#endif	
 	rlwimi	r4,r5,32-1,26-Hash_bits,25	/* (VSID & hash_mask) << 6 */
 	rlwinm	r0,r3,32-6,26-Hash_bits,25	/* (PI & hash_mask) << 6 */
 	xor	r4,r4,r0		/* make primary hash */
@@ -1735,32 +1701,25 @@ turn_on_mmu:
 	mfmsr	r0
 	ori	r1,r0,MSR_DR|MSR_IR
 	mtspr	SRR1,r1
-#ifdef CONFIG_SMP
-	/* see the function start_here_ibm_hack for explanation -- Cort */
-	andi.	0,r1,MSR_DR	/* check if the MMU is already on */
-	bne	10f
-	lis	r5,smp_ibm_chrp_hack@h
-	ori	r5,r5,smp_ibm_chrp_hack@l
-	tophys(r5,r5,r6)
-	lwz	r5,0(r5)
-	cmpi	0,r5,0
-	beq	10f
-	lis	r5,first_cpu_booted@h
-	ori	r5,r5,first_cpu_booted@l
-	tophys(r5,r5,r6)
-	lwz	r5,0(r5)
-	cmpi	0,r5,0
-	beq	10f
-	lis	r0,start_here_ibm_hack@h
-	ori	r0,r0,start_here_ibm_hack@l
-	b	1010f
-10:	
-#endif /* CONFIG_SMP */
 	lis	r0,start_here@h
 	ori	r0,r0,start_here@l
-1010:	mtspr	SRR0,r0
+	mtspr	SRR0,r0
 	SYNC
 	rfi				/* enables MMU */
+
+#ifdef CONFIG_GEMINI
+	.globl	__secondary_start_gemini
+__secondary_start_gemini:
+        mfspr   r4,HID0
+        ori     r4,r4,HID0_ICFI
+        li      r3,0
+        ori     r3,r3,HID0_ICE
+        andc    r4,r4,r3
+        mtspr   HID0,r4
+        sync
+        bl      prom_init
+        b       __secondary_start
+#endif /* CONFIG_GEMINI */
 
 #ifdef CONFIG_SMP
 	.globl	__secondary_start_psurge
@@ -1791,25 +1750,6 @@ __secondary_hold:
 	blr
 #endif /* CONFIG_SMP */
 	
-/* 
- * We get _strange_ behavior on the new IBM chrp firmware.
- * We end up here with the MMU disabled, even though we enable
- * it with the rfi that takes us here.  Somehow, a physical address
- * access fixes this by enabling the MMU.
- *
- * The IBM engineers can't explain this behavior and AIX doesn't 
- * seem to find it.  This hack gets around it for now.
- *          -- Cort
- */
-start_here_ibm_hack:
-	mfmsr	r1
-	lis	r5,smp_ibm_chrp_hack@h
-	ori	r5,r5,smp_ibm_chrp_hack@l
-	tophys(r5,r5,r6)
-	mfmsr	r1
-	stw	r1,_MSR-16(r5)
-	addi	r5,r5,_MSR-16
-	dcbf	0,r5
 #ifndef CONFIG_8xx
 start_here:
 	/*
@@ -1896,6 +1836,8 @@ start_here:
 	mr	r6,r28
 	mr	r7,r27
 	bl	identify_machine
+lis r20,0xc0000000@h
+stw	r20,0(r20)	
 	bl	MMU_init
 /*
  * Go back to running unmapped so we can load up new values
@@ -1906,11 +1848,7 @@ start_here:
  */
 #ifndef CONFIG_8xx
 	lis	r6,_SDR1@ha
-#ifdef CONFIG_PPC64	
-	ld	r6,_SDR1@l(r6)
-#else
 	lwz	r6,_SDR1@l(r6)
-#endif		
 #else
 	/* The right way to do this would be to track it down through
 	 * init's TSS like the context switch code does, but this is
@@ -1939,14 +1877,6 @@ start_here:
 #endif
 #ifndef CONFIG_8xx
 	mtspr	SDR1,r6
-#ifdef CONFIG_PPC64
-	/* clear the v bit in the ASR so we can
-	 * behave as if we have segment registers 
-	 * -- Cort
-	 */
-	clrldi	r6,r6,63
-	mtasr	r6
-#endif /* CONFIG_PPC64 */
 	li	r0,16		/* load up segment register values */
 	mtctr	r0		/* for context 0 */
 	lis	r3,0x2000	/* Ku = 1, VSID = 0 */
@@ -1963,17 +1893,10 @@ start_here:
 	lis	r3,BATS@ha
 	addi	r3,r3,BATS@l
 	tophys(r3,r3,r4)
-#ifdef CONFIG_PPC64
-	LOAD_BAT(0,0,r3,r4,r5)
-	LOAD_BAT(1,32,r3,r4,r5)
-	LOAD_BAT(2,64,r3,r4,r5)
-	LOAD_BAT(3,96,r3,r4,r5)
-#else /* CONFIG_PPC64 */
 	LOAD_BAT(0,0,r3,r4,r5)
 	LOAD_BAT(1,16,r3,r4,r5)
 	LOAD_BAT(2,32,r3,r4,r5)
 	LOAD_BAT(3,48,r3,r4,r5)
-#endif /* CONFIG_PPC64 */
 #endif /* CONFIG_8xx */
 /* Set up for using our exception vectors */
 	/* ptr to phys current tss */

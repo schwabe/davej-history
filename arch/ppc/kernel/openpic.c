@@ -241,10 +241,13 @@ __initfunc(void openpic_init(int main_pic))
 	    
 	    /* Initialize the spurious interrupt */
 	    openpic_set_spurious(OPENPIC_VEC_SPURIOUS);
-	    
-	    if (request_irq(IRQ_8259_CASCADE, no_action, SA_INTERRUPT,
-			    "82c59 cascade", NULL))
-		    printk("Unable to get OpenPIC IRQ 0 for cascade\n");
+
+	    if ( _machine != _MACH_gemini )
+	    {
+		    if (request_irq(IRQ_8259_CASCADE, no_action, SA_INTERRUPT,
+				    "82c59 cascade", NULL))
+			    printk("Unable to get OpenPIC IRQ 0 for cascade\n");
+	    }
 	    openpic_set_priority(0, 0);
 	    openpic_disable_8259_pass_through();
     }
@@ -508,4 +511,11 @@ void openpic_set_sense(u_int irq, int sense)
     openpic_safe_writefield(&OpenPIC->Source[irq].Vector_Priority,
     			    OPENPIC_SENSE_LEVEL,
 			    (sense ? OPENPIC_SENSE_LEVEL : 0));
+}
+
+void openpic_enable_IPI(u_int ipi)
+{
+	check_arg_ipi(ipi);
+	openpic_clearfield(&OpenPIC->Global.IPI_Vector_Priority(ipi),
+			   OPENPIC_MASK);
 }

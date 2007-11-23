@@ -62,6 +62,12 @@ extern void apus_init(unsigned long r3,
                       unsigned long r6,
                       unsigned long r7);
 
+extern void gemini_init(unsigned long r3,
+                      unsigned long r4,
+                      unsigned long r5,
+                      unsigned long r6,
+                      unsigned long r7);
+
 extern boot_infos_t *boot_infos;
 extern char cmd_line[512];
 char saved_command_line[256];
@@ -342,7 +348,6 @@ unsigned long __init
 identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7)
 {
-	
 #ifdef __SMP__
 	if ( first_cpu_booted ) return 0;
 #endif /* __SMP__ */
@@ -403,6 +408,8 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	_machine = _MACH_fads;
 #elif defined(CONFIG_APUS)
 	_machine = _MACH_apus;
+#elif defined(CONFIG_GEMINI)
+	_machine = _MACH_gemini;
 #else
 #error "Machine not defined correctly"
 #endif /* CONFIG_APUS */
@@ -487,6 +494,11 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
         case _MACH_mbx:
                 mbx_init(r3, r4, r5, r6, r7);
                 break;
+#endif
+#ifdef CONFIG_GEMINI
+	case _MACH_gemini:
+                gemini_init(r3, r4, r5, r6, r7);
+		break;
 #endif
 	default:
 		printk("Unknown machine type in identify_machine!\n");

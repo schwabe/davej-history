@@ -25,6 +25,7 @@
 #include <asm/smp.h>
 #include <asm/bootx.h>
 #include <asm/system.h>
+#include <asm/gemini.h>
 
 /*
  * Properties whose value is longer than this get excluded from our
@@ -276,6 +277,11 @@ prom_init(int r3, int r4, prom_entry pp)
 	unsigned long offset = reloc_offset();
 	int l;
 	char *p, *d;
+	
+#ifdef CONFIG_GEMINI
+	gemini_prom_init();
+	return;
+#endif /* CONFIG_GEMINI */
 	
 	/* check if we're apus, return if we are */
 	if ( r3 == 0x61707573 )

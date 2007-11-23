@@ -69,6 +69,7 @@
 #define _MACH_rpxlite 64  /* RPCG RPX-Lite 8xx board */
 #define _MACH_bseip   128 /* Bright Star Engineering ip-Engine */
 #define _MACH_yk      256 /* Motorola Yellowknife */
+#define _MACH_gemini  512 /* Synergy Microsystems gemini board */
 
 /* see residual.h for these */
 #define _PREP_Motorola 0x01  /* motorola prep */

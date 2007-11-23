@@ -258,6 +258,7 @@ static struct dev_info device_list[] =
 {"TEAC","CD-ROM","1.06", BLIST_NOLUN},          /* causes failed REQUEST SENSE on lun 1
 						 * for seagate controller, which causes
 						 * SCSI code to reset bus.*/
+	{"TEAC", "MT-2ST/45S2-27", "RV M", BLIST_NOLUN},	/* Responds to all lun */
 {"TEXEL","CD-ROM","1.06", BLIST_NOLUN},         /* causes failed REQUEST SENSE on lun 1
 						 * for seagate controller, which causes
 						 * SCSI code to reset bus.*/
@@ -268,7 +269,8 @@ static struct dev_info device_list[] =
 {"HP", "C1750A", "3226", BLIST_NOLUN},          /* scanjet iic */
 {"HP", "C1790A", "", BLIST_NOLUN},              /* scanjet iip */
 {"HP", "C2500A", "", BLIST_NOLUN},              /* scanjet iicx */
-{"YAMAHA", "CDR102", "1.00", BLIST_NOLUN},	/* extra reset */
+{"YAMAHA","CDR100","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
+{"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"RELISYS", "Scorpio", "*", BLIST_NOLUN},	/* responds to all LUN */
 
 /*
@@ -292,8 +294,6 @@ static struct dev_info device_list[] =
 {"nCipher","Fastness Crypto","*", BLIST_FORCELUN},
 {"NEC","PD-1 ODX654P","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"MATSHITA","PD-1","*", BLIST_FORCELUN | BLIST_SINGLELUN},
-{"YAMAHA","CDR100","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
-{"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"iomega","jaz 1GB","J.86", BLIST_NOTQ | BLIST_NOLUN},
 {"CREATIVE","DVD-RAM RAM","*", BLIST_GHOST},
 {"MATSHITA","PD-2 LF-D100","*", BLIST_GHOST},

@@ -210,7 +210,8 @@ static ssize_t read_mouse(struct file * file,
 	buttons = mouse.buttons;
 	mouse.dx -= dx;
 	mouse.dy -= dy;
-	mouse.ready = 0;
+	if(mouse.dx==0 && mouse.dy==0)
+		mouse.ready = 0;
 	enable_irq(mouse_irq);
 	/* restore_flags(flags); */
 

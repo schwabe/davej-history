@@ -54,6 +54,7 @@
 #include <asm/setup.h>
 #include <asm/amigahw.h>
 /* END APUS includes */
+#include <asm/gemini.h>
 
 int prom_trashed;
 atomic_t next_mmu_context;
@@ -83,6 +84,7 @@ static void *MMU_get_page(void);
 unsigned long *prep_find_end_of_memory(void);
 unsigned long *pmac_find_end_of_memory(void);
 unsigned long *apus_find_end_of_memory(void);
+unsigned long *gemini_find_end_of_memory(void);
 extern unsigned long *find_end_of_memory(void);
 #ifdef CONFIG_MBX
 unsigned long *mbx_find_end_of_memory(void);
@@ -987,6 +989,10 @@ __initfunc(void free_initmem(void))
 		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
 		break;
+	case _MACH_gemini:
+		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
+		FREESEC(__prep_begin,__prep_end,num_prep_pages);
+		break;
 	}
 
 	if ( !have_of )
@@ -1024,9 +1030,13 @@ __initfunc(void MMU_init(void))
 	else if (_machine == _MACH_apus )
 		end_of_DRAM = apus_find_end_of_memory();
 #endif
+#ifdef CONFIG_GEMINI	
+	else if ( _machine == _MACH_gemini )
+		end_of_DRAM = gemini_find_end_of_memory();
+#endif /* CONFIG_GEMINI	*/
 	else /* prep */
 		end_of_DRAM = prep_find_end_of_memory();
-
+*(unsigned long *)(KERNELBASE) = 0xdeadbeef;	
         hash_init();
         _SDR1 = __pa(Hash) | (Hash_mask >> 10);
 	ioremap_base = 0xf8000000;
@@ -1068,6 +1078,10 @@ __initfunc(void MMU_init(void))
 		/* Note: a temporary hack in arch/ppc/amiga/setup.c
 		   (kernel_map) remaps individual IO regions to
 		   0x90000000. */
+		break;
+	case _MACH_gemini:
+		setbat(0, 0xf0000000, 0xf0000000, 0x10000000, IO_PAGE);
+		setbat(1, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
 		break;
 	}
 	ioremap_bot = ioremap_base;
@@ -1408,6 +1422,32 @@ __initfunc(unsigned long *prep_find_end_of_memory(void))
 
 	return (__va(total));
 }
+
+#if defined(CONFIG_GEMINI)
+unsigned long __init *gemini_find_end_of_memory(void)
+{
+	unsigned long total, kstart, ksize, *ret;
+	unsigned char reg;
+*(unsigned long *)(KERNELBASE) = 0x1;
+	reg = readb(GEMINI_MEMCFG);
+*(unsigned long *)(KERNELBASE) = 0x2;
+	total = ((1<<((reg & 0x7) - 1)) *
+		 (8<<((reg >> 3) & 0x7)));
+	total *= (1024*1024);
+	phys_mem.regions[0].address = 0;
+	phys_mem.regions[0].size = total;
+	phys_mem.n_regions = 1;
+	
+	ret = __va(phys_mem.regions[0].size);
+	phys_avail = phys_mem;
+	kstart = __pa(_stext);
+	ksize = PAGE_ALIGN( _end - _stext );
+*(unsigned long *)(KERNELBASE) = 0x3;
+	remove_mem_piece( &phys_avail, kstart, ksize, 0 );
+*(unsigned long *)(KERNELBASE) = 0x4;
+	return ret;
+}
+#endif /* defined(CONFIG_GEMINI) */
 
 #ifdef CONFIG_APUS
 #define HARDWARE_MAPPED_SIZE (512*1024)

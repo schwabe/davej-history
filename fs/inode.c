@@ -343,12 +343,11 @@ int invalidate_inodes(struct super_block * sb)
 	(((inode)->i_count | (inode)->i_state) == 0)
 #define INODE(entry)	(list_entry(entry, struct inode, i_list))
 
-static int free_inodes(void)
+static int __free_inodes(struct list_head * freeable)
 {
-	struct list_head list, *entry, *freeable = &list;
+	struct list_head *entry;
 	int found = 0;
 
-	INIT_LIST_HEAD(freeable);
 	entry = inode_in_use.next;
 	while (entry != &inode_in_use) {
 		struct list_head *tmp = entry;
@@ -361,13 +360,17 @@ static int free_inodes(void)
 		INIT_LIST_HEAD(&INODE(tmp)->i_hash);
 		list_add(tmp, freeable);
 		list_entry(tmp, struct inode, i_list)->i_state = I_FREEING;
-		found = 1;
+		found++;
 	}
 
-	if (found)
-		dispose_list(freeable);
-
 	return found;
+}
+
+static void free_inodes(void)
+{
+	LIST_HEAD(throw_away);
+	if (__free_inodes(&throw_away))
+		dispose_list(&throw_away);
 }
 
 /*
@@ -377,6 +380,36 @@ static int free_inodes(void)
  */
 static void try_to_free_inodes(int goal)
 {
+	static int block;
+	static struct wait_queue * wait_inode_freeing;
+	LIST_HEAD(throw_away);
+	
+	/* We must make sure to not eat the inodes
+	   while the blocker task sleeps otherwise
+	   the blocker task may find none inode
+	   available. */
+	if (block)
+	{
+		struct wait_queue __wait;
+
+		__wait.task = current;
+		add_wait_queue(&wait_inode_freeing, &__wait);
+		for (;;)
+		{
+			/* NOTE: we rely only on the inode_lock to be sure
+			   to not miss the unblock event */
+			current->state = TASK_UNINTERRUPTIBLE;
+			spin_unlock(&inode_lock);
+			schedule();
+			spin_lock(&inode_lock);
+			if (!block)
+				break;
+		}
+		remove_wait_queue(&wait_inode_freeing, &__wait);
+		current->state = TASK_RUNNING;
+	}
+
+	block = 1;
 	/*
 	 * First stry to just get rid of unused inodes.
 	 *
@@ -384,16 +417,18 @@ static void try_to_free_inodes(int goal)
 	 * to try to shrink the dcache and sync existing
 	 * inodes..
 	 */
-	free_inodes();
-	goal -= inodes_stat.nr_free_inodes;
+	goal -= __free_inodes(&throw_away);
 	if (goal > 0) {
 		spin_unlock(&inode_lock);
-		select_dcache(goal, 0);
-		prune_dcache(goal);
+		prune_dcache(0, goal);
 		spin_lock(&inode_lock);
 		sync_all_inodes();
-		free_inodes();
+		__free_inodes(&throw_away);
 	}
+	if (!list_empty(&throw_away))
+		dispose_list(&throw_away);
+	block = 0;
+	wake_up(&wait_inode_freeing);
 }
 
 /*
@@ -472,7 +507,7 @@ static struct inode * grow_inodes(void)
 	 * If the allocation failed, do an extensive pruning of 
 	 * the dcache and then try again to free some inodes.
 	 */
-	prune_dcache(inodes_stat.nr_inodes >> 2);
+	prune_dcache(0, inodes_stat.nr_inodes >> 2);
 
 	spin_lock(&inode_lock);
 	free_inodes();

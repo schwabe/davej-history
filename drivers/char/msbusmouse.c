@@ -157,7 +157,8 @@ static ssize_t read_mouse(struct file * file,
 		put_user(0x00, buffer + i);
 	mouse.dx -= dx;
 	mouse.dy += dy;
-	mouse.ready = 0;
+	if(mouse.dx == 0 && mouse.dy == 0)
+		mouse.ready = 0;
 	return i;	
 }
 

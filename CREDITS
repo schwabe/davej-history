@@ -997,6 +997,7 @@ S: Austria
 
 N: Jan Kara
 E: jack@atrey.karlin.mff.cuni.cz
+E: jack@suse.cz
 D: Quota fixes for 2.2 kernel
 D: Few other fixes in filesystem area (isofs, loopback)
 W: http://atrey.karlin.mff.cuni.cz/~jack/

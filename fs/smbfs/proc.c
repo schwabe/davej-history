@@ -1599,8 +1599,7 @@ printk("smb_proc_readdir_long: starting fpos=%d, mask=%s\n", fpos, mask);
 			command = TRANSACT2_FINDFIRST;
 			WSET(param, 0, aSYSTEM | aHIDDEN | aDIR);
 			WSET(param, 2, max_matches);	/* max count */
-			WSET(param, 4, 8 + 4 + 2);	/* resume required +
-							   close on end +
+			WSET(param, 4, 4 + 2);		/* close on end +
 							   continue */
 			WSET(param, 6, info_level);
 			DSET(param, 8, 0);

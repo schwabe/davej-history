@@ -45,9 +45,9 @@ kmem_cache_t *dentry_cache;
 #define D_HASHBITS     d_hash_shift
 #define D_HASHMASK     d_hash_mask
 
-static unsigned int d_hash_mask = 0;
-static unsigned int d_hash_shift = 0;
-static struct list_head *dentry_hashtable = NULL;
+static unsigned int d_hash_mask;
+static unsigned int d_hash_shift;
+static struct list_head *dentry_hashtable;
 static LIST_HEAD(dentry_unused);
 
 struct {
@@ -71,18 +71,23 @@ static inline void d_free(struct dentry *dentry)
  * Release the dentry's inode, using the fileystem
  * d_iput() operation if defined.
  */
-static inline void dentry_iput(struct dentry * dentry)
+static inline int dentry_iput(struct dentry * dentry)
 {
 	struct inode *inode = dentry->d_inode;
+	int ret = 0;
+
 	if (inode) {
 		dentry->d_inode = NULL;
 		list_del(&dentry->d_alias);
 		INIT_LIST_HEAD(&dentry->d_alias);
+		ret = inode->i_count == 1;
 		if (dentry->d_op && dentry->d_op->d_iput)
 			dentry->d_op->d_iput(dentry, inode);
 		else
 			iput(inode);
 	}
+
+	return ret;
 }
 
 /*
@@ -197,86 +202,23 @@ int d_invalidate(struct dentry * dentry)
 }
 
 /*
- * Select less valuable dentries to be pruned when we need
- * inodes or memory. The selected dentries are moved to the
- * old end of the list where prune_dcache() can find them.
- * 
- * Negative dentries are included in the selection so that
- * they don't accumulate at the end of the list. The count
- * returned is the total number of dentries selected, which
- * may be much larger than the requested number of inodes.
- */
-int select_dcache(int inode_count, int page_count)
-{
-	struct list_head *next, *tail = &dentry_unused;
-	int found = 0;
-	int depth = dentry_stat.nr_unused >> 1;
-	unsigned long max_value = 4;
-
-	if (page_count)
-		max_value = -1;
-
-	next = tail->prev;
-	while (next != &dentry_unused && depth--) {
-		struct list_head *tmp = next;
-		struct dentry *dentry = list_entry(tmp, struct dentry, d_lru);
-		struct inode *inode = dentry->d_inode;
-		unsigned long value = 0;	
-
-		next = tmp->prev;
-		if (dentry->d_count) {
-			dentry_stat.nr_unused--;
-			list_del(tmp);
-			INIT_LIST_HEAD(tmp);
-			continue;
-		}
-
-		/*
-		 * Select dentries based on the page cache count ...
-		 * should factor in number of uses as well. We take
-		 * all negative dentries so that they don't accumulate.
-		 * (We skip inodes that aren't immediately available.)
-		 */
-		if (inode) {
-			value = inode->i_nrpages;	
-			if (value >= max_value)
-				continue;
-			if (inode->i_state || inode->i_count > 1)
-				continue;
-		}
-
-		/*
-		 * Move the selected dentries behind the tail.
-		 */
-		if (tmp != tail->prev) {
-			list_del(tmp);
-			list_add(tmp, tail->prev);
-		}
-		tail = tmp;
-		found++;
-		if (inode && --inode_count <= 0)
-			break;
-		if (page_count && (page_count -= value) <= 0)
-			break;
-	}
-	return found;
-}
-
-/*
  * Throw away a dentry - free the inode, dput the parent.
  * This requires that the LRU list has already been
  * removed.
  */
-static inline void prune_one_dentry(struct dentry * dentry)
+static inline int prune_one_dentry(struct dentry * dentry)
 {
 	struct dentry * parent;
+	int ret;
 
 	list_del(&dentry->d_hash);
 	list_del(&dentry->d_child);
-	dentry_iput(dentry);
+	ret = dentry_iput(dentry);
 	parent = dentry->d_parent;
 	d_free(dentry);
 	dput(parent);
+
+	return ret;
 }
 
 /*
@@ -284,9 +226,21 @@ static inline void prune_one_dentry(struct dentry * dentry)
  * more memory, or simply when we need to unmount
  * something (at which point we need to unuse
  * all dentries).
+ *
+ * If you don't want a limit on the number of
+ * inodes that will be released then call
+ * with i_nr = -1.
+ *
+ * If you don't want a limit on the number of
+ * dentries that will be released then call
+ * with d_nr = 0.
+ *
+ * Returns the number of inodes released.
  */
-void prune_dcache(int count)
+int prune_dcache(int d_nr, int i_nr)
 {
+	int __i_nr = i_nr;
+
 	for (;;) {
 		struct dentry *dentry;
 		struct list_head *tmp = dentry_unused.prev;
@@ -298,11 +252,15 @@ void prune_dcache(int count)
 		INIT_LIST_HEAD(tmp);
 		dentry = list_entry(tmp, struct dentry, d_lru);
 		if (!dentry->d_count) {
-			prune_one_dentry(dentry);
-			if (!--count)
+			i_nr -= prune_one_dentry(dentry);
+			if (!i_nr)
+				break;
+			if (!--d_nr)
 				break;
 		}
 	}
+
+	return __i_nr - i_nr;
 }
 
 /*
@@ -457,7 +415,7 @@ void shrink_dcache_parent(struct dentry * parent)
 	int found;
 
 	while ((found = select_parent(parent)) != 0)
-		prune_dcache(found);
+		prune_dcache(found, -1);
 }
 
 /*
@@ -477,7 +435,7 @@ void shrink_dcache_memory(int priority, unsigned int gfp_mask)
 		int count = 0;
 		if (priority)
 			count = dentry_stat.nr_unused / priority;
-		prune_dcache(count);
+		prune_dcache(count, -1);
 	}
 }
 
@@ -926,8 +884,9 @@ void __init dcache_init(void)
 		panic("Cannot create dentry cache");
 
 	memory_size = num_physpages << PAGE_SHIFT;
-	for (order = 5; (1UL << order) < memory_size; order++)
-		;
+	memory_size >>= 13;
+	memory_size *= 2 * sizeof(void *);
+	for (order = 0; ((1UL << order) << PAGE_SHIFT) < memory_size; order++);
 
 	do {
 		unsigned long tmp;

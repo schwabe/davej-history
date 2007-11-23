@@ -1154,6 +1154,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_NCR885E),y)
+L_OBJS += ncr885e.o
+else
+  ifeq ($(CONFIG_NCR885E),m)
+  M_OBJS += ncr885e.o
+  endif
+endif
+
 ifeq ($(CONFIG_VENDOR_SANGOMA),y)
   LX_OBJS += sdladrv.o
   L_OBJS += sdlamain.o

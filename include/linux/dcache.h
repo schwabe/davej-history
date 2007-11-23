@@ -133,15 +133,14 @@ extern void d_delete(struct dentry *);
 
 /* allocate/de-allocate */
 extern struct dentry * d_alloc(struct dentry * parent, const struct qstr *name);
-extern void prune_dcache(int);
+extern int prune_dcache(int, int);
 extern void shrink_dcache_sb(struct super_block *);
 extern void shrink_dcache_parent(struct dentry *);
 extern int d_invalidate(struct dentry *);
 
-#define shrink_dcache() prune_dcache(0)
+#define shrink_dcache() prune_dcache(0, -1)
 
 /* dcache memory management */
-extern int  select_dcache(int, int);
 extern void shrink_dcache_memory(int, unsigned int);
 extern void check_dcache_memory(void);
 extern void free_inode_memory(int);	/* defined in fs/inode.c */

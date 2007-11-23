@@ -15,73 +15,68 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
+#include <asm/machdep.h>
+
+#include <linux/kernel.h>
 #include <linux/ioport.h>
 #include <asm/io.h>
-
-#include <linux/config.h>
-#include <asm/adb.h>
-#include <asm/machdep.h>
-#ifdef CONFIG_APUS
-#include <asm-m68k/keyboard.h>
-#else
 
 #define KEYBOARD_IRQ			1
 #define DISABLE_KBD_DURING_INTERRUPTS	0
 #define INIT_KBD
 
-#ifdef CONFIG_PREP
-extern int prep_kbd_present;
-#endif /* CONFIG_PREP */
-
 static inline int kbd_setkeycode(unsigned int scancode, unsigned int keycode)
 {
-	return ppc_md.kbd_setkeycode(scancode, keycode);
+	if ( ppc_md.kbd_setkeycode )
+		return ppc_md.kbd_setkeycode(scancode, keycode);
+	else
+		return 0;
 }
   
 static inline int kbd_getkeycode(unsigned int scancode)
 {
-	return ppc_md.kbd_getkeycode(scancode);
+	if ( ppc_md.kbd_getkeycode )
+		return ppc_md.kbd_getkeycode(scancode);
+	else
+		return 0;
 }
   
 static inline int kbd_translate(unsigned char keycode, unsigned char *keycodep,
 				char raw_mode)
 {
-	return ppc_md.kbd_translate(keycode, keycodep, raw_mode);
+	if ( ppc_md.kbd_translate )
+		return ppc_md.kbd_translate(keycode, keycodep, raw_mode);
+	else
+		return 0;
 }
   
 static inline int kbd_unexpected_up(unsigned char keycode)
 {
-	return ppc_md.kbd_unexpected_up(keycode);
+	if ( ppc_md.kbd_unexpected_up )
+		return ppc_md.kbd_unexpected_up(keycode);
+	else
+		return 0;
 }
   
 static inline void kbd_leds(unsigned char leds)
 {
-#ifdef CONFIG_PREP
-	if (prep_kbd_present)
-#endif /* CONFIG_PREP */
+	if ( ppc_md.kbd_leds )
 		ppc_md.kbd_leds(leds);
 }
   
 static inline void kbd_init_hw(void)
 {
-#ifdef CONFIG_PREP
-	if (prep_kbd_present)
-#endif /* CONFIG_PREP */
+	if ( ppc_md.kbd_init_hw )
 		ppc_md.kbd_init_hw();
 }
 
-#define kbd_sysrq_xlate	(ppc_md.kbd_sysrq_xlate)
+#define kbd_sysrq_xlate	(ppc_md.ppc_kbd_sysrq_xlate)
 
-#ifdef CONFIG_MAC_KEYBOARD
-# define SYSRQ_KEY 0x69
-#else
-# define SYSRQ_KEY 0x54
-#endif
-
-#endif /* CONFIG_APUS */
+extern unsigned long SYSRQ_KEY;
 
 /* resource allocation */
-#define kbd_request_region() request_region(0x60, 16, "keyboard")
+#define kbd_request_region()
 #define kbd_request_irq(handler) request_irq(KEYBOARD_IRQ, handler, 0, \
                                              "keyboard", NULL)
 

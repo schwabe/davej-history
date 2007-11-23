@@ -170,7 +170,7 @@ static char Mesquite_pci_IRQ_map[23] __prepdata =
 	0,	/* Slot 8  - unused */
 	0,	/* Slot 9  - unused */
 	0,	/* Slot 10 - unxued */
-	0,	/* Slot 11 - unused */
+	0x1e,	/* Slot 11 - PCI-ISA/IDE/USB */
 	0,	/* Slot 12 - unused */
 	0,	/* Slot 13 - unused */
 	2,	/* Slot 14 - Ethernet */
@@ -198,7 +198,7 @@ static char Sitka_pci_IRQ_map[21] __prepdata =
 	0,      /* Slot 8  - unused */
 	0,      /* Slot 9  - unused */
 	0,      /* Slot 10 - unxued */
-	0,      /* Slot 11 - unused */
+	0x1e,   /* Slot 11 - PCI-ISA/IDE/USB */
 	0,      /* Slot 12 - unused */
 	0,      /* Slot 13 - unused */
 	2,      /* Slot 14 - Ethernet */
@@ -224,7 +224,7 @@ static char MTX_pci_IRQ_map[23] __prepdata =
 	0,	/* Slot 8  - unused */
 	0,	/* Slot 9  - unused */
 	0,	/* Slot 10 - unused */
-	0,	/* Slot 11 - unused */
+	0x1e,	/* Slot 11 - PCI-ISA/IDE/USB */
 	3,	/* Slot 12 - SCSI */
 	0,	/* Slot 13 - unused */
 	2,	/* Slot 14 - Ethernet */
@@ -253,7 +253,7 @@ static char MTXplus_pci_IRQ_map[23] __prepdata =
         0,      /* Slot 8  - unused */
         0,      /* Slot 9  - unused */
         0,      /* Slot 10 - unused */
-        0,      /* Slot 11 - unused */
+        0x1e,   /* Slot 11 - PCI-ISA/IDE/USB */
         3,      /* Slot 12 - SCSI */
         0,      /* Slot 13 - unused */
         2,      /* Slot 14 - Ethernet 1 */
@@ -1076,40 +1076,91 @@ Mesquite_Map_Non0(struct pci_dev *pdev)
 	return;
 }
 
+int motopenpic_to_irq(int n)
+{
+       if (n & 0xF0) {
+               return (n & 0x0F);
+       } else {
+               return(openpic_to_irq(n));
+       }
+}
+
+void prep_pib_init(void)
+{
+unsigned char   reg;
+unsigned short  short_reg;
+
+struct pci_dev *dev = NULL;
+
+	if (( _prep_type == _PREP_Motorola) && (OpenPIC)) {
+		/*
+		 * Perform specific configuration for the Via Tech or
+		 * or Winbond PCI-ISA-Bridge part.
+		 */
+		if ((dev = pci_find_device(PCI_VENDOR_ID_VIA, 
+					PCI_DEVICE_ID_VIA_82C586_1, dev))) {
+			/*
+			 * PPCBUG does not set the enable bits
+			 * for the IDE device. Force them on here.
+			 */
+			pcibios_read_config_byte(dev->bus->number, 
+					dev->devfn, 0x40, &reg);
+
+			reg |= 0x03; /* IDE: Chip Enable Bits */
+			pcibios_write_config_byte(dev->bus->number, 
+					dev->devfn, 0x40, reg);
+
+		} else if ((dev = pci_find_device(PCI_VENDOR_ID_WINBOND, 
+					PCI_DEVICE_ID_WINBOND_83C553, dev))) {
+			/*
+			 * Clear the PCI Interrupt Routing Control Register.
+			 */
+			short_reg = 0x0000;
+			pcibios_write_config_word(dev->bus->number, 
+					dev->devfn, 0x44, short_reg);
+		}
+	}
+}
 __initfunc(
 void
 prep_pcibios_fixup(void))
 {
-        struct pci_dev *dev;
-        extern unsigned char *Motherboard_map;
-        extern unsigned char *Motherboard_routes;
-        unsigned char i;
+extern unsigned char *Motherboard_map;
+extern unsigned char *Motherboard_routes;
+unsigned char	i;
+struct pci_dev  *dev;
 
-        if ( _prep_type == _PREP_Radstone )
-        {
-                printk("Radstone boards require no PCI fixups\n");
-		return;
-        }
-
-	prep_route_pci_interrupts();
-
-	printk("Setting PCI interrupts for a \"%s\"\n", Motherboard_map_name);
-	if (OpenPIC) {
-		/* PCI interrupts are controlled by the OpenPIC */
-		for(dev=pci_devices; dev; dev=dev->next) {
-			if (dev->bus->number == 0) {
-                       		dev->irq = openpic_to_irq(Motherboard_map[PCI_SLOT(dev->devfn)]);
-				pcibios_write_config_byte(dev->bus->number, dev->devfn, PCI_INTERRUPT_PIN, dev->irq);
-			} else {
-				if (Motherboard_non0 != NULL)
-					Motherboard_non0(dev);
-			}
-		}
+	if (_prep_type == _PREP_Radstone) {
+		printk("Radstone boards require no PCI fixups\n");
 		return;
 	}
 
-	for(dev=pci_devices; dev; dev=dev->next)
-	{
+	prep_route_pci_interrupts();
+
+	prep_pib_init();
+
+	printk("Setting PCI interrupts for a \"%s\"\n", Motherboard_map_name);
+
+	if (OpenPIC) {
+
+	    /* PCI interrupts are controlled by the OpenPIC */
+	    for(dev=pci_devices; dev; dev=dev->next) {
+		if (dev->bus->number == 0) {
+		    dev->irq = 
+		       motopenpic_to_irq(Motherboard_map[PCI_SLOT(dev->devfn)]);
+
+		    pcibios_write_config_byte(dev->bus->number, dev->devfn, 
+					      PCI_INTERRUPT_PIN, dev->irq);
+		} else {
+			if (Motherboard_non0 != NULL)
+				Motherboard_non0(dev);
+		}
+
+	    }
+	return;
+	}
+
+	for(dev=pci_devices; dev; dev=dev->next) {
 		/*
 		 * Use our old hard-coded kludge to figure out what
 		 * irq this device uses.  This is necessary on things
@@ -1118,29 +1169,26 @@ prep_pcibios_fixup(void))
 		unsigned char d = PCI_SLOT(dev->devfn);
 		dev->irq = Motherboard_routes[Motherboard_map[d]];
 
-		for ( i = 0 ; i <= 5 ; i++ )
-		{
-		        if ( dev->base_address[i] > 0x10000000 )
-		        {
-		                printk("Relocating PCI address %lx -> %lx\n",
-		                       dev->base_address[i],
-		                       (dev->base_address[i] & 0x00FFFFFF)
-		                       | 0x01000000);
-		                dev->base_address[i] =
-		                  (dev->base_address[i] & 0x00FFFFFF) | 0x01000000;
-		                pci_write_config_dword(dev,
-		                        PCI_BASE_ADDRESS_0+(i*0x4),
-		                       dev->base_address[i] );
-		        }
+		for ( i = 0 ; i <= 5 ; i++ ) {
+			if ( dev->base_address[i] > 0x10000000 ) {
+				printk("Relocating PCI address %lx -> %lx\n",
+				dev->base_address[i],
+				(dev->base_address[i] & 0x00FFFFFF)|0x01000000);
+
+				dev->base_address[i] = (dev->base_address[i] & 
+							0x00FFFFFF)|0x01000000;
+				pci_write_config_dword(dev, 
+						PCI_BASE_ADDRESS_0+(i*0x4),
+						dev->base_address[i] );
+			}
 		}
 #if 0
-		/*
-		 * If we have residual data and if it knows about this
-		 * device ask it what the irq is.
-		 *  -- Cort
-		 */
-		ppcd = residual_find_device_id( ~0L, dev->device,
-		                                -1,-1,-1, 0);
+	/*
+	 * If we have residual data and if it knows about this
+	 * device ask it what the irq is.
+	 *  -- Cort
+	 */
+	ppcd = residual_find_device_id( ~0L, dev->device, -1,-1,-1, 0);
 #endif
 	}
 }

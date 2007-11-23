@@ -103,6 +103,7 @@ extern int pamsnet_probe(struct device *);
 extern int tlan_probe(struct device *);
 extern int mace_probe(struct device *);
 extern int bmac_probe(struct device *);
+extern int ncr885e_probe(struct device *);
 extern int cs89x0_probe(struct device *dev);
 extern int ethertap_probe(struct device *dev);
 extern int ether1_probe (struct device *dev);
@@ -453,6 +454,9 @@ struct devprobe ppc_probes[] __initdata = {
 #endif
 #ifdef CONFIG_BMAC
 	{bmac_probe, 0},
+#endif
+#ifdef CONFIG_NCR885E
+	{ncr885e_probe, 0},
 #endif
 	{NULL, 0},
 };

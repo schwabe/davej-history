@@ -16,24 +16,24 @@ void openpic_ipi_action(int cpl, void *dev_id, struct pt_regs *regs)
 
 void chrp_mask_and_ack_irq(unsigned int irq_nr)
 {
-	if (is_8259_irq(irq_nr))
-	    i8259_pic.mask_and_ack(irq_nr);
+	if ((_machine != _MACH_gemini) && is_8259_irq(irq_nr))
+		i8259_pic.mask_and_ack(irq_nr);
 }
 
 static void chrp_mask_irq(unsigned int irq_nr)
 {
-	if (is_8259_irq(irq_nr))
+	if ((_machine != _MACH_gemini) && is_8259_irq(irq_nr))
 		i8259_pic.disable(irq_nr);
 	else
-		openpic_disable_irq(irq_to_openpic(irq_nr));
+		openpic_disable_irq(irq_nr-open_pic.irq_offset);
 }
 
 static void chrp_unmask_irq(unsigned int irq_nr)
 {
-	if (is_8259_irq(irq_nr))
+	if ((_machine != _MACH_gemini) && is_8259_irq(irq_nr))
 		i8259_pic.enable(irq_nr);
 	else
-		openpic_enable_irq(irq_to_openpic(irq_nr));
+		openpic_enable_irq(irq_nr-open_pic.irq_offset);
 }
 
 struct hw_interrupt_type open_pic = {

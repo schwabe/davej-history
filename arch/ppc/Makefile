@@ -112,6 +112,10 @@ apus_config:
 	rm -f .config arch/ppc/defconfig
 	ln -s apus_defconfig arch/ppc/defconfig
 
+gemini_config:
+	rm -f .config arch/ppc/defconfig
+	ln -s gemini_defconfig arch/ppc/defconfig
+
 tags:
 	etags */*.c include/{asm,linux}/*.h arch/ppc/kernel/*.{c,h}
 

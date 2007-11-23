@@ -9,7 +9,6 @@ comment 'Platform support'
 define_bool CONFIG_PPC y
 choice 'Processor type' \
 	"6xx/7xx		CONFIG_6xx \
-	 630/Power3(64-Bit) 	CONFIG_PPC64 \
 	 860/821		CONFIG_8xx" 6xx/7xx
 
 choice 'Machine Type' \
@@ -18,6 +17,7 @@ choice 'Machine Type' \
 	 CHRP		CONFIG_CHRP \
 	 PowerMac/PReP/CHRP	CONFIG_ALL_PPC \
   	 APUS           CONFIG_APUS \
+	 Gemini		CONFIG_GEMINI \
 	 MBX		CONFIG_MBX" PowerMac
 
 bool 'Symmetric multi-processing support' CONFIG_SMP

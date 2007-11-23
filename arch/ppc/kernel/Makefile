@@ -40,7 +40,8 @@ O_OBJS += prep_time.o pmac_time.o chrp_time.o \
 	  pmac_setup.o pmac_support.o \
 	  prep_pci.o pmac_pci.o chrp_pci.o \
 	  residual.o prom.o openpic.o feature.o \
-	  prep_nvram.o open_pic.o i8259.o pmac_pic.o indirect_pci.o
+	  prep_nvram.o open_pic.o i8259.o pmac_pic.o indirect_pci.o \
+	  gemini_pci.o gemini_prom.o gemini_setup.o
 OX_OBJS += chrp_setup.o prep_setup.o
 endif
 endif

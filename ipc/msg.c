@@ -50,6 +50,7 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	struct ipc_perm *ipcp;
 	struct msg *msgh;
 	long mtype;
+	int err;
 	
 	if (msgsz > MSGMAX || (long) msgsz < 0 || msqid < 0)
 		return -EINVAL;
@@ -70,34 +71,38 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	if (ipcperms(ipcp, S_IWUGO)) 
 		return -EACCES;
 	
-	if (msgsz + msq->msg_cbytes > msq->msg_qbytes) { 
-		if (msgsz + msq->msg_cbytes > msq->msg_qbytes) { 
-			/* still no space in queue */
-			if (msgflg & IPC_NOWAIT)
-				return -EAGAIN;
-			if (signal_pending(current))
-				return -EINTR;
-			interruptible_sleep_on (&msq->wwait);
-			goto slept;
-		}
+	if (msgsz + msq->msg_cbytes > msq->msg_qbytes || msq->msg_qnum>= MSGQNUM) { 
+		/* still no space in queue */
+		if (msgflg & IPC_NOWAIT)
+			return -EAGAIN;
+		if (signal_pending(current))
+			return -EINTR;
+		interruptible_sleep_on (&msq->wwait);
+		goto slept;
 	}
-	
-	/* allocate message header and text space*/ 
+
+	/* Charge first to avoid races */
+	msgbytes  += msgsz;
+	msghdrs++;
+	msq->msg_qnum++;
+	msq->msg_cbytes += msgsz;
+
+	/* allocate message header and text space */ 
+	err = -ENOMEM;
 	msgh = (struct msg *) kmalloc (sizeof(*msgh) + msgsz, GFP_KERNEL);
-	if (!msgh)
-		return -ENOMEM;
+	if (!msgh) 
+		goto uncharge;
 	msgh->msg_spot = (char *) (msgh + 1);
 
-	if (copy_from_user(msgh->msg_spot, msgp->mtext, msgsz))
-	{
-		kfree(msgh);
-		return -EFAULT;
+	err = -EFAULT; 
+	if (copy_from_user(msgh->msg_spot, msgp->mtext, msgsz))	{
+		goto uncharge;
 	}
 	
+	err = -EIDRM; 
 	if (msgque[id] == IPC_UNUSED || msgque[id] == IPC_NOID
 		|| msq->msg_perm.seq != (unsigned int) msqid / MSGMNI) {
-		kfree(msgh);
-		return -EIDRM;
+		goto uncharge;
 	}
 
 	msgh->msg_next = NULL;
@@ -111,14 +116,19 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 		msq->msg_last->msg_next = msgh;
 		msq->msg_last = msgh;
 	}
-	msq->msg_cbytes += msgsz;
-	msgbytes  += msgsz;
-	msghdrs++;
-	msq->msg_qnum++;
 	msq->msg_lspid = current->pid;
 	msq->msg_stime = CURRENT_TIME;
 	wake_up (&msq->rwait);
 	return 0;
+
+uncharge:
+	msgbytes  -= msgsz;
+	msghdrs--;
+	msq->msg_qnum--;
+	msq->msg_cbytes -= msgsz;
+	if (msgh)
+		kfree(msgh); 
+	return err;
 }
 
 static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, int msgflg)

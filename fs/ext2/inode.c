@@ -125,6 +125,8 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal, int * err
 				    "cannot get block %lu", result);
 			return 0;
 		}
+		if (!buffer_uptodate(bh))
+			wait_on_buffer(bh);
 		memset(bh->b_data, 0, inode->i_sb->s_blocksize);
 		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 1);

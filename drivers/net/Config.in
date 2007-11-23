@@ -46,6 +46,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   if [ "$CONFIG_PPC" = "y" ]; then
     tristate 'MACE (Power Mac ethernet) support' CONFIG_MACE
     tristate 'BMAC (G3 ethernet) support' CONFIG_BMAC
+    tristate 'Symbios 53c885 (Synergy ethernet) support' CONFIG_NCR885E
   fi
   if [ "$CONFIG_ZORRO" = "y" ]; then
     tristate 'Ariadne support' CONFIG_ARIADNE

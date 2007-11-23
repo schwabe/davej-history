@@ -628,25 +628,36 @@ prep_init_IRQ(void))
 void
 prep_ide_insw(ide_ioreg_t port, void *buf, int ns)
 {
-	_insw((unsigned short *)((port)+_IO_BASE), buf, ns);
+	ide_insw(((port)+(_IO_BASE)), buf, ns);
 }
 
 void
 prep_ide_outsw(ide_ioreg_t port, void *buf, int ns)
 {
-	_outsw((unsigned short *)((port)+_IO_BASE), buf, ns);
+	ide_outsw(((port)+_IO_BASE), buf, ns);
 }
 
 int
 prep_ide_default_irq(ide_ioreg_t base)
 {
-	switch (base) {
-		case 0x1f0: return 13;
-		case 0x170: return 13;
-		case 0x1e8: return 11;
-		case 0x168: return 10;
-		default:
-                        return 0;
+	if ( _prep_type == _PREP_IBM ) {
+		switch (base) {
+			case 0x1f0: return 13;
+			case 0x170: return 13;
+			case 0x1e8: return 11;
+			case 0x168: return 10;
+			default:
+				return 0;
+		}
+	} else {
+		switch (base) {
+			case 0x1f0: return 14;
+			case 0x170: return 14;
+			case 0x1e8: return 15;
+			case 0x168: return 15;
+			default:
+				return 0;
+		}
 	}
 }
 
@@ -687,6 +698,7 @@ prep_ide_release_region(ide_ioreg_t from,
 void
 prep_ide_fix_driveid(struct hd_driveid *id)
 {
+	ppc_generic_ide_fix_driveid(id);
 }
 
 __initfunc(void

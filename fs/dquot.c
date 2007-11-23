@@ -31,6 +31,9 @@
  *		add_dquot_ref() restarts after blocking
  *		Added check for bogus uid and fixed check for group in quotactl.
  *		Jan Kara, <jack@atrey.karlin.mff.cuni.cz>, 4-6/99
+ *		Definitely (hopefully) fixed deadlock in write_dquot(). We no
+ *		longer account quota files.
+ *		Jan Kara, <jack@suse.cz>, 11/99, sposored by SuSE CR
  *
  * (C) Copyright 1994 - 1997 Marco van Wieringen 
  */
@@ -245,6 +248,9 @@ static inline void unlock_dquot(struct dquot *dquot)
 	wake_up(&dquot->dq_wait);
 }
 
+/*
+ *	We don't have to be afraid of deadlocks as we never have quotas on quota files...
+ */
 static void write_dquot(struct dquot *dquot)
 {
 	short type = dquot->dq_type;
@@ -252,20 +258,14 @@ static void write_dquot(struct dquot *dquot)
 	mm_segment_t fs;
 	loff_t offset;
 	ssize_t ret;
-	struct dqblk data;
 	struct semaphore *sem = &dquot->dq_mnt->mnt_dquot.dqio_sem;
 
-	/*
-	 * We copy our data to preserve consistency when dquot is not locked.
-	 * We can't lock it because it can cause deadlocks - think about
-	 * growing the quota file...
-	 */
-	memcpy(&data, &dquot->dq_dqb, sizeof(struct dqblk));
-	down(sem);
+	lock_dquot(dquot);
 	if (!dquot->dq_mnt) {	/* Invalidated quota? */
-		up(sem);
+		unlock_dquot(dquot);
 		return;
 	}
+	down(sem);
 	filp = dquot->dq_mnt->mnt_dquot.files[type];
 	offset = dqoff(dquot->dq_id);
 	fs = get_fs();
@@ -278,18 +278,15 @@ static void write_dquot(struct dquot *dquot)
 	dquot->dq_flags &= ~DQ_MOD;
 	ret = 0;
 	if (filp)
-		ret = filp->f_op->write(filp, (char *)&data, 
+		ret = filp->f_op->write(filp, (char *)&dquot->dq_dqb, 
 					sizeof(struct dqblk), &offset);
 	if (ret != sizeof(struct dqblk))
 		printk(KERN_WARNING "VFS: dquota write failed on dev %s\n",
 			kdevname(dquot->dq_dev));
 
-	/*
-	 * Be sure that anybody didn't invalidated the dquot in the mean time...
-	 * Nasty but I don't see other choice when we don't want to lock dquot.
-	 */
-	up(sem);
 	set_fs(fs);
+	up(sem);
+	unlock_dquot(dquot);
 
 	dqstats.writes++;
 }
@@ -572,10 +569,9 @@ pressure:
 	/*
 	 * Try pruning the dcache to free up some dquots ...
 	 */
-	count = select_dcache(128, 0);
-	if (count) {
-		printk(KERN_DEBUG "get_empty_dquot: pruning %d\n", count);
-		prune_dcache(count);
+	printk(KERN_DEBUG "get_empty_dquot: pruning %d\n", count);
+	if (prune_dcache(0, 128))
+	{
 		free_inode_memory(count);
 		goto repeat;
 	}
@@ -652,12 +648,31 @@ static struct dquot *dqduplicate(struct dquot *dquot)
 	return dquot;
 }
 
+/* Check whether this inode is quota file */
+static inline int is_quotafile(struct inode *inode)
+{
+	int cnt;
+	struct vfsmount *vfsmnt;
+	struct file **files;
+
+	vfsmnt = lookup_vfsmnt(inode->i_dev);
+	if (!vfsmnt)
+		return 0;
+	files = vfsmnt->mnt_dquot.files;
+	for (cnt = 0; cnt < MAXQUOTAS; cnt++)
+		if (files[cnt] && files[cnt]->f_dentry->d_inode == inode)
+			return 1;
+	return 0;
+}
+
 static int dqinit_needed(struct inode *inode, short type)
 {
 	int cnt;
 
         if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode)))
                 return 0;
+	if (is_quotafile(inode))
+		return 0;
 	if (type != -1)
 		return inode->i_dquot[type] == NODQUOT;
 	for (cnt = 0; cnt < MAXQUOTAS; cnt++)
@@ -1070,6 +1085,9 @@ void dquot_initialize(struct inode *inode, short type)
 	if (S_ISREG(inode->i_mode) ||
             S_ISDIR(inode->i_mode) ||
             S_ISLNK(inode->i_mode)) {
+		/* We don't want to have quotas on quota files - nasty deadlocks possible */
+		if (is_quotafile(inode))
+			return;
 		for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
 			if (type != -1 && cnt != type)
 				continue;
@@ -1512,6 +1530,7 @@ int quota_on(kdev_t dev, short type, char *path)
 	error = -EINVAL;
 	if (inode->i_size == 0 || (inode->i_size % sizeof(struct dqblk)) != 0)
 		goto out_f;
+	dquot_drop(inode);	/* We don't want quota on quota files */
 
 	set_enable_flags(vfsmnt, type);
 	mnt_dquot->files[type] = f;

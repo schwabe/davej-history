@@ -182,7 +182,7 @@ static __inline__ void __tcp_inherit_port(struct sock *sk, struct sock *child)
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	if (child->num != sk->num) {
-		unsigned short snum = ntohs(child->num);
+		unsigned short snum = child->num;
 		for(tb = tcp_bhash[tcp_bhashfn(snum)];
 		    tb && tb->port != snum;
 		    tb = tb->next)

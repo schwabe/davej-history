@@ -446,6 +446,7 @@ __initfunc(void
 			(*(unsigned long *)get_property(np,
 							"8259-interrupt-acknowledge", NULL));
 	}
+	open_pic.irq_offset = 16;
 	for ( i = 16 ; i < NR_IRQS ; i++ )
 		irq_desc[i].ctl = &open_pic;
 	/* openpic knows that it's at irq 16 offset
