@@ -42,11 +42,15 @@
     - In vortex_error, do_tx_reset and vortex_tx_timeout(Vortex): clear
       tbusy and force a BH rerun to better recover from errors.
 
+    12Jun00 <2.2.16> andrewm
+    - Better handling of shared interrupts
+    - Reset the transmitter in vortex_error() on both maxcollisions and Tx reclaim error
+
     - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.2 for more details.
 */
 
 static char *version =
-"3c59x.c:v0.99H 27May00 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
+"3c59x.c:v0.99H 12Jun00 Donald Becker and others http://www.scyld.com/network/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -1443,8 +1447,8 @@ vortex_error(struct device *dev, int status)
 		if (tx_status & 0x14)  vp->stats.tx_fifo_errors++;
 		if (tx_status & 0x38)  vp->stats.tx_aborted_errors++;
 		outb(0, ioaddr + TxStatus);
-		if (tx_status & 0x30)
-			do_tx_reset = 1;
+		if (tx_status & 0x3a)	/* TxReset after 16 collisions, despite what the manual says */
+			do_tx_reset = 1;	/* Also reset on reclaim errors */
 		else					/* Merely re-enable the transmitter. */
 			outw(TxEnable, ioaddr + EL3_CMD);
 	}
@@ -1650,14 +1654,14 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	struct device *dev = dev_id;
 	struct vortex_private *vp = (struct vortex_private *)dev->priv;
 	long ioaddr;
-	int latency, status;
+	int status;
 	int work_done = max_interrupt_work;
 
-	spin_lock(&vp->lock);
-
 	ioaddr = dev->base_addr;
-	latency = inb(ioaddr + Timer);
+	spin_lock(&vp->lock);
 	status = inw(ioaddr + EL3_STATUS);
+	if ((status & IntLatch) == 0)
+		goto no_int;	/* Happens during shared interrupts */
 
 	if (status & IntReq) {
 		status |= vp->deferred;
@@ -1666,7 +1670,8 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (vortex_debug > 4)
 		printk(KERN_DEBUG "%s: interrupt, status %4.4x, latency %d ticks.\n",
-			   dev->name, status, latency);
+			   dev->name, status, inb(ioaddr + Timer));
+
 	do {
 		if (vortex_debug > 5)
 				printk(KERN_DEBUG "%s: In interrupt loop, status %4.4x.\n",
@@ -1761,8 +1766,8 @@ static void vortex_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		printk(KERN_DEBUG "%s: exiting interrupt, status %4.4x.\n",
 			   dev->name, status);
 
+no_int:
 	spin_unlock(&vp->lock);
-	return;
 }
 
 static int vortex_rx(struct device *dev)

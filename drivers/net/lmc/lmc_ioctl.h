@@ -1,6 +1,6 @@
 #ifndef _LMC_IOCTL_H_
 #define _LMC_IOCTL_H_
-/*	$Id: lmc_ioctl.h,v 1.9 2000/01/21 13:29:47 asj Exp $	*/
+/*	$Id: lmc_ioctl.h,v 1.18 2000/06/06 08:32:12 asj Exp $	*/
 
  /*
   * Copyright (c) 1997-2000 LAN Media Corporation (LMC)
@@ -16,22 +16,20 @@
   * of the GNU Public License version 2, incorporated herein by reference.
   */
 
-#define LMCIOCGINFO         SIOCDEVPRIVATE+3 /* get current state */
-#define LMCIOCSINFO         SIOCDEVPRIVATE+4 /* set state to user values */
-#define LMCIOCSKEEPALIVE    SIOCDEVPRIVATE+5 /* Turn keepalives on/off */
-#ifdef  LMC_DEBUG_FILE
-#define LMCIOCLEARSTATS LMCIOCSINFO + 1 /* Clear debug stats */
-#endif
-#define LMCIOCGETLMCSTATS       LMCIOCSINFO + 3
-#define LMCIOCCLEARLMCSTATS     LMCIOCSINFO + 4
-#define LMCIOCDUMPEVENTLOG      LMCIOCSINFO + 5
-#define LMCIOCGETXINFO          LMCIOCSINFO + 6
-#define LMCIOCSETCIRCUIT        LMCIOCSINFO + 7
-#define LMCIOCUNUSEDATM         LMCIOCSINFO + 8
-#define LMCIOCRESET             LMCIOCSINFO + 9
-#define LMCIOCT1CONTROL         LMCIOCSINFO + 10
+#define LMCIOCGINFO             SIOCDEVPRIVATE+3 /* get current state */
+#define LMCIOCSINFO             SIOCDEVPRIVATE+4 /* set state to user values */
+#define LMCIOCGETLMCSTATS       SIOCDEVPRIVATE+5
+#define LMCIOCCLEARLMCSTATS     SIOCDEVPRIVATE+6
+#define LMCIOCDUMPEVENTLOG      SIOCDEVPRIVATE+7
+#define LMCIOCGETXINFO          SIOCDEVPRIVATE+8
+#define LMCIOCSETCIRCUIT        SIOCDEVPRIVATE+9
+#define LMCIOCUNUSEDATM         SIOCDEVPRIVATE+10
+#define LMCIOCRESET             SIOCDEVPRIVATE+11
+#define LMCIOCMEDIA             SIOCDEVPRIVATE+12
+#define LMCIOCIFTYPE            SIOCDEVPRIVATE+13
+#define LMCIOCXILINX            SIOCDEVPRIVATE+14
 
-#define LMC_CARDTYPE_UNKNOWN    -1
+#define LMC_CARDTYPE_UNKNOWN            -1
 #define LMC_CARDTYPE_HSSI               1       /* probed card is a HSSI card */
 #define LMC_CARDTYPE_DS3                2       /* probed card is a DS3 card */
 #define LMC_CARDTYPE_SSI                3       /* probed card is a SSI card */
@@ -61,6 +59,13 @@
 #define LMC_CTL_CIRCUIT_TYPE_T1 1
 
 /*
+ * IFTYPE defines
+ */
+#define LMC_PPP         1               /* use sppp interface */
+#define LMC_NET         2               /* use direct net interface */
+#define LMC_RAW         3               /* use direct net interface */
+
+/*
  * These are not in the least IOCTL related, but I want them common.
  */
 /*
@@ -68,10 +73,10 @@
  */
 #define LMC_GEP_INIT		0x01 /* 0: */
 #define LMC_GEP_RESET		0x02 /* 1: */
-#define LMC_GEP_LOAD		0x10 /* 4: */
+#define LMC_GEP_MODE		0x10 /* 4: */
 #define LMC_GEP_DP		0x20 /* 5: */
-#define LMC_GEP_SERIAL		0x40 /* 6: serial out */
-#define LMC_GEP_SERIALCLK	0x80 /* 7: serial clock */
+#define LMC_GEP_DATA		0x40 /* 6: serial out */
+#define LMC_GEP_CLK	        0x80 /* 7: serial clock */
 
 /*
  * HSSI GPIO assignments
@@ -80,10 +85,15 @@
 #define LMC_GEP_HSSI_CLOCK	0x08 /* 3: clock source */
 
 /*
- * T1 GPIO assignments
+ * SSI GPIO assignments
  */
 #define LMC_GEP_SSI_GENERATOR	0x04 /* 2: enable prog freq gen serial i/f */
 #define LMC_GEP_SSI_TXCLOCK	0x08 /* 3: provide clock on TXCLOCK output */
+
+/*
+ * T1 GPIO assigments
+ */
+#define LMC_GEP_T1_INT	        0x08 /* 3: Interupt enable */
 
 /*
  * Common MII16 bits
@@ -118,6 +128,7 @@
 #define LMC_MII16_DS3_DLOS	0x0040
 #define LMC_MII16_DS3_CRC	0x1000
 #define LMC_MII16_DS3_SCRAM	0x2000
+#define LMC_MII16_DS3_SCRAM_LARS 0x4000
 
 /* Note: 2 pairs of LEDs where swapped by mistake
  * in Xilinx code for DS3 & DS1 adapters */
@@ -176,7 +187,8 @@
 /*
  * And T1, LMC1200
  */
-#define LMC_MII16_T1_UNUSED1    0x0003
+#define LMC_MII16_T1_UNUSED1            0x0001
+#define LMC_MII16_T1_INVERT             0x0002
 #define LMC_MII16_T1_XOE                0x0004
 #define LMC_MII16_T1_RST                0x0008  /* T1 chip reset - RW */
 #define LMC_MII16_T1_Z                  0x0010  /* output impedance T1=1, E1=0 output - RW */
@@ -224,12 +236,35 @@
 #define LMC_T1F_WRITE       0
 #define LMC_T1F_READ        1
 
+enum lmc_st1f_cmd {
+    lmc_st1f_write = 1,
+    lmc_st1f_read = 2,
+    lmc_st1f_inv = 3,
+    lmc_st1f_amisf = 4,
+    lmc_st1f_frac = 5,
+    lmc_st1f_loopt = 6,
+};
+
 typedef struct lmc_st1f_control {
   int command;
   int address;
   int value;
   char *data;
 } lmc_t1f_control;
+
+
+
+enum lmc_xilinx_c {
+    lmc_xilinx_reset = 1,
+    lmc_xilinx_load_prom = 2,
+    lmc_xilinx_load = 3
+};
+
+struct lmc_xilinx_control {
+    enum lmc_xilinx_c command;
+    int len;
+    char *data;
+};
 
 /* ------------------ end T1 defs ------------------- */
 

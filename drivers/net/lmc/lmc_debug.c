@@ -1,6 +1,10 @@
 
 #include <linux/types.h>
 #include <linux/sched.h>
+#include <linux/netdevice.h>
+#include <linux/interrupt.h>
+#include <linux/version.h>
+#include "lmc_ver.h"
 #include "lmc_debug.h"
 
 /*
@@ -45,20 +49,20 @@ void lmcConsoleLog(char *type, unsigned char *ucData, int iLen)
 #endif
 }
 
-#ifdef DEBUG
-u_int32_t lmcEventLogIndex = 0;
-u_int32_t lmcEventLogBuf[LMC_EVENTLOGSIZE * LMC_EVENTLOGARGS];
-#endif
+inline void lmc_trace(struct net_device *dev, char *msg){
+#ifdef LMC_TRACE
+    unsigned long j = jiffies + 3; /* Wait for 50 ms */
 
-void lmcEventLog (u_int32_t EventNum, u_int32_t arg2, u_int32_t arg3)
-{
-#ifdef DEBUG
-  lmcEventLogBuf[lmcEventLogIndex++] = EventNum;
-  lmcEventLogBuf[lmcEventLogIndex++] = arg2;
-  lmcEventLogBuf[lmcEventLogIndex++] = arg3;
-  lmcEventLogBuf[lmcEventLogIndex++] = jiffies;
-
-  lmcEventLogIndex &= (LMC_EVENTLOGSIZE * LMC_EVENTLOGARGS) - 1;
+    if(in_interrupt()){
+        printk("%s: * %s\n", dev->name, msg);
+//        while(jiffies < j+10)
+//            ;
+    }
+    else {
+        printk("%s: %s\n", dev->name, msg);
+        while(jiffies < j)
+            schedule();
+    }
 #endif
 }
 

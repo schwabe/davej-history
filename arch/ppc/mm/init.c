@@ -933,15 +933,21 @@ __initfunc(static void mapin_ram(void))
 				/* On the powerpc, no user access
 				   forces R/W kernel access */
 				f |= _PAGE_USER;
+			map_page(v, p, f);
+			v += PAGE_SIZE;
+			p += PAGE_SIZE;
+		}
+	}
+
 #else	/* CONFIG_8xx */
-            for (i = 0; i < phys_mem.n_regions; ++i) {
-                    v = (ulong)__va(phys_mem.regions[i].address);
-                    p = phys_mem.regions[i].address;
-                    for (s = 0; s < phys_mem.regions[i].size; s += PAGE_SIZE) {
+	for (i = 0; i < phys_mem.n_regions; ++i) {
+		v = (ulong)__va(phys_mem.regions[i].address);
+		p = phys_mem.regions[i].address;
+		for (s = 0; s < phys_mem.regions[i].size; s += PAGE_SIZE) {
                         /* On the MPC8xx, we want the page shared so we
                          * don't get ASID compares on kernel space.
                          */
-                            f = _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_SHARED;
+			f = _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_SHARED;
 
                         /* I don't really need the rest of this code, but
                          * I grabbed it because I think the line:
@@ -951,14 +957,14 @@ __initfunc(static void mapin_ram(void))
                          * the MPC8xx, the PAGE_DIRTY takes care of that
                          * for us (along with the RW software state).
                          */
-                            if ((char *) v < _stext || (char *) v >= etext)
-                                    f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
-#endif /* CONFIG_8xx */
+			if ((char *) v < _stext || (char *) v >= etext)
+				f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
 			map_page(v, p, f);
 			v += PAGE_SIZE;
 			p += PAGE_SIZE;
 		}
-	}	    
+	}
+#endif /* CONFIG_8xx */
 }
 
 /* This can get called from ioremap, so don't make it an initfunc, OK? */
@@ -1057,7 +1063,6 @@ __initfunc(void MMU_init(void))
 #endif /* CONFIG_GEMINI	*/
 	else /* prep */
 		end_of_DRAM = prep_find_end_of_memory();
-*(unsigned long *)(KERNELBASE) = 0xdeadbeef;	
         hash_init();
         _SDR1 = __pa(Hash) | (Hash_mask >> 10);
 	ioremap_base = 0xf8000000;
@@ -1257,8 +1262,8 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 #endif /* CONFIG_BLK_DEV_INITRD */
 #ifndef CONFIG_8xx		  
 			if ( !rtas_data ||
-			     addr < (rtas_data & PAGE_MASK) ||
-			     addr >= (rtas_data+rtas_size))
+			     addr < (rtas_data + KERNELBASE) ||
+			     addr >= (rtas_data + KERNELBASE + rtas_size))
 #endif /* CONFIG_8xx */
 				free_page(addr);
 	}
@@ -1319,6 +1324,7 @@ __initfunc(unsigned long *mbx_find_end_of_memory(void))
 	return ret;
 }
 #endif /* CONFIG_MBX */
+
 #ifndef CONFIG_8xx
 /*
  * On systems with Open Firmware, collect information about
@@ -1385,6 +1391,7 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	if (boot_infos == 0) {
 		/* record which bits the prom is using */
 		get_mem_prop("available", &phys_avail);
+		remove_mem_piece(&phys_avail, __max_memory, ~0U, 0);
 		prom_mem = phys_mem;
 		for (i = 0; i < phys_avail.n_regions; ++i)
 			remove_mem_piece(&prom_mem,

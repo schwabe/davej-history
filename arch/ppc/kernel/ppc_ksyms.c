@@ -29,6 +29,7 @@
 #include <asm/spinlock.h>
 #include <asm/dma.h>
 #include <asm/machdep.h>
+#include <asm/nvram.h>
 
 /* Tell string.h we don't want memcpy etc. as cpp defines */
 #define EXPORT_SYMTAB_STROPS
@@ -45,6 +46,9 @@ extern int sys_sigreturn(struct pt_regs *regs);
 extern atomic_t ppc_n_lost_interrupts;
 extern void do_lost_interrupts(unsigned long);
 extern int do_signal(sigset_t *, struct pt_regs *);
+extern unsigned long mktime(unsigned int, unsigned int, unsigned int,
+                            unsigned int, unsigned int, unsigned int);
+extern void to_tm(int tim, struct rtc_time * tm);
 
 long long __ashrdi3(long long, int);
 long long __ashldi3(long long, int);
@@ -222,7 +226,13 @@ EXPORT_SYMBOL(kd_mksound);
 /*#ifdef CONFIG_PMAC */
 EXPORT_SYMBOL(nvram_read_byte);
 EXPORT_SYMBOL(nvram_write_byte);
+EXPORT_SYMBOL(pmac_xpram_read);
+EXPORT_SYMBOL(pmac_xpram_write);
 /*#endif*/ /* CONFIG_PMAC */
+#ifdef CONFIG_PPC_RTC
+EXPORT_SYMBOL(mktime);
+EXPORT_SYMBOL(to_tm);
+#endif
 
 EXPORT_SYMBOL(abs);
 

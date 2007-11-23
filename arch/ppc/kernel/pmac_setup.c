@@ -64,6 +64,7 @@
 
 #undef SHOW_GATWICK_IRQS
 
+void pmac_time_init(void);
 unsigned long pmac_get_rtc_time(void);
 int pmac_set_rtc_time(unsigned long nowtime);
 void pmac_read_rtc_time(void);
@@ -308,6 +309,8 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	find_via_cuda();
 	find_via_pmu();
 
+	pmac_nvram_init();
+
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;
 #endif
@@ -402,7 +405,6 @@ __initfunc(void
 pmac_init2(void))
 {
 	adb_init();
-	pmac_nvram_init();
 	media_bay_init();
 }
 
@@ -642,7 +644,7 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.power_off      = pmac_power_off;
 	ppc_md.halt           = pmac_halt;
 
-	ppc_md.time_init      = NULL;
+	ppc_md.time_init      = pmac_time_init;
 	ppc_md.set_rtc_time   = pmac_set_rtc_time;
 	ppc_md.get_rtc_time   = pmac_get_rtc_time;
 	ppc_md.calibrate_decr = pmac_calibrate_decr;

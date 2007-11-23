@@ -29,8 +29,25 @@
   *
   */
 
+#if LINUX_VERSION_CODE < 0x20363
+#define net_device device
+#define dev_kfree_skb_irq LMC_DEV_KFREE_SKB
+#endif
+
+#if LINUX_VERSION_CODE < 0x20363
+#define LMC_XMITTER_BUSY(x) (x)->tbusy = 1
+#define LMC_XMITTER_FREE(x) (x)->tbusy = 0
+#define LMC_XMITTER_INIT(x) (x)->tbusy = 0
+#else
+#define LMC_XMITTER_BUSY(x) netif_stop_queue(x)
+#define LMC_XMITTER_FREE(x) netif_wake_queue(x)
+#define LMC_XMITTER_INIT(x) netif_start_queue(x)
+
+#endif
+
+
 #if LINUX_VERSION_CODE < 0x20100
-typedef unsigned int u_int32_t;
+//typedef unsigned int u_int32_t;
 
 #define  LMC_SETUP_20_DEV {\
                              int indx; \
@@ -41,7 +58,11 @@ typedef unsigned int u_int32_t;
                           dev->pa_addr = 0; \
                           dev->pa_brdaddr = 0; \
                           dev->pa_mask = 0xFCFFFFFF; \
-                          dev->pa_alen = 4;		/* IP addr.  sizeof(u32) */
+    dev->pa_alen = 4;		/* IP addr.  sizeof(u32) */
+
+#define cpu_to_le32(x) (x)
+#define le32_to_cpu(x) (x)
+#define le16_to_cpu(x) (x)
 
 #else
 
@@ -73,20 +94,20 @@ typedef unsigned int u_int32_t;
 #define LMC_SKB_FREE(skb, val)
 #endif
 
+
+#if LINUX_VERSION_CODE >= 0x20200
+
 #define LMC_SPIN_FLAGS                unsigned long flags;
-
-#if (LINUX_VERSION_CODE >= 0x20200)
-
 #define LMC_SPIN_LOCK_INIT(x)         spin_lock_init(&(x)->lmc_lock);
 #define LMC_SPIN_UNLOCK(x)            ((x)->lmc_lock = SPIN_LOCK_UNLOCKED)
 #define LMC_SPIN_LOCK_IRQSAVE(x)      spin_lock_irqsave (&(x)->lmc_lock, flags);
 #define LMC_SPIN_UNLOCK_IRQRESTORE(x) spin_unlock_irqrestore (&(x)->lmc_lock, flags);
 #else
-#define LMC_SPIN_FLAGS
-#define LMC_SPIN_LOCK_INIT(x)
-#define LMC_SPIN_UNLOCK(x)
-#define LMC_SPIN_LOCK_IRQSAVE(x)
-#define LMC_SPIN_UNLOCK_IRQRESTORE(x)
+#define LMC_SPIN_FLAGS                unsigned long flags;
+#define LMC_SPIN_LOCK_INIT(x)         
+#define LMC_SPIN_UNLOCK(x)            
+#define LMC_SPIN_LOCK_IRQSAVE(x)      save_flags(flags); cli();
+#define LMC_SPIN_UNLOCK_IRQRESTORE(x) restore_flags(flags); 
 #endif
 
 
@@ -105,3 +126,19 @@ typedef unsigned int u_int32_t;
 
 
 #endif
+
+#if LINUX_VERSION_CODE >= 0x20200
+#else
+#define mdelay(x) { int j; for(j = 0; j < x; j++){ udelay(1000); } }
+
+#endif
+
+/*
+ * See DMA-mapping.txt for info
+ */
+
+#if LINUX_VERSION_CODE < 0x20363
+#else
+#define LMC_PCI_ALLOC_CONSISTENT(x, y, z) pci_alloc_consistent(x, y, z)
+#endif
+

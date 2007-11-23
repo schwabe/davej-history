@@ -96,7 +96,7 @@ extern char *klimit;
 char *bootpath = 0;
 char *bootdevice = 0;
 
-unsigned int rtas_data = 0;   /* virtual pointer */
+unsigned int rtas_data = 0;   /* physical pointer */
 unsigned int rtas_entry = 0;  /* physical pointer */
 unsigned int rtas_size = 0;
 unsigned int old_rtas = 0;
@@ -114,7 +114,7 @@ static void flushscreen(void);
 
 void drawchar(char c);
 void drawstring(const char *c);
-static void drawhex(unsigned long v);
+void drawhex(unsigned long v);
 static void scrollscreen(void);
 
 static void draw_byte(unsigned char c, long locX, long locY);
@@ -272,6 +272,22 @@ prom_print(const char *msg)
 				  RELOC("\r\n"), 2);
 		}
 	}
+}
+
+void
+prom_print_hex(unsigned int v)
+{
+	char buf[16];
+	int i, c;
+
+	for (i = 0; i < 8; ++i) {
+		c = (v >> ((7-i)*4)) & 0xf;
+		c += (c >= 10)? ('a' - 10): '0';
+		buf[i] = c;
+	}
+	buf[i] = ' ';
+	buf[i+1] = 0;
+	prom_print(buf);
 }
 
 unsigned long smp_ibm_chrp_hack __initdata = 0;
@@ -448,15 +464,6 @@ prom_init(int r3, int r4, prom_entry pp)
 		RELOC(bootdevice) = PTRUNRELOC(d);
 		mem = ALIGN(mem + strlen(d) + 1);
 	}
-
-	mem = check_display(mem);
-
-	prom_print(RELOC("copying OF device tree..."));
-	mem = copy_device_tree(mem, mem + (1<<20));
-	prom_print(RELOC("done\n"));
-
-
-	RELOC(klimit) = (char *) (mem - offset);
 	
 	prom_rtas = call_prom(RELOC("finddevice"), 1, 1, RELOC("/rtas"));
 	if (prom_rtas != (void *) -1) {
@@ -468,18 +475,14 @@ prom_init(int r3, int r4, prom_entry pp)
 			RELOC(rtas_data) = 0;
 		} else {
 			/*
-			 * We do _not_ want the rtas_data inside the klimit
-			 * boundry since it'll be squashed when we do the
-			 * relocate of the kernel on chrp right after prom_init()
-			 * in head.S.  So, we just pick a spot in memory.
-			 * -- Cort
+			 * Ask OF for some space for RTAS.
 			 */
-#if 0
-			mem = (mem + 4095) & -4096;
-			RELOC(rtas_data) = mem + KERNELBASE;
-			mem += RELOC(rtas_size);
-#endif
-			RELOC(rtas_data) = (6<<20) + KERNELBASE;
+			RELOC(rtas_data) = (unsigned int)
+				call_prom(RELOC("claim"), 3, 1, 0,
+					  RELOC(rtas_size), 0x1000);
+			prom_print(RELOC("rtas at "));
+			prom_print_hex(RELOC(rtas_data));
+			prom_print(RELOC("\n"));
 		}
 		prom_rtas = call_prom(RELOC("open"), 1, 1, RELOC("/rtas"));
 		{
@@ -491,7 +494,7 @@ prom_init(int r3, int r4, prom_entry pp)
 			prom_args.nret = 2;
 			prom_args.args[0] = RELOC("instantiate-rtas");
 			prom_args.args[1] = prom_rtas;
-			prom_args.args[2] = ((void *)(RELOC(rtas_data)-KERNELBASE));
+			prom_args.args[2] = (void *) RELOC(rtas_data);
 			RELOC(prom)(&prom_args);
 			if (prom_args.args[nargs] != 0)
 				i = 0;
@@ -504,6 +507,15 @@ prom_init(int r3, int r4, prom_entry pp)
 		else
 			prom_print(RELOC(" done\n"));
 	}
+
+	mem = check_display(mem);
+
+	prom_print(RELOC("copying OF device tree..."));
+	/* N.B. do this *after* any claims */
+	mem = copy_device_tree(mem, mem + (1<<20));
+	prom_print(RELOC("done\n"));
+
+	RELOC(klimit) = (char *) (mem - offset);
 
 	/* If we are already running at 0xc0000000, we assume we were loaded by
 	 * an OF bootloader which did set a BAT for us. This breaks OF translate
@@ -537,7 +549,7 @@ prom_init(int r3, int r4, prom_entry pp)
 	}
 	    
 #ifdef CONFIG_BOOTX_TEXT
-	if (!chrp && RELOC(prom_disp_node) != 0)
+	if (RELOC(prom_disp_node) != 0)
 		setup_disp_fake_bi(RELOC(prom_disp_node));
 #endif
 
@@ -631,10 +643,10 @@ prom_init(int r3, int r4, prom_entry pp)
 		RELOC(prom_stdout) = 0;
 		clearscreen();
 		prom_welcome(PTRRELOC(RELOC(disp_bi)), phys);
-		prom_print(RELOC("booting...\n"));
 	}
 #endif
 
+	prom_print(RELOC("booting...\n"));
 	return phys;
 }
 
@@ -762,7 +774,7 @@ check_display(unsigned long mem)
 
 		if (RELOC(prom_disp_node) == 0)
 			RELOC(prom_disp_node) = node;
-			
+
 		/* Setup a useable color table when the appropriate
 		 * method is available. Should update this to set-colors */
 		for (i = 0; i < 32; i++)
@@ -841,7 +853,10 @@ setup_disp_fake_bi(ihandle dp)
 		prom_print(RELOC("Failed to get pitch\n"));
 		return;
 	}
+	if (pitch == 1)
+		pitch = 0x1000;
 	address = len = 0;
+	len = 0xfa000000;
 	call_prom(RELOC("getprop"), 4, 1, dp, RELOC("address"), &len, sizeof(len));
 	address = len;
 	if (address == 0) {
@@ -852,22 +867,21 @@ setup_disp_fake_bi(ihandle dp)
 	/* kludge for valkyrie */
 	if (strcmp(dp->name, "valkyrie") == 0) 
 	    address += 0x1000;
-    }
 #endif
  
-    RELOC(disp_bi) = &fake_bi;
-    bi = PTRRELOC((&fake_bi));
-    RELOC(g_loc_X) = 0;
-    RELOC(g_loc_Y) = 0;
-    RELOC(g_max_loc_X) = width / 8;
-    RELOC(g_max_loc_Y) = height / 16;
-    bi->logicalDisplayBase = (unsigned char *)address;
-    bi->dispDeviceBase = (unsigned char *)address;
-    bi->dispDeviceRowBytes = pitch;
-    bi->dispDeviceDepth = depth;
-    bi->dispDeviceRect[0] = bi->dispDeviceRect[1] = 0;
-    bi->dispDeviceRect[2] = width;
-    bi->dispDeviceRect[3] = height;
+	RELOC(disp_bi) = &fake_bi;
+	bi = PTRRELOC((&fake_bi));
+	RELOC(g_loc_X) = 0;
+	RELOC(g_loc_Y) = 0;
+	RELOC(g_max_loc_X) = width / 8;
+	RELOC(g_max_loc_Y) = height / 16;
+	bi->logicalDisplayBase = (unsigned char *)address;
+	bi->dispDeviceBase = (unsigned char *)address;
+	bi->dispDeviceRowBytes = pitch;
+	bi->dispDeviceDepth = depth;
+	bi->dispDeviceRect[0] = bi->dispDeviceRect[1] = 0;
+	bi->dispDeviceRect[2] = width;
+	bi->dispDeviceRect[3] = height;
 }
 #endif
 
@@ -1005,31 +1019,17 @@ void
 finish_device_tree(void)
 {
 	unsigned long mem = (unsigned long) klimit;
-#if 0
-	char* model;
-	
-	/* Here, we decide if we'll use the interrupt-tree (new Core99 code) or not.
-	 * This code was only tested with Core99 machines so far, but should be easily
-	 * adapted to older newworld machines (iMac, B&W G3, Lombard).
-	 */
-	model = get_property(allnodes, "model", 0);
-	if ((boot_infos == 0) && model && (
-		strcmp(model, "PowerBook2,1") == 0 ||
-		strcmp(model, "PowerBook3,1") == 0 ||
-		strcmp(model, "PowerMac2,1") == 0 ||
-		strcmp(model, "PowerMac3,1") == 0))
- 		use_of_interrupt_tree = 1;
-#endif 	
-	/* All newworld machines now use the interrupt tree */
+
+	/* All newworld machines and CHRP now use the interrupt tree */
 	struct device_node *np = allnodes;
-	while(np) {
+	while(np && (_machine == _MACH_Pmac)) {
 		if (get_property(np, "interrupt-parent", 0)) {
 			pmac_newworld = 1;
 			break;
 		}
 		np = np->allnext;
 	}
-	if (boot_infos == 0 && pmac_newworld)
+	if ((_machine == _MACH_chrp) || (boot_infos == 0 && pmac_newworld))
 		use_of_interrupt_tree = 1;
 
 	mem = finish_node(allnodes, mem, NULL);
@@ -1171,6 +1171,25 @@ finish_node_interrupts(struct device_node *np, unsigned long mem_start)
 		        np->intrs[i].sense = *interrupts++;
 		    for (j=2; j<isize; j++)
 		    	interrupts++;
+		}
+		/*
+		 *  On the CHRP LongTrail, ISA interrupts are cascaded through
+		 *  the OpenPIC. For compatibility reasons, ISA interrupts are
+		 *  numbered 0-15 and OpenPIC interrupts start at 16.
+		 *  Hence we have to fixup the interrupt numbers for sources
+		 *  that are attached to the OpenPIC and thus have an
+		 *  interrupt-controller named `open-pic'.
+		 *
+		 *  FIXME: The name of the interrupt-controller node for the
+		 *         `ide' node has no name, although its parent is
+		 *         correctly specified in interrupt-map, so we check
+		 *         for a NULL name as well.
+		 */
+		if (_machine == _MACH_chrp &&
+		    ((node->name && !strcmp(node->name, "open-pic")) ||
+		     !node->name)) {
+		    for (i = 0; i < np->n_intrs; ++i)
+			np->intrs[i].line = openpic_to_irq(np->intrs[i].line);
 		}
 		return mem_start;
 	    }
@@ -2015,6 +2034,15 @@ drawchar(char c)
 	}
 }
 
+void
+here(int n)
+{
+	chrp_indicator(n);
+	if (n == 1)
+		clearscreen();
+	showvalue("here ", n);
+}
+
 __pmac
 void
 drawstring(const char *c)
@@ -2024,7 +2052,7 @@ drawstring(const char *c)
 }
 
 __pmac
-static void
+void
 drawhex(unsigned long v)
 {
 	static char hex_table[] = "0123456789abcdef";

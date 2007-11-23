@@ -9,7 +9,7 @@
 	.text
 
 /*
- * Use the BAT0 registers to map the 1st 8MB of RAM to 0x90000000.
+ * Use the BAT0 registers to map the 1st 8 or 64MB of RAM to 0x90000000.
  */
 	.globl	setup_bats
 setup_bats:
@@ -21,7 +21,7 @@ setup_bats:
 	ori	4,4,4			/* set up BAT registers for 601 */
 	li	5,0x7f
 	b	5f
-4:	ori	4,4,0xff		/* set up BAT registers for 604 */
+4:	ori	4,4,0x7ff		/* set up BAT registers for 604 */
 	li	5,2
 	mtdbatu	3,4
 	mtdbatl	3,5

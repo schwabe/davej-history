@@ -11,7 +11,7 @@
   Copyright 1992 - 2000 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Wed Feb  2 22:04:05 2000 by makisara@kai.makisara.local
+  Last modified: Sat Jun 17 17:29:35 2000 by makisara@kai.makisara.local
   Some small formal changes - aeb, 950809
 */
 
@@ -896,7 +896,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 scsi_tape_flush(struct file * filp)
 {
     int result = 0, result2;
-    static unsigned char cmd[10];
+    unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
     ST_mode * STm;
@@ -1060,7 +1060,7 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
     ssize_t i, do_count, blks, retval, transfer;
     int write_threshold;
     int doing_write = 0;
-    static unsigned char cmd[10];
+    unsigned char cmd[10];
     const char *b_point;
     Scsi_Cmnd * SCpnt = NULL;
     Scsi_Tape * STp;
@@ -1380,7 +1380,7 @@ static long
 read_tape(struct inode *inode, long count, Scsi_Cmnd **aSCpnt)
 {
     int transfer, blks, bytes;
-    static unsigned char cmd[10];
+    unsigned char cmd[10];
     Scsi_Cmnd *SCpnt;
     Scsi_Tape *STp;
     ST_mode * STm;

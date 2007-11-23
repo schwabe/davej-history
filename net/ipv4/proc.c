@@ -359,8 +359,8 @@ int netstat_get_info(char *buffer, char **start, off_t offset, int length, int d
 	len = sprintf(buffer,
 		      "TcpExt: SyncookiesSent SyncookiesRecv SyncookiesFailed"
 		      " EmbryonicRsts PruneCalled RcvPruned OfoPruned"
-		      " OutOfWindowIcmps LockDroppedIcmps\n" 	
-		      "TcpExt: %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
+		      " OutOfWindowIcmps LockDroppedIcmps SockMallocOOM\n" 	
+		      "TcpExt: %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
 		      net_statistics.SyncookiesSent,
 		      net_statistics.SyncookiesRecv,
 		      net_statistics.SyncookiesFailed,
@@ -369,7 +369,8 @@ int netstat_get_info(char *buffer, char **start, off_t offset, int length, int d
 		      net_statistics.RcvPruned,
 		      net_statistics.OfoPruned,
 		      net_statistics.OutOfWindowIcmps,
-		      net_statistics.LockDroppedIcmps);
+		      net_statistics.LockDroppedIcmps,
+		      net_statistics.SockMallocOOM);
 
 	if (offset >= len)
 	{

@@ -41,7 +41,7 @@
 #ifndef MODULE
 static int version_printed=0;
 #endif
-static const char* version = "HDLC support routines revision: 1.0-pre9";
+static const char* version = "HDLC support routines revision: 1.0-pre10";
 
 
 #define CISCO_MULTICAST         0x8f    /* Cisco multicast address */
@@ -139,9 +139,11 @@ static void cisco_netif(hdlc_device *hdlc, struct sk_buff *skb)
 #endif
 
 	case CISCO_KEEPALIVE:
-		if (skb->len != sizeof(cisco_packet)) {
+		if (skb->len != CISCO_PACKET_LEN && 
+		    skb->len != CISCO_BIG_PACKET_LEN) {
 			printk(KERN_INFO "%s: Invalid length of Cisco "
-			       "control packet\n", hdlc->name);
+			       "control packet (%d bytes)\n", hdlc->name, 
+			       skb->len);
 			goto rx_error;
 		}
 

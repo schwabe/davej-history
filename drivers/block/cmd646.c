@@ -247,5 +247,9 @@ __initfunc(void ide_init_cmd646 (ide_hwif_t *hwif))
 	(void) pci_write_config_byte(dev, 0x58, 0x3f);
 	(void) pci_write_config_byte(dev, 0x5b, 0x3f);
 
+#ifdef CONFIG_PPC
+	(void) pci_write_config_byte(dev, 0x73, 0xf0);
+#endif /* CONFIG_PPC */
+
 	hwif->dmaproc = &cmd646_dmaproc;
 }

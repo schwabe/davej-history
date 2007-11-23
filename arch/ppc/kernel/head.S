@@ -2832,7 +2832,6 @@ enter_rtas:
 	stw	r0,20(r1)
 	lis	r4,rtas_data@ha
 	lwz	r4,rtas_data@l(r4)
-	addis	r4,r4,-KERNELBASE@h
 	lis	r6,1f@ha	/* physical return address for rtas */
 	addi	r6,r6,1f@l
 	addis	r6,r6,-KERNELBASE@h

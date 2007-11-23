@@ -128,6 +128,8 @@ typedef struct {
 	u16 rel;		/* reliability */
 	u32 time;
 }__attribute__ ((packed)) cisco_packet;
+#define	CISCO_PACKET_LEN	18
+#define	CISCO_BIG_PACKET_LEN	20
 
 
 

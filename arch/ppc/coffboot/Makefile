@@ -92,11 +92,11 @@ vmlinux.elf.initrd: $(CHRPOBJS) initrd.o mknote
 micoffboot: dummy.o
 	$(LD) -o $@ $(COFF_LD_ARGS) dummy.o $(LIBS)
 
-miboot.image: micoffboot hack-coff
+miboot.image: micoffboot hack-coff vmlinux.gz
 	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=image=vmlinux.gz micoffboot $@
 	./hack-coff $@
 
-miboot.image.initrd: micoffboot hack-coff
+miboot.image.initrd: micoffboot hack-coff vmlinux.gz ramdisk.image.gz
 	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=image=vmlinux.gz \
 	--add-section=initrd=ramdisk.image.gz micoffboot $@
 	./hack-coff $@

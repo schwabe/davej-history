@@ -266,7 +266,11 @@ static void mace_reset(struct device *dev)
     /* done changing address */
     out_8(&mb->iac, 0);
 
+#ifndef CONFIG_MACE_AAUI_PORT
     out_8(&mb->plscc, PORTSEL_GPSI + ENPLSIO);
+#else
+    out_8(&mb->plscc, PORTSEL_AUI + ENPLSIO);
+#endif /* CONFIG_MACE_AAUI_PORT */
 }
 
 static void __mace_set_address(struct device *dev, void *addr)

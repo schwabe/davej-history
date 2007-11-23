@@ -717,6 +717,10 @@ extern void			destroy_sock(struct sock *sk);
 extern struct sk_buff		*sock_wmalloc(struct sock *sk,
 					      unsigned long size, int force,
 					      int priority);
+
+extern struct sk_buff		*sock_wmalloc_err(struct sock *sk,
+					      unsigned long size, int force,
+					      int priority, int *err);
 extern struct sk_buff		*sock_rmalloc(struct sock *sk,
 					      unsigned long size, int force,
 					      int priority);

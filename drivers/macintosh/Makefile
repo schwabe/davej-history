@@ -36,6 +36,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PPC_RTC),y)
+  L_OBJS += rtc.o
+else
+  ifeq ($(CONFIG_PPC_RTC),m)
+    M_OBJS += rtc.o
+  endif
+endif
+
 ifdef CONFIG_MAC_KEYBOARD
 L_OBJS += mac_keyb.o
 endif

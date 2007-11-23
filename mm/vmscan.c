@@ -380,6 +380,8 @@ out:
 static int do_try_to_free_pages(unsigned int gfp_mask)
 {
 	int priority;
+	int ret = 0;
+	int swapcount;
 	int count = SWAP_CLUSTER_MAX;
 
 	lock_kernel();
@@ -390,6 +392,7 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 	priority = 6;
 	do {
 		while (shrink_mmap(priority, gfp_mask)) {
+			ret = 1;
 			if (!--count)
 				goto done;
 		}
@@ -397,15 +400,18 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 		/* Try to get rid of some shared memory pages.. */
 		if (gfp_mask & __GFP_IO) {
 			while (shm_swap(priority, gfp_mask)) {
+				ret = 1;
 				if (!--count)
 					goto done;
 			}
 		}
 
 		/* Then, try to page stuff out.. */
+		swapcount = count;
 		while (swap_out(priority, gfp_mask)) {
-			if (!--count)
-				goto done;
+			ret = 1;
+			if (!--swapcount)
+				break;
 		}
 
 		shrink_dcache_memory(priority, gfp_mask);
@@ -417,7 +423,7 @@ done:
 		printk("VM: do_try_to_free_pages failed for %s...\n",
 				current->comm);
 	/* Return success if we freed a page. */
-	return priority >= 0;
+	return ret;
 }
 
 /*

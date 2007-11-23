@@ -685,3 +685,8 @@ void chrp_progress(char *s)
 	while ( *s )
 		call_rtas( "display-character", 1, 1, NULL, *s++ );
 }
+
+void chrp_indicator(int x)
+{
+	call_rtas("set-indicator", 3, 1, NULL, 6, 0, x);
+}

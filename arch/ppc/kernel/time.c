@@ -106,6 +106,13 @@ void timer_interrupt(struct pt_regs * regs)
 		if ( !smp_processor_id() )
 		{
 			do_timer(regs);
+#if 0
+	/* -- BenH -- I'm removing this for now since it can cause various
+	 *            troubles with local-time RTCs. Now that we have a
+	 *            /dev/rtc that uses ppc_md.set_rtc_time() on mac, it
+	 *            should be possible to program the RTC from userland
+	 *            in all cases.
+	 */
 			/*
 			 * update the rtc when needed
 			 */
@@ -119,6 +126,7 @@ void timer_interrupt(struct pt_regs * regs)
 					/* do it again in 60 s */
 					last_rtc_update = xtime.tv_sec;
 			}
+#endif			
 		}
 	}
 #ifdef __SMP__

@@ -102,7 +102,7 @@
 #define DMFE_AUTO       8
 
 #define DMFE_TIMER_WUT  jiffies+(HZ*2)/2	/* timer wakeup time : 1 second */
-#define DMFE_TX_TIMEOUT HZ*1.5	/* tx packet time-out time 1.5 s" */
+#define DMFE_TX_TIMEOUT ((HZ*3)/2)	/* tx packet time-out time 1.5 s" */
 
 #define DMFE_DBUG(dbug_now, msg, vaule) if (dmfe_debug || dbug_now) printk("DBUG: %s %x\n", msg, vaule)
 

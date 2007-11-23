@@ -566,6 +566,31 @@ struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int
 			skb->sk = sk;
 			return skb;
 		}
+		net_statistics.SockMallocOOM++; 
+	}
+	return NULL;
+}
+
+/*
+ * Allocate memory from the sockets send buffer, telling caller about real OOM. 
+ * err is only set for oom, not for socket buffer overflow.
+ */ 
+struct sk_buff *sock_wmalloc_err(struct sock *sk, unsigned long size, int force, int priority, int *err)
+{
+	*err = 0; 
+	/* Note: overcommitment possible */ 
+	if (force || atomic_read(&sk->wmem_alloc) < sk->sndbuf) {
+		struct sk_buff * skb;
+		*err = -ENOMEM; 
+		skb = alloc_skb(size, priority);
+		if (skb) {
+			*err = 0;
+			atomic_add(skb->truesize, &sk->wmem_alloc);
+			skb->destructor = sock_wfree;
+			skb->sk = sk;
+			return skb;
+		}
+		net_statistics.SockMallocOOM++; 
 	}
 	return NULL;
 }
@@ -583,6 +608,7 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 			skb->sk = sk;
 			return skb;
 		}
+		net_statistics.SockMallocOOM++; 
 	}
 	return NULL;
 }
@@ -602,6 +628,7 @@ void *sock_kmalloc(struct sock *sk, int size, int priority)
 		if (mem)
 			return mem;
 		atomic_sub(size, &sk->omem_alloc);
+		net_statistics.SockMallocOOM++; 
 	}
 	return NULL;
 }

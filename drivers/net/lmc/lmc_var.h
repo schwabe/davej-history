@@ -1,7 +1,7 @@
 #ifndef _LMC_VAR_H_
 #define _LMC_VAR_H_
 
-/* $Id: lmc_var.h,v 1.14 2000/01/21 13:29:50 asj Exp $ */
+/* $Id: lmc_var.h,v 1.24 2000/06/16 23:37:16 asj Exp $ */
 
  /*
   * Copyright (c) 1997-2000 LAN Media Corporation (LMC)
@@ -18,6 +18,7 @@
   */
 
 #include <linux/timer.h>
+#include <linux/version.h>
 
 #ifndef __KERNEL__
 typedef signed char s8;
@@ -32,6 +33,14 @@ typedef unsigned int u32;
 typedef signed long long s64;
 typedef unsigned long long u64;
 
+#if LINUX_VERSION_CODE >= 0x20363
+struct timer_list {
+};
+#endif
+
+typedef u32 spinlock_t;
+typedef u32 dma_addr_t;
+
 #define BITS_PER_LONG 32 
 
 #endif
@@ -44,7 +53,7 @@ typedef struct lmc___softc lmc_softc_t;
 typedef struct lmc___media lmc_media_t;
 typedef struct lmc___ctl lmc_ctl_t;
 
-#define lmc_csrptr_t	u32
+#define lmc_csrptr_t    unsigned long
 #define u_int16_t	u16
 #define u_int8_t	u8
 #define tulip_uint32_t	u32
@@ -69,13 +78,13 @@ typedef struct lmc___ctl lmc_ctl_t;
 #define LMC_CSR_READ(sc, csr) \
 	inl((sc)->lmc_csrs.csr)
 #define LMC_CSR_WRITE(sc, reg, val) \
-	outl(val, (sc)->lmc_csrs.reg)
+	outl((val), (sc)->lmc_csrs.reg)
 
-#ifdef _LINUX_DELAY_H
-	#define SLOW_DOWN_IO udelay(2);
-	#undef __SLOW_DOWN_IO
-	#define __SLOW_DOWN_IO udelay(2);
-#endif
+//#ifdef _LINUX_DELAY_H
+//	#define SLOW_DOWN_IO udelay(2);
+//	#undef __SLOW_DOWN_IO
+//	#define __SLOW_DOWN_IO udelay(2);
+//#endif
 
 #define DELAY(n) SLOW_DOWN_IO
 
@@ -83,10 +92,10 @@ typedef struct lmc___ctl lmc_ctl_t;
 
 /* This macro sync's up with the mii so that reads and writes can take place */
 #define LMC_MII_SYNC(sc) do {int n=32; while( n >= 0 ) { \
-		LMC_CSR_WRITE((sc), csr_9, 0x20000); \
+                LMC_CSR_WRITE((sc), csr_9, 0x20000); \
 		lmc_delay(); \
 		LMC_CSR_WRITE((sc), csr_9, 0x30000); \
-		lmc_delay(); \
+                lmc_delay(); \
 		n--; }} while(0);
 
 struct lmc_regfile_t {
@@ -242,6 +251,8 @@ struct lmc___media {
 	void	(* set_crc_length)(lmc_softc_t * const, int);
         void    (* set_circuit_type)(lmc_softc_t * const, int);
         void	(* watchdog)(lmc_softc_t * const);
+        int     (* ioctl)(lmc_softc_t * const, void *);
+        int     (* got_interupt)(lmc_softc_t * const);
 };
 
 
@@ -254,32 +265,32 @@ struct lmc___media {
  */
 struct lmc_statistics
 {
-        int     rx_packets;             /* total packets received       */
-        int     tx_packets;             /* total packets transmitted    */
-	int     rx_bytes;
-        int     tx_bytes;
+        unsigned long     rx_packets;             /* total packets received       */
+        unsigned long     tx_packets;             /* total packets transmitted    */
+	unsigned long     rx_bytes;
+        unsigned long     tx_bytes;
         
-        int     rx_errors;              /* bad packets received         */
-        int     tx_errors;              /* packet transmit problems     */
-        int     rx_dropped;             /* no space in linux buffers    */
-        int     tx_dropped;             /* no space available in linux  */
-        int     multicast;              /* multicast packets received   */
-        int     collisions;
+        unsigned long     rx_errors;              /* bad packets received         */
+        unsigned long     tx_errors;              /* packet transmit problems     */
+        unsigned long     rx_dropped;             /* no space in linux buffers    */
+        unsigned long     tx_dropped;             /* no space available in linux  */
+        unsigned long     multicast;              /* multicast packets received   */
+        unsigned long     collisions;
 
         /* detailed rx_errors: */
-        int     rx_length_errors;
-        int     rx_over_errors;         /* receiver ring buff overflow  */
-        int     rx_crc_errors;          /* recved pkt with crc error    */
-        int     rx_frame_errors;        /* recv'd frame alignment error */
-        int     rx_fifo_errors;         /* recv'r fifo overrun          */
-        int     rx_missed_errors;       /* receiver missed packet       */
+        unsigned long     rx_length_errors;
+        unsigned long     rx_over_errors;         /* receiver ring buff overflow  */
+        unsigned long     rx_crc_errors;          /* recved pkt with crc error    */
+        unsigned long     rx_frame_errors;        /* recv'd frame alignment error */
+        unsigned long     rx_fifo_errors;         /* recv'r fifo overrun          */
+        unsigned long     rx_missed_errors;       /* receiver missed packet       */
 
         /* detailed tx_errors */
-        int     tx_aborted_errors;
-        int     tx_carrier_errors;
-        int     tx_fifo_errors;
-        int     tx_heartbeat_errors;
-        int     tx_window_errors;
+        unsigned long     tx_aborted_errors;
+        unsigned long     tx_carrier_errors;
+        unsigned long     tx_fifo_errors;
+        unsigned long     tx_heartbeat_errors;
+        unsigned long     tx_window_errors;
 
         /* for cslip etc */
         unsigned long rx_compressed;
@@ -296,6 +307,9 @@ struct lmc_statistics
         u_int32_t       tx_MaxXmtsB4Int;
         u_int32_t       tx_TimeoutCnt;
         u_int32_t       tx_OutOfSyncPtr;
+        u_int32_t       tx_tbusy0;
+        u_int32_t       tx_tbusy1;
+        u_int32_t       tx_tbusy_calls;
         u_int32_t       resetCount;
         u_int32_t       lmc_txfull;
         u_int32_t       tbusy;
@@ -353,10 +367,11 @@ typedef struct lmc_xinfo {
  * forward decl
  */
 struct lmc___softc {
+        void                   *if_ptr;   /* General purpose pointer (used by SPPP >= 2.4) */
 	char                   *name;
 	u8			board_idx;
 	struct lmc_statistics   stats;
-	struct device          *lmc_device;
+	struct net_device          *lmc_device;
 
 	int                     hang, rxdesc, bad_packet, some_counter;
 	u_int32_t               txgo;
@@ -371,9 +386,12 @@ struct lmc___softc {
 	u_int32_t		lmc_gpio;	/* state of outputs */
 	struct sk_buff*		lmc_txq[LMC_TXDESCS];
 	struct sk_buff*		lmc_rxq[LMC_RXDESCS];
+	volatile
 	struct tulip_desc_t	lmc_rxring[LMC_RXDESCS];
+	volatile
 	struct tulip_desc_t	lmc_txring[LMC_TXDESCS];
 	unsigned int		lmc_next_rx, lmc_next_tx;
+	volatile
 	unsigned int		lmc_taint_tx, lmc_taint_rx;
 	int			lmc_tx_start, lmc_txfull;
 	int			lmc_txbusy;
@@ -382,27 +400,49 @@ struct lmc___softc {
 	int			last_link_status;
 	int			lmc_cardtype;
 	u_int32_t               last_frameerr;
-	lmc_media_t	       *lmc_media;
+        lmc_media_t	       *lmc_media;
 	struct timer_list	timer;
 	lmc_ctl_t		ictl;
 	u_int32_t		TxDescriptControlInit;  
-	struct device		*next_module;   /* Link to the next module  */
+	struct net_device      *next_module;   /* Link to the next module  */
 	int                     tx_TimeoutInd; /* additional driver state */
 	int                     tx_TimeoutDisplay;
 	unsigned int		lastlmc_taint_tx;
 	int                     lasttx_packets;
 	u_int32_t		tx_clockState;
 	u_int32_t		lmc_crcSize;
-	LMC_XINFO		lmc_xinfo; 
-	char                    lmc_yel, lmc_blue, lmc_red; /* for T1 and DS3 */
+	LMC_XINFO		lmc_xinfo;
         char                    lmc_timing; /* for HSSI and SSI */
         int                     got_irq;
 
         char                    last_led_err[4];
+        char                    yellow_alarm; /* Time in seconds to run yellow alarm for */
+        char                    red_alarm;    /* Time in seconds to run red alarm for */
+        char                    blue_alarm;   /* Time in seconds to run blue alarm for */
 
 #if LINUX_VERSION_CODE >= 0x20200
 	spinlock_t              lmc_lock;
 #endif
+#if LINUX_VERSION_CODE >= 0x20363
+        struct pci_dev          *pdev;
+        dma_addr_t              sc_dma_handle;
+        struct lmc___softc      *sc_dma;
+#endif
+        u_int16_t               if_type;       /* PPP or NET */
+        struct ppp_device       *pd;
+
+        /* Failure cases */
+        u8                       failed_ring;
+        u8                       failed_recv_alloc;
+
+        /* T1 Specicfic Variable */
+        u16                      loop_timer; /* Time out loop up requests */
+        u8                       t1_amisf;
+        u32                      t1_frac_mask;
+        u8                       t1_loop_time;
+
+        /* Structure check */
+        u32                     check;
 };
 
 #define LMC_PCI_TIME 1

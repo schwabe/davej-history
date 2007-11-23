@@ -1768,6 +1768,9 @@ static int cdrom_read_toc(ide_drive_t *drive, struct request_sense *sense)
 	if (stat)
 		toc->capacity = 0x1fffff;
 
+	HWIF(drive)->gd->sizes[drive->select.b.unit << PARTN_BITS] = (toc->capacity * SECTORS_PER_FRAME) >> (BLOCK_SIZE_BITS - 9);
+	drive->part[0].nr_sects = toc->capacity * SECTORS_PER_FRAME;
+
 	/* Remember that we've read this stuff. */
 	CDROM_STATE_FLAGS (drive)->toc_valid = 1;
 

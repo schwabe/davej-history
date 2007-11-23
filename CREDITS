@@ -645,6 +645,10 @@ S: 1150 Ringwood Court
 S: San Jose, California 95131
 S: USA
 
+N: Kumar Gala
+E: kumar.gala@motorola.com
+D: AltiVec PowerPC support
+
 N: Nigel Gamble
 E: nigel@nrg.org
 E: nigel@sgi.com
@@ -812,6 +816,7 @@ E: bh40@calva.net
 E: benh@mipsys.com
 D: PowerMac booter (BootX)
 D: Additional PowerBook support
+D: Apple "Core99" machines support (ibook,g4,...)
 S: 22, rue des Marguettes
 S: 75012 Paris
 S: France
@@ -1631,6 +1636,13 @@ S: Germany
 N: Ken Pizzini
 E: ken@halcyon.com
 D: CDROM driver "sonycd535" (Sony CDU-535/531)
+
+N: Matt Porter
+E: mporter@phx.mcd.mot.com
+D: Motorola PowerPC PReP support
+S: 2900 S. Diable Way
+S: Tempe, Arizona 85282
+S: USA
 
 N: Frederic Potter 
 E: Frederic.Potter@masi.ibp.fr 

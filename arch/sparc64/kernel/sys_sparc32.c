@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.107.2.8 2000/02/28 04:09:49 davem Exp $
+/* $Id: sys_sparc32.c,v 1.107.2.9 2000/06/20 17:12:25 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -2488,7 +2488,8 @@ static void cmsg32_recvmsg_fixup(struct msghdr *kmsg, unsigned long orig_cmsg_up
 	 * the cmsg_len for MSG_TRUNC cases, we need not check that case either.
 	 */
 	ucmsg = (struct cmsghdr *) orig_cmsg_uptr;
-	while(((unsigned long)ucmsg) < ((unsigned long)kmsg->msg_control)) {
+	while(((unsigned long)ucmsg) <=
+	      (((unsigned long)kmsg->msg_control) - sizeof(struct cmsghdr))) {
 		struct cmsghdr32 *kcmsg32 = (struct cmsghdr32 *) wp;
 		int clen64, clen32;
 
@@ -3689,8 +3690,10 @@ int asmlinkage sys32_nfsservctl(int cmd, struct nfsctl_arg32 *arg32, union nfsct
 		err = nfs_getfh32_trans(karg, arg32);
 		break;
 	case NFSCTL_LOCKD:
-		/* No arguments, no translations... */
-		err = 0;
+		/* We still have to copy over the version
+		 * because nfsctl still checks that.
+		 */
+		err = get_user(karg->ca_version, &arg32->ca32_version);
 		break;
 	default:
 		err = -EINVAL;

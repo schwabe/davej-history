@@ -27,18 +27,6 @@
 
 #undef DEBUG
 
-/*
- * Read and write the non-volatile RAM on PowerMacs and CHRP machines.
- */
-static int nvram_naddrs;
-static volatile unsigned char *nvram_addr;
-static volatile unsigned char *nvram_data;
-static int nvram_mult, is_core_99;
-static char* nvram_image;
-static int core99_bank = 0;
-
-extern int pmac_newworld;
-
 #define NVRAM_SIZE		0x2000	/* 8kB of non-volatile RAM */
 
 #define CORE99_SIGNATURE	0x5a
@@ -51,7 +39,6 @@ extern int pmac_newworld;
 #define CORE99_FLASH_CMD_ERASE_SETUP	0x20
 #define CORE99_FLASH_CMD_RESET		0xff
 #define CORE99_FLASH_CMD_WRITE_SETUP	0x40
-
 
 /* CHRP NVRAM header */
 struct chrp_header {
@@ -69,7 +56,28 @@ struct core99_header {
   u32			reserved[2];
 };
 
+/*
+ * Read and write the non-volatile RAM on PowerMacs and CHRP machines.
+ */
+static int nvram_naddrs;
+static volatile unsigned char *nvram_addr;
+static volatile unsigned char *nvram_data;
+static int nvram_mult, is_core_99;
+static int core99_bank = 0;
 static int nvram_partitions[3];
+
+/* FIXME: kmalloc fails to allocate the image now that I had to move it
+ *        before time_init(). For now, I allocate a static buffer here
+ *        but it's a waste of space on all but core99 machines
+ */
+#if 0
+static char* nvram_image;
+#else
+__pmac static char nvram_image[NVRAM_SIZE];
+#endif
+
+extern int pmac_newworld;
+
 
 static u8
 chrp_checksum(struct chrp_header* hdr)
@@ -244,11 +252,13 @@ void pmac_nvram_init(void)
 			printk(KERN_ERR "nvram: no address\n");
 			return;
 		}
+#if 0
 		nvram_image = kmalloc(NVRAM_SIZE, GFP_KERNEL);
 		if (!nvram_image) {
 			printk(KERN_ERR "nvram: can't allocate image\n");
 			return;
 		}
+#endif		
 		nvram_data = ioremap(dp->addrs[0].address, NVRAM_SIZE*2);
 #ifdef DEBUG
 		printk("nvram: Checking bank 0...\n");
@@ -322,7 +332,7 @@ nvram_read_byte(int addr)
 		return req.reply[1];
 	case 1:
 		if (is_core_99)
-			return nvram_image[addr];
+			return nvram_image ? nvram_image[addr] : 0;
 		return nvram_data[(addr & (NVRAM_SIZE - 1)) * nvram_mult];
 	case 2:
 		*nvram_addr = addr >> 5;
@@ -347,6 +357,8 @@ nvram_write_byte(unsigned char val, int addr)
 		break;
 	case 1:
 		if (is_core_99) {
+			if (!nvram_image)
+				return;
 			nvram_image[addr] = val;
 			break;
 		}

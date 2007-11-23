@@ -17,15 +17,16 @@ void gunzip(void *, int, unsigned char *, int *);
 #define get_32be(x)	(*(unsigned *)(x))
 
 #define RAM_START	0x00000000
-#define RAM_END		(8<<20)
+#define RAM_END		(64<<20)
 
-#define RAM_FREE	((unsigned long)(_end+0x1000)&~0xFFF)
+#define BOOT_START	((unsigned long)_start)
+#define BOOT_END	((unsigned long)(_end + 0xFFF) & ~0xFFF)
 #define PROG_START	0x00010000
 
 char *avail_ram;
 char *end_avail;
 
-extern char _end[];
+extern char _start[], _end[];
 extern char image_data[];
 extern int image_len;
 extern char initrd_data[];
@@ -48,17 +49,23 @@ chrpboot(int a1, int a2, void *prom)
 	initrd_start = (RAM_END - initrd_size) & ~0xFFF;
 	a1 = initrd_start;
 	a2 = initrd_size;
-	printf("initial ramdisk moving 0x%x <- 0x%x (%x bytes)\n\r", initrd_start,
-	       initrd_data,initrd_size);
+	claim(initrd_start, RAM_END - initrd_start, 0);
+	printf("initial ramdisk moving 0x%x <- 0x%x (%x bytes)\n",
+	       initrd_start, initrd_data, initrd_size);
 	memcpy((char *)initrd_start, initrd_data, initrd_size);
-	end_avail = (char *)initrd_start;
-    } else
-	end_avail = (char *) RAM_END;
+    }
     im = image_data;
     len = image_len;
+    /* try and claim our text/data in case of OF bugs */
+    claim(BOOT_START, BOOT_END - BOOT_START, 0);
+    /* claim 4MB starting at PROG_START */
+    claim(PROG_START, (4<<20) - PROG_START, 0);
     dst = (void *) PROG_START;
     if (im[0] == 0x1f && im[1] == 0x8b) {
-	avail_ram = (char *)RAM_FREE;
+	/* claim 512kB for scratch space */
+	avail_ram = (char *) claim(0, 512 << 10, 0x10);
+	end_avail = avail_ram + (512 << 10);
+	printf("avail_ram = %x\n", avail_ram);
 	printf("gunzipping (0x%x <- 0x%x:0x%0x)...", dst, im, im+len);
 	gunzip(dst, 0x400000, im, &len);
 	printf("done %u bytes\n\r", len);

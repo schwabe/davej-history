@@ -90,6 +90,7 @@ tristate 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
 if [ "$CONFIG_MAC_SERIAL" = "y" ]; then
    bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
 fi
+tristate 'Support for /dev/rtc' CONFIG_PPC_RTC
 bool 'Support for PowerMac ADB mouse' CONFIG_ADBMOUSE
 bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
 bool 'Support for TotalImpact TotalMP' CONFIG_TOTALMP

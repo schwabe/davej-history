@@ -22,6 +22,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <asm/nvram.h>
 
 #include "time.h"
 
@@ -49,11 +50,35 @@
 /* Bits in IFR and IER */
 #define T1_INT		0x40		/* Timer 1 interrupt */
 
-__pmac
+extern struct timezone sys_tz;
 
+__init
+void pmac_time_init(void)
+{
+	s32 delta = 0;
+	int dst;
+	int i;
+	char tmp[1024];
+	char *p = tmp;
+	
+	delta = ((s32)pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0x9)) << 16;
+	delta |= ((s32)pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0xa)) << 8;
+	delta |= pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0xb);
+	if (delta & 0x00800000UL)
+		delta |= 0xFF000000UL;
+	dst = ((pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0x8) & 0x80) != 0);
+	printk("GMT Delta read from XPRAM: %d minutes, DST: %s\n", delta/60,
+		dst ? "on" : "off");
+	sys_tz.tz_minuteswest = -delta/60;
+	/* I _suppose_ this is 0:off, 1:on */
+	sys_tz.tz_dsttime = dst;
+}
+
+__pmac
 unsigned long pmac_get_rtc_time(void)
 {
 	struct adb_request req;
+	int offset = sys_tz.tz_minuteswest * 60;
 
 	/* Get the time from the RTC */
 	if (adb_controller == 0)
@@ -70,7 +95,7 @@ unsigned long pmac_get_rtc_time(void)
 			printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
 			       req.reply_len);
 		return (req.reply[3] << 24) + (req.reply[4] << 16)
-			+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET;
+			+ (req.reply[5] << 8) + req.reply[6] - RTC_OFFSET + offset;
 	case ADB_VIAPMU:
 		if (pmu_request(&req, NULL, 1, PMU_READ_RTC) < 0) {
 			printk("pmac_read_rtc_time: pmu_request failed\n");
@@ -82,7 +107,7 @@ unsigned long pmac_get_rtc_time(void)
 			printk(KERN_ERR "pmac_get_rtc_time: got %d byte reply\n",
 			       req.reply_len);
 		return (req.reply[1] << 24) + (req.reply[2] << 16)
-			+ (req.reply[3] << 8) + req.reply[4] - RTC_OFFSET;
+			+ (req.reply[3] << 8) + req.reply[4] - RTC_OFFSET + offset;
 	default:
 		return 0;
 	}
@@ -90,7 +115,39 @@ unsigned long pmac_get_rtc_time(void)
 
 int pmac_set_rtc_time(unsigned long nowtime)
 {
-	return 0;
+	struct adb_request req;
+
+	nowtime += RTC_OFFSET - sys_tz.tz_minuteswest * 60;
+
+	/* Set the time in the RTC */
+	if (adb_controller == 0)
+		return 0;
+	/* adb_controller->kind, not adb_hardware, since that doesn't
+	   get set until we call adb_init - paulus. */
+	switch (adb_controller->kind) {
+	case ADB_VIACUDA:
+		if (cuda_request(&req, NULL, 6, CUDA_PACKET, CUDA_SET_TIME,
+				 nowtime >> 24, nowtime >> 16, nowtime >> 8, nowtime) < 0)
+			return 0;
+		while (!req.complete)
+			cuda_poll();
+//		if (req.reply_len != 7)
+			printk(KERN_ERR "pmac_set_rtc_time: got %d byte reply\n",
+			       req.reply_len);
+		return 1;
+	case ADB_VIAPMU:
+		if (pmu_request(&req, NULL, 5, PMU_SET_RTC,
+				nowtime >> 24, nowtime >> 16, nowtime >> 8, nowtime) < 0)
+			return 0;
+		while (!req.complete)
+			pmu_poll();
+		if (req.reply_len != 5)
+			printk(KERN_ERR "pmac_set_rtc_time: got %d byte reply\n",
+			       req.reply_len);
+		return 1;
+	default:
+		return 0;
+	}
 }
 
 /*

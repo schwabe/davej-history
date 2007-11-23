@@ -1089,6 +1089,14 @@ struct mac_driver_desc {
     /* ... more stuff */
 };
 
+static inline void mac_fix_string(char *stg, int len)
+{
+	int i;
+
+	for (i = len - 1; i >= 0 && stg[i] == ' '; i--)
+		stg[i] = 0;
+}
+
 static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 {
 	struct buffer_head *bh;
@@ -1157,18 +1165,31 @@ static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 		 */
 		if (_machine == _MACH_Pmac) {
 			int goodness = 0;
+
+			mac_fix_string(part->processor, 16);
+			mac_fix_string(part->name, 32);
+			mac_fix_string(part->type, 32);					
 		    
 			if ((be32_to_cpu(part->status) & MAC_STATUS_BOOTABLE)
 			    && strcasecmp(part->processor, "powerpc") == 0)
 				goodness++;
 
-			if (strcasecmp(part->type, "Apple_UNIX_SVR2") == 0) {
+			if (strcasecmp(part->type, "Apple_UNIX_SVR2") == 0
+			    || strcasecmp(part->type, "Linux_PPC") == 0) {
+				int i, l;
+
 				goodness++;
-				if ((strcmp(part->name, "/") == 0) ||
-				    (strstr(part->name, "root") != 0)) {
+				l = strlen(part->name);
+				if (strcmp(part->name, "/") == 0)
 					goodness++;
+				for (i = 0; i <= l - 4; ++i) {
+					if (strnicmp(part->name + i, "root",
+						     4) == 0) {
+						goodness += 2;
+						break;
+					}
 				}
-				if (strncmp(part->name, "swap", 4) == 0)
+				if (strnicmp(part->name, "swap", 4) == 0)
 					goodness--;
 			}
 
