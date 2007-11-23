@@ -1,5 +1,5 @@
 /*
- * QLogic ISP2100 SCSI-FCP
+ * QLogic ISP2x00 SCSI-FCP
  * 
  * Written by Erik H. Moe, ehm@cris.com
  * Copyright 1995, Erik H. Moe
@@ -18,7 +18,7 @@
 /* Renamed and updated to 1.3.x by Michael Griffith <grif@cs.ucr.edu> */
 
 /* This is a version of the isp1020 driver which was modified by
- * Chris Loveland <cwl@iol.unh.edu> to support the isp2100
+ * Chris Loveland <cwl@iol.unh.edu> to support the isp2x00
  */
 
 
@@ -61,39 +61,48 @@
  * requests are queued serially and the scatter/gather limit is
  * determined for each queue request anew.
  */
-#define QLOGICFC_REQ_QUEUE_LEN	63	/* must be power of two - 1 */
-#define QLOGICFC_MAX_SG(ql)	(2 + (((ql) > 0) ? 5*((ql) - 1) : 0))
+
+#if BITS_PER_LONG > 32
+#define DATASEGS_PER_COMMAND 2
+#define DATASEGS_PER_CONT 5
+#else
+#define DATASEGS_PER_COMMAND 3
+#define DATASEGS_PER_CONT 7
+#endif
+
+#define QLOGICFC_REQ_QUEUE_LEN	127	/* must be power of two - 1 */
+#define QLOGICFC_MAX_SG(ql)	(DATASEGS_PER_COMMAND + (((ql) > 0) ? DATASEGS_PER_CONT*((ql) - 1) : 0))
 #define QLOGICFC_CMD_PER_LUN    8
 
-int isp2100_detect(Scsi_Host_Template *);
-int isp2100_release(struct Scsi_Host *);
-const char * isp2100_info(struct Scsi_Host *);
-int isp2100_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
-int isp2100_abort(Scsi_Cmnd *);
-int isp2100_reset(Scsi_Cmnd *, unsigned int);
-int isp2100_biosparam(Disk *, kdev_t, int[]);
+int isp2x00_detect(Scsi_Host_Template *);
+int isp2x00_release(struct Scsi_Host *);
+const char * isp2x00_info(struct Scsi_Host *);
+int isp2x00_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
+int isp2x00_abort(Scsi_Cmnd *);
+int isp2x00_reset(Scsi_Cmnd *, unsigned int);
+int isp2x00_biosparam(Disk *, kdev_t, int[]);
 
 #ifndef NULL
 #define NULL (0)
 #endif
 
-extern struct proc_dir_entry proc_scsi_isp2100;
+extern struct proc_dir_entry proc_scsi_isp2x00;
 
 #define QLOGICFC {							   \
-        detect:                 isp2100_detect,                            \
-        release:                isp2100_release,                           \
-        info:                   isp2100_info,                              \
-        queuecommand:           isp2100_queuecommand,                      \
-        abort:                  isp2100_abort,                             \
-        reset:                  isp2100_reset,                             \
-        bios_param:             isp2100_biosparam,                         \
+        detect:                 isp2x00_detect,                            \
+        release:                isp2x00_release,                           \
+        info:                   isp2x00_info,                              \
+        queuecommand:           isp2x00_queuecommand,                      \
+        eh_abort_handler:       isp2x00_abort,                             \
+        reset:                  isp2x00_reset,                             \
+        bios_param:             isp2x00_biosparam,                         \
         can_queue:              QLOGICFC_REQ_QUEUE_LEN,                    \
         this_id:                -1,                                        \
         sg_tablesize:           QLOGICFC_MAX_SG(QLOGICFC_REQ_QUEUE_LEN),   \
-        cmd_per_lun:            QLOGICFC_CMD_PER_LUN,                      \
+	cmd_per_lun:		QLOGICFC_CMD_PER_LUN, 			   \
         present:                0,                                         \
         unchecked_isa_dma:      0,                                         \
-        use_clustering:         DISABLE_CLUSTERING                         \
+        use_clustering:         ENABLE_CLUSTERING 			   \
 }
 
 #endif /* _QLOGICFC_H */

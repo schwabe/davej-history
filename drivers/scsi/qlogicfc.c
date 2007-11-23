@@ -1,5 +1,5 @@
 /*
- * QLogic ISP2100 SCSI-FCP
+ * QLogic ISP2x00 SCSI-FCP
  * Written by Erik H. Moe, ehm@cris.com
  * Copyright 1995, Erik H. Moe
  *
@@ -17,7 +17,7 @@
 /* Renamed and updated to 1.3.x by Michael Griffith <grif@cs.ucr.edu> */
 
 /* This is a version of the isp1020 driver which was modified by
- * Chris Loveland <cwl@iol.unh.edu> to support the isp2100
+ * Chris Loveland <cwl@iol.unh.edu> to support the isp2100 and isp2200
  */
 
 /*
@@ -63,28 +63,30 @@
 
 /* Configuration section **************************************************** */
 
-/* Set the following macro to 1 to reload the ISP2100's firmware.  This is
-   version 1.15.19 of the firmware. */
+/* Set the following macro to 1 to reload the ISP2x00's firmware.  This is
+   version 1.15.37 of the isp2100's firmware and version 2.00.16 of the 
+   isp2200's firmware. 
+*/
 
 #define RELOAD_FIRMWARE		1
 
 #define USE_NVRAM_DEFAULTS      1
 
-#define ISP2100_PORTDB          1
+#define ISP2x00_PORTDB          1
 
 /* Set the following to 1 to include fabric support, fabric support is 
  * currently not as well tested as the other aspects of the driver */
 
-#define ISP2100_FABRIC          0
+#define ISP2x00_FABRIC          0
 
 /*  Macros used for debugging */
 /*
-#define DEBUG_ISP2100		1
-#define DEBUG_ISP2100_INT	1
-#define DEBUG_ISP2100_INTR	1
-#define DEBUG_ISP2100_SETUP	1
+#define DEBUG_ISP2x00		1
+#define DEBUG_ISP2x00_INT	1
+#define DEBUG_ISP2x00_INTR	1
+#define DEBUG_ISP2x00_SETUP	1
 
-#define DEBUG_ISP2100_FABRIC    1
+#define DEBUG_ISP2x00_FABRIC    1
 */
 /* #define TRACE_ISP             1 */
 
@@ -127,51 +129,49 @@ struct {
 #define TRACE(w, i, a)
 #endif
 
-#if DEBUG_ISP2100_FABRIC
+#if DEBUG_ISP2x00_FABRIC
 #define DEBUG_FABRIC(x)	x
 #else
 #define DEBUG_FABRIC(x)
-#endif				/* DEBUG_ISP2100_FABRIC */
+#endif				/* DEBUG_ISP2x00_FABRIC */
 
 
-#if DEBUG_ISP2100
-#define ENTER(x)	printk("isp2100 : entering %s()\n", x);
-#define LEAVE(x)	printk("isp2100 : leaving %s()\n", x);
+#if DEBUG_ISP2x00
+#define ENTER(x)	printk("isp2x00 : entering %s()\n", x);
+#define LEAVE(x)	printk("isp2x00 : leaving %s()\n", x);
 #define DEBUG(x)	x
 #else
 #define ENTER(x)
 #define LEAVE(x)
 #define DEBUG(x)
-#endif				/* DEBUG_ISP2100 */
+#endif				/* DEBUG_ISP2x00 */
 
-#if DEBUG_ISP2100_INTR
-#define ENTER_INTR(x)	printk("isp2100 : entering %s()\n", x);
-#define LEAVE_INTR(x)	printk("isp2100 : leaving %s()\n", x);
+#if DEBUG_ISP2x00_INTR
+#define ENTER_INTR(x)	printk("isp2x00 : entering %s()\n", x);
+#define LEAVE_INTR(x)	printk("isp2x00 : leaving %s()\n", x);
 #define DEBUG_INTR(x)	x
 #else
 #define ENTER_INTR(x)
 #define LEAVE_INTR(x)
 #define DEBUG_INTR(x)
-#endif				/* DEBUG ISP2100_INTR */
+#endif				/* DEBUG ISP2x00_INTR */
 
 
-#if defined(__i386__)
-#define virt_to_bus_low32(x)   virt_to_bus(x)
-#define virt_to_bus_high32(x)  0x0
-#define bus_to_virt_low32(x)   bus_to_virt(x)
-#define bus_to_virt_high32(x)  0x0
-#elif defined(__alpha__)
+#if BITS_PER_LONG > 32
 #define virt_to_bus_low32(x)   ((u32) (0xffffffff & virt_to_bus(x)))
 #define virt_to_bus_high32(x)  ((u32) (0xffffffff & (virt_to_bus(x)>>32)))
 #define bus_to_virt_low32(x)   ((u32) (0xffffffff & bus_to_virt(x)))
 #define bus_to_virt_high32(x)  ((u32) (0xffffffff & (bus_to_virt(x)>>32)))
+#else
+#define virt_to_bus_low32(x)   virt_to_bus(x)
+#define virt_to_bus_high32(x)  0x0
+#define bus_to_virt_low32(x)   bus_to_virt(x)
+#define bus_to_virt_high32(x)  0x0
 #endif
 
-#define ISP2100_REV_ID	1
+#define ISP2100_REV_ID1	       1
 #define ISP2100_REV_ID3        3
-
-#define MAX_TARGETS	16
-#define MAX_LUNS	8
+#define ISP2200_REV_ID5        5
 
 /* host configuration and control registers */
 #define HOST_HCCR	0xc0	/* host command and control */
@@ -219,6 +219,8 @@ struct {
 #define PORT_DB_CHANGED                 0x8014
 #define CHANGE_NOTIFICATION             0x8015
 #define SCSI_COMMAND_COMPLETE           0x8020
+#define POINT_TO_POINT_UP               0x8030
+#define CONNECTION_MODE                 0x8036
 
 struct Entry_header {
 	u_char entry_type;
@@ -228,19 +230,27 @@ struct Entry_header {
 };
 
 /* entry header type commands */
+#if BITS_PER_LONG > 32
 #define ENTRY_COMMAND		0x19
 #define ENTRY_CONTINUATION	0x0a
+#else
+#define ENTRY_COMMAND		0x11
+#define ENTRY_CONTINUATION	0x02
+#endif
+
 #define ENTRY_STATUS		0x03
 #define ENTRY_MARKER		0x04
+
 
 /* entry header flag definitions */
 #define EFLAG_BUSY		2
 #define EFLAG_BAD_HEADER	4
 #define EFLAG_BAD_PAYLOAD	8
 
+#if BITS_PER_LONG > 32
 struct dataseg {
-	u_int d_base_lo;
-	u_int d_base_high;
+	u_int d_base;
+	u_int d_base_hi;
 	u_int d_count;
 };
 
@@ -249,15 +259,39 @@ struct Command_Entry {
 	u_int handle;
 	u_char target_lun;
 	u_char target_id;
-	u_short rsvd1;
+	u_short expanded_lun;
 	u_short control_flags;
 	u_short rsvd2;
 	u_short time_out;
 	u_short segment_cnt;
 	u_char cdb[16];
 	u_int total_byte_cnt;
-	struct dataseg dataseg[2];
+	struct dataseg dataseg[DATASEGS_PER_COMMAND];
 };
+
+#else
+struct dataseg {
+	u_int d_base;
+	u_int d_count;
+};
+
+struct Command_Entry {
+	struct Entry_header hdr;
+	u_int handle;
+	u_char target_lun;
+	u_char target_id;
+	u_short expanded_lun;
+	u_short control_flags;
+	u_short rsvd2;
+	u_short time_out;
+	u_short segment_cnt;
+	u_char cdb[16];
+	u_int total_byte_cnt;
+	struct dataseg dataseg[DATASEGS_PER_COMMAND];
+};
+
+#endif
+
 
 /* command entry control flag definitions */
 #define CFLAG_NODISC		0x01
@@ -268,23 +302,18 @@ struct Command_Entry {
 #define CFLAG_READ		0x20
 #define CFLAG_WRITE		0x40
 
-struct Ext_Command_Entry {
-	struct Entry_header hdr;
-	u_int handle;
-	u_char target_lun;
-	u_char target_id;
-	u_short cdb_length;
-	u_short control_flags;
-	u_short rsvd;
-	u_short time_out;
-	u_short segment_cnt;
-	u_char cdb[44];
-};
-
+#if BITS_PER_LONG > 32
 struct Continuation_Entry {
 	struct Entry_header hdr;
-	struct dataseg dataseg[5];
+	struct dataseg dataseg[DATASEGS_PER_CONT];
 };
+#else
+struct Continuation_Entry {
+	struct Entry_header hdr;
+        u32 rsvd;
+	struct dataseg dataseg[DATASEGS_PER_CONT];
+};
+#endif
 
 struct Marker_Entry {
 	struct Entry_header hdr;
@@ -292,7 +321,7 @@ struct Marker_Entry {
 	u_char target_lun;
 	u_char target_id;
 	u_char modifier;
-	u_char rsvd;
+	u_char expanded_lun;
 	u_char rsvds[52];
 };
 
@@ -549,7 +578,7 @@ struct sns_cb {
 	u_int response_high;
 	u_short sub_len;
 	u_short res2;
-	u_short data[22];
+	u_char data[44];
 };
 
 /* address of instance of this struct is passed to adapter to initialize things
@@ -574,6 +603,17 @@ struct init_cb {
 	u_int req_queue_addr_high;
 	u_int res_queue_addr_lo;
 	u_int res_queue_addr_high;
+        /* the rest of this structure only applies to the isp2200 */
+        u_short lun_enables;
+        u_char cmd_resource_cnt;
+        u_char notify_resource_cnt;
+        u_short timeout;
+        u_short reserved3;
+        u_short add_firm_opts;
+        u_char res_accum_timer;
+        u_char irq_delay_timer;
+        u_short special_options;
+        u_short reserved4[13];
 };
 
 /*
@@ -583,16 +623,24 @@ struct init_cb {
 #define RES_QUEUE_LEN		((QLOGICFC_REQ_QUEUE_LEN + 1) / 8 - 1)
 #define QUEUE_ENTRY_LEN		64
 
-#if ISP2100_FABRIC
+#if ISP2x00_FABRIC
 #define QLOGICFC_MAX_ID    0xff
 #else
-#define QLOGICFC_MAX_ID    0x80
+#define QLOGICFC_MAX_ID    0x7d
 #endif
 
-struct isp2100_hostdata {
+#define QLOGICFC_MAX_LOOP_ID 0x7d
+
+/* adapter_state values */
+#define AS_FIRMWARE_DEAD      -1
+#define AS_LOOP_DOWN           0
+#define AS_LOOP_GOOD           1
+#define AS_REDO_PORTDB         2
+
+struct isp2x00_hostdata {
 	u_char revision;
 	struct pci_dev *pci_dev;
-	/* result and request queues (shared with isp2100): */
+	/* result and request queues (shared with isp2x00): */
 	u_int req_in_ptr;	/* index of next request slot */
 	u_int res_out_ptr;	/* index of next result slot */
 
@@ -602,7 +650,7 @@ struct isp2100_hostdata {
 	char res[RES_QUEUE_LEN + 1][QUEUE_ENTRY_LEN];
 	char req[QLOGICFC_REQ_QUEUE_LEN + 1][QUEUE_ENTRY_LEN];
 	struct init_cb control_block;
-	int loop_up;
+	int adapter_state;
 	unsigned long int tag_ages[126];
 	Scsi_Cmnd *handle_ptrs[QLOGICFC_REQ_QUEUE_LEN + 1];
 	unsigned long handle_serials[QLOGICFC_REQ_QUEUE_LEN + 1];
@@ -611,6 +659,7 @@ struct isp2100_hostdata {
 	u64 wwn;
 	u_int port_id;
 	u_char queued;
+	u_char host_id;
 };
 
 
@@ -620,177 +669,187 @@ struct isp2100_hostdata {
 						    QLOGICFC_REQ_QUEUE_LEN)
 #define RES_QUEUE_DEPTH(in, out)	QUEUE_DEPTH(in, out, RES_QUEUE_LEN)
 
-static void isp2100_enable_irqs(struct Scsi_Host *);
-static void isp2100_disable_irqs(struct Scsi_Host *);
-static int isp2100_init(struct Scsi_Host *);
-static int isp2100_reset_hardware(struct Scsi_Host *);
-static int isp2100_mbox_command(struct Scsi_Host *, u_short[]);
-static int isp2100_return_status(struct Status_Entry *);
-static void isp2100_intr_handler(int, void *, struct pt_regs *);
-static void do_isp2100_intr_handler(int, void *, struct pt_regs *);
-static int isp2100_make_portdb(struct Scsi_Host *);
+static void isp2x00_enable_irqs(struct Scsi_Host *);
+static void isp2x00_disable_irqs(struct Scsi_Host *);
+static int isp2x00_init(struct Scsi_Host *);
+static int isp2x00_reset_hardware(struct Scsi_Host *);
+static int isp2x00_mbox_command(struct Scsi_Host *, u_short[]);
+static int isp2x00_return_status(struct Status_Entry *);
+static void isp2x00_intr_handler(int, void *, struct pt_regs *);
+static void do_isp2x00_intr_handler(int, void *, struct pt_regs *);
+static int isp2x00_make_portdb(struct Scsi_Host *);
 
-#if ISP2100_FABRIC
-static int isp2100_init_fabric(struct Scsi_Host *, struct id_name_map *, int);
+#if ISP2x00_FABRIC
+static int isp2x00_init_fabric(struct Scsi_Host *, struct id_name_map *, int);
 #endif
 
 #if USE_NVRAM_DEFAULTS
-static int isp2100_get_nvram_defaults(struct Scsi_Host *, struct init_cb *);
-static u_short isp2100_read_nvram_word(struct Scsi_Host *, u_short);
+static int isp2x00_get_nvram_defaults(struct Scsi_Host *, struct init_cb *);
+static u_short isp2x00_read_nvram_word(struct Scsi_Host *, u_short);
 #endif
 
-#if DEBUG_ISP2100
-static void isp2100_print_scsi_cmd(Scsi_Cmnd *);
+#if DEBUG_ISP2x00
+static void isp2x00_print_scsi_cmd(Scsi_Cmnd *);
 #endif
 
-static void isp2100_print_status_entry(struct Status_Entry *);
+#if DEBUG_ISP2x00_INTR
+static void isp2x00_print_status_entry(struct Status_Entry *);
+#endif
 
-static struct proc_dir_entry proc_scsi_isp2100 =
+static struct proc_dir_entry proc_scsi_isp2x00 =
 {
-	PROC_SCSI_QLOGICFC, 7, "isp2100",
+	PROC_SCSI_QLOGICFC, 7, "isp2x00",
 	S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
 
 
-static inline void isp2100_enable_irqs(struct Scsi_Host *host)
+static inline void isp2x00_enable_irqs(struct Scsi_Host *host)
 {
 	outw(ISP_EN_INT | ISP_EN_RISC, host->io_port + PCI_INTER_CTL);
 }
 
 
-static inline void isp2100_disable_irqs(struct Scsi_Host *host)
+static inline void isp2x00_disable_irqs(struct Scsi_Host *host)
 {
 	outw(0x0, host->io_port + PCI_INTER_CTL);
 }
 
 
-int isp2100_detect(Scsi_Host_Template * tmpt)
+int isp2x00_detect(Scsi_Host_Template * tmpt)
 {
 	int hosts = 0;
 	int wait_time;
 	struct Scsi_Host *host = NULL;
-	struct isp2100_hostdata *hostdata;
+	struct isp2x00_hostdata *hostdata;
 	struct pci_dev *pdev = NULL;
+	unsigned short device_ids[2];
+	int i;
 
-	ENTER("isp2100_detect");
 
-	tmpt->proc_dir = &proc_scsi_isp2100;
+	ENTER("isp2x00_detect");
+
+       	device_ids[0] = PCI_DEVICE_ID_QLOGIC_ISP2100;
+	device_ids[1] = PCI_DEVICE_ID_QLOGIC_ISP2200;
+
+	tmpt->proc_dir = &proc_scsi_isp2x00;
 
 	if (pci_present() == 0) {
 		printk("qlogicfc : PCI not present\n");
 		return 0;
 	}
-	while ((pdev = pci_find_device(PCI_VENDOR_ID_QLOGIC, PCI_DEVICE_ID_QLOGIC_ISP2100, pdev))) {
 
-		host = scsi_register(tmpt, sizeof(struct isp2100_hostdata));
-		host->max_id = QLOGICFC_MAX_ID + 1;
-		host->hostt->use_new_eh_code = 1;
-		hostdata = (struct isp2100_hostdata *) host->hostdata;
+	for (i=0; i<2; i++){
+	        while ((pdev = pci_find_device(PCI_VENDOR_ID_QLOGIC, device_ids[i], pdev))) {
 
-		memset(hostdata, 0, sizeof(struct isp2100_hostdata));
-		hostdata->pci_dev = pdev;
+		        host = scsi_register(tmpt, sizeof(struct isp2x00_hostdata));
+			host->max_id = QLOGICFC_MAX_ID + 1;
+			host->hostt->use_new_eh_code = 1;
+			hostdata = (struct isp2x00_hostdata *) host->hostdata;
 
-		hostdata->queued = 0;
-		/* set up the control block */
-		hostdata->control_block.version = 0x0f;
-		hostdata->control_block.firm_opts = 0x010c;
-		hostdata->control_block.max_frame_len = 2048;
-		hostdata->control_block.max_iocb = 256;
-		hostdata->control_block.exec_throttle = 8;
-		hostdata->control_block.retry_delay = 5;
-		hostdata->control_block.retry_cnt = 0;
-		hostdata->control_block.node_name[0] = 0x0020;
-		hostdata->control_block.node_name[1] = 0xE000;
-		hostdata->control_block.node_name[2] = 0x008B;
-		hostdata->control_block.node_name[3] = 0x0000;
-		hostdata->control_block.hard_addr = 0x0003;
-		hostdata->control_block.req_queue_len = QLOGICFC_REQ_QUEUE_LEN + 1;
-		hostdata->control_block.res_queue_len = RES_QUEUE_LEN + 1;
-		hostdata->control_block.res_queue_addr_lo = virt_to_bus_low32(&hostdata->res);
-		hostdata->control_block.res_queue_addr_high = virt_to_bus_high32(&hostdata->res);
-		hostdata->control_block.req_queue_addr_lo = virt_to_bus_low32(&hostdata->req);
-		hostdata->control_block.req_queue_addr_high = virt_to_bus_high32(&hostdata->req);
+			memset(hostdata, 0, sizeof(struct isp2x00_hostdata));
+			hostdata->pci_dev = pdev;
 
-		hostdata->loop_up = 0;
+			hostdata->queued = 0;
+			/* set up the control block */
+			hostdata->control_block.version = 0x1;
+			hostdata->control_block.firm_opts = 0x0108;
+			hostdata->control_block.max_frame_len = 2048;
+			hostdata->control_block.max_iocb = 256;
+			hostdata->control_block.exec_throttle = 8;
+			hostdata->control_block.retry_delay = 5;
+			hostdata->control_block.retry_cnt = 1;
+			hostdata->control_block.node_name[0] = 0x0020;
+			hostdata->control_block.node_name[1] = 0xE000;
+			hostdata->control_block.node_name[2] = 0x008B;
+			hostdata->control_block.node_name[3] = 0x0000;
+			hostdata->control_block.hard_addr = 0x0003;
+			hostdata->control_block.req_queue_len = QLOGICFC_REQ_QUEUE_LEN + 1;
+			hostdata->control_block.res_queue_len = RES_QUEUE_LEN + 1;
+			hostdata->control_block.res_queue_addr_lo = virt_to_bus_low32(&hostdata->res);
+			hostdata->control_block.res_queue_addr_high = virt_to_bus_high32(&hostdata->res);
+			hostdata->control_block.req_queue_addr_lo = virt_to_bus_low32(&hostdata->req);
+			hostdata->control_block.req_queue_addr_high = virt_to_bus_high32(&hostdata->req);
 
-		if (isp2100_init(host) || isp2100_reset_hardware(host)) {
-			scsi_unregister(host);
-			continue;
+
+			hostdata->adapter_state = AS_LOOP_DOWN;
+			hostdata->host_id = hosts;
+		
+			if (isp2x00_init(host) || isp2x00_reset_hardware(host)) {
+			        scsi_unregister(host);
+				continue;
+			}
+			host->this_id = 0;
+
+			if (request_irq(host->irq, do_isp2x00_intr_handler, SA_INTERRUPT | SA_SHIRQ, "qlogicfc", host)) {
+			        printk("qlogicfc%d : interrupt %d already in use\n",
+				       hostdata->host_id, host->irq);
+				scsi_unregister(host);
+				continue;
+			}
+			if (check_region(host->io_port, 0xff)) {
+			        printk("qlogicfc%d : i/o region 0x%lx-0x%lx already "
+				       "in use\n",
+				       hostdata->host_id, host->io_port, host->io_port + 0xff);
+				free_irq(host->irq, host);
+				scsi_unregister(host);
+				continue;
+			}
+			request_region(host->io_port, 0xff, "qlogicfc");
+
+			outw(0x0, host->io_port + PCI_SEMAPHORE);
+			outw(HCCR_CLEAR_RISC_INTR, host->io_port + HOST_HCCR);
+			isp2x00_enable_irqs(host);
+			/* wait for the loop to come up */
+			for (wait_time = jiffies + 10 * HZ; wait_time > jiffies && hostdata->adapter_state == AS_LOOP_DOWN;)
+			        barrier();
+
+			if (hostdata->adapter_state == AS_LOOP_DOWN) {
+			        printk("qlogicfc%d : link is not up\n", hostdata->host_id);
+			}
+			hosts++;
 		}
-		host->this_id = 0;
-
-		if (request_irq(host->irq, do_isp2100_intr_handler, SA_INTERRUPT | SA_SHIRQ, "qlogicfc", host)) {
-			printk("qlogicfc : interrupt %d already in use\n",
-			       host->irq);
-			scsi_unregister(host);
-			continue;
-		}
-		if (check_region(host->io_port, 0xff)) {
-			printk("qlogicfc : i/o region 0x%lx-0x%lx already "
-			       "in use\n",
-			       host->io_port, host->io_port + 0xff);
-			free_irq(host->irq, host);
-			scsi_unregister(host);
-			continue;
-		}
-		request_region(host->io_port, 0xff, "qlogicfc");
-
-		outw(0x0, host->io_port + PCI_SEMAPHORE);
-		outw(HCCR_CLEAR_RISC_INTR, host->io_port + HOST_HCCR);
-		isp2100_enable_irqs(host);
-		/* wait for the loop to come up */
-		for (wait_time = jiffies + 10 * HZ; wait_time > jiffies && hostdata->loop_up == 0;)
-			barrier();
-
-		if (hostdata->loop_up == 0) {
-			printk("qlogicfc: loop is not up\n");
-			release_region(host->io_port, 0xff);
-			free_irq(host->irq, host);
-			scsi_unregister(host);
-			continue;
-		}
-		hosts++;
 	}
 
 
-	/* this busy loop should not be needed but the isp2100 seems to need 
+	/* this busy loop should not be needed but the isp2x00 seems to need 
 	   some time before recognizing it is attached to a fabric */
 
-#if ISP2100_FABRIC
+#if ISP2x00_FABRIC
 	for (wait_time = jiffies + 5 * HZ; wait_time > jiffies;)
 		barrier();
 #endif
 
-	LEAVE("isp2100_detect");
+	LEAVE("isp2x00_detect");
 
 	return hosts;
 }
 
 
-static int isp2100_make_portdb(struct Scsi_Host *host)
+static int isp2x00_make_portdb(struct Scsi_Host *host)
 {
 
 	short param[8];
 	int i, j;
 	struct id_name_map temp[QLOGICFC_MAX_ID + 1];
-	struct isp2100_hostdata *hostdata;
+	struct isp2x00_hostdata *hostdata;
 
-	isp2100_disable_irqs(host);
+	isp2x00_disable_irqs(host);
 
 	memset(temp, 0, sizeof(temp));
-	hostdata = (struct isp2100_hostdata *) host->hostdata;
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
 
-#if ISP2100_FABRIC
+#if ISP2x00_FABRIC
 	for (i = 0x81; i < QLOGICFC_MAX_ID; i++) {
 		param[0] = MBOX_PORT_LOGOUT;
 		param[1] = i << 8;
 		param[2] = 0;
 		param[3] = 0;
 
-		isp2100_mbox_command(host, param);
+		isp2x00_mbox_command(host, param);
 
 		if (param[0] != MBOX_COMMAND_COMPLETE) {
-			printk("logout failed %x  %x\n", i, param[0]);
+
+			DEBUG_FABRIC(printk("qlogicfc%d : logout failed %x  %x\n", hostdata->host_id, i, param[0]));
 		}
 	}
 #endif
@@ -798,7 +857,7 @@ static int isp2100_make_portdb(struct Scsi_Host *host)
 
 	param[0] = MBOX_GET_INIT_SCSI_ID;
 
-	isp2100_mbox_command(host, param);
+	isp2x00_mbox_command(host, param);
 
 	if (param[0] == MBOX_COMMAND_COMPLETE) {
 		hostdata->port_id = ((u_int) param[3]) << 16;
@@ -807,16 +866,17 @@ static int isp2100_make_portdb(struct Scsi_Host *host)
 		temp[0].wwn = hostdata->wwn;
 	}
 	else {
-	        printk("qlogicfc: error getting scsi id.\n");
+	        printk("qlogicfc%d : error getting scsi id.\n", hostdata->host_id);
 	}
 
-	for (i = 1, j = 1; i <= QLOGICFC_MAX_ID; i++) {
-	        temp[i].loop_id = temp[0].loop_id;
-
-		param[0] = MBOX_GET_PORT_NAME;
+        for (i = 0; i <=QLOGICFC_MAX_ID; i++)
+                temp[i].loop_id = temp[0].loop_id;
+   
+        for (i = 0, j = 1; i <= QLOGICFC_MAX_LOOP_ID; i++) {
+                param[0] = MBOX_GET_PORT_NAME;
 		param[1] = (i << 8) & 0xff00;
 
-		isp2100_mbox_command(host, param);
+		isp2x00_mbox_command(host, param);
 
 		if (param[0] == MBOX_COMMAND_COMPLETE) {
 			temp[j].loop_id = i;
@@ -835,8 +895,8 @@ static int isp2100_make_portdb(struct Scsi_Host *host)
 	}
 
 
-#if ISP2100_FABRIC
-	isp2100_init_fabric(host, temp, j);
+#if ISP2x00_FABRIC
+	isp2x00_init_fabric(host, temp, j);
 #endif
 
 	for (i = 0; i <= QLOGICFC_MAX_ID; i++) {
@@ -856,7 +916,7 @@ static int isp2100_make_portdb(struct Scsi_Host *host)
 				}
 			}
 			if (j == QLOGICFC_MAX_ID + 1)
-				printk("qlogicfc.c: Too many scsi devices, no more room in port map.\n");
+				printk("qlogicfc%d : Too many scsi devices, no more room in port map.\n", hostdata->host_id);
 			if (!hostdata->port_db[j].wwn) {
 				hostdata->port_db[j].loop_id = temp[i].loop_id;
 				hostdata->port_db[j].wwn = temp[i].wwn;
@@ -866,41 +926,69 @@ static int isp2100_make_portdb(struct Scsi_Host *host)
 
 	}
 
-	isp2100_enable_irqs(host);
+	isp2x00_enable_irqs(host);
 
 	return 0;
 }
 
 
-#if ISP2100_FABRIC
+#if ISP2x00_FABRIC
 
-int isp2100_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int j)
+#define FABRIC_PORT          0x7e
+#define FABRIC_CONTROLLER    0x7f
+#define FABRIC_SNS           0x80
+
+int isp2x00_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int cur_scsi_id)
 {
 
 	u_short param[8];
 	u64 wwn;
 	int done = 0;
 	u_short loop_id = 0x81;
-	u_short scsi_id = j;
+	u_short scsi_id = cur_scsi_id;
 	u_int port_id;
 	struct sns_cb req;
 	u_char sns_response[608];
-	struct isp2100_hostdata *hostdata;
+	struct isp2x00_hostdata *hostdata;
 
-	hostdata = (struct isp2100_hostdata *) host->hostdata;
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
 
-	DEBUG_FABRIC(printk("qlogicfc.c: Checking for a fabric.\n"));
+	DEBUG_FABRIC(printk("qlogicfc%d : Checking for a fabric.\n", hostdata->host_id));
 	param[0] = MBOX_GET_PORT_NAME;
-	param[1] = 0x7E00;
+	param[1] = (u16)FABRIC_PORT << 8;
 
-	isp2100_mbox_command(host, param);
+	isp2x00_mbox_command(host, param);
 
 	if (param[0] != MBOX_COMMAND_COMPLETE) {
-		DEBUG_FABRIC(printk("fabric check result %x\n", param[0]));
+		DEBUG_FABRIC(printk("qlogicfc%d : fabric check result %x\n", hostdata->host_id, param[0]));
 		return 0;
 	}
-	printk("qlogicfc.c: Fabric found.\n");
+	printk("qlogicfc%d : Fabric found.\n", hostdata->host_id);
 
+
+	memset(&req, 0, sizeof(req));
+	
+	req.len = 8;
+	req.response_low = virt_to_bus_low32(sns_response);
+	req.response_high = virt_to_bus_high32(sns_response);
+	req.sub_len = 22;
+	req.data[0] = 0x17;
+	req.data[1] = 0x02;
+	req.data[8] = (u_char) (hostdata->port_id & 0xff);
+	req.data[9] = (u_char) (hostdata->port_id >> 8 & 0xff);
+	req.data[10] = (u_char) (hostdata->port_id >> 16 & 0xff);
+	req.data[13] = 0x01;
+	param[0] = MBOX_SEND_SNS;
+	param[1] = 30;
+	param[2] = virt_to_bus_low32(&req) >> 16;
+	param[3] = virt_to_bus_low32(&req);
+	param[6] = virt_to_bus_high32(&req) >> 16;
+	param[7] = virt_to_bus_high32(&req);
+	
+	isp2x00_mbox_command(host, param);
+	
+	if (param[0] != MBOX_COMMAND_COMPLETE)
+	        printk("qlogicfc%d : error sending RFC-4\n", hostdata->host_id);	       
 
 	port_id = hostdata->port_id;
 	while (!done) {
@@ -910,9 +998,11 @@ int isp2100_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 		req.response_low = virt_to_bus_low32(sns_response);
 		req.response_high = virt_to_bus_high32(sns_response);
 		req.sub_len = 6;
-		req.data[0] = 0x0100;
-		req.data[4] = (u_short) (port_id & 0xffff);
-		req.data[5] = (u_short) (port_id >> 16 & 0xffff);
+		req.data[0] = 0x00;
+		req.data[1] = 0x01;
+		req.data[8] = (u_char) (port_id & 0xff);
+		req.data[9] = (u_char) (port_id >> 8 & 0xff);
+		req.data[10] = (u_char) (port_id >> 16 & 0xff);
 
 		param[0] = MBOX_SEND_SNS;
 		param[1] = 14;
@@ -921,10 +1011,10 @@ int isp2100_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 		param[6] = virt_to_bus_high32(&req) >> 16;
 		param[7] = virt_to_bus_high32(&req);
 
-		isp2100_mbox_command(host, param);
+		isp2x00_mbox_command(host, param);
 
 		if (param[0] == MBOX_COMMAND_COMPLETE) {
-			DEBUG_FABRIC(printk("found node %02x%02x%02x%02x%02x%02x%02x%02x ", sns_response[20], sns_response[21], sns_response[22], sns_response[23], sns_response[24], sns_response[25], sns_response[26], sns_response[27]));
+			DEBUG_FABRIC(printk("qlogicfc%d : found node %02x%02x%02x%02x%02x%02x%02x%02x ", hostdata->host_id, sns_response[20], sns_response[21], sns_response[22], sns_response[23], sns_response[24], sns_response[25], sns_response[26], sns_response[27]));
 			DEBUG_FABRIC(printk("  port id: %02x%02x%02x\n", sns_response[17], sns_response[18], sns_response[19]));
 			port_id = ((u_int) sns_response[17]) << 16;
 			port_id |= ((u_int) sns_response[18]) << 8;
@@ -938,13 +1028,13 @@ int isp2100_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 			wwn |= ((u64) sns_response[26]) << 8;
 			wwn |= ((u64) sns_response[27]);
 			if (hostdata->port_id >> 8 != port_id >> 8) {
-				DEBUG_FABRIC(printk("adding a fabric port: %x\n", port_id));
+				DEBUG_FABRIC(printk("qlogicfc%d : adding a fabric port: %x\n", hostdata->host_id, port_id));
 				param[0] = MBOX_PORT_LOGIN;
 				param[1] = loop_id << 8;
 				param[2] = (u_short) (port_id >> 16);
 				param[3] = (u_short) (port_id);
 
-				isp2100_mbox_command(host, param);
+				isp2x00_mbox_command(host, param);
 
 				if (param[0] == MBOX_COMMAND_COMPLETE) {
 					port_db[scsi_id].wwn = wwn;
@@ -952,15 +1042,22 @@ int isp2100_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 					loop_id++;
 					scsi_id++;
 				} else {
-					printk("qlogicfc.c: Error performing port login %x\n", param[0]);
-					DEBUG_FABRIC(printk("loop_id: %x\n", loop_id));
+					printk("qlogicfc%d : Error performing port login %x\n", hostdata->host_id, param[0]);
+					DEBUG_FABRIC(printk("qlogicfc%d : loop_id: %x\n", hostdata->host_id, loop_id));
+					param[0] = MBOX_PORT_LOGOUT;
+					param[1] = loop_id << 8;
+					param[2] = 0;
+					param[3] = 0;
+
+					isp2x00_mbox_command(host, param);
+					
 				}
 
 			}
 			if (hostdata->port_id == port_id)
 				done = 1;
 		} else {
-			printk("qlogicfc.c: Get All Next failed %x.\n", param[0]);
+			printk("qlogicfc%d : Get All Next failed %x.\n", hostdata->host_id, param[0]);
 			return 0;
 		}
 	}
@@ -968,42 +1065,42 @@ int isp2100_init_fabric(struct Scsi_Host *host, struct id_name_map *port_db, int
 	return 1;
 }
 
-#endif				/* ISP2100_FABRIC */
+#endif				/* ISP2x00_FABRIC */
 
 
-int isp2100_release(struct Scsi_Host *host)
+int isp2x00_release(struct Scsi_Host *host)
 {
-	struct isp2100_hostdata *hostdata;
+	struct isp2x00_hostdata *hostdata;
 
-	ENTER("isp2100_release");
+	ENTER("isp2x00_release");
 
-	hostdata = (struct isp2100_hostdata *) host->hostdata;
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
 
 	outw(0x0, host->io_port + PCI_INTER_CTL);
 	free_irq(host->irq, host);
 
 	release_region(host->io_port, 0xff);
 
-	LEAVE("isp2100_release");
+	LEAVE("isp2x00_release");
 
 	return 0;
 }
 
 
-const char *isp2100_info(struct Scsi_Host *host)
+const char *isp2x00_info(struct Scsi_Host *host)
 {
 	static char buf[80];
-	struct isp2100_hostdata *hostdata;
-	ENTER("isp2100_info");
+	struct isp2x00_hostdata *hostdata;
+	ENTER("isp2x00_info");
 
-	hostdata = (struct isp2100_hostdata *) host->hostdata;
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
 	sprintf(buf,
-		"QLogic ISP2100 SCSI on PCI bus %02x device %02x irq %d base 0x%lx",
-		hostdata->pci_dev->bus->number, hostdata->pci_dev->devfn, host->irq,
+		"QLogic ISP%04x SCSI on PCI bus %02x device %02x irq %d base 0x%lx",
+		hostdata->pci_dev->device, hostdata->pci_dev->bus->number, hostdata->pci_dev->devfn, host->irq,
 		host->io_port);
 
 
-	LEAVE("isp2100_info");
+	LEAVE("isp2x00_info");
 
 	return buf;
 }
@@ -1015,7 +1112,7 @@ const char *isp2100_info(struct Scsi_Host *host)
  * interrupt handler may call this routine as part of
  * request-completion handling).
  */
-int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
+int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 {
 	int i, sg_count, n, num_free;
 	u_int in_ptr, out_ptr;
@@ -1024,25 +1121,26 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	struct Command_Entry *cmd;
 	struct Continuation_Entry *cont;
 	struct Scsi_Host *host;
-	struct isp2100_hostdata *hostdata;
+	struct isp2x00_hostdata *hostdata;
 
-	ENTER("isp2100_queuecommand");
+	ENTER("isp2x00_queuecommand");
 
 	host = Cmnd->host;
-	hostdata = (struct isp2100_hostdata *) host->hostdata;
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
 	Cmnd->scsi_done = done;
 
-	DEBUG(isp2100_print_scsi_cmd(Cmnd));
+	DEBUG(isp2x00_print_scsi_cmd(Cmnd));
 
-	if (hostdata->loop_up == 2) {
-		hostdata->loop_up = 1;
-		isp2100_make_portdb(host);
+	if (hostdata->adapter_state == AS_REDO_PORTDB) {
+		hostdata->adapter_state = AS_LOOP_GOOD;
+		isp2x00_make_portdb(host);
+		printk("qlogicfc%d : Port Database\n", hostdata->host_id);
 		for (i = 0; hostdata->port_db[i].wwn != 0; i++) {
-			DEBUG(printk("wwn: %08x%08x  scsi_id: %x  loop_id: %x\n", (u_int) (hostdata->port_db[i].wwn >> 32), (u_int) hostdata->port_db[i].wwn, i, hostdata->port_db[i].loop_id));
+			printk("wwn: %08x%08x  scsi_id: %x  loop_id: %x\n", (u_int) (hostdata->port_db[i].wwn >> 32), (u_int) hostdata->port_db[i].wwn, i, hostdata->port_db[i].loop_id);
 		}
 	}
-	if (hostdata->loop_up == -1) {
-		printk("qlogicfc.c: The firmware is dead, just return.\n");
+	if (hostdata->adapter_state == AS_FIRMWARE_DEAD) {
+		printk("qlogicfc%d : The firmware is dead, just return.\n", hostdata->host_id);
 		host->max_id = 0;
 		return 0;
 	}
@@ -1050,13 +1148,13 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	out_ptr = inw(host->io_port + MBOX4);
 	in_ptr = hostdata->req_in_ptr;
 
-	DEBUG(printk("qlogicfc : request queue depth %d\n",
+	DEBUG(printk("qlogicfc%d : request queue depth %d\n", hostdata->host_id,
 		     REQ_QUEUE_DEPTH(in_ptr, out_ptr)));
 
 	cmd = (struct Command_Entry *) &hostdata->req[in_ptr][0];
 	in_ptr = (in_ptr + 1) & QLOGICFC_REQ_QUEUE_LEN;
 	if (in_ptr == out_ptr) {
-		DEBUG(printk("qlogicfc : request queue overflow\n"));
+		DEBUG(printk("qlogicfc%d : request queue overflow\n", hostdata->host_id));
 		return 1;
 	}
 	if (hostdata->send_marker) {
@@ -1064,7 +1162,7 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 
 		TRACE("queue marker", in_ptr, 0);
 
-		DEBUG(printk("qlogicfc : adding marker entry\n"));
+		DEBUG(printk("qlogicfc%d : adding marker entry\n", hostdata->host_id));
 		marker = (struct Marker_Entry *) cmd;
 		memset(marker, 0, sizeof(struct Marker_Entry));
 
@@ -1077,7 +1175,7 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 		if (((in_ptr + 1) & QLOGICFC_REQ_QUEUE_LEN) == out_ptr) {
 			outw(in_ptr, host->io_port + MBOX4);
 			hostdata->req_in_ptr = in_ptr;
-			DEBUG(printk("qlogicfc : request queue overflow\n"));
+			DEBUG(printk("qlogicfc%d : request queue overflow\n", hostdata->host_id));
 			return 1;
 		}
 		cmd = (struct Command_Entry *) &hostdata->req[in_ptr][0];
@@ -1094,19 +1192,27 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 		cmd->handle = i;
 		hostdata->handle_ptrs[i] = Cmnd;
 		hostdata->handle_serials[i] = Cmnd->serial_number;
-	} else
-		printk("qlogicfc: no handle slots, this should not happen.\n");
+	} else {
+		printk("qlogicfc%d : no handle slots, this should not happen.\n", hostdata->host_id);
+		printk("hostdata->queued is %x, in_ptr: %x\n", hostdata->queued, in_ptr);
+		for (i = 0; i <= QLOGICFC_REQ_QUEUE_LEN; i++){
+			if (!hostdata->handle_ptrs[i]){
+				printk("slot %d has %p\n", i, hostdata->handle_ptrs[i]);
+			}
+		}
+	}
 
 	cmd->hdr.entry_type = ENTRY_COMMAND;
 	cmd->hdr.entry_cnt = 1;
 	cmd->target_lun = Cmnd->lun;
-#if ISP2100_PORTDB
+	cmd->expanded_lun = Cmnd->lun;
+#if ISP2x00_PORTDB
 	cmd->target_id = hostdata->port_db[Cmnd->target].loop_id;
 #else
 	cmd->target_id = Cmnd->target;
 #endif
 	cmd->total_byte_cnt = (u_int) Cmnd->request_bufflen;
-	cmd->time_out = (SCSI_TIMEOUT / HZ) * 5;
+	cmd->time_out = 0;
 	memcpy(cmd->cdb, Cmnd->cmnd, Cmnd->cmd_len);
 
 	if (Cmnd->use_sg) {
@@ -1115,15 +1221,18 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 		ds = cmd->dataseg;
 		/* fill in first two sg entries: */
 		n = sg_count;
-		if (n > 2)
-			n = 2;
+		if (n > DATASEGS_PER_COMMAND)
+			n = DATASEGS_PER_COMMAND;
+
 		for (i = 0; i < n; i++) {
-			ds[i].d_base_lo = virt_to_bus_low32(sg->address);
-			ds[i].d_base_high = virt_to_bus_high32(sg->address);
+			ds[i].d_base = virt_to_bus_low32(sg->address);
+#if BITS_PER_LONG > 32
+			ds[i].d_base_hi = virt_to_bus_high32(sg->address);
+#endif
 			ds[i].d_count = sg->length;
 			++sg;
 		}
-		sg_count -= 2;
+		sg_count -= DATASEGS_PER_COMMAND;
 
 		while (sg_count > 0) {
 			++cmd->hdr.entry_cnt;
@@ -1132,28 +1241,31 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 			memset(cont, 0, sizeof(struct Continuation_Entry));
 			in_ptr = (in_ptr + 1) & QLOGICFC_REQ_QUEUE_LEN;
 			if (in_ptr == out_ptr) {
-				DEBUG(printk("isp2100: unexpected request queue overflow\n"));
+				DEBUG(printk("qlogicfc%d : unexpected request queue overflow\n", hostdata->host_id));
 				return 1;
 			}
 			TRACE("queue continuation", in_ptr, 0);
 			cont->hdr.entry_type = ENTRY_CONTINUATION;
 			ds = cont->dataseg;
 			n = sg_count;
-			if (n > 5)
-				n = 5;
+			if (n > DATASEGS_PER_CONT)
+				n = DATASEGS_PER_CONT;
 			for (i = 0; i < n; ++i) {
-				ds[i].d_base_lo = virt_to_bus_low32(sg->address);
-				ds[i].d_base_high = virt_to_bus_high32(sg->address);
+				ds[i].d_base = virt_to_bus_low32(sg->address);
+#if BITS_PER_LONG > 32
+				ds[i].d_base_hi = virt_to_bus_high32(sg->address);
+#endif
 				ds[i].d_count = sg->length;
 				++sg;
 			}
 			sg_count -= n;
 		}
 	} else {
-		cmd->dataseg[0].d_base_lo = virt_to_bus_low32(Cmnd->request_buffer);
-		cmd->dataseg[0].d_base_high = virt_to_bus_high32(Cmnd->request_buffer);
-		cmd->dataseg[0].d_count =
-		    (u_int) Cmnd->request_bufflen;
+		cmd->dataseg[0].d_base = virt_to_bus_low32(Cmnd->request_buffer);
+#if BITS_PER_LONG > 32
+		cmd->dataseg[0].d_base_hi = virt_to_bus_high32(Cmnd->request_buffer);
+#endif
+		cmd->dataseg[0].d_count = (u_int) Cmnd->request_bufflen;
 		cmd->segment_cnt = 1;
 	}
 
@@ -1161,12 +1273,15 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	case WRITE_10:
 	case WRITE_6:
 	case WRITE_BUFFER:
+	case MODE_SELECT:
 		cmd->control_flags = CFLAG_WRITE;
 		break;
 	case REQUEST_SENSE:
 		/* scsi.c expects sense info in a different buffer */
-		cmd->dataseg[0].d_base_lo = virt_to_bus_low32(Cmnd->sense_buffer);
-		cmd->dataseg[0].d_base_high = virt_to_bus_high32(Cmnd->sense_buffer);
+		cmd->dataseg[0].d_base = virt_to_bus_low32(Cmnd->sense_buffer);
+#if BITS_PER_LONG > 32
+		cmd->dataseg[0].d_base_hi = virt_to_bus_high32(Cmnd->request_buffer);
+#endif
 		cmd->segment_cnt = 1;
 		cmd->control_flags = CFLAG_READ;
 		break;
@@ -1197,6 +1312,7 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	hostdata->req_in_ptr = in_ptr;
 
 	hostdata->queued++;
+
 	num_free = QLOGICFC_REQ_QUEUE_LEN - REQ_QUEUE_DEPTH(in_ptr, out_ptr);
 	num_free = (num_free > 2) ? num_free - 2 : 0;
 	host->can_queue = hostdata->queued + num_free;
@@ -1207,11 +1323,11 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	/* this is really gross */
 	if (host->can_queue <= host->host_busy){
 	        if (host->can_queue+2 < host->host_busy) 
-			DEBUG(printk("qlogicfc.c crosses its fingers.\n"));
+			DEBUG(printk("qlogicfc%d.c crosses its fingers.\n", hostdata->host_id));
 		host->can_queue = host->host_busy + 1;
 	}
 
-	LEAVE("isp2100_queuecommand");
+	LEAVE("isp2x00_queuecommand");
 
 	return 0;
 }
@@ -1220,33 +1336,33 @@ int isp2100_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 #define ASYNC_EVENT_INTERRUPT	0x01
 
 
-void do_isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
+void do_isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&io_request_lock, flags);
-	isp2100_intr_handler(irq, dev_id, regs);
+	isp2x00_intr_handler(irq, dev_id, regs);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
-void isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
+void isp2x00_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
 	Scsi_Cmnd *Cmnd;
 	struct Status_Entry *sts;
 	struct Scsi_Host *host = dev_id;
-	struct isp2100_hostdata *hostdata;
+	struct isp2x00_hostdata *hostdata;
 	u_int in_ptr, out_ptr, handle, num_free;
 	u_short status;
 
-	ENTER_INTR("isp2100_intr_handler");
+	ENTER_INTR("isp2x00_intr_handler");
 
-	hostdata = (struct isp2100_hostdata *) host->hostdata;
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
 
-	DEBUG_INTR(printk("qlogicfc : interrupt on line %d\n", irq));
+	DEBUG_INTR(printk("qlogicfc%d : interrupt on line %d\n", hostdata->host_id, irq));
 
 	if (!(inw(host->io_port + PCI_INTER_STS) & 0x08)) {
 		/* spurious interrupts can happen legally */
-		DEBUG_INTR(printk("qlogicfc: got spurious interrupt\n"));
+		DEBUG_INTR(printk("qlogicfc%d : got spurious interrupt\n", hostdata->host_id));
 		return;
 	}
 	in_ptr = inw(host->io_port + MBOX5);
@@ -1255,26 +1371,32 @@ void isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 	if ((inw(host->io_port + PCI_SEMAPHORE) & ASYNC_EVENT_INTERRUPT)) {
 		status = inw(host->io_port + MBOX0);
 
-		DEBUG_INTR(printk("qlogicfc : mbox completion status: %x\n",
-				  status));
+		DEBUG_INTR(printk("qlogicfc%d : mbox completion status: %x\n",
+				  hostdata->host_id, status));
 
 		switch (status) {
 		case LOOP_UP:
-			hostdata->loop_up = 2;
+		case POINT_TO_POINT_UP:
+		        printk("qlogicfc%d : link is up\n", hostdata->host_id);
+			hostdata->adapter_state = AS_REDO_PORTDB;
 			break;
 		case LOOP_DOWN:
-			hostdata->loop_up = 0;
+		        printk("qlogicfc%d : link is down\n", hostdata->host_id);
+			hostdata->adapter_state = AS_LOOP_DOWN;
+			break;
+		case CONNECTION_MODE:
+		        printk("received CONNECTION_MODE irq %x\n", inw(host->io_port + MBOX1));
 			break;
 		case LIP_OCCURED:
 		case CHANGE_NOTIFICATION:
 		case PORT_DB_CHANGED:
 		case LIP_RECEIVED:
-			if (hostdata->loop_up == 1)
-				hostdata->loop_up = 2;
+			if (hostdata->adapter_state == AS_LOOP_GOOD)
+				hostdata->adapter_state = AS_REDO_PORTDB;
 			break;
 		case SYSTEM_ERROR:
-			printk("The firmware just choked.\n");
-			hostdata->loop_up = -1;
+			printk("qlogicfc%d : The firmware just choked.\n", hostdata->host_id);
+			hostdata->adapter_state = AS_FIRMWARE_DEAD;
 			break;
 		case SCSI_COMMAND_COMPLETE:
 			handle = inw(host->io_port + MBOX1) | (inw(host->io_port + MBOX2) << 16);
@@ -1286,7 +1408,7 @@ void isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 				Cmnd->result = 0x0;
 				(*Cmnd->scsi_done) (Cmnd);
 			} else
-				printk("qlogicfc.c: got a null value out of handle_ptrs, this sucks\n");
+				printk("qlogicfc%d.c : got a null value out of handle_ptrs, this sucks\n", hostdata->host_id);
 			break;
 		case MBOX_COMMAND_COMPLETE:
 		case INVALID_COMMAND:
@@ -1301,37 +1423,54 @@ void isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 			outw(HCCR_CLEAR_RISC_INTR, host->io_port + HOST_HCCR);
 			return;
 		default:
-			printk("qlogicfc: got an unknown status? %x\n", status);
+			printk("qlogicfc%d : got an unknown status? %x\n", hostdata->host_id, status);
 		}
 		outw(0x0, host->io_port + PCI_SEMAPHORE);
 	} else {
-		DEBUG_INTR(printk("qlogicfc : response queue update\n"));
-		DEBUG_INTR(printk("qlogicfc : response queue depth %d\n", RES_QUEUE_DEPTH(in_ptr, out_ptr)));
+		DEBUG_INTR(printk("qlogicfc%d : response queue update\n", hostdata->host_id));
+		DEBUG_INTR(printk("qlogicfc%d : response queue depth %d\n", hostdata->host_id, RES_QUEUE_DEPTH(in_ptr, out_ptr)));
 
 		while (out_ptr != in_ptr) {
 			sts = (struct Status_Entry *) &hostdata->res[out_ptr][0];
 			out_ptr = (out_ptr + 1) & RES_QUEUE_LEN;
                  
 			TRACE("done", out_ptr, Cmnd);
-			DEBUG_INTR(isp2100_print_status_entry(sts));
-			if (sts->hdr.entry_type == ENTRY_STATUS) {
-				Cmnd = hostdata->handle_ptrs[sts->handle];
-				Cmnd->result = isp2100_return_status(sts);
+			DEBUG_INTR(isp2x00_print_status_entry(sts));
+			if (sts->hdr.entry_type == ENTRY_STATUS && (Cmnd = hostdata->handle_ptrs[sts->handle])) {
+				Cmnd->result = isp2x00_return_status(sts);
 				hostdata->handle_ptrs[sts->handle] = NULL;
 				hostdata->queued--;
-				if (hostdata->handle_serials[sts->handle] != Cmnd->serial_number) {
+
+				/* 
+				 * if any of the following are true we do not
+				 * call scsi_done.  if the status is CS_ABORTED
+				 * we dont have to call done because the upper
+				 * level should already know its aborted.
+				 */
+				if (hostdata->handle_serials[sts->handle] != Cmnd->serial_number 
+				    || sts->completion_status == CS_ABORTED){
 					hostdata->handle_serials[sts->handle] = 0;
 					outw(out_ptr, host->io_port + MBOX5);
 					continue;
 				}
-				hostdata->handle_serials[sts->handle] = 0;
+				/*
+				 * if we get back an error indicating the port
+				 * is not there or if the link is down and 
+				 * this is a device that used to be there 
+				 * allow the command to timeout.
+				 * the device may well be back in a couple of
+				 * seconds.
+				 */
+				if ((hostdata->adapter_state == AS_LOOP_DOWN || sts->completion_status == CS_PORT_UNAVAILABLE || sts->completion_status == CS_PORT_LOGGED_OUT || sts->completion_status == CS_PORT_CONFIG_CHANGED) && hostdata->port_db[Cmnd->target].wwn){
+					outw(out_ptr, host->io_port + MBOX5);
+					continue;
+				}
 			} else {
 				outw(out_ptr, host->io_port + MBOX5);
 				continue;
 			}
 
 			if (sts->completion_status == CS_RESET_OCCURRED
-			    || sts->completion_status == CS_ABORTED
 			    || (sts->status_flags & STF_BUS_RESET))
 				hostdata->send_marker = 1;
 
@@ -1345,7 +1484,7 @@ void isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 			if (Cmnd->scsi_done != NULL) {
 				(*Cmnd->scsi_done) (Cmnd);
 			} else
-				printk("Ouch, scsi done is NULL\n");
+				printk("qlogicfc%d : Ouch, scsi done is NULL\n", hostdata->host_id);
 		}
 		hostdata->res_out_ptr = out_ptr;
 	}
@@ -1363,19 +1502,19 @@ void isp2100_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 
 	if (host->can_queue <= host->host_busy){
 	        if (host->can_queue+2 < host->host_busy) 
-		        DEBUG(printk("qlogicfc crosses its fingers.\n"));
+		        DEBUG(printk("qlogicfc%d : crosses its fingers.\n", hostdata->host_id));
 		host->can_queue = host->host_busy + 1;
 	}
 
 	outw(HCCR_CLEAR_RISC_INTR, host->io_port + HOST_HCCR);
-	LEAVE_INTR("isp2100_intr_handler");
+	LEAVE_INTR("isp2x00_intr_handler");
 }
 
 
-static int isp2100_return_status(struct Status_Entry *sts)
+static int isp2x00_return_status(struct Status_Entry *sts)
 {
 	int host_status = DID_ERROR;
-#if DEBUG_ISP2100_INTR
+#if DEBUG_ISP2x00_INTR
 	static char *reason[] =
 	{
 		"DID_OK",
@@ -1389,9 +1528,9 @@ static int isp2100_return_status(struct Status_Entry *sts)
 		"DID_RESET",
 		"DID_BAD_INTR"
 	};
-#endif				/* DEBUG_ISP2100_INTR */
+#endif				/* DEBUG_ISP2x00_INTR */
 
-	ENTER("isp2100_return_status");
+	ENTER("isp2x00_return_status");
 
 	DEBUG(printk("qlogicfc : completion status = 0x%04x\n",
 		     sts->completion_status));
@@ -1436,93 +1575,105 @@ static int isp2100_return_status(struct Status_Entry *sts)
 	DEBUG_INTR(printk("qlogicfc : host status (%s) scsi status %x\n",
 			  reason[host_status], sts->scsi_status));
 
-	LEAVE("isp2100_return_status");
+	LEAVE("isp2x00_return_status");
 
 	return (sts->scsi_status & STATUS_MASK) | (host_status << 16);
 }
 
 
-int isp2100_abort(Scsi_Cmnd * Cmnd)
+int isp2x00_abort(Scsi_Cmnd * Cmnd)
 {
 	u_short param[8];
 	int i;
 	struct Scsi_Host *host;
-	struct isp2100_hostdata *hostdata;
-	int return_status = SCSI_ABORT_SUCCESS;
+	struct isp2x00_hostdata *hostdata;
+	int return_status = SUCCESS;
 
-	ENTER("isp2100_abort");
+	ENTER("isp2x00_abort");
 
 	host = Cmnd->host;
-	hostdata = (struct isp2100_hostdata *) host->hostdata;
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
 
 	for (i = 0; i < QLOGICFC_REQ_QUEUE_LEN; i++)
 		if (hostdata->handle_ptrs[i] == Cmnd)
 			break;
 
-	if (i == QLOGICFC_REQ_QUEUE_LEN)
-		return SCSI_ABORT_ERROR;
+	if (i == QLOGICFC_REQ_QUEUE_LEN){
+		return SUCCESS;
+	}
 
-	isp2100_disable_irqs(host);
+	isp2x00_disable_irqs(host);
 
 	param[0] = MBOX_ABORT_IOCB;
+#if ISP2x00_PORTDB
+	param[1] = (((u_short) hostdata->port_db[Cmnd->target].loop_id) << 8) | Cmnd->lun;
+#else
 	param[1] = (((u_short) Cmnd->target) << 8) | Cmnd->lun;
-	param[2] = i >> 16;
-	param[3] = i & 0xffff;
+#endif
+	param[2] = i & 0xffff;
+	param[3] = i >> 16;
 
-	isp2100_mbox_command(host, param);
+	isp2x00_mbox_command(host, param);
 
 	if (param[0] != MBOX_COMMAND_COMPLETE) {
-		printk("qlogicfc : scsi abort failure: %x\n", param[0]);
+		printk("qlogicfc%d : scsi abort failure: %x\n", hostdata->host_id, param[0]);
 		if (param[0] == 0x4005)
 			Cmnd->result = DID_ERROR << 16;
 		if (param[0] == 0x4006)
 			Cmnd->result = DID_BAD_TARGET << 16;
-		(*Cmnd->scsi_done) (Cmnd);
-		return_status = SCSI_ABORT_ERROR;
+		return_status = FAILED;
 	}
-	isp2100_enable_irqs(host);
 
-	LEAVE("isp2100_abort");
+	if (return_status != SUCCESS){
+		param[0] = MBOX_GET_FIRMWARE_STATE;
+		isp2x00_mbox_command(host, param);
+		printk("qlogicfc%d : abort failed\n", hostdata->host_id);
+		printk("qlogicfc%d : firmware status is %x %x\n", hostdata->host_id, param[0], param[1]);
+	}
+
+	isp2x00_enable_irqs(host);
+
+	LEAVE("isp2x00_abort");
 
 	return return_status;
 }
 
 
-int isp2100_reset(Scsi_Cmnd * Cmnd, unsigned int reset_flags)
+int isp2x00_reset(Scsi_Cmnd * Cmnd, unsigned int reset_flags)
 {
 	u_short param[8];
 	struct Scsi_Host *host;
-	struct isp2100_hostdata *hostdata;
+	struct isp2x00_hostdata *hostdata;
 	int return_status = SCSI_RESET_SUCCESS;
 
-	ENTER("isp2100_reset");
+	ENTER("isp2x00_reset");
 
 	host = Cmnd->host;
-	hostdata = (struct isp2100_hostdata *) host->hostdata;
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
 	param[0] = MBOX_BUS_RESET;
 	param[1] = 3;
 
-	isp2100_disable_irqs(host);
+	isp2x00_disable_irqs(host);
 
-	isp2100_mbox_command(host, param);
+	isp2x00_mbox_command(host, param);
 
 	if (param[0] != MBOX_COMMAND_COMPLETE) {
-		printk("qlogicfc : scsi bus reset failure: %x\n", param[0]);
+		printk("qlogicfc%d : scsi bus reset failure: %x\n", hostdata->host_id, param[0]);
 		return_status = SCSI_RESET_ERROR;
 	}
-	isp2100_enable_irqs(host);
+	isp2x00_enable_irqs(host);
 
-	LEAVE("isp2100_reset");
+	LEAVE("isp2x00_reset");
 
 	return return_status;;
 }
 
 
-int isp2100_biosparam(Disk * disk, kdev_t n, int ip[])
+int isp2x00_biosparam(Disk * disk, kdev_t n, int ip[])
 {
 	int size = disk->capacity;
 
-	ENTER("isp2100_biosparam");
+	ENTER("isp2x00_biosparam");
 
 	ip[0] = 64;
 	ip[1] = 32;
@@ -1532,19 +1683,21 @@ int isp2100_biosparam(Disk * disk, kdev_t n, int ip[])
 		ip[1] = 63;
 		ip[2] = size / (ip[0] * ip[1]);
 	}
-	LEAVE("isp2100_biosparam");
+	LEAVE("isp2x00_biosparam");
 
 	return 0;
 }
 
 
-static int isp2100_reset_hardware(struct Scsi_Host *host)
+static int isp2x00_reset_hardware(struct Scsi_Host *host)
 {
 	u_short param[8];
-	struct isp2100_hostdata *hostdata;
+	struct isp2x00_hostdata *hostdata;
 	int loop_count;
 
-	ENTER("isp2100_reset_hardware");
+	ENTER("isp2x00_reset_hardware");
+
+	hostdata = (struct isp2x00_hostdata *) host->hostdata;
 
 	outw(0x01, host->io_port + ISP_CTRL_STATUS);
 	outw(HCCR_RESET, host->io_port + HOST_HCCR);
@@ -1555,35 +1708,46 @@ static int isp2100_reset_hardware(struct Scsi_Host *host)
 	while (--loop_count && inw(host->io_port + HOST_HCCR) == RISC_BUSY)
 		barrier();
 	if (!loop_count)
-		printk("qlogicfc: reset_hardware loop timeout\n");
+		printk("qlogicfc%d : reset_hardware loop timeout\n", hostdata->host_id);
 
 
 
-#if DEBUG_ISP2100
-	printk("qlogicfc : mbox 0 0x%04x \n", inw(host->io_port + MBOX0));
-	printk("qlogicfc : mbox 1 0x%04x \n", inw(host->io_port + MBOX1));
-	printk("qlogicfc : mbox 2 0x%04x \n", inw(host->io_port + MBOX2));
-	printk("qlogicfc : mbox 3 0x%04x \n", inw(host->io_port + MBOX3));
-	printk("qlogicfc : mbox 4 0x%04x \n", inw(host->io_port + MBOX4));
-	printk("qlogicfc : mbox 5 0x%04x \n", inw(host->io_port + MBOX5));
-	printk("qlogicfc : mbox 6 0x%04x \n", inw(host->io_port + MBOX6));
-	printk("qlogicfc : mbox 7 0x%04x \n", inw(host->io_port + MBOX7));
-#endif				/* DEBUG_ISP2100 */
+#if DEBUG_ISP2x00
+	printk("qlogicfc%d : mbox 0 0x%04x \n", hostdata->host_id,  inw(host->io_port + MBOX0));
+	printk("qlogicfc%d : mbox 1 0x%04x \n", hostdata->host_id,  inw(host->io_port + MBOX1));
+	printk("qlogicfc%d : mbox 2 0x%04x \n", hostdata->host_id,  inw(host->io_port + MBOX2));
+	printk("qlogicfc%d : mbox 3 0x%04x \n", hostdata->host_id,  inw(host->io_port + MBOX3));
+	printk("qlogicfc%d : mbox 4 0x%04x \n", hostdata->host_id,  inw(host->io_port + MBOX4));
+	printk("qlogicfc%d : mbox 5 0x%04x \n", hostdata->host_id,  inw(host->io_port + MBOX5));
+	printk("qlogicfc%d : mbox 6 0x%04x \n", hostdata->host_id,  inw(host->io_port + MBOX6));
+	printk("qlogicfc%d : mbox 7 0x%04x \n", hostdata->host_id,  inw(host->io_port + MBOX7));
+#endif				/* DEBUG_ISP2x00 */
 
-	DEBUG(printk("qlogicfc : verifying checksum\n"));
+	DEBUG(printk("qlogicfc%d : verifying checksum\n", hostdata->host_id));
 
 #if RELOAD_FIRMWARE
 	{
 		int i;
-		for (i = 0; i < risc_code_length01; i++) {
+		unsigned short * risc_code = NULL;
+		unsigned short risc_code_len = 0;
+		if (hostdata->pci_dev->device == PCI_DEVICE_ID_QLOGIC_ISP2100){
+		        risc_code = risc_code2100;
+			risc_code_len = risc_code_length2100;
+		}
+		else if (hostdata->pci_dev->device == PCI_DEVICE_ID_QLOGIC_ISP2200){
+		        risc_code = risc_code2200;
+			risc_code_len = risc_code_length2200;
+		}
+
+		for (i = 0; i < risc_code_len; i++) {
 			param[0] = MBOX_WRITE_RAM_WORD;
 			param[1] = risc_code_addr01 + i;
-			param[2] = risc_code01[i];
+			param[2] = risc_code[i];
 
-			isp2100_mbox_command(host, param);
+			isp2x00_mbox_command(host, param);
 
 			if (param[0] != MBOX_COMMAND_COMPLETE) {
-				printk("qlogicfc : firmware load failure\n");
+				printk("qlogicfc%d : firmware load failure\n", hostdata->host_id);
 				return 1;
 			}
 		}
@@ -1593,36 +1757,34 @@ static int isp2100_reset_hardware(struct Scsi_Host *host)
 	param[0] = MBOX_VERIFY_CHECKSUM;
 	param[1] = risc_code_addr01;
 
-	isp2100_mbox_command(host, param);
+	isp2x00_mbox_command(host, param);
 
 	if (param[0] != MBOX_COMMAND_COMPLETE) {
-		printk("qlogicfc : ram checksum failure\n");
+		printk("qlogicfc%d : ram checksum failure\n", hostdata->host_id);
 		return 1;
 	}
-	DEBUG(printk("qlogicfc : executing firmware\n"));
+	DEBUG(printk("qlogicfc%d : executing firmware\n", hostdata->host_id));
 
 	param[0] = MBOX_EXEC_FIRMWARE;
 	param[1] = risc_code_addr01;
 
-	isp2100_mbox_command(host, param);
+	isp2x00_mbox_command(host, param);
 
 	param[0] = MBOX_ABOUT_FIRMWARE;
 
-	isp2100_mbox_command(host, param);
+	isp2x00_mbox_command(host, param);
 
 	if (param[0] != MBOX_COMMAND_COMPLETE) {
-		printk("qlogicfc : about firmware failure\n");
+		printk("qlogicfc%d : about firmware failure\n", hostdata->host_id);
 		return 1;
 	}
-	DEBUG(printk("qlogicfc : firmware major revision %d\n", param[1]));
-	DEBUG(printk("qlogicfc : firmware minor revision %d\n", param[2]));
-
-	hostdata = (struct isp2100_hostdata *) host->hostdata;
+	DEBUG(printk("qlogicfc%d : firmware major revision %d\n", hostdata->host_id,  param[1]));
+	DEBUG(printk("qlogicfc%d : firmware minor revision %d\n", hostdata->host_id,  param[2]));
 
 #ifdef USE_NVRAM_DEFAULTS
 
-	if (isp2100_get_nvram_defaults(host, &hostdata->control_block) != 0) {
-		printk("qlogicfc: Could not read from NVRAM\n");
+	if (isp2x00_get_nvram_defaults(host, &hostdata->control_block) != 0) {
+		printk("qlogicfc%d : Could not read from NVRAM\n", hostdata->host_id);
 	}
 #endif
 
@@ -1642,38 +1804,38 @@ static int isp2100_reset_hardware(struct Scsi_Host *host)
 	param[5] = 0;
 	param[6] = (u_short) (virt_to_bus_high32(&hostdata->control_block) >> 16);
 	param[7] = (u_short) (virt_to_bus_high32(&hostdata->control_block) & 0xffff);
-	isp2100_mbox_command(host, param);
+	isp2x00_mbox_command(host, param);
 	if (param[0] != MBOX_COMMAND_COMPLETE) {
-		printk("qlogicfc.c: Ouch 0x%04x\n", param[0]);
+		printk("qlogicfc%d.c: Ouch 0x%04x\n", hostdata->host_id,  param[0]);
 		return 1;
 	}
 	param[0] = MBOX_GET_FIRMWARE_STATE;
-	isp2100_mbox_command(host, param);
+	isp2x00_mbox_command(host, param);
 	if (param[0] != MBOX_COMMAND_COMPLETE) {
-		printk("qlogicfc.c: 0x%04x\n", param[0]);
+		printk("qlogicfc%d.c: 0x%04x\n", hostdata->host_id,  param[0]);
 		return 1;
 	}
 
-	LEAVE("isp2100_reset_hardware");
+	LEAVE("isp2x00_reset_hardware");
 
 	return 0;
 }
 
 #ifdef USE_NVRAM_DEFAULTS
 
-static int isp2100_get_nvram_defaults(struct Scsi_Host *host, struct init_cb *control_block)
+static int isp2x00_get_nvram_defaults(struct Scsi_Host *host, struct init_cb *control_block)
 {
 
 	u_short value;
-	if (isp2100_read_nvram_word(host, 0) != 0x5349)
+	if (isp2x00_read_nvram_word(host, 0) != 0x5349)
 		return 1;
 
-	value = isp2100_read_nvram_word(host, 8);
-	control_block->node_name[0] = isp2100_read_nvram_word(host, 9);
-	control_block->node_name[1] = isp2100_read_nvram_word(host, 10);
-	control_block->node_name[2] = isp2100_read_nvram_word(host, 11);
-	control_block->node_name[3] = isp2100_read_nvram_word(host, 12);
-	control_block->hard_addr = isp2100_read_nvram_word(host, 13);
+	value = isp2x00_read_nvram_word(host, 8);
+	control_block->node_name[0] = isp2x00_read_nvram_word(host, 9);
+	control_block->node_name[1] = isp2x00_read_nvram_word(host, 10);
+	control_block->node_name[2] = isp2x00_read_nvram_word(host, 11);
+	control_block->node_name[3] = isp2x00_read_nvram_word(host, 12);
+	control_block->hard_addr = isp2x00_read_nvram_word(host, 13);
 
 	return 0;
 
@@ -1681,54 +1843,53 @@ static int isp2100_get_nvram_defaults(struct Scsi_Host *host, struct init_cb *co
 
 #endif
 
-static int isp2100_init(struct Scsi_Host *sh)
+static int isp2x00_init(struct Scsi_Host *sh)
 {
 	u_int io_base;
-	struct isp2100_hostdata *hostdata;
+	struct isp2x00_hostdata *hostdata;
 	u_char revision;
 	u_int irq;
 	u_short command;
 	struct pci_dev *pdev;
 
 
-	ENTER("isp2100_init");
+	ENTER("isp2x00_init");
 
-	hostdata = (struct isp2100_hostdata *) sh->hostdata;
+	hostdata = (struct isp2x00_hostdata *) sh->hostdata;
 	pdev = hostdata->pci_dev;
 
 	if (pci_read_config_word(pdev, PCI_COMMAND, &command)
 	  || pci_read_config_byte(pdev, PCI_CLASS_REVISION, &revision)) {
-		printk("qlogicfc : error reading PCI configuration\n");
+		printk("qlogicfc%d : error reading PCI configuration\n", hostdata->host_id);
 		return 1;
 	}
 	io_base = pdev->base_address[0];
 	irq = pdev->irq;
 
 
-
 	if (pdev->vendor != PCI_VENDOR_ID_QLOGIC) {
-		printk("qlogicfc : 0x%04x is not QLogic vendor ID\n",
+		printk("qlogicfc%d : 0x%04x is not QLogic vendor ID\n", hostdata->host_id, 
 		       pdev->vendor);
 		return 1;
 	}
-	if (pdev->device != PCI_DEVICE_ID_QLOGIC_ISP2100) {
-		printk("qlogicfc : 0x%04x does not match ISP2100 device id\n",
+	if (pdev->device != PCI_DEVICE_ID_QLOGIC_ISP2100 && pdev->device != PCI_DEVICE_ID_QLOGIC_ISP2200) {
+		printk("qlogicfc%d : 0x%04x does not match ISP2100 or ISP2200 device id\n", hostdata->host_id, 
 		       pdev->device);
 		return 1;
 	}
 	if (command & PCI_COMMAND_IO && (io_base & 3) == 1)
 		io_base &= PCI_BASE_ADDRESS_IO_MASK;
 	else {
-		printk("qlogicfc : i/o mapping is disabled\n");
+		printk("qlogicfc%d : i/o mapping is disabled\n", hostdata->host_id);
 		return 1;
 	}
 
 	if (!(command & PCI_COMMAND_MASTER)) {
-		printk("qlogicfc : bus mastering is disabled\n");
+		printk("qlogicfc%d : bus mastering is disabled\n", hostdata->host_id);
 		return 1;
 	}
-	if (revision != ISP2100_REV_ID && revision != ISP2100_REV_ID3)
-		printk("qlogicfc : new isp2100 revision ID (%d)\n", revision);
+	if (revision != ISP2100_REV_ID1 && revision != ISP2100_REV_ID3 && revision != ISP2200_REV_ID5)
+		printk("qlogicfc%d : new isp2x00 revision ID (%d)\n", hostdata->host_id,  revision);
 
 
 	hostdata->revision = revision;
@@ -1736,7 +1897,7 @@ static int isp2100_init(struct Scsi_Host *sh)
 	sh->irq = irq;
 	sh->io_port = io_base;
 
-	LEAVE("isp2100_init");
+	LEAVE("isp2x00_init");
 
 	return 0;
 }
@@ -1746,7 +1907,7 @@ static int isp2100_init(struct Scsi_Host *sh)
 #define NVRAM_DELAY() udelay(10)	/* 10 microsecond delay */
 
 
-u_short isp2100_read_nvram_word(struct Scsi_Host * host, u_short byte)
+u_short isp2x00_read_nvram_word(struct Scsi_Host * host, u_short byte)
 {
 	int i;
 	u_short value, output, input;
@@ -1795,26 +1956,27 @@ u_short isp2100_read_nvram_word(struct Scsi_Host * host, u_short byte)
  * currently, this is only called during initialization or abort/reset,
  * at which times interrupts are disabled, so polling is OK, I guess...
  */
-static int isp2100_mbox_command(struct Scsi_Host *host, u_short param[])
+static int isp2x00_mbox_command(struct Scsi_Host *host, u_short param[])
 {
 	int loop_count;
-	struct isp2100_hostdata *hostdata = (struct isp2100_hostdata *) host->hostdata;
+	struct isp2x00_hostdata *hostdata = (struct isp2x00_hostdata *) host->hostdata;
 
-	if (mbox_param[param[0]] == 0)
+	if (mbox_param[param[0]] == 0 || hostdata->adapter_state == AS_FIRMWARE_DEAD)
 		return 1;
 
 	loop_count = DEFAULT_LOOP_COUNT;
 	while (--loop_count && inw(host->io_port + HOST_HCCR) & 0x0080)
 		barrier();
 	if (!loop_count) {
-		printk("qlogicfc: mbox_command loop timeout #1\n");
+		printk("qlogicfc%d : mbox_command loop timeout #1\n", hostdata->host_id);
 		param[0] = 0x4006;
+		hostdata->adapter_state = AS_FIRMWARE_DEAD;
 		return 1;
 	}
 	hostdata->mbox_done = 0;
 
 	if (mbox_param[param[0]] == 0)
-		printk("qlogicfc: invalid mbox command\n");
+		printk("qlogicfc%d : invalid mbox command\n", hostdata->host_id);
 
 	if (mbox_param[param[0]] & 0x80)
 		outw(param[7], host->io_port + MBOX7);
@@ -1843,10 +2005,11 @@ static int isp2100_mbox_command(struct Scsi_Host *host, u_short param[])
 		}
 
 		if (!loop_count) {
-			printk("qlogicfc: mbox_command loop timeout #2\n");
+			hostdata->adapter_state = AS_FIRMWARE_DEAD;
+			printk("qlogicfc%d : mbox_command loop timeout #2\n", hostdata->host_id);
 			break;
 		}
-		isp2100_intr_handler(host->irq, host, NULL);
+		isp2x00_intr_handler(host->irq, host, NULL);
 
 		if (hostdata->mbox_done == 1)
 			break;
@@ -1858,7 +2021,7 @@ static int isp2100_mbox_command(struct Scsi_Host *host, u_short param[])
 		barrier();
 	}
 	if (!loop_count)
-		printk("qlogicfc: mbox_command loop timeout #3\n");
+		printk("qlogicfc%d : mbox_command loop timeout #3\n", hostdata->host_id);
 
 	param[7] = inw(host->io_port + MBOX7);
 	param[6] = inw(host->io_port + MBOX6);
@@ -1873,19 +2036,21 @@ static int isp2100_mbox_command(struct Scsi_Host *host, u_short param[])
 	outw(0x0, host->io_port + PCI_SEMAPHORE);
 
 	if (inw(host->io_port + HOST_HCCR) & 0x0080) {
-		printk("mbox op is still pending\n");
+		hostdata->adapter_state = AS_FIRMWARE_DEAD;
+		printk("qlogicfc%d : mbox op is still pending\n", hostdata->host_id);
 	}
 	return 0;
 }
 
+#if DEBUG_ISP2x00_INTR
 
-void isp2100_print_status_entry(struct Status_Entry *status)
+void isp2x00_print_status_entry(struct Status_Entry *status)
 {
-	printk("qlogicfc : entry count = 0x%02x, type = 0x%02x, flags = 0x%02x\n",
+	printk("qlogicfc : entry count = 0x%02x, type = 0x%02x, flags = 0x%02x\n", 
 	status->hdr.entry_cnt, status->hdr.entry_type, status->hdr.flags);
 	printk("qlogicfc : scsi status = 0x%04x, completion status = 0x%04x\n",
 	       status->scsi_status, status->completion_status);
-	printk("qlogicfc : state flags = 0x%04x, status flags = 0x%04x\n",
+	printk("qlogicfc : state flags = 0x%04x, status flags = 0x%04x\n", 
 	       status->state_flags, status->status_flags);
 	printk("qlogicfc : response info length = 0x%04x, request sense length = 0x%04x\n",
 	       status->res_info_len, status->req_sense_len);
@@ -1893,15 +2058,16 @@ void isp2100_print_status_entry(struct Status_Entry *status)
 
 }
 
+#endif                         /* DEBUG_ISP2x00_INTR */
 
 
-#if DEBUG_ISP2100
+#if DEBUG_ISP2x00
 
-void isp2100_print_scsi_cmd(Scsi_Cmnd * cmd)
+void isp2x00_print_scsi_cmd(Scsi_Cmnd * cmd)
 {
 	int i;
 
-	printk("qlogicfc : target = 0x%02x, lun = 0x%02x, cmd_len = 0x%02x\n",
+	printk("qlogicfc : target = 0x%02x, lun = 0x%02x, cmd_len = 0x%02x\n", 
 	       cmd->target, cmd->lun, cmd->cmd_len);
 	printk("qlogicfc : command = ");
 	for (i = 0; i < cmd->cmd_len; i++)
@@ -1909,7 +2075,7 @@ void isp2100_print_scsi_cmd(Scsi_Cmnd * cmd)
 	printk("\n");
 }
 
-#endif				/* DEBUG_ISP2100 */
+#endif				/* DEBUG_ISP2x00 */
 
 
 #ifdef MODULE

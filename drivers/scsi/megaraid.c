@@ -9,14 +9,14 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Version : 1.00
+ * Version : 1.01
  * 
  * Description: Linux device driver for AMI MegaRAID controller
  *
  * Supported controllers: MegaRAID 418, 428, 438, 466, 762
  * 
  * Maintainer: Jeff L Jones <jeffreyj@ami.com>
- *
+ *             Xi Shine Chen <xic@ami.com>
  * History:
  *
  * Version 0.90:
@@ -38,10 +38,10 @@
  *     Removed setting of SA_INTERRUPT flag when requesting Irq.
  *
  * Version 0.92ac:
- *      Small changes to the comments/formatting. Plus a couple of
+ *     Small changes to the comments/formatting. Plus a couple of
  *      added notes. Returned to the authors. No actual code changes
  *      save printk levels.
- *      8 Oct 98        Alan Cox <alan.cox@linux.org>
+ *     8 Oct 98        Alan Cox <alan.cox@linux.org>
  *
  *     Merged with 2.1.131 source tree.
  *     12 Dec 98       K. Baranowski <kgb@knm.org.pl>                          
@@ -73,14 +73,15 @@
  *
  * Version 0.96:
  *     762 fully supported.
+ *
  * Version 0.97:
  *     Changed megaraid_command to use wait_queue.
  *     Fixed bug of undesirably detecting HP onboard controllers which
- *      are disabled.
+ *       are disabled.
  *     
  * Version 1.00:
  *     Checks to see if an irq ocurred while in isr, and runs through
- *        routine again.
+ *       routine again.
  *     Copies mailbox to temp area before processing in isr
  *     Added barrier() in busy wait to fix volatility bug
  *     Uses separate list for freed Scbs, keeps track of cmd state
@@ -88,6 +89,11 @@
  *     Full multi-io commands working stablely without previous problems
  *     Added skipXX LILO option for Madrona motherboard support
  *
+ * Version 1.01:
+ *     Fixed bug in mega_cmd_done() for megamgr control commands,
+ *       the host_byte in the result code from the scsi request to 
+ *       scsi midlayer is set to DID_BAD_TARGET when adapter's 
+ *       returned codes are 0xF0 and oxF4.  
  *
  * BUGS:
  *     Some older 2.1 kernels (eg. 2.1.90) have a bug in pci.c that
@@ -100,6 +106,7 @@
 
 #define CRLFSTR "\n"
 
+#include <linux/config.h>
 #include <linux/version.h>
 
 #ifdef MODULE
@@ -132,6 +139,7 @@ MODULE_DESCRIPTION ("AMI MegaRAID driver");
 #include <linux/sched.h>
 #include <linux/stat.h>
 #include <linux/malloc.h>	/* for kmalloc() */
+#include <linux/config.h>	/* for CONFIG_PCI */
 #if LINUX_VERSION_CODE < 0x20100
 #include <linux/bios32.h>
 #else
@@ -482,6 +490,8 @@ static void mega_cmd_done (mega_host_config * megaCfg, mega_scb * pScb,
 {
   int islogical;
   Scsi_Cmnd *SCpnt;
+  mega_passthru *pthru;
+  mega_mailbox *mbox;
 
   if (pScb == NULL) {
 	TRACE(("NULL pScb in mega_cmd_done!"));
@@ -489,7 +499,9 @@ static void mega_cmd_done (mega_host_config * megaCfg, mega_scb * pScb,
   }
 
   SCpnt = pScb->SCpnt;
-  freeSCB(megaCfg, pScb);
+  /*freeSCB(megaCfg, pScb);*/ /*delay this to the end of this func.*/
+  pthru = &pScb->pthru;
+  mbox = (mega_mailbox *) &pScb->mboxData;
 
   if (SCpnt == NULL) {
 	TRACE(("NULL SCpnt in mega_cmd_done!"));
@@ -507,23 +519,48 @@ static void mega_cmd_done (mega_host_config * megaCfg, mega_scb * pScb,
       !islogical) {
     status = 0xF0;
   }
- 
-  SCpnt->result = 0;  /* clear result; otherwise, success returns corrupt
-                         value */
 
+/* clear result; otherwise, success returns corrupt value */ 
+ SCpnt->result = 0;  
+
+if (SCpnt->cmnd[0] & 0x80)	/* ioctl from megamgr */{
+    /*printk(KERN_WARNING "***megamgr cmnd status= %x h\n ", status); */
+    switch (status) {
+      case 0xF0:
+      case 0xF4:
+	SCpnt->result=(DID_BAD_TARGET<<16)|status;
+        break;
+      default:
+	SCpnt->result|=status;
+   }/*end of switch*/
+}
+else{
   /* Convert MegaRAID status to Linux error code */
   switch (status) {
-  case 0x00: /* SUCCESS */
-  case 0x02: /* ERROR_ABORTED */
+  case 0x00: /* SUCCESS , i.e. SCSI_STATUS_GOOD*/
     SCpnt->result |= (DID_OK << 16);
     break;
-  case 0x8:  /* ERR_DEST_DRIVE_FAILED */
-    SCpnt->result |= (DID_BUS_BUSY << 16);
+  case 0x02: /* ERROR_ABORTED, i.e. SCSI_STATUS_CHECK_CONDITION */
+	/*set sense_buffer and result fields*/
+       if( mbox->cmd==MEGA_MBOXCMD_PASSTHRU ){
+	  memcpy( SCpnt->sense_buffer , pthru->reqsensearea, 14);
+          SCpnt->result = (DRIVER_SENSE<<24)|(DID_ERROR << 16)|status; 
+       }
+       else{
+ 	  SCpnt->sense_buffer[0]=0x70;
+	  SCpnt->sense_buffer[2]=ABORTED_COMMAND;
+          SCpnt->result |= (CHECK_CONDITION << 1);
+       }
     break;
-  default:
+  case 0x08:  /* ERR_DEST_DRIVE_FAILED, i.e. SCSI_STATUS_BUSY */
+    SCpnt->result |= (DID_BUS_BUSY << 16)|status;
+    break;
+  default: 
     SCpnt->result |= (DID_BAD_TARGET << 16);
     break;
   }
+ }
+  freeSCB(megaCfg, pScb);
 
   /* Add Scsi_Command to end of completed queue */
   ENQUEUE_NL(SCpnt, Scsi_Cmnd, qCompleted, host_scribble);
@@ -741,7 +778,6 @@ static mega_scb * mega_ioctl (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt)
 
   if (data[0] == 0x03) {	/* passthrough command */
     unsigned char cdblen = data[2];
-
     pthru = &pScb->pthru;
     memset (pthru, 0, sizeof (mega_passthru));
     pthru->islogical = (data[cdblen+3] & 0x80) ? 1:0;
@@ -953,7 +989,7 @@ static int megaIssueCmd (mega_host_config * megaCfg,
   u_char byte;
   u_long cmdDone;
   Scsi_Cmnd *SCpnt;
-  
+
   mboxData[0x1] = (pScb ? pScb->idx + 1: 0x0);   /* Set cmdid */
   mboxData[0xF] = 1;		/* Set busy */
 
@@ -961,6 +997,10 @@ static int megaIssueCmd (mega_host_config * megaCfg,
   if (intr && mbox->busy) {
     return 0;
   }
+#endif
+
+#if DEBUG
+  showMbox(pScb);
 #endif
 
   /* Wait until mailbox is free */
@@ -984,9 +1024,9 @@ static int megaIssueCmd (mega_host_config * megaCfg,
     callDone(SCpnt);
     return 0;
   }
+
   pLastScb = pScb;
 
-  
   /* Copy mailbox data into host structure */
   memcpy (mbox, mboxData, 16);
 
@@ -995,7 +1035,7 @@ static int megaIssueCmd (mega_host_config * megaCfg,
 
     /* Issue interrupt (non-blocking) command */
     if (megaCfg->flag & BOARD_QUARTZ) {
-      mbox->mraid_poll = 0;
+       mbox->mraid_poll = 0;
       mbox->mraid_ack = 0;
       WRINDOOR (megaCfg, virt_to_bus (megaCfg->mbox) | 0x1);
     }

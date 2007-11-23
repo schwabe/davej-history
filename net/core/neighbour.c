@@ -354,8 +354,8 @@ static int pneigh_ifdown(struct neigh_table *tbl, struct device *dev)
 	u32 h;
 
 	for (h=0; h<=PNEIGH_HASHMASK; h++) {
-		np = &tbl->phash_buckets[h]; 
-		for (np = &tbl->phash_buckets[h]; (n=*np) != NULL; np = &n->next) {
+		np = &tbl->phash_buckets[h];
+		while ((n=*np) != NULL) {
 			if (n->dev == dev || dev == NULL) {
 				*np = n->next;
 				synchronize_bh();

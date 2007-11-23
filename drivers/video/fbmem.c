@@ -74,6 +74,7 @@ extern void imsttfb_init(void);
 extern void imsttfb_setup(char *options, int *ints);
 extern void dnfb_init(void);
 extern void tgafb_init(void);
+extern void tgafb_setup(char *options, int *ints);
 extern void virgefb_init(void);
 extern void virgefb_setup(char *options, int *ints);
 extern void resolver_video_setup(char *options, int *ints);
@@ -81,6 +82,8 @@ extern void s3triofb_init(void);
 extern void s3triofb_setup(char *options, int *ints);
 extern void vesafb_init(void);
 extern void vesafb_setup(char *options, int *ints);
+extern void vga16fb_init(void);
+extern void vga16fb_setup(char *options, int *ints);
 extern void matroxfb_init(void);
 extern void matroxfb_setup(char* options, int *ints);
 extern void hpfb_init(void);
@@ -156,13 +159,16 @@ static struct {
 	{ "s3trio", s3triofb_init, s3triofb_setup },
 #endif 
 #ifdef CONFIG_FB_TGA
-	{ "tga", tgafb_init, NULL },
+	{ "tga", tgafb_init, tgafb_setup },
 #endif
 #ifdef CONFIG_FB_VIRGE
 	{ "virge", virgefb_init, virgefb_setup },
 #endif
 #ifdef CONFIG_FB_VESA
 	{ "vesa", vesafb_init, vesafb_setup },
+#endif 
+#ifdef CONFIG_FB_VGA16
+	{ "vga16", vga16fb_init, vga16fb_setup },
 #endif 
 #ifdef CONFIG_FB_MATROX
 	{ "matrox", matroxfb_init, matroxfb_setup },

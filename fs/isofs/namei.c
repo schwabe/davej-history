@@ -147,6 +147,8 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry, unsigned long *ino)
 			
 			de = (struct iso_directory_record *)
 				kmalloc(offset - old_offset, GFP_KERNEL);
+			if(de==NULL)
+				break;
 			memcpy((char *)de, bh->b_data + old_offset, 
 			       bufsize - old_offset);
 			memcpy((char *)de + bufsize - old_offset,

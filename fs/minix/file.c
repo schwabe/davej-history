@@ -25,7 +25,6 @@
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
 #include <linux/fs.h>
-#include <linux/minix_fs.h>
 
 static ssize_t minix_file_write(struct file *, const char *, size_t, loff_t *);
 

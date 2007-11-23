@@ -220,21 +220,7 @@ repeat:
 	}
 	*err = -EFBIG;
 	if (!create)
-		goto dont_create;
-
-	/* Check file limits.. */
-	{
-		unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-		if (limit < RLIM_INFINITY) {
-			limit >>= EXT2_BLOCK_SIZE_BITS(inode->i_sb);
-			if (new_block >= limit) {
-				send_sig(SIGXFSZ, current, 0);
-dont_create:
-				*err = -EFBIG;
-				return NULL;
-			}
-		}
-	}
+		return NULL;
 
 	if (inode->u.ext2_i.i_next_alloc_block == new_block)
 		goal = inode->u.ext2_i.i_next_alloc_goal;
@@ -286,7 +272,6 @@ static struct buffer_head * block_getblk (struct inode * inode,
 	u32 * p;
 	struct buffer_head * result;
 	int blocks = inode->i_sb->s_blocksize / 512;
-	unsigned long limit;
 	
 	if (!bh)
 		return NULL;
@@ -314,16 +299,6 @@ repeat:
 	if (!create) {
 		brelse (bh);
 		return NULL;
-	}
-
-	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-	if (limit < RLIM_INFINITY) {
-		limit >>= EXT2_BLOCK_SIZE_BITS(inode->i_sb);
-		if (new_block >= limit) {
-			brelse (bh);
-			send_sig(SIGXFSZ, current, 0);
-			return NULL;
-		}
 	}
 
 	if (inode->u.ext2_i.i_next_alloc_block == new_block)
@@ -732,49 +707,83 @@ int ext2_notify_change(struct dentry *dentry, struct iattr *iattr)
 	unsigned int	flags;
 	
 	retval = -EPERM;
-	if ((iattr->ia_attr_flags &
-	     (ATTR_FLAG_APPEND | ATTR_FLAG_IMMUTABLE)) ^
-	    (inode->u.ext2_i.i_flags &
-	     (EXT2_APPEND_FL | EXT2_IMMUTABLE_FL))) {
+	if (iattr->ia_valid & ATTR_ATTR_FLAG &&
+	    ((!(iattr->ia_attr_flags & ATTR_FLAG_APPEND) !=
+	      !(inode->u.ext2_i.i_flags & EXT2_APPEND_FL)) ||
+	     (!(iattr->ia_attr_flags & ATTR_FLAG_IMMUTABLE) !=
+	      !(inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)))) {
 		if (!capable(CAP_LINUX_IMMUTABLE))
 			goto out;
 	} else if ((current->fsuid != inode->i_uid) && !capable(CAP_FOWNER))
 		goto out;
 
+	if (iattr->ia_valid & ATTR_SIZE) {
+		off_t size = iattr->ia_size;
+		unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
+
+		if (size < 0)
+			return -EINVAL;
+#if BITS_PER_LONG == 64	
+		if (size > ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(inode->i_sb)])
+			return -EFBIG;
+#endif
+		if (limit < RLIM_INFINITY && size > limit) {
+			send_sig(SIGXFSZ, current, 0);
+			return -EFBIG;
+		}
+
+#if BITS_PER_LONG == 64	
+		if (size >> 33) {
+			struct super_block *sb = inode->i_sb;
+			struct ext2_super_block *es = sb->u.ext2_sb.s_es;
+			if (!(es->s_feature_ro_compat &
+			      cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE))){
+				/* If this is the first large file
+				 * created, add a flag to the superblock */
+				es->s_feature_ro_compat |=
+				cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE);
+				mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+			}
+		}
+#endif
+	}
+	
 	retval = inode_change_ok(inode, iattr);
 	if (retval != 0)
 		goto out;
 
 	inode_setattr(inode, iattr);
 	
-	flags = iattr->ia_attr_flags;
-	if (flags & ATTR_FLAG_SYNCRONOUS) {
-		inode->i_flags |= MS_SYNCHRONOUS;
-		inode->u.ext2_i.i_flags = EXT2_SYNC_FL;
-	} else {
-		inode->i_flags &= ~MS_SYNCHRONOUS;
-		inode->u.ext2_i.i_flags &= ~EXT2_SYNC_FL;
-	}
-	if (flags & ATTR_FLAG_NOATIME) {
-		inode->i_flags |= MS_NOATIME;
-		inode->u.ext2_i.i_flags = EXT2_NOATIME_FL;
-	} else {
-		inode->i_flags &= ~MS_NOATIME;
-		inode->u.ext2_i.i_flags &= ~EXT2_NOATIME_FL;
-	}
-	if (flags & ATTR_FLAG_APPEND) {
-		inode->i_flags |= S_APPEND;
-		inode->u.ext2_i.i_flags = EXT2_APPEND_FL;
-	} else {
-		inode->i_flags &= ~S_APPEND;
-		inode->u.ext2_i.i_flags &= ~EXT2_APPEND_FL;
-	}
-	if (flags & ATTR_FLAG_IMMUTABLE) {
-		inode->i_flags |= S_IMMUTABLE;
-		inode->u.ext2_i.i_flags = EXT2_IMMUTABLE_FL;
-	} else {
-		inode->i_flags &= ~S_IMMUTABLE;
-		inode->u.ext2_i.i_flags &= ~EXT2_IMMUTABLE_FL;
+	if (iattr->ia_valid & ATTR_ATTR_FLAG) {
+		flags = iattr->ia_attr_flags;
+		if (flags & ATTR_FLAG_SYNCRONOUS) {
+			inode->i_flags |= MS_SYNCHRONOUS;
+			inode->u.ext2_i.i_flags = EXT2_SYNC_FL;
+		} else {
+			inode->i_flags &= ~MS_SYNCHRONOUS;
+			inode->u.ext2_i.i_flags &= ~EXT2_SYNC_FL;
+		}
+		if (flags & ATTR_FLAG_NOATIME) {
+			inode->i_flags |= MS_NOATIME;
+			inode->u.ext2_i.i_flags = EXT2_NOATIME_FL;
+		} else {
+			inode->i_flags &= ~MS_NOATIME;
+			inode->u.ext2_i.i_flags &= ~EXT2_NOATIME_FL;
+		}
+		if (flags & ATTR_FLAG_APPEND) {
+			inode->i_flags |= S_APPEND;
+			inode->u.ext2_i.i_flags = EXT2_APPEND_FL;
+		} else {
+			inode->i_flags &= ~S_APPEND;
+			inode->u.ext2_i.i_flags &= ~EXT2_APPEND_FL;
+		}
+		if (flags & ATTR_FLAG_IMMUTABLE) {
+			inode->i_flags |= S_IMMUTABLE;
+			inode->u.ext2_i.i_flags = EXT2_IMMUTABLE_FL;
+		} else {
+			inode->i_flags &= ~S_IMMUTABLE;
+			inode->u.ext2_i.i_flags &= ~EXT2_IMMUTABLE_FL;
+		}
 	}
 	mark_inode_dirty(inode);
 out:

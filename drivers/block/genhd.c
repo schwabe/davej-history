@@ -30,6 +30,7 @@
 #include <linux/init.h>
 
 #include <asm/system.h>
+#include <asm/byteorder.h>
 
 /*
  * Many architectures don't like unaligned accesses, which is
@@ -58,12 +59,29 @@ extern void initrd_load(void);
 
 extern int chr_dev_init(void);
 extern int blk_dev_init(void);
+#ifdef CONFIG_BLK_DEV_DAC960
+extern void DAC960_Initialize(void);
+#endif
 extern int scsi_dev_init(void);
 extern int net_dev_init(void);
 
 #ifdef CONFIG_PPC
 extern void note_bootable_part(kdev_t dev, int part);
 #endif
+
+static char *raid_name (struct gendisk *hd, int minor, int major_base,
+                        char *buf)
+{
+        int ctlr = hd->major - major_base;
+        int disk = minor >> hd->minor_shift;
+        int part = minor & (( 1 << hd->minor_shift) - 1);
+        if (part == 0)
+                sprintf(buf, "%s/c%dd%d", hd->major_name, ctlr, disk);
+        else
+                sprintf(buf, "%s/c%dd%dp%d", hd->major_name, ctlr, disk,
+                        part);
+        return buf;
+}
 
 /*
  * disk_name() is used by genhd.c and md.c.
@@ -81,6 +99,8 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	 * IDE devices use multiple major numbers, but the drives
 	 * are named as:  {hda,hdb}, {hdc,hdd}, {hde,hdf}, {hdg,hdh}..
 	 * This requires special handling here.
+	 *
+	 * MD devices are named md0, md1, ... md15, fix it up here.
 	 */
 	switch (hd->major) {
 		case IDE5_MAJOR:
@@ -96,6 +116,8 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 		case IDE0_MAJOR:
 			maj = "hd";
 			break;
+		case MD_MAJOR:
+			unit -= 'a'-'0';
 	}
 	part = minor & ((1 << hd->minor_shift) - 1);
 	if (hd->major >= SCSI_DISK1_MAJOR && hd->major <= SCSI_DISK7_MAJOR) {
@@ -108,6 +130,13 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 			return buf;
 		}
 	}
+	if (hd->major >= COMPAQ_SMART2_MAJOR && hd->major <=
+            COMPAQ_SMART2_MAJOR+7) {
+          return raid_name (hd, minor, COMPAQ_SMART2_MAJOR, buf);
+ 	}
+	if (hd->major >= DAC960_MAJOR && hd->major <= DAC960_MAJOR+7) {
+          return raid_name (hd, minor, DAC960_MAJOR, buf);
+ 	}
 	if (part)
 		sprintf(buf, "%s%c%d", maj, unit, part);
 	else
@@ -115,11 +144,16 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	return buf;
 }
 
-static void add_partition (struct gendisk *hd, int minor, int start, int size)
+static void add_partition (struct gendisk *hd, int minor,
+					int start, int size, int type)
 {
-	char buf[8];
-	hd->part[minor].start_sect = start;
-	hd->part[minor].nr_sects   = size;
+	char buf[MAX_DISKNAME_LEN];
+	struct hd_struct *p = hd->part+minor;
+
+	p->start_sect = start;
+	p->nr_sects = size;
+	p->type = type;
+
 	printk(" %s", disk_name(hd, minor, buf));
 }
 
@@ -140,49 +174,49 @@ static int sector_partition_scale(kdev_t dev)
 
 static unsigned int get_ptable_blocksize(kdev_t dev)
 {
-  int ret = 1024;
+	int ret = 1024;
 
-  /*
-   * See whether the low-level driver has given us a minumum blocksize.
-   * If so, check to see whether it is larger than the default of 1024.
-   */
-  if (!blksize_size[MAJOR(dev)])
-    {
-      return ret;
-    }
+	/*
+	 * See whether the low-level driver has given us a minumum blocksize.
+	 * If so, check to see whether it is larger than the default of 1024.
+	 */
+	if (!blksize_size[MAJOR(dev)])
+		return ret;
 
-  /*
-   * Check for certain special power of two sizes that we allow.
-   * With anything larger than 1024, we must force the blocksize up to
-   * the natural blocksize for the device so that we don't have to try
-   * and read partial sectors.  Anything smaller should be just fine.
-   */
+	/*
+	 * Check for certain special power of two sizes that we allow.
+	 * With anything larger than 1024, we must force the blocksize up to
+	 * the natural blocksize for the device so that we don't have to try
+	 * and read partial sectors.  Anything smaller should be just fine.
+	 */
 
-  switch( blksize_size[MAJOR(dev)][MINOR(dev)] )
-    {
-    case 2048:
-      ret = 2048;
-      break;
-    case 4096:
-      ret = 4096;
-      break;
-    case 8192:
-      ret = 8192;
-      break;
-    case 1024:
-    case 512:
-    case 256:
-    case 0:
-      /*
-       * These are all OK.
-       */
-      break;
-    default:
-      panic("Strange blocksize for partition table\n");
-    }
+	switch( blksize_size[MAJOR(dev)][MINOR(dev)] ) {
+	case 2048:
+		ret = 2048;
+		break;
 
-  return ret;
+	case 4096:
+		ret = 4096;
+		break;
 
+	case 8192:
+		ret = 8192;
+		break;
+
+	case 1024:
+	case 512:
+	case 256:
+	case 0:
+		/*
+		 * These are all OK.
+		 */
+		break;
+
+	default:
+		panic("Strange blocksize for partition table\n");
+	}
+
+	return ret;
 }
 
 #ifdef CONFIG_MSDOS_PARTITION
@@ -255,7 +289,8 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 				     first_sector + first_size))
 				continue;
 
-			add_partition(hd, current_minor, this_sector+START_SECT(p)*sector_size, NR_SECTS(p)*sector_size);
+			add_partition(hd, current_minor, this_sector+START_SECT(p)*sector_size, 
+				      NR_SECTS(p)*sector_size, ptype(SYS_IND(p)));
 			current_minor++;
 			if ((current_minor & mask) == 0)
 				goto done;
@@ -319,7 +354,8 @@ solaris_x86_partition(struct gendisk *hd, kdev_t dev, long offset) {
 		 * one but add_partition starts relative to sector
 		 * zero of the disk.  Therefore, must add the offset
 		 * of the current partition */
-		add_partition(hd, current_minor, s->s_start+offset, s->s_size);
+		add_partition(hd, current_minor,
+					s->s_start+offset, s->s_size, 0);
 		current_minor++;
 	}
 	brelse(bh);
@@ -365,7 +401,7 @@ static void check_and_add_bsd_partition(struct gendisk *hd,
 	} /* if the bsd partition is not currently known to linux, we end
 	   * up here 
 	   */
-	add_partition(hd, current_minor, bsd_p->p_offset, bsd_p->p_size);
+	add_partition(hd, current_minor, bsd_p->p_offset, bsd_p->p_size, 0);
 	current_minor++;
 }
 /* 
@@ -432,7 +468,7 @@ static void unixware_partition(struct gendisk *hd, kdev_t dev)
 			break;
 
 		if (p->s_label != UNIXWARE_FS_UNUSED) {
-			add_partition(hd, current_minor, START_SECT(p), NR_SECTS(p));
+			add_partition(hd, current_minor, START_SECT(p), NR_SECTS(p), 0);
 			current_minor++;
 		}
 		p++;
@@ -552,7 +588,8 @@ check_table:
 	for (i=1 ; i<=4 ; minor++,i++,p++) {
 		if (!NR_SECTS(p))
 			continue;
-               add_partition(hd, minor, first_sector+START_SECT(p)*sector_size, NR_SECTS(p)*sector_size);
+               add_partition(hd, minor, first_sector+START_SECT(p)*sector_size, NR_SECTS(p)*sector_size, 
+               		     ptype(SYS_IND(p)));
 		if (is_extended_partition(p)) {
 			printk(" <");
 			/*
@@ -619,7 +656,8 @@ check_table:
 				break;
 			if (!(START_SECT(p) && NR_SECTS(p)))
 				continue;
-			add_partition(hd, current_minor, START_SECT(p), NR_SECTS(p));
+			add_partition(hd, current_minor, START_SECT(p),
+					NR_SECTS(p), 0);
 		}
 	}
 	printk("\n");
@@ -677,12 +715,10 @@ static int osf_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 	label = (struct disklabel *) (bh->b_data+64);
 	partition = label->d_partitions;
 	if (label->d_magic != DISKLABELMAGIC) {
-		printk("magic: %08x\n", label->d_magic);
 		brelse(bh);
 		return 0;
 	}
 	if (label->d_magic2 != DISKLABELMAGIC) {
-		printk("magic2: %08x\n", label->d_magic2);
 		brelse(bh);
 		return 0;
 	}
@@ -692,7 +728,7 @@ static int osf_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 		if (partition->p_size)
 			add_partition(hd, current_minor,
 				first_sector+partition->p_offset,
-				partition->p_size);
+				partition->p_size, 0);
 		current_minor++;
 	}
 	printk("\n");
@@ -711,7 +747,14 @@ static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 	struct buffer_head *bh;
 	struct sun_disklabel {
 		unsigned char info[128];   /* Informative text string */
-		unsigned char spare[292];  /* Boot information etc. */
+		unsigned char spare0[14];
+		struct sun_disklabelinfo {
+			unsigned char spare1;
+			unsigned char id;
+			unsigned char spare2;
+			unsigned char flags;
+		} infos[8];
+		unsigned char spare1[246];  /* Boot information etc. */
 		unsigned short rspeed;     /* Disk rotational speed */
 		unsigned short pcylcount;  /* Physical cylinder count */
 		unsigned short sparecyl;   /* extra sects per cylinder */
@@ -765,7 +808,8 @@ static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 		st_sector = first_sector + be32_to_cpu(p->start_cylinder) * spc;
 		num_sectors = be32_to_cpu(p->num_sectors);
 		if (num_sectors)
-			add_partition(hd, current_minor, st_sector, num_sectors);
+			add_partition(hd, current_minor, st_sector,
+					num_sectors, ptype(label->infos[i].id));
 		current_minor++;
 	}
 	printk("\n");
@@ -776,14 +820,11 @@ static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 #endif /* CONFIG_SUN_PARTITION */
 
 #ifdef CONFIG_SGI_PARTITION
-#include <asm/byteorder.h>
 
 static int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 {
-	int i, csum;
-	unsigned int *ui;
-	unsigned int start, blocks, cs;
-	int magic;
+	int i, csum, magic;
+	unsigned int *ui, start, blocks, cs;
 	struct buffer_head *bh;
 	struct sgi_disklabel {
 		int magic_mushroom;         /* Big fat spliff... */
@@ -841,7 +882,7 @@ static int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 		start  = be32_to_cpu(p->first_block);
 		if(!blocks)
 			continue;
-		add_partition(hd, current_minor, start, blocks);
+		add_partition(hd, current_minor, start, blocks, 0);
 		current_minor++;
 	}
 	printk("\n");
@@ -852,7 +893,6 @@ static int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 #endif
 
 #ifdef CONFIG_AMIGA_PARTITION
-#include <asm/byteorder.h>
 #include <linux/affs_hardblocks.h>
 
 static __inline__ u32
@@ -923,27 +963,30 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 				blk = htonl(pb->pb_Next);
 				if (pb->pb_ID == htonl(IDNAME_PARTITION) && checksum_block(
 				    (u32 *)pb,htonl(pb->pb_SummedLongs) & 0x7F) == 0 ) {
-					
+
 					/* Tell Kernel about it */
 
 					if (!(nr_sects = (htonl(pb->pb_Environment[10]) + 1 -
 							  htonl(pb->pb_Environment[9])) *
 							 htonl(pb->pb_Environment[3]) *
 							 htonl(pb->pb_Environment[5]))) {
+						brelse(bh);
 						continue;
 					}
 					start_sect = htonl(pb->pb_Environment[9]) *
 						     htonl(pb->pb_Environment[3]) *
 						     htonl(pb->pb_Environment[5]);
-					add_partition(hd,current_minor,start_sect,nr_sects);
+					add_partition(hd,current_minor,
+							start_sect,nr_sects,0);
 					current_minor++;
 					res = 1;
 				}
 				brelse(bh);
 			}
 			printk("\n");
-			break;
 		}
+		else
+			brelse(bh);
 	}
 
 rdb_done:
@@ -1056,7 +1099,7 @@ static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 		blocks_in_map = be32_to_cpu(part->map_count);
 		add_partition(hd, current_minor,
 			fsec + be32_to_cpu(part->start_block) * (secsize/512),
-			be32_to_cpu(part->block_count) * (secsize/512));
+			be32_to_cpu(part->block_count) * (secsize/512), 0);
 
 #ifdef CONFIG_PPC
 		/*
@@ -1147,7 +1190,7 @@ static int atari_partition (struct gendisk *hd, kdev_t dev,
 		  }
 
 		  add_partition(hd, minor, partsect + xrs->part[0].st,
-				xrs->part[0].siz);
+				xrs->part[0].siz, 0);
 
 		  if (!(xrs->part[1].flg & 1)) {
 		    /* end of linked partition list */
@@ -1173,7 +1216,7 @@ static int atari_partition (struct gendisk *hd, kdev_t dev,
 	  else
 	    {
 	      /* we don't care about other id's */
-	      add_partition (hd, minor, pi->st, pi->siz);
+	      add_partition (hd, minor, pi->st, pi->siz, 0);
 	    }
 	}
     }
@@ -1200,7 +1243,7 @@ static int atari_partition (struct gendisk *hd, kdev_t dev,
              memcmp (pi->id, "RAW", 3) == 0) )
         {
           part_fmt = 2;
-	  add_partition (hd, minor, pi->st, pi->siz);
+	  add_partition (hd, minor, pi->st, pi->siz, 0);
         }
       }
       printk(" >");
@@ -1215,11 +1258,59 @@ static int atari_partition (struct gendisk *hd, kdev_t dev,
 }
 #endif /* CONFIG_ATARI_PARTITION */
 
+#ifdef CONFIG_ULTRIX_PARTITION
+
+static int ultrix_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
+{
+	int i, minor = current_minor;
+	struct buffer_head *bh;
+	struct ultrix_disklabel {
+		long	pt_magic;	/* magic no. indicating part. info exits */
+		int	pt_valid;	/* set by driver if pt is current */
+		struct  pt_info {
+			int		pi_nblocks; /* no. of sectors */
+			unsigned long	pi_blkoff;  /* block offset for start */
+		} pt_part[8];
+	} *label;
+
+#define PT_MAGIC	0x032957	/* Partition magic number */
+#define PT_VALID	1		/* Indicates if struct is valid */
+
+#define	SBLOCK	((unsigned long)((16384 - sizeof(struct ultrix_disklabel)) \
+                  /get_ptable_blocksize(dev)))
+
+	bh = bread (dev, SBLOCK, get_ptable_blocksize(dev));
+	if (!bh) {
+		printk (" unable to read block 0x%lx\n", SBLOCK);
+		return -1;
+	}
+	
+	label = (struct ultrix_disklabel *)(bh->b_data
+                                            + get_ptable_blocksize(dev)
+                                            - sizeof(struct ultrix_disklabel));
+
+	if (label->pt_magic == PT_MAGIC && label->pt_valid == PT_VALID) {
+		for (i=0; i<8; i++, minor++)
+			if (label->pt_part[i].pi_nblocks)
+				add_partition(hd, minor, 
+					      label->pt_part[i].pi_blkoff,
+					      label->pt_part[i].pi_nblocks);
+		brelse(bh);
+		printk ("\n");
+		return 1;
+	} else {
+		brelse(bh);
+		return 0;
+	}
+}
+
+#endif /* CONFIG_ULTRIX_PARTITION */
+
 static void check_partition(struct gendisk *hd, kdev_t dev)
 {
 	static int first_time = 1;
 	unsigned long first_sector;
-	char buf[8];
+	char buf[MAX_DISKNAME_LEN];
 
 	if (first_time)
 		printk("Partition check:\n");
@@ -1262,6 +1353,10 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 #endif
 #ifdef CONFIG_SGI_PARTITION
 	if(sgi_partition(hd, dev, first_sector))
+		return;
+#endif
+#ifdef CONFIG_ULTRIX_PARTITION
+	if(ultrix_partition(hd, dev, first_sector))
 		return;
 #endif
 	printk(" unknown partition table\n");
@@ -1323,6 +1418,7 @@ static inline void setup_dev(struct gendisk *dev)
 __initfunc(void device_setup(void))
 {
 	extern void console_map_init(void);
+	extern void cpqarray_init(void);
 #ifdef CONFIG_PARPORT
 	extern int parport_init(void);
 #endif
@@ -1340,12 +1436,18 @@ __initfunc(void device_setup(void))
 	chr_dev_init();
 	blk_dev_init();
 	sti();
+#ifdef CONFIG_BLK_DEV_DAC960
+	DAC960_Initialize();
+#endif
 #ifdef CONFIG_FC4_SOC
 	/* This has to be done before scsi_dev_init */
 	soc_probe();
 #endif
 #ifdef CONFIG_SCSI
 	scsi_dev_init();
+#endif
+#ifdef CONFIG_BLK_CPQ_DA
+	cpqarray_init();
 #endif
 #ifdef CONFIG_INET
 	net_dev_init();
@@ -1373,7 +1475,7 @@ __initfunc(void device_setup(void))
 int get_partition_list(char * page)
 {
 	struct gendisk *p;
-	char buf[32];
+	char buf[MAX_DISKNAME_LEN];
 	int n, len;
 
 	len = sprintf(page, "major minor  #blocks  name\n\n");

@@ -633,6 +633,13 @@ static struct proc_dir_entry proc_root_rtc = {
 	0, &proc_array_inode_operations
 };
 #endif
+#ifdef CONFIG_SGI_DS1286
+static struct proc_dir_entry proc_root_ds1286 = {
+	PROC_RTC, 3, "rtc",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
+};
+#endif
 static struct proc_dir_entry proc_root_locks = {
 	PROC_LOCKS, 5, "locks",
 	S_IFREG | S_IRUGO, 1, 0, 0,
@@ -709,6 +716,9 @@ __initfunc(void proc_root_init(void))
 	proc_register(&proc_root, &proc_root_cmdline);
 #ifdef CONFIG_RTC
 	proc_register(&proc_root, &proc_root_rtc);
+#endif
+#ifdef CONFIG_SGI_DS1286
+	proc_register(&proc_root, &proc_root_ds1286);
 #endif
 	proc_register(&proc_root, &proc_root_locks);
 

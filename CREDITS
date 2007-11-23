@@ -324,6 +324,10 @@ S: 4 Place Jussieu
 S: 75252 Paris Cedex 05
 S: France
 
+N: Ulf Carlsson
+D: SGI Indy audio (HAL2) drivers
+E: ulfc@bun.falkenberg.se
+
 N: Ed Carp
 E: ecarp@netcom.com
 D: uucp, elm, pine, pico port
@@ -452,6 +456,14 @@ D: Random console hacks and other miscellaneous stuff
 S: 3000 FORE Drive
 S: Warrendale, Pennsylvania 15086
 S: USA
+
+N: Alex deVries
+E: puffin@redhat.com
+D: Various SGI parts, bits of HAL2 and Newport
+S: 18 Bernier Terrace
+S: Kanata, Ontario
+S: K2L 2V@
+S: CANADA
 
 N: Eddie C. Dost
 E: ecd@skynet.be
@@ -946,7 +958,7 @@ N: Niels Kristian Bech Jensen
 E: nkbj@image.dk
 W: http://www.image.dk/~nkbj
 D: 4.4BSD and NeXTstep filesystem support in the old ufs.
-D: Openstep filesystem support in the new ufs.
+D: Openstep filesystem and NeXTstep CDROM support in the new ufs.
 D: Danish HOWTO, Linux+FreeBSD mini-HOWTO.
 S: Dr. Holsts Vej 34, lejl. 164
 S: DK-8230 Åbyhøj
@@ -1603,6 +1615,15 @@ S: 4390 Albany Drive #41A
 S: San Jose, California 95129
 S: USA
 
+N: Augusto Cesar Radtke
+E: bishop@sekure.org
+W: http://bishop.sekure.org
+D: {copy,get,put}_user calls updates
+D: Miscellaneous hacks
+S: R. Otto Marquardt, 226 - Garcia
+S: 89020-350 Blumenau - Santa Catarina
+S: Brazil
+
 N: Eric S. Raymond
 E: esr@thyrsus.com
 W: http://www.tuxedo.org/~esr/
@@ -1638,12 +1659,13 @@ S: 75019 Paris
 S: France
 
 N: Rik van Riel
-E: H.H.vanRiel@humbolt.geo.uu.nl
-W: http://humbolt.geo.uu.nl/
-D: Maintainer of the mm-patches page (see www.linuxhq.com)
-D: Documentation/sysctl/*, kswapd fixes, random kernel hacker
-S: Vorenkampsweg 1
-S: NL-9488 TG  Zeijerveld
+E: riel@nl.linux.org
+W: http://www.nl.linux.org/~riel/
+D: Linux-MM site, Documentation/sysctl/*, swap/mm readaround
+D: clustering contributor, kswapd fixes, random kernel hacker,
+D: nl.linux.org maintainer, minor scheduler additions
+S: IJsselstraat 23a
+S: 9725 GA  Groningen
 S: The Netherlands
 
 N: William E. Roadcap
@@ -2253,6 +2275,7 @@ N: Leonard N. Zubkoff
 E: lnz@dandelion.com
 W: http://www.dandelion.com/Linux/
 D: BusLogic SCSI driver
+D: Mylex DAC960 PCI RAID driver
 D: Miscellaneous kernel fixes
 S: 3078 Sulphur Spring Court
 S: San Jose, California 95148

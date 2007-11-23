@@ -341,7 +341,11 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 		error = filp->f_op->lock(filp, F_GETLK, &file_lock);
 		if (error < 0)
 			goto out_putf;
-		fl = &file_lock;
+		else if (error == LOCK_USE_CLNT)
+		  /* Bypass for NFS with no locking - 2.0.36 compat */
+		  fl = posix_test_lock(filp, &file_lock);
+		else
+		  fl = (file_lock.fl_type == F_UNLCK ? NULL : &file_lock);
 	} else {
 		fl = posix_test_lock(filp, &file_lock);
 	}

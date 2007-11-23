@@ -93,6 +93,9 @@ static ssize_t read_core(struct file * file, char * buf,
 	memset(&dump, 0, sizeof(struct user));
 	dump.magic = CMAGIC;
 	dump.u_dsize = max_mapnr;
+#if defined (__i386__)
+	dump.start_code = PAGE_OFFSET;
+#endif
 #ifdef __alpha__
 	dump.start_data = PAGE_OFFSET;
 #endif
@@ -529,7 +532,22 @@ static unsigned long get_wchan(struct task_struct *p)
 		return ((unsigned long *)schedule_frame)[12];
 	    }
 	    return pc;
-	}	
+	}
+#elif defined(__mips__)
+	/*
+	 * The same comment as on the Alpha applies here, too ...
+	 */
+	{
+		unsigned long schedule_frame;
+		unsigned long pc;
+
+		pc = thread_saved_pc(&p->tss);
+		if (pc >= (unsigned long) interruptible_sleep_on && pc < (unsigned long) add_timer) {
+			schedule_frame = ((unsigned long *)(long)p->tss.reg30)[16];
+			return (unsigned long)((unsigned long *)schedule_frame)[11];
+		}
+		return pc;
+	}
 #elif defined(__mc68000__)
 	{
 	    unsigned long fp, pc;
@@ -608,6 +626,7 @@ static unsigned long get_wchan(struct task_struct *p)
 		} while (++count < 16);
 	}
 #endif
+
 	return 0;
 }
 
@@ -644,6 +663,12 @@ static unsigned long get_wchan(struct task_struct *p)
 #elif defined(__sparc__)
 # define KSTK_EIP(tsk)  ((tsk)->tss.kregs->pc)
 # define KSTK_ESP(tsk)  ((tsk)->tss.kregs->u_regs[UREG_FP])
+#elif defined(__mips__)
+# define PT_REG(reg)		((long)&((struct pt_regs *)0)->reg \
+				 - sizeof(struct pt_regs))
+#define KSTK_TOS(tsk) ((unsigned long)(tsk) + KERNEL_STACK_SIZE - 32)
+# define KSTK_EIP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(cp0_epc)))
+# define KSTK_ESP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(regs[29])))
 #endif
 
 /* Gcc optimizes away "strlen(x)" for constant x */
@@ -1341,6 +1366,10 @@ static long get_root_array(char * page, int type, char **start,
 #ifdef CONFIG_RTC
 		case PROC_RTC:
 			return get_rtc_status(page);
+#endif
+#ifdef CONFIG_SGI_DS1286
+		case PROC_RTC:
+			return get_ds1286_status(page);
 #endif
 		case PROC_LOCKS:
 			return get_locks_status(page, start, offset, length);

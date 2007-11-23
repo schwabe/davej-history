@@ -1,4 +1,4 @@
-/* $Id: mipsregs.h,v 1.6 1998/08/17 11:27:08 ralf Exp $
+/* $Id: mipsregs.h,v 1.5 1999/04/11 17:13:57 harald Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -233,11 +233,12 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 /*
  * Bitfields in the R[23]000 cp0 status register.
  */
-#define ST0_KUC			0x00000001
-#define ST0_IEP			0x00000002
-#define ST0_KUP			0x00000004
-#define ST0_IEO			0x00000008
-#define ST0_KUO			0x00000010
+#define ST0_IEC                 0x00000001
+#define ST0_KUC			0x00000002
+#define ST0_IEP			0x00000004
+#define ST0_KUP			0x00000008
+#define ST0_IEO			0x00000010
+#define ST0_KUO			0x00000020
 /* bits 6 & 7 are reserved on R[23]000 */
 
 /*

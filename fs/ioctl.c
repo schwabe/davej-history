@@ -18,6 +18,8 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 
 	switch (cmd) {
 		case FIBMAP:
+			if (!capable(CAP_SYS_RAWIO))
+				return -EPERM;
 			if (inode->i_op == NULL)
 				return -EBADF;
 		    	if (inode->i_op->bmap == NULL)

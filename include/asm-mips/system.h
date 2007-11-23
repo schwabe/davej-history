@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.8 1998/07/20 17:52:21 ralf Exp $
+/* $Id: system.h,v 1.10 1999/06/13 16:35:55 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -88,6 +88,12 @@ __restore_flags(int flags)
 {
 	__asm__ __volatile__(
 		".set\tnoreorder\n\t"
+		"mfc0\t$8,$12\n\t"
+		"li\t$9,0xff00\n\t"
+		"and\t$8,$9\n\t"
+		"nor\t$9,$0,$9\n\t"
+		"and\t%0,$9\n\t"
+		"or\t%0,$8\n\t"
 		"mtc0\t%0,$12\n\t"
 		"nop\n\t"
 		"nop\n\t"
@@ -95,7 +101,7 @@ __restore_flags(int flags)
 		".set\treorder"
 		: /* no output */
 		: "r" (flags)
-		: "memory");
+		: "$8", "$9", "memory");
 }
 
 /*
@@ -107,6 +113,9 @@ __restore_flags(int flags)
 #define save_and_cli(x) __save_and_cli(x)
 #define restore_flags(x) __restore_flags(x)
 
+/*
+ * These are probably defined overly paranoid ...
+ */
 #define mb()						\
 __asm__ __volatile__(					\
 	"# prevent instructions being moved around\n\t"	\
@@ -117,18 +126,20 @@ __asm__ __volatile__(					\
 	: /* no output */				\
 	: /* no input */				\
 	: "memory")
+#define rmb() mb()
+#define wmb() mb()
 
 #if !defined (_LANGUAGE_ASSEMBLY)
 /*
  * switch_to(n) should switch tasks to task nr n, first
  * checking that n isn't the current task, in which case it does nothing.
  */
-extern asmlinkage void (*resume)(void *tsk);
+extern asmlinkage void *(*resume)(void *last, void *next);
 #endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
-#define switch_to(prev,next) \
+#define switch_to(prev,next,last) \
 do { \
-	resume(next); \
+	(last) = resume(prev, next); \
 } while(0)
 
 /*

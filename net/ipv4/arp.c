@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.77 1999/03/21 05:22:30 davem Exp $
+ * Version:	$Id: arp.c,v 1.77.2.1 1999/06/28 10:39:23 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -383,9 +383,9 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 			end_bh_atomic();
 			return 0;
 		}
+		neigh_release(n);
 	} else
 		kfree_skb(skb);
-	neigh_release(n);
 	end_bh_atomic();
 	return 1;
 }

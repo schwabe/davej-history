@@ -67,6 +67,7 @@ extern int console_loglevel;
 
 static int init(void *);
 extern int bdflush(void *);
+extern int kupdate(void *);
 extern int kswapd(void *);
 extern int kpiod(void *);
 extern void kswapd_setup(void);
@@ -332,6 +333,9 @@ extern void mdacon_setup(char *str, int *ints);
 #ifdef CONFIG_LTPC
 extern void ltpc_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_BLK_CPQ_DA
+extern void cpqarray_setup(char *str, int *ints);
+#endif
 
 #if defined(CONFIG_SYSVIPC)
 extern void ipc_init(void);
@@ -403,6 +407,9 @@ static struct dev_name_struct {
 #ifdef CONFIG_ROOT_NFS
 	{ "nfs",     0x00ff },
 #endif
+#ifdef CONFIG_BLK_DEV_LOOP
+	{ "loop",    0x0700 },
+#endif
 #ifdef CONFIG_BLK_DEV_IDE
 	{ "hda",     0x0300 },
 	{ "hdb",     0x0340 },
@@ -434,6 +441,24 @@ static struct dev_name_struct {
 	{ "sdn",     0x08d0 },
 	{ "sdo",     0x08e0 },
 	{ "sdp",     0x08f0 },
+#endif
+#ifdef CONFIG_BLK_DEV_DAC960
+	{ "rd/c0d0p",0x3000 },
+	{ "rd/c0d1p",0x3008 },
+	{ "rd/c0d2p",0x3010 },
+	{ "rd/c0d3p",0x3018 },
+	{ "rd/c0d4p",0x3020 },
+	{ "rd/c0d5p",0x3028 },
+	{ "rd/c0d6p",0x3030 },
+	{ "rd/c0d7p",0x3038 },
+	{ "rd/c0d8p",0x3040 },
+	{ "rd/c0d9p",0x3048 },
+	{ "rd/c0d10p",0x3050 },
+	{ "rd/c0d11p",0x3058 },
+	{ "rd/c0d12p",0x3060 },
+	{ "rd/c0d13p",0x3068 },
+	{ "rd/c0d14p",0x3070 },
+	{ "rd/c0d15p",0x3078 },
 #endif
 #ifdef CONFIG_ATARI_ACSI
 	{ "ada",     0x1c00 },
@@ -582,6 +607,8 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "no-hlt", no_halt },
 	{ "no387", no_387 },
 	{ "reboot=", reboot_setup },
+#endif
+#ifdef CONFIG_MCA
 	{ "mca-pentium", mca_pentium },
 #endif
 #ifdef CONFIG_INET
@@ -860,6 +887,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_LTPC
 	{ "ltpc=", ltpc_setup },
+#endif
+#ifdef CONFIG_BLK_CPQ_DA
+	{ "smart2=", cpqarray_setup },
 #endif
 	{ 0, 0 }
 };
@@ -1291,6 +1321,7 @@ static void __init do_basic_setup(void)
 
 	/* Launch bdflush from here, instead of the old syscall way. */
 	kernel_thread(bdflush, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	kernel_thread(kupdate, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	/* Start the background pageout daemon. */
 	kswapd_setup();
 	kernel_thread(kpiod, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
@@ -1323,21 +1354,6 @@ static void __init do_basic_setup(void)
 
 	/* Mount the root filesystem.. */
 	mount_root();
-
-#ifdef CONFIG_UMSDOS_FS
-	{
-		/*
-			When mounting a umsdos fs as root, we detect
-			the pseudo_root (/linux) and initialise it here.
-			pseudo_root is defined in fs/umsdos/inode.c
-		*/
-		extern struct inode *pseudo_root;
-		if (pseudo_root != NULL){
-			current->fs->root = pseudo_root->i_sb->s_root;
-			current->fs->pwd  = pseudo_root->i_sb->s_root;
-		}
-	}
-#endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	root_mountflags = real_root_mountflags;

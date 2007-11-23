@@ -13,22 +13,23 @@ extern spinlock_t kernel_flag;
 /*
  * Release global kernel lock and global interrupt lock
  */
-static __inline__ void release_kernel_lock(struct task_struct *task, int cpu)
-{
-	if (task->lock_depth >= 0)
-		spin_unlock(&kernel_flag);
-	release_irqlock(cpu);
-	__sti();
-}
+#define release_kernel_lock(task, cpu) \
+do { \
+	if (task->lock_depth >= 0) \
+		spin_unlock(&kernel_flag); \
+	release_irqlock(cpu); \
+	__sti(); \
+} while (0)
 
 /*
  * Re-acquire the kernel lock
  */
-static __inline__ void reacquire_kernel_lock(struct task_struct *task)
-{
-	if (task->lock_depth >= 0)
-		spin_lock(&kernel_flag);
-}
+#define reacquire_kernel_lock(task) \
+do { \
+	if (task->lock_depth >= 0) \
+		spin_lock(&kernel_flag); \
+} while (0)
+
 
 /*
  * Getting the big kernel lock.
@@ -37,14 +38,14 @@ static __inline__ void reacquire_kernel_lock(struct task_struct *task)
  * so we only need to worry about other
  * CPU's.
  */
-static __inline__ void lock_kernel(void)
-{
-	if (!++current->lock_depth)
-		spin_lock(&kernel_flag);
-}
+#define lock_kernel() \
+do { \
+	if (!++current->lock_depth) \
+		spin_lock(&kernel_flag); \
+} while(0)
 
-static __inline__ void unlock_kernel(void)
-{
-	if (--current->lock_depth < 0)
-		spin_unlock(&kernel_flag);
-}
+#define unlock_kernel() \
+do { \
+	if (--current->lock_depth < 0) \
+		spin_unlock(&kernel_flag); \
+} while(0)

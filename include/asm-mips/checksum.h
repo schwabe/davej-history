@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.6 1998/09/16 13:30:51 ralf Exp $
+/* $Id: checksum.h,v 1.6 1998/09/19 19:19:36 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

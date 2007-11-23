@@ -234,6 +234,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BLK_CPQ_DA),y)
+L_OBJS += cpqarray.o
+else
+  ifeq ($(CONFIG_BLK_CPQ_DA),m)
+  M_OBJS += cpqarray.o
+  endif
+endif
+
+ifeq ($(CONFIG_BLK_DEV_DAC960),y)
+LX_OBJS += DAC960.o
+else
+  ifeq ($(CONFIG_BLK_DEV_DAC960),m)
+  MX_OBJS += DAC960.o
+  endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_MD),y)
 LX_OBJS += md.o
 

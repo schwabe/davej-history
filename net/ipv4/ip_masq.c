@@ -4,7 +4,7 @@
  *
  * 	Copyright (c) 1994 Pauline Middelink
  *
- *	$Id: ip_masq.c,v 1.34 1999/03/17 01:53:51 davem Exp $
+ *	$Id: ip_masq.c,v 1.34.2.1 1999/07/02 10:10:00 davem Exp $
  *
  *
  *	See ip_fw.c for original log
@@ -46,6 +46,7 @@
  *	Juan Jose Ciarlante	: 	make masq_proto_doff() robust against fake sized/corrupted packets
  *	Kai Bankett		:	do not toss other IP protos in proto_doff()
  *	Dan Kegel		:	pointed correct NAT behavior for UDP streams
+ *	Julian Anastasov	:	use daddr and dport as hash keys
  *	
  */
 
@@ -315,9 +316,7 @@ static __inline__ const __u8 icmp_type_request(__u8 type)
  *	Will cycle in MASQ_PORT boundaries.
  */
 static __u16 masq_port = PORT_MASQ_BEGIN;
-#ifdef __SMP__
 static spinlock_t masq_port_lock = SPIN_LOCK_UNLOCKED;
-#endif
 
 /*
  *	free ports counters (UDP & TCP)
@@ -366,17 +365,24 @@ EXPORT_SYMBOL(ip_masq_control_add);
 EXPORT_SYMBOL(ip_masq_control_del);
 EXPORT_SYMBOL(ip_masq_control_get);
 EXPORT_SYMBOL(ip_masq_user_hook);
-EXPORT_SYMBOL(ip_masq_m_tab);
 EXPORT_SYMBOL(ip_masq_state_name);
 EXPORT_SYMBOL(ip_masq_select_addr);
 EXPORT_SYMBOL(__ip_masq_lock);
+EXPORT_SYMBOL(ip_masq_m_table);
+EXPORT_SYMBOL(ip_masq_s_table);
+EXPORT_SYMBOL(ip_masq_d_table);
 
 /*
- *	2 ip_masq hash tables: for input and output pkts lookups.
+ *	3 ip_masq hash double linked tables: 
+ *	  2 for input  m{addr,port}  and output s{addr,port} pkts lookups.
+ *	  1 for extra modules support (daddr)
  */
+  
+#define IP_MASQ_NTABLES 3
 
-struct ip_masq *ip_masq_m_tab[IP_MASQ_TAB_SIZE];
-struct ip_masq *ip_masq_s_tab[IP_MASQ_TAB_SIZE];
+struct list_head ip_masq_m_table[IP_MASQ_TAB_SIZE];
+struct list_head ip_masq_s_table[IP_MASQ_TAB_SIZE];
+struct list_head ip_masq_d_table[IP_MASQ_TAB_SIZE];
 
 /*
  * timeouts
@@ -450,21 +456,44 @@ static int ip_masq_hash(struct ip_masq *ms)
 			__builtin_return_address(0));
                 return 0;
         }
-        /*
-         *	Hash by proto,m{addr,port}
-         */
-        hash = ip_masq_hash_key(ms->protocol, ms->maddr, ms->mport);
-        ms->m_link = ip_masq_m_tab[hash];
-	atomic_inc(&ms->refcnt);
-        ip_masq_m_tab[hash] = ms;
+	atomic_add(IP_MASQ_NTABLES, &ms->refcnt);
+
+	if ((ms->flags & (MASQ_DADDR_PASS | MASQ_DPORT_PASS |
+		IP_MASQ_F_SIMPLE_HASH)) == 0)
+		/*
+		 *	Hash by proto,m{addr,port},d{addr,port}
+		 */
+		hash = ip_masq_hash_key(ms->protocol,
+			ms->maddr^ms->daddr, ms->mport^ms->dport);
+	else
+		/*
+		 *	Hash by proto,m{addr,port}
+		 */
+		hash = ip_masq_hash_key(ms->protocol, ms->maddr, ms->mport);
+
+	list_add(&ms->m_list, &ip_masq_m_table[hash]);
+
+	if ((ms->flags & (MASQ_DADDR_PASS | MASQ_DPORT_PASS |
+		IP_MASQ_F_NO_SADDR | IP_MASQ_F_NO_SPORT |
+		IP_MASQ_F_SIMPLE_HASH)) == 0)
+		/*
+		 *	Hash by proto,s{addr,port},d{addr,port}
+		 */
+		hash = ip_masq_hash_key(ms->protocol,
+			ms->saddr^ms->daddr, ms->sport^ms->dport);
+	else
+		/*
+		 *	Hash by proto,s{addr,port}
+		 */
+		hash = ip_masq_hash_key(ms->protocol, ms->saddr, ms->sport);
+
+	list_add(&ms->s_list, &ip_masq_s_table[hash]);
 
         /*
-         *	Hash by proto,s{addr,port}
+         *	Hash by proto,d{addr,port}
          */
-        hash = ip_masq_hash_key(ms->protocol, ms->saddr, ms->sport);
-        ms->s_link = ip_masq_s_tab[hash];
-	atomic_inc(&ms->refcnt);
-        ip_masq_s_tab[hash] = ms;
+        hash = ip_masq_hash_key(ms->protocol, ms->daddr, ms->dport);
+	list_add(&ms->d_list, &ip_masq_d_table[hash]);
 
 
         ms->flags |= IP_MASQ_F_HASHED;
@@ -479,34 +508,16 @@ static int ip_masq_hash(struct ip_masq *ms)
 
 static int ip_masq_unhash(struct ip_masq *ms)
 {
-        unsigned hash;
-        struct ip_masq ** ms_p;
         if (!(ms->flags & IP_MASQ_F_HASHED)) {
                 IP_MASQ_ERR( "ip_masq_unhash(): request for unhash flagged, called from %p\n",
 			__builtin_return_address(0));
                 return 0;
         }
-        /*
-         *	UNhash by m{addr,port}
-         */
-        hash = ip_masq_hash_key(ms->protocol, ms->maddr, ms->mport);
-        for (ms_p = &ip_masq_m_tab[hash]; *ms_p ; ms_p = &(*ms_p)->m_link)
-                if (ms == (*ms_p))  {
-			atomic_dec(&ms->refcnt);
-			*ms_p = ms->m_link;
-                        break;
-                }
+	list_del(&ms->m_list);
+	list_del(&ms->s_list);
+	list_del(&ms->d_list);
 
-        /*
-         *	UNhash by s{addr,port}
-         */
-        hash = ip_masq_hash_key(ms->protocol, ms->saddr, ms->sport);
-        for (ms_p = &ip_masq_s_tab[hash]; *ms_p ; ms_p = &(*ms_p)->s_link)
-                if (ms == (*ms_p))  {
-			atomic_dec(&ms->refcnt);
-			*ms_p = ms->s_link;
-                        break;
-                }
+	atomic_sub(IP_MASQ_NTABLES, &ms->refcnt);
 
         ms->flags &= ~IP_MASQ_F_HASHED;
         return 1;
@@ -535,10 +546,34 @@ static struct ip_masq * __ip_masq_in_get(int protocol, __u32 s_addr, __u16 s_por
 {
         unsigned hash;
         struct ip_masq *ms = NULL;
+	struct list_head *l,*e;
+
+	hash = ip_masq_hash_key(protocol, d_addr^s_addr, d_port^s_port);
+
+	l = &ip_masq_m_table[hash];
+	for (e=l->next; e!=l; e=e->next) {
+		ms = list_entry(e, struct ip_masq, m_list);
+		if (s_port==ms->dport && s_addr==ms->daddr &&
+		    d_port==ms->mport && protocol==ms->protocol &&
+		    d_addr==ms->maddr &&
+		    ((ms->flags & (MASQ_DADDR_PASS | MASQ_DPORT_PASS)) == 0)
+		    ) {
+			IP_MASQ_DEBUG(2, "look/in %d %08X:%04hX->%08X:%04hX OK\n",
+			       protocol,
+			       s_addr,
+			       s_port,
+			       d_addr,
+			       d_port);
+			atomic_inc(&ms->refcnt);
+                        goto out;
+		}
+        }
 
         hash = ip_masq_hash_key(protocol, d_addr, d_port);
 
-        for(ms = ip_masq_m_tab[hash]; ms ; ms = ms->m_link) {
+	l = &ip_masq_m_table[hash];
+	for (e=l->next; e!=l; e=e->next) {
+		ms = list_entry(e, struct ip_masq, m_list);
 		if (protocol==ms->protocol && 
 		    (d_addr==ms->maddr && d_port==ms->mport) &&
 		    (s_addr==ms->daddr || ms->flags & MASQ_DADDR_PASS) &&
@@ -561,6 +596,7 @@ static struct ip_masq * __ip_masq_in_get(int protocol, __u32 s_addr, __u16 s_por
 	       d_addr,
 	       d_port);
 
+	ms = NULL;
 out:
         return ms;
 }
@@ -585,13 +621,40 @@ static struct ip_masq * __ip_masq_out_get(int protocol, __u32 s_addr, __u16 s_po
 {
         unsigned hash;
         struct ip_masq *ms = NULL;
+	struct list_head *l,*e;
 
 	/*	
 	 *	Check for "full" addressed entries
 	 */
+	hash = ip_masq_hash_key(protocol, s_addr^d_addr, s_port^d_port);
+
+	l = &ip_masq_s_table[hash];
+	for (e=l->next; e!=l; e=e->next) {
+		ms = list_entry(e, struct ip_masq, s_list);
+		if (d_addr==ms->daddr && d_port==ms->dport &&
+		   s_addr==ms->saddr && s_port==ms->sport &&
+		   protocol==ms->protocol &&
+		   ((ms->flags & (MASQ_DADDR_PASS | MASQ_DPORT_PASS |
+		   IP_MASQ_F_NO_SADDR | IP_MASQ_F_NO_SPORT)) == 0)
+                   ) {
+			IP_MASQ_DEBUG(2, "lk/out0 %d %08X:%04hX->%08X:%04hX OK\n",
+			       protocol,
+			       s_addr,
+			       s_port,
+			       d_addr,
+			       d_port);
+
+			atomic_inc(&ms->refcnt);
+			goto out;
+		}
+
+        }
+
         hash = ip_masq_hash_key(protocol, s_addr, s_port);
 	
-        for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
+	l = &ip_masq_s_table[hash];
+	for (e=l->next; e!=l; e=e->next) {
+		ms = list_entry(e, struct ip_masq, s_list);
 		if (protocol == ms->protocol &&
 		    s_addr == ms->saddr && s_port == ms->sport &&
 		    (d_addr==ms->daddr || ms->flags & MASQ_DADDR_PASS) &&
@@ -614,7 +677,9 @@ static struct ip_masq * __ip_masq_out_get(int protocol, __u32 s_addr, __u16 s_po
 	 *	Check for NO_SPORT entries
 	 */
         hash = ip_masq_hash_key(protocol, s_addr, 0);
-        for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
+	l = &ip_masq_s_table[hash];
+	for (e=l->next; e!=l; e=e->next) {
+		ms = list_entry(e, struct ip_masq, s_list);
 		if (ms->flags & IP_MASQ_F_NO_SPORT &&
 		    protocol == ms->protocol &&
 		    s_addr == ms->saddr && 
@@ -639,6 +704,7 @@ static struct ip_masq * __ip_masq_out_get(int protocol, __u32 s_addr, __u16 s_po
 	       d_addr,
 	       d_port);
 
+	ms = NULL;
 out:
         return ms;
 }
@@ -710,9 +776,9 @@ void ip_masq_put(struct ip_masq *ms)
 	__ip_masq_put(ms);
 
 	/*
-	 *	if refcnt==2  (2 hashes)	
+	 *	if refcnt==IP_MASQ_NTABLES
 	 */
-	if (atomic_read(&ms->refcnt)==2) {
+	if (atomic_read(&ms->refcnt)==IP_MASQ_NTABLES) {
 		__ip_masq_set_expire(ms, ms->timeout);
 	} else {
 		IP_MASQ_DEBUG(0, "did not set timer with refcnt=%d, called from %p\n",
@@ -845,6 +911,9 @@ struct ip_masq * ip_masq_new(int proto, __u32 maddr, __u16 mport, __u32 saddr, _
         }
 	MOD_INC_USE_COUNT;
         memset(ms, 0, sizeof(*ms));
+	INIT_LIST_HEAD(&ms->s_list);
+	INIT_LIST_HEAD(&ms->m_list);
+	INIT_LIST_HEAD(&ms->d_list);
 	init_timer(&ms->timer);
 	ms->timer.data     = (unsigned long)ms;
 	ms->timer.function = masq_expire;
@@ -1157,11 +1226,11 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 		 */
 
 		if ( ms->flags & IP_MASQ_F_NO_SPORT && ms->protocol == IPPROTO_TCP ) {
-			ms->flags &= ~IP_MASQ_F_NO_SPORT;
 
 			write_lock(&__ip_masq_lock);
 			
 			ip_masq_unhash(ms);
+			ms->flags &= ~IP_MASQ_F_NO_SPORT;
 			ms->sport = h.portp[0];
 			ip_masq_hash(ms);	/* hash on new sport */
 
@@ -2011,16 +2080,30 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 			ms->daddr = iph->saddr;
 		} else {
                 if ( ms->flags & IP_MASQ_F_NO_DPORT ) { /*  && ms->protocol == IPPROTO_TCP ) { */
+
+			write_lock(&__ip_masq_lock);
+
+			ip_masq_unhash(ms);
                         ms->flags &= ~IP_MASQ_F_NO_DPORT;
                         ms->dport = h.portp[0];
+			ip_masq_hash(ms);	/* hash on new dport */
+
+			write_unlock(&__ip_masq_lock);
 
                         IP_MASQ_DEBUG(1, "ip_fw_demasquerade(): filled dport=%d\n",
                                ntohs(ms->dport));
 
                 }
                 if (ms->flags & IP_MASQ_F_NO_DADDR ) { /*  && ms->protocol == IPPROTO_TCP)  { */
+
+			write_lock(&__ip_masq_lock);
+
+			ip_masq_unhash(ms);
                         ms->flags &= ~IP_MASQ_F_NO_DADDR;
                         ms->daddr = iph->saddr;
+			ip_masq_hash(ms);	/* hash on new daddr */
+
+			write_unlock(&__ip_masq_lock);
 
                         IP_MASQ_DEBUG(1, "ip_fw_demasquerade(): filled daddr=%lX\n",
                                ntohl(ms->daddr));
@@ -2162,7 +2245,7 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 	char temp[129];
         int idx = 0;
 	int len=0;
-
+	struct list_head *l,*e;
 
 	if (offset < 128)
 	{
@@ -2183,8 +2266,9 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 	 */
 	read_lock_bh(&__ip_masq_lock);
 
-        for(ms = ip_masq_m_tab[idx]; ms ; ms = ms->m_link)
-	{
+	l = &ip_masq_m_table[idx];
+	for (e=l->next; e!=l; e=e->next) {
+		ms = list_entry(e, struct ip_masq, m_list);
 		pos += 128;
 		if (pos <= offset) {
 			len = 0;
@@ -2400,6 +2484,12 @@ u32 ip_masq_select_addr(struct device *dev, u32 dst, int scope)
  */
 __initfunc(int ip_masq_init(void))
 {
+	int idx;
+        for(idx = 0; idx < IP_MASQ_TAB_SIZE; idx++)  {
+		INIT_LIST_HEAD(&ip_masq_s_table[idx]);
+		INIT_LIST_HEAD(&ip_masq_m_table[idx]);
+		INIT_LIST_HEAD(&ip_masq_d_table[idx]);
+	}
 #ifdef CONFIG_PROC_FS        
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPMSQHST, 13, "ip_masquerade",

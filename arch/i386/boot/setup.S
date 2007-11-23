@@ -757,11 +757,11 @@ bootsect_panic_mess:
 ! with no keyboard attached...
 
 empty_8042:
-       push    cx
-       mov     cx,#0xFFFF
+       push    ecx
+       mov     ecx,#0xFFFFFF
 
 empty_8042_loop:
-       dec     cx
+       dec     ecx
        jz      empty_8042_end_loop
 
 	call	delay
@@ -775,7 +775,7 @@ no_output:
 	test	al,#2		! is input buffer full?
 	jnz	empty_8042_loop	! yes - loop
 empty_8042_end_loop:
-        pop     cx
+        pop     ecx
 	ret
 
 !

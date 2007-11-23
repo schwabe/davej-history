@@ -67,6 +67,7 @@ extern int ewrk3_probe(struct device *);
 extern int de4x5_probe(struct device *);
 extern int el1_probe(struct device *);
 extern int wavelan_probe(struct device *);
+extern int arlan_probe(struct device *);
 extern int el16_probe(struct device *);
 extern int elmc_probe(struct device *);
 extern int skmca_probe(struct device *);
@@ -111,6 +112,8 @@ extern int am79c961_probe(struct device *dev);
 extern int epic100_probe(struct device *dev);
 extern int rtl8139_probe(struct device *dev);
 extern int hplance_probe(struct device *dev);
+extern int bagetlance_probe(struct device *);
+extern int dec_lance_probe(struct device *);
 extern int via_rhine_probe(struct device *dev);
 extern int tc515_probe(struct device *dev);
 extern int lance_probe(struct device *dev);
@@ -357,6 +360,9 @@ struct devprobe isa_probes[] __initdata = {
 #ifdef CONFIG_WAVELAN		/* WaveLAN */
 	{wavelan_probe, 0},
 #endif
+#ifdef CONFIG_ARLAN		/* Aironet */
+	{arlan_probe, 0},
+#endif
 #ifdef CONFIG_EL16		/* 3c507 */
 	{el16_probe, 0},
 #endif
@@ -442,6 +448,12 @@ struct devprobe sgi_probes[] __initdata = {
 struct devprobe mips_probes[] __initdata = {
 #ifdef CONFIG_MIPS_JAZZ_SONIC
 	{sonic_probe, 0},
+#endif
+#ifdef CONFIG_DECLANCE		/* DECstation on-board controller */
+	{dec_lance_probe, 0},   /* and maybe TURBOchannel option boards */
+#endif
+#ifdef CONFIG_BAGETLANCE        /* Lance-based Baget ethernet boards */
+        {bagetlance_probe, 0},
 #endif
 	{NULL, 0},
 };
@@ -668,6 +680,14 @@ static struct device mkiss_bootstrap = {
 #define NEXT_DEV (&mkiss_bootstrap)
 #endif	/* MKISS */
   
+#if defined(CONFIG_YAM)
+extern int yam_init(struct device *);
+static struct device yam_bootstrap = {
+  "yam", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NEXT_DEV, yam_init, };
+#undef NEXT_DEV
+#define NEXT_DEV (&yam_bootstrap)
+#endif	/* CONFIG_YAM */
+  
 #if defined(CONFIG_STRIP)
 extern int strip_init_ctrl_dev(struct device *);
 static struct device strip_bootstrap = {
@@ -711,6 +731,7 @@ struct device eql_dev = {
 #ifdef CONFIG_TR
 /* Token-ring device probe */
 extern int ibmtr_probe(struct device *);
+extern int olympic_probe(struct device *);
 
 static int
 trif_probe(struct device *dev)
@@ -718,6 +739,9 @@ trif_probe(struct device *dev)
     if (1
 #ifdef CONFIG_IBMTR
 	&& ibmtr_probe(dev)
+#endif
+#ifdef CONFIG_IBMOL
+	&& olympic_probe(dev)
 #endif
 #ifdef CONFIG_SKTR
 	&& sktr_probe(dev)

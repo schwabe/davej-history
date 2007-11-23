@@ -30,16 +30,30 @@ endif
 
 ifeq ($(CONFIG_SERIAL),y)
   ifeq ($(CONFIG_SUN_SERIAL),)
-  LX_OBJS += serial.o
+    ifeq ($(CONFIG_SGI_SERIAL),)
+      ifeq ($(CONFIG_DECSTATION),)
+	ifeq ($(CONFIG_BAGET_MIPS),)
+      LX_OBJS += serial.o
+    endif
+  endif
+    endif
   endif
 else
   ifeq ($(CONFIG_SERIAL),m)
     ifeq ($(CONFIG_SUN_SERIAL),)
-    MX_OBJS += serial.o
+      ifeq ($(CONFIG_SGI_SERIAL),)
+        ifeq ($(CONFIG_DECSTATION),)
+          ifeq ($(CONFIG_BAGET_MIPS),)
+      MX_OBJS += serial.o
+      endif
+    endif
+  endif
     endif
   endif
 endif
 
+ifndef CONFIG_DECSTATION
+ifndef CONFIG_BAGET_MIPS
 ifndef CONFIG_SUN_KEYBOARD
 ifdef CONFIG_VT
 LX_OBJS += keyboard.o
@@ -56,6 +70,8 @@ endif
 
 ifdef CONFIG_MAGIC_SYSRQ
 LX_OBJS += sysrq.o
+endif
+endif
 endif
 
 ifeq ($(CONFIG_ATARI_DSP56K),y)
@@ -362,6 +378,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_VIDEO_VINO),y)
+L_OBJS += vino.o
+else
+  ifeq ($(CONFIG_VIDEO_VINO),m)
+  M_OBJS += vino.o
+  endif
+endif
+
 ifeq ($(CONFIG_RADIO_AZTECH),y)
 L_OBJS += radio-aztech.o
 else
@@ -477,6 +501,10 @@ else
   MOD_SUB_DIRS += hfmodem
   endif
 
+endif
+
+ifeq ($(CONFIG_DZ),y)
+  L_OBJS += dz.o
 endif
 
 include $(TOPDIR)/Rules.make

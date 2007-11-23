@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.164.2.3 1999/06/02 04:15:06 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164.2.5 1999/06/30 09:27:05 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -916,13 +916,20 @@ extern void tcp_tw_deschedule(struct tcp_tw_bucket *tw);
 
 void tcp_timewait_kill(struct tcp_tw_bucket *tw)
 {
-	/* Unlink from various places. */
+	struct tcp_bind_bucket *tb = tw->tb;
+
+	/* Disassociate with bind bucket. */
 	if(tw->bind_next)
 		tw->bind_next->bind_pprev = tw->bind_pprev;
 	*(tw->bind_pprev) = tw->bind_next;
-	if(tw->tb->owners == NULL)
-		tcp_inc_slow_timer(TCP_SLT_BUCKETGC);
+	if (tb->owners == NULL) {
+		if (tb->next)
+			tb->next->pprev = tb->pprev;
+		*(tb->pprev) = tb->next;
+		kmem_cache_free(tcp_bucket_cachep, tb);
+	}
 
+	/* Unlink from established hashes. */
 	if(tw->next)
 		tw->next->pprev = tw->pprev;
 	*tw->pprev = tw->next;
@@ -1023,6 +1030,7 @@ static __inline__ void tcp_tw_hashdance(struct sock *sk, struct tcp_tw_bucket *t
 		sk->bind_next->bind_pprev = &tw->bind_next;
 	tw->bind_pprev = sk->bind_pprev;
 	*sk->bind_pprev = (struct sock *)tw;
+	sk->prev = NULL;
 
 	/* Step 3: Same for the protocol sklist. */
 	(tw->sklist_next = sk->sklist_next)->sklist_prev = (struct sock *)tw;

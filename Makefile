@@ -27,6 +27,7 @@ CPP	=$(CC) -E
 AR	=$(CROSS_COMPILE)ar
 NM	=$(CROSS_COMPILE)nm
 STRIP	=$(CROSS_COMPILE)strip
+OBJCOPY	=$(CROSS_COMPILE)objcopy
 OBJDUMP	=$(CROSS_COMPILE)objdump
 MAKE	=make
 GENKSYMS=/sbin/genksyms
@@ -70,7 +71,7 @@ KERNELRELEASE=$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
 #
 # INSTALL_MOD_PATH specifies a prefix to MODLIB for module directory 
 # relocations required by build roots.  This is not defined in the
-# makefile but the arguement can be passed to make if needed.
+# makefile but the argument can be passed to make if needed.
 #
 
 #
@@ -87,6 +88,9 @@ SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 #
 
 CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
+
+# use '-fno-strict-aliasing', but only if the compiler can take it
+CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
 
 ifdef CONFIG_SMP
 CFLAGS += -D__SMP__
@@ -162,6 +166,10 @@ ifdef CONFIG_PNP
 DRIVERS := $(DRIVERS) drivers/pnp/pnp.a
 endif
 
+ifdef CONFIG_SGI
+DRIVERS := $(DRIVERS) drivers/sgi/sgi.a
+endif
+
 ifdef CONFIG_VT
 DRIVERS := $(DRIVERS) drivers/video/video.a
 endif
@@ -172,6 +180,10 @@ endif
 
 ifdef CONFIG_HAMRADIO
 DRIVERS := $(DRIVERS) drivers/net/hamradio/hamradio.a
+endif
+
+ifeq ($(CONFIG_TC),y)
+DRIVERS := $(DRIVERS) drivers/tc/tc.a
 endif
 
 ifeq ($(CONFIG_USB),y)
@@ -287,7 +299,7 @@ init/main.o: init/main.c include/config/MARKER
 fs lib mm ipc kernel drivers net: dummy
 	$(MAKE) $(subst $@, _dir_$@, $@)
 
-MODFLAGS = -DMODULE
+MODFLAGS += -DMODULE
 ifdef CONFIG_MODULES
 ifdef CONFIG_MODVERSIONS
 MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h
@@ -323,7 +335,7 @@ modules_install:
 	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
 	if [ -f IRDA_MODULES  ]; then inst_mod IRDA_MODULES  net;   fi; \
 	\
-	ls *.o > $$MODLIB/.allmods; \
+	for f in *.o; do [ -r $$f ] && echo $$f; done > $$MODLIB/.allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \
 	if [ -s $$MODLIB/.misc ]; then inst_mod $$MODLIB/.misc misc; fi; \
 	rm -f $$MODLIB/.misc $$MODLIB/.allmods; \
@@ -343,8 +355,8 @@ endif
 
 clean:	archclean
 	rm -f kernel/ksyms.lst include/linux/compile.h
-	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog/.*' \
-		! -regex '.*ksymoops/.*' -print`
+	rm -f core `find . -name '*.[oas]' ! \( -regex '.*lxdialog/.*' \
+		-o -regex '.*ksymoops/.*' \) -print`
 	rm -f core `find . -type f -name 'core' -print`
 	rm -f core `find . -name '.*.flags' -print`
 	rm -f vmlinux System.map
@@ -391,7 +403,7 @@ backup: mrproper
 sums:
 	find . -type f -print | sort | xargs sum > .SUMS
 
-dep-files: scripts/mkdep archdep include/linux/version.h
+dep-files: scripts/mkdep archdep include/linux/version.h new-genksyms
 	scripts/mkdep init/*.c > .depend
 	scripts/mkdep `find $(FINDHPATH) -follow -name \*.h ! -name modversions.h -print` > .hdepend
 #	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep ;done
@@ -401,7 +413,19 @@ dep-files: scripts/mkdep archdep include/linux/version.h
 MODVERFILE :=
 
 ifdef CONFIG_MODVERSIONS
+
 MODVERFILE := $(TOPDIR)/include/linux/modversions.h
+
+new-genksyms:
+	@$(GENKSYMS) -k $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) </dev/null \
+	2>/dev/null || ( echo -e "\nYou need a new version of the genksyms\
+	program, which is part of\nthe modutils package. Please read the file\
+	Documentation/Changes\nfor more information.\n"; exit 1 )
+
+else
+
+new-genksyms:
+
 endif
 
 depend dep: dep-files $(MODVERFILE)

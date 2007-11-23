@@ -24,6 +24,23 @@ extern void srm_device_interrupt(unsigned long vector, struct pt_regs * regs);
 
 extern void handle_irq(int irq, int ack, struct pt_regs * regs);
 
+extern char _stext;
+static inline void alpha_do_profile (unsigned long pc)
+{
+	if (prof_buffer && current->pid) {
+		pc -= (unsigned long) &_stext;
+		pc >>= prof_shift;
+		/*
+		 * Don't ignore out-of-bounds PC values silently,
+		 * put them into the last histogram slot, so if
+		 * present, they will show up as a sharp peak.
+		 */
+		if (pc > prof_len - 1)
+			pc = prof_len - 1;
+		atomic_inc((atomic_t *)&prof_buffer[pc]);
+	}
+}
+
 #define RTC_IRQ    8
 #ifdef CONFIG_RTC
 #define TIMER_IRQ  0			 /* timer is the pit */

@@ -3,7 +3,7 @@
  *
  * Included from linux/fs/namei.c
  *
- * $Id: namei.h,v 1.10 1998/10/28 08:13:24 jj Exp $
+ * $Id: namei.h,v 1.6 1999/01/04 16:09:23 ralf Exp $
  */
 #ifndef __ASM_MIPS_NAMEI_H
 #define __ASM_MIPS_NAMEI_H

@@ -75,11 +75,7 @@ extern struct sock *tcp_listening_hash[TCP_LHTABLE_SIZE];
  */
 struct tcp_bind_bucket {
 	unsigned short		port;
-	unsigned short		flags;
-#define TCPB_FLAG_LOCKED	0x0001
-#define TCPB_FLAG_FASTREUSE	0x0002
-#define TCPB_FLAG_GOODSOCKNUM	0x0004
-
+	unsigned short		fastreuse;
 	struct tcp_bind_bucket	*next;
 	struct sock		*owners;
 	struct tcp_bind_bucket	**pprev;
@@ -114,32 +110,6 @@ static __inline__ void tcp_reg_zap(struct sock *sk)
 static __inline__ int tcp_bhashfn(__u16 lport)
 {
 	return (lport & (TCP_BHTABLE_SIZE - 1));
-}
-
-static __inline__ void tcp_sk_bindify(struct sock *sk)
-{
-	struct tcp_bind_bucket *tb;
-	unsigned short snum = sk->num;
-
-	for(tb = tcp_bound_hash[tcp_bhashfn(snum)]; tb->port != snum; tb = tb->next)
-		;
-	/* Update bucket flags. */
-	if(tb->owners == NULL) {
-		/* We're the first. */
-		if(sk->reuse && sk->state != TCP_LISTEN)
-			tb->flags = TCPB_FLAG_FASTREUSE;
-		else
-			tb->flags = 0;
-	} else {
-		if((tb->flags & TCPB_FLAG_FASTREUSE) &&
-		   ((sk->reuse == 0) || (sk->state == TCP_LISTEN)))
-			tb->flags &= ~TCPB_FLAG_FASTREUSE;
-	}
-	if((sk->bind_next = tb->owners) != NULL)
-		tb->owners->bind_pprev = &sk->bind_next;
-	tb->owners = sk;
-	sk->bind_pprev = &tb->owners;
-	sk->prev = (struct sock *) tb;
 }
 
 /* This is a TIME_WAIT bucket.  It works around the memory consumption
@@ -478,7 +448,9 @@ extern __inline int between(__u32 seq1, __u32 seq2, __u32 seq3)
 extern struct proto tcp_prot;
 extern struct tcp_mib tcp_statistics;
 
-extern unsigned short		tcp_good_socknum(void);
+extern void			tcp_put_port(struct sock *sk);
+extern void			__tcp_put_port(struct sock *sk);
+extern void			tcp_inherit_port(struct sock *sk, struct sock *child);
 
 extern void			tcp_v4_err(struct sk_buff *skb,
 					   unsigned char *, int);
@@ -631,8 +603,7 @@ struct tcp_sl_timer {
 #define TCP_SLT_SYNACK		0
 #define TCP_SLT_KEEPALIVE	1
 #define TCP_SLT_TWKILL		2
-#define TCP_SLT_BUCKETGC	3
-#define TCP_SLT_MAX		4
+#define TCP_SLT_MAX		3
 
 extern struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX];
  
@@ -1068,17 +1039,6 @@ extern __inline__ void tcp_dec_slow_timer(int timer)
 	struct tcp_sl_timer *slt = &tcp_slt_array[timer];
 
 	atomic_dec(&slt->count);
-}
-
-/* This needs to use a slow timer, so it is here. */
-static __inline__ void tcp_sk_unbindify(struct sock *sk)
-{
-	struct tcp_bind_bucket *tb = (struct tcp_bind_bucket *) sk->prev;
-	if(sk->bind_next)
-		sk->bind_next->bind_pprev = sk->bind_pprev;
-	*sk->bind_pprev = sk->bind_next;
-	if(tb->owners == NULL)
-		tcp_inc_slow_timer(TCP_SLT_BUCKETGC);
 }
 
 extern const char timer_bug_msg[];

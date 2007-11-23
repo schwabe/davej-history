@@ -54,7 +54,12 @@ tristate 'UFS filesystem support' CONFIG_UFS_FS
 if [ "$CONFIG_UFS_FS" != "n" ]; then
   bool '   UFS filesystem write support (experimental)' CONFIG_UFS_FS_WRITE
 fi
-
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'SGI EFS filesystem support (read only) (experimental)' CONFIG_EFS_FS
+  if [ "$CONFIG_EFS_FS" != "n" ]; then
+    define_bool CONFIG_SGI_PARTITION y
+  fi
+fi
 
 if [ "$CONFIG_NET" = "y" ]; then
 
@@ -69,9 +74,9 @@ if [ "$CONFIG_INET" = "y" ]; then
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     tristate 'NFS server support' CONFIG_NFSD
-    if [ "$CONFIG_NFSD" != "n" ]; then
-      bool '   Emulate SUN NFS server' CONFIG_NFSD_SUN
-    fi
+  fi
+  if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_NFSD" != "n" ]; then
+    bool '   Emulate SUN NFS server' CONFIG_NFSD_SUN
   fi
   if [ "$CONFIG_NFS_FS" = "y" -o "$CONFIG_NFSD" = "y" ]; then
     define_bool CONFIG_SUNRPC y

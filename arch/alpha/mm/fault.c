@@ -34,15 +34,16 @@ extern void die_if_kernel(char *,struct pt_regs *,long, unsigned long *);
  */
 
 #ifndef __SMP__
-int last_asn = ASN_FIRST_VERSION;
+unsigned long last_asn = ASN_FIRST_VERSION;
 #endif
 
 void
 get_new_mmu_context(struct task_struct *p, struct mm_struct *mm)
 {
-	p->tss.asn = HARDWARE_ASN_MASK & __get_new_mmu_context(p, mm);
+	unsigned long new = __get_new_mmu_context();
+	mm->context = new;
+	p->tss.asn = new & HARDWARE_ASN_MASK;
 }
-
 
 /*
  * This routine handles page faults.  It determines the address,

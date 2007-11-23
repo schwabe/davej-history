@@ -736,6 +736,54 @@ inline void wait_for_buffer(struct device * dev)
 		outw( SEEQCMD_WINDOW_INT_ACK | (status & SEEQCMD_INT_MASK), SEEQ_CMD);
 }
 	
+#ifdef MODULE
+
+static char devicename[9] = { 0, };
+
+static struct device dev_seeq =
+{
+	devicename, /* device name is inserted by linux/drivers/net/net_init.c */
+	0, 0, 0, 0,
+	0x300, 5,
+	0, 0, 0, NULL, seeq8005_probe
+};
+
+static int io=0x320;
+static int irq=10;
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
+
+int init_module(void)
+{
+	dev_seeq.irq=irq;
+	dev_seeq.base_addr=io;
+	if (register_netdev(&dev_seeq) != 0)
+		return -EIO;
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	/*
+	 *	No need to check MOD_IN_USE, as sys_delete_module() checks.
+	 */
+
+	unregister_netdev(&dev_seeq);
+
+	/*
+	 *	Free up the private structure, or leak memory :-)
+	 */
+
+	kfree(dev_seeq.priv);
+	dev_seeq.priv = NULL;	/* gets re-allocated by el1_probe1 */
+
+	/*
+	 *	If we don't do this, we can't re-insmod it later.
+	 */
+	release_region(dev_seeq.base_addr, EL1_IO_EXTENT);
+}
+
+#endif /* MODULE */
 
 /*
  * Local variables:

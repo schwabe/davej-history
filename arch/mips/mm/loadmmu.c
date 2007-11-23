@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: loadmmu.c,v 1.7 1998/03/27 08:53:41 ralf Exp $
+ * $Id: loadmmu.c,v 1.9.2.2 1999/06/17 12:06:42 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -53,7 +53,7 @@ void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
 
 int (*user_mode)(struct pt_regs *);
 
-asmlinkage void (*resume)(void *tsk);
+asmlinkage void *(*resume)(void *last, void *next);
 
 extern void ld_mmu_r2300(void);
 extern void ld_mmu_r4xx0(void);
@@ -66,6 +66,7 @@ __initfunc(void loadmmu(void))
 	switch(mips_cputype) {
 	case CPU_R2000:
 	case CPU_R3000:
+	case CPU_R3000A:
 		printk("Loading R[23]00 MMU routines.\n");
 		ld_mmu_r2300();
 		break;

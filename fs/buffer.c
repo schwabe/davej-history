@@ -100,7 +100,7 @@ union bdflush_param{
 				each time we call refill */
 		int nref_dirt; /* Dirty buffer threshold for activating bdflush
 				  when trying to refill buffers. */
-		int dummy1;    /* unused */
+		int interval; /* jiffies delay between kupdate flushes */
 		int age_buffer;  /* Time for normal buffer to age before 
 				    we flush it */
 		int age_super;  /* Time for superblock to age before we 
@@ -109,11 +109,11 @@ union bdflush_param{
 		int dummy3;    /* unused */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{40, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{40, 500, 64, 256, 5*HZ, 30*HZ, 5*HZ, 1884, 2}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   1*HZ,   1*HZ, 1, 1};
-int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 600*HZ, 600*HZ, 2047, 5};
+int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,60*HZ, 600*HZ, 600*HZ, 2047, 5};
 
 void wakeup_bdflush(int);
 
@@ -1663,8 +1663,9 @@ asmlinkage int sys_bdflush(int func, long data)
 		goto out;
 
 	if (func == 1) {
-		 error = sync_old_buffers();
-		 goto out;
+		unlock_kernel();
+		/* do_exit directly and let kupdate to do its work alone. */
+		do_exit(0);
 	}
 
 	/* Basically func 1 means read param 1, 2 means write param 1, etc */
@@ -1823,5 +1824,44 @@ int bdflush(void * unused)
 
 			interruptible_sleep_on(&bdflush_wait);
 		}
+	}
+}
+
+/*
+ * This is the kernel update daemon. It was used to live in userspace
+ * but since it's need to run safely we want it unkillable by mistake.
+ * You don't need to change your userspace configuration since
+ * the userspace `update` will do_exit(0) at the first sys_bdflush().
+ */
+int kupdate(void * unused) 
+{
+	struct task_struct * tsk = current;
+	int interval;
+
+	tsk->session = 1;
+	tsk->pgrp = 1;
+	strcpy(tsk->comm, "kupdate");
+	sigfillset(&tsk->blocked);
+	/* sigcont will wakeup kupdate after setting interval to 0 */
+	sigdelset(&tsk->blocked, SIGCONT);
+
+	lock_kernel();
+
+	for (;;) {
+		interval = bdf_prm.b_un.interval;
+		if (interval)
+		{
+			tsk->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(interval);
+		}
+		else
+		{
+			tsk->state = TASK_STOPPED;
+			schedule(); /* wait for SIGCONT */
+		}
+#ifdef DEBUG
+		printk("kupdate() activated...\n");
+#endif
+		sync_old_buffers();
 	}
 }

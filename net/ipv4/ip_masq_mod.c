@@ -4,7 +4,7 @@
  *
  * Author:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *
- * 	$Id: ip_masq_mod.c,v 1.5 1998/08/29 23:51:09 davem Exp $
+ * 	$Id: ip_masq_mod.c,v 1.5.2.1 1999/07/02 10:10:03 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -33,9 +33,7 @@ EXPORT_SYMBOL(unregister_ip_masq_mod);
 EXPORT_SYMBOL(ip_masq_mod_lkp_link);
 EXPORT_SYMBOL(ip_masq_mod_lkp_unlink);
 
-#ifdef __SMP__
 static spinlock_t masq_mod_lock = SPIN_LOCK_UNLOCKED;
-#endif
 
 /*
  *	Base pointer for registered modules

@@ -4,7 +4,7 @@
  *  Copyright (C) 1995  Waldorf Electronics
  *  Copyright (C) 1997  Ralf Baechle
  *
- * $Id: bugs.h,v 1.4 1998/05/01 01:35:47 ralf Exp $
+ * $Id: bugs.h,v 1.3 1997/12/01 18:00:36 ralf Exp $
  */
 #include <asm/bootinfo.h>
 

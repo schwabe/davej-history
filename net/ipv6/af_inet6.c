@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.43 1999/04/22 10:07:39 davem Exp $
+ *	$Id: af_inet6.c,v 1.43.2.1 1999/06/20 20:15:06 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -236,20 +236,17 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		       sizeof(struct in6_addr));
 
 	snum = ntohs(addr->sin6_port);
-	if (snum == 0) 
-		snum = sk->prot->good_socknum();
-	if (snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
+	if (snum && snum < PROT_SOCK && !capable(CAP_NET_BIND_SERVICE))
 		return(-EACCES);
 
 	/* Make sure we are allowed to bind here. */
-	if(sk->prot->verify_bind(sk, snum))
+	if(sk->prot->get_port(sk, snum) != 0)
 		return -EADDRINUSE;
 
-	sk->num = snum;
 	sk->sport = ntohs(sk->num);
 	sk->dport = 0;
 	sk->daddr = 0;
-	sk->prot->rehash(sk);
+	sk->prot->hash(sk);
 	add_to_prot_sklist(sk);
 
 	return(0);

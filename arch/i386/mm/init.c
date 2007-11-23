@@ -168,6 +168,8 @@ void show_mem(void)
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
 	printk("%d pages swap cached\n",cached);
+	printk("%ld pages in file cache\n",page_cache_size-cached);
+	printk("%ld pages in page cache\n",page_cache_size);
 	printk("%ld pages in page table cache\n",pgtable_cache_size);
 	show_buffers();
 #ifdef CONFIG_NET

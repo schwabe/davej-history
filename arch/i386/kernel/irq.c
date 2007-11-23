@@ -139,7 +139,7 @@ static struct hw_interrupt_type i8259A_irq_type = {
 /*
  * Controller mappings for all interrupt sources:
  */
-irq_desc_t irq_desc[NR_IRQS] = { [0 ... NR_IRQS-1] = { 0, &no_irq_type, }};
+irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned = { [0 ... NR_IRQS-1] = { 0, &no_irq_type, }};
 
 
 /*
@@ -927,6 +927,17 @@ void free_irq(unsigned int irq, void *dev_id)
 		return;
 
 	spin_lock_irqsave(&irq_controller_lock,flags);
+
+#ifdef __SMP__
+        /* Make sure no interrupt handler is in progress when we
+           manipulate the action list and free the structure */
+        while (irq_desc[irq].status & IRQ_INPROGRESS) {
+                spin_unlock_irqrestore(&irq_controller_lock,flags);
+                udelay(1000);
+                spin_lock_irqsave(&irq_controller_lock,flags);
+        }
+#endif
+
 	for (p = &irq_desc[irq].action; (action = *p) != NULL; p = &action->next) {
 		if (action->dev_id != dev_id)
 			continue;

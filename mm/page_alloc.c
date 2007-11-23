@@ -155,12 +155,12 @@ void free_pages(unsigned long addr, unsigned long order)
 	change_bit((index) >> (1+(order)), (area)->map)
 #define CAN_DMA(x) (PageDMA(x))
 #define ADDRESS(x) (PAGE_OFFSET + ((x) << PAGE_SHIFT))
-#define RMQUEUE(order, gfp_mask) \
+#define RMQUEUE_DMA(order) \
 do { struct free_area_struct * area = free_area+order; \
      unsigned long new_order = order; \
 	do { struct page *prev = memory_head(area), *ret = prev->next; \
 		while (memory_head(area) != ret) { \
-			if (!(gfp_mask & __GFP_DMA) || CAN_DMA(ret)) { \
+			if (CAN_DMA(ret)) { \
 				unsigned long map_nr; \
 				(prev->next = ret->next)->prev = prev; \
 				map_nr = ret - mem_map; \
@@ -172,6 +172,45 @@ do { struct free_area_struct * area = free_area+order; \
 			} \
 			prev = ret; \
 			ret = ret->next; \
+		} \
+		new_order++; area++; \
+	} while (new_order < NR_MEM_LISTS); \
+} while (0)
+#define RMQUEUE_NODMA(order) \
+do { struct free_area_struct * area = free_area+order; \
+     unsigned long new_order = order; \
+	do { struct page *prev = memory_head(area), *ret = prev->next; \
+		while (memory_head(area) != ret) { \
+			if (!CAN_DMA(ret)) { \
+				unsigned long map_nr; \
+				(prev->next = ret->next)->prev = prev; \
+				map_nr = ret - mem_map; \
+				MARK_USED(map_nr, new_order, area); \
+				nr_free_pages -= 1 << order; \
+				EXPAND(ret, map_nr, order, new_order, area); \
+				spin_unlock_irqrestore(&page_alloc_lock, flags); \
+				return ADDRESS(map_nr); \
+			} \
+			prev = ret; \
+			ret = ret->next; \
+		} \
+		new_order++; area++; \
+	} while (new_order < NR_MEM_LISTS); \
+} while (0)
+#define RMQUEUE_ANY(order) \
+do { struct free_area_struct * area = free_area+order; \
+     unsigned long new_order = order; \
+	do { struct page *prev = memory_head(area), *ret = prev->next; \
+		if (memory_head(area) != ret) { \
+			unsigned long map_nr; \
+			(prev->next = ret->next)->prev = prev; \
+			map_nr = ret - mem_map; \
+			MARK_USED(map_nr, new_order, area); \
+			nr_free_pages -= 1 << order; \
+			EXPAND(ret, map_nr, order, new_order, area); \
+			spin_unlock_irqrestore(&page_alloc_lock, flags); \
+			return ADDRESS(map_nr); \
+		 \
 		} \
 		new_order++; area++; \
 	} while (new_order < NR_MEM_LISTS); \
@@ -236,7 +275,12 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	}
 ok_to_allocate:
 	spin_lock_irqsave(&page_alloc_lock, flags);
-	RMQUEUE(order, gfp_mask);
+	if (gfp_mask & __GFP_DMA)
+		RMQUEUE_DMA(order);
+	else {
+		RMQUEUE_NODMA(order);
+		RMQUEUE_ANY(order);
+	}
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
 
 	/*

@@ -1,4 +1,4 @@
-/* $Id: newport.h,v 1.1 1998/08/19 21:58:12 ralf Exp $
+/* $Id: newport.h,v 1.2 1999/03/02 23:40:53 tsbogend Exp $
  *
  * newport.h: Defines and register layout for NEWPORT graphics
  *            hardware.
@@ -581,6 +581,13 @@ xmap9SetModeReg (struct newport_regs *rex, unsigned int modereg, unsigned int da
                         DCB_DATAWIDTH_4 | WAYSLOW_DCB_XMAP9_PROTOCOL; 
         rex->set.dcbdata0.all = ((modereg) << 24) | (data24 & 0xffffff);
 }
+
+#define BT445_PROTOCOL		DCB_CYCLES(1,1,3)
+
+#define BT445_CSR_ADDR_REG	(0 << DCB_CRS_SHIFT)
+#define BT445_CSR_REVISION	(2 << DCB_CRS_SHIFT)
+
+#define BT445_REVISION_REG	0x01
 
 #endif /* !(_SGI_NEWPORT_H) */
 

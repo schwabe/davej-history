@@ -19,6 +19,7 @@
  *		Adam Sulmicki <adam@cfar.umd.edu>
  *
  *	Changes:
+ *		Marcelo Tosatti <marcelo@conectiva.com.br> : dont accept mtu 0 or <
  *		Alan Cox	:	device private ioctl copies fields back.
  *		Alan Cox	:	Transmit queue code does relevant stunts to
  *					keep the queue safe.
@@ -1470,7 +1471,7 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 			 *	MTU must be positive.
 			 */
 			 
-			if (ifr->ifr_mtu<0)
+			if (ifr->ifr_mtu<=0)
 				return -EINVAL;
 
 			if (dev->change_mtu)

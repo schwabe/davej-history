@@ -9,13 +9,13 @@
 
 struct cpuinfo_alpha {
 	unsigned long loops_per_sec;
+	unsigned long last_asn;
 	unsigned long *pgd_cache;
 	unsigned long *pte_cache;
 	unsigned long pgtable_cache_sz;
 	unsigned long ipi_count;
 	unsigned long prof_multiplier;
 	unsigned long prof_counter;
-	int last_asn;
 } __cacheline_aligned;
 
 extern struct cpuinfo_alpha cpu_data[NR_CPUS];

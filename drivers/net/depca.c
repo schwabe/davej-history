@@ -1900,14 +1900,12 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
       tmp.addr[i] = dev->dev_addr[i];
     }
     ioc->len = ETH_ALEN;
-    if (verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len)) return -EFAULT;
-    copy_to_user(ioc->data, tmp.addr, ioc->len);
+    if (copy_to_user(ioc->data, tmp.addr, ioc->len)) return -EFAULT;
     break;
 
   case DEPCA_SET_HWADDR:             /* Set the hardware address */
     if (!capable(CAP_NET_ADMIN)) return -EPERM;
-    if (verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN)) return -EFAULT;
-    copy_from_user(tmp.addr,ioc->data,ETH_ALEN);
+    if (copy_from_user(tmp.addr,ioc->data,ETH_ALEN)) return -EFAULT;
     for (i=0; i<ETH_ALEN; i++) {
       dev->dev_addr[i] = tmp.addr[i];
     }
@@ -1958,14 +1956,12 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
   case DEPCA_GET_MCA:                /* Get the multicast address table */
     ioc->len = (HASH_TABLE_LEN >> 3);
-    if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
-    copy_to_user(ioc->data, lp->init_block.mcast_table, ioc->len); 
+    if (copy_to_user(ioc->data, lp->init_block.mcast_table, ioc->len)) return -EFAULT; 
     break;
 
   case DEPCA_SET_MCA:                /* Set a multicast address */
     if (!capable(CAP_NET_ADMIN)) return -EPERM;
-    if (verify_area(VERIFY_READ, ioc->data, ETH_ALEN*ioc->len)) return -EFAULT;
-    copy_from_user(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
+    if (copy_from_user(tmp.addr, ioc->data, ETH_ALEN * ioc->len)) return -EFAULT;
     set_multicast_list(dev);
     break;
 
@@ -1982,11 +1978,8 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
   case DEPCA_GET_STATS:              /* Get the driver statistics */
     cli();
     ioc->len = sizeof(lp->pktStats);
-    if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) {
-	status = -EFAULT;
-    } else {
-	copy_to_user(ioc->data, &lp->pktStats, ioc->len); 
-    }
+	if (copy_to_user(ioc->data, &lp->pktStats, ioc->len)) 
+		status = -EFAULT;
     sti();
     break;
 
@@ -2004,8 +1997,7 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     tmp.sval[i++] = inw(DEPCA_DATA);
     memcpy(&tmp.sval[i], &lp->init_block, sizeof(struct depca_init));
     ioc->len = i+sizeof(struct depca_init);
-    if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
-    copy_to_user(ioc->data, tmp.addr, ioc->len);
+    if (copy_to_user(ioc->data, tmp.addr, ioc->len)) return -EFAULT;
     break;
 
   default:

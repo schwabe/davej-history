@@ -48,6 +48,7 @@
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
 #include <linux/random.h>
+#include <linux/pkt_sched.h>
 #include <asm/byteorder.h>
 #include "syncppp.h"
 
@@ -771,7 +772,7 @@ static void sppp_cp_send (struct sppp *sp, u16 proto, u8 type,
 	}
 	sp->obytes += skb->len;
 	/* Control is high priority so it doesnt get queued behind data */
-	skb->priority=1;
+	skb->priority=TC_PRIO_CONTROL;
 	skb->dev = dev;
 	dev_queue_xmit(skb);
 }
@@ -813,7 +814,7 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 			dev->name,  ntohl (ch->type), ch->par1,
 			ch->par2, ch->rel, ch->time0, ch->time1);
 	sp->obytes += skb->len;
-	skb->priority=1;
+	skb->priority=TC_PRIO_CONTROL;
 	skb->dev = dev;
 	dev_queue_xmit(skb);
 }

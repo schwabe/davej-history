@@ -14,6 +14,7 @@
  *
  *	Fixes:
  *	Vitaly E. Lavrov		RTA_OK arithmetics was wrong.
+ *	Alexey Zhuravlev		ifi_change does something useful 
  */
 
 #include <linux/config.h>
@@ -139,7 +140,7 @@ int rtnetlink_send(struct sk_buff *skb, u32 pid, unsigned group, int echo)
 }
 
 static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
-				 int type, u32 pid, u32 seq)
+				 int type, u32 pid, u32 seq, u32 change)
 {
 	struct ifinfomsg *r;
 	struct nlmsghdr  *nlh;
@@ -152,7 +153,7 @@ static int rtnetlink_fill_ifinfo(struct sk_buff *skb, struct device *dev,
 	r->ifi_type = dev->type;
 	r->ifi_index = dev->ifindex;
 	r->ifi_flags = dev->flags;
-	r->ifi_change = ~0U;
+	r->ifi_change = change;
 
 	RTA_PUT(skb, IFLA_IFNAME, strlen(dev->name)+1, dev->name);
 	if (dev->addr_len) {
@@ -192,7 +193,7 @@ int rtnetlink_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 	for (dev=dev_base, idx=0; dev; dev = dev->next, idx++) {
 		if (idx < s_idx)
 			continue;
-		if (rtnetlink_fill_ifinfo(skb, dev, RTM_NEWLINK, NETLINK_CB(cb->skb).pid, cb->nlh->nlmsg_seq) <= 0)
+		if (rtnetlink_fill_ifinfo(skb, dev, RTM_NEWLINK, NETLINK_CB(cb->skb).pid, cb->nlh->nlmsg_seq, 0) <= 0)
 			break;
 	}
 	cb->args[0] = idx;
@@ -235,7 +236,7 @@ void rtmsg_ifinfo(int type, struct device *dev)
 	if (!skb)
 		return;
 
-	if (rtnetlink_fill_ifinfo(skb, dev, type, 0, 0) < 0) {
+	if (rtnetlink_fill_ifinfo(skb, dev, type, 0, 0, ~0U) < 0) {
 		kfree_skb(skb);
 		return;
 	}

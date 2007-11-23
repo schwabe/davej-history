@@ -103,6 +103,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( DEC,		DEC_21152,	"DC21152"),
 	DEVICE( DEC,		DEC_21153,	"DC21153"),
 	DEVICE( DEC,		DEC_21154,	"DC21154"),
+	DEVICE( DEC,		DEC_21285,	"DC21285 Footbridge"),
 	DEVICE( CIRRUS,		CIRRUS_7548,	"GD 7548"),
 	DEVICE( CIRRUS,		CIRRUS_5430,	"GD 5430"),
 	DEVICE( CIRRUS,		CIRRUS_5434_4,	"GD 5434"),
@@ -222,6 +223,9 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( X,		X_AGX016,	"ITT AGX016"),
 	DEVICE( PICOP,		PICOP_PT86C52X,	"PT86C52x Vesuvius"),
 	DEVICE( PICOP,		PICOP_PT80C524,	"PT80C524 Nile"),
+	DEVICE( MYLEX,		MYLEX_DAC960P_V2,"DAC960P V2"),
+	DEVICE( MYLEX,		MYLEX_DAC960P_V3,"DAC960P V3"),
+	DEVICE( MYLEX,		MYLEX_DAC960P_V4,"DAC960P V4"),
 	DEVICE( APPLE,		APPLE_BANDIT,	"Bandit"),
 	DEVICE( APPLE,		APPLE_GC,	"Grand Central"),
 	DEVICE( APPLE,		APPLE_HYDRA,	"Hydra"),
@@ -303,6 +307,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( NEOMAGIC,	NEOMAGIC_MAGICGRAPH_128V, "MagicGraph 128V"),
 	DEVICE( NEOMAGIC,	NEOMAGIC_MAGICGRAPH_128ZV, "MagicGraph 128ZV"),
 	DEVICE( NEOMAGIC,	NEOMAGIC_MAGICGRAPH_NM2160, "MagicGraph NM2160"),
+	DEVICE( NEOMAGIC,	NEOMAGIC_MAGICGRAPH_128ZVPLUS, "MagicGraph 128ZV+"),
 	DEVICE( ASP,		ASP_ABP940,	"ABP940"),
 	DEVICE( ASP,		ASP_ABP940U,	"ABP940U"),
 	DEVICE( ASP,		ASP_ABP940UW,	"ABP940UW"),
@@ -460,6 +465,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( SATSAGEM,	SATSAGEM_PCR2101,"PCR2101 DVB receiver"),
 	DEVICE( SATSAGEM,	SATSAGEM_TELSATTURBO,"Telsat Turbo DVB"),
 	DEVICE( HUGHES,		HUGHES_DIRECPC,	"DirecPC"),
+	DEVICE( ENSONIQ,	ENSONIQ_ES1371,	"ES1371"),
 	DEVICE( ENSONIQ,	ENSONIQ_AUDIOPCI,"AudioPCI"),
 	DEVICE( ALTEON,		ALTEON_ACENIC,  "AceNIC"),
 	DEVICE( PICTUREL,	PICTUREL_PCIVST,"PCIVST"),
@@ -498,11 +504,13 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( S3,		S3_ViRGE_MXPMV,	"ViRGE/MX+MV"),
 	DEVICE( S3,		S3_SONICVIBES,	"SonicVibes"),
 	DEVICE( DCI,		DCI_PCCOM4,	"PC COM PCI Bus 4 port serial Adapter"),
+	DEVICE( GENROCO,	GENROCO_HFP832,	"TURBOstor HFP832"),
 	DEVICE( INTEL,		INTEL_82375,	"82375EB"),
 	DEVICE( INTEL,		INTEL_82424,	"82424ZX Saturn"),
 	DEVICE( INTEL,		INTEL_82378,	"82378IB"),
 	DEVICE( INTEL,		INTEL_82430,	"82430ZX Aries"),
 	DEVICE( INTEL,		INTEL_82434,	"82434LX Mercury/Neptune"),
+	DEVICE( INTEL,		INTEL_I960,	"i960"),
 	DEVICE( INTEL,		INTEL_82092AA_0,"82092AA PCMCIA bridge"),
 	DEVICE( INTEL,		INTEL_82092AA_1,"82092AA EIDE"),
 	DEVICE( INTEL,		INTEL_7116,	"SAA7116"),
@@ -536,6 +544,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE(	KTI,		KTI_ET32P2,	"ET32P2"),
 	DEVICE( ADAPTEC,	ADAPTEC_7810,	"AIC-7810 RAID"),
 	DEVICE( ADAPTEC,	ADAPTEC_7821,	"AIC-7860"),
+	DEVICE( ADAPTEC,	ADAPTEC_38602,	"AIC-7860"),
 	DEVICE( ADAPTEC,	ADAPTEC_7850,	"AIC-7850"),
 	DEVICE( ADAPTEC,	ADAPTEC_7855,	"AIC-7855"),
 	DEVICE( ADAPTEC,	ADAPTEC_5800,	"AIC-5800"),
@@ -627,8 +636,8 @@ static const char *pci_strclass (unsigned int class)
 	      case PCI_CLASS_STORAGE_SCSI:		return "SCSI storage controller";
 	      case PCI_CLASS_STORAGE_IDE:		return "IDE interface";
 	      case PCI_CLASS_STORAGE_FLOPPY:		return "Floppy disk controller";
-	      case PCI_CLASS_STORAGE_IPI:		return "IPI bus controller";
-	      case PCI_CLASS_STORAGE_RAID:		return "RAID bus controller";
+	      case PCI_CLASS_STORAGE_IPI:		return "IPI storage controller";
+	      case PCI_CLASS_STORAGE_RAID:		return "RAID storage controller";
 	      case PCI_CLASS_STORAGE_OTHER:		return "Unknown mass storage controller";
 
 	      case PCI_CLASS_NETWORK_ETHERNET:		return "Ethernet controller";
@@ -736,6 +745,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_N9:		return "Number Nine";
 	      case PCI_VENDOR_ID_UMC:		return "UMC";
 	      case PCI_VENDOR_ID_X:		return "X TECHNOLOGY";
+	      case PCI_VENDOR_ID_MYLEX:		return "Mylex";
 	      case PCI_VENDOR_ID_PICOP:		return "PicoPower";
 	      case PCI_VENDOR_ID_APPLE:		return "Apple";
 	      case PCI_VENDOR_ID_NEXGEN:	return "Nexgen";
@@ -826,6 +836,7 @@ static const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_NETVIN:	return "NetVin";
 	      case PCI_VENDOR_ID_S3:		return "S3 Inc.";
 	      case PCI_VENDOR_ID_DCI:		return "Decision Computer Int.";
+	      case PCI_VENDOR_ID_GENROCO:	return "Genroco";
 	      case PCI_VENDOR_ID_INTEL:		return "Intel";
 	      case PCI_VENDOR_ID_KTI:		return "KTI";
 	      case PCI_VENDOR_ID_ADAPTEC:	return "Adaptec";

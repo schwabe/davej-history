@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.76 1999/05/08 05:54:55 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.76.2.1 1999/06/28 10:40:07 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -103,6 +103,7 @@
 #include <net/scm.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+#include <linux/smp_lock.h>
 
 #include <asm/checksum.h>
 
@@ -981,7 +982,11 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		unix_attach_fds(scm, skb);
 
 	skb->h.raw = skb->data;
+
+	unlock_kernel();
 	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
+	lock_kernel();
+
 	if (err)
 		goto out_free;
 
@@ -1013,7 +1018,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	while (skb_queue_len(&other->receive_queue) >=
 	       sysctl_unix_max_dgram_qlen)
 	{
-		if (sock->file->f_flags & O_NONBLOCK)
+		if (msg->msg_flags&MSG_DONTWAIT)
 		{
 			err = -EAGAIN;
 			goto out_unlock;
@@ -1137,11 +1142,19 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		if (scm->fp)
 			unix_attach_fds(scm, skb);
 
-		if (memcpy_fromiovec(skb_put(skb,size), msg->msg_iov, size)) {
-			kfree_skb(skb);
-			if (sent)
-				goto out;
-			return -EFAULT;
+		{
+			int err;
+
+			unlock_kernel();
+			err = memcpy_fromiovec(skb_put(skb,size), msg->msg_iov, size);
+			lock_kernel();
+
+			if(err) {
+				kfree_skb(skb);
+				if (sent)
+					goto out;
+				return -EFAULT;
+			}
 		}
 
 		other=unix_peer(sk);
@@ -1219,7 +1232,10 @@ static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	else if (size < skb->len)
 		msg->msg_flags |= MSG_TRUNC;
 
+	unlock_kernel();
 	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, size);
+	lock_kernel();
+
 	if (err)
 		goto out_free;
 
@@ -1339,11 +1355,19 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 		}
 
 		chunk = min(skb->len, size);
-		if (memcpy_toiovec(msg->msg_iov, skb->data, chunk)) {
-			skb_queue_head(&sk->receive_queue, skb);
-			if (copied == 0)
-				copied = -EFAULT;
-			break;
+		{
+			int err;
+
+			unlock_kernel();
+			err = memcpy_toiovec(msg->msg_iov, skb->data, chunk);
+			lock_kernel();
+
+			if(err) {
+				skb_queue_head(&sk->receive_queue, skb);
+				if (copied == 0)
+					copied = -EFAULT;
+				break;
+			}
 		}
 		copied += chunk;
 		size -= chunk;

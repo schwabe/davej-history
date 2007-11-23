@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: irixsig.c,v 1.11 1998/03/26 07:39:09 ralf Exp $
+ * $Id: irixsig.c,v 1.10.2.2 1999/06/17 12:06:39 ralf Exp $
  */
 
 #include <linux/kernel.h>
@@ -272,6 +272,7 @@ asmlinkage int do_irix_signal(sigset_t *oldset, struct pt_regs *regs)
 			default:
 				lock_kernel();
 				sigaddset(&current->signal, signr);
+				recalc_sigpending(current);
 				current->flags |= PF_SIGNALED;
 				do_exit(exit_code);
 				/* NOTREACHED */

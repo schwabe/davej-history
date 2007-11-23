@@ -1416,6 +1416,17 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 	hwgroup->handler = NULL;
 	(void)ide_ack_intr(hwif->io_ports[IDE_STATUS_OFFSET], hwif->io_ports[IDE_IRQ_OFFSET]);
 	del_timer(&(hwgroup->timer));
+	{
+		struct request *rq;
+		unsigned long block, sectors;
+
+		if ((rq = hwgroup->rq) != NULL) {
+			block = rq->sector;
+			block += drive->part[MINOR(rq->rq_dev)&PARTN_MASK].start_sect + drive->sect0;
+			sectors = drive->using_dma ? rq->nr_sectors : drive->mult_count ? drive->mult_count : 1;
+		}
+	}
+
 	spin_unlock_irqrestore(&hwgroup->spinlock, flags);
 	if (drive->unmask)
 		ide__sti();	/* local CPU only */

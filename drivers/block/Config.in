@@ -114,6 +114,9 @@ if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
   bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
 fi
 tristate 'XT hard disk support' CONFIG_BLK_DEV_XD
+if [ "$CONFIG_PCI" = "y" ]; then
+  tristate 'Mylex DAC960/DAC1100 PCI RAID Controller support' CONFIG_BLK_DEV_DAC960
+fi
 
 # PARIDE doesn't need PARPORT, but if PARPORT is configured as a module,
 # PARIDE must also be a module.  The bogus CONFIG_PARIDE_PARPORT option
@@ -128,6 +131,7 @@ dep_tristate 'Parallel port IDE device support' CONFIG_PARIDE $CONFIG_PARIDE_PAR
 if [ "$CONFIG_PARIDE" = "y" -o "$CONFIG_PARIDE" = "m" ]; then
   source drivers/block/paride/Config.in
 fi
+tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
 
 if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then
   define_bool CONFIG_BLK_DEV_HD y

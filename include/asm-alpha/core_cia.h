@@ -77,14 +77,14 @@
 #define CIA_MEM_R2_MASK 0x07ffffff  /* SPARSE Mem region 2 mask is 27 bits */
 #define CIA_MEM_R3_MASK 0x03ffffff  /* SPARSE Mem region 3 mask is 26 bits */
 
-#define CIA_DMA_WIN_BASE_DEFAULT	(1024*1024*1024)
-#define CIA_DMA_WIN_SIZE_DEFAULT	(1024*1024*1024)
+#define CIA_DMA_WIN_BASE_DEFAULT	(2UL*1024*1024*1024)
+#define CIA_DMA_WIN_SIZE_DEFAULT	(2UL*1024*1024*1024)
 
 #if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
 #define CIA_DMA_WIN_BASE		alpha_mv.dma_win_base
 #define CIA_DMA_WIN_SIZE		alpha_mv.dma_win_size
 #else
-#define CIA_DMA_WIN_BASE		CIA_DMA_WIN_SIZE_DEFAULT
+#define CIA_DMA_WIN_BASE		CIA_DMA_WIN_BASE_DEFAULT
 #define CIA_DMA_WIN_SIZE		CIA_DMA_WIN_SIZE_DEFAULT
 #endif
 

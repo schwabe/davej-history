@@ -140,18 +140,21 @@ extern inline void iounmap(void *addr)
 /*
  * XXX We need system specific versions of these to handle EISA address bits
  * 24-31 on SNI.
+ * XXX more SNI hacks.
  */
-#define readb(addr) (*(volatile unsigned char *) (isa_slot_offset + (unsigned long)(addr)))
-#define readw(addr) (*(volatile unsigned short *) (isa_slot_offset + (unsigned long)(addr)))
-#define readl(addr) (*(volatile unsigned int *) (isa_slot_offset + (unsigned long)(addr)))
+#define readb(addr) (*(volatile unsigned char *) (0xa0000000 + (unsigned long)(addr)))
+#define readw(addr) (*(volatile unsigned short *) (0xa0000000 + (unsigned long)(addr)))
+#define readl(addr) (*(volatile unsigned int *) (0xa0000000 + (unsigned long)(addr)))
 
-#define writeb(b,addr) (*(volatile unsigned char *) (isa_slot_offset + (unsigned long)(addr)) = (b))
-#define writew(b,addr) (*(volatile unsigned short *) (isa_slot_offset + (unsigned long)(addr)) = (b))
-#define writel(b,addr) (*(volatile unsigned int *) (isa_slot_offset + (unsigned long)(addr)) = (b))
+#define writeb(b,addr) (*(volatile unsigned char *) (0xa0000000 + (unsigned long)(addr)) = (b))
+#define writew(b,addr) (*(volatile unsigned short *) (0xa0000000 + (unsigned long)(addr)) = (b))
+#define writel(b,addr) (*(volatile unsigned int *) (0xa0000000 + (unsigned long)(addr)) = (b))
 
-#define memset_io(a,b,c)	memset((void *)(isa_slot_offset + (unsigned long)a),(b),(c))
-#define memcpy_fromio(a,b,c)	memcpy((a),(void *)(isa_slot_offset + (unsigned long)(b)),(c))
-#define memcpy_toio(a,b,c)	memcpy((void *)(isa_slot_offset + (unsigned long)(a)),(b),(c))
+#define memset_io(a,b,c)	memset((void *)(0xa0000000 + (unsigned long)a),(b),(c))
+#define memcpy_fromio(a,b,c)	memcpy((a),(void *)(0xa0000000 + (unsigned long)(b)),(c))
+#define memcpy_toio(a,b,c)	memcpy((void *)(0xa0000000 + (unsigned long)(a)),(b),(c))
+
+/* END SNI HACKS ... */
 
 /*
  * We don't have csum_partial_copy_fromio() yet, so we cheat here and

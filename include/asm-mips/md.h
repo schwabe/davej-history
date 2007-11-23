@@ -1,4 +1,4 @@
-/* $Id: md.h,v 1.1 1998/08/17 10:20:14 ralf Exp $
+/* $Id: md.h,v 1.1 1998/08/25 09:21:57 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

@@ -269,6 +269,7 @@ static inline int buffer_protected(struct buffer_head * bh)
 #include <linux/sysv_fs_i.h>
 #include <linux/affs_fs_i.h>
 #include <linux/ufs_fs_i.h>
+#include <linux/efs_fs_i.h>
 #include <linux/coda_fs_i.h>
 #include <linux/romfs_fs_i.h>
 #include <linux/smb_fs_i.h>
@@ -381,12 +382,13 @@ struct inode {
 		struct sysv_inode_info		sysv_i;
 		struct affs_inode_info		affs_i;
 		struct ufs_inode_info		ufs_i;
+		struct efs_inode_info		efs_i;
 		struct romfs_inode_info		romfs_i;
 		struct coda_inode_info		coda_i;
 		struct smb_inode_info		smbfs_i;
 		struct hfs_inode_info		hfs_i;
 		struct adfs_inode_info		adfs_i;
-		struct qnx4_inode_info		qnx4_i;	   
+		struct qnx4_inode_info		qnx4_i;
 		struct socket			socket_i;
 		void				*generic_ip;
 	} u;
@@ -505,6 +507,7 @@ extern int fasync_helper(int, struct file *, int, struct fasync_struct **);
 #include <linux/sysv_fs_sb.h>
 #include <linux/affs_fs_sb.h>
 #include <linux/ufs_fs_sb.h>
+#include <linux/efs_fs_sb.h>
 #include <linux/romfs_fs_sb.h>
 #include <linux/smb_fs_sb.h>
 #include <linux/hfs_fs_sb.h>
@@ -547,6 +550,7 @@ struct super_block {
 		struct sysv_sb_info	sysv_sb;
 		struct affs_sb_info	affs_sb;
 		struct ufs_sb_info	ufs_sb;
+		struct efs_sb_info	efs_sb;
 		struct romfs_sb_info	romfs_sb;
 		struct smb_sb_info	smbfs_sb;
 		struct hfs_sb_info	hfs_sb;
@@ -652,6 +656,10 @@ struct file_system_type {
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
 
+/* Return value for VFS lock functions - tells locks.c to lock conventionally
+ * REALLY kosha for root NFS and nfs_lock
+ */ 
+#define LOCK_USE_CLNT 1
 
 #define FLOCK_VERIFY_READ  1
 #define FLOCK_VERIFY_WRITE 2
@@ -829,6 +837,8 @@ extern struct dentry * __namei(const char *, unsigned int);
 #define lnamei(pathname)	__namei(pathname, 0)
 
 extern void iput(struct inode *);
+extern struct inode * igrab(struct inode *inode);
+extern ino_t iunique(struct super_block *, ino_t);
 extern struct inode * iget(struct super_block *, unsigned long);
 extern void clear_inode(struct inode *);
 extern struct inode * get_empty_inode(void);

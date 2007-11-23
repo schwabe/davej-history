@@ -63,6 +63,8 @@
 #define ACSI_MAJOR	28
 #define AZTECH_CDROM_MAJOR 29
 #define GRAPHDEV_MAJOR	29	/* SparcLinux & Linux/68k /dev/fb */
+#define SHMIQ_MAJOR	85	/* Linux/MIPS, SGI /dev/shmiq */
+#define USEMA_MAJOR	86	/* Linux/MIPS, SGI /dev/usema */
 #define CM206_CDROM_MAJOR 32
 #define IDE2_MAJOR	33
 #define IDE3_MAJOR	34
@@ -74,6 +76,7 @@
 #define DDV_MAJOR       39   /* AP1000 DDV block device */
 #define NBD_MAJOR	43   /* Network block device	*/
 #define RISCOM8_NORMAL_MAJOR 48
+#define DAC960_MAJOR	48	/* 48..55 */
 #define RISCOM8_CALLOUT_MAJOR 49
 #define MKISS_MAJOR	55
 #define DSP56K_MAJOR    55   /* DSP56001 processor device */
@@ -89,8 +92,21 @@
 #define SCSI_DISK6_MAJOR	70
 #define SCSI_DISK7_MAJOR	71
 
+#define LVM_BLK_MAJOR	58	/* Logical Volume Manager */
+
+#define COMPAQ_SMART2_MAJOR	72
+#define COMPAQ_SMART2_MAJOR1	73
+#define COMPAQ_SMART2_MAJOR2	74
+#define COMPAQ_SMART2_MAJOR3	75
+#define COMPAQ_SMART2_MAJOR4	76
+#define COMPAQ_SMART2_MAJOR5	77
+#define COMPAQ_SMART2_MAJOR6	78
+#define COMPAQ_SMART2_MAJOR7	79
+
 #define SPECIALIX_NORMAL_MAJOR 75
 #define SPECIALIX_CALLOUT_MAJOR 76
+
+#define LVM_CHAR_MAJOR	109	/* Logical Volume Manager */
 
 #define AURORA_MAJOR 79
 

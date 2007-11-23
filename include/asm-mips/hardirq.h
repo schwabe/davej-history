@@ -1,4 +1,4 @@
-/* $Id: hardirq.h,v 1.5 1998/08/29 21:20:21 ralf Exp $
+/* $Id: hardirq.h,v 1.4 1998/09/19 19:19:37 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

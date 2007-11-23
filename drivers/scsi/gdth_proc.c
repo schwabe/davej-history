@@ -3,6 +3,7 @@
  */
 
 #include "gdth_ioctl.h"
+#include <linux/version.h>
 
 int gdth_proc_info(char *buffer,char **start,off_t offset,int length,   
                    int hostno,int inout)

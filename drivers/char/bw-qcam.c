@@ -159,6 +159,8 @@ static struct qcam_device *qcam_init(struct parport *port)
 	struct qcam_device *q;
 	
 	q = kmalloc(sizeof(struct qcam_device), GFP_KERNEL);
+	if(q==NULL)
+		return NULL;
 
 	q->pport = port;
 	q->pdev = parport_register_device(port, "bw-qcam", NULL, NULL,

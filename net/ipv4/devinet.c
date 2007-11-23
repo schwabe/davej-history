@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.28 1999/05/08 20:00:16 davem Exp $
+ *	Version: $Id: devinet.c,v 1.28.2.1 1999/06/28 10:39:30 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -99,6 +99,9 @@ static __inline__ void inet_free_ifa(struct in_ifaddr *ifa)
 struct in_device *inetdev_init(struct device *dev)
 {
 	struct in_device *in_dev;
+
+	if (dev->mtu < 68)
+		return NULL;
 
 	in_dev = kmalloc(sizeof(*in_dev), GFP_KERNEL);
 	if (!in_dev)
@@ -721,6 +724,10 @@ static int inetdev_event(struct notifier_block *this, unsigned long event, void 
 	case NETDEV_DOWN:
 		ip_mc_down(in_dev);
 		break;
+	case NETDEV_CHANGEMTU:	
+		if (dev->mtu >= 68)
+			break;
+		/* MTU falled under minimal IP mtu. Disable IP. */
 	case NETDEV_UNREGISTER:
 		inetdev_destroy(in_dev);
 		break;

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.48 1999/03/25 10:04:43 davem Exp $
+ *	$Id: addrconf.c,v 1.48.2.1 1999/06/28 10:39:39 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -889,7 +889,6 @@ static int inet6_addr_del(int ifindex, struct in6_addr *pfx, int plen)
 	struct inet6_ifaddr *ifp;
 	struct inet6_dev *idev;
 	struct device *dev;
-	int scope;
 	
 	if ((dev = dev_get_by_index(ifindex)) == NULL)
 		return -ENODEV;
@@ -897,11 +896,9 @@ static int inet6_addr_del(int ifindex, struct in6_addr *pfx, int plen)
 	if ((idev = ipv6_get_idev(dev)) == NULL)
 		return -ENXIO;
 
-	scope = ipv6_addr_scope(pfx);
-
 	start_bh_atomic();
 	for (ifp = idev->addr_list; ifp; ifp=ifp->if_next) {
-		if (ifp->scope == scope && ifp->prefix_len == plen &&
+		if (ifp->prefix_len == plen &&
 		    (!memcmp(pfx, &ifp->addr, sizeof(struct in6_addr)))) {
 			ipv6_del_addr(ifp);
 			end_bh_atomic();
@@ -1529,6 +1526,8 @@ inet6_rtm_deladdr(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 			return -EINVAL;
 		pfx = RTA_DATA(rta[IFA_LOCAL-1]);
 	}
+	if (pfx == NULL)
+		return -EINVAL;
 
 	return inet6_addr_del(ifm->ifa_index, pfx, ifm->ifa_prefixlen);
 }
@@ -1551,6 +1550,8 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh, void *arg)
 			return -EINVAL;
 		pfx = RTA_DATA(rta[IFA_LOCAL-1]);
 	}
+	if (pfx == NULL)
+		return -EINVAL;
 
 	return inet6_addr_add(ifm->ifa_index, pfx, ifm->ifa_prefixlen);
 }

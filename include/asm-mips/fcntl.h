@@ -1,4 +1,4 @@
-/* $Id: fcntl.h,v 1.3 1998/08/29 20:41:02 ralf Exp $
+/* $Id: fcntl.h,v 1.5 1999/01/04 16:09:21 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -24,9 +24,9 @@
 #define O_NOCTTY	0x0800	/* not fcntl */
 #define FASYNC		0x1000	/* fcntl, for BSD compatibility */
 #define O_LARGEFILE	0x2000	/* allow large file opens - currently ignored */
-#define O_NOFOLLOW	0x4000	/* Don't follow symbolic links */
 #define O_DIRECT	0x8000	/* direct disk access hint - currently ignored */
 #define O_DIRECTORY	0x10000	/* must be a directory */
+#define O_NOFOLLOW	0x20000	/* don't follow links */
 
 #define O_NDELAY	O_NONBLOCK
 

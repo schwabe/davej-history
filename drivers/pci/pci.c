@@ -184,6 +184,11 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 		}
 
 		dev = kmalloc(sizeof(*dev), GFP_ATOMIC);
+		if(dev==NULL)
+		{
+			printk(KERN_ERR "pci: out of memory.\n");
+			continue;
+		}
 		memset(dev, 0, sizeof(*dev));
 		dev->bus = bus;
 		dev->devfn  = devfn;
@@ -292,6 +297,11 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 			 * Insert it into the tree of buses.
 			 */
 			child = kmalloc(sizeof(*child), GFP_ATOMIC);
+			if(child==NULL)
+			{
+				printk(KERN_ERR "pci: out of memory for bridge.\n");
+				continue;
+			}
 			memset(child, 0, sizeof(*child));
 			child->next = bus->children;
 			bus->children = child;

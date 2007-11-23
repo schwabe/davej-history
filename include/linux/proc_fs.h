@@ -200,12 +200,14 @@ enum scsi_directory_inos {
 	PROC_SCSI_ATARI,
 	PROC_SCSI_MAC,
 	PROC_SCSI_IDESCSI,
+	PROC_SCSI_SGIWD93,
 	PROC_SCSI_MESH,
 	PROC_SCSI_53C94,
 	PROC_SCSI_PLUTO,
 	PROC_SCSI_INI9100U,
- 	PROC_SCSI_INIA100,
+	PROC_SCSI_INIA100,
 	PROC_SCSI_FCAL,
+	PROC_SCSI_I2O,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
 	PROC_SCSI_FILE,                        /* I'm assuming here that we */
@@ -443,12 +445,12 @@ extern void proc_device_tree_init(void);
 
 #else
 
-extern inline int proc_register(struct proc_dir_entry *a, struct proc_dir_entry *b) {};
-extern inline int proc_unregister(struct proc_dir_entry *a, int b) {};
-extern inline int proc_net_register(struct proc_dir_entry *a) {};
-extern inline int proc_net_unregister(int x) {};
-extern inline int proc_scsi_register(struct proc_dir_entry *b, struct proc_dir_entry *c) {};
-extern inline int proc_scsi_unregister(struct proc_dir_entry *a, int x);
+extern inline int proc_register(struct proc_dir_entry *a, struct proc_dir_entry *b) { return 0; };
+extern inline int proc_unregister(struct proc_dir_entry *a, int b) { return 0; };
+extern inline int proc_net_register(struct proc_dir_entry *a) { return 0; };
+extern inline int proc_net_unregister(int x) { return 0; };
+extern inline int proc_scsi_register(struct proc_dir_entry *b, struct proc_dir_entry *c) { return 0; };
+extern inline int proc_scsi_unregister(struct proc_dir_entry *a, int x) { return 0; };
 
 extern inline struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 					 struct proc_dir_entry *parent)

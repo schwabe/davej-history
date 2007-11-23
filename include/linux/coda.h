@@ -100,10 +100,14 @@ typedef unsigned long long u_quad_t;
 
 #if defined(__linux__)
 #define cdev_t u_quad_t
+#ifndef __KERNEL__
 #if !defined(_UQUAD_T_) && (!defined(__GLIBC__) || __GLIBC__ < 2)
 #define _UQUAD_T_ 1
 typedef unsigned long long u_quad_t;
 #endif
+#else /*__KERNEL__ */
+typedef unsigned long long u_quad_t;
+#endif /* __KERNEL__ */
 #else
 #define cdev_t dev_t
 #endif

@@ -48,6 +48,7 @@
 #include <asm/io.h>
 #include <asm/pci-bridge.h>
 #include <asm/adb.h>
+#include <asm/dma.h>
 #include <asm/cuda.h>
 #include <asm/pmu.h>
 #include <asm/ohare.h>

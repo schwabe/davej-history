@@ -48,6 +48,7 @@ extern void wait_for_keypress(void);
 extern struct file_operations * get_blkfops(unsigned int major);
 
 extern int root_mountflags;
+extern void rd_load_secondary(void);
 
 static int do_remount_sb(struct super_block *sb, int flags, char * data);
 
@@ -1161,9 +1162,9 @@ void __init mount_root(void)
 
 #ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
-#ifdef CONFIG_BLK_DEV_RAM
+#ifdef CONFIG_BLK_DEV_RAM	
 		extern int rd_doload;
-#endif
+#endif		
 		floppy_eject();
 #ifndef CONFIG_BLK_DEV_RAM
 		printk(KERN_NOTICE "(Warning, this kernel has no ramdisk support)\n");
@@ -1172,7 +1173,7 @@ void __init mount_root(void)
 		if(rd_doload==2)
 			rd_load_secondary();
 		else
-#endif
+#endif		
 		{
 			printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");
 			wait_for_keypress();

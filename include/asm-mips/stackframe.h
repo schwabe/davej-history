@@ -3,7 +3,7 @@
  *
  *  Copyright (C) 1994, 1995, 1996 by Ralf Baechle and Paul M. Antoine.
  *
- * $Id: stackframe.h,v 1.7 1998/04/28 19:39:15 ralf Exp $
+ * $Id: stackframe.h,v 1.8 1999/05/01 10:08:19 harald Exp $
  */
 #ifndef __ASM_MIPS_STACKFRAME_H
 #define __ASM_MIPS_STACKFRAME_H
@@ -139,7 +139,12 @@
 		ori	t0, 0x1f;                        \
 		xori	t0, 0x1f;                        \
 		mtc0	t0, CP0_STATUS;                  \
+		li	v1, 0xff00;                      \
+		and	t0, v1;				 \
 		lw	v0, PT_STATUS(sp);               \
+		nor	v1, $0, v1;			 \
+		and	v0, v1;				 \
+		or	v0, t0;				 \
 		mtc0	v0, CP0_STATUS;                  \
 		lw	v1, PT_EPC(sp);                  \
 		mtc0	v1, CP0_EPC;                     \

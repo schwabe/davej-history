@@ -28,6 +28,9 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
       tristate 'Digiboard PC/Xx Support' CONFIG_DIGI
    fi
    tristate 'Cyclades async mux support' CONFIG_CYCLADES
+   if [ "$CONFIG_EXPERIMENTAL" = "y" -a "$CONFIG_CYCLADES" != "n" ]; then
+      bool '  Cyclades-Z interrupt mode operation (EXPERIMENTAL)' CONFIG_CYZ_INTR
+   fi
    bool 'Stallion multiport serial support' CONFIG_STALDRV
    if [ "$CONFIG_STALDRV" = "y" ]; then
      tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION
@@ -144,6 +147,11 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   dep_tristate 'SF16FMI Radio' CONFIG_RADIO_SF16FMI $CONFIG_VIDEO_DEV
   if [ "$CONFIG_RADIO_SF16FMI" = "y" ]; then
     hex '  SF16FMI I/O port (0x284 or 0x384)' CONFIG_RADIO_SF16FMI_PORT 284
+  fi
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    if [ "$CONFIG_SGI" = "y" ]; then
+      dep_tristate 'SGI Vino Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_VINO $CONFIG_VIDEO_DEV
+    fi
   fi
   dep_tristate 'Typhoon Radio (a.k.a. EcoRadio)' CONFIG_RADIO_TYPHOON $CONFIG_VIDEO_DEV
   if [ "$CONFIG_PROC_FS" = "y" ]; then

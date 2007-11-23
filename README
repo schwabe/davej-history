@@ -91,7 +91,7 @@ INSTALLING the kernel:
 
 SOFTWARE REQUIREMENTS
 
-   Compiling and running the 2.2.x kernels requires up-to-date
+   Compiling and running the 2.2.xx kernels requires up-to-date
    versions of various software packages.  Consult
    ./Documentation/Changes for the minimum version numbers required
    and how to get updates for these packages.  Beware that using

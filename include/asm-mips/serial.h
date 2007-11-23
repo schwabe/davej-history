@@ -1,4 +1,4 @@
-/* $Id: serial.h,v 1.3 1998/08/28 15:55:38 ralf Exp $
+/* $Id: serial.h,v 1.1 1998/05/04 12:43:16 ralf Exp $
  *
  * include/asm-mips/serial.h
  */

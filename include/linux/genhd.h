@@ -11,6 +11,7 @@
 
 #include <linux/config.h>
 #include <linux/types.h>
+#include <asm/unaligned.h>
 
 #define CONFIG_MSDOS_PARTITION 1
 
@@ -32,7 +33,9 @@
 #define LINUX_EXTENDED_PARTITION 0x85
 #define WIN98_EXTENDED_PARTITION 0x0f
 
-#define LINUX_SWAP_PARTITION	0x82
+#define LINUX_SWAP_PARTITION		0x82
+#define LINUX_RAID_PARTITION		0xfd	/* autodetect RAID partition */
+#define LINUX_OLD_RAID_PARTITION	0x86
 
 #ifdef CONFIG_SOLARIS_X86_PARTITION
 #define SOLARIS_X86_PARTITION	LINUX_SWAP_PARTITION
@@ -43,6 +46,7 @@
 #define DM6_AUX1PARTITION	0x51	/* no DDO:  use xlated geom */
 #define DM6_AUX3PARTITION	0x53	/* no DDO:  use xlated geom */
 	
+
 struct partition {
 	unsigned char boot_ind;		/* 0x80 - active */
 	unsigned char head;		/* starting head */
@@ -59,7 +63,31 @@ struct partition {
 struct hd_struct {
 	long start_sect;
 	long nr_sects;
+	int type;		/* RAID or normal */
 };
+
+/*
+ * partition types Linux cares about.
+ *
+ * currently there are 'normal' and RAID types.
+ */
+
+static inline unsigned int ptype (unsigned char raw_type)
+{
+	switch (raw_type) {
+		case LINUX_OLD_RAID_PARTITION:
+			return LINUX_OLD_RAID_PARTITION;
+		case LINUX_RAID_PARTITION:
+			return LINUX_RAID_PARTITION;
+		default:
+	}
+	return 0;
+}
+
+/*
+ * the maximum length a given partition name can take (eg. "scd11")
+ */
+#define MAX_DISKNAME_LEN 32
 
 struct gendisk {
 	int major;			/* major number of driver */

@@ -20,7 +20,7 @@
 
 #define spin_lock_init(lock)			((void) 0)
 #define spin_lock(lock)				((void) 0)
-#define spin_trylock(lock)			((void) 0)
+#define spin_trylock(lock)			(1)
 #define spin_unlock_wait(lock)			((void) 0)
 #define spin_unlock(lock)			((void) 0)
 #define spin_lock_irq(lock)			cli()

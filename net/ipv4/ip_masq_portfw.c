@@ -2,7 +2,7 @@
  *		IP_MASQ_PORTFW masquerading module
  *
  *
- *	$Id: ip_masq_portfw.c,v 1.3 1998/12/08 05:42:12 davem Exp $
+ *	$Id: ip_masq_portfw.c,v 1.3.2.1 1999/07/02 10:10:02 davem Exp $
  *
  * Author:	Steven Clarke <steven.clarke@monmouth.demon.co.uk>
  *
@@ -51,9 +51,7 @@ MODULE_PARM(debug, "i");
 /*
  *	Lock
  */
-#ifdef __SMP__
-static spinlock_t portfw_lock = SPIN_LOCK_UNLOCKED;
-#endif
+static rwlock_t portfw_lock = RW_LOCK_UNLOCKED;
 
 static struct list_head portfw_list[2];
 static __inline__ int portfw_idx(int protocol)

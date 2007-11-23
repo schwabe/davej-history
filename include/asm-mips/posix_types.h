@@ -1,4 +1,4 @@
-/* $Id: posix_types.h,v 1.5 1998/08/17 13:59:34 ralf Exp $
+/* $Id: posix_types.h,v 1.5 1998/08/25 09:22:00 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

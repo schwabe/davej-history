@@ -11,6 +11,7 @@
 #include <linux/netdevice.h>
 #include <linux/ip.h>
 #include <linux/skbuff.h>
+#include <linux/list.h>
 #endif /* __KERNEL__ */
 
 /*
@@ -57,6 +58,7 @@
 
 #define IP_MASQ_F_MPORT		      0x1000 	/* own mport specified */
 #define IP_MASQ_F_USER		      0x2000	/* from uspace */
+#define IP_MASQ_F_SIMPLE_HASH	      0x8000	/* prevent s+d and m+d hashing */
 
 /*
  *	Delta seq. info structure
@@ -73,7 +75,8 @@ struct ip_masq_seq {
  *	MASQ structure allocated for each masqueraded association
  */
 struct ip_masq {
-        struct ip_masq  *m_link, *s_link; /* hashed link ptrs */
+	struct list_head m_list, s_list, d_list;
+			/* hashed d-linked list heads */
 	atomic_t refcnt;		/* reference count */
 	struct timer_list timer;	/* Expiration timer */
 	__u16 		protocol;	/* Which protocol are we talking? */
@@ -145,8 +148,9 @@ struct ip_masq_hook {
 	int (*info)(char *, char **, off_t, int, int);
 };
 
-extern struct ip_masq *ip_masq_m_tab[IP_MASQ_TAB_SIZE];
-extern struct ip_masq *ip_masq_s_tab[IP_MASQ_TAB_SIZE];
+extern struct list_head ip_masq_m_table[IP_MASQ_TAB_SIZE];
+extern struct list_head ip_masq_s_table[IP_MASQ_TAB_SIZE];
+extern struct list_head ip_masq_d_table[IP_MASQ_TAB_SIZE];
 extern const char * ip_masq_state_name(int state);
 extern struct ip_masq_hook *ip_masq_user_hook;
 extern u32 ip_masq_select_addr(struct device *dev, u32 dst, int scope);

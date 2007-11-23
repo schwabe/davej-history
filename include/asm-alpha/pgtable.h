@@ -49,7 +49,6 @@ ev4_flush_tlb_other(struct mm_struct *mm)
 __EXTERN_INLINE void
 ev5_flush_tlb_current(struct mm_struct *mm)
 {
-	mm->context = 0;
 	get_new_mmu_context(current, mm);
 	reload_context(current);
 }
@@ -71,7 +70,7 @@ ev4_flush_tlb_current_page(struct mm_struct * mm,
 			   struct vm_area_struct *vma,
 			   unsigned long addr)
 {
-	tbi(2 + ((vma->vm_flags & VM_EXEC) != 0), addr);
+	tbi(((vma->vm_flags & VM_EXEC) != 0) ? 3 : 2, addr);
 }
 
 __EXTERN_INLINE void
@@ -299,7 +298,7 @@ extern unsigned long __zero_page(void);
 
 #define BAD_PAGETABLE	__bad_pagetable()
 #define BAD_PAGE	__bad_page()
-#define ZERO_PAGE	(PAGE_OFFSET+0x30A000)
+#define ZERO_PAGE(vaddr)	(PAGE_OFFSET+0x30A000)
 
 /* number of bits that fit into a memory pointer */
 #define BITS_PER_PTR			(8*sizeof(unsigned long))

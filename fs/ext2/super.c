@@ -134,7 +134,7 @@ static struct super_operations ext2_sops = {
 	ext2_write_inode,
 	ext2_put_inode,
 	ext2_delete_inode,
-	NULL,
+	ext2_notify_change,
 	ext2_put_super,
 	ext2_write_super,
 	ext2_statfs,

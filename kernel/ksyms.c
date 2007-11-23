@@ -38,6 +38,7 @@
 #include <linux/console.h>
 #include <linux/poll.h>
 #include <linux/mm.h>
+#include <linux/capability.h>
 
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
@@ -116,6 +117,8 @@ EXPORT_SYMBOL(get_super);
 EXPORT_SYMBOL(get_fs_type);
 EXPORT_SYMBOL(getname);
 EXPORT_SYMBOL(__fput);
+EXPORT_SYMBOL(igrab);
+EXPORT_SYMBOL(iunique);
 EXPORT_SYMBOL(iget);
 EXPORT_SYMBOL(iput);
 EXPORT_SYMBOL(__namei);
@@ -184,6 +187,7 @@ EXPORT_SYMBOL(vfs_rmdir);
 EXPORT_SYMBOL(vfs_unlink);
 EXPORT_SYMBOL(vfs_rename);
 EXPORT_SYMBOL(__pollwait);
+EXPORT_SYMBOL(ROOT_DEV);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);
@@ -222,6 +226,7 @@ EXPORT_SYMBOL(tq_disk);
 EXPORT_SYMBOL(find_buffer);
 EXPORT_SYMBOL(init_buffer);
 EXPORT_SYMBOL(max_sectors);
+EXPORT_SYMBOL(max_segments);
 EXPORT_SYMBOL(max_readahead);
 
 /* tty routines */
@@ -338,6 +343,7 @@ EXPORT_SYMBOL(_ctype);
 EXPORT_SYMBOL(secure_tcp_sequence_number);
 EXPORT_SYMBOL(get_random_bytes);
 EXPORT_SYMBOL(securebits);
+EXPORT_SYMBOL(cap_bset);
 
 /* Program loader interfaces */
 EXPORT_SYMBOL(setup_arg_pages);
@@ -398,3 +404,6 @@ EXPORT_SYMBOL(get_fast_time);
 
 /* library functions */
 EXPORT_SYMBOL(strnicmp);
+
+/* init task, for moving kthread roots - ought to export a function ?? */
+EXPORT_SYMBOL(init_task_union);

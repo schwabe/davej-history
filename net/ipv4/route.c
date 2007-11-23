@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.67 1999/05/08 20:00:20 davem Exp $
+ * Version:	$Id: route.c,v 1.67.2.1 1999/06/28 10:39:11 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -599,6 +599,22 @@ restart:
 	return 0;
 }
 
+static void rt_del(unsigned hash, struct rtable *rt)
+{
+	struct rtable **rthp;
+
+	start_bh_atomic();
+	ip_rt_put(rt);
+	for (rthp = &rt_hash_table[hash]; *rthp; rthp = &(*rthp)->u.rt_next) {
+		if (*rthp == rt) {
+			*rthp = rt->u.rt_next;
+			rt_free(rt);
+			break;
+		}
+	}
+	end_bh_atomic();
+}
+
 void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 		    u32 saddr, u8 tos, struct device *dev)
 {
@@ -669,6 +685,7 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 				rt->u.dst.lastuse = jiffies;
 				rt->u.dst.neighbour = NULL;
 				rt->u.dst.hh = NULL;
+				rt->u.dst.obsolete = 0;
 
 				rt->rt_flags |= RTCF_REDIRECTED;
 
@@ -687,10 +704,10 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 					break;
 				}
 
-				*rthp = rth->u.rt_next;
+				rt_del(hash, rth);
+
 				if (!rt_intern_hash(hash, rt, &rt))
 					ip_rt_put(rt);
-				rt_drop(rth);
 				break;
 			}
 		}
@@ -718,20 +735,10 @@ static struct dst_entry *ipv4_negative_advice(struct dst_entry *dst)
 		}
 		if ((rt->rt_flags&RTCF_REDIRECTED) || rt->u.dst.expires) {
 			unsigned hash = rt_hash_code(rt->key.dst, rt->key.src^(rt->key.oif<<5), rt->key.tos);
-			struct rtable **rthp;
 #if RT_CACHE_DEBUG >= 1
 			printk(KERN_DEBUG "ip_rt_advice: redirect to %d.%d.%d.%d/%02x dropped\n", NIPQUAD(rt->rt_dst), rt->key.tos);
 #endif
-			start_bh_atomic();
-			ip_rt_put(rt);
-			for (rthp = &rt_hash_table[hash]; *rthp; rthp = &(*rthp)->u.rt_next) {
-				if (*rthp == rt) {
-					*rthp = rt->u.rt_next;
-					rt_free(rt);
-					break;
-				}
-			}
-			end_bh_atomic();
+			rt_del(hash, rt);
 			return NULL;
 		}
 	}
@@ -980,6 +987,8 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 			rt->u.dst.pmtu = rt->u.dst.dev->mtu;
 			if (rt->u.dst.pmtu > IP_MAX_MTU)
 				rt->u.dst.pmtu = IP_MAX_MTU;
+			if (rt->u.dst.pmtu < 68)
+				rt->u.dst.pmtu = 68;
 			if (rt->u.dst.mxlock&(1<<RTAX_MTU) &&
 			    rt->rt_gateway != rt->rt_dst &&
 			    rt->u.dst.pmtu > 576)
@@ -994,6 +1003,8 @@ static void rt_set_nexthop(struct rtable *rt, struct fib_result *res, u32 itag)
 		rt->u.dst.pmtu	= rt->u.dst.dev->mtu;
 		if (rt->u.dst.pmtu > IP_MAX_MTU)
 			rt->u.dst.pmtu = IP_MAX_MTU;
+		if (rt->u.dst.pmtu < 68)
+			rt->u.dst.pmtu = 68;
 		rt->u.dst.window= 0;
 		rt->u.dst.rtt	= TCP_TIMEOUT_INIT;
 	}

@@ -2,7 +2,7 @@
  *		IP_MASQ_IRC irc masquerading module
  *
  *
- * Version:	@(#)ip_masq_irc.c 0.03   97/11/30
+ * Version:	@(#)ip_masq_irc.c 0.04   99/06/19
  *
  * Author:	Juan Jose Ciarlante
  *		
@@ -18,6 +18,8 @@
  *	Oliver Wagner 		:  more IRC cmds processing
  *	  <winmute@lucifer.gv.kotnet.org>
  *	Juan Jose Ciarlante	:  put new ms entry to listen()
+ *	Scottie Shore		:  added support for clients that add extra args
+ *	  <sshore@escape.ca>
  *
  * FIXME:
  *	- detect also previous "PRIVMSG" string ?.
@@ -82,15 +84,14 @@ struct dccproto
 {
   char *match;
   int matchlen;
-  int xtra_args;
 };
 
 struct dccproto dccprotos[NUM_DCCPROTO] = {
- { "SEND ", 5, 1 },
- { "CHAT ", 5, 0, },
- { "MOVE ", 5, 1 },
- { "TSEND ", 6, 1, },
- { "SCHAT ", 6, 0, }
+ { "SEND ", 5 },
+ { "CHAT ", 5 },
+ { "MOVE ", 5 },
+ { "TSEND ", 6 },
+ { "SCHAT ", 6 }
 };
 #define MAXMATCHLEN 6
 
@@ -121,7 +122,6 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 	char buf[20];		/* "m_addr m_port" (dec base)*/
         unsigned buf_len;
 	int diff;
-        int xtra_args = 0;      /* extra int args wanted after addr */
         char *dcc_p, *addr_beg_p, *addr_end_p;
 
         skb = *skb_p;
@@ -132,12 +132,11 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
         /*
 	 *	Hunt irc DCC string, the _shortest_:
 	 *
-	 *	strlen("DCC CHAT chat AAAAAAAA P\x01\n")=26
-	 *	strlen("DCC SCHAT chat AAAAAAAA P\x01\n")=27
-	 *	strlen("DCC SEND F AAAAAAAA P S\x01\n")=25
-	 *	strlen("DCC MOVE F AAAAAAAA P S\x01\n")=25
-	 *	strlen("DCC TSEND F AAAAAAAA P S\x01\n")=26
-	 *	strlen("DCC MOVE F AAAAAAAA P S\x01\n")=25
+	 *	strlen("\1DCC CHAT chat AAAAAAAA P\1\n")=27
+	 *	strlen("\1DCC SCHAT chat AAAAAAAA P\1\n")=28
+	 *	strlen("\1DCC SEND F AAAAAAAA P S\1\n")=26
+	 *	strlen("\1DCC MOVE F AAAAAAAA P S\1\n")=26
+	 *	strlen("\1DCC TSEND F AAAAAAAA P S\1\n")=27
 	 *		AAAAAAAAA: bound addr (1.0.0.0==16777216, min 8 digits)
 	 *		P:         bound port (min 1 d )
 	 *		F:         filename   (min 1 d )
@@ -147,16 +146,16 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 
         data_limit = skb->h.raw + skb->len;
         
-	while (data < (data_limit - ( 21 + MAXMATCHLEN ) ) )
+	while (data < (data_limit - ( 22 + MAXMATCHLEN ) ) )
 	{
 		int i;
-		if (memcmp(data,"DCC ",4))  {
+		if (memcmp(data,"\1DCC ",5))  {
 			data ++;
 			continue;
 		}
 
 		dcc_p = data;
-		data += 4;     /* point to DCC cmd */
+		data += 5;     /* point to DCC cmd */
 
 		for(i=0; i<NUM_DCCPROTO; i++)
 		{
@@ -166,7 +165,6 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 
 			if( memcmp(data, dccprotos[i].match, dccprotos[i].matchlen ) == 0 )
 			{
-				xtra_args = dccprotos[i].xtra_args;
 				data += dccprotos[i].matchlen;
 
 				/*
@@ -176,7 +174,7 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 				while( *data++ != ' ')
 
 					/*
-					 *	must still parse, at least, "AAAAAAAA P\x01\n",
+					 *	must still parse, at least, "AAAAAAAA P\1\n",
 					 *      12 bytes left.
 					 */
 					if (data > (data_limit-12)) return 0;
@@ -198,29 +196,6 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 
 				s_port = simple_strtoul(data,&data,10);
 				addr_end_p = data;
-
-				/*
-				 *	should check args consistency?
-				 */
-
-				while(xtra_args) {
-					if (*data != ' ')
-						break;
-					data++;
-					simple_strtoul(data,&data,10);
-					xtra_args--;
-				}
-
-				if (xtra_args != 0) continue;
-
-				/*
-				 *	terminators.
-				 */
-
-				if (data[0] != 0x01)
-					continue;
-				if (data[1]!='\r' && data[1]!='\n')
-					continue;
 
 				/*
 				 *	Now create an masquerade entry for it

@@ -19,7 +19,6 @@
 #include <linux/mm.h>
 #include <asm/uaccess.h>
 #include <asm/byteorder.h>
-#include <linux/errno.h>
 #include <linux/locks.h>
 
 #include <linux/ncp_fs.h>
@@ -351,6 +350,10 @@ ncp_lookup_validate(struct dentry * dentry, int flags)
 	struct ncpfs_inode_info finfo;
 	__u8 __name[dentry->d_name.len + 1];
         
+	if (!dir) {
+		return 0;
+	}
+	
 	server = NCP_SERVER(dir);
 
 	if (!ncp_conn_valid(server))

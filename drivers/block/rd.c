@@ -517,7 +517,7 @@ __initfunc(static void rd_load_image(kdev_t device, int offset, int unit))
 	}
 
 	if (nblocks > (rd_length[unit] >> RDBLK_SIZE_BITS)) {
-		printk("RAMDISK: image too big! (%d/%d blocks)\n",
+		printk("RAMDISK: image too big! (%d/%ld blocks)\n",
 		       nblocks, rd_length[unit] >> RDBLK_SIZE_BITS);
 		goto done;
 	}

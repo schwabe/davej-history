@@ -30,11 +30,15 @@ struct i2c_bus;
 struct i2c_driver;
 struct i2c_device;
 
-#define I2C_DRIVERID_MSP3400     1
-#define I2C_DRIVERID_TUNER       2
-#define I2C_DRIVERID_VIDEOTEXT	 3
+#define I2C_DRIVERID_MSP3400    	 1
+#define I2C_DRIVERID_TUNER      	 2
+#define I2C_DRIVERID_VIDEOTEXT		 3
+#define I2C_DRIVERID_VIDEODECODER	 4
+#define I2C_DRIVERID_VIDEOENCODER	 5
 
 #define I2C_BUSID_BT848		1	/* I2C bus on a BT848 */
+	/* 2 is used in 2.3.x */
+#define I2C_BUSID_BUZ		3	/* I2C bus on a BUZ */
 
 /*
  * struct for a driver for a i2c chip (tuner, soundprocessor,

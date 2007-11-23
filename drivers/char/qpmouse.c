@@ -42,7 +42,7 @@
 #include <asm/system.h>
 #include <asm/semaphore.h>
 
-#include "pc_keyb.h"		/* mouse enable command.. */
+#include <linux/pc_keyb.h>		/* mouse enable command.. */
 
 
 /*

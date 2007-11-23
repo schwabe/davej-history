@@ -1,4 +1,4 @@
-/* $Id: r4xx0.c,v 1.30 1998/10/16 19:22:43 ralf Exp $
+/* $Id: r4xx0.c,v 1.21.2.2 1999/06/17 12:06:42 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

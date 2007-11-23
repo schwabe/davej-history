@@ -18,9 +18,10 @@
 #include <linux/proc_fs.h>
 #include <linux/ctype.h>
 #include <linux/utsname.h>
-#include <linux/swapctl.h>
+#include <linux/capability.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/sysrq.h>
 
 #include <asm/uaccess.h>
 
@@ -164,6 +165,8 @@ static ctl_table kern_table[] = {
 	 0644, NULL, &proc_doutsstring, &sysctl_string},
 	{KERN_PANIC, "panic", &panic_timeout, sizeof(int),
 	 0644, NULL, &proc_dointvec},
+	{KERN_CAP_BSET, "cap-bound", &cap_bset, sizeof(kernel_cap_t),
+	 0600, NULL, &proc_dointvec_bset},
 #ifdef CONFIG_BLK_DEV_INITRD
 	{KERN_REALROOTDEV, "real-root-dev", &real_root_dev, sizeof(int),
 	 0644, NULL, &proc_dointvec},
@@ -212,6 +215,10 @@ static ctl_table kern_table[] = {
 	{KERN_SHMMAX, "shmmax", &shmmax, sizeof (int),
 	 0644, NULL, &proc_dointvec},
 #endif
+#ifdef CONFIG_MAGIC_SYSRQ
+	{KERN_SYSRQ, "sysrq", &sysrq_enabled, sizeof (int),
+	 0644, NULL, &proc_dointvec},
+#endif	 
 	{0}
 };
 
@@ -563,7 +570,6 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 				continue;
 		}
 
-		/* Don't unregoster proc entries that are still being used.. */
 		if (de->count)
 			continue;
 
@@ -684,8 +690,13 @@ static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
 	return r;
 }
 
+#define OP_SET	0
+#define OP_AND	1
+#define OP_OR	2
+#define OP_MAX	3
+#define OP_MIN	4
 static int do_proc_dointvec(ctl_table *table, int write, struct file *filp,
-		  void *buffer, size_t *lenp, int conv)
+		  void *buffer, size_t *lenp, int conv, int op)
 {
 	int *i, vleft, first=1, len, left, neg, val;
 	#define TMPBUFLEN 20
@@ -736,7 +747,17 @@ static int do_proc_dointvec(ctl_table *table, int write, struct file *filp,
 				val = -val;
 			buffer += len;
 			left -= len;
-			*i = val;
+			switch(op) {
+			case OP_SET:	*i = val; break;
+			case OP_AND:	*i &= val; break;
+			case OP_OR:	*i |= val; break;
+			case OP_MAX:	if(*i < val)
+						*i = val;
+					break;
+			case OP_MIN:	if(*i > val)
+						*i = val;
+					break;
+			}
 		} else {
 			p = buf;
 			if (!first)
@@ -778,8 +799,20 @@ static int do_proc_dointvec(ctl_table *table, int write, struct file *filp,
 int proc_dointvec(ctl_table *table, int write, struct file *filp,
 		     void *buffer, size_t *lenp)
 {
-    return do_proc_dointvec(table,write,filp,buffer,lenp,1);
+    return do_proc_dointvec(table,write,filp,buffer,lenp,1,OP_SET);
 }
+
+/*
+ *	init may raise the set.
+ */
+ 
+int proc_dointvec_bset(ctl_table *table, int write, struct file *filp,
+			void *buffer, size_t *lenp)
+{
+	return do_proc_dointvec(table,write,filp,buffer,lenp,1,
+		(current->pid == 1) ? OP_SET : OP_AND);
+}
+
 
 int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
@@ -883,7 +916,7 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
 			  void *buffer, size_t *lenp)
 {
-    return do_proc_dointvec(table,write,filp,buffer,lenp,HZ);
+    return do_proc_dointvec(table,write,filp,buffer,lenp,HZ,OP_SET);
 }
 
 #else /* CONFIG_PROC_FS */

@@ -1,4 +1,4 @@
-/* $Id: spinlock.h,v 1.3 1998/08/28 15:55:39 ralf Exp $
+/* $Id: spinlock.h,v 1.4.2.2 1999/06/17 12:09:42 ralf Exp $
  */
 #ifndef __ASM_MIPS_SPINLOCK_H
 #define __ASM_MIPS_SPINLOCK_H

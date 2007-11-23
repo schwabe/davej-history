@@ -471,9 +471,16 @@ arcnet_open(struct device *dev)
 
 #ifdef CONFIG_ARCNET_1051
   /* Initialize the RFC1051-encap protocol driver */
-  lp->sdev=(struct device *)kmalloc(sizeof(struct device),GFP_KERNEL);
+  lp->sdev=(struct device *)kmalloc(sizeof(struct device)+10,GFP_KERNEL);
+  if(lp->sdev = NULL)
+  {
+  	if(lp->edev)
+  		kfree(lp->edev);
+  	lp->edev=NULL;
+  	return -ENOMEM;
+  }
   memcpy(lp->sdev,dev,sizeof(struct device));
-  lp->sdev->name=(char *)kmalloc(10,GFP_KERNEL);
+  lp->sdev->name=(char *)(lp+1);
   sprintf(lp->sdev->name,"%ss",dev->name);
   lp->sdev->init=arcnetS_init;
   register_netdevice(lp->sdev);

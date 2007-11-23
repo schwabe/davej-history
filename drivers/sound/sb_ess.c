@@ -40,6 +40,10 @@
  *								recording problems for high samplerates. I
  *								fixed this by removing ess_calc_best_speed ()
  *								and just doing what the documentation says. 
+ * Andy Sloane  (June 4 1999):  Stole some code from ALSA to fix the playback
+ * andy@guildsoftware.com		speed on ES1869, ES1879, ES1887, and ES1888.
+ * 								1879's were previously ignored by this driver;
+ * 								added (untested) support for those.
  *
  * This files contains ESS chip specifics. It's based on the existing ESS
  * handling as it resided in sb_common.c, sb_mixer.c and sb_audio.c. This
@@ -190,14 +194,22 @@
 #define ESSTYPE_LIKE20	-1		/* Mimic 2.0 behaviour					*/
 #define ESSTYPE_DETECT	0		/* Mimic 2.0 behaviour					*/
 
-int esstype = ESSTYPE_LIKE20; /* module parameter in sb_card.c */
+int esstype = ESSTYPE_DETECT; /* module parameter in sb_card.c */
 
 #define SUBMDL_ES1788	0x10	/* Subtype ES1788 for specific handling */
 #define SUBMDL_ES1868	0x11	/* Subtype ES1868 for specific handling */
 #define SUBMDL_ES1869	0x12	/* Subtype ES1869 for specific handling */
 #define SUBMDL_ES1878	0x13	/* Subtype ES1878 for specific handling */
+#define SUBMDL_ES1879	0x16    /* ES1879 was initially forgotten */
 #define SUBMDL_ES1887	0x14	/* Subtype ES1887 for specific handling */
 #define SUBMDL_ES1888	0x15	/* Subtype ES1888 for specific handling */
+
+#define SB_CAP_ES18XX_RATE 0x100
+
+#define ES1688_CLOCK1 795444 /* 128 - div */
+#define ES1688_CLOCK2 397722 /* 256 - div */
+#define ES18XX_CLOCK1 793800 /* 128 - div */
+#define ES18XX_CLOCK2 768000 /* 256 - div */
 
 #ifdef FKS_LOGGING
 static void ess_show_mixerregs (sb_devc *devc);
@@ -323,7 +335,6 @@ static int ess_calc_div (int clock, int revert, int *speedp, int *diffp)
 	return retval;
 }
 
-#ifdef OBSOLETE
 static int ess_calc_best_speed
 	(int clock1, int rev1, int clock2, int rev2, int *divp, int *speedp)
 {
@@ -347,7 +358,6 @@ static int ess_calc_best_speed
 
 	return retval;
 }
-#endif
 
 /*
  * Depending on the audiochannel ESS devices can
@@ -366,11 +376,14 @@ static void ess_common_speed (sb_devc *devc, int *speedp, int *divp)
 		 * The 0x80 is important for the first audio channel
 		 */
 		div = 0x80 | ess_calc_div (795500, 128, speedp, &diff);
+	} else if(devc->caps & SB_CAP_ES18XX_RATE) {
+		ess_calc_best_speed(ES18XX_CLOCK1, 128, ES18XX_CLOCK2, 256, 
+						&div, speedp);
 	} else {
 		if (*speedp > 22000) {
-			div = 0x80 | ess_calc_div (795500, 256, speedp, &diff);
+			div = 0x80 | ess_calc_div (ES1688_CLOCK1, 256, speedp, &diff);
 		} else {
-			div = 0x00 | ess_calc_div (397700, 128, speedp, &diff);
+			div = 0x00 | ess_calc_div (ES1688_CLOCK2, 128, speedp, &diff);
 		}
 	}
 	*divp = div;
@@ -1070,6 +1083,12 @@ int ess_init(sb_devc * devc, struct address_info *hw_config)
 		case 1788:
 			submodel = SUBMDL_ES1788;
 			break;
+		case 1878:
+			submodel = SUBMDL_ES1878;
+			break;
+		case 1879:
+			submodel = SUBMDL_ES1879;
+			break;
 		case 1887:
 			submodel = SUBMDL_ES1887;
 			break;
@@ -1116,6 +1135,10 @@ FKS_test (devc);
 			case 0x1878:
 				chip = "ES1878";
 				devc->submodel = SUBMDL_ES1878;
+				break;
+			case 0x1879:
+				chip = "ES1879";
+				devc->submodel = SUBMDL_ES1879;
 				break;
 			default:
 				if ((type & 0x00ff) != ((type >> 8) & 0x00ff)) {
@@ -1173,6 +1196,17 @@ FKS_test (devc);
 		sprintf(name,"ESS %s AudioDrive (rev %d)", chip, ess_minor & 0x0f);
 	} else {
 		strcpy(name, "Jazz16");
+	}
+
+	/* AAS: info stolen from ALSA: these boards have different clocks */
+	switch(devc->submodel) {
+/* APPARENTLY NOT 1869 
+		case SUBMDL_ES1869:
+*/		
+		case SUBMDL_ES1887:
+		case SUBMDL_ES1888:
+			devc->caps |= SB_CAP_ES18XX_RATE;
+			break;
 	}
 
 	hw_config->name = name;

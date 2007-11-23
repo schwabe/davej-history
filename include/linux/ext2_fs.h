@@ -504,6 +504,10 @@ struct ext2_dir_entry_2 {
 					 ~EXT2_DIR_ROUND)
 
 #ifdef __KERNEL__
+
+/* Filesize hard limits for 64-bit file offsets */
+extern long long ext2_max_sizes[];
+
 /*
  * Function prototypes
  */
@@ -564,6 +568,7 @@ extern void ext2_write_inode (struct inode *);
 extern void ext2_put_inode (struct inode *);
 extern void ext2_delete_inode (struct inode *);
 extern int ext2_sync_inode (struct inode *);
+extern int ext2_notify_change(struct dentry *, struct iattr *);
 extern void ext2_discard_prealloc (struct inode *);
 
 /* ioctl.c */

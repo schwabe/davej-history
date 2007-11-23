@@ -377,6 +377,9 @@ extern int  scsi_sense_valid(Scsi_Cmnd *);
 extern int  scsi_decide_disposition (Scsi_Cmnd * SCpnt);
 extern int  scsi_block_when_processing_errors(Scsi_Device *);
 extern void scsi_sleep(int);
+extern int  scsi_partsize(struct buffer_head *bh, unsigned long capacity,
+                    unsigned int *cyls, unsigned int *hds,
+                    unsigned int *secs);
 
 /*
  *  scsi_abort aborts the current command that is executing on host host.

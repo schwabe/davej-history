@@ -1,4 +1,4 @@
-/* $Id: ide-no.c,v 1.2 1998/05/28 03:17:57 ralf Exp $
+/* $Id: ide-no.c,v 1.2.2.2 1999/06/17 12:06:40 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive

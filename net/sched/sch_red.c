@@ -231,7 +231,6 @@ drop:
 		 */
 		if (((q->qave - q->qth_min)>>q->Wlog)*q->qcount < q->qR)
 			goto enqueue;
-printk(KERN_DEBUG "Drop %d\n", q->qcount);
 		q->qcount = 0;
 		q->qR = net_random()&q->Rmask;
 		sch->stats.overlimits++;

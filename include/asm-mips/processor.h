@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.18 1998/10/14 20:31:12 ralf Exp $
+/* $Id: processor.h,v 1.15 1999/02/15 02:22:12 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -174,6 +174,7 @@ struct thread_struct {
 
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);
+extern pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 
 /* Copy and release all segment info associated with a VM */
 #define copy_segments(nr, p, mm) do { } while(0)

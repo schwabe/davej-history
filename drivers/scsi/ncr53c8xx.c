@@ -5003,7 +5003,7 @@ static int ncr_queue_command (ncb_p np, Scsi_Cmnd *cmd)
 		**	Force ordered tag if necessary to avoid timeouts 
 		**	and to preserve interactivity.
 		*/
-		if (lp && lp->tags_stime + (3*HZ) <= jiffies) {
+		if (lp && time_before_eq(lp->tags_stime + 3*HZ, jiffies)) {
 			if (lp->tags_smap) {
 				order = M_ORDERED_TAG;
 				if ((DEBUG_FLAGS & DEBUG_TAGS)||bootverbose>2){ 
@@ -9850,7 +9850,8 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 		/* PCI_CACHE_LINE_SIZE value is in 32-bit words. */
 		cache_line_size = 64 / sizeof(u_int32);
 		if (initverbose >= 2)
-			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fixup)\n", cache_line_size);
+			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fixup)\n",
+			       cache_line_size);
 		pcibios_write_config_byte(bus, device_fn,
 					  PCI_CACHE_LINE_SIZE, cache_line_size);
 		pcibios_read_config_byte(bus, device_fn,
@@ -9858,7 +9859,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	}
 
 	if (!latency_timer) {
-		latency_timer = 128;
+		latency_timer = 64;
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fixup)\n", latency_timer);
 		pcibios_write_config_byte(bus, device_fn,

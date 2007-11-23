@@ -568,11 +568,11 @@ toshoboe_net_open (struct device *dev)
   self->rxs = inb_p (OBOE_RCVT);
   self->txs = inb_p (OBOE_XMTT) - OBOE_XMTT_OFFSET;
 
-#ifdef 0
+#if 0
   self->rxs = 0;
   self->txs = 0;
 #endif
-#ifdef 0
+#if 0
   self->rxs = RX_SLOTS - 1;
   self->txs = 0;
 #endif

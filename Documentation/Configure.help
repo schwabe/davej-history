@@ -1844,6 +1844,11 @@ CONFIG_FB_VESA
   You will get a boot time penguin logo at no additional cost. Please
   read Documentation/fb/vesafb.txt. If unsure, say Y.
 
+VGA 16-color graphics console
+CONFIG_FB_VGA16
+  This is the frame buffer device driver for VGA 16 color graphic
+  cards. Say Y if you have such a card.
+
 Backward compatibility mode for Xpmac
 CONFIG_FB_COMPAT_XPMAC
   If you use the Xpmac X server (common with mklinux), you'll need to
@@ -4989,6 +4994,17 @@ CONFIG_WAVELAN
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+Aironet Arlan 655 & IC2200 DS support
+CONFIG_ARLAN
+  Aironet makes Arlan. www.aironet.com. Uses www.Telxon.com chip, which is
+  used on several similar cards. Driver is tested on 655 and IC2200 series. 
+  Look for http://www.ylenurme.ee/~elmer/655/ for latest information. 
+  Driver is build as two modules, arlan and arlan-proc. The later is /proc
+  interface and not needed most of time.
+  On some computers the card ends up in non-valid state after some time.
+  Use a ping-reset script to clear it.
+   
+
 LAPB over Ethernet driver
 CONFIG_LAPBETHER
   This is a driver for a pseudo device (typically called /dev/lapb0)
@@ -5114,6 +5130,15 @@ CONFIG_ETHERTAP
   The module will be called ethertap.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt. If you don't
   know what to use this for, you don't need it.
+
+Sealevel Systems 4021 support
+CONFIG_SEALEVEL_4021
+  This is a driver for the Sealevel Systems ACB 56 serial I/O adapter.
+  
+  This driver can only be compiled as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  If you want to do that, say M here. The module will be called
+  sealevel.o.
 
 Frame Relay (DLCI) support
 CONFIG_DLCI
@@ -5734,7 +5759,7 @@ CONFIG_YELLOWFIN
   say M here and read Documentation/modules.txt. This is recommended.
   The module will be called yellowfin.o.
 
-Alteon AceNIC / 3Com 3C985 Gigabit Ethernet support.
+Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support
 CONFIG_ACENIC
   Say Y here if you have an Alteon AceNIC or 3Com 3C985 PCI Gigabit
   Ethernet adapter. The driver allows for using the Jumbo Frame
@@ -6491,6 +6516,25 @@ CONFIG_IBMTR
   inserted in and removed from the running kernel whenever you want).
   The module will be called ibmtr.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+IBM Olympic chipset PCI adapter support
+CONFIG_IBMOL
+  This is support for all non-Lanstreamer IBM PCI Token Ring Cards. 
+  Specifically this is all IBM PCI, PCI Wake On Lan, PCI II, PCI II
+  Wake On Lan, and PCI 100/16/4 adapters.
+
+  If you have such an adapter, say Y and read the Token-Ring mini-HOWTO,
+  available via FTP (user:anonymous) from
+  ftp://metalab.unc/edu/pub/Linux/docs/HOWTO.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will will be called olympic.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+  Also read the linux/Documentation/networking/olympic.txt or check the 
+  Linux Token Ring Project site for the latest information at
+  http://www.linuxtr.net
 
 SysKonnect adapter support
 CONFIG_SKTR
@@ -7360,6 +7404,18 @@ CONFIG_UFS_FS_WRITE
   Say Y here if you want to try writing to UFS partitions. This is
   experimental, so you should back up your UFS partitions beforehand.
 
+EFS filesystem support (experimental)
+CONFIG_EFS_FS
+  EFS is the filesystem used for CDROMs and filesystems by SGI's IRIX.
+  This implementation only offers read-only access.  If you don't know
+  what all this is about, it's safe to say N.  For more information
+  about EFS see it's homepage at http://aeschi.ch.eu.org/efs.
+
+SGI disklabel support
+CONFIG_SGI_DISKLABEL
+  Say Y to this only if you plan on mounting disks with SGI disklabels.
+  This is not required to mount EFS-format CDROMs.
+
 BSD disklabel (FreeBSD partition tables) support
 CONFIG_BSD_DISKLABEL
   FreeBSD uses its own hard disk partition scheme on your PC. It
@@ -8109,6 +8165,16 @@ CONFIG_CYCLADES
   called cyclades.o. 
 
   If you haven't heard about it, it's safe to say N.
+
+Cyclades-Z interrupt mode operation (EXPERIMENTAL)
+CONFIG_CYZ_INTR
+  The Cyclades-Z family of multiport cards allows 2 (two) driver
+  op modes: polling and interrupt. In polling mode, the driver will
+  check the status of the Cyclades-Z ports every certain amount of
+  time (which is called polling cycle and is configurable). In
+  interrupt mode, it will use an interrupt line (IRQ) in order to check
+  the status of the Cyclades-Z ports. The default op mode is polling.
+  If unsure, say N.
 
 Stallion multiport serial support 
 CONFIG_STALDRV
@@ -9191,7 +9257,7 @@ CONFIG_SOUND
   after the PnP configuration is finished. To do this, say M here and
   read Documentation/modules.txt as well as
   Documentation/sound/README.modules; the module will be called
-  sound.o.
+  soundcore.o.
 
   I'm told that even without a sound card, you can make your computer
   say more than an occasional beep, by programming the PC speaker.
@@ -9764,6 +9830,11 @@ CONFIG_MAGIC_SYSRQ
 
 ISDN subsystem
 CONFIG_ISDN
+  CAUTION: the ISDN driver shipped with this kernel distribution
+  is outdated and might not work without problems. An updated driver
+  is available for download. Please read http://www.isdn4linux.de
+  on the WWW for a list of servers.
+
   ISDN ("Integrated Services Digital Networks", called RNIS in France)
   is a special type of fully digital telephone service; it's mostly
   used to connect to your Internet service provider (with SLIP or
@@ -9830,6 +9901,20 @@ CONFIG_ISDN_X25
   connections. See Documentation/isdn/README.x25 for more information
   if you are thinking about using this.
 
+ISDN diversion services support
+CONFIG_ISDN_DIVERSION
+  This option allows you to use some supplementary diversion
+  services in conjunction with the HiSax driver on an EURO/DSS1
+  line. Supported options are CD (call deflection), CFU (Call 
+  forward unconditional), CFB (Call forward when busy) and CFNR 
+  (call forward not reachable).
+  Additionally the actual CFU, CFB and CFNR state may be 
+  interrogated. The use of CFU, CFB, CFNR and interrogation may
+  be limited to some countries. The keypad protocol is still not
+  implemented.
+  CD should work in all countries if this service has been sub-
+  scribed.
+
 ICN 2B and 4B support
 CONFIG_ISDN_DRV_ICN
   This enables support for two kinds of ISDN-cards made by a German
@@ -9872,6 +9957,24 @@ CONFIG_ISDN_DRV_HISAX
   called hisax.o. See Documentation/isdn/README.HiSax for more
   information on using this driver.
 
+HiSax Support for EURO/DSS1
+CONFIG_HISAX_EURO
+  Enable this if you have a EURO ISDN line.
+
+Support for german chargeinfo
+CONFIG_DE_AOC
+  If you have german AOC, you can enable this to get the charginfo.
+
+Disable sending complete
+CONFIG_HISAX_NO_SENDCOMPLETE
+  If you have trouble with some ugly exchanges or you live in
+  Australia select this option.
+
+Disable sending low layer compatibility
+CONFIG_HISAX_NO_LLC
+  If you have trouble with some ugly exchanges try to select this
+  option.
+
 HiSax Support for Teles 16.0/8.0
 CONFIG_HISAX_16_0
   This enables HiSax support for the Teles ISDN-cards S0-16.0, S0-8
@@ -9890,13 +9993,15 @@ CONFIG_HISAX_16_3
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for Teles 16.3c
-CONFIG_HISAX_TELES3C
-  This enables HiSax support for the Teles ISDN-cards 16.3c.
-  
-  See Documentation/isdn/README.HiSax on how to configure it using the
-  different cards, a different D-channel protocol, or non-standard
-  IRQ/port settings.
+HiSax Support for Teles PCI
+CONFIG_HISAX_TELESPCI
+  This enables HiSax support for the Teles PCI.
+  See Documentation/isdn/README.HiSax on how to configure it.
+
+HiSax Support for Teles S0Box
+CONFIG_HISAX_S0BOX
+  This enables HiSax support for the Teles/Creatix parallel port
+  S0BOX.  See Documentation/isdn/README.HiSax on how to configure it.
 
 HiSax Support for AVM A1 (Fritz)
 CONFIG_HISAX_AVM_A1
@@ -9906,7 +10011,17 @@ CONFIG_HISAX_AVM_A1
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for Elsa ISA cards
+HiSax Support for AVM PnP/PCI (Fritz!PNP/PCI)
+CONFIG_HISAX_FRITZPCI
+  This enables HiSax support for the AVM "Fritz!PnP" and "Fritz!PCI".
+  See Documentation/isdn/README.HiSax on how to configure it.
+
+HiSax Support for AVM A1 PCMCIA (Fritz)
+CONFIG_HISAX_AVM_A1_PCMCIA
+  This enables HiSax support for the AVM A1 "Fritz!PCMCIA").
+  See Documentation/isdn/README.HiSax on how to configure it.
+
+HiSax Support for Elsa cards
 CONFIG_HISAX_ELSA
   This enables HiSax support for the Elsa Mircolink ISA cards, for the
   Elsa Quickstep series cards and Elsa PCMCIA.
@@ -9949,7 +10064,16 @@ CONFIG_HISAX_TELEINT
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for Sedlbauer speed card/win-star
+HiSax Support for HFC-S based cards
+CONFIG_HISAX_HFCS
+  This enables HiSax support for the HFC-S 2BDS0 based cards, like
+  teles 16.3c.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using the
+  different cards, a different D-channel protocol, or non-standard
+  IRQ/port settings.
+
+HiSax Support for Sedlbauer cards
 CONFIG_HISAX_SEDLBAUER
   This enables HiSax support for the Sedlbauer passive ISDN cards.
 
@@ -9986,50 +10110,45 @@ CONFIG_HISAX_NICCY
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
+HiSax Support for Siemens I-Surf card
+CONFIG_HISAX_ISURF
+  This enables HiSax support for the Siemens I-Talk/I-Surf card with
+  ISAR chip.
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
+HiSax Support for HST Saphir card
+CONFIG_HISAX_HSTSAPHIR
+  This enables HiSax support for the HST Saphir card.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
+HiSax Support for Telekom A4T card
+CONFIG_HISAX_BKM_A4T
+  This enables HiSax support for the Telekom A4T card.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
+HiSax Support for Scitel Quadro card
+CONFIG_HISAX_SCT_QUADRO
+  This enables HiSax support for the Scitel Quadro card.
+  
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
+HiSax Support for Gazel cards
+CONFIG_HISAX_GAZEL
+  This enables HiSax support for the Gazel cards.
+
+  See Documentation/isdn/README.HiSax on how to configure it using a
+  different D-channel protocol, or non-standard IRQ/port settings.
+
 HiSax Support for Am7930 (EXPERIMENTAL)
 CONFIG_HISAX_AMD7930
   This enables HiSax support for the AMD7930 chips on some SPARCs.
   This code is not finished yet.
-
-HiSax Support for EURO/DSS1
-CONFIG_HISAX_EURO
-  Say Y or N according to the D-channel protocol which your local
-  telephone service company provides.
-
-  NOTE: If you say Y here and you have only one ISDN card installed,
-  you cannot say Y to "HiSax Support for German 1TR6", below. And vice
-  versa.
-
-Support for German tariff info
-CONFIG_DE_AOC
-  If you want that the HiSax hardware driver sends messages to the
-  upper level of the isdn code on each AOCD (Advice Of Charge, During
-  the call -- transmission of the fee information during a call) and
-  on each AOCE (Advice Of Charge, at the End of the call --
-  transmission of fee information at the end of the call), say Y here.
-  This works only in Germany.
-
-Support for Australian Microlink service (not for std. EURO)
-CONFIG_HISAX_ML
-  If you are in Australia and connected to the Microlink telephone
-  network, enable this, because there are little differences in
-  protocol.
-  
-  Please don't enable this in other countries.
-
-HiSax Support for US/NI-1 (not released yet)
-CONFIG_HISAX_NI1
-  Say Y or N according to the D-channel protocol which your local
-  telephone service company provides.
-
-HiSax Support for German 1TR6
-CONFIG_HISAX_1TR6
-  Say Y or N according to the D-channel protocol which your local
-  telephone service company provides.
-
-  NOTE: If you say Y here and you have only one ISDN card installed,
-  you cannot say Y to "HiSax Support for EURO/DSS1", above. And vice
-  versa.
 
 PCBIT-D support
 CONFIG_ISDN_DRV_PCBIT
@@ -10730,6 +10849,11 @@ AIMSlab RadioTrack II support
 CONFIG_RADIO_RTRACK2
   Choose Y here if you have this FM radio card, and then fill in the 
   port address below.
+
+  If you have GemTeks combined (PnP) sound- and radio card you must use
+  this driver as a module and setup the card with isapnptools. You must
+  also pass the module a suitable io parameter, 0x248 has been reported
+  to be used by these cards.
 
   In order to control your radio card, you will need to use programs
   that are compatible with the Video for Linux API. Information on 
@@ -11452,6 +11576,14 @@ CONFIG_BVME6000_SCC
   boards from BVM Ltd.  Everyone using one of these boards should say
   Y here.
 
+Compaq SMART2 support
+CONFIG_BLK_CPQ_DA
+   This is the driver for Compaq Smart Array controllers.  
+   Everyone using these boards should say Y here.  
+   See "linux/Documentation/cpqarray.txt" for the current list of 
+   boards supported by this driver, and for further information 
+   on the use of this driver. 
+ 
 #
 # A couple of things I keep forgetting:
 #   capitalize: AppleTalk, Ethernet, DOS, DMA, FAT, FTP, Internet, 

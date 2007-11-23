@@ -535,8 +535,6 @@ cia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 		 * Set up the PCI->physical memory translation windows.
 		 * For now, windows 1,2 and 3 are disabled.  In the future,
 		 * we may want to use them to do scatter/gather DMA. 
-		 *
-		 * Window 0 goes at 1 GB and is 1 GB large.
 		 */
 
 		*(vuip)CIA_IOC_PCI_W0_BASE = 1U | (CIA_DMA_WIN_BASE_DEFAULT & 0xfff00000U);

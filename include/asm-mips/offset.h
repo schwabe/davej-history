@@ -51,36 +51,36 @@
 #define TASK_NEED_RESCHED  20
 #define TASK_COUNTER       24
 #define TASK_PRIORITY      28
-#define TASK_MM            928
+#define TASK_MM            920
 
 /* MIPS specific thread_struct offsets. */
-#define THREAD_REG16   568
-#define THREAD_REG17   572
-#define THREAD_REG18   576
-#define THREAD_REG19   580
-#define THREAD_REG20   584
-#define THREAD_REG21   588
-#define THREAD_REG22   592
-#define THREAD_REG23   596
-#define THREAD_REG29   600
-#define THREAD_REG30   604
-#define THREAD_REG31   608
-#define THREAD_STATUS  612
-#define THREAD_FPU     616
-#define THREAD_BVADDR  880
-#define THREAD_BUADDR  884
-#define THREAD_ECODE   888
-#define THREAD_TRAPNO  892
-#define THREAD_PGDIR   896
-#define THREAD_MFLAGS  900
-#define THREAD_CURDS   904
-#define THREAD_TRAMP   908
-#define THREAD_OLDCTX  912
+#define THREAD_REG16   560
+#define THREAD_REG17   564
+#define THREAD_REG18   568
+#define THREAD_REG19   572
+#define THREAD_REG20   576
+#define THREAD_REG21   580
+#define THREAD_REG22   584
+#define THREAD_REG23   588
+#define THREAD_REG29   592
+#define THREAD_REG30   596
+#define THREAD_REG31   600
+#define THREAD_STATUS  604
+#define THREAD_FPU     608
+#define THREAD_BVADDR  872
+#define THREAD_BUADDR  876
+#define THREAD_ECODE   880
+#define THREAD_TRAPNO  884
+#define THREAD_PGDIR   888
+#define THREAD_MFLAGS  892
+#define THREAD_CURDS   896
+#define THREAD_TRAMP   900
+#define THREAD_OLDCTX  904
 
 /* Linux mm_struct offsets. */
-#define MM_COUNT      12
-#define MM_PGD        8
-#define MM_CONTEXT    32
+#define MM_COUNT      16
+#define MM_PGD        12
+#define MM_CONTEXT    36
 
 /* Linux sigcontext offsets. */
 #define SC_REGMASK    0

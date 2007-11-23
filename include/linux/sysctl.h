@@ -78,7 +78,7 @@ enum
 	KERN_NODENAME=7,
 	KERN_DOMAINNAME=8,
 
-	KERN_SECURELVL=14,	/* int: system security level */
+	KERN_CAP_BSET=14,	/* int: capability bounding set */
 	KERN_PANIC=15,		/* int: panic timeout */
 	KERN_REALROOTDEV=16,	/* real root device to mount after initrd */
 
@@ -102,7 +102,8 @@ enum
 	KERN_SHMMAX=34,         /* int: Maximum shared memory segment */
 	KERN_MSGMAX=35,         /* int: Maximum size of a messege */
 	KERN_MSGMNB=36,         /* int: Maximum message queue size */
-	KERN_MSGPOOL=37         /* int: Maximum system message pool size */
+	KERN_MSGPOOL=37,         /* int: Maximum system message pool size */
+	KERN_SYSRQ=38		/* int: Sysreq enable */
 };
 
 
@@ -451,6 +452,8 @@ extern int proc_dostring(ctl_table *, int, struct file *,
 			 void *, size_t *);
 extern int proc_dointvec(ctl_table *, int, struct file *,
 			 void *, size_t *);
+extern int proc_dointvec_bset(ctl_table *, int, struct file *,
+			      void *, size_t *);
 extern int proc_dointvec_minmax(ctl_table *, int, struct file *,
 				void *, size_t *);
 extern int proc_dointvec_jiffies(ctl_table *, int, struct file *,

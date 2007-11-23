@@ -668,7 +668,7 @@ void attach_mad16(struct address_info *hw_config)
 	 * Set the IRQ and DMA addresses.
 	 */
 	
-	if (board_type == C930)
+	if (board_type == C930 || c924pnp)
 		interrupt_bits[5] = 0x28;	/* Also IRQ5 is possible on C930 */
 
 	bits = interrupt_bits[hw_config->irq];

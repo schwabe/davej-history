@@ -5559,17 +5559,15 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     switch(ioc->cmd) {
     case DE4X5_GET_HWADDR:           /* Get the hardware address */
 	ioc->len = ETH_ALEN;
-	if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
 	for (i=0; i<ETH_ALEN; i++) {
 	    tmp.addr[i] = dev->dev_addr[i];
 	}
-	copy_to_user(ioc->data, tmp.addr, ioc->len);
+	if (copy_to_user(ioc->data, tmp.addr, ioc->len)) return -EFAULT;
 	break;
 
     case DE4X5_SET_HWADDR:           /* Set the hardware address */
 	if (!capable(CAP_NET_ADMIN)) return -EPERM;
-	if (verify_area(VERIFY_READ, ioc->data, ETH_ALEN)) return -EFAULT;
-	copy_from_user(tmp.addr, ioc->data, ETH_ALEN);
+	if (copy_from_user(tmp.addr, ioc->data, ETH_ALEN)) return -EFAULT;
 	for (i=0; i<ETH_ALEN; i++) {
 	    dev->dev_addr[i] = tmp.addr[i];
 	}
@@ -5612,9 +5610,8 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     case DE4X5_GET_STATS:            /* Get the driver statistics */
 	ioc->len = sizeof(lp->pktStats);
-	if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
 	spin_lock_irqsave(&lp->lock, flags);
-	copy_to_user(ioc->data, &lp->pktStats, ioc->len); 
+	if (copy_to_user(ioc->data, &lp->pktStats, ioc->len)) return -EFAULT; 
 	spin_unlock_irqrestore(&lp->lock, flags);
 	break;
 
@@ -5627,14 +5624,12 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 
     case DE4X5_GET_OMR:              /* Get the OMR Register contents */
 	tmp.addr[0] = inl(DE4X5_OMR);
-	if (verify_area(VERIFY_WRITE, ioc->data, 1)) return -EFAULT;
-	copy_to_user(ioc->data, tmp.addr, 1);
+	if (copy_to_user(ioc->data, tmp.addr, 1)) return -EFAULT;
 	break;
 
     case DE4X5_SET_OMR:              /* Set the OMR Register contents */
 	if (!capable(CAP_NET_ADMIN)) return -EPERM;
-	if (verify_area(VERIFY_READ, ioc->data, 1)) return -EFAULT;
-	copy_from_user(tmp.addr, ioc->data, 1);
+	if (copy_from_user(tmp.addr, ioc->data, 1)) return -EFAULT;
 	outl(tmp.addr[0], DE4X5_OMR);
 	break;
 
@@ -5649,8 +5644,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	tmp.lval[6] = inl(DE4X5_STRR); j+=4;
 	tmp.lval[7] = inl(DE4X5_SIGR); j+=4;
 	ioc->len = j;
-	if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
-	copy_to_user(ioc->data, tmp.addr, ioc->len);
+	if (copy_to_user(ioc->data, tmp.addr, ioc->len)) return -EFAULT;
 	break;
 	
 #define DE4X5_DUMP              0x0f /* Dump the DE4X5 Status */
@@ -5739,8 +5733,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	tmp.addr[j++] = dev->tbusy;
 	
 	ioc->len = j;
-	if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
-	copy_to_user(ioc->data, tmp.addr, ioc->len);
+	if (copy_to_user(ioc->data, tmp.addr, ioc->len)) return -EFAULT;
 	break;
 
 */

@@ -50,7 +50,7 @@ static int ext2_open_file (struct inode *, struct file *);
 	   (1LL << (bits - 2)) * (1LL << (bits - 2)) * (1LL << (bits - 2))) * 	\
 	  (1LL << bits)) - 1)
 
-static long long ext2_max_sizes[] = {
+long long ext2_max_sizes[] = {
 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 EXT2_MAX_SIZE(10), EXT2_MAX_SIZE(11), EXT2_MAX_SIZE(12), EXT2_MAX_SIZE(13)
 };
@@ -163,10 +163,16 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 	struct super_block * sb;
 	int err;
 	int i,buffercount,write_error, new_buffer;
-
+	unsigned long limit;
+	
 	/* POSIX: mtime/ctime may not change for 0 count */
 	if (!count)
 		return 0;
+	/* This makes the bounds-checking arithmetic later on much more
+	 * sane. */
+	if (((signed) count) < 0)
+		return -EINVAL;
+	
 	write_error = buffercount = 0;
 	if (!inode) {
 		printk("ext2_file_write: inode = NULL\n");
@@ -192,29 +198,38 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 		pos = *ppos;
 		if (pos != *ppos)
 			return -EINVAL;
-#if BITS_PER_LONG >= 64
-		if (pos > ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(sb)])
-			return -EINVAL;
-#endif
 	}
 
 	/* Check for overflow.. */
+
 #if BITS_PER_LONG < 64
-	if (pos > (__u32) (pos + count)) {
-		count = ~pos; /* == 0xFFFFFFFF - pos */
-		if (!count)
+	/* If the fd's pos is already greater than or equal to the file
+	 * descriptor's offset maximum, then we need to return EFBIG for
+	 * any non-zero count (and we already tested for zero above). */
+	if (((unsigned) pos) >= 0x7FFFFFFFUL)
+		return -EFBIG;
+	
+	/* If we are about to overflow the maximum file size, we also
+	 * need to return the error, but only if no bytes can be written
+	 * successfully. */
+	if (((unsigned) pos + count) > 0x7FFFFFFFUL) {
+		count = 0x7FFFFFFFL - pos;
+		if (((signed) count) < 0)
 			return -EFBIG;
 	}
 #else
 	{
 		off_t max = ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(sb)];
 
+		if (pos >= max)
+			return -EFBIG;
+		
 		if (pos + count > max) {
 			count = max - pos;
 			if (!count)
 				return -EFBIG;
 		}
-		if (((pos + count) >> 32) && 
+		if (((pos + count) >> 33) && 
 		    !(sb->u.ext2_sb.s_es->s_feature_ro_compat &
 		      cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE))) {
 			/* If this is the first large file created, add a flag
@@ -225,6 +240,20 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 		}
 	}
 #endif
+
+	/* From SUS: We must generate a SIGXFSZ for file size overflow
+	 * only if no bytes were actually written to the file. --sct */
+
+	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
+	if (limit < RLIM_INFINITY) {
+		if (((unsigned) pos+count) >= limit) {
+			count = limit - pos;
+			if (((signed) count) <= 0) {
+				send_sig(SIGXFSZ, current, 0);
+				return -EFBIG;
+			}
+		}
+	}
 
 	/*
 	 * If a file has been opened in synchronous mode, we have to ensure

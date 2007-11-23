@@ -64,7 +64,7 @@ extern int ip_masq_mod_lkp_link(struct ip_masq_mod *mmod);
  *	init functions protos
  */
 extern int ip_portfw_init(void);
-extern int ip_markfw_init(void);
+extern int ip_mfw_init(void);
 extern int ip_autofw_init(void);
 
 /*
