@@ -156,9 +156,6 @@ extern void ctc_setup(char *str, int *ints);
 #ifdef CONFIG_IUCV
 extern void iucv_setup(char *str, int *ints);
 #endif
-#ifdef CONFIG_IUCV
-extern void iucv_setup(char *str, int *ints);
-#endif
 #ifdef CONFIG_ARCNET_COM90xxIO
 extern void com90io_setup(char *str, int *ints);
 #endif
@@ -656,10 +653,6 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "noapic", ioapic_setup },
 	{ "pirq=", ioapic_pirq_setup },
 #endif
-#ifdef CONFIG_IUCV
-        { "iucv=", iucv_setup } ,
-#endif
-
 #endif
 #ifdef CONFIG_BLK_DEV_RAM
 	{ "ramdisk_start=", ramdisk_start_setup },
