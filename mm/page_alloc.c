@@ -210,6 +210,12 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	 */
 	if (!(current->flags & PF_MEMALLOC)) {
 		int freed;
+		if (current->state != TASK_RUNNING && (gfp_mask & __GFP_WAIT)) {
+			printk("gfp called by non-running (%d) task from %p!\n",
+				current->state, __builtin_return_address(0));
+			/* if we're not running, we can't sleep */
+			gfp_mask &= ~__GFP_WAIT;
+		}
 
 		if (nr_free_pages <= freepages.low) {
 			wake_up_interruptible(&kswapd_wait);
@@ -224,6 +230,9 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		current->flags |= PF_MEMALLOC;
 		freed = try_to_free_pages(gfp_mask);
 		current->flags &= ~PF_MEMALLOC;
+
+		if ((gfp_mask & __GFP_MED) && nr_free_pages > freepages.min / 2)
+			goto ok_to_allocate;
 
 		if (!freed && !(gfp_mask & __GFP_HIGH))
 			goto nopage;

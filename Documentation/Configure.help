@@ -5490,6 +5490,31 @@ CONFIG_COSA
   The module will be called cosa.o. For general information about
   modules read Documentation/modules.txt.
 
+Lan Media sync serial boards support
+CONFIG_LANMEDIA
+  This is a driver for the following Lan Media family of serial boards.
+
+  LMC 1000 board allows you to connect synchronous serial devices (for
+  example base-band modems, or any other device with the X.21, V.24,
+  V.35 or V.36 interface) to your Linux box. 
+
+  LMC 1200 with on board DSU board allows you to connect your Linux
+  box dirrectly to a T1 or E1 circuit. 
+
+  LMC 5200 board provides a HSSI interface capable of runnig up to
+  52 mbits per second.
+
+  LMC 5245 board connects directly to a T3 circuit saving the
+  additional external hardware.
+
+  To change setting such as syncPPP vs cisco HDLC or clock source you
+  will need lmcctl.  It it available at ftp.lanmedia.com.
+
+  The driver will be compiled as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called lmc.o. For general information about
+  modules read Documentation/modules.txt.
+
 Red Creek Hardware VPN (EXPERIMENTAL)
 CONFIG_RCPCI
   This is a driver for hardware which provides a Virtual Private
@@ -10304,11 +10329,16 @@ CONFIG_HISAX_NO_LLC
   If you have trouble with some ugly exchanges try to select this
   option.
 
+Disable keypad protocol option
+CONFIG_HISAX_NO_KEYPAD
+  If you like to send special dialstrings including * or # without
+  using the keypad protocol, select this option.
+
 HiSax Support for german 1TR6
 CONFIG_HISAX_1TR6
   Enable this if you have a old german 1TR6 line.
 
-HiSax Support for Teles 16.0/8.0
+Teles 16.0/8.0
 CONFIG_HISAX_16_0
   This enables HiSax support for the Teles ISDN-cards S0-16.0, S0-8
   and many compatibles. 
@@ -10317,7 +10347,7 @@ CONFIG_HISAX_16_0
   different cards, a different D-channel protocol, or non-standard
   IRQ/port/shmem settings.
 
-HiSax Support for Teles 16.3 or PNP or PCMCIA
+Teles 16.3 or PNP or PCMCIA
 CONFIG_HISAX_16_3
   This enables HiSax support for the Teles ISDN-cards S0-16.3 the
   Teles/Creatix PnP and the Teles PCMCIA.
@@ -10326,17 +10356,17 @@ CONFIG_HISAX_16_3
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for Teles PCI
+Teles PCI
 CONFIG_HISAX_TELESPCI
   This enables HiSax support for the Teles PCI.
   See Documentation/isdn/README.HiSax on how to configure it.
 
-HiSax Support for Teles S0Box
+Teles S0Box
 CONFIG_HISAX_S0BOX
   This enables HiSax support for the Teles/Creatix parallel port
   S0BOX.  See Documentation/isdn/README.HiSax on how to configure it.
 
-HiSax Support for AVM A1 (Fritz)
+AVM A1 (Fritz)
 CONFIG_HISAX_AVM_A1
   This enables HiSax support for the AVM A1 (aka "Fritz").
   
@@ -10344,17 +10374,17 @@ CONFIG_HISAX_AVM_A1
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for AVM PnP/PCI (Fritz!PNP/PCI)
+AVM PnP/PCI (Fritz!PNP/PCI)
 CONFIG_HISAX_FRITZPCI
   This enables HiSax support for the AVM "Fritz!PnP" and "Fritz!PCI".
   See Documentation/isdn/README.HiSax on how to configure it.
 
-HiSax Support for AVM A1 PCMCIA (Fritz)
+AVM A1 PCMCIA (Fritz)
 CONFIG_HISAX_AVM_A1_PCMCIA
   This enables HiSax support for the AVM A1 "Fritz!PCMCIA").
   See Documentation/isdn/README.HiSax on how to configure it.
 
-HiSax Support for Elsa cards
+Elsa cards
 CONFIG_HISAX_ELSA
   This enables HiSax support for the Elsa Mircolink ISA cards, for the
   Elsa Quickstep series cards and Elsa PCMCIA.
@@ -10363,7 +10393,7 @@ CONFIG_HISAX_ELSA
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for ITK ix1-micro Revision 2
+ITK ix1-micro Revision 2
 CONFIG_HISAX_IX1MICROR2
   This enables HiSax support for the ITK ix1-micro Revision 2 card.
 
@@ -10371,7 +10401,7 @@ CONFIG_HISAX_IX1MICROR2
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for Eicon.Diehl Diva cards
+Eicon.Diehl Diva cards
 CONFIG_HISAX_DIEHLDIVA
   This enables HiSax support for the Eicon.Diehl Diva none PRO
   versions passive ISDN cards.
@@ -10380,16 +10410,16 @@ CONFIG_HISAX_DIEHLDIVA
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for ASUSCOM cards
+ASUSCOM ISA cards
 CONFIG_HISAX_ASUSCOM
   This enables HiSax support for the AsusCom and their OEM versions
-  passive ISDN cards.
+  passive ISDN ISA cards.
 
   See Documentation/isdn/README.HiSax on how to configure it using the
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for TELEINT cards
+TELEINT cards
 CONFIG_HISAX_TELEINT
   This enables HiSax support for the TELEINT SA1 semiactiv ISDN card.
 
@@ -10397,7 +10427,7 @@ CONFIG_HISAX_TELEINT
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for HFC-S based cards
+HFC-S based cards
 CONFIG_HISAX_HFCS
   This enables HiSax support for the HFC-S 2BDS0 based cards, like
   teles 16.3c.
@@ -10406,7 +10436,7 @@ CONFIG_HISAX_HFCS
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for Sedlbauer cards
+Sedlbauer cards
 CONFIG_HISAX_SEDLBAUER
   This enables HiSax support for the Sedlbauer passive ISDN cards.
 
@@ -10414,21 +10444,21 @@ CONFIG_HISAX_SEDLBAUER
   different cards, a different D-channel protocol, or non-standard
   IRQ/port settings.
 
-HiSax Support for USR Sportster internal TA
+USR Sportster internal TA
 CONFIG_HISAX_SPORTSTER
   This enables HiSax support for the USR Sportster internal TA card.
 
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for MIC card
+MIC card
 CONFIG_HISAX_MIC
   This enables HiSax support for the ITH MIC card. 
 
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for NETjet card
+NETjet card
 CONFIG_HISAX_NETJET
   This enables HiSax support for the NetJet from Traverse
   Technologies.
@@ -10436,62 +10466,67 @@ CONFIG_HISAX_NETJET
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for Niccy PnP/PCI card
+Niccy PnP/PCI card
 CONFIG_HISAX_NICCY
   This enables HiSax support for the Dr. Neuhaus Niccy PnP or PCI. 
 
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for Siemens I-Surf card
+Siemens I-Surf card
 CONFIG_HISAX_ISURF
   This enables HiSax support for the Siemens I-Talk/I-Surf card with
   ISAR chip.
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for HST Saphir card
+HST Saphir card
 CONFIG_HISAX_HSTSAPHIR
   This enables HiSax support for the HST Saphir card.
   
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for Telekom A4T card
+Telekom A4T card
 CONFIG_HISAX_BKM_A4T
   This enables HiSax support for the Telekom A4T card.
   
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for Scitel Quadro card
+Scitel Quadro card
 CONFIG_HISAX_SCT_QUADRO
   This enables HiSax support for the Scitel Quadro card.
   
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for Gazel cards
+Gazel cards
 CONFIG_HISAX_GAZEL
   This enables HiSax support for the Gazel cards.
 
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for HFC PCI-Bus cards
+HFC PCI-Bus cards
 CONFIG_HISAX_HFC_PCI
   This enables HiSax support for the HFC-S PCI 2BDS0 based cards.
   
   For more informations see under Documentation/isdn/README.hfc-pci.
 
-HiSax Support for Winbond W6692 based cards
+Winbond W6692 based cards
 CONFIG_HISAX_W6692
   This enables HiSax support for Winbond W6692 based PCI ISDN cards.
   
   See Documentation/isdn/README.HiSax on how to configure it using a
   different D-channel protocol, or non-standard IRQ/port settings.
 
-HiSax Support for Am7930 (EXPERIMENTAL)
+HFC-S+, HFC-SP, HFC-PCMCIA cards (EXPERIMENTAL)
+CONFIG_HISAX_HFC_SX
+  This enables HiSax support for the HFC-S+, HFC-SP and HFC-PCMCIA cards.
+  This code is not finished yet.
+
+Am7930 (EXPERIMENTAL)
 CONFIG_HISAX_AMD7930
   This enables HiSax support for the AMD7930 chips on some SPARCs.
   This code is not finished yet.
@@ -11248,11 +11283,6 @@ CONFIG_RADIO_RTRACK2
   Choose Y here if you have this FM radio card, and then fill in the 
   port address below.
 
-  If you have GemTeks combined (PnP) sound- and radio card you must use
-  this driver as a module and setup the card with isapnptools. You must
-  also pass the module a suitable io parameter, 0x248 has been reported
-  to be used by these cards.
-
   In order to control your radio card, you will need to use programs
   that are compatible with the Video for Linux API. Information on 
   this API and pointers to "v4l" programs may be found on the WWW at
@@ -11436,6 +11466,12 @@ CONFIG_RADIO_GEMTEK
   Choose Y here if you have this FM radio card, and then fill in the 
   port address below.
 
+  If you have GemTeks combined (PnP) sound- and radio card you might want
+  to use this driver as a module and setup the card with isapnptools. You
+  must also pass the module a suitable io parameter. If you have trouble
+  getting the driver to work with the card as a module, please try building
+  it into the kernel by answering Y.
+
   In order to control your radio card, you will need to use programs
   that are compatible with the Video for Linux API. Information on 
   this API and pointers to "v4l" programs may be found on the WWW at
@@ -11450,8 +11486,9 @@ CONFIG_RADIO_GEMTEK
 
 GemTek i/o port
 CONFIG_RADIO_GEMTEK_PORT
-  Enter either 0x20c, 0x30c, 0x24c or 0x34c here. The card default is
-  0x34c, if you haven't changed the jumper setting on the card.
+  Enter either 0x20c, 0x30c, 0x24c or 0x34c here. 0x20c and 0x248 have
+  been reported to work with the combined sound/radio card. The card
+  default is 0x34c, if you haven't changed the jumper setting on the card.
 
 Trust FM Radio Card
 CONFIG_RADIO_TRUST

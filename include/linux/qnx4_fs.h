@@ -29,10 +29,12 @@
 #define QNX4_VALID_FS		0x0001	/* Clean fs. */
 #define QNX4_ERROR_FS		0x0002	/* fs has errors. */
 #define QNX4_BLOCK_SIZE         0x200	/* blocksize of 512 bytes */
-#define QNX4_DIR_ENTRY_SIZE     0x040	/* dir entry size */
+#define QNX4_BLOCK_SIZE_SHIFT	9
+#define QNX4_DIR_ENTRY_SIZE     0x040	/* dir entry size of 64 bytes */
+#define QNX4_DIR_ENTRY_SIZE_SHIFT 6
 #define QNX4_XBLK_ENTRY_SIZE    0x200	/* xblk entry size */
 #define QNX4_INODES_PER_BLOCK   0x08	/* 512 / 64 */
-
+#define QNX4_INODES_PER_BLOCK_MASK 0x07
 /* for filenames */
 #define QNX4_SHORT_NAME_MAX	16
 #define QNX4_NAME_MAX		48

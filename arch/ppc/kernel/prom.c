@@ -608,6 +608,7 @@ prom_init(int r3, int r4, prom_entry pp)
 		else
 			prom_print(RELOC("...failed\n"));
 	}
+#endif /* CONFIG_SMP */
 	
 	/* If OpenFirmware version >= 3, then use quiesce call */
 	if (RELOC(prom_version) >= 3) {
@@ -617,7 +618,6 @@ prom_init(int r3, int r4, prom_entry pp)
 	    phys = offset + KERNELBASE;
 	}
 
-#endif	
 	return phys;
 }
 

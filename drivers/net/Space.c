@@ -120,7 +120,7 @@ extern int via_rhine_probe(struct device *dev);
 extern int tc515_probe(struct device *dev);
 extern int lance_probe(struct device *dev);
 extern int rcpci_probe(struct device *);
-extern int dmfe_reg_board(struct device *);
+extern int dmfe_probe(struct device *);
 
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct device *dev);
@@ -227,7 +227,7 @@ struct devprobe pci_probes[] __initdata = {
 #endif
 
 #ifdef CONFIG_DM9102
-	{dmfe_reg_board, 0}, 
+	{dmfe_probe, 0}, 
 #endif
 
 #ifdef CONFIG_YELLOWFIN
@@ -243,7 +243,7 @@ struct devprobe pci_probes[] __initdata = {
 	{via_rhine_probe, 0},
 #endif
 #ifdef CONFI_NET_DM9102
-	{dmfe_reg_board, 0},
+	{dmfe_probe, 0},
 #endif	
 	{NULL, 0},
 };

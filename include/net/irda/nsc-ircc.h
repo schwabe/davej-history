@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Nov 13 14:37:40 1998
- * Modified at:   Thu Jan 13 18:27:38 2000
+ * Modified at:   Sun Jan 23 17:47:00 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>
@@ -204,10 +204,11 @@ struct st_fifo_entry {
 	int len;
 };
 
-#define MAX_WINDOW 7
+#define MAX_TX_WINDOW 7
+#define MAX_RX_WINDOW 7
 
 struct st_fifo {
-	struct st_fifo_entry entries[MAX_WINDOW];
+	struct st_fifo_entry entries[MAX_RX_WINDOW];
 	int pending_bytes;
 	int head;
 	int tail;
@@ -220,20 +221,17 @@ struct frame_cb {
 };
 
 struct tx_fifo {
-	struct frame_cb queue[MAX_WINDOW]; /* Info about frames in queue */
-	int             ptr;               /* Currently being sent */
-	int             len;               /* Lenght of queue */
-	int             free;              /* Next free slot */
-	void           *tail;              /* Next free start in DMA mem */
+	struct frame_cb queue[MAX_TX_WINDOW]; /* Info about frames in queue */
+	int             ptr;                  /* Currently being sent */
+	int             len;                  /* Lenght of queue */
+	int             free;                 /* Next free slot */
+	void           *tail;                 /* Next free start in DMA mem */
 };
 
 /* Private data for each instance */
 struct nsc_ircc_cb {
 	struct st_fifo st_fifo;    /* Info about received frames */
 	struct tx_fifo tx_fifo;    /* Info about frames to be transmitted */
-
-	int tx_buff_offsets[10];   /* Offsets between frames in tx_buff */
-	int tx_len;                /* Number of frames in tx_buff */
 
 	struct device *netdev;     /* Yes! we are some kind of netdevice */
 	struct net_device_stats stats;

@@ -1,4 +1,4 @@
-/* $Id: eicon_idi.c,v 1.27 1999/11/29 13:12:03 armin Exp $
+/* $Id: eicon_idi.c,v 1.28 2000/01/20 19:55:34 keil Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  *        IDI interface 
@@ -26,6 +26,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_idi.c,v $
+ * Revision 1.28  2000/01/20 19:55:34  keil
+ * Add FAX Class 1 support
+ *
  * Revision 1.27  1999/11/29 13:12:03  armin
  * Autoconnect on L2_TRANS doesn't work with link_level correctly,
  * changed back to former mode.
@@ -142,7 +145,7 @@
 
 #undef EICON_FULL_SERVICE_OKTETT
 
-char *eicon_idi_revision = "$Revision: 1.27 $";
+char *eicon_idi_revision = "$Revision: 1.28 $";
 
 eicon_manifbuf *manbuf;
 
@@ -224,7 +227,7 @@ idi_assign_req(eicon_REQ *reqbuf, int signet, eicon_chan *chan)
 			reqbuf->XBuffer.P[l++] = 1;
 	}
 	switch(chan->l3prot) {
-		case ISDN_PROTO_L3_FAX:
+		case ISDN_PROTO_L3_FCLASS2:
 #ifdef CONFIG_ISDN_TTY_FAX
 			reqbuf->XBuffer.P[l++] = 6;
 			reqbuf->XBuffer.P[l++] = NLC;

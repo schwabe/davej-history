@@ -10393,7 +10393,7 @@ aic7xxx_negotiation_complete(Scsi_Cmnd *cmd)
          * instead of slowing down if those exist.  That's hard to do with simple
          * checksums though.
          */
-        if(aic7xxx_verbose & VERBOSE_NEGOTIATION) 
+        if(aic7xxx_verbose & VERBOSE_NEGOTIATION2) 
         {
           printk(INFO_LEAD "reducing SCSI transfer speed due to Domain "
                  "validation failure.\n", p->host_no, CTL_OF_CMD(cmd));
@@ -10424,7 +10424,7 @@ aic7xxx_negotiation_complete(Scsi_Cmnd *cmd)
       }
       else
       {
-        if(aic7xxx_verbose & VERBOSE_NEGOTIATION) 
+        if(aic7xxx_verbose & VERBOSE_NEGOTIATION2) 
         {
           printk(INFO_LEAD "Performing Domain validation.\n",
                  p->host_no, CTL_OF_CMD(cmd));
@@ -10449,7 +10449,7 @@ aic7xxx_negotiation_complete(Scsi_Cmnd *cmd)
     } 
     else
     {
-      if( (aic7xxx_verbose & VERBOSE_NEGOTIATION) &&
+      if( (aic7xxx_verbose & VERBOSE_NEGOTIATION2) &&
           (p->needdv & (1<<tindex)) )
       {
         printk(INFO_LEAD "Successfully completed Domain validation.\n",

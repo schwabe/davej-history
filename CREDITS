@@ -1901,6 +1901,13 @@ D: Optics Storage 8000AT cdrom driver
 S: Cliffwood, New Jersey 07721
 S: USA
 
+N: Andrew Stanley-Jones
+E: asj@lanmedia.com
+D: LanMedia Corp. Device WAN card device driver
+S: #102, 686 W. Maude Ave
+S: Sunyvale, CA 94086
+S: USA
+
 N: Henrik Storner
 E: storner@image.dk
 W: http://www.image.dk/~storner/

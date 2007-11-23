@@ -1,4 +1,4 @@
-/* $Id: sedlbauer.c,v 1.19 1999/12/19 13:09:42 keil Exp $
+/* $Id: sedlbauer.c,v 1.20 2000/01/20 19:47:45 keil Exp $
 
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
@@ -17,6 +17,9 @@
  *            Edgar Toernig
  *
  * $Log: sedlbauer.c,v $
+ * Revision 1.20  2000/01/20 19:47:45  keil
+ * Add Fax Class 1 support
+ *
  * Revision 1.19  1999/12/19 13:09:42  keil
  * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
  * signal proof delays
@@ -114,7 +117,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.19 $";
+const char *Sedlbauer_revision = "$Revision: 1.20 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 
@@ -663,15 +666,13 @@ setup_sedlbauer(struct IsdnCard *card))
 			(sub_id == PCI_SUB_ID_SPEEDFAXP)) {
 			cs->hw.sedl.chip = SEDL_CHIP_ISAC_ISAR;
 			cs->subtyp = SEDL_SPEEDFAX_PCI;
-			cs->hw.sedl.reset_on = cs->hw.sedl.cfg_reg +
-						SEDL_ISAR_PCI_ISAR_RESET_ON;
-			cs->hw.sedl.reset_off = cs->hw.sedl.cfg_reg +
-						SEDL_ISAR_PCI_ISAR_RESET_OFF;
 		} else {
 			cs->hw.sedl.chip = SEDL_CHIP_IPAC;
 			cs->subtyp = SEDL_SPEED_PCI;
 		}
 		bytecnt = 256;
+		cs->hw.sedl.reset_on = SEDL_ISAR_PCI_ISAR_RESET_ON;
+		cs->hw.sedl.reset_off = SEDL_ISAR_PCI_ISAR_RESET_OFF;
 		byteout(cs->hw.sedl.cfg_reg, 0xff);
 		byteout(cs->hw.sedl.cfg_reg, 0x00);
 		byteout(cs->hw.sedl.cfg_reg+ 2, 0xdd);

@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.95 1999/10/27 21:21:17 detabc Exp $
+/* $Id: isdn_net.c,v 1.103 2000/01/23 18:45:37 keil Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,46 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.103  2000/01/23 18:45:37  keil
+ * Change EAZ mapping to forbit the use of cards (insert a "-" for the MSN)
+ *
+ * Revision 1.102  2000/01/09 20:43:14  detabc
+ * exand logical bind-group's for both call's (in and out).
+ * add first part of kernel-config-help for abc-extension.
+ *
+ * Revision 1.101  1999/12/05 16:06:08  detabc
+ * add resethandling for rawip-compression.
+ * at now all B2-Protocols are usable with rawip-compression
+ *
+ * Revision 1.100  1999/12/04 15:05:25  detabc
+ * bugfix abc-rawip-bsdcompress with channel-bundeling
+ *
+ * Revision 1.99  1999/11/30 11:29:06  detabc
+ * add a on the fly frame-counter and limit
+ *
+ * Revision 1.98  1999/11/28 14:49:07  detabc
+ * In case of rawip-compress adjust dev[x]->ibytes/obytes to reflect the
+ * uncompressed size.
+ *
+ * Revision 1.97  1999/11/26 15:54:59  detabc
+ * added compression (isdn_bsdcompress) for rawip interfaces with x75i B2-protocol.
+ *
+ * Revision 1.96  1999/11/20 22:14:13  detabc
+ * added channel dial-skip in case of external use
+ * (isdn phone or another isdn device) on the same NTBA.
+ * usefull with two or more card's connected the different NTBA's.
+ * global switchable in kernel-config and also per netinterface.
+ *
+ * add auto disable of netinterface's in case of:
+ * 	to many connection's in short time.
+ * 	config mistakes (wrong encapsulation, B2-protokoll or so on) on local
+ * 	or remote side.
+ * 	wrong password's or something else to a ISP (syncppp).
+ *
+ * possible encapsulations for this future are:
+ * ISDN_NET_ENCAP_SYNCPPP, ISDN_NET_ENCAP_UIHDLC, ISDN_NET_ENCAP_RAWIP,
+ * and ISDN_NET_ENCAP_CISCOHDLCK.
+ *
  * Revision 1.95  1999/10/27 21:21:17  detabc
  * Added support for building logically-bind-group's per interface.
  * usefull for outgoing call's with more then one isdn-card.
@@ -443,7 +483,7 @@ int isdn_net_force_dial_lp(isdn_net_local *);
 static int isdn_net_start_xmit(struct sk_buff *, struct device *);
 static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
 
-char *isdn_net_revision = "$Revision: 1.95 $";
+char *isdn_net_revision = "$Revision: 1.103 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -1259,14 +1299,16 @@ isdn_net_log_skb(struct sk_buff * skb, isdn_net_local * lp)
 					strcpy(addinfo, " IDP");
 					break;
 			}
-			printk(KERN_INFO "OPEN: %d.%d.%d.%d -> %d.%d.%d.%d%s\n",
+			printk(KERN_INFO
+				"OPEN: %d.%d.%d.%d -> %d.%d.%d.%d%s\n",
 
 			       p[12], p[13], p[14], p[15],
 			       p[16], p[17], p[18], p[19],
 			       addinfo);
 			break;
 		case ETH_P_ARP:
-			printk(KERN_INFO "OPEN: ARP %d.%d.%d.%d -> *.*.*.* ?%d.%d.%d.%d\n",
+			printk(KERN_INFO
+				"OPEN: ARP %d.%d.%d.%d -> *.*.*.* ?%d.%d.%d.%d\n",
 			       p[14], p[15], p[16], p[17],
 			       p[24], p[25], p[26], p[27]);
 			break;
@@ -1286,8 +1328,8 @@ isdn_net_log_skb(struct sk_buff * skb, isdn_net_local * lp)
  */
 #endif
 int
-isdn_net_send_skb(struct device *ndev, isdn_net_local * lp,
-		  struct sk_buff *skb)
+isdn_net_send_skb
+		(struct device *ndev, isdn_net_local * lp,struct sk_buff *skb)
 {
 	int ret;
 	int len = skb->len;     /* save len */
@@ -1484,7 +1526,6 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 					} else
 						lp->dialwait_timer = 0;
 				}
-
 				/* Grab a free ISDN-Channel */
 				if (((chi =
 				     isdn_get_free_channel(
@@ -1492,7 +1533,8 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 							lp->l2_proto,
 							lp->l3_proto,
 							lp->pre_device,
-						 	lp->pre_channel)
+						 	lp->pre_channel,
+							lp->msn)
 							) < 0) &&
 					((chi =
 				     isdn_get_free_channel(
@@ -1500,7 +1542,8 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 							lp->l2_proto,
 							lp->l3_proto,
 							lp->pre_device,
-						    lp->pre_channel^1)
+							lp->pre_channel^1,
+							lp->msn)
 							) < 0)) {
 					restore_flags(flags);
 					isdn_net_unreachable(ndev, skb,
@@ -2389,7 +2432,7 @@ isdn_net_find_icall(int di, int ch, int idx, setup_parm setup)
 						p = (isdn_net_dev *) p->next;
 						continue;
 					}
-				}
+				} 
 				if (lp->flags & ISDN_NET_CALLBACK) {
 					int chi;
 					/*
@@ -2411,9 +2454,10 @@ isdn_net_find_icall(int di, int ch, int idx, setup_parm setup)
 							isdn_get_free_channel(
 								ISDN_USAGE_NET,
 								lp->l2_proto,
-							    lp->l3_proto,
+								lp->l3_proto,
 							  	lp->pre_device,
-						 		lp->pre_channel)
+						 		lp->pre_channel,
+						 		lp->msn)
 								) < 0) {
 
 							printk(KERN_WARNING "isdn_net_find_icall: No channel for %s\n", lp->name);
@@ -2528,7 +2572,8 @@ isdn_net_force_dial_lp(isdn_net_local * lp)
 							lp->l2_proto,
 							lp->l3_proto,
 							lp->pre_device,
-						 	lp->pre_channel)
+						 	lp->pre_channel,
+							lp->msn)
 							) < 0) {
 				printk(KERN_WARNING "isdn_net_force_dial: No channel for %s\n", lp->name);
 				restore_flags(flags);
@@ -2837,10 +2882,9 @@ isdn_net_setcfg(isdn_net_ioctl_cfg * cfg)
 
 			/* If binding is exclusive, try to grab the channel */
 			save_flags(flags);
-			if ((i = isdn_get_free_channel(ISDN_USAGE_NET, lp->l2_proto,
-						       lp->l3_proto,
-						       drvidx,
-						       chidx)) < 0) {
+			if ((i = isdn_get_free_channel(ISDN_USAGE_NET,
+				lp->l2_proto, lp->l3_proto, drvidx,
+				chidx, lp->msn)) < 0) {
 				/* Grab failed, because desired channel is in use */
 				lp->exclusive = -1;
 				restore_flags(flags);

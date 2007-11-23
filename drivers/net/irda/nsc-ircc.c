@@ -6,7 +6,7 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Wed Jan 19 08:59:16 2000
+ * Modified at:   Wed Jan 26 13:00:29 2000
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-2000 Dag Brattli <dagb@cs.uit.no>
@@ -163,10 +163,6 @@ int __init nsc_ircc_init(void)
 	int reg;
 	int i = 0;
 
-#ifdef CONFIG_APM
-	apm_register_callback(nsc_ircc_apmproc);
-#endif /* CONFIG_APM */
-
 	/* Probe for all the NSC chipsets we know about */
 	for (chip=chips; chip->name ; chip++,i++) {
 		IRDA_DEBUG(2, __FUNCTION__"(), Probing for %s ...\n", 
@@ -219,6 +215,12 @@ int __init nsc_ircc_init(void)
 		} 
 		
 	}
+#ifdef CONFIG_APM
+	/* Make sure at least one chip was found before enabling APM */
+	if (ret == 0)
+		apm_register_callback(nsc_ircc_apmproc);
+#endif /* CONFIG_APM */
+
 	return ret;
 }
 
@@ -1207,7 +1209,7 @@ static int nsc_ircc_hard_xmit_fir(struct sk_buff *skb, struct device *dev)
 	}
  out:
 	/* Not busy transmitting anymore if window is not full */
-	if (self->tx_fifo.free < MAX_WINDOW)
+	if (self->tx_fifo.free < MAX_TX_WINDOW)
 		dev->tbusy = 0;
 
 	/* Restore bank register */
@@ -1354,7 +1356,7 @@ static int nsc_ircc_dma_xmit_complete(struct nsc_ircc_cb *self)
 	}
 
 	/* Make sure we have room for more frames */
-	if (self->tx_fifo.free < MAX_WINDOW) {
+	if (self->tx_fifo.free < MAX_TX_WINDOW) {
 		/* Not busy transmitting anymore */
 		self->netdev->tbusy = 0;
 
@@ -1442,20 +1444,21 @@ static int nsc_ircc_dma_receive_complete(struct nsc_ircc_cb *self, int iobase)
 	
 	/* Read all entries in status FIFO */
 	switch_bank(iobase, BANK5);
-	while (((status = inb(iobase+FRM_ST)) & FRM_ST_VLD) && 
-	       (st_fifo->tail < MAX_WINDOW))
-	{
-		st_fifo->entries[st_fifo->tail].status = status;
+	while ((status = inb(iobase+FRM_ST)) & FRM_ST_VLD) {
+		/* We must empty the status FIFO no matter what */
+		len = inb(iobase+RFLFL) | ((inb(iobase+RFLFH) & 0x1f) << 8);
 
-		len = inb(iobase+RFLFL) | (inb(iobase+RFLFH) << 8);
-		
+		if (st_fifo->tail >= MAX_RX_WINDOW)
+			continue;
+			
+		st_fifo->entries[st_fifo->tail].status = status;
 		st_fifo->entries[st_fifo->tail].len = len;
 		st_fifo->pending_bytes += len;
 		st_fifo->tail++;
 		st_fifo->len++;
 	}
 	/* Try to process all entries in status FIFO */
-	while (st_fifo->len) {
+	while (st_fifo->len > 0) {
 		/* Get first entry */
 		status = st_fifo->entries[st_fifo->head].status;
 		len    = st_fifo->entries[st_fifo->head].len;
@@ -1662,8 +1665,8 @@ static void nsc_ircc_fir_interrupt(struct nsc_ircc_cb *self, int iobase,
 
 	bank = inb(iobase+BSR);
 	
-	/* Status event, or end of frame detected in FIFO */
-	if (eir & (EIR_SFIF_EV|EIR_LS_EV)) {
+	/* Status FIFO event*/
+	if (eir & EIR_SFIF_EV) {
 		if (nsc_ircc_dma_receive_complete(self, iobase)) {
 			/* Wait for next status FIFO interrupt */
 			self->ier = IER_SFIF_IE;
@@ -1678,7 +1681,7 @@ static void nsc_ircc_fir_interrupt(struct nsc_ircc_cb *self, int iobase,
 
 			/* Start timer */
 			outb(IRCR1_TMR_EN, iobase+IRCR1);
-			self->ier = IER_TMR_IE;
+			self->ier = IER_TMR_IE | IER_SFIF_IE;
 		}
 	} else if (eir & EIR_TMR_EV) { /* Timer finished */
 		/* Disable timer */
@@ -1709,7 +1712,7 @@ static void nsc_ircc_fir_interrupt(struct nsc_ircc_cb *self, int iobase,
 				/* Prepare for receive */
 				nsc_ircc_dma_receive(self);
 			
-				self->ier = IER_LS_IE|IER_SFIF_IE;
+				self->ier = IER_SFIF_IE;
 			}
 		} else {
 			/*  Not finished yet, so interrupt on DMA again */

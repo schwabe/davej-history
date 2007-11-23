@@ -784,6 +784,9 @@ void netif_rx(struct sk_buff *skb)
 #else
 		netdev_dropping = 0;
 #endif
+		if (skb->dev->flags & IFF_SLAVE  &&  skb->dev->slave) {
+			skb->dev = skb->dev->slave;
+		}
 		skb_queue_tail(&backlog,skb);
 		mark_bh(NET_BH);
 		return;

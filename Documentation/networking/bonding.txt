@@ -1,0 +1,128 @@
+Installation:
+
+Apply patch.  (if your reading this in
+/usr/src/linux/Documentation/network/bonding.txt, then it's already
+applied.)
+
+Run make menuconfig/xconfig/config, and select 'bonding device' in
+network devices.
+
+Build the new kernel/modules.
+
+Get update ifenslave.c (included in tar file.) (location to be determined.)
+
+install ifenslave.c; do:
+	gcc -O2 -o ifenslave ifenslave.c
+	cp ifenslave /sbin/ifenslave
+
+Modify /etc/conf.modules by adding the line:
+	alias bond0 bonding
+
+If you running a RH5.0 or newer distribution, do:
+
+cd /etc/sysconfig/network-scripts
+cp ifcfg-eth0 ifcfg-bond0
+edit ifcfg-bond0, and make it look the following:
+
+DEVICE=bond0
+USERCTL=no
+ONBOOT=yes
+BOOTPROTO=none
+BROADCAST=XXX.XXX.XXX.255
+NETWORK=XXX.XXX.XXX.0
+NETMASK=255.255.255.0
+IPADDR=XXX.XXX.XXX.XXX
+
+(put the approiate values for you network in where the XXX's are at.)
+
+Then, edit ifcfg-eth0/ifcfg-eth1 (and all the other slave devices), and make them
+look like this:
+
+DEVICE=eth0
+USERCTL=no
+ONBOOT=yes
+MASTER=bond0
+SLAVE=yes
+BOOTPROTO=none
+
+Reboot, and the network should come up bonded together.
+
+For other distributions, you need to do something like:
+
+/sbin/ifconfig bond0 addresss netmask xxx.xxx.xxx.xxx broadcast xxx.xxx.xxx.xxx up
+/sbin/ifenslave bond0 eth0
+/sbin/ifenslave bond0 eth1
+
+When properly configured, it will look this:
+
+[root]# /sbin/ifconfig
+bond0     Link encap:Ethernet  HWaddr 00:C0:F0:1F:37:B4  
+          inet addr:XXX.XXX.XXX.YYY  Bcast:XXX.XXX.XXX.255  Mask:255.255.252.0
+          UP BROADCAST RUNNING MASTER MULTICAST  MTU:1500  Metric:1
+          RX packets:7224794 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:3286647 errors:1 dropped:0 overruns:1 carrier:0
+          collisions:0 txqueuelen:0 
+
+eth0      Link encap:Ethernet  HWaddr 00:C0:F0:1F:37:B4  
+          inet addr:XXX.XXX.XXX.YYY  Bcast:XXX.XXX.XXX.255  Mask:255.255.252.0
+          UP BROADCAST RUNNING SLAVE MULTICAST  MTU:1500  Metric:1
+          RX packets:3573025 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:1643167 errors:1 dropped:0 overruns:1 carrier:0
+          collisions:0 txqueuelen:100 
+          Interrupt:10 Base address:0x1080 
+
+eth1      Link encap:Ethernet  HWaddr 00:C0:F0:1F:37:B4  
+          inet addr:XXX.XXX.XXX.YYY  Bcast:XXX.XXX.XXX.255  Mask:255.255.252.0
+          UP BROADCAST RUNNING SLAVE MULTICAST  MTU:1500  Metric:1
+          RX packets:3651769 errors:0 dropped:0 overruns:0 frame:0
+          TX packets:1643480 errors:0 dropped:0 overruns:0 carrier:0
+          collisions:0 txqueuelen:100 
+          Interrupt:9 Base address:0x1400 
+
+Questions:
+
+1.  Is it SMP safe?
+
+	Yes.  The old 2.0.xx channel bonding patch wasn't SMP safe.
+This one was designed from the start to be SMP safe.
+
+2.  What type of cards can it work with it?
+
+	Any Ethernet type cards (ie, you can even mix cards - a tulip
+and a 3com 3c905, for example).  You can even bond together Gigabit
+Ethernet cards!
+
+3.  How many bond devices can I have?
+
+	Just one at this time.
+
+4.  How many slaves can a bond device have?
+
+	Limited by the number of cards you can place in your system.
+
+5.  What happens when a slave dies?
+
+	Currently, the ethernet drivers don't really handle this
+situation very well.  The tulip driver never stalls; it just starts to
+throw packets away!
+
+6.  If this was fixed, can bonding be used for High Availability?
+
+	Yes!
+
+7.  Which switches/systems does it work with?
+
+	Cisco 5500 series (look for EtherChannel support).
+	SunTrunking software.
+
+8.  Where does the bond0 device get it's mac address from?
+
+	It's taken from the first slave device.  If you remove that
+first slave device, the MAC address continues to be associated with
+it.  If you wish to remove that MAC address, you have to ifconfig
+bond0 down, and then modprobe -r bonding.  If you wish, you can also
+assign a MAC address when you ifconfig the bond0 device.
+
+9.  Which transmit policy is used?
+
+	Round robin, based on order of enslaving.

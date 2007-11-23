@@ -244,6 +244,8 @@ struct olympic_private {
 	__u8 *olympic_mmio;
 	__u8 *olympic_lap;
 
+	spinlock_t	olympic_lock ; 
+
 	volatile int srb_queued;    /* True if an SRB is still posted */	
 	struct wait_queue *srb_wait;
 

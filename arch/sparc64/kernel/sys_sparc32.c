@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.107.2.5 1999/11/12 11:17:47 davem Exp $
+/* $Id: sys_sparc32.c,v 1.107.2.7 2000/01/24 11:36:50 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -1890,15 +1890,14 @@ sys32_rt_sigqueueinfo(int pid, int sig, siginfo_t32 *uinfo)
 	return ret;
 }
 
+#define low2highuid(uid) ((uid) == (u16)-1) ? (uid_t)-1 : (uid_t)(uid)
+#define low2highgid(gid) ((gid) == (u16)-1) ? (gid_t)-1 : (gid_t)(gid)
+
 extern asmlinkage int sys_setreuid(uid_t ruid, uid_t euid);
 
 asmlinkage int sys32_setreuid(__kernel_uid_t32 ruid, __kernel_uid_t32 euid)
 {
-	uid_t sruid, seuid;
-
-	sruid = (ruid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)ruid);
-	seuid = (euid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)euid);
-	return sys_setreuid(sruid, seuid);
+	return sys_setreuid(low2highuid(ruid), low2highuid(euid));
 }
 
 extern asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid);
@@ -1907,12 +1906,7 @@ asmlinkage int sys32_setresuid(__kernel_uid_t32 ruid,
 			       __kernel_uid_t32 euid,
 			       __kernel_uid_t32 suid)
 {
-	uid_t sruid, seuid, ssuid;
-
-	sruid = (ruid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)ruid);
-	seuid = (euid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)euid);
-	ssuid = (suid == (__kernel_uid_t32)-1) ? ((uid_t)-1) : ((uid_t)suid);
-	return sys_setresuid(sruid, seuid, ssuid);
+	return sys_setresuid(low2highuid(ruid), low2highuid(euid), low2highuid(suid));
 }
 
 extern asmlinkage int sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid);
@@ -1935,11 +1929,7 @@ extern asmlinkage int sys_setregid(gid_t rgid, gid_t egid);
 
 asmlinkage int sys32_setregid(__kernel_gid_t32 rgid, __kernel_gid_t32 egid)
 {
-	gid_t srgid, segid;
-
-	srgid = (rgid == (__kernel_gid_t32)-1) ? ((gid_t)-1) : ((gid_t)rgid);
-	segid = (egid == (__kernel_gid_t32)-1) ? ((gid_t)-1) : ((gid_t)egid);
-	return sys_setregid(srgid, segid);
+	return sys_setregid(low2highgid(rgid), low2highgid(egid));
 }
 
 extern asmlinkage int sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid);
@@ -1948,12 +1938,7 @@ asmlinkage int sys32_setresgid(__kernel_gid_t32 rgid,
 			       __kernel_gid_t32 egid,
 			       __kernel_gid_t32 sgid)
 {
-	gid_t srgid, segid, ssgid;
-
-	srgid = (rgid == (__kernel_gid_t32)-1) ? ((gid_t)-1) : ((gid_t)rgid);
-	segid = (egid == (__kernel_gid_t32)-1) ? ((gid_t)-1) : ((gid_t)egid);
-	ssgid = (sgid == (__kernel_gid_t32)-1) ? ((gid_t)-1) : ((gid_t)sgid);
-	return sys_setresgid(srgid, segid, ssgid);
+	return sys_setresgid(low2highgid(rgid), low2highgid(egid), low2highgid(sgid));
 }
 
 extern asmlinkage int sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid);
@@ -1973,6 +1958,25 @@ asmlinkage int sys32_getresgid(__kernel_gid_t32 *rgid, __kernel_gid_t32 *egid, _
 		ret |= put_user (c, sgid);
 	}
 	return ret;
+}
+
+extern asmlinkage long sys_chown(const char *, uid_t,gid_t);
+extern asmlinkage long sys_lchown(const char *, uid_t,gid_t);
+extern asmlinkage long sys_fchown(unsigned int, uid_t,gid_t);
+
+asmlinkage long sys32_chown16(const char * filename, u16 user, u16 group)
+{
+	return sys_chown(filename, low2highuid(user), low2highgid(group));
+}
+
+asmlinkage long sys32_lchown16(const char * filename, u16 user, u16 group)
+{
+	return sys_lchown(filename, low2highuid(user), low2highgid(group));
+}
+                
+asmlinkage long sys32_fchown16(unsigned int fd, u16 user, u16 group)
+{
+	return sys_fchown(fd, low2highuid(user), low2highgid(group));
 }
 
 struct tms32 {

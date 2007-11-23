@@ -483,11 +483,16 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	 * would be a ten byte read where only a six byte read was supported.
 	 * Also, on a system where READ CAPACITY failed, we have have read
 	 * past the end of the disk.
+	 *
+	 * Don't screw with the ten byte flag unless we are certain that
+	 * the drive does not understand the command /axboe
 	 */
 
 	if (SCpnt->sense_buffer[2] == ILLEGAL_REQUEST) {
 	    if (rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].ten) {
-		rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].ten = 0;
+		if (SCpnt->cmnd[0] == READ_10 || SCpnt->cmnd[0] == WRITE_10 ||
+		    SCpnt->sense_buffer[12] == 0x20)
+		    rscsi_disks[DEVICE_NR(SCpnt->request.rq_dev)].ten = 0;
 		requeue_sd_request(SCpnt);
 		result = 0;
 	    } else {
@@ -1016,7 +1021,7 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	this_count = this_count << 1;
     }
 
-    if (((this_count > 0xff) ||  (block > 0x1fffff)) && rscsi_disks[dev].ten)
+    if (((this_count > 0xff) ||  (block > 0x1fffff)) || rscsi_disks[dev].ten)
     {
 	if (this_count > 0xffff)
 	    this_count = 0xffff;

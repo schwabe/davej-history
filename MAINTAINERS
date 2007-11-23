@@ -476,6 +476,12 @@ L:	nfs-devel@linux.kernel.org (Linux NFS)
 W:	http://csua.berkeley.edu/~gam3/knfsd
 S:	Maintained
 
+LANMEDIA WAN CARD DRIVER
+P:	Andrew Stanley-Jones
+M:	asj@lanmedia.com
+W:      http://www.lanmedia.com/
+S:	Supported
+
 LAPB module
 P:	Henner Eisen
 M:	eis@baty.hanse.de

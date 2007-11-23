@@ -96,6 +96,7 @@ int parport_probe(struct parport *port, char *buffer, int len)
 	struct pardevice *dev = parport_register_device(port, "IEEE 1284 probe", NULL, NULL, NULL, 0, &dev);
 
 	int result = 0;
+	int lives = 1;
 
 	if (!dev) {
 		printk("%s: unable to register for probe.\n", port->name);
@@ -104,6 +105,7 @@ int parport_probe(struct parport *port, char *buffer, int len)
 
 	parport_claim_or_block(dev);
 
+ try_again:
 	switch (parport_ieee1284_nibble_mode_ok(port, 4)) {
 	case 2:
 		current->state=TASK_INTERRUPTIBLE;
@@ -115,6 +117,20 @@ int parport_probe(struct parport *port, char *buffer, int len)
 		result = -EIO;
 		break;
 	}
+
+	if (result < 1 && lives--) {
+		/* Reset the peripherals and try again. */
+		parport_pc_write_control(port, 0x8);
+		parport_pc_write_data(port, 0);
+		udelay (50);
+		parport_pc_write_control(port, 0xc);
+		udelay (500);
+		goto try_again;
+	}
+
+	printk (KERN_DEBUG "parport_probe: %s%s\n",
+		lives ? "" : "after reset: ",
+		result < 1 ? "failed" : "succeeded");
 
 	parport_release(dev);
 	parport_unregister_device(dev);

@@ -1,4 +1,4 @@
-/* $Id: eicon_mod.c,v 1.22 1999/11/27 12:56:19 armin Exp $
+/* $Id: eicon_mod.c,v 1.23 2000/01/20 19:55:34 keil Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  * 
@@ -31,6 +31,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.23  2000/01/20 19:55:34  keil
+ * Add FAX Class 1 support
+ *
  * Revision 1.22  1999/11/27 12:56:19  armin
  * Forgot some iomem changes for last ioremap compat.
  *
@@ -133,7 +136,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.22 $";
+static char *eicon_revision = "$Revision: 1.23 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -669,7 +672,7 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 				break;
 			chan->l3prot = (c->arg >> 8);
 #ifdef CONFIG_ISDN_TTY_FAX
-			if (chan->l3prot == ISDN_PROTO_L3_FAX)
+			if (chan->l3prot == ISDN_PROTO_L3_FCLASS2)
 				chan->fax = c->parm.fax;
 #endif
 			return 0;
@@ -1086,7 +1089,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_MODEM |
 					ISDN_FEATURE_L2_FAX | 
 					ISDN_FEATURE_L3_TRANSDSP |
-					ISDN_FEATURE_L3_FAX;
+					ISDN_FEATURE_L3_FCLASS2;
                                 card->hwif.pci.card = (void *)card;
 				card->hwif.pci.PCIreg = pcic->PCIreg;
 				card->hwif.pci.PCIcfg = pcic->PCIcfg;
@@ -1110,7 +1113,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_MODEM |
 					ISDN_FEATURE_L2_FAX |
 					ISDN_FEATURE_L3_TRANSDSP |
-					ISDN_FEATURE_L3_FAX;
+					ISDN_FEATURE_L3_FCLASS2;
                                 card->hwif.pci.card = (void *)card;
                                 card->hwif.pci.shmem = (eicon_pci_shmem *)pcic->shmem;
 				card->hwif.pci.PCIreg = pcic->PCIreg;

@@ -313,7 +313,7 @@ static int lmc_ioctl (struct device *dev, struct ifreq *ifr, int cmd) /*fold00*/
 
 
 /* the watchdog process that cruises around */
-static void lmc_watchdog (unsigned long data) /*FOLD00*/
+static void lmc_watchdog (unsigned long data) /*fold00*/
 {
     struct device *dev = (struct device *) data;
     lmc_softc_t *sc;
@@ -483,9 +483,9 @@ static struct device *lmc_probe1 (struct device *dev, int ioaddr, int irq, /*fol
 	/*
 	 *	Switch to common hdlc%d naming. We name by type not by vendor
 	 */
-    dev->name = (char *)(dev+1);
+    dev->name = (char *) (((u32) (dev)) + sizeof (struct ppp_device));
     dev_alloc_name(dev, "hdlc%d");
-    
+
     Lmc_Count++;
 
     if(lmc_first_load == 0){
@@ -504,10 +504,7 @@ static struct device *lmc_probe1 (struct device *dev, int ioaddr, int irq, /*fol
      * Allocate space for the private data structure
      */
 
-    /* FIXME: we adjust to 8 byte align, but we then kfree the adjusted value
-       BUG BUG BUG - fortunately kmalloc will be 8 byte aligned.. */
-       
-    sc = (void *) (((long) kmalloc (sizeof (lmc_softc_t), GFP_KERNEL) + 7) & ~7);
+    sc = kmalloc (sizeof (lmc_softc_t), GFP_KERNEL);
     if (sc == NULL) {
         printk (KERN_WARNING "%s: Cannot allocate memory for device state\n",
                 dev->name);
@@ -923,7 +920,6 @@ static int lmc_close (struct device *dev) /*fold00*/
     del_timer (&sc->timer);
     sppp_close (dev);
     lmc_ifdown (dev);
-    printk(KERN_DEBUG "%s: Close ran\n", dev->name);
 
     return 0;
 }
@@ -1315,7 +1311,7 @@ lmc_start_xmit_bug_out:
 }
 
 
-static int lmc_rx (struct device *dev) /*FOLD00*/
+static int lmc_rx (struct device *dev) /*fold00*/
 {
     lmc_softc_t *sc;
     int i;

@@ -35,13 +35,13 @@ static int qnx4_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	QNX4DEBUG(("filp->f_pos         = %ld\n", (long) filp->f_pos));
 
 	while (filp->f_pos < inode->i_size) {
-		blknum = qnx4_block_map( inode, filp->f_pos / QNX4_BLOCK_SIZE );
+		blknum = qnx4_block_map( inode, filp->f_pos >> QNX4_BLOCK_SIZE_SHIFT );
 		bh = bread(inode->i_dev, blknum, QNX4_BLOCK_SIZE);
 		if(bh==NULL) {
 			printk(KERN_ERR "qnx4_readdir: bread failed (%ld)\n", blknum);
 			break;
 		}
-		ix = (filp->f_pos / QNX4_DIR_ENTRY_SIZE - (filp->f_pos / QNX4_BLOCK_SIZE) * QNX4_INODES_PER_BLOCK) % QNX4_INODES_PER_BLOCK;
+		ix = ( (filp->f_pos >> QNX4_DIR_ENTRY_SIZE_SHIFT) - (filp->f_pos >> QNX4_BLOCK_SIZE_SHIFT) * QNX4_INODES_PER_BLOCK) & QNX4_INODES_PER_BLOCK_MASK;
 		while (ix < QNX4_INODES_PER_BLOCK) {
 			offset = ix * QNX4_DIR_ENTRY_SIZE;
 			de = (struct qnx4_inode_entry *) (bh->b_data + offset);

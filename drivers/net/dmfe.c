@@ -283,7 +283,7 @@ static unsigned long CrcTable[256] =
 };
 
 /* function declaration ------------------------------------- */
-static int dmfe_probe(struct device *);
+int dmfe_probe(struct device *);
 static int dmfe_open(struct device *);
 static int dmfe_start_xmit(struct sk_buff *, struct device *);
 static int dmfe_stop(struct device *);

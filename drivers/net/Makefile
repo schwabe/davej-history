@@ -366,6 +366,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BONDING),y)
+L_OBJS += bonding.o
+else
+  ifeq ($(CONFIG_BONDING),m)
+  M_OBJS += bonding.o
+  endif
+endif
+
 ifeq ($(CONFIG_DE600),y)
 L_OBJS += de600.o
 else
