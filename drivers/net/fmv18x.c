@@ -369,7 +369,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
-		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
+		short length = skb->len;
 		unsigned char *buf = skb->data;
 
 		if (length > ETH_FRAME_LEN) {
@@ -378,6 +378,17 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 					dev->name, length);
 			return 1;
 		}
+	
+		if (length < ETH_ZLEN)
+		{
+			skb = skb_padto(skb, ETH_ZLEN);
+			if(skb == NULL)
+			{
+				dev->tbusy = 0;
+				return 0;
+			}
+			length = ETH_ZLEN;
+		}	
 
 		if (net_debug > 4)
 			printk("%s: Transmitting a packet of length %lu.\n", dev->name,

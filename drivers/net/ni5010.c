@@ -113,7 +113,7 @@ static void	reset_receiver(struct device *dev);
 
 static int	process_xmt_interrupt(struct device *dev);
 #define tx_done(dev) 1
-extern void	hardware_send_packet(struct device *dev, char *buf, int length);
+extern void	hardware_send_packet(struct device *dev, char *buf, int length, int pad);
 extern void 	chipset_init(struct device *dev, int startp);
 static void	dump_packet(void *buf, int len);
 static void 	show_registers(struct device *dev);
@@ -457,7 +457,7 @@ static int ni5010_send_packet(struct sk_buff *skb, struct device *dev)
 	} else {
 		int length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 
-		hardware_send_packet(dev, (unsigned char *)skb->data, length);
+		hardware_send_packet(dev, (unsigned char *)skb->data, length, length-skb->len);
 		dev->trans_start = jiffies;
 	}
 	dev_kfree_skb (skb);
@@ -702,7 +702,7 @@ ni5010_set_multicast_list(struct device *dev)
 	}
 }
 
-extern void hardware_send_packet(struct device *dev, char *buf, int length)
+extern void hardware_send_packet(struct device *dev, char *buf, int length, int pad)
 {
 	struct ni5010_local *lp = (struct ni5010_local *)dev->priv;
 	int ioaddr = dev->base_addr;
@@ -727,8 +727,8 @@ extern void hardware_send_packet(struct device *dev, char *buf, int length)
 	
 	if (NI5010_DEBUG > 3) dump_packet(buf, length);
 
-        buf_offs = NI5010_BUFSIZE - length;
-        lp->o_pkt_size = length;
+        buf_offs = NI5010_BUFSIZE - length - pad ;
+        lp->o_pkt_size = length + pad ;
 
 	save_flags(flags);	
 	cli();
@@ -739,6 +739,9 @@ extern void hardware_send_packet(struct device *dev, char *buf, int length)
 
 	outw(buf_offs, IE_GP); /* Point GP at start of packet */
 	outsb(IE_XBUF, buf, length); /* Put data in buffer */
+	while(pad--)
+		outb(0, IE_XBUF);
+		
 	outw(buf_offs, IE_GP); /* Rewrite where packet starts */
 
 	/* should work without that outb() (Crynwr used it) */

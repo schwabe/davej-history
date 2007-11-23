@@ -312,6 +312,55 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int gfp_mask)
 	return n;
 }
 
+struct sk_buff *skb_copy_grow(struct sk_buff *skb, int pad, int gfp_mask)
+{
+	struct sk_buff *n;
+	unsigned long offset;
+
+	/*
+	 *	Allocate the copy buffer
+	 */
+	 
+	n=alloc_skb(skb->end - skb->head + pad, gfp_mask);
+	if(n==NULL)
+		return NULL;
+
+	/*
+	 *	Shift between the two data areas in bytes
+	 */
+	 
+	offset=n->head-skb->head;
+
+	/* Set the data pointer */
+	skb_reserve(n,skb->data-skb->head);
+	/* Set the tail pointer and length */
+	skb_put(n,skb->len);
+	/* Copy the bytes */
+	memcpy(n->head,skb->head,skb->end-skb->head);
+	n->csum = skb->csum;
+	n->list=NULL;
+	n->sk=NULL;
+	n->dev=skb->dev;
+	n->priority=skb->priority;
+	n->protocol=skb->protocol;
+	n->dst=dst_clone(skb->dst);
+	n->h.raw=skb->h.raw+offset;
+	n->nh.raw=skb->nh.raw+offset;
+	n->mac.raw=skb->mac.raw+offset;
+	memcpy(n->cb, skb->cb, sizeof(skb->cb));
+	n->used=skb->used;
+	n->is_clone=0;
+	atomic_set(&n->users, 1);
+	n->pkt_type=skb->pkt_type;
+	n->stamp=skb->stamp;
+	n->destructor = NULL;
+	n->security=skb->security;
+#ifdef CONFIG_IP_FIREWALL
+        n->fwmark = skb->fwmark;
+#endif
+	return n;
+}
+
 struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 {
 	struct sk_buff *n;
@@ -362,6 +411,36 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	return n;
 }
 
+/**
+ *	skb_pad			-	zero pad the tail of an skb
+ *	@skb: buffer to pad
+ *	@pad: space to pad
+ *
+ *	Ensure that a buffer is followed by a padding area that is zero
+ *	filled. Used by network drivers which may DMA or transfer data
+ *	beyond the buffer end onto the wire.
+ *
+ *	May return NULL in out of memory cases.
+ */
+ 
+struct sk_buff *skb_pad(struct sk_buff *skb, int pad)
+{
+	struct sk_buff *nskb;
+	
+	/* If the skbuff is non linear tailroom is always zero.. */
+	if(skb_tailroom(skb) >= pad)
+	{
+		memset(skb->data+skb->len, 0, pad);
+		return skb;
+	}
+	
+	nskb = skb_copy_grow(skb, pad, GFP_ATOMIC);
+	kfree_skb(skb);
+	if(nskb)
+		memset(nskb->data+nskb->len, 0, pad);
+	return nskb;
+}	
+ 
 #if 0
 /* 
  * 	Tune the memory allocator for a new MTU size.

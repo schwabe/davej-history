@@ -290,7 +290,7 @@ static void el16_rx(struct device *dev);
 static int	el16_close(struct device *dev);
 static struct net_device_stats *el16_get_stats(struct device *dev);
 
-static void hardware_send_packet(struct device *dev, void *buf, short length);
+static void hardware_send_packet(struct device *dev, void *buf, short length, short pad);
 static void init_82586_mem(struct device *dev);
 
 
@@ -495,10 +495,10 @@ static int el16_send_packet(struct sk_buff *skb, struct device *dev)
 		outb(0x80, ioaddr + MISC_CTRL);
 #ifdef CONFIG_SMP
 		spin_lock_irqsave(&lp->lock, flags);
-		hardware_send_packet(dev, buf, length);
+		hardware_send_packet(dev, buf, skb->len, length - skb->len);
 		spin_unlock_irqrestore(&lp->lock, flags);
 #else
-		hardware_send_packet(dev, buf, length);
+		hardware_send_packet(dev, buf, skb->len, length - skb->len);
 #endif		
 		dev->trans_start = jiffies;
 		/* Enable the 82586 interrupt input. */
@@ -758,12 +758,13 @@ static void init_82586_mem(struct device *dev)
 	return;
 }
 
-static void hardware_send_packet(struct device *dev, void *buf, short length)
+static void hardware_send_packet(struct device *dev, void *buf, short length, short pad)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
 	ushort tx_block = lp->tx_head;
 	unsigned long write_ptr = dev->mem_start + tx_block;
+	static char padding[ETH_ZLEN];
 
 	/* Set the write pointer to the Tx block, and put out the header. */
 	writew(0x0000,write_ptr);			/* Tx status */
@@ -772,7 +773,7 @@ static void hardware_send_packet(struct device *dev, void *buf, short length)
 	writew(tx_block+8,write_ptr+=2);			/* Data Buffer offset. */
 
 	/* Output the data buffer descriptor. */
-	writew(length | 0x8000,write_ptr+=2);		/* Byte count parameter. */
+	writew((pad + length) | 0x8000,write_ptr+=2);	/* Byte count parameter. */
 	writew(-1,write_ptr+=2);			/* No next data buffer. */
 	writew(tx_block+22+SCB_BASE,write_ptr+=2);	/* Buffer follows the NoOp command. */
 	writew(0x0000,write_ptr+=2);			/* Buffer address high bits (always zero). */
@@ -784,6 +785,8 @@ static void hardware_send_packet(struct device *dev, void *buf, short length)
 
 	/* Output the packet at the write pointer. */
 	memcpy_toio(write_ptr+2, buf, length);
+	if(pad)
+		memcpy_toio(write_ptr+length+2, padding, pad);
 
 	/* Set the old command link pointing to this send packet. */
 	writew(tx_block,dev->mem_start + lp->tx_cmd_link);

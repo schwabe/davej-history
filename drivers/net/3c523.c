@@ -1118,8 +1118,10 @@ static int elmc_send_packet(struct sk_buff *skb, struct device *dev)
 	if (test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	} else {
-		memcpy((char *) p->xmit_cbuffs[p->xmit_count], (char *) (skb->data), skb->len);
 		len = (ETH_ZLEN < skb->len) ? skb->len : ETH_ZLEN;
+		if(len != skb->len)
+			memset((char *) p->xmit_cbuffs[p->xmit_count], 0, ETH_ZLEN);
+		memcpy((char *) p->xmit_cbuffs[p->xmit_count], (char *) (skb->data), skb->len);
 
 #if (NUM_XMIT_BUFFS == 1)
 #ifdef NO_NOPCOMMANDS

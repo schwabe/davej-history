@@ -969,6 +969,15 @@ static int start_tx(struct sk_buff *skb, struct device *dev)
 	/* Calculate the next Tx descriptor entry. */
 	entry = np->cur_tx % TX_RING_SIZE;
 
+	if (skb->len < ETH_ZLEN) {
+		skb = skb_padto(skb, ETH_ZLEN);
+		if(skb == NULL)
+		{
+			dev->tbusy = 0;
+			return 0;
+		}
+	}
+
 	np->tx_skbuff[entry] = skb;
 
 	if ((np->drv_flags & ReqTxAlign)  && ((long)skb->data & 3)) {

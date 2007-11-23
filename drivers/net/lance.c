@@ -919,8 +919,15 @@ static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	/* The old LANCE chips doesn't automatically pad buffers to min. size. */
 	if (chip_table[lp->chip_version].flags & LANCE_MUST_PAD) {
-		lp->tx_ring[entry].length =
-			-(ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN);
+		if(skb->len < ETH_ZLEN)
+		{
+			skb = skb_padto(skb, ETH_ZLEN);
+			if(skb == NULL)
+				goto out;
+			lp->tx_ring[entry].length = -ETH_ZLEN;
+		}
+		else 
+			lp->tx_ring[entry].length = -skb->len;
 	} else
 		lp->tx_ring[entry].length = -skb->len;
 
@@ -950,6 +957,7 @@ static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	dev->trans_start = jiffies;
 
+out:
 	save_flags(flags);
 	cli();
 	lp->lock = 0;

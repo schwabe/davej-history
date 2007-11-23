@@ -879,6 +879,13 @@ epic_start_xmit(struct sk_buff *skb, struct device *dev)
 	int entry, free_count;
 	u32 ctrl_word;
 	long flags;
+	
+	if(skb->len < ETH_ZLEN)
+	{
+		skb = skb_padto(skb, ETH_ZLEN);
+		if(skb == NULL)
+			return 0;
+	}
 
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */

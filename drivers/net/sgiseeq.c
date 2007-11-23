@@ -562,6 +562,8 @@ static int sgiseeq_start_xmit(struct sk_buff *skb, struct device *dev)
 	 *    added this new entry and restarted it.
 	 */
 	memcpy((char *)td->buf_vaddr, skb->data, skblen);
+	if(len != skblen)
+		memset((char *)(long)td->buf_vaddr + skb->len, 0, len-skblen);
 	td->tdma.cntinfo = ((len) & HPCDMA_BCNT) |
 		(HPCDMA_XIU | HPCDMA_EOXP | HPCDMA_XIE | HPCDMA_EOX);
 	if(sp->tx_old != sp->tx_new) {

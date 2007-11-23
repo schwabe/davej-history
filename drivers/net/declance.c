@@ -873,12 +873,23 @@ static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
 		return -1;
 	}
 	skblen = skb->len;
+	len = skblen;
+	
+	if(len < ETH_ZLEN)
+	{
+		skb = skb_padto(skb, ETH_ZLEN);
+		if(skb == NULL)
+		{
+			dev->tbusy = 0;
+			return 0;
+		}
+		len = ETH_ZLEN;
+	}
 	save_and_cli(flags);
 	if (!TX_BUFFS_AVAIL) {
 		restore_flags(flags);
 		return -1;
 	}
-	len = (skblen <= ETH_ZLEN) ? ETH_ZLEN : skblen;
 
 	lp->stats.tx_bytes += len;
 

@@ -524,11 +524,24 @@ am79c961_sendpacket(struct sk_buff *skb, struct device *dev)
 	if (!dev->tbusy) {
 again:
 		if (!test_and_set_bit(0, (void*)&dev->tbusy)) {
-			unsigned int length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
+			unsigned int length = skb->len;
 			unsigned int hdraddr, bufaddr;
 			unsigned int head;
 			unsigned long flags;
 
+
+			/* FIXME: I thought the 79c961 could do padding - RMK ??? */
+			if(length < ETH_ZLEN)
+			{
+				skb = skb_padto(skb, ETH_ZLEN);
+				if(skb == NULL)
+				{
+					dev->tbusy = 0;
+					return 0;
+				}
+				length = ETH_ZLEN;
+			}
+ 
 			head = priv->txhead;
 			hdraddr = priv->txhdr + (head << 3);
 			bufaddr = priv->txbuffer[head];

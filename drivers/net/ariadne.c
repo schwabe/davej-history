@@ -547,6 +547,7 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
     struct AriadneBoard *board = priv->board;
     int entry;
     unsigned long flags;
+    int len = skb->len;
 
     /* Transmitter timeout, serious problems. */
     if (dev->tbusy) {
@@ -608,6 +609,18 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
     }
 
     /* Fill in a Tx ring entry */
+    /* FIXME: is the 79C960 new enough to do its own padding right ? */
+    if(skb->len < ETH_ZLEN)
+    {
+    	skb = skb_padto(skb, ETH_ZLEN);
+    	if(skb == NULL)
+    	{
+    	    dev->tbusy = 0;
+    	    return 0;
+    	}
+    	len = ETH_ZLEN;
+    }
++
 
 #if 0
     printk("TX pkt type 0x%04x from ", ((u_short *)skb->data)[6]);
@@ -637,7 +650,7 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
 
     priv->tx_ring[entry]->TMD2 = swapw((u_short)-skb->len);
     priv->tx_ring[entry]->TMD3 = 0x0000;
-    memcpyw(priv->tx_buff[entry], (u_short *)skb->data, skb->len);
+    memcpyw(priv->tx_buff[entry], (u_short *)skb->data, len);
 
 #if 0
     {

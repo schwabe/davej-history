@@ -310,7 +310,7 @@ de620_read_byte(struct device *dev)
 }
 
 static inline void
-de620_write_block(struct device *dev, byte *buffer, int count)
+de620_write_block(struct device *dev, byte *buffer, int count, int pad)
 {
 #ifndef LOWSPEED
 	byte uflip = NIC_Cmd ^ (DS0 | DS1);
@@ -328,6 +328,9 @@ de620_write_block(struct device *dev, byte *buffer, int count)
 	/* No further optimization useful, the limit is in the adapter. */
 	for ( ; count > 0; --count, ++buffer) {
 		de620_put_byte(dev,*buffer);
+	}
+	for ( count = pad ; count > 0; --count, ++buffer) {
+		de620_put_byte(dev, 0);
 	}
 	de620_send_command(dev,W_DUMMY);
 #ifdef COUNT_LOOPS
@@ -570,7 +573,7 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 1;
 		break;
 	}
-	de620_write_block(dev, buffer, len);
+	de620_write_block(dev, buffer, skb->len, len-skb->len);
 
 	dev->trans_start = jiffies;
 	dev->tbusy = (using_txbuf == (TXBF0 | TXBF1)); /* Boolean! */

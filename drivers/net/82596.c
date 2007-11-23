@@ -1045,9 +1045,19 @@ static int i596_start_xmit(struct sk_buff *skb, struct device *dev)
 	if (test_and_set_bit(0, (void *) &dev->tbusy) != 0)
 		printk("%s: Transmitter access conflict.\n", dev->name);
 	else {
-		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
+		short length = skb->len;
 		dev->trans_start = jiffies;
 
+		if(skb->len < ETH_ZLEN)
+		{
+			skb = skb_padto(skb, ETH_ZLEN);
+			if(skb == NULL)
+			{
+				dev->tbusy = 0;
+				return 0;
+			}
+			length = ETH_ZLEN;
+		}
 		tx_cmd = lp->tx_cmds + lp->next_tx_cmd;
 		tbd = lp->tbds + lp->next_tx_cmd;
 

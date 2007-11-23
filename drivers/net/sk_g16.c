@@ -1175,6 +1175,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 {
     struct priv *p = (struct priv *) dev->priv;
     struct tmd *tmdp;
+    static char pad[64];
 
     if (dev->tbusy)
     {
@@ -1221,6 +1222,8 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 	/* Copy data into dual ported ram */
 
 	memcpy_toio((tmdp->u.buffer & 0x00ffffff), skb->data, skb->len);
+	if(len != skb->len)
+		memcpy_toio((tmdp->u.buffer & 0x00ffffff) + skb->len, pad, len-skb->len);
 
 	writew(-len, tmdp->blen);            /* set length to transmit */
 

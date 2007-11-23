@@ -149,6 +149,7 @@ extern void			kfree_skbmem(struct sk_buff *skb);
 extern struct sk_buff *		skb_clone(struct sk_buff *skb, int priority);
 extern struct sk_buff *		skb_copy(struct sk_buff *skb, int priority);
 extern struct sk_buff *		skb_realloc_headroom(struct sk_buff *skb, int newheadroom);
+extern struct sk_buff *		skb_pad(struct sk_buff *skb, int pad);
 #define dev_kfree_skb(a)	kfree_skb(a)
 extern unsigned char *		skb_put(struct sk_buff *skb, unsigned int len);
 extern unsigned char *		skb_push(struct sk_buff *skb, unsigned int len);
@@ -574,6 +575,26 @@ skb_cow(struct sk_buff *skb, unsigned int headroom)
 		skb = skb2;
 	}
 	return skb;
+}
+
+/**
+ *	skb_padto	- pad an skbuff up to a minimal size
+ *	@skb: buffer to pad
+ *	@len: minimal length
+ *
+ *	Pads up a buffer to ensure the trailing bytes exist and are
+ *	blanked. If the buffer already contains sufficient data it
+ *	is untouched. Returns the buffer, which may be a replacement
+ *	for the original, or NULL for out of memory - in which case
+ *	the original buffer is still freed.
+ */
+ 
+static inline struct sk_buff *skb_padto(struct sk_buff *skb, unsigned int len)
+{
+	unsigned int size = skb->len;
+	if(size >= len)
+		return skb;
+	return skb_pad(skb, len-size);
 }
 
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);

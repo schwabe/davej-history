@@ -836,6 +836,13 @@ static int depca_start_xmit(struct sk_buff *skb, struct device *dev)
 		}
 		return status;
 	} else if (skb->len > 0) {
+		if(skb->len < ETH_ZLEN)
+		{
+			skb = skb_padto(skb, ETH_ZLEN);
+			if(skb == NULL)
+				return 0;
+		}
+
 		/* Enforce 1 process per h/w access */
 		if (test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
 			printk("%s: Transmitter access conflict.\n", dev->name);

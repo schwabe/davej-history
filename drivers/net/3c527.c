@@ -1087,6 +1087,12 @@ static int mc32_send_packet(struct sk_buff *skb, struct device *dev)
 	        /* We will need this to flush the buffer out */
 		lp->tx_ring[lp->tx_ring_head].skb=skb;
    	   
+   		if(skb->len < ETH_ZLEN)
+	   	{
+	   		skb = skb_padto(skb, ETH_ZLEN);
+	   		if(skb == NULL)
+	   			goto out;
+	   	}
 		np->length = (skb->len < ETH_ZLEN) ? ETH_ZLEN : skb->len; 
 			
 		np->data	= virt_to_bus(skb->data);
@@ -1096,6 +1102,7 @@ static int mc32_send_packet(struct sk_buff *skb, struct device *dev)
 		
 		p->control     &= ~CONTROL_EOL;     /* Clear EOL on p */ 
 	   
+out:
        	        dev->tbusy	= 0;	       /* Keep feeding me */		
 	
 	        restore_flags(flags);

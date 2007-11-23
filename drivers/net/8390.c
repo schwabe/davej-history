@@ -196,6 +196,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
 	int length, send_length, output_page;
 	unsigned long flags;
+	char scratch[ETH_ZLEN];
 
 	/*
 	 *  We normally shouldn't be called if dev->tbusy is set, but the
@@ -348,8 +349,16 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	 * isn't already sending. If it is busy, the interrupt handler will
 	 * trigger the send later, upon receiving a Tx done interrupt.
 	 */
-
-	ei_block_output(dev, length, skb->data, output_page);
+	 
+	if(length == send_length)
+		ei_block_output(dev, length, skb->data, output_page);
+	else
+	{
+		memset(scratch, 0, ETH_ZLEN);
+		memcpy(scratch, skb->data, skb->len);
+		ei_block_output(dev, ETH_ZLEN, scratch, output_page);
+	}
+		
 	if (! ei_local->txing) 
 	{
 		ei_local->txing = 1;
@@ -378,7 +387,14 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	 * reasonable hardware if you only use one Tx buffer.
 	 */
 
-	ei_block_output(dev, length, skb->data, ei_local->tx_start_page);
+	if(length == send_length)
+		ei_block_output(dev, length, skb->data, ei_local->tx_start_page);
+	else
+	{
+		memset(scratch, 0, ETH_ZLEN);
+		memcpy(scratch, skb->data, skb->len);
+		ei_block_output(dev, ETH_ZLEN, scratch, ei_local->tx_start_page);
+	}
 	ei_local->txing = 1;
 	NS8390_trigger_send(dev, send_length, ei_local->tx_start_page);
 	dev->trans_start = jiffies;
