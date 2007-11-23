@@ -375,7 +375,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	fp = qp->fragments;
 	while(fp != NULL)
 	{
-		if (fp->len < 0 || count+fp->len > skb->len)
+		if (fp->len < 0 || fp->offset+qp->ihlen+fp->len > skb->len)
 		{
 			NETDEBUG(printk("Invalid fragment list: Fragment over size.\n"));
 			ip_free(qp);
@@ -489,7 +489,7 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 	if(ntohs(iph->tot_len)+(int)offset>65535)
 	{
 		skb->sk = NULL;
-		printk("Oversized packet received from %s\n",in_ntoa(iph->saddr));
+		NETDEBUG(printk("Oversized packet received from %s\n",in_ntoa(iph->saddr)));
 		kfree_skb(skb, FREE_READ);
 		ip_statistics.IpReasmFails++;
 		return NULL;
