@@ -58,5 +58,6 @@ extern int init_nls_cp865(void);
 extern int init_nls_cp866(void);
 extern int init_nls_cp869(void);
 extern int init_nls_cp874(void);
+extern int init_nls_koi8_r(void);
 
 #endif /* _LINUX_NLS_H */

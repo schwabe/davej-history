@@ -871,10 +871,9 @@ int hold_timer_expired(int port_no)
 
 int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 {
-struct sk_buff *skb;
-struct device *dev = port_info[port_no].dev;
-int size;
-unsigned long flags;
+	struct sk_buff *skb;
+	struct device *dev = port_info[port_no].dev;
+	int size;
 	
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_config_bpdu: port %i not valid\n",port_no);
@@ -927,10 +926,9 @@ unsigned long flags;
 
 int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
 {
-struct sk_buff *skb;
-struct device *dev = port_info[port_no].dev;
-int size;
-unsigned long flags;
+	struct sk_buff *skb;
+	struct device *dev = port_info[port_no].dev;
+	int size;
 	
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_tcn_bpdu: port %i not valid\n",port_no);
@@ -1047,7 +1045,6 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 {
 	int port;
-	int i;
 	
 	if (br_stats.flags & BR_DEBUG)
 		printk("br_receive_frame: ");

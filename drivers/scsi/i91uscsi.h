@@ -1,4 +1,3 @@
-
 /**************************************************************************
  * Initio 9100 device driver for Linux.
  *
@@ -70,277 +69,271 @@
 #endif
 
 #ifndef NULL
-#define NULL     0            /* zero          */
+#define NULL     0		/* zero          */
 #endif
 #ifndef TRUE
-#define TRUE     (1)          /* boolean true  */
+#define TRUE     (1)		/* boolean true  */
 #endif
 #ifndef FALSE
-#define FALSE    (0)          /* boolean false */
+#define FALSE    (0)		/* boolean false */
 #endif
 #ifndef FAILURE
 #define FAILURE  (-1)
 #endif
-/*#endif*/
 
 #define TOTAL_SG_ENTRY		32
 #define MAX_SUPPORTED_ADAPTERS  8
 #define MAX_OFFSET		15
 #define MAX_TARGETS		16
 
-#define INI_VENDOR_ID   0x1101          /* Initio's PCI vendor ID       */
-#define I950_DEVICE_ID	0x9500          /* Initio's inic-950 product ID	*/
-#define I940_DEVICE_ID	0x9400          /* Initio's inic-940 product ID	*/
-#define I935_DEVICE_ID	0x9401          /* Initio's inic-935 product ID	*/
-
-//#if defined(__KERNEL__)
+#define INI_VENDOR_ID   0x1101	/* Initio's PCI vendor ID       */
+#define I950_DEVICE_ID	0x9500	/* Initio's inic-950 product ID   */
+#define I940_DEVICE_ID	0x9400	/* Initio's inic-940 product ID   */
+#define I935_DEVICE_ID	0x9401	/* Initio's inic-935 product ID   */
 
 #define	_I91USCSI_H
-#if 0
-#include "ini9100u.h"
-#endif
 
 typedef struct {
-  unsigned short base;
-  unsigned short vec;
-} i91u_config ;
+	unsigned short base;
+	unsigned short vec;
+} i91u_config;
 
 /***************************************/
 /*  Tulip Configuration Register Set */
 /***************************************/
-#define TUL_PVID        0x00            /* Vendor ID                    */
-#define TUL_PDID        0x02            /* Device ID                    */
-#define TUL_PCMD        0x04            /* Command                      */
-#define TUL_PSTUS       0x06            /* Status                       */
-#define TUL_PRID        0x08            /* Revision number              */
-#define TUL_PPI         0x09            /* Programming interface        */
-#define TUL_PSC         0x0A            /* Sub Class                    */
-#define TUL_PBC         0x0B            /* Base Class                   */
-#define TUL_PCLS        0x0C            /* Cache line size              */
-#define TUL_PLTR        0x0D            /* Latency timer                */
-#define TUL_PHDT        0x0E            /* Header type                  */
-#define TUL_PBIST       0x0F            /* BIST                         */
-#define TUL_PBAD        0x10            /* Base address                 */
-#define TUL_PBAD1       0x14            /* Base address                 */
-#define TUL_PBAD2       0x18            /* Base address                 */
-#define TUL_PBAD3       0x1C            /* Base address                 */
-#define TUL_PBAD4       0x20            /* Base address                 */
-#define TUL_PBAD5       0x24            /* Base address                 */
-#define TUL_PRSVD       0x28            /* Reserved                     */
-#define TUL_PRSVD1      0x2C            /* Reserved                     */
-#define TUL_PRAD        0x30            /* Expansion ROM base address   */
-#define TUL_PRSVD2      0x34            /* Reserved                     */
-#define TUL_PRSVD3      0x38            /* Reserved                     */
-#define TUL_PINTL       0x3C            /* Interrupt line               */
-#define TUL_PINTP       0x3D            /* Interrupt pin                */
-#define TUL_PIGNT       0x3E            /* MIN_GNT                      */
-#define TUL_PMGNT       0x3F            /* MAX_GNT                      */
+#define TUL_PVID        0x00	/* Vendor ID                    */
+#define TUL_PDID        0x02	/* Device ID                    */
+#define TUL_PCMD        0x04	/* Command                      */
+#define TUL_PSTUS       0x06	/* Status                       */
+#define TUL_PRID        0x08	/* Revision number              */
+#define TUL_PPI         0x09	/* Programming interface        */
+#define TUL_PSC         0x0A	/* Sub Class                    */
+#define TUL_PBC         0x0B	/* Base Class                   */
+#define TUL_PCLS        0x0C	/* Cache line size              */
+#define TUL_PLTR        0x0D	/* Latency timer                */
+#define TUL_PHDT        0x0E	/* Header type                  */
+#define TUL_PBIST       0x0F	/* BIST                         */
+#define TUL_PBAD        0x10	/* Base address                 */
+#define TUL_PBAD1       0x14	/* Base address                 */
+#define TUL_PBAD2       0x18	/* Base address                 */
+#define TUL_PBAD3       0x1C	/* Base address                 */
+#define TUL_PBAD4       0x20	/* Base address                 */
+#define TUL_PBAD5       0x24	/* Base address                 */
+#define TUL_PRSVD       0x28	/* Reserved                     */
+#define TUL_PRSVD1      0x2C	/* Reserved                     */
+#define TUL_PRAD        0x30	/* Expansion ROM base address   */
+#define TUL_PRSVD2      0x34	/* Reserved                     */
+#define TUL_PRSVD3      0x38	/* Reserved                     */
+#define TUL_PINTL       0x3C	/* Interrupt line               */
+#define TUL_PINTP       0x3D	/* Interrupt pin                */
+#define TUL_PIGNT       0x3E	/* MIN_GNT                      */
+#define TUL_PMGNT       0x3F	/* MAX_GNT                      */
 
 /************************/
 /*  Jasmin Register Set */
 /************************/
-#define TUL_HACFG0      0x40    /* H/A Configuration Register 0         */
-#define TUL_HACFG1      0x41    /* H/A Configuration Register 1         */
-#define TUL_HACFG2      0x42    /* H/A Configuration Register 2         */
+#define TUL_HACFG0      0x40	/* H/A Configuration Register 0         */
+#define TUL_HACFG1      0x41	/* H/A Configuration Register 1         */
+#define TUL_HACFG2      0x42	/* H/A Configuration Register 2         */
 
-#define TUL_SDCFG0      0x44    /* SCSI Device Configuration 0          */
-#define TUL_SDCFG1      0x45    /* SCSI Device Configuration 1          */
-#define TUL_SDCFG2      0x46    /* SCSI Device Configuration 2          */
-#define TUL_SDCFG3      0x47    /* SCSI Device Configuration 3          */
+#define TUL_SDCFG0      0x44	/* SCSI Device Configuration 0          */
+#define TUL_SDCFG1      0x45	/* SCSI Device Configuration 1          */
+#define TUL_SDCFG2      0x46	/* SCSI Device Configuration 2          */
+#define TUL_SDCFG3      0x47	/* SCSI Device Configuration 3          */
 
-#define TUL_GINTS       0x50    /* Global Interrupt Status Register     */
-#define TUL_GIMSK       0x52    /* Global Interrupt MASK Register       */
-#define TUL_GCTRL       0x54    /* Global Control Register              */
-	#define TUL_GCTRL_EEPROM_BIT    0x04
-#define TUL_GCTRL1      0x55    /* Global Control Register              */
-#define TUL_DMACFG      0x5B    /* DMA configuration                    */
-#define TUL_NVRAM       0x5D    /* Non-volatile RAM port                */
+#define TUL_GINTS       0x50	/* Global Interrupt Status Register     */
+#define TUL_GIMSK       0x52	/* Global Interrupt MASK Register       */
+#define TUL_GCTRL       0x54	/* Global Control Register              */
+#define TUL_GCTRL_EEPROM_BIT    0x04
+#define TUL_GCTRL1      0x55	/* Global Control Register              */
+#define TUL_DMACFG      0x5B	/* DMA configuration                    */
+#define TUL_NVRAM       0x5D	/* Non-volatile RAM port                */
 
-#define TUL_SCnt0       0x80    /* 00 R/W Transfer Counter Low          */
-#define TUL_SCnt1       0x81    /* 01 R/W Transfer Counter Mid          */
-#define TUL_SCnt2       0x82    /* 02 R/W Transfer Count High           */
-#define TUL_SFifoCnt    0x83    /* 03 R   FIFO counter                  */
-#define TUL_SIntEnable  0x84    /* 03 W   Interrupt enble               */
-#define TUL_SInt        0x84    /* 04 R   Interrupt Register            */
-#define TUL_SCtrl0      0x85    /* 05 W   Control 0                     */
-#define TUL_SStatus0    0x85    /* 05 R   Status 0                      */
-#define TUL_SCtrl1      0x86    /* 06 W   Control 1                     */
-#define TUL_SStatus1    0x86    /* 06 R   Status 1                      */
-#define TUL_SConfig     0x87    /* 07 W   Configuration                 */
-#define TUL_SStatus2    0x87    /* 07 R   Status 2                      */
-#define TUL_SPeriod     0x88    /* 08 W   Sync. Transfer Period & Offset*/
-#define TUL_SOffset     0x88    /* 08 R   Offset                        */
-#define TUL_SScsiId     0x89    /* 09 W   SCSI ID                       */
-#define TUL_SBusId      0x89    /* 09 R   SCSI BUS ID                   */
-#define TUL_STimeOut    0x8A    /* 0A W   Sel/Resel Time Out Register   */
-#define TUL_SIdent      0x8A    /* 0A R   Identify Message Register     */
-#define TUL_SAvail      0x8A    /* 0A R   Availiable Counter Register   */
-#define TUL_SData       0x8B    /* 0B R/W SCSI data in/out              */
-#define TUL_SFifo       0x8C    /* 0C R/W FIFO                          */
-#define TUL_SSignal     0x90    /* 10 R/W SCSI signal in/out            */
-#define TUL_SCmd        0x91    /* 11 R/W Command                       */
-#define TUL_STest0      0x92    /* 12 R/W Test0                         */
-#define TUL_STest1      0x93    /* 13 R/W Test1                         */
-#define TUL_SCFG1	0x94    /* 14 R/W Configuration                 */
+#define TUL_SCnt0       0x80	/* 00 R/W Transfer Counter Low          */
+#define TUL_SCnt1       0x81	/* 01 R/W Transfer Counter Mid          */
+#define TUL_SCnt2       0x82	/* 02 R/W Transfer Count High           */
+#define TUL_SFifoCnt    0x83	/* 03 R   FIFO counter                  */
+#define TUL_SIntEnable  0x84	/* 03 W   Interrupt enble               */
+#define TUL_SInt        0x84	/* 04 R   Interrupt Register            */
+#define TUL_SCtrl0      0x85	/* 05 W   Control 0                     */
+#define TUL_SStatus0    0x85	/* 05 R   Status 0                      */
+#define TUL_SCtrl1      0x86	/* 06 W   Control 1                     */
+#define TUL_SStatus1    0x86	/* 06 R   Status 1                      */
+#define TUL_SConfig     0x87	/* 07 W   Configuration                 */
+#define TUL_SStatus2    0x87	/* 07 R   Status 2                      */
+#define TUL_SPeriod     0x88	/* 08 W   Sync. Transfer Period & Offset */
+#define TUL_SOffset     0x88	/* 08 R   Offset                        */
+#define TUL_SScsiId     0x89	/* 09 W   SCSI ID                       */
+#define TUL_SBusId      0x89	/* 09 R   SCSI BUS ID                   */
+#define TUL_STimeOut    0x8A	/* 0A W   Sel/Resel Time Out Register   */
+#define TUL_SIdent      0x8A	/* 0A R   Identify Message Register     */
+#define TUL_SAvail      0x8A	/* 0A R   Availiable Counter Register   */
+#define TUL_SData       0x8B	/* 0B R/W SCSI data in/out              */
+#define TUL_SFifo       0x8C	/* 0C R/W FIFO                          */
+#define TUL_SSignal     0x90	/* 10 R/W SCSI signal in/out            */
+#define TUL_SCmd        0x91	/* 11 R/W Command                       */
+#define TUL_STest0      0x92	/* 12 R/W Test0                         */
+#define TUL_STest1      0x93	/* 13 R/W Test1                         */
+#define TUL_SCFG1	0x94	/* 14 R/W Configuration                 */
 
-#define TUL_XAddH       0xC0    /*DMA Transfer Physical Address         */
-#define TUL_XAddW       0xC8    /*DMA Current Transfer Physical Address */
-#define TUL_XCntH       0xD0    /*DMA Transfer Counter                  */
-#define TUL_XCntW       0xD4    /*DMA Current Transfer Counter          */
-#define TUL_XCmd        0xD8    /*DMA Command Register                  */
-#define TUL_Int         0xDC    /*Interrupt Register                    */
-#define TUL_XStatus     0xDD    /*DMA status Register                   */
-#define TUL_Mask        0xE0    /*Interrupt Mask Register               */
-#define TUL_XCtrl       0xE4    /*DMA Control Register                  */
-#define TUL_XCtrl1      0xE5    /*DMA Control Register 1                */
-#define TUL_XFifo       0xE8    /*DMA FIFO                              */
+#define TUL_XAddH       0xC0	/*DMA Transfer Physical Address         */
+#define TUL_XAddW       0xC8	/*DMA Current Transfer Physical Address */
+#define TUL_XCntH       0xD0	/*DMA Transfer Counter                  */
+#define TUL_XCntW       0xD4	/*DMA Current Transfer Counter          */
+#define TUL_XCmd        0xD8	/*DMA Command Register                  */
+#define TUL_Int         0xDC	/*Interrupt Register                    */
+#define TUL_XStatus     0xDD	/*DMA status Register                   */
+#define TUL_Mask        0xE0	/*Interrupt Mask Register               */
+#define TUL_XCtrl       0xE4	/*DMA Control Register                  */
+#define TUL_XCtrl1      0xE5	/*DMA Control Register 1                */
+#define TUL_XFifo       0xE8	/*DMA FIFO                              */
 
-#define TUL_WCtrl       0xF7    /*Bus master wait state control         */
-#define TUL_DCtrl       0xFB    /*DMA delay control                     */
+#define TUL_WCtrl       0xF7	/*Bus master wait state control         */
+#define TUL_DCtrl       0xFB	/*DMA delay control                     */
 
 /*----------------------------------------------------------------------*/
 /*   bit definition for Command register of Configuration Space Header  */
 /*----------------------------------------------------------------------*/
-#define BUSMS           0x04    /* BUS MASTER Enable                    */
-#define IOSPA           0x01    /* IO Space Enable                      */
+#define BUSMS           0x04	/* BUS MASTER Enable                    */
+#define IOSPA           0x01	/* IO Space Enable                      */
 
 /*----------------------------------------------------------------------*/
 /* Command Codes of Tulip SCSI Command register                         */
 /*----------------------------------------------------------------------*/
-#define TSC_EN_RESEL    0x80    /* Enable Reselection                   */
-#define TSC_CMD_COMP    0x84    /* Command Complete Sequence            */
-#define TSC_SEL         0x01    /* Select Without ATN Sequence          */
-#define TSC_SEL_ATN     0x11    /* Select With ATN Sequence             */
-#define TSC_SEL_ATN_DMA 0x51    /* Select With ATN Sequence with DMA    */
-#define TSC_SEL_ATN3    0x31    /* Select With ATN3 Sequence            */
-#define TSC_SEL_ATNSTOP 0x12    /* Select With ATN and Stop Sequence    */
-#define TSC_SELATNSTOP  0x1E    /* Select With ATN and Stop Sequence    */
+#define TSC_EN_RESEL    0x80	/* Enable Reselection                   */
+#define TSC_CMD_COMP    0x84	/* Command Complete Sequence            */
+#define TSC_SEL         0x01	/* Select Without ATN Sequence          */
+#define TSC_SEL_ATN     0x11	/* Select With ATN Sequence             */
+#define TSC_SEL_ATN_DMA 0x51	/* Select With ATN Sequence with DMA    */
+#define TSC_SEL_ATN3    0x31	/* Select With ATN3 Sequence            */
+#define TSC_SEL_ATNSTOP 0x12	/* Select With ATN and Stop Sequence    */
+#define TSC_SELATNSTOP  0x1E	/* Select With ATN and Stop Sequence    */
 
-#define TSC_SEL_ATN_DIRECT_IN   0x95    /* Select With ATN Sequence     */
-#define TSC_SEL_ATN_DIRECT_OUT  0x15    /* Select With ATN Sequence     */
-#define TSC_SEL_ATN3_DIRECT_IN  0xB5    /* Select With ATN3 Sequence    */
-#define TSC_SEL_ATN3_DIRECT_OUT 0x35    /* Select With ATN3 Sequence    */
-#define TSC_XF_DMA_OUT_DIRECT   0x06    /* DMA Xfer Infomation out      */
-#define TSC_XF_DMA_IN_DIRECT    0x86    /* DMA Xfer Infomation in       */
+#define TSC_SEL_ATN_DIRECT_IN   0x95	/* Select With ATN Sequence     */
+#define TSC_SEL_ATN_DIRECT_OUT  0x15	/* Select With ATN Sequence     */
+#define TSC_SEL_ATN3_DIRECT_IN  0xB5	/* Select With ATN3 Sequence    */
+#define TSC_SEL_ATN3_DIRECT_OUT 0x35	/* Select With ATN3 Sequence    */
+#define TSC_XF_DMA_OUT_DIRECT   0x06	/* DMA Xfer Infomation out      */
+#define TSC_XF_DMA_IN_DIRECT    0x86	/* DMA Xfer Infomation in       */
 
-#define TSC_XF_DMA_OUT  0x43    /* DMA Xfer Infomation out              */
-#define TSC_XF_DMA_IN   0xC3    /* DMA Xfer Infomation in               */
-#define TSC_XF_FIFO_OUT 0x03    /* FIFO Xfer Infomation out             */
-#define TSC_XF_FIFO_IN  0x83    /* FIFO Xfer Infomation in              */
+#define TSC_XF_DMA_OUT  0x43	/* DMA Xfer Infomation out              */
+#define TSC_XF_DMA_IN   0xC3	/* DMA Xfer Infomation in               */
+#define TSC_XF_FIFO_OUT 0x03	/* FIFO Xfer Infomation out             */
+#define TSC_XF_FIFO_IN  0x83	/* FIFO Xfer Infomation in              */
 
-#define TSC_MSG_ACCEPT  0x0F    /* Message Accept                       */
+#define TSC_MSG_ACCEPT  0x0F	/* Message Accept                       */
 
 /*----------------------------------------------------------------------*/
 /* bit definition for Tulip SCSI Control 0 Register                     */
 /*----------------------------------------------------------------------*/
-#define TSC_RST_SEQ     0x20            /* Reset sequence counter               */
-#define TSC_FLUSH_FIFO  0x10    /* Flush FIFO                           */
-#define TSC_ABT_CMD     0x04    /* Abort command (sequence)             */
-#define TSC_RST_CHIP    0x02    /* Reset SCSI Chip                      */
-#define TSC_RST_BUS     0x01    /* Reset SCSI Bus                       */
+#define TSC_RST_SEQ     0x20	/* Reset sequence counter               */
+#define TSC_FLUSH_FIFO  0x10	/* Flush FIFO                           */
+#define TSC_ABT_CMD     0x04	/* Abort command (sequence)             */
+#define TSC_RST_CHIP    0x02	/* Reset SCSI Chip                      */
+#define TSC_RST_BUS     0x01	/* Reset SCSI Bus                       */
 
 /*----------------------------------------------------------------------*/
 /* bit definition for Tulip SCSI Control 1 Register                     */
 /*----------------------------------------------------------------------*/
-#define TSC_EN_SCAM     0x80    /* Enable SCAM                          */
-#define TSC_TIMER       0x40    /* Select timeout unit                  */
-#define TSC_EN_SCSI2    0x20    /* SCSI-2 mode                          */
-#define TSC_PWDN        0x10    /* Power down mode                      */
-#define TSC_WIDE_CPU    0x08    /* Wide CPU                             */
-#define TSC_HW_RESELECT 0x04    /* Enable HW reselect                   */
-#define TSC_EN_BUS_OUT  0x02    /* Enable SCSI data bus out latch       */
-#define TSC_EN_BUS_IN   0x01    /* Enable SCSI data bus in latch        */
+#define TSC_EN_SCAM     0x80	/* Enable SCAM                          */
+#define TSC_TIMER       0x40	/* Select timeout unit                  */
+#define TSC_EN_SCSI2    0x20	/* SCSI-2 mode                          */
+#define TSC_PWDN        0x10	/* Power down mode                      */
+#define TSC_WIDE_CPU    0x08	/* Wide CPU                             */
+#define TSC_HW_RESELECT 0x04	/* Enable HW reselect                   */
+#define TSC_EN_BUS_OUT  0x02	/* Enable SCSI data bus out latch       */
+#define TSC_EN_BUS_IN   0x01	/* Enable SCSI data bus in latch        */
 
 /*----------------------------------------------------------------------*/
 /* bit definition for Tulip SCSI Configuration Register                 */
 /*----------------------------------------------------------------------*/
-#define TSC_EN_LATCH    0x80    /* Enable phase latch                   */
-#define TSC_INITIATOR   0x40    /* Initiator mode                       */
-#define TSC_EN_SCSI_PAR 0x20    /* Enable SCSI parity                   */
-#define TSC_DMA_8BIT    0x10    /* Alternate dma 8-bits mode            */
-#define TSC_DMA_16BIT   0x08    /* Alternate dma 16-bits mode           */
-#define TSC_EN_WDACK    0x04    /* Enable DACK while wide SCSI xfer     */
-#define TSC_ALT_PERIOD  0x02    /* Alternate sync period mode           */
-#define TSC_DIS_SCSIRST 0x01    /* Disable SCSI bus reset us            */
+#define TSC_EN_LATCH    0x80	/* Enable phase latch                   */
+#define TSC_INITIATOR   0x40	/* Initiator mode                       */
+#define TSC_EN_SCSI_PAR 0x20	/* Enable SCSI parity                   */
+#define TSC_DMA_8BIT    0x10	/* Alternate dma 8-bits mode            */
+#define TSC_DMA_16BIT   0x08	/* Alternate dma 16-bits mode           */
+#define TSC_EN_WDACK    0x04	/* Enable DACK while wide SCSI xfer     */
+#define TSC_ALT_PERIOD  0x02	/* Alternate sync period mode           */
+#define TSC_DIS_SCSIRST 0x01	/* Disable SCSI bus reset us            */
 
 #define TSC_INITDEFAULT (TSC_INITIATOR | TSC_EN_LATCH | TSC_ALT_PERIOD | TSC_DIS_SCSIRST)
 
-#define TSC_WIDE_SCSI   0x80    /* Enable Wide SCSI                     */
+#define TSC_WIDE_SCSI   0x80	/* Enable Wide SCSI                     */
 
 /*----------------------------------------------------------------------*/
 /* bit definition for Tulip SCSI signal Register                        */
 /*----------------------------------------------------------------------*/
-#define TSC_RST_ACK     0x00    /* Release ACK signal                   */
-#define TSC_RST_ATN     0x00    /* Release ATN signal                   */
-#define TSC_RST_BSY     0x00    /* Release BSY signal                   */
- 
-#define TSC_SET_ACK     0x40    /* ACK signal                           */
-#define TSC_SET_ATN     0x08    /* ATN signal                           */
+#define TSC_RST_ACK     0x00	/* Release ACK signal                   */
+#define TSC_RST_ATN     0x00	/* Release ATN signal                   */
+#define TSC_RST_BSY     0x00	/* Release BSY signal                   */
 
-#define TSC_REQI        0x80    /* REQ signal                           */
-#define TSC_ACKI        0x40    /* ACK signal                           */
-#define TSC_BSYI        0x20    /* BSY signal                           */
-#define TSC_SELI        0x10    /* SEL signal                           */
-#define TSC_ATNI        0x08    /* ATN signal                           */
-#define TSC_MSGI        0x04    /* MSG signal                           */
-#define TSC_CDI         0x02    /* C/D signal                           */
-#define TSC_IOI         0x01    /* I/O signal                           */
+#define TSC_SET_ACK     0x40	/* ACK signal                           */
+#define TSC_SET_ATN     0x08	/* ATN signal                           */
+
+#define TSC_REQI        0x80	/* REQ signal                           */
+#define TSC_ACKI        0x40	/* ACK signal                           */
+#define TSC_BSYI        0x20	/* BSY signal                           */
+#define TSC_SELI        0x10	/* SEL signal                           */
+#define TSC_ATNI        0x08	/* ATN signal                           */
+#define TSC_MSGI        0x04	/* MSG signal                           */
+#define TSC_CDI         0x02	/* C/D signal                           */
+#define TSC_IOI         0x01	/* I/O signal                           */
 
 
 /*----------------------------------------------------------------------*/
 /* bit definition for Tulip SCSI Status 0 Register                      */
 /*----------------------------------------------------------------------*/
-#define TSS_INT_PENDING 0x80            /* Interrupt pending            */
-#define TSS_SEQ_ACTIVE  0x40            /* Sequencer active             */
-#define TSS_XFER_CNT    0x20            /* Transfer counter zero        */
-#define TSS_FIFO_EMPTY  0x10            /* FIFO empty                   */
-#define TSS_PAR_ERROR   0x08            /* SCSI parity error            */
-#define TSS_PH_MASK     0x07            /* SCSI phase mask              */
+#define TSS_INT_PENDING 0x80	/* Interrupt pending            */
+#define TSS_SEQ_ACTIVE  0x40	/* Sequencer active             */
+#define TSS_XFER_CNT    0x20	/* Transfer counter zero        */
+#define TSS_FIFO_EMPTY  0x10	/* FIFO empty                   */
+#define TSS_PAR_ERROR   0x08	/* SCSI parity error            */
+#define TSS_PH_MASK     0x07	/* SCSI phase mask              */
 
 /*----------------------------------------------------------------------*/
 /* bit definition for Tulip SCSI Status 1 Register                      */
 /*----------------------------------------------------------------------*/
-#define TSS_STATUS_RCV  0x08            /* Status received              */
-#define TSS_MSG_SEND    0x40            /* Message sent                 */
-#define TSS_CMD_PH_CMP  0x20            /* command phase done              */
-#define TSS_DATA_PH_CMP 0x10            /* Data phase done              */
-#define TSS_STATUS_SEND 0x08            /* Status sent                  */
-#define TSS_XFER_CMP    0x04            /* Transfer completed           */
-#define TSS_SEL_CMP     0x02            /* Selection completed          */
-#define TSS_ARB_CMP     0x01            /* Arbitration completed        */
+#define TSS_STATUS_RCV  0x08	/* Status received              */
+#define TSS_MSG_SEND    0x40	/* Message sent                 */
+#define TSS_CMD_PH_CMP  0x20	/* command phase done              */
+#define TSS_DATA_PH_CMP 0x10	/* Data phase done              */
+#define TSS_STATUS_SEND 0x08	/* Status sent                  */
+#define TSS_XFER_CMP    0x04	/* Transfer completed           */
+#define TSS_SEL_CMP     0x02	/* Selection completed          */
+#define TSS_ARB_CMP     0x01	/* Arbitration completed        */
 
 /*----------------------------------------------------------------------*/
 /* bit definition for Tulip SCSI Status 2 Register                      */
 /*----------------------------------------------------------------------*/
-#define TSS_CMD_ABTED   0x80            /* Command aborted              */
-#define TSS_OFFSET_0    0x40            /* Offset counter zero          */
-#define TSS_FIFO_FULL   0x20            /* FIFO full                    */
-#define TSS_TIMEOUT_0   0x10            /* Timeout counter zero         */
-#define TSS_BUSY_RLS    0x08            /* Busy release                 */
-#define TSS_PH_MISMATCH 0x04            /* Phase mismatch               */
-#define TSS_SCSI_BUS_EN 0x02            /* SCSI data bus enable         */
-#define TSS_SCSIRST     0x01            /* SCSI bus reset in progress   */
+#define TSS_CMD_ABTED   0x80	/* Command aborted              */
+#define TSS_OFFSET_0    0x40	/* Offset counter zero          */
+#define TSS_FIFO_FULL   0x20	/* FIFO full                    */
+#define TSS_TIMEOUT_0   0x10	/* Timeout counter zero         */
+#define TSS_BUSY_RLS    0x08	/* Busy release                 */
+#define TSS_PH_MISMATCH 0x04	/* Phase mismatch               */
+#define TSS_SCSI_BUS_EN 0x02	/* SCSI data bus enable         */
+#define TSS_SCSIRST     0x01	/* SCSI bus reset in progress   */
 
 /*----------------------------------------------------------------------*/
 /* bit definition for Tulip SCSI Interrupt Register                     */
 /*----------------------------------------------------------------------*/
-#define TSS_RESEL_INT   0x80            /* Reselected interrupt         */
-#define TSS_SEL_TIMEOUT 0x40            /* Selected/reselected timeout  */
+#define TSS_RESEL_INT   0x80	/* Reselected interrupt         */
+#define TSS_SEL_TIMEOUT 0x40	/* Selected/reselected timeout  */
 #define TSS_BUS_SERV    0x20
-#define TSS_SCSIRST_INT 0x10            /* SCSI bus reset detected      */
-#define TSS_DISC_INT    0x08            /* Disconnected interrupt       */
-#define TSS_SEL_INT     0x04            /* Select interrupt             */
-#define TSS_SCAM_SEL    0x02            /* SCAM selected                */
+#define TSS_SCSIRST_INT 0x10	/* SCSI bus reset detected      */
+#define TSS_DISC_INT    0x08	/* Disconnected interrupt       */
+#define TSS_SEL_INT     0x04	/* Select interrupt             */
+#define TSS_SCAM_SEL    0x02	/* SCAM selected                */
 #define TSS_FUNC_COMP   0x01
 
 /*----------------------------------------------------------------------*/
 /* SCSI Phase Codes.                                                    */
 /*----------------------------------------------------------------------*/
 #define DATA_OUT        0
-#define DATA_IN         1               /* 4                            */
+#define DATA_IN         1	/* 4                            */
 #define CMD_OUT         2
-#define STATUS_IN       3               /* 6                            */
-#define MSG_OUT         6               /* 3                            */
+#define STATUS_IN       3	/* 6                            */
+#define MSG_OUT         6	/* 3                            */
 #define MSG_IN          7
 
 
@@ -370,8 +363,8 @@ typedef struct {
 /*----------------------------------------------------------------------*/
 /* Tulip DMA Status Register                                            */
 /*----------------------------------------------------------------------*/
-#define XPEND           0x01            /* Transfer pending             */
-#define FEMPTY          0x02            /* FIFO empty                   */
+#define XPEND           0x01	/* Transfer pending             */
+#define FEMPTY          0x02	/* FIFO empty                   */
 
 
 
@@ -396,59 +389,58 @@ typedef struct {
 /************************************************************************/
 /*              Scatter-Gather Element Structure                        */
 /************************************************************************/
-typedef struct SG_Struc         {
-	U32   SG_Ptr;         /* Data Pointer */
-	U32   SG_Len;         /* Data Length */
+typedef struct SG_Struc {
+	U32 SG_Ptr;		/* Data Pointer */
+	U32 SG_Len;		/* Data Length */
 } SG;
 
 /***********************************************************************
 		SCSI Control Block
 ************************************************************************/
-typedef struct Scsi_Ctrl_Blk            {
-	struct	Scsi_Ctrl_Blk *SCB_NxtScb;
-	UBYTE   SCB_Status;     /*4 */
-	UBYTE   SCB_NxtStat;    /*5 */
-	UBYTE   SCB_Mode;       /*6 */
-	UBYTE   SCB_Msgin;      /*7 SCB_Res0 */
-	UWORD   SCB_SGIdx;      /*8 */
-	UWORD   SCB_SGMax;      /*A */
+typedef struct Scsi_Ctrl_Blk {
+	struct Scsi_Ctrl_Blk *SCB_NxtScb;
+	UBYTE SCB_Status;	/*4 */
+	UBYTE SCB_NxtStat;	/*5 */
+	UBYTE SCB_Mode;		/*6 */
+	UBYTE SCB_Msgin;	/*7 SCB_Res0 */
+	UWORD SCB_SGIdx;	/*8 */
+	UWORD SCB_SGMax;	/*A */
 #ifdef ALPHA
-	U32   SCB_Reserved[2];/*C */
+	U32 SCB_Reserved[2];	/*C */
 #else
-	U32   SCB_Reserved[3];/*C */
+	U32 SCB_Reserved[3];	/*C */
 #endif
 
-	U32   SCB_XferLen;    /*18 Current xfer len           */
-	U32   SCB_TotXLen;    /*1C Total xfer len             */
-	U32   SCB_PAddr;      /*20 SCB phy. Addr. */
+	U32 SCB_XferLen;	/*18 Current xfer len           */
+	U32 SCB_TotXLen;	/*1C Total xfer len             */
+	U32 SCB_PAddr;		/*20 SCB phy. Addr. */
 
-	UBYTE   SCB_Opcode;     /*24 SCB command code */
-	UBYTE   SCB_Flags;      /*25 SCB Flags */
-	UBYTE   SCB_Target;     /*26 Target Id */
-	UBYTE   SCB_Lun;        /*27 Lun */
-	U32   SCB_BufPtr;     /*28 Data Buffer Pointer */
-	U32   SCB_BufLen;     /*2C Data Allocation Length */
-	UBYTE   SCB_SGLen;      /*30 SG list # */
-	UBYTE   SCB_SenseLen;   /*31 Sense Allocation Length */
-	UBYTE   SCB_HaStat;     /*32 */
-	UBYTE   SCB_TaStat;     /*33 */
-	UBYTE   SCB_CDBLen;     /*34 CDB Length */
-	UBYTE   SCB_Ident;      /*35 Identify */
-	UBYTE   SCB_TagMsg;     /*36 Tag Message */ 
-	UBYTE   SCB_TagId;      /*37 Queue Tag */
-	UBYTE   SCB_CDB[12];    /*38 */
-	U32   SCB_SGPAddr;    /*44 SG List/Sense Buf phy. Addr. */
-	U32   SCB_SensePtr;   /*48 Sense data pointer */
-	void    (* SCB_Post)(BYTE *, BYTE *);  /*4C POST routine */
-	unsigned char *SCB_Srb;       /*50 SRB Pointer */
-//	Scsi_Cmnd       *SCB_Srb;       /*2C SRB Pointer */
-	SG      SCB_SGList[TOTAL_SG_ENTRY];     /*54 Start of SG list */
+	UBYTE SCB_Opcode;	/*24 SCB command code */
+	UBYTE SCB_Flags;	/*25 SCB Flags */
+	UBYTE SCB_Target;	/*26 Target Id */
+	UBYTE SCB_Lun;		/*27 Lun */
+	U32 SCB_BufPtr;		/*28 Data Buffer Pointer */
+	U32 SCB_BufLen;		/*2C Data Allocation Length */
+	UBYTE SCB_SGLen;	/*30 SG list # */
+	UBYTE SCB_SenseLen;	/*31 Sense Allocation Length */
+	UBYTE SCB_HaStat;	/*32 */
+	UBYTE SCB_TaStat;	/*33 */
+	UBYTE SCB_CDBLen;	/*34 CDB Length */
+	UBYTE SCB_Ident;	/*35 Identify */
+	UBYTE SCB_TagMsg;	/*36 Tag Message */
+	UBYTE SCB_TagId;	/*37 Queue Tag */
+	UBYTE SCB_CDB[12];	/*38 */
+	U32 SCB_SGPAddr;	/*44 SG List/Sense Buf phy. Addr. */
+	U32 SCB_SensePtr;	/*48 Sense data pointer */
+	void (*SCB_Post) (BYTE *, BYTE *);	/*4C POST routine */
+	unsigned char *SCB_Srb;	/*50 SRB Pointer */
+	SG SCB_SGList[TOTAL_SG_ENTRY];	/*54 Start of SG list */
 } SCB;
 
 /* Bit Definition for SCB_Status */
 #define SCB_RENT        0x01
 #define SCB_PEND        0x02
-#define SCB_CONTIG      0x04            /* Contigent Allegiance */
+#define SCB_CONTIG      0x04	/* Contigent Allegiance */
 #define SCB_SELECT      0x08
 #define SCB_BUSY        0x10
 #define SCB_DONE        0x20
@@ -461,7 +453,7 @@ typedef struct Scsi_Ctrl_Blk            {
 
 
 /* Bit Definition for SCB_Mode */
-#define SCM_RSENS       0x01            /* request sense mode */
+#define SCM_RSENS       0x01	/* request sense mode */
 
 
 /* Bit Definition for SCB_Flags */
@@ -473,7 +465,7 @@ typedef struct Scsi_Ctrl_Blk            {
 #define SCF_DIN         0x08
 #define SCF_DOUT        0x10
 #define SCF_NO_XF       0x18
-#define SCF_WR_VF       0x20            /* Write verify turn on         */
+#define SCF_WR_VF       0x20	/* Write verify turn on         */
 #define SCF_POLL        0x40
 #define SCF_SG          0x80
 
@@ -483,7 +475,7 @@ typedef struct Scsi_Ctrl_Blk            {
 #define HOST_BUS_FREE   0x13
 #define HOST_BAD_PHAS   0x14
 #define HOST_INV_CMD    0x16
-#define HOST_ABORTED    0x1A		/* 07/21/98 */
+#define HOST_ABORTED    0x1A	/* 07/21/98 */
 #define HOST_SCSI_RST   0x1B
 #define HOST_DEV_RST    0x1C
 
@@ -522,13 +514,13 @@ typedef struct Scsi_Ctrl_Blk            {
 **********************************************************************/
 
 typedef struct Tar_Ctrl_Struc {
-	UWORD   TCS_Flags;              /* 0 */
-	UBYTE   TCS_JS_Period;          /* 2 */
-	UBYTE   TCS_SConfig0;           /* 3 */
+	UWORD TCS_Flags;	/* 0 */
+	UBYTE TCS_JS_Period;	/* 2 */
+	UBYTE TCS_SConfig0;	/* 3 */
 
-	UWORD   TCS_DrvFlags;           /* 4 */
-	UBYTE   TCS_DrvHead;            /* 6 */
-	UBYTE   TCS_DrvSector;          /* 7 */
+	UWORD TCS_DrvFlags;	/* 4 */
+	UBYTE TCS_DrvHead;	/* 6 */
+	UBYTE TCS_DrvSector;	/* 7 */
 } TCS;
 
 /***********************************************************************
@@ -548,16 +540,16 @@ typedef struct Tar_Ctrl_Struc {
 
 
 /* Bit Definition for TCF_DrvFlags */
-#define TCF_DRV_BUSY            0x01    /* Indicate target busy(driver) */
+#define TCF_DRV_BUSY            0x01	/* Indicate target busy(driver) */
 #define TCF_DRV_EN_TAG          0x0800
 #define TCF_DRV_255_63          0x0400
 
 typedef struct I91u_Adpt_Struc {
-	UWORD   ADPT_BIOS;              /* 0 */
-	UWORD   ADPT_BASE;              /* 1 */
-	UBYTE   ADPT_Bus;               /* 2 */
-	UBYTE   ADPT_Device;            /* 3 */
-	UBYTE   ADPT_INTR;              /* 4 */
+	UWORD ADPT_BIOS;	/* 0 */
+	UWORD ADPT_BASE;	/* 1 */
+	UBYTE ADPT_Bus;		/* 2 */
+	UBYTE ADPT_Device;	/* 3 */
+	UBYTE ADPT_INTR;	/* 4 */
 } INI_ADPT_STRUCT;
 
 
@@ -565,57 +557,52 @@ typedef struct I91u_Adpt_Struc {
 	      Host Adapter Control Structure
 ************************************************************************/
 typedef struct Ha_Ctrl_Struc {
-	UWORD   HCS_Base;       /* 00 */
-	UWORD   HCS_BIOS;       /* 02 */
-	UBYTE   HCS_Intr;       /* 04 */
-	UBYTE   HCS_SCSI_ID;    /* 05 */
-	UBYTE   HCS_MaxTar;     /* 06 */
-	UBYTE   HCS_NumScbs;    /* 07 */
+	UWORD HCS_Base;		/* 00 */
+	UWORD HCS_BIOS;		/* 02 */
+	UBYTE HCS_Intr;		/* 04 */
+	UBYTE HCS_SCSI_ID;	/* 05 */
+	UBYTE HCS_MaxTar;	/* 06 */
+	UBYTE HCS_NumScbs;	/* 07 */
 
-	UBYTE   HCS_Flags;      /* 08 */
-	UBYTE   HCS_Index;      /* 09 */
-	UBYTE   HCS_HaId;       /* 0A */
-	UBYTE   HCS_Config;     /* 0B */
-	UWORD   HCS_IdMask;     /* 0C */
-	UBYTE   HCS_Semaph;     /* 0E */
-	UBYTE   HCS_Phase;      /* 0F */
-	UBYTE   HCS_JSStatus0;  /* 10 */
-	UBYTE   HCS_JSInt;      /* 11 */
-	UBYTE   HCS_JSStatus1;  /* 12 */
-	UBYTE   HCS_SConf1;     /* 13 */
+	UBYTE HCS_Flags;	/* 08 */
+	UBYTE HCS_Index;	/* 09 */
+	UBYTE HCS_HaId;		/* 0A */
+	UBYTE HCS_Config;	/* 0B */
+	UWORD HCS_IdMask;	/* 0C */
+	UBYTE HCS_Semaph;	/* 0E */
+	UBYTE HCS_Phase;	/* 0F */
+	UBYTE HCS_JSStatus0;	/* 10 */
+	UBYTE HCS_JSInt;	/* 11 */
+	UBYTE HCS_JSStatus1;	/* 12 */
+	UBYTE HCS_SConf1;	/* 13 */
 
-	UBYTE   HCS_Msg[8];     /* 14 */
-	SCB     *HCS_NxtAvail;  /* 1C */
-	SCB     *HCS_Scb;       /* 20 */
-	SCB     *HCS_ScbEnd;    /* 24 */
-	SCB     *HCS_NxtPend;   /* 28 */
-	SCB     *HCS_NxtContig; /* 2C */
-	SCB     *HCS_ActScb;    /* 30 */
-	TCS     *HCS_ActTcs;    /* 34 */
+	UBYTE HCS_Msg[8];	/* 14 */
+	SCB *HCS_NxtAvail;	/* 1C */
+	SCB *HCS_Scb;		/* 20 */
+	SCB *HCS_ScbEnd;	/* 24 */
+	SCB *HCS_NxtPend;	/* 28 */
+	SCB *HCS_NxtContig;	/* 2C */
+	SCB *HCS_ActScb;	/* 30 */
+	TCS *HCS_ActTcs;	/* 34 */
 
-	SCB     *HCS_FirstAvail;/* 38 */
-	SCB     *HCS_LastAvail;	/* 3C */
-	SCB     *HCS_FirstPend;	/* 40 */
-	SCB     *HCS_LastPend;	/* 44 */
-	SCB     *HCS_FirstBusy;	/* 48 */
-	SCB     *HCS_LastBusy;	/* 4C */
-	SCB     *HCS_FirstDone;	/* 50 */
-	SCB     *HCS_LastDone;	/* 54 */
-#if 1				/* HILAM */
-	UBYTE   HCS_MaxTags[16];/* 58 */
-	UBYTE   HCS_ActTags[16];/* 68 */
-	TCS     HCS_Tcs[MAX_TARGETS]; /* 78 */
-	ULONG   pSRB_head;	/* SRB save queue header     */
-	ULONG   pSRB_tail;	/* SRB save queue tail       */
-#else
-	ULONG   pSRB_head;	/* 58 SRB save queue header     */
-	ULONG   pSRB_tail;	/* 5C SRB save queue tail       */
-	UBYTE   HCS_MaxTags[16];/* 60 */
-	UBYTE   HCS_ActTags[16];/* 70 */
-	TCS     HCS_Tcs[MAX_TARGETS]; /* 78 */
+	SCB *HCS_FirstAvail;	/* 38 */
+	SCB *HCS_LastAvail;	/* 3C */
+	SCB *HCS_FirstPend;	/* 40 */
+	SCB *HCS_LastPend;	/* 44 */
+	SCB *HCS_FirstBusy;	/* 48 */
+	SCB *HCS_LastBusy;	/* 4C */
+	SCB *HCS_FirstDone;	/* 50 */
+	SCB *HCS_LastDone;	/* 54 */
+	UBYTE HCS_MaxTags[16];	/* 58 */
+	UBYTE HCS_ActTags[16];	/* 68 */
+	TCS HCS_Tcs[MAX_TARGETS];	/* 78 */
+	ULONG pSRB_head;	/* SRB save queue header     */
+	ULONG pSRB_tail;	/* SRB save queue tail       */
+#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
+	spinlock_t HCS_AvailLock;
+	spinlock_t HCS_SemaphLock;
+	spinlock_t pSRB_lock;	/* SRB queue lock            */
 #endif
-//	Scsi_Cmnd       *pSRB_head;     /* B4 SRB save queue header     */
-//	Scsi_Cmnd       *pSRB_tail;     /* B8 SRB save queue tail       */
 } HCS;
 
 /* Bit Definition for HCB_Config */
@@ -636,77 +623,77 @@ typedef struct Ha_Ctrl_Struc {
 	Serial EEProm
 *******************************************************************/
 
-typedef struct _NVRAM_SCSI {            /* SCSI channel configuration   */
-	UCHAR   NVM_ChSCSIID;           /* 0Ch -> Channel SCSI ID       */
-	UCHAR   NVM_ChConfig1;          /* 0Dh -> Channel config 1      */
-	UCHAR   NVM_ChConfig2;          /* 0Eh -> Channel config 2      */
-	UCHAR   NVM_NumOfTarg;          /* 0Fh -> Number of SCSI target */
-					/* SCSI target configuration    */
-	UCHAR   NVM_Targ0Config;        /* 10h -> Target 0 configuration*/
-	UCHAR   NVM_Targ1Config;        /* 11h -> Target 1 configuration*/
-	UCHAR   NVM_Targ2Config;        /* 12h -> Target 2 configuration*/
-	UCHAR   NVM_Targ3Config;        /* 13h -> Target 3 configuration*/
-	UCHAR   NVM_Targ4Config;        /* 14h -> Target 4 configuration*/
-	UCHAR   NVM_Targ5Config;        /* 15h -> Target 5 configuration*/
-	UCHAR   NVM_Targ6Config;        /* 16h -> Target 6 configuration*/
-	UCHAR   NVM_Targ7Config;        /* 17h -> Target 7 configuration*/
-	UCHAR   NVM_Targ8Config;        /* 18h -> Target 8 configuration*/
-	UCHAR   NVM_Targ9Config;        /* 19h -> Target 9 configuration*/
-	UCHAR   NVM_TargAConfig;        /* 1Ah -> Target A configuration*/
-	UCHAR   NVM_TargBConfig;        /* 1Bh -> Target B configuration*/
-	UCHAR   NVM_TargCConfig;        /* 1Ch -> Target C configuration*/
-	UCHAR   NVM_TargDConfig;        /* 1Dh -> Target D configuration*/
-	UCHAR   NVM_TargEConfig;        /* 1Eh -> Target E configuration*/
-	UCHAR   NVM_TargFConfig;        /* 1Fh -> Target F configuration*/
+typedef struct _NVRAM_SCSI {	/* SCSI channel configuration   */
+	UCHAR NVM_ChSCSIID;	/* 0Ch -> Channel SCSI ID       */
+	UCHAR NVM_ChConfig1;	/* 0Dh -> Channel config 1      */
+	UCHAR NVM_ChConfig2;	/* 0Eh -> Channel config 2      */
+	UCHAR NVM_NumOfTarg;	/* 0Fh -> Number of SCSI target */
+	/* SCSI target configuration    */
+	UCHAR NVM_Targ0Config;	/* 10h -> Target 0 configuration */
+	UCHAR NVM_Targ1Config;	/* 11h -> Target 1 configuration */
+	UCHAR NVM_Targ2Config;	/* 12h -> Target 2 configuration */
+	UCHAR NVM_Targ3Config;	/* 13h -> Target 3 configuration */
+	UCHAR NVM_Targ4Config;	/* 14h -> Target 4 configuration */
+	UCHAR NVM_Targ5Config;	/* 15h -> Target 5 configuration */
+	UCHAR NVM_Targ6Config;	/* 16h -> Target 6 configuration */
+	UCHAR NVM_Targ7Config;	/* 17h -> Target 7 configuration */
+	UCHAR NVM_Targ8Config;	/* 18h -> Target 8 configuration */
+	UCHAR NVM_Targ9Config;	/* 19h -> Target 9 configuration */
+	UCHAR NVM_TargAConfig;	/* 1Ah -> Target A configuration */
+	UCHAR NVM_TargBConfig;	/* 1Bh -> Target B configuration */
+	UCHAR NVM_TargCConfig;	/* 1Ch -> Target C configuration */
+	UCHAR NVM_TargDConfig;	/* 1Dh -> Target D configuration */
+	UCHAR NVM_TargEConfig;	/* 1Eh -> Target E configuration */
+	UCHAR NVM_TargFConfig;	/* 1Fh -> Target F configuration */
 } NVRAM_SCSI;
 
 typedef struct _NVRAM {
-	/*----------header ---------------*/
-	USHORT  NVM_Signature;                  /* 0,1: Signature */
-	UCHAR   NVM_Size;                       /* 2:   Size of data structure */
-	UCHAR   NVM_Revision;                   /* 3:   Revision of data structure */
-	/* ----Host Adapter Structure ----*/
-	UCHAR   NVM_ModelByte0;                 /* 4:   Model number (byte 0) */
-	UCHAR   NVM_ModelByte1;                 /* 5:   Model number (byte 1) */
-	UCHAR   NVM_ModelInfo;                  /* 6:   Model information         */
-	UCHAR   NVM_NumOfCh;                    /* 7:   Number of SCSI channel*/
-	UCHAR   NVM_BIOSConfig1;                /* 8:   BIOS configuration 1  */
-	UCHAR   NVM_BIOSConfig2;                /* 9:   BIOS configuration 2  */
-	UCHAR   NVM_HAConfig1;                  /* A:   Hoat adapter configuration 1 */
-	UCHAR   NVM_HAConfig2;                  /* B:   Hoat adapter configuration 2 */
+/*----------header ---------------*/
+	USHORT NVM_Signature;	/* 0,1: Signature */
+	UCHAR NVM_Size;		/* 2:   Size of data structure */
+	UCHAR NVM_Revision;	/* 3:   Revision of data structure */
+	/* ----Host Adapter Structure ---- */
+	UCHAR NVM_ModelByte0;	/* 4:   Model number (byte 0) */
+	UCHAR NVM_ModelByte1;	/* 5:   Model number (byte 1) */
+	UCHAR NVM_ModelInfo;	/* 6:   Model information         */
+	UCHAR NVM_NumOfCh;	/* 7:   Number of SCSI channel */
+	UCHAR NVM_BIOSConfig1;	/* 8:   BIOS configuration 1  */
+	UCHAR NVM_BIOSConfig2;	/* 9:   BIOS configuration 2  */
+	UCHAR NVM_HAConfig1;	/* A:   Hoat adapter configuration 1 */
+	UCHAR NVM_HAConfig2;	/* B:   Hoat adapter configuration 2 */
 	NVRAM_SCSI NVM_SCSIInfo[2];
-	UCHAR   NVM_reserved[10];
+	UCHAR NVM_reserved[10];
 	/* ---------- CheckSum ----------       */
-	USHORT  NVM_CheckSum;                   /* 0x3E, 0x3F: Checksum of NVRam        */
-	} NVRAM, *PNVRAM;
+	USHORT NVM_CheckSum;	/* 0x3E, 0x3F: Checksum of NVRam        */
+} NVRAM, *PNVRAM;
 
 /* Bios Configuration for nvram->BIOSConfig1                            */
-#define NBC1_ENABLE             0x01    /* BIOS enable                  */
-#define NBC1_8DRIVE             0x02    /* Support more than 2 drives   */
-#define NBC1_REMOVABLE          0x04    /* Support removable drive      */
-#define NBC1_INT19              0x08    /* Intercept int 19h            */
-#define NBC1_BIOSSCAN           0x10    /* Dynamic BIOS scan            */
-#define NBC1_LUNSUPPORT         0x40    /* Support LUN                  */
+#define NBC1_ENABLE             0x01	/* BIOS enable                  */
+#define NBC1_8DRIVE             0x02	/* Support more than 2 drives   */
+#define NBC1_REMOVABLE          0x04	/* Support removable drive      */
+#define NBC1_INT19              0x08	/* Intercept int 19h            */
+#define NBC1_BIOSSCAN           0x10	/* Dynamic BIOS scan            */
+#define NBC1_LUNSUPPORT         0x40	/* Support LUN                  */
 
 /* HA Configuration Byte 1                                              */
-#define NHC1_BOOTIDMASK 0x0F            /* Boot ID number               */
-#define NHC1_LUNMASK    0x70            /* Boot LUN number              */
-#define NHC1_CHANMASK   0x80            /* Boot Channel number          */
+#define NHC1_BOOTIDMASK 0x0F	/* Boot ID number               */
+#define NHC1_LUNMASK    0x70	/* Boot LUN number              */
+#define NHC1_CHANMASK   0x80	/* Boot Channel number          */
 
 /* Bit definition for nvram->SCSIconfig1                                */
-#define NCC1_BUSRESET           0x01    /* Reset SCSI bus at power up   */
-#define NCC1_PARITYCHK          0x02    /* SCSI parity enable           */
-#define NCC1_ACTTERM1           0x04    /* Enable active terminator 1   */
-#define NCC1_ACTTERM2           0x08    /* Enable active terminator 2   */
-#define NCC1_AUTOTERM           0x10    /* Enable auto terminator       */
-#define NCC1_PWRMGR             0x80    /* Enable power management      */
+#define NCC1_BUSRESET           0x01	/* Reset SCSI bus at power up   */
+#define NCC1_PARITYCHK          0x02	/* SCSI parity enable           */
+#define NCC1_ACTTERM1           0x04	/* Enable active terminator 1   */
+#define NCC1_ACTTERM2           0x08	/* Enable active terminator 2   */
+#define NCC1_AUTOTERM           0x10	/* Enable auto terminator       */
+#define NCC1_PWRMGR             0x80	/* Enable power management      */
 
 /* Bit definition for SCSI Target configuration byte                    */
-#define NTC_DISCONNECT          0x08    /* Enable SCSI disconnect       */
-#define NTC_SYNC                0x10    /* SYNC_NEGO                    */
-#define NTC_NO_WDTR             0x20    /* SYNC_NEGO                    */
-#define NTC_1GIGA               0x40    /* 255 head / 63 sectors (64/32)*/
-#define NTC_SPINUP              0x80    /* Start disk drive             */
+#define NTC_DISCONNECT          0x08	/* Enable SCSI disconnect       */
+#define NTC_SYNC                0x10	/* SYNC_NEGO                    */
+#define NTC_NO_WDTR             0x20	/* SYNC_NEGO                    */
+#define NTC_1GIGA               0x40	/* 255 head / 63 sectors (64/32) */
+#define NTC_SPINUP              0x80	/* Start disk drive             */
 
 /*      Default NVRam values                                            */
 #define INI_SIGNATURE           0xC925
@@ -715,8 +702,8 @@ typedef struct _NVRAM {
 #define NTC_DEFAULT             (NTC_NO_WDTR | NTC_1GIGA | NTC_DISCONNECT)
 
 /* SCSI related definition                                              */
-#define DISC_NOT_ALLOW          0x80    /* Disconnect is not allowed    */
-#define DISC_ALLOW              0xC0    /* Disconnect is allowed        */
+#define DISC_NOT_ALLOW          0x80	/* Disconnect is not allowed    */
+#define DISC_ALLOW              0xC0	/* Disconnect is allowed        */
 #define SCSICMD_RequestSense    0x03
 
 
@@ -737,126 +724,105 @@ typedef struct _NVRAM {
 
 #define SUCCESSFUL              0x00
 #define FUNC_NOT_SUPPORTED      0x81
-#define BAD_VENDOR_ID           0x83    /* Bad vendor ID                */
-#define DEVICE_NOT_FOUND        0x86    /* PCI device not found         */
+#define BAD_VENDOR_ID           0x83	/* Bad vendor ID                */
+#define DEVICE_NOT_FOUND        0x86	/* PCI device not found         */
 #define BAD_REGISTER_NUMBER     0x87
 
-#define MAX_PCI_DEVICES         21      /* Maximum devices supportted   */
+#define MAX_PCI_DEVICES         21	/* Maximum devices supportted   */
 
 #define MAX_PCI_CHANL           4
 
 typedef struct _BIOS32_ENTRY_STRUCTURE {
-	DWORD Signatures;               /* Should be "_32_"             */
-	DWORD BIOS32Entry;              /* 32-bit physical address      */
-	BYTE  Revision;                 /* Revision level, should be 0  */
-	BYTE  Length;                   /* Multiply of 16, should be 1  */
-	BYTE  CheckSum;                 /* Checksum of whole structure  */
-	BYTE  Reserved[5];              /* Reserved                     */
+	DWORD Signatures;	/* Should be "_32_"             */
+	DWORD BIOS32Entry;	/* 32-bit physical address      */
+	BYTE Revision;		/* Revision level, should be 0  */
+	BYTE Length;		/* Multiply of 16, should be 1  */
+	BYTE CheckSum;		/* Checksum of whole structure  */
+	BYTE Reserved[5];	/* Reserved                     */
 } BIOS32_ENTRY_STRUCTURE, *PBIOS32_ENTRY_STRUCTURE;
 
-typedef struct
-   {
-   union
-	  {
-	  unsigned int eax;
-	  struct
-	 {
-	 unsigned short ax;
-	 } word;
-	  struct
-	 {
-	 unsigned char al;
-	 unsigned char ah;
-	 } byte;
-      } eax;
-   union
-	  {
-      unsigned int ebx;
-      struct
-	 {
-	 unsigned short bx;
-	 } word;
-	  struct
-	 {
-	 unsigned char bl;
-	 unsigned char bh;
-	 } byte;
-	  } ebx;
-   union
-	  {
-	  unsigned int ecx;
-	  struct
-	 {
-	 unsigned short cx;
-	 } word;
-	  struct
-	 {
-	 unsigned char cl;
-	 unsigned char ch;
-	 } byte;
-      } ecx;
-   union
-	  {
-	  unsigned int edx;
-	  struct
-	 {
-	 unsigned short dx;
-	 } word;
-	  struct
-	 {
-	 unsigned char dl;
-	 unsigned char dh;
-	 } byte;
-	  } edx;
-   union
-	  {
-      unsigned int edi;
-      struct
-	 {
-	 unsigned short di;
-	 } word;
-	  } edi;
-   union
-	  {
-	  unsigned int esi;
-	  struct
-	 {
-	 unsigned short si;
-	 } word;
-	  } esi;
-   } REGS;
+typedef struct {
+	union {
+		unsigned int eax;
+		struct {
+			unsigned short ax;
+		} word;
+		struct {
+			unsigned char al;
+			unsigned char ah;
+		} byte;
+	} eax;
+	union {
+		unsigned int ebx;
+		struct {
+			unsigned short bx;
+		} word;
+		struct {
+			unsigned char bl;
+			unsigned char bh;
+		} byte;
+	} ebx;
+	union {
+		unsigned int ecx;
+		struct {
+			unsigned short cx;
+		} word;
+		struct {
+			unsigned char cl;
+			unsigned char ch;
+		} byte;
+	} ecx;
+	union {
+		unsigned int edx;
+		struct {
+			unsigned short dx;
+		} word;
+		struct {
+			unsigned char dl;
+			unsigned char dh;
+		} byte;
+	} edx;
+	union {
+		unsigned int edi;
+		struct {
+			unsigned short di;
+		} word;
+	} edi;
+	union {
+		unsigned int esi;
+		struct {
+			unsigned short si;
+		} word;
+	} esi;
+} REGS;
 
-typedef union                           /* Union define for mechanism 1 */
-	{
-    struct
-	{
-	unsigned char RegNum;
-	unsigned char FcnNum:3;
-	unsigned char DeviceNum:5;
-	unsigned char BusNum;
-	unsigned char Reserved:7;
-	unsigned char Enable:1;
-	}               sConfigAdr;
-	unsigned long   lConfigAdr;
-	} CONFIG_ADR;
+typedef union {			/* Union define for mechanism 1 */
+	struct {
+		unsigned char RegNum;
+		unsigned char FcnNum:3;
+		unsigned char DeviceNum:5;
+		unsigned char BusNum;
+		unsigned char Reserved:7;
+		unsigned char Enable:1;
+	} sConfigAdr;
+	unsigned long lConfigAdr;
+} CONFIG_ADR;
 
-typedef union                           /* Union define for mechanism 2 */
-	{
-	struct
-	    {
-	    unsigned char RegNum;
-	    unsigned char DeviceNum;
-	    unsigned short Reserved;
-	    } sHostAdr;
-	unsigned long   lHostAdr;
-	} HOST_ADR;
+typedef union {			/* Union define for mechanism 2 */
+	struct {
+		unsigned char RegNum;
+		unsigned char DeviceNum;
+		unsigned short Reserved;
+	} sHostAdr;
+	unsigned long lHostAdr;
+} HOST_ADR;
 
 typedef struct _HCSinfo {
-	ULONG  base;
-	UCHAR  vec;
-	UCHAR  bios;            /* High byte of BIOS address */
-	USHORT BaseAndBios;     /* high byte: pHcsInfo->bios,low byte:pHcsInfo->base */
-	} HCSINFO ;
+	ULONG base;
+	UCHAR vec;
+	UCHAR bios;		/* High byte of BIOS address */
+	USHORT BaseAndBios;	/* high byte: pHcsInfo->bios,low byte:pHcsInfo->base */
+} HCSINFO;
 
 #define TUL_RD(x,y)             (UCHAR)(inb(  (int)((ULONG)(x+y)) ))
 #define TUL_RDLONG(x,y)         (ULONG)(inl((int)((ULONG)(x+y)) ))
@@ -887,4 +853,3 @@ typedef struct _HCSinfo {
 #define SCSI_RESET_BUS_RESET 0x100
 #define SCSI_RESET_HOST_RESET 0x200
 #define SCSI_RESET_ACTION   0xff
-

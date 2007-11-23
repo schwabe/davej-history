@@ -3155,7 +3155,7 @@ ppp_dev_stats (struct device *dev)
 	ppp_stats.tx_heartbeat_errors = 0;
 
 	if (ppp->flags & SC_DEBUG)
-		printk (KERN_INFO "ppp_dev_stats called");
+		printk (KERN_INFO "ppp_dev_stats called\n");
 	return &ppp_stats;
 }
 

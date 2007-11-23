@@ -46,9 +46,6 @@ static char *version =
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
-
-static char kernel_version [] = UTS_RELEASE;
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -170,7 +167,7 @@ static struct device *root_RCdev = NULL;
 #ifdef MODULE
 int init_module(void)
 #else
-int rcpci_probe(struct netdevice *dev)
+int rcpci_probe(struct device *dev)
 #endif
 {
      int cards_found;

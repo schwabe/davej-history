@@ -354,7 +354,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.1.5"
+#define AIC7XXX_C_VERSION  "5.1.6"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -1065,8 +1065,7 @@ struct aic7xxx_host {
 #define  DEVICE_RESET_DELAY             0x04
 #define  DEVICE_PRINT_SDTR              0x08
 #define  DEVICE_PRINT_WDTR              0x10
-#define  DEVICE_SUCCESS                 0x20
-#define  DEVICE_TAGGED_SUCCESS          0x40
+#define  DEVICE_WAS_BUSY                0x20
 #define  DEVICE_SCANNED                 0x80
   volatile unsigned char   dev_flags[MAX_TARGETS];
   volatile unsigned char   dev_active_cmds[MAX_TARGETS];
@@ -2877,6 +2876,7 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
     {
       char *buffer;
       
+      p->dev_flags[tindex] |= DEVICE_PRESENT;
       if(cmd->use_sg)
       {
         struct scatterlist *sg;
@@ -2918,23 +2918,34 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
         p->needsdtr_copy |= (1<<tindex);
 
         if (p->flags & AHC_SEEPROM_FOUND)
+        {
           p->transinfo[tindex].goal_period = p->transinfo[tindex].user_period;
-        else if (p->features & AHC_ULTRA2)
-          p->transinfo[tindex].goal_period =
-            aic7xxx_syncrates[AHC_SYNCRATE_ULTRA2].period;
-        else if (p->features & AHC_ULTRA)
-          p->transinfo[tindex].goal_period =
-            aic7xxx_syncrates[AHC_SYNCRATE_ULTRA].period;
+          p->transinfo[tindex].goal_offset = p->transinfo[tindex].user_offset;
+        }
         else
-          p->transinfo[tindex].goal_period =
-            aic7xxx_syncrates[AHC_SYNCRATE_FAST].period;
-
-        if (p->features & AHC_ULTRA2)
-          p->transinfo[tindex].goal_offset = MAX_OFFSET_ULTRA2;
-        else if (p->transinfo[tindex].goal_width == MSG_EXT_WDTR_BUS_16_BIT)
-          p->transinfo[tindex].goal_offset = MAX_OFFSET_16BIT;
-        else
-          p->transinfo[tindex].goal_offset = MAX_OFFSET_8BIT;
+        {
+          if (p->features & AHC_ULTRA2)
+          {
+            p->transinfo[tindex].goal_period =
+              aic7xxx_syncrates[AHC_SYNCRATE_ULTRA2].period;
+          }
+          else if (p->features & AHC_ULTRA)
+          {
+            p->transinfo[tindex].goal_period =
+              aic7xxx_syncrates[AHC_SYNCRATE_ULTRA].period;
+          }
+          else
+          {
+            p->transinfo[tindex].goal_period =
+              aic7xxx_syncrates[AHC_SYNCRATE_FAST].period;
+          }
+          if (p->features & AHC_ULTRA2)
+            p->transinfo[tindex].goal_offset = MAX_OFFSET_ULTRA2;
+          else if (p->transinfo[tindex].goal_width == MSG_EXT_WDTR_BUS_16_BIT)
+            p->transinfo[tindex].goal_offset = MAX_OFFSET_16BIT;
+          else
+            p->transinfo[tindex].goal_offset = MAX_OFFSET_8BIT;
+        }
       }
       else
       {
@@ -3417,19 +3428,6 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
       if (aic7xxx_verbose & (VERBOSE_ABORT_PROCESS | VERBOSE_RESET_PROCESS))
         printk(INFO_LEAD "Cleaning up status information "
           "and delayed_scbs.\n", p->host_no, channel, i, lun);
-      if ( !(p->dev_flags[i] & DEVICE_TAGGED_SUCCESS) &&
-            (p->dev_active_cmds[i]) &&
-            (p->tagenable & (0x01 << i)) )
-      {
-        printk(INFO_LEAD "Device appears to be choking on tagged commands.\n",
-          p->host_no, channel, i, lun);
-        printk(INFO_LEAD "Will use untagged I/O instead.\n", p->host_no,
-          channel, i, lun);
-        p->dev_max_queue_depth[i] = 1;
-        p->dev_temp_queue_depth[i] = 1;
-        p->tagenable &= ~(0x01 << i);
-        p->orderedtag &= ~(0x01 << i);
-      }
       p->dev_flags[i] &= ~BUS_DEVICE_RESET_PENDING;
       if ( tag == SCB_LIST_NULL )
       {
@@ -4010,7 +4008,7 @@ aic7xxx_run_waiting_queues(struct aic7xxx_host *p)
     }
     if ( (p->dev_active_cmds[tindex] >=
           p->dev_temp_queue_depth[tindex]) ||
-         (p->dev_flags[tindex] & DEVICE_RESET_DELAY) )
+         (p->dev_flags[tindex] & (DEVICE_RESET_DELAY|DEVICE_WAS_BUSY)) )
     {
       scbq_insert_tail(&p->delayed_scbs[tindex], scb);
     }
@@ -4140,7 +4138,7 @@ aic7xxx_timer(struct aic7xxx_host *p)
          time_after_eq(jiffies, p->dev_expires[i]) )
     {
       p->dev_timer_active &= ~(0x01 << i);
-      p->dev_flags[i] &= ~DEVICE_RESET_DELAY;
+      p->dev_flags[i] &= ~(DEVICE_RESET_DELAY|DEVICE_WAS_BUSY);
       p->dev_temp_queue_depth[i] =  p->dev_max_queue_depth[i];
       j = 0;
       while ( ((scb = scbq_remove_head(&p->delayed_scbs[i])) != NULL) &&
@@ -4455,8 +4453,7 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
              (scb->tag_action) &&
             !(scb->flags & SCB_MSGOUT_BITS) )
         {
-          if ((scb->tag_action == MSG_ORDERED_Q_TAG) &&
-              (p->dev_flags[tindex] & DEVICE_TAGGED_SUCCESS))
+          if (scb->tag_action == MSG_ORDERED_Q_TAG)
           {
             /*
              * OK...the device seems able to accept tagged commands, but
@@ -4477,8 +4474,7 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
             aic_outb(p, MSG_IDENTIFYFLAG, MSG_OUT);
             aic_outb(p, aic_inb(p, SCSISIGI) | ATNO, SCSISIGO);
           }
-          else if ( (scb->tag_action == MSG_SIMPLE_Q_TAG) &&
-                   !(p->dev_flags[tindex] & DEVICE_TAGGED_SUCCESS) )
+          else if (scb->tag_action == MSG_SIMPLE_Q_TAG)
           {
             unsigned char i, reset = 0;
             struct aic7xxx_scb *scbp;
@@ -4898,11 +4894,11 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
                 p->dev_timer_active |= (0x01 << tindex);
                 if ( p->dev_active_cmds[tindex] )
                 {
-                  p->dev_expires[tindex] = jiffies + (HZ * 2);
+                  p->dev_expires[tindex] = jiffies + HZ;
                 }
                 else
                 {
-                  p->dev_expires[tindex] = jiffies + (HZ / 2);
+                  p->dev_expires[tindex] = jiffies + (HZ / 10);
                 }
                 if ( !(p->dev_timer_active & (0x01 << p->scsi_id)) )
                 {
@@ -4956,6 +4952,10 @@ aic7xxx_handle_seqint(struct aic7xxx_host *p, unsigned char intstat)
                       p->dev_active_cmds[tindex];
                   p->dev_last_queue_full[tindex] = 0;
                   p->dev_last_queue_full_count[tindex] = 0;
+                }
+                else
+                {
+                  p->dev_flags[tindex] |= DEVICE_WAS_BUSY;
                 }
               }
               break;
@@ -5281,7 +5281,8 @@ aic7xxx_parse_msg(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
          * have a device ask for a higher speed then we want to give it
          * in that case
          */
-        if (!(p->sdtr_pending & target_mask))
+        if ( (scb->flags & (SCB_MSGOUT_SENT|SCB_MSGOUT_SDTR)) !=
+             (SCB_MSGOUT_SENT|SCB_MSGOUT_SDTR) )
         {
           if (!(p->dev_flags[tindex] & DEVICE_SCANNED))
           {
@@ -5299,54 +5300,36 @@ aic7xxx_parse_msg(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
               p->transinfo[tindex].user_offset;
             p->needsdtr_copy |= target_mask;
           }
+          if ( !p->transinfo[tindex].goal_offset )
+            period = 255;
           if ( p->transinfo[tindex].goal_period > period )
             period = p->transinfo[tindex].goal_period;
-          if ( p->transinfo[tindex].goal_offset < offset )
-            saved_offset = offset = p->transinfo[tindex].goal_offset;
         }
   
-#ifdef AIC7XXX_VERBOSE_DEBUGGING
-        if (aic7xxx_verbose > 0xffff)
-        {
-          printk(INFO_LEAD "Finished receipt of SDTR, parsing %d/%d\n",
-                 p->host_no, CTL_OF_SCB(scb), period, offset);
-          syncrate = aic7xxx_find_syncrate(p, &period, maxsync);
-          printk(INFO_LEAD "After find_syncrate() %d/%d\n",
-                 p->host_no, CTL_OF_SCB(scb), period, offset);
-          aic7xxx_validate_offset(p, syncrate, &offset,
-                                  target_scsirate & WIDEXFER);
-          printk(INFO_LEAD "After validate_offset() %d/%d\n",
-                 p->host_no, CTL_OF_SCB(scb), period, offset);
-          aic7xxx_set_syncrate(p, syncrate, target, channel, period,
-                               offset, AHC_TRANS_ACTIVE|AHC_TRANS_CUR);
-          printk(INFO_LEAD "Final values of Period/Offset as set: %d/%d\n",
-                 p->host_no, CTL_OF_SCB(scb), period, offset);
-        }
-        else
-        {
-          syncrate = aic7xxx_find_syncrate(p, &period, maxsync);
-          aic7xxx_validate_offset(p, syncrate, &offset,
-                                  target_scsirate & WIDEXFER);
-          aic7xxx_set_syncrate(p, syncrate, target, channel, period,
-                               offset, AHC_TRANS_ACTIVE|AHC_TRANS_CUR);
-        }
-#else
         syncrate = aic7xxx_find_syncrate(p, &period, maxsync);
         aic7xxx_validate_offset(p, syncrate, &offset,
                                 target_scsirate & WIDEXFER);
         aic7xxx_set_syncrate(p, syncrate, target, channel, period,
                              offset, AHC_TRANS_ACTIVE|AHC_TRANS_CUR);
-#endif
 
-        if (offset == 0)
+        /*
+         * Did we drop to async?  If so, are we sending a reply?  If we are,
+         * then we have to make sure that the reply value reflects the proper
+         * settings so we need to set the goal values according to what
+         * we need to send.
+         */
+        if ( (offset == 0) || (offset != saved_offset) ||
+             ((scb->flags & (SCB_MSGOUT_SENT|SCB_MSGOUT_SDTR)) !=
+              (SCB_MSGOUT_SENT|SCB_MSGOUT_SDTR) ) )
         {
-          /*
-           * Uhh ohh, things fell through to async....update the goal
-           * items and the needsdtr_copy to reflect this...
-           */
           aic7xxx_set_syncrate(p, syncrate, target, channel, period,
-                 offset, AHC_TRANS_GOAL|AHC_TRANS_QUITE);
+                               offset, AHC_TRANS_GOAL|AHC_TRANS_QUITE);
+          if ( offset == 0 )
+          {
+            p->needsdtr_copy &= ~target_mask;
+          }
         }
+        
         /*
          * Did we start this, if not, or if we went to low and had to
          * go async, then send an SDTR back to the target
@@ -5437,7 +5420,6 @@ aic7xxx_parse_msg(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
               p->transinfo[tindex].user_width;
             p->needwdtr_copy |= target_mask;
             p->needsdtr_copy |= target_mask;
-            p->dev_flags[tindex] |= DEVICE_SCANNED;
           }
           switch(bus_width)
           {
@@ -6266,12 +6248,6 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
             aic7xxx_calculate_residual(p, scb);
           }
           cmd->result |= (aic7xxx_error(cmd) << 16);
-          if (scb->tag_action)
-            p->dev_flags[TARGET_INDEX(cmd)] |= 
-               DEVICE_TAGGED_SUCCESS | DEVICE_SUCCESS | DEVICE_PRESENT;
-          else
-            p->dev_flags[TARGET_INDEX(cmd)] |= 
-               DEVICE_SUCCESS | DEVICE_PRESENT;
           aic7xxx_done(p, scb);
           break;
       }      
@@ -10131,8 +10107,6 @@ aic7xxx_bus_device_reset(struct aic7xxx_host *p, Scsi_Cmnd *cmd)
                 "message buffer\n", p->host_no, CTL_OF_SCB(scb));
         scb->flags |= SCB_RESET | SCB_DEVICE_RESET;
         aic7xxx_error(scb->cmd) = DID_RESET;
-        p->dev_flags[TARGET_INDEX(scb->cmd)] &= 
-                ~DEVICE_SUCCESS;
         p->dev_flags[TARGET_INDEX(scb->cmd)] |= 
                 BUS_DEVICE_RESET_PENDING;
         /* Send the abort message to the active SCB. */
@@ -10153,8 +10127,6 @@ aic7xxx_bus_device_reset(struct aic7xxx_host *p, Scsi_Cmnd *cmd)
                 "in use\n", p->host_no, CTL_OF_SCB(scb));
         scb->flags |= SCB_RESET | SCB_DEVICE_RESET;
         aic7xxx_error(scb->cmd) = DID_RESET;
-        p->dev_flags[TARGET_INDEX(scb->cmd)] &= 
-                ~DEVICE_SUCCESS;
         p->dev_flags[TARGET_INDEX(scb->cmd)] |= 
                 BUS_DEVICE_RESET_PENDING;
         return(SCSI_RESET_ERROR);
@@ -10182,7 +10154,6 @@ aic7xxx_bus_device_reset(struct aic7xxx_host *p, Scsi_Cmnd *cmd)
          */
     scb->hscb->control |= MK_MESSAGE;
     scb->flags |= SCB_RESET | SCB_DEVICE_RESET;
-    p->dev_flags[TARGET_INDEX(scb->cmd)] &= ~DEVICE_SUCCESS;
     p->dev_flags[TARGET_INDEX(scb->cmd)] |= 
         BUS_DEVICE_RESET_PENDING;
     if (hscb_index != SCB_LIST_NULL)

@@ -1254,10 +1254,11 @@ dgrs_found_device(
 )
 {
 	DGRS_PRIV	*priv;
-	int		i;
 
 	#ifdef MODULE
 	{
+		int		i;
+
 		/* Allocate and fill new device structure. */
 		int dev_size = sizeof(struct device) + sizeof(DGRS_PRIV);
 

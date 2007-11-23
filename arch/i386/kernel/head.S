@@ -484,7 +484,7 @@ gdt_descr:
 #define upper_seg(type,dpl,base,limit) \
         ((base) & 0xff000000) | \
         (((base) & 0x00ff0000)>>16) | \
-        ((limit) & 0xf0000) | \
+        (((limit)>>12) & 0xf0000) | \
         ((dpl)<<13) | \
         (0x00c09000) | \
         ((type)<<8)

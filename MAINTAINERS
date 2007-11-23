@@ -291,9 +291,9 @@ S:	Maintained
 
 NCP FILESYSTEM:
 P:	Volker Lendecke
-M:	lendecke@namu01.Num.Math.Uni-Goettingen.de
+M:	vl@kki.org
 L:	linware@sh.cvut.cz
-S:	Maintained
+S:	Odd Fixes
 
 NETROM NETWORK LAYER
 P:	Jon Naylor
@@ -327,7 +327,7 @@ S:	Maintained
 
 SMB FILESYSTEM:
 P:	Volker Lendecke
-M:	lendecke@namu01.Num.Math.Uni-Goettingen.de
+M:	vl@kki.org
 L:	samba@listproc.anu.edu.au
 S:	Odd Fixes
 

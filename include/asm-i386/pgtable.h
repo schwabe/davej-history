@@ -54,7 +54,7 @@ do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3"
  * address.
  */
 #define __invlpg_mem(addr) \
-	(((char *)(addr)-__PAGE_OFFSET))
+	(*((char *)(addr)-__PAGE_OFFSET))
 #define __invlpg(addr) \
 	__asm__ __volatile__("invlpg %0": :"m" (__invlpg_mem(addr)))
 

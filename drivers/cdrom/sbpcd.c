@@ -4911,14 +4911,16 @@ static int sbp_data(struct request *req)
 		msg(DBG_000, "sbp_data: beginning to read.\n");
 		p = D_S[d].sbp_buf + frame *  CD_FRAMESIZE;
 		if (sbpro_type==1) OUT(CDo_sel_i_d,1);
-		if (cmd_type==READ_M2)
+		if (cmd_type==READ_M2) {
                         if (do_16bit) insw(CDi_data, xa_head_buf, CD_XA_HEAD>>1);
                         else insb(CDi_data, xa_head_buf, CD_XA_HEAD);
+		}
 		if (do_16bit) insw(CDi_data, p, CD_FRAMESIZE>>1);
 		else insb(CDi_data, p, CD_FRAMESIZE);
-		if (cmd_type==READ_M2)
+		if (cmd_type==READ_M2) {
                         if (do_16bit) insw(CDi_data, xa_tail_buf, CD_XA_TAIL>>1);
                         else insb(CDi_data, xa_tail_buf, CD_XA_TAIL);
+		}
 		D_S[d].sbp_current++;
 		if (sbpro_type==1) OUT(CDo_sel_i_d,0);
 		if (cmd_type==READ_M2)
@@ -5502,9 +5504,10 @@ int SBPCD_INIT(void)
 		cc_ReadStatus();
 		i=ResponseStatus();  /* returns orig. status or p_busy_new */
 		if (famT_drive) i=ResponseStatus();  /* returns orig. status or p_busy_new */
-		if (i<0)
+		if (i<0) {
 			if (i!=-402)
 				msg(DBG_INF,"init: ResponseStatus returns %d.\n",i);
+		}
 		else
 		{
 			if (st_check)
