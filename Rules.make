@@ -155,6 +155,8 @@ $(MODINCL)/%.ver: %.c
 
 $(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver)): $(TOPDIR)/include/linux/autoconf.h
 
+.PHONY: $(TOPDIR)/include/linux/modversions.h
+
 $(TOPDIR)/include/linux/modversions.h: $(addprefix $(MODINCL)/,$(SYMTAB_OBJS:.o=.ver))
 	@echo updating $(TOPDIR)/include/linux/modversions.h
 	@(echo "#ifdef MODVERSIONS";\

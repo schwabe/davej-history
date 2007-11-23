@@ -346,9 +346,11 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	struct irqaction * action = *(irq + irq_action);
 	int do_random = 0;
 	int c,intm,mask;
+#ifdef IRQ_DEBUG
 	static int count;
 	if (smp_processor_id() != 0 && count++ < 1000)
 	  printk("IRQ %d: done by CPU %d\n",irq,smp_processor_id());
+#endif	  
 	if (irq  >= 8) {
 	  c = cache_A1;
 	  intm = inb(0xA1);
@@ -359,7 +361,9 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	  mask =  1 << irq;
 	}
 	if (!(c & mask) || !(intm & mask)) {
+#ifdef IRQ_DEBUG	
 	  printk("IRQ %d (proc %d):cache_x1=0x%x,INT mask=0x%x\n", irq, smp_processor_id(),c,intm);
+#endif	  
 	  /* better to return because the interrupt may be asserted again,
 	     the bad thing is that we may loose some interrupts */
 	  return;

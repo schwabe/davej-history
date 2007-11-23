@@ -1963,8 +1963,13 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
 		 * Delay the ack if possible.  Send ack's to
 		 * fin frames immediately as there shouldn't be
 		 * anything more to come.
+		 *
+		 * ACK immediately if we still have any out of
+		 * order data.  This is because we desire "maximum
+		 * feedback during loss".  --DaveM
 		 */
-		if (!sk->delay_acks || th->fin) {
+		if (!sk->delay_acks || th->fin ||
+		    (skb->next != (struct sk_buff *) &sk->receive_queue)) {
 			tcp_send_ack(sk);
 		} else {
 			/*
