@@ -790,14 +790,12 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			else
 				LP_F(minor) &= ~LP_ABORTOPEN;
 			break;
-#ifdef OBSOLETED
 		case LPCAREFUL:
 			if (arg)
 				LP_F(minor) |= LP_CAREFUL;
 			else
 				LP_F(minor) &= ~LP_CAREFUL;
 			break;
-#endif
 		case LPTRUSTIRQ:
 			if (arg)
 				LP_F(minor) |= LP_TRUST_IRQ;

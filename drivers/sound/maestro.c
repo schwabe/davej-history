@@ -107,6 +107,8 @@
  *	similar.
  *	
  * History
+ *  v0.13 - Nov 18 1999 - Zach Brown <zab@redhat.com>
+ *	fix nec Versas?  man would that be cool.
  *  v0.12 - Nov 12 1999 - Zach Brown <zab@redhat.com>
  *	brown bag volume max fix..
  *  v0.11 - Nov 11 1999 - Zach Brown <zab@redhat.com>
@@ -242,7 +244,7 @@ static int dsps_order=0;
 #endif
 
 /* --------------------------------------------------------------------- */
-#define DRIVER_VERSION "0.12"
+#define DRIVER_VERSION "0.13"
 
 #ifndef PCI_VENDOR_ESS
 #define PCI_VENDOR_ESS			0x125D
@@ -256,6 +258,10 @@ static int dsps_order=0;
 #endif /* PCI_VENDOR_ESS */
 
 #define ESS_CHAN_HARD		0x100
+
+/* NEC Versas ? */
+#define NEC_VERSA_SUBID1	0x80581033
+#define NEC_VERSA_SUBID2	0x803c1033
 
 
 /* changed so that I could actually find all the
@@ -826,6 +832,7 @@ maestro_ac97_reset(int ioaddr, struct pci_dev *pcidev)
 {
 	u16 save_68;
 	u16 w;
+	u32 vend;
 
 	outw( inw(ioaddr + 0x38) & 0xfffc, ioaddr + 0x38);
 	outw( inw(ioaddr + 0x3a) & 0xfffc, ioaddr + 0x3a);
@@ -835,6 +842,7 @@ maestro_ac97_reset(int ioaddr, struct pci_dev *pcidev)
 	outw(0x0000,  ioaddr+0x36);
 	save_68 = inw(ioaddr+0x68);
 	pci_read_config_word(pcidev, 0x58, &w);	/* something magical with gpio and bus arb. */
+	pci_read_config_dword(pcidev, PCI_SUBSYSTEM_VENDOR_ID, &vend);
 	if( w & 0x1)
 		save_68 |= 0x10;
 	outw(0xfffe, ioaddr + 0x64);	/* tickly gpio 0.. */
@@ -888,6 +896,12 @@ maestro_ac97_reset(int ioaddr, struct pci_dev *pcidev)
 		}
 	}
 #endif
+	if ( vend == NEC_VERSA_SUBID1 || vend == NEC_VERSA_SUBID2) {
+		/* turn on external amp? */
+		outw(0xf9ff, ioaddr + 0x64);
+		outw(inw(ioaddr+0x68) | 0x600, ioaddr + 0x68);
+		outw(0x0209, ioaddr + 0x60);
+	}
 }
 /*
  *	Indirect register access. Not all registers are readable so we

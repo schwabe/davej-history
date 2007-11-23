@@ -1243,7 +1243,7 @@ static int sd_init_onedisk(int i)
 		time1 = jiffies + HZ;
 		do {
 		    current->state = TASK_UNINTERRUPTIBLE;
-		    time1 = schedule_timeout(time1);
+		    time1 = schedule_timeout(HZ);
 		} while (time1); /* Wait 1 second for next try */
 		printk( "." );
 		spin_lock_irq(&io_request_lock);

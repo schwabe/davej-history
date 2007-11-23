@@ -421,8 +421,8 @@ static inline void remove_from_hash_queue(struct buffer_head * bh)
 		}
 		*pprev = next;
 		bh->b_pprev = NULL;
+		nr_hashed_buffers--;
 	}
-	nr_hashed_buffers--;
 }
 
 static inline void remove_from_lru_list(struct buffer_head * bh)
@@ -532,8 +532,8 @@ static void insert_into_queues(struct buffer_head * bh)
 			}
 			*bhp = bh;
 			bh->b_pprev = bhp;
+			nr_hashed_buffers++;
 		}
-		nr_hashed_buffers++;
 	}
 }
 

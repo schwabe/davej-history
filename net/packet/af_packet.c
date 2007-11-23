@@ -524,7 +524,7 @@ static void packet_destroy_timer(unsigned long data)
 
 	sk->timer.expires=jiffies+10*HZ;
 	add_timer(&sk->timer);
-	printk(KERN_DEBUG "packet sk destroy delayed\n");
+/*	printk(KERN_DEBUG "packet sk destroy delayed\n"); */
 }
 
 /*

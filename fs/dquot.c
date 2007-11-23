@@ -732,7 +732,7 @@ static int reset_inode_dquot_ptrs(struct inode *inode, short type)
 	}
 	inode->i_flags &= ~S_QUOTA;
 put_it:
-	if (dquot != NODQUOT)
+	if (dquot != NODQUOT) {
 		if (dqput_blocks(dquot)) {
 			spin_unlock(&inode_lock);	/* We may block so drop the lock... */
 			dqput(dquot);
@@ -742,6 +742,8 @@ put_it:
 		}
 		else
 			dqput(dquot);	/* dqput() won't block so we can hold locks... */
+	}
+
 	return 0;
 }
 
