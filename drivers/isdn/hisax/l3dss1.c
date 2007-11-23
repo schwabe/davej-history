@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 2.19 1999/08/25 16:55:23 keil Exp $
+/* $Id: l3dss1.c,v 2.20 1999/10/11 22:16:27 keil Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -13,6 +13,9 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
+ * Revision 2.20  1999/10/11 22:16:27  keil
+ * Suspend/Resume is possible without explicit ID too
+ *
  * Revision 2.19  1999/08/25 16:55:23  keil
  * Fix for test case TC10011
  *
@@ -90,7 +93,7 @@
 #include <linux/ctype.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 2.19 $";
+const char *dss1_revision = "$Revision: 2.20 $";
 
 #define EXT_BEARER_CAPS 1
 
@@ -2520,14 +2523,13 @@ l3dss1_suspend_req(struct l3_process *pc, u_char pr, void *arg)
 	u_char *msg = pc->chan->setup.phone;
 
 	MsgHead(p, pc->callref, MT_SUSPEND);
-
-	*p++ = IE_CALL_ID;
 	l = *msg++;
 	if (l && (l <= 10)) {	/* Max length 10 octets */
+		*p++ = IE_CALL_ID;
 		*p++ = l;
 		for (i = 0; i < l; i++)
 			*p++ = *msg++;
-	} else {
+	} else if (l) {
 		l3_debug(pc->st, "SUS wrong CALL_ID len %d", l);
 		return;
 	}
@@ -2596,13 +2598,13 @@ l3dss1_resume_req(struct l3_process *pc, u_char pr, void *arg)
 
 	MsgHead(p, pc->callref, MT_RESUME);
 
-	*p++ = IE_CALL_ID;
 	l = *msg++;
 	if (l && (l <= 10)) {	/* Max length 10 octets */
+		*p++ = IE_CALL_ID;
 		*p++ = l;
 		for (i = 0; i < l; i++)
 			*p++ = *msg++;
-	} else {
+	} else if (l) {
 		l3_debug(pc->st, "RES wrong CALL_ID len %d", l);
 		return;
 	}

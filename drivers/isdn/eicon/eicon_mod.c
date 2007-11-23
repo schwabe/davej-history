@@ -1,4 +1,4 @@
-/* $Id: eicon_mod.c,v 1.15 1999/09/08 20:17:31 armin Exp $
+/* $Id: eicon_mod.c,v 1.19 1999/11/12 13:21:44 armin Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  * 
@@ -10,6 +10,11 @@
  *              documents, informations and hardware.
  *
  *              Deutsche Telekom AG for S2M support.
+ *
+ *		Deutsche Mailbox Saar-Lor-Lux GmbH
+ *		for sponsoring and testing fax
+ *		capabilities with Diva Server cards.
+ *		(dor@deutschemailbox.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +31,20 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.19  1999/11/12 13:21:44  armin
+ * Bugfix of undefined reference with CONFIG_MCA
+ *
+ * Revision 1.18  1999/10/11 18:13:25  armin
+ * Added fax capabilities for Eicon Diva Server cards.
+ *
+ * Revision 1.17  1999/10/08 22:09:34  armin
+ * Some fixes of cards interface handling.
+ * Bugfix of NULL pointer occurence.
+ * Changed a few log outputs.
+ *
+ * Revision 1.16  1999/09/26 14:17:53  armin
+ * Improved debug and log via readstat()
+ *
  * Revision 1.15  1999/09/08 20:17:31  armin
  * Added microchannel patch from Erik Weber.
  *
@@ -104,7 +123,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.15 $";
+static char *eicon_revision = "$Revision: 1.19 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -185,8 +204,7 @@ find_channel(eicon_card *card, int channel)
 {
 	if ((channel >= 0) && (channel < card->nchannels))
         	return &(card->bch[channel]);
-	if (DebugVar & 1)
-		printk(KERN_WARNING "eicon: Invalid channel %d\n", channel);
+	eicon_log(card, 1, "eicon: Invalid channel %d\n", channel);
 	return NULL;
 }
 
@@ -263,9 +281,8 @@ eicon_rcv_dispatch(struct eicon_card *card)
 			eicon_io_rcv_dispatch(card);
 			break;
 		default:
-			if (DebugVar & 1)
-				printk(KERN_WARNING
-				       "eicon_ack_dispatch: Illegal bustype %d\n", card->bus);
+			eicon_log(card, 1,
+			       "eicon_ack_dispatch: Illegal bustype %d\n", card->bus);
 	}
 }
 
@@ -279,9 +296,8 @@ eicon_ack_dispatch(struct eicon_card *card)
 			eicon_io_ack_dispatch(card);
 			break;
 		default:
-			if (DebugVar & 1)
-				printk(KERN_WARNING
-			       		"eicon_ack_dispatch: Illegal bustype %d\n", card->bus);
+			eicon_log(card, 1,
+		       		"eicon_ack_dispatch: Illegal bustype %d\n", card->bus);
 	}
 }
 
@@ -295,9 +311,8 @@ eicon_transmit(struct eicon_card *card)
 			eicon_io_transmit(card);
 			break;
 		default:
-			if (DebugVar & 1)
-				printk(KERN_WARNING
-				       "eicon_transmit: Illegal bustype %d\n", card->bus);
+			eicon_log(card, 1,
+			       "eicon_transmit: Illegal bustype %d\n", card->bus);
 	}
 }
 
@@ -307,8 +322,7 @@ static int eicon_xlog(eicon_card *card, xlogreq_t *xlogreq)
 	int ret_val;
 
 	if (!(xlr = kmalloc(sizeof(xlogreq_t), GFP_KERNEL))) {
-		if (DebugVar & 1)
-			printk(KERN_WARNING "idi_err: alloc_xlogreq_t failed\n");
+		eicon_log(card, 1, "idi_err: alloc_xlogreq_t failed\n");
 		return -ENOMEM;
 	}
 	if (copy_from_user(xlr, xlogreq, sizeof(xlogreq_t))) {
@@ -338,9 +352,8 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 	int ret = 0;
 	unsigned long flags;
  
-	if (DebugVar & 16)
-		printk(KERN_WARNING "eicon_cmd 0x%x with arg 0x%lx (0x%lx)\n",
-			c->command, c->arg, (ulong) *c->parm.num);
+	eicon_log(card, 16, "eicon_cmd 0x%x with arg 0x%lx (0x%lx)\n",
+		c->command, c->arg, (ulong) *c->parm.num);
 
         switch (c->command) {
 		case ISDN_CMD_IOCTL:
@@ -360,9 +373,8 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 							return card->hwif.pci.PCIram;
 #endif
 						default:
-							if (DebugVar & 1)
-								printk(KERN_WARNING
-								       "eicon: Illegal BUS type %d\n",
+							eicon_log(card, 1,
+							       "eicon: Illegal BUS type %d\n",
 							       card->bus);
 							ret = -ENODEV;
 					}
@@ -389,9 +401,8 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 							return 0;
 #endif /* CONFIG_MCA */
 						default:
-							if (DebugVar & 1)
-								printk(KERN_WARNING
-							      		"eicon: Illegal BUS type %d\n",
+							eicon_log(card, 1,
+						      		"eicon: Illegal BUS type %d\n",
 							       card->bus);
 							ret = -ENODEV;
 					}					
@@ -406,9 +417,8 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 							return card->hwif.pci.irq;
 #endif
 						default:
-							if (DebugVar & 1)
-								printk(KERN_WARNING
-								       "eicon: Illegal BUS type %d\n",
+							eicon_log(card, 1,
+							       "eicon: Illegal BUS type %d\n",
 							       card->bus);
 							ret = -ENODEV;
 					}
@@ -423,9 +433,8 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 							card->hwif.isa.irq = a;
 							return 0;
 						default:
-							if (DebugVar & 1)
-								printk(KERN_WARNING
-							      		"eicon: Illegal BUS type %d\n",
+							eicon_log(card, 1,
+						      		"eicon: Illegal BUS type %d\n",
 							       card->bus);
 							ret = -ENODEV;
 					}					
@@ -441,9 +450,8 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 								&(((eicon_codebuf *)a)->isa));
 							break;
 						default:
-							if (DebugVar & 1)
-								printk(KERN_WARNING
-								       "eicon: Illegal BUS type %d\n",
+							eicon_log(card, 1,
+							       "eicon: Illegal BUS type %d\n",
 							       card->bus);
 							ret = -ENODEV;
 					}
@@ -475,9 +483,8 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 							}
 							break;
 						default:
-							if (DebugVar & 1)
-								printk(KERN_WARNING
-								       "eicon: Illegal BUS type %d\n",
+							eicon_log(card, 1,
+							       "eicon: Illegal BUS type %d\n",
 							       card->bus);
 							ret = -ENODEV;
 					}
@@ -541,7 +548,7 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 					return 0;
 				case EICON_IOCTL_DEBUGVAR:
 					DebugVar = a;
-					printk(KERN_DEBUG"Eicon: Debug Value set to %ld\n", DebugVar);
+					eicon_log(card, 1, "Eicon: Debug Value set to %ld\n", DebugVar);
 					return 0;
 #ifdef MODULE
 				case EICON_IOCTL_FREEIT:
@@ -562,8 +569,7 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 			cli();
 			if ((chan->fsm_state != EICON_STATE_NULL) && (chan->fsm_state != EICON_STATE_LISTEN)) {
 				restore_flags(flags);
-				if (DebugVar & 1)
-					printk(KERN_WARNING "Dial on channel %d with state %d\n",
+				eicon_log(card, 1, "Dial on channel %d with state %d\n",
 					chan->No, chan->fsm_state);
 				return -EBUSY;
 			}
@@ -572,7 +578,6 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 			else
 				tmp[0] = c->parm.setup.eazmsn[0];
 			chan->fsm_state = EICON_STATE_OCALL;
-			chan->callref = 0xffff;
 			restore_flags(flags);
 			
 			ret = idi_connect_req(card, chan, c->parm.setup.phone,
@@ -667,20 +672,17 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 		case ISDN_CMD_GETEAZ:
 			if (!card->flags & EICON_FLAGS_RUNNING)
 				return -ENODEV;
-			if (DebugVar & 1)
-				printk(KERN_DEBUG "eicon CMD_GETEAZ not implemented\n");
+			eicon_log(card, 1, "eicon CMD_GETEAZ not implemented\n");
 			return 0;
 		case ISDN_CMD_SETSIL:
 			if (!card->flags & EICON_FLAGS_RUNNING)
 				return -ENODEV;
-			if (DebugVar & 1)
-				printk(KERN_DEBUG "eicon CMD_SETSIL not implemented\n");
+			eicon_log(card, 1, "eicon CMD_SETSIL not implemented\n");
 			return 0;
 		case ISDN_CMD_GETSIL:
 			if (!card->flags & EICON_FLAGS_RUNNING)
 				return -ENODEV;
-			if (DebugVar & 1)
-				printk(KERN_DEBUG "eicon CMD_GETSIL not implemented\n");
+			eicon_log(card, 1, "eicon CMD_GETSIL not implemented\n");
 			return 0;
 		case ISDN_CMD_LOCK:
 			MOD_INC_USE_COUNT;
@@ -752,6 +754,52 @@ if_writecmd(const u_char * buf, int len, int user, int id, int channel)
 static int
 if_readstatus(u_char * buf, int len, int user, int id, int channel)
 {
+	int count = 0;
+	int cnt = 0;
+	ulong flags = 0;
+	u_char *p = buf;
+	struct sk_buff *skb;
+
+        eicon_card *card = eicon_findcard(id);
+	
+        if (card) {
+                if (!card->flags & EICON_FLAGS_RUNNING)
+                        return -ENODEV;
+	
+		save_flags(flags);
+		cli();
+		while((skb = skb_dequeue(&card->statq))) {
+
+			if ((skb->len + count) > len)
+				cnt = len - count;
+			else
+				cnt = skb->len;
+
+			if (user)
+				copy_to_user(p, skb->data, cnt);
+			else
+				memcpy(p, skb->data, cnt);
+
+			count += cnt;
+			p += cnt;
+
+			if (cnt == skb->len) {
+				dev_kfree_skb(skb);
+				if (card->statq_entries > 0)
+					card->statq_entries--;
+			} else {
+				skb_pull(skb, cnt);
+				skb_queue_head(&card->statq, skb);
+				restore_flags(flags);
+				return count;
+			}
+		}
+		card->statq_entries = 0;
+		restore_flags(flags);
+		return count;
+        }
+        printk(KERN_ERR
+               "eicon: if_readstatus called with invalid driverId!\n");
         return 0;
 }
 
@@ -766,14 +814,11 @@ if_sendbuf(int id, int channel, int ack, struct sk_buff *skb)
 	len = skb->len;
 	
         if (card) {
-                if (!card->flags & EICON_FLAGS_RUNNING) {
-			dev_kfree_skb(skb);
+                if (!card->flags & EICON_FLAGS_RUNNING)
                         return -ENODEV;
-		}
-        	if (!(chan = find_channel(card, channel))) {
-			dev_kfree_skb(skb);
+        	if (!(chan = find_channel(card, channel)))
 			return -ENODEV;
-		}
+
 		if (chan->fsm_state == EICON_STATE_ACTIVE) {
 #ifdef CONFIG_ISDN_TTY_FAX
 			if (chan->l2prot == ISDN_PROTO_L2_FAX) {
@@ -785,14 +830,113 @@ if_sendbuf(int id, int channel, int ack, struct sk_buff *skb)
 				ret = idi_send_data(card, chan, ack, skb, 1);
 			return (ret);
 		} else {
-			dev_kfree_skb(skb);
 			return -ENODEV;
 		}
         }
         printk(KERN_ERR
                "eicon: if_sendbuf called with invalid driverId!\n");
-	dev_kfree_skb(skb);
         return -ENODEV;
+}
+
+/* jiftime() copied from HiSax */
+inline int
+jiftime(char *s, long mark)
+{
+        s += 8;
+
+        *s-- = '\0';
+        *s-- = mark % 10 + '0';
+        mark /= 10;
+        *s-- = mark % 10 + '0';
+        mark /= 10;
+        *s-- = '.';
+        *s-- = mark % 10 + '0';
+        mark /= 10;
+        *s-- = mark % 6 + '0';
+        mark /= 6;
+        *s-- = ':';
+        *s-- = mark % 10 + '0';
+        mark /= 10;
+        *s-- = mark % 10 + '0';
+        return(8);
+}
+
+void
+eicon_putstatus(eicon_card * card, char * buf)
+{
+	ulong flags;
+	int count;
+	isdn_ctrl cmd;
+	u_char *p;
+	struct sk_buff *skb;
+
+	if (!card)
+		return;
+
+	save_flags(flags);
+	cli();
+	count = strlen(buf);
+	skb = alloc_skb(count, GFP_ATOMIC);
+	if (!skb) {
+		restore_flags(flags);
+		printk(KERN_ERR "eicon: could not alloc skb in putstatus\n");
+		return;
+	}
+	p = skb_put(skb, count);
+	memcpy(p, buf, count);
+
+	skb_queue_tail(&card->statq, skb);
+
+	if (card->statq_entries >= MAX_STATUS_BUFFER) {
+		if ((skb = skb_dequeue(&card->statq))) {
+			count -= skb->len;
+			dev_kfree_skb(skb);
+		} else
+			count = 0;
+	} else
+		card->statq_entries++;
+
+	restore_flags(flags);
+        if (count) {
+                cmd.command = ISDN_STAT_STAVAIL;
+                cmd.driver = card->myid;
+                cmd.arg = count;
+		card->interface.statcallb(&cmd);
+        }
+}
+
+/*
+ * Debug and Log 
+ */
+void
+eicon_log(eicon_card * card, int level, const char *fmt, ...)
+{
+	va_list args;
+	char Line[160];
+	u_char *p;
+
+
+	if ((DebugVar & level) || (DebugVar & 256)) {
+		va_start(args, fmt);
+
+		if (DebugVar & level) {
+			if (DebugVar & 256) {
+				/* log-buffer */
+				p = Line;
+				p += jiftime(p, jiffies);
+				*p++ = 32;
+				p += vsprintf(p, fmt, args);
+				*p = 0;	
+				eicon_putstatus(card, Line);
+			} else {
+				/* printk, syslogd */
+				vsprintf(Line, fmt, args);
+				printk(KERN_DEBUG "%s", Line);
+			}
+		}
+
+		va_end(args);
+	}
 }
 
 
@@ -817,7 +961,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 	qloop = (Type == EICON_CTYPE_QUADRO)?2:0;
 	for (i = 0; i <= qloop; i++) {
 		if (!(card = (eicon_card *) kmalloc(sizeof(eicon_card), GFP_KERNEL))) {
-			printk(KERN_WARNING
+			eicon_log(card, 1,
 			       "eicon: (%s) Could not allocate card-struct.\n", id);
 			return;
 		}
@@ -826,6 +970,8 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 		skb_queue_head_init(&card->rcvq);
 		skb_queue_head_init(&card->rackq);
 		skb_queue_head_init(&card->sackq);
+		skb_queue_head_init(&card->statq);
+		card->statq_entries = 0;
 		card->snd_tq.routine = (void *) (void *) eicon_transmit;
 		card->snd_tq.data = card;
 		card->rcv_tq.routine = (void *) (void *) eicon_rcv_dispatch;
@@ -897,7 +1043,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 						p = p->next;
 					}
 					if (!p) {
-						printk(KERN_WARNING "eicon_alloccard: Quadro Master not found.\n");
+						eicon_log(card, 1, "eicon_alloccard: Quadro Master not found.\n");
 						kfree(card);
 						return;
 					}
@@ -919,7 +1065,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_V11019 |
 					ISDN_FEATURE_L2_V11038 |
 					ISDN_FEATURE_L2_MODEM |
-					/* ISDN_FEATURE_L2_FAX | */ 
+					ISDN_FEATURE_L2_FAX | 
 					ISDN_FEATURE_L3_TRANSDSP |
 					ISDN_FEATURE_L3_FAX;
                                 card->hwif.pci.card = (void *)card;
@@ -943,7 +1089,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_V11019 |
 					ISDN_FEATURE_L2_V11038 |
 					ISDN_FEATURE_L2_MODEM |
-					/* ISDN_FEATURE_L2_FAX | */
+					ISDN_FEATURE_L2_FAX |
 					ISDN_FEATURE_L3_TRANSDSP |
 					ISDN_FEATURE_L3_FAX;
                                 card->hwif.pci.card = (void *)card;
@@ -992,13 +1138,13 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 				break;
 #endif
 			default:
-				printk(KERN_WARNING "eicon_alloccard: Invalid type %d\n", Type);
+				eicon_log(card, 1, "eicon_alloccard: Invalid type %d\n", Type);
 				kfree(card);
 				return;
 		}
 		if (!(card->bch = (eicon_chan *) kmalloc(sizeof(eicon_chan) * (card->nchannels + 1)
 							 , GFP_KERNEL))) {
-			printk(KERN_WARNING
+			eicon_log(card, 1,
 			       "eicon: (%s) Could not allocate bch-struct.\n", id);
 			kfree(card);
 			return;
@@ -1044,9 +1190,8 @@ eicon_registercard(eicon_card * card)
 			break;
 #endif
 		default:
-			if (DebugVar & 1)
-				printk(KERN_WARNING
-				       "eicon_registercard: Illegal BUS type %d\n",
+			eicon_log(card, 1,
+			       "eicon_registercard: Illegal BUS type %d\n",
 			       card->bus);
 			return -1;
         }
@@ -1085,9 +1230,8 @@ unregister_card(eicon_card * card)
 			break;
 #endif
 		default:
-			if (DebugVar & 1)
-				printk(KERN_WARNING
-				       "eicon: Invalid BUS type %d\n",
+			eicon_log(card, 1,
+			       "eicon: Invalid BUS type %d\n",
 			       card->bus);
 			break;
         }
@@ -1096,6 +1240,26 @@ unregister_card(eicon_card * card)
 
 static void
 eicon_freecard(eicon_card *card) {
+	int i;
+	struct sk_buff *skb;
+
+	for(i = 0; i < (card->nchannels + 1); i++) {
+		while((skb = skb_dequeue(&card->bch[i].e.X)))
+			dev_kfree_skb(skb);
+		while((skb = skb_dequeue(&card->bch[i].e.R)))
+			dev_kfree_skb(skb);
+	}
+	while((skb = skb_dequeue(&card->sndq)))
+		dev_kfree_skb(skb);
+	while((skb = skb_dequeue(&card->rcvq)))
+		dev_kfree_skb(skb);
+	while((skb = skb_dequeue(&card->rackq)))
+		dev_kfree_skb(skb);
+	while((skb = skb_dequeue(&card->sackq)))
+		dev_kfree_skb(skb);
+	while((skb = skb_dequeue(&card->statq)))
+		dev_kfree_skb(skb);
+
 	eicon_clear_msn(card);
 	kfree(card->bch);
 	kfree(card);
@@ -1141,9 +1305,8 @@ eicon_addcard(int Type, int membase, int irq, char *id)
 					break;
 #endif
 				default:
-					if (DebugVar & 1)
-						printk(KERN_WARNING
-						       "eicon: addcard: Invalid BUS type %d\n",
+					printk(KERN_ERR
+					       "eicon: addcard: Invalid BUS type %d\n",
 					       p->bus);
 			}
 		} else
@@ -1155,7 +1318,7 @@ eicon_addcard(int Type, int membase, int irq, char *id)
                         p = p->next;
                 } else {
                         /* registering failed, remove card from list, free memory */
-                        printk(KERN_WARNING
+                        printk(KERN_ERR
                                "eicon: Initialization of %s failed\n",
                                p->interface.id);
                         if (q) {
@@ -1222,10 +1385,9 @@ eicon_init(void)
                 printk(KERN_INFO
                         "eicon: No MCA bus, ISDN-interfaces  not probed.\n");
         } else {
-		if (DebugVar & 8)
-               		printk(KERN_DEBUG
-			       "eicon_mca_find_card, irq=%d.\n", 
-                                irq);
+		eicon_log(NULL, 8,
+			"eicon_mca_find_card, irq=%d.\n", 
+				irq);
                	if (!eicon_mca_find_card(0, membase, irq, id))
                        card_count++;
         };
@@ -1346,10 +1508,9 @@ int eicon_mca_find_card(int type,          /* type-idx of eicon-card          */
 {
 	int j, curr_slot = 0;
 
-	if (DebugVar & 8)
-        	printk(KERN_DEBUG
-                       "eicon_mca_find_card type: %d, membase: %#x, irq %d \n",
-                       type, membase, irq);
+       	eicon_log(NULL, 8,
+		"eicon_mca_find_card type: %d, membase: %#x, irq %d \n",
+		type, membase, irq);
 	/* find a no-driver-assigned eicon card                               */
 	for (j=0; eicon_mca_adapters[j].adf_id != 0; j++) 
 		{
@@ -1414,11 +1575,10 @@ int eicon_mca_probe(int slot,  /* slot-nr where the card was detected         */
 	int irq_array1[]={3,4,0,0,2,10,11,12};
 
         adf_pos0 = mca_read_stored_pos(slot,2);
-	if (DebugVar & 8)
-		printk(KERN_DEBUG
-                       "eicon_mca_probe irq=%d, membase=%d\n", 
-                        irq,
-                        membase);
+	eicon_log(NULL, 8,
+		"eicon_mca_probe irq=%d, membase=%d\n", 
+		irq,
+		membase);
 	switch (a_idx) {
 		case 0:                /* P/2-Adapter (== PRI/S2M ? )         */
 			cards_membase= 0xC0000+((adf_pos0>>4)*0x4000);
@@ -1473,7 +1633,7 @@ int eicon_mca_probe(int slot,  /* slot-nr where the card was detected         */
 		default:
 			return  ENODEV;
 	};
-	/* Uebereinstimmung vorgegebener membase & irq */
+	/* matching membase & irq */
 	if ( 1 == eicon_addcard(type, membase, irq, id)) { 
 		mca_set_adapter_name(slot, eicon_mca_adapters[a_idx].name);
   		mca_set_adapter_procfn(slot, (MCA_ProcFn) eicon_info, cards);
@@ -1486,10 +1646,9 @@ int eicon_mca_probe(int slot,  /* slot-nr where the card was detected         */
 		/* reset card */
 		outb_p(0,cards_io+1);
 
-		if (DebugVar & 8)
-			printk(KERN_INFO "eicon_addcard: successful for slot # %d.\n", 
+		eicon_log(NULL, 8, "eicon_addcard: successful for slot # %d.\n", 
 			cards->mca_slot+1);
-		return  0 ; /* eicon_addcard hat eine Karte zugefuegt */
+		return  0 ; /* eicon_addcard added a card */
 	} else {
 		return ENODEV;
 	};

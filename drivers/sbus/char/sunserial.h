@@ -1,4 +1,4 @@
-/* $Id: sunserial.h,v 1.17 1997/12/19 07:33:12 ecd Exp $
+/* $Id: sunserial.h,v 1.17.4.1 1999/10/04 14:57:08 jj Exp $
  * sunserial.h: SUN serial driver infrastructure (including keyboards).
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -41,6 +41,7 @@ extern void sunserial_setinitfunc(unsigned long *, int (*) (void));
 extern void sunkbd_setinitfunc(unsigned long *, int (*) (void));
 
 extern int serial_console;
+extern int stop_a_enabled;
 extern void sunserial_console_termios(struct console *);
 
 #ifdef CONFIG_PCI

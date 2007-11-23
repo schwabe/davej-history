@@ -5857,6 +5857,24 @@ CONFIG_RTL8139
   say M here and read Documentation/modules.txt. This is recommended.
   The module will be called rtl8139.o.
 
+SiS 900/7016 support
+CONFIG_SIS900
+  This is a driver for the Fast Ethernet PCI network cards based on
+  the SiS 900 and SiS 7016 chips. The SiS 900 core is also embedded in
+  SiS 630 and SiS 540 chipsets. If you have one of those, say Y and
+  read the Ethernet-HOWTO, available via FTP (user: anonymous) in   
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO. Please read 
+  Documentation/networking/sis900.txt and comments at the beginning
+  of drivers/net/sis900.c for more information.
+
+  This driver also supports AMD 79C901 HomePNA such that you can use
+  your phone line as network cable.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want), 
+  say M here and read Documentation/modules.txt. This is recommended. 
+  The module will be called sis900.o.
+
 Packet Engines Yellowfin Gigabit-NIC support
 CONFIG_YELLOWFIN
   Say Y here if you have a Packet Engines G-NIC PCI Gigabit Ethernet
@@ -10006,11 +10024,6 @@ CONFIG_MAGIC_SYSRQ
 
 ISDN subsystem
 CONFIG_ISDN
-  CAUTION: the ISDN driver shipped with this kernel distribution
-  is outdated and might not work without problems. An updated driver
-  is available for download. Please read http://www.isdn4linux.de
-  on the WWW for a list of servers.
-
   ISDN ("Integrated Services Digital Networks", called RNIS in France)
   is a special type of fully digital telephone service; it's mostly
   used to connect to your Internet service provider (with SLIP or
@@ -10019,9 +10032,7 @@ CONFIG_ISDN
   conversations while downloading stuff. It only works if your
   computer is equipped with an ISDN card and both you and your service
   provider purchased an ISDN line from the phone company. For details,
-  read http://alumni.caltech.edu/~dank/isdn/ on the WWW. (To browse
-  the WWW, you need to have access to a machine on the Internet that
-  has a program like lynx or netscape.)
+  read http://alumni.caltech.edu/~dank/isdn/ on the WWW.
 
   This driver allows you to use an ISDN-card for networking
   connections and as dialin/out device. The isdn-tty's have a built in
@@ -10071,25 +10082,28 @@ CONFIG_ISDN_AUDIO
   is the only voice-supporting driver. See
   Documentation/isdn/README.audio for more information.
 
-X.25 PLP on top of ISDN (EXPERIMENTAL)
+X.25 PLP on top of ISDN
 CONFIG_ISDN_X25
-  This experimental feature provides the X.25 protocol over ISDN
-  connections. See Documentation/isdn/README.x25 for more information
+  This feature provides the X.25 protocol over ISDN connections.
+  See Documentation/isdn/README.x25 for more information
   if you are thinking about using this.
 
 ISDN diversion services support
 CONFIG_ISDN_DIVERSION
   This option allows you to use some supplementary diversion
   services in conjunction with the HiSax driver on an EURO/DSS1
-  line. Supported options are CD (call deflection), CFU (Call 
-  forward unconditional), CFB (Call forward when busy) and CFNR 
-  (call forward not reachable).
-  Additionally the actual CFU, CFB and CFNR state may be 
-  interrogated. The use of CFU, CFB, CFNR and interrogation may
-  be limited to some countries. The keypad protocol is still not
-  implemented.
-  CD should work in all countries if this service has been sub-
-  scribed.
+  line. 
+
+  Supported options are CD (call deflection), CFU (Call forward
+  unconditional), CFB (Call forward when busy) and CFNR (call forward
+  not reachable). Additionally the actual CFU, CFB and CFNR state may
+  be interrogated.
+
+  The use of CFU, CFB, CFNR and interrogation may be limited to some
+  countries. The keypad protocol is still not implemented. CD should
+  work in all countries if the service has been subscribed to.
+
+  Please read the file Documentation/isdn/README.diversion.
 
 ICN 2B and 4B support
 CONFIG_ISDN_DRV_ICN
@@ -10331,7 +10345,7 @@ CONFIG_HISAX_HFC_PCI
   
   For more informations see under Documentation/isdn/README.hfc-pci.
 
-HiSax Support for Winbond W6692 based cards (EXPERIMENTAL)
+HiSax Support for Winbond W6692 based cards
 CONFIG_HISAX_W6692
   This enables HiSax support for Winbond W6692 based PCI ISDN cards.
   
@@ -10364,35 +10378,33 @@ CONFIG_ISDN_DRV_SC
   can be inserted in and removed from the running kernel whenever you
   want, details in Documentation/modules.txt); the module will be
   called sc.o. See Documentation/isdn/README.sc and
-  http://www.spellcast.com for more information (to browse the WWW,
-  you need to have access to a machine on the Internet that has a
-  program like lynx or netscape).
+  http://www.spellcast.com for more information.
 
 Eicon.Diehl active card support
 CONFIG_ISDN_DRV_EICON
   Say Y here if you have an Eicon active ISDN card. In order to use
   this card, additional firmware is necessary, which has to be loaded
-  into the card using the eiconctrl utility which is part of the latest
-  isdn4k-utils package. Please read the file
+  into the card using the eiconctrl utility which is part of the
+  latest isdn4k-utils package. Please read the file
   Documentation/isdn/README.eicon for more information.
   
 Eicon old-type card support
 CONFIG_ISDN_DRV_EICON_ISA
-  Say Y here if you have an old-type Eicon active ISDN card. In order to
-  use this card, additional firmware is necessary, which has to be loaded
-  into the card using the eiconctrl utility which is part of the latest
-  isdn4k-utils package. Please read the file
+  Say Y here if you have an old-type Eicon active ISDN card. In order
+  to use this card, additional firmware is necessary, which has to be
+  loaded into the card using the eiconctrl utility which is part of
+  the latest isdn4k-utils package. Please read the file
   Documentation/isdn/README.eicon for more information.
 
 Support AT-Fax Class 2 commands
 CONFIG_ISDN_TTY_FAX
   If you say Y here, the modem-emulator will support a subset of the
   Fax Class 2 commands. Using a getty with fax-support
-  (mgetty+sendfax, hylafax), you will be able to use your Linux box 
-  as an ISDN-fax-machine. This must be supported by the lowlevel driver
+  (mgetty+sendfax, hylafax), you will be able to use your Linux box as
+  an ISDN-fax-machine. This must be supported by the lowlevel driver
   also. See Documentation/isdn/README.fax for more information.
 
-AVM-B1 with CAPI2.0 support
+AVM CAPI2.0 support
 CONFIG_ISDN_DRV_AVMB1
   This enables support for the AVM B1/T1 ISDN networking cards.In
   addition, a CAPI (Common ISDN Application Programming Interface, a
@@ -10403,7 +10415,7 @@ CONFIG_ISDN_DRV_AVMB1
   additional firmware is necessary, which has to be downloaded into
   the card using a utility which is distributed separately. Please
   read the file Documentation/isdn/README.avmb1. 
-
+  
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called avmb1.o. If you want to compile it as a
@@ -10417,7 +10429,7 @@ AVM B1 PCI support
 CONFIG_ISDN_DRV_AVMB1_B1PCI
   Enable support for the PCI version of the AVM B1 card.
 
-AVM T1/T1B ISA support
+AVM T1/T1-B ISA support
 CONFIG_ISDN_DRV_AVMB1_T1ISA
   Enable support for the AVM T1 T1B card.
   Note: This is a PRI card and handle 30 B-channels.
@@ -10426,11 +10438,17 @@ AVM B1/M1/M2 PCMCIA support
 CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
   Enable support for the PCMCIA version of the AVM B1 card.
 
+AVM T1/T1-B PCI support
+CONFIG_ISDN_DRV_AVMB1_T1PCI
+  Enable support for the AVM T1 T1B card.
+  Note: This is a PRI card and handle 30 B-channels.
+
 Verbose reason code reporting (kernel size +=7K)
 CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON
   If you say Y here, the AVM B1 driver will give verbose reasons for
   disconnecting. This will increase the size of the kernel by 7 KB. If
   unsure, say Y.
+
 
 IBM Active 2000 support (EXPERIMENTAL)
 CONFIG_ISDN_DRV_ACT2000

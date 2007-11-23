@@ -222,11 +222,11 @@ static inline int myri_load_lanai(struct myri_eth *mp)
 	}
 
 	if(i == 5000)
-		printk("myricom: Chip would not reset after firmware load.\n");
+		printk(KERN_ERR "myricom: Chip would not reset after firmware load.\n");
 
 	i = myri_do_handshake(mp);
 	if(i)
-		printk("myricom: Handshake with LANAI failed.\n");
+		printk(KERN_ERR "myricom: Handshake with LANAI failed.\n");
 
 	if(mp->eeprom.cpuvers == CPUVERS_4_0)
 		mp->lregs->vers = 0;
@@ -575,7 +575,7 @@ static int myri_start_xmit(struct sk_buff *skb, struct device *dev)
 			return 1;
 		} else {
 			DTX(("resetting, return 0\n"));
-			printk("%s: transmit timed out, resetting\n", dev->name);
+			printk(KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
 			mp->enet_stats.tx_errors++;
 			myri_init(mp, in_interrupt());
 			dev->tbusy = 0;

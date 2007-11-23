@@ -67,7 +67,7 @@ static inline int qec_global_reset(struct qe_globreg *gregs)
 	}
 	if(tries)
 		return 0;
-	printk("QuadEther: AIEEE cannot reset the QEC!\n");
+	printk(KERN_ERR "QuadEther: AIEEE cannot reset the QEC!\n");
 	return -1;
 }
 
@@ -91,7 +91,7 @@ static inline int qe_stop(struct sunqe *qep)
 		break;
 	}
 	if(!tries) {
-		printk("QuadEther: AIEEE cannot reset the MACE!\n");
+		printk(KERN_ERR "QuadEther: AIEEE cannot reset the MACE!\n");
 		return -1;
 	}
 
@@ -105,7 +105,7 @@ static inline int qe_stop(struct sunqe *qep)
 		break;
 	}
 	if(!tries) {
-		printk("QuadEther: Cannot reset QE channel!\n");
+		printk(KERN_ERR "QuadEther: Cannot reset QE channel!\n");
 		return -1;
 	}
 	return 0;
@@ -216,7 +216,7 @@ static int qe_init(struct sunqe *qep, int from_irq)
 				break;
 		}
 		if (tries == 0)
-			printk("%s: Warning, link state is down.\n", qep->dev->name);
+			printk(KERN_NOTICE "%s: Warning, link state is down.\n", qep->dev->name);
 	}
 
 	/* Missed packet counter is cleared on a read. */
@@ -240,41 +240,41 @@ static int qe_is_bolixed(struct sunqe *qep, unsigned int qe_status)
 	int mace_hwbug_workaround = 0;
 
 	if(qe_status & CREG_STAT_EDEFER) {
-		printk("%s: Excessive transmit defers.\n", dev->name);
+		printk(KERN_ERR "%s: Excessive transmit defers.\n", dev->name);
 		qep->net_stats.tx_errors++;
 	}
 
 	if(qe_status & CREG_STAT_CLOSS) {
-		printk("%s: Carrier lost, link down?\n", dev->name);
+		printk(KERN_ERR "%s: Carrier lost, link down?\n", dev->name);
 		qep->net_stats.tx_errors++;
 		qep->net_stats.tx_carrier_errors++;
 	}
 
 	if(qe_status & CREG_STAT_ERETRIES) {
-		printk("%s: Excessive transmit retries (more than 16).\n", dev->name);
+		printk(KERN_ERR "%s: Excessive transmit retries (more than 16).\n", dev->name);
 		qep->net_stats.tx_errors++;
 		mace_hwbug_workaround = 1;
 	}
 
 	if(qe_status & CREG_STAT_LCOLL) {
-		printk("%s: Late transmit collision.\n", dev->name);
+		printk(KERN_ERR "%s: Late transmit collision.\n", dev->name);
 		qep->net_stats.tx_errors++;
 		qep->net_stats.collisions++;
 		mace_hwbug_workaround = 1;
 	}
 
 	if(qe_status & CREG_STAT_FUFLOW) {
-		printk("%s: Transmit fifo underflow, driver bug.\n", dev->name);
+		printk(KERN_ERR "%s: Transmit fifo underflow, driver bug.\n", dev->name);
 		qep->net_stats.tx_errors++;
 		mace_hwbug_workaround = 1;
 	}
 
 	if(qe_status & CREG_STAT_JERROR) {
-		printk("%s: Jabber error.\n", dev->name);
+		printk(KERN_ERR "%s: Jabber error.\n", dev->name);
 	}
 
 	if(qe_status & CREG_STAT_BERROR) {
-		printk("%s: Babble error.\n", dev->name);
+		printk(KERN_ERR "%s: Babble error.\n", dev->name);
 	}
 
 	if(qe_status & CREG_STAT_CCOFLOW) {
@@ -283,27 +283,27 @@ static int qe_is_bolixed(struct sunqe *qep, unsigned int qe_status)
 	}
 
 	if(qe_status & CREG_STAT_TXDERROR) {
-		printk("%s: Transmit descriptor is bogus, driver bug.\n", dev->name);
+		printk(KERN_ERR "%s: Transmit descriptor is bogus, driver bug.\n", dev->name);
 		qep->net_stats.tx_errors++;
 		qep->net_stats.tx_aborted_errors++;
 		mace_hwbug_workaround = 1;
 	}
 
 	if(qe_status & CREG_STAT_TXLERR) {
-		printk("%s: Transmit late error.\n", dev->name);
+		printk(KERN_ERR "%s: Transmit late error.\n", dev->name);
 		qep->net_stats.tx_errors++;
 		mace_hwbug_workaround = 1;
 	}
 
 	if(qe_status & CREG_STAT_TXPERR) {
-		printk("%s: Transmit DMA parity error.\n", dev->name);
+		printk(KERN_ERR "%s: Transmit DMA parity error.\n", dev->name);
 		qep->net_stats.tx_errors++;
 		qep->net_stats.tx_aborted_errors++;
 		mace_hwbug_workaround = 1;
 	}
 
 	if(qe_status & CREG_STAT_TXSERR) {
-		printk("%s: Transmit DMA sbus error ack.\n", dev->name);
+		printk(KERN_ERR "%s: Transmit DMA sbus error ack.\n", dev->name);
 		qep->net_stats.tx_errors++;
 		qep->net_stats.tx_aborted_errors++;
 		mace_hwbug_workaround = 1;
@@ -325,13 +325,13 @@ static int qe_is_bolixed(struct sunqe *qep, unsigned int qe_status)
 	}
 
 	if(qe_status & CREG_STAT_RXFOFLOW) {
-		printk("%s: Receive fifo overflow.\n", dev->name);
+		printk(KERN_ERR "%s: Receive fifo overflow.\n", dev->name);
 		qep->net_stats.rx_errors++;
 		qep->net_stats.rx_over_errors++;
 	}
 
 	if(qe_status & CREG_STAT_RLCOLL) {
-		printk("%s: Late receive collision.\n", dev->name);
+		printk(KERN_ERR "%s: Late receive collision.\n", dev->name);
 		qep->net_stats.rx_errors++;
 		qep->net_stats.collisions++;
 	}
@@ -347,33 +347,33 @@ static int qe_is_bolixed(struct sunqe *qep, unsigned int qe_status)
 	}
 
 	if(qe_status & CREG_STAT_RXDROP) {
-		printk("%s: Receive packet dropped.\n", dev->name);
+		printk(KERN_INFO "%s: Receive packet dropped.\n", dev->name);
 		qep->net_stats.rx_errors++;
 		qep->net_stats.rx_dropped++;
 		qep->net_stats.rx_missed_errors++;
 	}
 
 	if(qe_status & CREG_STAT_RXSMALL) {
-		printk("%s: Receive buffer too small, driver bug.\n", dev->name);
+		printk(KERN_ERR "%s: Receive buffer too small, driver bug.\n", dev->name);
 		qep->net_stats.rx_errors++;
 		qep->net_stats.rx_length_errors++;
 	}
 
 	if(qe_status & CREG_STAT_RXLERR) {
-		printk("%s: Receive late error.\n", dev->name);
+		printk(KERN_ERR "%s: Receive late error.\n", dev->name);
 		qep->net_stats.rx_errors++;
 		mace_hwbug_workaround = 1;
 	}
 
 	if(qe_status & CREG_STAT_RXPERR) {
-		printk("%s: Receive DMA parity error.\n", dev->name);
+		printk(KERN_ERR "%s: Receive DMA parity error.\n", dev->name);
 		qep->net_stats.rx_errors++;
 		qep->net_stats.rx_missed_errors++;
 		mace_hwbug_workaround = 1;
 	}
 
 	if(qe_status & CREG_STAT_RXSERR) {
-		printk("%s: Receive DMA sbus error ack.\n", dev->name);
+		printk(KERN_ERR "%s: Receive DMA sbus error ack.\n", dev->name);
 		qep->net_stats.rx_errors++;
 		qep->net_stats.rx_missed_errors++;
 		mace_hwbug_workaround = 1;
@@ -437,7 +437,7 @@ static void qe_rx(struct sunqe *qep)
 	}
 	qep->rx_new = elem;
 	if(drops)
-		printk("%s: Memory squeeze, deferring packet.\n", qep->dev->name);
+		printk(KERN_INFO "%s: Memory squeeze, deferring packet.\n", qep->dev->name);
 }
 
 /* Interrupts for all QE's get filtered out via the QEC master controller,
@@ -538,7 +538,7 @@ static int qe_start_xmit(struct sk_buff *skb, struct device *dev)
 		long tickssofar = jiffies - dev->trans_start;
 
 		if (tickssofar >= 40) {
-			printk("%s: transmit timed out, resetting\n", dev->name);
+			printk(KERN_NOTICE "%s: transmit timed out, resetting\n", dev->name);
 			qe_init(qep, 1);
 			dev->tbusy = 0;
 			dev->trans_start = jiffies;
@@ -711,7 +711,7 @@ static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *s
 		qe_devs[0]->dev_addr[j] = idprom->id_ethaddr[j];
 
 	if(version_printed++ == 0)
-		printk(version);
+		printk(KERN_INFO "%s", version);
 
 	qe_devs[1] = qe_devs[2] = qe_devs[3] = NULL;
 	for(i = 1; i < 4; i++) {
@@ -777,7 +777,7 @@ static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *s
 					   qranges[k].ot_child_space)
 						break;
 				if(k >= num_qranges)
-					printk("QuadEther: Aieee, bogus QEC range for "
+					printk(KERN_ERR "QuadEther: Aieee, bogus QEC range for "
 					       "space %08x\n",qesdevs[i]->reg_addrs[j].which_io);
 				qesdevs[i]->reg_addrs[j].which_io = qranges[k].ot_parent_space;
 				qesdevs[i]->reg_addrs[j].phys_addr += qranges[k].ot_parent_base;
@@ -796,14 +796,14 @@ static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *s
 				     "QEC Global Registers",
 				     sdev->reg_addrs[0].which_io, 0);
 	if(!qecp->gregs) {
-		printk("QuadEther: Cannot map QEC global registers.\n");
+		printk(KERN_ERR "QuadEther: Cannot map QEC global registers.\n");
 		res = ENODEV;
 		goto qec_free_devs;
 	}
 
 	/* Make sure the QEC is in MACE mode. */
 	if((qecp->gregs->ctrl & 0xf0000000) != GLOB_CTRL_MMODE) {
-		printk("QuadEther: AIEEE, QEC is not in MACE mode!\n");
+		printk(KERN_ERR "QuadEther: AIEEE, QEC is not in MACE mode!\n");
 		res = ENODEV;
 		goto qec_free_devs;
 	}
@@ -841,7 +841,7 @@ static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *s
 						 "QEC Per-Channel Registers",
 						 qesdevs[i]->reg_addrs[0].which_io, 0);
 		if(!qeps[i]->qcregs) {
-			printk("QuadEther: Cannot map QE %d's channel registers.\n", i);
+			printk(KERN_ERR "QuadEther: Cannot map QE %d's channel registers.\n", i);
 			res = ENODEV;
 			goto qec_free_devs;
 		}
@@ -852,7 +852,7 @@ static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *s
 						"QE MACE Registers",
 						qesdevs[i]->reg_addrs[1].which_io, 0);
 		if(!qeps[i]->mregs) {
-			printk("QuadEther: Cannot map QE %d's MACE registers.\n", i);
+			printk(KERN_ERR "QuadEther: Cannot map QE %d's MACE registers.\n", i);
 			res = ENODEV;
 			goto qec_free_devs;
 		}
@@ -888,14 +888,14 @@ static inline int qec_ether_init(struct device *dev, struct linux_sbus_device *s
 	 */
 	if(request_irq(sdev->irqs[0], &qec_interrupt,
 		       SA_SHIRQ, "QuadEther", (void *) qecp)) {
-		printk("QuadEther: Can't register QEC master irq handler.\n");
+		printk(KERN_ERR "QuadEther: Can't register QEC master irq handler.\n");
 		res = EAGAIN;
 		goto qec_free_devs;
 	}
 
 	/* Report the QE channels. */
 	for(i = 0; i < 4; i++) {
-		printk("%s: QuadEthernet channel[%d] ", qe_devs[i]->name, i);
+		printk(KERN_INFO "%s: QuadEthernet channel[%d] ", qe_devs[i]->name, i);
 		for(j = 0; j < 6; j++)
 			printk ("%2.2x%c",
 				qe_devs[i]->dev_addr[j],

@@ -302,7 +302,7 @@ static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 
 static inline unsigned long get_timeout(idescsi_pc_t *pc)
 {
-	return IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
+	return IDE_MAX((30 * HZ), pc->timeout - jiffies);	/* CD-RW drives need long timeouts */
 }
 
 /*

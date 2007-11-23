@@ -104,7 +104,8 @@ enum
 	KERN_MSGMNB=36,         /* int: Maximum message queue size */
 	KERN_MSGPOOL=37,         /* int: Maximum system message pool size */
 	KERN_SYSRQ=38,		/* int: Sysreq enable */
-	KERN_SHMALL=41		/* int: maximum size of shared memory */
+	KERN_SHMALL=41,		/* int: maximum size of shared memory */
+	KERN_SPARC_STOP_A=44,	/* int: Sparc Stop-A enable */
 };
 
 

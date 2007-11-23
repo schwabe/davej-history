@@ -1519,8 +1519,11 @@ do_sync_known:
 		 */
 		if((idprom->id_machtype == (SM_SUN4C | SM_4C_SS1)) ||
 		   (idprom->id_machtype == (SM_SUN4C | SM_4C_SS1PLUS))) {
-			/* But we are nice and allow tapes to disconnect. */
-			if(SDptr->type == TYPE_TAPE)
+			/* But we are nice and allow tapes and removable
+			 * disks (but not CDROMs) to disconnect.
+			 */
+			if(SDptr->type == TYPE_TAPE ||
+			   (SDptr->type != TYPE_ROM && SDptr->removable))
 				SDptr->disconnect = 1;
 			else
 				SDptr->disconnect = 0;
@@ -1538,7 +1541,8 @@ do_sync_known:
 		 */
 		if(esp->erev == fashme && !SDptr->wide) {
 			if(!SDptr->borken &&
-			   SDptr->type != TYPE_ROM) {
+			   SDptr->type != TYPE_ROM &&
+			   SDptr->removable == 0) {
 				build_wide_nego_msg(esp, 16);
 				SDptr->wide = 1;
 				esp->wnip = 1;
@@ -1555,6 +1559,11 @@ do_sync_known:
 				ESPMISC(("esp%d: Disabling sync for buggy "
 					 "CDROM.\n", esp->esp_id));
 				cdrom_hwbug_wkaround = 1;
+				build_sync_nego_msg(esp, 0, 0);
+			} else if (SDptr->removable != 0) {
+				ESPMISC(("esp%d: Not negotiating sync/wide but "
+					 "allowing disconnect for removable media.\n",
+					 esp->esp_id));
 				build_sync_nego_msg(esp, 0, 0);
 			} else {
 				build_sync_nego_msg(esp, esp->sync_defp, 15);
@@ -1589,7 +1598,9 @@ after_nego_msg_built:
 		 *           Therefore _no_ disconnects for SCSI1 targets
 		 *           thank you very much. ;-)
 		 */
-		if(((SDptr->scsi_level < 3) && (SDptr->type != TYPE_TAPE)) ||
+		if(((SDptr->scsi_level < 3) &&
+		    (SDptr->type != TYPE_TAPE) &&
+		    SDptr->removable == 0) ||
 		   cdrom_hwbug_wkaround || SDptr->borken) {
 			ESPMISC((KERN_INFO "esp%d: Disabling DISCONNECT for target %d "
 				 "lun %d\n", esp->esp_id, SCptr->target, SCptr->lun));

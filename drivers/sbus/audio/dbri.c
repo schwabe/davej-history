@@ -64,6 +64,7 @@
 #include <linux/errno.h>
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
+#include <linux/ioport.h>
 #include <linux/version.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -229,7 +230,7 @@ static void dbri_reset(struct dbri *dbri)
                         dbri->regs->reg8, dbri->regs->reg9)); 
 
 	dbri->regs->reg0 = D_R; /* Soft Reset */
-	for(i = 0; (dbri->regs->reg0 & D_R) && i < 10; i++)
+	for(i = 0; (dbri->regs->reg0 & D_R) && i < 64; i++)
 		udelay(10);
 }
 
@@ -370,9 +371,9 @@ static void reception_complete_intr(struct dbri *dbri, int pipe)
         int rd;
         int status;
         void *buffer;
-        int count;
+        int count = 0;
         void (*callback)(void *, int, unsigned int) = NULL;
-        void *callback_arg;
+        void *callback_arg = NULL;
 
         if ((pipe < 0) || (pipe > 15)) {
                 printk("DBRI: invalid pipe in reception_complete_intr\n");
@@ -804,6 +805,7 @@ static void link_time_slot(struct dbri *dbri, int pipe,
         dbri_cmdsend(dbri, cmd);
 }
 
+#if 0
 /* unlink_time_slot()
  *
  * I don't use this function, so it's basically untested.
@@ -865,6 +867,7 @@ static void unlink_time_slot(struct dbri *dbri, int pipe,
 
         dbri_cmdsend(dbri, cmd);
 }
+#endif
 
 /* xmit_fixed() / recv_fixed()
  *
@@ -1475,7 +1478,7 @@ static int mmcodec_setctrl(struct dbri *dbri)
          * codec at this location on the CHI, so return false.
          */
 
-        i = 10;
+        i = 64;
         while (((dbri->mm.status & 0xe4) != 0x20) && --i) udelay(125);
         if (i == 0) {
 		return 0;

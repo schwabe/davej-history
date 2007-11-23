@@ -1,4 +1,4 @@
-/* $Id: cgfourteenfb.c,v 1.4 1999/01/26 10:55:03 jj Exp $
+/* $Id: cgfourteenfb.c,v 1.4.2.1 1999/09/28 15:59:58 davem Exp $
  * cgfourteenfb.c: CGfourteen frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)

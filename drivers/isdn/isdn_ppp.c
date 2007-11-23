@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.54 1999/09/13 23:25:17 he Exp $
+/* $Id: isdn_ppp.c,v 1.60 1999/11/04 20:29:55 he Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,28 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.c,v $
+ * Revision 1.60  1999/11/04 20:29:55  he
+ * applied Andre Beck's reset_free fix
+ *
+ * Revision 1.59  1999/10/31 15:59:50  he
+ * more skb headroom checks
+ *
+ * Revision 1.58  1999/10/30 13:13:01  keil
+ * Henners isdn_ppp_skb_push:under fix
+ *
+ * Revision 1.57  1999/10/05 22:47:17  he
+ * Removed dead ISDN_SYNCPPP_READDRESS code (obsoleted by sysctl_ip_dynaddr
+ * and network address translation)
+ *
+ * Revision 1.56  1999/09/29 16:01:06  he
+ * replaced dev_alloc_skb() for downstream skbs by equivalent alloc_skb()
+ *
+ * Revision 1.55  1999/09/23 22:07:51  detabc
+ *
+ * make ipc_head common usable (for use compressor with raw-ip)
+ * add function before netif_rx(). needed for ipv4-tcp-keepalive-detect.
+ * ~
+ *
  * Revision 1.54  1999/09/13 23:25:17  he
  * serialized xmitting frames from isdn_ppp and BSENT statcallb
  *
@@ -218,10 +240,6 @@
 
 /* TODO: right tbusy handling when using MP */
 
-/*
- * experimental for dynamic addressing: readdress IP frames
- */
-#undef ISDN_SYNCPPP_READDRESS
 #define CONFIG_ISDN_CCP 1
 
 #include <linux/config.h>
@@ -264,6 +282,7 @@ static void isdn_ppp_ccp_xmit_reset(struct ippp_struct *is, int proto,
 				    unsigned char code, unsigned char id,
 				    unsigned char *data, int len);
 static struct ippp_ccp_reset *isdn_ppp_ccp_reset_alloc(struct ippp_struct *is);
+static void isdn_ppp_ccp_reset_free(struct ippp_struct *is);
 static void isdn_ppp_ccp_reset_free_state(struct ippp_struct *is,
 					  unsigned char id);
 static void isdn_ppp_ccp_timer_callback(unsigned long closure);
@@ -287,9 +306,10 @@ static int isdn_ppp_fill_mpqueue(isdn_net_dev *, struct sk_buff **skb,
 static void isdn_ppp_free_mpqueue(isdn_net_dev *);
 #endif
 
-char *isdn_ppp_revision = "$Revision: 1.54 $";
+char *isdn_ppp_revision = "$Revision: 1.60 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
+
 static struct isdn_ppp_compressor *ipc_head = NULL;
 
 /*
@@ -360,10 +380,6 @@ isdn_ppp_free(isdn_net_local * lp)
 		printk(KERN_DEBUG "isdn_ppp_free %d %lx %lx\n", lp->ppp_slot, (long) lp, (long) is->lp);
 
 	is->lp = NULL;          /* link is down .. set lp to NULL */
-#ifdef ISDN_SYNCPPP_READDRESS
-	is->old_pa_addr = 0x0;
-	is->old_pa_dstaddr = 0x0;
-#endif
 	lp->ppp_slot = -1;      /* is this OK ?? */
 	restore_flags(flags);
 
@@ -608,9 +624,9 @@ isdn_ppp_release(int min, struct file *file)
 	is->comp_stat    = is->link_comp_stat    = NULL;
         is->decomp_stat  = is->link_decomp_stat  = NULL;
 
+	/* Clean up if necessary */
 	if(is->reset)
-		kfree(is->reset);
-	is->reset = NULL;
+		isdn_ppp_ccp_reset_free(is);
 
 	/* this slot is ready for new connections */
 	is->state = 0;
@@ -1462,12 +1478,6 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 	ipts = ippp_table[mlp->ppp_slot];
 
 	if (!(ipts->pppcfg & SC_ENABLE_IP)) {	/* PPP connected ? */
-#ifdef ISDN_SYNCPPP_READDRESS
-		if (!ipts->old_pa_addr)
-			ipts->old_pa_addr = mdev->pa_addr;
-		if (!ipts->old_pa_dstaddr)
-			ipts->old_pa_dstaddr = mdev->pa_dstaddr;
-#endif
 		if (ipts->debug & 0x1)
 			printk(KERN_INFO "%s: IP frame delayed.\n", netdev->name);
 		return 1;
@@ -1476,21 +1486,6 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 	switch (ntohs(skb->protocol)) {
 		case ETH_P_IP:
 			proto = PPP_IP;
-#ifdef ISDN_SYNCPPP_READDRESS
-			if (ipts->old_pa_addr != mdev->pa_addr) {
-				struct iphdr *ipfr;
-				ipfr = (struct iphdr *) skb->data;
-				if(ipts->debug & 0x4)
-					printk(KERN_DEBUG "IF-address changed from %lx to %lx\n", ipts->old_pa_addr, mdev->pa_addr);
-				if (ipfr->version == 4) {
-					if (ipfr->saddr == ipts->old_pa_addr) {
-						printk(KERN_DEBUG "readdressing %lx to %lx\n", ipfr->saddr, mdev->pa_addr);
-						ipfr->saddr = mdev->pa_addr;
-					}
-				}
-			}
-			/* dstaddr change not so important */
-#endif
 			break;
 		case ETH_P_IPX:
 			proto = PPP_IPX;	/* untested */
@@ -1521,8 +1516,6 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *netdev)
 
 	/* Pull off the fake header we stuck on earlier to keep
      * the fragemntation code happy.
-     * this will break the ISDN_SYNCPPP_READDRESS hack a few lines
-     * above. So, enabling this is no longer allowed
      */
 	skb_pull(skb,IPPP_MAX_HEADER);
 
@@ -2233,18 +2226,20 @@ static void isdn_ppp_ccp_xmit_reset(struct ippp_struct *is, int proto,
 {
 	struct sk_buff *skb;
 	unsigned char *p;
-	int count;
+	int count, hl;
 	unsigned long flags;
 	int cnt = 0;
 	isdn_net_local *lp = is->lp;
 
 	/* Alloc large enough skb */
-	skb = dev_alloc_skb(len + 16);
+	hl = dev->drv[lp->isdn_device]->interface->hl_hdrlen;
+	skb = alloc_skb(len + hl + 16,GFP_ATOMIC);
 	if(!skb) {
 		printk(KERN_WARNING
 		       "ippp: CCP cannot send reset - out of memory\n");
 		return;
 	}
+	skb_reserve(skb, hl);
 
 	/* We may need to stuff an address and control field first */
 	if(!(is->pppcfg & SC_COMP_AC)) {
@@ -2299,13 +2294,32 @@ static void isdn_ppp_ccp_xmit_reset(struct ippp_struct *is, int proto,
 static struct ippp_ccp_reset *isdn_ppp_ccp_reset_alloc(struct ippp_struct *is)
 {
 	struct ippp_ccp_reset *r;
-	printk(KERN_DEBUG "ippp_ccp: allocating reset data structure\n");
 	r = kmalloc(sizeof(struct ippp_ccp_reset), GFP_KERNEL);
-	if(!r)
+	if(!r) {
+		printk(KERN_ERR "ippp_ccp: failed to allocate reset data"
+		       " structure - no mem\n");
 		return NULL;
+	}
 	memset(r, 0, sizeof(struct ippp_ccp_reset));
+	printk(KERN_DEBUG "ippp_ccp: allocated reset data structure %p\n", r);
 	is->reset = r;
 	return r;
+}
+
+/* Destroy the reset state vector. Kill all pending timers first. */
+static void isdn_ppp_ccp_reset_free(struct ippp_struct *is)
+{
+	unsigned int id;
+
+	printk(KERN_DEBUG "ippp_ccp: freeing reset data structure %p\n",
+	       is->reset);
+	for(id = 0; id < 256; id++) {
+		if(is->reset->rs[id]) {
+			isdn_ppp_ccp_reset_free_state(is, (unsigned char)id);
+		}
+	}
+	kfree(is->reset);
+	is->reset = NULL;
 }
 
 /* Free a given state and clear everything up for later reallocation */
@@ -2673,7 +2687,8 @@ static struct sk_buff *isdn_ppp_compress(struct sk_buff *skb_in,int *proto,
 	}
 
 	/* Allow for at least 150 % expansion (for now) */
-	skb_out = dev_alloc_skb(skb_in->len + skb_in->len/2 + 32 + skb_headroom(skb_in));
+	skb_out = alloc_skb(skb_in->len + skb_in->len/2 + 32 +
+		skb_headroom(skb_in), GFP_ATOMIC);
 	if(!skb_out)
 		return skb_in;
 	skb_reserve(skb_out, skb_headroom(skb_in));
@@ -2905,7 +2920,6 @@ static void isdn_ppp_send_ccp(isdn_net_dev *net_dev, isdn_net_local *lp, struct 
 	}
 }
 
-
 int isdn_ppp_register_compressor(struct isdn_ppp_compressor *ipc)
 {
 	ipc->next = ipc_head;
@@ -2939,6 +2953,16 @@ static int isdn_ppp_set_compressor(struct ippp_struct *is, struct isdn_ppp_comp_
 	if(is->debug & 0x10)
 		printk(KERN_DEBUG "[%d] Set %s type %d\n",is->unit,
 			(data->flags&IPPP_COMP_FLAG_XMIT)?"compressor":"decompressor",num);
+
+	/* If is has no valid reset state vector, we cannot allocate a
+	   decompressor. The decompressor would cause reset transactions
+	   sooner or later, and they need that vector. */
+
+	if(!(data->flags & IPPP_COMP_FLAG_XMIT) && !is->reset) {
+		printk(KERN_ERR "ippp_ccp: no reset data structure - can't"
+		       " allow decompression.\n");
+		return -ENOMEM;
+	}
 
 	while(ipc) {
 		if(ipc->num == num) {

@@ -135,7 +135,7 @@ struct amd7930_channel {
 	unsigned char xmit_idle_char;
 
 	/* Callback routine (and argument) when output is done on */
-	void (*output_callback)();
+	void (*output_callback)(void *, unsigned char);
 	void * output_callback_arg;
 
 	/* Current buffer that the driver is recording on channel */
@@ -144,7 +144,7 @@ struct amd7930_channel {
 	volatile unsigned long input_limit;
 
 	/* Callback routine (and argument) when input is done on */
-	void (*input_callback)();
+	void (*input_callback)(void *, unsigned char, unsigned long);
 	void * input_callback_arg;
 };
 
@@ -520,7 +520,7 @@ static void transceive_Bchannel(struct amd7930_channel *channel,
 			channel->input_count = 0;
 			if (channel->input_callback)
 				(*channel->input_callback)
-					(channel->input_callback_arg, 1);
+					(channel->input_callback_arg, 1, 0);
 		}
 	}
 }

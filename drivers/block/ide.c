@@ -1175,17 +1175,14 @@ static void ide_do_request (ide_hwgroup_t *hwgroup)
 				 * This gives other hwgroups on the same a chance to
 				 * play fairly with us, just in case there are big differences
 				 * in relative throughputs.. don't want to hog the cpu too much.
-				 *
-				 * Mmmm.. note we also do hwgroup->busy=0 below, which means
-				 * we will also be woken up if somebody enqueues another
-				 * request against this hwgroup while we're snoozing.
-				 * We could "fix" that by setting hwgroup->busy=1 instead,
-				 * but that would make the error handling more complicated
-				 * in ide_timer_expiry() -- this is good enough for now.
 				 */
 				if (0 < (signed long)(jiffies + WAIT_MIN_SLEEP - sleep)) 
 					sleep = jiffies + WAIT_MIN_SLEEP;
 				hwgroup->sleeping = 1;	/* so that ide_timer_expiry knows what to do */
+#if 1	/* paranoia */
+				if (hwgroup->timer.next || hwgroup->timer.prev)
+					printk("ide_set_handler: timer was already active\n");
+#endif
 				mod_timer(&hwgroup->timer, sleep);
 				/* we purposely leave hwgroup->busy==1 while sleeping */
 			} else {
@@ -1419,12 +1416,16 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 			 */
 			(void)ide_ack_intr(hwif->io_ports[IDE_STATUS_OFFSET], hwif->io_ports[IDE_IRQ_OFFSET]);
 			unexpected_intr(irq, hwgroup);
-		} else {
+		} 
+#ifdef CONFIG_BLK_DEV_IDEPCI		
+		else 
+		{
 			/*
 			 * Whack the status register, just in case we have a leftover pending IRQ.
 			 */
 			(void)IN_BYTE(hwif->io_ports[IDE_STATUS_OFFSET]);
 		}
+#endif		
 		spin_unlock_irqrestore(&io_request_lock, flags);
 		return;
 	}

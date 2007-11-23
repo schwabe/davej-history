@@ -1,10 +1,19 @@
-/* $Id: config.c,v 2.37 1999/09/20 12:11:08 keil Exp $
+/* $Id: config.c,v 2.40 1999/10/30 13:09:45 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
  *
  * $Log: config.c,v $
+ * Revision 2.40  1999/10/30 13:09:45  keil
+ * Version 3.3c
+ *
+ * Revision 2.39  1999/10/16 14:44:45  keil
+ * Fix module parm if only NICCY was selected
+ *
+ * Revision 2.38  1999/10/14 20:25:28  keil
+ * add a statistic for error monitoring
+ *
  * Revision 2.37  1999/09/20 12:11:08  keil
  * Fix hang if no protocol was selected
  *
@@ -483,10 +492,10 @@ MODULE_PARM(io, "1-8i");
 MODULE_PARM(irq, "1-8i");
 MODULE_PARM(mem, "1-8i");
 MODULE_PARM(id, "s");
-#ifdef CONFIG_HISAX_16_3	/* For Creatix/Teles PnP */
+#ifdef IO0_IO1
 MODULE_PARM(io0, "1-8i");
 MODULE_PARM(io1, "1-8i");
-#endif /* CONFIG_HISAX_16_3 */
+#endif /* IO0_IO1 */
 #endif /* MODULE */
 
 int nrcards;
@@ -519,9 +528,9 @@ HiSaxVersion(void))
 
 	printk(KERN_INFO "HiSax: Linux Driver for passive ISDN cards\n");
 #ifdef MODULE
-	printk(KERN_INFO "HiSax: Version 3.3a (module)\n");
+	printk(KERN_INFO "HiSax: Version 3.3c (module)\n");
 #else
-	printk(KERN_INFO "HiSax: Version 3.3a (kernel)\n");
+	printk(KERN_INFO "HiSax: Version 3.3c (kernel)\n");
 #endif
 	strcpy(tmp, l1_revision);
 	printk(KERN_INFO "HiSax: Layer1 Revision %s\n", HiSax_getrev(tmp));
@@ -1369,12 +1378,9 @@ HiSax_closecard(int cardnr)
 }
 
 void
-HiSax_reportcard(int cardnr)
+HiSax_reportcard(int cardnr, int sel)
 {
 	struct IsdnCardState *cs = cards[cardnr].cs;
-	struct PStack *stptr;
-	struct l3_process *pc;
-	int j, i = 1;
 
 	printk(KERN_DEBUG "HiSax: reportcard No %d\n", cardnr + 1);
 	printk(KERN_DEBUG "HiSax: Type %s\n", CardType[cs->typ]);
@@ -1382,45 +1388,33 @@ HiSax_reportcard(int cardnr)
 	printk(KERN_DEBUG "HiSax: HiSax_reportcard address 0x%lX\n",
 		(ulong) & HiSax_reportcard);
 	printk(KERN_DEBUG "HiSax: cs 0x%lX\n", (ulong) cs);
-	printk(KERN_DEBUG "HiSax: HW_Flags %x bc0 flg %x bc0 flg %x\n",
+	printk(KERN_DEBUG "HiSax: HW_Flags %x bc0 flg %x bc1 flg %x\n",
 		cs->HW_Flags, cs->bcs[0].Flag, cs->bcs[1].Flag);
 	printk(KERN_DEBUG "HiSax: bcs 0 mode %d ch%d\n",
 		cs->bcs[0].mode, cs->bcs[0].channel);
 	printk(KERN_DEBUG "HiSax: bcs 1 mode %d ch%d\n",
 		cs->bcs[1].mode, cs->bcs[1].channel);
-	printk(KERN_DEBUG "HiSax: cs setstack_d 0x%lX\n", (ulong) cs->setstack_d);
-	printk(KERN_DEBUG "HiSax: cs stl 0x%lX\n", (ulong) & (cs->stlist));
-	stptr = cs->stlist;
-	while (stptr != NULL) {
-		printk(KERN_DEBUG "HiSax: dst%d 0x%lX\n", i, (ulong) stptr);
-		printk(KERN_DEBUG "HiSax: dst%d stp 0x%lX\n", i, (ulong) stptr->l1.stlistp);
-		printk(KERN_DEBUG "HiSax: dst%d l1.l1hw 0x%lX\n", i, (ulong) stptr->l1.l1hw);
-		printk(KERN_DEBUG "HiSax:   tei %d sapi %d\n",
-		       stptr->l2.tei, stptr->l2.sap);
-		printk(KERN_DEBUG "HiSax:      man 0x%lX\n", (ulong) stptr->ma.layer);
-		pc = stptr->l3.proc;
-		while (pc) {
-			printk(KERN_DEBUG "HiSax: l3proc %x 0x%lX\n", pc->callref,
-			       (ulong) pc);
-			printk(KERN_DEBUG "HiSax:    state %d  st 0x%lX chan 0x%lX\n",
-			    pc->state, (ulong) pc->st, (ulong) pc->chan);
-			pc = pc->next;
-		}
-		stptr = stptr->next;
-		i++;
+#ifdef ERROR_STATISTIC
+	printk(KERN_DEBUG "HiSax: dc errors(rx,crc,tx) %d,%d,%d\n",
+		cs->err_rx, cs->err_crc, cs->err_tx);
+	printk(KERN_DEBUG "HiSax: bc0 errors(inv,rdo,crc,tx) %d,%d,%d,%d\n",
+		cs->bcs[0].err_inv, cs->bcs[0].err_rdo, cs->bcs[0].err_crc, cs->bcs[0].err_tx);
+	printk(KERN_DEBUG "HiSax: bc1 errors(inv,rdo,crc,tx) %d,%d,%d,%d\n",
+		cs->bcs[1].err_inv, cs->bcs[1].err_rdo, cs->bcs[1].err_crc, cs->bcs[1].err_tx);
+	if (sel == 99) {
+		cs->err_rx  = 0;
+		cs->err_crc = 0;
+		cs->err_tx  = 0;
+		cs->bcs[0].err_inv = 0;
+		cs->bcs[0].err_rdo = 0;
+		cs->bcs[0].err_crc = 0;
+		cs->bcs[0].err_tx  = 0;
+		cs->bcs[1].err_inv = 0;
+		cs->bcs[1].err_rdo = 0;
+		cs->bcs[1].err_crc = 0;
+		cs->bcs[1].err_tx  = 0;
 	}
-	for (j = 0; j < 2; j++) {
-		printk(KERN_DEBUG "HiSax: ch%d 0x%lX\n", j,
-		       (ulong) & cs->channel[j]);
-		stptr = cs->channel[j].b_st;
-		i = 1;
-		while (stptr != NULL) {
-			printk(KERN_DEBUG "HiSax:  b_st%d 0x%lX\n", i, (ulong) stptr);
-			printk(KERN_DEBUG "HiSax:    man 0x%lX\n", (ulong) stptr->ma.layer);
-			stptr = stptr->next;
-			i++;
-		}
-	}
+#endif
 }
 
 
@@ -1599,9 +1593,7 @@ int elsa_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 
 	nrcards = 0;
 	HiSaxVersion();
-	if (id)			/* If id= string used */
-		HiSax_id = id;
-	/* Initialize all 8 structs, even though we only accept
+	/* Initialize all structs, even though we only accept
 	   two pcmcia cards
 	   */
 	for (i = 0; i < HISAX_MAX_CARDS; i++) {
@@ -1650,9 +1642,7 @@ int sedl_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 
 	nrcards = 0;
 	HiSaxVersion();
-	if (id)			/* If id= string used */
-		HiSax_id = id;
-	/* Initialize all 8 structs, even though we only accept
+	/* Initialize all structs, even though we only accept
 	   two pcmcia cards
 	   */
 	for (i = 0; i < HISAX_MAX_CARDS; i++) {
@@ -1701,12 +1691,10 @@ int avm_a1_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 
 	nrcards = 0;
 	HiSaxVersion();
-	if (id)			/* If id= string used */
-		HiSax_id = id;
-	/* Initialize all 16 structs, even though we only accept
+	/* Initialize all structs, even though we only accept
 	   two pcmcia cards
 	   */
-	for (i = 0; i < 16; i++) {
+	for (i = 0; i < HISAX_MAX_CARDS; i++) {
 		cards[i].para[0] = irq[i];
 		cards[i].para[1] = io[i];
 		cards[i].typ = type[i];

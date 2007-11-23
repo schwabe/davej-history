@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.43.2.1 1999/05/28 02:18:13 davem Exp $
+/*  $Id: setup.c,v 1.43.2.2 1999/10/24 17:29:20 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -434,6 +434,17 @@ static struct pt_regs fake_swapper_regs = { { 0, }, 0, 0, 0, 0 };
 
 extern struct consw sun_serial_con;
 
+void register_prom_callbacks(void)
+{
+	prom_setcallback(prom_callback);
+	prom_feval(": linux-va>tte-data 2 \" va>tte-data\" $callback drop ; "
+		   "' linux-va>tte-data to va>tte-data");
+	prom_feval(": linux-.soft1 1 \" .soft1\" $callback 2drop ; "
+		   "' linux-.soft1 to .soft1");
+	prom_feval(": linux-.soft2 1 \" .soft2\" $callback 2drop ; "
+		   "' linux-.soft2 to .soft2");
+}
+
 __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
@@ -478,13 +489,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 			}
 		}
 	}
-	prom_setcallback(prom_callback);
-	prom_feval(": linux-va>tte-data 2 \" va>tte-data\" $callback drop ; "
-		   "' linux-va>tte-data to va>tte-data");
-	prom_feval(": linux-.soft1 1 \" .soft1\" $callback 2drop ; "
-		   "' linux-.soft1 to .soft1");
-	prom_feval(": linux-.soft2 1 \" .soft2\" $callback 2drop ; "
-		   "' linux-.soft2 to .soft2");
 
 	/* In paging_init() we tip off this value to see if we need
 	 * to change init_mm.pgd to point to the real alias mapping.

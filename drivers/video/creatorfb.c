@@ -1,4 +1,4 @@
-/* $Id: creatorfb.c,v 1.27 1999/03/28 12:37:12 jj Exp $
+/* $Id: creatorfb.c,v 1.27.2.2 1999/11/05 09:07:56 davem Exp $
  * creatorfb.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997,1998,1999 Jakub Jelinek (jj@ultra.linux.cz)
@@ -539,6 +539,36 @@ static void ffb_revc(struct display *p, int xx, int yy)
 	/* Not used if hw cursor */
 }
 
+#if 0
+static void ffb_blank(struct fb_info_sbusfb *fb)
+{
+	struct ffb_dac *dac = fb->s.ffb.dac;
+	unsigned long flags;
+	u32 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	dac->type = 0x6000;
+	tmp = (dac->value & ~0x1);
+	dac->type = 0x6000;
+	dac->value = tmp;
+	spin_unlock_irqrestore(&fb->lock, flags);
+}
+#endif
+
+static void ffb_unblank(struct fb_info_sbusfb *fb)
+{
+	struct ffb_dac *dac = fb->s.ffb.dac;
+	unsigned long flags;
+	u32 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	dac->type = 0x6000;
+	tmp = (dac->value | 0x1);
+	dac->type = 0x6000;
+	dac->value = tmp;
+	spin_unlock_irqrestore(&fb->lock, flags);
+}
+
 static void ffb_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct ffb_dac *dac = fb->s.ffb.dac;
@@ -726,6 +756,16 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	fb->setcurshape = ffb_setcurshape;
 	fb->switch_from_graph = ffb_switch_from_graph;
 	fb->fill = ffb_fill;
+#if 0
+	/* XXX Can't enable this for now, I've seen cases
+	 * XXX where the VC was blanked, and Xsun24 was started
+	 * XXX via a remote login, the sunfb code did not
+	 * XXX unblank creator when it was mmap'd for some
+	 * XXX reason, investigate later... -DaveM
+	 */
+	fb->blank = ffb_blank;
+	fb->unblank = ffb_unblank;
+#endif
 	
 	/* If there are any read errors or fifo overflow conditions,
 	 * clear them now.
@@ -755,5 +795,12 @@ __initfunc(char *creatorfb_init(struct fb_info_sbusfb *fb))
 	if (afb)
 		fb->s.ffb.dac_rev = 10;
 	
+	/* Unblank it just to be sure.  When there are multiple
+	 * FFB/AFB cards in the system, or it is not the OBP
+	 * chosen console, it will have video outputs off in
+	 * the DAC.
+	 */
+	ffb_unblank(fb);
+
 	return idstring;
 }

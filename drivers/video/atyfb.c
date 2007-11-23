@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.106.2.4 1999/09/02 06:34:46 paulus Exp $
+/*  $Id: atyfb.c,v 1.106.2.6 1999/10/14 08:44:47 davem Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -227,8 +227,8 @@ struct fb_info_aty {
     } fbcon_cmap;
     u8 blitter_may_be_busy;
 #ifdef __sparc__
-    u8 open;
     u8 mmaped;
+    int open;
     int vtconsole;
     int consolecnt;
 #endif
@@ -1896,10 +1896,8 @@ static int atyfb_open(struct fb_info *info, int user)
     struct fb_info_aty *fb = (struct fb_info_aty *)info;
 
     if (user) {
-	if (fb->open)
-	    return -EBUSY;
+	fb->open++;
 	fb->mmaped = 0;
-	fb->open = 1;
 	fb->vtconsole = -1;
     } else {
 	fb->consolecnt++;
@@ -1909,17 +1907,54 @@ static int atyfb_open(struct fb_info *info, int user)
     return(0);
 }
 
+struct fb_var_screeninfo default_var = {
+    /* 640x480, 60 Hz, Non-Interlaced (25.175 MHz dotclock) */
+    640, 480, 640, 480, 0, 0, 8, 0,
+    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
+    0, 0, -1, -1, 0, 39722, 48, 16, 33, 10, 96, 2,
+    0, FB_VMODE_NONINTERLACED
+};
+
 static int atyfb_release(struct fb_info *info, int user)
 {
 #ifdef __sparc__
     struct fb_info_aty *fb = (struct fb_info_aty *)info;
 
     if (user) {
-	if (fb->vtconsole != -1)
-	    vt_cons[fb->vtconsole]->vc_mode = KD_TEXT;
-	fb->open = 0;
-	fb->mmaped = 0;
-	fb->vtconsole = -1;
+	fb->open--;
+	udelay(1000);
+	wait_for_idle(fb);
+	if (!fb->open) {
+		int was_mmaped = fb->mmaped;
+
+		fb->mmaped = 0;
+		if (fb->vtconsole != -1)
+			vt_cons[fb->vtconsole]->vc_mode = KD_TEXT;
+		fb->vtconsole = -1;
+
+		if (was_mmaped) {
+			struct fb_var_screeninfo var;
+
+			/* Now reset the default display config, we have no
+			 * idea what the program(s) which mmap'd the chip did
+			 * to the configuration, nor whether it restored it
+			 * correctly.
+			 */
+			var = default_var;
+			if (noaccel)
+				var.accel_flags &= ~FB_ACCELF_TEXT;
+			else
+				var.accel_flags |= FB_ACCELF_TEXT;
+			if (var.yres == var.yres_virtual) {
+				u32 vram = (fb->total_vram - (PAGE_SIZE << 2));
+				var.yres_virtual = ((vram * 8) / var.bits_per_pixel) /
+					var.xres_virtual;
+				if (var.yres_virtual < var.yres)
+					var.yres_virtual = var.yres;
+			}
+			atyfb_set_var(&var, -1, &fb->fb_info);
+		}
+	}
     } else {
 	fb->consolecnt--;
     }
@@ -1980,15 +2015,6 @@ static int encode_fix(struct fb_fix_screeninfo *fix,
 
     return 0;
 }
-
-
-struct fb_var_screeninfo default_var = {
-    /* 640x480, 60 Hz, Non-Interlaced (25.175 MHz dotclock) */
-    640, 480, 640, 480, 0, 0, 8, 0,
-    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-    0, 0, -1, -1, 0, 39722, 48, 16, 33, 10, 96, 2,
-    0, FB_VMODE_NONINTERLACED
-};
 
 
     /*

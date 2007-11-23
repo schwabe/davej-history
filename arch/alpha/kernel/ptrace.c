@@ -159,7 +159,7 @@ get_long(struct task_struct * tsk, struct vm_area_struct * vma,
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return 0;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -173,7 +173,7 @@ get_long(struct task_struct * tsk, struct vm_area_struct * vma,
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return 0;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -187,7 +187,7 @@ get_long(struct task_struct * tsk, struct vm_area_struct * vma,
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return 0;
 	}
 	page = pte_page(*pgtable);
@@ -224,7 +224,7 @@ put_long(struct task_struct * tsk, struct vm_area_struct * vma,
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -238,7 +238,7 @@ put_long(struct task_struct * tsk, struct vm_area_struct * vma,
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -252,7 +252,7 @@ put_long(struct task_struct * tsk, struct vm_area_struct * vma,
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return;
 	}
 	page = pte_page(*pgtable);
@@ -261,7 +261,7 @@ put_long(struct task_struct * tsk, struct vm_area_struct * vma,
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return;
 	}
 

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.187.2.2 1999/09/21 11:24:15 anton Exp $
+/* $Id: srmmu.c,v 1.187.2.7 1999/11/16 06:29:44 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -114,7 +114,9 @@ static unsigned long srmmu_p2v_hash[SRMMU_HASHSZ];
 #define srmmu_ahashfn(addr)	((addr) >> 24)
 
 int viking_mxcc_present = 0;
+#ifdef __SMP__
 static spinlock_t srmmu_context_spinlock = SPIN_LOCK_UNLOCKED;
+#endif
 
 /* Physical memory can be _very_ non-contiguous on the sun4m, especially
  * the SS10/20 class machines and with the latest openprom revisions.
@@ -725,6 +727,17 @@ static void srmmu_set_pte_cacheable(pte_t *ptep, pte_t pteval)
 	srmmu_set_entry(ptep, pte_val(pteval));
 }
 
+extern void swift_flush_chunk(unsigned long chunk);
+
+static void srmmu_set_pte_nocache_swift(pte_t *ptep, pte_t pteval)
+{
+	unsigned long page;
+
+	srmmu_set_entry(ptep, pte_val(pteval));
+	page = ((unsigned long)ptep) & PAGE_MASK;
+	swift_flush_chunk(page);
+}
+
 static void srmmu_set_pte_nocache_cypress(pte_t *ptep, pte_t pteval)
 {
 	register unsigned long a, b, c, d, e, f, g;
@@ -909,7 +922,8 @@ static void srmmu_free_task_struct(struct task_struct *tsk)
 /* tsunami.S */
 extern void tsunami_flush_cache_all(void);
 extern void tsunami_flush_cache_mm(struct mm_struct *mm);
-extern void tsunami_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end);
+extern void tsunami_flush_cache_range(struct mm_struct *mm,
+				      unsigned long start, unsigned long end);
 extern void tsunami_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
 extern void tsunami_flush_page_to_ram(unsigned long page);
 extern void tsunami_flush_page_for_dma(unsigned long page);
@@ -917,111 +931,54 @@ extern void tsunami_flush_sig_insns(struct mm_struct *mm, unsigned long insn_add
 extern void tsunami_flush_chunk(unsigned long chunk);
 extern void tsunami_flush_tlb_all(void);
 extern void tsunami_flush_tlb_mm(struct mm_struct *mm);
-extern void tsunami_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end);
+extern void tsunami_flush_tlb_range(struct mm_struct *mm,
+				    unsigned long start, unsigned long end);
 extern void tsunami_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
+extern void tsunami_setup_blockops(void);
 
-/* Workaround, until we find what's going on with Swift. When low on memory, it sometimes
- * loops in fault/handle_mm_fault incl. flush_tlb_page to find out it is already in page tables/
- * fault again on the same instruction. I really don't understand it, have checked it and contexts
- * are right, flush_tlb_all is done as well, and it faults again... Strange. -jj
- */
-static void swift_update_mmu_cache(struct vm_area_struct * vma, unsigned long address, pte_t pte)
+/* swift.S */
+extern void swift_flush_cache_all(void);
+extern void swift_flush_cache_mm(struct mm_struct *mm);
+extern void swift_flush_cache_range(struct mm_struct *mm,
+				    unsigned long start, unsigned long end);
+extern void swift_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
+extern void swift_flush_page_to_ram(unsigned long page);
+extern void swift_flush_page_for_dma(unsigned long page);
+extern void swift_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
+extern void swift_flush_tlb_all(void);
+extern void swift_flush_tlb_mm(struct mm_struct *mm);
+extern void swift_flush_tlb_range(struct mm_struct *mm,
+				  unsigned long start, unsigned long end);
+extern void swift_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
+
+static void swift_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
 {
-	static unsigned long last;
-
-	if (last == address) viking_hwprobe(address);
-	last = address;
+	if(pgdp != swapper_pg_dir)
+		swift_flush_chunk((unsigned long)pgdp);
+	if(tsk->mm->context != NO_CONTEXT &&
+	   tsk->mm->pgd != pgdp) {
+		swift_flush_cache_mm(tsk->mm);
+		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
+		swift_flush_tlb_mm(tsk->mm);
+	}
 }
 
-/* Swift flushes.  It has the recommended SRMMU specification flushing
- * facilities, so we can do things in a more fine grained fashion than we
- * could on the tsunami.  Let's watch out for HARDWARE BUGS...
- */
-
-static void swift_flush_cache_all(void)
+static void swift_init_new_context(struct mm_struct *mm)
 {
-	flush_user_windows();
-	swift_idflash_clear();
-}
+	ctxd_t *ctxp;
 
-static void swift_flush_cache_mm(struct mm_struct *mm)
-{
-	FLUSH_BEGIN(mm)
-	flush_user_windows();
-	swift_idflash_clear();
-	FLUSH_END
-}
+	spin_lock(&srmmu_context_spinlock);
+	alloc_context(mm);
+	spin_unlock(&srmmu_context_spinlock);
 
-static void swift_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-	FLUSH_BEGIN(mm)
-	flush_user_windows();
-	swift_idflash_clear();
-	FLUSH_END
-}
+	ctxp = &srmmu_context_table[mm->context];
+	srmmu_set_entry((pte_t *)ctxp,
+			__pte((SRMMU_ET_PTD |
+			       (srmmu_v2p((unsigned long) mm->pgd) >> 4))));
+	swift_flush_chunk(((unsigned long)ctxp) & PAGE_MASK);
 
-static void swift_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
-{
-	FLUSH_BEGIN(vma->vm_mm)
-	flush_user_windows();
-	if(vma->vm_flags & VM_EXEC)
-		swift_flush_icache();
-	swift_flush_dcache();
-	FLUSH_END
-}
-
-/* Not copy-back on swift. */
-static void swift_flush_page_to_ram(unsigned long page)
-{
-}
-
-/* But not IO coherent either. */
-static void swift_flush_page_for_dma(unsigned long page)
-{
-	swift_flush_dcache();
-}
-
-/* Again, Swift is non-snooping split I/D cache'd just like tsunami,
- * so have to punt the icache for on-stack signal insns.  Only the
- * icache need be flushed since the dcache is write-through.
- */
-static void swift_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
-{
-	swift_flush_icache();
-}
-
-static void swift_flush_chunk(unsigned long chunk)
-{
-}
-
-static void swift_flush_tlb_all(void)
-{
-	srmmu_flush_whole_tlb();
-	module_stats.invall++;
-}
-
-static void swift_flush_tlb_mm(struct mm_struct *mm)
-{
-	FLUSH_BEGIN(mm)
-	srmmu_flush_whole_tlb();
-	module_stats.invmm++;
-	FLUSH_END
-}
-
-static void swift_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-	FLUSH_BEGIN(mm)
-	srmmu_flush_whole_tlb();
-	module_stats.invrnge++;
-	FLUSH_END
-}
-
-static void swift_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
-{
-	FLUSH_BEGIN(vma->vm_mm)
-	srmmu_flush_whole_tlb();
-	module_stats.invpg++;
-	FLUSH_END
+	if(mm == current->mm)
+		srmmu_set_context(mm->context);
 }
 
 /* The following are all MBUS based SRMMU modules, and therefore could
@@ -1306,7 +1263,8 @@ extern void sun4dsmp_flush_tlb_page(struct vm_area_struct *vma,
 /* hypersparc.S */
 extern void hypersparc_flush_cache_all(void);
 extern void hypersparc_flush_cache_mm(struct mm_struct *mm);
-extern void hypersparc_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end);
+extern void hypersparc_flush_cache_range(struct mm_struct *mm,
+					 unsigned long start, unsigned long end);
 extern void hypersparc_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
 extern void hypersparc_flush_page_to_ram(unsigned long page);
 extern void hypersparc_flush_chunk(unsigned long chunk);
@@ -1314,7 +1272,8 @@ extern void hypersparc_flush_page_for_dma(unsigned long page);
 extern void hypersparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
 extern void hypersparc_flush_tlb_all(void);
 extern void hypersparc_flush_tlb_mm(struct mm_struct *mm);
-extern void hypersparc_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end);
+extern void hypersparc_flush_tlb_range(struct mm_struct *mm,
+				       unsigned long start, unsigned long end);
 extern void hypersparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
 extern void hypersparc_setup_blockops(void);
 
@@ -1328,7 +1287,8 @@ static void srmmu_set_pte_nocache_hyper(pte_t *ptep, pte_t pteval)
 
 static void hypersparc_ctxd_set(ctxd_t *ctxp, pgd_t *pgdp)
 {
-	srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) pgdp) >> 4))));
+	srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD |
+					      (srmmu_v2p((unsigned long) pgdp) >> 4))));
 	hypersparc_flush_page_to_ram((unsigned long)ctxp);
 	hyper_flush_whole_icache();
 }
@@ -1407,7 +1367,9 @@ static void hypersparc_switch_to_context(struct task_struct *tsk)
 		alloc_context(tsk->mm);
 		spin_unlock(&srmmu_context_spinlock);
 		ctxp = &srmmu_context_table[tsk->mm->context];
-		srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) tsk->mm->pgd) >> 4))));
+		srmmu_set_entry((pte_t *)ctxp,
+				__pte((SRMMU_ET_PTD |
+				       (srmmu_v2p((unsigned long) tsk->mm->pgd) >> 4))));
 		hypersparc_flush_page_to_ram((unsigned long)ctxp);
 	}
 	hyper_flush_whole_icache();
@@ -1423,7 +1385,9 @@ static void hypersparc_init_new_context(struct mm_struct *mm)
 	spin_unlock(&srmmu_context_spinlock);
 
 	ctxp = &srmmu_context_table[mm->context];
-	srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) mm->pgd) >> 4))));
+	srmmu_set_entry((pte_t *)ctxp,
+			__pte((SRMMU_ET_PTD |
+			       (srmmu_v2p((unsigned long) mm->pgd) >> 4))));
 	hypersparc_flush_page_to_ram((unsigned long)ctxp);
 
 	if(mm == current->mm) {
@@ -1450,12 +1414,14 @@ static inline unsigned long srmmu_early_paddr(unsigned long vaddr)
 
 static inline void srmmu_early_pgd_set(pgd_t *pgdp, pmd_t *pmdp)
 {
-	set_pte((pte_t *)pgdp, __pte((SRMMU_ET_PTD | (srmmu_early_paddr((unsigned long) pmdp) >> 4))));
+	set_pte((pte_t *)pgdp, __pte((SRMMU_ET_PTD |
+				      (srmmu_early_paddr((unsigned long) pmdp) >> 4))));
 }
 
 static inline void srmmu_early_pmd_set(pmd_t *pmdp, pte_t *ptep)
 {
-	set_pte((pte_t *)pmdp, __pte((SRMMU_ET_PTD | (srmmu_early_paddr((unsigned long) ptep) >> 4))));
+	set_pte((pte_t *)pmdp, __pte((SRMMU_ET_PTD |
+				      (srmmu_early_paddr((unsigned long) ptep) >> 4))));
 }
 
 static inline unsigned long srmmu_early_pgd_page(pgd_t pgd)
@@ -1470,12 +1436,14 @@ static inline unsigned long srmmu_early_pmd_page(pmd_t pmd)
 
 static inline pmd_t *srmmu_early_pmd_offset(pgd_t *dir, unsigned long address)
 {
-	return (pmd_t *) srmmu_early_pgd_page(*dir) + ((address >> SRMMU_PMD_SHIFT) & (SRMMU_PTRS_PER_PMD - 1));
+	return (pmd_t *) srmmu_early_pgd_page(*dir) +
+		((address >> SRMMU_PMD_SHIFT) & (SRMMU_PTRS_PER_PMD - 1));
 }
 
 static inline pte_t *srmmu_early_pte_offset(pmd_t *dir, unsigned long address)
 {
-	return (pte_t *) srmmu_early_pmd_page(*dir) + ((address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1));
+	return (pte_t *) srmmu_early_pmd_page(*dir) +
+		((address >> PAGE_SHIFT) & (SRMMU_PTRS_PER_PTE - 1));
 }
 
 static inline void srmmu_allocate_ptable_skeleton(unsigned long start, unsigned long end)
@@ -2245,6 +2213,7 @@ __initfunc(static void poke_hypersparc(void))
 __initfunc(static void init_hypersparc(void))
 {
 	srmmu_name = "ROSS HyperSparc";
+	srmmu_modtype = HyperSparc;
 
 	init_vac_layout();
 
@@ -2373,21 +2342,14 @@ __initfunc(static void init_cypress_605(unsigned long mrev))
 
 __initfunc(static void poke_swift(void))
 {
-	unsigned long mreg = srmmu_get_mmureg();
+	unsigned long mreg;
 
 	/* Clear any crap from the cache or else... */
-	swift_idflash_clear();
-	mreg |= (SWIFT_IE | SWIFT_DE); /* I & D caches on */
+	swift_flush_cache_all();
 
-	/* The Swift branch folding logic is completely broken.  At
-	 * trap time, if things are just right, if can mistakenly
-	 * think that a trap is coming from kernel mode when in fact
-	 * it is coming from user mode (it mis-executes the branch in
-	 * the trap code).  So you see things like crashme completely
-	 * hosing your machine which is completely unacceptable.  Turn
-	 * this shit off... nice job Fujitsu.
-	 */
-	mreg &= ~(SWIFT_BF);
+	/* Enable I & D caches */
+	mreg = srmmu_get_mmureg();
+	mreg |= (SWIFT_IE | SWIFT_DE);
 	srmmu_set_mmureg(mreg);
 }
 
@@ -2444,18 +2406,24 @@ __initfunc(static void init_swift(void))
 	BTFIXUPSET_CALL(flush_cache_page, swift_flush_cache_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_cache_range, swift_flush_cache_range, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(flush_chunk, swift_flush_chunk, BTFIXUPCALL_NOP); /* local flush _only_ */
+	BTFIXUPSET_CALL(flush_chunk, swift_flush_chunk, BTFIXUPCALL_NORM); /* local flush _only_ */
 
 	BTFIXUPSET_CALL(flush_tlb_all, swift_flush_tlb_all, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_tlb_mm, swift_flush_tlb_mm, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_tlb_page, swift_flush_tlb_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_tlb_range, swift_flush_tlb_range, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(flush_page_to_ram, swift_flush_page_to_ram, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_page_to_ram, swift_flush_page_to_ram, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_sig_insns, swift_flush_sig_insns, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_page_for_dma, swift_flush_page_for_dma, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(update_mmu_cache, swift_update_mmu_cache, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(update_mmu_cache, srmmu_update_mmu_cache, BTFIXUPCALL_NOP);
+
+	BTFIXUPSET_CALL(sparc_update_rootmmu_dir, swift_update_rootmmu_dir, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(set_pte, srmmu_set_pte_nocache_swift, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(init_new_context, swift_init_new_context, BTFIXUPCALL_NORM);
+
+	flush_page_for_dma_global = 0;
 
 	/* Are you now convinced that the Swift is one of the
 	 * biggest VLSI abortions of all time?  Bravo Fujitsu!
@@ -2613,7 +2581,7 @@ __initfunc(static void init_turbosparc(void))
 	BTFIXUPSET_CALL(flush_chunk, turbosparc_flush_chunk, BTFIXUPCALL_NORM);
 
 	BTFIXUPSET_CALL(flush_sig_insns, turbosparc_flush_sig_insns, BTFIXUPCALL_NOP);
-	BTFIXUPSET_CALL(flush_page_for_dma, turbosparc_flush_page_for_dma, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_page_for_dma, turbosparc_flush_page_for_dma, BTFIXUPCALL_NORM);
 
 	poke_srmmu = poke_turbosparc;
 }
@@ -2644,7 +2612,7 @@ __initfunc(static void init_tsunami(void))
 	BTFIXUPSET_CALL(flush_cache_page, tsunami_flush_cache_page, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_cache_range, tsunami_flush_cache_range, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(flush_chunk, tsunami_flush_chunk, BTFIXUPCALL_NOP); /* local flush _only_ */
+	BTFIXUPSET_CALL(flush_chunk, tsunami_flush_chunk, BTFIXUPCALL_NORM); /* local flush _only_ */
 
 	BTFIXUPSET_CALL(flush_tlb_all, tsunami_flush_tlb_all, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(flush_tlb_mm, tsunami_flush_tlb_mm, BTFIXUPCALL_NORM);
@@ -2656,6 +2624,8 @@ __initfunc(static void init_tsunami(void))
 	BTFIXUPSET_CALL(flush_page_for_dma, tsunami_flush_page_for_dma, BTFIXUPCALL_NORM);
 
 	poke_srmmu = poke_tsunami;
+
+	tsunami_setup_blockops();
 }
 
 __initfunc(static void poke_viking(void))
@@ -2738,8 +2708,7 @@ __initfunc(static void init_viking(void))
 		 * which we use the IOMMU.
 		 */
 		BTFIXUPSET_CALL(flush_page_for_dma, viking_flush_page, BTFIXUPCALL_NORM);
-		/* Also, this is so far the only chip which actually uses
-		   the page argument to flush_page_for_dma */
+
 		flush_page_for_dma_global = 0;
 	} else {
 		srmmu_name = "TI Viking/MXCC";

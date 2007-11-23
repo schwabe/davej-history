@@ -217,7 +217,7 @@ static int fbcon_is_default = 1;
 static int PROC_CONSOLE(struct fb_info *info)
 {
 	int fgc;
-	
+
 	if (info->display_fg != NULL)
 		fgc = info->display_fg->vc_num;
 	else
@@ -353,6 +353,20 @@ static void set_con2fb_map(int unit, int newidx)
        /* tell console var has changed */
        if (newfb->changevar)
 	   newfb->changevar(unit);
+       /* fixme: this really needs lock protection */
+       conp->vc_display_fg = &newfb->display_fg;
+       if (!newfb->display_fg)
+	   newfb->display_fg = conp;
+       if (oldfb != newfb && oldfb->display_fg == conp) {
+	   int i;
+	   for (i = 0; i < MAX_NR_CONSOLES; i++)
+	       if (fb_display[i].conp && con2fb_map[i] == oldidx) {
+		   oldfb->display_fg = fb_display[i].conp;
+		   break;
+	       }
+	   if (i == MAX_NR_CONSOLES)
+	       oldfb->display_fg = NULL;
+       }
     }
 }
 
@@ -447,6 +461,11 @@ fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		    for (i = 0; i < MAX_NR_CONSOLES; i++)
 			set_con2fb_map(i, con2fb.framebuffer);
 		return 0;
+	case FBIOBLANK:
+		if (info->blank == 0)
+			return -EINVAL;
+		(*info->blank)(arg, info);
+		return 0;
 	default:
 		return fb->fb_ioctl(inode, file, cmd, arg, PROC_CONSOLE(info),
 				    info);
@@ -468,12 +487,16 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 		return -ENODEV;
 	if (fb->fb_mmap)
 		return fb->fb_mmap(info, file, vma);
+#if defined(__sparc__) && !defined(__sparc_v9__)
+	/* Should never get here, all fb drivers should have their own
+	   mmap routines */
+	return -EINVAL;
+#else
 	fb->fb_get_fix(&fix, PROC_CONSOLE(info), info);
 
 	/* frame buffer memory */
 	start = (unsigned long)fix.smem_start;
 	len = (start & ~PAGE_MASK)+fix.smem_len;
-	start &= PAGE_MASK;
 	len = (len+~PAGE_MASK) & PAGE_MASK;
 	if (vma->vm_offset >= len) {
 		/* memory mapped io */
@@ -483,14 +506,37 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 			return -EINVAL;
 		start = (unsigned long)fix.mmio_start;
 		len = (start & ~PAGE_MASK)+fix.mmio_len;
-		start &= PAGE_MASK;
 		len = (len+~PAGE_MASK) & PAGE_MASK;
 	}
+	start &= PAGE_MASK;
 	if ((vma->vm_end - vma->vm_start + vma->vm_offset) > len)
 		return -EINVAL;
 	vma->vm_offset += start;
 	if (vma->vm_offset & ~PAGE_MASK)
 		return -ENXIO;
+#if defined(__sparc_v9__)
+	vma->vm_flags |= (VM_SHM | VM_LOCKED);
+	{
+		unsigned long align, j;
+		for (align = 0x400000; align > PAGE_SIZE; align >>= 3)
+			if (len >= align && !((start & ~PAGE_MASK) & (align - 1)))
+				break;
+		if (align > PAGE_SIZE && vma->vm_start & (align - 1)) {
+			/* align as much as possible */
+			struct vm_area_struct *vmm;
+			j = (-vma->vm_start) & (align - 1);
+			vmm = find_vma(current->mm, vma->vm_start);
+			if (!vmm || vmm->vm_start >= vma->vm_end + j) {
+				vma->vm_start += j;
+				vma->vm_end += j;
+			}
+		}
+	}
+	if (io_remap_page_range(vma->vm_start, vma->vm_offset,
+				vma->vm_end - vma->vm_start, vma->vm_page_prot, 0))
+		return -EAGAIN;
+	vma->vm_flags |= VM_IO;
+#else
 #if defined(__mc68000__)
 	if (CPU_IS_020_OR_030)
 		pgprot_val(vma->vm_page_prot) |= _PAGE_NOCACHE030;
@@ -503,9 +549,6 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	pgprot_val(vma->vm_page_prot) |= _PAGE_NO_CACHE|_PAGE_GUARDED;
 #elif defined(__alpha__)
 	/* Caching is off in the I/O space quadrant by design.  */
-#elif defined(__sparc__)
-	/* Should never get here, all fb drivers should have their own
-	   mmap routines */
 #elif defined(__i386__)
 	if (boot_cpu_data.x86 > 3)
 		pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
@@ -525,7 +568,9 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	if (remap_page_range(vma->vm_start, vma->vm_offset,
 			     vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
+#endif /* !__sparc_v9__ */
 	return 0;
+#endif /* ! sparc32 */
 }
 
 static int

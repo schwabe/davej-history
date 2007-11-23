@@ -182,6 +182,10 @@
 #define ASIZ_task_sas_ss_sp	0x00000004
 #define AOFF_task_sas_ss_size	0x00000598
 #define ASIZ_task_sas_ss_size	0x00000004
+#define AOFF_task_parent_exec_id	0x0000059c
+#define ASIZ_task_parent_exec_id	0x00000004
+#define AOFF_task_self_exec_id	0x000005a0
+#define ASIZ_task_self_exec_id	0x00000004
 #define AOFF_mm_mmap	0x00000000
 #define ASIZ_mm_mmap	0x00000004
 #define AOFF_mm_mmap_avl	0x00000004
@@ -457,6 +461,10 @@
 #define ASIZ_task_sas_ss_sp	0x00000004
 #define AOFF_task_sas_ss_size	0x00000694
 #define ASIZ_task_sas_ss_size	0x00000004
+#define AOFF_task_parent_exec_id	0x00000698
+#define ASIZ_task_parent_exec_id	0x00000004
+#define AOFF_task_self_exec_id	0x0000069c
+#define ASIZ_task_self_exec_id	0x00000004
 #define AOFF_mm_mmap	0x00000000
 #define ASIZ_mm_mmap	0x00000004
 #define AOFF_mm_mmap_avl	0x00000004

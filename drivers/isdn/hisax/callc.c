@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 2.37 1999/09/20 19:49:47 keil Exp $
+/* $Id: callc.c,v 2.39 1999/10/14 20:25:28 keil Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,12 @@
  *              Fritz Elfert
  *
  * $Log: callc.c,v $
+ * Revision 2.39  1999/10/14 20:25:28  keil
+ * add a statistic for error monitoring
+ *
+ * Revision 2.38  1999/10/11 22:16:27  keil
+ * Suspend/Resume is possible without explicit ID too
+ *
  * Revision 2.37  1999/09/20 19:49:47  keil
  * Fix wrong init of PStack
  *
@@ -157,7 +163,7 @@
 #define MOD_USE_COUNT ( GET_USE_COUNT (&__this_module))
 #endif	/* MODULE */
 
-const char *lli_revision = "$Revision: 2.37 $";
+const char *lli_revision = "$Revision: 2.39 $";
 
 extern struct IsdnCard cards[];
 extern int nrcards;
@@ -1478,11 +1484,6 @@ leased_l1l2(struct PStack *st, int pr, void *arg)
 }
 
 static void
-channel_report(struct Channel *chanp)
-{
-}
-
-static void
 distr_debug(struct IsdnCardState *csta, int debugflags)
 {
 	int i;
@@ -1515,7 +1516,6 @@ capi_debug(struct Channel *chanp, capi_msg *cm)
 {
 	char *t = tmpbuf;
 
-	t += sprintf(tmpbuf, "%d CAPIMSG", chanp->chan);
 	t += QuickHex(t, (u_char *)cm, (cm->Length>50)? 50: cm->Length);
 	t--;
 	*t= 0;
@@ -1532,20 +1532,16 @@ lli_got_fac_req(struct Channel *chanp, capi_msg *cm) {
 		return;
 	switch(cm->para[3]) {
 		case 4: /* Suspend */
-			if (cm->para[5]) {
-				strncpy(chanp->setup.phone, &cm->para[5], cm->para[5] +1);
-				FsmEvent(&chanp->fi, EV_SUSPEND, cm);
-			}
+			strncpy(chanp->setup.phone, &cm->para[5], cm->para[5] +1);
+			FsmEvent(&chanp->fi, EV_SUSPEND, cm);
 			break;
 		case 5: /* Resume */
-			if (cm->para[5]) {
-				strncpy(chanp->setup.phone, &cm->para[5], cm->para[5] +1);
-				if (chanp->fi.state == ST_NULL) {
-					FsmEvent(&chanp->fi, EV_RESUME, cm);
-				} else {
-					FsmDelTimer(&chanp->dial_timer, 72);
-					FsmAddTimer(&chanp->dial_timer, 80, EV_RESUME, cm, 73);
-				}
+			strncpy(chanp->setup.phone, &cm->para[5], cm->para[5] +1);
+			if (chanp->fi.state == ST_NULL) {
+				FsmEvent(&chanp->fi, EV_RESUME, cm);
+			} else {
+				FsmDelTimer(&chanp->dial_timer, 72);
+				FsmAddTimer(&chanp->dial_timer, 80, EV_RESUME, cm, 73);
 			}
 			break;
 	}
@@ -1697,9 +1693,8 @@ HiSax_command(isdn_ctrl * ic)
 		case (ISDN_CMD_IOCTL):
 			switch (ic->arg) {
 				case (0):
-					HiSax_reportcard(csta->cardnr);
-					for (i = 0; i < 2; i++)
-						channel_report(&csta->channel[i]);
+					num = *(unsigned int *) ic->parm.num;
+					HiSax_reportcard(csta->cardnr, num);
 					break;
 				case (1):
 					num = *(unsigned int *) ic->parm.num;

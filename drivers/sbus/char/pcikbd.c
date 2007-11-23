@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.27 1999/05/09 06:40:47 ecd Exp $
+/* $Id: pcikbd.c,v 1.27.2.1 1999/10/01 05:09:36 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -934,8 +934,32 @@ struct file_operations psaux_fops = {
 	aux_fasync,
 };
 
+static int aux_no_open(struct inode *inode, struct file *file)
+{
+	return -ENODEV;
+}
+
+struct file_operations psaux_no_fops = {
+	NULL,		/* seek */
+	NULL,
+	NULL,
+	NULL, 		/* readdir */
+	NULL,
+	NULL, 		/* ioctl */
+	NULL,		/* mmap */
+	aux_no_open,
+	NULL,		/* flush */
+	NULL,
+	NULL,
+	NULL,
+};
+
 static struct miscdevice psaux_mouse = {
 	PSMOUSE_MINOR, "ps2aux", &psaux_fops
+};
+
+static struct miscdevice psaux_no_mouse = {
+	PSMOUSE_MINOR, "ps2aux", &psaux_no_fops
 };
 
 __initfunc(int pcimouse_init(void))
@@ -947,7 +971,7 @@ __initfunc(int pcimouse_init(void))
 	if (pcikbd_mrcoffee) {
 		if ((pcimouse_iobase = pcikbd_iobase) == 0) {
 			printk("pcimouse_init: no 8042 given\n");
-			return -ENODEV;
+			goto do_enodev;
 		}
 		pcimouse_irq = pcikbd_irq;
 	} else {
@@ -962,7 +986,7 @@ __initfunc(int pcimouse_init(void))
 			}
 		}
 		printk("pcimouse_init: no 8042 found\n");
-		return -ENODEV;
+		goto do_enodev;
 
 found:
 		pcimouse_iobase = child->base_address[0];
@@ -987,7 +1011,7 @@ found:
 		        SA_SHIRQ, "mouse", (void *)pcimouse_iobase)) {
 		printk("8042: Cannot register IRQ %s\n",
 		       __irq_itoa(pcimouse_irq));
-		return -ENODEV;
+		goto do_enodev;
 	}
 
 	printk("8042(mouse) at %lx (irq %s)\n", pcimouse_iobase,
@@ -1016,8 +1040,17 @@ found:
 	aux_end_atomic();
 
 	return 0;
+
+do_enodev:
+	misc_register(&psaux_no_mouse);
+	return -ENODEV;
 }
 
+__initfunc(int pcimouse_no_init(void))
+{
+	misc_register(&psaux_no_mouse);
+	return -ENODEV;
+}
 
 __initfunc(int ps2kbd_probe(unsigned long *memory_start))
 {
@@ -1034,7 +1067,7 @@ __initfunc(int ps2kbd_probe(unsigned long *memory_start))
 	len = prom_getproperty(prom_root_node, "name", prop, sizeof(prop));
 	if (len < 0) {
 		printk("ps2kbd_probe: no name of root node\n");
-		return -ENODEV;
+		goto do_enodev;
 	}
 	if (strncmp(prop, "SUNW,JavaStation-1", len) == 0) {
 		pcikbd_mrcoffee = 1;	/* Brain damage detected */
@@ -1047,7 +1080,7 @@ __initfunc(int ps2kbd_probe(unsigned long *memory_start))
         node = prom_getchild(prom_root_node);
 	node = prom_searchsiblings(node, "aliases");
 	if (!node)
-		return -ENODEV;
+		goto do_enodev;
 
 	len = prom_getproperty(node, "keyboard", prop, sizeof(prop));
 	if (len > 0) {
@@ -1055,7 +1088,7 @@ __initfunc(int ps2kbd_probe(unsigned long *memory_start))
 		kbnode = prom_finddevice(prop);
 	}
 	if (!kbnode)
-		return -ENODEV;
+		goto do_enodev;
 
 	len = prom_getproperty(node, "mouse", prop, sizeof(prop));
 	if (len > 0) {
@@ -1063,7 +1096,7 @@ __initfunc(int ps2kbd_probe(unsigned long *memory_start))
 		msnode = prom_finddevice(prop);
 	}
 	if (!msnode)
-		return -ENODEV;
+		goto do_enodev;
 
 	/*
 	 * Find matching EBus nodes...
@@ -1131,6 +1164,8 @@ __initfunc(int ps2kbd_probe(unsigned long *memory_start))
 		pnode = prom_getsibling(pnode);
 		pnode = prom_searchsiblings(pnode, "pci");
 	}
+do_enodev:
+	sunkbd_setinitfunc(memory_start, pcimouse_no_init);
 	return -ENODEV;
 
 found:

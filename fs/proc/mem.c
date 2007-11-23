@@ -288,11 +288,15 @@ int mem_mmap(struct file * file, struct vm_area_struct * vma)
 		if (!dest_table)
 			return -ENOMEM;
 
-		if (!pte_present(*src_table))
-			handle_mm_fault(tsk, src_vma, stmp, 1);
+		if (!pte_present(*src_table)) {
+			if (handle_mm_fault(tsk, src_vma, stmp, 1) < 0)
+				return -ENOMEM;
+		}
 
-		if ((vma->vm_flags & VM_WRITE) && !pte_write(*src_table))
-			handle_mm_fault(tsk, src_vma, stmp, 1);
+		if ((vma->vm_flags & VM_WRITE) && !pte_write(*src_table)) {
+			if (handle_mm_fault(tsk, src_vma, stmp, 1) < 0)
+				return -ENOMEM;
+		}
 
 		set_pte(src_table, pte_mkdirty(*src_table));
 		set_pte(dest_table, *src_table);

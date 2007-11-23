@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.85.2.2 1999/08/09 13:00:21 davem Exp $
+/* $Id: psycho.c,v 1.85.2.5 1999/10/28 02:28:38 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -221,15 +221,12 @@ out:
 	control |= (IOMMU_CTRL_TBWSZ | IOMMU_CTRL_ENAB);
 	switch(tsbsize) {
 	case 8:
-		pci_dvma_mask = 0x1fffffffUL;
 		control |= IOMMU_TSBSZ_8K;
 		break;
 	case 16:
-		pci_dvma_mask = 0x3fffffffUL;
 		control |= IOMMU_TSBSZ_16K;
 		break;
 	case 32:
-		pci_dvma_mask = 0x7fffffffUL;
 		control |= IOMMU_TSBSZ_32K;
 		break;
 	default:
@@ -461,8 +458,19 @@ void __init pcibios_init(void)
 
 		err = prom_getproperty(node, "model", namebuf, sizeof(namebuf));
 		if ((err > 0) && !strncmp(namebuf, "SUNW,sabre", err)) {
+			/* SABRE/APB is composed of a 4GB aligned 4GB
+			 * total PCI memory space.
+			 */
+			pci_dvma_mask = 0xffffffff;
+
 			sabre_init(node);
 			goto next_pci;
+		} else {
+			/* PSYCHO has two independant 4GB, 2GB aligned,
+			 * memory spaces, and the lower 2GB is the region
+			 * for all PCI memory space device mappings.
+			 */
+			pci_dvma_mask = 0x7fffffff;
 		}
 
 		portid = prom_getintdefault(node, "upa-portid", 0xff);
@@ -755,17 +763,18 @@ static void __init apb_init(struct linux_psycho *sabre)
 {
 	struct pci_dev *pdev;
 	unsigned short stmp;
-	unsigned int itmp;
-	unsigned char btmp;
+#if 0
+	unsigned char sabre_latency_timer = 32;
 
 	for(pdev = pci_devices; pdev; pdev = pdev->next) {
 		if(pdev->vendor == PCI_VENDOR_ID_SUN &&
 		   pdev->device == PCI_DEVICE_ID_SUN_SABRE) {
-			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
+			pci_read_config_byte(pdev, PCI_LATENCY_TIMER,
+					     &sabre_latency_timer);
 			break;
 		}
 	}
-
+#endif
 	for (pdev = sabre->pci_bus->devices; pdev; pdev = pdev->sibling) {
 		if (pdev->vendor == PCI_VENDOR_ID_SUN &&
 		    pdev->device == PCI_DEVICE_ID_SUN_SIMBA) {
@@ -778,52 +787,11 @@ static void __init apb_init(struct linux_psycho *sabre)
 			/* Status register bits are "write 1 to clear". */
 			pci_write_config_word(pdev, PCI_STATUS, 0xffff);
 			pci_write_config_word(pdev, PCI_SEC_STATUS, 0xffff);
-
-			pci_read_config_word(pdev, PCI_BRIDGE_CONTROL, &stmp);
-			stmp = PCI_BRIDGE_CTL_MASTER_ABORT |
-			       PCI_BRIDGE_CTL_SERR |
-			       PCI_BRIDGE_CTL_PARITY;
-			pci_write_config_word(pdev, PCI_BRIDGE_CONTROL, stmp);
-
-			pci_read_config_dword(pdev, APB_PCI_CONTROL_HIGH, &itmp);
-			itmp = APB_PCI_CTL_HIGH_SERR |
-			       APB_PCI_CTL_HIGH_ARBITER_EN;
-			pci_write_config_dword(pdev, APB_PCI_CONTROL_HIGH, itmp);
-
-			/* Systems with SIMBA are usually workstations, so
-			 * we configure to park to SIMBA not to the previous
-			 * bus owner.
-			 */
-			pci_read_config_dword(pdev, APB_PCI_CONTROL_LOW, &itmp);
-			itmp = APB_PCI_CTL_LOW_ERRINT_EN | 0x0f;
-			pci_write_config_dword(pdev, APB_PCI_CONTROL_LOW, itmp);
-
-			/* Don't mess with the retry limit and PIO/DMA latency
-			 * timer settings.  But do set primary and secondary
-			 * latency timers.
-			 */
-			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
-			pci_write_config_byte(pdev, PCI_SEC_LATENCY_TIMER, 64);
-
-			/* Here is an overview of the behavior of various
-			 * revisions of APB wrt. write buffer full conditions:
-			 *
-			 * Revision 1.0: pre-FCS, always stalls
-			 * Revision 1.1: pre-FCS, always disconnects
-			 * Revision 1.2: same behavior as rev 1.1
-			 * Revision 1.3: behavior is determined by bit 4 of
-			 *               secondary control register
-			 *		 0: stall initially, but disconnect
-			 *		    if PCI latency timer expires
-			 *		 1: always disconnect
-			 *
-			 * By setting the bit, since it is reserved in previous
-			 * revisions of APB, we get all FCS hardware to have
-			 * identical behavior when APB's write buffer fills up.
-			 */
-			pci_read_config_byte(pdev, APB_SECONDARY_CONTROL, &btmp);
-			btmp |= APB_SECONDARY_CTL_DISCON_FULL;
-			pci_write_config_byte(pdev, APB_SECONDARY_CONTROL, btmp);
+#if 0
+			/* Propagate Sabre latency timer value into APB. */
+			pci_write_config_byte(pdev, PCI_LATENCY_TIMER,
+					      sabre_latency_timer);
+#endif
 		}
 	}
 }
@@ -1958,6 +1926,12 @@ static void __init fixup_pci_dev(struct pci_dev *pdev,
 	}
 
 	node = pcp->prom_node;
+
+	/* No need to crash if the PCI device lacks PROM
+	 * information.
+	 */
+	if (node == -1)
+		return;
 
 	err = prom_getproperty(node, "reg", (char *)&pregs[0], sizeof(pregs));
 	if(err == 0 || err == -1) {

@@ -87,9 +87,11 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 	dev_pcbit[board] = dev;
 	memset(dev, 0, sizeof(struct pcbit_dev));
 
-	if (mem_base >= 0xA0000 && mem_base <= 0xFFFFF )
+	if (mem_base >= 0xA0000 && mem_base <= 0xFFFFF ) {
+		dev->ph_mem = mem_base;
 		dev->sh_mem = (unsigned char*) mem_base;
-	else
+	}
+	else 
 	{
 		printk("memory address invalid");
 		kfree(dev);

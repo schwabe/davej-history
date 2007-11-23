@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.105 1999/04/13 14:17:08 jj Exp $
+/*  $Id: setup.c,v 1.105.2.1 1999/11/16 06:29:31 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -424,7 +424,9 @@ __initfunc(void setup_arch(char **cmdline_p,
 				initrd_start -= KERNBASE;
 				initrd_end -= KERNBASE;
 				break;
-			}
+			default:
+				break;
+			};
 		}
 	}
 #endif	

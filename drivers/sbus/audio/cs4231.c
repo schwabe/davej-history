@@ -904,8 +904,9 @@ static int cs4231_record_gain(struct sparcaudio_driver *drv, int value, unsigned
     if (l < 0) l = 0;
   }
 
-  l_adj = l * (CS4231_MAX_GAIN + 1) / (AUDIO_MAX_GAIN + 1);
-  r_adj = r * (CS4231_MAX_GAIN + 1) / (AUDIO_MAX_GAIN + 1);
+  /* See cs4231_play_gain for why we do things this way. -DaveM */
+  l_adj = ((l * (CS4231_MAX_GAIN + 1)) + AUDIO_MAX_GAIN) / (AUDIO_MAX_GAIN + 1);
+  r_adj = ((r * (CS4231_MAX_GAIN + 1)) + AUDIO_MAX_GAIN) / (AUDIO_MAX_GAIN + 1);
   
   CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x0);
   old_gain = CS4231_READ8(cs4231_chip, &(cs4231_chip->regs->idr));
@@ -932,7 +933,7 @@ static int cs4231_play_gain(struct sparcaudio_driver *drv, int value, unsigned c
   int tmp = 0, r, l, r_adj, l_adj;
   unsigned char old_gain;
 
-  tprintk(("in play_gain: %d %c\n", value, balance));
+  tprintk(("in play_gain: %d %x, ", value, balance));
   r = l = value;
   if (balance < AUDIO_MID_BALANCE) {
     r = (int)(value - ((AUDIO_MID_BALANCE - balance) << AUDIO_BALANCE_SHIFT));
@@ -942,11 +943,15 @@ static int cs4231_play_gain(struct sparcaudio_driver *drv, int value, unsigned c
     if (l < 0) l = 0;
   }
 
+  /* We have to round up else several OSS programs
+   * get confused because for small increments we
+   * would otherwise not increase the volume ever. -DaveM
+   */
   (l == 0) ? (l_adj = CS4231_MAX_DEV_ATEN) : (l_adj = CS4231_MAX_ATEN - 
-                                              (l * (CS4231_MAX_ATEN + 1) / 
+                              (((l * (CS4231_MAX_ATEN + 1)) + AUDIO_MAX_GAIN) / 
                                                (AUDIO_MAX_GAIN + 1)));
   (r == 0) ? (r_adj = CS4231_MAX_DEV_ATEN) : (r_adj = CS4231_MAX_ATEN -
-                                              (r * (CS4231_MAX_ATEN + 1) /
+                              (((r * (CS4231_MAX_ATEN + 1)) + AUDIO_MAX_GAIN) /
                                                (AUDIO_MAX_GAIN + 1)));
   
   CS4231_WRITE8(cs4231_chip, &(cs4231_chip->regs->iar), 0x6);

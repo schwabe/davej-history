@@ -2,7 +2,7 @@
  *	IP_MASQ_USER user space control module
  *
  *
- *	$Id: ip_masq_user.c,v 1.1.2.2 1999/08/13 18:26:33 davem Exp $
+ *	$Id: ip_masq_user.c,v 1.1.2.3 1999/11/16 06:33:51 davem Exp $
  */
 
 #include <linux/config.h>

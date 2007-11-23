@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.68 1998/12/09 18:53:51 davem Exp $
+/* $Id: sunserial.c,v 1.68.2.2 1999/10/04 14:57:02 jj Exp $
  * serial.c: Serial port driver infrastructure for the Sparc.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -19,6 +19,7 @@
 #include "sunserial.h"
 
 int serial_console;
+int stop_a_enabled = 1;
 
 __initfunc(int con_is_present(void))
 {
@@ -389,12 +390,10 @@ sun_serial_setup(unsigned long memory_start))
 	 * So be very careful not to probe for keyboards if we are on a
 	 * serial console.
 	 */
-	if (!serial_console) {
-		if (ps2kbd_probe(&memory_start) == 0)
-			return memory_start;
-		if (su_probe(&memory_start) == 0)
-			return memory_start;
-	}
+	if (!serial_console)
+		ps2kbd_probe(&memory_start);
+	if (su_probe(&memory_start) == 0)
+		return memory_start;
 #endif
 
 	if (!ret)

@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.6 1999/08/31 11:20:20 paul Exp $
+/* $Id: isar.c,v 1.7 1999/10/14 20:25:29 keil Exp $
 
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: isar.c,v $
+ * Revision 1.7  1999/10/14 20:25:29  keil
+ * add a statistic for error monitoring
+ *
  * Revision 1.6  1999/08/31 11:20:20  paul
  * various spelling corrections (new checksums may be needed, Karsten!)
  *
@@ -480,6 +483,12 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 			if (cs->debug & L1_DEB_WARN)
 				debugl1(cs, "isar frame error %x len %d",
 					ireg->cmsb, ireg->clsb);
+#ifdef ERROR_STATISTIC
+			if (ireg->cmsb & HDLC_ERR_RER)
+				bcs->err_inv++;
+			if (ireg->cmsb & HDLC_ERR_CER)
+				bcs->err_crc++;
+#endif
 			bcs->hw.isar.rcvidx = 0;
 			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
 		} else {
@@ -790,10 +799,19 @@ isar_int_main(struct IsdnCardState *cs)
 			check_send(cs, ireg->cmsb);
 			break;
 		case ISAR_IIS_BSTEV:
-			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
+#ifdef ERROR_STATISTIC
+			if ((bcs = sel_bcs_isar(cs, ireg->iis >> 6))) {
+				if (ireg->cmsb == BSTEV_TBO)
+					bcs->err_tx++;
+				if (ireg->cmsb == BSTEV_RBO)
+					bcs->err_rdo++;
+			}
+#endif
 			if (cs->debug & L1_DEB_WARN)
 				debugl1(cs, "Buffer STEV dpath%d msb(%x)",
 					ireg->iis>>6, ireg->cmsb);
+			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
+			break;
 		case ISAR_IIS_PSTEV:
 			if ((bcs = sel_bcs_isar(cs, ireg->iis >> 6))) {
 				rcv_mbox(cs, ireg, (u_char *)ireg->par);

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.34 1999/03/16 12:12:28 jj Exp $
+/* $Id: fault.c,v 1.34.2.1 1999/11/16 06:29:56 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -210,8 +210,15 @@ good_area:
 			goto bad_area;
 	}
 	current->mm->segments = (void *) (address & PAGE_SIZE);
-	if (!handle_mm_fault(current, vma, address, write))
-		goto do_sigbus;
+survive:
+	{
+		int fault = handle_mm_fault(current, vma, address, write);
+		if (!fault)
+			goto do_sigbus;
+		if (fault < 0)
+			goto out_of_memory;
+	}
+
 	up(&mm->mmap_sem);
 	return;
 	/*
@@ -289,6 +296,17 @@ do_kernel_fault:
 		}
 		unhandled_fault (address, current, regs);
 	}
+	return;
+
+out_of_memory:
+	if (current->pid == 1) {
+		current->policy |= SCHED_YIELD;
+		schedule();
+		goto survive;
+	}
+	up(&mm->mmap_sem);
+	printk("VM: killing process %s\n", current->comm);
+	do_exit(SIGKILL);
 	return;
 
 do_sigbus:

@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.36.2.3 1999/09/21 15:45:37 davem Exp $
+/* $Id: ebus.c,v 1.36.2.4 1999/11/08 23:25:45 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -56,15 +56,15 @@ static inline unsigned long ebus_alloc(size_t size)
 	return mem;
 }
 
-__initfunc(void ebus_intmap_match(struct linux_ebus *ebus,
-				  struct linux_prom_registers *reg,
-				  int *interrupt))
+__initfunc(int ebus_intmap_match(struct linux_ebus *ebus,
+				 struct linux_prom_registers *reg,
+				 int *interrupt))
 {
 	unsigned int hi, lo, irq;
 	int i;
 
 	if (!ebus->num_ebus_intmap)
-		return;
+		return 0;
 
 	hi = reg->which_io & ebus->ebus_intmask.phys_hi;
 	lo = reg->phys_addr & ebus->ebus_intmask.phys_lo;
@@ -74,13 +74,10 @@ __initfunc(void ebus_intmap_match(struct linux_ebus *ebus,
 		    (ebus->ebus_intmap[i].phys_lo == lo) &&
 		    (ebus->ebus_intmap[i].interrupt == irq)) {
 			*interrupt = ebus->ebus_intmap[i].cinterrupt;
-			return;
+			return 0;
 		}
 	}
-
-	prom_printf("ebus: IRQ [%08x.%08x.%08x] not found in interrupt-map\n",
-		    reg->which_io, reg->phys_addr, *interrupt);
-	prom_halt();
+	return -1;
 }
 
 __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
@@ -132,9 +129,16 @@ __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
 		for (i = 0; i < dev->num_irqs; i++) {
-			ebus_intmap_match(dev->bus, preg, &irqs[i]);
-			dev->irqs[i] = psycho_irq_build(dev->bus->parent,
-							dev->bus->self, irqs[i]);
+			if (ebus_intmap_match(dev->bus, preg, &irqs[i]) != -1) {
+				dev->irqs[i] = psycho_irq_build(dev->bus->parent,
+								dev->bus->self,
+								irqs[i]);
+			} else {
+				/* If we get a bogus interrupt property, just
+				 * record the raw value instead of punting.
+				 */
+				dev->irqs[i] = irqs[i];
+			}
 		}
 	}
 
@@ -186,9 +190,16 @@ __initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
 		for (i = 0; i < dev->num_irqs; i++) {
-			ebus_intmap_match(dev->bus, &regs[0], &irqs[i]);
-			dev->irqs[i] = psycho_irq_build(dev->bus->parent,
-							dev->bus->self, irqs[i]);
+			if (ebus_intmap_match(dev->bus, &regs[0], &irqs[i]) != -1) {
+				dev->irqs[i] = psycho_irq_build(dev->bus->parent,
+								dev->bus->self,
+								irqs[i]);
+			} else {
+				/* If we get a bogus interrupt property, just
+				 * record the raw value instead of punting.
+				 */
+				dev->irqs[i] = irqs[i];
+			}
 		}
 	}
 

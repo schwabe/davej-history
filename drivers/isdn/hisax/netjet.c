@@ -1,4 +1,4 @@
-/* $Id: netjet.c,v 1.15 1999/09/04 06:20:06 keil Exp $
+/* $Id: netjet.c,v 1.16 1999/10/14 20:25:29 keil Exp $
 
  * netjet.c     low level stuff for Traverse Technologie NETJet ISDN cards
  *
@@ -7,6 +7,9 @@
  * Thanks to Traverse Technologie Australia for documents and informations
  *
  * $Log: netjet.c,v $
+ * Revision 1.16  1999/10/14 20:25:29  keil
+ * add a statistic for error monitoring
+ *
  * Revision 1.15  1999/09/04 06:20:06  keil
  * Changes from kernel set_current_state()
  *
@@ -78,7 +81,7 @@
 
 extern const char *CardType[];
 
-const char *NETjet_revision = "$Revision: 1.15 $";
+const char *NETjet_revision = "$Revision: 1.16 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -528,19 +531,26 @@ static void read_raw(struct BCState *bcs, u_int *buf, int cnt){
 							debugl1(bcs->cs, "tiger: frame not byte aligned");
 							state=HDLC_FLAG_SEARCH;
 							bcs->hw.tiger.r_err++;
+#ifdef ERROR_STATISTIC
+							bcs->err_inv++;
+#endif
 						} else {
 							if (bcs->cs->debug & L1_DEB_HSCX)
 								debugl1(bcs->cs,"tiger frame end(%d,%d): fcs(%x) i %x",
 									i,j,bcs->hw.tiger.r_fcs, bcs->cs->hw.njet.irqstat0);
 							if (bcs->hw.tiger.r_fcs == PPP_GOODFCS) {
 								got_frame(bcs, (bitcnt>>3)-3);
-							} else
+							} else {
 								if (bcs->cs->debug) {
 									debugl1(bcs->cs, "tiger FCS error");
 									printframe(bcs->cs, bcs->hw.tiger.rcvbuf,
 										(bitcnt>>3)-1, "rec");
 									bcs->hw.tiger.r_err++;
 								}
+#ifdef ERROR_STATISTIC
+							bcs->err_crc++;
+#endif
+							}
 							state=HDLC_FLAG_FOUND;
 						}
 						bitcnt=0;
@@ -562,6 +572,9 @@ static void read_raw(struct BCState *bcs, u_int *buf, int cnt){
 						r_val=0; 
 						state=HDLC_FLAG_SEARCH;
 						bcs->hw.tiger.r_err++;
+#ifdef ERROR_STATISTIC
+						bcs->err_inv++;
+#endif
 					} else {
 						bcs->hw.tiger.rcvbuf[(bitcnt>>3)-1] = r_val;
 						bcs->hw.tiger.r_fcs = 
@@ -586,6 +599,12 @@ static void read_tiger(struct IsdnCardState *cs) {
 	if ((cs->hw.njet.irqstat0 & cs->hw.njet.last_is0) & NETJET_IRQM0_READ) {
 		debugl1(cs,"tiger warn read double dma %x/%x",
 			cs->hw.njet.irqstat0, cs->hw.njet.last_is0);
+#ifdef ERROR_STATISTIC
+		if (cs->bcs[0].mode)
+			cs->bcs[0].err_rdo++;
+		if (cs->bcs[1].mode)
+			cs->bcs[1].err_rdo++;
+#endif
 		return;
 	} else {
 		cs->hw.njet.last_is0 &= ~NETJET_IRQM0_READ;
@@ -757,6 +776,12 @@ static void write_tiger(struct IsdnCardState *cs) {
 	if ((cs->hw.njet.irqstat0 & cs->hw.njet.last_is0) & NETJET_IRQM0_WRITE) {
 		debugl1(cs,"tiger warn write double dma %x/%x",
 			cs->hw.njet.irqstat0, cs->hw.njet.last_is0);
+#ifdef ERROR_STATISTIC
+		if (cs->bcs[0].mode)
+			cs->bcs[0].err_tx++;
+		if (cs->bcs[1].mode)
+			cs->bcs[1].err_tx++;
+#endif
 		return;
 	} else {
 		cs->hw.njet.last_is0 &= ~NETJET_IRQM0_WRITE;

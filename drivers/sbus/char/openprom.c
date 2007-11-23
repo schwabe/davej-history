@@ -209,7 +209,7 @@ static int openprom_sunos_ioctl(struct inode * inode, struct file * file,
 				     buf, len);
 		restore_flags(flags);
 
-		if (error <= 0)
+		if (error < 0)
 			error = -EINVAL;
 		break;
 

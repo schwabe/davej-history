@@ -1,4 +1,4 @@
-/* $Id: eicon.h,v 1.14 1999/09/08 20:17:31 armin Exp $
+/* $Id: eicon.h,v 1.17 1999/10/26 21:15:33 armin Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  *
@@ -21,6 +21,17 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon.h,v $
+ * Revision 1.17  1999/10/26 21:15:33  armin
+ * using define for checking phone number len to avoid buffer overflow.
+ *
+ * Revision 1.16  1999/10/08 22:09:33  armin
+ * Some fixes of cards interface handling.
+ * Bugfix of NULL pointer occurence.
+ * Changed a few log outputs.
+ *
+ * Revision 1.15  1999/09/26 14:17:53  armin
+ * Improved debug and log via readstat()
+ *
  * Revision 1.14  1999/09/08 20:17:31  armin
  * Added microchannel patch from Erik Weber.
  *
@@ -126,6 +137,7 @@
 
 #define MAX_HEADER_LEN 10
 
+#define MAX_STATUS_BUFFER	150
 
 /* Struct for adding new cards */
 typedef struct eicon_cdef {
@@ -233,6 +245,7 @@ typedef struct {
 #include <linux/delay.h>
 #include <linux/ctype.h>
 
+#include <linux/isdn.h>
 #include <linux/isdnif.h>
 
 
@@ -480,7 +493,6 @@ typedef struct {
 
 typedef struct {
 	int	       No;		 /* Channel Number	        */
-	unsigned short callref;          /* Call Reference              */
 	unsigned short fsm_state;        /* Current D-Channel state     */
 	unsigned short eazmask;          /* EAZ-Mask for this Channel   */
 	int		queued;          /* User-Data Bytes in TX queue */
@@ -497,9 +509,13 @@ typedef struct {
 	entity		e;		 /* Entity  			*/
 	char		cpn[32];	 /* remember cpn		*/
 	char		oad[32];	 /* remember oad		*/
+	char		dsa[32];	 /* remember dsa		*/
+	char		osa[32];	 /* remember osa		*/
 	unsigned char   cause[2];	 /* Last Cause			*/
 	unsigned char	si1;
 	unsigned char	si2;
+	unsigned char	plan;
+	unsigned char	screen;
 } eicon_chan;
 
 typedef struct {
@@ -535,7 +551,7 @@ typedef struct {
 #define EICON_STATE_LISTEN  15
 #define EICON_STATE_WMCONN  16
 
-#define EICON_MAX_QUEUED  8000 /* 2 * maxbuff */
+#define EICON_MAX_QUEUE  2138
 
 #define EICON_LOCK_TX 0
 #define EICON_LOCK_RX 1
@@ -589,6 +605,8 @@ typedef struct eicon_card {
 	struct sk_buff_head sndq;        /* Send-Message queue               */
 	struct sk_buff_head rackq;       /* Req-Ack-Message queue            */
 	struct sk_buff_head sackq;       /* Data-Ack-Message queue           */
+	struct sk_buff_head statq;       /* Status-Message queue             */
+	int statq_entries;
 	u_char *ack_msg;                 /* Ptr to User Data in User skb     */
 	__u16 need_b3ack;                /* Flag: Need ACK for current skb   */
 	struct sk_buff *sbuf;            /* skb which is currently sent      */
@@ -677,6 +695,7 @@ extern int eicon_info(char *, int , void *);
 #endif /* CONFIG_MCA */
 
 extern ulong DebugVar;
+extern void eicon_log(eicon_card * card, int level, const char *fmt, ...);
 
 #endif  /* __KERNEL__ */
 

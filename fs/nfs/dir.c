@@ -526,29 +526,6 @@ struct dentry_operations nfs_dentry_operations = {
 	NULL			/* d_iput */
 };
 
-#ifdef NFS_PARANOIA
-/*
- * Display all dentries holding the specified inode.
- */
-static void show_dentry(struct list_head * dlist)
-{
-	struct list_head *tmp = dlist;
-
-	while ((tmp = tmp->next) != dlist) {
-		struct dentry * dentry = list_entry(tmp, struct dentry, d_alias);
-		const char * unhashed = "";
-
-		if (list_empty(&dentry->d_hash))
-			unhashed = "(unhashed)";
-
-		printk("show_dentry: %s/%s, d_count=%d%s\n",
-			dentry->d_parent->d_name.name,
-			dentry->d_name.name, dentry->d_count,
-			unhashed);
-	}
-}
-#endif
-
 static struct dentry *nfs_lookup(struct inode *dir, struct dentry * dentry)
 {
 	struct inode *inode;

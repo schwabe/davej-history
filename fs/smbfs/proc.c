@@ -7,6 +7,11 @@
  *  28/06/96 - Fixed long file name support (smb_proc_readdir_long) by Yuri Per
  *  28/09/97 - Fixed smb_d_path [now smb_build_path()] to be non-recursive
  *             by Riccardo Facchetti
+ *  16/11/99 (tridge) 
+ *           - use level 260 for most conns, or level 1 for <NT1
+ *           - don't sleep every time with win95 on a FINDNEXT
+ *           - fixed loop_count bug
+ *           - got rid of resume_key
  */
 
 #include <linux/types.h>
@@ -1449,13 +1454,12 @@ entries_seen, i, fpos);
 
 /*
  * Interpret a long filename structure using the specified info level:
- *   level 1   -- Win NT, Win 95, OS/2
- *   level 259 -- File name and length only, Win NT, Win 95
+ *   level 1 for anything below NT1 protocol
+ *   level 260 for NT1 protocol
  *
  * We return a reference to the name string to avoid copying, and perform
- * any needed upper/lower casing in place.  Note!! Level 259 entries may
- * not have any space beyond the name, so don't try to write a null byte!
- *
+ * any needed upper/lower casing in place.  
+
  * Bugs Noted:
  * (1) Win NT 4.0 appends a null byte to names and counts it in the length!
  */
@@ -1474,30 +1478,24 @@ smb_decode_long_dirent(struct smb_sb_info *server, char *p,
 	switch (level)
 	{
 	case 1:
-		len = *((unsigned char *) p + 26);
+		len = *((unsigned char *) p + 22);
 		entry->len = len;
-		entry->name = p + 27;
-		result = p + 28 + len;
+		entry->name = p + 23;
+		result = p + 24 + len;
 		break;
 
-	case 259: /* SMB_FIND_FILE_NAMES_INFO = 0x103 */
-		result = p + DVAL(p, 0);
-		/* DVAL(p, 4) should be resume key? Seems to be 0 .. */
-		len = DVAL(p, 8);
-		if (len > 255)
-			len = 255;
-		entry->name = p + 12;
-		/*
-		 * Kludge alert: Win NT 4.0 adds a trailing null byte and
-		 * counts it in the name length, but Win 95 doesn't.  Hence
-		 * we test for a trailing null and decrement the length ...
-		 */
+	case 260: /* SMB_FIND_FILE_BOTH_DIRECTORY_INFO = 0x104 */
+		result = p + WVAL(p, 0);
+		len = DVAL(p, 60);
+		if (len > 255) len = 255;
+		/* NT4 null terminates */
+		entry->name = p + 94;
 		if (len && entry->name[len-1] == '\0')
 			len--;
 		entry->len = len;
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_decode_long_dirent: info 259 at %p, len=%d, name=%s\n",
-p, len, entry->name);
+printk("smb_decode_long_dirent: info 260 at %p, len=%d, name=%s\n",
+       p, entry->len, entry->name);
 #endif
 		break;
 
@@ -1528,40 +1526,40 @@ p, len, entry->name);
  * is completely reproducible and can be toggled by the creation of a
  * single file. (E.g. echo hi >foo breaks, rm -f foo works.)
  */
+
+#define SMB_CLOSE_AFTER_FIRST (1<<0)
+#define SMB_CLOSE_IF_END (1<<1)
+#define SMB_REQUIRE_RESUME_KEY (1<<2)
+#define SMB_CONTINUE_BIT (1<<3)
+
 static int
 smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		      void *cachep)
 {
-	char *p, *mask, *lastname, *param = server->temp_buf;
+	char *p, *mask, *param = server->temp_buf;
 	__u16 command;
 	int first, entries, entries_seen;
 
 	/* Both NT and OS/2 accept info level 1 (but see note below). */
-	int info_level = 1;
+	int info_level = 260;
 	const int max_matches = 512;
 
 	unsigned char *resp_data = NULL;
 	unsigned char *resp_param = NULL;
 	int resp_data_len = 0;
 	int resp_param_len = 0;
-	int ff_resume_key = 0; /* this isn't being used */
 	int ff_searchcount = 0;
 	int ff_eos = 0;
-	int ff_lastname = 0;
 	int ff_dir_handle = 0;
 	int loop_count = 0;
 	int mask_len, i, result;
 	static struct qstr star = { "*", 1, 0 };
 
 	/*
-	 * Check whether to change the info level.  There appears to be
-	 * a bug in Win NT 4.0's handling of info level 1, whereby it
-	 * truncates the directory scan for certain patterns of files.
-	 * Hence we use level 259 for NT.
+	 * use info level 1 for older servers that don't do 260
 	 */
-	if (server->opt.protocol >= SMB_PROTOCOL_NT1 &&
-	    !(server->mnt->version & SMB_FIX_WIN95))
-		info_level = 259;
+	if (server->opt.protocol < SMB_PROTOCOL_NT1)
+		info_level = 1;
 
 	smb_lock_server(server);
 
@@ -1586,7 +1584,7 @@ printk("smb_proc_readdir_long: starting fpos=%d, mask=%s\n", fpos, mask);
 	while (ff_eos == 0)
 	{
 		loop_count += 1;
-		if (loop_count > 200)
+		if (loop_count > 10)
 		{
 			printk(KERN_WARNING "smb_proc_readdir_long: "
 			       "Looping in FIND_NEXT??\n");
@@ -1599,32 +1597,27 @@ printk("smb_proc_readdir_long: starting fpos=%d, mask=%s\n", fpos, mask);
 			command = TRANSACT2_FINDFIRST;
 			WSET(param, 0, aSYSTEM | aHIDDEN | aDIR);
 			WSET(param, 2, max_matches);	/* max count */
-			WSET(param, 4, 4 + 2);		/* close on end +
-							   continue */
+			WSET(param, 4, 
+			     SMB_CONTINUE_BIT|SMB_CLOSE_IF_END); 
 			WSET(param, 6, info_level);
 			DSET(param, 8, 0);
 		} else
 		{
+			/* we don't need the mask after the first bit */
+			mask_len = 0;
+			mask[0] = 0;
+
 			command = TRANSACT2_FINDNEXT;
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_readdir_long: handle=0x%X, resume=%d, lastname=%d, mask=%s\n",
-ff_dir_handle, ff_resume_key, ff_lastname, mask);
+printk("smb_proc_readdir_long: handle=0x%X, mask=%s\n",
+ff_dir_handle, mask);
 #endif
 			WSET(param, 0, ff_dir_handle);	/* search handle */
 			WSET(param, 2, max_matches);	/* max count */
 			WSET(param, 4, info_level);
-			DSET(param, 6, ff_resume_key);	/* ff_resume_key */
-			WSET(param, 10, 8 + 4 + 2);	/* resume required +
-							   close on end +
-							   continue */
-			if (server->mnt->version & SMB_FIX_WIN95)
-			{
-				/* Windows 95 is not able to deliver answers
-				 * to FIND_NEXT fast enough, so sleep 0.2 sec
-				 */
-				current->state = TASK_INTERRUPTIBLE;
-				schedule_timeout(HZ/5);
-			}
+			DSET(param, 6, 0);       	/* ff_resume_key */
+			WSET(param, 10,
+			     SMB_CONTINUE_BIT|SMB_CLOSE_IF_END); 
 		}
 
 		result = smb_trans2_request(server, command,
@@ -1647,6 +1640,16 @@ printk("smb_proc_readdir_long: error=%d, breaking\n", result);
 			entries = result;
 			break;
 		}
+
+
+		if (server->rcls == ERRSRV && server->err == ERRerror) {
+			/* a damn Win95 bug - sometimes it clags if you 
+			   ask it too fast */
+			current->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(HZ/5);
+			continue;
+		}
+
 		if (server->rcls != 0)
 		{ 
 #ifdef SMBFS_PARANOIA
@@ -1663,12 +1666,10 @@ mask, entries, server->rcls, server->err);
 			ff_dir_handle = WVAL(resp_param, 0);
 			ff_searchcount = WVAL(resp_param, 2);
 			ff_eos = WVAL(resp_param, 4);
-			ff_lastname = WVAL(resp_param, 8);
 		} else
 		{
 			ff_searchcount = WVAL(resp_param, 0);
 			ff_eos = WVAL(resp_param, 2);
-			ff_lastname = WVAL(resp_param, 6);
 		}
 
 		if (ff_searchcount == 0)
@@ -1676,38 +1677,6 @@ mask, entries, server->rcls, server->err);
 			break;
 		}
 
-		/* we might need the lastname for continuations */
-		mask_len = 0;
-		if (ff_lastname > 0)
-		{
-			lastname = resp_data + ff_lastname;
-			switch (info_level)
-			{
-			case 259:
- 				if (ff_lastname < resp_data_len)
-					mask_len = resp_data_len - ff_lastname;
-				break;
-			case 1:
-				/* Win NT 4.0 doesn't set the length byte */
-				lastname++;
- 				if (ff_lastname + 2 < resp_data_len)
-					mask_len = strlen(lastname);
-				break;
-			}
-			/*
-			 * Update the mask string for the next message.
-			 */
-			if (mask_len > 255)
-				mask_len = 255;
-			if (mask_len)
-				strncpy(mask, lastname, mask_len);
-			ff_resume_key = 0;
-		}
-		mask[mask_len] = 0;
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_readdir_long: new mask, len=%d@%d, mask=%s\n",
-mask_len, ff_lastname, mask);
-#endif
 		/* Now we are ready to parse smb directory entries. */
 
 		/* point to the data bytes */
@@ -1718,8 +1687,6 @@ mask_len, ff_lastname, mask);
 
 			p = smb_decode_long_dirent(server, p, entry,
 							info_level);
-
-			pr_debug("smb_readdir_long: got %s\n", entry->name);
 
 			/* ignore . and .. from the server */
 			if (entries_seen == 2 && entry->name[0] == '.')
@@ -1738,10 +1705,11 @@ mask_len, ff_lastname, mask);
 		}
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_proc_readdir_long: received %d entries, eos=%d, resume=%d\n",
-ff_searchcount, ff_eos, ff_resume_key);
+printk("smb_proc_readdir_long: received %d entries, eos=%d\n",
+       ff_searchcount, ff_eos);
 #endif
 		first = 0;
+		loop_count = 0;
 	}
 
 	smb_unlock_server(server);

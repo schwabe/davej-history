@@ -1,4 +1,4 @@
-/* $Id: hfc_2bds0.c,v 1.9 1999/07/01 08:11:35 keil Exp $
+/* $Id: hfc_2bds0.c,v 1.10 1999/10/14 20:25:28 keil Exp $
  *
  *  specific routines for CCD's HFC 2BDS0
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hfc_2bds0.c,v $
+ * Revision 1.10  1999/10/14 20:25:28  keil
+ * add a statistic for error monitoring
+ *
  * Revision 1.9  1999/07/01 08:11:35  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -260,6 +263,9 @@ static struct sk_buff
 		if (cs->debug & L1_DEB_WARN)
 			debugl1(cs, "hfc_empty_fifo: incoming packet too small");
 		cip = HFCB_FIFO | HFCB_FIFO_OUT | HFCB_REC | HFCB_CHANNEL(bcs->channel);
+#ifdef ERROR_STATISTIC
+		bcs->err_inv++;
+#endif
 		cli();
 		while ((idx++ < count) && WaitNoBusy(cs))
 			ReadReg(cs, HFCD_DATA_NODEB, cip);
@@ -302,6 +308,9 @@ static struct sk_buff
 				debugl1(cs, "FIFO CRC error");
 				dev_kfree_skb(skb);
 				skb = NULL;
+#ifdef ERROR_STATISTIC
+				bcs->err_crc++;
+#endif
 			}
 		}
 	}
@@ -741,6 +750,9 @@ int receive_dmsg(struct IsdnCardState *cs)
 				printk(KERN_WARNING "HFC DFIFO channel BUSY Error\n");
 				dev_kfree_skb(skb);
 				skb = NULL;
+#ifdef ERROR_STATISTIC
+				cs->err_rx++;
+#endif
 			} else {
 				cli();
 				WaitNoBusy(cs);
@@ -757,6 +769,9 @@ int receive_dmsg(struct IsdnCardState *cs)
 					debugl1(cs, "FIFO CRC error");
 					dev_kfree_skb(skb);
 					skb = NULL;
+#ifdef ERROR_STATISTIC
+					cs->err_crc++;
+#endif
 				} else {
 					skb_queue_tail(&cs->rq, skb);
 					sched_event_D(cs, D_RCVBUFREADY);

@@ -1,9 +1,10 @@
-/* $Id: mmu_context.h,v 1.35 1999/05/08 03:03:20 davem Exp $ */
+/* $Id: mmu_context.h,v 1.35.2.1 1999/09/29 20:22:02 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
 /* Derived heavily from Linus's Alpha/AXP ASN code... */
 
+#include <asm/spinlock.h>
 #include <asm/system.h>
 #include <asm/spitfire.h>
 #include <asm/spinlock.h>
@@ -12,6 +13,7 @@
 
 #ifndef __ASSEMBLY__
 
+extern spinlock_t ctx_alloc_lock;
 extern unsigned long tlb_context_cache;
 extern unsigned long mmu_context_bmap[];
 
@@ -35,11 +37,13 @@ extern void get_new_mmu_context(struct mm_struct *mm);
  * the final reference to the address space.
  */
 #define destroy_context(__mm)	do { 						\
+	spin_lock(&ctx_alloc_lock);						\
 	if ((__mm)->context != NO_CONTEXT &&					\
 	    atomic_read(&(__mm)->count) == 1) { 				\
 		if (!(((__mm)->context ^ tlb_context_cache) & CTX_VERSION_MASK))\
-			clear_bit((__mm)->context & ~(CTX_VERSION_MASK),	\
-				  mmu_context_bmap);				\
+		{	unsigned long nr = (__mm)->context & ~CTX_VERSION_MASK;	\
+			mmu_context_bmap[nr>>6] &= ~(1UL << (nr & 63));		\
+		}								\
 		(__mm)->context = NO_CONTEXT; 					\
 		if(current->mm == (__mm)) {					\
 			current->tss.ctx = 0;					\
@@ -47,6 +51,7 @@ extern void get_new_mmu_context(struct mm_struct *mm);
 			__asm__ __volatile__("flush %g6");			\
 		}								\
 	} 									\
+	spin_unlock(&ctx_alloc_lock);						\
 } while (0)
 
 /* This routine must called with interrupts off,

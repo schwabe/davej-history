@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.67.2.2 1999/09/22 11:37:42 jj Exp $
+# $Id: config.in,v 1.67.2.5 1999/10/19 16:49:37 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -169,7 +169,7 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 	    bool '   Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS N
 	    int  '   Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5
 	  fi
-	  dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
+	  dep_tristate 'SYM53C8XX SCSI support' CONFIG_SCSI_SYM53C8XX $CONFIG_SCSI
 	  if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
 	    int  '  default tagged command queue depth' CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS 8
 	    int  '  maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 32

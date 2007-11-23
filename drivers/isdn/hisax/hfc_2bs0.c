@@ -1,4 +1,4 @@
-/* $Id: hfc_2bs0.c,v 1.9 1999/07/01 08:11:36 keil Exp $
+/* $Id: hfc_2bs0.c,v 1.10 1999/10/14 20:25:28 keil Exp $
 
  *  specific routines for CCD's HFC 2BS0
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hfc_2bs0.c,v $
+ * Revision 1.10  1999/10/14 20:25:28  keil
+ * add a statistic for error monitoring
+ *
  * Revision 1.9  1999/07/01 08:11:36  keil
  * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
  *
@@ -217,6 +220,9 @@ hfc_empty_fifo(struct BCState *bcs, int count)
 		stat = cs->BC_Read_Reg(cs, HFC_DATA, HFC_CIP | HFC_F2_INC | HFC_REC |
 				       HFC_CHANNEL(bcs->channel));
 		WaitForBusy(cs);
+#ifdef ERROR_STATISTIC
+		bcs->err_inv++;
+#endif
 		return (NULL);
 	}
 	if (!(skb = dev_alloc_skb(count - 3)))
@@ -252,6 +258,9 @@ hfc_empty_fifo(struct BCState *bcs, int count)
 			debugl1(cs, "FIFO CRC error");
 			dev_kfree_skb(skb);
 			skb = NULL;
+#ifdef ERROR_STATISTIC
+			bcs->err_crc++;
+#endif
 		}
 		WaitNoBusy(cs);
 		stat = cs->BC_Read_Reg(cs, HFC_DATA, HFC_CIP | HFC_F2_INC | HFC_REC |

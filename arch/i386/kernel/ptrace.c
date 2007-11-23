@@ -89,7 +89,7 @@ repeat:
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return 0;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -103,7 +103,7 @@ repeat:
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return 0;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -117,7 +117,7 @@ repeat:
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return 0;
 	}
 	page = pte_page(*pgtable);
@@ -153,7 +153,7 @@ repeat:
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -167,7 +167,7 @@ repeat:
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -181,7 +181,7 @@ repeat:
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return;
 	}
 	page = pte_page(*pgtable);
@@ -190,7 +190,7 @@ repeat:
 		if (fault > 0)
 			goto repeat;
 		if (fault < 0)
-			force_sig(SIGKILL, current);
+			force_sig(SIGKILL, tsk);
 		return;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */

@@ -74,6 +74,7 @@ running, the suggested command should tell you.
 - Pcmcia-cs              3.0.14                  ; cardmgr -V
 - PPP                    2.3.10                  ; pppd --version
 - Util-linux             2.9z                    ; chsh -v
+- isdn4k-utils           v3.1beta7               ; isdnctrl 2>&1|grep version
 
 Upgrade notes
 *************
@@ -271,9 +272,6 @@ available from http://juanjox.linuxhq.com/ .
 
    DHCP clients for 2.0 do not work with the new networking code in the
 2.2 kernel.  You will need to upgrade your dhcpcd / dhcpclient.
-
-   The ISDN code in the stock 2.2 kernel may not work for you.  If it
-doesn't, look in ftp://ftp.suse.com/pub/isdn4linux for updated versions.
 
    In 2.0.x the kernel could be configured to drop source routed IP
 packets via a compile time configuration option.  In 2.2.x, this has
@@ -512,6 +510,11 @@ config.h file needs to
    /* #undef HAVE_LINUX_ACCT_H */
 
    so be sure to check that when you recompile.
+
+ISDN4Linux
+==========
+Older isdn4k-utils versions don't support EXTRAVERSION into kernel version
+string. A upgrade to isdn4k-utils.v3.1beta7 or later is recomented.
 
 Where to get the files
 **********************
@@ -789,6 +792,11 @@ Patch
 
 The 2.5 release:
 ftp://ftp.gnu.org/gnu/patch/patch-2.5.tar.gz
+
+ISDN4Linux
+==========
+The v3.1beta7 release:
+ftp://ftp.isdn4linux.de/pub/isdn4linux/utils/testing/isdn4k-utils.v3.1beta7.tar.gz
 
 Other Info
 ==========

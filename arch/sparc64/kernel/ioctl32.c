@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.62.2.4 1999/09/22 17:06:56 jj Exp $
+/* $Id: ioctl32.c,v 1.62.2.7 1999/10/09 06:03:20 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -1699,9 +1699,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	int error = -EBADF;
 
 	lock_kernel();
-	filp = fcheck(fd);
+	filp = fget(fd);
 	if(!filp)
-		goto out;
+		goto out2;
 
 	if (!filp->f_op || !filp->f_op->ioctl) {
 		error = sys_ioctl (fd, cmd, arg);
@@ -1920,6 +1920,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case TIOCSCTTY:
 	case TIOCGPTN:
 	case TIOCSPTLCK:
+	case TIOCGSERIAL:
+	case TIOCSSERIAL:
+	case TIOCSERGETLSR:
 	
 	/* Big F */
 	case FBIOGTYPE:
@@ -2219,6 +2222,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case CDROM_DRIVE_STATUS:
 	case CDROM_DISC_STATUS:
 	case CDROM_CHANGER_NSLOTS:
+	case CDROM_LOCKDOOR:
+	case CDROM_DEBUG:
+	case CDROM_GET_CAPABILITY:
 	
 	/* Big L */
 	case LOOP_SET_FD:
@@ -2385,6 +2391,10 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case AUTOFS_IOC_PROTOVER:
 	case AUTOFS_IOC_EXPIRE:
 	
+	/* Raw devices */
+	case _IO(0xac, 0): /* RAW_SETBIND */
+	case _IO(0xac, 1): /* RAW_GETBIND */
+
 		error = sys_ioctl (fd, cmd, arg);
 		goto out;
 
@@ -2397,9 +2407,11 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				       (int)fd, (unsigned int)cmd, (unsigned int)arg);
 		} while(0);
 		error = -EINVAL;
-		break;
+		goto out;
 	}
 out:
+	fput(filp);
+out2:
 	unlock_kernel();
 	return error;
 }

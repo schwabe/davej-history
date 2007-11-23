@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.85 1999/03/21 05:22:05 davem Exp $
+/* $Id: sunlance.c,v 1.85.2.1 1999/10/09 06:03:38 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -428,7 +428,7 @@ static int init_restart_lance (struct lance_private *lp)
 	for (i = 0; (i < 100) && !(ll->rdp & (LE_C0_ERR | LE_C0_IDON)); i++)
 		barrier();
 	if ((i == 100) || (ll->rdp & LE_C0_ERR)) {
-		printk ("LANCE unopened after %d ticks, csr0=%4.4x.\n", i, ll->rdp);
+		printk (KERN_ERR "LANCE unopened after %d ticks, csr0=%4.4x.\n", i, ll->rdp);
 		if (lp->ledma)
 			printk ("dcsr=%8.8x\n",
 				(unsigned int) lp->ledma->regs->cond_reg);
@@ -489,7 +489,7 @@ static int lance_rx (struct device *dev)
 			skb = dev_alloc_skb (len+2);
 
 			if (skb == 0) {
-				printk ("%s: Memory squeeze, deferring packet.\n",
+				printk (KERN_INFO "%s: Memory squeeze, deferring packet.\n",
 					dev->name);
 				lp->stats.rx_dropped++;
 				rd->mblength = 0;
@@ -547,7 +547,7 @@ static int lance_tx (struct device *dev)
 				lp->stats.tx_carrier_errors++;
 				if (lp->auto_select) {
 					lp->tpe = 1 - lp->tpe;
-					printk("%s: Carrier Lost, trying %s\n",
+					printk(KERN_NOTICE "%s: Carrier Lost, trying %s\n",
 					       dev->name, lp->tpe?"TPE":"AUI");
 					/* Stop the lance */
 					ll->rap = LE_CSR0;
@@ -565,7 +565,7 @@ static int lance_tx (struct device *dev)
 			if (status & (LE_T3_BUF|LE_T3_UFL)) {
 				lp->stats.tx_fifo_errors++;
 
-				printk ("%s: Tx: ERR_BUF|ERR_UFL, restarting\n",
+				printk (KERN_ERR "%s: Tx: ERR_BUF|ERR_UFL, restarting\n",
 					dev->name);
 				/* Stop the lance */
 				ll->rap = LE_CSR0;
@@ -606,7 +606,7 @@ static void lance_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	int csr0;
     
 	if (dev->interrupt)
-		printk ("%s: again", dev->name);
+		printk (KERN_ERR "%s: again", dev->name);
     
 	dev->interrupt = 1;
 
@@ -643,7 +643,7 @@ static void lance_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 		struct sparc_dma_registers *dregs = lp->ledma->regs;
 		unsigned long tst = (unsigned long)dregs->st_addr;
 
-		printk ("%s: Memory error, status %04x, addr %06lx\n",
+		printk (KERN_ERR "%s: Memory error, status %04x, addr %06lx\n",
 			dev->name, csr0, tst & 0xffffff);
 
 		ll->rdp = LE_C0_STOP;
@@ -674,7 +674,7 @@ static int lance_open (struct device *dev)
 
 	if (request_irq (dev->irq, &lance_interrupt, SA_SHIRQ,
 			 lancestr, (void *) dev)) {
-		printk ("Lance: Can't get irq %s\n", __irq_itoa(dev->irq));
+		printk (KERN_ERR "Lance: Can't get irq %s\n", __irq_itoa(dev->irq));
 		return -EAGAIN;
 	}
 
@@ -775,7 +775,7 @@ static inline int lance_reset (struct device *dev)
 
 	/* On the 4m, reset the dma too */
 	if (lp->ledma) {
-		printk ("resetting ledma\n");
+		printk (KERN_NOTICE "resetting ledma\n");
 		lp->ledma->regs->cond_reg |= DMA_RST_ENET;
 		udelay (200);
 		lp->ledma->regs->cond_reg &= ~DMA_RST_ENET;
@@ -789,7 +789,7 @@ static inline int lance_reset (struct device *dev)
 	dev->tbusy = 0;
 	status = init_restart_lance (lp);
 #ifdef DEBUG_DRIVER
-	printk ("Lance restart=%d\n", status);
+	printk (KERN_DEBUG "Lance restart=%d\n", status);
 #endif
 	return status;
 }
@@ -809,7 +809,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 		if (tickssofar < 100)
 			return 1;
 
-		printk ("%s: transmit timed out, status %04x, reset\n",
+		printk (KERN_ERR "%s: transmit timed out, status %04x, reset\n",
 			dev->name, ll->rdp);
 		lp->stats.tx_errors++;
 		lance_reset (dev);
@@ -986,9 +986,9 @@ sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 		memset(dev->priv, 0, sizeof (struct lance_private) + 8);
 	}
 	if (sparc_lance_debug && version_printed++ == 0)
-		printk (version);
+		printk (KERN_INFO "%s", version);
 
-	printk ("%s: LANCE ", dev->name);
+	printk (KERN_INFO "%s: LANCE ", dev->name);
 	/* Fill the dev fields */
 	dev->base_addr = (long) sdev;
 
@@ -1061,7 +1061,7 @@ sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 		if (prop[0] == 0) {
 			int topnd, nd;
 
-			printk("%s: using auto-carrier-detection.\n",
+			printk(KERN_INFO "%s: using auto-carrier-detection.\n",
 			       dev->name);
 
 			/* Is this found at /options .attributes in all
@@ -1081,9 +1081,9 @@ sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 				       sizeof(prop));
 
 			if (strcmp(prop, "true")) {
-				printk("%s: warning: overriding option "
+				printk(KERN_NOTICE "%s: warning: overriding option "
 				       "'tpe-link-test?'\n", dev->name);
-				printk("%s: warning: mail any problems "
+				printk(KERN_NOTICE "%s: warning: mail any problems "
 				       "to ecd@skynet.be\n", dev->name);
 				set_auxio(AUXIO_LINK_TEST, 0);
 			}
@@ -1106,7 +1106,7 @@ no_link_test:
 
 	/* This should never happen. */
 	if ((unsigned long)(lp->init_block->brx_ring) & 0x07) {
-		printk("%s: ERROR: Rx and Tx rings not on even boundary.\n",
+		printk(KERN_ERR "%s: ERROR: Rx and Tx rings not on even boundary.\n",
 		       dev->name);
 		return ENODEV;
 	}

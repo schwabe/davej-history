@@ -11,7 +11,7 @@ README for the ISDN-subsystem
   necessary. Those programs and some contributed utilities are available
   at
 
-   ftp.franken.de
+   ftp.isdn4linux.de
 
    /pub/isdn4linux/isdn4k-utils-<VersionNumber>.tar.gz
 
@@ -22,11 +22,11 @@ README for the ISDN-subsystem
    reasons, the mailing-list's primary language is german. However mails
    written in english have been welcome all the time.
 
-   to subscribe: write a email to majordomo@hub-wue.franken.de,
+   to subscribe: write a email to majordomo@listserv.isdn4linux.de,
    Subject irrelevant, in the message body:
    subscribe isdn4linux <your_email_address>
 
-   To write to the mailing-list, write to isdn4linux@hub-wue.franken.de
+   To write to the mailing-list, write to isdn4linux@listserv.isdn4linux.de
 
    This mailinglist is bidirectionally gated to the newsgroup
 

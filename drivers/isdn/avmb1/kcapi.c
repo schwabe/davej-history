@@ -1,11 +1,18 @@
 /*
- * $Id: kcapi.c,v 1.8 1999/09/10 17:24:18 calle Exp $
+ * $Id: kcapi.c,v 1.10 1999/10/26 15:30:32 calle Exp $
  * 
  * Kernel CAPI 2.0 Module
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kcapi.c,v $
+ * Revision 1.10  1999/10/26 15:30:32  calle
+ * Generate error message if user want to add card, but driver module is
+ * not loaded.
+ *
+ * Revision 1.9  1999/10/11 22:04:12  keil
+ * COMPAT_NEED_UACCESS (no include in isdn_compat.h)
+ *
  * Revision 1.8  1999/09/10 17:24:18  calle
  * Changes for proposed standard for CAPI2.0:
  * - AK148 "Linux Exention"
@@ -72,7 +79,7 @@
 #include <linux/b1lli.h>
 #endif
 
-static char *revision = "$Revision: 1.8 $";
+static char *revision = "$Revision: 1.10 $";
 
 /* ------------------------------------------------------------- */
 
@@ -1226,7 +1233,12 @@ static int old_capi_manufacturer(unsigned int cmd, void *data)
 			case AVM_CARDTYPE_T1: driver = t1isa_driver; break;
 			default: driver = 0;
 		}
-		if (!driver || !driver->add_card) {
+		if (!driver) {
+			printk(KERN_ERR "kcapi: driver not loaded.\n");
+			return -EIO;
+		}
+		if (!driver->add_card) {
+			printk(KERN_ERR "kcapi: driver has no add card function.\n");
 			return -EIO;
 		}
 

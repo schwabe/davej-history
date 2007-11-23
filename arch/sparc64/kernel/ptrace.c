@@ -40,6 +40,7 @@ static pte_t *get_page(struct task_struct * tsk,
 	pgd_t * pgdir;
 	pmd_t * pgmiddle;
 	pte_t * pgtable;
+	int fault;
 
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
@@ -50,8 +51,12 @@ repeat:
 	current->mm->segments = (void *) (addr & PAGE_SIZE);
 
 	if (pgd_none(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, write);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, write);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return 0;
 	}
 	if (pgd_bad(*pgdir)) {
 		printk("ptrace: bad page directory %016lx\n", pgd_val(*pgdir));
@@ -60,8 +65,12 @@ repeat:
 	}
 	pgmiddle = pmd_offset(pgdir, addr);
 	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, write);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, write);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return 0;
 	}
 	if (pmd_bad(*pgmiddle)) {
 		printk("ptrace: bad page middle %016lx\n", pmd_val(*pgmiddle));
@@ -70,12 +79,20 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, write);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, write);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return 0;
 	}
 	if (write && !pte_write(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, write);
-		goto repeat;
+		fault = handle_mm_fault(tsk, vma, addr, write);
+		if (fault > 0)
+			goto repeat;
+		if (fault < 0)
+			force_sig(SIGKILL, tsk);
+		return 0;
 	}
 	return pgtable;
 }

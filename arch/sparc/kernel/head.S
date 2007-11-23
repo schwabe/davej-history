@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.95.2.2 1999/09/23 09:53:18 anton Exp $
+/* $Id: head.S,v 1.95.2.3 1999/11/12 15:45:45 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -450,7 +450,7 @@ C_LABEL(empty_zero_page):		.skip PAGE_SIZE
  */
 	.ascii	"HdrS"
 	.word	LINUX_VERSION_CODE
-	.half	0x0201		/* HdrS version */
+	.half	0x0203		/* HdrS version */
 C_LABEL(root_flags):
 	.half	1
 C_LABEL(root_dev):
@@ -462,6 +462,8 @@ C_LABEL(sparc_ramdisk_image):
 C_LABEL(sparc_ramdisk_size):
 	.word	0
 	.word	C_LABEL(reboot_command)
+	.word	0, 0, 0
+	.word	_end
 
 /* Cool, here we go. Pick up the romvec pointer in %o0 and stash it in
  * %g7 and at prom_vector_p. And also quickly check whether we are on

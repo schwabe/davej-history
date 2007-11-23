@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.41.2.2 1999/09/21 15:50:45 davem Exp $
+/* $Id: zs.c,v 1.41.2.4 1999/10/14 08:44:40 davem Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -374,6 +374,8 @@ static void zs_start(struct tty_struct *tty)
  */
 void batten_down_hatches(void)
 {
+	if (!stop_a_enabled)
+		return;
 	/* If we are doing kadb, we call the debugger
 	 * else we just drop into the boot monitor.
 	 * Note that we must flush the user windows
@@ -471,7 +473,7 @@ static _INLINE_ void receive_chars(struct sun_serial *info, struct pt_regs *regs
 			goto next_char;
 		}
 		if(info->cons_mouse) {
-			sun_mouse_inbyte(ch);
+			sun_mouse_inbyte(ch, 0);
 			do_queue_task = 0;
 			goto next_char;
 		}
@@ -584,8 +586,12 @@ static _INLINE_ void status_handle(struct sun_serial *info)
 	 * 'break asserted' status change interrupt, call
 	 * the boot prom.
 	 */
-	if((status & BRK_ABRT) && info->break_abort)
-		batten_down_hatches();
+	if(status & BRK_ABRT) {
+		if (info->break_abort)
+			batten_down_hatches();
+		if (info->cons_mouse)
+			sun_mouse_inbyte(0, 1);
+	}
 
 	/* XXX Whee, put in a buffer somewhere, the status information
 	 * XXX whee whee whee... Where does the information go...
@@ -1849,7 +1855,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.41.2.2 $";
+	char *revision = "$Revision: 1.41.2.4 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

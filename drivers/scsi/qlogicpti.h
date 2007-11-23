@@ -483,7 +483,7 @@ struct qlogicpti {
 	int                       prom_node;
 	char                      prom_name[64];
 	int                       irq;
-	char                      differential, ultra;
+	char                      differential, ultra, clock;
 	unsigned char             bursts;
 	struct	host_param        host_param;
 	struct	dev_param         dev_param[MAX_TARGETS];
@@ -496,8 +496,10 @@ struct qlogicpti {
 #define SREG_IMASK                0x0c   /* Interrupt level            */
 #define SREG_SPMASK               0x03   /* Mask for switch pack       */
 	unsigned char             swsreg;
-	unsigned char             is_pti; /* Non-zero if this is a PTI board. */
-	unsigned short            sbits;
+	unsigned int	
+		gotirq	:	1,	/* this instance got an irq */
+		is_pti	: 	1,	/* Non-zero if this is a PTI board. */
+		sbits	:	16;	/* syncmode known bits */
 };
 
 /* How to twiddle them bits... */

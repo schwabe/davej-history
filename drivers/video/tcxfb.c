@@ -1,4 +1,4 @@
-/* $Id: tcxfb.c,v 1.7 1999/01/26 10:55:03 jj Exp $
+/* $Id: tcxfb.c,v 1.7.2.1 1999/09/28 16:00:14 davem Exp $
  * tcxfb.c: TCX 24/8bit frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)

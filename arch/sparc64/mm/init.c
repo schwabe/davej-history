@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.127.2.1 1999/06/25 10:42:10 davem Exp $
+/*  $Id: init.c,v 1.127.2.4 1999/10/24 17:29:30 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -39,9 +39,6 @@ unsigned long *sparc64_valid_addr_bitmap;
 
 /* Ugly, but necessary... -DaveM */
 unsigned long phys_base;
-
-/* get_new_mmu_context() uses "cache + 1".  */
-unsigned long tlb_context_cache = CTX_FIRST_VERSION - 1;
 
 /* References to section boundaries */
 extern char __init_begin, __init_end, etext, __bss_start;
@@ -646,13 +643,23 @@ struct linux_prom_translation {
 	unsigned long data;
 };
 
-static inline void inherit_prom_mappings(void)
+extern unsigned long prom_boot_page;
+extern void prom_remap(unsigned long physpage, unsigned long virtpage, int mmu_ihandle);
+extern int prom_get_mmu_ihandle(void);
+extern void register_prom_callbacks(void);
+
+/* Exported for SMP bootup purposes. */
+unsigned long kern_locked_tte_data;
+
+static void inherit_prom_mappings(void)
 {
 	struct linux_prom_translation *trans;
+	unsigned long phys_page, tte_vaddr, tte_data;
+	void (*remap_func)(unsigned long, unsigned long, int);
 	pgd_t *pgdp;
 	pmd_t *pmdp;
 	pte_t *ptep;
-	int node, n, i;
+	int node, n, i, tsz;
 
 	node = prom_finddevice("/virtual-memory");
 	n = prom_getproplen(node, "translations");
@@ -660,11 +667,12 @@ static inline void inherit_prom_mappings(void)
 		prom_printf("Couldn't get translation property\n");
 		prom_halt();
 	}
+	n += 5 * sizeof(struct linux_prom_translation);
+	for (tsz = 1; tsz < n; tsz <<= 1)
+		/* empty */;
+	trans = sparc_init_alloc(&mempool, tsz);
 
-	for (i = 1; i < n; i <<= 1) /* empty */;
-	trans = sparc_init_alloc(&mempool, i);
-
-	if (prom_getproperty(node, "translations", (char *)trans, i) == -1) {
+	if ((n = prom_getproperty(node, "translations", (char *)trans, tsz)) == -1) {
 		prom_printf("Couldn't get translation property\n");
 		prom_halt();
 	}
@@ -696,6 +704,83 @@ static inline void inherit_prom_mappings(void)
 			}
 		}
 	}
+
+	/* Now fixup OBP's idea about where we really are mapped. */
+	prom_printf("Remapping the kernel... ");
+	phys_page = spitfire_get_dtlb_data(63) & _PAGE_PADDR;
+	phys_page += ((unsigned long)&prom_boot_page -
+		      (unsigned long)&empty_zero_page);
+
+	/* Lock this into i/d tlb entry 59 */
+	__asm__ __volatile__(
+		"stxa	%%g0, [%2] %3\n\t"
+		"stxa	%0, [%1] %4\n\t"
+		"membar	#Sync\n\t"
+		"flush	%%g6\n\t"
+		"stxa	%%g0, [%2] %5\n\t"
+		"stxa	%0, [%1] %6\n\t"
+		"membar	#Sync\n\t"
+		"flush	%%g6"
+		: : "r" (phys_page | _PAGE_VALID | _PAGE_SZ8K | _PAGE_CP |
+			 _PAGE_CV | _PAGE_P | _PAGE_L | _PAGE_W),
+		    "r" (59 << 3), "r" (TLB_TAG_ACCESS),
+		    "i" (ASI_DMMU), "i" (ASI_DTLB_DATA_ACCESS),
+		    "i" (ASI_IMMU), "i" (ASI_ITLB_DATA_ACCESS)
+		: "memory");
+
+	tte_vaddr = (unsigned long) &empty_zero_page;
+	kern_locked_tte_data = tte_data = spitfire_get_dtlb_data(63);
+
+	remap_func = (void *)  ((unsigned long) &prom_remap -
+				(unsigned long) &prom_boot_page);
+
+	remap_func(spitfire_get_dtlb_data(63) & _PAGE_PADDR,
+		   (unsigned long) &empty_zero_page,
+		   prom_get_mmu_ihandle());
+
+	/* Flush out that temporary mapping. */
+	spitfire_flush_dtlb_nucleus_page(0x0);
+	spitfire_flush_itlb_nucleus_page(0x0);
+
+	/* Now lock us back into the TLBs via OBP. */
+	prom_dtlb_load(63, tte_data, tte_vaddr);
+	prom_itlb_load(63, tte_data, tte_vaddr);
+
+	/* Re-read translations property. */
+	if ((n = prom_getproperty(node, "translations", (char *)trans, tsz)) == -1) {
+		prom_printf("Couldn't get translation property\n");
+		prom_halt();
+	}
+	n = n / sizeof(*trans);
+
+	for (i = 0; i < n; i++) {
+		unsigned long vaddr = trans[i].virt;
+		unsigned long size = trans[i].size;
+
+		if (vaddr < 0xf0000000UL) {
+			unsigned long avoid_start = (unsigned long) &empty_zero_page;
+			unsigned long avoid_end = avoid_start + (4 * 1024 * 1024);
+
+			if (vaddr < avoid_start) {
+				unsigned long top = vaddr + size;
+
+				if (top > avoid_start)
+					top = avoid_start;
+				prom_unmap(top - vaddr, vaddr);
+			}
+			if ((vaddr + size) > avoid_end) {
+				unsigned long bottom = vaddr;
+
+				if (bottom < avoid_end)
+					bottom = avoid_end;
+				prom_unmap((vaddr + size) - bottom, bottom);
+			}
+		}
+	}
+
+	prom_printf("done.\n");
+
+	register_prom_callbacks();
 }
 
 /* The OBP specifications for sun4u mark 0xfffffffc00000000 and
@@ -956,6 +1041,8 @@ void __flush_tlb_all(void)
 
 #define CTX_BMAP_SLOTS (1UL << (CTX_VERSION_SHIFT - 6))
 unsigned long mmu_context_bmap[CTX_BMAP_SLOTS];
+spinlock_t ctx_alloc_lock = SPIN_LOCK_UNLOCKED;
+unsigned long tlb_context_cache = CTX_FIRST_VERSION - 1;
 
 /* Caller does TLB context flushing on local CPU if necessary.
  *
@@ -966,14 +1053,17 @@ unsigned long mmu_context_bmap[CTX_BMAP_SLOTS];
  */
 void get_new_mmu_context(struct mm_struct *mm)
 {
-	unsigned long ctx = (tlb_context_cache + 1) & ~(CTX_VERSION_MASK);
-	unsigned long new_ctx;
+	unsigned long ctx, new_ctx;
 	
+	spin_lock(&ctx_alloc_lock);
+	ctx = (tlb_context_cache + 1) & ~(CTX_VERSION_MASK);
 	if (ctx == 0)
 		ctx = 1;
 	if ((mm->context != NO_CONTEXT) &&
-	    !((mm->context ^ tlb_context_cache) & CTX_VERSION_MASK))
-		clear_bit(mm->context & ~(CTX_VERSION_MASK), mmu_context_bmap);
+	    !((mm->context ^ tlb_context_cache) & CTX_VERSION_MASK)) {
+		unsigned long nr = mm->context & ~(CTX_VERSION_MASK);
+		mmu_context_bmap[nr >> 6] &= ~(1UL << (nr & 63));
+	}
 	new_ctx = find_next_zero_bit(mmu_context_bmap, 1UL << CTX_VERSION_SHIFT, ctx);
 	if (new_ctx >= (1UL << CTX_VERSION_SHIFT)) {
 		new_ctx = find_next_zero_bit(mmu_context_bmap, ctx, 1);
@@ -1000,10 +1090,12 @@ void get_new_mmu_context(struct mm_struct *mm)
 			goto out;
 		}
 	}
-	set_bit(new_ctx, mmu_context_bmap);
+	mmu_context_bmap[new_ctx >> 6] |= (1UL << (new_ctx & 63));
 	new_ctx |= (tlb_context_cache & CTX_VERSION_MASK);
 out:
 	tlb_context_cache = new_ctx;
+	spin_unlock(&ctx_alloc_lock);
+
 	mm->context = new_ctx;
 	mm->cpu_vm_mask = 0;
 }
@@ -1214,7 +1306,7 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	/* Allocate 64M for dynamic DVMA mapping area. */
 	allocate_ptable_skeleton(DVMA_VADDR, DVMA_VADDR + 0x4000000);
 	inherit_prom_mappings();
-	
+
 	/* Ok, we can use our TLB miss and window trap handlers safely.
 	 * We need to do a quick peek here to see if we are on StarFire
 	 * or not, so setup_tba can setup the IRQ globals correctly (it
@@ -1230,24 +1322,12 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 		setup_tba(is_starfire);
 	}
 
-	/* Really paranoid. */
-	flushi((long)&empty_zero_page);
-	membar("#Sync");
-
-	/* Cleanup the extra locked TLB entry we created since we have the
-	 * nice TLB miss handlers of ours installed now.
-	 */
+	inherit_locked_prom_mappings(1);
+	
 	/* We only created DTLB mapping of this stuff. */
 	spitfire_flush_dtlb_nucleus_page(alias_base);
 	if (second_alias_page)
 		spitfire_flush_dtlb_nucleus_page(second_alias_page);
-	membar("#Sync");
-
-	/* Paranoid */
-	flushi((long)&empty_zero_page);
-	membar("#Sync");
-
-	inherit_locked_prom_mappings(1);
 
 	flush_tlb_all();
 
@@ -1256,11 +1336,97 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	return device_scan (PAGE_ALIGN (start_mem));
 }
 
+/* Ok, it seems that the prom can allocate some more memory chunks
+ * as a side effect of some prom calls we perform during the
+ * boot sequence.  My most likely theory is that it is from the
+ * prom_set_traptable() call, and OBP is allocating a scratchpad
+ * for saving client program register state etc.
+ */
+__initfunc(static void sort_memlist(struct linux_mlist_p1275 *thislist))
+{
+	int swapi = 0;
+	int i, mitr;
+	unsigned long tmpaddr, tmpsize;
+	unsigned long lowest;
+
+	for(i=0; thislist[i].theres_more != 0; i++) {
+		lowest = thislist[i].start_adr;
+		for(mitr = i+1; thislist[mitr-1].theres_more != 0; mitr++)
+			if(thislist[mitr].start_adr < lowest) {
+				lowest = thislist[mitr].start_adr;
+				swapi = mitr;
+			}
+		if(lowest == thislist[i].start_adr) continue;
+		tmpaddr = thislist[swapi].start_adr;
+		tmpsize = thislist[swapi].num_bytes;
+		for(mitr = swapi; mitr > i; mitr--) {
+			thislist[mitr].start_adr = thislist[mitr-1].start_adr;
+			thislist[mitr].num_bytes = thislist[mitr-1].num_bytes;
+		}
+		thislist[i].start_adr = tmpaddr;
+		thislist[i].num_bytes = tmpsize;
+	}
+}
+
+__initfunc(static void rescan_sp_banks(void))
+{
+	struct linux_prom64_registers memlist[64];
+	struct linux_mlist_p1275 avail[64], *mlist;
+	unsigned long bytes, base_paddr;
+	int num_regs, node = prom_finddevice("/memory");
+	int i;
+
+	num_regs = prom_getproperty(node, "available",
+				    (char *) memlist, sizeof(memlist));
+	num_regs = (num_regs / sizeof(struct linux_prom64_registers));
+	for (i = 0; i < num_regs; i++) {
+		avail[i].start_adr = memlist[i].phys_addr;
+		avail[i].num_bytes = memlist[i].reg_size;
+		avail[i].theres_more = &avail[i + 1];
+	}
+	avail[i - 1].theres_more = NULL;
+	sort_memlist(avail);
+
+	mlist = &avail[0];
+	i = 0;
+	bytes = mlist->num_bytes;
+	base_paddr = mlist->start_adr;
+  
+	sp_banks[0].base_addr = base_paddr;
+	sp_banks[0].num_bytes = bytes;
+
+	while (mlist->theres_more != NULL){
+		i++;
+		mlist = mlist->theres_more;
+		bytes = mlist->num_bytes;
+		if (i >= SPARC_PHYS_BANKS-1) {
+			printk ("The machine has more banks than "
+				"this kernel can support\n"
+				"Increase the SPARC_PHYS_BANKS "
+				"setting (currently %d)\n",
+				SPARC_PHYS_BANKS);
+			i = SPARC_PHYS_BANKS-1;
+			break;
+		}
+    
+		sp_banks[i].base_addr = mlist->start_adr;
+		sp_banks[i].num_bytes = mlist->num_bytes;
+	}
+
+	i++;
+	sp_banks[i].base_addr = 0xdeadbeefbeefdeadUL;
+	sp_banks[i].num_bytes = 0;
+
+	for (i = 0; sp_banks[i].num_bytes != 0; i++)
+		sp_banks[i].num_bytes &= PAGE_MASK;
+}
+
 __initfunc(static void taint_real_pages(unsigned long start_mem, unsigned long end_mem))
 {
 	unsigned long tmp = 0, paddr, endaddr;
 	unsigned long end = __pa(end_mem);
 
+	rescan_sp_banks();
 	dvmaio_init();
 	for (paddr = __pa(start_mem); paddr < end; ) {
 		for (; sp_banks[tmp].num_bytes != 0; tmp++)

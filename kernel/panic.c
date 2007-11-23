@@ -74,7 +74,12 @@ NORET_TYPE void panic(const char * fmt, ...)
 		machine_restart(NULL);
 	}
 #ifdef __sparc__
-	printk("Press L1-A to return to the boot prom\n");
+	{
+		extern int stop_a_enabled;
+		/* Make sure the user can actually press L1-A */
+		stop_a_enabled = 1;
+		printk("Press L1-A to return to the boot prom\n");
+	}
 #endif
 #ifdef __alpha__
 	if (alpha_using_srm)

@@ -85,7 +85,7 @@ static inline int qec_global_reset(struct qe_globreg *gregs)
 	}
 	if(tries)
 		return 0;
-	printk("BigMAC: Cannot reset the QEC.\n");
+	printk(KERN_ERR "BigMAC: Cannot reset the QEC.\n");
 	return -1;
 }
 
@@ -133,8 +133,8 @@ static inline void bigmac_tx_reset(struct BIG_MAC_regs *bregs)
 		udelay(20);
 
 	if(!tries) {
-		printk("BIGMAC: Transmitter will not reset.\n");
-		printk("BIGMAC: tx_cfg is %08x\n", bregs->tx_cfg);
+		printk(KERN_ERR "BIGMAC: Transmitter will not reset.\n");
+		printk(KERN_ERR "BIGMAC: tx_cfg is %08x\n", bregs->tx_cfg);
 	}
 }
 
@@ -147,8 +147,8 @@ static inline void bigmac_rx_reset(struct BIG_MAC_regs *bregs)
 		udelay(20);
 
 	if(!tries) {
-		printk("BIGMAC: Receiver will not reset.\n");
-		printk("BIGMAC: rx_cfg is %08x\n", bregs->rx_cfg);
+		printk(KERN_ERR "BIGMAC: Receiver will not reset.\n");
+		printk(KERN_ERR "BIGMAC: rx_cfg is %08x\n", bregs->rx_cfg);
 	}
 }
 
@@ -292,7 +292,7 @@ static void write_tcvr_bit(struct bigmac *bp, struct bmac_tcvr *tregs, int bit)
 					 MGMT_PAL_DCLOCK);
 		garbage = tregs->mgmt_pal;
 	} else {
-		printk("write_tcvr_bit: No transceiver type known!\n");
+		printk(KERN_ERR "write_tcvr_bit: No transceiver type known!\n");
 	}
 }
 
@@ -314,7 +314,7 @@ static int read_tcvr_bit(struct bigmac *bp, struct bmac_tcvr *tregs)
 		garbage = tregs->mgmt_pal;
 		retval = (tregs->mgmt_pal & MGMT_PAL_EXT_MDIO) >> 2;
 	} else {
-		printk("read_tcvr_bit: No transceiver type known!\n");
+		printk(KERN_ERR "read_tcvr_bit: No transceiver type known!\n");
 	}
 	return retval;
 }
@@ -337,7 +337,7 @@ static int read_tcvr_bit2(struct bigmac *bp, struct bmac_tcvr *tregs)
 		tregs->mgmt_pal = (MGMT_PAL_INT_MDIO | MGMT_PAL_DCLOCK);
 		garbage = tregs->mgmt_pal;
 	} else {
-		printk("read_tcvr_bit2: No transceiver type known!\n");
+		printk(KERN_ERR "read_tcvr_bit2: No transceiver type known!\n");
 	}
 	return retval;
 }
@@ -367,7 +367,7 @@ static void bigmac_tcvr_write(struct bigmac *bp, struct bmac_tcvr *tregs,
 		break;
 
 	default:
-		printk("bigmac_tcvr_read: Whoops, no known transceiver type.\n");
+		printk(KERN_ERR "bigmac_tcvr_read: Whoops, no known transceiver type.\n");
 		return;
 	};
 
@@ -406,7 +406,7 @@ static unsigned short bigmac_tcvr_read(struct bigmac *bp,
 		break;
 
 	default:
-		printk("bigmac_tcvr_read: Whoops, no known transceiver type.\n");
+		printk(KERN_ERR "bigmac_tcvr_read: Whoops, no known transceiver type.\n");
 		return 0xffff;
 	};
 
@@ -493,9 +493,9 @@ static void bigmac_tcvr_init(struct bigmac *bp)
 				    TCVR_PAL_LTENABLE);
 		garbage = tregs->tcvr_pal;
 	} else {
-		printk("BIGMAC: AIEEE, neither internal nor "
+		printk(KERN_ERR "BIGMAC: AIEEE, neither internal nor "
 		       "external MDIO available!\n");
-		printk("BIGMAC: mgmt_pal[%08x] tcvr_pal[%08x]\n",
+		printk(KERN_ERR "BIGMAC: mgmt_pal[%08x] tcvr_pal[%08x]\n",
 		       tregs->mgmt_pal, tregs->tcvr_pal);
 	}
 }
@@ -521,7 +521,7 @@ static int try_next_permutation(struct bigmac *bp, struct bmac_tcvr *tregs)
 			udelay(20);
 		}
 		if(timeout == 0)
-			printk("%s: PHY reset failed.\n", bp->dev->name);
+			printk(KERN_ERR "%s: PHY reset failed.\n", bp->dev->name);
 
 		bp->sw_bmcr = bigmac_tcvr_read(bp, tregs, BIGMAC_BMCR);
 
@@ -546,7 +546,7 @@ static void bigmac_timer(unsigned long data)
 		bp->sw_bmsr = bigmac_tcvr_read(bp, tregs, BIGMAC_BMSR);
 		bp->sw_bmcr = bigmac_tcvr_read(bp, tregs, BIGMAC_BMCR);
 		if(bp->sw_bmsr & BMSR_LSTATUS) {
-			printk("%s: Link is now up at %s.\n",
+			printk(KERN_INFO "%s: Link is now up at %s.\n",
 			       bp->dev->name,
 			       (bp->sw_bmcr & BMCR_SPEED100) ?
 			       "100baseT" : "10baseT");
@@ -558,11 +558,11 @@ static void bigmac_timer(unsigned long data)
 
 				ret = try_next_permutation(bp, tregs);
 				if(ret == -1) {
-					printk("%s: Link down, cable problem?\n",
+					printk(KERN_ERR "%s: Link down, cable problem?\n",
 					       bp->dev->name);
 					ret = bigmac_init(bp, 0);
 					if(ret) {
-						printk("%s: Error, cannot re-init the "
+						printk(KERN_ERR "%s: Error, cannot re-init the "
 						       "BigMAC.\n", bp->dev->name);
 					}
 					return;
@@ -575,7 +575,7 @@ static void bigmac_timer(unsigned long data)
 		}
 	} else {
 		/* Can't happens.... */
-		printk("%s: Aieee, link timer is asleep but we got one anyways!\n",
+		printk(KERN_ERR "%s: Aieee, link timer is asleep but we got one anyways!\n",
 		       bp->dev->name);
 		restart_timer = 0;
 		bp->timer_ticks = 0;
@@ -614,7 +614,7 @@ static void bigmac_begin_auto_negotiation(struct bigmac *bp)
 		udelay(20);
 	}
 	if(timeout == 0)
-		printk("%s: PHY reset failed.\n", bp->dev->name);
+		printk(KERN_ERR "%s: PHY reset failed.\n", bp->dev->name);
 
 	bp->sw_bmcr = bigmac_tcvr_read(bp, tregs, BIGMAC_BMCR);
 
@@ -724,7 +724,7 @@ static void bigmac_is_medium_rare(struct bigmac *bp,
 				  unsigned int qec_status,
 				  unsigned int bmac_status)
 {
-	printk("bigmac_is_medium_rare: ");
+	printk(KERN_ERR "bigmac_is_medium_rare: ");
 	if(qec_status & (GLOB_STAT_ER | GLOB_STAT_BM)) {
 		if(qec_status & GLOB_STAT_ER)
 			printk("QEC_ERROR, ");
@@ -838,7 +838,7 @@ static inline void bigmac_rx(struct bigmac *bp)
 #ifdef NEED_DMA_SYNCHRONIZATION
 #ifdef __sparc_v9__
 		if ((unsigned long) (skb->data + skb->len) >= MAX_DMA_ADDRESS) {
-			printk("sunbmac: Bogus DMA buffer address "
+			printk(KERN_CRIT "sunbmac: Bogus DMA buffer address "
 			       "[%016lx]\n", ((unsigned long) skb->data));
 			panic("DMA address too large, tell DaveM");
 		}
@@ -895,7 +895,7 @@ static inline void bigmac_rx(struct bigmac *bp)
 	}
 	bp->rx_new = elem;
 	if(drops)
-		printk("%s: Memory squeeze, deferring packet.\n", bp->dev->name);
+		printk(KERN_NOTICE "%s: Memory squeeze, deferring packet.\n", bp->dev->name);
 }
 
 #ifndef __sparc_v9__
@@ -948,7 +948,7 @@ static inline void sun4c_bigmac_rx(struct bigmac *bp)
 	}
 	bp->rx_new = elem;
 	if(drops)
-		printk("%s: Memory squeeze, deferring packet.\n", bp->dev->name);
+		printk(KERN_NOTICE "%s: Memory squeeze, deferring packet.\n", bp->dev->name);
 }
 #endif
 
@@ -1024,14 +1024,14 @@ static int bigmac_open(struct device *dev)
 	if(sparc_cpu_model == sun4c) {
 		if(request_irq(dev->irq, &sun4c_bigmac_interrupt,
 			       SA_SHIRQ, "BIG MAC", (void *) bp)) {
-			printk("BIGMAC: Can't order irq %d to go.\n", dev->irq);
+			printk(KERN_ERR "BIGMAC: Can't order irq %d to go.\n", dev->irq);
 			return -EAGAIN;
 		}
 	} else
 #endif
 	if(request_irq(dev->irq, &bigmac_interrupt,
 		       SA_SHIRQ, "BIG MAC", (void *) bp)) {
-		printk("BIGMAC: Can't order irq %d to go.\n", dev->irq);
+		printk(KERN_ERR "BIGMAC: Can't order irq %d to go.\n", dev->irq);
 		return -EAGAIN;
 	}
 	init_timer(&bp->bigmac_timer);
@@ -1069,7 +1069,7 @@ static int bigmac_start_xmit(struct sk_buff *skb, struct device *dev)
 		if (tickssofar < 40) {
 			return 1;
 		} else {
-			printk ("%s: transmit timed out, resetting\n", dev->name);
+			printk (KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
 			bp->enet_stats.tx_errors++;
 			bigmac_init(bp, 0);
 			dev->tbusy = 0;
@@ -1080,7 +1080,7 @@ static int bigmac_start_xmit(struct sk_buff *skb, struct device *dev)
 	}
 
 	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
-		printk("%s: Transmitter access conflict.\n", dev->name);
+		printk(KERN_ERR "%s: Transmitter access conflict.\n", dev->name);
 		return 1;
 	}
 
@@ -1138,7 +1138,7 @@ static int sun4c_bigmac_start_xmit(struct sk_buff *skb, struct device *dev)
 		if (tickssofar < 40) {
 			return 1;
 		} else {
-			printk ("%s: transmit timed out, resetting\n", dev->name);
+			printk (KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
 			bp->enet_stats.tx_errors++;
 			bigmac_init(bp, 0);
 			dev->tbusy = 0;
@@ -1148,7 +1148,7 @@ static int sun4c_bigmac_start_xmit(struct sk_buff *skb, struct device *dev)
 	}
 
 	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
-		printk("%s: Transmitter access conflict.\n", dev->name);
+		printk(KERN_ERR "%s: Transmitter access conflict.\n", dev->name);
 		return 1;
 	}
 
@@ -1266,10 +1266,10 @@ __initfunc(static int bigmac_ether_init(struct device *dev, struct linux_sbus_de
 	dev = init_etherdev(0, sizeof(struct bigmac));
 
 	if(version_printed++ == 0)
-		printk(version);
+		printk(KERN_INFO "%s", version);
 
 	/* Report what we have found to the user. */
-	printk("%s: BigMAC 100baseT Ethernet ", dev->name);
+	printk(KERN_INFO "%s: BigMAC 100baseT Ethernet ", dev->name);
 	dev->base_addr = (long) qec_sdev;
 	for(i = 0; i < 6; i++)
 		printk("%2.2x%c", dev->dev_addr[i] = idprom->id_ethaddr[i],
@@ -1287,10 +1287,10 @@ __initfunc(static int bigmac_ether_init(struct device *dev, struct linux_sbus_de
 	/* Verify the registers we expect, are actually there. */
 	if((bp->bigmac_sbus_dev->num_registers != 3) ||
 	   (bp->qec_sbus_dev->num_registers != 2)) {
-		printk("BIGMAC: Device does not have 2 and 3 regs, it has %d and %d.\n",
+		printk(KERN_ERR "BIGMAC: Device does not have 2 and 3 regs, it has %d and %d.\n",
 		       bp->qec_sbus_dev->num_registers,
 		       bp->bigmac_sbus_dev->num_registers);
-		printk("BIGMAC: Would you like that for here or to go?\n");
+		printk(KERN_ERR "BIGMAC: Would you like that for here or to go?\n");
 		goto fail_and_cleanup;
 	}
 
@@ -1309,7 +1309,7 @@ __initfunc(static int bigmac_ether_init(struct device *dev, struct linux_sbus_de
 				   qranges[k].ot_child_space)
 					break;
 			if(k >= num_qranges) {
-				printk("BigMAC: Aieee, bogus QEC range for space %08x\n",
+				printk(KERN_ERR "BigMAC: Aieee, bogus QEC range for space %08x\n",
 				       bp->bigmac_sbus_dev->reg_addrs[j].which_io);
 				goto fail_and_cleanup;
 			}
@@ -1338,13 +1338,13 @@ __initfunc(static int bigmac_ether_init(struct device *dev, struct linux_sbus_de
 				   bp->qec_sbus_dev->reg_addrs[0].which_io,
 				   0);
 	if(!bp->gregs) {
-		printk("BIGMAC: Cannot map QEC global registers.\n");
+		printk(KERN_ERR "BIGMAC: Cannot map QEC global registers.\n");
 		goto fail_and_cleanup;
 	}
 
 	/* Make sure QEC is in BigMAC mode. */
 	if((bp->gregs->ctrl & 0xf0000000) != GLOB_CTRL_BMODE) {
-		printk("BigMAC: AIEEE, QEC is not in BigMAC mode!\n");
+		printk(KERN_ERR "BigMAC: AIEEE, QEC is not in BigMAC mode!\n");
 		goto fail_and_cleanup;
 	}
 
@@ -1380,7 +1380,7 @@ __initfunc(static int bigmac_ether_init(struct device *dev, struct linux_sbus_de
 				  bp->bigmac_sbus_dev->reg_addrs[0].which_io,
 				  0);
 	if(!bp->creg) {
-		printk("BIGMAC: Cannot map QEC channel registers.\n");
+		printk(KERN_ERR "BIGMAC: Cannot map QEC channel registers.\n");
 		goto fail_and_cleanup;
 	}
 
@@ -1392,7 +1392,7 @@ __initfunc(static int bigmac_ether_init(struct device *dev, struct linux_sbus_de
 				   bp->bigmac_sbus_dev->reg_addrs[1].which_io,
 				   0);
 	if(!bp->bregs) {
-		printk("BIGMAC: Cannot map BigMAC primary registers.\n");
+		printk(KERN_ERR "BIGMAC: Cannot map BigMAC primary registers.\n");
 		goto fail_and_cleanup;
 	}
 
@@ -1406,7 +1406,7 @@ __initfunc(static int bigmac_ether_init(struct device *dev, struct linux_sbus_de
 				   bp->bigmac_sbus_dev->reg_addrs[2].which_io,
 				   0);
 	if(!bp->tregs) {
-		printk("BIGMAC: Cannot map BigMAC transceiver registers.\n");
+		printk(KERN_ERR "BIGMAC: Cannot map BigMAC transceiver registers.\n");
 		goto fail_and_cleanup;
 	}
 
