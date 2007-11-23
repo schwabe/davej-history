@@ -19,6 +19,8 @@
  * the i386 page table tree.
  */
 
+#ifndef __ASSEMBLY__
+
 /* Caches aren't brain-dead on the intel. */
 #define flush_cache_all()			do { } while (0)
 #define flush_cache_mm(mm)			do { } while (0)
@@ -46,13 +48,13 @@ do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3"
  * NOTE! The intel "invlpg" semantics are extremely strange. The
  * chip will add the segment base to the memory address, even though
  * no segment checking is done. We correct for this by using an
- * offset of 0x40000000 that will wrap around the kernel segment base
- * of 0xC0000000 to get the correct address (it will always be outside
+ * offset of -__PAGE_OFFSET that will wrap around the kernel segment base
+ * of __PAGE_OFFSET to get the correct address (it will always be outside
  * the kernel segment, but we're only interested in the final linear
  * address.
  */
 #define __invlpg_mem(addr) \
-	(((char *)(addr))[0x40000000])
+	(*((char *)(addr)-__PAGE_OFFSET))
 #define __invlpg(addr) \
 	__asm__ __volatile__("invlpg %0": :"m" (__invlpg_mem(addr)))
 
@@ -177,6 +179,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 }
 #endif
 #endif
+#endif /* !__ASSEMBLY__ */
 
 
 /* Certain architectures need to do special things when pte's
@@ -202,6 +205,17 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define PTRS_PER_PTE	1024
 #define PTRS_PER_PMD	1
 #define PTRS_PER_PGD	1024
+
+/*
+ * pgd entries used up by user/kernel:
+ */
+
+#define USER_PGD_PTRS ((unsigned long)__PAGE_OFFSET >> PGDIR_SHIFT)
+#define KERNEL_PGD_PTRS (PTRS_PER_PGD-USER_PGD_PTRS)
+#define __USER_PGD_PTRS (__PAGE_OFFSET >> PGDIR_SHIFT)
+#define __KERNEL_PGD_PTRS (PTRS_PER_PGD-__USER_PGD_PTRS)
+
+#ifndef __ASSEMBLY__
 
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the
@@ -507,5 +521,7 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 #define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
 #define SWP_OFFSET(entry) ((entry) >> 8)
 #define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
+
+#endif /* !__ASSEMBLY__ */
 
 #endif /* _I386_PAGE_H */

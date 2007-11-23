@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 
-void main()
+int main()
 {
 	int c;
 	int comma=0;
@@ -25,7 +25,5 @@ void main()
 	}
 	if(count)
 		printf("\n");
-	exit(0);
+	return 0;
 }
-
-		

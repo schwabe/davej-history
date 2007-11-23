@@ -145,6 +145,23 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_ACARD),y)
+L_OBJS += atp870u.o 
+else
+  ifeq ($(CONFIG_SCSI_ACARD),m)
+  M_OBJS += atp870u.o 
+  endif
+endif
+
+
+ifeq ($(CONFIG_SCSI_INITIO),y)
+L_OBJS += initio.o
+else
+  ifeq ($(CONFIG_SCSI_INITIO),m)
+  M_OBJS += initio.o
+  endif
+endif
+
 
 ifeq ($(CONFIG_SCSI_AHA152X),y)
 L_OBJS += aha152x.o
@@ -363,12 +380,60 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_SYM53C416),y) 
+L_OBJS += sym53c416.o 
+else 
+  ifeq ($(CONFIG_SCSI_SYM53C416),m) 
+  M_OBJS += sym53c416.o 
+  endif 
+endif 
+
+ifeq ($(CONFIG_SCSI_TC2550),y) 
+L_OBJS += tripace.o 
+else 
+  ifeq ($(CONFIG_SCSI_TC2550),m) 
+  M_OBJS += tripace.o 
+  endif 
+endif 
+
 ifeq ($(CONFIG_SCSI_MEGARAID),y)
 L_OBJS += megaraid.o
 else
   ifeq ($(CONFIG_SCSI_MEGARAID),m)
   M_OBJS += megaraid.o
   endif
+endif
+
+ifeq ($(CONFIG_SCSI_INIA100),y)
+L_OBJS += a100u2w.o
+else
+  ifeq ($(CONFIG_SCSI_INIA100),m)
+  M_OBJS += a100u2w.o
+  endif
+endif
+
+ifeq ($(CONFIG_SCSI_PCI2000),y)
+L_OBJS += pci2000.o
+else
+    ifeq ($(CONFIG_SCSI_PCI2000),m)
+    M_OBJS += pci2000.o
+    endif
+endif
+
+ifeq ($(CONFIG_SCSI_PCI2220I),y)
+L_OBJS += pci2220i.o
+else
+    ifeq ($(CONFIG_SCSI_PCI2220I),m)
+    M_OBJS += pci2220i.o
+    endif
+endif
+
+ifeq ($(CONFIG_SCSI_PSI240I),y)
+L_OBJS += psi240i.o
+else
+    ifeq ($(CONFIG_SCSI_PSI240I),m)
+    M_OBJS += psi240i.o
+    endif
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDESCSI),y)
@@ -402,8 +467,14 @@ tmscsim.o : tmscsim.c
 g_NCR5380.o: g_NCR5380.c
 	$(CC) $(CFLAGS) -DGENERIC_NCR5380_OVERRIDE="{{(NCR5380_map_type)0x350,5,0, BOARD_NCR53C400}};" -c g_NCR5380.c
 
+initio.o: ini9100u.o i91uscsi.o
+	$(LD) -r -o initio.o ini9100u.o i91uscsi.o
+
 megaraid.o: megaraid.c
 	$(CC) $(CFLAGS) -c megaraid.c
+
+a100u2w.o: inia100.o i60uscsi.o
+	$(LD) -r -o a100u2w.o inia100.o i60uscsi.o
 
 scsi_mod.o: $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o

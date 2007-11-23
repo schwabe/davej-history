@@ -1,7 +1,9 @@
 /* -*- linux-c -*-
  * APM BIOS driver for Linux
- * Copyright 1994, 1995, 1996 Stephen Rothwell
- *                           (Stephen.Rothwell@canb.auug.org.au)
+ * Copyright 1994-1999 Stephen Rothwell
+ *                     (Stephen.Rothwell@canb.auug.org.au)
+ * Development of this driver was funded by NEC Australia P/L
+ *	and NEC Corporation
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -12,8 +14,6 @@
  * WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
- *
- * $Id: apm_bios.c,v 0.22 1995/03/09 14:12:02 sfr Exp $
  *
  * October 1995, Rik Faith (faith@cs.unc.edu):
  *    Minor enhancements and updates (to the patch set) for 1.3.x
@@ -1167,11 +1167,11 @@ void apm_bios_init(void)
 	apm_bios_entry.offset = apm_bios_info.offset;
 	apm_bios_entry.segment = APM_CS;
 	set_base(gdt[APM_CS >> 3],
-		 0xc0000000 + ((unsigned long)apm_bios_info.cseg << 4));
+		 __PAGE_OFFSET + ((unsigned long)apm_bios_info.cseg << 4));
 	set_base(gdt[APM_CS_16 >> 3],
-		 0xc0000000 + ((unsigned long)apm_bios_info.cseg_16 << 4));
+		 __PAGE_OFFSET + ((unsigned long)apm_bios_info.cseg_16 << 4));
 	set_base(gdt[APM_DS >> 3],
-		 0xc0000000 + ((unsigned long)apm_bios_info.dseg << 4));
+		 __PAGE_OFFSET + ((unsigned long)apm_bios_info.dseg << 4));
 	if (apm_bios_info.version == 0x100) {
 		set_limit(gdt[APM_CS >> 3], 64 * 1024);
 		set_limit(gdt[APM_CS_16 >> 3], 64 * 1024);

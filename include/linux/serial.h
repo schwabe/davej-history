@@ -81,6 +81,7 @@ struct serial_struct {
 #define ASYNC_CTS_FLOW		0x04000000 /* Do CTS flow control */
 #define ASYNC_CHECK_CD		0x02000000 /* i.e., CLOCAL */
 #define ASYNC_SHARE_IRQ		0x01000000 /* for multifunction cards */
+#define ASYNC_PCI           0x00800000 /* this port is on a PCI board */
 
 /*
  * Multiport serial configuration structure --- external structure
@@ -200,6 +201,42 @@ struct rs_multiport_struct {
 	unsigned char	mask4, match4;
 	int		port_monitor;
 };
+
+/*
+ * PCI board base -- internal structure 
+ */
+
+/*
+ * There are four config spaces on a PCI board. Which ones house the
+ * serial chips?
+ */
+
+enum pci_spc {
+  pci_space_0 = 1,  
+  pci_space_1 = 2,
+  pci_space_2 = 4,  
+  pci_space_3 = 8
+};
+
+struct pci_struct {
+  int start;                        /* IO Base for this chip */
+  struct pci_serial_boards *type;   /* Pointer to the board type */
+};
+
+struct pci_serial_boards {
+  int vendor_id;          /* Vendor of the Board */
+  int device_id;          /* Device ID */
+  char *board_name;       /* Name of the Board */
+  int board_type;         /* Which chip is on the board */
+  enum pci_spc pci_space; /* How many PCI spaces should be mapped in? */
+  int dev_per_space;      /* How many chips are in every PCI space */
+  int dev_spacing;        /* What spacing are they located? */ 
+  int io_size;            /* Size of the Register IO Space */
+  int baud_base;          /* What crystal is on the board */
+};
+
+
+
 
 /* Export to allow PCMCIA to use this - Dave Hinds */
 extern int register_serial(struct serial_struct *req);

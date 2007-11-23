@@ -9,10 +9,14 @@
  */
 
 .text
+#include <linux/config.h>
 #include <linux/tasks.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
 #include <linux/config.h>
+#include <asm/page.h>
+#include <asm/pgtable.h>
+
 
 #define CL_MAGIC_ADDR	0x90020
 #define CL_MAGIC	0xA33F
@@ -329,7 +333,7 @@ check_x87:
  *  sets up a idt with 256 entries pointing to
  *  ignore_int, interrupt gates. It doesn't actually load
  *  idt - that can be done only after paging has been enabled
- *  and the kernel moved to 0xC0000000. Interrupts
+ *  and the kernel moved to PAGE_OFFSET. Interrupts
  *  are enabled elsewhere, when we can be relatively
  *  sure everything is ok.
  */
@@ -370,9 +374,9 @@ setup_paging:
 /* Identity-map the kernel in low 4MB memory for ease of transition */
 /* set present bit/user r/w */
 	movl $ SYMBOL_NAME(pg0)+7,SYMBOL_NAME(swapper_pg_dir)
-/* But the real place is at 0xC0000000 */
+/* But the real place is at PAGE_OFFSET */
 /* set present bit/user r/w */
-	movl $ SYMBOL_NAME(pg0)+7,SYMBOL_NAME(swapper_pg_dir)+3072
+	movl $ SYMBOL_NAME(pg0)+7,SYMBOL_NAME(swapper_pg_dir)+__USER_PGD_PTRS*4
 	movl $ SYMBOL_NAME(pg0)+4092,%edi
 	movl $0x03ff007,%eax		/*  4Mb - 4096 + 7 (r/w user,p) */
 	std
@@ -460,7 +464,7 @@ ignore_int:
 .word 0
 idt_descr:
 	.word 256*8-1		# idt contains 256 entries
-	.long 0xc0000000+SYMBOL_NAME(idt)
+	.long __PAGE_OFFSET+SYMBOL_NAME(idt)
 
 	ALIGN
 .word 0
@@ -470,19 +474,45 @@ gdt_descr:
 #else
 	.word (8+2*NR_TASKS)*8-1
 #endif
-	.long 0xc0000000+SYMBOL_NAME(gdt)
+	.long __PAGE_OFFSET+SYMBOL_NAME(gdt)
 
 /*
  * This gdt setup gives the kernel a 1GB address space at virtual
- * address 0xC0000000 - space enough for expansion, I hope.
+ * address PAGE_OFFSET - space enough for expansion, I hope.
  */
+
+#define upper_seg(type,dpl,base,limit) \
+        ((base) & 0xff000000) | \
+        (((base) & 0x00ff0000)>>16) | \
+        (((limit)>>12) & 0xf0000) | \
+        ((dpl)<<13) | \
+        (0x00c09000) | \
+        ((type)<<8)
+
+#define lower_seg(type,dpl,base,limit) \
+        (((base) & 0x0000ffff)<<16) | \
+        ((limit) & 0x0ffff)
+
+#define x86_seg(type,dpl,base,limit) \
+	.long lower_seg(type,dpl,base,limit); \
+	.long upper_seg(type,dpl,base,limit)
+
 ENTRY(gdt)
 	.quad 0x0000000000000000	/* NULL descriptor */
 	.quad 0x0000000000000000	/* not used */
-	.quad 0xc0c39a000000ffff	/* 0x10 kernel 1GB code at 0xC0000000 */
-	.quad 0xc0c392000000ffff	/* 0x18 kernel 1GB data at 0xC0000000 */
-	.quad 0x00cbfa000000ffff	/* 0x23 user   3GB code at 0x00000000 */
-	.quad 0x00cbf2000000ffff	/* 0x2b user   3GB data at 0x00000000 */
+
+	/* 0x10 kernel 1GB code at 0xC0000000: */
+	x86_seg(0xa,0,__PAGE_OFFSET,0xffffffff-__PAGE_OFFSET)
+
+	/* 0x18 kernel 1GB data at 0xC0000000: */
+	x86_seg(0x2,0,__PAGE_OFFSET,0xffffffff-__PAGE_OFFSET)
+
+	/* 0x23 user 3GB code at 0x00000000: */
+        x86_seg(0xa,3,0,__PAGE_OFFSET-1)
+
+	/* 0x2b user 3GB data at 0x00000000: */
+        x86_seg(0x2,3,0,__PAGE_OFFSET-1)
+
 	.quad 0x0000000000000000	/* not used */
 	.quad 0x0000000000000000	/* not used */
 	.fill 2*NR_TASKS,8,0		/* space for LDT's and TSS's etc */

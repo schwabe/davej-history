@@ -76,10 +76,13 @@ struct icmphdr {
 };
 
 
+#ifdef __KERNEL__
+
 struct icmp_err {
   int		errno;
   unsigned	fatal:1;
 };
 
+#endif
 
 #endif	/* _LINUX_ICMP_H */

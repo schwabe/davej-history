@@ -288,12 +288,14 @@ static struct dev_info device_list[] =
 {"PIONEER","CD-ROM DRM-600","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-602X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"PIONEER","CD-ROM DRM-604X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"PIONEER","CD-ROM DRM-1804X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"EMULEX","MD21/S2     ESDI","*", BLIST_SINGLELUN},
 {"CANON","IPUBJD","*", BLIST_SPARSELUN},
 {"MATSHITA","PD","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"YAMAHA","CDR100","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"nCipher","Fastness Crypto","*", BLIST_FORCELUN},
+{"iomega","jaz 1GB","J.86", BLIST_NOTQ | BLIST_NOLUN},
 /*
  * Must be at end of list...
  */

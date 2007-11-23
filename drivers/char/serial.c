@@ -19,6 +19,9 @@
  *      flags INPCK, BRKINT, PARMRK, IGNPAR and IGNBRK.
  *                                            Bernd Anhäupl 05/17/96.
  * 
+ * Added Support for PCI serial boards which contain 16x50 Chips
+ * 31.10.1998 Henning P. Schmiedehausen <hps@tanstaafl.de>
+ * 
  * This module exports the following rs232 io functions:
  *
  *	int rs_init(void);
@@ -43,13 +46,18 @@
 #include <linux/ioport.h>
 #include <linux/mm.h>
 
+#ifdef CONFIG_SERIAL_PCI
+#include <linux/pci.h>
+#include <linux/bios32.h>
+#endif
+
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
 
 static char *serial_name = "Serial driver";
-static char *serial_version = "4.13";
+static char *serial_version = "4.13p1";
 
 DECLARE_TASK_QUEUE(tq_serial);
 
@@ -82,6 +90,10 @@ static int serial_refcount;
 #undef SERIAL_DEBUG_INTR
 #undef SERIAL_DEBUG_OPEN
 #undef SERIAL_DEBUG_FLOW
+
+#ifdef CONFIG_SERIAL_PCI
+# undef SERIAL_DEBUG_PCI
+#endif
 
 #define RS_STROBE_TIME (10*HZ)
 #define RS_ISR_PASS_LIMIT 256
@@ -121,6 +133,14 @@ static void change_speed(struct async_struct *info);
  */
 #define BASE_BAUD ( 1843200 / 16 )
 
+/*
+ * Well, it is not a 24,756 MHz clock but it is at least a start. 
+ * This PCI board here has a 14,7456 MHz crystal oscillator which is 
+ * eight times as fast as the standard serial clock...
+ */
+
+#define PCI_BAUD  ( 14745600 / 16 )
+
 /* Standard COM flags (except for COM4, because of the 8514 problem) */
 #define STD_COM_FLAGS (ASYNC_BOOT_AUTOCONF | ASYNC_SKIP_TEST )
 #define STD_COM4_FLAGS ASYNC_BOOT_AUTOCONF
@@ -129,6 +149,29 @@ static void change_speed(struct async_struct *info);
 #define ACCENT_FLAGS 0
 #define BOCA_FLAGS 0
 #define HUB6_FLAGS 0
+	
+#ifdef CONFIG_SERIAL_PCI
+
+#define PCI_FLAGS (ASYNC_PCI|ASYNC_BOOT_AUTOCONF)
+
+#ifndef PCI_DEVICE_ID_PLX_SPCOM200
+#define PCI_DEVICE_ID_PLX_SPCOM200 0x1103
+#endif
+
+/*
+ * The chips we know about
+ */
+
+#define PCISER_PLX9050  0    /* PLX 9050 local bus bridge as serial card */
+#define PCISER_PCCOM4   1    /* "PC COM PCI Bus 4 port serial Adapter" -- from Alvin Sim <alvin@alloycp.com.au> */
+
+struct pci_serial_boards pci_serial_tbl[] = {
+  { PCI_VENDOR_ID_PLX, PCI_DEVICE_ID_PLX_SPCOM200, "SPCom 200", PCISER_PLX9050, pci_space_0|pci_space_1, 1, 0, 128, PCI_BAUD },
+  { PCI_VENDOR_ID_DCI, PCI_DEVICE_ID_DCI_PCCOM4,   "PC COM 4",  PCISER_PCCOM4,  pci_space_0,             4, 8, 128, BASE_BAUD },
+  {	0, 0, 0, 0, 0, 0, 0, 0, 0 }
+};
+
+#endif
 	
 /*
  * The following define the access methods for the HUB6 card. All
@@ -202,9 +245,41 @@ struct async_struct rs_table[] = {
 	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,4) },	/* ttyS42 */
 	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,5) },	/* ttyS43 */
 #endif
+
+#ifdef CONFIG_SERIAL_PCI
+		{ 0, BASE_BAUD, 0x0, 0, 0 },	/* ttyS32 or bigger... */
+		{ 0, BASE_BAUD, 0x0, 0, 0 },	/* ttyS33 */
+		{ 0, BASE_BAUD, 0x0, 0, 0 },	/* ttyS34 */
+		{ 0, BASE_BAUD, 0x0, 0, 0 },	/* ttyS35 */
+		{ 0, BASE_BAUD, 0x0, 0, 0 },	/* ttyS36 */
+		{ 0, BASE_BAUD, 0x0, 0, 0 },	/* ttyS37 */
+		{ 0, BASE_BAUD, 0x0, 0, 0 },	/* ttyS38 */
+		{ 0, BASE_BAUD, 0x0, 0, 0 },	/* ttyS39 */
+#endif
 };
 
 #define NR_PORTS	(sizeof(rs_table)/sizeof(struct async_struct))
+
+#ifdef CONFIG_SERIAL_PCI
+
+/*
+ * currently you can have up to four PCI serial boards in your
+ * system. Increase the size of this structure to have more
+ */
+
+struct pci_struct pci_rs_chips[] = {                 
+  {0, 0,},
+  {0, 0,},
+  {0, 0,},
+  {0, 0,},
+};
+
+#define PCI_NR_BOARDS	(sizeof(pci_rs_chips)/sizeof(struct pci_struct))
+#define PCI_NR_PORTS	8
+
+#define PCI_PORT_START (NR_PORTS - PCI_NR_PORTS)
+
+#endif
 
 static struct tty_struct *serial_table[NR_PORTS];
 static struct termios *serial_termios[NR_PORTS];
@@ -1731,6 +1806,26 @@ static int do_autoconfig(struct async_struct * info)
 
 
 /*
+ * rs_break() --- routine which turns the break handling on or off
+ * adapted from 2.1.124
+ */
+static void rs_break(struct async_struct * info, int break_state)
+{
+        unsigned long flags;
+        
+        if (!info->port)
+                return;
+        save_flags(flags);cli();
+        if (break_state == -1)
+                serial_out(info, UART_LCR,
+                           serial_inp(info, UART_LCR) | UART_LCR_SBC);
+        else
+                serial_out(info, UART_LCR,
+                           serial_inp(info, UART_LCR) & ~UART_LCR_SBC);
+        restore_flags(flags);
+}
+
+/*
  * This routine sends a break character out the serial port.
  */
 static void send_break(	struct async_struct * info, int duration)
@@ -1922,6 +2017,20 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	}
 	
 	switch (cmd) {
+                case TIOCSBRK:  /* Turn break on, unconditionally */
+			retval = tty_check_change(tty);
+			if (retval)
+				return retval;
+			tty_wait_until_sent(tty, 0);
+			rs_break(info,-1);
+			return 0;
+                case TIOCCBRK:  /* Turn break off, unconditionally */
+			retval = tty_check_change(tty);
+			if (retval)
+				return retval;
+			tty_wait_until_sent(tty, 0);
+			rs_break(info,0);
+			return 0;
 		case TCSBRK:	/* SVID version: non-zero arg --> no break */
 			retval = tty_check_change(tty);
 			if (retval)
@@ -2478,6 +2587,10 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 static void show_serial_version(void)
 {
  	printk(KERN_INFO "%s version %s with", serial_name, serial_version);
+#ifdef CONFIG_SERIAL_PCI
+  printk(" PCI");
+#define SERIAL_OPT
+#endif
 #ifdef CONFIG_HUB6
 	printk(" HUB-6");
 #define SERIAL_OPT
@@ -2712,6 +2825,73 @@ static void autoconfig(struct async_struct * info)
 	restore_flags(flags);
 }
 
+void display_uart_type(int type)
+{
+  switch (type) {
+	case PORT_8250:
+	  printk(" is a 8250\n");
+	  break;
+	case PORT_16450:
+	  printk(" is a 16450\n");
+	  break;
+	case PORT_16550:
+	  printk(" is a 16550\n");
+	  break;
+	case PORT_16550A:
+	  printk(" is a 16550A\n");
+	  break;
+	case PORT_16650:
+	  printk(" is a 16650\n");
+	  break;
+	default:
+	  printk("\n");
+	  break;
+  }
+}
+
+void init_port(struct async_struct *info, int num)
+{
+  info->magic = SERIAL_MAGIC;
+  info->line = num;
+  info->tty = 0;
+  info->type = PORT_UNKNOWN;
+  info->custom_divisor = 0;
+  info->close_delay = 5*HZ/10;
+  info->closing_wait = 30*HZ;
+  info->x_char = 0;
+  info->event = 0;
+  info->count = 0;
+  info->blocked_open = 0;
+  info->tqueue.routine = do_softint;
+  info->tqueue.data = info;
+  info->tqueue_hangup.routine = do_serial_hangup;
+  info->tqueue_hangup.data = info;
+  info->callout_termios =callout_driver.init_termios;
+  info->normal_termios = serial_driver.init_termios;
+  info->open_wait = 0;
+  info->close_wait = 0;
+  info->delta_msr_wait = 0;
+  info->icount.cts = info->icount.dsr = 
+	info->icount.rng = info->icount.dcd = 0;
+  info->next_port = 0;
+  info->prev_port = 0;
+  if (info->irq == 2)
+	info->irq = 9;
+  
+  if (info->type == PORT_UNKNOWN) {
+	if (!(info->flags & ASYNC_BOOT_AUTOCONF))
+	  return;
+	autoconfig(info);
+	if (info->type == PORT_UNKNOWN)
+	  return;
+  }
+  printk(KERN_INFO "ttyS%02d%s%s at 0x%04x (irq = %d)", info->line, 
+		 (info->flags & ASYNC_FOURPORT) ? " FourPort" : "",
+		 (info->flags & ASYNC_PCI)      ? " PCI" : "",
+		 info->port, info->irq);
+  display_uart_type(info->type);
+}
+
 int register_serial(struct serial_struct *req);
 void unregister_serial(int line);
 
@@ -2722,9 +2902,212 @@ static struct symbol_table serial_syms = {
 #include <linux/symtab_end.h>
 };
 
+#ifdef CONFIG_SERIAL_PCI
+
+/*
+ * Query PCI space for known serial boards
+ * If found, add them to the PCI device space in rs_table[]
+ *
+ * Accept a maximum of eight boards
+ *
+ */
+
+static void probe_serial_pci(void) 
+{
+  u16 vendor, device;
+  static int pci_index  = 0;
+  unsigned char pci_bus, pci_device_fn;
+  struct async_struct *pci_boards = &rs_table[PCI_PORT_START];
+  unsigned int port_num = 0;
+  unsigned int card_num = 0;
+
+  u32 device_ioaddr;
+  u8  device_irq;
+  
+  enum pci_spc pci_space        = pci_space_0;
+  unsigned int pci_space_offset = 0;
+
+
+#ifdef SERIAL_DEBUG_PCI
+  printk(KERN_DEBUG "Entered probe_serial_pci()\n");
+#endif
+  
+  if (! pcibios_present()) {
+#ifdef SERIAL_DEBUG_PCI
+	printk(KERN_DEBUG "Leaving probe_serial_pci() (no pcibios)\n");
+#endif
+	return;
+  }
+
+/*
+ * Start scanning the PCI bus for serial controllers ...
+ *
+ */
+
+  for (;pci_index < 0xff; pci_index++) {
+	int i = 0;
+	
+	if (pcibios_find_class(PCI_CLASS_COMMUNICATION_SERIAL << 8,
+						   pci_index,
+						   &pci_bus, 
+						   &pci_device_fn) != PCIBIOS_SUCCESSFUL)
+	  break; /* for (; pci_index ... */
+	
+	pcibios_read_config_word(pci_bus, pci_device_fn, PCI_VENDOR_ID, &vendor);
+	pcibios_read_config_word(pci_bus, pci_device_fn, PCI_DEVICE_ID, &device);
+	
+	for (i = 0; pci_serial_tbl[i].board_name; i++) {
+	  if (vendor == pci_serial_tbl[i].vendor_id  &&
+		  device == pci_serial_tbl[i].device_id)
+		break; /* for(i=0... */
+	}
+	
+	if (pci_serial_tbl[i].board_name == 0) {
+#ifdef SERIAL_DEBUG_PCI
+	  printk(KERN_DEBUG "Found Board (%x/%x) (not one of us)\n", vendor, device);
+#endif
+	  continue;        /* Found a serial communication controller but not one we know */
+	}
+
+/*
+ * At this point we found a serial board which we know
+ */
+
+	if(card_num >= PCI_NR_BOARDS) {
+	  printk(KERN_ERR "Already %d boards configured, skipping\n", PCI_NR_BOARDS);
+	  continue; /* for (;pci_index < 0xff */
+	}
+
+	pcibios_read_config_byte(pci_bus, pci_device_fn, 
+							 PCI_INTERRUPT_LINE, &device_irq);
+	pcibios_read_config_dword(pci_bus, pci_device_fn, 
+							  PCI_BASE_ADDRESS_1, &device_ioaddr);
+
+#ifdef SERIAL_DEBUG_PCI
+		printk(KERN_DEBUG "Device %s at #%x found\n", pci_serial_tbl[i].board_name, device_ioaddr);
+#endif
+
+	if (check_region(device_ioaddr, pci_serial_tbl[i].io_size)) {
+	  printk(KERN_ERR "Could not reserve %d bytes of I/O Space at %x\n", pci_serial_tbl[i].io_size, device_ioaddr);
+	  continue; /* for (;pci_index < 0xff */
+	}
+
+/*
+ * Every PCI device brings 128 bytes (at least) of IO-Space with it
+ * reserve a region for it. It is not exactly necessary as PCI will
+ * ensure that no other device will be mapped onto this space (LOL)
+ * but we do it nevertheless so it will show up nicely on
+ * /proc/ioports -- hps
+ */
+	
+	  if((device_ioaddr & 1) == 0) {
+#ifdef SERIAL_DEBUG_PCI
+		device_ioaddr &= ~0x7f;
+		printk(KERN_DEBUG "%s has its config registers memory-mapped at #%x (ignoring)\n", 
+			   pci_serial_tbl[i].board_name, device_ioaddr);
+#endif
+		continue; /* for (;pci_index < 0xff */
+	  }
+
+	device_ioaddr &= ~0x7f;         /* Mask out the flag bits 
+									 * from this register. At least on the PLX9050
+									 * they're always 0 but this is here nevertheless
+									 * for sanity's sake 
+									 */
+
+	request_region(device_ioaddr, pci_serial_tbl[i].io_size, "serial (PCI Controller)");
+		
+	pci_rs_chips[card_num].start = device_ioaddr;
+	pci_rs_chips[card_num].type  = &pci_serial_tbl[i];
+		
+
+/*
+ * Every PCI device can bring up to four PCI memory or IO spaces (at
+ * least according to the documentation I have. So we will now check
+ * with our config whether this device has one of these spaces and we
+ * should configure UARTs inside -- hps
+ */
+
+	for(; pci_space <= pci_space_3; pci_space <<= 1, pci_space_offset+= 4) {
+	  u32 uart_chip_base;
+	  u32 uart_chip_count;
+	  
+	  if((pci_serial_tbl[i].pci_space & pci_space) == 0)
+		continue; /* for(;pci_space... */
+	  
+	  pcibios_read_config_dword(pci_bus, pci_device_fn, 
+								PCI_BASE_ADDRESS_2+pci_space_offset, &uart_chip_base);
+	  
+	  if((uart_chip_base & 1) == 0) {
+#ifdef SERIAL_DEBUG_PCI
+		chip_base &= ~0x0f;
+		printk(KERN_DEBUG "%s has a memory-mapped IO Chip at #%x (ignoring)\n", 
+			   pci_serial_tbl[i].board_name, chip_base);
+#endif
+		continue; /* for(;pci_space... */
+	  }
+
+	  uart_chip_base &= ~0x0f;
+
+/*
+ * uart_chip_base now points to the IO-Space. 
+ *
+ * Alvin Sim <alvin@alloycp.com.au> told me the following thing:
+ *
+ * UARTS can be "setserial"d by kernel 2.0.35, but ports needed to be
+ * manually specified. 4 ports start at 0x6100, in increments of 8
+ * addresses.
+ * 
+ * so there is at least one board out there which can do more than one
+ * UART in a single PCI config space. My trustworthy SPCom 200 PCI has
+ * just one UART in one config space. So I added a check for more than
+ * one chip in a config space -- hps
+ *
+ */
+
+	  for(uart_chip_count=0;uart_chip_count < pci_serial_tbl[i].dev_per_space; uart_chip_count++) {
+#ifdef SERIAL_DEBUG_PCI
+		printk(KERN_DEBUG "%s has an IO Chip at #%x\n", 
+			   pci_serial_tbl[i].board_name, uart_chip_base);
+#endif
+		
+		if(port_num >= PCI_NR_PORTS) {
+		  printk(KERN_ERR "Already %d ports configured, skipping\n", PCI_NR_PORTS);
+		  break; /* for(;uart_chip_count... */
+		}
+		
+		if (check_region(uart_chip_base, 8)) {
+		  printk(KERN_ERR "Could not reserve %d bytes of I/O Space at %x\n", 8, uart_chip_base);
+		  break; /* for(;uart_chip_count... */
+		}
+		  
+		request_region(uart_chip_base, 8, "serial (PCI)");
+		pci_boards[port_num].port  = uart_chip_base;
+		pci_boards[port_num].irq   = device_irq;
+		pci_boards[port_num].flags = PCI_FLAGS;
+		pci_boards[port_num].baud_base = pci_serial_tbl[i].baud_base;
+		
+		port_num++;
+		uart_chip_base += pci_serial_tbl[i].dev_spacing;
+
+	  }  /* for(uart_chip_count... */
+	} /* for(pci_space ... */
+	
+	card_num++;
+  }  /* for */
+
+#ifdef SERIAL_DEBUG_PCI
+  printk(KERN_DEBUG "Leaving probe_serial_pci() (probe finished)\n");
+#endif
+  return;
+}
+
+#endif /* CONFIG_SERIAL_PCI */
+
 /*
  * The serial driver boot-time initialization code!
  */
+
 int rs_init(void)
 {
 	int i;
@@ -2744,6 +3127,9 @@ int rs_init(void)
 	}
 	
 	show_serial_version();
+#ifdef CONFIG_SERIAL_PCI
+		probe_serial_pci();
+#endif	
 
 	/* Initialize the tty_driver structure */
 	
@@ -2795,66 +3181,14 @@ int rs_init(void)
 		panic("Couldn't register callout driver\n");
 	
 	for (i = 0, info = rs_table; i < NR_PORTS; i++,info++) {
-		info->magic = SERIAL_MAGIC;
-		info->line = i;
-		info->tty = 0;
-		info->type = PORT_UNKNOWN;
-		info->custom_divisor = 0;
-		info->close_delay = 5*HZ/10;
-		info->closing_wait = 30*HZ;
-		info->x_char = 0;
-		info->event = 0;
-		info->count = 0;
-		info->blocked_open = 0;
-		info->tqueue.routine = do_softint;
-		info->tqueue.data = info;
-		info->tqueue_hangup.routine = do_serial_hangup;
-		info->tqueue_hangup.data = info;
-		info->callout_termios =callout_driver.init_termios;
-		info->normal_termios = serial_driver.init_termios;
-		info->open_wait = 0;
-		info->close_wait = 0;
-		info->delta_msr_wait = 0;
-		info->icount.cts = info->icount.dsr = 
-			info->icount.rng = info->icount.dcd = 0;
-		info->next_port = 0;
-		info->prev_port = 0;
-		if (info->irq == 2)
-			info->irq = 9;
-		if (info->type == PORT_UNKNOWN) {
-			if (!(info->flags & ASYNC_BOOT_AUTOCONF))
-				continue;
-			autoconfig(info);
-			if (info->type == PORT_UNKNOWN)
-				continue;
-		}
-		printk(KERN_INFO "tty%02d%s at 0x%04x (irq = %d)", info->line, 
-		       (info->flags & ASYNC_FOURPORT) ? " FourPort" : "",
-		       info->port, info->irq);
-		switch (info->type) {
-			case PORT_8250:
-				printk(" is a 8250\n");
-				break;
-			case PORT_16450:
-				printk(" is a 16450\n");
-				break;
-			case PORT_16550:
-				printk(" is a 16550\n");
-				break;
-			case PORT_16550A:
-				printk(" is a 16550A\n");
-				break;
-			case PORT_16650:
-				printk(" is a 16650\n");
-				break;
-			default:
-				printk("\n");
-				break;
-		}
-	}
+				init_port(info, i);
+		};
+
 	register_symtab(&serial_syms);
 	return 0;
 }
+
+
 
 /*
  * register_serial and unregister_serial allows for serial ports to be
@@ -2898,20 +3232,9 @@ int register_serial(struct serial_struct *req)
 		printk("register_serial(): autoconfig failed\n");
 		return -1;
 	}
-	printk(KERN_INFO "tty%02d at 0x%04x (irq = %d)", info->line, 
+		printk(KERN_INFO "ttyS%02d at 0x%04x (irq = %d)", info->line, 
 	       info->port, info->irq);
-	switch (info->type) {
-	case PORT_8250:
-		printk(" is a 8250\n"); break;
-	case PORT_16450:
-		printk(" is a 16450\n"); break;
-	case PORT_16550:
-		printk(" is a 16550\n"); break;
-	case PORT_16550A:
-		printk(" is a 16550A\n"); break;
-	default:
-		printk("\n"); break;
-	}
+		display_uart_type(info->type);
 	restore_flags(flags);
 	return info->line;
 }
@@ -2926,7 +3249,7 @@ void unregister_serial(int line)
 	if (info->tty)
 		tty_hangup(info->tty);
 	info->type = PORT_UNKNOWN;
-	printk(KERN_INFO "tty%02d unloaded\n", info->line);
+		printk(KERN_INFO "ttyS%02d unloaded\n", info->line);
 	restore_flags(flags);
 }
 
@@ -2960,6 +3283,18 @@ void cleanup_module(void)
 		if (rs_table[i].type != PORT_UNKNOWN)
 			release_region(rs_table[i].port, 8);
 	}
+
+#ifdef CONFIG_SERIAL_PCI
+		for (i = 0; i < PCI_NR_BOARDS; i++) {
+		  if (pci_rs_chips[i].start != 0x0) {
+#ifdef SERIAL_DEBUG_PCI
+			printk(KERN_DEBUG "Releasing %d Bytes at #%x\n", pci_rs_chips[i].type->io_size, pci_rs_chips[i].start);
+#endif
+			release_region(pci_rs_chips[i].start, pci_rs_chips[i].type->io_size);
+		  }
+		}
+#endif
+
 	if (tmp_buf) {
 		free_page((unsigned long) tmp_buf);
 		tmp_buf = NULL;

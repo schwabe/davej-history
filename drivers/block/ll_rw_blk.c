@@ -82,6 +82,30 @@ int * blksize_size[MAX_BLKDEV] = { NULL, NULL, };
 int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
 
 /*
+ * Max number of sectors per request
+ */
+int * max_sectors[MAX_BLKDEV] = { NULL, NULL, };
+
+/*
+ * Max number of segments per request
+ */
+int * max_segments[MAX_BLKDEV] = { NULL, NULL, };
+
+static inline int get_max_sectors(kdev_t dev)
+{
+	if (!max_sectors[MAJOR(dev)])
+		return MAX_SECTORS;
+	return max_sectors[MAJOR(dev)][MINOR(dev)];
+}
+
+static inline int get_max_segments(kdev_t dev)
+{
+	if (!max_segments[MAJOR(dev)])
+		return MAX_SEGMENTS;
+	return max_segments[MAJOR(dev)][MINOR(dev)];
+}
+
+/*
  * remove the plug and let it rip..
  */
 void unplug_device(void * data)
@@ -233,22 +257,29 @@ static inline void drive_stat_acct(int cmd, unsigned long nr_sectors,
 
 void add_request(struct blk_dev_struct * dev, struct request * req)
 {
+	int major = MAJOR(req->rq_dev);
+	int minor = MINOR(req->rq_dev);
 	struct request * tmp;
 	short		 disk_index;
 
-	switch (MAJOR(req->rq_dev)) {
+	switch (major) {
+		case DAC960_MAJOR+0:
+			disk_index = (minor & 0x00f8) >> 3;
+			if (disk_index < 4)
+				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
+			break;
 		case SCSI_DISK_MAJOR:
-			disk_index = (MINOR(req->rq_dev) & 0x0070) >> 4;
+			disk_index = (minor & 0x0070) >> 4;
 			if (disk_index < 4)
 				drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
 		case IDE0_MAJOR:	/* same as HD_MAJOR */
 		case XT_DISK_MAJOR:
-			disk_index = (MINOR(req->rq_dev) & 0x0040) >> 6;
+			disk_index = (minor & 0x0040) >> 6;
 			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 			break;
 		case IDE1_MAJOR:
-			disk_index = ((MINOR(req->rq_dev) & 0x0040) >> 6) + 2;
+			disk_index = ((minor & 0x0040) >> 6) + 2;
 			drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 		default:
 			break;
@@ -274,30 +305,39 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	tmp->next = req;
 
 /* for SCSI devices, call request_fn unconditionally */
-	if (scsi_blk_major(MAJOR(req->rq_dev)))
+	if (scsi_blk_major(major))
 		(dev->request_fn)();
+
+	if ( (major >= DAC960_MAJOR+0 && major <= DAC960_MAJOR+7) ||
+	     (major >= COMPAQ_SMART2_MAJOR+0 && major <= COMPAQ_SMART2_MAJOR+7))
+	  (dev->request_fn)();
 
 	sti();
 }
 
-#define MAX_SECTORS 244
-
-static inline void attempt_merge (struct request *req)
+static inline void attempt_merge (struct request *req,
+				  int max_sectors,
+				  int max_segments)
 {
 	struct request *next = req->next;
+	int total_segments;
 
 	if (!next)
 		return;
 	if (req->sector + req->nr_sectors != next->sector)
 		return;
-	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors >= MAX_SECTORS)
+	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev ||
+	    req->nr_sectors + next->nr_sectors > max_sectors)
 		return;
-#if 0
-	printk ("%s: merge %ld, %ld + %ld == %ld\n", kdevname(req->rq_dev), req->sector, req->nr_sectors, next->nr_sectors, req->nr_sectors + next->nr_sectors);
-#endif	
+	total_segments = req->nr_segments + next->nr_segments;
+	if (req->bhtail->b_data + req->bhtail->b_size == next->bh->b_data)
+		total_segments--;
+	if (total_segments > max_segments)
+		return;
 	req->bhtail->b_reqnext = next->bh;
 	req->bhtail = next->bhtail;
 	req->nr_sectors += next->nr_sectors;
+	req->nr_segments = total_segments;
 	next->rq_status = RQ_INACTIVE;
 	req->next = next->next;
 	wake_up (&wait_for_request);
@@ -307,7 +347,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 {
 	unsigned int sector, count;
 	struct request * req;
-	int rw_ahead, max_req;
+	int rw_ahead, max_req, max_sectors, max_segments;
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
@@ -324,7 +364,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	lock_buffer(bh);
 
 	if (blk_size[major])
-		if (blk_size[major][MINOR(bh->b_rdev)] < (sector + count)>>1) {
+               if (blk_size[major][MINOR(bh->b_rdev)] < (sector + count)>>1) {
 			bh->b_state &= (1 << BH_Lock) | (1 << BH_FreeOnIO);
                         /* This may well happen - the kernel calls bread()
                            without checking the size of the device, e.g.,
@@ -390,6 +430,9 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	/*
 	 * Try to coalesce the new request with old requests
 	 */
+	max_sectors = get_max_sectors(bh->b_rdev);
+	max_segments = get_max_segments(bh->b_rdev);
+
 	cli();
 	req = blk_dev[major].current_request;
 	if (!req) {
@@ -418,25 +461,52 @@ void make_request(int major,int rw, struct buffer_head * bh)
 
 	     case SCSI_DISK_MAJOR:
 	     case SCSI_CDROM_MAJOR:
-
+	     case DAC960_MAJOR+0:
+	     case DAC960_MAJOR+1:
+	     case DAC960_MAJOR+2:
+	     case DAC960_MAJOR+3:
+	     case DAC960_MAJOR+4:
+	     case DAC960_MAJOR+5:
+	     case DAC960_MAJOR+6:
+	     case DAC960_MAJOR+7:
+	     case COMPAQ_SMART2_MAJOR+0:
+	     case COMPAQ_SMART2_MAJOR+1:
+	     case COMPAQ_SMART2_MAJOR+2:
+	     case COMPAQ_SMART2_MAJOR+3:
+	     case COMPAQ_SMART2_MAJOR+4:
+	     case COMPAQ_SMART2_MAJOR+5:
+	     case COMPAQ_SMART2_MAJOR+6:
+	     case COMPAQ_SMART2_MAJOR+7:
 		do {
 			if (req->sem)
 				continue;
 			if (req->cmd != rw)
 				continue;
-			if (req->nr_sectors >= MAX_SECTORS)
+			if (req->nr_sectors + count > max_sectors)
 				continue;
 			if (req->rq_dev != bh->b_rdev)
 				continue;
 			/* Can we add it to the end of this request? */
 			if (req->sector + req->nr_sectors == sector) {
+				if (req->bhtail->b_data + req->bhtail->b_size
+				    != bh->b_data) {
+					if (req->nr_segments < max_segments)
+						req->nr_segments++;
+					else continue;
+				}
 				req->bhtail->b_reqnext = bh;
 				req->bhtail = bh;
 			    	req->nr_sectors += count;
 				/* Can we now merge this req with the next? */
-				attempt_merge(req);
+				attempt_merge(req, max_sectors, max_segments);
 			/* or to the beginning? */
 			} else if (req->sector - count == sector) {
+				if (bh->b_data + bh->b_size
+				    != req->bh->b_data) {
+					if (req->nr_segments < max_segments)
+						req->nr_segments++;
+					else continue;
+				}
 			    	bh->b_reqnext = req->bh;
 			    	req->bh = bh;
 			    	req->buffer = bh->b_data;
@@ -470,6 +540,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	req->errors = 0;
 	req->sector = sector;
 	req->nr_sectors = count;
+	req->nr_segments = 1;
 	req->current_nr_sectors = count;
 	req->buffer = bh->b_data;
 	req->sem = NULL;
@@ -634,6 +705,7 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 			req[j]->errors = 0;
 			req[j]->sector = rsector;
 			req[j]->nr_sectors = buffersize >> 9;
+			req[j]->nr_segments = 1;
 			req[j]->current_nr_sectors = buffersize >> 9;
 			req[j]->buffer = buf;
 			req[j]->sem = &sem;

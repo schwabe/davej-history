@@ -154,7 +154,20 @@
     the 'memory autoprobe' picking the wrong shared memory  (for the case of
     2 depca's in a PC).
 
+    ************************************************************************
+    Support for MCA EtherWORKS cards added 11-3-98.
+    Verified to work with up to 2 DE212 cards in a system (although not
+      fully stress-tested).  
 
+    Currently known bugs/limitations:
+
+    Note:  with the MCA stuff as a module, it trusts the MCA configuration,
+           not the command line for IRQ and memory address.  You can
+           specify them if you want, but it will throw your values out.
+           You still have to pass the IO address it was configured as
+           though.
+
+    ************************************************************************
     TO DO:
     ------
 
@@ -202,11 +215,16 @@
       0.422   29-Apr-96	  Fix depca_hw_init() bug <jari@markkus2.fimr.fi>
       0.423    7-Jun-96   Fix module load bug <kmg@barco.be>
       0.43    16-Aug-96   Update alloc_device() to conform to de4x5.c
+      0.44     1-Sep-97   Fix *_probe() to test check_region() first - bug
+                           reported by <mmogilvi@elbert.uccs.edu>
+      0.45     3-Nov-98   Added support for MCA EtherWORKS (DE210/DE212) cards
+                           by <tymm@computer.org> 
+      0.451    5-Nov-98   Fixed mca stuff cuz I'm a dummy. <tymm@computer.org>
 
     =========================================================================
 */
 
-static const char *version = "depca.c:v0.43 96/8/16 davies@maniac.ultranet.com\n";
+static const char *version = "depca.c:v0.451 1998/11/14 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -232,6 +250,10 @@ static const char *version = "depca.c:v0.43 96/8/16 davies@maniac.ultranet.com\n
 #include <linux/types.h>
 #include <linux/unistd.h>
 #include <linux/ctype.h>
+
+#ifdef CONFIG_MCA
+#include <linux/mca.h>
+#endif
 
 #include "depca.h"
 
@@ -280,15 +302,20 @@ static int depca_debug = 1;
 static short mem_chkd = 0;
 
 /*
+** Adapter ID for the MCA EtherWORKS DE210/212 adapter
+*/
+#define DE212_ID 0x6def
+
+/*
 ** Name <-> Adapter mapping
 */
 #define DEPCA_SIGNATURE {"DEPCA",\
 			 "DE100","DE101",\
                          "DE200","DE201","DE202",\
-			 "DE210",\
+			 "DE210","DE212",\
                          "DE422",\
                          ""}
-static enum {DEPCA, de100, de101, de200, de201, de202, de210, de422, unknown} adapter;
+static enum {DEPCA, de100, de101, de200, de201, de202, de210, de212, de422, unknown} adapter;
 
 /*
 ** Miscellaneous info...
@@ -342,7 +369,7 @@ struct depca_private {
     char devname[DEPCA_STRLEN];    /* Device Product String                  */
     char adapter_name[DEPCA_STRLEN];/* /proc/ioports string                  */
     char adapter;                  /* Adapter type                           */
-    struct depca_rx_desc *rx_ring; /* Pointer to start of RX descriptor ring */
+    char mca_slot;                 /* MCA slot, if MCA else -1               */    struct depca_rx_desc *rx_ring; /* Pointer to start of RX descriptor ring */
     struct depca_tx_desc *tx_ring; /* Pointer to start of TX descriptor ring */
     struct depca_init	init_block;/* Shadow Initialization block            */
     char *rx_memcpy[NUM_RX_DESC];  /* CPU virt address of sh'd memory buffs  */
@@ -393,7 +420,7 @@ static void   set_multicast_list(struct device *dev);
 /*
 ** Private functions
 */
-static int    depca_hw_init(struct device *dev, u_long ioaddr);
+static int    depca_hw_init(struct device *dev, u_long ioaddr, int mca_slot);
 static void   depca_init_ring(struct device *dev);
 static int    depca_rx(struct device *dev);
 static int    depca_tx(struct device *dev);
@@ -407,6 +434,9 @@ static int    EISA_signature(char *name, s32 eisa_id);
 static void   SetMulticastFilter(struct device *dev);
 static void   isa_probe(struct device *dev, u_long iobase);
 static void   eisa_probe(struct device *dev, u_long iobase);
+#ifdef CONFIG_MCA      
+static void   mca_probe(struct device *dev, u_long iobase);
+#endif
 static struct device *alloc_device(struct device *dev, u_long iobase);
 static int    depca_dev_index(char *s);
 static struct device *insert_device(struct device *dev, u_long iobase, int (*init)(struct device *));
@@ -441,7 +471,8 @@ static char   *adapter_name = '\0';        /* If no PROM when loadable module
 
 
 
-int depca_probe(struct device *dev)
+int
+depca_probe(struct device *dev)
 {
   int tmp = num_depcas, status = -ENODEV;
   u_long iobase = dev->base_addr;
@@ -450,6 +481,9 @@ int depca_probe(struct device *dev)
     printk("Autoprobing is not supported when loading a module based driver.\n");
     status = -EIO;
   } else {
+#ifdef CONFIG_MCA      
+    mca_probe(dev, iobase);
+#endif
     isa_probe(dev, iobase);
     eisa_probe(dev, iobase);
 
@@ -472,7 +506,7 @@ int depca_probe(struct device *dev)
 }
 
 static int
-depca_hw_init(struct device *dev, u_long ioaddr)
+depca_hw_init(struct device *dev, u_long ioaddr, int mca_slot)
 {
   struct depca_private *lp;
   int i, j, offset, netRAM, mem_len, status=0;
@@ -495,7 +529,10 @@ depca_hw_init(struct device *dev, u_long ioaddr)
     if ((adapter != unknown) && mem_start) {        /* found a DEPCA device */
       dev->base_addr = ioaddr;
 
-      if ((ioaddr&0x0fff)==DEPCA_EISA_IO_PORTS) {/* EISA slot address */
+      if (mca_slot != -1) {
+	printk("%s: %s at 0x%04lx (MCA slot %d)", dev->name, name, 
+	                                                   ioaddr, mca_slot);
+      } else if ((ioaddr & 0x0fff) == DEPCA_EISA_IO_PORTS) { /* EISA slot address */
 	printk("%s: %s at 0x%04lx (EISA slot %d)", 
 	                    dev->name, name, ioaddr, (int)((ioaddr>>12)&0x0f));
       } else {                             /* ISA port address */
@@ -541,7 +578,8 @@ depca_hw_init(struct device *dev, u_long ioaddr)
 	  lp = (struct depca_private *)dev->priv;
 	  memset((char *)dev->priv, 0, sizeof(struct depca_private));
 	  lp->adapter = adapter;
-	  sprintf(lp->adapter_name,"%s (%s)", name, dev->name);
+	  lp->mca_slot = mca_slot;
+ 	  sprintf(lp->adapter_name,"%s (%s)", name, dev->name);
 	  request_region(ioaddr, DEPCA_TOTAL_SIZE, lp->adapter_name);
 
 	  /* Initialisation Block */
@@ -603,6 +641,7 @@ depca_hw_init(struct device *dev, u_long ioaddr)
 	    case de201:
 	    case de202:
 	    case de210:
+	    case de212:
 	      depca_irq = de2xx_irq;
 	      break;
 	    case de422:
@@ -1205,10 +1244,161 @@ static void SetMulticastFilter(struct device *dev)
   return;
 }
 
+#ifdef CONFIG_MCA
+/*
+** Microchannel bus I/O device probe
+*/
+static void
+mca_probe(struct device *dev, u_long ioaddr)
+{
+    unsigned char pos[2];
+    unsigned char where;
+    unsigned long iobase;
+    int irq;
+    int slot = 0;
+
+    /*
+    ** See if we've been here before.
+    */
+    if ((!ioaddr && autoprobed) || (ioaddr && !loading_module)) return;   
+
+    if (MCA_bus) {
+	/*
+	** Search for the adapter.  If an address has been given, search 
+	** specifically for the card at that address.  Otherwise find the
+	** first card in the system.
+	*/
+	while ((dev!=NULL) && 
+	       ((slot=mca_find_adapter(DE212_ID, slot)) != MCA_NOTFOUND)) {
+	    pos[0] = mca_read_stored_pos(slot, 2);
+	    pos[1] = mca_read_stored_pos(slot, 3);
+
+	    /*
+	    ** IO of card is handled by bits 1 and 2 of pos0.    
+	    **
+	    **    bit2 bit1    IO
+	    **       0    0    0x2c00
+	    **       0    1    0x2c10
+	    **       1    0    0x2c20
+	    **       1    1    0x2c30
+	    */
+	    where = (pos[0] & 6) >> 1;
+	    iobase = 0x2c00 + (0x10 * where);
+	       
+	    if ((ioaddr) && (ioaddr != iobase)) {
+		/*
+		** Card was found, but not at the right IO location. Continue 
+		** scanning from the next MCA slot up for another card.
+		*/
+		slot++;
+		continue;
+	    }
+
+	    /*
+	    ** Found the adapter we were looking for. Now start setting it up.
+	    ** 
+	    ** First work on decoding the IRQ.  It's stored in the lower 4 bits
+	    ** of pos1.  Bits are as follows (from the ADF file):
+	    **
+	    **      Bits           
+	    **   3   2   1   0    IRQ 
+	    **   --------------------
+	    **   0   0   1   0     5
+	    **   0   0   0   1     9
+	    **   0   1   0   0    10
+	    **   1   0   0   0    11
+	    **/
+	    where = pos[1] & 0x0f;
+	    switch(where) {       
+	    case 1:
+		irq = 9;
+		break;
+	    case 2:
+		irq = 5;
+		break;
+	    case 4:
+		irq = 10;
+		break;
+	    case 8:
+		irq = 11;
+		break;
+	    default:
+		printk("%s: mca_probe IRQ error.  You should never get here (%d).\n", dev->name, where);
+		return;
+	    }  
+ 
+	    /*
+	    ** Shared memory address of adapter is stored in bits 3-5 of pos0.
+	    ** They are mapped as follows:
+	    **
+	    **    Bit
+	    **   5  4  3       Memory Addresses
+	    **   0  0  0       C0000-CFFFF (64K)
+	    **   1  0  0       C8000-CFFFF (32K)
+	    **   0  0  1       D0000-DFFFF (64K)
+	    **   1  0  1       D8000-DFFFF (32K)
+	    **   0  1  0       E0000-EFFFF (64K)
+	    **   1  1  0       E8000-EFFFF (32K)
+	    */ 
+	    where = (pos[0] & 0x18) >> 3; 
+	    mem = 0xc0000 + (where * 0x10000);
+	    if (pos[0] & 0x20) {
+		mem += 0x8000;
+	    }
+       
+	    /*
+	    ** Get everything allocated and initialized...  (almost just
+	    ** like the ISA and EISA probes)
+	    */
+	    if (DevicePresent(iobase) != 0) {
+		/*
+		** If the MCA configuration says the card should be here,
+		** it really should be here.
+		*/
+		printk(KERN_ERR "%s: MCA reports card at 0x%lx but it is not
+responding.\n", dev->name, iobase);
+	    }
+       
+	    if (check_region(iobase, DEPCA_TOTAL_SIZE) == 0) {
+		if ((dev = alloc_device(dev, iobase)) != NULL) {
+		    dev->irq = irq;
+		    if (depca_hw_init(dev, iobase, slot) == 0) {       
+			/*
+			** Adapter initialized correctly:  Name it in
+			** /proc/mca.
+			*/
+			mca_set_adapter_name(slot, "DE210/212 Ethernet Adapter");
+			mca_mark_as_used(slot);
+			num_depcas++;
+		    }
+		    num_eth++;
+		}
+	    } else if (autoprobed) {
+		printk(KERN_WARNING "%s: region already allocated at 0x%04lx.\n", dev->name, iobase);
+	    }
+       
+	    /*
+	    ** If this is a probe by a module, return after setting up the
+	    ** given card.
+	    */
+	    if (ioaddr) return;
+       
+	    /*
+	    ** Set up to check the next slot and loop.
+	    */
+	    slot++;
+	}
+    }
+
+    return;
+}
+#endif
+
 /*
 ** ISA bus I/O device probe
 */
-static void isa_probe(struct device *dev, u_long ioaddr)
+static void
+isa_probe(struct device *dev, u_long ioaddr)
 {
   int i = num_depcas, maxSlots;
   s32 ports[] = DEPCA_IO_PORTS;
@@ -1225,17 +1415,17 @@ static void isa_probe(struct device *dev, u_long ioaddr)
   }
 
   for (; (i<maxSlots) && (dev!=NULL) && ports[i]; i++) {
-    if (DevicePresent(ports[i]) == 0) { 
-      if (check_region(ports[i], DEPCA_TOTAL_SIZE) == 0) {
+    if (check_region(ports[i], DEPCA_TOTAL_SIZE) == 0) {
+      if (DevicePresent(ports[i]) == 0) { 
 	if ((dev = alloc_device(dev, ports[i])) != NULL) {
-	  if (depca_hw_init(dev, ports[i]) == 0) {
+	  if (depca_hw_init(dev, ports[i], -1) == 0) {
 	    num_depcas++;
 	  }
 	  num_eth++;
 	}
-      } else if (autoprobed) {
-	printk("%s: region already allocated at 0x%04x.\n", dev->name,ports[i]);
       }
+    } else if (autoprobed) {
+      printk("%s: region already allocated at 0x%04x.\n", dev->name,ports[i]);
     }
   }
 
@@ -1246,7 +1436,8 @@ static void isa_probe(struct device *dev, u_long ioaddr)
 ** EISA bus I/O device probe. Probe from slot 1 since slot 0 is usually
 ** the motherboard. Upto 15 EISA devices are supported.
 */
-static void eisa_probe(struct device *dev, u_long ioaddr)
+static void
+eisa_probe(struct device *dev, u_long ioaddr)
 {
   int i, maxSlots;
   u_long iobase;
@@ -1267,19 +1458,19 @@ static void eisa_probe(struct device *dev, u_long ioaddr)
   if ((iobase & 0x0fff) == 0) iobase += DEPCA_EISA_IO_PORTS;
 
   for (; (i<maxSlots) && (dev!=NULL); i++, iobase+=EISA_SLOT_INC) {
-    if (EISA_signature(name, EISA_ID)) {
-      if (DevicePresent(iobase) == 0) { 
-	if (check_region(iobase, DEPCA_TOTAL_SIZE) == 0) {
+    if (check_region(iobase, DEPCA_TOTAL_SIZE) == 0) {
+      if (EISA_signature(name, EISA_ID)) {
+	if (DevicePresent(iobase) == 0) { 
 	  if ((dev = alloc_device(dev, iobase)) != NULL) {
-	    if (depca_hw_init(dev, iobase) == 0) {
+	    if (depca_hw_init(dev, iobase, -1) == 0) {
 	      num_depcas++;
 	    }
 	    num_eth++;
 	  }
-	} else if (autoprobed) {
-	  printk("%s: region already allocated at 0x%04lx.\n",dev->name,iobase);
 	}
       }
+    } else if (autoprobed) {
+      printk("%s: region already allocated at 0x%04lx.\n",dev->name,iobase);
     }
   }
 
@@ -1683,7 +1874,7 @@ static void depca_dbg_open(struct device *dev)
 /*
 ** Perform IOCTL call functions here. Some are privileged operations and the
 ** effective uid is checked in those cases.
-** All MCA IOCTLs will not work here and are for testing purposes only.
+** All multicast IOCTLs will not work here and are for testing purposes only.
 */
 static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 {
@@ -1703,126 +1894,103 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
       tmp.addr[i] = dev->dev_addr[i];
     }
     ioc->len = ETH_ALEN;
-    if (!(status = verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, tmp.addr, ioc->len);
-    }
-
+    if (verify_area(VERIFY_WRITE, (void *)ioc->data, ioc->len)) return -EFAULT;
+    memcpy_tofs(ioc->data, tmp.addr, ioc->len);
     break;
+
   case DEPCA_SET_HWADDR:             /* Set the hardware address */
-    if (suser()) {
-      if (!(status = verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN))) {
-	memcpy_fromfs(tmp.addr,ioc->data,ETH_ALEN);
-	for (i=0; i<ETH_ALEN; i++) {
-	  dev->dev_addr[i] = tmp.addr[i];
-	}
-	while(dev->tbusy);              /* Stop ring access */
-	set_bit(0, (void*)&dev->tbusy);
-	while(lp->tx_old != lp->tx_new);/* Wait for the ring to empty */
-
-	STOP_DEPCA;                     /* Temporarily stop the depca.  */
-	depca_init_ring(dev);           /* Initialize the descriptor rings */
-	LoadCSRs(dev);                  /* Reload CSR3 */
-	InitRestartDepca(dev);          /* Resume normal operation. */
-	dev->tbusy = 0;                 /* Unlock the TX ring */
-      }
-    } else {
-      status = -EPERM;
+    if (!suser()) return -EPERM;
+    if (verify_area(VERIFY_READ, (void *)ioc->data, ETH_ALEN)) return -EFAULT;
+    memcpy_fromfs(tmp.addr,ioc->data,ETH_ALEN);
+    for (i=0; i<ETH_ALEN; i++) {
+      dev->dev_addr[i] = tmp.addr[i];
     }
+    while(dev->tbusy) barrier();        /* Stop ring access */
+    set_bit(0, (void*)&dev->tbusy);
+    while(lp->tx_old != lp->tx_new);    /* Wait for the ring to empty */
 
+    STOP_DEPCA;                         /* Temporarily stop the depca.  */
+    depca_init_ring(dev);               /* Initialize the descriptor rings */
+    LoadCSRs(dev);                      /* Reload CSR3 */
+    InitRestartDepca(dev);              /* Resume normal operation. */
+    dev->tbusy = 0;                     /* Unlock the TX ring */
     break;
+
   case DEPCA_SET_PROM:               /* Set Promiscuous Mode */
-    if (suser()) {
-      while(dev->tbusy);                /* Stop ring access */
-      set_bit(0, (void*)&dev->tbusy);
-      while(lp->tx_old != lp->tx_new);  /* Wait for the ring to empty */
+    if (!suser()) return -EPERM;
+    while(dev->tbusy) barrier();        /* Stop ring access */
+    set_bit(0, (void*)&dev->tbusy);
+    while(lp->tx_old != lp->tx_new);    /* Wait for the ring to empty */
 
-      STOP_DEPCA;                       /* Temporarily stop the depca.  */
-      depca_init_ring(dev);             /* Initialize the descriptor rings */
-      lp->init_block.mode |= PROM;      /* Set promiscuous mode */
+    STOP_DEPCA;                         /* Temporarily stop the depca.  */
+    depca_init_ring(dev);               /* Initialize the descriptor rings */
+    lp->init_block.mode |= PROM;        /* Set promiscuous mode */
 
-      LoadCSRs(dev);                    /* Reload CSR3 */
-      InitRestartDepca(dev);            /* Resume normal operation. */
-      dev->tbusy = 0;                   /* Unlock the TX ring */
-    } else {
-      status = -EPERM;
-    }
-
+    LoadCSRs(dev);                      /* Reload CSR3 */
+    InitRestartDepca(dev);              /* Resume normal operation. */
+    dev->tbusy = 0;                     /* Unlock the TX ring */
     break;
+
   case DEPCA_CLR_PROM:               /* Clear Promiscuous Mode */
-    if (suser()) {
-      while(dev->tbusy);                /* Stop ring access */
-      set_bit(0, (void*)&dev->tbusy);
-      while(lp->tx_old != lp->tx_new);  /* Wait for the ring to empty */
+    if (!suser()) return -EPERM;
+    while(dev->tbusy) barrier();        /* Stop ring access */
+    set_bit(0, (void*)&dev->tbusy);
+    while(lp->tx_old != lp->tx_new);    /* Wait for the ring to empty */
 
-      STOP_DEPCA;                       /* Temporarily stop the depca.  */
-      depca_init_ring(dev);             /* Initialize the descriptor rings */
-      lp->init_block.mode &= ~PROM;     /* Clear promiscuous mode */
+    STOP_DEPCA;                         /* Temporarily stop the depca.  */
+    depca_init_ring(dev);               /* Initialize the descriptor rings */
+    lp->init_block.mode &= ~PROM;       /* Clear promiscuous mode */
 
-      LoadCSRs(dev);                    /* Reload CSR3 */
-      InitRestartDepca(dev);            /* Resume normal operation. */
-      dev->tbusy = 0;                   /* Unlock the TX ring */
-    } else {
-      status = -EPERM;
-    }
-
+    LoadCSRs(dev);                      /* Reload CSR3 */
+    InitRestartDepca(dev);              /* Resume normal operation. */
+    dev->tbusy = 0;                     /* Unlock the TX ring */
     break;
+
   case DEPCA_SAY_BOO:                /* Say "Boo!" to the kernel log file */
     printk("%s: Boo!\n", dev->name);
-
     break;
+
   case DEPCA_GET_MCA:                /* Get the multicast address table */
     ioc->len = (HASH_TABLE_LEN >> 3);
-    if (!(status = verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, lp->init_block.mcast_table, ioc->len); 
-    }
-
+    if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
+    memcpy_tofs(ioc->data, lp->init_block.mcast_table, ioc->len); 
     break;
+
   case DEPCA_SET_MCA:                /* Set a multicast address */
-    if (suser()) {
-      if (!(status=verify_area(VERIFY_READ, ioc->data, ETH_ALEN*ioc->len))) {
-	memcpy_fromfs(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
-	set_multicast_list(dev);
-      }
-    } else {
-      status = -EPERM;
-    }
-
+    if (!suser()) return -EPERM;
+    if (verify_area(VERIFY_READ, ioc->data, ETH_ALEN*ioc->len)) return -EFAULT;
+    memcpy_fromfs(tmp.addr, ioc->data, ETH_ALEN * ioc->len);
+    set_multicast_list(dev);
     break;
+
   case DEPCA_CLR_MCA:                /* Clear all multicast addresses */
-    if (suser()) {
-      set_multicast_list(dev);
-    } else {
-      status = -EPERM;
-    }
-
+    if (!suser()) return -EPERM;
+    set_multicast_list(dev);
     break;
+
   case DEPCA_MCA_EN:                 /* Enable pass all multicast addressing */
-    if (suser()) {
+    if (!suser()) return -EPERM;
       set_multicast_list(dev);
-    } else {
-      status = -EPERM;
-    }
-
     break;
+
   case DEPCA_GET_STATS:              /* Get the driver statistics */
     cli();
     ioc->len = sizeof(lp->pktStats);
-    if (!(status=verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, &lp->pktStats, ioc->len); 
+    if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) {
+	status = -EFAULT;
+    } else {
+	memcpy_tofs(ioc->data, &lp->pktStats, ioc->len); 
     }
     sti();
-
     break;
+
   case DEPCA_CLR_STATS:              /* Zero out the driver statistics */
-    if (suser()) {
-      cli();
-      memset(&lp->pktStats, 0, sizeof(lp->pktStats));
-      sti();
-    } else {
-      status = -EPERM;
-    }
-
+    if (!suser()) return -EPERM;
+    cli();
+    memset(&lp->pktStats, 0, sizeof(lp->pktStats));
+    sti();
     break;
+
   case DEPCA_GET_REG:                /* Get the DEPCA Registers */
     i=0;
     tmp.sval[i++] = inw(DEPCA_NICSR);
@@ -1830,25 +1998,25 @@ static int depca_ioctl(struct device *dev, struct ifreq *rq, int cmd)
     tmp.sval[i++] = inw(DEPCA_DATA);
     memcpy(&tmp.sval[i], &lp->init_block, sizeof(struct depca_init));
     ioc->len = i+sizeof(struct depca_init);
-    if (!(status=verify_area(VERIFY_WRITE, ioc->data, ioc->len))) {
-      memcpy_tofs(ioc->data, tmp.addr, ioc->len);
-    }
-
+    if (verify_area(VERIFY_WRITE, ioc->data, ioc->len)) return -EFAULT;
+    memcpy_tofs(ioc->data, tmp.addr, ioc->len);
     break;
+
   default:
-    status = -EOPNOTSUPP;
+    return -EOPNOTSUPP;
   }
 
   return status;
 }
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
+static char devicename[9] = {0,};
 static struct device thisDepca = {
   devicename,  /* device name is inserted by /linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0x200, 7,    /* I/O address, IRQ */
-  0, 0, 0, NULL, depca_probe };
+  0, 0, 0, NULL, depca_probe
+};
 
 static int irq=7;	/* EDIT THESE LINE FOR YOUR CONFIGURATION */
 static int io=0x200;    /* Or use the irq= io= options to insmod */
@@ -1869,8 +2037,13 @@ init_module(void)
 void
 cleanup_module(void)
 {
-  if (thisDepca.priv) {
-    kfree(thisDepca.priv);
+  struct depca_private *lp = thisDepca.priv;
+  if (lp) {
+#ifdef CONFIG_MCA      
+    if(lp->mca_slot != -1)
+      mca_mark_as_unused(lp->mca_slot);
+#endif                 
+    kfree(lp);
     thisDepca.priv = NULL;
   }
   thisDepca.irq=0;

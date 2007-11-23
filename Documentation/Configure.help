@@ -58,6 +58,29 @@ CONFIG_EXPERIMENTAL
   you say Y here, you will be offered the choice of using features or
   drivers that are currently considered to be in the alpha-test phase.
 
+Symmetric Multi Processing
+CONFIG_SMP
+  This enables support for systems with more than one CPU.  If you have a
+  system with only one CPU, like most personal computers, say N.  If you
+  have a system with more than one CPU, say Y.
+
+  A non-SMP kernel will run on any machine, but will use only one CPU of
+  a multi-CPU machine.  An SMP kernel will run on many, but not all,
+  single-CPU machines.  On a single-CPU machine, a non-SMP kernel
+  will run faster than an SMP kernel.
+
+  People using multiprocessor machines should also say Y to "Enhanced
+  Real Time Clock Support", below.  The "Advanced Power Management"
+  code will be disabled in an SMP kernel.
+
+  If you don't know what to do here, say N.
+  
+  See also: Documentation/SMP.txt, Documentation/smp.tex,
+  Documentation/smp.txt, and Documentation/IO-APIC.txt.  Also see the
+  SMP-FAQ on the WWW at http://www.irisa.fr/prive/mentre/smp-faq/ (to
+  browse the WWW, you need to have access to a machine on the Internet
+  that has a program like lynx or netscape).
+  
 Kernel math emulation
 CONFIG_MATH_EMULATION
   Linux can emulate a math coprocessor (used for floating point
@@ -78,6 +101,14 @@ CONFIG_MATH_EMULATION
   of Linux math coprocessor emulation can be found in
   arch/i386/math-emu/README. If you are not sure, say Y; apart from
   resulting in a 45kB bigger kernel, it won't hurt.
+
+Max physical memory
+CONFIG_MAX_MEMSIZE
+  Linux/x86 can use up to ~3.5 gigabytes of physical memory. Default
+  is maximum 950 megabyte physical memory, this is enough for most
+  systems. (if you have more than 900MB RAM, see
+  Documentation/more-than-900MB-RAM.txt how to configure this option. Do
+  not change this value if you have less than 950MB RAM!)
 
 Normal floppy disk support
 CONFIG_BLK_DEV_FD
@@ -164,6 +195,15 @@ CONFIG_BLK_DEV_HD_IDE
   address (0x1f0), along with IDE drives at the secondary/3rd/4th port
   addresses.  Normally, just say N here; you will then use the new
   driver for all 4 interfaces.
+
+Use multi-mode by default
+CONFIG_IDEDISK_MULTI_MODE
+  If you get this error, try to enable this option.
+
+  hda: set_multmode: status=0x51 { DriveReady SeekComplete Error }
+  hda: set_multmode: error=0x04 { DriveStatusError }
+
+  If in doubt, say N.
 
 Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
@@ -319,6 +359,12 @@ CONFIG_BLK_DEV_XD
   from the running kernel whenever you want), say M here and read
   Documentation/modules.txt.
   It's pretty unlikely that you have one of these: say N.
+
+Mylex DAC960/DAC1100 PCI RAID Controller support
+CONFIG_BLK_DEV_DAC960
+  This driver adds support for the Mylex DAC960, AcceleRAID, and
+  eXtremeRAID PCI RAID controllers.  See README.DAC960 for further
+  information about this driver.
 
 Parallel port IDE device support
 CONFIG_PARIDE
@@ -482,6 +528,16 @@ CONFIG_PARIDE_FIT3
   should answer M to build it as a loadable module.  The module will
   be called fit3.o.  You must also have a high-level driver for the
   type of device that you want to support.
+
+Freecom IQ ASIC-2 protocol
+CONFIG_PARIDE_FRIQ
+  This option enables support for version 2 of the Freecom IQ parallel
+  port IDE adapter.  This adapter is used by the Maxell Superdisk 
+  drive.  If you chose to build PARIDE support into your kernel, you
+  may answer Y here to build in the protocol driver, otherwise you
+  should answer M to build it as a loadable module. The module will be
+  called friq.o. You must also have a high-level driver for the type
+  of device that you want to support. 
 
 FreeCom power protocol
 CONFIG_PARIDE_FRPW
@@ -828,15 +884,33 @@ CONFIG_PCI_OPTIMIZE
   certain BIOSes if your computer uses a PCI bus system. This is
   recommended; say Y.
 
-Intel 82371 PIIX (Triton I/II) DMA support
+Generic IDE (U)DMA support
 CONFIG_BLK_DEV_TRITON
-  If your PCI system uses an IDE hard drive (as opposed to SCSI, say)
-  and includes the Intel Triton I/II IDE interface chipset (i82371FB,
+  If your PCI system uses an EIDE hard disk (as opposed to SCSI, say)
+  and includes one of the Intel (U)DMA IDE Southbridge ICs (i82371FB,
   i82371SB or i82371AB), you will want to enable this option to allow
-  use of bus-mastering DMA data transfers. Read the comments at the
-  beginning of drivers/block/triton.c and Documentation/ide.txt.
+  use of bus-mastering DMA data transfers. This increases transfer
+  rates and reduces latencies and CPU utilization. Read the comments in
+  Documentation/ide.txt and Documentation/udma.txt.
   Check the file Documentation/Changes for location and latest version
-  of the hdparm utility. It is safe to say Y to this question.
+  of the hdparm utility. There are now several more chipsets added, to
+  include offboard PCI-IDE-UDMA cards and newer SiS and VIA chipsets.
+  It is safe to say Y to this question, as long as your PCI bus is
+  operating within specs (33MHz recommended).
+
+Boot off-board chipsets first support
+CONFIG_BLK_DEV_OFFBOARD
+  Normally, IDE controllers built into the motherboard (on-board
+  controllers) are assigned to ide0 and ide1 while those on add-in
+  PCI cards (off-board controllers) are relegated to ide2 and ide3.
+  Saying Y to here will reverse the situation, with off-board
+  controllers on ide0/1 and on-board controllers on ide2/3. This
+  can improve the usability of some boot managers such as LILO
+  when booting from a drive on an off-board controller.
+  Note that this will rearrange the order of the hd* devices and
+  may require modification of fstab and other files.
+  Check the file Documentation/udma.txt
+  If in doubt, say N.
 
 System V IPC
 CONFIG_SYSVIPC
@@ -956,6 +1030,7 @@ CONFIG_M386
   the other hand, if you use a compiler before gcc 2.7 (say "gcc -v"
   to find out), then you have to say "386" or "486" here even if
   running on a Pentium or PPro machine.
+
   If you don't know what to do, say "386".
 
 Compile the kernel into the ELF object format
@@ -1198,6 +1273,65 @@ CONFIG_IP_MASQUERADE
   forwarding/gatewaying, IP firewalling and (ideally, but optionally)
   IP always defragment.
   If you want this, say Y.
+
+IP: MS PPTP masq support (EXPERIMENTAL)
+CONFIG_IP_MASQUERADE_PPTP
+  Support for masquerading of the GRE data channel portion of the PPTP
+  Virtual Private Network protocol.
+  If you are masquerading a PPTP client or server you need to enable
+  this in addition to regular IP Masquerade.
+  See http://www.wolfenet.com/~jhardin/ip_masq_pptp.html for more details.
+
+IP: MS PPTP Call ID masq support (EXPERIMENTAL)
+CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+  Enabling this adds code to masquerade PPTP Call IDs, which allows
+  more than one masqueraded client to access the same server.
+  This only needs to be enabled if you are masquerading more than one
+  client, and if those clients will try to access the same PPTP server
+  at the same time.
+  You do NOT need to enable this if you are masquerading a PPTP
+  server, regardless of how many clients will be accessing it.
+
+IP: MS PPTP masq debugging
+DEBUG_IP_MASQUERADE_PPTP
+  Enables PPTP Masquerade debugging messages. This should be disabled
+  for normal use once you have PPTP masq working, as it will cause
+  your system logs to quickly grow rather large. Enable verbose
+  debugging for more detailed information.
+
+IP: IPSEC ESP & ISAKMP masq support (EXPERIMENTAL)
+CONFIG_IP_MASQUERADE_IPSEC
+  Support for limited masquerading of the IPSEC ESP network encryption
+  and ISAKMP key-exchange protocols.
+  If you are masquerading an IPSEC client you need to enable this in
+  addition to regular IP Masquerade.
+  Note that this may not successfully masquerade all types of
+  IPSEC-based encryption, as some options in the protocol offer a
+  cryptographic checksum across the IP addresses, which prevents the
+  masqueraded packets from being accepted.
+
+IP: IPSEC masq table lifetime (minutes)
+CONFIG_IP_MASQUERADE_IPSEC_EXPIRE
+  After a period of inactivity IPSEC masq table entries expire and are
+  removed. When this happens inbound traffic can no longer be routed
+  to the masqueraded host until new outbound traffic creates a new
+  masq table entry.
+  For greatest reliability, your IPSEC rekey interval should be less
+  than the table entry lifetime. If your rekey interval is greater
+  than thirty minutes you will improve security by reducing it to
+  thirty minutes. If you don't want to do that, then increase the masq
+  table entry lifetime. Note that doing this will increase the clutter
+  in the IPSEC masq table, as old table entries will persist for this
+  many minutes after a rekey.
+  The minimum lifetime is 15 minutes. Decreasing the lifetime will
+  interfere with sessions that are idle for long periods of time.
+
+IP: IPSEC masq debugging
+DEBUG_IP_MASQUERADE_IPSEC
+  Enables IPSEC Masquerade debugging messages. This should be disabled
+  for normal use once you have IPSEC masq working, as it will cause
+  your system logs to quickly grow rather large. Enable verbose
+  debugging for more detailed information.
 
 IP: ipautofw masquerading (EXPERIMENTAL)
 CONFIG_IP_MASQUERADE_IPAUTOFW
@@ -1622,66 +1756,102 @@ CONFIG_SCSI_AHA1740
 Adaptec AIC7xxx chipset SCSI controller support
 CONFIG_SCSI_AIC7XXX
   This is support for the various aic7xxx based Adaptec SCSI
-  controllers.  These include the 274x EISA cards, 284x VLB cards,
-  294x PCI cards, 394x PCI cards, 3985 PCI card, and several versions
-  of the Adaptec built-in SCSI controllers on various PC motherboards.
+  controllers. These include the 274x EISA cards; 284x VLB cards; 2902,
+  2910, 293x, 294x, 394x, 3985 and several other PCI and motherboard based
+  SCSI controllers from Adaptec.  It does not support the AAA-13x RAID
+  controllers from Adaptec, nor will it likely ever support them.  It
+  does not support the 2920 cards from Adaptec that use the Future Domain
+  SCSI controller chip.  For those cards, you need the "Future Domain
+  16xx SCSI support" driver.
+
+  In general, if the controller is based on an Adaptec SCSI controller
+  chip from the aic777x series or the aic78xx series, it should work.  The
+  only exception is the 7810 which is specifically not supported (that's the
+  RAID controller chip on the AAA-13x cards).
+
   Information on the configuration options for this controller can be
-  found by checking the README.aic7xxx file, usually in
-  /usr/src/linux/drivers/scsi.
+  found by checking the help file for each of the available
+  configuration options. You should read drivers/scsi/README.aic7xxx
+  at a minimum before contacting the maintainer with any questions.  
+  The SCSI-HOWTO, available via FTP (user: anonymous) at
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO can also be of great help.
 
-Override driver defaults for commands per LUN
-CONFIG_OVERRIDE_CMDS
-  Use this option to allow you to override the default maximum number
-  of commands that a single device on the aic7xxx controller is
-  allowed to have active at one time.  This option only effects tagged
-  queueing capable devices.  The driver uses a "failsafe" value of 8
-  by default.  This is much lower than many devices can handle, but
-  left in place for safety sake.
-  NOTE:  This does not actually enabled tagged queueing on any
-  particular device.  The driver has changed in this respect.  Please
-  see the file README.aic7xxx in /usr/src/linux/drivers/scsi for more
-  information on how to get particular devices to use tagged command
-  queueing.
-  Default: N
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called aic7xxx.o.
 
-Maximum number of commands per LUN
-CONFIG_AIC7XXX_CMDS_PER_LUN
-  Specify the maximum number of commands per lun you would like to
-  allocate per device.  Reasonable figures are in the range of 14 to
-  32 commands per device, but depending on hardware could be increased
-  or decreased from that figure.  If the number is too high for any
-  particular device, the driver will automatically compensate usually
-  after only 10 minutes of uptime and will issue a message to alert
-  you to the fact that the number of commands for that device has been
-  reduced.  It will not hinder performance if a portion of your
-  devices eventually have their commands per lun reduced, but is a
-  waste of memory if all of your devices end up reducing this number
-  down to a more reasonable figure.  Default: 24
+Enable or Disable Tagged Command Queueing by default
+CONFIG_AIC7XXX_TCQ_ON_BY_DEFAULT
+  This option causes the aic7xxx driver to attempt to use tagged command
+  queueing on any devices that claim to support it.  If this is set to yes,
+  you can still turn off TCQ on troublesome devices with the use of the
+  tag_info boot parameter.  See /usr/src/linux/drivers/scsi/README.aic7xxx
+  for more information on that and other aic7xxx setup commands.  If this
+  option is turned off, you may still enable TCQ on known good devices by
+  use of the tag_info boot parameter.
+  
+  If you are unsure about your devices then it is safest to say N here.
+  
+  However, TCQ can increase performance on some hard drives by as much
+  as 50% or more, so I would recommend that if you say N here, that you
+  at least read the README.aic7xxx file so you will know how to enable
+  this option manually should your drives prove to be safe in regards
+  to TCQ.
+
+  Conversely, certain drives are known to lock up or cause bus resets when
+  TCQ is enabled on them.  If you have a Western Digital Enterprise SCSI
+  drive for instance, then don't even bother to enable TCQ on it as the
+  drive will become unreliable, and it will actually reduce performance.
+
+Default number of TCQ commands per device
+CONFIG_AIC7XXX_CMDS_PER_DEVICE
+  Specify the number of commands you would like to allocate per SCSI
+  device when Tagged Command Queueing (TCQ) is enabled on that device.
+
+  Reasonable figures are in the range of 8 to 24 commands per device,
+  but depending on hardware could be increased or decreased from that
+  figure. If the number is too high for any particular device, the
+  driver will automatically compensate usually after only 10 minutes
+  of uptime. It will not hinder performance if some of your devices
+  eventually have their command depth reduced, but is a waste of memory
+  if all of your devices end up reducing this number down to a more
+  reasonable figure.
+  
+  NOTE: Certain very broken drives are known to lock up when given more
+  commands than they like to deal with.  Quantum Fireball drives are the
+  most common in this category.  For the Quantum Fireball drives I would
+  suggest no more than 8 commands per device.
+
+  Default: 8
 
 Collect statistics to report in /proc
 CONFIG_AIC7XXX_PROC_STATS
   This option tells the driver to keep track of how many commands have
   been sent to each particular device and report that information to
-  the user via the /proc/scsi/aic7xxx/x file, where x is the number
-  of the aic7xxx controller you want the information on.  This adds
-  a small amount of overhead to each and every SCSI command the
-  aic7xxx driver handles, so if you aren't really interested in this
-  information, it is best to leave it disabled.  Default: N
+  the user via the /proc/scsi/aic7xxx/n file, where n is the number of
+  the aic7xxx controller you want the information on. This adds a
+  small amount of overhead to each and every SCSI command the aic7xxx
+  driver handles, so if you aren't really interested in this
+  information, it is best to leave it disabled. This will only work if
+  you also say Y to "/proc filesystem support", below. 
+
+  If unsure, say N.
 
 Delay in seconds after SCSI bus reset
 CONFIG_AIC7XXX_RESET_DELAY
   This sets how long the driver will wait after resetting the SCSI bus
   before attempting to communicate with the devices on the SCSI bus
-  again.  This delay will be used during the reset phase at bootup
-  time as well as after any reset that might occur during normal
-  operation.  Reasonable numbers range anywhere from 5 to 15 seconds
-  depending on your devices. DAT tape drives are notorious for needing
-  more time after a bus reset to be ready for the next command, but
-  most hard drives and CD-ROM devices are ready in only a few seconds.
-  This option has a maximum upper limit of 20 seconds to avoid bad
-  interactions between the aic7xxx driver and the rest of the Linux
-  kernel.  The default value has been reduced.  If this doesn't work
-  with your hardware, try increasing this value.  Default: 5
+  again. This delay will be used during the reset phase at bootup time
+  as well as after any reset that might occur during normal operation.
+  Reasonable numbers range anywhere from 5 to 15 seconds depending on
+  your devices. DAT tape drives are notorious for needing more time
+  after a bus reset to be ready for the next command, but most hard
+  drives and CD-ROM devices are ready in only a few seconds. This
+  option has a maximum upper limit of 20 seconds to avoid bad
+  interactions between the aic7xxx driver and the rest of the linux
+  kernel. The default value has been reduced to 5 seconds. If this
+  doesn't work with your hardware, try increasing this value.
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
@@ -1833,43 +2003,50 @@ NCR53C8XX SCSI support
 CONFIG_SCSI_NCR53C8XX
   This is the BSD ncr driver adapted to Linux for the NCR53C8XX family
   of PCI-SCSI controllers. This driver supports parity checking,
-  tagged command queuing, fast SCSI II transfer up to 10 MB/s with
-  narrow SCSI devices and 20 MB/s with wide SCSI devices.
-  Support of Ultra SCSI data transfers with NCR53C860 and NCR53C875
-  controllers has been recently added to the driver.
+  tagged command queuing and fast synchronous data transfers up to 80
+  MB/s with wide FAST-40 LVD devices and controllers.
+  The NCR53C860 and NCR53C875 support FAST-20 transfers. The NCR53C895
+  supports FAST-40 transfers with Ultra2 LVD devices.
+  If you have a SYM53C896 PCI-SCSI controller, you may want to use the new 
+  improved driver available at ftp://ftp.tux.org/pub/roudier/896/.
   Please read drivers/scsi/README.ncr53c8xx for more information.
-  Linux/i386 and Linux/Alpha are supported by this driver.
-
+  
 Synchronous data transfers frequency
 CONFIG_SCSI_NCR53C8XX_SYNC
-  SCSI-2 specifications allow SCSI devices to negotiate a synchronous
-  transfer period of 25 nano-seconds or more.
-  The transfer period value is 4 times the agreed transfer period.
-  So, data can be transferred at a 10 MHz frequency, allowing 10
-  MB/second throughput with 8 bits SCSI-2 devices and 20 MB/second
-  with wide16 devices.  This frequency can be used safely with
-  differential devices but may cause problems with singled-ended
-  devices.
-  Specify 0 if you want to only use asynchronous data transfers.
-  Otherwise, specify a value between 5 and 10.  Commercial O/Ses
-  generally use 5 Mhz frequency for synchronous transfers.  It is a
-  reasonable default value.
-  However, a flawless singled-ended SCSI bus supports 10 MHz data
-  transfers.  Regardless the value chosen in the Linux configuration,
-  the synchronous period can be changed after boot-up through the
-  /proc/scsi file system. The generic command is:
-      echo "setsync #target period" >/proc/scsi/ncr53c8xx/0
-  Use a 25 ns period for 10 Mhz synchronous data transfers.
-  If you don't know what to do now, go with the default.
+  The SCSI Parallel Interface-2 Standard defines 4 classes of transfer
+  rates: FAST-5, FAST-10, FAST-20 and FAST-40. The numbers are
+  respectively the maximum data transfer rates in mega-transfers per
+  second for each class. For example, a FAST-20 Wide 16 device is able
+  to transfer data at 20 million 16 bit packets per second for a total
+  rate of 40 MB/s.
+  You may specify 0 if you want to only use asynchronous data
+  transfers. This is the safest and slowest option. Otherwise, specify
+  a value between 5 and 40, depending on the capability of your SCSI
+  controller. The higher the number, the faster the data transfer.
+  Note that 40 should normally be ok since the driver decreases the
+  value automatically according to the controller's capabilities.
+  Your answer to this question is ignored for controllers with NVRAM,
+  since the driver will get this information from the user set-up. It
+  also can be overridden using a boot setup option, as follows
+  (example): 'ncr53c8xx=sync:12' will allow the driver to negotiate
+  for FAST-20 synchronous data transfer (20 mega-transfers per
+  second).
+  The normal answer therefore is not to go with the default but to
+  select the maximum value 40 allowing the driver to use the maximum
+  value supported by each controller. If this causes problems with
+  your SCSI devices, you should come back and decrease the value.
+  There is no safe option other than using good cabling, right
+  terminations and SCSI conformant devices.
 
 Use normal IO
 CONFIG_SCSI_NCR53C8XX_IOMAPPED
-  This option allows you to force the driver to use normal IO.
-  Memory mapped IO has less latency than normal IO and works for most
-  Intel-based hardware.
-  Under Linux/Alpha only normal IO is currently supported by the
-  driver and so, this option has no effect.
-  The normal answer therefore is N.
+  If you say Y here, the driver will use normal IO, as opposed to
+  memory mapped IO. Memory mapped IO has less latency than normal IO
+  and works for most Intel-based hardware. Under Linux/Alpha only
+  normal IO is currently supported by the driver and so, this option
+  has no effect on those systems. 
+  The normal answer therefore is N; try Y only if you encounter SCSI
+  related problems.
 
 Not allow targets to disconnect
 CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
@@ -1877,70 +2054,61 @@ CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
   device of yours to not support properly the target-disconnect
   feature. In that case, you would say Y here. In general however, to
   not allow targets to disconnect is not reasonable if there is more
-  than 1 device on a SCSI bus.  The normal answer therefore is N.
+  than 1 device on a SCSI bus. The normal answer therefore is N.
 
-Enable tagged command queuing
-CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
-  This option allows you to enable tagged command queuing support at
-  Linux start-up.  Some SCSI devices do not properly support this
-  feature.  The suggested method is to say N here and to use the
-  "settags" control command after boot-up to enable this feature:
-      echo "settags 2 4" >/proc/scsi/ncr53c8xx/0
-  asks the driver to use up to 4 concurrent tagged commands for target
-  2 of controller 0.
-  See the file drivers/scsi/README.ncr53c8xx for more information.
-  WARNING! If you say Y here, then you have to say N to "not allow
-  targets to disconnect", above.
-  The safe answer therefore is N.
-  The normal answer therefore is Y.
+Default tagged command queue depth
+CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS
+  "Tagged command queuing" is a feature of SCSI-2 which improves
+  performance: the host adapter can send several SCSI commands to a
+  device's queue even if previous commands haven't finished yet. Some
+  SCSI devices don't implement this properly; if you want to disable
+  this feature, enter 0 or 1 here (it doesn't matter which).
+  The default value is 8 and should be supported by most hard disks.
+  This value can be overridden from the boot command line using the 
+  'tags' option as follows (example):
+  'ncr53c8xx=tags:4/t2t3q16/t0u2q10' will set default queue depth to
+  4, set queue depth to 16 for target 2 and target 3 on controller 0
+  and set queue depth to 10 for target 0 / lun 2 on controller 1.
+  The normal answer therefore is to go with the default 8 and to use 
+  a boot command line option for devices that need to use a different 
+  command queue depth.
+  There is no safe option other than using good SCSI devices.
 
 Maximum number of queued commands
 CONFIG_SCSI_NCR53C8XX_MAX_TAGS
   This option allows you to specify the maximum number of commands
-  that can be queued to a device, when tagged command queuing is
-  possible.  The default value is 4. Minimum is 2, maximum is 12.  The
-  normal answer therefore is the default one.
-
-Detect and read serial NVRAM
-CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT
-  Enable support for reading the serial NVRAM data on Symbios and
-  some Symbios compatible cards, and Tekram DC390W/U/F cards.  Useful
-  for systems with more than one Symbios compatible controller where
-  at least one has a serial NVRAM, or for a system with a mixture of
-  Symbios and Tekram cards.  Enables setting the boot order of host
-  adaptors to something other than the default order or "reverse
-  probe" order.  Also enables Symbios and Tekram cards to be
-  distinguished so CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT may be set in
-  a system with a mixture of Symbios and Tekram cards so the Symbios
-  cards can make use of the full range of Symbios features,
-  differential, led pin, without causing problems for the Tekram
-  card(s).
-      (added by Richard Waltham: dormouse@farsrobt.demon.co.uk)
-  Also enables setting host and targets SCSI features as defined in
-  the user setup for each host using a serial NVRAM (added by the
-  maintainer).
-  The default answer is N, the normal answer should be Y.
-  Read drivers/scsi/README.ncr53c8xx for more information.
+  that can be queued to any device, when tagged command queuing is
+  possible. The default value is 32. Minimum is 2, maximum is 64.
+  Modern hard disks are able to support 64 tags and even more, but 
+  donnot seem to be faster when more than 32 tags are being used.
+  So, the normal answer here is to go with the default value 32 unless
+  you are using very large hard disks with large cache (>= 1 MB) that
+  are able to take advantage of more than 32 tagged commands.
+  There is no safe option and the default answer is recommended.
 
 Assume boards are SYMBIOS compatible
 CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
   This option allows you to enable some features depending on GPIO
-  wiring.  These General Purpose Input/Output pins can be used for
+  wiring. These General Purpose Input/Output pins can be used for
   vendor specific features or implementation of the standard SYMBIOS
-  features.  Genuine SYMBIOS boards use GPIO0 in output for controller
-  LED and GPIO3 bit as a flag indicating singled-ended/differential
-  interface.
-  If all the boards of your system are genuine SYMBIOS boards or use
-  BIOS and drivers from SYMBIOS, you would want to enable this option.
-  The driver behaves correctly on my system with this option enabled.
-  (SDMS 4.0 + Promise SCSI ULTRA 875 rev 0x3 + ASUS SC200 810A rev
-  0x12).  This option must be set to N if your system has at least one
-  53C8XX based SCSI board with a vendor-specific BIOS (example: Tekram
-  DC-390/U/W/F).  If unsure, say N.
-  However, if all your non Symbios compatible boards have NVRAM,
-  setting option CONFIG_SCSI_NCR53C8XX_NVRAM_DETECT allows the driver
-  to distinguish Symbios compatible boards from other ones.  So,
-  you can answer Y if all non Symbios compatible boards have NVRAM.
+  features. Genuine SYMBIOS controllers use GPIO0 in output for
+  controller LED and GPIO3 bit as a flag indicating
+  singled-ended/differential interface. The Tekram DC-390U/F boards
+  uses a different GPIO wiring.
+  Your answer to this question is ignored if all your controllers have
+  NVRAM, since the driver is able to detect the board type from the
+  NVRAM format.
+  If all the controllers in your system are genuine SYMBIOS boards or
+  use BIOS and drivers from SYMBIOS, you would want to say Y here,
+  otherwise N. N is the safe answer.
+
+Enable profiling statistics gathering
+CONFIG_SCSI_NCR53C8XX_PROFILE
+  This option allows you to enable profiling information gathering.
+  These statistics are not very accurate due to the low frequency 
+  of the kernel clock (100 Hz on i386) and have performance impact 
+  on systems that use very fast devices.
+  The normal answer therefore is N.
 
 Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
@@ -2055,21 +2223,59 @@ CONFIG_SCSI_NCR53C406A
   and removed from the running kernel whenever you want), say M here
   and read Documentation/modules.txt.
 
-Tekram DC390(T) (AMD PCscsi) SCSI support
+Tekram DC390(T) and Am53/79C974 (PCscsi) SCSI support
 CONFIG_SCSI_DC390T
-  This driver supports the Tekram DC390(T) PCI SCSI Hostadapter with
-  the Am53C974A chip, and perhaps other cards using the same chip.
-  This driver does _not_ support the DC390W/U/F adaptor with the
-  NCR/Symbios chips.
+  This driver supports  PCI SCSI host adapters  based on the Am53C974A
+  chip,  e.g.  Tekram DC390(T),  DawiControl 2974  and  some   onboard
+  PCscsi/PCnet (Am53/79C974) solutions.
+  Documentation can be found in linux/drivers/scsi/README.tmscsim.
+  Note that this driver  does NOT support Tekram DC390W/U/F, which are
+  based on NCR/Symbios chips. Use the NCR53C8XX driver for those.
+  Also note, that there is another generic Am53C974 driver.
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel  whenever you want),
+  say M here  and read Documentation/modules.txt.  The module  will be
+  called tmscsim.o.
+
+Skip support for other Am53/79C974 based SCSI adapters
+CONFIG_SCSI_DC390T_NOGENSUPP
+  Normally, the DC390(T) SCSI driver relies on the DC390 EEPROM to get
+  initial values  for its settings,  such as speed,  termination, etc.
+  If  it can't find  this EEPROM, it  will use  defaults  or  the user
+  supplied boot/module parameters. For details on driver configuration
+  see linux/drivers/scsi/README.tmscsim.
+  With this option set, if no EEPROM is found, the driver gives up and
+  thus only supports  Tekram DC390(T) adapters.  This can be useful if
+  you have a DC390(T)  and another Am53C974 based adapter,  which, for
+  some reason, you want to drive with the other AM53C974 driver.
+  If unsure, say N.
+
+Symbios Logic sym53c416 support
+CONFIG_SCSI_SYM53C416
+  This is support for the sym53c416 SCSI host adapter. This is the 
+  SCSI adapter that comes with some hp scanners. This driver requires that
+  the sym53c416 is configured first using some sort of pnp configuration
+  program (e.g. isapnp). After doing so it should be loaded as a module
+  using insmod. The parameters of the configured card(s) should be passed
+  to the driver. The format is:
+  
+    insmod sym53c416 sym53c416=<base>,<irq> [sym53c416_1=<base>,<irq>]
+
+  There is support for up to four adapters. If you want to compile this
+  driver as a module ( = code which can be inserted in and removed from
+  the running kernel whenever you want), say M here and read
+  Documentation/modules.txt.                                      
 
 AM53/79C974 PCI SCSI support
 CONFIG_SCSI_AM53C974
   This is support for the AM53/79C974 SCSI host adapters. Please read
   drivers/scsi/README.AM53C974 for details. Also, the SCSI-HOWTO,
   available via FTP (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO, is for you.
-  Use the native DC390 driver if you've got a Tekram DC390(T) PCI-SCSI
-  host adapter.
+  ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO, is for you.
+  Note that there is another driver for AM53C974 based adapters: The
+  Tekram DC390(T) driver.
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
 
 GDT SCSI Disk Array Controller support
 CONFIG_SCSI_GDTH
@@ -2105,6 +2311,17 @@ CONFIG_SCSI_PPA_HAVE_PEDANTIC
   reliably transfer data:
        Winbond xxx837
        National Semiconductor PC87306 (early revisions)
+
+Initio INI-A100U2W SCSI support
+CONFIG_SCSI_INIA100
+  This is support for the Initio INI-A100U2W SCSI host adapter.
+  Please read the SCSI-HOWTO, available via FTP (user anonymous) at
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documenation/modules.txt. The module will be
+  called a100u2w.o
 
 Network device support?
 CONFIG_NETDEVICES
@@ -3840,15 +4057,61 @@ CONFIG_SMB_WIN95
 NCP filesystem support (to mount NetWare volumes)
 CONFIG_NCP_FS
   NCP (NetWare Core Protocol) is a protocol that runs over IPX and is
-  used by Novel NetWare clients to talk to file servers. It is to IPX
-  what NFS is to TCP/IP, if that helps. Enabling this option allows
-  you to mount NetWare file server volumes and to access them just
-  like any other Unix directory. For details, please read the file
+  used by Novell NetWare clients to talk to file servers. It is to IPX
+  what NFS is to TCP/IP, if that helps. Saying Y here allows you to
+  mount NetWare file server volumes and to access them just like any
+  other Unix directory. For details, please read the file
   Documentation/filesystems/ncpfs.txt in the kernel source and the
-  IPX-HOWTO on sunsite.unc.edu:/pub/Linux/docs/howto.  If you want to
-  compile this as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt.
+  IPX-HOWTO on ftp://sunsite.unc.edu:/pub/Linux/docs/howto.
+  You do not have to say Y here if you want your Linux box to act as a
+  file *server* for Novell NetWare clients.
+  General information about how to connect Linux, Windows machines and
+  Macs is on the WWW at http://www.eats.com/linux_mac_win.html (to
+  browse the WWW, you need to have access to a machine on the Internet
+  that has a program like lynx or netscape).
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called ncpfs.o. Say N unless you are connected to a Novell network.
+
+Packet signatures
+CONFIG_NCPFS_PACKET_SIGNING
+  NCP allows packets to be signed for stronger security. If you want
+  security, say Y. Normal users can leave it off. To be able to use
+  packet signing you must use ncpfs > 2.0.12.
+
+Proprietary file locking
+CONFIG_NCPFS_IOCTL_LOCKING
+  Allows locking of records on remote volumes. Say N unless you have
+  special applications which are able to utilize this locking scheme.
+
+Clear remove/delete inhibit when needed
+CONFIG_NCPFS_STRONG
+  Allows manipulation of files flagged as Delete or Rename Inhibit. To
+  use this feature you must mount volumes with the ncpmount parameter
+  "-s" (ncpfs-2.0.12 and newer). Say Y unless you are not mounting
+  volumes with -f 444.
+
+Use NFS namespace when available
+CONFIG_NCPFS_NFS_NS
+  Allows you to utilize NFS namespace on NetWare servers. It brings
+  you case sensitive filenames. Say Y. You can disable it at
+  mount-time with the `-N nfs' parameter of ncpmount.
+
+Use OS2/LONG namespace when available
+CONFIG_NCPFS_OS2_NS
+  Allows you to utilize OS2/LONG namespace on NetWare servers.
+  Filenames in this namespace are limited to 255 characters, they are
+  case insensitive, and case in names is preserved. Say Y. You can
+  disable it at mount time with the -N os2 parameter of ncpmount.
+
+Allow mounting of volume subdirectories
+CONFIG_NCPFS_MOUNT_SUBDIR
+  Allows you to mount not only whole servers or whole volumes, but
+  also subdirectories from a volume. It can be used to reexport data
+  and so on. There is no reason to say N, so Y is recommended unless
+  you count every byte.
+  To utilize this feature you must use ncpfs-2.0.12 or newer.
 
 Amiga FFS filesystem support (EXPERIMENTAL)
 CONFIG_AFFS_FS
@@ -4693,6 +4956,16 @@ CONFIG_MTRR
   registers in the chips up correctly as the specification and Intel
   rules require. If you have a PPro or later SMP and one or more CPU's
   report a value of about 2-3 bogomips enable this.
+
+Nemory configuration
+CONFIG_MEM_STD
+  There are three memory configurations available. The standard
+  configuration allows use of just under 1GB of RAM with 3GB of
+  virtual space per process. The enterprise configuration allows
+  2Gigabytes of physical memory but limits the per process address
+  space to 2Gigabytes. The custom option allows you to specify the
+  split subject to kernel constraints. If you don't know how it works
+  don't pick it.
 
 # need an empty line after last entry, for sed script in Configure.
 

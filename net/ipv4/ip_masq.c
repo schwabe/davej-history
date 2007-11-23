@@ -20,6 +20,7 @@
  *	Delian Delchev		:	Added support for ICMP requests and replys
  *	Nigel Metheringham	:	ICMP in ICMP handling, tidy ups, bug fixes, made ICMP optional
  *	Juan Jose Ciarlante	:	re-assign maddr if no packet received from outside
+ * 	John D. Hardin		:	Added PPTP and IPSEC protocols
  *	
  */
 
@@ -45,6 +46,150 @@
 
 #define IP_MASQ_TAB_SIZE 256    /* must be power of 2 */
 
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+/*
+ * This is clumsier than it otherwise might be (i.e. the
+ * PPTP control channel sniffer should be a module, and there
+ * should be a separate table for GRE masq entries so that
+ * we're not making all of the hacks to the TCP table code)
+ # but I wanted to keep the code changes localized to one file
+ # if possible.
+ * This should all be modular, and the table routines need to
+ * be somewhat more generic.
+ *
+ * Maybe for 2.0.38 - we'll see.
+ *
+ * John Hardin <jhardin@wolfenet.com> gets all blame...
+ * See also http://www.wolfenet.com/~jhardin/ip_masq_vpn.html
+ */
+
+static const char *strGREProt = "GRE";
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+/*
+ * MULTICLIENT watches the control channel and preloads the
+ * call ID into the masq table entry, so we want the
+ * masq table entry to persist until a Call Disconnect
+ * occurs, otherwise the call IDs will be lost and the link broken.
+ */
+#define MASQUERADE_EXPIRE_PPTP 15*60*HZ
+
+/*
+ * To support multiple clients communicating with the same server,
+ * we have to sniff the control channel and trap the client's
+ * call ID, then substitute a unique-to-the-firewall call ID.
+ * Then on inbound GRE packets we use the bogus call ID to figure
+ * out which client to route the traffic to, then replace the
+ * bogus call ID with the client's real call ID, which we've saved.
+ * For simplicity we'll use masq port as the bogus call ID.
+ * The actual call ID will be stored in the masq table as
+ * the source port, and the destination port will always be zero.
+ *
+ * NB: PPTP servers can tell whether the client is masqueraded by
+ * looking for call IDs above 61000.
+ */
+#define PPTP_CONTROL_PORT 1723
+
+#else /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+
+/* non-MULTICLIENT ignores call IDs, so masq table
+ * entries may expire quickly without causing problems.
+ */
+#define MASQUERADE_EXPIRE_PPTP 5*60*HZ
+
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+
+/*
+ * Define this here rather than in /usr/src/linux/include/wherever/whatever.h
+ * in order to localize my mistakes to one file...
+ *
+ * This struct may be architecture-specific because of the bitmaps.
+ */
+struct pptp_gre_header {
+        __u8
+                recur:3,
+                is_strict:1,
+                has_seq:1,
+                has_key:1,
+                has_routing:1,
+                has_cksum:1;
+        __u8
+                version:3,
+                flags:5;
+        __u16   
+                protocol,
+                payload_len,
+                call_id;        /* peer's call_id for this session */
+
+};
+
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+/*
+ * The above comments about PPTP apply here, too. This should all be a module.
+ *
+ * The "port numbers" for masq table purposes will be part of the
+ * SPI, just to gain a little benefit from the hashing.
+ */
+
+static const char *strESPProt = "ESP";
+static const char *strAHProt = "AH";
+
+/*
+ * ISAKMP uses 500/udp, and the traffic must come from
+ * 500/udp (i.e. 500/udp <-> 500/udp), so we need to
+ * check for ISAKMP UDP traffic and avoid changing the
+ * source port number. In order to associate the data streams
+ * we may need to sniff the ISAKMP cookies as well.
+ */
+#define UDP_PORT_ISAKMP	500	/* ISAKMP default UDP port */
+
+#if CONFIG_IP_MASQUERADE_IPSEC_EXPIRE > 15
+#define MASQUERADE_EXPIRE_IPSEC CONFIG_IP_MASQUERADE_IPSEC_EXPIRE*60*HZ
+#else
+#define MASQUERADE_EXPIRE_IPSEC 15*60*HZ
+#endif
+
+/*
+ * We can't know the inbound SPI until it comes in (the ISAKMP exchange
+ * is encryptd so we can't sniff it out of that), so we associate inbound
+ * and outbound traffic by inspection. If somebody sends a new packet to a
+ * remote server, then block all other new traffic to that server until we
+ * get a response from that server with a SPI we haven't seen yet. It is
+ * assumed that this is the correct response - we have no way to verify it,
+ * as everything else is encrypted.
+ *
+ * If there is a collision, the block will last for up to two minutes (or
+ * whatever MASQUERADE_EXPIRE_IPSEC_INIT is set to), and if the client
+ * retries during that time the timer will be reset. This could easily lead
+ * to a Denial of Service, so we limit the number of retries that will
+ * reset the timer. This means the maximum time the server could be blocked
+ * is ((IPSEC_INIT_RETRIES + 1) * MASQUERADE_EXPIRE_IPSEC_INIT).
+ *
+ * Note: blocking will not affect already-established traffic (i.e. where
+ * the inbound SPI has been associated with an outbound SPI).
+ */
+#define MASQUERADE_EXPIRE_IPSEC_INIT 2*60*HZ
+#define IPSEC_INIT_RETRIES 5
+
+/*
+ * ...connections that don't get an answer are squelched
+ * (recognized but ignored) for a short time to prevent DoS.
+ * SPI values 1-255 are reserved by the IANA and are currently (2/99)
+ * not assigned. If that should change, this number must also be changed
+ * to an unused NONZERO value:
+ */
+#define IPSEC_INIT_SQUELCHED 1
+
+struct ip_masq * ip_masq_out_get_ipsec(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port, __u32 o_spi);
+struct ip_masq * ip_masq_in_get_ipsec(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port, __u32 i_spi);
+struct ip_masq * ip_masq_out_get_isakmp(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port, __u32 cookie);
+struct ip_masq * ip_masq_in_get_isakmp(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port, __u32 cookie);
+
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
+
 /*
  *	Implement IP packet masquerading
  */
@@ -53,6 +198,9 @@ static const char *strProt[] = {"UDP","TCP","ICMP"};
 
 /*
  * masq_proto_num returns 0 for UDP, 1 for TCP, 2 for ICMP
+ *
+ * No, I am NOT going to add GRE/ESP/AH support to everything that relies on this...
+ *
  */
 
 static int masq_proto_num(unsigned proto)
@@ -60,6 +208,12 @@ static int masq_proto_num(unsigned proto)
    switch (proto)
    {
       case IPPROTO_UDP:  return (0); break;
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+      case IPPROTO_GRE:
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+      case IPPROTO_ESP:
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
       case IPPROTO_TCP:  return (1); break;
       case IPPROTO_ICMP: return (2); break;
       default:           return (-1); break;
@@ -96,6 +250,24 @@ static __inline__ const __u8 icmp_type_request(__u8 type)
 
 static __inline__ const char *masq_proto_name(unsigned proto)
 {
+
+	/*
+	 * I don't want to track down everything that
+	 * relies on masq_proto_num() and make it GRE/ESP/AH-tolerant.
+	 */
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+	if (proto == IPPROTO_GRE) {
+          return strGREProt;
+	}
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+	if (proto == IPPROTO_ESP) {
+          return strESPProt;
+	} else if (proto == IPPROTO_AH) {
+          return strAHProt;
+	}
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
+
         return strProt[masq_proto_num(proto)];
 }
 
@@ -139,6 +311,14 @@ static struct symbol_table ip_masq_syms = {
 
 struct ip_masq *ip_masq_m_tab[IP_MASQ_TAB_SIZE];
 struct ip_masq *ip_masq_s_tab[IP_MASQ_TAB_SIZE];
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+	/*
+	 * Add a third hash table for input lookup by remote side
+	 */
+struct ip_masq *ip_masq_d_tab[IP_MASQ_TAB_SIZE];
+
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
 /*
  * timeouts
@@ -284,10 +464,26 @@ ip_masq_hash(struct ip_masq *ms)
         /*
          *	Hash by proto,s{addr,port}
          */
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+	if (ms->protocol == IPPROTO_GRE) {
+                /* Ignore the source port (Call ID) when hashing, as
+                 * outbound packets will not be able to supply it...
+                 */
+                hash = ip_masq_hash_key(ms->protocol, ms->saddr, 0);
+        } else
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
         hash = ip_masq_hash_key(ms->protocol, ms->saddr, ms->sport);
         ms->s_link = ip_masq_s_tab[hash];
         ip_masq_s_tab[hash] = ms;
 
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+        /* 
+          * Hash by proto,d{addr,port}
+          */
+        hash = ip_masq_hash_key(ms->protocol, ms->daddr, ms->dport);
+	ms->d_link = ip_masq_d_tab[hash];
+	ip_masq_d_tab[hash] = ms;
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
         ms->flags |= IP_MASQ_F_HASHED;
         return 1;
@@ -319,12 +515,29 @@ static __inline__ int ip_masq_unhash(struct ip_masq *ms)
         /*
          *	UNhash by s{addr,port}
          */
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+	if (ms->protocol == IPPROTO_GRE) {
+                hash = ip_masq_hash_key(ms->protocol, ms->saddr, 0);
+        } else
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
         hash = ip_masq_hash_key(ms->protocol, ms->saddr, ms->sport);
         for (ms_p = &ip_masq_s_tab[hash]; *ms_p ; ms_p = &(*ms_p)->s_link)
                 if (ms == (*ms_p))  {
                         *ms_p = ms->s_link;
                         break;
                 }
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+	/* 
+	 * UNhash by d{addr,port}
+	 */
+	hash = ip_masq_hash_key(ms->protocol, ms->daddr, ms->dport);
+	for (ms_p = &ip_masq_d_tab[hash]; *ms_p ; ms_p = &(*ms_p)->d_link)
+		if (ms == (*ms_p))  {
+			*ms_p = ms->d_link;
+			break;
+		}
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
         ms->flags &= ~IP_MASQ_F_HASHED;
         return 1;
@@ -348,6 +561,9 @@ ip_masq_in_get(struct iphdr *iph)
         int protocol;
         __u32 s_addr, d_addr;
         __u16 s_port, d_port;
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+        __u32 cookie;
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
  	portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
         protocol = iph->protocol;
@@ -355,6 +571,13 @@ ip_masq_in_get(struct iphdr *iph)
         s_port = portptr[0];
         d_addr = iph->daddr;
         d_port = portptr[1];
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+        if (protocol == IPPROTO_UDP && ntohs(s_port) == UDP_PORT_ISAKMP && ntohs(d_port) == UDP_PORT_ISAKMP) {
+                cookie = *((__u32 *)&portptr[4]);
+                return ip_masq_in_get_isakmp(protocol, s_addr, s_port, d_addr, d_port, cookie);
+        } else
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
         return ip_masq_in_get_2(protocol, s_addr, s_port, d_addr, d_port);
 }
@@ -400,6 +623,32 @@ ip_masq_in_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d
                         return ms;
 		}
         }
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+	if (protocol == IPPROTO_GRE) {
+                for(ms = ip_masq_m_tab[hash]; ms ; ms = ms->m_link) {
+                        if (protocol==ms->protocol &&
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+                            ms->mport == d_port && /* ignore source port */
+#else /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+                            ms->mport == 0 && ms->sport == 0 &&
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+                            s_addr==ms->daddr && d_addr==ms->maddr) {
+#ifdef DEBUG_IP_MASQUERADE_PPTP_VERBOSE
+                                printk(KERN_DEBUG "MASQ: look/in %d %08X:%04hX->%08X:%04hX OK\n",
+                                       protocol,
+                                       s_addr,
+                                       s_port,
+                                       d_addr,
+                                       d_port);
+#endif /* DEBUG_IP_MASQUERADE_PPTP_VERBOSE */
+                                return ms;
+                        }
+		}
+        }
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+
+
 #ifdef DEBUG_IP_MASQUERADE_VERBOSE
 	printk("MASQ: look/in %d %08X:%04hX->%08X:%04hX fail\n",
 	       protocol,
@@ -410,6 +659,121 @@ ip_masq_in_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d
 #endif
         return NULL;
 }
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+struct ip_masq *
+ip_masq_in_get_ipsec(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port, __u32 i_spi)
+{
+        unsigned hash;
+        struct ip_masq *ms;
+
+        if (protocol != IPPROTO_ESP) {
+                return ip_masq_in_get_2(protocol,s_addr,s_port,d_addr,d_port);
+        }
+
+        /* find an entry for a packet coming in from outside,
+         * or find whether there's a setup pending
+         */
+
+        if (i_spi != 0) {
+                /* there's a SPI - look for a completed entry */
+                hash = ip_masq_hash_key(protocol, s_addr, s_port);
+                for(ms = ip_masq_d_tab[hash]; ms ; ms = ms->d_link) {
+                        if (protocol==ms->protocol &&
+                            s_addr==ms->daddr &&
+                            d_addr==ms->maddr &&
+                            ms->ispi != 0 && i_spi==ms->ispi) {
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+                                printk(KERN_DEBUG "MASQ: IPSEC look/in %08X->%08X:%08X OK\n",
+                                       s_addr,
+                                       d_addr,
+                                       i_spi);
+#endif
+                                return ms;
+                        }
+                }
+        }
+        
+        /* no joy. look for a pending connection - maybe somebody else's
+         * if we're checking for a pending setup, the d_addr will be zero
+         * to avoid having to know the masq IP.
+         */
+        hash = ip_masq_hash_key(protocol, s_addr, 0);
+        for(ms = ip_masq_d_tab[hash]; ms ; ms = ms->d_link) {
+                if (protocol==ms->protocol &&
+                    s_addr==ms->daddr &&
+                    (d_addr==0 || d_addr==ms->maddr) &&
+                    ms->ispi==0) {
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+                        printk(KERN_DEBUG "MASQ: IPSEC look/in %08X->%08X:0 OK\n",
+                               s_addr,
+                               d_addr
+                               );
+#endif
+                        return ms;
+                }
+        }
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+	printk(KERN_DEBUG "MASQ: IPSEC look/in %08X->%08X:%08X fail\n",
+	       s_addr,
+	       d_addr,
+	       i_spi);
+#endif
+        return NULL;
+}
+
+struct ip_masq *
+ip_masq_in_get_isakmp(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port, __u32 cookie)
+{
+        unsigned hash;
+        struct ip_masq *ms;
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC
+	printk(KERN_DEBUG "ip_masq_in_get_isakmp(): ");
+	printk("%s -> ", in_ntoa(s_addr));
+	printk("%s cookie %lX\n", in_ntoa(d_addr), ntohl(cookie));
+#endif /* DEBUG_IP_MASQUERADE_IPSEC */
+
+        if (cookie == 0) {
+                printk(KERN_INFO "ip_masq_in_get_isakmp(): ");
+                printk("zero cookie from %s\n", in_ntoa(s_addr));
+        }
+
+        hash = ip_masq_hash_key(protocol, d_addr, d_port);
+        for(ms = ip_masq_m_tab[hash]; ms ; ms = ms->m_link) {
+ 		if (protocol==ms->protocol &&
+		    cookie==ms->ospi &&
+		    ((s_addr==ms->daddr || ms->flags & IP_MASQ_F_NO_DADDR)
+		     ) &&
+		    (s_port==ms->dport || ms->flags & IP_MASQ_F_NO_DPORT) &&
+		    (d_addr==ms->maddr && d_port==ms->mport)) {
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+			printk(KERN_DEBUG "MASQ: look/in %d %08X:%04hX->%08X:%04hX %08X OK\n",
+			       protocol,
+			       s_addr,
+			       s_port,
+			       d_addr,
+			       d_port,
+                               cookie);
+#endif
+                        return ms;
+		}
+        }
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+	printk(KERN_DEBUG "MASQ: look/in %d %08X:%04hX->%08X:%04hX %08X fail\n",
+	       protocol,
+	       s_addr,
+	       s_port,
+	       d_addr,
+	       d_port,
+               cookie);
+#endif
+        return NULL;
+}
+
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
 /*
  *	Returns ip_masq associated with addresses found in iph.
@@ -423,6 +787,10 @@ ip_masq_out_get(struct iphdr *iph)
         int protocol;
         __u32 s_addr, d_addr;
         __u16 s_port, d_port;
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+        __u32 cookie;
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
+
 
  	portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
         protocol = iph->protocol;
@@ -430,6 +798,13 @@ ip_masq_out_get(struct iphdr *iph)
         s_port = portptr[0];
         d_addr = iph->daddr;
         d_port = portptr[1];
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+        if (protocol == IPPROTO_UDP && ntohs(s_port) == UDP_PORT_ISAKMP && ntohs(d_port) == UDP_PORT_ISAKMP) {
+                cookie = *((__u32 *)&portptr[4]);
+                return ip_masq_out_get_isakmp(protocol, s_addr, s_port, d_addr, d_port, cookie);
+        } else
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
         return ip_masq_out_get_2(protocol, s_addr, s_port, d_addr, d_port);
 }
@@ -454,6 +829,35 @@ ip_masq_out_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 
         unsigned hash;
         struct ip_masq *ms;
 
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+	if (protocol == IPPROTO_GRE) {
+                /*
+                 * Call ID is saved in source port number,
+                 * but we have no way of knowing it on the outbound packet...
+                 * we only know the *other side's* Call ID
+                 */
+
+                hash = ip_masq_hash_key(protocol, s_addr, 0);
+                for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
+                        if (protocol == ms->protocol &&
+                            s_addr == ms->saddr && (s_port == 0 || s_port == ms->sport) &&
+                            d_addr == ms->daddr && d_port == ms->dport ) {
+#ifdef DEBUG_IP_MASQUERADE_VERBOSE
+                                printk(KERN_DEBUG "MASQ: lk/out2 %d %08X:%04hX->%08X:%04hX OK\n",
+                                       protocol,
+                                       s_addr,
+                                       s_port,
+                                       d_addr,
+                                       d_port);
+#endif /* DEBUG_IP_MASQUERADE_VERBOSE */
+                                return ms;
+                        }
+                }
+        }
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
 
         hash = ip_masq_hash_key(protocol, s_addr, s_port);
         for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
@@ -498,6 +902,92 @@ ip_masq_out_get_2(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 
 #endif
         return NULL;
 }
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+struct ip_masq *
+ip_masq_out_get_ipsec(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port, __u32 o_spi)
+{
+        unsigned hash;
+        struct ip_masq *ms;
+
+	if (protocol != IPPROTO_ESP) {
+                return ip_masq_out_get_2(protocol,s_addr,s_port,d_addr,d_port);
+        }
+
+        hash = ip_masq_hash_key(protocol, s_addr, s_port);
+        for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
+ 		if (protocol==ms->protocol &&
+		    s_addr==ms->saddr &&
+		    d_addr==ms->daddr &&
+                    o_spi==ms->ospi) {
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+			printk(KERN_DEBUG "MASQ: IPSEC look/out %08X:%08X->%08X OK\n",
+			       s_addr,
+			       o_spi,
+			       d_addr);
+#endif
+                        return ms;
+		}
+        }
+        
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+	printk(KERN_DEBUG "MASQ: IPSEC look/out %08X:%08X->%08X fail\n",
+	       s_addr,
+	       o_spi,
+	       d_addr);
+#endif
+        return NULL;
+}
+
+struct ip_masq *
+ip_masq_out_get_isakmp(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port, __u32 cookie)
+{
+        unsigned hash;
+        struct ip_masq *ms;
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC
+	printk(KERN_DEBUG "ip_masq_out_get_isakmp(): ");
+	printk("%s -> ", in_ntoa(s_addr));
+	printk("%s cookie %lX\n", in_ntoa(d_addr), ntohl(cookie));
+#endif /* DEBUG_IP_MASQUERADE_IPSEC */
+
+        if (cookie == 0) {
+                printk(KERN_INFO "ip_masq_out_get_isakmp(): ");
+                printk("zero cookie from %s\n", in_ntoa(s_addr));
+        }
+
+        hash = ip_masq_hash_key(protocol, s_addr, s_port);
+        for(ms = ip_masq_s_tab[hash]; ms ; ms = ms->s_link) {
+		if (protocol == ms->protocol &&
+		    cookie == ms->ospi &&
+		    s_addr == ms->saddr && s_port == ms->sport &&
+                    d_addr == ms->daddr && d_port == ms->dport ) {
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+			printk(KERN_DEBUG "MASQ: lk/out1 %d %08X:%04hX->%08X:%04hX %08X OK\n",
+			       protocol,
+			       s_addr,
+			       s_port,
+			       d_addr,
+			       d_port,
+                               cookie);
+#endif
+                        return ms;
+		}
+        }
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+	printk(KERN_DEBUG "MASQ: lk/out1 %d %08X:%04hX->%08X:%04hX %08X fail\n",
+	       protocol,
+	       s_addr,
+	       s_port,
+	       d_addr,
+	       d_port,
+               cookie);
+#endif
+        return NULL;
+}
+
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 
 /*
  *	Returns ip_masq for given proto,m_addr,m_port.
@@ -647,6 +1137,34 @@ struct ip_masq * ip_masq_new_enh(struct device *dev, int proto, __u32 saddr, __u
         for (ports_tried = 0; 
 	     (*free_ports_p && (ports_tried <= (PORT_MASQ_END - PORT_MASQ_BEGIN)));
 	     ports_tried++){
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+#ifndef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+                /* Ignoring PPTP call IDs.
+                 * Don't needlessly increase the TCP port pointer.
+                 */
+                if (proto == IPPROTO_GRE) {
+                        ms->mport = 0;
+                        mst = NULL;
+                } else {
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+                /* ESP masq keys off the SPI, not the port number.
+                 * Don't needlessly increase the TCP port pointer.
+                 */
+                if (proto == IPPROTO_ESP) {
+                        ms->mport = 0;
+                        mst = NULL;
+                } else {
+                if (proto == IPPROTO_UDP && ntohs(sport) == UDP_PORT_ISAKMP && ntohs(dport) == UDP_PORT_ISAKMP) {
+                        /* the port number cannot be changed */
+                        ms->mport = htons(UDP_PORT_ISAKMP);
+                        mst = NULL;
+                } else {
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
+
                 save_flags(flags);
                 cli();
                 
@@ -667,6 +1185,18 @@ struct ip_masq * ip_masq_new_enh(struct device *dev, int proto, __u32 saddr, __u
                  */
                 
                 mst = ip_masq_getbym(proto, ms->maddr, ms->mport);
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+#ifndef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+                }
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+                }
+                }
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
+
                 if (mst == NULL || matchport) {
                         save_flags(flags);
                         cli();
@@ -707,11 +1237,11 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
 
 void ip_masq_set_expire(struct ip_masq *ms, unsigned long tout)
 {
+	/* There Can Be Only One (timer on a masq table entry, that is) */
+        del_timer(&ms->timer);
         if (tout) {
                 ms->timer.expires = jiffies+tout;
                 add_timer(&ms->timer);
-        } else {
-                del_timer(&ms->timer);
         }
 }
 
@@ -725,6 +1255,1118 @@ static void recalc_check(struct udphdr *uh, __u32 saddr,
 		uh->check=0xFFFF;
 }
 	
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+/*
+ *      Masquerade of GRE connections
+ *      to support a PPTP VPN client or server.
+ */
+
+/*
+ *	Handle outbound GRE packets.
+ *
+ *	This is largely a copy of ip_fw_masquerade()
+ */
+
+int ip_fw_masq_gre(struct sk_buff **skb_p, struct device *dev)
+{
+        struct sk_buff 	*skb   = *skb_p;
+        struct iphdr	*iph   = skb->h.iph;
+        struct pptp_gre_header	*greh;
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+#ifdef DEBUG_IP_MASQUERADE_PPTP_VERBOSE
+        __u8		*greraw;
+#endif /* DEBUG_IP_MASQUERADE_PPTP_VERBOSE */
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+        struct ip_masq	*ms;
+        unsigned long    flags;
+
+
+        greh = (struct pptp_gre_header *)&(((char *)iph)[iph->ihl*4]);
+
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+
+        printk(KERN_DEBUG "ip_fw_masq_gre(): ");
+        printk("Outbound GRE packet from %s", in_ntoa(iph->saddr));
+        printk(" to %s\n", in_ntoa(iph->daddr));
+
+#ifdef DEBUG_IP_MASQUERADE_PPTP_VERBOSE
+	greraw = (__u8 *) greh;
+	printk(KERN_DEBUG "ip_fw_masq_gre(): ");
+	printk("GRE raw: %X %X %X %X %X %X %X %X %X %X %X %X.\n",
+		greraw[0],
+		greraw[1],
+		greraw[2],
+		greraw[3],
+		greraw[4],
+		greraw[5],
+		greraw[6],
+		greraw[7],
+		greraw[8],
+		greraw[9],
+		greraw[10],
+		greraw[11]);
+	printk(KERN_DEBUG "ip_fw_masq_gre(): ");
+	printk("GRE C: %d R: %d K: %d S: %d s: %d recur: %X.\n",
+                greh->has_cksum,
+                greh->has_routing,
+                greh->has_key,
+                greh->has_seq,
+                greh->is_strict,
+                greh->recur);
+	printk(KERN_DEBUG "ip_fw_masq_gre(): ");
+	printk("GRE flags: %X ver: %X.\n", greh->flags, greh->version);
+	printk(KERN_DEBUG "ip_fw_masq_gre(): ");
+	printk("GRE proto: %X.\n", ntohs(greh->protocol));
+#endif /* DEBUG_IP_MASQUERADE_PPTP_VERBOSE */
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+
+	if (ntohs(greh->protocol) != 0x880B) {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+	  printk(KERN_INFO "ip_fw_masq_gre(): ");
+	  printk("GRE protocol %X not 0x880B (non-PPTP encap?) - discarding.\n", ntohs(greh->protocol));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+	  return -1;
+	}
+
+	/*
+	 *	Look for masq table entry
+	 */
+
+        ms = ip_masq_out_get_2(IPPROTO_GRE,
+                iph->saddr, 0,
+                iph->daddr, 0);
+
+	if (ms!=NULL) {
+                /* delete the expiration timer */
+        	ip_masq_set_expire(ms,0);
+
+		/*
+                 *      Make sure that the masq IP address is correct
+                 *      for dynamic IP...
+		 */
+		if ( (ms->maddr != dev->pa_addr) && (sysctl_ip_dynaddr & 3) ) {
+                        printk(KERN_INFO "ip_fw_masq_gre(): ");
+                        printk("change maddr from %s", in_ntoa(ms->maddr));
+                        printk(" to %s\n", in_ntoa(dev->pa_addr));
+		        save_flags(flags);
+		        cli();
+		        ip_masq_unhash(ms);
+		        ms->maddr = dev->pa_addr;
+		        ip_masq_hash(ms);
+		        restore_flags(flags);
+                }
+	} else {
+                /*
+                 *	Nope, not found, create a new entry for it, maybe
+                 */
+	
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+                /* masq table entry has to come from control channel sniffing.
+                 * If we can't find one, it may have expired.
+                 * How can this happen with the control channel active?
+                 */
+	        printk(KERN_INFO "ip_fw_masq_gre(): ");
+                printk("Outbound GRE to %s has no masq table entry.\n",
+                        in_ntoa(iph->daddr));
+                return -1;
+#else /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+                /* call IDs ignored, can create masq table entries on the fly. */
+		ms = ip_masq_new(dev, iph->protocol,
+				 iph->saddr, 0,
+				 iph->daddr, 0,
+				 0);
+
+                if (ms == NULL) {
+                        printk(KERN_NOTICE "ip_fw_masq_gre(): Couldn't create masq table entry.\n");
+			return -1;
+                }
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+ 	}
+
+        /*
+         *	Set iph source addr from ip_masq obj.
+         */
+ 	iph->saddr = ms->maddr;
+
+ 	/*
+ 	 *	set timeout and check IP header
+ 	 */
+ 	
+        ip_masq_set_expire(ms, MASQUERADE_EXPIRE_PPTP);
+ 	ip_send_check(iph);
+
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+ 	printk(KERN_DEBUG "MASQ: GRE O-routed from %s over %s\n",
+                in_ntoa(ms->maddr), dev->name);
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+
+	return 0;
+}
+
+/*
+ *	Handle inbound GRE packets.
+ *
+ */
+
+int ip_fw_demasq_gre(struct sk_buff **skb_p, struct device *dev)
+{
+        struct sk_buff 	*skb   = *skb_p;
+ 	struct iphdr	*iph   = skb->h.iph;
+ 	struct pptp_gre_header	*greh;
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+#ifdef DEBUG_IP_MASQUERADE_PPTP_VERBOSE
+	__u8		*greraw;
+#endif /* DEBUG_IP_MASQUERADE_PPTP_VERBOSE */
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+        struct ip_masq	*ms;
+
+
+	greh = (struct pptp_gre_header *)&(((char *)iph)[iph->ihl*4]);
+
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+
+	printk(KERN_DEBUG "ip_fw_demasq_gre(): ");
+	printk("Inbound GRE packet from %s", in_ntoa(iph->saddr));
+	printk(" to %s\n", in_ntoa(iph->daddr));
+
+#ifdef DEBUG_IP_MASQUERADE_PPTP_VERBOSE
+	greraw = (__u8 *) greh;
+	printk(KERN_DEBUG "ip_fw_demasq_gre(): ");
+	printk("GRE raw: %X %X %X %X %X %X %X %X %X %X %X %X.\n",
+		greraw[0],
+		greraw[1],
+		greraw[2],
+		greraw[3],
+		greraw[4],
+		greraw[5],
+		greraw[6],
+		greraw[7],
+		greraw[8],
+		greraw[9],
+		greraw[10],
+		greraw[11]);
+	printk(KERN_DEBUG "ip_fw_demasq_gre(): ");
+	printk("GRE C: %d R: %d K: %d S: %d s: %d recur: %X.\n",
+                greh->has_cksum,
+                greh->has_routing,
+                greh->has_key,
+                greh->has_seq,
+                greh->is_strict,
+                greh->recur);
+	printk(KERN_DEBUG "ip_fw_demasq_gre(): ");
+	printk("GRE flags: %X ver: %X.\n", greh->flags, greh->version);
+	printk(KERN_DEBUG "ip_fw_demasq_gre(): ");
+	printk("GRE proto: %X.\n", ntohs(greh->protocol));
+#endif /* DEBUG_IP_MASQUERADE_PPTP_VERBOSE */
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+	printk(KERN_DEBUG "ip_fw_demasq_gre(): ");
+	printk("PPTP call ID: %X.\n", ntohs(greh->call_id));
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+
+	if (ntohs(greh->protocol) != 0x880B) {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+	  printk(KERN_INFO "ip_fw_demasq_gre(): ");
+	  printk("GRE protocol %X not 0x880B (non-PPTP encap?) - discarding.\n", ntohs(greh->protocol));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+	  return -1;
+	}
+
+ 	/*
+ 	 *      Look for a masq table entry and reroute if found
+         */
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+        ms = ip_masq_getbym(IPPROTO_GRE,
+                iph->daddr, greh->call_id);
+#else /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+        ms = ip_masq_in_get_2(IPPROTO_GRE,
+                iph->saddr, 0,
+                iph->daddr, 0);
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+
+        if (ms != NULL)
+        {
+                /* delete the expiration timer */
+		ip_masq_set_expire(ms,0);
+
+                iph->daddr = ms->saddr;
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+                /*
+                 * change peer call ID to original value
+                 * (saved in masq table source port)
+                 */
+
+                greh->call_id = ms->sport;
+
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+	        printk(KERN_DEBUG "ip_fw_demasq_gre(): ");
+                printk("inbound PPTP from %s call ID now %X\n",
+                       in_ntoa(iph->saddr), ntohs(greh->call_id));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+
+                /*
+                 * resum checksums and set timeout
+                 */
+		ip_masq_set_expire(ms, MASQUERADE_EXPIRE_PPTP);
+                ip_send_check(iph);
+
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                printk(KERN_DEBUG "MASQ: GRE I-routed to %s\n", in_ntoa(iph->daddr));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                return 1;
+ 	}
+
+ 	/* sorry, all this trouble for a no-hit :) */
+	printk(KERN_INFO "ip_fw_demasq_gre(): ");
+	printk("Inbound from %s has no masq table entry.\n", in_ntoa(iph->saddr));
+ 	return 0;
+}
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+/*
+ *      Define all of the PPTP control channel message structures.
+ *      Sniff the control channel looking for start- and end-call
+ *      messages, and masquerade the Call ID as if it was a TCP
+ *      port.
+ */
+
+#define PPTP_CONTROL_PACKET            1
+#define PPTP_MGMT_PACKET               2
+#define PPTP_MAGIC_COOKIE              0x1A2B3C4D
+
+struct PptpPacketHeader {
+       __u16 packetLength;
+       __u16 packetType;
+       __u32 magicCookie;
+};
+
+/* PptpControlMessageType values */
+#define PPTP_START_SESSION_REQUEST     1
+#define PPTP_START_SESSION_REPLY       2
+#define PPTP_STOP_SESSION_REQUEST      3
+#define PPTP_STOP_SESSION_REPLY        4
+#define PPTP_ECHO_REQUEST              5
+#define PPTP_ECHO_REPLY                6
+#define PPTP_OUT_CALL_REQUEST          7
+#define PPTP_OUT_CALL_REPLY            8
+#define PPTP_IN_CALL_REQUEST           9
+#define PPTP_IN_CALL_REPLY             10
+#define PPTP_CALL_CLEAR_REQUEST        11
+#define PPTP_CALL_DISCONNECT_NOTIFY    12
+#define PPTP_CALL_ERROR_NOTIFY         13
+#define PPTP_WAN_ERROR_NOTIFY          14
+#define PPTP_SET_LINK_INFO             15
+
+struct PptpControlHeader {
+    __u16 messageType;
+    __u16 reserved;
+};
+
+struct PptpOutCallRequest {
+    __u16 callID;
+    __u16 callSerialNumber;
+    __u32 minBPS;
+    __u32 maxBPS;
+    __u32 bearerType;
+    __u32 framingType;
+    __u16 packetWindow;
+    __u16 packetProcDelay;
+    __u16 reserved1;
+    __u16 phoneNumberLength;
+    __u16 reserved2;
+    __u8  phoneNumber[64];
+    __u8  subAddress[64];
+};
+
+struct PptpOutCallReply {
+    __u16 callID;
+    __u16 peersCallID;
+    __u8  resultCode;
+    __u8  generalErrorCode;
+    __u16 causeCode;
+    __u32 connectSpeed;
+    __u16 packetWindow;
+    __u16 packetProcDelay;
+    __u32 physChannelID;
+};
+
+struct PptpInCallRequest {
+    __u16 callID;
+    __u16 callSerialNumber;
+    __u32 callBearerType;
+    __u32 physChannelID;
+    __u16 dialedNumberLength;
+    __u16 dialingNumberLength;
+    __u8  dialedNumber[64];
+    __u8  dialingNumber[64];
+    __u8  subAddress[64];
+};
+
+struct PptpInCallReply {
+    __u16 callID;
+    __u16 peersCallID;
+    __u8  resultCode;
+    __u8  generalErrorCode;
+    __u16 packetWindow;
+    __u16 packetProcDelay;
+    __u16 reserved;
+};
+
+struct PptpCallDisconnectNotify {
+    __u16 callID;
+    __u8  resultCode;
+    __u8  generalErrorCode;
+    __u16 causeCode;
+    __u16 reserved;
+    __u8  callStatistics[128];
+};
+
+struct PptpWanErrorNotify {
+    __u16 peersCallID;
+    __u16 reserved;
+    __u32 crcErrors;
+    __u32 framingErrors;
+    __u32 hardwareOverRuns;
+    __u32 bufferOverRuns;
+    __u32 timeoutErrors;
+    __u32 alignmentErrors;
+};
+
+struct PptpSetLinkInfo {
+    __u16 peersCallID;
+    __u16 reserved;
+    __u32 sendAccm;
+    __u32 recvAccm;
+};
+
+
+/* Packet sent to or from PPTP control port. Process it. */
+/* Yes, all of this should be in a kernel module. Real Soon Now... */
+void ip_masq_pptp(struct sk_buff *skb, struct ip_masq *ms, struct device *dev)
+{
+        struct iphdr    *iph   = skb->h.iph;
+        struct PptpPacketHeader  *pptph = NULL;
+        struct PptpControlHeader *ctlh = NULL;
+        union {
+                char *req;
+                struct PptpOutCallRequest       *ocreq;
+                struct PptpOutCallReply         *ocack;
+                struct PptpInCallRequest        *icreq;
+                struct PptpInCallReply          *icack;
+                struct PptpCallDisconnectNotify *disc;
+                struct PptpWanErrorNotify       *wanerr;
+                struct PptpSetLinkInfo          *setlink;
+        } pptpReq;
+        struct ip_masq  *ms_gre = NULL;
+
+        /*
+         * The GRE data channel will be treated as the "control channel"
+         * for the purposes of masq because there are keepalives happening
+         * on the control channel, whereas the data channel may be subject
+         * to relatively long periods of inactivity.
+         */
+         
+        pptph = (struct PptpPacketHeader *)&(((char *)iph)[sizeof(struct iphdr) + sizeof(struct tcphdr)]);
+#ifdef DEBUG_IP_MASQUERADE_PPTP_VERBOSE
+        printk(KERN_DEBUG "ip_masq_pptp(): ");
+        printk("LEN=%d TY=%d MC=%lX", ntohs(pptph->packetLength),
+                ntohs(pptph->packetType), ntohl(pptph->magicCookie));
+	printk(" from %s", in_ntoa(iph->saddr));
+	printk(" to %s\n", in_ntoa(iph->daddr));
+#endif /* DEBUG_IP_MASQUERADE_PPTP_VERBOSE */
+
+        if (ntohs(pptph->packetType) == PPTP_CONTROL_PACKET &&
+            ntohl(pptph->magicCookie) == PPTP_MAGIC_COOKIE) {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                printk(KERN_DEBUG "ip_masq_pptp(): ");
+                printk("PPTP control packet from %s", in_ntoa(iph->saddr));
+                printk(" to %s\n", in_ntoa(iph->daddr));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                ctlh = (struct PptpControlHeader *)&(((char*)pptph)[sizeof(struct PptpPacketHeader)]);
+                pptpReq.req = &(((char*)ctlh)[sizeof(struct PptpControlHeader)]);
+#ifdef DEBUG_IP_MASQUERADE_PPTP_VERBOSE
+                printk(KERN_DEBUG "ip_masq_pptp(): ");
+                printk("MTY=%X R0=%X\n",
+                        ntohs(ctlh->messageType), ctlh->reserved);
+#endif /* DEBUG_IP_MASQUERADE_PPTP_VERBOSE */
+
+                switch (ntohs(ctlh->messageType))
+                {
+                        case PPTP_OUT_CALL_REQUEST:
+                                if (iph->daddr == ms->daddr)    /* outbound only */
+                                {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                        printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                        printk("Call request, call ID %X\n",
+                                                ntohs(pptpReq.ocreq->callID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        ms_gre = ip_masq_new(dev, IPPROTO_GRE,
+                                                ms->saddr, pptpReq.ocreq->callID,
+                                                ms->daddr, 0,
+                                                0);
+                                        if (ms_gre != NULL)
+                                        {
+                                                ms->control = ms_gre;
+                                                ms_gre->flags |= IP_MASQ_F_CONTROL;
+                                                ip_masq_set_expire(ms_gre, 0);
+                                                ip_masq_set_expire(ms_gre, 2*60*HZ);
+                                                pptpReq.ocreq->callID = ms_gre->mport;
+                                                printk(KERN_INFO "ip_masq_pptp(): ");
+                                                printk("Req outcall PPTP sess %s", in_ntoa(ms->saddr));
+                                                printk(" -> %s", in_ntoa(ms->daddr));
+                                                printk(" Call ID %X -> %X.\n", ntohs(ms_gre->sport), ntohs(ms_gre->mport));
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                                printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                                printk("masqed call ID %X\n",
+                                                        ntohs(pptpReq.ocreq->callID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        } else {
+                                                printk(KERN_NOTICE "ip_masq_pptp(): ");
+                                                printk("Couldn't create GRE masq table entry (%s)\n", "OUT_CALL_REQ");
+                                        }
+                                }
+                        break;
+                        case PPTP_OUT_CALL_REPLY:
+                                if (iph->saddr == ms->daddr)    /* inbound (masqueraded client) */
+                                {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                        printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                        printk("Call reply, peer call ID %X\n",
+                                                ntohs(pptpReq.ocack->peersCallID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        ms_gre = ip_masq_getbym(IPPROTO_GRE,
+                                                ms->maddr, pptpReq.ocack->peersCallID);
+                                        if (ms_gre != NULL)
+                                        {
+                                                ip_masq_set_expire(ms_gre, 0);
+                                                ip_masq_set_expire(ms_gre, 2*60*HZ);
+                                                pptpReq.ocack->peersCallID = ms_gre->sport;
+                                                printk(KERN_INFO "ip_masq_pptp(): ");
+                                                printk("Estab outcall PPTP sess %s", in_ntoa(ms->saddr));
+                                                printk(" -> %s", in_ntoa(ms->daddr));
+                                                printk(" Call ID %X -> %X.\n", ntohs(ms_gre->sport), ntohs(ms_gre->mport));
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                                printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                                printk("unmasqed call ID %X\n",
+                                                        ntohs(pptpReq.ocack->callID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        } else {
+                                                printk(KERN_INFO "ip_masq_pptp(): ");
+                                                printk("Lost GRE masq table entry (%s)\n", "OUT_CALL_REPLY");
+                                        }
+                                }
+                        break;
+                        case PPTP_IN_CALL_REQUEST:
+                                if (iph->daddr == ms->daddr)    /* outbound only */
+                                {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                        printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                        printk("Call request, call ID %X\n",
+                                                ntohs(pptpReq.icreq->callID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        ms_gre = ip_masq_new(dev, IPPROTO_GRE,
+                                                 ms->saddr, pptpReq.icreq->callID,
+                                                 ms->daddr, 0,
+                                                 0);
+                                        if (ms_gre != NULL)
+                                        {
+                                                ms->control = ms_gre;
+                                                ms_gre->flags |= IP_MASQ_F_CONTROL;
+                                                ip_masq_set_expire(ms_gre, 0);
+                                                ip_masq_set_expire(ms_gre, 2*60*HZ);
+                                                pptpReq.icreq->callID = ms_gre->mport;
+                                                printk(KERN_INFO "ip_masq_pptp(): ");
+                                                printk("Req incall PPTP sess %s", in_ntoa(ms->saddr));
+                                                printk(" -> %s", in_ntoa(ms->daddr));
+                                                printk(" Call ID %X -> %X.\n", ntohs(ms_gre->sport), ntohs(ms_gre->mport));
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                                printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                                printk("masqed call ID %X\n",
+                                                        ntohs(pptpReq.icreq->callID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        } else {
+                                                printk(KERN_NOTICE "ip_masq_pptp(): ");
+                                                printk("Couldn't create GRE masq table entry (%s)\n", "IN_CALL_REQ");
+                                        }
+                                }
+                        break;
+                        case PPTP_IN_CALL_REPLY:
+                                if (iph->saddr == ms->daddr)    /* inbound (masqueraded client) */
+                                {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                        printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                        printk("Call reply, peer call ID %X\n",
+                                                ntohs(pptpReq.icack->peersCallID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        ms_gre = ip_masq_getbym(IPPROTO_GRE,
+                                                ms->maddr, pptpReq.icack->peersCallID);
+                                        if (ms_gre != NULL)
+                                        {
+                                                ip_masq_set_expire(ms_gre, 0);
+                                                ip_masq_set_expire(ms_gre, 2*60*HZ);
+                                                pptpReq.icack->peersCallID = ms_gre->sport;
+                                                printk(KERN_INFO "ip_masq_pptp(): ");
+                                                printk("Estab incall PPTP sess %s", in_ntoa(ms->saddr));
+                                                printk(" -> %s", in_ntoa(ms->daddr));
+                                                printk(" Call ID %X -> %X.\n", ntohs(ms_gre->sport), ntohs(ms_gre->mport));
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                                printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                                printk("unmasqed call ID %X\n",
+                                                        ntohs(pptpReq.icack->callID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        } else {
+                                                printk(KERN_INFO "ip_masq_pptp(): ");
+                                                printk("Lost GRE masq table entry (%s)\n", "IN_CALL_REPLY");
+                                        }
+                                }
+                        break;
+                        case PPTP_CALL_DISCONNECT_NOTIFY:
+                                if (iph->daddr == ms->daddr)    /* outbound only */
+                                {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                        printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                        printk("Disconnect notify, call ID %X\n",
+                                                ntohs(pptpReq.disc->callID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        ms_gre = ip_masq_out_get_2(IPPROTO_GRE,
+                                                iph->saddr, pptpReq.disc->callID,
+                                                iph->daddr, 0);
+                                        if (ms_gre != NULL)
+                                        {
+                                                /*
+                                                 * expire the data channel
+                                                 * table entry quickly now.
+                                                 */
+                                                ip_masq_set_expire(ms_gre, 0);
+                                                ip_masq_set_expire(ms_gre, 30*HZ);
+                                                ms->control = NULL;
+                                                ms_gre->flags &= ~IP_MASQ_F_CONTROL;
+                                                pptpReq.disc->callID = ms_gre->mport;
+                                                printk(KERN_INFO "ip_masq_pptp(): ");
+                                                printk("Disconnect PPTP sess %s", in_ntoa(ms->saddr));
+                                                printk(" -> %s", in_ntoa(ms->daddr));
+                                                printk(" Call ID %X -> %X.\n", ntohs(ms_gre->sport), ntohs(ms_gre->mport));
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                                printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                                printk("masqed call ID %X\n",
+                                                        ntohs(pptpReq.disc->callID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        }
+                                }
+                        break;
+                        case PPTP_WAN_ERROR_NOTIFY:
+                                if (iph->saddr == ms->daddr)    /* inbound only */
+                                {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                        printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                        printk("Error notify, peer call ID %X\n",
+                                                ntohs(pptpReq.wanerr->peersCallID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        ms_gre = ip_masq_getbym(IPPROTO_GRE,
+                                                ms->maddr, pptpReq.wanerr->peersCallID);
+                                        if (ms_gre != NULL)
+                                        {
+                                                pptpReq.wanerr->peersCallID = ms_gre->sport;
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                                printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                                printk("unmasqed call ID %X\n",
+                                                        ntohs(pptpReq.wanerr->peersCallID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        } else {
+                                                printk(KERN_INFO "ip_masq_pptp(): ");
+                                                printk("Lost GRE masq table entry (%s)\n", "WAN_ERROR_NOTIFY");
+                                        }
+                                }
+                        break;
+                        case PPTP_SET_LINK_INFO:
+                                if (iph->saddr == ms->daddr)    /* inbound only */
+                                {
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                        printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                        printk("Set link info, peer call ID %X\n",
+                                                ntohs(pptpReq.setlink->peersCallID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        ms_gre = ip_masq_getbym(IPPROTO_GRE,
+                                                ms->maddr, pptpReq.setlink->peersCallID);
+                                        if (ms_gre != NULL)
+                                        {
+                                                pptpReq.setlink->peersCallID = ms_gre->sport;
+#ifdef DEBUG_IP_MASQUERADE_PPTP
+                                                printk(KERN_DEBUG "ip_masq_pptp(): ");
+                                                printk("unmasqed call ID %X\n",
+                                                        ntohs(pptpReq.setlink->peersCallID));
+#endif /* DEBUG_IP_MASQUERADE_PPTP */
+                                        } else {
+                                                printk(KERN_INFO "ip_masq_pptp(): ");
+                                                printk("Lost GRE masq table entry (%s)\n", "SET_LINK_INFO");
+                                        }
+                                }
+                        break;
+                }
+        }
+}
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+
+static struct symbol_table pptp_masq_syms = {
+#include <linux/symtab_begin.h>
+	X(ip_fw_masq_gre),
+	X(ip_fw_demasq_gre),
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+	X(ip_masq_pptp),
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+#include <linux/symtab_end.h>
+};
+
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+/*
+ *      Quick-and-dirty handling of ESP connections
+ *      John Hardin <jhardin@wolfenet.com> gets all blame...
+ */
+
+/*
+ *	Handle outbound ESP packets.
+ *
+ *	This is largely a copy of ip_fw_masquerade()
+ *
+ * To associate inbound traffic with outbound traffic, we only
+ * allow one session per remote host to be negotiated at a time.
+ * If a packet comes in and there's no masq table entry for it,
+ * then check for other masq table entries for the same server
+ * with the inbound SPI set to zero (i.e. no response yet). If
+ * found, discard the packet.
+ * This will DoS the server for the duration of the connection
+ * attempt, so keep the masq entry's lifetime short until a
+ * response comes in.
+ * If multiple masqueraded hosts are in contention for the same
+ * remote host, enforce round-robin access. This may lead to
+ * misassociation of response traffic if the response is delayed
+ * a great deal, but the masqueraded hosts will clean that up
+ * if it happens.
+ */
+
+int ip_fw_masq_esp(struct sk_buff **skb_p, struct device *dev)
+{
+        struct sk_buff 	*skb   = *skb_p;
+        struct iphdr	*iph   = skb->h.iph;
+        struct ip_masq	*ms;
+        unsigned long    flags;
+        __u32 o_spi;
+        __u16 fake_sport;
+        unsigned long    timeout = MASQUERADE_EXPIRE_IPSEC;
+
+        o_spi = *((__u32 *)&(((char *)iph)[iph->ihl*4]));
+        fake_sport = (__u16) ntohl(o_spi) & 0xffff;
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC
+        printk(KERN_DEBUG "ip_fw_masq_esp(): ");
+        printk("pkt %s", in_ntoa(iph->saddr));
+        printk(" -> %s SPI %lX (fakeport %X)\n", in_ntoa(iph->daddr), ntohl(o_spi), fake_sport);
+#endif /* DEBUG_IP_MASQUERADE_IPSEC */
+
+        if (o_spi == 0) {
+                /* illegal SPI - discard */
+                printk(KERN_INFO "ip_fw_masq_esp(): ");
+                printk("zero SPI from %s discarded\n", in_ntoa(iph->saddr));
+                return -1;
+        }
+
+	/*
+	 *	Look for masq table entry
+	 */
+
+        ms = ip_masq_out_get_ipsec(IPPROTO_ESP,
+                iph->saddr, fake_sport,
+                iph->daddr, 0,
+                o_spi);
+
+	if (ms!=NULL) {
+                if (ms->ispi == IPSEC_INIT_SQUELCHED) {
+                        /* squelched: toss the packet without changing the timer */
+#ifdef DEBUG_IP_MASQUERADE_IPSEC
+                        printk(KERN_INFO "ip_fw_masq_esp(): ");
+			printk("init %s ", in_ntoa(iph->saddr));
+			printk("-> %s SPI %lX ", in_ntoa(iph->daddr), ntohl(o_spi));
+			printk("squelched\n");
+#endif /* DEBUG_IP_MASQUERADE_IPSEC */
+                        return -1;
+                }
+
+                /* delete the expiration timer */
+        	ip_masq_set_expire(ms,0);
+
+		/*
+                 *      Make sure that the masq IP address is correct
+                 *      for dynamic IP...
+		 */
+		if ( (ms->maddr != dev->pa_addr) && (sysctl_ip_dynaddr & 3) ) {
+                        printk(KERN_INFO "ip_fw_masq_esp(): ");
+                        printk("change maddr from %s", in_ntoa(ms->maddr));
+                        printk(" to %s\n", in_ntoa(dev->pa_addr));
+		        save_flags(flags);
+		        cli();
+		        ip_masq_unhash(ms);
+		        ms->maddr = dev->pa_addr;
+		        ip_masq_hash(ms);
+		        restore_flags(flags);
+                }
+
+                if (ms->ispi == 0) {
+                        /* no response yet, keep timeout short */
+			timeout = MASQUERADE_EXPIRE_IPSEC_INIT;
+                        if (ms->blocking) {
+                                /* prevent DoS: limit init packet timer resets */
+                                ms->ocnt++;
+        #ifdef DEBUG_IP_MASQUERADE_IPSEC
+                                printk(KERN_INFO "ip_fw_masq_esp(): ");
+                                printk("init %s ", in_ntoa(iph->saddr));
+                                printk("-> %s SPI %lX ", in_ntoa(iph->daddr), ntohl(o_spi));
+                                printk("retry %d\n", ms->ocnt);
+        #endif /* DEBUG_IP_MASQUERADE_IPSEC */
+                                if (ms->ocnt > IPSEC_INIT_RETRIES) {
+                                        /* more than IPSEC_INIT_RETRIES tries, give up */
+                                        printk(KERN_INFO "ip_fw_masq_esp(): ");
+                                        printk("init %s ", in_ntoa(iph->saddr));
+                                        printk("-> %s SPI %lX ", in_ntoa(iph->daddr), ntohl(o_spi));
+                                        printk("no response after %d tries, unblocking & squelching\n", ms->ocnt);
+                                        /* squelch that source+SPI for a bit */
+                                        timeout = 30*HZ;
+                                        save_flags(flags);
+                                        cli();
+                                        ip_masq_unhash(ms);
+                                        ms->ispi = IPSEC_INIT_SQUELCHED;
+                                        ms->dport = IPSEC_INIT_SQUELCHED;
+                                        ip_masq_hash(ms);
+                                        restore_flags(flags);
+                                        ip_masq_set_expire(ms, timeout);
+                                        /* toss the packet */
+                                        return -1;
+                                }
+                        }
+                }
+	} else {
+                /*
+                 *	Nope, not found, create a new entry for it, maybe
+                 */
+	
+                /* see if there are any pending inits with the same destination... */
+                ms = ip_masq_in_get_ipsec(IPPROTO_ESP,
+                        iph->daddr, 0,
+                        0, 0,
+                        0);
+                
+                if (ms != NULL) {
+                        /* found one with ispi == 0 */
+                        if (ms->saddr != iph->saddr) {
+                                /* it's not ours, don't step on their toes */
+                                printk(KERN_INFO "ip_fw_masq_esp(): ");
+                                printk("init %s ", in_ntoa(iph->saddr));
+                                printk("-> %s ", in_ntoa(iph->daddr));
+                                printk("temporarily blocked by pending ");
+                                printk("%s init\n", in_ntoa(ms->saddr));
+                                /* let it know it has competition */
+                                ms->blocking = 1;
+                                /* toss the packet */
+                                return -1;
+                        }
+                        if (ms->ospi != o_spi) {
+                                /* SPIs differ, still waiting for a previous attempt to expire */
+                                printk(KERN_INFO "ip_fw_masq_esp(): ");
+                                printk("init %s ", in_ntoa(iph->saddr));
+                                printk("-> %s SPI %lX ", in_ntoa(iph->daddr), ntohl(o_spi));
+                                printk("temporarily blocked by pending ");
+                                printk("init w/ SPI %lX\n", ntohl(ms->ospi));
+                                /* let it know it has competition */
+                                ms->blocking = 1;
+                                /* toss the packet */
+                                return -1;
+                        }
+                } else  /* nothing pending, make new entry, pending response */
+                        ms = ip_masq_new(dev, iph->protocol,
+				 iph->saddr, fake_sport,
+				 iph->daddr, 0,
+				 0);
+
+                if (ms == NULL) {
+                        printk(KERN_NOTICE "ip_fw_masq_esp(): Couldn't create masq table entry.\n");
+			return -1;
+                }
+
+                ms->blocking = ms->ocnt = 0;
+                ms->ospi = o_spi;
+                timeout = MASQUERADE_EXPIRE_IPSEC_INIT;      /* fairly brief timeout while waiting for a response */
+ 	}
+
+        /*
+         *	Set iph source addr from ip_masq obj.
+         */
+ 	iph->saddr = ms->maddr;
+
+ 	/*
+ 	 *	set timeout and check IP header
+ 	 */
+ 	
+        ip_masq_set_expire(ms, timeout);
+ 	ip_send_check(iph);
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+ 	printk(KERN_DEBUG "MASQ: ESP O-routed from %s over %s\n",
+                in_ntoa(ms->maddr), dev->name);
+#endif /* DEBUG_IP_MASQUERADE_IPSEC_VERBOSE */
+
+	return 0;
+}
+
+/*
+ *	Handle inbound ESP packets.
+ *
+ */
+
+int ip_fw_demasq_esp(struct sk_buff **skb_p, struct device *dev)
+{
+        struct sk_buff 	*skb   = *skb_p;
+ 	struct iphdr	*iph   = skb->h.iph;
+        struct ip_masq	*ms;
+        unsigned long   flags;
+        __u32 i_spi;
+        __u16 fake_sport;
+#ifndef CONFIG_IP_MASQUERADE_IPSEC_NOGUESS
+	#define ESP_GUESS_SZ 5			/* minimum 3, please */
+	#define ESP_CAND_MIN_TM 5*60*HZ		/* max 10*60*HZ? */
+	unsigned	hash;
+	int		i, ii,
+			ncand = 0, nguess = 0;
+	__u16		isakmp;
+	__u32		cand_ip,
+			guess_ip[ESP_GUESS_SZ];
+	unsigned long	cand_tm,
+			guess_tm[ESP_GUESS_SZ];
+	struct sk_buff 	*skb_cl;
+	struct iphdr	*iph_cl;
+#endif /* CONFIG_IP_MASQUERADE_IPSEC_NOGUESS */
+
+        i_spi = *((__u32 *)&(((char *)iph)[iph->ihl*4]));
+        fake_sport = (__u16) ntohl(i_spi) & 0xffff;
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC
+        printk(KERN_DEBUG "ip_fw_demasq_esp(): ");
+	printk("pkt %s", in_ntoa(iph->saddr));
+	printk(" -> %s SPI %lX (fakeport %X)\n", in_ntoa(iph->daddr), ntohl(i_spi), fake_sport);
+#endif /* DEBUG_IP_MASQUERADE_IPSEC */
+
+        if (i_spi == 0) {
+                /* illegal SPI - discard */
+                printk(KERN_INFO "ip_fw_demasq_esp(): ");
+                printk("zero SPI from %s discarded\n", in_ntoa(iph->saddr));
+                return -1;
+        }
+
+        if (i_spi == IPSEC_INIT_SQUELCHED) {
+                /* Ack! This shouldn't happen! */
+		/* IPSEC_INIT_SQUELCHED is chosen to be a reserved value as of 4/99 */
+                printk(KERN_NOTICE "ip_fw_demasq_esp(): ");
+                printk("SPI from %s is IPSEC_INIT_SQUELCHED - modify ip_masq.c!\n", in_ntoa(iph->saddr));
+                return -1;
+        }
+
+ 	/*
+ 	 *      Look for a masq table entry and reroute if found
+         */
+
+        ms = ip_masq_in_get_ipsec(IPPROTO_ESP,
+                iph->saddr, fake_sport,
+                iph->daddr, 0,
+                i_spi);
+
+        if (ms != NULL)
+        {
+                /* delete the expiration timer */
+		ip_masq_set_expire(ms,0);
+
+                iph->daddr = ms->saddr;
+
+                if (ms->ispi == 0) {
+#ifdef DEBUG_IP_MASQUERADE_IPSEC
+                        printk(KERN_INFO "ip_fw_demasq_esp(): ");
+                        printk("resp from %s SPI %lX", in_ntoa(iph->saddr), ntohl(i_spi));
+                        printk(" routed to %s (SPI %lX)\n", in_ntoa(ms->saddr), ntohl(ms->ospi));
+#endif /* DEBUG_IP_MASQUERADE_IPSEC */
+		        save_flags(flags);
+		        cli();
+		        ip_masq_unhash(ms);
+		        ms->ispi = i_spi;
+		        ms->dport = fake_sport;
+		        ip_masq_hash(ms);
+		        restore_flags(flags);
+                }
+                
+                /*
+                 * resum checksums and set timeout
+                 */
+		ip_masq_set_expire(ms, MASQUERADE_EXPIRE_IPSEC);
+                ip_send_check(iph);
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+                printk(KERN_DEBUG "MASQ: ESP I-routed to %s\n", in_ntoa(iph->daddr));
+#endif /* DEBUG_IP_MASQUERADE_IPSEC_VERBOSE */
+                return 1;
+ 	}
+
+#ifndef CONFIG_IP_MASQUERADE_IPSEC_NOGUESS
+	/* Guess who this packet is likely intended for:
+	 * Scan the UDP masq table for local hosts that have communicated via
+	 * ISAKMP with the host who sent this packet.
+	 * Using an insertion sort with duplicate IP suppression, build a list
+	 * of the ESP_GUESS_SZ most recent ISAKMP sessions (determined by
+	 * sorting in decreasing order of timeout timer).
+	 * Clone the original packet and send it to those hosts, but DON'T make
+	 * a masq table entry, as we're only guessing. It is assumed that the correct
+	 * host will respond to the traffic and that will create a masq table entry.
+	 * To limit the list a bit, don't consider any ISAKMP masq entries with
+	 * less than ESP_CAND_MIN_TM time to live. This should be some value less
+	 * than the IPSEC table timeout or *all* entries will be ignored...
+	 */
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+	printk(KERN_DEBUG "ip_fw_demasq_esp(): ");
+        printk("guessing from %s SPI %lX\n", in_ntoa(iph->saddr), ntohl(i_spi));
+#endif /* DEBUG_IP_MASQUERADE_IPSEC_VERBOSE */
+
+	/* zero out the guess table */
+	for (i = 0;i < ESP_GUESS_SZ; i++) {
+		guess_ip[i] = 0;
+		guess_tm[i] = 0;
+	}
+
+	/* scan ISAKMP sessions with the source host */
+	isakmp = htons(UDP_PORT_ISAKMP);
+        hash = ip_masq_hash_key(IPPROTO_UDP, iph->saddr, isakmp);
+	for(ms = ip_masq_d_tab[hash]; ms ; ms = ms->d_link) {
+		if (ms->protocol == IPPROTO_UDP &&
+		    ms->daddr == iph->saddr &&
+		    ms->sport == isakmp &&
+		    ms->dport == isakmp &&
+		    ms->mport == isakmp &&
+		    ms->ospi != 0) {
+			/* a candidate... */
+			ncand++;
+			cand_ip = ms->saddr;
+			cand_tm = ms->timer.expires - jiffies;
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+			printk(KERN_DEBUG "ip_fw_demasq_esp(): ");
+			printk("cand %d: IP %s TM %ld\n", ncand, in_ntoa(cand_ip), cand_tm);
+#endif /* DEBUG_IP_MASQUERADE_IPSEC_VERBOSE */
+			if (cand_tm > ESP_CAND_MIN_TM) {
+				/* traffic is recent enough, add to list (maybe) */
+				for (i = 0; i < ESP_GUESS_SZ; i++) {
+					if (cand_tm > guess_tm[i]) {
+						/* newer */
+						if (guess_ip[i] != 0 && cand_ip != guess_ip[i]) {
+							/* newer and IP different - insert */
+							if (i < (ESP_GUESS_SZ - 1)) {
+								/* move entries down the list,
+								 * find first entry after this slot
+								 * where the IP is 0 (unused) or
+								 * IP == candidate (older traffic, same host)
+								 * rather than simply going to the end of the list,
+								 * for efficiency (don't shift zeros) and
+								 * duplicate IP suppression (don't keep older entries
+								 * having the same IP)
+								 */
+								for (ii = i + 1; ii < (ESP_GUESS_SZ - 1); ii++) {
+									if (guess_ip[ii] == 0 || guess_ip[ii] == cand_ip)
+										break;
+								}
+								for (ii-- ; ii >= i; ii--) {
+									guess_ip[ii+1] = guess_ip[ii];
+									guess_tm[ii+1] = guess_tm[ii];
+								}
+							}
+						}
+						guess_ip[i] = cand_ip;
+						guess_tm[i] = cand_tm;
+						break;
+					}
+					if (cand_ip == guess_ip[i]) {
+						/* fresher entry already there */
+						break;
+					}
+				}
+			}
+		}
+	}
+	
+	if (guess_ip[0]) {
+		/* had guesses - send */
+		if (guess_ip[1]) {
+			/* multiple guesses, send a copy to all */
+			for (i = 0; guess_ip[i] != 0; i++) {
+				nguess++;
+#ifdef DEBUG_IP_MASQUERADE_IPSEC_VERBOSE
+				printk(KERN_DEBUG "ip_fw_demasq_esp(): ");
+				printk("guess %d: IP %s TM %ld\n", nguess, in_ntoa(guess_ip[i]), guess_tm[i]);
+#endif /* DEBUG_IP_MASQUERADE_IPSEC_VERBOSE */
+				/* duplicate and send the skb */
+				if ((skb_cl = skb_copy(skb, GFP_ATOMIC)) == NULL) {
+					printk(KERN_INFO "ip_fw_demasq_esp(): ");
+					printk("guessing: cannot copy skb\n");
+				} else {
+					iph_cl = skb_cl->h.iph;
+					iph_cl->daddr = guess_ip[i];
+					ip_send_check(iph_cl);
+					ip_forward(skb_cl, dev, IPFWD_MASQUERADED, iph_cl->daddr);
+					kfree_skb(skb_cl, FREE_WRITE);
+				}
+			}
+#ifdef DEBUG_IP_MASQUERADE_IPSEC
+                        printk(KERN_INFO "ip_fw_demasq_esp(): ");
+                        printk("guessing from %s SPI %lX sent to", in_ntoa(iph->saddr), ntohl(i_spi));
+                        printk(" %d hosts (%d cand)\n", nguess, ncand);
+#endif /* DEBUG_IP_MASQUERADE_IPSEC */
+			return -1;	/* discard original packet */
+		} else {
+			/* only one guess, send original packet to that host */
+			iph->daddr = guess_ip[0];
+			ip_send_check(iph);
+
+#ifdef DEBUG_IP_MASQUERADE_IPSEC
+                        printk(KERN_INFO "ip_fw_demasq_esp(): ");
+                        printk("guessing from %s SPI %lX sent to", in_ntoa(iph->saddr), ntohl(i_spi));
+                        printk(" %s (%d cand)\n", in_ntoa(guess_ip[0]), ncand);
+#endif /* DEBUG_IP_MASQUERADE_IPSEC */
+			return 1;
+		}
+	}
+#endif /* CONFIG_IP_MASQUERADE_IPSEC_NOGUESS */
+
+ 	/* sorry, all this trouble for a no-hit :) */
+        printk(KERN_INFO "ip_fw_demasq_esp(): ");
+	printk("Inbound from %s SPI %lX has no masq table entry.\n", in_ntoa(iph->saddr), ntohl(i_spi));
+ 	return 0;
+}
+
+static struct symbol_table ipsec_masq_syms = {
+#include <linux/symtab_begin.h>
+	X(ip_masq_out_get_ipsec),
+	X(ip_masq_in_get_ipsec),
+	X(ip_masq_out_get_isakmp),
+	X(ip_masq_in_get_isakmp),
+	X(ip_fw_masq_esp),
+	X(ip_fw_demasq_esp),
+#include <linux/symtab_end.h>
+};
+
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
+
+
 int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 {
 	struct sk_buff  *skb=*skb_ptr;
@@ -742,6 +2384,14 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 
         if (iph->protocol==IPPROTO_ICMP) 
             return (ip_fw_masq_icmp(skb_ptr,dev));
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+        if (iph->protocol==IPPROTO_GRE) 
+            return (ip_fw_masq_gre(skb_ptr,dev));
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+        if (iph->protocol==IPPROTO_ESP) 
+            return (ip_fw_masq_esp(skb_ptr,dev));
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
 		return -1;
 
@@ -758,6 +2408,7 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 #endif
 
         ms = ip_masq_out_get(iph);
+
 	if (ms!=NULL) {
                 ip_masq_set_expire(ms,0);
                 
@@ -835,7 +2486,28 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
                         	         0);
                 if (ms == NULL)
 			return -1;
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+                if (iph->protocol == IPPROTO_UDP && ntohs(portptr[0]) == UDP_PORT_ISAKMP && ntohs(portptr[1]) == UDP_PORT_ISAKMP) {
+                        /* save the initiator cookie */
+                        ms->ospi = *((__u32 *)&portptr[4]);
+                }
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
  	}
+
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+	if (iph->protocol == IPPROTO_TCP && ntohs(portptr[1]) == PPTP_CONTROL_PORT)
+	{
+                /*
+                 * Packet sent to PPTP control port. Process it.
+                 * May change call ID word in request, but
+                 * packet length will not change.
+                 */
+		ip_masq_pptp(skb, ms, dev);
+	}
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
 
  	/*
  	 *	Change the fragments origin
@@ -869,6 +2541,13 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  	
  	if (masq_proto_num(iph->protocol)==0)
  	{
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+		if (iph->protocol == IPPROTO_UDP && ntohs(portptr[0]) == UDP_PORT_ISAKMP && ntohs(portptr[1]) == UDP_PORT_ISAKMP) {
+			/* ISAKMP timeout should be same as ESP timeout to allow for rekeying */
+			timeout = MASQUERADE_EXPIRE_IPSEC;
+		} else
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
+
                 timeout = ip_masq_expire->udp_timeout;
  		recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
  	}
@@ -1360,20 +3039,32 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
  	__u16	*portptr;
  	struct ip_masq	*ms;
 	unsigned short len;
-	unsigned long 	timeout;
+	unsigned long 	timeout = MASQUERADE_EXPIRE_TCP;
 #ifdef CONFIG_IP_MASQUERADE_IPAUTOFW 
  	struct ip_autofw *af;
 #endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 
+
 	switch (iph->protocol) {
 	case IPPROTO_ICMP:
 		return(ip_fw_demasq_icmp(skb_p, dev));
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+	case IPPROTO_GRE:
+		return(ip_fw_demasq_gre(skb_p, dev));
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+	case IPPROTO_ESP:
+		return(ip_fw_demasq_esp(skb_p, dev));
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
 		/* Make sure packet is in the masq range */
 		portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
 		if ((ntohs(portptr[1]) < PORT_MASQ_BEGIN ||
 		     ntohs(portptr[1]) > PORT_MASQ_END)
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+                    && ((iph->protocol != IPPROTO_UDP) || (ntohs(portptr[0]) != UDP_PORT_ISAKMP) || (ntohs(portptr[1]) != UDP_PORT_ISAKMP))
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 #ifdef CONFIG_IP_MASQUERADE_IPAUTOFW 
 		    && !ip_autofw_check_range(iph->saddr, portptr[1], 
 					      iph->protocol, 0)
@@ -1502,6 +3193,20 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                         len = ntohs(iph->tot_len) - (iph->ihl * 4);
                 }
 
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+#ifdef CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT
+                if (iph->protocol == IPPROTO_TCP && ntohs(portptr[0]) == PPTP_CONTROL_PORT)
+                {
+                        /*
+                         * Packet received from PPTP control port. Process it.
+                         * May change call ID word in request, but
+                         * packet length will not change.
+                         */
+                        ip_masq_pptp(skb, ms, dev);
+                }
+#endif /* CONFIG_IP_MASQUERADE_PPTP_MULTICLIENT */
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+
                 /*
                  * Yug! adjust UDP/TCP and IP checksums, also update
 		 * timeouts.
@@ -1510,6 +3215,14 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                 if (masq_proto_num(iph->protocol)==0)
 		{
                         recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,len);
+
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+			if (iph->protocol == IPPROTO_UDP && ntohs(portptr[0]) == UDP_PORT_ISAKMP && ntohs(portptr[1]) == UDP_PORT_ISAKMP) {
+				/* ISAKMP timeout should be same as ESP timeout to allow for rekeying */
+				timeout = MASQUERADE_EXPIRE_IPSEC;
+			} else
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
+
 			timeout = ip_masq_expire->udp_timeout;
 		}
                 else
@@ -1675,6 +3388,12 @@ done:
 int ip_masq_init(void)
 {
         register_symtab (&ip_masq_syms);
+#ifdef CONFIG_IP_MASQUERADE_PPTP
+        register_symtab (&pptp_masq_syms);
+#endif /* CONFIG_IP_MASQUERADE_PPTP */
+#ifdef CONFIG_IP_MASQUERADE_IPSEC
+        register_symtab (&ipsec_masq_syms);
+#endif /* CONFIG_IP_MASQUERADE_IPSEC */
 #ifdef CONFIG_PROC_FS        
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPMSQHST, 13, "ip_masquerade",

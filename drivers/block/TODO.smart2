@@ -1,0 +1,20 @@
+Passthrough ioctl (needs testing)
+
+Missing #defines for error codes and bit definitions in arraycmd.h
+Missing structures for health and wellness stuff in arraycmd.h
+	
+Online Array config utility for userspace. 
+
+Array health monitor for userspace.  Perhaps add functionality to use
+the Event Notifier to send health events to a userspace daemon.
+
+Portability:  This driver probably doesn't work on Compaq's Alpha hardware.
+
+Performance, Performance, Performance:  There just have to be some bottlenecks
+in this driver.  I'd like to get some more profiling numbers on things, like
+how often we totally fill the controller's queue, how much stuff sits out on
+the completetion queue and timings on some critical sections of code (the
+intr. handler, the request function, cmd_alloc, etc).  The end result being
+that I'm absolutely positive that when the kernel has IO for me,  I am not
+letting the controller idle at all.
+

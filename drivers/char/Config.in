@@ -5,6 +5,11 @@ mainmenu_option next_comment
 comment 'Character devices'
 
 tristate 'Standard/generic serial support' CONFIG_SERIAL
+if [ "$CONFIG_SERIAL" != "n" ]; then
+	if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+		bool '  PCI serial support' CONFIG_SERIAL_PCI
+	fi
+fi
 bool 'Digiboard PC/Xx Support' CONFIG_DIGI
 tristate 'Cyclades async mux support' CONFIG_CYCLADES
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -53,15 +58,6 @@ if [ "$CONFIG_FTAPE" != "n" ]; then
   comment 'Set IObase/IRQ/DMA for ftape in ./drivers/char/ftape/Makefile'
 fi
 
-bool 'Advanced Power Management BIOS support' CONFIG_APM
-if [ "$CONFIG_APM" = "y" ]; then
-  bool '   Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
-  bool '   Enable PM at boot time' CONFIG_APM_DO_ENABLE
-  bool '   Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
-  bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
-  bool '   Power off on shutdown' CONFIG_APM_POWER_OFF
-  bool '   Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
-fi
 if [ "$CONFIG_ALPHA_BOOK1" = "y" ]; then
   bool 'Tadpole ANA H8 Support'	CONFIG_H8
 fi

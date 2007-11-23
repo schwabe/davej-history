@@ -964,7 +964,13 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 	 * Failures after this point use release_mem to clean up, so 
 	 * there's no need to null out the local pointers.
 	 */
-	driver->table[idx] = tty;
+	driver->table[idx] = tty;	/* FIXME: this is broken and
+	probably causes ^D bug. tty->private_date does not (yet) point
+	to a console, if keypress comes now, await armagedon. 
+
+	also, driver->table is accessed from interrupt for vt case,
+	and this does not look like atomic access at all. */
+	
 	if (!*tp_loc)
 		*tp_loc = tp;
 	if (!*ltp_loc)
@@ -1926,8 +1932,9 @@ int tty_unregister_driver(struct tty_driver *driver)
 {
 	int	retval;
 	struct tty_driver *p;
-	int	found = 0;
+	int	i, found = 0;
 	const char *othername = NULL;
+	struct termios *tp;
 	
 	if (*driver->refcount)
 		return -EBUSY;
@@ -1957,6 +1964,18 @@ int tty_unregister_driver(struct tty_driver *driver)
 	if (driver->next)
 		driver->next->prev = driver->prev;
 
+	for (i = 0; i < driver->num; i++) {
+		tp = driver->termios[i];
+		if (tp != NULL) {
+			kfree_s(tp, sizeof(struct termios));
+			driver->termios[i] = NULL;
+		}
+		tp = driver->termios_locked[i];
+		if (tp != NULL) {
+			kfree_s(tp, sizeof(struct termios));
+			driver->termios_locked[i] = NULL;
+		}
+	}
 	return 0;
 }
 

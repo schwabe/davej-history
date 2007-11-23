@@ -68,6 +68,10 @@ int do_truncate(struct inode *inode, unsigned long length)
 	int error;
 	struct iattr newattrs;
 
+        /* Not pretty: "inode->i_size" shouldn't really be "off_t". But it is. */
+        if ((off_t) length < 0)
+        	return -EINVAL;
+                                 
 	down(&inode->i_sem);
 	newattrs.ia_size = length;
 	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;

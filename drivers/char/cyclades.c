@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.1.1.10 $$Date: 1998/11/12 16:08:23 $";
+"$Revision: 2.1.2.1 $$Date: 1999/04/08 16:17:18 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,7 +31,21 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
- * Revision: 2.1.1.10  1998/11/12 16:08:23 ivan
+ * Revision 2.1.2.1   1999/04/08 16:17:18 ivan
+ * cy_wait_until_sent function revisited;
+ * Module usage counter scheme revisited;
+ * Added support to the upcoming Y PCI boards (i.e., support to additional
+ * PCI Device ID's).
+ *
+ * Revision 2.1.1.12  1999/01/19 13:08:18 ivan
+ * Fixed PLX PCI bridge registers mapping for Cyclom-Y boards, so
+ * that it works even with addresses out of memory page boundaries.
+ *
+ * Revision 2.1.1.11  1998/12/30 18:58:47 ivan
+ * Changed access to PLX PCI bridge registers from I/O to MMIO, in
+ * order to make PLX9050-based boards work with certain motherboards.
+ *
+ * Revision 2.1.1.10  1998/11/12 16:08:23 ivan
  * cy_close function now resets (correctly) the tty->closing flag;
  * JIFFIES_DIFF macro fixed.
  *
@@ -519,6 +533,7 @@ static char rcsid[] =
 #undef	CY_DEBUG_COUNT
 #undef	CY_DEBUG_DTR
 #undef	CY_DEBUG_WAIT_UNTIL_SENT
+#undef	CY_DEBUG_INTERRUPTS
 #undef	CY_16Y_HACK
 #undef	CY_ENABLE_MONITORING
 #undef	CY_PCI_DEBUG
@@ -758,16 +773,20 @@ static int cy_chip_offset [] =
 
 /* PCI related definitions */
 
-static unsigned short   cy_pci_nboard = 0;
-static unsigned short   cy_isa_nboard = 0;
-static unsigned short   cy_nboard = 0;
-static unsigned short   cy_pci_dev_id[] = {
-			    PCI_DEVICE_ID_CYCLOM_Y_Lo,/* PCI below 1Mb */
-			    PCI_DEVICE_ID_CYCLOM_Y_Hi,/* PCI above 1Mb */
-			    PCI_DEVICE_ID_CYCLOM_Z_Lo,/* PCI below 1Mb */
-			    PCI_DEVICE_ID_CYCLOM_Z_Hi,/* PCI above 1Mb */
-			    0                       /* end of table */
-                        };
+static unsigned short	cy_pci_nboard = 0;
+static unsigned short	cy_isa_nboard = 0;
+static unsigned short	cy_nboard = 0;
+static unsigned short	cy_pci_dev_id[] = {
+			    PCI_DEVICE_ID_CYCLOM_Y_Lo,	/* PCI < 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_Y_Hi,	/* PCI > 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_4Y_Lo,	/* 4Y PCI < 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_4Y_Hi,	/* 4Y PCI > 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_8Y_Lo,	/* 8Y PCI < 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_8Y_Hi,	/* 8Y PCI > 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_Z_Lo,	/* Z PCI < 1Mb */
+			    PCI_DEVICE_ID_CYCLOM_Z_Hi,	/* Z PCI > 1Mb */
+			    0				/* end of table */
+			};
 
 
 static void cy_start(struct tty_struct *);
@@ -2508,13 +2527,17 @@ cy_open(struct tty_struct *tty, struct file * filp)
 {
   struct cyclades_port  *info;
   int retval, line;
+  unsigned long page;
 
+    MOD_INC_USE_COUNT;
     line = MINOR(tty->device) - tty->driver.minor_start;
     if ((line < 0) || (NR_PORTS <= line)){
+	MOD_DEC_USE_COUNT;
         return -ENODEV;
     }
     info = &cy_port[line];
     if (info->line < 0){
+	MOD_DEC_USE_COUNT;
         return -ENODEV;
     }
     
@@ -2540,6 +2563,8 @@ cy_open(struct tty_struct *tty, struct file * filp)
 #ifdef CY_DEBUG_OTHER
     printk("cyc:cy_open ttyC%d\n", info->line); /* */
 #endif
+    tty->driver_data = info;
+    info->tty = tty;
     if (serial_paranoia_check(info, tty->device, "cy_open")){
         return -ENODEV;
     }
@@ -2552,16 +2577,15 @@ cy_open(struct tty_struct *tty, struct file * filp)
     printk("cyc:cy_open (%d): incrementing count to %d\n",
         current->pid, info->count);
 #endif
-    tty->driver_data = info;
-    info->tty = tty;
 
-    /* Some drivers have (incorrect/incomplete) code to test
-       against a race condition.  Should add good code here!!! */
     if (!tmp_buf) {
-        tmp_buf = (unsigned char *) get_free_page(GFP_KERNEL);
-        if (!tmp_buf){
-            return -ENOMEM;
-        }
+	page = get_free_page(GFP_KERNEL);
+	if (!page)
+	    return -ENOMEM;
+	if (tmp_buf)
+	    free_page(page);
+	else
+	    tmp_buf = (unsigned char *) page;
     }
 
     if ((info->count == 1) && (info->flags & ASYNC_SPLIT_TERMIOS)) {
@@ -2577,8 +2601,6 @@ cy_open(struct tty_struct *tty, struct file * filp)
     if (retval){
         return retval;
     }
-
-    MOD_INC_USE_COUNT;
 
     retval = block_til_ready(tty, filp, info);
     if (retval) {
@@ -2612,6 +2634,9 @@ static void cy_wait_until_sent(struct tty_struct *tty, int timeout)
     if (serial_paranoia_check(info, tty->device, "cy_wait_until_sent"))
 	return;
 
+    if (info->xmit_fifo_size == 0)
+	return; /* Just in case.... */
+
     orig_jiffies = jiffies;
     /*
      * Set the check interval to be 1/5 of the estimated time to
@@ -2629,6 +2654,17 @@ static void cy_wait_until_sent(struct tty_struct *tty, int timeout)
 	timeout = 0;
     if (timeout)
 	char_time = MIN(char_time, timeout);
+    /*
+     * If the transmitter hasn't cleared in twice the approximate
+     * amount of time to send the entire FIFO, it probably won't
+     * ever clear.  This assumes the UART isn't doing flow
+     * control, which is currently the case.  Hence, if it ever
+     * takes longer than info->timeout, this is probably due to a
+     * UART bug of some kind.  So, we clamp the timeout parameter at
+     * 2*info->timeout.
+     */
+    if (!timeout || timeout > 2*info->timeout)
+	timeout = 2*info->timeout;
 #ifdef CY_DEBUG_WAIT_UNTIL_SENT
     printk("In cy_wait_until_sent(%d) check=%lu...", timeout, char_time);
     printk("jiff=%lu...", jiffies);
@@ -2682,8 +2718,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
     printk("cyc:cy_close ttyC%d\n", info->line);
 #endif
 
-    if (!info
-    || serial_paranoia_check(info, tty->device, "cy_close")){
+    if (!info || serial_paranoia_check(info, tty->device, "cy_close")){
         return;
     }
 #ifdef CY_DEBUG_OPEN
@@ -4707,7 +4742,6 @@ cy_detect_pci(void))
 {
 #ifdef CONFIG_PCI
   unsigned char         cyy_bus, cyy_dev_fn, cyy_rev_id;
-  unsigned long         pci_intr_ctrl;
   unsigned char         cy_pci_irq;
   uclong                cy_pci_addr0, cy_pci_addr1, cy_pci_addr2;
   unsigned short        i,j,cy_pci_nchan, plx_ver;
@@ -4751,6 +4785,8 @@ cy_detect_pci(void))
                 pcibios_read_config_byte(cyy_bus, cyy_dev_fn,
                                   PCI_REVISION_ID, &cyy_rev_id);
 
+		device_id &= ~PCI_DEVICE_ID_MASK;
+
     if ((device_id == PCI_DEVICE_ID_CYCLOM_Y_Lo)
 	   || (device_id == PCI_DEVICE_ID_CYCLOM_Y_Hi)){
 #ifdef CY_PCI_DEBUG
@@ -4758,11 +4794,11 @@ cy_detect_pci(void))
 		cyy_bus, cyy_dev_fn);
             printk("rev_id=%d) IRQ%d\n",
 		cyy_rev_id, (int)cy_pci_irq);
-            printk("Cyclom-Y/PCI:found  winaddr=0x%lx ioaddr=0x%lx\n",
-		(ulong)cy_pci_addr2, (ulong)cy_pci_addr1);
+            printk("Cyclom-Y/PCI:found  winaddr=0x%lx ctladdr=0x%lx\n",
+		(ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 #endif
-                cy_pci_addr1  &= PCI_BASE_ADDRESS_IO_MASK;
-                cy_pci_addr2  &= PCI_BASE_ADDRESS_MEM_MASK;
+		cy_pci_addr0  &= PCI_BASE_ADDRESS_MEM_MASK;
+		cy_pci_addr2  &= PCI_BASE_ADDRESS_MEM_MASK;
 
 #if defined(__alpha__)
                 if (device_id  == PCI_DEVICE_ID_CYCLOM_Y_Lo) { /* below 1M? */
@@ -4770,21 +4806,24 @@ cy_detect_pci(void))
 		        cyy_bus, cyy_dev_fn);
 		    printk("rev_id=%d) IRQ%d\n",
 		        cyy_rev_id, (int)cy_pci_irq);
-                    printk("Cyclom-Y/PCI:found  winaddr=0x%lx ioaddr=0x%lx\n",
-		        (ulong)cy_pci_addr2, (ulong)cy_pci_addr1);
+                    printk("Cyclom-Y/PCI:found  winaddr=0x%lx ctladdr=0x%lx\n",
+		        (ulong)cy_pci_addr2, (ulong)cy_pci_addr0);
 	            printk("Cyclom-Y/PCI not supported for low addresses in "
                            "Alpha systems.\n");
 		    i--;
 	            continue;
                 }
 #else
+		cy_pci_addr0 = (ulong)ioremap(cy_pci_addr0 & PAGE_MASK, 
+					PAGE_ALIGN(CyPCI_Yctl)) 
+				+ (cy_pci_addr0 & (PAGE_SIZE-1));
                 if ((ulong)cy_pci_addr2 >= 0x100000)  /* above 1M? */
                     cy_pci_addr2 = (ulong) ioremap(cy_pci_addr2, CyPCI_Ywin);
 #endif
 
 #ifdef CY_PCI_DEBUG
-            printk("Cyclom-Y/PCI: relocate winaddr=0x%lx ioaddr=0x%lx\n",
-		(u_long)cy_pci_addr2, (u_long)cy_pci_addr1);
+            printk("Cyclom-Y/PCI: relocate winaddr=0x%lx ctladdr=0x%lx\n",
+		(u_long)cy_pci_addr2, (u_long)cy_pci_addr0);
 #endif
                 cy_pci_nchan = (unsigned short)(CyPORTS_PER_CHIP * 
                        cyy_init_card((volatile ucchar *)cy_pci_addr2, 1));
@@ -4827,7 +4866,7 @@ cy_detect_pci(void))
 
                 /* set cy_card */
                 cy_card[j].base_addr = (ulong)cy_pci_addr2;
-                cy_card[j].ctl_addr = 0;
+                cy_card[j].ctl_addr = (ulong)cy_pci_addr0;
                 cy_card[j].irq = (int) cy_pci_irq;
                 cy_card[j].bus_index = 1;
                 cy_card[j].first_line = cy_next_channel;
@@ -4839,20 +4878,16 @@ cy_detect_pci(void))
                 switch (plx_ver) {
 		    case PLX_9050:
 
-		    outw(inw(cy_pci_addr1+0x4c)|0x0040,cy_pci_addr1+0x4c);
-		    pci_intr_ctrl = (unsigned long)
-				(inw(cy_pci_addr1+0x4c)
-				| inw(cy_pci_addr1+0x4e)<<16);
+		    cy_writew(cy_pci_addr0+0x4c,
+			cy_readw(cy_pci_addr0+0x4c)|0x0040);
 		    break;
 
 		    case PLX_9060:
 		    case PLX_9080:
 		    default: /* Old boards, use PLX_9060 */
 
-		    outw(inw(cy_pci_addr1+0x68)|0x0900,cy_pci_addr1+0x68);
-		    pci_intr_ctrl = (unsigned long)
-				(inw(cy_pci_addr1+0x68)
-				| inw(cy_pci_addr1+0x6a)<<16);
+		    cy_writew(cy_pci_addr0+0x68,
+			cy_readw(cy_pci_addr0+0x68)|0x0900);
 		    break;
                 }
 

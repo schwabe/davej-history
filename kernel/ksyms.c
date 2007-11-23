@@ -201,6 +201,8 @@ struct symbol_table symbol_table = {
 	X(hardsect_size),
 	X(blk_size),
 	X(blk_dev),
+	X(max_sectors),
+	X(max_segments),
 	X(is_read_only),
 	X(set_device_ro),
 	X(bmap),

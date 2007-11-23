@@ -22,6 +22,20 @@ mainmenu_option next_comment
 comment 'General setup'
 
 bool 'Kernel math emulation' CONFIG_MATH_EMULATION
+choice 'Memory configuration' \
+	"Standard	CONFIG_MEM_STD	\
+	 Enterprise	CONFIG_MEM_ENT	\
+	 Custom		CONFIG_MEM_SPECIAL" Standard
+
+if [ "$CONFIG_MEM_SPECIAL" = "y" ]; then
+	int ' Max physical memory in MB' CONFIG_MAX_MEMSIZE 1024
+fi
+if [ "$CONFIG_MEM_ENT" = "y" ]; then
+	define_int CONFIG_MAX_MEMSIZE 2048
+fi
+if [ "$CONFIG_MEM_STD" = "y" ]; then
+	define_int CONFIG_MAX_MEMSIZE 1024
+fi
 bool 'Networking support' CONFIG_NET
 bool 'Limit memory to low 16MB' CONFIG_MAX_16M
 bool 'PCI bios support' CONFIG_PCI
@@ -47,6 +61,16 @@ choice 'Processor type' \
 # Conditionally compile MTRR manipulation support
 if [ "$CONFIG_M686" = "y" -o "$CONFIG_M586" = "y" ]; then
   bool 'Handle buggy SMP BIOSes with bad MTRR setup' CONFIG_MTRR
+fi
+
+bool 'Advanced Power Management BIOS support' CONFIG_APM
+if [ "$CONFIG_APM" = "y" ]; then
+  bool '   Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
+  bool '   Enable PM at boot time' CONFIG_APM_DO_ENABLE
+  bool '   Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
+  bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
+  bool '   Power off on shutdown' CONFIG_APM_POWER_OFF
+  bool '   Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
 fi
 
 endmenu

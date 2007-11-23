@@ -1,8 +1,8 @@
 VERSION = 2
 PATCHLEVEL = 0
-SUBLEVEL = 36
+SUBLEVEL = 37
 
-ARCH = i386
+ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
 #
 # For SMP kernels, set this. We don't want to have this in the config file
@@ -359,6 +359,14 @@ dep-files: scripts/mkdep archdep include/linux/version.h
 	scripts/mkdep `find $(FINDHPATH) -follow -name \*.h ! -name modversions.h -print` > .hdepend
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep; done
 	mv .tmpdepend .depend
+
+# Prepare source tree for RCS version control using Emacs VC;
+# make all needed RCS directories and write-lock nearly everything.
+vc:
+	chmod a-w COPYING CREDITS MAINTAINERS Makefile README Rules.make  
+	find . -type d ! -name "*RCS" -exec mkdir {}/RCS \;
+	find . -type f \( -name *.[chS] -o -name "*Makefile" -o -name "*README*" -o -name "*Config.in" -o -name "*.txt" \) -exec chmod a-w {} \;
+	find Documentation scripts -type f -exec chmod a-w {} \;
 
 MODVERFILE :=
 

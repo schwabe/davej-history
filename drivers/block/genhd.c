@@ -51,6 +51,9 @@ extern void initrd_load(void);
 
 extern int chr_dev_init(void);
 extern int blk_dev_init(void);
+#ifdef CONFIG_BLK_DEV_DAC960
+extern void DAC960_Initialize(void);
+#endif
 extern int scsi_dev_init(void);
 extern int net_dev_init(void);
 
@@ -83,6 +86,29 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 			maj = "hd";
 	}
 #endif
+	if (hd->major >= DAC960_MAJOR+0 && hd->major <= DAC960_MAJOR+7)
+	  {
+	    int controller = hd->major - DAC960_MAJOR;
+	    int partition = minor & ((1 << hd->minor_shift) - 1);
+	    if (partition == 0)
+	      sprintf(buf, "%s/c%dd%d",
+		      maj, controller, minor >> hd->minor_shift);
+	    else sprintf(buf, "%s/c%dd%dp%d",
+			 maj, controller, minor >> hd->minor_shift, partition);
+	    return buf;
+	  }
+#if defined(CONFIG_BLK_CPQ_DA) || defined(CONFIG_BLK_CPQ_DA_MODULE)
+	if (hd->major >= COMPAQ_SMART2_MAJOR && hd->major <= COMPAQ_SMART2_MAJOR+7) {
+		int ctlr = hd->major - COMPAQ_SMART2_MAJOR;
+		int disk = minor >> hd->minor_shift;
+		int part = minor & (( 1 << hd->minor_shift) - 1);
+		if (part == 0)
+			sprintf(buf, "%s/c%dd%d", maj, ctlr, disk);
+		else
+			sprintf(buf, "%s/c%dd%dp%d", maj, ctlr, disk, part);
+		return buf;
+	}
+#endif
 	part = minor & ((1 << hd->minor_shift) - 1);
 	if (part)
 		sprintf(buf, "%s%c%d", maj, unit, part);
@@ -93,10 +119,18 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 
 static void add_partition (struct gendisk *hd, int minor, int start, int size)
 {
-	char buf[8];
+	char buf[40];
 	hd->part[minor].start_sect = start;
 	hd->part[minor].nr_sects   = size;
-	printk(" %s", disk_name(hd, minor, buf));
+	if (hd->major >= DAC960_MAJOR+0 && hd->major <= DAC960_MAJOR+7)
+		printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
+	else
+#if defined(CONFIG_BLK_CPQ_DA) || defined(CONFIG_BLK_CPQ_DA_MODULE)
+	if (hd->major >= COMPAQ_SMART2_MAJOR && hd->major <= COMPAQ_SMART2_MAJOR+7) 
+		printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
+	else
+#endif
+		printk(" %s", disk_name(hd, minor, buf));
 }
 
 static inline int is_extended_partition(struct partition *p)
@@ -332,7 +366,9 @@ check_table:
 				   && (q->sector & 63) == 1
 				   && (q->end_sector & 63) == 63) {
 					unsigned int heads = q->end_head + 1;
-					if (heads == 32 || heads == 64 || heads == 128 || heads == 255) {
+					if (heads == 32 || heads == 64 ||
+					    heads == 128 || heads == 240 ||
+					    heads == 255) {
 
 						(void) ide_xlate_1024(dev, heads, " [PTBL]");
 						break;
@@ -641,7 +677,7 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 {
 	static int first_time = 1;
 	unsigned long first_sector;
-	char buf[8];
+	char buf[40];
 
 	if (first_time)
 		printk("Partition check:\n");
@@ -733,14 +769,21 @@ static void setup_dev(struct gendisk *dev)
 void device_setup(void)
 {
 	extern void console_map_init(void);
+	extern void cpqarray_init(void);
 	struct gendisk *p;
 	int nr=0;
 
 	chr_dev_init();
 	blk_dev_init();
 	sti();
+#ifdef CONFIG_BLK_DEV_DAC960
+	DAC960_Initialize();
+#endif
 #ifdef CONFIG_SCSI
 	scsi_dev_init();
+#endif
+#ifdef CONFIG_BLK_CPQ_DA
+	cpqarray_init();
 #endif
 #ifdef CONFIG_INET
 	net_dev_init();

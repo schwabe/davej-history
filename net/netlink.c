@@ -198,6 +198,7 @@ int netlink_attach(int unit, int (*function)(struct sk_buff *skb))
 	if(active_map&(1<<unit))
 		return -EBUSY;
 	active_map|=(1<<unit);
+	open_map&=~(1<<unit);	
 	netlink_handler[unit]=function;
 	return 0;
 }
@@ -206,6 +207,7 @@ void netlink_detach(int unit)
 {
 	active_map&=~(1<<unit);
 	netlink_handler[unit]=netlink_err;
+	open_map&=~(1<<unit);	
 }
 
 int netlink_post(int unit, struct sk_buff *skb)

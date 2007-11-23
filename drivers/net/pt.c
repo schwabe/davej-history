@@ -909,7 +909,7 @@ static int pt_open(struct device *dev)
 {
     unsigned long flags;
     struct pt_local *lp = dev->priv;
-    static first_time = 1;
+    static int first_time = 1;
     
     if (dev->base_addr & CHANA)
     {

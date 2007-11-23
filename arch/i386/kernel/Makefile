@@ -23,6 +23,11 @@ all: kernel.o head.o
 O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o bios32.o \
             ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o ksyms.o
+OX_OBJS  :=
+
+ifdef CONFIG_APM
+OX_OBJS += apm.o
+endif
 
 ifdef SMP
 

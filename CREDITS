@@ -557,6 +557,14 @@ S: 25360 Georgia Tech Station
 S: Atlanta, Georgia 30332
 S: USA
 
+N: John Hardin
+E: jhardin@wolfenet.com
+W: http://www.wolfenet.com/~jhardin/
+D: IPSec and PPTP masquerade
+S: 17014 Broadway ave.
+S: Snohomish, WA 98296-8031
+S: USA
+
 N: Angelo Haritsis
 E: ah@doc.ic.ac.uk
 D: kernel patches (serial, watchdog)
@@ -796,11 +804,11 @@ D: Author of the dialog utility, foundation
 D: for Menuconfig's lxdialog.
 
 N: Volker Lendecke
-E: lendecke@namu01.Num.Math.Uni-Goettingen.de
+E: vl@kki.org
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
 D: NCP filesystem support (to mount NetWare volumes)
-S: Innersteweg 11
-S: 37081 Goettingen
+S: Von Ossietzky Str. 12
+S: 37085 Goettingen
 S: Germany
 
 N: Kevin Lentin
@@ -1192,10 +1200,12 @@ S: Germany
 
 N: Stephen Rothwell
 E: Stephen.Rothwell@canb.auug.org.au
+W: http://www.canb.auug.org.au/~sfr
+P: 1024/BD8C7805 CD A4 9D 01 10 6E 7E 3B  91 88 FA D9 C8 40 AA 02
 D: Boot/setup/build work for setup > 2K
 D: Author, APM driver
-S: 59 Bugden Avenue
-S: Gowrie ACT 2904
+S: 66 Maltby Circuit
+S: Wanniassa ACT 2903
 S: Australia
 
 N: Gerard Roudier
@@ -1244,6 +1254,11 @@ D: Mitsumi CD-ROM driver patches March version
 S: Molenbaan 29
 S: B2240 Zandhoven
 S: Belgium
+
+N: Henning P. Schmiedehausen
+E: hps@tanstaafl.de
+D: added PCI support to the serial driver
+S: Buckenhof, Germany
 
 N: Martin Schulze
 E: joey@linux.de
@@ -1641,6 +1656,7 @@ N: Leonard N. Zubkoff
 E: lnz@dandelion.com
 W: http://www.dandelion.com/Linux/
 D: BusLogic SCSI driver
+D: Mylex DAC960 PCI RAID driver
 D: Miscellaneous kernel fixes
 S: 3078 Sulphur Spring Court
 S: San Jose, California 95148

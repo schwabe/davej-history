@@ -1,0 +1,21 @@
+Dated December 21 Chennai,India:-
+----- -------- -----------------
+
+
+Release Notes of 1.00.000 (904) version:-
+
+1.0 All machine dependent timing loops have been removed and
+    replaced with the udelay function.
+
+2.0 Search function has been made static
+
+3.0 Search function ,in case of failure was not reenabling interrupts
+    This has been corrected.
+
+4.0 The save_flags,cli & restore_flags in ISR has been removed.
+
+5.0 Wait_risc_halt has a sanity check and times out incase hw failure.
+
+6.0 Source code indentation with "indent -kr -i8 -bl -bli0 tripace.c"
+
+

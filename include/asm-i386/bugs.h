@@ -132,6 +132,24 @@ static void check_tlb(void)
 extern int pentium_f00f_bug;
 extern void trap_init_f00f_bug(void);
 
+/*
+ * Access to machine-specific registers (available on 586 and better only)
+ * Note: the rd* operations modify the parameters directly (without using
+ * pointer indirection), this allows gcc to optimize better
+ * Code from Richard Gooch's 2.2 MTRR drivers.
+ */
+ 
+#define rdmsr(msr,val1,val2) \
+       __asm__ __volatile__("rdmsr" \
+			    : "=a" (val1), "=d" (val2) \
+			    : "c" (msr))
+
+#define wrmsr(msr,val1,val2) \
+     __asm__ __volatile__("wrmsr" \
+			  : /* no outputs */ \
+			  : "c" (msr), "a" (val1), "d" (val2))
+
+
 static void check_pentium_f00f(void)
 {
 	/*
@@ -143,6 +161,26 @@ static void check_pentium_f00f(void)
 		pentium_f00f_bug = 1;
 		trap_init_f00f_bug();
 	}
+}
+
+static void check_privacy(void)
+{
+	/*
+	 * Pentium III or higher - processors with mtrrs/cpuid
+	 */
+	if(memcmp(x86_vendor_id, "GenuineIntel", 12))
+		return;
+	if(x86_capability & (1<<18))
+	{
+		/*
+		 *	Thanks to Phil Karn for this bit.
+		 */
+		unsigned long lo,hi;
+		rdmsr(0x119,lo,hi);
+		lo |= 0x200000;
+		wrmsr(0x119,lo,hi);
+		printk(KERN_INFO "Pentium-III serial number disabled.\n");
+	}		
 }
 
 /*
@@ -335,5 +373,6 @@ static void check_bugs(void)
 	check_fpu();
 	check_hlt();
 	check_pentium_f00f();
+	check_privacy();
 	system_utsname.machine[1] = '0' + x86;
 }

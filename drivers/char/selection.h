@@ -66,11 +66,12 @@ extern void putconsxy(int currcons, char *p);
 #ifdef CONFIG_TGA_CONSOLE
 
 # ifdef CONFIG_VGA_CONSOLE
-extern int curr_cons;
 extern const struct console_desc cons_devices[];
 # endif
 
 extern unsigned long video_mem_term;
+
+int tga_blitc (unsigned int, unsigned long);
 
 /*
  * TGA console screen memory access
@@ -110,8 +111,8 @@ static inline void scr_writew(unsigned short val, unsigned short * addr)
 		 * TGA might need the char blitted to the screen,
 		 * but check first, we could be running on a VGA.
 		 */
-                if (con_blitc && IS_VIDEO_MEMORY(addr))
-			con_blitc(val, (unsigned long) addr);
+                if (tga_blitc && IS_VIDEO_MEMORY(addr))
+			tga_blitc(val, (unsigned long) addr);
         } else
                 writew(val, (unsigned long) addr);
 }

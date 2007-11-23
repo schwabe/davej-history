@@ -455,9 +455,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen)
 {
 	int val,err;
-#ifdef CONFIG_IP_MULTICAST
-	int len;
-#endif
 	
 	if(level!=SOL_IP)
 		return -EOPNOTSUPP;
@@ -541,16 +538,33 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			val=sk->ip_mc_loop;
 			break;
 		case IP_MULTICAST_IF:
+		{
+			struct device *dev;
+			struct in_addr ia;
+			
 			err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
 			if(err)
   				return err;
-  			len=strlen(sk->ip_mc_name);
-  			err=verify_area(VERIFY_WRITE, optval, len);
+  			err=verify_area(VERIFY_WRITE, optval, sizeof(ia));
 		  	if(err)
   				return err;
-  			put_user(len,(int *) optlen);
-			memcpy_tofs((void *)optval,sk->ip_mc_name, len);
+  			
+  			if(*sk->ip_mc_name)
+  			{
+	  			dev=dev_get(sk->ip_mc_name);
+  				/* Someone ran off with the interface, its probably
+  				   been downed. */
+  				if(dev==NULL)
+  					return -ENODEV;
+	  			ia.s_addr = dev->pa_addr;
+	  		}
+	  		else
+	  			ia.s_addr = 0L;
+	 
+  			put_user(sizeof(ia),(int *) optlen);
+			memcpy_tofs((void *)optval, &ia, sizeof(ia));
 			return 0;
+		}
 #endif
 		default:
 			return(-ENOPROTOOPT);

@@ -513,7 +513,7 @@ APM support
 as well.  APM, which is primarily of use in laptops, provides access to
 battery status information and may help to conserve battery power.  The
 support files can be found in
-ftp://tsx-11.mit.edu/pub/linux/packages/laptops/apm/apmd-2.4.tar.gz
+http://www.worldvisions.ca/~apenwarr/apmd/
 
 iBCS and Dosemu
 ===============

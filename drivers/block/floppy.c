@@ -96,6 +96,11 @@
  * features to asm/floppy.h.
  */
 
+/*
+ * 1999/02/23 -- Paul Slootman -- floppy stopped working on Alpha after 24
+ * days, 6 hours, 32 minutes and 32 seconds (i.e. MAXINT jiffies; ints were
+ * being used to store jiffies, which are unsigned longs).
+ */
 
 #define FLOPPY_SANITY_CHECK
 #undef  FLOPPY_SILENT_DCL_CLEAR
@@ -521,6 +526,8 @@ static struct floppy_struct *_floppy = floppy_type;
 static unsigned char current_drive = 0;
 static long current_count_sectors = 0;
 static unsigned char sector_t; /* sector in track */
+static unsigned char in_sector_offset; /* offset within physical sector,
+                                        * expressed in units of 512 bytes */
 
 #ifndef fd_eject
 #define fd_eject(x) -EINVAL
@@ -571,10 +578,10 @@ static void is_alive(const char *message)
 #define OLOGSIZE 20
 
 static void (*lasthandler)(void) = NULL;
-static int interruptjiffies=0;
-static int resultjiffies=0;
+static unsigned long interruptjiffies=0;
+static unsigned long resultjiffies=0;
 static int resultsize=0;
-static int lastredo=0;
+static unsigned long lastredo=0;
 
 static struct output_log {
 	unsigned char data;
@@ -594,7 +601,7 @@ static void reschedule_timeout(int drive, const char *message, int marg)
 		drive = current_drive;
 	del_timer(&fd_timeout);
 	if (drive < 0 || drive > N_DRIVE) {
-		fd_timeout.expires = jiffies + 20*HZ;
+		fd_timeout.expires = jiffies + 20UL*HZ;
 		drive=0;
 	} else
 		fd_timeout.expires = jiffies + UDP->timeout;
@@ -677,7 +684,7 @@ static int disk_change(int drive)
 #ifdef DCL_DEBUG
 	if (UDP->flags & FD_DEBUG){
 		DPRINT("checking disk change line for drive %d\n",drive);
-		DPRINT("jiffies=%ld\n", jiffies);
+		DPRINT("jiffies=%lu\n", jiffies);
 		DPRINT("disk change line=%x\n",fd_inb(FD_DIR)&0x80);
 		DPRINT("flags=%x\n",UDRS->flags);
 	}
@@ -962,7 +969,7 @@ static void main_command_interrupt(void)
 }
 
 /* waits for a delay (spinup or select) to pass */
-static int wait_for_completion(int delay, timeout_fn function)
+static int wait_for_completion(unsigned long delay, timeout_fn function)
 {
 	if (FDCS->reset){
 		reset_fdc(); /* do the reset during sleep to win time
@@ -1224,7 +1231,7 @@ static int fdc_configure(void)
 static void fdc_specify(void)
 {
 	unsigned char spec1, spec2;
-	int srt, hlt, hut;
+	unsigned long srt, hlt, hut;
 	unsigned long dtr = NOMINAL_DTR;
 	unsigned long scale_dtr = NOMINAL_DTR;
 	int hlt_max_code = 0x7f;
@@ -1311,7 +1318,7 @@ static int fdc_dtr(void)
 	 * Pause 5 msec to avoid trouble. (Needs to be 2 jiffies)
 	 */
 	FDCS->dtr = raw_cmd->rate & 3;
-	return(wait_for_completion(jiffies+2*HZ/100,
+	return(wait_for_completion(jiffies+2UL*HZ/100,
 				   (timeout_fn) floppy_ready));
 } /* fdc_dtr */
 
@@ -1407,7 +1414,8 @@ static int interpret_errors(void)
  */
 static void setup_rw_floppy(void)
 {
-	int i,ready_date,r, flags,dflags;
+	int i,r, flags,dflags;
+	unsigned long ready_date;
 	timeout_fn function;
 
 	flags = raw_cmd->flags;
@@ -1480,7 +1488,7 @@ static void seek_interrupt(void)
 #ifdef DCL_DEBUG
 		if (DP->flags & FD_DEBUG){
 			DPRINT("clearing NEWCHANGE flag because of effective seek\n");
-			DPRINT("jiffies=%ld\n", jiffies);
+			DPRINT("jiffies=%lu\n", jiffies);
 		}
 #endif
 		CLEARF(FD_DISK_NEWCHANGE); /* effective seek */
@@ -1760,20 +1768,20 @@ void show_floppy(void)
 	printk("\n");
 	printk("floppy driver state\n");
 	printk("-------------------\n");
-	printk("now=%ld last interrupt=%d last called handler=%p\n",
-	       jiffies, interruptjiffies, lasthandler);
+	printk("now=%lu last interrupt=%lu diff=%lu last called handler=%p\n",
+	       jiffies, interruptjiffies, jiffies-interruptjiffies, lasthandler);
 
 
 #ifdef FLOPPY_SANITY_CHECK
 	printk("timeout_message=%s\n", timeout_message);
 	printk("last output bytes:\n");
 	for (i=0; i < OLOGSIZE; i++)
-		printk("%2x %2x %ld\n",
+		printk("%2x %2x %lu\n",
 		       output_log[(i+output_log_pos) % OLOGSIZE].data,
 		       output_log[(i+output_log_pos) % OLOGSIZE].status,
 		       output_log[(i+output_log_pos) % OLOGSIZE].jiffies);
-	printk("last result at %d\n", resultjiffies);
-	printk("last redo_fd_request at %d\n", lastredo);
+	printk("last result at %lu\n", resultjiffies);
+	printk("last redo_fd_request at %lu\n", lastredo);
 	for (i=0; i<resultsize; i++){
 		printk("%2x ", reply_buffer[i]);
 	}
@@ -1790,8 +1798,8 @@ void show_floppy(void)
 		printk("fd_timer.function=%p\n", fd_timer.function);
 	if (fd_timeout.prev){
 		printk("timer_table=%p\n",fd_timeout.function);
-		printk("expires=%ld\n",fd_timeout.expires-jiffies);
-		printk("now=%ld\n",jiffies);
+		printk("expires=%lu\n",fd_timeout.expires-jiffies);
+		printk("now=%lu\n",jiffies);
 	}
 	printk("cont=%p\n", cont);
 	printk("CURRENT=%p\n", CURRENT);
@@ -2056,7 +2064,7 @@ static void format_interrupt(void)
 
 #define CODE2SIZE (ssize = ((1 << SIZECODE) + 3) >> 2)
 #define FM_MODE(x,y) ((y) & ~(((x)->rate & 0x80) >>1))
-#define CT(x) ((x) | 0x40)
+#define CT(x) ((x) | 0xc0)
 static void setup_format_params(int track)
 {
 	struct fparm {
@@ -2224,7 +2232,7 @@ static void request_done(int uptodate)
 /* Interrupt handler evaluating the result of the r/w operation */
 static void rw_interrupt(void)
 {
-	int nr_sectors, ssize, eoc;
+	int nr_sectors, ssize, eoc, heads;
 
 	if (!DRS->first_read_date)
 		DRS->first_read_date = jiffies;
@@ -2236,23 +2244,32 @@ static void rw_interrupt(void)
 		eoc = 1;
 	else
 		eoc = 0;
-	nr_sectors = ((R_TRACK-TRACK)*_floppy->head+R_HEAD-HEAD) *
-		_floppy->sect + ((R_SECTOR-SECTOR+eoc) <<  SIZECODE >> 2) -
-		(sector_t % _floppy->sect) % ssize;
+
+	if(COMMAND & 0x80)
+		heads = 2;
+	else
+		heads = 1;
+
+	nr_sectors = (((R_TRACK-TRACK) * heads + 
+				   R_HEAD-HEAD) * SECT_PER_TRACK +
+				  R_SECTOR-SECTOR + eoc) << SIZECODE >> 2;
 
 #ifdef FLOPPY_SANITY_CHECK
-	if (nr_sectors > current_count_sectors + ssize -
-	     (current_count_sectors + sector_t) % ssize +
-	     sector_t % ssize){
+	if (nr_sectors / ssize > 
+		(in_sector_offset + current_count_sectors + ssize - 1)/ssize) {
 		DPRINT("long rw: %x instead of %lx\n",
 			nr_sectors, current_count_sectors);
 		printk("rs=%d s=%d\n", R_SECTOR, SECTOR);
 		printk("rh=%d h=%d\n", R_HEAD, HEAD);
 		printk("rt=%d t=%d\n", R_TRACK, TRACK);
-		printk("spt=%d st=%d ss=%d\n", SECT_PER_TRACK,
-		       sector_t, ssize);
+		printk("heads=%d eoc=%d\n", heads, eoc);
+		printk("spt=%d st=%d ss=%d\n", SECT_PER_TRACK, 
+			   sector_t, ssize);
+		printk("in_sector_offset=%d\n", in_sector_offset);
 	}
 #endif
+
+	nr_sectors -= in_sector_offset;
 	INFBOUND(nr_sectors,0);
 	SUPBOUND(current_count_sectors, nr_sectors);
 
@@ -2424,6 +2441,32 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 #endif
 }
 
+/* work around a bug in pseudo DMA
+ * (on some FDCs) pseudo DMA does not stop when the CPU stops
+ * sending data.  Hence we need a different way to signal the
+ * transfer length:  We use SECT_PER_TRACK.  Unfortunately, this
+ * does not work with MT, hence we can only transfer one head at
+ * a time
+ */
+static void virtualdmabug_workaround(void) {
+	int hard_sectors, end_sector;
+	if(CT(COMMAND) == FD_WRITE) {
+		COMMAND &= ~0x80; /* switch off multiple track mode */
+	   
+		hard_sectors = raw_cmd->length >> (7 + SIZECODE);
+		end_sector = SECTOR + hard_sectors - 1;
+#ifdef FLOPPY_SANITY_CHECK
+		if(end_sector > SECT_PER_TRACK) {
+			printk("too many sectors %d > %d\n", 
+				   end_sector, SECT_PER_TRACK);
+			return;
+		}
+#endif
+		SECT_PER_TRACK = end_sector; /* make sure SECT_PER_TRACK points
+									  * to end of transfer */
+	}
+}
+
 /*
  * Formulate a read/write request.
  * this routine decides where to load the data (directly to buffer, or to
@@ -2495,11 +2538,17 @@ static int make_raw_rw_request(void)
 	CODE2SIZE;
 	SECT_PER_TRACK = _floppy->sect << 2 >> SIZECODE;
 	SECTOR = ((sector_t % _floppy->sect) << 2 >> SIZECODE) + 1;
+
+	/* tracksize describes the size which can be filled up with sectors
+	 * of size ssize.
+	 */
 	tracksize = _floppy->sect - _floppy->sect % ssize;
 	if (tracksize < _floppy->sect){
 		SECT_PER_TRACK ++;
 		if (tracksize <= sector_t % _floppy->sect)
 			SECTOR--;
+
+		/* if we are beyond tracksize, fill up using smaller sectors */
 		while (tracksize <= sector_t % _floppy->sect){
 			while(tracksize + ssize > _floppy->sect){
 				SIZECODE--;
@@ -2509,10 +2558,15 @@ static int make_raw_rw_request(void)
 			tracksize += ssize;
 		}
 		max_sector = HEAD * _floppy->sect + tracksize;
-	} else if (!TRACK && !HEAD && !(_floppy->rate & FD_2M) && probing)
+	} else if (!TRACK && !HEAD && !(_floppy->rate & FD_2M) && probing) {
 		max_sector = _floppy->sect;
+	} else if (!HEAD && CT(COMMAND) == FD_WRITE) {
+		/* for virtual DMA bug workaround */
+		max_sector = _floppy->sect;
+	}
 
-	aligned_sector_t = sector_t - (sector_t % _floppy->sect) % ssize;
+	in_sector_offset = (sector_t % _floppy->sect) % ssize;
+	aligned_sector_t = sector_t - in_sector_offset;
 	max_size = CURRENT->nr_sectors;
 	if ((raw_cmd->track == buffer_track) && 
 	    (current_drive == buffer_drive) &&
@@ -2522,7 +2576,7 @@ static int make_raw_rw_request(void)
 			copy_buffer(1, max_sector, buffer_max);
 			return 1;
 		}
-	} else if (aligned_sector_t != sector_t || CURRENT->nr_sectors < ssize){
+	} else if (in_sector_offset || CURRENT->nr_sectors < ssize){
 		if (CT(COMMAND) == FD_WRITE){
 			if (sector_t + CURRENT->nr_sectors > ssize &&
 			    sector_t + CURRENT->nr_sectors < ssize + ssize)
@@ -2575,6 +2629,7 @@ static int make_raw_rw_request(void)
 					indirect, direct, sector_t);
 				return 0;
 			}
+			virtualdmabug_workaround();
 			return 2;
 		}
 	}
@@ -2588,7 +2643,7 @@ static int make_raw_rw_request(void)
 	    sector_t > buffer_max ||
 	    sector_t < buffer_min ||
 	    ((CT(COMMAND) == FD_READ ||
-	      (aligned_sector_t == sector_t && CURRENT->nr_sectors >= ssize))&&
+	      (!in_sector_offset && CURRENT->nr_sectors >= ssize))&&
 	     max_sector > 2 * max_buffer_sectors + buffer_min &&
 	     max_size + sector_t > 2 * max_buffer_sectors + buffer_min)
 	    /* not enough space */){
@@ -2605,7 +2660,7 @@ static int make_raw_rw_request(void)
 		 * is either aligned or the data already in the buffer
 		 * (buffer will be overwritten) */
 #ifdef FLOPPY_SANITY_CHECK
-		if (sector_t != aligned_sector_t && buffer_track == -1)
+		if (in_sector_offset && buffer_track == -1)
 			DPRINT("internal error offset !=0 on write\n");
 #endif
 		buffer_track = raw_cmd->track;
@@ -2616,7 +2671,7 @@ static int make_raw_rw_request(void)
 			      2*max_buffer_sectors+buffer_min-aligned_sector_t);
 
 	/* round up current_count_sectors to get dma xfer size */
-	raw_cmd->length = sector_t+current_count_sectors-aligned_sector_t;
+	raw_cmd->length = in_sector_offset+current_count_sectors;
 	raw_cmd->length = ((raw_cmd->length -1)|(ssize-1))+1;
 	raw_cmd->length <<= 9;
 #ifdef FLOPPY_SANITY_CHECK
@@ -2678,6 +2733,8 @@ static int make_raw_rw_request(void)
 		return 0;
 	}
 #endif
+
+	virtualdmabug_workaround();
 	return 2;
 }
 
@@ -2846,7 +2903,7 @@ static int user_reset_fdc(int drive, int arg, int interruptible)
  * Misc Ioctl's and support
  * ========================
  */
-static int fd_copyout(void *param, const void *address, int size)
+static int fd_copyout(void *param, const void *address, unsigned long size)
 {
 	int ret;
 
@@ -2855,7 +2912,7 @@ static int fd_copyout(void *param, const void *address, int size)
 	return 0;
 }
 
-static int fd_copyin(void *param, void *address, int size)
+static int fd_copyin(void *param, void *address, unsigned long size)
 {
 	int ret;
 
@@ -3663,7 +3720,7 @@ static int check_floppy_change(kdev_t dev)
 	if (UTESTF(FD_DISK_CHANGED) || UTESTF(FD_VERIFY))
 		return 1;
 
-	if (UDP->checkfreq < jiffies - UDRS->last_checked){
+	if (UDP->checkfreq < (int)(jiffies - UDRS->last_checked)) {
 		lock_fdc(drive,0);
 		poll_drive(0,0);
 		process_fd_request();

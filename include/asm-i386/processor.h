@@ -83,10 +83,9 @@ extern int EISA_bus;
 #define MCA_bus__is_a_macro /* for versions in ksyms.c */
 
 /*
- * User space process size: 3GB. This is hardcoded into a few places,
- * so don't change it unless you know what you are doing.
+ * User space process size: 3GB (default).
  */
-#define TASK_SIZE	(0xC0000000UL)
+#define TASK_SIZE	((unsigned long)__PAGE_OFFSET)
 #define MAX_USER_ADDR	TASK_SIZE
 #define MMAP_SEARCH_START (TASK_SIZE/3)
 

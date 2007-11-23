@@ -123,8 +123,8 @@ L:      linux-net@vger.rutgers.edu
 S:      Maintained
 
 APM DRIVER
-P:	Rik Faith & Stephen Rothwell
-M:	faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au
+P:	Stephen Rothwell
+M:	Stephen.Rothwell@canb.auug.org.au
 L:	linux-laptop@vger.rutgers.edu
 S:	Maintained
 
@@ -165,10 +165,22 @@ L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 CYCLADES ASYNC MUX DRIVER
-P:	Marcio Saito
-M:	Marcio Saito <marcio@cyclades.com>
+P:	Ivan Passos
+M:	Ivan Passos <ivan@cyclades.com>
 W:	http://www.cyclades.com/
 S:	Supported
+
+DC390/AM53C974 SCSI driver
+P:	Kurt Garloff
+M:	kurt@garloff.de
+W:	http://www.garloff.de/kurt/linux/dc390/
+S:	Maintained
+
+DAC960 RAID DRIVER
+P:	Leonard N. Zubkoff
+M:	Leonard N. Zubkoff <lnz@dandelion.com>
+L:	linux-raid@vger.rutgers.edu
+S:	Maintained
 
 EATA ISA/EISA/PCI SCSI DRIVER
 P:	Dario Ballabio
@@ -279,9 +291,9 @@ S:	Maintained
 
 NCP FILESYSTEM:
 P:	Volker Lendecke
-M:	lendecke@namu01.Num.Math.Uni-Goettingen.de
+M:	vl@kki.org
 L:	linware@sh.cvut.cz
-S:	Maintained
+S:	Odd Fixes
 
 NETROM NETWORK LAYER
 P:	Jon Naylor
@@ -315,7 +327,7 @@ S:	Maintained
 
 SMB FILESYSTEM:
 P:	Volker Lendecke
-M:	lendecke@namu01.Num.Math.Uni-Goettingen.de
+M:	vl@kki.org
 L:	samba@listproc.anu.edu.au
 S:	Odd Fixes
 

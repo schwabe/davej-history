@@ -139,18 +139,22 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 		 *	the error...
 		 */
 		if (!smp_scan_config(639*0x400,0x400))	/* Scan the top 1K of base RAM */
-			smp_scan_config(0xF0000,0x10000);	/* Scan the 64K of bios */
-		/*
-		 * If it is an SMP machine we should know now, unless the
-		 * configuration is in an EISA/MCA bus machine with an
-		 * extended bios data area. 
-		 *
-		 * there is a real-mode segmented pointer pointing to the
-		 * 4K EBDA area at 0x40E, calculate and scan it here:
-		 */
-		address = *(unsigned short *)phys_to_virt(0x40E);
-		address<<=4;
-		smp_scan_config(address, 0x1000);
+		{
+			if(!smp_scan_config(0xF0000,0x10000)) /* Scan the 64K of bios */
+			{
+				/*
+				 * If it is an SMP machine we should know now, unless the
+				 * configuration is in an EISA/MCA bus machine with an
+				 * extended bios data area. 
+				 *
+				 * there is a real-mode segmented pointer pointing to the
+				 * 4K EBDA area at 0x40E, calculate and scan it here:
+				 */
+				address = *(unsigned short *)phys_to_virt(0x40E);
+				address<<=4;
+				smp_scan_config(address, 0x1000);
+			}
+		}
 	}
 	/*
 	 *	If it is an SMP machine we should know now, unless the configuration
@@ -188,14 +192,14 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 #endif
 			wp_works_ok = 1;
 			pgd_val(pg_dir[0]) = _PAGE_TABLE | _PAGE_4M | address;
-			pgd_val(pg_dir[768]) = _PAGE_TABLE | _PAGE_4M | address;
+			pgd_val(pg_dir[USER_PGD_PTRS]) = _PAGE_TABLE | _PAGE_4M | address;
 			pg_dir++;
 			address += 4*1024*1024;
 			continue;
 		}
 #endif
-		/* map the memory at virtual addr 0xC0000000 */
-		pg_table = (pte_t *) (PAGE_MASK & pgd_val(pg_dir[768]));
+		/* map the memory at virtual addr PAGE_OFFSET */
+		pg_table = (pte_t *) (PAGE_MASK & pgd_val(pg_dir[USER_PGD_PTRS]));
 		if (!pg_table) {
 			pg_table = (pte_t *) start_mem;
 			start_mem += PAGE_SIZE;
@@ -203,7 +207,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 
 		/* also map it temporarily at 0x0000000 for init */
 		pgd_val(pg_dir[0])   = _PAGE_TABLE | (unsigned long) pg_table;
-		pgd_val(pg_dir[768]) = _PAGE_TABLE | (unsigned long) pg_table;
+		pgd_val(pg_dir[USER_PGD_PTRS]) = _PAGE_TABLE | (unsigned long) pg_table;
 		pg_dir++;
 		for (tmp = 0 ; tmp < PTRS_PER_PTE ; tmp++,pg_table++) {
 			if (address < end_mem)

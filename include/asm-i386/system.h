@@ -275,7 +275,7 @@ __asm__ __volatile__ ("movw $" #limit ",%1\n\t" \
 	"movb %%ah,%6\n\t" \
 	"rorl $16,%%eax" \
 	: /* no output */ \
-	:"a" (addr+0xc0000000), "m" (*(n)), "m" (*(n+2)), "m" (*(n+4)), \
+	:"a" (addr+__PAGE_OFFSET), "m" (*(n)), "m" (*(n+2)), "m" (*(n+4)), \
 	 "m" (*(n+5)), "m" (*(n+6)), "m" (*(n+7)) \
 	)
 

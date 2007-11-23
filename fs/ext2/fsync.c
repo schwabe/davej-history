@@ -10,6 +10,8 @@
  *  linux/fs/minix/truncate.c   Copyright (C) 1991, 1992  Linus Torvalds
  * 
  *  ext2fs fsync primitive
+ *
+ *  Fast 'fsync' on large files (Scott Laird <laird@pacificrim.net>)
  */
 
 #include <asm/segment.h>
@@ -172,6 +174,13 @@ int ext2_sync_file (struct inode * inode, struct file * file)
 		 * Don't sync fast links!
 		 */
 		goto skip;
+
+	/* fsync on large files is *slow*, so fall back to sync() if
+	 * the file's over 10M */
+	if (inode->i_size>10000000) {
+		file_fsync(inode,file);
+		goto skip;
+	}
 
 	for (wait=0; wait<=1; wait++)
 	{

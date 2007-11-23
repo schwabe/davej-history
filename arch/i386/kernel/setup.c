@@ -98,9 +98,7 @@ extern char empty_zero_page[PAGE_SIZE];
 #ifndef STANDARD_MEMORY_BIOS_CALL
 #define ALT_MEM_K (*(unsigned long *) (PARAM+0x1e0))
 #endif
-#ifdef CONFIG_APM
-#define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+64))
-#endif
+#define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+0x40))
 #define DRIVE_INFO (*(struct drive_info_struct *) (PARAM+0x80))
 #define SCREEN_INFO (*(struct screen_info *) (PARAM+0))
 #define MOUNT_ROOT_RDONLY (*(unsigned short *) (PARAM+0x1F2))
@@ -167,13 +165,14 @@ void setup_arch(char **cmdline_p,
 #endif
 
 	/*
-	 *	The 1Gig sanity checker.
+	 *	The CONFIG_MAX_MEMSIZE sanity checker.
 	 */
 	 
-	if (memory_end > 980*1024*1024)
+	if (memory_end > (CONFIG_MAX_MEMSIZE-128)*1024*1024)
 	{
-		printk(KERN_WARNING "Warning only 980Mb will be used.\n");
-		memory_end = 980 * 1024 * 1024;
+		memory_end = (CONFIG_MAX_MEMSIZE-128)*1024*1024;
+		printk(KERN_WARNING "ONLY %dMB RAM will be used, see Documentation/more-than-900MB-RAM.txt!.\n", CONFIG_MAX_MEMSIZE-128);
+		udelay(3*1000*1000);
 	}
 	
 	if (!MOUNT_ROOT_RDONLY)
@@ -462,7 +461,7 @@ int get_cpuinfo(char * buffer)
 	static const char *x86_ext_cap_flags[] = {
 		   "fpu","vme", "de",   "pse", "tsc", "msr",  "6",   "mce",
 		   "cx8",  "9", "10", "syscr",  "12", "pge", "14",  "cmov",
-		"fpcmov", "17", "18",    "19",  "20",  "21", "22",   "mmx",
+		"fpcmov", "17", "psn",    "19",  "20",  "21", "22",   "mmx",
 		  "emmx", "25", "26",    "27",  "28",  "29", "30", "3dnow"
 	};
          

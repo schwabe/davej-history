@@ -189,6 +189,8 @@ static void rarp_init_pkt (void)
         rarp_pkt_inited=1;
 }
 
+#ifdef MODULE
+
 static void rarp_end_pkt(void)
 {
         if(!rarp_pkt_inited)
@@ -197,6 +199,8 @@ static void rarp_end_pkt(void)
         unregister_netdevice_notifier(&rarp_dev_notifier);
         rarp_pkt_inited=0;
 }
+
+#endif
 
 
 /*

@@ -39,6 +39,9 @@
 #ifdef CONFIG_MTRR
 #include <asm/mtrr.h>
 #endif
+#ifdef CONFIG_APM
+#include <linux/apm_bios.h>
+#endif
 
 #include <asm/bugs.h>
 
@@ -103,7 +106,9 @@ extern void u14_34f_setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
 extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
+extern void sym53c416_setup(char *str, int *ints);
 extern void wd7000_setup(char *str, int *ints);
+extern void dc390_setup(char* str, int *ints);
 extern void ppa_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
@@ -203,6 +208,11 @@ extern void pg_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_PARIDE_PCD
 extern void pcd_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_BLK_CPQ_DA
+#ifdef CONFIG_BLK_CPQ_DA_EISA
+extern void cpqarray_setup(char *str, int *ints);
+#endif
 #endif
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
@@ -372,6 +382,9 @@ struct kernel_param bootsetups[] = {
 #ifdef CONFIG_SCSI_NCR53C406A
 	{ "ncr53c406a=", NCR53c406a_setup},
 #endif
+#ifdef CONFIG_SCSI_SYM53C416
+	{ "sym53c416=", sym53c416_setup}, 
+#endif
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 	{ "fdomain=", fdomain_setup},
 #endif
@@ -383,6 +396,9 @@ struct kernel_param bootsetups[] = {
 #endif
 #ifdef CONFIG_SCSI_PPA
         { "ppa=", ppa_setup },
+#endif
+#if defined(CONFIG_SCSI_DC390T) && ! defined(CONFIG_SCSI_DC390T_NOGENSUPP)
+	{ "tmscsim=", dc390_setup },
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
@@ -468,8 +484,10 @@ struct kernel_param bootsetups[] = {
 #ifdef CONFIG_BAYCOM
 	{ "baycom=", baycom_setup },
 #endif
-#ifdef CONFIG_APM
-	{ "apm=", apm_setup },
+#ifdef CONFIG_BLK_CPQ_DA
+#ifdef CONFIG_BLK_CPQ_DA_EISA
+       { "smart2=", cpqarray_setup },
+#endif
 #endif
 	{ 0, 0 }
 };
@@ -490,6 +508,9 @@ static struct kernel_param raw_params[] = {
 #endif
 #ifdef CONFIG_PARIDE_PG
        { "pg.", pg_setup },
+#endif
+#ifdef CONFIG_APM
+	{ "apm=", apm_setup },
 #endif
        { 0, 0 }
 } ;
@@ -648,6 +669,24 @@ static void parse_root_dev(char * line)
 		{ "sdn",     0x08d0 },
 		{ "sdo",     0x08e0 },
 		{ "sdp",     0x08f0 },
+#ifdef CONFIG_BLK_DEV_DAC960
+		{ "rd/c0d0p",0x3000 },
+		{ "rd/c0d1p",0x3008 },
+		{ "rd/c0d2p",0x3010 },
+		{ "rd/c0d3p",0x3018 },
+		{ "rd/c0d4p",0x3020 },
+		{ "rd/c0d5p",0x3028 },
+		{ "rd/c0d6p",0x3030 },
+		{ "rd/c0d7p",0x3038 },
+		{ "rd/c0d8p",0x3040 },
+		{ "rd/c0d9p",0x3048 },
+		{ "rd/c0d10p",0x3050 },
+		{ "rd/c0d11p",0x3058 },
+		{ "rd/c0d12p",0x3060 },
+		{ "rd/c0d13p",0x3068 },
+		{ "rd/c0d14p",0x3070 },
+		{ "rd/c0d15p",0x3078 },
+#endif
 		{ "fd",      0x0200 },
 		{ "xda",     0x0d00 },
 		{ "xdb",     0x0d40 },

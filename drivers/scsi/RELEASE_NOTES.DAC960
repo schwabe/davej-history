@@ -1,0 +1,74 @@
+	       Mylex DAC960 PCI RAID Controller Driver for Linux
+
+			Version 2.0.0 for Linux 2.0.36
+			Version 2.1.0 for Linux 2.1.130
+
+			      BETA TEST RELEASE 3
+
+			       23 November 1998
+
+			       Leonard N. Zubkoff
+			       Dandelion Digital
+			       lnz@dandelion.com
+
+	   Copyright 1998 by Leonard N. Zubkoff <lnz@dandelion.com>
+
+
+				 RELEASE NOTES
+
+o The error reporting functionality has been greatly improved.  The driver now
+  queries the controller every 7 seconds to collect status information, and
+  reports on progress rebuilding logical drives at most every 60 seconds.
+  The status of all physical disk drives is also queried as well as updates
+  to the controller's internal error log.  This functionality allows for
+  more accurate reporting of the cause of drive failures when they occur.
+
+o The production model AcceleRAID controllers are now supported.  Mylex had
+  unfortunately provided me with pre-production AcceleRAID units which differed
+  in critical ways from the production models, and so the Beta2 driver release
+  did not function properly.
+
+o New releases of the Linux Symbios driver now contain code to notice when
+  motherboard Symbios chips are controlled by an AcceleRAID and to not
+  interfere with operation of the AcceleRAID board.  A patch is also available
+  for the Symbios driver version 3.0i.
+
+o A bug was corrected where functionality necessary for swapping to files was
+  not implemented.
+
+
+
+
+	       Mylex DAC960 PCI RAID Controller Driver for Linux
+
+			Version 2.0.0 for Linux 2.0.36
+			Version 2.1.0 for Linux 2.1.126
+
+			      BETA TEST RELEASE 2
+
+				19 October 1998
+
+			       Leonard N. Zubkoff
+			       Dandelion Digital
+			       lnz@dandelion.com
+
+	   Copyright 1998 by Leonard N. Zubkoff <lnz@dandelion.com>
+
+
+				 RELEASE NOTES
+
+o The Mylex AcceleRAID 250 (DAC960PTL-1) and AcceleRAID 200 (DAC960PTL-0)
+  models are now supported.  Please note that if you use an AcceleRAID 200,
+  or an AcceleRAID 250 configured to use the Symbios chips on the motherboard,
+  then the Symbios driver must not be included in the Linux kernel.  This
+  restriction will be removed in a future release of these drivers.
+
+o This version of the DAC960 driver uses a more efficient interface for
+  communicating with the AcceleRAID 250, AcceleRAID 200, DAC960PJ, and
+  DAC960PG models.
+
+o A bug was corrected where the cache was not flushed at shutdown on systems
+  with a DAC960 Logical Drive mounted as the root file system.  This only
+  affected systems where the DAC960 Logical Drive was configured for write back
+  operation without a battery backup unit installed and the system was powered
+  off within a couple of seconds of system shutdown.

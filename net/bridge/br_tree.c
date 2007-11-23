@@ -215,6 +215,11 @@ br_avl_insert (struct fdb * new_node)
 			break;
 		*stack_ptr++ = nodeplace; stack_count++;
 		if (addr_cmp(new_node->ula, node->ula) == 0) { /* update */
+		/*
+		 * Vova Oksman: There was the BUG, in case that port 
+		 * was changed we must to update it.
+		 */
+			node->port = new_node->port;
 			node->flags = new_node->flags;
 			node->timer = new_node->timer;	
 			return(0);

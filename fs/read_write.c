@@ -254,7 +254,7 @@ static int do_readv_writev(int type, struct inode * inode, struct file * file,
 			return retval;
 	}
 
-	retval = locks_verify_area(type == VERIFY_READ ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE,
+	retval = locks_verify_area(type == VERIFY_WRITE ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE,
 				   inode, file, file->f_pos, tot_len);
 	if (retval)
 		return retval;

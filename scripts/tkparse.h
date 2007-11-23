@@ -14,6 +14,7 @@ enum token {
   tok_hex,
   tok_make,
   tok_define,
+  tok_define_int,
   tok_choose,
   tok_choice,
   tok_endmenu,

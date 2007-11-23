@@ -310,6 +310,16 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
+#elif (MAJOR_NR == COMPAQ_SMART2_MAJOR)
+
+#define DEVICE_NAME "ida"
+#define DEVICE_INTR do_ida
+#define TIMEOUT_VALUE (25*HZ)
+#define DEVICE_REQUEST do_ida_request0
+#define DEVICE_NR(device) (MINOR(device) >> 4)
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
 #endif /* MAJOR_NR == whatever */
 
 #if (MAJOR_NR != SCSI_TAPE_MAJOR)
@@ -370,7 +380,7 @@ static void (DEVICE_REQUEST)(void);
 /* end_request() - SCSI devices have their own version */
 /*               - IDE drivers have their own copy too */
 
-#if ! SCSI_BLK_MAJOR(MAJOR_NR)
+#if ! SCSI_BLK_MAJOR(MAJOR_NR) && (MAJOR_NR != COMPAQ_SMART2_MAJOR)
 
 #if defined(IDE_DRIVER) && !defined(_IDE_C) /* shared copy for IDE modules */
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);

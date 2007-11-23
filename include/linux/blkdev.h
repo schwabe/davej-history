@@ -25,6 +25,7 @@ struct request {
 	int errors;
 	unsigned long sector;
 	unsigned long nr_sectors;
+	unsigned long nr_segments;
 	unsigned long current_nr_sectors;
 	char * buffer;
 	struct semaphore * sem;
@@ -62,5 +63,13 @@ extern int * blk_size[MAX_BLKDEV];
 extern int * blksize_size[MAX_BLKDEV];
 
 extern int * hardsect_size[MAX_BLKDEV];
+
+extern int * max_sectors[MAX_BLKDEV];
+
+extern int * max_segments[MAX_BLKDEV];
+
+#define MAX_SECTORS 254
+
+#define MAX_SEGMENTS MAX_SECTORS
 
 #endif

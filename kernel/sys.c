@@ -34,6 +34,7 @@
 int C_A_D = 1;
 
 extern void adjust_clock(void);
+extern void DAC960_Finalize(void);
 extern void gdth_halt(void);
 
 asmlinkage int sys_ni_syscall(void)
@@ -188,6 +189,9 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 	if (magic != 0xfee1dead || magic_too != 672274793)
 		return -EINVAL;
 	if (flag == 0x01234567) {
+#ifdef CONFIG_BLK_DEV_DAC960
+		DAC960_Finalize();
+#endif
 #ifdef CONFIG_SCSI_GDTH
 		gdth_halt();
 #endif
@@ -197,6 +201,9 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 	else if (!flag)
 		C_A_D = 0;
 	else if (flag == 0xCDEF0123) {
+#ifdef CONFIG_BLK_DEV_DAC960
+		DAC960_Finalize();
+#endif
 #ifdef CONFIG_SCSI_GDTH
 		gdth_halt();
 #endif
@@ -219,6 +226,9 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 void ctrl_alt_del(void)
 {
 	if (C_A_D) {
+#ifdef CONFIG_BLK_DEV_DAC960
+		DAC960_Finalize();
+#endif
 #ifdef CONFIG_SCSI_GDTH
 		gdth_halt();
 #endif

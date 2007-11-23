@@ -254,8 +254,12 @@ static void igmp_send_report(struct device *dev, unsigned long address, int type
 
 	if(skb==NULL)
 		return;
-	tmp=ip_build_header(skb, dev->pa_addr, address, &dev, IPPROTO_IGMP, NULL,
-				28 , 0, 1, NULL);
+	if (type != IGMP_HOST_LEAVE_MESSAGE)
+		tmp=ip_build_header(skb, dev->pa_addr, address, &dev, IPPROTO_IGMP, NULL,
+			28 , 0, 1, NULL);
+	else
+		tmp=ip_build_header(skb, dev->pa_addr, IGMP_ALL_ROUTER, &dev, IPPROTO_IGMP, NULL,
+			28, 0, 1, NULL);
 	if(tmp<0)
 	{
 		kfree_skb(skb, FREE_WRITE);
@@ -429,7 +433,8 @@ extern __inline__ void igmp_group_dropped(struct ip_mc_list *im)
 	del_timer(&im->timer);
         /* It seems we have to send Leave Messages to 224.0.0.2 and not to
            the group itself, to remain RFC 2236 compliant... (jmel) */
-        igmp_send_report(im->interface, IGMP_ALL_ROUTER, IGMP_HOST_LEAVE_MESSAGE);
+        /*igmp_send_report(im->interface, IGMP_ALL_ROUTER, IGMP_HOST_LEAVE_MESSAGE);*/
+        igmp_send_report(im->interface, im->multiaddr, IGMP_HOST_LEAVE_MESSAGE);
 	ip_mc_filter_del(im->interface, im->multiaddr);
 }
 
