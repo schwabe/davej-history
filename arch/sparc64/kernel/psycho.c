@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.85.2.9 2000/05/01 06:33:49 davem Exp $
+/* $Id: psycho.c,v 1.85.2.10 2000/06/14 07:41:19 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)

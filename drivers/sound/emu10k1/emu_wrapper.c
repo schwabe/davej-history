@@ -90,7 +90,7 @@ pci_compat_register_driver(struct pci_driver *drv)
 {
         struct pci_dev *dev;
         int count = 0, found, i;
-
+#ifdef CONFIG_PCI
         list_add_tail(&drv->node, &pci_drivers);
         pci_for_each_dev(dev) {
                 found = 0;
@@ -100,6 +100,7 @@ pci_compat_register_driver(struct pci_driver *drv)
                 if (!found)
                         count += pci_announce_device(drv, dev);
         }
+#endif        
         return count;
 }
 
@@ -108,7 +109,7 @@ pci_compat_unregister_driver(struct pci_driver *drv)
 {
         struct pci_dev *dev;
         int i, found;
-
+#ifdef CONFIG_PCI
         list_del(&drv->node);
         pci_for_each_dev(dev) {
                 found = 0;
@@ -121,6 +122,7 @@ pci_compat_unregister_driver(struct pci_driver *drv)
                         drvmap[i].dev = NULL;
                 }
         }
+#endif        
 }
 
 unsigned long pci_compat_get_size (struct pci_dev *dev, int n_base)

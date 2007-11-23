@@ -74,6 +74,7 @@
 #define FB_ACCEL_SUN_CGTHREE	24	/* Sun cgthree			 */
 #define FB_ACCEL_SUN_TCX	25	/* Sun tcx			 */
 #define FB_ACCEL_MATROX_MGAG400 26	/* Matrox G400                   */
+#define FB_ACCEL_ATI_RAGE128	32	/* ATI Rage 128                  */
 
 struct fb_fix_screeninfo {
 	char id[16];			/* identification string eg "TT Builtin" */

@@ -507,7 +507,7 @@ void b1_handle_interrupt(avmcard * card)
 	struct sk_buff *skb;
 
 	unsigned ApplId;
-	unsigned MsgLen;
+	signed MsgLen;
 	unsigned DataB3Len;
 	unsigned NCCI;
 	unsigned WindowSize;

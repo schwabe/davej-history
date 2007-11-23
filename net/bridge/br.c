@@ -2258,7 +2258,7 @@ int br_ioctl(unsigned int cmd, void *arg)
 					break;
 			        case BRCMD_IF_ENABLE:
 				        bcf.arg1 = br_find_port(bcf.arg1);
-					if (bcf.arg1 < 0)
+					if ((signed)bcf.arg1 < 0)
 						return(bcf.arg1);
 				case BRCMD_PORT_ENABLE:
 					if (port_info[bcf.arg1].dev == 0)
@@ -2276,7 +2276,7 @@ int br_ioctl(unsigned int cmd, void *arg)
 					break;
 			        case BRCMD_IF_DISABLE:
 				        bcf.arg1 = br_find_port(bcf.arg1);
-					if (bcf.arg1 < 0)
+					if ((signed)bcf.arg1 < 0)
 						return(bcf.arg1);
 				case BRCMD_PORT_DISABLE:
 					if (port_info[bcf.arg1].dev == 0)
@@ -2299,7 +2299,7 @@ int br_ioctl(unsigned int cmd, void *arg)
 					break;
 			        case BRCMD_SET_IF_PRIORITY:
 				        bcf.arg1 = br_find_port(bcf.arg1);
-					if (bcf.arg1 < 0)
+					if ((signed)bcf.arg1 < 0)
 						return(bcf.arg1);
 				case BRCMD_SET_PORT_PRIORITY:
 					if((port_info[bcf.arg1].dev == 0)
@@ -2310,7 +2310,7 @@ int br_ioctl(unsigned int cmd, void *arg)
 					break;
 			        case BRCMD_SET_IF_PATH_COST:
 				        bcf.arg1 = br_find_port(bcf.arg1);
-					if (bcf.arg1 < 0)
+					if ((signed)bcf.arg1 < 0)
 						return(bcf.arg1);
 				case BRCMD_SET_PATH_COST:
 					if (port_info[bcf.arg1].dev == 0)

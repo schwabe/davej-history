@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.62.2.12 2000/05/27 04:46:26 davem Exp $
+/* $Id: ioctl32.c,v 1.62.2.13 2000/07/27 01:50:59 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -59,6 +59,7 @@
 #include <asm/envctrl.h>
 #include <asm/audioio.h>
 #include <asm/ethtool.h>
+#include <asm/display7seg.h>
 
 #include <linux/soundcard.h>
 
@@ -2167,7 +2168,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case _IOR('v' , BASE_VIDIOCPRIVATE+6, int):
 	case _IOR('v' , BASE_VIDIOCPRIVATE+7, int):
 
-	/* Little p (/dev/rtc, /dev/envctrl, etc.) */
+	/* Little p (/dev/rtc, /dev/envctrl, /dev/d7s, etc.) */
 	case RTCGET:
 	case RTCSET:
 	case ENVCTRL_RD_WARNING_TEMPERATURE:
@@ -2179,6 +2180,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case ENVCTRL_RD_ETHERNET_TEMPERATURE:
 	case ENVCTRL_RD_MTHRBD_TEMPERATURE:
 	case ENVCTRL_RD_CPU_VOLTAGE:
+	case D7SIOCWR:
+	/* case D7SIOCRD: Same value as ENVCTRL_RD_VOLTAGE_STATUS */
+	case D7SIOCTM:
 
 
 	/* Little m */

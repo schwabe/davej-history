@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.45 1998/11/09 15:33:29 davem Exp $
+/* $Id: rtrap.S,v 1.45.2.1 2000/07/28 02:10:55 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -139,6 +139,14 @@ check_signal:	brz,a,pt		%l0, check_user_wins
 		call			do_signal
 		 add			%sp, STACK_BIAS + REGWIN_SZ, %o1
 		clr			%l6
+
+		/* Signal delivery can change ptregs->tstate so we must
+		 * reload it into %l1 here.
+		 */
+		ldx			[%sp + PTREGS_OFF + PT_V9_TSTATE], %l1
+		sethi			%hi(0xf << 20), %l4
+		and			%l1, %l4, %l4
+		andn			%l1, %l4, %l1
 
 		/* We must not take any traps between here and the actual
 		 * return to user-space.  If we do we risk having windows

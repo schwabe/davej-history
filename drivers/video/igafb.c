@@ -367,7 +367,7 @@ static int iga_setcolreg(unsigned regno, unsigned red, unsigned green,
 	pci_outb(info, green, DAC_DATA);
 	pci_outb(info, blue,  DAC_DATA);
 
-	if (regno << 16)
+	if (regno < 16) {
 		switch (default_var.bits_per_pixel) {
 #ifdef FBCON_HAS_CFB16
 		case 16:
@@ -383,11 +383,14 @@ static int iga_setcolreg(unsigned regno, unsigned red, unsigned green,
 #endif
 #ifdef FBCON_HAS_CFB32
 		case 32:
+			{ int i;
 			i = (regno << 8) | regno;
 			info->fbcon_cmap.cfb32[regno] = (i << 16) | i;
+			}
 			break;
 #endif
 		}
+	}
 	return 0;
 }
 
@@ -508,19 +511,19 @@ static void igafb_set_disp(int con, struct fb_info_iga *info)
         case 15:
         case 16:
                 sw = &fbcon_cfb16;
-		display->dispsw_data = fbcon_cmap.cfb16;
+		display->dispsw_data = info->fbcon_cmap.cfb16;
                 break;
 #endif
 #ifdef FBCON_HAS_CFB24
 	case 24:
 		sw = &fbcon_cfb24;
-		display->dispsw_data = fbcon_cmap.cfb24;
+		display->dispsw_data = info->fbcon_cmap.cfb24;
 		break;
 #endif
 #ifdef FBCON_HAS_CFB32
         case 32:
                 sw = &fbcon_cfb32;
-		display->dispsw_data = fbcon_cmap.cfb32;
+		display->dispsw_data = info->fbcon_cmap.cfb32;
                 break;
 #endif
         default:

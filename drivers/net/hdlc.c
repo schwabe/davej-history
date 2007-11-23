@@ -878,10 +878,6 @@ static int hdlc_open(struct device *dev)
 	if (hdlc->mode==MODE_NONE)
 		return -ENOSYS;
 
-	result=hdlc->open(hdlc);
-	if (result)
-		return result;
-  
 	memset(&(hdlc->stats), 0, sizeof(struct net_device_stats));
 
 	if (mode_is(hdlc, MODE_FR | MODE_SOFT) ||
@@ -898,12 +894,28 @@ static int hdlc_open(struct device *dev)
 		result = sppp_open(dev);
 		if (result) {
 			sppp_detach(dev);
-			hdlc->close(hdlc);
 			return result;
 		}
 	}
 
-	return 0;
+	result=hdlc->open(hdlc);
+	if (result) {
+		if (mode_is(hdlc, MODE_FR | MODE_SOFT) ||
+		    mode_is(hdlc, MODE_CISCO | MODE_SOFT))
+			fr_cisco_close(hdlc);
+
+		else if (mode_is(hdlc, MODE_PPP | MODE_SOFT)) {
+			sppp_close(dev);
+			sppp_detach(dev);
+			dev->rebuild_header=NULL;
+			dev->change_mtu=hdlc_change_mtu;
+			dev->mtu=HDLC_MAX_MTU;
+			dev->hard_header_len=16;
+		}
+
+	}
+
+	return result;
 }
 
 
@@ -911,6 +923,8 @@ static int hdlc_open(struct device *dev)
 static int hdlc_close(struct device *dev)
 {
 	hdlc_device *hdlc=dev_to_hdlc(dev);
+
+	hdlc->close(hdlc);
 
 	if (mode_is(hdlc, MODE_FR | MODE_SOFT) ||
 	    mode_is(hdlc, MODE_CISCO | MODE_SOFT))
@@ -925,7 +939,6 @@ static int hdlc_close(struct device *dev)
 		dev->hard_header_len=16;
 	}
 
-	hdlc->close(hdlc);
 	return 0;
 }
 

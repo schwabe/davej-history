@@ -561,7 +561,7 @@ static inline int must_not_trace_exec(struct task_struct * p)
 
 /* 
  * Fill the binprm structure from the inode. 
- * Check permissions, then read the first 512 bytes
+ * Check permissions, then read the first 128 bytes
  */
 int prepare_binprm(struct linux_binprm *bprm)
 {

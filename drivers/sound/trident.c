@@ -1,6 +1,6 @@
 /*
  *
- *	Trident 4D-Wave/SiS 7018 OSS driver for Linux 2.2.x
+ *	Trident 4D-Wave/SiS 7018/ALi 5451 OSS driver for Linux 2.2.x
  *
  *	Driver: Alan Cox <alan@redhat.com>
  *
@@ -12,6 +12,7 @@
  *  Hacked up by:
  *	Aaron Holtzman <aholtzma@ess.engr.uvic.ca>
  *	Ollie Lho <ollie@sis.com.tw> SiS 7018 Audio Core Support
+ *	Ching Ling Lee <cling-li@ali.com.tw> ALi 5451 Audio Core Support 
  *
  *
  *	This program is free software; you can redistribute it and/or modify

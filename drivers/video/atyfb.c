@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.106.2.8 2000/04/28 04:40:09 davem Exp $
+/*  $Id: atyfb.c,v 1.106.2.9 2000/06/23 12:06:38 davem Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -466,7 +466,8 @@ static struct aty_features {
     { 0x4749, 0x4749, "3D RAGE PRO (BGA, PCI)" },
     { 0x4750, 0x4750, "3D RAGE PRO (PQFP, PCI)" },
     { 0x4751, 0x4751, "3D RAGE PRO (PQFP, PCI, limited 3D)" },
-    { 0x4c4e, 0x4c4e, "3D RAGE Mobility (AGP)" }, /* Doesn't quite work yet */
+    { 0x4c4d, 0x4c4d, "3D RAGE Mobility (PCI)" },
+    { 0x4c4e, 0x4c4e, "3D RAGE Mobility (AGP)" },
 };
 
 static const char *aty_gx_ram[8] __initdata = {
@@ -1795,7 +1796,7 @@ static void atyfb_set_par(const struct atyfb_par *par,
 	} else if ((Gx == VT_CHIP_ID) || (Gx == VU_CHIP_ID)) {
 	    aty_st_le32(DAC_CNTL, 0x87010184, info);
 	    aty_st_le32(BUS_CNTL, 0x680000f9, info);
-	} else if (Gx == LN_CHIP_ID) {
+	} else if ((Gx == LN_CHIP_ID) || (Gx == LM_CHIP_ID)) {
 	    aty_st_le32(DAC_CNTL, 0x80010102, info);
 	    aty_st_le32(BUS_CNTL, 0x7b33a040, info);
 	} else {
@@ -2583,10 +2584,10 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 		/* Rage LT */
 		pll = 230;
 		mclk = 63;
-	    } else if (Gx == LN_CHIP_ID) {
-	    	/* Rage mobility */
+	    } else if ((Gx == LN_CHIP_ID) || (Gx == LM_CHIP_ID)) {
+	    	/* Rage mobility M1 */
 	    	pll = 230;
-	    	mclk = 100;
+	    	mclk = 50;
 	    } else {
 		/* other RAGE */
 		pll = 135;

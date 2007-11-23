@@ -1272,8 +1272,11 @@ static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 			dmabuf->ready = 0;
 			if(val)
 				dmabuf->fmt |= CS_FMT_STEREO;
+#if 0				
+			/* Needs extra work to support this */				
 			else
 				dmabuf->fmt &= ~CS_FMT_STEREO;
+#endif				
 		}
 		return 0;
 
@@ -1290,12 +1293,12 @@ static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		}
 
 	case SNDCTL_DSP_GETFMTS: /* Returns a mask of supported sample format*/
-		return put_user(AFMT_S16_LE|AFMT_U8, (int *)arg);
+		return put_user(AFMT_S16_LE, (int *)arg);
 
 	case SNDCTL_DSP_SETFMT: /* Select sample format */
 		get_user_ret(val, (int *)arg, -EFAULT);
 		if (val != AFMT_QUERY) {
-			if(val==AFMT_S16_LE || val==AFMT_U8)
+			if(val==AFMT_S16_LE/* || val==AFMT_U8*/)
 			{
 				if (file->f_mode & FMODE_WRITE) {
 					stop_dac(state);
@@ -1322,13 +1325,18 @@ static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 			if (file->f_mode & FMODE_WRITE) {
 				stop_dac(state);
 				dmabuf->ready = 0;
+				if(val>1)
+					dmabuf->fmt |= CS_FMT_STEREO;
+				else
+					dmabuf->fmt &= ~CS_FMT_STEREO;
 			}
 			if (file->f_mode & FMODE_READ) {
 				stop_adc(state);
 				dmabuf->ready = 0;
 			}
 		}
-		return put_user(2, (int *)arg);
+		return put_user((dmabuf->fmt & CS_FMT_STEREO) ? 2 : 1,
+				(int *)arg);
 
 	case SNDCTL_DSP_POST:
 		/* FIXME: the same as RESET ?? */
@@ -1393,7 +1401,7 @@ static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		return 0;
 
 	case SNDCTL_DSP_GETCAPS:
-	    return put_user(DSP_CAP_REALTIME|DSP_CAP_TRIGGER|DSP_CAP_MMAP,
+		return put_user(DSP_CAP_REALTIME|DSP_CAP_TRIGGER|DSP_CAP_MMAP,
 			    (int *)arg);
 
 	case SNDCTL_DSP_GETTRIGGER:
@@ -1543,21 +1551,23 @@ static int cs_open(struct inode *inode, struct file *file)
 	   should be default to unsigned 8-bits, mono, with sample rate 8kHz and
 	   /dev/dspW will accept 16-bits sample */
 	if (file->f_mode & FMODE_WRITE) {
+		/* Output is 16bit only mono or stereo */
 		dmabuf->fmt &= ~CS_FMT_MASK;
 		dmabuf->fmt |= CS_FMT_16BIT;
 		dmabuf->ossfragshift = 0;
 		dmabuf->ossmaxfrags  = 0;
 		dmabuf->subdivision  = 0;
-		cs_set_dac_rate(state, 48000);
+		cs_set_dac_rate(state, 8000);
 	}
 
 	if (file->f_mode & FMODE_READ) {
+		/* Input is 16bit stereo only */
 		dmabuf->fmt &= ~CS_FMT_MASK;
-		dmabuf->fmt |= CS_FMT_16BIT;
+		dmabuf->fmt |= CS_FMT_16BIT|CS_FMT_STEREO;
 		dmabuf->ossfragshift = 0;
 		dmabuf->ossmaxfrags  = 0;
 		dmabuf->subdivision  = 0;
-		cs_set_adc_rate(state, 48000);
+		cs_set_adc_rate(state, 8000);
 	}
 
 	state->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
@@ -2212,7 +2222,7 @@ static int cs_hardware_init(struct cs_card *card)
 			break;
 		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout(1);
-	} while (end_time - (signed long)jiffies >= 0);
+	} while (time_before(end_time, jiffies));
 
 	/*
 	 *  Make sure CODEC is READY.
@@ -2243,7 +2253,7 @@ static int cs_hardware_init(struct cs_card *card)
 			break;
 		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout(1);
-	} while (end_time - (signed long)jiffies >= 0);
+	} while (time_before(end_time, jiffies));
 
 	/*
 	 *  Make sure input slots 3 and 4 are valid.  If not, then return

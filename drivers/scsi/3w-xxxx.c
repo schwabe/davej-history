@@ -2,8 +2,6 @@
    3w-xxxx.c -- 3ware Storage Controller device driver for Linux.
 
    Written By: Adam Radford <linux@3ware.com>
-   Modifications By: Joel Jacobson <linux@3ware.com>
-
    Copyright (C) 1999-2000 3ware Inc.
 
    Kernel compatablity By: 	Andre Hedrick <andre@suse.com>
@@ -49,19 +47,6 @@
 
    For more information, goto:
    http://www.3ware.com
-
-   History
-   -------
-   0.1.000 -     Initial release.
-   0.4.000 -     Added support for Asynchronous Event Notification through
-                 ioctls for 3DM.
-   1.0.000 -     Added DPO & FUA bit support for WRITE_10 & WRITE_6 cdb
-                 to disable drive write-cache before writes.
-   1.1.000 -     Fixed performance bug with DPO & FUA not existing for WRITE_6.
-   1.2.000 -     Added support for clean shutdown notification/feature table.
-   1.02.00.001 - Added support for full command packet posts through ioctls
-                 for 3DM.
-                 Bug fix so hot spare drives don't show up.
 */
 
 #include <linux/module.h>
@@ -80,7 +65,6 @@ MODULE_DESCRIPTION ("3ware Storage Controller Linux Driver");
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/smp.h>
-#include <linux/reboot.h>
 
 #include <asm/spinlock.h>
 #include <asm/errno.h>
@@ -99,12 +83,6 @@ MODULE_DESCRIPTION ("3ware Storage Controller Linux Driver");
 static int tw_copy_info(TW_Info *info, char *fmt, ...);
 static void tw_copy_mem_info(TW_Info *info, char *data, int len);
 static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs);
-static int tw_halt(struct notifier_block *nb, ulong event, void *buf);
-
-/* Notifier block to get a notify on system shutdown/halt/reboot */
-static struct notifier_block tw_notifier = {
-  tw_halt, NULL, 0
-};
 
 struct proc_dir_entry tw_scsi_proc_entry = {
 	PROC_SCSI_3W_XXXX,
@@ -113,7 +91,7 @@ struct proc_dir_entry tw_scsi_proc_entry = {
 };
 
 /* Globals */
-char *tw_driver_version="1.02.00.001";
+char *tw_driver_version="1.1.000";
 TW_Device_Extension *tw_device_extension_list[TW_MAX_SLOT];
 int tw_device_extension_count = 0;
 
@@ -252,7 +230,7 @@ int tw_aen_drain_queue(TW_Device_Extension *tw_dev)
 				if (command_packet->status != 0) {
 					if (command_packet->flags != TW_AEN_TABLE_UNDEFINED) {
 						/* Bad response */
-						printk(KERN_WARNING "3w-xxxx: tw_aen_drain_queue(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+						printk(KERN_WARNING "3w-xxxx: tw_aen_drain_queue(): Bad response, flags = 0x%x.\n", command_packet->flags);
 						return 1;
 					} else {
 						/* We know this is a 3w-1x00, and doesn't support aen's */
@@ -590,7 +568,6 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 	TW_Device_Extension *tw_dev2;
 	struct pci_dev *tw_pci_dev = pci_devices;
 	u32 status_reg_value;
-	unsigned char c = 1;
 
 	dprintk(KERN_NOTICE "3w-xxxx: tw_findcards()\n");
 	while ((tw_pci_dev = pci_find_device(TW_VENDOR_ID, TW_DEVICE_ID, tw_pci_dev))) {
@@ -689,7 +666,7 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 			continue;
 		}
 
-		error = tw_initconnection(tw_dev, TW_INIT_MESSAGE_CREDITS);
+		error = tw_initconnection(tw_dev);
 		if (error) {
 			printk(KERN_WARNING "3w-xxxx: tw_findcards(): Couldn't initconnection for card %d.\n", numcards);
 			release_region((tw_dev->tw_pci_dev->base_address[0]), TW_IO_ADDRESS_RANGE);
@@ -749,14 +726,10 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 		/* Free the temporary device extension */
 		if (tw_dev)
 			kfree(tw_dev);
-		/* Tell the firmware we support shutdown notification*/
-		tw_setfeature(tw_dev, 2, 1, &c);
 	}
 
 	if (numcards == 0) 
 		printk(KERN_WARNING "3w-xxxx: tw_findcards(): No cards found.\n");
-	else
-	  register_reboot_notifier(&tw_notifier);
 
 	return numcards;
 } /* End tw_findcards() */
@@ -778,22 +751,8 @@ void tw_free_device_extension(TW_Device_Extension *tw_dev)
 	}
 } /* End tw_free_device_extension() */
 
-/* Clean shutdown routine */
-static int tw_halt(struct notifier_block *nb, ulong event, void *buf)
-{
-	int i;
-	
-	for (i=0;i<tw_device_extension_count;i++) {
-		printk(KERN_NOTICE "3w-xxxx: Notifying card #%d\n", i);
-		tw_shutdown_device(tw_device_extension_list[i]);
-	}
-	unregister_reboot_notifier(&tw_notifier);
-	
-	return NOTIFY_OK;
-} /* End tw_halt() */
-
 /* This function will send an initconnection command to controller */
-int tw_initconnection(TW_Device_Extension *tw_dev, int message_credits) 
+int tw_initconnection(TW_Device_Extension *tw_dev) 
 {
 	u32 command_que_addr, command_que_value;
 	u32 status_reg_addr, status_reg_value;
@@ -825,7 +784,7 @@ int tw_initconnection(TW_Device_Extension *tw_dev, int message_credits)
 	command_packet->byte3.host_id = 0x0;
 	command_packet->status = 0x0;
 	command_packet->flags = 0x0;
-	command_packet->byte6.message_credits = message_credits; 
+	command_packet->byte6.message_credits = TW_INIT_MESSAGE_CREDITS; 
 	command_packet->byte8.init_connection.response_queue_pointer = 0x0;
 	command_que_value = tw_dev->command_packet_physical_address[request_id];
 
@@ -856,7 +815,7 @@ int tw_initconnection(TW_Device_Extension *tw_dev, int message_credits)
 			}
 			if (command_packet->status != 0) {
 				/* bad response */
-				printk(KERN_WARNING "3w-xxxx: tw_initconnection(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+				printk(KERN_WARNING "3w-xxxx: tw_initconnection(): Bad response, flags = 0x%x.\n", command_packet->flags);
 				return 1;
 			}
 			break;	/* Response was okay, so we exit */
@@ -1003,7 +962,7 @@ int tw_initialize_units(TW_Device_Extension *tw_dev)
 			}
 			if (command_packet->status != 0) {
 				/* bad response */
-				printk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+				printk(KERN_WARNING "3w-xxxx: tw_initialize_units(): Bad response, flags = 0x%x.\n", command_packet->flags);
 				return 1;
 			}
 			found = 1;
@@ -1025,11 +984,9 @@ int tw_initialize_units(TW_Device_Extension *tw_dev)
 		if (is_unit_present[i] == 0) {
 			tw_dev->is_unit_present[i] = FALSE;
 		} else {
-		  if (is_unit_present[i] & TW_UNIT_ONLINE) {
 			dprintk(KERN_NOTICE "3w-xxxx: tw_initialize_units(): Unit %d found.\n", i);
 			tw_dev->is_unit_present[i] = TRUE;
 			num_units++;
-		  }
 		}
 	}
 	tw_dev->num_units = num_units;
@@ -1133,7 +1090,7 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				request_id = response_que.u.response_id;
 				command_packet = (TW_Command *)tw_dev->command_packet_virtual_address[request_id];
 				if (command_packet->status != 0) {
-					printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
+					printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Bad response, flags = 0x%x.\n", command_packet->flags);
 				}
 				if (tw_dev->state[request_id] != TW_S_POSTED) {
 					printk(KERN_WARNING "3w-xxxx: tw_interrupt(): Received a request id (%d) (opcode = 0x%x) that wasn't posted.\n", request_id, command_packet->byte0.opcode);
@@ -1229,7 +1186,7 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 	/* Initialize command packet */
 	command_packet = (TW_Command *)tw_dev->command_packet_virtual_address[request_id];
 	if (command_packet == NULL) {
-		printk(KERN_WARNING "3w-xxxx: tw_ioctl(): Bad command packet virtual address.\n");
+		printk(KERN_WARNING "3w-xxxx: twioctl(): Bad command packet virtual address.\n");
 		tw_dev->state[request_id] = TW_S_COMPLETED;
 		tw_state_request_finish(tw_dev, request_id);
 		tw_dev->srb[request_id]->result = (DID_OK << 16);
@@ -1299,12 +1256,6 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 			tw_dev->srb[request_id]->result = (DID_OK << 16);
 			tw_dev->srb[request_id]->scsi_done(tw_dev->srb[request_id]);
 			return 0;
-		case TW_CMD_PACKET:
-		  memcpy(command_packet, ioctl->data, sizeof(TW_Command));
-		  command_packet->request_id = request_id;
-		  tw_post_command_packet(tw_dev, request_id);
-		
-		  return 0;
 		default:
 			printk(KERN_WARNING "3w-xxxx: Unknown ioctl 0x%x.\n", opcode);
 			tw_dev->state[request_id] = TW_S_COMPLETED;
@@ -1529,7 +1480,7 @@ int tw_reset_sequence(TW_Device_Extension *tw_dev)
 		return 1;
 	}
 
-	error = tw_initconnection(tw_dev, TW_INIT_MESSAGE_CREDITS);
+	error = tw_initconnection(tw_dev);
 	if (error) {
 		printk(KERN_WARNING "3w-xxxx: tw_reset_sequence(): Couldn't initconnection for card %d.\n", tw_dev->host->host_no);
 		return 1;
@@ -1853,11 +1804,6 @@ int tw_scsi_release(struct Scsi_Host *tw_host)
 	/* Tell kernel scsi-layer we are gone */
 	scsi_unregister(tw_host);
 
-	/* Fake like we just shut down, so notify the card that
-	 * we "shut down cleanly".
-	 */
-	tw_halt(0, 0, 0);  // parameters aren't actually used
-
 	return 0;
 } /* End tw_scsi_release() */
 
@@ -1955,10 +1901,8 @@ int tw_scsiop_inquiry_complete(TW_Device_Extension *tw_dev, int request_id)
 		if (is_unit_present[i] == 0) {
 			tw_dev->is_unit_present[i] = FALSE;
 		} else {
-		  if (is_unit_present[i] & TW_UNIT_ONLINE) {
 			tw_dev->is_unit_present[i] = TRUE;
 			dprintk(KERN_NOTICE "3w-xxxx: tw_scsiop_inquiry_complete: Unit %d found.\n", i);
-		  }
 		}
 	}
 
@@ -2181,92 +2125,6 @@ int tw_scsiop_test_unit_ready(TW_Device_Extension *tw_dev, int request_id)
 	return 0;
 } /* End tw_scsiop_test_unit_ready() */
 
-/* Set a value in the features table */
-int tw_setfeature(TW_Device_Extension *tw_dev, int parm, int param_size,
-                  unsigned char *val)
-{
-	TW_Param *param;
-	TW_Command  *command_packet;
-	TW_Response_Queue response_queue;
-	int request_id = 0;
-	u32 command_que_value, command_que_addr;
-	u32 status_reg_addr, status_reg_value;
-	u32 response_que_addr;
-	u32 param_value;
-	int imax, i;
-
-	/* Initialize SetParam command packet */
-	if (tw_dev->command_packet_virtual_address[request_id] == NULL) {
-		printk(KERN_WARNING "3w-xxxx: tw_setfeature(): Bad command packet virtual address.\n");
-		return 1;
-	}
-	command_packet = (TW_Command *)tw_dev->command_packet_virtual_address[request_id];
-	memset(command_packet, 0, sizeof(TW_Sector));
-	param = (TW_Param *)tw_dev->alignment_virtual_address[request_id];
-
-	command_packet->byte0.opcode = TW_OP_SET_PARAM;
-	command_packet->byte0.sgl_offset  = 2;
-	param->table_id = 0x404;  /* Features table */
-	param->parameter_id = parm;
-	param->parameter_size_bytes = param_size;
-	memcpy(param->data, val, param_size);
-
-	param_value = tw_dev->alignment_physical_address[request_id];
-	if (param_value == 0) {
-		printk(KERN_WARNING "3w-xxxx: tw_ioctl(): Bad alignment physical address.\n");
-		tw_dev->state[request_id] = TW_S_COMPLETED;
-		tw_state_request_finish(tw_dev, request_id);
-		tw_dev->srb[request_id]->result = (DID_OK << 16);
-		tw_dev->srb[request_id]->scsi_done(tw_dev->srb[request_id]);
-	}
-	command_packet->byte8.param.sgl[0].address = param_value;
-	command_packet->byte8.param.sgl[0].length = sizeof(TW_Sector);
-
-	command_packet->size = 4;
-	command_packet->request_id = request_id;
-	command_packet->byte6.parameter_count = 1;
-
-	command_que_value = tw_dev->command_packet_physical_address[request_id];
-	if (command_que_value == 0) {
-		printk(KERN_WARNING "3w-xxxx: tw_setfeature(): Bad command packet physical address.\n");
-		return 1;
-	}
-	command_que_addr = tw_dev->registers.command_que_addr;
-	status_reg_addr = tw_dev->registers.status_reg_addr;
-	response_que_addr = tw_dev->registers.response_que_addr;
-
-	/* Send command packet to the board */
-	outl(command_que_value, command_que_addr);
-
-	/* Poll for completion */
-	imax = TW_POLL_MAX_RETRIES;
-	for (i=0;i<imax;i++) {
-		mdelay(10);
-		status_reg_value = inl(status_reg_addr);
-		if (tw_check_bits(status_reg_value)) {
-			printk(KERN_WARNING "3w-xxxx: tw_setfeature(): Unexpected bits.\n");
-			return 1;
-		}
-		if ((status_reg_value & TW_STATUS_RESPONSE_QUEUE_EMPTY) == 0) {
-			response_queue.value = inl(response_que_addr);
-			request_id = (unsigned char)response_queue.u.response_id;
-			if (request_id != 0) {
-				/* unexpected request id */
-				printk(KERN_WARNING "3w-xxxx: tw_setfeature(): Unexpected request id.\n");
-				return 1;
-			}
-			if (command_packet->status != 0) {
-				/* bad response */
-				printk(KERN_WARNING "3w-xxxx: tw_setfeature(): Bad response, status = 0x%x, flags = 0x%x.\n", command_packet->status, command_packet->flags);
-				return 1;
-			}
-			break; /* Response was okay, so we exit */
-		}
-	}
-
-	return 0;
-} /* End tw_setfeature() */
-
 /* This function will setup the interrupt handler */
 int tw_setup_irq(TW_Device_Extension *tw_dev)
 {
@@ -2282,29 +2140,6 @@ int tw_setup_irq(TW_Device_Extension *tw_dev)
 	}
 	return 0;
 } /* End tw_setup_irq() */
-
-/* This function will tell the controller we're shutting down by sending
-   initconnection with a 1 */
-int tw_shutdown_device(TW_Device_Extension *tw_dev)
-{
-	int error;
-
-	/* Disable interrupts */
-	tw_disable_interrupts(tw_dev);
-
-	/* poke the board */
-	error = tw_initconnection(tw_dev, 1);
-	if (error) {
-		printk(KERN_WARNING "3w-xxxx: tw_shutdown_device(): Couldn't initconnection for card %d.\n", tw_dev->host->host_no);
-	} else {
-		printk(KERN_NOTICE "3w-xxxx shutdown succeeded\n");
-	}
-
-	/* Re-enable interrupts */
-	tw_enable_interrupts(tw_dev);
-
-	return 0;
-} /* End tw_shutdown_device() */
 
 /* This function will soft reset the controller */
 void tw_soft_reset(TW_Device_Extension *tw_dev) 

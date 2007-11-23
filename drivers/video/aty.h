@@ -745,7 +745,8 @@
 #define GI_CHIP_ID	0x4749	/* RAGE PRO, BGA, PCI33 only */
 #define GP_CHIP_ID	0x4750	/* RAGE PRO, PQFP, PCI33, full 3D */
 #define GQ_CHIP_ID	0x4751	/* RAGE PRO, PQFP, PCI33, limited 3D */
-#define LN_CHIP_ID	0x4c4d	/* RAGE Mobility AGP */
+#define LM_CHIP_ID	0x4c4d	/* RAGE Mobility PCI */
+#define LN_CHIP_ID	0x4c4e	/* RAGE Mobility AGP */
 
 
 /* Mach64 major ASIC revisions */
