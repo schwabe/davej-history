@@ -43,6 +43,9 @@
  *	    moved bh's to tasklets, moved to the new PCI driver initialization style.
  *	0.6 Make use of pci_alloc_consistent, improve compatibility layer for 2.2 kernels,
  *	    code reorganization and cleanup.
+ *      0.7 Support for the Emu-APS. Bug fixes for voice cache setup, mmaped sound + poll().
+ *	    Support for setting external TRAM size.
+ *	
  **********************************************************************
  */
 
@@ -61,8 +64,9 @@
 #include "cardmo.h"
 #include "cardmi.h"
 #include "recmgr.h"
+#include "ecard.h"
 
-#define DRIVER_VERSION "0.6"
+#define DRIVER_VERSION "0.7"
 
 /* FIXME: is this right? */
 /* does the card support 32 bit bus master?*/
@@ -76,6 +80,8 @@
 #define PCI_DEVICE_ID_CREATIVE_EMU10K1 0x0002
 #endif
 
+#define EMU_APS_SUBID	0x40011102
+ 
 enum {
 	EMU10K1 = 0,
 };
@@ -103,32 +109,38 @@ extern struct file_operations emu10k1_midi_fops;
 extern void emu10k1_interrupt(int, void *, struct pt_regs *s);
 extern int emu10k1_mixer_wrch(struct emu10k1_card *, unsigned int, int);
 
-static int __devinit audio_init(struct emu10k1_card *card)
+static void __devinit audio_init(struct emu10k1_card *card)
 {
-	if ((card->waveout = kmalloc(sizeof(struct emu10k1_waveout), GFP_KERNEL)) == NULL) {
-		printk(KERN_WARNING "emu10k1: Unable to allocate emu10k1_waveout: out of memory\n");
-		return -1;
-	}
-	memset(card->waveout, 0, sizeof(struct emu10k1_waveout));
+	/* Assign default playback voice parameters */
+	/* mono voice */
+	card->waveout.send_a[0] = 0x00;
+	card->waveout.send_b[0] = 0xff;
+	card->waveout.send_c[0] = 0xff;
+	card->waveout.send_d[0] = 0x00;
+	card->waveout.send_routing[0] = 0xd01c;
 
-	/* Assign default global volume, reverb, chorus */
-	card->waveout->globalvol = 0xffffffff;
-	card->waveout->left = 0xffff;
-	card->waveout->right = 0xffff;
-	card->waveout->mute = 0;
-	card->waveout->globalreverb = 0xffffffff;
-	card->waveout->globalchorus = 0xffffffff;
+	/* stereo voice */
+	card->waveout.send_a[1] = 0x00;
+        card->waveout.send_b[1] = 0xff;
+        card->waveout.send_c[1] = 0x00;
+        card->waveout.send_d[1] = 0x00;
+        card->waveout.send_routing[1] = 0xd01c;
 
-	if ((card->wavein = kmalloc(sizeof(struct emu10k1_wavein), GFP_KERNEL))
-	    == NULL) {
-		printk(KERN_WARNING "emu10k1: Unable to allocate emu10k1_wavein: out of memory\n");
-		return -1;
-	}
-	memset(card->wavein, 0, sizeof(struct emu10k1_wavein));
+	card->waveout.send_a[2] = 0x00;
+        card->waveout.send_b[2] = 0x00;
+        card->waveout.send_c[2] = 0xff;
+        card->waveout.send_d[2] = 0x00;
+        card->waveout.send_routing[2] = 0xd01c;
 
-	card->wavein->recsrc = WAVERECORD_AC97;
+	/* Assign default recording parameters */
+	if(card->isaps)
+		card->wavein.recsrc = WAVERECORD_FX;
+	else
+		card->wavein.recsrc = WAVERECORD_AC97;
 
-	return 0;
+	card->wavein.fxwc = 0x0003;
+
+	return;
 }
 
 static void __devinit mixer_init(struct emu10k1_card *card)
@@ -160,45 +172,48 @@ static void __devinit mixer_init(struct emu10k1_card *card)
 		94, 95
 	};
 
-	/* Reset */
-	sblive_writeac97(card, AC97_RESET, 0);
-
-#if 0
-	/* Check status word */
-	{
-		u16 reg;
-
-		sblive_readac97(card, AC97_RESET, &reg);
-		DPD(2, "RESET 0x%x\n", reg);
-		sblive_readac97(card, AC97_MASTERTONE, &reg);
-		DPD(2, "MASTER_TONE 0x%x\n", reg);
-	}
-#endif
-
-	/* Set default recording source to mic in */
-	sblive_writeac97(card, AC97_RECORDSELECT, 0);
-
-	/* Set default AC97 "PCM" volume to acceptable max */
-	//sblive_writeac97(card, AC97_PCMOUTVOLUME, 0);
-	//sblive_writeac97(card, AC97_LINE2, 0);
-
-	/* Set default volumes for all mixer channels */
-
 	for (count = 0; count < sizeof(card->digmix) / sizeof(card->digmix[0]); count++) {
 		card->digmix[count] = 0x80000000;
 		sblive_writeptr(card, FXGPREGBASE + 0x10 + count, 0, 0);
 	}
 
-	for (count = 0; count < sizeof(initdig) / sizeof(initdig[0]); count++) {
-		card->digmix[initdig[count]] = 0x7fffffff;
-		sblive_writeptr(card, FXGPREGBASE + 0x10 + initdig[count], 0, 0x7fffffff);
+	card->modcnt = 0;       // Should this be here or in open() ?
+
+	if (!card->isaps) {
+
+		for (count = 0; count < sizeof(initdig) / sizeof(initdig[0]); count++) {
+			card->digmix[initdig[count]] = 0x7fffffff;
+			sblive_writeptr(card, FXGPREGBASE + 0x10 + initdig[count], 0, 0x7fffffff);
+		}
+
+		/* Reset */
+		sblive_writeac97(card, AC97_RESET, 0);
+
+#if 0
+		/* Check status word */
+		{
+			u16 reg;
+
+			sblive_readac97(card, AC97_RESET, &reg);
+			DPD(2, "RESET 0x%x\n", reg);
+			sblive_readac97(card, AC97_MASTERTONE, &reg);
+			DPD(2, "MASTER_TONE 0x%x\n", reg);
+		}
+#endif
+
+		/* Set default recording source to mic in */
+		sblive_writeac97(card, AC97_RECORDSELECT, 0);
+
+		/* Set default AC97 "PCM" volume to acceptable max */
+		//sblive_writeac97(card, AC97_PCMOUTVOLUME, 0);
+		//sblive_writeac97(card, AC97_LINE2, 0);
 	}
+
+	/* Set default volumes for all mixer channels */
 
 	for (count = 0; count < sizeof(initvol) / sizeof(initvol[0]); count++) {
 		emu10k1_mixer_wrch(card, initvol[count].mixch, initvol[count].vol);
 	}
-
-	card->modcnt = 0;	// Should this be here or in open() ?
 
 	return;
 }
@@ -236,7 +251,7 @@ static int __devinit midi_init(struct emu10k1_card *card)
 	spin_lock_init(&card->mpuin->lock);
 
 	/* Reset the MPU port */
-	if (emu10k1_mpu_reset(card) != CTSTATUS_SUCCESS) {
+	if (emu10k1_mpu_reset(card) < 0) {
 		ERROR();
 		return -1;
 	}
@@ -280,7 +295,10 @@ static void __devinit addxmgr_init(struct emu10k1_card *card)
 
 static void __devinit fx_init(struct emu10k1_card *card)
 {
-	int i, j, k, l;
+	int i, j, k;
+#ifdef TONE_CONTROL
+	int l;
+#endif	
 	u32 pc = 0;
 
 	for (i = 0; i < 512; i++)
@@ -309,6 +327,7 @@ static void __devinit fx_init(struct emu10k1_card *card)
 			OP(0, 0x102, 0x102, 0x11a + k, 0x16 + j);
 			OP(0, 0x102, 0x102, 0x11c + k, 0x18 + j);
 			OP(0, 0x102, 0x102, 0x11e + k, 0x1a + j);
+#ifdef TONE_CONTROL
 			OP(0, 0x102, 0x102, 0x120 + k, 0x1c + j);
 
 			k = 0x1a0 + i * 8 + j * 4;
@@ -327,10 +346,13 @@ static void __devinit fx_init(struct emu10k1_card *card)
 			OP(0, l + 2, 0x56, l + 2, 0x196 + j);
 			OP(4, l + 2, 0x40, l + 2, 0x46);
 
-			if (i == 0)
-				OP(0, 0x20 + (i * 2) + j, 0x40, l + 2, 0x4e);	/* FIXME: Is this really needed? */
+			if ((i == 0) && !card->isaps)
+				OP(4, 0x20 + (i * 2) + j, 0x40, l + 2, 0x50);	/* FIXME: Is this really needed? */
 			else
 				OP(6, 0x20 + (i * 2) + j, l + 2, 0x40, 0x40);
+#else
+			OP(0, 0x20 + (i * 2) + j, 0x102, 0x120 + k, 0x1c + j);
+#endif
 		}
 	}
 	sblive_writeptr(card, DBG, 0, 0);
@@ -482,7 +504,7 @@ static int __devinit hw_init(struct emu10k1_card *card)
 	sblive_writeac97(card, AC97_PCMOUTVOLUME, 0);
 
 	if(card->model == 0x20 || card->model == 0xc400 ||
-	  (card->model == 0x21 && card->chiprev <= 3))
+	  (card->model == 0x21 && card->chiprev < 6))
 	        emu10k1_writefn0(card, HCFG, HCFG_AUDIOENABLE  | HCFG_LOCKTANKCACHE_MASK | HCFG_AUTOMUTE);
 	else
 		emu10k1_writefn0(card, HCFG, HCFG_AUDIOENABLE  | HCFG_LOCKTANKCACHE_MASK | HCFG_AUTOMUTE | HCFG_JOYENABLE);
@@ -518,13 +540,6 @@ static int __devinit emu10k1_init(struct emu10k1_card *card)
 	DPD(2, "  hw control register -> 0x%x\n", emu10k1_readfn0(card, HCFG));
 
 	return 0;
-}
-
-static void __devinit audio_exit(struct emu10k1_card *card)
-{
-	kfree(card->waveout);
-	kfree(card->wavein);
-	return;
 }
 
 static void __devexit midi_exit(struct emu10k1_card *card)
@@ -596,6 +611,7 @@ static void __devinit emu10k1_exit(struct emu10k1_card *card)
 static int __devinit emu10k1_probe(struct pci_dev *pci_dev, const struct pci_device_id *pci_id)
 {
 	struct emu10k1_card *card;
+	u32 subsysvid;
 
 	if ((card = kmalloc(sizeof(struct emu10k1_card), GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "emu10k1: out of memory\n");
@@ -644,18 +660,21 @@ static int __devinit emu10k1_probe(struct pci_dev *pci_dev, const struct pci_dev
 		card_names[pci_id->driver_data], card->chiprev, card->model, card->iobase,
 		card->iobase + card->length - 1, card->irq);
 
+	pci_read_config_dword(pci_dev, PCI_SUBSYSTEM_VENDOR_ID, &subsysvid);
+	card->isaps = (subsysvid == EMU_APS_SUBID);
+
 	spin_lock_init(&card->lock);
 	init_MUTEX(&card->open_sem);
 	card->open_mode = 0;
 	init_waitqueue_head(&card->open_wait);
 
 	/* Register devices */
-	if ((card->audio1_num = register_sound_dsp(&emu10k1_audio_fops, -1)) < 0) {
+	if ((card->audio_num = register_sound_dsp(&emu10k1_audio_fops, -1)) < 0) {
 		printk(KERN_ERR "emu10k1: cannot register first audio device!\n");
 		goto err_dev0;
 	}
 
-	if ((card->audio2_num = register_sound_dsp(&emu10k1_audio_fops, -1)) < 0) {
+	if ((card->audio1_num = register_sound_dsp(&emu10k1_audio_fops, -1)) < 0) {
 		printk(KERN_ERR "emu10k1: cannot register second audio device!\n");
 		goto err_dev1;
 	}
@@ -675,26 +694,22 @@ static int __devinit emu10k1_probe(struct pci_dev *pci_dev, const struct pci_dev
 		goto err_emu10k1_init;
 	}
 
-	if (audio_init(card) < 0) {
-		printk(KERN_ERR "emu10k1: cannot initialize audio!\n");
-		goto err_audio_init;
-	}
-
 	if (midi_init(card) < 0) {
 		printk(KERN_ERR "emu10k1: cannot initialize midi!\n");
 		goto err_midi_init;
 	}
 
+	audio_init(card);
 	mixer_init(card);
+
+	if (card->isaps)
+		emu10k1_ecard_init(card);
 
 	list_add(&card->list, &emu10k1_devs);
 
 	return 0;
 
       err_midi_init:
-	audio_exit(card);
-
-      err_audio_init:
 	emu10k1_exit(card);
 
       err_emu10k1_init:
@@ -704,10 +719,10 @@ static int __devinit emu10k1_probe(struct pci_dev *pci_dev, const struct pci_dev
 	unregister_sound_mixer(card->mixer_num);
 
       err_dev2:
-	unregister_sound_dsp(card->audio2_num);
+	unregister_sound_dsp(card->audio1_num);
 
       err_dev1:
-	unregister_sound_dsp(card->audio1_num);
+	unregister_sound_dsp(card->audio_num);
 
       err_dev0:
 	free_irq(card->irq, card);
@@ -724,13 +739,14 @@ static void __devexit emu10k1_remove(struct pci_dev *pci_dev)
 	struct emu10k1_card *card = PCI_GET_DRIVER_DATA(pci_dev);
 
 	midi_exit(card);
-	audio_exit(card);
 	emu10k1_exit(card);
 
 	unregister_sound_midi(card->midi_num);
+	
 	unregister_sound_mixer(card->mixer_num);
-	unregister_sound_dsp(card->audio2_num);
+
 	unregister_sound_dsp(card->audio1_num);
+	unregister_sound_dsp(card->audio_num);
 
 	free_irq(card->irq, card);
 	release_region(card->iobase, card->length);
@@ -772,6 +788,6 @@ module_exit(emu10k1_cleanup_module);
 #ifndef MODULE
 int __init init_emu10k1(void)
 {
-	return emu10k1_init_module();
+        return emu10k1_init_module();
 }
 #endif

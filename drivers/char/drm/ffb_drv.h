@@ -1,8 +1,18 @@
-/* $Id: drm-2.4.0-test6-pre5.patch,v 1.1 2000/08/06 05:24:31 notting Exp $
+/* $Id: ffb_drv.h,v 1.1.2.1 2000/09/05 00:10:45 davem Exp $
  * ffb_drv.h: Creator/Creator3D direct rendering driver.
  *
  * Copyright (C) 2000 David S. Miller (davem@redhat.com)
  */
+
+/* 2.2.x compat items. */
+#ifndef upa_readb
+#define upa_readb(x)		(*(volatile u8 *)(x))
+#define upa_readw(x)		(*(volatile u16 *)(x))
+#define upa_readl(x)		(*(volatile u32 *)(x))
+#define upa_writeb(val,x)	((*(volatile u8 *)(x)) = (val))
+#define upa_writew(val,x)	((*(volatile u16 *)(x)) = (val))
+#define upa_writel(val,x)	((*(volatile u32 *)(x)) = (val))
+#endif /* !defined(upa_readb) */
 
 /* Auxilliary clips. */
 typedef struct  {

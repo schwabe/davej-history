@@ -35,10 +35,13 @@
 
 #define __NO_VERSION__		/* Kernel version only defined once */
 #include <linux/module.h>
+#include <linux/version.h>
+#include <linux/bitops.h>
 #include <asm/uaccess.h>
 
 #include "hwaccess.h"
 #include "8010.h"
+#include "recmgr.h"
 
 #define AC97_PESSIMISTIC
 #undef OSS_DOCUMENTED_MIXER_SEMANTICS
@@ -49,31 +52,12 @@
 #define vol_to_sw_5(hwvol) (((31 - (hwvol)) * 100) / 31)
 #define vol_to_sw_4(hwvol) (((15 - (hwvol)) * 100) / 15)
 
+#define DM_MUTE 0x80000000
+
 #ifdef PRIVATE_PCM_VOLUME
 struct sblive_pcm_volume_rec sblive_pcm_volume[MAX_PCM_CHANNELS];
 u16 pcm_last_mixer = 0x6464;
 #endif
-
-/* --------------------------------------------------------------------- */
-
-/*
- * hweightN: returns the hamming weight (i.e. the number
- * of bits set) of a N-bit word
- */
-
-#ifdef hweight32
-#undef hweight32
-#endif
-
-extern __inline__ unsigned int hweight32(unsigned int w)
-{
-	unsigned int res = (w & 0x55555555) + ((w >> 1) & 0x55555555);
-
-	res = (res & 0x33333333) + ((res >> 2) & 0x33333333);
-	res = (res & 0x0F0F0F0F) + ((res >> 4) & 0x0F0F0F0F);
-	res = (res & 0x00FF00FF) + ((res >> 8) & 0x00FF00FF);
-	return (res & 0x0000FFFF) + ((res >> 16) & 0x0000FFFF);
-}
 
 /* Mapping arrays */
 static const unsigned int recsrc[] = {
@@ -85,10 +69,10 @@ static const unsigned int recsrc[] = {
 	SOUND_MASK_VOLUME,
 	SOUND_MASK_OGAIN,	/* Used to be PHONEOUT */
 	SOUND_MASK_PHONEIN,
+#ifdef TONE_CONTROL
 	SOUND_MASK_TREBLE,
 	SOUND_MASK_BASS,
-	SOUND_MASK_MONITOR,
-	SOUND_MASK_PCM,
+#endif
 };
 
 static const unsigned char volreg[SOUND_MIXER_NRDEVICES] = {
@@ -135,12 +119,25 @@ static int mixer_rdch(struct emu10k1_card *card, unsigned int ch, int *arg)
 	int nL, nR;
 
 	switch (ch) {
+	case SOUND_MIXER_PCM:
+	case SOUND_MIXER_VOLUME:
+#ifdef TONE_CONTROL
+	case SOUND_MIXER_TREBLE:
+        case SOUND_MIXER_BASS:
+#endif
+                return put_user(0x0000, (int *) arg);
+	default:
+		break;
+	}
+
+	if(card->isaps)
+		return -EINVAL;
+
+	switch (ch) {
 	case SOUND_MIXER_LINE:
 	case SOUND_MIXER_CD:
 	case SOUND_MIXER_VIDEO:
 	case SOUND_MIXER_LINE1:
-	case SOUND_MIXER_PCM:
-	case SOUND_MIXER_VOLUME:
 		sblive_readac97(card, volreg[ch], &reg);
 		nL = ((~(reg >> 8) & 0x1f) * 100) / 32;
 		nR = (~(reg & 0x1f) * 100) / 32;
@@ -166,9 +163,6 @@ static int mixer_rdch(struct emu10k1_card *card, unsigned int ch, int *arg)
 		nR = (~(reg & 0x1f) * 100) / 16;
 		return put_user(reg & 0x8000 ? 0 : (nL << 8) | nR, (int *) arg);
 
-	case SOUND_MIXER_TREBLE:
-	case SOUND_MIXER_BASS:
-		return put_user(0x0000, (int *) arg);
 	default:
 		return -EINVAL;
 	}
@@ -204,6 +198,8 @@ static const unsigned char volidx[SOUND_MIXER_NRDEVICES] = {
 	[SOUND_MIXER_DIGITAL1] = 18,
 	[SOUND_MIXER_DIGITAL2] = 19
 };
+
+#ifdef TONE_CONTROL
 
 static const u32 bass_table[41][5] = {
 	{ 0x3e4f844f, 0x84ed4cc3, 0x3cc69927, 0x7b03553a, 0xc4da8486 },
@@ -317,6 +313,8 @@ static void set_treble(struct emu10k1_card *card, int l, int r)
 	}
 }
 
+#endif
+
 static const u32 db_table[101] = {
 	0x00000000, 0x01571f82, 0x01674b41, 0x01783a1b, 0x0189f540,
 	0x019c8651, 0x01aff763, 0x01c45306, 0x01d9a446, 0x01eff6b8,
@@ -340,6 +338,29 @@ static const u32 db_table[101] = {
 	0x65ac8c2f, 0x6a773c39, 0x6f7bbc23, 0x74bcc56c, 0x7a3d3272,
 	0x7fffffff,
 };
+
+static void aps_update_digital(struct emu10k1_card *card)
+{
+	int i, l1, r1, l2, r2;
+	
+	i = card->arrwVol[volidx[SOUND_MIXER_VOLUME]];
+	l1 = (i & 0xff);
+	r1 = ((i >> 8) & 0xff);
+
+	i = card->arrwVol[volidx[SOUND_MIXER_PCM]];
+	l2 = (i & 0xff);
+	r2 = ((i >> 8) & 0xff);
+	
+	for (i = 0; i < 108; i++) {
+		if (card->digmix[i] != DM_MUTE) {
+			if ((i % 18 >= 0) && (i % 18 < 4))
+				card->digmix[i] = ((i & 1) ? ((u64) db_table[r1] * (u64) db_table[r2]) : ((u64) db_table[l1] * (u64) db_table[l2])) >> 31;
+			else
+				card->digmix[i] = (i & 1) ? db_table[r1] : db_table[l1];
+			sblive_writeptr(card, FXGPREGBASE + 0x10 + i, 0, card->digmix[i]);
+		}
+	}
+}
 
 static void update_digital(struct emu10k1_card *card)
 {
@@ -378,7 +399,7 @@ static void update_digital(struct emu10k1_card *card)
 	}
 
 	for (i = 0; i < 36; i++) {
-		if (card->digmix[i] != 0x80000000) {
+		if (card->digmix[i] != DM_MUTE) {
 			if (((i >= 0) && (i < 4)) || ((i >= 18) && (i < 22)))
 				j = (i & 1) ? ((u64) db_table[r1] * (u64) db_table[r3]) : ((u64) db_table[l1] * (u64) db_table[l3]);
 			else if ((i == 6) || (i == 7) || (i == 24) || (i == 25))
@@ -391,7 +412,7 @@ static void update_digital(struct emu10k1_card *card)
 	}
 
 	for (i = 72; i < 90; i++) {
-		if (card->digmix[i] != 0x80000000) {
+		if (card->digmix[i] != DM_MUTE) {
 			if ((i >= 72) && (i < 76))
 				j = (i & 1) ? ((u64) db_table[r2] * (u64) db_table[r3]) : ((u64) db_table[l2] * (u64) db_table[l3]);
 			else if ((i == 78) || (i == 79))
@@ -406,15 +427,15 @@ static void update_digital(struct emu10k1_card *card)
 	for (i = 36; i <= 90; i += 18) {
 		if (i != 72) {
 			for (k = 0; k < 4; k++)
-				if (card->digmix[i + k] != 0x80000000) {
+				if (card->digmix[i + k] != DM_MUTE) {
 					card->digmix[i + k] = db_table[l3];
 					sblive_writeptr(card, FXGPREGBASE + 0x10 + i + k, 0, card->digmix[i + k]);
 				}
-			if (card->digmix[i + 6] != 0x80000000) {
+			if (card->digmix[i + 6] != DM_MUTE) {
 				card->digmix[i + 6] = db_table[l4];
 				sblive_writeptr(card, FXGPREGBASE + 0x10 + i + 6, 0, card->digmix[i + 6]);
 			}
-			if (card->digmix[i + 7] != 0x80000000) {
+			if (card->digmix[i + 7] != DM_MUTE) {
 				card->digmix[i + 7] = db_table[r4];
 				sblive_writeptr(card, FXGPREGBASE + 0x10 + i + 7, 0, card->digmix[i + 7]);
 			}
@@ -506,10 +527,11 @@ int emu10k1_mixer_wrch(struct emu10k1_card *card, unsigned int ch, int val)
 
 	switch (ch) {
 	case SOUND_MIXER_VOLUME:
-	case SOUND_MIXER_DIGITAL1:
-	case SOUND_MIXER_LINE3:
-		DPD(4, "SOUND_MIXER_%s:\n", (ch == SOUND_MIXER_VOLUME) ? "VOLUME" : (ch == SOUND_MIXER_DIGITAL1) ? "DIGITAL1" : "LINE3");
-		update_digital(card);
+		DPF(4, "SOUND_MIXER_VOLUME:\n");
+		if (card->isaps)
+			aps_update_digital(card);
+		else
+			update_digital(card);
 		return 0;
 	case SOUND_MIXER_PCM:
 		DPF(4, "SOUND_MIXER_PCM\n");
@@ -517,6 +539,34 @@ int emu10k1_mixer_wrch(struct emu10k1_card *card, unsigned int ch, int val)
 		if (update_pcm_attn(card, l1, r1))
 			return 0;
 #endif
+		if (card->isaps)
+			aps_update_digital(card);
+		else
+			update_digital(card);
+		return 0;
+#ifdef TONE_CONTROL
+	case SOUND_MIXER_TREBLE:
+                DPF(4, "SOUND_MIXER_TREBLE:\n");
+                set_treble(card, l1, r1);
+                return 0;
+
+        case SOUND_MIXER_BASS:
+                DPF(4, "SOUND_MIXER_BASS:\n");
+                set_bass(card, l1, r1);
+		return 0;
+#endif
+	default:
+		break;
+	}
+
+
+	if (card->isaps)
+		return -EINVAL;
+
+	switch (ch) {
+	case SOUND_MIXER_DIGITAL1:
+	case SOUND_MIXER_LINE3:
+		DPD(4, "SOUND_MIXER_%s:\n", (ch == SOUND_MIXER_DIGITAL1) ? "DIGITAL1" : "LINE3");
 		update_digital(card);
 		return 0;
 	case SOUND_MIXER_DIGITAL2:
@@ -573,16 +623,6 @@ int emu10k1_mixer_wrch(struct emu10k1_card *card, unsigned int ch, int val)
 		sblive_writeac97(card, volreg[ch], wval);
 		return 0;
 
-	case SOUND_MIXER_TREBLE:
-		DPF(4, "SOUND_MIXER_TREBLE:\n");
-		set_treble(card, l1, r1);
-		return 0;
-
-	case SOUND_MIXER_BASS:
-		DPF(4, "SOUND_MIXER_BASS:\n");
-		set_bass(card, l1, r1);
-		return 0;
-
 	default:
 		DPF(2, "Got unknown SOUND_MIXER ioctl\n");
 		return -EINVAL;
@@ -598,6 +638,10 @@ static loff_t emu10k1_mixer_llseek(struct file *file, loff_t offset, int origin)
 /* Mixer file operations */
 
 /* FIXME: Do we need spinlocks in here? */
+/* WARNING! not all the ioctl's are supported by the emu-APS
+   (anything AC97 related). As a general rule keep the AC97 related ioctls
+   separate from the rest. This will make it easier to rewrite the mixer
+   using the kernel AC97 interface. */ 
 static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
 	static const char id[] = "SBLive";
@@ -659,11 +703,10 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 			return -EFAULT;
 
 		for (i = 0; i < sizeof(card->digmix) / sizeof(card->digmix[0]); i++)
-			sblive_writeptr(card, FXGPREGBASE + 0x10 + i, 0, (card->digmix[i] & 0x80000000) ? 0 : card->digmix[i]);
+			sblive_writeptr(card, FXGPREGBASE + 0x10 + i, 0, (card->digmix[i] & DM_MUTE) ? 0 : card->digmix[i]);
 		return 0;
 
 		break;
-#ifdef EMU10K1_DEBUG
 	case SOUND_MIXER_PRIVATE3: {
 			struct mixer_private_ioctl ctl;
 
@@ -671,18 +714,28 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 				return -EFAULT;
 
 			switch (ctl.cmd) {
+#ifdef EMU10K1_DEBUG
 			case CMD_WRITEFN0:
-				if(ctl.val[0] >= 0x7f)
-					return -EINVAL;
-
 				emu10k1_writefn0(card, ctl.val[0], ctl.val[1]);
 				return 0;
 				break;
 
-			case CMD_READFN0:
-				if(ctl.val[0] >= 0x7f)
+			case CMD_WRITEPTR:
+				if(ctl.val[1] >= 0x40)
 					return -EINVAL;
 
+				if(ctl.val[0] > 0xff)
+					return -EINVAL;
+
+				if((ctl.val[0] & 0x7ff) > 0x3f)
+					ctl.val[1] = 0x00;
+
+				sblive_writeptr(card, ctl.val[0], ctl.val[1], ctl.val[2]);
+
+				return 0;
+				break;
+#endif
+			case CMD_READFN0:
 				ctl.val[2] = emu10k1_readfn0(card, ctl.val[0]);
 
 				if (copy_to_user((void *) arg, &ctl, sizeof(struct mixer_private_ioctl)))
@@ -691,29 +744,14 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 				return 0;
 				break;
 
-			case CMD_WRITEPTR:
-				if(ctl.val[1] < 0x00 || ctl.val[1] >= 0x40)
-					return -EINVAL;
-
-				if(ctl.val[0] >= 0x100)
-					return -EINVAL;
-
-				if(ctl.val[0] >= 0x40)
-					ctl.val[1] = 0x00;
-
-				sblive_writeptr(card, ctl.val[0], ctl.val[1], ctl.val[2]);
-
-				return 0;
-				break;
-
 			case CMD_READPTR:
-				if(ctl.val[1] < 0x00 || ctl.val[1] >= 0x40)
+				if(ctl.val[1] >= 0x40)
 					return -EINVAL;
 
-				if(ctl.val[0] >= 0x100)
+				if((ctl.val[0] & 0x7ff) > 0xff)
 					return -EINVAL;
 
-				if(ctl.val[0] > 0x40)
+				if((ctl.val[0] & 0x7ff) > 0x3f)
 					ctl.val[1] = 0x00;
 
 				ctl.val[2] = sblive_readptr(card, ctl.val[0], ctl.val[1]);
@@ -724,13 +762,86 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 				return 0;
 				break;
 
+			case CMD_SETRECSRC:
+				switch(ctl.val[0]){
+				case WAVERECORD_AC97:
+					if(card->isaps)
+						return -EINVAL;
+					card->wavein.recsrc = WAVERECORD_AC97;
+					break;
+				case WAVERECORD_MIC:	
+					card->wavein.recsrc = WAVERECORD_MIC;
+					break;
+				case WAVERECORD_FX:
+					card->wavein.recsrc = WAVERECORD_FX;
+					card->wavein.fxwc = ctl.val[1] & 0xffff;
+					if(!card->wavein.fxwc)
+						return -EINVAL;
+					break;
+				default:
+					return -EINVAL;
+				}
+				return 0;
+				break;
+
+			case CMD_GETRECSRC:
+				ctl.val[0] = card->wavein.recsrc;
+				ctl.val[1] = card->wavein.fxwc;
+				if (copy_to_user((void *) arg, &ctl, sizeof(struct mixer_private_ioctl)))
+					return -EFAULT;
+
+				return 0;
+				break;
+
+			case CMD_GETVOICEPARAM:
+
+				ctl.val[0] = card->waveout.send_routing[0];
+				ctl.val[1] = card->waveout.send_a[0] | card->waveout.send_b[0] << 8 |
+				             card->waveout.send_c[0] << 16 | card->waveout.send_d[0] << 24;
+
+				ctl.val[2] = card->waveout.send_routing[1]; 
+				ctl.val[3] = card->waveout.send_a[1] | card->waveout.send_b[1] << 8 |
+					     card->waveout.send_c[1] << 16 | card->waveout.send_d[1] << 24;
+
+				ctl.val[4] = card->waveout.send_routing[2]; 
+				ctl.val[5] = card->waveout.send_a[2] | card->waveout.send_b[2] << 8 |
+					     card->waveout.send_c[2] << 16 | card->waveout.send_d[2] << 24;
+
+				if (copy_to_user((void *) arg, &ctl, sizeof(struct mixer_private_ioctl)))
+					return -EFAULT;
+
+				return 0;
+				break;
+
+			case CMD_SETVOICEPARAM:
+				card->waveout.send_routing[0] = ctl.val[0] & 0xffff;
+				card->waveout.send_a[0] = ctl.val[1] & 0xff;
+				card->waveout.send_b[0] = (ctl.val[1] >> 8) & 0xff;
+				card->waveout.send_c[0] = (ctl.val[1] >> 16) & 0xff;
+				card->waveout.send_d[0] = (ctl.val[1] >> 24) & 0xff;
+
+				card->waveout.send_routing[1] = ctl.val[2] & 0xffff;
+				card->waveout.send_a[1] = ctl.val[3] & 0xff;
+				card->waveout.send_b[1] = (ctl.val[3] >> 8) & 0xff;
+				card->waveout.send_c[1] = (ctl.val[3] >> 16) & 0xff;
+				card->waveout.send_d[1] = (ctl.val[3] >> 24) & 0xff;
+
+				card->waveout.send_routing[2] = ctl.val[4] & 0xffff;
+				card->waveout.send_a[2] = ctl.val[5] & 0xff;
+				card->waveout.send_b[2] = (ctl.val[5] >> 8) & 0xff;
+				card->waveout.send_c[2] = (ctl.val[5] >> 16) & 0xff;
+				card->waveout.send_d[2] = (ctl.val[5] >> 24) & 0xff;
+
+				return 0;
+				break;
+
 			default:
 				return -EINVAL;
 				break;
 			}
 		}
 		break;
-#endif
+
 	case SOUND_MIXER_PRIVATE4:{
 			u32 size;
 			int size_reg = 0;
@@ -797,56 +908,106 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 
 	if (_IOC_DIR(cmd) == _IOC_READ) {
 		switch (_IOC_NR(cmd)) {
-		case SOUND_MIXER_RECSRC:	/* Arg contains a bit for each recording source */
-			DPF(2, "SOUND_MIXER_READ_RECSRC\n");
-			sblive_readac97(card, AC97_RECORDSELECT, &reg);
-			return put_user(recsrc[reg & 7], (int *) arg);
-
-		case SOUND_MIXER_DEVMASK:	/* Arg contains a bit for each supported device */
-			DPF(4, "SOUND_MIXER_READ_DEVMASK\n");
+			case SOUND_MIXER_DEVMASK:       /* Arg contains a bit for each supported device */
+                        DPF(4, "SOUND_MIXER_READ_DEVMASK\n");
+			if (card->isaps)
+#ifdef TONE_CONTROL
+				return put_user(SOUND_MASK_PCM | SOUND_MASK_VOLUME |
+						SOUND_MASK_BASS | SOUND_MASK_TREBLE,
+						(int *) arg); 
+#else
+				return put_user(SOUND_MASK_PCM | SOUND_MASK_VOLUME,
+						(int *) arg); 
+#endif
+		
+#ifdef TONE_CONTROL
 			return put_user(SOUND_MASK_LINE | SOUND_MASK_CD |
-					SOUND_MASK_OGAIN | SOUND_MASK_LINE1 |
-					SOUND_MASK_PCM | SOUND_MASK_VOLUME |
-					SOUND_MASK_PHONEIN | SOUND_MASK_MIC |
-					SOUND_MASK_BASS | SOUND_MASK_TREBLE |
-					SOUND_MASK_RECLEV | SOUND_MASK_SPEAKER |
-					SOUND_MASK_LINE3 | SOUND_MASK_DIGITAL1 | 
-					SOUND_MASK_DIGITAL2 | SOUND_MASK_LINE2, (int *) arg);
-		case SOUND_MIXER_RECMASK:	/* Arg contains a bit for each supported recording source */
-			DPF(2, "SOUND_MIXER_READ_RECMASK\n");
-			return put_user(SOUND_MASK_MIC | SOUND_MASK_CD |
-					SOUND_MASK_LINE1 | SOUND_MASK_LINE | 
-					SOUND_MASK_VOLUME | SOUND_MASK_OGAIN | 
-					SOUND_MASK_PHONEIN | SOUND_MASK_MONITOR | 
-					SOUND_MASK_PCM, (int *) arg);
-
-		case SOUND_MIXER_STEREODEVS:	/* Mixer channels supporting stereo */
-			DPF(2, "SOUND_MIXER_READ_STEREODEVS\n");
+                                        SOUND_MASK_OGAIN | SOUND_MASK_LINE1 |
+                                        SOUND_MASK_PCM | SOUND_MASK_VOLUME |
+                                        SOUND_MASK_PHONEIN | SOUND_MASK_MIC |
+                                        SOUND_MASK_BASS | SOUND_MASK_TREBLE |
+                                        SOUND_MASK_RECLEV | SOUND_MASK_SPEAKER |
+                                        SOUND_MASK_LINE3 | SOUND_MASK_DIGITAL1 | 
+                                        SOUND_MASK_DIGITAL2 | SOUND_MASK_LINE2, (int *) arg);
+#else
 			return put_user(SOUND_MASK_LINE | SOUND_MASK_CD |
+                                        SOUND_MASK_OGAIN | SOUND_MASK_LINE1 |
+                                        SOUND_MASK_PCM | SOUND_MASK_VOLUME |
+                                        SOUND_MASK_PHONEIN | SOUND_MASK_MIC |
+                                        SOUND_MASK_RECLEV | SOUND_MASK_SPEAKER |
+                                        SOUND_MASK_LINE3 | SOUND_MASK_DIGITAL1 | 
+                                        SOUND_MASK_DIGITAL2 | SOUND_MASK_LINE2, (int *) arg);
+#endif
+
+			case SOUND_MIXER_RECMASK:       /* Arg contains a bit for each supported recording source */
+				DPF(2, "SOUND_MIXER_READ_RECMASK\n");
+				if (card->isaps)
+					return put_user(0, (int *) arg);
+
+				return put_user(SOUND_MASK_MIC | SOUND_MASK_CD |
+					SOUND_MASK_LINE1 | SOUND_MASK_LINE |
+					SOUND_MASK_VOLUME | SOUND_MASK_OGAIN |
+					SOUND_MASK_PHONEIN, (int *) arg);
+
+			case SOUND_MIXER_STEREODEVS:    /* Mixer channels supporting stereo */
+				DPF(2, "SOUND_MIXER_READ_STEREODEVS\n");
+
+				if (card->isaps)
+#ifdef TONE_CONTROL
+					return put_user(SOUND_MASK_PCM | SOUND_MASK_VOLUME |
+                                        		SOUND_MASK_BASS | SOUND_MASK_TREBLE,
+                                        		(int *) arg);
+#else
+					return put_user(SOUND_MASK_PCM | SOUND_MASK_VOLUME,
+                                         		(int *) arg);
+#endif
+
+#ifdef TONE_CONTROL
+				return put_user(SOUND_MASK_LINE | SOUND_MASK_CD |
 					SOUND_MASK_OGAIN | SOUND_MASK_LINE1 |
 					SOUND_MASK_PCM | SOUND_MASK_VOLUME |
 					SOUND_MASK_BASS | SOUND_MASK_TREBLE |
 					SOUND_MASK_RECLEV | SOUND_MASK_LINE3 |
-					SOUND_MASK_DIGITAL1 | SOUND_MASK_DIGITAL2 | 
+					SOUND_MASK_DIGITAL1 | SOUND_MASK_DIGITAL2 |
 					SOUND_MASK_LINE2, (int *) arg);
-
-		case SOUND_MIXER_CAPS:
-			DPF(2, "SOUND_MIXER_READ_CAPS\n");
-			return put_user(SOUND_CAP_EXCL_INPUT, (int *) arg);
-
-#ifdef PRIVATE_PCM_VOLUME
-		case SOUND_MIXER_PCM:
-			/* needs to be before default: !!*/
-			{
-				int i;
-
-				for (i = 0; i < MAX_PCM_CHANNELS; i++) {
-					if (sblive_pcm_volume[i].files == current->files) {
-						return put_user((int) sblive_pcm_volume[i].mixer, (int *) arg);
-					}
-				}
-			}
+#else
+				return put_user(SOUND_MASK_LINE | SOUND_MASK_CD |
+					SOUND_MASK_OGAIN | SOUND_MASK_LINE1 |
+					SOUND_MASK_PCM | SOUND_MASK_VOLUME |
+					SOUND_MASK_RECLEV | SOUND_MASK_LINE3 |
+					SOUND_MASK_DIGITAL1 | SOUND_MASK_DIGITAL2 |
+					SOUND_MASK_LINE2, (int *) arg);
 #endif
+
+			case SOUND_MIXER_CAPS:
+				DPF(2, "SOUND_MIXER_READ_CAPS\n");
+				return put_user(SOUND_CAP_EXCL_INPUT, (int *) arg);
+#ifdef PRIVATE_PCM_VOLUME
+                case SOUND_MIXER_PCM:
+                        /* needs to be before default: !!*/
+                        {
+                                int i;
+
+                                for (i = 0; i < MAX_PCM_CHANNELS; i++) {
+                                        if (sblive_pcm_volume[i].files == current->files) {
+                                                return put_user((int) sblive_pcm_volume[i].mixer, (int *) arg);
+                                        }
+                                }
+                        }
+#endif
+		default:
+			break;
+		}
+
+		switch (_IOC_NR(cmd)) {
+		case SOUND_MIXER_RECSRC:	/* Arg contains a bit for each recording source */
+			DPF(2, "SOUND_MIXER_READ_RECSRC\n");
+			if (card->isaps)
+				return put_user(0, (int *) arg);
+
+			sblive_readac97(card, AC97_RECORDSELECT, &reg);
+			return put_user(recsrc[reg & 7], (int *) arg);
+
 		default:
 			i = _IOC_NR(cmd);
 			DPD(4, "SOUND_MIXER_READ(%d)\n", i);
@@ -862,6 +1023,7 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 #endif				/* OSS_DOCUMENTED_MIXER_SEMANTICS */
 		}
 	}
+
 	/* End of _IOC_READ */
 	if (_IOC_DIR(cmd) != (_IOC_READ | _IOC_WRITE))
 		return -EINVAL;
@@ -872,6 +1034,9 @@ static int emu10k1_mixer_ioctl(struct inode *inode, struct file *file, unsigned 
 	switch (_IOC_NR(cmd)) {
 	case SOUND_MIXER_RECSRC:	/* Arg contains a bit for each recording source */
 		DPF(2, "SOUND_MIXER_WRITE_RECSRC\n");
+
+		if (card->isaps)
+			return -EINVAL;
 
 		get_user_ret(val, (int *) arg, -EFAULT);
 		i = hweight32(val);
@@ -936,14 +1101,14 @@ static int emu10k1_mixer_open(struct inode *inode, struct file *file)
 
 static int emu10k1_mixer_release(struct inode *inode, struct file *file)
 {
-	DPF(3, "emu10k1_mixer_release()\n");
+	DPF(4, "emu10k1_mixer_release()\n");
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
 
 struct file_operations emu10k1_mixer_fops = {
-	llseek:emu10k1_mixer_llseek,
-	ioctl:emu10k1_mixer_ioctl,
-	open:emu10k1_mixer_open,
-	release:emu10k1_mixer_release,
+	llseek:		emu10k1_mixer_llseek,
+	ioctl:		emu10k1_mixer_ioctl,
+	open:		emu10k1_mixer_open,
+	release:	emu10k1_mixer_release,
 };

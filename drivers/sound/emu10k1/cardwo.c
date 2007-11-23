@@ -119,66 +119,86 @@ static void free_buffer(struct emu10k1_card *card, struct waveout_buffer *buffer
 
 static int get_voice(struct emu10k1_card *card, struct woinst *woinst)
 {
-	struct voice_allocdesc voice_allocdesc;
-
+	struct emu_voice *voice = &woinst->voice;
 	/* Allocate voices here, if no voices available, return error.
 	 * Init voice_allocdesc first.*/
 
-	voice_allocdesc.usage = VOICE_USAGE_PLAYBACK;
+	voice->usage = VOICE_USAGE_PLAYBACK;
 
-	voice_allocdesc.flags = 0;
+	voice->flags = 0;
 
 	if (woinst->format.channels == 2)
-		voice_allocdesc.flags |= VOICE_FLAGS_STEREO;
+		voice->flags |= VOICE_FLAGS_STEREO;
 
 	if (woinst->format.bitsperchannel == 16)
-		voice_allocdesc.flags |= VOICE_FLAGS_16BIT;
+		voice->flags |= VOICE_FLAGS_16BIT;
 
-	if (emu10k1_voice_alloc(card, &woinst->voice, &voice_allocdesc) < 0)
+	if (emu10k1_voice_alloc(card, voice) < 0)
 		return -1;
 
 	/* Calculate pitch */
-	woinst->voice.initial_pitch = (u16) (srToPitch(woinst->format.samplingrate) >> 8);
-	woinst->voice.pitch_target = samplerate_to_linearpitch(woinst->format.samplingrate);
+	voice->initial_pitch = (u16) (srToPitch(woinst->format.samplingrate) >> 8);
+	voice->pitch_target = samplerate_to_linearpitch(woinst->format.samplingrate);
 
-	DPD(2, "Initial pitch --> 0x%x\n", woinst->voice.initial_pitch);
+	DPD(2, "Initial pitch --> 0x%x\n", voice->initial_pitch);
 
-	woinst->voice.start = (woinst->buffer.emupageindex << 12) / woinst->format.bytespersample;
-	woinst->voice.end = woinst->voice.start + woinst->buffer.size / woinst->format.bytespersample;
-	woinst->voice.startloop = woinst->voice.start;
-	woinst->voice.endloop = woinst->voice.end;
+	voice->startloop = (woinst->buffer.emupageindex << 12) / woinst->format.bytespersample;
+	voice->endloop = voice->startloop + woinst->buffer.size / woinst->format.bytespersample;
+	voice->start = voice->startloop;
 
-	woinst->voice.params[0].send_a=0x00;
-	woinst->voice.params[0].send_b=0x00;
-	woinst->voice.params[0].send_c=0xff;
-	woinst->voice.params[0].send_d=0x00;
+	if (voice->flags & VOICE_FLAGS_STEREO) {
+		voice->params[0].send_a = card->waveout.send_a[1];
+		voice->params[0].send_b = card->waveout.send_b[1];
+		voice->params[0].send_c = card->waveout.send_c[1];
+		voice->params[0].send_d = card->waveout.send_d[1];
 
-	woinst->voice.params[0].bus_routing= (woinst->device == 1) ? 0xd23c : 0xd01c;
-	woinst->voice.params[0].volume_target=0xffff;
-	woinst->voice.params[0].initial_fc=0xff;
-	woinst->voice.params[0].initial_attn=0x00;
-	woinst->voice.params[0].byampl_env_sustain = 0x7f;
-	woinst->voice.params[0].byampl_env_decay = 0x7f;
+		if (woinst->device)
+			voice->params[0].send_routing = 0xd23c;
+		else
+			voice->params[0].send_routing = card->waveout.send_routing[1];
 
-	if (woinst->voice.flags & VOICE_FLAGS_STEREO) {
-		woinst->voice.params[1].send_a=0x00;
-		woinst->voice.params[1].send_b=0xff;		
-		woinst->voice.params[1].send_c=0x00;
-		woinst->voice.params[1].send_d=0x00;
+		voice->params[0].volume_target = 0xffff;
+		voice->params[0].initial_fc = 0xff;
+		voice->params[0].initial_attn = 0x00;
+		voice->params[0].byampl_env_sustain = 0x7f;
+		voice->params[0].byampl_env_decay = 0x7f;
 
-		woinst->voice.params[1].bus_routing= (woinst->device == 1) ? 0xd23c : 0xd01c;
-		woinst->voice.params[1].volume_target=0xffff;
-		woinst->voice.params[1].initial_fc=0xff;
-		woinst->voice.params[1].initial_attn=0x00;
-		woinst->voice.params[1].byampl_env_sustain = 0x7f;
-		woinst->voice.params[1].byampl_env_decay = 0x7f;
+		voice->params[1].send_a = card->waveout.send_a[2];
+		voice->params[1].send_b = card->waveout.send_b[2];
+		voice->params[1].send_c = card->waveout.send_c[2];
+		voice->params[1].send_d = card->waveout.send_d[2];
+
+		if (woinst->device)
+			voice->params[1].send_routing = 0xd23c;
+		else
+			voice->params[1].send_routing = card->waveout.send_routing[2];
+
+		voice->params[1].volume_target = 0xffff;
+		voice->params[1].initial_fc = 0xff;
+		voice->params[1].initial_attn = 0x00;
+		voice->params[1].byampl_env_sustain = 0x7f;
+		voice->params[1].byampl_env_decay = 0x7f;
 	} else {
-		woinst->voice.params[0].send_b=0xff;
+		voice->params[0].send_a = card->waveout.send_a[0];
+		voice->params[0].send_b = card->waveout.send_b[0];
+		voice->params[0].send_c = card->waveout.send_c[0];
+		voice->params[0].send_d = card->waveout.send_d[0];
+
+		if (woinst->device)
+                        voice->params[0].send_routing = 0xd23c;
+                else
+			voice->params[0].send_routing = card->waveout.send_routing[0];
+
+		voice->params[0].volume_target = 0xffff;
+		voice->params[0].initial_fc = 0xff;
+		voice->params[0].initial_attn = 0x00;
+		voice->params[0].byampl_env_sustain = 0x7f;
+		voice->params[0].byampl_env_decay = 0x7f;
 	}
 
-	DPD(2, "voice: start=0x%x, end=0x%x, startloop=0x%x, endloop=0x%x\n", woinst->voice.start, woinst->voice.end,woinst->voice.startloop, woinst->voice.endloop);
+	DPD(2, "voice: startloop=0x%x, endloop=0x%x\n", voice->startloop, voice->endloop);
 
-	emu10k1_voice_playback_setup(&woinst->voice);
+	emu10k1_voice_playback_setup(voice);
 
 	return 0;
 }
@@ -245,7 +265,8 @@ void emu10k1_waveout_start(struct emu10k1_wavedevice *wave_dev)
 
 	DPF(2, "emu10k1_waveout_start()\n");
 	/* Actual start */
-	emu10k1_voice_start(&woinst->voice);
+
+	emu10k1_voice_start(&woinst->voice, woinst->total_played);
 
 	emu10k1_timer_enable(card, &woinst->timer);
 
@@ -351,15 +372,20 @@ static void copy_block(void **dst, u32 str, u8 *src, u32 len)
 
 	i = str / PAGE_SIZE;
 	j = str % PAGE_SIZE;
-	k = (len > PAGE_SIZE - j) ? PAGE_SIZE - j : len;
-	copy_from_user(dst[i] + j, src, k);
-	len -= k;
-	while (len >= PAGE_SIZE) {
-		copy_from_user(dst[++i], src + k, PAGE_SIZE);
-		k += PAGE_SIZE;
-		len -= PAGE_SIZE;
-	}
-	copy_from_user(dst[++i], src + k, len);
+
+	if (len > PAGE_SIZE - j) {
+		k = PAGE_SIZE - j;
+		copy_from_user(dst[i] + j, src, k);
+		len -= k;
+		while (len > PAGE_SIZE) {
+                	copy_from_user(dst[++i], src + k, PAGE_SIZE);
+                	k += PAGE_SIZE;
+                	len -= PAGE_SIZE;
+        	}
+        	copy_from_user(dst[++i], src + k, len);
+
+	} else
+		copy_from_user(dst[i] + j, src, len);
 
 	return;
 }
@@ -370,14 +396,19 @@ static void fill_block(void **dst, u32 str, u8 src, u32 len)
 
 	i = str / PAGE_SIZE;
 	j = str % PAGE_SIZE;
-	k = (len > PAGE_SIZE - j) ? PAGE_SIZE - j : len;
-	memset(dst[i] + j, src, k);
-	len -= k;
-	while (len >= PAGE_SIZE) {
-		memset(dst[++i], src, PAGE_SIZE);
-		len -= PAGE_SIZE;
-	}
-	memset(dst[++i], src, len);
+
+	if (len > PAGE_SIZE - j) {
+                k = PAGE_SIZE - j;
+                memset(dst[i] + j, src, k);
+                len -= k;
+                while (len > PAGE_SIZE) {
+                        memset(dst[++i], src, PAGE_SIZE);
+                        len -= PAGE_SIZE;
+                }
+                memset(dst[++i], src, len);
+
+        } else
+                memset(dst[i] + j, src, len);
 
 	return;
 }
@@ -463,22 +494,15 @@ void emu10k1_waveout_update(struct woinst *woinst)
 	if (!(woinst->state & WAVE_STATE_STARTED)) {
 		hw_pos = woinst->buffer.hw_pos;
 	} else {
-		u32 samples;
 		/* hw_pos in sample units */
-		emu10k1_voice_getcontrol(&woinst->voice, CCCA_CURRADDR, &hw_pos);
+		hw_pos = sblive_readptr(woinst->voice.card, CCCA_CURRADDR, woinst->voice.num);
 
-		hw_pos -= woinst->voice.start;
+		if(hw_pos < woinst->voice.start)
+			hw_pos += woinst->buffer.size / woinst->format.bytespersample - woinst->voice.start;
+		else
+			hw_pos -= woinst->voice.start;
 
 		hw_pos *= woinst->format.bytespersample;
-
-		/* Refer to voicemgr.c, CA is not started at zero.
-		 * We need to take this into account. */
-		samples = 64 * woinst->format.channels - 4 * woinst->format.bytesperchannel;
-
-		if (hw_pos >= samples)
-			hw_pos -= samples;
-		else
-			hw_pos += woinst->buffer.size - samples;
 	}
 
 	diff = (woinst->buffer.size + hw_pos - woinst->buffer.hw_pos) % woinst->buffer.size;

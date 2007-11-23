@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.52.2.5 2000/04/08 02:45:56 davem Exp $
+ *	Version: $Id: icmp.c,v 1.52.2.6 2000/08/31 23:49:16 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -522,6 +522,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	struct icmp_bxm icmp_param;
 	struct rtable *rt = (struct rtable*)skb_in->dst;
 	struct ipcm_cookie ipc;
+	unsigned int offset;
 	u32 saddr;
 	u8  tos;
 	
@@ -651,7 +652,12 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	room -= sizeof(struct iphdr) + icmp_param.replyopts.optlen;
 	room -= sizeof(struct icmphdr);
 
-	icmp_param.data_len=(iph->ihl<<2)+skb_in->len;
+	if (skb_in->data > skb_in->nh.raw) 
+		offset = (skb_in->data - skb_in->nh.raw);
+	else 
+		offset = 0;
+	icmp_param.data_len = (skb_in->len + offset);
+
 	if (icmp_param.data_len > room)
 		icmp_param.data_len = room;
 	

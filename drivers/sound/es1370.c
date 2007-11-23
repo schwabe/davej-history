@@ -164,12 +164,8 @@
 
 #ifdef MODULE
 #define __exit
-#define module_exit(x) void cleanup_module(void) { x(); }
-#define module_init(x) int init_module(void) { return x(); }
 #else
 #define __exit __attribute__ ((unused, __section__ (".text.init")))
-#define module_exit(x) /* nothing */
-#define module_init(x) /* nothing */
 #endif
 
 /* --------------------------------------------------------------------- */

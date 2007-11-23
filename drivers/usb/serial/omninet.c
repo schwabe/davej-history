@@ -10,9 +10,11 @@
  *
  * Please report both successes and troubles to the author at omninet@kroah.com
  *
+ * (07/19/2000) gkh
+ *	Added module_init and module_exit functions to handle the fact that this
+ *	driver is a loadable module now.
+ *
  */
-
-#define __NO_VERSION__
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -334,4 +336,21 @@ static void omninet_write_bulk_callback (struct urb *urb)
 
 	return;
 }
+
+
+int omninet_init (void)
+{
+	usb_serial_register (&zyxel_omninet_device);
+	return 0;
+}
+
+
+void omninet_exit (void)
+{
+	usb_serial_deregister (&zyxel_omninet_device);
+}
+
+
+module_init(omninet_init);
+module_exit(omninet_exit);
 

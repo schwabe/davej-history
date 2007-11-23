@@ -1,4 +1,4 @@
-/* $Id: drm-2.4.0-test6-pre5.patch,v 1.1 2000/08/06 05:24:31 notting Exp $
+/* $Id: ffb_context.c,v 1.4.2.1 2000/09/05 00:10:45 davem Exp $
  * ffb_context.c: Creator/Creator3D DRI/DRM context switching.
  *
  * Copyright (C) 2000 David S. Miller (davem@redhat.com)
@@ -7,6 +7,7 @@
  * for authors.
  */
 
+#define __NO_VERSION__
 #include <linux/sched.h>
 #include <asm/upa.h>
 

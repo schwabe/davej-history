@@ -34,7 +34,13 @@
 #include <linux/module.h>
 #include <linux/poll.h>
 #include <linux/malloc.h>
+#include <linux/version.h>
+#include <linux/bitops.h>
 #include <asm/io.h>
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
+#include <linux/wrapper.h>
+
 
 #include "hwaccess.h"
 #include "cardwo.h"
@@ -47,7 +53,7 @@ static void calculate_ofrag(struct woinst *);
 static void calculate_ifrag(struct wiinst *);
 
 /* Audio file operations */
-static loff_t emu10k1_audio_llseek(struct file *file, loff_t offset, int nOrigin)
+static loff_t emu10k1_audio_llseek(struct file *file, loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
@@ -61,7 +67,7 @@ static ssize_t emu10k1_audio_read(struct file *file, char *buffer, size_t count,
 
 	GET_INODE_STRUCT();
 
-	DPD(4, "emu10k1_audio_read(), buffer=%p, count=%d\n", buffer, (u32) count);
+	DPD(3, "emu10k1_audio_read(), buffer=%p, count=%d\n", buffer, (u32) count);
 
 	if (ppos != &file->f_pos)
 		return -ESPIPE;
@@ -112,7 +118,7 @@ static ssize_t emu10k1_audio_read(struct file *file, char *buffer, size_t count,
 
 		spin_unlock_irqrestore(&wiinst->lock, flags);
 
-		DPD(4, "bytestocopy --> %d\n", bytestocopy);
+		DPD(3, "bytestocopy --> %d\n", bytestocopy);
 
 		if ((bytestocopy >= wiinst->buffer.fragment_size)
 		    || (bytestocopy >= count)) {
@@ -140,7 +146,7 @@ static ssize_t emu10k1_audio_read(struct file *file, char *buffer, size_t count,
 		}
 	}
 
-	DPD(4, "bytes copied -> %d\n", (u32) ret);
+	DPD(3, "bytes copied -> %d\n", (u32) ret);
 
 	return ret;
 }
@@ -154,7 +160,7 @@ static ssize_t emu10k1_audio_write(struct file *file, const char *buffer, size_t
 
 	GET_INODE_STRUCT();
 
-	DPD(4, "emu10k1_audio_write(), buffer=%p, count=%d\n", buffer, (u32) count);
+	DPD(3, "emu10k1_audio_write(), buffer=%p, count=%d\n", buffer, (u32) count);
 
 	if (ppos != &file->f_pos)
 		return -ESPIPE;
@@ -200,7 +206,7 @@ static ssize_t emu10k1_audio_write(struct file *file, const char *buffer, size_t
 		emu10k1_waveout_getxfersize(woinst, &bytestocopy);
 		spin_unlock_irqrestore(&woinst->lock, flags);
 
-		DPD(4, "bytestocopy --> %d\n", bytestocopy);
+		DPD(3, "bytestocopy --> %d\n", bytestocopy);
 
 		if ((bytestocopy >= woinst->buffer.fragment_size)
 		    || (bytestocopy >= count)) {
@@ -238,7 +244,7 @@ static ssize_t emu10k1_audio_write(struct file *file, const char *buffer, size_t
 		}
 	}
 
-	DPD(4, "bytes copied -> %d\n", (u32) ret);
+	DPD(3, "bytes copied -> %d\n", (u32) ret);
 
 	return ret;
 }
@@ -278,7 +284,7 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 
 					/* Undo marking the pages as reserved */
 					for (i = 0; i < woinst->buffer.pages; i++)
-						set_bit(PG_reserved, &mem_map[MAP_NR(woinst->buffer.addr[i])].flags);
+						mem_map_reserve(MAP_NR(woinst->buffer.addr[i]));
 				}
 
 				emu10k1_waveout_close(wave_dev);
@@ -328,7 +334,7 @@ static int emu10k1_audio_ioctl(struct inode *inode, struct file *file, unsigned 
 
 					/* Undo marking the pages as reserved */
 					for (i = 0; i < woinst->buffer.pages; i++)
-						set_bit(PG_reserved, &mem_map[MAP_NR(woinst->buffer.addr[i])].flags);
+						mem_map_reserve(MAP_NR(woinst->buffer.addr[i]));
 				}
 
 				emu10k1_waveout_close(wave_dev);
@@ -947,7 +953,7 @@ static int emu10k1_audio_mmap(struct file *file, struct vm_area_struct *vma)
 
 			/* Now mark the pages as reserved, otherwise remap_page_range doesn't do what we want */
 			for (i = 0; i < woinst->buffer.pages; i++)
-				set_bit(PG_reserved, &mem_map[MAP_NR(woinst->buffer.addr[i])].flags);
+				mem_map_reserve(MAP_NR(woinst->buffer.addr[i]));
 		}
 
 		size = vma->vm_end - vma->vm_start;
@@ -995,7 +1001,7 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 	list_for_each(entry, &emu10k1_devs) {
 		card = list_entry(entry, struct emu10k1_card, list);
 
-		if (!((card->audio1_num ^ minor) & ~0xf) || !((card->audio2_num ^ minor) & ~0xf))
+		if (!((card->audio_num ^ minor) & ~0xf) || !((card->audio1_num ^ minor) & ~0xf))
 			break;
 	}
 
@@ -1026,7 +1032,10 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 			return -ENODEV;
 		}
 
-		switch (card->wavein->recsrc) {
+		wiinst->recsrc = card->wavein.recsrc;
+                wiinst->fxwc = card->wavein.fxwc;
+
+		switch (wiinst->recsrc) {
 		case WAVERECORD_AC97:
 			wiinst->format.samplingrate = 8000;
 			wiinst->format.bitsperchannel = 16;
@@ -1040,7 +1049,7 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 		case WAVERECORD_FX:
 			wiinst->format.samplingrate = 48000;
 			wiinst->format.bitsperchannel = 16;
-			wiinst->format.channels = 2;
+			wiinst->format.channels = hweight32(wiinst->fxwc);
 			break;
 		default:
 			BUG();
@@ -1049,7 +1058,6 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 
 		wiinst->state = WAVE_STATE_CLOSED;
 
-		wiinst->recsrc = card->wavein->recsrc;
 		wiinst->buffer.ossfragshift = 0;
 		wiinst->buffer.fragment_size = 0;
 		wiinst->buffer.numfrags = 0;
@@ -1087,7 +1095,7 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 		woinst->buffer.fragment_size = 0;
 		woinst->buffer.ossfragshift = 0;
 		woinst->buffer.numfrags = 0;
-		woinst->device = (card->audio2_num == minor);
+		woinst->device = (card->audio1_num == minor);
 
 		init_waitqueue_head(&woinst->wait_queue);
 
@@ -1149,8 +1157,10 @@ static int emu10k1_audio_open(struct inode *inode, struct file *file)
 static int emu10k1_audio_release(struct inode *inode, struct file *file)
 {
 	struct emu10k1_wavedevice *wave_dev = (struct emu10k1_wavedevice *) file->private_data;
-	struct emu10k1_card *card = wave_dev->card;
+	struct emu10k1_card *card;
 	unsigned long flags;
+
+	card = wave_dev->card;
 
 	DPF(2, "emu10k1_audio_release()\n");
 
@@ -1177,7 +1187,7 @@ static int emu10k1_audio_release(struct inode *inode, struct file *file)
 
 				/* Undo marking the pages as reserved */
 				for (i = 0; i < woinst->buffer.pages; i++)
-					set_bit(PG_reserved, &mem_map[MAP_NR(woinst->buffer.addr[i])].flags);
+					mem_map_reserve(MAP_NR(woinst->buffer.addr[i]));
 			}
 
 			emu10k1_waveout_close(wave_dev);
@@ -1451,7 +1461,7 @@ void emu10k1_wavein_bh(unsigned long refdata)
 	if (bytestocopy >= wiinst->buffer.fragment_size)
 		wake_up_interruptible(&wiinst->wait_queue);
 	else
-		DPD(4, "Not enough transfer size, %d\n", bytestocopy);
+		DPD(3, "Not enough transfer size, %d\n", bytestocopy);
 
 	return;
 }
@@ -1482,18 +1492,18 @@ void emu10k1_waveout_bh(unsigned long refdata)
 	if (bytestocopy >= woinst->buffer.fragment_size)
 		wake_up_interruptible(&woinst->wait_queue);
 	else
-		DPD(4, "Not enough transfer size -> %d\n", bytestocopy);
+		DPD(3, "Not enough transfer size -> %d\n", bytestocopy);
 
 	return;
 }
 
 struct file_operations emu10k1_audio_fops = {
-	llseek:emu10k1_audio_llseek,
-	read:emu10k1_audio_read,
-	write:emu10k1_audio_write,
-	poll:emu10k1_audio_poll,
-	ioctl:emu10k1_audio_ioctl,
-	mmap:emu10k1_audio_mmap,
-	open:emu10k1_audio_open,
-	release:emu10k1_audio_release,
+	llseek:		emu10k1_audio_llseek,
+	read:		emu10k1_audio_read,
+	write:		emu10k1_audio_write,
+	poll:		emu10k1_audio_poll,
+	ioctl:		emu10k1_audio_ioctl,
+	mmap:		emu10k1_audio_mmap,
+	open:		emu10k1_audio_open,
+	release:	emu10k1_audio_release,
 };

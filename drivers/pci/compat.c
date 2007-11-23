@@ -41,3 +41,31 @@ pcibios_find_device(unsigned short vendor, unsigned short device, unsigned short
 		}
 	return PCIBIOS_DEVICE_NOT_FOUND;
 }
+
+/* 2.4 compatibility */
+
+unsigned long pci_resource_len (struct pci_dev *dev, int n_base)
+{
+        u32 l, sz;
+        int reg = PCI_BASE_ADDRESS_0 + (n_base << 2);
+
+        /* XXX temporarily disable I/O and memory decoding for this device? */
+
+        pci_read_config_dword (dev, reg, &l);
+        if (l == 0xffffffff)
+                return 0;
+
+        pci_write_config_dword (dev, reg, ~0);
+        pci_read_config_dword (dev, reg, &sz);
+        pci_write_config_dword (dev, reg, l);
+
+        if (!sz || sz == 0xffffffff)
+                return 0;
+        if ((l & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_MEMORY) {
+                sz = ~(sz & PCI_BASE_ADDRESS_MEM_MASK);
+        } else {
+                sz = ~(sz & PCI_BASE_ADDRESS_IO_MASK) & 0xffff;
+        }
+
+        return sz + 1;
+}

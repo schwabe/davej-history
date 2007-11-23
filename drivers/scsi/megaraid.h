@@ -99,6 +99,30 @@
 #define ENABLE_INTR(base)     WRITE_PORT(base,I_TOGGLE_PORT,ENABLE_INTR_BYTE)
 #define DISABLE_INTR(base)    WRITE_PORT(base,I_TOGGLE_PORT,DISABLE_INTR_BYTE)
 
+/* Special Adapter Commands */
+#define FW_FIRE_WRITE 	0x2C
+#define FW_FIRE_FLASH  	0x2D
+
+#define FC_NEW_CONFIG               0xA1
+#define DCMD_FC_CMD                 0xA1
+    #define DCMD_FC_PROCEED		0x02
+    #define DCMD_DELETE_LOGDRV		0x03
+    #define DCMD_FC_READ_NVRAM_CONFIG	0x04 
+    #define DCMD_FC_READ_FINAL_CONFIG	0x05
+    #define DCMD_GET_DISK_CONFIG	0x06
+    #define DCMD_CHANGE_LDNO		0x07
+    #define DCMD_COMPACT_CONFIG		0x08
+    #define DCMD_DELETE_DRIVEGROUP	0x09
+    #define DCMD_GET_LOOPID_INFO	0x0A
+    #define DCMD_CHANGE_LOOPID		0x0B
+    #define DCMD_GET_NUM_SCSI_CHANS	0x0C
+    #define DCMD_WRITE_CONFIG		0x0D /* writes 40-ld config */
+    #define NC_SUBOP_PRODUCT_INFO       0x0E
+    #define NC_SUBOP_ENQUIRY3           0x0F
+	#define ENQ3_GET_SOLICITED_NOTIFY_ONLY  0x01
+	#define ENQ3_GET_SOLICITED_FULL         0x02
+	#define ENQ3_GET_UNSOLICITED            0x03
+
 /* Define AMI's PCI codes */
 #undef PCI_VENDOR_ID_AMI
 #undef PCI_DEVICE_ID_AMI_MEGARAID
@@ -583,6 +607,7 @@ struct _mega_scb {
     mega_sglist   *sgList;
     struct semaphore  ioctl_sem;
     void	  *buff_ptr;
+	u32			iDataSize;
     mega_scb      *next;
 };
 
@@ -663,6 +688,6 @@ int megaraid_biosparam(Disk *, kdev_t, int *);
 int megaraid_proc_info(char *buffer, char **start, off_t offset,
 		       int length, int hostno, int inout);
 
-void mega_build_user_sg(char *, ulong , mega_scb *, mega_ioctl_mbox *); 
+void mega_build_kernel_sg(char *, ulong , mega_scb *, mega_ioctl_mbox *); 
 void mega_create_proc_entry(int index, struct proc_dir_entry *);
 #endif

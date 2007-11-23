@@ -1823,6 +1823,16 @@ CONFIG_FB_ATY
   The module will be called atyfb.o. If you want to compile it as
   a module, say M here and read Documentation/modules.txt.
 
+ATI Rage128 display support (EXPERIMENTAL)
+CONFIG_FB_ATY128
+  This driver supports graphics boards with the ATI Rage128 chips.
+  Say Y if you have such a graphics board.
+
+  The driver is also available as a module ( = code which can be
+  inserted and removed from the running kernel whenever you want). The
+  module will be called aty128fb.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
 PowerMac "control" frame buffer device support
 CONFIG_FB_CONTROL
   This driver supports a frame buffer for the graphics adapter in the
@@ -10360,7 +10370,7 @@ CONFIG_SOUND_VWSND
 Creative EMU10K1 based PCI sound cards
 CONFIG_SOUND_EMU10K1
   Say Y or M if you have a PCI sound card using the EMU10K1
-  chipset, such as the Creative SBLive! or SB PCI512.
+  chipset, such as the Creative SBLive!,  SB PCI512 or Emu-APS.
 
 Ensoniq ES1370 based PCI sound cards
 CONFIG_SOUND_ES1370

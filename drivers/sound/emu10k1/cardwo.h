@@ -44,7 +44,7 @@
 #define WAVEOUT_DEFAULTFRAGLEN	20 /* Time to play a fragment in ms (latency) */
 #define WAVEOUT_DEFAULTBUFLEN	500 /* Time to play the entire buffer in ms */
 
-#define WAVEOUT_MINFRAGSHIFT	4
+#define WAVEOUT_MINFRAGSHIFT	6
 
 struct waveout_buffer {
 	u16 ossfragshift;
@@ -76,16 +76,6 @@ struct woinst
         u32 blocks;
 	u8 device;
 	spinlock_t lock;
-};
-
-struct emu10k1_waveout
-{
-	u32 globalvol;
-	u32 mute;
-	u32 left;
-	u32 right;
-	u32 globalreverb;
-	u32 globalchorus;
 };
 
 int emu10k1_waveout_open(struct emu10k1_wavedevice *);

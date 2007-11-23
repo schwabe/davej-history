@@ -67,20 +67,9 @@ void query_format(int recsrc, struct wave_format *wave_fmt)
 
 		break;
 
+	/* these can't be changed from the original values */
 	case WAVERECORD_MIC:
-		wave_fmt->channels = 1;
-		wave_fmt->samplingrate = 0x1F40;
-		wave_fmt->bitsperchannel = 16;
-		break;
-
 	case WAVERECORD_FX:
-		if (wave_fmt->channels > 16)
-			wave_fmt->channels = 16;
-		else if (wave_fmt->channels < 1)
-			wave_fmt->channels = 1;
-
-		wave_fmt->samplingrate = 0xBB80;
-		wave_fmt->bitsperchannel = 16;
 		break;
 
 	default:
@@ -123,13 +112,13 @@ int emu10k1_wavein_open(struct emu10k1_wavedevice *wave_dev)
 
 	switch (wiinst->recsrc) {
 	case WAVERECORD_AC97:
-		wiinst_tmp = &card->wavein->ac97;
+		wiinst_tmp = &card->wavein.ac97;
 		break;
 	case WAVERECORD_MIC:
-		wiinst_tmp = &card->wavein->mic;
+		wiinst_tmp = &card->wavein.mic;
 		break;
 	case WAVERECORD_FX:
-		wiinst_tmp = &card->wavein->fx;
+		wiinst_tmp = &card->wavein.fx;
 		break;
 	default:
 		BUG();
@@ -191,13 +180,13 @@ void emu10k1_wavein_close(struct emu10k1_wavedevice *wave_dev)
 	spin_lock_irqsave(&card->lock, flags);
 	switch (wave_dev->wiinst->recsrc) {
 	case WAVERECORD_AC97:
-		card->wavein->ac97 = NULL;
+		card->wavein.ac97 = NULL;
 		break;
 	case WAVERECORD_MIC:
-		card->wavein->mic = NULL;
+		card->wavein.mic = NULL;
 		break;
 	case WAVERECORD_FX:
-		card->wavein->fx = NULL;
+		card->wavein.fx = NULL;
 		break;
 	default:
 		BUG();

@@ -1893,6 +1893,9 @@ static void cs_ac97_set(struct ac97_codec *dev, u8 reg, u16 val)
 	 *
 	 *	When the CD mute changes we adjust the power level if the
 	 *	CD was a valid input.
+	 *
+	 *      We also check for CD volume != 0, as the CD mute isn't
+	 *      normally tweaked from userspace.
 	 */
 	 
 	/* CD mute change ? */
@@ -1900,7 +1903,7 @@ static void cs_ac97_set(struct ac97_codec *dev, u8 reg, u16 val)
 	if(reg==AC97_CD_VOL)
 	{
 		/* Mute bit change ? */
-		if((val2^val)&0x8000)
+		if((val2^val)&0x8000 || ((val2 == 0x1f1f || val == 0x1f1f) && val2 != val))
 		{
 			/* This is a hack but its cleaner than the alternatives.
 			   Right now card->ac97_codec[0] might be NULL as we are
@@ -1911,7 +1914,7 @@ static void cs_ac97_set(struct ac97_codec *dev, u8 reg, u16 val)
 				card->ac97_codec[0]=dev;
 				
 			/* Mute on */
-			if(val&0x8000)
+			if(val&0x8000 || val == 0x1f1f)
 				card->amplifier_ctrl(card, -1);
 			else /* Mute off power on */
 				card->amplifier_ctrl(card, 1);

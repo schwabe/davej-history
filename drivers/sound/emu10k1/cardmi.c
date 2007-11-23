@@ -81,7 +81,7 @@ int emu10k1_mpuin_open(struct emu10k1_card *card, struct midi_openinfo *openinfo
 	DPF(2, "emu10k1_mpuin_open\n");
 
 	if (!(card_mpuin->status & FLAGS_AVAILABLE))
-		return CTSTATUS_INUSE;
+		return -1;
 
 	/* Copy open info and mark channel as in use */
 	card_mpuin->openinfo = *openinfo;
@@ -98,7 +98,7 @@ int emu10k1_mpuin_open(struct emu10k1_card *card, struct midi_openinfo *openinfo
 	emu10k1_mpu_reset(card);
 	emu10k1_mpu_acquire(card);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int emu10k1_mpuin_close(struct emu10k1_card *card)
@@ -110,7 +110,7 @@ int emu10k1_mpuin_close(struct emu10k1_card *card)
 	/* Check if there are pending input SysEx buffers */
 	if (card_mpuin->firstmidiq != NULL) {
 		ERROR();
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	/* Disable RX interrupt */
@@ -121,7 +121,7 @@ int emu10k1_mpuin_close(struct emu10k1_card *card)
 	card_mpuin->status |= FLAGS_AVAILABLE;	/* set */
 	card_mpuin->status &= ~FLAGS_MIDM_STARTED;	/* clear */
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /* Adds MIDI buffer to local queue list                         */
@@ -139,7 +139,7 @@ int emu10k1_mpuin_add_buffer(struct emu10k1_mpuin *card_mpuin, struct midi_hdr *
 
 	if ((midiq = (struct midi_queue *) kmalloc(sizeof(struct midi_queue), GFP_ATOMIC)) == NULL) {
 		/* Message lost */
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	midiq->next = NULL;
@@ -161,7 +161,7 @@ int emu10k1_mpuin_add_buffer(struct emu10k1_mpuin *card_mpuin, struct midi_hdr *
 
 	spin_unlock_irqrestore(&card_mpuin->lock, flags);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /* First set the Time Stamp if MIDI IN has not started.         */
@@ -179,7 +179,7 @@ int emu10k1_mpuin_start(struct emu10k1_card *card)
 	if (card_mpuin->status & FLAGS_MIDM_STARTED) {
 		DPF(2, "Time Stamp not changed\n");
 	} else {
-		while (emu10k1_mpu_read_data(card, &dummy) == CTSTATUS_SUCCESS);
+		while (!emu10k1_mpu_read_data(card, &dummy));
 
 		card_mpuin->status |= FLAGS_MIDM_STARTED;	/* set */
 
@@ -193,7 +193,7 @@ int emu10k1_mpuin_start(struct emu10k1_card *card)
 		emu10k1_irq_enable(card, INTE_MIDIRXENABLE);
 	}
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /* Disable the RX Irq.  If a partial recorded buffer            */
@@ -234,7 +234,7 @@ int emu10k1_mpuin_stop(struct emu10k1_card *card)
 		}
 	}
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /* Disable the RX Irq.  If any buffer                           */
@@ -264,7 +264,7 @@ int emu10k1_mpuin_reset(struct emu10k1_card *card)
 	card_mpuin->lastmidiq = NULL;
 	card_mpuin->status &= ~FLAGS_MIDM_STARTED;
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /* Passes the message with the data back to the client          */
@@ -307,7 +307,7 @@ int emu10k1_mpuin_callback(struct emu10k1_mpuin *card_mpuin, u32 msg, unsigned l
 	/* Notify client that Sysex buffer has been sent */
 	emu10k1_midi_callback(msg, card_mpuin->openinfo.refdata, callback_msg);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 void emu10k1_mpuin_bh(unsigned long refdata)
@@ -349,13 +349,13 @@ int emu10k1_mpuin_irqhandler(struct emu10k1_card *card)
 	idx = card_mpuin->qtail;
 
 	while (1) {
-		if (emu10k1_mpu_read_data(card, &MPUIvalue) == CTSTATUS_SUCCESS) {
+		if (emu10k1_mpu_read_data(card, &MPUIvalue) < 0) {
+			break;
+		} else {
 			++count;
 			card_mpuin->midiq[idx].data = MPUIvalue;
 			card_mpuin->midiq[idx].timein = (jiffies * 1000) / HZ;
 			idx = (idx + 1) % MIDIIN_MAX_BUFFER_SIZE;
-		} else {
-			break;
 		}
 	}
 
@@ -365,7 +365,7 @@ int emu10k1_mpuin_irqhandler(struct emu10k1_card *card)
 		tasklet_hi_schedule(&card_mpuin->tasklet);
 	}
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /*****************************************************************************/
@@ -385,7 +385,7 @@ int sblive_miStateInit(struct emu10k1_mpuin *card_mpuin)
 	card_mpuin->timestart = 0;
 	card_mpuin->timein = 0;
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /* FIXME: This should be a macro */
@@ -430,7 +430,7 @@ int sblive_miStateParse(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 		case 0x7:
 			emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATAERROR, 0xf7, 0);
-			return CTSTATUS_ERROR;
+			return -1;
 
 		case 0x2:
 			card_mpuin->laststate = card_mpuin->curstate;
@@ -452,7 +452,7 @@ int sblive_miStateParse(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 	default:
 		DPF(2, "BUG: default case hit\n");
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	return midistatefn[card_mpuin->curstate].Fn(card_mpuin, data);
@@ -494,7 +494,7 @@ int sblive_miState3ByteKey(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 		emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATAERROR, tmp, 0);
 
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	card_mpuin->data = data;
@@ -525,7 +525,7 @@ int sblive_miState3ByteVel(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 		emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATAERROR, tmp, 0);
 
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	card_mpuin->curstate = STIN_3BYTE;
@@ -537,7 +537,7 @@ int sblive_miState3ByteVel(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 	emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATA, tmp, 3);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int sblive_miState2Byte(struct emu10k1_mpuin *card_mpuin, u8 data)
@@ -578,7 +578,7 @@ int sblive_miState2ByteKey(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 		emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATAERROR, tmp, 0);
 
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	card_mpuin->curstate = STIN_2BYTE;
@@ -588,7 +588,7 @@ int sblive_miState2ByteKey(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 	emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATA, tmp, 2);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int sblive_miStateSysCommon2(struct emu10k1_mpuin *card_mpuin, u8 data)
@@ -620,7 +620,7 @@ int sblive_miStateSysCommon2Key(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 		emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATAERROR, tmp, 0);
 
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	card_mpuin->curstate = card_mpuin->laststate;
@@ -630,7 +630,7 @@ int sblive_miStateSysCommon2Key(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 	emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATA, tmp, 2);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int sblive_miStateSysCommon3(struct emu10k1_mpuin *card_mpuin, u8 data)
@@ -662,7 +662,7 @@ int sblive_miStateSysCommon3Key(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 		emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATAERROR, tmp, 0);
 
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	card_mpuin->data = data;
@@ -694,7 +694,7 @@ int sblive_miStateSysCommon3Vel(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 		emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATAERROR, tmp, 0);
 
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	card_mpuin->curstate = card_mpuin->laststate;
@@ -706,7 +706,7 @@ int sblive_miStateSysCommon3Vel(struct emu10k1_mpuin *card_mpuin, u8 data)
 
 	emu10k1_mpuin_callback(card_mpuin, ICARDMIDI_INDATA, tmp, 3);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int sblive_miStateSysExNorm(struct emu10k1_mpuin *card_mpuin, u8 data)
@@ -744,7 +744,7 @@ int sblive_miStateSysExNorm(struct emu10k1_mpuin *card_mpuin, u8 data)
 			kfree(midiq);
 		}
 
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	if (card_mpuin->firstmidiq) {
@@ -780,7 +780,7 @@ int sblive_miStateSysExNorm(struct emu10k1_mpuin *card_mpuin, u8 data)
 			kfree(midiq);
 		}
 
-		return CTSTATUS_SUCCESS;
+		return 0;
 	}
 
 	if (card_mpuin->firstmidiq) {

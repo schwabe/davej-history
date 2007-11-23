@@ -657,8 +657,13 @@ spinlock_t sym53c8xx_lock = SPIN_LOCK_UNLOCKED;
 
 #ifdef __sparc__
 #  include <asm/irq.h>
+#  if LINUX_VERSION_CODE < LinuxVersionCode(2,3,0)
+     /* ioremap/iounmap broken in 2.2.x on Sparc. -DaveM */
+#    define ioremap(base, size)		((u_long) __va(base))
+#    define iounmap(vaddr)
+#  endif
 #  define pcivtobus(p)			bus_dvma_to_mem(p)
-#  define memcpy_to_pci(a, b, c)	memcpy_toio((a), (b), (c))
+#  define memcpy_to_pci(a, b, c)	memcpy_toio((void *)(a), (const void *)(b), (c))
 #elif defined(__alpha__)
 #  define pcivtobus(p)			((p) & 0xfffffffful)
 #  define memcpy_to_pci(a, b, c)	memcpy_toio((a), (b), (c))
@@ -13174,6 +13179,32 @@ sym53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
 	}
 #endif
 #endif	/* __powerpc__ */
+
+#if defined(__sparc__) && (LINUX_VERSION_CODE < LinuxVersionCode(2,3,0))
+	/*
+	**    Fix-ups for sparc.
+	**
+	**    I wrote:	   Should not be performed by the driver,
+	**    Guy wrote:   but how can OBP know each and every PCI card,
+	** 		   if they don't use Fcode?
+	**    I replied:   no need to know each and every PCI card, just 
+	**	           be skilled enough to understand the PCI specs.
+	*/
+
+	/*
+	**    PCI configuration is based on configuration registers being
+	**    coherent with hardware and software resource identifications.
+	**    This is fairly simple, but seems still too complex for Sparc.
+	*/
+	base = __pa(base);
+	base_2 = __pa(base_2);
+
+	if (!cache_line_size)
+		suggested_cache_line_size = 16;
+
+	driver_setup.pci_fix_up |= 0x7;
+
+#endif	/* __sparc__ */
 
 #if defined(__i386__) && !defined(MODULE)
 	if (!cache_line_size) {

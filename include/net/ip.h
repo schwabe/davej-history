@@ -171,10 +171,8 @@ extern __inline__
 int ip_decrease_ttl(struct iphdr *iph)
 {
 	u16 check = iph->check;
-	check = ntohs(check) + 0x0100;
-	if ((check & 0xFF00) == 0)
-		check++;		/* carry overflow */
-	iph->check = htons(check);
+	check += __constant_htons(0x0100);
+	iph->check = check + (check>=0xFFFF);
 	return --iph->ttl;
 }
 

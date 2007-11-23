@@ -900,6 +900,12 @@ void net_bh(void)
 		 */
 		skb = skb_dequeue(&backlog);
 
+		/* This can happen if dev_clear_backlog is running
+		 * at the same time and it empties the queue.
+		 */
+		if (skb == NULL)
+			break;
+
 #ifdef CONFIG_CPU_IS_SLOW
 		if (ave_busy > 128*16) {
 			kfree_skb(skb);

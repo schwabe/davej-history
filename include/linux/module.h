@@ -142,8 +142,11 @@ struct module_info
 #define __MODULE_STRING(x)	__MODULE_STRING_1(x)
 
 /* Find a symbol exported by the kernel or another module */
+#ifndef CONFIG_MODULES
+static inline unsigned long get_module_symbol(char *A, char *B) { return 0; };
+#else
 extern unsigned long get_module_symbol(char *, char *);
-
+#endif
 #if defined(MODULE) && !defined(__GENKSYMS__)
 
 /* Embedded module documentation macros.  */
@@ -195,6 +198,7 @@ __asm__(".section .modinfo\n\t.previous");
 /* Define the module variable, and usage macros.  */
 extern struct module __this_module;
 
+#define THIS_MODULE		(&__this_module)
 #define MOD_INC_USE_COUNT	__MOD_INC_USE_COUNT(&__this_module)
 #define MOD_DEC_USE_COUNT	__MOD_DEC_USE_COUNT(&__this_module)
 #define MOD_IN_USE		__MOD_IN_USE(&__this_module)
@@ -216,6 +220,7 @@ const char __module_using_checksums[] __attribute__((section(".modinfo"))) =
 #define MODULE_SUPPORTED_DEVICE(name)
 #define MODULE_PARM(var,type)
 #define MODULE_PARM_DESC(var,desc)
+#define THIS_MODULE		NULL
 
 #ifndef __GENKSYMS__
 

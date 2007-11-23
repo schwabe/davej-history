@@ -2303,6 +2303,62 @@ sym53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
 #endif
 #endif	/* __powerpc__ */
 
+#if defined(__sparc__) && (LINUX_VERSION_CODE < LinuxVersionCode(2,3,0))
+	/*
+	 *	Severall fix-ups for sparc.
+	 *
+	 *	Should not be performed by the driver, which is why all
+	 *	this crap is cleaned up in 2.4.x
+	 */
+
+	base = __pa(base);
+	base_2 = __pa(base_2);
+
+	if (!(command & PCI_COMMAND_MASTER)) {
+		if (initverbose >= 2)
+			printk("ncr53c8xx: setting PCI_COMMAND_MASTER bit (fixup)\n");
+		command |= PCI_COMMAND_MASTER;
+		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
+		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+	}
+
+	if ((chip->features & FE_WRIE) && !(command & PCI_COMMAND_INVALIDATE)) {
+		if (initverbose >= 2)
+			printk("ncr53c8xx: setting PCI_COMMAND_INVALIDATE bit (fixup)\n");
+		command |= PCI_COMMAND_INVALIDATE;
+		pcibios_write_config_word(bus, device_fn, PCI_COMMAND, command);
+		pcibios_read_config_word(bus, device_fn, PCI_COMMAND, &command);
+	}
+
+	if ((chip->features & FE_CLSE) && !cache_line_size) {
+		/* PCI_CACHE_LINE_SIZE value is in 32-bit words. */
+		cache_line_size = 64 / sizeof(u_int32);
+		if (initverbose >= 2)
+			printk("ncr53c8xx: setting PCI_CACHE_LINE_SIZE to %d (fixup)\n",
+			       cache_line_size);
+		pcibios_write_config_byte(bus, device_fn,
+					  PCI_CACHE_LINE_SIZE, cache_line_size);
+		pcibios_read_config_byte(bus, device_fn,
+					 PCI_CACHE_LINE_SIZE, &cache_line_size);
+	}
+
+	if (!latency_timer) {
+		unsigned char min_gnt;
+
+		pcibios_read_config_byte(bus, device_fn,
+					 PCI_MIN_GNT, &min_gnt);
+		if (min_gnt == 0)
+			latency_timer = 128;
+		else
+			latency_timer = ((min_gnt << 3) & 0xff);
+		printk("ncr53c8xx: setting PCI_LATENCY_TIMER to %d bus clocks (fixup)\n", latency_timer);
+		pcibios_write_config_byte(bus, device_fn,
+					  PCI_LATENCY_TIMER, latency_timer);
+		pcibios_read_config_byte(bus, device_fn,
+					 PCI_LATENCY_TIMER, &latency_timer);
+	}
+#endif /* __sparc__ && (LINUX_VERSION_CODE < LinuxVersionCode(2,3,0)) */
+
 #if defined(__i386__) && !defined(MODULE)
 	if (!cache_line_size) {
 #if LINUX_VERSION_CODE < LinuxVersionCode(2,1,75)

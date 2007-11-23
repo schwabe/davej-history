@@ -75,7 +75,6 @@
 (((dev)->base_address[(bar)] & PCI_BASE_ADDRESS_SPACE) ? \
  ((dev)->base_address[(bar)] & PCI_BASE_ADDRESS_IO_MASK) : \
  ((dev)->base_address[(bar)] & PCI_BASE_ADDRESS_MEM_MASK))
-#define pci_resource_len pci_compat_get_size
 
 struct pci_device_id {
         unsigned int vendor, device;
@@ -98,7 +97,6 @@ struct pci_driver {
 const struct pci_device_id * pci_compat_match_device(const struct pci_device_id *ids, struct pci_dev *dev);
 int pci_compat_register_driver(struct pci_driver *drv);
 void pci_compat_unregister_driver(struct pci_driver *drv);
-unsigned long pci_compat_get_size (struct pci_dev *dev, int n_base);
 int pci_compat_enable_device(struct pci_dev *dev);
 void *compat_request_region (unsigned long start, unsigned long n, const char *name);
 void * pci_compat_get_driver_data (struct pci_dev *dev);
@@ -112,7 +110,7 @@ pci_alloc_consistent(struct pci_dev *hwdev,
 
         if (hwdev == NULL)
                 gfp |= GFP_DMA;
-        ret = (void *)__get_free_pages(gfp, __compat_get_order(size));
+        ret = (void *)__get_free_pages(gfp, compat_get_order(size));
 
         if (ret != NULL) {
                 memset(ret, 0, size);
@@ -125,7 +123,7 @@ extern __inline__ void
 pci_free_consistent(struct pci_dev *hwdev, size_t size,
                     void *vaddr, dma_addr_t dma_handle)
 {
-        free_pages((unsigned long)vaddr, __compat_get_order(size));
+        free_pages((unsigned long)vaddr, compat_get_order(size));
 }
 
 static inline int pci_module_init(struct pci_driver *drv)

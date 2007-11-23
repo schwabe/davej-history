@@ -36,9 +36,6 @@ void emu10k1_start_record(struct emu10k1_card *card, struct wavein_buffer *buffe
 {
 	DPF(2, "emu10k1_start_record()\n");
 
-	if(buffer->fxwc)
-		sblive_writeptr(card, FXWC, 0, buffer->fxwc);
-
 	sblive_writeptr(card, buffer->sizereg, 0, buffer->sizeregval);
 
 	if (buffer->adcctl)
@@ -109,8 +106,6 @@ void emu10k1_set_record_src(struct emu10k1_card *card, struct wiinst *wiinst)
 		if (wiinst->format.channels == 2)
 			buffer->adcctl |= ADCCR_RCHANENABLE;
 
-			buffer->fxwc = 0;
-
 		break;
 
 	case WAVERECORD_MIC:
@@ -119,7 +114,6 @@ void emu10k1_set_record_src(struct emu10k1_card *card, struct wiinst *wiinst)
 		buffer->addrreg = MICBA;
 		buffer->idxreg = MICIDX_IDX;
 		buffer->adcctl = 0;
-		buffer->fxwc = 0;
 		break;
 
 	case WAVERECORD_FX:
@@ -128,7 +122,8 @@ void emu10k1_set_record_src(struct emu10k1_card *card, struct wiinst *wiinst)
 		buffer->addrreg = FXBA;
 		buffer->idxreg = FXIDX_IDX;
 		buffer->adcctl = 0;
-		buffer->fxwc = 0x0001;
+
+		sblive_writeptr(card, FXWC, 0, wiinst->fxwc);
 		break;
 	default:
 		BUG();

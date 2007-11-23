@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 18
-EXTRAVERSION = pre3
+EXTRAVERSION = pre4
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -111,7 +111,7 @@ CORE_FILES	=kernel/kernel.o mm/mm.o fs/fs.o ipc/ipc.o
 FILESYSTEMS	=fs/filesystems.a
 NETWORKS	=net/network.a
 DRIVERS		=drivers/block/block.a \
-		 drivers/char/char.a \
+		 drivers/char/char.o \
 	         drivers/misc/misc.a
 LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib

@@ -77,7 +77,7 @@ ALL_O = $(OX_OBJS) $(O_OBJS)
 $(O_TARGET): $(ALL_O)
 	rm -f $@
 ifneq "$(strip $(ALL_O))" ""
-	$(LD) $(EXTRA_LDFLAGS) -r -o $@ $(ALL_O)
+	$(LD) $(EXTRA_LDFLAGS) -r -o $@ $(filter $(ALL_O), $^)
 else
 	$(AR) rcs $@
 endif

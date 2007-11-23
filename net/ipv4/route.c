@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.67.2.4 1999/11/16 02:28:43 davem Exp $
+ * Version:	$Id: route.c,v 1.67.2.5 2000/09/01 23:19:46 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -222,8 +222,8 @@ static int rt_cache_get_info(char *buffer, char **start, off_t offset, int lengt
 				(unsigned long)r->rt_dst,
 				(unsigned long)r->rt_gateway,
 				r->rt_flags,
-				atomic_read(&r->u.dst.use),
 				atomic_read(&r->u.dst.refcnt),
+				atomic_read(&r->u.dst.use),
 				0,
 				(unsigned long)r->rt_src, (int)r->u.dst.pmtu,
 				r->u.dst.window,

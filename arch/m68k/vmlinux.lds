@@ -35,6 +35,7 @@ SECTIONS
 
   _edata = .;			/* End of data section */
 
+
   . = ALIGN(16);
   .data.cacheline_aligned : { *(.data.cacheline_aligned) }
 
@@ -42,6 +43,13 @@ SECTIONS
   __init_begin = .;
   .text.init : { *(.text.init) }
   .data.init : { *(.data.init) }
+  . = ALIGN(16);		/* __setup() commandline parameters */
+  __setup_start = .;
+  .setup.init : { *(.setup.init) }
+  __setup_end = .;
+  __initcall_start = .;		/* the init functions to be called */
+  .initcall.init : { *(.initcall.init) }
+  __initcall_end = .;
   . = ALIGN(8192);
   __init_end = .;
 

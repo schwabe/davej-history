@@ -174,12 +174,8 @@ static int do_microcode_update(void)
 	int i, error = 0, err;
 	struct microcode *m;
 
-#ifdef __SMP__
 	if (smp_call_function(do_update_one, (void *)update_req, 1, 1) != 0)
 		panic("do_microcode_update(): timed out waiting for other CPUs\n");
-#else
-	smp_call_function(do_update_one, (void *)update_req, 1, 1);
-#endif
 
 	do_update_one((void *)update_req);
 

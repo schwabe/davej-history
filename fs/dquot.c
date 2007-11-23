@@ -1265,14 +1265,6 @@ int dquot_transfer(struct dentry *dentry, struct iattr *iattr, uid_t initiator)
 	if (!inode)
 		return -ENOENT;
 	/*
-	 * Find out if this filesystem uses i_blocks.
-	 */
-	if (inode->i_blksize == 0)
-		blocks = isize_to_blocks(inode->i_size, BLOCK_SIZE);
-	else
-		blocks = (inode->i_blocks / 2);
-
-	/*
 	 * Build the transfer_from and transfer_to lists and check quotas to see
 	 * if operation is permitted.
 	 */
@@ -1331,13 +1323,25 @@ int dquot_transfer(struct dentry *dentry, struct iattr *iattr, uid_t initiator)
 		 * dqget() could block and so the first structure might got
 		 * invalidated or locked...
 		 */
-		if (!transfer_to[cnt]->dq_mnt || !transfer_from[cnt]->dq_mnt ||
-		    check_idq(transfer_to[cnt], cnt, 1, initiator, tty) == NO_QUOTA ||
-		    check_bdq(transfer_to[cnt], cnt, blocks, initiator, tty, 0) == NO_QUOTA) {
+		if (!transfer_to[cnt]->dq_mnt || !transfer_from[cnt]->dq_mnt) {
 			cnt++;
 			goto put_all;
 		}
 	}
+
+	/*
+	 * Find out if this filesystem uses i_blocks.
+	 */
+	if (inode->i_blksize == 0)
+		blocks = isize_to_blocks(inode->i_size, BLOCK_SIZE);
+	else
+		blocks = (inode->i_blocks / 2);
+	for (cnt = 0; cnt < MAXQUOTAS; cnt++)
+		if (check_idq(transfer_to[cnt], cnt, 1, initiator, tty) == NO_QUOTA ||
+		    check_bdq(transfer_to[cnt], cnt, blocks, initiator, tty, 0) == NO_QUOTA) {
+			cnt = MAXQUOTAS;
+			goto put_all;
+		}
 
 	if ((error = notify_change(dentry, iattr)))
 		goto put_all; 

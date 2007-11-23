@@ -33,6 +33,9 @@
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/malloc.h>
+#include <linux/version.h>
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 
 #include "hwaccess.h"
@@ -63,20 +66,20 @@ static int midiin_add_buffer(struct emu10k1_mididevice *midi_dev, struct midi_hd
 	if ((midihdr->data = (u8 *) kmalloc(MIDIIN_BUFLEN, GFP_KERNEL)) == NULL) {
 		ERROR();
 		kfree(midihdr);
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
-	if (emu10k1_mpuin_add_buffer(midi_dev->card->mpuin, midihdr) != CTSTATUS_SUCCESS) {
+	if (emu10k1_mpuin_add_buffer(midi_dev->card->mpuin, midihdr) < 0) {
 		ERROR();
 		kfree(midihdr->data);
 		kfree(midihdr);
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	*midihdrptr = midihdr;
 	list_add_tail(&midihdr->list, &midi_dev->mid_hdrs);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 static int emu10k1_midi_open(struct inode *inode, struct file *file)
@@ -142,8 +145,7 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 
 		dsCardMidiOpenInfo.refdata = (unsigned long) midi_dev;
 
-		if (emu10k1_mpuin_open(card, &dsCardMidiOpenInfo)
-		    != CTSTATUS_SUCCESS) {
+		if (emu10k1_mpuin_open(card, &dsCardMidiOpenInfo) < 0) {
 			ERROR();
 			kfree(midi_dev);
 			MOD_DEC_USE_COUNT;
@@ -151,13 +153,13 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 		}
 
 		/* Add two buffers to receive sysex buffer */
-		if (midiin_add_buffer(midi_dev, &midihdr1) != CTSTATUS_SUCCESS) {
+		if (midiin_add_buffer(midi_dev, &midihdr1) < 0) {
 			kfree(midi_dev);
 			MOD_DEC_USE_COUNT;
 			return -ENODEV;
 		}
 
-		if (midiin_add_buffer(midi_dev, &midihdr2) != CTSTATUS_SUCCESS) {
+		if (midiin_add_buffer(midi_dev, &midihdr2) < 0) {
 			list_del(&midihdr1->list);
 			kfree(midihdr1->data);
 			kfree(midihdr1);
@@ -172,8 +174,7 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 
 		dsCardMidiOpenInfo.refdata = (unsigned long) midi_dev;
 
-		if (emu10k1_mpuout_open(card, &dsCardMidiOpenInfo)
-		    != CTSTATUS_SUCCESS) {
+		if (emu10k1_mpuout_open(card, &dsCardMidiOpenInfo) < 0) {
 			ERROR();
 			kfree(midi_dev);
 			MOD_DEC_USE_COUNT;
@@ -193,8 +194,9 @@ static int emu10k1_midi_open(struct inode *inode, struct file *file)
 static int emu10k1_midi_release(struct inode *inode, struct file *file)
 {
 	struct emu10k1_mididevice *midi_dev = (struct emu10k1_mididevice *) file->private_data;
-	struct emu10k1_card *card = midi_dev->card;
+	struct emu10k1_card *card;
 
+	card = midi_dev->card;
 	DPF(2, "emu10k1_midi_release()\n");
 
 	if (file->f_mode & FMODE_WRITE) {
@@ -259,8 +261,7 @@ static ssize_t emu10k1_midi_read(struct file *file, char *buffer, size_t count, 
 		return -EFAULT;
 
 	if (midi_dev->mistate == MIDIIN_STATE_STOPPED) {
-		if (emu10k1_mpuin_start(midi_dev->card)
-		    != CTSTATUS_SUCCESS) {
+		if (emu10k1_mpuin_start(midi_dev->card) < 0) {
 			ERROR();
 			return -EINVAL;
 		}
@@ -355,7 +356,7 @@ static ssize_t emu10k1_midi_write(struct file *file, const char *buffer, size_t 
 
 	spin_lock_irqsave(&midi_spinlock, flags);
 
-	if (emu10k1_mpuout_add_buffer(midi_dev->card, midihdr) != CTSTATUS_SUCCESS) {
+	if (emu10k1_mpuout_add_buffer(midi_dev->card, midihdr) < 0) {
 		ERROR();
 		kfree(midihdr->data);
 		kfree(midihdr);
@@ -429,19 +430,19 @@ int emu10k1_midi_callback(unsigned long msg, unsigned long refdata, unsigned lon
 		break;
 
 	default:		/* Unknown message */
-		return CTSTATUS_ERROR;
+		return -1;
 	}
 
 	spin_unlock_irqrestore(&midi_spinlock, flags);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /* MIDI file operations */
 struct file_operations emu10k1_midi_fops = {
-	read:emu10k1_midi_read,
-	write:emu10k1_midi_write,
-	poll:emu10k1_midi_poll,
-	open:emu10k1_midi_open,
-	release:emu10k1_midi_release,
+	read:		emu10k1_midi_read,
+	write:		emu10k1_midi_write,
+	poll:		emu10k1_midi_poll,
+	open:		emu10k1_midi_open,
+	release:	emu10k1_midi_release,
 };

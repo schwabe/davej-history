@@ -52,10 +52,6 @@ extern int cpia_pp_init(void);
 extern int cpia_usb_init(void);
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
-#define init_MUTEX(x) (*(x) = MUTEX)
-#endif
-
 #ifdef MODULE
 MODULE_AUTHOR("Scott J. Bertin <sbertin@mindspring.com> & Peter Pregler <Peter_Pregler@email.com> & Johannes Erdfelt <jerdfelt@valinux.com>");
 MODULE_DESCRIPTION("V4L-driver for Vision CPiA based cameras");

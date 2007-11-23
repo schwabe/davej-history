@@ -48,7 +48,6 @@ struct wavein_buffer {
         u32 addrreg;
         u32 idxreg;
         u32 adcctl;
-	u32 fxwc;
 	void *addr;
 	u8 cov;
 	dma_addr_t dma_handle;	
@@ -66,18 +65,8 @@ struct wiinst
 	u32 blocks;
 	spinlock_t lock;
 	u8 recsrc;
+	u16 fxwc;
 };
-
-struct emu10k1_wavein 
-{
-	struct wiinst *ac97;
-	struct wiinst *mic;
-	struct wiinst *fx;
-
-	u8 recsrc;
-	u32 fxwc;
-};
-
 
 #define WAVEIN_MAXBUFSIZE         65536
 #define WAVEIN_MINBUFSIZE	  368

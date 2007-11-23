@@ -22,6 +22,7 @@
 #include <linux/smp_lock.h>
 #include <linux/blk.h>
 #include <linux/hdreg.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -227,6 +228,7 @@ extern void aha152x_setup(char *str, int *ints);
 extern void aha1542_setup(char *str, int *ints);
 extern void gdth_setup(char *str, int *ints);
 extern void aic7xxx_setup(char *str, int *ints);
+extern void ips_setup(char *str, int *ints);
 extern void AM53C974_setup(char *str, int *ints);
 extern void BusLogic_Setup(char *str, int *ints);
 extern void ncr53c8xx_setup(char *str, int *ints);
@@ -870,6 +872,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_SCSI_AIC7XXX
 	{ "aic7xxx=", aic7xxx_setup},
 #endif
+#ifdef CONFIG_SCSI_IPS
+	{ "ips=", ips_setup},
+#endif
 #ifdef CONFIG_SCSI_BUSLOGIC
 	{ "BusLogic=", BusLogic_Setup},
 #endif
@@ -1119,6 +1124,7 @@ static struct kernel_param raw_params[] __initdata = {
 	{ 0, 0 }
 };
 
+
 #ifdef CONFIG_BLK_DEV_RAM
 static void __init ramdisk_start_setup(char *str, int *ints)
 {
@@ -1147,6 +1153,7 @@ static void __init ramdisk_size(char *str, int *ints)
 
 static int __init checksetup(char *line)
 {
+	struct new_kernel_param *p;
 	int i, ints[11];
 
 #ifdef CONFIG_BLK_DEV_IDE
@@ -1170,6 +1177,18 @@ static int __init checksetup(char *line)
 			return 1;
 		}
 	}
+
+	/* Now handle new-style __setup parameters */
+	p = &__setup_start;
+	do {
+		int n = strlen(p->str);
+		if (!strncmp(line,p->str,n)) {
+			if (p->setup_func(line+n))
+				return 1;
+		}
+		p++;
+	} while (p < &__setup_end);
+
 	return 0;
 }
 
@@ -1468,6 +1487,19 @@ static void __init no_initrd(char *s,int *ints)
 
 struct task_struct *child_reaper = &init_task;
 
+
+static void __init do_initcalls(void)
+{
+	initcall_t *call;
+
+	call = &__initcall_start;
+	do {
+		(*call)();
+		call++;
+	} while (call < &__initcall_end);
+}
+
+
 /*
  * Ok, the machine is now initialized. None of the devices
  * have been touched yet, but the CPU subsystem is up and
@@ -1568,6 +1600,10 @@ static void __init do_basic_setup(void)
 
 	/* .. executable formats .. */
 	binfmt_setup();
+
+	/* the functions marked initcall  */
+	
+	do_initcalls();
 
 	/* .. filesystems .. */
 	filesystem_setup();

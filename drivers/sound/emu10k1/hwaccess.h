@@ -47,14 +47,6 @@
 #define MAXPAGES	8192 
 #define BUFMAXPAGES     (MAXBUFSIZE / PAGE_SIZE)
 
-enum GlobalErrorCode
-{
-	CTSTATUS_SUCCESS = 0x0000,
-	CTSTATUS_ERROR,
-	CTSTATUS_NOMEMORY,
-	CTSTATUS_INUSE,
-};
-
 #define FLAGS_AVAILABLE     0x0001
 #define FLAGS_READY         0x0002
 
@@ -72,14 +64,35 @@ struct memhandle
 #ifdef EMU10K1_DEBUG
 # define DPD(level,x,y...) do {if(level <= DEBUG_LEVEL) printk( KERN_NOTICE "emu10k1: %s: %d: " x , __FILE__ , __LINE__ , y );} while(0)
 # define DPF(level,x)   do {if(level <= DEBUG_LEVEL) printk( KERN_NOTICE "emu10k1: %s: %d: " x , __FILE__ , __LINE__ );} while(0)
-#define ERROR() DPF(1,"error\n");
 #else
 # define DPD(level,x,y...) do { } while (0) /* not debugging: nothing */
 # define DPF(level,x) do { } while (0)
-#define ERROR() do { } while (0)
 #endif /* EMU10K1_DEBUG */
 
+#define ERROR() DPF(1,"error\n")
+
 /* DATA STRUCTURES */
+
+struct emu10k1_waveout
+{
+	u16 send_routing[3];
+
+	u8 send_a[3];
+	u8 send_b[3];
+	u8 send_c[3];
+	u8 send_d[3];
+};
+
+struct emu10k1_wavein
+{
+        struct wiinst *ac97;
+        struct wiinst *mic;
+        struct wiinst *fx;
+
+        u8 recsrc;
+        u32 fxwc;
+};
+
 
 struct emu10k1_card 
 {
@@ -104,13 +117,13 @@ struct emu10k1_card
 	unsigned short		model;
 	unsigned int irq; 
 
-	unsigned long	audio1_num;
-	unsigned long	audio2_num;
-	unsigned long	mixer_num;
-	unsigned long	midi_num;
+	int	audio_num;
+	int	audio1_num;
+	int	mixer_num;
+	int	midi_num;
 
-	struct emu10k1_waveout	*waveout;
-	struct emu10k1_wavein	*wavein;
+	struct emu10k1_waveout	waveout;
+	struct emu10k1_wavein	wavein;
 	struct emu10k1_mpuout	*mpuout;
 	struct emu10k1_mpuin	*mpuin;
 
@@ -126,6 +139,8 @@ struct emu10k1_card
 	u32	    has_toslink;	       // TOSLink detection
 
 	u8 chiprev;                    /* Chip revision                */
+
+	int isaps;
 };
 
 int emu10k1_addxmgr_alloc(u32, struct emu10k1_card *);
@@ -146,10 +161,6 @@ struct sblive_pcm_volume_rec {
 extern struct sblive_pcm_volume_rec sblive_pcm_volume[];
 extern u16 pcm_last_mixer;
 #endif
-
-
-#define ENABLE 			0xffffffff
-#define DISABLE 		0x00000000
 
 #define TIMEOUT 		    16384
 

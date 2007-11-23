@@ -103,68 +103,6 @@ int usb_init(void)
 #ifdef CONFIG_USB_PLUSB
 	plusb_init();
 #endif
-
-#if defined(CONFIG_INPUT_KEYBDEV) || defined(CONFIG_INPUT_MOUSEDEV) || \
-    defined(CONFIG_INPUT_JOYDEV)  || defined(CONFIG_INPUT_EVDEV)    || \
-    defined(CONFIG_INPUT_KBD)     || defined(CONFIG_INPUT_MOUSE)    || \
-    defined(CONFIG_INPUT_WACOM)   || defined(CONFIG_INPUT_WMFORCE)  || \
-    defined(CONFIG_INPUT_HID)
-	input_init_module();
-#endif
-#ifdef CONFIG_USB_ACM
-       acm_init_module();
-#endif
-#ifdef CONFIG_USB_DC2XX
-       usb_dc2xx_init_module();
-#endif
-#ifdef CONFIG_INPUT_EVDEV
-       evdev_init_module();
-#endif
-#ifdef CONFIG_USB_HID
-       hid_init_module();
-#endif
-#ifdef CONFIG_INPUT_JOYDEV
-       joydev_init_module();
-#endif
-#ifdef CONFIG_INPUT_KEYBDEV
-       keybdev_init_module();
-#endif
-#ifdef CONFIG_INPUT_MOUSEDEV
-       mousedev_init_module();
-#endif
-#ifdef CONFIG_USB_MICROTEK
-	microtek_drv_init_module();
-#endif
-#ifdef CONFIG_USB_PRINTER
-       usblp_init_module();
-#endif
-#ifdef CONFIG_VIDEO_OV511
-	usb_ov511_init_module();
-#endif
-#ifdef CONFIG_USB_RIO500
-       usb_rio_init_module();
-#endif
-#ifdef CONFIG_USB_SCANNER
-       usb_scanner_init_module();
-#endif
-#ifdef CONFIG_USB_SERIAL
-       usb_serial_init_module();
-#endif
-#ifdef CONFIG_USB_STORAGE
-       usb_stor_init_module();
-#endif
-#ifdef CONFIG_USB_KBD
-       usb_kbd_init_module();
-#endif
-#ifdef CONFIG_USB_MOUSE
-       usb_mouse_init_module();
-#endif
-#ifdef CONFIG_USB_WACOM
-       wacom_init_module();
-#endif
-#ifdef CONFIG_USB_WMFORCE
-       wmforce_init_module();
-#endif
 #ifdef CONFIG_USB_UHCI
 	uhci_init();
 #endif

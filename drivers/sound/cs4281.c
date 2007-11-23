@@ -75,24 +75,6 @@ EXPORT_NO_SYMBOLS;
 
 #include <linux/version.h>
 
-#if LINUX_VERSION_CODE < 0x02030d
-#ifdef MODULE
-#define __exit
-#define module_exit(x) void cleanup_module(void) { x(); }
-#define module_init(x) int init_module(void) { return x(); }
-#else
-#define __exit __attribute__ ((unused, __section__ (".text.init")))
-#define module_exit(x) // nothing 
-#define module_init(x) // nothing 
-#endif
-
-#define DECLARE_WAIT_QUEUE_HEAD(w) struct wait_queue *w = NULL
-#define DECLARE_WAITQUEUE(w,c) struct wait_queue w = {(c), NULL}
-#define wait_queue_head_t struct wait_queue *
-#define init_waitqueue_head(w) *(w) = 0
-#define init_MUTEX(m) *(m) = MUTEX
-#endif
-
 // MIDI buffer sizes 
 #define MIDIINBUF  500
 #define MIDIOUTBUF 500

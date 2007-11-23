@@ -63,7 +63,7 @@ void ext2_delete_inode (struct inode * inode)
 	ext2_free_inode (inode);
 }
 
-#define inode_bmap(inode, nr) ((inode)->u.ext2_i.i_data[(nr)])
+#define inode_bmap(inode, nr) le32_to_cpu((inode)->u.ext2_i.i_data[(nr)])
 
 /* 
  * ext2_discard_prealloc and ext2_alloc_block are atomic wrt. the
@@ -235,7 +235,8 @@ static struct buffer_head * inode_getblk (struct inode * inode, int nr,
 repeat:
 	tmp = *p;
 	if (tmp) {
-		struct buffer_head * result = getblk (inode->i_dev, tmp, inode->i_sb->s_blocksize);
+		struct buffer_head * result;
+		result = getblk (inode->i_dev, le32_to_cpu(tmp), inode->i_sb->s_blocksize);
 		if (tmp == *p)
 			return result;
 		brelse (result);
@@ -253,7 +254,7 @@ repeat:
 	if (!goal) {
 		for (tmp = nr - 1; tmp >= 0; tmp--) {
 			if (inode->u.ext2_i.i_data[tmp]) {
-				goal = inode->u.ext2_i.i_data[tmp];
+				goal = le32_to_cpu(inode->u.ext2_i.i_data[tmp]);
 				break;
 			}
 		}
@@ -274,7 +275,7 @@ repeat:
 		brelse (result);
 		goto repeat;
 	}
-	*p = tmp;
+	*p = cpu_to_le32(tmp);
 	inode->u.ext2_i.i_next_alloc_block = new_block;
 	inode->u.ext2_i.i_next_alloc_goal = tmp;
 	inode->i_ctime = CURRENT_TIME;
@@ -544,11 +545,8 @@ void ext2_read_inode (struct inode * inode)
 			    "New inode has non-zero prealloc count!");
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		inode->i_rdev = to_kdev_t(le32_to_cpu(raw_inode->i_block[0]));
-	else if (S_ISLNK(inode->i_mode) && !inode->i_blocks)
-		for (block = 0; block < EXT2_N_BLOCKS; block++)
-			inode->u.ext2_i.i_data[block] = raw_inode->i_block[block];
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
-		inode->u.ext2_i.i_data[block] = le32_to_cpu(raw_inode->i_block[block]);
+		inode->u.ext2_i.i_data[block] = raw_inode->i_block[block];
 	brelse (bh);
 	inode->i_op = NULL;
 	if (inode->i_ino == EXT2_ACL_IDX_INO ||
@@ -668,11 +666,8 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 	raw_inode->i_version = cpu_to_le32(inode->u.ext2_i.i_version);
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		raw_inode->i_block[0] = cpu_to_le32(kdev_t_to_nr(inode->i_rdev));
-	else if (S_ISLNK(inode->i_mode) && !inode->i_blocks)
-		for (block = 0; block < EXT2_N_BLOCKS; block++)
-			raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
-		raw_inode->i_block[block] = cpu_to_le32(inode->u.ext2_i.i_data[block]);
+		raw_inode->i_block[block] = inode->u.ext2_i.i_data[block];
 	mark_buffer_dirty(bh, 1);
 	if (do_sync) {
 		ll_rw_block (WRITE, 1, &bh);

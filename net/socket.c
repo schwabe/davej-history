@@ -1165,7 +1165,6 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 			/* Note - when this code becomes multithreaded on
 			 * SMP machines you have a race to fix here.
 			 */
-			err = -ENOBUFS;
 			ctl_buf = sock_kmalloc(sock->sk, ctl_len, GFP_KERNEL);
 			if (ctl_buf == NULL) 
 				goto out_freeiov;

@@ -1,8 +1,9 @@
 /*
  * USB Serial Converter driver
  *
- *	Copyright (C) 1999, 2000
- *	    Greg Kroah-Hartman (greg@kroah.com)
+ * Copyright (C) 1999, 2000 Greg Kroah-Hartman (greg@kroah.com)
+ * Copyright (c) 2000 Peter Berger (pberger@brimson.com)
+ * Copyright (c) 2000 Al Borchers (borchers@steinerpoint.com)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -14,6 +15,22 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (07/23/2000) gkh
+ *	Added bulk_out_endpointAddress to port structure.
+ *
+ * (07/19/2000) gkh, pberger, and borchers
+ *	Modifications to allow usb-serial drivers to be modules.
+ *
+ * (07/03/2000) gkh
+ *	Added more debugging to serial_ioctl call
+ * 
+ * (06/25/2000) gkh
+ *	Changed generic_write_bulk_callback to not call wake_up_interruptible
+ *	directly, but to have port_softint do it at a safer time.
+ *
+ * (06/23/2000) gkh
+ *	Cleaned up debugging statements in a quest to find UHCI timeout bug.
+ *
  * (05/22/2000) gkh
  *	Changed the makefile, enabling the big CONFIG_USB_SERIAL_SOMTHING to be 
  *	removed from the individual device source files.
@@ -205,7 +222,6 @@
  * 
  */
 
-
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -220,6 +236,9 @@
 #include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
+#include <linux/list.h>
+#include <linux/smp_lock.h>
+#include <linux/devfs_fs_kernel.h>
 
 #ifdef CONFIG_USB_SERIAL_DEBUG
 	#define DEBUG
@@ -273,37 +292,6 @@ static struct usb_serial_device_type generic_device = {
 #endif
 
 
-/* To add support for another serial converter, create a usb_serial_device_type
-   structure for that device, and add it to this list, making sure that the
-   last  entry is NULL. */
-static struct usb_serial_device_type *usb_serial_devices[] = {
-#ifdef CONFIG_USB_SERIAL_GENERIC
-	&generic_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_WHITEHEAT
-	&whiteheat_fake_device,
-	&whiteheat_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_VISOR
-	&handspring_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_FTDI_SIO
-	&ftdi_sio_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_KEYSPAN_PDA
-	&keyspan_pda_fake_device,
-	&keyspan_pda_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_OMNINET
-	&zyxel_omninet_device,
-#endif
-#ifdef CONFIG_USB_SERIAL_DIGI_ACCELEPORT
-	&digi_acceleport_device,
-#endif
-	NULL
-};
-
-
 /* local function prototypes */
 static int  serial_open (struct tty_struct *tty, struct file * filp);
 static void serial_close (struct tty_struct *tty, struct file * filp);
@@ -330,6 +318,8 @@ static struct tty_struct *	serial_tty[SERIAL_TTY_MINORS];
 static struct termios *		serial_termios[SERIAL_TTY_MINORS];
 static struct termios *		serial_termios_locked[SERIAL_TTY_MINORS];
 static struct usb_serial	*serial_table[SERIAL_TTY_MINORS] = {NULL, };
+
+LIST_HEAD(usb_serial_driver_list);
 
 
 static inline struct usb_serial* get_usb_serial (struct usb_serial_port *port, const char *function) 
@@ -359,7 +349,7 @@ static struct usb_serial *get_free_serial (int num_ports, int *minor)
 	int i, j;
 	int good_spot;
 
-	dbg("get_free_serial %d", num_ports);
+	dbg(__FUNCTION__ " %d", num_ports);
 
 	*minor = 0;
 	for (i = 0; i < SERIAL_TTY_MINORS; ++i) {
@@ -374,14 +364,14 @@ static struct usb_serial *get_free_serial (int num_ports, int *minor)
 			continue;
 			
 		if (!(serial = kmalloc(sizeof(struct usb_serial), GFP_KERNEL))) {
-			err("Out of memory");
+			err(__FUNCTION__ " - Out of memory");
 			return NULL;
 		}
 		memset(serial, 0, sizeof(struct usb_serial));
 		serial->magic = USB_SERIAL_MAGIC;
 		serial_table[i] = serial;
 		*minor = i;
-		dbg("minor base = %d", *minor);
+		dbg(__FUNCTION__ " - minor base = %d", *minor);
 		for (i = *minor+1; (i < (*minor + num_ports)) && (i < SERIAL_TTY_MINORS); ++i)
 			serial_table[i] = serial;
 		return serial;
@@ -394,7 +384,7 @@ static void return_serial (struct usb_serial *serial)
 {
 	int i;
 
-	dbg("return_serial");
+	dbg(__FUNCTION__);
 
 	if (serial == NULL)
 		return;
@@ -419,7 +409,7 @@ int ezusb_writememory (struct usb_serial *serial, int address, unsigned char *da
 //	dbg("ezusb_writememory %x, %d", address, length);
 
 	if (!transfer_buffer) {
-		err("ezusb_writememory: kmalloc(%d) failed.", length);
+		err(__FUNCTION__ " - kmalloc(%d) failed.", length);
 		return -ENOMEM;
 	}
 	memcpy (transfer_buffer, data, length);
@@ -432,10 +422,10 @@ int ezusb_writememory (struct usb_serial *serial, int address, unsigned char *da
 int ezusb_set_reset (struct usb_serial *serial, unsigned char reset_bit)
 {
 	int	response;
-	dbg("ezusb_set_reset: %d", reset_bit);
+	dbg(__FUNCTION__ " - %d", reset_bit);
 	response = ezusb_writememory (serial, CPUCS_REG, &reset_bit, 1, 0xa0);
 	if (response < 0) {
-		err("ezusb_set_reset %d failed", reset_bit);
+		err(__FUNCTION__ "- %d failed", reset_bit);
 	}
 	return response;
 }
@@ -452,7 +442,7 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 	struct usb_serial_port *port;
 	int portNumber;
 	
-	dbg("serial_open");
+	dbg(__FUNCTION__);
 
 	/* initialize the pointer incase something fails */
 	tty->driver_data = NULL;
@@ -460,7 +450,7 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 	/* get the serial object associated with this tty pointer */
 	serial = get_serial_by_minor (MINOR(tty->device));
 
-	if (serial_paranoia_check (serial, "serial_open")) {
+	if (serial_paranoia_check (serial, __FUNCTION__)) {
 		return -ENODEV;
 	}
 
@@ -482,16 +472,16 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 static void serial_close(struct tty_struct *tty, struct file * filp)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial = get_usb_serial (port, "serial_close");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 
 	if (!serial) {
 		return;
 	}
 
-	dbg("serial_close port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 	
 	if (!port->active) {
-		dbg ("port not opened");
+		dbg (__FUNCTION__ " - port not opened");
 		return;
 	}
 
@@ -507,16 +497,16 @@ static void serial_close(struct tty_struct *tty, struct file * filp)
 static int serial_write (struct tty_struct * tty, int from_user, const unsigned char *buf, int count)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial = get_usb_serial (port, "serial_write");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 	
 	if (!serial) {
 		return -ENODEV;
 	}
 	
-	dbg("serial_write port %d, %d byte(s)", port->number, count);
+	dbg(__FUNCTION__ " - port %d, %d byte(s)", port->number, count);
 
 	if (!port->active) {
-		dbg ("port not opened");
+		dbg (__FUNCTION__ " - port not opened");
 		return -EINVAL;
 	}
 	
@@ -532,16 +522,16 @@ static int serial_write (struct tty_struct * tty, int from_user, const unsigned 
 static int serial_write_room (struct tty_struct *tty) 
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial = get_usb_serial (port, "serial_write_room");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 
 	if (!serial) {
 		return -ENODEV;
 	}
 
-	dbg("serial_write_room port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 	
 	if (!port->active) {
-		dbg ("port not open");
+		dbg (__FUNCTION__ " - port not open");
 		return -EINVAL;
 	}
 
@@ -557,14 +547,14 @@ static int serial_write_room (struct tty_struct *tty)
 static int serial_chars_in_buffer (struct tty_struct *tty) 
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial = get_usb_serial (port, "serial_chars_in_buffer");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 
 	if (!serial) {
 		return -ENODEV;
 	}
 
 	if (!port->active) {
-		dbg ("port not open");
+		dbg (__FUNCTION__ " - port not open");
 		return -EINVAL;
 	}
 
@@ -580,16 +570,16 @@ static int serial_chars_in_buffer (struct tty_struct *tty)
 static void serial_throttle (struct tty_struct * tty)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial = get_usb_serial (port, "serial_throttle");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 
 	if (!serial) {
 		return;
 	}
 
-	dbg("serial_throttle port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 
 	if (!port->active) {
-		dbg ("port not open");
+		dbg (__FUNCTION__ " - port not open");
 		return;
 	}
 
@@ -605,16 +595,16 @@ static void serial_throttle (struct tty_struct * tty)
 static void serial_unthrottle (struct tty_struct * tty)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial = get_usb_serial (port, "serial_unthrottle");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 
 	if (!serial) {
 		return;
 	}
 
-	dbg("serial_unthrottle port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 
 	if (!port->active) {
-		dbg ("port not open");
+		dbg (__FUNCTION__ " - port not open");
 		return;
 	}
 
@@ -630,16 +620,16 @@ static void serial_unthrottle (struct tty_struct * tty)
 static int serial_ioctl (struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned long arg)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial = get_usb_serial (port, "serial_ioctl");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 
 	if (!serial) {
 		return -ENODEV;
 	}
 
-	dbg("serial_ioctl port %d", port->number);
+	dbg(__FUNCTION__ " - port %d, cmd 0x%.4x", port->number, cmd);
 
 	if (!port->active) {
-		dbg ("port not open");
+		dbg (__FUNCTION__ " - port not open");
 		return -ENODEV;
 	}
 
@@ -655,16 +645,16 @@ static int serial_ioctl (struct tty_struct *tty, struct file * file, unsigned in
 static void serial_set_termios (struct tty_struct *tty, struct termios * old)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial = get_usb_serial (port, "serial_set_termios");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 
 	if (!serial) {
 		return;
 	}
 
-	dbg("serial_set_termios port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 
 	if (!port->active) {
-		dbg ("port not open");
+		dbg (__FUNCTION__ " - port not open");
 		return;
 	}
 
@@ -680,16 +670,16 @@ static void serial_set_termios (struct tty_struct *tty, struct termios * old)
 static void serial_break (struct tty_struct *tty, int break_state)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *) tty->driver_data;
-	struct usb_serial *serial = get_usb_serial (port, "serial_break");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 
 	if (!serial) {
 		return;
 	}
 
-	dbg("serial_break port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 
 	if (!port->active) {
-		dbg ("port not open");
+		dbg (__FUNCTION__ " - port not open");
 		return;
 	}
 
@@ -709,10 +699,10 @@ static int generic_open (struct usb_serial_port *port, struct file *filp)
 {
 	struct usb_serial *serial = port->serial;
 
-	dbg("generic_open port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 
 	if (port->active) {
-		dbg ("device already open");
+		dbg (__FUNCTION__ " - device already open");
 		return -EINVAL;
 	}
 	port->active = 1;
@@ -721,7 +711,7 @@ static int generic_open (struct usb_serial_port *port, struct file *filp)
 	if (serial->num_bulk_in) {
 		/*Start reading from the device*/
 		if (usb_submit_urb(port->read_urb))
-			dbg("usb_submit_urb(read bulk) failed");
+			dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
 	}
 
 	return (0);
@@ -732,7 +722,7 @@ static void generic_close (struct usb_serial_port *port, struct file * filp)
 {
 	struct usb_serial *serial = port->serial;
 
-	dbg("generic_close port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 	
 	/* shutdown any bulk reads that might be going on */
 	if (serial->num_bulk_out) {
@@ -750,21 +740,32 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 {
 	struct usb_serial *serial = port->serial;
 
-	dbg("generic_serial_write port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 
 	if (count == 0) {
-		dbg("write request of 0 bytes");
+		dbg(__FUNCTION__ " - write request of 0 bytes");
 		return (0);
 	}
 
 	/* only do something if we have a bulk out endpoint */
 	if (serial->num_bulk_out) {
 		if (port->write_urb->status == -EINPROGRESS) {
-			dbg ("already writing");
+			dbg (__FUNCTION__ " - already writing");
 			return (0);
 		}
 
 		count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
+
+#ifdef DEBUG
+		{
+			int i;
+			printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ " - length = %d, data = ", count);
+			for (i = 0; i < count; ++i) {
+				printk ("%.2x ", buf[i]);
+			}
+			printk ("\n");
+		}
+#endif
 
 		if (from_user) {
 			copy_from_user(port->write_urb->transfer_buffer, buf, count);
@@ -777,7 +778,7 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 		port->write_urb->transfer_buffer_length = count;
 
 		if (usb_submit_urb(port->write_urb))
-			dbg("usb_submit_urb(write bulk) failed");
+			dbg(__FUNCTION__ " - usb_submit_urb(write bulk) failed");
 
 		return (count);
 	}
@@ -790,59 +791,58 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 static int generic_write_room (struct usb_serial_port *port)
 {
 	struct usb_serial *serial = port->serial;
-	int room;
+	int room = 0;
 
-	dbg("generic_write_room port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 	
-	if (serial->num_bulk_out) {
-		if (port->write_urb->status == -EINPROGRESS)
-			room = 0;
-		else
+	if (serial->num_bulk_out)
+		if (port->write_urb->status != -EINPROGRESS)
 			room = port->bulk_out_size;
-		dbg("generic_write_room returns %d", room);
-		return (room);
-	}
 	
-	return (0);
+	dbg(__FUNCTION__ " - returns %d", room);
+	return (room);
 }
 
 
 static int generic_chars_in_buffer (struct usb_serial_port *port)
 {
 	struct usb_serial *serial = port->serial;
+	int chars = 0;
 
-	dbg("generic_chars_in_buffer port %d", port->number);
+	dbg(__FUNCTION__ " - port %d", port->number);
 	
-	if (serial->num_bulk_out) {
-		if (port->write_urb->status == -EINPROGRESS) {
-			return (port->bulk_out_size);
-		}
-	}
+	if (serial->num_bulk_out)
+		if (port->write_urb->status == -EINPROGRESS)
+			chars = port->write_urb->transfer_buffer_length;
 
-	return (0);
+	dbg (__FUNCTION__ " - returns %d", chars);
+	return (chars);
 }
 
 
 static void generic_read_bulk_callback (struct urb *urb)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
-	struct usb_serial *serial = get_usb_serial (port, "generic_read_bulk_callback");
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 	struct tty_struct *tty;
 	unsigned char *data = urb->transfer_buffer;
 	int i;
 
+	dbg(__FUNCTION__ " - port %d", port->number);
+	
 	if (!serial) {
+		dbg(__FUNCTION__ " - bad serial pointer, exiting");
 		return;
 	}
 
 	if (urb->status) {
-		dbg("nonzero read bulk status received: %d", urb->status);
+		dbg(__FUNCTION__ " - nonzero read bulk status received: %d", urb->status);
 		return;
 	}
 
 #ifdef DEBUG
 	if (urb->actual_length) {
-		printk (KERN_DEBUG __FILE__ ": data read - length = %d, data = ", urb->actual_length);
+		printk (KERN_DEBUG __FILE__ ": " __FUNCTION__ "- length = %d, data = ", urb->actual_length);
 		for (i = 0; i < urb->actual_length; ++i) {
 			printk ("%.2x ", data[i]);
 		}
@@ -860,7 +860,7 @@ static void generic_read_bulk_callback (struct urb *urb)
 
 	/* Continue trying to always read  */
 	if (usb_submit_urb(urb))
-		dbg("failed resubmitting read urb");
+		dbg(__FUNCTION__ " - failed resubmitting read urb");
 
 	return;
 }
@@ -869,39 +869,63 @@ static void generic_read_bulk_callback (struct urb *urb)
 static void generic_write_bulk_callback (struct urb *urb)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
-	struct usb_serial *serial = get_usb_serial (port, "generic_write_bulk_callback");
-	struct tty_struct *tty;
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 
+	dbg(__FUNCTION__ " - port %d", port->number);
+	
 	if (!serial) {
+		dbg(__FUNCTION__ " - bad serial pointer, exiting");
 		return;
 	}
 
 	if (urb->status) {
-		dbg("nonzero write bulk status received: %d", urb->status);
+		dbg(__FUNCTION__ " - nonzero write bulk status received: %d", urb->status);
 		return;
 	}
 
-	tty = port->tty;
-	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup)
-		(tty->ldisc.write_wakeup)(tty);
-
-	wake_up_interruptible(&tty->write_wait);
+	queue_task(&port->tqueue, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
 	
 	return;
 }
+
+
+static void port_softint(void *private)
+{
+	struct usb_serial_port *port = (struct usb_serial_port *)private;
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
+	struct tty_struct *tty;
+
+	dbg(__FUNCTION__ " - port %d", port->number);
+	
+	if (!serial) {
+		return;
+	}
+ 	
+	tty = port->tty;
+	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) && tty->ldisc.write_wakeup) {
+		dbg(__FUNCTION__ " - write wakeup call.");
+		(tty->ldisc.write_wakeup)(tty);
+	}
+
+	wake_up_interruptible(&tty->write_wait);
+}
+
 
 
 static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_serial *serial = NULL;
 	struct usb_serial_port *port;
-	struct usb_interface_descriptor *interface;
+	struct usb_interface *interface;
+	struct usb_interface_descriptor *iface_desc;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_endpoint_descriptor *interrupt_in_endpoint[MAX_NUM_PORTS];
 	struct usb_endpoint_descriptor *bulk_in_endpoint[MAX_NUM_PORTS];
 	struct usb_endpoint_descriptor *bulk_out_endpoint[MAX_NUM_PORTS];
-	struct usb_serial_device_type *type;
-	int device_num;
+	struct usb_serial_device_type *type = NULL;
+	struct list_head *tmp;
+	int found;
 	int minor;
 	int buffer_size;
 	int i;
@@ -913,34 +937,38 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	int num_bulk_out = 0;
 	int num_ports;
 	int max_endpoints;
+
 	
 	/* loop through our list of known serial converters, and see if this
-           device matches. */
-	for (device_num = 0; usb_serial_devices[device_num]; device_num++) {
-		type = usb_serial_devices[device_num];
+	   device matches. */
+	found = 0;
+	list_for_each (tmp, &usb_serial_driver_list) {
+		type = list_entry(tmp, struct usb_serial_device_type, driver_list);
 		dbg ("Looking at %s Vendor id=%.4x Product id=%.4x", 
-		     type->name, *(type->idVendor), *(type->idProduct));
+			type->name, *(type->idVendor), *(type->idProduct));
 
 		/* look at the device descriptor */
 		if ((dev->descriptor.idVendor == *(type->idVendor)) &&
 		    (dev->descriptor.idProduct == *(type->idProduct))) {
 			dbg("descriptor matches");
+			found = 1;
 			break;
 		}
 	}
-	if (!usb_serial_devices[device_num]) {
+	if (!found) {
 		/* no match */
 		dbg("none matched");
 		return(NULL);
 	}
-
+	
 	/* descriptor matches, let's find the endpoints needed */
 	interrupt_pipe = bulk_in_pipe = bulk_out_pipe = HAS_NOT;
 			
 	/* check out the endpoints */
-	interface = &dev->actconfig->interface[ifnum].altsetting[0];
-	for (i = 0; i < interface->bNumEndpoints; ++i) {
-		endpoint = &interface->endpoint[i];
+	interface = &dev->actconfig->interface[ifnum];
+	iface_desc = &interface->altsetting[0];
+	for (i = 0; i < iface_desc->bNumEndpoints; ++i) {
+		endpoint = &iface_desc->endpoint[i];
 		
 		if ((endpoint->bEndpointAddress & 0x80) &&
 		    ((endpoint->bmAttributes & 3) == 0x02)) {
@@ -1004,6 +1032,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	
 	serial->dev = dev;
 	serial->type = type;
+	serial->interface = interface;
 	serial->minor = minor;
 	serial->num_ports = num_ports;
 	serial->num_bulk_in = num_bulk_in;
@@ -1051,6 +1080,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 		}
 		buffer_size = endpoint->wMaxPacketSize;
 		port->bulk_out_size = buffer_size;
+		port->bulk_out_endpointAddress = endpoint->bEndpointAddress;
 		port->bulk_out_buffer = kmalloc (buffer_size, GFP_KERNEL);
 		if (!port->bulk_out_buffer) {
 			err("Couldn't allocate bulk_out_buffer");
@@ -1096,6 +1126,8 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 		port->number = i + serial->minor;
 		port->serial = serial;
 		port->magic = USB_SERIAL_PORT_MAGIC;
+		port->tqueue.routine = port_softint;
+		port->tqueue.data = port;
 	}
 	
 	/* initialize the devfs nodes for this device and let the user know what ports we are bound to */
@@ -1148,6 +1180,12 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 	int i;
 
 	if (serial) {
+		/* fail all future close/read/write/ioctl/etc calls */
+		for (i = 0; i < serial->num_ports; ++i) {
+			if (serial->port[i].tty != NULL)
+				serial->port[i].tty->driver_data = NULL;
+		}
+
 		if (serial->type->shutdown)
 			serial->type->shutdown(serial);
 
@@ -1233,7 +1271,6 @@ static struct tty_driver serial_tty_driver = {
 int usb_serial_init(void)
 {
 	int i;
-	int something;
 	int result;
 
 	/* Initalize our global data */
@@ -1241,25 +1278,19 @@ int usb_serial_init(void)
 		serial_table[i] = NULL;
 	}
 
-	/* tell the world what devices this driver currently supports */
-	something = 0;
-	for (i = 0; usb_serial_devices[i]; ++i) {
-		if (!strstr (usb_serial_devices[i]->name, "prerenumeration")) {
-			info ("USB Serial support registered for %s", usb_serial_devices[i]->name);
-			something = 1;
-		}
-	}
-	if (!something)
-		info ("USB Serial driver is not configured for any devices!");
-
 	/* register the tty driver */
 	serial_tty_driver.init_termios          = tty_std_termios;
 	serial_tty_driver.init_termios.c_cflag  = B9600 | CS8 | CREAD | HUPCL | CLOCAL;
 	if (tty_register_driver (&serial_tty_driver)) {
-		err("failed to register tty driver");
+		err(__FUNCTION__ " - failed to register tty driver");
 		return -1;
 	}
 
+#ifdef CONFIG_USB_SERIAL_GENERIC
+	/* register our generic driver with ourselves */
+	usb_serial_register (&generic_device);
+#endif
+	
 	/* register the USB driver */
 	result = usb_register(&usb_serial_driver);
 	if (result < 0) {
@@ -1268,12 +1299,19 @@ int usb_serial_init(void)
 		return -1;
 	}
 	
+	
 	return 0;
 }
 
 
 void usb_serial_exit(void)
 {
+
+#ifdef CONFIG_USB_SERIAL_GENERIC
+	/* remove our generic driver */
+	usb_serial_deregister (&generic_device);
+#endif
+	
 	usb_deregister(&usb_serial_driver);
 	tty_unregister_driver(&serial_tty_driver);
 }
@@ -1282,4 +1320,47 @@ void usb_serial_exit(void)
 module_init(usb_serial_init);
 module_exit(usb_serial_exit);
 
+
+int usb_serial_register(struct usb_serial_device_type *new_device)
+{
+	/* Add this device to our list of devices */
+	list_add(&new_device->driver_list, &usb_serial_driver_list);
+
+	info ("USB Serial support registered for %s", new_device->name);
+
+	usb_scan_devices();
+
+	return 0;
+}
+
+
+void usb_serial_deregister(struct usb_serial_device_type *device)
+{
+	struct usb_serial *serial;
+	int i;
+
+	info("USB Serial deregistering driver %s", device->name);
+
+	/* clear out the serial_table if the device is attached to a port */
+	for(i = 0; i < SERIAL_TTY_MINORS; ++i) {
+		serial = serial_table[i];
+		if ((serial != NULL) && (serial->type == device)) {
+			usb_driver_release_interface (&usb_serial_driver, serial->interface);
+			usb_serial_disconnect (NULL, serial);
+		}
+	}
+
+	list_del(&device->driver_list);
+}
+
+
+
+/* If the usb-serial core is build into the core, the usb-serial drivers
+   need these symbols to load properly as modules. */
+EXPORT_SYMBOL(usb_serial_register);
+EXPORT_SYMBOL(usb_serial_deregister);
+#ifdef USES_EZUSB_FUNCTIONS
+	EXPORT_SYMBOL(ezusb_writememory);
+	EXPORT_SYMBOL(ezusb_set_reset);
+#endif
 

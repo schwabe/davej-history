@@ -29,9 +29,12 @@
  *                                       infrastructure and Sparc support
  *   Pierrick Pinasseau (CERN): For lending me an Ultra 5 to test the
  *                              driver under Linux/Sparc64
- *   Matt Domsch <Matt_Domsch@dell.com>: Detect 1000baseT cards
+ *   Matt Domsch <Matt_Domsch@dell.com>: Detect Alteon 1000baseT cards
  *   Chip Salzenberg <chip@valinux.com>: Fix race condition between tx
  *                                       handler and close() cleanup.
+ *   Ken Aaker <kdaaker@rchland.vnet.ibm.com>: Correct check for whether
+ *                                       memory mapped IO is enabled to
+ *                                       make the driver work on RS/6000.
  */
 
 #include <linux/config.h>
@@ -85,8 +88,13 @@
 #define PCI_VENDOR_ID_NETGEAR		0x1385
 #define PCI_DEVICE_ID_NETGEAR_GA620	0x620a
 #endif
+#ifndef PCI_DEVICE_ID_NETGEAR_GA620T
+#define PCI_DEVICE_ID_NETGEAR_GA620T	0x630a
+#endif
+
 /*
- * They used the DEC vendor ID by mistake
+ * Farallon used the DEC vendor ID by mistake and they seem not
+ * to care - stinky!
  */
 #ifndef PCI_DEVICE_ID_FARALLON_PN9000SX
 #define PCI_DEVICE_ID_FARALLON_PN9000SX	0x1a
@@ -390,7 +398,7 @@ static int tx_ratio[ACE_MAX_MOD_PARMS] = {0, };
 static int dis_pci_mem_inval[ACE_MAX_MOD_PARMS] = {1, 1, 1, 1, 1, 1, 1, 1};
 
 static const char __initdata *version = 
-  "acenic.c: v0.45 05/31/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
+  "acenic.c: v0.46 2000/09/05  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
   "                            http://home.cern.ch/~jes/gige/acenic.html\n";
 
 static struct net_device *root_dev = NULL;
@@ -430,7 +438,8 @@ int __init acenic_probe (struct net_device *dev)
 		    !((pdev->vendor == PCI_VENDOR_ID_3COM) &&
 		      (pdev->device == PCI_DEVICE_ID_3COM_3C985)) &&
 		    !((pdev->vendor == PCI_VENDOR_ID_NETGEAR) &&
-		      (pdev->device == PCI_DEVICE_ID_NETGEAR_GA620)) &&
+		      ((pdev->device == PCI_DEVICE_ID_NETGEAR_GA620) || 
+		       (pdev->device == PCI_DEVICE_ID_NETGEAR_GA620T))) &&
 		/*
 		 * Farallon used the DEC vendor ID on their cards by
 		 * mistake for a while
@@ -481,7 +490,7 @@ int __init acenic_probe (struct net_device *dev)
 		pci_read_config_word(pdev, PCI_COMMAND, &ap->pci_command);
 
 		/* OpenFirmware on Mac's does not set this - DOH.. */ 
-		if (!ap->pci_command & PCI_COMMAND_MEMORY) {
+		if (!(ap->pci_command & PCI_COMMAND_MEMORY)) {
 			printk(KERN_INFO "%s: Enabling PCI Memory Mapped "
 			       "access - was not enabled by BIOS/Firmware\n",
 			       dev->name);
@@ -598,7 +607,6 @@ int __init acenic_probe (struct net_device *dev)
 }
 
 
-#ifdef MODULE
 MODULE_AUTHOR("Jes Sorensen <Jes.Sorensen@cern.ch>");
 MODULE_DESCRIPTION("AceNIC/3C985/GA620 Gigabit Ethernet driver");
 MODULE_PARM(link, "1-" __MODULE_STRING(8) "i");
@@ -607,7 +615,6 @@ MODULE_PARM(tx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_tx_desc, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_rx_desc, "1-" __MODULE_STRING(8) "i");
-#endif
 
 
 void __exit ace_module_cleanup(void)

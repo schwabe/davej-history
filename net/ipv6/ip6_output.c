@@ -121,7 +121,7 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 
 		if (skb_headroom(skb) < head_room) {
 			struct sk_buff *skb2 = skb_realloc_headroom(skb, head_room);
-			kfree(skb);
+			kfree_skb(skb);
 			skb = skb2;
 			if (skb == NULL)
 				return -ENOBUFS;

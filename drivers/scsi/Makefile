@@ -7,7 +7,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) aacraid
+ALL_SUB_DIRS := $(SUB_DIRS)
 
 L_TARGET := scsi.a
 L_OBJS   := 
@@ -347,16 +347,6 @@ L_OBJS += aha1740.o
 else
   ifeq ($(CONFIG_SCSI_AHA1740),m)
   M_OBJS += aha1740.o
-  endif
-endif
-
-ifeq ($(CONFIG_SCSI_AACRAID),y)
-  SUB_DIRS += aacraid
-  MOD_IN_SUB_DIRS += aacraid
-  L_OBJS += aacraid/aacraid.o
-else
-  ifeq ($(CONFIG_SCSI_AACRAID),m)
-    MOD_IN_SUB_DIRS += aacraid
   endif
 endif
 

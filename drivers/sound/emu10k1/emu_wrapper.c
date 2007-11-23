@@ -100,7 +100,7 @@ pci_compat_register_driver(struct pci_driver *drv)
                 if (!found)
                         count += pci_announce_device(drv, dev);
         }
-#endif        
+#endif
         return count;
 }
 
@@ -119,36 +119,10 @@ pci_compat_unregister_driver(struct pci_driver *drv)
                 if (found) {
                         if (drv->remove)
                                 drv->remove(dev);
-                        drvmap[i].dev = NULL;
+                        drvmap[i - 1].dev = NULL;
                 }
         }
-#endif        
-}
-
-unsigned long pci_compat_get_size (struct pci_dev *dev, int n_base)
-{
-        u32 l, sz;
-        int reg = PCI_BASE_ADDRESS_0 + (n_base << 2);
-
-        /* XXX temporarily disable I/O and memory decoding for this device? */
-
-        pci_read_config_dword (dev, reg, &l);
-        if (l == 0xffffffff)
-                return 0;
-
-        pci_write_config_dword (dev, reg, ~0);
-        pci_read_config_dword (dev, reg, &sz);
-        pci_write_config_dword (dev, reg, l);
-
-        if (!sz || sz == 0xffffffff)
-                return 0;
-        if ((l & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_MEMORY) {
-                sz = ~(sz & PCI_BASE_ADDRESS_MEM_MASK);
-        } else {
-                sz = ~(sz & PCI_BASE_ADDRESS_IO_MASK) & 0xffff;
-        }
-
-        return sz + 1;
+#endif
 }
 
 int pci_compat_enable_device(struct pci_dev *dev)

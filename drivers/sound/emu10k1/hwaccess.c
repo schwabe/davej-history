@@ -366,7 +366,7 @@ int sblive_readac97(struct emu10k1_card *card, u8 index, u16 * data)
 
 	spin_unlock_irqrestore(&card->lock, flags);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int sblive_writeac97(struct emu10k1_card *card, u8 index, u16 data)
@@ -380,7 +380,7 @@ int sblive_writeac97(struct emu10k1_card *card, u8 index, u16 data)
 
 	spin_unlock_irqrestore(&card->lock, flags);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int sblive_rmwac97(struct emu10k1_card *card, u8 index, u16 data, u16 mask)
@@ -399,7 +399,7 @@ int sblive_rmwac97(struct emu10k1_card *card, u8 index, u16 data, u16 mask)
 
 	spin_unlock_irqrestore(&card->lock, flags);
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 /*********************************************************
@@ -415,9 +415,9 @@ int emu10k1_mpu_write_data(struct emu10k1_card *card, u8 data)
 
 	if ((inb(card->iobase + MUSTAT) & MUSTAT_ORDYN) == 0) {
 		outb(data, card->iobase + MUDATA);
-		ret = CTSTATUS_SUCCESS;
+		ret = 0;
 	} else
-		ret = CTSTATUS_BUSY;
+		ret = -1;
 
 	spin_unlock_irqrestore(&card->lock, flags);
 
@@ -433,9 +433,9 @@ int emu10k1_mpu_read_data(struct emu10k1_card *card, u8 * data)
 
 	if ((inb(card->iobase + MUSTAT) & MUSTAT_IRDYN) == 0) {
 		*data = inb(card->iobase + MUDATA);
-		ret = CTSTATUS_SUCCESS;
+		ret = 0;
 	} else
-		ret = CTSTATUS_NODATA;
+		ret = -1;
 
 	spin_unlock_irqrestore(&card->lock, flags);
 
@@ -473,12 +473,12 @@ int emu10k1_mpu_reset(struct emu10k1_card *card)
 		spin_unlock_irqrestore(&card->lock, flags);
 
 		if (status == 0xfe)
-			return CTSTATUS_SUCCESS;
+			return 0;
 		else
-			return CTSTATUS_ERROR;
+			return -1;
 	}
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int emu10k1_mpu_acquire(struct emu10k1_card *card)
@@ -486,7 +486,7 @@ int emu10k1_mpu_acquire(struct emu10k1_card *card)
 	/* FIXME: This should be a macro */
 	++card->mpuacqcount;
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }
 
 int emu10k1_mpu_release(struct emu10k1_card *card)
@@ -494,5 +494,5 @@ int emu10k1_mpu_release(struct emu10k1_card *card)
 	/* FIXME: this should be a macro */
 	--card->mpuacqcount;
 
-	return CTSTATUS_SUCCESS;
+	return 0;
 }

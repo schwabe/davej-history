@@ -9,7 +9,7 @@
  *              as published by the Free Software Foundation; either version
  *              2 of the License, or (at your option) any later version.
  *
- * Version : 1.09
+ * Version : 1b08b
  * 
  * Description: Linux device driver for AMI MegaRAID controller
  *
@@ -120,7 +120,7 @@
  *      also enables the driver to handle large amount of I/O requests for
  *      long duration of time.
  * Version 1.06
- * 	Intel Release
+ * 		Intel Release
  * Version 1.07
  *    Removed the usage of uaccess.h file for kernel versions less than
  *    2.0.36, as this file is not present in those versions.
@@ -146,11 +146,40 @@
  *    Change PCI ID value for the 471 card, use #defines when searching
  *    for megaraid cards.
  *
- * Version 1.09
- *    Fixes by dledford@redhat.com and Manoj @ AMI for IOCTL_CMD_NEW handling of
- *    IOCTLs > 4K
+ * Version 1.10
+ *	  
+ *	I) Changes made to make following ioctl commands work in 0x81 interface
+ *		a)DCMD_DELETE_LOGDRV	
+ *		b)DCMD_GET_DISK_CONFIG
+ *		c)DCMD_DELETE_DRIVEGROUP
+ *		d)NC_SUBOP_ENQUIRY3
+ *		e)DCMD_CHANGE_LDNO	
+ *	 	f)DCMD_CHANGE_LOOPID
+ *		g)DCMD_FC_READ_NVRAM_CONFIG
+ *    	h)DCMD_WRITE_CONFIG
+ * 	II) Added mega_build_kernel_sg function
+ *  III)Firmware flashing option added
+ *	
+ * Version 1.10a
  *
+ *	I)Dell updates included in the source code. 
+ * 		Note:	This change is not tested due to the unavailability of IA64 kernel 
+ *	and it is in the #ifdef DELL_MODIFICATION macro which is not defined
+ *				
+ * Version 1.10b
  *
+ *	I)In IOCTL_CMD_NEW command the wrong way of copying the data 
+ *    to the user address corrected
+ *
+ * Version 1.10c
+ *
+ *	I) DCMD_GET_DISK_CONFIG opcode updated for the firmware changes. 
+ *
+ * Version 1.11
+ *	I)  Version number changed from 1.10c to 1.11
+ *  II)	DCMD_WRITE_CONFIG(0x0D) command in the driver changed from 
+ *  	scatter/gather list mode to direct pointer mode.. 
+ * 
  * BUGS:
  *     Some older 2.1 kernels (eg. 2.1.90) have a bug in pci.c that
  *     fails to detect the controller as a pci device on the system.
@@ -165,7 +194,7 @@
 #define CRLFSTR "\n"
 #define IOCTL_CMD_NEW  0x81
 
-#define MEGARAID_VERSION "v1.09 (August 7, 2000)" 
+#define MEGARAID_VERSION "v1.11 (Aug 23, 2000)" 
 #define MEGARAID_IOCTL_VERSION 108
 
 #include <linux/config.h>
@@ -1039,22 +1068,65 @@ static mega_scb * mega_ioctl (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt)
  */
 
   if (SCpnt->cmnd[0] == IOCTL_CMD_NEW) { 
-            /* use external data area for large xfers  */
+      /* use external data area for large xfers  */
      /* If cmnd[0] is set to IOCTL_CMD_NEW then *
       *   cmnd[4..7] = external user buffer     *
       *   cmnd[8..11] = length of buffer        *
       *                                         */
+      char *user_area = *((char **)&SCpnt->cmnd[4]);
       u32 xfer_size = *((u32 *)&SCpnt->cmnd[8]);
+      switch (data[0])
+      {
+		case FW_FIRE_WRITE:
+		case FW_FIRE_FLASH:
+	     if ((ulong)user_area & (PAGE_SIZE - 1)) {
+          printk("megaraid:user address not aligned on 4K boundary.Error.\n");
+          SCpnt->result = (DID_ERROR << 16);
+          callDone (SCpnt);
+          return NULL;
+	     }
+	     break;
+		default:
+		 break;
+	  }
       if(!(pScb->buff_ptr = kmalloc(xfer_size, GFP_KERNEL))) {
           printk("megaraid: Insufficient mem for IOCTL_CMD_NEW.\n");
           SCpnt->result = (DID_ERROR << 16);
           callDone (SCpnt);
           return NULL;
       }
+
+      copy_from_user(pScb->buff_ptr,user_area,xfer_size);
       pScb->sgList[0].address = virt_to_bus(pScb->buff_ptr);
       pScb->sgList[0].length = xfer_size;
+	  pScb->iDataSize = xfer_size;
       mbox->xferaddr = virt_to_bus(pScb->sgList);
       mbox->numsgelements = 1;
+	  
+      switch (data[0])
+      {
+		case DCMD_FC_CMD:
+		switch (data[1])
+		{
+  		  case DCMD_FC_READ_NVRAM_CONFIG: 
+      	  case DCMD_GET_DISK_CONFIG:
+          {
+	  		if ((ulong) pScb->buff_ptr & (PAGE_SIZE - 1)) {
+          	  printk("megaraid:user address not sufficient Error.\n");
+              SCpnt->result = (DID_ERROR << 16);
+              callDone (SCpnt);
+              return NULL;
+	        }
+			//building SG list
+     		mega_build_kernel_sg(pScb->buff_ptr, xfer_size, pScb, mbox);
+	        break;
+	    }
+	    default:
+		  break;
+	  }//switch (data[1])
+	  break;
+    }
+
   }
 #endif
 
@@ -1065,10 +1137,59 @@ static mega_scb * mega_ioctl (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt)
   mbox->logdrv = data[4];
 
   if(SCpnt->cmnd[0] == IOCTL_CMD_NEW) {
-      if (data[0] == DCMD_FC_CMD){ /*i.e. 0xA1, then override some mbox data */
+      switch (data[0]) {
+        case FW_FIRE_WRITE:
+	      mbox->cmd = FW_FIRE_WRITE;
+	      mbox->channel = data[1]; /* Current Block Number */
+          mbox->xferaddr = virt_to_bus(pScb->buff_ptr);
+	      mbox->numsgelements = 0;
+	      break;
+		case FW_FIRE_FLASH:
+	      mbox->cmd = FW_FIRE_FLASH;
+	      mbox->channel = data[1] | 0x80 ; /* Origin */
+          mbox->xferaddr = virt_to_bus(pScb->buff_ptr);
+	      mbox->numsgelements = 0;
+	      break;
+		case DCMD_FC_CMD:
           *(mboxdata+0) = data[0]; /*mailbox byte 0: DCMD_FC_CMD*/
           *(mboxdata+2) = data[1]; /*sub command*/
-          *(mboxdata+3) = mbox->numsgelements;       /*number of elements in SG list*/
+	      switch (data[1]) 
+	      {
+			case DCMD_FC_READ_NVRAM_CONFIG: 
+              *(mboxdata+3) = mbox->numsgelements;       /*number of elements in SG list*/
+	          break;
+    		case DCMD_WRITE_CONFIG:
+	          mbox->xferaddr = virt_to_bus(pScb->buff_ptr);
+	          mbox->numsgelements = 0;
+			  break;
+        	case DCMD_GET_DISK_CONFIG:
+          	  *(mboxdata+3) = data[2];       /*number of elements in SG list*/
+          	  *(mboxdata+4) = mbox->numsgelements;       /*number of elements in SG list*/
+			  break;
+        	case DCMD_DELETE_LOGDRV:	
+        	case DCMD_DELETE_DRIVEGROUP:
+    		case NC_SUBOP_ENQUIRY3:
+              *(mboxdata+3) = data[2]; 
+	          mbox->xferaddr = virt_to_bus(pScb->buff_ptr);
+	          mbox->numsgelements = 0;
+			  break;
+        	case DCMD_CHANGE_LDNO:	
+        	case DCMD_CHANGE_LOOPID:
+              *(mboxdata+3) = data[2]; 
+              *(mboxdata+4) = data[3]; 
+	          mbox->xferaddr = virt_to_bus(pScb->buff_ptr);
+	    	  mbox->numsgelements = 0;
+			  break;
+			default:
+	          mbox->xferaddr = virt_to_bus(pScb->buff_ptr);
+	          mbox->numsgelements = 0;
+			  break;
+	      }//switch
+		  break;
+		default:
+          mbox->xferaddr = virt_to_bus(pScb->buff_ptr);
+          mbox->numsgelements = 0;
+		  break;
       }
   } 
   else {
@@ -1083,6 +1204,37 @@ static mega_scb * mega_ioctl (mega_host_config * megaCfg, Scsi_Cmnd * SCpnt)
   }
 
   return (pScb);
+}
+
+void mega_build_kernel_sg(char *barea, ulong xfersize, mega_scb *pScb,
+			 mega_ioctl_mbox *mbox) 
+{
+    ulong i, buffer_area, len, end, end_page, x, idx = 0;
+
+    buffer_area = (ulong)barea;
+    i = buffer_area;
+    end = buffer_area + xfersize;
+    end_page = (end) & ~(PAGE_SIZE - 1);
+
+    do {
+    	len =  PAGE_SIZE - (i % PAGE_SIZE);
+    	x = pScb->sgList[idx].address = virt_to_bus((volatile void *)i);
+    	pScb->sgList[idx].length = len;
+        i += len;
+        idx++;
+	} while (i < end_page);
+ 
+    if ((end - i)< 0) {
+          printk("megaraid:Error in user address\n");
+    }       
+	
+	if (end - i) {
+    	pScb->sgList[idx].address = virt_to_bus((volatile void *)i);
+    	pScb->sgList[idx].length = end - i;
+		idx++; 
+	}
+	mbox->xferaddr = virt_to_bus(pScb->sgList);
+	mbox->numsgelements = idx;
 }
 
 #if DEBUG
@@ -1323,7 +1475,7 @@ static int megaIssueCmd (mega_host_config * megaCfg,
 
   /* Wait until mailbox is free */
   if (mega_busyWaitMbox (megaCfg)) {
-    printk(KERN_ERR "megaraid: Blocked mailbox......!!\n");
+    printk("Blocked mailbox......!!\n");
     udelay(1000);
 
 #if DEBUG
@@ -1333,7 +1485,7 @@ static int megaIssueCmd (mega_host_config * megaCfg,
     /* Abort command */
     if (pScb == NULL) {
 	TRACE(("NULL pScb in megaIssue\n"));
-	printk(KERN_WARNING "megaraid: NULL pScb in megaIssue\n");
+	printk("NULL pScb in megaIssue\n");
     }
     mega_cmd_done (megaCfg, pScb, 0x08);
     return -1;
@@ -1410,7 +1562,7 @@ static int megaIssueCmd (mega_host_config * megaCfg,
   }
 #if DEBUG
   while (mega_busyWaitMbox (megaCfg)) {
-    printk(KERN_ERR "megaraid: Blocked mailbox on exit......!\n");
+    printk("Blocked mailbox on exit......!\n");
     udelay(1000);
   }
 #endif
@@ -1688,6 +1840,11 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
 #endif
   
   while ((pdev = pci_find_device (pciVendor, pciDev, pdev))) {
+
+#ifdef DELL_MODIFICATION 
+    if (pci_enable_device(pdev))
+    	continue;
+#endif	
     pciBus = pdev->bus->number;
     pciDevFun = pdev->devfn;
 #endif
@@ -1732,7 +1889,7 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
 				"megaraid: to protect your data, please upgrade your firmware to version\n"
 				"megaraid: 3.10 or later, available from the Dell Technical Support web\n"
 				"megaraid: site at\n"
-				"http://support.dell.com/us/en/filelib/download/index.asp?fileid=2489\n");
+				"http://support.dell.com/us/en/filelib/download/index.asp?fileid=2940\n");
 			continue;
 			}
 		}
@@ -1756,21 +1913,17 @@ int mega_findCard (Scsi_Host_Template * pHostTmpl,
     megaBase = pdev->base_address[0];
     megaIrq  = pdev->irq;
 #else
-    megaBase = pdev->resource[0].start;
+
+    megaBase = pci_resource_start (pdev, 0);
     megaIrq  = pdev->irq;
 #endif
 
     pciIdx++;
 
-    if (flag & BOARD_QUARTZ) {
-
-      megaBase &= PCI_BASE_ADDRESS_MEM_MASK;
-      megaBase = (long) ioremap (megaBase, 128);
-    }
-    else {
-      megaBase &= PCI_BASE_ADDRESS_IO_MASK;
-      megaBase += 0x10;
-    }
+    if (flag & BOARD_QUARTZ)
+       megaBase = (long) ioremap (megaBase, 128);
+    else
+       megaBase += 0x10;
 
     /* Initialize SCSI Host structure */
     host = scsi_register (pHostTmpl, sizeof (mega_host_config));
@@ -2071,7 +2224,7 @@ int megaraid_queue (Scsi_Cmnd * SCpnt, void (*pktComp) (Scsi_Cmnd *))
     spin_unlock_irq(&io_request_lock);
     down(&pScb->ioctl_sem);
     user_area = *((char **)&pScb->SCpnt->cmnd[4]);
-    if(copy_to_user(user_area,pScb->buff_ptr,pScb->sgList[0].length)) {
+    if(copy_to_user(user_area,pScb->buff_ptr,pScb->iDataSize)) {
        printk("megaraid: Error copying ioctl return value to user buffer.\n");
        pScb->SCpnt->result = (DID_ERROR << 16);
     }

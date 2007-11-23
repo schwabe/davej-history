@@ -2614,14 +2614,14 @@ static struct display_switch fbcon_aty128_32 = {
 MODULE_AUTHOR("(c)1999-2000 Brad Douglas <brad@neruo.com>");
 MODULE_DESCRIPTION("FBDev driver for ATI Rage128 / Pro cards");
 
-int __init
+int
 init_module(void)
 {
     aty128fb_init();
     return 0;
 }
 
-void __exit
+void
 cleanup_module(void)
 {
     struct fb_info_aty128 *info = board_list;
@@ -2636,9 +2636,9 @@ cleanup_module(void)
             mtrr_del(info->mtrr.vram, info->frame_buffer_phys,
                      info->vram_size);
 #endif /* CONFIG_MTRR */
-        iounmap (tmp->regbase);
-        iounmap (tmp->frame_buffer);
-        kfree (tmp);
+        iounmap (info->regbase);
+        iounmap (&info->frame_buffer);
+        kfree (info);
     }
 }
 #endif /* MODULE */

@@ -9812,24 +9812,35 @@ static void uni2char(unsigned char ch, unsigned char cl, unsigned char *out, int
 
 	if (boundlen <= 0)
 		return;
-	if (ch == 0xFF && 0x61 <= cl && cl <= 0x9F){
+	if (ch == 0 && cl < 0x80) {
+		out[0] = cl;
+		*outlen = 1;
+		return;
+	}
+	else if (ch == 0xFF && 0x61 <= cl && cl <= 0x9F) {
 		out[0] = cl + 0x40;
 		*outlen = 1;
 		return;
 	}
+
 	uni2charset = page_uni2charset[ch];
-	*outlen = 0;
-	if (uni2charset){
+	if (uni2charset) {
 		if (boundlen <= 1)
 			return;
 		out[0] = uni2charset[cl*2];
 		out[1] = uni2charset[cl*2+1];
-		*outlen = 1;
-	} else if (ch==0 && cl)
+		*outlen = 2;
+	}
+	/*
+	else if (ch == 0 && cl) {
 		out[0] = cl;
-	else
+		*outlen = 1;
+	}
+	*/
+	else {
 		out[0] = '?';
-	(*outlen)++;
+		*outlen = 1;
+	}
 	return;
 }
 
@@ -9840,21 +9851,29 @@ static void char2uni(unsigned char *rawstring, int *offset, unsigned char *uni1,
 
 	ch = rawstring[0];
 	cl = rawstring[1];
-	if (0xA1 <= ch && ch <= 0xDF){
+	if (ch < 0x80) {
+		*uni1 = ch;
+		*uni2 = 0x00;
+		*offset = 1;
+		return;
+	}
+	else if (0xA1 <= ch && ch <= 0xDF) {
 		*uni1 = ch - 0x40;
 		*uni2 = 0xFF;
 		*offset = 1;
 		return;
 	}
+
 	charset2uni = page_charset2uni[ch];
-	if (charset2uni && cl){
+	*offset = 2;
+	if (charset2uni) {
 		*uni1 = charset2uni[cl].uni2;
 		*uni2 = charset2uni[cl].uni1;
-		*offset = 2;
-	} else{
-		*uni1 = ch;
+	}
+	else {
+		/* *uni1 = ch; */
+		*uni1 = '?';
 		*uni2 = 0x00;
-		*offset = 1;
 	}
 	return;
 }
@@ -9891,7 +9910,12 @@ static void uni2char_euc_jp(unsigned char ch, unsigned char cl, unsigned char * 
 {
 	if (boundlen <= 0)
 		return;
-	if (ch == 0xFF && 0x61 <= cl && cl <= 0x9F){
+	if (ch == 0 && cl < 0x80) {
+		out[0] = cl;
+		*outlen = 1;
+		return;
+	}
+	else if (ch == 0xFF && 0x61 <= cl && cl <= 0x9F) {
 		if (boundlen <= 1)
 			return;
 		out[0] = 0x8E; /* EUCHANKAKU */
@@ -9899,6 +9923,8 @@ static void uni2char_euc_jp(unsigned char ch, unsigned char cl, unsigned char * 
 		*outlen = 2;
 		return;
 	}
+
+	*outlen = 0;
 	uni2char(ch, cl, out, boundlen, outlen);
 	if (*outlen == 2) {
 		/* translate SJIS into EUC-JP */ 
@@ -9913,30 +9939,46 @@ static void uni2char_euc_jp(unsigned char ch, unsigned char cl, unsigned char * 
 		else
 			out[1] = out[1] + 0x02;
 	}
+	return;
 }
 
 static void char2uni_euc_jp(unsigned char *rawstring, int *offset, unsigned char *uni1, unsigned char *uni2)
 {
+	unsigned char ch, cl;
 	unsigned char sjis_temp[2];
 
-	if (rawstring[0] == 0x8E) {
-		if (0xA1 <= rawstring[1] && rawstring[1] <= 0xDF){
-			*uni1 = rawstring[1] - 0x40;
-			*uni2 = 0xFF;
-			*offset = 2;
-			return;
-		}
+	ch = rawstring[0];
+	cl = rawstring[1];
+	if (ch < 0x80) {
+		*uni1 = ch;
+		*uni2 = 0x00;
+		*offset = 1;
+		return;
 	}
+	else if (ch == 0x8E) {
+		if (0xA1 <= cl && cl <= 0xDF){
+			*uni1 = cl - 0x40;
+			*uni2 = 0xFF;
+		}
+		else {
+			*uni1 = '?';
+			*uni2 = 0x00;
+		}
+		*offset = 2;
+		return;
+	}
+
 	/* translate EUC-JP into SJIS */
-	sjis_temp[0] = ((rawstring[0]-0x5f)/2) ^ 0xA0;
-	if (!(rawstring[0]&1))
-		sjis_temp[1] = rawstring[1] - 0x02;
-	else if (rawstring[1] < 0xE0)
-		sjis_temp[1] = rawstring[1] - 0x61;
+	sjis_temp[0] = ((ch-0x5f)/2) ^ 0xA0;
+	if (!(ch&1))
+		sjis_temp[1] = cl - 0x02;
+	else if (cl < 0xE0)
+		sjis_temp[1] = cl - 0x61;
 	else
-		sjis_temp[1] = rawstring[1] - 0x60;
+		sjis_temp[1] = cl - 0x60;
 
 	char2uni(sjis_temp, offset, uni1, uni2);
+	return;
 }
 
 static struct nls_table euc_jp_table = {

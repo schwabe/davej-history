@@ -416,6 +416,7 @@
 #define PCI_DEVICE_ID_IBM_TR_WAKE	0x003e
 #define PCI_DEVICE_ID_IBM_MPIC		0x0046
 #define PCI_DEVICE_ID_IBM_3780IDSP	0x007d
+#define PCI_DEVICE_ID_IBM_SERVERAIDI960	0x01bd
 #define PCI_DEVICE_ID_IBM_MPIC_2	0xffff
 
 #define PCI_VENDOR_ID_WD		0x101c
@@ -1364,6 +1365,7 @@ int pci_proc_detach_device(struct pci_dev *dev);
 struct pci_dev *pci_find_device (unsigned int vendor, unsigned int device, struct pci_dev *from);
 struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from);
 struct pci_dev *pci_find_slot (unsigned int bus, unsigned int devfn);
+unsigned long pci_resource_len (struct pci_dev *dev, int n_base);
 
 #define pci_present pcibios_present
 int pci_read_config_byte(struct pci_dev *dev, u8 where, u8 *val);

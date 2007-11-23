@@ -40,6 +40,10 @@ EXPORT_SYMBOL(pci_proc_detach_device);
 EXPORT_SYMBOL(pcibios_find_class);
 EXPORT_SYMBOL(pcibios_find_device);
 
+/* Forward compatibility */
+
+EXPORT_SYMBOL(pci_resource_len);
+
 /* Quirk info */
 
 #ifdef CONFIG_PCI_QUIRKS

@@ -47,7 +47,7 @@ struct voice_param
 {
 	/* FX bus amount send */
 
-	u32 bus_routing;
+	u32 send_routing;
 
 	u32 send_a;
 	u32 send_b;
@@ -64,11 +64,6 @@ struct voice_param
 	u32 byampl_env_decay;
 };
 
-struct voice_allocdesc
-{
-	u8 usage;			/* playback, Midi */
-	u8 flags;			/* stereo/mono rec/playback 8/16 bit*/
-};
 
 struct emu_voice
 {
@@ -77,10 +72,9 @@ struct emu_voice
 	u8 num;			/* Voice ID */
 	u8 flags;		/* Stereo/mono, 8/16 bit */
 
-	u32 start;
         u32 startloop;
         u32 endloop;
-        u32 end;
+	u32 start;
 
 	u32 initial_pitch;
 	u32 pitch_target;
@@ -88,18 +82,10 @@ struct emu_voice
 	struct voice_param params[2];
 };
 
-struct voice_cntlset
-{
-	u32 paramID;
-	u32 value;
-};
-
-int emu10k1_voice_alloc(struct emu10k1_card *, struct emu_voice *, struct voice_allocdesc *);
+int emu10k1_voice_alloc(struct emu10k1_card *, struct emu_voice *);
 void emu10k1_voice_free(struct emu_voice *);
 void emu10k1_voice_playback_setup(struct emu_voice *);
-void emu10k1_voice_start(struct emu_voice *);
+void emu10k1_voice_start(struct emu_voice *, int);
 void emu10k1_voice_stop(struct emu_voice *);
-void emu10k1_voice_setcontrol(struct emu_voice *, struct voice_cntlset *, u32);
-void emu10k1_voice_getcontrol(struct emu_voice *, u32, u32 *);
 
 #endif /* _VOICEMGR_H */

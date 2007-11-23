@@ -1,4 +1,4 @@
-/* $Id: drm-2.4.0-test6-pre5.patch,v 1.1 2000/08/06 05:24:31 notting Exp $
+/* $Id: ffb_drv.c,v 1.6.2.2 2000/09/07 03:51:06 davem Exp $
  * ffb_drv.c: Creator/Creator3D direct rendering driver.
  *
  * Copyright (C) 2000 David S. Miller (davem@redhat.com)
@@ -14,11 +14,6 @@
 #include "ffb_drv.h"
 
 #include <linux/agp_backend.h>
-
-static __attribute__((unused)) void unused(void)
-{
-	agp_enable(0);
-}
 
 #define FFB_NAME	"ffb"
 #define FFB_DESC	"Creator/Creator3D"
@@ -53,7 +48,10 @@ extern int ffb_rmctx(struct inode *, struct file *, unsigned int, unsigned long)
 extern int ffb_context_switch(drm_device_t *, int, int);
 
 static struct file_operations ffb_fops = {
+#if LINUX_VERSION_CODE >= 0x020322
+				/* This started being used approx. 2.3.34 */
 	owner:		THIS_MODULE,
+#endif
 	open:		ffb_open,
 	flush:		drm_flush,
 	release:	ffb_release,
@@ -203,8 +201,13 @@ static void get_ffb_type(ffb_dev_priv_t *ffb_priv, int instance)
 	volatile unsigned char *strap_bits;
 	unsigned char val;
 
+#if LINUX_VERSION_CODE < 0x020300
+	strap_bits = (volatile unsigned char *)
+		__va(ffb_priv->card_phys_base + 0x00200000UL);
+#else
 	strap_bits = (volatile unsigned char *)
 		(ffb_priv->card_phys_base + 0x00200000UL);
+#endif
 
 	/* Don't ask, you have to read the value twice for whatever
 	 * reason to get correct contents.
@@ -274,8 +277,13 @@ static int ffb_init_one(int prom_node, int instance)
 		return -EINVAL;
 	}
 	ffb_priv->card_phys_base = regs[0].phys_addr;
+#if LINUX_VERSION_CODE < 0x020300
+	ffb_priv->regs = (ffb_fbcPtr)
+		__va(regs[0].phys_addr + 0x00600000UL);
+#else
 	ffb_priv->regs = (ffb_fbcPtr)
 		(regs[0].phys_addr + 0x00600000UL);
+#endif
 	get_ffb_type(ffb_priv, instance);
 	for (i = 0; i < FFB_MAX_CTXS; i++)
 		ffb_priv->hw_state[i] = NULL;
@@ -859,6 +867,11 @@ static int ffb_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	vma->vm_flags |= VM_LOCKED | VM_SHM; /* Don't swap */
 
+#if LINUX_VERSION_CODE < 0x020203 /* KERNEL_VERSION(2,2,3) */
+				/* In Linux 2.2.3 and above, this is
+				   handled in do_mmap() in mm/mmap.c. */
+	++filp->f_count;
+#endif
 	vma->vm_file = filp; /* Needed for drm_vm_open() */
 	drm_vm_open(vma);
 	return 0;

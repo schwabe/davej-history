@@ -130,11 +130,7 @@ static int check_block_empty(struct inode *inode, struct buffer_head *bh,
 			goto in_use;
 
 	if (bh->b_count == 1) {
-		int tmp;
-		if (ind_bh)
-			tmp = le32_to_cpu(*p);
-		else
-			tmp = *p;
+		int tmp = le32_to_cpu(*p);
 		*p = 0;
 		inode->i_blocks -= (inode->i_sb->s_blocksize / 512);
 		mark_inode_dirty(inode);
@@ -170,7 +166,7 @@ static int trunc_direct (struct inode * inode)
 
 	for (i = direct_block ; i < EXT2_NDIR_BLOCKS ; i++) {
 		u32 * p = inode->u.ext2_i.i_data + i;
-		int tmp = *p;
+		int tmp = le32_to_cpu(*p);
 
 		if (!tmp)
 			continue;
@@ -215,11 +211,11 @@ static int trunc_indirect (struct inode * inode, int offset, u32 * p,
 	unsigned long block_to_free = 0, free_count = 0;
 	int indirect_block, addr_per_block, blocks;
 
-	tmp = dind_bh ? le32_to_cpu(*p) : *p;
+	tmp = le32_to_cpu(*p);
 	if (!tmp)
 		return 0;
 	ind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-	if (tmp != (dind_bh ? le32_to_cpu(*p) : *p)) {
+	if (tmp != le32_to_cpu(*p)) {
 		brelse (ind_bh);
 		return 1;
 	}
@@ -297,11 +293,11 @@ static int trunc_dindirect (struct inode * inode, int offset, u32 * p,
 	int i, tmp, retry = 0;
 	int dindirect_block, addr_per_block;
 
-	tmp = tind_bh ? le32_to_cpu(*p) : *p;
+	tmp = le32_to_cpu(*p);
 	if (!tmp)
 		return 0;
 	dind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-	if (tmp != (tind_bh ? le32_to_cpu(*p) : *p)) {
+	if (tmp != le32_to_cpu(*p)) {
 		brelse (dind_bh);
 		return 1;
 	}
@@ -346,7 +342,8 @@ static int trunc_tindirect (struct inode * inode)
 
 	if (!(tmp = *p))
 		return 0;
-	tind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
+	tind_bh = bread (inode->i_dev, le32_to_cpu(tmp),
+						inode->i_sb->s_blocksize);
 	if (tmp != *p) {
 		brelse (tind_bh);
 		return 1;
@@ -355,7 +352,7 @@ static int trunc_tindirect (struct inode * inode)
 	if (!tind_bh) {
 		ext2_error(inode->i_sb, "trunc_tindirect",
 			"Read failure, inode=%ld, block=%d",
-			inode->i_ino, tmp);
+			inode->i_ino, le32_to_cpu(tmp));
 		*p = 0;
 		mark_inode_dirty(inode);
 		return 0;

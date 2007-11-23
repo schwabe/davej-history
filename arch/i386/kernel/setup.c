@@ -16,19 +16,22 @@
  *  Intel Mobile Pentium II detection fix. Sean Gilley, June 1999.
  *
  *  IDT Winchip tweaks, misc clean ups.
- *	Dave Jones <dave@powertweak.com>, August 1999
+ *	Dave Jones <davej@suse.de>, August 1999
  *
  *	Added proper L2 cache detection for Coppermine
  *	Dragan Stancevic <visitor@valinux.com>, October 1999
  *
  *	Improved Intel cache detection.
- *	Dave Jones <dave@powertweak.com>, October 1999
+ *	Dave Jones <davej@suse.de>, October 1999
  *
  *	Added proper Cascades CPU and L2 cache detection for Cascades
  *	and 8-way type cache happy bunch from Intel:^)
  *	Dragan Stancevic <visitor@valinux.com>, May 2000
  *
  *	Transmeta CPU detection.  H. Peter Anvin <hpa@zytor.com>, May 2000
+ *
+ *  Cleaned up get_model_name(), AMD_model(), added display_cacheinfo().
+ *  Dave Jones <davej@suse.de>, September 2000
  */
 
 /*
@@ -428,15 +431,12 @@ __initfunc(void setup_arch(char **cmdline_p,
 	conswitchp = &dummy_con;
 #endif
 #endif
-	/*
-	 *	Check the bugs that will bite us before we get booting
-	 */
-
 }
+
 
 __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 {
-	unsigned int n, dummy, *v, ecx, edx;
+	unsigned int n, dummy, *v;
 
 	/* 
 	 * Actually we must have cpuid or we could never have
@@ -454,48 +454,42 @@ __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 	cpuid(0x80000004, &v[8], &v[9], &v[10], &v[11]);
 	c->x86_model_id[48] = 0;
 	
-	switch(c->x86_vendor)
-	{
-	case X86_VENDOR_AMD:
-		/*  Set MTRR capability flag if appropriate  */
-		if(boot_cpu_data.x86 == 5) {
-			if((boot_cpu_data.x86_model == 9) ||
-			   ((boot_cpu_data.x86_model == 8) && 
-			    (boot_cpu_data.x86_mask >= 8)))
-				c->x86_capability |= X86_FEATURE_MTRR;
-		}
-
-		/* Fall through */
-
-	case X86_VENDOR_TRANSMETA:
-		/* Cache information */
-		if (n >= 0x80000005){
-			cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-			printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
-				ecx>>24, edx>>24);
-			c->x86_cache_size=(ecx>>24)+(edx>>24);
-		}
-		if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
-			boot_cpu_data.x86 == 6 && 
-			boot_cpu_data.x86_model== 3 &&
-			boot_cpu_data.x86_mask == 0)
-		{
-			/* AMD errata T13 (order #21922) */
-			printk("CPU: L2 Cache: 64K\n");
-			c->x86_cache_size = 64;
-		}
-		else if (n >= 0x80000006){
-			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-			printk("CPU: L2 Cache: %dK\n", ecx>>16);
-			c->x86_cache_size = ecx>>16;
-		}
-		break;
-
-	default:		/* Cyrix */
-		break;
-	}
 	return 1;
 }
+
+
+__initfunc (static void display_cacheinfo(struct cpuinfo_x86 *c))
+{
+	unsigned int n, dummy, ecx, edx;
+
+	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
+
+	if (n >= 0x80000005){
+		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
+			ecx>>24, edx>>24);
+		c->x86_cache_size=(ecx>>24)+(edx>>24);
+	}
+
+	if (n < 0x80000006)
+		return;	/* No function to get L2 info */
+
+	cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+	c->x86_cache_size = ecx>>16;
+
+	/* AMD errata T13 (order #21922) */
+	if(boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
+		boot_cpu_data.x86 == 6 && 
+		boot_cpu_data.x86_model== 3 &&
+		boot_cpu_data.x86_mask == 0)
+	{
+		c->x86_cache_size = 64;
+	}
+
+	printk("CPU: L2 Cache: %dK\n", c->x86_cache_size);
+}
+
+
 
 __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 {
@@ -517,7 +511,7 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 				/* Anyone with a K5 want to fill this in */				
 				break;
 			}
-			
+
 			/* K6 with old style WHCR */
 			if( c->x86_model < 8 ||
 				(c->x86_model== 8 && c->x86_mask < 8))
@@ -537,16 +531,17 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 					restore_flags(flags);
 					printk(KERN_INFO "Enabling old style K6 write allocation for %d Mb\n",
 						mbytes);
-					
+
 				}
 				break;
 			}
-			if (c->x86_model == 8 || c->x86_model == 9)
+			if (c->x86_model == 8 || c->x86_model == 9 || c->x86_model == 13)
 			{
 				/* The more serious chips .. */
 				
 				if(mbytes>4092)
 					mbytes=4092;
+
 				rdmsr(0xC0000082, l, h);
 				if((l&0xFFFF0000)==0)
 				{
@@ -559,15 +554,23 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 					printk(KERN_INFO "Enabling new style K6 write allocation for %d Mb\n",
 						mbytes);
 				}
+
+				/*  Set MTRR capability flag if appropriate  */
+				if((boot_cpu_data.x86_model == 9) ||
+				  ((boot_cpu_data.x86_model == 8) && 
+				   (boot_cpu_data.x86_mask >= 8)))
+					c->x86_capability |= X86_FEATURE_MTRR;
 				break;
 			}
 			break;
+
 		case 6:	/* An Athlon. We can trust the BIOS probably */
 		{
 			break;
 		}
-		
 	}
+
+	display_cacheinfo(c);
 	return r;
 }
 
@@ -701,18 +704,17 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 		 */
 		
 #ifdef CONFIG_PCI_QUIRKS
-                /* It isnt really a PCI quirk directly, but the cure is the
-       	           same. The MediaGX has deep magic SMM stuff that handles the
-                   SB emulation. It thows away the fifo on disable_dma() which
-                   is wrong and ruins the audio. 
+		/* It isnt really a PCI quirk directly, but the cure is the
+		   same. The MediaGX has deep magic SMM stuff that handles the
+		   SB emulation. It thows away the fifo on disable_dma() which
+		   is wrong and ruins the audio. 
                    
-                   Bug2: VSA1 has a wrap bug so that using maximum sized DMA 
-                   causes bad things. According to NatSemi VSA2 has another
-                   bug to do with 'hlt'. I've not seen any boards using VSA2
-                   and X doesn't seem to support it either so who cares 8).
-                   VSA1 we work around however.
-                   
-                  */
+		   Bug2: VSA1 has a wrap bug so that using maximum sized DMA 
+		   causes bad things. According to NatSemi VSA2 has another
+		   bug to do with 'hlt'. I've not seen any boards using VSA2
+		   and X doesn't seem to support it either so who cares 8).
+		   VSA1 we work around however.
+		*/
 
 		printk(KERN_INFO "Working around Cyrix MediaGX virtual DMA bug.\n");
                 isa_dma_bridge_buggy = 2;
@@ -769,12 +771,13 @@ __initfunc(static void cyrix_model(struct cpuinfo_x86 *c))
 
 __initfunc(static void transmeta_model(struct cpuinfo_x86 *c))
 {
-	unsigned int cap_mask, uk, max, dummy, n, ecx, edx;
+	unsigned int cap_mask, uk, max, dummy;
 	unsigned int cms_rev1, cms_rev2;
 	unsigned int cpu_rev, cpu_freq, cpu_flags;
 	char cpu_info[65];
 
 	get_model_name(c);	/* Same as AMD/Cyrix */
+	display_cacheinfo(c);
 
 	/* Print CMS and CPU revision */
 	cpuid(0x80860000, &max, &dummy, &dummy, &dummy);
@@ -1009,14 +1012,13 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 			if ((cpu_models[i].vendor == X86_VENDOR_INTEL)
 			    && (cpu_models[i].x86 == 6)){ 
 				if(c->x86_model == 6 && c->x86_cache_size == 128) {
-                            		p = "Celeron (Mendocino)"; 
-                          	}
-			  	else { 
-                            	if (c->x86_model == 5 && c->x86_cache_size == 0) {
-				  	p = "Celeron (Covington)";
-			    	}
-                        }
-                    }
+					p = "Celeron (Mendocino)"; 
+				} else { 
+					if (c->x86_model == 5 && c->x86_cache_size == 0) {
+						p = "Celeron (Covington)";
+					}
+				}
+			}
 		}
 	}
 

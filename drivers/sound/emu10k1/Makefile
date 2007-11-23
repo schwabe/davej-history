@@ -4,16 +4,16 @@
 
 ifeq ($(CONFIG_SOUND_EMU10K1),y)
     O_TARGET := emu10k1.o
-    O_OBJS = audio.o cardmi.o cardmo.o cardwi.o cardwo.o emuadxmg.o \
-             emu_wrapper.o hwaccess.o irqmgr.o main.o midi.o mixer.o \
-             recmgr.o timer.o voicemgr.o
+    O_OBJS = audio.o cardmi.o cardmo.o cardwi.o cardwo.o ecard.o \
+             emuadxmg.o emu_wrapper.o hwaccess.o irqmgr.o main.o midi.o \
+             mixer.o recmgr.o timer.o voicemgr.o
 else
   ifeq ($(CONFIG_SOUND_EMU10K1),m)
     M_OBJS := emu10k1.o
     O_TARGET := emu10k1.o
-    O_OBJS = audio.o cardmi.o cardmo.o cardwi.o cardwo.o emuadxmg.o \
-             emu_wrapper.o hwaccess.o irqmgr.o main.o midi.o mixer.o \
-             recmgr.o timer.o voicemgr.o
+    O_OBJS = audio.o cardmi.o cardmo.o cardwi.o cardwo.o ecard.o \
+             emuadxmg.o emu_wrapper.o hwaccess.o irqmgr.o main.o midi.o \
+             mixer.o recmgr.o timer.o voicemgr.o
   endif
 endif
 

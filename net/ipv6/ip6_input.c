@@ -99,7 +99,7 @@ static __inline__ int icmpv6_filter(struct sock *sk, struct sk_buff *skb)
 	struct raw6_opt *opt;
 
 	opt = &sk->tp_pinfo.tp_raw;
-	icmph = (struct icmp6hdr *) (skb->nh.ipv6h + 1);
+	icmph = (struct icmp6hdr *) skb->h.raw;
 	return test_bit(icmph->icmp6_type, &opt->filter);
 }
 
