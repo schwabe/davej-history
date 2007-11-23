@@ -9536,6 +9536,11 @@ CONFIG_SOUND_MSS
   have their own MSS support and saying Y to this option will cause a
   conflict.
 
+SoundPro chip support
+CONFIG_SOUND_SPRO
+  If you have a (usually Taiwanese) motherboard with the SoundPro chip
+  on board, say Y here. Otherwise say N.
+
 Ensoniq Soundscape support
 CONFIG_SOUND_SSCAPE
   Answer Y if you have a sound card based on the Ensoniq SoundScape

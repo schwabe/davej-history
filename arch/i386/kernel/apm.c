@@ -389,6 +389,7 @@ static const lookup_t error_table[] = {
 	{ APM_RESUME_DISABLED,	"Resume timer disabled" },
 	{ APM_BAD_STATE,	"Unable to enter requested state" },
 /* N/A	{ APM_NO_EVENTS,	"No events pending" }, */
+	{ APM_NO_ERROR,		"BIOS did not set a return code" },
 	{ APM_NOT_PRESENT,	"No APM present" }
 };
 #define ERROR_COUNT	(sizeof(error_table)/sizeof(lookup_t))
@@ -660,7 +661,7 @@ int apm_display_blank(void)
 	if (!apm_enabled)
 		return 0;
 	error = apm_set_display_power_state(APM_STATE_STANDBY);
-	if (error == APM_SUCCESS)
+	if ((error == APM_SUCCESS) || (error == APM_NO_ERROR))
 		return 1;
 	apm_error("set display standby", error);
 #endif
@@ -676,7 +677,7 @@ int apm_display_unblank(void)
 	if (!apm_enabled)
 		return 0;
 	error = apm_set_display_power_state(APM_STATE_READY);
-	if (error == APM_SUCCESS)
+	if ((error == APM_SUCCESS) || (error == APM_NO_ERROR))
 		return 1;
 	apm_error("set display ready", error);
 #endif
@@ -791,7 +792,7 @@ static void suspend(void)
 #endif
 
 	err = apm_set_power_state(APM_STATE_SUSPEND);
-	if (err)
+	if ((err != APM_SUCCESS) && (err != APM_NO_ERROR))
 		apm_error("suspend", err);
 #ifdef INIT_TIMER_AFTER_SUSPEND
 	save_flags(flags);
@@ -813,7 +814,7 @@ static void standby(void)
 	int	err;
 
 	err = apm_set_power_state(APM_STATE_STANDBY);
-	if (err)
+	if ((err != APM_SUCCESS) && (err != APM_NO_ERROR))
 		apm_error("standby", err);
 }
 

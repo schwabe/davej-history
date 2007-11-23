@@ -159,7 +159,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
   
   dep_tristate 'Microsoft Sound System support' CONFIG_SOUND_MSS $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_MSS" = "y" ]; then
-      bool 'Enable support for the SoundPro mixer' CONFIG_SOUND_SPRO
+      bool '  Enable support for the SoundPro mixer' CONFIG_SOUND_SPRO
       hex 'MSS/WSS I/O base 530, 604, E80 or F40' CONFIG_MSS_BASE 530
       int 'MSS/WSS IRQ 7, 9, 10 or 11' CONFIG_MSS_IRQ 11
       int 'MSS/WSS DMA 0, 1 or 3' CONFIG_MSS_DMA 3
