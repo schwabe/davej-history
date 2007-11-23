@@ -263,7 +263,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
   fi
 
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    dep_tristate 'Support for AD1816(A) based cards (EXPERIMENTAL)' CONFIG_SOUND_AD1816 $CONFIG_SOUND
+    dep_tristate 'Support for AD1816(A) based cards (EXPERIMENTAL)' CONFIG_SOUND_AD1816 $CONFIG_SOUND_OSS
     if [ "$CONFIG_SOUND_AD1816" = "y" ]; then
       hex 'AD1816 audio I/O base 530, 604, E80 or F40' CONFIG_AD1816_BASE 530
       int 'AD1816 audio IRQ 5, 7, 9, 11, 12 or 15' CONFIG_AD1816_IRQ 7

@@ -109,6 +109,7 @@ extern int microcode_init(void);
 #endif
 extern void no_scroll(char *str, int *ints);
 extern void kbd_reset_setup(char *str, int *ints);
+extern void aux_reconnect_setup(char *str, int *ints);
 extern void panic_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
 extern void msmouse_setup(char *str, int *ints);
@@ -757,6 +758,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_VT
 	{ "kbd-reset", kbd_reset_setup },
+#endif
+#ifdef CONFIG_PSMOUSE
+	{ "psaux-reconnect", aux_reconnect_setup },
 #endif
 #ifdef CONFIG_BUGi386
 	{ "no-hlt", no_halt },

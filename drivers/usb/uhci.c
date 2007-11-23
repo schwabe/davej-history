@@ -2426,7 +2426,7 @@ static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data)
 	return 0;
 }
 
-static int __init uhci_init(void)
+int __init uhci_init(void)
 {
 	int retval;
 	struct pci_dev *dev;

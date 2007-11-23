@@ -1831,7 +1831,7 @@ RCGetRavlinIPandMask(u16 AdapterID, u32 * pIpAddr, u32 * pNetMask,
     if (0xFFFFFFFF == off)
         return RC_RTN_FREE_Q_EMPTY;
 
-    p32 = (volatile u32 *)(pPab->pLinOutMsgBlock - ADAPTER_BLOCK_RESERVED_SPACE + sizeof(PAB));
+    p32 = (u32 *)(pPab->pLinOutMsgBlock - ADAPTER_BLOCK_RESERVED_SPACE + sizeof(PAB));
     *p32 = 0xFFFFFFFF;
 
     pMsg = (u32 *)(pPab->pPci45LinBaseAddr + off);

@@ -1230,7 +1230,7 @@ static int RCioctl(struct device *dev, struct ifreq *rq, int cmd)
             }
             RCUD_GETSPEED = &RCuser.RCUS_GETSPEED;
             RCGetLinkSpeed(pDpa->id, (u32 *) &RCUD_GETSPEED->LinkSpeedCode, NULL);
-            printk("RC speed = 0x%ld\n", RCUD_GETSPEED->LinkSpeedCode);
+            printk("RC speed = 0x%d\n", RCUD_GETSPEED->LinkSpeedCode);
             break;
         case RCUC_SETIPANDMASK:
             printk("RC SETIPANDMASK\n");

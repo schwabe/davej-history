@@ -558,7 +558,7 @@ static struct tvcard tvcards[] =
         /* TurboTV */
         { 3, 1, 0, 2, 3, { 2, 3, 1, 1}, { 1, 1, 2, 3, 0}},
         /* Newer Hauppauge (bt878) */
-	{ 3, 1, 0, 2, 7, { 2, 0, 1, 1}, { 0, 1, 2, 3, 4}},
+	{ 4, 1, 0, 2, 7, { 2, 0, 1, 1}, { 0, 1, 2, 3, 4}},
         /* MIRO PCTV pro */
         { 3, 1, 0, 2, 65551, { 2, 3, 1, 1}, {1,65537, 0, 0,10}},
 	/* ADS Technologies Channel Surfer TV (and maybe TV+FM) */

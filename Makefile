@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 18
-EXTRAVERSION = pre11
+EXTRAVERSION = pre12
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -22,7 +22,9 @@ CROSS_COMPILE 	=
 
 AS	=$(CROSS_COMPILE)as
 LD	=$(CROSS_COMPILE)ld
-CC	=$(CROSS_COMPILE)cc -D__KERNEL__ -I$(HPATH)
+CC	=$(CROSS_COMPILE)$(shell if [ -n "`which gcc272 2>/dev/null`" ]; then echo "`which gcc272`";\
+	else  if [ -n "`which kgcc 2>/dev/null`" ]; then echo "`which kgcc`"; else\
+	echo "cc"; fi ; fi)  -D__KERNEL__ -I$(HPATH) 
 CPP	=$(CC) -E
 AR	=$(CROSS_COMPILE)ar
 NM	=$(CROSS_COMPILE)nm
@@ -135,7 +137,7 @@ DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a
 endif
 
 ifeq ($(CONFIG_SOUND),y)
-DRIVERS := $(DRIVERS) drivers/sound/sound.a
+DRIVERS := $(DRIVERS) drivers/sound/sounddrivers.o
 endif
 
 ifdef CONFIG_PCI

@@ -96,12 +96,7 @@ static int users = 0;
 static void sleep_125ms(void)
 {
 	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(HZ >> 3);
-}
-
-static void udelay2(void)
-{
-	udelay(2);
+			 schedule_timeout(HZ >> 3);
 }
 
 static void udelay4(void)
@@ -125,11 +120,11 @@ static __u32 radio_bits_get(struct radio_device *dev)
 	udelay16();
 	for (l=24;l--;) {
 		outw(STR_CLK, io);		/* HI state */
-		udelay2();
+		udelay4();
 		if(!l) 
 			dev->tuned = inw(io) & STR_MOST ? 0 : 0xffff;
 		outw(0, io);			/* LO state */
-		udelay2();
+		udelay4();
 		data <<= 1;			/* shift data */
 		rdata = inw(io);
 		if(!l)
@@ -138,7 +133,7 @@ static __u32 radio_bits_get(struct radio_device *dev)
 		else
 			if(rdata & STR_DATA)
 				data++;
-		udelay2();
+		udelay4();
 	}
 	if(dev->muted)
 		outw(STR_WREN, io);
@@ -160,9 +155,9 @@ static void radio_bits_set(struct radio_device *dev, __u32 data)
 		bits = ((data >> 18) & STR_DATA) | STR_WREN ;
 		data <<= 1;			/* shift data */
 		outw(bits, io);			/* start strobe */
-		udelay2();
+		udelay4();
 		outw(bits | STR_CLK, io);	/* HI level */
-		udelay2();   
+		udelay4();   
 		outw(bits, io);			/* LO level */
 		udelay4();
 	}

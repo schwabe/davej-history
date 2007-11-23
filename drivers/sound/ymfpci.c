@@ -1472,7 +1472,7 @@ static unsigned int ymf_poll(struct file *file, struct poll_table_struct *wait)
 	if (file->f_mode & (FMODE_WRITE | FMODE_READ))
 		poll_wait(file, &dmabuf->wait, wait);
 
-	spin_lock_irqsave(&state->card->lock, flags);
+	spin_lock_irqsave(&state->unit->reg_lock, flags);
 	if (file->f_mode & FMODE_READ) {
 		if (dmabuf->count >= (signed)dmabuf->fragsize)
 			mask |= POLLIN | POLLRDNORM;
@@ -2013,7 +2013,7 @@ static /*const*/ struct file_operations ymf_fops = {
 	llseek:		ymf_llseek,
 	read:		ymf_read,
 	write:		ymf_write,
-	/* poll:		ymf_poll, */
+	poll:		ymf_poll,
 	ioctl:		ymf_ioctl,
 	mmap:		ymf_mmap,
 	open:		ymf_open,

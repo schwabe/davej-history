@@ -1591,6 +1591,7 @@ static u16 i810_ac97_get(struct ac97_codec *dev, u8 reg)
 	struct i810_card *card = dev->private_data;
 	int count = 1000;
 
+#if 0
 	if (card->pci_id != INTEL440MX) {
 		while(--count && (inl(card->iobase + GLOB_STA) & 0x0100))
 			udelay(10);
@@ -1598,6 +1599,7 @@ static u16 i810_ac97_get(struct ac97_codec *dev, u8 reg)
 			printk("i810_audio: AC97 access failed.\n");
 		count=1000;
 	}
+#endif
 	while(--count && (inb(card->iobase + CAS) & 1)) 
 		udelay(10);
 	if(!count)
@@ -1610,6 +1612,7 @@ static void i810_ac97_set(struct ac97_codec *dev, u8 reg, u16 data)
 	struct i810_card *card = dev->private_data;
 	int count = 1000;
 
+#if 0
 	if (card->pci_id != INTEL440MX) {
 		while(--count && (inl(card->iobase + GLOB_STA) & 0x0100))
 			udelay(10);
@@ -1618,6 +1621,7 @@ static void i810_ac97_set(struct ac97_codec *dev, u8 reg, u16 data)
 
 		count=1000;
 	}
+#endif	
 	while(--count && (inb(card->iobase + CAS) & 1)) 
 		udelay(10);
 	if(!count)

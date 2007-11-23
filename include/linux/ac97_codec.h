@@ -156,6 +156,8 @@ struct ac97_codec {
 	int supported_mixers;
 	int stereo_mixers;
 	int record_sources;
+
+	int bit_resolution;
 	
 	/* OSS mixer interface */
 	int  (*read_mixer) (struct ac97_codec *codec, int oss_channel);

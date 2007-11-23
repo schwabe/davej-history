@@ -58,6 +58,7 @@ static void kbd_write_command_w(int data);
 static void kbd_write_output_w(int data);
 #ifdef CONFIG_PSMOUSE
 static void aux_write_ack(int val);
+static int aux_reconnect = 0;
 #endif
 
 spinlock_t kbd_controller_lock = SPIN_LOCK_UNLOCKED;
@@ -399,18 +400,20 @@ static inline void handle_mouse_event(unsigned char scancode)
 		}
 		mouse_reply_expected = 0;
 	}
-    else if(scancode == AUX_RECONNECT){
-        queue->head = queue->tail = 0;  /* Flush input queue */
-        /* ping the mouse :) */
-	kb_wait();
-	kbd_write_command(KBD_CCMD_WRITE_MOUSE);
-	kb_wait();
-	kbd_write_output(AUX_ENABLE_DEV);
-	/* we expect an ACK in response. */
-	mouse_reply_expected++;
-	kb_wait();
-        return;
-    }
+	
+	else if(scancode == AUX_RECONNECT && aux_reconnect)
+	{
+	        queue->head = queue->tail = 0;  /* Flush input queue */
+        	/* ping the mouse :) */
+		kb_wait();
+		kbd_write_command(KBD_CCMD_WRITE_MOUSE);
+		kb_wait();
+		kbd_write_output(AUX_ENABLE_DEV);
+		/* we expect an ACK in response. */
+		mouse_reply_expected++;
+		kb_wait();
+	        return;
+	}
 
 	add_mouse_randomness(scancode);
 	if (aux_count) {
@@ -446,18 +449,21 @@ static unsigned char handle_kbd_event(void)
 		unsigned char scancode;
 
 		scancode = kbd_read_input();
-#  ifdef CHECK_RECONNECT_SCANCODE
-    printk(KERN_INFO "-=db=-: kbd_read_input() : scancode == %d\n",scancode);
-#  endif
-		if (status & KBD_STAT_MOUSE_OBF) {
-			handle_mouse_event(scancode);
-		} else {
-			kbd_exists = 1;
-			if (do_acknowledge(scancode))
-				handle_scancode(scancode, !(scancode & 0x80));
-			mark_bh(KEYBOARD_BH);
+		
+		/* Check for errors. Shouldnt ever happen but it does on Compaq
+		   Presario 16[89]. */
+		   
+		if(!(status&(KBD_STAT_GTO|KBD_STAT_PERR)))
+		{
+			if (status & KBD_STAT_MOUSE_OBF) {
+				handle_mouse_event(scancode);
+			} else {
+				kbd_exists = 1;
+				if (do_acknowledge(scancode))
+					handle_scancode(scancode, !(scancode & 0x80));
+				mark_bh(KEYBOARD_BH);
+			}
 		}
-
 		status = kbd_read_status();
 		
 		if(!work--)
@@ -549,6 +555,7 @@ void __init kbd_reset_setup(char *str, int *ints)
 {
 	kbd_startup_reset = 1;
 }
+
 
 #define KBD_NO_DATA	(-1)	/* No data */
 #define KBD_BAD_DATA	(-2)	/* Parity or other error */
@@ -747,6 +754,11 @@ void __init pckbd_init_hw(void)
 }
 
 #if defined CONFIG_PSMOUSE
+
+void __init aux_reconnect_setup(char *str, int *ints)
+{
+	aux_reconnect=1;
+}
 
 /*
  * Check if this is a dual port controller.

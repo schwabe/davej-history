@@ -1605,7 +1605,7 @@ static int ipx_get_info(char *buffer, char **start, off_t offset,
 				       s->protinfo.af_ipx.node[5],
 				       htons(s->protinfo.af_ipx.port));
 #else
-			len += sprintf(buffer+len,"%08lX:%04X  ",
+			len += sprintf(buffer+len,"%08X:%04X  ",
 				       htonl(i->if_netnum),
 				       htons(s->protinfo.af_ipx.port));
 #endif	/* CONFIG_IPX_INTERN */

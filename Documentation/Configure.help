@@ -12522,6 +12522,23 @@ ADS Cadet AM/FM Radio Tuner Card I/O Port
 CONFIG_RADIO_CADET_PORT
   Enter the I/O address of the card here (most commonly 330). 
 
+Maestro Radio
+CONFIG_RADIO_MAESTRO
+  Choose Y here if you have one of these Maestro sound cards
+  with FM radio included.
+
+  In order to control your radio card, you will need to use programs
+  that are compatible with the Video for Linux API. Information on
+  this API and pointers to "v4l" programs may be found on the WWW at
+  http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
+  you need to have access to a machine on the Internet that has a
+  program like lynx or netscape.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called radio-maestro.o
+
 SF16FMI Radio
 CONFIG_RADIO_SF16FMI
   Choose Y here if you have one of these FM radio cards, and then fill

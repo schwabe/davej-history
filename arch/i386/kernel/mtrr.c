@@ -440,6 +440,7 @@ static unsigned int get_num_var_ranges (void)
 	/*break;*/
       case X86_VENDOR_CYRIX:
 	/*  Cyrix have 8 ARRs  */
+	return 8;
       case X86_VENDOR_CENTAUR:
         /*  and Centaur has 8 MCR's  */
 	if(boot_cpu_data.x86==5)
