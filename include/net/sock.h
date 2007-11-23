@@ -252,8 +252,8 @@ struct sock
 	unsigned char		max_ack_backlog;
 	unsigned char		priority;
 	unsigned char		debug;
-	unsigned int		rcvbuf;
-	unsigned int		sndbuf;
+	int			rcvbuf;
+	int			sndbuf;
 	unsigned short		type;
 	unsigned char		localroute;	/* Route locally only */
 #ifdef CONFIG_AX25

@@ -1110,7 +1110,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 
 #ifdef CONFIG_NET_ALIAS
 			  	if (net_alias_is(dev))
-			    	net_alias_dev_rehash(dev ,&ifr.ifr_addr);
+				    	net_alias_dev_rehash(dev ,&ifr.ifr_addr);
 #endif
 				dev->pa_addr = new_pa_addr;
 				dev->family = new_family;
@@ -1200,7 +1200,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 		case SIOCSIFMTU:	/* Set the MTU of a device */
 		
 			if (dev->change_mtu)
-				ret = (*dev->change_mtu)(dev, ifr.ifr_mtu);
+				ret = dev->change_mtu(dev, ifr.ifr_mtu);
 			else
 			{
 				/*
@@ -1367,7 +1367,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
  *
  */
 extern int lance_init(void);
-extern int ni65_init(void);
 extern int pi_init(void);
 extern void sdla_setup(void);
 extern int dlci_setup(void);
@@ -1397,9 +1396,6 @@ int net_dev_init(void)
 	 */
 #if defined(CONFIG_LANCE)
 	lance_init();
-#endif
-#if defined(CONFIG_NI65)
-	ni65_init();
 #endif
 #if defined(CONFIG_PI)
 	pi_init();

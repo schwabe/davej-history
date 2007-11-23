@@ -2058,21 +2058,6 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 
 	sk->mtu = min(sk->mtu, dev->mtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
 
-#ifdef CONFIG_SKIP
-
-	/*
-	 *	SKIP devices set their MTU to 65535. This is so they can take packets
-	 *	unfragmented to security process then fragment. They could lie to the
-	 *	TCP layer about a suitable MTU, but it's easier to let skip sort it out
-	 *	simply because the final package we want unfragmented is going to be
-	 *
-	 *	[IPHDR][IPSP][Security data][Modified TCP data][Security data]
-	 */
-
-	if(skip_pick_mtu!=NULL)		/* If SKIP is loaded.. */
-		sk->mtu=skip_pick_mtu(sk->mtu,dev);
-#endif
-
 	/*
 	 *	Put in the TCP options to say MTU.
 	 */

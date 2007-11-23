@@ -1,6 +1,6 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Thu Aug  8 14:58:51 1996 by r.faith@ieee.org
+ * Revised: Sat Nov  2 09:27:47 1996 by root@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994, 1995, 1996 Rickard E. Faith
  *
@@ -461,7 +461,7 @@ struct signature {
    { "IBM F1 P2 BIOS v1.0104/29/93",                        5, 28,  3, -1, 0 },
    { "Future Domain Corp. V1.0008/18/93",                   5, 33,  3,  4, 0 },
    { "Future Domain Corp. V1.0008/18/93",                  26, 33,  3,  4, 1 },
-   { "Adaptec AHA-2920 PCI-SCSI Card",                     42, 31,  3,  0, 1 },
+   { "Adaptec AHA-2920 PCI-SCSI Card",                     42, 31,  3, -1, 1 },
 				/* This next signature may not be a 3.5 bios */
    { "Future Domain Corp. V2.0108/18/93",                   5, 33,  3,  5, 0 },
    { "FUTURE DOMAIN CORP.  V3.5008/18/93",                  5, 34,  3,  5, 0 },

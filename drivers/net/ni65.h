@@ -1,6 +1,6 @@
 /* am7990 (lance) definitions
  * 
- * This is a extension to the Linux operating system, and is covered by
+ * This is an extension to the Linux operating system, and is covered by
  * same Gnu Public License that covers that work.
  * 
  * Michael Hipp
@@ -92,16 +92,16 @@ struct init_block
   unsigned char eaddr[6];
   unsigned char filter[8];
   /* bit 29-31: number of rmd's (power of 2) */
-  unsigned long rrp;   /* receive ring pointer (align 8) */
+  u32 rrp;   /* receive ring pointer (align 8) */
   /* bit 29-31: number of tmd's (power of 2) */
-  unsigned long trp;   /* transmit ring pointer (align 8) */
+  u32 trp;   /* transmit ring pointer (align 8) */
 };
 
 struct rmd /* Receive Message Descriptor */
 { 
   union
   {
-    volatile unsigned long buffer;
+    volatile u32 buffer;
     struct 
     {
       volatile unsigned char dummy[3];
@@ -116,7 +116,7 @@ struct tmd
 {
   union 
   {
-    volatile unsigned long buffer;
+    volatile u32 buffer;
     struct 
     {
       volatile unsigned char dummy[3];

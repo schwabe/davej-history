@@ -1,6 +1,6 @@
 /*
  * ni6510 (am7990 'lance' chip) driver for Linux-net-3
- * BETAcode v0.70 (96/04/07) for 1.3.66 (or later)
+ * BETAcode v0.71 (96/09/29) for 2.0.0 (or later)
  * copyrights (c) 1994,1995,1996 by M.Hipp
  * 
  * This driver can handle the old ni6510 board and the newer ni6510 
@@ -23,16 +23,19 @@
  *   and from the original drivers by D.Becker
  *
  * known problems:
- *   on some PCI boards (including my own) the card/board/ISA-bridge has
- *   problems with bus master DMA. This results in lotsa overruns.
- *   It may help to '#define RCV_PARANOIA_CHECK' or try to #undef
- *   the XMT and RCV_VIA_SKB option .. this reduces driver performance.
- *   Or just play with your BIOS options to optimize ISA-DMA access.
- *   Maybe you also wanna play with the LOW_PERFORAMCE and MID_PERFORMANCE
- *   defines -> please report me your experience then
+ *   - on some PCI boards (including my own) the card/board/ISA-bridge has
+ *     problems with bus master DMA. This results in lotsa overruns.
+ *     It may help to '#define RCV_PARANOIA_CHECK' or try to #undef
+ *     the XMT and RCV_VIA_SKB option .. this reduces driver performance.
+ *     Or just play with your BIOS options to optimize ISA-DMA access.
+ *     Maybe you also wanna play with the LOW_PERFORAMCE and MID_PERFORMANCE
+ *     defines -> please report me your experience then
+ *   - Harald reported for ASUS SP3G mainboards, that you should use
+ *     the 'optimal settings' from the user's manual on page 3-12!
  *
  * credits:
  *   thanx to Jason Sullivan for sending me a ni6510 card!
+ *   lot of debug runs with ASUS SP3G Boards (Intel Saturn) by Harald Koenig
  *
  * simple performance test: (486DX-33/Ni6510-EB receives from 486DX4-100/Ni6510-EB)
  *    average: FTP -> 8384421 bytes received in 8.5 seconds
@@ -42,8 +45,10 @@
  */
 
 /*
+ * 96.Sept.29: virt_to_bus stuff added for new memory modell
+ * 96.April.29: Added Harald Koenig's Patches (MH)
  * 96.April.13: enhanced error handling .. more tests (MH)
- * 96.April.5/6: a lot of performance tests .. got it stable now (hopefully) (MH)
+ * 96.April.5/6: a lot of performance tests. Got it stable now (hopefully) (MH)
  * 96.April.1: (no joke ;) .. added EtherBlaster and Module support (MH)
  * 96.Feb.19: fixed a few bugs .. cleanups .. tested for 1.3.66 (MH)
  *            hopefully no more 16MB limit
@@ -52,7 +57,7 @@
  *
  * 94.Aug.22: changes in xmit_intr (ack more than one xmitted-packet), ni65_send_packet (p->lock) (MH)
  *
- * 94,July.16: fixed bugs in recv_skb and skb-alloc stuff  (MH)
+ * 94.July.16: fixed bugs in recv_skb and skb-alloc stuff  (MH)
  */
 
 #include <linux/kernel.h>
@@ -84,8 +89,8 @@
  * 'invert' the defines for max. performance. This may cause DMA problems
  * on some boards (e.g on my ASUS SP3G)
  */
-#define XMT_VIA_SKB
-#define RCV_VIA_SKB
+#undef XMT_VIA_SKB
+#undef RCV_VIA_SKB
 #define RCV_PARANOIA_CHECK
 
 #define MID_PERFORMANCE
@@ -121,12 +126,12 @@
 #define RMDNUMMASK 0x60000000 /* log2(RMDNUM)<<29 */
 #endif
 
-#if 1
+#if 0
 #define TMDNUM 1
-#define TMDNUMMASK 0x00000000 /* log2(TMDNUM)<<29 */
+#define TMDNUMMASK 0x00000000
 #else
-#define TMDNUM 2
-#define TMDNUMMASK 0x20000000 /* log2(TMDNUM)<<29 */
+#define TMDNUM 4
+#define TMDNUMMASK 0x40000000 /* log2(TMDNUM)<<29 */
 #endif
 
 /* slightly oversized */
@@ -239,7 +244,7 @@ static void ni65_set_performance(struct priv *p)
 {
   writereg(CSR0_STOP | CSR0_CLRALL,CSR0); /* STOP */
 
-  if(!test_bit(1,&cards[p->cardno].config))
+  if( !(cards[p->cardno].config & 0x02) )
     return;
  
   outw(80,PORT+L_ADDRREG);
@@ -487,6 +492,7 @@ static int ni65_probe1(struct device *dev,int ioaddr)
 static void ni65_init_lance(struct priv *p,unsigned char *daddr,int filter,int mode) 
 {
   int i;
+  u32 pib;
 
   writereg(CSR0_CLRALL|CSR0_STOP,CSR0);
 
@@ -497,11 +503,12 @@ static void ni65_init_lance(struct priv *p,unsigned char *daddr,int filter,int m
     p->ib.filter[i] = filter;
   p->ib.mode = mode;
 
-  p->ib.trp = (unsigned long) p->tmdhead | TMDNUMMASK;
-  p->ib.rrp = (unsigned long) p->rmdhead | RMDNUMMASK;
+  p->ib.trp = (u32) virt_to_bus(p->tmdhead) | TMDNUMMASK;
+  p->ib.rrp = (u32) virt_to_bus(p->rmdhead) | RMDNUMMASK;
   writereg(0,CSR3);  /* busmaster/no word-swap */
-  writereg((unsigned short) (((unsigned long) &(p->ib)) & 0xffff),CSR1);
-  writereg((unsigned short) (((unsigned long) &(p->ib))>>16),CSR2);
+  pib = (u32) virt_to_bus(&p->ib);
+  writereg(pib & 0xffff,CSR1);
+  writereg(pib >> 16,CSR2);
 
   writereg(CSR0_INIT,CSR0); /* this changes L_ADDRREG to CSR0 */
 
@@ -540,7 +547,7 @@ static void *ni65_alloc_mem(struct device *dev,char *what,int size,int type)
       return NULL;
     }
   }
-  if( (unsigned long) (ptr+size) > 0x1000000) {
+  if( (u32) virt_to_bus(ptr+size) > 0x1000000) {
     printk("%s: unable to allocate %s memory in lower 16MB!\n",dev->name,what);
     if(type)
       kfree_skb(skb,FREE_WRITE);
@@ -672,7 +679,7 @@ static void ni65_stop_start(struct device *dev,struct priv *p)
 #ifdef XMT_VIA_SKB
       skb_save[i] = p->tmd_skb[i];
 #endif
-      buffer[i] = tmdp->u.buffer;
+      buffer[i] = (u32) bus_to_virt(tmdp->u.buffer);
       blen[i] = tmdp->blen;
       tmdp->u.s.status = 0x0;
     }
@@ -686,10 +693,10 @@ static void ni65_stop_start(struct device *dev,struct priv *p)
 
     for(i=0;i<TMDNUM;i++) {
       int num = (i + p->tmdlast) & (TMDNUM-1);
-      p->tmdhead[i].u.buffer = buffer[num]; /* status is part of buffer field */
+      p->tmdhead[i].u.buffer = (u32) virt_to_bus((char *)buffer[num]); /* status is part of buffer field */
       p->tmdhead[i].blen = blen[num];
       if(p->tmdhead[i].u.s.status & XMIT_OWN) {
-	 p->tmdnum = (p->tmdnum + 1) & (TMDNUM-1);
+         p->tmdnum = (p->tmdnum + 1) & (TMDNUM-1);
          p->xmit_queued = 1;
 	 writedatareg(CSR0_TDMD | CSR0_INEA | csr0);
       }
@@ -749,9 +756,9 @@ static int ni65_lance_reinit(struct device *dev)
    {
      struct rmd *rmdp = p->rmdhead + i;
 #ifdef RCV_VIA_SKB
-     rmdp->u.buffer = (unsigned long) p->recv_skb[i]->data;
+     rmdp->u.buffer = (u32) virt_to_bus(p->recv_skb[i]->data);
 #else
-     rmdp->u.buffer = (unsigned long) p->recvbounce[i];
+     rmdp->u.buffer = (u32) virt_to_bus(p->recvbounce[i]);
 #endif
      rmdp->blen = -(R_BUF_SIZE-8);
      rmdp->mlen = 0;
@@ -822,8 +829,8 @@ static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
     if(csr0 & CSR0_ERR)
     {
       struct priv *p = (struct priv *) dev->priv;
-      if (debuglevel > 1)
-	printk("%s: general error: %04x.\n",dev->name,csr0);
+      if(debuglevel > 1)
+        printk("%s: general error: %04x.\n",dev->name,csr0);
       if(csr0 & CSR0_BABL)
         p->stats.tx_errors++;
       if(csr0 & CSR0_MISS) {
@@ -834,8 +841,8 @@ static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
         p->stats.rx_errors++;
       }
       if(csr0 & CSR0_MERR) {
-	if (debuglevel > 1)
-	  printk("%s: Ooops .. memory error: %04x.\n",dev->name,csr0);
+        if(debuglevel > 1)
+          printk("%s: Ooops .. memory error: %04x.\n",dev->name,csr0);
         ni65_stop_start(dev,p);
       }
     }
@@ -887,7 +894,7 @@ static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 }
 #endif
 
-  if(csr0 & (CSR0_RXON | CSR0_TXON) != (CSR0_RXON | CSR0_TXON) ) {
+  if( (csr0 & (CSR0_RXON | CSR0_TXON)) != (CSR0_RXON | CSR0_TXON) ) {
     printk("%s: RX or TX was offline -> restart\n",dev->name);
     ni65_stop_start(dev,p);
   }
@@ -1024,7 +1031,7 @@ static void ni65_recv_intr(struct device *dev,int csr0)
           struct sk_buff *skb1 = p->recv_skb[p->rmdnum];
           skb_put(skb,R_BUF_SIZE);
           p->recv_skb[p->rmdnum] = skb;
-          rmdp->u.buffer = (unsigned long) skb->data;
+          rmdp->u.buffer = (u32) virt_to_bus(skb->data);
           skb = skb1;
           skb_trim(skb,len);
         }
@@ -1068,14 +1075,12 @@ static int ni65_send_packet(struct sk_buff *skb, struct device *dev)
       return 1;
 
     printk(KERN_ERR "%s: xmitter timed out, try to restart!\n",dev->name);
-#if 0
 {
   int i;
   for(i=0;i<TMDNUM;i++)
     printk("%02x ",p->tmdhead[i].u.s.status);
   printk("\n");
 }
-#endif
     ni65_lance_reinit(dev);
     dev->tbusy=0;
     dev->trans_start = jiffies;
@@ -1115,7 +1120,7 @@ static int ni65_send_packet(struct sk_buff *skb, struct device *dev)
       cli();
 
       tmdp = p->tmdhead + p->tmdnum;
-      tmdp->u.buffer = (unsigned long ) p->tmdbounce[p->tmdbouncenum];
+      tmdp->u.buffer = (u32) virt_to_bus(p->tmdbounce[p->tmdbouncenum]);
       p->tmdbouncenum = (p->tmdbouncenum + 1) & (TMDNUM - 1);
 
 #ifdef XMT_VIA_SKB
@@ -1125,7 +1130,7 @@ static int ni65_send_packet(struct sk_buff *skb, struct device *dev)
       cli();
  
       tmdp = p->tmdhead + p->tmdnum;
-      tmdp->u.buffer = (unsigned long) skb->data;
+      tmdp->u.buffer = (u32) virt_to_bus(skb->data);
       p->tmd_skb[p->tmdnum] = skb;
     }
 #endif
@@ -1178,9 +1183,9 @@ static struct device dev_ni65 = {
   0, 0, 0, NULL, ni65_probe };
 
 /* set: io,irq,dma or set it when calling insmod */
-int irq=0;
-int io=0;
-int dma=0;
+static int irq=0;
+static int io=0;
+static int dma=0;
 
 int init_module(void)
 {

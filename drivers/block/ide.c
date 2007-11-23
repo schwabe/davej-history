@@ -811,6 +811,10 @@ static void do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
 	 */
 	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		ide_drive_t *rdrive = &hwif->drives[unit];
+#ifdef CONFIG_BLK_DEV_IDETAPE
+		if (rdrive->media == ide_tape)
+			rdrive->tape.reset_issued = 1;
+#endif /* CONFIG_BLK_DEV_IDETAPE */
 		rdrive->special.all = 0;
 		rdrive->special.b.set_geometry = 1;
 		rdrive->special.b.recalibrate  = 1;

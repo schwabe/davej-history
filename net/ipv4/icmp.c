@@ -38,6 +38,7 @@
  *					path MTU bug.
  *		Thomas Quinot	:	ICMP Dest Unreach codes up to 15 are
  *					valid (RFC 1812).
+ *		Alan Cox	:	Spoofing and junk icmp protections.
  *
  *
  * RFC1122 (Host Requirements -- Comm. Layer) Status:
@@ -639,6 +640,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	int hash;
 	struct inet_protocol *ipprot;
 	unsigned char *dp;	
+	int match_addr=0;
 	
 	iph = (struct iphdr *) (icmph + 1);
 	
@@ -655,8 +657,9 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 			case ICMP_PROT_UNREACH:
 /*				printk(KERN_INFO "ICMP: %s:%d: protocol unreachable.\n",
 					in_ntoa(iph->daddr), (int)iph->protocol);*/
-				break;
+			/* Drop through */
 			case ICMP_PORT_UNREACH:
+				match_addr=1;
 				break;
 			case ICMP_FRAG_NEEDED:
 #ifdef CONFIG_NO_PATH_MTU_DISCOVERY
@@ -747,42 +750,46 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 	 *	RFC 1122: 3.2.2 MUST extract the protocol ID from the passed header.
 	 *	RFC 1122: 3.2.2.1 MUST pass ICMP unreach messages to the transport layer.
 	 *	RFC 1122: 3.2.2.2 MUST pass ICMP time expired messages to transport layer.
-	 */
-
-	/*
-	 *	Get the protocol(s). 
-	 */
-	 
-	hash = iph->protocol & (MAX_INET_PROTOS -1);
-
-	/*
-	 *	This can't change while we are doing it. 
 	 *
-	 *	FIXME: Deliver to appropriate raw sockets too.
+	 *	Rule: Require port unreachable and protocol unreachable come
+	 *		from the host in question. Stop junk spoofs.
 	 */
-	 
-	ipprot = (struct inet_protocol *) inet_protos[hash];
-	while(ipprot != NULL) 
-	{
-		struct inet_protocol *nextip;
-
-		nextip = (struct inet_protocol *) ipprot->next;
 	
-		/* 
-		 *	Pass it off to everyone who wants it. 
+	if(!match_addr || saddr == iph->daddr)
+	{
+		/*
+		 *	Get the protocol(s). 
 		 */
+	 
+		hash = iph->protocol & (MAX_INET_PROTOS -1);
 
-		/* RFC1122: OK. Passes appropriate ICMP errors to the */
-		/* appropriate protocol layer (MUST), as per 3.2.2. */
-
-		if (iph->protocol == ipprot->protocol && ipprot->err_handler) 
+		/*
+		 *	This can't change while we are doing it. 
+		 */
+	 
+		ipprot = (struct inet_protocol *) inet_protos[hash];
+		while(ipprot != NULL) 
 		{
-			ipprot->err_handler(icmph->type, icmph->code, dp,
+			struct inet_protocol *nextip;
+	
+			nextip = (struct inet_protocol *) ipprot->next;
+		
+			/* 
+			 *	Pass it off to everyone who wants it. 
+			 */
+	
+			/* RFC1122: OK. Passes appropriate ICMP errors to the */
+			/* appropriate protocol layer (MUST), as per 3.2.2. */
+	
+			if (iph->protocol == ipprot->protocol && ipprot->err_handler) 
+			{
+				ipprot->err_handler(icmph->type, icmph->code, dp,
 					    iph->daddr, iph->saddr, ipprot);
-		}
+			}
 
-		ipprot = nextip;
-  	}
+			ipprot = nextip;
+		}
+	}
 	kfree_skb(skb, FREE_READ);
 }
 

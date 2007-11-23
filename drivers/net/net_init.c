@@ -163,12 +163,12 @@ static int eth_change_mtu(struct device *dev, int new_mtu)
 #ifdef CONFIG_FDDI
 
 static int fddi_change_mtu(struct device *dev, int new_mtu)
-	{
+{
 	if ((new_mtu < FDDI_K_SNAP_HLEN) || (new_mtu > FDDI_K_SNAP_DLEN))
 		return(-EINVAL);
 	dev->mtu = new_mtu;
 	return(0);
-	}
+}
 
 #endif
 

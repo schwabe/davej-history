@@ -503,6 +503,11 @@ ENTRY(page_fault)
 	pushl $ SYMBOL_NAME(do_page_fault)
 	jmp error_code
 
+ENTRY(spurious_interrupt_bug)
+	pushl $0
+	pushl $ SYMBOL_NAME(do_spurious_interrupt_bug)
+	jmp error_code
+
 .data
 ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_setup)		/* 0 */

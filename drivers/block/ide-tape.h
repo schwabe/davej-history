@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.h	Version 1.8 - ALPHA	Sep  26, 1996
+ * linux/drivers/block/ide-tape.h	Version 1.9 - ALPHA	Nov   5, 1996
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -466,6 +466,7 @@ typedef struct {
 	/* Character device operation */
 
 	chrdev_direction_t chrdev_direction;	/* Current character device data transfer direction */
+	int filemark;				/* Currently on a filemark */
 	byte busy;				/* Device already opened */
 
 	/* Device information */
