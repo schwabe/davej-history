@@ -82,9 +82,8 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate 'Packet Engines Yellowfin Gigabit-NIC support' CONFIG_YELLOWFIN
     tristate 'RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
     tristate 'SMC EPIC/100 (EtherPower II) support' CONFIG_EPIC
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'TI ThunderLAN support (EXPERIMENTAL)' CONFIG_TLAN
-   fi
+    tristate 'TI ThunderLAN support' CONFIG_TLAN
+    tristate 'VIA Rhine support' CONFIG_VIA_RHINE
   fi
   bool 'Other ISA cards' CONFIG_NET_ISA
   if [ "$CONFIG_NET_ISA" = "y" ]; then

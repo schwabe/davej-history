@@ -96,8 +96,6 @@ void autofs_hash_insert(struct autofs_dirhash *dh, struct autofs_dir_ent *ent)
 	ent->next = *dhnp;
 	ent->back = dhnp;
 	*dhnp = ent;
-        if ( ent->next )
-          ent->next->back = &(ent->next);
 }
 
 void autofs_hash_delete(struct autofs_dir_ent *ent)

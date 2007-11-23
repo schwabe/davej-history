@@ -200,7 +200,7 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 		printk(KERN_EMERG "System halted\n");
 		sys_kill(-1, SIGKILL);
 #if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
-		apm_set_power_state(APM_STATE_OFF);
+		apm_power_off();
 #endif
 		do_exit(0);
 	} else

@@ -36,6 +36,9 @@
 #ifdef CONFIG_ROOT_NFS
 #include <linux/nfs_fs.h>
 #endif
+#ifdef CONFIG_MTRR
+#include <asm/mtrr.h>
+#endif
 
 #include <asm/bugs.h>
 
@@ -945,6 +948,11 @@ asmlinkage void start_kernel(void)
 	arch_syms_export();
 	sti();
 	check_bugs();
+
+#ifdef CONFIG_MTRR
+	init_mtrr_config();
+#endif
+
 
 	printk(linux_banner);
 #ifdef __SMP__

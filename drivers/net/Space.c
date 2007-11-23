@@ -61,6 +61,7 @@ extern int apricot_probe(struct device *);
 extern int ewrk3_probe(struct device *);
 extern int de4x5_probe(struct device *);
 extern int el1_probe(struct device *);
+extern int via_rhine_probe(struct device *);
 #if	defined(CONFIG_WAVELAN)
 extern int wavelan_probe(struct device *);
 #endif	/* defined(CONFIG_WAVELAN) */
@@ -128,6 +129,9 @@ ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_RTL8139
 	&& rtl8139_probe(dev)
+#endif
+#if defined(CONFIG_VIA_RHINE)
+	&& via_rhine_probe(dev)
 #endif
 #if defined(CONFIG_VORTEX)
 	&& tc59x_probe(dev)

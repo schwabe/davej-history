@@ -35,6 +35,9 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 #include <asm/smp.h>
+#ifdef CONFIG_MTRR
+#include <asm/mtrr.h>
+#endif
 
 /*
  *	Why isn't this somewhere standard ??
@@ -552,6 +555,14 @@ void smp_callin(void)
  	l=apic_read(APIC_SPIV);
  	l|=(1<<8);		/* Enable */
  	apic_write(APIC_SPIV,l);
+
+#ifdef CONFIG_MTRR
+	/*
+	 * checks the MTRR configuration of this application processor
+	 */
+	check_mtrr_config();
+#endif
+
  	sti();
 	/*
 	 *	Get our bogomips.

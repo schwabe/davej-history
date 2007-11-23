@@ -43,6 +43,12 @@ choice 'Processor type' \
 	 486		CONFIG_M486	\
 	 Pentium	CONFIG_M586	\
 	 PPro		CONFIG_M686" Pentium
+
+# Conditionally compile MTRR manipulation support
+if [ "$CONFIG_M686" = "y" -o "$CONFIG_M586" = "y" ]; then
+  bool 'Handle buggy SMP BIOSes with bad MTRR setup' CONFIG_MTRR
+fi
+
 endmenu
 
 source drivers/block/Config.in

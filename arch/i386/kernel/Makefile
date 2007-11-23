@@ -26,6 +26,10 @@ O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o bios32.o \
 
 ifdef SMP
 
+ifdef CONFIG_MTRR
+O_OBJS += mtrr.o
+endif
+
 O_OBJS += smp.o
 
 head.o: head.S $(TOPDIR)/include/linux/tasks.h

@@ -150,7 +150,7 @@ static void check_pentium_f00f(void)
  *      misexecution of code under Linux. Owners of such processors should
  *      contact AMD for precise details and a (free) CPU exchange.
  *
- *      See     http://www.chorus.com/~poulot/k6bug.html (broken link!)
+ *      See     http://www.chorus.com/~poulot/k6bug.html
  *              http://www.amd.com/K6/k6docs/revgd.html
  *
  *      The following test is erm... interesting. AMD neglected to up

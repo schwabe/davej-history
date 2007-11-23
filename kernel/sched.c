@@ -50,7 +50,7 @@ int securelevel = 0;			/* system security level */
 
 long tick = (1000000 + HZ/2) / HZ;	/* timer interrupt period */
 volatile struct timeval xtime;		/* The current time */
-int tickadj = 500/HZ;			/* microsecs */
+int tickadj = 500/HZ ? 500/HZ : 1;	/* microsecs */
 
 DECLARE_TASK_QUEUE(tq_timer);
 DECLARE_TASK_QUEUE(tq_immediate);

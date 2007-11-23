@@ -3061,13 +3061,18 @@ CONFIG_ETH16I
   Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
-TI ThunderLAN support (EXPERIMENTAL)
+TI ThunderLAN support
 CONFIG_TLAN
   If you have a TLAN based network card which is supported by this
   driver, say Y and read the Ethernet-HOWTO.  Devices currently
   supported are the Compaq Netelligent 10, Netelligent 10/100, and
   Internal NetFlex 3.  This driver is also available as a module.
   Please email feedback to james.banks@caldera.com.
+
+VIA Rhine support
+CONFIG_VIA_RHINE
+  If you have a VIA "rhine" based network card (Rhine-I (3043) or Rhine-2 (
+  VT86c100A)), say Y here. To build this driver as a module say 'M'.
 
 Zenith Z-Note support
 CONFIG_ZNET
@@ -4592,6 +4597,13 @@ CONFIG_SUN_OPENPROMIO
   compile this as a module ( = code which can be inserted in and
   removed from the running kernel whenever you want), say M and read
   Documentation/modules.txt. If unsure, say Y.
+
+Handle buggy SMP BIOSes with bad MTRR setup
+CONFIG_MTRR
+  Some BIOSes for MP1.1/MP1.4 SMP machines fail to set the MTRR registers
+  in the chips up correctly as the specification and intel rules require.
+  If you have a PPro or later SMP and one or more CPU's report a value of
+  about 2-3 bogomips enable this.
 
 # need an empty line after last entry, for sed script in Configure.
 

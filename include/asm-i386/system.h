@@ -296,4 +296,39 @@ extern struct desc_struct default_ldt;
 void disable_hlt(void);
 void enable_hlt(void);
 
+static __inline__ unsigned long long rdmsr(unsigned int msr)
+{
+	unsigned long long ret;
+        __asm__ __volatile__("rdmsr"
+			    : "=A" (ret)
+			    : "c" (msr));
+        return ret;
+}
+
+static __inline__ void wrmsr(unsigned int msr,unsigned long long val)
+{
+        __asm__ __volatile__("wrmsr"
+			    : /* no Outputs */
+			    : "c" (msr), "A" (val));
+}
+
+
+static __inline__ unsigned long long rdtsc(void)
+{
+	unsigned long long ret;
+        __asm__ __volatile__("rdtsc"
+			    : "=A" (ret)
+			    : /* no inputs */);
+        return ret;
+}
+
+static __inline__ unsigned long long rdpmc(unsigned int counter)
+{
+	unsigned long long ret;
+        __asm__ __volatile__("rdpmc"
+			    : "=A" (ret)
+			    : "c" (counter));
+        return ret;
+}
+
 #endif

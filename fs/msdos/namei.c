@@ -369,7 +369,7 @@ static int msdos_empty(struct inode *dir)
 	if (MSDOS_I(dir)->i_start) { /* may be zero in mkdir */
 		pos = 0;
 		bh = NULL;
-		while (fat_get_entry(dir,&pos,&bh,&de) > -1)
+		while (fat_get_entry(dir,&pos,&bh,&de) > -1) {
 			/* Ignore vfat longname entries */
 			if (de->attr == ATTR_EXT)
 				continue;
@@ -379,6 +379,7 @@ static int msdos_empty(struct inode *dir)
 				fat_brelse(sb, bh);
 				return -ENOTEMPTY;
 			}
+		}
 		if (bh)
 			fat_brelse(sb, bh);
 	}

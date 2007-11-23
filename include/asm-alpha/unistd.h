@@ -274,8 +274,8 @@ static inline int write(int fd, const char * buf, int nr)
 	return sys_write(fd, buf, nr);
 }
 
-extern int sys_read(int, char *, int);
-static inline int read(int fd, char * buf, int nr)
+extern int sys_read(unsigned int, char *, int);
+static inline int read(unsigned int fd, char * buf, int nr)
 {
 	return sys_read(fd, buf, nr);
 }

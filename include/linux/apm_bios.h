@@ -83,7 +83,7 @@ extern void		apm_bios_init(void);
 extern int		apm_register_callback(int (*callback)(apm_event_t));
 extern void		apm_unregister_callback(int (*callback)(apm_event_t));
 
-extern int		apm_set_power_state(ushort state);
+extern void		apm_power_off(void);
 extern int		apm_display_blank(void);
 extern int		apm_display_unblank(void);
 

@@ -319,6 +319,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_VIA_RHINE),y)
+L_OBJS += via-rhine.o
+else
+  ifeq ($(CONFIG_VIA_RHINE),m)
+  M_OBJS += via-rhine.o
+  endif
+endif
+
 ifeq ($(CONFIG_EEXPRESS),y)
 L_OBJS += eexpress.o
 else
