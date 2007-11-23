@@ -977,6 +977,7 @@ static int posix_lock_file(struct file *filp, struct file_lock *caller,
 			/* The new lock breaks the old one in two pieces,
 			 * so we have to use the second new lock (in this
 			 * case, even F_UNLCK may fail!).
+			 */
 			left = locks_init_lock(new_fl2, right);
 			locks_insert_lock(before, left);
 			new_fl2 = NULL;

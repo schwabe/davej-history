@@ -172,6 +172,7 @@ struct symbol_table symbol_table = {
 	X(generic_file_mmap),
 	X(generic_readpage),
 	X(__fput),
+	X(make_bad_inode),
 
 	/* device registration */
 	X(register_chrdev),

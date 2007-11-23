@@ -48,9 +48,9 @@ struct ip_masq_app *masq_incarnations[MAX_MASQ_APP_PORTS];
 
 typedef struct
 { 
-        __u16 type;     // (Little Endian) Type of message.
-	__u16 length;   // (Little Endian) Length of message, header included. 
-	char  message[0];  // The contents of the message.
+        __u16 type;     /* (Little Endian) Type of message. */
+	__u16 length;   /* (Little Endian) Length of message, header included. */
+	char  message[0];  /* The contents of the message. */
 } QUAKEHEADER;
 
 struct quake_priv_data {
