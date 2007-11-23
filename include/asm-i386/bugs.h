@@ -373,5 +373,6 @@ static void check_bugs(void)
 	check_fpu();
 	check_hlt();
 	check_pentium_f00f();
+	check_privacy();
 	system_utsname.machine[1] = '0' + x86;
 }

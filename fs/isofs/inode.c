@@ -554,12 +554,17 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		return NULL;
 	}
 
+#ifdef DO_FUNKY_BROKEN_MEDIA_CHANGE_CHECK
 	if(!check_disk_change(s->s_dev)) {
 		return s;
 	}
 	if (s->u.isofs_sb.s_nls_iocharset)
 		unload_nls(s->u.isofs_sb.s_nls_iocharset);
 	if (opt.iocharset) kfree(opt.iocharset);
+#else
+	check_disk_change(s->s_dev);
+	return s;
+#endif	
 
  out: /* Kick out for various error conditions */
 	brelse(bh);

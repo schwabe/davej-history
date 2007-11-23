@@ -423,6 +423,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	outb_p(0x00, ioaddr + EN0_RCNTLO);
 	outb_p(0x00, ioaddr + EN0_RCNTHI);
 	outb_p(E8390_RREAD+E8390_START, ioaddr); /* Trigger it... */
+	udelay(10000);		/* wait 10ms for interrupt to propagate */
 	outb_p(0x00, ioaddr + EN0_IMR); 		/* Mask it again. */
 	dev->irq = autoirq_report(0);
 	if (ei_debug > 2)
@@ -676,9 +677,7 @@ ne_block_output(struct device *dev, int count,
     outb_p(0x00, nic_base + EN0_RSARHI);
     outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
     /* Make certain that the dummy read has occurred. */
-    SLOW_DOWN_IO;
-    SLOW_DOWN_IO;
-    SLOW_DOWN_IO;
+    udelay(6);
 #endif
 
     outb_p(ENISR_RDC, nic_base + EN0_ISR);
