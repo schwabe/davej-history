@@ -31,22 +31,15 @@
  * BIOS32-style PCI interface:
  */
 
+#define DEBUG_MCHECK 0	/* 0 = minimum, 1 = debug, 2 = dump */
+
 #define DEBUG_CONFIG 0
-#define DEBUG_MCHECK 0
 
 #if DEBUG_CONFIG
 # define DBG_CNF(args)	printk args
 #else
 # define DBG_CNF(args)
 #endif
-
-#if DEBUG_MCHECK
-# define DBG_MCK(args)	printk args
-# define DEBUG_MCHECK_DUMP
-#else
-# define DBG_MCK(args)
-#endif
-
 
 static volatile unsigned int PYXIS_mcheck_expected = 0;
 static volatile unsigned int PYXIS_mcheck_taken = 0;
@@ -432,14 +425,13 @@ pyxis_native_window_setup(void)
 	 * Window 1 goes at 2 GB and is 1 GB large.
 	 */
 
-	*(vuip)PYXIS_W0_BASE = PYXIS_DMA_WIN_BASE_DEFAULT | 1U;
-	*(vuip)PYXIS_W0_MASK = (PYXIS_DMA_WIN_SIZE_DEFAULT - 1) & 0xfff00000U;
-	*(vuip)PYXIS_T0_BASE = 0;
+	*(vuip)PYXIS_W0_BASE = PYXIS_DMA_WIN0_BASE_DEFAULT | 1U;
+	*(vuip)PYXIS_W0_MASK = (PYXIS_DMA_WIN0_SIZE_DEFAULT - 1) & 0xfff00000U;
+	*(vuip)PYXIS_T0_BASE = PYXIS_DMA_WIN0_TRAN_DEFAULT >> 2;
 
-	*(vuip)PYXIS_W1_BASE = (PYXIS_DMA_WIN_BASE_DEFAULT +
-				PYXIS_DMA_WIN_SIZE_DEFAULT) | 1U;
-	*(vuip)PYXIS_W1_MASK = (PYXIS_DMA_WIN_SIZE_DEFAULT - 1) & 0xfff00000U;
-	*(vuip)PYXIS_T1_BASE = PYXIS_DMA_WIN_SIZE_DEFAULT;
+	*(vuip)PYXIS_W1_BASE = PYXIS_DMA_WIN1_BASE_DEFAULT | 1U;
+	*(vuip)PYXIS_W1_MASK = (PYXIS_DMA_WIN1_SIZE_DEFAULT - 1) & 0xfff00000U;
+	*(vuip)PYXIS_T1_BASE = PYXIS_DMA_WIN1_TRAN_DEFAULT >> 2;
 
 	*(vuip)PYXIS_W2_BASE = 0x0 ;
 	*(vuip)PYXIS_W3_BASE = 0x0 ;
@@ -530,16 +522,6 @@ pyxis_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	pyxis_finish_init_arch();
 }
 
-static int
-pyxis_pci_clr_err(void)
-{
-	PYXIS_jd = *(vuip)PYXIS_ERR;
-	DBG_MCK(("PYXIS_pci_clr_err: PYXIS ERR after read 0x%x\n", PYXIS_jd));
-	*(vuip)PYXIS_ERR = 0x0180; mb();
-	PYXIS_jd = *(vuip)PYXIS_ERR;  /* re-read to force write */
-	return 0;
-}
-
 void
 pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 		    struct pt_regs * regs)
@@ -552,61 +534,26 @@ pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 	mchk_sysdata = (struct el_PYXIS_sysdata_mcheck *)
 		(la_ptr + mchk_header->sys_offset);
 
-#if 0
-	DBG_MCK(("pyxis_machine_check: vector=0x%lx la_ptr=0x%lx\n",
-		 vector, la_ptr));
-	DBG_MCK(("\t\t pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
-		 regs->pc, mchk_header->size, mchk_header->proc_offset,
-		 mchk_header->sys_offset));
-	DBG_MCK(("pyxis_machine_check: expected %d DCSR 0x%lx PEAR 0x%lx\n",
-		 PYXIS_mcheck_expected, mchk_sysdata->epic_dcsr,
-		 mchk_sysdata->epic_pear));
-#endif
-
-	/*
-	 * Check if machine check is due to a badaddr() and if so,
-	 * ignore the machine check.
-	 */
+	/* Clear the error before reporting anything. */
 	mb();
 	mb();  /* magic */
-	if (PYXIS_mcheck_expected) {
-		DBG_MCK(("PYXIS machine check expected\n"));
-		PYXIS_mcheck_expected = 0;
-		PYXIS_mcheck_taken = 1;
-		mb();
-		mb();  /* magic */
-		draina();
-		pyxis_pci_clr_err();
-		wrmces(0x7);
-		mb();
-	}
-	else {
-		printk("PYXIS machine check NOT expected\n") ;
-		DBG_MCK(("pyxis_machine_check: vector=0x%lx la_ptr=0x%lx\n",
-			 vector, la_ptr));
-		DBG_MCK(("\t\t pc=0x%lx size=0x%x procoffset=0x%x"
-			 " sysoffset 0x%x\n",
-			 regs->pc, mchk_header->size, mchk_header->proc_offset,
-			 mchk_header->sys_offset));
-		PYXIS_mcheck_expected = 0;
-		PYXIS_mcheck_taken = 1;
-		mb();
-		mb();  /* magic */
-		draina();
-		pyxis_pci_clr_err();
-		wrmces(0x7);
-		mb();
+	draina();
 
-#ifdef DEBUG_MCHECK_DUMP
-		{
-			unsigned long *ptr = (unsigned long *)la_ptr;;
-			long n = mchk_header->size / (2*sizeof(long));
+	PYXIS_jd = *(vuip)PYXIS_ERR;
+	*(vuip)PYXIS_ERR = PYXIS_jd;
+	mb();
+	PYXIS_jd = *(vuip)PYXIS_ERR;  /* re-read to force write */
 
-			do
-				printk(" +%lx %lx %lx\n", i*sizeof(long),
-				       ptr[i], ptr[i+1]);
-			while (--i);
-		}
-#endif
-	}
+	wrmces(0x7);
+	mb();
+
+	/*
+	 * See if the machine check is due to a badaddr() and if so,
+	 * ignore it.
+	 */
+	process_mcheck_info(vector, la_ptr, regs, "PYXIS",
+			    DEBUG_MCHECK, PYXIS_mcheck_expected);
+
+	PYXIS_mcheck_expected = 0;
+	PYXIS_mcheck_taken = 1;
 }

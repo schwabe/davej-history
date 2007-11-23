@@ -652,9 +652,10 @@ u32 inet_select_addr(struct device *dev, u32 dst, int scope)
 	for_primary_ifa(in_dev) {
 		if (ifa->ifa_scope > scope)
 			continue;
-		addr = ifa->ifa_local;
 		if (!dst || inet_ifa_match(dst, ifa))
-			return addr;
+			return ifa->ifa_local;
+		if (!addr)
+			addr = ifa->ifa_local;
 	} endfor_ifa(in_dev);
 	
 	if (addr || scope >= RT_SCOPE_LINK)

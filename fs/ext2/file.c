@@ -229,7 +229,7 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 			if (!count)
 				return -EFBIG;
 		}
-		if (((pos + count) >> 33) && 
+		if (((pos + count) >> 31) && 
 		    !(sb->u.ext2_sb.s_es->s_feature_ro_compat &
 		      cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE))) {
 			/* If this is the first large file created, add a flag

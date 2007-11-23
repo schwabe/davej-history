@@ -829,9 +829,9 @@ static int probe_one_port(unsigned long int base, int irq, int dma)
 	/* Done probing.  Now put the port into a sensible start-up state. */
 	if (p->modes & PARPORT_MODE_PCECR)
 		/*
-		 * Put the ECP detected port in the more SPP like mode.
+		 * Put the ECP detected port in the more PS2 like mode.
 		 */
-		parport_pc_write_econtrol(p, 0x0);
+		parport_pc_write_econtrol(p, 0x34);
 	parport_pc_write_control(p, 0x8);
 	parport_pc_write_data(p, 0);
 	udelay (50);

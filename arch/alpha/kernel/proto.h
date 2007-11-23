@@ -201,3 +201,9 @@ extern int ptrace_cancel_bpt (struct task_struct *child);
 
 /* ../mm/init.c */
 void srm_paging_stop(void);
+
+/* irq.c */
+extern void process_mcheck_info(unsigned long vector, unsigned long la_ptr,
+				struct pt_regs *regs, char *machine,
+				unsigned int debug, unsigned int expected);
+

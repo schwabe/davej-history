@@ -611,17 +611,6 @@ ip_fw_check(struct iphdr *ip,
 
 	offset = ntohs(ip->frag_off) & IP_OFFSET;
 	
-	/* If it is a truncated first fragment then it can be
-	 * used to rewrite port information, and thus should
-	 * be blocked.
-	 */
-	if (offset && (ntohs(ip->frag_off) & IP_MF)) {
-		if (!testing && net_ratelimit()) {
-			/*printk(KERN_ERR "Suspect short first fragment.\n");*/
-			dump_packet(ip,rif,NULL,NULL,0,0,0,0);
-		}
-		return FW_BLOCK;
-	}
 	/*
 	 *	Don't allow a fragment of TCP 8 bytes in. Nobody
 	 *	normal causes this. Its a cracker trying to break
@@ -659,6 +648,18 @@ ip_fw_check(struct iphdr *ip,
 			size_req = 0;
 		}
 		offset = (ntohs(ip->tot_len) < (ip->ihl<<2)+size_req);
+
+		/* If it is a truncated first fragment then it can be
+		 * used to rewrite port information, and thus should
+		 * be blocked.
+		 */
+		if (offset && (ntohs(ip->frag_off) & IP_MF)) {
+			if (!testing && net_ratelimit()) {
+				printk("Suspect short first fragment.\n");
+				dump_packet(ip,rif,NULL,NULL,0,0,0,0);
+			}
+			return FW_BLOCK;
+		}
 	}
 
 	src = ip->saddr;
