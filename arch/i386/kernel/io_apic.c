@@ -200,6 +200,8 @@ static void name##_IO_APIC_irq(unsigned int irq)			\
  * We disable IO-APIC IRQs by setting their 'destination CPU mask' to
  * zero. Trick by Ramesh Nalluri.
  */
+DO_ACTION( disable, 1, &= 0x00ffffff, io_apic_sync(entry->apic))/* destination = 0x00 */
+DO_ACTION( enable,  1, |= 0xff000000, )				/* destination = 0xff */
 DO_ACTION( mask,    0, |= 0x00010000, io_apic_sync(entry->apic))/* mask = 1 */
 DO_ACTION( unmask,  0, &= 0xfffeffff, )				/* mask = 0 */
 
@@ -610,7 +612,7 @@ void __init setup_IO_APIC_irqs(void)
 		entry.delivery_mode = dest_LowestPrio;
 		entry.dest_mode = 1;			/* logical delivery */
 		entry.mask = 0;				/* enable IRQ */
-		entry.dest.logical.logical_dest = 0xff;	/* but no route */
+		entry.dest.logical.logical_dest = 0;	/* but no route */
 
 		idx = find_irq_entry(apic,pin,mp_INT);
 		if (idx == -1) {
@@ -1015,10 +1017,13 @@ static inline void self_IPI(unsigned int irq)
 static void enable_edge_ioapic_irq(unsigned int irq)
 {
 	self_IPI(irq);
-	unmask_IO_APIC_irq(irq);
+	enable_IO_APIC_irq(irq);
 }
 
-static void disable_edge_ioapic_irq(unsigned int irq) { /* nothing */ }
+static void disable_edge_ioapic_irq(unsigned int irq)
+{
+	disable_IO_APIC_irq(irq);
+}
 
 /*
  * Starting up a edge-triggered IO-APIC interrupt is
@@ -1234,7 +1239,7 @@ static inline void check_timer(void)
 
 	pin1 = find_timer_pin(mp_INT);
 	pin2 = find_timer_pin(mp_ExtINT);
-	unmask_IO_APIC_irq(0);
+	enable_IO_APIC_irq(0);
 	if (!timer_irq_works()) {
 
 		if (pin1 != -1)

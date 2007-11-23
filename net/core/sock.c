@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.80.2.3 2000/08/10 00:37:05 davem Exp $
+ * Version:	$Id: sock.c,v 1.80.2.4 2001/02/20 04:21:46 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>

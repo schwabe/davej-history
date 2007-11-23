@@ -73,6 +73,15 @@ device_scan(unsigned long mem_start))
 	
 	prom_cpu_nodes[0] = prom_node_cpu;
 
+#ifndef __SMP__
+	{
+		extern unsigned int up_clock_tick;
+		up_clock_tick = prom_getintdefault(prom_node_cpu,
+						   "clock-frequency",
+						   0);
+	}
+#endif
+
 	mem_start = central_probe(mem_start);
 
 	cpu_probe();

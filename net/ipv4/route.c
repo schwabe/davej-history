@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.67.2.5 2000/09/01 23:19:46 davem Exp $
+ * Version:	$Id: route.c,v 1.67.2.6 2001/02/09 08:43:58 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>

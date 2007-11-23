@@ -1,4 +1,4 @@
-/* $Id: ttable.h,v 1.11.2.3 1999/10/07 20:48:25 davem Exp $ */
+/* $Id: ttable.h,v 1.11.2.5 2001/03/28 11:24:15 davem Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
@@ -54,12 +54,22 @@
 	 clr	%l6;					\
 	nop;
 	
+	/* The grotty trick to save %g1 into current->thread.kernel_cntd0
+	 * is because when we take this trap we could be interrupting trap
+	 * code already using the trap alternate global registers.  It is
+	 * better to corrupt a performance counter than corrupt trap register
+	 * state.  We cross our fingers and pray that this store/load does
+	 * not cause yet another CEE trap.
+	 */
 #define TRAPTL1_CEE			\
+	membar	#Sync;			\
+	stx	%g1, [%g6 + AOFF_task_tss + AOFF_thread_kernel_cntd0]; \
 	ldxa	[%g0] ASI_AFSR, %g1;	\
 	membar	#Sync;			\
 	stxa	%g1, [%g0] ASI_AFSR;	\
 	membar	#Sync;			\
-	retry; nop; nop; nop;
+	ldx	[%g6 + AOFF_task_tss + AOFF_thread_kernel_cntd0], %g1; \
+	retry;
 
 #define TRAP_ARG(routine, arg)				\
 	sethi	%hi(109f), %g7;				\

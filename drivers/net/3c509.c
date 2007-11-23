@@ -180,12 +180,20 @@ int __init el3_probe(struct device *dev)
 	if (EISA_bus) {
 		static int eisa_addr = 0x1000;
 		while (eisa_addr < 0x9000) {
+			int device_id;
+
 			ioaddr = eisa_addr;
 			eisa_addr += 0x1000;
 
 			/* Check the standard EISA ID register for an encoded '3Com'. */
 			if (inw(ioaddr + 0xC80) != 0x6d50)
 				continue;
+
+			/* Avoid conflict with 3c590, 3c592, 3c597, etc */
+			device_id = (inb(ioaddr + 0xC82)<<8) + inb(ioaddr + 0xC83);
+			if ((device_id & 0xFF00) == 0x5900) {
+				continue;
+			}
 
 			/* Change the register set to the configuration window 0. */
 			outw(SelectWindow | 0, ioaddr + 0xC80 + EL3_CMD);

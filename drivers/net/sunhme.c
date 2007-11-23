@@ -3019,27 +3019,23 @@ static struct quattro * __init quattro_sbus_find(struct linux_sbus_device *goal_
 	struct linux_sbus *sbus;
 	struct linux_sbus_device *sdev;
 	struct quattro *qp;
+	int i;
 
 	if(qfe_sbus_list == NULL)
 		goto found;
 
 	for(qp = qfe_sbus_list; qp != NULL; qp = qp->next) {
-		for(sdev = qp->quattro_sbus_dev;
-		    sdev != NULL;
-		    sdev = sdev->next) {
+		for(i = 0, sdev = qp->quattro_sbus_dev;
+		    (sdev != NULL) && (i < 4);
+		    sdev = sdev->next, i++) {
 			if(sdev == goal_sdev)
 				return qp;
 		}
 	}
 	for_each_sbus(sbus) {
 		for_each_sbusdev(sdev, sbus) {
-			if(sdev->child != NULL) {
-				struct linux_sbus_device *p;
-
-				for(p = sdev->child; p != NULL; p = p->next)
-					if(p == goal_sdev)
-						goto found;
-			}
+			if (sdev == goal_sdev)
+				goto found;
 		}
 	}
 

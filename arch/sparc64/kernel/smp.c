@@ -77,15 +77,17 @@ int smp_bogo(char *buf)
 	for (i = 0; i < NR_CPUS; i++)
 		if(cpu_present_map & (1UL << i))
 			len += sprintf(buf + len,
-				       "Cpu%dBogo\t: %lu.%02lu\n",
+				       "Cpu%dBogo\t: %lu.%02lu\n"
+				       "Cpu%dClkTck\t: %016lx\n",
 				       i, cpu_data[i].udelay_val / (500000/HZ),
-				       (cpu_data[i].udelay_val / (5000/HZ)) % 100);
+				       (cpu_data[i].udelay_val / (5000/HZ)) % 100,
+				       i, (unsigned long) cpu_data[i].clock_tick);
 	return len;
 }
 
 __initfunc(void smp_store_cpu_info(int id))
 {
-	int i;
+	int i, no;
 
 	cpu_data[id].irq_count			= 0;
 	cpu_data[id].bh_count			= 0;
@@ -93,6 +95,13 @@ __initfunc(void smp_store_cpu_info(int id))
 	   smp_setup_percpu_timer()  */
 	cpu_data[id].udelay_val			= loops_per_jiffy;
 
+
+	for (no = 0; no < linux_num_cpus; no++)
+		if (linux_cpus[no].mid == id)
+			break;
+
+	cpu_data[id].clock_tick = prom_getintdefault(linux_cpus[no].prom_node,
+						     "clock-frequency", 0);
 	cpu_data[id].pgcache_size		= 0;
 	cpu_data[id].pte_cache[0]		= NULL;
 	cpu_data[id].pte_cache[1]		= NULL;

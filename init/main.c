@@ -462,13 +462,8 @@ static struct dev_name_struct {
 	const char *name;
 	const int num;
 } root_dev_names[] __initdata = {
-#ifdef CONFIG_ROOT_NFS
 	{ "nfs",     0x00ff },
-#endif
-#ifdef CONFIG_BLK_DEV_LOOP
 	{ "loop",    0x0700 },
-#endif
-#ifdef CONFIG_BLK_DEV_IDE
 	{ "hda",     0x0300 },
 	{ "hdb",     0x0340 },
 	{ "hdc",     0x1600 },
@@ -481,8 +476,6 @@ static struct dev_name_struct {
 	{ "hdj",     0x3840 },
 	{ "hdk",     0x3900 },
 	{ "hdl",     0x3940 },
-#endif
-#ifdef CONFIG_BLK_DEV_SD
 	{ "sda",     0x0800 },
 	{ "sdb",     0x0810 },
 	{ "sdc",     0x0820 },
@@ -499,8 +492,6 @@ static struct dev_name_struct {
 	{ "sdn",     0x08d0 },
 	{ "sdo",     0x08e0 },
 	{ "sdp",     0x08f0 },
-#endif
-#ifdef CONFIG_BLK_DEV_DAC960
 	{ "rd/c0d0p",0x3000 },
 	{ "rd/c0d1p",0x3008 },
 	{ "rd/c0d2p",0x3010 },
@@ -517,8 +508,6 @@ static struct dev_name_struct {
 	{ "rd/c0d13p",0x3068 },
 	{ "rd/c0d14p",0x3070 },
 	{ "rd/c0d15p",0x3078 },
-#endif
-#if defined(CONFIG_BLK_CPQ_DA) || defined(CONFIG_BLK_CPQ_DA_MODULE)
 	{ "ida/c0d0p",0x4800 },
 	{ "ida/c0d1p",0x4810 },
 	{ "ida/c0d2p",0x4820 },
@@ -535,71 +524,34 @@ static struct dev_name_struct {
 	{ "ida/c0d13p",0x48D0 },
 	{ "ida/c0d14p",0x48E0 },
 	{ "ida/c0d15p",0x48F0 },
-#endif
-#ifdef CONFIG_ATARI_ACSI
 	{ "ada",     0x1c00 },
 	{ "adb",     0x1c10 },
 	{ "adc",     0x1c20 },
 	{ "add",     0x1c30 },
 	{ "ade",     0x1c40 },
-#endif
-#ifdef CONFIG_BLK_DEV_FD
 	{ "fd",      0x0200 },
-#endif
-#ifdef CONFIG_MD_BOOT
 	{ "md",      0x0900 },	     
-#endif     
-#ifdef CONFIG_BLK_DEV_XD
 	{ "xda",     0x0d00 },
 	{ "xdb",     0x0d40 },
-#endif
-#ifdef CONFIG_BLK_DEV_RAM
 	{ "ram",     0x0100 },
-#endif
-#ifdef CONFIG_BLK_DEV_SR
 	{ "scd",     0x0b00 },
-#endif
-#ifdef CONFIG_MCD
 	{ "mcd",     0x1700 },
-#endif
-#ifdef CONFIG_CDU535
 	{ "cdu535",  0x1800 },
 	{ "sonycd",  0x1800 },
-#endif
-#ifdef CONFIG_AZTCD
 	{ "aztcd",   0x1d00 },
-#endif
-#ifdef CONFIG_CM206
 	{ "cm206cd", 0x2000 },
-#endif
-#ifdef CONFIG_GSCD
 	{ "gscd",    0x1000 },
-#endif
-#ifdef CONFIG_SBPCD
 	{ "sbpcd",   0x1900 },
-#endif
-#ifdef CONFIG_BLK_DEV_PS2
 	{ "eda",     0x2400 },
 	{ "edb",     0x2440 },
-#endif
-#ifdef CONFIG_PARIDE_PD
 	{ "pda",	0x2d00 },
 	{ "pdb",	0x2d10 },
 	{ "pdc",	0x2d20 },
 	{ "pdd",	0x2d30 },
-#endif
-#ifdef CONFIG_PARIDE_PCD
 	{ "pcd",	0x2e00 },
-#endif
-#ifdef CONFIG_PARIDE_PF
 	{ "pf",		0x2f00 },
-#endif
-#if CONFIG_APBLOCK
 	{ "apblock", APBLOCK_MAJOR << 8},
-#endif
-#if CONFIG_DDV
 	{ "ddv", DDV_MAJOR << 8},
-#endif
 #ifdef CONFIG_MDISK
         { "mnda", (MDISK_MAJOR << MINORBITS)},
         { "mndb", (MDISK_MAJOR << MINORBITS) + 1},

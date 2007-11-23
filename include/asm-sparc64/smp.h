@@ -38,7 +38,7 @@ struct cpuinfo_sparc {
 	unsigned int	multiplier;
 	unsigned int	counter;
 	unsigned int	idle_volume;
-	unsigned int	__pad;
+	unsigned int	clock_tick;	/* %tick's per second */
 	unsigned long	udelay_val;
 
 	/* Dcache line 2 */

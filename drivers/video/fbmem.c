@@ -251,14 +251,16 @@ static int fbmem_read_proc(char *buf, char **start, off_t offset,
 {
 	struct fb_info **fi;
 
-	len = 0;
+	int buflen = 0;
 	for (fi = registered_fb; fi < &registered_fb[FB_MAX] && len < 4000; fi++)
 		if (*fi)
-			len += sprintf(buf + len, "%d %s\n",
+			buflen += sprintf(buf + buflen, "%d %s\n",
 				       GET_FB_IDX((*fi)->node),
 				       (*fi)->modename);
 	*start = buf + offset;
-	return len > offset ? len - offset : 0;
+
+	buflen = buflen > offset ? buflen - offset : 0;
+	return len < buflen ? len : buflen;
 }
 
 static ssize_t

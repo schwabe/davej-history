@@ -733,7 +733,7 @@ __initfunc(static void offb_init_fb(const char *name, const char *full_name,
     disp->scrollmode = SCROLL_YREDRAW;
 
     strcpy(info->info.modename, "OFfb ");
-    strncat(info->info.modename, full_name, sizeof(info->info.modename));
+    strncat(info->info.modename, full_name, sizeof(info->info.modename)-6);
     info->info.node = -1;
     info->info.fbops = &offb_ops;
     info->info.disp = disp;

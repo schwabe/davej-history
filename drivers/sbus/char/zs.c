@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.41.2.7 2001/01/03 08:07:04 ecd Exp $
+/* $Id: zs.c,v 1.41.2.8 2001/04/17 07:14:47 davem Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -173,7 +173,7 @@ static struct termios **serial_termios_locked;
  * buffer across all the serial ports, since it significantly saves
  * memory if large numbers of serial ports are open.
  */
-static unsigned char tmp_buf[4096]; /* This is cheating */
+static unsigned char tmp_buf[SERIAL_XMIT_SIZE]; /* This is cheating */
 static struct semaphore tmp_buf_sem = MUTEX;
 
 static inline int serial_paranoia_check(struct sun_serial *info,
@@ -1856,7 +1856,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.41.2.7 $";
+	char *revision = "$Revision: 1.41.2.8 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

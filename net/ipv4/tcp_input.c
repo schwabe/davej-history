@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.164.2.21 2001/03/06 05:39:39 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164.2.22 2001/04/10 19:58:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -734,8 +734,6 @@ static void tcp_ack_saw_tstamp(struct sock *sk, struct tcp_opt *tp,
 	if (tp->retransmits) {
 		if (tp->packets_out == 0) {
 			tp->retransmits = 0;
-			tp->fackets_out = 0;
-			tp->retrans_out = 0;
 			tp->backoff = 0;
 			tcp_set_rto(tp);
 		} else {
@@ -782,8 +780,10 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	if(sk->zapped)
 		return(1);	/* Dead, can't ack any more so why bother */
 
-	if (tp->pending == TIME_KEEPOPEN)
+	if (tp->pending == TIME_KEEPOPEN) {
 	  	tp->probes_out = 0;
+		tp->pending = 0;
+	}
 
 	tp->rcv_tstamp = tcp_time_stamp;
 
@@ -851,8 +851,6 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 		if (tp->retransmits) {
 			if (tp->packets_out == 0) {
 				tp->retransmits = 0;
-				tp->fackets_out = 0;
-				tp->retrans_out = 0;
 			}
 		} else {
 			/* We don't have a timestamp. Can only use
@@ -879,6 +877,8 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 			tcp_ack_packets_out(sk, tp);
 	} else {
 		tcp_clear_xmit_timer(sk, TIME_RETRANS);
+		tp->fackets_out = 0;
+		tp->retrans_out = 0;
 	}
 
 	flag &= (FLAG_DATA | FLAG_WIN_UPDATE);

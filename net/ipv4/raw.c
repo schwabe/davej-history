@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.39.2.1 1999/06/20 20:14:50 davem Exp $
+ * Version:	$Id: raw.c,v 1.39.2.2 2001/02/20 04:21:46 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>

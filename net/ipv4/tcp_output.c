@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.108.2.11 2000/11/10 12:43:29 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.108.2.12 2001/04/10 19:58:44 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -547,6 +547,8 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb, int m
 		 */
 		kfree_skb(next_skb);
 		sk->tp_pinfo.af_tcp.packets_out--;
+		if (sk->tp_pinfo.af_tcp.fackets_out)
+			sk->tp_pinfo.af_tcp.fackets_out--;
 	}
 }
 

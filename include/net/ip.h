@@ -170,7 +170,7 @@ extern __inline__ void ip_send(struct sk_buff *skb)
 extern __inline__
 int ip_decrease_ttl(struct iphdr *iph)
 {
-	u16 check = iph->check;
+	u32 check = iph->check;
 	check += __constant_htons(0x0100);
 	iph->check = check + ((check>=0xFFFF) ? 1 : 0);
 	return --iph->ttl;
