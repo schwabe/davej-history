@@ -48,23 +48,19 @@ asmlinkage int old_mmap(unsigned long *buffer)
 	int error;
 	unsigned long flags;
 	struct file * file = NULL;
-	unsigned long b[6];
 
 	error = verify_area(VERIFY_READ, buffer, 6*sizeof(long));
 	if (error)
 		return error;
-	memcpy_fromfs(&b[0], buffer, 6*sizeof(long));
-	flags = b[3];
+	flags = get_user(buffer+3);
 	if (!(flags & MAP_ANONYMOUS)) {
-		unsigned long fd = b[4];
+		unsigned long fd = get_user(buffer+4);
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 			return -EBADF;
 	}
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
-	down(&current->mm->mmap_sem);
-	error = do_mmap(file, b[0], b[1], b[2], flags, b[5]);
-	up(&current->mm->mmap_sem);
-	return error;
+	return do_mmap(file, get_user(buffer), get_user(buffer+1),
+		       get_user(buffer+2), flags, get_user(buffer+5));
 }
 
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);

@@ -557,6 +557,14 @@ S: 25360 Georgia Tech Station
 S: Atlanta, Georgia 30332
 S: USA
 
+N: John Hardin
+E: jhardin@wolfenet.com
+W: http://www.wolfenet.com/~jhardin/
+D: IPSec and PPTP masquerade
+S: 17014 Broadway ave.
+S: Snohomish, WA 98296-8031
+S: USA
+
 N: Angelo Haritsis
 E: ah@doc.ic.ac.uk
 D: kernel patches (serial, watchdog)

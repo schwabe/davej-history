@@ -31,6 +31,9 @@ enum {
   IPPROTO_PUP = 12,		/* PUP protocol				*/
   IPPROTO_UDP = 17,		/* User Datagram Protocol		*/
   IPPROTO_IDP = 22,		/* XNS IDP protocol			*/
+  IPPROTO_GRE = 47,		/* GRE Encapsulation used by PPTP et al	*/
+  IPPROTO_ESP = 50,		/* ESP protocol for IPSec		*/
+  IPPROTO_AH = 51,		/* AH protocol for IPSec		*/
 
   IPPROTO_RAW = 255,		/* Raw IP packets			*/
   IPPROTO_MAX

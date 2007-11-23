@@ -601,7 +601,7 @@ static void reschedule_timeout(int drive, const char *message, int marg)
 		drive = current_drive;
 	del_timer(&fd_timeout);
 	if (drive < 0 || drive > N_DRIVE) {
-		fd_timeout.expires = jiffies + 20*HZ;
+		fd_timeout.expires = jiffies + 20UL*HZ;
 		drive=0;
 	} else
 		fd_timeout.expires = jiffies + UDP->timeout;
@@ -969,7 +969,7 @@ static void main_command_interrupt(void)
 }
 
 /* waits for a delay (spinup or select) to pass */
-static int wait_for_completion(int delay, timeout_fn function)
+static int wait_for_completion(unsigned long delay, timeout_fn function)
 {
 	if (FDCS->reset){
 		reset_fdc(); /* do the reset during sleep to win time
@@ -1318,7 +1318,7 @@ static int fdc_dtr(void)
 	 * Pause 5 msec to avoid trouble. (Needs to be 2 jiffies)
 	 */
 	FDCS->dtr = raw_cmd->rate & 3;
-	return(wait_for_completion(jiffies+2*HZ/100,
+	return(wait_for_completion(jiffies+2UL*HZ/100,
 				   (timeout_fn) floppy_ready));
 } /* fdc_dtr */
 
@@ -2903,7 +2903,7 @@ static int user_reset_fdc(int drive, int arg, int interruptible)
  * Misc Ioctl's and support
  * ========================
  */
-static int fd_copyout(void *param, const void *address, int size)
+static int fd_copyout(void *param, const void *address, unsigned long size)
 {
 	int ret;
 
@@ -2912,7 +2912,7 @@ static int fd_copyout(void *param, const void *address, int size)
 	return 0;
 }
 
-static int fd_copyin(void *param, void *address, int size)
+static int fd_copyin(void *param, void *address, unsigned long size)
 {
 	int ret;
 

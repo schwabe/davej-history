@@ -85,12 +85,11 @@ struct ip_masq {
 	unsigned  flags;        	/* status flags */
 	struct ip_masq	*control;	/* Corresponding control connection */
 #ifdef CONFIG_IP_MASQUERADE_IPSEC
-        struct ip_masq  *d_link;	/* hashed link ptr */
+	struct ip_masq  *d_link;	/* hashed link ptr */
 	__u32		ospi, ispi;	/* outbound and inbound SPI keys for IPSEC */
-                                        /* also the cookie for ISAKMP masq (maybe) */
+					/* also the icookie for ISAKMP masquerade  */
 	short		ocnt;		/* counter of inits sent - limit blocking  */
-        short           blocking;       /* if we're blocking another host */
-
+	short		blocking;	/* if we're blocking another host          */
 #endif /* CONFIG_IP_MASQUERADE_IPSEC */
 };
 
