@@ -74,6 +74,7 @@ struct ip_vs_dest;
 
 #ifdef __KERNEL__
 
+#define IP_MASQ_NTABLES		3
 #define IP_MASQ_TAB_SIZE	256
 
 /*

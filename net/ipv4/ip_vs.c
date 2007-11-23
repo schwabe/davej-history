@@ -42,6 +42,7 @@
 #include <net/ip.h>
 #include <net/route.h>
 
+#include <net/ip_masq.h>
 #include <net/ip_vs.h>
 
 #ifdef CONFIG_KMOD
@@ -229,12 +230,12 @@ int ip_vs_hash(struct ip_masq *ms)
         hash = ip_vs_hash_key(ms->protocol, ms->daddr, ms->dport);
 
         /*
-         * Note: because ip_masq_put sets masq expire if its refcnt==2,
-         *       we have to increase counter two times, otherwise the
-         *       masq won't expire.
+         * Note: because ip_masq_put sets masq expire if its
+         *       refcnt==IP_MASQ_NTABLES, we have to increase
+         *       counter IP_MASQ_NTABLES times, otherwise the masq
+         *       won't expire.
          */
-	atomic_inc(&ms->refcnt);
-	atomic_inc(&ms->refcnt);
+	atomic_add(IP_MASQ_NTABLES, &ms->refcnt);
         list_add(&ms->m_list, &ip_vs_table[hash]);
 
         ms->flags |= IP_MASQ_F_HASHED;
@@ -250,7 +251,6 @@ int ip_vs_hash(struct ip_masq *ms)
 int ip_vs_unhash(struct ip_masq *ms)
 {
         unsigned int hash;
-        struct ip_masq ** ms_p;
 
         if (!(ms->flags & IP_MASQ_F_HASHED)) {
                 IP_VS_ERR("ip_vs_unhash(): request for unhash flagged, called from %p\n",
@@ -262,11 +262,10 @@ int ip_vs_unhash(struct ip_masq *ms)
          */
         hash = ip_vs_hash_key(ms->protocol, ms->daddr, ms->dport);
         /*
-         * Note: since we increase refcnt twice while hashing,
-         *       we have to decrease it twice while unhashing.
+         * Note: since we increase refcnt while hashing,
+         *       we have to decrease it while unhashing.
          */
-	atomic_dec(&ms->refcnt);
-	atomic_dec(&ms->refcnt);
+	atomic_sub(IP_MASQ_NTABLES, &ms->refcnt);
 	list_del(&ms->m_list);
         ms->flags &= ~IP_MASQ_F_HASHED;
         return 1;
@@ -284,7 +283,7 @@ int ip_vs_unhash(struct ip_masq *ms)
 struct ip_masq * ip_vs_in_get(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port)
 {
         unsigned hash;
-        struct ip_masq *ms = NULL;
+        struct ip_masq *ms;
         struct list_head *l, *e;
 
         hash = ip_vs_hash_key(protocol, s_addr, s_port);
@@ -301,6 +300,7 @@ struct ip_masq * ip_vs_in_get(int protocol, __u32 s_addr, __u16 s_port, __u32 d_
                         goto out;
 		}
         }
+	ms = NULL;
 
   out:
         return ms;
@@ -317,7 +317,7 @@ struct ip_masq * ip_vs_in_get(int protocol, __u32 s_addr, __u16 s_port, __u32 d_
 struct ip_masq * ip_vs_out_get(int protocol, __u32 s_addr, __u16 s_port, __u32 d_addr, __u16 d_port)
 {
         unsigned hash;
-        struct ip_masq *ms = NULL;
+        struct ip_masq *ms;
         struct list_head *l, *e;
 
 	/*	
@@ -338,6 +338,7 @@ struct ip_masq * ip_vs_out_get(int protocol, __u32 s_addr, __u16 s_port, __u32 d
 		}
 
         }
+	ms = NULL;
 
   out:
         return ms;
@@ -1289,7 +1290,7 @@ __initfunc(int ip_vs_init(void))
 #ifdef CONFIG_IP_MASQUERADE_VS_WLC
         ip_vs_wlc_init();
 #endif
-#ifdef CONFIG_IP_MASQUERADE_VS_WLC
+#ifdef CONFIG_IP_MASQUERADE_VS_PCC
         ip_vs_pcc_init();
 #endif
         return 0;

@@ -4704,8 +4704,8 @@ CONFIG_SCSI_AM53C974
 
 AMI MegaRAID support
 CONFIG_SCSI_MEGARAID
-  This driver supports the AMI MegaRAID 428 and 438 (and maybe 466)
-  SCSI host adapters. 
+  This driver supports the AMI MegaRAID 418, 428, 438, 466, 762, 490
+  and 467 SCSI host adapters. 
 
   If you want to compile this driver as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -9935,6 +9935,15 @@ CONFIG_SOUND_ES1371_GAMEPORT
   The joystick driver will by default use 0x201. 
   Leave the default 200 unless you have a joystick not attached
   to your sound card.
+
+ESS Solo1 based PCI sound cards (eg. SC1938)
+CONFIG_SOUND_ESSSOLO1
+  Say Y or M if you have a PCI sound card utilizing the ESS Technology
+  Solo1 chip. To find out if your sound card uses a
+  Solo1 chip without removing your computer's cover, use
+  lspci -n and look for the PCI ID 125D:1969. This driver 
+  differs slightly from OSS/Free, so PLEASE READ
+  Documentation/sound/solo1.
 
 S3 SonicVibes based PCI sound cards
 CONFIG_SOUND_SONICVIBES

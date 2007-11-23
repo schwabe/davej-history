@@ -599,8 +599,6 @@ EXPORT_SYMBOL(ip_masq_d_table);
  *	  1 for extra modules support (daddr)
  */
   
-#define IP_MASQ_NTABLES 3
-
 struct list_head ip_masq_m_table[IP_MASQ_TAB_SIZE];
 struct list_head ip_masq_s_table[IP_MASQ_TAB_SIZE];
 struct list_head ip_masq_d_table[IP_MASQ_TAB_SIZE];
