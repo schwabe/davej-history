@@ -25,6 +25,7 @@
 #define spin_unlock(lock)			((void) 0)
 #define spin_lock_irq(lock)			cli()
 #define spin_unlock_irq(lock)			sti()
+#define spin_is_locked(lock)			(0)
 
 #define spin_lock_irqsave(lock, flags)		save_and_cli(flags)
 #define spin_unlock_irqrestore(lock, flags)	restore_flags(flags)
@@ -97,6 +98,9 @@ typedef struct {
 #define SPIN_LOCK_UNLOCKED	(spinlock_t) { 0 }
 #define spin_lock_init(x)	((x)->lock = 0)
 #endif
+
+#define spin_is_locked(lp) \
+	(*((volatile unsigned int *)(&((lp)->lock))) != 0)
 
 #define spin_unlock_wait(x) \
 	({ do { barrier(); } while(((volatile spinlock_t *)x)->lock); })

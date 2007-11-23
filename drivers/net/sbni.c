@@ -1371,7 +1371,7 @@ unsigned long calc_crc(char *mem, int len, unsigned initial)
 		"movl %%edx,%%eax"
 		: 
 		: "S" (mem), "D" (&crc32tab[0]), "c" (len), "d" (initial)
-		: "eax", "edx", "ecx"
+		: "eax"
 	);
 	/* return crc; */
 }

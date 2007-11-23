@@ -944,7 +944,7 @@ pcnet32_init_ring(struct device *dev)
 	lp->tx_ring[i].status = 0;
     }
 
-    lp->init_block.tlen_rlen = TX_RING_LEN_BITS | RX_RING_LEN_BITS;
+    lp->init_block.tlen_rlen = le16_to_cpu(TX_RING_LEN_BITS | RX_RING_LEN_BITS); 
     for (i = 0; i < 6; i++)
 	lp->init_block.phys_addr[i] = dev->dev_addr[i];
     lp->init_block.rx_ring = (u32)le32_to_cpu(virt_to_bus(lp->rx_ring));

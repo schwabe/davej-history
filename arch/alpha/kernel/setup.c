@@ -37,6 +37,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/hwrpb.h>
+#include <asm/page.h>
 #include <asm/dma.h>
 #include <asm/io.h>
 
@@ -56,6 +57,7 @@ unsigned char aux_device_present = 0xaa;
 #define N(a) (sizeof(a)/sizeof(a[0]))
 
 static unsigned long find_end_memory(void);
+static unsigned long get_memory_end_override(char *);
 static struct alpha_machine_vector *get_sysvec(long, long, long);
 static struct alpha_machine_vector *get_sysvec_byname(const char *);
 static void get_sysnames(long, long, char **, char **);
@@ -112,12 +114,14 @@ WEAK(eb164_mv);
 WEAK(eb64p_mv);
 WEAK(eb66_mv);
 WEAK(eb66p_mv);
+WEAK(eiger_mv);
 WEAK(jensen_mv);
 WEAK(lx164_mv);
 WEAK(miata_mv);
 WEAK(mikasa_mv);
 WEAK(mikasa_primo_mv);
 WEAK(monet_mv);
+WEAK(nautilus_mv);
 WEAK(noname_mv);
 WEAK(noritake_mv);
 WEAK(noritake_primo_mv);
@@ -136,7 +140,6 @@ WEAK(xlt_mv);
 
 #undef WEAK
 
-
 void __init
 setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	   unsigned long * memory_end_p)
@@ -146,8 +149,9 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	struct alpha_machine_vector *vec = NULL;
 	struct percpu_struct *cpu;
 	char *type_name, *var_name, *p;
+	unsigned long memory_end_override = 0;
 
-	hwrpb = (struct hwrpb_struct*)(IDENT_ADDR + INIT_HWRPB->phys_addr);
+	hwrpb = (struct hwrpb_struct*) __va(INIT_HWRPB->phys_addr);
 
 	/* 
 	 * Locate the command line.
@@ -189,6 +193,11 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 			est_cycle_freq = simple_strtol(p+6, NULL, 0);
 			continue;
 		}
+
+		if (strncmp(p, "mem=", 4) == 0) {
+			memory_end_override = get_memory_end_override(p+4);
+			continue;
+		}
 	}
 
 	/* Replace the command line, not that we've killed it with strtok.  */
@@ -215,9 +224,10 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 		      type_name, (*var_name ? " variation " : ""), var_name,
 		      hwrpb->sys_type, hwrpb->sys_variation);
 	}
-	if (vec != &alpha_mv)
+	if (vec != &alpha_mv) {
 		alpha_mv = *vec;
-
+	}
+	
 #ifdef CONFIG_ALPHA_GENERIC
 	/* Assume that we've booted from SRM if we havn't booted from MILO.
 	   Detect the later by looking for "MILO" in the system serial nr.  */
@@ -248,8 +258,14 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	wrmces(0x7);
 
 	/* Find our memory.  */
-	*memory_end_p = find_end_memory();
 	*memory_start_p = (unsigned long) _end;
+	*memory_end_p = find_end_memory();
+	if (memory_end_override && memory_end_override < *memory_end_p) {
+		printk("Overriding memory size from %luMB to %luMB\n",
+		       __pa(*memory_end_p) >> 20,
+		       __pa(memory_end_override) >> 20);
+		*memory_end_p = memory_end_override;
+	}
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	initrd_start = INITRD_START;
@@ -339,13 +355,35 @@ find_end_memory(void)
 	/* Round it up to an even number of pages. */
 	high = (high + PAGE_SIZE) & (PAGE_MASK*2);
 
-	/* Enforce maximum of 2GB even if there is more.  Blah.  */
+	/* Enforce maximum of 2GB even if there is more,
+	 * but only if the platform (support) cannot handle it.
+	 */
 	if (high > 0x80000000UL) {
-		printk("Cropping memory from %luMB to 2048MB\n", high);
+		printk("Cropping memory from %luMB to 2048MB\n", high >> 20);
 		high = 0x80000000UL;
 	}
 
-	return PAGE_OFFSET + high;
+	return (unsigned long) __va(high);
+}
+
+static unsigned long __init
+get_memory_end_override(char *s)
+{
+	unsigned long end = 0;
+	char *from = s;
+
+	end = simple_strtoul(from, &from, 0);
+	if ( *from == 'K' || *from == 'k' ) {
+		end = end << 10;
+		from++;
+	} else if ( *from == 'M' || *from == 'm' ) {
+		end = end << 20;
+		from++;
+	} else if ( *from == 'G' || *from == 'g' ) {
+		end = end << 30;
+		from++;
+	}
+	return (unsigned long) __va(end);
 }
 
 
@@ -358,10 +396,12 @@ static char systype_names[][16] = {
 	"Mikasa", "EB64", "EB66", "EB64+", "AlphaBook1",
 	"Rawhide", "K2", "Lynx", "XL", "EB164", "Noritake",
 	"Cortex", "29", "Miata", "XXM", "Takara", "Yukon",
-	"Tsunami", "Wildfire", "CUSCO"
+	"Tsunami", "Wildfire", "CUSCO", "Eiger"
 };
 
 static char unofficial_names[][8] = {"100", "Ruffian"};
+
+static char api_names[][16] = {"200", "Nautilus"};
 
 static char eb164_names[][8] = {"EB164", "PC164", "LX164", "SX164", "RX164"};
 static int eb164_indices[] = {0,0,0,1,1,1,1,1,2,2,2,2,3,3,3,3,4};
@@ -385,7 +425,6 @@ static char tsunami_names[][16] = {
 	"Goldrush", "Webbrick", "Catamaran"
 };
 static int tsunami_indices[] = {0,1,2,3,4,5,6,7,8};
-
 
 static struct alpha_machine_vector * __init
 get_sysvec(long type, long variation, long cpu)
@@ -429,12 +468,19 @@ get_sysvec(long type, long variation, long cpu)
 		NULL,		/* Tsunami -- see variation.  */
 		NULL,		/* Wildfire */
 		NULL,		/* CUSCO */
+		&eiger_mv,	/* Eiger */
 	};
 
 	static struct alpha_machine_vector *unofficial_vecs[] __initlocaldata =
 	{
 		NULL,		/* 100 */
 		&ruffian_mv,
+	};
+
+	static struct alpha_machine_vector *api_vecs[] __initlocaldata =
+	{
+		NULL,		/* 200 */
+		&nautilus_mv,
 	};
 
 	static struct alpha_machine_vector *alcor_vecs[] __initlocaldata = 
@@ -485,6 +531,9 @@ get_sysvec(long type, long variation, long cpu)
 	vec = NULL;
 	if (type < N(systype_vecs)) {
 		vec = systype_vecs[type];
+	} else if ((type > ST_API_BIAS) &&
+		   (type - ST_API_BIAS) < N(api_vecs)) {
+		vec = api_vecs[type - ST_API_BIAS];
 	} else if ((type > ST_UNOFFICIAL_BIAS) &&
 		   (type - ST_UNOFFICIAL_BIAS) < N(unofficial_vecs)) {
 		vec = unofficial_vecs[type - ST_UNOFFICIAL_BIAS];
@@ -558,12 +607,14 @@ get_sysvec_byname(const char *name)
 		&eb64p_mv,
 		&eb66_mv,
 		&eb66p_mv,
+		&eiger_mv,
 		&jensen_mv,
 		&lx164_mv,
 		&miata_mv,
 		&mikasa_mv,
 		&mikasa_primo_mv,
 		&monet_mv,
+		&nautilus_mv,
 		&noname_mv,
 		&noritake_mv,
 		&noritake_primo_mv,
@@ -604,6 +655,9 @@ get_sysnames(long type, long variation,
 	   else set type name to family */
 	if (type < N(systype_names)) {
 		*type_name = systype_names[type];
+	} else if ((type > ST_API_BIAS) &&
+		   (type - ST_API_BIAS) < N(api_names)) {
+		*type_name = api_names[type - ST_API_BIAS];
 	} else if ((type > ST_UNOFFICIAL_BIAS) &&
 		   (type - ST_UNOFFICIAL_BIAS) < N(unofficial_names)) {
 		*type_name = unofficial_names[type - ST_UNOFFICIAL_BIAS];
@@ -689,6 +743,21 @@ platform_string(void)
 	}
 }
 
+static int
+get_nr_processors(struct percpu_struct *cpubase, unsigned long num)
+{
+	struct percpu_struct *cpu;
+	int i, count = 0;
+
+	for (i = 0; i < num; i++) {
+		cpu = (struct percpu_struct *)
+			((char *)cpubase + i*hwrpb->processor_size);
+		if ((cpu->flags & 0x1cc) == 0x1cc)
+			count++;
+	}
+	return count;
+}
+
 /*
  * BUFFER is PAGE_SIZE bytes long.
  */
@@ -708,7 +777,7 @@ int get_cpuinfo(char *buffer)
 	char *cpu_name;
 	char *systype_name;
 	char *sysvariation_name;
-	int len;
+	int len, nr_processors;
 
 	cpu = (struct percpu_struct*)((char*)hwrpb + hwrpb->processor_offset);
 	cpu_index = (unsigned) (cpu->type - 1);
@@ -718,6 +787,8 @@ int get_cpuinfo(char *buffer)
 
 	get_sysnames(hwrpb->sys_type, hwrpb->sys_variation,
 		     &systype_name, &sysvariation_name);
+
+	nr_processors = get_nr_processors(cpu, hwrpb->nr_processors);
 
 	len = sprintf(buffer,
 		      "cpu\t\t\t: Alpha\n"
@@ -738,7 +809,7 @@ int get_cpuinfo(char *buffer)
 		      "kernel unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
 		      "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
 		      "platform string\t\t: %s\n"
-		      "cpus detected\t\t: %ld\n",
+		      "cpus detected\t\t: %d\n",
 		       cpu_name, cpu->variation, cpu->revision,
 		       (char*)cpu->serial_no,
 		       systype_name, sysvariation_name, hwrpb->sys_revision,
@@ -753,7 +824,7 @@ int get_cpuinfo(char *buffer)
 		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100,
 		       unaligned[0].count, unaligned[0].pc, unaligned[0].va,
 		       unaligned[1].count, unaligned[1].pc, unaligned[1].va,
-		       platform_string(), hwrpb->nr_processors);
+		       platform_string(), nr_processors);
 
 #ifdef __SMP__
 	len += smp_info(buffer+len);

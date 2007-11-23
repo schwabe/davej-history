@@ -624,8 +624,8 @@ static int fcif_probe(struct device *dev)
 #endif
 
 #ifdef CONFIG_SDLA
-    extern int sdla_c_init(struct device *);
-    static struct device sdla0_dev = { "sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_c_init, };
+    extern int sdla_init(struct device *);
+    static struct device sdla0_dev = { "sdla0", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sdla_init, };
 
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&sdla0_dev)

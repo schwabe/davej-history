@@ -203,7 +203,6 @@ clipper_init_irq(void)
 	enable_irq(2);
 }
 
-
 /*
  * PCI Fixup configuration.
  *
@@ -402,7 +401,6 @@ webbrick_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(webbrick_map_irq, common_swizzle);
-	SMC669_Init(0);
 }
 
 static void __init
@@ -411,7 +409,6 @@ clipper_pci_fixup(void)
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(clipper_map_irq, common_swizzle);
 }
-
 
 /*
  * The System Vectors
@@ -427,7 +424,7 @@ struct alpha_machine_vector dp264_mv __initmv = {
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
 
 	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	irq_probe_mask:		TSUNAMI_PROBE_MASK,
 	update_irq_hw:		dp264_update_irq_hw,
 	ack_irq:		generic_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
@@ -450,7 +447,7 @@ struct alpha_machine_vector monet_mv __initmv = {
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
 
 	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	irq_probe_mask:		TSUNAMI_PROBE_MASK,
 	update_irq_hw:		dp264_update_irq_hw,
 	ack_irq:		generic_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
@@ -472,7 +469,7 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
 
 	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	irq_probe_mask:		TSUNAMI_PROBE_MASK,
 	update_irq_hw:		dp264_update_irq_hw,
 	ack_irq:		generic_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
@@ -494,7 +491,7 @@ struct alpha_machine_vector clipper_mv __initmv = {
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
 
 	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	irq_probe_mask:		TSUNAMI_PROBE_MASK,
 	update_irq_hw:		clipper_update_irq_hw,
 	ack_irq:		generic_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
@@ -505,6 +502,6 @@ struct alpha_machine_vector clipper_mv __initmv = {
 	pci_fixup:		clipper_pci_fixup,
 	kill_arch:		generic_kill_arch,
 };
-
 /* No alpha_mv alias for webbrick/monet/clipper, since we compile them
    in unconditionally with DP264; setup_arch knows how to cope.  */
+

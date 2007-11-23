@@ -602,7 +602,7 @@ __EXTERN_INLINE unsigned long pyxis_dense_mem(unsigned long addr)
 #define virt_to_bus	pyxis_virt_to_bus
 #define bus_to_virt	pyxis_bus_to_virt
 
-#if defined(BWIO_ENABLED) && !defined(CONFIG_ALPHA_RUFFIAN)
+#if defined(BWIO_ENABLED)
 # define __inb		pyxis_bw_inb
 # define __inw		pyxis_bw_inw
 # define __inl		pyxis_bw_inl
@@ -643,7 +643,7 @@ __EXTERN_INLINE unsigned long pyxis_dense_mem(unsigned long addr)
 
 #define dense_mem	pyxis_dense_mem
 
-#if defined(BWIO_ENABLED) && !defined(CONFIG_ALPHA_RUFFIAN)
+#if defined(BWIO_ENABLED)
 # define inb(port) __inb((port))
 # define inw(port) __inw((port))
 # define inl(port) __inl((port))

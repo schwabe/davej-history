@@ -215,41 +215,6 @@ __EXTERN_INLINE void * mcpcia_bus_to_virt(unsigned long address)
 #define vuip	volatile unsigned int *
 #define vulp	volatile unsigned long *
 
-#if 0 /* BWIO */
-__EXTERN_INLINE unsigned int mcpcia_bw_inb(unsigned long addr)
-{
-	return __kernel_ldbu(*(vucp)(addr+MCPCIA_BW_IO));
-}
-
-__EXTERN_INLINE void mcpcia_bw_outb(unsigned char b, unsigned long addr)
-{
-	__kernel_stb(b, *(vucp)(addr+MCPCIA_BW_IO));
-	mb();
-}
-
-__EXTERN_INLINE unsigned int mcpcia_bw_inw(unsigned long addr)
-{
-	return __kernel_ldwu(*(vusp)(addr+MCPCIA_BW_IO));
-}
-
-__EXTERN_INLINE void mcpcia_bw_outw(unsigned short b, unsigned long addr)
-{
-	__kernel_stw(b, *(vusp)(addr+MCPCIA_BW_IO));
-	mb();
-}
-
-__EXTERN_INLINE unsigned int mcpcia_bw_inl(unsigned long addr)
-{
-	return *(vuip)(addr+MCPCIA_BW_IO);
-}
-
-__EXTERN_INLINE void mcpcia_bw_outl(unsigned int b, unsigned long addr)
-{
-	*(vuip)(addr+MCPCIA_BW_IO) = b;
-	mb();
-}
-#endif
-
 __EXTERN_INLINE unsigned int mcpcia_inb(unsigned long in_addr)
 {
 	unsigned long addr = in_addr & 0xffffffffUL;
@@ -335,48 +300,6 @@ __EXTERN_INLINE void mcpcia_outl(unsigned int b, unsigned long in_addr)
  * HHH = 31:29 HAE_MEM CSR
  * 
  */
-
-#if 0 /* BWIO */
-__EXTERN_INLINE unsigned long mcpcia_bw_readb(unsigned long addr)
-{
-	return __kernel_ldbu(*(vucp)(addr+MCPCIA_BW_MEM));
-}
-
-__EXTERN_INLINE unsigned long mcpcia_bw_readw(unsigned long addr)
-{
-	return __kernel_ldbw(*(vusp)(addr+MCPCIA_BW_MEM));
-}
-
-__EXTERN_INLINE unsigned long mcpcia_bw_readl(unsigned long addr)
-{
-	return *(vuip)(addr + MCPCIA_BW_MEM);
-}
-
-__EXTERN_INLINE unsigned long mcpcia_bw_readq(unsigned long addr)
-{
-	return *(vulp)(addr + MCPCIA_BW_MEM);
-}
-
-__EXTERN_INLINE void mcpcia_bw_writeb(unsigned char b, unsigned long addr)
-{
-	__kernel_stb(b, *(vucp)(addr+MCPCIA_BW_MEM));
-}
-
-__EXTERN_INLINE void mcpcia_bw_writew(unsigned short b, unsigned long addr)
-{
-	__kernel_stw(b, *(vusp)(addr+MCPCIA_BW_MEM));
-}
-
-__EXTERN_INLINE void mcpcia_bw_writel(unsigned int b, unsigned long addr)
-{
-	*(vuip)(addr+MCPCIA_BW_MEM) = b;
-}
-
-__EXTERN_INLINE void mcpcia_bw_writeq(unsigned long b, unsigned long addr)
-{
-	*(vulp)(addr+MCPCIA_BW_MEM) = b;
-}
-#endif
 
 __EXTERN_INLINE unsigned long mcpcia_srm_base(unsigned long addr)
 {
@@ -543,64 +466,34 @@ __EXTERN_INLINE unsigned long mcpcia_dense_mem(unsigned long addr)
 #define virt_to_bus	mcpcia_virt_to_bus
 #define bus_to_virt	mcpcia_bus_to_virt
 
-#if 0 /* BWIO */
-# define __inb		mcpcia_bw_inb
-# define __inw		mcpcia_bw_inw
-# define __inl		mcpcia_bw_inl
-# define __outb		mcpcia_bw_outb
-# define __outw		mcpcia_bw_outw
-# define __outl		mcpcia_bw_outl
-# define __readb	mcpcia_bw_readb
-# define __readw	mcpcia_bw_readw
-# define __writeb	mcpcia_bw_writeb
-# define __writew	mcpcia_bw_writew
-# define __readl	mcpcia_bw_readl
-# define __readq	mcpcia_bw_readq
-# define __writel	mcpcia_bw_writel
-# define __writeq	mcpcia_bw_writeq
+#define __inb		mcpcia_inb
+#define __inw		mcpcia_inw
+#define __inl		mcpcia_inl
+#define __outb		mcpcia_outb
+#define __outw		mcpcia_outw
+#define __outl		mcpcia_outl
+#ifdef CONFIG_ALPHA_SRM_SETUP
+# define __readb	mcpcia_srm_readb
+# define __readw	mcpcia_srm_readw
+# define __writeb	mcpcia_srm_writeb
+# define __writew	mcpcia_srm_writew
 #else
-# define __inb		mcpcia_inb
-# define __inw		mcpcia_inw
-# define __inl		mcpcia_inl
-# define __outb		mcpcia_outb
-# define __outw		mcpcia_outw
-# define __outl		mcpcia_outl
-# ifdef CONFIG_ALPHA_SRM_SETUP
-#  define __readb	mcpcia_srm_readb
-#  define __readw	mcpcia_srm_readw
-#  define __writeb	mcpcia_srm_writeb
-#  define __writew	mcpcia_srm_writew
-# else
-#  define __readb	mcpcia_readb
-#  define __readw	mcpcia_readw
-#  define __writeb	mcpcia_writeb
-#  define __writew	mcpcia_writew
-# endif
-# define __readl	mcpcia_readl
-# define __readq	mcpcia_readq
-# define __writel	mcpcia_writel
-# define __writeq	mcpcia_writeq
-#endif /* BWIO */
+# define __readb	mcpcia_readb
+# define __readw	mcpcia_readw
+# define __writeb	mcpcia_writeb
+# define __writew	mcpcia_writew
+#endif
+#define __readl		mcpcia_readl
+#define __readq		mcpcia_readq
+#define __writel	mcpcia_writel
+#define __writeq	mcpcia_writeq
 
 #define dense_mem	mcpcia_dense_mem
 
-#if 0 /* BWIO */
-# define inb(port) __inb((port))
-# define inw(port) __inw((port))
-# define inl(port) __inl((port))
-# define outb(x, port) __outb((x),(port))
-# define outw(x, port) __outw((x),(port))
-# define outl(x, port) __outl((x),(port))
-# define readb(addr) __readb((addr))
-# define readw(addr) __readw((addr))
-# define writeb(b, addr) __writeb((b),(addr))
-# define writew(b, addr) __writew((b),(addr))
-#else
-# define inb(port) \
-  (__builtin_constant_p((port))?__inb(port):_inb(port))
-# define outb(x, port) \
-  (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
-#endif /* BWIO */
+#define inb(port) \
+ (__builtin_constant_p((port))?__inb(port):_inb(port))
+#define outb(x, port) \
+ (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
 #define readl(a)	__readl((unsigned long)(a))
 #define readq(a)	__readq((unsigned long)(a))

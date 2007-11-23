@@ -30,38 +30,53 @@
 #include "bios32.h"
 #include "machvec.h"
 
+static unsigned int hose_irq_masks[4] = { 0xff0000, 0xfe0000,
+					  0xff0000, 0xff0000 };
 
 static void
-rawhide_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+rawhide_update_irq_hw(unsigned long irq, unsigned long unused, int unmask_p)
 {
-	if (irq >= 40) {
-		/* PCI bus 1 with builtin NCR810 SCSI */
-		*(vuip)MCPCIA_INT_MASK0(1) =
-			(~((mask) >> 40) & 0x00ffffffU) | 0x00fe0000U;
-		mb();
-		/* ... and read it back to make sure it got written.  */
-	  	*(vuip)MCPCIA_INT_MASK0(1);
+	unsigned int saddle, hose, new_irq;
+	unsigned long mask;
+
+	saddle = (irq > 63); /* Which saddle are we on? */
+	mask = _alpha_irq_masks[saddle]; /* Use the correct mask. */
+
+	if (irq < 16) {
+		if (irq < 8)
+			outb(mask, 0x21);	/* ISA PIC1 */
+		else
+			outb(mask >> 8, 0xA1);	/* ISA PIC2 */
+		return;
 	}
-	else if (irq >= 16) {
-		/* PCI bus 0 with EISA bridge */
-		*(vuip)MCPCIA_INT_MASK0(0) =
-			(~((mask) >> 16) & 0x00ffffffU) | 0x00ff0000U;
-		mb();
-		/* ... and read it back to make sure it got written.  */
-	  	*(vuip)MCPCIA_INT_MASK0(0);
+
+	if (!saddle) {
+		mask >>= 16; /* Saddle 0 includes EISA interrupts. */
+		new_irq = irq - 16;
+	} else {
+		new_irq = irq - 64;
 	}
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else
-		outb(mask, 0x21);	/* ISA PIC1 */
+
+	hose = (saddle << 1);
+
+	if (new_irq >= 24) {
+		mask >>= 24;
+		hose++;
+	}
+
+	*(vuip)MCPCIA_INT_MASK0(hose) =
+		(~(mask) & 0x00ffffffU) | hose_irq_masks[hose];
+	mb();
+	/* ... and read it back to make sure it got written.  */
+	*(vuip)MCPCIA_INT_MASK0(hose);
 }
 
 static void 
 rawhide_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
-	int irq, ack;
+	int irq;
 
-	ack = irq = (vector - 0x800) >> 4;
+	irq = (vector - 0x800) >> 4;
 
         /*
          * The RAWHIDE SRM console reports PCI interrupts with a vector
@@ -73,34 +88,31 @@ rawhide_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	 * also, PCI #1 interrupts are offset some more... :-(
          */
 	if (irq == 52)
-		ack = irq = 56; /* SCSI on PCI 1 is special */
-	else {
-		if (irq >= 24) /* adjust all PCI interrupts down 8 */
-			ack = irq = irq - 8;
-		if (irq >= 48) /* adjust PCI bus 1 interrupts down another 8 */
-			ack = irq = irq - 8;
-	}
+		irq = 72; /* SCSI on PCI 1 is special */
 
-	handle_irq(irq, ack, regs);
+	/* Adjust by which hose it is from. */
+	irq -= (((irq + 16) >> 2) & 0x38);
+
+	handle_irq(irq, irq, regs);
 }
 
 static void __init
 rawhide_init_irq(void)
 {
+	unsigned int hose;
+
+	mcpcia_init_hoses();
+
 	STANDARD_INIT_IRQ_PROLOG;
 
-	/* HACK ALERT! only PCI busses 0 and 1 are used currently,
-	   and routing is only to CPU #1*/
+	/* HACK ALERT! routing is only to CPU #0. */
 
-	*(vuip)MCPCIA_INT_MASK0(0) =
-		(~((alpha_irq_mask) >> 16) & 0x00ffffffU) | 0x00ff0000U; mb();
-	/* ... and read it back to make sure it got written.  */
-	*(vuip)MCPCIA_INT_MASK0(0);
-
-	*(vuip)MCPCIA_INT_MASK0(1) =
-		(~((alpha_irq_mask) >> 40) & 0x00ffffffU) | 0x00fe0000U; mb();
-	/* ... and read it back to make sure it got written.  */
-	*(vuip)MCPCIA_INT_MASK0(1);
+	for (hose = 0; hose < hose_count; hose++) {
+		*(vuip)MCPCIA_INT_MASK0(hose) = hose_irq_masks[hose];
+		mb();
+		/* ... and read it back to make sure it got written.  */
+		*(vuip)MCPCIA_INT_MASK0(hose);
+	}
 
 	enable_irq(2);
 }
@@ -177,8 +189,8 @@ struct alpha_machine_vector rawhide_mv __initmv = {
 	machine_check:		mcpcia_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
 
-	nr_irqs:		64,
-	irq_probe_mask:		_PROBE_MASK(64),
+	nr_irqs:		128,
+	irq_probe_mask:		_PROBE_MASK(128),
 	update_irq_hw:		rawhide_update_irq_hw,
 	ack_irq:		generic_ack_irq,
 	device_interrupt:	rawhide_srm_device_interrupt,

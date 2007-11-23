@@ -43,8 +43,6 @@
 
 static volatile unsigned int PYXIS_mcheck_expected = 0;
 static volatile unsigned int PYXIS_mcheck_taken = 0;
-static unsigned int PYXIS_jd;
-
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -526,23 +524,17 @@ void
 pyxis_machine_check(unsigned long vector, unsigned long la_ptr,
 		    struct pt_regs * regs)
 {
-	struct el_common *mchk_header;
-	struct el_PYXIS_sysdata_mcheck *mchk_sysdata;
-
-	mchk_header = (struct el_common *)la_ptr;
-
-	mchk_sysdata = (struct el_PYXIS_sysdata_mcheck *)
-		(la_ptr + mchk_header->sys_offset);
+	unsigned int tmp;
 
 	/* Clear the error before reporting anything. */
 	mb();
 	mb();  /* magic */
 	draina();
 
-	PYXIS_jd = *(vuip)PYXIS_ERR;
-	*(vuip)PYXIS_ERR = PYXIS_jd;
+	tmp = *(vuip)PYXIS_ERR;
+	*(vuip)PYXIS_ERR = tmp;
 	mb();
-	PYXIS_jd = *(vuip)PYXIS_ERR;  /* re-read to force write */
+	*(vuip)PYXIS_ERR;  /* re-read to force write */
 
 	wrmces(0x7);
 	mb();

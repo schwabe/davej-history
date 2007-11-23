@@ -7,6 +7,7 @@
 #include <asm/init.h>
 #include <asm/pal.h>
 
+/* make a multiple of 64-bytes */
 struct cpuinfo_alpha {
 	unsigned long loops_per_sec;
 	unsigned long last_asn;
@@ -16,6 +17,10 @@ struct cpuinfo_alpha {
 	unsigned long ipi_count;
 	unsigned long prof_multiplier;
 	unsigned long prof_counter;
+  /* start of second 64-bytes */
+	unsigned long irq_count;
+	unsigned long bh_count;
+	unsigned long __pad[6];
 } __cacheline_aligned;
 
 extern struct cpuinfo_alpha cpu_data[NR_CPUS];

@@ -164,6 +164,8 @@ tsunami_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	__kernel_stb(value, *(vucp)addr);
+	mb();
+	__kernel_ldbu(*(vucp)addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -178,6 +180,8 @@ tsunami_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	__kernel_stw(value, *(vusp)addr);
+	mb();
+	__kernel_ldwu(*(vusp)addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -192,6 +196,8 @@ tsunami_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	*(vuip)addr = value;
+	mb();
+	*(vuip)addr;
 	return PCIBIOS_SUCCESSFUL;
 }
 

@@ -1853,6 +1853,7 @@ extern int lance_init(void);
 extern int bpq_init(void);
 extern int scc_init(void);
 extern void sdla_setup(void);
+extern void sdla_c_setup(void);
 extern void dlci_setup(void);
 extern int dmascc_init(void);
 extern int sm_init(void);
@@ -1930,7 +1931,7 @@ __initfunc(int net_dev_init(void))
 	dlci_setup();
 #endif
 #if defined(CONFIG_SDLA)
-	sdla_setup();
+	sdla_c_setup();
 #endif
 #if defined(CONFIG_BAYCOM_PAR)
 	baycom_par_init();

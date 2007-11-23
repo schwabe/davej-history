@@ -227,10 +227,8 @@ int scsi_ioctl_send_command(Scsi_Device *dev, Scsi_Ioctl_Command *sic)
     if(buf_needed){
 	buf_needed = (buf_needed + 511) & ~511;
 	if (buf_needed > MAX_BUF) buf_needed = MAX_BUF;
-        spin_lock_irqsave(&io_request_lock, flags);
-	buf = (char *) scsi_malloc(buf_needed);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if (!buf) return -ENOMEM;
+	if ((buf = (char *) scsi_malloc(buf_needed)) == NULL)
+		return -ENOMEM;
 	memset(buf, 0, buf_needed);
     } else
 	buf = NULL;

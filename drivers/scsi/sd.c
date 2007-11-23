@@ -1239,13 +1239,16 @@ static int sd_init_onedisk(int i)
 		    spintime = jiffies;
 		}
 
-		time1 = jiffies + HZ;
 		spin_unlock_irq(&io_request_lock);
-		while(jiffies < time1); /* Wait 1 second for next try */
+		time1 = jiffies + HZ;
+		do {
+		    current->state = TASK_UNINTERRUPTIBLE;
+		    time1 = schedule_timeout(time1);
+		} while (time1); /* Wait 1 second for next try */
 		printk( "." );
 		spin_lock_irq(&io_request_lock);
 	    }
-	} while(the_result && spintime && spintime+100*HZ > jiffies);
+	} while(the_result && spintime && time_before(jiffies, spintime+100*HZ));
 	if (spintime) {
 	    if (the_result)
 		printk( "not responding...\n" );
@@ -1315,6 +1318,7 @@ static int sd_init_onedisk(int i)
 
 	printk("%s : block size assumed to be 512 bytes, disk size 1GB.  \n",
 	       nbuff);
+
 	rscsi_disks[i].capacity = 0x1fffff;
 	rscsi_disks[i].sector_size = 512;
 

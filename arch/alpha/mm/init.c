@@ -179,7 +179,7 @@ load_PCB(struct thread_struct * pcb)
 {
 	register unsigned long sp __asm__("$30");
 	pcb->ksp = sp;
-	return __reload_tss(pcb);
+	return (struct thread_struct *) __reload_tss(pcb);
 }
 
 /*

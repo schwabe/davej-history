@@ -18,6 +18,11 @@
    we can read and write it as we like.  ;-)  */
 #define POLARIS_HAE_ADDRESS	(&alpha_mv.hae_cache)
 
+/* Whee.  IRONGATE doesn't have an HAE.  Fix things up for the GENERIC
+   kernel by defining the HAE address to be that of the cache.  Now
+   we can read and write it as we like.  ;-)  */
+#define IRONGATE_HAE_ADDRESS	(&alpha_mv.hae_cache)
+
 /* Only a few systems don't define IACK_SC, handling all interrupts through
    the SRM console.  But splitting out that one case from IO() below
    seems like such a pain.  Define this to get things to compile.  */
@@ -90,6 +95,7 @@
 
 #define DO_APECS_IO	IO(APECS,apecs,apecs)
 #define DO_CIA_IO	IO(CIA,cia,cia)
+#define DO_IRONGATE_IO	IO(IRONGATE,irongate,irongate)
 #define DO_LCA_IO	IO(LCA,lca,lca)
 #define DO_MCPCIA_IO	IO(MCPCIA,mcpcia,mcpcia)
 #define DO_PYXIS_IO	IO(PYXIS,pyxis_bw,pyxis)
@@ -103,6 +109,7 @@
 
 #define DO_APECS_BUS	BUS(apecs)
 #define DO_CIA_BUS	BUS(cia)
+#define DO_IRONGATE_BUS	BUS(irongate)
 #define DO_LCA_BUS	BUS(lca)
 #define DO_MCPCIA_BUS	BUS(mcpcia)
 #define DO_PYXIS_BUS	BUS(pyxis)

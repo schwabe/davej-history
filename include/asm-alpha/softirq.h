@@ -5,7 +5,11 @@
 #include <asm/atomic.h>
 #include <asm/hardirq.h>
 
-extern unsigned int local_bh_count[NR_CPUS];
+#ifndef __SMP__
+extern unsigned long local_bh_count;
+#else
+#define local_bh_count          (cpu_data[smp_processor_id()].bh_count)
+#endif
 
 #define get_active_bhs()	(bh_mask & bh_active)
 
@@ -70,7 +74,7 @@ static inline int softirq_trylock(int cpu)
 {
 	if (!test_and_set_bit(0,&global_bh_count)) {
 		if (atomic_read(&global_bh_lock) == 0) {
-			++local_bh_count[cpu];
+			++local_bh_count;
 			return 1;
 		}
 		clear_bit(0,&global_bh_count);
@@ -80,7 +84,7 @@ static inline int softirq_trylock(int cpu)
 
 static inline void softirq_endlock(int cpu)
 {
-	local_bh_count[cpu]--;
+	local_bh_count--;
 	clear_bit(0,&global_bh_count);
 }
 
@@ -88,22 +92,22 @@ static inline void softirq_endlock(int cpu)
 
 extern inline void start_bh_atomic(void)
 {
-	local_bh_count[smp_processor_id()]++;
+	local_bh_count++;
 	barrier();
 }
 
 extern inline void end_bh_atomic(void)
 {
 	barrier();
-	local_bh_count[smp_processor_id()]--;
+	local_bh_count--;
 }
 
 /* These are for the irq's testing the lock */
 #define softirq_trylock(cpu) \
-  (local_bh_count[cpu] ? 0 : (local_bh_count[cpu] = 1))
+  (local_bh_count ? 0 : (local_bh_count = 1))
 
 #define softirq_endlock(cpu) \
-  (local_bh_count[cpu] = 0)
+  (local_bh_count = 0)
 
 #define synchronize_bh()	do { } while (0)
 

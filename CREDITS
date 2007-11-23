@@ -1283,11 +1283,11 @@ S: 198 00 Praha 9
 S: Czech Republic
 
 N: Paul Mackerras
-E: paulus@cs.anu.edu.au
+E: paulus@linuxcare.com
 D: Linux port for PCI Power Macintosh
-S: Dept. of Computer Science
-S: Australian National University
-S: Canberra  ACT  0200
+S: Linuxcare, Inc.
+S: 24 Marcus Clarke Street
+S: Canberra ACT 2601
 S: Australia
 
 N: Pat Mackinlay
@@ -1536,7 +1536,7 @@ S: Perth, Western Australia
 S: Australia
 
 N: Greg Page
-E: greg@caldera.com
+E: gpage@sovereign.org
 D: IPX development and support
 
 N: David Parsons
@@ -1964,7 +1964,8 @@ S: Kanata, Ontario
 S: Canada K2L 1S2
 
 N: Andrew Tridgell
-E: Andrew.Tridgell@anu.edu.au
+E: tridge@samba.org
+W: http://linuxcare.com.au/tridge/
 D: dosemu, networking, samba
 S: 3 Ballow Crescent
 S: MacGregor A.C.T 2615

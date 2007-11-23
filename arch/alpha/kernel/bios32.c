@@ -78,6 +78,7 @@ void reset_for_srm(void) { }
 
 struct linux_hose_info *bus2hose[256];
 struct linux_hose_info *hose_head, **hose_tail = &hose_head;
+struct linux_hose_info default_hose;
 int hose_count;
 int pci_probe_enabled;
 
@@ -639,11 +640,11 @@ layout_dev(struct pci_dev *dev)
 				/* Bypass hi reg in the loop.  */
 				dev->base_address[++idx] = 0;
 
-				printk("bios32 WARNING: "
-				       "handling 64-bit device in "
-				       "slot %d, function %d: \n",
-				       PCI_SLOT(dev->devfn),
-				       PCI_FUNC(dev->devfn));
+				DBG_DEVS(("bios32 WARNING: "
+					  "handling 64-bit device in "
+					  "slot %d, function %d: \n",
+					  PCI_SLOT(dev->devfn),
+					  PCI_FUNC(dev->devfn)));
 			}
 
 			DBG_DEVS(("layout_dev: dev 0x%x MEM @ 0x%lx (0x%x)\n",
@@ -1345,8 +1346,7 @@ layout_hoses(void)
 		/* For the benefit of single-bus machines, emulate a
 		   multi-bus machine to the (limited) extent necessary. 
 		   Init all bus2hose entries to point to a dummy.  */
-		hose = kmalloc(sizeof(*hose), GFP_KERNEL);
-		memset(hose, 0, sizeof(*hose));
+		hose = &default_hose;
 		for (i = 0; i < 256; ++i)
 			bus2hose[i] = hose;
 	}

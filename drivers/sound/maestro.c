@@ -175,11 +175,11 @@
 /*****************************************************************************/
 
 #include <linux/version.h>
+#include <linux/module.h>
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
 
  #ifdef MODULE
-  #include <linux/module.h>
   #ifdef MODVERSIONS
    #include <linux/modversions.h>
   #endif

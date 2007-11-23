@@ -1184,7 +1184,7 @@ check_type:
 	   not set, don't return stale filehandle. */
 	if (inode->i_generation != fh->fh_generation) {
 		if (fh->fh_dcookie) {
-			dprintk("fh_verify: Bad version %u %u %u: 0x%x, 0x%x\n",
+			dprintk("fh_verify: Bad version %lu %u %u: 0x%x, 0x%x\n",
 				inode->i_ino,
 				inode->i_generation,
 				fh->fh_generation,
@@ -1476,7 +1476,7 @@ nfsd_fh_shutdown(void)
 	if (!filetable)
 		return;
 	printk(KERN_DEBUG 
-		"nfsd_fh_shutdown : freeing %d fhcache entries.\n", NFSD_MAXFH);
+		"nfsd_fh_shutdown : freeing %ld fhcache entries.\n", NFSD_MAXFH);
 	kfree(filetable);
 	kfree(dirstable);
 	filetable = dirstable = NULL;

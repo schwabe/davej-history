@@ -80,7 +80,7 @@ static int nr_unused_buffer_heads = 0;
 static int nr_hashed_buffers = 0;
 
 /* This is used by some architectures to estimate available memory. */
-int buffermem = 0;
+long buffermem = 0;
 
 /* Here is the parameter block for the bdflush process. If you add or
  * remove any of the parameters, make sure to update kernel/sysctl.c.
@@ -1465,7 +1465,7 @@ void show_buffers(void)
 	int nlist;
 	static char *buf_types[NR_LIST] = {"CLEAN","LOCKED","DIRTY"};
 
-	printk("Buffer memory:   %6dkB\n",buffermem>>10);
+	printk("Buffer memory:   %8ldkB\n",buffermem>>10);
 	printk("Buffer heads:    %6d\n",nr_buffer_heads);
 	printk("Buffer blocks:   %6d\n",nr_buffers);
 	printk("Buffer hashed:   %6d\n",nr_hashed_buffers);

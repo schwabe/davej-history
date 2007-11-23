@@ -233,8 +233,12 @@ __start:
 	bl	prom_init
 	.globl	__secondary_start
 __secondary_start:
-/*
- * Use the first pair of BAT registers to map the 1st 16MB
+/* Switch MMU off, clear BATs and flush TLB */
+ 	bl	mmu_off
+	bl	clear_bats
+	bl	flush_tlbs
+
+/* Use the first pair of BAT registers to map the 1st 16MB
  * of RAM to KERNELBASE.  From this point on we can't safely
  * call OF any more.
  */
@@ -267,11 +271,6 @@ __secondary_start:
 	 * If the MMU is off clear the bats.  See clear_bat() -- Cort
 	 */
 #ifndef CONFIG_GEMINI	
-	mfmsr	r20
-	andi.	r20,r20,MSR_DR
-	bne	100f
-	bl	clear_bats
-100:
 	/* 
 	 * allow secondary cpus to get at all of ram in early bootup
 	 * since their init_task may be up there -- Cort
@@ -1639,6 +1638,19 @@ giveup_fpu:
 	blr
 #endif /* CONFIG_8xx */
 
+mmu_off:
+ 	addi	r4, r3, __secondary_start - _start
+	mfmsr	r3
+	andi.	r0,r3,MSR_DR|MSR_IR		/* MMU enabled? */
+	beq	1f
+	ori	r3,r3,MSR_DR|MSR_IR
+	xori	r3,r3,MSR_DR|MSR_IR
+	mtspr	SRR0,r4
+	mtspr	SRR1,r3
+	sync
+	rfi
+1:	blr
+
 /*
  * This code is jumped to from the startup code to copy
  * the kernel image to physical address 0.
@@ -1648,8 +1660,10 @@ relocate_kernel:
 	addi	r9,r9,0x6f58		/* translate source addr */
 	cmpw	r31,r9			/* (we have to on chrp) */
 	beq	7f
+#if 0 // still needed ? breaks on me if I don't disable this
 	rlwinm	r4,r4,0,8,31		/* translate source address */
 	add	r4,r4,r3		/* to region mapped with BATs */
+#endif	
 7:	addis	r9,r26,klimit@ha	/* fetch klimit */
 	lwz	r25,klimit@l(r9)
 	addis	r25,r25,-KERNELBASE@h
@@ -2675,26 +2689,38 @@ cmd_line:
  *  -- Cort 
  */
 clear_bats:
+#if !defined(CONFIG_GEMINI)
 	li	r20,0
+	mfspr	r9,PVR
+	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
+	cmpwi	r9, 1
+	beq	1f
 	
 	mtspr	DBAT0U,r20
-	mtspr	DBAT0L,r20
-	mtspr	IBAT0U,r20
-	mtspr	IBAT0L,r20
-	
+	mtspr	DBAT0L,r20	
 	mtspr	DBAT1U,r20
 	mtspr	DBAT1L,r20
-	mtspr	IBAT1U,r20
-	mtspr	IBAT1L,r20
-	
 	mtspr	DBAT2U,r20
-	mtspr	DBAT2L,r20
-	mtspr	IBAT2U,r20
-	mtspr	IBAT2L,r20
-	
+	mtspr	DBAT2L,r20	
 	mtspr	DBAT3U,r20
 	mtspr	DBAT3L,r20
+1:	
+	mtspr	IBAT0U,r20
+	mtspr	IBAT0L,r20
+	mtspr	IBAT1U,r20
+	mtspr	IBAT1L,r20
+	mtspr	IBAT2U,r20
+	mtspr	IBAT2L,r20
 	mtspr	IBAT3U,r20
 	mtspr	IBAT3L,r20
-
+#endif /* !defined(CONFIG_GEMINI) */
 	blr
+
+flush_tlbs:
+	lis	r20, 0x1000
+1:	addic.	r20, r20, -0x1000
+	tlbie	r20
+	blt	1b
+	sync
+	blr
+	

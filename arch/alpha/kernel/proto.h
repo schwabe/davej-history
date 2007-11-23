@@ -1,4 +1,5 @@
 /* Prototypes of functions used across modules here in this directory.  */
+#include <linux/pci.h>
 
 #define vucp	volatile unsigned char  *
 #define vusp	volatile unsigned short *
@@ -44,6 +45,22 @@ extern int cia_hose_write_config_dword (u8, u8, u8, u32 value,
 extern void cia_init_arch(unsigned long *, unsigned long *);
 extern void cia_machine_check(u64, u64, struct pt_regs *);
 
+/* core_irongate.c */
+extern int irongate_hose_read_config_byte (u8, u8, u8, u8 *value,
+					  struct linux_hose_info *hose);
+extern int irongate_hose_read_config_word (u8, u8, u8, u16 *value,
+					  struct linux_hose_info *hose);
+extern int irongate_hose_read_config_dword (u8, u8, u8, u32 *value,
+					   struct linux_hose_info *hose);
+extern int irongate_hose_write_config_byte (u8, u8, u8, u8 value,
+					   struct linux_hose_info *hose);
+extern int irongate_hose_write_config_word (u8, u8, u8, u16 value,
+					   struct linux_hose_info *hose);
+extern int irongate_hose_write_config_dword (u8, u8, u8, u32 value,
+					    struct linux_hose_info *hose);
+extern void irongate_init_arch(unsigned long *, unsigned long *);
+extern void irongate_machine_check(u64, u64, struct pt_regs *);
+
 /* core_lca.c */
 extern int lca_hose_read_config_byte (u8, u8, u8, u8 *value,
 				      struct linux_hose_info *hose);
@@ -74,6 +91,7 @@ extern int mcpcia_hose_write_config_word (u8, u8, u8, u16 value,
 extern int mcpcia_hose_write_config_dword (u8, u8, u8, u32 value,
 					   struct linux_hose_info *hose);
 extern void mcpcia_init_arch(unsigned long *, unsigned long *);
+extern void mcpcia_init_hoses(void);
 extern void mcpcia_machine_check(u64, u64, struct pt_regs *);
 
 /* core_polaris.c */

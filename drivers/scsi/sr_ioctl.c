@@ -241,7 +241,6 @@ int sr_get_mcn(struct cdrom_device_info *cdi,struct cdrom_mcn *mcn)
         u_char  sr_cmd[10];
 	char * buffer;
         int result;
-        unsigned long flags;
         	
 	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
 	sr_cmd[1] = ((scsi_CDs[MINOR(cdi->dev)].device->lun) << 5);
@@ -253,20 +252,15 @@ int sr_get_mcn(struct cdrom_device_info *cdi,struct cdrom_mcn *mcn)
 	sr_cmd[8] = 24;
 	sr_cmd[9] = 0;
 
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char*) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
+	if ((buffer = (unsigned char*) scsi_malloc(512)) == NULL)
+		return -ENOMEM;
 	
 	result = sr_do_ioctl(MINOR(cdi->dev), sr_cmd, buffer, 24, 0);
 	
 	memcpy (mcn->medium_catalog_number, buffer + 9, 13);
         mcn->medium_catalog_number[13] = 0;
 
-        spin_lock_irqsave(&io_request_lock, flags);
 	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	
 	return result;
 }
 
@@ -395,7 +389,6 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     {
 	struct cdrom_tochdr* tochdr = (struct cdrom_tochdr*)arg;
 	char * buffer;
-        unsigned long flags;
 	
 	sr_cmd[0] = SCMD_READ_TOC;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5);
@@ -405,19 +398,15 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[8] = 12;             /* LSB of length */
 	sr_cmd[9] = 0;
 	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
+	if ((buffer = (unsigned char *) scsi_malloc(512)) == NULL)
+		return -ENOMEM;
 	
 	result = sr_do_ioctl(target, sr_cmd, buffer, 12, 1);
 	
 	tochdr->cdth_trk0 = buffer[2];
 	tochdr->cdth_trk1 = buffer[3];
 	
-        spin_lock_irqsave(&io_request_lock, flags);
 	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
         break;
     }
 	
@@ -425,7 +414,6 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     {
 	struct cdrom_tocentry* tocentry = (struct cdrom_tocentry*)arg;
 	unsigned char * buffer;
-        unsigned long flags;
 	
 	sr_cmd[0] = SCMD_READ_TOC;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) |
@@ -436,10 +424,8 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[8] = 12;            /* LSB of length */
 	sr_cmd[9] = 0;
 	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
+	if ((buffer = (unsigned char *) scsi_malloc(512)) == NULL)
+		return -ENOMEM;
 	
 	result = sr_do_ioctl (target, sr_cmd, buffer, 12, 0);
 	
@@ -454,9 +440,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	    tocentry->cdte_addr.lba = (((((buffer[8] << 8) + buffer[9]) << 8)
                                        + buffer[10]) << 8) + buffer[11];
 	
-        spin_lock_irqsave(&io_request_lock, flags);
 	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
         break;
     }
 	
@@ -482,7 +466,6 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     {
 	char * buffer, * mask;
 	struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
-        unsigned long flags;
 	
 	/* First we get the current params so we can just twiddle the volume */
 	
@@ -493,16 +476,12 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[4] = 28;
 	sr_cmd[5] = 0;
 	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
+	if ((buffer = (unsigned char *) scsi_malloc(512)) == NULL)
+		return -ENOMEM;
 	
 	if ((result = sr_do_ioctl (target, sr_cmd, buffer, 28, 0))) {
 	    printk ("Hosed while obtaining audio mode page\n");
-            spin_lock_irqsave(&io_request_lock, flags);
 	    scsi_free(buffer, 512);
-            spin_unlock_irqrestore(&io_request_lock, flags);
             break;
 	}
 	
@@ -513,23 +492,17 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[4] = 28;
 	sr_cmd[5] = 0;
 	
-        spin_lock_irqsave(&io_request_lock, flags);
 	mask = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
 	if(!mask) {
-            spin_lock_irqsave(&io_request_lock, flags);
 	    scsi_free(buffer, 512);
-            spin_unlock_irqrestore(&io_request_lock, flags);
 	    result = -ENOMEM;
             break;
 	};
 
 	if ((result = sr_do_ioctl (target, sr_cmd, mask, 28, 0))) {
 	    printk ("Hosed while obtaining mask for audio mode page\n");
-            spin_lock_irqsave(&io_request_lock, flags);
 	    scsi_free(buffer, 512);
 	    scsi_free(mask, 512);
-            spin_unlock_irqrestore(&io_request_lock, flags);
 	    break;
 	}
 	
@@ -548,10 +521,8 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[5] = 0;
 	
 	result = sr_do_ioctl (target, sr_cmd, buffer, 28, 0);
-        spin_lock_irqsave(&io_request_lock, flags);
 	scsi_free(buffer, 512);
 	scsi_free(mask, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
         break;
     }
 	
@@ -559,7 +530,6 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     {
 	char * buffer;
 	struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
-        unsigned long flags;
 	
 	/* Get the current params */
 	
@@ -570,16 +540,12 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[4] = 28;
 	sr_cmd[5] = 0;
 	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
+	if ((buffer = (unsigned char *) scsi_malloc(512)) == NULL)
+		return -ENOMEM;
 	
 	if ((result = sr_do_ioctl (target, sr_cmd, buffer, 28, 0))) {
 	    printk ("(CDROMVOLREAD) Hosed while obtaining audio mode page\n");
-            spin_lock_irqsave(&io_request_lock, flags);
 	    scsi_free(buffer, 512);
-            spin_unlock_irqrestore(&io_request_lock, flags);
             break;
 	}
 
@@ -588,9 +554,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	volctrl->channel2 = buffer[25];
 	volctrl->channel3 = buffer[27];
 
-        spin_lock_irqsave(&io_request_lock, flags);
 	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
         break;
     }
 	
@@ -598,7 +562,6 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     {
 	struct cdrom_subchnl* subchnl = (struct cdrom_subchnl*)arg;
 	char * buffer;
-        unsigned long flags;
 	
 	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) | 0x02;    /* MSF format */
@@ -610,10 +573,8 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	sr_cmd[8] = 16;
 	sr_cmd[9] = 0;
 	
-        spin_lock_irqsave(&io_request_lock, flags);
-	buffer = (unsigned char *) scsi_malloc(512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if(!buffer) return -ENOMEM;
+	if ((buffer = (unsigned char *) scsi_malloc(512)) == NULL)
+		return -ENOMEM;
 	
 	result = sr_do_ioctl(target, sr_cmd, buffer, 16, 0);
 	
@@ -630,9 +591,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	subchnl->cdsc_absaddr.msf.second = buffer[10];
 	subchnl->cdsc_absaddr.msf.frame = buffer[11];
 	
-        spin_lock_irqsave(&io_request_lock, flags);
 	scsi_free(buffer, 512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
         break;
     }
     default:
@@ -740,15 +699,13 @@ sr_is_xa(int minor)
 {
     unsigned char *raw_sector;
     int is_xa;
-    unsigned long flags;
     
     if (!xa_test)
         return 0;
    
-    spin_lock_irqsave(&io_request_lock, flags);
-    raw_sector = (unsigned char *) scsi_malloc(2048+512);
-    spin_unlock_irqrestore(&io_request_lock, flags);
-    if (!raw_sector) return -ENOMEM;
+    if ((raw_sector = (unsigned char *) scsi_malloc(2048+512)) == NULL)
+    	return -ENOMEM;
+
     if (0 == sr_read_sector(minor,scsi_CDs[minor].ms_offset+16,
                             CD_FRAMESIZE_RAW1,raw_sector)) {
         is_xa = (raw_sector[3] == 0x02) ? 1 : 0;
@@ -756,9 +713,7 @@ sr_is_xa(int minor)
         /* read a raw sector failed for some reason. */
         is_xa = -1;
     }
-    spin_lock_irqsave(&io_request_lock, flags);
     scsi_free(raw_sector, 2048+512);
-    spin_unlock_irqrestore(&io_request_lock, flags);
 #ifdef DEBUG
     printk("sr%d: sr_is_xa: %d\n",minor,is_xa);
 #endif
@@ -781,7 +736,6 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
         struct cdrom_msf   msf;
         int                lba, rc;
 	int                blocksize = 2048;
-        unsigned long flags;
 
         switch (cmd) {
         case CDROMREADMODE2: blocksize = CD_FRAMESIZE_RAW0; break; /* 2336 */
@@ -790,11 +744,9 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
 
 	if (copy_from_user(&msf,(void*)arg,sizeof(msf)))
 		return -EFAULT;
-        spin_lock_irqsave(&io_request_lock, flags);
-        raw = scsi_malloc(2048+512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if (!(raw))
-                return -ENOMEM;
+
+	if ((raw = scsi_malloc(2048+512)) == NULL)
+		return -ENOMEM;
 
 	lba = (((msf.cdmsf_min0 * CD_SECS) + msf.cdmsf_sec0)
 			* CD_FRAMES + msf.cdmsf_frame0) - CD_MSF_OFFSET;
@@ -806,9 +758,7 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
 		if (copy_to_user((void*)arg, raw, blocksize))
 			rc = -EFAULT;
 
-        spin_lock_irqsave(&io_request_lock, flags);
 	scsi_free(raw,2048+512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
 	return rc;
     }
     case CDROMREADAUDIO:
@@ -816,7 +766,6 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
 	unsigned char      *raw;
         int                lba, rc=0;
         struct cdrom_read_audio ra;
-        unsigned long flags;
 
         if (!scsi_CDs[target].readcd_known || !scsi_CDs[target].readcd_cdda)
             return -EINVAL;  /* -EDRIVE_DOES_NOT_SUPPORT_THIS ? */
@@ -832,11 +781,8 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
 
         if (lba < 0 || lba >= scsi_CDs[target].capacity)
             return -EINVAL;
-        spin_lock_irqsave(&io_request_lock, flags);
-        raw = scsi_malloc(2048+512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if (!(raw))
-            return -ENOMEM;
+        if ((raw = scsi_malloc(2048+512)) == NULL)
+		return -ENOMEM;
 
         while (ra.nframes > 0) {
             rc = sr_read_cd(target, raw, lba, 1, CD_FRAMESIZE_RAW);
@@ -850,9 +796,7 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
             ra.nframes -= 1;
             lba++;
         }
-        spin_lock_irqsave(&io_request_lock, flags);
 	scsi_free(raw,2048+512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
         return rc;
     }
     case BLKRAGET:

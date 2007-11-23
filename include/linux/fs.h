@@ -753,7 +753,7 @@ extern void set_writetime(struct buffer_head * buf, int flag);
 extern int try_to_free_buffers(struct page *);
 
 extern int nr_buffers;
-extern int buffermem;
+extern long buffermem;
 extern int nr_buffer_heads;
 
 #define BUF_CLEAN	0

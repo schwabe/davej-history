@@ -63,7 +63,7 @@ typedef void (*prom_entry)(struct prom_args *);
 
 /* Prototypes */
 extern void abort(void);
-extern void prom_init(int, int, prom_entry);
+extern unsigned long prom_init(int, int, prom_entry);
 extern void prom_print(const char *msg);
 extern void relocate_nodes(void);
 extern void finish_device_tree(void);

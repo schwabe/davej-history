@@ -839,7 +839,8 @@ if_sendbuf(int id, int channel, int ack, struct sk_buff *skb)
 }
 
 /* jiftime() copied from HiSax */
-inline int
+/* Copying functions without making them static causes nameclashed --ADVE */
+static inline int
 jiftime(char *s, long mark)
 {
         s += 8;

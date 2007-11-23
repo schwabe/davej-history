@@ -264,7 +264,7 @@ unsigned long smp_ibm_chrp_hack __initdata = 0;
  * handling exceptions and the MMU hash table for us.
  */
 __init
-void
+unsigned long
 prom_init(int r3, int r4, prom_entry pp)
 {
 #ifdef CONFIG_SMP	
@@ -273,19 +273,23 @@ prom_init(int r3, int r4, prom_entry pp)
 	char type[16], *path;
 #endif	
 	unsigned long mem;
-	ihandle prom_rtas;
+	ihandle prom_rtas, prom_mmu;
 	unsigned long offset = reloc_offset();
 	int l;
 	char *p, *d;
+ 	unsigned long phys;
+ 	
+ 	/* Default */
+ 	phys = offset + KERNELBASE;
 	
 #ifdef CONFIG_GEMINI
 	gemini_prom_init();
-	return;
+		return phys;
 #endif /* CONFIG_GEMINI */
 	
 	/* check if we're apus, return if we are */
 	if ( r3 == 0x61707573 )
-		return;
+ 		return phys;
 
 	/* If we came here from BootX, clear the screen,
 	 * set up some pointers and return. */
@@ -381,12 +385,12 @@ prom_init(int r3, int r4, prom_entry pp)
 		prom_print(RELOC("booting...\n"));
 		flushscreen();
 #endif
-		return;
+		return phys;
 	}
 	
 	/* check if we're prep, return if we are */
 	if ( *(unsigned long *)(0) == 0xdeadc0de )
-		return;
+		return phys;
 
 	/* First get a handle for the stdout device */
 	RELOC(prom) = pp;
@@ -478,6 +482,29 @@ prom_init(int r3, int r4, prom_entry pp)
 			prom_print(RELOC(" done\n"));
 	}
 
+	if ((int) call_prom(RELOC("getprop"), 4, 1, RELOC(prom_chosen),
+			    RELOC("mmu"), &prom_mmu, sizeof(prom_mmu)) <= 0) {	
+		prom_print(RELOC(" no MMU found\n"));
+	} else {
+		int nargs;
+		struct prom_args prom_args;
+		nargs = 4;
+		prom_args.service = RELOC("call-method");
+		prom_args.nargs = nargs;
+		prom_args.nret = 4;
+		prom_args.args[0] = RELOC("translate");
+		prom_args.args[1] = prom_mmu;
+		prom_args.args[2] = (void *)(offset + KERNELBASE);
+		prom_args.args[3] = (void *)1;
+		RELOC(prom)(&prom_args);
+
+		/* We assume the phys. address size is 3 cells */
+		if (prom_args.args[nargs] != 0)
+			prom_print(RELOC(" (translate failed) "));
+		else
+			phys = (unsigned long)prom_args.args[nargs+3];
+	}
+
 #ifdef CONFIG_SMP
 	/*
 	 * With CHRP SMP we need to use the OF to start the other
@@ -554,6 +581,7 @@ prom_init(int r3, int r4, prom_entry pp)
 			prom_print(RELOC("...failed\n"));
 	}
 #endif	
+	return phys;
 }
 
 /*

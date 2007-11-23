@@ -97,6 +97,9 @@ smp_store_cpu_info(int cpuid)
 	cpu_data[cpuid].loops_per_sec = loops_per_sec;
 	cpu_data[cpuid].last_asn
 	  = (cpuid << WIDTH_HARDWARE_ASN) + ASN_FIRST_VERSION;
+
+        cpu_data[cpuid].irq_count = 0;
+        cpu_data[cpuid].bh_count = 0;
 }
 
 /*
@@ -580,7 +583,7 @@ void
 smp_percpu_timer_interrupt(struct pt_regs *regs)
 {
 	int cpu = smp_processor_id();
-	int user = user_mode(regs);
+	unsigned long user = user_mode(regs);
 	struct cpuinfo_alpha *data = &cpu_data[cpu];
 
 	/* Record kernel PC */
@@ -902,7 +905,7 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 			return;
 	} else
 		flush_tlb_other(mm);
-	
+       
 	data.vma = vma;
 	data.mm = mm;
 	data.addr = addr;
