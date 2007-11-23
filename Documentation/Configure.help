@@ -5966,10 +5966,11 @@ CONFIG_SK98LIN
   - SK-9844 (dual link   1000Base-SX)
   - SK-9821 (single link 1000Base-T)
   - SK-9822 (dual link   1000Base-T)
+  The adapters support Jumbo Frames.
   The dual link adapters support a link-failover feature.
   Read Documentation/networking/sk98lin.txt for information about
   optional driver parameters.
-  Questions concerning this driver may be addresse to:
+  Questions concerning this driver may be addressed to:
     linux@syskonnect.de
 
   If you want to compile this driver as a module ( = code which can be
@@ -6609,7 +6610,7 @@ CONFIG_TLAN
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-  Please email feedback to james.banks@caldera.com.
+  Please email feedback to torben.mathiasen@compaq.com.
 
 VIA Rhine support
 CONFIG_VIA_RHINE
@@ -9092,8 +9093,8 @@ CONFIG_APM
   machines with more than one CPU.
 
   Supporting software is available; for more information, read the
-  Battery Powered Linux mini-HOWTO, available via FTP (user:
-  anonymous) from ftp://metalab.unc.edu/pub/Linux/docs/HOWTO/mini.
+  Battery Powered Linux mini-HOWTO, available from
+  http://www.linuxdoc.org/docs.html#howto .
 
   This driver does not spin down disk drives (see the hdparm(8)
   manpage ("man 8 hdparm") for that), and it doesn't turn off
@@ -9106,9 +9107,7 @@ CONFIG_APM
 
   If you are running Linux on a laptop, you may also want to read the
   Linux Laptop home page on the WWW at
-  http://www.cs.utexas.edu/users/kharker/linux-laptop/ (to browse the
-  WWW, you need to have access to a machine on the Internet that has a
-  program like lynx or netscape). 
+  http://www.cs.utexas.edu/users/kharker/linux-laptop/ .
 
   Generally, if you don't have a battery in your machine, there isn't
   much point in using this driver and you should say N. If you get
@@ -9179,18 +9178,6 @@ CONFIG_APM_DISPLAY_BLANK
   backlight at all, or it might print a lot of errors to the console,
   especially if you are using gpm.
 
-Power off on shutdown 
-CONFIG_APM_POWER_OFF
-  Enable the ability to power off the computer after the Linux kernel
-  is halted. You will need software (e.g., a suitable version of the
-  halt(8) command ("man 8 halt")) to cause the computer to power down.
-  Recent versions of the sysvinit package available from
-  ftp://metalab.unc.edu/pub/Linux/system/daemons/init/ (user:
-  anonymous) contain support for this ("halt -p" shuts down Linux and
-  powers off the computer, if executed from runlevel 0). As with the
-  other APM options, this option may not work reliably with some APM
-  BIOS implementations.
-
 Ignore multiple suspend/standby events
 CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
   This option is necessary on the IBM Thinkpad 560, but should work on
@@ -9227,6 +9214,12 @@ CONFIG_APM_ALLOW_INTS
   needs to.  Unfortunately, some BIOSes do not - especially those in
   many of the newer IBM Thinkpads.  If you experience hangs when you
   suspend, try setting this to Y.  Otherwise, say N.
+
+Use real mode APM BIOS call to power off
+CONFIG_APM_REAL_MODE_POWER_OFF
+  Use real mode APM BIOS calls to switch off the computer. This is
+  a work-around for a number of buggy BIOSes. Switch this option on if
+  your computer crashes instead of powering off properly.
 
 Watchdog Timer Support 
 CONFIG_WATCHDOG

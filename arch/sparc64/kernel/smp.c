@@ -159,7 +159,7 @@ __initfunc(void smp_callin(void))
 }
 
 extern int cpu_idle(void *unused);
-extern void init_IRQ(void);
+extern unsigned long init_IRQ(unsigned long);
 
 void initialize_secondary(void)
 {
@@ -168,7 +168,8 @@ void initialize_secondary(void)
 int start_secondary(void *unused)
 {
 	trap_init();
-	init_IRQ();
+	/* No memory allocation allowed on slave IRQ init */
+	init_IRQ(NULL);
 	smp_callin();
 	return cpu_idle(NULL);
 }

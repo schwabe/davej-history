@@ -1250,7 +1250,7 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	unsigned long flags;
         audio_buf_info abinfo;
         count_info cinfo;
-	int val, mapped, ret;
+	int val, mapped, ret, count;
         int div1, div2;
         unsigned rate1, rate2;
 
@@ -1330,7 +1330,7 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			stop_dac(s);
 			s->dma_adc.ready = s->dma_dac.ready = 0;
 			/* program channels */
-			s->channels = val ? 2 : 1;
+			s->channels = (val >= 2) ? 2 : 1;
 			prog_codec(s);
 		}
 		return put_user(s->channels, (int *)arg);
@@ -1394,7 +1394,10 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
 		abinfo.fragsize = s->dma_dac.fragsize;
-                abinfo.bytes = s->dma_dac.dmasize - s->dma_dac.count;
+		count = s->dma_dac.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = s->dma_dac.dmasize - count;
                 abinfo.fragstotal = s->dma_dac.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_dac.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -1423,9 +1426,11 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 			return -EINVAL;
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
-                val = s->dma_dac.count;
+                count = s->dma_dac.count;
 		spin_unlock_irqrestore(&s->lock, flags);
-		return put_user(val, (int *)arg);
+		if (count < 0)
+			count = 0;
+		return put_user(count, (int *)arg);
 
         case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
@@ -1433,7 +1438,10 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
                 cinfo.bytes = s->dma_adc.total_bytes;
-                cinfo.blocks = s->dma_adc.count >> s->dma_adc.fragshift;
+		count = s->dma_dac.count;
+		if (count < 0)
+			count = 0;
+		cinfo.blocks = count >> s->dma_dac.fragshift;
                 cinfo.ptr = s->dma_adc.hwptr;
 		if (s->dma_adc.mapped)
 			s->dma_adc.count &= s->dma_adc.fragsize-1;

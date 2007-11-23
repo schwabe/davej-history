@@ -2,14 +2,12 @@
  *  include/asm-s390/sigcontext.h
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  */
 
 #ifndef _ASM_S390_SIGCONTEXT_H
 #define _ASM_S390_SIGCONTEXT_H
-
-#include <asm/ptrace.h>
-
+#include <asm/s390-regs-common.h>
 
 /*
   Has to be at least _NSIG_WORDS from asm/signal.h
@@ -20,11 +18,19 @@
 #define __SIGNAL_FRAMESIZE      STACK_FRAME_OVERHEAD
 #define _SIGCONTEXT_NSIG_WORDS  (_SIGCONTEXT_NSIG / _SIGCONTEXT_NSIG_BPW)
 #define SIGMASK_COPY_SIZE       (sizeof(unsigned long)*_SIGCONTEXT_NSIG_WORDS)
-struct sigcontext_struct {
-	int		signal;
-	unsigned long	handler;
-	user_regs_struct *regs;
+
+typedef struct
+{
+	s390_regs_common regs;
+	s390_fp_regs     fpregs;
+} sigregs;
+
+struct sigcontext
+{
 	unsigned long	oldmask[_SIGCONTEXT_NSIG_WORDS];
+	sigregs         *sregs;
 };
 
+
 #endif
+

@@ -1399,7 +1399,7 @@ void enable_prom_timer(void)
 	prom_timers->count0 = 0;
 }
 
-__initfunc(void init_IRQ(void))
+unsigned long __init init_IRQ(unsigned long memory)
 {
 	static int called = 0;
 
@@ -1430,4 +1430,5 @@ __initfunc(void init_IRQ(void))
 			     : /* No outputs */
 			     : "i" (PSTATE_IE)
 			     : "g1");
+	return memory;
 }

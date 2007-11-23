@@ -2,7 +2,7 @@
  *  include/asm-s390/pgtable.h
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Hartmut Penner
  *
  *  Derived from "include/asm-i386/pgtable.h"
@@ -284,7 +284,7 @@ static inline void flush_tlb_range(struct mm_struct * mm,
  * The Kernel segment-tables includes the User segment-table
  */
 
-#define _SEGMENT_TABLE  (_USER_SEG_TABLE_LEN)
+#define _SEGMENT_TABLE  (_USER_SEG_TABLE_LEN|0x80000000)
 #define _KERNSEG_TABLE  (_KERNEL_SEG_TABLE_LEN)
 /*
  * No mapping available

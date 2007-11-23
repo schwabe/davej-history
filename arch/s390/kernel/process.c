@@ -2,7 +2,7 @@
  *  arch/s390/kernel/process.c
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Martin Schwidefsky (schwidefsky@de.ibm.com),
  *               Hartmut Penner (hp@de.ibm.com),
  *               Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com),
@@ -45,7 +45,6 @@
 #include <asm/io.h>
 #include <asm/processor.h>
 #include <asm/misc390.h>
-#include "irq.h"
 
 spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
 
@@ -163,8 +162,10 @@ int sprintf_regs(int line,char *buff,struct task_struct * task,struct thread_str
 		{
 			regno=(line-sp_gprs1)*4;
 			linelen=sprintf(buff,"%08x  %08x  %08x  %08x\n",
-			       regs->gprs[regno], regs->gprs[regno+1],
-			       regs->gprs[regno+2], regs->gprs[regno+3]);
+					regs->gprs[regno], 
+					regs->gprs[regno+1],
+					regs->gprs[regno+2],
+					regs->gprs[regno+3]);
 		}
 		break;
 	case sp_acrs:
@@ -176,8 +177,10 @@ int sprintf_regs(int line,char *buff,struct task_struct * task,struct thread_str
 		{
 			regno=(line-sp_acrs1)*4;
 			linelen=sprintf(buff,"%08x  %08x  %08x  %08x\n",
-					regs->acrs[regno], regs->acrs[regno+1],
-					regs->acrs[regno+2], regs->acrs[regno+3]);
+					regs->acrs[regno],
+					regs->acrs[regno+1],
+					regs->acrs[regno+2],
+					regs->acrs[regno+3]);
 		}
 		break;
 	case sp_kern_backchain:
@@ -283,7 +286,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long new_stackp,
             unsigned long gprs[10];    /* gprs 6 -15                       */
             unsigned long fprs[4];     /* fpr 4 and 6                      */
             unsigned long empty[4];
-            struct pt_regs childregs;
+#if CONFIG_REMOTE_DEBUG
+		gdb_pt_regs childregs;
+#else
+		pt_regs childregs;
+#endif
+		__u32   pgm_old_ilc;     /* single step magic from entry.S */
+		__u32   pgm_svc_step;
           } *frame;
 
         frame = (struct stack_frame *) (2*PAGE_SIZE + (unsigned long) p) -1;
@@ -299,10 +308,10 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long new_stackp,
 
         /* fake return stack for resume(), don't go back to schedule */
         frame->gprs[9]  = (unsigned long) frame;
-
+	frame->pgm_svc_step=0; /* Nope we aren't single stepping an svc */
         /* save fprs, if used in last task */
 	save_fp_regs(&p->tss.fp_regs);
-        p->tss.user_seg = __pa((unsigned long) p->mm->pgd) | _USER_SEG_TABLE_LEN;
+        p->tss.user_seg = __pa((unsigned long) p->mm->pgd) | _SEGMENT_TABLE;
         p->tss.fs = USER_DS;
         /* Don't copy debug registers */
         memset(&p->tss.per_info,0,sizeof(p->tss.per_info));

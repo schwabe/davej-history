@@ -376,11 +376,12 @@ __initfunc(static void i8259_init(void))
 	outb(cached_21, 0x21);
 }
 
-__initfunc(void init_IRQ(void))
+unsigned long init_IRQ(unsigned long memory)
 {
 	irq_cannonicalize = i8259_irq_cannonicalize;
 	/* i8259_init(); */
 	irq_setup();
+	return memory;
 }
 
 EXPORT_SYMBOL(irq_cannonicalize);

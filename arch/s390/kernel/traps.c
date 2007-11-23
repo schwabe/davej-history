@@ -2,7 +2,7 @@
  *  arch/s390/kernel/traps.c
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Martin Schwidefsky (schwidefsky@de.ibm.com),
  *               Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com),
  *
@@ -255,7 +255,7 @@ asmlinkage void illegal_op(struct pt_regs * regs, long error_code)
 		get_user(*((__u16 *) opcode), location);
 	else
 		*((__u16 *)opcode)=*((__u16 *)location);
-	if(*((__u16 *)opcode)==BREAKPOINT_U16)
+	if(*((__u16 *)opcode)==S390_BREAKPOINT_U16)
         {
 		if(do_debugger_trap(regs,SIGTRAP))
 			do_sig=1;
@@ -443,6 +443,8 @@ __initfunc(void trap_init(void))
         pgm_check_table[4] = &do_page_fault;
         pgm_check_table[0x10] = &do_page_fault;
         pgm_check_table[0x11] = &do_page_fault;
+        pgm_check_table[0x1C] = &privileged_op;
+
 }
 
 
@@ -456,6 +458,13 @@ void handle_per_exception(struct pt_regs *regs)
 		per_info->lowcore.words.access_id=S390_lowcore.per_access_id;
 	}
 	if(do_debugger_trap(regs,SIGTRAP))
+	{
+		/* I've seen this possibly a task structure being reused ? */
 		printk("Spurious per exception detected\n");
+		printk("switching off per tracing for this task.\n");
+		show_crashed_task_info();
+		/* Hopefully switching off per tracing will help us survive */
+		regs->psw.mask &= ~PSW_PER_MASK;
+	}
 }
 

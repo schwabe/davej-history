@@ -1030,6 +1030,56 @@ static void __init pcibios_fixup_peer_bridges(void)
  * Exceptions for specific devices. Usually work-arounds for fatal design flaws.
  */
 
+static void __init pci_fixup_peer_bus_scan(unsigned char busno, unsigned char busmax)
+{
+	struct pci_bus *bus;
+	if((busno == 0) && (busmax > 0))
+		busno++;
+	while(busno != 0) {
+		pci_scan_peer_bridge(busno);
+		for(bus=&pci_root;bus;bus=bus->next)
+			if(bus->number == busno)
+				break;
+		if(bus==NULL) {
+			return;
+		}
+		if(bus->subordinate < busmax)
+			busno = bus->subordinate + 1;
+		else
+			busno = 0;
+	}
+}
+
+static void __init pci_fixup_rcc(struct pci_dev *d)
+{
+	/*
+	 * Find and scan busses behind RCC LE north bridge chips
+	 */
+	struct pci_bus *bus;
+	unsigned char busno, busmax;
+	pci_probe |= PCI_NO_PEER_FIXUP;
+	pci_read_config_byte(d, 0x44, &busno);
+	pci_read_config_byte(d, 0x45, &busmax);
+	printk("PCI: Scanning RCC HE/LE Peer Bus Bridge %02x/%02x\n",
+		PCI_SLOT(d->devfn), PCI_FUNC(d->devfn));
+	pci_fixup_peer_bus_scan(busno, busmax);
+}
+
+static void __init pci_fixup_compaq(struct pci_dev *d)
+{
+	/*
+	 * Find and scan busses behind RCC LE north bridge chips
+	 */
+	struct pci_bus *bus;
+	unsigned char busno, busmax;
+	pci_probe |= PCI_NO_PEER_FIXUP;
+	pci_read_config_byte(d, 0xc8, &busno);
+	pci_read_config_byte(d, 0xc9, &busmax);
+	printk("PCI: Scanning Compaq Peer Bus Bridge %02x/%02x\n",
+		PCI_SLOT(d->devfn), PCI_FUNC(d->devfn));
+	pci_fixup_peer_bus_scan(busno, busmax);
+}
+
 static void __init pci_fixup_i450nx(struct pci_dev *d)
 {
 	/*
@@ -1043,10 +1093,7 @@ static void __init pci_fixup_i450nx(struct pci_dev *d)
 		pci_read_config_byte(d, reg++, &suba);
 		pci_read_config_byte(d, reg++, &subb);
 		DBG("i450NX PXB %d: %02x/%02x/%02x\n", pxb, busno, suba, subb);
-		if (busno)
-			pci_scan_peer_bridge(busno);	/* Bus A */
-		if (suba < subb)
-			pci_scan_peer_bridge(suba+1);	/* Bus B */
+		pci_fixup_peer_bus_scan(busno,subb);
 	}
 	pci_probe |= PCI_NO_PEER_FIXUP;
 }
@@ -1071,6 +1118,9 @@ struct dev_ex {
 
 static struct dev_ex __initdata dev_ex_table[] = {
  { PCI_VENDOR_ID_INTEL,		PCI_DEVICE_ID_INTEL_82451NX,	pci_fixup_i450nx, 	"Scanning peer host bridges" },
+ { PCI_VENDOR_ID_RCC,		PCI_DEVICE_ID_RCC_HE,	pci_fixup_rcc, 	"Scanning peer host bridges" },
+ { PCI_VENDOR_ID_RCC,		PCI_DEVICE_ID_RCC_LE,	pci_fixup_rcc, 	"Scanning peer host bridges" },
+ { PCI_VENDOR_ID_COMPAQ,	PCI_DEVICE_ID_COMPAQ_6010,	pci_fixup_compaq, 	"Scanning peer host bridges" },
  { PCI_VENDOR_ID_UMC,		PCI_DEVICE_ID_UMC_UM8886BF,	pci_fixup_umc_ide,	"Working around UM8886BF bugs" }
 };
 

@@ -562,7 +562,7 @@ void breakpoint(void)
 			".globl	breakinst\n"
 			"breakinst:\t.word   %0\n\t"
 			:
-			: "i" (BREAKPOINT_U16)
+			: "i" (S390_BREAKPOINT_U16)
 				:
 				);
 }

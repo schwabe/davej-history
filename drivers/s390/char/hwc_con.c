@@ -20,7 +20,6 @@
 
 extern void hwc_tty_init(void);
 
-
 #ifdef CONFIG_HWC_CONSOLE
 
 #define  hwc_console_major 4 
@@ -32,7 +31,9 @@ kdev_t hwc_console_device(struct console *);
 
 #define  HWC_CON_PRINT_HEADER "hwc console driver: "
 
-struct console hwc_console = {
+struct console hwc_console =
+{
+
 	hwc_console_name,
 	hwc_console_write,
 	NULL,
@@ -46,13 +47,15 @@ struct console hwc_console = {
 	NULL
 };
  
-void hwc_console_write(
+void 
+hwc_console_write (
 	struct console *console,
 	const char *message,
 	unsigned int count)
 {
-	if (console->device(console) != hwc_console.device(&hwc_console)) 
-	{
+
+	if (console->device (console) != hwc_console.device (&hwc_console)) {
+
 		hwc_printk(KERN_WARNING HWC_CON_PRINT_HEADER
 				"hwc_console_write() called with wrong "
 				"device number");
@@ -61,8 +64,8 @@ void hwc_console_write(
 	hwc_write(0, message, count);
 }
 
-
-kdev_t hwc_console_device(struct console *c)
+kdev_t 
+hwc_console_device (struct console * c)
 {
 	return  MKDEV(hwc_console_major, hwc_console_minor);
 }
@@ -72,18 +75,23 @@ kdev_t hwc_console_device(struct console *c)
 __initfunc(unsigned long hwc_console_init(unsigned long kmem_start))
 {
 
-        if (MACHINE_IS_P390)
-                return kmem_start;
 #ifdef CONFIG_3215
         if (MACHINE_IS_VM)
                 return kmem_start;
 #endif
+	if (MACHINE_IS_P390)
+		return kmem_start;
+
 	if (hwc_init(&kmem_start) == 0) {
+
 #ifdef CONFIG_HWC_CONSOLE
+
 		register_console(&hwc_console);
 #endif	
+
 		hwc_tty_init();
-	}
-	else panic(HWC_CON_PRINT_HEADER "hwc initialisation failed !");
+	} else
+		panic (HWC_CON_PRINT_HEADER "hwc initialisation failed !");
+
 	return kmem_start;
 }

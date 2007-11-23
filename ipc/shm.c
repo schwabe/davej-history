@@ -79,6 +79,7 @@ static int newseg (key_t key, int shmflg, int size)
 	struct shmid_kernel *shp;
 	int numpages = (size + PAGE_SIZE -1) >> PAGE_SHIFT;
 	int id, i;
+	pte_t tmp_pte;
 
 	if (size < SHMMIN)
 		return -EINVAL;
@@ -107,7 +108,11 @@ found:
 		return -ENOMEM;
 	}
 
-	for (i = 0; i < numpages; shp->shm_pages[i++] = 0);
+	pte_clear(&tmp_pte);
+
+	for (i = 0; i < numpages; i++)
+		shp->shm_pages[i] = pte_val(tmp_pte);
+
 	shm_tot += numpages;
 	shp->u.shm_perm.key = key;
 	shp->u.shm_perm.mode = (shmflg & S_IRWXUGO);

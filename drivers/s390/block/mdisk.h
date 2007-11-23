@@ -3,14 +3,14 @@
  *    VM minidisk device driver.
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Hartmut Penner (hp@de.ibm.com)
  */
 
 #include <linux/ioctl.h>
 #include <linux/types.h>
 
-#define MDISK_DEVS 4                   /* for disks                        */
+#define MDISK_DEVS 8                   /* for disks                        */
 #define MDISK_RAHEAD 8                 /* read ahead                       */
 #define MDISK_BLKSIZE 1024             /* 1k blocks                        */
 #define MDISK_HARDSECT 512             /* FIXME -- 512 byte blocks         */
@@ -25,8 +25,8 @@
 #define MDISK_WRITE_REQ 0x01                                                 
 #define MDISK_READ_REQ  0x02                                                   
 
-#define MDISK_SYNC      0x01
-#define MDISK_ASYNC     0x03
+#define MDISK_SYNC      0x00
+#define MDISK_ASYNC     0x02
 #define INIT_BIO        0x00
 #define RW_BIO          0x01
 #define TERM_BIO        0x02
@@ -67,5 +67,28 @@ typedef struct {
         u32     interrupt_params;
         u32     spare3[5];
 } mdisk_rw_io_t;
+
+/*
+ * low level definitions for Diagnose 210
+ */
+
+#define DEV_CLASS_FBA   0x01
+
+/*
+ * Data structures for Diagnose 210
+ */
+
+typedef struct {
+        u16     dev_nr;
+        u16     rdc_len;
+        u8      vdev_class;
+        u8      vdev_type;
+        u8      vdev_status;
+        u8      vdev_flags;
+        u8      rdev_class;
+        u8      rdev_type;
+        u8      rdev_model;
+        u8      rdev_features;
+} mdisk_dev_char_t;
 
                                                                                

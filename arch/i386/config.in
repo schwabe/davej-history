@@ -104,16 +104,16 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
 fi
 
 bool 'Advanced Power Management BIOS support' CONFIG_APM
-if [ "$CONFIG_APM" = "y" ]; then
+if [ "$CONFIG_APM" != "n" ]; then
   bool '   Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
   bool '   Enable PM at boot time' CONFIG_APM_DO_ENABLE
   bool '   Make CPU Idle calls when idle' CONFIG_APM_CPU_IDLE
   bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
-  bool '   Power off on shutdown' CONFIG_APM_POWER_OFF
   bool '   Ignore multiple suspend' CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
   bool '   Ignore multiple suspend/resume cycles' CONFIG_APM_IGNORE_SUSPEND_BOUNCE
   bool '   RTC stores time in GMT' CONFIG_APM_RTC_IS_GMT
   bool '   Allow interrupts during APM BIOS calls' CONFIG_APM_ALLOW_INTS
+  bool '   Use real mode APM BIOS call to power off' CONFIG_APM_REAL_MODE_POWER_OFF
 fi
 
 endmenu

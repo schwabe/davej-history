@@ -75,8 +75,7 @@ extern int kupdate(void *);
 extern int kswapd(void *);
 extern int kpiod(void *);
 extern void kswapd_setup(void);
-
-extern void init_IRQ(void);
+extern unsigned long init_IRQ( unsigned long);
 extern void init_modules(void);
 extern long console_init(long, long);
 extern void sock_init(void);
@@ -157,6 +156,9 @@ extern void ctc_setup(char *str, int *ints);
 #ifdef CONFIG_IUCV
 extern void iucv_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_IUCV
+extern void iucv_setup(char *str, int *ints);
+#endif
 #ifdef CONFIG_ARCNET_COM90xxIO
 extern void com90io_setup(char *str, int *ints);
 #endif
@@ -187,6 +189,9 @@ extern void pg_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_PARIDE_PCD
 extern void pcd_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_3215
+extern void con3215_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_3215
 extern void con3215_setup(char *str, int *ints);
@@ -578,24 +583,24 @@ static struct dev_name_struct {
 	{ "ddv", DDV_MAJOR << 8},
 #endif
 #ifdef CONFIG_MDISK
-        { "mnd0", (MDISK_MAJOR << MINORBITS)},
-        { "mnd1", (MDISK_MAJOR << MINORBITS) + 1},
-        { "mnd2", (MDISK_MAJOR << MINORBITS) + 2},
-        { "mnd3", (MDISK_MAJOR << MINORBITS) + 3},
-        { "mnd4", (MDISK_MAJOR << MINORBITS) + 4},
-        { "mnd5", (MDISK_MAJOR << MINORBITS) + 5},
-        { "mnd6", (MDISK_MAJOR << MINORBITS) + 6},
-        { "mnd7", (MDISK_MAJOR << MINORBITS) + 7},
+        { "mnda", (MDISK_MAJOR << MINORBITS)},
+        { "mndb", (MDISK_MAJOR << MINORBITS) + 1},
+        { "mndc", (MDISK_MAJOR << MINORBITS) + 2},
+        { "mndd", (MDISK_MAJOR << MINORBITS) + 3},
+        { "mnde", (MDISK_MAJOR << MINORBITS) + 4},
+        { "mndf", (MDISK_MAJOR << MINORBITS) + 5},
+        { "mndg", (MDISK_MAJOR << MINORBITS) + 6},
+        { "mndh", (MDISK_MAJOR << MINORBITS) + 7},
 #endif
 #ifdef CONFIG_DASD
-       { "dasd0", (DASD_MAJOR << MINORBITS) },
-       { "dasd1", (DASD_MAJOR << MINORBITS) + (1 << 2) },
-       { "dasd2", (DASD_MAJOR << MINORBITS) + (2 << 2) },
-       { "dasd3", (DASD_MAJOR << MINORBITS) + (3 << 2) },
-       { "dasd4", (DASD_MAJOR << MINORBITS) + (4 << 2) },
-       { "dasd5", (DASD_MAJOR << MINORBITS) + (5 << 2) },
-       { "dasd6", (DASD_MAJOR << MINORBITS) + (6 << 2) },
-       { "dasd7", (DASD_MAJOR << MINORBITS) + (7 << 2) },
+       { "dasda", (DASD_MAJOR << MINORBITS) },
+       { "dasdb", (DASD_MAJOR << MINORBITS) + (1 << 2) },
+       { "dasdc", (DASD_MAJOR << MINORBITS) + (2 << 2) },
+       { "dasdd", (DASD_MAJOR << MINORBITS) + (3 << 2) },
+       { "dasde", (DASD_MAJOR << MINORBITS) + (4 << 2) },
+       { "dasdf", (DASD_MAJOR << MINORBITS) + (5 << 2) },
+       { "dasdg", (DASD_MAJOR << MINORBITS) + (6 << 2) },
+       { "dasdh", (DASD_MAJOR << MINORBITS) + (7 << 2) },
 #endif
 	{ NULL, 0 }
 };
@@ -651,6 +656,10 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "noapic", ioapic_setup },
 	{ "pirq=", ioapic_pirq_setup },
 #endif
+#ifdef CONFIG_IUCV
+        { "iucv=", iucv_setup } ,
+#endif
+
 #endif
 #ifdef CONFIG_BLK_DEV_RAM
 	{ "ramdisk_start=", ramdisk_start_setup },
@@ -1018,6 +1027,9 @@ static struct kernel_param raw_params[] __initdata = {
 #ifdef CONFIG_3215
 	{ "condev=", con3215_setup },
 #endif
+#ifdef CONFIG_3215
+	{ "condev=", con3215_setup },
+#endif
 #ifdef CONFIG_MDISK
         { "mdisk=", mdisk_setup },
 #endif
@@ -1264,7 +1276,7 @@ asmlinkage void __init start_kernel(void)
 	setup_arch(&command_line, &memory_start, &memory_end);
 	memory_start = paging_init(memory_start,memory_end);
 	trap_init();
-	init_IRQ();
+        memory_start = init_IRQ( memory_start );
 	sched_init();
 	time_init();
 	parse_options(command_line);

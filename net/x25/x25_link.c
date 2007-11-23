@@ -74,6 +74,11 @@ static void x25_stop_t20timer(struct x25_neigh *neigh)
 	del_timer(&neigh->t20timer);
 }
 
+static int x25_t20timer_pending(struct x25_neigh *neigh)
+{
+	return timer_pending(&neigh->t20timer);
+}
+
 /*
  *	This handles all restart and diagnostic frames.
  */
@@ -84,7 +89,7 @@ void x25_link_control(struct sk_buff *skb, struct x25_neigh *neigh, unsigned sho
 	switch (frametype) {
 		case X25_RESTART_REQUEST:
 			x25_stop_t20timer(neigh);
-			if (neigh->state!=X25_LINK_STATE_2)
+			if (!x25_t20timer_pending(neigh))
 				x25_transmit_restart_confirmation(neigh);
 			neigh->state = X25_LINK_STATE_3;
 			break;

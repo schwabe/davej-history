@@ -282,6 +282,14 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 	 * all PCI-to-PCI bridges on this bus.
 	 */
 	pcibios_fixup_bus(bus);
+	/*
+	 * The fixup code may have just found some peer pci bridges on this
+	 * machine.  Update the max variable if that happened so we don't
+	 * get duplicate bus numbers.
+	 */
+	for(child=&pci_root; child; child=child->next)
+		max=((max > child->subordinate) ? max : child->subordinate);
+
 	for(dev=bus->devices; dev; dev=dev->sibling)
 		/*
 		 * If it's a bridge, scan the bus behind it.
@@ -291,6 +299,37 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 			unsigned int devfn = dev->devfn;
 			unsigned short cr;
 
+			/*
+			 * Check for a duplicate bus.  If we already scanned
+			 * this bus number as a peer bus, don't also scan it
+			 * as a child bus
+			 */
+			if(
+			   ((dev->vendor == PCI_VENDOR_ID_RCC) &&
+			    ((dev->device == PCI_DEVICE_ID_RCC_HE) ||
+			     (dev->device == PCI_DEVICE_ID_RCC_LE))) ||
+			   ((dev->vendor == PCI_VENDOR_ID_COMPAQ) &&
+			    (dev->device == PCI_DEVICE_ID_COMPAQ_6010)) ||
+			   ((dev->vendor == PCI_VENDOR_ID_INTEL) &&
+			    ((dev->device == PCI_DEVICE_ID_INTEL_82454NX) ||
+			     (dev->device == PCI_DEVICE_ID_INTEL_82451NX)))
+			  )
+				goto skip_it;
+			/*
+			 * Read the existing primary/secondary/subordinate bus
+			 * number configuration to determine if the PCI bridge
+			 * has already been configured by the system.  If so,
+			 * check to see if we've already scanned this bus as
+			 * a result of peer bus scanning, if so, skip this.
+			 */
+			pcibios_read_config_dword(bus->number, devfn, PCI_PRIMARY_BUS, &buses);
+			if ((buses & 0xFFFFFF) != 0)
+			  {
+			    for(child=pci_root.next;child;child=child->next)
+				if(child->number == ((buses >> 8) & 0xff))
+				    goto skip_it;
+			  }
+			
 			/*
 			 * Insert it into the tree of buses.
 			 */
@@ -363,6 +402,7 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 			    pcibios_write_config_dword(bus->number, devfn, PCI_PRIMARY_BUS, buses);
 			  }
 			pcibios_write_config_word(bus->number, devfn, PCI_COMMAND, cr);
+skip_it:
 		}
 
 	/*
@@ -380,6 +420,12 @@ struct pci_bus * __init pci_scan_peer_bridge(int bus)
 {
 	struct pci_bus *b;
 
+	b = &pci_root;
+	while((b != NULL) && (bus != 0)) {
+		if(b->number == bus)
+			return(b);
+		b = b->next;
+	}
 	b = kmalloc(sizeof(*b), GFP_KERNEL);
 	memset(b, 0, sizeof(*b));
 	b->next = pci_root.next;

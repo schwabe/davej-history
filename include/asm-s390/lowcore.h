@@ -2,7 +2,7 @@
  *  include/asm-s390/lowcore.h
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Hartmut Penner (hp@de.ibm.com),
  *               Martin Schwidefsky (schwidefsky@de.ibm.com),
  *               Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
@@ -28,6 +28,7 @@
 #define __LC_PGM_ILC                    0x08C
 #define __LC_PGM_INT_CODE               0x08E
 #define __LC_TRANS_EXC_ADDR             0x090
+#define __LC_SUBCHANNEL_ID              0x0B8
 #define __LC_SUBCHANNEL_NR              0x0BA
 #define __LC_IO_INT_PARM                0x0BC
 #define __LC_MCCK_CODE                  0x0E8
@@ -54,7 +55,7 @@
 #define _IO_PSW_MASK         0x04080000
 #define _USER_PSW_MASK       0x070DC000/* DAT, IO, EXT, Home-space         */
 #define _PSW_IO_WAIT         0x020A0000/* IO, Wait */
-#define _WAIT_PSW_MASK       0x070EC000/* DAT, IO, EXT, Wait, Home-space   */
+#define _WAIT_PSW_MASK       0x070E0000/* DAT, IO, EXT, Wait, Home-space   */
 #define _DW_PSW_MASK         0x000A0000/* disabled wait PSW mask           */
 #define _PRIMARY_MASK        0x0000    /* MASK for SACF                    */
 #define _SECONDARY_MASK      0x0100    /* MASK for SACF                    */

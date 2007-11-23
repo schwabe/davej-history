@@ -414,7 +414,7 @@ out:
  */
 #include <asm/arch/irq.h>
 
-__initfunc(void init_IRQ(void))
+unsigned long __init init_IRQ(unsigned long memory)
 {
 	extern void init_dma(void);
 	int irq;
@@ -430,4 +430,5 @@ __initfunc(void init_IRQ(void))
 	init_FIQ();
 #endif
 	init_dma();
+	return memory;
 }

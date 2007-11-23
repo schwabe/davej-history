@@ -868,7 +868,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 int ncp_create_new(struct inode *dir, struct dentry *dentry, int mode,
 		int attributes)
 {
+ 	struct ncp_server *server = NCP_SERVER(dir);
 	int error, result;
+	int opmode;
 	struct ncpfs_inode_info finfo;
 	__u8 _name[dentry->d_name.len + 1];
 	
@@ -886,18 +888,25 @@ dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 	io2vol(NCP_SERVER(dir), _name, !ncp_preserve_case(dir));
 
 	error = -EACCES;
-	result = ncp_open_create_file_or_subdir(NCP_SERVER(dir), dir, _name,
+	result = ncp_open_create_file_or_subdir(server, dir, _name,
 			   OC_MODE_CREATE | OC_MODE_OPEN | OC_MODE_REPLACE,
 			   attributes, AR_READ | AR_WRITE, &finfo.nw_info);
-	if (!result) {
-		finfo.nw_info.access = O_RDWR;
-		error = ncp_instantiate(dir, dentry, &finfo);
-	} else {
-		if (result == 0x87) error = -ENAMETOOLONG;
-		DPRINTK(KERN_DEBUG "ncp_create: %s/%s failed\n",
-			dentry->d_parent->d_name.name, dentry->d_name.name);
-	}
-
+	opmode = O_RDWR;
+	if (result) {
+		result = ncp_open_create_file_or_subdir(server, dir, _name,
+				OC_MODE_CREATE | OC_MODE_OPEN | OC_MODE_REPLACE,
+				attributes, AR_WRITE, &finfo.nw_info);
+		if (result) {
+			if (result == 0x87)
+				error = -ENAMETOOLONG;
+			DPRINTK("ncp_create: %s/%s failed\n",
+				dentry->d_parent->d_name.name, dentry->d_name.name);
+			goto out;
+		}
+		opmode = O_WRONLY;
+ 	}
+	finfo.nw_info.access = opmode;
+	error = ncp_instantiate(dir, dentry, &finfo);
 out:
 	return error;
 }

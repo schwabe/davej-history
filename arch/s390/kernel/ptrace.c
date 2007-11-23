@@ -2,7 +2,7 @@
  *  arch/s390/kernel/ptrace.c
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com),
  *
  *  Based on PowerPC version 
@@ -226,7 +226,9 @@ static struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigne
 static int read_long(struct task_struct * tsk, unsigned long addr,
 	unsigned long * result)
 {
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
+	struct vm_area_struct * vma;
+	addr=ADDR_BITS_REMOVE(addr);
+	vma= find_extend_vma(tsk, addr);
 
 	if (!vma)
 		return -EIO;
@@ -268,7 +270,10 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 static int write_long(struct task_struct * tsk, unsigned long addr,
 	unsigned long data)
 {
-	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
+	struct vm_area_struct * vma;
+
+	addr=ADDR_BITS_REMOVE(addr);
+	vma = find_extend_vma(tsk, addr);
 
 	if (!vma)
 		return -EIO;

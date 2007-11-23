@@ -28,7 +28,7 @@ typedef struct { volatile int counter; } atomic_t __attribute__ ((aligned (4)));
 static __inline__ int atomic_read(atomic_t *v)
 {
         int retval;
-        __asm__ __volatile("bcr      15,0\n\t"
+        __asm__ __volatile__("bcr      15,0\n\t"
                            "l        %0,%1"
                            : "=d" (retval) : "m" (*v) );
         return retval;

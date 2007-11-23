@@ -2,7 +2,7 @@
  * File...........: linux/drivers/s390/block/dasd_ccwstuff.c
  * Author(s)......: Holger Smolinski <Holger.Smolinski@de.ibm.com>
  * Bugreports.to..: <Linux390@de.ibm.com>
- * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999
+ * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999,2000
  */
 
 #include <linux/stddef.h>
@@ -337,6 +337,7 @@ dasd_chanq_enq (dasd_chanq_t * q, cqr_t * cqr)
 		q->head = cqr;
 	cqr->next = NULL;
 	q->tail = cqr;
+	q->queued_requests ++;
 	if (atomic_compare_and_swap(CQR_STATUS_FILLED,
 				    CQR_STATUS_QUEUED,
 				    &cqr->status)) {
@@ -368,6 +369,7 @@ dasd_chanq_deq (dasd_chanq_t * q, cqr_t * cqr)
 			q->tail = prev;
 	}
 	cqr->next = NULL;
+	q->queued_requests --;
 	return release_cqr(cqr);
 }
 

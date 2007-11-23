@@ -2,7 +2,7 @@
  * File...........: linux/drivers/s390/block/dasd_eckd.c
  * Author(s)......: Holger Smolinski <Holger.Smolinski@de.ibm.com>
  * Bugreports.to..: <Linux390@de.ibm.com>
- * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999
+ * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999,2000
  */
 
 #include <linux/stddef.h>
@@ -15,7 +15,7 @@
 #include <linux/malloc.h>
 #include <asm/io.h>
 
-#include "../../../arch/s390/kernel/irq.h"
+#include <asm/irq.h>
 
 #include "dasd_types.h"
 #include "dasd_ccwstuff.h"
@@ -347,17 +347,17 @@ recs_per_track (dasd_eckd_characteristics_t * rdc,
 		unsigned int kl, unsigned int dl)
 {
 	int rpt = 0;
-	if (rdc->formula == 0x01) {
+	int dn;
+        switch ( rdc -> dev_type ) {
+	case 0x3380: 
 		if (kl)
 			return 1499 / (15 +
 				       7 + ceil_quot (kl + 12, 32) +
 				       ceil_quot (dl + 12, 32));
 		else
 			return 1499 / (15 + ceil_quot (dl + 12, 32));
-
-	}
-	if (rdc->formula == 0x02) {
-		int dn = ceil_quot (dl + 6, 232) + 1;
+	case 0x3390: 
+		dn = ceil_quot (dl + 6, 232) + 1;
 		if (kl) {
 			int kn = ceil_quot (kl + 6, 232) + 1;
 			return 1729 / (10 +
@@ -366,6 +366,16 @@ recs_per_track (dasd_eckd_characteristics_t * rdc,
 		} else
 			return 1729 / (10 +
 				       9 + ceil_quot (dl + 6 * dn, 34));
+	case 0x9345: 
+	        dn = ceil_quot (dl + 6, 232) + 1;
+                if (kl) {
+                        int kn = ceil_quot (kl + 6, 232) + 1;
+                        return 1420 / (18 +
+                                       7 + ceil_quot (kl + 6 * kn, 34) +
+                                       ceil_quot (dl + 6 * dn, 34));
+                } else
+                        return 1420 / (18 +
+                                       7 + ceil_quot (dl + 6 * dn, 34));
 	}
 	return rpt;
 }
@@ -403,9 +413,11 @@ define_extent (ccw1_t * de_ccw,
 	case DASD_ECKD_CCW_READ_CKD_MT:
 	case DASD_ECKD_CCW_READ_COUNT:
 		data->mask.perm = 0x1;
+                data->attributes.operation = 0x3; /* enable seq. caching */
 		break;
 	case DASD_ECKD_CCW_WRITE:
 	case DASD_ECKD_CCW_WRITE_MT:
+                data->attributes.operation = 0x3; /* enable seq. caching */
 		break;
 	case DASD_ECKD_CCW_WRITE_CKD:
 	case DASD_ECKD_CCW_WRITE_CKD_MT:
@@ -914,8 +926,11 @@ dasd_eckd_read_count (int di)
                 rc = dasd_start_IO ( rw_cp );
                 s390irq_spin_unlock_irqrestore (irq, flags);
                 retries --;
-	} while ( ( ( (cs=atomic_read(&rw_cp->status)) != CQR_STATUS_DONE) || 
-                    rc ) &&  retries );
+                cs = atomic_read(&rw_cp->status);
+		if ( cs != CQR_STATUS_DONE && retries == 5 ) {
+			dasd_eckd_print_error(rw_cp->dstat);
+		}
+	} while ( ( ( cs != CQR_STATUS_DONE) || rc ) &&  retries );
         if ( ( rc || cs != CQR_STATUS_DONE) ) {
                 if ( ( cs == CQR_STATUS_ERROR ) &&
                      ( rw_cp -> dstat -> ii.sense.data[1] == 0x08 ) ) {

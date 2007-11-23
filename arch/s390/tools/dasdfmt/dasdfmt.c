@@ -3,11 +3,13 @@
  * dasdfmt.c
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Corporation
- *    Author(s): Utz Bacher (utz.bacher@de.ibm.com)
+ *    Copyright (C) 1999,2000 IBM Corporation
+ *    Author(s): Utz Bacher, <utz.bacher@de.ibm.com>
+ *
+ *  Device-in-use-checks by Fritz Elfert, <felfert@to.com>
  *
  * Still to do:
- *   detect non-switch parameters and complain about them
+ *   detect non-switch parameters ("dasdfmt -n 170 XY") and complain about them 
  */
 
 #include <unistd.h>
@@ -23,8 +25,14 @@
 #include <errno.h>
 #include <string.h>
 #include <dirent.h>
+#include <mntent.h>
+#include "../../../drivers/s390/block/dasd.h" /* uses DASD_PARTN_BITS */
+#define __KERNEL__ /* we want to use kdev_t and not have to define it */
+#include <linux/kdev_t.h>
+#undef __KERNEL__
 
 #define EXIT_MISUSE 1
+#define EXIT_BUSY 2
 #define TEMPFILENAME "/tmp/ddfXXXXXX"
 #define TEMPFILENAMECHARS 8  /* 8 characters are fixed in all temp filenames */
 #define IOCTL_COMMAND 'D' << 8
@@ -71,16 +79,26 @@ char tempfilename[]=TEMPFILENAME;
 void
 exit_usage(int exitcode)
 {
-	printf("Usage: %s [-tvV] [-s start_track] [-e end_track] \n",prog_name);
-	printf("       [-b blocksize] -f dev_filename | -n 390_devno\n");
+	printf("Usage: %s [-htvyV] [-b blocksize] <range> <diskspec>\n\n",
+	       prog_name);
+	printf("       where <range> is either\n");
+	printf("           -s start_track -e end_track\n");
+	printf("       or\n");
+	printf("           -r start_track-end_track\n");
+	printf("       and <diskspec> is either\n");
+	printf("           -f /dev/ddX\n");
+	printf("       or\n");
+	printf("           -n <s390-devnr>\n");
 	exit(exitcode);
 }
 
 void
-get_xno_from_xno(int *devno,int *major_no,int *minor_no,int mode)
+get_xno_from_xno(int *devno,kdev_t *major_no,kdev_t *minor_no,int mode)
 {
 	FILE *file;
-	int d,mi,ma,rc;
+	int d,rc;
+	kdev_t mi,ma;
+	int mi_i,ma_i; /* for scanf :-( */
 	char line[PROC_LINE_LENGTH];
 
 	file=fopen(PROC_DASD_DEVICES,"r");
@@ -91,7 +109,9 @@ get_xno_from_xno(int *devno,int *major_no,int *minor_no,int mode)
 
 	fgets(line,sizeof(line),file); /* omit first line */
 	while (fgets(line,sizeof(line),file)!=NULL) {
-		rc=sscanf(line,"%X%d%d",&d,&ma,&mi);
+		rc=sscanf(line,"%X%d%d",&d,&ma_i,&mi_i);
+		ma=ma_i;
+		mi=mi_i;
 		if ( (rc==3) &&
 			!((d!=*devno)&&(mode&GIVEN_DEVNO)) &&
 			!((ma!=*major_no)&&(mode&GIVEN_MAJOR)) &&
@@ -102,7 +122,6 @@ get_xno_from_xno(int *devno,int *major_no,int *minor_no,int mode)
 			/* yes, this is a quick exit, but the easiest way */
 			fclose(file);
 			return;
-			break;
 		}
 	}
 	fclose(file);
@@ -115,8 +134,8 @@ get_xno_from_xno(int *devno,int *major_no,int *minor_no,int mode)
 char *
 get_devname_from_devno(int devno,int verbosity)
 {
-	int major_no,minor_no;
-	int file_major,file_minor;
+	kdev_t major_no,minor_no;
+	kdev_t file_major,file_minor;
 	struct stat stat_buf;
 	int rc;
 	int found;
@@ -139,8 +158,8 @@ get_devname_from_devno(int devno,int verbosity)
 		strcat(tmpname,direntp->d_name);
 		rc=stat(tmpname,&stat_buf);
 		if (!rc) {
-			file_major=(stat_buf.st_rdev>>8)&0xff;
-			file_minor=stat_buf.st_rdev&0xff;
+			file_major=MAJOR(stat_buf.st_rdev);
+			file_minor=MINOR(stat_buf.st_rdev);
 			if ((file_major==major_no) && (file_minor==minor_no)) {
 				found=1;
 				break;
@@ -169,7 +188,7 @@ get_devname_from_devno(int devno,int verbosity)
 	close(rc);
 	rc=unlink(tempfilename);
 	
-	rc=mknod(tempfilename,S_IFBLK|0600,(major_no<<8)+minor_no);
+	rc=mknod(tempfilename,S_IFBLK|0600,MKDEV(major_no,minor_no));
 	if (rc)
 		ERRMSG_EXIT(EXIT_FAILURE,"%s: failed to create temporary " \
 			"device node %s: %s\n",prog_name,tempfilename,
@@ -281,13 +300,75 @@ ask_user_for_data(format_data_t params)
 	return params;
 }
 
+/* Check if the device we are going to format is mounted.
+ * If true, complain and exit.
+ */
+void
+check_mounted(int major, int minor)
+{
+	FILE *f;
+	int ishift = 0;
+	struct mntent *ment;
+	struct stat stbuf;
+	char line[128];
+
+	/* If whole disk to be formatted ... */
+	if ((minor % (1U << DASD_PARTN_BITS)) == 0) {
+		/* ... ignore partition-selector */
+		minor >>= DASD_PARTN_BITS;
+		ishift = DASD_PARTN_BITS;
+	}
+	/*
+	 * first, check filesystems
+	 */
+	if (!(f = fopen(_PATH_MOUNTED, "r")))
+		ERRMSG_EXIT(EXIT_FAILURE, "%s: %s\n", _PATH_MOUNTED,
+			strerror(errno));
+	while ((ment = getmntent(f))) {
+		if (stat(ment->mnt_fsname, &stbuf) == 0)
+			if ((major == MAJOR(stbuf.st_rdev)) &&
+				(minor == (MINOR(stbuf.st_rdev)>>ishift))) {
+				ERRMSG("%s: device is mounted on %s!!\n",
+					prog_name,ment->mnt_dir);
+				ERRMSG_EXIT(EXIT_BUSY, "If you really want to "
+					"format it, please unmount it.\n");
+			}
+	}
+	fclose(f);
+	/*
+	 * second, check active swap spaces
+	 */
+	if (!(f = fopen("/proc/swaps", "r")))
+		ERRMSG_EXIT(EXIT_FAILURE, "/proc/swaps: %s", strerror(errno));
+	/*
+	 * skip header line
+	 */
+	fgets(line, sizeof(line), f);
+	while (fgets(line, sizeof(line), f)) {
+		char *p;
+		for (p = line; *p && (!isspace(*p)); p++) ;
+		*p = '\0';
+		if (stat(line, &stbuf) == 0)
+			if ((major == MAJOR(stbuf.st_rdev)) &&
+				(minor == (MINOR(stbuf.st_rdev)>>ishift))) {
+				ERRMSG("%s: the device is in use for "
+					"swapping!!\n",prog_name);
+				ERRMSG_EXIT(EXIT_BUSY, "If you really want to "
+					"format it, please use swapoff %s.\n",
+					line);
+			}
+	}
+	fclose(f);
+}
+
 void
 do_format_dasd(char *dev_name,format_data_t format_params,int testmode,
 	int verbosity,int withoutprompt)
 {
 	int fd,rc;
 	struct stat stat_buf;
-	int minor_no,major_no,devno;
+	kdev_t minor_no,major_no;
+	int devno;
 	char inp_buffer[5]; /* to contain yes */
 
 	fd=open(dev_name,O_RDWR);
@@ -306,9 +387,10 @@ do_format_dasd(char *dev_name,format_data_t format_params,int testmode,
 		if (!S_ISBLK(stat_buf.st_mode))
 			ERRMSG_EXIT(EXIT_FAILURE,"%s: file is not a " \
 				"blockdevice.\n",prog_name);
-		major_no=(stat_buf.st_rdev>>8)&0xff;
-		minor_no=stat_buf.st_rdev&0xff;
+		major_no=MAJOR(stat_buf.st_rdev);
+		minor_no=MINOR(stat_buf.st_rdev);
 	}
+	check_mounted(major_no, minor_no);
 	
 	if ( ((withoutprompt)&&(verbosity>=1)) ||
 		(!withoutprompt) ) {
@@ -397,7 +479,7 @@ int main(int argc,char *argv[]) {
 	/* set default values */
 	format_params.start_unit=0;
 	format_params.stop_unit=-1;
-	format_params.blksize=1024;
+	format_params.blksize=4096;
 	testmode=0;
 	verbosity=0;
 	withoutprompt=0;
@@ -464,8 +546,6 @@ int main(int argc,char *argv[]) {
 			break;
 		}
 	}
-
-	/* set default values */
 
 	/******************** checking of parameters **************/
 

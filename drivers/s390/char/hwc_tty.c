@@ -21,12 +21,17 @@
 #include "hwc_rw.h"
 
 #define HWC_TTY_PRINT_HEADER "hwc tty driver: "
+
 #define HWC_TTY_BUF_SIZE 512
 
 typedef struct {
+
 	struct tty_struct *tty;
+
 	unsigned char buf[HWC_TTY_BUF_SIZE];
+
 	unsigned short int buf_count;
+
 	spinlock_t lock;
 } hwc_tty_data_struct;
 
@@ -39,9 +44,11 @@ static int hwc_tty_refcount = 0;
 
 extern struct termios  tty_std_termios;
 
-static int hwc_tty_open(struct tty_struct *tty,
+static int 
+hwc_tty_open (struct tty_struct *tty,
                          struct file       *filp)
 {
+
 	if (MINOR(tty->device) - tty->driver.minor_start)
 		return -ENODEV;
 
@@ -53,7 +60,8 @@ static int hwc_tty_open(struct tty_struct *tty,
 	return 0;
 }
 
-void wake_up_hwc_tty(void)
+void 
+wake_up_hwc_tty (void)
 {
 	if ((hwc_tty_data.tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 			hwc_tty_data.tty->ldisc.write_wakeup)
@@ -61,7 +69,8 @@ void wake_up_hwc_tty(void)
 	wake_up_interruptible(&hwc_tty_data.tty->write_wait);
 }
 
-static void hwc_tty_close(struct tty_struct *tty,
+static void 
+hwc_tty_close (struct tty_struct *tty,
                            struct file *filp)
 {
 	if (MINOR(tty->device) != tty->driver.minor_start) {
@@ -69,11 +78,11 @@ static void hwc_tty_close(struct tty_struct *tty,
 			"do not close hwc tty because of wrong device number");
 		return;
 	}
-
 	hwc_tty_data.tty = NULL;
 }
 
-static int hwc_tty_write_room (struct tty_struct *tty)
+static int 
+hwc_tty_write_room (struct tty_struct *tty)
 {
 	int retval;
 
@@ -81,15 +90,15 @@ static int hwc_tty_write_room (struct tty_struct *tty)
 	return retval;
 }
 
-static int hwc_tty_write(struct tty_struct   *tty,
+static int 
+hwc_tty_write (struct tty_struct *tty,
 			  int                  from_user,
 	                  const unsigned char *buf,
        		          int                  count)
 {
 	int retval;
 
-	if (hwc_tty_data.buf_count > 0)
-	{
+	if (hwc_tty_data.buf_count > 0) {
 		hwc_write(0, hwc_tty_data.buf, hwc_tty_data.buf_count);
 		hwc_tty_data.buf_count = 0;
 	}
@@ -97,14 +106,14 @@ static int hwc_tty_write(struct tty_struct   *tty,
 	return retval;
 }
 
-static void hwc_tty_put_char(struct tty_struct *tty,
+static void 
+hwc_tty_put_char (struct tty_struct *tty,
                               unsigned char ch)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&hwc_tty_data.lock, flags);
-	if (hwc_tty_data.buf_count >= HWC_TTY_BUF_SIZE)
-	{
+	if (hwc_tty_data.buf_count >= HWC_TTY_BUF_SIZE) {
 		hwc_write(0, hwc_tty_data.buf, hwc_tty_data.buf_count);
 		hwc_tty_data.buf_count = 0;
 	}
@@ -113,7 +122,8 @@ static void hwc_tty_put_char(struct tty_struct *tty,
 	spin_unlock_irqrestore(&hwc_tty_data.lock, flags);
 }
 
-static void hwc_tty_flush_chars(struct tty_struct *tty)
+static void 
+hwc_tty_flush_chars (struct tty_struct *tty)
 {
 	unsigned long flags;
 
@@ -123,8 +133,8 @@ static void hwc_tty_flush_chars(struct tty_struct *tty)
 	spin_unlock_irqrestore(&hwc_tty_data.lock, flags);
 }
 
-
-static int hwc_tty_chars_in_buffer(struct tty_struct *tty)
+static int 
+hwc_tty_chars_in_buffer (struct tty_struct *tty)
 {
 	int retval;
 
@@ -132,12 +142,14 @@ static int hwc_tty_chars_in_buffer(struct tty_struct *tty)
 	return retval;
 }
 
-static void hwc_tty_flush_buffer(struct tty_struct *tty)
+static void 
+hwc_tty_flush_buffer (struct tty_struct *tty)
 {
 	wake_up_hwc_tty();
 }
 
-static int hwc_tty_ioctl(
+static int 
+hwc_tty_ioctl (
 	struct tty_struct *tty,
 	struct file * file,
 	unsigned int cmd,
@@ -149,11 +161,13 @@ static int hwc_tty_ioctl(
 	return hwc_ioctl(cmd, arg);
 }
 
-void store_hwc_input(unsigned char* buf, unsigned int count)
+void 
+store_hwc_input (unsigned char *buf, unsigned int count)
 {
 	struct tty_struct *tty = hwc_tty_data.tty;
 
 	if (tty != NULL) {
+
 		if (count == 2 && strncmp(buf, "^c", 2) == 0) {
 			tty->flip.count++;
 			*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
@@ -167,12 +181,14 @@ void store_hwc_input(unsigned char* buf, unsigned int count)
 			*tty->flip.flag_buf_ptr++ = TTY_NORMAL;
 			*tty->flip.char_buf_ptr++ = SUSP_CHAR(tty);
 		} else {
+
 			memcpy(tty->flip.char_buf_ptr, buf, count);
 			if (count < 2 ||
 			    strncmp(buf + count - 2, "^n", 2)) {
 				tty->flip.char_buf_ptr[count] = '\n';
 				count++;
-			} else	count -= 2;
+			} else
+				count -= 2;
 			memset(tty->flip.flag_buf_ptr, TTY_NORMAL, count);
 			tty->flip.char_buf_ptr += count;
 			tty->flip.flag_buf_ptr += count;
@@ -183,7 +199,8 @@ void store_hwc_input(unsigned char* buf, unsigned int count)
 	}
 }
 
-void hwc_tty_init(void)
+void 
+hwc_tty_init (void)
 {
 	memset (&hwc_tty_driver, 0, sizeof(struct tty_driver));
 	hwc_tty_driver.magic = TTY_DRIVER_MAGIC;

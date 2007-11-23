@@ -3,7 +3,7 @@
  *    Network driver for VM using iucv
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Stefan Hegewald <hegewald@de.ibm.com>
  *               Hartmut Penner <hpenner@de.ibm.com> 
  */

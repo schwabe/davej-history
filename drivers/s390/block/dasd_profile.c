@@ -167,15 +167,14 @@ dasd_debug ( unsigned long tag )
 	dasd_debug_actual = (dasd_debug_entry *)
 		( (unsigned long) dasd_debug_area +
 		  ( ( (unsigned long)dasd_debug_actual -
-		      (unsigned long)dasd_debug_area ) % 1808 ) );
+		      (unsigned long)dasd_debug_area ) % PAGE_SIZE ) );
 	d = dasd_debug_actual ++;
 	spin_unlock_irqrestore(&debug_lock,flags);
 	/* write CPUID to lowest 12 bits of clock... */
-	__asm__ __volatile__ ( "STCK  %0\n"
-			       "ST    14,%1\n"
-			       :"=m" (d->u.clock),
-			       "=m" (d->caller_address));
+	__asm__ __volatile__ ( "STCK  %0"
+			       :"=m" (d->u.clock));
 	d->tag = tag;
+	d -> caller_address = __builtin_return_address(0);
 	d->u.s.cpu = smp_processor_id();
 }
 

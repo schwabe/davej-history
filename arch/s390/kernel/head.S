@@ -2,7 +2,7 @@
  *  arch/s390/kernel/head.S
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Hartmut Penner (hp@de.ibm.com),
  *               Martin Schwidefsky (schwidefsky@de.ibm.com),
  *
@@ -78,6 +78,7 @@ iplstart:
 	l     %r1,0xb8                         # load ipl subchannel number
         lhi   %r2,IPL_BS                       # load start address
         bras  %r14,.Lloader                    # load rest of ipl image
+        st    %r1,__LC_IPLDEV                  # store ipl device number
         l     %r12,.Lparm                      # pointer to parameter area
 
 #
@@ -106,16 +107,20 @@ iplstart:
         bras  %r14,.Lloader                    # load parameter file
         ltr   %r2,%r2                          # got anything ?
         jz    .Lnopf
-	chi   %r2,896
+	chi   %r2,895
 	jnh   .Lnotrunc
-	lhi   %r2,896
+	lhi   %r2,895
 .Lnotrunc:
 	l     %r4,INITRD_START-PARMAREA(%r12)
-	clc   0(6,%r4),.Lebcdic                # prefix EBCDIC in parm file ?
-	jne   .Lnocv
-	ahi   %r4,6                            # skip EBCDIC
-	ahi   %r2,-6
-	jnp   .Lnopf
+        la    %r5,0(%r4,%r2)
+        lr    %r3,%r2
+.Lidebc:
+        tm    0(%r5),0x80                      # high order bit set ?
+        jo    .Ldocv                           #  yes -> convert from EBCDIC
+        ahi   %r5,-1
+        brct  %r3,.Lidebc
+        j     .Lnocv
+.Ldocv:
         l     %r3,.Lcvtab
         tr    0(256,%r4),0(%r3)                # convert parameters to ascii
         tr    256(256,%r4),0(%r3)
@@ -251,7 +256,6 @@ iplstart:
 .Lrdstart:.long 0x02000000
 .Lldret:.long  0
 .Lsnsret: .long 0
-.Lebcdic:.long 0xc5c2c3c4,0xc9c30000
 .Lcvtab:.long  _ebcasc                         # ebcdic to ascii table
 
 #endif  /* CONFIG_IPL_TAPE */
@@ -289,6 +293,7 @@ iplstart:
 	l     %r1,0xb8                         # load ipl subchannel number
         lhi   %r2,0x730                        # load start address
         bras  %r14,.Lloader                    # load rest of ipl image
+        st    %r1,__LC_IPLDEV                  # store ipl device number
 	l     %r12,.Lparm                      # pointer to parameter area
 
 #
@@ -317,16 +322,20 @@ iplstart:
         bras  %r14,.Lloader                    # load parameter file
         ltr   %r2,%r2                          # got anything ?
         jz    .Lnopf
-        chi   %r2,896
+        chi   %r2,895
         jnh   .Lnotrunc
-        lhi   %r2,896
+        lhi   %r2,895
 .Lnotrunc:
         l     %r4,INITRD_START-PARMAREA(%r12)
-        clc   0(6,%r4),.Lebcdic                # prefix EBCDIC in parm file ?
-        jne   .Lnocv
-        ahi   %r4,6                            # skip EBCDIC
-        ahi   %r2,-6
-        jnp   .Lnopf
+        la    %r5,0(%r4,%r2)
+        lr    %r3,%r2
+.Lidebc:
+        tm    0(%r5),0x80                      # high order bit set ?
+        jo    .Ldocv                           #  yes -> convert from EBCDIC
+        ahi   %r5,-1
+        brct  %r3,.Lidebc
+        j     .Lnocv
+.Ldocv:
         l     %r3,.Lcvtab
         tr    0(256,%r4),0(%r3)                # convert parameters to ascii
         tr    256(256,%r4),0(%r3)
@@ -439,7 +448,6 @@ iplstart:
 .Lcr6:  .long  0xff000000
 .Lloadp:.long  0,0
 .Lparm:	.long  PARMAREA
-.Lebcdic:.long 0xc5c2c3c4,0xc9c30000
 .L4malign0:.long 0xffc00000
 .Lbigmem:.long 0x04000000
 .Lrdstart:.long 0x02000000
@@ -525,7 +533,7 @@ start:  basr  %r13,0                     # get base
         lpsw  .Lentry-.LPG1(13)         # jump to _stext in primary-space,
                                         # virtual and never return ...
         .align 8
-.Lentry:.long  0x0408C000,0x80000000 + _stext
+.Lentry:.long  0x04080000,0x80000000 + _stext
 .Lpstd: .long  .Lpgd+0x7F               # segment-table
 .Lcr0:  .long  0x04b50002
 .Lpcmem:.long  0x00080000,0x80000000 + .Lchkmem
@@ -569,11 +577,14 @@ _stext:	basr  %r13,0                    # get base
 #
 # Setup lowcore
 #
+        l     %r1,__LC_IPLDEV           # load ipl device number
         spx   .Lprefix-.LPG2(%r13)      # set prefix to linux lowcore
+        st    %r1,__LC_IPLDEV           # store ipl device number
         l     %r15,.Linittu-.LPG2(%r13)
         ahi   %r15,8192                 # init_task_union + 8191
         st    %r15,__LC_KERNEL_STACK    # set end of kernel stack
         ahi   %r15,-96
+        xc    0(4,%r15),0(%r15)         # set backchain to zero
         lhi   %r0,-1
         st    %r0,__LC_KERNEL_LEVEL     # set interrupt count to -1
 #

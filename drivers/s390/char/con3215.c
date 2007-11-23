@@ -3,7 +3,7 @@
  *    3215 line mode terminal driver.
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Martin Schwidefsky (schwidefsky@de.ibm.com),
  */
 
@@ -22,7 +22,7 @@
 #include <asm/uaccess.h>
 
 #include "../../../arch/s390/kernel/cpcmd.h"
-#include "../../../arch/s390/kernel/irq.h"
+#include <asm/irq.h>
 
 #define NR_3215		    1
 #define NR_3215_REQ	    (4*NR_3215)
@@ -42,6 +42,7 @@
 #define RAW3215_CLOSING	    32	      /* set while in close process */
 #define RAW3215_TIMER_RUNS  64	      /* set if the output delay timer is on */
 #define RAW3215_FLUSHING    128	      /* set to flush buffer (no delay) */
+#define RAW3215_BH_PENDING  256       /* indication for bh scheduling */
 
 struct _raw3215_info;		      /* forward declaration ... */
 
@@ -51,7 +52,7 @@ int raw3215_condevice = -1;           /* preset console device */
  * Request types for a 3215 device
  */
 typedef enum {
-	RAW3215_READ, RAW3215_WRITE
+	RAW3215_FREE, RAW3215_READ, RAW3215_WRITE
 } raw3215_type;
 
 /*
@@ -129,6 +130,9 @@ extern inline raw3215_req *raw3215_alloc_req(void) {
 extern inline void raw3215_free_req(raw3215_req *req) {
 	unsigned long flags;
 
+        if (req->type == RAW3215_FREE)
+                return;         /* don't free a free request */
+        req->type = RAW3215_FREE;
 	spin_lock_irqsave(&raw3215_freelist_lock, flags);
 	req->next = raw3215_freelist;
 	raw3215_freelist = req;
@@ -208,12 +212,6 @@ static int raw3215_mk_write_ccw(raw3215_info *raw, raw3215_req *req)
 		ix = (ix + count) & (RAW3215_BUFFER_SIZE - 1);
 		ccw++;
 	}
-	if (ccw > req->ccws)
-		ccw[-1].flags |= 0x40;	/* use command chaining */
-	ccw->cmd_code = 0x03; /* nop at the end */
-	ccw->flags = 0x20;    /* ignore incorrect length */
-	ccw->cda = NULL;      /* no data address for nop */
-	ccw->count = 0;	      /* no count for nop */
 	return len;
 }
 
@@ -226,14 +224,9 @@ static void raw3215_mk_read_ccw(raw3215_info *raw, raw3215_req *req)
 
 	ccw = req->ccws;
 	ccw->cmd_code = 0x0A; /* read inquiry */
-	ccw->flags = 0x60;    /* ignore incorrect length & command chaining */
+	ccw->flags = 0x20;    /* ignore incorrect length */
 	ccw->count = 160;
 	ccw->cda = (void *) virt_to_phys(raw->inbuf);
-	ccw++;
-	ccw->cmd_code = 0x03; /* nop at the end */
-	ccw->flags = 0x20;    /* ignore incorrect length ind. */
-	ccw->cda = NULL;      /* no data address for nop */
-	ccw->count = 0;	      /* no count for nop */
 }
 
 /*
@@ -335,6 +328,7 @@ static void raw3215_softint(void *data)
 	raw = (raw3215_info *) data;
 	s390irq_spin_lock_irqsave(raw->irq, flags);
 	raw3215_try_io((raw3215_info *) data);
+        raw->flags &= ~RAW3215_BH_PENDING;
 	s390irq_spin_unlock_irqrestore(raw->irq, flags);
 	/* Check for pending message from raw3215_irq */
 	if (raw->message != NULL) {
@@ -349,6 +343,21 @@ static void raw3215_softint(void *data)
 			(tty->ldisc.write_wakeup)(tty);
 		wake_up_interruptible(&tty->write_wait);
 	}
+}
+
+/*
+ * Function to safely add raw3215_softint to tq_immediate.
+ * The s390irq spinlock must be held.
+ */
+static inline void raw3215_sched_bh(raw3215_info *raw)
+{
+        if (raw->flags & RAW3215_BH_PENDING)
+                return;       /* already pending */
+        raw->flags |= RAW3215_BH_PENDING;
+        raw->tqueue.routine = raw3215_softint;
+        raw->tqueue.data = raw;
+        queue_task(&raw->tqueue, &tq_immediate);
+        mark_bh(IMMEDIATE_BH);
 }
 
 /*
@@ -391,23 +400,10 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
 				"(dev %i, dev sts 0x%2x, sch sts 0x%2x)";
 			raw->msg_dstat = dstat;
 			raw->msg_cstat = cstat;
-			queue_task(&raw->tqueue, &tq_immediate);
-			mark_bh(IMMEDIATE_BH);
+                        raw3215_sched_bh(raw);
 		}
 	}
         if (dstat & 0x01) { /* we got a unit exception */
-#if 0
-		raw = raw3215_find_info(irq);
-		if (raw != NULL) {
-                        raw->message = KERN_WARNING
-                                "Got a unit exception in raw3215_irq "
-                                "(dev %i, dev sts 0x%2x, sch sts 0x%2x)";
-                        raw->msg_dstat = dstat;
-                        raw->msg_cstat = cstat;
-                        queue_task(&raw->tqueue, &tq_immediate);
-                        mark_bh(IMMEDIATE_BH);
-		}
-#endif
 		dstat &= ~0x01;  /* we can ignore it */
         }
 	switch (dstat) {
@@ -423,8 +419,7 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
 		raw->queued_read = req;
                 if (MACHINE_IS_P390)
                         memset(raw->inbuf, 0, RAW3215_INBUF_SIZE);
-		queue_task(&raw->tqueue, &tq_immediate);
-		mark_bh(IMMEDIATE_BH);
+                raw3215_sched_bh(raw);
 		break;
 	case 0x08:
 	case 0x0C:
@@ -501,28 +496,26 @@ static void raw3215_irq(int irq, void *int_parm, struct pt_regs *regs)
 			wake_up_interruptible(&raw->empty_wait);
 			raw->empty_wait = NULL;
 		}
-		queue_task(&raw->tqueue, &tq_immediate);
-		mark_bh(IMMEDIATE_BH);
+                raw3215_sched_bh(raw);
 		break;
 	default:
-		if (dstat & 0x04) {
 			/* Strange interrupt, I'll do my best to clean up */
-			if (req != NULL && req->info != NULL &&
-			    req->type == RAW3215_WRITE) {
-				req->info->count -= ((req->end - req->start) &
+                if ((raw = raw3215_find_info(irq)) == NULL)
+                        return;              /* That shouldn't happen ... */
+                if (raw == NULL) break;
+		if (req != NULL && req->type != RAW3215_FREE) {
+		        if (req->type == RAW3215_WRITE) 
+			        raw->count -= ((req->end - req->start) &
 					            (RAW3215_BUFFER_SIZE-1))+1;
+                        raw->flags &= ~RAW3215_WORKING;
+                        raw3215_free_req(req);
 			}
-		}
-		raw = raw3215_find_info(irq);
-		if (raw != NULL) {
 			raw->message = KERN_WARNING
 				"Spurious interrupt in in raw3215_irq "
 				"(dev %i, dev sts 0x%2x, sch sts 0x%2x)";
 			raw->msg_dstat = dstat;
 			raw->msg_cstat = cstat;
-			queue_task(&raw->tqueue, &tq_immediate);
-			mark_bh(IMMEDIATE_BH);
-		}
+                raw3215_sched_bh(raw);
 	}
 	return;
 }
@@ -708,19 +701,20 @@ raw3215_find_dev(int number)
 	int irq;
 	int count;
 
-	irq = 0;
+	irq = get_irq_first();
 	count = 0;
-	while (count <= number && get_dev_info(irq, &dinfo) != -ENODEV) {
+        while (count <= number && irq != -ENODEV) {
+                if (get_dev_info(irq, &dinfo) == -ENODEV)
+                        break;
 		if (dinfo.devno == raw3215_condevice ||
-                    dinfo.sid_data.cu_type == 0x3215)
+                    dinfo.sid_data.cu_type == 0x3215) {
 			count++;
-		irq++;
-	}
-	if (count <= number)
-		irq = -1;     /* console not found */
-	else
-		irq--;
+                    if (count > number)
 	return irq;
+}
+                irq = get_irq_next(irq);
+        }
+        return -1;            /* console not found */
 }
 
 #ifdef CONFIG_3215_CONSOLE
@@ -770,7 +764,7 @@ void con3215_unblank(void)
 
 	raw = raw3215[0];  /* console 3215 is the first one */
 	s390irq_spin_lock_irqsave(raw->irq, flags);
-	while (RAW3215_BUFFER_SIZE > raw->count) {
+	while (raw->count > 0) {
 		/* there might be a request pending */
 		raw->flags |= RAW3215_FLUSHING;
 		raw3215_try_io(raw);

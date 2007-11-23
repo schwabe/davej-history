@@ -13,13 +13,11 @@
 #ifndef __HWC_H__
 #define __HWC_H__
 
-
 #define ET_OpCmd		0x01
 #define ET_Msg		0x02
 #define ET_StateChange	0x08
 #define ET_PMsgCmd		0x09
 #define ET_CntlProgOpCmd	0x20
-
 
 #define ET_OpCmd_Mask	0x80000000
 #define ET_Msg_Mask		0x40000000
@@ -27,11 +25,9 @@
 #define ET_PMsgCmd_Mask	0x00800000
 #define ET_CtlProgOpCmd_Mask	0x00000001
 
-
 #define GMF_DOM		0x8000
 #define GMF_SndAlrm	0x4000
 #define GMF_HoldMsg	0x2000
-
 
 #define LTF_CntlText	0x8000
 #define LTF_LabelText	0x4000
@@ -39,11 +35,9 @@
 #define LTF_EndText	0x1000
 #define LTF_PromptText	0x0800
 
-
 #define HWC_COMMAND_INITIATED	0
 #define HWC_BUSY		2
 #define HWC_NOT_OPERATIONAL	3
-
 
 #define HWC_CMDW_READDATA 0x00770005
 
@@ -51,16 +45,21 @@
 
 #define HWC_CMDW_WRITEMASK 0x00780005
 
-
 #define GDS_ID_MDSMU		0x1310
-#define GDS_ID_MDSRouteInfo	0x1311
-#define GDS_ID_AgUnWrkCorr	0x1549
-#define GDS_ID_SNACondReport	0x1532
-#define GDS_ID_CPMSU		0x1212
-#define GDS_ID_RoutTargInstr	0x154D
-#define GDS_ID_OpReq		0x8070
-#define GDS_ID_TextCmd		0x1320
 
+#define GDS_ID_MDSRouteInfo	0x1311
+
+#define GDS_ID_AgUnWrkCorr	0x1549
+
+#define GDS_ID_SNACondReport	0x1532
+
+#define GDS_ID_CPMSU		0x1212
+
+#define GDS_ID_RoutTargInstr	0x154D
+
+#define GDS_ID_OpReq		0x8070
+
+#define GDS_ID_TextCmd		0x1320
 
 #define GDS_KEY_SelfDefTextMsg	0x31
 
@@ -76,9 +75,9 @@
 
 typedef struct {
 	_EBUF_HEADER
-} __attribute__((packed))	evbuf_t;
+} __attribute__ ((packed)) 
 
-
+evbuf_t;
 
 #define _MDB_HEADER	u16	length; \
 			u16	type; \
@@ -106,32 +105,45 @@ typedef struct {
 
 typedef struct {
 	_GO_HEADER
-} __attribute__((packed))	go_t;
+} __attribute__ ((packed)) 
+
+go_t;
 
 typedef	struct {
 	go_t	go;
-} __attribute__((packed))	mdb_body_t;
+} __attribute__ ((packed)) 
+
+mdb_body_t;
 
 typedef struct {
 	_MDB_HEADER
 	mdb_body_t	mdb_body;
-} __attribute__((packed))	mdb_t;
+} __attribute__ ((packed)) 
+
+mdb_t;
 
 typedef struct {
 	_EBUF_HEADER
 	mdb_t		mdb;
-} __attribute__((packed))	msgbuf_t;
+} __attribute__ ((packed)) 
+
+msgbuf_t;
 
 typedef struct {
 	_HWCB_HEADER
 	msgbuf_t	msgbuf;
-} __attribute__((packed))	write_hwcb_t;
+} __attribute__ ((packed)) 
+
+write_hwcb_t;
 
 typedef struct {
 	_MTO_HEADER
-} __attribute__((packed))	mto_t;
+} __attribute__ ((packed)) 
 
-static write_hwcb_t write_hwcb_template = {
+mto_t;
+
+static write_hwcb_t write_hwcb_template =
+{
 	sizeof(write_hwcb_t),				
 	0x00,						
 	{
@@ -154,20 +166,21 @@ static write_hwcb_t write_hwcb_template = {
 				{ 	
 					sizeof(go_t),	
 					0x0001
+
 				}
 			}
 		}
 	}
 };
 
-static mto_t mto_template = {
+static mto_t mto_template =
+{
 	sizeof(mto_t),
 	0x0004,
 	LTF_EndText,	
 	0x00			
 };
 
- 
 typedef u32 _hwcb_mask_t;
 
 typedef struct {
@@ -178,9 +191,12 @@ typedef struct {
 	_hwcb_mask_t	cp_send_mask;
 	_hwcb_mask_t	hwc_receive_mask;
 	_hwcb_mask_t	hwc_send_mask;
-} __attribute__((packed))	init_hwcb_t;
+} __attribute__ ((packed)) 
 
-static init_hwcb_t init_hwcb_template = {
+init_hwcb_t;
+
+static init_hwcb_t init_hwcb_template =
+{
 	sizeof(init_hwcb_t),
 	0x00,
 	{
@@ -195,7 +211,6 @@ static init_hwcb_t init_hwcb_template = {
 	ET_Msg_Mask
 };
 
-
 #define _GDS_VECTOR_HEADER	u16	length; \
 				u16	gds_id;
 
@@ -204,17 +219,24 @@ static init_hwcb_t init_hwcb_template = {
 
 typedef struct {
 	_GDS_VECTOR_HEADER
-} __attribute__((packed))	gds_vector_t;
+} __attribute__ ((packed)) 
+
+gds_vector_t;
 
 typedef struct {
 	_GDS_SUBVECTOR_HEADER
-} __attribute__((packed))	gds_subvector_t;
+} __attribute__ ((packed)) 
+
+gds_subvector_t;
 
 typedef struct {
 	_HWCB_HEADER
-} __attribute__((packed))	read_hwcb_t;
+} __attribute__ ((packed)) 
 
-static read_hwcb_t read_hwcb_template = {
+read_hwcb_t;
+
+static read_hwcb_t read_hwcb_template =
+{
 	PAGE_SIZE,
 	0x00,		
 	{
@@ -225,4 +247,3 @@ static read_hwcb_t read_hwcb_template = {
 };
 
 #endif   /* __HWC_H__ */ 
-

@@ -44,9 +44,7 @@
 #include <linux/delay.h>
 #include <linux/config.h>
 #include <linux/init.h>
-#ifdef CONFIG_APM
 #include <linux/apm_bios.h>
-#endif
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
@@ -84,9 +82,7 @@ unsigned int mca_pentium_flag = 0;
  */
 struct drive_info_struct { char dummy[32]; } drive_info;
 struct screen_info screen_info;
-#ifdef CONFIG_APM
 struct apm_bios_info apm_bios_info;
-#endif
 struct sys_desc_table_struct {
 	unsigned short length;
 	unsigned char table[0];
@@ -277,9 +273,7 @@ __initfunc(void setup_arch(char **cmdline_p,
  	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
  	drive_info = DRIVE_INFO;
  	screen_info = SCREEN_INFO;
-#ifdef CONFIG_APM
 	apm_bios_info = APM_BIOS_INFO;
-#endif
 	if( SYS_DESC_TABLE.length != 0 ) {
 		MCA_bus = SYS_DESC_TABLE.table[3] &0x2;
 		machine_id = SYS_DESC_TABLE.table[0];
@@ -394,7 +388,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_start_p = memory_start;
 	*memory_end_p = memory_end;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 	/*
 	 *	Save possible boot-time SMP configuration:
 	 */
@@ -987,7 +981,7 @@ int get_cpuinfo(char * buffer)
 	int i, n;
 
 	for(n=0; n<NR_CPUS; n++, c++) {
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 		if (!(cpu_online_map & (1<<n)))
 			continue;
 #endif

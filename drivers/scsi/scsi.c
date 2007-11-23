@@ -278,6 +278,7 @@ static struct dev_info device_list[] =
 {"YAMAHA","CDR100","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"YAMAHA","CRW8424S","1.0", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
+{"YAMAHA","CRW6416S","1.0c", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"RELISYS", "Scorpio", "*", BLIST_NOLUN},	/* responds to all LUN */
 
 /*
@@ -3455,6 +3456,8 @@ scsi_dump_status(int level)
 }
 
 #ifdef MODULE
+
+MODULE_PARM(max_scsi_luns, "i");
 
 int init_module(void) 
 {

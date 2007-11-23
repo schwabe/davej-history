@@ -1,4 +1,4 @@
-/********************************************************************
+/********************************************************************************
  *
  *  Linux ThunderLAN Driver
  *
@@ -7,6 +7,7 @@
  *
  *  (C) 1997-1998 Caldera, Inc.
  *  (C) 1998 James Banks
+ *  (C) 1999-2000 Torben Mathiasen 
  *
  *  This software may be used and distributed according to the terms
  *  of the GNU Public License, incorporated herein by reference.
@@ -34,7 +35,15 @@
  *
  *	Torben Mathiasen <torben.mathiasen@compaq.com> New Maintainer!
  *
- ********************************************************************/
+ * 	v1.2 Feb 14, 2000	- Fixed a timer bug that would cause
+ * 				  the tlan driver to get stuck if no 
+ * 				  cable/link were present.
+ * 				- We now allow higher priority timers
+ * 				  to overwrite timers like TLAN_TIMER_ACTIVITY
+ * 				  Patch from John Cagle <john.cagle@compaq.com>
+ * 				- Removed dependency of HZ being 100.
+ *
+ ********************************************************************************/
 
 
 #include <linux/module.h>
@@ -76,7 +85,7 @@ static	int		bbuf = 0;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
 static	int		TLanVersionMajor = 1;
-static	int		TLanVersionMinor = 0;
+static	int		TLanVersionMinor = 2;
 
 
 static	TLanAdapterEntry TLanAdapterList[] = {
@@ -238,7 +247,8 @@ TLan_SetTimer( struct device *dev, u32 ticks, u32 type )
 	TLanPrivateInfo *priv = (TLanPrivateInfo *) dev->priv;
 
 	cli();
-	if ( priv->timer.function != NULL ) {
+	if ( priv->timer.function != NULL && 
+		priv->timerType != TLAN_TIMER_ACTIVITY) {
 		return;
 	}
 	priv->timer.function = &TLan_Timer;
@@ -712,6 +722,9 @@ int TLan_Open( struct device *dev )
 	int		err;
 
 	priv->tlanRev = TLan_DioRead8( dev->base_addr, TLAN_DEF_REVISION );
+	
+	MOD_INC_USE_COUNT;
+
 	if ( priv->sa_int ) {
 		TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:   Using SA_INTERRUPT\n" ); 
 		err = request_irq( dev->irq, TLan_HandleInterrupt, SA_SHIRQ | SA_INTERRUPT, TLanSignature, dev );
@@ -723,8 +736,6 @@ int TLan_Open( struct device *dev )
 		return -EAGAIN;
 	}
 	
-	MOD_INC_USE_COUNT;
-
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
@@ -735,7 +746,6 @@ int TLan_Open( struct device *dev )
 	TLan_ResetLists( dev );
 	TLan_ReadAndClearStats( dev, TLAN_IGNORE );
 	TLan_ResetAdapter( dev );
-
 	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  %s: Opened.  TLAN Chip Rev: %x\n", dev->name, priv->tlanRev );
 
 	return 0;
@@ -927,6 +937,7 @@ int TLan_Close(struct device *dev)
 	outl( TLAN_HC_AD_RST, dev->base_addr + TLAN_HOST_CMD );
 	if ( priv->timer.function != NULL )
 		del_timer( &priv->timer );
+		priv->timer.function = NULL;
 	free_irq( dev->irq, dev );
 	TLan_FreeLists( dev );
 	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  Device %s closed.\n", dev->name );
@@ -1132,8 +1143,8 @@ u32 TLan_HandleTxEOF( struct device *dev, u16 host_int )
 		printk( "TLAN:  Received interrupt for uncompleted TX frame.\n" );
 	}
 
-#if LINUX_KERNEL_VERSION > 0x20100
-	priv->stats->tx_bytes += head_list->frameSize;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
+	priv->stats.tx_bytes += head_list->frameSize;
 #endif
 
 	head_list->cStat = TLAN_CSTAT_UNUSED;
@@ -1252,8 +1263,8 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 			skb_reserve( skb, 2 );
 			t = (void *) skb_put( skb, head_list->frameSize );
 
-#if LINUX_KERNEL_VERSION > 0x20100
-			priv->stats->rx_bytes += head_list->frameSize;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
+			priv->stats.rx_bytes += head_list->frameSize;
 #endif
 
 			memcpy( t, head_buffer, head_list->frameSize );
@@ -1276,8 +1287,8 @@ u32 TLan_HandleRxEOF( struct device *dev, u16 host_int )
 			skb = (struct sk_buff *) head_list->buffer[9].address;
 			head_list->buffer[9].address = 0;
 			skb_trim( skb, head_list->frameSize );
-#if LINUX_KERNEL_VERSION > 0x20100
-			priv->stats->rx_bytes += head_list->frameSize;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,0)
+			priv->stats.rx_bytes += head_list->frameSize;
 #endif
 
 			skb->protocol = eth_type_trans( skb, dev );
@@ -1884,7 +1895,7 @@ TLan_ResetAdapter( struct device *dev )
 	u32		addr;
 	u32		data;
 	u8		data8;
-
+	
 	priv->tlanFullDuplex = FALSE;
 	priv->phyOnline=0;
 /*  1.	Assert reset bit. */
@@ -2015,7 +2026,7 @@ TLan_FinishReset( struct device *dev )
 		outl( TLAN_HC_GO | TLAN_HC_RT, dev->base_addr + TLAN_HOST_CMD );
 	} else {
 		printk( "TLAN:  %s: Link inactive, will retry in 10 secs...\n", dev->name );
-		TLan_SetTimer( dev, 1000, TLAN_TIMER_FINISH_RESET );
+		TLan_SetTimer( dev, (10*HZ), TLAN_TIMER_FINISH_RESET );
 		return;
 	}
 
@@ -2197,11 +2208,11 @@ void TLan_PhyPowerDown( struct device *dev )
 		TLan_MiiWriteReg( dev, priv->phy[1], MII_GEN_CTL, value );
 	}
 
-	/* Wait for 5 jiffies (50 ms) and powerup
+	/* Wait for 50 ms and powerup
 	 * This is abitrary.  It is intended to make sure the
 	 * tranceiver settles.
 	 */
-	TLan_SetTimer( dev, 5, TLAN_TIMER_PHY_PUP );
+	TLan_SetTimer( dev, (HZ/20), TLAN_TIMER_PHY_PUP );
 
 } /* TLan_PhyPowerDown */
 
@@ -2212,17 +2223,17 @@ void TLan_PhyPowerUp( struct device *dev )
 {
 	TLanPrivateInfo	*priv = (TLanPrivateInfo *) dev->priv;
 	u16		value;
-
+	
 	TLAN_DBG( TLAN_DEBUG_GNRL, "TLAN:  %s: Powering up PHY.\n", dev->name );
 	TLan_MiiSync( dev->base_addr );
 	value = MII_GC_LOOPBK;
 	TLan_MiiWriteReg( dev, priv->phy[priv->phyNum], MII_GEN_CTL, value );
 
-	/* Wait for 50 jiffies (500 ms) and reset the
+	/* Wait for 500 ms and reset the
 	 * tranceiver.  The TLAN docs say both 50 ms and
 	 * 500 ms, so do the longer, just in case
 	 */
-	TLan_SetTimer( dev, 50, TLAN_TIMER_PHY_RESET );
+	TLan_SetTimer( dev, (HZ/2), TLAN_TIMER_PHY_RESET );
 
 } /* TLan_PhyPowerUp */
 
@@ -2247,10 +2258,10 @@ void TLan_PhyReset( struct device *dev )
 	}
 	TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0 );
 
-	/* Wait for 50 jiffies (500 ms) and initialize.
+	/* Wait for 500 ms and initialize.
 	 * I don't remember why I wait this long.
 	 */
-	TLan_SetTimer( dev, 50, TLAN_TIMER_PHY_START_LINK );
+	TLan_SetTimer( dev, (HZ/2), TLAN_TIMER_PHY_START_LINK );
 
 } /* TLan_PhyReset */
 
@@ -2293,13 +2304,13 @@ void TLan_PhyStartLink( struct device *dev )
        		TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1000 );
 		TLan_MiiWriteReg( dev, phy, MII_GEN_CTL, 0x1200 );
 
-		/* Wait for 400 jiffies (4 sec) for autonegotiation
+		/* Wait for 4 sec for autonegotiation
 		 * to complete.  The max spec time is less than this
 		 * but the card need additional time to start AN.
 		 * .5 sec should be plenty extra.
 		 */
 		printk( "TLAN:  %s: Starting autonegotiation.\n", dev->name );
-		TLan_SetTimer( dev, 400, TLAN_TIMER_PHY_FINISH_AN );
+		TLan_SetTimer( dev, (4*HZ), TLAN_TIMER_PHY_FINISH_AN );
 		return;
 	}
 
@@ -2307,7 +2318,7 @@ void TLan_PhyStartLink( struct device *dev )
 		priv->phyNum = 0;
 		data = TLAN_NET_CFG_1FRAG | TLAN_NET_CFG_1CHAN | TLAN_NET_CFG_PHY_EN;
 		TLan_DioWrite16( dev->base_addr, TLAN_NET_CONFIG, data );
-		TLan_SetTimer( dev, 4, TLAN_TIMER_PHY_PDOWN );
+		TLan_SetTimer( dev, (4*(HZ/1000)), TLAN_TIMER_PHY_PDOWN );
 		return;
 	} else if ( priv->phyNum == 0 ) {
         	TLan_MiiReadReg( dev, phy, TLAN_TLPHY_CTL, &tctl );
@@ -2328,10 +2339,10 @@ void TLan_PhyStartLink( struct device *dev )
         	TLan_MiiWriteReg( dev, phy, TLAN_TLPHY_CTL, tctl );
 	}
 
-	/* Wait for 100 jiffies (1 sec) to give the tranceiver time
+	/* Wait for 1 sec to give the tranceiver time
 	 * to establish link.
 	 */
-	TLan_SetTimer( dev, 100, TLAN_TIMER_FINISH_RESET );
+	TLan_SetTimer( dev, HZ, TLAN_TIMER_FINISH_RESET );
 
 } /* TLan_PhyStartLink */
 
@@ -2352,11 +2363,11 @@ void TLan_PhyFinishAutoNeg( struct device *dev )
 
 	TLan_MiiReadReg( dev, phy, MII_GEN_STS, &status );
 	if ( ! ( status & MII_GS_AUTOCMPLT ) ) {
-		/* Wait for 800 jiffies (8 sec) to give the process
+		/* Wait for 8 sec to give the process
 		 * more time.  Perhaps we should fail after a while.
 		 */
 		printk( "TLAN:  Giving autonegotiation more time.\n" );
-		TLan_SetTimer( dev, 800, TLAN_TIMER_PHY_FINISH_AN );
+		TLan_SetTimer( dev, (8*HZ), TLAN_TIMER_PHY_FINISH_AN );
 		return;
 	}
 
@@ -2374,7 +2385,7 @@ void TLan_PhyFinishAutoNeg( struct device *dev )
 		priv->phyNum = 0;
 		data = TLAN_NET_CFG_1FRAG | TLAN_NET_CFG_1CHAN | TLAN_NET_CFG_PHY_EN;
 		TLan_DioWrite16( dev->base_addr, TLAN_NET_CONFIG, data );
-		TLan_SetTimer( dev, 40, TLAN_TIMER_PHY_PDOWN );
+		TLan_SetTimer( dev, (400*(HZ/1000)), TLAN_TIMER_PHY_PDOWN );
 		return;
 	}
 
@@ -2388,9 +2399,9 @@ void TLan_PhyFinishAutoNeg( struct device *dev )
 		}
 	}
 
-	/* Wait for 10 jiffies (100 ms).  No reason in partiticular.
+	/* Wait for 100 ms.  No reason in partiticular.
 	 */
-	TLan_SetTimer( dev, 10, TLAN_TIMER_FINISH_RESET );
+	TLan_SetTimer( dev, (HZ/10), TLAN_TIMER_FINISH_RESET );
 		
 } /* TLan_PhyFinishAutoNeg */
 

@@ -31,8 +31,6 @@
 #include <linux/timex.h>
 #include <linux/config.h>
 
-#include "irq.h"
-
 
 extern volatile unsigned long lost_ticks;
 

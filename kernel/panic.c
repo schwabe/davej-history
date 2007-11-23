@@ -16,10 +16,6 @@
 #include <linux/sysrq.h>
 #include <linux/interrupt.h>
 
-#ifdef __alpha__
-#include <asm/machvec.h>
-#endif
-
 asmlinkage void sys_sync(void);	/* it's really int */
 extern void unblank_console(void);
 extern int C_A_D;
@@ -38,6 +34,9 @@ NORET_TYPE void panic(const char * fmt, ...)
 {
 	static char buf[1024];
 	va_list args;
+#ifdef CONFIG_ARCH_S390
+        unsigned long caller = (unsigned long) __builtin_return_address(0);
+#endif
 
 	va_start(args, fmt);
 	vsprintf(buf, fmt, args);
@@ -81,12 +80,8 @@ NORET_TYPE void panic(const char * fmt, ...)
 		printk("Press L1-A to return to the boot prom\n");
 	}
 #endif
-#ifdef __alpha__
-	if (alpha_using_srm)
-		halt();
-#endif
 #ifdef CONFIG_ARCH_S390
-        disabled_wait(0x1234);
+        disabled_wait(caller);
 #endif
 	sti();
 	for(;;) {

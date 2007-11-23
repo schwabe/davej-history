@@ -2,7 +2,7 @@
  *  include/asm-s390/uaccess.h
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Hartmut Penner (hp@de.ibm.com),
  *               Martin Schwidefsky (schwidefsky@de.ibm.com)
  *
@@ -321,6 +321,20 @@ extern int __put_user_bad(void);
         __gu_err;                                               \
 })
 
+/*
+ * The "xxx_ret" versions return constant specified in third argument, if
+ * something bad happens. These macros can be optimized for the
+ * case of just returning from the function xxx_ret is used.
+ */
+
+#define put_user_ret(x,ptr,ret) ({ if (put_user(x,ptr)) return ret; })
+
+#define get_user_ret(x,ptr,ret) ({ if (get_user(x,ptr)) return ret; })
+
+#define __put_user_ret(x,ptr,ret) ({ if (__put_user(x,ptr)) return ret; })
+
+#define __get_user_ret(x,ptr,ret) ({ if (__get_user(x,ptr)) return ret; })
+
 extern int __get_user_bad(void);
 
 /*
@@ -427,30 +441,28 @@ strncpy_from_user(char *dst, const char *src, long count)
                                 "   sacf  512\n"
                                 "0: ic    3,0(%0,4)\n"
                                 "1: stc   3,0(%0,2)\n"
-                                "   ahi   %0,1\n"
-                                "   cr    %0,%3\n"
-                                "   je    2f\n"
                                 "   ltr   3,3\n"
-                                "   jne   0b\n"
+                                "   jz    2f\n"
+                                "   ahi   %0,1\n"
+                                "   clr   %0,%3\n"
+                                "   jl    0b\n"
                                 "2: sacf  0(1)\n"
-				"3:\n"
 				".section .fixup,\"ax\"\n"
-				"4: sacf  0(1)\n"
-                                "   lhi   %0,%h4\n"
-				"   bras  3,5f\n"
-				"   .long 3b\n"
-				"5: l     3,0(3)\n"
+                                "3: lhi   %0,%h4\n"
+				"   basr  3,0\n"
+                                "   l     3,4f-.(3)\n"
 				"   br    3\n"
+				"4: .long 2b\n"
 				".previous\n"
 				".section __ex_table,\"a\"\n"
 				"   .align 4\n"
-				"   .long  0b,4b\n"
-				"   .long  1b,4b\n"
+				"   .long  0b,3b\n"
+                                "   .long  1b,3b\n"
 				".previous"
                                 : "=&a" (len)
                                 : "a"  (dst), "d" (src), "d" (count),
                                   "K" (-EFAULT)
-                                : "1", "2" ,"3", "4" );
+                                : "1", "2", "3", "4", "memory" );
         return len;
 }
 

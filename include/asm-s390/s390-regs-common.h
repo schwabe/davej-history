@@ -2,7 +2,7 @@
  *  include/asm-s390/s390-regs-common.h
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
  *
  *  this file is designed to keep as much compatibility between
@@ -84,8 +84,11 @@ typedef struct
 
 
 /* Sequence of bytes for breakpoint illegal instruction.  */
-#define BREAKPOINT {0x0,0x1}
-#define BREAKPOINT_U16 ((__u16)0x0001)
+#define S390_BREAKPOINT {0x0,0x1}
+#define S390_BREAKPOINT_U16 ((__u16)0x0001)
+#define S390_SYSCALL_OPCODE ((__u16)0x0a00)
+#define S390_SYSCALL_SIZE   2
+#define ADDR_BITS_REMOVE(addr) ((addr)&0x7fffffff)
 #endif
 #endif
 

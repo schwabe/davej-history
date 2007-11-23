@@ -1,10 +1,9 @@
-/* 456789.123456789.123456789.123456789.123456789.123456789.123456789.123456789.
- * IBM CONFIDENTIAL
+/*
  * File...........: linux/drivers/s390/block/dasd_types.h
  * Author.........: Holger Smolinski <Holger.Smolinski@de.ibm.com>
  * Created........: 08/31/1999
  * Last Modified..: 09/29/1999
- * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999
+ * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 1999,2000
 
  * List of Changes:
  - Initial Release as of 09/29/1999
@@ -26,7 +25,7 @@
 
 #include <linux/blkdev.h>
 
-#include "../../../arch/s390/kernel/irq.h"
+#include <asm/irq.h>
 
 #define CCW_DEFINE_EXTENT 0x63
 #define CCW_LOCATE_RECORD 0x43
@@ -65,9 +64,8 @@ struct {
 			unsigned char removable:1;
 			unsigned char shared:1;
 			unsigned char zero1:1;
-			unsigned char bam:1;
-			unsigned char hpsa:1;
-			unsigned char zeros:2;
+			unsigned char mam:1;
+			unsigned char zeros:3;
 		} __attribute__ ((packed)) bits;
 	} __attribute__ ((packed)) features;
 	__u8 dev_class;
@@ -76,7 +74,7 @@ struct {
 	__u32 blk_per_cycl;
 	__u32 blk_per_bound;
 	__u32 blk_bdsa;
-	__u32 blk_hpsa;
+	__u32 reserved0;
 	__u16 reserved1;
 	__u16 blk_ce;
 	__u32 reserved2;
@@ -248,7 +246,7 @@ struct dasd_chanq_t {
 	volatile cqr_t *tail;
 	spinlock_t q_lock;	/* lock for queue operations */
 	spinlock_t f_lock;	/* lock for flag operations */
-	long lockflags;
+	int queued_requests;
 	atomic_t flags;
 	struct dasd_chanq_t *next_q;	/* pointer to next queue */
 } __attribute__ ((packed, aligned (16))) 

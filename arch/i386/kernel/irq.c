@@ -1064,7 +1064,7 @@ void init_ISA_irqs (void)
 	}
 }
 
-__initfunc(void init_IRQ(void))
+unsigned long __init init_IRQ(unsigned long memory)
 {
 	int i;
 
@@ -1128,6 +1128,7 @@ __initfunc(void init_IRQ(void))
 	setup_x86_irq(2, &irq2);
 	setup_x86_irq(13, &irq13);
 #endif
+	return memory;
 }
 
 #ifdef CONFIG_X86_IO_APIC

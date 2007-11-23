@@ -248,9 +248,10 @@ static int get_kstat(char * buffer)
 	unsigned long ticks;
 
 	ticks = jiffies * smp_num_cpus;
+#ifndef CONFIG_ARCH_S390
 	for (i = 0 ; i < NR_IRQS ; i++)
 		sum += kstat_irqs(i);
-
+#endif
 #ifdef __SMP__
 	len = sprintf(buffer,
 		"cpu  %u %u %u %lu\n",
@@ -274,8 +275,12 @@ static int get_kstat(char * buffer)
 		"disk_rblk %u %u %u %u\n"
 		"disk_wblk %u %u %u %u\n"
 		"page %u %u\n"
+#ifdef CONFIG_ARCH_S390
+                "swap %u %u\n",
+#else
 		"swap %u %u\n"
 		"intr %u",
+#endif
 #else
 	len = sprintf(buffer,
 		"cpu  %u %u %u %lu\n"
@@ -285,8 +290,12 @@ static int get_kstat(char * buffer)
 		"disk_rblk %u %u %u %u\n"
 		"disk_wblk %u %u %u %u\n"
 		"page %u %u\n"
+#ifdef CONFIG_ARCH_S390           
+                "swap %u %u\n",   
+#else                             
 		"swap %u %u\n"
 		"intr %u",
+#endif                            
 		kstat.cpu_user,
 		kstat.cpu_nice,
 		kstat.cpu_system,
@@ -305,10 +314,14 @@ static int get_kstat(char * buffer)
 		kstat.pgpgin,
 		kstat.pgpgout,
 		kstat.pswpin,
+#ifdef CONFIG_ARCH_S390
+		kstat.pswpout);
+#else
 		kstat.pswpout,
 		sum);
 	for (i = 0 ; i < NR_IRQS ; i++)
 		len += sprintf(buffer + len, " %u", kstat_irqs(i));
+#endif
 	len += sprintf(buffer + len,
 		"\nctxt %u\n"
 		"btime %lu\n"
@@ -850,7 +863,6 @@ static inline char * task_sig(struct task_struct *p, char *buffer)
 	buffer += sprintf(buffer, "SigBlk:\t");
 	buffer = render_sigset_t(&p->blocked, buffer);
 	*buffer++ = '\n';
-
 	collect_sigign_sigcatch(p, &ign, &catch);
 	buffer += sprintf(buffer, "SigIgn:\t");
 	buffer = render_sigset_t(&ign, buffer);
@@ -877,7 +889,7 @@ static int get_status(int pid, char * buffer)
 {
 	char * orig = buffer;
 	struct task_struct *tsk;
-#ifdef  CONFIG_ARCH_S390
+#if  __s390__
 	int line,len;
 #endif
 
@@ -891,7 +903,7 @@ static int get_status(int pid, char * buffer)
 	buffer = task_mem(tsk, buffer);
 	buffer = task_sig(tsk, buffer);
 	buffer = task_cap(tsk, buffer);
-#ifdef CONFIG_ARCH_S390
+#if __s390__
 	for(line=0;(len=sprintf_regs(line,buffer,tsk,NULL,NULL))!=0;line++)
 		buffer+=len;
 #endif
@@ -1302,7 +1314,9 @@ extern int get_device_list(char *);
 extern int get_partition_list(char *);
 extern int get_filesystem_list(char *);
 extern int get_filesystem_info( char * );
+#ifndef CONFIG_ARCH_S390
 extern int get_irq_list(char *);
+#endif
 extern int get_dma_list(char *);
 extern int get_cpuinfo(char *);
 extern int get_pci_list(char *);
@@ -1366,10 +1380,10 @@ static long get_root_array(char * page, int type, char **start,
 
 		case PROC_PARTITIONS:
 			return get_partition_list(page);
-
+#ifndef CONFIG_ARCH_S390
 		case PROC_INTERRUPTS:
 			return get_irq_list(page);
-
+#endif
 		case PROC_FILESYSTEMS:
 			return get_filesystem_list(page);
 #ifndef CONFIG_ARCH_S390

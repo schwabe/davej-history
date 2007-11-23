@@ -2,7 +2,7 @@
  *  arch/s390/kernel/smp.c
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Denis Joseph Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com),
  *               Martin Schwidefsky (schwidefsky@de.ibm.com)
  *
@@ -33,7 +33,7 @@
 #include <asm/string.h>
 
 #include "cpcmd.h"
-#include "irq.h"
+#include <asm/irq.h>
 
 /* prototypes */
 extern void update_one_process( struct task_struct *p,
@@ -85,12 +85,15 @@ void __init smp_setup(char *str, int *ints)
 void do_machine_restart(void)
 {
         smp_send_stop();
+	reipl(S390_lowcore.ipl_device); 
+#if 0
         if (MACHINE_IS_VM) {
                 cpcmd("IPL", NULL, 0);
         } else {
                 /* FIXME: how to reipl ? */
                 disabled_wait(2);
         }
+#endif
 }
 
 void machine_restart(char * __unused) 

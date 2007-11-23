@@ -236,7 +236,7 @@ int __init misc_init(void)
 	dtlk_init();
 #endif
 #ifdef CONFIG_APM
-	apm_bios_init();
+	apm_init();
 #endif
 #ifdef CONFIG_H8
 	h8_init();

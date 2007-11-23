@@ -92,11 +92,11 @@ dasd_proc_read_devices ( char * buf, char **start, off_t off, int len, int d)
 		if ( len >= PAGE_SIZE - 80 )
 			len += sprintf ( buf + len, "terminated...\n");
 		len += sprintf ( buf + len,
-				 "%04X %3d %5d /dev/dd%04X",
+				 "%04X %3d %5d /dev/dasd%c",
 				 dasd_info[i]->info.devno,
 				 DASD_MAJOR,
 				 i << PARTN_BITS,
-				 i );
+				 'a' + i );
                 if (info->flags == DASD_NOT_FORMATTED) {
 			len += sprintf ( buf + len, "    n/a");
 		} else {

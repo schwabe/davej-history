@@ -76,17 +76,17 @@ int (*mach_request_irq) (unsigned int, void (*)(int, void *, struct pt_regs *),
 void (*mach_free_irq) (unsigned int, void *) = dummy_free_irq;
 
 /*
- * void init_IRQ(void)
+ * unsigned long init_IRQ(unsigned long memory)
  *
- * Parameters:	None
+ * Parameters:	Memory base
  *
- * Returns:	Nothing
+ * Returns:	New memory base
  *
  * This function should be called during kernel startup to initialize
  * the IRQ handling routines.
  */
 
-__initfunc(void init_IRQ(void))
+unsigned long __init init_IRQ(unsigned long memory)
 {
 	int i;
 
@@ -102,6 +102,7 @@ __initfunc(void init_IRQ(void))
 		nodes[i].handler = NULL;
 
 	mach_init_IRQ ();
+	return memory;
 }
 
 irq_node_t *new_irq_node(void)

@@ -2,16 +2,15 @@
  *  arch/s390/kernel/irq.c
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Ingo Adlung (adlung@de.ibm.com)
  *
  *  Derived from "arch/i386/kernel/irq.c"
  *    Copyright (C) 1992, 1999 Linus Torvalds, Ingo Molnar
  *
  *  S/390 I/O interrupt processing and I/O request processing is
- *  implemented in linux/arch/s390/do_io.c
+ *   implemented in arch/s390/kernel/s390io.c
  */
-
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
@@ -37,10 +36,7 @@
 #include <asm/delay.h>
 #include <asm/lowcore.h>
 
-#include "irq.h"
-
-
-void s390_init_IRQ(void);
+unsigned long s390_init_IRQ(unsigned long);
 void s390_free_irq(unsigned int irq, void *dev_id);
 int  s390_request_irq( unsigned int   irq,
                        void           (*handler)(int, void *, struct pt_regs *),
@@ -49,24 +45,8 @@ int  s390_request_irq( unsigned int   irq,
                        void          *dev_id);
 
 atomic_t nmi_counter;
+
 spinlock_t s390_bh_lock = SPIN_LOCK_UNLOCKED;
-/*
- * Dummy controller type for unused interrupts
- */
-int  do_none(unsigned int irq, int cpu, struct pt_regs * regs) { return 0;}
-int  enable_none(unsigned int irq) { return(-ENODEV); }
-int  disable_none(unsigned int irq) { return(-ENODEV); }
-
-struct hw_interrupt_type no_irq_type = {
-	"none",
-	do_none,
-	enable_none,
-	disable_none
-};
-
-irq_desc_t irq_desc[NR_IRQS] = {
-	[0 ... (NR_IRQS-1)] = { 0, &no_irq_type, },
-};
 
 #if 0
 /*
@@ -82,9 +62,6 @@ BUILD_SMP_INTERRUPT(spurious_interrupt)
 #endif
 
 #if 0
-static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
-#endif
-
 int get_irq_list(char *buf)
 {
 	int i, j;
@@ -92,14 +69,22 @@ int get_irq_list(char *buf)
 	char *p = buf;
 
 	p += sprintf(p, "           ");
+
 	for (j=0; j<smp_num_cpus; j++)
 		p += sprintf(p, "CPU%d       ",j);
+
 	*p++ = '\n';
 
-	for (i = 0 ; i < NR_IRQS ; i++) {
-		action = irq_desc[i].action;
+	for (i = 0 ; i < NR_IRQS ; i++)
+	{
+		if (ioinfo[i] == INVALID_STORAGE_AREA)
+			continue;
+
+		action = ioinfo[i]->irq_desc.action;
+		
 		if (!action)
 			continue;
+
 		p += sprintf(p, "%3d: ",i);
 #ifndef __SMP__
 		p += sprintf(p, "%10u ", kstat_irqs(i));
@@ -108,20 +93,27 @@ int get_irq_list(char *buf)
 			p += sprintf(p, "%10u ",
 				     kstat.irqs[cpu_logical_map(j)][i]);
 #endif
-		p += sprintf(p, " %14s", irq_desc[i].handler->typename);
+		p += sprintf(p, " %14s", ioinfo[i]->irq_desc.handler->typename);
 		p += sprintf(p, "  %s", action->name);
 
-		for (action=action->next; action; action = action->next) {
+		for (action=action->next; action; action = action->next)
+		{
 			p += sprintf(p, ", %s", action->name);
-		}
+
+		} /* endfor */
+
 		*p++ = '\n';
-	}
+	
+	} /* endfor */
+
 	p += sprintf(p, "NMI: %10u\n", atomic_read(&nmi_counter));
 #ifdef __SMP__
 	p += sprintf(p, "IPI: %10u\n", atomic_read(&ipi_count));
 #endif
+
 	return p - buf;
 }
+#endif
 
 /*
  * Global interrupt locks for SMP. Allow interrupts to come in on any
@@ -376,43 +368,48 @@ int handle_IRQ_event(unsigned int irq, int cpu, struct pt_regs * regs)
 	int                status;
 
 	status = 0;
-	action = irq_desc[irq].action;
 
-	if (action) {
+	if ( ioinfo[irq] == INVALID_STORAGE_AREA )
+		return( -ENODEV);
+
+	action = ioinfo[irq]->irq_desc.action;
+
+	if (action)
+	{
 		status |= 1;
 
 		if (!(action->flags & SA_INTERRUPT))
 			__sti();
 
-		do {
+		do
+		{
 			status |= action->flags;
 			action->handler(irq, action->dev_id, regs);
 			action = action->next;
 		} while (action);
+
 		if (status & SA_SAMPLE_RANDOM)
 			add_interrupt_randomness(irq);
 		__cli();
-	}
+
+	} /* endif */
 
 	return status;
 }
-
 
 void enable_nop(int irq)
 {
 }
 
-__initfunc(void init_IRQ(void))
+unsigned long __init init_IRQ(unsigned long memory)
 {
-
-   s390_init_IRQ();
-
+	return s390_init_IRQ( memory);
 }
 
 
 void free_irq(unsigned int irq, void *dev_id)
 {
-   s390_free_irq( irq, dev_id);
+	s390_free_irq( irq, dev_id);
 }
 
 
@@ -422,7 +419,6 @@ int request_irq( unsigned int   irq,
                  const char    *devname,
                  void          *dev_id)
 {
-   return( s390_request_irq( irq, handler, irqflags, devname, dev_id ) );
-
+	return( s390_request_irq( irq, handler, irqflags, devname, dev_id ) );
 }
 

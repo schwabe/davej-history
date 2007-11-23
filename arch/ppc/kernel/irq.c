@@ -296,16 +296,17 @@ int probe_irq_off (unsigned long irqs)
 	return 0;
 }
 
-void __init init_IRQ(void)
+unsigned long __init init_IRQ(unsigned long memory)
 {
 	static int once = 0;
 
 	if ( once )
-		return;
+		return memory;
 	else
 		once++;
 	
 	ppc_md.init_IRQ();
+	return memory;
 }
 
 #ifdef __SMP__

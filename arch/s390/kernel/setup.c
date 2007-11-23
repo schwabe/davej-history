@@ -2,7 +2,7 @@
  *  arch/s390/kernel/setup.c
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Hartmut Penner (hp@de.ibm.com),
  *               Martin Schwidefsky (schwidefsky@de.ibm.com)
  *
@@ -102,12 +102,15 @@ void cpu_init (void)
 #ifndef __SMP__
 void machine_restart(char * __unused)
 {
+  reipl(S390_lowcore.ipl_device); 
+#if 0
         if (MACHINE_IS_VM) {
                 cpcmd("IPL", NULL, 0);
         } else {
                 /* FIXME: how to reipl ? */
                 disabled_wait(2);
         }
+#endif
 }
 
 void machine_halt(void)
@@ -151,11 +154,9 @@ void tod_wait(unsigned long delay)
 __initfunc(void setup_arch(char **cmdline_p,
         unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
-        unsigned long memory_start, memory_end;
-        char c = ' ', *to = command_line, *from = COMMAND_LINE;
         static unsigned int smptrap=0;
-        unsigned long delay = 0;
-        int len = 0;
+        unsigned long memory_start, memory_end;
+        char c, cn, *to, *from;
 
         if (smptrap)
                 return;
@@ -187,10 +188,6 @@ __initfunc(void setup_arch(char **cmdline_p,
         rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
         rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
 #endif
-	/* nasty stuff with PARMAREAs. we use head.S or parameterline
-	  if (!MOUNT_ROOT_RDONLY)
-	  root_mountflags &= ~MS_RDONLY;
-	*/
         memory_start = (unsigned long) &_end;    /* fixit if use $CODELO etc*/
 	memory_end = MEMORY_SIZE;
         init_task.mm->start_code = PAGE_OFFSET;
@@ -202,6 +199,9 @@ __initfunc(void setup_arch(char **cmdline_p,
         memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
         saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
 
+        c = ' ';
+        from = COMMAND_LINE;
+        to = command_line;
         for (;;) {
                 /*
                  * "mem=XXX[kKmM]" sets memsize != 32M
@@ -219,6 +219,8 @@ __initfunc(void setup_arch(char **cmdline_p,
                         }
                 }
                 if (c == ' ' && strncmp(from, "ipldelay=", 9) == 0) {
+                        unsigned long delay;
+
 			if (to != command_line) to--;
                         delay = simple_strtoul(from+9, &from, 0);
 			if (*from == 's' || *from == 'S') {
@@ -230,10 +232,13 @@ __initfunc(void setup_arch(char **cmdline_p,
 			}
 			tod_wait(delay);
                 }
-                c = *(from++);
-                if (!c)
+                cn = *(from++);
+                if (!cn)
                         break;
-                if (COMMAND_LINE_SIZE <= ++len)
+                if (cn == ' ' && c == ' ')
+                        continue;  /* remove additional spaces */
+                c = cn;
+                if (to - command_line >= COMMAND_LINE_SIZE)
                         break;
                 *(to++) = c;
         }

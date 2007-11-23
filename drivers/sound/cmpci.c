@@ -21,7 +21,7 @@
  *      along with this program; if not, write to the Free Software
  *      Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * Special thanks to David C. Niemi
+ * Special thanks to David C. Niemi, Jan Pfeifer
  *
  *
  * Module command line parameters:
@@ -57,9 +57,45 @@
  *                     reported by Johan Maes <joma@telindus.be>
  *    22.03.99   0.12  return EAGAIN instead of EBUSY when O_NONBLOCK
  *                     read/write cannot be executed
+ *    20 09 99   0.13  merged the generic changes in sonicvibes since this
+ *		       diverged.
+ *    18.08.99   1.5   Only deallocate DMA buffer when unloading.
+ *    02.09.99   1.6   Enable SPDIF LOOP
+ *                     Change the mixer read back
+ *    21.09.99   2.33  Use RCS version aas driver version.
+ *                     Add support for modem, S/PDIF loop and 4 channels.
+ *                     (8738 only)
+ *                     Fix bug cause x11amp cannot play.
+ *    $Log: cmpci.c,v $
+ *    Revision 2.41  1999/10/27 02:00:05  cltien
+ *    Now the fragsize for modem is activated by parameter.
+ *
+ *    Revision 2.40  1999/10/26 23:38:26  cltien
+ *    Remove debugging message in cm_write which may cause module counter not 0.
+ *
+ *    Revision 2.39  1999/10/26 21:52:50  cltien
+ *    I forgor too adjust mic recording volume, as it should be moved to 5MUTEMONO.
+ *    Change the DYNAMIC macro to FIXEDDMA, which means static DMA buffer.
+ *
+ *    Revision 2.38  1999/10/08 21:59:03  cltien
+ *    Set FLINKON and reset FLINKOFF for modem.
+ *
+ *    Revision 2.37  1999/09/28 02:57:04  cltien
+ *    Add set_bus_master() to make sure bus master enabled.
+ *
+ *    Revision 2.36  1999/09/22 14:15:03  cltien
+ *    Use open_sem to avoid multiple access to open_mode.
+ *    Use wakeup in IntrClose to activate process in waiting queue.
+ *
+ *    Revision 2.35  1999/09/22 13:20:53  cltien
+ *    Use open_mode to check if DAC in used. Also more check in IntrWrite and IntrClose. Now the modem can access DAC safely.
+ *
+ *    Revision 2.34  1999/09/22 03:29:57  cltien
+ *    Use module count to decide which one to access the dac.
+ *
  *
  */
-
+ 
 /*****************************************************************************/
       
 #include <linux/config.h>
@@ -251,6 +287,7 @@ struct cm_state {
 		unsigned fragsize;
 		unsigned dmasize;
 		unsigned fragsamples;
+		unsigned dmasamples;
 		/* OSS stuff */
 		unsigned mapped:1;
 		unsigned ready:1;
@@ -275,6 +312,7 @@ struct cm_state {
 /* --------------------------------------------------------------------- */
 
 static struct cm_state *devs = NULL;
+static struct cm_state *devaudio = NULL;
 static unsigned long wavetable_mem = 0;
 
 /* --------------------------------------------------------------------- */
@@ -330,7 +368,7 @@ static void set_dmadac(struct cm_state *s, unsigned int addr, unsigned int count
 	outl(addr, s->iobase + CODEC_CMI_CH0_FRAME1);
 	outw(count, s->iobase + CODEC_CMI_CH0_FRAME2);
 	outb(inb(s->iobase + CODEC_CMI_FUNCTRL0) & ~1, s->iobase + CODEC_CMI_FUNCTRL0);
-	outb(inb(s->iobase + CODEC_CMI_FUNCTRL0 + 2) | 1, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
+//	outb(inb(s->iobase + CODEC_CMI_FUNCTRL0 + 2) | 1, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
 }
 
 static void set_dmaadc(struct cm_state *s, unsigned int addr, unsigned int count)
@@ -339,12 +377,15 @@ static void set_dmaadc(struct cm_state *s, unsigned int addr, unsigned int count
 	outl(addr, s->iobase + CODEC_CMI_CH1_FRAME1);
 	outw(count, s->iobase + CODEC_CMI_CH1_FRAME2);
 	outb(inb(s->iobase + CODEC_CMI_FUNCTRL0) | 2, s->iobase + CODEC_CMI_FUNCTRL0);
-	outb(inb(s->iobase + CODEC_CMI_FUNCTRL0 + 2) | 2, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
+//	outb(inb(s->iobase + CODEC_CMI_FUNCTRL0 + 2) | 2, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
 }
 
 extern __inline__ unsigned get_dmadac(struct cm_state *s)
 {
 	unsigned int curr_addr;
+
+	if (!s->dma_dac.dmasize || !(s->enable & CM_CENABLE_PE))
+		return 0;
 
 	curr_addr = inl(s->iobase + CODEC_CMI_CH0_FRAME1);
 	curr_addr -= virt_to_bus(s->dma_dac.rawbuf);
@@ -356,6 +397,9 @@ extern __inline__ unsigned get_dmadac(struct cm_state *s)
 extern __inline__ unsigned get_dmaadc(struct cm_state *s)
 {
 	unsigned int curr_addr;
+
+	if (!s->dma_adc.dmasize || !(s->enable & CM_CENABLE_RE))
+		return 0;
 
 	curr_addr = inl(s->iobase + CODEC_CMI_CH1_FRAME1);
 	curr_addr -= virt_to_bus(s->dma_adc.rawbuf);
@@ -420,7 +464,7 @@ static struct {
 	{ 22050,	(16000 + 22050) / 2,	(22050 + 32000) / 2,	2 },
 	{ 32000,	(22050 + 32000) / 2,	(32000 + 44100) / 2,	6 },
 	{ 44100,	(32000 + 44100) / 2,	(44100 + 48000) / 2,	3 },
-	{ 48000,	48000,			48000,			7 }
+	{ 48000,	(44100 + 48000) /2,	48000,			7 }
 };
 
 static void set_dac_rate(struct cm_state *s, unsigned rate)
@@ -484,10 +528,12 @@ extern inline void stop_adc(struct cm_state *s)
 	unsigned long flags;
 
 	spin_lock_irqsave(&s->lock, flags);
+	/* disable channel */
+	outb(s->enable, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
 	s->enable &= ~CM_CENABLE_RE;
 	/* disable interrupt */
 	outb(inb(s->iobase + CODEC_CMI_INT_HLDCLR + 2) & ~2, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
-	/* disable channel and reset */
+	/* reset */
 	outb(s->enable | CM_CH1_RESET, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
 	udelay(10);
 	outb(s->enable & ~CM_CH1_RESET, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
@@ -499,10 +545,12 @@ extern inline void stop_dac(struct cm_state *s)
 	unsigned long flags;
 
 	spin_lock_irqsave(&s->lock, flags);
+	/* disable channel */
 	s->enable &= ~CM_CENABLE_PE;
+	outb(s->enable, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
 	/* disable interrupt */
 	outb(inb(s->iobase + CODEC_CMI_INT_HLDCLR + 2) & ~1, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
-	/* disable channel and reset */
+	/* reset */
 	outb(s->enable | CM_CH0_RESET, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
 	udelay(10);
 	outb(s->enable & ~CM_CH0_RESET, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
@@ -515,10 +563,10 @@ static void start_dac(struct cm_state *s)
 
 	spin_lock_irqsave(&s->lock, flags);
 	if ((s->dma_dac.mapped || s->dma_dac.count > 0) && s->dma_dac.ready) {
+		outb(inb(s->iobase + CODEC_CMI_INT_HLDCLR + 2) | 1, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
 		s->enable |= CM_CENABLE_PE;
 		outb(s->enable, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
 	}
-	outb(inb(s->iobase + CODEC_CMI_INT_HLDCLR + 2) | 1, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
 	spin_unlock_irqrestore(&s->lock, flags);
 }	
 
@@ -529,10 +577,10 @@ static void start_adc(struct cm_state *s)
 	spin_lock_irqsave(&s->lock, flags);
 	if ((s->dma_adc.mapped || s->dma_adc.count < (signed)(s->dma_adc.dmasize - 2*s->dma_adc.fragsize)) 
 	    && s->dma_adc.ready) {
+		outb(inb(s->iobase + CODEC_CMI_INT_HLDCLR + 2) | 2, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
 		s->enable |= CM_CENABLE_RE;
 		outb(s->enable, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
 	}
-	outb(inb(s->iobase + CODEC_CMI_INT_HLDCLR + 2) | 2, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
 	spin_unlock_irqrestore(&s->lock, flags);
 }	
 
@@ -585,16 +633,17 @@ static int prog_dmabuf(struct cm_state *s, unsigned rec)
 	db->hwptr = db->swptr = db->total_bytes = db->count = db->error = db->endcleared = 0;
 	if (!db->rawbuf) {
 		db->ready = db->mapped = 0;
-		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER && !db->rawbuf; order--)
-			db->rawbuf = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA, order);
+		for (order = DMABUF_DEFAULTORDER; order >= DMABUF_MINORDER; order--)
+			if ((db->rawbuf = (void *)__get_free_pages(GFP_KERNEL | GFP_DMA, order)))
+				break;
 		if (!db->rawbuf)
 			return -ENOMEM;
 		db->buforder = order;
 		if ((virt_to_bus(db->rawbuf) ^ (virt_to_bus(db->rawbuf) + (PAGE_SIZE << db->buforder) - 1)) & ~0xffff)
-			printk(KERN_DEBUG "cm: DMA buffer crosses 64k boundary: busaddr 0x%lx  size %ld\n", 
+			printk(KERN_DEBUG "cmpci: DMA buffer crosses 64k boundary: busaddr 0x%lx  size %ld\n", 
 			       virt_to_bus(db->rawbuf), PAGE_SIZE << db->buforder);
 		if ((virt_to_bus(db->rawbuf) + (PAGE_SIZE << db->buforder) - 1) & ~0xffffff)
-			printk(KERN_DEBUG "cm: DMA buffer beyond 16MB: busaddr 0x%lx  size %ld\n", 
+			printk(KERN_DEBUG "cmpci: DMA buffer beyond 16MB: busaddr 0x%lx  size %ld\n", 
 			       virt_to_bus(db->rawbuf), PAGE_SIZE << db->buforder);
 		/* now mark the pages as reserved; otherwise remap_page_range doesn't do what we want */
 		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
@@ -621,17 +670,21 @@ static int prog_dmabuf(struct cm_state *s, unsigned rec)
 	db->fragsize = 1 << db->fragshift;
 	if (db->ossmaxfrags >= 4 && db->ossmaxfrags < db->numfrag)
 		db->numfrag = db->ossmaxfrags;
-#if 1
-	/* to make fragsize >= 4096 */
-	while (db->fragsize < 4096 && db->numfrag >= 4)
-	{
-		db->fragsize *= 2;
-		db->fragshift++;
-		db->numfrag /= 2;
+ 	/* to make fragsize >= 4096 */
+#if 0 	
+ 	if(s->modem)
+ 	{
+	 	while (db->fragsize < 4096 && db->numfrag >= 4)
+		{
+			db->fragsize *= 2;
+ 			db->fragshift++;
+ 			db->numfrag /= 2;
+ 		}
 	}
-#endif
+#endif	
 	db->fragsamples = db->fragsize >> sample_shift[fmt];
 	db->dmasize = db->numfrag << db->fragshift;
+	db->dmasamples = db->dmasize >> sample_shift[fmt];
 	memset(db->rawbuf, (fmt & CM_CFMT_16BIT) ? 0 : 0x80, db->dmasize);
 	spin_lock_irqsave(&s->lock, flags);
 	if (rec) {
@@ -663,6 +716,7 @@ extern __inline__ void clear_advance(struct cm_state *s)
 		len -= x;
 	}
 	memset(buf + bptr, c, len);
+	outb(s->enable, s->iobase + CODEC_CMI_FUNCTRL0 + 2);
 }
 
 /* call with spinlock held! */
@@ -750,25 +804,26 @@ static void cm_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	unsigned int intsrc, intstat;
 	
 	/* fastpath out, to ease interrupt sharing */
-	intsrc = inb(s->iobase + CODEC_CMI_INT_STATUS);
-	if (!(intsrc & (CM_INT_CH0 | CM_INT_CH1)))
+	intsrc = inl(s->iobase + CODEC_CMI_INT_STATUS);
+	if (!(intsrc & 0x80000000))
 		return;
 	spin_lock(&s->lock);
 	intstat = inb(s->iobase + CODEC_CMI_INT_HLDCLR + 2);
-	/* disable interrupt */
+	/* acknowledge interrupt */
 	if (intsrc & CM_INT_CH0)
+	{
 		outb(intstat & ~1, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
-	if (intsrc & CM_INT_CH1)
-		outb(intstat & ~2, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
-	cm_update_ptr(s);
-#ifdef SOUND_CONFIG_CMPCI_MIDI
-	cm_handle_midi(s);
-#endif
-	/* enable interrupt */
-	if (intsrc & CM_INT_CH0)
+		udelay(10);
 		outb(intstat | 1, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
+	}
 	if (intsrc & CM_INT_CH1)
+	{
+		outb(intstat & ~2, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
+		udelay(10);
 		outb(intstat | 2, s->iobase + CODEC_CMI_INT_HLDCLR + 2);
+	}
+	cm_update_ptr(s);
+	cm_handle_midi(s);
 	spin_unlock(&s->lock);
 }
 
@@ -786,7 +841,7 @@ static void cm_midi_timer(unsigned long data)
 
 /* --------------------------------------------------------------------- */
 
-static const char invalid_magic[] = KERN_CRIT "cm: invalid magic value\n";
+static const char invalid_magic[] = KERN_CRIT "cmpci: invalid magic value\n";
 
 #ifdef CONFIG_SOUND_CMPCI	/* support multiple chips */
 #define VALIDATE_STATE(s)
@@ -806,6 +861,7 @@ static const char invalid_magic[] = KERN_CRIT "cm: invalid magic value\n";
 #define MT_5MUTE      2
 #define MT_4MUTEMONO  3
 #define MT_6MUTE      4
+#define MT_5MUTEMONO  5
 
 static const struct {
 	unsigned left;
@@ -816,7 +872,7 @@ static const struct {
 } mixtable[SOUND_MIXER_NRDEVICES] = {
 	[SOUND_MIXER_CD]     = { DSP_MIX_CDVOLIDX_L,     DSP_MIX_CDVOLIDX_R,     MT_5MUTE,     0x04, 0x02 },
 	[SOUND_MIXER_LINE]   = { DSP_MIX_LINEVOLIDX_L,   DSP_MIX_LINEVOLIDX_R,   MT_5MUTE,     0x10, 0x08 },
-	[SOUND_MIXER_MIC]    = { DSP_MIX_MICVOLIDX,      CODEC_CMI_MIXER2,       MT_4MUTEMONO, 0x01, 0x01 },
+	[SOUND_MIXER_MIC]    = { DSP_MIX_MICVOLIDX,      DSP_MIX_MICVOLIDX,      MT_5MUTEMONO, 0x01, 0x01 },
 	[SOUND_MIXER_SYNTH]  = { DSP_MIX_FMVOLIDX_L,  	 DSP_MIX_FMVOLIDX_R,     MT_5MUTE,     0x40, 0x00 },
 	[SOUND_MIXER_VOLUME] = { DSP_MIX_MASTERVOLIDX_L, DSP_MIX_MASTERVOLIDX_R, MT_5MUTE,     0x00, 0x00 },
 	[SOUND_MIXER_PCM]    = { DSP_MIX_VOICEVOLIDX_L,  DSP_MIX_VOICEVOLIDX_R,  MT_5MUTE,     0x00, 0x00 }
@@ -849,10 +905,16 @@ static int return_mixval(struct cm_state *s, unsigned i, int *arg)
 		r = l;
 		break;
 
+	case MT_5MUTEMONO:
+		r = l;
+		rl = 100 - 3 * ((l >> 3) & 31);
+		rr = rl;
+		break;
+				
 	case MT_5MUTE:
 	default:
-		rl = 100 - 3 * (l & 31);
-		rr = 100 - 3 * (r & 31);
+		rl = 100 - 3 * ((l >> 3) & 31);
+		rr = 100 - 3 * ((r >> 3) & 31);
 		break;
 				
 	case MT_6MUTE:
@@ -990,7 +1052,7 @@ static int mixer_ioctl(struct cm_state *s, unsigned int cmd, unsigned long arg)
 		}
 		spin_lock_irqsave(&s->lock, flags);
 		wrmixer(s, DSP_MIX_ADCMIXIDX_L, j);
-		wrmixer(s, DSP_MIX_ADCMIXIDX_R, (j & 1) | j>>1);
+		wrmixer(s, DSP_MIX_ADCMIXIDX_R, (j & 1) | (j>>1));
 		spin_unlock_irqrestore(&s->lock, flags);
 		return 0;
 
@@ -1039,6 +1101,14 @@ static int mixer_ioctl(struct cm_state *s, unsigned int cmd, unsigned long arg)
 			outb((inb(s->iobase + CODEC_CMI_MIXER2) & ~0x0e) | rr<<1, s->iobase + CODEC_CMI_MIXER2);
 			break;
 			
+		case MT_5MUTEMONO:
+			r = l;
+			rl = l < 4 ? 0 : (l - 5) / 3;
+			rr = rl >> 2;
+ 			wrmixer(s, mixtable[i].left, rl<<3);
+			outb((inb(s->iobase + CODEC_CMI_MIXER2) & ~0x0e) | rr<<1, s->iobase + CODEC_CMI_MIXER2);
+			break;
+				
 		case MT_5MUTE:
 			rl = l < 4 ? 0 : (l - 5) / 3;
 			rr = r < 4 ? 0 : (r - 5) / 3;
@@ -1122,8 +1192,6 @@ static /*const*/ struct file_operations cm_mixer_fops = {
 	&cm_release_mixdev,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
@@ -1131,7 +1199,7 @@ static /*const*/ struct file_operations cm_mixer_fops = {
 
 static int drain_dac(struct cm_state *s, int nonblock)
 {
-        struct wait_queue wait = { current, NULL };
+	struct wait_queue wait = { current, NULL} ;
 	unsigned long flags;
 	int count, tmo;
 
@@ -1155,7 +1223,7 @@ static int drain_dac(struct cm_state *s, int nonblock)
 		tmo = (count * HZ) / s->ratedac;
 		tmo >>= sample_shift[(s->fmt >> CM_CFMT_DACSHIFT) & CM_CFMT_MASK];
 		if (!schedule_timeout(tmo ? : 1) && tmo)
-			printk(KERN_DEBUG "cm: dma timed out??\n");
+			printk(KERN_DEBUG "cmpci: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac.wait, &wait);
         current->state = TASK_RUNNING;
@@ -1202,7 +1270,18 @@ static ssize_t cm_read(struct file *file, char *buffer, size_t count, loff_t *pp
 			start_adc(s);
 			if (file->f_flags & O_NONBLOCK)
 				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->dma_adc.wait);
+			if (!interruptible_sleep_on_timeout(&s->dma_adc.wait, HZ)) {
+				printk(KERN_DEBUG "cmpci: read: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
+				       s->dma_adc.dmasize, s->dma_adc.fragsize, s->dma_adc.count,
+				       s->dma_adc.hwptr, s->dma_adc.swptr);
+				stop_adc(s);
+				spin_lock_irqsave(&s->lock, flags);
+				set_dmaadc(s, virt_to_bus(s->dma_adc.rawbuf), s->dma_adc.dmasamples);
+				/* program sample counts */
+				outw(s->dma_adc.fragsamples-1, s->iobase + CODEC_CMI_CH1_FRAME2 + 2);
+				s->dma_adc.count = s->dma_adc.hwptr = s->dma_adc.swptr = 0;
+				spin_unlock_irqrestore(&s->lock, flags);
+			}
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
 			continue;
@@ -1262,7 +1341,18 @@ static ssize_t cm_write(struct file *file, const char *buffer, size_t count, lof
 			start_dac(s);
 			if (file->f_flags & O_NONBLOCK)
 				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->dma_dac.wait);
+			if (!interruptible_sleep_on_timeout(&s->dma_dac.wait, HZ)) {
+				printk(KERN_DEBUG "cmpci: write: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
+				       s->dma_dac.dmasize, s->dma_dac.fragsize, s->dma_dac.count,
+				       s->dma_dac.hwptr, s->dma_dac.swptr);
+				stop_dac(s);
+				spin_lock_irqsave(&s->lock, flags);
+				set_dmadac(s, virt_to_bus(s->dma_dac.rawbuf), s->dma_dac.dmasamples);
+				/* program sample counts */
+				outw(s->dma_dac.fragsamples-1, s->iobase + CODEC_CMI_CH0_FRAME2 + 2);
+				s->dma_dac.count = s->dma_dac.hwptr = s->dma_dac.swptr = 0;
+				spin_unlock_irqrestore(&s->lock, flags);
+			}
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
 			continue;
@@ -1630,9 +1720,11 @@ static int cm_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
         case SOUND_PCM_READ_BITS:
 		return put_user((s->fmt & ((file->f_mode & FMODE_READ) ? (CM_CFMT_16BIT << CM_CFMT_ADCSHIFT) : (CM_CFMT_16BIT << CM_CFMT_DACSHIFT))) ? 16 : 8, (int *)arg);
 
+        case SOUND_PCM_READ_FILTER:
+		return put_user((file->f_mode & FMODE_READ) ? s->rateadc : s->ratedac, (int *)arg);
+
         case SOUND_PCM_WRITE_FILTER:
         case SNDCTL_DSP_SETSYNCRO:
-        case SOUND_PCM_READ_FILTER:
                 return -EINVAL;
 		
 	}
@@ -1721,17 +1813,15 @@ static /*const*/ struct file_operations cm_audio_fops = {
 	&cm_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
 
-#ifdef CONFIG_SOUND_CMPCI_MIDI
 /* --------------------------------------------------------------------- */
 
 static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct cm_state *s = (struct cm_state *)file->private_data;
+	struct wait_queue wait = { current , NULL };
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1742,7 +1832,10 @@ static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_
 		return -ESPIPE;
 	if (!access_ok(VERIFY_WRITE, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+	add_wait_queue(&s->midi.iwait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.ird;
@@ -1753,15 +1846,27 @@ static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.iwait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) 
+			{
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			current->state = TASK_INTERRUPTIBLE;
+			schedule();
+			if (signal_pending(current)) 
+			{
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIINBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.ird = ptr;
@@ -1770,13 +1875,17 @@ static ssize_t cm_midi_read(struct file *file, char *buffer, size_t count, loff_
 		count -= cnt;
 		buffer += cnt;
 		ret += cnt;
+		break;
 	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&s->midi.iwait, &wait);
 	return ret;
 }
 
 static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct cm_state *s = (struct cm_state *)file->private_data;
+	struct wait_queue wait = { current, NULL };
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1787,7 +1896,10 @@ static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count
 		return -ESPIPE;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+	add_wait_queue(&s->midi.owait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.owr;
@@ -1800,15 +1912,25 @@ static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.owait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+ 			current->state = TASK_INTERRUPTIBLE;
+			schedule();
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIOUTBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.owr = ptr;
@@ -1821,6 +1943,8 @@ static ssize_t cm_midi_write(struct file *file, const char *buffer, size_t count
 		cm_handle_midi(s);
 		spin_unlock_irqrestore(&s->lock, flags);
 	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&s->midi.owait, &wait);
 	return ret;
 }
 
@@ -1908,14 +2032,15 @@ static int cm_midi_open(struct inode *inode, struct file *file)
 static int cm_midi_release(struct inode *inode, struct file *file)
 {
 	struct cm_state *s = (struct cm_state *)file->private_data;
-        struct wait_queue wait = { current, NULL };
+	struct wait_queue wait = { current, NULL};
+
 	unsigned long flags;
 	unsigned count, tmo;
 
 	VALIDATE_STATE(s);
 
 	if (file->f_mode & FMODE_WRITE) {
-		current->state = TASK_INTERRUPTIBLE;
+ current->state = TASK_INTERRUPTIBLE;
 		add_wait_queue(&s->midi.owait, &wait);
 		for (;;) {
 			spin_lock_irqsave(&s->lock, flags);
@@ -1932,7 +2057,7 @@ static int cm_midi_release(struct inode *inode, struct file *file)
 			}
 			tmo = (count * HZ) / 3100;
 			if (!schedule_timeout(tmo ? : 1) && tmo)
-				printk(KERN_DEBUG "cm: midi timed out??\n");
+				printk(KERN_DEBUG "cmpci: midi timed out??\n");
 		}
 		remove_wait_queue(&s->midi.owait, &wait);
 		current->state = TASK_RUNNING;
@@ -1968,15 +2093,11 @@ static /*const*/ struct file_operations cm_midi_fops = {
 	&cm_midi_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
-#endif
 
 /* --------------------------------------------------------------------- */
 
-#ifdef CONFIG_SOUND_CMPCI_FM
 static int cm_dmfm_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
 	static const unsigned char op_offset[18] = {
@@ -2144,11 +2265,8 @@ static /*const*/ struct file_operations cm_dmfm_fops = {
 	&cm_dmfm_release,
 	NULL,  /* fsync */
 	NULL,  /* fasync */
-	NULL,  /* check_media_change */
-	NULL,  /* revalidate */
 	NULL,  /* lock */
 };
-#endif /* CONFIG_SOUND_CMPCI_FM */
 
 /* --------------------------------------------------------------------- */
 
@@ -2176,15 +2294,39 @@ static struct initvol {
 };
 
 #ifdef MODULE
-__initfunc(int init_module(void))
+static int	spdif_loop = 0;
+static int	four_ch = 0;
+static int	rear_out = 0;
+MODULE_PARM(spdif_loop, "i");
+MODULE_PARM(four_ch, "i");
+MODULE_PARM(rear_out, "i");
+
+int  __init init_module(void)
 #else
-__initfunc(int init_cmpci(void))
+#ifdef CONFIG_SOUND_CMPCI_SPDIFLOOP
+static int	spdif_loop = 1;
+#else
+static int	spdif_loop = 0;
+#endif
+#ifdef CONFIG_SOUND_CMPCI_4CH
+static int	four_ch = 1;
+#else
+static int	four_ch = 0;
+#endif
+#ifdef CONFIG_SOUND_CMPCI_REAR
+static int	rear_out = 1;
+#else
+static int	read_out = 0;
+#endif
+
+int __init init_cmpci(void)
 #endif
 {
 	struct cm_state *s;
 	struct pci_dev *pcidev = NULL;
 	mm_segment_t fs;
 	int i, val, index = 0;
+	
 	struct {
 		unsigned short	deviceid;
 		char		*devicename;
@@ -2200,10 +2342,10 @@ __initfunc(int init_cmpci(void))
 	if (!pci_present())   /* No PCI bus in this machine! */
 #endif
 		return -ENODEV;
-	printk(KERN_INFO "cm: version v1.1 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "cmpci: version v2.41-nomodem time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
-		printk(KERN_INFO "cm: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
+		printk(KERN_INFO "cmpci: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
 #endif
 	while (index < NR_DEVICE && pcidev == NULL && (
  	       (pcidev = pci_find_device(PCI_VENDOR_ID_CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8338A, pcidev)) ||
@@ -2212,7 +2354,7 @@ __initfunc(int init_cmpci(void))
 		if (pcidev->irq == 0)
 			continue;
 		if (!(s = kmalloc(sizeof(struct cm_state), GFP_KERNEL))) {
-			printk(KERN_WARNING "cm: out of memory\n");
+			printk(KERN_WARNING "cmpci: out of memory\n");
 			continue;
 		}
 		/* search device name */
@@ -2233,65 +2375,60 @@ __initfunc(int init_cmpci(void))
 		s->open_sem = MUTEX;
 		s->magic = CM_MAGIC;
 		s->iobase = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
-#ifdef CONFIG_SOUND_CMPCI_FM
 		s->iosynth = 0x388;
-#endif
-#ifdef CONFIG_SOUND_CMPCI_MIDI
 		s->iomidi = 0x330;
-#endif
 		if (s->iobase == 0)
 			continue;
 		s->irq = pcidev->irq;
 
 		if (check_region(s->iobase, CM_EXTENT_CODEC)) {
-			printk(KERN_ERR "cm: io ports %#x-%#x in use\n", s->iobase, s->iobase+CM_EXTENT_CODEC-1);
+			printk(KERN_ERR "cmpci: io ports %#x-%#x in use\n", s->iobase, s->iobase+CM_EXTENT_CODEC-1);
 			goto err_region5;
 		}
 		request_region(s->iobase, CM_EXTENT_CODEC, "cmpci");
-#ifdef CONFIG_SOUND_CMPCI_MIDI
 		if (check_region(s->iomidi, CM_EXTENT_MIDI)) {
-			printk(KERN_ERR "cm: io ports %#x-%#x in use\n", s->iomidi, s->iomidi+CM_EXTENT_MIDI-1);
-			goto err_region4;
+			printk(KERN_WARNING "cmpci: io ports %#x-%#x in use, midi disabled.\n", s->iomidi, s->iomidi+CM_EXTENT_MIDI-1);
+			s->iomidi = 0;
 		}
-		request_region(s->iomidi, CM_EXTENT_MIDI, "cmpci Midi");
-		/* set IO based at 0x330 */
-		outb(inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x60, s->iobase + CODEC_CMI_LEGACY_CTRL + 3);
-#endif
-#ifdef CONFIG_SOUND_CMPCI_FM
+		else
+		{
+			request_region(s->iomidi, CM_EXTENT_MIDI, "cmpci Midi");
+			/* set IO based at 0x330 */
+			outb(inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x60, s->iobase + CODEC_CMI_LEGACY_CTRL + 3);
+		}
 		if (check_region(s->iosynth, CM_EXTENT_SYNTH)) {
-			printk(KERN_ERR "cm: io ports %#x-%#x in use\n", s->iosynth, s->iosynth+CM_EXTENT_SYNTH-1);
-			goto err_region1;
+			printk(KERN_WARNING "cmpci: io ports %#x-%#x in use, synth disabled.\n", s->iosynth, s->iosynth+CM_EXTENT_SYNTH-1);
+			s->iosynth = 0;
 		}
-		request_region(s->iosynth, CM_EXTENT_SYNTH, "cmpci FM");
-		/* enable FM */
-		outb(inb(s->iobase + CODEC_CMI_MISC_CTRL + 2) | 8, s->iobase + CODEC_CMI_MISC_CTRL);
-#endif
+		else
+		{
+			request_region(s->iosynth, CM_EXTENT_SYNTH, "cmpci FM");
+			/* enable FM */
+			outb(inb(s->iobase + CODEC_CMI_MISC_CTRL + 2) | 8, s->iobase + CODEC_CMI_MISC_CTRL);
+		}
 		/* initialize codec registers */
 		outb(0, s->iobase + CODEC_CMI_INT_HLDCLR + 2);  /* disable ints */
-		outb(0, s->iobase + CODEC_CMI_FUNCTRL0 + 2); /* reset channels */
+		outb(0, s->iobase + CODEC_CMI_FUNCTRL0 + 2); /* disable channels */
 		/* reset mixer */
 		wrmixer(s, DSP_MIX_DATARESETIDX, 0);
 
 		/* request irq */
 		if (request_irq(s->irq, cm_interrupt, SA_SHIRQ, "cmpci", s)) {
-			printk(KERN_ERR "cm: irq %u in use\n", s->irq);
+			printk(KERN_ERR "cmpci: irq %u in use\n", s->irq);
 			goto err_irq;
 		}
-		printk(KERN_INFO "cm: found %s adapter at io %#06x irq %u\n",
+		printk(KERN_INFO "cmpci: found %s adapter at io %#06x irq %u\n",
 		       devicename, s->iobase, s->irq);
 		/* register devices */
 		if ((s->dev_audio = register_sound_dsp(&cm_audio_fops, -1)) < 0)
 			goto err_dev1;
 		if ((s->dev_mixer = register_sound_mixer(&cm_mixer_fops, -1)) < 0)
 			goto err_dev2;
-#ifdef CONFIG_SOUND_CMPCI_MIDI
-		if ((s->dev_midi = register_sound_midi(&cm_midi_fops, -1)) < 0)
+		if (s->iomidi && (s->dev_midi = register_sound_midi(&cm_midi_fops, -1)) < 0)
 			goto err_dev3;
-#endif
-#ifdef CONFIG_SOUND_CMPCI_FM
-		if ((s->dev_dmfm = register_sound_special(&cm_dmfm_fops, 15 /* ?? */)) < 0)
+		if (s->iosynth && (s->dev_dmfm = register_sound_special(&cm_dmfm_fops, 15 /* ?? */)) < 0)
 			goto err_dev4;
-#endif
+		pci_set_master(pcidev);
 		/* initialize the chips */
 		fs = get_fs();
 		set_fs(KERNEL_DS);
@@ -2305,6 +2442,38 @@ __initfunc(int init_cmpci(void))
 			mixer_ioctl(s, initvol[i].mixch, (unsigned long)&val);
 		}
 		set_fs(fs);
+		if (pcidev->device == PCI_DEVICE_ID_CMEDIA_CM8738)
+		{
+			/* enable SPDIF loop */
+			if (spdif_loop)
+			{
+				/* turn on spdif-in to spdif-out */
+				outb(inb(s->iobase + CODEC_CMI_FUNCTRL1) | 0x80, s->iobase + CODEC_CMI_FUNCTRL1);
+				printk(KERN_INFO "cmpci: Enable SPDIF loop\n");
+			}
+			else
+				outb(inb(s->iobase + CODEC_CMI_FUNCTRL1) & ~0x80, s->iobase + CODEC_CMI_FUNCTRL1);
+			/* enable 4 channels mode */
+			if (four_ch)
+			{
+				/* 4 channel mode (analog duplicate) */
+				outb(inb(s->iobase + CODEC_CMI_MISC_CTRL + 3) | 0x04, s->iobase + CODEC_CMI_MISC_CTRL + 3);
+				printk(KERN_INFO "cmpci: Enable 4 channels mode\n");
+				/* has separate rear-out jack ? */
+				if (rear_out)
+				{
+					/* has separate rear out jack */
+					outb(inb(s->iobase + CODEC_CMI_MIXER1) & ~0x20, s->iobase + CODEC_CMI_MIXER1);
+				}
+				else
+				{
+					outb(inb(s->iobase + CODEC_CMI_MIXER1) | 0x20, s->iobase + CODEC_CMI_MIXER1);
+					printk(KERN_INFO "cmpci: line-in routed as rear-out\n");
+				}
+			}
+			else
+				outb(inb(s->iobase + CODEC_CMI_MISC_CTRL + 3) & ~0x04, s->iobase + CODEC_CMI_MISC_CTRL + 3);
+		}
 		/* queue it for later freeing */
 		s->next = devs;
 		devs = s;
@@ -2318,16 +2487,14 @@ __initfunc(int init_cmpci(void))
 	err_dev2:
 		unregister_sound_dsp(s->dev_audio);
 	err_dev1:
-		printk(KERN_ERR "cm: cannot register misc device\n");
+		printk(KERN_ERR "cmpci: cannot register misc device\n");
 		free_irq(s->irq, s);
 	err_irq:
-#ifdef CONFIG_SOUND_CMPCI_FM
-		release_region(s->iosynth, CM_EXTENT_SYNTH);
+		if(s->iosynth)
+			release_region(s->iosynth, CM_EXTENT_SYNTH);
 	err_region1:
-#endif
-#ifdef CONFIG_SOUND_CMPCI_MIDI
-		release_region(s->iomidi, CM_EXTENT_MIDI);
-#endif
+		if(s->iomidi)
+			release_region(s->iomidi, CM_EXTENT_MIDI);
 	err_region4:
 		release_region(s->iobase, CM_EXTENT_CODEC);
 	err_region5:
@@ -2345,11 +2512,6 @@ __initfunc(int init_cmpci(void))
 
 #ifdef MODULE
 
-#if 0
-MODULE_PARM(wavetable, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(wavetable, "if 1 the wavetable synth is enabled");
-#endif
-
 MODULE_AUTHOR("ChenLi Tien, cltien@home.com");
 MODULE_DESCRIPTION("CMPCI Audio Driver");
 
@@ -2361,32 +2523,30 @@ void cleanup_module(void)
 		devs = devs->next;
 		outb(0, s->iobase + CODEC_CMI_INT_HLDCLR + 2);  /* disable ints */
 		synchronize_irq();
-		outb(0, s->iobase + CODEC_CMI_FUNCTRL0 + 2); /* reset channels */
+		outb(0, s->iobase + CODEC_CMI_FUNCTRL0 + 2); /* disable channels */
 		free_irq(s->irq, s);
 
 		/* reset mixer */
 		wrmixer(s, DSP_MIX_DATARESETIDX, 0);
 
 		release_region(s->iobase, CM_EXTENT_CODEC);
-#ifdef CONFIG_SOUND_CMPCI_MIDI
-		release_region(s->iomidi, CM_EXTENT_MIDI);
-#endif
-#ifdef CONFIG_SOUND_CMPCI_FM
-		release_region(s->iosynth, CM_EXTENT_SYNTH);
-#endif
+		if(s->iomidi)
+		{
+			release_region(s->iomidi, CM_EXTENT_MIDI);
+			unregister_sound_midi(s->dev_midi);
+		}
+		if(s->iosynth)
+		{
+			release_region(s->iosynth, CM_EXTENT_SYNTH);
+			unregister_sound_special(s->dev_dmfm);
+		}
 		unregister_sound_dsp(s->dev_audio);
 		unregister_sound_mixer(s->dev_mixer);
-#ifdef CONFIG_SOUND_CMPCI_MIDI
-		unregister_sound_midi(s->dev_midi);
-#endif
-#ifdef CONFIG_SOUND_CMPCI_FM
-		unregister_sound_special(s->dev_dmfm);
-#endif
 		kfree_s(s, sizeof(struct cm_state));
 	}
 	if (wavetable_mem)
 		free_pages(wavetable_mem, 20-PAGE_SHIFT);
-	printk(KERN_INFO "cm: unloading\n");
+	printk(KERN_INFO "cmpci: unloading\n");
 }
 
 #endif /* MODULE */

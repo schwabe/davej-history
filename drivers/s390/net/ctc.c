@@ -3,8 +3,42 @@
  *    CTC / ESCON network driver
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Dieter Wellerdiek (wel@de.ibm.com)
+ *
+ *
+ *  Description of the Kernel Parameter
+ *    Normally the CTC driver selects the channels in order (automatic channel 
+ *    selection). If your installation needs to use the channels in a different 
+ *    order or doesn't want to have automatic channel selection on, you can do 
+ *    this with the "ctc= kernel keyword". 
+ *
+ *       ctc=0,0xrrrr,0xwwww,ddddd
+ *
+ *     Where:
+ *
+ *       "rrrr" is the read channel address
+ *       "wwww" is the write channel address
+ *       "dddd" is the network device (ctc0 to ctc7 for a parallel channel, escon0
+ *              to escon7 for ESCON channels).
+ *
+ *     To switch the automatic channel selection off use the ctc= keyword with 
+ *     parameter "noauto". This may be necessary if you 3271 devices or other devices 
+ *     which use the ctc device type and model, but operate with a different protocol. 
+ *     
+ *       ctc=noauto
+ *
+ *  Change History
+ *    0.50  Initial release shipped
+ *    0.51  Bug fixes
+ *          - CTC / ESCON network device can now handle up to 64 channels 
+ *          - 3088-61 info message supperssed - CISCO 7206 - CLAW - ESCON 
+ *          - 3088-62 info message suppressed - OSA/D   
+ *          - channel: def ffffffed ... error message suppressed 
+ *          - CTC / ESCON device was not recoverable after a lost connection with 
+ *            IFCONFIG dev DOWN and IFCONFIG dev UP 
+ *          - Possibility to switch the automatic selection off
+ *          - Minor bug fixes 
  */
 
 #include <linux/kernel.h>
@@ -28,12 +62,12 @@
 #include <asm/io.h>
 #include <asm/bitops.h>
  
-#include "../../../arch/s390/kernel/irq.h"
+#include <asm/irq.h>
 
 
 //#define DEBUG 
 
-/* Redefine message level, so that all messages occure on 3215 console in DEBUG mode */
+/* Redefine message level, so that all messages occur on 3215 console in DEBUG mode */
 #ifdef DEBUG                
         #undef  KERN_INFO
         #undef  KERN_WARNING
@@ -49,8 +83,8 @@
 #define CCW_CMD_SET_EXTENDED    0xc3
 #define CCW_CMD_PREPARE         0xe3
 
-#define MAX_DEVICES             16 
-#define MAX_ADAPTERS            MAX_DEVICES / 2
+#define MAX_CHANNEL_DEVICES     64 
+#define MAX_ADAPTERS            8
 #define CTC_DEFAULT_MTU_SIZE    1500
 #define READ                    0
 #define WRITE                   1
@@ -77,7 +111,7 @@
 
 typedef enum { 
         channel_type_none,           /* Device is not a channel */
-        channel_type_undefined,      /* Device is a channel but we dont know anything about it */
+        channel_type_undefined,      /* Device is a channel but we don't know anything about it */
         channel_type_ctca,           /* Device is a CTC/A and we can deal with it */
         channel_type_escon,          /* Device is a ESCON channel and we can deal with it */
         channel_type_unsupported     /* Device is a unsupported model */
@@ -99,7 +133,7 @@ struct devicelist {
 }; 
 
 static struct {
-        struct devicelist  list[MAX_DEVICES]; 
+        struct devicelist  list[MAX_CHANNEL_DEVICES]; 
         int                count;
         int                left;
 } channel[CHANNEL_MEDIA];
@@ -113,7 +147,7 @@ struct adapterlist{
         __u16              protocol;
 };
 
-static struct adapterlist ctc_adapter[CHANNEL_MEDIA][MAX_ADAPTERS];
+static struct adapterlist ctc_adapter[CHANNEL_MEDIA][MAX_ADAPTERS];  /* 0 = CTC  / 1 = ESCON */
 
 
 /* 
@@ -131,7 +165,7 @@ struct buffer {
 struct channel {
         unsigned int        devno;
         int                 irq;
-        int                 IO_active;
+        unsigned long       IO_active;
         ccw1_t              ccw[3];
         __u32               state; 
         int                 buffer_count;
@@ -152,7 +186,7 @@ struct channel {
 
 
 struct ctc_priv {                                                                    
-        struct net_device_stats  stats;
+        struct enet_statistics   stats;
         struct channel           channel[2]; 
         __u16                    protocol;
 };  
@@ -224,7 +258,7 @@ static void channel_init(void)
         if (!test_and_set_bit(0, (void *)& channel_tab_initialized)){
                 channel_scan(); 
                 for (m = 0; m < CHANNEL_MEDIA; m++) { 
-                        channel_sort (channel[m].list, MAX_DEVICES); 
+                        channel_sort (channel[m].list, MAX_CHANNEL_DEVICES); 
                         channel[m].left = channel[m].count;   
                 }
                 if (channel[CTC].count == 0 && channel[ESCON].count == 0) 
@@ -234,7 +268,7 @@ static void channel_init(void)
                             channel[CTC].count, channel[ESCON].count);  
 #ifdef DEBUG 
                 for (m = 0; m < CHANNEL_MEDIA;  m++) { 
-                        for (c = 0; c < MAX_DEVICES; c++){
+                        for (c = 0; c < MAX_CHANNEL_DEVICES; c++){
                                 printk(KERN_DEBUG "channel: Adapter=%x Entry=%x devno=%04x\n", 
                                      m, c, channel[m].list[c].devno);
                         }
@@ -255,14 +289,14 @@ static void channel_scan(void)
         dev_info_t temp;
         
         for (m = 0; m < CHANNEL_MEDIA;  m++) { 
-                for (c = 0; c < MAX_DEVICES; c++){
+                for (c = 0; c < MAX_CHANNEL_DEVICES; c++){
                         channel[m].list[c].devno = -ENODEV;
                 }
         }
         
         for (irq = 0; irq < NR_IRQS; irq++) {
                 /* CTC/A */
-                if (channel[CTC].count < MAX_DEVICES ) {
+                if (channel[CTC].count < MAX_CHANNEL_DEVICES ) {
                         if (get_dev_info(irq, &temp) == 0 && 
                             channel_check_for_type(&temp.sid_data) == channel_type_ctca) {
                                 channel[CTC].list[channel[CTC].count].devno = temp.devno; 
@@ -271,7 +305,7 @@ static void channel_scan(void)
                 }
 
                 /* ESCON */
-                if (channel[ESCON].count < MAX_DEVICES ) {
+                if (channel[ESCON].count < MAX_CHANNEL_DEVICES ) {
                         if (get_dev_info(irq, &temp) == 0 && 
                             channel_check_for_type(&temp.sid_data) == channel_type_escon) {
                                 channel[ESCON].list[channel[ESCON].count].devno = temp.devno; 
@@ -363,21 +397,23 @@ static channel_type_t channel_check_for_type (senseid_t *id)
 
                         switch (id->cu_model) {
                                 case 0x08:    
-                                        type = channel_type_ctca;  /* 3088/08  ==> CTCA */
+                                        type = channel_type_ctca;  /* 3088-08  ==> CTCA */
                                         break; 
 
                                 case 0x1F:   
-                                        type = channel_type_escon; /* 3088/1F  ==> ESCON channel */
+                                        type = channel_type_escon; /* 3088-1F  ==> ESCON channel */
                                         break;
  
-                                case 0x01:                         /* 3088/01  ==> P390 OSA emulation */
-                                case 0x60:                         /* 3088/60  ==> OSA/2 Adapter */
+                                case 0x01:                         /* 3088-01  ==> P390 OSA emulation */
+                                case 0x60:                         /* 3088-60  ==> OSA/2 adapter */
+                                case 0x61:                         /* 3088-61  ==> CISCO 7206 CLAW protocol ESCON connected */
+                                case 0x62:                         /* 3088-62  ==> OSA/D device */ 
                                         type = channel_type_unsupported;
                                          break; 
 
                                 default:
                                         type = channel_type_undefined;
-                                        printk(KERN_INFO "channel: Unknown model found 3088/%02x\n",id->cu_model);
+                                        printk(KERN_INFO "channel: Unknown model found 3088-%02x\n",id->cu_model);
                         }
                         break;
 
@@ -545,6 +581,11 @@ void ctc_setup(char *dev_name, int *ints)
         
         ctc_no_auto = 1;
 
+        if (!strcmp(dev_name,"noauto")) { 
+                printk(KERN_INFO "ctc: automatic channel selection deactivated\n");
+                return;
+        }
+
         tmp.devno[WRITE] = -ENODEV;
         tmp.devno[READ] = -ENODEV; 
 
@@ -556,7 +597,7 @@ void ctc_setup(char *dev_name, int *ints)
                 case 2: /* read channel passed */
                         tmp.devno[READ] = ints[2];
                         if (tmp.devno[WRITE] == -ENODEV)
-                                tmp.devno[WRITE] = tmp.devno[READ]++; 
+                                tmp.devno[WRITE] = tmp.devno[READ] + 1; 
 
                 case 1: /* protocol type passed */
                         tmp.protocol    = ints[1];
@@ -566,9 +607,10 @@ void ctc_setup(char *dev_name, int *ints)
                                 printk(KERN_WARNING "%s: wrong Channel protocol type passed\n", dev_name);
                                 return;
                         }
+                        break;
 
                 default: 
-                        printk(KERN_WARNING "%s: wrong number of parameter passed\n", dev_name);
+                        printk(KERN_WARNING "ctc: wrong number of parameter passed\n");
                         return;
         }
         ctc_adapter[extract_channel_media(dev_name)][extract_channel_id(dev_name)] = tmp; 
@@ -610,6 +652,9 @@ int ctc_probe(struct device *dev)
         if (channel_left(m) <=1) 
                 return -ENODEV;
 
+        if (ctc_no_auto == 1 && (ctc_adapter[m][i].devno[READ] == -ENODEV || ctc_adapter[m][i].devno[WRITE] == -ENODEV))
+                return -ENODEV;
+
         dev->priv = kmalloc(sizeof(struct ctc_priv), GFP_KERNEL);
         if (dev->priv == NULL)
                 return -ENOMEM;
@@ -618,6 +663,7 @@ int ctc_probe(struct device *dev)
 
         
         for (c = 0; c < 2; c++) {
+
                 privptr->channel[c].devstat = kmalloc(sizeof(devstat_t), GFP_KERNEL);
                 if (privptr->channel[c].devstat == NULL){
                         if (i == WRITE)
@@ -1031,7 +1077,7 @@ static void ctc_irq_bh (struct channel *ctc)
                                 skb->mac.raw = skb->data;
                                 skb->dev = dev;
                                 skb->protocol = htons(ETH_P_IP);
-                                skb->ip_summed = CHECKSUM_UNNECESSARY; /* no UC happend!!! */
+                                skb->ip_summed = CHECKSUM_UNNECESSARY; /* no UC happened!!! */
                                 netif_rx(skb);
                                 privptr->stats.rx_packets++;
                         } else {
@@ -1150,6 +1196,7 @@ static int ctc_open(struct device *dev)
                 privptr->channel[i].dev = dev;
                 
                 privptr->channel[i].flag_a = 0;
+                privptr->channel[i].IO_active = 0;
 
                 privptr->channel[i].ccw[0].cmd_code  = CCW_CMD_PREPARE;
                 privptr->channel[i].ccw[0].flags     = CCW_FLAG_SLI | CCW_FLAG_CC;

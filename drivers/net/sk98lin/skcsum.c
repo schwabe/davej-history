@@ -140,9 +140,11 @@ static const char SysKonnectFileId[] = "@(#)"
  */
 #ifdef SK_LITTLE_ENDIAN
 #define SKCS_HTON16(Val16)	(((unsigned) (Val16) >> 8) | (((Val16) & 0xFF) << 8))
+#define SKCS_INV_HTON16(Val16)	(Val16)
 #endif	/* SK_LITTLE_ENDIAN */
 #ifdef SK_BIG_ENDIAN
 #define SKCS_HTON16(Val16)	(Val16)
+#define SKCS_INV_HTON16(Val16)	(((unsigned) (Val16) >> 8) | (((Val16) & 0xFF) << 8))
 #endif	/* SK_BIG_ENDIAN */
 #define SKCS_NTOH16(Val16)	SKCS_HTON16(Val16)
 
@@ -617,7 +619,6 @@ unsigned	Checksum2)	/* Hardware checksum 2. */
 	/*
 	 * Calculate the TCP/UDP checksum.
 	 */
-
 	/* Get total length of IP header and data. */
 
 	IpDataLength =
@@ -639,12 +640,11 @@ unsigned	Checksum2)	/* Hardware checksum 2. */
 			SKCS_OFS_IP_DESTINATION_ADDRESS + 0) +
 		(unsigned long) *(SK_U16 *) SKCS_IDX(pIpHeader,
 			SKCS_OFS_IP_DESTINATION_ADDRESS + 2) +
-		(unsigned long) (NextLevelProtocol << 8) +
+		(unsigned long) SKCS_HTON16(NextLevelProtocol) +
 		(unsigned long) SKCS_HTON16(IpDataLength) +
 
 		/* Add the TCP/UDP header checksum. */
-
-		(unsigned long) IpDataChecksum;
+		(unsigned long) SKCS_INV_HTON16(IpDataChecksum);
 
 	/* Add-in any carries. */
 

@@ -403,7 +403,11 @@ no_psmouse:
 	int	0x15		! ignore return code
 
 	mov	ax,#0x05303	! 32 bit connect
-	xor	bx,bx
+	xor	ebx,ebx
+	xor	cx,cx		! paranoia
+	xor	dx,dx		!   ...
+	xor	esi,esi		!   ...
+	xor	di,di		!   ...
 	int	0x15
 	jc	no_32_apm_bios	! error
 
@@ -419,6 +423,7 @@ no_psmouse:
 !
 	mov	ax,#0x05300	! APM BIOS installation check
 	xor	bx,bx
+	xor	cx,cx		! paranoia
 	int	0x15
 	jc	apm_disconnect	! error -> should not happen, tidy up
 

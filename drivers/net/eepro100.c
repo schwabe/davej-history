@@ -43,7 +43,12 @@ static int rxdmacount = 0;
 
 /* Set the copy breakpoint for the copy-only-tiny-buffer Rx method.
    Lower values use more memory, but are faster. */
+#ifdef __alpha__
+/* force copying of all packets to avoid unaligned accesses on Alpha */
+static int rx_copybreak = 1518;
+#else
 static int rx_copybreak = 200;
+#endif
 
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
 static int max_interrupt_work = 20;
@@ -561,7 +566,7 @@ int eepro100_init(void)
 
 	for (; pci_index < 8; pci_index++) {
 		unsigned char pci_bus, pci_device_fn, pci_latency;
-		u32 pciaddr;
+		unsigned long pciaddr;
 		long ioaddr;
 		int irq;
 
@@ -1736,7 +1741,7 @@ speedo_rx(struct net_device *dev)
 				skb->dev = dev;
 				skb_reserve(skb, 2);	/* Align IP on 16 byte boundaries */
 				/* 'skb_put()' points to the start of sk_buff data area. */
-#if 1 || USE_IP_CSUM
+#if !defined(__alpha__)
 				/* Packet is in one chunk -- we can copy + cksum. */
 				eth_copy_and_sum(skb, sp->rx_skbuff[entry]->tail, pkt_len, 0);
 				skb_put(skb, pkt_len);

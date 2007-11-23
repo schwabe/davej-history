@@ -17,6 +17,10 @@
  * 
  * This file may be redistributed under the terms of the GNU Public
  * License.
+ *
+ * 2000/01/20   Fixed SMP locking on put_tty_queue using bits of 
+ *		the patch by Andrew J. Kroll <ag784@freenet.buffalo.edu>
+ *		who actually finally proved there really was a race.
  */
 
 #include <linux/types.h>
@@ -38,6 +42,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
+#include <asm/spinlock.h>
 
 #define CONSOLE_DEV MKDEV(TTY_MAJOR,0)
 #define SYSCONS_DEV  MKDEV(TTYAUX_MAJOR,1)
@@ -57,13 +62,22 @@
 #define TTY_THRESHOLD_THROTTLE		128 /* now based on remaining room */
 #define TTY_THRESHOLD_UNTHROTTLE 	128
 
+static spinlock_t __attribute((unused)) tty_put_lock = SPIN_LOCK_UNLOCKED;
+
 static inline void put_tty_queue(unsigned char c, struct tty_struct *tty)
 {
+	unsigned long flags;
+	/*
+	 *	The problem of stomping on the buffers ends here.
+	 *	Why didn't anyone see this one comming? --AJK
+	*/
+	spin_lock_irqsave(&tty_put_lock, flags);
 	if (tty->read_cnt < N_TTY_BUF_SIZE) {
 		tty->read_buf[tty->read_head] = c;
 		tty->read_head = (tty->read_head + 1) & (N_TTY_BUF_SIZE-1);
 		tty->read_cnt++;
 	}
+	spin_unlock_irqrestore(&tty_put_lock, flags);
 }
 
 /* 

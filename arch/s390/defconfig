@@ -52,10 +52,10 @@ CONFIG_DASD_ECKD=y
 #
 CONFIG_NETDEVICES=y
 CONFIG_CTC=y
-# CONFIG_IUCV is not set
+CONFIG_IUCV=y
 # CONFIG_DUMMY is not set
 CONFIG_NET_ETHERNET=y
-# CONFIG_TR is not set
+CONFIG_TR=y
 
 #
 # S/390 Terminal and Console options
@@ -127,13 +127,15 @@ CONFIG_PROC_FS=y
 CONFIG_EXT2_FS=y
 # CONFIG_SYSV_FS is not set
 # CONFIG_UFS_FS is not set
+# CONFIG_EFS_FS is not set
 
 #
 # Network File Systems
 #
 # CONFIG_CODA_FS is not set
 CONFIG_NFS_FS=y
-# CONFIG_NFSD is not set
+CONFIG_NFSD=y
+# CONFIG_NFSD_SUN is not set
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
@@ -154,4 +156,3 @@ CONFIG_LOCKD=y
 #
 # CONFIG_PROFILE is not set
 # CONFIG_REMOTE_DEBUG is not set
-# CONFIG_MAGIC_SYSRQ is not set

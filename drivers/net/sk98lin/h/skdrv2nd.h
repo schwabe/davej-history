@@ -411,6 +411,7 @@ struct s_AC  {
 	int		RxBufSize;	/* length of receive buffers */
         struct net_device_stats stats;	/* linux 'netstat -i' statistics */
 	int		Index;		/* internal board index number */
+	SK_BOOL		JumboActivated; /* jumbo support ever activated */
 
 	/* adapter RAM sizes for queues of active port */
 	int		RxQueueSize;	/* memory used for receive queue */

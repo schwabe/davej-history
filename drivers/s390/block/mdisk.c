@@ -3,7 +3,7 @@
  *    VM minidisk device driver.
  *
  *  S390 version
- *    Copyright (C) 1999 IBM Deutschland Entwicklung GmbH, IBM Corporation
+ *    Copyright (C) 1999,2000 IBM Deutschland Entwicklung GmbH, IBM Corporation
  *    Author(s): Hartmut Penner (hp@de.ibm.com)
  */
 
@@ -37,7 +37,7 @@ char kernel_version [] = UTS_RELEASE;
 #include <asm/io.h>                    /* virt_to_phys                     */
 
 	 /* Added statement HSM 12/03/99 */
-#include "../../../arch/s390/kernel/irq.h"
+#include <asm/irq.h>
 
 #define MAJOR_NR MDISK_MAJOR /* force definitions on in blk.h */
 
@@ -125,6 +125,7 @@ __initfunc(void mdisk_setup(char *str,int *ints))
 		vdev = size = offset = 0;
 		if (!isxdigit(*cur)) goto syntax_error;
 		vdev = simple_strtoul(cur,&cur,16);
+		if (*cur != 0 && *cur != ',') { 
 		if (*cur++ != ':') goto syntax_error;
 		if (!isxdigit(*cur)) goto syntax_error;
 		size = simple_strtoul(cur,&cur,16);
@@ -139,6 +140,7 @@ __initfunc(void mdisk_setup(char *str,int *ints))
 			}
 		}
 		if (*cur != ',' && *cur != 0) goto syntax_error;
+		} 
 		if (*cur == ',') cur++;
 		if (i >= MDISK_DEVS) {
 			printk(KERN_WARNING "mnd: too many devices\n");
@@ -158,6 +160,8 @@ syntax_error:
         printk(KERN_WARNING "mnd: syntax error in parameter string: %s\n", str);
 	return;
 }
+
+
 
 /*
  * Open and close
@@ -298,6 +302,101 @@ dia250(void* iob,int cmd)
 }
 
 /*
+ * The device characteristics function
+ */
+
+static __inline__ int
+dia210(void* devchar)
+{
+	int rc;
+
+	devchar = (void*) virt_to_phys(devchar);
+
+	asm volatile ("    lr    2,%1\n"
+		      "    .long 0x83200210\n"
+		      "    ipm   %0\n"
+		      "    srl   %0,28"
+		      : "=d" (rc)
+		      : "d" (devchar)
+		      : "2" );
+	return rc;
+}
+/*
+ * read the label of a minidisk and extract its characteristics
+ */
+
+static __inline__ int
+mdisk_read_label (mdisk_Dev *dev, int i)
+{
+	static mdisk_dev_char_t devchar;
+	static long label[1024];
+	int block, b;
+	int rc;
+	mdisk_bio_t *bio;
+
+	devchar.dev_nr = dev -> vdev;
+	devchar.rdc_len = sizeof(mdisk_dev_char_t);
+
+	if (dia210(&devchar) == 0) {
+		if (devchar.vdev_class == DEV_CLASS_FBA) {
+			block = 2;
+		}
+		else {
+			block = 3;
+		}
+		bio = dev->bio;
+		rc = mdisk_term_io(dev);
+		for (b=512;b<4097;b=b*2) {
+			rc = mdisk_init_io(dev, b, 0, 64);
+			if (rc > 4) {
+				continue;
+			}
+			memset(&bio[0], 0, sizeof(mdisk_bio_t));
+			bio[0].type = MDISK_READ_REQ;
+			bio[0].block_number = block;
+			bio[0].buffer = virt_to_phys(&label);
+			dev->nr_bhs = 1;
+			if (mdisk_rw_io_clustered(dev,
+			                          &bio[0],
+			                          1,
+			                          (unsigned long) dev,
+			                          MDISK_SYNC)
+			    == 0 ) {
+				if (label[0] != 0xc3d4e2f1) { /* CMS1 */
+					printk ( KERN_WARNING "mnd: %4lX "
+					         "is not CMS format\n",
+					         mdisk_setup_data.vdev[i]);
+					rc = mdisk_term_io(dev);
+					return 1;
+				}
+				if (label[13] == 0) {
+					printk ( KERN_WARNING "mnd: %4lX "
+		   		         "is not reserved\n",
+					         mdisk_setup_data.vdev[i]);
+					rc = mdisk_term_io(dev);
+					return 2;
+				}
+				mdisk_setup_data.size[i] =
+				   (label[7] - 1 - label[13]) *
+				   (label[3] >> 9) >> 1;
+				mdisk_setup_data.blksize[i] = label[3];
+				mdisk_setup_data.offset[i] = label[13] + 1;
+				rc = mdisk_term_io(dev);
+				return rc;
+			}
+			rc = mdisk_term_io(dev);
+		}
+		printk ( KERN_WARNING "mnd: Cannot read label of %4lX "
+			 "- is it formatted?\n",
+			 mdisk_setup_data.vdev[i]);
+		return 3;
+	}
+	return 4;
+}
+
+
+
+/*
  * Init of minidisk device
  */
 
@@ -365,9 +464,9 @@ mdisk_rw_io_clustered (mdisk_Dev *dev,
 	iob->bio_list     = virt_to_phys(bio_array);
 	
 	rc = dia250(iob,RW_BIO);
-	rc = (rc == 8) ? 0 : rc;
 	return rc;
 }
+
 
 
 /*
@@ -507,7 +606,7 @@ void mdisk_request(void)
 #else
 						 MDISK_ASYNC
 #endif
-			)) != 0 ) {
+			)) > 8 ) {
 			printk(KERN_WARNING "mnd%c: %s request failed rc %d"
 			       " sector %ld nr_sectors %ld \n",
 			       DEVICE_NR(CURRENT_DEV),
@@ -524,6 +623,9 @@ void mdisk_request(void)
 #ifdef CONFIG_MDISK_SYNC
 		mdisk_end_request(dev->nr_bhs);
 #else
+		if (rc == 0)
+		        mdisk_end_request(dev->nr_bhs);
+		else
 		return;
 #endif	
 	}
@@ -627,8 +729,7 @@ __initfunc(int mdisk_init(void))
 	max_sectors[MAJOR_NR]   = mdisk_maxsectors;
 	
 	for (i=0;i<MDISK_DEVS;i++) {
-		mdisk_sizes[i] = mdisk_setup_data.size[i];
-		if (mdisk_sizes[i] == 0) {
+		if (mdisk_setup_data.vdev[i] == 0) {
 			continue;
 		}
 		/* Added block HSM 12/03/99 */
@@ -636,7 +737,7 @@ __initfunc(int mdisk_init(void))
 				 mdisk_handler, 0, "mnd",
 				 &(mdisk_devices[i].dev_status)) ){
 			printk ( KERN_WARNING "mnd: Cannot acquire I/O irq of"
-				 " %4X for paranoia reasons, skipping\n",
+				 " %4lX for paranoia reasons, skipping\n",
 				 mdisk_setup_data.vdev[i]);
 			continue;
 		}
@@ -647,6 +748,9 @@ __initfunc(int mdisk_init(void))
 		dev->bio=mdisk_bio[i];
 		dev->iob=&mdisk_iob[i];
 		dev->vdev = mdisk_setup_data.vdev[i];
+
+		if ( mdisk_setup_data.size[i] == 0 )
+	 		rc = mdisk_read_label(dev, i);
 		dev->size = mdisk_setup_data.size[i] * 2; /* buffer 512 b */
 		dev->blksize = mdisk_setup_data.blksize[i]; 
 		dev->tqueue.routine = do_mdisk_bh;
@@ -658,6 +762,7 @@ __initfunc(int mdisk_init(void))
 		  dev->blkmult==4?2:
 		  dev->blkmult==8?3:-1;
 
+		mdisk_sizes[i] = mdisk_setup_data.size[i];
 		mdisk_blksizes[i]  = mdisk_setup_data.blksize[i];
 		mdisk_hardsects[i] = mdisk_setup_data.blksize[i];
 
