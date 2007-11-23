@@ -280,7 +280,9 @@ date_dos2unix(struct smb_sb_info *server, __u16 date, __u16 time)
 	int month, year;
 	time_t secs;
 
-	month = ((date >> 5) & 15) - 1;
+	/* first subtract and mask after that... Otherwise, if
+	   date == 0, bad things happen */
+	month = ((date >> 5) - 1) & 15;
 	year = date >> 9;
 	secs = (time & 31) * 2 + 60 * ((time >> 5) & 63) + (time >> 11) * 3600 + 86400 *
 	    ((date & 31) - 1 + day_n[month] + (year / 4) + year * 365 - ((year & 3) == 0 &&
@@ -299,6 +301,11 @@ date_unix2dos(struct smb_sb_info *server,
 	int day, year, nl_day, month;
 
 	unix_date = utc2local(server, unix_date);
+
+	/* Jan 1 GMT 00:00:00 1980. But what about another time zone? */
+	if (unix_date < 315532800)
+		unix_date = 315532800;
+
 	*time = (unix_date % 60) / 2 +
 		(((unix_date / 60) % 60) << 5) +
 		(((unix_date / 3600) % 24) << 11);

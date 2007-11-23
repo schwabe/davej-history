@@ -106,7 +106,6 @@ asmlinkage void stack_segment(void);
 asmlinkage void general_protection(void);
 asmlinkage void page_fault(void);
 asmlinkage void coprocessor_error(void);
-asmlinkage void reserved(void);
 asmlinkage void alignment_check(void);
 asmlinkage void spurious_interrupt_bug(void);
 asmlinkage void machine_check(void);
@@ -246,7 +245,6 @@ DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
 DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
 DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
-DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
 /* I don't have documents for this but it does seem to cover the cache
    flush from user space exception some people get. */
 DO_ERROR(19, SIGSEGV, "cache flush denied", cache_flush_denied, current)

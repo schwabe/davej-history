@@ -63,7 +63,6 @@ extern int msnd_pinnacle_init(void);
 extern int init_solo1(void);
 extern int init_ymf7xxsb_module(void);
 extern int cs_probe(void);
-extern int init_emu10k1(void);
 extern int cs4281_probe(void);
 extern void init_vwsnd(void);
 extern int ymf_probe(void);
@@ -434,9 +433,6 @@ int soundcore_init(void)
 #endif
 #ifdef CONFIG_SOUND_CS4281
 	cs4281_probe();
-#endif
-#ifdef CONFIG_SOUND_EMU10K1
-	init_emu10k1();
 #endif
 #ifdef CONFIG_SOUND_YMFPCI
 	ymf_probe();

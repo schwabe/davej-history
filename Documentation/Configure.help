@@ -5895,6 +5895,25 @@ CONFIG_COMX_HW_MIXCOM
   If you want to compile this as a module, say M and read
   Documentation/modules.txt. The module will be called comx-hw-mixcom.o.
 
+i810 TCO support
+CONFIG_I810_TCO
+  Hardware driver for the TCO timer built into the Intel i810 and i815
+  chipset family. The TCO (Total Cost of Ownership) timer is a watchdog
+  timer that will reboot the machine after it's second expiration. The
+  expiration time can be configured by commandline argument
+  "i810_margin=<n>" where <n> is the counter initial value. It is
+  decremented every 0.6 secs, the default is 50 which gives a timeout
+  of 30 seconds and one minute until reset.
+
+  On some motherboards the driver may fail to reset the chipset's
+  NO_REBOOT flag which prevents the watchdog from rebooting the machine.
+  If this is the case you will get a kernel message like
+  "i810tco init: failed to reset NO_REBOOT flag".
+
+  If you want to compile this as a module, say M and read
+  Documentation/modules.txt. The module will be called
+  i810-tco.o.
+
 MultiGate Cisco-HDLC and synchronous PPP protocol support
 CONFIG_COMX_PROTO_PPP
   Cisco-HDLC and synchronous PPP protocol driver for all MultiGate boards. 
@@ -7511,13 +7530,6 @@ CONFIG_QUOTA
   ftp://metalab.unc.edu/pub/Linux/docs/HOWTO/mini. Probably the quota
   support is only useful for multi user systems. If unsure, say N.
 
-Acorn's ADFS filesystem support (read only) (EXPERIMENTAL)
-CONFIG_ADFS_FS
-  The Advanced Disk File System is the filesystem used on floppy and
-  hard disks by Acorn Systems.  Currently in development, as a read-
-  only driver for hard disks.  These should be the first partition
-  (eg. /dev/[sh]d?1) on each of your drives.  If unsure, say N.
-
 Support for USB
 CONFIG_USB
   Universal Serial Bus (USB) is a specification for a serial bus
@@ -7889,6 +7901,16 @@ CONFIG_USB_SERIAL_DIGI_ACCELEPORT
   inserted in and removed from the running kernel whenever you want).
   The module will be called digi_acceleport.o. If you want to compile 
   it as a module, say M here and read Documentation/modules.txt.
+
+USB Empeg empeg-car Mark I/II Driver
+CONFIG_USB_SERIAL_EMPEG
+  Say Y here if you want to connect to your Empeg empeg-car Mark I/II
+  mp3 player via USB.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called empeg.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
 
 USB Serial Converter verbose debug
 CONFIG_USB_SERIAL_DEBUG
@@ -9696,6 +9718,24 @@ CONFIG_PRINTER
   If you have more than 3 printers, you need to increase the LP_NO
   variable in lp.c.
 
+Amiga built-in parallel port support
+CONFIG_PARPORT_AMIGA
+  Say Y here if you need support for the parallel port hardware on
+  Amiga machines. This code is also available as a module (say M),
+  called parport_amiga.o. If in doubt, saying N is the safe plan.
+
+Atari built-in parallel port support
+CONFIG_PARPORT_ATARI
+  Say Y here if you need support for the parallel port hardware on
+  Atari machines. This code is also available as a module (say M),
+  called parport_atari.o. If in doubt, saying N is the safe plan.
+
+Multiface 3 parallel port card support
+CONFIG_PARPORT_MFC3
+  Say Y here if you need parallel port support for the MFC3 card.
+  This code is also available as a module (say M), called
+  parport_mfc3.o. If in doubt, saying N is the safe plan.
+
 Support IEEE1284 status readback
 CONFIG_PRINTER_READBACK
   If your printer conforms to IEEE 1284, it may be able to provide a
@@ -10741,17 +10781,6 @@ CONFIG_JOY_AMIGA
   Say Y here if you have an Amiga with a digital joystick connected
   to it. For more information on how to use the driver please read
   Documentation/joystick.txt
-
-Atomwide Serial Support
-CONFIG_ATOMWIDE_SERIAL
-  If you have an Atomwide Serial card for an Acorn system, say Y to
-  this option. The driver can handle 1, 2, or 3 port cards.
-  If unsure, say N
-
-The Serial Port Dual Serial Port
-CONFIG_DUALSP_SERIAL
-  If you have the Serial Port's dual serial card for an Acorn system,
-  say Y to this option. If unsure, say N
 
 NetWinder Button
 CONFIG_NWBUTTON
@@ -12814,22 +12843,6 @@ CONFIG_RADIO_ZOLTRIX
 ZOLTRIX I/O port (0x20c or 0x30c)
 CONFIG_RADIO_ZOLTRIX_PORT
   Enter the I/O port of your Zoltrix radio card.
-
-ADS Cadet AM/FM Tuner
-CONFIG_RADIO_CADET
-  Say Y here if this is your AM/FM radio card.
-
-  In order to control your radio card, you will need to use programs
-  that are compatible with the Video for Linux API. Information on 
-  this API and pointers to "v4l" programs may be found on the WWW at
-  http://roadrunner.swansea.uk.linux.org/v4l.shtml; to browse the WWW,
-  you need to have access to a machine on the Internet that has a 
-  program like lynx or netscape.
-
-  If you want to compile this driver as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want),
-  say M here and read Documentation/modules.txt. The module will be
-  called radio-cadet.o
 
 Miro PCM20 Radio
 CONFIG_RADIO_MIROPCM20

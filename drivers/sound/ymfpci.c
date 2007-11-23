@@ -34,6 +34,8 @@
  *      ? underused structure members
  */
 
+#define YMFPCI_HAVE_MIDI_SUPPORT
+
 #include <linux/module.h>
 #include <linux/ioport.h>
 #include <linux/pci.h>
@@ -45,6 +47,10 @@
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/uaccess.h>
+
+#ifdef YMFPCI_HAVE_MIDI_SUPPORT
+# include "sound_config.h"
+#endif
 
 #include "ymfpci.h"
 
@@ -1870,6 +1876,90 @@ static int ymf_ioctl(struct inode *inode, struct file *file,
 	return -ENOTTY;
 }
 
+#ifdef YMFPCI_HAVE_MIDI_SUPPORT
+/* MIDI stuff */
+
+/* */
+
+static int ymfpci_setup_legacy( ymfpci_t *codec, struct pci_dev *pcidev )
+{
+	int v;
+	int mpuio=-1, oplio=-1;
+
+	switch(codec->iomidi) {
+	case 0x330:
+		mpuio = 0;
+		break;
+	case 0x300:
+		mpuio = 1;
+		break;
+	case 0x332:
+		mpuio = 2;
+		break;
+	case 0x334:
+		mpuio = 3;
+		break;
+	default:
+		break;
+	}
+
+	switch(codec->iosynth) {
+	case 0x388:
+		oplio = 0;
+		break;
+	case 0x398:
+		oplio = 1;
+		break;
+	case 0x3a0:
+		oplio = 2;
+		break;
+	case 0x3a8:
+		oplio = 3;
+		break;
+	default:
+		break;
+	}
+
+	if ( mpuio >= 0 || oplio >= 0 ) {
+		v = 0x003e;
+		pci_write_config_word(pcidev, PCIR_LEGCTRL, v);
+	
+		switch( pcidev->device ) {
+		case PCI_DEVICE_ID_YAMAHA_724:
+		case PCI_DEVICE_ID_YAMAHA_740:
+		case PCI_DEVICE_ID_YAMAHA_724F:
+		case PCI_DEVICE_ID_YAMAHA_740C:
+			v = 0x8800;
+			if ( mpuio >= 0 ) { v|= (mpuio<<4)&0x03; }
+			if ( oplio >= 0 ) { v|= (oplio&0x03); }
+			pci_write_config_word(pcidev, PCIR_ELEGCTRL, v);
+			break;
+
+		case PCI_DEVICE_ID_YAMAHA_744:
+		case PCI_DEVICE_ID_YAMAHA_754:
+			v = 0x8800;
+			pci_write_config_word(pcidev, PCIR_ELEGCTRL, v);
+			if ( mpuio >= 0 ) {
+				pci_write_config_word(pcidev, PCIR_OPLADR, codec->iosynth);
+			}
+			if ( oplio >= 0 ) {
+				pci_write_config_word(pcidev, PCIR_MPUADR, codec->iomidi);
+			}
+		break;
+
+		default:
+			printk(KERN_ERR "ymfpci: Invalid device ID: %d\n",pcidev->device);
+			return -EINVAL;
+			break;
+		}
+	}
+
+	return 0;
+}
+#endif /* YMFPCI_HAVE_MIDI_SUPPORT */
+
+/* */
+
 static int ymf_open(struct inode *inode, struct file *file)
 {
 	ymfpci_t *unit;
@@ -1895,7 +1985,11 @@ static int ymf_open(struct inode *inode, struct file *file)
 
 	/* XXX Semaphore here! */
 	for (unit = ymf_devs; unit != NULL; unit = unit->next) {
+#if 0
 		if (unit->inst == instance) break;
+#else
+		if (!((unit->dev_audio ^ minor) & ~0x0f)) break;
+#endif
 	}
 	if (unit == NULL) return -ENODEV;
 
@@ -2234,6 +2328,20 @@ static int ymf_ac97_init(ymfpci_t *card, int num_ac97)
 	return 0;
 }
 
+/* */
+#ifdef YMFPCI_HAVE_MIDI_SUPPORT
+# ifdef MODULE
+static int mpu_io     = 0;
+static int synth_io   = 0;
+MODULE_PARM(mpu_io, "i");
+MODULE_PARM(synth_io, "i");
+# else
+static int mpu_io     = 0x330;
+static int synth_io   = 0x388;
+# endif
+#endif /* YMFPCI_HAVE_MIDI_SUPPORT */
+/* */
+
 static int /* __init */
 ymf_install(struct pci_dev *pcidev, int instance, int devx)
 {
@@ -2267,6 +2375,15 @@ ymf_install(struct pci_dev *pcidev, int instance, int devx)
 		ymfpci_free(codec);
 		return -ENODEV;
 	}
+
+#ifdef YMFPCI_HAVE_MIDI_SUPPORT
+	codec->iomidi = mpu_io;
+	codec->iosynth = synth_io;
+	if (ymfpci_setup_legacy(codec, pcidev) < 0) {
+		ymfpci_free(codec);
+		return -ENODEV;
+	}
+#endif
 
 	ymfpci_download_image(codec);
 
@@ -2304,6 +2421,28 @@ ymf_install(struct pci_dev *pcidev, int instance, int devx)
 		return err;
 	}
 
+#ifdef YMFPCI_HAVE_MIDI_SUPPORT
+	memset (&codec->opl3_data, 0, sizeof (struct address_info));
+	memset (&codec->mpu_data,  0, sizeof (struct address_info));
+
+	codec->opl3_data.name = "ymfpci";
+	codec->mpu_data.name  = "ymfpci";
+
+	codec->opl3_data.io_base = codec->iosynth;
+	codec->opl3_data.irq     = -1;
+
+	codec->mpu_data.io_base  = codec->iomidi;
+	codec->mpu_data.irq      = -1;
+
+	if ( mpu_io > 0 )
+	{
+		if ( probe_uart401(&codec->mpu_data) ) {
+			attach_uart401(&codec->mpu_data);
+		}
+	}
+
+#endif /* YMFPCI_HAVE_MIDI_SUPPORT */
+
 	codec->next = ymf_devs;
 	ymf_devs = codec;
 
@@ -2339,6 +2478,11 @@ ymfpci_free(ymfpci_t *codec)
 		unregister_sound_mixer(codec->ac97_codec[0]->dev_mixer);
 		kfree(codec->ac97_codec[0]);
 	}
+#ifdef YMFPCI_HAVE_MIDI_SUPPORT
+	if (codec->iomidi) {
+		unload_uart401(&(codec->mpu_data));
+	}
+#endif /* YMFPCI_HAVE_MIDI_SUPPORT */
 	kfree(codec);
 }
 

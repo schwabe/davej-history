@@ -422,7 +422,18 @@ function define_string () {
 function string () {
 	old=$(eval echo "\${$2}")
 	def=${old:-$3}
-	readln "$1 ($2) [$def] " "$def" "$old"
+	while :; do
+          if [ "$old" = "?" ]; then
+             readln "$1 ($2) [$def] " "$def" ""
+          else
+	     readln "$1 ($2) [$def] " "$def" "$old"
+          fi
+	  if [ "$ans" = "?" ]; then
+	    help "$2"
+	  else
+	    break
+	  fi
+	done
 	define_string "$2" "$ans"
 }
 #

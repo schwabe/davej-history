@@ -27,6 +27,8 @@
                     : is running from all accounts.
                     
   Alan Cox          : Removed 1.2 support, added 2.1 extra counters.
+
+  Arnaldo Melo	    : release resources on failure in cs89x0_probe1
 */
 
 static char *version =
@@ -249,13 +251,17 @@ __initfunc(static int cs89x0_probe1(struct device *dev, int ioaddr))
 	struct net_local *lp;
 	static unsigned version_printed = 0;
 	int i;
+	char priv_alloced_here = 0;
 	unsigned rev_type = 0;
 	int eeprom_buff[CHKSUM_LEN];
 
 	/* Initialize the device structure. */
 	if (dev->priv == NULL) {
 		dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+		if (!dev->priv)
+			return -ENOMEM;
                 memset(dev->priv, 0, sizeof(struct net_local));
+		priv_alloced_here = 1;
         }
 	lp = (struct net_local *)dev->priv;
 
@@ -265,12 +271,12 @@ __initfunc(static int cs89x0_probe1(struct device *dev, int ioaddr))
 	if (ioaddr & 1) {
 		ioaddr &= ~1;
 		if ((inw(ioaddr + ADD_PORT) & ADD_MASK) != ADD_SIG)
-			return ENODEV;
+			goto err;
 		outw(PP_ChipID, ioaddr + ADD_PORT);
 	}
 
 	if (inw(ioaddr + DATA_PORT) != CHIP_EISA_ID_SIG)
-		return ENODEV;
+		goto err;
 
 	/* Fill in the 'dev' fields. */
 	dev->base_addr = ioaddr;
@@ -388,6 +394,11 @@ __initfunc(static int cs89x0_probe1(struct device *dev, int ioaddr))
 
 	printk("\n");
 	return 0;
+err:	if (priv_alloced_here) {
+		kfree(dev->priv);
+		dev->priv = NULL;
+	}
+	return -ENODEV;
 }
 
 

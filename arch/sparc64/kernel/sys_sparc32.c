@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.107.2.14 2000/10/10 04:50:50 davem Exp $
+/* $Id: sys_sparc32.c,v 1.107.2.16 2000/12/20 02:45:00 anton Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3462,7 +3462,7 @@ asmlinkage int sys32_get_kernel_syms(struct kernel_sym32 *table)
 	set_fs (KERNEL_DS);
 	sys_get_kernel_syms(tbl);
 	set_fs (old_fs);
-	for (i = 0; i < len; i++, table += sizeof (struct kernel_sym32)) {
+	for (i = 0; i < len; i++, table++) {
 		if (put_user (tbl[i].value, &table->value) ||
 		    copy_to_user (table->name, tbl[i].name, 60))
 			break;
@@ -3553,6 +3553,12 @@ struct nfsctl_fhparm32 {
 	s32			gf32_version;
 };
 
+struct nfsctl_fdparm32 {
+	struct sockaddr		gd32_addr;
+	s8			gd32_path[NFS_MAXPATHLEN+1];
+	s32			gd32_version;
+};
+
 struct nfsctl_arg32 {
 	s32			ca32_version;	/* safeguard */
 	union {
@@ -3561,6 +3567,7 @@ struct nfsctl_arg32 {
 		struct nfsctl_export32	u32_export;
 		struct nfsctl_uidmap32	u32_umap;
 		struct nfsctl_fhparm32	u32_getfh;
+		struct nfsctl_fdparm32  u32_getfd;
 		u32			u32_debug;
 	} u;
 #define ca32_svc	u.u32_svc
@@ -3569,6 +3576,7 @@ struct nfsctl_arg32 {
 #define ca32_umap	u.u32_umap
 #define ca32_getfh	u.u32_getfh
 #define ca32_authd	u.u32_authd
+#define ca32_getfd	u.u32_getfd
 #define ca32_debug	u.u32_debug
 };
 
@@ -3698,6 +3706,22 @@ static int nfs_getfh32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32
 	return err;
 }
 
+static int nfs_getfd32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
+{
+	int err;
+	
+	err = __get_user(karg->ca_version, &arg32->ca32_version);
+	err |= copy_from_user(&karg->ca_getfd.gd_addr,
+			  &arg32->ca32_getfd.gd32_addr,
+			  (sizeof(struct sockaddr)));
+	err |= copy_from_user(&karg->ca_getfd.gd_path,
+			  &arg32->ca32_getfd.gd32_path,
+			  (NFS_MAXPATHLEN+1));
+	err |= __get_user(karg->ca_getfd.gd_version,
+		      &arg32->ca32_getfd.gd32_version);
+	return err;
+}
+
 static int nfs_getfh32_res_trans(union nfsctl_res *kres, union nfsctl_res32 *res32)
 {
 	int err;
@@ -3739,6 +3763,7 @@ int asmlinkage sys32_nfsservctl(int cmd, struct nfsctl_arg32 *arg32, union nfsct
 		err = nfs_clnt32_trans(karg, arg32);
 		break;
 	case NFSCTL_EXPORT:
+	case NFSCTL_UNEXPORT:
 		err = nfs_exp32_trans(karg, arg32);
 		break;
 	/* This one is unimplemented, be we're ready for it. */
@@ -3747,6 +3772,9 @@ int asmlinkage sys32_nfsservctl(int cmd, struct nfsctl_arg32 *arg32, union nfsct
 		break;
 	case NFSCTL_GETFH:
 		err = nfs_getfh32_trans(karg, arg32);
+		break;
+	case NFSCTL_GETFD:
+		err = nfs_getfd32_trans(karg, arg32);
 		break;
 	case NFSCTL_LOCKD:
 		/* We still have to copy over the version
@@ -3765,7 +3793,11 @@ int asmlinkage sys32_nfsservctl(int cmd, struct nfsctl_arg32 *arg32, union nfsct
 	err = sys_nfsservctl(cmd, karg, kres);
 	set_fs(oldfs);
 
-	if(!err && cmd == NFSCTL_GETFH)
+	if (err)
+		goto done;
+
+	if((cmd == NFSCTL_GETFH) ||
+	   (cmd == NFSCTL_GETFD))
 		err = nfs_getfh32_res_trans(kres, res32);
 
 done:

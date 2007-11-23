@@ -36,6 +36,9 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/smp.h>
+#include "cpcmd.h"
+
+extern void reipl(int ipl_device);
 
 /*
  * Machine setup..

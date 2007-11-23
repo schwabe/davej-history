@@ -283,6 +283,7 @@ struct streamer_private {
 	__u16 streamer_addr_table_addr, streamer_parms_addr;
 	__u16 mac_rx_buffer;
 	__u8 streamer_laa[6];
+        spinlock_t lock;
 };
 
 struct streamer_adapter_addr_table {

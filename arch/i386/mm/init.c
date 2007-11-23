@@ -27,6 +27,7 @@
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 #include <asm/fixmap.h>
+#include <asm/e820.h>
 
 extern void show_net_buffers(void);
 extern unsigned long init_smp_mappings(unsigned long);
@@ -384,8 +385,6 @@ __initfunc(void test_wp_bit(void))
 		printk(".\n");
 }
 
-extern unsigned long i386_endbase;
-
 __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	unsigned long start_low_mem = PAGE_SIZE;
@@ -417,15 +416,36 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 #endif
 	start_mem = PAGE_ALIGN(start_mem);
 
-	while (start_low_mem < i386_endbase) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(start_low_mem)].flags);
-		start_low_mem += PAGE_SIZE;
+	for (tmp = __pa(start_low_mem); tmp < __pa(end_mem);
+	     tmp += PAGE_SIZE) {
+		struct page * page = mem_map + (tmp >> PAGE_SHIFT);
+		int i;
+		extern struct e820map e820;
+
+		/* don't include kernel memory and bootmem allocations */
+		if (tmp >= 0x100000 && tmp < __pa(start_mem))
+			continue;
+
+		for (i = 0; i < e820.nr_map; i++) {
+			unsigned long long start, end;
+			/* RAM? */
+			if (e820.map[i].type != E820_RAM)
+				continue;
+			start = e820.map[i].addr;
+			if (start >= 0xffffffff)
+				continue;
+			end = e820.map[i].addr + e820.map[i].size;
+			if (start >= end)
+				continue;
+			if (end > 0xffffffff)
+				end = 0xffffffff;
+
+			/* start and end are valid here */
+			if (start <= tmp && tmp+PAGE_SIZE <= end)
+				clear_bit(PG_reserved, &page->flags);
+		}
 	}
 
-	while (start_mem < end_mem) {
-		clear_bit(PG_reserved, &mem_map[MAP_NR(start_mem)].flags);
-		start_mem += PAGE_SIZE;
-	}
 	for (tmp = PAGE_OFFSET ; tmp < end_mem ; tmp += PAGE_SIZE) {
 		if (tmp >= MAX_DMA_ADDRESS)
 			clear_bit(PG_DMA, &mem_map[MAP_NR(tmp)].flags);

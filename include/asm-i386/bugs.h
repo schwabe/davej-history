@@ -188,6 +188,7 @@ __asm__(".align 4\nvide: ret");
 __initfunc(static void check_amd_k6(void))
 {
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD &&
+	    boot_cpu_data.x86 == 5 &&
 	    boot_cpu_data.x86_model == 6 &&
 	    boot_cpu_data.x86_mask == 1)
 	{

@@ -105,6 +105,122 @@ struct {
 } mdisk_setup_data;
 
 /*
+ * The 'low level' IO function
+ */
+
+static __inline__ int
+dia250(void* iob,int cmd)
+{
+	int rc;
+	
+	iob = (void*) virt_to_phys(iob);
+
+	asm volatile ("    lr    2,%1\n"
+		      "    lr    3,%2\n"
+		      "    .long 0x83230250\n"
+		      "    lr    %0,3"
+		      : "=d" (rc)
+		      : "d" (iob) , "d" (cmd)
+		      : "2", "3" );
+	return rc;
+}
+
+/*
+ * The device characteristics function
+ */
+
+static __inline__ int
+dia210(void* devchar)
+{
+	int rc;
+
+	devchar = (void*) virt_to_phys(devchar);
+
+	asm volatile ("    lr    2,%1\n"
+		      "    .long 0x83200210\n"
+		      "    ipm   %0\n"
+		      "    srl   %0,28"
+		      : "=d" (rc)
+		      : "d" (devchar)
+		      : "2" );
+	return rc;
+}
+
+
+/*
+ * release of minidisk device
+ */
+
+static __inline__ int
+mdisk_term_io(mdisk_Dev *dev)
+{
+	mdisk_init_io_t *iob = (mdisk_init_io_t*) dev->iob;
+	
+	memset(iob,0,sizeof(mdisk_init_io_t));
+	
+	iob->dev_nr = dev->vdev;
+	
+	return dia250(iob,TERM_BIO);
+}
+
+
+/*
+ * Init of minidisk device
+ */
+
+static __inline__ int
+mdisk_init_io(mdisk_Dev *dev,int blocksize,int offset,int size)
+{
+	mdisk_init_io_t *iob = (mdisk_init_io_t*) dev->iob;
+	int rc;
+
+	memset(iob,0,sizeof(mdisk_init_io_t));
+	
+	iob->dev_nr = dev->vdev;
+	iob->block_size = blocksize;
+	iob->offset     = offset;
+	iob->start_block= 0;
+	iob->end_block  = size;
+	
+	rc = dia250(iob,INIT_BIO);
+	
+	/*
+	 * clear for following io once
+	 */
+	
+	memset(iob,0,sizeof(mdisk_rw_io_t));
+	
+	return rc;
+}
+
+
+/*
+ * setup and start of minidisk io request
+ */
+
+static __inline__ int
+mdisk_rw_io_clustered (mdisk_Dev *dev,
+                       mdisk_bio_t* bio_array,
+                       int length,
+                       int req,
+                       int sync)
+{
+	int rc;
+	mdisk_rw_io_t *iob = dev->iob;
+	
+	iob->dev_nr      = dev->vdev;
+	iob->key         = 0;
+	iob->flags       = sync;
+	
+	iob->block_count = length;
+	iob->interrupt_params = req;
+	iob->bio_list     = virt_to_phys(bio_array);
+	
+	rc = dia250(iob,RW_BIO);
+	return rc;
+}
+
+/*
  * Parameter parsing function, called from init/main.c
  * vdev    : virtual device number
  * size    : size in kbyte
@@ -117,7 +233,7 @@ __initfunc(void mdisk_setup(char *str,int *ints))
 {
 	char *cur = str;
 	int vdev, size, offset=0,blksize;
-	static i = 0;
+static	int i = 0;
 	if (!i)
 	  memset(&mdisk_setup_data,0,sizeof(mdisk_setup_data));
 
@@ -280,48 +396,7 @@ static struct file_operations mdisk_fops = {
 	NULL,          /* mdisk_lock */
 };
 
-/*
- * The 'low level' IO function
- */
 
-
-static __inline__ int
-dia250(void* iob,int cmd)
-{
-	int rc;
-	
-	iob = (void*) virt_to_phys(iob);
-
-	asm volatile ("    lr    2,%1\n"
-		      "    lr    3,%2\n"
-		      "    .long 0x83230250\n"
-		      "    lr    %0,3"
-		      : "=d" (rc)
-		      : "d" (iob) , "d" (cmd)
-		      : "2", "3" );
-	return rc;
-}
-
-/*
- * The device characteristics function
- */
-
-static __inline__ int
-dia210(void* devchar)
-{
-	int rc;
-
-	devchar = (void*) virt_to_phys(devchar);
-
-	asm volatile ("    lr    2,%1\n"
-		      "    .long 0x83200210\n"
-		      "    ipm   %0\n"
-		      "    srl   %0,28"
-		      : "=d" (rc)
-		      : "d" (devchar)
-		      : "2" );
-	return rc;
-}
 /*
  * read the label of a minidisk and extract its characteristics
  */
@@ -394,80 +469,6 @@ mdisk_read_label (mdisk_Dev *dev, int i)
 	}
 	return 4;
 }
-
-
-
-/*
- * Init of minidisk device
- */
-
-static __inline__ int
-mdisk_init_io(mdisk_Dev *dev,int blocksize,int offset,int size)
-{
-	mdisk_init_io_t *iob = (mdisk_init_io_t*) dev->iob;
-	int rc;
-
-	memset(iob,0,sizeof(mdisk_init_io_t));
-	
-	iob->dev_nr = dev->vdev;
-	iob->block_size = blocksize;
-	iob->offset     = offset;
-	iob->start_block= 0;
-	iob->end_block  = size;
-	
-	rc = dia250(iob,INIT_BIO);
-	
-	/*
-	 * clear for following io once
-	 */
-	
-	memset(iob,0,sizeof(mdisk_rw_io_t));
-	
-	return rc;
-}
-
-/*
- * release of minidisk device
- */
-
-static __inline__ int
-mdisk_term_io(mdisk_Dev *dev)
-{
-	mdisk_init_io_t *iob = (mdisk_init_io_t*) dev->iob;
-	
-	memset(iob,0,sizeof(mdisk_init_io_t));
-	
-	iob->dev_nr = dev->vdev;
-	
-	return dia250(iob,TERM_BIO);
-}
-
-/*
- * setup and start of minidisk io request
- */
-
-static __inline__ int
-mdisk_rw_io_clustered (mdisk_Dev *dev,
-                       mdisk_bio_t* bio_array,
-                       int length,
-                       int req,
-                       int sync)
-{
-	int rc;
-	mdisk_rw_io_t *iob = dev->iob;
-	
-	iob->dev_nr      = dev->vdev;
-	iob->key         = 0;
-	iob->flags       = sync;
-	
-	iob->block_count = length;
-	iob->interrupt_params = req;
-	iob->bio_list     = virt_to_phys(bio_array);
-	
-	rc = dia250(iob,RW_BIO);
-	return rc;
-}
-
 
 
 /*
@@ -640,11 +641,8 @@ void mdisk_request(void)
  */
 void do_mdisk_interrupt(struct pt_regs *regs, __u16 code)
 {
-        u16 code;
 	mdisk_Dev *dev;
 	
-	code = S390_lowcore.cpu_addr;
-
 	if ((code >> 8) != 0x03) {
 	  printk("mnd: wrong sub-interruption code %d",code>>8);
 	  return;

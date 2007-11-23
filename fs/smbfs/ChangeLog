@@ -1,5 +1,10 @@
 ChangeLog for smbfs.
 
+2000-11-22 Igor Zhbanov <bsg@uniyar.ac.ru>
+
+	* proc.c: fixed date_unix2dos for dates earlier than 01/01/1980
+	  and date_dos2unix for date==0
+
 2000-11-04 Urban Widmark <urban@svenskatest.se>
 
 	* proc.c, sock.c: adjust max parameters & max data to follow max_xmit
@@ -41,7 +46,7 @@ ChangeLog for smbfs.
 	* proc.c: removed support for old protocol levels. It didn't work
 	  anyway and was cluttering things up a lot.
 
-2000-01-?? cpg@aladdin.de
+2000-01-03 Christian Groessler <cpg@aladdin.de>
 
 	* proc.c: added posix semantics for unlink
 

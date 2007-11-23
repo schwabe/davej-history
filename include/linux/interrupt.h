@@ -5,6 +5,7 @@
 #include <linux/kernel.h>
 #include <asm/bitops.h>
 #include <asm/atomic.h>
+#include <asm/ptrace.h>
 
 struct irqaction {
 	void (*handler)(int, void *, struct pt_regs *);

@@ -680,7 +680,7 @@ extern unsigned long i386_endbase;
  */
 unsigned long __init smp_alloc_memory(unsigned long mem_base)
 {
-	if (mem_base + PAGE_SIZE > i386_endbase)
+	if (mem_base + PAGE_SIZE > i386_endbase + PAGE_OFFSET)
 		panic("smp_alloc_memory: Insufficient low memory for kernel trampoline 0x%lx.", mem_base);
 	trampoline_base = (void *)mem_base;
 	return mem_base + PAGE_SIZE;

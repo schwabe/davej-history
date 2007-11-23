@@ -41,7 +41,9 @@ EXPORT_SYMBOL(s390_request_irq_special);
 EXPORT_SYMBOL(s390_device_register);
 EXPORT_SYMBOL(s390_device_unregister);
 
+#ifdef	__SMP__
 EXPORT_SYMBOL(s390_bh_lock);
+#endif
 
 EXPORT_SYMBOL(ccw_alloc_request);
 EXPORT_SYMBOL(ccw_free_request);

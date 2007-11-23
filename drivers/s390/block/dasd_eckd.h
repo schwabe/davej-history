@@ -282,5 +282,6 @@ typedef struct dasd_eckd_confdata_t {
 } __attribute__ ((packed)) dasd_eckd_confdata_t;
 
 int dasd_eckd_init( void );
+void dasd_eckd_cleanup( void );
 
 #endif /* DASD_ECKD_H */

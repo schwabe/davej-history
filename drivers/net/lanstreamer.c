@@ -58,6 +58,7 @@
  *            First release to the public
  *  03/03/00 - Merged to kernel, indented -kr -i8 -bri0, fixed some missing
  *		malloc free checks, reviewed code. <alan@redhat.com>
+ *  12/18/00 - Made it SMP safe   - George Staikos <staikos@0wned.org>
  *  
  *  To Do:
  *
@@ -108,6 +109,7 @@
 #include <net/checksum.h>
 
 #include <asm/io.h>
+#include <asm/spinlock.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 
@@ -284,6 +286,8 @@ static int __init streamer_init(struct device *dev)
 
 	streamer_priv = (struct streamer_private *) dev->priv;
 	streamer_mmio = streamer_priv->streamer_mmio;
+
+        streamer_priv->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
 
 	printk("%s \n", version);
 	printk(KERN_INFO "%s: IBM PCI tokenring card. I/O at %hx, MMIO at %p, using irq %d\n",
@@ -823,6 +827,7 @@ static void streamer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	__u16 misr;
 	__u16 sisrmask;
 
+        spin_lock(&(streamer_priv->lock));
 	sisrmask = SISR_MI;
 	writew(~sisrmask, streamer_mmio + SISR_MASK_RUM);
 	sisr = readw(streamer_mmio + SISR);
@@ -831,6 +836,7 @@ static void streamer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	writew(~misr, streamer_mmio + MISR_RUM);
 
 	if (!sisr) {		/* Interrupt isn't for us */
+                spin_unlock(&(streamer_priv->lock));
 		return;
 	}
 
@@ -919,6 +925,7 @@ static void streamer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	dev->interrupt = 0;
 	writew(SISR_MI, streamer_mmio + SISR_MASK_SUM);
+        spin_unlock(&(streamer_priv->lock));
 }
 
 
@@ -927,10 +934,13 @@ static int streamer_xmit(struct sk_buff *skb, struct device *dev)
 	struct streamer_private *streamer_priv =
 	    (struct streamer_private *) dev->priv;
 	__u8 *streamer_mmio = streamer_priv->streamer_mmio;
+        int flags;
 
 	if (test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
 		return 1;
 	}
+
+        spin_lock_irqsave(&(streamer_priv->lock), flags);
 
 	if (streamer_priv->free_tx_ring_entries) {
 		streamer_priv->streamer_tx_ring[streamer_priv->tx_ring_free].status = 0;
@@ -956,8 +966,10 @@ static int streamer_xmit(struct sk_buff *skb, struct device *dev)
 
 		streamer_priv->tx_ring_free = (streamer_priv->tx_ring_free + 1) & (STREAMER_TX_RING_SIZE - 1);
 		dev->tbusy = 0;
+                spin_unlock_irqrestore(&(streamer_priv->lock), flags);
 		return 0;
 	} else {
+                spin_unlock_irqrestore(&(streamer_priv->lock), flags);
 		return 1;
 	}
 }

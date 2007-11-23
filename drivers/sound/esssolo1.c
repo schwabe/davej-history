@@ -63,7 +63,12 @@
  *    28.10.1999   0.10  More waitqueue races fixed
  *    09.12.1999   0.11  Work around stupid Alpha port issue (virt_to_bus(kmalloc(GFP_DMA)) > 16M)
  *                       Disabling recording on Alpha
- *
+ *    12.01.2000   0.12  Prevent some ioctl's from returning bad count values on underrun/overrun;
+ *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
+ *                       Integrated (aka redid 8-)) APM support patch by Zach Brown
+ *    21.11.2000   0.16  Initialize dma buffers in poll, otherwise poll may return a bogus mask
+ *    12.12.2000   0.17  More dma buffer initializations, patch from
+ *                       Tjeerd Mulder <tjeerd.mulder@fujitsu-siemens.com>
  */
 
 /*****************************************************************************/
@@ -1276,7 +1281,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return 0;
 
         case SNDCTL_DSP_SPEED:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val >= 0) {
 			stop_adc(s);
 			stop_dac(s);
@@ -1303,7 +1309,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return put_user(s->rate, (int *)arg);
 		
         case SNDCTL_DSP_STEREO:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		stop_adc(s);
 		stop_dac(s);
 		s->dma_adc.ready = s->dma_dac.ready = 0;
@@ -1313,7 +1320,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return 0;
 
         case SNDCTL_DSP_CHANNELS:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 0) {
 			stop_adc(s);
 			stop_dac(s);
@@ -1328,7 +1336,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
                 return put_user(AFMT_S16_LE|AFMT_U16_LE|AFMT_S8|AFMT_U8, (int *)arg);
 
 	case SNDCTL_DSP_SETFMT: /* Selects ONE fmt*/
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != AFMT_QUERY) {
 			stop_adc(s);
 			stop_dac(s);
@@ -1354,7 +1363,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return put_user(val, (int *)arg);
 
 	case SNDCTL_DSP_SETTRIGGER:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			if (val & PCM_ENABLE_INPUT) {
 				if (!s->dma_adc.ready && (ret = prog_dmabuf_adc(s)))
@@ -1378,7 +1388,7 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	case SNDCTL_DSP_GETOSPACE:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
-		if (!(s->ena & FMODE_WRITE) && (val = prog_dmabuf_dac(s)) != 0)
+		if (!s->dma_dac.ready && (val = prog_dmabuf_dac(s)) != 0)
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
@@ -1395,7 +1405,7 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	case SNDCTL_DSP_GETISPACE:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
-		if (!(s->ena & FMODE_READ) && (val = prog_dmabuf_adc(s)) != 0)
+		if (!s->dma_adc.ready && (val = prog_dmabuf_adc(s)) != 0)
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
@@ -1413,6 +1423,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
         case SNDCTL_DSP_GETODELAY:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_dac.ready && (val = prog_dmabuf_dac(s)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
                 count = s->dma_dac.count;
@@ -1424,13 +1436,12 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
         case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
+		if (!s->dma_adc.ready && (val = prog_dmabuf_adc(s)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
                 cinfo.bytes = s->dma_adc.total_bytes;
-		count = s->dma_dac.count;
-		if (count < 0)
-			count = 0;
-		cinfo.blocks = count >> s->dma_dac.fragshift;
+                cinfo.blocks = s->dma_adc.count >> s->dma_adc.fragshift;
                 cinfo.ptr = s->dma_adc.hwptr;
 		if (s->dma_adc.mapped)
 			s->dma_adc.count &= s->dma_adc.fragsize-1;
@@ -1440,10 +1451,15 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
         case SNDCTL_DSP_GETOPTR:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_dac.ready && (val = prog_dmabuf_dac(s)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		solo1_update_ptr(s);
                 cinfo.bytes = s->dma_dac.total_bytes;
-                cinfo.blocks = s->dma_dac.count >> s->dma_dac.fragshift;
+		count = s->dma_dac.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_dac.fragshift;
                 cinfo.ptr = s->dma_dac.hwptr;
 		if (s->dma_dac.mapped)
 			s->dma_dac.count &= s->dma_dac.fragsize-1;
@@ -1467,7 +1483,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		return put_user(s->dma_adc.fragsize, (int *)arg);
 
         case SNDCTL_DSP_SETFRAGMENT:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			s->dma_adc.ossfragshift = val & 0xffff;
 			s->dma_adc.ossmaxfrags = (val >> 16) & 0xffff;
@@ -1494,7 +1511,8 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if ((file->f_mode & FMODE_READ && s->dma_adc.subdivision) ||
 		    (file->f_mode & FMODE_WRITE && s->dma_dac.subdivision))
 			return -EINVAL;
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 1 && val != 2 && val != 4)
 			return -EINVAL;
 		if (file->f_mode & FMODE_READ)
@@ -2170,7 +2188,7 @@ static struct initvol {
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.11 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.17 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, pcidev))) {
 		if (pcidev->base_address[0] == 0 ||

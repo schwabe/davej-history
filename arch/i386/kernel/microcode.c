@@ -33,6 +33,8 @@
  *		Messages for error cases (non intel & no suitable microcode).
  *	1.06	07 Dec 2000, Tigran Aivazian <tigran@veritas.com>
  *		Pentium 4 support + backported fixes from 2.4
+ *	1.07	13 Dec 2000, Tigran Aivazian <tigran@veritas.com>
+ *		More bugfixes backported from 2.4
  */
 
 #include <linux/init.h>
@@ -47,7 +49,7 @@
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#define MICROCODE_VERSION 	"1.06"
+#define MICROCODE_VERSION 	"1.07"
 
 MODULE_DESCRIPTION("Intel CPU (IA-32) microcode update driver");
 MODULE_AUTHOR("Tigran Aivazian <tigran@veritas.com>");
@@ -87,13 +89,10 @@ static struct miscdevice microcode_dev = {
 
 int __init microcode_init(void)
 {
-	int error = 0;
-
 	if (misc_register(&microcode_dev) < 0) {
-		printk(KERN_WARNING 
-			"microcode: can't misc_register on minor=%d\n",
+		printk(KERN_ERR "microcode: can't misc_register on minor=%d\n",
 			MICROCODE_MINOR);
-		error = 1;
+		return -EINVAL;
 	}
 	printk(KERN_INFO "IA-32 Microcode Update Driver: v%s <tigran@veritas.com>\n", 
 			MICROCODE_VERSION);
@@ -234,18 +233,21 @@ static void do_update_one(void *arg)
 
 static ssize_t microcode_read(struct file *file, char *buf, size_t len, loff_t *ppos)
 {
-	if (*ppos >= mc_fsize)
-		return 0;
+	ssize_t err = 0;
+
 	down(&microcode_sem);
+	if (*ppos >= mc_fsize)
+		goto out;
 	if (*ppos + len > mc_fsize)
 		len = mc_fsize - *ppos;
-	if (copy_to_user(buf, mc_applied + *ppos, len)) {
-		up(&microcode_sem);
-		return -EFAULT;
-	}
+	err = -EFAULT;
+	if (copy_to_user(buf, mc_applied + *ppos, len))
+		goto out;
 	*ppos += len;
+	err = len;
+out:
 	up(&microcode_sem);
-	return len;
+	return err;
 }
 
 static ssize_t microcode_write(struct file *file, const char *buf, size_t len, loff_t *ppos)
@@ -300,11 +302,12 @@ static int microcode_ioctl(struct inode *inode, struct file *file,
 		case MICROCODE_IOCFREE:
 			down(&microcode_sem);
 			if (mc_applied) {
+				int bytes = smp_num_cpus * sizeof(struct microcode);
+
 				memset(mc_applied, 0, mc_fsize);
 				kfree(mc_applied);
 				mc_applied = NULL;
-				printk(KERN_WARNING 
-					"microcode: freed %d bytes\n", mc_fsize);
+				printk(KERN_WARNING "microcode: freed %d bytes\n", bytes);
 				mc_fsize = 0;
 				up(&microcode_sem);
 				return 0;

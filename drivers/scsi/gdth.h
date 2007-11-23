@@ -10,7 +10,7 @@
  *
  * <achim@vortex.de>
  *
- * $Id: gdth.h,v 1.33 2000/07/24 09:29:25 achim Exp $
+ * $Id: gdth.h,v 1.35 2000/10/11 08:42:38 achim Exp $
  */
 
 #include <linux/version.h>
@@ -29,9 +29,9 @@
 /* defines, macros */
 
 /* driver version */
-#define GDTH_VERSION_STR        "1.23"
+#define GDTH_VERSION_STR        "1.25"
 #define GDTH_VERSION            1
-#define GDTH_SUBVERSION         23
+#define GDTH_SUBVERSION         25
 
 /* protocol version */
 #define PROTOCOL_VERSION        1
@@ -625,7 +625,7 @@ typedef struct {
             unchar      priority;               /* only 0 used */
             ulong32     sense_len;              /* sense data length */
             ulong32     sense_data;             /* sense data addr. */
-            struct raw  *link_p;                /* linked cmds (not supp.) */
+            ulong32     link_p;                 /* linked cmds (not supp.) */
             ulong32     sg_ranz;                /* s/g element count */
             gdth_sg_str sg_lst[GDTH_MAXSG];     /* s/g list */
         } PACKED raw;                           /* raw service cmd. struct. */
@@ -877,7 +877,7 @@ typedef struct {
     Scsi_Cmnd           *req_first;             /* top of request queue */
     struct {
         unchar          present;                /* Flag: host drive present? */
-        unchar          is_logdrv;              /* Flag: logical drive (master)? */
+        unchar          is_logdrv;              /* Flag: log. drive (master)? */
         unchar          is_arraydrv;            /* Flag: array drive? */
         unchar          is_master;              /* Flag: array drive master? */
         unchar          is_parity;              /* Flag: parity drive? */
@@ -891,7 +891,7 @@ typedef struct {
         unchar          ldr_no;                 /* log. drive no. */
         unchar          rw_attribs;             /* r/w attributes */
         unchar          cluster_type;           /* cluster properties */
-        unchar          reserved;
+        unchar          media_changed;          /* Flag:MOUNT/UNMOUNT occured */
         ulong32         start_sec;              /* start sector */
     } hdr[MAX_LDRIVES];                         /* host drives */
     struct {

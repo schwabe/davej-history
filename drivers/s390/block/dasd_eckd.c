@@ -74,6 +74,7 @@ dasd_eckd_private_t {
         eckd_count_t count_area;
 } dasd_eckd_private_t;
 
+#ifdef CONFIG_DASD_DYNAMIC
 static
 devreg_t dasd_eckd_known_devices[] = {
 	{
@@ -92,6 +93,7 @@ devreg_t dasd_eckd_known_devices[] = {
                 oper_func: dasd_oper_handler
         }
 };
+#endif
 
 static inline unsigned int
 round_up_multiple (unsigned int no, unsigned int mult)
@@ -923,7 +925,9 @@ dasd_discipline_t dasd_eckd_discipline = {
 int
 dasd_eckd_init( void ) {
         int rc = 0;
+#ifdef CONFIG_DASD_DYNAMIC
 	int i;
+#endif
         printk ( KERN_INFO PRINTK_HEADER
                  "%s discipline initializing\n", dasd_eckd_discipline.name);
         ASCEBC(dasd_eckd_discipline.ebcname,4);
@@ -944,8 +948,9 @@ dasd_eckd_init( void ) {
 
 void
 dasd_eckd_cleanup( void ) {
-        int rc = 0;
+#ifdef CONFIG_DASD_DYNAMIC
 	int i;
+#endif
         printk ( KERN_INFO PRINTK_HEADER
                  "%s discipline cleaning up\n", dasd_eckd_discipline.name);
 #ifdef CONFIG_DASD_DYNAMIC
@@ -960,7 +965,7 @@ dasd_eckd_cleanup( void ) {
 	} 
 #endif /* CONFIG_DASD_DYNAMIC */
         dasd_discipline_deq(&dasd_eckd_discipline);
-        return rc;
+        return;
 }
 
 /*

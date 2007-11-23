@@ -1,5 +1,5 @@
 /* gdth_proc.c 
- * $Id: gdth_proc.c,v 1.22 2000/07/24 09:30:28 achim Exp $
+ * $Id: gdth_proc.c,v 1.23 2000/10/11 08:43:11 achim Exp $
  */
 
 #include "gdth_ioctl.h"
@@ -524,6 +524,30 @@ static int gdth_set_bin_info(char *buffer,int length,int hanum,Scsi_Cmnd scp)
             gdth_analyse_hdrive(hanum, k);
         gdth_polling = FALSE;
         GDTH_UNLOCK_HA(ha, flags);
+        break;
+
+      case GDTIOCTL_RESET_DRV:
+        if (!gdth_ioctl_alloc( hanum, sizeof(gdth_iord_str) ))
+            return(-EBUSY);
+        piord = (gdth_iord_str *)ha->pscratch;
+        piord->size = sizeof(gdth_iord_str);
+        piord->status = S_OK;
+        i = piowr->iu.scsi.target;
+        if (ha->hdr[i].present) {
+            gdtcmd.BoardNode = LOCALBOARD;
+            gdtcmd.Service = CACHESERVICE;
+            gdtcmd.OpCode = GDT_CLUST_RESET;
+            gdtcmd.u.cache.DeviceNo = i;
+            gdtcmd.u.cache.BlockNo = 0;
+            gdtcmd.u.cache.sg_canz = 0;
+#if LINUX_VERSION_CODE >= 0x020322
+            gdth_do_cmd(scp, &gdtcmd, cmnd, 30);
+            piord->status = (ulong32)scp->SCp.Message;
+#else
+            gdth_do_cmd(&scp, &gdtcmd, cmnd, 30);
+            piord->status = (ulong32)scp.SCp.Message;
+#endif
+        }
         break;
 
       default:

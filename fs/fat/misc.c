@@ -2,6 +2,8 @@
  *  linux/fs/fat/misc.c
  *
  *  Written 1992,1993 by Werner Almesberger
+ *  22/11/2000 - Fixed fat_date_unix2dos for dates earlier than 01/01/1980
+ *		 and date_dos2unix for date==0 by Igor Zhbanov(bsg@uniyar.ac.ru)
  */
 
 #include <linux/fs.h>
@@ -288,7 +290,9 @@ int date_dos2unix(unsigned short time,unsigned short date)
 {
 	int month,year,secs;
 
-	month = ((date >> 5) & 15)-1;
+	/* first subtract and mask after that... Otherwise, if
+	   date == 0, bad things happen */
+	month = ((date >> 5) - 1) & 15;
 	year = date >> 9;
 	secs = (time & 31)*2+60*((time >> 5) & 63)+(time >> 11)*3600+86400*
 	    ((date & 31)-1+day_n[month]+(year/4)+year*365-((year & 3) == 0 &&
@@ -309,6 +313,10 @@ void fat_date_unix2dos(int unix_date,unsigned short *time,
 
 	unix_date -= sys_tz.tz_minuteswest*60;
 	if (sys_tz.tz_dsttime) unix_date += 3600;
+
+	/* Jan 1 GMT 00:00:00 1980. But what about another time zone? */
+	if (unix_date < 315532800)
+		unix_date = 315532800;
 
 	*time = (unix_date % 60)/2+(((unix_date/60) % 60) << 5)+
 	    (((unix_date/3600) % 24) << 11);

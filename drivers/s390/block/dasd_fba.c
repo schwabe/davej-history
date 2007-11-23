@@ -181,9 +181,7 @@ dasd_fba_fill_geometry(struct dasd_device_t *device, struct hd_geometry *geo)
         int rc = 0;
 	unsigned long sectors = device->sizes.blocks << device->sizes.s2b_shift;
 	unsigned long tracks = sectors >> 6;
-	unsigned long trk_rem = sectors & ((1<<6)-1);
 	unsigned long cyls = tracks >> 4;
-	unsigned long cyls_rem = tracks & ((1<<4)-1);
 
         switch(device->sizes.bp_block) {
         case 512:
@@ -371,7 +369,9 @@ dasd_discipline_t dasd_fba_discipline = {
 int
 dasd_fba_init( void ) {
         int rc = 0;
+#ifdef	CONFIG_DASD_DYNAMIC
 	int i;
+#endif
         printk ( KERN_INFO PRINTK_HEADER
                  "%s discipline initializing\n", dasd_fba_discipline.name);
         ASCEBC(dasd_fba_discipline.ebcname,4);
@@ -392,8 +392,9 @@ dasd_fba_init( void ) {
 
 void
 dasd_fba_cleanup( void ) {
-        int rc = 0;
+#ifdef	CONFIG_DASD_DYNAMIC
 	int i;
+#endif
         printk ( KERN_INFO PRINTK_HEADER
                  "%s discipline cleaning up\n", dasd_fba_discipline.name);
 #ifdef CONFIG_DASD_DYNAMIC
@@ -408,7 +409,7 @@ dasd_fba_cleanup( void ) {
         }
 #endif /* CONFIG_DASD_DYNAMIC */
         dasd_discipline_deq(&dasd_fba_discipline);
-        return rc;
+        return;
 }
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

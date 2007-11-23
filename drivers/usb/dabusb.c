@@ -173,8 +173,8 @@ static void dabusb_iso_complete (purb_t purb)
 
 	// process if URB was not killed
 	if (purb->status != -ENOENT) {
-		unsigned int pipe = usb_rcvisocpipe (purb->dev, _DABUSB_ISOPIPE);
-		int pipesize = usb_maxpacket (purb->dev, pipe, usb_pipeout (pipe));
+		unsigned int pipe = usb_rcvisocpipe (s->usbdev, _DABUSB_ISOPIPE);
+		int pipesize = usb_maxpacket (s->usbdev, pipe, usb_pipeout (pipe));
 		for (i = 0; i < purb->number_of_packets; i++)
 			if (!purb->iso_frame_desc[i].status) {
 				len = purb->iso_frame_desc[i].actual_length;
@@ -455,6 +455,8 @@ static int dabusb_startrek (pdabusb_t s)
 			dbg("submitting: end:%p s->rec_buff_list:%p", s->rec_buff_list.prev, &s->rec_buff_list);
 
 			end = list_entry (s->rec_buff_list.prev, buff_t, buff_list);
+
+			end->purb->dev=s->usbdev;
 
 			ret = usb_submit_urb (end->purb);
 			if (ret) {

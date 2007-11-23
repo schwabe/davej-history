@@ -96,6 +96,12 @@
  *                       detect ES137x chip and derivatives.
  *    05.01.2000   0.22  Should now work with rev7 boards; patch by
  *                       Eric Lemar, elemar@cs.washington.edu
+ *    08.01.2000   0.23  Prevent some ioctl's from returning bad count values on underrun/overrun;
+ *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
+ *    01.03.2000   0.26  SPDIF patch by Mikael Bouillot <mikael.bouillot@bigfoot.com>
+ *    21.11.2000   0.27  Initialize dma buffers in poll, otherwise poll may return a bogus mask
+ *    12.12.2000   0.28  More dma buffer initializations, patch from
+ *                       Tjeerd Mulder <tjeerd.mulder@fujitsu-siemens.com>
  */
 
 /*****************************************************************************/
@@ -1937,6 +1943,7 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 	unsigned long flags;
         audio_buf_info abinfo;
         count_info cinfo;
+	int count;
 	int val, mapped, ret;
 
 	VALIDATE_STATE(s);
@@ -1971,7 +1978,8 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		return 0;
 
         case SNDCTL_DSP_SPEED:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val >= 0) {
 			if (file->f_mode & FMODE_READ) {
 				stop_adc(s);
@@ -1987,7 +1995,8 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		return put_user((file->f_mode & FMODE_READ) ? s->adcrate : s->dac2rate, (int *)arg);
 
         case SNDCTL_DSP_STEREO:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			stop_adc(s);
 			s->dma_adc.ready = 0;
@@ -2013,7 +2022,8 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		return 0;
 
         case SNDCTL_DSP_CHANNELS:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 0) {
 			if (file->f_mode & FMODE_READ) {
 				stop_adc(s);
@@ -2044,7 +2054,8 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
                 return put_user(AFMT_S16_LE|AFMT_U8, (int *)arg);
 		
 	case SNDCTL_DSP_SETFMT: /* Selects ONE fmt*/
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != AFMT_QUERY) {
 			if (file->f_mode & FMODE_READ) {
 				stop_adc(s);
@@ -2084,7 +2095,8 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		return put_user(val, (int *)arg);
 		
 	case SNDCTL_DSP_SETTRIGGER:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			if (val & PCM_ENABLE_INPUT) {
 				if (!s->dma_adc.ready && (ret = prog_dmabuf_adc(s)))
@@ -2106,12 +2118,15 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 	case SNDCTL_DSP_GETOSPACE:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
-		if (!(s->ctrl & CTRL_DAC2_EN) && (val = prog_dmabuf_dac2(s)) != 0)
+		if (!s->dma_dac2.ready && (val = prog_dmabuf_dac2(s)) != 0)
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
 		abinfo.fragsize = s->dma_dac2.fragsize;
-                abinfo.bytes = s->dma_dac2.dmasize - s->dma_dac2.count;
+		count = s->dma_dac2.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = s->dma_dac2.dmasize - count;
                 abinfo.fragstotal = s->dma_dac2.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_dac2.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -2120,12 +2135,15 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 	case SNDCTL_DSP_GETISPACE:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
-		if (!(s->ctrl & CTRL_ADC_EN) && (val = prog_dmabuf_adc(s)) != 0)
+		if (!s->dma_adc.ready && (val = prog_dmabuf_adc(s)) != 0)
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
 		abinfo.fragsize = s->dma_adc.fragsize;
-                abinfo.bytes = s->dma_adc.count;
+		count = s->dma_adc.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = count;
                 abinfo.fragstotal = s->dma_adc.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_adc.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -2138,19 +2156,28 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
         case SNDCTL_DSP_GETODELAY:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_dac2.ready && (val = prog_dmabuf_dac2(s)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
-                val = s->dma_dac2.count;
+                count = s->dma_dac2.count;
 		spin_unlock_irqrestore(&s->lock, flags);
-		return put_user(val, (int *)arg);
+		if (count < 0)
+			count = 0;
+		return put_user(count, (int *)arg);
 
         case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
+		if (!s->dma_adc.ready && (val = prog_dmabuf_adc(s)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
                 cinfo.bytes = s->dma_adc.total_bytes;
-                cinfo.blocks = s->dma_adc.count >> s->dma_adc.fragshift;
+		count = s->dma_adc.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_adc.fragshift;
                 cinfo.ptr = s->dma_adc.hwptr;
 		if (s->dma_adc.mapped)
 			s->dma_adc.count &= s->dma_adc.fragsize-1;
@@ -2160,10 +2187,15 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
         case SNDCTL_DSP_GETOPTR:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_dac2.ready && (val = prog_dmabuf_dac2(s)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
                 cinfo.bytes = s->dma_dac2.total_bytes;
-                cinfo.blocks = s->dma_dac2.count >> s->dma_dac2.fragshift;
+		count = s->dma_dac2.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_dac2.fragshift;
                 cinfo.ptr = s->dma_dac2.hwptr;
 		if (s->dma_dac2.mapped)
 			s->dma_dac2.count &= s->dma_dac2.fragsize-1;
@@ -2181,7 +2213,8 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		return put_user(s->dma_adc.fragsize, (int *)arg);
 
         case SNDCTL_DSP_SETFRAGMENT:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			s->dma_adc.ossfragshift = val & 0xffff;
 			s->dma_adc.ossmaxfrags = (val >> 16) & 0xffff;
@@ -2208,7 +2241,8 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		if ((file->f_mode & FMODE_READ && s->dma_adc.subdivision) ||
 		    (file->f_mode & FMODE_WRITE && s->dma_dac2.subdivision))
 			return -EINVAL;
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 1 && val != 2 && val != 4)
 			return -EINVAL;
 		if (file->f_mode & FMODE_READ)
@@ -2458,6 +2492,7 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 	unsigned long flags;
         audio_buf_info abinfo;
         count_info cinfo;
+	int count;
 	int val, ret;
 
 	VALIDATE_STATE(s);
@@ -2481,7 +2516,8 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		return 0;
 
         case SNDCTL_DSP_SPEED:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val >= 0) {
 			stop_dac1(s);
 			s->dma_dac1.ready = 0;
@@ -2490,7 +2526,8 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		return put_user(s->dac1rate, (int *)arg);
 
         case SNDCTL_DSP_STEREO:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		stop_dac1(s);
 		s->dma_dac1.ready = 0;
 		spin_lock_irqsave(&s->lock, flags);
@@ -2503,7 +2540,8 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		return 0;
 
         case SNDCTL_DSP_CHANNELS:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 0) {
 			stop_dac1(s);
 			s->dma_dac1.ready = 0;
@@ -2521,7 +2559,8 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
                 return put_user(AFMT_S16_LE|AFMT_U8, (int *)arg);
 		
         case SNDCTL_DSP_SETFMT: /* Selects ONE fmt*/
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != AFMT_QUERY) {
 			stop_dac1(s);
 			s->dma_dac1.ready = 0;
@@ -2542,7 +2581,8 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		return put_user((s->ctrl & CTRL_DAC1_EN) ? PCM_ENABLE_OUTPUT : 0, (int *)arg);
 						
 	case SNDCTL_DSP_SETTRIGGER:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val & PCM_ENABLE_OUTPUT) {
 			if (!s->dma_dac1.ready && (ret = prog_dmabuf_dac1(s)))
 				return ret;
@@ -2552,12 +2592,15 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		return 0;
 
 	case SNDCTL_DSP_GETOSPACE:
-		if (!(s->ctrl & CTRL_DAC1_EN) && (val = prog_dmabuf_dac1(s)) != 0)
+		if (!s->dma_dac1.ready && (val = prog_dmabuf_dac1(s)) != 0)
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
 		abinfo.fragsize = s->dma_dac1.fragsize;
-                abinfo.bytes = s->dma_dac1.dmasize - s->dma_dac1.count;
+		count = s->dma_dac1.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = s->dma_dac1.dmasize - count;
                 abinfo.fragstotal = s->dma_dac1.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_dac1.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -2568,19 +2611,26 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
                 return 0;
 
         case SNDCTL_DSP_GETODELAY:
+		if (!s->dma_dac1.ready && (val = prog_dmabuf_dac1(s)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
-                val = s->dma_dac1.count;
+                count = s->dma_dac1.count;
 		spin_unlock_irqrestore(&s->lock, flags);
-		return put_user(val, (int *)arg);
+		if (count < 0)
+			count = 0;
+		return put_user(count, (int *)arg);
 
         case SNDCTL_DSP_GETOPTR:
-		if (!(file->f_mode & FMODE_WRITE))
-			return -EINVAL;
+		if (!s->dma_dac1.ready && (val = prog_dmabuf_dac1(s)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
                 cinfo.bytes = s->dma_dac1.total_bytes;
-                cinfo.blocks = s->dma_dac1.count >> s->dma_dac1.fragshift;
+		count = s->dma_dac1.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_dac1.fragshift;
                 cinfo.ptr = s->dma_dac1.hwptr;
 		if (s->dma_dac1.mapped)
 			s->dma_dac1.count &= s->dma_dac1.fragsize-1;
@@ -2593,7 +2643,8 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
                 return put_user(s->dma_dac1.fragsize, (int *)arg);
 
         case SNDCTL_DSP_SETFRAGMENT:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		s->dma_dac1.ossfragshift = val & 0xffff;
 		s->dma_dac1.ossmaxfrags = (val >> 16) & 0xffff;
 		if (s->dma_dac1.ossfragshift < 4)
@@ -2607,7 +2658,8 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
         case SNDCTL_DSP_SUBDIVIDE:
 		if (s->dma_dac1.subdivision)
 			return -EINVAL;
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 1 && val != 2 && val != 4)
 			return -EINVAL;
 		s->dma_dac1.subdivision = val;
@@ -3261,7 +3313,7 @@ __initfunc(int init_es1371(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.22 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.28 time " __TIME__ " " __DATE__ "\n");
 	for (pcidev = pci_devices; pcidev && index < NR_DEVICE; pcidev = pcidev->next) {
 		if (pcidev->vendor == PCI_VENDOR_ID_ENSONIQ) {
 			if (pcidev->device != PCI_DEVICE_ID_ENSONIQ_ES1371 &&

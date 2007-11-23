@@ -2,7 +2,7 @@
 #define _GDTH_IOCTL_H
 
 /* gdth_ioctl.h
- * $Id: gdth_ioctl.h,v 1.6 2000/07/24 09:29:43 achim Exp $
+ * $Id: gdth_ioctl.h,v 1.7 2000/10/11 08:43:35 achim Exp $
  */
 
 /* IOCTLs */
@@ -19,6 +19,7 @@
 #define GDTIOCTL_SCSI       (GDTIOCTL_MASK | 9) /* SCSI command */
 #define GDTIOCTL_RESET_BUS  (GDTIOCTL_MASK |10) /* reset SCSI bus */
 #define GDTIOCTL_RESCAN     (GDTIOCTL_MASK |11) /* rescan host drives */
+#define GDTIOCTL_RESET_DRV  (GDTIOCTL_MASK |12) /* reset (remote) drv. res. */
 
 #define GDTIOCTL_MAGIC      0xaffe0003UL
 #define EVENT_SIZE          294 

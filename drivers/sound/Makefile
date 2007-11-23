@@ -97,7 +97,7 @@ obj-$(CONFIG_SOUND_MAESTRO)	+= maestro.o
 obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
 obj-$(CONFIG_SOUND_TRIDENT)     += trident.o ac97_codec.o
 obj-$(CONFIG_SOUND_VIA82CXXX)	+= via82cxxx_audio.o ac97_codec.o
-obj-$(CONFIG_SOUND_YMFPCI)	+= ymfpci.o ac97_codec.o
+obj-$(CONFIG_SOUND_YMFPCI)	+= ymfpci.o ac97_codec.o uart401.o
 
 ifeq ($(CONFIG_SOUND_EMU10K1),y)
   obj-y				+= emu10k1/emu10k1.o
@@ -126,7 +126,6 @@ vidc_mod-objs	:= vidc.o vidc_fill.o vidc_synth.o
 wavefront-objs  := wavfront.o wf_midi.o yss225.o
 nm256-objs	:= nm256_audio.o ac97.o
 via82cxxx-objs  := via82cxxx_audio.o ac97.o
-ymfsb-objs	:= ymf_sb.o ac97.o
 
 
 # Extract lists of the multi-part drivers.
@@ -217,9 +216,6 @@ nm256.o: $(nm256-objs)
 
 via82cxxx.o: $(via82cxxx-objs)
 	$(LD) -r -o $@ $(via82cxxx-objs)
-
-ymfsb.o: $(ymfsb-objs)
-	$(LD) -r -o $@ $(ymfsb-objs)
 
 # Firmware files that need translation
 #

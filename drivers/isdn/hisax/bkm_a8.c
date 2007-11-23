@@ -463,5 +463,6 @@ setup_sct_quadro(struct IsdnCard *card))
 	return (1);
 #else
 	printk(KERN_ERR "HiSax: bkm_a8 only supported on PCI Systems\n");
+	return (0);
 #endif /* CONFIG_PCI */
 }

@@ -77,11 +77,15 @@
  *    24.08.1999   0.19  get rid of the dmaio kludge, replace with allocate_resource
  *    31.08.1999   0.20  add spin_lock_init
  *                       __initlocaldata to fix gcc 2.7.x problems
- *                       use new resource allocation to allocate DDMA IO space
  *                       replaced current->state = x with set_current_state(x)
  *    03.09.1999   0.21  change read semantics for MIDI to match
  *                       OSS more closely; remove possible wakeup race
  *    28.10.1999   0.22  More waitqueue races fixed
+ *    08.01.2000   0.25  Prevent some ioctl's from returning bad count values on underrun/overrun;
+ *                       Tim Janik's BSE (Bedevilled Sound Engine) found this
+ *    21.11.2000   0.27  Initialize dma buffers in poll, otherwise poll may return a bogus mask
+ *    12.12.2000   0.28  More dma buffer initializations, patch from
+ *                       Tjeerd Mulder <tjeerd.mulder@fujitsu-siemens.com>
  *
  */
 
@@ -1543,6 +1547,7 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 	unsigned long flags;
         audio_buf_info abinfo;
         count_info cinfo;
+	int count;
 	int val, mapped, ret;
 	unsigned char fmtm, fmtd;
 
@@ -1578,7 +1583,8 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		return 0;
 
         case SNDCTL_DSP_SPEED:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val >= 0) {
 			if (file->f_mode & FMODE_READ) {
 				stop_adc(s);
@@ -1594,7 +1600,8 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		return put_user((file->f_mode & FMODE_READ) ? s->rateadc : s->ratedac, (int *)arg);
 		
         case SNDCTL_DSP_STEREO:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		fmtd = 0;
 		fmtm = ~0;
 		if (file->f_mode & FMODE_READ) {
@@ -1617,7 +1624,8 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		return 0;
 
         case SNDCTL_DSP_CHANNELS:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 0) {
 			fmtd = 0;
 			fmtm = ~0;
@@ -1646,7 +1654,8 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
                 return put_user(AFMT_S16_LE|AFMT_U8, (int *)arg);
 		
 	case SNDCTL_DSP_SETFMT: /* Selects ONE fmt*/
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != AFMT_QUERY) {
 			fmtd = 0;
 			fmtm = ~0;
@@ -1683,7 +1692,8 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		return put_user(val, (int *)arg);
 		
 	case SNDCTL_DSP_SETTRIGGER:
-		get_user_ret(val, (int *)arg, -EFAULT);
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			if (val & PCM_ENABLE_INPUT) {
 				if (!s->dma_adc.ready && (ret =  prog_dmabuf(s, 1)))
@@ -1705,12 +1715,15 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 	case SNDCTL_DSP_GETOSPACE:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
-		if (!(s->enable & SV_CENABLE_PE) && (val = prog_dmabuf(s, 0)) != 0)
+		if (!s->dma_dac.ready && (val = prog_dmabuf(s, 0)) != 0)
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
 		abinfo.fragsize = s->dma_dac.fragsize;
-                abinfo.bytes = s->dma_dac.dmasize - s->dma_dac.count;
+		count = s->dma_dac.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = s->dma_dac.dmasize - count;
                 abinfo.fragstotal = s->dma_dac.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_dac.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -1719,12 +1732,15 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 	case SNDCTL_DSP_GETISPACE:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
-		if (!(s->enable & SV_CENABLE_RE) && (val = prog_dmabuf(s, 1)) != 0)
+		if (!s->dma_adc.ready && (val = prog_dmabuf(s, 1)) != 0)
 			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
 		abinfo.fragsize = s->dma_adc.fragsize;
-                abinfo.bytes = s->dma_adc.count;
+		count = s->dma_adc.count;
+		if (count < 0)
+			count = 0;
+                abinfo.bytes = count;
                 abinfo.fragstotal = s->dma_adc.numfrag;
                 abinfo.fragments = abinfo.bytes >> s->dma_adc.fragshift;      
 		spin_unlock_irqrestore(&s->lock, flags);
@@ -1737,19 +1753,28 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
         case SNDCTL_DSP_GETODELAY:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_dac.ready && (val = prog_dmabuf(s, 0)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
-                val = s->dma_dac.count;
+                count = s->dma_dac.count;
 		spin_unlock_irqrestore(&s->lock, flags);
-		return put_user(val, (int *)arg);
+		if (count < 0)
+			count = 0;
+		return put_user(count, (int *)arg);
 
         case SNDCTL_DSP_GETIPTR:
 		if (!(file->f_mode & FMODE_READ))
 			return -EINVAL;
+		if (!s->dma_adc.ready && (val = prog_dmabuf(s, 1)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
                 cinfo.bytes = s->dma_adc.total_bytes;
-                cinfo.blocks = s->dma_adc.count >> s->dma_adc.fragshift;
+		count = s->dma_adc.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_adc.fragshift;
                 cinfo.ptr = s->dma_adc.hwptr;
 		if (s->dma_adc.mapped)
 			s->dma_adc.count &= s->dma_adc.fragsize-1;
@@ -1759,10 +1784,15 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
         case SNDCTL_DSP_GETOPTR:
 		if (!(file->f_mode & FMODE_WRITE))
 			return -EINVAL;
+		if (!s->dma_dac.ready && (val = prog_dmabuf(s, 0)) != 0)
+			return val;
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
                 cinfo.bytes = s->dma_dac.total_bytes;
-                cinfo.blocks = s->dma_dac.count >> s->dma_dac.fragshift;
+		count = s->dma_dac.count;
+		if (count < 0)
+			count = 0;
+                cinfo.blocks = count >> s->dma_dac.fragshift;
                 cinfo.ptr = s->dma_dac.hwptr;
 		if (s->dma_dac.mapped)
 			s->dma_dac.count &= s->dma_dac.fragsize-1;
@@ -1780,7 +1810,8 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		return put_user(s->dma_adc.fragsize, (int *)arg);
 
         case SNDCTL_DSP_SETFRAGMENT:
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (file->f_mode & FMODE_READ) {
 			s->dma_adc.ossfragshift = val & 0xffff;
 			s->dma_adc.ossmaxfrags = (val >> 16) & 0xffff;
@@ -1807,7 +1838,8 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		if ((file->f_mode & FMODE_READ && s->dma_adc.subdivision) ||
 		    (file->f_mode & FMODE_WRITE && s->dma_dac.subdivision))
 			return -EINVAL;
-                get_user_ret(val, (int *)arg, -EFAULT);
+                if (get_user(val, (int *)arg))
+			return -EFAULT;
 		if (val != 1 && val != 2 && val != 4)
 			return -EINVAL;
 		if (file->f_mode & FMODE_READ)
@@ -2432,7 +2464,7 @@ __initfunc(int init_sonicvibes(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.22 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.28 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");

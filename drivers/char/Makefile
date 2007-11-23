@@ -689,6 +689,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_I810_TCO),y)
+O_OBJS += i810-tco.o
+else
+  ifeq ($(CONFIG_I810_TCO),m)
+  M_OBJS += i810-tco.o
+  endif
+endif
+
 # remove objects from modular that are also built in
 obj-m           := $(filter-out $(obj-y), $(obj-m))
 

@@ -183,7 +183,7 @@ comment 'Ethernet (1000 Mbit)'
       tristate 'Packet Engines GNIC-II (Hamachi) support' CONFIG_HAMACHI
       tristate 'Packet Engines Yellowfin Gigabit-NIC support' CONFIG_YELLOWFIN
     fi
-    tristate 'SysKonnect SK-98xx support' CONFIG_SK98LIN
+    dep_tristate 'SysKonnect SK-98xx support' CONFIG_SK98LIN $CONFIG_PCI
 endmenu
 
 bool 'FDDI driver support' CONFIG_FDDI

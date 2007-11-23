@@ -50,6 +50,7 @@ comment 'USB Devices'
          fi
          dep_tristate '    USB ZyXEL omni.net LCD Plus Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_OMNINET $CONFIG_USB_SERIAL
          dep_tristate '    USB Belkin and Peracom Single Port Serial Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_BELKIN $CONFIG_USB_SERIAL
+         dep_tristate '    USB Empeg empeg-car Mark I/II Driver (EXPERIMENTAL)' CONFIG_USB_SERIAL_EMPEG $CONFIG_USB_SERIAL
       fi
       bool '    USB Serial Converter verbose debug' CONFIG_USB_SERIAL_DEBUG $CONFIG_USB_SERIAL
    fi

@@ -2924,9 +2924,7 @@ cleanup_dasd (void)
 int
 init_module ( void )
 {
-        int rc=0;
         return dasd_init(); 
-        return rc;
 }
 
 void 

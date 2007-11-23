@@ -510,20 +510,20 @@ do {								\
 			"	popl %0\n"			\
 			"	shl $2,%0\n"			\
 			"	addl $3,%0\n"			\
-			"	jmp 2b\n"			\
+			"	jmp 3b\n"			\
 			"5:	pushl %%eax\n"			\
 			"	xorl %%eax,%%eax\n"		\
 			"	stosw\n"			\
 			"	stosb\n"			\
 			"	popl %%eax\n"			\
 			"	addl $3,%0\n"			\
-			"	jmp 2b\n"			\
+			"	jmp 3b\n"			\
 			"6:	pushl %%eax\n"			\
 			"	xorl %%eax,%%eax\n"		\
 			"	stosb\n"			\
 			"	popl %%eax\n"			\
 			"	incl %0\n"			\
-			"	jmp 2b\n"			\
+			"	jmp 3b\n"			\
 			".previous\n"				\
 			".section __ex_table,\"a\"\n"		\
 			"	.align 4\n"			\

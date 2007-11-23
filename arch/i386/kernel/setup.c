@@ -104,7 +104,7 @@ struct sys_desc_table_struct {
 	unsigned short length;
 	unsigned char table[0];
 };
-struct e820map e820;
+struct e820map e820 __initdata = { 0, };
 
 unsigned char aux_device_present;
 
@@ -272,8 +272,9 @@ visws_get_board_type_and_rev(void)
 					visws_board_rev);
 	}
 #endif
-void __init add_memory_region(unsigned long long start,
-                                  unsigned long long size, int type)
+
+static void __init add_memory_region(unsigned long long start,
+				     unsigned long long size, int type)
 {
        int x = e820.nr_map;
 
@@ -287,6 +288,8 @@ void __init add_memory_region(unsigned long long start,
        e820.map[x].type = type;
        e820.nr_map++;
 } /* add_memory_region */
+
+unsigned long i386_endbase __initdata =  0;
 
 static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
 {
@@ -309,10 +312,10 @@ static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
                 * Not right. Fix it up.
                 */
                if (type == E820_RAM) {
-                       if (start < 0x100000ULL && end > 0xA0000ULL) {
-                               if (start < 0xA0000ULL)
-                                       add_memory_region(start, 0xA0000ULL-start, type);
-                               if (end < 0x100000ULL)
+                       if (start < 0x100000ULL && end > i386_endbase) {
+                               if (start < i386_endbase)
+                                       add_memory_region(start, i386_endbase-start, type);
+                               if (end <= 0x100000ULL)
                                        continue;
                                start = 0x100000ULL;
                                size = end - start;
@@ -323,9 +326,33 @@ static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
        return 0;
 }
 
-#define LOWMEMSIZE() (0x9f000)
+static void __init print_memory_map(char *who)
+{
+	int i;
 
-void __init setup_memory_region(void)
+	for (i = 0; i < e820.nr_map; i++) {
+		printk(" %s: %08lx @ %08lx ", who,
+		       (unsigned long) e820.map[i].size,
+		       (unsigned long) e820.map[i].addr);
+		switch (e820.map[i].type) {
+		case E820_RAM:	printk("(usable)\n");
+				break;
+		case E820_RESERVED:
+				printk("(reserved)\n");
+				break;
+		case E820_ACPI:
+				printk("(ACPI data)\n");
+				break;
+		case E820_NVS:
+				printk("(ACPI NVS)\n");
+				break;
+		default:	printk("type %lu\n", e820.map[i].type);
+				break;
+		}
+	}
+}
+
+static void __init setup_memory_region(void)
 {
        char *who = "BIOS-e820";
 
@@ -348,26 +375,27 @@ void __init setup_memory_region(void)
                }
 
                e820.nr_map = 0;
-               add_memory_region(0, LOWMEMSIZE(), E820_RAM);
-               add_memory_region(HIGH_MEMORY, mem_size << 10, E820_RAM);
+               add_memory_region(0, i386_endbase, E820_RAM);
+               add_memory_region(HIGH_MEMORY, (mem_size << 10)-HIGH_MEMORY,
+				 E820_RAM);
        }
        printk("BIOS-provided physical RAM map:\n");
+       print_memory_map(who);
 } /* setup_memory_region */
 
 
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
        char saved_command_line[COMMAND_LINE_SIZE];
-unsigned long i386_endbase __initdata =  0;
 
 __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
-	unsigned long memory_start, memory_end;
-	unsigned long max_pfn;
+	unsigned long memory_start, memory_end = 0;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
 	int read_endbase_from_BIOS = 1;
 	int i;
+	unsigned long user_mem = 0;
 
 #ifdef CONFIG_VISWS
 	visws_get_board_type_and_rev();
@@ -402,26 +430,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
 	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
 
-       setup_memory_region();
-
-#define PFN_UP(x)      (((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
-#define PFN_DOWN(x)    ((x) >> PAGE_SHIFT)
-       max_pfn = 0;
-       for (i = 0; i < e820.nr_map; i++) {
-               unsigned long start, end;
-               /* RAM? */
-               if (e820.map[i].type != E820_RAM)
-                       continue;
-               start = PFN_UP(e820.map[i].addr);
-               end = PFN_DOWN(e820.map[i].addr + e820.map[i].size);
-               if (start >= end)
-                       continue;
-               if (end > max_pfn)
-                       max_pfn = end;
-       }
-       memory_end = (max_pfn << PAGE_SHIFT);
-
-
 	for (;;) {
 		/*
 		 * "mem=nopentium" disables the 4MB page tables.
@@ -434,12 +442,12 @@ __initfunc(void setup_arch(char **cmdline_p,
 				from += 9+4;
 				boot_cpu_data.x86_capability &= ~X86_FEATURE_PSE;
 			} else {
-				memory_end = simple_strtoul(from+4, &from, 0);
+				user_mem = simple_strtoul(from+4, &from, 0);
 				if ( *from == 'K' || *from == 'k' ) {
-					memory_end = memory_end << 10;
+					user_mem = user_mem << 10;
 					from++;
 				} else if ( *from == 'M' || *from == 'm' ) {
-					memory_end = memory_end << 20;
+					user_mem = user_mem << 20;
 					from++;
 				}
 			}
@@ -448,7 +456,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 		{
 			if (to != command_line) to--;
 			i386_endbase = simple_strtoul(from+8, &from, 0);
-			i386_endbase += PAGE_OFFSET;
 			read_endbase_from_BIOS = 0;
 		}
 		c = *(from++);
@@ -484,7 +491,35 @@ __initfunc(void setup_arch(char **cmdline_p,
 			}
 			i386_endbase = BIOS_ENDBASE;
 		}
-		i386_endbase += PAGE_OFFSET;
+	}
+
+	if (!user_mem)
+		setup_memory_region();
+	else {
+		e820.nr_map = 0;
+		add_memory_region(0, i386_endbase, E820_RAM);
+		add_memory_region(HIGH_MEMORY, user_mem-HIGH_MEMORY, E820_RAM);
+		printk("USER-provided physical RAM map:\n");
+		print_memory_map("USER");
+	}
+
+#define PFN_UP(x)      (((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
+#define PFN_DOWN(x)    ((x) >> PAGE_SHIFT)
+	for (i = 0; i < e820.nr_map; i++) {
+		unsigned long long start, end;
+		/* RAM? */
+		if (e820.map[i].type != E820_RAM)
+			continue;
+		start = e820.map[i].addr;
+		if (start >= 0xffffffff)
+			continue;
+		end = e820.map[i].addr + e820.map[i].size;
+		if (start >= end)
+			continue;
+		if (end > 0xffffffff)
+			end = 0xffffffff;
+		if (end > memory_end)
+			memory_end = end;
 	}
 
 #define VMALLOC_RESERVE	(64 << 20)	/* 64MB for vmalloc */

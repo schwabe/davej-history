@@ -131,7 +131,19 @@
 #define YDSXG_AC97READCMD		0x8000
 #define YDSXG_AC97WRITECMD		0x0000
 
+#define PCIR_VENDORID			0x00
+#define PCIR_DEVICEID			0x02
+#define PCIR_CMD			0x04
+#define PCIR_REVISIONID			0x08
+#define PCIR_BASEADDR			0x10
+#define PCIR_IRQ			0x3c
+
+#define PCIR_LEGCTRL			0x40
+#define PCIR_ELEGCTRL			0x42
 #define PCIR_DSXGCTRL			0x48
+#define PCIR_OPLADR			0x60
+#define PCIR_SBADR			0x62
+#define PCIR_MPUADR			0x64
 
 #define YDSXG_DSPLENGTH			0x0080
 #define YDSXG_CTRLLENGTH		0x3000
@@ -280,6 +292,10 @@ struct ymf_unit {
 	struct pci_dev *pci;
 	int irq;
 	int inst;		/* Unit number (instance) */
+
+        /* legacy hardware resources */
+	unsigned int iosynth, iomidi;
+	struct address_info opl3_data, mpu_data;
 
 	spinlock_t reg_lock;
 	spinlock_t voice_lock;

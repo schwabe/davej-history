@@ -5,6 +5,7 @@
  * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 2000
  */
 
+#include <linux/blkdev.h>
 #include <asm/ccwcache.h>
 #include <asm/dasd.h>
 
@@ -32,8 +33,6 @@
 dasd_era_t
 dasd_9336_erp_examine (ccw_req_t * cqr, devstat_t * stat)
 {
-	char *sense = stat->ii.sense.data;
-
 	/* check for successful execution first */
 	if (stat->cstat == 0x00 &&
 	    stat->dstat == (DEV_STAT_CHN_END | DEV_STAT_DEV_END))

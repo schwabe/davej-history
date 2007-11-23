@@ -15,10 +15,14 @@
 
 	Support and updates available at
 	http://cesdis.gsfc.nasa.gov/linux/drivers/tulip.html
-	
+
 	This driver also contains updates by Wolfgang Walter and others.
 	For this specific driver variant please use linux-kernel for 
 	bug reports.
+
+	Updated 12/17/2000 by Jim McQuillan <jam@McQuil.com> to
+	include support for the Linksys LNE100TX card based on the
+	Admtek 985 Centaur-P chipset.
 */
 
 #define SMP_CHECK
@@ -398,6 +402,8 @@ static struct tulip_chip_table {
 	HAS_MII | HAS_NWAY143 | HAS_8023X, t21142_timer },
   { "ADMtek Comet", 256, 0x0001abef,
 	MC_HASH_ONLY, comet_timer },
+  { "ADMtek Centaur-P", 256, 0x0001abef,
+  	MC_HASH_ONLY, comet_timer },
   { "Compex 9881 PMAC", 128, 0x0001ebef,
 	HAS_MII | HAS_MEDIA_TABLE | CSR12_IN_SROM, mxic_timer },
   { "Intel DS21145 Tulip", 128, 0x0801fbff,
@@ -411,8 +417,8 @@ static struct tulip_chip_table {
 /* This matches the table above.  Note 21142 == 21143. */
 enum chips {
 	DC21040=0, DC21041=1, DC21140=2, DC21142=3, DC21143=3,
-	LC82C168, MX98713, MX98715, MX98725, AX88140, PNIC2, COMET, COMPEX9881,
-	I21145,
+	LC82C168, MX98713, MX98715, MX98725, AX88140, PNIC2, COMET, COMET5,
+        COMPEX9881, I21145, XIRCOM,
 };
 
 /* A full-duplex map for media types. */
@@ -423,7 +429,7 @@ static const char media_cap[] =
 {0,0,0,16,  3,19,16,24,  27,4,7,5, 0,20,23,20 };
 static u8 t21040_csr13[] = {2,0x0C,8,4,  4,0,0,0, 0,0,0,0, 4,0,0,0};
 /* 21041 transceiver register settings: 10-T, 10-2, AUI, 10-T, 10T-FD*/
-static u16 t21041_csr13[] = { 0xEF05, 0xEF0D, 0xEF0D, 0xEF05, 0xEF05, };
+static u16 t21041_csr13[] = { 0xEF01, 0xEF09, 0xEF09, 0xEF01, 0xEF09, };
 static u16 t21041_csr14[] = { 0xFFFF, 0xF7FD, 0xF7FD, 0x7F3F, 0x7F3D, };
 static u16 t21041_csr15[] = { 0x0008, 0x0006, 0x000E, 0x0008, 0x0008, };
 
@@ -584,7 +590,7 @@ int __init tulip_probe(struct device *dev)
 		return -ENODEV;
 
 	for (;pci_index < 0xff; pci_index++) {
-		u16 vendor, device, pci_command, new_command, subvendor;
+		u16 vendor, device, pci_command, new_command;
 		int chip_idx;
 		int irq;
 		long ioaddr;
@@ -602,13 +608,6 @@ int __init tulip_probe(struct device *dev)
 								 PCI_VENDOR_ID, &vendor);
 		pcibios_read_config_word(pci_bus, pci_device_fn,
 								 PCI_DEVICE_ID, &device);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_SUBSYSTEM_VENDOR_ID, &subvendor);
-		
-	        if( subvendor == 0x1376 ){
-			printk("tulip: skipping LMC card.\n");
-			continue;
-		}	
 
 		for (chip_idx = 0; pci_tbl[chip_idx].vendor_id; chip_idx++)
 			if (vendor == pci_tbl[chip_idx].vendor_id
@@ -750,7 +749,13 @@ static struct device *tulip_probe1(int pci_bus, int pci_devfn,
 			put_unaligned(le16_to_cpu(value), ((u16*)dev->dev_addr) + i);
 			sum += value & 0xffff;
 		}
-	} else if (chip_idx == COMET) {
+	} else if (chip_idx == COMET){
+		/* No need to read the EEPROM. */
+		put_unaligned(inl(ioaddr + 0xA4), (u32 *)dev->dev_addr);
+		put_unaligned(inl(ioaddr + 0xA8), (u16 *)(dev->dev_addr + 4));
+		for (i = 0; i < 6; i ++)
+			sum += dev->dev_addr[i];
+	} else if (chip_idx == COMET5){
 		/* No need to read the EEPROM. */
 		put_unaligned(inl(ioaddr + 0xA4), (u32 *)dev->dev_addr);
 		put_unaligned(inl(ioaddr + 0xA8), (u16 *)(dev->dev_addr + 4));
@@ -993,6 +998,9 @@ static struct device *tulip_probe1(int pci_bus, int pci_devfn,
 		outl(0x00001000, ioaddr + CSR12);
 		break;
 	case COMET:
+		/* No initialization necessary. */
+		break;
+	case COMET5:
 		/* No initialization necessary. */
 		break;
 	}
@@ -1321,6 +1329,17 @@ static int mdio_read(struct device *dev, int phy_id, int location)
 		}
 		return 0xffff;
 	}
+	if (tp->chip_id == COMET5) {
+		if (phy_id == 1) {
+			if (location < 7)
+				return inl(ioaddr + 0xB4 + (location<<2));
+			else if (location == 17)
+				return inl(ioaddr + 0xD0);
+			else if (location >= 29 && location <= 31)
+				return inl(ioaddr + 0xD4 + ((location-29)<<2));
+		}
+		return 0xffff;
+	}
 
 	/* Establish sync by sending at least 32 logic ones. */
 	for (i = 32; i >= 0; i--) {
@@ -1368,6 +1387,18 @@ static void mdio_write(struct device *dev, int phy_id, int location, int value)
 	}
 
 	if (tp->chip_id == COMET) {
+		if (phy_id != 1)
+			return;
+		if (location < 7)
+			outl(value, ioaddr + 0xB4 + (location<<2));
+		else if (location == 17)
+			outl(value, ioaddr + 0xD0);
+		else if (location >= 29 && location <= 31)
+			outl(value, ioaddr + 0xD4 + ((location-29)<<2));
+		return;
+	}
+
+	if (tp->chip_id == COMET5) {
 		if (phy_id != 1)
 			return;
 		if (location < 7)
@@ -1458,6 +1489,11 @@ tulip_open(struct device *dev)
 			outl(1, ioaddr + CSR13);
 			outl(addr_high, ioaddr + CSR14);
 		} else if (tp->chip_id == COMET) {
+			outl(addr_low,  ioaddr + 0xA4);
+			outl(addr_high, ioaddr + 0xA8);
+			outl(0, ioaddr + 0xAC);
+			outl(0, ioaddr + 0xB0);
+		} else if (tp->chip_id == COMET5) {
 			outl(addr_low,  ioaddr + 0xA4);
 			outl(addr_high, ioaddr + 0xA8);
 			outl(0, ioaddr + 0xAC);
@@ -1573,6 +1609,9 @@ media_picked:
 		outl(0x0000, ioaddr + CSR14);
 		outl(0x0008, ioaddr + CSR15);
 	} else if (tp->chip_id == COMET) {
+		dev->if_port = 0;
+		tp->csr6 = 0x00040000;
+	} else if (tp->chip_id == COMET5) {
 		dev->if_port = 0;
 		tp->csr6 = 0x00040000;
 	} else if (tp->chip_id == AX88140) {
@@ -3014,6 +3053,8 @@ static int private_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 			data[0] = 32;
 		else if (tp->chip_id == COMET)
 			data[0] = 1;
+		else if (tp->chip_id == COMET5)
+			data[0] = 1;
 		else
 			return -ENODEV;
 	case SIOCDEVPRIVATE+1:		/* Read the specified MII register. */
@@ -3140,6 +3181,9 @@ static void set_rx_mode(struct device *dev)
 				outl(3, ioaddr + CSR13);
 				outl(mc_filter[1], ioaddr + CSR14);
 			} else if (tp->chip_id == COMET) { /* Has a simple hash filter. */
+				outl(mc_filter[0], ioaddr + 0xAC);
+				outl(mc_filter[1], ioaddr + 0xB0);
+			} else if (tp->chip_id == COMET5) { /* Has a simple hash filter. */
 				outl(mc_filter[0], ioaddr + 0xAC);
 				outl(mc_filter[1], ioaddr + 0xB0);
 			}

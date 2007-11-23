@@ -5,6 +5,7 @@
  * (C) IBM Corporation, IBM Deutschland Entwicklung GmbH, 2000
  */
 
+#include <linux/blkdev.h>
 #include <asm/ccwcache.h>
 #include <asm/dasd.h>
 

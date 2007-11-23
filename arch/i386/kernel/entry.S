@@ -267,16 +267,18 @@ error_code:
 	pushl %ebx
 	cld
 	movl %es,%cx
-	xchgl %eax, ORIG_EAX(%esp)	# orig_eax (get the error code. )
+	movl ORIG_EAX(%esp), %esi	# get the error code
+	movl ES(%esp), %edi		# get the function address
+	movl %eax, ORIG_EAX(%esp)
+	movl %ecx, ES(%esp)
 	movl %esp,%edx
-	xchgl %ecx, ES(%esp)		# get the address and save es.
-	pushl %eax			# push the error code
-	pushl %edx
+	pushl %esi			# push the error code
+	pushl %edx			# push the pt_regs pointer
 	movl $(__KERNEL_DS),%edx
 	movl %dx,%ds
 	movl %dx,%es
 	GET_CURRENT(%ebx)
-	call *%ecx
+	call *%edi
 	addl $8,%esp
 	jmp ret_from_exception
 
@@ -331,11 +333,6 @@ ENTRY(invalid_op)
 ENTRY(coprocessor_segment_overrun)
 	pushl $0
 	pushl $ SYMBOL_NAME(do_coprocessor_segment_overrun)
-	jmp error_code
-
-ENTRY(reserved)
-	pushl $0
-	pushl $ SYMBOL_NAME(do_reserved)
 	jmp error_code
 
 ENTRY(double_fault)

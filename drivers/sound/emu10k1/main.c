@@ -784,10 +784,3 @@ static void __exit emu10k1_cleanup_module(void)
 
 module_init(emu10k1_init_module);
 module_exit(emu10k1_cleanup_module);
-
-#ifndef MODULE
-int __init init_emu10k1(void)
-{
-        return emu10k1_init_module();
-}
-#endif
