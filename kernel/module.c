@@ -356,6 +356,21 @@ err0:
 	return error;
 }
 
+static spinlock_t unload_lock = SPIN_LOCK_UNLOCKED;
+int try_inc_mod_count(struct module *mod)
+{
+	int res = 1;
+	if (mod) {
+		spin_lock(&unload_lock);
+		if (mod->flags & MOD_DELETED)
+			res = 0;
+		else
+			__MOD_INC_USE_COUNT(mod);
+		spin_unlock(&unload_lock);
+	}
+	return res;
+}
+
 asmlinkage int
 sys_delete_module(const char *name_user)
 {
@@ -383,11 +398,18 @@ sys_delete_module(const char *name_user)
 		}
 		put_mod_name(name);
 		error = -EBUSY;
- 		if (mod->refs != NULL || __MOD_IN_USE(mod))
+		if (mod->refs != NULL)
 			goto out;
 
-		free_module(mod, 0);
-		error = 0;
+		spin_lock(&unload_lock);
+ 		if (!__MOD_IN_USE(mod)) {
+			mod->flags |= MOD_DELETED;
+			spin_unlock(&unload_lock);
+			free_module(mod, 0);
+			error = 0;
+		} else {
+			spin_unlock(&unload_lock);
+		}
 		goto out;
 	}
 
@@ -396,6 +418,7 @@ restart:
 	something_changed = 0;
 	for (mod = module_list; mod != &kernel_module; mod = next) {
 		next = mod->next;
+		spin_lock(&unload_lock);
 		if (mod->refs == NULL
 		    && (mod->flags & MOD_AUTOCLEAN)
 		    && (mod->flags & MOD_RUNNING)
@@ -404,11 +427,16 @@ restart:
 		    && !__MOD_IN_USE(mod)) {
 			if ((mod->flags & MOD_VISITED)
 			    && !(mod->flags & MOD_JUST_FREED)) {
+				spin_unlock(&unload_lock);
 				mod->flags &= ~MOD_VISITED;
 			} else {
+				mod->flags |= MOD_DELETED;
+				spin_unlock(&unload_lock);
 				free_module(mod, 1);
 				something_changed = 1;
 			}
+		} else {
+			spin_unlock(&unload_lock);
 		}
 	}
 	if (something_changed)
@@ -781,7 +809,6 @@ free_module(struct module *mod, int tag_freed)
 
 	/* Let the module clean up.  */
 
-	mod->flags |= MOD_DELETED;
 	if (mod->flags & MOD_RUNNING) 
 	{
 		if(mod->cleanup)
@@ -1015,6 +1042,11 @@ asmlinkage int
 sys_get_kernel_syms(struct kernel_sym *table)
 {
 	return -ENOSYS;
+}
+
+int try_inc_mod_count(struct module *mod)
+{
+	return 1;
 }
 
 #endif	/* CONFIG_MODULES */

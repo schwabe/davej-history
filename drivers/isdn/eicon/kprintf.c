@@ -27,13 +27,11 @@
  */
 
 
+#include "eicon.h"
 #include "sys.h"
 #include <stdarg.h>
 #undef MAX
 #undef MIN
-
-#include <sys/types.h>
-#include <sys/param.h>
 
 #include "divas.h"
 #include "divalog.h"
@@ -512,7 +510,7 @@ void    DivasPrintf(char  *fmt, ...)
 
     /* clear log entry */
 
-    bzero((caddr_t) &log, sizeof(klog_t));
+    memset((void *) &log, 0, sizeof(klog_t));
 
     log.card = -1;
     log.type = KLOG_TEXT_MSG;

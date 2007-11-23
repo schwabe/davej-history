@@ -29,6 +29,7 @@
 #include <linux/nls.h>
 #include <linux/locks.h>
 #include <linux/init.h>
+#include <asm/page.h>
 
 /* Forward declarations */
 static struct inode_operations ntfs_dir_inode_operations;
@@ -941,6 +942,13 @@ struct super_block * ntfs_read_super(struct super_block *sb,
 	brelse(bh);
 	NTFS_SB(vol)=sb;
 	ntfs_debug(DEBUG_OTHER, "Done to init volume\n");
+
+	/* Check the cluster size is within allowed blocksize limits. */
+	if (vol->clustersize > PAGE_SIZE) {
+		ntfs_error("Partition cluster size is not supported yet (it "
+			   "is > max kernel blocksize).\n");
+		goto ntfs_read_super_unl;
+	}
 
 	/* Inform the kernel that a device block is a NTFS cluster */
 	sb->s_blocksize=vol->clustersize;

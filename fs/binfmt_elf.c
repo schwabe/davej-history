@@ -40,7 +40,7 @@
 #include <linux/elf.h>
 
 static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs);
-static int load_elf_library(int fd);
+static int load_elf_library(struct file *file);
 extern int dump_fpu (struct pt_regs *, elf_fpregset_t *);
 extern void dump_thread(struct pt_regs *, struct user *);
 
@@ -415,8 +415,7 @@ out:
 #define INTERPRETER_ELF 2
 
 
-static inline int
-do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
+static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct file * file;
 	struct dentry *interpreter_dentry = NULL; /* to shut gcc up */
@@ -727,16 +726,12 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	if (interpreter_type != INTERPRETER_AOUT)
 		sys_close(elf_exec_fileno);
 
+	set_binfmt(&elf_format);
 	if (current->exec_domain && current->exec_domain->module)
 		__MOD_DEC_USE_COUNT(current->exec_domain->module);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_DEC_USE_COUNT(current->binfmt->module);
 	current->exec_domain = lookup_exec_domain(current->personality);
-	current->binfmt = &elf_format;
 	if (current->exec_domain && current->exec_domain->module)
 		__MOD_INC_USE_COUNT(current->exec_domain->module);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_INC_USE_COUNT(current->binfmt->module);
 
 	compute_creds(bprm);
 	current->flags &= ~PF_FORKNOEXEC;
@@ -819,24 +814,11 @@ out_free_ph:
 	goto out;
 }
 
-static int
-load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
-{
-	int retval;
-
-	MOD_INC_USE_COUNT;
-	retval = do_load_elf_binary(bprm, regs);
-	MOD_DEC_USE_COUNT;
-	return retval;
-}
-
 /* This is really simpleminded and specialized - we are loading an
    a.out library that is given an ELF header. */
 
-static inline int
-do_load_elf_library(int fd)
+static int load_elf_library(struct file *file)
 {
-	struct file * file;
 	struct dentry * dentry;
 	struct inode * inode;
 	struct elf_phdr *elf_phdata;
@@ -845,10 +827,6 @@ do_load_elf_library(int fd)
 	struct elfhdr elf_ex;
 	loff_t offset = 0;
 
-	error = -EACCES;
-	file = fget(fd);
-	if (!file || !file->f_op)
-		goto out;
 	dentry = file->f_dentry;
 	inode = dentry->d_inode;
 
@@ -924,19 +902,7 @@ do_load_elf_library(int fd)
 out_free_ph:
 	kfree(elf_phdata);
 out_putf:
-	fput(file);
-out:
 	return error;
-}
-
-static int load_elf_library(int fd)
-{
-	int retval;
-
-	MOD_INC_USE_COUNT;
-	retval = do_load_elf_library(fd);
-	MOD_DEC_USE_COUNT;
-	return retval;
 }
 
 /*

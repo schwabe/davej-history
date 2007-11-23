@@ -59,7 +59,7 @@ void	xlog_to_klog(byte *b, int size, int card_num)
 
 	x = (card_xlog_t *) b;
 
-	bzero(&klog, sizeof(klog));
+	memset(&klog, 0, sizeof(klog));
 
 	klog.time_stamp = (dword) x->time_hi;
 	klog.time_stamp = (klog.time_stamp << 16) | (dword) x->time_lo;

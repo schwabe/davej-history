@@ -697,21 +697,32 @@ static int moxa_write(struct tty_struct *tty, int from_user,
 	struct moxa_str *ch;
 	int len, port;
 	unsigned long flags;
-	unsigned char *temp;
 
 	ch = (struct moxa_str *) tty->driver_data;
 	if (ch == NULL)
 		return (0);
 	port = ch->port;
 	save_flags(flags);
-	cli();
 	if (from_user) {
-		copy_from_user(moxaXmitBuff, buf, count);
-		temp = moxaXmitBuff;
-	} else
-		temp = (unsigned char *) buf;
-	len = MoxaPortWriteData(port, temp, count);
-	restore_flags(flags);
+		if (count > PAGE_SIZE)
+			count = PAGE_SIZE;
+		down(&moxaBuffSem);
+		if (copy_from_user(moxaXmitBuff, buf, count)) {
+			len = -EFAULT;
+		} else {
+			cli();
+			len = MoxaPortWriteData(port, moxaXmitBuff, count);
+			restore_flags(flags);
+		}
+		up(&moxaBuffSem);
+		if (len < 0)
+			return len;
+	} else {
+		cli();
+		len = MoxaPortWriteData(port, (unsigned char *) buf, count);
+		restore_flags(flags);
+	}
+
 	/*********************************************
 	if ( !(ch->statusflags & LOWWAIT) &&
 	     ((len != count) || (MoxaPortTxFree(port) <= 100)) )
@@ -2905,6 +2916,8 @@ static int moxaload320b(int cardno, unsigned char * tmp, int len)
 	unsigned long baseAddr;
 	int i;
 
+	if(len > sizeof(moxaBuff))
+		return -EINVAL;
 	if(copy_from_user(moxaBuff, tmp, len))
 		return -EFAULT;
 	baseAddr = moxaBaseAddr[cardno];

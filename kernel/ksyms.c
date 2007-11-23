@@ -81,6 +81,7 @@ EXPORT_SYMBOL(hotplug_path);
 
 #ifdef CONFIG_MODULES
 EXPORT_SYMBOL(get_module_symbol);
+EXPORT_SYMBOL(try_inc_mod_count);
 #endif
 EXPORT_SYMBOL(get_options);
 
@@ -274,6 +275,7 @@ EXPORT_SYMBOL(search_binary_handler);
 EXPORT_SYMBOL(prepare_binprm);
 EXPORT_SYMBOL(compute_creds);
 EXPORT_SYMBOL(remove_arg_zero);
+EXPORT_SYMBOL(set_binfmt);
 
 /* execution environment registration */
 EXPORT_SYMBOL(lookup_exec_domain);

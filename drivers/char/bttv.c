@@ -1979,7 +1979,9 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 					vfree(vcp);
 					return -EFAULT;
 				}
-			} else if (vw.clipcount) {
+			} else if (vw.clipcount > 2048) 
+				return -ENOMEM;
+			else {
 				if((vcp=vmalloc(sizeof(struct video_clip)*
 					(vw.clipcount))) == NULL)
 					return -ENOMEM;

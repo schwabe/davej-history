@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.77.2.7 2000/10/29 11:41:15 davem Exp $
+ * Version:	$Id: arp.c,v 1.77.2.8 2001/07/06 11:36:55 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -731,7 +731,8 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			    (addr_type == RTN_UNICAST  && rt->u.dst.dev != dev &&
 			     (IN_DEV_PROXY_ARP(in_dev) || pneigh_lookup(&arp_tbl, &tip, dev, 0)))) {
 				n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
-				neigh_release(n);
+				if (n)
+					neigh_release(n);
 
 				if (skb->stamp.tv_sec == 0 ||
 				    skb->pkt_type == PACKET_HOST ||

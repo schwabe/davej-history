@@ -31,6 +31,8 @@
 #include <linux/fcntl.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#define __NO_VERSION__
+#include <linux/module.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -168,30 +170,40 @@ out:
  */
 asmlinkage int sys_uselib(const char * library)
 {
-	int fd, retval;
+	int retval;
 	struct file * file;
 	struct linux_binfmt * fmt;
+	char * tmp = getname(library);
 
 	lock_kernel();
-	fd = sys_open(library, 0, 0);
-	retval = fd;
-	if (fd < 0)
+	retval = PTR_ERR(tmp);
+	if (IS_ERR(tmp))
 		goto out;
-	file = fget(fd);
+
+	file = filp_open(tmp, 0, 0);
+	putname(tmp);
+
+	retval = PTR_ERR(file);
+	if (IS_ERR(file))
+		goto out;
+
+	retval = -EINVAL;
+	if (!S_ISREG(file->f_dentry->d_inode->i_mode))
+		goto out_fput;
+
 	retval = -ENOEXEC;
-	if (file && file->f_dentry && file->f_op && file->f_op->read) {
+	if (file->f_op && file->f_op->read) {
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
-			int (*fn)(int) = fmt->load_shlib;
+			int (*fn)(struct file *) = fmt->load_shlib;
 			if (!fn)
 				continue;
-			/* N.B. Should use file instead of fd */
-			retval = fn(fd);
+			retval = fn(file);
 			if (retval != -ENOEXEC)
 				break;
 		}
 	}
+out_fput:
 	fput(file);
-	sys_close(fd);
 out:
 	unlock_kernel();
   	return retval;
@@ -894,6 +906,16 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	current->dumpable = was_dumpable;
 
 	return retval;
+}
+
+void set_binfmt(struct linux_binfmt *new)
+{
+	struct linux_binfmt *old = current->binfmt;
+	if (new && new->module)
+		__MOD_INC_USE_COUNT(new->module);
+	current->binfmt = new;
+	if (old && old->module)
+		__MOD_DEC_USE_COUNT(old->module);
 }
 
 int do_coredump(long signr, struct pt_regs * regs)

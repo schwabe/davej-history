@@ -96,7 +96,7 @@ void	DivasLogFifoWrite(char *entry, int length)
 	}
 
 	m_count++;
-	bzero(new_klog,sizeof(KNODE));
+	memset(new_klog, 0, sizeof(KNODE));
 
 	/* Set head & tail to point to the new Msg Struct */
 	head=tail=new_klog;
@@ -112,7 +112,7 @@ void	DivasLogFifoWrite(char *entry, int length)
 	}
 
 	m_count++;
-	bzero(new_klog,sizeof(KNODE));
+	memset(new_klog, 0, sizeof(KNODE));
 
 	/* Let last Msg Struct point to new Msg Struct & inc tail */
 	tail->next=new_klog;
@@ -155,7 +155,7 @@ void	DivasLogIdi(card_t *card, ENTITY *e, int request)
 {
 	klog_t		klog;
 
-	bzero(&klog, sizeof(klog));
+	memset(&klog, 0, sizeof(klog));
 
 	klog.time_stamp = UxTimeGet();
 

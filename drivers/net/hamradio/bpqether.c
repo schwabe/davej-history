@@ -169,7 +169,7 @@ static __inline__ int dev_is_ethdev(struct device *dev)
  */
 static int bpq_check_devices(struct device *dev)
 {
-	struct bpqdev *bpq, *bpq_prev;
+	struct bpqdev *bpq, *bpq_prev, *bpq_next;
 	int result = 0;
 	unsigned long flags;
 
@@ -178,7 +178,8 @@ static int bpq_check_devices(struct device *dev)
 
 	bpq_prev = NULL;
 
-	for (bpq = bpq_devices; bpq != NULL; bpq = bpq->next) {
+	for (bpq = bpq_devices; bpq != NULL; bpq = bpq_next) {
+		bpq_next = bpq->next;
 		if (!dev_get(bpq->ethname)) {
 			if (bpq_prev)
 				bpq_prev->next = bpq->next;
@@ -195,8 +196,8 @@ static int bpq_check_devices(struct device *dev)
 			unregister_netdevice(&bpq->axdev);
 			kfree(bpq);
 		}
-
-		bpq_prev = bpq;
+		else
+			bpq_prev = bpq;
 	}
 
 	restore_flags(flags);

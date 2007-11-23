@@ -94,7 +94,7 @@ struct agp_bridge_data {
 	u32 mode;
 	enum chipset_type type;
 	enum aper_size_type size_type;
-	u32 *key_list;
+	unsigned long *key_list;
 	atomic_t current_memory_agp;
 	atomic_t agp_in_use;
 	int max_memory_agp;	/* in number of pages */
@@ -119,15 +119,17 @@ struct agp_bridge_data {
 	int (*remove_memory) (agp_memory *, off_t, int);
 	agp_memory *(*alloc_by_type) (size_t, int);
 	void (*free_by_type) (agp_memory *);
+	unsigned long (*agp_alloc_page) (void);
+	void (*agp_destroy_page) (unsigned long);
 };
 
 #define OUTREG32(mmap, addr, val)   writel((val),(mmap + (addr)))
 #define OUTREG16(mmap, addr, val)   writew((val),(mmap + (addr)))
-#define OUTREG8 (mmap, addr, val)   writeb((val),(mmap + (addr)))
+#define OUTREG8(mmap, addr, val)   writeb((val),(mmap + (addr)))
 
 #define INREG32(mmap, addr)         readl(mmap + (addr))
 #define INREG16(mmap, addr)         readw(mmap + (addr))
-#define INREG8 (mmap, addr)         readb(mmap + (addr))
+#define INREG8(mmap, addr)         readb(mmap + (addr))
 
 #define CACHE_FLUSH	agp_bridge.cache_flush
 #define A_SIZE_8(x)	((aper_size_info_8 *) x)
@@ -222,6 +224,24 @@ struct agp_bridge_data {
 #ifndef PCI_DEVICE_ID_VIA_8363_0
 #define PCI_DEVICE_ID_VIA_8363_0	0x0305
 #endif
+#ifndef PCI_DEVICE_ID_AL_M1621_0
+#define PCI_DEVICE_ID_AL_M1621_0	0x1621
+#endif
+#ifndef PCI_DEVICE_ID_AL_M1631_0
+#define PCI_DEVICE_ID_AL_M1631_0	0x1631
+#endif
+#ifndef PCI_DEVICE_ID_AL_M1632_0
+#define PCI_DEVICE_ID_AL_M1632_0	0x1632
+#endif
+#ifndef PCI_DEVICE_ID_AL_M1641_0
+#define PCI_DEVICE_ID_AL_M1641_0	0x1641
+#endif
+#ifndef PCI_DEVICE_ID_AL_M1647_0
+#define PCI_DEVICE_ID_AL_M1647_0	0x1647
+#endif
+#ifndef PCI_DEVICE_ID_AL_M1651_0
+#define PCI_DEVICE_ID_AL_M1651_0	0x1651
+#endif
 
 
 /* intel register */
@@ -283,5 +303,29 @@ struct agp_bridge_data {
 #define ALI_AGPCTRL	0xb8
 #define ALI_ATTBASE	0xbc
 #define ALI_TLBCTRL	0xc0
+#define ALI_TAGCTRL	0xc4
+#define ALI_CACHE_FLUSH_CTRL	0xD0
+#define ALI_CACHE_FLUSH_ADDR_MASK	0xFFFFF000
+#define ALI_CACHE_FLUSH_EN	0x100
+
+
+/* Serverworks Registers */
+#define SVWRKS_APSIZE 0x10
+#define SVWRKS_SIZE_MASK 0xfe000000
+
+#define SVWRKS_MMBASE 0x14
+#define SVWRKS_CACHING 0x4b
+#define SVWRKS_FEATURE 0x68
+
+/* func 1 registers */
+#define SVWRKS_AGP_ENABLE 0x60
+#define SVWRKS_COMMAND 0x04
+
+/* Memory mapped registers */
+#define SVWRKS_GART_CACHE 0x02
+#define SVWRKS_GATTBASE   0x04
+#define SVWRKS_TLBFLUSH   0x10
+#define SVWRKS_POSTFLUSH  0x14
+#define SVWRKS_DIRFLUSH   0x0c
 
 #endif				/* _AGP_BACKEND_PRIV_H */

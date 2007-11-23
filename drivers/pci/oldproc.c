@@ -1034,7 +1034,6 @@ int get_pci_list(char *buf)
 {
 	int nprinted, len, size;
 	struct pci_dev *dev;
-	static int complained = 0;
 #	define MSG "\nwarning: page-size limit reached!\n"
 
 	/* reserve same for truncation warning message: */

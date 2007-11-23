@@ -612,7 +612,7 @@ static int pad_ioctl(struct inode *inode, struct file * file,
 		current_params.tap_interval	= new.tap_interval;
 		return 0;
 	}
-	return -ENOIOCTLCMD;
+	return -ENOTTY;
 }
 
 

@@ -4,6 +4,8 @@
 #
 mainmenu_name "Linux Kernel Configuration"
 
+define_bool CONFIG_X86 y
+
 mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL

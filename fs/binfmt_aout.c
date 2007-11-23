@@ -30,7 +30,7 @@
 #include <asm/pgtable.h>
 
 static int load_aout_binary(struct linux_binprm *, struct pt_regs * regs);
-static int load_aout_library(int fd);
+static int load_aout_library(struct file *file);
 static int aout_core_dump(long signr, struct pt_regs * regs, struct file *);
 
 extern void dump_thread(struct pt_regs *, struct user *);
@@ -262,7 +262,7 @@ static int warnings = 0;
  * libraries.  There is no binary dependent code anywhere else.
  */
 
-static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
+static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct exec ex;
 	struct file * file;
@@ -411,16 +411,12 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 		}
 	}
 beyond_if:
+	set_binfmt(&aout_format);
 	if (current->exec_domain && current->exec_domain->module)
 		__MOD_DEC_USE_COUNT(current->exec_domain->module);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_DEC_USE_COUNT(current->binfmt->module);
 	current->exec_domain = lookup_exec_domain(current->personality);
-	current->binfmt = &aout_format;
 	if (current->exec_domain && current->exec_domain->module)
 		__MOD_INC_USE_COUNT(current->exec_domain->module);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_INC_USE_COUNT(current->binfmt->module);
 
 	set_brk(current->mm->start_brk, current->mm->brk);
 
@@ -437,22 +433,8 @@ beyond_if:
 	return 0;
 }
 
-
-static int
-load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
+static int load_aout_library(struct file *file)
 {
-	int retval;
-
-	MOD_INC_USE_COUNT;
-	retval = do_load_aout_binary(bprm, regs);
-	MOD_DEC_USE_COUNT;
-	return retval;
-}
-
-static inline int
-do_load_aout_library(int fd)
-{
-        struct file * file;
 	struct inode * inode;
 	unsigned long bss, start_addr, len;
 	unsigned long error;
@@ -460,12 +442,6 @@ do_load_aout_library(int fd)
 	loff_t offset = 0;
 	struct exec ex;
 
-	retval = -EACCES;
-	file = fget(fd);
-	if (!file)
-		goto out;
-	if (!file->f_op)
-		goto out_putf;
 	inode = file->f_dentry->d_inode;
 
 	retval = -ENOEXEC;
@@ -528,22 +504,8 @@ do_load_aout_library(int fd)
 	retval = 0;
 
 out_putf:
-	fput(file);
-out:
 	return retval;
 }
-
-static int
-load_aout_library(int fd)
-{
-	int retval;
-
-	MOD_INC_USE_COUNT;
-	retval = do_load_aout_library(fd);
-	MOD_DEC_USE_COUNT;
-	return retval;
-}
-
 
 int __init init_aout_binfmt(void)
 {

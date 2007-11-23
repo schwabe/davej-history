@@ -243,7 +243,6 @@ isdn_dc2minor(int di, int ch)
 static int isdn_timer_cnt1 = 0;
 static int isdn_timer_cnt2 = 0;
 static int isdn_timer_cnt3 = 0;
-static int isdn_timer_cnt4 = 0;
 
 static void
 isdn_timer_funct(ulong dummy)
@@ -267,15 +266,10 @@ isdn_timer_funct(ulong dummy)
 			isdn_timer_cnt2 = 0;
 			if (tf & ISDN_TIMER_NETHANGUP)
 				isdn_net_autohup();
-			if (++isdn_timer_cnt3 > ISDN_TIMER_RINGING) {
+			if (++isdn_timer_cnt3 >= ISDN_TIMER_RINGING) {
 				isdn_timer_cnt3 = 0;
 				if (tf & ISDN_TIMER_MODEMRING)
 					isdn_tty_modem_ring();
-			}
-			if (++isdn_timer_cnt4 > ISDN_TIMER_KEEPINT) {
-				isdn_timer_cnt4 = 0;
-				if (tf & ISDN_TIMER_KEEPALIVE)
-					isdn_net_slarp_out();
 			}
 			if (tf & ISDN_TIMER_CARRIER)
 				isdn_tty_carrier_timeout();
@@ -295,7 +289,7 @@ isdn_timer_funct(ulong dummy)
 void
 isdn_timer_ctrl(int tf, int onoff)
 {
-	int flags;
+	int flags, old_tflags;
 
 	save_flags(flags);
 	cli();
@@ -304,11 +298,12 @@ isdn_timer_ctrl(int tf, int onoff)
 		isdn_timer_cnt1 = 0;
 		isdn_timer_cnt2 = 0;
 	}
+	old_tflags = dev->tflags;
 	if (onoff)
 		dev->tflags |= tf;
 	else
 		dev->tflags &= ~tf;
-	if (dev->tflags)
+	if (dev->tflags && !old_tflags)
 		mod_timer(&dev->timer, jiffies+ISDN_TIMER_RES);
 	restore_flags(flags);
 }
@@ -1007,7 +1002,7 @@ isdn_read(struct file *file, char *buf, size_t count, loff_t * off)
 		retval = -ENODEV;
 		goto out;
 	}
-	if (minor < ISDN_MINOR_CTRL) {
+	if (minor <= ISDN_MINOR_BMAX) {
 		printk(KERN_WARNING "isdn_read minor %d obsolete!\n", minor);
 		drvidx = isdn_minor2drv(minor);
 		if (drvidx < 0) {
@@ -1098,7 +1093,7 @@ isdn_write(struct file *file, const char *buf, size_t count, loff_t * off)
 	if (!dev->drivers)
 		return -ENODEV;
 
-	if (minor < ISDN_MINOR_CTRL) {
+	if (minor <= ISDN_MINOR_BMAX) {
 		printk(KERN_WARNING "isdn_write minor %d obsolete!\n", minor);
 		drvidx = isdn_minor2drv(minor);
 		if (drvidx < 0) {
@@ -1248,7 +1243,7 @@ isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
 	}
 	if (!dev->drivers)
 		return -ENODEV;
-	if (minor < ISDN_MINOR_CTRL) {
+	if (minor <= ISDN_MINOR_BMAX) {
 		drvidx = isdn_minor2drv(minor);
 		if (drvidx < 0)
 			return -ENODEV;
@@ -1664,7 +1659,7 @@ isdn_open(struct inode *ino, struct file *filep)
 	}
 	if (!dev->channels)
 		goto out;
-	if (minor < ISDN_MINOR_CTRL) {
+	if (minor <= ISDN_MINOR_BMAX) {
 		printk(KERN_WARNING "isdn_open minor %d obsolete!\n", minor);
 		drvidx = isdn_minor2drv(minor);
 		if (drvidx < 0)
@@ -1725,7 +1720,7 @@ isdn_close(struct inode *ino, struct file *filep)
 		goto out;
 	}
 	isdn_unlock_drivers();
-	if (minor < ISDN_MINOR_CTRL)
+	if (minor <= ISDN_MINOR_BMAX)
 		goto out;
 	if (minor <= ISDN_MINOR_CTRLMAX) {
 		if (dev->profd == current)

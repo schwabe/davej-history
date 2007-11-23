@@ -59,7 +59,6 @@ struct ux_diva_card_s
 };
 
 void bcopy(void *pSource, void *pDest, dword dwLength);
-void bzero(void *pDataArea, dword dwLength);
 
 
 /*

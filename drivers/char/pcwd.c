@@ -240,7 +240,7 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 
 	switch(cmd) {
 	default:
-		return -ENOIOCTLCMD;
+		return -ENOTTY;
 
 	case WDIOC_GETSUPPORT:
 		i = copy_to_user((void*)arg, &ident, sizeof(ident));
@@ -476,6 +476,8 @@ static inline char *get_firmware(void)
 	char *ret;
 
 	ret = kmalloc(6, GFP_KERNEL);
+	if(ret == NULL)
+		return NULL;
 
 	while((count < 3) && (!found)) {
 		outb_p(0x80, current_readport + 2);
@@ -497,10 +499,8 @@ static inline char *get_firmware(void)
 		ten = send_command(0x82);
 		hund = send_command(0x83);
 		minor = send_command(0x84);
-	}
-
-	if (found)
 		sprintf(ret, "%c.%c%c%c", one, ten, hund, minor);
+	}
 	else
 		sprintf(ret, "ERROR");
 
@@ -622,12 +622,12 @@ __initfunc(int pcwatchdog_init(void))
 #ifdef	MODULE
 void cleanup_module(void)
 {
+	misc_deregister(&pcwd_miscdev);
 	/*  Disable the board  */
 	if (revision == PCWD_REVISION_C) {
 		outb_p(0xA5, current_readport + 3);
 		outb_p(0xA5, current_readport + 3);
 	}
-	misc_deregister(&pcwd_miscdev);
 	if (supports_temp)
 		misc_deregister(&temp_miscdev);
 

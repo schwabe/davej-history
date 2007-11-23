@@ -136,6 +136,7 @@ struct module_info
 	(mod_member_present((mod), can_unload) && (mod)->can_unload	\
 	 ? (mod)->can_unload() : atomic_read(&(mod)->uc.usecount))
 
+extern int try_inc_mod_count(struct module *mod);
 /* Indirect stringification.  */
 
 #define __MODULE_STRING_1(x)	#x

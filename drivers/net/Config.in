@@ -101,10 +101,11 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate 'RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'Alternative RealTek 8139 driver (8139too) support' CONFIG_RTL8139TOO
+      tristate 'Alternative RealTek 8129/8139 driver (8139too) support' CONFIG_RTL8139TOO
       if [ "$CONFIG_RTL8139TOO" != "n" ]; then
           bool '  Use PIO instead of MMIO' CONFIG_8139TOO_PIO
           bool '  Support for automatic channel equalization' CONFIG_8139TOO_TUNE_TWISTER
+          bool '  Support for 8129' CONFIG_8139TOO_8129
       fi
   fi
   bool 'Other ISA cards' CONFIG_NET_ISA
@@ -135,8 +136,8 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
   if [ "$CONFIG_NET_EISA" = "y" ]; then
     tristate 'AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
+    tristate 'Adaptec Starfire/DuraLAN support' CONFIG_ADAPTEC_STARFIRE
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'Adaptec Starfire support (EXPERIMENTAL)' CONFIG_ADAPTEC_STARFIRE
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
     tristate 'Apricot Xen-II on board Ethernet' CONFIG_APRICOT

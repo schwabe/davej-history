@@ -43,7 +43,7 @@
 #undef DEBUG_ELF
 
 static int load_irix_binary(struct linux_binprm * bprm, struct pt_regs * regs);
-static int load_irix_library(int fd);
+static int load_irix_library(struct file *file);
 static int irix_core_dump(long signr, struct pt_regs * regs, struct file *);
 extern int dump_fpu (elf_fpregset_t *);
 
@@ -610,8 +610,7 @@ void irix_map_prda_page (void)
 /* These are the functions used to load ELF style executables and shared
  * libraries.  There is no binary dependent code anywhere else.
  */
-static inline int do_load_irix_binary(struct linux_binprm * bprm,
-				      struct pt_regs * regs)
+static int load_irix_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct elfhdr elf_ex, interp_elf_ex;
 	struct dentry *interpreter_dentry;
@@ -750,16 +749,12 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	sys_close(elf_exec_fileno);
 	current->personality = PER_IRIX32;
 
+	set_binfmt(&irix_format);
 	if (current->exec_domain && current->exec_domain->module)
 		__MOD_DEC_USE_COUNT(current->exec_domain->module);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_DEC_USE_COUNT(current->binfmt->module);
 	current->exec_domain = lookup_exec_domain(current->personality);
-	current->binfmt = &irix_format;
 	if (current->exec_domain && current->exec_domain->module)
 		__MOD_INC_USE_COUNT(current->exec_domain->module);
-	if (current->binfmt && current->binfmt->module)
-		__MOD_INC_USE_COUNT(current->binfmt->module);
 
 	compute_creds(bprm);
 	current->flags &= ~PF_FORKNOEXEC;
@@ -822,20 +817,10 @@ out_phdata:
 	return retval;
 }
 
-static int load_irix_binary(struct linux_binprm * bprm, struct pt_regs * regs)
-{
-	int retval;
-
-	MOD_INC_USE_COUNT;
-	retval = do_load_irix_binary(bprm, regs);
-	MOD_DEC_USE_COUNT;
-	return retval;
-}
-
 /* This is really simpleminded and specialized - we are loading an
  * a.out library that is given an ELF header.
  */
-static inline int do_load_irix_library(struct file *file)
+static int load_irix_library(struct file *file)
 {
 	struct elfhdr elf_ex;
 	struct elf_phdr *elf_phdata  =  NULL;
@@ -931,21 +916,6 @@ static inline int do_load_irix_library(struct file *file)
 	return 0;
 }
 
-static int load_irix_library(int fd)
-{
-	int retval = -EACCES;
-	struct file *file;
-
-	MOD_INC_USE_COUNT;
-	file = fget(fd);
-	if (file) {
-		retval = do_load_irix_library(file);
-		fput(file);
-	}
-	MOD_DEC_USE_COUNT;
-	return retval;
-}
-	
 /* Called through irix_syssgi() to map an elf image given an FD,
  * a phdr ptr USER_PHDRP in userspace, and a count CNT telling how many
  * phdrs there are in the USER_PHDRP array.  We return the vaddr the

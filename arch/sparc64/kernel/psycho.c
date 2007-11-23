@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.85.2.12 2001/05/16 07:28:41 davem Exp $
+/* $Id: psycho.c,v 1.85.2.13 2001/06/28 01:31:12 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1899,20 +1899,21 @@ static void __init fixup_irq(struct pci_dev *pdev,
 
 		/* Slot determination is only slightly complex.  Handle
 		 * the easy case first.
+		 *
+		 * Basically, device number zero on the top-level bus is
+		 * always the PCI host controller.  Slot 0 is then device 1.
+		 * PBM A supports two external slots (0 and 1), and PBM B
+		 * supports 4 external slots (0, 1, 2, and 3).  On-board PCI
+		 * devices are wired to device numbers outside of these
+		 * ranges. -DaveM
 		 */
 		if(pdev->bus->number == pbm->pci_first_busno) {
-			if(pbm == &pbm->parent->pbm_A)
-				slot = (pdev->devfn >> 3) - 1;
-			else
-				slot = (pdev->devfn >> 3) - 2;
+			slot = (pdev->devfn >> 3) - 1;
 		} else {
 			/* Underneath a bridge, use slot number of parent
 			 * bridge.
 			 */
-			if(pbm == &pbm->parent->pbm_A)
-				slot = (pdev->bus->self->devfn >> 3) - 1;
-			else
-				slot = (pdev->bus->self->devfn >> 3) - 2;
+			slot = (pdev->bus->self->devfn >> 3) - 1;
 
 			/* Use low slot number bits of child as IRQ line. */
 			line = (pdev->devfn >> 3) & 0x03;

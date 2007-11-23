@@ -42,11 +42,12 @@ struct linux_binfmt {
 	struct linux_binfmt * next;
 	struct module *module;
 	int (*load_binary)(struct linux_binprm *, struct  pt_regs * regs);
-	int (*load_shlib)(int fd);
+	int (*load_shlib)(struct file *file);
 	int (*core_dump)(long signr, struct pt_regs * regs, struct file *file);
 	unsigned long min_coredump;
 };
 
+extern void set_binfmt(struct linux_binfmt *);
 extern int do_coredump(long, struct pt_regs *);
 extern int register_binfmt(struct linux_binfmt *);
 extern int unregister_binfmt(struct linux_binfmt *);

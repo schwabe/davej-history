@@ -931,18 +931,60 @@ static void __init setup_ioapic_id(void)
 		panic("could not set ID");
 }
 
+static int __init ELCR_trigger(unsigned int irq)
+{
+	unsigned int port;
+
+	port = 0x4d0 + (irq >> 3);
+	return (inb(port) >> (irq & 7)) & 1;
+}
+
 static void __init construct_default_ISA_mptable(void)
 {
 	int i, pos = 0;
+	int ELCR_fallback = 0;
 	const int bus_type = (mpc_default_type == 2 || mpc_default_type == 3 ||
 			      mpc_default_type == 6) ? MP_BUS_EISA : MP_BUS_ISA;
+
+	/*
+	 *  If true, we have an ISA/PCI system with no IRQ entries
+	 *  in the MP table. To prevent the PCI interrupts from being set up
+	 *  incorrectly, we try to use the ELCR. The sanity check to see if
+	 *  there is good ELCR data is very simple - IRQ0, 1, 2 and 13 can
+	 *  never be level sensitive, so we simply see if the ELCR agrees.
+	 *  If it does, we assume it's valid.
+	 */
+	if (mpc_default_type == 5) {
+		printk("ISA/PCI bus type with no IRQ information... falling back to ELCR\n");
+
+		if (ELCR_trigger(0) || ELCR_trigger(1) || ELCR_trigger(2) || ELCR_trigger(13))
+			printk("ELCR contains invalid data... not using ELCR\n");
+		else {
+			printk("Using ELCR to identify PCI interrupts\n");
+			ELCR_fallback = 1;
+		}
+	}
 
 	for (i = 0; i < 16; i++) {
 		if (!IO_APIC_IRQ(i))
 			continue;
 
 		mp_irqs[pos].mpc_irqtype = mp_INT;
-		mp_irqs[pos].mpc_irqflag = 0;		/* default */
+
+		if (ELCR_fallback) {
+			/*
+			 *  If the ELCR indicates a level-sensitive interrupt, we
+			 *  copy that information over to the MP table in the
+			 *  irqflag field (level sensitive, active high polarity).
+			 */
+			if (ELCR_trigger(i))
+				mp_irqs[pos].mpc_irqflag = 13;
+			else
+				mp_irqs[pos].mpc_irqflag = 0;
+		}
+		else
+			mp_irqs[pos].mpc_irqflag = 0;		/* default */
+
 		mp_irqs[pos].mpc_srcbus = 0;
 		mp_irqs[pos].mpc_srcbusirq = i;
 		mp_irqs[pos].mpc_dstapic = 0;

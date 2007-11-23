@@ -928,6 +928,9 @@ static int pc_write(struct tty_struct * tty, int from_user,
 
 		/* First we read the data in from the file system into a temp buffer */
 
+		memoff(ch);
+		restore_flags(flags);
+
 		if (bytesAvailable) 
 		{ /* Begin bytesAvailable */
 
@@ -968,8 +971,6 @@ static int pc_write(struct tty_struct * tty, int from_user,
 			post_fep_init.
 		--------------------------------------------------------------------- */
 		buf = ch->tmp_buf;
-		memoff(ch);
-		restore_flags(flags);
 
 	} /* End from_user */
 

@@ -45,11 +45,6 @@ void bcopy(void *pSource, void *pDest, dword dwLength)
 }
 #endif
 
-void bzero(void *pDataArea, dword dwLength)
-{
-	memset(pDataArea, 0, dwLength);
-}
-
 int Divas4BRIInitPCI(card_t *card, dia_card_t *cfg)
 {
 	/* Use UxPciConfigWrite	routines to initialise PCI config space */

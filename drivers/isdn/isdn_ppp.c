@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.c,v 1.85.6.2 2001/01/23 17:45:02 kai Exp $
+/* $Id: isdn_ppp.c,v 1.85.6.5 2001/05/26 15:19:56 kai Exp $
  *
  * Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -84,7 +84,7 @@ static void isdn_ppp_mp_cleanup( isdn_net_local * lp );
 static int isdn_ppp_bundle(struct ippp_struct *, int unit);
 #endif	/* CONFIG_ISDN_MPP */
   
-char *isdn_ppp_revision = "$Revision: 1.85.6.2 $";
+char *isdn_ppp_revision = "$Revision: 1.85.6.5 $";
 
 static struct ippp_struct *ippp_table[ISDN_MAX_CHANNELS];
 
@@ -166,6 +166,7 @@ isdn_ppp_bind(isdn_net_local * lp)
 	int unit = 0;
 	long flags;
 	struct ippp_struct *is;
+	int retval;
 
 	save_flags(flags);
 	cli();
@@ -198,12 +199,14 @@ isdn_ppp_bind(isdn_net_local * lp)
 	if (i >= ISDN_MAX_CHANNELS) {
 		restore_flags(flags);
 		printk(KERN_WARNING "isdn_ppp_bind: Can't find a (free) connection to the ipppd daemon.\n");
-		return -1;
+		retval = -1;
+		goto out;
 	}
 	unit = isdn_ppp_if_get_unit(lp->name);	/* get unit number from interface name .. ugly! */
 	if (unit < 0) {
 		printk(KERN_ERR "isdn_ppp_bind: illegal interface name %s.\n", lp->name);
-		return -1;
+		retval = -1;
+		goto out;
 	}
 	
 	lp->ppp_slot = i;
@@ -212,13 +215,16 @@ isdn_ppp_bind(isdn_net_local * lp)
 	is->unit = unit;
 	is->state = IPPP_OPEN | IPPP_ASSIGNED;	/* assigned to a netdevice but not connected */
 #ifdef CONFIG_ISDN_MPP
-	if (isdn_ppp_mp_init(lp, NULL) < 0)
-		return -ENOMEM;
+	retval = isdn_ppp_mp_init(lp, NULL);
+	if (retval < 0)
+		goto out;
 #endif /* CONFIG_ISDN_MPP */
 
-	restore_flags(flags);
+	retval = lp->ppp_slot;
 
-	return lp->ppp_slot;
+ out:
+	restore_flags(flags);
+	return retval;
 }
 
 /*
@@ -780,7 +786,10 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 			}
 			skb_reserve(skb, hl);
 			if (copy_from_user(skb_put(skb, count), buf, count))
+			{
+				kfree_skb(skb);
 				return -EFAULT;
+			}
 			if (is->debug & 0x40) {
 				printk(KERN_DEBUG "ppp xmit: len %d\n", (int) skb->len);
 				isdn_ppp_frame_log("xmit", skb->data, skb->len, 32,is->unit,lp->ppp_slot);
@@ -814,7 +823,7 @@ isdn_ppp_init(void)
 		      kmalloc(sizeof(struct ippp_struct), GFP_KERNEL))) {
 			printk(KERN_WARNING "isdn_ppp_init: Could not alloc ippp_table\n");
 			for (j = 0; j < i; j++)
-				kfree(ippp_table[i]);
+				kfree(ippp_table[j]);
 			return -1;
 		}
 		memset((char *) ippp_table[i], 0, sizeof(struct ippp_struct));
@@ -2431,6 +2440,13 @@ static void isdn_ppp_receive_ccp(isdn_net_dev *net_dev, isdn_net_local *lp,
 
 	switch(skb->data[0]) {
 	case CCP_CONFREQ:
+		if(is->debug & 0x10)
+			printk(KERN_DEBUG "Disable compression here!\n");
+		if(proto == PPP_CCP)
+			mis->compflags &= ~SC_COMP_ON;		
+		else
+			is->compflags &= ~SC_LINK_COMP_ON;		
+		break;
 	case CCP_TERMREQ:
 	case CCP_TERMACK:
 		if(is->debug & 0x10)
@@ -2546,6 +2562,17 @@ static void isdn_ppp_receive_ccp(isdn_net_dev *net_dev, isdn_net_local *lp,
 
 /* TODO: Clean this up with new Reset semantics */
 
+/* I believe the CCP handling as-is is done wrong. Compressed frames
+ * should only be sent/received after CCP reaches UP state, which means
+ * both sides have sent CONF_ACK. Currently, we handle both directions
+ * independently, which means we may accept compressed frames too early
+ * (supposedly not a problem), but may also mean we send compressed frames
+ * too early, which may turn out to be a problem.
+ * This part of state machine should actually be handled by (i)pppd, but
+ * that's too big of a change now. --kai
+ */
+
+
 static void isdn_ppp_send_ccp(isdn_net_dev *net_dev, isdn_net_local *lp, struct sk_buff *skb)
 {
 	struct ippp_struct *mis,*is = ippp_table[lp->ppp_slot];
@@ -2580,6 +2607,13 @@ static void isdn_ppp_send_ccp(isdn_net_dev *net_dev, isdn_net_local *lp, struct 
 	
         switch(data[2]) {
 	case CCP_CONFREQ:
+		if(is->debug & 0x10)
+			printk(KERN_DEBUG "Disable decompression here!\n");
+		if(proto == PPP_CCP)
+			is->compflags &= ~SC_DECOMP_ON;
+		else
+			is->compflags &= ~SC_LINK_DECOMP_ON;
+		break;
 	case CCP_TERMREQ:
 	case CCP_TERMACK:
 		if(is->debug & 0x10)

@@ -1324,6 +1324,7 @@ int isp2x00_queuecommand(Scsi_Cmnd * Cmnd, void (*done) (Scsi_Cmnd *))
 	case WRITE_6:
 	case WRITE_BUFFER:
 	case MODE_SELECT:
+	case MODE_SELECT_10:
 		cmd->control_flags = CFLAG_WRITE;
 		break;
 	case REQUEST_SENSE:

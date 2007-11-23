@@ -58,7 +58,16 @@ enum chipset_type {
 	AMD_GENERIC,
 	AMD_IRONGATE,
 	ALI_M1541,
-	ALI_GENERIC
+	ALI_M1621,
+	ALI_M1631,
+	ALI_M1632,
+	ALI_M1641,
+	ALI_M1647,
+	ALI_M1651,
+	ALI_GENERIC,
+	SVWRKS_HE,
+	SVWRKS_LE,
+	SVWRKS_GENERIC
 };
 
 typedef struct _agp_version {

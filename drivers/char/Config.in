@@ -102,7 +102,7 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   tristate '   Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
   tristate '   Advantech SBC Watchdog Timer' CONFIG_ADVANTECH_WDT
   tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
-  tristate '  Intel i810 TCO timer / Watchdog' CONFIG_I810_TCO
+  tristate '   Intel i810 TCO timer / Watchdog' CONFIG_I810_TCO
   tristate '   Mixcom Watchdog' CONFIG_MIXCOMWD 
   tristate '   SBC-60XX Watchdog Timer' CONFIG_60XX_WDT
   tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
@@ -137,6 +137,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       bool '   AMD Irongate support' CONFIG_AGP_AMD
       bool '   Generic SiS support' CONFIG_AGP_SIS
       bool '   ALI M1541 support' CONFIG_AGP_ALI
+      bool '   Serverworks LE/HE support' CONFIG_AGP_SWORKS
    fi
    source drivers/char/drm/Config.in
 fi

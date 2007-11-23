@@ -19,6 +19,8 @@
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
 #include <asm/sysinfo.h>
+#include <asm/hwrpb.h>
+#include <asm/machvec.h>
 
 #include "proto.h"
 
@@ -97,6 +99,30 @@ static alist intm_name[] = {{0, "mull"}, {0x20, "mulq"}, {0x30, "umulh"},
 	{0x40, "mull/v"}, {0x60, "mulq/v"}, {-1, 0}};
 
 static alist * int_name[] = {inta_name, intl_name, ints_name, intm_name};
+
+static int opDEC_testing = 0;
+static int opDEC_fix = 0;
+static unsigned long opDEC_test_pc = 0;
+
+static void
+opDEC_check(void)
+{
+	unsigned long test_pc;
+
+	lock_kernel();
+	opDEC_testing = 1;
+
+	__asm__ __volatile__(
+		"       br      %0,1f\n"
+		"1:     addq    %0,8,%0\n"
+		"       stq     %0,%1\n"
+		"       cvttq/svm $f31,$f31\n"
+		: "=&r"(test_pc), "=m"(opDEC_test_pc)
+		: );
+
+	opDEC_testing = 0;
+	unlock_kernel();
+}
 
 static char *
 assoc(int fcode, alist * a)
@@ -358,7 +384,9 @@ do_entIF(unsigned long type, unsigned long a1,
 	 unsigned long a2, unsigned long a3, unsigned long a4,
 	 unsigned long a5, struct pt_regs regs)
 {
-	die_if_kernel("Instruction fault", &regs, type, 0);
+	if (!opDEC_testing || type != 4) {
+		die_if_kernel("Instruction fault", &regs, type, 0);
+	}
 	switch (type) {
 	      case 0: /* breakpoint */
 		if (ptrace_cancel_bpt(current)) {
@@ -414,6 +442,22 @@ do_entIF(unsigned long type, unsigned long a1,
 
 	      case 4: /* opDEC */
 		if (implver() == IMPLVER_EV4) {
+			/* The some versions of SRM do not handle
+			   the opDEC properly - they return the PC of the
+			   opDEC fault, not the instruction after as the
+			   Alpha architecture requires.  Here we fix it up.
+			   We do this by intentionally causing an opDEC
+			   fault during the boot sequence and testing if
+			   we get the correct PC.  If not, we set a flag
+			   to correct it every time through.
+			*/
+			if (opDEC_testing && regs.pc == opDEC_test_pc) {
+				opDEC_fix = 4;
+				printk("opDEC fixup enabled.\n");
+			}
+
+			regs.pc += opDEC_fix; 
+
 			/* EV4 does not implement anything except normal
 			   rounding.  Everything else will come here as
 			   an illegal instruction.  Emulate them.  */
@@ -1105,4 +1149,11 @@ trap_init(void)
 	wrent(entUna, 4);
 	wrent(entSys, 5);
 	wrent(entDbg, 6);
+
+	/* Hack for Multia (UDB) and JENSEN: some of their SRMs have
+	 * a bug in the handling of the opDEC fault.  Fix it up.
+	 */
+	if (implver() == IMPLVER_EV4) {
+		opDEC_check();
+	}
 }

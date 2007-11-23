@@ -12,7 +12,7 @@
 #include <linux/binfmts.h>
 #include <linux/init.h>
 
-static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
+static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
 	char *cp, *i_name, *i_name_start, *i_arg;
 	struct dentry * dentry;
@@ -88,15 +88,6 @@ static int do_load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	if (retval < 0)
 		return retval;
 	return search_binary_handler(bprm,regs);
-}
-
-static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
-{
-	int retval;
-	MOD_INC_USE_COUNT;
-	retval = do_load_script(bprm,regs);
-	MOD_DEC_USE_COUNT;
-	return retval;
 }
 
 struct linux_binfmt script_format = {
