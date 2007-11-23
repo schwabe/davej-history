@@ -1018,16 +1018,15 @@ static int duplex=-1;
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
 MODULE_PARM(debug, "i");
-MODULE_PARM(media, "s");
+MODULE_PARM(media, "c8");
 MODULE_PARM(duplex, "i");
 
 EXPORT_NO_SYMBOLS;
 
 /*
-* media=t             - specify media type
-   or media=2
+* media=rj45             - specify media type
+   or media=bnc
    or media=aui
-   or medai=auto
 * duplex=0            - specify forced half/full/autonegotiate duplex
 * debug=#             - debug level
 

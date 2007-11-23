@@ -131,7 +131,6 @@ static void nfsd_proc_init(void)
 static void
 nfsd_init(void)
 {
-	nfsd_xdr_init();	/* XDR */
 	nfsd_stat_init();	/* Statistics */
 	nfsd_cache_init();	/* RPC reply cache */
 	nfsd_export_init();	/* Exports table */

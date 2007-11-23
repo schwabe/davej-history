@@ -205,9 +205,8 @@ configuration options are available on the command line:
 * mmode=#####         - specify memory base address
 * dma=#               - specify DMA channel
 * media=rj45          - specify media type
-   or media=2
+   or media=bnc
    or media=aui
-   or medai=auto
 * duplex=f            - specify forced half/full/autonegotiate duplex
    or duplex=h
    or duplex=auto

@@ -66,7 +66,7 @@ static void proc_pid_fill_inode(struct inode * inode, int fill)
 	if (fill && (p = find_task_by_pid(pid)) != NULL) {
 		uid_t uid = 0;
 		gid_t gid = 0;
-		if (p->dumpable == 1 || ino == PROC_PID_INO) {
+		if (p->dumpable || ino == PROC_PID_INO) {
 			uid = p->euid;
 			gid = p->egid;
 		}

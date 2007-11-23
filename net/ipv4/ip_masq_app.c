@@ -2,7 +2,7 @@
  *		IP_MASQ_APP application masquerading module
  *
  *
- * 	$Id: ip_masq_app.c,v 1.16 1998/08/29 23:51:14 davem Exp $
+ * 	$Id: ip_masq_app.c,v 1.16.2.2 2001/01/04 05:28:46 davem Exp $
  *
  * Author:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *

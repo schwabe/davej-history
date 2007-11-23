@@ -87,7 +87,7 @@ int ipv4_sysctl_forward(ctl_table *ctl, int write, struct file * filp,
 	return ret;
 }
 
-static int ipv4_sysctl_forward_strategy(ctl_table *table, int *name, int nlen,
+static int ipv4_sysctl_forward_strategy(ctl_table *table, int *name, unsigned nlen,
 			 void *oldval, size_t *oldlenp,
 			 void *newval, size_t newlen, 
 			 void **context)

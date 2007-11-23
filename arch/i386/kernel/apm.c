@@ -36,6 +36,7 @@
  * Oct 1999, Version 1.10
  * Nov 1999, Version 1.11
  * Jan 2000, Version 1.12
+ * Feb 2000, Version 1.13
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
@@ -55,7 +56,7 @@
  *         The new replacment for it is, but Linux doesn't yet support this.
  *         Alan Cox Linux 2.1.55
  *    1.3: Set up a valid data descriptor 0x40 for buggy BIOS's
- *    1.4: Upgraded to support APM 1.2. Integrated ThinkPad suspend patch by 
+ *    1.4: Upgraded to support APM 1.2. Integrated ThinkPad suspend patch by
  *         Dean Gaudet <dgaudet@arctic.org>.
  *         C. Scott Ananian <cananian@alumni.princeton.edu> Linux 2.1.87
  *    1.5: Fix segment register reloading (in case of bad segments saved
@@ -127,7 +128,7 @@
  *         scripts that check for it before doing power off
  *         work (Jim Avera <jima@hal.com>).
  *   1.13: Fix the Thinkpad (again) :-( (CONFIG_APM_IGNORE_MULTIPLE_SUSPENDS
- *         is now the way life works). 
+ *         is now the way life works).
  *         Fix thinko in suspend() (wrong return).
  *   1.13ac: Added apm_battery_horked() for Compal boards (Dell 5000e etc)
  *
@@ -242,8 +243,8 @@ extern int (*console_blank_hook)(int);
 
 /*
  * Define to re-initialize the interrupt 0 timer to 100 Hz after a suspend.
- * This patched by Chad Miller <cmiller@surfsouth.com>, orig code by David 
- * Chen <chen@ctpa04.mit.edu>
+ * This patched by Chad Miller <cmiller@surfsouth.com>, original code by
+ * David Chen <chen@ctpa04.mit.edu>
  */
 #undef INIT_TIMER_AFTER_SUSPEND
 
@@ -326,7 +327,6 @@ static int			power_off_enabled = 0;
 #else
 static int			power_off_enabled = 1;
 #endif
-static int 			dell_crap = 0;	/*Set if we find a 5000e */
 
 static DECLARE_WAIT_QUEUE_HEAD(apm_waitqueue);
 static DECLARE_WAIT_QUEUE_HEAD(apm_suspend_waitqueue);
@@ -522,7 +522,7 @@ static int apm_get_event(apm_event_t *event, apm_eventinfo_t *info)
 			&dummy, &dummy))
 		return (eax >> 8) & 0xff;
 	*event = ebx;
-	if (apm_bios_info.version < 0x0102)
+	if (apm_info.connection_version < 0x0102)
 		*info = ~0; /* indicate info not valid */
 	else
 		*info = ecx;
@@ -554,7 +554,7 @@ static int apm_do_idle(void)
 #ifdef ALWAYS_CALL_BUSY
 	clock_slowed = 1;
 #else
-	clock_slowed = (apm_bios_info.flags & APM_IDLE_SLOWS_CLOCK) != 0;
+	clock_slowed = (apm_info.bios.flags & APM_IDLE_SLOWS_CLOCK) != 0;
 #endif
 	return 1;
 }
@@ -620,7 +620,7 @@ static void apm_power_off(void)
 	 * This may be called on an SMP machine.
 	 */
 #ifdef CONFIG_SMP
-	/* Many bioses don't like being called from CPU != 0 */
+	/* Some bioses don't like being called from CPU != 0 */
 	while (cpu_number_map[smp_processor_id()] != 0) {
 		kernel_thread(apm_magic, NULL,
 			CLONE_FS | CLONE_FILES | CLONE_SIGHAND | SIGCHLD);
@@ -638,15 +638,15 @@ static int apm_enable_power_management(int enable)
 {
 	u32	eax;
 
-	if ((enable == 0) && (apm_bios_info.flags & APM_BIOS_DISENGAGED))
+	if ((enable == 0) && (apm_info.bios.flags & APM_BIOS_DISENGAGED))
 		return APM_NOT_ENGAGED;
 	if (apm_bios_call_simple(APM_FUNC_ENABLE_PM, APM_DEVICE_BALL,
 			enable, &eax))
 		return (eax >> 8) & 0xff;
 	if (enable)
-		apm_bios_info.flags &= ~APM_BIOS_DISABLED;
+		apm_info.bios.flags &= ~APM_BIOS_DISABLED;
 	else
-		apm_bios_info.flags |= APM_BIOS_DISABLED;
+		apm_info.bios.flags |= APM_BIOS_DISABLED;
 	return APM_SUCCESS;
 }
 
@@ -658,6 +658,8 @@ static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 	u32	edx;
 	u32	dummy;
 
+	if (apm_info.get_power_status_broken)
+		return APM_32_UNSUPPORTED;
 	if (apm_bios_call(APM_FUNC_GET_STATUS, APM_DEVICE_ALL, 0,
 			&eax, &ebx, &ecx, &edx, &dummy))
 		return (eax >> 8) & 0xff;
@@ -677,7 +679,7 @@ static int apm_get_battery_status(u_short which, u_short *status,
 	u32	edx;
 	u32	esi;
 
-	if (apm_bios_info.version < 0x0102) {
+	if (apm_info.connection_version < 0x0102) {
 		/* pretend we only have one battery. */
 		if (which != 1)
 			return APM_BAD_DEVICE;
@@ -701,15 +703,15 @@ static int apm_engage_power_management(u_short device, int enable)
 	u32	eax;
 
 	if ((enable == 0) && (device == APM_DEVICE_ALL)
-	    && (apm_bios_info.flags & APM_BIOS_DISABLED))
+	    && (apm_info.bios.flags & APM_BIOS_DISABLED))
 		return APM_DISABLED;
 	if (apm_bios_call_simple(APM_FUNC_ENGAGE_PM, device, enable, &eax))
 		return (eax >> 8) & 0xff;
 	if (device == APM_DEVICE_ALL) {
 		if (enable)
-			apm_bios_info.flags &= ~APM_BIOS_DISENGAGED;
+			apm_info.bios.flags &= ~APM_BIOS_DISENGAGED;
 		else
-			apm_bios_info.flags |= APM_BIOS_DISENGAGED;
+			apm_info.bios.flags |= APM_BIOS_DISENGAGED;
 	}
 	return APM_SUCCESS;
 }
@@ -931,7 +933,7 @@ static int send_event(apm_event_t event, apm_event_t undo,
 		if (call->callback(event) && undo) {
 			for (fix = callback_list; fix != call; fix = fix->next)
 				fix->callback(undo);
-			if (apm_bios_info.version > 0x100)
+			if (apm_info.connection_version > 0x100)
 				apm_set_power_state(APM_STATE_REJECT);
 			return 0;
 		}
@@ -974,7 +976,7 @@ static void check_events(void)
 
 		case APM_USER_SUSPEND:
 #ifdef CONFIG_APM_IGNORE_USER_SUSPEND
-			if (apm_bios_info.version > 0x100)
+			if (apm_info.connection_version > 0x100)
 				apm_set_power_state(APM_STATE_REJECT);
 			break;
 #endif
@@ -1035,7 +1037,7 @@ static void apm_event_handler(unsigned long unused)
 	int		err;
 
 	if ((standbys_pending > 0) || (suspends_pending > 0)) {
-		if ((apm_bios_info.version > 0x100) && (pending_count-- <= 0)) {
+		if ((apm_info.connection_version > 0x100) && (pending_count-- <= 0)) {
 			pending_count = 4;
 			if (debug)
 				printk(KERN_DEBUG "apm: setting state busy\n");
@@ -1244,18 +1246,6 @@ static int do_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
-/*
- *	This is called by the DMI code when it finds an Inspiron 5000e
- *	(aka compal reference board). We actually do the check by the BIOS
- *	vendor name, version and serial so we can extend it to try and catch
- *	non Dell stuff later.
- */
- 
-void apm_battery_horked(void)
-{
-	dell_crap = 1;
-}
-
 static int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 {
 	char *		p;
@@ -1272,14 +1262,14 @@ static int apm_get_info(char *buf, char **start, off_t fpos, int length, int dum
 
 	p = buf;
 
-	if ((smp_num_cpus == 1) && (!dell_crap) && 
+	if ((smp_num_cpus == 1) &&
 	    !(error = apm_get_power_status(&bx, &cx, &dx))) {
 		ac_line_status = (bx >> 8) & 0xff;
 		battery_status = bx & 0xff;
 		if ((cx & 0xff) != 0xff)
 			percentage = cx & 0xff;
 
-		if (apm_bios_info.version > 0x100) {
+		if (apm_info.connection_version > 0x100) {
 			battery_flag = (cx >> 8) & 0xff;
 			if (dx != 0xffff) {
 				units = (dx & 0x8000) ? "min" : "sec";
@@ -1327,9 +1317,9 @@ static int apm_get_info(char *buf, char **start, off_t fpos, int length, int dum
 
 	p += sprintf(p, "%s %d.%d 0x%02x 0x%02x 0x%02x 0x%02x %d%% %d %s\n",
 		     driver_version,
-		     (apm_bios_info.version >> 8) & 0xff,
-		     apm_bios_info.version & 0xff,
-		     apm_bios_info.flags,
+		     (apm_info.bios.version >> 8) & 0xff,
+		     apm_info.bios.version & 0xff,
+		     apm_info.bios.flags,
 		     ac_line_status,
 		     battery_status,
 		     battery_flag,
@@ -1349,22 +1339,28 @@ static int __init apm(void *unused)
 	char *		power_stat;
 	char *		bat_stat;
 
-	if (apm_bios_info.version > 0x100) {
-		/*
-		 * We only support BIOSs up to version 1.2
-		 */
-		if (apm_bios_info.version > 0x0102)
-			apm_bios_info.version = 0x0102;
-		if (apm_driver_version(&apm_bios_info.version) != APM_SUCCESS) {
-			/* Fall back to an APM 1.0 connection. */
-			apm_bios_info.version = 0x100;
+	if (apm_info.connection_version == 0) {
+		apm_info.connection_version = apm_info.bios.version;
+		if (apm_info.connection_version > 0x100) {
+			/*
+			 * We only support BIOSs up to version 1.2
+			 */
+			if (apm_info.connection_version > 0x0102)
+				apm_info.connection_version = 0x0102;
+			error = apm_driver_version(&apm_info.connection_version);
+			if (error != APM_SUCCESS) {
+				apm_error("driver version", error);
+				/* Fall back to an APM 1.0 connection. */
+				apm_info.connection_version = 0x100;
+			}
 		}
 	}
-	if (debug && (smp_num_cpus == 1)) {
+	if (debug)
 		printk(KERN_INFO "apm: Connection version %d.%d\n",
-			(apm_bios_info.version >> 8) & 0xff,
-			apm_bios_info.version & 0xff);
+			(apm_info.connection_version >> 8) & 0xff,
+			apm_info.connection_version & 0xff);
 
+	if (debug && (smp_num_cpus == 1)) {
 		error = apm_get_power_status(&bx, &cx, &dx);
 		if (error)
 			printk(KERN_INFO "apm: power status not available\n");
@@ -1389,7 +1385,7 @@ static int __init apm(void *unused)
 				printk("unknown\n");
 			else
 				printk("%d%%\n", cx & 0xff);
-			if (apm_bios_info.version > 0x100) {
+			if (apm_info.connection_version > 0x100) {
 				printk(KERN_INFO
 				       "apm: battery flag 0x%02x, battery life ",
 				       (cx >> 8) & 0xff);
@@ -1404,7 +1400,7 @@ static int __init apm(void *unused)
 	}
 
 #ifdef CONFIG_APM_DO_ENABLE
-	if (apm_bios_info.flags & APM_BIOS_DISABLED) {
+	if (apm_info.bios.flags & APM_BIOS_DISABLED) {
 		/*
 		 * This call causes my NEC UltraLite Versa 33/C to hang if it
 		 * is booted with PM disabled but not in the docking station.
@@ -1417,8 +1413,8 @@ static int __init apm(void *unused)
 		}
 	}
 #endif
-	if ((apm_bios_info.flags & APM_BIOS_DISENGAGED)
-	    && (apm_bios_info.version > 0x0100)) {
+	if ((apm_info.bios.flags & APM_BIOS_DISENGAGED)
+	    && (apm_info.connection_version > 0x0100)) {
 		error = apm_engage_power_management(APM_DEVICE_ALL, 1);
 		if (error) {
 			apm_error("engage power management", error);
@@ -1482,17 +1478,17 @@ static struct miscdevice apm_device = {
 
 static int __init apm_init(void)
 {
-	if (apm_bios_info.version == 0) {
+	if (apm_info.bios.version == 0) {
 		printk(KERN_INFO "apm: BIOS not found.\n");
 		return -ENODEV;
 	}
 	printk(KERN_INFO
 		"apm: BIOS version %d.%d Flags 0x%02x (Driver version %s)\n",
-		((apm_bios_info.version >> 8) & 0xff),
-		(apm_bios_info.version & 0xff),
-		apm_bios_info.flags,
+		((apm_info.bios.version >> 8) & 0xff),
+		(apm_info.bios.version & 0xff),
+		apm_info.bios.flags,
 		driver_version);
-	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) == 0) {
+	if ((apm_info.bios.flags & APM_32_BIT_SUPPORT) == 0) {
 		printk(KERN_INFO "apm: no 32 bit BIOS support\n");
 		return -ENODEV;
 	}
@@ -1501,23 +1497,23 @@ static int __init apm_init(void)
 	 * Fix for the Compaq Contura 3/25c which reports BIOS version 0.1
 	 * but is reportedly a 1.0 BIOS.
 	 */
-	if (apm_bios_info.version == 0x001)
-		apm_bios_info.version = 0x100;
+	if (apm_info.bios.version == 0x001)
+		apm_info.bios.version = 0x100;
 
 	/* BIOS < 1.2 doesn't set cseg_16_len */
-	if (apm_bios_info.version < 0x102)
-		apm_bios_info.cseg_16_len = 0; /* 64k */
+	if (apm_info.bios.version < 0x102)
+		apm_info.bios.cseg_16_len = 0; /* 64k */
 
 	if (debug) {
 		printk(KERN_INFO "apm: entry %x:%lx cseg16 %x dseg %x",
-			apm_bios_info.cseg, apm_bios_info.offset,
-			apm_bios_info.cseg_16, apm_bios_info.dseg);
-		if (apm_bios_info.version > 0x100)
+			apm_info.bios.cseg, apm_info.bios.offset,
+			apm_info.bios.cseg_16, apm_info.bios.dseg);
+		if (apm_info.bios.version > 0x100)
 			printk(" cseg len %x, dseg len %x",
-				apm_bios_info.cseg_len,
-				apm_bios_info.dseg_len);
-		if (apm_bios_info.version > 0x101)
-			printk(" cseg16 len %x", apm_bios_info.cseg_16_len);
+				apm_info.bios.cseg_len,
+				apm_info.bios.dseg_len);
+		if (apm_info.bios.version > 0x101)
+			printk(" cseg16 len %x", apm_info.bios.cseg_16_len);
 		printk("\n");
 	}
 
@@ -1540,16 +1536,16 @@ static int __init apm_init(void)
 		 __va((unsigned long)0x40 << 4));
 	_set_limit((char *)&gdt[APM_40 >> 3], 4095 - (0x40 << 4));
 
-	apm_bios_entry.offset = apm_bios_info.offset;
+	apm_bios_entry.offset = apm_info.bios.offset;
 	apm_bios_entry.segment = APM_CS;
 	set_base(gdt[APM_CS >> 3],
-		 __va((unsigned long)apm_bios_info.cseg << 4));
+		 __va((unsigned long)apm_info.bios.cseg << 4));
 	set_base(gdt[APM_CS_16 >> 3],
-		 __va((unsigned long)apm_bios_info.cseg_16 << 4));
+		 __va((unsigned long)apm_info.bios.cseg_16 << 4));
 	set_base(gdt[APM_DS >> 3],
-		 __va((unsigned long)apm_bios_info.dseg << 4));
+		 __va((unsigned long)apm_info.bios.dseg << 4));
 #ifndef APM_RELAX_SEGMENTS
-	if (apm_bios_info.version == 0x100) {
+	if (apm_info.bios.version == 0x100) {
 #endif
 		/* For ASUS motherboard, Award BIOS rev 110 (and others?) */
 		_set_limit((char *)&gdt[APM_CS >> 3], 64 * 1024 - 1);
@@ -1560,11 +1556,11 @@ static int __init apm_init(void)
 #ifndef APM_RELAX_SEGMENTS
 	} else {
 		_set_limit((char *)&gdt[APM_CS >> 3],
-			(apm_bios_info.cseg_len - 1) & 0xffff);
+			(apm_info.bios.cseg_len - 1) & 0xffff);
 		_set_limit((char *)&gdt[APM_CS_16 >> 3],
-			(apm_bios_info.cseg_16_len - 1) & 0xffff);
+			(apm_info.bios.cseg_16_len - 1) & 0xffff);
 		_set_limit((char *)&gdt[APM_DS >> 3],
-			(apm_bios_info.dseg_len - 1) & 0xffff);
+			(apm_info.bios.dseg_len - 1) & 0xffff);
 	}
 #endif
 

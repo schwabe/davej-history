@@ -28,6 +28,8 @@ struct linux_binprm{
 	int argc, envc;
 	char * filename;	/* Name of binary */
 	unsigned long loader, exec;
+	int dumpable;
+	int priv_change;
 };
 
 /*

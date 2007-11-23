@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.67.2.13 2000/10/24 21:00:53 davem Exp $
+# $Id: config.in,v 1.67.2.14 2001/01/26 22:26:07 davem Exp $
 # For a description of the syntax of this configuration file,
 # see Documentation/kbuild/config-language.txt.
 #
@@ -92,6 +92,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
   fi
   tristate 'SUNW,envctrl support' CONFIG_ENVCTRL
   tristate '7-Segment Display support' CONFIG_DISPLAY7SEG
+  tristate 'CP1XXX Hardware Watchdog support' CONFIG_WATCHDOG_CP1XXX
 fi
 endmenu
 

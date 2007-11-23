@@ -77,7 +77,7 @@ extern int acct_parm[];
 
 extern int pgt_cache_water[];
 
-static int parse_table(int *, int, void *, size_t *, void *, size_t,
+static int parse_table(int *, unsigned, void *, size_t *, void *, size_t,
 		       ctl_table *, void **);
 static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp);
@@ -320,7 +320,7 @@ void __init sysctl_init(void)
 }
 
 
-int do_sysctl (int *name, int nlen,
+int do_sysctl (int *name, unsigned nlen,
 	       void *oldval, size_t *oldlenp,
 	       void *newval, size_t newlen)
 {
@@ -330,10 +330,12 @@ int do_sysctl (int *name, int nlen,
 	
 	if (nlen == 0 || nlen >= CTL_MAXNAME)
 		return -ENOTDIR;
-	
-	if (oldval) 
-	{
-		int old_len;
+
+	if ((ssize_t)newlen < 0)
+		return -EINVAL;	
+
+	if (oldval) {
+		size_t old_len;
 		if (!oldlenp)
 			return -EFAULT;
 		if(get_user(old_len, oldlenp))
@@ -387,7 +389,7 @@ static inline int ctl_perm(ctl_table *table, int op)
 	return test_perm(table->mode, op);
 }
 
-static int parse_table(int *name, int nlen,
+static int parse_table(int *name, unsigned nlen,
 		       void *oldval, size_t *oldlenp,
 		       void *newval, size_t newlen,
 		       ctl_table *table, void **context)
@@ -430,11 +432,12 @@ repeat:
 
 /* Perform the actual read/write of a sysctl table entry. */
 int do_sysctl_strategy (ctl_table *table, 
-			int *name, int nlen,
+			int *name, unsigned nlen,
 			void *oldval, size_t *oldlenp,
 			void *newval, size_t newlen, void **context)
 {
-	int op = 0, rc, len;
+	int op = 0, rc;
+	size_t len;
 
 	if (oldval)
 		op |= 004;
@@ -642,7 +645,7 @@ static int proc_sys_permission(struct inode *inode, int op)
 int proc_dostring(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
 {
-	int len;
+	size_t len;
 	char *p, c;
 	
 	if (!table->data || !table->maxlen || !*lenp ||
@@ -710,7 +713,8 @@ static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
 static int do_proc_dointvec(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp, int conv, int op)
 {
-	int *i, vleft, first=1, len, left, neg, val;
+	int *i, neg, val;
+	size_t len, left, vleft, first=1;
 	#define TMPBUFLEN 20
 	char buf[TMPBUFLEN], *p;
 	
@@ -832,7 +836,8 @@ int proc_dointvec_bset(ctl_table *table, int write, struct file *filp,
 int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
 {
-	int *i, *min, *max, vleft, first=1, len, left, neg, val;
+	int *i, *min, *max, neg, val;
+	size_t len, left, vleft, first=1;
 	#define TMPBUFLEN 20
 	char buf[TMPBUFLEN], *p;
 	
@@ -974,11 +979,12 @@ int proc_dointvec_jiffies(ctl_table *table, int write, struct file *filp,
  */
 
 /* The generic string strategy routine: */
-int sysctl_string(ctl_table *table, int *name, int nlen,
+int sysctl_string(ctl_table *table, int *name, unsigned nlen,
 		  void *oldval, size_t *oldlenp,
 		  void *newval, size_t newlen, void **context)
 {
-	int l, len;
+	unsigned l;
+	size_t len;
 	
 	if (!table->data || !table->maxlen) 
 		return -ENOTDIR;
@@ -1017,11 +1023,12 @@ int sysctl_string(ctl_table *table, int *name, int nlen,
  * are between the minimum and maximum values given in the arrays
  * table->extra1 and table->extra2, respectively.
  */
-int sysctl_intvec(ctl_table *table, int *name, int nlen,
+int sysctl_intvec(ctl_table *table, int *name, unsigned nlen,
 		void *oldval, size_t *oldlenp,
 		void *newval, size_t newlen, void **context)
 {
-	int i, length, *vec, *min, *max;
+	int *vec, *min, *max;
+	size_t i, length;
 
 	if (newval && newlen) {
 		if (newlen % sizeof(int) != 0)
@@ -1051,7 +1058,7 @@ int sysctl_intvec(ctl_table *table, int *name, int nlen,
 }
 
 /* Strategy function to convert jiffies to seconds */ 
-int sysctl_jiffies(ctl_table *table, int *name, int nlen,
+int sysctl_jiffies(ctl_table *table, int *name, unsigned nlen,
 		void *oldval, size_t *oldlenp,
 		void *newval, size_t newlen, void **context)
 {
@@ -1159,21 +1166,21 @@ extern asmlinkage int sys_sysctl(struct __sysctl_args *args)
 	return -ENOSYS;
 }
 
-int sysctl_string(ctl_table *table, int *name, int nlen,
+int sysctl_string(ctl_table *table, int *name, unsigned nlen,
 		  void *oldval, size_t *oldlenp,
 		  void *newval, size_t newlen, void **context)
 {
 	return -ENOSYS;
 }
 
-int sysctl_intvec(ctl_table *table, int *name, int nlen,
+int sysctl_intvec(ctl_table *table, int *name, unsigned nlen,
 		void *oldval, size_t *oldlenp,
 		void *newval, size_t newlen, void **context)
 {
 	return -ENOSYS;
 }
 
-int sysctl_jiffies(ctl_table *table, int *name, int nlen,
+int sysctl_jiffies(ctl_table *table, int *name, unsigned nlen,
 		void *oldval, size_t *oldlenp,
 		void *newval, size_t newlen, void **context)
 {

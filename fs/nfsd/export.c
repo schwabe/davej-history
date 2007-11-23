@@ -9,8 +9,6 @@
  * creates a client control block and adds it to the hash
  * table. Then, you call NFSCTL_EXPORT for each fs.
  *
- * You cannot currently read the export information from the
- * kernel. It would be nice to have a /proc file though.
  *
  * Copyright (C) 1995, 1996 Olaf Kirch, <okir@monad.swb.de>
  */
@@ -447,7 +445,7 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
 	if (path) {
 		if (!(dentry = lookup_dentry(path, NULL, 0))) {
 			printk("nfsd: exp_rootfh path not found %s", path);
-			return -EPERM;
+			return err;
 		}
 		dev = dentry->d_inode->i_dev;
 		ino = dentry->d_inode->i_ino;
@@ -611,7 +609,7 @@ struct flags {
 	{ NFSEXP_SUNSECURE, { "sunsecure", ""}},
 	{ NFSEXP_CROSSMNT, {"nohide", ""}},
 	{ NFSEXP_NOSUBTREECHECK, {"no_subtree_check", ""}},
-	{ NFSEXP_NOAUTHNLM, {"no_auth_nlm", ""}},
+	{ NFSEXP_NOAUTHNLM, {"insecure_locks", ""}},
 	{ 0, {"", ""}}
 };
 

@@ -183,7 +183,6 @@ int d_splice(struct dentry *target, struct dentry *parent, struct qstr *name)
 	if (!(target->d_flags & DCACHE_NFSD_DISCONNECTED))
 		printk("nfsd: d_splice with non-DISCONNECTED target: %s/%s\n", parent->d_name.name, name->name);
 #endif
-	name->hash = full_name_hash(name->name, name->len);
 	tdentry = d_alloc(parent, name);
 	if (tdentry == NULL)
 		return -ENOMEM;
@@ -275,7 +274,6 @@ static struct dentry *splice(struct dentry *child, struct dentry *parent)
 	struct qstr qs;
 	char namebuf[256];
 	struct list_head *lp;
-	struct dentry *tmp;
 	/* child is an IS_ROOT (anonymous) dentry, but it is hypothesised that
 	 * it should be a child of parent.
 	 * We see if we can find a name and, if we can - splice it in.
@@ -295,8 +293,8 @@ static struct dentry *splice(struct dentry *child, struct dentry *parent)
 	 * parent by a lookup.  In this case return that dentry. 
 	 * caller must notice and act accordingly
 	 */
-	for (lp = child->d_inode->i_dentry.next; lp != &child->d_inode->i_dentry ; lp=lp->next) {
-		tmp = list_entry(lp,struct dentry, d_alias);
+	list_for_each(lp, &child->d_inode->i_dentry) {
+		struct dentry *tmp = list_entry(lp,struct dentry, d_alias);
 		if (tmp->d_parent == parent) {
 			child = dget(tmp);
 			goto out;
@@ -308,12 +306,12 @@ static struct dentry *splice(struct dentry *child, struct dentry *parent)
 	err = get_ino_name(parent, &qs, child->d_inode->i_ino);
 	if (err)
 		goto out;
-	tmp = d_lookup(parent, &qs);
-	if (tmp) {
+
+	/* find_inode_number calculates the name hash as a side effect */
+	if (find_inode_number(parent, &qs) != 0) {
 		/* Now that IS odd.  I wonder what it means... */
 		err = -EEXIST;
 		printk("nfsd-fh: found a name that I didn't expect: %s/%s\n", parent->d_name.name, qs.name);
-		dput(tmp);
 		goto out;
 	}
 	err = d_splice(child, parent, &qs);
@@ -339,7 +337,7 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	struct dentry *dentry, *result = NULL;
 	struct dentry *tmp;
 	int  found =0;
-	int err;
+	int err = -ESTALE;
 	/* the sb->s_nfsd_free_path_sem semaphore is needed to make sure that only one unconnected (free)
 	 * dcache path ever exists, as otherwise two partial paths might get
 	 * joined together, which would be very confusing.
@@ -353,23 +351,21 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	 * Attempt to find the inode.
 	 */
  retry:
+	down(&sb->s_nfsd_free_path_sem);
 	result = nfsd_iget(sb, fh->fh_ino, fh->fh_generation);
-	err = PTR_ERR(result);
-	if (IS_ERR(result))
-		goto err_out;
-	err = -ESTALE;
-	if (!result) {
-		dprintk("find_fh_dentry: No inode found.\n");
-		goto err_out;
-	}
-	if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED))
-		return result;
-
-	/* result is now an anonymous dentry, which may be adequate as it 
-	 * stands, or else will get spliced into the dcache tree */
-
-	if (!S_ISDIR(result->d_inode->i_mode) && ! needpath) {
-		nfsdstats.fh_anon++;
+	if (!result || IS_ERR(result)
+	    || !(result->d_flags & DCACHE_NFSD_DISCONNECTED)
+	    || (!S_ISDIR(result->d_inode->i_mode) && !needpath)) {
+		up(&sb->s_nfsd_free_path_sem);
+		if (!result) {
+			dprintk("find_fh_dentry: No inode found.\n");
+			goto err_out;
+		}
+		err = PTR_ERR(result);
+		if (IS_ERR(result))
+			goto err_out;
+		if ( (result->d_flags & DCACHE_NFSD_DISCONNECTED))
+			nfsdstats.fh_anon++;
 		return result;
 	}
 
@@ -377,14 +373,6 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	 * location in the tree.
 	 */
 	dprintk("nfs_fh: need to look harder for %d/%d\n",sb->s_dev,fh->fh_ino);
-	down(&sb->s_nfsd_free_path_sem);
-
-	/* claiming the semaphore might have allow things to get fixed up */
-	if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED)) {
-		up(&sb->s_nfsd_free_path_sem);
-		return result;
-	}
-
 
 	found = 0;
 	if (!S_ISDIR(result->d_inode->i_mode)) {
@@ -466,6 +454,7 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 		if (tmp != dentry) {
 			/* we lost a race,  try again
 			 */
+			dput(pdentry);
 			dput(tmp);
 			dput(dentry);
 			dput(result);	/* this will discard the whole free path, so we can up the semaphore */
@@ -563,7 +552,7 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 					!(exp->ex_flags & NFSEXP_NOSUBTREECHECK));
 
 		if (IS_ERR(dentry)) {
-			error = nfserrno(-PTR_ERR(dentry));
+			error = nfserrno(PTR_ERR(dentry));
 			goto out;
 		}
 #ifdef NFSD_PARANOIA

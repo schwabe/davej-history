@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.94.2.5 2000/09/16 14:15:15 davem Exp $
+/* $Id: sys_sunos.c,v 1.94.2.6 2001/02/02 05:16:11 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -712,7 +712,7 @@ struct sunos_fh_t {
 
 struct sunos_nfs_mount_args {
 	struct sockaddr_in  *addr; /* file server address */
-	struct nfs_fh *fh;     /* File handle to be mounted */
+	struct nfs3_fh *fh;     /* File handle to be mounted */
 	int        flags;      /* flags */
 	int        wsize;      /* write size in bytes */
 	int        rsize;      /* read size in bytes */

@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.36.2.5 2000/07/27 01:50:59 davem Exp $
+/* $Id: ebus.c,v 1.36.2.6 2001/01/26 22:26:07 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -46,6 +46,9 @@ extern int envctrl_init(void);
 #endif
 #ifdef CONFIG_DISPLAY7SEG
 extern int d7s_init(void);
+#endif
+#ifdef CONFIG_WATCHDOG_CP1XXX
+extern int wd_init(void);
 #endif
 
 static inline unsigned long ebus_alloc(size_t size)

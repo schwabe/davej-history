@@ -30,7 +30,7 @@
 
 struct __sysctl_args {
 	int *name;
-	int nlen;
+	unsigned nlen;
 	void *oldval;
 	size_t *oldlenp;
 	void *newval;
@@ -465,7 +465,7 @@ extern void sysctl_init(void);
 
 typedef struct ctl_table ctl_table;
 
-typedef int ctl_handler (ctl_table *table, int *name, int nlen,
+typedef int ctl_handler (ctl_table *table, int *name, unsigned nlen,
 			 void *oldval, size_t *oldlenp,
 			 void *newval, size_t newlen, 
 			 void **context);
@@ -484,12 +484,12 @@ extern int proc_dointvec_minmax(ctl_table *, int, struct file *,
 extern int proc_dointvec_jiffies(ctl_table *, int, struct file *,
 				 void *, size_t *);
 
-extern int do_sysctl (int *name, int nlen,
+extern int do_sysctl (int *name, unsigned nlen,
 		      void *oldval, size_t *oldlenp,
 		      void *newval, size_t newlen);
 
 extern int do_sysctl_strategy (ctl_table *table, 
-			       int *name, int nlen,
+			       int *name, unsigned nlen,
 			       void *oldval, size_t *oldlenp,
 			       void *newval, size_t newlen, void ** context);
 

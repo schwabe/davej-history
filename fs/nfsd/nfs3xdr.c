@@ -36,17 +36,6 @@ static u32	nfs3_ftypes[] = {
 	NF3SOCK, NF3BAD,  NF3LNK, NF3BAD,
 };
 
-/*
- * XDR functions for basic NFS types
- */
-static inline u32 *
-dec64(u32 *p, u64 *valp)
-{
-	*valp  = ((u64) ntohl(*p++)) << 32;
-	*valp |= ntohl(*p++);
-	return p;
-}
-
 static inline u32 *
 encode_time3(u32 *p, time_t secs)
 {
@@ -140,7 +129,7 @@ decode_sattr3(u32 *p, struct iattr *iap)
 		u64	newsize;
 
 		iap->ia_valid |= ATTR_SIZE;
-		p = dec64(p, &newsize);
+		p = xdr_decode_hyper(p, &newsize);
 		if (newsize <= NFS_OFFSET_MAX)
 			iap->ia_size = (u32) newsize;
 		else
@@ -177,24 +166,24 @@ encode_fattr3(struct svc_rqst *rqstp, u32 *p, struct dentry *dentry)
 	*p++ = htonl((u32) nfsd_ruid(rqstp, inode->i_uid));
 	*p++ = htonl((u32) nfsd_rgid(rqstp, inode->i_gid));
 	if (S_ISLNK(inode->i_mode) && inode->i_size > NFS3_MAXPATHLEN) {
-		p = enc64(p, (u64) NFS3_MAXPATHLEN);
+		p = xdr_encode_hyper(p, (u64) NFS3_MAXPATHLEN);
 	} else {
-		p = enc64(p, (u64) inode->i_size);
+		p = xdr_encode_hyper(p, (u64) inode->i_size);
 	}
 	/*
 	 *  For the 'used' member, we take i_blocks if set; assuming 512-byte
 	 *  units.  Some FSs don't set this, so all we can do then is
 	 *  use the size.
 	 */
-	if (inode->i_blocks) {
-		p = enc64(p,  ((u64)inode->i_blocks)<<9 );
-	} else {
-		p = enc64(p, (u64) inode->i_size);
-	}
+	if (inode->i_blocks)
+		p = xdr_encode_hyper(p,  ((u64)inode->i_blocks)<<9 );
+	else
+		p = xdr_encode_hyper(p, (u64) inode->i_size);
+
 	*p++ = htonl((u32) MAJOR(inode->i_rdev));
 	*p++ = htonl((u32) MINOR(inode->i_rdev));
-	p = enc64(p, (u64) inode->i_dev);
-	p = enc64(p, (u64) inode->i_ino);
+	p = xdr_encode_hyper(p, (u64) inode->i_dev);
+	p = xdr_encode_hyper(p, (u64) inode->i_ino);
 	p = encode_time3(p, inode->i_atime);
 	p = encode_time3(p, inode->i_mtime);
 	p = encode_time3(p, inode->i_ctime);
@@ -216,19 +205,19 @@ encode_saved_post_attr(struct svc_rqst *rqstp, u32 *p, struct svc_fh *fhp)
 	*p++ = htonl((u32) nfsd_ruid(rqstp, fhp->fh_post_uid));
 	*p++ = htonl((u32) nfsd_rgid(rqstp, fhp->fh_post_gid));
 	if (S_ISLNK(fhp->fh_post_mode) && fhp->fh_post_size > NFS3_MAXPATHLEN) {
-		p = enc64(p, (u64) NFS3_MAXPATHLEN);
+		p = xdr_encode_hyper(p, (u64) NFS3_MAXPATHLEN);
 	} else {
-		p = enc64(p, (u64) fhp->fh_post_size);
+		p = xdr_encode_hyper(p, (u64) fhp->fh_post_size);
 	}
 	if (fhp->fh_post_blocks) {
-		p = enc64(p, ((u64)fhp->fh_post_blocks)<<9);
+		p = xdr_encode_hyper(p, ((u64)fhp->fh_post_blocks)<<9);
 	} else {
-		p = enc64(p, (u64) fhp->fh_post_size);
+		p = xdr_encode_hyper(p, (u64) fhp->fh_post_size);
 	}
 	*p++ = htonl((u32) MAJOR(fhp->fh_post_rdev));
 	*p++ = htonl((u32) MINOR(fhp->fh_post_rdev));
-	p = enc64(p, (u64) inode->i_dev);
-	p = enc64(p, (u64) inode->i_ino);
+	p = xdr_encode_hyper(p, (u64) inode->i_dev);
+	p = xdr_encode_hyper(p, (u64) inode->i_ino);
 	p = encode_time3(p, fhp->fh_post_atime);
 	p = encode_time3(p, fhp->fh_post_mtime);
 	p = encode_time3(p, fhp->fh_post_ctime);
@@ -263,7 +252,7 @@ encode_wcc_data(struct svc_rqst *rqstp, u32 *p, struct svc_fh *fhp)
 	if (dentry && dentry->d_inode && fhp->fh_post_saved) {
 		if (fhp->fh_pre_saved) {
 			*p++ = xdr_one;
-			p = enc64(p, (u64) fhp->fh_pre_size);
+			p = xdr_encode_hyper(p, (u64) fhp->fh_pre_size);
 			p = encode_time3(p, fhp->fh_pre_mtime);
 			p = encode_time3(p, fhp->fh_pre_ctime);
 		} else {
@@ -350,7 +339,7 @@ nfs3svc_decode_readargs(struct svc_rqst *rqstp, u32 *p,
 					struct nfsd3_readargs *args)
 {
 	if (!(p = decode_fh(p, &args->fh))
-	 || !(p = dec64(p, &args->offset)))
+	 || !(p = xdr_decode_hyper(p, &args->offset)))
 		return 0;
 
 	args->count = ntohl(*p++);
@@ -362,7 +351,7 @@ nfs3svc_decode_writeargs(struct svc_rqst *rqstp, u32 *p,
 					struct nfsd3_writeargs *args)
 {
 	if (!(p = decode_fh(p, &args->fh))
-	 || !(p = dec64(p, &args->offset)))
+	 || !(p = xdr_decode_hyper(p, &args->offset)))
 		return 0;
 
 	args->count = ntohl(*p++);
@@ -478,7 +467,7 @@ nfs3svc_decode_readdirargs(struct svc_rqst *rqstp, u32 *p,
 {
 	if (!(p = decode_fh(p, &args->fh)))
 		return 0;
-	p = dec64(p, &args->cookie);
+	p = xdr_decode_hyper(p, &args->cookie);
 	args->verf   = p; p += 2;
 	args->dircount = ~0;
 	args->count  = ntohl(*p++);
@@ -492,7 +481,7 @@ nfs3svc_decode_readdirplusargs(struct svc_rqst *rqstp, u32 *p,
 {
 	if (!(p = decode_fh(p, &args->fh)))
 		return 0;
-	p = dec64(p, &args->cookie);
+	p = xdr_decode_hyper(p, &args->cookie);
 	args->verf     = p; p += 2;
 	args->dircount = ntohl(*p++);
 	args->count    = ntohl(*p++);
@@ -506,7 +495,7 @@ nfs3svc_decode_commitargs(struct svc_rqst *rqstp, u32 *p,
 {
 	if (!(p = decode_fh(p, &args->fh)))
 		return 0;
-	p = dec64(p, &args->offset);
+	p = xdr_decode_hyper(p, &args->offset);
 	args->count = ntohl(*p++);
 
 	return xdr_argsize_check(rqstp, p);
@@ -682,7 +671,7 @@ encode_entry(struct readdir_cd *cd, const char *name,
 	int		buflen, slen, elen;
 
 	if (cd->offset)
-		enc64(cd->offset, (u64) offset);
+		xdr_encode_hyper(cd->offset, (u64) offset);
 
 	/* nfsd_readdir calls us with name == 0 when it wants us to
 	 * set the last offset entry. */
@@ -705,20 +694,12 @@ encode_entry(struct readdir_cd *cd, const char *name,
 		cd->eob = 1;
 		return -EINVAL;
 	}
-	*p++ = xdr_one;				   /* mark entry present */
-	p    = enc64(p, ino);			   /* file id */
-#ifdef XDR_ENCODE_STRING_TAKES_LENGTH
-	p    = xdr_encode_string(p, name, namlen); /* name length & name */
-#else
-	/* just like nfsproc.c */
-	*p++ = htonl((u32) namlen);
-	p[slen - 1] = 0;		/* don't leak kernel data */
-	memcpy(p, name, namlen);
-	p += slen;
-#endif
+	*p++ = xdr_one;				  /* mark entry present */
+	p    = xdr_encode_hyper(p, ino);	  /* file id */
+	p    = xdr_encode_string(p, name, namlen);/* name length & name */
 
 	cd->offset = p;			/* remember pointer */
-	p = enc64(p, NFS_OFFSET_MAX);	/* offset of next entry */
+	p = xdr_encode_hyper(p, NFS_OFFSET_MAX);	/* offset of next entry */
 
 	/* throw in readdirplus baggage */
 	if (plus) {
@@ -769,12 +750,12 @@ nfs3svc_encode_fsstatres(struct svc_rqst *rqstp, u32 *p,
 	*p++ = xdr_zero;	/* no post_op_attr */
 
 	if (resp->status == 0) {
-		p = enc64(p, bs * s->f_blocks);	/* total bytes */
-		p = enc64(p, bs * s->f_bfree);	/* free bytes */
-		p = enc64(p, bs * s->f_bavail);	/* user available bytes */
-		p = enc64(p, s->f_files);	/* total inodes */
-		p = enc64(p, s->f_ffree);	/* free inodes */
-		p = enc64(p, s->f_ffree);	/* user available inodes */
+		p = xdr_encode_hyper(p, bs * s->f_blocks);	/* total bytes */
+		p = xdr_encode_hyper(p, bs * s->f_bfree);	/* free bytes */
+		p = xdr_encode_hyper(p, bs * s->f_bavail);	/* user available bytes */
+		p = xdr_encode_hyper(p, s->f_files);	/* total inodes */
+		p = xdr_encode_hyper(p, s->f_ffree);	/* free inodes */
+		p = xdr_encode_hyper(p, s->f_ffree);	/* user available inodes */
 		*p++ = htonl(resp->invarsec);	/* mean unchanged time */
 	}
 	return xdr_ressize_check(rqstp, p);
@@ -795,7 +776,7 @@ nfs3svc_encode_fsinfores(struct svc_rqst *rqstp, u32 *p,
 		*p++ = htonl(resp->f_wtpref);
 		*p++ = htonl(resp->f_wtmult);
 		*p++ = htonl(resp->f_dtpref);
-		p = enc64(p, resp->f_maxfilesize);
+		p = xdr_encode_hyper(p, resp->f_maxfilesize);
 		*p++ = xdr_one;
 		*p++ = xdr_zero;
 		*p++ = htonl(resp->f_properties);

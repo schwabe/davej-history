@@ -45,6 +45,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_WATCHDOG_CP1XXX),y)
+O_OBJS += cpwatchdog.o
+else
+  ifeq ($(CONFIG_WATCHDOG_CP1XXX),m)
+  M_OBJS += cpwatchdog.o
+  endif
+endif
+
 endif # eq($(CONFIG_PCI,y)
 
 ifeq ($(CONFIG_OBP_FLASH),y)

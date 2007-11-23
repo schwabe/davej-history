@@ -517,8 +517,10 @@ int flush_old_exec(struct linux_binprm * bprm)
 
 	current->sas_ss_sp = current->sas_ss_size = 0;
 
+	current->dumpable = 0;
+	bprm->dumpable = 0;
 	if (current->euid == current->uid && current->egid == current->gid)
-		current->dumpable = 2;
+		bprm->dumpable = !bprm->priv_change;
 	name = bprm->filename;
 	for (i=0; (ch = *(name++)) != '\0';) {
 		if (ch == '/')
@@ -531,10 +533,10 @@ int flush_old_exec(struct linux_binprm * bprm)
 
 	flush_thread();
 
-	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
-	    permission(bprm->dentry->d_inode,MAY_READ))
-		current->dumpable = 0;
-		
+	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid ||
+	    permission(bprm->dentry->d_inode, MAY_READ))
+		bprm->dumpable = 0;
+
 	current->self_exec_id++;
 
 	flush_signal_handlers(current);
@@ -646,7 +648,8 @@ int prepare_binprm(struct linux_binprm *bprm)
 		}
 	}
 
-	if (id_change || cap_raised) {
+	bprm->priv_change = id_change || cap_raised;
+	if (bprm->priv_change) {
 		/* We can't suid-execute if we're sharing parts of the executable */
 		/* or if we're being traced (or if suid execs are not allowed)    */
 		/* (current->mm->count > 1 is ok, as we'll get a new mm anyway)   */
@@ -704,7 +707,7 @@ void compute_creds(struct linux_binprm *bprm)
         current->sgid = current->egid = current->fsgid = bprm->e_gid;
         if (current->euid != current->uid || current->egid != current->gid ||
 	    !cap_issubset(new_permitted, current->cap_permitted))
-                current->dumpable = 0;
+                bprm->dumpable = 0;
 
         current->keep_capabilities = 0;
 }
@@ -865,9 +868,8 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	if (retval >= 0)
 		retval = search_binary_handler(&bprm,regs);
 
-	if(current->dumpable == 2)
-		current->dumpable = 1;
-		
+	current->dumpable = bprm.dumpable;
+
 	if (retval >= 0)
 		/* execve success */
 		return retval;
@@ -879,6 +881,5 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(bprm.page[i]);
 
-		
 	return retval;
 }

@@ -1530,7 +1530,7 @@ CONFIG_I2O
   inserted in and removed from the running kernel whenever you want).
   If you want to compile it as a module, say M here and read
   Documentation/modules.txt. You will get modules called i2o_core.o
-  and i20_config.o. 
+  and i2o_config.o. 
 
   If unsure, say N.
 
@@ -8512,10 +8512,10 @@ CONFIG_NFSD
   The module is called nfsd.o. If you want to compile it as a module,
   say M here and read Documentation/modules.txt. If unsure, say N.
 
-Provide NFSv3 server support (EXPERIMENTAL)
+Provide NFSv3 server support
 CONFIG_NFSD_V3
   If you would like to include the NFSv3 server as well as the NFSv2
-  server, say Y here.  File locking, via the NLMv4 protocol, is now
+  server, say Y here.  File locking, via the NLMv4 protocol, is also
   supported. If unsure, say N.
 
 OS/2 HPFS filesystem support (read only)
@@ -13616,6 +13616,20 @@ CONFIG_DISPLAY7SEG
   If you do not have a CompactPCI model CP1400 or CP1500, or 
   another UltraSPARC-IIi-cEngine boardset with digital display,
   you should say N to this option.
+
+CP1XXX Hardware Watchdog support
+CONFIG_WATCHDOG_CP1XXX
+  This is the driver for the hardware watchdog timers present on
+  Sun Microsystems CompactPCI models CP1400 and CP1500.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called cpwatchdog.o. If you want to compile it
+  as a module, say M here and read Documentation/modules.txt.
+ 
+  If you do not have a CompactPCI model CP1400 or CP1500, or
+  another UltraSPARC-IIi-cEngine boardset with hardware watchdog,
+  you should say N to this option. 
    
 #
 # A couple of things I keep forgetting:

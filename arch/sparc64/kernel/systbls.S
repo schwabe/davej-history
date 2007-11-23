@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.53.2.6 2001/01/11 15:44:37 davem Exp $
+/* $Id: systbls.S,v 1.53.2.7 2001/01/11 19:12:10 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -49,7 +49,7 @@ sys_call_table32:
 	.word sys_nis_syscall, sys_mkdir, sys_rmdir, sys32_utimes, sys_lfs_syscall
 /*140*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getrlimit
 	.word sys32_setrlimit, sys_nis_syscall, sys32_prctl, sys32_pciconfig_read, sys32_pciconfig_write
-/*150*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall
+/*150*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_lfs_syscall
 	.word sys_lfs_syscall, sys_nis_syscall, sys32_statfs, sys32_fstatfs, sys_oldumount
 /*160*/	.word sys_nis_syscall, sys_nis_syscall, sys_getdomainname, sys_setdomainname, sys_nis_syscall
 	.word sys32_quotactl, sys_nis_syscall, sys32_mount, sys_ustat, sys_nis_syscall

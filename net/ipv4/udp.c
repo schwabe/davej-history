@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.66.2.4 2000/03/10 00:16:05 davem Exp $
+ * Version:	$Id: udp.c,v 1.66.2.6 2001/02/02 01:27:09 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>

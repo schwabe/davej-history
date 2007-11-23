@@ -4,7 +4,7 @@
  *
  * Author:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *
- * 	$Id: ip_masq_mod.c,v 1.5.2.1 1999/07/02 10:10:03 davem Exp $
+ * 	$Id: ip_masq_mod.c,v 1.5.2.3 2001/01/04 04:20:16 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License

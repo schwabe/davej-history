@@ -378,7 +378,7 @@ void proc_read_inode(struct inode * inode)
 		goto out_unlock;
 
 	ino &= 0x0000ffff;
-	if (ino == PROC_PID_INO || p->dumpable == 1) {
+	if (ino == PROC_PID_INO || p->dumpable) {
 		inode->i_uid = p->euid;
 		inode->i_gid = p->egid;
 	}

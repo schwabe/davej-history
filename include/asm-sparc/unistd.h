@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.55.2.1 2001/01/11 15:44:37 davem Exp $ */
+/* $Id: unistd.h,v 1.55.2.2 2001/01/11 19:12:10 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -169,7 +169,7 @@
 /* #define __NR_getmsg          151    SunOS Specific                              */
 /* #define __NR_putmsg          152    SunOS Specific                              */
 #define __NR_poll               153 /* Common                                      */
-/* #define __NR_ni_syscall      154    ENOSYS under SunOS                          */
+/* #define __NR_getdents64      154    Linux Sparc32 Specific                      */
 /* #define __NR_fcntl64         155    Linux Sparc32 Specific                      */
 /* #define __NR_getdirentries   156    SunOS Specific                              */
 #define __NR_statfs             157 /* Common                                      */

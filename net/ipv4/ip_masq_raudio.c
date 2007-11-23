@@ -2,7 +2,7 @@
  *		IP_MASQ_RAUDIO  - Real Audio masquerading module
  *
  *
- * Version:	@(#)$Id: ip_masq_raudio.c,v 1.11 1998/10/06 04:49:04 davem Exp $
+ * Version:	@(#)$Id: ip_masq_raudio.c,v 1.11.2.1 2001/01/10 01:52:33 davem Exp $
  *
  * Author:	Nigel Metheringham
  *		Real Time Streaming code by Progressive Networks

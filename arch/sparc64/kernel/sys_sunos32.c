@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.22.2.5 2001/01/04 05:35:03 davem Exp $
+/* $Id: sys_sunos32.c,v 1.22.2.6 2001/02/02 01:30:09 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -677,7 +677,7 @@ struct sunos_fh_t {
 
 struct sunos_nfs_mount_args {
 	struct sockaddr_in  *addr; /* file server address */
-	struct nfs_fh *fh;     /* File handle to be mounted */
+	struct nfs3_fh *fh;     /* File handle to be mounted */
 	int        flags;      /* flags */
 	int        wsize;      /* write size in bytes */
 	int        rsize;      /* read size in bytes */

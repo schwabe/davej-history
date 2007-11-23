@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.62.2.17 2000/11/08 09:43:04 davem Exp $
+/* $Id: ioctl32.c,v 1.62.2.18 2001/01/26 22:26:07 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -63,6 +63,7 @@
 #include <asm/audioio.h>
 #include <asm/ethtool.h>
 #include <asm/display7seg.h>
+#include <asm/watchdog.h>
 
 #include <linux/soundcard.h>
 
@@ -3093,6 +3094,17 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case AUTOFS_IOC_CATATONIC:
 	case AUTOFS_IOC_PROTOVER:
 	case AUTOFS_IOC_EXPIRE:
+
+	/* Big W for hardware watchdog timers */
+	/* WIOC_GETSUPPORT not yet implemented -E */
+	case WDIOC_GETSTATUS:
+	case WDIOC_GETBOOTSTATUS:
+	case WDIOC_GETTEMP:
+	case WDIOC_SETOPTIONS:
+	case WDIOC_KEEPALIVE:
+	case WIOCSTART:
+	case WIOCSTOP:
+	case WIOCGSTAT:
 	
 	/* Raw devices */
 	case _IO(0xac, 0): /* RAW_SETBIND */

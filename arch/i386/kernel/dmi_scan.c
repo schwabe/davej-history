@@ -1,8 +1,8 @@
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/init.h>
+#include <linux/apm_bios.h>
 #include <asm/io.h>
 
 struct dmi_header
@@ -125,17 +125,19 @@ static void __init dmi_decode(struct dmi_header *dm)
 			 *	< Does it Boot Win98 >-N--
 			 *               |Y
 			 *           [Ship It]
+			 *
+			 *	Phoenix A04  08/24/2000 is known bad (Dell Inspiron 5000e)
+			 *	Phoenix A07  09/29/2000 is known good (Dell Inspiron 5000)
 			 */
 			 
-			if(strcmp(dmi_string(dm, data[4]), "Phoenix Technologies LTD")==0 &&
-			   strcmp(dmi_string(dm, data[5]), "A04")==0 &&
-			   strcmp(dmi_string(dm, data[8]), "08/24/2000")==0)
+			if(strcmp(dmi_string(dm, data[4]), "Phoenix Technologies LTD")==0)
 			{
-#ifdef CONFIG_APM
-				extern void apm_battery_horked(void);
-			   	apm_battery_horked();			   	
-			   	printk(KERN_WARNING "BIOS strings suggest APM bugs, disabling battery reporting.\n");
-#endif			   	
+				if(strcmp(dmi_string(dm, data[5]), "A04")==0 
+					&& strcmp(dmi_string(dm, data[8]), "08/24/2000")==0)
+				{
+				   	apm_info.get_power_status_broken = 1;
+					printk(KERN_WARNING "BIOS strings suggest APM bugs, disabling power status reporting.\n");
+				}
 			}
 			break;
 #ifdef DUMP_DMI

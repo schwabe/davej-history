@@ -543,7 +543,7 @@ sys_ptrace(long request, long pid, long addr, long data,
 		ret = -EPERM;
 		if (child == current)
 			goto out;
-		if ((child->dumpable != 1 ||
+		if ((!child->dumpable ||
 		     (current->uid != child->euid) ||
 		     (current->uid != child->suid) ||
 		     (current->uid != child->uid) ||
