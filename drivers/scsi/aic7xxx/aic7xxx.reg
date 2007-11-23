@@ -1079,10 +1079,25 @@ scratch_ram {
 	CUR_SCBID {
 		size		1
 	}
+	ARG_1 {
+		size		1
+		mask	SEND_MSG	0x80
+		mask	SEND_SENSE	0x40
+		mask	SEND_REJ	0x20
+		alias	RETURN_1
+	}
 	/*
 	 * Running count of commands placed in
 	 * the QOUTFIFO.  This is cleared by the
 	 * kernel driver every FIFODEPTH commands.
+	 *
+	 * NOTE: these scratch RAM registers are *only* used on cards
+	 * that enable SCB paging.  The 2742 is unable to page.  We
+	 * won't use these on a 2742, and we can't init these registers
+	 * in the kernel driver for 2742 cards because these locations are
+	 * are used by the 2742 cards to control things like bus
+	 * termination.  Touching these memory locations is a no-no on all
+	 * non-paging cards as far as we are concerned.
 	 */
 	CMDOUTCNT {
 		size		1
@@ -1094,13 +1109,6 @@ scratch_ram {
 	FIFODEPTH {
 		size		1
 	}
-	ARG_1 {
-		size		1
-		mask	SEND_MSG	0x80
-		mask	SEND_SENSE	0x40
-		mask	SEND_REJ	0x20
-		alias	RETURN_1
-	}
 	/*
 	 * These are reserved registers in the card's scratch ram.  Some of
 	 * the values are specified in the AHA2742 technical reference manual
@@ -1108,6 +1116,11 @@ scratch_ram {
 	 */
 	SCSICONF {
 		address		0x05a
+		size		1
+		bit	RESET_SCSI	0x40
+	}
+        SCSICONF2 {
+		address		0x05b
 		size		1
 		bit	RESET_SCSI	0x40
 	}

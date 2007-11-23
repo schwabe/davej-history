@@ -2,6 +2,7 @@
 #include <linux/smp.h>
 #include <linux/user.h>
 #include <linux/elfcore.h>
+#include <linux/delay.h>
 
 #include <asm/semaphore.h>
 
@@ -13,6 +14,7 @@ static struct symbol_table arch_symbol_table = {
 	/* platform dependent support */
 	X(dump_thread),
 	X(dump_fpu),
+	XNOVERS(__do_delay),
 	XNOVERS(down_failed),
 	XNOVERS(down_failed_interruptible),
 	XNOVERS(up_wakeup),

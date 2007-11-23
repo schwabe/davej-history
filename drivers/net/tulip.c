@@ -1444,7 +1444,7 @@ static void tulip_timer(unsigned long data)
 				  }
 				  if (tulip_debug > 0) /* Gurppp, should be >1 */
 					  printk(KERN_INFO "%s: Setting %s-duplex based on MII"
-							 " Xcvr #%d parter capability of %4.4x.\n",
+							 " Xcvr #%d partner capability of %4.4x.\n",
 							 dev->name, full_duplex ? "full" : "half",
 							 tp->phys[0], mii_reg5);
 			  }

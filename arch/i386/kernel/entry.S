@@ -259,7 +259,6 @@ ENOSYS = 38
 	iret
 #endif
 
-
 ENTRY(lcall7)
 	pushfl			# We get a different stack layout with call gates,
 	pushl %eax		# which has to be cleaned up later..

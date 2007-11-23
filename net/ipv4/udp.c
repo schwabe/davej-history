@@ -53,6 +53,8 @@
  *					Last socket cache retained as it
  *					does have a high hit rate.
  *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
+ *	Willy Konynenberg	:	Transparent proxy adapted to new
+ *					socket hash code.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -313,79 +315,60 @@ __inline__ struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport
 }
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
-#define secondlist(hpnum, sk, fpass) \
-({ struct sock *s1; if(!(sk) && (fpass)--) \
-	s1 = udp_hash[(hpnum) & (TCP_HTABLE_SIZE - 1)]; \
-   else \
-	s1 = (sk); \
-   s1; \
-})
-
-#define udp_v4_proxy_loop_init(hnum, hpnum, sk, fpass) \
-	secondlist((hpnum), udp_hash[(hnum)&(TCP_HTABLE_SIZE-1)],(fpass))
-
-#define udp_v4_proxy_loop_next(hnum, hpnum, sk, fpass) \
-	secondlist((hpnum),(sk)->next,(fpass))
-
-struct sock *udp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
-				 unsigned short rnum, unsigned long laddr,
-				 unsigned long paddr, unsigned short pnum,
+struct sock *udp_v4_proxy_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport, u32 paddr, u16 rport,
 				 struct device *dev)
 {
-	struct sock *s, *result = NULL;
+	struct sock *hh[3], *sk, *result = NULL;
+	int i;
 	int badness = -1;
-	unsigned short hnum = ntohs(num);
-	unsigned short hpnum = ntohs(pnum);
-	int firstpass = 1;
+	unsigned short hnum = ntohs(dport);
+	unsigned short hpnum = ntohs(rport);
 
 	SOCKHASH_LOCK();
-	for(s = udp_v4_proxy_loop_init(hnum, hpnum, s, firstpass);
-	    s != NULL;
-	    s = udp_v4_proxy_loop_next(hnum, hpnum, s, firstpass)) {
-		if(s->num == hnum || s->num == hpnum) {
-			int score = 0;
-			if(s->dead && (s->state == TCP_CLOSE))
-				continue;
-			if(s->rcv_saddr) {
-				if((s->num != hpnum || s->rcv_saddr != paddr) &&
-				   (s->num != hnum || s->rcv_saddr != laddr))
+	hh[0] = udp_hash[hnum & (UDP_HTABLE_SIZE - 1)];
+	hh[1] = udp_hash[hpnum & (UDP_HTABLE_SIZE - 1)];
+	for (i = 0; i < 2; i++) {
+		for(sk = hh[i]; sk != NULL; sk = sk->next) {
+			if(sk->num == hnum || sk->num == hpnum) {
+				int score = 0;
+				if(sk->dead && (sk->state == TCP_CLOSE))
 					continue;
-				score++;
-			}
-			if(s->daddr) {
-				if(s->daddr != raddr)
-					continue;
-				score++;
-			}
-			if(s->dummy_th.dest) {
-				if(s->dummy_th.dest != rnum)
-					continue;
-				score++;
-			}
-			/* If this socket is bound to a particular interface,
-			 * did the packet come in on it? */
-			if(s->bound_device) {
-				if (s->bound_device != dev)
-					continue;
-				score++;
-			}
-			if(score == 4 && s->num == hnum) {
-				result = s;
-				break;
-			} else if(score > badness && (s->num == hpnum || s->rcv_saddr)) {
-					result = s;
+				if(sk->rcv_saddr) {
+					if((sk->num != hpnum || sk->rcv_saddr != paddr) &&
+					   (sk->num != hnum || sk->rcv_saddr != daddr))
+						continue;
+					score++;
+				}
+				if(sk->daddr) {
+					if(sk->daddr != saddr)
+						continue;
+					score++;
+				}
+				if(sk->dummy_th.dest) {
+					if(sk->dummy_th.dest != sport)
+						continue;
+					score++;
+				}
+				/* If this socket is bound to a particular interface,
+				 * did the packet come in on it? */
+				if(sk->bound_device) {
+					if (sk->bound_device != dev)
+						continue;
+					score++;
+				}
+				if(score == 4 && sk->num == hnum) {
+					result = sk;
+					break;
+				} else if(score > badness && (sk->num == hpnum || sk->rcv_saddr)) {
+					result = sk;
 					badness = score;
+				}
 			}
 		}
 	}
 	SOCKHASH_UNLOCK();
 	return result;
 }
-
-#undef secondlist
-#undef udp_v4_proxy_loop_init
-#undef udp_v4_proxy_loop_next
-
 #endif
 
 static inline struct sock *udp_v4_mcast_next(struct sock *sk,
@@ -950,8 +933,8 @@ int udp_chkaddr(struct sk_buff *skb)
 	struct udphdr *uh = (struct udphdr *)(skb->h.raw + iph->ihl*4);
 	struct sock *sk;
 
-	sk = udp_v4_proxy_lookup(uh->dest, iph->saddr, uh->source, iph->daddr,
-				 0, 0, skb->dev);
+	sk = udp_v4_lookup(iph->saddr, uh->source, iph->daddr, uh->dest,
+			   skb->dev);
 	if (!sk)
 		return 0;
 	/* 0 means accept all LOCAL addresses here, not all the world... */
@@ -1098,8 +1081,8 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 #endif
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	if(skb->redirport)
-		sk = udp_v4_proxy_lookup(uh->dest, saddr, uh->source,
-					 daddr, dev->pa_addr, skb->redirport, dev);
+		sk = udp_v4_proxy_lookup(saddr, uh->source, daddr, uh->dest,
+					 dev->pa_addr, skb->redirport, dev);
 	else
 #endif
 	sk = udp_v4_lookup(saddr, uh->source, daddr, uh->dest, dev);

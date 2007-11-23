@@ -79,7 +79,7 @@ extern int max_files, nr_files;
 /*
  * Flags that can be altered by MS_REMOUNT
  */
-#define MS_RMT_MASK (MS_RDONLY|MS_MANDLOCK|MS_NOATIME)
+#define MS_RMT_MASK (MS_RDONLY|MS_NOSUID|MS_NODEV|MS_NOEXEC|MS_SYNCHRONOUS|MS_MANDLOCK|MS_NOATIME)
 
 /*
  * Magic mount flag number. Has to be or-ed to the flag values.
@@ -332,6 +332,11 @@ struct inode {
 	} u;
 };
 
+struct fown_struct {
+	int pid;		/* pid or -pgrp where SIGIO should be sent */
+	uid_t uid, euid;	/* uid/euid of process setting the owner */
+};
+
 struct file {
 	mode_t f_mode;
 	loff_t f_pos;
@@ -339,7 +344,7 @@ struct file {
 	unsigned short f_count;
 	unsigned long f_reada, f_ramax, f_raend, f_ralen, f_rawin;
 	struct file *f_next, *f_prev;
-	int f_owner;		/* pid or -pgrp where SIGIO should be sent */
+	struct fown_struct f_owner;
 	struct inode * f_inode;
 	struct file_operations * f_op;
 	unsigned long f_version;

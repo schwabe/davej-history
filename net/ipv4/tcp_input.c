@@ -34,6 +34,8 @@
  *		David S. Miller	:	New socket lookup architecture for ISS.
  *					This code is dedicated to John Dyson.
  *              Elliot Poger    :       Added support for SO_BINDTODEVICE.
+ *	Willy Konynenberg	:	Transparent proxy adapted to new
+ *					socket hash code.
  */
 
 #include <linux/config.h>
@@ -301,76 +303,41 @@ __inline__ struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport
 }
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
-#define secondlist(hpnum, sk, fpass) \
-({ struct sock *s1; if((hpnum) && !(sk) && (fpass)--) \
-	s1 = tcp_bound_hash[tcp_bhashfn(hpnum)]; \
-   else \
-	s1 = (sk); \
-   s1; \
-})
-
-#define tcp_v4_proxy_loop_init(hnum, hpnum, sk, fpass) \
-	secondlist((hpnum), tcp_bound_hash[tcp_bhashfn(hnum)],(fpass))
-
-#define tcp_v4_proxy_loop_next(hnum, hpnum, sk, fpass) \
-	secondlist((hpnum),(sk)->bind_next,(fpass))
-
-struct sock *tcp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
-				 unsigned short rnum, unsigned long laddr,
-				 unsigned long paddr, unsigned short pnum,
+/* I am not entirely sure this is fully equivalent to the old lookup code, but it does
+ * look reasonable.  WFK
+ */
+struct sock *tcp_v4_proxy_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport, u32 paddr, u16 rport,
 				 struct device *dev)
 {
-	struct sock *s, *result = NULL;
-	int badness = -1;
-	unsigned short hnum = ntohs(num);
-	unsigned short hpnum = ntohs(pnum);
-	int firstpass = 1;
+	unsigned short hnum = ntohs(dport);
+	unsigned short hrnum = ntohs(rport);
+	struct sock *sk;
 
-	/* This code must run only from NET_BH. */
-	for(s = tcp_v4_proxy_loop_init(hnum, hpnum, s, firstpass);
-	    s != NULL;
-	    s = tcp_v4_proxy_loop_next(hnum, hpnum, s, firstpass)) {
-		if(s->num == hnum || s->num == hpnum) {
-			int score = 0;
-			if(s->dead && (s->state == TCP_CLOSE))
-				continue;
-			if(s->rcv_saddr) {
-				if((s->num != hpnum || s->rcv_saddr != paddr) &&
-				   (s->num != hnum || s->rcv_saddr != laddr))
-					continue;
-				score++;
-			}
-			if(s->daddr) {
-				if(s->daddr != raddr)
-					continue;
-				score++;
-			}
-			if(s->dummy_th.dest) {
-				if(s->dummy_th.dest != rnum)
-					continue;
-				score++;
-			}
-			if(s->bound_device) {
-				if (s->bound_device != dev)
-					continue;
-				score++;
-			}
-			if(score == 4 && s->num == hnum) {
-				result = s;
-				break;
-			} else if(score > badness && (s->num == hpnum || s->rcv_saddr)) {
-					result = s;
-					badness = score;
-			}
-		}
+	/* Optimize here for direct hit, only listening connections can
+	 * have wildcards anyways.  It is assumed that this code only
+	 * gets called from within NET_BH.
+	 */
+	sk = tcp_established_hash[tcp_hashfn(daddr, hnum, saddr, sport)];
+	for(; sk; sk = sk->next)
+		if(sk->daddr		== saddr		&& /* remote address */
+		   sk->dummy_th.dest	== sport		&& /* remote port    */
+		   sk->num		== hnum			&& /* local port     */
+		   sk->rcv_saddr	== daddr		&& /* local address  */
+		   ((sk->bound_device==NULL) || (sk->bound_device==dev))  )
+			goto hit; /* You sunk my battleship! */
+	/* If we don't match on a bound socket, try to find one explicitly listening
+	 * on the remote address (a proxy bind).
+	 */
+	sk = tcp_v4_lookup_longway(daddr, hnum, dev);
+	/* If that didn't yield an exact match, look for a socket listening on the
+	 * redirect port.
+	 */
+	if (!sk || sk->rcv_saddr != daddr) {
+		sk = tcp_v4_lookup_longway(paddr, hrnum, dev);
 	}
-	return result;
+hit:
+	return sk;
 }
-
-#undef secondlist
-#undef tcp_v4_proxy_loop_init
-#undef tcp_v4_proxy_loop_next
-
 #endif
 
 /*
@@ -2258,8 +2225,8 @@ int tcp_chkaddr(struct sk_buff *skb)
 	struct tcphdr *th = (struct tcphdr *)(skb->h.raw + iph->ihl*4);
 	struct sock *sk;
 
-	sk = tcp_v4_proxy_lookup(th->dest, iph->saddr, th->source, iph->daddr,
-				 0, 0, skb->dev);
+	sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr, th->dest,
+			   skb->dev);
 	if (!sk)
 		return 0;
 	/* 0 means accept all LOCAL addresses here, not all the world... */
@@ -2327,8 +2294,7 @@ retry_search:
 #endif
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 		if (skb->redirport)
-			sk = tcp_v4_proxy_lookup(th->dest, saddr, th->source, daddr,
-						 dev->pa_addr, skb->redirport, dev);
+			sk = tcp_v4_proxy_lookup(saddr, th->source, daddr, th->dest, dev->pa_addr, skb->redirport, dev);
 		else
 #endif
 		sk = __tcp_v4_lookup(th, saddr, th->source, daddr, th->dest, dev);
@@ -2643,11 +2609,17 @@ retry_search:
 			tcp_set_state(sk, TCP_CLOSE);
 			sk->shutdown = SHUTDOWN_MASK;
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
-			sk = tcp_v4_proxy_lookup(th->dest, saddr, th->source, daddr,
-						 dev->pa_addr, skb->redirport, dev);
-#else
-			sk = NULL;
+			/* What to do here?
+			 * For the non-proxy case, this code is effectively almost a no-op,
+			 * due to the sk = NULL.  Is that intentional?  If so, why shouldn't we
+			 * do the same for the proxy case and get rid of some useless code?
+			 */
+			if (skb->redirport)
+				sk = tcp_v4_proxy_lookup(saddr, th->source, daddr, th->dest,
+							 dev->pa_addr, skb->redirport, dev);
+			else
 #endif
+			sk = NULL;
 			/* this is not really correct: we should check sk->users */
 			if (sk && sk->state==TCP_LISTEN)
 			{

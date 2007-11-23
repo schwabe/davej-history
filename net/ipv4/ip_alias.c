@@ -2,12 +2,14 @@
  *		IP_ALIAS (AF_INET) aliasing module.
  *
  *
- * Version:	@(#)ip_alias.c	0.43   12/20/95
+ * Version:	@(#)ip_alias.c	0.50   6/14/97
  *
  * Author:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *
  * Fixes:
  *	JJC	:	ip_alias_dev_select method.
+ *	JJC	:	use ip_rt_dev instead of ip_rt_route 
+ *	JJC	:	new no_sel semantics
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -76,11 +78,13 @@ int ip_alias_print_1(struct net_alias_type *this, struct net_alias *alias, char 
 		(p[0] & 255), (p[1] & 255), (p[2] & 255), (p[3] & 255));
 }
 
+/*
+ *	Called by net_alias module when no local alias address has been hit,
+ *	to find out if an alias is a better candidate for handling given addr
+ */
 struct device *ip_alias_dev_select(struct net_alias_type *this, struct device *main_dev, struct sockaddr *sa)
 {
 	__u32 addr;
-	struct rtable *rt;
-	struct device *dev=NULL;
   
 	/*
 	 *	Defensive...	
@@ -102,13 +106,12 @@ struct device *ip_alias_dev_select(struct net_alias_type *this, struct device *m
 	 *	net_alias module will check if returned device is main_dev's alias
 	 */
 
-	rt = ip_rt_route(addr, 0, NULL);
-	if(rt)
-	{
-		dev=rt->rt_dev;
-		ip_rt_put(rt);
-	}
-	return dev;
+	/*
+	 *	Fixed arping caused by incorrectly using ip_rt_route(), 
+	 *	ip_rt_dev() just returns routing device without hh generation.
+	 */
+
+	return ip_rt_dev(addr);
 }
 
 /*
@@ -149,8 +152,23 @@ int ip_alias_done(void)
 
 #ifdef MODULE
 
+/*
+ *	If no_sel is set, alias association (device selection) with
+ *	foreign addresses will be disabled.
+ *	You will get:
+ *	- faster operation by avoiding completely routing lookups
+ *	You will loose:
+ *	- inter-alias routing
+ *	- proxyarp over aliases
+ */
+
+int no_sel = 0;
+
 int init_module(void)
 {
+	if (no_sel)
+		ip_alias_type.dev_select = NULL;
+
 	if (ip_alias_init() != 0)
 		return -EIO;
 	return 0;

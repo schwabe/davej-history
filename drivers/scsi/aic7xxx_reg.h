@@ -252,18 +252,20 @@
 
 #define	CUR_SCBID       		0x58
 
-#define	CMDOUTCNT       		0x59
-
-#define	SCSICONF        		0x5a
-#define		RESET_SCSI      	0x40
-
-#define	FIFODEPTH       		0x5a
-
-#define	ARG_1           		0x5b
-#define	RETURN_1        		0x5b
+#define	ARG_1           		0x59
+#define	RETURN_1        		0x59
 #define		SEND_MSG        	0x80
 #define		SEND_SENSE      	0x40
 #define		SEND_REJ        	0x20
+
+#define	SCSICONF        		0x5a
+
+#define	CMDOUTCNT       		0x5a
+
+#define	FIFODEPTH       		0x5b
+
+#define	SCSICONF2       		0x5b
+#define		RESET_SCSI      	0x40
 
 #define	HOSTCONF        		0x5d
 

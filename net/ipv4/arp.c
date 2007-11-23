@@ -1921,6 +1921,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	{
 		/*
 		 *	net_alias_dev_rx32 returns main dev if it fails to found other.
+		 *  	if successful, also incr. alias rx count.
 		 */
 		dev = net_alias_dev_rx32(dev, AF_INET, sip, tip);
 

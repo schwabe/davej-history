@@ -46,6 +46,7 @@
  *		Andi Kleen	:	Don't send multicast addresses to
  *					kerneld.	
  *
+ *	Juan Jose Ciarlante     :	Added ip_rt_dev 
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -1533,6 +1534,20 @@ void ip_rt_put(struct rtable * rt)
 	 * refcnt goes to zero, because nobody else will... */
 	if ( rt && (rt->rt_flags & RTF_NOTCACHED) && (!rt->rt_refcnt) )
 		rt_free(rt);
+}
+
+/*
+ *	Return routing dev for given address.
+ *	Called by ip_alias module to avoid using ip_rt_route and
+ *	generating hhs.
+ */
+struct device * ip_rt_dev(__u32 addr)
+{
+	struct fib_node *f;
+	f = fib_lookup(addr, NULL);
+	if (f) 
+		return f->fib_info->fib_dev;
+	return NULL;
 }
 
 struct rtable * ip_rt_route(__u32 daddr, int local, struct device *dev)

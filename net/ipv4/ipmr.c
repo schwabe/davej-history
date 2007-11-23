@@ -193,6 +193,8 @@ static struct mfc_cache *ipmr_cache_alloc(int priority)
 	init_timer(&c->mfc_timer);
 	c->mfc_timer.data=(long)c;
 	c->mfc_timer.function=ipmr_cache_timer;
+	c->mfc_packets=0;
+	c->mfc_bytes=0;
 	return c;
 }
  
@@ -591,6 +593,7 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 	struct sioc_sg_req sr;
 	struct sioc_vif_req vr;
 	struct vif_device *vif;
+	struct mfc_cache *cl;
 	
 	switch(cmd)
 	{
@@ -617,6 +620,19 @@ int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg)
 			if(err)
 				return err;
 			memcpy_fromfs(&sr,(void *)arg,sizeof(sr));
+			cl=ipmr_cache_find(sr.src.s_addr,sr.grp.s_addr);
+			if(cl==NULL)
+			{
+				sr.pktcnt=0;
+				sr.bytecnt=0;
+				sr.wrong_if=0;
+			}
+			else
+			{
+				sr.pktcnt=cl->mfc_packets;
+				sr.bytecnt=cl->mfc_bytes;
+				sr.wrong_if=0;
+			}
 			memcpy_tofs((void *)arg,&sr,sizeof(sr));
 			return 0;
 		default:
@@ -753,6 +769,8 @@ void ipmr_forward(struct sk_buff *skb, int is_frag)
 	
 	vif_table[vif].pkt_in++;
 	vif_table[vif].bytes_in+=skb->len;
+	cache->mfc_packets++;
+	cache->mfc_bytes+=skb->len;
 	
 	/*
 	 *	Forward the frame
@@ -785,9 +803,7 @@ void ipmr_forward(struct sk_buff *skb, int is_frag)
 	if(psend==-1)
 		kfree_skb(skb, FREE_WRITE);
 	else
-	{
 		ipmr_queue_xmit(skb, &vif_table[psend], skb->dev, is_frag);
-	}
 }
 
 /*
@@ -907,7 +923,7 @@ done:
  
 void ip_mr_init(void)
 {
-	printk(KERN_INFO "Linux IP multicast router 0.06.\n");
+	printk(KERN_INFO "Linux IP multicast router 0.07.\n");
 	register_netdevice_notifier(&ip_mr_notifier);
 #ifdef CONFIG_PROC_FS	
 	proc_net_register(&(struct proc_dir_entry) {

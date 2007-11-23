@@ -232,10 +232,13 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	kdev_t dev = sb->s_dev;
 	int error;
 
+	MOD_INC_USE_COUNT;
+
 	if (smb_get_mount_data(&data, raw_data) != 0)
 	{
 		printk("smb_read_super: wrong data argument\n");
 		sb->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	fd = data.fd;
@@ -243,12 +246,14 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	{
 		printk("smb_read_super: invalid file descriptor\n");
 		sb->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	if (!S_ISSOCK(filp->f_inode->i_mode))
 	{
 		printk("smb_read_super: not a socket!\n");
 		sb->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	/* We must malloc our own super-block info */
@@ -258,6 +263,8 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (smb_sb == NULL)
 	{
 		printk("smb_read_super: could not alloc smb_sb_info\n");
+		sb->s_dev = 0;
+		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	filp->f_count += 1;
@@ -328,7 +335,6 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 		printk("smb_read_super: get root inode failed\n");
 		goto fail;
 	}
-	MOD_INC_USE_COUNT;
 	return sb;
 
       fail:
@@ -340,6 +346,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	filp->f_count -= 1;
 	smb_dont_catch_keepalive(server);
 	smb_kfree_s(SMB_SBP(sb), sizeof(struct smb_sb_info));
+	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -385,9 +392,32 @@ smb_notify_change(struct inode *inode, struct iattr *attr)
 	     (attr->ia_gid != SMB_SERVER(inode)->m.gid)))
 		return -EPERM;
 
-	if (((attr->ia_valid & ATTR_MODE) &&
-	(attr->ia_mode & ~(S_IFREG | S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO))))
-		return -EPERM;
+	if (attr->ia_valid & ATTR_MODE) {
+		struct smb_dirent *fold = SMB_FINFO(inode);
+		struct smb_dirent finfo;
+
+		if (attr->ia_mode & ~(S_IFREG | S_IFDIR |
+				      S_IRWXU | S_IRWXG | S_IRWXO))
+			return -EPERM;
+
+		memset((char *)&finfo, 0, sizeof(finfo));
+		finfo.attr = fold->attr;
+
+		if((attr->ia_mode & 0200) == 0)
+		    finfo.attr |= aRONLY;
+		else
+		    finfo.attr &= ~aRONLY;
+
+		if ((error = smb_proc_setattr(SMB_SERVER(inode),
+					      inode, &finfo)) >= 0)
+		{
+			fold->attr = finfo.attr;
+			if ((attr->ia_mode & 0200) == 0)
+				inode->i_mode &= ~0222;
+			else
+				inode->i_mode |= 0222;
+		}
+	}
 
 	if ((attr->ia_valid & ATTR_SIZE) != 0)
 	{
@@ -401,41 +431,18 @@ smb_notify_change(struct inode *inode, struct iattr *attr)
 			goto fail;
 
 	}
-	if ((attr->ia_valid & (ATTR_CTIME | ATTR_MTIME | ATTR_ATIME)) != 0)
+
+	/* ATTR_CTIME and ATTR_ATIME can not be set via SMB, so ignore it. */
+
+	if (attr->ia_valid & ATTR_MTIME)
 	{
-
-		struct smb_dirent finfo;
-
-		finfo.attr = 0;
-		finfo.f_size = inode->i_size;
-		finfo.f_blksize = inode->i_blksize;
-
-		if ((attr->ia_valid & ATTR_CTIME) != 0)
-			finfo.f_ctime = attr->ia_ctime;
+		if (smb_make_open(inode, O_WRONLY) != 0)
+			error = -EACCES;
 		else
-			finfo.f_ctime = inode->i_ctime;
-
-		if ((attr->ia_valid & ATTR_MTIME) != 0)
-			finfo.f_mtime = attr->ia_mtime;
-		else
-			finfo.f_mtime = inode->i_mtime;
-
-		if ((attr->ia_valid & ATTR_ATIME) != 0)
-			finfo.f_atime = attr->ia_atime;
-		else
-			finfo.f_atime = inode->i_atime;
-
-		if ((error = smb_proc_setattr(SMB_SERVER(inode),
-					      inode, &finfo)) >= 0)
-		{
-			inode->i_ctime = finfo.f_ctime;
-			inode->i_mtime = finfo.f_mtime;
-			inode->i_atime = finfo.f_atime;
-		}
+			inode->i_mtime = attr->ia_mtime;
 	}
       fail:
 	smb_invalid_dir_cache(smb_info_ino(SMB_INOP(inode)->dir));
-
 	return error;
 }
 

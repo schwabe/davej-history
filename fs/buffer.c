@@ -559,7 +559,7 @@ static inline int can_reclaim(struct buffer_head *bh, int size)
 static struct buffer_head *find_candidate(struct buffer_head *bh,
 					  int *list_len, int size)
 {
-	int behind = 0;
+	int lookahead  = 7;
 
 	if (!bh)
 		goto no_candidate;
@@ -572,11 +572,12 @@ static struct buffer_head *find_candidate(struct buffer_head *bh,
 			try_to_free_buffer(bh,&bh,1);
 			if (!bh)
 				break;
+			lookahead = 7;
 			continue;
 		}
 		else if (buffer_locked(bh) && 
 			 (bh->b_list == BUF_LOCKED || bh->b_list == BUF_LOCKED1)) {
-			if (behind++ > 10) {
+			if (!--lookahead) {
 				(*list_len) = 0;
 				goto no_candidate;
 			}
@@ -595,9 +596,10 @@ static void refill_freelist(int size)
 {
 	struct buffer_head * bh;
 	struct buffer_head * candidate[BUF_DIRTY];
+	extern struct task_struct *bdflush_tsk;
 	unsigned int best_time, winner;
 	int buffers[BUF_DIRTY];
-	int i;
+	int i, limit = ((min_free_pages + free_pages_low) >> 1);
 	int needed;
 
 	refilled = 1;
@@ -606,7 +608,7 @@ static void refill_freelist(int size)
 	   for user processes to use (and dirty) */
 	
 	/* We are going to try to locate this much memory */
-	needed =bdf_prm.b_un.nrefill * size;  
+	needed = bdf_prm.b_un.nrefill * size;  
 
 	while (nr_free_pages > min_free_pages*2 && needed > 0 &&
 	       grow_buffers(GFP_BUFFER, size)) {
@@ -661,21 +663,38 @@ repeat:
 
 	/* Dirty buffers should not overtake, wakeup_bdflush(1) calls
 	   bdflush and sleeps, therefore kswapd does his important work. */
-	if ((nr_buffers_type[BUF_DIRTY] > nr_buffers * bdf_prm.b_un.nfract/100) ||
-	    (nr_free_pages < min_free_pages))
+	if (nr_buffers_type[BUF_DIRTY] > nr_buffers * bdf_prm.b_un.nfract/100)
 		wakeup_bdflush(1);
 	
 	/* Too bad, that was not enough. Try a little harder to grow some. */
 	
-	if (nr_free_pages > min_free_pages + 5) {
+	if (nr_free_pages > limit) {
 		if (grow_buffers(GFP_BUFFER, size)) {
 			needed -= PAGE_SIZE;
 			goto repeat;
 		};
 	}
 
+	/* If we are not bdflush we should wake up bdflush and try it again. */
+
+	if (current != bdflush_tsk) {
+		wakeup_bdflush(1);
+		needed -= PAGE_SIZE;
+		goto repeat;
+	}
+
+	/* We are bdflush: let's try our best */
+
+	/*
+	 * In order to protect our reserved pages, 
+	 * return now if we got any buffers.
+	 */
+	allow_interrupts();
+	if (free_list[BUFSIZE_INDEX(size)])
+		return;
+
 	/* and repeat until we find something good */
-	wakeup_bdflush(1);
+	grow_buffers(GFP_BUFFER, size);
 
 	/* decrease needed even if there is no success */
 	needed -= PAGE_SIZE;
@@ -966,11 +985,15 @@ static void get_more_buffer_heads(void)
 		 * This is critical.  We can't swap out pages to get
 		 * more buffer heads, because the swap-out may need
 		 * more buffer-heads itself.  Thus GFP_ATOMIC.
+		 *
+		 * This is no longer true, it is GFP_BUFFER again, the
+		 * swapping code now knows not to perform I/O when that
+		 * GFP level is specified... -DaveM
 		 */
 		/* we now use kmalloc() here instead of gfp as we want
                    to be able to easily release buffer heads - they
                    took up quite a bit of memory (tridge) */
-		bh = (struct buffer_head *) kmalloc(sizeof(*bh),GFP_ATOMIC);
+		bh = (struct buffer_head *) kmalloc(sizeof(*bh),GFP_BUFFER);
 		if (bh) {
 			put_unused_buffer_head(bh);
 			nr_buffer_heads++;

@@ -406,11 +406,8 @@ int try_to_free_page(int priority, int dma, int wait)
 	can_do_io = 1;
 	if (wait)
 		stop = 0;
-	if (priority == GFP_BUFFER) {
-		/* bdflush() should do the rest if we fail */
-		stop = 3;
+	if (priority == GFP_BUFFER)
 		can_do_io = 0;
-	}
 	switch (state) {
 		do {
 		case 0:
@@ -492,10 +489,14 @@ int kswapd(void *unused)
 		interruptible_sleep_on(&kswapd_wait);
 		kswapd_awake = 1;
 		swapstats.wakeups++;
+		/* Protect our reserved pages: */
+		i = 0;
+		if (nr_free_pages <= min_free_pages)
+			i = (1+min_free_pages) - nr_free_pages;
 		/* Do the background pageout: */
-		for (i=0; i < kswapd_ctl.maxpages; i++)
+		for (i += kswapd_ctl.maxpages; i > 0; i--)
 			try_to_free_page(GFP_KERNEL, 0,
-					 (nr_free_pages < min_free_pages));
+					 (nr_free_pages <= min_free_pages));
 	}
 }
 

@@ -6,6 +6,7 @@ NET_ALIAS device aliasing v0.5x
   (specific IP) support.
   From version 0.50, dynamic configuration of max alias per device and
   tx/rx stats for aliases added.
+  Also fixed inter-alias routing and arping problems.
 
 Features
 --------
@@ -35,8 +36,37 @@ Usage (IP aliasing)
      # modprobe ip_alias.o
      
      Also, dynamic loading is supported (kerneld).
-       You should have the following line in /etc/conf.modules:
+       You should have the following line in /etc/conf.modules (not needed
+       for newer modutils):
        alias net_alias-2 ip_alias
+
+  Module options
+  --------------
+  From 0.5x ip_alias module supports a new option ("no_sel" symbol).
+  If no_sel is set (default is 0), alias association (device selection) with
+  foreign addresses will be disabled.
+
+    You will get:
+    - Faster operation by avoiding completely routing lookups. 
+      Due to the "logical nature" of aliasing, netdevice SELection can only be
+      done based on info from network layer. When packet dst address isn't 
+      one of my addresses, I query the routing table to see which netdevice
+      would be selected for packet _source_ address. This option avoids
+      doing so, and you must consider using it if you *only* have same-net
+      aliases (common usage).
+
+    You will loose:
+    - Inter-alias routing
+    - Proxyarp over aliases
+
+  To activate:
+    # insmod ip_alias.o no_sel=1  
+      or
+    # modprobe ip_alias.o no_sel=1
+      or
+    add the following line to /etc/conf.modules:
+      options ip_alias no_sel=1
+
 
 o Alias creation.
   Alias creation is done by 'magic' iface naming: eg. to create a
@@ -81,9 +111,9 @@ o PROCfs entries
      device           family address                                
      eth0:0           2      200.1.1.1
      
-o PROCfs dynamic configuration
+o PROCfs dynamic configuration (from v0.50)
   You can now change the max aliases per device limit via
-  /proc/sys/net/core/net_alias_max entry
+  /proc/sys/net/core/net_alias_max entry (default=256)
      # cat /proc/sys/net/core/net_alias_max
      256
      # echo 1000 > /proc/sys/net/core/net_alias_max
@@ -111,9 +141,9 @@ o Alias devices rx/tx stats
   Fake rx/tx stats are accounted:
   - TX
     When the packet is ``switched'' from logical alias device to
-    physical device, tx counter gets incr.
+    physical device, tx counter gets incremented.
   - RX
-    When an incoming packet's address equals alias device's addr it
+    When an incoming packet's address equals alias network device's addr it
     gets ``switched'' from physical to logical device, rx counter gets
     incr.
     
@@ -122,7 +152,23 @@ o Alias devices rx/tx stats
   will NOT pass down via alias device (so, no tx++ will occur).
   
   Also NOTE that currently ifconfig does not handle the ``:'' of alias devices
-  names, a little patch (attached) solves the problem.
+  names, a little patch solves the problem:
+--- ifconfig.c.dist	Tue Apr  4 17:58:32 1995
++++ ifconfig.c	Fri Oct 25 13:11:23 1996
+@@ -243,7 +243,12 @@
+   		bp++;
+   	if(strncmp(bp,ifname,strlen(ifname))==0 && bp[strlen(ifname)]==':')
+   	{
+- 		bp=strchr(bp,':');
++	   	/* 
++		 * 	start bp at ifname end to prevent ':' ambiguity
++		 * 	with alias devices (eg. eth0:0)
++		 * 	
++		 */
++		bp+=strlen(ifname);
+  		bp++;
+  		sscanf(bp,"%d %d %d %d %d %d %d %d %d %d %d",
+  			&ife->stats.rx_packets,
   
 Relationship with main device
 -----------------------------
@@ -138,7 +184,12 @@ Contact
 Please e-mail me:
    Juan Jose Ciarlante <irriga@impsat1.com.ar> or <jjciarla@raiz.uncu.edu.ar>
    
-		   		
+Acknowledments
+--------------
+Special thanks to Claudia for all her love an patience.
+Also thanks to Antonio Trevi~o <antonio@ecord.gov.ar> great human being 
+and un*x guru.
+
 ; local variables:
 ; mode: indented-text
 ; mode: auto-fill

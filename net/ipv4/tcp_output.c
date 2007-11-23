@@ -537,6 +537,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 					skb2->raddr=rt->rt_gateway;
                                         if (sk->state == TCP_SYN_SENT && sysctl_ip_dynaddr)
                                                 ip_rewrite_addrs (sk, skb2, dev);
+					skb_pull(skb2,((unsigned char *)skb2->ip_hdr)-skb2->data);
 					skb2->dev = dev;
 					skb2->arp=1;
 					if (rt->rt_hh)

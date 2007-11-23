@@ -983,8 +983,7 @@ int ip_build_xmit(struct sock *sk,
 		}
 #endif		
 #ifdef CONFIG_IP_ACCT
-		if(!offset)
-			ip_fw_chk(iph, dev, NULL, ip_acct_chain, 0, IP_FW_MODE_ACCT_OUT);
+		ip_fw_chk(iph, dev, NULL, ip_acct_chain, 0, IP_FW_MODE_ACCT_OUT);
 #endif	
 		offset -= (maxfraglen-fragheaderlen);
 		fraglen = maxfraglen;

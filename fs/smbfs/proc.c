@@ -230,40 +230,6 @@ date_dos2unix(unsigned short time, unsigned short date)
 	return local2utc(secs);
 }
 
-
-/* Convert linear UNIX date to a MS-DOS time/date pair. */
-
-static void
-date_unix2dos(int unix_date, byte * date, byte * time)
-{
-	int day, year, nl_day, month;
-
-	unix_date = utc2local(unix_date);
-	WSET(time, 0,
-	     (unix_date % 60) / 2 + (((unix_date / 60) % 60) << 5) +
-	     (((unix_date / 3600) % 24) << 11));
-	day = unix_date / 86400 - 3652;
-	year = day / 365;
-	if ((year + 3) / 4 + 365 * year > day)
-		year--;
-	day -= (year + 3) / 4 + 365 * year;
-	if (day == 59 && !(year & 3))
-	{
-		nl_day = day;
-		month = 2;
-	} else
-	{
-		nl_day = (year & 3) || day <= 59 ? day : day - 1;
-		for (month = 0; month < 12; month++)
-			if (day_n[month] > nl_day)
-				break;
-	}
-	WSET(date, 0,
-	     nl_day - day_n[month - 1] + 1 + (month << 5) + (year << 9));
-}
-
-
-
 /*****************************************************************************/
 /*                                                                           */
 /*  Support section.                                                         */
@@ -922,6 +888,9 @@ smb_finish_dirent(struct smb_server *server, struct smb_dirent *entry)
 		entry->f_mode = server->m.file_mode;
 	}
 
+	if (entry->attr & aRONLY)
+		entry->f_mode &= ~0222;
+
 	if ((entry->f_blksize != 0) && (entry->f_size != 0))
 	{
 		entry->f_blocks =
@@ -1414,80 +1383,15 @@ smb_proc_getattr_core(struct inode *dir, const char *name, int len,
 	return 0;
 }
 
-static int
-smb_proc_getattr_trans2(struct inode *dir, const char *name, int len,
-			struct smb_dirent *entry)
-{
-	struct smb_server *server = SMB_SERVER(dir);
-	char param[SMB_MAXPATHLEN + 20];
-	char *p;
-	int result;
-
-	unsigned char *resp_data = NULL;
-	unsigned char *resp_param = NULL;
-	int resp_data_len = 0;
-	int resp_param_len = 0;
-
-	WSET(param, 0, 1);	/* Info level SMB_INFO_STANDARD */
-	DSET(param, 2, 0);
-	p = smb_encode_path(server, param + 6, SMB_INOP(dir), name, len);
-
-	smb_lock_server(server);
-      retry:
-	result = smb_trans2_request(server, TRANSACT2_QPATHINFO,
-				    0, NULL, p - param, param,
-				    &resp_data_len, &resp_data,
-				    &resp_param_len, &resp_param);
-
-	if (server->rcls != 0)
-	{
-		smb_unlock_server(server);
-		return -smb_errno(server->rcls, server->err);
-	}
-	if (result < 0)
-	{
-		if (smb_retry(server))
-		{
-			goto retry;
-		}
-		smb_unlock_server(server);
-		return result;
-	}
-	if (resp_data_len < 22)
-	{
-		smb_unlock_server(server);
-		return -ENOENT;
-	}
-	entry->f_ctime = date_dos2unix(WVAL(resp_data, 2),
-				       WVAL(resp_data, 0));
-	entry->f_atime = date_dos2unix(WVAL(resp_data, 6),
-				       WVAL(resp_data, 4));
-	entry->f_mtime = date_dos2unix(WVAL(resp_data, 10),
-				       WVAL(resp_data, 8));
-	entry->f_size = DVAL(resp_data, 12);
-	entry->attr = WVAL(resp_data, 20);
-	smb_unlock_server(server);
-
-	return 0;
-}
-
 int
 smb_proc_getattr(struct inode *dir, const char *name, int len,
 		 struct smb_dirent *entry)
 {
 	struct smb_server *server = SMB_SERVER(dir);
-	int result = 0;
+        int result;
 
 	smb_init_dirent(server, entry);
-
-	if (server->protocol >= PROTOCOL_LANMAN2)
-	{
-		result = smb_proc_getattr_trans2(dir, name, len, entry);
-	}
-	if ((server->protocol < PROTOCOL_LANMAN2) || (result < 0))
-	{
-		result = smb_proc_getattr_core(dir, name, len, entry);
-	}
+        result = smb_proc_getattr_core(dir, name, len, entry);
 	smb_finish_dirent(server, entry);
 
 	entry->len = len;
@@ -1497,12 +1401,9 @@ smb_proc_getattr(struct inode *dir, const char *name, int len,
 	return result;
 }
 
-
-/* In core protocol, there is only 1 time to be set, we use
-   entry->f_mtime, to make touch work. */
-static int
-smb_proc_setattr_core(struct smb_server *server,
-		      struct inode *i, struct smb_dirent *new_finfo)
+int
+smb_proc_setattr(struct smb_server *server,
+                 struct inode *i, struct smb_dirent *new_finfo)
 {
 	char *p;
 	char *buf;
@@ -1514,12 +1415,14 @@ smb_proc_setattr_core(struct smb_server *server,
 	buf = server->packet;
 	p = smb_setup_header(server, SMBsetatr, 8, 0);
 	WSET(buf, smb_vwv0, new_finfo->attr);
-	DSET(buf, smb_vwv1, utc2local(new_finfo->f_mtime));
+	DSET(buf, smb_vwv1, 0);
+	DSET(buf, smb_vwv3, 0);
+	DSET(buf, smb_vwv5, 0);
+	WSET(buf, smb_vwv7, 0);
 	*p++ = 4;
 	p = smb_encode_path(server, p,
 			    SMB_INOP(i)->dir, SMB_INOP(i)->finfo.name,
 			    SMB_INOP(i)->finfo.len);
-	p = smb_encode_ascii(p, "", 0);
 
 	smb_setup_bcc(server, p);
 	if ((result = smb_request_ok(server, SMBsetatr, 0, 0)) < 0)
@@ -1530,74 +1433,6 @@ smb_proc_setattr_core(struct smb_server *server,
 		}
 	}
 	smb_unlock_server(server);
-	return result;
-}
-
-static int
-smb_proc_setattr_trans2(struct smb_server *server,
-			struct inode *i, struct smb_dirent *new_finfo)
-{
-	char param[SMB_MAXPATHLEN + 20];
-	char data[26];
-	char *p;
-	int result;
-
-	unsigned char *resp_data = NULL;
-	unsigned char *resp_param = NULL;
-	int resp_data_len = 0;
-	int resp_param_len = 0;
-
-	WSET(param, 0, 1);	/* Info level SMB_INFO_STANDARD */
-	DSET(param, 2, 0);
-	p = smb_encode_path(server, param + 6,
-			    SMB_INOP(i)->dir, SMB_INOP(i)->finfo.name,
-			    SMB_INOP(i)->finfo.len);
-
-	date_unix2dos(new_finfo->f_ctime, &(data[0]), &(data[2]));
-	date_unix2dos(new_finfo->f_atime, &(data[4]), &(data[6]));
-	date_unix2dos(new_finfo->f_mtime, &(data[8]), &(data[10]));
-	DSET(data, 12, new_finfo->f_size);
-	DSET(data, 16, new_finfo->f_blksize);
-	WSET(data, 20, new_finfo->attr);
-	WSET(data, 22, 0);
-
-	smb_lock_server(server);
-      retry:
-	result = smb_trans2_request(server, TRANSACT2_SETPATHINFO,
-				    26, data, p - param, param,
-				    &resp_data_len, &resp_data,
-				    &resp_param_len, &resp_param);
-
-	if (server->rcls != 0)
-	{
-		smb_unlock_server(server);
-		return -smb_errno(server->rcls, server->err);
-	}
-	if (result < 0)
-	{
-		if (smb_retry(server))
-		{
-			goto retry;
-		}
-	}
-	smb_unlock_server(server);
-	return 0;
-}
-
-int
-smb_proc_setattr(struct smb_server *server, struct inode *inode,
-		 struct smb_dirent *new_finfo)
-{
-	int result;
-
-	if (server->protocol >= PROTOCOL_LANMAN2)
-	{
-		result = smb_proc_setattr_trans2(server, inode, new_finfo);
-	}
-	if ((server->protocol < PROTOCOL_LANMAN2) || (result < 0))
-	{
-		result = smb_proc_setattr_core(server, inode, new_finfo);
-	}
 	return result;
 }
 

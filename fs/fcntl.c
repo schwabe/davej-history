@@ -55,8 +55,6 @@ asmlinkage int sys_dup(unsigned int fildes)
 asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
-	struct task_struct *p;
-	int task_found = 0;
 
 	if (fd >= NR_OPEN || !(filp = current->files->fd[fd]))
 		return -EBADF;
@@ -108,49 +106,11 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			 * current syscall conventions, the only way
 			 * to fix this will be in libc.
 			 */
-			return filp->f_owner;
+			return filp->f_owner.pid;
 		case F_SETOWN:
-			/*
-			 *	Add the security checks - AC. Without
-			 *	this there is a massive Linux security
-			 *	hole here - consider what happens if
-			 *	you do something like
-			 * 
-			 *		fcntl(0,F_SETOWN,some_root_process);
-			 *		getchar();
-			 * 
-			 *	and input a line!
-			 * 
-			 * BTW: Don't try this for fun. Several Unix
-			 *	systems I tried this on fall for the
-			 *	trick!
-			 * 
-			 * I had to fix this botch job as Linux
-			 *	kill_fasync asserts priv making it a
-			 *	free all user process killer!
-			 *
-			 * Changed to make the security checks more
-			 * liberal.  -- TYT
-			 */
-			if (current->pgrp == -arg || current->pid == arg)
-				goto fasync_ok;
-			
-			for_each_task(p) {
-				if ((p->pid == arg) || (p->pid == -arg) || 
-				    (p->pgrp == -arg)) {
-					task_found++;
-					if ((p->session != current->session) &&
-					    (p->uid != current->uid) &&
-					    (p->euid != current->euid) &&
-					    !suser())
-						return -EPERM;
-					break;
-				}
-			}
-			if ((task_found == 0) && !suser())
-				return -EINVAL;
-		fasync_ok:
-			filp->f_owner = arg;
+			filp->f_owner.pid = arg;
+			filp->f_owner.uid = current->uid;
+			filp->f_owner.euid = current->euid;
 			if (S_ISSOCK (filp->f_inode->i_mode))
 				sock_fcntl (filp, F_SETOWN, arg);
 			return 0;
@@ -164,18 +124,38 @@ asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	}
 }
 
+static void send_sigio(int sig, int pid, uid_t uid, uid_t euid)
+{
+	struct task_struct * p;
+
+	for_each_task(p) {
+		int match = p->pid;
+		if (pid < 0)
+			match = -p->pgrp;
+		if (pid != match)
+			continue;
+		if (!euid &&
+		    (euid ^ p->suid) && (euid ^ p->uid) &&
+		    (uid ^ p->suid) && (uid ^ p->uid))
+			continue;
+		p->signal |= 1 << (sig-1);
+		if (p->state == TASK_INTERRUPTIBLE && (p->signal & ~p->blocked))
+			wake_up_process(p);
+	}
+}
+
 void kill_fasync(struct fasync_struct *fa, int sig)
 {
 	while (fa) {
+		struct fown_struct * fown;
 		if (fa->magic != FASYNC_MAGIC) {
 			printk("kill_fasync: bad magic number in "
 			       "fasync_struct!\n");
 			return;
 		}
-		if (fa->fa_file->f_owner > 0)
-			kill_proc(fa->fa_file->f_owner, sig, 1);
-		else
-			kill_pg(-fa->fa_file->f_owner, sig, 1);
+		fown = &fa->fa_file->f_owner;
+		if (fown->pid)
+			send_sigio(sig, fown->pid, fown->uid, fown->euid);
 		fa = fa->fa_next;
 	}
 }

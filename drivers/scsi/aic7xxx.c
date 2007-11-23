@@ -871,7 +871,7 @@ struct aic7xxx_host {
     long r_total;                            /* total reads */
     long r_total512;                         /* 512 byte blocks read */
     long r_bins[10];                         /* binned reads */
-  } stats[2][16][8];                         /* channel, target, lun */
+  } stats[16][8];                            /* channel, target, lun */
 #endif /* AIC7XXX_PROC_STATS */
 };
 
@@ -968,7 +968,13 @@ static int aic7xxx_verbose = 0;	             /* verbose messages */
  * These functions are not used yet, but when we do memory mapped
  * IO, we'll use them then.
  *
+ * For now we leave these commented out as the x86 inline assembly causes
+ * compiles to barf on DEC Alphas.  Besides, they aren't even used yet, so
+ * they constitute wasted .text space right now.
  ***************************************************************************/
+
+/***************************************************************************
+
 static inline unsigned char
 aic_inb(struct aic7xxx_host *p, long port)
 {
@@ -1007,6 +1013,7 @@ aic_outsb(struct aic7xxx_host *p, long port, unsigned char *valp, size_t size)
     outsb(p->base + port, valp, size);
   }
 }
+ ***************************************************************************/
 
 /*+F*************************************************************************
  * Function:
@@ -1985,6 +1992,8 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
   aic7xxx_queue_cmd_complete(p, cmd);
 
 #ifdef AIC7XXX_PROC_STATS
+  if ( (cmd->cmnd[0] != TEST_UNIT_READY) &&
+       (cmd->cmnd[0] != INQUIRY) )
   {
     int actual;
 
@@ -2000,7 +2009,7 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
       long *ptr;
       int x;
 
-      sp = &p->stats[cmd->channel & 0x01][cmd->target & 0x0F][cmd->lun & 0x07];
+      sp = &p->stats[((cmd->channel << 3) | cmd->target) & 0xf][cmd->lun & 0x7];
       sp->xfers++;
 
       if (cmd->request.cmd == WRITE)
@@ -4062,7 +4071,7 @@ aic7xxx_device_queue_depth(struct aic7xxx_host *p, Scsi_Device *device)
 #ifndef AIC7XXX_TAGGED_QUEUEING_BY_DEVICE
       device->queue_depth = default_depth;
 #else
-      if (p->instance > NUMBER(aic7xxx_tag_info))
+      if (p->instance >= NUMBER(aic7xxx_tag_info))
       {
         device->queue_depth = default_depth;
       }
@@ -5022,7 +5031,7 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p)
   scbq_init(&p->scb_data->free_scbs);
   scbq_init(&p->waiting_scbs);
 
-  for (i = 0; i <= NUMBER(p->device_status); i++)
+  for (i = 0; i < NUMBER(p->device_status); i++)
   {
     p->device_status[i].commands_sent = 0;
     p->device_status[i].flags = 0;
@@ -5305,8 +5314,11 @@ aic7xxx_register(Scsi_Host_Template *template, struct aic7xxx_host *p)
     */
   outb(p->qcntmask, p->base + QCNTMASK);
 
-  outb(p->qfullcount, p->base + FIFODEPTH);
-  outb(0, p->base + CMDOUTCNT);
+  if (p->flags & PAGE_ENABLED)
+  {
+    outb(p->qfullcount, p->base + FIFODEPTH);
+    outb(0, p->base + CMDOUTCNT);
+  }
 
   /*
    * We don't have any waiting selections or disconnected SCBs.
@@ -5721,7 +5733,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
    * a NULL entry to indicate that no prior hosts have
    * been found/registered for that IRQ.
    */
-  for (i = 0; i <= NUMBER(aic7xxx_boards); i++)
+  for (i = 0; i < NUMBER(aic7xxx_boards); i++)
   {
     aic7xxx_boards[i] = NULL;
   }
@@ -6887,7 +6899,7 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
   scb = (p->scb_data->scb_array[aic7xxx_position(cmd)]);
   base = p->base;
   channel = cmd->channel ? 'B': 'A';
-  tindex = (cmd->channel << 4) | cmd->target;
+  tindex = (cmd->channel << 3) | cmd->target;
 
 #ifdef 0   /* AIC7XXX_DEBUG_ABORT */
   if (scb != NULL)
@@ -7128,4 +7140,3 @@ Scsi_Host_Template driver_template = AIC7XXX;
  * tab-width: 8
  * End:
  */
-

@@ -85,6 +85,7 @@ extern void		ip_rt_flush(struct device *dev);
 extern void		ip_rt_update(int event, struct device *dev);
 extern void		ip_rt_redirect(__u32 src, __u32 dst, __u32 gw, struct device *dev);
 extern struct rtable	*ip_rt_slow_route(__u32 daddr, int local, struct device *dev);
+extern struct device	*ip_rt_dev(__u32 addr);
 extern int		rt_get_info(char * buffer, char **start, off_t offset, int length, int dummy);
 extern int		rt_cache_get_info(char *buffer, char **start, off_t offset, int length, int dummy);
 extern int		ip_rt_ioctl(unsigned int cmd, void *arg);

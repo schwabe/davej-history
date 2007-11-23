@@ -100,6 +100,7 @@ static struct symbol_table net_syms = {
 
 	X(init_etherdev),
 	X(ip_rt_route),
+	X(ip_rt_dev),
 	X(icmp_send),
 	X(ip_options_compile),
 	X(ip_rt_put),

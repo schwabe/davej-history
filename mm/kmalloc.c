@@ -447,6 +447,6 @@ bad_order:
 	return;
 
 not_on_freelist:
-	printk("Ooops. page %p doesn't show on freelist.\n", page);
 	restore_flags(flags);
+	printk("Ooops. page %p doesn't show on freelist.\n", page);
 }

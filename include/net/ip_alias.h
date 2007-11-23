@@ -2,7 +2,7 @@
  *		IP_ALIAS (AF_INET) aliasing definitions.
  *
  *
- * Version:	@(#)ip_alias.h	0.43   12/20/95
+ * Version:	@(#)ip_alias.h	0.50   4/20/97
  *
  * Author:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *

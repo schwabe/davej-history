@@ -340,15 +340,19 @@ void allow_interrupts(void)
   if (smp_processor_id() == boot_cpu_id) return;
   if (smp_blocked_interrupt_pending)
     {
-      long timeout_counter = loops_per_sec;
       unsigned long saved_kernel_counter;
+      long timeout_counter;
       saved_active_kernel_processor = active_kernel_processor;
       saved_kernel_counter = kernel_counter;
       kernel_counter = 0;
       active_kernel_processor = boot_cpu_id;
+      timeout_counter = 6000000;
       while (active_kernel_processor != saved_active_kernel_processor &&
 	     --timeout_counter >= 0)
-	barrier();
+	{
+	  udelay(10);
+	  barrier();
+	}
       if (timeout_counter < 0)
 	panic("FORWARDED INTERRUPT TIMEOUT (AKP = %d, Saved AKP = %d)\n",
 	      active_kernel_processor, saved_active_kernel_processor);
