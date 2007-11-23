@@ -16,8 +16,8 @@
  *
  *  Borrows code from st driver. Thanks to Alessandro Rubini's "dd" book.
  */
- static char * sg_version_str = "Version: 2.1.37 (20000504)";
- static int sg_version_num = 20137; /* 2 digits for each component */
+ static char * sg_version_str = "Version: 2.1.38 (20000527)";
+ static int sg_version_num = 20138; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
  *      - scsi logging is available via SCSI_LOG_TIMEOUT macros. First
@@ -35,7 +35,7 @@
  *          # echo "scsi dump 1" > /proc/scsi/scsi 
  *        To dump the state of sg's data structures get the 'sg_debug'
  *        program from the utilities and enter:
- *          # sg_debug /dev/sga 
+ *          # sg_debug /dev/sg0 
  *        or any valid sg device name. The state of _all_ sg devices
  *        will be sent to the console and the log.
  *
@@ -127,6 +127,7 @@ typedef struct sg_request  /* SG_MAX_QUEUE requests outstanding per file */
     Sg_scatter_hold data;       /* hold buffer, perhaps scatter list */
     struct sg_header header;    /* scsi command+info, see <scsi/sg.h> */
     char res_used;              /* 1 -> using reserve buffer, 0 -> not ... */
+    char done;                  /* 0->before bh, 1->before read, 2->read */
 } Sg_request; /* 72 bytes long on i386 */
 
 typedef struct sg_fd /* holds the state of a file descriptor */
@@ -186,7 +187,7 @@ static char * sg_low_malloc(int rqSz, int lowDma, int mem_src,
 static void sg_low_free(char * buff, int size, int mem_src);
 static Sg_fd * sg_add_sfp(Sg_device * sdp, int dev, int get_reserved);
 static int sg_remove_sfp(Sg_device * sdp, Sg_fd * sfp);
-static Sg_request * sg_get_request(const Sg_fd * sfp, int pack_id);
+static Sg_request * sg_get_rq_mark(Sg_fd * sfp, int pack_id);
 static Sg_request * sg_add_request(Sg_fd * sfp);
 static int sg_remove_request(Sg_fd * sfp, const Sg_request * srp);
 static int sg_res_in_use(const Sg_fd * sfp);
@@ -319,13 +320,13 @@ static ssize_t sg_read(struct file * filp, char * buf,
         copy_from_user(&hdr, buf, size_sg_header);
         req_pack_id = hdr.pack_id;
     }
-    srp = sg_get_request(sfp, req_pack_id);
+    srp = sg_get_rq_mark(sfp, req_pack_id);
     if (! srp) { /* now wait on packet to arrive */
         if (filp->f_flags & O_NONBLOCK)
             return -EAGAIN;
         res = 0;  /* following is a macro that beats race condition */
         __wait_event_interruptible(sfp->read_wait, 
-                                   (srp = sg_get_request(sfp, req_pack_id)),
+                                   (srp = sg_get_rq_mark(sfp, req_pack_id)),
                                    res);
         if (res)
             return res; /* -ERESTARTSYS because signal hit process */
@@ -533,7 +534,7 @@ static int sg_ioctl(struct inode * inode, struct file * filp,
         if (result) return result;
         srp = sfp->headrp;
         while (srp) {
-            if (! srp->my_cmdp) {
+            if (1 == srp->done) {
                 __put_user(srp->header.pack_id, (int *)arg);
                 return 0;
             }
@@ -545,7 +546,7 @@ static int sg_ioctl(struct inode * inode, struct file * filp,
         srp = sfp->headrp;
         val = 0;
         while (srp) {
-            if (! srp->my_cmdp)
+            if (1 == srp->done)
                 ++val;
             srp = srp->nextrp;
         }
@@ -673,7 +674,7 @@ static unsigned int sg_poll(struct file * filp, poll_table * wait)
     poll_wait(filp, &sfp->read_wait, wait);
     srp = sfp->headrp;
     while (srp) {   /* if any read waiting, flag it */
-        if (! (res || srp->my_cmdp))
+        if ((0 == res) && (1 == srp->done))
             res = POLLIN | POLLRDNORM;
         ++count;
         srp = srp->nextrp;
@@ -753,6 +754,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
     srp->data.buffer = SCpnt->buffer;
     sg_clr_scpnt(SCpnt);
     srp->my_cmdp = NULL;
+    srp->done = 1;
 
     SCSI_LOG_TIMEOUT(4, printk("sg__done: dev=%d, scsi_stat=%d, res=0x%x\n", 
                 dev, (int)status_byte(SCpnt->result), (int)SCpnt->result));
@@ -885,9 +887,9 @@ static void sg_debug(const Sg_device * sdp, const Sg_fd * sfp, int part_of)
     dev = MINOR(sdp->i_rdev);
 
     if (part_of)
-        printk(" >>> device=%d(sg%c), ", dev, 'a' + dev);
+        printk(" >>> device=%d (sg%d), ", dev, dev);
     else
-        printk("sg_debug: device=%d(sg%c), ", dev, 'a' + dev);
+        printk("sg_debug: device=%d (sg%d), ", dev, dev);
     printk("scsi%d chan=%d id=%d lun=%d  em=%d\n", sdp->device->host->host_no,
            sdp->device->channel, sdp->device->id, sdp->device->lun,
            sdp->device->host->hostt->emulated);
@@ -929,7 +931,8 @@ static void sg_debug(const Sg_device * sdp, const Sg_fd * sfp, int part_of)
                        srp->header.pack_id, srp->my_cmdp->bufflen, 
                        srp->my_cmdp->use_sg);
             else
-                printk("to_read: pack_id=%d, bufflen=%d, use_sg=%d\n",
+                printk("%s: pack_id=%d, bufflen=%d, use_sg=%d\n",
+                   ((1 == srp->done) ? "to_read" : "prior"),
                    srp->header.pack_id, srp->data.bufflen, srp->data.use_sg);
             if (! srp->parentfp)
                 printk(">> request has NULL parent pointer ???\n");
@@ -966,9 +969,9 @@ static int sg_detect(Scsi_Device * scsidp)
         case TYPE_WORM:
         case TYPE_TAPE: break;
         default:
-        printk("Detected scsi generic sg%c at scsi%d,"
+        printk("Detected scsi generic sg%d at scsi%d,"
                 " channel %d, id %d, lun %d\n",
-               'a'+sg_template.dev_noticed,
+               sg_template.dev_noticed,
                scsidp->host->host_no, scsidp->channel, 
                scsidp->id, scsidp->lun);
     }
@@ -1438,15 +1441,17 @@ static void sg_unlink_reserve(Sg_fd * sfp, Sg_request * srp)
     srp->res_used = 0;
 }
 
-static Sg_request * sg_get_request(const Sg_fd * sfp, int pack_id)
+static Sg_request * sg_get_rq_mark(Sg_fd * sfp, int pack_id)
 {
     Sg_request * resp = NULL;
 
     resp = sfp->headrp;
     while (resp) {
-        if ((! resp->my_cmdp) && 
-            ((-1 == pack_id) || (resp->header.pack_id == pack_id)))
+        if ((1 == resp->done) && 
+            ((-1 == pack_id) || (resp->header.pack_id == pack_id))) {
+            resp->done = 2;
             return resp;
+        }
         resp = resp->nextrp;
     }
     return resp;
@@ -1575,7 +1580,7 @@ static int sg_remove_sfp(Sg_device * sdp, Sg_fd * sfp)
 /* Need to stop sg_command_done() playing with this list during this loop */
         while (srp) {
             tsrp = srp->nextrp;
-            if (! srp->my_cmdp)
+            if (srp->done)
                 sg_finish_rem_req(srp, NULL, 0);
             else
                 ++dirty;

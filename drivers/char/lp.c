@@ -202,7 +202,7 @@ struct lp_struct lp_table[LP_NO] =
 /* Test if the printer is not acking the strobe */
 #define	LP_NO_ACKING(status)	((status) & LP_PACK)
 /* Test if the printer has error conditions */
-#define LP_NO_ERROR(status)	((status) & LP_PERRORP)
+#define LP_NO_ERROR(minor, status)	((!(LP_F(minor) & LP_CAREFUL)) ? ((status) & LP_PERRORP) : (((status) & (LP_PERRORP|LP_POUTPA|LP_PSELECD)) == (LP_PERRORP|LP_PSELECD)))
 
 #undef LP_DEBUG
 #undef LP_READ_DEBUG
@@ -289,7 +289,7 @@ static inline int lp_char(char lpchar, int minor)
 		lp_yield(minor);
 
 		status = r_str(minor);
-		if (LP_NO_ERROR(status))
+		if (LP_NO_ERROR(minor, status))
 		{
 			if (LP_READY(status))
 				break;

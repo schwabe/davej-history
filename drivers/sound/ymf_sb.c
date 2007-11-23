@@ -14,8 +14,31 @@
     * OPL3-compatible FM synthesizer
     * MPU-401 compatible "external" MIDI interface
 
-  Because of hardware specification, only 4 cards on a machine can 
-  be handled. This driver supports 4 cards with one driver.
+  -------------------------------------------------------------------------
+
+  Revision history
+
+   Tue May 14 19:00:00 2000   0.0.1
+   * initial release
+
+   Tue May 16 19:29:29 2000   0.0.2
+
+   * add a little delays for reset devices.
+   * fixed addressing bug.
+
+   Sun May 21 15:14:37 2000   0.0.3
+
+   * Add 'master_vol' module parameter to change 'PCM out Vol' of AC'97.
+   * remove native UART401 support. External MIDI port should be supported 
+     by sb_midi driver.
+   * add support for SPDIF OUT. Module parameter 'spdif_out' is now available.
+
+   Wed May 31 00:13:57 2000   0.0.4
+
+   * remove entries in Hwmcode.h. Now YMF744 / YMF754 sets instructions 
+     in 724hwmcode.h.
+   * fixed wrong legacy_io setting on YMF744/YMF754 .
+
  */
 
 #include <linux/module.h>
@@ -35,7 +58,6 @@
 #include "ac97.h"
 
 #include "724hwmcode.h"
-#include "Hwmcode.h"
 
 #undef YMF_DEBUG
 #define SUPPORT_UART401_MIDI 1
@@ -201,7 +223,7 @@
 
 #define PFX		"ymf_sb: "
 
-#define YMFSB_VERSION	"0.0.3"
+#define YMFSB_VERSION	"0.0.4"
 #define YMFSB_CARD_NAME	"YMF7xx Legacy Audio driver " YMFSB_VERSION
 
 #ifdef SUPPORT_UART401_MIDI
@@ -262,7 +284,6 @@ static int readRegWord( int adr ) {
 
 	if (ymfbase[cards]==NULL) return 0;
 
-	/* printk(KERN_INFO PFX "readRegWord(%p)\n",ymfbase[cards]+adr/2); */
 	return readw(ymfbase[cards]+adr/2);
 }
 
@@ -326,7 +347,7 @@ static int checkCodec( struct pci_dev *pcidev )
 {
 	u8 tmp8;
 
-	pci_read_config_byte(pcidev, YMFSB_PCIR_DSXGCTRL, &tmp8);
+	pci_read_config_byte( pcidev, YMFSB_PCIR_DSXGCTRL, &tmp8 );
 	if ( tmp8 & 0x03 ) {
 		pci_write_config_byte(pcidev, YMFSB_PCIR_DSXGCTRL, tmp8&0xfc);
 		mdelay(YMFSB_RESET_DELAY);
@@ -344,7 +365,7 @@ static int checkCodec( struct pci_dev *pcidev )
 static int setupLegacyIO( struct pci_dev *pcidev )
 {
 	int v;
-	int sbio=0x220,mpuio=0x330,oplio=0x388,dma=0;
+	int sbio=0, mpuio=0, oplio=0,dma=0;
 
 	switch(sb_data[cards].io_base) {
 	case 0x220:
@@ -437,12 +458,11 @@ static int setupLegacyIO( struct pci_dev *pcidev )
 	case PCI_DEVICE_ID_YMF754:
 		v = 0x8800;
 		pci_write_config_word(pcidev, YMFSB_PCIR_ELEGCTRL, v);
-#ifdef YMF_DEBUG
-		printk(PFX "ELEGCTRL: 0x%x\n",v);
+		pci_write_config_word(pcidev, YMFSB_PCIR_OPLADR, opl3_data[cards].io_base);
+		pci_write_config_word(pcidev, YMFSB_PCIR_SBADR,  sb_data[cards].io_base);
+#ifdef SUPPORT_UART401_MIDI
+		pci_write_config_word(pcidev, YMFSB_PCIR_MPUADR, mpu_data[cards].io_base);
 #endif
-		pci_write_config_word(pcidev, YMFSB_PCIR_OPLADR, oplio);
-		pci_write_config_word(pcidev, YMFSB_PCIR_SBADR,  sbio);
-		pci_write_config_word(pcidev, YMFSB_PCIR_MPUADR, mpuio);
 		break;
 
 	default:
@@ -502,14 +522,14 @@ static int setupInstruction( struct pci_dev *pcidev )
 	val = readRegWord( YMFSB_GLOBALCTRL );
 	writeRegWord( YMFSB_GLOBALCTRL, (val&~0x0007) );
 
+	/* setup DSP instruction code */
+	for ( i=0 ; i<YMFSB_DSPLENGTH ; i+=4 ) {
+	  writeRegDWord( YMFSB_DSPINSTRAM+i, DspInst[i>>2] );
+	}
+
 	switch( pcidev->device ) {
 	case PCI_DEVICE_ID_YMF724:
 	case PCI_DEVICE_ID_YMF740:
-		/* setup DSP instruction code */
-		for ( i=0 ; i<YMFSB_DSPLENGTH ; i+=4 ) {
-			writeRegDWord( YMFSB_DSPINSTRAM+i, DspInst[i>>2] );
-		}
-
 		/* setup Control instruction code */
 		for ( i=0 ; i<YMFSB_CTRLLENGTH ; i+=4 ) {
 			writeRegDWord( YMFSB_CTRLINSTRAM+i, CntrlInst[i>>2] );
@@ -518,11 +538,8 @@ static int setupInstruction( struct pci_dev *pcidev )
 
 	case PCI_DEVICE_ID_YMF724F:
 	case PCI_DEVICE_ID_YMF740C:
-		/* setup DSP instruction code */
-		for ( i=0 ; i<YMFSB_DSPLENGTH ; i+=4 ) {
-			writeRegDWord( YMFSB_DSPINSTRAM+i, DspInst[i>>2] );
-		}
-
+	case PCI_DEVICE_ID_YMF744:
+	case PCI_DEVICE_ID_YMF754:
 		/* setup Control instruction code */
 	
 		for ( i=0 ; i<YMFSB_CTRLLENGTH ; i+=4 ) {
@@ -530,19 +547,6 @@ static int setupInstruction( struct pci_dev *pcidev )
 		}
 		break;
 
-	case PCI_DEVICE_ID_YMF744:
-	case PCI_DEVICE_ID_YMF754:
-		/* setup DSP instruction code */
-		for ( i=0 ; i<YMFSB_DSPLENGTH ; i+=4 ) {
-			writeRegDWord( YMFSB_DSPINSTRAM+i, gdwDSPCode[i>>2] );
-		}
-
-		/* setup Control instruction code */
-
-		for ( i=0 ; i<YMFSB_CTRLLENGTH ; i+=4 ) {
-			writeRegDWord( YMFSB_CTRLINSTRAM+i, gdwCtrl1eCode[i>>2] );
-		}
-		break;
 	default:
 		return -1;
 	}
@@ -634,9 +638,6 @@ static int __init ymf7xx_init(struct pci_dev *pcidev)
 
 static void __init ymf7xxsb_attach_sb(struct address_info *hw_config)
 {
-#ifdef SUPPORT_UART401_MIDI
-//	hw_config->driver_use_1 |= SB_NO_MIDI;
-#endif
 	if(!sb_dsp_init(hw_config))
 		hw_config->slots[0] = -1;
 }
@@ -649,7 +650,6 @@ static int __init ymf7xxsb_probe_sb(struct address_info *hw_config)
 		       hw_config->io_base);
 		return 0;
 	}
-//	return sb_dsp_detect(hw_config, 0, 0);
 	return sb_dsp_detect(hw_config, SB_PCI_YAMAHA, 0);
 }
 
@@ -822,7 +822,7 @@ static void free_iomaps( void )
 	return;
 }
 
-int __init init_ymf7xxsb_module(void)
+static int __init init_ymf7xxsb_module(void)
 {
 	if ( master_vol < 0 ) master_vol  = 50;
 	if ( master_vol > 100 ) master_vol = 100;

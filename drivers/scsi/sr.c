@@ -23,6 +23,9 @@
  *       Modified by Jens Axboe <axboe@image.dk> - Uniform sr_packet()
  *       interface, capabilities probe additions, ioctl cleanups, etc.
  *
+ *	Modified by Jens Axboe <axboe@suse.de> - support DVD-RAM
+ *	transparently and loose the GHOST hack
+ *
  */
 
 #include <linux/module.h>
@@ -562,11 +565,14 @@ repeat:
 	}
 	switch (SCpnt->request.cmd) {
 	case WRITE:
-		SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
-		goto repeat;
+		if (!scsi_CDs[dev].device->writeable) {
+			SCpnt = end_scsi_request(SCpnt, 0, SCpnt->request.nr_sectors);
+			goto repeat;
+		}
+		cmd[0] = WRITE_10;
 		break;
 	case READ:
-		cmd[0] = READ_6;
+		cmd[0] = READ_10;
 		break;
 	default:
 		panic("Unknown sr command %d\n", SCpnt->request.cmd);
@@ -740,35 +746,18 @@ repeat:
 	if (scsi_CDs[dev].sector_size == 512)
 		realcount = realcount << 2;
 
-	/*
-	 * Note: The scsi standard says that READ_6 is *optional*, while
-	 * READ_10 is mandatory.   Thus there is no point in using
-	 * READ_6.
-	 */
-	if (scsi_CDs[dev].ten) {
-		if (realcount > 0xffff) {
-			realcount = 0xffff;
-			this_count = realcount * (scsi_CDs[dev].sector_size >> 9);
-		}
-		cmd[0] += READ_10 - READ_6;
-		cmd[2] = (unsigned char) (block >> 24) & 0xff;
-		cmd[3] = (unsigned char) (block >> 16) & 0xff;
-		cmd[4] = (unsigned char) (block >> 8) & 0xff;
-		cmd[5] = (unsigned char) block & 0xff;
-		cmd[6] = cmd[9] = 0;
-		cmd[7] = (unsigned char) (realcount >> 8) & 0xff;
-		cmd[8] = (unsigned char) realcount & 0xff;
-	} else {
-		if (realcount > 0xff) {
-			realcount = 0xff;
-			this_count = realcount * (scsi_CDs[dev].sector_size >> 9);
-		}
-		cmd[1] |= (unsigned char) ((block >> 16) & 0x1f);
-		cmd[2] = (unsigned char) ((block >> 8) & 0xff);
-		cmd[3] = (unsigned char) block & 0xff;
-		cmd[4] = (unsigned char) realcount;
-		cmd[5] = 0;
+	if (realcount > 0xffff) {
+		realcount = 0xffff;
+		this_count = realcount * (scsi_CDs[dev].sector_size >> 9);
 	}
+
+	cmd[2] = (unsigned char) (block >> 24) & 0xff;
+	cmd[3] = (unsigned char) (block >> 16) & 0xff;
+	cmd[4] = (unsigned char) (block >> 8) & 0xff;
+	cmd[5] = (unsigned char) block & 0xff;
+	cmd[6] = cmd[9] = 0;
+	cmd[7] = (unsigned char) (realcount >> 8) & 0xff;
+	cmd[8] = (unsigned char) realcount & 0xff;
 
 #ifdef DEBUG
 	{
@@ -968,6 +957,7 @@ void get_capabilities(int i)
 		""
 	};
 
+	scsi_CDs[i].device->writeable = 0;
 	spin_lock_irq(&io_request_lock);
 	buffer = (unsigned char *) scsi_malloc(512);
 	spin_unlock_irq(&io_request_lock);
@@ -991,10 +981,11 @@ void get_capabilities(int i)
 	scsi_CDs[i].readcd_known = 1;
 	scsi_CDs[i].readcd_cdda = buffer[n + 5] & 0x01;
 	/* print some capability bits */
-	printk("sr%i: scsi3-mmc drive: %dx/%dx %s%s%s%s%s\n", i,
+	printk("sr%i: scsi3-mmc drive: %dx/%dx %s%s%s%s%s%s\n", i,
 	       ((buffer[n + 14] << 8) + buffer[n + 15]) / 176,
 	       scsi_CDs[i].cdi.speed,
 	       buffer[n + 3] & 0x01 ? "writer " : "",	/* CD Writer */
+	       buffer[n + 3] & 0x20 ? "dvd-ram " : "",
 	       buffer[n + 2] & 0x02 ? "cd/rw " : "",	/* can read rewriteable */
 	       buffer[n + 4] & 0x20 ? "xa/form2 " : "",		/* can read xa/from2 */
 	       buffer[n + 5] & 0x01 ? "cdda " : "",	/* can read audio data */
@@ -1005,9 +996,12 @@ void get_capabilities(int i)
 	if ((buffer[n + 2] & 0x8) == 0)
 		/* not a DVD drive */
 		scsi_CDs[i].cdi.mask |= CDC_DVD;
-	if ((buffer[n + 3] & 0x20) == 0)
+	if ((buffer[n + 3] & 0x20) == 0) {
 		/* can't write DVD-RAM media */
 		scsi_CDs[i].cdi.mask |= CDC_DVD_RAM;
+	} else {
+		scsi_CDs[i].device->writeable = 1;
+	}
 	if ((buffer[n + 3] & 0x10) == 0)
 		/* can't write DVD-R media */
 		scsi_CDs[i].cdi.mask |= CDC_DVD_R;
@@ -1030,7 +1024,6 @@ void get_capabilities(int i)
 		scsi_CDs[i].cdi.mask |= CDC_SELECT_DISC;
 	/*else    I don't think it can close its tray
 		scsi_CDs[i].cdi.mask |= CDC_CLOSE_TRAY; */
-
 
 	scsi_free(buffer, 512);
 }

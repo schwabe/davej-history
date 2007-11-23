@@ -225,7 +225,7 @@ static int tx_params[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 
 #if (LINUX_VERSION_CODE >= 0x20100)
-char kernel_version[] = UTS_RELEASE;
+static char kernel_version[] = UTS_RELEASE;
 #else
 #ifndef __alpha__
 #define ioremap vremap

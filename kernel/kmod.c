@@ -44,6 +44,7 @@ use_init_fs_context(void)
 	dput(fs->pwd);
 	fs->root = dget(init_task.fs->root);
 	fs->pwd = dget(init_task.fs->pwd);
+	fs->umask = 0022;
 
 	unlock_kernel();
 }

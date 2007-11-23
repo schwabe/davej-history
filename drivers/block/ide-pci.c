@@ -24,6 +24,7 @@
 
 #include "ide.h"
 
+#define DEVID_450NX	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82451NX})
 #define DEVID_PIIXa	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_0})
 #define DEVID_PIIXb	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371FB_1})
 #define DEVID_PIIX3	((ide_pci_devid_t){PCI_VENDOR_ID_INTEL,   PCI_DEVICE_ID_INTEL_82371SB_1})
@@ -110,6 +111,8 @@ extern void ide_init_cs5530(ide_hwif_t *);
 #else
 #define INIT_CS5530     NULL
 #endif
+
+static int autodma_default = 0;
 
 typedef struct ide_pci_enablebit_s {
 	byte	reg;	/* byte pci reg holding the enable-bit */
@@ -296,14 +299,12 @@ __initfunc(static int ide_setup_pci_baseregs (struct pci_dev *dev, const char *n
  */
 __initfunc(static void ide_setup_pci_device (struct pci_dev *dev, ide_pci_device_t *d))
 {
-	unsigned int port, at_least_one_hwif_enabled = 0, autodma = 0, pciirq = 0;
+	unsigned int port, at_least_one_hwif_enabled = 0, pciirq = 0;
 	unsigned short pcicmd = 0, tried_config = 0;
 	byte tmp = 0;
 	ide_hwif_t *hwif, *mate = NULL;
+	int autodma = autodma_default;
 
-#ifdef CONFIG_IDEDMA_AUTO
-	autodma = 1;
-#endif
 check_if_enabled:
 	if (pci_read_config_word(dev, PCI_COMMAND, &pcicmd)) {
 		printk("%s: error accessing PCI regs\n", d->name);
@@ -443,6 +444,19 @@ __initfunc(void ide_scan_pcibus (void))
 
 	if (!pci_present())
 		return;
+
+#ifdef CONFIG_IDEDMA_AUTO
+	autodma_default = 1;
+	for(dev = pci_devices; dev; dev=dev->next) {
+		devid.vid = dev->vendor;
+		devid.did = dev->device;
+		if (IDE_PCI_DEVID_EQ(devid, DEVID_450NX)) {
+			autodma_default = 0;
+			break;
+		}
+	}
+#endif
+
 	for(dev = pci_devices; dev; dev=dev->next) {
 		devid.vid = dev->vendor;
 		devid.did = dev->device;

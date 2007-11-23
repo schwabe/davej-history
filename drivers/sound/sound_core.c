@@ -58,6 +58,9 @@ extern int init_sonicvibes(void);
 #ifdef CONFIG_SOUND_MAESTRO
 extern int init_maestro(void);
 #endif
+#ifdef CONFIG_SOUND_TRIDENT
+extern int init_trident(void);
+#endif
 #ifdef CONFIG_SOUND_ICH
 extern int i810_probe(void);
 #endif
@@ -421,6 +424,9 @@ int soundcore_init(void)
 #endif
 #ifdef CONFIG_SOUND_MAESTRO
 	init_maestro();
+#endif
+#ifdef CONFIG_SOUND_TRIDENT
+	init_trident();
 #endif
 #ifdef CONFIG_SOUND_MSNDCLAS
 	msnd_classic_init();

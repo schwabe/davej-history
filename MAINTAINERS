@@ -433,7 +433,9 @@ S:	Maintained
 IP FIREWALL
 P:	Paul Russell
 M:	Paul.Russell@rustcorp.com.au
-W:	http://www.rustcorp.com/linux/ipchains
+W:	http://netfilter.filewatcher.org/ipchains
+W:	http://www.samba.org/netfilter/ipchains
+W:	http://netfilter.kernelnotes.org/ipchains
 S:	Supported
 
 IP MASQUERADING:
@@ -870,6 +872,13 @@ M:	pnorton@ieee.org
 L:	linux-net@vger.rutgers.edu
 L:	linux-tr@emissary.aus-etc.com
 S:	Maintained
+
+TRIDENT 4DWAVE/SIS 7018 PCI AUDIO CORE/ALi 5451
+P:	Ollie Lho
+M:	ollie@sis.com.tw
+L:	linux-kernel@vger.rutgers.edu
+S:	Supported
+
 
 U14-34F SCSI DRIVER
 P:	Dario Ballabio

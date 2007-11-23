@@ -21,7 +21,7 @@
  *
  * History
  * v0.4 Mar 15 2000 Ollie Lho
- *	dual codec support verified with 4 channel output
+ *	dual codecs support verified with 4 channels output
  * v0.3 Feb 22 2000 Ollie Lho
  *	bug fix for record mask setting
  * v0.2 Feb 10 2000 Ollie Lho
@@ -34,6 +34,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/errno.h>
+#include <linux/bitops.h>
 #include <linux/ac97_codec.h>
 #include <asm/uaccess.h>
 
@@ -70,6 +71,7 @@ static struct {
 	{0x83847605, "SigmaTel STAC9704"      , NULL},
 	{0x83847608, "SigmaTel STAC9708"      , NULL},
 	{0x83847609, "SigmaTel STAC9721/23"   , sigmatel_init},
+	{0x54524106, "TriTech TR28026"        , NULL},
 	{0x54524108, "TriTech TR28028"        , NULL},
 	{0x574D4C00, "Wolfson WM9704"         , NULL},
 	{0x00000000, NULL, NULL}
@@ -329,6 +331,11 @@ static int ac97_recmask_io(struct ac97_codec *codec, int rw, int mask)
 
 	/* else, write the first set in the mask as the
 	   output */	
+	/* clear out current set value first (AC97 supports only 1 input!) */
+	val = (1 << ac97_rm2oss[codec->codec_read(codec, AC97_RECORD_SELECT) & 0x07]);
+	if (mask != val)
+	    mask &= ~val;
+       
 	val = ffs(mask); 
 	val = ac97_oss_rm[val-1];
 	val |= val << 8;  /* set both channels */
@@ -417,6 +424,7 @@ static int ac97_mixer_ioctl(struct ac97_codec *codec, unsigned int cmd, unsigned
 		switch (_IOC_NR(cmd)) {
 		case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
 			if (!codec->recmask_io) return -EINVAL;
+			if (!val) return 0;
 			if (!(val &= codec->record_sources)) return -EINVAL;
 
 			codec->recmask_io(codec, 0, val);
@@ -442,6 +450,7 @@ int ac97_read_proc (char *page, char **start, off_t off,
 {
 	int len = 0, cap, extid, val, id1, id2;
 	struct ac97_codec *codec;
+	int is_ac97_20 = 0;
 
 	if ((codec = data) == NULL)
 		return -ENODEV;
@@ -455,6 +464,7 @@ int ac97_read_proc (char *page, char **start, off_t off,
 	extid &= ~((1<<2)|(1<<4)|(1<<5)|(1<<10)|(1<<11)|(1<<12)|(1<<13));
 	len += sprintf (page+len, "AC97 Version     : %s\n",
 			extid ? "2.0 or later" : "1.0");
+	if (extid) is_ac97_20 = 1;
 
 	cap = codec->codec_read(codec, AC97_RESET);
 	len += sprintf (page+len, "Capabilities     :%s%s%s%s%s%s\n",
@@ -493,6 +503,7 @@ int ac97_read_proc (char *page, char **start, off_t off,
 			val & 0x0100 ? "MIC2" : "MIC1",
 			val & 0x0080 ? "on" : "off");
 
+	extid = codec->codec_read(codec, AC97_EXTENDED_ID);
 	cap = extid;
 	len += sprintf (page+len, "Ext Capabilities :%s%s%s%s%s%s%s\n",
 			cap & 0x0001 ? " -var rate PCM audio-" : "",
@@ -502,6 +513,10 @@ int ac97_read_proc (char *page, char **start, off_t off,
 			cap & 0x0080 ? " -PCM surround DAC-" : "",
 			cap & 0x0100 ? " -PCM LFE DAC-" : "",
 			cap & 0x0200 ? " -slot/DAC mappings-" : "");
+	if (is_ac97_20) {
+		len += sprintf (page+len, "Front DAC rate   : %d\n",
+				codec->codec_read(codec, AC97_PCM_FRONT_DAC_RATE));
+	}
 
 	return len;
 }

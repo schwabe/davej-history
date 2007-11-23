@@ -208,11 +208,16 @@
   DVD_HOST_SEND_RPC_STATE did not set buffer size in cdb, and
   dvd_do_auth passed uninitialized data to drive because init_cdrom_command
   did not clear a 0 sized buffer.
+
+  3.09 May 12, 2000 - Jens Axboe <axboe@suse.de>
+  -- Fix Video-CD on SCSI drives that don't support READ_CD command. In
+  that case switch block size and issue plain READ_10 again, then switch
+  back.
  
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 3.08"
-#define VERSION "Id: cdrom.c 3.08 2000/05/01"
+#define REVISION "Revision: 3.09"
+#define VERSION "Id: cdrom.c 3.09 2000/05/12"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -455,7 +460,7 @@ int cdrom_open(struct inode *ip, struct file *fp)
 	if ((cdi = cdrom_find_device(dev)) == NULL)
 		return -ENODEV;
 
-	if (fp->f_mode & FMODE_WRITE)
+	if ((fp->f_mode & FMODE_WRITE) && !CDROM_CAN(CDC_DVD_RAM))
 		return -EROFS;
 
 	/* if this was a O_NONBLOCK open and we should honor the flags,
@@ -1363,6 +1368,28 @@ static int cdrom_read_subchannel(struct cdrom_device_info *cdi,
 	return 0;
 }
 
+/*
+ * Specific READ_10 interface
+ */
+static int cdrom_read_cd(struct cdrom_device_info *cdi,
+			 struct cdrom_generic_command *cgc, int lba,
+			 int blocksize, int nblocks)
+{
+	struct cdrom_device_ops *cdo = cdi->ops;
+
+	memset(&cgc->cmd, 0, sizeof(cgc->cmd));
+	cgc->cmd[0] = GPCMD_READ_10;
+	cgc->cmd[2] = (lba >> 24) & 0xff;
+	cgc->cmd[3] = (lba >> 16) & 0xff;
+	cgc->cmd[4] = (lba >>  8) & 0xff;
+	cgc->cmd[5] = lba & 0xff;
+	cgc->cmd[6] = (nblocks >> 16) & 0xff;
+	cgc->cmd[7] = (nblocks >>  8) & 0xff;
+	cgc->cmd[8] = nblocks & 0xff;
+	cgc->buflen = blocksize * nblocks;
+	return cdo->generic_packet(cdi, cgc);
+}
+
 /* very generic interface for reading the various types of blocks */
 static int cdrom_read_block(struct cdrom_device_info *cdi,
 			    struct cdrom_generic_command *cgc,
@@ -1779,6 +1806,34 @@ int msf_to_lba(char m, char s, char f)
 	return (((m * CD_SECS) + s) * CD_FRAMES + f) - CD_MSF_OFFSET;
 }
 
+/*
+ * Required when we need to use READ_10 to issue other than 2048 block
+ * reads
+ */
+static int cdrom_switch_blocksize(struct cdrom_device_info *cdi, int size)
+{
+	struct cdrom_device_ops *cdo = cdi->ops;
+	struct cdrom_generic_command cgc;
+	struct modesel_head mh;
+
+	memset(&mh, 0, sizeof(mh));
+	mh.block_desc_length = 0x08;
+	mh.block_length_med = (size >> 8) & 0xff;
+	mh.block_length_lo = size & 0xff;
+
+	memset(&cgc, 0, sizeof(cgc));
+	cgc.cmd[0] = 0x15;
+	cgc.cmd[1] = 1 << 4;
+	cgc.cmd[4] = 12;
+	cgc.buflen = sizeof(mh);
+	cgc.buffer = (char *) &mh;
+	mh.block_desc_length = 0x08;
+	mh.block_length_med = (size >> 8) & 0xff;
+	mh.block_length_lo = size & 0xff;
+
+	return cdo->generic_packet(cdi, &cgc);
+}
+
 static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		     unsigned long arg)
 {		
@@ -1820,8 +1875,20 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		if (cgc.buffer == NULL)
 			return -ENOMEM;
 		ret = cdrom_read_block(cdi, &cgc, lba, 1, format, blocksize);
-		if (!ret)
-			if (copy_to_user((char *)arg, cgc.buffer, blocksize))
+		if (ret) {
+			/*
+			 * SCSI-II devices are not required to support
+			 * READ_CD, so let's try switching block size
+			 */
+			/* FIXME: switch back again... */
+			if ((ret = cdrom_switch_blocksize(cdi, blocksize))) {
+				kfree(cgc.buffer);
+				return ret;
+			}
+			ret = cdrom_read_cd(cdi, &cgc, lba, blocksize, 1);
+			ret |= cdrom_switch_blocksize(cdi, blocksize);
+		}
+		if (!ret && copy_to_user((char *)arg, cgc.buffer, blocksize))
 				ret = -EFAULT;
 		kfree(cgc.buffer);
 		return ret;
@@ -1858,8 +1925,7 @@ static int mmc_ioctl(struct cdrom_device_info *cdi, unsigned int cmd,
 		}
 
 		while (ra.nframes > 0) {
-			ret = cdrom_read_block(cdi, &cgc, lba, frames, 1,
-					       CD_FRAMESIZE_RAW);
+			ret = cdrom_read_block(cdi, &cgc, lba, frames, 1, CD_FRAMESIZE_RAW);
 			if (ret) break;
 			__copy_to_user(ra.buf, cgc.buffer,
 				       CD_FRAMESIZE_RAW * frames);

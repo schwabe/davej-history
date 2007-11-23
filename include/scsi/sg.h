@@ -11,10 +11,13 @@ Original driver (sg.h):
 2.x extensions to driver:
 *       Copyright (C) 1998 - 2000 Douglas Gilbert
 
-    Version: 2.1.37 (20000504)
+    Version: 2.1.38 (20000527)
     This version for 2.2.x series kernels
     D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au)
 
+    Changes since 2.1.37 (20000504)
+        - fine tune state machine to stop read() race
+        - switch to numeric device description (e.g. sg0 instead of sga)
     Changes since 2.1.36 (991008)
         - fix 0 length scatter gather requests + alignment
         - activate SG_SCSI_RESET ioctl() [to work needs mid level changes]
@@ -45,9 +48,9 @@ Map of SG verions to the Linux kernels in which they appear:
        2.1.32            2.2.8 and 2.2.9
        2.1.34            2.2.10 to 2.2.13
        2.1.36            2.2.14 and 2.2.15
-       2.1.37            2.2.16
-       3.0.13            optional version 3 sg driver for 2.2 series
-       3.1.13            2.3.99-pre5, version 3 sg driver for 2.3 series
+       2.1.38            2.2.16
+       3.0.15            optional version 3 sg driver for 2.2 series
+       3.1.15            late 2.3 series approaching 2.4
 
     New features and changes:
         - per file descriptor (fd) write-read sequencing

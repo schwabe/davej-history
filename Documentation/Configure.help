@@ -2379,7 +2379,7 @@ CONFIG_IP_FIREWALL
   ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
 
   Also, you will need the ipchains tool (available on the WWW at
-  http://www.rustcorp.com/linux/ipchains/) to allow selective blocking
+  http://netfilter.kernelnotes.org/ipchains/) to allow selective blocking
   of Internet traffic based on type, origin and destination. 
   Note that the Linux firewall code has changed and the old program
   called ipfwadm won't work anymore. Please read the IPCHAINS-HOWTO.
@@ -10289,6 +10289,22 @@ CONFIG_SOUND_SONICVIBES
   lspci -n and look for the PCI ID 5333:CA00. This driver 
   differs slightly from OSS/Free, so PLEASE READ
   Documentation/sound/sonicvibes.
+  
+Trident 4DWave DX/NX or SiS 7018 PCI Audio Core or ALi 5451
+CONFIG_SOUND_TRIDENT
+  Say Y or M if you have a PCI sound card utilizing the Trident
+  4DWave-DX/NX chipset or your mother board chipset has SiS 7018
+  built-in, or if you have an ALi 5451. The SiS 7018 PCI Audio Core
+  is embedded in SiS960 Super South Bridge and SiS540/630 Single
+  Chipset.
+
+  Use lspci -n to find out if your sound card or chipset uses
+  Trident 4DWave or SiS 7018. PCI ID 1023:2000 or 1023:2001 stands
+  for Trident 4Dwave. PCI ID 1039:7018 stands for SiS7018.
+  PCI ID 10b9:5451 stands for ALi 5451.
+
+  This driver differs slightly from OSS/Free, so PLEASE READ the
+  comments at the beginning of driver/sound/trident.c
 
 Rockwell WaveArtist
 CONFIG_SOUND_WAVEARTIST

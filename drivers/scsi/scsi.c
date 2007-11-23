@@ -114,7 +114,6 @@ static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/scsi.c,v 1
 #define BLIST_MAX5LUN	0x080
 #define BLIST_ISDISK	0x100
 #define BLIST_ISROM	0x200
-#define BLIST_GHOST	0x400
 
 /*
  * Data declarations.
@@ -307,13 +306,7 @@ static struct dev_info device_list[] =
 {"NEC","PD-1 ODX654P","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"MATSHITA","PD-1","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"iomega","jaz 1GB","J.86", BLIST_NOTQ | BLIST_NOLUN},
-{"CREATIVE","DVD-RAM RAM","*", BLIST_GHOST},
-{"MATSHITA","PD-2 LF-D100","*", BLIST_GHOST},
-{"AOpen","PD-2 DVD-520S","*", BLIST_GHOST},
-{"HITACHI","GF-1050","*", BLIST_GHOST},        /* Hitachi SCSI DVD-RAM */
 {"TOSHIBA","CDROM","*", BLIST_ISROM},
-{"TOSHIBA","DVD-RAM SD-W1101","*", BLIST_GHOST},
-{"TOSHIBA","DVD-RAM SD-W1111","*", BLIST_GHOST},
 {"MegaRAID", "LD", "*", BLIST_FORCELUN},
 /*
  * Must be at end of list...
@@ -677,20 +670,12 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   struct Scsi_Device_Template *sdtpnt;
   Scsi_Device * SDtail, *SDpnt=*SDpnt2;
   int bflags, type=-1;
-  static int ghost_channel=-1, ghost_dev=-1;
-  int org_lun = lun;
 
   SDpnt->host = shpnt;
   SDpnt->id = dev;
   SDpnt->lun = lun;
   SDpnt->channel = channel;
   SDpnt->online = TRUE;
-
-  if ((channel == ghost_channel) && (dev == ghost_dev) && (lun == 1)) {
-    SDpnt->lun = 0;
-  } else {
-    ghost_channel = ghost_dev = -1;
-  }
 
   /* Some low level driver could use device->type (DB) */
   SDpnt->type = -1;
@@ -802,17 +787,6 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
   if (bflags & BLIST_ISROM) {
     scsi_result[0] = TYPE_ROM;
     scsi_result[1] |= 0x80;     /* removable */
-  }
-
-  if (bflags & BLIST_GHOST) {
-    if ((ghost_channel == channel) && (ghost_dev == dev) && (org_lun == 1)) {
-      lun=1;
-    } else {
-      ghost_channel = channel;
-      ghost_dev = dev;
-      scsi_result[0] = TYPE_MOD;
-      scsi_result[1] |= 0x80;     /* removable */
-    }
   }
 
   memcpy (SDpnt->vendor, scsi_result + 8, 8);
@@ -999,15 +973,6 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
    */
   if (bflags & BLIST_FORCELUN) {
     *max_dev_lun = 8;
-    return 1;
-  }
-
-  /*
-   * If this device is Ghosted, scan upto two luns. (It physically only
-   * has one). -- REW
-   */
-  if (bflags & BLIST_GHOST) {
-    *max_dev_lun = 2;
     return 1;
   }
 

@@ -1772,7 +1772,9 @@ S: Germany
 
 N: Paul Russell
 E: Paul.Russell@rustcorp.com.au
-W: http://www.rustcorp.com
+W: http://netfilter.filewatcher.org/ipchains
+W: http://www.samba.org/netfilter/ipchains
+W: http://netfilter.kernelnotes.org/ipchains
 D: Ruggedly handsome.
 D: Developed Generic IP Firewalling Chains with Michael Neuling.
 
@@ -2274,15 +2276,15 @@ S: 2612 XV Delft
 S: The Netherlands
 
 N: David Woodhouse
-E: David.Woodhouse@mvhi.com
-E: Dave@imladris.demon.co.uk
-D: Extensive ARCnet rewrite
-D: ARCnet COM20020, COM90xx IO-MAP drivers
-D: SO_BINDTODEVICE in 2.1.x (from Elliot Poger's code in 2.0.31)
-D: Contributed to NCPFS rewrite for 2.1.x dcache
-D: Alpha platforms: SX164, LX164 and Ruffian ported to 2.1.x
-S: 29, David Bull Way
-S: Milton, Cambridge. CB4 6DP
+E: dwmw2@infradead.org
+E: dwmw2@redhat.com
+D: ARCnet stuff, Applicom board driver, SO_BINDTODEVICE,
+D: some Alpha platform porting from 2.0, Memory Technology Devices,
+D: Acquire watchdog timer, PC speaker driver maintenance,
+D: various other stuff that annoyed me by not working.
+S: c/o Red Hat UK Limited
+S: 35-36 Cambridge Place
+S: Cambridge. CB2 1NS
 S: England
 
 N: Frank Xia

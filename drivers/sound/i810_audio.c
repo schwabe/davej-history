@@ -401,8 +401,8 @@ static unsigned int i810_set_adc_rate(struct i810_state * state, unsigned int ra
 	i810_ac97_set(codec, AC97_POWER_CONTROL, dacp|0x0100);
 	
 	/* Load the rate and read the effective rate */
-	i810_ac97_set(codec, AC97_PCM_LR_ADC_RATE, rate);
-	rp=i810_ac97_get(codec, AC97_PCM_LR_ADC_RATE);
+	i810_ac97_set(codec, AC97_PCM_LR_DAC_RATE, rate);
+	rp=i810_ac97_get(codec, AC97_PCM_LR_DAC_RATE);
 	
 //	printk("ADC rate set to %d Returned %d\n", 
 //		rate, (int)rp);

@@ -1158,7 +1158,9 @@ int __init ip_auto_config(void)
 	/*
 	 * Record which protocol was actually used.
 	 */
+#ifdef IPCONFIG_DYNAMIC
 	ic_proto_used = ic_got_reply | (ic_proto_enabled & IC_USE_DHCP);
+#endif
 
 #ifndef IPCONFIG_SILENT
 	/*

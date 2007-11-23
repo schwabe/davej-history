@@ -134,7 +134,7 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 	if(timer_active == 0)
 		timer_expires = jiffies;
 	sprintf(tmpbuf, "%4d: %08lX:%04X %08lX:%04X"
-		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld",
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %lu",
 		i, src, srcp, dest, destp, sp->state, 
 		(tw_bucket ?
 		 0 :

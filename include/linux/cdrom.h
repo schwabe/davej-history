@@ -266,6 +266,15 @@ struct cdrom_blk
 
 #define CDROM_PACKET_SIZE	12
 
+/*
+ * These are for 2.3/4 only, but lets have them in 2.2 as well so that
+ * apps don't need to check for versions.
+ */
+#define CGC_DATA_UNKNOWN	0
+#define CGC_DATA_WRITE		1
+#define CGC_DATA_READ		2
+#define CGC_DATA_NONE		3
+
 /* for CDROM_PACKET_COMMAND ioctl */
 struct cdrom_generic_command
 {
@@ -274,6 +283,7 @@ struct cdrom_generic_command
 	unsigned int 		buflen;
 	int			stat;
 	struct request_sense	*sense;
+	unsigned char		data_direction;
 	void			*reserved[3];
 };
 
@@ -471,16 +481,11 @@ struct cdrom_generic_command
 /* This seems to be a SCSI specific CD-ROM opcode 
  * to play data at track/index */
 #define GPCMD_PLAYAUDIO_TI		    0x48
-
-/* Is this really used by anything?  I couldn't find these...*/
-#if 0
-/* MMC2/MTFuji Opcodes */
-#define ERASE			0x2c
-#define READ_BUFFER		0x3c
-#endif
-
-
-
+/*
+ * From MS Media Status Notification Support Specification. For
+ * older drives only.
+ */
+#define GPCMD_GET_MEDIA_STATUS		    0xda
 
 /* Mode page codes for mode sense/set */
 #define GPMODE_R_W_ERROR_PAGE		0x01
@@ -986,6 +991,22 @@ typedef struct {
 	__u8 subhdr2;
 	__u8 subhdr3;
 } __attribute__((packed)) write_param_page;
+
+struct modesel_head
+{
+	__u8	reserved1;
+	__u8	medium;
+	__u8	reserved2;
+	__u8	block_desc_length;
+	__u8	density;
+	__u8	number_of_blocks_hi;
+	__u8	number_of_blocks_med;
+	__u8	number_of_blocks_lo;
+	__u8	reserved3;
+	__u8	block_length_hi;
+	__u8	block_length_med;
+	__u8	block_length_lo;
+};
 
 typedef struct {
 	__u16 report_key_length;

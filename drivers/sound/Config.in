@@ -40,8 +40,10 @@ dep_tristate 'Intel ICH (810, 820, 440MX...)' CONFIG_SOUND_ICH $CONFIG_SOUND
 dep_tristate 'S3 SonicVibes' CONFIG_SOUND_SONICVIBES $CONFIG_SOUND
 
 if [ "$CONFIG_VISWS" = "y" ]; then
-    dep_tristate 'SGI Visual Workstation Sound' CONFIG_SOUND_VWSND $CONFIG_SOUND
+    dep_tristate ' Workstation Sound' CONFIG_SOUND_VWSND $CONFIG_SOUND
 fi
+
+dep_tristate 'Trident 4DWave DX/NX or SiS 7018 PCI Audio Core or ALi 5451' CONFIG_SOUND_TRIDENT $CONFIG_SOUND
 
 dep_tristate 'Support for Turtle Beach MultiSound Classic, Tahiti, Monterey' CONFIG_SOUND_MSNDCLAS $CONFIG_SOUND
 if [ "$CONFIG_SOUND_MSNDCLAS" = "y" -o "$CONFIG_SOUND_MSNDCLAS" = "m" ]; then

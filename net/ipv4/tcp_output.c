@@ -596,6 +596,7 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 	   (skb->len < (cur_mss >> 1)) &&
 	   (skb->next != tp->send_head) &&
 	   (skb->next != (struct sk_buff *)&sk->write_queue) &&
+	   (skb->next != tp->retrans_head) &&
 	   (sysctl_tcp_retrans_collapse != 0))
 		tcp_retrans_try_collapse(sk, skb, cur_mss);
 
