@@ -19,7 +19,6 @@
 #include <linux/blkdev.h>
 #include <linux/file.h>
 #include <linux/swapctl.h>
-#include <linux/slab.h>
 #include <linux/init.h>
 
 #include <asm/pgtable.h>
@@ -35,25 +34,6 @@
 unsigned long page_cache_size = 0;
 unsigned int page_hash_bits, page_hash_mask;
 struct page **page_hash_table;
-
-/* 
- * Define a request structure for outstanding page write requests
- * to the background page io daemon
- */
-
-struct pio_request 
-{
-	struct pio_request *	next;
-	struct file *		file;
-	unsigned long		offset;
-	unsigned long		page;
-};
-static struct pio_request *pio_first = NULL, **pio_last = &pio_first;
-static kmem_cache_t *pio_request_cache;
-static struct wait_queue *pio_wait = NULL;
-
-static inline void 
-make_pio_request(struct file *, unsigned long, unsigned long);
 
 static inline int sync_page(struct page *page)
 {
@@ -150,14 +130,21 @@ int shrink_mmap(int priority, int gfp_mask)
 	unsigned long limit = num_physpages;
 	struct page * page;
 	int count;
-	int nr_dirty = 0;
-	
+
 	/* Make sure we scan all pages twice at priority 0. */
-	count = (limit << 1) >> priority;
+	count = limit / priority;
 
  refresh_clock:
 	page = mem_map + clock;
 	do {
+		int referenced;
+
+		if (current->need_resched) {
+			current->state = TASK_RUNNING;
+			schedule();
+			goto refresh_clock;
+		}
+		
 		/* This works even in the presence of PageSkip because
 		 * the first two entries at the beginning of a hole will
 		 * be marked, not just the first.
@@ -174,42 +161,39 @@ int shrink_mmap(int priority, int gfp_mask)
 			clock = page - mem_map;
 		}
 		
-		if (test_and_clear_bit(PG_referenced, &page->flags)) {
-			page->age = PAGE_AGE_YOUNG;
-			continue;
-		}
-
-		if (page->age > 0) {
-			page->age--;
-			continue;
-		}
+		count--;
 
 		/* We can't free pages unless there's just one user */
 		if (atomic_read(&page->count) != 1)
 			continue;
 
+		referenced = test_and_clear_bit(PG_referenced, &page->flags);
+
 		if (PageLocked(page))
 			continue;
 
-		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
+		if ((gfp_mask & __GFP_DMA) && !PageDMA(page)) {
+			count++;
 			continue;
+		}
 
-		/* Is it a page swap page? Drop it, its old. */
+		/*
+		 * Is it a page swap page? If so, we want to
+		 * drop it if it is no longer used, even if it
+		 * were to be marked referenced..
+		 */
 		if (PageSwapCache(page)) {
+			if (referenced && swap_count(page->offset) != 1)
+				continue;
 			delete_from_swap_cache(page);
 			return 1;
 		}	
 
+		if (referenced)
+			continue;
+
 		/* Is it a buffer page? */
 		if (page->buffers) {
-			/*
-			 * Wait for async IO to complete
-			 * at each 64 buffers
-			 */ 
-
-			int wait = ((gfp_mask & __GFP_IO) 
-				&& (!(nr_dirty++ % 64)));
-
 			if (buffer_under_min())
 				continue;
 			/*
@@ -217,10 +201,8 @@ int shrink_mmap(int priority, int gfp_mask)
 			 * throttling.
 			 */
 
-			if (!try_to_free_buffers(page, wait)) { 
-				if(--count < 0) break;
+			if (!try_to_free_buffers(page, gfp_mask))
 				goto refresh_clock;
-			}
 			return 1;
 		}
 
@@ -231,8 +213,7 @@ int shrink_mmap(int priority, int gfp_mask)
 			remove_inode_page(page);
 			return 1;
 		}
-
-	} while (--count > 0);
+	} while (count > 0);
 	return 0;
 }
 
@@ -299,7 +280,7 @@ static inline void add_to_page_cache(struct page * page,
 	struct page **hash)
 {
 	atomic_inc(&page->count);
-	page->flags = (page->flags & ~((1 << PG_uptodate) | (1 << PG_error))) | (1 << PG_referenced);
+	page->flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_referenced));
 	page->offset = offset;
 	add_page_to_inode_queue(inode, page);
 	__add_page_to_hash_queue(page, hash);
@@ -878,12 +859,12 @@ static int file_send_actor(read_descriptor_t * desc, const char *area, unsigned 
 
 	if (size > count)
 		size = count;
-	down(&inode->i_sem);
+	fs_down(&inode->i_sem);
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	written = file->f_op->write(file, area, size, &file->f_pos);
 	set_fs(old_fs);
-	up(&inode->i_sem);
+	fs_up(&inode->i_sem);
 	if (written < 0) {
 		desc->error = written;
 		written = 0;
@@ -1160,8 +1141,7 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 
 static int filemap_write_page(struct vm_area_struct * vma,
 			      unsigned long offset,
-			      unsigned long page,
-			      int wait)
+			      unsigned long page)
 {
 	int result;
 	struct file * file;
@@ -1179,20 +1159,9 @@ static int filemap_write_page(struct vm_area_struct * vma,
 	 * and file could be released ... increment the count to be safe.
 	 */
 	file->f_count++;
-
-	/* 
-	 * If this is a swapping operation rather than msync(), then
-	 * leave the actual IO, and the restoration of the file count,
-	 * to the kpiod thread.  Just queue the request for now.
-	 */
-	if (!wait) {
-		make_pio_request(file, offset, page);
-		return 0;
-	}
-	
-	down(&inode->i_sem);
+	fs_down(&inode->i_sem);
 	result = do_write_page(inode, file, (const char *) page, offset);
-	up(&inode->i_sem);
+	fs_up(&inode->i_sem);
 	fput(file);
 	return result;
 }
@@ -1205,7 +1174,7 @@ static int filemap_write_page(struct vm_area_struct * vma,
  */
 int filemap_swapout(struct vm_area_struct * vma, struct page * page)
 {
-	return filemap_write_page(vma, page->offset, page_address(page), 0);
+	return filemap_write_page(vma, page->offset, page_address(page));
 }
 
 static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
@@ -1242,7 +1211,7 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 			return 0;
 		}
 	}
-	error = filemap_write_page(vma, address - vma->vm_start + vma->vm_offset, page, 1);
+	error = filemap_write_page(vma, address - vma->vm_start + vma->vm_offset, page);
 	page_cache_free(page);
 	return error;
 }
@@ -1414,9 +1383,9 @@ static int msync_interval(struct vm_area_struct * vma,
 			if (file) {
 				struct dentry * dentry = file->f_dentry;
 				struct inode * inode = dentry->d_inode;
-				down(&inode->i_sem);
+				fs_down(&inode->i_sem);
 				error = file_fsync(file, dentry);
-				up(&inode->i_sem);
+				fs_up(&inode->i_sem);
 			}
 		}
 		return error;
@@ -1743,130 +1712,6 @@ void put_cached_page(unsigned long addr)
 	clear_bit(PG_locked, &page->flags);
 	wake_up(&page->wait);
 	page_cache_release(page);
-}
-
-
-/* Add request for page IO to the queue */
-
-static inline void put_pio_request(struct pio_request *p)
-{
-	*pio_last = p;
-	p->next = NULL;
-	pio_last = &p->next;
-}
-
-/* Take the first page IO request off the queue */
-
-static inline struct pio_request * get_pio_request(void)
-{
-	struct pio_request * p = pio_first;
-	pio_first = p->next;
-	if (!pio_first)
-		pio_last = &pio_first;
-	return p;
-}
-
-/* Make a new page IO request and queue it to the kpiod thread */
-
-static inline void make_pio_request(struct file *file,
-				    unsigned long offset,
-				    unsigned long page)
-{
-	struct pio_request *p;
-
-	atomic_inc(&page_cache_entry(page)->count);
-
-	/* 
-	 * We need to allocate without causing any recursive IO in the
-	 * current thread's context.  We might currently be swapping out
-	 * as a result of an allocation made while holding a critical
-	 * filesystem lock.  To avoid deadlock, we *MUST* not reenter
-	 * the filesystem in this thread.
-	 *
-	 * We can wait for kswapd to free memory, or we can try to free
-	 * pages without actually performing further IO, without fear of
-	 * deadlock.  --sct
-	 */
-
-	while ((p = kmem_cache_alloc(pio_request_cache, GFP_BUFFER)) == NULL) {
-		if (try_to_free_pages(__GFP_WAIT))
-			continue;
-		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(HZ/10);
-	}
-	
-	p->file   = file;
-	p->offset = offset;
-	p->page   = page;
-
-	put_pio_request(p);
-	wake_up(&pio_wait);
-}
-
-
-/*
- * This is the only thread which is allowed to write out filemap pages
- * while swapping.
- * 
- * To avoid deadlock, it is important that we never reenter this thread.
- * Although recursive memory allocations within this thread may result
- * in more page swapping, that swapping will always be done by queuing
- * another IO request to the same thread: we will never actually start
- * that IO request until we have finished with the current one, and so
- * we will not deadlock.  
- */
-
-int kpiod(void * unused)
-{
-	struct task_struct *tsk = current;
-	struct wait_queue wait = { tsk, };
-	struct inode * inode;
-	struct dentry * dentry;
-	struct pio_request * p;
-	
-	tsk->session = 1;
-	tsk->pgrp = 1;
-	strcpy(tsk->comm, "kpiod");
-	sigfillset(&tsk->blocked);
-	init_waitqueue(&pio_wait);
-	/*
-	 * Mark this task as a memory allocator - we don't want to get caught
-	 * up in the regular mm freeing frenzy if we have to allocate memory
-	 * in order to write stuff out.
-	 */
-	tsk->flags |= PF_MEMALLOC;
-
-	lock_kernel();
-	
-	pio_request_cache = kmem_cache_create("pio_request", 
-					      sizeof(struct pio_request),
-					      0, SLAB_HWCACHE_ALIGN, 
-					      NULL, NULL);
-	if (!pio_request_cache)
-		panic ("Could not create pio_request slab cache");
-
-	while (1) {
-		tsk->state = TASK_INTERRUPTIBLE;
-		add_wait_queue(&pio_wait, &wait);
-		if (!pio_first)
-			schedule();
-		remove_wait_queue(&pio_wait, &wait);
-		tsk->state = TASK_RUNNING;
-
-		while (pio_first) {
-			p = get_pio_request();
-			dentry = p->file->f_dentry;
-			inode = dentry->d_inode;
-			
-			down(&inode->i_sem);
-			do_write_page(inode, p->file,
-				      (const char *) p->page, p->offset);
-			up(&inode->i_sem);
-			fput(p->file);
-			page_cache_free(p->page);
-			kmem_cache_free(pio_request_cache, p);
-		}
-	}
 }
 
 void __init page_cache_init(unsigned long memory_size)

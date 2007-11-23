@@ -63,6 +63,7 @@ int add_to_swap_cache(struct page *page, unsigned long entry)
 		return 0;
 	}
 	atomic_inc(&page->count);
+	page->flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error) | (1 << PG_referenced));
 	page->inode = &swapper_inode;
 	page->offset = entry;
 	add_page_to_hash_queue(page, &swapper_inode, entry);

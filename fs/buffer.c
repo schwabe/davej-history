@@ -83,6 +83,7 @@ static struct wait_queue * buffer_wait = NULL;
 
 static int nr_buffers = 0;
 static int nr_buffers_type[NR_LIST] = {0,};
+static unsigned long size_buffers_type[NR_LIST];
 static int nr_buffer_heads = 0;
 static int nr_unused_buffer_heads = 0;
 static int nr_hashed_buffers = 0;
@@ -359,9 +360,9 @@ asmlinkage int sys_fsync(unsigned int fd)
 		goto out_putf;
 
 	/* We need to protect against concurrent writers.. */
-	down(&inode->i_sem);
+	fs_down(&inode->i_sem);
 	err = file->f_op->fsync(file, dentry);
-	up(&inode->i_sem);
+	fs_up(&inode->i_sem);
 
 out_putf:
 	fput(file);
@@ -396,9 +397,9 @@ asmlinkage int sys_fdatasync(unsigned int fd)
 		goto out_putf;
 
 	/* this needs further work, at the moment it is identical to fsync() */
-	down(&inode->i_sem);
+	fs_down(&inode->i_sem);
 	err = file->f_op->fsync(file, dentry);
-	up(&inode->i_sem);
+	fs_up(&inode->i_sem);
 
 out_putf:
 	fput(file);
@@ -474,6 +475,7 @@ static void remove_from_queues(struct buffer_head * bh)
 		return;
 	}
 	nr_buffers_type[bh->b_list]--;
+	size_buffers_type[bh->b_list] -= bh->b_size;
 	remove_from_hash_queue(bh);
 	remove_from_lru_list(bh);
 }
@@ -523,6 +525,7 @@ static void insert_into_queues(struct buffer_head * bh)
 		(*bhp)->b_prev_free = bh;
 
 		nr_buffers_type[bh->b_list]++;
+		size_buffers_type[bh->b_list] += bh->b_size;
 
 		/* Put the buffer in new hash-queue if it has a device. */
 		bh->b_next = NULL;
@@ -571,8 +574,10 @@ struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 {
 	struct buffer_head * bh;
 	bh = find_buffer(dev,block,size);
-	if (bh)
+	if (bh) {
 		bh->b_count++;
+		touch_buffer(bh);
+	}
 	return bh;
 }
 
@@ -816,6 +821,46 @@ static inline void file_buffer(struct buffer_head *bh, int list)
 	insert_into_queues(bh);
 }
 
+/* -1 -> no need to flush
+    0 -> async flush
+    1 -> sync flush (wait for I/O completation) */
+static int balance_dirty_state(kdev_t dev)
+{
+	unsigned long dirty, tot, hard_dirty_limit, soft_dirty_limit;
+
+	dirty = size_buffers_type[BUF_DIRTY] >> PAGE_SHIFT;
+	tot = (buffermem >> PAGE_SHIFT) + nr_free_pages;
+	tot -= size_buffers_type[BUF_PROTECTED] >> PAGE_SHIFT;
+
+	dirty *= 200;
+	soft_dirty_limit = tot * bdf_prm.b_un.nfract;
+	hard_dirty_limit = soft_dirty_limit * 2;
+
+	if (dirty > soft_dirty_limit)
+	{
+		if (dirty > hard_dirty_limit)
+			return 1;
+		return 0;
+	}
+	return -1;
+}
+
+/*
+ * if a new dirty buffer is created we need to balance bdflush.
+ *
+ * in the future we might want to make bdflush aware of different
+ * pressures on different devices - thus the (currently unused)
+ * 'dev' parameter.
+ */
+void balance_dirty(kdev_t dev)
+{
+	int state = balance_dirty_state(dev);
+
+	if (state < 0)
+		return;
+	wakeup_bdflush(state);
+}
+
 /*
  * A buffer may need to be moved from one buffer list to another
  * (e.g. in case it is not shared any more). Handle this.
@@ -828,7 +873,9 @@ void refile_buffer(struct buffer_head * buf)
 		printk("Attempt to refile free buffer\n");
 		return;
 	}
-	if (buffer_dirty(buf))
+	if (buffer_protected(buf))
+		dispose = BUF_PROTECTED;
+	else if (buffer_dirty(buf))
 		dispose = BUF_DIRTY;
 	else if (buffer_locked(buf))
 		dispose = BUF_LOCKED;
@@ -837,13 +884,7 @@ void refile_buffer(struct buffer_head * buf)
 	if(dispose != buf->b_list) {
 		file_buffer(buf, dispose);
 		if(dispose == BUF_DIRTY) {
-			int too_many = (nr_buffers * bdf_prm.b_un.nfract/100);
-
-			/* This buffer is dirty, maybe we need to start flushing.
-			 * If too high a percentage of the buffers are dirty...
-			 */
-			if (nr_buffers_type[BUF_DIRTY] > too_many)
-				wakeup_bdflush(1);
+			balance_dirty(buf->b_dev);
 
 			/* If this is a loop device, and
 			 * more than half of the buffers are dirty...
@@ -864,7 +905,6 @@ void __brelse(struct buffer_head * buf)
 	/* If dirty, mark the time this buffer should be written back. */
 	set_writetime(buf, 0);
 	refile_buffer(buf);
-	touch_buffer(buf);
 
 	if (buf->b_count) {
 		buf->b_count--;
@@ -1457,6 +1497,7 @@ static int grow_buffers(int size)
 	}
 	tmp->b_this_page = bh;
 	free_list[isize] = bh;
+	mem_map[MAP_NR(page)].flags = 0;
 	mem_map[MAP_NR(page)].buffers = bh;
 	buffermem += PAGE_SIZE;
 	return 1;
@@ -1468,33 +1509,34 @@ static int grow_buffers(int size)
 #define BUFFER_BUSY_BITS	((1<<BH_Dirty) | (1<<BH_Lock) | (1<<BH_Protected))
 #define buffer_busy(bh)		((bh)->b_count || ((bh)->b_state & BUFFER_BUSY_BITS))
 
-static int sync_page_buffers(struct page * page, int wait)
+static void sync_page_buffers(struct page * page)
 {
-	struct buffer_head * bh = page->buffers;
-	struct buffer_head * tmp = bh;
+	struct buffer_head * tmp, * bh = page->buffers;
 
+	/*
+	 * Here we'll probably sleep and so we must make sure that
+	 * the page doesn't go away from under us. We also prefer any
+	 * concurrent try_to_free_buffers() not to work in any way on
+	 * our current page from under us since we're just working on it.
+	 * As always in 2.2.x we're serialized by the big kernel lock
+	 * during those hacky page-visibility manipulations.
+	 *
+	 * SUBTLE NOTE: for things like LVM snapshotting WRITEA will block too!
+	 */
 	page->buffers = NULL;
 
+	tmp = bh;
 	do {
 		struct buffer_head *p = tmp;
 		tmp = tmp->b_this_page;
-		if (buffer_locked(p)) {
-			if (wait)
-				__wait_on_buffer(p);
-		} else if (buffer_dirty(p))
-			ll_rw_block(WRITE, 1, &p);
+
+		if (buffer_dirty(p))
+			if (test_and_set_bit(BH_Wait_IO, &p->b_state))
+				ll_rw_block(WRITE, 1, &p);
 	} while (tmp != bh);
 
+	/* Restore the visibility of the page before returning. */
 	page->buffers = bh;
-
-	do {
-		struct buffer_head *p = tmp;
-		tmp = tmp->b_this_page;
-		if (buffer_busy(p))
-			return 1;
-	} while (tmp != bh);
-
-	return 0;
 }
 
 /*
@@ -1504,10 +1546,9 @@ static int sync_page_buffers(struct page * page, int wait)
  * Wake up bdflush() if this fails - if we're running low on memory due
  * to dirty buffers, we need to flush them out as quickly as possible.
  */
-int try_to_free_buffers(struct page * page_map, int wait)
+int try_to_free_buffers(struct page * page_map, int gfp_mask)
 {
 	struct buffer_head * tmp, * bh = page_map->buffers;
-	int too_many;
 
 	tmp = bh;
 	do {
@@ -1516,8 +1557,6 @@ int try_to_free_buffers(struct page * page_map, int wait)
 		tmp = tmp->b_this_page;
 	} while (tmp != bh);
 
- succeed:
-	tmp = bh;
 	do {
 		struct buffer_head * p = tmp;
 		tmp = tmp->b_this_page;
@@ -1536,25 +1575,12 @@ int try_to_free_buffers(struct page * page_map, int wait)
 	return 1;
 
  busy:
-	too_many = (nr_buffers * bdf_prm.b_un.nfract/100);
+	if (gfp_mask & __GFP_IO)
+		sync_page_buffers(page_map);
 
-	if (!sync_page_buffers(page_map, wait)) {
-
-		/* If a high percentage of the buffers are dirty, 
-		 * wake kflushd 
-		 */
-		if (nr_buffers_type[BUF_DIRTY] > too_many)
-			wakeup_bdflush(0);
-			
-		/*
-		 * We can jump after the busy check because
-		 * we rely on the kernel lock.
-		 */
-		goto succeed;
-	}
-
-	if(nr_buffers_type[BUF_DIRTY] > too_many)
+	if (balance_dirty_state(NODEV) >= 0)
 		wakeup_bdflush(0);
+
 	return 0;
 }
 
@@ -1566,7 +1592,7 @@ void show_buffers(void)
 	int found = 0, locked = 0, dirty = 0, used = 0, lastused = 0;
 	int protected = 0;
 	int nlist;
-	static char *buf_types[NR_LIST] = {"CLEAN","LOCKED","DIRTY"};
+	static char *buf_types[NR_LIST] = {"CLEAN","LOCKED","DIRTY","PROTECTED",};
 
 	printk("Buffer memory:   %8ldkB\n",buffermem>>10);
 	printk("Buffer heads:    %6d\n",nr_buffer_heads);
@@ -1590,7 +1616,7 @@ void show_buffers(void)
 			used++, lastused = found;
 		bh = bh->b_next_free;
 	  } while (bh != lru_list[nlist]);
-	  printk("%8s: %d buffers, %d used (last=%d), "
+	  printk("%9s: %d buffers, %d used (last=%d), "
 		 "%d locked, %d protected, %d dirty\n",
 		 buf_types[nlist], found, used, lastused,
 		 locked, protected, dirty);
@@ -1935,7 +1961,8 @@ int bdflush(void * unused)
 		
 		/* If there are still a lot of dirty buffers around, skip the sleep
 		   and flush some more */
-		if(ndirty == 0 || nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
+		if (!ndirty || balance_dirty_state(NODEV) < 0)
+		{
 			spin_lock_irq(&current->sigmask_lock);
 			flush_signals(current);
 			spin_unlock_irq(&current->sigmask_lock);

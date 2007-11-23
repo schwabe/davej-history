@@ -93,34 +93,69 @@ static inline void remove_mem_queue(struct page * entry)
  */
 spinlock_t page_alloc_lock = SPIN_LOCK_UNLOCKED;
 
-static inline void free_pages_ok(unsigned long map_nr, unsigned long order, unsigned type)
-{
-	struct free_area_struct *area = free_area[type] + order;
-	unsigned long index = map_nr >> (1 + order);
-	unsigned long mask = (~0UL) << order;
-	unsigned long flags;
-
-	spin_lock_irqsave(&page_alloc_lock, flags);
-
 #define list(x) (mem_map+(x))
-
-	map_nr &= mask;
-	nr_free_pages -= mask;
-	while (mask + (1 << (NR_MEM_LISTS-1))) {
-		if (!test_and_change_bit(index, area->map))
-			break;
-		area->count--;
-		remove_mem_queue(list(map_nr ^ -mask));
-		mask <<= 1;
-		area++;
-		index >>= 1;
-		map_nr &= mask;
-	}
+#define __free_pages_ok(map_nr, mask, area, index)		\
+	nr_free_pages -= (mask);				\
+	while ((mask) + (1 << (NR_MEM_LISTS-1))) {		\
+		if (!test_and_change_bit((index), (area)->map))	\
+			break;					\
+		(area)->count--;				\
+		remove_mem_queue(list((map_nr) ^ -(mask)));	\
+		(mask) <<= 1;					\
+		(area)++;					\
+		(index) >>= 1;					\
+		(map_nr) &= (mask);				\
+	}							\
 	add_mem_queue(area, list(map_nr));
 
-#undef list
+static void free_local_pages(struct page * page) {
+	unsigned long order = page->offset;
+	unsigned int type = PageDMA(page) ? 1 : 0;
+	struct free_area_struct *area;
+	unsigned long map_nr = page - mem_map;
+	unsigned long mask = (~0UL) << order;
+	unsigned long index = map_nr >> (1 + order);
 
+	area = free_area[type] + order;
+	__free_pages_ok(map_nr, mask, area, index);
+}
+
+static inline void free_pages_ok(unsigned long map_nr, unsigned long order, unsigned type)
+{
+	struct free_area_struct *area;
+	unsigned long index;
+	unsigned long mask;
+	unsigned long flags;
+	struct page * page;
+
+	if (current->flags & PF_FREE_PAGES)
+		goto local_freelist;
+ back_local_freelist:
+
+	index = map_nr >> (1 + order);
+	mask = (~0UL) << order;
+	map_nr &= mask;
+
+	spin_lock_irqsave(&page_alloc_lock, flags);
+	area = free_area[type] + order;
+	__free_pages_ok(map_nr, mask, area, index);
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
+	return;
+
+ local_freelist:
+	/*
+	 * This is a little subtle: if the allocation order
+	 * wanted is major than zero we'd better take all the pages
+	 * local since we must deal with fragmentation too and we
+	 * can't rely on the nr_local_pages information.
+	 */
+	if (current->nr_local_pages && !current->allocation_order)
+		goto back_local_freelist;
+
+	page = mem_map + map_nr;
+	list_add((struct list_head *) page, &current->local_pages);
+	page->offset = order;
+	current->nr_local_pages++;
 }
 
 void __free_pages(struct page *page, unsigned long order)
@@ -129,7 +164,6 @@ void __free_pages(struct page *page, unsigned long order)
 		if (PageSwapCache(page))
 			panic ("Freeing swap cache page");
 		page->flags &= ~(1 << PG_referenced);
-		page->age = PAGE_AGE_INITIAL;
 		free_pages_ok(page - mem_map, order, PageDMA(page) ? 1 : 0);
 		return;
 	}
@@ -180,13 +214,32 @@ do { unsigned long size = 1 << high; \
 	atomic_set(&map->count, 1); \
 } while (0)
 
+static void refile_local_pages(void)
+{
+	if (current->nr_local_pages) {
+		struct page * page;
+		struct list_head * entry;
+		int nr_pages = current->nr_local_pages;
+
+		while ((entry = current->local_pages.next) != &current->local_pages) {
+			list_del(entry);
+			page = (struct page *) entry;
+			free_local_pages(page);
+			if (!nr_pages--)
+				panic("__get_free_pages local_pages list corrupted I");
+		}
+		if (nr_pages)
+			panic("__get_free_pages local_pages list corrupted II");
+		current->nr_local_pages = 0;
+	}
+}
+
 unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 {
 	unsigned long flags;
-	static atomic_t free_before_allocate = ATOMIC_INIT(0);
 
 	if (order >= NR_MEM_LISTS)
-		goto nopage;
+		goto out;
 
 #ifdef ATOMIC_MEMORY_DEBUGGING
 	if ((gfp_mask & __GFP_WAIT) && in_interrupt()) {
@@ -195,9 +248,15 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 			printk("gfp called nonatomically from interrupt %p\n",
 				__builtin_return_address(0));
 		}
-		goto nopage;
+		goto out;
 	}
 #endif
+
+	/*
+	 * Acquire lock before reading nr_free_pages to make sure it
+	 * won't change from under us.
+	 */
+	spin_lock_irqsave(&page_alloc_lock, flags);
 
 	/*
 	 * If this is a recursive call, we'd better
@@ -205,15 +264,7 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	 * further thought.
 	 */
 	if (!(current->flags & PF_MEMALLOC)) {
-		int freed;
 		extern struct wait_queue * kswapd_wait;
-
-		/* Somebody needs to free pages so we free some of our own. */
-		if (atomic_read(&free_before_allocate)) {
-			current->flags |= PF_MEMALLOC;
-			try_to_free_pages(gfp_mask);
-			current->flags &= ~PF_MEMALLOC;
-		}
 
 		if (nr_free_pages > freepages.low)
 			goto ok_to_allocate;
@@ -224,35 +275,44 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		/* Do we have to block or can we proceed? */
 		if (nr_free_pages > freepages.min)
 			goto ok_to_allocate;
+		if (gfp_mask & __GFP_WAIT) {
+			int freed;
+			/*
+			 * If the task is ok to sleep it's fine also
+			 * if we release irq here.
+			 */
+			spin_unlock_irq(&page_alloc_lock);
 
-		current->flags |= PF_MEMALLOC;
-		atomic_inc(&free_before_allocate);
-		freed = try_to_free_pages(gfp_mask);
-		atomic_dec(&free_before_allocate);
-		current->flags &= ~PF_MEMALLOC;
+			current->flags |= PF_MEMALLOC|PF_FREE_PAGES;
+			current->allocation_order = order;
+			freed = try_to_free_pages(gfp_mask);
+			current->flags &= ~(PF_MEMALLOC|PF_FREE_PAGES);
 
-		/*
-		 * Re-check we're still low on memory after we blocked
-		 * for some time. Somebody may have released lots of
-		 * memory from under us while we was trying to free
-		 * the pages. We check against pages_high to be sure
-		 * to succeed only if lots of memory is been released.
-		 */
-		if (nr_free_pages > freepages.high)
-			goto ok_to_allocate;
+			spin_lock_irq(&page_alloc_lock);
+			refile_local_pages();
 
-		if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
-			goto nopage;
+			/*
+			 * Re-check we're still low on memory after we blocked
+			 * for some time. Somebody may have released lots of
+			 * memory from under us while we was trying to free
+			 * the pages. We check against pages_high to be sure
+			 * to succeed only if lots of memory is been released.
+			 */
+			if (nr_free_pages > freepages.high)
+				goto ok_to_allocate;
+
+			if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
+				goto nopage;
+		}
 	}
 ok_to_allocate:
-	spin_lock_irqsave(&page_alloc_lock, flags);
 	/* if it's not a dma request, try non-dma first */
 	if (!(gfp_mask & __GFP_DMA))
 		RMQUEUE_TYPE(order, 0);
 	RMQUEUE_TYPE(order, 1);
+ nopage:
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
-
-nopage:
+ out:
 	return 0;
 }
 

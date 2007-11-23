@@ -319,6 +319,8 @@ struct task_struct {
 	struct files_struct *files;
 /* memory management info */
 	struct mm_struct *mm;
+	struct list_head local_pages; int allocation_order, nr_local_pages;
+	int fs_locks;
 
 /* signal handlers */
 	spinlock_t sigmask_lock;	/* Protects signal and blocked */
@@ -351,6 +353,7 @@ struct task_struct {
 #define PF_SIGNALED	0x00000400	/* killed by a signal */
 #define PF_MEMALLOC	0x00000800	/* Allocating memory */
 #define PF_VFORK	0x00001000	/* Wake up parent in mm_release */
+#define PF_FREE_PAGES	0x00002000	/* The current-> */
 
 #define PF_USEDFPU	0x00100000	/* task used FPU this quantum (SMP) */
 #define PF_DTRACE	0x00200000	/* delayed trace (used on m68k, i386) */
@@ -400,7 +403,7 @@ struct task_struct {
 /* tss */	INIT_TSS, \
 /* fs */	&init_fs, \
 /* files */	&init_files, \
-/* mm */	&init_mm, \
+/* mm */	&init_mm, { &init_task.local_pages, &init_task.local_pages}, 0, 0, 0, \
 /* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
 /* exec cts */	0,0, \
 /* oom */	0, \

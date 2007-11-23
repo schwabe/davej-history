@@ -679,7 +679,7 @@ done:	/* pte_val(pte) == shp->shm_pages[idx] */
 }
 
 /*
- * Goes through counter = (shm_rss >> prio) present shm pages.
+ * Goes through counter = (shm_rss / prio) present shm pages.
  */
 static unsigned long swap_id = 0; /* currently being swapped */
 static unsigned long swap_idx = 0; /* next to swap */
@@ -693,7 +693,7 @@ int shm_swap (int prio, int gfp_mask)
 	int loop = 0;
 	int counter;
 	
-	counter = shm_rss >> prio;
+	counter = shm_rss / prio;
 	if (!counter || !(swap_nr = get_swap_page()))
 		return 0;
 

@@ -96,6 +96,9 @@ drop_pte:
 	 * some real work in the future in "shrink_mmap()".
 	 */
 	if (!pte_dirty(pte)) {
+		if (page_map->inode && pgcache_under_min())
+			/* unmapping this page would be useless */
+			return 0;
 		flush_cache_page(vma, address);
 		pte_clear(page_table);
 		goto drop_pte;
@@ -106,7 +109,7 @@ drop_pte:
 	 * we cannot do I/O! Avoid recursing on FS
 	 * locks etc.
 	 */
-	if (!(gfp_mask & __GFP_IO))
+	if (!(gfp_mask & __GFP_IO) || current->fs_locks)
 		return 0;
 
 	/*
@@ -208,6 +211,8 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 		result = try_to_swap_out(tsk, vma, address, pte, gfp_mask);
 		if (result)
 			return result;
+		if (current->need_resched)
+			return 2;
 		address += PAGE_SIZE;
 		pte++;
 	} while (address < end);
@@ -327,7 +332,7 @@ static int swap_out(unsigned int priority, int gfp_mask)
 	 * Think of swap_cnt as a "shadow rss" - it tells us which process
 	 * we want to page out (always try largest first).
 	 */
-	counter = nr_tasks / (priority+1);
+	counter = nr_tasks / priority;
 	if (counter < 1)
 		counter = 1;
 
@@ -361,8 +366,13 @@ static int swap_out(unsigned int priority, int gfp_mask)
 			goto out;
 		}
 
-		if (swap_out_process(pbest, gfp_mask))
+		switch (swap_out_process(pbest, gfp_mask)) {
+		case 1:
 			return 1;
+		case 2:
+			current->state = TASK_RUNNING;
+			schedule();
+		}
 	}
 out:
 	return 0;
@@ -377,11 +387,9 @@ out:
  * cluster them so that we get good swap-out behaviour. See
  * the "free_memory()" macro for details.
  */
-static int do_try_to_free_pages(unsigned int gfp_mask)
+int try_to_free_pages(unsigned int gfp_mask)
 {
 	int priority;
-	int ret = 0;
-	int swapcount;
 	int count = SWAP_CLUSTER_MAX;
 
 	lock_kernel();
@@ -389,41 +397,34 @@ static int do_try_to_free_pages(unsigned int gfp_mask)
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
 
-	priority = 6;
+	priority = 5;
 	do {
 		while (shrink_mmap(priority, gfp_mask)) {
-			ret = 1;
 			if (!--count)
 				goto done;
 		}
 
 		/* Try to get rid of some shared memory pages.. */
-		if (gfp_mask & __GFP_IO) {
+		if (gfp_mask & __GFP_IO && !current->fs_locks) {
 			while (shm_swap(priority, gfp_mask)) {
-				ret = 1;
 				if (!--count)
 					goto done;
 			}
 		}
 
 		/* Then, try to page stuff out.. */
-		swapcount = count;
 		while (swap_out(priority, gfp_mask)) {
-			ret = 1;
-			if (!--swapcount)
-				break;
+			if (!--count)
+				goto done;
 		}
 
 		shrink_dcache_memory(priority, gfp_mask);
-	} while (--priority >= 0);
+	} while (--priority > 0);
 done:
 	unlock_kernel();
 
-	if (!ret)
-		printk("VM: do_try_to_free_pages failed for %s...\n",
-				current->comm);
 	/* Return success if we freed a page. */
-	return ret;
+	return priority > 0;
 }
 
 /*
@@ -499,7 +500,7 @@ int kswapd(void *unused)
 
 		while (nr_free_pages < freepages.high)
 		{
-			if (do_try_to_free_pages(GFP_KSWAPD))
+			if (try_to_free_pages(GFP_KSWAPD))
 			{
 				if (tsk->need_resched)
 					schedule();
@@ -510,17 +511,3 @@ int kswapd(void *unused)
 		}
 	}
 }
-
-/*
- * Called by non-kswapd processes when kswapd really cannot
- * keep up with the demand for free memory.
- */
-int try_to_free_pages(unsigned int gfp_mask)
-{
-	int retval = 1;
-
-	if (gfp_mask & __GFP_WAIT)
-		retval = do_try_to_free_pages(gfp_mask);
-	return retval;
-}
-	

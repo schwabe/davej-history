@@ -190,6 +190,7 @@ typedef char buffer_block[BLOCK_SIZE];
 #define BH_Lock		2	/* 1 if the buffer is locked */
 #define BH_Req		3	/* 0 if the buffer has been invalidated */
 #define BH_Protected	6	/* 1 if the buffer is protected */
+#define BH_Wait_IO	7	/* 1 if we should throttle on this buffer */
 
 /*
  * Try to keep the most commonly used fields in single cache lines (16
@@ -782,7 +783,7 @@ extern struct file *inuse_filps;
 
 extern void refile_buffer(struct buffer_head * buf);
 extern void set_writetime(struct buffer_head * buf, int flag);
-extern int try_to_free_buffers(struct page *, int wait);
+extern int try_to_free_buffers(struct page *, int);
 
 extern int nr_buffers;
 extern long buffermem;
@@ -791,15 +792,25 @@ extern int nr_buffer_heads;
 #define BUF_CLEAN	0
 #define BUF_LOCKED	1	/* Buffers scheduled for write */
 #define BUF_DIRTY	2	/* Dirty buffers, not yet scheduled for write */
-#define NR_LIST		3
+#define BUF_PROTECTED	3	/* Ramdisk persistent storage */
+#define NR_LIST		4
 
 void mark_buffer_uptodate(struct buffer_head * bh, int on);
+
+extern inline void mark_buffer_protected(struct buffer_head * bh)
+{
+	if (!test_and_set_bit(BH_Protected, &bh->b_state)) {
+		if (bh->b_list != BUF_PROTECTED)
+			refile_buffer(bh);
+	}
+}
 
 extern inline void mark_buffer_clean(struct buffer_head * bh)
 {
 	if (test_and_clear_bit(BH_Dirty, &bh->b_state)) {
 		if (bh->b_list == BUF_DIRTY)
 			refile_buffer(bh);
+		clear_bit(BH_Wait_IO, &bh->b_state);
 	}
 }
 
@@ -940,6 +951,9 @@ extern int inode_change_ok(struct inode *, struct iattr *);
 extern void inode_setattr(struct inode *, struct iattr *);
 
 extern __u32 inode_generation_count;
+
+#define fs_down(sem)	do { current->fs_locks++; down(sem); } while (0)
+#define fs_up(sem)	do { up(sem); current->fs_locks--; } while (0)
 
 #endif /* __KERNEL__ */
 

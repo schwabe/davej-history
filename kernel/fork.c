@@ -665,6 +665,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->lock_depth = -1;		/* -1 = no lock */
 	p->start_time = jiffies;
 
+	INIT_LIST_HEAD(&p->local_pages);
+
 	retval = -ENOMEM;
 	/* copy all the process information */
 	if (copy_files(clone_flags, p))

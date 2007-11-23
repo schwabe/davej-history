@@ -73,7 +73,7 @@ int do_truncate(struct dentry *dentry, unsigned long length)
 	if ((off_t) length < 0)
 		return -EINVAL;
 
-	down(&inode->i_sem);
+	fs_down(&inode->i_sem);
 	newattrs.ia_size = length;
 	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;
 	error = notify_change(dentry, &newattrs);
@@ -83,7 +83,7 @@ int do_truncate(struct dentry *dentry, unsigned long length)
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
 	}
-	up(&inode->i_sem);
+	fs_up(&inode->i_sem);
 	return error;
 }
 

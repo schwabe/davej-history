@@ -50,10 +50,12 @@ extern inline void lock_super(struct super_block * sb)
 	if (sb->s_lock)
 		__wait_on_super(sb);
 	sb->s_lock = 1;
+	current->fs_locks++;
 }
 
 extern inline void unlock_super(struct super_block * sb)
 {
+	current->fs_locks--;
 	sb->s_lock = 0;
 	wake_up(&sb->s_wait);
 }
