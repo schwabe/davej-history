@@ -399,6 +399,12 @@ int try_to_free_pages(unsigned int gfp_mask)
 
 	priority = 5;
 	do {
+		/* Always pick on the dcache even if we didnt need to,
+		   without this some workloads cause excessive dcache
+	   	   growth */
+
+		shrink_dcache_memory(priority, gfp_mask);
+	
 		while (shrink_mmap(priority, gfp_mask)) {
 			if (!--count)
 				goto done;
@@ -418,7 +424,6 @@ int try_to_free_pages(unsigned int gfp_mask)
 				goto done;
 		}
 
-		shrink_dcache_memory(priority, gfp_mask);
 	} while (--priority > 0);
 done:
 	unlock_kernel();

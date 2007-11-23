@@ -849,6 +849,7 @@ void fat_write_inode(struct inode *inode)
 	loff_t i_pos;
 
 retry:
+	i_pos = MSDOS_I(inode)->i_location;
 	if (inode->i_ino == MSDOS_ROOT_INO || !i_pos) return;
 	if (!(bh = fat_bread(sb, ((unsigned long long) i_pos) >> MSDOS_DPB_BITS))) {
 		printk("dev = %s, ino = %ld\n", kdevname(inode->i_dev), i_pos);

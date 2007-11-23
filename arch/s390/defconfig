@@ -63,6 +63,7 @@ CONFIG_NETDEVICES=y
 #
 # S390 Network devices
 #
+CONFIG_LCS=m
 CONFIG_CTC=y
 CONFIG_IUCV=y
 # CONFIG_DUMMY is not set

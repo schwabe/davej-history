@@ -22,4 +22,12 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_LCS),y)
+O_OBJS += lcs.o
+else
+  ifeq ($(CONFIG_LCS),m)
+  M_OBJS += lcs.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make

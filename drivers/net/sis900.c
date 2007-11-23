@@ -1,6 +1,6 @@
 /* sis900.c: A SiS 900/7016 PCI Fast Ethernet driver for Linux.
    Copyright 1999 Silicon Integrated System Corporation 
-   Revision:	1.06.09 Sep. 28 2001
+   Revision:	1.06.10 Feb 28 2002
 
    Modified from the driver which is originally written by Donald Becker.
    
@@ -18,6 +18,7 @@
    preliminary Rev. 1.0 Jan. 18, 1998
    http://www.sis.com.tw/support/databook.htm
 
+   Rev 1.06.10 Feb. 28 2002 Allan Jacobsen (aj@2m.dk) Made RTL8201 PHY work on ECS K7S5A
    Rev 1.06.09 Sep. 28 2001 Hui-Fen Hsu (hfhsu@sis.com.tw) update for 630ET & workaround for ICS1893 PHY
    Rev 1.06.08 Mar.  2 2001 Hui-Fen Hsu (hfhsu@sis.com.tw) some bug fix & 635M/B support
    Rev 1.06.07 Jan.  8 2001 Lei-Chun Chang added RTL8201 PHY support
@@ -55,7 +56,7 @@
 #include "sis900.h"
 
 static const char *version =
-"sis900.c: v1.06.09  09/28/2001\n";
+"sis900.c: v1.06.10  02/28/2002\n";
 
 static int max_interrupt_work = 20;
 static int multicast_filter_limit = 128;
@@ -101,6 +102,7 @@ static struct mii_chip_info {
 	{ "AMD 79C901 HomePNA PHY",		0x0000, 0x6B90, HOME},
 	{ "ICS LAN PHY",			0x0015, 0xF440, LAN },
 	{ "NS  83851 PHY",			0x2000, 0x5C20, MIX },
+	{ "Realtek RTL8201 PHY",		0x0000, 0x8200, LAN },
 	{0,},
 };
 
@@ -1089,6 +1091,7 @@ static void sis900_auto_negotiate(struct device *net_dev, int phy_addr)
 static void sis900_read_mode(struct device *net_dev, int *speed, int *duplex)
 {
 	struct sis900_private *sis_priv = (struct sis900_private *)net_dev->priv;
+	struct mii_phy *phy = sis_priv->mii;
 	int phy_addr = sis_priv->cur_phy;
 	u32 status;
 	u16 autoadv, autorec;
@@ -1115,6 +1118,14 @@ static void sis900_read_mode(struct device *net_dev, int *speed, int *duplex)
 
 	sis_priv->autong_complete = 1;
 	
+	/* Workaround for Realtek RTL8201 PHY issue */
+	if((phy->phy_id0 == 0x0000) && ((phy->phy_id1 & 0xFFF0) == 0x8200)){
+		if(mdio_read(net_dev, phy_addr, MII_CONTROL) & MII_CNTL_FDX)
+			*duplex = FDX_CAPABLE_FULL_SELECTED;
+		if(mdio_read(net_dev, phy_addr, 0x0019) & 0x01)
+			*speed = HW_SPEED_100_MBPS;
+	}
+
 	printk(KERN_INFO "%s: Media Link On %s %s-duplex \n",
 	       net_dev->name,
 	       *speed == HW_SPEED_100_MBPS ?

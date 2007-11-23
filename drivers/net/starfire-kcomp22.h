@@ -73,10 +73,20 @@ struct ethtool_drvinfo {
 	char	reserved2[32];
 };
 
+/* for passing single values */
+struct ethtool_value {
+	u32	cmd;
+	u32	data;
+};
+
 /* CMDs currently supported */
 #define ETHTOOL_GSET		0x00000001 /* Get settings. */
 #define ETHTOOL_SSET		0x00000002 /* Set settings, privileged. */
 #define ETHTOOL_GDRVINFO	0x00000003 /* Get driver info. */
+#define ETHTOOL_GMSGLVL		0x00000007 /* Get driver message level */
+#define ETHTOOL_SMSGLVL		0x00000008 /* Set driver msg level, priv. */
+#define ETHTOOL_NWAY_RST	0x00000009 /* Restart autonegotiation, priv. */
+#define ETHTOOL_GLINK		0x0000000a /* Get link status */
 
 /* Indicates what features are supported by the interface. */
 #define SUPPORTED_10baseT_Half		(1 << 0)
@@ -163,6 +173,7 @@ static struct pci_driver_mapping drvmap [PCI_MAX_MAPPINGS] = { { NULL, } , };
 #define __devinit			__init
 #define __devinitdata			__initdata
 #define __devexit
+#define __devexit_p(foo)		foo
 #define MODULE_DEVICE_TABLE(foo,bar)
 #define SET_MODULE_OWNER(dev)
 #define COMPAT_MOD_INC_USE_COUNT	MOD_INC_USE_COUNT
@@ -178,6 +189,10 @@ static struct pci_driver_mapping drvmap [PCI_MAX_MAPPINGS] = { { NULL, } , };
 #define del_timer_sync(timer)		del_timer(timer)
 #define alloc_etherdev(size)		init_etherdev(NULL, size)
 #define register_netdev(dev)		0
+
+#ifdef CONFIG_SPARC64
+typedef unsigned long dma_addr_t;
+#endif /* CONFIG_SPARC64 */
 
 static inline void *pci_alloc_consistent(struct pci_dev *hwdev, size_t size,
 					 dma_addr_t *dma_handle)

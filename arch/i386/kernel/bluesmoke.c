@@ -39,13 +39,12 @@ static void intel_machine_check(struct pt_regs * regs, long error_code)
 			if(high&(1<<27))
 			{
 				rdmsr(0x402+i*4, alow, ahigh);
-				printk("[%08x%08x]", alow, ahigh);
+				printk("[%08x%08x]", ahigh, alow);
 			}
 			if(high&(1<<26))
 			{
 				rdmsr(0x402+i*4, alow, ahigh);
-				printk(" at %08x%08x", 
-					ahigh, alow);
+				printk(" at %08x%08x", ahigh, alow);
 			}
 			printk("\n");
 			/* Clear it */
@@ -165,7 +164,7 @@ void __init intel_mcheck_init(struct cpuinfo_x86 *c)
 	if(l&(1<<8))
 		wrmsr(0x17b, 0xffffffff, 0xffffffff);
 	banks = l&0xff;
-	for(i=1;i<banks;i++)
+	for(i=0;i<banks;i++)
 	{
 		wrmsr(0x400+4*i, 0xffffffff, 0xffffffff); 
 	}

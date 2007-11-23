@@ -73,7 +73,7 @@ struct cpuinfo_x86 {
 #define X86_FEATURE_PGE		0x00002000	/* Page Global Enable */
 #define X86_FEATURE_MCA		0x00004000	/* Machine Check Architecture */
 #define X86_FEATURE_CMOV	0x00008000	/* CMOV instruction (FCMOVCC and FCOMI too if FPU present) */
-#define X86_FEATURE_PAT	0x00010000	/* Page Attribute Table */
+#define X86_FEATURE_PAT		0x00010000	/* Page Attribute Table */
 #define X86_FEATURE_PSE36	0x00020000	/* 36-bit PSEs */
 #define X86_FEATURE_PN		0x00040000	/* Processor serial number */
 #define X86_FEATURE_19		0x00080000
@@ -137,51 +137,52 @@ extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
 		  "=b" (*ebx),
 		  "=c" (*ecx),
 		  "=d" (*edx)
-		: "a" (op)
-		: "cc");
+		: "0" (op));
 }
 
 /*
  *  * CPUID functions returning a single datum
  *   */
-extern inline unsigned int cpuid_eax(unsigned int op)
+static inline unsigned int cpuid_eax(unsigned int op)
 {
-	unsigned int eax, ebx, ecx, edx;
+	unsigned int eax;
 
 	__asm__("cpuid"
-		: "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
-		: "a" (op));
+	: "=a" (eax)
+	: "0" (op)
+	: "bx", "cx", "dx");
 	return eax;
-}
-
-extern inline unsigned int cpuid_ebx(unsigned int op)
-{
-	unsigned int eax, ebx, ecx, edx;
+}   
+static inline unsigned int cpuid_ebx(unsigned int op)
+{       
+	unsigned int eax, ebx;
 
 	__asm__("cpuid"
-		: "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
-		: "a" (op));
+	: "=a" (eax), "=b" (ebx)
+	: "0" (op)
+	: "cx", "dx" );
 	return ebx;
-}
-extern inline unsigned int cpuid_ecx(unsigned int op)
-{
-	unsigned int eax, ebx, ecx, edx;
+}   
+static inline unsigned int cpuid_ecx(unsigned int op)
+{ 
+	unsigned int eax, ecx;
 
 	__asm__("cpuid"
-		: "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
-		: "a" (op));
+	: "=a" (eax), "=c" (ecx)
+	: "0" (op)
+	: "bx", "dx" );
 	return ecx;
 }
-extern inline unsigned int cpuid_edx(unsigned int op)
+static inline unsigned int cpuid_edx(unsigned int op)
 {
-	unsigned int eax, ebx, ecx, edx;
+	unsigned int eax, edx;
 
 	__asm__("cpuid"
-		: "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
-		: "a" (op));
+	: "=a" (eax), "=d" (edx)
+	: "0" (op)
+	: "bx", "cx");
 	return edx;
 }
-
 /*
  *      Cyrix CPU configuration register indexes
  */
