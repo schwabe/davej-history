@@ -244,10 +244,18 @@
  *                         ide-scsi. TODO: non-modular way of doing the
  *                         same.
  *                         
+ * 4.54  Sep 09, 1999 	- Fixed start/stop error on some drives if the
+ *			   drive was locked.
+ *			- Fixed read_toc header, size given was too large.
+ *			- Fixed possible leaks in ioctl.
+ *			- CDROMREADTOCENTRY now honors the cdte_format
+ *			   field, instead of forcing CDROM_LBA.
+ *			- Mask out things the drive can't do instead of
+ *			   just telling people what the driver can do.
  *
  *************************************************************************/
 
-#define IDECD_VERSION "4.53"
+#define IDECD_VERSION "4.54"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -1564,6 +1572,10 @@ cdrom_eject (ide_drive_t *drive, int ejectflag,
 	if (CDROM_CONFIG_FLAGS (drive)->no_eject==1 && ejectflag==0)
 		return -EDRIVE_CANT_DO_THIS;
 
+	/* reload fails on some drives, if the tray is locked */
+	if (CDROM_STATE_FLAGS (drive)->door_locked && ejectflag)
+		return 0;
+
 	memset (&pc, 0, sizeof (pc));
 	pc.sense_data = reqbuf;
 
@@ -1669,12 +1681,11 @@ cdrom_read_toc (ide_drive_t *drive,
 		/* Try to allocate space. */
 		toc = (struct atapi_toc *) kmalloc (sizeof (struct atapi_toc),
 						    GFP_KERNEL);
+		if (toc == NULL) {
+			printk ("%s: No cdrom TOC buffer!\n", drive->name);
+			return -ENOMEM;
+		}
 		info->toc = toc;
-	}
-
-	if (toc == NULL) {
-		printk ("%s: No cdrom TOC buffer!\n", drive->name);
-		return -EIO;
 	}
 
 	/* Check to see if the existing data is still valid.
@@ -1686,8 +1697,7 @@ cdrom_read_toc (ide_drive_t *drive,
 
 	/* First read just the header, so we know how long the TOC is. */
 	stat = cdrom_read_tocentry (drive, 0, 1, 0, (char *)&toc->hdr,
-				    sizeof (struct atapi_toc_header) +
-				    sizeof (struct atapi_toc_entry),
+				    sizeof (struct atapi_toc_header),
 				    reqbuf);
 	if (stat) return stat;
 
@@ -1889,7 +1899,7 @@ static int
 cdrom_play_lba_range (ide_drive_t *drive, int lba_start, int lba_end,
 		      struct atapi_request_sense *reqbuf)
 {
-	int i, stat;
+	int i, stat = 0;
 	struct atapi_request_sense my_reqbuf;
 
 	if (reqbuf == NULL)
@@ -2142,9 +2152,11 @@ int ide_cdrom_dev_ioctl (struct cdrom_device_info *cdi,
 		if (stat == 0) {
 			if (cmd == CDROMREADMODE2) {
 				/* For Mode2, skip the Sync, Header, and Subheader */
-				copy_to_user_ret((char *)arg, buf+16, CD_FRAMESIZE_RAW0, -EFAULT);
+				if (copy_to_user((char *)arg, buf+16, CD_FRAMESIZE_RAW0))
+					stat = -EFAULT;
 			} else {
-				copy_to_user_ret((char *)arg, buf, blocksize, -EFAULT);
+				if (copy_to_user((char *)arg, buf, blocksize))
+					stat = -EFAULT;
 			}
 		}
 
@@ -2392,8 +2404,14 @@ int ide_cdrom_audio_ioctl (struct cdrom_device_info *cdi,
 
 		tocentry->cdte_ctrl = toce->control;
 		tocentry->cdte_adr  = toce->adr;
-		tocentry->cdte_format = CDROM_LBA;
-		tocentry->cdte_addr.lba = toce->addr.lba;
+		if (tocentry->cdte_format == CDROM_MSF) {
+			lba_to_msf (toce->addr.lba,
+				   &tocentry->cdte_addr.msf.minute,
+				   &tocentry->cdte_addr.msf.second,
+				   &tocentry->cdte_addr.msf.frame);
+		} else {
+			tocentry->cdte_addr.lba = toce->addr.lba;
+		}
 
 		return 0;
 	}
@@ -2850,6 +2868,15 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 	*(int *)&devinfo->capacity = nslots;
 	devinfo->handle = (void *) drive;
 	strcpy(devinfo->name, drive->name);
+
+	/* set capability mask to match the probe. */
+	if (!CDROM_CONFIG_FLAGS (drive)->is_changer)
+		devinfo->mask |= CDC_SELECT_DISC;
+	if (!CDROM_CONFIG_FLAGS (drive)->audio_play)
+		devinfo->mask |= CDC_PLAY_AUDIO;
+	if (!CDROM_CONFIG_FLAGS (drive)->close_tray)
+		devinfo->mask |= CDC_CLOSE_TRAY;
+
 	return register_cdrom (devinfo);
 }
 
@@ -2889,6 +2916,10 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		CDROM_CONFIG_FLAGS (drive)->dvd_r = 1;
 	if (buf.cap.dvd_r_write)
 		CDROM_CONFIG_FLAGS (drive)->dvd_rw = 1;
+	if (buf.cap.audio_play)
+		CDROM_CONFIG_FLAGS (drive)->audio_play = 1;
+	if (buf.cap.mechtype == 0)
+		CDROM_CONFIG_FLAGS (drive)->close_tray = 0;
 
 #if ! STANDARD_ATAPI
 	if (CDROM_STATE_FLAGS (drive)->sanyo_slot > 0) {
@@ -3000,7 +3031,9 @@ int ide_cdrom_setup (ide_drive_t *drive)
 	CDROM_CONFIG_FLAGS (drive)->dvd_rw = 0;
 	CDROM_CONFIG_FLAGS (drive)->no_eject = 1;
 	CDROM_CONFIG_FLAGS (drive)->supp_disc_present = 0;
-	
+	CDROM_CONFIG_FLAGS (drive)->audio_play = 0;
+	CDROM_CONFIG_FLAGS (drive)->close_tray = 1;
+
 	/* limit transfer size per interrupt. */
 	CDROM_CONFIG_FLAGS (drive)->limit_nframes = 0;
 	if (drive->id != NULL) {

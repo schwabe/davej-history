@@ -117,26 +117,31 @@ __clear_user(void *to, unsigned long n)
 /*
  * Return the size of a string (including the ending 0)
  *
- * Return 0 for error
+ * Return 0 on exception, a value greater than N if too long
  */
 
-long strlen_user(const char *s)
+long strnlen_user(const char *s, long n)
 {
+	unsigned long mask = -__addr_ok(s);
 	unsigned long res;
 
 	__asm__ __volatile__(
+		"	andl %0,%%ecx\n"
 		"0:	repne; scasb\n"
-		"	notl %0\n"
+		"	setne %%al\n"
+		"	subl %%ecx,%0\n"
+		"	addl %0,%%eax\n"
 		"1:\n"
 		".section .fixup,\"ax\"\n"
-		"2:	xorl %0,%0\n"
+		"2:	xorl %%eax,%%eax\n"
 		"	jmp 1b\n"
 		".previous\n"
 		".section __ex_table,\"a\"\n"
 		"	.align 4\n"
 		"	.long 0b,2b\n"
 		".previous"
-		:"=c" (res), "=D" (s)
-		:"1" (s), "a" (0), "0" (-__addr_ok(s)));
-	return res & -__addr_ok(s);
+		:"=r" (n), "=D" (s), "=a" (res)
+		:"0" (n), "1" (s), "2" (0), "c" (mask)
+		:"cx", "cc");
+	return res & mask;
 }

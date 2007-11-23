@@ -125,11 +125,15 @@
   -- autoclose was mistakenly checked against CDC_OPEN_TRAY instead of
   CDC_CLOSE_TRAY.
   -- proc info didn't mask against capabilities mask.
+  
+  2.56 Sep 9, 1999 - Jens Axboe <axboe@image.dk>
+  -- Define CDROM_CAN() for checking capabilities.
+  -- Fix up capability reporting, for proc and ioctl.
 
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 2.55"
-#define VERSION "Id: cdrom.c 2.55 1999/04/25"
+#define REVISION "Revision: 2.56"
+#define VERSION "Id: cdrom.c 2.56 1999/09/09"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -194,6 +198,9 @@ MODULE_PARM(check_media_type, "i");
 #define IOCTL_OUT(arg, type, out) \
 	copy_to_user_ret((type *) arg, &out, sizeof out, -EFAULT)
 
+/* The (cdo->capability & ~cdi->mask & CDC_XXX) construct was used in
+   a lot of places. This macro makes the code more clear. */
+#define CDROM_CAN(type) (cdi->ops->capability & ~cdi->mask & type)
 
 #define FM_WRITE	0x2                 /* file mode write bit */
 
@@ -273,9 +280,9 @@ int register_cdrom(struct cdrom_device_info *cdi)
 	cdo->n_minors = 0;
         cdi->options = CDO_USE_FFLAGS;
 	
-	if (autoclose==1 && cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY)
+	if (autoclose==1 && CDROM_CAN(CDC_CLOSE_TRAY))
 		cdi->options |= (int) CDO_AUTO_CLOSE;
-	if (autoeject==1 && cdo->capability & ~cdi->mask & CDC_OPEN_TRAY)
+	if (autoeject==1 && CDROM_CAN(CDC_OPEN_TRAY))
 		cdi->options |= (int) CDO_AUTO_EJECT;
 	if (lockdoor==1)
 		cdi->options |= (int) CDO_LOCK;
@@ -377,7 +384,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 		if (ret == CDS_TRAY_OPEN) {
 			cdinfo(CD_OPEN, "the tray is open...\n"); 
 			/* can/may i close it? */
-			if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY &&
+			if (CDROM_CAN(CDC_CLOSE_TRAY) &&
 			    cdi->options & CDO_AUTO_CLOSE) {
 				cdinfo(CD_OPEN, "trying to close the tray.\n"); 
 				ret=cdo->tray_move(cdi,0);
@@ -442,8 +449,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 		cdinfo(CD_OPEN, "open device failed.\n"); 
 		goto clean_up_and_return;
 	}
-	if (cdo->capability & ~cdi->mask & CDC_LOCK && 
-		cdi->options & CDO_LOCK) {
+	if (CDROM_CAN(CDC_LOCK) && cdi->options & CDO_LOCK) {
 			cdo->lock_door(cdi, 1);
 			cdinfo(CD_OPEN, "door locked.\n");
 	}	
@@ -457,8 +463,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 	is a goto to avoid bloating the driver with redundant code. */ 
 clean_up_and_return:
 	cdinfo(CD_WARNING, "open failed.\n"); 
-	if (cdo->capability & ~cdi->mask & CDC_LOCK && 
-		cdi->options & CDO_LOCK) {
+	if (CDROM_CAN(CDC_LOCK) && cdi->options & CDO_LOCK) {
 			cdo->lock_door(cdi, 0);
 			cdinfo(CD_OPEN, "door unlocked.\n");
 	}
@@ -482,7 +487,7 @@ int check_for_audio_disc(struct cdrom_device_info * cdi,
 		if (ret == CDS_TRAY_OPEN) {
 			cdinfo(CD_OPEN, "the tray is open...\n"); 
 			/* can/may i close it? */
-			if (cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY &&
+			if (CDROM_CAN(CDC_CLOSE_TRAY) &&
 			    cdi->options & CDO_AUTO_CLOSE) {
 				cdinfo(CD_OPEN, "trying to close the tray.\n"); 
 				ret=cdo->tray_move(cdi,0);
@@ -552,9 +557,8 @@ int cdrom_release(struct inode *ip, struct file *fp)
 		sb = get_super(dev);
 		if (sb) invalidate_inodes(sb);
 		invalidate_buffers(dev);
-		if (opened_for_data &&
-		    cdi->options & CDO_AUTO_EJECT &&
-		    cdo->capability & ~cdi->mask & CDC_OPEN_TRAY)
+		if (opened_for_data && (cdi->options & CDO_AUTO_EJECT) &&
+		    CDROM_CAN(CDC_OPEN_TRAY))
 			cdo->tray_move(cdi, 1);
 	}
 	return 0;
@@ -572,7 +576,7 @@ int media_changed(struct cdrom_device_info *cdi, int queue)
 	unsigned int mask = (1 << (queue & 1));
 	int ret = !!(cdi->mc_flags & mask);
 
-	if (!(cdi->ops->capability & ~cdi->mask & CDC_MEDIA_CHANGED))
+	if (!CDROM_CAN(CDC_MEDIA_CHANGED))
 	    return ret;
 	/* changed since last call? */
 	if (cdi->ops->media_changed(cdi, CDSL_CURRENT)) {
@@ -594,7 +598,7 @@ int cdrom_media_changed(kdev_t dev)
 		return 0;
 	if (cdi->ops->media_changed == NULL)
 		return 0;
-	if (!(cdi->ops->capability & ~cdi->mask & CDC_MEDIA_CHANGED))
+	if (!CDROM_CAN(CDC_MEDIA_CHANGED))
 	    return 0;
 	return (media_changed(cdi, 0));
 }
@@ -739,26 +743,27 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 	case CDROMEJECT: {
 		int ret;
 		cdinfo(CD_DO_IOCTL, "entering CDROMEJECT\n"); 
-		if (!(cdo->capability & ~cdi->mask & CDC_OPEN_TRAY))
+		if (!CDROM_CAN(CDC_OPEN_TRAY))
 			return -ENOSYS;
 		if (cdi->use_count != 1 || keeplocked)
 			return -EBUSY;
-		if (cdo->capability & ~cdi->mask & CDC_LOCK)
+		if (CDROM_CAN(CDC_LOCK))
 			if ((ret=cdo->lock_door(cdi, 0)))
 				return ret;
 
 		return cdo->tray_move(cdi, 1);
 		}
 
-	case CDROMCLOSETRAY:
+	case CDROMCLOSETRAY: {
 		cdinfo(CD_DO_IOCTL, "entering CDROMCLOSETRAY\n"); 
-		if (!(cdo->capability & ~cdi->mask & CDC_CLOSE_TRAY))
+		if (!CDROM_CAN(CDC_CLOSE_TRAY))
 			return -ENOSYS;
 		return cdo->tray_move(cdi, 0);
+		}
 
-	case CDROMEJECT_SW:
+	case CDROMEJECT_SW: {
 		cdinfo(CD_DO_IOCTL, "entering CDROMEJECT_SW\n"); 
-		if (!(cdo->capability & ~cdi->mask & CDC_OPEN_TRAY))
+		if (!CDROM_CAN(CDC_OPEN_TRAY))
 			return -ENOSYS;
 		if (keeplocked)
 			return -EBUSY;
@@ -766,12 +771,13 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		if (arg)
 			cdi->options |= CDO_AUTO_CLOSE | CDO_AUTO_EJECT;
 		return 0;
+		}
 
 	case CDROM_MEDIA_CHANGED: {
 		cdinfo(CD_DO_IOCTL, "entering CDROM_MEDIA_CHANGED\n"); 
-		if (!(cdo->capability & ~cdi->mask & CDC_MEDIA_CHANGED))
+		if (!CDROM_CAN(CDC_MEDIA_CHANGED))
 			return -ENOSYS;
-		if (!(cdo->capability & ~cdi->mask & CDC_SELECT_DISC)
+		if (!CDROM_CAN(CDC_SELECT_DISC)
 		    || arg == CDSL_CURRENT)
 			/* cannot select disc or select current disc */
 			return media_changed(cdi, 1);
@@ -780,7 +786,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		return cdo->media_changed (cdi, arg);
 		}
 
-	case CDROM_SET_OPTIONS:
+	case CDROM_SET_OPTIONS: {
 		cdinfo(CD_DO_IOCTL, "entering CDROM_SET_OPTIONS\n"); 
 		/* options need to be in sync with capability. too late for
 		   that, so we have to check each one separately... */
@@ -789,27 +795,29 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		case CDO_CHECK_TYPE:
 			break;
 		case CDO_LOCK:
-			if (!(cdo->capability & ~cdi->mask & CDC_LOCK))
+			if (!CDROM_CAN(CDC_LOCK))
 				return -ENOSYS;
 			break;
 		case 0:
 			return cdi->options;
 		/* default is basically CDO_[AUTO_CLOSE|AUTO_EJECT] */
 		default:
-			if (!(cdo->capability & ~cdi->mask & arg))
+			if (!CDROM_CAN(arg))
 				return -ENOSYS;
 		}
 		cdi->options |= (int) arg;
 		return cdi->options;
+		}
 
-	case CDROM_CLEAR_OPTIONS:
+	case CDROM_CLEAR_OPTIONS: {
 		cdinfo(CD_DO_IOCTL, "entering CDROM_CLEAR_OPTIONS\n"); 
 		cdi->options &= ~(int) arg;
 		return cdi->options;
+		}
 
 	case CDROM_SELECT_SPEED: {
 		cdinfo(CD_DO_IOCTL, "entering CDROM_SELECT_SPEED\n"); 
-		if (!(cdo->capability & ~cdi->mask & CDC_SELECT_SPEED))
+		if (!CDROM_CAN(CDC_SELECT_SPEED))
 			return -ENOSYS;
 		return cdo->select_speed(cdi, arg);
 		}
@@ -827,14 +835,14 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 	case CDROMRESET: {
 		cdinfo(CD_DO_IOCTL, "entering CDROM_RESET\n");
-		if (!(cdo->capability & ~cdi->mask & CDC_RESET))
+		if (!CDROM_CAN(CDC_RESET))
 			return -ENOSYS;
 		return cdo->reset(cdi);
 		}
 
 	case CDROM_LOCKDOOR: {
 		cdinfo(CD_DO_IOCTL, "%socking door.\n",arg?"L":"Unl");
-		if (!(cdo->capability & ~cdi->mask & CDC_LOCK)) {
+		if (!CDROM_CAN(CDC_LOCK)) {
 			return -EDRIVE_CANT_DO_THIS;
 		} else {
 			keeplocked = arg ? 1 : 0;
@@ -852,7 +860,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 	case CDROM_GET_CAPABILITY: {
 		cdinfo(CD_DO_IOCTL, "entering CDROM_GET_CAPABILITY\n");
-		return cdo->capability;
+		return (cdo->capability & ~cdi->mask);
 		}
 
 /* The following function is implemented, although very few audio
@@ -864,7 +872,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		int ret;
 		struct cdrom_mcn mcn;
 		cdinfo(CD_DO_IOCTL, "entering CDROM_GET_MCN\n"); 
-		if (!(cdo->capability & CDC_MCN))
+		if (!CDROM_CAN(CDC_MCN))
 			return -ENOSYS;
 		if ((ret=cdo->get_mcn(cdi, &mcn)))
 			return ret;
@@ -875,7 +883,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 	case CDROM_DRIVE_STATUS: {
 		cdinfo(CD_DO_IOCTL, "entering CDROM_DRIVE_STATUS\n"); 
-		if (!(cdo->capability & CDC_DRIVE_STATUS))
+		if (!CDROM_CAN(CDC_DRIVE_STATUS))
 			return -ENOSYS;
                 if ((arg == CDSL_CURRENT) || (arg == CDSL_NONE)) 
 			return cdo->drive_status(cdi, arg);
@@ -952,7 +960,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 
 #define CHECKAUDIO if ((ret=check_for_audio_disc(cdi, cdo))) return ret
 
-	if (!(cdo->capability & CDC_PLAY_AUDIO))
+	if (!CDROM_CAN(CDC_PLAY_AUDIO))
 		return -ENOSYS;
 	else {
 		switch (cmd) {
@@ -1079,6 +1087,7 @@ int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
 {
         int pos;
 	struct cdrom_device_info *cdi;
+	char *info = cdrom_drive_info;
 	
 	if (!*lenp || (filp->f_pos && !write)) {
 		*lenp = 0;
@@ -1089,62 +1098,53 @@ int cdrom_sysctl_info(ctl_table *ctl, int write, struct file * filp,
 	
 	pos += sprintf(cdrom_drive_info+pos, "\ndrive name:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%s", cdi->name);
+	    pos += sprintf(info+pos, "\t%s", cdi->name);
 
 	pos += sprintf(cdrom_drive_info+pos, "\ndrive speed:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d", cdi->speed);
+	    pos += sprintf(info+pos, "\t%d", cdi->speed);
 
 	pos += sprintf(cdrom_drive_info+pos, "\ndrive # of slots:");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d", cdi->capacity);
+	    pos += sprintf(info+pos, "\t%d", cdi->capacity);
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan close tray:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-		((cdi->ops->capability & ~cdi->mask & CDC_CLOSE_TRAY)!=0));
+	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_CLOSE_TRAY)!=0);
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan open tray:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-		   ((cdi->ops->capability & ~cdi->mask & CDC_OPEN_TRAY)!=0));
+	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_OPEN_TRAY)!=0);
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan lock tray:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-		   ((cdi->ops->capability & ~cdi->mask & CDC_LOCK)!=0));
+	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_LOCK)!=0);
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan change speed:");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-		   ((cdi->ops->capability & ~cdi->mask & CDC_SELECT_SPEED)!=0));
+	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_SELECT_SPEED)!=0);
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan select disk:");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-		   ((cdi->ops->capability & ~cdi->mask & CDC_SELECT_DISC)!=0));
+	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_SELECT_DISC)!=0);
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan read multisession:");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-			   ((cdi->ops->capability & CDC_MULTI_SESSION)!=0));
+	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_MULTI_SESSION)!=0);
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan read MCN:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-			   ((cdi->ops->capability & CDC_MCN)!=0));
+	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_MCN)!=0);
 
 	pos += sprintf(cdrom_drive_info+pos, "\nReports media changed:");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-			   ((cdi->ops->capability & CDC_MEDIA_CHANGED)!=0));
+	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_MEDIA_CHANGED)!=0);
 
 	pos += sprintf(cdrom_drive_info+pos, "\nCan play audio:\t");
 	for (cdi=topCdromPtr;cdi!=NULL;cdi=cdi->next)
-	    pos += sprintf(cdrom_drive_info+pos, "\t%d",
-		   ((cdi->ops->capability & ~cdi->mask & CDC_PLAY_AUDIO)!=0));
+	    pos += sprintf(info+pos, "\t%d", CDROM_CAN(CDC_PLAY_AUDIO)!=0);
 
-        strcpy(cdrom_drive_info+pos,"\n\n");
+        strcpy(info+pos,"\n\n");
 	pos += 3;
 	if (*lenp > pos)
 		*lenp = pos;

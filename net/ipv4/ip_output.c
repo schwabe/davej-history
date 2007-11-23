@@ -320,7 +320,7 @@ void ip_queue_xmit(struct sk_buff *skb)
 		if (skb2 == NULL)
 			return;
 		if (sk)
-			skb_set_owner_w(skb, sk);
+			skb_set_owner_w(skb2, sk);
 		skb = skb2;
 		iph = skb->nh.iph;
 	}

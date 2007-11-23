@@ -94,6 +94,7 @@ extern void destroy_8023_client(struct datalink_proto *);
 
 #ifdef CONFIG_SYSCTL
 extern int sysctl_max_syn_backlog;
+extern int sysctl_ip_always_defrag;
 #endif
 
 EXPORT_SYMBOL(dev_lockct);
@@ -350,6 +351,7 @@ EXPORT_SYMBOL(tcp_regs);
 
 #ifdef CONFIG_SYSCTL
 EXPORT_SYMBOL(sysctl_max_syn_backlog);
+EXPORT_SYMBOL(sysctl_ip_always_defrag);
 #endif
 #endif
 

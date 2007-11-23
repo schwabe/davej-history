@@ -85,7 +85,8 @@ static __inline__ int ip_portfw_del(__u16 protocol, __u16 lport, __u32 laddr, __
 				(!laddr || n->laddr == laddr) &&
 				(!raddr || n->raddr == raddr) && 
 				(!rport || n->rport == rport)) {
-			list_del(entry);
+			entry = n->list.prev;
+			list_del(&n->list);
 			ip_masq_mod_dec_nent(mmod_self);
 			kfree_s(n, sizeof(struct ip_portfw));
 			MOD_DEC_USE_COUNT;

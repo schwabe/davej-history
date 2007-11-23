@@ -59,6 +59,13 @@ static	int		sa_int = 0;
 static	int		duplex = 0;
 static	int		speed = 0;
 
+MODULE_PARM(aui, "i");
+MODULE_PARM(sa_int, "i");
+MODULE_PARM(duplex, "i");
+MODULE_PARM(speed, "i");
+MODULE_PARM(debug, "i");
+EXPORT_NO_SYMBOLS;
+
 #endif
 
 

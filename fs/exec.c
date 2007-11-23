@@ -244,8 +244,8 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 	char *str;
 	mm_segment_t old_fs;
 
-	if (!p)
-		return 0;	/* bullet-proofing */
+	if ((long)p <= 0)
+		return p;	/* bullet-proofing */
 	old_fs = get_fs();
 	if (from_kmem==2)
 		set_fs(KERNEL_DS);
@@ -259,15 +259,14 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		if (!str)
 		{
 			set_fs(old_fs);
-			return 0;
-//			panic("VFS: argc is wrong");
+			return -EFAULT;
 		}
 		if (from_kmem == 1)
 			set_fs(old_fs);
-		len = strlen_user(str);	/* includes the '\0' */
-		if (!len || p < len) {	/* strlen_user() returns 0 on error */
-			set_fs(old_fs);
-			return 0;
+		len = strnlen_user(str, p);	/* includes the '\0' */
+ 		if (!len || len > p) {	/* EFAULT or E2BIG */
+ 			set_fs(old_fs);
+ 			return len ? -E2BIG : -EFAULT;
 		}
 		p -= len;
 		pos = p;
@@ -281,7 +280,7 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 			      (unsigned long *) get_free_page(GFP_USER))) {
 				if (from_kmem==2)
 					set_fs(old_fs);
-				return 0;
+				return -EFAULT;
 			}
 			bytes_to_copy = PAGE_SIZE - offset;
 			if (bytes_to_copy > len)
@@ -840,8 +839,8 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 		bprm.exec = bprm.p;
 		bprm.p = copy_strings(bprm.envc,envp,bprm.page,bprm.p,0);
 		bprm.p = copy_strings(bprm.argc,argv,bprm.page,bprm.p,0);
-		if (!bprm.p)
-			retval = -E2BIG;
+		if ((long)bprm.p < 0)
+			retval = (long)bprm.p;
 	}
 
 	if (retval >= 0)

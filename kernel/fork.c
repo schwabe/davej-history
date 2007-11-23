@@ -705,9 +705,9 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		write_lock_irq(&tasklist_lock);
 		SET_LINKS(p);
 		hash_pid(p);
-		write_unlock_irq(&tasklist_lock);
-
 		nr_tasks++;
+
+		write_unlock_irq(&tasklist_lock);
 
 		p->next_run = NULL;
 		p->prev_run = NULL;

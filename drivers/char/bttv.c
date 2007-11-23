@@ -563,7 +563,7 @@ static struct tvcard tvcards[] =
         /* MIRO PCTV pro */
         { 3, 1, 0, 2, 65551, { 2, 3, 1, 1}, {1,65537, 0, 0,10}},
 	/* ADS Technologies Channel Surfer TV (and maybe TV+FM) */
-	{ 3, 4, 2, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
+	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
         /* AVerMedia TVCapture 98 */
 	{ 3, 4, 0, 2, 15, { 2, 3, 1, 1}, { 13, 14, 11, 7, 0, 0}, 0},
         /* Aimslab VHX */

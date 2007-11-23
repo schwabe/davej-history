@@ -198,10 +198,10 @@ static struct quirk_info quirk_list[] __initdata = {
 	{ PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82441,	quirk_passive_release,	0x00 },
 	/*
 	 * Its not totally clear which chipsets are the problematic ones
-	 * This is the 82C586 variants. At the moment the 596 is an unknown
-	 * quantity 
+	 * This is the 82C586 variants.
 	 */
 	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C586_0,	quirk_isa_dma_hangs,	0x00 },
+	{ PCI_VENDOR_ID_VIA,	PCI_DEVICE_ID_VIA_82C596_0,	quirk_isa_dma_hangs,	0x00 },
 };
 
 __initfunc(void pci_quirks_init(void))

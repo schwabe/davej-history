@@ -880,6 +880,8 @@ static __u16 get_next_mport(void)
  * 	Be careful, it can be called from u-space
  */
 
+extern int sysctl_ip_always_defrag;
+
 struct ip_masq * ip_masq_new(int proto, __u32 maddr, __u16 mport, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned mflags)
 {
         struct ip_masq *ms, *mst;
@@ -910,6 +912,7 @@ struct ip_masq * ip_masq_new(int proto, __u32 maddr, __u16 mport, __u32 saddr, _
                 return NULL;
         }
 	MOD_INC_USE_COUNT;
+	sysctl_ip_always_defrag++;
         memset(ms, 0, sizeof(*ms));
 	INIT_LIST_HEAD(&ms->s_list);
 	INIT_LIST_HEAD(&ms->m_list);
@@ -1057,6 +1060,7 @@ struct ip_masq * ip_masq_new(int proto, __u32 maddr, __u16 mport, __u32 saddr, _
 mport_nono:
         kfree_s(ms, sizeof(*ms));
 
+	sysctl_ip_always_defrag--;
 	MOD_DEC_USE_COUNT;
         return NULL;
 }

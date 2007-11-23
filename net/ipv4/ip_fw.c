@@ -484,6 +484,11 @@ static int find_special(ip_chainlabel label, int *answer)
 		return 1;
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 	} else if (strcmp(label,IP_FW_LABEL_REDIRECT) == 0) {
+                extern int sysctl_ip_always_defrag;
+                static int enabled = 0;
+
+                if(!enabled)
+                        sysctl_ip_always_defrag++;
 		*answer = FW_REDIRECT;
 		return 1;
 #endif

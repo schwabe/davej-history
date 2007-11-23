@@ -44,10 +44,10 @@ void release(struct task_struct * p)
 		}
 #endif
 		free_uid(p);
-		nr_tasks--;
 		add_free_taskslot(p->tarray_ptr);
 
 		write_lock_irq(&tasklist_lock);
+		nr_tasks--;
 		unhash_pid(p);
 		REMOVE_LINKS(p);
 		write_unlock_irq(&tasklist_lock);

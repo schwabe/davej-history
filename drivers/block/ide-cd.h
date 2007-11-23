@@ -141,7 +141,9 @@ struct ide_cd_config_flags {
 				      multiples of SECTOR_SIZE when more
 				      than one interrupt is needed. */
 	__u8 seeking          : 1; /* Seeking in progress */
-	__u8 reserved         : 6;
+	__u8 audio_play       : 1; /* can do audio related commands */
+	__u8 close_tray       : 1; /* can close the tray */
+	__u8 reserved         : 4;
 	byte max_speed; 	   /* Max speed of the drive */
 };
 #define CDROM_CONFIG_FLAGS(drive) (&(((struct cdrom_info *)(drive->driver_data))->config_flags))
@@ -518,9 +520,11 @@ struct atapi_mechstat_header {
 
 #if defined(__BIG_ENDIAN_BITFIELD)
 	__u8 mech_state    : 3;
-	__u8 reserved1     : 5;
+	__u8 door_open     : 1;
+	__u8 reserved1     : 4;
 #elif defined(__LITTLE_ENDIAN_BITFIELD)
 	__u8 reserved1     : 5;
+	__u8 door_open     : 1;
 	__u8 mech_state    : 3;
 #else
 #error "Please fix <asm/byteorder.h>"

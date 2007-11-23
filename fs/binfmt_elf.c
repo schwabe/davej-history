@@ -191,13 +191,13 @@ create_elf_tables(char *p, int argc, int envc,
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
 		__put_user((elf_caddr_t)(unsigned long)p,argv++);
-		p += strlen_user(p);
+		p += strnlen_user(p, 65536);
 	}
 	__put_user(NULL, argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
 		__put_user((elf_caddr_t)(unsigned long)p,envp++);
-		p += strlen_user(p);
+		p += strnlen_user(p, 65536);
 	}
 	__put_user(NULL, envp);
 	current->mm->env_end = (unsigned long) p;
