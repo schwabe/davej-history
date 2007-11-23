@@ -87,13 +87,6 @@ static int ax25_ds_state1_machine(ax25_cb *ax25, struct sk_buff *skb, int framet
 					ax25->sk->state_change(ax25->sk);
 			}
 			ax25_dama_on(ax25);
-
-			/* according to DK4EG´s spec we are required to
-			 * send a RR RESPONSE FINAL NR=0. Please mail
-			 * <jreuter@poboxes.com> if this causes problems
-			 * with the TheNetNode DAMA Master implementation.
-			 */ 
-
 			ax25_std_enquiry_response(ax25);
 			break;
 

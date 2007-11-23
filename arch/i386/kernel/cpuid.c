@@ -150,20 +150,12 @@ int __init cpuid_init(void)
   return 0;
 }
 
-#ifdef MODULE
 static void cpuid_exit(void)
 {
 }
 
-int init_module (void)
-{
-	return cpuid_init();
-}
-void cleanup_module (void)
-{
-	cpuid_exit();
-}
-#endif
+module_init(cpuid_init);
+module_exit(cpuid_exit);
 	
 EXPORT_NO_SYMBOLS;
 

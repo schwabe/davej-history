@@ -42,15 +42,13 @@ typedef struct elevator_s
 {
 	int read_latency;
 	int write_latency;
-	int max_bomb_segments;
 	unsigned int queue_ID;
 } elevator_t;
 
 #define ELEVATOR_DEFAULTS				\
 ((elevator_t) {						\
-	128,			/* read_latency */	\
-	8192,			/* write_latency */	\
-	32,			/* max_bomb_segments */	\
+	256,			/* read_latency */	\
+	512,			/* write_latency */	\
         0                       /* queue_ID */          \
 	})
 

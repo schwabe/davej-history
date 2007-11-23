@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.107.2.13 2000/09/14 10:39:24 davem Exp $
+/* $Id: sys_sparc32.c,v 1.107.2.14 2000/10/10 04:50:50 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -2924,7 +2924,7 @@ sys32_rt_sigaction(int sig, struct sigaction32 *act, struct sigaction32 *oact,
 /*
  * count32() counts the number of arguments/envelopes
  */
-static int count32(u32 * argv)
+static int count32(u32 * argv, int max)
 {
 	int i = 0;
 
@@ -2933,9 +2933,13 @@ static int count32(u32 * argv)
 			u32 p; int error;
 
 			error = get_user(p,argv);
-			if (error) return error;
-			if (!p) break;
-			argv++; i++;
+			if (error)
+				return error;
+			if (!p)
+				break;
+			argv++;
+			if (++i > max)
+				return -E2BIG;
 		}
 	}
 	return i;
@@ -2952,18 +2956,24 @@ copy_strings32(int argc,u32 * argv,unsigned long *page,
 {
 	u32 str;
 
-	if (!p) return 0;	/* bullet-proofing */
+	if ((long)p <= 0)
+		return p;	/* bullet-proofing */
 	while (argc-- > 0) {
 		int len;
 		unsigned long pos;
 
 		get_user(str, argv+argc);
-		if (!str) panic("VFS: argc is wrong");
-		len = strlen_user((char *)A(str));	/* includes the '\0' */
-		if (p < len)	/* this shouldn't happen - 128kB */
-			return 0;
-		p -= len; pos = p;
-		while (len) {
+		if (!str)
+			return -EFAULT;
+
+		len = strnlen_user((char *)A(str), p);	/* includes the '\0' */
+		if (!len)
+			return -EFAULT;
+		if (len > p)
+			return -E2BIG;
+		p -= len;
+		pos = p;
+		while (len > 0) {
 			char *pag;
 			int offset, bytes_to_copy;
 
@@ -3010,11 +3020,11 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	bprm.java = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
-	if ((bprm.argc = count32(argv)) < 0) {
+	if ((bprm.argc = count32(argv, bprm.p / sizeof(u32))) < 0) {
 		dput(dentry);
 		return bprm.argc;
 	}
-	if ((bprm.envc = count32(envp)) < 0) {
+	if ((bprm.envc = count32(envp, bprm.p / sizeof(u32))) < 0) {
 		dput(dentry);
 		return bprm.envc;
 	}
@@ -3026,11 +3036,11 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 		bprm.exec = bprm.p;
 		bprm.p = copy_strings32(bprm.envc,envp,bprm.page,bprm.p);
 		bprm.p = copy_strings32(bprm.argc,argv,bprm.page,bprm.p);
-		if (!bprm.p)
-			retval = -E2BIG;
+		if ((long)bprm.p < 0)
+			retval = (int) bprm.p;
 	}
 
-	if(retval>=0)
+	if (retval >= 0)
 		retval = search_binary_handler(&bprm,regs);
 	if(retval>=0)
 		/* execve success */

@@ -76,11 +76,9 @@ nfsd_svc(unsigned short port, int nrservs)
 	if (error < 0)
 		goto failure;
 
-#if 0	/* Don't even pretend that TCP works. It doesn't. */
 	error = svc_makesock(serv, IPPROTO_TCP, port);
 	if (error < 0)
 		goto failure;
-#endif
 
 	nfsd_racache_init();	/* Readahead param cache */
 
@@ -142,8 +140,10 @@ nfsd(struct svc_rqst *rqstp)
 		while ((err = svc_recv(serv, rqstp,
 				       MAX_SCHEDULE_TIMEOUT)) == -EAGAIN)
 		    ;
-		if (err < 0)
-			break;
+
+                if (err < 0)
+                        break;
+
 
 		/* Lock the export hash tables for reading. */
 		exp_readlock();

@@ -877,6 +877,7 @@ static void usbin_completed(struct urb *urb)
 		mask = 0;
 		printk(KERN_ERR "usbin_completed: panic: unknown URB\n");
 	}
+	urb->dev = as->state->usbdev;
 	spin_lock_irqsave(&as->lock, flags);
 	if (!usbin_retire_desc(u, urb) &&
 	    u->flags & FLG_RUNNING &&
@@ -941,6 +942,7 @@ static void usbin_sync_completed(struct urb *urb)
 		mask = 0;
 		printk(KERN_ERR "usbin_sync_completed: panic: unknown URB\n");
 	}
+	urb->dev = as->state->usbdev;
 	spin_lock_irqsave(&as->lock, flags);
 	if (!usbin_sync_retire_desc(u, urb) &&
 	    u->flags & FLG_RUNNING &&
@@ -1233,6 +1235,7 @@ static void usbout_completed(struct urb *urb)
 		mask = 0;
 		printk(KERN_ERR "usbout_completed: panic: unknown URB\n");
 	}
+	urb->dev = as->state->usbdev;
 	spin_lock_irqsave(&as->lock, flags);
 	if (!usbout_retire_desc(u, urb) &&
 	    u->flags & FLG_RUNNING &&
@@ -1304,6 +1307,7 @@ static void usbout_sync_completed(struct urb *urb)
 		mask = 0;
 		printk(KERN_ERR "usbout_sync_completed: panic: unknown URB\n");
 	}
+	urb->dev = as->state->usbdev;
 	spin_lock_irqsave(&as->lock, flags);
 	if (!usbout_sync_retire_desc(u, urb) &&
 	    u->flags & FLG_RUNNING &&
@@ -2744,6 +2748,14 @@ static void usb_audio_parsestreaming(struct usb_audio_state *s, unsigned char *b
 	init_waitqueue_head(&as->usbin.dma.wait);
 	init_waitqueue_head(&as->usbout.dma.wait);
 	spin_lock_init(&as->lock);
+	spin_lock_init(&as->usbin.durb[0].urb.lock);
+	spin_lock_init(&as->usbin.durb[1].urb.lock);
+	spin_lock_init(&as->usbin.surb[0].urb.lock);
+	spin_lock_init(&as->usbin.surb[1].urb.lock);
+	spin_lock_init(&as->usbout.durb[0].urb.lock);
+	spin_lock_init(&as->usbout.durb[1].urb.lock);
+	spin_lock_init(&as->usbout.surb[0].urb.lock);
+	spin_lock_init(&as->usbout.surb[1].urb.lock);
 	as->state = s;
 	as->usbin.interface = asifin;
 	as->usbout.interface = asifout;

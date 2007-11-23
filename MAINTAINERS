@@ -241,9 +241,9 @@ S:	Supported
 
 DAMA SLAVE for AX.25
 P:	Joerg Reuter
-M:	jreuter@poboxes.com
-W:	http://poboxes.com/jreuter/
-W:	http://qsl.net/dl1bke/
+M:	jreuter@yaina.de
+W:	http://yaina.de/jreuter
+W:	http://www.qsl.net/dl1bke/
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 
@@ -384,6 +384,12 @@ FPU EMULATOR
 P:	Bill Metzenthen
 M:	billm@suburbia.net
 W:	http://suburbia.net/~billm/floating-point/emulator/
+S:	Maintained
+
+FRAME DIVERTER
+P:	Benoit Locher
+M:	Benoit.Locher@skf.com
+W:	http://perso.wanadoo.fr/magpie/EtherDivert.html
 S:	Maintained
 
 FRAME RELAY DLCI/FRAD (Sangoma drivers too)
@@ -1018,9 +1024,9 @@ S:	Maintained
 
 Z8530 DRIVER FOR AX.25
 P:	Joerg Reuter
-M:	jreuter@poboxes.com
-W:	http://poboxes.com/jreuter/
-W:	http://qsl.net/dl1bke/
+M:	jreuter@yaina.de
+W:	http://yaina.de/jreuter
+W:	http://www.qsl.net/dl1bke/
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 

@@ -108,6 +108,8 @@ extern inline unix_socket *unix_get_socket(struct file *filp)
 	return u_sock;
 }
 
+int unix_tot_inflight;
+
 /*
  *	Keep the number of times in flight count for the file
  *	descriptor if it is for an AF_UNIX socket.
@@ -116,15 +118,19 @@ extern inline unix_socket *unix_get_socket(struct file *filp)
 void unix_inflight(struct file *fp)
 {
 	unix_socket *s=unix_get_socket(fp);
-	if(s)
+	if (s) {
 		s->protinfo.af_unix.inflight++;
+		unix_tot_inflight++;
+	}
 }
 
 void unix_notinflight(struct file *fp)
 {
 	unix_socket *s=unix_get_socket(fp);
-	if(s)
+	if (s) {
 		s->protinfo.af_unix.inflight--;
+		unix_tot_inflight--;
+	}
 }
 
 

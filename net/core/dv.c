@@ -39,7 +39,7 @@
 #include <net/divert.h>
 #include <linux/sockios.h>
 
-const char sysctl_divert_version[32]="0.45";	/* Current version */
+const char sysctl_divert_version[32]="0.461";	/* Current version */
 
 __initfunc(void dv_init(void))
 {
@@ -446,7 +446,8 @@ int divert_ioctl(unsigned int cmd, struct divert_cf *arg)
  */
 
 #define	ETH_DIVERT_FRAME(skb) \
-	memcpy(skb->mac.ethernet, skb->dev->dev_addr, ETH_ALEN)
+	memcpy(skb->mac.ethernet, skb->dev->dev_addr, ETH_ALEN); \
+	skb->pkt_type=PACKET_HOST
 		
 void divert_frame(struct sk_buff *skb)
 {
@@ -459,7 +460,7 @@ void divert_frame(struct sk_buff *skb)
 	unsigned char			*skb_data_end=skb->data+skb->len;
 
 	/* Packet is already aimed at us, return */
-	if (!memcmp(eth, skb->dev->dev_addr, ETH_ALEN))
+	if (skb->pkt_type==PACKET_HOST)
 		return;
 	
 	/* proto is not IP, do nothing */

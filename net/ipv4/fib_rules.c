@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: policy rules.
  *
- * Version:	$Id: fib_rules.c,v 1.9 1999/03/25 10:04:23 davem Exp $
+ * Version:	$Id: fib_rules.c,v 1.9.2.1 2000/10/06 10:34:16 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -224,7 +224,7 @@ u32 fib_rules_policy(u32 saddr, struct fib_result *res, unsigned *flags)
 
 		if (addrtype == RTN_NAT) {
 			/* Packet is from  translated source; remember it */
-			saddr = (saddr&~r->r_srcmask)|r->r_srcmap;
+			saddr = r->r_srcmask ? (saddr&~r->r_srcmask)|r->r_srcmap : r->r_srcmap;
 			*flags |= RTCF_SNAT;
 		} else if (addrtype == RTN_LOCAL || r->r_srcmap == 0) {
 			/* Packet is from masqueraded source; remember it */

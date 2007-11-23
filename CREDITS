@@ -1791,10 +1791,10 @@ S: 79098 Freiburg
 S: Germany
 
 N: Joerg Reuter
-E: jreuter@poboxes.com
-W: http://poboxes.com/jreuter/
-W: http://qsl.net/dl1bke/
-D: Generic Z8530 driver, AX.25 DAMA slave implementation
+E: jreuter@yaina.de
+W: http://yaina.de/jreuter
+W: http://www.qsl.net/dl1bke/
+D: Generic Z8530 driver for AX.25, AX.25 DAMA slave implementation
 D: Several AX.25 hacks
 
 N: Francois-Rene Rideau

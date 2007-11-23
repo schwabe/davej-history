@@ -7,7 +7,7 @@ extern void unix_notinflight(struct file *fp);
 typedef struct sock unix_socket;
 extern void unix_gc(void);
 
-#define UNIX_HASH_SIZE	16
+#define UNIX_HASH_SIZE	256
 
 extern unix_socket *unix_socket_table[UNIX_HASH_SIZE+1];
 

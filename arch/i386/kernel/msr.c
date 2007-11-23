@@ -258,20 +258,12 @@ int __init msr_init(void)
   return 0;
 }
 
-#ifdef MODULE
 static void msr_exit(void)
 {
 }
 
-int init_module(void)
-{
-	return msr_init();
-}
-void cleanup_module(void)
-{
-	msr_exit();
-}
-#endif
+module_init(msr_init);
+module_exit(msr_exit);
 
 MODULE_AUTHOR("H. Peter Anvin <hpa@zytor.com>");
 MODULE_DESCRIPTION("x86 generic MSR driver");

@@ -27,6 +27,8 @@
 #ifndef _AGP_BACKEND_PRIV_H
 #define _AGP_BACKEND_PRIV_H 1
 
+#include <asm/io.h>
+
 enum aper_size_type {
 	U8_APER_SIZE,
 	U16_APER_SIZE,
@@ -119,13 +121,13 @@ struct agp_bridge_data {
 	void (*free_by_type) (agp_memory *);
 };
 
-#define OUTREG32(mmap, addr, val)   *(volatile u32 *)(mmap + (addr)) = (val)
-#define OUTREG16(mmap, addr, val)   *(volatile u16 *)(mmap + (addr)) = (val)
-#define OUTREG8 (mmap, addr, val)   *(volatile u8 *) (mmap + (addr)) = (val)
+#define OUTREG32(mmap, addr, val)   writel((val),(mmap + (addr)))
+#define OUTREG16(mmap, addr, val)   writew((val),(mmap + (addr)))
+#define OUTREG8 (mmap, addr, val)   writeb((val),(mmap + (addr)))
 
-#define INREG32(mmap, addr)         *(volatile u32 *)(mmap + (addr))
-#define INREG16(mmap, addr)         *(volatile u16 *)(mmap + (addr))
-#define INREG8 (mmap, addr)         *(volatile u8 *) (mmap + (addr))
+#define INREG32(mmap, addr)         readl(mmap + (addr))
+#define INREG16(mmap, addr)         readw(mmap + (addr))
+#define INREG8 (mmap, addr)         readb(mmap + (addr))
 
 #define CACHE_FLUSH	agp_bridge.cache_flush
 #define A_SIZE_8(x)	((aper_size_info_8 *) x)

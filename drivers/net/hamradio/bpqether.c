@@ -652,7 +652,7 @@ __initfunc(int bpq_init(void))
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
 
-MODULE_AUTHOR("Joerg Reuter DL1BKE <jreuter@lykos.oche.de>");
+MODULE_AUTHOR("Joerg Reuter DL1BKE <jreuter@yaina.de>");
 MODULE_DESCRIPTION("Transmit and receive AX.25 packets over Ethernet");
 
 int init_module(void)

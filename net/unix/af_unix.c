@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.76.2.4 2000/05/27 04:46:44 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.76.2.5 2000/10/17 09:08:37 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -110,6 +110,8 @@
 
 #define min(a,b)	(((a)<(b))?(a):(b))
 
+extern int unix_tot_inflight;
+
 int sysctl_unix_delete_delay = HZ;
 int sysctl_unix_destroy_delay = 10*HZ;
 int sysctl_unix_max_dgram_qlen = 10;
@@ -130,7 +132,6 @@ extern __inline__ unsigned unix_hash_fold(unsigned hash)
 {
 	hash ^= hash>>16;
 	hash ^= hash>>8;
-	hash ^= hash>>4;
 	return hash;
 }
 
@@ -240,7 +241,7 @@ static unix_socket *unix_find_socket_byname(struct sockaddr_un *sunname,
 {
 	unix_socket *s;
 
-	for (s=unix_socket_table[(hash^type)&0xF]; s; s=s->next)
+	for (s=unix_socket_table[(hash^type)&(UNIX_HASH_SIZE-1)]; s; s=s->next)
 	{
 		if(s->protinfo.af_unix.addr->len==len &&
 		   memcmp(s->protinfo.af_unix.addr->name, sunname, len) == 0 &&
@@ -257,7 +258,7 @@ static unix_socket *unix_find_socket_byinode(struct inode *i)
 {
 	unix_socket *s;
 
-	for (s=unix_socket_table[i->i_ino & 0xF]; s; s=s->next)
+	for (s=unix_socket_table[i->i_ino & (UNIX_HASH_SIZE - 1)]; s; s=s->next)
 	{
 		struct dentry *dentry = s->protinfo.af_unix.dentry;
 
@@ -344,7 +345,8 @@ static int unix_release_sock (unix_socket *sk)
 	 *	  What the above comment does talk about? --ANK(980817)
 	 */
 
-	unix_gc();		/* Garbage collect fds */	
+	if (unix_tot_inflight)
+		unix_gc();		/* Garbage collect fds */	
 	return 0;
 }
 	
@@ -519,7 +521,7 @@ retry:
 
 	sk->protinfo.af_unix.addr = addr;
 	unix_remove_socket(sk);
-	sk->protinfo.af_unix.list = &unix_socket_table[(addr->hash ^ sk->type)&0xF];
+	sk->protinfo.af_unix.list = &unix_socket_table[(addr->hash ^ sk->type)&(UNIX_HASH_SIZE - 1)];
 	unix_insert_socket(sk);
 	return 0;
 }
@@ -607,7 +609,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		}
 		unix_remove_socket(sk);
 		sk->protinfo.af_unix.addr = addr;
-		sk->protinfo.af_unix.list = &unix_socket_table[(hash^sk->type)&0xF];
+		sk->protinfo.af_unix.list = &unix_socket_table[(hash^sk->type)&(UNIX_HASH_SIZE - 1)];
 		unix_insert_socket(sk);
 		return 0;
 	}
@@ -628,7 +630,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 			return err;
 	}
 	unix_remove_socket(sk);
-	sk->protinfo.af_unix.list = &unix_socket_table[dentry->d_inode->i_ino & 0xF];
+	sk->protinfo.af_unix.list = &unix_socket_table[dentry->d_inode->i_ino & (UNIX_HASH_SIZE - 1)];
 	sk->protinfo.af_unix.dentry = dentry;
 	unix_insert_socket(sk);
 

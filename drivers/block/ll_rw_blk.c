@@ -312,7 +312,7 @@ static int blkelvget_ioctl(elevator_t * elevator, blkelv_ioctl_arg_t * arg)
 	output.queue_ID			= elevator->queue_ID;
 	output.read_latency		= elevator->read_latency;
 	output.write_latency		= elevator->write_latency;
-	output.max_bomb_segments	= elevator->max_bomb_segments;
+	output.max_bomb_segments	= 0;
 
 	ret = -EFAULT;
 	if (copy_to_user(arg, &output, sizeof(blkelv_ioctl_arg_t)))
@@ -336,12 +336,9 @@ static int blkelvset_ioctl(elevator_t * elevator, const blkelv_ioctl_arg_t * arg
 		goto out;
 	if (input.write_latency < 0)
 		goto out;
-	if (input.max_bomb_segments <= 0)
-		goto out;
 
 	elevator->read_latency		= input.read_latency;
 	elevator->write_latency		= input.write_latency;
-	elevator->max_bomb_segments	= input.max_bomb_segments;
 
 	ret = 0;
  out:
@@ -362,26 +359,15 @@ int blkelv_ioctl(kdev_t dev, unsigned long cmd, unsigned long arg)
 	return -EINVAL;
 }
 
-static inline int seek_to_not_starving_chunk(struct request ** req, int * lat)
+static inline struct request * seek_to_not_starving_chunk(struct request * req)
 {
-	struct request * tmp = *req;
-	int found = 0, pos = 0;
-	int last_pos = 0, __lat = *lat;
+	struct request * tmp = req;
 
-	do {
-		if (tmp->elevator_latency <= 0)
-		{
-			*req = tmp;
-			found = 1;
-			last_pos = pos;
-			if (last_pos >= __lat)
-				break;
-		}
-		pos += tmp->nr_segments;
-	} while ((tmp = tmp->next));
-	*lat -= last_pos;
+	while ((tmp = tmp->next))
+		if ((tmp->cmd != READ && tmp->cmd != WRITE) || !tmp->elevator_latency)
+			req = tmp;
 
-	return found;
+	return req;
 }
 
 #define CASE_COALESCE_BUT_FIRST_REQUEST_MAYBE_BUSY	\
@@ -434,51 +420,18 @@ static inline int seek_to_not_starving_chunk(struct request ** req, int * lat)
 #define elevator_starve_rest_of_queue(req)			\
 do {								\
 	struct request * tmp = (req);				\
-	for ((tmp) = (tmp)->next; (tmp); (tmp) = (tmp)->next)	\
-		(tmp)->elevator_latency--;			\
+	for ((tmp) = (tmp)->next; (tmp); (tmp) = (tmp)->next) {	\
+		if ((tmp)->cmd != READ && (tmp)->cmd != WRITE)	\
+			continue; 				\
+		if (--(tmp)->elevator_latency < 0)		\
+			panic("elevator_starve_rest_of_queue");	\
+	}							\
 } while (0)
 
 static inline void elevator_queue(struct request * req,
-				  struct request * tmp,
-				  int latency,
-				  struct blk_dev_struct * dev,
-				  struct request ** queue_head)
+				  struct request * tmp)
 {
-	struct request * __tmp;
-	int starving, __latency;
-
-	starving = seek_to_not_starving_chunk(&tmp, &latency);
-	__tmp = tmp;
-	__latency = latency;
-
-	for (;; tmp = tmp->next)
-	{
-		if ((latency -= tmp->nr_segments) <= 0)
-		{
-			tmp = __tmp;
-			latency = __latency - tmp->nr_segments;
-
-			if (starving)
-				break;
-
-			switch (MAJOR(req->rq_dev))
-			{
-			CASE_COALESCE_BUT_FIRST_REQUEST_MAYBE_BUSY
-				if (tmp == dev->current_request)
-			default:
-					goto link;
-			CASE_COALESCE_ALSO_FIRST_REQUEST
-			}
-
-			latency += tmp->nr_segments;
-			req->next = tmp;
-			*queue_head = req;
-			goto after_link;
-		}
-
-		if (!tmp->next)
-			break;
-
+	for (tmp = seek_to_not_starving_chunk(tmp); tmp->next; tmp = tmp->next) {
 		{
 			const int after_current = IN_ORDER(tmp,req);
 			const int before_next = IN_ORDER(req,tmp->next);
@@ -493,12 +446,8 @@ static inline void elevator_queue(struct request * req,
 		}
 	}
 
- link:
 	req->next = tmp->next;
 	tmp->next = req;
-
- after_link:
-	req->elevator_latency = latency;
 
 	elevator_starve_rest_of_queue(req);
 }
@@ -521,7 +470,6 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	short		 disk_index;
 	unsigned long flags;
 	int queue_new_request = 0;
-	int latency;
 
 	switch (major) {
 		case DAC960_MAJOR+0:
@@ -552,7 +500,7 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	if (disk_index >= 0 && disk_index < 4)
 		drive_stat_acct(req->cmd, req->nr_sectors, disk_index);
 
-	latency = get_request_latency(&dev->elevator, req->cmd);
+	req->elevator_latency = get_request_latency(&dev->elevator, req->cmd);
 
 	/*
 	 * We use the goto to reduce locking complexity
@@ -564,13 +512,12 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 		mark_buffer_clean(req->bh);
 	if (!(tmp = *current_request)) {
 		req->next = NULL;
-		req->elevator_latency = latency;
 		*current_request = req;
 		if (dev->current_request != &dev->plug)
 			queue_new_request = 1;
 		goto out;
 	}
-	elevator_queue(req, tmp, latency, dev, current_request);
+	elevator_queue(req, tmp);
 
 /* for SCSI devices, call request_fn unconditionally */
 	if (scsi_blk_major(major) ||
@@ -620,28 +567,13 @@ static inline void attempt_merge (struct request *req,
 	wake_up (&wait_for_request);
 }
 
-#define read_pendings(req)			\
-({						\
-	int __ret = 0;				\
-	struct request * tmp = (req);		\
-	do {					\
-		if (tmp->cmd == READ)		\
-		{				\
-			__ret = 1;		\
-			break;			\
-		}				\
-		tmp = tmp->next;		\
-	} while (tmp);				\
-	__ret;					\
-})
-
 void make_request(int major, int rw, struct buffer_head * bh)
 {
 	unsigned int sector, count;
 	struct request * req, * prev;
 	int rw_ahead, max_req, max_sectors, max_segments;
 	unsigned long flags;
-	int latency, starving;
+	int back, front;
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
@@ -718,8 +650,6 @@ void make_request(int major, int rw, struct buffer_head * bh)
 	max_sectors = get_max_sectors(bh->b_rdev);
 	max_segments = get_max_segments(bh->b_rdev);
 
-	latency = get_request_latency(&blk_dev[major].elevator, rw);
-
 	/*
 	 * Now we acquire the request spinlock, we have to be mega careful
 	 * not to schedule or do something nonatomic
@@ -743,33 +673,31 @@ void make_request(int major, int rw, struct buffer_head * bh)
 		 * entry may be busy being processed and we thus can't change it.
 		 */
 		if (req == blk_dev[major].current_request)
-		{
 	        	if (!(req = req->next))
 				break;
-			latency -= req->nr_segments;
-		}
 		/* fall through */
 	     CASE_COALESCE_ALSO_FIRST_REQUEST
 
-		/* avoid write-bombs to not hurt iteractiveness of reads */
-		if (rw != READ && read_pendings(req))
-			max_segments = blk_dev[major].elevator.max_bomb_segments;
-
-		starving = seek_to_not_starving_chunk(&req, &latency);
+		req = seek_to_not_starving_chunk(req);
 		prev = NULL;
+		back = front = 0;
 		do {
-			if (req->sem)
-				continue;
 			if (req->cmd != rw)
-				continue;
-			if (req->nr_sectors + count > max_sectors)
 				continue;
 			if (req->rq_dev != bh->b_rdev)
 				continue;
+			if (req->sector + req->nr_sectors == sector)
+				back = 1;
+			else if (req->sector - count == sector)
+				front = 1;
+
+			if (req->nr_sectors + count > max_sectors)
+				continue;
+			if (req->sem)
+				continue;
+
 			/* Can we add it to the end of this request? */
-			if (req->sector + req->nr_sectors == sector) {
-				if (latency - req->nr_segments < 0)
-					break;
+			if (back) {
 				if (req->bhtail->b_data + req->bhtail->b_size
 				    != bh->b_data) {
 					if (req->nr_segments < max_segments)
@@ -780,16 +708,18 @@ void make_request(int major, int rw, struct buffer_head * bh)
 				req->bhtail = bh;
 			    	req->nr_sectors += count;
 
-				/* latency stuff */
-				if ((latency -= req->nr_segments) < req->elevator_latency)
-					req->elevator_latency = latency;
 				elevator_starve_rest_of_queue(req);
 
 				/* Can we now merge this req with the next? */
 				attempt_merge(req, max_sectors, max_segments);
 			/* or to the beginning? */
-			} else if (req->sector - count == sector) {
-				if (!prev && starving)
+			} else if (front) {
+				/*
+				 * Check that we didn't seek on a starving request,
+				 * that could happen only at the first pass, thus
+				 * do that only if prev is NULL.
+				 */
+				if (!prev && ((req->cmd != READ && req->cmd != WRITE) || !req->elevator_latency))
 					break;
 				if (bh->b_data + bh->b_size
 				    != req->bh->b_data) {
@@ -805,8 +735,8 @@ void make_request(int major, int rw, struct buffer_head * bh)
 			    	req->nr_sectors += count;
 
 				/* latency stuff */
-				if (latency < --req->elevator_latency)
-					req->elevator_latency = latency;
+				--req->elevator_latency;
+
 				elevator_starve_rest_of_queue(req);
 
 				if (prev)
@@ -819,7 +749,7 @@ void make_request(int major, int rw, struct buffer_head * bh)
 		    	return;
 
 		} while (prev = req,
-			 (latency -= req->nr_segments) >= 0 && (req = req->next) != NULL);
+			 !front && !back && (req = req->next) != NULL);
 	}
 
 /* find an unused request. */

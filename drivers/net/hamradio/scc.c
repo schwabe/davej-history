@@ -19,7 +19,7 @@
 
    ********************************************************************
 
-	Copyright (c) 1993, 1998 Joerg Reuter DL1BKE
+	Copyright (c) 1993, 2000 Joerg Reuter DL1BKE
 
 	portions (c) 1993 Guido ten Dolle PE1NNZ
 
@@ -127,9 +127,9 @@
 
    vy 73,
    Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
-		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
-		Internet: jreuter@poboxes.com
-		www     : http://poboxes.com/jreuter/
+		AX-25   : DL1BKE @ DB0ABH.#BAY.DEU.EU
+		Internet: jreuter@yaina.de
+		www     : http://yaina.de/jreuter/
 */
 
 /* ----------------------------------------------------------------------- */
@@ -236,7 +236,7 @@ static unsigned char Driver_Initialized = 0;
 static int Nchips = 0;
 static io_port Vector_Latch = 0;
 
-MODULE_AUTHOR("Joerg Reuter <jreuter@poboxes.com>");
+MODULE_AUTHOR("Joerg Reuter <jreuter@yaina.de>");
 MODULE_DESCRIPTION("Network Device Driver for Z8530 based HDLC cards for Amateur Packet Radio");
 MODULE_SUPPORTED_DEVICE("scc");
 
@@ -2242,7 +2242,7 @@ int init_module(void)
 	result = scc_init();
 
 	if (result == 0)
-		printk(KERN_INFO "Copyright 1993,1998 Joerg Reuter DL1BKE (jreuter@poboxes.com)\n");
+		printk(KERN_INFO "Copyright 1993,2000 Joerg Reuter DL1BKE (jreuter@yaina.de)\n");
 		
 	return result;
 }
