@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.87.2.10 2000/09/20 01:47:40 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.87.2.11 2000/10/24 21:28:46 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -111,7 +111,7 @@
 #endif
  
 #ifdef CONFIG_NET_DIVERT
-#include <net/divert.h>
+#include <linux/divert.h>
 #endif /* CONFIG_NET_DIVERT */
  
 #ifdef CONFIG_KMOD

@@ -105,7 +105,7 @@ problem and not mine, but I'm not sure.
 Configuration
 =============
 
-You can pass kernel command line options to vesafb with
+You can pass kernel command line options to matroxfb with
 `video=matrox:option1,option2:value2,option3' (multiple options should be 
 separated by comma, values are separated from options by `:'). 
 Accepted options:

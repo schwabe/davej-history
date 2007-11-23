@@ -478,9 +478,16 @@ M:	axboe@suse.de
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 
-IDE/ATAPI TAPE/FLOPPY DRIVERS
+IDE/ATAPI TAPE DRIVERS
 P:	Gadi Oxman
 M:	Gadi Oxman <gadio@netvision.net.il>
+L:	linux-kernel@vger.kernel.org
+S:	Maintained
+
+IDE/ATAPI FLOPPY DRIVERS
+P:	Paul Bristow
+M:	Paul Bristow <paul@paulbristow.net>
+W:      http://paulbristow.net/linux
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.108.2.9 2000/09/02 01:27:51 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.108.2.10 2000/10/29 01:52:21 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -195,7 +195,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb, int force_queue)
 		TCP_SKB_CB(skb)->when = tcp_time_stamp;
 		tp->snd_nxt = TCP_SKB_CB(skb)->end_seq;
 		tp->packets_out++;
-		tcp_transmit_skb(sk, skb_clone(skb, GFP_KERNEL));
+		tcp_transmit_skb(sk, skb_clone(skb, sk->allocation));
 		if(!tcp_timer_is_set(sk, TIME_RETRANS))
 			tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 	} else {

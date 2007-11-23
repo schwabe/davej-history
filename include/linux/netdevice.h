@@ -30,9 +30,6 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
-#ifdef __KERNEL__
-#include <net/divert.h>
-#endif
 
 #include <asm/atomic.h>
 
@@ -41,6 +38,8 @@
 #include <net/profile.h>
 #endif
 #endif
+
+struct divert_blk;
 
 /*
  *	For future expansion when we will have different priorities. 

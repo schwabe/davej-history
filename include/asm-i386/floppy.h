@@ -285,8 +285,23 @@ struct fd_routine_l {
 static int FDC1 = 0x3f0;
 static int FDC2 = -1;
 
-#define FLOPPY0_TYPE	((CMOS_READ(0x10) >> 4) & 15)
-#define FLOPPY1_TYPE	(CMOS_READ(0x10) & 15)
+#define FLOPPY0_TYPE	({				\
+	unsigned long flags;				\
+	unsigned char val;				\
+	spin_lock_irqsave(&rtc_lock, flags);		\
+	val = (CMOS_READ(0x10) >> 4) & 15;		\
+	spin_unlock_irqrestore(&rtc_lock, flags);	\
+	val;						\
+})
+
+#define FLOPPY1_TYPE	({				\
+	unsigned long flags;				\
+	unsigned char val;				\
+	spin_lock_irqsave(&rtc_lock, flags);		\
+	val = CMOS_READ(0x10) & 15;			\
+	spin_unlock_irqrestore(&rtc_lock, flags);	\
+	val;						\
+})
 
 #define N_FDC 2
 #define N_DRIVE 8

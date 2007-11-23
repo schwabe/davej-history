@@ -317,6 +317,11 @@ S: 19. Wellington Road
 S: Lancaster, LA1 4DN
 S: UK, England
 
+N: Paul Bristow
+E: paul@paulbristow.net
+W: http://paulbristow.net/linux
+D: ide-floppy maintainer
+
 N: Andries Brouwer
 E: aeb@cwi.nl
 D: random Linux hacker

@@ -958,12 +958,18 @@ void isdn_ppp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buf
 				if(is->debug & 0x10)
 					printk(KERN_DEBUG "received single link compressed frame\n");
 				skb = isdn_ppp_decompress(skb,is,NULL,proto);
-				if(!skb)
+				if(!skb) {
+					printk(KERN_DEBUG "ippp: dropping LINK_COMP frame!\n");
 					return;
+				}
 				proto = isdn_ppp_strip_proto(skb);
+			} else {
+				skb = isdn_ppp_decompress(skb,is,NULL,proto);
+				if(!skb) {
+					printk(KERN_DEBUG "ippp: dropping uncompressed frame!\n");
+					return;
+				}
 			}
-			else
-				isdn_ppp_decompress(skb,is,NULL,proto);
 		}
 
 		if (proto == PPP_MP) {
@@ -1001,11 +1007,11 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 	}
 
 	if(proto == PPP_COMP) {
-		if(!lp->master)
+		if(!lp->master) {
 			skb = isdn_ppp_decompress(skb,is,is,proto);
-		else
+		} else {
 			skb = isdn_ppp_decompress(skb,is,ippp_table[((isdn_net_local *) (lp->master->priv))->ppp_slot],proto);
-
+		}
 		if(!skb) {
 			printk(KERN_DEBUG "ippp: compressed frame discarded!\n");
 			return;
@@ -1017,11 +1023,17 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 			isdn_ppp_frame_log("R-Decomp", skb->data, skb->len, 32,is->unit,lp->ppp_slot);
 		}
 	}
-	else if(is->compflags & SC_DECOMP_ON)  { /* If decomp is ON */
-		if(!lp->master)
-			isdn_ppp_decompress(skb,is,is,proto);
-		else
-			isdn_ppp_decompress(skb,is,ippp_table[((isdn_net_local *) (lp->master->priv))->ppp_slot],proto);
+	else if (is->compflags & SC_DECOMP_ON)  { /* If decomp is ON */
+		if(!lp->master) {
+			skb = isdn_ppp_decompress(skb,is,is,proto);
+		} else {
+			skb = isdn_ppp_decompress(skb,is,ippp_table[((isdn_net_local *) (lp->master->priv))->ppp_slot],proto);
+		}
+
+		if(!skb) {
+			printk(KERN_DEBUG "ippp: compressed frame discarded!\n");
+			return;
+		}
 	}
 
 	switch (proto) {
@@ -2371,14 +2383,12 @@ static struct sk_buff *isdn_ppp_decompress(struct sk_buff *skb,struct ippp_struc
 		 * single link decompression 
 		 */
 		if(!is->link_decompressor) {
-			printk(KERN_ERR "ippp: no link decompressor defined!\n");
-			dev_kfree_skb(skb);
-			return NULL;
+			printk(KERN_DEBUG "ippp: no link decompressor defined!\n");
+			return skb;
 		}
 		if(!is->link_decomp_stat) {
 			printk(KERN_DEBUG "ippp: no link decompressor data allocated\n");
-			dev_kfree_skb(skb);
-			return NULL;
+			return skb;
 		}
 		stat = is->link_decomp_stat;
 		ipc = is->link_decompressor;
@@ -2389,14 +2399,12 @@ static struct sk_buff *isdn_ppp_decompress(struct sk_buff *skb,struct ippp_struc
 		 * 'normal' or bundle-compression 
 		 */
 		if(!master->decompressor) {
-			printk(KERN_ERR "ippp: no decompressor defined!\n");
-			dev_kfree_skb(skb);
-			return NULL;
+			printk(KERN_DEBUG "ippp: no decompressor defined!\n");
+			return skb;
 		}
 		if(!master->decomp_stat) {
 			printk(KERN_DEBUG "ippp: no decompressor data allocated\n");
-			dev_kfree_skb(skb);
-			return NULL;
+			return skb;
 		}
 		stat = master->decomp_stat;
 		ipc = master->decompressor;

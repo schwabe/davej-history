@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.175.2.16 2000/06/28 04:54:17 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.175.2.17 2000/10/31 22:42:58 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1909,8 +1909,17 @@ do_rewrite:
 
 static struct sock * tcp_v4_get_sock(struct sk_buff *skb, struct tcphdr *th)
 {
-	return tcp_v4_lookup(skb->nh.iph->saddr, th->source,
-			     skb->nh.iph->daddr, th->dest, skb->dev->ifindex);
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	if (IPCB(skb)->redirport)
+		return tcp_v4_proxy_lookup(th->dest, skb->nh.iph->saddr,
+					   th->source,  skb->nh.iph->daddr,
+					   skb->dev, IPCB(skb)->redirport,
+					   skb->dev->ifindex);
+	else
+#endif
+		return tcp_v4_lookup(skb->nh.iph->saddr, th->source,
+				     skb->nh.iph->daddr, th->dest,
+				     skb->dev->ifindex);
 }
 
 static void v4_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)

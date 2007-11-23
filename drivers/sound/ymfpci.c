@@ -2289,6 +2289,7 @@ ymf_install(struct pci_dev *pcidev, int instance, int devx)
 	/* register /dev/dsp */
 	if ((codec->dev_audio = register_sound_dsp(&ymf_fops, -1)) < 0) {
 		printk(KERN_ERR "ymfpci%d: unable to register dsp\n", codec->inst);
+		free_irq(codec->irq, codec);
 		ymfpci_free(codec);
 		return -ENODEV;
 	}
@@ -2298,6 +2299,7 @@ ymf_install(struct pci_dev *pcidev, int instance, int devx)
 	 */
 	if ((err = ymf_ac97_init(codec, 0)) != 0) {
 		unregister_sound_dsp(codec->dev_audio);
+		free_irq(codec->irq, codec);
 		ymfpci_free(codec);
 		return err;
 	}
@@ -2333,6 +2335,10 @@ ymfpci_free(ymfpci_t *codec)
 		iounmap((void *)codec->reg_area_virt);
 	if (codec->work_ptr)
 		kfree(codec->work_ptr);
+	if (codec->ac97_codec[0]) {
+		unregister_sound_mixer(codec->ac97_codec[0]->dev_mixer);
+		kfree(codec->ac97_codec[0]);
+	}
 	kfree(codec);
 }
 
@@ -2386,6 +2392,7 @@ void cleanup_module (void)
 
 	while (ymf_devs){
 		next = ymf_devs->next;
+		free_irq(ymf_devs->irq, ymf_devs);
 		ymfpci_free(ymf_devs);
 		ymf_devs = next;
 	}

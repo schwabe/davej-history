@@ -85,7 +85,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <net/br.h>
-#include <net/divert.h>
+#include <linux/divert.h>
 #include <net/dst.h>
 #include <net/pkt_sched.h>
 #include <net/profile.h>
