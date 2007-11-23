@@ -419,6 +419,7 @@ void dev_deactivate(struct device *dev)
 		for (hp = &qdisc_head.forw; (h = *hp) != &qdisc_head; hp = &h->forw) {
 			if (h == &qdisc->h) {
 				*hp = h->forw;
+				h->forw = NULL;
 				break;
 			}
 		}
