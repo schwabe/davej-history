@@ -47,16 +47,8 @@
  */
 
 #include <linux/config.h>
-#ifdef MODULE
-#ifdef MODVERSIONS
-#include <linux/modversions.h>
-#endif
 #include <linux/module.h>
 #include <linux/version.h>
-#else
-#define MOD_INC_USE_COUNT
-#define MOD_DEC_USE_COUNT
-#endif
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -68,10 +60,6 @@
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-
-#if LINUX_VERSION_CODE < 0x20155
-#include <linux/bios32.h>
-#endif
 
 #include <linux/delay.h>
 #include <asm/processor.h>
@@ -291,7 +279,7 @@ unsigned long CrcTable[256] =
 };
 
 /* function declaration ------------------------------------- */
-static int dmfe_reg_board(struct device *);
+int dmfe_reg_board(struct device *);
 static int dmfe_open(struct device *);
 static int dmfe_start_xmit(struct sk_buff *, struct device *);
 static int dmfe_stop(struct device *);

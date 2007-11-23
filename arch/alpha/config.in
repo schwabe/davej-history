@@ -33,6 +33,7 @@ choice 'Alpha system type' \
 	 EB64+			CONFIG_ALPHA_EB64P		\
 	 EB66			CONFIG_ALPHA_EB66		\
 	 EB66+			CONFIG_ALPHA_EB66P		\
+	 Eiger			CONFIG_ALPHA_EIGER		\
 	 Jensen			CONFIG_ALPHA_JENSEN		\
 	 LX164			CONFIG_ALPHA_LX164		\
 	 Miata			CONFIG_ALPHA_MIATA		\
@@ -117,7 +118,7 @@ then
 	define_bool CONFIG_ALPHA_EV5 y
 	define_bool CONFIG_ALPHA_PYXIS y
 fi
-if [ "$CONFIG_ALPHA_DP264" = "y" ]
+if [ "$CONFIG_ALPHA_DP264" = "y" -o "$CONFIG_ALPHA_EIGER" = "y" ]
 then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_EV6 y
@@ -147,7 +148,8 @@ if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_MIATA" = "y" \
 	-o "$CONFIG_ALPHA_NORITAKE" = "y" -o "$CONFIG_ALPHA_PC164" = "y" \
 	-o "$CONFIG_ALPHA_LX164" = "y" -o "$CONFIG_ALPHA_SX164" = "y" \
-	-o "$CONFIG_ALPHA_DP264" = "y" -o "$CONFIG_ALPHA_RAWHIDE" = "y" ]
+	-o "$CONFIG_ALPHA_DP264" = "y" -o "$CONFIG_ALPHA_RAWHIDE" = "y" \
+	-o "$CONFIG_ALPHA_EIGER" = "y" ]
 then
   bool 'Use SRM as bootloader' CONFIG_ALPHA_SRM
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

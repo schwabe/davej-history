@@ -652,7 +652,7 @@ static inline ssize_t do_tty_write(
 	struct inode *inode = file->f_dentry->d_inode;
 	
 	up(&inode->i_sem);
-	if (down_interruptible(&inode->i_atomic_write)) {
+	if (down_interruptible(&tty->atomic_write)) {
 		down(&inode->i_sem);
 		return -ERESTARTSYS;
 	}
@@ -682,7 +682,7 @@ static inline ssize_t do_tty_write(
 		file->f_dentry->d_inode->i_mtime = CURRENT_TIME;
 		ret = written;
 	}
-	up(&inode->i_atomic_write);
+	up(&tty->atomic_write);
 	down(&inode->i_sem);
 	return ret;
 }
@@ -1939,6 +1939,7 @@ static void initialize_tty_struct(struct tty_struct *tty)
 	tty->tq_hangup.routine = do_tty_hangup;
 	tty->tq_hangup.data = tty;
 	sema_init(&tty->atomic_read, 1);
+	sema_init(&tty->atomic_write, 1);
 }
 
 /*

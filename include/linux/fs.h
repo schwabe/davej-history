@@ -22,6 +22,7 @@
 #include <asm/atomic.h>
 #include <linux/bitops.h>
 #include <asm/cache.h>
+#include <linux/stddef.h>	/* just in case the #define NULL previously in here was needed */
 
 struct poll_table_struct;
 
@@ -64,10 +65,6 @@ extern int max_super_blocks, nr_super_blocks;
 #define WRITE 1
 #define READA 2		/* read-ahead  - don't block if no resources */
 #define WRITEA 3	/* write-ahead - don't block if no resources */
-
-#ifndef NULL
-#define NULL ((void *) 0)
-#endif
 
 #define NIL_FILP	((struct file *)0)
 #define SEL_IN		1

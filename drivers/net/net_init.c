@@ -587,7 +587,7 @@ trfound:						/* From the double loop above. */
 	memset(dev->broadcast,0xFF, TR_ALEN);
 
 	/* New-style flags. */
-	dev->flags		= IFF_BROADCAST;
+	dev->flags		= IFF_BROADCAST | IFF_MULTICAST ;
 
 	if (new_device)
 		register_netdevice(dev);

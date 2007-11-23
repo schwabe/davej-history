@@ -97,10 +97,6 @@ struct sched_param {
 	int sched_priority;
 };
 
-#ifndef NULL
-#define NULL ((void *) 0)
-#endif
-
 #ifdef __KERNEL__
 
 #include <asm/spinlock.h>

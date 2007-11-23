@@ -93,6 +93,24 @@ clipper_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 }
 
 static void
+eiger_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
+{
+	if (irq >= 16) {
+		volatile unsigned long *csr;
+
+		csr = &TSUNAMI_cchip->dim0.csr;
+		
+		*csr = ~mask;
+		mb();
+		*csr;
+	}
+	else if (irq >= 8)
+		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
+	else
+		outb(mask, 0x21);	/* ISA PIC1 */
+}
+
+static void
 dp264_device_interrupt(unsigned long vector, struct pt_regs * regs)
 {
 #if 1
@@ -169,6 +187,21 @@ clipper_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	handle_irq(irq, ack, regs);
 }
 
+static void 
+eiger_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
+{
+	int irq, ack;
+
+	ack = irq = (vector - 0x800) >> 4;
+
+	/* This is just like TAKARA rather than like the other TSUNAMIs. */
+	/* ??? Is this really correct??? */
+	if (irq > 15)     
+		ack = irq = ((vector - 0x800) >> 6) + 12;   
+
+	handle_irq(irq, ack, regs);
+}
+
 static void __init
 dp264_init_irq(void)
 {
@@ -200,6 +233,25 @@ clipper_init_irq(void)
 	clipper_update_irq_hw(16, alpha_irq_mask, 0);
 
         enable_irq(55);     /* Enable ISA interrupt controller.  */
+	enable_irq(2);
+}
+
+static void __init
+eiger_init_irq(void)
+{
+	outb(0, DMA1_RESET_REG);
+	outb(0, DMA2_RESET_REG);
+	outb(DMA_MODE_CASCADE, DMA2_MODE_REG);
+	outb(0, DMA2_MASK_REG);
+
+	if (alpha_using_srm)
+		alpha_mv.device_interrupt = eiger_srm_device_interrupt;
+
+	eiger_update_irq_hw(16, alpha_irq_mask, 0);
+
+#if 0
+        enable_irq(55);     /* Enable ISA interrupt controller.  */
+#endif
 	enable_irq(2);
 }
 
@@ -402,7 +454,6 @@ webbrick_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(webbrick_map_irq, common_swizzle);
-	SMC669_Init(0);
 }
 
 static void __init
@@ -410,6 +461,13 @@ clipper_pci_fixup(void)
 {
 	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
 	common_pci_fixup(clipper_map_irq, common_swizzle);
+}
+
+static void __init
+eiger_pci_fixup(void)
+{
+	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
+	common_pci_fixup(monet_map_irq, monet_swizzle);
 }
 
 
@@ -505,6 +563,29 @@ struct alpha_machine_vector clipper_mv __initmv = {
 	pci_fixup:		clipper_pci_fixup,
 	kill_arch:		generic_kill_arch,
 };
-
 /* No alpha_mv alias for webbrick/monet/clipper, since we compile them
    in unconditionally with DP264; setup_arch knows how to cope.  */
+
+struct alpha_machine_vector eiger_mv __initmv = {
+	vector_name:		"Eiger",
+	DO_EV6_MMU,
+	DO_DEFAULT_RTC,
+	DO_TSUNAMI_IO,
+	DO_TSUNAMI_BUS,
+	machine_check:		tsunami_machine_check,
+	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+
+	nr_irqs:		64,
+	irq_probe_mask:		_PROBE_MASK(64),
+	update_irq_hw:		eiger_update_irq_hw,
+	ack_irq:		generic_ack_irq,
+	device_interrupt:	dp264_device_interrupt,
+
+	init_arch:		tsunami_init_arch,
+	init_irq:		eiger_init_irq,
+	init_pit:		generic_init_pit,
+	pci_fixup:		eiger_pci_fixup,
+	kill_arch:		generic_kill_arch,
+};
+ALIAS_MV(eiger)
+

@@ -1698,7 +1698,7 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 	if (!rekey_time || (tv.tv_sec - rekey_time) > REKEY_INTERVAL) {
 		rekey_time = tv.tv_sec;
 		/* First three words are overwritten below. */
-		get_random_bytes(&secret+3, sizeof(secret)-12);
+		get_random_bytes(&secret[3], sizeof(secret)-12);
 		count = (tv.tv_sec/REKEY_INTERVAL) << HASH_BITS;
 	}
 
