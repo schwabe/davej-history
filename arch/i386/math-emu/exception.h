@@ -43,11 +43,11 @@
 
 #ifdef DEBUG
 #define	EXCEPTION(x)	{ printk("exception in %s at line %d\n", \
-	__FILE__, __LINE__); exception(x); }
+	__FILE__, __LINE__); FPU_exception(x); }
 #else
-#define	EXCEPTION(x)	exception(x)
+#define	EXCEPTION(x)	FPU_exception(x)
 #endif
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLY__ */ 
 
 #endif /* _EXCEPTION_H_ */

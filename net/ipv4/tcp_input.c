@@ -46,6 +46,7 @@
  *					</RANT>
  *	George Baeslack		:	SIGIO delivery on accept() bug that
  *					affected sun jdk.
+ *	Michael Deutschmann	:	Added IS_SKBs to tcp_insert_skb
  */
 
 #include <linux/config.h>
@@ -1897,6 +1898,8 @@ static inline void tcp_insert_skb(struct sk_buff * skb, struct sk_buff_head * li
 	struct sk_buff * prev, * next;
 	u32 seq;
 
+	IS_SKB_UNLINKED(skb);
+
 	/*
 	 * Find where the new skb goes.. (This goes backwards,
 	 * on the assumption that we get the packets in order)
@@ -1904,7 +1907,9 @@ static inline void tcp_insert_skb(struct sk_buff * skb, struct sk_buff_head * li
 	seq = skb->seq;
 	prev = list->prev;
 	next = (struct sk_buff *) list;
+	IS_SKB_HEAD(next);
 	for (;;) {
+		IS_SKB_LINKED(prev);
 		if (prev == (struct sk_buff *) list || !after(prev->seq, seq))
 			break;
 		next = prev;

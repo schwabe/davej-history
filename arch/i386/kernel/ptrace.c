@@ -295,67 +295,11 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 		put_long(tsk, vma, addr, data);
 	return 0;
 }
-#ifdef CONFIG_MATH_EMULATION
-static void write_emulator_word(struct task_struct *child,
-				unsigned long register_offset,
-				long data)
-{
-	int i, j;
-	struct i387_soft_struct *soft_fpu;
-	struct fpu_reg *this_fpreg, *next_fpreg;
-	char hard_reg[2][10];
-	int control_word;
-	unsigned long top;
-	i = register_offset / 10;
-	j = register_offset % 10;
-	soft_fpu = &child->tss.i387.soft;
-	top = i + (unsigned long) soft_fpu->top;
-	control_word = soft_fpu->cwd;
-	this_fpreg = &soft_fpu->regs[(top + i) % 8];
-	next_fpreg = &soft_fpu->regs[(top + i + 1) % 8];
-	softreg_to_hardreg(this_fpreg, hard_reg[0], control_word);
-	if (j > 6)
-		softreg_to_hardreg(next_fpreg, hard_reg[1], control_word);
-	*(long *) &hard_reg[0][j] = data;
-	hardreg_to_softreg(hard_reg[0], this_fpreg);
-	if (j > 6)
-		hardreg_to_softreg(hard_reg[1], next_fpreg);
-}
-#endif /* defined(CONFIG_MATH_EMULATION) */
 
 /*
  * Floating point support added to ptrace by Ramon Garcia,
  * ramon@juguete.quim.ucm.es
  */
-
-#ifdef CONFIG_MATH_EMULATION
-
-static unsigned long get_emulator_word(struct task_struct *child,
-				       unsigned long register_offset)
-{
-	char hard_reg[2][10];
-	int i, j;
-	struct fpu_reg *this_fpreg, *next_fpreg;
-	struct i387_soft_struct *soft_fpu;
-	long int control_word;
-	unsigned long top;
-	unsigned long tmp;
-	i = register_offset / 10;
-	j = register_offset % 10;
-	soft_fpu = &child->tss.i387.soft;
-	top = (unsigned long) soft_fpu->top;
-	this_fpreg = &soft_fpu->regs[(top + i) % 8];
-	next_fpreg = &soft_fpu->regs[(top + i + 1) % 8];
-	control_word = soft_fpu->cwd;
-	softreg_to_hardreg(this_fpreg, hard_reg[0], control_word);
-	if (j > 6)
-		softreg_to_hardreg(next_fpreg, hard_reg[1], control_word);
-	tmp = *(long *)
-		&hard_reg[0][j];
-	return tmp;
-}
-
-#endif /* defined(CONFIG_MATH_EMULATION) */
 
 static int putreg(struct task_struct *child,
 	unsigned long regno, unsigned long value)

@@ -65,17 +65,17 @@ static void handle_config(void)
 #endif
 
 #define GETNEXT { \
+if (next == end) \
+	break; \
 next_byte(__buf); \
 if (!__nrbuf) { \
 	__buf = *(unsigned long *) next; \
 	__nrbuf = sizeof(unsigned long); \
-	if (!__buf) \
-		break; \
 } next++; __nrbuf--; }
 #define CASE(c,label) if (current == c) goto label
 #define NOTCASE(c,label) if (current != c) goto label
 
-static void state_machine(register char *next)
+static void state_machine(register char *next, register char *end)
 {
 	for(;;) {
 	register unsigned long __buf = 0;
@@ -244,7 +244,7 @@ static void do_depend(void)
 		return;
 	}
 	close(fd);
-	state_machine(map);
+	state_machine(map, map + st.st_size);
 	munmap(map, mapsize);
 	if (hasdep)
 		puts(command);

@@ -104,4 +104,9 @@ bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
    int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
+bool 'Memory flooding' CONFIG_SADISTIC_KMALLOC
+bool 'Socket-buffer consistency checking' CONFIG_SKB_CHECK
+if [ "$CONFIG_SKB_CHECK" = "y" ]; then
+   bool '  Whole-queue checking' CONFIG_SKB_CHECK_WHOLE_QUEUE
+fi
 endmenu

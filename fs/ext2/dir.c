@@ -145,7 +145,7 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 					brelse (bha[i]);
 			}
 		}
-		
+
 revalidate:
 		/* If the dir block has changed since the last call to
 		 * readdir(2), then we might be pointing to an invalid
@@ -153,7 +153,7 @@ revalidate:
 		 * to make sure. */
 		if (filp->f_version != inode->i_version) {
 			for (i = 0; i < sb->s_blocksize && i < offset; ) {
-				de = (struct ext2_dir_entry *) 
+				de = (struct ext2_dir_entry_2 *)
 					(bh->b_data + i);
 				/* It's too expensive to do a full
 				 * dirent test each time round this
@@ -170,8 +170,8 @@ revalidate:
 				| offset;
 			filp->f_version = inode->i_version;
 		}
-		
-		while (!error && filp->f_pos < inode->i_size 
+
+		while (!error && filp->f_pos < inode->i_size
 		       && offset < sb->s_blocksize) {
 			de = (struct ext2_dir_entry_2 *) (bh->b_data + offset);
 			if (!ext2_check_dir_entry ("ext2_readdir", inode, de,

@@ -4,12 +4,12 @@
  |                                                                           |
  | Fixed point arithmetic square root evaluation.                            |
  |                                                                           |
- | Copyright (C) 1992,1993,1995                                              |
+ | Copyright (C) 1992,1993,1995,1997                                         |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
+ |                       Australia.  E-mail billm@suburbia.net               |
  |                                                                           |
  | Call from C as:                                                           |
- |   void wm_sqrt(FPU_REG *n, unsigned int control_word)                     |
+ |    int wm_sqrt(FPU_REG *n, unsigned int control_word)                     |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -70,7 +70,7 @@ FPU_fsqrt_arg_1:
 	.long	0
 FPU_fsqrt_arg_0:
 	.long	0		/* ls word, at most the ms bit is set */
-#endif /* NON_REENTRANT_FPU */
+#endif /* NON_REENTRANT_FPU */ 
 
 
 .text
@@ -92,7 +92,7 @@ ENTRY(wm_sqrt)
 
 /* We use a rough linear estimate for the first guess.. */
 
-	cmpl	EXP_BIAS,EXP(%esi)
+	cmpw	EXP_BIAS,EXP(%esi)
 	jnz	sqrt_arg_ge_2
 
 	shrl	$1,%eax			/* arg is in the range  [1.0 .. 2.0) */
@@ -224,7 +224,7 @@ sqrt_stage_2_finish:
 sqrt_stage_2_error:
 	pushl	EX_INTERNAL|0x213
 	call	EXCEPTION
-#endif /* PARANOID */
+#endif /* PARANOID */ 
 
 sqrt_stage_2_done:
 
@@ -347,9 +347,8 @@ sqrt_round_result:
 	movl	%esi,%eax
 	movl	%edi,%ebx
 	movl	PARAM1,%edi
-	movl	EXP_BIAS,EXP(%edi)	/* Result is in  [1.0 .. 2.0) */
-	movl	PARAM2,%ecx
-	jmp	fpu_reg_round_sqrt
+	movw	EXP_BIAS,EXP(%edi)	/* Result is in  [1.0 .. 2.0) */
+	jmp	fpu_reg_round
 
 
 sqrt_near_exact_x:
@@ -386,7 +385,7 @@ sqrt_near_exact:
 	call	EXCEPTION
 
 sqrt_near_exact_ok:
-#endif /* PARANOID */
+#endif /* PARANOID */ 
 
 	or	%ebx,%ebx
 	js	sqrt_near_exact_small
@@ -446,7 +445,7 @@ sqrt_get_more_precision:
 	call	EXCEPTION
 
 sqrt_more_prec_ok:
-#endif /* PARANOID */
+#endif /* PARANOID */ 
 
 	or	%ebx,%ebx
 	js	sqrt_more_prec_small

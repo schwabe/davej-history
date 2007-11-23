@@ -62,21 +62,22 @@ asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 #define get_seg_byte(seg,addr) ({ \
 register unsigned char __res; \
 __asm__("push %%fs; mov %%ax, %%fs; movb %%fs:%2, %%al; pop %%fs" \
-	: "=a" (__res)
+	: "=a" (__res) \
 	: "0" (seg), "m" (*(addr))); \
 __res;})
 
 #define get_seg_long(seg,addr) ({ \
 register unsigned long __res; \
 __asm__("push %%fs; mov %%ax, %%fs; movl %%fs:%2, %%eax; pop %%fs" \
-	: "=a" (__res)
+	: "=a" (__res) \
 	: "0" (seg), "m" (*(addr))); \
 __res;})
 
 #define _fs() ({ \
 register unsigned short __res; \
-__asm__("mov %%fs, %%ax"
-	: "=a" (__res):); \
+__asm__("mov %%fs, %%ax" \
+	: "=a" (__res) \
+	:); \
 __res;})
 
 void page_exception(void);
@@ -206,7 +207,7 @@ asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 		return;
 	}
 
-	/* 
+	/*
 	 * HACK HACK HACK  :)  Fixing the segment invalid on syscall return
 	 * barfage for 2.0 has been put into the too-hard basket but having
 	 * a user producing endless GPFs is unacceptable as well. - Paul G.
@@ -234,13 +235,13 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
 #ifdef CONFIG_SMP_NMI_INVAL
 	smp_flush_tlb_rcv();
-#else
+#else /* CONFIG_SMP_NMI_INVAL */
 #ifndef CONFIG_IGNORE_NMI
 	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
 	printk("You probably have a hardware problem with your RAM chips or a\n");
 	printk("power saving mode enabled.\n");
-#endif
-#endif
+#endif /* !CONFIG_IGNORE_NMI */
+#endif /* !CONFIG_SMP_NMI_INVAL */
 }
 
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
@@ -344,8 +345,7 @@ asmlinkage void math_state_restore(void)
 		__asm__("frstor %0"
 			:
 			: "m" (current->tss.i387));
-	else
-	{
+	else {
 		/*
 		 *	Our first FPU usage, clean the chip.
 		 */
@@ -418,8 +418,7 @@ void trap_init(void)
 	struct desc_struct * p;
 	static int smptrap=0;
 
-	if(smptrap)
-	{
+	if(smptrap) {
 		__asm__("pushfl; andl $0xffffbfff, (%esp); popfl");
 		load_ldt(0);
 		return;

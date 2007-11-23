@@ -3,17 +3,8 @@
 
 #include <asm/sigcontext.h>
 
-void restore_i387_soft(struct _fpstate *buf);
-struct _fpstate * save_i387_soft(struct _fpstate * buf);
-
-struct fpu_reg {
-	char sign;
-	char tag;
-	long exp;
-	unsigned sigl;
-	unsigned sigh;
-};
-
+int restore_i387_soft(void *s387, struct _fpstate *buf);
+int save_i387_soft(void *s387, struct _fpstate * buf);
 
 /* This structure matches the layout of the data saved to the stack
    following a device-not-present interrupt, part of it saved
@@ -44,14 +35,5 @@ struct info {
 	long ___vm86_fs;
 	long ___vm86_gs;
 };
-
-/* Interface for converting data between the emulator format
- * and the hardware format. Used for core dumping and for
- * ptrace(2) */
-void hardreg_to_softreg(const char hardreg[10],
-			      struct fpu_reg *soft_reg);
-
-void softreg_to_hardreg(const struct fpu_reg *rp, char d[10],
-			long int control_word);
 
 #endif

@@ -34,7 +34,12 @@ The magic table is current to Linux 1.3.98.
 					<mec@duracef.shout.net>
 					6 May 1996
 
+Added SKB-debugging values.  Note that they only appear under 
+CONFIG_SKB_CHECK, and are 12 bytes inside the structure.
 
+					Michael Deutschmann
+					<michael@talamasca.ocis.net>
+					2000-07-24
 
 Magic Name          Number      Structure            File
 ===========================================================================
@@ -60,4 +65,7 @@ STL_BOARDMAGIC      0xa2267f52  stlbrd_t             include/linux/stallion.h
 STL_PORTMAGIC       0x5a7182c9  stlport_t            include/linux/stallion.h
 PCXX_MAGIC          0x5c6df104  struct channel       drivers/char/pcxx.h
 BAYCOM_MAGIC        0x3105bac0  struct baycom_state  drivers/char/baycom.c
+SK_FREED_SKB        0x0de2code  struct sk_buff       include/linux/skbuff.h
+SK_GOOD_SKB         0xdec0ded1  struct sk_buff       include/linux/skbuff.h
+SK_HEAD_SKB         0x12231298  struct sk_buff_head  include/linux/skbuff.h
 

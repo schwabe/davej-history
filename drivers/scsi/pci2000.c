@@ -53,7 +53,9 @@
 #include "pci2000.h"
 #include "psi_roy.h"
 
-#include<linux/stat.h>
+#include "pci2220i.h"
+
+#include <linux/stat.h>
 
 struct proc_dir_entry Proc_Scsi_Pci2000 =
 	{ PROC_SCSI_PCI2000, 7, "pci2000", S_IFDIR | S_IRUGO | S_IXUGO, 2 };

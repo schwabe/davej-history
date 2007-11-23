@@ -1,9 +1,9 @@
 /*---------------------------------------------------------------------------+
  |  status_w.h                                                               |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,2001                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@melbpc.org.au            |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -17,6 +17,11 @@
 #else
 #define	Const__(x)	x
 #endif
+
+#define CFLAG   1
+#define PFLAG   4
+#define ZFLAG   0x40
+#define SFLAGS (CFLAG | PFLAG | ZFLAG)
 
 #define SW_Backward    	Const__(0x8000)	/* backward compatibility */
 #define SW_C3		Const__(0x4000)	/* condition bit 3 */
@@ -47,10 +52,12 @@
 #define COMP_SNaN	0x80
 
 #define status_word() \
-  ((partial_status & ~SW_Top & 0xffff) | ((top << SW_Top_Shift) & SW_Top))
+  ((partial_status & ~SW_Top & 0xffff) | ((FPU_top << SW_Top_Shift) & SW_Top))
 #define setcc(cc) ({ \
   partial_status &= ~(SW_C0|SW_C1|SW_C2|SW_C3); \
   partial_status |= (cc) & (SW_C0|SW_C1|SW_C2|SW_C3); })
+
+#define setccf(ftype,cc) { if ( ftype ) setflags((cc) >> 8); else setcc(cc); }
 
 #ifdef PECULIAR_486
    /* Default, this conveys no information, but an 80486 does it. */

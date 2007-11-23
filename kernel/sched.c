@@ -241,15 +241,15 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 {
 	int weight;
 
-#ifdef __SMP__
+#ifdef __SMP__	
 	/* We are not permitted to run a task someone else is running */
 	if (p->processor != NO_PROC_ID)
 		return -1000;
-#ifdef PAST_2_0
+#ifdef PAST_2_0		
 	/* This process is locked to a processor group */
 	if (p->processor_mask && !(p->processor_mask & (1<<this_cpu))
 		return -1000;
-#endif
+#endif		
 #endif
 
 	/*

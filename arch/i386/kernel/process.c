@@ -520,35 +520,8 @@ int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 		/* We dump the emulator state here.
 		   We convert it into standard 387 format first.. */
 #ifdef CONFIG_MATH_EMULATION
-		int i;
-		unsigned long top;
-		char (*hardreg)[10];
-		struct i387_soft_struct *soft_fpu = &current->tss.i387.soft;
-		struct fpu_reg* softreg;
-		long int control_word = soft_fpu->cwd;
-
-		fpu->cwd = soft_fpu->cwd;
-		fpu->swd = soft_fpu->swd;
-		fpu->twd = soft_fpu->twd;
-		fpu->fip = soft_fpu->fip;
-		fpu->fcs = soft_fpu->fcs;
-		fpu->foo = soft_fpu->foo;
-		fpu->fos = soft_fpu->fos;
-		hardreg = (char (*)[10]) &fpu->st_space[0];
-		top = (unsigned long) soft_fpu->top % 8;
-		softreg = &soft_fpu->regs[top];
-		for (i = top ; i < 8; i ++) {
-			softreg_to_hardreg(softreg, *hardreg, control_word);
-			hardreg++;
-			softreg++;
-		}
-		softreg = &soft_fpu->regs[0];
-		for (i = 0; i < top; i++) {
-			softreg_to_hardreg(softreg, *hardreg, control_word);
-			hardreg++;
-			softreg++;
-		}
-		fpvalid = 1;   
+		fpvalid = save_i387_soft(&current->tss.i387.soft,
+					 (struct _fpstate *)fpu);
 #else /* defined(CONFIG_MATH_EMULATION) */
 		fpvalid = 0;
 #endif /* !defined(CONFIG_MATH_EMULATION) */

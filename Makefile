@@ -300,7 +300,7 @@ modules: include/linux/version.h
 
 modules_install:
 	@( \
-	MODLIB=/lib/modules/$(VERSION).$(PATCHLEVEL).$(SUBLEVEL); \
+	MODLIB=/lib/modules/$(KERNELRELEASE); \
 	cd modules; \
 	MODULES=""; \
 	inst_mod() { These="`cat $$1`"; MODULES="$$MODULES $$These"; \

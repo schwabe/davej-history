@@ -20,8 +20,6 @@
 #include <asm/atomic.h>
 #include <asm/types.h>
 
-#define CONFIG_SKB_CHECK 0
-
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
 #define HAVE_ALIGNABLE_SKB	/* Ditto 8)		   */
 
@@ -209,9 +207,24 @@ extern __inline__ __u32 skb_queue_len(struct sk_buff_head *list_)
 extern int 			skb_check(struct sk_buff *skb,int,int, char *);
 #define IS_SKB(skb)		skb_check((skb), 0, __LINE__,__FILE__)
 #define IS_SKB_HEAD(skb)	skb_check((skb), 1, __LINE__,__FILE__)
+#define IS_SKB_LINKED(skb)	skb_check((skb), 2, __LINE__,__FILE__)
+#define IS_SKB_UNLINKED(skb)	skb_check((skb), 3, __LINE__,__FILE__)
+/* Note: IS_SKB_LINKED will accept skb_heads in addition to linked-in 
+ * data skbs */
+
+extern void __skb_queue_head(struct sk_buff_head *list, struct sk_buff *newsk);
+extern void __skb_queue_tail(struct sk_buff_head *list, struct sk_buff *newsk);
+extern struct sk_buff *__skb_dequeue(struct sk_buff_head *list);
+extern void __skb_insert(struct sk_buff *newsk,
+	struct sk_buff * prev, struct sk_buff *next,
+	struct sk_buff_head * list);
+extern void __skb_unlink(struct sk_buff *skb, struct sk_buff_head *list);
+
 #else
 #define IS_SKB(skb)		
 #define IS_SKB_HEAD(skb)	
+#define IS_SKB_LINKED(skb)	
+#define IS_SKB_UNLINKED(skb)	
 
 extern __inline__ void skb_queue_head_init(struct sk_buff_head *list)
 {

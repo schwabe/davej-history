@@ -21,9 +21,6 @@
 #include <asm/system.h>
 #include <asm/dma.h>
 
-/* Define this if you want slow routines that try to trip errors */
-#undef SADISTIC_KMALLOC
-
 /* Private flags. */
 
 #define MF_USED 0xffaa0055
@@ -295,7 +292,7 @@ found_it:
 	bucket->nbytesmalloced += size;
 	p->bh_flags = type;	/* As of now this block is officially in use */
 	p->bh_length = size;
-#ifdef SADISTIC_KMALLOC
+#if CONFIG_SADISTIC_KMALLOC
 	memset(p+1, 0xf0, size);
 #endif
 	return p + 1;		/* Pointer arithmetic: increments past header */
@@ -405,7 +402,7 @@ void kfree(void *__ptr)
 	if (ptr->bh_flags != MF_USED)
 		goto bad_order;
 	ptr->bh_flags = MF_FREE;	/* As of now this block is officially free */
-#ifdef SADISTIC_KMALLOC
+#if CONFIG_SADISTIC_KMALLOC
 	memset(ptr+1, 0xe0, ptr->bh_length);
 #endif
 	save_flags(flags);

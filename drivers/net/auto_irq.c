@@ -24,6 +24,20 @@
 
     The idea of using the setup timeout to filter out bogus IRQs came from
     the serial driver.
+
+Update 2000-09-04, by Michael Deutschmann <michael@talamasca.ocis.net>:
+    
+    The code used to rely upon freeing an IRQ handler, within the same 
+    handler.  This is not correct -- it causes the kernel to free a 
+    structure that is still in use.  
+
+    Because the read-after-free takes place with interrupts off, it's
+    probably impossible for anything else to reallocate the memory and 
+    trash the structure -- but in SADISTIC_KMALLOC mode it will crash 
+    every time.
+
+    I've fixed the code so it doesn't do that.
+
 */
 
 
@@ -52,13 +66,14 @@ static volatile int irq_number;			/* The latest irq number we actually found. */
 
 static void autoirq_probe(int irq, void *dev_id, struct pt_regs * regs)
 {
+	/* Only act on first instance of this IRQ.  We can't free the 
+	 * handler from here, so we just make sure second trips do nothing.
+	 */
+	if (test_bit(irq, (void *)&irq_bitmap)) 
+            return; 
+
 	irq_number = irq;
 	set_bit(irq, (void *)&irq_bitmap);	/* irq_bitmap |= 1 << irq; */
-	/* This code used to disable the irq. However, the interrupt stub
-	 * would then re-enable the interrupt with (potentially) disastrous
-	 * consequences
-	 */
-	free_irq(irq, dev_id);
 	return;
 }
 
@@ -101,8 +116,6 @@ int autoirq_report(int waittime)
 	while (timeout > jiffies  &&  --boguscount > 0)
 		if (irq_number)
 			break;
-
-	irq_handled &= ~irq_bitmap;	/* This eliminates the already reset handlers */
 
 	/* Retract the irq handlers that we installed. */
 	for (i = 0; i < 16; i++) {

@@ -206,6 +206,7 @@
  *		David S. Miller	:	New socket lookup architecture for ISS.
  *					This code is dedicated to John Dyson.
  *		Elliot Poger	:	Added support for SO_BINDTODEVICE.
+ *	Michael Deutschmann	:	Added some IS_SKBs in tcp_recvmsg.
  *					
  * To Fix:
  *		Fast path the code. Two things here - fix the window calculation
@@ -1652,9 +1653,11 @@ static int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 
 		current->state = TASK_INTERRUPTIBLE;
 
+		IS_SKB_HEAD((struct sk_buff *)&sk->receive_queue);
 		skb = sk->receive_queue.next;
 		while (skb != (struct sk_buff *)&sk->receive_queue)
 		{
+			IS_SKB_LINKED(skb);
 			if (before(*seq, skb->seq))
 				break;
 			offset = *seq - skb->seq;

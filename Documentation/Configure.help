@@ -4977,6 +4977,39 @@ CONFIG_MEM_STD
   split subject to kernel constraints. If you don't know how it works
   don't pick it.
 
+Memory flooding
+CONFIG_SADISTIC_KMALLOC
+  A common class of errors, both in userspace programs and the kernel,
+  is accessing memory areas after freeing them.  Programs with such
+  errors often work anyway most of the time, since the bug only bites
+  if something else happens to allocate the same area in a short time
+  window.
+  This option will cause the memory allocator to immediately destroy 
+  any data that has been freed within the kernel, causing such bugs to
+  manifest consistently so they may be solved.  Newly allocated memory
+  is also flooded, making failure-to-initialize bugs easier to detect.
+  This feature does not affect bugs in userspace programs.
+  Non-kernel hackers should say N.  If there are any such bugs in the
+  kernel, there is no point provoking them if you are not prepared to
+  fix them.  And it will run slightly slower.
+
+Socket-buffer consistency checking
+CONFIG_SKB_CHECK
+  The networking facilities of Linux use a special system of memory
+  management, known as socket buffers or SKBs.  SKB structures are
+  moderately complicated and could be corrupted by kernel bugs, later 
+  causing puzzling crashes.
+  This option causes SKBs to be rechecked almost every time they are
+  used, leading to earlier detection of such problems.  This will
+  reduce performance -- however it does not affect the likelihood of
+  the kernel crashing.  Non-kernel hackers should say N.
+
+Whole-queue checking
+CONFIG_SKB_CHECK_WHOLE_QUEUE
+  This option is an extension of CONFIG_SKB_CHECK.  Whenever a list
+  header is validated, this mode will traverse the entire list looking
+  for inconsistent pointers.
+
 # need an empty line after last entry, for sed script in Configure.
 
 #

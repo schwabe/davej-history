@@ -1,9 +1,9 @@
 /*---------------------------------------------------------------------------+
  |  fpu_system.h                                                             |
  |                                                                           |
- | Copyright (C) 1992,1994                                                   |
+ | Copyright (C) 1992,1994,1997,2001                                         |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@melbpc.org.au            |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -12,28 +12,38 @@
 
 /* system dependent definitions */
 
+#include <asm/segment.h>
+
+#include <linux/isdnif.h>  /* for copy to and from user */
+
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 
+#ifdef FPU_current
+extern struct task_struct * FPU_current;
+#else
+#define FPU_current current
+#endif
+
 /* This sets the pointer FPU_info to point to the argument part
    of the stack frame of math_emulate() */
-#define SETUP_DATA_AREA(arg)    FPU_info = (struct info *) &arg
+#define SETUP_DATA_AREA(arg)	FPU_info = (struct info *) &arg
 
-#define LDT_DESCRIPTOR(s)       (current->ldt[(s) >> 3])
-#define SEG_D_SIZE(x)           ((x).b & (3 << 21))
-#define SEG_G_BIT(x)            ((x).b & (1 << 23))
-#define SEG_GRANULARITY(x)      (((x).b & (1 << 23)) ? 4096 : 1)
-#define SEG_286_MODE(x)         ((x).b & ( 0xff000000 | 0xf0000 | (1 << 23)))
-#define SEG_BASE_ADDR(s)        (((s).b & 0xff000000) \
+#define LDT_DESCRIPTOR(s)	(FPU_current->ldt[(s) >> 3])
+#define SEG_D_SIZE(x)		((x).b & (3 << 21))
+#define SEG_G_BIT(x)		((x).b & (1 << 23))
+#define SEG_GRANULARITY(x)	(((x).b & (1 << 23)) ? 4096 : 1)
+#define SEG_286_MODE(x)		((x).b & ( 0xff000000 | 0xf0000 | (1 << 23)))
+#define SEG_BASE_ADDR(s)	(((s).b & 0xff000000) \
 				 | (((s).b & 0xff) << 16) | ((s).a >> 16))
-#define SEG_LIMIT(s)            (((s).b & 0xff0000) | ((s).a & 0xffff))
-#define SEG_EXECUTE_ONLY(s)     (((s).b & ((1 << 11) | (1 << 9))) == (1 << 11))
-#define SEG_WRITE_PERM(s)       (((s).b & ((1 << 11) | (1 << 9))) == (1 << 9))
-#define SEG_EXPAND_DOWN(s)      (((s).b & ((1 << 11) | (1 << 10))) \
+#define SEG_LIMIT(s)		(((s).b & 0xff0000) | ((s).a & 0xffff))
+#define SEG_EXECUTE_ONLY(s)	(((s).b & ((1 << 11) | (1 << 9))) == (1 << 11))
+#define SEG_WRITE_PERM(s)	(((s).b & ((1 << 11) | (1 << 9))) == (1 << 9))
+#define SEG_EXPAND_DOWN(s)	(((s).b & ((1 << 11) | (1 << 10))) \
 				 == (1 << 10))
 
-#define I387			(current->tss.i387)
+#define I387			(FPU_current->tss.i387)
 #define FPU_info		(I387.soft.info)
 
 #define FPU_CS			(*(unsigned short *) &(FPU_info->___cs))
@@ -44,27 +54,39 @@
 #define FPU_EIP			(FPU_info->___eip)
 #define FPU_ORIG_EIP		(FPU_info->___orig_eip)
 
+#define FPU_USER_CS		USER_CS
+#define FPU_USER_DS		USER_DS
+#define FPU_KERNEL_CS		KERNEL_CS
+
+#define FPU_TRACING		(FPU_current->flags & PF_PTRACED)
+
+#define FPU_SEND_SIGNAL(signal)	FPU_current->tss.trap_no = 16; \
+				FPU_current->tss.error_code = 0; \
+				send_sig(signal,FPU_current,1);
+
 #define FPU_lookahead           (I387.soft.lookahead)
+
+#define FPU_need_resched	need_resched
 
 /* nz if ip_offset and cs_selector are not to be set for the current
    instruction. */
-#define no_ip_update            (((char *)&(I387.soft.twd))[0])
-#define FPU_rm                  (((unsigned char *)&(I387.soft.twd))[1])
+#define no_ip_update		(*(u_char *)&(I387.soft.no_update))
+#define FPU_rm			(*(u_char *)&(I387.soft.rm))
 
 /* Number of bytes of data which can be legally accessed by the current
    instruction. This only needs to hold a number <= 108, so a byte will do. */
-#define access_limit            (((unsigned char *)&(I387.soft.twd))[2])
+#define access_limit		(*(u_char *)&(I387.soft.alimit))
 
-#define partial_status       	(I387.soft.swd)
+#define partial_status		(I387.soft.swd)
 #define control_word		(I387.soft.cwd)
-#define regs			(I387.soft.regs)
-#define top			(I387.soft.top)
+#define fpu_tag_word		(I387.soft.twd)
+#define registers		(I387.soft.st_space)
+#define FPU_top			(I387.soft.ftop)
 
-#define instruction_address     (*(struct address *)&I387.soft.fip)
-#define operand_address         (*(struct address *)&I387.soft.foo)
+#define instruction_address	(*(struct address *)&I387.soft.fip)
+#define operand_address		(*(struct address *)&I387.soft.foo)
 
-#define FPU_verify_area(x,y,z)  if ( verify_area(x,y,z) ) \
-                                math_abort(FPU_info,SIGSEGV)
+#define FPU_verify_area(x,y,z)	if ( verify_area(x,y,z) ) math_abort(SIGSEGV)
 
 #undef FPU_IGNORE_CODE_SEGV
 #ifdef FPU_IGNORE_CODE_SEGV
@@ -79,5 +101,23 @@
    past the upper boundary of a legal code area. */
 #define	FPU_code_verify_area(z) FPU_verify_area(VERIFY_READ,(void *)FPU_EIP,z)
 #endif
+
+#ifndef FPU_get_user
+#define FPU_get_user(x,y)       (x) = get_user(y)
+#define FPU_put_user(x,y)       put_user((x),(y))
+#define FPU_copy_from_user(x,y,z)	copy_from_user((x),(y),(z))
+#define FPU_copy_to_user(x,y,z)	copy_to_user((x),(y),(z))
+#else
+int get_user_n(void *dst, void *ptr, int n);
+#define FPU_get_user(x,y)       { unsigned long int v; \
+			get_user_n(&v, (y),sizeof(*(y))); (x) = v; }
+int put_user_n(void *src, void *ptr, int n);
+#define FPU_put_user(x,y)       { unsigned long int v = (x); \
+ 			put_user_n(&v,(y),sizeof(*(y))); }
+#define FPU_copy_from_user(x,y,n)	get_user_n((x),(y),n)
+#define FPU_copy_to_user(x,y,n)	put_user_n((x),(y),n)
+#endif
+
+#define FPU_EXIT  __asm__("movl %0,%%esp ; ret": :"g" (((long) FPU_info)-4))
 
 #endif

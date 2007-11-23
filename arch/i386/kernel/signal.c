@@ -69,7 +69,7 @@ static void restore_i387(struct _fpstate *buf)
 		restore_i387_hard(buf);
 		return;
 	}
-	restore_i387_soft(buf);
+	restore_i387_soft(&current->tss.i387.soft, buf);
 #endif	
 }
 	
@@ -152,7 +152,8 @@ static struct _fpstate * save_i387(struct _fpstate * buf)
 #else
 	if (hard_math)
 		return save_i387_hard(buf);
-	return save_i387_soft(buf);
+	save_i387_soft(&current->tss.i387.soft, buf);
+	return buf;
 #endif
 }
 

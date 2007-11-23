@@ -711,7 +711,6 @@ void cleanup_module(void)
 void ext2_statfs (struct super_block * sb, struct statfs * buf, int bufsiz)
 {
 	unsigned long overhead;
-	unsigned long overhead_per_group;
 	struct statfs tmp;
 	int ngroups, i;
 
