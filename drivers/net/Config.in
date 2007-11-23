@@ -37,6 +37,7 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
 	 bool '    Soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
 	 bool '    Soundmodem support for 4800 baud PSK modulation' CONFIG_SOUNDMODEM_PSK4800
 	 bool '    Soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
+      fi
    fi
    tristate '  Serial port KISS driver for AX.25' CONFIG_MKISS
    tristate '  BPQ Ethernet driver for AX.25' CONFIG_BPQETHER
