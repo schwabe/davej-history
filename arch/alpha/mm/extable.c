@@ -41,7 +41,7 @@ search_exception_table(unsigned long addr)
 {
 	unsigned ret;
 
-#ifndef CONFIG_MODULE
+#ifndef CONFIG_MODULES
 	/* There is only the kernel to search.  */
 	ret = search_one_table(__start___ex_table, __stop___ex_table - 1,
 			       addr - gp);

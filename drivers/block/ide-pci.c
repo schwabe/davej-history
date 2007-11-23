@@ -245,7 +245,7 @@ __initfunc(static ide_hwif_t *ide_match_hwif (unsigned long io_base, byte bootab
 				return hwif;	/* pick an unused entry */
 		}
 	}
-	for (h = 0; h < 2; ++h) {
+	for (h = 0; h < ((MAX_HWIFS >= 2) ? 2 : MAX_HWIFS); ++h) {
 		hwif = ide_hwifs + h;
 		if (hwif->chipset == ide_unknown)
 			return hwif;	/* pick an unused entry */

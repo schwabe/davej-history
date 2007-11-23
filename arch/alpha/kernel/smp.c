@@ -348,7 +348,7 @@ secondary_cpu_start(int cpuid, struct task_struct *idle)
 	hwpcb->res1 = hwpcb->res2 = 0;
 
 	DBGS(("KSP 0x%lx PTBR 0x%lx VPTBR 0x%lx UNIQUE 0x%lx\n",
-	      hwpcb->ksp, hwpcb->ptbr, hwrpb->vptb, hwcpb->unique));
+	      hwpcb->ksp, hwpcb->ptbr, hwrpb->vptb, hwpcb->unique));
 	DBGS(("Starting secondary cpu %d: state 0x%lx pal_flags 0x%lx\n",
 	      cpuid, idle->state, idle->tss.pal_flags));
 
@@ -704,7 +704,7 @@ handle_ipi(struct pt_regs *regs)
 	unsigned long *pending_ipis = &ipi_data[this_cpu].bits;
 	unsigned long ops;
 
-	DBGS(("handle_ipi: on CPU %d ops 0x%x PC 0x%lx\n",
+	DBGS(("handle_ipi: on CPU %d ops 0x%lx PC 0x%lx\n",
 	      this_cpu, *pending_ipis, regs->pc));
 
 	mb();	/* Order interrupt and bit testing. */
@@ -836,6 +836,23 @@ smp_call_function (void (*func) (void *info), void *info, int retry, int wait)
 	}
 
 	return 0;
+}
+
+static void
+ipi_imb(void *ignored)
+{
+	imb();
+}
+
+void
+smp_imb(void)
+{
+	/* Must wait for other processors to flush their icache
+	   before continuing. */
+	if (smp_call_function(ipi_imb, NULL, 1, 1))
+		printk(KERN_CRIT "smp_imb: timed out\n");
+
+	imb();
 }
 
 static void

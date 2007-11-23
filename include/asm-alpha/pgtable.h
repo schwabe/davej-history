@@ -17,14 +17,29 @@
 #include <asm/spinlock.h>	/* For the task lock */
 
 
-/* Caches aren't brain-dead on the Alpha. */
-#define flush_cache_all()			do { } while (0)
+/* The icache is not coherent with the dcache on an Alpha, thus before
+   running self modified code we must always issue an imb(). Actually
+   flush_cache_all() is real overkill as it's recalled from vmalloc() before
+   accessing pagetables and on the Alpha we are not required to flush the
+   icache before doing that, but the semantic of flush_cache_all() requires
+   us to flush _all_ the caches and so we must be correct here. It's instead
+   vmalloc that should be changed to use a more finegrained cache flush
+   operation (I suspect that also other archs doesn't need an icache flush
+   while handling pagetables). OTOH vmalloc is not a performance critical
+   path so after all we can live with it for now. */
+
+#define flush_cache_all()                      flush_icache_range(0, 0)
 #define flush_cache_mm(mm)			do { } while (0)
 #define flush_cache_range(mm, start, end)	do { } while (0)
 #define flush_cache_page(vma, vmaddr)		do { } while (0)
 #define flush_page_to_ram(page)			do { } while (0)
-#define flush_icache_range(start, end)		do { } while (0)
 #define flush_dcache_page(page)			do { } while (0)
+#ifndef __SMP__
+#define flush_icache_range(start, end)		imb()
+#else
+#define flush_icache_range(start, end)		smp_imb()
+extern void smp_imb(void);
+#endif
 
 /*
  * Use a few helper functions to hide the ugly broken ASN

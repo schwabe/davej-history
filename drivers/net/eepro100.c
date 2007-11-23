@@ -335,7 +335,7 @@ struct pci_id_info {
    Typically this takes 0 ticks. */
 static inline void wait_for_cmd_done(long cmd_ioaddr)
 {
-	int wait = 100;
+	int wait = 1000;
 	do   ;
 	while(inb(cmd_ioaddr) && --wait >= 0);
 }

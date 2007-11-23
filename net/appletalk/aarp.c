@@ -814,6 +814,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	unsigned long flags;
 	int hash;
 	struct atalk_iface *ifa;
+	int func;
 	
 	
 	/*
@@ -836,13 +837,13 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 		return 0;
 	}
 
-	ea->function=ntohs(ea->function);
+	func=ntohs(ea->function);
 	
 	/*
 	 *	Sanity check fields.
 	 */
 	 
-	if(ea->function<AARP_REQUEST || ea->function > AARP_PROBE || ea->hw_len != ETH_ALEN || ea->pa_len != AARP_PA_ALEN ||
+	if(func<AARP_REQUEST || func > AARP_PROBE || ea->hw_len != ETH_ALEN || ea->pa_len != AARP_PA_ALEN ||
 		ea->pa_src_zero != 0 || ea->pa_dst_zero != 0)
 	{
 		kfree_skb(skb);
@@ -920,7 +921,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			return 1;
 		}
 
-	switch(ea->function)
+	switch(func)
 	{
 		case AARP_REPLY:	
 			if(unresolved_count==0)	/* Speed up */
@@ -977,7 +978,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 				ma = &da;
 			}
 
-			if(ea->function==AARP_PROBE)
+			if(func==AARP_PROBE)
 			{
 				/* A probe implies someone trying to get an
 				   address. So as a precaution flush any

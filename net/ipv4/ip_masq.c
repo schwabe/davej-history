@@ -74,6 +74,7 @@
 #include <net/tcp.h>
 #include <net/udp.h>
 #include <net/checksum.h>
+#include <net/sock.h>
 #include <net/ip_masq.h>
 
 #ifdef CONFIG_IP_MASQUERADE_MOD
@@ -85,6 +86,7 @@
 #include <linux/ip_masq.h>
 
 int sysctl_ip_masq_debug = 0;
+int sysctl_ip_masq_udp_dloose = 0;
 
 /*
  *	Exported wrapper 
@@ -930,17 +932,29 @@ struct ip_masq * ip_masq_new(int proto, __u32 maddr, __u16 mport, __u32 saddr, _
 	atomic_set(&ms->n_control,0);
 	atomic_set(&ms->refcnt,0);
 
-        if (proto == IPPROTO_UDP && !mport)
-#ifdef CONFIG_IP_MASQUERADE_UDP_LOOSE
-		/*
-		 *	Flag this tunnel as "dest loose"
-		 *	
-		 */
-		ms->flags |= IP_MASQ_F_DLOOSE;
-#else
-                ms->flags |= IP_MASQ_F_NO_DADDR;
-#endif
+        if (proto == IPPROTO_UDP && !mport) {
 
+		switch( sysctl_ip_masq_udp_dloose ) {
+		case 2:
+			/*
+		 	*	Flag this tunnel as "dest loose"
+		 	*	
+		 	*/
+			ms->flags |= IP_MASQ_F_DLOOSE;
+			break;
+		case 1:
+			if( ntohs(sport) < PROT_SOCK ) {
+				ms->flags |= IP_MASQ_F_NO_DADDR;
+			}
+			else {
+				ms->flags |= IP_MASQ_F_DLOOSE;
+			}
+			break;
+		default:
+			ms->flags |= IP_MASQ_F_NO_DADDR;
+			break;
+		}
+	}
         
         /* get masq address from rif */
         ms->maddr	   = maddr;

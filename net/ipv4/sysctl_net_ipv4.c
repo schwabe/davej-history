@@ -46,6 +46,7 @@ extern int sysctl_ip_always_defrag;
 
 /* From ip_masq.c */
 extern int sysctl_ip_masq_debug;
+extern int sysctl_ip_masq_udp_dloose;
 
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
@@ -149,6 +150,8 @@ ctl_table ipv4_table[] = {
 #ifdef CONFIG_IP_MASQUERADE
 	{NET_IPV4_IP_MASQ_DEBUG, "ip_masq_debug",
 	 &sysctl_ip_masq_debug, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_IP_MASQ_UDP_DLOOSE, "ip_masq_udp_dloose",
+	 &sysctl_ip_masq_udp_dloose, sizeof(int), 0644, NULL, &proc_dointvec},
 #endif
 	{NET_IPV4_IPFRAG_TIME, "ipfrag_time",
 	 &sysctl_ipfrag_time, sizeof(int), 0644, NULL, &proc_dointvec_jiffies, 
