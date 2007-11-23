@@ -209,113 +209,6 @@ static long long mem_lseek(struct file * file, long long offset, int orig)
 	return offset;
 }
 
-/*
- * This isn't really reliable by any means..
- */
-int mem_mmap(struct file * file, struct vm_area_struct * vma)
-{
-	struct task_struct *tsk;
-	pgd_t *src_dir, *dest_dir;
-	pmd_t *src_middle, *dest_middle;
-	pte_t *src_table, *dest_table;
-	unsigned long stmp, dtmp, mapnr;
-	struct vm_area_struct *src_vma = NULL;
-	struct inode *inode = file->f_dentry->d_inode;
-	
-	/* Get the source's task information */
-
-	tsk = get_task(inode->i_ino >> 16);
-
-	if (!tsk)
-		return -ESRCH;
-
-	/* Ensure that we have a valid source area.  (Has to be mmap'ed and
-	 have valid page information.)  We can't map shared memory at the
-	 moment because working out the vm_area_struct & nattach stuff isn't
-	 worth it. */
-
-	src_vma = tsk->mm->mmap;
-	stmp = vma->vm_offset;
-	while (stmp < vma->vm_offset + (vma->vm_end - vma->vm_start)) {
-		while (src_vma && stmp > src_vma->vm_end)
-			src_vma = src_vma->vm_next;
-		if (!src_vma || (src_vma->vm_flags & VM_SHM))
-			return -EINVAL;
-
-		src_dir = pgd_offset(tsk->mm, stmp);
-		if (pgd_none(*src_dir))
-			return -EINVAL;
-		if (pgd_bad(*src_dir)) {
-			printk("Bad source page dir entry %08lx\n", pgd_val(*src_dir));
-			return -EINVAL;
-		}
-		src_middle = pmd_offset(src_dir, stmp);
-		if (pmd_none(*src_middle))
-			return -EINVAL;
-		if (pmd_bad(*src_middle)) {
-			printk("Bad source page middle entry %08lx\n", pmd_val(*src_middle));
-			return -EINVAL;
-		}
-		src_table = pte_offset(src_middle, stmp);
-		if (pte_none(*src_table))
-			return -EINVAL;
-
-		if (stmp < src_vma->vm_start) {
-			if (!(src_vma->vm_flags & VM_GROWSDOWN))
-				return -EINVAL;
-			if (src_vma->vm_end - stmp > current->rlim[RLIMIT_STACK].rlim_cur)
-				return -EINVAL;
-		}
-		stmp += PAGE_SIZE;
-	}
-
-	src_vma = tsk->mm->mmap;
-	stmp    = vma->vm_offset;
-	dtmp    = vma->vm_start;
-
-	flush_cache_range(vma->vm_mm, vma->vm_start, vma->vm_end);
-	flush_cache_range(src_vma->vm_mm, src_vma->vm_start, src_vma->vm_end);
-	while (dtmp < vma->vm_end) {
-		while (src_vma && stmp > src_vma->vm_end)
-			src_vma = src_vma->vm_next;
-
-		src_dir = pgd_offset(tsk->mm, stmp);
-		src_middle = pmd_offset(src_dir, stmp);
-		src_table = pte_offset(src_middle, stmp);
-
-		dest_dir = pgd_offset(current->mm, dtmp);
-		dest_middle = pmd_alloc(dest_dir, dtmp);
-		if (!dest_middle)
-			return -ENOMEM;
-		dest_table = pte_alloc(dest_middle, dtmp);
-		if (!dest_table)
-			return -ENOMEM;
-
-		if (!pte_present(*src_table)) {
-			if (handle_mm_fault(tsk, src_vma, stmp, 1) < 0)
-				return -ENOMEM;
-		}
-
-		if ((vma->vm_flags & VM_WRITE) && !pte_write(*src_table)) {
-			if (handle_mm_fault(tsk, src_vma, stmp, 1) < 0)
-				return -ENOMEM;
-		}
-
-		set_pte(src_table, pte_mkdirty(*src_table));
-		set_pte(dest_table, *src_table);
-		mapnr = MAP_NR(pte_page(*src_table));
-		if (mapnr < max_mapnr)
-			atomic_inc(&mem_map[MAP_NR(pte_page(*src_table))].count);
-
-		stmp += PAGE_SIZE;
-		dtmp += PAGE_SIZE;
-	}
-
-	flush_tlb_range(vma->vm_mm, vma->vm_start, vma->vm_end);
-	flush_tlb_range(src_vma->vm_mm, src_vma->vm_start, src_vma->vm_end);
-	return 0;
-}
-
 static struct file_operations proc_mem_operations = {
 	mem_lseek,
 	mem_read,
@@ -323,7 +216,7 @@ static struct file_operations proc_mem_operations = {
 	NULL,		/* mem_readdir */
 	NULL,		/* mem_poll */
 	NULL,		/* mem_ioctl */
-	mem_mmap,	/* mmap */
+	NULL,		/* mmap */
 	NULL,		/* no special open code */
 	NULL,		/* flush */
 	NULL,		/* no special release code */

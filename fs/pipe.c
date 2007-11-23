@@ -105,9 +105,17 @@ static ssize_t pipe_write(struct file * filp, const char * buf,
 	else
 		free = 1; /* can't do it atomically, wait for any free space */
 	up(&inode->i_sem);
-	if (down_interruptible(&inode->i_atomic_write)) {
-		down(&inode->i_sem);
-		return -ERESTARTSYS;
+	if (filp->f_flags & O_NONBLOCK) {
+		if (down_trylock(&inode->i_atomic_write)) {
+			down(&inode->i_sem);
+			return -ERESTARTSYS;
+		}
+	}
+	else {
+		if (down_interruptible(&inode->i_atomic_write)) {
+			down(&inode->i_sem);
+			return -ERESTARTSYS;
+		}
 	}
 	while (count>0) {
 		while ((PIPE_FREE(*inode) < free) || PIPE_LOCK(*inode)) {

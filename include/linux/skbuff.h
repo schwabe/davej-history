@@ -564,7 +564,12 @@ skb_cow(struct sk_buff *skb, unsigned int headroom)
 	headroom = (headroom+15)&~15;
 
 	if ((unsigned)skb_headroom(skb) < headroom || skb_cloned(skb)) {
-		struct sk_buff *skb2 = skb_realloc_headroom(skb, headroom);
+		struct sk_buff *skb2;
+		
+		if ((unsigned)skb_headroom(skb) < headroom)
+			skb2 = skb_realloc_headroom(skb, headroom);
+		else
+			skb2 = skb_copy(skb, GFP_ATOMIC);
 		kfree_skb(skb);
 		skb = skb2;
 	}
