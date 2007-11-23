@@ -39,6 +39,39 @@
  * Linus noticed.  -- jrs
  */
 
+static poll_table* alloc_wait(int nfds)
+{
+	poll_table* out;
+	poll_table* walk;
+
+	out = (poll_table *) __get_free_page(GFP_KERNEL);
+	if(out==NULL)
+		return NULL;
+	out->nr = 0;
+	out->entry = (struct poll_table_entry *)(out + 1);
+	out->next = NULL;
+	nfds -=__MAX_POLL_TABLE_ENTRIES;
+	walk = out;
+	while(nfds > 0) {
+		poll_table *tmp = (poll_table *) __get_free_page(GFP_KERNEL);
+		if (!tmp) {
+			while(out != NULL) {
+				tmp = out->next;
+				free_page((unsigned long)out);
+				out = tmp;
+			}
+			return NULL;
+		}
+		tmp->nr = 0;
+		tmp->entry = (struct poll_table_entry *)(tmp + 1);
+		tmp->next = NULL;
+		walk->next = tmp;
+		walk = tmp;
+		nfds -=__MAX_POLL_TABLE_ENTRIES;
+	}
+	return out;
+}
+
 static void free_wait(poll_table * p)
 {
 	struct poll_table_entry * entry;
@@ -63,7 +96,6 @@ void __pollwait(struct file * filp, struct wait_queue ** wait_address, poll_tabl
 	for (;;) {
 		if (p->nr < __MAX_POLL_TABLE_ENTRIES) {
 			struct poll_table_entry * entry;
-ok_table:
 		 	entry = p->entry + p->nr;
 		 	entry->filp = filp;
 		 	filp->f_count++;
@@ -73,17 +105,6 @@ ok_table:
 			add_wait_queue(wait_address,&entry->wait);
 			p->nr++;
 			return;
-		}
-		if (p->next == NULL) {
-			poll_table *tmp = (poll_table *) __get_free_page(GFP_KERNEL);
-			if (!tmp)
-				return;
-			tmp->nr = 0;
-			tmp->entry = (struct poll_table_entry *)(tmp + 1);
-			tmp->next = NULL;
-			p->next = tmp;
-			p = tmp;
-			goto ok_table;
 		}
 		p = p->next;
 	}
@@ -154,23 +175,21 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 	long __timeout = *timeout;
 
 	wait = wait_table = NULL;
-	if (__timeout) {
-		wait_table = (poll_table *) __get_free_page(GFP_KERNEL);
-		if (!wait_table)
-			return -ENOMEM;
-
-		wait_table->nr = 0;
-		wait_table->entry = (struct poll_table_entry *)(wait_table + 1);
-		wait_table->next = NULL;
-		wait = wait_table;
-	}
-
 	lock_kernel();
 
 	retval = max_select_fd(n, fds);
 	if (retval < 0)
 		goto out;
 	n = retval;
+	if (__timeout) {
+		retval = -ENOMEM;
+		wait_table = alloc_wait(n);
+		if (!wait_table)
+			goto out;
+
+		wait = wait_table;
+	}
+
 	retval = 0;
 	for (;;) {
 		current->state = TASK_INTERRUPTIBLE;
@@ -406,12 +425,10 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 
 	err = -ENOMEM;
 	if (timeout) {
-		wait_table = (poll_table *) __get_free_page(GFP_KERNEL);
+		wait_table = alloc_wait(nfds);
 		if (!wait_table)
 			goto out;
-		wait_table->nr = 0;
-		wait_table->entry = (struct poll_table_entry *)(wait_table + 1);
-		wait_table->next = NULL;
+
 		wait = wait_table;
 	}
 

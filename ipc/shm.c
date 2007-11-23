@@ -634,7 +634,7 @@ static unsigned long shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 	/* This can occur on a remap */
 	
 	if (idx >= shp->shm_npages) {
-		return NULL;
+		return 0;
 	}
 
 	pte = __pte(shp->shm_pages[idx]);

@@ -436,14 +436,14 @@ __initfunc(void setup_arch(char **cmdline_p,
 
 __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 {
-	unsigned int n, dummy, *v;
+	unsigned int n, dummy, *v, ecx, edx;
 
 	/* Actually we must have cpuid or we could never have
 	 * figured out that this was AMD from the vendor info :-).
 	 */
 
 	cpuid(0x80000000, &n, &dummy, &dummy, &dummy);
-	if (n < 4)
+	if (n < 0x80000004)
 		return 0;
 	cpuid(0x80000001, &dummy, &dummy, &dummy, &(c->x86_capability));
 	v = (unsigned int *) c->x86_model_id;
@@ -458,6 +458,18 @@ __initfunc(static int get_model_name(struct cpuinfo_x86 *c))
 	   ((boot_cpu_data.x86_model == 8) && 
 	    (boot_cpu_data.x86_mask >= 8)))
 		c->x86_capability |= X86_FEATURE_MTRR;
+
+	if (n >= 0x80000005){
+		cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
+			ecx>>24, edx>>24);
+		c->x86_cache_size=(ecx>>24)+(edx>>24);
+	}
+	if (n >= 0x80000006){
+		cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
+		printk("CPU: L2 Cache: %dK\n", ecx>>16);
+		c->x86_cache_size = ecx>>16;
+	}
 
 	return 1;
 }
@@ -529,14 +541,6 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 			break;
 		case 6:	/* An Athlon. We can trust the BIOS probably */
 		{
-			
-			u32 ecx, edx, dummy;
-			cpuid(0x80000005, &dummy, &dummy, &ecx, &edx);
-			printk("L1 I Cache: %dK  L1 D Cache: %dK\n",
-				ecx>>24, edx>>24);
-			cpuid(0x80000006, &dummy, &dummy, &ecx, &edx);
-			printk("L2 Cache: %dK\n", ecx>>16);
-			c->x86_cache_size = ecx>>16;
 			break;
 		}
 		

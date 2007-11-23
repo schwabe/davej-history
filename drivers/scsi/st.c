@@ -8,10 +8,10 @@
   order) Klaus Ehrenfried, Wolfgang Denk, Steve Hirsch, Andreas Koppenh"ofer,
   Michael Leodolter, Eyal Lebedinsky, J"org Weule, and Eric Youngdale.
 
-  Copyright 1992 - 1999 Kai Makisara
+  Copyright 1992 - 2000 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Tue May 18 09:29:52 1999 by makisara@home
+  Last modified: Wed Feb  2 22:04:05 2000 by makisara@kai.makisara.local
   Some small formal changes - aeb, 950809
 */
 
@@ -595,7 +595,13 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 #endif
       return (-EBUSY);
     }
+    STp->in_use = 1;
     STp->rew_at_close = (MINOR(inode->i_rdev) & 0x80) == 0;
+
+    if (scsi_tapes[dev].device->host->hostt->module)
+	__MOD_INC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+    if(st_template.module)
+	__MOD_INC_USE_COUNT(st_template.module);
 
     if (mode != STp->current_mode) {
 #if DEBUG
@@ -618,6 +624,11 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       STp->buffer = new_tape_buffer(FALSE, need_dma_buffer);
       if (STp->buffer == NULL) {
 	printk(KERN_WARNING "st%d: Can't allocate tape buffer.\n", dev);
+	STp->in_use = 0;
+	if (scsi_tapes[dev].device->host->hostt->module)
+	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
+	if(st_template.module)
+	    __MOD_DEC_USE_COUNT(st_template.module);
 	return (-EBUSY);
       }
     }
@@ -651,17 +662,15 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     STp->nbr_waits = STp->nbr_finished = 0;
 #endif
 
-    if (scsi_tapes[dev].device->host->hostt->module)
-	__MOD_INC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
-    if(st_template.module)
-	__MOD_INC_USE_COUNT(st_template.module);
-
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = TEST_UNIT_READY;
 
     SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->long_timeout, MAX_READY_RETRIES,
 		       TRUE);
     if (!SCpnt) {
+	(STp->buffer)->in_use = 0;
+	STp->buffer = NULL;
+	STp->in_use = 0;
 	if (scsi_tapes[dev].device->host->hostt->module)
 	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
 	if(st_template.module)
@@ -671,11 +680,16 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 
     if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
 	(SCpnt->sense_buffer[2] & 0x0f) == UNIT_ATTENTION) { /* New media? */
-      memset ((void *) &cmd[0], 0, 10);
-      cmd[0] = TEST_UNIT_READY;
 
-      SCpnt = st_do_scsi(SCpnt, STp, cmd, 0, STp->long_timeout, MAX_READY_RETRIES,
-			 TRUE);
+      for (i=0; i < 10; i++) {
+	  memset ((void *) &cmd[0], 0, 10);
+	  cmd[0] = TEST_UNIT_READY;
+	  SCpnt = st_do_scsi(SCpnt, STp, cmd, 0, STp->long_timeout, MAX_READY_RETRIES,
+			     TRUE);
+	  if ((SCpnt->sense_buffer[0] & 0x70) != 0x70 ||
+	      (SCpnt->sense_buffer[2] & 0x0f) != UNIT_ATTENTION)
+	      break;
+      }
 
       (STp->device)->was_reset = 0;
       STp->partition = STp->new_partition = 0;
@@ -709,7 +723,6 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       STp->ps[0].drv_file = STp->ps[0].drv_block = (-1);
       STp->partition = STp->new_partition = 0;
       STp->door_locked = ST_UNLOCKED;
-      STp->in_use = 1;
       return 0;
     }
 
@@ -787,6 +800,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	scsi_release_command(SCpnt);
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
+	STp->in_use = 0;
 	if (scsi_tapes[dev].device->host->hostt->module)
 	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
 	if(st_template.module)
@@ -820,6 +834,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       if ((flags & O_ACCMODE) == O_WRONLY || (flags & O_ACCMODE) == O_RDWR) {
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
+	STp->in_use = 0;
 	if (scsi_tapes[dev].device->host->hostt->module)
 	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
 	if(st_template.module)
@@ -837,13 +852,15 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	printk(ST_DEB_MSG "st%d: Updating partition number in status.\n", dev);
 #endif
       if ((STp->partition = find_partition(inode)) < 0) {
+	i = STp->partition;
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
+	STp->in_use = 0;
 	if (scsi_tapes[dev].device->host->hostt->module)
 	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
 	if(st_template.module)
 	    __MOD_DEC_USE_COUNT(st_template.module);
-	return STp->partition;
+	return i;
       }
       STp->new_partition = STp->partition;
       STp->nbr_partitions = 1;  /* This guess will be updated when necessary */
@@ -856,6 +873,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	  (i = set_mode_densblk(inode, STp, STm)) < 0) {
 	(STp->buffer)->in_use = 0;
 	STp->buffer = NULL;
+	STp->in_use = 0;
 	if (scsi_tapes[dev].device->host->hostt->module)
 	    __MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
 	if(st_template.module)
@@ -868,8 +886,6 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 		 dev, STp->default_drvbuffer);
       }
     }
-
-    STp->in_use = 1;
 
     return 0;
 }
@@ -898,18 +914,24 @@ scsi_tape_flush(struct file * filp)
     STm = &(STp->modes[STp->current_mode]);
     STps = &(STp->ps[STp->partition]);
 
+    if ( STps->rw == ST_WRITING && !(STp->device)->was_reset) {
+      result = flush_write_buffer(STp);
+      if (result != 0 && result != (-ENOSPC))
+	  goto out;
+    }
+
     if (STp->can_partitions &&
-	(result = update_partition(inode)) < 0) {
+	(result2 = update_partition(inode)) < 0) {
 #if DEBUG
       if (debugging)
 	printk(ST_DEB_MSG "st%d: update_partition at close failed.\n", dev);
 #endif
+      if (result == 0)
+	  result = result2;
       goto out;
     }
 
     if ( STps->rw == ST_WRITING && !(STp->device)->was_reset) {
-
-      result = flush_write_buffer(STp);
 
 #if DEBUG
       if (debugging) {
@@ -920,41 +942,38 @@ scsi_tape_flush(struct file * filp)
       }
 #endif
 
-      if (result == 0 || result == (-ENOSPC)) {
+      memset(cmd, 0, 10);
+      cmd[0] = WRITE_FILEMARKS;
+      cmd[4] = 1 + STp->two_fm;
 
-	memset(cmd, 0, 10);
-	cmd[0] = WRITE_FILEMARKS;
-	cmd[4] = 1 + STp->two_fm;
-
-	SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->timeout, MAX_WRITE_RETRIES,
-			   TRUE);
-	if (!SCpnt)
+      SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->timeout, MAX_WRITE_RETRIES,
+			 TRUE);
+      if (!SCpnt)
 	  goto out;
 
-	if ((STp->buffer)->last_result_fatal != 0 &&
-	    ((SCpnt->sense_buffer[0] & 0x70) != 0x70 ||
-	     (SCpnt->sense_buffer[2] & 0x4f) != 0x40 ||
-	     ((SCpnt->sense_buffer[0] & 0x80) != 0 &&
-	      (SCpnt->sense_buffer[3] | SCpnt->sense_buffer[4] |
-	       SCpnt->sense_buffer[5] |
-	       SCpnt->sense_buffer[6]) == 0))) {
-	    /* Filter out successful write at EOM */
-	    scsi_release_command(SCpnt);
-	    SCpnt = NULL;
-	    printk(KERN_ERR "st%d: Error on write filemark.\n", dev);
-	    if (result == 0)
-		result = (-EIO);
-	}
-	else {
+      if ((STp->buffer)->last_result_fatal != 0 &&
+	  ((SCpnt->sense_buffer[0] & 0x70) != 0x70 ||
+	   (SCpnt->sense_buffer[2] & 0x4f) != 0x40 ||
+	   ((SCpnt->sense_buffer[0] & 0x80) != 0 &&
+	    (SCpnt->sense_buffer[3] | SCpnt->sense_buffer[4] |
+	     SCpnt->sense_buffer[5] |
+	     SCpnt->sense_buffer[6]) == 0))) {
+	  /* Filter out successful write at EOM */
+	  scsi_release_command(SCpnt);
+	  SCpnt = NULL;
+	  printk(KERN_ERR "st%d: Error on write filemark.\n", dev);
+	  if (result == 0)
+	      result = (-EIO);
+      }
+      else {
 	  scsi_release_command(SCpnt);
 	  SCpnt = NULL;
 	  if (STps->drv_file >= 0)
 	      STps->drv_file++ ;
 	  STps->drv_block = 0;
 	  if (STp->two_fm)
-	    cross_eof(STp, FALSE);
+	      cross_eof(STp, FALSE);
 	  STps->eof = ST_FM;
-	}
       }
 
 #if DEBUG

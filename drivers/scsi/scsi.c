@@ -277,6 +277,7 @@ static struct dev_info device_list[] =
 {"HP", "C2500A", "", BLIST_NOLUN},              /* scanjet iicx */
 {"YAMAHA","CDR100","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
+{"YAMAHA","CRW8424S","1.0", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"RELISYS", "Scorpio", "*", BLIST_NOLUN},	/* responds to all LUN */
 
 /*

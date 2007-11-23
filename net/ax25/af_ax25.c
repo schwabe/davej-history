@@ -96,6 +96,7 @@
  *      AX.25 038       Matthias(DG2FEF)        Small fixes to the syscall interface to make kernel
  *                                              independent of AX25_MAX_DIGIS used by applications.
  *                      Tomi(OH2BNS)            Fixed ax25_getname().
+ *                      Tomi(OH2BNS)            recvmsg() returns source not dest in msg.
  */
 
 #include <linux/config.h>
@@ -1482,16 +1483,16 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int f
 	if (msg->msg_namelen != 0) {
 		struct sockaddr_ax25 *sax = (struct sockaddr_ax25 *)msg->msg_name;
 		ax25_digi digi;
-		ax25_address dest;
+		ax25_address src;
 
-		ax25_addr_parse(skb->mac.raw+1, skb->data-skb->mac.raw-1, NULL, &dest, &digi, NULL, NULL);
+		ax25_addr_parse(skb->mac.raw+1, skb->data-skb->mac.raw-1, &src, NULL, &digi, NULL, NULL);
 
 		sax->sax25_family = AF_AX25;
 		/* We set this correctly, even though we may not let the
 		   application know the digi calls further down (because it
 		   did NOT ask to know them).  This could get political... **/
 		sax->sax25_ndigis = digi.ndigi;
-		sax->sax25_call   = dest;
+		sax->sax25_call   = src;
 
 		if (sax->sax25_ndigis != 0) {
 			int ct;

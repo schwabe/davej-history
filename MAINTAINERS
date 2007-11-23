@@ -463,6 +463,12 @@ L:	linux-joystick@atrey.karlin.mff.cuni.cz
 W:	http://www.suse.cz/development/joystick/
 S:	Maintained
 
+KCTT DRIVER FOR ANTENNA ROTORS
+P:	Jean-Paul Roubelat
+M:	jpr@f6fbb.org
+L:	linux-hams@vger.rutgers.edu
+S:	Maintained
+
 KERNEL AUTOMOUNTER (AUTOFS)
 P:	H. Peter Anvin
 M:	hpa@zytor.com
@@ -714,8 +720,8 @@ L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
 ROSE NETWORK LAYER
-P:	Frederic Rible
-M:	frible@teaser.fr
+P:	Jean-Paul Roubelat
+M:	jpr@f6fbb.org
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
@@ -920,6 +926,12 @@ X.25 NETWORK LAYER
 P:	Henner Eisen
 M:	eis@baty.hanse.de
 L:	linux-x25@vger.rutgers.edu
+S:	Maintained
+
+YAM DRIVER FOR AX.25
+P:	Jean-Paul Roubelat
+M:	jpr@f6fbb.org
+L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
 Z85230 SYNCHRONOUS DRIVER

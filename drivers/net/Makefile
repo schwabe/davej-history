@@ -864,7 +864,6 @@ else
   ifeq ($(CONFIG_LANMEDIA),m)
   CONFIG_SYNCPPP_MODULE = y
   MOD_IN_SUB_DIRS += lmc
-  M_OBJS += lmc.o
   endif
 endif
 
