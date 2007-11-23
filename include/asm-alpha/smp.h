@@ -15,6 +15,7 @@ struct cpuinfo_alpha {
 	unsigned long ipi_count;
 	unsigned long prof_multiplier;
 	unsigned long prof_counter;
+	int last_asn;
 } __cacheline_aligned;
 
 extern struct cpuinfo_alpha cpu_data[NR_CPUS];

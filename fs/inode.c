@@ -44,7 +44,7 @@
  * allowing for low-overhead inode sync() operations.
  */
 
-static LIST_HEAD(inode_in_use);
+LIST_HEAD(inode_in_use);
 static LIST_HEAD(inode_unused);
 static struct list_head inode_hashtable[HASH_SIZE];
 
