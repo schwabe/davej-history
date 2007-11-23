@@ -122,6 +122,7 @@ CONFIG_NFS_FS=y
 # CONFIG_ISO9660_FS is not set
 # CONFIG_HPFS_FS is not set
 # CONFIG_SYSV_FS is not set
+# CONFIG_AUTOFS_FS is not set
 # CONFIG_AFFS_FS is not set
 # CONFIG_UFS_FS is not set
 

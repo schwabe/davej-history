@@ -46,6 +46,7 @@
 #include <linux/genhd.h>
 #include <linux/swap.h>
 #include <linux/ctype.h>
+#include <linux/file.h>
 
 extern unsigned char aux_device_present, kbd_read_mask;
 
@@ -170,6 +171,7 @@ struct symbol_table symbol_table = {
 	X(generic_file_read),
 	X(generic_file_mmap),
 	X(generic_readpage),
+	X(__fput),
 
 	/* device registration */
 	X(register_chrdev),

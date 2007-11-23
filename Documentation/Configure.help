@@ -3211,6 +3211,17 @@ CONFIG_SYSV_FS
   Documentation/modules.txt. If you haven't heard about all of this
   before, it's safe to say N.
 
+Kernel automounter support (experimental)
+CONFIG_AUTOFS_FS
+  The automounter is a tool to automatically mount remote filesystems
+  on demand.  This implementation is partially kernel-based to reduce
+  overhead in the already-mounted case; this is unlike the BSD
+  automounter (amd), which is only in user space.  To use the
+  automounter you also need the user-space tools from
+  ftp.kernel.org:/pub/linux/daemons/autofs.  If you are not a part of
+  a fairly large, distributed network, you probably do not need an
+  automounter, and can say N here.
+
 BSD UFS filesystem support (read only)
 CONFIG_UFS_FS
   BSD and derivate versions of Unix (such as SunOS, FreeBSD, NetBSD

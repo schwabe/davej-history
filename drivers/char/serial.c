@@ -2960,7 +2960,7 @@ void cleanup_module(void)
 			release_region(rs_table[i].port, 8);
 	}
 	if (tmp_buf) {
-		free_page(tmp_buf);
+		free_page((unsigned long) tmp_buf);
 		tmp_buf = NULL;
 	}
 }

@@ -24,6 +24,7 @@
 #include <linux/ncp_fs.h>
 #include <linux/affs_fs.h>
 #include <linux/ufs_fs.h>
+#include <linux/auto_fs.h>
 #include <linux/major.h>
 
 extern void device_setup(void);
@@ -110,6 +111,9 @@ asmlinkage int sys_setup(void)
 	init_ufs_fs();
 #endif
 
+#ifdef CONFIG_AUTOFS_FS
+	init_autofs_fs();
+#endif
 	mount_root();
 	return 0;
 }
