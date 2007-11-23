@@ -13,9 +13,7 @@
 static kmem_cache_t *filp_cache;
 
 /* sysctl tunables... */
-int nr_files = 0;	/* read only */
-int nr_free_files = 0;	/* read only */
-int max_files = NR_FILE;/* tunable */
+struct files_stat_struct files_stat = {0, 0, NR_FILE};
 
 /* Free list management, if you are here you must have f_count == 0 */
 static struct file * free_filps = NULL;
@@ -26,7 +24,7 @@ static void insert_file_free(struct file *file)
 		free_filps->f_pprev = &file->f_next;
 	free_filps = file;
 	file->f_pprev = &free_filps;
-	nr_free_files++;
+	files_stat.nr_free_files++;
 }
 
 /* The list of in-use filp's must be exported (ugh...) */
@@ -72,11 +70,11 @@ struct file * get_empty_filp(void)
 	static int old_max = 0;
 	struct file * f;
 
-	if (nr_free_files > NR_RESERVED_FILES) {
+	if (files_stat.nr_free_files > NR_RESERVED_FILES) {
 	used_one:
 		f = free_filps;
 		remove_filp(f);
-		nr_free_files--;
+		files_stat.nr_free_files--;
 	new_one:
 		memset(f, 0, sizeof(*f));
 		f->f_count = 1;
@@ -89,23 +87,23 @@ struct file * get_empty_filp(void)
 	/*
 	 * Use a reserved one if we're the superuser
 	 */
-	if (nr_free_files && !current->euid)
+	if (files_stat.nr_free_files && !current->euid)
 		goto used_one;
 	/*
 	 * Allocate a new one if we're below the limit.
 	 */
-	if (nr_files < max_files) {
+	if (files_stat.nr_files < files_stat.max_files) {
 		f = kmem_cache_alloc(filp_cache, SLAB_KERNEL);
 		if (f) {
-			nr_files++;
+			files_stat.nr_files++;
 			goto new_one;
 		}
 		/* Big problems... */
 		printk("VFS: filp allocation failed\n");
 
-	} else if (max_files > old_max) {
-		printk("VFS: file-max limit %d reached\n", max_files);
-		old_max = max_files;
+	} else if (files_stat.max_files > old_max) {
+		printk("VFS: file-max limit %d reached\n", files_stat.max_files);
+		old_max = files_stat.max_files;
 	}
 	return NULL;
 }

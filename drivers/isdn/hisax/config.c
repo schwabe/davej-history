@@ -1,161 +1,9 @@
-/* $Id: config.c,v 2.44 2000/02/26 00:35:12 keil Exp $
-
+/* $Id: config.c,v 2.52 2000/10/02 17:33:43 keil Exp $
+ *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
  *
- *
- * $Log: config.c,v $
- * Revision 2.44  2000/02/26 00:35:12  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 2.43  2000/01/20 19:49:36  keil
- * Support teles 13.3c vendor version 2.1
- *
- * Revision 2.42  1999/12/19 13:09:41  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 2.41  1999/11/18 00:00:43  werner
- *
- * Added support for HFC-S+ and HFC-SP cards
- *
- * Revision 2.40  1999/10/30 13:09:45  keil
- * Version 3.3c
- *
- * Revision 2.39  1999/10/16 14:44:45  keil
- * Fix module parm if only NICCY was selected
- *
- * Revision 2.38  1999/10/14 20:25:28  keil
- * add a statistic for error monitoring
- *
- * Revision 2.37  1999/09/20 12:11:08  keil
- * Fix hang if no protocol was selected
- *
- * Revision 2.36  1999/09/07 05:43:58  werner
- *
- * Added io as parameter 0 for HFC-PCI cards, if manual selection needed.
- *
- * Revision 2.35  1999/09/04 06:35:09  keil
- * Winbond W6692 support
- *
- * Revision 2.34  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 2.33  1999/08/30 11:57:52  keil
- * Fix broken avm pcmcia
- *
- * Revision 2.32  1999/08/28 22:11:10  keil
- * __setup function should be static
- *
- * Revision 2.31  1999/08/25 16:47:43  keil
- * Support new __setup; allow to add FEATURES after register_isdn
- *
- * Revision 2.30  1999/08/05 20:43:14  keil
- * ISAR analog modem support
- *
- * Revision 2.29  1999/07/21 14:46:00  keil
- * changes from EICON certification
- *
- * Revision 2.28  1999/07/14 12:38:36  werner
- * Added changes for echo channel handling
- *
- * Revision 2.27  1999/07/12 21:05:00  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 2.26  1999/07/08 21:27:17  keil
- * version 3.2
- *
- * Revision 2.25  1999/07/05 23:51:44  werner
- * Allow limiting of available HiSax B-chans per card. Controlled by hisaxctrl
- * hisaxctrl id 10 <nr. of chans 0-2>
- *
- * Revision 2.24  1999/07/01 08:11:26  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.23  1999/02/17 10:53:02  cpetig
- * Added Hisax_closecard to exported symbols.
- * As indicated by Oliver Schoett <os@sdm.de>.
- *
- * If anyone is annoyed by exporting symbols deep inside the code, please
- * contact me.
- *
- * Revision 2.22  1999/02/04 21:41:53  keil
- * Fix printk msg
- *
- * Revision 2.21  1999/02/04 10:48:52  keil
- * Fix readstat bug
- *
- * Revision 2.20  1998/11/15 23:54:28  keil
- * changes from 2.0
- *
- * Revision 2.19  1998/08/13 23:36:18  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.18  1998/07/30 21:01:37  niemann
- * Fixed Sedlbauer Speed Fax PCMCIA missing isdnl3new
- *
- * Revision 2.17  1998/07/15 15:01:26  calle
- * Support for AVM passive PCMCIA cards:
- *    A1 PCMCIA, FRITZ!Card PCMCIA and FRITZ!Card PCMCIA 2.0
- *
- * Revision 2.16  1998/05/25 14:10:03  keil
- * HiSax 3.0
- * X.75 and leased are working again.
- *
- * Revision 2.15  1998/05/25 12:57:43  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.14  1998/04/15 16:38:25  keil
- * Add S0Box and Teles PCI support
- *
- * Revision 2.13  1998/03/09 23:19:23  keil
- * Changes for PCMCIA
- *
- * Revision 2.12  1998/02/11 17:28:02  keil
- * Niccy PnP/PCI support
- *
- * Revision 2.11  1998/02/09 21:26:13  keil
- * fix export module for 2.1
- *
- * Revision 2.10  1998/02/09 18:46:05  keil
- * Support for Sedlbauer PCMCIA (Marcus Niemann)
- *
- * Revision 2.9  1998/02/03 23:31:28  keil
- * add AMD7930 support
- *
- * Revision 2.8  1998/02/02 13:32:59  keil
- * New card support
- *
- * Revision 2.7  1998/01/31 21:41:44  keil
- * changes for newer 2.1 kernels
- *
- * Revision 2.6  1997/11/08 21:35:43  keil
- * new l1 init
- *
- * Revision 2.5  1997/11/06 17:15:08  keil
- * New 2.1 init; PCMCIA wrapper changes
- *
- * Revision 2.4  1997/10/29 19:07:52  keil
- * changes for 2.1
- *
- * Revision 2.3  1997/10/01 09:21:33  fritz
- * Removed old compatibility stuff for 2.0.X kernels.
- * From now on, this code is for 2.1.X ONLY!
- * Old stuff is still in the separate branch.
- *
- * Revision 2.2  1997/09/11 17:24:46  keil
- * Add new cards
- *
- * Revision 2.1  1997/07/27 21:41:35  keil
- * version change
- *
- * Revision 2.0  1997/06/26 11:06:28  keil
- * New card and L1 interface.
- * Eicon.Diehl Diva and Dynalink IS64PH support
- *
- * old changes removed /KKe
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 #include <linux/types.h>
@@ -198,7 +46,7 @@
  *   17 MIC card                p0=irq  p1=iobase
  *   18 ELSA Quickstep 1000PCI  no parameter
  *   19 Compaq ISDN S0 ISA card p0=irq  p1=IO0 (HSCX)  p2=IO1 (ISAC) p3=IO2
- *   20 Travers Technologies NETjet PCI card
+ *   20 Travers Technologies NETjet-S PCI card
  *   21 TELES PCI               no parameter
  *   22 Sedlbauer Speed Star    p0=irq p1=iobase
  *   23 reserved
@@ -216,6 +64,8 @@
  *   35 HFC 2BDS0 PCI           none
  *   36 Winbond 6692 PCI        none
  *   37 HFC 2BDS0 S+/SP         p0=irq p1=iobase
+ *   38 Travers Technologies NETspider-U PCI card
+ *   39 HFC 2BDS0-SP PCMCIA     p0=irq p1=iobase
  *
  * protocol can be either ISDN_PTYPE_EURO or ISDN_PTYPE_1TR6 or ISDN_PTYPE_NI1
  *
@@ -227,11 +77,11 @@ const char *CardType[] =
  "AVM A1", "Elsa ML", "Elsa Quickstep", "Teles PCMCIA", "ITK ix1-micro Rev.2",
  "Elsa PCMCIA", "Eicon.Diehl Diva", "ISDNLink", "TeleInt", "Teles 16.3c",
  "Sedlbauer Speed Card", "USR Sportster", "ith mic Linux", "Elsa PCI",
- "Compaq ISA", "NETjet", "Teles PCI", "Sedlbauer Speed Star (PCMCIA)",
+ "Compaq ISA", "NETjet-S", "Teles PCI", "Sedlbauer Speed Star (PCMCIA)",
  "AMD 7930", "NICCY", "S0Box", "AVM A1 (PCMCIA)", "AVM Fritz PnP/PCI",
  "Sedlbauer Speed Fax +", "Siemens I-Surf", "Acer P10", "HST Saphir",
  "Telekom A4T", "Scitel Quadro", "Gazel", "HFC 2BDS0 PCI", "Winbond 6692",
- "HFC 2BDS0 SX",
+ "HFC 2BDS0 SX", "NETspider-U", "HFC-2BDS0-SP PCMCIA",
 };
 
 void HiSax_closecard(int cardnr);
@@ -257,7 +107,6 @@ EXPORT_SYMBOL(elsa_init_pcmcia);
 #define DEFAULT_CFG {11,0x170,0,0}
 int avm_a1_init_pcmcia(void*, int, int*, int);
 EXPORT_SYMBOL(avm_a1_init_pcmcia);
-EXPORT_SYMBOL(HiSax_closecard);
 #endif /* CONFIG_HISAX_AVM_A1_PCMCIA */
 
 #ifdef CONFIG_HISAX_FRITZPCI
@@ -349,7 +198,7 @@ EXPORT_SYMBOL(sedl_init_pcmcia);
 #ifdef CONFIG_HISAX_NETJET
 #undef DEFAULT_CARD
 #undef DEFAULT_CFG
-#define DEFAULT_CARD ISDN_CTYPE_NETJET
+#define DEFAULT_CARD ISDN_CTYPE_NETJET_S
 #define DEFAULT_CFG {0,0,0,0}
 #endif
 
@@ -372,6 +221,8 @@ EXPORT_SYMBOL(sedl_init_pcmcia);
 #undef DEFAULT_CFG
 #define DEFAULT_CARD ISDN_CTYPE_HFC_SX
 #define DEFAULT_CFG {5,0x2E0,0,0}
+int hfc_init_pcmcia(void*, int, int*, int);
+EXPORT_SYMBOL(hfc_init_pcmcia);
 #endif
 
 
@@ -431,21 +282,28 @@ EXPORT_SYMBOL(sedl_init_pcmcia);
 #define DEFAULT_CFG {0,0,0,0}
 #endif
 
+#ifdef CONFIG_HISAX_NETJET_U
+#undef DEFAULT_CARD
+#undef DEFAULT_CFG
+#define DEFAULT_CARD ISDN_CTYPE_NETJET_U
+#define DEFAULT_CFG {0,0,0,0}
+#endif
+
 #ifdef CONFIG_HISAX_1TR6
 #define DEFAULT_PROTO ISDN_PTYPE_1TR6
 #define DEFAULT_PROTO_NAME "1TR6"
-#endif
-#ifdef CONFIG_HISAX_EURO
-#undef DEFAULT_PROTO
-#define DEFAULT_PROTO ISDN_PTYPE_EURO
-#undef DEFAULT_PROTO_NAME
-#define DEFAULT_PROTO_NAME "EURO"
 #endif
 #ifdef CONFIG_HISAX_NI1
 #undef DEFAULT_PROTO
 #define DEFAULT_PROTO ISDN_PTYPE_NI1
 #undef DEFAULT_PROTO_NAME
 #define DEFAULT_PROTO_NAME "NI1"
+#endif
+#ifdef CONFIG_HISAX_EURO
+#undef DEFAULT_PROTO
+#define DEFAULT_PROTO ISDN_PTYPE_EURO
+#undef DEFAULT_PROTO_NAME
+#define DEFAULT_PROTO_NAME "EURO"
 #endif
 #ifndef DEFAULT_PROTO
 #define DEFAULT_PROTO ISDN_PTYPE_UNKNOWN
@@ -454,6 +312,10 @@ EXPORT_SYMBOL(sedl_init_pcmcia);
 #ifndef DEFAULT_CARD
 #error "HiSax: No cards configured"
 #endif
+
+int hisax_init_pcmcia(void *, int *, struct IsdnCard *);
+EXPORT_SYMBOL(hisax_init_pcmcia);
+EXPORT_SYMBOL(HiSax_closecard);
 
 #define FIRST_CARD { \
 	DEFAULT_CARD, \
@@ -551,9 +413,9 @@ HiSaxVersion(void))
 
 	printk(KERN_INFO "HiSax: Linux Driver for passive ISDN cards\n");
 #ifdef MODULE
-	printk(KERN_INFO "HiSax: Version 3.3e (module)\n");
+	printk(KERN_INFO "HiSax: Version 3.5 (module)\n");
 #else
-	printk(KERN_INFO "HiSax: Version 3.3e (kernel)\n");
+	printk(KERN_INFO "HiSax: Version 3.5 (kernel)\n");
 #endif
 	strcpy(tmp, l1_revision);
 	printk(KERN_INFO "HiSax: Layer1 Revision %s\n", HiSax_getrev(tmp));
@@ -689,8 +551,8 @@ extern int setup_sportster(struct IsdnCard *card);
 extern int setup_mic(struct IsdnCard *card);
 #endif
 
-#if CARD_NETJET
-extern int setup_netjet(struct IsdnCard *card);
+#if CARD_NETJET_S
+extern int setup_netjet_s(struct IsdnCard *card);
 #endif
 
 #if CARD_HFCS
@@ -739,6 +601,10 @@ extern int setup_gazel(struct IsdnCard *card);
 
 #if CARD_W6692
 extern int setup_w6692(struct IsdnCard *card);
+#endif
+
+#if CARD_NETJET_U
+extern int setup_netjet_u(struct IsdnCard *card);
 #endif
 
 /*
@@ -943,7 +809,7 @@ ll_stop(struct IsdnCardState *cs)
 	ic.command = ISDN_STAT_STOP;
 	ic.driver = cs->myid;
 	cs->iif.statcallb(&ic);
-	CallcFreeChan(cs);
+//	CallcFreeChan(cs);
 }
 
 static void
@@ -1012,7 +878,7 @@ HISAX_INITFUNC(static int init_card(struct IsdnCardState *cs))
 	while (cnt) {
 		cs->cardmsg(cs, CARD_INIT, NULL);
 		sti();
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		/* Timeout 10ms */
 		schedule_timeout((10*HZ)/1000);
 		restore_flags(flags);
@@ -1066,6 +932,8 @@ checkcard(int cardnr, char *id, int *busy_flag))
 	cs->busy_flag = busy_flag;
 	cs->irq_flags = I4L_IRQ_FLAG;
 #if TEI_PER_CARD
+	if (card->protocol == ISDN_PTYPE_NI1)
+		test_and_set_bit(FLG_TWO_DCHAN, &cs->HW_Flags);
 #else
 	test_and_set_bit(FLG_TWO_DCHAN, &cs->HW_Flags);
 #endif
@@ -1210,9 +1078,9 @@ checkcard(int cardnr, char *id, int *busy_flag))
 				ret = setup_mic(card);
 				break;
 #endif
-#if CARD_NETJET
-			case ISDN_CTYPE_NETJET:
-				ret = setup_netjet(card);
+#if CARD_NETJET_S
+			case ISDN_CTYPE_NETJET_S:
+				ret = setup_netjet_s(card);
 				break;
 #endif
 #if CARD_HFCS
@@ -1275,6 +1143,11 @@ checkcard(int cardnr, char *id, int *busy_flag))
 		case ISDN_CTYPE_W6692:
 			ret = setup_w6692(card);
 			break;
+#endif
+#if CARD_NETJET_U
+			case ISDN_CTYPE_NETJET_U:
+				ret = setup_netjet_u(card);
+				break;
 #endif
 		default:
 			printk(KERN_WARNING
@@ -1395,6 +1268,9 @@ HiSax_closecard(int cardnr)
 	if (cards[cardnr].cs) {
 		ll_stop(cards[cardnr].cs);
 		release_tei(cards[cardnr].cs);
+		
+		CallcFreeChan(cards[cardnr].cs);
+		
 		closecard(cardnr);
 		if (cards[cardnr].cs->irq)
 			free_irq(cards[cardnr].cs->irq, cards[cardnr].cs);
@@ -1453,10 +1329,19 @@ HiSax_reportcard(int cardnr, int sel)
 __initfunc(int
 HiSax_init(void))
 {
-	int i;
+	int i,j;
 
 #ifdef MODULE
 	int nzproto = 0;
+	if (!type[0]) {
+		/* We 'll register drivers later, but init basic functions*/
+		CallcNew();
+		Isdnl3New();
+		Isdnl2New();
+		TeiNew();
+		Isdnl1New();
+		return 0;
+	}
 #ifdef CONFIG_HISAX_ELSA
 	if (type[0] == ISDN_CTYPE_ELSA_PCMCIA) {
 		/* we have exported  and return in this case */
@@ -1475,47 +1360,53 @@ HiSax_init(void))
 		return 0;
 	}
 #endif
+#ifdef CONFIG_HISAX_HFC_SX
+	if (type[0] == ISDN_CTYPE_HFC_SP_PCMCIA) {
+		/* we have to export  and return in this case */
+		return 0;
+	}
+#endif
 #endif
 	nrcards = 0;
 	HiSaxVersion();
 #ifdef MODULE
 	if (id)			/* If id= string used */
 		HiSax_id = id;
-	for (i = 0; i < HISAX_MAX_CARDS; i++) {
-		cards[i].typ = type[i];
+	for (i = j = 0; j < HISAX_MAX_CARDS; i++) {
+		cards[j].typ = type[i];
 		if (protocol[i]) {
-			cards[i].protocol = protocol[i];
+			cards[j].protocol = protocol[i];
 			nzproto++;
 		}
 		switch (type[i]) {
 			case ISDN_CTYPE_16_0:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = mem[i];
-				cards[i].para[2] = io[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = mem[i];
+				cards[j].para[2] = io[i];
 				break;
 
 			case ISDN_CTYPE_8_0:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = mem[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = mem[i];
 				break;
 
 #ifdef IO0_IO1
 			case ISDN_CTYPE_PNP:
 			case ISDN_CTYPE_NICCY:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io0[i];
-				cards[i].para[2] = io1[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = io0[i];
+				cards[j].para[2] = io1[i];
 				break;
 			case ISDN_CTYPE_COMPAQ_ISA:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io0[i];
-				cards[i].para[2] = io1[i];
-				cards[i].para[3] = io[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = io0[i];
+				cards[j].para[2] = io1[i];
+				cards[j].para[3] = io[i];
 				break;
 #endif
 			case ISDN_CTYPE_ELSA:
 			case ISDN_CTYPE_HFC_PCI:
-				cards[i].para[0] = io[i];
+				cards[j].para[0] = io[i];
 				break;
 			case ISDN_CTYPE_16_3:
 			case ISDN_CTYPE_TELESPCMCIA:
@@ -1539,26 +1430,43 @@ HiSax_init(void))
 			case ISDN_CTYPE_HSTSAPHIR:
 			case ISDN_CTYPE_GAZEL:
 		        case ISDN_CTYPE_HFC_SX:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io[i];
+		        case ISDN_CTYPE_HFC_SP_PCMCIA:
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = io[i];
 				break;
 			case ISDN_CTYPE_ISURF:
-				cards[i].para[0] = irq[i];
-				cards[i].para[1] = io[i];
-				cards[i].para[2] = mem[i];
+				cards[j].para[0] = irq[i];
+				cards[j].para[1] = io[i];
+				cards[j].para[2] = mem[i];
 				break;
 			case ISDN_CTYPE_ELSA_PCI:
-			case ISDN_CTYPE_NETJET:
+			case ISDN_CTYPE_NETJET_S:
 			case ISDN_CTYPE_AMD7930:
 			case ISDN_CTYPE_TELESPCI:
 			case ISDN_CTYPE_W6692:
+			case ISDN_CTYPE_NETJET_U:
 				break;
 			case ISDN_CTYPE_BKM_A4T:
-	  		   	break;
+	  			break;
 			case ISDN_CTYPE_SCT_QUADRO:
-	          	cards[i].para[0] = irq[i];
+				if (irq[i]) {
+					cards[j].para[0] = irq[i];
+				} else {
+				        /* QUADRO is a 4 BRI card */
+					cards[j++].para[0] = 1;
+					cards[j].typ = ISDN_CTYPE_SCT_QUADRO; 
+					cards[j].protocol = protocol[i];
+					cards[j++].para[0] = 2;
+					cards[j].typ = ISDN_CTYPE_SCT_QUADRO; 
+					cards[j].protocol = protocol[i];
+					cards[j++].para[0] = 3;
+					cards[j].typ = ISDN_CTYPE_SCT_QUADRO; 
+					cards[j].protocol = protocol[i];
+					cards[j].para[0] = 4;
+				}
 				break;
 		}
+		j++;
 	}
 	if (!nzproto) {
 		printk(KERN_WARNING "HiSax: Warning - no protocol specified\n");
@@ -1642,6 +1550,55 @@ int elsa_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	cards[0].para[1] = (int)pcm_iob;
 	cards[0].protocol = prot;
 	cards[0].typ = 10;
+	nzproto = 1;
+
+	if (!HiSax_id)
+		HiSax_id = HiSaxID;
+	if (!HiSaxID[0])
+		strcpy(HiSaxID, "HiSax");
+	for (i = 0; i < HISAX_MAX_CARDS; i++)
+		if (cards[i].typ > 0)
+			nrcards++;
+	printk(KERN_DEBUG "HiSax: Total %d card%s defined\n",
+	       nrcards, (nrcards > 1) ? "s" : "");
+
+	Isdnl1New();
+	CallcNew();
+	Isdnl3New();
+	Isdnl2New();
+	TeiNew();
+	HiSax_inithardware(busy_flag);
+	printk(KERN_NOTICE "HiSax: module installed\n");
+#endif
+	return (0);
+}
+#endif
+
+#ifdef CONFIG_HISAX_HFC_SX
+int hfc_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
+{
+#ifdef MODULE
+	int i;
+	int nzproto = 0;
+
+	nrcards = 0;
+	HiSaxVersion();
+	/* Initialize all structs, even though we only accept
+	   two pcmcia cards
+	   */
+	for (i = 0; i < HISAX_MAX_CARDS; i++) {
+		cards[i].para[0] = irq[i];
+		cards[i].para[1] = io[i];
+		cards[i].typ = type[i];
+		if (protocol[i]) {
+			cards[i].protocol = protocol[i];
+			nzproto++;
+		}
+	}
+	cards[0].para[0] = pcm_irq;
+	cards[0].para[1] = (int)pcm_iob;
+	cards[0].protocol = prot;
+	cards[0].typ = ISDN_CTYPE_HFC_SP_PCMCIA;
 	nzproto = 1;
 
 	if (!HiSax_id)
@@ -1763,3 +1720,21 @@ int avm_a1_init_pcmcia(void *pcm_iob, int pcm_irq, int *busy_flag, int prot)
 	return (0);
 }
 #endif
+
+int hisax_init_pcmcia(void *pcm_iob, int *busy_flag, struct IsdnCard *card)
+{
+	u_char ids[16];
+	int ret = -1;
+
+	cards[nrcards] = *card;
+	if (nrcards)
+		sprintf(ids, "HiSax%d", nrcards);
+	else
+		sprintf(ids, "HiSax");
+	if (!checkcard(nrcards, ids, busy_flag)) {
+		return(-1);
+	}
+	ret = nrcards;
+	nrcards++;
+	return (ret);
+}

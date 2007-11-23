@@ -30,8 +30,8 @@ struct pppcallinfo
 #define PPPIOCGIFNAME      _IOR('t',136, char [IFNAMSIZ] )
 
 #define PPP_MP          0x003d
-#define PPP_LINK_COMP   0x00fb
-#define PPP_LINK_CCP    0x80fb
+#define PPP_COMPFRAG    0x00fb
+#define PPP_CCPFRAG     0x80fb
 
 #define SC_MP_PROT       0x00000200
 #define SC_REJ_MP_PROT   0x00000400
@@ -67,8 +67,6 @@ struct isdn_ppp_comp_data {
 };
 
 #ifdef __KERNEL__
-
-#include <asm/spinlock.h>
 
 /*
  * We need a way for the decompressor to influence the generation of CCP

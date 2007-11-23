@@ -79,6 +79,7 @@ extern int last_pid;
 #define TASK_ZOMBIE		4
 #define TASK_STOPPED		8
 #define TASK_SWAPPING		16
+#define TASK_EXCLUSIVE		32
 
 /*
  * Scheduling policies
@@ -251,6 +252,7 @@ struct task_struct {
 	struct task_struct *next_task, *prev_task;
 	struct task_struct *next_run,  *prev_run;
 
+	unsigned int task_exclusive;	/* task wants wake-one semantics in __wake_up() */
 /* task state */
 	struct linux_binfmt *binfmt;
 	int exit_code, exit_signal;
@@ -370,6 +372,7 @@ struct task_struct {
 /* counter */	DEF_PRIORITY,DEF_PRIORITY,0, \
 /* SMP */	0,0,0,-1, \
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \
+/* task_exclusive */ 0, \
 /* binfmt */	NULL, \
 /* ec,brk... */	0,0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0,0, \
@@ -496,8 +499,8 @@ extern long FASTCALL(interruptible_sleep_on_timeout(struct wait_queue ** p,
 						    signed long timeout));
 extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 
-#define wake_up(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE)
-#define wake_up_interruptible(x)	__wake_up((x),TASK_INTERRUPTIBLE)
+#define wake_up(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
+#define wake_up_interruptible(x)	__wake_up((x),TASK_INTERRUPTIBLE | TASK_EXCLUSIVE)
 
 #define __set_current_state(state_value)	do { current->state = state_value; } while (0)
 #ifdef __SMP__

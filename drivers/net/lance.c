@@ -926,6 +926,8 @@ static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	lp->tx_ring[entry].misc = 0x0000;
 
+	lp->stats.tx_bytes += skb->len;
+
 	/* If any part of this buffer is >16M we must copy it to a low-memory
 	   buffer. */
 	if ((u32)virt_to_bus(skb->data) + skb->len > 0x01000000) {
@@ -941,7 +943,6 @@ static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
 		lp->tx_ring[entry].base = ((u32)virt_to_bus(skb->data) & 0xffffff) | 0x83000000;
 	}
 	lp->cur_tx++;
-	lp->stats.tx_bytes += skb->len;
 
 	/* Trigger an immediate send poll. */
 	outw(0x0000, ioaddr+LANCE_ADDR);

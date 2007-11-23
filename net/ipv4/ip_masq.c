@@ -236,7 +236,7 @@ static int masq_tcp_state(struct ip_masq *ms, int output, struct tcphdr *th)
 	
 tcp_state_out:
 	if (new_state!=ms->state)
-		IP_MASQ_DEBUG(1, "%s %s [%c%c%c%c] %08lX:%04X-%08lX:%04X state: %s->%s\n",
+		IP_MASQ_DEBUG(1, "%s %s [%c%c%c%c] %08X:%04X-%08X:%04X state: %s->%s\n",
 				masq_proto_name(ms->protocol),
 				output? "output" : "input ",
 				th->syn? 'S' : '.',
@@ -798,7 +798,7 @@ static void masq_expire(unsigned long data)
 	 */
 	atomic_inc(&ms->refcnt);
 
-	IP_MASQ_DEBUG(1, "Masqueraded %s %08lX:%04X expired\n",
+	IP_MASQ_DEBUG(1, "Masqueraded %s %08X:%04X expired\n",
 			masq_proto_name(ms->protocol),
 			ntohl(ms->saddr),ntohs(ms->sport));
 
@@ -846,7 +846,7 @@ static void masq_expire(unsigned long data)
 	}
 
 masq_expire_later:
-	IP_MASQ_DEBUG(0, "masq_expire delayed: %s %08lX:%04X->%08lX:%04X masq.refcnt-1=%d masq.n_control=%d\n",
+	IP_MASQ_DEBUG(0, "masq_expire delayed: %s %08X:%04X->%08X:%04X masq.refcnt-1=%d masq.n_control=%d\n",
 		masq_proto_name(ms->protocol),
 		ntohl(ms->saddr), ntohs(ms->sport),
 		ntohl(ms->daddr), ntohs(ms->dport),
@@ -1223,7 +1223,7 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 
 	/* h.raw = (char*) iph + iph->ihl * 4; */
 
- 	IP_MASQ_DEBUG(2, "Outgoing %s %08lX:%04X -> %08lX:%04X\n",
+ 	IP_MASQ_DEBUG(2, "Outgoing %s %08X:%04X -> %08X:%04X\n",
   		masq_proto_name(iph->protocol),
   		ntohl(iph->saddr), ntohs(h.portp[0]),
   		ntohl(iph->daddr), ntohs(h.portp[1]));
@@ -1294,6 +1294,8 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 					0);
                 if (ms == NULL)
 			return -1;
+		if (!ms->app && skb->fwmark)
+			ip_masq_bind_app_fwmark(ms, skb->fwmark);
  	}
 
 	/*
@@ -1387,7 +1389,7 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 	}
 	ip_send_check(iph);
 
-  	IP_MASQ_DEBUG(2, "O-routed from %08lX:%04X with masq.addr %08lX\n",
+  	IP_MASQ_DEBUG(2, "O-routed from %08X:%04X with masq.addr %08X\n",
 		ntohl(ms->maddr),ntohs(ms->mport),ntohl(maddr));
 
 	masq_set_state(ms, 1, iph, h.portp);
@@ -1486,7 +1488,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 	struct ip_masq	*ms;
 	unsigned short   len   = ntohs(iph->tot_len) - (iph->ihl * 4);
 
- 	IP_MASQ_DEBUG(2, "Incoming forward ICMP (%d,%d) %lX -> %lX\n",
+ 	IP_MASQ_DEBUG(2, "Incoming forward ICMP (%d,%d) %X -> %X\n",
 	        icmph->type, ntohs(icmp_id(icmph)),
  		ntohl(iph->saddr), ntohl(iph->daddr));
 
@@ -1496,7 +1498,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 	    (icmph->type == ICMP_INFO_REQUEST ) ||
 	    (icmph->type == ICMP_ADDRESS )) {
 
-		IP_MASQ_DEBUG(2, "icmp request rcv %lX->%lX  id %d type %d\n",
+		IP_MASQ_DEBUG(2, "icmp request rcv %X->%X  id %d type %d\n",
 		       ntohl(iph->saddr),
 		       ntohl(iph->daddr),
 		       ntohs(icmp_id(icmph)),
@@ -1547,7 +1549,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 		icmph->checksum = 0;
 		icmph->checksum = ip_compute_csum((unsigned char *)icmph, len);
 
-		IP_MASQ_DEBUG(2, "icmp request rwt %lX->%lX id %d type %d\n",
+		IP_MASQ_DEBUG(2, "icmp request rwt %X->%X id %d type %d\n",
 		       ntohl(iph->saddr),
 		       ntohl(iph->daddr),
 		       ntohs(icmp_id(icmph)),
@@ -1585,7 +1587,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 							     (ciph->ihl<<2));
 
 
-		IP_MASQ_DEBUG(2, "fw icmp/icmp rcv %lX->%lX id %d type %d\n",
+		IP_MASQ_DEBUG(2, "fw icmp/icmp rcv %X->%X id %d type %d\n",
 		       ntohl(ciph->saddr),
 		       ntohl(ciph->daddr),
 		       ntohs(icmp_id(cicmph)),
@@ -1621,7 +1623,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 		icmph->checksum = ip_compute_csum((unsigned char *) icmph, len);
 
 
-		IP_MASQ_DEBUG(2, "fw icmp/icmp rwt %lX->%lX id %d type %d\n",
+		IP_MASQ_DEBUG(2, "fw icmp/icmp rwt %X->%X id %d type %d\n",
 		       ntohl(ciph->saddr),
 		       ntohl(ciph->daddr),
 		       ntohs(icmp_id(cicmph)),
@@ -1657,7 +1659,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 	}
 
 
- 	IP_MASQ_DEBUG(2, "Handling forward ICMP for %08lX:%04X -> %08lX:%04X\n",
+ 	IP_MASQ_DEBUG(2, "Handling forward ICMP for %08X:%04X -> %08X:%04X\n",
 	       ntohl(ciph->saddr), ntohs(pptr[0]),
 	       ntohl(ciph->daddr), ntohs(pptr[1]));
 
@@ -1695,7 +1697,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, __u32 maddr)
 	icmph->checksum = ip_compute_csum((unsigned char *) icmph, len);
 
 
- 	IP_MASQ_DEBUG(2, "Rewrote forward ICMP to %08lX:%04X -> %08lX:%04X\n",
+ 	IP_MASQ_DEBUG(2, "Rewrote forward ICMP to %08X:%04X -> %08X:%04X\n",
 	       ntohl(ciph->saddr), ntohs(pptr[0]),
 	       ntohl(ciph->daddr), ntohs(pptr[1]));
 
@@ -1745,7 +1747,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 	unsigned short   len   = ntohs(iph->tot_len) - (iph->ihl * 4);
 
 
- 	IP_MASQ_DEBUG(2, "icmp in/rev (%d,%d) %lX -> %lX\n",
+ 	IP_MASQ_DEBUG(2, "icmp in/rev (%d,%d) %X -> %X\n",
 	        icmph->type, ntohs(icmp_id(icmph)),
  		ntohl(iph->saddr), ntohl(iph->daddr));
 
@@ -1756,7 +1758,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 	    (icmph->type == ICMP_INFO_REPLY) ||
 	    (icmph->type == ICMP_ADDRESSREPLY))	{
 
-		IP_MASQ_DEBUG(2, "icmp reply rcv %lX->%lX id %d type %d, req %d\n",
+		IP_MASQ_DEBUG(2, "icmp reply rcv %X->%X id %d type %d, req %d\n",
 		       ntohl(iph->saddr),
 		       ntohl(iph->daddr),
 		       ntohs(icmp_id(icmph)),
@@ -1793,7 +1795,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 
 
 
-		IP_MASQ_DEBUG(2, "icmp reply rwt %lX->%lX id %d type %d\n",
+		IP_MASQ_DEBUG(2, "icmp reply rwt %X->%X id %d type %d\n",
 		       ntohl(iph->saddr),
 		       ntohl(iph->daddr),
 		       ntohs(icmp_id(icmph)),
@@ -1830,7 +1832,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 							     (ciph->ihl<<2));
 
 
-		IP_MASQ_DEBUG(2, "rv icmp/icmp rcv %lX->%lX id %d type %d\n",
+		IP_MASQ_DEBUG(2, "rv icmp/icmp rcv %X->%X id %d type %d\n",
 		       ntohl(ciph->saddr),
 		       ntohl(ciph->daddr),
 		       ntohs(icmp_id(cicmph)),
@@ -1872,7 +1874,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 		icmph->checksum = ip_compute_csum((unsigned char *) icmph, len);
 
 
-		IP_MASQ_DEBUG(2, "rv icmp/icmp rwt %lX->%lX id %d type %d\n",
+		IP_MASQ_DEBUG(2, "rv icmp/icmp rwt %X->%X id %d type %d\n",
 		       ntohl(ciph->saddr),
 		       ntohl(ciph->daddr),
 		       ntohs(icmp_id(cicmph)),
@@ -1906,7 +1908,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 	}
 
 
- 	IP_MASQ_DEBUG(2, "Handling reverse ICMP for %08lX:%04X -> %08lX:%04X\n",
+ 	IP_MASQ_DEBUG(2, "Handling reverse ICMP for %08X:%04X -> %08X:%04X\n",
 	       ntohl(ciph->saddr), ntohs(pptr[0]),
 	       ntohl(ciph->daddr), ntohs(pptr[1]));
 
@@ -1948,7 +1950,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 	icmph->checksum = ip_compute_csum((unsigned char *) icmph, len);
 
 
- 	IP_MASQ_DEBUG(2, "Rewrote reverse ICMP to %08lX:%04X -> %08lX:%04X\n",
+ 	IP_MASQ_DEBUG(2, "Rewrote reverse ICMP to %08X:%04X -> %08X:%04X\n",
 	       ntohl(ciph->saddr), ntohs(pptr[0]),
 	       ntohl(ciph->daddr), ntohs(pptr[1]));
 
@@ -2067,7 +2069,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 
 
 
- 	IP_MASQ_DEBUG(2, "Incoming %s %08lX:%04X -> %08lX:%04X\n",
+ 	IP_MASQ_DEBUG(2, "Incoming %s %08X:%04X -> %08X:%04X\n",
  		masq_proto_name(iph->protocol),
  		ntohl(iph->saddr), ntohs(h.portp[0]),
  		ntohl(iph->daddr), ntohs(h.portp[1]));
@@ -2082,8 +2084,11 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
  	 * 	Give additional modules a chance to create an entry
 	 */
 #ifdef CONFIG_IP_MASQUERADE_MOD
-	if (!ms) 
+	if (!ms) {
 		ms = ip_masq_mod_in_create(skb, iph, maddr);
+		if (ms && !ms->app && skb->fwmark)
+			ip_masq_bind_app_fwmark(ms, skb->fwmark);
+	}
 
 	/*
  	 * 	Call module's input update hook
@@ -2138,7 +2143,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 
 			write_unlock(&__ip_masq_lock);
 
-                        IP_MASQ_DEBUG(1, "ip_fw_demasquerade(): filled daddr=%lX\n",
+                        IP_MASQ_DEBUG(1, "ip_fw_demasquerade(): filled daddr=%X\n",
                                ntohl(ms->daddr));
 
                 }
@@ -2208,7 +2213,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p)
 		}
                 ip_send_check(iph);
 
-                IP_MASQ_DEBUG(2, "I-routed to %08lX:%04X\n",ntohl(iph->daddr),ntohs(h.portp[1]));
+                IP_MASQ_DEBUG(2, "I-routed to %08X:%04X\n",ntohl(iph->daddr),ntohs(h.portp[1]));
 
 		masq_set_state (ms, 0, iph, h.portp);
 		ip_masq_put(ms);

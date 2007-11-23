@@ -115,6 +115,7 @@ comment 'Partition Types'
 
 bool 'BSD disklabel (BSD partition tables) support' CONFIG_BSD_DISKLABEL
 bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
+bool 'Minix subpartition support' CONFIG_MINIX_SUBPARTITION
 bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
 bool 'Solaris (x86) partition table support' CONFIG_SOLARIS_X86_PARTITION
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

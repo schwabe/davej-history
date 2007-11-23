@@ -57,6 +57,8 @@
 #define REG_CPPP     12
 #define BIT_CPPP    128
 
+#define REG_DXMT     13
+#define BIT_DXMT      1
 #define REG_T70      13
 #define BIT_T70       2
 #define BIT_T70_EXT  32

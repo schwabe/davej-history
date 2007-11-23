@@ -216,6 +216,7 @@ extern void vmpoff_setup(char *str, int *ints);
 #endif
 extern void floppy_setup(char *str, int *ints);
 extern void st_setup(char *str, int *ints);
+extern void osst_setup(char *str, int *ints);
 extern void st0x_setup(char *str, int *ints);
 extern void advansys_setup(char *str, int *ints);
 extern void tmc8xx_setup(char *str, int *ints);
@@ -840,6 +841,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #ifdef CONFIG_CHR_DEV_ST
 	{ "st=", st_setup },
+#endif
+#ifdef CONFIG_CHR_DEV_OSST
+	{ "osst=", osst_setup },
 #endif
 #ifdef CONFIG_BUSMOUSE
 	{ "bmouse=", bmouse_setup },

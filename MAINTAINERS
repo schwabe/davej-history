@@ -493,6 +493,13 @@ W:      http://paulbristow.net/linux
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 
+INTEL IA32 MICROCODE UPDATE DRIVER
+P:	Tigran Aivazian
+M:	Tigran Aivazian <tigran@veritas.com>
+W:      http://www.urbanmyth.org/microcode
+L:	linux-kernel@vger.kernel.org
+S:	Maintained
+
 IP FIREWALL
 P:	Paul Russell
 M:	Paul.Russell@rustcorp.com.au
@@ -723,6 +730,13 @@ M:	phillim@amtrak.com
 L:	linux-net@vger.kernel.org
 L:	linux-tr@emissary.aus-etc.com
 W:	http://www.linuxtr.net
+S:	Maintained
+
+ONSTREAM SCSI TAPE DRIVER
+P:	Willem Riede
+M:	osst@riede.org
+L:	osst@linux1.onstream.nl
+L:	linux-scsi@vger.rutgers.edu
 S:	Maintained
 
 OPL3-SA2, SA3, and SAx DRIVER

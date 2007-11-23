@@ -1,143 +1,8 @@
-/* $Id: hisax.h,v 2.41 2000/02/26 00:35:13 keil Exp $
-
+/* $Id: hisax.h,v 2.49 2000/09/08 22:55:59 werner Exp $
+ *
  *   Basic declarations, defines and prototypes
  *
- * $Log: hisax.h,v $
- * Revision 2.41  2000/02/26 00:35:13  keil
- * Fix skb freeing in interrupt context
- *
- * Revision 2.40  2000/01/20 19:51:46  keil
- * Fix AddTimer message
- * Change CONFIG defines
- *
- * Revision 2.39  1999/11/18 00:00:43  werner
- *
- * Added support for HFC-S+ and HFC-SP cards
- *
- * Revision 2.38  1999/11/14 23:37:03  keil
- * new ISA memory mapped IO
- *
- * Revision 2.37  1999/10/14 20:25:28  keil
- * add a statistic for error monitoring
- *
- * Revision 2.36  1999/10/10 20:16:15  werner
- *
- * Added variable to hfcpci union.
- *
- * Revision 2.35  1999/09/04 06:35:09  keil
- * Winbond W6692 support
- *
- * Revision 2.34  1999/08/25 17:00:04  keil
- * Make ISAR V32bis modem running
- * Make LL->HL interface open for additional commands
- *
- * Revision 2.33  1999/08/05 20:43:16  keil
- * ISAR analog modem support
- *
- * Revision 2.31  1999/07/21 14:46:11  keil
- * changes from EICON certification
- *
- * Revision 2.30  1999/07/14 12:38:38  werner
- * Added changes for echo channel handling
- *
- * Revision 2.29  1999/07/12 21:05:14  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 2.28  1999/07/05 23:51:46  werner
- * Allow limiting of available HiSax B-chans per card. Controlled by hisaxctrl
- * hisaxctrl id 10 <nr. of chans 0-2>
- *
- * Revision 2.27  1999/07/01 08:11:38  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.26  1998/11/15 23:54:45  keil
- * changes from 2.0
- *
- * Revision 2.25  1998/09/30 22:28:42  keil
- * More work for ISAR support
- *
- * Revision 2.24  1998/08/20 13:50:39  keil
- * More support for hybrid modem (not working yet)
- *
- * Revision 2.23  1998/08/13 23:36:31  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.22  1998/07/15 15:01:28  calle
- * Support for AVM passive PCMCIA cards:
- *    A1 PCMCIA, FRITZ!Card PCMCIA and FRITZ!Card PCMCIA 2.0
- *
- * Revision 2.21  1998/05/25 14:10:05  keil
- * HiSax 3.0
- * X.75 and leased are working again.
- *
- * Revision 2.20  1998/05/25 12:57:57  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.19  1998/04/15 16:39:15  keil
- * Add S0Box and Teles PCI support
- *
- * Revision 2.18  1998/03/26 07:10:04  paul
- * The jumpmatrix table in struct Fsm was an array of "int". This is not
- * large enough for pointers to functions on Linux/Alpha (instant crash
- * on "insmod hisax). Now there is a typedef for the pointer to function.
- * This also prevents warnings about "incompatible pointer types".
- *
- * Revision 2.17  1998/03/19 13:18:43  keil
- * Start of a CAPI like interface for supplementary Service
- * first service: SUSPEND
- *
- * Revision 2.16  1998/03/09 23:19:25  keil
- * Changes for PCMCIA
- *
- * Revision 2.14  1998/02/11 17:28:04  keil
- * Niccy PnP/PCI support
- *
- * Revision 2.13  1998/02/09 18:46:02  keil
- * Support for Sedlbauer PCMCIA (Marcus Niemann)
- *
- * Revision 2.12  1998/02/03 23:31:30  keil
- * add AMD7930 support
- *
- * Revision 2.11  1998/02/02 13:33:00  keil
- * New card support
- *
- * Revision 2.10  1997/11/08 21:37:52  keil
- * new l1 init;new Compaq card
- *
- * Revision 2.9  1997/11/06 17:09:09  keil
- * New 2.1 init code
- *
- * Revision 2.8  1997/10/29 19:04:13  keil
- * new L1; changes for 2.1
- *
- * Revision 2.7  1997/10/10 20:56:47  fritz
- * New HL interface.
- *
- * Revision 2.6  1997/09/11 17:25:51  keil
- * Add new cards
- *
- * Revision 2.5  1997/08/03 14:36:31  keil
- * Implement RESTART procedure
- *
- * Revision 2.4  1997/07/31 19:25:20  keil
- * PTP_DATA_LINK support
- *
- * Revision 2.3  1997/07/31 11:50:17  keil
- * ONE TEI and FIXED TEI handling
- *
- * Revision 2.2  1997/07/30 17:13:02  keil
- * more changes for 'One TEI per card'
- *
- * Revision 2.1  1997/07/27 21:45:13  keil
- * new main structures
- *
- * Revision 2.0  1997/06/26 11:06:27  keil
- * New card and L1 interface.
- * Eicon.Diehl Diva and Dynalink IS64PH support
- *
- * old changes removed KKe
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 #include <linux/config.h>
@@ -173,8 +38,11 @@
 #define HW_POWERUP	0x0008
 #define HW_ACTIVATE	0x0010
 #define HW_DEACTIVATE	0x0018
+
+#define HW_INFO1	0x0010
 #define HW_INFO2	0x0020
 #define HW_INFO3	0x0030
+#define HW_INFO4	0x0040
 #define HW_INFO4_P8	0x0040
 #define HW_INFO4_P10	0x0048
 #define HW_RSYNC	0x0060
@@ -224,6 +92,7 @@
 #define CC_SUSPEND	0x0370
 #define CC_PROCEED_SEND 0x0374
 #define CC_REDIR        0x0378
+#define CC_T302		0x0382
 #define CC_T303		0x0383
 #define CC_T304		0x0384
 #define CC_T305		0x0385
@@ -234,6 +103,7 @@
 #define CC_T313		0x0393
 #define CC_T318		0x0398
 #define CC_T319		0x0399
+#define CC_TSPID	0x03A0
 #define CC_NOSETUP_RSP	0x03E0
 #define CC_SETUP_ERR	0x03E1
 #define CC_SUSPEND_ERR	0x03E2
@@ -242,6 +112,7 @@
 #define CC_RELEASE_ERR	0x03E5
 #define CC_RESTART	0x03F4
 #define CC_TDSS1_IO     0x13F4    /* DSS1 IO user timer */
+#define CC_TNI1_IO      0x13F5    /* NI1 IO user timer */
 
 /* define maximum number of possible waiting incoming calls */
 #define MAX_WAITING_CALLS 2
@@ -249,12 +120,18 @@
 
 #ifdef __KERNEL__
 
-/* include only l3dss1 specific process structures, but no other defines */
+/* include l3dss1 & ni1 specific process structures, but no other defines */
 #ifdef CONFIG_HISAX_EURO
   #define l3dss1_process
   #include "l3dss1.h" 
   #undef  l3dss1_process
 #endif CONFIG_HISAX_EURO
+
+#ifdef CONFIG_HISAX_NI1
+  #define l3ni1_process
+  #include "l3ni1.h" 
+  #undef  l3ni1_process
+#endif CONFIG_HISAX_NI1
 
 #define MAX_DFRAME_LEN	260
 #define MAX_DFRAME_LEN_L1	300
@@ -318,6 +195,7 @@ struct L3Timer {
 #define FLG_L1_ACTTIMER		4
 #define FLG_L1_T3RUN		5
 #define FLG_L1_PULL_REQ		6
+#define FLG_L1_UINT		7
 
 struct Layer1 {
 	void *hardware;
@@ -432,7 +310,7 @@ struct PStack {
 	struct Layer3 l3;
 	struct LLInterface lli;
 	struct Management ma;
-	int protocol;		/* EDSS1 or 1TR6 */
+	int protocol;		/* EDSS1, 1TR6 or NI1 */
 
         /* protocol specific data fields */
         union
@@ -440,6 +318,9 @@ struct PStack {
 #ifdef CONFIG_HISAX_EURO
            dss1_stk_priv dss1; /* private dss1 data */
 #endif CONFIG_HISAX_EURO              
+#ifdef CONFIG_HISAX_NI1
+           ni1_stk_priv ni1; /* private ni1 data */
+#endif CONFIG_HISAX_NI1              
 	 } prot;
 };
 
@@ -461,6 +342,9 @@ struct l3_process {
 #ifdef CONFIG_HISAX_EURO 
            dss1_proc_priv dss1; /* private dss1 data */
 #endif CONFIG_HISAX_EURO            
+#ifdef CONFIG_HISAX_NI1
+           ni1_proc_priv ni1; /* private ni1 data */
+#endif CONFIG_HISAX_NI1              
 	 } prot;
 };
 
@@ -499,6 +383,7 @@ struct isar_hw {
 	u_char mod;
 	u_char newcmd;
 	u_char newmod;
+	char try_mod;
 	struct timer_list ftimer;
 	u_char *rcvbuf;         /* B-Channel receive Buffer */
 	u_char conmsg[16];
@@ -506,10 +391,17 @@ struct isar_hw {
 };
 
 struct hdlc_stat_reg {
+#ifdef __BIG_ENDIAN
+	u_char fill __attribute__((packed));
+	u_char mode __attribute__((packed));
+	u_char xml  __attribute__((packed));
+	u_char cmd  __attribute__((packed));
+#else
 	u_char cmd  __attribute__((packed));
 	u_char xml  __attribute__((packed));
 	u_char mode __attribute__((packed));
 	u_char fill __attribute__((packed));
+#endif
 };
 
 struct hdlc_hw {
@@ -938,6 +830,22 @@ struct w6692_chip {
 	int ph_state;
 };
 
+struct icc_chip {
+	int ph_state;
+	u_char *mon_tx;
+	u_char *mon_rx;
+	int mon_txp;
+	int mon_txc;
+	int mon_rxp;
+	struct arcofi_msg *arcofi_list;
+	struct timer_list arcofitimer;
+	struct wait_queue *arcofi_wait;
+	u_char arcofi_bc;
+	u_char arcofi_state;
+	u_char mocr;
+	u_char adf2;
+};
+
 #define HW_IOM1			0
 #define HW_IPAC			1
 #define HW_ISAR			2
@@ -948,6 +856,7 @@ struct w6692_chip {
 #define FLG_LOCK_ATOMIC 	7
 #define FLG_ARCOFI_TIMER	8
 #define FLG_ARCOFI_ERROR	9
+#define FLG_HW_L1_UINT		10
 
 struct IsdnCardState {
 	unsigned char typ;
@@ -1016,6 +925,7 @@ struct IsdnCardState {
 		struct hfcpci_chip hfcpci;
 		struct hfcsx_chip hfcsx;
 		struct w6692_chip w6692;
+		struct icc_chip icc;
 	} dc;
 	u_char *rcvbuf;
 	int rcvidx;
@@ -1057,7 +967,7 @@ struct IsdnCardState {
 #define  ISDN_CTYPE_MIC		17
 #define  ISDN_CTYPE_ELSA_PCI	18
 #define  ISDN_CTYPE_COMPAQ_ISA	19
-#define  ISDN_CTYPE_NETJET	20
+#define  ISDN_CTYPE_NETJET_S	20
 #define  ISDN_CTYPE_TELESPCI	21
 #define  ISDN_CTYPE_SEDLBAUER_PCMCIA	22
 #define  ISDN_CTYPE_AMD7930	23
@@ -1075,7 +985,9 @@ struct IsdnCardState {
 #define  ISDN_CTYPE_HFC_PCI	35
 #define  ISDN_CTYPE_W6692	36
 #define  ISDN_CTYPE_HFC_SX      37
-#define  ISDN_CTYPE_COUNT	37
+#define  ISDN_CTYPE_NETJET_U	38
+#define  ISDN_CTYPE_HFC_SP_PCMCIA      39
+#define  ISDN_CTYPE_COUNT	39
 
 
 #ifdef ISDN_CHIP_ISAC
@@ -1224,12 +1136,12 @@ struct IsdnCardState {
 #endif
 
 #ifdef  CONFIG_HISAX_NETJET
-#define CARD_NETJET 1
+#define CARD_NETJET_S 1
 #ifndef ISDN_CHIP_ISAC
 #define ISDN_CHIP_ISAC 1
 #endif
 #else
-#define CARD_NETJET 0
+#define CARD_NETJET_S 0
 #endif
 
 #ifdef	CONFIG_HISAX_HFCS
@@ -1337,17 +1249,19 @@ struct IsdnCardState {
 #define	CARD_W6692	0
 #endif
 
-#define TEI_PER_CARD 0
-
-#ifdef CONFIG_HISAX_1TR6
-#undef TEI_PER_CARD
-#define TEI_PER_CARD 1
+#ifdef  CONFIG_HISAX_NETJET_U
+#define CARD_NETJET_U 1
+#ifndef ISDN_CHIP_ICC
+#define ISDN_CHIP_ICC 1
+#endif
+#ifndef HISAX_UINTERFACE
+#define HISAX_UINTERFACE 1
+#endif
+#else
+#define CARD_NETJET_U 0
 #endif
 
-#ifdef CONFIG_HISAX_EURO
-#undef TEI_PER_CARD
 #define TEI_PER_CARD 1
-#endif
 
 /* L1 Debug */
 #define	L1_DEB_WARN		0x01
@@ -1371,7 +1285,7 @@ extern void Logl2Frame(struct IsdnCardState *cs, struct sk_buff *skb, char *buf,
 
 struct IsdnCard {
 	int typ;
-	int protocol;		/* EDSS1 or 1TR6 */
+	int protocol;		/* EDSS1, 1TR6 or NI1 */
 	unsigned int para[4];
 	struct IsdnCardState *cs;
 };
@@ -1448,3 +1362,17 @@ char *HiSax_getrev(const char *revision);
 void TeiNew(void);
 void TeiFree(void);
 int certification_check(int output);
+#ifdef __powerpc__
+#include <linux/pci.h>
+static inline int pci_enable_device(struct pci_dev *dev)
+{
+	u16 cmd;
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+	cmd |= PCI_COMMAND_MEMORY | PCI_COMMAND_IO | PCI_COMMAND_SERR;
+	cmd &= ~PCI_COMMAND_FAST_BACK;
+	pci_write_config_word(dev, PCI_COMMAND, cmd);
+	return(0);
+}
+#else
+#define pci_enable_device(dev)	!dev
+#endif /* __powerpc__ */

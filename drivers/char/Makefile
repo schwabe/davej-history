@@ -295,6 +295,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ADVANTECH_WDT),y)
+O_OBJS += advantechwdt.o
+else
+  ifeq ($(CONFIG_ADVANTECH_WDT),m)
+  M_OBJS += advantechwdt.o
+  endif
+endif
+
 ifeq ($(CONFIG_60XX_WDT),y)
 O_OBJS += sbc60xxwdt.o
 else

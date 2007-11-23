@@ -1,39 +1,10 @@
-/* $Id: isar.c,v 1.9 2000/01/20 19:47:45 keil Exp $
-
+/* $Id: isar.c,v 1.15 2000/06/26 08:59:13 keil Exp $
+ *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *
- *
- * $Log: isar.c,v $
- * Revision 1.9  2000/01/20 19:47:45  keil
- * Add Fax Class 1 support
- *
- * Revision 1.8  1999/12/19 13:00:56  keil
- * Fix races in setting a new mode
- *
- * Revision 1.7  1999/10/14 20:25:29  keil
- * add a statistic for error monitoring
- *
- * Revision 1.6  1999/08/31 11:20:20  paul
- * various spelling corrections (new checksums may be needed, Karsten!)
- *
- * Revision 1.5  1999/08/25 16:59:55  keil
- * Make ISAR V32bis modem running
- * Make LL->HL interface open for additional commands
- *
- * Revision 1.4  1999/08/05 20:43:18  keil
- * ISAR analog modem support
- *
- * Revision 1.3  1999/07/01 08:11:45  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.2  1998/11/15 23:54:53  keil
- * changes from 2.0
- *
- * Revision 1.1  1998/08/13 23:33:47  keil
- * First version, only init
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 
@@ -272,6 +243,14 @@ isar_load_firmware(struct IsdnCardState *cs, u_char *buf)
 			printk(KERN_ERR"isar_load_firmware copy_from_user ret %d\n", ret);
 			goto reterror;
 		}
+#ifdef __BIG_ENDIAN
+		sadr = (blk_head.sadr & 0xff)*256 + blk_head.sadr/256;
+		blk_head.sadr = sadr;
+		sadr = (blk_head.len & 0xff)*256 + blk_head.len/256;
+		blk_head.len = sadr;
+		sadr = (blk_head.d_key & 0xff)*256 + blk_head.d_key/256;
+		blk_head.d_key = sadr;
+#endif /* __BIG_ENDIAN */
 		cnt += BLK_HEAD_SIZE;
 		p += BLK_HEAD_SIZE;
 		printk(KERN_DEBUG"isar firmware block (%#x,%5d,%#x)\n",
@@ -313,8 +292,13 @@ isar_load_firmware(struct IsdnCardState *cs, u_char *buf)
 #endif
 			sadr += noc;
 			while(noc) {
+#ifdef __BIG_ENDIAN
+				*mp++ = *sp % 256;
+				*mp++ = *sp / 256;
+#else
 				*mp++ = *sp / 256;
 				*mp++ = *sp % 256;
+#endif /* __BIG_ENDIAN */
 				sp++;
 				noc--;
 			}
@@ -557,8 +541,9 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 			rcv_mbox(cs, ireg, ptr);
 			if (ireg->cmsb & HDLC_FED) {
 				if (bcs->hw.isar.rcvidx < 3) { /* last 2 bytes are the FCS */
-					printk(KERN_WARNING "ISAR: HDLC frame too short(%d)\n",
-						bcs->hw.isar.rcvidx);
+					if (cs->debug & L1_DEB_WARN)
+						debugl1(cs, "isar frame to short %d",
+							bcs->hw.isar.rcvidx);
 				} else if (!(skb = dev_alloc_skb(bcs->hw.isar.rcvidx-2))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
@@ -567,6 +552,7 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 					skb_queue_tail(&bcs->rqueue, skb);
 					isar_sched_event(bcs, B_RCVBUFREADY);
 				}
+				bcs->hw.isar.rcvidx = 0;
 			}
 		}
 		break;
@@ -635,13 +621,16 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 			bcs->hw.isar.rcvidx += ireg->clsb;
 			rcv_mbox(cs, ireg, ptr);
 			if (ireg->cmsb & HDLC_FED) {
+				int len = bcs->hw.isar.rcvidx +
+					dle_count(bcs->hw.isar.rcvbuf, bcs->hw.isar.rcvidx);
 				if (bcs->hw.isar.rcvidx < 3) { /* last 2 bytes are the FCS */
-					printk(KERN_WARNING "ISAR: HDLC frame too short(%d)\n",
-						bcs->hw.isar.rcvidx);
+					if (cs->debug & L1_DEB_WARN)
+						debugl1(cs, "isar frame to short %d",
+							bcs->hw.isar.rcvidx);
 				} else if (!(skb = dev_alloc_skb(bcs->hw.isar.rcvidx))) {
 					printk(KERN_WARNING "ISAR: receive out of memory\n");
 				} else {
-					memcpy(skb_put(skb, bcs->hw.isar.rcvidx),
+					insert_dle((u_char *)skb_put(skb, len),
 						bcs->hw.isar.rcvbuf,
 						bcs->hw.isar.rcvidx);
 					skb_queue_tail(&bcs->rqueue, skb);
@@ -649,7 +638,19 @@ isar_rcv_frame(struct IsdnCardState *cs, struct BCState *bcs)
 					send_DLE_ETX(bcs);
 					isar_sched_event(bcs, B_LL_OK);
 				}
+				bcs->hw.isar.rcvidx = 0;
 			}
+		}
+		if (ireg->cmsb & SART_NMD) { /* ABORT */
+			if (cs->debug & L1_DEB_WARN)
+				debugl1(cs, "isar_rcv_frame: no more data");
+			cs->BC_Write_Reg(cs, 1, ISAR_IIA, 0);
+			bcs->hw.isar.rcvidx = 0;
+			send_DLE_ETX(bcs);
+			sendmsg(cs, SET_DPS(bcs->hw.isar.dpath) |
+				ISAR_HIS_PUMPCTRL, PCTRL_CMD_ESC, 0, NULL);
+			bcs->hw.isar.state = STFAX_ESCAPE;
+			isar_sched_event(bcs, B_LL_NOCARRIER);
 		}
 		break;
 	default:
@@ -1073,6 +1074,9 @@ isar_pump_statev_fax(struct BCState *bcs, u_char devt) {
 				debugl1(cs, "pump stev RSP_DISC");
 			if (bcs->hw.isar.state == STFAX_ESCAPE) {
 				switch(bcs->hw.isar.newcmd) {
+					case 0:
+						bcs->hw.isar.state = STFAX_READY;
+						break;
 					case PCTRL_CMD_FTH:
 					case PCTRL_CMD_FTM:
 						p1 = 10;
@@ -1082,13 +1086,14 @@ isar_pump_statev_fax(struct BCState *bcs, u_char devt) {
 						break;
 					case PCTRL_CMD_FRH:
 					case PCTRL_CMD_FRM:
-						p1 = bcs->hw.isar.newmod;
+						p1 = bcs->hw.isar.mod = bcs->hw.isar.newmod;
 						bcs->hw.isar.newmod = 0;
 						bcs->hw.isar.cmd = bcs->hw.isar.newcmd;
 						bcs->hw.isar.newcmd = 0;
 						sendmsg(cs, dps | ISAR_HIS_PUMPCTRL,
 							bcs->hw.isar.cmd, 1, &p1);
 						bcs->hw.isar.state = STFAX_LINE;
+						bcs->hw.isar.try_mod = 3;
 						break;
 					default:
 						if (cs->debug & L1_DEB_HSCX)
@@ -1114,13 +1119,14 @@ isar_pump_statev_fax(struct BCState *bcs, u_char devt) {
 			if (cs->debug & L1_DEB_HSCX)
 				debugl1(cs, "pump stev RSP_SILDET");
 			if (bcs->hw.isar.state == STFAX_SILDET) {
-				p1 = bcs->hw.isar.newmod;
+				p1 = bcs->hw.isar.mod = bcs->hw.isar.newmod;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.cmd = bcs->hw.isar.newcmd;
 				bcs->hw.isar.newcmd = 0;
 				sendmsg(cs, dps | ISAR_HIS_PUMPCTRL,
 					bcs->hw.isar.cmd, 1, &p1);
 				bcs->hw.isar.state = STFAX_LINE;
+				bcs->hw.isar.try_mod = 3;
 			}
 			break;
 		case PSEV_RSP_SILOFF:
@@ -1128,6 +1134,17 @@ isar_pump_statev_fax(struct BCState *bcs, u_char devt) {
 				debugl1(cs, "pump stev RSP_SILOFF");
 			break;
 		case PSEV_RSP_FCERR:
+			if (bcs->hw.isar.state == STFAX_LINE) {
+				if (cs->debug & L1_DEB_HSCX)
+					debugl1(cs, "pump stev RSP_FCERR try %d",
+						bcs->hw.isar.try_mod);
+				if (bcs->hw.isar.try_mod--) {
+					sendmsg(cs, dps | ISAR_HIS_PUMPCTRL,
+						bcs->hw.isar.cmd, 1,
+						&bcs->hw.isar.mod);
+					break;
+				}
+			}
 			if (cs->debug & L1_DEB_HSCX)
 				debugl1(cs, "pump stev RSP_FCERR");
 			bcs->hw.isar.state = STFAX_ESCAPE;
@@ -1438,6 +1455,7 @@ isar_pump_cmd(struct BCState *bcs, u_char cmd, u_char para)
 				bcs->hw.isar.mod = para;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.newcmd = 0;
+				bcs->hw.isar.try_mod = 3; 
 			} else if ((bcs->hw.isar.state == STFAX_ACTIV) &&
 				(bcs->hw.isar.cmd == PCTRL_CMD_FTM) &&
 				(bcs->hw.isar.mod == para)) {
@@ -1460,6 +1478,7 @@ isar_pump_cmd(struct BCState *bcs, u_char cmd, u_char para)
 				bcs->hw.isar.mod = para;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.newcmd = 0;
+				bcs->hw.isar.try_mod = 3; 
 			} else if ((bcs->hw.isar.state == STFAX_ACTIV) &&
 				(bcs->hw.isar.cmd == PCTRL_CMD_FTH) &&
 				(bcs->hw.isar.mod == para)) {
@@ -1482,6 +1501,7 @@ isar_pump_cmd(struct BCState *bcs, u_char cmd, u_char para)
 				bcs->hw.isar.mod = para;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.newcmd = 0;
+				bcs->hw.isar.try_mod = 3; 
 			} else if ((bcs->hw.isar.state == STFAX_ACTIV) &&
 				(bcs->hw.isar.cmd == PCTRL_CMD_FRM) &&
 				(bcs->hw.isar.mod == para)) {
@@ -1504,6 +1524,7 @@ isar_pump_cmd(struct BCState *bcs, u_char cmd, u_char para)
 				bcs->hw.isar.mod = para;
 				bcs->hw.isar.newmod = 0;
 				bcs->hw.isar.newcmd = 0;
+				bcs->hw.isar.try_mod = 3; 
 			} else if ((bcs->hw.isar.state == STFAX_ACTIV) &&
 				(bcs->hw.isar.cmd == PCTRL_CMD_FRH) &&
 				(bcs->hw.isar.mod == para)) {

@@ -129,6 +129,7 @@ void __free_pages(struct page *page, unsigned long order)
 		if (PageSwapCache(page))
 			panic ("Freeing swap cache page");
 		page->flags &= ~(1 << PG_referenced);
+		page->age = PAGE_AGE_INITIAL;
 		free_pages_ok(page - mem_map, order, PageDMA(page) ? 1 : 0);
 		return;
 	}

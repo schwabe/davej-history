@@ -73,6 +73,7 @@
 #include <asm/cobalt.h>
 #include <asm/msr.h>
 #include <asm/dma.h>
+#include <asm/e820.h>
 
 /*
  * Machine setup..
@@ -103,6 +104,7 @@ struct sys_desc_table_struct {
 	unsigned short length;
 	unsigned char table[0];
 };
+struct e820map e820;
 
 unsigned char aux_device_present;
 
@@ -123,6 +125,8 @@ extern unsigned long cpu_khz;
 #define SCREEN_INFO (*(struct screen_info *) (PARAM+0))
 #define EXT_MEM_K (*(unsigned short *) (PARAM+2))
 #define ALT_MEM_K (*(unsigned long *) (PARAM+0x1e0))
+#define E820_MAP_NR (*(char*) (PARAM+E820NR))
+#define E820_MAP  ((struct e820entry *) (PARAM+E820MAP))
 #define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+0x40))
 #define DRIVE_INFO (*(struct drive_info_struct *) (PARAM+0x80))
 #define SYS_DESC_TABLE (*(struct sys_desc_table_struct*)(PARAM+0xa0))
@@ -268,6 +272,87 @@ visws_get_board_type_and_rev(void)
 					visws_board_rev);
 	}
 #endif
+void __init add_memory_region(unsigned long long start,
+                                  unsigned long long size, int type)
+{
+       int x = e820.nr_map;
+
+       if (x == E820MAX) {
+           printk("Ooops! Too many entries in the memory map!\n");
+           return;
+       }
+
+       e820.map[x].addr = start;
+       e820.map[x].size = size;
+       e820.map[x].type = type;
+       e820.nr_map++;
+} /* add_memory_region */
+
+static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
+{
+       /* Only one memory region (or negative)? Ignore it */
+       if (nr_map < 2)
+               return -1;
+
+       do {
+               unsigned long long start = biosmap->addr;
+               unsigned long long size = biosmap->size;
+               unsigned long long end = start + size;
+               unsigned long type = biosmap->type;
+
+               /* Overflow in 64 bits? Ignore the memory map. */
+               if (start > end)
+                       return -1;
+
+               /*
+                * Some BIOSes claim RAM in the 640k - 1M region.
+                * Not right. Fix it up.
+                */
+               if (type == E820_RAM) {
+                       if (start < 0x100000ULL && end > 0xA0000ULL) {
+                               if (start < 0xA0000ULL)
+                                       add_memory_region(start, 0xA0000ULL-start, type);
+                               if (end < 0x100000ULL)
+                                       continue;
+                               start = 0x100000ULL;
+                               size = end - start;
+                       }
+               }
+               add_memory_region(start, size, type);
+       } while (biosmap++,--nr_map);
+       return 0;
+}
+
+#define LOWMEMSIZE() (0x9f000)
+
+void __init setup_memory_region(void)
+{
+       char *who = "BIOS-e820";
+
+       /*
+        * Try to copy the BIOS-supplied E820-map.
+        *
+        * Otherwise fake a memory map; one section from 0k->640k,
+        * the next section from 1mb->appropriate_mem_k
+        */
+       if (copy_e820_map(E820_MAP, E820_MAP_NR) < 0) {
+               unsigned long mem_size;
+
+               /* compare results from other methods and take the greater */
+               if (ALT_MEM_K < EXT_MEM_K) {
+                       mem_size = EXT_MEM_K;
+                       who = "BIOS-88";
+               } else {
+                       mem_size = ALT_MEM_K;
+                       who = "BIOS-e801";
+               }
+
+               e820.nr_map = 0;
+               add_memory_region(0, LOWMEMSIZE(), E820_RAM);
+               add_memory_region(HIGH_MEMORY, mem_size << 10, E820_RAM);
+       }
+       printk("BIOS-provided physical RAM map:\n");
+} /* setup_memory_region */
 
 
 static char command_line[COMMAND_LINE_SIZE] = { 0, };
@@ -278,9 +363,11 @@ __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	unsigned long memory_start, memory_end;
+	unsigned long max_pfn;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
 	int read_endbase_from_BIOS = 1;
+	int i;
 
 #ifdef CONFIG_VISWS
 	visws_get_board_type_and_rev();
@@ -297,17 +384,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 		BIOS_revision = SYS_DESC_TABLE.table[2];
 	}
 	aux_device_present = AUX_DEVICE_INFO;
-	memory_end = (1<<20) + (EXT_MEM_K<<10);
-#ifndef STANDARD_MEMORY_BIOS_CALL
-	{
-		unsigned long memory_alt_end = (1<<20) + (ALT_MEM_K<<10);
-		/* printk(KERN_DEBUG "Memory sizing: %08x %08x\n", memory_end, memory_alt_end); */
-		if (memory_alt_end > memory_end)
-			memory_end = memory_alt_end;
-	}
-#endif
 
-	memory_end &= PAGE_MASK;
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
 	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
@@ -324,6 +401,26 @@ __initfunc(void setup_arch(char **cmdline_p,
 	/* Save unparsed command line copy for /proc/cmdline */
 	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
 	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
+
+       setup_memory_region();
+
+#define PFN_UP(x)      (((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
+#define PFN_DOWN(x)    ((x) >> PAGE_SHIFT)
+       max_pfn = 0;
+       for (i = 0; i < e820.nr_map; i++) {
+               unsigned long start, end;
+               /* RAM? */
+               if (e820.map[i].type != E820_RAM)
+                       continue;
+               start = PFN_UP(e820.map[i].addr);
+               end = PFN_DOWN(e820.map[i].addr + e820.map[i].size);
+               if (start >= end)
+                       continue;
+               if (end > max_pfn)
+                       max_pfn = end;
+       }
+       memory_end = (max_pfn << PAGE_SHIFT);
+
 
 	for (;;) {
 		/*

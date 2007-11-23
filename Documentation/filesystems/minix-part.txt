@@ -1,0 +1,43 @@
+Minix 2.0.0/2.0.2 subpartition support.
+=======================================
+
+  Minix subpartition support is provided in `linux/drivers/block/genhd.c'.
+Minix partitions are shown with the device name suffixed with an `@'
+followed by any detected subpartitions inside angle brackets, like this:
+
+Partition check:
+ hda: hda1 hda2@ < hda5 hda6 > hda3 hda4
+
+Usage
+=====
+
+Add entries to /etc/fstab, change for your setup:
+ /dev/hda5	/mnt/minix	minix	rw,noauto	0	0
+ /dev/hda6	/mnt/minix/usr	minix	rw,noauto	0	0
+
+To mount your Minix filesystems:
+ mount /mnt/minix		# mount /
+ mount /mnt/minix/usr		# mount /usr
+
+
+Note
+====
+
+The first sector of a Minix 2.0.0/2.0.2 partition containing 
+subpartitions looks like the master boot record (MBR) on the first 
+sector of the hard disk. 
+
+It has
+ 1) a small loader program which loads the boot sector from
+          the Minix root partition (usually hd?a).
+ 2) a small partition table which gives the starting 
+	  C/H/S values and sizes for the 4 Minix subpartitions.
+
+If there are no subpartitions then the first sector of the Minix
+partition contains the usual boot sector.
+
+Bug Reports
+===========
+
+Anand Krishnamurthy <anandk@wiproge.med.ge.com>
+Rajeev V. Pillai    <rajeevvp@yahoo.com> 

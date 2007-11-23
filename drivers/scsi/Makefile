@@ -61,6 +61,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_CHR_DEV_OSST),y)
+L_OBJS += osst.o
+else
+  ifeq ($(CONFIG_CHR_DEV_OSST),m)
+  M_OBJS += osst.o
+  endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_SD),y)
 L_OBJS += sd.o sd_ioctl.o
 else

@@ -15,7 +15,8 @@
  * Fixes:
  *	JJC			: Implemented also input pkt hook
  *	Miquel van Smoorenburg	: Copy more stuff when resizing skb
- *
+ *	Juan Jose Ciarlante	: reworked register() (new _init_xxxx()  functions for nicer interface)
+ *	Juan Jose Ciarlante	: add INBOUND hooks (default to OUTBOUND)
  *
  * FIXME:
  *	- ip_masq_skb_replace(): use same skb if space available.
@@ -41,13 +42,27 @@
 
 #define IP_MASQ_APP_TAB_SIZE  16 /* must be power of 2 */
 
-#define IP_MASQ_APP_HASH(proto, port) ((port^proto) & (IP_MASQ_APP_TAB_SIZE-1))
-#define IP_MASQ_APP_TYPE(proto, port) ( proto<<16 | port )
-#define IP_MASQ_APP_PORT(type)        ( type & 0xffff )
-#define IP_MASQ_APP_PROTO(type)       ( (type>>16) & 0x00ff )
+/*
+ * 	ip_masq_app->type holds all the values needed to hook
+ * 	passing packet
+ * 		flags: 	(uses only upper 8bits: f_bits)
+ * 			INBOUND, OUTBOUND
+ * 			FWMARK
+ *
+ * 	if (flags & IP_MASQ_APP_FWMARK)
+ * 		[ f_bits][ fwmark (24 bits only)  ]
+ * 	else
+ * 		[ f_bits][ proto ][     port      ]
+ * 	        
+ * 	        <-----------  32 bits ------------>
+ * 	
+ */
+
+#define IP_MASQ_APP_HASH(type) (((type>>16)^(type)) & (IP_MASQ_APP_TAB_SIZE-1))
 
 
 EXPORT_SYMBOL(register_ip_masq_app);
+EXPORT_SYMBOL(register_ip_masq_app_type);
 EXPORT_SYMBOL(unregister_ip_masq_app);
 EXPORT_SYMBOL(ip_masq_skb_replace);
 
@@ -58,29 +73,53 @@ EXPORT_SYMBOL(ip_masq_skb_replace);
 struct ip_masq_app *ip_masq_app_base[IP_MASQ_APP_TAB_SIZE];
 
 /*
- * 	ip_masq_app registration routine
- *	port: host byte order.
+ * 	"raw" ip_masq_app registration routine if you 
+ * 	did ip_masq_app_init_xxxx() before to initialize (and check)
+ * 	type value
  */
 
-int register_ip_masq_app(struct ip_masq_app *mapp, unsigned short proto, __u16 port)
-{
+int register_ip_masq_app_type(struct ip_masq_app *mapp)  {
         unsigned long flags;
         unsigned hash;
+#ifdef CONFIG_IP_MASQ_DEBUG
         if (!mapp) {
                 IP_MASQ_ERR("register_ip_masq_app(): NULL arg\n");
                 return -EINVAL;
         }
-        mapp->type = IP_MASQ_APP_TYPE(proto, port);
+#endif
+	if (!mapp->type) {
+		IP_MASQ_DEBUG(1, "ip_masq_app_register_type(): ZERO type passed\n");
+		return -EINVAL;
+	}
+
         mapp->n_attach = 0;
-        hash = IP_MASQ_APP_HASH(proto, port);
+        hash = IP_MASQ_APP_HASH(mapp->type);
+	IP_MASQ_DEBUG(2, "ip_masq_app_register(): type=0x%x hash=0x%x\n", mapp->type, hash);
 
         save_flags(flags);
         cli();
         mapp->next = ip_masq_app_base[hash];
         ip_masq_app_base[hash] = mapp;
         restore_flags(flags);
+	return 0;
+}
 
-        return 0;
+/*
+ * 	ip_masq_app registration routine
+ *	port: host byte order.
+ *	proto:  (flags<<8) | ipproto 
+ */
+int register_ip_masq_app(struct ip_masq_app *mapp, unsigned proto, __u16 port)
+{
+#ifdef CONFIG_IP_MASQ_DEBUG
+        if (!mapp) {
+                IP_MASQ_ERR("register_ip_masq_app(): NULL arg\n");
+                return -EINVAL;
+        }
+#endif
+
+	ip_masq_app_init_proto_port(mapp, IP_MASQ_APP_OUTBOUND, proto, port);
+        return register_ip_masq_app_type(mapp);
 }
 
 /*
@@ -104,7 +143,7 @@ int unregister_ip_masq_app(struct ip_masq_app *mapp)
                        mapp->n_attach);
                 return -EINVAL;
         }
-        hash = IP_MASQ_APP_HASH(IP_MASQ_APP_PROTO(mapp->type), IP_MASQ_APP_PORT(mapp->type));
+        hash = IP_MASQ_APP_HASH(mapp->type);
 
         save_flags(flags);
         cli();
@@ -116,24 +155,26 @@ int unregister_ip_masq_app(struct ip_masq_app *mapp)
                 }
 
         restore_flags(flags);
-        IP_MASQ_ERR("unregister_ip_masq_app(proto=%s,port=%u): not hashed!\n",
-               masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)), IP_MASQ_APP_PORT(mapp->type));
+        IP_MASQ_ERR("unregister_ip_masq_app(flags=0x%x, proto=%s,port=%u,fwmark=%d): not hashed!\n",
+			
+		IP_MASQ_APP_TYPE2FLAGS(mapp->type),
+		masq_proto_name(IP_MASQ_APP_TYPE2PROTO(mapp->type)), 
+		IP_MASQ_APP_TYPE2PORT(mapp->type),
+		IP_MASQ_APP_TYPE2FWMARK(mapp->type));
         return -EINVAL;
 }
 
 /*
- *	get ip_masq_app object by its proto and port (net byte order).
+ *	get ip_masq_app object by its proto and port (host byte order).
  */
 
-struct ip_masq_app * ip_masq_app_get(unsigned short proto, __u16 port)
+struct ip_masq_app * ip_masq_app_get_type(unsigned type)
 {
         struct ip_masq_app *mapp;
         unsigned hash;
-        unsigned type;
 
-        port = ntohs(port);
-        type = IP_MASQ_APP_TYPE(proto,port);
-        hash = IP_MASQ_APP_HASH(proto,port);
+        hash = IP_MASQ_APP_HASH(type);
+	IP_MASQ_DEBUG(2, "ip_masq_app_get(): type=0x%x hash=0x%x\n", type, hash);
         for(mapp = ip_masq_app_base[hash]; mapp ; mapp = mapp->next) {
                 if (type == mapp->type) return mapp;
         }
@@ -159,8 +200,8 @@ static __inline__ int ip_masq_app_bind_chg(struct ip_masq_app *mapp, int delta)
         if (n_at < 0) {
                 restore_flags(flags);
                 IP_MASQ_ERR("ip_masq_app: tried to set n_attach < 0 for (proto=%s,port==%d) ip_masq_app object.\n",
-                       masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)),
-                       IP_MASQ_APP_PORT(mapp->type));
+                       masq_proto_name(IP_MASQ_APP_TYPE2PROTO(mapp->type)),
+                       IP_MASQ_APP_TYPE2PORT(mapp->type));
                 return -1;
         }
         mapp->n_attach = n_at;
@@ -169,41 +210,91 @@ static __inline__ int ip_masq_app_bind_chg(struct ip_masq_app *mapp, int delta)
 }
 
 /*
+ *	Actually bind pointers and call contructor
+ */
+
+static struct ip_masq_app *do_bind_app(struct ip_masq *ms, struct ip_masq_app *mapp) 
+{
+	/*
+	 *	don't allow binding if already bound
+	 */
+	if (ms->app != NULL) {
+		IP_MASQ_ERR("ip_masq_bind_app() called for already bound object.\n");
+		goto end;
+	}
+	IP_MASQ_DEBUG(1, "ip_masq_bind_app() : bound \"%s\" module\n", mapp->name);
+	ms->app = mapp;
+	if (mapp->masq_init_1) mapp->masq_init_1(mapp, ms);
+	ip_masq_app_bind_chg(mapp, +1);
+end:
+        return ms->app;
+}
+
+/*
  *	Bind ip_masq to its ip_masq_app based on proto and dport ALREADY
- *	set in ip_masq struct. Also calls constructor.
+ *	set in ip_masq struct. 
+ *	Only called from ip_masq_new() when creating NEW masq tunnel,
  */
 
 struct ip_masq_app * ip_masq_bind_app(struct ip_masq *ms)
 {
         struct ip_masq_app * mapp;
+	unsigned type;
 
 	if (ms->protocol != IPPROTO_TCP && ms->protocol != IPPROTO_UDP)
 		return NULL;
 
-        mapp = ip_masq_app_get(ms->protocol, ms->dport);
+	IP_MASQ_DEBUG(1, "ip_masq_bind_app() : called for dst=%d.%d.%d.%d:%d src=%d.%d.%d.%d:%d masq=%d.%d.%d.%d:%d\n",
+			NIPQUAD(ms->daddr), ntohs(ms->dport),
+			NIPQUAD(ms->saddr), ntohs(ms->sport),
+			NIPQUAD(ms->maddr), ntohs(ms->mport));
 
-#if 0000
-/* #ifdef CONFIG_IP_MASQUERADE_IPAUTOFW */
-	if (mapp == NULL)
-		mapp = ip_masq_app_get(ms->protocol, ms->sport);
-/* #endif */
-#endif
+	/*
+	 * 	Lookup "normal" case (client's active open inside)  	
+	 */
+	type = IP_MASQ_APP_TYPE_PP(IP_MASQ_APP_OUTBOUND, ms->protocol, ntohs(ms->dport));
+        mapp = ip_masq_app_get_type(type);
 
-        if (mapp != NULL) {
-                /*
-                 *	don't allow binding if already bound
-                 */
+	if (mapp==NULL) {
+		/*	
+		 *	lookup "reverse" case (server waiting inside,
+		 *	for portfw and friends)
+		 */
+		type = IP_MASQ_APP_TYPE_PP(IP_MASQ_APP_INBOUND, ms->protocol, ntohs(ms->mport));
+		mapp = ip_masq_app_get_type(type);
+	}
 
-                if (ms->app != NULL) {
-                        IP_MASQ_ERR("ip_masq_bind_app() called for already bound object.\n");
-                        return ms->app;
-                }
+        if (mapp != NULL) 
+		mapp=do_bind_app(ms, mapp);
+	return mapp;
+}
+/*
+ *	Bind ip_masq to its ip_masq_app based on firewall mark
+ */
+struct ip_masq_app * ip_masq_bind_app_fwmark(struct ip_masq *ms, __u32 fwmark) {
+	struct ip_masq_app *mapp;
+	unsigned type;
 
-                ms->app = mapp;
-                if (mapp->masq_init_1) mapp->masq_init_1(mapp, ms);
-                ip_masq_app_bind_chg(mapp, +1);
-        }
-        return mapp;
+	IP_MASQ_DEBUG(1, "ip_masq_bind_app_fwmark() : called for fwmark=0x%x, dst=%d.%d.%d.%d:%d src=%d.%d.%d.%d:%d masq=%d.%d.%d.%d:%d\n",
+			fwmark,
+			NIPQUAD(ms->daddr), ntohs(ms->dport),
+			NIPQUAD(ms->saddr), ntohs(ms->sport),
+			NIPQUAD(ms->maddr), ntohs(ms->mport));
+
+	type = IP_MASQ_APP_TYPE_FWMARK(IP_MASQ_APP_OUTBOUND, fwmark);
+        mapp = ip_masq_app_get_type(type);
+
+	if (mapp==NULL) {
+		/*	
+		 *	lookup "reverse" case (server waiting inside,
+		 *	for portfw and friends)
+		 */
+		type = IP_MASQ_APP_TYPE_FWMARK(IP_MASQ_APP_INBOUND, fwmark);
+		mapp = ip_masq_app_get_type(type);
+	}
+        if (mapp != NULL) 
+		mapp=do_bind_app(ms, mapp);
+	return mapp;
 }
 
 /*
@@ -269,10 +360,14 @@ static __inline__ void masq_fix_ack_seq(const struct ip_masq_seq *ms_seq, struct
          * Adjust ack_seq with delta-offset for
          * the packets AFTER most recent resized pkt has caused a shift
          * for packets before most recent resized pkt, use previous_delta
+	 *
+	 * Compare acks against  (remote SEQs space is +delta)
+	 * 	(ms_seq->init_seq + ms_seq->delta), not ms_seq->init_seq
+	 * 		-- R.R. 27/08/00
          */
 
         if (ms_seq->delta || ms_seq->previous_delta) {
-                if(after(ack_seq,ms_seq->init_seq)) {
+                if(after(ack_seq,ms_seq->init_seq + ms_seq->delta)) {
                         th->ack_seq = htonl(ack_seq-ms_seq->delta);
                         IP_MASQ_DEBUG(1, "masq_fix_ack_seq() : subtracted delta (%d) from ack_seq\n",ms_seq->delta);
 
@@ -455,8 +550,8 @@ int ip_masq_app_getinfo(char *buffer, char **start, off_t offset, int length, in
 				continue;
 
                         len += sprintf(buffer+len, "%-3s  %-7u %-7d  %-17s\n",
-                                       masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)),
-                                       IP_MASQ_APP_PORT(mapp->type), mapp->n_attach,
+                                       masq_proto_name(IP_MASQ_APP_TYPE2PROTO(mapp->type)),
+                                       IP_MASQ_APP_TYPE2PORT(mapp->type), mapp->n_attach,
 				       mapp->name);
 
                         if(len >= length)
@@ -497,7 +592,7 @@ __initfunc(int ip_masq_app_init(void))
  *	Replace a segment (of skb->data) with a new one.
  *	FIXME: Should re-use same skb if space available, this could
  *	       be done if n_len < o_len, unless some extra space
- *	       were already allocated at driver level :P .
+ *	       were already allocated at link level :P .
  */
 
 static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, int o_len, char *n_buf, int n_len)

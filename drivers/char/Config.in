@@ -99,7 +99,13 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   mainmenu_option next_comment
   comment 'Watchdog Cards'
   bool '   Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
-  tristate '   WDT Watchdog timer' CONFIG_WDT
+  tristate '   Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
+  tristate '   Advantech SBC Watchdog Timer' CONFIG_ADVANTECH_WDT
+  tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
+  tristate '   Mixcom Watchdog' CONFIG_MIXCOMWD 
+  tristate '   SBC-60XX Watchdog Timer' CONFIG_60XX_WDT
+  tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
+  tristate '   WDT ISA Watchdog timer' CONFIG_WDT
   if [ "$CONFIG_WDT" != "n" ]; then
      bool '       WDT501 features' CONFIG_WDT_501
      if [ "$CONFIG_WDT_501" = "y" ]; then
@@ -107,11 +113,6 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
      fi
   fi
   tristate '   WDT PCI Watchdog timer' CONFIG_WDTPCI
-  tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
-  tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
-  tristate '   Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
-  tristate '   SBC-60XX Watchdog Timer' CONFIG_60XX_WDT
-  tristate '   Mixcom Watchdog' CONFIG_MIXCOMWD 
   endmenu
 fi
 
@@ -128,8 +129,8 @@ fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    tristate '/dev/agpgart (AGP Support) (EXPERIMENTAL)' CONFIG_AGP n
    if [ "$CONFIG_AGP" != "n" ]; then
-      bool '   Intel 440LX/BX/GX support' CONFIG_AGP_INTEL
-      bool '   Intel I810/I810 DC100/I810e support' CONFIG_AGP_I810
+      bool '   Intel 440LX/BX/GX and I815/820 support' CONFIG_AGP_INTEL
+      bool '   Intel I810/I815 (on-board video) support' CONFIG_AGP_I810
       bool '   VIA VP3/MVP3/Apollo Pro support' CONFIG_AGP_VIA
       bool '   AMD Irongate support' CONFIG_AGP_AMD
       bool '   Generic SiS support' CONFIG_AGP_SIS

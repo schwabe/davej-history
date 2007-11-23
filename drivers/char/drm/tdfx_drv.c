@@ -38,13 +38,6 @@
 #include <linux/agp_backend.h>
 #endif
 
-static void __attribute__((unused)) unused(void)
-{
-#if defined(CONFIG_AGP) || defined(CONFIG_AGP_MODULE)
-	agp_enable(0);
-#endif
-}
-
 #define TDFX_NAME	 "tdfx"
 #define TDFX_DESC	 "3dfx Banshee/Voodoo3+"
 #define TDFX_DATE	 "20000719"

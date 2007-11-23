@@ -241,7 +241,7 @@ The device driver may use these commands as appropriate.
 
 The get_dev_info_by_irq() / get_dev_info_by_devno() functions return:
 
-      0 - sucessful completion
+      0 - successful completion
 -ENODEV - irq or devno don't specify a known subchannel or device
           number.
 -EINVAL - invalid devinfo value.

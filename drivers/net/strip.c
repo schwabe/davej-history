@@ -14,7 +14,7 @@
  *		for kernel-based devices like TTY.  It interfaces between a
  *		raw TTY, and the kernel's INET protocol layers (via DDI).
  *
- * Version:	@(#)strip.c	1.3	July 1997
+ * Version:	@(#)strip.c	1.4	September 2000
  *
  * Author:	Stuart Cheshire <cheshire@cs.stanford.edu>
  *
@@ -66,12 +66,15 @@
  *              It is no longer necessarily to manually set the radio's
  *              rate permanently to 115200 -- the driver handles setting
  *              the rate automatically.
+ *
+ *              v1.4 September 2000 (AB)
+ *              Added support for long serial numbers.
  */
 
 #ifdef MODULE
-static const char StripVersion[] = "1.3-STUART.CHESHIRE-MODULAR";
+static const char StripVersion[] = "1.4-STUART.CHESHIRE-MODULAR";
 #else
-static const char StripVersion[] = "1.3-STUART.CHESHIRE";
+static const char StripVersion[] = "1.4-STUART.CHESHIRE";
 #endif
 
 #define TICKLE_TIMERS 0
@@ -897,20 +900,37 @@ static void set_baud(struct tty_struct *tty, unsigned int baudcode)
  * Convert a string to a Metricom Address.
  */
 
-#define IS_RADIO_ADDRESS(p) (                                                 \
+#define IS_RADIO_ADDRESS_1(p) (                                               \
   isdigit((p)[0]) && isdigit((p)[1]) && isdigit((p)[2]) && isdigit((p)[3]) && \
   (p)[4] == '-' &&                                                            \
   isdigit((p)[5]) && isdigit((p)[6]) && isdigit((p)[7]) && isdigit((p)[8])    )
 
+#define IS_RADIO_ADDRESS_2(p) (                                               \
+  isdigit((p)[0]) && isdigit((p)[1]) &&                                       \
+  (p)[2] == '-' &&                                                            \
+  isdigit((p)[3]) && isdigit((p)[4]) && isdigit((p)[5]) && isdigit((p)[6]) && \
+  (p)[7] == '-' &&                                                            \
+  isdigit((p)[8]) && isdigit((p)[9]) && isdigit((p)[10]) && isdigit((p)[11])  )
+
 static int string_to_radio_address(MetricomAddress *addr, __u8 *p)
 {
-    if (!IS_RADIO_ADDRESS(p)) return(1);
+    if (IS_RADIO_ADDRESS_2(p))
+    {
+        addr->c[0] = 0;
+        addr->c[1] = (READHEX(p[0]) << 4 | READHEX(p[1])) ^ 0xFF;
+        addr->c[2] = READHEX(p[3]) << 4 | READHEX(p[4]);
+        addr->c[3] = READHEX(p[5]) << 4 | READHEX(p[6]);
+        addr->c[4] = READHEX(p[8]) << 4 | READHEX(p[9]);
+        addr->c[5] = READHEX(p[10]) << 4 | READHEX(p[11]);
+    }else{
+        if(!IS_RADIO_ADDRESS_1(p)) return(1);
     addr->c[0] = 0;
     addr->c[1] = 0;
     addr->c[2] = READHEX(p[0]) << 4 | READHEX(p[1]);
     addr->c[3] = READHEX(p[2]) << 4 | READHEX(p[3]);
     addr->c[4] = READHEX(p[5]) << 4 | READHEX(p[6]);
     addr->c[5] = READHEX(p[7]) << 4 | READHEX(p[8]);
+    }
     return(0);
 }
 
@@ -920,6 +940,9 @@ static int string_to_radio_address(MetricomAddress *addr, __u8 *p)
 
 static __u8 *radio_address_to_string(const MetricomAddress *addr, MetricomAddressString *p)
 {
+    if(addr->c[1])
+        sprintf(p->c, "%02X-%02X%02X-%02X%02X", addr->c[1] ^ 0xFF, addr->c[2], addr->c[3], addr->c[4], addr->c[5]);
+    else
     sprintf(p->c, "%02X%02X-%02X%02X", addr->c[2], addr->c[3], addr->c[4], addr->c[5]);
     return(p->c);
 }
@@ -1481,6 +1504,12 @@ static unsigned char *strip_make_packet(unsigned char *buffer, struct strip *str
 
     *ptr++ = 0x0D;
     *ptr++ = '*';
+    if(haddr.c[1])
+    {
+        *ptr++ = hextable[(haddr.c[1] >> 4) ^ 0xF];
+        *ptr++ = hextable[(haddr.c[1] & 0xF) ^ 0xF];
+        *ptr++ = '-';
+    }
     *ptr++ = hextable[haddr.c[2] >> 4];
     *ptr++ = hextable[haddr.c[2] & 0xF];
     *ptr++ = hextable[haddr.c[3] >> 4];

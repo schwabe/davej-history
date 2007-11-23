@@ -1,5 +1,5 @@
-/* $Id: sedlbauer.c,v 1.20 2000/01/20 19:47:45 keil Exp $
-
+/* $Id: sedlbauer.c,v 1.23 2000/06/26 08:59:14 keil Exp $
+ *
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
  *              support for the Sedlbauer speed fax+,
@@ -16,71 +16,7 @@
  *            Sedlbauer AG for informations
  *            Edgar Toernig
  *
- * $Log: sedlbauer.c,v $
- * Revision 1.20  2000/01/20 19:47:45  keil
- * Add Fax Class 1 support
- *
- * Revision 1.19  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.18  1999/11/13 21:25:03  keil
- * Support for Speedfax+ PCI
- *
- * Revision 1.17  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.16  1999/08/29 18:23:01  niemann
- * Fixed typo in errormsg
- *
- * Revision 1.15  1999/08/25 17:00:00  keil
- * Make ISAR V32bis modem running
- * Make LL->HL interface open for additional commands
- *
- * Revision 1.14  1999/08/11 20:59:22  keil
- * new PCI codefix
- * fix IRQ problem while unload
- *
- * Revision 1.13  1999/08/10 16:02:08  calle
- * struct pci_dev changed in 2.3.13. Made the necessary changes.
- *
- * Revision 1.12  1999/08/05 20:43:22  keil
- * ISAR analog modem support
- *
- * Revision 1.11  1999/07/12 21:05:27  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.10  1999/07/01 08:12:09  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.9  1998/11/15 23:55:20  keil
- * changes from 2.0
- *
- * Revision 1.8  1998/08/13 23:34:51  keil
- * starting speedfax+ (ISAR) support
- *
- * Revision 1.7  1998/04/15 16:44:33  keil
- * new init code
- *
- * Revision 1.6  1998/02/09 18:46:06  keil
- * Support for Sedlbauer PCMCIA (Marcus Niemann)
- *
- * Revision 1.5  1998/02/02 13:29:45  keil
- * fast io
- *
- * Revision 1.4  1997/11/08 21:35:52  keil
- * new l1 init
- *
- * Revision 1.3  1997/11/06 17:09:28  keil
- * New 2.1 init code
- *
- * Revision 1.2  1997/10/29 18:55:52  keil
- * changes for 2.1.60 (irq2dev_map)
- *
- * Revision 1.1  1997/09/11 17:32:04  keil
- * new
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 
@@ -103,8 +39,6 @@
  * For example: hisaxctrl <DriverID> 9 ISAR.BIN
 */
 
-#define SEDLBAUER_PCI 1
-
 #define __NO_VERSION__
 #include <linux/config.h>
 #include "hisax.h"
@@ -117,19 +51,23 @@
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.20 $";
+const char *Sedlbauer_revision = "$Revision: 1.23 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 
 	"speed win II / ISDN PC/104", "speed star II", "speed pci",
-	"speed fax+ pci"};
+	"speed fax+ pyramid", "speed fax+ pci"};
 
-#ifdef SEDLBAUER_PCI
-#define PCI_VENDOR_SEDLBAUER	0xe159
-#define PCI_SPEEDPCI_ID		0x02
-#define PCI_SUBVENDOR_SEDLBAUER	0x51
-#define PCI_SUB_ID_SPEEDFAXP	0x01
+#ifndef PCI_VENDOR_ID_TIGERJET
+#define PCI_VENDOR_ID_TIGERJET		0xe159
 #endif
+#ifndef PCI_DEVICE_ID_TIGERJET_100
+#define PCI_DEVICE_ID_TIGERJET_100	0x0002
+#endif
+#define PCI_SUBVENDOR_SPEEDFAX_PYRAMID	0x51
+#define PCI_SUBVENDOR_SEDLBAUER_PCI	0x53
+#define PCI_SUBVENDOR_SPEEDFAX_PCI	0x54
+#define PCI_SUB_ID_SEDLBAUER		0x01
  
 #define SEDL_SPEED_CARD_WIN	1
 #define SEDL_SPEED_STAR 	2
@@ -137,7 +75,8 @@ const char *Sedlbauer_Types[] =
 #define SEDL_SPEED_WIN2_PC104 	4
 #define SEDL_SPEED_STAR2 	5
 #define SEDL_SPEED_PCI   	6
-#define SEDL_SPEEDFAX_PCI	7
+#define SEDL_SPEEDFAX_PYRAMID	7
+#define SEDL_SPEEDFAX_PCI	8
 
 #define SEDL_CHIP_TEST		0
 #define SEDL_CHIP_ISAC_HSCX	1
@@ -349,10 +288,10 @@ sedlbauer_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	}
 
 	if ((cs->hw.sedl.bus == SEDL_BUS_PCMCIA) && (*cs->busy_flag == 1)) {
-          /* The card tends to generate interrupts while being removed
-             causing us to just crash the kernel. bad. */
-          printk(KERN_WARNING "Sedlbauer: card not available!\n");
-          return;
+		/* The card tends to generate interrupts while being removed
+		   causing us to just crash the kernel. bad. */
+		printk(KERN_WARNING "Sedlbauer: card not available!\n");
+		return;
         }
 
 	val = readreg(cs->hw.sedl.adr, cs->hw.sedl.hscx, HSCX_ISTA + 0x40);
@@ -424,7 +363,8 @@ Start_IPAC:
 		goto Start_IPAC;
 	}
 	if (!icnt)
-		printk(KERN_WARNING "Sedlbauer IRQ LOOP\n");
+		if (cs->debug & L1_DEB_ISAC)
+			debugl1(cs, "Sedlbauer IRQ LOOP");
 	writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_MASK, 0xFF);
 	writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_MASK, 0xC0);
 }
@@ -462,7 +402,8 @@ sedlbauer_interrupt_isar(int intno, void *dev_id, struct pt_regs *regs)
 		goto Start_ISAC;
 	}
 	if (!cnt)
-		printk(KERN_WARNING "Sedlbauer IRQ LOOP\n");
+		if (cs->debug & L1_DEB_ISAC)
+			debugl1(cs, "Sedlbauer IRQ LOOP");
 
 	writereg(cs->hw.sedl.adr, cs->hw.sedl.hscx, ISAR_IRQBIT, 0);
 	writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, ISAC_MASK, 0xFF);
@@ -497,10 +438,10 @@ reset_sedlbauer(struct IsdnCardState *cs)
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_POTA2, 0x20);
 			save_flags(flags);
 			sti();
-			current->state = TASK_UNINTERRUPTIBLE;
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_POTA2, 0x0);
-			current->state = TASK_UNINTERRUPTIBLE;
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_CONF, 0x0);
 			writereg(cs->hw.sedl.adr, cs->hw.sedl.isac, IPAC_ACFG, 0xff);
@@ -523,10 +464,10 @@ reset_sedlbauer(struct IsdnCardState *cs)
 			byteout(cs->hw.sedl.reset_on, SEDL_RESET);	/* Reset On */
 			save_flags(flags);
 			sti();
-			current->state = TASK_UNINTERRUPTIBLE;
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			byteout(cs->hw.sedl.reset_off, 0);	/* Reset Off */
-			current->state = TASK_UNINTERRUPTIBLE;
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((10*HZ)/1000);
 			restore_flags(flags);
 		}
@@ -572,7 +513,7 @@ Sedl_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 		case CARD_TEST:
 			return(0);
 		case MDL_INFO_CONN:
-			if (cs->subtyp != SEDL_SPEEDFAX_PCI)
+			if (cs->subtyp != SEDL_SPEEDFAX_PYRAMID)
 				return(0);
 			if ((long) arg)
 				cs->hw.sedl.reset_off &= ~SEDL_ISAR_PCI_LED2;
@@ -581,7 +522,7 @@ Sedl_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			byteout(cs->hw.sedl.cfg_reg +3, cs->hw.sedl.reset_off);
 			break;
 		case MDL_INFO_REL:
-			if (cs->subtyp != SEDL_SPEEDFAX_PCI)
+			if (cs->subtyp != SEDL_SPEEDFAX_PYRAMID)
 				return(0);
 			if ((long) arg)
 				cs->hw.sedl.reset_off |= SEDL_ISAR_PCI_LED2;
@@ -593,9 +534,7 @@ Sedl_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 	return(0);
 }
 
-#ifdef SEDLBAUER_PCI
 static 	struct pci_dev *dev_sedl __initdata = NULL;
-#endif
 
 __initfunc(int
 setup_sedlbauer(struct IsdnCard *card))
@@ -633,42 +572,50 @@ setup_sedlbauer(struct IsdnCard *card))
 		}
 	} else {
 /* Probe for Sedlbauer speed pci */
-#if SEDLBAUER_PCI
 #if CONFIG_PCI
 		if (!pci_present()) {
 			printk(KERN_ERR "Sedlbauer: no PCI bus present\n");
 			return(0);
 		}
-		if ((dev_sedl = pci_find_device(PCI_VENDOR_SEDLBAUER,
-				PCI_SPEEDPCI_ID, dev_sedl))) {
+		if ((dev_sedl = pci_find_device(PCI_VENDOR_ID_TIGERJET,
+				PCI_DEVICE_ID_TIGERJET_100, dev_sedl))) {
+			if (pci_enable_device(dev_sedl))
+				return(0);
 			cs->irq = dev_sedl->irq;
 			if (!cs->irq) {
 				printk(KERN_WARNING "Sedlbauer: No IRQ for PCI card found\n");
 				return(0);
 			}
-			cs->hw.sedl.cfg_reg = dev_sedl->base_address[ 0] &
-				PCI_BASE_ADDRESS_IO_MASK; 
+			cs->hw.sedl.cfg_reg = dev_sedl->base_address[ 0] & PCI_BASE_ADDRESS_IO_MASK;
 		} else {
 			printk(KERN_WARNING "Sedlbauer: No PCI card found\n");
 			return(0);
 		}
 		cs->irq_flags |= SA_SHIRQ;
 		cs->hw.sedl.bus = SEDL_BUS_PCI;
-		pci_read_config_word(dev_sedl, PCI_SUBSYSTEM_VENDOR_ID,
-			&sub_vendor_id);
-		pci_read_config_word(dev_sedl, PCI_SUBSYSTEM_ID,
-			&sub_id);
+		pci_read_config_word(dev_sedl, PCI_SUBSYSTEM_VENDOR_ID, &sub_vendor_id);
+		pci_read_config_word(dev_sedl, PCI_SUBSYSTEM_ID, &sub_id);
 		printk(KERN_INFO "Sedlbauer: PCI subvendor:%x subid %x\n",
 			sub_vendor_id, sub_id);
 		printk(KERN_INFO "Sedlbauer: PCI base adr %#x\n",
 			cs->hw.sedl.cfg_reg);
-		if ((sub_vendor_id == PCI_SUBVENDOR_SEDLBAUER) &&
-			(sub_id == PCI_SUB_ID_SPEEDFAXP)) {
+		if (sub_id != PCI_SUB_ID_SEDLBAUER) {
+			printk(KERN_ERR "Sedlbauer: unknown sub id %#x\n", sub_id);
+			return(0);
+		}
+		if (sub_vendor_id == PCI_SUBVENDOR_SPEEDFAX_PYRAMID) {
+			cs->hw.sedl.chip = SEDL_CHIP_ISAC_ISAR;
+			cs->subtyp = SEDL_SPEEDFAX_PYRAMID;
+		} else if (sub_vendor_id == PCI_SUBVENDOR_SPEEDFAX_PCI) {
 			cs->hw.sedl.chip = SEDL_CHIP_ISAC_ISAR;
 			cs->subtyp = SEDL_SPEEDFAX_PCI;
-		} else {
+		} else if (sub_vendor_id == PCI_SUBVENDOR_SEDLBAUER_PCI) {
 			cs->hw.sedl.chip = SEDL_CHIP_IPAC;
 			cs->subtyp = SEDL_SPEED_PCI;
+		} else {
+			printk(KERN_ERR "Sedlbauer: unknown sub vendor id %#x\n",
+				sub_vendor_id);
+			return(0);
 		}
 		bytecnt = 256;
 		cs->hw.sedl.reset_on = SEDL_ISAR_PCI_ISAR_RESET_ON;
@@ -688,7 +635,6 @@ setup_sedlbauer(struct IsdnCard *card))
 		printk(KERN_WARNING "Sedlbauer: NO_PCI_BIOS\n");
 		return (0);
 #endif /* CONFIG_PCI */
-#endif /* SEDLBAUER_PCI */
 	}	
 	
        	/* In case of the sedlbauer pcmcia card, this region is in use,
@@ -748,7 +694,6 @@ setup_sedlbauer(struct IsdnCard *card))
 
 
 	if (cs->hw.sedl.chip == SEDL_CHIP_IPAC) {
-	/* IPAC */
 		if (cs->hw.sedl.bus == SEDL_BUS_PCI) {
 	                cs->hw.sedl.adr  = cs->hw.sedl.cfg_reg + SEDL_IPAC_PCI_ADR;
         	        cs->hw.sedl.isac = cs->hw.sedl.cfg_reg + SEDL_IPAC_PCI_IPAC;

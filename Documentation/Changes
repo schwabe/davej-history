@@ -517,6 +517,31 @@ ISDN4Linux
 Older isdn4k-utils versions don't support EXTRAVERSION into kernel version
 string. A upgrade to isdn4k-utils.v3.1beta7 or later is recomented.
 
+Intel IA32 microcode
+====================
+
+A driver has been added to allow updating of Intel IA32 microcode,
+accessible as a misc character device.  If you have not done so already
+you might want to:
+
+mkdir /dev/cpu
+mknod /dev/cpu/microcode c 10 184
+chmod 0644 /dev/cpu/microcode
+
+as root before you can use this.  You'll probably also want to
+get the user-space microcode_ctl utility to use with this.  The utility is
+available at:
+
+http://www.urbanmyth.org/microcode
+
+If you have compiled the driver as a module you may need to add
+the following line:
+
+alias char-major-10-184 microcode
+
+to your /etc/modules.conf file.
+
+
 Where to get the files
 **********************
 

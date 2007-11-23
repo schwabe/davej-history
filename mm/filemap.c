@@ -158,8 +158,6 @@ int shrink_mmap(int priority, int gfp_mask)
  refresh_clock:
 	page = mem_map + clock;
 	do {
-		int referenced;
-
 		/* This works even in the presence of PageSkip because
 		 * the first two entries at the beginning of a hole will
 		 * be marked, not just the first.
@@ -176,11 +174,19 @@ int shrink_mmap(int priority, int gfp_mask)
 			clock = page - mem_map;
 		}
 		
+		if (test_and_clear_bit(PG_referenced, &page->flags)) {
+			page->age = PAGE_AGE_YOUNG;
+			continue;
+		}
+
+		if (page->age > 0) {
+			page->age--;
+			continue;
+		}
+
 		/* We can't free pages unless there's just one user */
 		if (atomic_read(&page->count) != 1)
 			continue;
-
-		referenced = test_and_clear_bit(PG_referenced, &page->flags);
 
 		if (PageLocked(page))
 			continue;
@@ -188,20 +194,11 @@ int shrink_mmap(int priority, int gfp_mask)
 		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
 			continue;
 
-		/*
-		 * Is it a page swap page? If so, we want to
-		 * drop it if it is no longer used, even if it
-		 * were to be marked referenced..
-		 */
+		/* Is it a page swap page? Drop it, its old. */
 		if (PageSwapCache(page)) {
-			if (referenced && swap_count(page->offset) != 1)
-				continue;
 			delete_from_swap_cache(page);
 			return 1;
 		}	
-
-		if (referenced)
-			continue;
 
 		/* Is it a buffer page? */
 		if (page->buffers) {

@@ -1,4 +1,4 @@
-/* $Id: hfc_sx.c,v 1.3 2000/01/20 19:49:36 keil Exp $
+/* $Id: hfc_sx.c,v 1.7 2000/09/08 22:55:59 werner Exp $
 
  * hfc_sx.c     low level driver for CCD´s hfc-s+/sp based cards
  *
@@ -21,24 +21,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Log: hfc_sx.c,v $
- * Revision 1.3  2000/01/20 19:49:36  keil
- * Support teles 13.3c vendor version 2.1
- *
- * Revision 1.2  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.1  1999/11/18 00:09:18  werner
- *
- * Initial release of files for HFC-S+ and HFC-SP cards with 32K-RAM.
- * Audio and Echo are supported.
- *
- *
- *
  */
 
-#include <linux/config.h>
 #define __NO_VERSION__
 #include "hisax.h"
 #include "hfc_sx.h"
@@ -47,7 +31,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcsx_revision = "$Revision: 1.3 $";
+static const char *hfcsx_revision = "$Revision: 1.7 $";
 
 /***************************************/
 /* IRQ-table for CCDs demo board       */
@@ -361,7 +345,7 @@ release_io_hfcsx(struct IsdnCardState *cs)
 	restore_flags(flags);
 	Write_hfc(cs, HFCSX_CIRM, HFCSX_RESET);	/* Reset On */
 	sti();
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
 	Write_hfc(cs, HFCSX_CIRM, 0);	/* Reset Off */
 	del_timer(&cs->hw.hfcsx.timer);
@@ -408,10 +392,10 @@ reset_hfcsx(struct IsdnCardState *cs)
 	while (1) {
 	  Write_hfc(cs, HFCSX_CIRM, HFCSX_RESET | cs->hw.hfcsx.cirm ); /* Reset */
 	  sti();
-	  current->state = TASK_UNINTERRUPTIBLE;
+	  set_current_state(TASK_UNINTERRUPTIBLE);
 	  schedule_timeout((30 * HZ) / 1000);	/* Timeout 30ms */
 	  Write_hfc(cs, HFCSX_CIRM, cs->hw.hfcsx.cirm); /* Reset Off */
-	  current->state = TASK_UNINTERRUPTIBLE;
+	  set_current_state(TASK_UNINTERRUPTIBLE);
 	  schedule_timeout((20 * HZ) / 1000);	/* Timeout 20ms */
 	  if (Read_hfc(cs, HFCSX_STATUS) & 2)
 	    printk(KERN_WARNING "HFC-SX init bit busy\n");
@@ -1471,7 +1455,7 @@ hfcsx_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			inithfcsx(cs);
 			save_flags(flags);
 			sti();
-			current->state = TASK_UNINTERRUPTIBLE;
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((80 * HZ) / 1000);	/* Timeout 80ms */
 			/* now switch timer interrupt off */
 			cs->hw.hfcsx.int_m1 &= ~HFCSX_INTS_TIMER;
@@ -1502,7 +1486,8 @@ __initfunc(int
 	cs->hw.hfcsx.int_s1 = 0;
 	cs->dc.hfcsx.ph_state = 0;
 	cs->hw.hfcsx.fifo = 255;
-	if (cs->typ == ISDN_CTYPE_HFC_SX) {
+	if ((cs->typ == ISDN_CTYPE_HFC_SX) || 
+	    (cs->typ == ISDN_CTYPE_HFC_SP_PCMCIA)) {
 	        if ((!cs->hw.hfcsx.base) || 
 		    check_region((cs->hw.hfcsx.base), 2)) {
 		  printk(KERN_WARNING

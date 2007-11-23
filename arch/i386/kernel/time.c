@@ -176,6 +176,14 @@ static unsigned long do_slow_gettimeoffset(void)
 
 	count |= inb_p(0x40) << 8;
 
+	/* VIA686a test code... reset the latch if count > max */
+ 	if (count > LATCH-1) {
+		outb_p(0x34, 0x43);
+		outb_p(LATCH & 0xff, 0x40);
+		outb(LATCH >> 8, 0x40);
+		count = LATCH - 1;
+	}	
+	
 	/*
 	 * avoiding timer inconsistencies (they are rare, but they happen)...
 	 * there are two kinds of problems that must be avoided here:
@@ -468,6 +476,22 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		count = inb_p(0x40);    /* read the latched count */
 		count |= inb(0x40) << 8;
+
+		/* VIA686a test code... reset the latch if count > max */
+		if (count > LATCH-1) {
+			static int last_whine;
+			outb_p(0x34, 0x43);
+			outb_p(LATCH & 0xff, 0x40);
+			outb(LATCH >> 8, 0x40);
+			count = LATCH - 1;
+			if(time_after(jiffies, last_whine))
+			{
+				printk(KERN_WARNING "probable hardware bug: clock timer configuration lost - probably a VIA686a.\n");
+				printk(KERN_WARNING "probable hardware bug: restoring chip configuration.\n");
+				last_whine = jiffies + HZ;
+			}			
+		}	
+
 #if 0
 		spin_unlock(&i8253_lock);
 #endif

@@ -634,7 +634,7 @@ extern int scsi_mlqueue_insert(Scsi_Cmnd * cmd, int reason);
 extern int scsi_mlqueue_finish(struct Scsi_Host * host, Scsi_Device * device);
 
 
-#if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR)
+#if defined(MAJOR_NR) && (MAJOR_NR != SCSI_TAPE_MAJOR) && (MAJOR_NR != OSST_MAJOR)
 #include "hosts.h"
 
 static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors)

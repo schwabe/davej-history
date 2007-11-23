@@ -1,29 +1,10 @@
-/* $Id: hfcscard.c,v 1.6 1999/12/19 13:09:42 keil Exp $
-
+/* $Id: hfcscard.c,v 1.7 2000/06/26 08:59:13 keil Exp $
+ *
  * hfcscard.c     low level stuff for hfcs based cards (Teles3c, ACER P10)
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
- *
- * $Log: hfcscard.c,v $
- * Revision 1.6  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.5  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.4  1999/08/09 18:59:59  keil
- * Fix S0 init - Thanks to Stefan Gybas
- *
- * Revision 1.3  1999/07/12 21:05:12  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.2  1999/07/01 08:16:03  keil
- * teles3c ---> hfcscard
- *
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 
@@ -34,7 +15,7 @@
 
 extern const char *CardType[];
 
-static const char *hfcs_revision = "$Revision: 1.6 $";
+static const char *hfcs_revision = "$Revision: 1.7 $";
 
 static void
 hfcs_interrupt(int intno, void *dev_id, struct pt_regs *regs)
@@ -89,13 +70,13 @@ reset_hfcs(struct IsdnCardState *cs)
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CIRM, cs->hw.hfcD.cirm);	/* Reset On */
 	save_flags(flags);
 	sti();
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30*HZ)/1000);
 	cs->hw.hfcD.cirm = 0;
 	if (cs->typ == ISDN_CTYPE_TELES3C)
 		cs->hw.hfcD.cirm |= HFCD_MEM8K;
 	cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CIRM, cs->hw.hfcD.cirm);	/* Reset Off */
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((10*HZ)/1000);
 	if (cs->typ == ISDN_CTYPE_TELES3C)
 		cs->hw.hfcD.cirm |= HFCD_INTB;
@@ -142,7 +123,7 @@ hfcs_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			init2bds0(cs);
 			save_flags(flags);
 			sti();
-			current->state = TASK_UNINTERRUPTIBLE;
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			schedule_timeout((80*HZ)/1000);
 			cs->hw.hfcD.ctmt |= HFCD_TIM800;
 			cs->BC_Write_Reg(cs, HFCD_DATA, HFCD_CTMT, cs->hw.hfcD.ctmt); 

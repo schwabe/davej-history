@@ -54,6 +54,14 @@
 				le32_to_cpu(__a); \
 			})
 
+#define MSDOS_LABEL_MAGIC1		0x55
+#define MSDOS_LABEL_MAGIC2		0xAA
+
+static inline int
+msdos_magic_present(unsigned char *p) {
+	return (p[0] == MSDOS_LABEL_MAGIC1 && p[1] == MSDOS_LABEL_MAGIC2);
+}
+
 struct gendisk *gendisk_head = NULL;
 
 static int current_minor = 0;
@@ -244,8 +252,6 @@ static unsigned int get_ptable_blocksize(kdev_t dev)
  * only for the actual data partitions.
  */
 
-#define MSDOS_LABEL_MAGIC		0xAA55
-
 static void extended_partition(struct gendisk *hd, kdev_t dev, int sector_size)
 {
 	struct buffer_head *bh;
@@ -273,10 +279,10 @@ static void extended_partition(struct gendisk *hd, kdev_t dev, int sector_size)
 	   */
 		bh->b_state = 0;
 
-		if ((*(unsigned short *) (bh->b_data+510)) != cpu_to_le16(MSDOS_LABEL_MAGIC))
+		if (!(msdos_magic_present(bh->b_data + 510)))
 			goto done;
 
-		p = (struct partition *) (0x1BE + bh->b_data);
+		p = (struct partition *) (bh->b_data + 0x1be);
 
 		this_size = hd->part[MINOR(dev)].nr_sects;
 
@@ -499,7 +505,51 @@ static void unixware_partition(struct gendisk *hd, kdev_t dev)
 	printk(" >");
 }
 #endif
+		
+#ifdef CONFIG_MINIX_SUBPARTITION
+/*
+ * Minix 2.0.0/2.0.2 subpartition support.
+ * Anand Krishnamurthy <anandk@wiproge.med.ge.com>
+ * Rajeev V. Pillai    <rajeevvp@yahoo.com>
+ */
+#define MINIX_PARTITION         0x81  /* Minix Partition ID */
+#define MINIX_NR_SUBPARTITIONS  4
+static void minix_partition(struct gendisk *hd, kdev_t dev)
+{
+	struct buffer_head *bh;
+	struct partition *p;
+	int mask = (1 << hd->minor_shift) - 1;
+	int i;
 
+	if (!(bh = bread(dev, 0, get_ptable_blocksize(dev))))
+		return;
+	bh->b_state = 0;
+
+	p = (struct partition *)(bh->b_data + 0x1be);
+
+	/* The first sector of a Minix partition can have either
+	 * a secondary MBR describing its subpartitions, or
+	 * the normal boot sector. */
+	if (msdos_magic_present(bh->b_data + 510) &&
+	    SYS_IND(p) == MINIX_PARTITION) { /* subpartition table present */
+
+		printk(" <");
+		for (i = 0; i < MINIX_NR_SUBPARTITIONS; i++, p++) {
+			if ((current_minor & mask) == 0) 
+				break;
+			/* add each partition in use */
+			if (SYS_IND(p) == MINIX_PARTITION) {
+				add_partition(hd, current_minor,
+					      START_SECT(p), NR_SECTS(p), 0);
+				current_minor++;
+			}
+		}
+		printk(" >");
+	}
+	brelse(bh);
+}
+#endif /* CONFIG_MINIX_SUBPARTITION */
+ 
 static int msdos_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 {
 	int i, minor = current_minor;
@@ -540,11 +590,11 @@ read_mbr:
 #ifdef CONFIG_BLK_DEV_IDE
 check_table:
 #endif
-	if (*(unsigned short *)  (0x1fe + data) != cpu_to_le16(MSDOS_LABEL_MAGIC)) {
+	if (!(msdos_magic_present(data + 510))) {
 		brelse(bh);
 		return 0;
 	}
-	p = (struct partition *) (0x1be + data);
+	p = (struct partition *) (data + 0x1be);
 
 #ifdef CONFIG_BLK_DEV_IDE
 	if (!tested_for_xlate++) {	/* Do this only once per disk */
@@ -649,8 +699,8 @@ check_table:
 	for (i=1 ; i<=4 ; minor++,i++,p++) {
 		if (!NR_SECTS(p))
 			continue;
-               add_partition(hd, minor, first_sector+START_SECT(p)*sector_size, NR_SECTS(p)*sector_size, 
-               		     ptype(SYS_IND(p)));
+               add_partition(hd, minor, first_sector+START_SECT(p)*sector_size,
+			     NR_SECTS(p)*sector_size, ptype(SYS_IND(p)));
 		if (is_extended_partition(p)) {
 			printk(" <");
 			/*
@@ -682,6 +732,12 @@ check_table:
 			}
 		}
 #endif
+#ifdef CONFIG_MINIX_SUBPARTITION
+		if (SYS_IND(p) == MINIX_PARTITION) {
+			printk("@");	/* Minix partitions are indicated by '@' */
+			minix_partition(hd, MKDEV(hd->major, minor));
+		}
+#endif
 #ifdef CONFIG_UNIXWARE_DISKLABEL
 		if (SYS_IND(p) == UNIXWARE_PARTITION)
 			unixware_partition(hd, MKDEV(hd->major, minor));
@@ -709,7 +765,7 @@ check_table:
 	/*
 	 *  Check for old-style Disk Manager partition table
 	 */
-	if (*(unsigned short *) (data+0xfc) == cpu_to_le16(MSDOS_LABEL_MAGIC)) {
+	if (msdos_magic_present(data + 0xfc)) {
 		p = (struct partition *) (0x1be + data);
 		for (i = 4 ; i < 16 ; i++, current_minor++) {
 			p--;

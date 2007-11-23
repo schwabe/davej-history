@@ -1,11 +1,28 @@
 /*
- * $Id: b1pci.c,v 1.20 2000/02/02 18:36:03 calle Exp $
+ * $Id: b1pci.c,v 1.25 2000/05/29 12:29:18 keil Exp $
  * 
  * Module for AVM B1 PCI-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pci.c,v $
+ * Revision 1.25  2000/05/29 12:29:18  keil
+ * make pci_enable_dev compatible to 2.2 kernel versions
+ *
+ * Revision 1.24  2000/05/19 15:43:22  calle
+ * added calls to pci_device_start().
+ *
+ * Revision 1.23  2000/05/06 00:52:36  kai
+ * merged changes from kernel tree
+ * fixed timer and net_device->name breakage
+ *
+ * Revision 1.22  2000/04/21 13:01:33  calle
+ * Revision in b1pciv4 driver was missing.
+ *
+ * Revision 1.21  2000/04/03 13:29:24  calle
+ * make Tim Waugh happy (module unload races in 2.3.99-pre3).
+ * no real problem there, but now it is much cleaner ...
+ *
  * Revision 1.20  2000/02/02 18:36:03  calle
  * - Modules are now locked while init_module is running
  * - fixed problem with memory mapping if address is not aligned
@@ -70,12 +87,13 @@
 #include <linux/pci.h>
 #include <linux/capi.h>
 #include <asm/io.h>
+#include <linux/isdn.h>
 #include "capicmd.h"
 #include "capiutil.h"
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.20 $";
+static char *revision = "$Revision: 1.25 $";
 
 /* ------------------------------------------------------------- */
 
@@ -469,6 +487,19 @@ static int add_card(struct pci_dev *dev)
 		param.membase = dev->base_address[ 0] & PCI_BASE_ADDRESS_MEM_MASK;
 		param.port = dev->base_address[ 2] & PCI_BASE_ADDRESS_IO_MASK;
 		param.irq = dev->irq;
+
+		retval = pci_enable_device (dev);
+		if (retval != 0) {
+		        printk(KERN_ERR
+			"%s: failed to enable AVM-B1 V4 at i/o %#x, irq %d, mem %#x err=%d\n",
+			driver->name, param.port, param.irq, param.membase, retval);
+#ifdef MODULE
+			cleanup_module();
+#endif
+			MOD_DEC_USE_COUNT;
+			return -EIO;
+		}
+
 		printk(KERN_INFO
 		"%s: PCI BIOS reports AVM-B1 V4 at i/o %#x, irq %d, mem %#x\n",
 		driver->name, param.port, param.irq, param.membase);
@@ -486,6 +517,18 @@ static int add_card(struct pci_dev *dev)
 		param.membase = 0;
 		param.port = dev->base_address[ 1] & PCI_BASE_ADDRESS_IO_MASK;
 		param.irq = dev->irq;
+
+		retval = pci_enable_device (dev);
+		if (retval != 0) {
+		        printk(KERN_ERR
+			"%s: failed to enable AVM-B1 at i/o %#x, irq %d, err=%d\n",
+			driver->name, param.port, param.irq, retval);
+#ifdef MODULE
+			cleanup_module();
+#endif
+			MOD_DEC_USE_COUNT;
+			return -EIO;
+		}
 		printk(KERN_INFO
 		"%s: PCI BIOS reports AVM-B1 at i/o %#x, irq %d\n",
 		driver->name, param.port, param.irq);
@@ -509,10 +552,18 @@ int b1pci_init(void)
 	char *p;
 	int retval;
 
+	MOD_INC_USE_COUNT;
+
 	if ((p = strchr(revision, ':'))) {
 		strncpy(driver->revision, p + 1, sizeof(driver->revision));
 		p = strchr(driver->revision, '$');
 		*p = 0;
+#ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
+	        p = strchr(revision, ':');
+		strncpy(driverv4->revision, p + 1, sizeof(driverv4->revision));
+		p = strchr(driverv4->revision, '$');
+		*p = 0;
+#endif
 	}
 
 	printk(KERN_INFO "%s: revision %s\n", driver->name, driver->revision);
@@ -522,6 +573,7 @@ int b1pci_init(void)
 	if (!di) {
 		printk(KERN_ERR "%s: failed to attach capi_driver\n",
 				driver->name);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -534,6 +586,7 @@ int b1pci_init(void)
     		detach_capi_driver(driver);
 		printk(KERN_ERR "%s: failed to attach capi_driver\n",
 				driverv4->name);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 #endif
@@ -545,6 +598,7 @@ int b1pci_init(void)
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
     		detach_capi_driver(driverv4);
 #endif
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -554,6 +608,7 @@ int b1pci_init(void)
 #ifdef MODULE
 			cleanup_module();
 #endif
+			MOD_DEC_USE_COUNT;
 			return retval;
 		}
 		ncards++;
@@ -561,12 +616,15 @@ int b1pci_init(void)
 	if (ncards) {
 		printk(KERN_INFO "%s: %d B1-PCI card(s) detected\n",
 				driver->name, ncards);
+		MOD_DEC_USE_COUNT;
 		return 0;
 	}
 	printk(KERN_ERR "%s: NO B1-PCI card detected\n", driver->name);
+	MOD_DEC_USE_COUNT;
 	return -ESRCH;
 #else
 	printk(KERN_ERR "%s: kernel not compiled with PCI.\n", driver->name);
+	MOD_DEC_USE_COUNT;
 	return -EIO;
 #endif
 }

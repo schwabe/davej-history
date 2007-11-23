@@ -776,6 +776,11 @@ else
   endif
 endif
 
+# This is also a 82596 and should probably be merged
+ifeq ($(CONFIG_LP486E),y)
+L_OBJS += lp486e.o
+endif
+
 ifeq ($(CONFIG_DEC_ELCP),y)
 L_OBJS += tulip.o
 else

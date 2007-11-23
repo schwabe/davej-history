@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.107 2000/09/10 20:29:18 detabc Exp $
+/* $Id: isdn.h,v 1.110 2000/11/01 17:54:01 detabc Exp $
 
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -66,9 +66,7 @@
 #undef CONFIG_ISDN_WITH_ABC_CH_EXTINUSE
 #undef CONFIG_ISDN_WITH_ABC_CONN_ERROR
 #undef CONFIG_ISDN_WITH_ABC_RAWIPCOMPRESS
-#undef CONFIG_ISDN_WITH_ABC_FRAME_LIMIT
-#undef CONFIG_ISDN_WITH_ABC_IPV4_RW_SOCKADDR 
-#undef CONFIG_ISDN_WITH_ABC_IPV4_RWUDP_SOCKADDR 
+#undef CONFIG_ISDN_WITH_ABC_IPTABLES_NETFILTER
 
 
 /* New ioctl-codes */
@@ -368,7 +366,6 @@ typedef struct isdn_net_local_s {
   ulong                  sqfull_stamp; /* Start-Time of overload           */
   ulong                  slavedelay;   /* Dynamic bundling delaytime       */
   int                    triggercps;   /* BogoCPS needed for trigger slave */
-  struct device      *srobin;      /* Ptr to Master device for slaves  */
   isdn_net_phone         *phone[2];    /* List of remote-phonenumbers      */
 				       /* phone[0] = Incoming Numbers      */
 				       /* phone[1] = Outgoing Numbers      */
@@ -378,9 +375,15 @@ typedef struct isdn_net_local_s {
   struct isdn_net_local_s *next;       /* Ptr to next link in bundle       */
   struct isdn_net_local_s *last;       /* Ptr to last link in bundle       */
   struct isdn_net_dev_s  *netdev;      /* Ptr to netdev                    */
-  struct sk_buff         *first_skb;   /* Ptr to skb that triggers dialing */
-  struct sk_buff *volatile sav_skb;    /* Ptr to skb, rejected by LL-driver*/
+  struct sk_buff_head    super_tx_queue; /* List of supervisory frames to  */
+	                               /* be transmitted asap              */
+  atomic_t frame_cnt;                  /* number of frames currently       */
+                        	       /* queued in HL driver              */    
                                        /* Ptr to orig. hard_header_cache   */
+  spinlock_t             xmit_lock;    /* used to protect the xmit path of */
+                                       /* a particular channel (including  */
+                                       /* the frame_cnt                    */
+
   int                    (*org_hhc)(
 				    struct neighbour *neigh,
 				    struct hh_cache *hh);
@@ -400,13 +403,17 @@ typedef struct isdn_net_local_s {
   int  cisco_loop;                     /* Loop counter for Cisco-SLARP     */
   ulong cisco_myseq;                   /* Local keepalive seq. for Cisco   */
   ulong cisco_yourseq;                 /* Remote keepalive seq. for Cisco  */
+  struct tq_struct tqueue;
 } isdn_net_local;
 
 /* the interface itself */
 typedef struct isdn_net_dev_s {
   isdn_net_local *local;
-  isdn_net_local *queue;
-  void           *next;                /* Pointer to next isdn-interface   */
+  isdn_net_local *queue;               /* circular list of all bundled
+					  channels, which are currently
+					  online                           */
+  spinlock_t queue_lock;               /* lock to protect queue            */
+  void *next;                          /* Pointer to next isdn-interface   */
   struct device dev;               /* interface to upper levels        */
 #ifdef CONFIG_ISDN_PPP
   ippp_bundle * pb;		/* pointer to the common bundle structure
@@ -697,5 +704,13 @@ static void __inline__ netif_stop_queue(struct device * dev)
 {
 	dev->tbusy = 1;
 }
+
+struct pci_dev;
+
+static int __inline__ pci_enable_device(struct pci_dev * pdev)
+{
+	return 0;
+}
+
 #endif /* __KERNEL__ */
 #endif /* isdn_h */

@@ -1,5 +1,5 @@
-/* $Id: isdnl1.c,v 2.37 2000/01/20 19:51:46 keil Exp $
-
+/* $Id: isdnl1.c,v 2.39 2000/06/26 08:59:13 keil Exp $
+ *
  * isdnl1.c     common low level stuff for Siemens Chipsetbased isdn cards
  *              based on the teles driver from Jan den Ouden
  *
@@ -13,136 +13,9 @@
  *              Fritz Elfert
  *              Beat Doebeli
  *
- *
- * $Log: isdnl1.c,v $
- * Revision 2.37  2000/01/20 19:51:46  keil
- * Fix AddTimer message
- * Change CONFIG defines
- *
- * Revision 2.36  1999/08/25 16:50:57  keil
- * Fix bugs which cause 2.3.14 hangs (waitqueue init)
- *
- * Revision 2.35  1999/08/22 20:27:07  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 2.34  1999/07/09 13:50:15  keil
- * remove unused variable
- *
- * Revision 2.33  1999/07/09 13:34:33  keil
- * remove debug code
- *
- * Revision 2.32  1999/07/01 08:11:47  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.31  1998/11/15 23:54:56  keil
- * changes from 2.0
- *
- * Revision 2.30  1998/09/30 22:27:00  keil
- * Add init of l1.Flags
- *
- * Revision 2.29  1998/09/27 23:54:43  keil
- * cosmetics
- *
- * Revision 2.28  1998/09/27 12:52:23  keil
- * Fix against segfault, if the driver cannot allocate an IRQ channel
- *
- * Revision 2.27  1998/08/13 23:36:39  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.26  1998/07/15 15:01:31  calle
- * Support for AVM passive PCMCIA cards:
- *    A1 PCMCIA, FRITZ!Card PCMCIA and FRITZ!Card PCMCIA 2.0
- *
- * Revision 2.25  1998/05/25 14:10:09  keil
- * HiSax 3.0
- * X.75 and leased are working again.
- *
- * Revision 2.24  1998/05/25 12:58:04  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.22  1998/04/15 16:40:13  keil
- * Add S0Box and Teles PCI support
- * Fix cardnr overwrite bug
- *
- * Revision 2.21  1998/04/10 10:35:28  paul
- * fixed (silly?) warnings from egcs on Alpha.
- *
- * Revision 2.20  1998/03/09 23:19:27  keil
- * Changes for PCMCIA
- *
- * Revision 2.18  1998/02/12 23:07:42  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 2.17  1998/02/11 17:28:07  keil
- * Niccy PnP/PCI support
- *
- * Revision 2.16  1998/02/09 18:46:08  keil
- * Support for Sedlbauer PCMCIA (Marcus Niemann)
- *
- * Revision 2.15  1998/02/09 10:54:51  keil
- * fixes for leased mode
- *
- * Revision 2.14  1998/02/03 23:31:31  keil
- * add AMD7930 support
- *
- * Revision 2.13  1998/02/02 13:33:02  keil
- * New card support
- *
- * Revision 2.12  1998/01/31 21:41:48  keil
- * changes for newer 2.1 kernels
- *
- * Revision 2.11  1997/11/12 15:01:23  keil
- * COMPAQ_ISA changes
- *
- * Revision 2.10  1997/11/08 21:35:48  keil
- * new l1 init
- *
- * Revision 2.9  1997/11/06 17:09:18  keil
- * New 2.1 init code
- *
- * Revision 2.8  1997/10/29 19:00:05  keil
- * new layer1,changes for 2.1
- *
- * Revision 2.7  1997/10/10 20:56:50  fritz
- * New HL interface.
- *
- * Revision 2.6  1997/09/12 10:05:16  keil
- * ISDN_CTRL_DEBUG define
- *
- * Revision 2.5  1997/09/11 17:24:45  keil
- * Add new cards
- *
- * Revision 2.4  1997/08/15 17:47:09  keil
- * avoid oops because a uninitialised timer
- *
- * Revision 2.3  1997/08/01 11:16:40  keil
- * cosmetics
- *
- * Revision 2.2  1997/07/30 17:11:08  keil
- * L1deactivated exported
- *
- * Revision 2.1  1997/07/27 21:35:38  keil
- * new layer1 interface
- *
- * Revision 2.0  1997/06/26 11:02:53  keil
- * New Layer and card interface
- *
- * Revision 1.15  1997/05/27 15:17:55  fritz
- * Added changes for recent 2.1.x kernels:
- *   changed return type of isdn_close
- *   queue_task_* -> queue_task
- *   clear/set_bit -> test_and_... where apropriate.
- *   changed type of hard_header_cache parameter.
- *
- * old changes removed KKe
- *
  */
 
-const char *l1_revision = "$Revision: 2.37 $";
+const char *l1_revision = "$Revision: 2.39 $";
 
 #define __NO_VERSION__
 #include "hisax.h"
@@ -155,7 +28,7 @@ struct Fsm l1fsm_b =
 {NULL, 0, 0, NULL, NULL};
 
 static
-struct Fsm l1fsm_d =
+struct Fsm l1fsm_s =
 {NULL, 0, 0, NULL, NULL};
 
 enum {
@@ -168,9 +41,9 @@ enum {
 	ST_L1_F8,
 };
 
-#define L1D_STATE_COUNT (ST_L1_F8+1)
+#define L1S_STATE_COUNT (ST_L1_F8+1)
 
-static char *strL1DState[] =
+static char *strL1SState[] =
 {
 	"ST_L1_F2",
 	"ST_L1_F3",
@@ -180,6 +53,29 @@ static char *strL1DState[] =
 	"ST_L1_F7",
 	"ST_L1_F8",
 };
+
+#ifdef HISAX_UINTERFACE
+static
+struct Fsm l1fsm_u =
+{NULL, 0, 0, NULL, NULL};
+
+enum {
+	ST_L1_RESET,
+	ST_L1_DEACT,
+	ST_L1_SYNC2,
+	ST_L1_TRANS,
+};
+
+#define L1U_STATE_COUNT (ST_L1_TRANS+1)
+
+static char *strL1UState[] =
+{
+	"ST_L1_RESET",
+	"ST_L1_DEACT",
+	"ST_L1_SYNC2",
+	"ST_L1_TRANS",
+};
+#endif
 
 enum {
 	ST_L1_NULL,
@@ -559,7 +455,7 @@ l1_deact_cnf(struct FsmInst *fi, int event, void *arg)
 }
 
 static void
-l1_deact_req(struct FsmInst *fi, int event, void *arg)
+l1_deact_req_s(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;
 
@@ -569,7 +465,7 @@ l1_deact_req(struct FsmInst *fi, int event, void *arg)
 }
 
 static void
-l1_power_up(struct FsmInst *fi, int event, void *arg)
+l1_power_up_s(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;
 
@@ -599,7 +495,12 @@ l1_info2_ind(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;
 
-	FsmChangeState(fi, ST_L1_F6);
+#ifdef HISAX_UINTERFACE
+	if (test_bit(FLG_L1_UINT, &st->l1.Flags))
+		FsmChangeState(fi, ST_L1_SYNC2);
+	else
+#endif
+		FsmChangeState(fi, ST_L1_F6);
 	st->l1.l1hw(st, HW_INFO3 | REQUEST, NULL);
 }
 
@@ -608,7 +509,12 @@ l1_info4_ind(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;
 
-	FsmChangeState(fi, ST_L1_F7);
+#ifdef HISAX_UINTERFACE
+	if (test_bit(FLG_L1_UINT, &st->l1.Flags))
+		FsmChangeState(fi, ST_L1_TRANS);
+	else
+#endif
+		FsmChangeState(fi, ST_L1_F7);
 	st->l1.l1hw(st, HW_INFO3 | REQUEST, NULL);
 	if (test_and_clear_bit(FLG_L1_DEACTTIMER, &st->l1.Flags))
 		FsmDelTimer(&st->l1.timer, 4);
@@ -628,6 +534,10 @@ l1_timer3(struct FsmInst *fi, int event, void *arg)
 	test_and_clear_bit(FLG_L1_T3RUN, &st->l1.Flags);	
 	if (test_and_clear_bit(FLG_L1_ACTIVATING, &st->l1.Flags))
 		L1deactivated(st->l1.hardware);
+
+#ifdef HISAX_UINTERFACE
+	if (!test_bit(FLG_L1_UINT, &st->l1.Flags))
+#endif
 	if (st->l1.l1m.state != ST_L1_F6) {
 		FsmChangeState(fi, ST_L1_F3);
 		st->l1.l1hw(st, HW_ENABLE | REQUEST, NULL);
@@ -656,7 +566,7 @@ l1_timer_deact(struct FsmInst *fi, int event, void *arg)
 }
 
 static void
-l1_activate(struct FsmInst *fi, int event, void *arg)
+l1_activate_s(struct FsmInst *fi, int event, void *arg)
 {
 	struct PStack *st = fi->userdata;
                 
@@ -674,9 +584,9 @@ l1_activate_no(struct FsmInst *fi, int event, void *arg)
 	}
 }
 
-static struct FsmNode L1DFnList[] HISAX_INITDATA =
+static struct FsmNode L1SFnList[] HISAX_INITDATA =
 {
-	{ST_L1_F3, EV_PH_ACTIVATE, l1_activate},
+	{ST_L1_F3, EV_PH_ACTIVATE, l1_activate_s},
 	{ST_L1_F6, EV_PH_ACTIVATE, l1_activate_no},
 	{ST_L1_F8, EV_PH_ACTIVATE, l1_activate_no},
 	{ST_L1_F3, EV_RESET_IND, l1_reset},
@@ -691,10 +601,10 @@ static struct FsmNode L1DFnList[] HISAX_INITDATA =
 	{ST_L1_F6, EV_DEACT_CNF, l1_deact_cnf},
 	{ST_L1_F7, EV_DEACT_CNF, l1_deact_cnf},
 	{ST_L1_F8, EV_DEACT_CNF, l1_deact_cnf},
-	{ST_L1_F6, EV_DEACT_IND, l1_deact_req},
-	{ST_L1_F7, EV_DEACT_IND, l1_deact_req},
-	{ST_L1_F8, EV_DEACT_IND, l1_deact_req},
-	{ST_L1_F3, EV_POWER_UP, l1_power_up},
+	{ST_L1_F6, EV_DEACT_IND, l1_deact_req_s},
+	{ST_L1_F7, EV_DEACT_IND, l1_deact_req_s},
+	{ST_L1_F8, EV_DEACT_IND, l1_deact_req_s},
+	{ST_L1_F3, EV_POWER_UP, l1_power_up_s},
 	{ST_L1_F4, EV_RSYNC_IND, l1_go_F5},
 	{ST_L1_F6, EV_RSYNC_IND, l1_go_F8},
 	{ST_L1_F7, EV_RSYNC_IND, l1_go_F8},
@@ -722,7 +632,68 @@ static struct FsmNode L1DFnList[] HISAX_INITDATA =
 	{ST_L1_F8, EV_TIMER_DEACT, l1_timer_deact},
 };
 
-#define L1D_FN_COUNT (sizeof(L1DFnList)/sizeof(struct FsmNode))
+#define L1S_FN_COUNT (sizeof(L1SFnList)/sizeof(struct FsmNode))
+
+#ifdef HISAX_UINTERFACE
+static void
+l1_deact_req_u(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+
+	FsmChangeState(fi, ST_L1_RESET);
+	FsmRestartTimer(&st->l1.timer, 550, EV_TIMER_DEACT, NULL, 2);
+	test_and_set_bit(FLG_L1_DEACTTIMER, &st->l1.Flags);
+	st->l1.l1hw(st, HW_ENABLE | REQUEST, NULL);
+}
+
+static void
+l1_power_up_u(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+
+	FsmRestartTimer(&st->l1.timer, TIMER3_VALUE, EV_TIMER3, NULL, 2);
+	test_and_set_bit(FLG_L1_T3RUN, &st->l1.Flags);
+}
+
+static void
+l1_info0_ind(struct FsmInst *fi, int event, void *arg)
+{
+	FsmChangeState(fi, ST_L1_DEACT);
+}
+
+static void
+l1_activate_u(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+                
+	st->l1.l1hw(st, HW_INFO1 | REQUEST, NULL);
+}
+
+static struct FsmNode L1UFnList[] HISAX_INITDATA =
+{
+	{ST_L1_RESET, EV_DEACT_IND, l1_deact_req_u},
+	{ST_L1_DEACT, EV_DEACT_IND, l1_deact_req_u},
+	{ST_L1_SYNC2, EV_DEACT_IND, l1_deact_req_u},
+	{ST_L1_TRANS, EV_DEACT_IND, l1_deact_req_u},
+	{ST_L1_DEACT, EV_PH_ACTIVATE, l1_activate_u},
+	{ST_L1_DEACT, EV_POWER_UP, l1_power_up_u},
+	{ST_L1_DEACT, EV_INFO2_IND, l1_info2_ind},
+	{ST_L1_TRANS, EV_INFO2_IND, l1_info2_ind},
+	{ST_L1_RESET, EV_DEACT_CNF, l1_info0_ind},
+	{ST_L1_DEACT, EV_INFO4_IND, l1_info4_ind},
+	{ST_L1_SYNC2, EV_INFO4_IND, l1_info4_ind},
+	{ST_L1_RESET, EV_INFO4_IND, l1_info4_ind},
+	{ST_L1_DEACT, EV_TIMER3, l1_timer3},
+	{ST_L1_SYNC2, EV_TIMER3, l1_timer3},
+	{ST_L1_TRANS, EV_TIMER_ACT, l1_timer_act},
+	{ST_L1_DEACT, EV_TIMER_DEACT, l1_timer_deact},
+	{ST_L1_SYNC2, EV_TIMER_DEACT, l1_timer_deact},
+	{ST_L1_RESET, EV_TIMER_DEACT, l1_timer_deact},
+};
+
+#define L1U_FN_COUNT (sizeof(L1UFnList)/sizeof(struct FsmNode))
+
+#endif
 
 static void
 l1b_activate(struct FsmInst *fi, int event, void *arg)
@@ -772,11 +743,18 @@ static struct FsmNode L1BFnList[] HISAX_INITDATA =
 
 HISAX_INITFUNC(void Isdnl1New(void))
 {
-	l1fsm_d.state_count = L1D_STATE_COUNT;
-	l1fsm_d.event_count = L1_EVENT_COUNT;
-	l1fsm_d.strEvent = strL1Event;
-	l1fsm_d.strState = strL1DState;
-	FsmNew(&l1fsm_d, L1DFnList, L1D_FN_COUNT);
+#ifdef HISAX_UINTERFACE
+	l1fsm_u.state_count = L1U_STATE_COUNT;
+	l1fsm_u.event_count = L1_EVENT_COUNT;
+	l1fsm_u.strEvent = strL1Event;
+	l1fsm_u.strState = strL1UState;
+	FsmNew(&l1fsm_u, L1UFnList, L1U_FN_COUNT);
+#endif
+	l1fsm_s.state_count = L1S_STATE_COUNT;
+	l1fsm_s.event_count = L1_EVENT_COUNT;
+	l1fsm_s.strEvent = strL1Event;
+	l1fsm_s.strState = strL1SState;
+	FsmNew(&l1fsm_s, L1SFnList, L1S_FN_COUNT);
 	l1fsm_b.state_count = L1B_STATE_COUNT;
 	l1fsm_b.event_count = L1_EVENT_COUNT;
 	l1fsm_b.strEvent = strL1Event;
@@ -786,7 +764,10 @@ HISAX_INITFUNC(void Isdnl1New(void))
 
 void Isdnl1Free(void)
 {
-	FsmFree(&l1fsm_d);
+#ifdef HISAX_UINTERFACE
+	FsmFree(&l1fsm_u);
+#endif
+	FsmFree(&l1fsm_s);
 	FsmFree(&l1fsm_b);
 }
 
@@ -804,7 +785,7 @@ dch_l2l1(struct PStack *st, int pr, void *arg)
 		case (PH_ACTIVATE | REQUEST):
 			if (cs->debug)
 				debugl1(cs, "PH_ACTIVATE_REQ %s",
-					strL1DState[st->l1.l1m.state]);
+					st->l1.l1m.fsm->strState[st->l1.l1m.state]);
 			if (test_bit(FLG_L1_ACTIVATED, &st->l1.Flags))
 				st->l1.l1l2(st, PH_ACTIVATE | CONFIRM, NULL);
 			else {
@@ -884,8 +865,16 @@ setstack_HiSax(struct PStack *st, struct IsdnCardState *cs)
 {
 	st->l1.hardware = cs;
 	st->protocol = cs->protocol;
-	st->l1.l1m.fsm = &l1fsm_d;
+	st->l1.l1m.fsm = &l1fsm_s;
 	st->l1.l1m.state = ST_L1_F3;
+	st->l1.Flags = 0;
+#ifdef HISAX_UINTERFACE
+	if (test_bit(FLG_HW_L1_UINT, &cs->HW_Flags)) {
+		st->l1.l1m.fsm = &l1fsm_u;
+		st->l1.l1m.state = ST_L1_RESET;
+		st->l1.Flags = FLG_L1_UINT;
+	}
+#endif
 	st->l1.l1m.debug = cs->debug;
 	st->l1.l1m.userdata = st;
 	st->l1.l1m.userint = 0;
@@ -895,7 +884,6 @@ setstack_HiSax(struct PStack *st, struct IsdnCardState *cs)
 	setstack_manager(st);
 	st->l1.stlistp = &(cs->stlist);
 	st->l2.l2l1  = dch_l2l1;
-	st->l1.Flags = 0;
 	cs->setstack_d(st, cs);
 }
 

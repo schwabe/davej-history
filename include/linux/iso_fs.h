@@ -177,41 +177,22 @@ extern int iso_date(char *, int);
 
 extern int parse_rock_ridge_inode(struct iso_directory_record *, struct inode *);
 extern int get_rock_ridge_filename(struct iso_directory_record *, char *, struct inode *);
+extern int isofs_name_translate(struct iso_directory_record *, char *, struct inode *);
 
 extern char * get_rock_ridge_symlink(struct inode *);
-extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inode *);
 
-int get_joliet_filename(struct iso_directory_record *, struct inode *, unsigned char *);
+extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inode *);
+int get_joliet_filename(struct iso_directory_record *, unsigned char *, struct inode *);
 int get_acorn_filename(struct iso_directory_record *, char *, struct inode *);
 
-/* The stuff that follows may be totally unneeded. I have not checked to see 
- which prototypes we are still using.  */
-
-extern int isofs_open(struct inode * inode, struct file * filp);
-extern void isofs_release(struct inode * inode, struct file * filp);
 extern struct dentry *isofs_lookup(struct inode * dir, struct dentry *);
-extern unsigned long isofs_count_free_inodes(struct super_block *sb);
-extern int isofs_new_block(int dev);
-extern int isofs_free_block(int dev, int block);
 extern int isofs_bmap(struct inode *,int);
-
-extern void isofs_put_super(struct super_block *);
-extern struct super_block *isofs_read_super(struct super_block *,void *,int);
+extern struct buffer_head *isofs_bread(struct inode *, unsigned int, unsigned int);
 extern int init_iso9660_fs(void);
-extern void isofs_read_inode(struct inode *);
-extern void isofs_put_inode(struct inode *);
-extern int isofs_statfs(struct super_block *, struct statfs *, int);
-
-extern int isofs_lseek(struct inode *, struct file *, off_t, int);
-extern int isofs_read(struct inode *, struct file *, char *, int);
-extern int isofs_lookup_grandparent(struct inode *, int);
 
 extern struct inode_operations isofs_file_inode_operations;
 extern struct inode_operations isofs_dir_inode_operations;
 extern struct inode_operations isofs_symlink_inode_operations;
-extern struct inode_operations isofs_chrdev_inode_operations;
-extern struct inode_operations isofs_blkdev_inode_operations;
-extern struct inode_operations isofs_fifo_inode_operations;
 
 /* The following macros are used to check for memory leaks. */
 #ifdef LEAK_CHECK

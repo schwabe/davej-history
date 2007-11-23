@@ -230,6 +230,9 @@ int __init misc_init(void)
 #ifdef CONFIG_ACQUIRE_WDT
 	acq_init();
 #endif
+#ifdef CONFIG_ADVANTECH_WDT
+	advwdt_init();
+#endif
 #ifdef CONFIG_60XX_WDT
 	sbc60xxwdt_init();
 #endif

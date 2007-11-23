@@ -1,5 +1,5 @@
 /*
- *  $Id: timer.c,v 1.2 1996/11/20 17:49:57 fritz Exp $
+ *  $Id: timer.c,v 1.3 2000/05/06 00:52:39 kai Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -91,9 +91,7 @@ void check_reset(unsigned long data)
 	else  {
 		pr_debug("%s: No signature yet, waiting another %d jiffies.\n", 
 			adapter[card]->devicename, CHECKRESET_TIME);
-		del_timer(&adapter[card]->reset_timer);
-		adapter[card]->reset_timer.expires = jiffies + CHECKRESET_TIME;
-		add_timer(&adapter[card]->reset_timer);
+		mod_timer(&adapter[card]->reset_timer, jiffies+CHECKRESET_TIME);
 	}
 	restore_flags(flags);
 		
@@ -138,9 +136,7 @@ void check_phystat(unsigned long data)
 	/* Reinitialize the timer */
 	save_flags(flags);
 	cli();
-	del_timer(&adapter[card]->stat_timer);
-	adapter[card]->stat_timer.expires = jiffies + CHECKSTAT_TIME;
-	add_timer(&adapter[card]->stat_timer);
+	mod_timer(&adapter[card]->stat_timer, jiffies+CHECKSTAT_TIME);
 	restore_flags(flags);
 
 	/* Send a new cePhyStatus message */

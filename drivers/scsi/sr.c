@@ -26,6 +26,8 @@
  *	Modified by Jens Axboe <axboe@suse.de> - support DVD-RAM
  *	transparently and loose the GHOST hack
  *
+ *	Modified by Arnaldo Carvalho de Melo <acme@conectiva.com.br>
+ *	check resource allocation in sr_init and some cleanups - 2000/12/09
  */
 
 #include <linux/module.h>
@@ -70,10 +72,10 @@ struct Scsi_Device_Template sr_template = {
 	sr_finish, sr_attach, sr_detach
 };
 
-Scsi_CD *scsi_CDs = NULL;
-static int *sr_sizes = NULL;
+Scsi_CD *scsi_CDs;
+static int *sr_sizes;
 
-static int *sr_blocksizes = NULL;
+static int *sr_blocksizes;
 
 static int sr_open(struct cdrom_device_info *, int);
 void get_sectorsize(int);
@@ -1113,16 +1115,21 @@ static int sr_init()
 	}
 	if (scsi_CDs)
 		return 0;
-	sr_template.dev_max =
-	    sr_template.dev_noticed + SR_EXTRA_DEVS;
-	scsi_CDs = (Scsi_CD *) scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD), GFP_ATOMIC);
-	memset(scsi_CDs, 0, sr_template.dev_max * sizeof(Scsi_CD));
+	sr_template.dev_max = sr_template.dev_noticed + SR_EXTRA_DEVS;
+	scsi_CDs = scsi_init_malloc(sr_template.dev_max * sizeof(Scsi_CD),
+					GFP_ATOMIC);
+	if (!scsi_CDs)
+		goto cleanup_register;
 
-	sr_sizes = (int *) scsi_init_malloc(sr_template.dev_max * sizeof(int), GFP_ATOMIC);
-	memset(sr_sizes, 0, sr_template.dev_max * sizeof(int));
+	sr_sizes = scsi_init_malloc(sr_template.dev_max * sizeof(int),
+					GFP_ATOMIC);
+	if (!sr_sizes)
+		goto cleanup_cds;
 
-	sr_blocksizes = (int *) scsi_init_malloc(sr_template.dev_max *
-						 sizeof(int), GFP_ATOMIC);
+	sr_blocksizes = scsi_init_malloc(sr_template.dev_max * sizeof(int),
+					GFP_ATOMIC);
+	if (!sr_blocksizes)
+		goto cleanup_sizes;
 
 	/*
 	 * These are good guesses for the time being.
@@ -1131,6 +1138,18 @@ static int sr_init()
 		sr_blocksizes[i] = 2048;
 	blksize_size[MAJOR_NR] = sr_blocksizes;
 	return 0;
+cleanup_sizes:
+	scsi_init_free((char *) sr_sizes, sr_template.dev_max * sizeof(int));
+	sr_sizes = NULL;
+cleanup_cds:
+	scsi_init_free((char *) scsi_CDs,
+		       (sr_template.dev_noticed + SR_EXTRA_DEVS) *
+		       sizeof(Scsi_CD));
+	scsi_CDs = NULL;
+cleanup_register:
+	unregister_blkdev(MAJOR_NR, "sr");
+	sr_registered--;
+	return 1;
 }
 
 void sr_finish()
@@ -1241,7 +1260,7 @@ void cleanup_module(void)
 		scsi_init_free((char *) scsi_CDs,
 			       (sr_template.dev_noticed + SR_EXTRA_DEVS)
 			       * sizeof(Scsi_CD));
-
+		scsi_CDs = NULL;
 		scsi_init_free((char *) sr_sizes, sr_template.dev_max * sizeof(int));
 		sr_sizes = NULL;
 

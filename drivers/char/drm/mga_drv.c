@@ -36,11 +36,6 @@
 
 #include <linux/agp_backend.h>
 
-static void __attribute__((unused)) unused(void)
-{
-	agp_enable(0);
-}
-
 #define MGA_NAME	 "mga"
 #define MGA_DESC	 "Matrox G200/G400"
 #define MGA_DATE	 "20000910"

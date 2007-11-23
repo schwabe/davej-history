@@ -1259,7 +1259,7 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 static struct tty_driver serial_tty_driver = {
 	magic:			TTY_DRIVER_MAGIC,
 	driver_name:		"usb-serial",
-	name:			"usb/tts/%d",
+	name:			"ttyUSB",
 	major:			SERIAL_TTY_MAJOR,
 	minor_start:		0,
 	num:			SERIAL_TTY_MINORS,

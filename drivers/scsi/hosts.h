@@ -458,6 +458,7 @@ struct Scsi_Device_Template
 
 extern struct Scsi_Device_Template sd_template;
 extern struct Scsi_Device_Template st_template;
+extern struct Scsi_Device_Template osst_template;
 extern struct Scsi_Device_Template sr_template;
 extern struct Scsi_Device_Template sg_template;
 

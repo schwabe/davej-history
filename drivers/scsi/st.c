@@ -55,6 +55,8 @@
 
 #include "constants.h"
 
+#include "osst_detect.h"
+
 #ifdef MODULE
 MODULE_PARM(buffer_kbs, "i");
 MODULE_PARM(write_threshold_kbs, "i");
@@ -3407,6 +3409,18 @@ st_setup(char *str, int *ints))
 #endif
 
 
+/* Returns zero for drives not supported by this driver */
+static int st_supported(Scsi_Device * SDp)
+{
+  /* These OnStream SC drives require a special driver. The OnStream ADR* drives
+     are supported by this driver */
+  if ( OSST_SUPPORTS(SDp) )
+      return 0;
+
+  return 1;
+}
+
+
 static struct file_operations st_fops = {
    NULL,            /* lseek - default */
    st_read,         /* read - general block-dev read */
@@ -3428,6 +3442,8 @@ static int st_attach(Scsi_Device * SDp){
    int i;
 
    if (SDp->type != TYPE_TAPE)
+       return 1;
+   if (!st_supported(SDp))
        return 1;
 
    if (st_template.nr_dev >= st_template.dev_max) {
@@ -3502,6 +3518,8 @@ static int st_attach(Scsi_Device * SDp){
 static int st_detect(Scsi_Device * SDp)
 {
   if(SDp->type != TYPE_TAPE) return 0;
+  if (!st_supported(SDp))
+      return 0;
 
   printk(KERN_WARNING
 	 "Detected scsi tape st%d at scsi%d, channel %d, id %d, lun %d\n",

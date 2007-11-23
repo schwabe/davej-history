@@ -2499,7 +2499,7 @@ static struct cs_card_type __initdata cards[]={
 	{PCI_VENDOR_ID_IBM, 0x0132, "Thinkpad 570", amp_none, clkrun_hack},
 	{PCI_VENDOR_ID_IBM, 0x0153, "Thinkpad 600X/A20/T20", amp_none, clkrun_hack},
 	{PCI_VENDOR_ID_IBM, 0x1010, "Thinkpad 600E (unsupported)", NULL, NULL},
-	{0, 0, "Card without SSID set", NULL, NULL },
+	{0, 0, "Card without SSID set", amp_none, NULL },
 	{0, 0, NULL, NULL, NULL}
 };
 

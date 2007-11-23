@@ -1,5 +1,5 @@
 /*
- *  $Id: debug.h,v 1.1 1996/11/07 13:07:42 fritz Exp $
+ *  $Id: debug.h,v 1.2 2000/02/26 01:00:53 keil Exp $
  *  Copyright (C) 1996  SpellCaster Telecommunications Inc.
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -26,10 +26,5 @@
  *     +1 (416) 297-6433 Facsimile
  */
 
-#if LINUX_VERSION_CODE < 131072
-	#error You cant use this driver on kernels older than 2.0
-#else
-	#define REQUEST_IRQ(a,b,c,d,e) request_irq(a,b,c,d,e)
-	#define FREE_IRQ(a,b) free_irq(a,b)
-#endif
-
+#define REQUEST_IRQ(a,b,c,d,e) request_irq(a,b,c,d,e)
+#define FREE_IRQ(a,b) free_irq(a,b)

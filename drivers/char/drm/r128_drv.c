@@ -35,11 +35,6 @@
 
 #include <linux/agp_backend.h>
 
-static void __attribute__((unused)) unused(void)
-{
-	agp_enable(0);
-}
-
 #define R128_NAME	 "r128"
 #define R128_DESC	 "ATI Rage 128"
 #define R128_DATE	 "20000719"

@@ -1,5 +1,5 @@
-/* $Id: elsa.c,v 2.20 1999/12/19 13:09:42 keil Exp $
-
+/* $Id: elsa.c,v 2.23 2000/06/26 08:59:12 keil Exp $
+ *
  * elsa.c     low level stuff for Elsa isdn cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
@@ -12,80 +12,6 @@
  *
  *              Klaus Lichtenwalder (Klaus.Lichtenwalder@WebForum.DE)
  *              for ELSA PCMCIA support
- *
- * $Log: elsa.c,v $
- * Revision 2.20  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 2.19  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 2.18  1999/08/25 16:50:54  keil
- * Fix bugs which cause 2.3.14 hangs (waitqueue init)
- *
- * Revision 2.17  1999/08/11 20:57:40  keil
- * bugfix IPAC version 1.1
- * new PCI codefix
- *
- * Revision 2.16  1999/08/10 16:01:51  calle
- * struct pci_dev changed in 2.3.13. Made the necessary changes.
- *
- * Revision 2.15  1999/08/09 19:25:21  keil
- * Support (alpha version) for the '98 model of ELSA Microlink ISDN/MC
- * by Christer Weinigel, Cendio Systems AB <wingel@cendio.se>
- * Add support for IPAC 1.2
- *
- * Revision 2.14  1999/07/12 21:05:07  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 2.13  1999/07/01 08:11:31  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 2.12  1998/11/15 23:54:35  keil
- * changes from 2.0
- *
- * Revision 2.11  1998/08/20 13:50:34  keil
- * More support for hybrid modem (not working yet)
- *
- * Revision 2.10  1998/08/13 23:36:22  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 2.9  1998/05/25 12:57:48  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 2.8  1998/04/15 16:41:42  keil
- * QS3000 PCI support
- * new init code
- * new PCI init (2.1.94)
- *
- * Revision 2.7  1998/03/07 22:56:58  tsbogend
- * made HiSax working on Linux/Alpha
- *
- * Revision 2.6  1998/02/02 13:29:40  keil
- * fast io
- *
- * Revision 2.5  1998/01/31 21:41:45  keil
- * changes for newer 2.1 kernels
- *
- * Revision 2.4  1997/11/08 21:35:46  keil
- * new l1 init
- *
- * Revision 2.3  1997/11/06 17:15:09  keil
- * New 2.1 init; PCMCIA wrapper changes
- *
- * Revision 2.2  1997/10/29 18:57:09  keil
- * changes for 2.1.60, arcofi support
- *
- * Revision 2.1  1997/07/27 21:47:08  keil
- * new interface structures
- *
- * Revision 2.0  1997/06/26 11:02:40  keil
- * New Layer and card interface
- *
- * old changes removed KKe
  *
  */
 
@@ -103,10 +29,10 @@
 
 extern const char *CardType[];
 
-const char *Elsa_revision = "$Revision: 2.20 $";
+const char *Elsa_revision = "$Revision: 2.23 $";
 const char *Elsa_Types[] =
 {"None", "PC", "PCC-8", "PCC-16", "PCF", "PCF-Pro",
- "PCMCIA", "QS 1000", "QS 3000", "QS 1000 PCI", "QS 3000 PCI", 
+ "PCMCIA", "QS 1000", "QS 3000", "Microlink PCI", "QS 3000 PCI", 
  "PCMCIA-IPAC" };
 
 const char *ITACVer[] =
@@ -140,9 +66,15 @@ const char *ITACVer[] =
 #define ELSA_PCMCIA_IPAC 11
 
 /* PCI stuff */
-#define PCI_VENDOR_ELSA	0x1048
-#define PCI_QS1000_ID	0x1000
-#define PCI_QS3000_ID	0x3000
+#ifndef PCI_VENDOR_ID_ELSA
+#define PCI_VENDOR_ID_ELSA	0x1048
+#endif
+#ifndef PCI_DEVICE_ID_ELSA_MIRCOLINK
+#define PCI_DEVICE_ID_ELSA_MIRCOLINK	0x1000
+#endif
+#ifndef PCI_DEVICE_ID_ELSA_QS3000
+#define PCI_DEVICE_ID_ELSA_QS3000	0x3000
+#endif
 #define ELSA_PCI_IRQ_MASK	0x04
 
 /* ITAC Registeradressen (only Microlink PC) */
@@ -582,10 +514,10 @@ reset_elsa(struct IsdnCardState *cs)
 		save_flags(flags);
 		sti();
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_POTA2, 0x20);
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_POTA2, 0x00);
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		writereg(cs->hw.elsa.ale, cs->hw.elsa.isac, IPAC_MASK, 0xc0);
 		schedule_timeout((10*HZ)/1000); /* Timeout 10ms */
 		restore_flags(flags);
@@ -789,7 +721,7 @@ Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 				cs->hw.elsa.status |= ELSA_TIMER_AKTIV;
 				byteout(cs->hw.elsa.ctrl, cs->hw.elsa.ctrl_reg);
 				byteout(cs->hw.elsa.timer, 0);
-				current->state = TASK_UNINTERRUPTIBLE;
+				set_current_state(TASK_UNINTERRUPTIBLE);
 				schedule_timeout((110*HZ)/1000);
 				restore_flags(flags);
 				cs->hw.elsa.ctrl_reg &= ~ELSA_ENA_TIMER_INT;
@@ -797,7 +729,8 @@ Elsa_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 				cs->hw.elsa.status &= ~ELSA_TIMER_AKTIV;
 				printk(KERN_INFO "Elsa: %d timer tics in 110 msek\n",
 				       cs->hw.elsa.counter);
-				if (abs(cs->hw.elsa.counter - 13) < 3) {
+				if ((cs->hw.elsa.counter > 10) &&
+					(cs->hw.elsa.counter < 16)) {
 					printk(KERN_INFO "Elsa: timer and irq OK\n");
 					ret = 0;
 				} else {
@@ -1056,22 +989,22 @@ setup_elsa(struct IsdnCard *card)
 			return(0);
 		}
 		cs->subtyp = 0;
-		if ((dev_qs1000 = pci_find_device(PCI_VENDOR_ELSA, PCI_QS1000_ID,
-			 dev_qs1000))) {
-				cs->subtyp = ELSA_QS1000PCI;
+		if ((dev_qs1000 = pci_find_device(PCI_VENDOR_ID_ELSA,
+			PCI_DEVICE_ID_ELSA_MIRCOLINK, dev_qs1000))) {
+			if (pci_enable_device(dev_qs1000))
+				return(0);
+			cs->subtyp = ELSA_QS1000PCI;
 			cs->irq = dev_qs1000->irq;
-			cs->hw.elsa.cfg = dev_qs1000->base_address[ 1] & 
-				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = dev_qs1000->base_address[ 3] & 
-				PCI_BASE_ADDRESS_IO_MASK;
-		} else if ((dev_qs3000 = pci_find_device(PCI_VENDOR_ELSA,
-			PCI_QS3000_ID, dev_qs3000))) {
+			cs->hw.elsa.cfg = dev_qs1000->base_address[ 1] & PCI_BASE_ADDRESS_IO_MASK;
+			cs->hw.elsa.base = dev_qs1000->base_address[ 3] & PCI_BASE_ADDRESS_IO_MASK;
+		} else if ((dev_qs3000 = pci_find_device(PCI_VENDOR_ID_ELSA,
+			PCI_DEVICE_ID_ELSA_QS3000, dev_qs3000))) {
+			if (pci_enable_device(dev_qs3000))
+				return(0);
 			cs->subtyp = ELSA_QS3000PCI;
 			cs->irq = dev_qs3000->irq;
-			cs->hw.elsa.cfg = dev_qs3000->base_address[ 1] & 
-				PCI_BASE_ADDRESS_IO_MASK;
-			cs->hw.elsa.base = dev_qs3000->base_address[ 3] & 
-				PCI_BASE_ADDRESS_IO_MASK;
+			cs->hw.elsa.cfg = dev_qs3000->base_address[ 1] & PCI_BASE_ADDRESS_IO_MASK;
+			cs->hw.elsa.base = dev_qs3000->base_address[ 3] & PCI_BASE_ADDRESS_IO_MASK;
 		} else {
 			printk(KERN_WARNING "Elsa: No PCI card found\n");
 			return(0);

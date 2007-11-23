@@ -129,7 +129,11 @@ typedef struct page {
 	struct wait_queue *wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
+	int age;
 } mem_map_t;
+
+#define PAGE_AGE_INITIAL 1	/* age for pages just mapped */
+#define PAGE_AGE_YOUNG 2	/* age for pages recently referenced */
 
 /* Page flag bit values */
 #define PG_locked		 0

@@ -1,0 +1,106 @@
+#!/bin/sh
+#
+#	rc.masqfw	v0.2
+#
+#	Author: Juanjo Ciarlante <jjo@mendoza.gov.ar>
+#	03-Oct-00	
+#
+# 	Setup reverse masquerading (ala portfw) with using firewall mark-ing
+#	_AND_ userspace "redir" support for complete redirection (even local
+#	connects).
+#
+# Semantics:
+#	Let ip_masq_mfw intercept truly "forward-able" packets based
+#	on ipchains ruling _AND_ leave the rest for redir tool.
+#
+# Requirement:
+#	- ipmasqadm	http://juanjox.kernelnotes.org/
+#			. setups kernel mark forwarding)
+#	- redir 2.2.x	http://freshmeat.net/search/?q=redir
+#			. setups "local" socket forwarding)
+#	- ip_masq_ftp	PATCHED for firewall marking (module parm "in_mark")
+#			. support internal server forwarding for PASV clients)
+#
+# Setup:
+# EXT_IP, EXT_PORT:	external (visible) IP address (can be '0') and port. 
+# INT_IP, INT_PORT:	internal server address and port
+# IN_MARK:		arbitrary value to use when marking pkts (ipchains -m)
+# FTP:			if not-null activate ftp support
+# REDIR:		path to redir-2.2.x (set to "" to avoid using)
+
+export PATH="/sbin:/usr/sbin:$PATH"
+
+EXT_IP=192.168.2.16
+EXT_PORT=2021
+INT_IP=10.1.1.128
+INT_PORT=21
+IN_MARK=4321
+FTP=1
+REDIR="/usr/sbin/redir"
+
+FW_IPCHAINS="-i eth0 -d $EXT_IP $EXT_PORT -p tcp"
+PID_FILE="/var/run/redir-$EXT_IP-$EXT_PORT"
+
+# seems ascii art... but it runs!!  =)
+#
+run() {
+	$* || {
+		echo "->	'$*'"
+		return 1
+	}
+}
+
+get_pid() {
+	test -f $PID_FILE || return 1
+	typeset pid=`cat $PID_FILE`
+	test -n "$pid" || return 1
+	kill -0 $pid || return 1
+	echo $pid
+}
+exit_err() {
+	ERR=$1;shift
+	echo $@ >&2
+	exit $ERR
+}	
+redir_on() {
+	test -n "$REDIR"  || return 1
+	test -n "$FTP" && REDIR="$REDIR --ftp=both"
+	$SHELL -c 'echo $$ > '"$PID_FILE
+		exec $REDIR \
+		--laddr $EXT_IP --lport $EXT_PORT \
+		--caddr $INT_IP --cport $INT_PORT 
+	" &
+
+}
+redir_off() {
+	test -n "$REDIR"  || return 1
+	if pid=`get_pid`;then
+		kill $pid 
+		rm $PID_FILE
+	fi
+	fuser -k -n tcp $EXT_PORT
+}
+
+case "$1" in
+start)
+	#run modprobe ip_masq_mfw
+	run ipmasqadm mfw -I -m $IN_MARK -r $INT_IP $INT_PORT
+	if test -n "$FTP";then
+		run modprobe ip_masq_ftp in_mark=$IN_MARK || \
+			exit_err 1 "Incorrect ftp module version ?"
+	fi
+	run ipchains -m $IN_MARK -I input $FW_IPCHAINS
+	redir_on
+	;;
+stop)
+	run ipchains -m $IN_MARK -D input $FW_IPCHAINS
+	if test -n "$FTP";then
+		run rmmod ip_masq_ftp
+	fi
+	run ipmasqadm mfw -D -m $IN_MARK -r $INT_IP $INT_PORT
+	#run ipmasqadm mfw -F
+	#run rmmod ip_masq_mfw
+	redir_off
+	;;
+
+esac

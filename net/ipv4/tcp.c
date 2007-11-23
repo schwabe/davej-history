@@ -1619,6 +1619,7 @@ static struct open_request * wait_for_connect(struct sock * sk,
 	struct wait_queue wait = { current, NULL };
 	struct open_request *req;
 
+	current->task_exclusive = 1;
 	add_wait_queue(sk->sleep, &wait);
 	for (;;) {
 		current->state = TASK_INTERRUPTIBLE;
@@ -1632,6 +1633,8 @@ static struct open_request * wait_for_connect(struct sock * sk,
 			break;
 	}
 	current->state = TASK_RUNNING;
+	wmb();
+	current->task_exclusive = 0;
 	remove_wait_queue(sk->sleep, &wait);
 	return req;
 }

@@ -113,6 +113,8 @@ Code	Seq#	Include File		Comments
 					<mailto:hdstich@connectu.ulm.circular.de>
 'z'	40-7F	CAN bas card		in development:
 					<mailto:oe@port.de>
+'6'	00-10	<asm-i386/processor.h>	Intel IA32 microcode update driver
+					<mailto:tigran@veritas.com>
 0x89	00-0F	asm-i386/sockios.h
 0x89	10-DF	linux/sockios.h
 0x89	E0-EF	linux/sockios.h		SIOCPROTOPRIVATE range

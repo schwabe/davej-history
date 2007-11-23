@@ -35,11 +35,6 @@
 
 #include <linux/agp_backend.h>
 
-static void __attribute__((unused)) unused(void)
-{
-	agp_enable(0);
-}
-
 #define I810_NAME	 "i810"
 #define I810_DESC	 "Intel I810"
 #define I810_DATE	 "20000719"

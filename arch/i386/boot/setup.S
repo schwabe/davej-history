@@ -32,7 +32,7 @@
 !
 !
 ! A20 gating fiddled to work on AMD Elan AmSC4xx series by kira@linuxgrrls.org
-! july 1999
+! july 1999 - from a 2.0 patch by Christian Lademann <cal@zls.de>
 !
 
 #define __ASSEMBLY__
@@ -248,16 +248,46 @@ loader_panic_mess:
 
 loader_ok:
 ! Get memory size (extended mem, kB)
-
+	xor     eax, eax
+	mov     [0x1e0], eax
 #ifndef STANDARD_MEMORY_BIOS_CALL
-	push	ebx
+	mov     [0x1e8], al
+meme820:
+	mov     edx, #0x534d4150
+	xor     ebx, ebx
+	mov     di,#0x2d0
 
-        xor     ebx,ebx		! preload new memory slot with 0k
-        mov	[0x1e0], ebx
-
-        mov     ax,#0xe801
+jmpe820:
+	mov     eax,#0x0000e820
+	mov     ecx,#20
+	push    ds
+	pop     es
 	int     0x15
-	jc      oldstylemem
+	jc      bail820
+
+	cmp     eax,#0x534d4150
+	jne     bail820
+
+	cmp     16(di),#1
+	jne     again820
+
+good820:
+	mov     al,[0x1e8]
+	cmp     al,#32
+	jnl     bail820
+
+	incb    [0x1e8]
+	mov     ax,di
+	add     ax,#20
+	mov     di,ax
+again820:
+	cmp     ebx,#0
+	jne     jmpe820
+bail820:
+meme801:
+	mov	ax,#0xe801
+	int	0x15
+	jc	mem88
 
 ! Memory size is in 1 k chunksizes, to avoid confusing loadlin.
 ! We store the 0xe801 memory size in a completely different place,
@@ -266,23 +296,19 @@ loader_ok:
 ! alternative new memory detection scheme, and it's sensible
 ! to write everything into the same place.)
 
-	and     ebx, #0xffff    ! clear sign extend
-	shl     ebx, 6          ! and go from 64k to 1k chunks
-	mov     [0x1e0],ebx     ! store extended memory size
+	and 	ebx, #0xffff	! clear sign extend
+	shl	ebx, 6		! and go from 64k to 1k chunks
+	mov	[0x1e0],ebx	! store extented memory size
+	
+	and	eax, #0xffff	! clear sign extend
+	add	[0x1e0],eax	! and add lower memory into total size. 
 
-	and     eax, #0xffff    ! clear sign extend
- 	add     [0x1e0],eax     ! and add lower memory into total size.
-  
-	! and fall into the old memory detection code to populate the
-	! compatibility slot.
-
-oldstylemem:
-	pop	ebx
-#else
-	mov     dword ptr [0x1e0], #0
+	! and fall into the old memory detection to populate the
+	! compatibility slot.	
+mem88:
 #endif
-	mov	ah,#0x88
-	int	0x15
+        mov     ah,#0x88
+        int     0x15
 	mov	[2],ax
 
 ! Set the keyboard repeat rate to the max

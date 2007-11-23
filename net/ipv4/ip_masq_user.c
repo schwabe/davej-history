@@ -35,7 +35,6 @@
  */
 static int debug=0;
 
-MODULE_PARM(ports, "1-" __MODULE_STRING(MAX_MASQ_APP_PORTS) "i");
 MODULE_PARM(debug, "i");
 
 /*

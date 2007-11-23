@@ -1,67 +1,12 @@
-/* $Id: netjet.c,v 1.17 1999/12/19 13:09:42 keil Exp $
-
+/* $Id: netjet.c,v 1.20 2000/06/26 08:59:14 keil Exp $
+ *
  * netjet.c     low level stuff for Traverse Technologie NETJet ISDN cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
  * Thanks to Traverse Technologie Australia for documents and informations
  *
- * $Log: netjet.c,v $
- * Revision 1.17  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.16  1999/10/14 20:25:29  keil
- * add a statistic for error monitoring
- *
- * Revision 1.15  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.14  1999/08/31 11:20:25  paul
- * various spelling corrections (new checksums may be needed, Karsten!)
- *
- * Revision 1.13  1999/08/11 21:01:31  keil
- * new PCI codefix
- *
- * Revision 1.12  1999/08/10 16:02:00  calle
- * struct pci_dev changed in 2.3.13. Made the necessary changes.
- *
- * Revision 1.11  1999/08/07 17:32:00  keil
- * Asymetric buffers for improved ping times.  Interframe spacing
- * fix for NJ<->NJ thoughput.  Matt Henderson - www.traverse.com.au
- *
- *
- * Revision 1.10  1999/07/12 21:05:22  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.9  1999/07/01 08:12:05  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.8  1998/11/15 23:55:14  keil
- * changes from 2.0
- *
- * Revision 1.7  1998/09/30 22:24:48  keil
- * Fix missing line in setstack*
- *
- * Revision 1.6  1998/08/13 23:36:54  keil
- * HiSax 3.1 - don't work stable with current LinkLevel
- *
- * Revision 1.5  1998/05/25 12:58:21  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 1.4  1998/04/15 16:42:35  keil
- * new init code
- * new PCI init (2.1.94)
- *
- * Revision 1.3  1998/02/12 23:08:05  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 1.2  1998/02/02 13:32:06  keil
- * New
- *
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 
@@ -74,6 +19,7 @@
 #include <linux/pci.h>
 #include <linux/interrupt.h>
 #include <linux/ppp_defs.h>
+#include "netjet.h"
 
 #ifndef bus_to_virt
 #define bus_to_virt (u_int *)
@@ -83,61 +29,12 @@
 #define virt_to_bus (u_int)
 #endif
 
-extern const char *CardType[];
-
-const char *NETjet_revision = "$Revision: 1.17 $";
-
-#define byteout(addr,val) outb(val,addr)
-#define bytein(addr) inb(addr)
-
-/* PCI stuff */
-#define PCI_VENDOR_TRAVERSE_TECH 0xe159
-#define PCI_NETJET_ID	0x0001
-
-#define NETJET_CTRL	0x00
-#define NETJET_DMACTRL	0x01
-#define NETJET_AUXCTRL	0x02
-#define NETJET_AUXDATA	0x03
-#define NETJET_IRQMASK0 0x04
-#define NETJET_IRQMASK1 0x05
-#define NETJET_IRQSTAT0 0x06
-#define NETJET_IRQSTAT1 0x07
-#define NETJET_DMA_READ_START	0x08
-#define NETJET_DMA_READ_IRQ	0x0c
-#define NETJET_DMA_READ_END	0x10
-#define NETJET_DMA_READ_ADR	0x14
-#define NETJET_DMA_WRITE_START	0x18
-#define NETJET_DMA_WRITE_IRQ	0x1c
-#define NETJET_DMA_WRITE_END	0x20
-#define NETJET_DMA_WRITE_ADR	0x24
-#define NETJET_PULSE_CNT	0x28
-
-#define NETJET_ISAC_OFF	0xc0
-#define NETJET_ISACIRQ	0x10
-#define NETJET_IRQM0_READ	0x0c
-#define NETJET_IRQM0_READ_1	0x04
-#define NETJET_IRQM0_READ_2	0x08
-#define NETJET_IRQM0_WRITE	0x03
-#define NETJET_IRQM0_WRITE_1	0x01
-#define NETJET_IRQM0_WRITE_2	0x02
-
-#define NETJET_DMA_TXSIZE 512
-#define NETJET_DMA_RXSIZE 128
-
-#define HDLC_ZERO_SEARCH 0
-#define HDLC_FLAG_SEARCH 1
-#define HDLC_FLAG_FOUND  2
-#define HDLC_FRAME_FOUND 3
-#define HDLC_NULL 4
-#define HDLC_PART 5
-#define HDLC_FULL 6
-
-#define HDLC_FLAG_VALUE	0x7e
+const char *NETjet_revision = "$Revision: 1.20 $";
 
 /* Interface functions */
 
-static u_char
-ReadISAC(struct IsdnCardState *cs, u_char offset)
+u_char
+NETjet_ReadIC(struct IsdnCardState *cs, u_char offset)
 {
 	long flags;
 	u_char ret;
@@ -152,8 +49,8 @@ ReadISAC(struct IsdnCardState *cs, u_char offset)
 	return(ret);
 }
 
-static void
-WriteISAC(struct IsdnCardState *cs, u_char offset, u_char value)
+void
+NETjet_WriteIC(struct IsdnCardState *cs, u_char offset, u_char value)
 {
 	long flags;
 	
@@ -166,8 +63,8 @@ WriteISAC(struct IsdnCardState *cs, u_char offset, u_char value)
 	restore_flags(flags);
 }
 
-static void
-ReadISACfifo(struct IsdnCardState *cs, u_char *data, int size)
+void
+NETjet_ReadICfifo(struct IsdnCardState *cs, u_char *data, int size)
 {
 	cs->hw.njet.auxd &= 0xfc;
 	byteout(cs->hw.njet.auxa, cs->hw.njet.auxd);
@@ -210,8 +107,8 @@ __u16 fcstab[256] =
 	0x7bc7, 0x6a4e, 0x58d5, 0x495c, 0x3de3, 0x2c6a, 0x1ef1, 0x0f78
 };
 
-static void 
-WriteISACfifo(struct IsdnCardState *cs, u_char *data, int size)
+void 
+NETjet_WriteICfifo(struct IsdnCardState *cs, u_char *data, int size)
 {
 	cs->hw.njet.auxd &= 0xfc;
 	byteout(cs->hw.njet.auxa, cs->hw.njet.auxd);
@@ -295,15 +192,6 @@ mode_tiger(struct BCState *bcs, int mode, int bc)
 			inl(cs->hw.njet.base + NETJET_DMA_READ_ADR),
 			inl(cs->hw.njet.base + NETJET_DMA_WRITE_ADR),
 			bytein(cs->hw.njet.base + NETJET_PULSE_CNT));
-}
-
-static u_char dummyrr(struct IsdnCardState *cs, int chan, u_char off)
-{
-	return(5);
-}
-
-static void dummywr(struct IsdnCardState *cs, int chan, u_char off, u_char value)
-{
 }
 
 static void printframe(struct IsdnCardState *cs, u_char *buf, int count, char *s) {
@@ -596,7 +484,7 @@ static void read_raw(struct BCState *bcs, u_int *buf, int cnt){
 	bcs->hw.tiger.r_bitcnt = bitcnt;
 }
 
-static void read_tiger(struct IsdnCardState *cs) {
+void read_tiger(struct IsdnCardState *cs) {
 	u_int *p;
 	int cnt = NETJET_DMA_RXSIZE/2;
 	
@@ -627,7 +515,7 @@ static void read_tiger(struct IsdnCardState *cs) {
 
 static void write_raw(struct BCState *bcs, u_int *buf, int cnt);
 
-static void fill_dma(struct BCState *bcs)
+void netjet_fill_dma(struct BCState *bcs)
 {
 	register u_int *p, *sp;
 	register int cnt;
@@ -742,7 +630,7 @@ static void write_raw(struct BCState *bcs, u_int *buf, int cnt) {
 				test_and_set_bit(BC_FLG_NOFRAME, &bcs->Flag);
 			}
 			if ((bcs->tx_skb = skb_dequeue(&bcs->squeue))) {
-				fill_dma(bcs);
+				netjet_fill_dma(bcs);
 			} else {
 				mask ^= 0xffffffff;
 				if (s_cnt < cnt) {
@@ -774,7 +662,7 @@ static void write_raw(struct BCState *bcs, u_int *buf, int cnt) {
 	}
 }
 
-static void write_tiger(struct IsdnCardState *cs) {
+void write_tiger(struct IsdnCardState *cs) {
 	u_int *p, cnt = NETJET_DMA_TXSIZE/2;
 	
 	if ((cs->hw.njet.irqstat0 & cs->hw.njet.last_is0) & NETJET_IRQM0_WRITE) {
@@ -990,88 +878,6 @@ releasetiger(struct IsdnCardState *cs)
 	}
 }
 
-static void
-netjet_interrupt(int intno, void *dev_id, struct pt_regs *regs)
-{
-	struct IsdnCardState *cs = dev_id;
-	u_char val, sval;
-	long flags;
-
-	if (!cs) {
-		printk(KERN_WARNING "NETjet: Spurious interrupt!\n");
-		return;
-	}
-	if (!((sval = bytein(cs->hw.njet.base + NETJET_IRQSTAT1)) &
-		NETJET_ISACIRQ)) {
-		val = ReadISAC(cs, ISAC_ISTA);
-		if (cs->debug & L1_DEB_ISAC)
-			debugl1(cs, "tiger: i1 %x %x", sval, val);
-		if (val) {
-			isac_interrupt(cs, val);
-			WriteISAC(cs, ISAC_MASK, 0xFF);
-			WriteISAC(cs, ISAC_MASK, 0x0);
-		}
-	}
-	save_flags(flags);
-	cli();
-	if ((sval = bytein(cs->hw.njet.base + NETJET_IRQSTAT0))) {
-		if (test_and_set_bit(FLG_LOCK_ATOMIC, &cs->HW_Flags)) {
-			restore_flags(flags);
-			return;
-		}
-		cs->hw.njet.irqstat0 = sval;
-		restore_flags(flags);
-/*		debugl1(cs, "tiger: ist0 %x  %x %x  %x/%x  pulse=%d",
-			sval, 
-			bytein(cs->hw.njet.base + NETJET_DMACTRL),
-			bytein(cs->hw.njet.base + NETJET_IRQMASK0),
-			inl(cs->hw.njet.base + NETJET_DMA_READ_ADR),
-			inl(cs->hw.njet.base + NETJET_DMA_WRITE_ADR),
-			bytein(cs->hw.njet.base + NETJET_PULSE_CNT));
-*/
-/*		cs->hw.njet.irqmask0 = ((0x0f & cs->hw.njet.irqstat0) ^ 0x0f) | 0x30;
-*/		byteout(cs->hw.njet.base + NETJET_IRQSTAT0, cs->hw.njet.irqstat0);
-/*		byteout(cs->hw.njet.base + NETJET_IRQMASK0, cs->hw.njet.irqmask0);
-*/		if (cs->hw.njet.irqstat0 & NETJET_IRQM0_READ)
-			read_tiger(cs);
-		if (cs->hw.njet.irqstat0 & NETJET_IRQM0_WRITE)
-			write_tiger(cs);
-		test_and_clear_bit(FLG_LOCK_ATOMIC, &cs->HW_Flags);
-	} else
-		restore_flags(flags);
-
-/*	if (!testcnt--) {
-		cs->hw.njet.dmactrl = 0;
-		byteout(cs->hw.njet.base + NETJET_DMACTRL,
-			cs->hw.njet.dmactrl);
-		byteout(cs->hw.njet.base + NETJET_IRQMASK0, 0);
-	}
-*/
-}
-
-static void
-reset_netjet(struct IsdnCardState *cs)
-{
-	long flags;
-
-	save_flags(flags);
-	sti();
-	cs->hw.njet.ctrl_reg = 0xff;  /* Reset On */
-	byteout(cs->hw.njet.base + NETJET_CTRL, cs->hw.njet.ctrl_reg);
-	current->state = TASK_UNINTERRUPTIBLE;
-	schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
-	cs->hw.njet.ctrl_reg = 0x00;  /* Reset Off and status read clear */
-	byteout(cs->hw.njet.base + NETJET_CTRL, cs->hw.njet.ctrl_reg);
-	current->state = TASK_UNINTERRUPTIBLE;
-	schedule_timeout((10*HZ)/1000);	/* Timeout 10ms */
-	restore_flags(flags);
-	cs->hw.njet.auxd = 0;
-	cs->hw.njet.dmactrl = 0;
-	byteout(cs->hw.njet.base + NETJET_AUXCTRL, ~NETJET_ISACIRQ);
-	byteout(cs->hw.njet.base + NETJET_IRQMASK1, NETJET_ISACIRQ);
-	byteout(cs->hw.njet.auxa, cs->hw.njet.auxd);
-}
-
 void
 release_io_netjet(struct IsdnCardState *cs)
 {
@@ -1081,99 +887,3 @@ release_io_netjet(struct IsdnCardState *cs)
 	release_region(cs->hw.njet.base, 256);
 }
 
-
-static int
-NETjet_card_msg(struct IsdnCardState *cs, int mt, void *arg)
-{
-	switch (mt) {
-		case CARD_RESET:
-			reset_netjet(cs);
-			return(0);
-		case CARD_RELEASE:
-			release_io_netjet(cs);
-			return(0);
-		case CARD_INIT:
-			inittiger(cs);
-			clear_pending_isac_ints(cs);
-			initisac(cs);
-			/* Reenable all IRQ */
-			cs->writeisac(cs, ISAC_MASK, 0);
-			return(0);
-		case CARD_TEST:
-			return(0);
-	}
-	return(0);
-}
-
-static 	struct pci_dev *dev_netjet __initdata = NULL;
-
-__initfunc(int
-setup_netjet(struct IsdnCard *card))
-{
-	int bytecnt;
-	struct IsdnCardState *cs = card->cs;
-	char tmp[64];
-#if CONFIG_PCI
-#endif
-	strcpy(tmp, NETjet_revision);
-	printk(KERN_INFO "HiSax: Traverse Tech. NETjet driver Rev. %s\n", HiSax_getrev(tmp));
-	if (cs->typ != ISDN_CTYPE_NETJET)
-		return(0);
-	test_and_clear_bit(FLG_LOCK_ATOMIC, &cs->HW_Flags);
-#if CONFIG_PCI
-	if (!pci_present()) {
-		printk(KERN_ERR "Netjet: no PCI bus present\n");
-		return(0);
-	}
-	if ((dev_netjet = pci_find_device(PCI_VENDOR_TRAVERSE_TECH,
-		PCI_NETJET_ID,  dev_netjet))) {
-		cs->irq = dev_netjet->irq;
-		if (!cs->irq) {
-			printk(KERN_WARNING "NETjet: No IRQ for PCI card found\n");
-			return(0);
-		}
-		cs->hw.njet.base = dev_netjet->base_address[ 0]
-			& PCI_BASE_ADDRESS_IO_MASK; 
-		if (!cs->hw.njet.base) {
-			printk(KERN_WARNING "NETjet: No IO-Adr for PCI card found\n");
-			return(0);
-		}
-	} else {
-		printk(KERN_WARNING "NETjet: No PCI card found\n");
-		return(0);
-	}
-	cs->hw.njet.auxa = cs->hw.njet.base + NETJET_AUXDATA;
-	cs->hw.njet.isac = cs->hw.njet.base | NETJET_ISAC_OFF;
-	bytecnt = 256;
-#else
-	printk(KERN_WARNING "NETjet: NO_PCI_BIOS\n");
-	printk(KERN_WARNING "NETjet: unable to config NETJET PCI\n");
-	return (0);
-#endif /* CONFIG_PCI */
-	printk(KERN_INFO
-		"NETjet: PCI card configured at 0x%x IRQ %d\n",
-		cs->hw.njet.base, cs->irq);
-	if (check_region(cs->hw.njet.base, bytecnt)) {
-		printk(KERN_WARNING
-		       "HiSax: %s config port %x-%x already in use\n",
-		       CardType[card->typ],
-		       cs->hw.njet.base,
-		       cs->hw.njet.base + bytecnt);
-		return (0);
-	} else {
-		request_region(cs->hw.njet.base, bytecnt, "netjet isdn");
-	}
-	reset_netjet(cs);
-	cs->readisac  = &ReadISAC;
-	cs->writeisac = &WriteISAC;
-	cs->readisacfifo  = &ReadISACfifo;
-	cs->writeisacfifo = &WriteISACfifo;
-	cs->BC_Read_Reg  = &dummyrr;
-	cs->BC_Write_Reg = &dummywr;
-	cs->BC_Send_Data = &fill_dma;
-	cs->cardmsg = &NETjet_card_msg;
-	cs->irq_func = &netjet_interrupt;
-	cs->irq_flags |= SA_SHIRQ;
-	ISACVersion(cs, "NETjet:");
-	return (1);
-}

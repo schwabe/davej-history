@@ -67,14 +67,18 @@ struct inode_operations isofs_dir_inode_operations =
 	NULL			/* permission */
 };
 
-static int isofs_name_translate(char * old, int len, char * new)
+int isofs_name_translate(struct iso_directory_record *de, char *new,
+			 struct inode *inode)
 {
-	int i, c;
+	char * old = de->name;
+	int len = de->name_len[0];
+	int i;
 			
 	for (i = 0; i < len; i++) {
-		c = old[i];
+		unsigned char c = old[i];
 		if (!c)
 			break;
+
 		if (c >= 'A' && c <= 'Z')
 			c |= 0x20;	/* lower case */
 
@@ -101,8 +105,7 @@ int get_acorn_filename(struct iso_directory_record * de,
 {
 	int std;
 	unsigned char * chr;
-	int retnamlen = isofs_name_translate(de->name,
-				de->name_len[0], retname);
+	int retnamlen = isofs_name_translate(de, retname, inode);
 	if (retnamlen == 0) return 0;
 	std = sizeof(struct iso_directory_record) + de->name_len[0];
 	if (std & 1) std++;
@@ -122,7 +125,9 @@ int get_acorn_filename(struct iso_directory_record * de,
 }
 
 /*
- * This should _really_ be cleaned up some day..
+ * Read directory and call the filldir() argument until either
+ * all entries were handled, or filldir() returns an error.
+ * Return 0.
  */
 static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		void *dirent, filldir_t filldir,
@@ -132,7 +137,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 	unsigned char bufbits = ISOFS_BUFFER_BITS(inode);
 	unsigned int block, offset;
 	int inode_number = 0;	/* Quiet GCC */
-	struct buffer_head *bh;
+	struct buffer_head *bh = NULL;
 	int len;
 	int map;
 	int high_sierra;
@@ -140,78 +145,59 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 	char *p = NULL;		/* Quiet GCC */
 	struct iso_directory_record *de;
 
- 	if (filp->f_pos >= inode->i_size)
-		return 0;
- 
 	offset = filp->f_pos & (bufsize - 1);
-	block = isofs_bmap(inode, filp->f_pos >> bufbits);
+	block = filp->f_pos >> bufbits;
 	high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
-
-	if (!block)
-		return 0;
-
-	if (!(bh = breada(inode->i_dev, block, bufsize, filp->f_pos, inode->i_size)))
-		return 0;
 
 	while (filp->f_pos < inode->i_size) {
 		int de_len;
-#ifdef DEBUG
-		printk("Block, offset, f_pos: %x %x %x\n",
-		       block, offset, filp->f_pos);
-	        printk("inode->i_size = %x\n",inode->i_size);
-#endif
-		de = (struct iso_directory_record *) (bh->b_data + offset);
-		if(first_de) inode_number = (block << bufbits) + (offset & (bufsize - 1));
 
-		/* Check boundaries and get length. by GO! */
-		if (offset < bufsize) de_len = *(unsigned char *) de;
-#ifdef DEBUG
-		if (offset < bufsize) printk("de_len = %ld\n", de_len);
-		else printk("Move to next sector\n");
-#endif
-	    
+		if (!bh) {
+			bh = isofs_bread(inode, bufsize, block);
+			if (!bh)
+				return 0;
+		}
+
+		de = (struct iso_directory_record *) (bh->b_data + offset);
+		if (first_de)
+			inode_number = (bh->b_blocknr << bufbits) + offset;
+
+		de_len = *(unsigned char *) de;
 
 		/* If the length byte is zero, we should move on to the next
 		   CDROM sector.  If we are at the end of the directory, we
 		   kick out of the while loop. */
 
-		if ((offset >= bufsize) || (de_len == 0) ) {
+		if (de_len == 0) {
 			brelse(bh);
-			if (offset >= bufsize) {	/*Check first. by GO!*/
-				offset -= bufsize;
-				filp->f_pos += offset;
-			} else {
-				filp->f_pos = ((filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))
-					       + ISOFS_BLOCK_SIZE);
-				offset = 0;
-			}
-
-			if (filp->f_pos >= inode->i_size)
-				return 0;
-
-			block = isofs_bmap(inode, (filp->f_pos) >> bufbits);
-			if (!block)
-				return 0;
-			bh = breada(inode->i_dev, block, bufsize, filp->f_pos, inode->i_size);
-			if (!bh)
-				return 0;
+			bh = NULL;
+			filp->f_pos = (filp->f_pos & ~(ISOFS_BLOCK_SIZE - 1))
+					       + ISOFS_BLOCK_SIZE;
+			block = filp->f_pos >> bufbits;
+			offset = 0;
 			continue;
 		}
 
-		offset +=  de_len;
-		if (offset > bufsize) {
-			/*
-			 * This would only normally happen if we had
-			 * a buggy cdrom image.  All directory
-			 * entries should terminate with a null size
-			 * or end exactly at the end of the sector.
-			 */
-		        printk("next_offset (%x) > bufsize (%lx)\n",
-			       offset,bufsize);
-			break;
+		offset += de_len;
+
+		/* Make sure we have a full directory entry */
+		if (offset >= bufsize) {
+			int slop = bufsize - offset + de_len;
+			memcpy(tmpde, de, slop);
+			offset &= bufsize - 1;
+			block++;
+			brelse(bh);
+			bh = NULL;
+			if (offset) {
+				bh = isofs_bread(inode, bufsize, block);
+				if (!bh)
+					return 0;
+				memcpy((void *) tmpde + slop, bh->b_data, offset);
+			}
+			de = tmpde;
 		}
 
-		if(de->flags[-high_sierra] & 0x80) {
+		if (de->flags[-high_sierra] & 0x80) {
 			first_de = 0;
 			filp->f_pos += de_len;
 			continue;
@@ -250,7 +236,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		map = 1;
 		if (inode->i_sb->u.isofs_sb.s_rock) {
 			len = get_rock_ridge_filename(de, tmpname, inode);
-			if (len != 0) {
+			if (len != 0) {		/* may be -1 */
 				p = tmpname;
 				map = 0;
 			}
@@ -258,7 +244,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 		if (map) {
 #ifdef CONFIG_JOLIET
 			if (inode->i_sb->u.isofs_sb.s_joliet_level) {
-				len = get_joliet_filename(de, inode, tmpname);
+				len = get_joliet_filename(de, tmpname, inode);
 				p = tmpname;
 			} else
 #endif
@@ -267,8 +253,7 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 				p = tmpname;
 			} else
 			if (inode->i_sb->u.isofs_sb.s_mapping == 'n') {
-				len = isofs_name_translate(de->name,
-					de->name_len[0], tmpname);
+				len = isofs_name_translate(de, tmpname, inode);
 				p = tmpname;
 			} else {
 				p = de->name;
@@ -283,7 +268,8 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 
 		continue;
 	}
-	brelse(bh);
+	if (bh)
+		brelse(bh);
 	return 0;
 }
 
@@ -296,17 +282,17 @@ static int isofs_readdir(struct file *filp,
 		void *dirent, filldir_t filldir)
 {
 	int result;
-	char * tmpname;
+	char * page;
 	struct iso_directory_record * tmpde;
 	struct inode *inode = filp->f_dentry->d_inode;
 
-	tmpname = (char *) __get_free_page(GFP_KERNEL);
-	if (!tmpname)
+	page = (char *) __get_free_page(GFP_KERNEL);
+	if (!page)
 		return -ENOMEM;
-	tmpde = (struct iso_directory_record *) (tmpname+1024);
+	tmpde = (struct iso_directory_record *) (page+1024);
 
-	result = do_isofs_readdir(inode, filp, dirent, filldir, tmpname, tmpde);
+	result = do_isofs_readdir(inode, filp, dirent, filldir, page, tmpde);
 
-	free_page((unsigned long) tmpname);
+	free_page((unsigned long) page);
 	return result;
 }

@@ -1,5 +1,5 @@
-/* $Id: diva.c,v 1.18 1999/12/19 13:09:41 keil Exp $
-
+/* $Id: diva.c,v 1.21 2000/06/26 08:59:12 keil Exp $
+ *
  * diva.c     low level stuff for Eicon.Diehl Diva Family ISDN cards
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
@@ -9,67 +9,6 @@
  *		../../../Documentation/isdn/HiSax.cert
  *
  * Thanks to Eicon Technology for documents and informations
- *
- *
- * $Log: diva.c,v $
- * Revision 1.18  1999/12/19 13:09:41  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.17  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.16  1999/08/11 21:01:25  keil
- * new PCI codefix
- *
- * Revision 1.15  1999/08/10 16:01:49  calle
- * struct pci_dev changed in 2.3.13. Made the necessary changes.
- *
- * Revision 1.14  1999/08/07 17:35:08  keil
- * approval for Eicon Technology Diva 2.01 PCI
- *
- * Revision 1.13  1999/07/21 14:46:07  keil
- * changes from EICON certification
- *
- * Revision 1.12  1999/07/12 21:05:04  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.11  1999/07/01 08:11:29  keil
- * Common HiSax version for 2.0, 2.1, 2.2 and 2.3 kernel
- *
- * Revision 1.10  1998/11/15 23:54:31  keil
- * changes from 2.0
- *
- * Revision 1.9  1998/06/27 22:52:03  keil
- * support for Diva 2.01
- *
- * Revision 1.8  1998/05/25 12:57:46  keil
- * HiSax golden code from certification, Don't use !!!
- * No leased lines, no X75, but many changes.
- *
- * Revision 1.7  1998/04/15 16:42:36  keil
- * new init code
- * new PCI init (2.1.94)
- *
- * Revision 1.6  1998/03/07 22:56:57  tsbogend
- * made HiSax working on Linux/Alpha
- *
- * Revision 1.5  1998/02/02 13:29:38  keil
- * fast io
- *
- * Revision 1.4  1997/11/08 21:35:44  keil
- * new l1 init
- *
- * Revision 1.3  1997/11/06 17:13:33  keil
- * New 2.1 init code
- *
- * Revision 1.2  1997/10/29 18:55:55  keil
- * changes for 2.1.60 (irq2dev_map)
- *
- * Revision 1.1  1997/09/18 17:11:20  keil
- * first version
- *
  *
  */
 
@@ -84,7 +23,7 @@
 
 extern const char *CardType[];
 
-const char *Diva_revision = "$Revision: 1.18 $";
+const char *Diva_revision = "$Revision: 1.21 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -108,12 +47,18 @@ const char *Diva_revision = "$Revision: 1.18 $";
 #define DIVA_IPAC_PCI	4
 
 /* PCI stuff */
-#define PCI_VENDOR_EICON_DIEHL	0x1133
-#define PCI_DIVA20PRO_ID	0xe001
-#define PCI_DIVA20_ID		0xe002
-#define PCI_DIVA20PRO_U_ID	0xe003
-#define PCI_DIVA20_U_ID		0xe004
-#define PCI_DIVA_201		0xe005
+#ifndef PCI_VENDOR_ID_EICON
+#define PCI_VENDOR_ID_EICON	0x1133
+#endif
+#ifndef PCI_DEVICE_ID_EICON_DIVA20
+#define PCI_DEVICE_ID_EICON_DIVA20	0xe002
+#endif
+#ifndef PCI_DEVICE_ID_EICON_DIVA20_U
+#define PCI_DEVICE_ID_EICON_DIVA20_U	0xe004
+#endif
+#ifndef PCI_DEVICE_ID_EICON_DIVA201
+#define PCI_DEVICE_ID_EICON_DIVA201	0xe005
+#endif
 
 /* CTRL (Read) */
 #define DIVA_IRQ_STAT	0x01
@@ -131,10 +76,16 @@ const char *Diva_revision = "$Revision: 1.18 $";
 
 /* Siemens PITA */
 #define PITA_MISC_REG		0x1c
+#ifdef __BIG_ENDIAN
+#define PITA_PARA_SOFTRESET	0x00000001
+#define PITA_PARA_MPX_MODE	0x00000004
+#define PITA_INT0_ENABLE	0x00000200
+#else
 #define PITA_PARA_SOFTRESET	0x01000000
 #define PITA_PARA_MPX_MODE	0x04000000
 #define PITA_INT0_ENABLE	0x00020000
-#define PITA_INT0_STATUS	0x00000002
+#endif
+#define PITA_INT0_STATUS	0x02
 
 static inline u_char
 readreg(unsigned int ale, unsigned int adr, u_char off)
@@ -183,7 +134,7 @@ writefifo(unsigned int ale, unsigned int adr, u_char off, u_char *data, int size
 static inline u_char
 memreadreg(unsigned long adr, u_char off)
 {
-	return(0xff & *((unsigned int *)
+	return(*((unsigned char *)
 		(((unsigned int *)adr) + off)));
 }
 
@@ -754,30 +705,30 @@ reset_diva(struct IsdnCardState *cs)
 	sti();
 	if (cs->subtyp == DIVA_IPAC_ISA) {
 		writereg(cs->hw.diva.isac_adr, cs->hw.diva.isac, IPAC_POTA2, 0x20);
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		writereg(cs->hw.diva.isac_adr, cs->hw.diva.isac, IPAC_POTA2, 0x00);
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		writereg(cs->hw.diva.isac_adr, cs->hw.diva.isac, IPAC_MASK, 0xc0);
 	} else if (cs->subtyp == DIVA_IPAC_PCI) {
 		unsigned int *ireg = (unsigned int *)(cs->hw.diva.pci_cfg +
 					PITA_MISC_REG);
 		*ireg = PITA_PARA_SOFTRESET | PITA_PARA_MPX_MODE;
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		*ireg = PITA_PARA_MPX_MODE;
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		memwritereg(cs->hw.diva.cfg_reg, IPAC_MASK, 0xc0);
 	} else { /* DIVA 2.0 */
 		cs->hw.diva.ctrl_reg = 0;        /* Reset On */
 		byteout(cs->hw.diva.ctrl, cs->hw.diva.ctrl_reg);
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		cs->hw.diva.ctrl_reg |= DIVA_RESET;  /* Reset Off */
 		byteout(cs->hw.diva.ctrl, cs->hw.diva.ctrl_reg);
-		current->state = TASK_UNINTERRUPTIBLE;
+		set_current_state(TASK_UNINTERRUPTIBLE);
 		schedule_timeout((10*HZ)/1000);
 		if (cs->subtyp == DIVA_ISA)
 			cs->hw.diva.ctrl_reg |= DIVA_ISA_LED_A;
@@ -931,28 +882,30 @@ setup_diva(struct IsdnCard *card))
 		}
 
 		cs->subtyp = 0;
-		if ((dev_diva = pci_find_device(PCI_VENDOR_EICON_DIEHL,
-			PCI_DIVA20_ID, dev_diva))) {
+		if ((dev_diva = pci_find_device(PCI_VENDOR_ID_EICON,
+			PCI_DEVICE_ID_EICON_DIVA20, dev_diva))) {
+			if (pci_enable_device(dev_diva))
+				return(0);
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva->irq;
-			cs->hw.diva.cfg_reg = dev_diva->base_address[ 2]
-				& PCI_BASE_ADDRESS_IO_MASK;
-		} else if ((dev_diva_u = pci_find_device(PCI_VENDOR_EICON_DIEHL,
-			PCI_DIVA20_U_ID, dev_diva_u))) {
+			cs->hw.diva.cfg_reg = dev_diva->base_address[ 2] & PCI_BASE_ADDRESS_IO_MASK;
+		} else if ((dev_diva_u = pci_find_device(PCI_VENDOR_ID_EICON,
+			PCI_DEVICE_ID_EICON_DIVA20_U, dev_diva_u))) {
+			if (pci_enable_device(dev_diva_u))
+				return(0);
 			cs->subtyp = DIVA_PCI;
 			cs->irq = dev_diva_u->irq;
-			cs->hw.diva.cfg_reg = dev_diva_u->base_address[ 2]
-				& PCI_BASE_ADDRESS_IO_MASK;
-		} else if ((dev_diva201 = pci_find_device(PCI_VENDOR_EICON_DIEHL,
-			PCI_DIVA_201, dev_diva201))) {
+			cs->hw.diva.cfg_reg = dev_diva_u->base_address[ 2] & PCI_BASE_ADDRESS_IO_MASK;
+		} else if ((dev_diva201 = pci_find_device(PCI_VENDOR_ID_EICON,
+			PCI_DEVICE_ID_EICON_DIVA201, dev_diva201))) {
+			if (pci_enable_device(dev_diva201))
+				return(0);
 			cs->subtyp = DIVA_IPAC_PCI;
 			cs->irq = dev_diva201->irq;
 			cs->hw.diva.pci_cfg =
-				(ulong) ioremap((dev_diva201->base_address[ 0]
-					& PCI_BASE_ADDRESS_IO_MASK), 4096);
+				(ulong) ioremap(dev_diva201->base_address[ 0] & PCI_BASE_ADDRESS_MEM_MASK, 4096);
 			cs->hw.diva.cfg_reg =
-				(ulong) ioremap((dev_diva201->base_address[ 1]
-					& PCI_BASE_ADDRESS_IO_MASK), 4096);
+				(ulong) ioremap(dev_diva201->base_address[ 1] & PCI_BASE_ADDRESS_MEM_MASK, 4096);
 		} else {
 			printk(KERN_WARNING "Diva: No PCI card found\n");
 			return(0);

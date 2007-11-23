@@ -47,7 +47,12 @@ struct poll_table_struct;
 
 /* And dynamically-tunable limits and defaults: */
 extern int max_inodes;
-extern int max_files, nr_files, nr_free_files;
+struct files_stat_struct {
+	int nr_files;		/* read only */
+	int nr_free_files;	/* read only */
+	int max_files;		/* tunable */
+};
+extern struct files_stat_struct files_stat; /* fs/file_table.c */
 extern int max_super_blocks, nr_super_blocks;
 
 #define NR_FILE  4096	/* this can well be larger on a larger system */

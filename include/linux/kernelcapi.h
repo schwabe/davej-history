@@ -1,58 +1,17 @@
 /*
- * $Id: kernelcapi.h,v 1.5 2000/01/28 16:45:40 calle Exp $
+ * $Id: kernelcapi.h,v 1.7 2000/06/12 09:20:20 kai Exp $
  * 
  * Kernel CAPI 2.0 Interface for Linux
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
- * $Log: kernelcapi.h,v $
- * Revision 1.5  2000/01/28 16:45:40  calle
- * new manufacturer command KCAPI_CMD_ADDCARD (generic addcard),
- * will search named driver and call the add_card function if one exist.
- *
- * Revision 1.4  1999/09/10 17:24:19  calle
- * Changes for proposed standard for CAPI2.0:
- * - AK148 "Linux Exention"
- *
- * Revision 1.3  1999/07/01 15:26:56  calle
- * complete new version (I love it):
- * + new hardware independed "capi_driver" interface that will make it easy to:
- *   - support other controllers with CAPI-2.0 (i.e. USB Controller)
- *   - write a CAPI-2.0 for the passive cards
- *   - support serial link CAPI-2.0 boxes.
- * + wrote "capi_driver" for all supported cards.
- * + "capi_driver" (supported cards) now have to be configured with
- *   make menuconfig, in the past all supported cards where included
- *   at once.
- * + new and better informations in /proc/capi/
- * + new ioctl to switch trace of capi messages per controller
- *   using "avmcapictrl trace [contr] on|off|...."
- * + complete testcircle with all supported cards and also the
- *   PCMCIA cards (now patch for pcmcia-cs-3.0.13 needed) done.
- *
- * Revision 1.2  1999/06/21 15:24:26  calle
- * extend information in /proc.
- *
- * Revision 1.1  1997/03/04 21:27:33  calle
- * First version in isdn4linux
- *
- * Revision 2.2  1997/02/12 09:31:39  calle
- * new version
- *
- * Revision 1.1  1997/01/31 10:32:20  calle
- * Initial revision
- *
- * 
  */
+
 #ifndef __KERNELCAPI_H__
 #define __KERNELCAPI_H__
 
-#define CAPI_MAXAPPL	20	/*
-				   * maximum number of applications 
-				 */
-#define CAPI_MAXCONTR	10	/*
-				   * maximum number of controller 
-				 */
+#define CAPI_MAXAPPL	20	/* maximum number of applications  */
+#define CAPI_MAXCONTR	10	/* maximum number of controller    */
 #define CAPI_MAXDATAWINDOW	8
 
 
@@ -94,8 +53,8 @@ struct capi_interface {
 	__u16 (*capi_put_message) (__u16 applid, struct sk_buff * msg);
 	__u16 (*capi_get_message) (__u16 applid, struct sk_buff ** msgp);
 	__u16 (*capi_set_signal) (__u16 applid,
-			      void (*signal) (__u16 applid, __u32 param),
-				  __u32 param);
+			      void (*signal) (__u16 applid, void *param),
+				  void *param);
 	__u16 (*capi_get_manufacturer) (__u32 contr, __u8 buf[CAPI_MANUFACTURER_LEN]);
 	__u16 (*capi_get_version) (__u32 contr, struct capi_version * verp);
 	 __u16(*capi_get_serial) (__u32 contr, __u8 serial[CAPI_SERIAL_LEN]);
@@ -108,8 +67,15 @@ struct capi_interface {
 
 };
 
-#define	KCI_CONTRUP	0
-#define	KCI_CONTRDOWN	1
+struct capi_ncciinfo {
+	__u16 applid;
+	__u32 ncci;
+};
+
+#define	KCI_CONTRUP	0	/* struct capi_profile */
+#define	KCI_CONTRDOWN	1	/* NULL */
+#define	KCI_NCCIUP	2	/* struct capi_ncciinfo */
+#define	KCI_NCCIDOWN	3	/* struct capi_ncciinfo */
 
 struct capi_interface_user {
 	char name[20];
@@ -147,6 +113,47 @@ int detach_capi_interface(struct capi_interface_user *);
 #define CAPI_MSGNOTINSTALLED 	          0x1109
 #define CAPI_MSGCTRLERNOTSUPPORTEXTEQUIP  0x110a
 #define CAPI_MSGCTRLERONLYSUPPORTEXTEQUIP 0x110b
+
+typedef enum {
+        CapiMessageNotSupportedInCurrentState = 0x2001,
+        CapiIllContrPlciNcci                  = 0x2002,
+        CapiNoPlciAvailable                   = 0x2003,
+        CapiNoNcciAvailable                   = 0x2004,
+        CapiNoListenResourcesAvailable        = 0x2005,
+        CapiNoFaxResourcesAvailable           = 0x2006,
+        CapiIllMessageParmCoding              = 0x2007,
+} RESOURCE_CODING_PROBLEM;
+
+typedef enum {
+        CapiB1ProtocolNotSupported                      = 0x3001,
+        CapiB2ProtocolNotSupported                      = 0x3002,
+        CapiB3ProtocolNotSupported                      = 0x3003,
+        CapiB1ProtocolParameterNotSupported             = 0x3004,
+        CapiB2ProtocolParameterNotSupported             = 0x3005,
+        CapiB3ProtocolParameterNotSupported             = 0x3006,
+        CapiBProtocolCombinationNotSupported            = 0x3007,
+        CapiNcpiNotSupported                            = 0x3008,
+        CapiCipValueUnknown                             = 0x3009,
+        CapiFlagsNotSupported                           = 0x300a,
+        CapiFacilityNotSupported                        = 0x300b,
+        CapiDataLengthNotSupportedByCurrentProtocol     = 0x300c,
+        CapiResetProcedureNotSupportedByCurrentProtocol = 0x300d,
+        CapiTeiAssignmentFailed                         = 0x300e,
+} REQUESTED_SERVICES_PROBLEM;
+
+typedef enum {
+	CapiSuccess                                     = 0x0000,
+	CapiSupplementaryServiceNotSupported            = 0x300e,
+	CapiRequestNotAllowedInThisState                = 0x3010,
+} SUPPLEMENTARY_SERVICE_INFO;
+
+typedef enum {
+	CapiProtocolErrorLayer1                         = 0x3301,
+	CapiProtocolErrorLayer2                         = 0x3302,
+	CapiProtocolErrorLayer3                         = 0x3303,
+	CapiTimeOut                                     = 0x3303, // SuppServiceReason
+	CapiCallGivenToOtherApplication                 = 0x3304,
+} CAPI_REASON;
 
 #endif				/* __KERNEL__ */
 

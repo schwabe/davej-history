@@ -23,6 +23,12 @@ D: NFS over TCP patches
 S: University of Limerick
 S: Ireland
 
+N: Tigran Aivazian
+E: tigran@veritas.com
+W: http://www.moses.uklinux.net/patches
+D: Intel IA32 microcode update driver
+S: United Kingdom
+
 N: Werner Almesberger
 E: werner.almesberger@lrc.di.epfl.ch
 D: dosfs, LILO, some fd features, various other hacks here and there
@@ -1333,6 +1339,13 @@ E: imp@village.org
 D: Linux/MIPS Deskstation support, Provided OI/OB for Linux
 S: 8786 Niwot Road
 S: Niwot, Colorado 80503
+S: USA
+
+N: Robert M. Love
+E: rml@tech9.net
+E: rml@ufl.edu
+D: misc. kernel hacking and debugging
+S: Gainesville, Florida 32608
 S: USA
 
 N: H.J. Lu

@@ -890,8 +890,9 @@ rwlock_t waitqueue_lock = RW_LOCK_UNLOCKED;
  */
 void __wake_up(struct wait_queue **q, unsigned int mode)
 {
-	struct task_struct *p;
+	struct task_struct *p, *best_exclusive;
 	struct wait_queue *head, *next;
+	unsigned int do_exclusive;
 
         if (!q)
 		goto out;
@@ -906,22 +907,23 @@ void __wake_up(struct wait_queue **q, unsigned int mode)
 	if (!next)
 		goto out_unlock;
 
+	best_exclusive = 0;
+	do_exclusive = mode & TASK_EXCLUSIVE;
 	while (next != head) {
 		p = next->task;
 		next = next->next;
 		if (p->state & mode) {
-			/*
-			 * We can drop the read-lock early if this
-			 * is the only/last process.
-			 */
-			if (next == head) {
-				read_unlock(&waitqueue_lock);
-				wake_up_process(p);
-				goto out;
+			if (do_exclusive && p->task_exclusive) {
+				if (best_exclusive == NULL)
+					best_exclusive = p;
 			}
-			wake_up_process(p);
+			else {
+				wake_up_process(p);
+			}
 		}
 	}
+	if (best_exclusive)
+		wake_up_process(best_exclusive);
 out_unlock:
 	read_unlock(&waitqueue_lock);
 out:
@@ -1943,7 +1945,7 @@ asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
 		delay=(t.tv_nsec + 999) / 1000;
 		
 		if(delay>10000)
-			mdelay(delay);
+			mdelay((delay+999)/1000);
 		else
 			udelay(delay);
 		return 0;

@@ -1,11 +1,34 @@
 /*
- * $Id: c4.c,v 1.5 2000/03/16 15:21:03 calle Exp $
+ * $Id: c4.c,v 1.12 2000/06/19 16:51:53 keil Exp $
  * 
  * Module for AVM C4 card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: c4.c,v $
+ * Revision 1.12  2000/06/19 16:51:53  keil
+ * don't free skb in irq context
+ *
+ * Revision 1.11  2000/06/19 15:11:24  keil
+ * avoid use of freed structs
+ * changes from 2.4.0-ac21
+ *
+ * Revision 1.10  2000/05/29 12:29:18  keil
+ * make pci_enable_dev compatible to 2.2 kernel versions
+ *
+ * Revision 1.9  2000/05/19 15:43:22  calle
+ * added calls to pci_device_start().
+ *
+ * Revision 1.8  2000/04/03 16:38:05  calle
+ * made suppress_pollack static.
+ *
+ * Revision 1.7  2000/04/03 13:29:24  calle
+ * make Tim Waugh happy (module unload races in 2.3.99-pre3).
+ * no real problem there, but now it is much cleaner ...
+ *
+ * Revision 1.6  2000/03/17 12:21:08  calle
+ * send patchvalues now working.
+ *
  * Revision 1.5  2000/03/16 15:21:03  calle
  * Bugfix in c4_remove: loop 5 times instead of 4 :-(
  *
@@ -36,6 +59,7 @@
 #include <linux/ioport.h>
 #include <linux/pci.h>
 #include <linux/capi.h>
+#include <linux/isdn.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include "capicmd.h"
@@ -43,7 +67,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.5 $";
+static char *revision = "$Revision: 1.12 $";
 
 #undef CONFIG_C4_DEBUG
 #undef CONFIG_C4_POLLDEBUG
@@ -774,45 +798,78 @@ static void c4_send_init(avmcard *card)
 	c4_dispatch_tx(card);
 }
 
-static int c4_send_config(avmcard *card, capiloaddatapart * config)
+static int queue_sendconfigword(avmcard *card, __u32 val)
 {
 	struct sk_buff *skb;
-	__u8 val[sizeof(__u32)];
 	void *p;
-	unsigned char *dp;
-	int left, retval;
-	
-	skb = alloc_skb(12 + ((config->len+3)/4)*5, GFP_ATOMIC);
+
+	skb = alloc_skb(3+4, GFP_ATOMIC);
 	if (!skb) {
-		printk(KERN_CRIT "%s: no memory, can't send config.\n",
+		printk(KERN_CRIT "%s: no memory, send config\n",
 					card->name);
-		return	-ENOMEM;
+		return -ENOMEM;
 	}
 	p = skb->data;
 	_put_byte(&p, 0);
 	_put_byte(&p, 0);
 	_put_byte(&p, SEND_CONFIG);
-	_put_word(&p, 1);
+	_put_word(&p, val);
+	skb_put(skb, (__u8 *)p - (__u8 *)skb->data);
+
+	skb_queue_tail(&card->dma->send_queue, skb);
+	c4_dispatch_tx(card);
+	return 0;
+}
+
+static int queue_sendconfig(avmcard *card, char cval[4])
+{
+	struct sk_buff *skb;
+	void *p;
+
+	skb = alloc_skb(3+4, GFP_ATOMIC);
+	if (!skb) {
+		printk(KERN_CRIT "%s: no memory, send config\n",
+					card->name);
+		return -ENOMEM;
+	}
+	p = skb->data;
+	_put_byte(&p, 0);
+	_put_byte(&p, 0);
 	_put_byte(&p, SEND_CONFIG);
-	_put_word(&p, config->len);	/* 12 */
+	_put_byte(&p, cval[0]);
+	_put_byte(&p, cval[1]);
+	_put_byte(&p, cval[2]);
+	_put_byte(&p, cval[3]);
+	skb_put(skb, (__u8 *)p - (__u8 *)skb->data);
+
+	skb_queue_tail(&card->dma->send_queue, skb);
+	c4_dispatch_tx(card);
+	return 0;
+}
+
+static int c4_send_config(avmcard *card, capiloaddatapart * config)
+{
+	__u8 val[4];
+	unsigned char *dp;
+	int left, retval;
+	
+	if ((retval = queue_sendconfigword(card, 1)) != 0)
+		return retval;
+	if ((retval = queue_sendconfigword(card, config->len)) != 0)
+		return retval;
 
 	dp = config->data;
 	left = config->len;
 	while (left >= sizeof(__u32)) {
 	        if (config->user) {
 			retval = copy_from_user(val, dp, sizeof(val));
-			if (retval) {
-				dev_kfree_skb(skb);
+			if (retval)
 				return -EFAULT;
-			}
 		} else {
 			memcpy(val, dp, sizeof(val));
 		}
-		_put_byte(&p, SEND_CONFIG);
-		_put_byte(&p, val[0]);
-		_put_byte(&p, val[1]);
-		_put_byte(&p, val[2]);
-		_put_byte(&p, val[3]);
+		if ((retval = queue_sendconfig(card, val)) != 0)
+			return retval;
 		left -= sizeof(val);
 		dp += sizeof(val);
 	}
@@ -820,24 +877,14 @@ static int c4_send_config(avmcard *card, capiloaddatapart * config)
 		memset(val, 0, sizeof(val));
 		if (config->user) {
 			retval = copy_from_user(&val, dp, left);
-			if (retval) {
-				dev_kfree_skb(skb);
+			if (retval)
 				return -EFAULT;
-			}
 		} else {
 			memcpy(&val, dp, left);
 		}
-		_put_byte(&p, SEND_CONFIG);
-		_put_byte(&p, val[0]);
-		_put_byte(&p, val[1]);
-		_put_byte(&p, val[2]);
-		_put_byte(&p, val[3]);
+		if ((retval = queue_sendconfig(card, val)) != 0)
+			return retval;
 	}
-
-	skb_put(skb, (__u8 *)p - (__u8 *)skb->data);
-
-	skb_queue_tail(&card->dma->send_queue, skb);
-	c4_dispatch_tx(card);
 
 	return 0;
 }
@@ -875,8 +922,15 @@ static int c4_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	c4outmeml(card->mbase+DOORBELL, DBELL_UP_ARM);
 	restore_flags(flags);
 
-	if (data->configuration.len > 0 && data->configuration.data)
-		c4_send_config(card, &data->configuration);
+	if (data->configuration.len > 0 && data->configuration.data) {
+		retval = c4_send_config(card, &data->configuration);
+		if (retval) {
+			printk(KERN_ERR "%s: failed to set config!!\n",
+					card->name);
+			c4_reset(card);
+			return retval;
+		}
+	}
 
         c4_send_init(card);
 
@@ -910,8 +964,10 @@ static void c4_remove_ctr(struct capi_ctr *ctrl)
 
         for (i=0; i < 4; i++) {
 		cinfo = &card->ctrlinfo[i];
-		if (cinfo->capi_ctrl)
+		if (cinfo->capi_ctrl) {
 			di->detach_ctr(cinfo->capi_ctrl);
+			cinfo->capi_ctrl = NULL;
+		}
 	}
 
 	free_irq(card->irq, card);
@@ -1124,7 +1180,6 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
         cinfo = (avmctrl_info *) kmalloc(sizeof(avmctrl_info)*4, GFP_ATOMIC);
 	if (!cinfo) {
 		printk(KERN_WARNING "%s: no memory.\n", driver->name);
-	        kfree(card->ctrlinfo);
 		kfree(card->dma);
 		kfree(card);
 	        MOD_DEC_USE_COUNT;
@@ -1282,6 +1337,8 @@ int c4_init(void)
 	char *p;
 	int retval;
 
+	MOD_INC_USE_COUNT;
+
 	if ((p = strchr(revision, ':'))) {
 		strncpy(driver->revision, p + 1, sizeof(driver->revision));
 		p = strchr(driver->revision, '$');
@@ -1295,6 +1352,7 @@ int c4_init(void)
 	if (!di) {
 		printk(KERN_ERR "%s: failed to attach capi_driver\n",
 				driver->name);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -1302,6 +1360,7 @@ int c4_init(void)
 	if (!pci_present()) {
 		printk(KERN_ERR "%s: no PCI bus present\n", driver->name);
     		detach_capi_driver(driver);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -1314,6 +1373,18 @@ int c4_init(void)
 		param.irq = dev->irq;
 		param.membase = dev->base_address[ 0] & PCI_BASE_ADDRESS_MEM_MASK;
 
+		retval = pci_enable_device (dev);
+		if (retval != 0) {
+		        printk(KERN_ERR
+			"%s: failed to enable AVM-C4 at i/o %#x, irq %d, mem %#x err=%d\n",
+			driver->name, param.port, param.irq, param.membase, retval);
+#ifdef MODULE
+			cleanup_module();
+#endif
+			MOD_DEC_USE_COUNT;
+			return -EIO;
+		}
+
 		printk(KERN_INFO
 			"%s: PCI BIOS reports AVM-C4 at i/o %#x, irq %d, mem %#x\n",
 			driver->name, param.port, param.irq, param.membase);
@@ -1325,6 +1396,7 @@ int c4_init(void)
 #ifdef MODULE
 			cleanup_module();
 #endif
+			MOD_DEC_USE_COUNT;
 			return retval;
 		}
 		ncards++;
@@ -1332,12 +1404,15 @@ int c4_init(void)
 	if (ncards) {
 		printk(KERN_INFO "%s: %d C4 card(s) detected\n",
 				driver->name, ncards);
+		MOD_DEC_USE_COUNT;
 		return 0;
 	}
 	printk(KERN_ERR "%s: NO C4 card detected\n", driver->name);
+	MOD_DEC_USE_COUNT;
 	return -ESRCH;
 #else
 	printk(KERN_ERR "%s: kernel not compiled with PCI.\n", driver->name);
+	MOD_DEC_USE_COUNT;
 	return -EIO;
 #endif
 }

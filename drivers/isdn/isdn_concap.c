@@ -52,15 +52,19 @@
 
 int isdn_concap_dl_data_req(struct concap_proto *concap, struct sk_buff *skb)
 {
-	int tmp;
 	struct device *ndev = concap -> net_dev;
-	isdn_net_local *lp = (isdn_net_local *) ndev->priv;
+	isdn_net_dev *nd = ((isdn_net_local *) ndev->priv)->netdev;
+	isdn_net_local *lp = isdn_net_get_locked_lp(nd);
 
 	IX25DEBUG( "isdn_concap_dl_data_req: %s \n", concap->net_dev->name);
+	if (!lp) {
+		IX25DEBUG( "isdn_concap_dl_data_req: %s : isdn_net_send_skb returned %d\n", concap -> net_dev -> name, 1);
+		return 1;
+	}
 	lp->huptimer = 0;
-	tmp=isdn_net_send_skb(ndev, lp, skb);
-	IX25DEBUG( "isdn_concap_dl_data_req: %s : isdn_net_send_skb returned %d\n", concap -> net_dev -> name, tmp);
-	return tmp;
+	isdn_net_writebuf_skb(lp, skb);
+	IX25DEBUG( "isdn_concap_dl_data_req: %s : isdn_net_send_skb returned %d\n", concap -> net_dev -> name, 0);
+	return 0;
 }
 
 

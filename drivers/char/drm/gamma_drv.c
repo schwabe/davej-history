@@ -35,11 +35,6 @@
 
 #include <linux/agp_backend.h>
 
-static void __attribute__((unused)) unused(void)
-{
-	agp_enable(0);
-}
-
 #ifndef PCI_DEVICE_ID_3DLABS_GAMMA
 #define PCI_DEVICE_ID_3DLABS_GAMMA 0x0008
 #endif

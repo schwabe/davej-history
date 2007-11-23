@@ -114,4 +114,18 @@ typedef union capi_ioctl_struct {
 	__u16 errcode;
 } capi_ioctl_struct;
 
+/*
+ * Middleware extension
+ */
+
+#define CAPIFLAG_HIGHJACKING	0x0001
+
+#define CAPI_GET_FLAGS		_IOR('C',0x23, unsigned)
+#define CAPI_SET_FLAGS		_IOR('C',0x24, unsigned)
+#define CAPI_CLR_FLAGS		_IOR('C',0x25, unsigned)
+
+#define CAPI_NCCI_OPENCOUNT	_IOR('C',0x26, unsigned)
+
+#define CAPI_NCCI_GETUNIT	_IOR('C',0x27, unsigned)
+
 #endif				/* __LINUX_CAPI_H__ */

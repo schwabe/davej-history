@@ -1,27 +1,12 @@
-/* $Id: saphir.c,v 1.5 1999/12/19 13:09:42 keil Exp $
-
+/* $Id: saphir.c,v 1.7 2000/06/26 08:59:14 keil Exp $
+ *
  * saphir.c low level stuff for HST Saphir 1
  *
  * Author     Karsten Keil (keil@isdn4linux.de)
  *
  * Thanks to    HST High Soft Tech GmbH
  *
- *
- * $Log: saphir.c,v $
- * Revision 1.5  1999/12/19 13:09:42  keil
- * changed TASK_INTERRUPTIBLE into TASK_UNINTERRUPTIBLE for
- * signal proof delays
- *
- * Revision 1.4  1999/09/04 06:20:06  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.3  1999/07/12 21:05:26  keil
- * fix race in IRQ handling
- * added watchdog for lost IRQs
- *
- * Revision 1.2  1999/07/01 08:07:55  keil
- * Initial version
- *
+ * This file is (c) under GNU PUBLIC LICENSE
  *
  */
 
@@ -33,7 +18,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-static char *saphir_rev = "$Revision: 1.5 $";
+static char *saphir_rev = "$Revision: 1.7 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -173,11 +158,9 @@ saphir_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 		goto Start_ISAC;
 	}
 	/* Watchdog */
-	if (cs->hw.saphir.timer.function) {
-		del_timer(&cs->hw.saphir.timer);
-		cs->hw.saphir.timer.expires = jiffies + 1*HZ;
-		add_timer(&cs->hw.saphir.timer);
-	} else
+	if (cs->hw.saphir.timer.function) 
+		mod_timer(&cs->hw.saphir.timer, jiffies+1*HZ);
+	else
 		printk(KERN_WARNING "saphir: Spurious timer!\n");
 	writereg(cs->hw.saphir.ale, cs->hw.saphir.hscx, HSCX_MASK, 0xFF);
 	writereg(cs->hw.saphir.ale, cs->hw.saphir.hscx, HSCX_MASK + 0x40, 0xFF);
@@ -192,9 +175,7 @@ SaphirWatchDog(struct IsdnCardState *cs)
 {
         /* 5 sec WatchDog, so read at least every 4 sec */
 	cs->readisac(cs, ISAC_RBCH);
-	del_timer(&cs->hw.saphir.timer);
-	cs->hw.saphir.timer.expires = jiffies + 1*HZ;
-	add_timer(&cs->hw.saphir.timer);
+	mod_timer(&cs->hw.saphir.timer, jiffies+1*HZ);
 }
 
 void
@@ -241,10 +222,10 @@ saphir_reset(struct IsdnCardState *cs)
 	save_flags(flags);
 	sti();
 	byteout(cs->hw.saphir.cfg_reg + RESET_REG, 1);
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30*HZ)/1000);	/* Timeout 30ms */
 	byteout(cs->hw.saphir.cfg_reg + RESET_REG, 0);
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	schedule_timeout((30*HZ)/1000);	/* Timeout 30ms */
 	restore_flags(flags);
 	byteout(cs->hw.saphir.cfg_reg + IRQ_REG, irq_val);

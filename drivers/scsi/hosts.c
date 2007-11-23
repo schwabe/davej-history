@@ -898,6 +898,9 @@ __initfunc(unsigned int scsi_init(void))
 #ifdef CONFIG_CHR_DEV_ST
     scsi_register_device(&st_template);
 #endif
+#ifdef CONFIG_CHR_DEV_OSST
+    scsi_register_device(&osst_template);
+#endif
 #ifdef CONFIG_CHR_DEV_SG
     scsi_register_device(&sg_template);
 #endif

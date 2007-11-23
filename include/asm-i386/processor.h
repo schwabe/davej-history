@@ -327,6 +327,23 @@ extern void free_task_struct(struct task_struct *);
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)
 
+/* '6' because it used to be for P6 only, now supports P15 too */
+#define MICROCODE_IOCFREE _IO('6',0)
+
+/* physical layour of IA32 microcode chunks */
+struct microcode {
+	unsigned int hdrver;
+	unsigned int rev;
+	unsigned int date;
+	unsigned int sig;
+	unsigned int cksum;
+	unsigned int ldrver;
+	unsigned int pf;
+	unsigned int reserved[5];
+	unsigned int bits[500];
+};
+
+
 /* REP NOP (PAUSE) is a good thing to insert into busy-wait loops. */
 extern inline void rep_nop(void)
 {

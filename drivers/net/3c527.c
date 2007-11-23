@@ -1,9 +1,7 @@
-
 /* 3c527.c: 3Com Etherlink/MC32 driver for Linux
  *
  *	(c) Copyright 1998 Red Hat Software Inc
  *	Written by Alan Cox.
- *	Further debugging by Carl Drougge.
  *
  *	Based on skeleton.c written 1993-94 by Donald Becker and ne2.c
  *	(for the MCA stuff) written by Wim Dumon.
@@ -17,7 +15,9 @@
  */
 
 static const char *version =
-	"3c527.c:v0.08 2000/02/22 Alan Cox (alan@redhat.com)\n";
+	"3c527.c:v0.06 1999/09/16 Alan Cox (alan@redhat.com)\n";
+
+/* Modified by Richard Procter (rprocter@mcs.vuw.ac.nz, rnp@netlink.co.nz) */
 
 /*
  *	Things you need
@@ -31,6 +31,11 @@ static const char *version =
  *	The documentation in places seems to miss things. In actual fact
  *	I've always eventually found everything is documented, it just
  *	requires careful study.
+ *
+ *      The manual contradicts itself when describing the minimum number 
+ *      buffers in the 'configure lists' command. 
+ *      My card accepts a buffer config of 4/4. 
+ *
  */
 
 #include <linux/module.h>
@@ -57,6 +62,8 @@ static const char *version =
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 
+#include <linux/proc_fs.h>
+
 #include "3c527.h"
 
 /*
@@ -69,23 +76,31 @@ static const char* cardname = "3c527";
 #ifndef NET_DEBUG
 #define NET_DEBUG 2
 #endif
+
+#undef DEBUG_IRQ
+
 static unsigned int mc32_debug = NET_DEBUG;
 
 /* The number of low I/O ports used by the ethercard. */
 #define NETCARD_IO_EXTENT	8
 
+/* As implemented, values must be a power-of-2 -- 4/8/16/32 */ 
 
-struct mc32_mailbox
+#define TX_RING_LEN     16       /* Typically the card supports 37  */
+#define RX_RING_LEN     8        /*     "       "        "          */
+
+#define RX_COPYBREAK    200      /* Value from 3c59x.c */
+
+
+/* Pointers to buffers and their on-card records */
+struct mc32_ring_desc 
 {
-	u16	mbox __attribute((packed));
-	u16	data[1] __attribute((packed));
+  volatile struct skb_header *p;                    
+  struct sk_buff *skb;          
 };
 
-/* Information that need to be kept for each board. */
 
-#define TX_RING_MAX	16	/* Typically the card supports 37 */
-#define RX_RING_MAX	32	/*        "     "       "         */
-
+/* Information that needs to be kept for each board. */
 struct mc32_local 
 {
 	struct net_device_stats net_stats;
@@ -93,25 +108,28 @@ struct mc32_local
 	volatile struct mc32_mailbox *rx_box;
 	volatile struct mc32_mailbox *tx_box;
 	volatile struct mc32_mailbox *exec_box;
-	volatile u16 *stats;
-	u16 tx_chain;
-	u16 rx_chain;
-	u16 tx_len;
-	u16 rx_len;
+        volatile struct mc32_stats *stats;    /* Start of on-card statistics */
+        u16 tx_chain;           /* Transmit list start offset */
+	u16 rx_chain;           /* Receive list start offset */
+        u16 tx_len;             /* Transmit list count */ 
+        u16 rx_len;             /* Receive list count */
 	u32 base;
 	u16 rx_halted;
 	u16 tx_halted;
-	u16 rx_pending;		/* ring due a service */
 	u16 exec_pending;
 	u16 mc_reload_wait;	/* a multicast load request is pending */
-	atomic_t tx_count;		/* buffers left */
+	atomic_t tx_count;	/* buffers left */
 	struct wait_queue *event;
-	struct sk_buff *tx_skb[TX_RING_MAX];	/* Transmit ring */
-	u16 tx_skb_top;
-	u16 tx_skb_end;
-	struct sk_buff *rx_skb[RX_RING_MAX];	/* Receive ring */
-	void *rx_ptr[RX_RING_MAX];		/* Data pointers */
-	u32 mc_list_valid;			/* True when the mclist is set */
+	
+	struct mc32_ring_desc tx_ring[TX_RING_LEN];	/* Host Transmit ring */
+	struct mc32_ring_desc rx_ring[RX_RING_LEN];	/* Host Receive ring */
+
+	u16 tx_ring_tail;       /* index to tx de-queue end */
+	u16 tx_ring_head;       /* index to tx en-queue end */
+
+	u16 rx_ring_tail;       /* index to rx de-queue end */ 
+
+	u32 mc_list_valid;	/* True when the mclist is set */
 };
 
 /* The station (ethernet) address prefix, used for a sanity check. */
@@ -124,7 +142,7 @@ struct mca_adapters_t {
 	char		*name;
 };
 
-static struct mca_adapters_t mc32_adapters[] __initdata = {
+const struct mca_adapters_t mc32_adapters[] = {
 	{ 0x0041, "3COM EtherLink MC/32" },
 	{ 0x8EF5, "IBM High Performance Lan Adapter" },
 	{ 0x0000, NULL }
@@ -136,6 +154,7 @@ static struct mca_adapters_t mc32_adapters[] __initdata = {
 extern int mc32_probe(struct device *dev);
 
 static int	mc32_probe1(struct device *dev, int ioaddr);
+static int      mc32_command(struct device *dev, u16 cmd, void *data, int len);
 static int	mc32_open(struct device *dev);
 static int	mc32_send_packet(struct sk_buff *skb, struct device *dev);
 static void	mc32_interrupt(int irq, void *dev_id, struct pt_regs *regs);
@@ -143,6 +162,7 @@ static int	mc32_close(struct device *dev);
 static struct	net_device_stats *mc32_get_stats(struct device *dev);
 static void	mc32_set_multicast_list(struct device *dev);
 static void	mc32_reset_multicast_list(struct device *dev);
+static void     mc32_flush_tx_ring(struct mc32_local *lp);
 
 /*
  * Check for a network adaptor of this type, and return '0' iff one exists.
@@ -224,7 +244,7 @@ __initfunc(static int mc32_probe1(struct device *dev, int slot))
 		"82586 initialisation failure",
 		"Adapter list configuration error"
 	};
-	
+
 	/* Time to play MCA games */
 
 	if (mc32_debug  &&  version_printed++ == 0)
@@ -399,11 +419,11 @@ __initfunc(static int mc32_probe1(struct device *dev, int slot))
 	
 	lp->exec_box=bus_to_virt(dev->mem_start+base);
 	
-	base=lp->exec_box->data[1]<<16|lp->exec_box->data[0];
+	base=lp->exec_box->data[1]<<16|lp->exec_box->data[0];  
 	
 	lp->base = dev->mem_start+base;
 	
-	lp->rx_box=bus_to_virt(lp->base + lp->exec_box->data[2]);
+	lp->rx_box=bus_to_virt(lp->base + lp->exec_box->data[2]); 
 	lp->tx_box=bus_to_virt(lp->base + lp->exec_box->data[3]);
 	
 	lp->stats = bus_to_virt(lp->base + lp->exec_box->data[5]);
@@ -412,17 +432,14 @@ __initfunc(static int mc32_probe1(struct device *dev, int slot))
 	 *	Descriptor chains (card relative)
 	 */
 	 
-	lp->tx_chain 		= lp->exec_box->data[8];
-	lp->rx_chain 		= lp->exec_box->data[10];
-	lp->tx_len 		= lp->exec_box->data[9];
-	lp->rx_len 		= lp->exec_box->data[11];
+	lp->tx_chain 		= lp->exec_box->data[8];   /* Transmit list start offset */
+	lp->rx_chain 		= lp->exec_box->data[10];  /* Receive list start offset */
+	lp->tx_len 		= lp->exec_box->data[9];   /* Transmit list count */ 
+	lp->rx_len 		= lp->exec_box->data[11];  /* Receive list count */
 	
-	printk("%s: %d RX buffers, %d TX buffers. Base of 0x%08X.\n",
-		dev->name, lp->rx_len, lp->tx_len, lp->base);
-	
-	if(lp->tx_len >TX_RING_MAX)
-		lp->tx_len = TX_RING_MAX;
-		
+	printk("%s: Firmware Rev %d. %d RX buffers, %d TX buffers. Base of 0x%08X.\n",
+		dev->name, lp->exec_box->data[12], lp->rx_len, lp->tx_len, lp->base);
+
 	dev->open		= mc32_open;
 	dev->stop		= mc32_close;
 	dev->hard_start_xmit	= mc32_send_packet;
@@ -431,13 +448,12 @@ __initfunc(static int mc32_probe1(struct device *dev, int slot))
 	
 	lp->rx_halted		= 1;
 	lp->tx_halted		= 1;
-	lp->rx_pending		= 0;
 
 	/* Fill in the fields of the device structure with ethernet values. */
 	ether_setup(dev);
+	
 	return 0;
 }
-
 
 /*
  *	Polled command stuff 
@@ -531,17 +547,18 @@ static int mc32_command(struct device *dev, u16 cmd, void *data, int len)
 	/* Send the command */
 	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
 	outb(1<<6, ioaddr+HOST_CMD);	
-	
+
 	save_flags(flags);
 	cli();
+
 	while(lp->exec_pending!=2)
-		sleep_on(&lp->event);
+	  sleep_on(&lp->event);
 	lp->exec_pending=0;
 	restore_flags(flags);
 	
-	 
-	if(lp->exec_box->data[0]&(1<<13))
+	if(lp->exec_box->mbox&(1<<13))
 		ret = -1;
+
 	/*
 	 *	A multicast set got blocked - do it now
 	 */
@@ -562,10 +579,12 @@ static void mc32_rx_abort(struct device *dev)
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 
-	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
+	mc32_ring_poll(dev);	
 	
 	lp->rx_box->mbox=0;
-	outb(3<<3, ioaddr+HOST_CMD);	/* Suspend reception */
+	outb(HOST_CMD_SUSPND_RX, ioaddr+HOST_CMD);	/* Suspend reception */
+	
+	mc32_ring_poll(dev);	
 }
 
  
@@ -577,58 +596,32 @@ static void mc32_rx_begin(struct device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
-	
-	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
-	
-	lp->rx_box->mbox=0;
-	outb(1<<3, ioaddr+HOST_CMD);	/* GO */
+
+	/* Tell the card start reception at the first descriptor */ 
+	lp->rx_box->data[0]=lp->rx_chain; 
+ 
 	mc32_ring_poll(dev);	
 	
+	lp->rx_box->mbox=0;
+	outb(HOST_CMD_START_RX, ioaddr+HOST_CMD);	/* GO */
+
+	mc32_ring_poll(dev);
 	lp->rx_halted=0;
-	lp->rx_pending=0;
 }
 
 static void mc32_tx_abort(struct device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
-	
-	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
+		
+	mc32_ring_poll(dev);
 	
 	lp->tx_box->mbox=0;
-	outb(3, ioaddr+HOST_CMD);	/* Suspend */
-	
-	/* Ring empty */
-	
-	atomic_set(&lp->tx_count, lp->tx_len);
-	
-	/* Flush */
-	if(lp->tx_skb_top!=lp->tx_skb_end)
-	{
-		int i;
-		if(lp->tx_skb_top<=lp->tx_skb_end)
-		{
-			for(i=lp->tx_skb_top;i<lp->tx_skb_end;i++)
-			{
-				dev_kfree_skb(lp->tx_skb[i]);
-				lp->tx_skb[i]=NULL;
-			}
-		}
-		else
-		{
-			for(i=lp->tx_skb_end;i<TX_RING_MAX;i++)
-			{
-				dev_kfree_skb(lp->tx_skb[i]);
-				lp->tx_skb[i]=NULL;
-			}
-			for(i=0;i<lp->tx_skb_top;i++)
-			{
-				dev_kfree_skb(lp->tx_skb[i]);
-				lp->tx_skb[i]=NULL;
-			}
-		}
-	}
-	lp->tx_skb_top=lp->tx_skb_end=0;
+	outb(HOST_CMD_SUSPND_TX, ioaddr+HOST_CMD);	/* Suspend */
+
+	mc32_flush_tx_ring(lp); 
+
+	mc32_ring_poll(dev);
 }
 
 /*
@@ -640,81 +633,132 @@ static void mc32_tx_begin(struct device *dev)
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 	
-	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
-	
+	mc32_ring_poll(dev);
+
 	lp->tx_box->mbox=0;
-#if 0	
-	outb(5, ioaddr+HOST_CMD);	/* GO */
-	printk("TX=>5\n");
+	outb(HOST_CMD_RESTRT_TX, ioaddr+HOST_CMD);	/* GO */
+
 	mc32_ring_poll(dev);	
-	if(lp->tx_box->mbox&(1<<13))
-		printk("TX begin error!\n");
-#endif		
 	lp->tx_halted=0;
 }
 
 	
 /*
- *	Load the rx ring
+ *	Load the rx ring.
  */
  
 static int mc32_load_rx_ring(struct device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	int i;
-	u16 base;
+	u16 rx_base;
 	volatile struct skb_header *p;
 	
-	base = lp->rx_box->data[0];
-	
-	/* Fix me - should use card size - also fix flush ! */ 
+	rx_base=lp->rx_chain;
 
-	for(i=0;i<RX_RING_MAX;i++)
+	for(i=0;i<RX_RING_LEN;i++)
 	{
-		lp->rx_skb[i]=alloc_skb(1532, GFP_KERNEL);
-		if(lp->rx_skb[i]==NULL)
+		lp->rx_ring[i].skb=alloc_skb(1532, GFP_KERNEL);
+		skb_reserve(lp->rx_ring[i].skb, 18);  
+
+		if(lp->rx_ring[i].skb==NULL)
 		{
 			for(;i>=0;i--)
-				kfree_skb(lp->rx_skb[i]);
+				kfree_skb(lp->rx_ring[i].skb);
 			return -ENOBUFS;
 		}
-		lp->rx_ptr[i]=lp->rx_skb[i]->data+18;
 		
-		p=bus_to_virt(lp->base+base);
+		p=bus_to_virt(lp->base+rx_base);
+				
 		p->control=0;
-		p->data = virt_to_bus(lp->rx_ptr[i]);
+		p->data=virt_to_bus(lp->rx_ring[i].skb->data);
 		p->status=0;
-		p->length = 1532;
-		base = p->next;
+		p->length=1532;
+	
+		lp->rx_ring[i].p=p; 
+		rx_base=p->next; 
 	}
-	p->control = (1<<6);
-	lp->rx_box->mbox = 0;
+
+	lp->rx_ring[i-1].p->control |= CONTROL_EOL;
+
+	lp->rx_ring_tail=0; 
+
+	lp->rx_box->mbox=0;   /* check: needed ? */
 	return 0;
 }	
 
 static void mc32_flush_rx_ring(struct mc32_local *lp)
 {
-	int i;
-	for(i=0;i<RX_RING_MAX;i++)
-		kfree_skb(lp->rx_skb[i]);
+	int i; 
+	for(i=0; i < RX_RING_LEN; i++) { 
+		kfree_skb(lp->rx_ring[i].skb);
+		lp->rx_ring[i].p=NULL; 
+	} 
 }
+
+
+/* Load the addresses of the on-card buffer descriptors into main memory */ 
+static void mc32_load_tx_ring(struct device *dev)
+{ 
+	struct mc32_local *lp = (struct mc32_local *)dev->priv;
+	volatile struct skb_header *p;
+	int i; 
+	u16 tx_base;
+
+	tx_base=lp->tx_box->data[0]; 
+
+	/* Read the 'next' pointers from the on-card list into      */
+	/* our tx_ring array so we can reduce slow shared-mem reads */ 
+
+	for(i=0;i<lp->tx_len;i++) 
+	{
+		p=bus_to_virt(lp->base+tx_base);
+		lp->tx_ring[i].p=p; 
+		lp->tx_ring[i].skb=NULL;
+
+		tx_base=p->next;
+	}
+
+	lp->tx_ring_head=lp->tx_ring_tail=0; 
+} 
 
 static void mc32_flush_tx_ring(struct mc32_local *lp)
 {
-	int i;
 	
-	if(lp->tx_skb_top <= lp->tx_skb_end)
+	if(lp->tx_ring_tail!=lp->tx_ring_head)
 	{
-		for(i=lp->tx_skb_top;i<lp->tx_skb_end;i++)
-			dev_kfree_skb(lp->tx_skb[i]);
+		int i;
+	
+		if(lp->tx_ring_tail < lp->tx_ring_head)
+		{
+			for(i=lp->tx_ring_tail;i<lp->tx_ring_head;i++)
+			{
+				dev_kfree_skb(lp->tx_ring[i].skb);
+				lp->tx_ring[i].skb=NULL;
+				lp->tx_ring[i].p=NULL; 
+			}
+		}
+		else
+		{
+			for(i=lp->tx_ring_tail; i<TX_RING_LEN; i++) 
+			{
+				dev_kfree_skb(lp->tx_ring[i].skb);
+				lp->tx_ring[i].skb=NULL;
+				lp->tx_ring[i].p=NULL; 
+			}
+			for(i=0; i<lp->tx_ring_head; i++) 
+			{
+				dev_kfree_skb(lp->tx_ring[i].skb);
+				lp->tx_ring[i].skb=NULL;
+				lp->tx_ring[i].p=NULL; 
+			}
+		}
 	}
-	else
-	{
-		for(i=0;i<lp->tx_skb_end;i++)
-			dev_kfree_skb(lp->tx_skb[i]);
-		for(i=lp->tx_skb_top;i<TX_RING_MAX;i++)
-			dev_kfree_skb(lp->tx_skb[i]);
-	}
+	
+	/* -1 so that tx_ring_head cannot "lap" tx_ring_tail, */
+	/* which would be bad news for mc32_tx_ring as cur. implemented */ 
+	atomic_set(&lp->tx_count, TX_RING_LEN-1); 
+	lp->tx_ring_tail=lp->tx_ring_head=0;
 }
  	
 /*
@@ -725,9 +769,11 @@ static void mc32_flush_tx_ring(struct mc32_local *lp)
 static int mc32_open(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
+	struct mc32_local *lp = (struct mc32_local *)dev->priv;
 	u16 zero_word=0;
 	u8 one=1;
 	u8 regs;
+	u16 descnumbuffs[2] = {TX_RING_LEN, RX_RING_LEN};
 	
 	dev->tbusy = 0;
 	dev->interrupt = 0;
@@ -748,7 +794,6 @@ static int mc32_open(struct device *dev)
 
 	mc32_command(dev, 4, &one, 2);
 
-	 	
 	/*
 	 *	Send the command sequence "abort, resume" for RX and TX.
 	 *	The abort cleans up the buffer chains if needed.
@@ -757,6 +802,22 @@ static int mc32_open(struct device *dev)
 	mc32_rx_abort(dev);
 	mc32_tx_abort(dev);
 	
+	/* Ask card to set up on-card descriptors to our spec */ 
+
+	if(mc32_command(dev, 8, descnumbuffs, 4)) { 
+		printk("%s: %s rejected our buffer configuration!\n",
+	 	       dev->name, cardname);
+		return -ENOBUFS; 
+	}
+	
+	/* Report new configuration */ 
+	mc32_command(dev, 6, NULL, 0); 
+
+	lp->tx_chain 		= lp->exec_box->data[8];   /* Transmit list start offset */
+	lp->rx_chain 		= lp->exec_box->data[10];  /* Receive list start offset */
+	lp->tx_len 		= lp->exec_box->data[9];   /* Transmit list count */ 
+	lp->rx_len 		= lp->exec_box->data[11];  /* Receive list count */
+ 
 	/* Set Network Address */
 	mc32_command(dev, 1, dev->dev_addr, 6);
 	
@@ -767,9 +828,11 @@ static int mc32_open(struct device *dev)
 	   but basically means for all lans now days - has a performance
 	   cost but best set */
 	   
-	mc32_command(dev, 0x0D, &zero_word, 2); /* 82586 bug workaround on */
-	
+	/* mc32_command(dev, 0x0D, &zero_word, 2); */   /* 82586 bug workaround on  */
+
 	/* Load the ring we just initialised */
+
+	mc32_load_tx_ring(dev);
 	
 	if(mc32_load_rx_ring(dev))
 	{
@@ -778,7 +841,7 @@ static int mc32_open(struct device *dev)
 	}
 	
 	/* And the resume command goes last */
-	
+
 	mc32_rx_begin(dev);
 	mc32_tx_begin(dev);
 	
@@ -787,10 +850,10 @@ static int mc32_open(struct device *dev)
 	return 0;
 }
 
+
 static int mc32_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct mc32_local *lp = (struct mc32_local *)dev->priv;
-	int ioaddr = dev->base_addr;
 
 	if (dev->tbusy) {
 		/*
@@ -817,9 +880,7 @@ static int mc32_send_packet(struct sk_buff *skb, struct device *dev)
 	}
 	else 
 	{
-		unsigned long flags;
-		
-		u16 tx_head;
+		unsigned long flags;	       
 		volatile struct skb_header *p, *np;
 
 		save_flags(flags);
@@ -832,129 +893,229 @@ static int mc32_send_packet(struct sk_buff *skb, struct device *dev)
 			return 1;
 		}
 
-		tx_head = lp->tx_box->data[0];
-		atomic_dec(&lp->tx_count);
+		atomic_dec(&lp->tx_count); 
 
-		/* We will need this to flush the buffer out */
-		
-		lp->tx_skb[lp->tx_skb_end] = skb;
-		lp->tx_skb_end++;
-		lp->tx_skb_end&=(TX_RING_MAX-1);
-		
-		/* TX suspend - shouldnt be needed but apparently is.
-		   This is a research item ... */
-		   
-		while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
-		lp->tx_box->mbox=0;
-		outb(3, ioaddr+HOST_CMD);
-		
-		/* Transmit now stopped */
 		/* P is the last sending/sent buffer as a pointer */
-		p=(struct skb_header *)bus_to_virt(lp->base+tx_head);
+		p=lp->tx_ring[lp->tx_ring_head].p; 
 		
-		/* NP is the buffer we will be loading */
-		np=(struct skb_header *)bus_to_virt(lp->base+p->next);
-		
-		np->control	|= (1<<6);	/* EOL */
-		wmb();
-				
-		np->length	= skb->len;
+		lp->tx_ring_head++;
+		lp->tx_ring_head&=(TX_RING_LEN-1); 
 
-		if(np->length < 60)
-			np->length = 60;
+		/* NP is the buffer we will be loading */
+		np=lp->tx_ring[lp->tx_ring_head].p; 
+
+	        /* We will need this to flush the buffer out */
+		lp->tx_ring[lp->tx_ring_head].skb=skb;
+   	   
+		np->length = (skb->len < 60) ? 60 : skb->len; 
 			
 		np->data	= virt_to_bus(skb->data);
-		np->status	= 0;
-		np->control	= (1<<7)|(1<<6);	/* EOP EOL */
-		wmb();
+   		np->status	= 0;
+		np->control     = CONTROL_EOP | CONTROL_EOL;     
+	        wmb();
 		
-		p->status	= 0;
-		p->control	&= ~(1<<6);
-		
-		dev->tbusy	= 0;			/* Keep feeding me */		
-		
-		while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
-		lp->tx_box->mbox=0;
-		outb(5, ioaddr+HOST_CMD);		/* Restart TX */
-		restore_flags(flags);
+		p->control     &= ~CONTROL_EOL;     /* Clear EOL on p */ 
+	   
+       	        dev->tbusy	= 0;	       /* Keep feeding me */		
+	
+	        restore_flags(flags);
 	}
 	return 0;
 }
 
 static void mc32_update_stats(struct device *dev)
 {
+	struct mc32_local *lp = (struct mc32_local *)dev->priv;
+	volatile struct mc32_stats *st = lp->stats; 
+	
+        u32 rx_errors=0; 
+
+	/* The databook isn't at all clear about whether      */ 
+        /* the host should suspend rx/tx here to avoid races. */
+        /* Assuming that it should, my code here is probably  */
+        /* a bit dodgey - RP                                  */
+
+	/* TO DO: count rx_errors, tx_errors, figure out how to measure colisions */     
+
+	/* RX */ 
+
+    	rx_errors += lp->net_stats.rx_crc_errors += st->rx_crc_errors;
+	st->rx_crc_errors = 0; 
+
+    	rx_errors += lp->net_stats.rx_length_errors += st->rx_tooshort_errors;
+	st->rx_tooshort_errors = 0; 
+
+	rx_errors += lp->net_stats.rx_length_errors += st->rx_toolong_errors;
+	st->rx_toolong_errors = 0; 
+
+	rx_errors += lp->net_stats.rx_fifo_errors += st->rx_overrun_errors; 
+	st->rx_overrun_errors = 0; 
+
+	rx_errors += lp->net_stats.rx_frame_errors += st->rx_alignment_errors;
+	st->rx_alignment_errors = 0; 
+
+	rx_errors += lp->net_stats.rx_missed_errors += st->rx_outofresource_errors;
+	st->rx_outofresource_errors = 0; 
+
+	lp->net_stats.rx_errors = rx_errors;
+	
+        /* TX */ 
+
+	/* How to count collisions when you're only 
+           told frames which had 1 or 2-15? - RP */
+	
+	lp->net_stats.collisions += (st->tx_max_collisions * 16); 
+	st->tx_max_collisions = 0;  
+
+	lp->net_stats.tx_carrier_errors += st->tx_carrier_errors; 
+	st->tx_carrier_errors = 0; 
+
+	lp->net_stats.tx_fifo_errors += st->tx_underrun_errors; 
+	st->tx_underrun_errors = 0; 
+	
 }
 
 
 static void mc32_rx_ring(struct device *dev)
 {
-	struct mc32_local *lp=dev->priv;
-	int ioaddr = dev->base_addr;
-	int x=0;
+	struct mc32_local *lp=dev->priv;		
 	volatile struct skb_header *p;
-	u16 base;
-	u16 top;
+	u16 rx_ring_tail = lp->rx_ring_tail;
+	u16 rx_old_tail = rx_ring_tail; 
+
+	int x=0;
 	
-	top = base = lp->rx_box->data[0];
 	do
-	{
-		p=(struct skb_header *)bus_to_virt(base+lp->base);
-		if(!(p->status & (1<<7)))
+	{ 
+		p=lp->rx_ring[rx_ring_tail].p; 
+
+		if(!(p->status & (1<<7))) { /* Not COMPLETED */ 
 			break;
-		if(p->status & (1<<6))
-		{
-			u16 length = p->length;
-			struct sk_buff *skb=dev_alloc_skb(length+2);
-			if(skb!=NULL)
+		} 
+		if(p->status & (1<<6)) /* COMPLETED_OK */
+		{		        
+
+			u16 length=p->length;
+			struct sk_buff *skb; 
+			struct sk_buff *newskb; 
+
+#ifdef DEBUG_IRQ 
+ 			printk("skb_header %p has frame, x==%d\n", p, x); 
+#endif 
+
+			/* Try to save time by avoiding a copy on big frames */
+
+			if ((length > RX_COPYBREAK) 
+			    && ((newskb=dev_alloc_skb(1532)) != NULL)) 
+			{ 
+				skb=lp->rx_ring[rx_ring_tail].skb;
+				skb_put(skb, length);
+				
+				skb_reserve(newskb,18); 
+				lp->rx_ring[rx_ring_tail].skb=newskb;  
+				p->data=virt_to_bus(newskb->data);  
+			} 
+			else 
 			{
+				skb=dev_alloc_skb(length+2);  
+
+				if(skb==NULL) 
+				{ 
+					lp->net_stats.rx_dropped++; 
+
+					p->length = 1532; 
+					p->status = 0;
+					p->control = 0; 	        
+					
+					rx_ring_tail++;
+					rx_ring_tail&=(RX_RING_LEN-1); 
+
+					continue; /* better to use a goto? */ 
+				}
+
 				skb_reserve(skb,2);
-				/*printk("Frame at %p\n", bus_to_virt(p->data)); */
 				memcpy(skb_put(skb, length),
-					bus_to_virt(p->data), length);
-				skb->protocol=eth_type_trans(skb,dev);
-				skb->dev=dev;
-				lp->net_stats.rx_packets++;
-				lp->net_stats.rx_bytes+=skb->len;
-				netif_rx(skb);
+				       lp->rx_ring[rx_ring_tail].skb->data, length);
 			}
-			else
-				lp->net_stats.rx_dropped++;
+			
+			skb->protocol=eth_type_trans(skb,dev); 
+			skb->dev=dev; 
+ 			lp->net_stats.rx_packets++; 
+ 			lp->net_stats.rx_bytes+=skb->len; 
+			netif_rx(skb); 
 		}
-		else
+		else    /* NOT COMPLETED_OK */
 		{
-			lp->net_stats.rx_errors++;
-			switch(p->status&0x0F)
-			{
-				case 1:
-					lp->net_stats.rx_crc_errors++;break;
-				case 2:
-					lp->net_stats.rx_fifo_errors++;break;
-				case 3:
-					lp->net_stats.rx_frame_errors++;break;
-				case 4:
-					lp->net_stats.rx_missed_errors++;break;
-				case 5:
-					lp->net_stats.rx_length_errors++;break;
-			}
+		        /* There was some sort of reception error.     */
+                        /* This case should never occur unless         */
+			/* the card is asked to upload damaged frames.  */
+  
+			/* do nothing */ 
 		}
-		p->length = 1532;
-		p->control &= ~(1<<6);
+
+		p->length = 1532; 
 		p->status = 0;
-		base = p->next;
+		p->control = 0; 	        
+
+		rx_ring_tail++;
+		rx_ring_tail&=(RX_RING_LEN-1); 
 	}
-	while(x++<48);
-	
-	/*
-	 *	Restart ring processing
-	 */	
-	
-	while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
-	lp->rx_box->mbox=0;
-	lp->rx_box->data[0] = top;
-	outb(1<<3, ioaddr+HOST_CMD);	
-	lp->rx_halted = 0;
+        while(x++<48);  
+
+	/* If there was actually a frame to be processed, */ 
+	/* place the EL bit at the descriptor prior to the one to be filled next */ 
+
+	if (rx_ring_tail != rx_old_tail) { 
+		lp->rx_ring[(rx_ring_tail-1)&(RX_RING_LEN-1)].p->control |=  CONTROL_EOL; 
+		lp->rx_ring[(rx_old_tail-1)&(RX_RING_LEN-1)].p->control  &= ~CONTROL_EOL; 
+
+		lp->rx_ring_tail=rx_ring_tail; 
+	}
 }
 
+
+static void mc32_tx_ring(struct device *dev) {
+
+  struct mc32_local *lp=(struct mc32_local *)dev->priv;
+  volatile struct skb_header *np;
+
+  /* NB: lp->tx_count=TX_RING_LEN-1 so that tx_ring_head cannot "lap" tail here */
+
+  while (lp->tx_ring_tail != lp->tx_ring_head)  
+  {   
+	  u16 t; 
+
+	  t=(lp->tx_ring_tail+1)&(TX_RING_LEN-1); 
+	  np=lp->tx_ring[t].p; 
+
+	  if(!(np->status & (1<<7))) { /* Not COMPLETED */ 
+		  break; 
+	  } 
+
+	  lp->net_stats.tx_packets++;
+
+	  if(!(np->status & (1<<6))) /* Not COMPLETED_OK */
+	  {
+		  lp->net_stats.tx_errors++;   
+		  
+                  /* Error stats are stored on-card to be picked up by
+	             mc32_update_stats() - RP */
+	  }
+	  
+	  
+	  /* Packets are sent in order - this is
+	     basically a FIFO queue of buffers matching
+	     the card ring */
+	  lp->net_stats.tx_bytes+=lp->tx_ring[t].skb->len;
+	  dev_kfree_skb(lp->tx_ring[t].skb);
+	  lp->tx_ring[t].skb=NULL;
+	  atomic_inc(&lp->tx_count);
+	  dev->tbusy=0;
+	  mark_bh(NET_BH);
+
+	  lp->tx_ring_tail=t; 
+  }
+} 
 
 /*
  * The typical workload of the driver:
@@ -965,26 +1126,29 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	struct device *dev = dev_id;
 	struct mc32_local *lp;
 	int ioaddr, status, boguscount = 0;
+	int rx_event = 0;
+	int tx_event = 0; 
+	int must_restart = 0;
 	
 	if (dev == NULL) {
 		printk(KERN_WARNING "%s: irq %d for unknown device.\n", cardname, irq);
 		return;
 	}
 	dev->interrupt = 1;
-
+ 
 	ioaddr = dev->base_addr;
 	lp = (struct mc32_local *)dev->priv;
 
 	/* See whats cooking */
-	
-	while((inb(ioaddr+2)&(1<<5)) && boguscount++<2000)
+
+	while((inb(ioaddr+HOST_STATUS)&HOST_STATUS_CWR) && boguscount++<2000)
 	{
 		status=inb(ioaddr+HOST_CMD);
 
 #ifdef DEBUG_IRQ		
-		printk("Status TX%d RX%d EX%d OV%d\n",
+		printk("Status TX%d RX%d EX%d OV%d BC%d\n",
 			(status&7), (status>>3)&7, (status>>6)&1,
-			(status>>7)&1);
+			(status>>7)&1, boguscount);
 #endif
 			
 		switch(status&7)
@@ -992,20 +1156,8 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			case 0:
 				break;
 			case 6: /* TX fail */
-				lp->net_stats.tx_errors++;
 			case 2:	/* TX ok */
-				lp->net_stats.tx_packets++;
-				/* Packets are sent in order - this is
-				   basically a FIFO queue of buffers matching
-				   the card ring */
-				lp->net_stats.tx_bytes+=lp->tx_skb[lp->tx_skb_top]->len;
-				dev_kfree_skb(lp->tx_skb[lp->tx_skb_top]);
-				lp->tx_skb[lp->tx_skb_top]=NULL;
-				lp->tx_skb_top++;
-				lp->tx_skb_top&=(TX_RING_MAX-1);
-				atomic_inc(&lp->tx_count);
-				dev->tbusy=0;
-				mark_bh(NET_BH);
+				tx_event = 1; 
 				break;
 			case 3: /* Halt */
 			case 4: /* Abort */
@@ -1017,8 +1169,7 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				wake_up(&lp->event);
 				break;
 			default:
-				printk("%s: strange tx ack %d\n", 
-					dev->name, status&7);
+				printk("%s: strange tx ack %d\n", dev->name, status&7);
 		}
 		status>>=3;
 		switch(status&7)
@@ -1026,15 +1177,7 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			case 0:
 				break;
 			case 2:	/* RX */
-				lp->rx_pending=1;
-				if(!lp->rx_halted)
-				{
-					/*
-					 *	Halt ring receive
-					 */
-					while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR));
-					outb(3<<3, ioaddr+HOST_CMD);
-				}
+				rx_event=1; 
 				break;
 			case 3:
 			case 4:
@@ -1047,25 +1190,32 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				break;
 			case 6:
 				/* Out of RX buffers stat */
-				lp->net_stats.rx_dropped++;
-				lp->rx_pending=1;
 				/* Must restart */
-				lp->rx_halted=1;
+				lp->net_stats.rx_dropped++;
+				must_restart = 1; 	/* To restart */
+				rx_event = 1; 
+
 				break;
 			default:
 				printk("%s: strange rx ack %d\n", 
-					dev->name, status&7);
-			
+					dev->name, status&7);			
 		}
 		status>>=3;
 		if(status&1)
 		{
+			
 			/* 0=no 1=yes 2=replied, get cmd, 3 = wait reply & dump it */
-			if(lp->exec_pending!=3)
+			
+			if(lp->exec_pending!=3) 
+			{
 				lp->exec_pending=2;
-			else
+				wake_up(&lp->event);
+			}
+			else 
+			{
 				lp->exec_pending=0;
-			wake_up(&lp->event);
+				wake_up(&lp->event);
+			}
 		}
 		if(status&2)
 		{
@@ -1074,28 +1224,42 @@ static void mc32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			 *	we have it flagged and can 
 			 *	send an immediate reply (CRR set)
 			 */
-			 
+	
 			if(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR)
 			{
-				mc32_update_stats(dev);
-				outb(0, ioaddr+HOST_CMD);
+			 	mc32_update_stats(dev);
+			        outb(0, ioaddr+HOST_CMD);
 			}
+			
 		}
 	}
-	
-	/*
-	 *	Process and restart the receive ring. This has some state
-	 *	as we must halt the ring to process it and halting the ring
-	 *	might not occur in the same IRQ handling loop as we issue
-	 *	the halt.
-	 */
-	 
-	if(lp->rx_pending && lp->rx_halted)
-	{
-		mc32_rx_ring(dev);
-		lp->rx_pending = 0;
+
+
+	if(tx_event) { 
+		mc32_tx_ring(dev);
 	}
-	dev->interrupt = 0;
+
+	/*
+	 *	Process the receive ring and restart if the card 
+	 *      stopped due to a shortage of free buffers.
+         */
+	 
+	if(rx_event) {
+		mc32_rx_ring(dev);
+		if (must_restart) { 
+			u16 rx_prev_tail=(lp->rx_ring_tail-1)&(RX_RING_LEN-1);
+
+			/* Restart at the current rx_ring_tail */ 
+			lp->rx_box->data[0]=lp->rx_ring[rx_prev_tail].p->next; 
+			lp->rx_box->mbox=0; 
+
+			while(!(inb(ioaddr+HOST_STATUS)&HOST_STATUS_CRR)); 
+			outb(HOST_CMD_START_RX, ioaddr+HOST_CMD); /* Re-enable receives */
+		}
+	}
+
+	dev->interrupt = 0;	
+
 	return;
 }
 
@@ -1152,7 +1316,12 @@ static int mc32_close(struct device *dev)
 
 static struct net_device_stats *mc32_get_stats(struct device *dev)
 {
-	struct mc32_local *lp = (struct mc32_local *)dev->priv;
+	struct mc32_local *lp;
+	
+	mc32_update_stats(dev); 
+
+	lp = (struct mc32_local *)dev->priv;
+
 	return &lp->net_stats;
 }
 
