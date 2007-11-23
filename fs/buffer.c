@@ -601,6 +601,8 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 	nr_unused_buffer_heads++;
 	bh->b_next_free = unused_list;
 	unused_list = bh;
+	if (!waitqueue_active(&buffer_wait))
+		return;
 	wake_up(&buffer_wait);
 }
 
@@ -983,6 +985,7 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 
 static void get_more_buffer_heads(void)
 {
+	struct wait_queue wait = { current, NULL };
 	struct buffer_head * bh;
 
 	while (!unused_list) {
@@ -1011,11 +1014,18 @@ static void get_more_buffer_heads(void)
 		 * finishing IO..
 		 */
 		run_task_queue(&tq_disk);
-		sleep_on(&buffer_wait);
+
 		/*
-		 * After we wake up, check for released async buffer heads.
+		 * Set our state for sleeping, then check again for buffer heads.
+		 * This ensures we won't miss a wake_up from an interrupt.
 		 */
+		add_wait_queue(&buffer_wait, &wait);
+		current->state = TASK_UNINTERRUPTIBLE;
+		if (!unused_list && !reuse_list)
+			schedule();
 		recover_reusable_buffer_heads();
+		remove_wait_queue(&buffer_wait, &wait);
+		current->state = TASK_RUNNING;
 	}
 
 }
@@ -1192,13 +1202,13 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 		 * and unlock_buffer(). */
 	} else {
 		unsigned long flags;
-		clear_bit(PG_locked, &page->flags);
-		set_bit(PG_uptodate, &page->flags);
-		wake_up(&page->wait);
 		save_flags(flags);
 		cli();
 		free_async_buffers(bh);
 		restore_flags(flags);
+		clear_bit(PG_locked, &page->flags);
+		set_bit(PG_uptodate, &page->flags);
+		wake_up(&page->wait);
 		after_unlock_page(page);
 		if (waitqueue_active(&buffer_wait))
 			wake_up(&buffer_wait);

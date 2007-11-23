@@ -1401,15 +1401,77 @@ CONFIG_SCSI_AHA1740
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
 
-Adaptec AHA274X/284X/294X support
+Adaptec AIC7xxx chipset SCSI controller support
 CONFIG_SCSI_AIC7XXX
-  Information about this SCSI host adapter is contained in
-  drivers/scsi/README.aic7xxx and in the SCSI-HOWTO, available via ftp
-  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it
-  doesn't work out of the box, you may have to change some settings in
-  drivers/scsi/aic7xxx.h.  If you want to compile this as a module ( =
-  code which can be inserted in and removed from the running kernel
-  whenever you want), say M here and read Documentation/modules.txt.
+  This is support for the various aic7xxx based Adaptec SCSI controllers.
+  These include the 274x EISA cards, 284x VLB cards, 294x PCI cards,
+  394x PCI cards, 3985 PCI card, and several versions of the Adaptec
+  built-in SCSI controllers on various PC motherboards.  Information on
+  the configuration options for this controller can be found by checking
+  the help file for each of the available configuration options.
+
+Enable tagged command queueing
+CONFIG_AIC7XXX_TAGGED_QUEUEING
+  Tagged command queueing is used to allow acceptable devices to have more
+  than one SCSI command active on the SCSI bus at the same time.  Regardless
+  of this option setting, only devices that report they are capable of
+  tagged queueing will use this support.  This option is highly recommended
+  if you use any SCSI hard drives on your aic7xxx SCSI controller for
+  performance reasons.  Default: Y
+
+Override driver defaults for commands per LUN
+CONFIG_OVERRIDE_CMDS
+  Use this option to allow you to override the default maximum number of
+  commands that a single device on the aic7xxx controller is allowed to have
+  active at one time.  This option only effects tagged queueing capable
+  devices.  The driver uses a "failsafe" value of 8 by default.  This is
+  much lower than many devices can handle, but left in place for safety sake.
+  Default: N
+
+Maximum number of commands per LUN
+CONFIG_AIC7XXX_CMDS_PER_LUN
+  Specify the maximum number of commands per lun you would like to allocate
+  per device.  Reasonable figures are in the range of 14 to 32 commands per
+  device, but depending on hardware could be increased or decreased from
+  that figure.  If the number is too high for any particular device, the
+  driver will automatically compensate usually after only 10 minutes of
+  uptime and will issue a message to alert you to the fact that the number
+  of commands for that device has been reduced.  It will not hinder
+  performance if a portion of your devices eventually have their commands
+  per lun reduced, but is a waste of memory if all of your devices end
+  up reducing this number down to a more reasonable figure.  Default: 24
+
+Enable SCB paging
+CONFIG_AIC7XXX_PAGE_ENABLE
+  This option allows the driver to issue more commands to the controller
+  than it has physical space to store.  Since some aic7xxx chipsets can only
+  store 3 commands, and the majority can only store 16, not enabling this
+  capability can effectively negate any performance increase you might get
+  from enabling Tagged Queueing.  Default: Y
+
+Collect statistics to report in /proc
+CONFIG_AIC7XXX_PROC_STATS
+  This option tells the driver to keep track of how many commands have been
+  sent to each particular device and report that information to the user
+  via the /proc/scsi/aic7xxx/x file, where x is the number of the aic7xxx
+  controller you want the information on.  This adds a small amount of
+  overhead to each and every SCSI command the aic7xxx driver handles, so if
+  you aren't really interested in this information, it is best to leave it
+  disabled.  Default: N
+
+Delay in seconds after SCSI bus reset
+CONFIG_AIC7XXX_RESET_DELAY
+  This sets how long the driver will wait after resetting the SCSI bus before
+  attempting to communicate with the devices on the SCSI bus again.  This
+  delay will be used during the reset phase at bootup time as well as after
+  any reset that might occur during normal operation.  Reasonable numbers
+  range anywhere from 5 to 15 seconds depending on your devices.  DAT tape
+  drives are notorious for needing more time after a bus reset to be
+  ready for the next command, but most hard drives and CD-ROM devices are
+  ready in only a few seconds.  This option has a maximum upper limit of
+  20 seconds to avoid bad interactions between the aic7xxx driver and the
+  rest of the linux kernel.  The default value is a "failsafe" value that
+  should work with just about any device.  Default: 15
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC

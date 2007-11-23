@@ -86,7 +86,7 @@ static inline int dup_mmap(struct mm_struct * mm)
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		tmp = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
 		if (!tmp) {
-			exit_mmap(mm);
+			/* exit_mmap is called by the caller */
 			return -ENOMEM;
 		}
 		*tmp = *mpnt;
@@ -101,12 +101,10 @@ static inline int dup_mmap(struct mm_struct * mm)
 			tmp->vm_prev_share = mpnt;
 		}
 		if (copy_page_range(mm, current->mm, tmp)) {
-			if (mpnt->vm_next_share == tmp) {
-				tmp->vm_prev_share->vm_next_share = tmp->vm_next_share;
-				tmp->vm_next_share->vm_prev_share = tmp->vm_prev_share;	
-			}
-			kfree(tmp);
-			exit_mmap(mm);
+			/* link into the linked list for exit_mmap */
+			*p = tmp;
+			p = &tmp->vm_next;
+			/* exit_mmap is called by the caller */
 			return -ENOMEM;
 		}
 		if (tmp->vm_ops && tmp->vm_ops->open)

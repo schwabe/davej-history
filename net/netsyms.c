@@ -67,6 +67,9 @@ static struct symbol_table net_syms = {
 	X(sock_register),
 	X(sock_unregister),
 
+	X(sock_alloc),
+	X(sock_release),
+
 	/* Socket layer support routines */
 	X(memcpy_fromiovec),
 	X(sock_setsockopt),

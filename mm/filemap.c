@@ -1194,9 +1194,7 @@ int generic_file_mmap(struct inode * inode, struct file * file, struct vm_area_s
 static int msync_interval(struct vm_area_struct * vma,
 	unsigned long start, unsigned long end, int flags)
 {
-	if (!vma->vm_inode)
-		return 0;
-	if (vma->vm_ops->sync) {
+	if (vma->vm_inode && vma->vm_ops && vma->vm_ops->sync) {
 		int error;
 		error = vma->vm_ops->sync(vma, start, end-start, flags);
 		if (error)

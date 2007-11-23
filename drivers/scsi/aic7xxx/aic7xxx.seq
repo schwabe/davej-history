@@ -1121,15 +1121,10 @@ return_error:
 dequeue_disc_scb:
 	mov	SCBPTR, DISCONNECTED_SCBH;
 /*
- * If we have a residual, then we are in the middle of some I/O
- * and we have to send this SCB back up to the kernel so that the
- * saved data pointers and residual information isn't lost.
+ * Whenever we are going to dequeue a disconnected SCB and wipe it out
+ * with a new SCB, we always send the SCB back to the kernel to make sure
+ * any residual info and any save/restore pointers are saved for later use..
  */
-	test	SCB_CONTROL, MUST_DMAUP_SCB jz . + 3;
-	and	SCB_CONTROL, ~MUST_DMAUP_SCB;
-	jmp	dma_up_scb;
-	test	SCB_RESID_SGCNT,0xff	jnz dma_up_scb;
-	cmp	SCB_LINKED_NEXT, SCB_LIST_NULL je unlink_disc_scb;
 dma_up_scb:
 	mvi	DMAPARAMS, FIFORESET;
 	mov	SCB_TAG		call dma_scb;

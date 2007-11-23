@@ -23,7 +23,7 @@
 #ifndef _aic7xxx_h
 #define _aic7xxx_h
 
-#define AIC7XXX_H_VERSION  "$Revision: 3.2 $"
+#define AIC7XXX_H_VERSION  "$Revision: 3.2.1 $"
 
 /*
  * Scsi_Host_Template (see hosts.h) for AIC-7xxx - some fields
@@ -57,8 +57,8 @@ extern int aic7xxx_queue(Scsi_Cmnd *, void (*)(Scsi_Cmnd *));
 extern int aic7xxx_biosparam(Disk *, kdev_t, int[]);
 extern int aic7xxx_detect(Scsi_Host_Template *);
 extern int aic7xxx_command(Scsi_Cmnd *);
-extern int aic7xxx_abort(Scsi_Cmnd *);
 extern int aic7xxx_reset(Scsi_Cmnd *, unsigned int);
+extern int aic7xxx_abort(Scsi_Cmnd *);
 
 extern const char *aic7xxx_info(struct Scsi_Host *);
 

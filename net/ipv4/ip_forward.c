@@ -321,6 +321,17 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	if (dev2->flags & IFF_UP)
 	{
 #ifdef CONFIG_IP_MASQUERADE
+		__u32	premasq_saddr = iph->saddr;
+		__u16	premasq_sport = 0;
+		__u16	*portptr;
+		long	premasq_len_diff = skb->len;
+
+		if (iph->protocol==IPPROTO_UDP ||
+                    iph->protocol==IPPROTO_TCP) {
+			portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
+			premasq_sport = portptr[0];
+		}
+
 		/*
 		 * If this fragment needs masquerading, make it so...
 		 * (Don't masquerade de-masqueraded fragments)
@@ -341,6 +352,28 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		if (skb->len+encap > dev2->mtu && (iph->frag_off & htons(IP_DF))) 
 		{
 			ip_statistics.IpFragFails++;
+#ifdef CONFIG_IP_MASQUERADE
+			/* If we're demasquerading, put the correct daddr back */
+			if (is_frag&IPFWD_MASQUERADED)
+				iph->daddr = dev->pa_addr;
+
+			/* If we're masquerading, put the correct source back */
+			else if (fw_res==FW_MASQUERADE) {
+				iph->saddr = premasq_saddr;
+				if (premasq_sport)
+					portptr[0] = premasq_sport;
+			}
+ 
+			/* If the packet has got larger and this has caused it to
+			   exceed the MTU, then we'll claim that our MTU just got
+			   smaller and hope it works */
+			premasq_len_diff -= skb->len;
+
+			if (premasq_len_diff < 0)
+				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
+					  htonl(dev2->mtu+premasq_len_diff), dev);
+			else
+#endif
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(dev2->mtu), dev);
 			if(rt)
 				ip_rt_put(rt);

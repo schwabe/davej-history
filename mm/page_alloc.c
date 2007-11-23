@@ -320,6 +320,7 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 		return;
 	}
 	if (!page) {
+		printk("swap_in:");
 		set_pte(page_table, BAD_PAGE);
 		swap_free(entry);
 		oom(tsk);

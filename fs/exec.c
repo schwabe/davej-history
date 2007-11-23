@@ -397,7 +397,12 @@ static int exec_mmap(void)
 
 		old_mm = current->mm;
 		current->mm = mm;
-		new_page_tables(current);
+		if (new_page_tables(current)) {
+			current->mm = old_mm;
+			exit_mmap(mm);
+			kfree(mm);
+			return -ENOMEM;
+		}
 
 		if ((old_mm != &init_mm) && (!--old_mm->count)) {
 			/*

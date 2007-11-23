@@ -328,6 +328,11 @@ static int swap_out(unsigned int priority, int dma, int wait, int can_do_io)
 			shfrv =  8;
 			break;
 	}
+	/*
+	 * kswapd should be more friendly to other processes.
+	 */
+	if (kswapd_awake)
+		shfrv = 10;
 #endif
 
 	counter = ((PAGEOUT_WEIGHT * nr_tasks) >> shfrv) >> priority;
@@ -453,7 +458,7 @@ void kswapd_setup(void)
  */
 int kswapd(void *unused)
 {
-	int i, j;
+	int i, reserved_pages;
 	
 	current->session = 1;
 	current->pgrp = 1;
@@ -491,12 +496,15 @@ int kswapd(void *unused)
 		swapstats.wakeups++;
 		/* Protect our reserved pages: */
 		i = 0;
-		j = (min_free_pages >= 48 ? min_free_pages-12 : min_free_pages);
-		if (nr_free_pages <= j)
-			i = (1+j) - nr_free_pages;
+		reserved_pages = min_free_pages;
+		if (min_free_pages >= 48)
+			reserved_pages -= (12 + (reserved_pages>>3));
+		if (nr_free_pages <= reserved_pages)
+			i = (1+reserved_pages) - nr_free_pages;
 		/* Do the background pageout: */
 		for (i += kswapd_ctl.maxpages; i > 0; i--)
-			try_to_free_page(GFP_KERNEL, 0, (nr_free_pages <= j));
+			try_to_free_page(GFP_KERNEL, 0,
+					 (nr_free_pages <= min_free_pages));
 	}
 }
 
