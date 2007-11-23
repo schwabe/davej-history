@@ -1,7 +1,7 @@
 Intro
 =====
 
-This document contains a list of the latest releases of the most
+This document contains a list of the latest stable releases of the most
 important packages for Linux as well as instructions for newcomers to
 the 2.0.x series of kernels.  By glancing through it, you should be
 able to find out what you need to upgrade in order to successfully run
@@ -28,13 +28,13 @@ http://www.datanet.hu/generations/linux/newkernel.html (Hungarian
 translation).
 
    Tamas also maintains a version of this file at
-http://www.datanet.hu/generations/linux/Changes.html (English).
+http://www.datanet.hu/generations/linux/Changes.html (English version).
 
    For people who prefer Japanese (thanks to Mitsuhiro Kojima): Kono
 bunshou no nihongo ban wa
 http://jf.gee.kyoto-u.ac.jp/JF/v2.0/Changes-2.0.html ni arimasu.
 
-Last updated: September 10, 1996.
+Last updated: October 12, 1996.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Releases
@@ -44,8 +44,8 @@ Current Releases
 - PPP daemon		 2.2.0f
 - Dynamic linker (ld.so) 1.7.14
 - GNU CC		 2.7.2
-- Binutils		 2.6.0.14
-- Linux C Library	 Stable:  5.2.18, Beta:  5.3.12
+- Binutils		 2.7.0.3
+- Linux C Library	 Stable:  5.2.18, Beta:  5.3.12 / 5.4.7
 - Linux C++ Library	 2.7.1.4
 - Termcap		 2.0.8
 - Procps		 1.01
@@ -73,6 +73,7 @@ add -net 127.0.0.0'.
 distributions like Caldera).  If you're running one of these, edit
 /etc/sysconfig/network-scripts/ifup-lo, changing the line `route add
 -net $(IPADDR)' to `route add -net 127.0.0.0' and you should be fine.
+The new Red Hat 4.0 (Colgate) distribution does not have this problem.
 
    People have also reported problems due to the naming of the dummy
 network interface driver.  If the dummy driver is compiled into the
@@ -103,6 +104,14 @@ option is present.  Many older distributions (mainly Slackware) have
 this option in their lilo.config file.  Comment it out and re-run lilo
 if you need ramdisks.
 
+   The definition of SIOCSARP in /usr/include/linux/sockios.h was
+changed.  This means bootpd has to be re-compiled in order to work.
+
+   The kernel reboot method is now, by default, a cold reboot so that
+the kernel will work on systems that don't support other methods.  If
+you want to be able to do a warm reboot, add a reboot=warm option to
+lilo.conf.
+
 The Linux C Library
 ===================
 
@@ -125,7 +134,9 @@ binary is at the end of this file).
 
    Also, the libc-5.3.x line has a known security hole relating to
 rlogin.  Libc-5.3.12 fixes this, so if you're going to run an
-experimental libc, be sure to upgrade to 5.3.12.
+experimental libc, be sure to upgrade to 5.3.12.  Libc-5.4.7 is
+currently available as well, but it has a few problems of its own (a
+few missing symbols, for example, that will break existing apps).
 
    If you're getting an error message that is something to the effect of
 
@@ -567,7 +578,7 @@ E2fsprogs
    e2fsprogs 1.02 will work with the latest kernels, but it cannot be
 compiled on them.  If you need (or want) to compile your own copy,
 you'll need to get the latest version, currently available at
-ftp://tsx-11.mit.edu/pub/linux/packages/ext2fs/e2fsprogs-1.04.tar.gz.
+ftp://tsx-11.mit.edu/pub/linux/packages/ext2fs/e2fsprogs-1.06.tar.gz.
 
 How to know the version of the installed programs
 *************************************************
@@ -591,9 +602,9 @@ Where to get the files
 Binutils
 ========
 
-ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.6.0.14.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.7.0.3.bin.tar.gz
 Installation notes:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.6.0.14
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.7.0.3
 
 GNU CC
 ======

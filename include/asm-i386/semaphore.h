@@ -38,10 +38,10 @@ extern inline void down(struct semaphore * sem)
 #ifdef __SMP__
 		"lock ; "
 #endif
-		"decl %0\n\t"
+		"decl 0(%0)\n\t"
 		"js " SYMBOL_NAME_STR(down_failed)
 		:/* no outputs */
-		:"m" (sem->count), "c" (sem)
+		:"c" (sem)
 		:"ax","dx","memory");
 }
 
@@ -59,11 +59,11 @@ extern inline void up(struct semaphore * sem)
 #ifdef __SMP__
 		"lock ; "
 #endif
-		"incl %0\n\t"
+		"incl 0(%0)\n\t"
 		"jle " SYMBOL_NAME_STR(up_wakeup)
 		"\n1:"
 		:/* no outputs */
-		:"m" (sem->count), "c" (sem)
+		:"c" (sem)
 		:"ax", "dx", "memory");
 }
 

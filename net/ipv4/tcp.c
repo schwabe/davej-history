@@ -873,6 +873,8 @@ static void wait_for_tcp_memory(struct sock * sk)
 		sk->socket->flags &= ~SO_NOSPACE;
 		add_wait_queue(sk->sleep, &wait);
 		for (;;) {
+			if (current->signal & ~current->blocked)
+				break;
 			current->state = TASK_INTERRUPTIBLE;
 			if (tcp_memory_free(sk))
 				break;
