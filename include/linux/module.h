@@ -52,8 +52,8 @@ struct symbol_table { /* received from "insmod" */
 	int size; /* total, including string table!!! */
 	int n_symbols;
 	int n_refs;
-	struct internal_symbol symbol[1]; /* actual size defined by n_symbols */
-	struct module_ref ref[1]; /* actual size defined by n_refs */
+	struct internal_symbol symbol[0]; /* actual size defined by n_symbols */
+	struct module_ref ref[0]; /* actual size defined by n_refs */
 };
 /*
  * Note: The string table follows immediately after the symbol table in memory!

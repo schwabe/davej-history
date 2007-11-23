@@ -1011,7 +1011,7 @@ int icmp_chkaddr(struct sk_buff *skb)
 			{
 			struct tcphdr *th = (struct tcphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
 
-			sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr, th->dest, skb->dev);
+			sk = tcp_v4_lookup(iph->daddr, th->dest, iph->saddr, th->source, skb->dev);
 			if (!sk) return 0;
 			if (sk->saddr != iph->saddr) return 0;
 			if (sk->daddr != iph->daddr) return 0;
@@ -1025,7 +1025,7 @@ int icmp_chkaddr(struct sk_buff *skb)
 			{
 			struct udphdr *uh = (struct udphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
 
-			sk = udp_v4_lookup(iph->saddr, uh->source, iph->daddr, uh->dest, skb->dev);
+			sk = udp_v4_lookup(iph->daddr, uh->dest, iph->saddr, uh->source, skb->dev);
 			if (!sk) return 0;
 			if (sk->saddr != iph->saddr && ip_chk_addr(iph->saddr) != IS_MYADDR)
 				return 0;

@@ -211,9 +211,18 @@ static void ip_expire(unsigned long arg)
 	ip_statistics.IpReasmTimeout++;
 	ip_statistics.IpReasmFails++;   
 	/* This if is always true... shrug */
-	if(qp->fragments!=NULL)
-		icmp_send(qp->fragments->skb,ICMP_TIME_EXCEEDED,
-				ICMP_EXC_FRAGTIME, 0, qp->dev);
+	if(qp->fragments!=NULL) {
+		struct sk_buff *skb = qp->fragments->skb;
+		struct iphdr *iph = skb->ip_hdr;
+
+		/* ICMP send engine expects skb->data to be just
+		 * past IP header.
+		 */
+		skb_pull(skb, iph->ihl * 4);
+
+		icmp_send(skb, ICMP_TIME_EXCEEDED,
+			  ICMP_EXC_FRAGTIME, 0, qp->dev);
+	}
 
 	/*
 	 *	Nuke the fragment queue.

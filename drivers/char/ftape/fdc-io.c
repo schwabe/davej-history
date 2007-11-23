@@ -852,18 +852,6 @@ int setup_fdc_and_dma(buffer_struct * buff, unsigned char operation)
 	set_dma_mode(fdc.dma, dma_mode);
 	set_dma_addr(fdc.dma, (unsigned) buff->ptr);
 	set_dma_count(fdc.dma, SECTOR_SIZE * buff->sector_count);
-#ifdef GCC_2_4_5_BUG
-	/*  This seemingly stupid construction confuses the gcc-2.4.5
-	 *  code generator enough to create correct code.
-	 */
-	if (1) {
-		int i;
-
-		for (i = 0; i < 1; ++i) {
-			udelay(1);
-		}
-	}
-#endif
 	enable_dma(fdc.dma);
 	/* Issue FDC command to start reading/writing.
 	 */
