@@ -105,7 +105,7 @@ static struct {
 
 /* Time Slot 6, Output Setting  */
 #define CS4215_RO(v)	v	/* Right Output Attenuation 0x3f: -94.5 dB */
-#define CS4215_SE	(1<<6)	/* Line Out Enable */
+#define CS4215_SE	(1<<6)	/* Speaker Enable */
 #define CS4215_ADI	(1<<7)	/* A/D Data Invalid: Busy in calibration */
 
 /* Time Slot 7, Input Setting */

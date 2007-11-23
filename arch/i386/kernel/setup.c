@@ -1278,7 +1278,9 @@ __initfunc(void setup_centaur(struct cpuinfo_x86 *c))
 		wrmsr(0x1107, lv, hv);
 		/* Cyrix III */
 		c->x86_capability |= X86_FEATURE_CX8;
-		rdmsr(0x80000001, lv, hv);
+		
+		/* Check for 3dnow */
+		cpuid(0x80000001, &lv, &lv, &lv, &hv);
 		if(hv&(1<<31))
 			c->x86_capability |= X86_FEATURE_AMD3D;
 	}	

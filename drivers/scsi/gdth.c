@@ -1837,6 +1837,7 @@ GDTH_INITFUNC(static int, gdth_search_drives(int hanum))
     register gdth_ha_str *ha;
     ushort cdev_cnt, i;
     ulong32 bus_no, drv_cnt, drv_no, j;
+    unsigned long flags;
     gdth_getch_str *chn;
     gdth_drlist_str *drl;
     gdth_iochan_str *ioc;
@@ -1861,6 +1862,7 @@ GDTH_INITFUNC(static int, gdth_search_drives(int hanum))
 #ifdef GDTH_RTC
     /* read realtime clock info, send to controller */
     /* 1. wait for the falling edge of update flag */
+    spin_lock_irqsave(&rtc_lock, flags)
     for (j = 0; j < 1000000; ++j)
         if (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP)
             break;
@@ -1872,6 +1874,7 @@ GDTH_INITFUNC(static int, gdth_search_drives(int hanum))
         for (j = 0; j < 12; ++j) 
             rtc[j] = CMOS_READ(j);
     } while (rtc[0] != CMOS_READ(0));
+    spin_unlock_irqrestore(&rtc_lock, flags);
     TRACE2(("gdth_search_drives(): RTC: %x/%x/%x\n",*(ulong32 *)&rtc[0],
             *(ulong32 *)&rtc[4], *(ulong32 *)&rtc[8]));
     /* 3. send to controller firmware */

@@ -307,32 +307,11 @@ static inline int lp_char(char lpchar, int minor)
 		/*
 		 * NOTE: if you run with irqs you _must_ use
 		 * `tunelp /dev/lp? -c 1' to be rasonable efficient!
+		 *
+		 * ..but beware that data corruption can happen that way. -Tim
 		 */
 		if (++count == LP_CHAR(minor))
-		{
-			if (irq_ok)
-			{
-				static int first_time = 1;
-				/*
-				 * The printer is using a buggy handshake, so
-				 * revert to polling to not overload the
-				 * machine and warn the user that its printer
-				 * could get optimized trusting the irq. -arca
-				 */
-				lp_table[minor].irq_missed = 1;
-				if (first_time)
-				{
-					first_time = 0;
-					printk(KERN_WARNING "lp%d: the "
-					       "printing could be optimized "
-					       "using the TRUST_IRQ flag, "
-					       "see the top of "
-					       "linux/drivers/char/lp.c\n",
-					       minor);
-				}
-			}
 			return 0;
-		}
 	}
 
 	w_dtr(minor, lpchar);

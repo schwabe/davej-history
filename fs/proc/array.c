@@ -951,7 +951,7 @@ static int get_stat(int pid, char * buffer)
 			vsize += vma->vm_end - vma->vm_start;
 			vma = vma->vm_next;
 		}
-		if ((current->fsuid == tsk->euid && tsk->dumpable &&
+		if ((current->fsuid == tsk->euid && tsk->dumpable == 1 &&
 		    cap_issubset(tsk->cap_permitted, current->cap_permitted)) ||
 		    capable(CAP_DAC_OVERRIDE)) {
 			eip = KSTK_EIP(tsk);
@@ -1482,7 +1482,7 @@ static int process_unauthorized(int type, int pid)
 		case PROC_PID_CPU:
 			return 0;	
 	}
-	if((current->fsuid == euid && ok) || capable(CAP_DAC_OVERRIDE))
+	if((current->fsuid == euid && ok == 1) || capable(CAP_DAC_OVERRIDE))
 		return 0;
 	return 1;
 }

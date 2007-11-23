@@ -367,7 +367,7 @@ fi
 #
 # Xpeed drivers
 #
-tristate 'Xpeed X200/X300 DSL NIC support' CONFIG_XPEED
+dep_tristate 'Xpeed X200/X300 DSL NIC support' CONFIG_XPEED $CONFIG_PCI
 
 endmenu
 

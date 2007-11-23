@@ -516,196 +516,230 @@ get_branch_address(struct task_struct *child, unsigned long pc, unsigned long in
 	    }
 	    break;
 	}
-printk ("=%08lX\n", alt);
-	if (alt != pc + 4)
-		child->tss.debug[nsaved++] = alt;
 
-	for (i = 0; i < nsaved; i++) {
-		res = read_long (child, child->tss.debug[i], &insn);
-		if (res >= 0) {
-			child->tss.debug[i + 2] = insn;
-			res = write_long (child, child->tss.debug[i], BREAKINST);
-		}
-		if (res < 0) {
-			child->tss.debug[4] = 0;
-			return res;
-		}
-	}
-	child->tss.debug[4] = nsaved;
-	return 0;
+	return alt;
 }
 
-/* Ensure no single-step breakpoint is pending.  Returns non-zero
+static int
+add_breakpoint(struct task_struct *child, struct debug_info *dbg, unsigned long addr)
+{
+	int nr = dbg->nsaved;
+	int res = -EINVAL;
+
+	if (nr < 2) {
+		res = read_tsk_long(child, addr, &dbg->bp[nr].insn);
+		if (res == 0)
+			res = write_tsk_long(child, addr, BREAKINST);
+
+		if (res == 0) {
+			dbg->bp[nr].address = addr;
+			dbg->nsaved += 1;
+		}
+	} else
+		printk(KERN_DEBUG "add_breakpoint: too many breakpoints\n");
+
+	return res;
+}
+
+int ptrace_set_bpt(struct task_struct *child)
+{
+	unsigned long insn, pc;
+	int res;
+
+	pc = pc_pointer(get_stack_long(child, REG_PC));
+
+	res = read_long(child, pc, &insn);
+	if (!res) {
+		struct debug_info *dbg = &child->tss.debug;
+		unsigned long alt;
+
+		dbg->nsaved = 0;
+
+		alt = get_branch_address(child, pc, insn);
+
+		if (alt)
+			res = add_breakpoint(child, dbg, alt);
+
+		/*
+		 * Note that we ignore the result of setting the above
+		 * breakpoint since it may fail.  When it does, this is
+		 * not so much an error, but a forewarning that we will
+		 * be receiving a prefetch abort shortly.
+		 *
+		 * If we don't set this breakpoint here, then we can
+		 * loose control of the thread during single stepping.
+		 */
+		if (!alt || predicate(insn) != PREDICATE_ALWAYS)
+			res = add_breakpoint(child, dbg, pc + 4);
+	}
+
+	return res;
+}
+
+/*
+ * Ensure no single-step breakpoint is pending.  Returns non-zero
  * value if child was being single-stepped.
  */
 int ptrace_cancel_bpt (struct task_struct *child)
 {
-	int i, nsaved = child->tss.debug[4];
+	struct debug_info *dbg = &child->tss.debug;
+	int i, nsaved = dbg->nsaved;
 
-	child->tss.debug[4] = 0;
+	dbg->nsaved = 0;
 
 	if (nsaved > 2) {
-		printk ("ptrace_cancel_bpt: bogus nsaved: %d!\n", nsaved);
+		printk("ptrace_cancel_bpt: bogus nsaved: %d!\n", nsaved);
 		nsaved = 2;
 	}
-	for (i = 0; i < nsaved; i++)
-		write_long (child, child->tss.debug[i], child->tss.debug[i + 2]);
+
+	for (i = 0; i < nsaved; i++) {
+		unsigned long tmp;
+
+		read_tsk_long(child, dbg->bp[i].address, &tmp);
+		if (tmp != BREAKINST)
+			printk(KERN_ERR "ptrace_cancel_bpt: weirdness\n");
+		write_tsk_long(child, dbg->bp[i].address, dbg->bp[i].insn);
+	}
 	return nsaved != 0;
 }
 
-asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
+static int do_ptrace(int request, struct task_struct *child, long addr, long data)
 {
-	struct task_struct *child;
+	unsigned long tmp;
 	int ret;
 
-	lock_kernel();
-	ret = -EPERM;
-	if (request == PTRACE_TRACEME) {
-		/* are we already being traced? */
-		if (current->flags & PF_PTRACED)
-			goto out;
-		/* set the ptrace bit in the process flags. */
-		current->flags |= PF_PTRACED;
-		ret = 0;
-		goto out;
-	}
-	if (pid == 1)		/* you may not mess with init */
-		goto out;
-	ret = -ESRCH;
-	if (!(child = find_task_by_pid(pid)))
-		goto out;
-	ret = -EPERM;
-	if (request == PTRACE_ATTACH) {
-		if (child == current)
-			goto out;
-		if ((child->dumpable != 1 ||
-		    (current->uid != child->euid) ||
-		    (current->uid != child->suid) ||
-		    (current->uid != child->uid) ||
-	 	    (current->gid != child->egid) ||
-	 	    (current->gid != child->sgid) ||
-	 	    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
-			goto out;
-		/* the same process cannot be attached many times */
-		if (child->flags & PF_PTRACED)
-			goto out;
-		child->flags |= PF_PTRACED;
-		if (child->p_pptr != current) {
-			REMOVE_LINKS(child);
-			child->p_pptr = current;
-			SET_LINKS(child);
-		}
-		send_sig(SIGSTOP, child, 1);
-		ret = 0;
-		goto out;
-	}
-	ret = -ESRCH;
-	if (!(child->flags & PF_PTRACED))
-		goto out;
-	if (child->state != TASK_STOPPED) {
-		if (request != PTRACE_KILL)
-			goto out;
-	}
-	if (child->p_pptr != current)
-		goto out;
-
 	switch (request) {
-		case PTRACE_PEEKTEXT:				/* read word at location addr. */
-		case PTRACE_PEEKDATA: {
-			unsigned long tmp;
+		/*
+		 * read word at location "addr" in the child process.
+		 */
+		case PTRACE_PEEKTEXT:
+		case PTRACE_PEEKDATA:
+			ret = read_tsk_long(child, addr, &tmp);
+			if (!ret)
+				ret = put_user(tmp, (unsigned long *) data);
+			break;
 
-			ret = read_long(child, addr, &tmp);
-			if (ret >= 0)
-				ret = put_user(tmp, (unsigned long *)data);
-			goto out;
-		}
-
-		case PTRACE_PEEKUSR: {				/* read the word at location addr in the USER area. */
-			unsigned long tmp;
-
+		/*
+		 * read the word at location "addr" in the user registers.
+		 */
+		case PTRACE_PEEKUSR:
 			ret = -EIO;
 			if ((addr & 3) || addr < 0 || addr >= sizeof(struct user))
-				goto out;
+				break;
 
 			tmp = 0;  /* Default return condition */
-			if (addr < sizeof (struct pt_regs))
+			if (addr < sizeof(struct pt_regs))
 				tmp = get_stack_long(child, (int)addr >> 2);
 			ret = put_user(tmp, (unsigned long *)data);
-			goto out;
-		}
+			break;
 
-		case PTRACE_POKETEXT:				/* write the word at location addr. */
+		/*
+		 * write the word at location addr.
+		 */
+		case PTRACE_POKETEXT:
 		case PTRACE_POKEDATA:
-			ret = write_long(child,addr,data);
-			goto out;
+			ret = write_tsk_long(child, addr, data);
+			break;
 
-		case PTRACE_POKEUSR:				/* write the word at location addr in the USER area */
+		/*
+		 * write the word at location addr in the user registers.
+		 */
+		case PTRACE_POKEUSR:
 			ret = -EIO;
 			if ((addr & 3) || addr < 0 || addr >= sizeof(struct user))
-				goto out;
+				break;
 
-			if (addr < sizeof (struct pt_regs))
+			if (addr < sizeof(struct pt_regs))
 				ret = put_stack_long(child, (int)addr >> 2, data);
-			goto out;
+			break;
 
-		case PTRACE_SYSCALL:				/* continue and stop at next (return from) syscall */
-		case PTRACE_CONT:				/* restart after signal. */
+		/*
+		 * continue/restart and stop at next (return from) syscall
+		 */
+		case PTRACE_SYSCALL:
+		case PTRACE_CONT:
 			ret = -EIO;
 			if ((unsigned long) data > _NSIG)
-				goto out;
+				break;
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
 			else
 				child->flags &= ~PF_TRACESYS;
 			child->exit_code = data;
-			wake_up_process (child);
 			/* make sure single-step breakpoint is gone. */
-			ptrace_cancel_bpt (child);
+			ptrace_cancel_bpt(child);
+			wake_up_process(child);
 			ret = 0;
-			goto out;
+			break;
 
-		/* make the child exit.  Best I can do is send it a sigkill.
+		/*
+		 * make the child exit.  Best I can do is send it a sigkill.
 		 * perhaps it should be put in the status that it wants to
 		 * exit.
 		 */
 		case PTRACE_KILL:
-			if (child->state == TASK_ZOMBIE)	/* already dead */
-				return 0;
-			wake_up_process (child);
+			/* already dead */
+			ret = 0;
+			if (child->state == TASK_ZOMBIE)
+				break;
 			child->exit_code = SIGKILL;
 			/* make sure single-step breakpoint is gone. */
-			ptrace_cancel_bpt (child);
+			ptrace_cancel_bpt(child);
+			wake_up_process(child);
 			ret = 0;
-			goto out;
+			break;
 
-		case PTRACE_SINGLESTEP:				/* execute single instruction. */
+		/*
+		 * execute single instruction.
+		 */
+		case PTRACE_SINGLESTEP:
 			ret = -EIO;
 			if ((unsigned long) data > _NSIG)
-				goto out;
-			child->tss.debug[4] = -1;
+				break;
+			child->tss.debug.nsaved = -1;
 			child->flags &= ~PF_TRACESYS;
-			wake_up_process(child);
 			child->exit_code = data;
 			/* give it a chance to run. */
+			wake_up_process(child);
 			ret = 0;
-			goto out;
-			
-		case PTRACE_GETREGS:
-		{	/* Get all gp regs from the child. */
-			unsigned char *stack;
+			break;
+
+		/*
+		 * detach a process that was attached.
+		 */
+		case PTRACE_DETACH:
+			ret = -EIO;
+			if ((unsigned long) data > _NSIG)
+				break;
+			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+			child->exit_code = data;
+			REMOVE_LINKS(child);
+			child->p_pptr = child->p_opptr;
+			SET_LINKS(child);
+			/* make sure single-step breakpoint is gone. */
+			ptrace_cancel_bpt (child);
+			wake_up_process (child);
+			ret = 0;
+			break;
+
+		/*
+		 * Get all gp regs from the child.
+		 */
+		case PTRACE_GETREGS: {
+			struct pt_regs *regs = get_user_regs(child);
 
 			ret = 0;
-			stack = (unsigned char *)((unsigned long)child + 8192 - sizeof(struct pt_regs));
-			if (copy_to_user((void *)data, stack,
+			if (copy_to_user((void *)data, regs,
 					 sizeof(struct pt_regs)))
 				ret = -EFAULT;
 
-			goto out;
-		};
+			break;
+		}
 
-		/* Set all gp regs in the child. */
-		case PTRACE_SETREGS:
-		{
+		/*
+		 * Set all gp regs in the child.
+		 */
+		case PTRACE_SETREGS: {
 			struct pt_regs newregs;
 
 			ret = -EFAULT;
@@ -783,7 +817,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	if (request == PTRACE_ATTACH) {
 		if (child == current)
 			goto out;
-		if ((!child->dumpable ||
+		if ((child->dumpable != 1 ||
 		    (current->uid != child->euid) ||
 		    (current->uid != child->suid) ||
 		    (current->uid != child->uid) ||

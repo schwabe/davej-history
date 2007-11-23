@@ -7,7 +7,7 @@ then
         exit 1
 fi
 
-IFS=:
+IFS=":$IFS"
 for cmd in $*
 do
         for path in $PATH

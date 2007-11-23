@@ -703,12 +703,12 @@ static void hd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 static void hd_geninit(struct gendisk *ignored)
 {
 	int drive;
-	unsigned long flags;
 
 #ifdef __i386__
 	if (!NR_HD) {
 		extern struct drive_info drive_info;
 		unsigned char *BIOS = (unsigned char *) &drive_info;
+		unsigned long flags;
 		int cmos_disks;
 
 		for (drive=0 ; drive<2 ; drive++) {
@@ -747,13 +747,15 @@ static void hd_geninit(struct gendisk *ignored)
 		
 	*/
                 spin_lock_irqsave(&rtc_lock, flags);
-		if ((cmos_disks = CMOS_READ(0x12)) & 0xf0) {
+		cmos_disks = CMOS_READ(0x12);
+		spin_unlock_irqrestore(&rtc_lock, flags);
+
+		if (cmos_disks & 0xf0) {
 			if (cmos_disks & 0x0f)
 				NR_HD = 2;
 			else
 				NR_HD = 1;
 		}
-		spin_unlock_irqrestore(&rtc_lock, flags);
 	}
 #endif /* __i386__ */
 	for (drive=0 ; drive < NR_HD ; drive++) {

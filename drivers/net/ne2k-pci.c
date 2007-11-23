@@ -33,10 +33,9 @@
 */
 
 /* These identify the driver base version and may not be removed. */
-static const char version1[] =
-"ne2k-pci.c:v1.02 10/19/2000 D. Becker/P. Gortmaker\n";
-static const char version2[] =
-"  http://www.scyld.com/network/ne2k-pci.html\n";
+static const char* version =
+"ne2k-pci.c: v1.02 for Linux 2.2, 10/19/2000, D. Becker/P. Gortmaker,"
+" http://www.scyld.com/network/ne2k-pci.html";
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -159,8 +158,7 @@ int
 init_module(void)
 {
 	/* We must emit version information. */
-	if (debug)
-		printk(KERN_INFO "%s" KERN_INFO "%s", version1, version2);
+	printk(KERN_INFO "%s\n", version);
 
 	if (ne2k_pci_probe(0)) {
 		printk(KERN_NOTICE "ne2k-pci.c: No useable cards found, driver NOT installed.\n");
@@ -243,7 +241,7 @@ __initfunc (int ne2k_pci_probe(struct device *dev))
 		{
 			static unsigned version_printed = 0;
 			if (version_printed++ == 0)
-				printk(KERN_INFO "%s %s", version1, version2);
+				printk(KERN_INFO "%s\n", version);
 		}
 #endif
 

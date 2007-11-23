@@ -10,7 +10,7 @@
 #ifndef _PPA_H
 #define _PPA_H
 
-#define   PPA_VERSION   "2.04a (for Linux 2.2.x)"
+#define   PPA_VERSION   "2.07 (for Linux 2.2.x)"
 
 /* 
  * this driver has been hacked by Matteo Frigo (athena@theory.lcs.mit.edu)
@@ -60,6 +60,8 @@
  *  by Dr. Peter Cherriman and
  *     Oleg Makarenko <omakarenko@cyberplat.ru>
  *                                                      [2.04a]
+ *
+ * Fix kernel panic on scsi timeout, 2000-08-18		[2.07]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 
@@ -176,6 +178,7 @@ int ppa_biosparam(Disk *, kdev_t, int *);
 		eh_device_reset_handler:	NULL,			\
 		eh_bus_reset_handler:		ppa_reset,		\
 		eh_host_reset_handler:		ppa_reset,		\
+		use_new_eh_code:		1,			\
 		bios_param:			ppa_biosparam,		\
 		this_id:			-1,			\
 		sg_tablesize:			SG_ALL,			\

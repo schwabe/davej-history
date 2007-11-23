@@ -1919,8 +1919,8 @@ static int ymfpci_setup_legacy( ymfpci_t *codec, struct pci_dev *pcidev )
 		case PCI_DEVICE_ID_YAMAHA_724F:
 		case PCI_DEVICE_ID_YAMAHA_740C:
 			v = 0x8800;
-			if ( mpuio >= 0 ) { v|= (mpuio<<4)&0x03; }
-			if ( oplio >= 0 ) { v|= (oplio&0x03); }
+			if ( mpuio >= 0 ) { v|= mpuio<<4; }
+			if ( oplio >= 0 ) { v|= oplio; }
 			pci_write_config_word(pcidev, PCIR_ELEGCTRL, v);
 			break;
 

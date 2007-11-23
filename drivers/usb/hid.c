@@ -856,7 +856,7 @@ static void hid_configure_usage(struct hid_device *device, struct hid_field *fie
 		case HID_UP_CONSUMER:	/* USB HUT v1.1, pages 56-62 */
 			
 			switch (usage->hid & HID_USAGE) {
-
+				case 0x000: usage->code = 0; break; 
 				case 0x034: usage->code = KEY_SLEEP;		break;
 				case 0x036: usage->code = BTN_MISC;		break;
 				case 0x08a: usage->code = KEY_WWW;		break;
@@ -980,6 +980,9 @@ static void hid_process_event(struct input_dev *input, int *quirks, struct hid_f
 		int b = field->logical_maximum;
 		input_event(input, EV_KEY, BTN_TOUCH, value > a + ((b - a) >> 3));
 	}
+
+	if((usage->type == EV_KEY) && (usage->code == 0)) /* Key 0 is "unassigned", not KEY_UKNOWN */
+		return;
 
 	input_event(input, usage->type, usage->code, value);
 
@@ -1231,6 +1234,7 @@ static int hid_submit_out(struct hid_device *hid)
 	hid->urbout.transfer_buffer_length = hid->out[hid->outtail].dr.length;
 	hid->urbout.transfer_buffer = hid->out[hid->outtail].buffer;
 	hid->urbout.setup_packet = (void *) &(hid->out[hid->outtail].dr);
+	hid->urbout.dev = hid->dev;
 
 	if (usb_submit_urb(&hid->urbout)) {
 		err("usb_submit_urb(out) failed");
@@ -1288,7 +1292,9 @@ static int hid_open(struct input_dev *dev)
 	if (hid->open++)
 		return 0;
 
-	 if (usb_submit_urb(&hid->urb))
+	hid->urb.dev = hid->dev;
+
+	if (usb_submit_urb(&hid->urb))
 		return -EIO;
 
 	return 0;

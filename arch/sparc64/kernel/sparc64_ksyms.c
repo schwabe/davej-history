@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.58.2.11 2000/10/25 21:17:44 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.58.2.13 2001/01/03 22:05:54 anton Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -167,6 +167,7 @@ EXPORT_SYMBOL(disable_irq);
 
 EXPORT_SYMBOL_PRIVATE(flushw_user);
 
+EXPORT_SYMBOL(flush_icache_range);
 EXPORT_SYMBOL(flush_dcache_page);
 
 EXPORT_SYMBOL(mstk48t02_regs);
@@ -209,6 +210,11 @@ EXPORT_SYMBOL(_sigpause_common);
 /* Should really be in linux/kernel/ksyms.c */
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
+EXPORT_SYMBOL(get_pmd_slow);
+EXPORT_SYMBOL(get_pte_slow);
+#ifndef CONFIG_SMP
+EXPORT_SYMBOL(pgt_quicklists);
+#endif
 
 /* math-emu wants this */
 EXPORT_SYMBOL(die_if_kernel);

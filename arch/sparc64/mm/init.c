@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.127.2.8 2000/03/03 23:50:41 davem Exp $
+/*  $Id: init.c,v 1.127.2.9 2000/12/11 12:31:06 anton Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -87,6 +87,14 @@ int do_check_pgt_cache(int low, int high)
         }
 #endif
         return freed;
+}
+
+void flush_icache_range(unsigned long start, unsigned long end)
+{
+	unsigned long kaddr;
+
+	for (kaddr = start; kaddr < end; kaddr += PAGE_SIZE)
+		flush_icache_page(__get_phys(kaddr));
 }
 
 /*

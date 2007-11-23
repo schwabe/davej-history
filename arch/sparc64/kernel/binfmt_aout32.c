@@ -101,7 +101,7 @@ do_aout32_core_dump(long signr, struct pt_regs * regs)
 #       define START_DATA(u)    (u.u_tsize)
 #       define START_STACK(u)   ((regs->u_regs[UREG_FP]) & ~(PAGE_SIZE - 1))
 
-	if (!current->dumpable || atomic_read(&current->mm->count) != 1)
+	if (current->dumpable != 1 || atomic_read(&current->mm->count) != 1)
 		return 0;
 	current->dumpable = 0;
 

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.103.2.3 2000/02/27 04:44:47 davem Exp $
+/* $Id: pgtable.h,v 1.103.2.4 2000/12/11 12:31:06 anton Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -171,9 +171,15 @@ extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 #define flush_cache_range(mm, start, end)	flushw_user()
 #define flush_cache_page(vma, page)		flushw_user()
 
-/* These operations are unnecessary on the SpitFire since D-CACHE is write-through. */
-#define flush_icache_range(start, end)		do { } while (0)
+/* This is unnecessary on the SpitFire since D-CACHE is write-through. */
 #define flush_page_to_ram(page)			do { } while (0)
+
+/* 
+ * icache doesnt snoop local stores and we don't use block commit stores
+ * (which invalidate icache lines) during module load, so we need this.
+ */
+extern void flush_icache_range(unsigned long start, unsigned long end);
+
 extern void flush_dcache_page(unsigned long page);
 
 extern void __flush_dcache_range(unsigned long start, unsigned long end);

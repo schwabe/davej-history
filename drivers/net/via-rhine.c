@@ -81,6 +81,7 @@ static const int multicast_filter_limit = 32;
 #error  You must compile this driver with "-O".
 #endif
 
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
