@@ -3,10 +3,7 @@ This driver is for Compaq's SMART2 Intellegent Disk Array Controllers.
 WARNING:
 --------
 
-This is still development code.  It seems to work fine for me, but I haven't
-done any real hardcore testing against this driver.  Also, things are likely
-to change, such as the major number used by the device driver as well as the
-names of the /dev entries.
+This code is distributed without warranty.  Use at your own risk.
 
 Installing:
 -----------

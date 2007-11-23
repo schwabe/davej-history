@@ -426,9 +426,9 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 		if (slave_dev->hard_header == NULL
 		|| slave_dev->hard_header(skb,slave_dev,
 			ETH_P_IP,NULL,NULL,skb->len) >= 0) {
+			slave->bytes_queued += skb->len; 
 			dev_queue_xmit (skb, slave_dev, 1);
 			eql->stats->tx_packets++;
-			slave->bytes_queued += skb->len; 
 			/* dev_kfree_skb(skb, FREE_WRITE); */
 			return 0;
 		}

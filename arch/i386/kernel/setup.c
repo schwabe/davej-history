@@ -98,9 +98,7 @@ extern char empty_zero_page[PAGE_SIZE];
 #ifndef STANDARD_MEMORY_BIOS_CALL
 #define ALT_MEM_K (*(unsigned long *) (PARAM+0x1e0))
 #endif
-#ifdef CONFIG_APM
-#define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+64))
-#endif
+#define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+0x40))
 #define DRIVE_INFO (*(struct drive_info_struct *) (PARAM+0x80))
 #define SCREEN_INFO (*(struct screen_info *) (PARAM+0))
 #define MOUNT_ROOT_RDONLY (*(unsigned short *) (PARAM+0x1F2))

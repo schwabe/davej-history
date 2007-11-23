@@ -111,6 +111,8 @@ static struct symbol_table net_syms = {
 	X(ip_id_count),
 	X(ip_send_check),
 	X(ip_forward),
+	X(ip_queue_xmit),
+	X(ip_fragment),
 	X(sysctl_ip_forward),
 
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \

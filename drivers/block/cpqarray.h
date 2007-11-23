@@ -55,6 +55,7 @@ typedef struct {
 	int usage_count;
 } drv_info_t;
 
+#ifdef __KERNEL__
 typedef struct {
 	int	ctlr;
 	char	devname[8];
@@ -92,5 +93,6 @@ typedef struct {
 	struct timer_list timer;
 	unsigned int misc_tflags;
 } ctlr_info_t;
+#endif
 
 #endif /* CPQARRAY_H */

@@ -45,7 +45,7 @@
 #define MOD_DEC_USE_COUNT
 #endif
 
-#define DRIVER_NAME "Compaq SMART2 Driver (v 0.9.8)"
+#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0)"
 
 #define MAJOR_NR COMPAQ_SMART2_MAJOR
 #include <linux/blk.h>
@@ -57,7 +57,7 @@
 #include "ida_ioctl.h"
 
 #define READ_AHEAD	128
-#define NR_CMDS	64
+#define NR_CMDS	128 /* This can probably go as high as ~400 */
 
 #define MAX_CTLR	8
 #define CTLR_SHIFT	8
@@ -79,6 +79,7 @@ static char *product_names[] = {
 	"SMART-2SL",
 	"SMART-3200",
 	"SMART-3100ES",
+	"SMART-221",
 };
 
 static struct hd_struct * ida;
@@ -112,7 +113,7 @@ static void flushcomplete(int ctlr);
 static int pollcomplete(int ctlr);
 static void getgeometry(int ctlr);
 
-static cmdlist_t * cmd_alloc(ctlr_info_t *h, int intr);
+static cmdlist_t * cmd_alloc(ctlr_info_t *h);
 static void cmd_free(ctlr_info_t *h, cmdlist_t *c);
 
 static int sendcmd(
@@ -173,17 +174,14 @@ static int ida_proc_get_info(char *buffer, char **start, off_t offset, int lengt
  */
 #ifdef CONFIG_BLK_CPQ_DA_PCI
 #	ifdef CONFIG_BLK_CPQ_DA_EISA
-#		warning "SMART2: EISA+PCI"
 #		define smart2_read(h, offset)  ( ((h)->vaddr) ? readl((h)->vaddr+(offset)) : inl((h)->ioaddr+(offset)) )
 #		define smart2_write(p, h, offset) ( ((h)->vaddr) ? writel((p), (h)->vaddr+(offset)) : outl((p), (h)->ioaddr+(offset)) )
 #	else
-#		warning "SMART2: PCI"
 #		define smart2_read(h, offset)  readl((h)->vaddr+(offset))
 #		define smart2_write(p, h, offset) writel((p), (h)->vaddr+(offset))
 #	endif
 #else
 #	ifdef CONFIG_BLK_CPQ_DA_EISA
-#		warning "SMART2: EISA"
 #		define smart2_read(h, offset)  inl((h)->vaddr+(offset))
 #		define smart2_write(p, h, offset) outl((p), (h)->vaddr+(offset))
 #	else
@@ -234,8 +232,9 @@ struct file_operations ida_fops  = {
 
 
 /*
- * Place some files in /proc/array/* that contain some information about
- * each controller.  There really isn't much useful in there now.
+ * Get us a file in /proc that says something about each controller.  Right
+ * now, we add entries to /proc, but in the future we should probably get
+ * our own subdir in /proc (/proc/array/ida) and put our stuff in there.
  */
 extern struct inode_operations proc_diskarray_inode_operations;
 struct proc_dir_entry *proc_array = NULL;
@@ -795,7 +794,7 @@ void do_ida_request(int ctlr)
 		goto doreq_done;
 	}
 
-	if ((c = cmd_alloc(h, 1)) == NULL)
+	if ((c = cmd_alloc(h)) == NULL)
 		goto doreq_done;
 
 	blk_dev[MAJOR_NR+ctlr].current_request = creq->next;
@@ -805,15 +804,10 @@ void do_ida_request(int ctlr)
 
 	c->ctlr = ctlr;
 	c->hdr.unit = MINOR(creq->rq_dev) >> NWD_SHIFT;
-	c->hdr.prio = 0;
 	c->hdr.size = sizeof(rblk_t) >> 2;
 	c->size += sizeof(rblk_t);
 
-	c->req.hdr.next = 0;
-	c->req.hdr.rcode = 0;
-	c->req.bp = 0;
 	c->req.hdr.sg_cnt = creq->nr_segments;
-	c->req.hdr.reserved = 0;
 	c->req.hdr.blk = ida[(ctlr<<CTLR_SHIFT) + MINOR(creq->rq_dev)].start_sect + creq->sector;
 	c->req.hdr.blk_cnt = creq->nr_sectors;
 	c->bh = bh;
@@ -1097,21 +1091,12 @@ int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 	int error;
 
 	DBGINFO(printk("ida_ctlr_ioctl %d %x %p\n", ctlr, dsk, io));
-	if ((c = cmd_alloc(h, 0)) == NULL)
+	if ((c = cmd_alloc(NULL)) == NULL)
 		return -ENOMEM;
 	c->ctlr = ctlr;
 	c->hdr.unit = (io->unit & UNITVALID) ? io->unit &0x7f : dsk;
-	c->hdr.prio = 0;
 	c->hdr.size = sizeof(rblk_t) >> 2;
 	c->size += sizeof(rblk_t);
-
-	c->req.hdr.next = 0;
-	c->req.hdr.rcode = 0;
-	c->req.bp = 0;
-	c->req.hdr.reserved = 0;
-
-	c->req.hdr.blk = 0;
-	c->req.hdr.blk_cnt = 0;
 	c->req.hdr.cmd = io->cmd;
 	c->type = CMD_IOCTL_PEND;
 
@@ -1142,6 +1127,7 @@ int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 		break;
 	case IDA_WRITE:
 	case IDA_WRITE_MEDIA:
+	case DIAG_PASS_THRU:
 		error = verify_area(VERIFY_READ,
 				(void*)io->sg[0].addr, io->sg[0].size);
 		if (error) goto ioctl_err_exit;
@@ -1174,6 +1160,7 @@ int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 	switch(io->cmd) {
 	case PASSTHRU_A:
 	case IDA_READ:
+	case DIAG_PASS_THRU:
 		memcpy_tofs((void*)io->sg[0].addr, p, io->sg[0].size);
 		/* fall through and free p */
 	case IDA_WRITE:
@@ -1187,37 +1174,49 @@ int ida_ctlr_ioctl(int ctlr, int dsk, ida_ioctl_t *io)
 	io->rcode = c->req.hdr.rcode;
 	error = 0;
 ioctl_err_exit:
-	cmd_free(h, c);
+	cmd_free(NULL, c);
 	return error;
 }
 
 /*
- * Sooner or later we'll want to maintain our own cache of
- * commands.  For now, just use kmalloc to get them
+ * Commands are pre-allocated in a large block.  Here we use a simple bitmap
+ * scheme to suballocte them to the driver.  Operations that are not time
+ * critical (and can wait for kmalloc and possibly sleep) can pass in NULL
+ * as the first argument to get a new command.
  */
-cmdlist_t * cmd_alloc(ctlr_info_t *h, int intr)
+cmdlist_t * cmd_alloc(ctlr_info_t *h)
 {
 	cmdlist_t * c;
 	int i;
 
-	do {
-		i = find_first_zero_bit(h->cmd_pool_bits, NR_CMDS);
-		if (i == NR_CMDS)
-			return NULL;
-	} while(set_bit(i%32, h->cmd_pool_bits+(i/32)) != 0);
+	if (h == NULL) {
+		c = (cmdlist_t*)kmalloc(sizeof(cmdlist_t), GFP_KERNEL);
+	} else {
+		do {
+			i = find_first_zero_bit(h->cmd_pool_bits, NR_CMDS);
+			if (i == NR_CMDS)
+				return NULL;
+		} while(set_bit(i%32, h->cmd_pool_bits+(i/32)) != 0);
+		c = h->cmd_pool + i;
+		h->nr_allocs++;
+	}
 
-	c = h->cmd_pool + i;
 	memset(c, 0, sizeof(cmdlist_t));
 	c->busaddr = virt_to_bus(c);
-	h->nr_allocs++;
 	return c;
 }
 
 void cmd_free(ctlr_info_t *h, cmdlist_t *c)
 {
-	int i = c - h->cmd_pool;
-	clear_bit(i%32, h->cmd_pool_bits+(i/32));
-	h->nr_frees++;
+	int i;
+
+	if (h == NULL) {
+		kfree(c);
+	} else {
+		i = c - h->cmd_pool;
+		clear_bit(i%32, h->cmd_pool_bits+(i/32));
+		h->nr_frees++;
+	}
 }
 
 /***********************************************************************
@@ -1242,7 +1241,7 @@ int sendcmd(
 	unsigned long i;
 	ctlr_info_t *info_p = hba[ctlr];
 
-	c = cmd_alloc(info_p, 0);
+	c = cmd_alloc(info_p);
 	c->ctlr = ctlr;
 	c->hdr.unit = log_unit;
 	c->hdr.prio = 0;
@@ -1558,6 +1557,9 @@ void getgeometry(int ctlr)
 			break;
 		case 0x40330E11: /* SMART-3100ES */
 			info_p->product = 5;
+			break;
+		case 0x40340E11: /* SMART-221 */
+			info_p->product = 6;
 			break;
 		default:  
 			/*

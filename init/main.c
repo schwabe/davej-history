@@ -39,6 +39,9 @@
 #ifdef CONFIG_MTRR
 #include <asm/mtrr.h>
 #endif
+#ifdef CONFIG_APM
+#include <linux/apm_bios.h>
+#endif
 
 #include <asm/bugs.h>
 
@@ -481,9 +484,6 @@ struct kernel_param bootsetups[] = {
 #ifdef CONFIG_BAYCOM
 	{ "baycom=", baycom_setup },
 #endif
-#ifdef CONFIG_APM
-	{ "apm=", apm_setup },
-#endif
 #ifdef CONFIG_BLK_CPQ_DA
 #ifdef CONFIG_BLK_CPQ_DA_EISA
        { "smart2=", cpqarray_setup },
@@ -508,6 +508,9 @@ static struct kernel_param raw_params[] = {
 #endif
 #ifdef CONFIG_PARIDE_PG
        { "pg.", pg_setup },
+#endif
+#ifdef CONFIG_APM
+	{ "apm=", apm_setup },
 #endif
        { 0, 0 }
 } ;

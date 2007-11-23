@@ -18,7 +18,7 @@
 ! March 1993/June 1994 (Christoph.Niemann@linux.org)
 !
 ! add APM BIOS checking by Stephen Rothwell, May 1994
-! (Stephen.Rothwell@pd.necisa.oz.au)
+! (Stephen.Rothwell@canb.auug.org.au)
 !
 ! High load stuff, initrd support and position independency
 ! by Hans Lermen & Werner Almesberger, February 1996
@@ -331,7 +331,7 @@ no_psmouse:
 
 #ifdef CONFIG_APM
 ! check for APM BIOS
-		! NOTE:	DS is pointing to the bootsector
+		! NOTE:	DS is pointing to the boot sector
 		!
 	mov	[64],#0		! version == 0 means no APM BIOS
 

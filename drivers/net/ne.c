@@ -43,6 +43,7 @@ static const char *version =
 #include <linux/bios32.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <linux/delay.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
