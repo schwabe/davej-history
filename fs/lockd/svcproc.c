@@ -476,7 +476,7 @@ nlmsvc_callback(struct svc_rqst *rqstp, u32 proc, struct nlm_res *resp)
 	call->a_host  = host;
 	memcpy(&call->a_args, resp, sizeof(*resp));
 
-	if (nlmclnt_async_call(call, proc, nlmsvc_callback_exit) < 0)
+	if (nlmsvc_async_call(call, proc, nlmsvc_callback_exit) < 0)
 		return rpc_system_err;
 
 	return rpc_success;
@@ -492,7 +492,6 @@ nlmsvc_callback_exit(struct rpc_task *task)
 					task->tk_pid, -task->tk_status);
 	}
 	nlm_release_host(call->a_host);
-	rpc_release_task(task);
 	kfree(call);
 }
 

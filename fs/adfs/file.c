@@ -1,7 +1,7 @@
 /*
  *  linux/fs/adfs/file.c
  *
- * Copyright (C) 1997 Russell King
+ * Copyright (C) 1997-1999 Russell King
  * from:
  *
  *  linux/fs/ext2/file.c
@@ -19,51 +19,23 @@
  *
  *  adfs regular file handling primitives           
  */
-
+#include <linux/version.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/fcntl.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
 
-/*
- * We have mostly NULLs here: the current defaults are OK for
- * the adfs filesystem.
- */
-static struct file_operations adfs_file_operations = {
-	NULL,			/* lseek - default	*/
-	generic_file_read,	/* read			*/
-	NULL,			/* write		*/
-	NULL,			/* readdir - bad	*/
-	NULL,			/* select - default	*/
-	NULL,			/* ioctl		*/
-	generic_file_mmap,	/* mmap			*/
-	NULL,			/* open - not special	*/
-	NULL,			/* flush		*/
-	NULL,			/* release		*/
-	file_fsync,		/* fsync		*/
-	NULL,			/* fasync		*/
-	NULL,			/* check_media_change	*/
-	NULL			/* revalidate		*/
+#include "adfs.h"
+
+struct file_operations adfs_file_operations = {
+	read:		generic_file_read,
+	mmap:		generic_file_mmap,
+	fsync:		file_fsync,
 };
 
 struct inode_operations adfs_file_inode_operations = {
-	&adfs_file_operations,	/* default file operations	*/
-	NULL,			/* create			*/
-	NULL,			/* lookup			*/
-	NULL,			/* link				*/
-	NULL,			/* unlink			*/
-	NULL,			/* symlink			*/
-	NULL,			/* mkdir			*/
-	NULL,			/* rmdir			*/
-	NULL,			/* mknod			*/
-	NULL,			/* rename			*/
-	NULL,			/* readlink			*/
-	NULL,			/* follow_link			*/
-	generic_readpage,	/* readpage			*/
-	NULL,			/* writepage			*/
-	adfs_bmap,		/* bmap				*/
-	NULL,			/* truncate			*/
-	NULL,			/* permission			*/
-	NULL			/* smap				*/
+	default_file_ops:	&adfs_file_operations,
+	readpage:	generic_readpage,
+	bmap:		adfs_bmap,
 };

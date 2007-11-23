@@ -1,68 +1,73 @@
 /*
  *  linux/arch/arm/kernel/setup.c
  *
- *  Copyright (C) 1995-1998 Russell King
+ *  Copyright (C) 1995-1999 Russell King
  */
-
-/*
- * This file obtains various parameters about the system that the kernel
- * is running on.
- */
-
 #include <linux/config.h>
-#include <linux/errno.h>
-#include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/stddef.h>
-#include <linux/unistd.h>
-#include <linux/ptrace.h>
-#include <linux/malloc.h>
-#include <linux/user.h>
-#include <linux/a.out.h>
 #include <linux/tty.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
-#include <linux/major.h>
 #include <linux/utsname.h>
 #include <linux/blk.h>
-#include <linux/init.h>
 #include <linux/console.h>
+#include <linux/init.h>
 
 #include <asm/elf.h>
 #include <asm/hardware.h>
 #include <asm/io.h>
-#include <asm/pgtable.h>
 #include <asm/procinfo.h>
-#include <asm/segment.h>
 #include <asm/setup.h>
 #include <asm/system.h>
 
-/* Work out which CPUs to support */
-#ifdef CONFIG_ARCH_ACORN
-#define SUPPORT_CPU_ARM6
-#define SUPPORT_CPU_ARM7
-#define SUPPORT_CPU_SA110
-#else
-#define SUPPORT_CPU_SA110
-#endif
-#ifdef CONFIG_CPU_ARM6
-#define SUPPORT_CPU_ARM6
-#endif
-#ifdef CONFIG_CPU_ARM7
-#define SUPPORT_CPU_ARM7
-#endif
-#ifdef CONFIG_CPU_SA110
-#define SUPPORT_CPU_SA110
+#ifndef MEM_SIZE
+#define MEM_SIZE	(16*1024*1024)
 #endif
 
 #ifndef CONFIG_CMDLINE
-#define CONFIG_CMDLINE	"root=/dev/nfs rw"
+#define CONFIG_CMDLINE ""
 #endif
-#define MEM_SIZE	(16*1024*1024)
-#define COMMAND_LINE_SIZE 256
+
+extern void reboot_setup(char *str, int *ints);
+extern void disable_hlt(void);
+extern int root_mountflags;
+extern int _stext, _text, _etext, _edata, _end;
+
+unsigned int processor_id;
+unsigned int __machine_arch_type;
+unsigned int vram_size;
+unsigned int system_rev;
+unsigned int system_serial_low;
+unsigned int system_serial_high;
+unsigned int elf_hwcap;
+
+#ifdef CONFIG_ARCH_ACORN
+unsigned int memc_ctrl_reg;
+unsigned int number_mfm_drives;
+#endif
+
+static unsigned long mem_end;
+
+struct machine_desc {
+	const char	*name;		/* architecture name	*/
+	unsigned int	param_offset;	/* parameter page	*/
+	unsigned int	video_start;	/* start of video RAM	*/
+	unsigned int	video_end;	/* end of video RAM	*/
+	unsigned int	reserve_lp0 :1;	/* never has lp0	*/
+	unsigned int	reserve_lp1 :1;	/* never has lp1	*/
+	unsigned int	reserve_lp2 :1;	/* never has lp2	*/
+	unsigned int	broken_hlt  :1;	/* hlt is broken	*/
+	unsigned int	soft_reboot :1;	/* soft reboot		*/
+	void		(*fixup)(struct machine_desc *,
+				 struct param_struct *, char **);
+};
+
+struct processor processor;
 
 struct drive_info_struct { char dummy[32]; } drive_info;
+
 struct screen_info screen_info = {
  orig_video_lines:	30,
  orig_video_cols:	80,
@@ -71,312 +76,429 @@ struct screen_info screen_info = {
  orig_video_isVGA:	1,
  orig_video_points:	8
 };
-struct processor processor;
+
 unsigned char aux_device_present;
-
-extern const struct processor arm2_processor_functions;
-extern const struct processor arm250_processor_functions;
-extern const struct processor arm3_processor_functions;
-extern const struct processor arm6_processor_functions;
-extern const struct processor arm7_processor_functions;
-extern const struct processor sa110_processor_functions;
-
 char elf_platform[ELF_PLATFORM_SIZE];
+char saved_command_line[COMMAND_LINE_SIZE];
 
-const struct armversions armidlist[] = {
-  /*-- Match -- --- Mask -- -- Manu --  Processor  uname -m   --- ELF STUFF ---
-	--- processor asm funcs --- */
-#if defined(CONFIG_CPU_26)
-  { 0x41560200, 0xfffffff0, "ARM/VLSI",	"arm2"	 , "armv1"  , "v1", 0,
-	&arm2_processor_functions   },
-  { 0x41560250, 0xfffffff0, "ARM/VLSI",	"arm250" , "armv2"  , "v2", HWCAP_SWP,
-	&arm250_processor_functions },
-  { 0x41560300, 0xfffffff0, "ARM/VLSI",	"arm3"	 , "armv2"  , "v2", HWCAP_SWP,
-	&arm3_processor_functions   },
-#elif defined(CONFIG_CPU_32)
-#ifdef SUPPORT_CPU_ARM6
-  { 0x41560600, 0xfffffff0, "ARM/VLSI",	"arm6"	 , "armv3"  , "v3", HWCAP_SWP,
-	&arm6_processor_functions   },
-  { 0x41560610, 0xfffffff0, "ARM/VLSI",	"arm610" , "armv3"  , "v3", HWCAP_SWP,
-	&arm6_processor_functions   },
-#endif
-#ifdef SUPPORT_CPU_ARM7
-  { 0x41007000, 0xffffff00, "ARM/VLSI",	"arm7"	 , "armv3"  , "v3", HWCAP_SWP,
-	&arm7_processor_functions   },
-  /* ARM710 IDs are non-standard */
-  { 0x41007100, 0xfff8ff00, "ARM/VLSI",	"arm710" , "armv3"  , "v3", HWCAP_SWP,
-	&arm7_processor_functions   },
-#endif
-#ifdef SUPPORT_CPU_SA110
-  { 0x4401a100, 0xfffffff0, "DEC",	"sa110"	 , "armv4"  , "v3", HWCAP_SWP|HWCAP_HALF,
-	&sa110_processor_functions  },
-#endif
-#endif
-  { 0x00000000, 0x00000000, "***", "unknown", "unknown", "**", 0, NULL }
-};
+static struct proc_info_item proc_info;
+static const char *machine_name;
+static char command_line[COMMAND_LINE_SIZE] = { 0, };
 
-/*
- * From head-armv.S
- */
-unsigned int processor_id;
-unsigned int machine_type;
-int armidindex;
+static char default_command_line[COMMAND_LINE_SIZE] __initdata = CONFIG_CMDLINE;
+static union { char c[4]; unsigned long l; } endian_test __initdata = { { 'l', '?', '?', 'b' } };
+#define ENDIANNESS ((char)endian_test.l)
 
-extern int root_mountflags;
-extern int _etext, _edata, _end;
-
-/*-------------------------------------------------------------------------
- * Early initialisation routines for various configurable items in the
- * kernel.  Each one either supplies a setup_ function, or defines this
- * symbol to be empty if not configured.
- */
-
-/*
- * Risc-PC specific initialisation
- */
-#ifdef CONFIG_ARCH_RPC
-
-#include <asm/arch/mmu.h>
-
-unsigned int vram_half_sam;
-
-static void
-setup_rpc(struct param_struct *params)
+static void __init setup_processor(void)
 {
-	extern void init_dram_banks(const struct param_struct *params);
+	extern struct proc_info_list __proc_info_begin, __proc_info_end;
+	struct proc_info_list *list;
 
-	init_dram_banks(params);
+	/*
+	 * locate processor in the list of supported processor
+	 * types.  The linker builds this table for us from the
+	 * entries in arch/arm/mm/proc-*.S
+	 */
+	for (list = &__proc_info_begin; list < &__proc_info_end ; list++)
+		if ((processor_id & list->cpu_mask) == list->cpu_val)
+			break;
 
-	switch (params->u1.s.pages_in_vram) {
-	case 256:
-		vram_half_sam = 1024;
-		break;
-	case 512:
-	default:
-		vram_half_sam = 2048;
-	}
-}
-#else
-#define setup_rpc(x)
-#endif
-
-#ifdef PARAMS_BASE
-
-#ifdef CONFIG_ARCH_ACORN
-int memc_ctrl_reg;
-int number_ide_drives;
-int number_mfm_drives;
-#endif
-
-static struct param_struct *params = (struct param_struct *)PARAMS_BASE;
-
-__initfunc(static char *
-setup_params(unsigned long *mem_end_p))
-{
-	ROOT_DEV	  = to_kdev_t(params->u1.s.rootdev);
-	ORIG_X		  = params->u1.s.video_x;
-	ORIG_Y		  = params->u1.s.video_y;
-	ORIG_VIDEO_COLS	  = params->u1.s.video_num_cols;
-	ORIG_VIDEO_LINES  = params->u1.s.video_num_rows;
-
-#ifdef CONFIG_ARCH_ACORN
-#ifndef CONFIG_FB
-	{
-		extern int bytes_per_char_h;
-		extern int bytes_per_char_v;
-
-		bytes_per_char_h  = params->u1.s.bytes_per_char_h;
-		bytes_per_char_v  = params->u1.s.bytes_per_char_v;
-	}
-#endif
-	memc_ctrl_reg	  = params->u1.s.memc_control_reg;
-	number_ide_drives = (params->u1.s.adfsdrives >> 6) & 3;
-	number_mfm_drives = (params->u1.s.adfsdrives >> 3) & 3;
-
-	setup_rpc(params);
-
-	if (!(params->u1.s.flags & FLAG_READONLY))
-		root_mountflags &= ~MS_RDONLY;
-#endif
-#ifdef CONFIG_BLK_DEV_RAM
-	{
-		extern int rd_doload;
-		extern int rd_prompt;
-		extern int rd_image_start;
-
-		rd_image_start = params->u1.s.rd_start;
-		rd_prompt = (params->u1.s.flags & FLAG_RDPROMPT) == 0;
-		rd_doload = (params->u1.s.flags & FLAG_RDLOAD) == 0;
-	}
-#endif
-
-#ifdef CONFIG_ARCH_ACORN
-	*mem_end_p = GET_MEMORY_END(params);
-#elif defined(CONFIG_ARCH_EBSA285)
-	*mem_end_p = PAGE_OFFSET + params->u1.s.page_size * params->u1.s.nr_pages;
-#else
-	*mem_end_p = PAGE_OFFSET + MEM_SIZE;
-#endif
-
-	return params->commandline;
-}
-
-#else
-
-static char default_command_line[] __initdata = CONFIG_CMDLINE;
-
-__initfunc(static char *
-setup_params(unsigned long *mem_end_p))
-{
-	ROOT_DEV	  = 0x00ff;
-
-#ifdef CONFIG_BLK_DEV_RAM
-	{
-		extern int rd_doload;
-		extern int rd_prompt;
-		extern int rd_image_start;
-
-		rd_image_start = 0;
-		rd_prompt = 1;
-		rd_doload = 1;
-	}
-#endif
-
-	*mem_end_p = PAGE_OFFSET + MEM_SIZE;
-
-	return default_command_line;
-}
-#endif
-
-/*
- * initial ram disk
- */
-#ifdef CONFIG_BLK_DEV_INITRD
-__initfunc(static void
-setup_initrd(const struct param_struct *params))
-{
-	if (params->u1.s.initrd_start) {
-		initrd_start = params->u1.s.initrd_start;
-		initrd_end   = initrd_start + params->u1.s.initrd_size;
-	} else {
-		initrd_start = 0;
-		initrd_end   = 0;
-	}
-}
-
-__initfunc(static void
-check_initrd(unsigned long mem_start, unsigned long mem_end))
-{
-	if (initrd_end > mem_end) {
-		printk ("initrd extends beyond end of memory "
-			"(0x%08lx > 0x%08lx) - disabling initrd\n",
-			initrd_end, mem_end);
-		initrd_start = 0;
-	}
-}
-
-#else
-#define setup_initrd(p)
-#define check_initrd(ms,me)
-#endif
-
-__initfunc(void
-setup_processor(void))
-{
-	armidindex = 0;
-
-	while ((armidlist[armidindex].id ^ processor_id) &
-	       armidlist[armidindex].mask)
-		armidindex += 1;
-
-	if (armidlist[armidindex].id == 0) {
-#ifdef CONFIG_ARCH_ACORN
-		int i;
-
-		for (i = 0; i < 3200; i++)
-			((unsigned long *)SCREEN2_BASE)[i] = 0x77113322;
-#endif
+	/*
+	 * If processor type is unrecognised, then we
+	 * can do nothing...
+	 */
+	if (list >= &__proc_info_end) {
+		printk("CPU configuration botched (ID %08x), unable "
+		       "to continue.\n", processor_id);
 		while (1);
 	}
 
-	processor = *armidlist[armidindex].proc;
+	proc_info = *list->info;
+
+	processor = *list->proc;
+
+	printk("Processor: %s %s revision %d\n",
+	       proc_info.manufacturer, proc_info.cpu_name,
+	       (int)processor_id & 15);
+
+	sprintf(system_utsname.machine, "%s%c", list->arch_name, ENDIANNESS);
+	sprintf(elf_platform, "%s%c", list->elf_name, ENDIANNESS);
+	elf_hwcap = list->elf_hwcap;
+
 	processor._proc_init();
 }
 
-static char command_line[COMMAND_LINE_SIZE] = { 0, };
-       char saved_command_line[COMMAND_LINE_SIZE];
-
-__initfunc(static void
-setup_mem(char *cmd_line, unsigned long *mem_start, unsigned long *mem_end))
+static unsigned long __init memparse(char *ptr, char **retptr)
 {
-	char c, *to = command_line;
-	int len = 0;
+	unsigned long ret = simple_strtoul(ptr, retptr, 0);
 
-	*mem_start = (unsigned long)&_end;
+	switch (**retptr) {
+	case 'M':
+	case 'm':
+		ret <<= 10;
+	case 'K':
+	case 'k':
+		ret <<= 10;
+		(*retptr)++;
+	default:
+		break;
+	}
+	return ret;
+}
+
+/*
+ * Initial parsing of the command line.  We need to pick out the
+ * memory size.  We look for mem=size, where size is "size[KkMm]"
+ */
+static void __init
+parse_cmdline(char **cmdline_p, char *from)
+{
+	char c = ' ', *to = command_line;
+	int usermem = 0, len = 0;
 
 	for (;;) {
-		if (cmd_line[0] == ' ' &&
-		    cmd_line[1] == 'm' &&
-		    cmd_line[2] == 'e' &&
-		    cmd_line[3] == 'm' &&
-		    cmd_line[4] == '=') {
-			*mem_end = simple_strtoul(cmd_line+5, &cmd_line, 0);
-			switch(*cmd_line) {
-			case 'M':
-			case 'm':
-				*mem_end <<= 10;
-			case 'K':
-			case 'k':
-				*mem_end <<= 10;
-				cmd_line++;
+		if (c == ' ' && !memcmp(from, "mem=", 4)) {
+			unsigned long size, start;
+
+			if (to != command_line)
+				to -= 1;
+
+			start = PAGE_OFFSET;
+			size  = memparse(from + 4, &from);
+			if (*from == '@')
+				memparse(from + 1, &from);
+
+			if (usermem == 0) {
+				usermem = 1;
+				mem_end = start + size;
 			}
-			*mem_end = *mem_end + PAGE_OFFSET;
 		}
-		c = *cmd_line++;
+		c = *from++;
 		if (!c)
 			break;
 		if (COMMAND_LINE_SIZE <= ++len)
 			break;
 		*to++ = c;
 	}
-
 	*to = '\0';
+	*cmdline_p = command_line;
+
+	/* remove trailing spaces */
+	while (*--to == ' ' && to != command_line)
+		*to = '\0';
 }
 
-__initfunc(void
-setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * memory_end_p))
+static void __init
+setup_ramdisk(int doload, int prompt, int image_start, unsigned int rd_sz)
 {
-	static unsigned char smptrap;
-	unsigned long memory_end;
-	char endian = 'l';
-	char *from;
+#ifdef CONFIG_BLK_DEV_RAM
+	extern int rd_doload, rd_prompt, rd_image_start, rd_size;
 
-	if (smptrap == 1)
-		return;
-	smptrap = 1;
+	rd_image_start = image_start;
+	rd_prompt = prompt;
+	rd_doload = doload;
+
+	if (rd_sz)
+		rd_size = rd_sz;
+#endif
+}
+
+/*
+ * initial ram disk
+ */
+static void __init setup_initrd(unsigned int start, unsigned int size)
+{
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (start == 0)
+		size = 0;
+	initrd_start = start;
+	initrd_end   = start + size;
+#endif
+}
+
+/*
+ * Initialise memory.
+ */
+static void __init setup_bootmem(void)
+{
+	unsigned long mem_start;
+
+	mem_start = (unsigned long)&_end;
+
+#ifdef CONFIG_BLK_DEV_INITRD
+	if (initrd_end > mem_end) {
+		printk ("initrd extends beyond end of memory "
+			"(0x%08lx > 0x%08lx) - disabling initrd\n",
+			initrd_end, mem_end);
+		initrd_start = 0;
+	}
+#endif
+}
+
+/*
+ * Architecture specific fixups.  This is where any
+ * parameters in the params struct are fixed up, or
+ * any additional architecture specific information
+ * is pulled from the params struct.
+ */
+static void __init
+fixup_acorn(struct machine_desc *desc, struct param_struct *params,
+	    char **cmdline)
+{
+#ifdef CONFIG_ARCH_ACORN
+	if (machine_is_riscpc()) {
+		/*
+		 * RiscPC can't handle half-word loads and stores
+		 */
+		elf_hwcap &= ~HWCAP_HALF;
+
+		switch (params->u1.s.pages_in_vram) {
+		case 512:
+			vram_size += PAGE_SIZE * 256;
+		case 256:
+			vram_size += PAGE_SIZE * 256;
+		default:
+			break;
+		}
+	}
+	memc_ctrl_reg	  = params->u1.s.memc_control_reg;
+	number_mfm_drives = (params->u1.s.adfsdrives >> 3) & 3;
+#endif
+}
+
+static void __init
+fixup_ebsa285(struct machine_desc *desc, struct param_struct *params,
+	      char **cmdline)
+{
+	ORIG_X		 = params->u1.s.video_x;
+	ORIG_Y		 = params->u1.s.video_y;
+	ORIG_VIDEO_COLS  = params->u1.s.video_num_cols;
+	ORIG_VIDEO_LINES = params->u1.s.video_num_rows;
+}
+
+/*
+ * Older NeTTroms either do not provide a parameters
+ * page, or they don't supply correct information in
+ * the parameter page.
+ */
+static void __init
+fixup_netwinder(struct machine_desc *desc, struct param_struct *params,
+		char **cmdline)
+{
+	if (params->u1.s.nr_pages != 0x02000 &&
+	    params->u1.s.nr_pages != 0x04000 &&
+	    params->u1.s.nr_pages != 0x08000 &&
+	    params->u1.s.nr_pages != 0x10000) {
+		printk(KERN_WARNING "Warning: bad NeTTrom parameters "
+		       "detected, using defaults\n");
+
+		params->u1.s.nr_pages = 0x2000;	/* 32MB */
+		params->u1.s.ramdisk_size = 0;
+		params->u1.s.flags = FLAG_READONLY;
+		params->u1.s.initrd_start = 0;
+		params->u1.s.initrd_size = 0;
+		params->u1.s.rd_start = 0;
+	}
+}
+
+/*
+ * CATS uses soft-reboot by default, since
+ * hard reboots fail on early boards.
+ */
+static void __init
+fixup_cats(struct machine_desc *desc, struct param_struct *params,
+	   char **cmdline)
+{
+	ORIG_VIDEO_LINES  = 25;
+	ORIG_VIDEO_POINTS = 16;
+	ORIG_Y = 24;
+}
+
+#define NO_PARAMS	0
+#define NO_VIDEO	0, 0
+
+/*
+ * This is the list of all architectures supported by
+ * this kernel.  This should be integrated with the list
+ * in head-armv.S.
+ */
+static struct machine_desc machine_desc[] __initdata = {
+	{ "EBSA110",		/* RMK			*/
+		0x00000400,
+		NO_VIDEO,
+		1, 0, 1, 1, 1,
+		NULL
+	}, { "Acorn-RiscPC",	/* RMK			*/
+		0x10000100,
+		NO_VIDEO,
+		1, 1, 0, 0, 0,
+		fixup_acorn
+	}, { "unknown",
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		NULL
+	}, { "FTV/PCI",		/* Philip Blundell	*/
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		NULL
+	}, { "EBSA285",		/* RMK			*/
+		0x00000100,
+		0x000a0000, 0x000bffff,
+		0, 0, 0, 0, 0,
+		fixup_ebsa285
+	}, { "Rebel-NetWinder",	/* RMK			*/
+		0x00000100,
+		0x000a0000, 0x000bffff,
+		1, 0, 1, 0, 0,
+		fixup_netwinder
+	}, { "Chalice-CATS",	/* Philip Blundell	*/
+		NO_PARAMS,
+		0x000a0000, 0x000bffff,
+		0, 0, 0, 0, 1,
+		fixup_cats
+	}, { "unknown-TBOX",	/* Philip Blundell	*/
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		NULL
+	}, { "co-EBSA285",	/* Mark van Doesburg	*/
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		NULL
+	}, { "CL-PS7110",	/* Werner Almesberger	*/
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		NULL
+	}, { "Acorn-Archimedes",/* RMK/DAG		*/
+		0x0207c000,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		fixup_acorn
+	}, { "Acorn-A5000",	/* RMK/PB		*/
+		0x0207c000,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		fixup_acorn
+	}, { "Etoile",		/* Alex de Vries	*/
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		NULL
+	}, { "LaCie_NAS",	/* Benjamin Herrenschmidt */
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		NULL
+	}, { "CL-PS7500",	/* Philip Blundell	*/
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		NULL
+	}, { "Shark",		/* Alexander Schulz	*/
+		NO_PARAMS,
+		/* do you really mean 0x200000? */
+		0x06000000, 0x06000000+0x00200000,
+		0, 0, 0, 0, 0,
+		NULL
+	}, { "SA1100-based",	/* Nicolas Pitre	*/
+		NO_PARAMS,
+		NO_VIDEO,
+		0, 0, 0, 0, 0,
+		NULL
+	}
+};
+
+void __init
+setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * memory_end_p)
+{
+	struct param_struct *params = NULL;
+	struct machine_desc *mdesc;
+	char *from = default_command_line;
+
+#if defined(CONFIG_ARCH_ARC)
+	__machine_arch_type = MACH_TYPE_ARCHIMEDES;
+#elif defined(CONFIG_ARCH_A5K)
+	__machine_arch_type = MACH_TYPE_A5K;
+#endif
 
 	setup_processor();
 
-	from = setup_params(&memory_end);
-	setup_initrd(params);
+	ROOT_DEV = MKDEV(0, 255);
 
-	/* Save unparsed command line copy for /proc/cmdline */
+	mdesc = machine_desc + machine_arch_type;
+	machine_name = mdesc->name;
+
+	if (mdesc->broken_hlt)
+		disable_hlt();
+
+	if (mdesc->soft_reboot)
+		reboot_setup("s", NULL);
+
+	if (mdesc->param_offset)
+		params = phys_to_virt(mdesc->param_offset);
+
+	if (mdesc->fixup)
+		mdesc->fixup(mdesc, params, &from);
+
+	if (params && params->u1.s.page_size != PAGE_SIZE) {
+		printk(KERN_WARNING "Warning: bad configuration page, "
+		       "trying to continue\n");
+		params = NULL;
+	}
+
+	if (params) {
+		mem_end	  = params->u1.s.page_size *
+			    params->u1.s.nr_pages;
+
+		ROOT_DEV	   = to_kdev_t(params->u1.s.rootdev);
+		system_rev	   = params->u1.s.system_rev;
+		system_serial_low  = params->u1.s.system_serial_low;
+		system_serial_high = params->u1.s.system_serial_high;
+
+		setup_ramdisk((params->u1.s.flags & FLAG_RDLOAD) == 0,
+			      (params->u1.s.flags & FLAG_RDPROMPT) == 0,
+			      params->u1.s.rd_start,
+			      params->u1.s.ramdisk_size);
+
+		setup_initrd(params->u1.s.initrd_start,
+			     params->u1.s.initrd_size);
+
+		if (!(params->u1.s.flags & FLAG_READONLY))
+			root_mountflags &= ~MS_RDONLY;
+
+#ifdef CONFIG_ARCH_RPC
+		{
+			extern void init_dram_banks(struct param_struct *);
+			init_dram_banks(params);
+		}
+#endif
+		mem_end -= vram_size;
+
+		from = params->commandline;
+	}
+
+	if (!mem_end)
+		mem_end = MEM_SIZE;
+
+	mem_end += PAGE_OFFSET;
+
+	init_task.mm->start_code = (unsigned long) &_text;
+	init_task.mm->end_code	 = (unsigned long) &_etext;
+	init_task.mm->end_data	 = (unsigned long) &_edata;
+	init_task.mm->brk	 = (unsigned long) &_end;
+
 	memcpy(saved_command_line, from, COMMAND_LINE_SIZE);
 	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
+	parse_cmdline(cmdline_p, from);
+	setup_bootmem();
 
-	setup_mem(from, memory_start_p, &memory_end);
-	check_initrd(*memory_start_p, memory_end);
-
-	init_task.mm->start_code = TASK_SIZE;
-	init_task.mm->end_code	 = TASK_SIZE + (unsigned long) &_etext;
-	init_task.mm->end_data	 = TASK_SIZE + (unsigned long) &_edata;
-	init_task.mm->brk	 = TASK_SIZE + (unsigned long) &_end;
-
-	*cmdline_p = command_line;
-	*memory_end_p = memory_end;
-
-	sprintf(system_utsname.machine, "%s%c", armidlist[armidindex].arch_vsn, endian);
-	sprintf(elf_platform, "%s%c", armidlist[armidindex].elf_vsn, endian);
+#ifdef CONFIG_NWFPE
+	fpe_init();
+#endif
 
 #ifdef CONFIG_VT
 #if defined(CONFIG_VGA_CONSOLE)
@@ -385,69 +507,32 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * mem
 	conswitchp = &dummy_con;
 #endif
 #endif
+
+	*cmdline_p = command_line;
+	*memory_start_p = (unsigned long)&_end;
+	*memory_end_p = mem_end;
 }
-
-static const struct {
-	char *machine_name;
-	char *bus_name;
-} machine_desc[] = {
-	{ "DEC-EBSA110",	"DEC"		},
-	{ "Acorn-RiscPC",	"Acorn"		},
-	{ "Nexus-NexusPCI",	"PCI"		},
-	{ "DEC-EBSA285",	"PCI"		},
-	{ "Corel-Netwinder",	"PCI/ISA"	},
-	{ "Chalice-CATS",	"PCI"		},
-	{ "unknown-TBOX",	"PCI"		}
-};
-
-#if defined(CONFIG_ARCH_ARC)
-#define HARDWARE "Acorn-Archimedes"
-#define IO_BUS	 "Acorn"
-#elif defined(CONFIG_ARCH_A5K)
-#define HARDWARE "Acorn-A5000"
-#define IO_BUS	 "Acorn"
-#endif
-
-#if defined(CONFIG_CPU_ARM2)
-#define OPTIMISATION "ARM2"
-#elif defined(CONFIG_CPU_ARM3)
-#define OPTIMISATION "ARM3"
-#elif defined(CONFIG_CPU_ARM6)
-#define OPTIMISATION "ARM6"
-#elif defined(CONFIG_CPU_ARM7)
-#define OPTIMISATION "ARM7"
-#elif defined(CONFIG_CPU_SA110)
-#define OPTIMISATION "StrongARM"
-#else
-#define OPTIMISATION "unknown"
-#endif
 
 int get_cpuinfo(char * buffer)
 {
-	int len;
+	char *p = buffer;
 
-	len = sprintf(buffer,
-		"Processor\t: %s %s rev %d\n"
-		"BogoMips\t: %lu.%02lu\n"
-		"Hardware\t: %s\n"
-		"Optimisation\t: %s\n"
-		"IO Bus\t\t: %s\n",
-		armidlist[armidindex].manu,
-		armidlist[armidindex].name,
-		(int)processor_id & 15,
-		(loops_per_sec+2500) / 500000,
-		((loops_per_sec+2500) / 5000) % 100,
-#ifdef HARDWARE
-		HARDWARE,
-#else
-		machine_desc[machine_type].machine_name,
-#endif
-		OPTIMISATION,
-#ifdef IO_BUS
-		IO_BUS
-#else
-		machine_desc[machine_type].bus_name
-#endif
-		);
-	return len;
+	p += sprintf(p, "Processor\t: %s %s rev %d (%s)\n",
+		     proc_info.manufacturer, proc_info.cpu_name,
+		     (int)processor_id & 15, elf_platform);
+
+	p += sprintf(p, "BogoMIPS\t: %lu.%02lu\n",
+		     (loops_per_sec+2500) / 500000,
+		     ((loops_per_sec+2500) / 5000) % 100);
+
+	p += sprintf(p, "Hardware\t: %s\n", machine_name);
+
+	p += sprintf(p, "Revision\t: %04x\n",
+		     system_rev);
+
+	p += sprintf(p, "Serial\t\t: %08x%08x\n",
+		     system_serial_high,
+		     system_serial_low);
+
+	return p - buffer;
 }

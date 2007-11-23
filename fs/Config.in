@@ -90,6 +90,9 @@ if [ "$CONFIG_INET" = "y" ]; then
       define_bool CONFIG_LOCKD n
     fi
   fi
+  if [ "$CONFIG_NFS_FS" != "n" -o "$CONFIG_NFSD" != "n" ]; then
+    bool '   NFS Version 3' CONFIG_NFS_V3
+  fi
   tristate 'SMB filesystem support (to mount WfW shares etc.)' CONFIG_SMB_FS
   if [ "$CONFIG_SMB_FS" != "n" ]; then
      bool '   Use a default NLS' CONFIG_SMB_NLS_DEFAULT

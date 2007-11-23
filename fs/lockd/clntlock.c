@@ -71,7 +71,7 @@ nlmclnt_block(struct nlm_host *host, struct file_lock *fl, u32 *statp)
 	 * a 1 minute timeout would do. See the comment before
 	 * nlmclnt_lock for an explanation.
 	 */
-	sleep_on_timeout(&block.b_wait, 30*HZ);
+	interruptible_sleep_on_timeout(&block.b_wait, 30*HZ);
 
 	for (head = &nlm_blocked; *head; head = &(*head)->b_next) {
 		if (*head == &block) {
@@ -152,7 +152,7 @@ nlmclnt_recovery(struct nlm_host *host, u32 newstate)
 		host->h_monitored = 0;
 		host->h_nsmstate = newstate;
 		host->h_state++;
-		host->h_count++;
+		nlm_get_host(host);
 		kernel_thread(reclaimer, host, 0);
 	}
 }

@@ -25,7 +25,6 @@
 #include <asm/unaligned.h>
 
 #define FAULT_CODE_READ		0x02
-#define FAULT_CODE_USER		0x01
 
 #define DO_COW(m)		(!((m) & FAULT_CODE_READ))
 #define READ_FAULT(m)		((m) & FAULT_CODE_READ)
@@ -377,16 +376,30 @@ do_alignment_exception(struct pt_regs *regs)
 
 #endif
 
+#define BUG_PROC_MSG \
+  "Weirdness detected (%08X)\n" \
+  "Please read http://www.arm.linux.org.uk/state.html for more information"
+
 asmlinkage void
 do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 {
-	if (user_mode(regs))
-		error_code |= FAULT_CODE_USER;
+	if (user_mode(regs)) {
+		if (addr == regs->ARM_pc) {
+			static int first = 1;
+			if (first) {
+				/*
+				 * I want statistical information on this problem!
+				 */
+				printk(KERN_ERR BUG_PROC_MSG, fsr);
+				first = 0;
+			}
+			return;
+		}
+	}
 
 #define DIE(signr,nam)\
 		force_sig(signr, current);\
 		die(nam, regs, fsr);\
-		do_exit(signr);\
 		break
 
 	switch (fsr & 15) {
@@ -395,10 +408,8 @@ do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 	 */
 	case 0:
 		force_sig(SIGSEGV, current);
-		if (!user_mode(regs)) {
+		if (!user_mode(regs))
 			die("vector exception", regs, fsr);
-			do_exit(SIGSEGV);
-		}
 		break;
 
 	/*
@@ -415,10 +426,9 @@ do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 	 */
 	case 13:
 		force_sig(SIGSEGV, current);
-		if (!user_mode(regs)) {
+		if (!user_mode(regs))
 			die("section permission fault", regs, fsr);
-			do_exit(SIGSEGV);
-		} else {
+		else {
 #ifdef CONFIG_DEBUG_USER
 			printk("%s: permission fault on section, "
 			       "address=0x%08lx, code %d\n",
@@ -476,6 +486,6 @@ do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 asmlinkage int
 do_PrefetchAbort(unsigned long addr, struct pt_regs *regs)
 {
-	do_page_fault(addr, FAULT_CODE_USER|FAULT_CODE_READ, regs);
+	do_page_fault(addr, FAULT_CODE_READ, regs);
 	return 1;
 }

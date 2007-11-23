@@ -1,19 +1,25 @@
 #
 # linux/arch/arm/lib/Makefile
 #
-# Copyright (C) 1995-1998 Russell King
+# Copyright (C) 1995-1999 Russell King
 #
 
 L_TARGET := lib.a
-L_OBJS   := backtrace.o bitops.o checksum.o delay.o io.o memcpy.o \
-	    system.o string.o uaccess.o
+L_OBJS   := changebit.o checksum.o \
+	    clearbit.o copy_page.o findbit.o \
+	    memchr.o memcpy.o memset.o memzero.o setbit.o strchr.o \
+	    strrchr.o testchangebit.o testclearbit.o testsetbit.o  \
+	    semaphore.o system.o uaccess.o
+
+O_TARGET := lib.o
+O_OBJS   := backtrace.o delay.o
 
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o
 endif
 
 ifdef CONFIG_ARCH_ACORN
-  L_OBJS += loaders.o ll_char_wr.o io-acorn.o
+  L_OBJS += io-acorn.o
   ifdef CONFIG_ARCH_A5K
     L_OBJS += floppydma.o
   endif
@@ -24,17 +30,18 @@ endif
 
 ifeq ($(MACHINE),ebsa110)
   L_OBJS += io-ebsa110.o
+else
+  OX_OBJS += io.o
 endif
 
-ifeq ($(MACHINE),vnc)
-  L_OBJS += io-ebsa285.o
-endif
-
-ifeq ($(MACHINE),ebsa285)
-  L_OBJS += io-ebsa285.o
+ifeq ($(MACHINE),footbridge)
+  L_OBJS += io-footbridge.o
 endif
 
 include $(TOPDIR)/Rules.make
+
+%.o: %.S
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
 
 constants.h: getconsdata.o extractconstants.pl
 	$(PERL) extractconstants.pl $(OBJDUMP) > $@
@@ -42,13 +49,4 @@ constants.h: getconsdata.o extractconstants.pl
 getconsdata.o: getconsdata.c
 	$(CC) $(CFLAGS) -c getconsdata.c
 
-checksum.o: constants.h
-
-%.o: %.S
-ifneq ($(CONFIG_BINUTILS_NEW),y)
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -E $< | tr ';$$' '\n#' > ..tmp.$<.s
-	$(CC) $(CFLAGS:-pipe=) -c -o $@ ..tmp.$<.s
-	$(RM) ..tmp.$<.s
-else
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c -o $@ $<
-endif
+checksum.o string.o: constants.h

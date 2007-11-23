@@ -213,6 +213,7 @@ enum scsi_directory_inos {
 	PROC_SCSI_I2O,
 	PROC_SCSI_3W_XXXX,
 	PROC_SCSI_USB_SCSI,
+	PROC_SCSI_CPQFCTS,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
 	PROC_SCSI_FILE,                        /* I'm assuming here that we */

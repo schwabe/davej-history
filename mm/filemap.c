@@ -55,6 +55,15 @@ static struct wait_queue *pio_wait = NULL;
 static inline void 
 make_pio_request(struct file *, unsigned long, unsigned long);
 
+static inline int sync_page(struct page *page)
+{
+	struct inode *inode = page->inode;
+
+	if (inode && inode->i_op && inode->i_op->sync_page)
+		return inode->i_op->sync_page(page);
+	run_task_queue(&tq_disk);
+	return 0;
+}
 
 /*
  * Invalidate the pages of an inode, removing all pages that aren't
@@ -350,7 +359,7 @@ void __wait_on_page(struct page *page)
 	add_wait_queue(&page->wait, &wait);
 repeat:
 	tsk->state = TASK_UNINTERRUPTIBLE;
-	run_task_queue(&tq_disk);
+	sync_page(page);
 	if (PageLocked(page)) {
 		schedule();
 		goto repeat;
@@ -621,7 +630,8 @@ static void do_generic_file_read(struct file * filp, loff_t *ppos, read_descript
 {
 	struct dentry *dentry = filp->f_dentry;
 	struct inode *inode = dentry->d_inode;
-	size_t pos, pgpos, page_cache;
+	unsigned long page_cache;
+	size_t pos, pgpos;
 	int reada_ok;
 	int max_readahead = get_max_readahead(inode);
 
@@ -1473,6 +1483,71 @@ out:
 	return error;
 }
 
+static inline
+struct page *__read_cache_page(struct inode *inode, 
+			       unsigned long offset,
+			       int (*filler)(void *,struct page*),
+			       void *data)
+{
+	struct page **hash = page_hash(inode, offset);
+	struct page *page;
+	unsigned long cached_page = 0;
+	int err;
+
+	offset &= PAGE_CACHE_MASK;
+repeat:
+	page = __find_page(inode, offset, *hash);
+	if (!page) {
+		if (!cached_page) {
+			cached_page = page_cache_alloc();
+			if (!cached_page)
+				return ERR_PTR(-ENOMEM);
+			goto repeat;
+		}
+		page = page_cache_entry(cached_page);
+		cached_page = 0;
+		add_to_page_cache(page, inode, offset, hash);
+		set_bit(PG_locked, &page->flags);
+		err = filler(data, page);
+		if (err < 0) {
+			page_cache_release(page);
+			page = ERR_PTR(err);
+		}
+	}
+	if (cached_page)
+		page_cache_free(cached_page);
+	return page;
+}
+
+/*
+ * Read into the page cache. If a page already exists,
+ * and Page_Uptodate() is not set, try to fill the page.
+ */
+struct page *read_cache_page(struct inode *inode,
+				unsigned long offset,
+				int (*filler)(void *,struct page*),
+				void *data)
+{
+	struct page *page = __read_cache_page(inode, offset, filler, data);
+	int err;
+
+	if (IS_ERR(page) || PageUptodate(page))
+		goto out;
+
+	wait_on_page(page);
+	if (PageUptodate(page))
+		goto out;
+
+	set_bit(PG_locked, &page->flags);
+	err = filler(data, page);
+	if (err < 0) {
+		page_cache_release(page);
+		page = ERR_PTR(err);
+	}
+ out:
+	return page;
+}
+
 /*
  * Write to a file through the page cache. This is mainly for the
  * benefit of NFS and possibly other network-based file systems.
@@ -1569,6 +1644,11 @@ generic_file_write(struct file *file, const char *buf,
 		wait_on_page(page);
 		set_bit(PG_locked, &page->flags);
 
+		if (inode->i_op->prepare_write)
+			status = inode->i_op->prepare_write(file, page, offset, bytes);
+		if (status < 0)
+			goto unlock;
+
 		/*
 		 * Do the real work.. If the writer ends up delaying the write,
 		 * the writer needs to increment the page use counts until he
@@ -1583,6 +1663,7 @@ generic_file_write(struct file *file, const char *buf,
 		if (bytes)
 			status = inode->i_op->updatepage(file, page, offset, bytes, sync);
 
+ unlock:
 		/* Mark it unlocked again and drop the page.. */
 		clear_bit(PG_locked, &page->flags);
 		wake_up(&page->wait);

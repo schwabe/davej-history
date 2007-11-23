@@ -73,7 +73,6 @@ extern unsigned char pckbd_sysrq_xlate[128];
 #define SYSRQ_KEY	0x54
 
 /* resource allocation */
-#define KEYBOARD_IRQ                   1
 #define kbd_request_region() request_region(0x60, 16, "keyboard")
 #define kbd_request_irq(handler) request_irq(KEYBOARD_IRQ, handler, 0, \
                                              "keyboard", NULL)
@@ -90,9 +89,6 @@ extern unsigned char pckbd_sysrq_xlate[128];
 /*
  * Machine specific bits for the PS/2 driver
  */
-
-#define AUX_IRQ 12
-
 #define aux_request_irq(hand, dev_id)					\
 	request_irq(AUX_IRQ, hand, SA_SHIRQ, "PS/2 Mouse", dev_id)
 

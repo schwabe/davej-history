@@ -65,6 +65,7 @@ extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
 extern int __ashldi3(int, int);
 extern int __lshrdi3(int, int);
+extern int __muldi3(int, int);
 
 extern void dump_thread(struct pt_regs *, struct user *);
 
@@ -272,6 +273,7 @@ EXPORT_SYMBOL_NOVERS(memmove);
 EXPORT_SYMBOL_NOVERS(__ashrdi3);
 EXPORT_SYMBOL_NOVERS(__ashldi3);
 EXPORT_SYMBOL_NOVERS(__lshrdi3);
+EXPORT_SYMBOL_NOVERS(__muldi3);
 
 EXPORT_SYMBOL_DOT(rem);
 EXPORT_SYMBOL_DOT(urem);

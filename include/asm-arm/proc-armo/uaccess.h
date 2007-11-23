@@ -136,5 +136,5 @@ extern __inline__ void set_fs (mm_segment_t fs)
 #define __do_strncpy_from_user(dst,src,count,res)			\
 	(res) = current->tss.uaccess->strncpy_from_user(dst,src,count)
 
-#define __do_strlen_user(s,res)						\
-	(res) = current->tss.uaccess->strlen_user(s)
+#define __do_strnlen_user(s,n,res)					\
+	(res) = current->tss.uaccess->strnlen_user(s,n)

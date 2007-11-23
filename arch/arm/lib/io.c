@@ -1,3 +1,5 @@
+#include <linux/module.h>
+
 #include <asm/io.h>
 
 /*
@@ -18,7 +20,7 @@ void _memcpy_fromio(void * to, unsigned long from, unsigned long count)
  * Copy data from "real" memory space to IO memory space.
  * This needs to be optimized.
  */
-void _memcpy_toio(unsigned long to, void * from, unsigned long count)
+void _memcpy_toio(unsigned long to, const void * from, unsigned long count)
 {
 	while (count) {
 		count--;
@@ -40,3 +42,7 @@ void _memset_io(unsigned long dst, int c, unsigned long count)
 		dst++;
 	}
 }
+
+EXPORT_SYMBOL(_memcpy_fromio);
+EXPORT_SYMBOL(_memcpy_toio);
+EXPORT_SYMBOL(_memset_io);

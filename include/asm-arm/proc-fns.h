@@ -86,7 +86,7 @@ extern struct processor {
 			/*
 			 * Special stuff for a reset
 			 */
-			unsigned long (*reset)(void);
+			unsigned long (*reset)(unsigned long addr);
 			/*
 			 * flush an icached page
 			 */
@@ -99,6 +99,14 @@ extern struct processor {
 			 * purge cached data without (necessarily) writing it back
 			 */
 			void (*_cache_purge_area)(unsigned long start, unsigned long end);
+			/*
+			 * Unused
+			 */
+			void (*unused1)(void);
+			/*
+			 * Idle the processor
+			 */
+			int (*_do_idle)(void);
 		} armv3v4;
 		struct {
 			/* MEMC

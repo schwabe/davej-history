@@ -344,8 +344,9 @@ svc_udp_data_ready(struct sock *sk, int count)
 		return;
 	dprintk("svc: socket %p(inet %p), count=%d, busy=%d\n",
 		svsk, sk, count, svsk->sk_busy);
-	svsk->sk_data = 1;
+	svsk->sk_data++;
 	svc_sock_enqueue(svsk);
+	wake_up_interruptible(sk->sleep);
 }
 
 /*
@@ -358,19 +359,10 @@ svc_udp_recvfrom(struct svc_rqst *rqstp)
 	struct svc_serv	*serv = svsk->sk_server;
 	struct sk_buff	*skb;
 	u32		*data;
-	int		err, len;
+	int		err, len, recvd = svsk->sk_data;
 
-	svsk->sk_data = 0;
-	while ((skb = skb_recv_datagram(svsk->sk_sk, 0, 1, &err)) == NULL) {
-		svc_sock_received(svsk, 0);
-		if (err == -EAGAIN)
-			return err;
-		/* possibly an icmp error */
-		dprintk("svc: recvfrom returned error %d\n", -err);
-	}
-
-	/* There may be more data */
-	svsk->sk_data = 1;
+	if ((skb = skb_recv_datagram(svsk->sk_sk, 0, 1, &err)) == NULL)
+		goto out_err;
 
 	len  = skb->len - sizeof(struct udphdr);
 	data = (u32 *) (skb->h.raw + sizeof(struct udphdr));
@@ -390,15 +382,24 @@ svc_udp_recvfrom(struct svc_rqst *rqstp)
 #else
 	rqstp->rq_addr.sin_addr.s_addr = skb->saddr;
 #endif
+	memset(rqstp->rq_addr.sin_zero, 0, sizeof(rqstp->rq_addr.sin_zero));
 
 	if (serv->sv_stats)
 		serv->sv_stats->netudpcnt++;
 
 	/* One down, maybe more to go... */
 	svsk->sk_sk->stamp = skb->stamp;
-	svc_sock_received(svsk, 0);
+	svc_sock_received(svsk, 1);
 
 	return len;
+ out_err:
+	if (err != -EAGAIN) {
+		/* possibly an icmp error */
+		dprintk("svc: recvfrom returned error %d\n", -err);
+		svc_sock_received(svsk, 0);
+	} else
+		svc_sock_received(svsk, recvd);
+	return -EAGAIN;
 }
 
 static int
@@ -458,6 +459,7 @@ svc_tcp_state_change1(struct sock *sk)
 	}
 	svsk->sk_conn++;
 	svc_sock_enqueue(svsk);
+	wake_up_interruptible(sk->sleep);
 }
 
 /*
@@ -477,6 +479,7 @@ svc_tcp_state_change2(struct sock *sk)
 	}
 	svsk->sk_close = 1;
 	svc_sock_enqueue(svsk);
+	wake_up_interruptible(sk->sleep);
 }
 
 static void

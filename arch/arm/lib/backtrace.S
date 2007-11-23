@@ -21,6 +21,11 @@ ENTRY(__backtrace)
 		mov	r0, fp
 
 ENTRY(c_backtrace)
+
+#ifndef CONFIG_FRAME_POINTER
+		mov	pc, lr
+#else
+
 		stmfd	sp!, {r4 - r8, lr}	@ Save an extra register so we have a location...
 #ifdef CONFIG_CPU_32
 		tst	r1, #0x10		@ 26 or 32-bit?
@@ -55,14 +60,14 @@ ENTRY(c_backtrace)
 
 		sub	r0, frame, #16
 		ldr	r1, [save, #4]
-		mov	r3, r1, lsr #10
+		mov	r3, r1, lsr #11
 		ldr	r2, .Ldsi+4
 		teq	r3, r2			@ Check for stmia sp!, {args}
 		addeq	save, save, #4		@ next instruction
 		bleq	.Ldumpstm
 
 		ldr	r1, [save, #4]		@ Get 'stmia sp!, {rlist, fp, ip, lr, pc}' instruction
-		mov	r3, r1, lsr #10
+		mov	r3, r1, lsr #11
 		ldr	r2, .Ldsi
 		teq	r3, r2
 		bleq	.Ldumpstm
@@ -78,28 +83,36 @@ ENTRY(c_backtrace)
 #define reg   r5
 #define stack r6
 
-.Ldumpstm:	stmfd	sp!, {instr, reg, stack, lr}
+.Ldumpstm:	stmfd	sp!, {instr, reg, stack, r7, lr}
 		mov	stack, r0
 		mov	instr, r1
-		mov	reg, #9
-
+		mov	reg, #10
+		mov	r7, #0
 1:		mov	r3, #1
 		tst	instr, r3, lsl reg
 		beq	2f
+		add	r7, r7, #1
+		teq	r7, #4
+		moveq	r7, #0
+		moveq	r3, #'\n'
+		movne	r3, #' '
 		ldr	r2, [stack], #-4
 		mov	r1, reg
 		adr	r0, .Lfp
 		bl	SYMBOL_NAME(printk)
 2:		subs	reg, reg, #1
 		bpl	1b
-
+		teq	r7, #0
+		adrne	r0, .Lcr
+		blne	SYMBOL_NAME(printk)
 		mov	r0, stack
-		LOADREGS(fd, sp!, {instr, reg, stack, pc})
+		LOADREGS(fd, sp!, {instr, reg, stack, r7, pc})
 
-.Lfe:		.ascii	"Function entered at [<%p>] from [<%p>]\n"
-		.byte 0
-.Lfp:		.ascii	"  r%d = %p\n"
-		.byte 0
+.Lfe:		.asciz	"Function entered at [<%p>] from [<%p>]\n"
+.Lfp:		.asciz	" r%d = %08X%c"
+.Lcr:		.asciz	"\n"
 		.align
-.Ldsi:		.word	0x00e92dd8 >> 2
-		.word	0x00e92d00 >> 2
+.Ldsi:		.word	0x00e92dd8 >> 3
+		.word	0x00e92d00 >> 3
+
+#endif

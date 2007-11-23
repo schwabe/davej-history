@@ -4,8 +4,9 @@
  * Copyright (c) 1996,1997 Russell King.
  *
  * Changelog:
- *  08-06-1996	RMK	Created
- *  12-09-1997	RMK	Added interrupt enable/disable
+ *  08-Jun-1996	RMK	Created
+ *  12-Sep-1997	RMK	Added interrupt enable/disable
+ *  17-Apr-1999	RMK	Support for V6 EASI
  */
 
 #include <linux/module.h>
@@ -44,7 +45,8 @@
 #define ICS_ARCIN_V6_IDESTEPPING	4
 
 static const card_ids icside_cids[] = {
-	{ MANU_ICS, PROD_ICS_IDE },
+	{ MANU_ICS,  PROD_ICS_IDE  },
+	{ MANU_ICS2, PROD_ICS2_IDE },
 	{ 0xffff, 0xffff }
 };
 
@@ -81,6 +83,8 @@ static const expansioncard_ops_t icside_ops_arcin_v5 = {
 	icside_irqenable_arcin_v5,
 	icside_irqdisable_arcin_v5,
 	NULL,
+	NULL,
+	NULL,
 	NULL
 };
 
@@ -106,9 +110,22 @@ static void icside_irqdisable_arcin_v6 (struct expansion_card *ec, int irqnr)
 	inb (ide_base_port + ICS_ARCIN_V6_INTROFFSET_2);
 }
 
+/* Prototype: icside_irqprobe(struct expansion_card *ec)
+ * Purpose  : detect an active interrupt from card
+ */
+static int icside_irqpending_arcin_v6(struct expansion_card *ec)
+{
+	unsigned int ide_base_port = (unsigned int)ec->irq_data;
+
+	return inb(ide_base_port + ICS_ARCIN_V6_INTRSTAT_1) & 1 ||
+	       inb(ide_base_port + ICS_ARCIN_V6_INTRSTAT_2) & 1;
+}
+
 static const expansioncard_ops_t icside_ops_arcin_v6 = {
 	icside_irqenable_arcin_v6,
 	icside_irqdisable_arcin_v6,
+	icside_irqpending_arcin_v6,
+	NULL,
 	NULL,
 	NULL
 };
@@ -157,7 +174,7 @@ static iftype_t icside_identifyif (struct expansion_card *ec)
 		printk ("icside: ***********************************\n");
 		printk ("icside: *** UNKNOWN ICS INTERFACE id=%d ***\n", id);
 		printk ("icside: ***********************************\n");
-		printk ("icside: please report this to: linux@arm.uk.linux.org\n");
+		printk ("icside: please report this to linux@arm.linux.org.uk\n");
 		printk ("icside: defaulting to ARCIN V5\n");
 		iftype = ics_if_arcin_v5;
 		break;
@@ -166,7 +183,9 @@ static iftype_t icside_identifyif (struct expansion_card *ec)
 	return iftype;
 }
 
-static int icside_register_port(unsigned long dataport, unsigned long ctrlport, int stepping, int irq)
+static int
+icside_register_port(unsigned long dataport, unsigned long ctrlport,
+		     int stepping, int irq, int dma)
 {
 	hw_regs_t hw;
 	int i;
@@ -179,6 +198,7 @@ static int icside_register_port(unsigned long dataport, unsigned long ctrlport, 
 	}
 	hw.io_ports[IDE_CONTROL_OFFSET] = ctrlport;
 	hw.irq = irq;
+	hw.dma = dma;
 
 	return ide_register_hw(&hw, NULL);
 }
@@ -189,7 +209,7 @@ static int icside_register_port(unsigned long dataport, unsigned long ctrlport, 
  */
 static inline void icside_register (struct expansion_card *ec, int index)
 {
-	unsigned long port;
+	unsigned long port, slot_port;
 
 	result[index][0] = -1;
 	result[index][1] = -1;
@@ -201,44 +221,48 @@ static inline void icside_register (struct expansion_card *ec, int index)
 		break;
 
 	case ics_if_arcin_v5:
-		port = ecard_address (ec, ECARD_MEMC, 0);
-		ec->irqaddr = ioaddr(port + ICS_ARCIN_V5_INTRSTAT);
+		slot_port = ecard_address (ec, ECARD_MEMC, 0);
+		ec->irqaddr = (unsigned char *)ioaddr(slot_port + ICS_ARCIN_V5_INTRSTAT);
 		ec->irqmask = 1;
-		ec->irq_data = (void *)port;
+		ec->irq_data = (void *)slot_port;
 		ec->ops = (expansioncard_ops_t *)&icside_ops_arcin_v5;
 
 		/*
 		 * Be on the safe side - disable interrupts
 		 */
-		inb (port + ICS_ARCIN_V5_INTROFFSET);
-		result[index][0] = icside_register_port(port + ICS_ARCIN_V5_IDEOFFSET,
-							port + ICS_ARCIN_V5_IDEALTOFFSET,
+		inb (slot_port + ICS_ARCIN_V5_INTROFFSET);
+		result[index][0] = icside_register_port(slot_port + ICS_ARCIN_V5_IDEOFFSET,
+							slot_port + ICS_ARCIN_V5_IDEALTOFFSET,
 							ICS_ARCIN_V5_IDESTEPPING,
-							ec->irq);
+							ec->irq, ec->dma);
 		result[index][1] = -1;
 		break;
 
 	case ics_if_arcin_v6:
-		port = ecard_address (ec, ECARD_IOC, ECARD_FAST);
-		ec->irqaddr = ioaddr(port + ICS_ARCIN_V6_INTRSTAT_1);
-		ec->irqmask = 1;
+		slot_port = ecard_address(ec, ECARD_IOC, ECARD_FAST);
+		port = ecard_address(ec, ECARD_EASI, ECARD_FAST);
+		if (port == 0)
+			port = slot_port;
+		else
+			outb(1 << 5, slot_port);
+
 		ec->irq_data = (void *)port;
 		ec->ops = (expansioncard_ops_t *)&icside_ops_arcin_v6;
 
 		/*
 		 * Be on the safe side - disable interrupts
 		 */
-		inb (port + ICS_ARCIN_V6_INTROFFSET_1);
-		inb (port + ICS_ARCIN_V6_INTROFFSET_2);
+		inb(port + ICS_ARCIN_V6_INTROFFSET_1);
+		inb(port + ICS_ARCIN_V6_INTROFFSET_2);
 
 		result[index][0] = icside_register_port(port + ICS_ARCIN_V6_IDEOFFSET_1,
 							port + ICS_ARCIN_V6_IDEALTOFFSET_1,
 							ICS_ARCIN_V6_IDESTEPPING,
-							ec->irq);
+							ec->irq, ec->dma);
 		result[index][1] = icside_register_port(port + ICS_ARCIN_V6_IDEOFFSET_2,
 							port + ICS_ARCIN_V6_IDEALTOFFSET_2,
 							ICS_ARCIN_V6_IDESTEPPING,
-							ec->irq);
+							ec->irq, ec->dma);
 		break;
 	}		
 }

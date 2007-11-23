@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-arm/proc-armv/pgtable.h
  *
- * Copyright (C) 1995, 1996, 1997 Russell King
+ * Copyright (C) 1995-1999 Russell King
  *
  * 12-Jan-1997	RMK	Altered flushing routines to use function pointers
  *			now possible to combine ARM6, ARM7 and StrongARM versions.
@@ -12,6 +12,7 @@
 #define __ASM_PROC_PGTABLE_H
 
 #include <asm/arch/memory.h>		/* For TASK_SIZE */
+#include <asm/proc/domain.h>
 
 #define LIBRARY_TEXT_START 0x0c000000
 
@@ -149,18 +150,7 @@
 #define VMALLOC_OFFSET	  (8*1024*1024)
 #define VMALLOC_START	  (((unsigned long)high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
-#define VMALLOC_END       (PAGE_OFFSET + 0x10000000)
-
-
-/*
- * Domains
- */
-#define DOMAIN_USER	0
-#define DOMAIN_KERNEL	1
-#define DOMAIN_TABLE	1
-#define DOMAIN_IO	2
-
-
+#define VMALLOC_END       (PAGE_OFFSET + 0x17f00000)
 
 #undef TEST_VERIFY_AREA
 

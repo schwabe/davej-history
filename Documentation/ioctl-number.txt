@@ -85,6 +85,7 @@ Code	Seq#	Include File		Comments
 'W'	20-27	linux/octal-relay.h	in development
 'W'	28-2F	linux/iso16-relay.h	in development
 'Y'	all	linux/cyclades.h
+'Z'     all     linux/drivers/scsi/cpqfcTSioctl.h
 'a'	all	various, see http://lrcwww.epfl.ch/linux-atm/magic.html
 'b'	00-FF	bit3 vme host bridge	in development:
 					<mailto:natalia@nikhefk.nikhef.nl>

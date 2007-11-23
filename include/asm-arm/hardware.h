@@ -12,7 +12,7 @@
 #include <asm/arch/hardware.h>
 
 #ifdef HAS_EXPMASK
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 #define __EXPMASK(offset)	(((volatile unsigned char *)EXPMASK_BASE)[offset])
 #else
 #define __EXPMASK(offset)	offset

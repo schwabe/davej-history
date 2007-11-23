@@ -153,4 +153,9 @@ static inline void wait_on_page(struct page * page)
 extern void update_vm_cache_conditional(struct inode *, unsigned long, const char *, int, unsigned long);
 extern void update_vm_cache(struct inode *, unsigned long, const char *, int);
 
+typedef int filler_t(void *, struct page*);
+
+extern struct page *read_cache_page(struct inode *, unsigned long,
+				filler_t *, void *);
+
 #endif

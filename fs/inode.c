@@ -529,7 +529,7 @@ static struct inode * grow_inodes(void)
 /*
  * Called with the inode lock held.
  */
-static struct inode * find_inode(struct super_block * sb, unsigned long ino, struct list_head *head)
+static struct inode * find_inode(struct super_block * sb, unsigned long ino, struct list_head *head, find_inode_t find_actor, void *opaque)
 {
 	struct list_head *tmp;
 	struct inode * inode;
@@ -544,6 +544,8 @@ static struct inode * find_inode(struct super_block * sb, unsigned long ino, str
 		if (inode->i_sb != sb)
 			continue;
 		if (inode->i_ino != ino)
+			continue;
+		if (find_actor && !find_actor(inode, ino, opaque))
 			continue;
 		inode->i_count++;
 		break;
@@ -619,7 +621,7 @@ add_new_inode:
  * We no longer cache the sb_flags in i_flags - see fs.h
  *	-- rmk@arm.uk.linux.org
  */
-static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, struct list_head *head)
+static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, struct list_head *head, find_inode_t find_actor, void *opaque)
 {
 	struct inode * inode;
 	struct list_head * tmp = inode_unused.next;
@@ -664,7 +666,7 @@ add_new_inode:
 	inode = grow_inodes();
 	if (inode) {
 		/* We released the lock, so.. */
-		struct inode * old = find_inode(sb, ino, head);
+		struct inode * old = find_inode(sb, ino, head, find_actor, opaque);
 		if (!old)
 			goto add_new_inode;
 		list_add(&inode->i_list, &inode_unused);
@@ -694,7 +696,7 @@ ino_t iunique(struct super_block *sb, ino_t max_reserved)
 retry:
 	if (counter > max_reserved) {
 		head = inode_hashtable + hash(sb,counter);
-		inode = find_inode(sb, res = counter++, head);
+		inode = find_inode(sb, res = counter++, head, NULL, NULL);
 		if (!inode) {
 			spin_unlock(&inode_lock);
 			return res;
@@ -720,13 +722,13 @@ struct inode *igrab(struct inode *inode)
 	return inode;
 }
 
-struct inode *iget(struct super_block *sb, unsigned long ino)
+struct inode *iget4(struct super_block *sb, unsigned long ino, find_inode_t find_actor, void *opaque)
 {
 	struct list_head * head = inode_hashtable + hash(sb,ino);
 	struct inode * inode;
 
 	spin_lock(&inode_lock);
-	inode = find_inode(sb, ino, head);
+	inode = find_inode(sb, ino, head, find_actor, opaque);
 	if (inode) {
 		spin_unlock(&inode_lock);
 		wait_on_inode(inode);
@@ -737,7 +739,12 @@ struct inode *iget(struct super_block *sb, unsigned long ino)
 	 * the inode lock and re-trying the search in case it
 	 * had to block at any point.
 	 */
-	return get_new_inode(sb, ino, head);
+	return get_new_inode(sb, ino, head, find_actor, opaque);
+}
+
+struct inode *iget(struct super_block *sb, unsigned long ino)
+{
+	return iget4(sb, ino, NULL, NULL);
 }
 
 void insert_inode_hash(struct inode *inode)
@@ -898,13 +905,13 @@ struct inode *iget_in_use(struct super_block *sb, unsigned long ino)
 	struct inode * inode;
 
 	spin_lock(&inode_lock);
-	inode = find_inode(sb, ino, head);
+	inode = find_inode(sb, ino, head, NULL, NULL);
 	if (inode) {
 		spin_unlock(&inode_lock);
 		wait_on_inode(inode);
 	}
 	else
-		inode = get_new_inode (sb, ino, head);
+		inode = get_new_inode (sb, ino, head, NULL, NULL);
 
 	/* When we get the inode, we have to check if it is in use. We
 	   have to release it if it is not. */

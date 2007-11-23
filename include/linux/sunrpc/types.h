@@ -58,6 +58,7 @@ __rpc_remove_list(struct rpc_listitem **q, struct rpc_listitem *item)
 	}
 	if (*q == item)
 		*q = next;
+	item->prev = item->next = 0;
 }
 
 #define rpc_insert_list(q, i) \

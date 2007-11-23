@@ -202,21 +202,17 @@ _arm2_3_check_bugs:
 LC0:		.word	SYMBOL_NAME(page_nr)
 /*
  * Function: arm2_switch_to (struct task_struct *prev, struct task_struct *next)
- *
  * Params  : prev	Old task structure
  *	   : next	New task structure for process to run
- *
  * Returns : prev
- *
  * Purpose : Perform a task switch, saving the old processes state, and restoring
  *	     the new.
- *
  * Notes   : We don't fiddle with the FP registers here - we postpone this until
  *	     the new task actually uses FP.  This way, we don't swap FP for tasks
  *	     that do not require it.
  */
 _arm2_switch_to:
-		stmfd	sp!, {r4 - r9, fp, lr}		@ Store most regs on stack
+		stmfd	sp!, {r4 - r10, fp, lr}		@ Store most regs on stack
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
 		mov	r4, r1
@@ -235,7 +231,7 @@ _arm2_switch_to:
 		strb	r6, [r6]
 		subs	r1, r1, #8
 		bhi	1b
-		ldmfd	sp!, {r4 - r9, fp, pc}^		@ Load all regs saved previously
+		ldmfd	sp!, {r4 - r10, fp, pc}^	@ Load all regs saved previously
 
 /*
  * Function: arm2_remap_memc (struct task_struct *tsk)
@@ -316,15 +312,11 @@ _arm2_proc_init:
 _arm2_proc_fin:	movs	pc, lr
 /*
  * Function: arm3_switch_to (struct task_struct *prev, struct task_struct *next)
- *
  * Params  : prev	Old task structure
  *	   : next	New task structure for process to run
- *
  * Returns : prev
- *
  * Purpose : Perform a task switch, saving the old processes state, and restoring
  *	     the new.
- *
  * Notes   : We don't fiddle with the FP registers here - we postpone this until
  *	     the new task actually uses FP.  This way, we don't swap FP for tasks
  *	     that do not require it.

@@ -99,9 +99,8 @@ proc_dodebug(ctl_table *table, int write, struct file *file,
 			left--, p++;
 		*(unsigned int *) table->data = value;
 		/* Display the RPC tasks on writing to rpc_debug */
-		if (table->ctl_name == CTL_RPCDEBUG) {
+		if (table->ctl_name == CTL_RPCDEBUG)
 			rpc_show_tasks();
-		}
 	} else {
 		if (!access_ok(VERIFY_WRITE, buffer, left))
 			return -EFAULT;

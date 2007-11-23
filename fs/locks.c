@@ -1130,6 +1130,8 @@ static struct file_lock *locks_init_lock(struct file_lock *new,
 		new->fl_start = fl->fl_start;
 		new->fl_end = fl->fl_end;
 		new->fl_notify = fl->fl_notify;
+		new->fl_insert = fl->fl_insert;
+		new->fl_remove = fl->fl_remove;
 		new->fl_u = fl->fl_u;
 	}
 	return new;
@@ -1147,6 +1149,9 @@ static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl)
 	file_lock_table = fl;
 	fl->fl_next = *pos;	/* insert into file's list */
 	*pos = fl;
+
+	if (fl->fl_insert)
+		fl->fl_insert(fl);
 
 	return;
 }
@@ -1175,6 +1180,9 @@ static void locks_delete_lock(struct file_lock **thisfl_p, unsigned int wait)
 		prevfl->fl_nextlink = nextfl;
 	else
 		file_lock_table = nextfl;
+
+	if (thisfl->fl_remove)
+		thisfl->fl_remove(thisfl);
 	
 	locks_wake_up_blocks(thisfl, wait);
 	locks_free_lock(thisfl);

@@ -117,12 +117,12 @@ csum_tcpudp_nofold(unsigned long saddr, unsigned long daddr, unsigned short len,
 		   unsigned short proto, unsigned int sum)
 {
 	__asm__("
-	adds	%0, %0, %1
-	adcs	%0, %0, %2
+	adds	%0, %1, %2
 	adcs	%0, %0, %3
+	adcs	%0, %0, %4
 	adc	%0, %0, #0"
 	: "=&r"(sum)
-	: "r" (daddr), "r" (saddr), "r" ((ntohs(len)<<16)+proto*256), "0" (sum));
+	: "r" (sum), "r" (daddr), "r" (saddr), "r" ((ntohs(len)<<16)+proto*256));
 	return sum;
 }	
 /*

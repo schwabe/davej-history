@@ -48,7 +48,7 @@ u32
 nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 					struct nfs_fh *f)
 {
-	struct knfs_fh	*fh = (struct knfs_fh *) f;
+	struct knfs_fh	*fh = (struct knfs_fh *) f->data;
 	struct nlm_file	*file;
 	unsigned int	hash;
 	u32		nfserr;

@@ -205,6 +205,9 @@ struct ccs_modesel_head
 /* Used to get the bus number for a device */
 #define SCSI_IOCTL_GET_BUS_NUMBER 0x5386
 
+/* Used to get Fibre Channel WWN and port_id from device */
+#define SCSI_IOCTL_FC_TARGET_ADDRESS 0x5387
+
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.
  * Emacs will notice this stuff at the end of the file and automatically

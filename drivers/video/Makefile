@@ -137,10 +137,10 @@ else
 endif
 
 ifeq ($(CONFIG_FB_CYBER2000),y)
-L_OBJS += cyber2000fb.o
+LX_OBJS += cyber2000fb.o
 else
   ifeq ($(CONFIG_FB_CYBER2000),m)
-  M_OBJS += cyber2000fb.o
+  MX_OBJS += cyber2000fb.o
   endif
 endif
 

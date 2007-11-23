@@ -43,6 +43,9 @@ dep_tristate 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC $CONFIG_SCSI
 if [ "$CONFIG_SCSI_BUSLOGIC" != "n" ]; then
     bool '  Omit FlashPoint support' CONFIG_SCSI_OMIT_FLASHPOINT
 fi
+if [ "$CONFIG_PCI" = "y" ]; then
+  dep_tristate 'Compaq Fibre Channel 64-bit/66Mhz HBA support' CONFIG_SCSI_CPQFCTS $CONFIG_SCSI
+fi
 dep_tristate 'DTC3180/3280 SCSI support' CONFIG_SCSI_DTC3280 $CONFIG_SCSI
 dep_tristate 'EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) support' CONFIG_SCSI_EATA $CONFIG_SCSI
   if [ "$CONFIG_SCSI_EATA" != "n" ]; then

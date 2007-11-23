@@ -16,6 +16,10 @@
 #include <linux/fs.h>
 #include <linux/nfs.h>
 
+#define NFS_FHSIZE		32
+#define NFS_MAXPATHLEN		1024
+#define NFS_MAXNAMLEN		255
+
 /*
  * Maximum protocol version supported by knfsd
  */

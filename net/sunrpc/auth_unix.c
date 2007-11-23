@@ -27,7 +27,7 @@ struct unx_cred {
 
 #define UNX_CRED_EXPIRE		(60 * HZ)
 
-#define UNX_WRITESLACK		(21 + (UNX_MAXNODENAME >> 2))
+#define UNX_WRITESLACK		(9 + NFS_NGROUPS + (UNX_MAXNODENAME >> 2))
 
 #ifdef RPC_DEBUG
 # define RPCDBG_FACILITY	RPCDBG_AUTH
@@ -60,7 +60,7 @@ unx_destroy(struct rpc_auth *auth)
 }
 
 static struct rpc_cred *
-unx_create_cred(struct rpc_task *task)
+unx_create_cred(int flags)
 {
 	struct unx_cred	*cred;
 	int		i;
@@ -68,14 +68,12 @@ unx_create_cred(struct rpc_task *task)
 	dprintk("RPC:      allocating UNIX cred for uid %d gid %d\n",
 				current->uid, current->gid);
 
-	if (!(cred = (struct unx_cred *) rpc_malloc(task, sizeof(*cred)))) {
-		task->tk_status = -ENOMEM;
+	if (!(cred = (struct unx_cred *) rpc_allocate(flags, sizeof(*cred))))
 		return NULL;
-	}
 
 	cred->uc_count = 0;
 	cred->uc_flags = RPCAUTH_CRED_UPTODATE;
-	if (RPC_DO_ROOTOVERRIDE(task)) {
+	if (flags & RPC_TASK_ROOTCREDS) {
 		cred->uc_uid = cred->uc_fsuid = 0;
 		cred->uc_gid = cred->uc_fsgid = 0;
 		cred->uc_gids[0] = NOGROUP;
@@ -116,7 +114,7 @@ authunix_fake_cred(struct rpc_task *task, uid_t uid, gid_t gid)
 	cred->uc_fsgid = gid;
 	cred->uc_gids[0] = (gid_t) NOGROUP;
 
-	return task->tk_cred = (struct rpc_cred *) cred;
+	return task->tk_msg.rpc_cred = (struct rpc_cred *) cred;
 }
 
 static void
@@ -131,12 +129,12 @@ unx_destroy_cred(struct rpc_cred *cred)
  * request root creds (e.g. for NFS swapping).
  */
 static int
-unx_match(struct rpc_task * task, struct rpc_cred *rcred)
+unx_match(struct rpc_cred *rcred, int taskflags)
 {
 	struct unx_cred	*cred = (struct unx_cred *) rcred;
 	int		i;
 
-	if (!RPC_DO_ROOTOVERRIDE(task)) {
+	if (!(taskflags & RPC_TASK_ROOTCREDS)) {
 		int groups;
 
 		if (cred->uc_uid != current->uid
@@ -166,7 +164,7 @@ static u32 *
 unx_marshal(struct rpc_task *task, u32 *p, int ruid)
 {
 	struct rpc_clnt	*clnt = task->tk_client;
-	struct unx_cred	*cred = (struct unx_cred *) task->tk_cred;
+	struct unx_cred	*cred = (struct unx_cred *) task->tk_msg.rpc_cred;
 	u32		*base, *hold;
 	int		i, n;
 
@@ -182,7 +180,8 @@ unx_marshal(struct rpc_task *task, u32 *p, int ruid)
 	memcpy(p, clnt->cl_nodename, n);
 	p += (n + 3) >> 2;
 
-	if (ruid) {
+	/* Note: we don't use real uid if it involves raising priviledge */
+	if (ruid && cred->uc_uid != 0 && cred->uc_gid != 0) {
 		*p++ = htonl((u32) cred->uc_uid);
 		*p++ = htonl((u32) cred->uc_gid);
 	} else {
@@ -207,7 +206,7 @@ unx_marshal(struct rpc_task *task, u32 *p, int ruid)
 static int
 unx_refresh(struct rpc_task *task)
 {
-	task->tk_cred->cr_flags |= RPCAUTH_CRED_UPTODATE;
+	task->tk_msg.rpc_cred->cr_flags |= RPCAUTH_CRED_UPTODATE;
 	return task->tk_status = -EACCES;
 }
 
@@ -216,7 +215,7 @@ unx_validate(struct rpc_task *task, u32 *p)
 {
 	u32		n = ntohl(*p++);
 
-	if (n != RPC_AUTH_NULL && n != RPC_AUTH_UNIX && n != RPC_AUTH_SHORT) {
+	if (n != RPC_AUTH_NULL && n != RPC_AUTH_SHORT) {
 		printk("RPC: bad verf flavor: %ld\n", (unsigned long) n);
 		return NULL;
 	}
@@ -224,8 +223,12 @@ unx_validate(struct rpc_task *task, u32 *p)
 		printk("RPC: giant verf size: %ld\n", (unsigned long) n);
 		return NULL;
 	}
-	task->tk_auth->au_rslack = (n >> 2) + 2;
-	p += (n >> 2);
+	if (n) {
+		n = XDR_QUADLEN(n);
+		if (n + 2 > task->tk_auth->au_rslack)
+			task->tk_auth->au_rslack = n + 2;
+		p += n;
+	}
 
 	return p;
 }

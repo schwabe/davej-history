@@ -31,7 +31,7 @@
 		.long	SYMBOL_NAME(sys_lseek)
 /* 20 */	.long	SYMBOL_NAME(sys_getpid)
 		.long	SYMBOL_NAME(sys_mount_wrapper)
-		.long	SYMBOL_NAME(sys_umount)
+		.long	SYMBOL_NAME(sys_oldumount)
 		.long	SYMBOL_NAME(sys_setuid)
 		.long	SYMBOL_NAME(sys_getuid)
 /* 25 */	.long	SYMBOL_NAME(sys_stime)
@@ -61,7 +61,7 @@
 		.long	SYMBOL_NAME(sys_geteuid)
 /* 50 */	.long	SYMBOL_NAME(sys_getegid)
 		.long	SYMBOL_NAME(sys_acct)
-		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_phys */
+		.long	SYMBOL_NAME(sys_umount)
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_lock */
 		.long	SYMBOL_NAME(sys_ioctl)
 /* 55 */	.long	SYMBOL_NAME(sys_fcntl)
@@ -110,7 +110,7 @@
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_profil */
 		.long	SYMBOL_NAME(sys_statfs)
 /* 100 */	.long	SYMBOL_NAME(sys_fstatfs)
-		.long	SYMBOL_NAME(sys_ni_syscall)		/* .long	_sys_ioperm */
+		.long	SYMBOL_NAME(sys_ni_syscall)
 		.long	SYMBOL_NAME(sys_socketcall)
 		.long	SYMBOL_NAME(sys_syslog)
 		.long	SYMBOL_NAME(sys_setitimer)
@@ -129,7 +129,7 @@
 		.long	SYMBOL_NAME(sys_ipc)
 		.long	SYMBOL_NAME(sys_fsync)
 		.long	SYMBOL_NAME(sys_sigreturn_wrapper)
-		.long	SYMBOL_NAME(sys_clone_wapper)
+/* 120 */	.long	SYMBOL_NAME(sys_clone_wapper)
 		.long	SYMBOL_NAME(sys_setdomainname)
 		.long	SYMBOL_NAME(sys_newuname)
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* .long	SYMBOL_NAME(sys_modify_ldt) */
@@ -157,8 +157,8 @@
 /* 145 */	.long	SYMBOL_NAME(sys_readv)
 		.long	SYMBOL_NAME(sys_writev)
 		.long	SYMBOL_NAME(sys_getsid)
-		.long	SYMBOL_NAME(sys_ni_syscall)
-		.long	SYMBOL_NAME(sys_ni_syscall)
+		.long	SYMBOL_NAME(sys_fdatasync)
+		.long	SYMBOL_NAME(sys_sysctl)
 /* 150 */	.long	SYMBOL_NAME(sys_mlock)
 		.long	SYMBOL_NAME(sys_munlock)
 		.long	SYMBOL_NAME(sys_mlockall)
@@ -196,6 +196,10 @@
 		.long	SYMBOL_NAME(sys_capget)
 /* 185 */	.long	SYMBOL_NAME(sys_capset)
 		.long	SYMBOL_NAME(sys_sigaltstack_wrapper)
+		.long	SYMBOL_NAME(sys_sendfile)
+		.long	SYMBOL_NAME(sys_ni_syscall)
+		.long	SYMBOL_NAME(sys_ni_syscall)
+/* 190 */	.long	SYMBOL_NAME(sys_vfork_wrapper)
 
 		.rept	NR_syscalls-186
 			.long	SYMBOL_NAME(sys_ni_syscall)

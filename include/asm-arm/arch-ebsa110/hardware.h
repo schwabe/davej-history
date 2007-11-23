@@ -8,7 +8,7 @@
 #ifndef __ASM_ARCH_HARDWARE_H
 #define __ASM_ARCH_HARDWARE_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 /*
  * IO definitions
@@ -39,6 +39,8 @@
 
 #define FLUSH_BASE		0xdf000000
 #define PCIO_BASE		0xf0000000
+
+#define PARAMS_BASE		(PAGE_OFFSET + 0x400)
 
 #endif
 

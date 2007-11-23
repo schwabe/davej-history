@@ -26,10 +26,9 @@ typedef unsigned long mm_segment_t;		/* domain register	*/
 
 #ifdef __KERNEL__
 
-#include <asm/assembler.h> 
-
 #define NR_DEBUGS	5
 
+#include <asm/ptrace.h>
 #include <asm/arch/processor.h>
 #include <asm/proc/processor.h>
 

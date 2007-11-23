@@ -12,6 +12,8 @@
 #ifndef __ASM_PROC_PROCESSOR_H
 #define __ASM_PROC_PROCESSOR_H
 
+#include <asm/proc/domain.h>
+
 #define KERNEL_STACK_SIZE	PAGE_SIZE
 
 struct context_save_struct {
@@ -22,14 +24,21 @@ struct context_save_struct {
 	unsigned long r7;
 	unsigned long r8;
 	unsigned long r9;
+	unsigned long sl;
 	unsigned long fp;
 	unsigned long pc;
 };
 
-#define INIT_CSS (struct context_save_struct){ SVC_MODE, 0, 0, 0, 0, 0, 0, 0, 0 }
+#define INIT_CSS (struct context_save_struct){ SVC_MODE, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
-#define EXTRA_THREAD_STRUCT
-#define EXTRA_THREAD_STRUCT_INIT
+#define EXTRA_THREAD_STRUCT						\
+	unsigned int	domain;
+
+#define EXTRA_THREAD_STRUCT_INIT					\
+	, domain_val(DOMAIN_USER, DOMAIN_CLIENT) |			\
+	  domain_val(DOMAIN_KERNEL, DOMAIN_MANAGER) |			\
+	  domain_val(DOMAIN_IO, DOMAIN_CLIENT)
+
 #define SWAPPER_PG_DIR	(((unsigned long)swapper_pg_dir) - PAGE_OFFSET)
 
 #define start_thread(regs,pc,sp)					\

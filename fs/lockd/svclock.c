@@ -520,7 +520,7 @@ callback:
 	nlmsvc_insert_block(block, jiffies + 30 * HZ);
 
 	/* Call the client */
-	nlmclnt_async_call(&block->b_call, NLMPROC_GRANTED_MSG,
+	nlmsvc_async_call(&block->b_call, NLMPROC_GRANTED_MSG,
 						nlmsvc_grant_callback);
 	up(&file->f_sema);
 }
@@ -564,7 +564,6 @@ nlmsvc_grant_callback(struct rpc_task *task)
 	block->b_incall = 0;
 
 	nlm_release_host(call->a_host);
-	rpc_release_task(task);
 }
 
 /*

@@ -76,6 +76,25 @@ unsigned long mktime(unsigned int year, unsigned int mon,
 		  )*60 + sec; /* finally seconds */
 }
 
+/*
+ * Handle profile stuff...
+ */
+static void do_profile(unsigned long pc)
+{
+	if (prof_buffer && current->pid) {
+		extern int _stext;
+
+		pc -= (unsigned long)&_stext;
+
+		pc >>= prof_shift;
+
+		if (pc >= prof_len)
+			pc = prof_len - 1;
+
+		prof_buffer[pc] += 1;
+	}
+}
+
 #include <asm/arch/time.h>
 
 static unsigned long do_gettimeoffset(void)
@@ -93,7 +112,7 @@ void do_gettimeofday(struct timeval *tv)
 
 	/*
 	 * xtime is atomically updated in timer_bh. lost_ticks is
-	 * nonzero if the tiemr bottom half hasnt executed yet.
+	 * nonzero if the timer bottom half hasnt executed yet.
 	 */
 	if (lost_ticks)
 		tv->tv_usec += USECS_PER_JIFFY;
@@ -127,27 +146,12 @@ void do_settimeofday(struct timeval *tv)
 	time_status |= STA_UNSYNC;
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
-	sti ();
+	sti();
 }
 
-/*
- * timer_interrupt() needs to keep up the real-time clock,
- * as well as call the "do_timer()" routine every clocktick.
- */
-static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+void __init time_init(void)
 {
-	if (reset_timer ())
-		do_timer(regs);
-
-	update_rtc ();
-}
-
-static struct irqaction irqtimer = { timer_interrupt, 0, 0, "timer", NULL, NULL};
-
-__initfunc(void time_init(void))
-{
-	xtime.tv_sec = setup_timer();
 	xtime.tv_usec = 0;
 
-	setup_arm_irq(IRQ_TIMER, &irqtimer);
+	setup_timer();
 }

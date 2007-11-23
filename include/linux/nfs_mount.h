@@ -8,6 +8,9 @@
  *
  *  structure passed from user-space to kernel-space during an nfs mount
  */
+#include <linux/nfs.h>
+#include <linux/nfs2.h>
+#include <linux/nfs_fs.h>
 
 /*
  * WARNING!  Do not delete or change the order of these fields.  If
@@ -15,13 +18,17 @@
  * tracks which fields are present.  This will ensure some measure of
  * mount-to-kernel version compatibility.  Some of these aren't used yet
  * but here they are anyway.
+ *
+ * Lugging around two file handles is inevitable if we want to pass
+ * version 3 handles while maintaining compatibility. We may want to
+ * break it for the 2.2 kernel eventually...
  */
-#define NFS_MOUNT_VERSION	3
+#define NFS_MOUNT_VERSION	4
 
 struct nfs_mount_data {
 	int		version;		/* 1 */
 	int		fd;			/* 1 */
-	struct nfs_fh	root;			/* 1 */
+	struct nfs2_fh	old_root;		/* 1 */
 	int		flags;			/* 1 */
 	int		rsize;			/* 1 */
 	int		wsize;			/* 1 */
@@ -35,6 +42,7 @@ struct nfs_mount_data {
 	char		hostname[256];		/* 1 */
 	int		namlen;			/* 2 */
 	unsigned int	bsize;			/* 3 */
+	struct nfs_fh	root;			/* 4 */
 };
 
 /* bits in the flags field */
@@ -49,5 +57,7 @@ struct nfs_mount_data {
 #define NFS_MOUNT_VER3		0x0080	/* 3 */
 #define NFS_MOUNT_KERBEROS	0x0100	/* 3 */
 #define NFS_MOUNT_NONLM		0x0200	/* 3 */
- 
+#define NFS_MOUNT_BROKEN_SUID	0x0400	/* 4 */
+#define NFS_MOUNT_FLAGMASK	0xFFFF
+
 #endif

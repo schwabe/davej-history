@@ -1,7 +1,7 @@
 /*
  *  linux/arch/arm/mm/init.c
  *
- *  Copyright (C) 1995, 1996  Russell King
+ *  Copyright (C) 1995-1999  Russell King
  */
 
 #include <linux/config.h>
@@ -248,7 +248,7 @@ void free_initmem (void)
 			  (unsigned long)(&__netwinder_end),
 			  "netwinder");
 
-	if (!machine_is_ebsa285() && !machine_is_cats())
+	if (!machine_is_ebsa285() && !machine_is_cats() && !machine_is_co285())
 		free_area((unsigned long)(&__ebsa285_begin),
 			  (unsigned long)(&__ebsa285_end),
 			  "ebsa285/cats");

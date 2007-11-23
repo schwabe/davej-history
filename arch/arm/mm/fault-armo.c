@@ -23,7 +23,6 @@
 #define FAULT_CODE_FORCECOW	0x80
 #define FAULT_CODE_PREFETCH	0x04
 #define FAULT_CODE_WRITE	0x02
-#define FAULT_CODE_USER		0x01
 
 #define DO_COW(m)		((m) & (FAULT_CODE_WRITE|FAULT_CODE_FORCECOW))
 #define READ_FAULT(m)		(!((m) & FAULT_CODE_WRITE))
@@ -96,11 +95,11 @@ asmlinkage int
 do_PrefetchAbort(unsigned long addr, struct pt_regs *regs)
 {
 #if 0
-	if (the memc mapping for this page exists - can check now...) {
+	if (the memc mapping for this page exists) {
 		printk ("Page in, but got abort (undefined instruction?)\n");
 		return 0;
 	}
 #endif
-	do_page_fault(addr, FAULT_CODE_USER|FAULT_CODE_PREFETCH, regs);
+	do_page_fault(addr, FAULT_CODE_PREFETCH, regs);
 	return 1;
 }

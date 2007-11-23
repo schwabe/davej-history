@@ -30,6 +30,10 @@
 ! Extended memory detection scheme retwiddled by orc@pell.chi.il.us (david
 ! parsons) to avoid loadlin confusion, July 1997
 !
+!
+! A20 gating fiddled to work on AMD Elan AmSC4xx series by kira@linuxgrrls.org
+! july 1999
+!
 
 #define __ASSEMBLY__
 #include <linux/config.h>
@@ -548,6 +552,14 @@ end_move_self:
 	lgdt	gdt_48		! load gdt with whatever appropriate
 
 ! that was painless, now we enable A20
+
+! if this is SC410 or a few other bits we need to do it with the 'fast' method
+
+        in      al,#0x92        ! read "System Control Port A"
+        or      al,#0x02        ! Set "Alternate Gate A20" - Bit
+        out     #0x92,al        ! write "System Control Port A"
+
+! do it the normal way too, so as not to upset normal machines
 
 	call	empty_8042
 	mov	al,#0xD1		! command write

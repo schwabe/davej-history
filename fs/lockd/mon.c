@@ -4,6 +4,10 @@
  * The kernel statd client.
  *
  * Copyright (C) 1996, Olaf Kirch <okir@monad.swb.de>
+ *
+ * Note: In a future release, we should fold all NSM activity into
+ * rpc.mountd and the mount program, respectively. Stuff like this
+ * really doesn't belong in the kernel.	--okir
  */
 
 #include <linux/types.h>
@@ -30,14 +34,12 @@ u32				nsm_local_state = 0;
  * Common procedure for SM_MON/SM_UNMON calls
  */
 static int
-nsm_mon_unmon(struct nlm_host *host, char *what, u32 proc)
+nsm_mon_unmon(struct nlm_host *host, u32 proc, struct nsm_res *res)
 {
 	struct rpc_clnt	*clnt;
 	int		status;
 	struct nsm_args	args;
-	struct nsm_res	res;
 
-	dprintk("lockd: nsm_%s(%s)\n", what, host->h_name);
 	status = -EACCES;
 	clnt = nsm_create();
 	if (!clnt)
@@ -47,23 +49,15 @@ nsm_mon_unmon(struct nlm_host *host, char *what, u32 proc)
 	args.prog = NLM_PROGRAM;
 	args.vers = 1;
 	args.proc = NLMPROC_NSM_NOTIFY;
+	memset(res, 0, sizeof(*res));
 
-	status = rpc_call(clnt, proc, &args, &res, 0);
-	if (status < 0) {
+	status = rpc_call(clnt, proc, &args, res, 0);
+	if (status < 0)
 		printk(KERN_DEBUG "nsm_mon_unmon: rpc failed, status=%d\n",
 			status);
-		goto out;
-	}
-
-	status = -EACCES;
-	if (res.status != 0) {
-		printk(KERN_NOTICE "lockd: cannot %s %s\n", what, host->h_name);
-		goto out;
-	}
-
-	nsm_local_state = res.state;
-	status = 0;
-out:
+	else
+		status = 0;
+ out:
 	return status;
 }
 
@@ -73,10 +67,16 @@ out:
 int
 nsm_monitor(struct nlm_host *host)
 {
+	struct nsm_res	res;
 	int		status;
 
-	status = nsm_mon_unmon(host, "monitor", SM_MON);
-	if (status >= 0)
+	dprintk("lockd: nsm_monitor(%s)\n", host->h_name);
+
+	status = nsm_mon_unmon(host, SM_MON, &res);
+
+	if (status < 0 || res.status != 0)
+		printk(KERN_NOTICE "lockd: cannot monitor %s\n", host->h_name);
+	else
 		host->h_monitored = 1;
 	return status;
 }
@@ -87,9 +87,15 @@ nsm_monitor(struct nlm_host *host)
 int
 nsm_unmonitor(struct nlm_host *host)
 {
+	struct nsm_res	res;
 	int		status;
 
-	if ((status = nsm_mon_unmon(host, "unmonitor", SM_UNMON)) >= 0)
+	dprintk("lockd: nsm_unmonitor(%s)\n", host->h_name);
+
+	status = nsm_mon_unmon(host, SM_UNMON, &res);
+	if (status < 0)
+		printk(KERN_NOTICE "lockd: cannot unmonitor %s\n", host->h_name);
+	else
 		host->h_monitored = 0;
 	return status;
 }
@@ -155,15 +161,15 @@ xdr_encode_mon(struct rpc_rqst *rqstp, u32 *p, struct nsm_args *argp)
 	 */
 	sprintf(buffer, "%d.%d.%d.%d", (addr>>24) & 0xff, (addr>>16) & 0xff,
 				 	(addr>>8) & 0xff,  (addr) & 0xff);
-	if (!(p = xdr_encode_string(p, buffer))
-	 || !(p = xdr_encode_string(p, system_utsname.nodename)))
+	if (!(p = xdr_encode_string(p, buffer, -1))
+	 || !(p = xdr_encode_string(p, system_utsname.nodename, -1)))
 		return -EIO;
 	*p++ = htonl(argp->prog);
 	*p++ = htonl(argp->vers);
 	*p++ = htonl(argp->proc);
 
 	/* This is the private part. Needed only for SM_MON call */
-	if (rqstp->rq_task->tk_proc == SM_MON) {
+	if (rqstp->rq_task->tk_msg.rpc_proc == SM_MON) {
 		*p++ = argp->addr;
 		*p++ = 0;
 		*p++ = 0;
@@ -187,7 +193,7 @@ xdr_decode_stat_res(struct rpc_rqst *rqstp, u32 *p, struct nsm_res *resp)
 static int
 xdr_decode_stat(struct rpc_rqst *rqstp, u32 *p, struct nsm_res *resp)
 {
-	resp->status = ntohl(*p++);
+	resp->state = ntohl(*p++);
 	return 0;
 }
 

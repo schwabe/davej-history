@@ -1,20 +1,17 @@
 /*
- * linux/arch/arm/lib/segment.S
+ * linux/arch/arm/lib/memcpy.S
  *
- * Copyright (C) 1995, 1996 Russell King
- * Except memcpy/memmove routine.
+ * Copyright (C) 1995-1999 Russell King
+ *
+ * ASM optimised string functions
+ *
  */
-
-#include <asm/assembler.h>
 #include <linux/linkage.h>
-
-#ifndef ENTRY
-#define ENTRY(x...)				\
-		.globl	_##x;			\
-_##x:
-#endif
+#include <asm/assembler.h>
+#include "constants.h"
 
 		.text
+
 #define ENTER	\
 		mov	ip,sp	;\
 		stmfd	sp!,{r4-r9,fp,ip,lr,pc}	;\
@@ -26,9 +23,10 @@ _##x:
 #define EXITEQ	\
 		LOADREGS(eqea, fp, {r4 - r9, fp, sp, pc})
 
-# Prototype: void memcpy(void *to,const void *from,unsigned long n);
-# ARM3: cant use memcopy here!!!
-
+/*
+ * Prototype: void memcpy(void *to,const void *from,unsigned long n);
+ * ARM3: cant use memcopy here!!!
+ */
 ENTRY(memcpy)
 ENTRY(memmove)
 		ENTER
@@ -316,4 +314,5 @@ ENTRY(memmove)
 		b	24b
 
 		.align
+
 

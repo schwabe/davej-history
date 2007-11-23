@@ -4474,6 +4474,23 @@ CONFIG_SCSI_QLOGIC_FC
   The module will be called qlogicfc.o. If you want to compile it as
   a module, say M here and read Documentation/modules.txt.
 
+Compaq 64-bit / 66MHz PCI Fibre Channel Host Adapter
+CONFIG_SCSI_CPQFCTS
+  This driver supports Compaq HBA part #120186-B21, the non-
+  intelligent Tachyon TL/TS (HPFC-5166A/1.2) based adapter.
+  Kernel linked or kernel module, SMP support.  Information at
+  /proc/scsi/cpqfcTS/*
+  
+  Only supports FC-AL (non-loop mode not supported). Supports Fabric 
+  (FL_Port, public device); tested on Brocade switches.  Supports hot-
+  plug of new devices and movement of devices across ports (i.e.,
+  dynamic re-assignment of 24-bit FC port_id).
+
+  Tested on Compaq RA4x00 (f/w ver 2.40 or newer), RA8000, with Vixel
+  Rapport 1000 (7-port non-managed), Gadzoox 12-port, Gadzoox Capellix
+  3000, Brocade 2010, 2400, 2800.  Selective Storage 
+  Presentation (SSP) on RA4x00 f/w 2.54 (no redundancy).
+
 Seagate ST-02 and Future Domain TMC-8xx SCSI support
 CONFIG_SCSI_SEAGATE
   These are 8-bit SCSI controllers; the ST-01 is also supported by

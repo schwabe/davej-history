@@ -136,13 +136,11 @@ char * getname(const char * filename)
  * for filesystem access without changing the "normal" uids which
  * are used for other things..
  */
-int permission(struct inode * inode,int mask)
+int vfs_permission(struct inode * inode,int mask)
 {
 	int mode = inode->i_mode;
 
-	if (inode->i_op && inode->i_op->permission)
-		return inode->i_op->permission(inode, mask);
-	else if ((mask & S_IWOTH) && IS_RDONLY(inode) &&
+	if ((mask & S_IWOTH) && IS_RDONLY(inode) &&
 		 (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode)))
 		return -EROFS; /* Nobody gets write access to a read-only fs */
 	else if ((mask & S_IWOTH) && IS_IMMUTABLE(inode))
@@ -159,6 +157,13 @@ int permission(struct inode * inode,int mask)
 		if (capable(CAP_DAC_READ_SEARCH))
 			return 0;
 	return -EACCES;
+}
+
+int permission(struct inode * inode,int mask)
+{
+	if (inode->i_op && inode->i_op->permission)
+		return inode->i_op->permission(inode, mask);
+	return vfs_permission(inode, mask);
 }
 
 /*

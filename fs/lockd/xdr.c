@@ -6,6 +6,7 @@
  * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/utsname.h>
@@ -20,6 +21,7 @@
 
 #define NLMDBG_FACILITY		NLMDBG_XDR
 #define NLM_MAXSTRLEN		1024
+#define OFFSET_MAX		LONG_MAX
 
 #define QUADLEN(len)		(((len) + 3) >> 2)
 
@@ -29,6 +31,8 @@ u32	nlm_granted, nlm_lck_denied, nlm_lck_denied_nolocks,
 
 
 typedef struct nlm_args	nlm_args;
+static void nlm_register_stats(void);
+static void nlm_unregister_stats(void);
 
 /*
  * Initialization of NFS status variables
@@ -48,6 +52,14 @@ nlmxdr_init(void)
 	nlm_lck_denied_grace_period = htonl(NLM_LCK_DENIED_GRACE_PERIOD);
 
 	inited = 1;
+
+	nlm_register_stats();
+}
+
+void
+nlmxdr_shutdown(void)
+{
+	nlm_unregister_stats();
 }
 
 /*
@@ -93,22 +105,23 @@ nlm_decode_fh(u32 *p, struct nfs_fh *f)
 {
 	unsigned int	len;
 
-	if ((len = ntohl(*p++)) != sizeof(*f)) {
+	if ((len = ntohl(*p++)) != NFS2_FHSIZE) {
 		printk(KERN_NOTICE
 			"lockd: bad fhandle size %x (should be %d)\n",
-			len, sizeof(*f));
+			len, NFS2_FHSIZE);
 		return NULL;
 	}
-	memcpy(f, p, sizeof(*f));
-	return p + XDR_QUADLEN(sizeof(*f));
+	f->size = NFS2_FHSIZE;
+	memcpy(f->data, p, NFS2_FHSIZE);
+	return p + XDR_QUADLEN(NFS2_FHSIZE);
 }
 
 static inline u32 *
 nlm_encode_fh(u32 *p, struct nfs_fh *f)
 {
-	*p++ = htonl(sizeof(*f));
-	memcpy(p, f, sizeof(*f));
-	return p + XDR_QUADLEN(sizeof(*f));
+	*p++ = htonl(NFS2_FHSIZE);
+	memcpy(p, f->data, NFS2_FHSIZE);
+	return p + XDR_QUADLEN(NFS2_FHSIZE);
 }
 
 /*
@@ -145,7 +158,7 @@ nlm_decode_lock(u32 *p, struct nlm_lock *lock)
 	fl->fl_start = ntohl(*p++);
 	len = ntohl(*p++);
 	if (len == 0 || (fl->fl_end = fl->fl_start + len - 1) < 0)
-		fl->fl_end = NLM_OFFSET_MAX;
+		fl->fl_end = OFFSET_MAX;
 	return p;
 }
 
@@ -157,17 +170,21 @@ nlm_encode_lock(u32 *p, struct nlm_lock *lock)
 {
 	struct file_lock	*fl = &lock->fl;
 
-	if (!(p = xdr_encode_string(p, lock->caller))
+	if (!(p = xdr_encode_string(p, lock->caller, -1))
 	 || !(p = nlm_encode_fh(p, &lock->fh))
 	 || !(p = nlm_encode_oh(p, &lock->oh)))
 		return NULL;
 
+	if (fl->fl_start > NLM_OFFSET_MAX
+	 || (fl->fl_end > NLM_OFFSET_MAX && fl->fl_end != OFFSET_MAX))
+		return NULL;
+
 	*p++ = htonl(fl->fl_pid);
-	*p++ = htonl(lock->fl.fl_start);
-	if (lock->fl.fl_end == NLM_OFFSET_MAX)
+	*p++ = htonl(fl->fl_start);
+	if (fl->fl_end == OFFSET_MAX)
 		*p++ = xdr_zero;
 	else
-		*p++ = htonl(lock->fl.fl_end - lock->fl.fl_start + 1);
+		*p++ = htonl(fl->fl_end - fl->fl_start + 1);
 
 	return p;
 }
@@ -193,7 +210,7 @@ nlm_encode_testres(u32 *p, struct nlm_res *resp)
 			return 0;
 
 		*p++ = htonl(fl->fl_start);
-		if (fl->fl_end == NLM_OFFSET_MAX)
+		if (fl->fl_end == OFFSET_MAX)
 			*p++ = xdr_zero;
 		else
 			*p++ = htonl(fl->fl_end - fl->fl_start + 1);
@@ -428,7 +445,7 @@ nlmclt_decode_testres(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
 		fl->fl_start = ntohl(*p++);
 		len = ntohl(*p++);
 		if (len == 0 || (fl->fl_end = fl->fl_start + len - 1) < 0)
-			fl->fl_end = NLM_OFFSET_MAX;
+			fl->fl_end = OFFSET_MAX;
 	}
 	return 0;
 }
@@ -512,10 +529,10 @@ nlmclt_decode_res(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
  */
 #define NLM_void_sz		0
 #define NLM_cookie_sz		3	/* 1 len , 2 data */
-#define NLM_caller_sz		1+QUADLEN(sizeof(system_utsname.nodename))
+#define NLM_caller_sz		1+QUADLEN(NLM_MAXSTRLEN)
 #define NLM_netobj_sz		1+QUADLEN(XDR_MAX_NETOBJ)
 /* #define NLM_owner_sz		1+QUADLEN(NLM_MAXOWNER) */
-#define NLM_fhandle_sz		1+QUADLEN(NFS_FHSIZE)
+#define NLM_fhandle_sz		1+QUADLEN(NFS2_FHSIZE)
 #define NLM_lock_sz		3+NLM_caller_sz+NLM_netobj_sz+NLM_fhandle_sz
 #define NLM_holder_sz		4+NLM_netobj_sz
 
@@ -541,7 +558,8 @@ nlmclt_decode_res(struct rpc_rqst *req, u32 *p, struct nlm_res *resp)
     { "nlm_" #proc,						\
       (kxdrproc_t) nlmclt_encode_##argtype,			\
       (kxdrproc_t) nlmclt_decode_##restype,			\
-      MAX(NLM_##argtype##_sz, NLM_##restype##_sz) << 2		\
+      MAX(NLM_##argtype##_sz, NLM_##restype##_sz) << 2,		\
+      0								\
     }
 
 static struct rpc_procinfo	nlm_procedures[] = {
@@ -586,14 +604,21 @@ static struct rpc_version	nlm_version3 = {
 	3, 24, nlm_procedures,
 };
 
+#ifdef CONFIG_NFS_V3
+extern struct rpc_version nlm_version4;
+#endif
+
 static struct rpc_version *	nlm_versions[] = {
 	NULL,
 	&nlm_version1,
 	NULL,
 	&nlm_version3,
+#ifdef CONFIG_NFS_V3
+	&nlm_version4,
+#endif
 };
 
-static struct rpc_stat		nlm_stats;
+static struct rpc_stat		nlm_stats = { &nlm_program };
 
 struct rpc_program		nlm_program = {
 	"lockd",
@@ -613,3 +638,13 @@ nlm_procname(u32 proc)
 }
 #endif
 
+static void nlm_register_stats(void) {
+#ifdef CONFIG_PROC_FS
+	rpc_proc_register(&nlm_stats);
+#endif
+}
+static void nlm_unregister_stats(void) {
+#ifdef CONFIG_PROC_FS
+	rpc_proc_unregister("lockd");
+#endif
+}

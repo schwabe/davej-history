@@ -469,6 +469,8 @@ struct file_lock {
 	off_t fl_end;
 
 	void (*fl_notify)(struct file_lock *);	/* unblock callback */
+	void (*fl_insert)(struct file_lock *);	/* lock insertion callback */
+	void (*fl_remove)(struct file_lock *);	/* lock removal callback */
 
 	union {
 		struct nfs_lock_info	nfs_fl;
@@ -626,6 +628,8 @@ struct inode_operations {
 	int (*smap) (struct inode *,int);
 	int (*updatepage) (struct file *, struct page *, unsigned long, unsigned int, int);
 	int (*revalidate) (struct dentry *);
+	int (*prepare_write) (struct file *, struct page *, unsigned, unsigned);
+	int (*sync_page) (struct page *);
 };
 
 struct super_operations {
@@ -810,6 +814,7 @@ extern int fsync_dev(kdev_t dev);
 extern void sync_supers(kdev_t dev);
 extern int bmap(struct inode * inode,int block);
 extern int notify_change(struct dentry *, struct iattr *);
+extern int vfs_permission(struct inode * inode,int mask);
 extern int permission(struct inode * inode,int mask);
 extern int get_write_access(struct inode *inode);
 extern void put_write_access(struct inode *inode);
@@ -854,7 +859,10 @@ extern struct dentry * __namei(const char *, unsigned int);
 extern void iput(struct inode *);
 extern struct inode * igrab(struct inode *inode);
 extern ino_t iunique(struct super_block *, ino_t);
-extern struct inode * iget(struct super_block *, unsigned long);
+
+typedef int (*find_inode_t)(struct inode *, unsigned long, void *);
+extern struct inode * iget4(struct super_block *, unsigned long, find_inode_t, void *);
+extern struct inode * iget(struct super_block *sb, unsigned long ino);
 extern struct inode * iget_in_use (struct super_block *, unsigned long);
 extern void clear_inode(struct inode *);
 extern struct inode * get_empty_inode(void);

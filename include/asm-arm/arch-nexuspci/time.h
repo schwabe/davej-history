@@ -38,6 +38,9 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	readb(UART_BASE + 0x14);
 
 	do_timer(regs);	
+
+	if (!user_mode(regs))
+		do_profile(instruction_pointer(regs));
 }
 
 static struct irqaction timerirq = {

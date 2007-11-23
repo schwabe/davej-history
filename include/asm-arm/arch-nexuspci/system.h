@@ -6,6 +6,8 @@
 #ifndef __ASM_ARCH_SYSTEM_H
 #define __ASM_ARCH_SYSTEM_H
 
+#define arch_do_idle()		processor.u.armv3v4._do_idle()
+
 extern __inline__ void arch_reset(char mode)
 {
 	/*

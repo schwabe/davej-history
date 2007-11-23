@@ -14,11 +14,24 @@ extern char * strchr(const char * s, int c);
 #define __HAVE_ARCH_MEMCPY
 #define __HAVE_ARCH_MEMMOVE
 #define __HAVE_ARCH_MEMSET
+#define __HAVE_ARCH_MEMCHR
 
 #define __HAVE_ARCH_MEMZERO
-extern void memzero(void *ptr, int n);
 
-extern void memsetl (unsigned long *, unsigned long, int n);
+extern void __memzero(void *ptr, __kernel_size_t n);
+
+#define memset(p,v,n)							\
+	({								\
+		if ((n) != 0) {						\
+			if (__builtin_constant_p((v)) && (v) == 0)	\
+				__memzero((p),(n));			\
+			else						\
+				memset((p),(v),(n));			\
+		}							\
+		(p);							\
+	})
+
+#define memzero(p,n) ({ if ((n) != 0) __memzero((p),(n)); (p); })
 
 #endif
  

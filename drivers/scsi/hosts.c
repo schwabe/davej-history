@@ -365,6 +365,11 @@
 #include "imm.h"
 #endif
 
+#ifdef CONFIG_SCSI_CPQFCTS
+#include "cpqfcTS.h"
+#endif 
+
+
 /*
 static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/hosts.c,v 1.20 1996/12/12 19:18:32 davem Exp $";
 */
@@ -641,6 +646,10 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_DEBUG
     SCSI_DEBUG,
+#endif
+/* CPQFCTS needs to be last because it can never be the boot device. */
+#ifdef CONFIG_SCSI_CPQFCTS
+   CPQFCTS,
 #endif
 };
 

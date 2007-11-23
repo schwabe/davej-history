@@ -25,6 +25,17 @@
  * Breakpoint SWI instruction: SWI &9F0001
  */
 #define BREAKINST	0xef9f0001
+#define PTRACE_GETREGS		12
+#define PTRACE_SETREGS		13
+#define PTRACE_GETFPREGS	14
+#define PTRACE_SETFPREGS	15
+
+static inline struct pt_regs *
+get_user_regs(struct task_struct *task)
+{
+	return (struct pt_regs *)
+		((unsigned long)task + 8192 - sizeof(struct pt_regs));
+}
 
 /*
  * this routine will get a word off of the processes privileged stack.
@@ -34,11 +45,7 @@
  */
 static inline long get_stack_long(struct task_struct *task, int offset)
 {
-	unsigned char *stack;
-
-	stack = (unsigned char *)((unsigned long)task + 8192 - sizeof(struct pt_regs));
-	stack += offset << 2;
-	return *(unsigned long *)stack;
+	return get_user_regs(task)->uregs[offset];
 }
 
 /*
@@ -47,15 +54,21 @@ static inline long get_stack_long(struct task_struct *task, int offset)
  * this routine assumes that all the privileged stacks are in our
  * data space.
  */
-static inline long put_stack_long(struct task_struct *task, int offset,
-	unsigned long data)
+static inline int
+put_stack_long(struct task_struct *task, int offset, long data)
 {
-	unsigned char *stack;
+	struct pt_regs newregs, *regs = get_user_regs(task);
+	int ret = -EINVAL;
 
-	stack = (unsigned char *)((unsigned long)task + 8192 - sizeof(struct pt_regs));
-	stack += offset << 2;
-	*(unsigned long *) stack = data;
-	return 0;
+	newregs = *regs;
+	newregs.uregs[offset] = data;
+
+	if (valid_user_regs(&newregs)) {
+		regs->uregs[offset] = data;
+		ret = 0;
+	}
+
+	return ret;
 }
 
 /*
@@ -71,39 +84,42 @@ static unsigned long get_long(struct task_struct * tsk,
 	pmd_t *pgmiddle;
 	pte_t *pgtable;
 	unsigned long page;
+	int fault;
 
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
-	if (pgd_none(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
+	if (pgd_none(*pgdir))
+		goto none;
 	if (pgd_bad(*pgdir)) {
 		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
 		pgd_clear(pgdir);
 		return 0;
 	}
 	pgmiddle = pmd_offset(pgdir, addr);
-	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
+	if (pmd_none(*pgmiddle))
+		goto none;
 	if (pmd_bad(*pgmiddle)) {
 		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
 		pmd_clear(pgmiddle);
 		return 0;
 	}
 	pgtable = pte_offset(pgmiddle, addr);
-	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 0);
-		goto repeat;
-	}
+	if (!pte_present(*pgtable))
+		goto none;
 	page = pte_page(*pgtable);
  
 	if(MAP_NR(page) >= max_mapnr)
 		return 0;
 	page += addr & ~PAGE_MASK;
 	return *(unsigned long *)page;
+
+none:
+	fault = handle_mm_fault(tsk, vma, addr, 0);
+	if (fault > 0)
+		goto repeat;
+	if (fault < 0)
+		force_sig(SIGKILL, tsk);
+	return 0;
 }
 
 /*
@@ -122,46 +138,52 @@ static void put_long(struct task_struct * tsk, struct vm_area_struct * vma, unsi
 	pmd_t *pgmiddle;
 	pte_t *pgtable;
 	unsigned long page;
+	int fault;
 
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
-	if (!pgd_present(*pgdir)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
+	if (!pgd_present(*pgdir))
+		goto none;
 	if (pgd_bad(*pgdir)) {
 		printk("ptrace: bad page directory %08lx\n", pgd_val(*pgdir));
 		pgd_clear(pgdir);
 		return;
 	}
 	pgmiddle = pmd_offset(pgdir, addr);
-	if (pmd_none(*pgmiddle)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
+	if (pmd_none(*pgmiddle))
+		goto none;
 	if (pmd_bad(*pgmiddle)) {
 		printk("ptrace: bad page middle %08lx\n", pmd_val(*pgmiddle));
 		pmd_clear(pgmiddle);
 		return;
 	}
 	pgtable = pte_offset(pgmiddle, addr);
-	if (!pte_present(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
+	if (!pte_present(*pgtable))
+		goto none;
 	page = pte_page(*pgtable);
-	if (!pte_write(*pgtable)) {
-		handle_mm_fault(tsk, vma, addr, 1);
-		goto repeat;
-	}
+	if (!pte_write(*pgtable))
+		goto none;
 	
 	if (MAP_NR(page) < max_mapnr) {
 		page += addr & ~PAGE_MASK;
+
+		flush_cache_range(vma->vm_mm, addr, addr + sizeof(unsigned long));
+
 		*(unsigned long *)page = data;
-		__flush_entry_to_ram(page);
+
+		clean_cache_area(page, sizeof(unsigned long));
+
+		set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
+		flush_tlb_page(vma, addr & PAGE_MASK);
 	}
-	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-	flush_tlb();
+	return;
+
+none:
+	fault = handle_mm_fault(tsk, vma, addr, 1);
+	if (fault > 0)
+		goto repeat;
+	if (fault < 0)
+		force_sig(SIGKILL, tsk);
 }
 
 static struct vm_area_struct * find_extend_vma(struct task_struct * tsk, unsigned long addr)
@@ -669,7 +691,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				return 0;
 			wake_up_process (child);
 			child->exit_code = SIGKILL;
-			ptrace_cancel_bpt (child);
 			/* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt (child);
 			ret = 0;
@@ -685,6 +706,54 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			child->exit_code = data;
 			/* give it a chance to run. */
 			ret = 0;
+			goto out;
+			
+		case PTRACE_GETREGS:
+		{	/* Get all gp regs from the child. */
+			unsigned char *stack;
+
+			ret = 0;
+			stack = (unsigned char *)((unsigned long)child + 8192 - sizeof(struct pt_regs));
+			if (copy_to_user((void *)data, stack,
+					 sizeof(struct pt_regs)))
+				ret = -EFAULT;
+
+			goto out;
+		};
+
+		/* Set all gp regs in the child. */
+		case PTRACE_SETREGS:
+		{
+			struct pt_regs newregs;
+
+			ret = -EFAULT;
+			if (copy_from_user(&newregs, (void *)data,
+					   sizeof(struct pt_regs)) == 0) {
+				struct pt_regs *regs = get_user_regs(child);
+
+				ret = -EINVAL;
+				if (valid_user_regs(&newregs)) {
+					*regs = newregs;
+					ret = 0;
+				}
+			}
+			goto out;
+		}
+
+		case PTRACE_GETFPREGS: 
+			/* Get the child FPU state. */
+			ret = 0;
+			if (copy_to_user((void *)data, &child->tss.fpstate,
+					 sizeof(struct user_fp)))
+				ret = -EFAULT;
+			goto out;
+		
+		case PTRACE_SETFPREGS:
+			/* Set the child FPU state. */
+			ret = 0;
+			if (copy_from_user(&child->tss.fpstate, (void *)data,
+					   sizeof(struct user_fp)))
+				ret = -EFAULT;
 			goto out;
 
 		case PTRACE_DETACH:				/* detach a process that was attached. */

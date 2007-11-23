@@ -105,7 +105,7 @@ extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int 
 "	bic	%0, %0, #0x0c000000\n"			\
 "	orr	%0, %0, %1\n"				\
 "	teqp	%0, #0\n"				\
-	  : "=r" (temp)					\
+	  : "=&r" (temp)				\
 	  : "r" (x)					\
 	  : "memory");					\
 	} while (0)

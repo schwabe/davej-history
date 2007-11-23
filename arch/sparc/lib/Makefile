@@ -6,7 +6,7 @@ OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o memcpy.o memset.o \
         strlen.o checksum.o blockops.o memscan.o memcmp.o strncmp.o \
 	strncpy_from_user.o divdi3.o udivdi3.o strlen_user.o \
 	copy_user.o locks.o atomic.o bitops.o debuglocks.o lshrdi3.o \
-	ashldi3.o
+	ashldi3.o muldi3.o
 
 ifdef CONFIG_SMP
 OBJS += irqlock.o

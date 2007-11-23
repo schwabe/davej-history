@@ -26,11 +26,12 @@ struct context_save_struct {
 	unsigned long r7;
 	unsigned long r8;
 	unsigned long r9;
+	unsigned long sl;
 	unsigned long fp;
 	unsigned long pc;
 };
 
-#define INIT_CSS (struct context_save_struct){ 0, 0, 0, 0, 0, 0, 0, SVC26_MODE }
+#define INIT_CSS (struct context_save_struct){ 0, 0, 0, 0, 0, 0, 0, 0, SVC26_MODE }
 
 typedef struct {
 	void (*put_byte)(void);			/* Special calling convention */
@@ -43,7 +44,7 @@ typedef struct {
 	unsigned long (*copy_to_user)(void *to, const void *from, unsigned long sz);
 	unsigned long (*clear_user)(void *addr, unsigned long sz);
 	unsigned long (*strncpy_from_user)(char *to, const char *from, unsigned long sz);
-	unsigned long (*strlen_user)(const char *s);
+	unsigned long (*strnlen_user)(const char *s, long n);
 } uaccess_t;
 
 extern uaccess_t uaccess_user, uaccess_kernel;

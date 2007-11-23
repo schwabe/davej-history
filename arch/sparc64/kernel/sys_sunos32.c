@@ -672,7 +672,7 @@ asmlinkage void sunos_nop(void)
 #define SMNT_SYS5         128
 
 struct sunos_fh_t {
-	char fh_data [NFS_FHSIZE];
+	char fh_data [NFS2_FHSIZE];
 };
 
 struct sunos_nfs_mount_args {
@@ -746,7 +746,7 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 
 	server.sin_family = AF_INET;
 	server.sin_addr = addr->sin_addr;
-	server.sin_port = NFS_PORT;
+	server.sin_port = NFS2_PORT;
 
 	/* Call sys_connect */
 	ret = socket->ops->connect (socket, (struct sockaddr *) &server,

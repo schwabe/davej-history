@@ -304,8 +304,10 @@ static struct proc_nfs_info {
 	{ NFS_MOUNT_SOFT, ",soft" },
 	{ NFS_MOUNT_INTR, ",intr" },
 	{ NFS_MOUNT_POSIX, ",posix" },
+	{ NFS_MOUNT_TCP, ",tcp" },
 	{ NFS_MOUNT_NOCTO, ",nocto" },
 	{ NFS_MOUNT_NOAC, ",noac" },
+	{ NFS_MOUNT_NONLM, ",nolock" },
 	{ 0, NULL }
 };
 
@@ -330,6 +332,8 @@ int get_filesystem_info( char *buf )
 		}
 		if (!strcmp("nfs", tmp->mnt_sb->s_type->name)) {
 			nfss = &tmp->mnt_sb->u.nfs_sb.s_server;
+			len += sprintf(buf+len, ",v%d", nfss->rpc_ops->version);
+
 			if (nfss->rsize != NFS_DEF_FILE_IO_BUFFER_SIZE) {
 				len += sprintf(buf+len, ",rsize=%d",
 					       nfss->rsize);

@@ -9,10 +9,13 @@
 
 O_TARGET := nfs.o
 O_OBJS   := inode.o file.o read.o write.o dir.o symlink.o proc.o \
-	    nfs2xdr.o
+	    nfs2xdr.o flushd.o unlink.o
 
 ifdef CONFIG_ROOT_NFS
   O_OBJS += nfsroot.o mount_clnt.o
+endif
+ifdef CONFIG_NFS_V3
+  O_OBJS += nfs3proc.o nfs3xdr.o
 endif
 
 M_OBJS   := $(O_TARGET)

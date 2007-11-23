@@ -70,3 +70,27 @@ __initfunc(unsigned long setup_io_pagetables(unsigned long start_mem))
 
 	return start_mem;
 }
+
+/*
+ * In order to soft-boot, we need to insert a 1:1 mapping in place of
+ * the user-mode pages.  This will then ensure that we have predictable
+ * results when turning the mmu off
+ */
+void setup_mm_for_reboot(char mode)
+{
+	pgd_t *pgd;
+	pmd_t pmd;
+	int i;
+
+	if (current->mm && current->mm->pgd)
+		pgd = current->mm->pgd;
+	else
+		pgd = init_mm.pgd;
+
+	for (i = 0; i < USER_PTRS_PER_PGD; i++) {
+		pmd_val(pmd) = (i << PAGE_SHIFT) |
+			PMD_SECT_AP_WRITE | PMD_SECT_AP_READ |
+			PMD_TYPE_SECT;
+		set_pmd(pmd_offset(pgd + i, i << PGDIR_SHIFT), pmd);
+	}
+}

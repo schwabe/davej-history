@@ -30,7 +30,7 @@ SYMBOL_NAME(uaccess_user):
 		.word	__arch_copy_to_user
 		.word	__arch_clear_user
 		.word	__arch_strncpy_from_user
-		.word	__arch_strlen_user
+		.word	__arch_strnlen_user
 
 
 @ In : r0 = x, r1 = addr, r2 = error
@@ -99,7 +99,7 @@ SYMBOL_NAME(uaccess_kernel):
 		.word	uaccess_kernel_copy
 		.word	uaccess_kernel_clear
 		.word	uaccess_kernel_strncpy_from
-		.word	uaccess_kernel_strlen
+		.word	uaccess_kernel_strnlen
 
 @ In : r0 = x, r1 = addr, r2 = error
 @ Out: r2 = error
@@ -214,17 +214,20 @@ uaccess_kernel_strncpy_from:
 2:		subs	r0, ip, r2
 		ldmfd	sp!, {pc}^
 
-/* Prototype: int uaccess_kernel_strlen(char *str)
+/* Prototype: int uaccess_kernel_strnlen(char *str, long n)
  * Purpose  : get length of a string in kernel memory
  * Params   : str - address of string in kernel memory
  * Returns  : length of string *including terminator*, or zero on error
  */
-uaccess_kernel_strlen:
+uaccess_kernel_strnlen:
 		stmfd	sp!, {lr}
 		mov	r2, r0
-1:		ldrb	r1, [r0], #1
-		teq	r1, #0
+1:		ldrb	r3, [r0], #1
+		teq	r3, #0
+		beq	2f
+		subs	r1, r1, #1
 		bne	1b
-		sub	r0, r0, r2
+		add	r0, r0, #1
+2:		sub	r0, r0, r2
 		ldmfd	sp!, {pc}^
 

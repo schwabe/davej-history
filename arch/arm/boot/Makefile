@@ -20,10 +20,10 @@ compressed/vmlinux: $(TOPDIR)/vmlinux dep
 	@$(MAKE) -C compressed vmlinux
 
 install: $(CONFIGURE) Image
-	sh ./install.sh $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) Image $(TOPDIR)/System.map "$(INSTALL_PATH)"
+	sh ./install.sh $(VERSION).$(PATCHLEVEL).$(SUBLEVEL).$(EXTRAVERSION) Image $(TOPDIR)/System.map "$(INSTALL_PATH)"
 
 zinstall: $(CONFIGURE) zImage
-	sh ./install.sh $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) zImage $(TOPDIR)/System.map "$(INSTALL_PATH)"
+	sh ./install.sh $(VERSION).$(PATCHLEVEL).$(SUBLEVEL).$(EXTRAVERSION) zImage $(TOPDIR)/System.map "$(INSTALL_PATH)"
 
 clean:
 	rm -f Image zImage

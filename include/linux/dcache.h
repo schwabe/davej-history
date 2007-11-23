@@ -151,7 +151,7 @@ extern struct dentry * d_alloc_root(struct inode * root_inode, struct dentry * o
 /* test whether root is busy without destroying dcache */
 extern int is_root_busy(struct dentry *);
 
-/* test whether we have any submounts in a subdir tree */
+/* test whether we have any submounts */
 extern int have_submounts(struct dentry *);
 
 /*

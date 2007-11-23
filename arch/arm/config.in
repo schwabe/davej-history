@@ -7,6 +7,11 @@ mainmenu_name "Linux Kernel Configuration"
 define_bool CONFIG_ARM y
 
 mainmenu_option next_comment
+comment 'Code maturity level options'
+bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+endmenu
+
+mainmenu_option next_comment
 comment 'System and processor type'
 
 choice 'ARM system type'	\
@@ -14,96 +19,111 @@ choice 'ARM system type'	\
 	 A5000			CONFIG_ARCH_A5K \
 	 RiscPC			CONFIG_ARCH_RPC \
 	 EBSA-110		CONFIG_ARCH_EBSA110 \
-	 EBSA-285		CONFIG_ARCH_EBSA285 \
-	 NexusPCI		CONFIG_ARCH_NEXUSPCI \
-	 Corel-VNC		CONFIG_ARCH_VNC \
-	 Tbox			CONFIG_ARCH_TBOX" RiscPC
+	 FootBridge-based	CONFIG_FOOTBRIDGE" RiscPC
 
-if [ "$CONFIG_ARCH_EBSA285" = "y" ]; then
-  bool '  Include support for CATS boards' CONFIG_CATS
+if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
+   bool 'FootBridge in HOST mode' CONFIG_HOST_FOOTBRIDGE
+   if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
+      define_bool CONFIG_ADDIN_FOOTBRIDGE n
+   else
+      define_bool CONFIG_ADDIN_FOOTBRIDGE y
+   fi
 fi
 
+if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
+   bool '  Include support for Intel EBSA285' CONFIG_ARCH_EBSA285
+   bool '  Include support for Chalice CATS boards' CONFIG_CATS
+   bool '  Include support for Corel NetWinder' CONFIG_ARCH_NETWINDER
+fi
+
+if [ "$CONFIG_ADDIN_FOOTBRIDGE" = "y" ]; then
+   # If we get any other footbridge-based plug-in boards, then
+   # add your architecture options here
+   define_bool CONFIG_ARCH_CO285 y
+fi
+
+#
 # Select various configuration options depending on the machine type
 #  Easy check for Acorn-style architectures
-
+#
 if [ "$CONFIG_ARCH_ARC" = "y" -o \
      "$CONFIG_ARCH_A5K" = "y" -o \
      "$CONFIG_ARCH_RPC" = "y" ]; then
-  define_bool CONFIG_ARCH_ACORN y
+   define_bool CONFIG_ARCH_ACORN y
 else
-  define_bool CONFIG_ARCH_ACORN n
+   define_bool CONFIG_ARCH_ACORN n
 fi
 
-if [ "$CONFIG_ARCH_TBOX" = "y" ]; then
-  define_bool CONFIG_BUS_I2C y
-fi
-
-#  These machines always have PCI
-
-if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
-     "$CONFIG_ARCH_VNC" = "y" ]; then
-  define_bool CONFIG_PCI y
-fi
-if [ "$CONFIG_ARCH_EBSA285" = "y" ]; then
-  bool "PCI support" CONFIG_PCI
-fi
-
-# These machines have ISA-DMA
-if [ "$CONFIG_CATS" = "y" -o \
-     "$CONFIG_ARCH_VNC" = "y" ]; then
-  define_bool CONFIG_ISA_DMA y
-else
-  define_bool CONFIG_ISA_DMA n
-fi
-
+#
 # Figure out whether this system uses 26-bit or 32-bit CPUs.  Nobody has
 # ever built a machine that can take both, and now that ARM3 is obsolete
 # nobody is likely to either.
-
+#
 if [ "$CONFIG_ARCH_ARC" = "y" -o \
      "$CONFIG_ARCH_A5K" = "y" ]; then
-  define_bool CONFIG_CPU_32 n
-  define_bool CONFIG_CPU_26 y
+   define_bool CONFIG_CPU_32 n
+   define_bool CONFIG_CPU_26 y
+
+   #
+   # Select memory size
+   #
+   bool '2MB physical memory' CONFIG_PAGESIZE_16
 else
-  define_bool CONFIG_CPU_32 y
-  define_bool CONFIG_CPU_26 n
+   define_bool CONFIG_CPU_32 y
+   define_bool CONFIG_CPU_26 n
+
+   #
+   # Select CPU and optimisation dependent on architecture
+   #
+   if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
+        "$CONFIG_FOOTBRIDGE" = "y" -o \
+        "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
+      define_bool CONFIG_CPU_32v4 y
+      define_bool CONFIG_CPU_SA110 y
+   else
+      if [ "$CONFIG_ARCH_RPC" = "y" ]; then
+	 define_bool CONFIG_CPU_32v3 y
+	 bool 'Support ARM610' CONFIG_CPU_ARM6
+	 bool 'Support ARM710' CONFIG_CPU_ARM7
+	 bool 'Support StrongARM110' CONFIG_CPU_SA110
+      fi
+   fi
 fi
 
-# Now allow the user to choose a more precise CPU.  This is only used to set
-# the flags we pass to GCC, not in any code.
+#if [ "$CONFIG_ARCH_TBOX" = "y" ]; then
+#  define_bool CONFIG_BUS_I2C y
+#fi
 
-choice 'Optimise for CPU'				\
-	"ARM2		CONFIG_CPU_ARM2 \
-	 ARM3		CONFIG_CPU_ARM3 \
-	 ARM6		CONFIG_CPU_ARM6 \
-	 ARM7		CONFIG_CPU_ARM7 \
-	 SA110		CONFIG_CPU_SA110" ARM6
-
-if [ "$CONFIG_CPU_26" = "y" ]; then
-
-# For 26-bit CPUs, the page size changes with the amount of physical RAM!
-# The default is 4MB but if the user has less they have to own up to it here.
-
-  choice 'Physical memory size'		\
-	"4MB+		CONFIG_PAGESIZE_32	\
-	 2MB		CONFIG_PAGESIZE_16	\
-	 1MB/512K	CONFIG_PAGESIZE_8" 4MB+
+#
+#  These machines always have PCI
+#
+if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
+     "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
+   define_bool CONFIG_PCI y
 fi
-endmenu
 
-mainmenu_option next_comment
-comment 'Code maturity level options'
-bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
-bool 'Use new compilation options (for GCC 2.8)' CONFIG_BINUTILS_NEW
-bool 'Compile kernel with frame pointer (for useful debugging)' CONFIG_FRAME_POINTER
+#
+# These machines have ISA-DMA
+#
+if [ "$CONFIG_CATS" = "y" -o \
+     "$CONFIG_ARCH_NETWINDER" = "y" ]; then
+   define_bool CONFIG_ISA_DMA y
+else
+   define_bool CONFIG_ISA_DMA n
+fi
+
+if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
+   bool 'Kernel-mode alignment trap handler' CONFIG_ALIGNMENT_TRAP
+fi
+#bool 'Split text into discardable sections' CONFIG_TEXT_SECTIONS
 endmenu
 
 mainmenu_option next_comment
 comment 'Loadable module support'
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
-  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
-  bool 'Kernel module loader' CONFIG_KMOD
+   bool '  Set version information on all symbols for modules' CONFIG_MODVERSIONS
+   bool '  Kernel module loader' CONFIG_KMOD
 fi
 endmenu
 
@@ -113,13 +133,19 @@ bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
+tristate 'Math emulation' CONFIG_NWFPE
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+if [ "$CONFIG_CPU_32" = "y" ]; then
+   tristate 'RISC OS personality' CONFIG_ARTHUR
+fi
 
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
-  dep_tristate '  Archimedes hardware' CONFIG_PARPORT_ARC $CONFIG_PARPORT
+  if [ "$CONFIG_ARCH_ARC" = "y" ]; then
+    dep_tristate '  Archimedes hardware' CONFIG_PARPORT_ARC $CONFIG_PARPORT
+  fi
   dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
 # If exactly one hardware type is selected then parport will optimise away
 # support for loading any others.  Defeat this if the user is keen.
@@ -129,10 +155,24 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
     fi
   fi
 fi
-if [ "$CONFIG_ARCH_EBSA285" = "y" -o \
-     "$CONFIG_ARCH_EBSA110" = "y" -o \
-     "$CONFIG_ARCH_VNC" = "y" ]; then
-  string 'Initial kernel command string' CONFIG_CMDLINE ""
+if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
+     "$CONFIG_ARCH_NETWINDER" = "y" -o \
+     "$CONFIG_CATS" = "y" ]; then
+   string 'Initial kernel command string' CONFIG_CMDLINE ""
+fi
+if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
+     "$CONFIG_ARCH_EBSA110" = "y" -o   \
+     "$CONFIG_ARCH_EBSA285" = "y" -o   \
+     "$CONFIG_ARCH_CO285" = "y" ]; then
+   bool 'Timer and CPU usage LEDs' CONFIG_LEDS
+   if [ "$CONFIG_LEDS" = "y" ]; then
+      if [ "$CONFIG_ARCH_NETWINDER" = "y" -o \
+	   "$CONFIG_ARCH_EBSA285" = "y" -o   \
+	   "$CONFIG_ARCH_CO285" = "y" ]; then
+         bool '  Timer LED' CONFIG_LEDS_TIMER
+         bool '  CPU usage LED' CONFIG_LEDS_CPU
+      fi
+   fi
 fi
 endmenu
 
@@ -141,63 +181,46 @@ source drivers/pnp/Config.in
 source drivers/block/Config.in
 
 if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-  source drivers/acorn/block/Config.in
+   source drivers/acorn/block/Config.in
 fi
 
-if [ "$CONFIG_VGA_CONSOLE" = "n" -a "$CONFIG_FB" = "n" ]; then
-  source arch/arm/drivers/char/Config.in
-else
-  source drivers/char/Config.in
-fi
+source drivers/char/Config.in
 if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-  source drivers/acorn/char/Config.in
+   if [ "$CONFIG_BUSMOUSE" = "y" ]; then
+      if [ "$CONFIG_ARCH_RPC" != "y" ]; then
+         define_bool CONFIG_KBDMOUSE y
+      else
+         define_bool CONFIG_RPCMOUSE y
+      fi
+   fi
 fi
 
 if [ "$CONFIG_VT" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'Console drivers'
-  if [ "$CONFIG_ARCH_ACORN" != "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
-    bool 'VGA text console' CONFIG_VGA_CONSOLE
-  fi
-  bool 'Support Frame buffer devices' CONFIG_FB
-  source drivers/video/Config.in
-  endmenu
+   mainmenu_option next_comment
+   comment 'Console drivers'
+   if [ "$CONFIG_ARCH_ACORN" != "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
+      bool 'VGA text console' CONFIG_VGA_CONSOLE
+   fi
+   bool 'Support Frame buffer devices' CONFIG_FB
+   source drivers/video/Config.in
+   endmenu
 fi
 
 if [ "$CONFIG_NET" = "y" ]; then
-  source net/Config.in
-fi
+   source net/Config.in
 
-if [ "$CONFIG_NET" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'Network device support'
+   source net/ax25/Config.in
 
-  bool 'Network device support?' CONFIG_NETDEVICES
-  if [ "$CONFIG_NETDEVICES" = "y" ]; then
-    source drivers/net/Config.in
-  fi
-  endmenu
-fi
+   source net/irda/Config.in
 
-mainmenu_option next_comment
-comment 'SCSI support'
+   mainmenu_option next_comment
+   comment 'Network device support'
 
-tristate 'SCSI support?' CONFIG_SCSI
-
-if [ "$CONFIG_SCSI" != "n" ]; then
-  source drivers/scsi/Config.in
-fi
-endmenu
-
-if [ "$CONFIG_ARCH_ACORN" = "y" -o "$CONFIG_PCI" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'Sound'
-
-  tristate 'Sound support' CONFIG_SOUND
-  if [ "$CONFIG_SOUND" != "n" ]; then
-    source drivers/sound/Config.in
-  fi
-  endmenu
+   bool 'Network device support?' CONFIG_NETDEVICES
+   if [ "$CONFIG_NETDEVICES" = "y" ]; then
+      source drivers/net/Config.in
+   fi
+   endmenu
 fi
 
 # mainmenu_option next_comment
@@ -205,16 +228,53 @@ fi
 #
 # tristate 'ISDN support' CONFIG_ISDN
 # if [ "$CONFIG_ISDN" != "n" ]; then
-#   source drivers/isdn/Config.in
+#    source drivers/isdn/Config.in
 # fi
 # endmenu
+
+mainmenu_option next_comment
+comment 'SCSI support'
+
+tristate 'SCSI support?' CONFIG_SCSI
+
+if [ "$CONFIG_SCSI" != "n" ]; then
+   source drivers/scsi/Config.in
+fi
+endmenu
+
+if [ "$CONFIG_ARCH_ACORN" = "y" -o "$CONFIG_PCI" = "y" ]; then
+   mainmenu_option next_comment
+   comment 'Sound'
+
+   tristate 'Sound support' CONFIG_SOUND
+   if [ "$CONFIG_SOUND" != "n" ]; then
+      source drivers/sound/Config.in
+   fi
+   endmenu
+fi
 
 source fs/Config.in
 
 mainmenu_option next_comment
 comment 'Kernel hacking'
 
-bool 'Debug kernel errors' CONFIG_DEBUG_ERRORS
+bool 'Compile kernel with frame pointer (for useful debugging)' CONFIG_FRAME_POINTER
+bool 'Verbose kernel error messages' CONFIG_DEBUG_ERRORS
+bool 'Verbose user fault messages' CONFIG_DEBUG_USER
+bool 'Include debugging information in kernel binary' CONFIG_DEBUG_INFO
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
+if [ "$CONFIG_CPU_26" = "y" ]; then
+   bool 'Disable pgtable cache' CONFIG_NO_PGT_CACHE
+fi
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   # These options are only for real kernel hackers
+   # who want to get their hands dirty. 
+   bool 'Kernel low-level debugging functions' CONFIG_DEBUG_LL
+   if [ "$CONFIG_DEBUG_LL" = "y" ]; then
+      if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
+         bool 'Kernel low-level debugging messages via DC21285 port' CONFIG_DEBUG_DC21285_PORT
+      fi
+   fi
+fi
 endmenu
