@@ -247,14 +247,21 @@ static int build_dmatable (ide_drive_t *drive)
 static int config_drive_for_dma (ide_drive_t *drive)
 {
 	const char **list;
-
 	struct hd_driveid *id = drive->id;
+
 	if (id && (id->capability & 1)) {
-		/* Enable DMA on any drive that supports mword2 DMA */
-		if ((id->field_valid & 2) && (id->dma_mword & 0x404) == 0x404) {
-			drive->using_dma = 1;
-			return 0;		/* DMA enabled */
-		}
+		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */
+		if (id->field_valid & 4)	/* UltraDMA */
+			if  ((id->dma_ultra & (id->dma_ultra >> 8) & 7)) {
+				drive->using_dma = 1;
+				return 0;	/* dma enabled */
+			}
+		/* Enable DMA on any drive that has mode2 DMA (multi or single) enabled */
+		if (id->field_valid & 2)	/* regular DMA */
+			if  ((id->dma_mword & 0x404) == 0x404 || (id->dma_1word & 0x404) == 0x404) {
+				drive->using_dma = 1;
+				return 0;	/* dma enabled */
+			}
 		/* Consult the list of known "good" drives */
 		list = good_dma_drives;
 		while (*list) {

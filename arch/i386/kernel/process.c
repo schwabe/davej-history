@@ -488,7 +488,7 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	}
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	if (p->ldt)
-		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,p->ldt, 512);
+		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,p->ldt, LDT_ENTRIES);
 	else
 		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&default_ldt, 1);
 	p->tss.bitmap = offsetof(struct thread_struct,io_bitmap);

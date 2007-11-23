@@ -272,6 +272,7 @@
  *			acknowledge media change on removable drives
  *			add work-around for BMI drives
  *			remove "LBA" from boot messages
+ * Version 5.53.1	add UDMA "CRC retry" support
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -602,6 +603,11 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 	unsigned long chs_sects   = id->cyls * id->heads * id->sectors;
 	unsigned long _10_percent = chs_sects / 10;
 
+	/* very large drives (8GB+) may lie about the number of cylinders */
+	if (id->cyls == 16383 && id->heads == 16 && id->sectors == 63 && lba_sects > chs_sects) {
+		id->cyls = lba_sects / (16 * 63); /* correct cyls */
+		return 1;	/* lba_capacity is our only option */
+	}
 	/* perform a rough sanity check on lba_sects:  within 10% is "okay" */
 	if ((lba_sects - chs_sects) < _10_percent)
 		return 1;	/* lba_capacity is good */
@@ -636,6 +642,7 @@ static unsigned long current_capacity (ide_drive_t  *drive)
 	/* Determine capacity, and use LBA if the drive properly supports it */
 	if (id != NULL && (id->capability & 2) && lba_capacity_is_ok(id)) {
 		if (id->lba_capacity >= capacity) {
+			drive->cyl = id->lba_capacity / (drive->head * drive->sect);
 			capacity = id->lba_capacity;
 			drive->select.b.lba = 1;
 		}
@@ -1043,12 +1050,15 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 	} else {
 		if (drive->media == ide_disk && (stat & ERR_STAT)) {
 			/* err has different meaning on cdrom and tape */
-			if (err & (BBD_ERR | ECC_ERR))	/* retries won't help these */
+			if (err == ABRT_ERR) {
+				if (drive->select.b.lba && IN_BYTE(IDE_COMMAND_REG) == WIN_SPECIFY)
+					return;	/* some newer drives don't support WIN_SPECIFY */
+			} else if ((err & (ABRT_ERR | ICRC_ERR)) == (ABRT_ERR | ICRC_ERR))
+				; /* UDMA crc error -- just retry the operation */
+			else if (err & (BBD_ERR | ECC_ERR))	/* retries won't help these */
 				rq->errors = ERROR_MAX;
 			else if (err & TRK0_ERR)	/* help it find track zero */
 				rq->errors |= ERROR_RECAL;
-			else if (err & MC_ERR)
-				drive->special.b.mc = 1;
 		}
 		if ((stat & DRQ_STAT) && rq->cmd != WRITE)
 			try_to_flush_leftover_data(drive);
@@ -2270,7 +2280,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		{
 			byte args[4], *argbuf = args;
 			int argsize = 4;
-			if (!suser()) return -EACCES;
+			if (!suser() || securelevel > 0) return -EACCES;
 			if (NULL == (void *) arg) {
 				err = ide_do_drive_cmd(drive, &rq, ide_wait);
 			} else if (!(err = verify_area(VERIFY_READ,(void *)arg, 4))) {
@@ -2561,13 +2571,15 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		drive->head = id->heads;
 		drive->sect = id->sectors;
 	}
+
+	/* calculate drive capacity, and select LBA if possible */
+	(void) current_capacity (drive);
+
 	/* Correct the number of cyls if the bios value is too small */
 	if (drive->sect == drive->bios_sect && drive->head == drive->bios_head) {
 		if (drive->cyl > drive->bios_cyl)
 			drive->bios_cyl = drive->cyl;
 	}
-
-	(void) current_capacity (drive); /* initialize LBA selection */
 
 	if (!strncmp(id->model, "BMI ", 4) &&
 	    strstr(id->model, " ENHANCED IDE ") &&
@@ -2587,8 +2599,12 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 			drive->special.b.set_multmode = 1;
 	}
 	if (drive->autotune != 2 && HWIF(drive)->dmaproc != NULL) {
-		if (!(HWIF(drive)->dmaproc(ide_dma_check, drive)))
-			printk(", DMA");
+		if (!(HWIF(drive)->dmaproc(ide_dma_check, drive))) {
+			if ((id->field_valid & 4) && (id->dma_ultra & (id->dma_ultra >> 8) & 7))
+				printk(", UDMA");
+			else
+				printk(", DMA");
+		}
 	}
 	printk("\n");
 }

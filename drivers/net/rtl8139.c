@@ -15,10 +15,12 @@
 
 	Support and updates available at
 	http://cesdis.gsfc.nasa.gov/linux/drivers/rtl8139.html
+
+	Twister-tuning code contributed by Kinston <shangh@realtek.com.tw>.
 */
 
 static const char *version =
-"rtl8139.c:v0.99A 2/7/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/rtl8139.html\n";
+"rtl8139.c:v0.99B 4/7/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/rtl8139.html\n";
 
 /* A few user-configurable values. */
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
@@ -78,16 +80,6 @@ static int max_interrupt_work = 10;
 #define RUN_AT(x) (jiffies + (x))
 
 #include <linux/delay.h>
-
-#ifdef SA_SHIRQ
-#define FREE_IRQ(irqnum, dev) free_irq(irqnum, dev)
-#define REQUEST_IRQ(i,h,f,n, instance) request_irq(i,h,f,n, instance)
-#define IRQ(irq, dev_id, pt_regs) (irq, dev_id, pt_regs)
-#else
-#define FREE_IRQ(irqnum, dev) free_irq(irqnum)
-#define REQUEST_IRQ(i,h,f,n, instance) request_irq(i,h,f,n)
-#define IRQ(irq, dev_id, pt_regs) (irq, pt_regs)
-#endif
 
 #if (LINUX_VERSION_CODE < 0x20123)
 #define test_and_set_bit(val, addr) set_bit(val, addr)
@@ -178,6 +170,10 @@ enum RTL8129_registers {
 	FlashReg=0x54, GPPinData=0x58, GPPinDir=0x59, MII_SMI=0x5A, HltClk=0x5B,
 	MultiIntr=0x5C, TxSummary=0x60,
 	BMCR=0x62, BMSR=0x64, NWayAdvert=0x66, NWayLPAR=0x68, NWayExpansion=0x6A,
+	/* Undocumented registers, but required for proper operation. */
+	FIFOTMS=0x70,	/* FIFO Test Mode Select */
+	CSCR=0x74,	/* Chip Status and Configuration Register. */
+	PARA78=0x78, PARA7c=0x7c,	/* Magic transceiver parameter register. */
 };
 
 enum ChipCmdBits {
@@ -197,6 +193,20 @@ enum RxStatusBits {
 	RxMulticast=0x8000, RxPhysical=0x4000, RxBroadcast=0x2000,
 	RxBadSymbol=0x0020, RxRunt=0x0010, RxTooLong=0x0008, RxCRCErr=0x0004,
 	RxBadAlign=0x0002, RxStatusOK=0x0001,
+};
+
+enum CSCRBits {
+	CSCR_LinkOKBit=0x0400, CSCR_LinkChangeBit=0x0800,
+	CSCR_LinkStatusBits=0x0f000, CSCR_LinkDownOffCmd=0x003c0,
+	CSCR_LinkDownCmd=0x0f3c0,
+};	
+
+/* Twister tuning parameters from RealTek.  Completely undocumented. */
+unsigned long param[4][4]={
+	{0x0cb39de43,0x0cb39ce43,0x0fb38de03,0x0cb38de43},
+	{0x0cb39de43,0x0cb39ce43,0x0cb39ce83,0x0cb39ce83},
+	{0x0cb39de43,0x0cb39ce43,0x0cb39ce83,0x0cb39ce83},
+	{0x0bb39de43,0x0bb39ce43,0x0bb39ce83,0x0bb39ce83}
 };
 
 struct rtl8129_private {
@@ -220,7 +230,7 @@ struct rtl8129_private {
 	unsigned char *tx_bufs;				/* Tx bounce buffer region. */
 	unsigned char mc_filter[8];			/* Current multicast filter. */
 	char phys[4];						/* MII device addresses. */
-	int in_interrupt;					/* Alpha need word-wide lock. */
+	int in_interrupt;					/* Alpha needs word-wide lock. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Full-duplex operation requested. */
 	unsigned int default_port:4;		/* Last dev->if_port value. */
@@ -596,8 +606,7 @@ rtl8129_open(struct device *dev)
 	/* Soft reset the chip. */
 	outb(CmdReset, ioaddr + ChipCmd);
 
-	if (request_irq(dev->irq, &rtl8129_interrupt, SA_SHIRQ,
-					"RealTek RTL8129/39 Fast Ethernet", dev)) {
+	if (request_irq(dev->irq, &rtl8129_interrupt, SA_SHIRQ, dev->name, dev)) {
 		return -EAGAIN;
 	}
 
@@ -735,6 +744,9 @@ static void rtl8129_tx_timeout(struct device *dev)
 	int ioaddr = dev->base_addr;
 	int i;
 
+	/* Disable interrupts by clearing the interrupt mask. */
+	outw(0x0000, ioaddr + IntrMask);
+
 	if (rtl8129_debug > 0)
 		printk(KERN_WARNING "%s: Transmit timeout, status %2.2x %4.4x.\n",
 			   dev->name, inb(ioaddr + ChipCmd), inw(ioaddr + IntrStatus));
@@ -754,12 +766,39 @@ static void rtl8129_tx_timeout(struct device *dev)
 			   dev->name, inw(ioaddr + BMSR));
 	}
 
-#ifdef notdef
 	/* Soft reset the chip. */
 	outb(CmdReset, ioaddr + ChipCmd);
 	for (i = 0; i < 6; i++)
 		outb(dev->dev_addr[i], ioaddr + MAC0 + i);
-#endif
+
+	{							/* Save the unsent Tx packets. */
+		struct sk_buff *saved_skb[NUM_TX_DESC], *skb;
+		int j = 0;
+		for (; tp->cur_tx - tp->dirty_tx > 0 ; tp->dirty_tx++)
+			saved_skb[j++] = tp->tx_skbuff[tp->dirty_tx % NUM_TX_DESC];
+		tp->dirty_tx = tp->cur_tx = 0;
+
+		for (i = 0; i < j; i++) {
+			skb = tp->tx_skbuff[i] = saved_skb[i];
+			if ((long)skb->data & 3) {		/* Must use alignment buffer. */
+				memcpy(tp->tx_buf[i], skb->data, skb->len);
+				outl(virt_to_bus(tp->tx_buf[i]), ioaddr + TxAddr0 + i*4);
+			} else
+				outl(virt_to_bus(skb->data), ioaddr + TxAddr0 + i*4);
+			/* Note: the chip doesn't have auto-pad! */
+			outl(((TX_FIFO_THRESH<<11) & 0x003f0000) |
+				 (skb->len >= ETH_ZLEN ? skb->len : ETH_ZLEN),
+				 ioaddr + TxStat0 + i*4);
+		}
+		tp->cur_tx = i;
+		while (i < NUM_TX_DESC)
+			tp->tx_skbuff[i] = 0;
+		if (tp->cur_tx - tp->dirty_tx < NUM_TX_DESC) {/* Typical path */
+			dev->tbusy = 0;
+		} else {
+			tp->tx_full = 1;
+		}
+	}
 
 	/* Must enable Tx/Rx before setting transfer thresholds! */
 	set_rx_mode(dev);
@@ -770,6 +809,9 @@ static void rtl8129_tx_timeout(struct device *dev)
 
 	dev->trans_start = jiffies;
 	tp->stats.tx_errors++;
+	/* Enable all known interrupts by setting the interrupt mask. */
+	outw(PCIErr | PCSTimeout | RxUnderrun | RxOverflow | RxFIFOOver
+		 | TxErr | TxOK | RxErr | RxOK, ioaddr + IntrMask);
 	return;
 }
 
@@ -837,7 +879,7 @@ rtl8129_start_xmit(struct sk_buff *skb, struct device *dev)
 
 /* The interrupt handler does all of the Rx thread work and cleans up
    after the Tx thread. */
-static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *regs)
+static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)dev_instance;
 	struct rtl8129_private *tp;
@@ -976,12 +1018,12 @@ static void rtl8129_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *r
 			   dev->name, inl(ioaddr + IntrStatus));
 
 	dev->interrupt = 0;
-	tp->in_interrupt = 0;
+	clear_bit(0, (void*)&tp->in_interrupt);
 	return;
 }
 
-/* Todo: The data sheet doesn't describe the Rx ring at all, so I'm winging
-   it here until I have a chip to play with. 8/30/97 */
+/* The data sheet doesn't describe the Rx ring at all, so I'm guessing at the
+   field alignments and semantics. */
 static int
 rtl8129_rx(struct device *dev)
 {
@@ -1025,6 +1067,12 @@ rtl8129_rx(struct device *dev)
 				tp->stats.rx_frame_errors++;
 			if (rx_status & (RxRunt|RxTooLong)) tp->stats.rx_length_errors++;
 			if (rx_status & RxCRCErr) tp->stats.rx_crc_errors++;
+			/* Reset the receiver, based on RealTek recommendation. (Bug?) */
+			tp->cur_rx = 0;
+			outb(CmdTxEnb, ioaddr + ChipCmd);
+			outb(CmdRxEnb | CmdTxEnb, ioaddr + ChipCmd);
+			outl((RX_FIFO_THRESH << 13) | (RX_BUF_LEN_IDX << 11) |
+				 (RX_DMA_BURST<<8), ioaddr + RxConfig);
 		} else {
 			/* Malloc up new buffer, compatible with net-2e. */
 			/* Omit the four octet CRC from the length. */
@@ -1166,7 +1214,6 @@ static inline unsigned ether_crc_le(int length, unsigned char *data)
 	return crc;
 }
 
-
 static void set_rx_mode(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
@@ -1245,7 +1292,8 @@ cleanup_module(void)
 
 /*
  * Local variables:
- *  compile-command: "gcc -DMODVERSIONS  -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c rtl8139.c"
+ *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c rtl8139.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
+ *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c rtl8139.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
  *  c-indent-level: 4
  *  c-basic-offset: 4
  *  tab-width: 4

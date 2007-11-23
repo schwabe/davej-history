@@ -16,7 +16,7 @@
 	http://cesdis.gsfc.nasa.gov/linux/drivers/yellowfin.html
 */
 
-static const char *version = "yellowfin.c:v0.99 1/21/98 becker@cesdis.gsfc.nasa.gov\n";
+static const char *version = "yellowfin.c:v0.99A 4/7/98 becker@cesdis.gsfc.nasa.gov\n";
 
 /* A few user-configurable values. */
 
@@ -28,7 +28,7 @@ static int mtu = 0;
 static int bogus_rx = 0;
 static int dma_ctrl = 0x004A0263; 			/* Constrained by errata */
 static int fifo_cfg = 0x0020;				/* Bypass external Tx FIFO. */
-#elif YF_NEW
+#elif YF_NEW					/* A future perfect board :->.  */
 static int dma_ctrl = 0x00CAC277;			/* Override when loading module! */
 static int fifo_cfg = 0x0028;
 #else
@@ -353,9 +353,9 @@ int yellowfin_probe(struct device *dev)
 		unsigned char pci_bus, pci_device_fn;
 
 		for (;pci_index < 0xff; pci_index++) {
-			unsigned char pci_irq_line, pci_latency;
-			unsigned short pci_command, vendor, device;
-			unsigned int pci_ioaddr, chip_idx = 0;
+			u8 pci_irq_line, pci_latency;
+			u16 pci_command, vendor, device;
+			u32 pci_ioaddr, chip_idx = 0;
 
 #ifdef REVERSE_PROBE_ORDER
 			if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8,
@@ -770,7 +770,7 @@ yellowfin_start_xmit(struct sk_buff *skb, struct device *dev)
 	outl(0x10001000, dev->base_addr + TxCtrl);
 
 	if (yp->cur_tx - yp->dirty_tx < TX_RING_SIZE - 1)
-		dev->tbusy = 0;					/* Typical path */
+		clear_bit(0, (void*)&dev->tbusy);		/* Typical path */
 	else
 		yp->tx_full = 1;
 	dev->trans_start = jiffies;
@@ -823,7 +823,7 @@ static void yellowfin_interrupt IRQ(int irq, void *dev_instance, struct pt_regs 
 			yellowfin_rx(dev);
 
 #ifdef NO_TXSTATS
-		for (; dirty_tx < lp->cur_tx; dirty_tx++) {
+		for (; lp->cur_tx - dirty_tx > 0; dirty_tx++) {
 			int entry = dirty_tx % TX_RING_SIZE;
 			if (lp->tx_ring[entry].status == 0)
 				break;
@@ -833,10 +833,10 @@ static void yellowfin_interrupt IRQ(int irq, void *dev_instance, struct pt_regs 
 			lp->stats.tx_packets++;
 		}
 		if (lp->tx_full && dev->tbusy
-			&& dirty_tx > lp->cur_tx - TX_RING_SIZE + 4) {
+			&& lp->cur_tx - dirty_tx < TX_RING_SIZE - 4) {
 			/* The ring is no longer full, clear tbusy. */
 			lp->tx_full = 0;
-			dev->tbusy = 0;
+			clear_bit(0, (void*)&dev->tbusy);
 			mark_bh(NET_BH);
 		}
 		lp->dirty_tx = dirty_tx;
@@ -844,7 +844,8 @@ static void yellowfin_interrupt IRQ(int irq, void *dev_instance, struct pt_regs 
 		if (intr_status & IntrTxDone
 			|| lp->tx_status[dirty_tx % TX_RING_SIZE].tx_errs) {
 
-			for (dirty_tx = lp->dirty_tx; dirty_tx < lp->cur_tx; dirty_tx++) {
+			for (dirty_tx = lp->dirty_tx; lp->cur_tx - dirty_tx > 0;
+				 dirty_tx++) {
 				/* Todo: optimize this. */
 				int entry = dirty_tx % TX_RING_SIZE;
 				u16 tx_errs = lp->tx_status[entry].tx_errs;
@@ -890,10 +891,10 @@ static void yellowfin_interrupt IRQ(int irq, void *dev_instance, struct pt_regs 
 #endif
 
 			if (lp->tx_full && dev->tbusy
-				&& dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
+				&& lp->cur_tx - dirty_tx < TX_RING_SIZE - 2) {
 				/* The ring is no longer full, clear tbusy. */
 				lp->tx_full = 0;
-				dev->tbusy = 0;
+				clear_bit(0, (void*)&dev->tbusy);
 				mark_bh(NET_BH);
 			}
 
@@ -937,7 +938,7 @@ static void yellowfin_interrupt IRQ(int irq, void *dev_instance, struct pt_regs 
 	}
 
 	dev->interrupt = 0;
-	lp->in_interrupt = 0;
+	clear_bit(0, (void*)&lp->in_interrupt);
 	return;
 }
 
@@ -1004,7 +1005,7 @@ yellowfin_rx(struct device *dev)
 #endif
 		} else {
 			u8 bogus_cnt = buf_addr[frm_size - 8];
-			short pkt_len = frm_size - 8 - bogus_cnt;
+			int pkt_len = frm_size - 8 - bogus_cnt;
 			struct sk_buff *skb;
 			int rx_in_place = 0;
 
@@ -1207,9 +1208,8 @@ static inline unsigned ether_crc_le(int length, unsigned char *data)
 }
 
 
-static void
 #ifdef NEW_MULTICAST
-set_rx_mode(struct device *dev)
+static void set_rx_mode(struct device *dev)
 #else
 static void set_rx_mode(struct device *dev, int num_addrs, void *addrs);
 #endif
@@ -1293,7 +1293,8 @@ cleanup_module(void)
 
 /*
  * Local variables:
- *  compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -c yellowfin.c"
+ *  compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -c yellowfin.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
+ *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -c yellowfin.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
  *  c-indent-level: 4
  *  c-basic-offset: 4
  *  tab-width: 4

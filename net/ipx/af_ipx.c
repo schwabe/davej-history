@@ -1283,6 +1283,9 @@ static __u16 ipx_set_checksum(ipx_packet *packet,int length)
 	 */
 
 	__u32 i=length>>1;
+	char    hops = packet->ipx_tctrl;
+
+	packet->ipx_tctrl = 0;     /* hop count excluded from checksum calc */
 
 	/*
 	 *	Loop through all complete words except the checksum field 
@@ -1298,6 +1301,7 @@ static __u16 ipx_set_checksum(ipx_packet *packet,int length)
 	if(packet->ipx_pktsize&htons(1))
 		sum+=ntohs(0xff00)&*p;
 
+	packet->ipx_tctrl = hops;
 	/*
 	 *	Do final fixup 
 	 */

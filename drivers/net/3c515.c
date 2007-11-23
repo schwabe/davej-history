@@ -1,6 +1,6 @@
 /* 3c515.c: A 3Com ISA EtherLink XL "Corkscrew" ethernet driver for linux. */
 /*
-	Written 1997 by Donald Becker.
+	Written 1997-1998 by Donald Becker.
 
 	This software may be used and distributed according to the terms
 	of the GNU Public License, incorporated herein by reference.
@@ -12,7 +12,7 @@
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 */
 
-static char *version = "3c515.c:v0.06 12/5/97 becker@cesdis.gsfc.nasa.gov\n";
+static char *version = "3c515.c:v0.99 4/7/98 becker@cesdis.gsfc.nasa.gov\n";
 #define CORKSCREW 1
 
 /* "Knobs" that adjust features and parameters. */
@@ -115,6 +115,11 @@ static int rx_nocopy = 0, rx_copy = 0, queued_packet = 0;
    aliased registers at <base>+0x400.
    */
 #define CORKSCREW_TOTAL_SIZE 0x20
+
+#ifdef HAVE_DEVLIST
+struct netdev_entry tc515_drv =
+{"3c515", tc515_probe, CORKSCREW_TOTAL_SIZE, NULL};
+#endif
 
 #ifdef DRIVER_DEBUG
 int vortex_debug = DRIVER_DEBUG;
@@ -408,7 +413,7 @@ init_module(void)
 }
 
 #else
-int isa515_probe(struct device *dev)
+int tc515_probe(struct device *dev)
 {
 	int cards_found = 0;
 

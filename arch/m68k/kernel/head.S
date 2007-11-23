@@ -65,6 +65,7 @@
  *   d4 - machine type
  */
 
+#include <linux/config.h>
 #include <linux/autoconf.h>
 #include <linux/linkage.h>
 #include <asm/bootinfo.h>

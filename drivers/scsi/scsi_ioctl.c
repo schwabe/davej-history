@@ -368,7 +368,7 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
     case SCSI_IOCTL_PROBE_HOST:
 	return ioctl_probe(dev->host, arg);
     case SCSI_IOCTL_SEND_COMMAND:
-	if(!suser())  return -EACCES;
+	if(!suser() || securelevel > 0)  return -EACCES;
 	return ioctl_command((Scsi_Device *) dev, arg);
     case SCSI_IOCTL_DOORLOCK:
 	if (!dev->removable || !dev->lockable) return 0;

@@ -24,6 +24,7 @@
 #ifndef _FRAD_H_
 #define _FRAD_H_
 
+#include <linux/config.h>
 #include <linux/if.h>
 
 /* Structures and constants associated with the DLCI device driver */

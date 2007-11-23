@@ -1404,16 +1404,7 @@ CONFIG_SCSI_AIC7XXX
   394x PCI cards, 3985 PCI card, and several versions of the Adaptec
   built-in SCSI controllers on various PC motherboards.  Information on
   the configuration options for this controller can be found by checking
-  the help file for each of the available configuration options.
-
-Enable tagged command queueing
-CONFIG_AIC7XXX_TAGGED_QUEUEING
-  Tagged command queueing is used to allow acceptable devices to have more
-  than one SCSI command active on the SCSI bus at the same time.  Regardless
-  of this option setting, only devices that report they are capable of
-  tagged queueing will use this support.  This option is highly recommended
-  if you use any SCSI hard drives on your aic7xxx SCSI controller for
-  performance reasons.  Default: Y
+  the README.aic7xxx file, usually in /usr/src/linux/drivers/scsi.
 
 Override driver defaults for commands per LUN
 CONFIG_OVERRIDE_CMDS
@@ -1422,6 +1413,10 @@ CONFIG_OVERRIDE_CMDS
   active at one time.  This option only effects tagged queueing capable
   devices.  The driver uses a "failsafe" value of 8 by default.  This is
   much lower than many devices can handle, but left in place for safety sake.
+  NOTE: This does not actually enabled tagged queueing on any particular
+  device.  The driver has changed in this respect.  Please see the file
+  README.aic7xxx in /usr/src/linux/drivers/scsi for more information on how
+  to get particular devices to use tagged command queueing.
   Default: N
 
 Maximum number of commands per LUN
@@ -1436,14 +1431,6 @@ CONFIG_AIC7XXX_CMDS_PER_LUN
   performance if a portion of your devices eventually have their commands
   per lun reduced, but is a waste of memory if all of your devices end
   up reducing this number down to a more reasonable figure.  Default: 24
-
-Enable SCB paging
-CONFIG_AIC7XXX_PAGE_ENABLE
-  This option allows the driver to issue more commands to the controller
-  than it has physical space to store.  Since some aic7xxx chipsets can only
-  store 3 commands, and the majority can only store 16, not enabling this
-  capability can effectively negate any performance increase you might get
-  from enabling Tagged Queueing.  Default: Y
 
 Collect statistics to report in /proc
 CONFIG_AIC7XXX_PROC_STATS
@@ -1466,8 +1453,8 @@ CONFIG_AIC7XXX_RESET_DELAY
   ready for the next command, but most hard drives and CD-ROM devices are
   ready in only a few seconds.  This option has a maximum upper limit of
   20 seconds to avoid bad interactions between the aic7xxx driver and the
-  rest of the linux kernel.  The default value is a "failsafe" value that
-  should work with just about any device.  Default: 15
+  rest of the linux kernel.  The default value has been reduced.  If this
+  doesn't work with your hardware, try increasing this value.  Default: 5
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC

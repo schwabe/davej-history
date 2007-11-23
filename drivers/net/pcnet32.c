@@ -12,7 +12,7 @@
  * 	This driver is for AMD PCnet-PCI based ethercards
  */
 
-static const char *version = "pcnet32.c:v0.99A 4/2/98 tsbogend@alpha.franken.de\n";
+static const char *version = "pcnet32.c:v0.99B 4/4/98 DJBecker/TSBogend.\n";
 
 /* A few user-configurable values. */
 
@@ -171,6 +171,19 @@ struct pcnet32_private {
 	unsigned long lock;
 };
 
+static struct pcnet_chip_type {
+	int id_number;
+	const char *name;
+	int flags;
+} chip_table[] = {
+	{0x2420, "PCnet/PCI 79C970", 0},
+	{0x2430, "PCnet32", 0},
+	{0x2621, "PCnet/PCI II 79C970A", 0},
+	{0x2623, "PCnet/PCI II 79C971A", 0},
+	{0x0, 	 "PCnet32 (unknown)", 0},
+};
+
+/* Index of functions. */
 int  pcnet32_probe(struct device *dev);
 static int  pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char irq_line);
 static int  pcnet32_open(struct device *dev);
@@ -252,7 +265,7 @@ static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char
 {
 	struct pcnet32_private *lp;
 	int i;
-	char *chipname;
+	const char *chipname;
 
 	/* check if there is really a pcnet chip on that ioaddr */
 	if ((inb(ioaddr + 14) != 0x57) || (inb(ioaddr + 15) != 0x57))
@@ -278,20 +291,10 @@ static int pcnet32_probe1(struct device *dev, unsigned int ioaddr, unsigned char
 		if ((chip_version & 0xfff) != 0x003)
 			return ENODEV;
 		chip_version = (chip_version >> 12) & 0xffff;
-		switch (chip_version) {
-		case 0x2420:
-			chipname = "PCnet/PCI 79C970";
-			break;
-		case 0x2430:
-			chipname = "PCnet32";
-			break;
-		case 0x2621:
-			chipname = "PCnet/PCI II 79C970A";
-			break;
-		default:
-			printk("pcnet32: PCnet version %#x, no PCnet32 chip.\n",chip_version);
-			return ENODEV;
-		}
+		for (i = 0; chip_table[i].id_number; i++)
+			if (chip_table[i].id_number == chip_version)
+				break;
+		chipname = chip_table[i].name;
 	}
 
 	dev = init_etherdev(dev, 0);
@@ -379,6 +382,7 @@ pcnet32_open(struct device *dev)
 					dev->name, (void *)dev)) {
 		return -EAGAIN;
 	}
+	MOD_INC_USE_COUNT;
 
 	/* Reset the PCNET32 */
 	inw(ioaddr+PCNET32_RESET);
@@ -840,6 +844,7 @@ pcnet32_close(struct device *dev)
 	outw(0x0004, ioaddr+PCNET32_DATA);
 
 	free_irq(dev->irq, dev);
+	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

@@ -340,7 +340,7 @@ int init_module(void)
 			return -EPERM;
 		}
 		if (register_netdev(dev) != 0) {
-			printk(KERN_WARNING "ne.c: No PCnet/LANCE card found (i/o = 0x%x).\n", io[this_dev]);
+			printk(KERN_WARNING "lance.c: No PCnet/LANCE card found (i/o = 0x%x).\n", io[this_dev]);
 			if (found != 0) return 0;	/* Got at least one. */
 			return -ENXIO;
 		}

@@ -45,12 +45,12 @@ extern int ultra32_probe(struct device *dev);
 extern int wd_probe(struct device *dev);
 extern int el2_probe(struct device *dev);
 extern int ne_probe(struct device *dev);
+extern int ne2k_pci_probe(struct device *dev);
 extern int hp_probe(struct device *dev);
 extern int hp_plus_probe(struct device *dev);
 extern int znet_probe(struct device *);
 extern int express_probe(struct device *);
 extern int eepro_probe(struct device *);
-extern int eepro100_probe(struct device *);
 extern int el3_probe(struct device *);
 extern int at1500_probe(struct device *);
 extern int at1700_probe(struct device *);
@@ -81,7 +81,8 @@ extern int a2065_probe(struct device *);
 extern int ariadne_probe(struct device *);
 extern int hydra_probe(struct device *);
 extern int yellowfin_probe(struct device *);
-extern int epic100_probe(struct device *);
+extern int eepro100_probe(struct device *);
+extern int epic_probe(struct device *);
 extern int rtl8139_probe(struct device *);
 extern int tlan_probe(struct device *);
 extern int isa515_probe(struct device *);
@@ -101,35 +102,53 @@ ethif_probe(struct device *dev)
 	return 1;		/* ENXIO */
 
     if (1
-#ifdef CONFIG_SMC_EPIC
-	&& epic100_probe(dev)
-#endif
-#ifdef CONFIG_YELLOWFIN
-	&& yellowfin_probe(dev)
-#endif
-#ifdef CONFIG_RTL8139
-	&& rtl8139_probe(dev)
+	/* All PCI probes are safe, and thus should be first. */
+#ifdef CONFIG_DE4X5             /* DEC DE425, DE434, DE435 adapters */
+	&& de4x5_probe(dev)
 #endif
 #ifdef CONFIG_DGRS
 	&& dgrs_probe(dev)
 #endif
-#if defined(CONFIG_VORTEX)
-	&& tc59x_probe(dev)
+#ifdef CONFIG_EEXPRESS_PRO100B	/* Intel EtherExpress Pro100B */
+	&& eepro100_probe(dev)
 #endif
-#if defined(CONFIG_SEEQ8005)
-	&& seeq8005_probe(dev)
-#endif
-#if defined(CONFIG_DEC_ELCP)
-	&& tulip_probe(dev)
+#ifdef CONFIG_SMC_EPIC
+	&& epic_probe(dev)
 #endif
 #if defined(CONFIG_HP100)
 	&& hp100_probe(dev)
 #endif	
-#if defined(CONFIG_ULTRA)
-	&& ultra_probe(dev)
+#if defined(CONFIG_NE2K_PCI)
+	&& ne2k_pci_probe(dev)
+#endif
+#ifdef CONFIG_PCNET32
+	&& pcnet32_probe(dev)
+#endif
+#ifdef CONFIG_RTL8139
+	&& rtl8139_probe(dev)
+#endif
+#if defined(CONFIG_VORTEX)
+	&& tc59x_probe(dev)
+#endif
+#if defined(CONFIG_DEC_ELCP)
+	&& tulip_probe(dev)
+#endif
+#ifdef CONFIG_YELLOWFIN
+	&& yellowfin_probe(dev)
+#endif
+	/* Next mostly-safe EISA-only drivers. */
+#ifdef CONFIG_AC3200		/* Ansel Communications EISA 3200. */
+	&& ac3200_probe(dev)
 #endif
 #if defined(CONFIG_ULTRA32)
 	&& ultra32_probe(dev)
+#endif
+	/* Third, sensitive ISA boards. */
+#ifdef CONFIG_AT1700
+	&& at1700_probe(dev)
+#endif
+#if defined(CONFIG_ULTRA)
+	&& ultra_probe(dev)
 #endif
 #if defined(CONFIG_SMC9194)
 	&& smc_init(dev)
@@ -146,20 +165,17 @@ ethif_probe(struct device *dev)
 #if defined(CONFIG_HPLAN_PLUS)
 	&& hp_plus_probe(dev)
 #endif
-#ifdef CONFIG_AC3200		/* Ansel Communications EISA 3200. */
-	&& ac3200_probe(dev)
+#if defined(CONFIG_SEEQ8005)
+	&& seeq8005_probe(dev)
 #endif
 #ifdef CONFIG_E2100		/* Cabletron E21xx series. */
 	&& e2100_probe(dev)
 #endif
-#if defined(CONFIG_NE2000) || defined(NE2000)
+#if defined(CONFIG_NE2000)
 	&& ne_probe(dev)
 #endif
 #ifdef CONFIG_AT1500
 	&& at1500_probe(dev)
-#endif
-#ifdef CONFIG_AT1700
-	&& at1700_probe(dev)
 #endif
 #ifdef CONFIG_FMV18X		/* Fujitsu FMV-181/182 */
 	&& fmv18x_probe(dev)
@@ -170,6 +186,9 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_EL3		/* 3c509 */
 	&& el3_probe(dev)
 #endif
+#ifdef CONFIG_3C515		/* 3c515 */
+	&& tc515_probe(dev)
+#endif
 #ifdef CONFIG_ZNET		/* Zenith Z-Note and some IBM Thinkpads. */
 	&& znet_probe(dev)
 #endif
@@ -179,17 +198,11 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_EEXPRESS_PRO	/* Intel EtherExpress Pro/10 */
 	&& eepro_probe(dev)
 #endif
-#ifdef CONFIG_EEXPRESS_PRO100B	/* Intel EtherExpress Pro100B */
-	&& eepro100_probe(dev)
-#endif
 #ifdef CONFIG_DEPCA		/* DEC DEPCA */
 	&& depca_probe(dev)
 #endif
 #ifdef CONFIG_EWRK3             /* DEC EtherWORKS 3 */
         && ewrk3_probe(dev)
-#endif
-#ifdef CONFIG_DE4X5             /* DEC DE425, DE434, DE435 adapters */
-        && de4x5_probe(dev)
 #endif
 #ifdef CONFIG_APRICOT		/* Apricot I82596 */
 	&& apricot_probe(dev)
@@ -221,6 +234,9 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_NI65
 	&& ni65_probe(dev)
 #endif
+#ifdef CONFIG_LANCE	/* ISA LANCE boards */
+	&& lance_probe(dev)
+#endif
 #ifdef CONFIG_ATARILANCE	/* Lance-based Atari ethernet boards */
 	&& atarilance_probe(dev)
 #endif
@@ -239,11 +255,8 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_TLAN
 	&& tlan_probe(dev)
 #endif
-#ifdef CONFIG_LANCE32
+#ifdef CONFIG_PCNET32
 	&& pcnet32_probe(dev)
-#endif
-#ifdef CONFIG_CORKSCREW
-	&& isa515_probe(dev)
 #endif
 #ifdef CONFIG_LANCE
 	&& lance_probe(dev)

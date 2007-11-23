@@ -5,7 +5,10 @@
  *
  * Copyright 1993, 1994, 1995 Drew Eckhardt, Frederic Potter,
  *	David Mosberger-Tang
+ *
+ * Apr 12, 1998 : Fixed handling of alien header types. [mj]
  */
+
 #include <linux/config.h>
 #include <linux/ptrace.h>
 #include <linux/types.h>
@@ -345,6 +348,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_P6,	"Orion P6"),
  	DEVICE( INTEL,		INTEL_82450GX,	"82450GX Orion P6"),
 	DEVICE(	KTI,		KTI_ET32P2,	"ET32P2"),
+	DEVICE( ADAPTEC,	ADAPTEC_7810,	"AIC-7810 RAID Controller"),
 	DEVICE( ADAPTEC,	ADAPTEC_7850,	"AIC-7850"),
 	DEVICE( ADAPTEC,	ADAPTEC_7855,	"AIC-7855"),
 	DEVICE( ADAPTEC,	ADAPTEC_7860,	"AIC-7860"),
@@ -354,6 +358,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ADAPTEC,	ADAPTEC_7872,	"AIC-7872"),
 	DEVICE( ADAPTEC,	ADAPTEC_7873,	"AIC-7873"),
 	DEVICE( ADAPTEC,	ADAPTEC_7874,	"AIC-7874"),
+	DEVICE( ADAPTEC,	ADAPTEC_7895,	"AIC-7895U"),
 	DEVICE( ADAPTEC,	ADAPTEC_7880,	"AIC-7880U"),
 	DEVICE( ADAPTEC,	ADAPTEC_7881,	"AIC-7881U"),
 	DEVICE( ADAPTEC,	ADAPTEC_7882,	"AIC-7882U"),
@@ -908,7 +913,7 @@ static void *pci_malloc(long size, unsigned long *mem_startp)
 static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 {
 	unsigned int devfn, l, max;
-	unsigned char cmd, tmp, hdr_type = 0;
+	unsigned char cmd, tmp, hdr_type, is_multi = 0;
 	struct pci_dev_info *info;
 	struct pci_dev *dev;
 	struct pci_bus *child;
@@ -919,32 +924,23 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 
 	max = bus->secondary;
 	for (devfn = 0; devfn < 0xff; ++devfn) {
-		if (PCI_FUNC(devfn) == 0) {
-			pcibios_read_config_byte(bus->number, devfn,
-						 PCI_HEADER_TYPE, &hdr_type);
-		} else if (!(hdr_type & 0x80)) {
-			/* not a multi-function device */
+		if (PCI_FUNC(devfn) && !is_multi) {
+			/* Not a multi-function device */
 			continue;
 		}
+		pcibios_read_config_byte(bus->number, devfn, PCI_HEADER_TYPE, &hdr_type);
+		if (!PCI_FUNC(devfn))
+			is_multi = hdr_type & 0x80;
 
-		pcibios_read_config_dword(bus->number, devfn, PCI_VENDOR_ID,
-					  &l);
+		pcibios_read_config_dword(bus->number, devfn, PCI_VENDOR_ID, &l);
 		/* some broken boards return 0 if a slot is empty: */
 		if (l == 0xffffffff || l == 0x00000000) {
-			hdr_type = 0;
+			is_multi = 0;
 			continue;
 		}
 
 		dev = pci_malloc(sizeof(*dev), mem_startp);
 		dev->bus = bus;
-		/*
-		 * Put it into the simple chain of devices on this
-		 * bus.  It is used to find devices once everything is
-		 * set up.
-		 */
-		dev->next = pci_devices;
-		pci_devices = dev;
-
 		dev->devfn  = devfn;
 		dev->vendor = l & 0xffff;
 		dev->device = (l >> 16) & 0xffff;
@@ -956,8 +952,10 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 		 */
 		info = pci_lookup_dev(dev->vendor, dev->device);
 		if (!info) {
-			printk("Warning : Unknown PCI device (%x:%x).  Please read include/linux/pci.h \n",
+#if 0
+			printk("Warning : Unknown PCI device (%x:%x).  Please read include/linux/pci.h\n",
 				dev->vendor, dev->device);
+#endif
 		} else {
 			/* Some BIOS' are lazy. Let's do their job: */
 			if (info->bridge_type != 0xff) {
@@ -986,6 +984,25 @@ static unsigned int scan_bus(struct pci_bus *bus, unsigned long *mem_startp)
 					  PCI_CLASS_REVISION, &l);
 		l = l >> 8;			/* upper 3 bytes */
 		dev->class = l;
+
+		/*
+		 * Check if the header type is known and consistent with
+		 * device type. Bridges should have hdr_type 1, all other
+		 * devices 0.
+		 */
+		if ((dev->class >> 8 == PCI_CLASS_BRIDGE_PCI) != (hdr_type & 0x7f)) {
+			printk(KERN_WARNING "PCI: %02x:%02x [%04x/%04x/%06x] has unknown header type %02x, ignoring.\n",
+				bus->number, dev->devfn, dev->vendor, dev->device, dev->class, hdr_type);
+			continue;
+		}
+
+		/*
+		 * Put it into the simple chain of all PCI devices.
+		 * It is used to find devices once everything is set up.
+		 */
+		dev->next = pci_devices;
+		pci_devices = dev;
+
 		/*
 		 * Now insert it into the list of devices held
 		 * by the parent bus.

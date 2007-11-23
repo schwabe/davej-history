@@ -1,42 +1,5 @@
 TLan Device Driver change log.
 
-0.42	- Coverted tranceiver from misused per-tranceiver functions
-	  to a timer-oriented path that covers four possible classes
-	  of tranceivers:
-		1. Unmanaged
-		2. Manual configuration
-		3. Autonegotiation w/ manual configuration
-		4. Autonegotiation w/ auto configuration
-	- Added ability to force speed and duplex settings.
-	- Made speed, duplex, sa_int, etc, to be set per adapter with
-	  ether= command.
-	- Added support for Olicom OC-2326
-
-0.41	- Added non-bounce buffer paths.  Added TLan_FreeLists to
-	  dispose of unused sk_buff's at device close time.
-	- Discovered inlined functions aren't being inlined, or at
-	  least take up more space than macros would.
-
-0.40	- Refined polarity checking to handle case when polarity
-	  changes to normal from abnormal.
-	- Cleaned up TLan_Probe routine.
-	- Added an option for the SA_INTERRUPT flag to be set.
-	- Created FAQ.
-	- Removed all C++ style comments.
-	- Added error message if devices busmastering is inactive.
-	  Also will now skip device.
-	- Put cli and sti back into TLan_HandleInterrupt.  It makes
-	  me feel better.
-	- Moved the code that checks for boot parameter options to 
-	  tlan_probe.
-
-0.39	- Minor cosmetic cleanups (especially variable declarations).
-	- Changes low level TLAN functions to use dev structures instead
-	  individual data elements.
-        - Changed low level TLAN functions not to play with sti and cli
-	  if in an interrupt routine.
-	- Removed cli and sti from TLan_HandleInterrupt.
-
 0.38	- Added code to isolate the external PHY if the internal PHY is
 	  being used for AUI/BNC connectivity.  Also set the aui and
 	  debug variables from mem_start and mem_end if the driver is

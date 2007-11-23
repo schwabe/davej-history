@@ -18,7 +18,7 @@
 */
 
 static const char *version =
-"epic100.c:v0.99B 2/6/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/epic100.html\n";
+"epic100.c:v0.99B 4/7/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/epic100.html\n";
 
 /* A few user-configurable values. */
 
@@ -691,13 +691,13 @@ epic_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	if (tp->cur_tx - tp->dirty_tx < TX_RING_SIZE/2) {/* Typical path */
 	  flag = 0x10; /* No interrupt */
-	  dev->tbusy = 0;
+	  clear_bit(0, (void*)&dev->tbusy);
 	} else if (tp->cur_tx - tp->dirty_tx == TX_RING_SIZE/2) {
 	  flag = 0x14; /* Tx-done intr. */
-	  dev->tbusy = 0;
+	  clear_bit(0, (void*)&dev->tbusy);
 	} else if (tp->cur_tx - tp->dirty_tx < TX_RING_SIZE - 2) {
 	  flag = 0x10; /* No Tx-done intr. */
-	  dev->tbusy = 0;
+	  clear_bit(0, (void*)&dev->tbusy);
 	} else {
 	  /* Leave room for two additional entries. */
 	  flag = 0x14; /* Tx-done intr. */
@@ -801,7 +801,7 @@ static void epic_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				&& dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
 				/* The ring is no longer full, clear tbusy. */
 				lp->tx_full = 0;
-				dev->tbusy = 0;
+				clear_bit(0, (void*)&dev->tbusy);
 				mark_bh(NET_BH);
 			}
 

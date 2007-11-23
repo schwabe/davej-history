@@ -706,7 +706,7 @@ static void xd_dtc_init_controller (u_char *address)
 	switch ((u_long) address) {
 		case 0x00000:
 		case 0xC8000:	break;			/*initial: 0x320 */
-		case 0xCA000:	if (xd[3]<=0) xd_iobase = 0x324; 
+		case 0xCA000:	xd_iobase = 0x324; 
 				break;
 		case 0xD0000:				/*5150CX*/
 		case 0xD8000:	break;			/*5150CX & 5150XL*/

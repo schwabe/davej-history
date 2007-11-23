@@ -227,6 +227,10 @@ int check_disk_change(kdev_t dev)
 int blkdev_open(struct inode * inode, struct file * filp)
 {
 	int ret = -ENODEV;
+
+	if (securelevel > 0 && (filp->f_mode & FMODE_WRITE))
+		return -EACCES; /* cevans */
+
 	filp->f_op = get_blkfops(MAJOR(inode->i_rdev));
 	if (filp->f_op != NULL){
 		ret = 0;

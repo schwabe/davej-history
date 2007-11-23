@@ -42,8 +42,8 @@ static int wdt_is_open=0;
  *	You must set these - there is no sane way to probe for this board.
  */
  
-int io=0x240;
-int irq=14;
+static int io=0x240;
+static int irq=14;
 
 #define WD_TIMO (100*60)		/* 1 minute */
 

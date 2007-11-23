@@ -15,7 +15,7 @@
 */
 
 static char *version =
-"3c59x.c:v0.49J 2/7/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
+"3c59x.c:v0.99 4/7/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -612,9 +612,9 @@ static int vortex_scan(struct device *dev)
 		unsigned char pci_bus, pci_device_fn;
 
 		for (;pci_index < 0xff; pci_index++) {
-			unsigned char pci_irq_line, pci_latency;
+			u8 pci_irq_line, pci_latency;
 			u16 pci_command, new_command, vendor, device;
-			unsigned int pci_ioaddr;
+			u32 pci_ioaddr;
 
 			if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8,
 									pci_index, &pci_bus, &pci_device_fn)
@@ -1420,7 +1420,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 		outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
 		dev_kfree_skb (skb, FREE_WRITE);
 		if (inw(ioaddr + TxFree) > 1536) {
-			dev->tbusy = 0;
+			clear_bit(0, (void*)&dev->tbusy);
 		} else
 			/* Interrupt us when the FIFO has room for max-sized packet. */
 			outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
@@ -1430,7 +1430,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 	outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
 	dev_kfree_skb (skb, FREE_WRITE);
 	if (inw(ioaddr + TxFree) > 1536) {
-		dev->tbusy = 0;
+		clear_bit(0, (void*)&dev->tbusy);
 	} else
 		/* Interrupt us when the FIFO has room for max-sized packet. */
 		outw(SetTxThreshold + (1536>>2), ioaddr + EL3_CMD);
@@ -1519,7 +1519,7 @@ boomerang_start_xmit(struct sk_buff *skb, struct device *dev)
 			vp->tx_full = 1;
 		else {					/* Clear previous interrupt enable. */
 			prev_entry->status &= ~TxIntrUploaded;
-			dev->tbusy = 0;
+			clear_bit(0, (void*)&dev->tbusy);
 		}
 		dev->trans_start = jiffies;
 		return 0;
@@ -1571,7 +1571,7 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 				printk(KERN_DEBUG "	TX room bit was handled.\n");
 			/* There's room in the FIFO for a full-sized packet. */
 			outw(AckIntr | TxAvailable, ioaddr + EL3_CMD);
-			dev->tbusy = 0;
+			clear_bit(0, (void*)&dev->tbusy);
 			mark_bh(NET_BH);
 		}
 
@@ -1594,14 +1594,14 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 			outw(AckIntr | DownComplete, ioaddr + EL3_CMD);
 			if (lp->tx_full && (lp->cur_tx - dirty_tx <= TX_RING_SIZE - 1)) {
 				lp->tx_full= 0;
-				dev->tbusy = 0;
+				clear_bit(0, (void*)&dev->tbusy);
 				mark_bh(NET_BH);
 			}
 		}
 #ifdef VORTEX_BUS_MASTER
 		if (status & DMADone) {
 			outw(0x1000, ioaddr + Wn7_MasterStatus); /* Ack the event. */
-			dev->tbusy = 0;
+			clear_bit(0, (void*)&dev->tbusy);
 			dev_kfree_skb (lp->tx_skb, FREE_WRITE); /* Release the transfered buffer */
 			mark_bh(NET_BH);
 		}
@@ -1636,7 +1636,7 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 			   dev->name, status);
 
 	dev->interrupt = 0;
-	lp->in_interrupt = 0;
+	clear_bit(0, (void*)&lp->in_interrupt);
 	return;
 }
 
@@ -2108,8 +2108,7 @@ cleanup_module(void)
 /*
  * Local variables:
  *  compile-command: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c59x.c `[ -f /usr/include/linux/modversions.h ] && echo -DMODVERSIONS`"
- *  compile-command-redhat: "gcc -DMODVERSIONS -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c59x.c"
- *  compile-command-alt0: "gcc -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c59x.c"
+ *  SMP-compile-command: "gcc -D__SMP__ -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c59x.c"
  *  compile-command-alt1: "gcc -DCARDBUS -DMODULE -D__KERNEL__ -Wall -Wstrict-prototypes -O6 -c 3c59x.c -o 3c59x_cb.o"
  *  c-indent-level: 4
  *  c-basic-offset: 4
