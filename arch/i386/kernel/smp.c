@@ -601,7 +601,7 @@ void __init init_intel_smp (void)
 		address<<=4;
 		smp_scan_config(address, 0x1000);
 		if (smp_found_config)
-			printk(KERN_WARNING "WARNING: MP table in the EBDA can be UNSAFE, contact linux-smp@vger.rutgers.edu if you experience SMP problems!\n");
+			printk(KERN_WARNING "WARNING: MP table in the EBDA can be UNSAFE, contact linux-smp@vger.kernel.org if you experience SMP problems!\n");
 	}
 }
 

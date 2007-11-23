@@ -78,7 +78,7 @@ struct cs_channel
 	void *state;
 };
 
-#define DRIVER_VERSION "0.09"
+#define DRIVER_VERSION "0.13"
 
 /* magic numbers to protect our data structures */
 #define CS_CARD_MAGIC		0x46524F4D /* "FROM" */
@@ -1577,6 +1577,12 @@ static int cs_open(struct inode *inode, struct file *file)
 	struct cs_state *state = NULL;
 	struct dmabuf *dmabuf = NULL;
 
+	/* Until we debug the record problems this is needed for a stable
+	   secure kernel.. */
+
+	if(file->f_mode& FMODE_READ)
+		return -EINVAL;
+		
 	/* find an avaiable virtual channel (instance of /dev/dsp) */
 	while (card != NULL) {
 		for (i = 0; i < NR_HW_CH; i++) {

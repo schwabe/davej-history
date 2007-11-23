@@ -128,8 +128,8 @@ the following pirq line can be used to force a board into the whitelist:
 [if your system works with no problems after this, then it should be added
 to the official whitelist, contact us]
 
-good luck and mail to linux-smp@vger.rutgers.edu or
-linux-kernel@vger.rutgers.edu if you have any problems that are not covered
+good luck and mail to linux-smp@vger.kernel.org or
+linux-kernel@vger.kernel.org if you have any problems that are not covered
 by this document.
 
 -- mingo

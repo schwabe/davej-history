@@ -54,11 +54,17 @@
     01Aug00 <2.2.17-pre14> andrewm
     - Added 3c556 support (Fred Maciel)
 
+    16Aug00 <2.2.17-pre17> andrem
+    - In vortex_error: don't reset the Tx after txReclaim or maxCollisions errors
+    - In vortex_error(do_tx_reset): only reset dev->tbusy for vortex-style NICs.
+    - In vortex_open(), set vp->tx_full to zero (else we get errors if the device was
+      closed with a full Tx ring).
+
     - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.2 for more details.
 */
 
-static char *version =
-"3c59x.c:v0.99H 01Aug00 Donald Becker and others http://www.scyld.com/network/vortex.html\n";
+static char version[] =
+"3c59x.c 16Aug00 Donald Becker and others http://www.scyld.com/network/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -1245,6 +1251,7 @@ vortex_open(struct device *dev)
 
 	dev->tbusy = 0;
 	dev->start = 1;
+	vp->tx_full = 0;
 
 	outw(RxEnable, ioaddr + EL3_CMD); /* Enable the receiver. */
 	outw(TxEnable, ioaddr + EL3_CMD); /* Enable transmitter. */
@@ -1492,8 +1499,8 @@ vortex_error(struct device *dev, int status)
 		if (tx_status & 0x14)  vp->stats.tx_fifo_errors++;
 		if (tx_status & 0x38)  vp->stats.tx_aborted_errors++;
 		outb(0, ioaddr + TxStatus);
-		if (tx_status & 0x3a)	/* TxReset after 16 collisions, despite what the manual says */
-			do_tx_reset = 1;	/* Also reset on reclaim errors */
+		if (tx_status & 0x30)	/* txJabber or txUnderrun */
+			do_tx_reset = 1;
 		else					/* Merely re-enable the transmitter. */
 			outw(TxEnable, ioaddr + EL3_CMD);
 	}
@@ -1554,13 +1561,14 @@ vortex_error(struct device *dev, int status)
 	if (do_tx_reset) {
 		int j;
 		outw(TxReset, ioaddr + EL3_CMD);
-		for (j = 200; j >= 0 ; j--)
+		for (j = 4000; j >= 0 ; j--)
 			if ( ! (inw(ioaddr + EL3_STATUS) & CmdInProgress))
 				break;
 		outw(TxEnable, ioaddr + EL3_CMD);
-		clear_bit(0, (void*)&dev->tbusy);
-		if (!vp->full_bus_master_tx)
+		if (!vp->full_bus_master_tx) {
+			clear_bit(0, (void*)&dev->tbusy);
 			mark_bh(NET_BH);
+		}
 	}
 
 }

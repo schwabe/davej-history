@@ -1145,7 +1145,7 @@ int get_cpuinfo(char * buffer)
 			x86_cap_flags[14] = "mca";
 			x86_cap_flags[16] = "pat";
 			x86_cap_flags[17] = "pse36";
-			x86_cap_flags[18] = "pn";
+			x86_cap_flags[18] = "psn";
 			x86_cap_flags[24] = "fxsr";
 			x86_cap_flags[25] = "xmm";
 			break;

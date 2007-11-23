@@ -684,7 +684,7 @@ void __init setup_ExtINT_pin(unsigned int apic, unsigned int pin, int irq)
 void __init UNEXPECTED_IO_APIC(void)
 {
 	printk(" WARNING: unexpected IO-APIC, please mail\n");
-	printk("          to linux-smp@vger.rutgers.edu\n");
+	printk("          to linux-smp@vger.kernel.org\n");
 }
 
 void __init print_IO_APIC(void)

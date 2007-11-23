@@ -1469,7 +1469,6 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 static int i810_open(struct inode *inode, struct file *file)
 {
 	int i = 0;
-	int minor = MINOR(inode->i_rdev);
 	struct i810_card *card = devs;
 	struct i810_state *state = NULL;
 	struct dmabuf *dmabuf = NULL;
@@ -1548,6 +1547,8 @@ static int i810_release(struct inode *inode, struct file *file)
 {
 	struct i810_state *state = (struct i810_state *)file->private_data;
 	struct dmabuf *dmabuf = &state->dmabuf;
+	struct i810_card *card = state->card;
+	int virt = state->virt;
 
 	/* stop DMA state machine and free DMA buffers/channels */
 	down(&state->open_sem);
@@ -1555,20 +1556,20 @@ static int i810_release(struct inode *inode, struct file *file)
 	if (file->f_mode & FMODE_WRITE) {
 		stop_dac(state);
 		dealloc_dmabuf(state);
-		state->card->free_pcm_channel(state->card, dmabuf->channel->num);
+		card->free_pcm_channel(state->card, dmabuf->channel->num);
 	}
 	if (file->f_mode & FMODE_READ) {
 		stop_adc(state);
 		dealloc_dmabuf(state);
-		state->card->free_pcm_channel(state->card, dmabuf->channel->num);
+		card->free_pcm_channel(state->card, dmabuf->channel->num);
 	}
 
 	state->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 
 	/* we're covered by the open_sem */
 	up(&state->open_sem);
-	kfree(state->card->states[state->virt]);
-	state->card->states[state->virt] = NULL;
+	kfree(card->states[virt]);
+	card->states[virt] = NULL;
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
