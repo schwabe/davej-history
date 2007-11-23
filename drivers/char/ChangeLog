@@ -253,7 +253,7 @@ Sat Feb 18 12:13:51 1995  Theodore Y. Ts'o  (tytso@rt-11)
 Fri Feb 17 09:34:09 1995  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* serial.c (rs_interrupt_single, rs_interrupt, rs_interrupt_multi): 
-		Change the the number of passes made from 64 to be 256,
+		Change the number of passes made from 64 to be 256,
 		configurable with the #define RS_ISR_PASS_LIMIT.
 
 	* serial.c (rs_init, set_serial_info, get_serial_info, rs_close):

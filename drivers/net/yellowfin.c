@@ -942,7 +942,7 @@ static void yellowfin_interrupt IRQ(int irq, void *dev_instance, struct pt_regs 
 	return;
 }
 
-/* This routine is logically part of the interrupt handler, but seperated
+/* This routine is logically part of the interrupt handler, but separated
    for clarity and better register allocation. */
 static int
 yellowfin_rx(struct device *dev)

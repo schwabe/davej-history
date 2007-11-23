@@ -23,9 +23,13 @@
 static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 {
 	struct old_stat tmp;
+	static int nagcount = 0;
 
-	printk("VFS: Warning: %s using old stat() call. Recompile your binary.\n",
-		current->comm);
+	if (++nagcount < 5)
+		printk("VFS: Warning: %s using old stat() call. "
+			"Recompile your binary.\n",
+			current->comm);
+
 	tmp.st_dev = kdev_t_to_nr(inode->i_dev);
 	tmp.st_ino = inode->i_ino;
 	tmp.st_mode = inode->i_mode;

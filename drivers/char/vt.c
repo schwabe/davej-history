@@ -23,6 +23,7 @@
 
 #include <asm/io.h>
 #include <asm/segment.h>
+#include <asm/bitops.h>
 
 #include "kbd_kern.h"
 #include "vt_kern.h"
@@ -147,11 +148,16 @@ kd_size_changed(int row, int col)
  * We also return immediately, which is what was implied within the X
  * comments - KDMKTONE doesn't put the process to sleep.
  */
+
+static unsigned int mksound_lock = 0;
+
 static void
 kd_nosound(unsigned long ignored)
 {
-	/* disable counter 2 */
-	outb(inb_p(0x61)&0xFC, 0x61);
+	/* if sound is being set up, don't turn it off */
+	if (!mksound_lock)
+               /* disable counter 2 */
+               outb(inb_p(0x61)&0xFC, 0x61);
 	return;
 }
 
@@ -165,25 +171,29 @@ _kd_mksound(unsigned int hz, unsigned int ticks)
 
 	if (hz > 20 && hz < 32767)
 		count = 1193180 / hz;
-	
-	cli();
-	del_timer(&sound_timer);
-	if (count) {
-		/* enable counter 2 */
-		outb_p(inb_p(0x61)|3, 0x61);
-		/* set command for counter 2, 2 byte write */
-		outb_p(0xB6, 0x43);
-		/* select desired HZ */
-		outb_p(count & 0xff, 0x42);
-		outb((count >> 8) & 0xff, 0x42);
-
-		if (ticks) {
-			sound_timer.expires = jiffies+ticks;
-			add_timer(&sound_timer);
-		}
-	} else
-		kd_nosound(0);
-	sti();
+        
+        /* ignore multiple simultaneous requests for sound */
+        if (!set_bit(0, &mksound_lock)) {
+        /* set_bit in 2.0.x is same as test-and-set in 2.1.x */
+                del_timer(&sound_timer);
+                if (count) {
+                        /* enable counter 2 */
+                        outb_p(inb_p(0x61)|3, 0x61);
+                        /* set command for counter 2, 2 byte write */
+                        outb_p(0xB6, 0x43);
+                        /* select desired HZ */
+                        outb_p(count & 0xff, 0x42);
+                        outb((count >> 8) & 0xff, 0x42);
+ 
+                        if (ticks) {
+                                sound_timer.expires = jiffies+ticks;
+                                add_timer(&sound_timer);
+                        }
+                } else
+                        kd_nosound(0);
+ 
+                mksound_lock = 0;
+        }	
 	return;
 }
 

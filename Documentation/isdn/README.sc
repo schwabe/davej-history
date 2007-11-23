@@ -42,7 +42,7 @@ TABLE OF CONTENTS
 ---------------
 
 The revision 2 Linux driver for SpellCaster ISA ISDN adapters is built
-upon ISDN4Linux available seperately or as included in Linux 2.0 and later.
+upon ISDN4Linux available separately or as included in Linux 2.0 and later.
 The driver will support a maximum of 4 adapters in any one system of any
 type including DataCommute/BRI, DataCommute/PRI and TeleCommute/BRI for a
 maximum of 92 channels for host. The driver is supplied as a module in
@@ -81,7 +81,7 @@ include:
 	  the driver and at the same time doubled the number of I/O ports
 	  probed increasing the likelyhood of finding an adapter.
 	- We now support all ISA adapter models with a single driver instead
-	  of seperate drivers for each model. The revision 2 driver supports
+	  of separate drivers for each model. The revision 2 driver supports
 	  the DataCommute/BRI, DataCommute/PRI and TeleCommute/BRI in any
 	  combination up to a maximum of four adapters per system.
 	- On board PPP protocol support has been removed in favour of the

@@ -223,7 +223,7 @@ void UMSDOS_read_inode(struct inode *inode)
 {
 	PRINTK (("read inode %x ino = %d ",inode,inode->i_ino));
 	msdos_read_inode(inode);
-	PRINTK (("ino = %d %d\n",inode->i_ino,inode->i_count));
+	PRINTK (("ino = %d %ld\n",inode->i_ino,inode->i_count));
 	if (S_ISDIR(inode->i_mode)
 		&& (inode->u.umsdos_i.u.dir_info.creating != 0
 			|| inode->u.umsdos_i.u.dir_info.looking != 0

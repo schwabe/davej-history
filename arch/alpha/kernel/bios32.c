@@ -345,13 +345,13 @@ printk("layout_dev: slot %d fn %d off 0x%x base 0x%x\n",
 			 * Alpha implementation of the PCI interface:
 			 *
 			 * In sparse memory address space, the first
-			 * octant (16MB) of every 128MB segment is
-			 * aliased to the the very first 16MB of the
+			 * octant (16 MB) of every 128 MB segment is
+			 * aliased to the very first 16 MB of the
 			 * address space (i.e., it aliases the ISA
 			 * memory address space).  Thus, we try to
 			 * avoid allocating PCI devices in that range.
 			 * Can be allocated in 2nd-7th octant only.
-			 * Devices that need more than 112MB of
+			 * Devices that need more than 112 MB of
 			 * address space must be accessed through
 			 * dense memory space only!
 			 */

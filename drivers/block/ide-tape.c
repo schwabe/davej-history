@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.9 - ALPHA	Nov   5, 1996
+ * linux/drivers/block/ide-tape.c	Version 1.91		May  21, 1998
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  *
@@ -195,15 +195,8 @@
  *                       MTTELL was sometimes returning incorrect results.
  *                       Return the real block size in the MTIOCGET ioctl.
  *                       Some error recovery bug fixes.
- *
- * We are currently in an *alpha* stage. The driver is not complete and not
- * much tested. I would strongly suggest to:
- *
- *	1. Connect the tape to a separate interface and irq.
- *	2. Be truly prepared for a kernel crash and the resulting data loss.
- *	3. Don't rely too much on the resulting backups.
- *
- * Other than that, enjoy !
+ * Ver 1.91  May 21 98   Add support for INTERRUPT DRQ devices.
+ *                       Add "speed == 0" work-around for HP COLORADO 5GB
  *
  * Here are some words from the first releases of hd.c, which are quoted
  * in ide.c and apply here as well:
@@ -1157,11 +1150,6 @@ int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 		printk ("ide-tape: The removable flag is not set\n");support=0;
 	}
 
-	if (gcw.drq_type != 2) {
-		printk ("ide-tape: Sorry, DRQ types other than Accelerated DRQ\n");
-		printk ("ide-tape: are still not supported by the driver\n");support=0;
-	}
-
 	if (gcw.packet_size != 0) {
 		printk ("ide-tape: Packet size is not 12 bytes long\n");
 		if (gcw.packet_size == 1)
@@ -1233,6 +1221,8 @@ void idetape_setup (ide_drive_t *drive)
 {
 	idetape_tape_t *tape=&(drive->tape);
 	unsigned int allocation_length;
+	struct idetape_id_gcw gcw;
+
 #if IDETAPE_ANTICIPATE_READ_WRITE_DSC
 	ide_hwif_t *hwif = HWIF(drive);
 	unsigned long t1, tmid, tn;
@@ -1260,7 +1250,10 @@ void idetape_setup (ide_drive_t *drive)
 	tape->chrdev_direction=idetape_direction_none;
 	tape->reset_issued=0;
 	tape->pc=&(tape->pc_stack [0]);
-	
+
+	*((unsigned short *) &gcw) = drive->id->config;
+	tape->drq_interrupt = (gcw.drq_type == 1) ? 1 : 0;
+
 #if IDETAPE_PIPELINE
 	tape->max_number_of_stages=IDETAPE_MIN_PIPELINE_STAGES;
 #else
@@ -1397,6 +1390,15 @@ void idetape_get_mode_sense_results (ide_drive_t *drive)
 	capabilities->speed=idetape_swap_short (capabilities->speed);
 	capabilities->buffer_size=idetape_swap_short (capabilities->buffer_size);
 
+	if (!capabilities->speed) {
+		printk("ide-tape: %s: overriding capabilities->speed (assuming 650KB/sec)\n", drive->name);
+		capabilities->speed = 650;
+	}
+	if (!capabilities->max_speed) {
+		printk("ide-tape: %s: overriding capabilities->max_speed (assuming 650KB/sec)\n", drive->name);
+		capabilities->max_speed = 650;
+	}
+
 	tape->capabilities=*capabilities;		/* Save us a copy */
 	tape->tape_block_size=capabilities->blk512 ? 512:1024;
 
@@ -1439,6 +1441,26 @@ void idetape_get_mode_sense_results (ide_drive_t *drive)
 	printk ("Current speed in KBps - %d\n",capabilities->speed);	
 	printk ("Buffer size - %d\n",capabilities->buffer_size*512);
 #endif /* IDETAPE_DEBUG_LOG */
+}
+
+static void idetape_transfer_pc (ide_drive_t *drive)
+{
+	idetape_tape_t *tape=&(drive->tape);
+	idetape_packet_command_t *pc = tape->pc;
+	idetape_ireason_reg_t ireason;
+
+	if (ide_wait_stat (drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) {
+		printk (KERN_ERR "ide-tape: Strange, packet command initiated yet DRQ isn't asserted\n");
+		return;
+	}
+	ireason.all=IN_BYTE (IDE_IREASON_REG);
+	if (!ireason.b.cod || ireason.b.io) {
+		printk (KERN_ERR "ide-tape: (IO,CoD) != (0,1) while issuing a packet command\n");
+		ide_do_reset (drive);
+		return;
+	}
+	ide_set_handler (drive, &idetape_pc_intr, WAIT_CMD);	/* Set the interrupt routine */
+	ide_output_data (drive,pc->c,12/4);			/* Send the actual packet */
 }
 
 /*
@@ -1489,7 +1511,6 @@ void idetape_issue_packet_command  (ide_drive_t *drive,idetape_packet_command_t 
 {
 	idetape_tape_t *tape;
 	idetape_bcount_reg_t bcount;
-	idetape_ireason_reg_t ireason;
 	int dma_ok=0;
 
 	tape=&(drive->tape);
@@ -1562,37 +1583,21 @@ void idetape_issue_packet_command  (ide_drive_t *drive,idetape_packet_command_t 
 	OUT_BYTE (bcount.b.high,IDETAPE_BCOUNTH_REG);
 	OUT_BYTE (bcount.b.low,IDETAPE_BCOUNTL_REG);
 	OUT_BYTE (drive->select.all,IDETAPE_DRIVESEL_REG);
-	
-	ide_set_handler (drive,handler,WAIT_CMD);			/* Set the interrupt routine */
-	OUT_BYTE (WIN_PACKETCMD,IDETAPE_ATACOMMAND_REG);		/* Issue the packet command */
-	if (ide_wait_stat (drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) { 	/* Wait for DRQ to be ready - Assuming Accelerated DRQ */	
-		/*
-		 *	We currently only support tape drives which report
-		 *	accelerated DRQ assertion. For this case, specs
-		 *	allow up to 50us. We really shouldn't get here.
-		 *
-		 *	??? Still needs to think what to do if we reach
-		 *	here anyway.
-		 */
-		 
-		printk ("ide-tape: Strange, packet command initiated yet DRQ isn't asserted\n");
-		return;
-	}
-	
-	ireason.all=IN_BYTE (IDETAPE_IREASON_REG);
-	if (!ireason.b.cod || ireason.b.io) {
-		printk ("ide-tape: (IO,CoD) != (0,1) while issuing a packet command\n");
-		ide_do_reset (drive);
-		return;		
-	}
-		
-	ide_output_data (drive,pc->c,12/4);			/* Send the actual packet */
+
 #ifdef CONFIG_BLK_DEV_TRITON
 	if ((pc->dma_in_progress=dma_ok)) {			/* Begin DMA, if necessary */
 		pc->dma_error=0;
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 	}
 #endif /* CONFIG_BLK_DEV_TRITON */
+
+	if (tape->drq_interrupt) {
+		ide_set_handler (drive, &idetape_transfer_pc, WAIT_CMD);
+		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
+	} else {
+		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);
+		idetape_transfer_pc (drive);
+	}
 }
 
 /*

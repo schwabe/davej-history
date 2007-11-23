@@ -104,7 +104,7 @@ struct inode *umsdos_emd_dir_lookup(struct inode *dir, int creat)
 	struct inode *ret = NULL;
 	if (dir->u.umsdos_i.i_emd_dir != 0){
 		ret = iget (dir->i_sb,dir->u.umsdos_i.i_emd_dir);
-		PRINTK (("deja trouve %d %x [%d] "
+		PRINTK (("deja trouve %d %x [%ld] "
 			,dir->u.umsdos_i.i_emd_dir,ret,ret->i_count));
 	}else{
 		umsdos_real_lookup (dir,UMSDOS_EMD_FILE,UMSDOS_EMD_NAMELEN,&ret);

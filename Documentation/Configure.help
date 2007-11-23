@@ -1013,7 +1013,7 @@ CONFIG_IP_MROUTE
 
 PC/TCP compatibility mode
 CONFIG_INET_PCTCP
-  If you have been having difficulties telneting to your Linux machine
+  If you have been having difficulties telnetting to your Linux machine
   from a DOS system that uses (broken) PC/TCP networking software (all
   versions up to OnNet 2.0) over your local ethernet try enabling this
   option.  Everyone else says N.
@@ -4324,10 +4324,10 @@ CONFIG_SUN_OPENPROMIO
 # LocalWords:  ipppd syncppp RFC MPP VJ downloaded icn NICCY Creatix shmem ufr
 # LocalWords:  ibp md ARCnet ether encap NDIS arcether ODI Amigas AmiTCP NetBSD
 # LocalWords:  initrd tue util DES funet des OnNet BIOSP smc Travan Iomega CMS
-# LocalWords:  FC DC dc PPA IOMEGA's ppa RNFS FMV Fujitsu ARPD arpd loran layes
+# LocalWords:  FC DC dc PPA ppa RNFS FMV Fujitsu ARPD arpd loran layes
 # LocalWords:  FRAD indiana framerelay DLCI DCLIs Sangoma SDLA mrouted sync sec
 # LocalWords:  Starmode Metricom MosquitoNet mosquitonet kbit nfsroot Digiboard
-# LocalWords:  DIGI Xe Xeve digiboard UMISC touchscreens mtu ethernets HBAs MEX
+# LocalWords:  DIGI Xe Xeve digiboard UMISC touchscreens mtu HBAs MEX
 # LocalWords:  Shifflett netcom js jshiffle WIC DECchip ELCP EtherPower dst RTC
 # LocalWords:  rtc SMP lp Digi Intl RightSwitch DGRS dgrs AFFS Amiga UFS SDL AP
 # LocalWords:  Solaris RISCom riscom syncPPP PCBIT pcbit sparc anu au artoo ufs
@@ -4336,7 +4336,7 @@ CONFIG_SUN_OPENPROMIO
 # LocalWords:  Bernd informatik rwth aachen uae affs multihosting bytecode java
 # LocalWords:  applets applet JDK ncsa cabi SNI Alphatronix readme LANs scarab
 # LocalWords:  winsock RNIS caltech OSPF honour Honouring Mbit Localtalk DEFRAG
-# LocalWords:  localtalk download Packetwin Baycom baycom interwork ascii JNT
+# LocalWords:  download Packetwin Baycom baycom interwork ascii JNT
 # LocalWords:  Camtec proxying indyramp defragment defragmented UDP FAS FASXX
 # LocalWords:  FastSCSI SIO FDC qlogicfas QLogic qlogicisp setbaycom ife ee LJ
 # LocalWords:  ethz ch Travelmates ProAudioSpectrum ProAudio SoundMan SB SBPro

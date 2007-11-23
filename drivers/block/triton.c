@@ -374,7 +374,7 @@ static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
 			 * safely use __get_free_page() here instead
 			 * of __get_dma_pages() -- no ISA limitations.
 			 */
-			dmatable = __get_free_page(GFP_KERNEL);
+			dmatable = __get_free_pages(GFP_KERNEL, 1, 0);
 		}
 		if (dmatable) {
 			hwif->dmatable = (unsigned long *) dmatable;
@@ -503,3 +503,24 @@ void ide_init_triton (byte bus, byte fn)
 quit: if (rc) printk("ide: pcibios access failed - %s\n", pcibios_strerror(rc));
 }
 
+void ide_init_promise (byte bus, byte fn, ide_hwif_t *hwif0, ide_hwif_t *hwif1, unsigned short dma)
+{
+	int rc;
+	unsigned short pcicmd;
+	unsigned int bmiba = 0;
+
+	printk("ide: Enabling DMA for Promise Technology IDE Ultra-DMA 33 on PCI bus %d function %d, port 0x%04x\n", bus, fn, dma);
+	if ((rc = pcibios_read_config_word(bus, fn, 0x04, &pcicmd)) || (pcicmd & 1) == 0 || (pcicmd & 4) == 0)
+		goto abort;
+	if ((rc = pcibios_read_config_dword(bus, fn, 0x20, &bmiba)))
+		goto abort;
+	bmiba &= 0xfff0;	/* extract port base address */
+	if (bmiba != dma || !bmiba)
+		goto abort;
+	hwif0->chipset = ide_promise_udma;
+	hwif1->chipset = ide_promise_udma;
+	init_triton_dma(hwif0, bmiba);
+	init_triton_dma(hwif1, bmiba + 0x08);
+abort:
+	printk("ide: Promise/33 not configured correctly (BIOS)\n");
+}

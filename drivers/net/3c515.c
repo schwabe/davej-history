@@ -149,7 +149,7 @@ The 3c515 series use an interface that's very similar to the 3c900 "Boomerang"
 PCI cards, with the bus master interface extensively modified to work with
 the ISA bus.
 
-The card is capable of full-bus-master transfers with seperate
+The card is capable of full-bus-master transfers with separate
 lists of transmit and receive descriptors, similar to the AMD LANCE/PCnet,
 DEC Tulip and Intel Speedo3.
 

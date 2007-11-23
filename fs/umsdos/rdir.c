@@ -175,7 +175,7 @@ static int UMSDOS_rrmdir (
 			if (ret == 0){
 				int empty;
 				if ((empty = umsdos_isempty (sdir)) != 0){
-					PRINTK (("isempty %d i_count %d ",empty,sdir->i_count));
+					PRINTK (("isempty %d i_count %ld ",empty,sdir->i_count));
 					if (empty == 2){
 						/*
 							Not a Umsdos directory, so the previous msdos_rmdir

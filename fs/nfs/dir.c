@@ -553,11 +553,13 @@ void nfs_sillyrename_cleanup(struct inode *inode)
 	int		error, slen;
 
 	slen = sprintf(silly, ".nfs%ld", inode->i_ino);
-	if ((error = nfs_unlink(dir, silly, slen)) < 0) {
+	error = nfs_proc_remove(NFS_SERVER(dir), NFS_FH(dir), silly);
+	nfs_lookup_cache_remove(dir, NULL, silly);
+	if (error < 0)
 		printk("NFS silly_rename cleanup failed (err = %d)\n",
 					-error);
-	}
 	NFS_RENAMED_DIR(inode) = NULL;
+	iput(dir);
 }
 
 static int nfs_unlink(struct inode *dir, const char *name, int len)

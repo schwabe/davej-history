@@ -261,7 +261,7 @@ reply.
 		      ...
 
 		The metadisk driver is used to span a
-		filesystem across multiple physical disks.
+		file system across multiple physical disks.
 
  10 char	Non-serial mice, misc features
 		  0 = /dev/logibm	Logitech bus mouse
@@ -345,11 +345,11 @@ reply.
 		 33 = /dev/patmgr1	Sequencer patch manager
 		 34 = /dev/midi02	Third MIDI port
 		 50 = /dev/midi03	Fourth MIDI port
-    block	BIOS harddrive callback support
-		  0 = /dev/dos_hda	First BIOS harddrive whole disk
-		 64 = /dev/dos_hdb	Second BIOS harddrive whole disk
-		128 = /dev/dos_hdc	Third BIOS harddrive whole disk
-		192 = /dev/dos_hdd	Fourth BIOS harddrive whole disk
+    block	BIOS hard drive callback support
+		  0 = /dev/dos_hda	First BIOS hard drive whole disk
+		 64 = /dev/dos_hdb	Second BIOS hard drive whole disk
+		128 = /dev/dos_hdc	Third BIOS hard drive whole disk
+		192 = /dev/dos_hdd	Fourth BIOS hard drive whole disk
 
 		Partitions are handled in the same way as IDE disks
 		(see major number 3).
@@ -854,7 +854,7 @@ exist, they should have the following uses.
 /dev/cdwriter	CD-writer	symbolic	Current CD-writer device
 /dev/scanner	scanner		symbolic	Current scanner device
 /dev/modem	modem port	symbolic	Current dialout device
-/dev/root	root device	symbolic	Current root filesystem
+/dev/root	root device	symbolic	Current root file system
 /dev/swap	swap device	symbolic	Current swap device
 
 /dev/modem should not be used for a modem which supports dialin as

@@ -231,7 +231,7 @@ static int umsdos_create_any (
 				if (ret == 0){
 					struct inode *inode = *result;
 					umsdos_lookup_patch (dir,inode,&info.entry,info.f_pos);
-					PRINTK (("inode %p[%d] ",inode,inode->i_count));
+					PRINTK (("inode %p[%ld] ",inode,inode->i_count));
 					PRINTK (("Creation OK: [%d] %s %d pos %d\n",dir->i_ino
 						,info.fake.fname,current->pid,info.f_pos));
 				}else{
@@ -568,7 +568,7 @@ int UMSDOS_link (
 	}else if ((ret = umsdos_nevercreat(dir,name,len,-EPERM))==0){
 		struct inode *olddir;
 		ret = umsdos_get_dirowner(oldinode,&olddir);
-		PRINTK (("umsdos_link dir_owner = %d -> %p [%d] "
+		PRINTK (("umsdos_link dir_owner = %d -> %p [%ld] "
 			,oldinode->u.umsdos_i.i_dir_owner,olddir,olddir->i_count));
 		if (ret == 0){
 			struct umsdos_dirent entry;
@@ -594,7 +594,7 @@ int UMSDOS_link (
 					ret = umsdos_newhidden (olddir,&info);
 					if (ret == 0){
 						olddir->i_count+=2;
-						PRINTK (("olddir[%d] ",olddir->i_count));
+						PRINTK (("olddir[%ld] ",olddir->i_count));
 						ret = umsdos_rename_f (olddir,entry.name
 							,entry.name_len
 							,olddir,info.entry.name,info.entry.name_len
@@ -604,9 +604,9 @@ int UMSDOS_link (
 							if (path == NULL){
 								ret = -ENOMEM;
 							}else{
-								PRINTK (("olddir[%d] ",olddir->i_count));
+								PRINTK (("olddir[%ld] ",olddir->i_count));
 								ret = umsdos_locate_path (oldinode,path);
-								PRINTK (("olddir[%d] ",olddir->i_count));
+								PRINTK (("olddir[%ld] ",olddir->i_count));
 								if (ret == 0){
 									olddir->i_count++;
 									ret = umsdos_symlink_x (olddir
@@ -875,7 +875,7 @@ int UMSDOS_rmdir(
 			if (sdir->i_count > 1){
 				ret = -EBUSY;
 			}else if ((empty = umsdos_isempty (sdir)) != 0){
-				PRINTK (("isempty %d i_count %d ",empty,sdir->i_count));
+				PRINTK (("isempty %d i_count %ld ",empty,sdir->i_count));
 				/* check sticky bit */
 				if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
 				    current->fsuid == sdir->i_uid ||

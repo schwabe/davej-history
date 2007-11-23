@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-floppy.c	Version 0.7 - ALPHA	Aug   4, 1997
+ * linux/drivers/block/ide-floppy.c	Version 0.71 - ALPHA	May  21, 1998
  *
  * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -23,6 +23,11 @@
  *                       Fix potential null dereferencing with DEBUG_LOG.
  * Ver 0.6   Jul  3 97   Limit max sectors per read/write command to 64.
  * Ver 0.7   Aug  4 97   Increase irq timeout from 10 to 100 seconds.
+ * Ver 0.71  May 21 98   Disallow opening a write protected media for writing
+ *                       Limit max sectors only on IOMEGA ZIP 21.D
+ *                       Issue START cmd only if TEST_UNIT_READY fails
+ *                       Add CDROMEJECT ioctl
+ *                       Clean up error messages a bit
  */
 
 #include <linux/config.h>
@@ -41,6 +46,7 @@
 #include <linux/hdreg.h>
 #include <linux/genhd.h>
 #include <linux/malloc.h>
+#include <linux/cdrom.h>
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
@@ -80,10 +86,7 @@
  */
 #define IDEFLOPPY_PC_STACK		(10 + IDEFLOPPY_MAX_PC_RETRIES)
 
-/*
- *	Some drives fail read/write requests with 64 or more sectors.
- */
-#define IDEFLOPPY_MAX_SECTORS		64
+#define IDEFLOPPY_MAX_SECTORS		256
 
 /*
  *	Some drives require a longer irq timeout.
@@ -203,6 +206,8 @@ typedef struct {
 	int blocks, block_size, bs_factor;			/* Current format */
 	idefloppy_capacity_descriptor_t capacity;		/* Last format capacity */
 	idefloppy_flexible_disk_page_t flexible_disk_page;	/* Copy of the flexible disk page */
+	int wp;
+	int max_sectors;
 
 	unsigned int flags;			/* Status/Action flags */
 } idefloppy_floppy_t;
@@ -950,10 +955,16 @@ static void idefloppy_create_start_stop_cmd (idefloppy_pc_t *pc, int start)
 	pc->c[4] = start;
 }
 
+static void idefloppy_create_test_unit_ready_cmd (idefloppy_pc_t *pc)
+{
+	idefloppy_init_pc (pc);
+	pc->c[0] = IDEFLOPPY_TEST_UNIT_READY_CMD;
+}
+
 static void idefloppy_create_rw_cmd (idefloppy_floppy_t *floppy, idefloppy_pc_t *pc, struct request *rq, unsigned long sector)
 {
 	int block = sector / floppy->bs_factor;
-	int blocks = IDEFLOPPY_MIN(rq->nr_sectors / floppy->bs_factor, IDEFLOPPY_MAX_SECTORS);
+	int blocks = IDEFLOPPY_MIN(rq->nr_sectors, floppy->max_sectors) / floppy->bs_factor;
 
 #if IDEFLOPPY_DEBUG_LOG
 	printk ("create_rw1%d_cmd: block == %d, blocks == %d\n",
@@ -1057,6 +1068,7 @@ static int idefloppy_get_flexible_disk_page (ide_drive_t *drive)
 		return 1;
 	}
 	header = (idefloppy_mode_parameter_header_t *) pc.buffer;
+	floppy->wp = header->wp;
 	page = (idefloppy_flexible_disk_page_t *) (header + 1);
 
 	page->transfer_rate = ntohs (page->transfer_rate);
@@ -1075,8 +1087,10 @@ static int idefloppy_get_flexible_disk_page (ide_drive_t *drive)
 	drive->bios_sect = page->sectors;
 	lba_capacity = floppy->blocks * floppy->block_size;
 	if (capacity != lba_capacity) {
-		printk (KERN_NOTICE "%s: The drive reports both %d and %d bytes as its capacity\n",
-			drive->name, capacity, lba_capacity);
+		if (!lba_capacity)
+			printk(KERN_NOTICE "%s: no media in the drive\n");
+		else printk (KERN_NOTICE "%s: The drive reports both %d and %d bytes as its capacity\n",
+			     drive->name, capacity, lba_capacity);
 		capacity = IDEFLOPPY_MIN(capacity, lba_capacity);
 		floppy->blocks = floppy->block_size ? capacity / floppy->block_size : 0;
 	}
@@ -1143,6 +1157,17 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 int idefloppy_ioctl (ide_drive_t *drive, struct inode *inode, struct file *file,
 			unsigned int cmd, unsigned long arg)
 {
+	idefloppy_pc_t pc;
+
+	if (cmd == CDROMEJECT) {
+		if (drive->usage > 1)
+			return -EBUSY;
+		idefloppy_create_prevent_cmd (&pc, 0);
+		(void) idefloppy_queue_pc_tail (drive, &pc);
+		idefloppy_create_start_stop_cmd (&pc, 2);
+		(void) idefloppy_queue_pc_tail (drive, &pc);
+		return 0;
+	}
 	return -EIO;
 }
 
@@ -1160,12 +1185,20 @@ int idefloppy_open (struct inode *inode, struct file *filp, ide_drive_t *drive)
 
 	MOD_INC_USE_COUNT;
 	if (drive->usage == 1) {
-		idefloppy_create_start_stop_cmd (&pc, 1);
-		(void) idefloppy_queue_pc_tail (drive, &pc);
+		idefloppy_create_test_unit_ready_cmd(&pc);
+		if (idefloppy_queue_pc_tail(drive, &pc)) {
+			idefloppy_create_start_stop_cmd (&pc, 1);
+			(void) idefloppy_queue_pc_tail (drive, &pc);
+		}
 		if (idefloppy_get_capacity (drive)) {
 			drive->usage--;
 			MOD_DEC_USE_COUNT;
 			return -EIO;
+		}
+		if (floppy->wp && (filp->f_mode & 2)) {
+			drive->usage--;
+			MOD_DEC_USE_COUNT;
+			return -EROFS;
 		}
 		set_bit (IDEFLOPPY_MEDIA_CHANGED, &floppy->flags);
 		idefloppy_create_prevent_cmd (&pc, 1);
@@ -1328,46 +1361,6 @@ int idefloppy_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 }
 
 /*
- *	idefloppy_get_capabilities asks the floppy about its various
- *	parameters.
- */
-static void idefloppy_get_capabilities (ide_drive_t *drive)
-{
-	idefloppy_pc_t pc;
-	idefloppy_mode_parameter_header_t *header;
-	idefloppy_capabilities_page_t *capabilities;
-	
-	idefloppy_create_mode_sense_cmd (&pc, IDEFLOPPY_CAPABILITIES_PAGE, MODE_SENSE_CURRENT);
-	if (idefloppy_queue_pc_tail (drive,&pc)) {
-		printk (KERN_ERR "ide-floppy: Can't get drive capabilities\n");
-		return;
-	}
-	header = (idefloppy_mode_parameter_header_t *) pc.buffer;
-	capabilities = (idefloppy_capabilities_page_t *) (header + 1);
-
-	if (!capabilities->sflp)
-		printk (KERN_INFO "%s: Warning - system floppy device bit is not set\n", drive->name);
-
-#if IDEFLOPPY_DEBUG_INFO
-	printk (KERN_INFO "Dumping the results of the MODE SENSE packet command\n");
-	printk (KERN_INFO "Mode Parameter Header:\n");
-	printk (KERN_INFO "Mode Data Length - %d\n",header->mode_data_length);
-	printk (KERN_INFO "Medium Type - %d\n",header->medium_type);
-	printk (KERN_INFO "WP - %d\n",header->wp);
-
-	printk (KERN_INFO "Capabilities Page:\n");
-	printk (KERN_INFO "Page code - %d\n",capabilities->page_code);
-	printk (KERN_INFO "Page length - %d\n",capabilities->page_length);
-	printk (KERN_INFO "PS - %d\n",capabilities->ps);
-	printk (KERN_INFO "System Floppy Type device - %s\n",capabilities->sflp ? "Yes":"No");
-	printk (KERN_INFO "Supports Reporting progress of Format - %s\n",capabilities->srfp ? "Yes":"No");
-	printk (KERN_INFO "Non CD Optical device - %s\n",capabilities->ncd ? "Yes":"No");
-	printk (KERN_INFO "Multiple LUN support - %s\n",capabilities->sml ? "Yes":"No");
-	printk (KERN_INFO "Total LUN supported - %s\n",capabilities->tlun ? "Yes":"No");
-#endif /* IDEFLOPPY_DEBUG_INFO */
-}
-
-/*
  *	Driver initialization.
  */
 void idefloppy_setup (ide_drive_t *drive)
@@ -1382,7 +1375,10 @@ void idefloppy_setup (ide_drive_t *drive)
 	floppy->pc = floppy->pc_stack;
 	if (gcw.drq_type == 1)
 		set_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags);
-
-	idefloppy_get_capabilities (drive);
+	if (strcmp(drive->id->model, "IOMEGA ZIP 100 ATAPI") == 0 &&
+	    strcmp(drive->id->fw_rev, "21.D") == 0)
+		floppy->max_sectors = 64;
+	else
+		floppy->max_sectors = IDEFLOPPY_MAX_SECTORS;
 	(void) idefloppy_get_capacity (drive);
 }

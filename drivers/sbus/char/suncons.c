@@ -769,7 +769,7 @@ get_phys (unsigned int addr)
 /*
  * Brooktree is the video dac and is funny to program on the cg6.
  * (it's even funnier on the cg3)
- * The FBC could be the the frame buffer control
+ * The FBC could be the frame buffer control
  * The FHC could be the frame buffer hardware control.
  */
 #define CG6_ROM_OFFSET       0x0

@@ -273,6 +273,10 @@
  *			add work-around for BMI drives
  *			remove "LBA" from boot messages
  * Version 5.53.1	add UDMA "CRC retry" support
+ * Version 5.53.2	add Promise/33 auto-detection and DMA support
+ *			fix MC_ERR handling
+ *			fix mis-detection of NEC cdrom as floppy
+ *			issue ATAPI reset and re-probe after "no response"
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -1059,6 +1063,8 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 				rq->errors = ERROR_MAX;
 			else if (err & TRK0_ERR)	/* help it find track zero */
 				rq->errors |= ERROR_RECAL;
+			else if (err & MC_ERR)
+				drive->special.b.mc = 1;
 		}
 		if ((stat & DRQ_STAT) && rq->cmd != WRITE)
 			try_to_flush_leftover_data(drive);
@@ -2447,11 +2453,11 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 			return;
 		}
 #endif /* CONFIG_BLK_DEV_PROMISE */
-		switch (type) {
+		if (!drive->ide_scsi) switch (type) {
 			case 0:
 				if (!strstr(id->model, "oppy") && !strstr(id->model, "poyp") && !strstr(id->model, "ZIP"))
 					printk("cdrom or floppy?, assuming ");
-				if (drive->media != ide_cdrom) {
+				if (drive->media != ide_cdrom && !strstr(id->model, "CD-ROM")) {
 #ifdef CONFIG_BLK_DEV_IDEFLOPPY
 					printk("FLOPPY drive\n");
 					drive->media = ide_floppy;
@@ -2728,6 +2734,7 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 {
 	int rc;
 	ide_hwif_t *hwif = HWIF(drive);
+	unsigned long timeout;
 #ifdef CONFIG_BLK_DEV_IDEATAPI
 	if (drive->present) {	/* avoid waiting for inappropriate probes */
 		if ((drive->media != ide_disk) && (cmd == WIN_IDENTIFY))
@@ -2752,6 +2759,17 @@ static int do_probe (ide_drive_t *drive, byte cmd)
 	{
 		if ((rc = try_to_identify(drive,cmd)))   /* send cmd and wait */
 			rc = try_to_identify(drive,cmd); /* failed: try again */
+		if (rc == 1 && cmd == WIN_PIDENTIFY && drive->autotune != 2) {
+			printk("%s: no response (status = 0x%02x), resetting drive\n", drive->name, GET_STAT());
+			delay_50ms();
+			OUT_BYTE (drive->select.all, IDE_SELECT_REG);
+			delay_50ms();
+			OUT_BYTE(WIN_SRST, IDE_COMMAND_REG);
+			timeout = jiffies;
+			while ((GET_STAT() & BUSY_STAT) && jiffies < timeout + WAIT_WORSTCASE)
+				delay_50ms();
+			rc = try_to_identify(drive, cmd);
+		}
 		if (rc == 1)
 			printk("%s: no response (status = 0x%02x)\n", drive->name, GET_STAT());
 		(void) GET_STAT();		/* ensure drive irq is clear */
@@ -3085,7 +3103,7 @@ void ide_setup (char *s)
 	if (s[0] == 'h' && s[1] == 'd' && s[2] >= 'a' && s[2] <= max_drive) {
 		const char *hd_words[] = {"none", "noprobe", "nowerr", "cdrom",
 				"serialize", "autotune", "noautotune",
-				"slow", NULL};
+				"slow", "ide-scsi", NULL};
 		unit = s[2] - 'a';
 		hw   = unit / MAX_DRIVES;
 		unit = unit % MAX_DRIVES;
@@ -3117,6 +3135,9 @@ void ide_setup (char *s)
 				goto done;
 			case -8: /* "slow" */
 				drive->slow = 1;
+				goto done;
+			case -9: /* "ide-scsi" */
+				drive->ide_scsi = 1;
 				goto done;
 			case 3: /* cyl,head,sect */
 				drive->media	= ide_disk;
@@ -3516,6 +3537,42 @@ static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci
 #endif /* defined(CONFIG_BLK_DEV_RZ1000) || defined(CONFIG_BLK_DEV_TRITON) */
 #endif /* CONFIG_PCI */
 
+static void ide_probe_promise_20246(void)
+{
+	byte fn, bus;
+	unsigned short io[6], count = 0;
+	unsigned int reg, tmp, i;
+	ide_hwif_t *hwif;
+
+	memset(io, 0, 6 * sizeof(unsigned short));
+	if (pcibios_find_device(PCI_VENDOR_ID_PROMISE, PCI_DEVICE_ID_PROMISE_20246, 0, &bus, &fn))
+		return;
+	printk("ide: Promise Technology IDE Ultra-DMA 33 on PCI bus %d function %d\n", bus, fn);
+	for (reg = PCI_BASE_ADDRESS_0; reg <= PCI_BASE_ADDRESS_5; reg += 4) {
+		pcibios_read_config_dword(bus, fn, reg, &tmp);
+		if (tmp & PCI_BASE_ADDRESS_SPACE_IO)
+			io[count++] = tmp & PCI_BASE_ADDRESS_IO_MASK;
+	}
+	for (i = 2; i < 4; i++) {
+		hwif = ide_hwifs + i;
+		if (hwif->chipset == ide_generic) {
+			printk("ide%d: overridden with command line parameter\n", i);
+			return;
+		}
+		tmp = (i - 2) * 2;
+		if (!io[tmp] || !io[tmp + 1]) {
+			printk("ide%d: invalid port address %x, %x -- aborting\n", i, io[tmp], io[tmp + 1]);
+			return;
+		}
+		hwif->io_base = io[tmp];
+		hwif->ctl_port = io[tmp + 1] + 2;
+		hwif->noprobe = 0;
+	}
+#ifdef CONFIG_BLK_DEV_TRITON
+	ide_init_promise (bus, fn, &ide_hwifs[2], &ide_hwifs[3], io[4]);
+#endif /* CONFIG_BLK_DEV_TRITON */
+}
+
 /*
  * ide_init_pci() finds/initializes "known" PCI IDE interfaces
  *
@@ -3545,6 +3602,7 @@ static void probe_for_hwifs (void)
 		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_1, &ide_init_triton, 0);
 		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB, &ide_init_triton, 0);
 #endif /* CONFIG_BLK_DEV_TRITON */
+		ide_probe_promise_20246();
 	}
 #endif /* CONFIG_PCI */
 #ifdef CONFIG_BLK_DEV_CMD640

@@ -4944,7 +4944,7 @@ int SccbMgr_isr(ULONG pCurrCard)
  *
  * Function: Sccb_bad_isr
  *
- * Description: Some type of interrupt has occured which is slightly
+ * Description: Some type of interrupt has occurred which is slightly
  *              out of the ordinary.  We will now decode it fully, in
  *              this routine.  This is broken up in an attempt to save
  *              processing time.

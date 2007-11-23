@@ -1,5 +1,5 @@
 /*
- * linux/drivers/scsi/ide-scsi.c	Version 0.31 - ALPHA	Apr   3, 1998
+ * linux/drivers/scsi/ide-scsi.c	Version 0.32		May  21, 1998
  *
  * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -19,6 +19,8 @@
  * Ver 0.3   Jul 24 97   Add support for ATAPI PD/CD drives.
  * Ver 0.31  Apr  3 98   Remove buggy MODE_SENSE6/MODE_SELECT6 translation.
  *                       Add variable irq timeout support.
+ * Ver 0.32  May 21 98   Perform maximal data transfer when the drive wants
+ *                        to send us more data than would fit in our buffer.
  */
 
 #include <linux/module.h>
@@ -276,7 +278,18 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 		if ( temp > pc->request_transfer) {
 			if (temp > pc->buffer_size) {
 				printk (KERN_ERR "ide-scsi: The scsi wants to send us more data than expected - discarding data\n");
-				idescsi_discard_data (drive,bcount);
+				temp = pc->buffer_size - pc->actually_transferred;
+				if (temp) {
+					clear_bit(PC_WRITING, &pc->flags);
+					if (pc->sg)
+						idescsi_input_buffers(drive, pc, temp);
+					else
+						atapi_input_bytes(drive, pc->current_position, temp);
+					printk(KERN_ERR "ide-scsi: transferred %d of %d bytes\n", temp, bcount);
+				}
+				pc->actually_transferred += temp;
+				pc->current_position += temp;
+				idescsi_discard_data (drive,bcount - temp);
 				ide_set_handler (drive, &idescsi_pc_intr, get_timeout(pc));
 				return;
 			}

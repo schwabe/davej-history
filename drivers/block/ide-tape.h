@@ -511,6 +511,8 @@ typedef struct {
 	idetape_pipeline_stage_t *last_stage;	/* New requests will be added to the pipeline here */
 	int error_in_pipeline_stage;		/* Set when an error was detected in one of the pipeline stages */	
 	
+	int drq_interrupt;
+	
 } idetape_tape_t;
 
 /*

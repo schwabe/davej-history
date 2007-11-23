@@ -2414,7 +2414,6 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 	case CDROMREADMODE2: {
 		struct cdrom_msf msf;
 		int blocksize, format, stat, lba;
-		struct atapi_toc *toc;
 		char *buf;
 
 		if (cmd == CDROMREADMODE1) {
