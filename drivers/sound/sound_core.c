@@ -452,6 +452,9 @@ int soundcore_init(void)
 #ifdef CONFIG_SOUND_FUSION
 	cs_probe();
 #endif
+#ifdef CONFIG_SOUND_CS4281
+	cs4281_probe();
+#endif
 #ifdef CONFIG_SOUND_EMU10K1
 	init_emu10k1();
 #endif

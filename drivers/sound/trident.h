@@ -246,6 +246,13 @@ enum miscint_bits {
 	ST_IRQ_EN       = 0x00800000, ACGPIO_IRQ      = 0x01000000
 };
 
+enum ali_mpuports {
+	ALI_MPUR0=0x20,
+	ALI_MPUR1=0x21,
+	ALI_MPUR2=0x22,
+	ALI_MPUR3=0x23
+};
+
 #define TRID_REG( trident, x ) ( (trident) -> iobase + (x) )
 
 #define VALIDATE_MAGIC(FOO,MAG)				\

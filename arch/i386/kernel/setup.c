@@ -917,6 +917,8 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 		printk(KERN_INFO "CPU serial number disabled.\n");
 	}
 
+	mcheck_init(c);
+	
 	if (c->x86_vendor == X86_VENDOR_CYRIX) {
 		cyrix_model(c);
 		return;

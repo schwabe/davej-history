@@ -2169,7 +2169,7 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_LINE2, 0x4040 },
 	{ SOUND_MIXER_WRITE_RECLEV, 0x4040 },
 	{ SOUND_MIXER_WRITE_SPEAKER, 0x4040 },
-	{ SOUND_MIXER_WRITE_MIC, 0x4040 }
+	{ SOUND_MIXER_WRITE_MIC, 0x0000 }
 };
 
 /*static*/ int __init init_solo1(void)

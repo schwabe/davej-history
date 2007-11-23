@@ -17,6 +17,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   fi
 fi
 
+dep_tristate 'Crystal CS4281' CONFIG_SOUND_CS4281 $CONFIG_SOUND
 dep_tristate 'Crystal SoundFusion (CS461x)' CONFIG_SOUND_FUSION $CONFIG_SOUND
 dep_tristate 'Creative SBLive! (EMU10K1)' CONFIG_SOUND_EMU10K1 $CONFIG_SOUND
 dep_tristate 'Ensoniq AudioPCI (ES1370)' CONFIG_SOUND_ES1370 $CONFIG_SOUND

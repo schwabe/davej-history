@@ -14,7 +14,8 @@ all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o \
-            ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o
+            ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o \
+	    bluesmoke.o
 OX_OBJS  := i386_ksyms.o
 MX_OBJS  :=
 

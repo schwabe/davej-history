@@ -113,9 +113,11 @@
 #include <asm/hardirq.h>
 #include <linux/bitops.h>
 
+#include "dm.h"
+
 #include "trident.h"
 
-#define DRIVER_VERSION "0.14.5"
+#define DRIVER_VERSION "0.14.6a"
 
 /* magic numbers to protect our data structures */
 #define TRIDENT_CARD_MAGIC	0x5072696E /* "Prin" */
@@ -138,6 +140,10 @@
 /* minor number of /dev/swmodem (temporary, experimental) */
 #define SND_DEV_SWMODEM	7
 
+/* Size of the MIDI buffer */
+#define MIDIINBUF	256
+#define MIDIOUTBUF	256
+
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
@@ -154,6 +160,15 @@ static struct pci_audio_info pci_audio_devices[] = {
 	{PCI_VENDOR_ID_TRIDENT, PCI_DEVICE_ID_TRIDENT_4DWAVE_NX, "Trident 4DWave NX"},
 	{PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_7018, "SiS 7018 PCI Audio"},
 	{PCI_VENDOR_ID_ALI, PCI_DEVICE_ID_ALI_5451, "ALi Audio Accelerator"}
+};
+
+struct midi_stuff{
+	unsigned ird, iwr, icnt;
+	unsigned ord, owr, ocnt;
+	struct wait_queue *iwait;
+	struct wait_queue *owait;
+	unsigned char ibuf[MIDIINBUF];
+	unsigned char obuf[MIDIOUTBUF];
 };
 
 /* "software" or virtual channel, an instance of opened /dev/dsp */
@@ -267,15 +282,24 @@ struct trident_card {
 
 	/* soundcore stuff */
 	int dev_audio;
-
+	int dev_midi;
+	int dev_dmfm;
+	
+	/* Device locks */
+	int midi_on;
+	int dmfm_on;
+	
 	/* structures for abstraction of hardware facilities, codecs, banks and channels*/
 	struct ac97_codec *ac97_codec[NR_AC97];
 	struct trident_pcm_bank banks[NR_BANKS];
 	struct trident_state *states[NR_HW_CH];
+	struct midi_stuff midi;
 
 	/* hardware resources */
 	unsigned long iobase;
 	u32 irq;
+	unsigned long midi_io;
+	unsigned long synth_io;
 	
 	/* Function support */
 	struct trident_channel *(*alloc_pcm_channel)(struct trident_card *);
@@ -1269,6 +1293,35 @@ static void ali_address_interrupt(struct trident_card *card)
 
 }
 
+static void trident_handle_midi(struct trident_card *card)
+{
+	unsigned char ch;
+	int wake = 0;
+
+	while (!(inb(card->iobase + ALI_MPUR1) & 0x80)) {	
+		ch = inb(card->iobase + ALI_MPUR0);
+		if (card->midi.icnt < MIDIINBUF) {
+			card->midi.ibuf[card->midi.iwr] = ch;
+			card->midi.iwr = (card->midi.iwr + 1) % MIDIINBUF;
+			card->midi.icnt++;
+		}
+		wake = 1;
+	}
+	if (wake)
+		wake_up(&card->midi.iwait);
+	wake = 0;
+	while (!(inb(card->iobase + ALI_MPUR1) & 0x40) && card->midi.ocnt > 0) {
+		inb(card->iobase + ALI_MPUR0);
+		outb(card->midi.obuf[card->midi.ord], card->iobase + ALI_MPUR0);
+		card->midi.ord = (card->midi.ord + 1) % MIDIOUTBUF;
+		card->midi.ocnt--;
+		if (card->midi.ocnt < MIDIOUTBUF-16)
+			wake = 1;
+	}
+	if (wake)
+		wake_up(&card->midi.owait);
+}
+
 static void trident_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct trident_card *card = (struct trident_card *)dev_id;
@@ -1284,7 +1337,11 @@ static void trident_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (event & ADDRESS_IRQ) {
 		card->address_interrupt(card);
 	}
-
+	
+	if(event & MPU401_IRQ) {
+		if(card->midi_on)
+			trident_handle_midi(card);
+	}
 	/* manually clear interrupt status, bad hardware design, blame T^2 */
 	outl((ST_TARGET_REACHED | MIXER_OVERFLOW | MIXER_UNDERFLOW),
 	     TRID_REG(card, T4D_MISCINT));
@@ -2018,6 +2075,385 @@ static /*const*/ struct file_operations trident_audio_fops = {
 	release:	trident_release,
 };
 
+/* --------------------------------------------------------------------- */
+
+/*
+ *	MIDI and direct synth support for the ALI 5451. These functions
+ *	are taken directly from Ching Ling Lee's original ALI only
+ *	driver.
+ */
+ 
+static ssize_t trident_midi_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
+{
+	struct trident_card *card = (struct trident_card *)file->private_data;
+	ssize_t ret;
+	unsigned long flags;
+	unsigned ptr;
+	int cnt;
+	struct midi_stuff *midi;
+
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
+	if (!access_ok(VERIFY_WRITE, buffer, count))
+		return -EFAULT;
+		
+	midi = &card->midi;
+	
+	ret = 0;
+	while (count > 0) {
+		spin_lock_irqsave(&card->lock, flags);
+		ptr = midi->ird;
+		cnt = MIDIINBUF - ptr;
+		if (midi->icnt < cnt)
+			cnt = midi->icnt;
+		spin_unlock_irqrestore(&card->lock, flags);
+		if (cnt > count)
+			cnt = count;
+		if (cnt <= 0) {
+			if (file->f_flags & O_NONBLOCK)
+				return ret ? ret : EAGAIN;
+			interruptible_sleep_on(&midi->iwait);
+			if (signal_pending(current))
+				return ret ? ret : -ERESTARTSYS;
+			continue;
+		}
+		if (copy_to_user(buffer, midi->ibuf + ptr, cnt))
+			return ret ? ret : -EFAULT;
+		ptr = (ptr + cnt) % MIDIINBUF;
+		spin_lock_irqsave(&card->lock, flags);
+		midi->ird = ptr;
+		midi->icnt -= cnt;
+		spin_unlock_irqrestore(&card->lock, flags);
+		count -= cnt;
+		buffer += cnt;
+		ret += cnt;
+	}
+	return ret;
+}
+
+static ssize_t trident_midi_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
+{
+	struct trident_card *card = (struct trident_card *)file->private_data;
+	ssize_t ret;
+	unsigned long flags;
+	unsigned ptr;
+	int cnt;
+	struct midi_stuff *midi;
+
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
+	if (!access_ok(VERIFY_READ, buffer, count))
+		return -EFAULT;
+		
+	midi = &card->midi;
+	
+	ret = 0;
+	while (count > 0) {
+		spin_lock_irqsave(&card->lock, flags);
+		ptr = midi->owr;
+		cnt = MIDIOUTBUF - ptr;
+		if (midi->ocnt + cnt > MIDIOUTBUF)
+			cnt = MIDIOUTBUF - midi->ocnt;
+		if (cnt <= 0)
+			trident_handle_midi(card);
+		spin_unlock_irqrestore(&card->lock, flags);
+		if (cnt > count)
+			cnt = count;
+		if (cnt <= 0) {
+			if (file->f_flags & O_NONBLOCK)
+				return ret ? ret : -EAGAIN;
+			interruptible_sleep_on(&midi->owait);
+			if (signal_pending(current))
+				return ret ? ret : -ERESTARTSYS;
+			continue;
+		}
+		if (copy_from_user(midi->obuf + ptr, buffer, cnt))
+			return ret ? ret : -EFAULT;
+		ptr = (ptr + cnt) % MIDIOUTBUF;
+		spin_lock_irqsave(&card->lock, flags);
+		midi->owr = ptr;
+		midi->ocnt += cnt;
+		spin_unlock_irqrestore(&card->lock, flags);
+		count -= cnt;
+		buffer += cnt;
+		ret += cnt;
+		spin_lock_irqsave(&card->lock, flags);
+		trident_handle_midi(card);
+		spin_unlock_irqrestore(&card->lock, flags);
+	}
+	return ret;
+}
+
+
+static unsigned int trident_midi_poll(struct file *file, struct poll_table_struct *wait)
+{
+	struct trident_card *card = (struct trident_card *)file->private_data;
+	unsigned long flags;
+	unsigned int mask = 0;
+
+	if (file->f_flags & FMODE_WRITE)
+		poll_wait(file, &card->midi.owait, wait);
+	if (file->f_flags & FMODE_READ)
+		poll_wait(file, &card->midi.iwait, wait);
+	spin_lock_irqsave(&card->lock, flags);
+	if (file->f_flags & FMODE_READ) {
+		if (card->midi.icnt > 0)
+			mask |= POLLIN | POLLRDNORM;
+	}
+	if (file->f_flags & FMODE_WRITE) {
+		if (card->midi.ocnt < MIDIOUTBUF)
+			mask |= POLLOUT | POLLWRNORM;
+	}
+	spin_unlock_irqrestore(&card->lock, flags);
+	return mask;
+}
+
+static int trident_midi_open(struct inode *inode, struct file *file)
+{
+	struct trident_card *card = devs;
+	struct midi_stuff *midi;
+	unsigned long flags;
+
+	while(card!=NULL)
+	{
+		if(card->midi_on == 0 && card->dev_midi!=-1)
+			break;
+		card=card->next;
+	}
+	if(card==NULL)
+		return -EBUSY;
+		
+	spin_lock_irqsave(&card->lock, flags);
+	card->midi_on = 1;
+	midi = &card->midi;
+	file->private_data = card;
+	if (file->f_mode & FMODE_READ) {
+		midi->ird = midi->iwr = midi->icnt = 0;
+	}
+	if (file->f_mode & FMODE_WRITE) {
+		midi->ord = midi->owr = midi->ocnt = 0;
+	}
+	spin_unlock_irqrestore(&card->lock, flags);
+	return 0;
+}
+
+static int trident_midi_release(struct inode *inode, struct file *file)
+{
+	struct trident_card *card = (struct trident_card *)file->private_data;
+        struct wait_queue wait = { current, NULL };
+	unsigned long flags;
+	unsigned count, tmo;
+
+	if (file->f_mode & FMODE_WRITE) {
+		current->state = TASK_INTERRUPTIBLE;
+		add_wait_queue(&card->midi.owait, &wait);
+		for (;;) {
+			spin_lock_irqsave(&card->lock, flags);
+			count = card->midi.ocnt;
+			spin_unlock_irqrestore(&card->lock, flags);
+			if (count <= 0)
+				break;
+			if (signal_pending(current))
+				break;
+			if (file->f_flags & O_NONBLOCK) {
+				remove_wait_queue(&card->midi.owait, &wait);
+				current->state = TASK_RUNNING;
+				return -EBUSY;
+			}
+			tmo = (count * HZ) / 3100;
+			if (!schedule_timeout(tmo ? : 1) && tmo)
+				printk(KERN_DEBUG "trident: midi timed out??\n");
+		}
+		remove_wait_queue(&card->midi.owait, &wait);
+		current->state = TASK_RUNNING;
+	}
+	spin_lock_irqsave(&card->lock, flags);
+	outb(0xff, card->iobase + ALI_MPUR1);
+	card->midi_on = 0;
+	spin_unlock_irqrestore(&card->lock, flags);
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
+
+static /*const*/ struct file_operations trident_midi_fops = {
+	&trident_llseek,
+	&trident_midi_read,
+	&trident_midi_write,
+	NULL,  /* readdir */
+	&trident_midi_poll,
+	NULL,  /* ioctl */
+	NULL,  /* mmap */
+	&trident_midi_open,
+	NULL,	/* flush */
+	&trident_midi_release,
+	NULL,  /* fsync */
+	NULL,  /* fasync */
+	NULL,  /* check_media_change */
+	NULL,  /* revalidate */
+	NULL,  /* lock */
+};
+
+/* --------------------------------------------------------------------- */
+
+static int trident_dmfm_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
+{
+	static const unsigned char op_offset[18] = {
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05,
+		0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D,
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15
+	};
+	struct trident_card *card = (struct trident_card *)file->private_data;
+	struct dm_fm_voice v;
+	struct dm_fm_note n;
+	struct dm_fm_params p;
+	unsigned int io;
+	unsigned int regb;
+
+	switch (cmd) {		
+	case FM_IOCTL_RESET:
+		for (regb = 0xb0; regb < 0xb9; regb++) {
+			outb(regb, card->synth_io);
+			outb(0, card->synth_io+1);
+			outb(regb, card->synth_io+2);
+			outb(0, card->synth_io+3);
+		}
+		return 0;
+
+	case FM_IOCTL_PLAY_NOTE:
+		if (copy_from_user(&n, (void *)arg, sizeof(n)))
+			return -EFAULT;
+		if (n.voice >= 18)
+			return -EINVAL;
+		if (n.voice >= 9) {
+			regb = n.voice - 9;
+			io = card->synth_io+2;
+		} else {
+			regb = n.voice;
+			io = card->synth_io;
+		}
+		outb(0xa0 + regb, io);
+		outb(n.fnum & 0xff, io+1);
+		outb(0xb0 + regb, io);
+		outb(((n.fnum >> 8) & 3) | ((n.octave & 7) << 2) | ((n.key_on & 1) << 5), io+1);
+		return 0;
+
+	case FM_IOCTL_SET_VOICE:
+		if (copy_from_user(&v, (void *)arg, sizeof(v)))
+			return -EFAULT;
+		if (v.voice >= 18)
+			return -EINVAL;
+		regb = op_offset[v.voice];
+		io = card->synth_io + ((v.op & 1) << 1);
+		outb(0x20 + regb, io);
+		outb(((v.am & 1) << 7) | ((v.vibrato & 1) << 6) | ((v.do_sustain & 1) << 5) | 
+		     ((v.kbd_scale & 1) << 4) | (v.harmonic & 0xf), io+1);
+		outb(0x40 + regb, io);
+		outb(((v.scale_level & 0x3) << 6) | (v.volume & 0x3f), io+1);
+		outb(0x60 + regb, io);
+		outb(((v.attack & 0xf) << 4) | (v.decay & 0xf), io+1);
+		outb(0x80 + regb, io);
+		outb(((v.sustain & 0xf) << 4) | (v.release & 0xf), io+1);
+		outb(0xe0 + regb, io);
+		outb(v.waveform & 0x7, io+1);
+		if (n.voice >= 9) {
+			regb = n.voice - 9;
+			io = card->synth_io+2;
+		} else {
+			regb = n.voice;
+			io = card->synth_io;
+		}
+		outb(0xc0 + regb, io);
+		outb(((v.right & 1) << 5) | ((v.left & 1) << 4) | ((v.feedback & 7) << 1) |
+		     (v.connection & 1), io+1);
+		return 0;
+		
+	case FM_IOCTL_SET_PARAMS:
+		if (copy_from_user(&p, (void *)arg, sizeof(p)))
+			return -EFAULT;
+		outb(0x08, card->synth_io);
+		outb((p.kbd_split & 1) << 6, card->synth_io+1);
+		outb(0xbd, card->synth_io);
+		outb(((p.am_depth & 1) << 7) | ((p.vib_depth & 1) << 6) | ((p.rhythm & 1) << 5) | ((p.bass & 1) << 4) |
+		     ((p.snare & 1) << 3) | ((p.tomtom & 1) << 2) | ((p.cymbal & 1) << 1) | (p.hihat & 1), card->synth_io+1);
+		return 0;
+
+	case FM_IOCTL_SET_OPL:
+		outb(4, card->synth_io+2);
+		outb(arg, card->synth_io+3);
+		return 0;
+
+	case FM_IOCTL_SET_MODE:
+		outb(5, card->synth_io+2);
+		outb(arg & 1, card->synth_io+3);
+		return 0;
+
+	default:
+		return -EINVAL;
+	}
+}
+
+static int trident_dmfm_open(struct inode *inode, struct file *file)
+{
+	struct trident_card *card = devs;
+
+	file->private_data = card;
+	while(card!=NULL)
+	{
+		if(card->midi_on == 0 && card->dev_midi!=-1)
+			break;
+		card=card->next;
+	}
+	if(card==NULL)
+		return -EBUSY;
+	MOD_INC_USE_COUNT;		
+	card->dmfm_on = 1;
+
+	/* init the stuff */
+	outb(1, card->synth_io);
+	outb(0x20, card->synth_io+1); /* enable waveforms */
+	outb(4, card->synth_io+2);
+	outb(0, card->synth_io+3);  /* no 4op enabled */
+	outb(5, card->synth_io+2);
+	outb(1, card->synth_io+3);  /* enable OPL3 */
+	return 0;
+}
+
+static int trident_dmfm_release(struct inode *inode, struct file *file)
+{
+	struct trident_card *card = (struct trident_card *)file->private_data;
+	unsigned int regb;
+
+	for (regb = 0xb0; regb < 0xb9; regb++) {
+		outb(regb, card->synth_io);
+		outb(0, card->synth_io+1);
+		outb(regb, card->synth_io+2);
+		outb(0, card->synth_io+3);
+	}
+	card->dmfm_on = 0;
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
+
+static /*const*/ struct file_operations trident_dmfm_fops = {
+	&trident_llseek,
+	NULL,  /* read */
+	NULL,  /* write */
+	NULL,  /* readdir */
+	NULL,  /* poll */
+	&trident_dmfm_ioctl,
+	NULL,  /* mmap */
+	&trident_dmfm_open,
+	NULL,	/* fl600
+	ush */
+	&trident_dmfm_release,
+	NULL,  /* fsync */
+	NULL,  /* fasync */
+	NULL,  /* check_media_change */
+	NULL,  /* revalidate */
+	NULL,  /* lock */
+};
+
+
 /* trident specific AC97 functions */
 /* Write AC97 codec registers */
 static void trident_ac97_set(struct ac97_codec *codec, u8 reg, u16 val)
@@ -2371,6 +2807,8 @@ static int __init trident_install(struct pci_dev *pci_dev, struct pci_audio_info
 	memset(card, 0, sizeof(*card));
 
 	card->iobase = iobase;
+	card->midi_io = iobase + 0x20;
+	card->synth_io = iobase + 0x10;
 	card->pci_info = pci_info;
 	card->pci_id = pci_info->device;
 	card->irq = pci_dev->irq;
@@ -2424,6 +2862,31 @@ static int __init trident_install(struct pci_dev *pci_dev, struct pci_audio_info
 		kfree(card);
 		return -ENODEV;
 	}
+	
+	if ((card->dev_midi = register_sound_midi(&trident_midi_fops, -1))<0)
+		printk(KERN_WARNING "trident: Unable to register midi.\n");
+	else
+	{
+		struct midi_stuff *midi = &card->midi;
+		init_waitqueue(&midi->iwait);
+		init_waitqueue(&midi->owait);
+		midi->ird = midi->iwr = midi->icnt = 0;
+		midi->ord = midi->owr = midi->ocnt = 0;
+		outb(0xbc, card->iobase+ALI_MPUR2);
+		
+		/* reset command */
+		while (inb(card->iobase + ALI_MPUR1) & 0x40);
+		outb(0xff, card->iobase + ALI_MPUR1);
+		while (inb(card->iobase + ALI_MPUR1) & 0x80);
+		while ((inb(card->iobase + ALI_MPUR0) != 0xfe) && (inb(card->iobase+ALI_MPUR1) != 0x10)) 
+			while (inb(card->iobase + ALI_MPUR1) & 0x80);
+			
+		midi->ird = midi->iwr = midi->icnt = 0;
+	}
+		
+	if ((card->dev_dmfm = register_sound_special(&trident_dmfm_fops, 15))<0)
+		printk(KERN_WARNING "trident: Unable to register FM.\n");
+	
 	outl(0x00, TRID_REG(card, T4D_MUSICVOL_WAVEVOL));
 
 	if (card->pci_id == PCI_DEVICE_ID_ALI_5451) {
@@ -2455,7 +2918,7 @@ int init_trident(void)
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
  
-	printk(KERN_INFO "Trident 4DWave/SiS 7018 PCI Audio, version "
+	printk(KERN_INFO "Trident 4DWave/SiS 7018/Ali 5451 PCI Audio, version "
 	       DRIVER_VERSION ", " __TIME__ " " __DATE__ "\n");
  
 	for (i = 0; i < sizeof (pci_audio_devices); i++) {
@@ -2497,6 +2960,10 @@ void cleanup_trident(void)
 				kfree (devs->ac97_codec[i]);
 			}
 		unregister_sound_dsp(devs->dev_audio);
+		if(devs->dev_midi!=-1)
+			unregister_sound_midi(devs->dev_midi);
+		if(devs->dev_dmfm!=-1)
+			unregister_sound_special(devs->dev_dmfm);
  
 		kfree(devs);
 		devs = devs->next;

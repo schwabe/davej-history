@@ -1775,8 +1775,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
                         if (v.channel>tvcards[btv->type].video_inputs)
                                 return -EINVAL;
 			bt848_muxsel(btv, v.channel);
-			if(v.norm!=VIDEO_MODE_PAL&&v.norm!=VIDEO_MODE_NTSC
-			   &&v.norm!=VIDEO_MODE_SECAM)
+			if (v.norm > (sizeof(tvnorms)/sizeof(*tvnorms)))
 				return -EOPNOTSUPP;
 			btv->win.norm = v.norm;
                         make_vbitab(btv);

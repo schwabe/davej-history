@@ -867,7 +867,7 @@ static int isp2x00_make_portdb(struct Scsi_Host *host)
 
 	short param[8];
 	int i, j;
-	struct id_name_map temp[QLOGICFC_MAX_ID + 1];
+	static struct id_name_map temp[QLOGICFC_MAX_ID + 1];
 	struct isp2x00_hostdata *hostdata;
 
 	isp2x00_disable_irqs(host);
@@ -1904,9 +1904,9 @@ static int isp2x00_reset_hardware(struct Scsi_Host *host)
 #endif
 
 	hostdata->wwn = (u64) (hostdata->control_block.node_name[0]) << 56;
-	hostdata->wwn |= (u64) (hostdata->control_block.node_name[0] & 0xff00) << 48;
+	hostdata->wwn |= (u64) (hostdata->control_block.node_name[0] & 0xff00) << 40;
+	hostdata->wwn |= (u64) (hostdata->control_block.node_name[1] & 0x00ff) << 40;
 	hostdata->wwn |= (u64) (hostdata->control_block.node_name[1] & 0xff00) << 24;
-	hostdata->wwn |= (u64) (hostdata->control_block.node_name[1] & 0x00ff) << 48;
 	hostdata->wwn |= (u64) (hostdata->control_block.node_name[2] & 0x00ff) << 24;
 	hostdata->wwn |= (u64) (hostdata->control_block.node_name[2] & 0xff00) << 8;
 	hostdata->wwn |= (u64) (hostdata->control_block.node_name[3] & 0x00ff) << 8;

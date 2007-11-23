@@ -460,6 +460,10 @@ int dev_close(struct device *dev)
 	if (!(dev->flags&IFF_UP))
 		return 0;
 
+	/* If the device is a slave we should not touch it*/
+	if(dev->flags&IFF_SLAVE)
+		return -EBUSY;
+                                
 	dev_deactivate(dev);
 
 	dev_lock_wait();

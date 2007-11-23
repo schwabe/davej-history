@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.54 1998/09/21 05:07:34 jj Exp $
+/* $Id: bitops.h,v 1.54.2.1 2000/08/10 23:50:04 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -240,6 +240,8 @@ extern __inline__ unsigned long find_next_zero_bit(void *addr, unsigned long siz
 
 found_first:
 	tmp |= ~0UL << size;
+	if (tmp == ~0UL)        /* Are any bits zero? */
+		return result + size; /* Nope. */
 found_middle:
 	return result + ffz(tmp);
 }
@@ -387,7 +389,11 @@ extern __inline__ unsigned long find_next_zero_le_bit(void *addr, unsigned long 
 	tmp = *p;
 
 found_first:
-	return result + ffz(__swab32(tmp) | (~0UL << size));
+	tmp = __swab32(tmp) | (~0UL << size);
+	if (tmp == ~0UL)        /* Are any bits zero? */
+		return result + size; /* Nope. */
+	return result + ffz(tmp);
+
 found_middle:
 	return result + ffz(__swab32(tmp));
 }

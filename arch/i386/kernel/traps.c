@@ -109,6 +109,7 @@ asmlinkage void coprocessor_error(void);
 asmlinkage void reserved(void);
 asmlinkage void alignment_check(void);
 asmlinkage void spurious_interrupt_bug(void);
+asmlinkage void machine_check(void);
 
 int kstack_depth_to_print = 24;
 
@@ -702,6 +703,7 @@ void __init trap_init(void)
 	set_trap_gate(15,&spurious_interrupt_bug);
 	set_trap_gate(16,&coprocessor_error);
 	set_trap_gate(17,&alignment_check);
+	set_trap_gate(18,&machine_check);
 	set_system_gate(SYSCALL_VECTOR,&system_call);
 
 	/* set up GDT task & ldt entries */
