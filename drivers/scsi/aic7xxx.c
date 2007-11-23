@@ -865,6 +865,8 @@ struct aic7xxx_host {
     int  flags;
     int  commands_sent;
     scb_queue_type delayed_scbs;
+    Scsi_Cmnd *scsi_cmnd0;
+    Scsi_Cmnd *scsi_cmnd1;
   } device_status[16];
 #ifdef AIC7XXX_PROC_STATS
   /*
@@ -4269,17 +4271,17 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 #endif
     while (qoutcnt > 0)
     {
+      if (p->flags & PAGE_ENABLED)
+      {
+        p->cmdoutcnt += qoutcnt;
+        if ( p->cmdoutcnt >= p->qfullcount )
+        {
+          outb(0, p->base + CMDOUTCNT);
+          p->cmdoutcnt = 0;
+        }
+      }
       for (i = 0; i < qoutcnt; i++)
       {
-        if (p->flags & PAGE_ENABLED)
-        {
-          p->cmdoutcnt += qoutcnt;
-          if ( p->cmdoutcnt >= p->qfullcount )
-          {
-            outb(0, p->base + CMDOUTCNT);
-            p->cmdoutcnt = 0;
-          }
-        }
         scb_index = inb(p->base + QOUTFIFO);
 	if ( scb_index >= p->scb_data->numscbs )
 	    scb = NULL;
@@ -6121,7 +6123,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
   int slot, base;
   int chan_num = 0;
   unsigned char hcntrl, sxfrctl1, sblkctl, hostconf, irq = 0;
-  int i, print_info=TRUE;
+  int i;
   struct aic7xxx_host *p;
 
   /*
@@ -6165,15 +6167,6 @@ aic7xxx_detect(Scsi_Host_Template *template)
     if (chip_type != AIC_NONE)
     {
 
-      if (print_info)
-      {
-	printk(KERN_INFO 
-"aic7xxx: Driver modifications performed by Doug Ledford, Aug-Nov, 1997\n"
-"aic7xxx: This version is not supported by the official aic7xxx maintainer\n"
-"aic7xxx: Please email problems/questions directly to dledford@dialnet.net\n"
-	  );
-	print_info = FALSE;
-      }
       switch (chip_type)
       {
         case AIC_7770:
@@ -6446,15 +6439,6 @@ aic7xxx_detect(Scsi_Host_Template *template)
           error += pcibios_read_config_dword(pci_bus, pci_device_fn,
                                              CLASS_PROGIF_REVID, &class_revid);
 
-          if (print_info)
-          {
-	    printk(KERN_INFO 
-"aic7xxx: Driver modifications performed by Doug Ledford, Aug-Nov, 1997\n"
-"aic7xxx: This version is not supported by the official aic7xxx maintainer\n"
-"aic7xxx: Please email problems/questions directly to dledford@dialnet.net\n"
-	      );
-	    print_info = FALSE;
-          }
           printk("aic7xxx: <%s> at PCI %d\n",
                  board_names[chip_type], PCI_SLOT(pci_device_fn));
 
@@ -6673,9 +6657,34 @@ aic7xxx_detect(Scsi_Host_Template *template)
 static void
 aic7xxx_fake_scsi_done(Scsi_Cmnd *cmd)
 {
-  kfree(cmd);
+  memset(&cmd->sense_buffer[0], '\0', sizeof(cmd->sense_buffer));
 }
 
+static void
+aic7xxx_make_fake_cmnd(struct aic7xxx_host *p, Scsi_Cmnd *cmd, int which)
+{
+  Scsi_Cmnd *cmd2;
+
+  if (which == 0)
+    p->device_status[TARGET_INDEX(cmd)].scsi_cmnd0 = cmd2 =
+	kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
+  else
+    p->device_status[TARGET_INDEX(cmd)].scsi_cmnd1 = cmd2 =
+	kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
+  if (cmd2 != NULL)
+  {
+    memcpy(cmd2, cmd, sizeof(Scsi_Cmnd));
+    memset(&cmd2->cmnd[0], '\0', sizeof(cmd2->cmnd));
+    cmd2->cmnd[0] = TEST_UNIT_READY;
+    cmd2->cmd_len = 6;
+    cmd2->bufflen = 0;
+    cmd2->request_bufflen = 0;
+    cmd2->buffer = NULL;
+    cmd2->request_buffer = NULL;
+    cmd2->use_sg = 0;
+    cmd2->underflow = 0;
+  }
+}
 
 /*+F*************************************************************************
  * Function:
@@ -6728,34 +6737,16 @@ aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
     }
     else
     {
-      Scsi_Cmnd *cmd2, *cmd3;
-
-      cmd2 = kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
-      cmd3 = kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
-      if ((cmd2 == NULL) || (cmd3 == NULL))
-        panic("aic7xxx: unable to proceed with device negotiation.\n");
-      memcpy(cmd2, cmd, sizeof(Scsi_Cmnd));
-      memcpy(cmd3, cmd, sizeof(Scsi_Cmnd));
-      memset(&cmd2->cmnd[0], '\0', sizeof(cmd2->cmnd));
-      memset(&cmd3->cmnd[0], '\0', sizeof(cmd3->cmnd));
-      cmd2->cmnd[0] = TEST_UNIT_READY;
-      cmd3->cmnd[0] = TEST_UNIT_READY;
-      cmd2->cmd_len = 6;
-      cmd3->cmd_len = 6;
-      cmd2->bufflen = 0;
-      cmd3->bufflen = 0;
-      cmd2->request_bufflen = 0;
-      cmd3->request_bufflen = 0;
-      cmd2->buffer = NULL;
-      cmd3->buffer = NULL;
-      cmd2->request_buffer = NULL;
-      cmd3->request_buffer = NULL;
-      cmd2->use_sg = 0;
-      cmd3->use_sg = 0;
-      cmd2->underflow = 0;
-      cmd3->underflow = 0;
-      aic7xxx_queue(cmd2, aic7xxx_fake_scsi_done);
-      aic7xxx_queue(cmd3, aic7xxx_fake_scsi_done);
+      if ( p->device_status[TARGET_INDEX(cmd)].scsi_cmnd0 == NULL )
+        aic7xxx_make_fake_cmnd(p, cmd, 0);
+      if ( p->device_status[TARGET_INDEX(cmd)].scsi_cmnd1 == NULL )
+        aic7xxx_make_fake_cmnd(p, cmd, 1);
+      if ( p->device_status[TARGET_INDEX(cmd)].scsi_cmnd0 != NULL )
+        aic7xxx_queue(p->device_status[TARGET_INDEX(cmd)].scsi_cmnd0,
+          aic7xxx_fake_scsi_done);
+      if ( p->device_status[TARGET_INDEX(cmd)].scsi_cmnd1 != NULL )
+        aic7xxx_queue(p->device_status[TARGET_INDEX(cmd)].scsi_cmnd1,
+          aic7xxx_fake_scsi_done);
     }
 #if 0
     printk("scsi%d: Sending WDTR request to target %d.\n",
@@ -6774,22 +6765,13 @@ aic7xxx_buildscb(struct aic7xxx_host *p, Scsi_Cmnd *cmd,
       }
       else
       {
-        Scsi_Cmnd *cmd2;
-
-        cmd2 = kmalloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
-        if (cmd2 == NULL)
-          panic("aic7xxx: unable to proceed with device negotiation.\n");
-        memcpy(cmd2, cmd, sizeof(Scsi_Cmnd));
-        memset(&cmd2->cmnd[0], '\0', sizeof(cmd2->cmnd));
-        cmd2->cmnd[0] = TEST_UNIT_READY;
-        cmd2->cmd_len = 6;
-        cmd2->bufflen = 0;
-        cmd2->request_bufflen = 0;
-        cmd2->buffer = NULL;
-        cmd2->request_buffer = NULL;
-        cmd2->use_sg = 0;
-        cmd2->underflow = 0;
-        aic7xxx_queue(cmd2, aic7xxx_fake_scsi_done);
+        if ( p->device_status[TARGET_INDEX(cmd)].scsi_cmnd0 == NULL )
+          aic7xxx_make_fake_cmnd(p, cmd, 0);
+        if ( p->device_status[TARGET_INDEX(cmd)].scsi_cmnd1 == NULL )
+          aic7xxx_make_fake_cmnd(p, cmd, 1);
+        if ( p->device_status[TARGET_INDEX(cmd)].scsi_cmnd1 != NULL )
+          aic7xxx_queue(p->device_status[TARGET_INDEX(cmd)].scsi_cmnd1,
+            aic7xxx_fake_scsi_done);
       }
 #if 0
       printk("scsi%d: Sending SDTR request to target %d.\n",
