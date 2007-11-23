@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.114.6.8 2001/02/16 16:43:22 kai Exp $
+/* $Id: isdn_common.c,v 1.114.6.12 2001/06/09 15:14:15 kai Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -50,7 +50,7 @@
 
 isdn_dev *dev;
 
-static char *isdn_revision = "$Revision: 1.114.6.8 $";
+static char *isdn_revision = "$Revision: 1.114.6.12 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;
@@ -228,20 +228,6 @@ int isdn_msncmp( const char * msn1, const char * msn2 )
 	*p = '\0';
 
 	return isdn_wildmat( TmpMsn1, TmpMsn2 );
-}
-
-static void
-isdn_free_queue(struct sk_buff_head *queue)
-{
-	struct sk_buff *skb;
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	if (skb_queue_len(queue))
-		while ((skb = skb_dequeue(queue)))
-			dev_kfree_skb(skb);
-	restore_flags(flags);
 }
 
 int
@@ -740,7 +726,7 @@ isdn_status_callback(isdn_ctrl * c)
 			kfree(dev->drv[di]->rcverr);
 			kfree(dev->drv[di]->rcvcount);
 			for (i = 0; i < dev->drv[di]->channels; i++)
-				isdn_free_queue(&dev->drv[di]->rpqueue[i]);
+				skb_queue_purge(&dev->drv[di]->rpqueue[i]);
 			kfree(dev->drv[di]->rpqueue);
 			kfree(dev->drv[di]->rcv_waitq);
 			kfree(dev->drv[di]);
@@ -1869,7 +1855,7 @@ isdn_free_channel(int di, int ch, int usage)
 			dev->v110[i] = NULL;
 // 20.10.99 JIM, try to reinitialize v110 !
 			isdn_info_update();
-			isdn_free_queue(&dev->drv[di]->rpqueue[ch]);
+			skb_queue_purge(&dev->drv[di]->rpqueue[ch]);
 		}
 	restore_flags(flags);
 }
@@ -2032,7 +2018,7 @@ isdn_add_channels(driver *d, int drvidx, int n, int adding)
 
 	if ((adding) && (d->rpqueue)) {
 		for (j = 0; j < d->channels; j++)
-			isdn_free_queue(&d->rpqueue[j]);
+			skb_queue_purge(&d->rpqueue[j]);
 		kfree(d->rpqueue);
 	}
 	if (!(d->rpqueue =

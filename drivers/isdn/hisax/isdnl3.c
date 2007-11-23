@@ -1,4 +1,4 @@
-/* $Id: isdnl3.c,v 2.17.6.2 2001/02/16 16:43:27 kai Exp $
+/* $Id: isdnl3.c,v 2.17.6.4 2001/06/09 15:14:17 kai Exp $
  *
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -18,7 +18,7 @@
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 2.17.6.2 $";
+const char *l3_revision = "$Revision: 2.17.6.4 $";
 
 static struct Fsm l3fsm;
 
@@ -404,7 +404,7 @@ releasestack_isdnl3(struct PStack *st)
 		st->l3.global = NULL;
 	}
 	FsmDelTimer(&st->l3.l3m_timer, 54);
-	discard_queue(&st->l3.squeue);
+	skb_queue_purge(&st->l3.squeue);
 }
 
 void
@@ -520,7 +520,7 @@ lc_release_ind(struct FsmInst *fi, int event, void *arg)
 
 	FsmDelTimer(&st->l3.l3m_timer, 52);
 	FsmChangeState(fi, ST_L3_LC_REL);
-	discard_queue(&st->l3.squeue);
+	skb_queue_purge(&st->l3.squeue);
 	l3ml3p(st, DL_RELEASE | INDICATION);
 }
 
@@ -530,7 +530,7 @@ lc_release_cnf(struct FsmInst *fi, int event, void *arg)
 	struct PStack *st = fi->userdata;
 
 	FsmChangeState(fi, ST_L3_LC_REL);
-	discard_queue(&st->l3.squeue);
+	skb_queue_purge(&st->l3.squeue);
 	l3ml3p(st, DL_RELEASE | CONFIRM);
 }
 
@@ -591,14 +591,14 @@ l3_msg(struct PStack *st, int pr, void *arg)
 	}
 }
 
-void __init
+int __init
 Isdnl3New(void)
 {
 	l3fsm.state_count = L3_STATE_COUNT;
 	l3fsm.event_count = L3_EVENT_COUNT;
 	l3fsm.strEvent = strL3Event;
 	l3fsm.strState = strL3State;
-	FsmNew(&l3fsm, L3FnList, L3_FN_COUNT);
+	return FsmNew(&l3fsm, L3FnList, L3_FN_COUNT);
 }
 
 void

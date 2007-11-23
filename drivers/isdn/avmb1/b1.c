@@ -1,111 +1,9 @@
 /*
- * $Id: b1.c,v 1.20.6.3 2001/03/21 08:52:20 kai Exp $
+ * $Id: b1.c,v 1.20.6.6 2001/05/17 21:15:33 kai Exp $
  * 
  * Common module for AVM B1 cards.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
- * 
- * $Log: b1.c,v $
- * Revision 1.20.6.3  2001/03/21 08:52:20  kai
- * merge from main branch: fix buffer for revision string (calle)
- *
- * Revision 1.20.6.2  2001/03/15 15:11:23  kai
- * *** empty log message ***
- *
- * Revision 1.20.6.1  2001/02/13 11:43:29  kai
- * more compatility changes for 2.2.19
- *
- * Revision 1.20  2000/11/23 20:45:14  kai
- * fixed module_init/exit stuff
- * Note: compiled-in kernel doesn't work pre 2.2.18 anymore.
- *
- * Revision 1.19  2000/11/19 17:02:47  kai
- * compatibility cleanup - part 3
- *
- * Revision 1.18  2000/11/19 17:01:53  kai
- * compatibility cleanup - part 2
- *
- * Revision 1.17  2000/11/01 14:05:02  calle
- * - use module_init/module_exit from linux/init.h.
- * - all static struct variables are initialized with "membername:" now.
- * - avm_cs.c, let it work with newer pcmcia-cs.
- *
- * Revision 1.16  2000/08/04 15:36:31  calle
- * copied wrong from file to file :-(
- *
- * Revision 1.15  2000/08/04 12:20:08  calle
- * - Fix unsigned/signed warning in the right way ...
- *
- * Revision 1.14  2000/06/19 16:51:53  keil
- * don't free skb in irq context
- *
- * Revision 1.13  2000/01/25 14:33:38  calle
- * - Added Support AVM B1 PCI V4.0 (tested with prototype)
- *   - splitted up t1pci.c into b1dma.c for common function with b1pciv4
- *   - support for revision register
- *
- * Revision 1.12  1999/11/05 16:38:01  calle
- * Cleanups before kernel 2.4:
- * - Changed all messages to use card->name or driver->name instead of
- *   constant string.
- * - Moved some data from struct avmcard into new struct avmctrl_info.
- *   Changed all lowlevel capi driver to match the new structur.
- *
- * Revision 1.11  1999/10/11 22:04:12  keil
- * COMPAT_NEED_UACCESS (no include in isdn_compat.h)
- *
- * Revision 1.10  1999/09/15 08:16:03  calle
- * Implementation of 64Bit extention complete.
- *
- * Revision 1.9  1999/09/07 09:02:53  calle
- * SETDATA removed. Now inside the kernel the datapart of DATA_B3_REQ and
- * DATA_B3_IND is always directly after the CAPI message. The "Data" member
- * ist never used inside the kernel.
- *
- * Revision 1.8  1999/08/22 20:26:22  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 1.7  1999/08/04 10:10:09  calle
- * Bugfix: corrected /proc functions, added structure for new AVM cards.
- *
- * Revision 1.6  1999/07/23 08:51:04  calle
- * small fix and typo in checkin before.
- *
- * Revision 1.5  1999/07/23 08:41:48  calle
- * prepared for new AVM cards.
- *
- * Revision 1.4  1999/07/09 15:05:38  keil
- * compat.h is now isdn_compat.h
- *
- * Revision 1.3  1999/07/06 07:41:59  calle
- * - changes in /proc interface
- * - check and changed calls to [dev_]kfree_skb and [dev_]alloc_skb.
- *
- * Revision 1.2  1999/07/05 15:09:47  calle
- * - renamed "appl_release" to "appl_released".
- * - version und profile data now cleared on controller reset
- * - extended /proc interface, to allow driver and controller specific
- *   informations to include by driver hackers.
- *
- * Revision 1.1  1999/07/01 15:26:23  calle
- * complete new version (I love it):
- * + new hardware independed "capi_driver" interface that will make it easy to:
- *   - support other controllers with CAPI-2.0 (i.e. USB Controller)
- *   - write a CAPI-2.0 for the passive cards
- *   - support serial link CAPI-2.0 boxes.
- * + wrote "capi_driver" for all supported cards.
- * + "capi_driver" (supported cards) now have to be configured with
- *   make menuconfig, in the past all supported cards where included
- *   at once.
- * + new and better informations in /proc/capi/
- * + new ioctl to switch trace of capi messages per controller
- *   using "avmcapictrl trace [contr] on|off|...."
- * + complete testcircle with all supported cards and also the
- *   PCMCIA cards (now patch for pcmcia-cs-3.0.13 needed) done.
- *
  *
  */
 
@@ -117,6 +15,7 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/capi.h>
+#include <linux/kernelcapi.h>
 #include <asm/io.h>
 #include <linux/init.h>
 #include <linux/isdn_compat.h>
@@ -127,7 +26,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.20.6.3 $";
+static char *revision = "$Revision: 1.20.6.6 $";
 
 /* ------------------------------------------------------------- */
 
@@ -372,7 +271,7 @@ int b1_load_firmware(struct capi_ctr *ctrl, capiloaddata *data)
 	cli();
 	b1_setinterrupt(port, card->irq, card->cardtype);
 	b1_put_byte(port, SEND_INIT);
-	b1_put_word(port, AVM_NAPPS);
+	b1_put_word(port, CAPI_MAXAPPL);
 	b1_put_word(port, AVM_NCCI_PER_CHANNEL*2);
 	b1_put_word(port, ctrl->cnr - 1);
 	restore_flags(flags);
@@ -687,6 +586,7 @@ int b1ctl_read_proc(char *page, char **start, off_t off,
 	case avm_t1isa: s = "T1 ISA (HEMA)"; break;
 	case avm_t1pci: s = "T1 PCI"; break;
 	case avm_c4: s = "C4"; break;
+	case avm_c2: s = "C2"; break;
 	default: s = "???"; break;
 	}
 	len += sprintf(page+len, "%-16s %s\n", "type", s);

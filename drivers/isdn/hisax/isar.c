@@ -1,4 +1,4 @@
-/* $Id: isar.c,v 1.17.6.1 2001/02/16 16:43:27 kai Exp $
+/* $Id: isar.c,v 1.17.6.3 2001/06/09 15:14:17 kai Exp $
  *
  * isar.c   ISAR (Siemens PSB 7110) specific routines
  *
@@ -383,12 +383,12 @@ isar_load_firmware(struct IsdnCardState *cs, u_char *buf)
 	} else {
 		printk(KERN_DEBUG"isar selftest not OK %x/%x/%x\n",
 			ireg->cmsb, ireg->clsb, ireg->par[0]);
-		ret = 1;goto reterror;
+		ret = 1;goto reterrflg;
 	}
 	ireg->iis = 0;
 	if (!sendmsg(cs, ISAR_HIS_DIAG, ISAR_CTRL_SWVER, 0, NULL)) {
 		printk(KERN_ERR"isar RQST SVN failed\n");
-		ret = 1;goto reterror;
+		ret = 1;goto reterrflg;
 	}
 	cnt = 30000; /* max 300 ms */
 	while ((ireg->iis != ISAR_IIS_DIAG) && cnt) {
@@ -1650,8 +1650,8 @@ close_isarstate(struct BCState *bcs)
 			kfree(bcs->hw.isar.rcvbuf);
 			bcs->hw.isar.rcvbuf = NULL;
 		}
-		discard_queue(&bcs->rqueue);
-		discard_queue(&bcs->squeue);
+		skb_queue_purge(&bcs->rqueue);
+		skb_queue_purge(&bcs->squeue);
 		if (bcs->tx_skb) {
 			dev_kfree_skb(bcs->tx_skb);
 			bcs->tx_skb = NULL;

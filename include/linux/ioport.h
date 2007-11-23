@@ -32,4 +32,21 @@ extern unsigned long occupy_region(unsigned long base, unsigned long end,
 extern void autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
 
+/*
+ * for compatibility with 2.4
+ */
+
+extern inline int check_mem_region(unsigned long from, unsigned long extent)
+{
+	return 0;
+}
+
+extern inline void request_mem_region(unsigned long from, unsigned long extent,const char *name)
+{
+}
+
+extern inline void release_mem_region(unsigned long from, unsigned long extent)
+{
+}
+
 #endif	/* _LINUX_PORTIO_H */

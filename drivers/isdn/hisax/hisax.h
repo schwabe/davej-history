@@ -1,4 +1,4 @@
-/* $Id: hisax.h,v 2.52.6.3 2001/02/16 16:43:27 kai Exp $
+/* $Id: hisax.h,v 2.52.6.6 2001/06/09 15:14:17 kai Exp $
  *
  *   Basic declarations, defines and prototypes
  *
@@ -686,6 +686,7 @@ struct hfcPCI_hw {
         unsigned char *pci_io; /* start of PCI IO memory */
         void *share_start; /* shared memory for Fifos start */
         void *fifos; /* FIFO memory */ 
+        int last_bfifo_cnt[2]; /* marker saving last b-fifo frame count */
 	struct timer_list timer;
 };
 
@@ -1302,7 +1303,7 @@ u_char *findie(u_char * p, int size, u_char ie, int wanted_set);
 int getcallref(u_char * p);
 int newcallref(void);
 
-void FsmNew(struct Fsm *fsm, struct FsmNode *fnlist, int fncount);
+int FsmNew(struct Fsm *fsm, struct FsmNode *fnlist, int fncount);
 void FsmFree(struct Fsm *fsm);
 int FsmEvent(struct FsmInst *fi, int event, void *arg);
 void FsmChangeState(struct FsmInst *fi, int newstate);
@@ -1323,7 +1324,6 @@ int QuickHex(char *txt, u_char * p, int cnt);
 void LogFrame(struct IsdnCardState *cs, u_char * p, int size);
 void dlogframe(struct IsdnCardState *cs, struct sk_buff *skb, int dir);
 void iecpy(u_char * dest, u_char * iestart, int ieoffset);
-int discard_queue(struct sk_buff_head *q);
 #ifdef ISDN_CHIP_ISAC
 void setstack_isac(struct PStack *st, struct IsdnCardState *cs);
 #endif	/* ISDN_CHIP_ISAC */
@@ -1333,19 +1333,19 @@ void setstack_isac(struct PStack *st, struct IsdnCardState *cs);
 
 int ll_run(struct IsdnCardState *cs, int addfeatures);
 void ll_stop(struct IsdnCardState *cs);
-void CallcNew(void);
+int CallcNew(void);
 void CallcFree(void);
 int CallcNewChan(struct IsdnCardState *cs);
 void CallcFreeChan(struct IsdnCardState *cs);
-void Isdnl1New(void);
+int Isdnl1New(void);
 void Isdnl1Free(void);
-void Isdnl2New(void);
+int Isdnl2New(void);
 void Isdnl2Free(void);
-void Isdnl3New(void);
+int Isdnl3New(void);
 void Isdnl3Free(void);
 void init_tei(struct IsdnCardState *cs, int protocol);
 void release_tei(struct IsdnCardState *cs);
 char *HiSax_getrev(const char *revision);
-void TeiNew(void);
+int TeiNew(void);
 void TeiFree(void);
 int certification_check(int output);

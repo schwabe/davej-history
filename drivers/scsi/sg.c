@@ -7,7 +7,7 @@
  * Original driver (sg.c):
  *        Copyright (C) 1992 Lawrence Foard
  * 2.x extensions to driver:
- *        Copyright (C) 1998 - 2000 Douglas Gilbert
+ *        Copyright (C) 1998 - 2001 Douglas Gilbert
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,8 +16,8 @@
  *
  *  Borrows code from st driver. Thanks to Alessandro Rubini's "dd" book.
  */
- static char * sg_version_str = "Version: 2.1.39 (20000626)";
- static int sg_version_num = 20139; /* 2 digits for each component */
+ static char * sg_version_str = "Version: 2.1.40 (20010620)";
+ static int sg_version_num = 20140; /* 2 digits for each component */
 /*
  *  D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au), notes:
  *      - scsi logging is available via SCSI_LOG_TIMEOUT macros. First
@@ -1635,18 +1635,14 @@ static int sg_res_in_use(const Sg_fd * sfp)
 }
 
 /* If retSzp==NULL want exact size or fail */
-/* sg_low_malloc() should always be called from a process context allowing
-   GFP_KERNEL to be used instead of GFP_ATOMIC */
 static char * sg_low_malloc(int rqSz, int lowDma, int mem_src, int * retSzp)
 {
     char * resp = NULL;
-    int page_mask = lowDma ? (GFP_KERNEL | GFP_DMA) : GFP_KERNEL;
+    int page_mask = lowDma ? (GFP_ATOMIC | GFP_DMA) : GFP_ATOMIC;
 
     if (rqSz <= 0)
         return resp;
     if (SG_HEAP_KMAL == mem_src) {
-        page_mask = lowDma ? (GFP_ATOMIC | GFP_DMA) : GFP_ATOMIC;
-        /* Seen kmalloc(..,GFP_KERNEL) hang for 40 secs! */
         resp = kmalloc(rqSz, page_mask);
         if (resp && retSzp) *retSzp = rqSz;
 #ifdef SG_DEBUG

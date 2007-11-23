@@ -305,9 +305,15 @@ asmlinkage int sys_access(const char * filename, int mode)
 	res = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
 		res = permission(dentry->d_inode, mode);
-		/* SuS v2 requires we report a read only fs too */
-		if(!res && (mode & S_IWOTH) && IS_RDONLY(dentry->d_inode))
-			res = -EROFS;
+
+		/* SUSv2 says to return EROFS for open() and access()
+		   for files on a read-only filesystem, when writing
+		   is requested.  Clearly, we want to be able to run
+		   a system from read-only media, so should not
+		   interpret this to mean that open("/dev/tty") should
+		   fail when the device node lives on a CDROM.
+		   In other words, no additional check is needed here. */
+
 		dput(dentry);
 	}
 

@@ -667,8 +667,6 @@ static int dqinit_needed(struct inode *inode, short type)
 {
 	int cnt;
 
-        if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode)))
-                return 0;
 	if (is_quotafile(inode))
 		return 0;
 	if (type != -1)
@@ -1082,38 +1080,34 @@ void dquot_initialize(struct inode *inode, short type)
 	unsigned int id = 0;
 	short cnt;
 
-	if (S_ISREG(inode->i_mode) ||
-            S_ISDIR(inode->i_mode) ||
-            S_ISLNK(inode->i_mode)) {
-		/* We don't want to have quotas on quota files - nasty deadlocks possible */
-		if (is_quotafile(inode))
-			return;
-		for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
-			if (type != -1 && cnt != type)
-				continue;
-
-			if (!sb_has_quota_enabled(inode->i_sb, cnt))
-				continue;
-
-			if (inode->i_dquot[cnt] == NODQUOT) {
-				switch (cnt) {
-					case USRQUOTA:
-						id = inode->i_uid;
-						break;
-					case GRPQUOTA:
-						id = inode->i_gid;
-						break;
-				}
-				dquot = dqget(inode->i_dev, id, cnt);
-				if (dquot == NODQUOT)
-					continue;
-				if (inode->i_dquot[cnt] != NODQUOT) {
-					dqput(dquot);
-					continue;
-				} 
-				inode->i_dquot[cnt] = dquot;
-				inode->i_flags |= S_QUOTA;
+	/* We don't want to have quotas on quota files - nasty deadlocks possible */
+	if (is_quotafile(inode))
+		return;
+	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+		if (type != -1 && cnt != type)
+			continue;
+		
+		if (!sb_has_quota_enabled(inode->i_sb, cnt))
+			continue;
+		
+		if (inode->i_dquot[cnt] == NODQUOT) {
+			switch (cnt) {
+			case USRQUOTA:
+				id = inode->i_uid;
+				break;
+			case GRPQUOTA:
+				id = inode->i_gid;
+				break;
 			}
+			dquot = dqget(inode->i_dev, id, cnt);
+			if (dquot == NODQUOT)
+				continue;
+			if (inode->i_dquot[cnt] != NODQUOT) {
+				dqput(dquot);
+				continue;
+			} 
+			inode->i_dquot[cnt] = dquot;
+			inode->i_flags |= S_QUOTA;
 		}
 	}
 }

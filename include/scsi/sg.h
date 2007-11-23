@@ -9,12 +9,14 @@
 Original driver (sg.h):
 *       Copyright (C) 1992 Lawrence Foard
 2.x extensions to driver:
-*       Copyright (C) 1998 - 2000 Douglas Gilbert
+*       Copyright (C) 1998 - 2001 Douglas Gilbert
 
-    Version: 2.1.39 (20000626)
+    Version: 2.1.40 (20010620)
     This version for 2.2.x series kernels
     D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au)
 
+    Changes since 2.1.38 (20000626)
+        - fix bug that caused long wait when large buffer requested
     Changes since 2.1.38 (20000527)
         - more scatter gather fine tuning for sym53c416
     Changes since 2.1.37 (20000504)

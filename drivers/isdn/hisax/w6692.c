@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.12.6.4 2001/02/16 16:43:29 kai Exp $
+/* $Id: w6692.c,v 1.12.6.5 2001/06/09 15:14:18 kai Exp $
  *
  * w6692.c   Winbond W6692 specific routines
  *
@@ -36,7 +36,7 @@ static const PCI_ENTRY id_list[] =
 
 extern const char *CardType[];
 
-const char *w6692_revision = "$Revision: 1.12.6.4 $";
+const char *w6692_revision = "$Revision: 1.12.6.5 $";
 
 #define DBUSY_TIMER_VALUE 80
 
@@ -642,8 +642,8 @@ W6692_l1hw(struct PStack *st, int pr, void *arg)
 			/* !!! not implemented yet */
 			break;
 		case (HW_DEACTIVATE | RESPONSE):
-			discard_queue(&cs->rq);
-			discard_queue(&cs->sq);
+			skb_queue_purge(&cs->rq);
+			skb_queue_purge(&cs->sq);
 			if (cs->tx_skb) {
 				dev_kfree_skb(cs->tx_skb);
 				cs->tx_skb = NULL;
@@ -806,8 +806,8 @@ close_w6692state(struct BCState *bcs)
 			kfree(bcs->blog);
 			bcs->blog = NULL;
 		}
-		discard_queue(&bcs->rqueue);
-		discard_queue(&bcs->squeue);
+		skb_queue_purge(&bcs->rqueue);
+		skb_queue_purge(&bcs->squeue);
 		if (bcs->tx_skb) {
 			dev_kfree_skb(bcs->tx_skb);
 			bcs->tx_skb = NULL;

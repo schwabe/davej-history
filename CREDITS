@@ -1833,14 +1833,15 @@ S: 75019 Paris
 S: France
 
 N: Rik van Riel
-E: riel@nl.linux.org
-W: http://www.nl.linux.org/~riel/
+E: riel@conectiva.com.br
+W: http://www.surriel.com/
 D: Linux-MM site, Documentation/sysctl/*, swap/mm readaround
 D: clustering contributor, kswapd fixes, random kernel hacker,
-D: nl.linux.org maintainer, minor scheduler additions
-S: IJsselstraat 23a
-S: 9725 GA  Groningen
-S: The Netherlands
+D: nl.linux.org administrator, minor scheduler additions
+S: Conectiva S.A.
+S: R. Tocantins, 89 - Cristo Rei
+S: 80050-430 - Curitiba - Paraná
+S: Brazil
 
 N: William E. Roadcap
 E: roadcapw@cfw.com

@@ -1,56 +1,10 @@
 /*
- * $Id: b1dma.c,v 1.11.6.3 2001/03/21 08:52:21 kai Exp $
+ * $Id: b1dma.c,v 1.11.6.6 2001/05/17 21:15:33 kai Exp $
  * 
  * Common module for AVM B1 cards that support dma with AMCC
  * 
  * (c) Copyright 2000 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
- * $Log: b1dma.c,v $
- * Revision 1.11.6.3  2001/03/21 08:52:21  kai
- * merge from main branch: fix buffer for revision string (calle)
- *
- * Revision 1.11.6.2  2001/03/15 15:11:23  kai
- * *** empty log message ***
- *
- * Revision 1.11.6.1  2001/02/13 11:43:29  kai
- * more compatility changes for 2.2.19
- *
- * Revision 1.11  2000/11/19 17:02:47  kai
- * compatibility cleanup - part 3
- *
- * Revision 1.10  2000/11/19 17:01:53  kai
- * compatibility cleanup - part 2
- *
- * Revision 1.9  2000/11/01 14:05:02  calle
- * - use module_init/module_exit from linux/init.h.
- * - all static struct variables are initialized with "membername:" now.
- * - avm_cs.c, let it work with newer pcmcia-cs.
- *
- * Revision 1.8  2000/10/10 17:44:19  kai
- * changes from/for 2.2.18
- *
- * Revision 1.7  2000/08/04 12:20:08  calle
- * - Fix unsigned/signed warning in the right way ...
- *
- * Revision 1.6  2000/06/29 13:59:06  calle
- * Bugfix: reinit txdma without interrupt will confuse some AMCC chips.
- *
- * Revision 1.5  2000/06/19 16:51:53  keil
- * don't free skb in irq context
- *
- * Revision 1.4  2000/04/03 16:38:05  calle
- * made suppress_pollack static.
- *
- * Revision 1.3  2000/02/26 01:00:53  keil
- * changes from 2.3.47
- *
- * Revision 1.2  2000/01/25 14:44:47  calle
- * typo in b1pciv4_detect().
- *
- * Revision 1.1  2000/01/25 14:36:43  calle
- * common function for  T1 PCI and B1 PCI V4.
- *
- *
  */
 
 #include <linux/config.h>
@@ -62,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/capi.h>
+#include <linux/kernelcapi.h>
 #include <asm/io.h>
 #include <linux/init.h>
 #include <linux/isdn_compat.h>
@@ -72,7 +27,7 @@
 #include "capicmd.h"
 #include "capiutil.h"
 
-static char *revision = "$Revision: 1.11.6.3 $";
+static char *revision = "$Revision: 1.11.6.6 $";
 
 /* ------------------------------------------------------------- */
 
@@ -729,7 +684,7 @@ static void b1dma_send_init(avmcard *card)
 	_put_byte(&p, 0);
 	_put_byte(&p, 0);
 	_put_byte(&p, SEND_INIT);
-	_put_word(&p, AVM_NAPPS);
+	_put_word(&p, CAPI_MAXAPPL);
 	_put_word(&p, AVM_NCCI_PER_CHANNEL*30);
 	_put_word(&p, card->cardnr - 1);
 	skb_put(skb, (__u8 *)p - (__u8 *)skb->data);
@@ -908,6 +863,7 @@ int b1dmactl_read_proc(char *page, char **start, off_t off,
 	case avm_t1isa: s = "T1 ISA (HEMA)"; break;
 	case avm_t1pci: s = "T1 PCI"; break;
 	case avm_c4: s = "C4"; break;
+	case avm_c2: s = "C2"; break;
 	default: s = "???"; break;
 	}
 	len += sprintf(page+len, "%-16s %s\n", "type", s);

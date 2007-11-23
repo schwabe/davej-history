@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.140.6.3 2001/02/07 11:31:30 kai Exp $
+/* $Id: isdn_net.c,v 1.140.6.6 2001/06/11 22:08:37 kai Exp $
 
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -294,13 +294,11 @@ static void
 isdn_net_unbind_channel(isdn_net_local * lp)
 {
 	ulong flags;
-	struct sk_buff *skb;
 
 	save_flags(flags);
 	cli();
-	while ((skb = skb_dequeue(&lp->super_tx_queue))) {
-		kfree_skb(skb);
-	}
+	skb_queue_purge(&lp->super_tx_queue);
+
 	if (!lp->master) {	/* reset only master device */
 		/* Moral equivalent of dev_purge_queues():
 		   BEWARE! This chunk of code cannot be called from hardware

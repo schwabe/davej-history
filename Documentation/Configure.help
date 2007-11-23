@@ -758,6 +758,39 @@ CONFIG_BLK_DEV_DAC960
   say M here and read Documentation/modules.txt.  The module will be
   called DAC960.o. 
 
+3ware Hardware ATA-RAID support
+CONFIG_BLK_DEV_3W_XXXX_RAID
+  3ware is the only hardware ATA-Raid product in Linux to date.
+  This card is 2,4, or 8 channel master mode support only.
+  SCSI support required!!!
+
+  <http://www.3ware.com/>
+
+  Please read the comments at the top of drivers/scsi/3w-xxxx.c
+
+RapIDE interface support
+CONFIG_BLK_DEV_IDE_RAPIDE
+  Say Y here if you want to support the Yellowstone RapIDE controller
+  manufactured for use with Acorn computers.
+
+WarpEngine SCSI support
+CONFIG_WARPENGINE_SCSI
+  Support for MacroSystem Development's WarpEngine Amiga SCSI-2 controller.
+  Info at <http://www.lysator.liu.se/amiga/ar/guide/ar310.guide?FEATURE5>.
+
+PowerMac IDE DMA support
+CONFIG_BLK_DEV_IDEDMA_PMAC
+  This option allows the driver for the built-in IDE controller on
+  Power Macintoshes and PowerBooks to use DMA (direct memory access)
+  to transfer data to and from memory.  Saying Y is safe and improves
+  performance.
+
+ICS IDE interface support
+CONFIG_BLK_DEV_IDE_ICSIDE
+  On Acorn systems, say Y here if you wish to use the ICS IDE
+  interface card.  This is not required for ICS partition support.
+  If you are unsure, say N to this.
+
 Parallel port IDE device support
 CONFIG_PARIDE
   There are many external CD-ROM and disk devices that connect through
@@ -1123,6 +1156,34 @@ CONFIG_ALGOR_P4032
   board uses the R4300 and a R5230 CPUs. For more information about
   this board see http://www.algor.co.uk.
 
+Support for BAGET MIPS series
+CONFIG_BAGET_MIPS
+  This enables support for the Baget, a Russian embedded system.  For
+  more details about the Baget see the Linux/MIPS FAQ on
+  <http://oss.sgi.com/mips>.
+
+Baget AMD LANCE support
+CONFIG_BAGETLANCE
+  Say Y to enable kernel support for AMD Lance Ethernet cards on the
+  MIPS-32-based Baget embedded system.  This chipset is better known
+  via the NE2100 cards.
+
+Support for DECstations
+CONFIG_DECSTATION
+  This enables support for DEC's MIPS based workstations.  For details
+  see the Linux/MIPS FAQ on <http://oss.sgi.com/mips> and the
+  DECstation porting pages on <http://decstation.unix-ag.org>.
+
+  If you have one of the following DECstation Models you definitely
+  want to choose R4xx0 for the CPU Type:
+
+	DECstation 5000/50
+	DECstation 5000/150
+	DECstation 5000/260
+	DECsystem 5900/260
+
+  otherwise choose R3000.
+
 IDE card support
 CONFIG_BLK_DEV_IDE_CARDS
   On Acorn systems, enable this if you wish to use an IDE interface
@@ -1157,12 +1218,99 @@ CONFIG_OLIVETTI_M700
   http://lena.fnet.fr/ (To browse the WWW, you need to have access to
   a machine on the Internet that has a program like lynx or netscape).
 
+Support for SNI RM200 PCI
+CONFIG_SNI_RM200_PCI
+  The SNI RM200 PCI was a MIPS-based platform manufactured by Siemens
+  Nixdorf Informationssysteme (SNI), parent company of Pyramid Technology
+  and now in turn merged with Fujitsu.  Say Y here to support this machine
+  type.
+
+MIPS JAZZ onboard SONIC Ethernet support
+CONFIG_MIPS_JAZZ_SONIC
+  This is the driver for the onboard card of MIPS Magnum 4000,
+  Acer PICA, Olivetti M700-10 and a few other identical OEM systems.
+
+MIPS JAZZ FAS216 SCSI support
+CONFIG_JAZZ_ESP
+  This is the driver for the onboard SCSI host adapter of MIPS Magnum
+  4000, Acer PICA, Olivetti M700-10 and a few other identical OEM
+  systems.
+
+SGI PROM Console Support
+CONFIG_SGI_PROM_CONSOLE
+  Say Y here to set up the boot console on serial port 0.
+
+DZ11 Serial Support
+CONFIG_DZ
+  DZ11-family serial controllers for VAXstations, including the DC7085,
+  M7814, and M7819.
+
+TURBOchannel support
+CONFIG_TC
+  TurboChannel is a DEC (now Compaq) bus for Alpha and MIPS processors.
+  Documentation on writing device drivers for TurboChannel is available at:
+  <http://www.cs.arizona.edu/computer.help/policy/DIGITAL_unix/AA-PS3HD-TET1_html/TITLE.html>.
+
+Z85C30 Serial Support
+CONFIG_ZS
+  Documentation on the Zilog 85C350 serial communications controller is
+  downloadable at <http://www.zilog.com/pdfs/serial/z85c30.pdf>.
+
 CPU type
 CONFIG_CPU_R3000
   Give the type of your machine's MIPS CPU. For this question, it
   suffices to give a unique prefix of the option you want to choose.
   In case of doubt select the R3000 CPU. The kernel will then run on
   other MIPS machines but with slightly reduced performance.
+
+  R3000    MIPS Technologies R3000-series processors,
+           including the 3041, 3051, and 3081.
+
+  R6000    MIPS Technologies R6000-series processors,
+           including the 64474, 64475, 64574 and 64575.
+
+  R4300    MIPS Technologies R4300-series processors.
+
+  R4x00    MIPS Technologies R4000-series processors other than 4300,
+           including the 4640, 4650, and 4700.
+
+  R5000    MIPS Technologies R5000-series processors other than the Nevada.
+
+  R52xx    MIPS Technologies R52x0-series ("Nevada") processors.
+
+  R8000    MIPS Technologies R8000-series processors.
+
+  R10000   MIPS Technologies R10000-series processors.
+
+R6000
+CONFIG_CPU_R6000
+  MIPS Technologies R6000-series processors, including the 64474,
+  64475, 64574 and 64575.
+
+R4300
+CONFIG_CPU_R4300
+  MIPS Technologies R4300-series processors.
+
+R4x00
+CONFIG_CPU_R4X00
+  MIPS Technologies R4000-series processors other than 4300, including
+  the 4640, 4650, and 4700.
+
+R5000
+CONFIG_CPU_R5000
+  MIPS Technologies R5000-series processors other than the Nevada.
+
+R52xx
+CONFIG_CPU_NEVADA
+  MIPS Technologies R52x0-series ("Nevada") processors.
+
+R8000
+CONFIG_CPU_R8000
+  MIPS Technologies R8000-series processors.
+
+R10000
+CONFIG_CPU_R10000
+  MIPS Technologies R10000-series processors.
 
 Compile the kernel into the ECOFF object format
 CONFIG_ECOFF_KERNEL
@@ -1175,6 +1323,12 @@ CONFIG_CPU_LITTLE_ENDIAN
   Some MIPS machines can be configured for either little or big endian
   byte order. These modes require different kernels. Say Y if your
   machine is little endian, N if it's a big endian machine.
+
+Use power LED as a heartbeat
+CONFIG_HEARTBEAT
+  Use the power-on LED on your machine as a load meter. The exact
+  behavior is platform-dependent, but normally the flash frequency is a
+  hyperbolic function of the 5-minute load average.
 
 Kernel support for IRIX binaries
 CONFIG_BINFMT_IRIX
@@ -1322,6 +1476,136 @@ CONFIG_ALPHA_GENERIC
   Takara              Takara
 
   If you don't know what to do, choose "generic".
+
+# Most of the information on these variants is from
+# http://www.alphalinux.org/docs/alpha-howto.html
+Alcor/Alpha-XLT
+CONFIG_ALPHA_ALCOR
+  For systems using the Digital ALCOR chipset: 5 chips (4, 64-bit data slices
+  (Data Switch, DSW) - 208-pin PQFP and 1 control (Control, I/O Address, CIA)
+  - a 383 pin plastic PGA). It provides a DRAM controller (256-bit memory
+  bus) and a PCI interface. It also does all the work required to support an
+  external Bcache and to maintain memory coherence when a PCI device DMAs
+  into (or out of) memory.
+
+Alpha-XL
+CONFIG_ALPHA_XL
+  XL-233 and XL-266-based Alpha systems.
+
+AlphaBook1
+CONFIG_ALPHA_BOOK1
+  Dec AlphaBook1/Burns Alpha-based laptops.
+
+Avanti
+CONFIG_ALPHA_AVANTI
+  Avanti AS 200, AS 205, AS 250, AS 255, AS 300, and AS 400-based Alphas.
+  Info at <http://www.unix-ag.org/Linux-Alpha/Architectures/Avanti.html>.
+
+Cabriolet
+CONFIG_ALPHA_CABRIOLET
+  Cabriolet AlphaPC64, AlphaPCI64 systems.  Derived from EB64+ but now
+  baby-AT with Flash boot ROM, no on-board SCSI or Ethernet. 3 ISA slots,
+  4 PCI slots (one pair are on a shared slot), uses plug-in Bcache SIMMs.
+  Requires power supply with 3.3V output.
+
+DP264
+CONFIG_ALPHA_DP264
+  Hard Data HD-DP264-based Alpha systems.  There is a Hard Data website at
+  <http://www.harddata.com/alpha/>.
+
+EB164
+CONFIG_ALPHA_EB164
+  EB164 21164 evaluation board from DEC.  Uses 21164 and ALCOR. Has ISA and
+  PCI expansion (3 ISA slots, 2 64-bit PCI slots (one is shared with an ISA
+  slot) and 2 32-bit PCI slots. Uses plus-in Bcache SIMMs. I/O sub-system
+  provides SuperI/O (2S, 1P, FD), KBD, MOUSE (PS2 style), RTC/NVRAM. Boot
+  ROM is Flash. PC-AT-sized motherboard. Requires power supply with 3.3V
+  output.
+
+EB64+
+CONFIG_ALPHA_EB64P
+  Uses 21064 or 21064A and APECs. Has ISA and PCI expansion (3 ISA, 2 PCI,
+  one pair are on a shared slot). Supports 36-bit DRAM SIMs. ISA bus
+  generated by Intel SaturnI/O PCI-ISA bridge. On-board SCSI (NCR 810 on
+  PCI) Ethernet (Digital 21040), KBD, MOUSE (PS2 style), SuperI/O (2S,
+  1P, FD), RTC/NVRAM. Boot ROM is EPROM. PC-AT size. Runs from standard
+  PC power supply.
+
+EB66
+CONFIG_ALPHA_EB66
+  A Digital DS group board. Uses 21066 or 21066A. I/O sub-system is identical
+  to EB64+. Baby PC-AT size. Runs from standard PC power supply. The EB66
+  schematic was published as a marketing poster advertising the 21066 as "the
+  first microprocessor in the world with embedded PCI"
+
+EB66+
+CONFIG_ALPHA_EB66P
+  Later variant of the EB66 board.
+
+Eiger
+CONFIG_ALPHA_EIGER
+  Apparently an obscure OEM single-board computer based on the
+  Typhoon/Tsunami chipset family. Information on it is scanty.
+
+Jensen
+CONFIG_ALPHA_JENSEN
+  DEC PC 150 AXP (aka Jensen): This is a very old Digital system - one
+  of the first-generation Alpha systems. A number of these systems
+  seem to be available on the second- hand market. The Jensen is a
+  floor-standing tower system which originally used a 150MHz 21064 It
+  used programmable logic to interface a 486 EISA I/O bridge to the
+  CPU.
+
+LX164
+CONFIG_ALPHA_LX164
+  A technical overview of this board is available at
+  <http://www.unix-ag.org/Linux-Alpha/Architectures/LX164.html>.
+
+Miata
+CONFIG_ALPHA_MIATA
+  The Digital PersonalWorkStation (PWS 433a, 433au, 500a, 500au, 600a,
+  or 600au).  There is an Installation HOWTO for this hardware at
+  <http://members.brabant.chello.nl/~s.vandereijk/miata.html>.
+
+Mikasa
+CONFIG_ALPHA_MIKASA
+  AlphaServer 1000-based Alpha systems.
+
+Nautilus
+CONFIG_ALPHA_NAUTILUS
+  Alpha systems based on the AMD 751 & ALI 1543C chipsets.
+
+Noname
+CONFIG_ALPHA_NONAME
+  The AXPpci33 (aka NoName), is based on the EB66 (includes the Multia
+  UDB).  This design was produced by Digital's Technical OEM (TOEM)
+  group. It uses the 21066 processor running at 166MHz or 233MHz. It
+  is a baby-AT size, and runs from a standard PC power supply. It has
+  5 ISA slots and 3 PCI slots (one pair are a shared slot). There are
+  2 versions, with either PS/2 or large DIN connectors for the
+  keyboard.
+
+Noritake
+CONFIG_ALPHA_NORITAKE
+  AlphaServer 1000A, AlphaServer 600A, and AlphaServer 800-based systems.
+
+Rawhide
+CONFIG_ALPHA_RAWHIDE
+  AlphaServer 1200, AlphaServer 4000 and AlphaServer 4100 machines.
+  See HOWTO at <http://www.alphalinux.org/docs/rawhide/4100_install.shtml>.
+
+Ruffian
+CONFIG_ALPHA_RUFFIAN
+   Samsung APC164UX.  There is a page on known problems and workarounds
+   at <http://www.alphalinux.org/faq/FAQ-11.html>.
+
+Sable
+CONFIG_ALPHA_SABLE
+  Digital AlphaServer 2000 and 2100-based systems.
+
+Takara
+CONFIG_ALPHA_TAKARA
+  Alpha 11164-based OEM single-board computer.
 
 EV5 CPU daughtercard
 CONFIG_ALPHA_PRIMO
