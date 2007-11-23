@@ -93,16 +93,17 @@ static inline int dup_mmap(struct mm_struct * mm)
 		tmp->vm_flags &= ~VM_LOCKED;
 		tmp->vm_mm = mm;
 		tmp->vm_next = NULL;
+		if (copy_page_range(mm, current->mm, tmp)) {
+			kfree(tmp);
+			exit_mmap(mm);
+			return -ENOMEM;
+		}
 		if (tmp->vm_inode) {
 			tmp->vm_inode->i_count++;
 			/* insert tmp into the share list, just after mpnt */
 			tmp->vm_next_share->vm_prev_share = tmp;
 			mpnt->vm_next_share = tmp;
 			tmp->vm_prev_share = mpnt;
-		}
-		if (copy_page_range(mm, current->mm, tmp)) {
-			exit_mmap(mm);
-			return -ENOMEM;
 		}
 		if (tmp->vm_ops && tmp->vm_ops->open)
 			tmp->vm_ops->open(tmp);

@@ -124,9 +124,9 @@ static int mlock_fixup(struct vm_area_struct * vma,
 			pages = -pages;
 		vma->vm_mm->locked_vm += pages;
 
-		if (newflags & VM_LOCKED)
+		if ((newflags & VM_LOCKED) && (newflags & VM_READ))
 			while (start < end) {
-				char c = get_user((char *) start);
+				int c = get_user((int *) start);
 				__asm__ __volatile__("": :"r" (c));
 				start += PAGE_SIZE;
 			}

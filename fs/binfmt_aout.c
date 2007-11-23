@@ -298,8 +298,10 @@ do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	if (ex.a_data + ex.a_bss > rlim)
 		return -ENOMEM;
 
+	if (flush_old_exec(bprm))
+		return -ENOMEM;
+
 	/* OK, This is the point of no return */
-	flush_old_exec(bprm);
 
 	current->mm->end_code = ex.a_text +
 		(current->mm->start_code = N_TXTADDR(ex));

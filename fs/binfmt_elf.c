@@ -549,8 +549,10 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		}
 	}
 	
+	if (flush_old_exec(bprm))
+		return -ENOMEM;
+
 	/* OK, This is the point of no return */
-	flush_old_exec(bprm);
 
 	current->mm->end_data = 0;
 	current->mm->end_code = 0;

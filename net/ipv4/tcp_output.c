@@ -441,6 +441,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		struct tcphdr *th;
 		struct iphdr *iph;
 		int size;
+		unsigned long flags;
 
 		dev = skb->dev;
 		IS_SKB(skb);
@@ -456,8 +457,18 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		/*		   effect is that we'll send some unnecessary data, */
 		/*		   but the alternative is disastrous...	    */
 		
-		if (skb_device_locked(skb))
+		save_flags(flags);
+		cli();
+
+		if (skb_device_locked(skb)) {
+			restore_flags(flags);
 			break;
+		}
+
+		/* Unlink from any chain */
+		skb_unlink(skb);
+
+		restore_flags(flags);
 
 		/*
 		 *	Discard the surplus MAC header
@@ -623,14 +634,15 @@ void tcp_do_retransmit(struct sock *sk, int all)
 				 *	We still add up the counts as the round trip time wants
 				 *	adjusting.
 				 */
-				if (sk && !skb_device_locked(skb))
+				if (!skb_device_locked(skb))
 				{
-					/* Remove it from any existing driver queue first! */
-					skb_unlink(skb);
 					/* Now queue it */
 					ip_statistics.IpOutRequests++;
 					dev_queue_xmit(skb, dev, sk->priority);
 					sk->packets_out++;
+				} else {
+					/* This shouldn't happen as we skip out above if the buffer is locked */
+				        printk(KERN_WARNING "tcp_do_retransmit: sk_buff (%p) became locked\n", skb);
 				}
 			}
 		}

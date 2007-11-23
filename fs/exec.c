@@ -301,15 +301,30 @@ unsigned long setup_arg_pages(unsigned long p, struct linux_binprm * bprm)
 		mpnt->vm_pte = 0;
 		insert_vm_struct(current->mm, mpnt);
 		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
+
+		for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
+			if (bprm->page[i]) {
+				current->mm->rss++;
+				put_dirty_page(current,bprm->page[i],stack_base);
+			}
+			stack_base += PAGE_SIZE;
+		}
+	} else {
+		/*
+		 * This one is tricky. We are already in the new context, so we cannot
+		 * return with -ENOMEM. So we _have_ to deallocate argument pages here,
+		 * if there is no VMA, they wont be freed at exit_mmap() -> memory leak.
+		 *
+		 * User space then gets a SIGSEGV when it tries to access argument pages.
+		 */
+		for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
+			if (bprm->page[i]) {
+				free_page(bprm->page[i]);
+				bprm->page[i]=NULL;
+			}
+		}
 	}
 
-	for (i = 0 ; i < MAX_ARG_PAGES ; i++) {
-		if (bprm->page[i]) {
-			current->mm->rss++;
-			put_dirty_page(current,bprm->page[i],stack_base);
-		}
-		stack_base += PAGE_SIZE;
-	}
 	return p;
 }
 
@@ -361,20 +376,17 @@ end_readexec:
 	return result;
 }
 
-static void exec_mmap(void)
+static int exec_mmap(void)
 {
 	/*
 	 * The clear_page_tables done later on exec does the right thing
 	 * to the page directory when shared, except for graceful abort
-	 * (the oom is wrong there, too, IMHO)
 	 */
 	if (current->mm->count > 1) {
-		struct mm_struct *mm = kmalloc(sizeof(*mm), GFP_KERNEL);
-		if (!mm) {
-			/* this is wrong, I think. */
-			oom(current);
-			return;
-		}
+		struct mm_struct *old_mm, *mm = kmalloc(sizeof(*mm), GFP_KERNEL);
+		if (!mm)
+			return -ENOMEM;
+
 		*mm = *current->mm;
 		mm->def_flags = 0;	/* should future lockings be kept? */
 		mm->count = 1;
@@ -382,13 +394,27 @@ static void exec_mmap(void)
 		mm->mmap_avl = NULL;
 		mm->total_vm = 0;
 		mm->rss = 0;
-		current->mm->count--;
+
+		old_mm = current->mm;
 		current->mm = mm;
 		new_page_tables(current);
-		return;
+
+		if ((old_mm != &init_mm) && (!--old_mm->count)) {
+			/*
+			 * all threads exited while we were sleeping, 'old_mm' is held
+			 * by us exclusively, lets get rid of it:
+			 */
+			exit_mmap(old_mm);
+			free_page_tables(old_mm);
+			kfree(old_mm);
+		}
+
+		return 0;
 	}
 	exit_mmap(current->mm);
 	clear_page_tables(current);
+
+	return 0;
 }
 
 /*
@@ -431,7 +457,7 @@ static inline void flush_old_files(struct files_struct * files)
 	}
 }
 
-void flush_old_exec(struct linux_binprm * bprm)
+int flush_old_exec(struct linux_binprm * bprm)
 {
 	int i;
 	int ch;
@@ -450,7 +476,8 @@ void flush_old_exec(struct linux_binprm * bprm)
 	current->comm[i] = '\0';
 
 	/* Release all of the old mmap stuff. */
-	exec_mmap();
+	if (exec_mmap())
+		return -ENOMEM;
 
 	flush_thread();
 
@@ -460,6 +487,8 @@ void flush_old_exec(struct linux_binprm * bprm)
 
 	flush_old_signals(current->sig);
 	flush_old_files(current->files);
+
+	return 0;
 }
 
 /* 

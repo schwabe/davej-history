@@ -1389,6 +1389,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	 */
 
 	for (;;) {
+		int was_locked;
 		struct sk_buff * skb = sk->send_head;
 		if (!skb)
 			break;
@@ -1460,10 +1461,22 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		 *	We may need to remove this from the dev send list. 
 		 */
 		cli();
-		if (skb->next)
+		was_locked = skb_device_locked(skb);
+
+		if (was_locked) {
+			/* In this case, we are relying on the fact that kfree_skb
+			 * will just set the free flag to be 3, and increment
+			 * a counter. It will not actually free anything, and 
+			 * will not take much time
+			 */
+			kfree_skb(skb, FREE_WRITE);	
+		} else {
 			skb_unlink(skb);
+		}
 		sti();
-		kfree_skb(skb, FREE_WRITE); /* write. */
+
+		if (!was_locked)
+		    kfree_skb(skb, FREE_WRITE); /* write. */
 		if (!sk->dead)
 			sk->write_space(sk);
 	}

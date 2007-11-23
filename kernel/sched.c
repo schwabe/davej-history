@@ -116,7 +116,7 @@ static inline void add_to_runqueue(struct task_struct * p)
 		return;
 	}
 #endif
-	if (p->counter > current->counter + 3)
+	if (p->policy != SCHED_OTHER || p->counter > current->counter + 3)
 		need_resched = 1;
 	nr_running++;
 	(p->prev_run = init_task.prev_run)->next_run = p;

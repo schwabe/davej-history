@@ -467,6 +467,14 @@ repeat:
 	
 	inode->i_count--;
 
+	if (inode->i_count)
+	/*
+	 * Huoh, we were supposed to be the last user, but someone has
+	 * grabbed it while we were sleeping. Dont destroy inode VM
+	 * mappings, it might cause a memory leak.
+	 */
+		return;
+
 	if (inode->i_mmap) {
 		printk("iput: inode %lu on device %s still has mappings.\n",
 			inode->i_ino, kdevname(inode->i_dev));

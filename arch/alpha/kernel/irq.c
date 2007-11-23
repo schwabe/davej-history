@@ -60,6 +60,10 @@ static unsigned long irq_mask = ~0UL;
  */
 static void update_hw(unsigned long irq, unsigned long mask)
 {
+#ifdef CONFIG_ALPHA_ALCOR
+	/* always mask out 20..30 (which are unused) */
+	mask |= 0x7ff00000UL << 16;
+#endif
 	switch (irq) {
 #if NR_IRQS == 48
 	      default:
