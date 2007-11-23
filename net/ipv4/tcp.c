@@ -896,6 +896,7 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 					err = -ERESTARTSYS;
 					goto do_interrupted;
 				}
+				tcp_push_pending_frames(sk, tp);
 				wait_for_tcp_memory(sk);
 
 				/* If SACK's were formed or PMTU events happened,

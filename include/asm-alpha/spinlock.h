@@ -79,19 +79,20 @@
  */
 
 typedef struct {
-	volatile unsigned int lock;
+	volatile unsigned int lock /*__attribute__((aligned(32))) */;
 #if DEBUG_SPINLOCK
-	char debug_state, target_ipl, saved_ipl, on_cpu;
+	int on_cpu;
+	int line_no;
 	void *previous;
 	struct task_struct * task;
+	const char *base_file;
 #endif
 } spinlock_t;
 
 #if DEBUG_SPINLOCK
-#define SPIN_LOCK_UNLOCKED (spinlock_t) {0, 1, 0, 0, 0, 0}
+#define SPIN_LOCK_UNLOCKED (spinlock_t) {0, -1, 0, 0, 0, 0}
 #define spin_lock_init(x)						\
-	((x)->lock = 0, (x)->target_ipl = 0, (x)->debug_state = 1,	\
-	 (x)->previous = 0, (x)->task = 0)
+	((x)->lock = 0, (x)->on_cpu = -1, (x)->previous = 0, (x)->task = 0)
 #else
 #define SPIN_LOCK_UNLOCKED	(spinlock_t) { 0 }
 #define spin_lock_init(x)	((x)->lock = 0)
@@ -105,8 +106,11 @@ typedef struct { unsigned long a[100]; } __dummy_lock_t;
 
 #if DEBUG_SPINLOCK
 extern void spin_unlock(spinlock_t * lock);
-extern void spin_lock(spinlock_t * lock);
-extern int spin_trylock(spinlock_t * lock);
+extern void debug_spin_lock(spinlock_t * lock, const char *, int);
+extern int debug_spin_trylock(spinlock_t * lock, const char *, int);
+
+#define spin_lock(LOCK) debug_spin_lock(LOCK, __BASE_FILE__, __LINE__)
+#define spin_trylock(LOCK) debug_spin_trylock(LOCK, __BASE_FILE__, __LINE__)
 
 #define spin_lock_own(LOCK, LOCATION)					\
 do {									\
@@ -161,7 +165,9 @@ static inline void spin_lock(spinlock_t * lock)
 
 /***********************************************************/
 
-typedef struct { volatile int write_lock:1, read_counter:31; } rwlock_t;
+typedef struct {
+	volatile int write_lock:1, read_counter:31;
+} /*__attribute__((aligned(32)))*/ rwlock_t;
 
 #define RW_LOCK_UNLOCKED (rwlock_t) { 0, 0 }
 

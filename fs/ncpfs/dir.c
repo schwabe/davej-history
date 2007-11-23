@@ -38,8 +38,7 @@ static int c_size;
 static int c_seen_eof;
 static int c_last_returned_index;
 static struct ncp_dirent *c_entry = NULL;
-static int c_lock = 0;
-static struct wait_queue *c_wait = NULL;
+static struct semaphore c_sem = MUTEX;
 
 static int ncp_read_volume_list(struct ncp_server *, int, int,
 					struct ncp_dirent *);
@@ -230,15 +229,12 @@ static inline int ncp_is_server_root(struct inode *inode)
 
 static inline void ncp_lock_dircache(void)
 {
-	while (c_lock)
-		sleep_on(&c_wait);
-	c_lock = 1;
+	down(&c_sem);
 }
 
 static inline void ncp_unlock_dircache(void)
 {
-	c_lock = 0;
-	wake_up(&c_wait);
+	up(&c_sem);
 }
 
 
@@ -354,16 +350,7 @@ ncp_lookup_validate(struct dentry * dentry, int flags)
 	int len = dentry->d_name.len;      
 	struct ncpfs_inode_info finfo;
 	__u8 __name[dentry->d_name.len + 1];
-
-        if (!dentry->d_inode) {
-                DPRINTK(KERN_DEBUG "ncp_lookup_validate: called with dentry->d_inode already NULL.\n");
-                return 0;
-        }
         
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		printk(KERN_WARNING "ncp_lookup_validate: inode is NULL or not a directory.\n");
-		goto finished;
-	}
 	server = NCP_SERVER(dir);
 
 	if (!ncp_conn_valid(server))

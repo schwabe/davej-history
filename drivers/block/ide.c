@@ -926,6 +926,7 @@ static inline void do_special (ide_drive_t *drive)
 int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeout)
 {
 	byte stat;
+	int i;
 	unsigned long flags;
 
 	udelay(1);	/* spec allows drive 400ns to assert "BUSY" */
@@ -942,9 +943,18 @@ int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeou
 		}
 		__restore_flags(flags);	/* local CPU only */
 	}
-	udelay(1);	/* allow status to settle, then read it again */
-	if (OK_STAT((stat = GET_STAT()), good, bad))
-		return 0;
+	/*
+	 * Allow status to settle, then read it again.
+	 * A few rare drives vastly violate the 400ns spec here,
+	 * so we'll wait up to 10usec for a "good" status
+	 * rather than expensively fail things immediately.
+	 * This fix courtesy of Matthew Faupel & Niccolo Rigacci.
+	 */
+	for (i = 0; i < 10; i++) {
+		udelay(1);
+		if (OK_STAT((stat = GET_STAT()), good, bad))
+			return 0;
+	}
 	ide_error(drive, "status error", stat);
 	return 1;
 }

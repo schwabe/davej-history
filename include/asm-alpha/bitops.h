@@ -90,6 +90,7 @@ extern __inline__ unsigned long test_and_set_bit(unsigned long nr,
 	"	xor %0,%3,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
+	"	mb\n"
 	"2:\n"
 	".section .text2,\"ax\"\n"
 	"3:	br 1b\n"
@@ -114,6 +115,7 @@ extern __inline__ unsigned long test_and_clear_bit(unsigned long nr,
 	"	xor %0,%3,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
+	"	mb\n"
 	"2:\n"
 	".section .text2,\"ax\"\n"
 	"3:	br 1b\n"
@@ -137,6 +139,7 @@ extern __inline__ unsigned long test_and_change_bit(unsigned long nr,
 	"	xor %0,%3,%0\n"
 	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
+	"	mb\n"
 	".section .text2,\"ax\"\n"
 	"3:	br 1b\n"
 	".previous"
@@ -172,7 +175,10 @@ extern inline unsigned long ffz_b(unsigned long x)
 
 extern inline unsigned long ffz(unsigned long word)
 {
-#ifdef __alpha_cix__
+#if 0 && defined(__alpha_cix__)
+	/* Swine architects -- a year after they publish v3 of the
+	   handbook, in the 21264 data sheet they quietly change CIX
+	   to FIX and remove the spiffy counting instructions.  */
 	/* Whee.  EV6 can calculate it directly.  */
 	unsigned long result;
 	__asm__("ctlz %1,%0" : "=r"(result) : "r"(~word));
@@ -208,7 +214,10 @@ extern inline int ffs(int word)
  * of bits set) of a N-bit word
  */
 
-#ifdef __alpha_cix__
+#if 0 && defined(__alpha_cix__)
+/* Swine architects -- a year after they publish v3 of the handbook, in
+   the 21264 data sheet they quietly change CIX to FIX and remove the
+   spiffy counting instructions.  */
 /* Whee.  EV6 can calculate it directly.  */
 extern __inline__ unsigned long hweight64(unsigned long w)
 {

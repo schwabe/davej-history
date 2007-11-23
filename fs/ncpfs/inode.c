@@ -346,11 +346,12 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 						   GFP_KERNEL);
 	if (server == NULL)
 		goto out_no_server;
+	memset(server, 0, sizeof(*server));
 	NCP_SBP(sb) = server;
 
 	server->ncp_filp = ncp_filp;
 	server->lock = 0;
-	server->wait = NULL;
+	sema_init(&server->sem, 1);
 	server->packet = NULL;
 	server->buffer_size = 0;
 	server->conn_status = 0;
@@ -687,7 +688,7 @@ int ncp_notify_change(struct dentry *dentry, struct iattr *attr)
 		if ((result = ncp_make_open(inode, O_RDWR)) < 0) {
 			return -EACCES;
 		}
-		ncp_write(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle,
+		ncp_write_kernel(NCP_SERVER(inode), NCP_FINFO(inode)->file_handle,
 			  attr->ia_size, 0, "", &written);
 
 		/* According to ndir, the changes only take effect after

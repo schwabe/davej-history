@@ -407,7 +407,8 @@ void ext2_truncate (struct inode * inode)
 			break;
 		if (IS_SYNC(inode) && (inode->i_state & I_DIRTY))
 			ext2_sync_inode (inode);
-		current->counter = 0;
+		run_task_queue(&tq_disk);
+		current->policy |= SCHED_YIELD;
 		schedule ();
 	}
 	/*

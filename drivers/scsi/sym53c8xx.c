@@ -572,6 +572,8 @@ spinlock_t sym53c8xx_lock;
 #define remap_pci_mem(base, size)	((u_long) __va(base))
 #define unmap_pci_mem(vaddr, size)
 #define pcivtobus(p)			((p) & pci_dvma_mask)
+#elif defined(__alpha__)
+#define pcivtobus(p)			((p) & 0xfffffffful)
 #else	/* __sparc__ */
 #define pcivtobus(p)			(p)
 

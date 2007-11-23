@@ -2300,3 +2300,4 @@ struct display_switch fbcon_dummy = {
 EXPORT_SYMBOL(fb_display);
 EXPORT_SYMBOL(fbcon_redraw_bmove);
 EXPORT_SYMBOL(fbcon_dummy);
+EXPORT_SYMBOL(fb_con);

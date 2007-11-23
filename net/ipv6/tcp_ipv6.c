@@ -551,7 +551,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
 failure:
 	dst_release(xchg(&sk->dst_cache, NULL));
-	memcpy(&np->daddr, 0, sizeof(struct in6_addr));
+	memset(&np->daddr, 0, sizeof(struct in6_addr));
 	sk->daddr = 0;
 	return err;
 }
