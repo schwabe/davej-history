@@ -82,7 +82,7 @@ extern int ariadne_probe(struct device *);
 extern int hydra_probe(struct device *);
 extern int yellowfin_probe(struct device *);
 extern int eepro100_probe(struct device *);
-extern int epic_probe(struct device *);
+extern int epic100_probe(struct device *);
 extern int rtl8139_probe(struct device *);
 extern int tlan_probe(struct device *);
 extern int isa515_probe(struct device *);
@@ -112,8 +112,8 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_EEXPRESS_PRO100B	/* Intel EtherExpress Pro100B */
 	&& eepro100_probe(dev)
 #endif
-#ifdef CONFIG_SMC_EPIC
-	&& epic_probe(dev)
+#ifdef CONFIG_EPIC
+	&& epic100_probe(dev)
 #endif
 #if defined(CONFIG_HP100)
 	&& hp100_probe(dev)

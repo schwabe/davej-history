@@ -943,7 +943,7 @@ speedo_start_xmit(struct sk_buff *skb, struct device *dev)
 			return 1;
 		}
 		speedo_tx_timeout(dev);
-		return 0;
+		return 1;
 	}
 
 	/* Caution: the write order is important here, set the base address

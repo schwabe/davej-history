@@ -345,7 +345,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	
 	if(len>65535)
 	{
-		printk("Oversized IP packet from %s.\n", in_ntoa(qp->iph->saddr));
+		NETDEBUG(printk("Oversized IP packet from %s.\n", in_ntoa(qp->iph->saddr)));
 		ip_statistics.IpReasmFails++;
 		ip_free(qp);
 		return NULL;

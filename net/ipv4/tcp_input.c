@@ -216,6 +216,7 @@ void add_clearance(__u32 saddr)
  *	(e.g. long delay packet radio links, 1200 baud modems.)
  */
 static __u32 cookie_mtu[8] = { 64, 256, 512, 536, 1024, 1440, 1460, 4312 };
+unsigned int ui_c_send_cookies = 0;
 #endif
 
 extern void tcp_v4_hash(struct sock *sk);
@@ -594,6 +595,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 #endif
 #ifdef CONFIG_SYN_COOKIES
 			send_cookie = 1;
+			ui_c_send_cookies++;
 #else
 			/* If we only have RST cookies we should
 			 * not drop through to the rest of the response code.

@@ -2298,7 +2298,22 @@ aic7xxx_done(struct aic7xxx_host *p, struct aic7xxx_scb *scb)
   {
     scbp = scbq_remove_head(&p->delayed_scbs[tindex]);
     if (scbp)
-      scbq_insert_tail(&p->waiting_scbs, scbp);
+    {
+      if (queue_depth == 1)
+      {
+        /*
+         * Give extra preference to untagged devices, such as CD-R devices
+         * This makes it more likely that a drive *won't* stuff up while
+         * waiting on data at a critical time, such as CD-R writing and
+         * audio CD ripping operations.  Should also benefit tape drives.
+         */
+        scbq_insert_head(&p->waiting_scbs, scbp);
+      }
+      else
+      {
+        scbq_insert_tail(&p->waiting_scbs, scbp);
+      }
+    }
     if ( (queue_depth > p->dev_active_cmds[tindex]) && scbp)
     {
       scbp = scbq_remove_head(&p->delayed_scbs[tindex]);
@@ -2726,7 +2741,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
         if (aic7xxx_match_scb(p, prev_scbp, target, channel, lun, tag))
         {
           scbq_remove(&p->delayed_scbs[i], prev_scbp);
-          if ( !(prev_scbp->flags & SCB_QUEUED_ABORT) )
+          if ( !(prev_scbp->flags & SCB_WAITINGQ) )
           {
             p->dev_active_cmds[i]++;
             p->activescbs++;
@@ -2785,7 +2800,7 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
       if (aic7xxx_match_scb(p, prev_scbp, target, channel, lun, tag))
       {
         scbq_remove(&p->waiting_scbs, prev_scbp);
-        if ( !(prev_scbp->flags & SCB_QUEUED_ABORT) )
+        if ( !(prev_scbp->flags & SCB_WAITINGQ) )
         {
           p->dev_active_cmds[TARGET_INDEX(prev_scbp->cmd)]++;
           p->activescbs++;
@@ -2838,6 +2853,11 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
         if (aic7xxx_match_scb(p, scbp, target, channel, lun, tag))
         {
           next = aic7xxx_abort_waiting_scb(p, scbp, next, prev);
+          if ( !(scbp->flags & SCB_WAITINGQ) )
+          {
+            p->dev_active_cmds[TARGET_INDEX(scbp->cmd)]++;
+            p->activescbs++;
+          }
           scbp->flags &= ~(SCB_ACTIVE | SCB_WAITINGQ);
           scbp->flags |= SCB_RESET | SCB_QUEUED_FOR_DONE;
           if (prev == SCB_LIST_NULL)
@@ -2893,6 +2913,11 @@ aic7xxx_reset_device(struct aic7xxx_host *p, int target, int channel,
         if (aic7xxx_match_scb(p, scbp, target, channel, lun, tag))
         {
           next = aic7xxx_rem_scb_from_disc_list(p, next);
+          if ( !(scbp->flags & SCB_WAITINGQ) )
+          {
+            p->dev_active_cmds[TARGET_INDEX(scbp->cmd)]++;
+            p->activescbs++;
+          }
           scbp->flags &= ~(SCB_ACTIVE | SCB_WAITINGQ);
           scbp->flags |= SCB_RESET | SCB_QUEUED_FOR_DONE;
           scbp->hscb->control = 0;
@@ -5007,6 +5032,21 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
           "0x%x, cmd 0x%lx\n", p->host_no, -1, -1, -1, scb_index, scb->flags,
           (unsigned long) scb->cmd);
         continue;
+      }
+      else if (scb->flags & SCB_QUEUED_ABORT)
+      {
+        pause_sequencer(p);
+        if ( ((aic_inb(p, LASTPHASE) & PHASE_MASK) != P_BUSFREE) &&
+             (aic_inb(p, SCB_TAG) == scb->hscb->tag) )
+        {
+          unpause_sequencer(p, FALSE);
+          continue;
+        }
+        aic7xxx_reset_device(p, scb->cmd->target, scb->cmd->channel,
+          scb->cmd->lun, scb->cmd->lun);
+        scb->flags &= ~(SCB_QUEUED_FOR_DONE | SCB_RESET | SCB_ABORT |
+          SCB_QUEUED_ABORT);
+        unpause_sequencer(p, FALSE);
       }
       switch (status_byte(scb->hscb->target_status))
       {
@@ -8185,7 +8225,7 @@ aic7xxx_bus_device_reset(struct aic7xxx_host *p, Scsi_Cmnd *cmd)
       if ( (lastphase != P_MESGOUT) && (lastphase != P_MESGIN) )
       {
         /* Send the abort message to the active SCB. */
-        aic_outb(p, MSG_BUS_DEV_RESET, MSG_OUT);
+        aic_outb(p, HOST_MSG, MSG_OUT);
         aic_outb(p, lastphase | ATNO, SCSISIGO);
         if (aic7xxx_verbose & VERBOSE_RESET_PROCESS)
           printk(INFO_LEAD "Device reset message in "
