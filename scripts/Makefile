@@ -2,6 +2,11 @@ HOSTCFLAGS:=$(HOSTCFLAGS) -g -Wall
 HEADER=header.tk
 TAIL=tail.tk
 
+# Ksymoops - to compile error-parsing program
+#
+ksymoops:
+	g++ ksymoops.cc -I /usr/include/g++/ -o ksymoops
+
 # We allow the Makefile in drivers/sound to decide when to rebuild its
 # files, rather than trying to second-guess it like we did before.
 #

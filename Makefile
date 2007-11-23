@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 0
-SUBLEVEL = 33
+SUBLEVEL = 34
 
 ARCH = i386
 
@@ -201,6 +201,9 @@ linuxsubdirs: dummy
 
 $(TOPDIR)/include/linux/version.h: include/linux/version.h
 $(TOPDIR)/include/linux/compile.h: include/linux/compile.h
+
+ksymoops: 
+	$(MAKE) -C scripts ksymoops
 
 newversion:
 	@if [ ! -f .version ]; then \

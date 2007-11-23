@@ -35,7 +35,7 @@
 #define MAX_ADDR_LEN	7
 #ifndef CONFIG_AX25
 #ifndef CONFIG_TR
-#ifndef CONFIG_NET_IPIP
+#if !defined(CONFIG_NET_IPIP) && !defined(CONFIG_NET_IPIP_MODULE)
 #define MAX_HEADER	32		/* We really need about 18 worst case .. so 32 is aligned */
 #else
 #define MAX_HEADER	80		/* We need to allow for having tunnel headers */

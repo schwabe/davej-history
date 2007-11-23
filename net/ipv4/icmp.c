@@ -665,16 +665,16 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 			case ICMP_HOST_UNREACH:
 				break;
 			case ICMP_PROT_UNREACH:
-/*				printk(KERN_INFO "ICMP: %s:%d: protocol unreachable.\n",
-					in_ntoa(iph->daddr), (int)iph->protocol);*/
+				NETDEBUG(printk(KERN_INFO "ICMP: %s:%d: protocol unreachable.\n",
+					in_ntoa(iph->daddr), (int)iph->protocol));
 			/* Drop through */
 			case ICMP_PORT_UNREACH:
 				match_addr=1;
 				break;
 			case ICMP_FRAG_NEEDED:
 #ifdef CONFIG_NO_PATH_MTU_DISCOVERY
-				printk(KERN_INFO "ICMP: %s: fragmentation needed and DF set.\n",
-								in_ntoa(iph->daddr));
+				NETDEBUG(printk(KERN_INFO "ICMP: %s: fragmentation needed and DF set.\n",
+								in_ntoa(iph->daddr))); 
 				break;
 #else
 			{
@@ -745,7 +745,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 			}
 #endif
 			case ICMP_SR_FAILED:
-				printk(KERN_INFO "ICMP: %s: Source Route Failed.\n", in_ntoa(iph->daddr));
+				NETDEBUG(printk(KERN_INFO "ICMP: %s: Source Route Failed.\n", in_ntoa(iph->daddr)));
 				break;
 			default:
 				break;
@@ -864,12 +864,12 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 			 *	(not some confused thing sending our
 			 *	address)
 			 */
-			printk(KERN_INFO "ICMP redirect from %s\n", in_ntoa(source));
+			NETDEBUG(printk(KERN_INFO "ICMP redirect from %s\n", in_ntoa(source)));
 			ip_rt_redirect(source, ip, icmph->un.gateway, dev);
 			break;
 		case ICMP_REDIR_NETTOS:
 		case ICMP_REDIR_HOSTTOS:
-			printk(KERN_INFO "ICMP: cannot handle TOS redirects yet!\n");
+			NETDEBUG(printk(KERN_INFO "ICMP: cannot handle TOS redirects yet!\n"));
 			break;
 		default:
 			break;
@@ -1059,7 +1059,7 @@ int icmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	if(len < sizeof(struct icmphdr))
 	{
 		icmp_statistics.IcmpInErrors++;
-		printk(KERN_INFO "ICMP: runt packet\n");
+		NETDEBUG(printk(KERN_INFO "ICMP: runt packet\n"));
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -1072,7 +1072,7 @@ int icmp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	{
 		/* Failed checksum! */
 		icmp_statistics.IcmpInErrors++;
-		printk(KERN_INFO "ICMP: failed checksum from %s!\n", in_ntoa(saddr));
+		NETDEBUG(printk(KERN_INFO "ICMP: failed checksum from %s!\n", in_ntoa(saddr)));
 		kfree_skb(skb, FREE_READ);
 		return(0);
 	}

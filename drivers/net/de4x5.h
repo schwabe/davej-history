@@ -120,7 +120,7 @@
 #define DC21140     DC21140_DID
 #define DC2114x     DC2114x_DID
 #define DC21142     (DC2114x_DID | 0x0010)
-#define DC21143     (DC2114x_DID | 0x0020)
+#define DC21143     (DC2114x_DID | 0x0030)
 
 #define is_DC21040 ((vendor == DC21040_VID) && (device == DC21040_DID))
 #define is_DC21041 ((vendor == DC21041_VID) && (device == DC21041_DID))
@@ -166,7 +166,7 @@
 /*
 ** PCI Configuration Base I/O Address Register (PCI_CBIO)
 */
-#define CBIO_MASK   0xffffff80       /* Base I/O Address Mask */
+#define CBIO_MASK   -128             /* Base I/O Address Mask */
 #define CBIO_IOSI   0x00000001       /* I/O Space Indicator (RO, value is 1) */
 
 /*
@@ -359,6 +359,12 @@
 #define TR_96      0x00004000       /* Threshold set to 96 (256) bytes */
 #define TR_128     0x00008000       /* Threshold set to 128 (512) bytes */
 #define TR_160     0x0000c000       /* Threshold set to 160 (1024) bytes */
+
+#define OMR_DEF     (OMR_SDP)
+#define OMR_SIA     (OMR_SDP | OMR_TTM)
+#define OMR_SYM     (OMR_SDP | OMR_SCR | OMR_PCS | OMR_HBD | OMR_PS)
+#define OMR_MII_10  (OMR_SDP | OMR_TTM | OMR_PS)
+#define OMR_MII_100 (OMR_SDP | OMR_HBD | OMR_PS)
 
 /*
 ** DC21040 Interrupt Mask Register (DE4X5_IMR)
@@ -606,48 +612,60 @@
 ** DC21140 General Purpose Register (DE4X5_GEP) (hardware dependent bits)
 */
 /* Valid ONLY for DE500 hardware */
-#define GEP_LNP  0x00000080        /* Link Pass               (input) */
-#define GEP_SLNK 0x00000040        /* SYM LINK                (input) */
-#define GEP_SDET 0x00000020        /* Signal Detect           (input) */
-#define GEP_HRST 0x00000010        /* Hard RESET (to PHY)     (output) */
-#define GEP_FDXD 0x00000008        /* Full Duplex Disable     (output) */
-#define GEP_PHYL 0x00000004        /* PHY Loopback            (output) */
-#define GEP_FLED 0x00000002        /* Force Activity LED on   (output) */
-#define GEP_MODE 0x00000001        /* 0: 10Mb/s,  1: 100Mb/s           */
-#define GEP_INIT 0x0000011f        /* Setup inputs (0) and outputs (1) */
-#define GEP_CTRL 0x00000100        /* GEP control bit                  */
+#define GEP_LNP  0x00000080        /* Link Pass               (input)        */
+#define GEP_SLNK 0x00000040        /* SYM LINK                (input)        */
+#define GEP_SDET 0x00000020        /* Signal Detect           (input)        */
+#define GEP_HRST 0x00000010        /* Hard RESET (to PHY)     (output)       */
+#define GEP_FDXD 0x00000008        /* Full Duplex Disable     (output)       */
+#define GEP_PHYL 0x00000004        /* PHY Loopback            (output)       */
+#define GEP_FLED 0x00000002        /* Force Activity LED on   (output)       */
+#define GEP_MODE 0x00000001        /* 0: 10Mb/s,  1: 100Mb/s                 */
+#define GEP_INIT 0x0000011f        /* Setup inputs (0) and outputs (1)       */
+#define GEP_CTRL 0x00000100        /* GEP control bit                        */
+
+/*
+** SIA Register Defaults
+*/
+#define CSR13 0x00000001
+#define CSR14 0x0003ff7f           /* Autonegotiation disabled               */
+#define CSR15 0x00000008
 
 /*
 ** SIA Status Register (DE4X5_SISR)
 */
-#define SISR_LPC   0xffff0000      /* Link Partner's Code Word */
-#define SISR_LPN   0x00008000      /* Link Partner Negotiable */
-#define SISR_ANS   0x00007000      /* Auto Negotiation Arbitration State */
-#define SISR_NSN   0x00000800      /* Non Stable NLPs Detected (DC21041) */
-#define SISR_TRF   0x00000800      /* Transmit Remote Fault */
-#define SISR_NSND  0x00000400      /* Non Stable NLPs Detected (DC21142) */
+#define SISR_LPC   0xffff0000      /* Link Partner's Code Word               */
+#define SISR_LPN   0x00008000      /* Link Partner Negotiable                */
+#define SISR_ANS   0x00007000      /* Auto Negotiation Arbitration State     */
+#define SISR_NSN   0x00000800      /* Non Stable NLPs Detected (DC21041)     */
+#define SISR_TRF   0x00000800      /* Transmit Remote Fault                  */
+#define SISR_NSND  0x00000400      /* Non Stable NLPs Detected (DC21142)     */
 #define SISR_ANR_FDS 0x00000400    /* Auto Negotiate Restart/Full Duplex Sel.*/
-#define SISR_TRA   0x00000200      /* 10BASE-T Receive Port Activity */
-#define SISR_NRA   0x00000200      /* Non Selected Port Receive Activity */
-#define SISR_ARA   0x00000100      /* AUI Receive Port Activity */
-#define SISR_SRA   0x00000100      /* Selected Port Receive Activity */
-#define SISR_DAO   0x00000080      /* PLL All One */
-#define SISR_DAZ   0x00000040      /* PLL All Zero */
-#define SISR_DSP   0x00000020      /* PLL Self-Test Pass */
-#define SISR_DSD   0x00000010      /* PLL Self-Test Done */
-#define SISR_APS   0x00000008      /* Auto Polarity State */
-#define SISR_LKF   0x00000004      /* Link Fail Status */
-#define SISR_NCR   0x00000002      /* Network Connection Error */
-#define SISR_PAUI  0x00000001      /* AUI_TP Indication */
-#define SISR_MRA   0x00000001      /* MII Receive Port Activity */
+#define SISR_TRA   0x00000200      /* 10BASE-T Receive Port Activity         */
+#define SISR_NRA   0x00000200      /* Non Selected Port Receive Activity     */
+#define SISR_ARA   0x00000100      /* AUI Receive Port Activity              */
+#define SISR_SRA   0x00000100      /* Selected Port Receive Activity         */
+#define SISR_DAO   0x00000080      /* PLL All One                            */
+#define SISR_DAZ   0x00000040      /* PLL All Zero                           */
+#define SISR_DSP   0x00000020      /* PLL Self-Test Pass                     */
+#define SISR_DSD   0x00000010      /* PLL Self-Test Done                     */
+#define SISR_APS   0x00000008      /* Auto Polarity State                    */
+#define SISR_LKF   0x00000004      /* Link Fail Status                       */
+#define SISR_LS10  0x00000004      /* 10Mb/s Link Fail Status                */
+#define SISR_NCR   0x00000002      /* Network Connection Error               */
+#define SISR_LS100 0x00000002      /* 100Mb/s Link Fail Status               */
+#define SISR_PAUI  0x00000001      /* AUI_TP Indication                      */
+#define SISR_MRA   0x00000001      /* MII Receive Port Activity              */
 
-#define ANS_NDIS   0x00000000      /* Nway disable */
-#define ANS_TDIS   0x00001000      /* Transmit Disable */
-#define ANS_ADET   0x00002000      /* Ability Detect */
-#define ANS_ACK    0x00003000      /* Acknowledge */
-#define ANS_CACK   0x00004000      /* Complete Acknowledge */
-#define ANS_NWOK   0x00005000      /* Nway OK - FLP Link Good */
-#define ANS_LCHK   0x00006000      /* Link Check */
+#define ANS_NDIS   0x00000000      /* Nway disable                           */
+#define ANS_TDIS   0x00001000      /* Transmit Disable                       */
+#define ANS_ADET   0x00002000      /* Ability Detect                         */
+#define ANS_ACK    0x00003000      /* Acknowledge                            */
+#define ANS_CACK   0x00004000      /* Complete Acknowledge                   */
+#define ANS_NWOK   0x00005000      /* Nway OK - FLP Link Good                */
+#define ANS_LCHK   0x00006000      /* Link Check                             */
+
+#define SISR_RST   0x00000301      /* CSR12 reset                            */
+#define SISR_ANR   0x00001301      /* Autonegotiation restart                */
 
 /*
 ** SIA Connectivity Register (DE4X5_SICR)
@@ -791,16 +809,22 @@
 
 /*
 ** Media / mode state machine definitions
+** User selectable:
 */
-#define NC              0x0000     /* No Connection                        */
 #define TP              0x0001     /* 10Base-T                             */
 #define TP_NW           0x0002     /* 10Base-T with Nway                   */
 #define BNC             0x0004     /* Thinwire                             */
 #define AUI             0x0008     /* Thickwire                            */
 #define BNC_AUI         0x0010     /* BNC/AUI on DC21040 indistinguishable */
-#define ANS             0x0020     /* Intermediate AutoNegotiation State   */
 #define _10Mb           0x0040     /* 10Mb/s Ethernet                      */
 #define _100Mb          0x0080     /* 100Mb/s Ethernet                     */
+#define AUTO            0x4000     /* Auto sense the media or speed        */
+
+/*
+** Internal states
+*/
+#define NC              0x0000     /* No Connection                        */
+#define ANS             0x0020     /* Intermediate AutoNegotiation State   */
 #define SPD_DET         0x0100     /* Parallel speed detection             */
 #define INIT            0x0200     /* Initial state                        */
 #define EXT_SIA         0x0400     /* External SIA for motherboard chip    */
@@ -812,7 +836,6 @@
 #define AUI_SUSPECT     0x0807     /* Suspect the AUI port is down         */
 #define MII             0x1000     /* MII on the 21143                     */
 
-#define AUTO            0x4000     /* Auto sense the media or speed        */
 #define TIMER_CB        0x80000000 /* Timer callback detection             */
 
 /*
@@ -828,6 +851,7 @@
 #define DEBUG_OPEN      0x0040     /* Print de4x5_open() messages */
 #define DEBUG_CLOSE     0x0080     /* Print de4x5_close() messages */
 #define DEBUG_PCICFG    0x0100
+#define DEBUG_ALL       0x01ff
 
 /*
 ** Miscellaneous
@@ -884,6 +908,12 @@
 #define OPEN                 2     /* Running */
 
 /*
+** Various wait times
+*/
+#define PDET_LINK_WAIT    1200    /* msecs to wait for link detect bits     */
+#define ANS_FINISH_WAIT   1000    /* msecs to wait for link detect bits     */
+
+/*
 ** IEEE OUIs for various PHY vendor/chip combos - Reg 2 values only. Since
 ** the vendors seem split 50-50 on how to calculate the OUI register values
 ** anyway, just reading Reg2 seems reasonable for now [see de4x5_get_oui()].
@@ -908,12 +938,13 @@
   } else if (lp->useSROM && !lp->useMII) {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
+    outl(omr | (lp->infoblock_csr6 & ~(OMR_SCR | OMR_HBD)), DE4X5_OMR);\
   } else {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | OMR_TTM, DE4X5_OMR);\
+    outl(omr | OMR_SDP | OMR_TTM, DE4X5_OMR);\
     lp->cache.gep = (lp->fdx ? 0 : GEP_FDXD);\
+    gep_wr(lp->cache.gep, dev);\
   }\
 }
 
@@ -936,12 +967,13 @@
   } else if (lp->useSROM && !lp->useMII) {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | lp->infoblock_csr6 | OMR_HBD, DE4X5_OMR);\
+    outl(omr | lp->infoblock_csr6, DE4X5_OMR);\
   } else {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
     omr |= (lp->fdx ? OMR_FDX : 0);\
-    outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
+    outl(omr | OMR_SDP | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
     lp->cache.gep = (lp->fdx ? 0 : GEP_FDXD) | GEP_MODE;\
+    gep_wr(lp->cache.gep, dev);\
   }\
 }
 
@@ -956,8 +988,9 @@
     outl(omr, DE4X5_OMR);\
   } else {\
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR | OMR_FDX));\
-    outl(omr | OMR_PS | OMR_HBD | OMR_PCS | OMR_SCR, DE4X5_OMR);\
+    outl(omr | OMR_SDP | OMR_PS | OMR_HBD | OMR_PCS, DE4X5_OMR);\
     lp->cache.gep = (GEP_FDXD | GEP_MODE);\
+    gep_wr(lp->cache.gep, dev);\
   }\
 }
 
@@ -991,3 +1024,5 @@ struct de4x5_ioctl {
 #define DE4X5_GET_OMR           0x0c /* Get the OMR Register contents */
 #define DE4X5_SET_OMR           0x0d /* Set the OMR Register contents */
 #define DE4X5_GET_REG           0x0e /* Get the DE4X5 Registers */
+
+#define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))

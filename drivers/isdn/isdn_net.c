@@ -208,9 +208,7 @@
 #include <net/icmp.h>
 #include "isdn_common.h"
 #include "isdn_net.h"
-#ifdef CONFIG_ISDN_PPP
 #include "isdn_ppp.h"
-#endif
 
 /* Prototypes */
 
