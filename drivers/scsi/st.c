@@ -1463,7 +1463,7 @@ read_tape(struct inode *inode, long count, Scsi_Cmnd **aSCpnt)
 			if (transfer < 0) {
 			    if (STps->drv_block >= 0)
 				STps->drv_block += 1;
-			    return (-ENOMEM);
+			    return (-EIO);
 			}
 			(STp->buffer)->buffer_bytes = bytes - transfer;
 		    }

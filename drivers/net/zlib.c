@@ -3938,7 +3938,6 @@ int r;
           r = t;
           LEAVE
         }
-        ZFREE(z, s->sub.trees.blens);
         Tracev((stderr, "inflate:       trees ok, %d * %d bytes used\n",
               inflate_hufts, sizeof(inflate_huft)));
         if ((c = inflate_codes_new(bl, bd, tl, td, z)) == Z_NULL)

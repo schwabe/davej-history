@@ -132,12 +132,23 @@
                  Empty stale responses before draining aen queue.
                  Fix tw_scsi_eh_abort() to not reset on every io abort.
                  Set can_queue in SHT to 255 to prevent hang from AEN.
+   1.02.00.020 - Fix possible null pointer dereference in tw_scsi_release().
+   1.02.00.021 - Fix bug in tw_aen_drain_queue() where unit # was always zero.
+   1.02.00.022 - Add severity levels to AEN strings.
+   1.02.00.023 - Fix command interrupt spurious error messages.
+   1.02.00.024 - Fix bug in raw command post with data ioctl method.
+                 Fix bug where rollcall sometimes failed with cable errors.
+   1.02.00.025 - Print unit # on all command timeouts.
 */
 
 #include <linux/module.h>
 
 MODULE_AUTHOR ("3ware Inc.");
+#ifdef __SMP__
+MODULE_DESCRIPTION ("3ware Storage Controller Linux Driver (SMP)");
+#else
 MODULE_DESCRIPTION ("3ware Storage Controller Linux Driver");
+#endif
 
 #include <linux/kernel.h>
 #include <linux/pci.h>
@@ -183,7 +194,7 @@ struct proc_dir_entry tw_scsi_proc_entry = {
 };
 
 /* Globals */
-char *tw_driver_version="1.02.00.019";
+char *tw_driver_version="1.02.00.025";
 TW_Device_Extension *tw_device_extension_list[TW_MAX_SLOT];
 int tw_device_extension_count = 0;
 
@@ -206,7 +217,7 @@ int tw_aen_complete(TW_Device_Extension *tw_dev, int request_id)
 
 	/* Print some useful info when certain aen codes come out */
 	if (aen == 0x0ff) {
-		printk(KERN_WARNING "3w-xxxx: scsi%d: AEN: AEN queue overflow.\n", tw_dev->host->host_no);
+		printk(KERN_WARNING "3w-xxxx: scsi%d: AEN: INFO: AEN queue overflow.\n", tw_dev->host->host_no);
 	} else {
 		if ((aen & 0x0ff) < TW_AEN_STRING_MAX) {
 			if ((tw_aen_string[aen & 0xff][strlen(tw_aen_string[aen & 0xff])-1]) == '#') {
@@ -278,7 +289,7 @@ int tw_aen_drain_queue(TW_Device_Extension *tw_dev)
 	status_reg_addr = tw_dev->registers.status_reg_addr;
 	response_que_addr = tw_dev->registers.response_que_addr;
 
-	if (tw_poll_status(tw_dev, TW_STATUS_ATTENTION_INTERRUPT, 30)) {
+	if (tw_poll_status(tw_dev, TW_STATUS_ATTENTION_INTERRUPT | TW_STATUS_MICROCONTROLLER_READY, 30)) {
 		dprintk(KERN_WARNING "3w-xxxx: tw_aen_drain_queue(): No attention interrupt for card %d\n", tw_device_extension_count);
 		return 1;
 	}
@@ -388,7 +399,7 @@ int tw_aen_drain_queue(TW_Device_Extension *tw_dev)
 						break;
 					default:
 						if (aen == 0x0ff) {
-							printk(KERN_WARNING "3w-xxxx: AEN: AEN queue overflow.\n");
+							printk(KERN_WARNING "3w-xxxx: AEN: INFO: AEN queue overflow.\n");
 						} else {
 							if ((aen & 0x0ff) < TW_AEN_STRING_MAX) {
 								if ((tw_aen_string[aen & 0xff][strlen(tw_aen_string[aen & 0xff])-1]) == '#') {
@@ -405,7 +416,7 @@ int tw_aen_drain_queue(TW_Device_Extension *tw_dev)
 
 				/* Now put the aen on the aen_queue */
 				if (queue == 1) {
-					tw_dev->aen_queue[tw_dev->aen_tail] = aen_code;
+					tw_dev->aen_queue[tw_dev->aen_tail] = aen;
 					if (tw_dev->aen_tail == TW_Q_LENGTH - 1) {
 						tw_dev->aen_tail = TW_Q_START;
 					} else {
@@ -974,7 +985,7 @@ int tw_findcards(Scsi_Host_Template *tw_host)
 		}
 	}
 	if (numcards == 0) 
-		printk(KERN_WARNING "3w-xxxx: tw_findcards(): No cards found.\n");
+		printk(KERN_WARNING "3w-xxxx: No cards with valid units found.\n");
 	else
 		register_reboot_notifier(&tw_notifier);
 	
@@ -1433,7 +1444,7 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 					}
 					tw_dev->pending_request_count--;
 				} else {
-					printk(KERN_WARNING "3w-xxxx: scsi%d: Error posting pending commands.\n", tw_dev->host->host_no);
+					/* If we get here, we will continue re-posting on the next command interrupt */
 					break;
 				}
 			}
@@ -1464,8 +1475,13 @@ static void tw_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 				/* Check for correct state */
 				if (tw_dev->state[request_id] != TW_S_POSTED) {
-					printk(KERN_WARNING "3w-xxxx: scsi%d: Received a request id (%d) (opcode = 0x%x) that wasn't posted.\n", tw_dev->host->host_no, request_id, command_packet->byte0.opcode);
-					error = 1;
+					/* Handle timed out ioctl's */
+					if (tw_dev->srb[request_id] != 0) {
+						if (tw_dev->srb[request_id]->cmnd[0] != TW_IOCTL) {
+							printk(KERN_WARNING "3w-xxxx: scsi%d: Received a request id (%d) (opcode = 0x%x) that wasn't posted.\n", tw_dev->host->host_no, request_id, command_packet->byte0.opcode);
+							error = 1;
+						}
+					}
 				}
 
 				dprintk(KERN_NOTICE "3w-xxxx: tw_interrupt(): Response queue request id: %d.\n", request_id);
@@ -1555,7 +1571,8 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 	TW_Passthru *passthru = NULL;
 	int tw_aen_code, i, use_sg;
 	char *data_ptr;
-	int total_bytes = 0;
+	int total_bytes = 0, posted = 0;
+	struct timeval before, timeout;
 
 	ioctl = (TW_Ioctl *)tw_dev->srb[request_id]->request_buffer;
 	if (ioctl == NULL) {
@@ -1706,7 +1723,7 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 						if ((u32 *)command_packet->byte8.param.sgl[i].address != NULL) {
 							error = copy_from_user(data_ptr, (u32 *)command_packet->byte8.param.sgl[i].address, command_packet->byte8.param.sgl[i].length);
 							if (error) {
-								printk(KERN_WARNING "3w-xxxx: scsi%d: Error copying param sglist from userspace.\n", tw_dev->host->host_no);
+								dprintk(KERN_WARNING "3w-xxxx: scsi%d: Error copying param sglist from userspace.\n", tw_dev->host->host_no);
 								goto tw_ioctl_bail;
 							}
 						} else {
@@ -1736,7 +1753,7 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 							if ((u32 *)command_packet->byte8.io.sgl[i].address != NULL) {
 								error = copy_from_user(data_ptr, (u32 *)command_packet->byte8.io.sgl[i].address, command_packet->byte8.io.sgl[i].length);
 								if (error) {
-									printk(KERN_WARNING "3w-xxxx: scsi%d: Error copying io sglist from userspace.\n", tw_dev->host->host_no);
+									dprintk(KERN_WARNING "3w-xxxx: scsi%d: Error copying io sglist from userspace.\n", tw_dev->host->host_no);
 									goto tw_ioctl_bail;
 								}
 							} else {
@@ -1752,15 +1769,31 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 					command_packet->byte8.io.sgl[0].length = total_bytes;
 				}
 
+				spin_unlock(&tw_dev->tw_lock);
 				spin_unlock_irq(&io_request_lock);
-				spin_unlock_irq(&tw_dev->tw_lock);
+
+				set_bit(TW_IN_IOCTL, &tw_dev->flags);
 
 				/* Finally post the command packet */
 				tw_post_command_packet(tw_dev, request_id);
+				posted = 1;
+				do_gettimeofday(&before);
 
+			tw_ioctl_retry:
 				mdelay(TW_IOCTL_WAIT_TIME);
-				spin_lock_irq(&tw_dev->tw_lock);
+				if (test_bit(TW_IN_IOCTL, &tw_dev->flags)) {
+					do_gettimeofday(&timeout);
+					if (before.tv_sec + TW_IOCTL_TIMEOUT < timeout.tv_sec) {
+						spin_lock_irq(&io_request_lock);
+						spin_lock(&tw_dev->tw_lock);
+						goto tw_ioctl_bail;
+					} else {
+						goto tw_ioctl_retry;
+					}
+				}
+
 				spin_lock_irq(&io_request_lock);
+				spin_lock(&tw_dev->tw_lock);
 
 				if (signal_pending(current)) {
 					dprintk(KERN_WARNING "3w-xxxx: scsi%d: tw_ioctl(): Signal pending, aborting ioctl().\n", tw_dev->host->host_no);
@@ -1778,7 +1811,7 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 						if ((u32 *)command_save->byte8.param.sgl[i].address != NULL) {
 							error = copy_to_user((u32 *)command_save->byte8.param.sgl[i].address, data_ptr, command_save->byte8.param.sgl[i].length);
 							if (error) {
-								printk(KERN_WARNING "3w-xxxx: scsi%d: Error copying param sglist to userspace.\n", tw_dev->host->host_no);
+								dprintk(KERN_WARNING "3w-xxxx: scsi%d: Error copying param sglist to userspace.\n", tw_dev->host->host_no);
 								goto tw_ioctl_bail;
 							}
 							dprintk(KERN_WARNING "3w-xxxx: scsi%d: Copied %ld bytes to pid %d.\n", tw_dev->host->host_no, command_save->byte8.param.sgl[i].length, current->pid);
@@ -1798,7 +1831,7 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 							if ((u32 *)command_save->byte8.io.sgl[i].address != NULL) {
 								error = copy_to_user((u32 *)command_save->byte8.io.sgl[i].address, data_ptr, command_save->byte8.io.sgl[i].length);
 								if (error) {
-									printk(KERN_WARNING "3w-xxxx: scsi%d: Error copying io sglist to userspace.\n", tw_dev->host->host_no);
+									dprintk(KERN_WARNING "3w-xxxx: scsi%d: Error copying io sglist to userspace.\n", tw_dev->host->host_no);
 									goto tw_ioctl_bail;
 								}
 								dprintk(KERN_WARNING "3w-xxxx: scsi%d: Copied %ld bytes to pid %d.\n", tw_dev->host->host_no, command_save->byte8.io.sgl[i].length, current->pid);
@@ -1823,7 +1856,8 @@ int tw_ioctl(TW_Device_Extension *tw_dev, int request_id)
 				/* Now complete the io */
 				tw_dev->state[request_id] = TW_S_COMPLETED;
 				tw_state_request_finish(tw_dev, request_id);
-				tw_dev->posted_request_count--;
+				if (posted)
+					tw_dev->posted_request_count--;
 				tw_dev->srb[request_id]->scsi_done(tw_dev->srb[request_id]);
 				
 				return 0;
@@ -1900,6 +1934,7 @@ int tw_ioctl_complete(TW_Device_Extension *tw_dev, int request_id)
 			break;
 		case TW_CMD_PACKET_WITH_DATA:
 			dprintk(KERN_WARNING "3w-xxxx: tw_ioctl_complete(): caught TW_CMD_PACKET_WITH_DATA.\n");
+			clear_bit(TW_IN_IOCTL, &tw_dev->flags);
 			return TW_ISR_DONT_COMPLETE; /* Special case for isr to not complete io */
 		default:
 			memset(buff, 0, tw_dev->srb[request_id]->request_bufflen);
@@ -2170,14 +2205,14 @@ int tw_scsi_eh_abort(Scsi_Cmnd *SCpnt)
 	for (i=0;i<TW_Q_LENGTH;i++) {
 		if (tw_dev->srb[i] == SCpnt) {
 			if (tw_dev->state[i] == TW_S_STARTED) {
-				printk(KERN_WARNING "3w-xxxx: scsi%d: Command (0x%x) timed out.\n", tw_dev->host->host_no, (u32)SCpnt);
+				printk(KERN_WARNING "3w-xxxx: scsi%d: Unit #%d: Command (0x%x) timed out.\n", tw_dev->host->host_no, tw_dev->srb[i]==0 ? 0 : tw_dev->srb[i]->target, (u32)SCpnt);
 				tw_dev->state[i] = TW_S_COMPLETED;
 				tw_state_request_finish(tw_dev, i);
 				spin_unlock(&tw_dev->tw_lock);
 				return (SUCCESS);
 			}
 			if (tw_dev->state[i] == TW_S_PENDING) {
-				printk(KERN_WARNING "3w-xxxx: scsi%d: Command (0x%x) timed out.\n", tw_dev->host->host_no, (u32)SCpnt);
+				printk(KERN_WARNING "3w-xxxx: scsi%d: Unit #%d: Command (0x%x) timed out.\n", tw_dev->host->host_no, tw_dev->srb[i]==0 ? 0 : tw_dev->srb[i]->target, (u32)SCpnt);
 				if (tw_dev->pending_head == TW_Q_LENGTH-1) {
 					tw_dev->pending_head = TW_Q_START;
 				} else {
@@ -2191,7 +2226,7 @@ int tw_scsi_eh_abort(Scsi_Cmnd *SCpnt)
 			}
 			if (tw_dev->state[i] == TW_S_POSTED) {
 				/* If the command has already been posted, we have to reset the card */
-				printk(KERN_WARNING "3w-xxxx: scsi%d: Command (0x%x) timed out, resetting card.\n", tw_dev->host->host_no, (u32)SCpnt);
+				printk(KERN_WARNING "3w-xxxx: scsi%d: Unit #%d: Command (0x%x) timed out, resetting card.\n", tw_dev->host->host_no, tw_dev->srb[i]==0 ? 0 : tw_dev->srb[i]->target, (u32)SCpnt);
 				/* We have to let AEN requests through before the reset */
 				spin_unlock(&tw_dev->tw_lock);
 				spin_unlock_irq(&io_request_lock);
@@ -2410,6 +2445,11 @@ int tw_scsi_release(struct Scsi_Host *tw_host)
 
 	dprintk(KERN_NOTICE "3w-xxxx: tw_scsi_release()\n");
 
+	/* Fake like we just shut down, so notify the card that
+	 * we "shut down cleanly".
+	 */
+	tw_halt(0, 0, 0);  // parameters aren't actually used
+
 	/* Free up the IO region */
 	release_region((tw_dev->tw_pci_dev->base_address[0]), TW_IO_ADDRESS_RANGE);
 
@@ -2421,11 +2461,6 @@ int tw_scsi_release(struct Scsi_Host *tw_host)
 
 	/* Tell kernel scsi-layer we are gone */
 	scsi_unregister(tw_host);
-
-	/* Fake like we just shut down, so notify the card that
-	 * we "shut down cleanly".
-	 */
-	tw_halt(0, 0, 0);  // parameters aren't actually used
 
 	return 0;
 } /* End tw_scsi_release() */

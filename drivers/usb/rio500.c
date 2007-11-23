@@ -132,7 +132,7 @@ ioctl_rio(struct inode *inode, struct file *file, unsigned int cmd,
 			retval = -EFAULT;
 			goto err_out;
 		}
-		if (rio_cmd.length > PAGE_SIZE) {
+		if (rio_cmd.length < 0 || rio_cmd.length > PAGE_SIZE) {
 			retval = -EINVAL;
 			goto err_out;
 		}
@@ -201,7 +201,7 @@ ioctl_rio(struct inode *inode, struct file *file, unsigned int cmd,
 			break;
 		if (copy_from_user(&rio_cmd, data, sizeof(struct RioCommand)))
 			return -EFAULT;
-		if (rio_cmd.length > PAGE_SIZE)
+		if (rio_cmd.length < 0 || rio_cmd.length > PAGE_SIZE)
 			return -EINVAL;
 		buffer = (unsigned char *) __get_free_page(GFP_KERNEL);
 		if (buffer == NULL)

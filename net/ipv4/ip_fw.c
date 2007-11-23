@@ -747,6 +747,7 @@ ip_fw_check(struct iphdr *ip,
 						      src_port, dst_port,
 						      count, tcpsyn)) {
 					ret = FW_BLOCK;
+					cleanup(chain, 0, slot);
 					goto out;
 				}
 				break;
@@ -1132,8 +1133,13 @@ static struct ip_chain *ip_init_chain(ip_chainlabel name,
 	unsigned int i;
 	struct ip_chain *label 
 		= kmalloc(SIZEOF_STRUCT_IP_CHAIN, GFP_KERNEL);
-	if (label == NULL)
-		panic("Can't kmalloc for firewall chains.\n");
+	if (label == NULL) {
+		/* Only pre-defined chains are created with a non-zero ref */
+		if (ref)
+			panic("Can't kmalloc for firewall chains.\n");
+		else
+			return NULL;
+	}
 	strcpy(label->label,name);
 	label->next = NULL;
 	label->chain = NULL;
@@ -1171,7 +1177,7 @@ static int create_chain(ip_chainlabel label)
 					      * user defined chain *
 					      * and therefore can be
 					      * deleted */
-	return 0;
+	return tmp->next ? 0 : ENOMEM;
 }
 
 /* This function simply changes the policy on one of the built in

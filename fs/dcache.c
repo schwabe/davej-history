@@ -68,7 +68,7 @@ static inline void d_free(struct dentry *dentry)
 }
 
 /*
- * Release the dentry's inode, using the fileystem
+ * Release the dentry's inode, using the filesystem
  * d_iput() operation if defined.
  */
 static inline int dentry_iput(struct dentry * dentry)

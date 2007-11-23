@@ -2586,7 +2586,8 @@ static int zoran_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 
 			/* Check for vaild parameters */
 			if (vw.width < BUZ_MIN_WIDTH || vw.height < BUZ_MIN_HEIGHT ||
-			    vw.width > BUZ_MAX_WIDTH || vw.height > BUZ_MAX_HEIGHT) {
+			    vw.width > BUZ_MAX_WIDTH || vw.height > BUZ_MAX_HEIGHT ||
+			    vw.clipcount < 0 || vw.clipcount > 2048) {
 				return -EINVAL;
 			}
 #ifdef XAWTV_HACK

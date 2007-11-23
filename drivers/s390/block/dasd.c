@@ -2883,8 +2883,12 @@ dasd_devices_read (  struct  file *file, char*   user_buf,  size_t  user_len, lo
 static ssize_t 
 dasd_devices_write (  struct  file *file, const char*   user_buf,  size_t  user_len, loff_t* offset )
 {
-        char * buffer = vmalloc(user_len);
+	char *buffer;
 
+	if (user_len > PAGE_SIZE)
+		return -EINVAL;
+
+	buffer = vmalloc(user_len + 1);
         if ( buffer == NULL)
                 return -ENOMEM;
         copy_from_user ( buffer, user_buf, user_len);

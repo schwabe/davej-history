@@ -1061,10 +1061,17 @@ static int comxhw_write_proc(struct file *file, const char *buffer,
 		if (!(page = (char *)__get_free_page(GFP_KERNEL))) {
 			return -ENOMEM;
 		}
-		copy_from_user(page, buffer, count = (min(count, PAGE_SIZE)));
-		if (*(page + count - 1) == '\n') {
+		if (copy_from_user(page, buffer,
+		    count = min(count, PAGE_SIZE))) {
+			free_page((unsigned long)page);
+			return -EFAULT;
+		}
+		if (count && *(page + count - 1) == '\n') {
 			*(page + count - 1) = 0;
 		}
+		if (count < PAGE_SIZE)
+			*(page + count) = 0;
+		*(page + PAGE_SIZE - 1) = 0;
 	} else {
 		byte *tmp;
 
@@ -1077,6 +1084,8 @@ static int comxhw_write_proc(struct file *file, const char *buffer,
 			hw->firmware->data = NULL;
 		}
 		
+		if (file->f_pos > 0x10000 || count > 0x10000)
+			return -EINVAL;
 		if ((tmp = kmalloc(count + file->f_pos, GFP_KERNEL)) == NULL) {
 			return -ENOMEM;
 		}
@@ -1089,7 +1098,10 @@ static int comxhw_write_proc(struct file *file, const char *buffer,
 		if (hw->firmware->data) {
 			kfree(hw->firmware->data);
 		}
-		copy_from_user(tmp + file->f_pos, buffer, count);
+		if (copy_from_user(tmp + file->f_pos, buffer, count)) {
+			kfree(tmp);
+			return -EFAULT;
+		}
 		hw->firmware->len = entry->size = file->f_pos + count;
 		hw->firmware->data = tmp;
 		file->f_pos += count;

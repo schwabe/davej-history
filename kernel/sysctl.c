@@ -338,8 +338,11 @@ int do_sysctl (int *name, unsigned nlen,
 		size_t old_len;
 		if (!oldlenp)
 			return -EFAULT;
-		if(get_user(old_len, oldlenp))
+		if (get_user(old_len, oldlenp))
 			return -EFAULT;
+		/* XXX: insufficient for SMP, but should be redundant anyway */
+		if ((ssize_t)old_len < 0)
+			return -EINVAL;
 	}
 	tmp = &root_table_header;
 	do {
@@ -459,7 +462,8 @@ int do_sysctl_strategy (ctl_table *table,
 	 * zero, proceed with automatic r/w */
 	if (table->data && table->maxlen) {
 		if (oldval && oldlenp) {
-			get_user(len, oldlenp);
+			if (get_user(len, oldlenp))
+				return -EFAULT;
 			if (len) {
 				if (len > table->maxlen)
 					len = table->maxlen;
@@ -853,7 +857,7 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 	vleft = table->maxlen / sizeof(int);
 	left = *lenp;
 	
-	for (; left && vleft--; i++, first=0) {
+	for (; left && vleft--; i++, min++, max++, first=0) {
 		if (write) {
 			while (left) {
 				char c;
@@ -889,9 +893,7 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 			buffer += len;
 			left -= len;
 
-			if (min && val < *min++)
-				continue;
-			if (max && val > *max++)
+			if ((min && val < *min) || (max && val > *max))
 				continue;
 			*i = val;
 		} else {
@@ -1047,7 +1049,8 @@ int sysctl_intvec(ctl_table *table, int *name, unsigned nlen,
 
 		for (i = 0; i < length; i++) {
 			int value;
-			get_user(value, vec + i);
+			if (get_user(value, vec + i))
+				return -EFAULT;
 			if (min && value < min[i])
 				return -EINVAL;
 			if (max && value > max[i])

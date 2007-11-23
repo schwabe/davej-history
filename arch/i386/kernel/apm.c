@@ -1072,7 +1072,7 @@ static ssize_t do_read(struct file *fp, char *buf, size_t count, loff_t *ppos)
 	as = fp->private_data;
 	if (check_apm_user(as, "read"))
 		return -EIO;
-	if (count < sizeof(apm_event_t))
+	if ((int)count < sizeof(apm_event_t))
 		return -EINVAL;
 	if (queue_empty(as)) {
 		if (fp->f_flags & O_NONBLOCK)

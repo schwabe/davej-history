@@ -194,24 +194,42 @@ proc_file_write(struct file * file, const char * buffer,
 
 
 static long long
-proc_file_lseek(struct file * file, long long offset, int orig)
+proc_file_lseek(struct file * file, long long offset, int origin)
 {
-    switch (orig) {
-    case 0:
+	struct inode *inode = file->f_dentry->d_inode;
+
 	if (offset < 0)
-	    return -EINVAL;    
-	file->f_pos = offset;
-	return(file->f_pos);
-    case 1:
-	if (offset + file->f_pos < 0)
-	    return -EINVAL;    
-	file->f_pos += offset;
-	return(file->f_pos);
-    case 2:
-	return(-EINVAL);
-    default:
-	return(-EINVAL);
-    }
+		return -EINVAL;
+
+	switch (origin) {
+		case 2:
+			/*
+			 * XXX: We don't always have a size, but older 2.2.x
+			 * kernels didn't support SEEK_END with procfs at all
+			 * so this should be OK for 2.2.x.
+			 */
+			if (!inode->i_size)
+				return -EINVAL;
+			offset += inode->i_size;
+			break;
+
+		case 1:
+			offset += file->f_pos;
+	}
+
+	/*
+	 * No reason to seek beyond end of file for what we have on procfs.
+	 * XXX: Assume that files for which we don't have a size are small.
+	 */
+	if (offset < 0 || offset > (inode->i_size ?: 0x10000000))
+		return -EINVAL;
+
+	if (offset != file->f_pos) {
+		file->f_pos = offset;
+		file->f_reada = 0;
+	}
+
+	return offset;
 }
 
 /*

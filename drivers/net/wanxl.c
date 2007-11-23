@@ -552,6 +552,9 @@ static int wanxl_ioctl(hdlc_device *hdlc, struct ifreq *ifr, int cmd)
 	if (copy_from_user(&length, ifr->ifr_data, 4)!=0)
 		return -EFAULT;
 
+	if (length > INT_MAX)
+		return -EINVAL;
+
 	switch(cmd) {
 	case HDLCRUN:
 		if (port->card->first_port != port) /* Not initial port */

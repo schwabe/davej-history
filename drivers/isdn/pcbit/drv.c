@@ -408,7 +408,7 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 	switch(dev->l2_state) {
 	case L2_LWMODE:
 		/* check (size <= rdp_size); write buf into board */
-		if (len > BANK4 + 1)
+		if (len < 0 || len > BANK4 + 1 || len > 1024)
 		{
 			printk("pcbit_writecmd: invalid length %d\n", len);
 			return -EFAULT;
@@ -418,7 +418,7 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 		{
 			u_char cbuf[1024];
 
-			copy_from_user(cbuf, buf, len);
+			copy_from_user_ret(cbuf, buf, len, -EFAULT);
 			for (i=0; i<len; i++)
 				writeb(cbuf[i], dev->sh_mem + i);
 		}
@@ -436,7 +436,7 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 			/* get it into kernel space */
 			if ((ptr = kmalloc(len, GFP_KERNEL))==NULL)
 				return -ENOMEM;
-			copy_from_user(ptr, buf, len);
+			copy_from_user_ret(ptr, buf, len, -EFAULT);
 			loadbuf = ptr;
 		}
 		else

@@ -52,6 +52,7 @@
 #define S_IRUGO		(S_IRUSR|S_IRGRP|S_IROTH)
 #define S_IWUGO		(S_IWUSR|S_IWGRP|S_IWOTH)
 #define S_IXUGO		(S_IXUSR|S_IXGRP|S_IXOTH)
+#define S_IRXUG		(S_IRUSR|S_IXUSR|S_IRGRP|S_IXGRP)
 #endif
 
 #endif

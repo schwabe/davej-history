@@ -840,8 +840,8 @@ static int generic_write (struct usb_serial_port *port, int from_user, const uns
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
-	if (count == 0) {
-		dbg(__FUNCTION__ " - write request of 0 bytes");
+	if (count <= 0) {
+		dbg(__FUNCTION__ " - write request of %d bytes", count);
 		return (0);
 	}
 

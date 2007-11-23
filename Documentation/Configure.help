@@ -2088,7 +2088,7 @@ CONFIG_M386
         Also SL/SLC/SLC2/SLC3/SX/SX2, NexGen Nx586 and UMC U5D or U5S.
 
   "586/K5/5x86/6x86"  Select this for an x586 or x686 processor such
-        as the AMD K5, the Intel  5x86 or 6x86, or the Intel 6x86MX.
+        as the AMD K5, the Cyrix  5x86 or 6x86, or the Cyrix 6x86MX.
         This choice does not assume the RDTSC (time stamp counter)
         instruction.
 

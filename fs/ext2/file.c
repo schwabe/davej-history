@@ -164,15 +164,15 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 	int err;
 	int i,buffercount,write_error, new_buffer;
 	unsigned long limit;
-	
+
 	/* POSIX: mtime/ctime may not change for 0 count */
 	if (!count)
 		return 0;
 	/* This makes the bounds-checking arithmetic later on much more
 	 * sane. */
-	if (((signed) count) < 0)
+	if (((ssize_t) count) < 0)
 		return -EINVAL;
-	
+
 	write_error = buffercount = 0;
 	if (!inode) {
 		printk("ext2_file_write: inode = NULL\n");
@@ -206,15 +206,15 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 	/* If the fd's pos is already greater than or equal to the file
 	 * descriptor's offset maximum, then we need to return EFBIG for
 	 * any non-zero count (and we already tested for zero above). */
-	if (((unsigned) pos) >= 0x7FFFFFFFUL)
+	if (((unsigned long) pos) >= 0x7FFFFFFFUL)
 		return -EFBIG;
 	
 	/* If we are about to overflow the maximum file size, we also
 	 * need to return the error, but only if no bytes can be written
 	 * successfully. */
-	if (((unsigned) pos + count) > 0x7FFFFFFFUL) {
+	if (((unsigned long) pos + count) > 0x7FFFFFFFUL) {
 		count = 0x7FFFFFFFL - pos;
-		if (((signed) count) < 0)
+		if (((ssize_t) count) < 0)
 			return -EFBIG;
 	}
 #else
@@ -246,9 +246,9 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 
 	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
 	if (limit < RLIM_INFINITY) {
-		if (((unsigned) pos+count) >= limit) {
+		if (((unsigned long) pos + count) >= limit) {
 			count = limit - pos;
-			if (((signed) count) <= 0) {
+			if (((ssize_t) count) <= 0) {
 				send_sig(SIGXFSZ, current, 0);
 				return -EFBIG;
 			}

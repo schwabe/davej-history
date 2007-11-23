@@ -249,7 +249,7 @@ static int get_video_window32(struct video_window *kp, struct video_window32 *up
 		return -EINVAL;
 
 	/* Peculiar interface... */
-	if(nclips < 0)
+	if(nclips < 0 || nclips > VIDEO_CLIPMAP_SIZE)
 		nclips = VIDEO_CLIPMAP_SIZE;
 
 	kcp = kmalloc(nclips * sizeof(struct video_clip), GFP_KERNEL);

@@ -1750,6 +1750,11 @@ static int planb_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			/* Reset clip mask */
 			memset ((void *) pb->mask, 0xff, (pb->maxlines
 					* ((PLANB_MAXPIXELS + 7) & ~7)) / 8);
+			/* XXX: The first check may be optimized away if the
+			 * compiler thinks a pointer can't wraparound */
+			if (vw.clips + vw.clipcount < vw.clips ||
+			    vw.clipcount < 0 || vw.clipcount > 2048)
+				return -EINVAL;
 			/* Add any clip rects */
 			for (i = 0; i < vw.clipcount; i++) {
 				if (copy_from_user(&clip, vw.clips + i,

@@ -495,6 +495,7 @@ static int wpx_exec (struct sdla* card, void* u_cmd, void* u_data)
 
 	if(copy_from_user((void*)&cmd, u_cmd, sizeof(cmd)))
 		return -EFAULT;
+	/* XXX: should check cmd.length against size allocated for mbox->data */
 		
 	/* execute command */
 

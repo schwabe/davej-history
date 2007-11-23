@@ -635,6 +635,15 @@ static void __init display_cacheinfo(struct cpuinfo_x86 *c)
 		l2size = 64;
 	}
 
+	/* VIA C3 CPUs (Samuel2, Ezra & Ezra-T) need further shifting. */
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_CENTAUR &&
+		boot_cpu_data.x86 == 6 &&
+		(boot_cpu_data.x86_model == 7 ||
+		boot_cpu_data.x86_model == 8)) 
+	{
+		l2size = l2size >> 8;
+	}
+
 	if (l2size == 0)
 		return;		/* Again, no L2 cache is possible */
 
@@ -1056,13 +1065,18 @@ static void __init init_centaur(struct cpuinfo_x86 *c)
 		}
 
 		/* Set 3DNow! on Winchip 2 and above. */
-		if (c->x86_model >=8)
+		if (c->x86_model >=8) {
 		    c->x86_capability |= X86_FEATURE_AMD3D;
-
+		    get_model_name(c);
+		    display_cacheinfo(c);
+		}
 		c->x86_capability |=X86_FEATURE_CX8;
 	}
 	/* Cyrix III 'Samuel' CPU */
-	if(c->x86 == 6 && c->x86_model == 6)
+	if(c->x86 == 6 && 
+		(c->x86_model == 6 || 
+		c->x86_model == 7 || 
+		c->x86_model == 8))
 	{
 		rdmsr(0x1107, lv, hv);
 		lv|=(1<<1);	/* Report CX8 */
@@ -1075,6 +1089,9 @@ static void __init init_centaur(struct cpuinfo_x86 *c)
 		cpuid(0x80000001, &lv, &lv, &lv, &hv);
 		if(hv&(1<<31))
 			c->x86_capability |= X86_FEATURE_AMD3D;
+		
+		get_model_name(c);
+		display_cacheinfo(c);
 	}	
 }
 
@@ -1277,6 +1294,10 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	    NULL, NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_CENTAUR,	5,
 	  { NULL, NULL, NULL, NULL, "C6", NULL, NULL, NULL, "C6-2", NULL, NULL,
+	    NULL, NULL, NULL, NULL, NULL }},
+	{ X86_VENDOR_CENTAUR,	6,
+	  { NULL, NULL, NULL, NULL, NULL, NULL, "Samuel 1",
+	    "Samuel 2/Ezra", "Ezra-T", NULL, NULL,
 	    NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_NEXGEN,	5,
 	  { "Nx586", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,

@@ -937,6 +937,11 @@ get_ksyms_list(char *buf, char **start, off_t offset, int length)
 	int len     = 0;	/* code from  net/ipv4/proc.c */
 	off_t pos   = 0;
 	off_t begin = 0;
+	off_t end;
+
+	end = offset + length;	/* XXX: undefined on overflow per ISO C99 */
+	if (end < offset)
+		return -EINVAL;
 
 	for (mod = module_list; mod; mod = mod->next) {
 		unsigned i;
@@ -963,7 +968,7 @@ get_ksyms_list(char *buf, char **start, off_t offset, int length)
 				begin = pos;
 			}
 			pos = begin + len;
-			if (pos > offset+length)
+			if (pos > end)
 				goto leave_the_loop;
 		}
 	}

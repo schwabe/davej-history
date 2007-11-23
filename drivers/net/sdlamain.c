@@ -589,6 +589,9 @@ static int ioctl (wan_device_t* wandev, unsigned cmd, unsigned long arg)
 	sdla_t* card;
 	int err;
 
+	if (!capable(CAP_NET_ADMIN))
+		return -EPERM;
+
 	/* sanity checks */
 	if ((wandev == NULL) || (wandev->private == NULL))
 		return -EFAULT;

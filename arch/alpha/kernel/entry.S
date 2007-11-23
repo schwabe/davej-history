@@ -556,7 +556,7 @@ entSys:
 	lda	$5,sys_call_table
 	lda	$27,sys_ni_syscall
 	cmpult	$0,$4,$4
-	ldq	$3,TASK_FLAGS($8)
+	ldq	$3,TASK_PTRACE($8)
 	stq	$17,SP_OFF+32($30)
 	s8addq	$0,$5,$5
 	and     $3,PT_PTRACED,$3

@@ -412,7 +412,7 @@ asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, long timeout)
 	lock_kernel();
 	/* Do a sanity check on nfds ... */
 	err = -EINVAL;
-	if (nfds > current->files->max_fds)
+	if (nfds > current->files->max_fds || nfds > 0x100000)
 		goto out;
 
 	if (timeout) {

@@ -533,6 +533,7 @@ static int wpp_exec(struct sdla *card, void *u_cmd, void *u_data)
 
 	if (copy_from_user((void*)&mbox->cmd, u_cmd, sizeof(ppp_cmd_t)))
 		return -EFAULT;
+	/* XXX: should check cmd.length against size allocated for mbox->data */
 
 	len = mbox->cmd.length;
 

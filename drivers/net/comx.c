@@ -636,9 +636,16 @@ static int comx_write_proc(struct file *file, const char *buffer, u_long count,
 
 	if (!(page = (char *)__get_free_page(GFP_KERNEL))) return -ENOMEM;
 
-	copy_from_user(page, buffer, count);
-
-	if (*(page + count - 1) == '\n') *(page + count - 1) = 0;
+	if (copy_from_user(page, buffer, count = min(count, PAGE_SIZE))) {
+		free_page((unsigned long)page);
+		return -EFAULT;
+	}
+	if (count && *(page + count - 1) == '\n') {
+		*(page + count - 1) = 0;
+	}
+	if (count < PAGE_SIZE)
+		*(page + count) = 0;
+	*(page + PAGE_SIZE - 1) = 0;
 
 	if (strcmp(entry->name, FILENAME_DEBUG) == 0) {
 		int i;
