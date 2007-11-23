@@ -11,6 +11,8 @@
 #include <linux/sched.h>
 #include <linux/utsname.h>
 #include <linux/nfs.h>
+#include <linux/nfs2.h>
+#include <linux/nfs3.h>
 
 #include <linux/sunrpc/xdr.h>
 #include <linux/sunrpc/clnt.h>

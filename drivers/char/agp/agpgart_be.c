@@ -43,7 +43,7 @@
 #include <asm/io.h>
 #include <asm/page.h>
 
-#include "agp_backend.h"
+#include <linux/agp_backend.h>
 #include "agp.h"
 
 MODULE_AUTHOR("Jeff Hartmann <jhartmann@precisioninsight.com>");
@@ -2118,9 +2118,15 @@ static struct {
 		via_generic_setup },
 	{ PCI_DEVICE_ID_VIA_8371_0,
 		PCI_VENDOR_ID_VIA,
-		VIA_APOLLO_SUPER,
+		VIA_APOLLO_KX133,
 		"Via",
-		"Apollo Super",
+		"Apollo KX133",
+		via_generic_setup },
+	{ PCI_DEVICE_ID_VIA_8363_0,
+		PCI_VENDOR_ID_VIA,
+		VIA_APOLLO_KT133,
+		"Via",
+		"Apollo KT133",
 		via_generic_setup },
 	{ PCI_DEVICE_ID_VIA_82C691_0,
 		PCI_VENDOR_ID_VIA,

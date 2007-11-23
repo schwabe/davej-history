@@ -401,7 +401,7 @@ static int ip_masq_user_info(char *buffer, char **start, off_t offset,
 
 		magic_control = atomic_read(&ms->n_control);
 		if (!magic_control && ms->control) magic_control = -1;
-		sprintf(temp,"%-4s %08lX:%04X %08lX:%04X %08lX:%04X %-12s %3X %4d %3d %7lu %4d %4d",
+		sprintf(temp,"%-4s %08X:%04X %08X:%04X %08X:%04X %-12s %3X %4d %3d %7lu %4d %4d",
 			masq_proto_name(ms->protocol),
 			ntohl(ms->saddr), ntohs(ms->sport),
 			ntohl(ms->daddr), ntohs(ms->dport),

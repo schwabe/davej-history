@@ -95,7 +95,6 @@ MODULE_PARM(pll,"1-4i");
 /* Anybody who uses more than four? */
 #define BTTV_MAX 4
 
-static int find_vga(void);
 static void bt848_set_risc_jmps(struct bttv *btv);
 
 static unsigned int vidmem=0;   /* manually set video mem address */
@@ -1663,8 +1662,6 @@ static int bttv_open(struct video_device *dev, int flags)
         audio(btv, AUDIO_UNMUTE);
         for (i=users=0; i<bttv_num; i++)
                 users+=bttvs[i].user;
-        if (users==0)
-                find_vga();
         btv->fbuffer=NULL;
         if (!btv->fbuffer)
                 btv->fbuffer=(unsigned char *) rvmalloc(2*BTTV_MAX_FBUF);
@@ -2673,242 +2670,12 @@ static struct video_device radio_template=
 };
 
 
-struct vidbases 
-{
-	unsigned short vendor, device;
-	char *name;
-	uint badr;
-};
-
-static struct vidbases vbs[] = {
-        { PCI_VENDOR_ID_ALLIANCE, PCI_DEVICE_ID_ALLIANCE_AT3D,
-                "Alliance AT3D", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_215CT222,
-                "ATI MACH64 CT", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_210888GX,
-		"ATI MACH64 Winturbo", PCI_BASE_ADDRESS_0},
- 	{ PCI_VENDOR_ID_ATI, PCI_DEVICE_ID_ATI_215GT,
-                "ATI MACH64 GT", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_CIRRUS, 0, "Cirrus Logic", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TGA,
-		"DEC DC21030", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_MATROX, PCI_DEVICE_ID_MATROX_MIL,
-		"Matrox Millennium", PCI_BASE_ADDRESS_1},
-	{ PCI_VENDOR_ID_MATROX, PCI_DEVICE_ID_MATROX_MIL_2,
-		"Matrox Millennium II", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_MATROX, PCI_DEVICE_ID_MATROX_MIL_2_AGP,
-		"Matrox Millennium II AGP", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_MATROX, 0x051a, "Matrox Mystique", PCI_BASE_ADDRESS_1},
-	{ PCI_VENDOR_ID_MATROX, 0x0521, "Matrox G200", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_N9, PCI_DEVICE_ID_N9_I128, 
-		"Number Nine Imagine 128", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_N9, PCI_DEVICE_ID_N9_I128_2, 
-		"Number Nine Imagine 128 Series 2", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_S3, 0, "S3", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_TSENG, 0, "TSENG", PCI_BASE_ADDRESS_0},
-	{ PCI_VENDOR_ID_NVIDIA_SGS, PCI_DEVICE_ID_NVIDIA_SGS_RIVA128,
-                "Riva128", PCI_BASE_ADDRESS_1},
-};
-
-
-/* DEC TGA offsets stolen from XFree-3.2 */
-
-static uint dec_offsets[4] = {
-	0x200000,
-	0x804000,
-	0,
-	0x1004000
-};
-
-#define NR_CARDS (sizeof(vbs)/sizeof(struct vidbases))
-
-/* Scan for PCI display adapter
-   if more than one card is present the last one is used for now */
-
-#if LINUX_VERSION_CODE >= 0x020100
-
-static int find_vga(void)
-{
-	unsigned short badr;
-	int found = 0, i, tga_type;
-	unsigned int vidadr=0;
-	struct pci_dev *dev;
-
-
-	for (dev = pci_devices; dev != NULL; dev = dev->next) 
-	{
-		if (dev->class != PCI_CLASS_NOT_DEFINED_VGA &&
-			((dev->class) >> 16 != PCI_BASE_CLASS_DISPLAY))
-		{
-			continue;
-		}
-		if (PCI_FUNC(dev->devfn) != 0)
-			continue;
-
-		badr=0;
-		printk(KERN_INFO "bttv: PCI display adapter: ");
-		for (i=0; i<NR_CARDS; i++) 
-		{
-			if (dev->vendor == vbs[i].vendor) 
-			{
-				if (vbs[i].device) 
-					if (vbs[i].device!=dev->device)
-						continue;
-				printk("%s.\n", vbs[i].name);
-				badr=vbs[i].badr;
-				break;
-			}
-		}
-		if (!badr) 
-		{
-			printk(KERN_ERR "bttv: Unknown video memory base address.\n");
-			continue;
-		}
-		pci_read_config_dword(dev, badr, &vidadr);
-		if (vidadr & PCI_BASE_ADDRESS_SPACE_IO) 
-		{
-			printk(KERN_ERR "bttv: Memory seems to be I/O memory.\n");
-			printk(KERN_ERR "bttv: Check entry for your card type in bttv.c vidbases struct.\n");
-			continue;
-		}
-		vidadr &= PCI_BASE_ADDRESS_MEM_MASK;
-		if (!vidadr) 
-		{
-			printk(KERN_ERR "bttv: Memory @ 0, must be something wrong!");
-			continue;
-		}
-     
-		if (dev->vendor == PCI_VENDOR_ID_DEC &&
-			dev->device == PCI_DEVICE_ID_DEC_TGA) 
-		{
-			tga_type = (readl((unsigned long)vidadr) >> 12) & 0x0f;
-			if (tga_type != 0 && tga_type != 1 && tga_type != 3) 
-			{
-				printk(KERN_ERR "bttv: TGA type (0x%x) unrecognized!\n", tga_type);
-				found--;
-			}
-			vidadr+=dec_offsets[tga_type];
-		}
-		DEBUG(printk(KERN_DEBUG "bttv: memory @ 0x%08x, ", vidadr));
-		DEBUG(printk(KERN_DEBUG "devfn: 0x%04x.\n", dev->devfn));
-		found++;
-	}
-  
-	if (vidmem)
-	{
-		vidadr=vidmem<<20;
-		printk(KERN_INFO "bttv: Video memory override: 0x%08x\n", vidadr);
-		found=1;
-	}
-	for (i=0; i<BTTV_MAX; i++)
-		bttvs[i].win.vidadr=vidadr;
-
-	return found;
-}
-
-#else
-static int find_vga(void)
-{
-	unsigned int devfn, class, vendev;
-	unsigned short vendor, device, badr;
-	int found=0, bus=0, i, tga_type;
-	unsigned int vidadr=0;
-
-
-	for (devfn = 0; devfn < 0xff; devfn++) 
-	{
-		if (PCI_FUNC(devfn) != 0)
-			continue;
-		pcibios_read_config_dword(bus, devfn, PCI_VENDOR_ID, &vendev);
-		if (vendev == 0xffffffff || vendev == 0x00000000) 
-			continue;
-		pcibios_read_config_word(bus, devfn, PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &device);
-		pcibios_read_config_dword(bus, devfn, PCI_CLASS_REVISION, &class);
-		class = class >> 16;
-/*		if (class == PCI_CLASS_DISPLAY_VGA) {*/
-		if ((class>>8) == PCI_BASE_CLASS_DISPLAY ||
-			/* Number 9 GXE64Pro needs this */
-			class == PCI_CLASS_NOT_DEFINED_VGA) 
-		{
-			badr=0;
-			printk(KERN_INFO "bttv: PCI display adapter: ");
-			for (i=0; i<NR_CARDS; i++) 
-			{
-				if (vendor==vbs[i].vendor) 
-				{
-					if (vbs[i].device) 
-						if (vbs[i].device!=device)
-							continue;
-					printk("%s.\n", vbs[i].name);
-					badr=vbs[i].badr;
-					break;
-				}
-			}
-                        if (NR_CARDS == i)
-                            printk("UNKNOWN.\n");
-			if (!badr) 
-			{
-				printk(KERN_ERR "bttv: Unknown video memory base address.\n");
-				continue;
-			}
-			pcibios_read_config_dword(bus, devfn, badr, &vidadr);
-			if (vidadr & PCI_BASE_ADDRESS_SPACE_IO) 
-			{
-				printk(KERN_ERR "bttv: Memory seems to be I/O memory.\n");
-				printk(KERN_ERR "bttv: Check entry for your card type in bttv.c vidbases struct.\n");
-				continue;
-			}
-			vidadr &= PCI_BASE_ADDRESS_MEM_MASK;
-			if (!vidadr) 
-			{
-				printk(KERN_ERR "bttv: Memory @ 0, must be something wrong!\n");
-				continue;
-			}
-      
-			if (vendor==PCI_VENDOR_ID_DEC)
-				if (device==PCI_DEVICE_ID_DEC_TGA) 
-			{
-				tga_type = (readl((unsigned long)vidadr) >> 12) & 0x0f;
-				if (tga_type != 0 && tga_type != 1 && tga_type != 3) 
-				{
-					printk(KERN_ERR "bttv: TGA type (0x%x) unrecognized!\n", tga_type);
-					found--;
-				}
-				vidadr+=dec_offsets[tga_type];
-			}
-
-			DEBUG(printk(KERN_DEBUG "bttv: memory @ 0x%08x, ", vidadr));
-			DEBUG(printk(KERN_DEBUG "devfn: 0x%04x.\n", devfn));
-			found++;
-		}
-	}
-  
-	if (vidmem)
-	{
-                if (vidmem < 0x1000)
-                        vidadr=vidmem<<20;
-                else
-                        vidadr=vidmem;
-		printk(KERN_INFO "bttv: Video memory override: 0x%08x\n", vidadr);
-		found=1;
-	}
-	for (i=0; i<BTTV_MAX; i++)
-		bttvs[i].win.vidadr=vidadr;
-
-	return found;
-}
-#endif
-
-
 #define  TRITON_PCON	           0x50 
 #define  TRITON_BUS_CONCURRENCY   (1<<0)
 #define  TRITON_STREAMING	  (1<<1)
 #define  TRITON_WRITE_BURST	  (1<<2)
 #define  TRITON_PEER_CONCURRENCY  (1<<3)
   
-
-#if LINUX_VERSION_CODE >= 0x020100
 
 static void handle_chipset(void)
 {
@@ -2973,78 +2740,6 @@ static void handle_chipset(void)
 #endif
 	}
 }
-#else
-static void handle_chipset(void)
-{
-	int index;
-  
-	for (index = 0; index < 8; index++)
-	{
-		unsigned char bus, devfn;
-		unsigned char b;
-    
-		/* Beware the SiS 85C496 my friend - rev 49 don't work with a bttv */
-		
-		if (!pcibios_find_device(PCI_VENDOR_ID_SI, 
-					 PCI_DEVICE_ID_SI_496, 
-					 index, &bus, &devfn))
-		{
-			printk(KERN_WARNING "BT848 and SIS 85C496 chipset don't always work together.\n");
-		}			
-
-		if (!pcibios_find_device(PCI_VENDOR_ID_INTEL, 
-					 PCI_DEVICE_ID_INTEL_82441,
-					 index, &bus, &devfn)) 
-		{
-			pcibios_read_config_byte(bus, devfn, 0x53, &b);
-			DEBUG(printk(KERN_INFO "bttv: Host bridge: 82441FX Natoma, "));
-			DEBUG(printk("bufcon=0x%02x\n",b));
-		}
-
-		if (!pcibios_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82437,
-			    index, &bus, &devfn)) 
-		{
-			printk(KERN_INFO "bttv: Host bridge 82437FX Triton PIIX\n");
-			triton1=BT848_INT_ETBF;
-			
-#if 0			
-			/* The ETBF bit SHOULD make all this unnecessary */
-			/* 430FX (Triton I) freezes with bus concurrency on -> switch it off */
-			{   
-			        unsigned char bo;
-
-				pcibios_read_config_byte(bus, devfn, TRITON_PCON, &b);
-				bo=b;
-				DEBUG(printk(KERN_DEBUG "bttv: 82437FX: PCON: 0x%x\n",b));
-
-				if(!(b & TRITON_BUS_CONCURRENCY)) 
-				{
-					printk(KERN_WARNING "bttv: 82437FX: disabling bus concurrency\n");
-					b |= TRITON_BUS_CONCURRENCY;
-				}
-
-				if(b & TRITON_PEER_CONCURRENCY) 
-				{
-					printk(KERN_WARNING "bttv: 82437FX: disabling peer concurrency\n");
-					b &= ~TRITON_PEER_CONCURRENCY;
-				}
-				if(!(b & TRITON_STREAMING)) 
-				{
-					printk(KERN_WARNING "bttv: 82437FX: disabling streaming\n");
-					b |=  TRITON_STREAMING;
-				}
-
-				if (b!=bo) 
-				{
-					pcibios_write_config_byte(bus, devfn, TRITON_PCON, b); 
-					printk(KERN_DEBUG "bttv: 82437FX: PCON changed to: 0x%x\n",b);
-				}
-			}
-#endif
-		}
-	}
-}
-#endif
 
 static void init_tea6300(struct i2c_bus *bus) 
 {

@@ -11,6 +11,7 @@
 #include <linux/sched.h>
 #include <linux/utsname.h>
 #include <linux/nfs.h>
+#include <linux/nfs2.h>
 
 #include <linux/sunrpc/xdr.h>
 #include <linux/sunrpc/clnt.h>
@@ -18,6 +19,7 @@
 #include <linux/sunrpc/stats.h>
 #include <linux/lockd/lockd.h>
 #include <linux/lockd/sm_inter.h>
+
 
 #define NLMDBG_FACILITY		NLMDBG_XDR
 #define NLM_MAXSTRLEN		1024

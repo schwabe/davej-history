@@ -29,7 +29,6 @@
 
 static int proc_root_readdir(struct file *, void *, filldir_t);
 static struct dentry *proc_root_lookup(struct inode *,struct dentry *);
-static int proc_unlink(struct inode *, struct dentry *);
 
 static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8] = {0};
 
@@ -86,7 +85,7 @@ struct inode_operations proc_dyna_dir_inode_operations = {
 	NULL,			/* create */
 	proc_lookup,		/* lookup */
 	NULL,			/* link	*/
-	proc_unlink,		/* unlink(struct inode *, struct dentry *) */
+	NULL, 			/* unlink(struct inode *, struct dentry *) */
 	NULL,			/* symlink	*/
 	NULL,			/* mkdir */
 	NULL,			/* rmdir */
@@ -988,17 +987,5 @@ static int proc_root_readdir(struct file * filp,
 			break;
 		filp->f_pos++;
 	}
-	return 0;
-}
-
-static int proc_unlink(struct inode *dir, struct dentry *dentry)
-{
-	struct proc_dir_entry * dp = dir->u.generic_ip;
-
-printk("proc_file_unlink: deleting %s/%s\n", dp->name, dentry->d_name.name);
-
-	remove_proc_entry(dentry->d_name.name, dp);
-	dentry->d_inode->i_nlink = 0;
-	d_delete(dentry);
 	return 0;
 }

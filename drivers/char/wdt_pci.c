@@ -499,6 +499,7 @@ static int __init wdtpci_init_one (struct pci_dev *dev)
 
 err_out_free_res:
 	release_region (io, 16);
+	return -EIO;
 }
 
 

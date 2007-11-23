@@ -140,7 +140,7 @@ struct JS_DATA_SAVE_TYPE {
 #define __exit
 #define BASE_ADDRESS(x,i)	((x)->base_address[i])
 #define SETUP_PARAM		char *str
-#define SETUP_PARSE(x)		int ints[x]; get_options(str, x, ints)
+#define SETUP_PARSE(x)		int ints[x]; get_options(str, ints)
 #else
 #define BASE_ADDRESS(x,i)	((x)->resource[i].start)
 #define SETUP_PARAM		char *str

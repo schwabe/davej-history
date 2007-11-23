@@ -548,7 +548,7 @@ __initfunc(int cadet_init(struct video_init *v))
 {
 #ifndef MODULE        
         if(cadet_probe()<0) {
-	        return EINVAL;
+	        return -EINVAL;
 	}
 #endif
 	if(video_register_device(&cadet_radio,VFL_TYPE_RADIO)==-1)

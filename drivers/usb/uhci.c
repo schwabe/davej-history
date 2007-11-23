@@ -24,6 +24,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/sched.h>
@@ -49,6 +50,7 @@ static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data);
 
 static int debug = 1;
 MODULE_PARM(debug, "i");
+MODULE_PARM_DESC(debug, "Debug level");
 
 static kmem_cache_t *uhci_td_cachep;
 static kmem_cache_t *uhci_qh_cachep;
@@ -1296,6 +1298,7 @@ static int uhci_submit_urb(struct urb *urb)
 	struct uhci *uhci;
 	unsigned long flags;
 	struct urb *u;
+	int bustime;
 
 	if (!urb)
 		return -EINVAL;
@@ -1325,13 +1328,40 @@ static int uhci_submit_urb(struct urb *urb)
 		ret = uhci_submit_control(urb);
 		break;
 	case PIPE_INTERRUPT:
-		ret = uhci_submit_interrupt(urb);
+		if (urb->bandwidth == 0) {	/* not yet checked/allocated */
+			bustime = usb_check_bandwidth (urb->dev, urb);
+			if (bustime < 0)
+				ret = bustime;
+			else {
+				ret = uhci_submit_interrupt(urb);
+				if (ret == -EINPROGRESS)
+					usb_claim_bandwidth (urb->dev, urb, bustime, 0);
+			}
+		} else {	/* bandwidth is already set */
+			ret = uhci_submit_interrupt(urb);
+		}
 		break;
 	case PIPE_BULK:
 		ret = uhci_submit_bulk(urb, u);
 		break;
 	case PIPE_ISOCHRONOUS:
-		ret = uhci_submit_isochronous(urb);
+		if (urb->bandwidth == 0) {	/* not yet checked/allocated */
+			if (urb->number_of_packets <= 0) {
+				ret = -EINVAL;
+				break;
+			}
+			bustime = usb_check_bandwidth (urb->dev, urb);
+			if (bustime < 0) {
+				ret = bustime;
+				break;
+			}
+
+			ret = uhci_submit_isochronous(urb);
+			if (ret == -EINPROGRESS)
+				usb_claim_bandwidth (urb->dev, urb, bustime, 1);
+		} else {	/* bandwidth is already set */
+			ret = uhci_submit_isochronous(urb);
+		}
 		break;
 	}
 
@@ -1387,6 +1417,10 @@ static void uhci_transfer_result(struct urb *urb)
 	case PIPE_CONTROL:
 	case PIPE_BULK:
 	case PIPE_ISOCHRONOUS:
+		/* Release bandwidth for Interrupt or Isoc. transfers */
+		/* Spinlock needed ? */
+		if (urb->bandwidth)
+			usb_release_bandwidth (urb->dev, urb, 1);
 		uhci_unlink_generic(urb);
 		break;
 	case PIPE_INTERRUPT:
@@ -1394,8 +1428,13 @@ static void uhci_transfer_result(struct urb *urb)
 		urb->complete(urb);
 		if (urb->interval)
 			uhci_reset_interrupt(urb);
-		else
+		else {
+			/* Release bandwidth for Interrupt or Isoc. transfers */
+			/* Spinlock needed ? */
+			if (urb->bandwidth)
+				usb_release_bandwidth (urb->dev, urb, 0);
 			uhci_unlink_generic(urb);
+		}
 		return;		/* <-- Note the return */
 	}
 
@@ -1475,6 +1514,21 @@ static int uhci_unlink_urb(struct urb *urb)
 	/* Short circuit the virtual root hub */
 	if (usb_pipedevice(urb->pipe) == uhci->rh.devnum)
 		return rh_unlink_urb(urb);
+
+	/* Release bandwidth for Interrupt or Isoc. transfers */
+	/* Spinlock needed ? */
+	if (urb->bandwidth) {
+		switch (usb_pipetype(urb->pipe)) {
+		case PIPE_INTERRUPT:
+			usb_release_bandwidth (urb->dev, urb, 0);
+			break;
+		case PIPE_ISOCHRONOUS:
+			usb_release_bandwidth (urb->dev, urb, 1);
+			break;
+		default:
+			break;
+		}
+	}
 
 	if (urb->status == -EINPROGRESS) {
 		uhci_unlink_generic(urb);
@@ -2372,7 +2426,7 @@ static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data)
 	return 0;
 }
 
-int uhci_init(void)
+static int __init uhci_init(void)
 {
 	int retval;
 	struct pci_dev *dev;
@@ -2478,16 +2532,15 @@ void uhci_cleanup(void)
 		printk(KERN_INFO "uhci: not all TD's were freed\n");
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return uhci_init();
-}
-
-void cleanup_module(void)
+static void __exit uhci_exit(void)
 {
 	pm_unregister_all(handle_pm_event);
 	uhci_cleanup();
 }
-#endif //MODULE
+
+module_init(uhci_init);
+module_exit(uhci_exit);
+
+MODULE_AUTHOR("Linus Torvalds, Johannes Erdfelt, Randy Dunlap, Georg Acher, Deti Fliegl, Thomas Sailer, Roman Weissgaerber");
+MODULE_DESCRIPTION("USB Universal Host Controller Interface driver");
 

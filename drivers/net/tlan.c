@@ -57,6 +57,8 @@
  *
  * 	v1.3b June 28, 2000	- Clean ups.
  *
+ * 	v1.3c Sep 7, 2000	- Minor typo fix.
+ *
  ********************************************************************************/
 
 
@@ -81,7 +83,7 @@ static	int		TLanDevicesInstalled = 0;
 static	int		aui = 0;
 static	int		duplex = 0;
 static	int		speed = 0;
-static const char *tlan_banner = "ThunderLAN driver v1.3b\n";
+static const char *tlan_banner = "ThunderLAN driver v1.3c\n";
 
 MODULE_AUTHOR("Maintainer: Torben Mathiasen <torben.mathiasen@compaq.com>");
 MODULE_DESCRIPTION("Driver for TI ThunderLAN based ethernet adapters");
@@ -510,7 +512,7 @@ extern int tlan_probe( struct device *dev )
 	}
 	priv->debug =      dev->mem_end;
 
-	printk(KERN_INFO "TLAN 1.3b: %s irq=%2d io=%04x, %s, Rev. %d\n",
+	printk(KERN_INFO "TLAN 1.3c: %s irq=%2d io=%04x, %s, Rev. %d\n",
 		dev->name, 
 		(int) irq, 
 		io_base,
@@ -1121,7 +1123,7 @@ void TLan_SetMulticastList( struct device *dev )
 u32 TLan_HandleInvalid( struct device *dev, u16 host_int )
 {
 	host_int = 0;
-	printk( "TLAN:  Invalid interrupt on %s.\n", dev->name ); 
+	/* printk( "TLAN:  Invalid interrupt on %s.\n", dev->name ); */
 	return 0;
 
 } /* TLan_HandleInvalid */

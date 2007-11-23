@@ -13,6 +13,7 @@
 #include <linux/in.h>
 #include <linux/sunrpc/xdr.h>
 #include <linux/sunrpc/msg_prot.h>
+#include <linux/nfs2.h>
 
 u32	rpc_success, rpc_prog_unavail, rpc_prog_mismatch, rpc_proc_unavail,
 	rpc_garbage_args, rpc_system_err;

@@ -97,6 +97,7 @@ obj-$(CONFIG_SOUND_MAESTRO)	+= maestro.o
 obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
 obj-$(CONFIG_SOUND_TRIDENT)     += trident.o ac97_codec.o
 obj-$(CONFIG_SOUND_VIA82CXXX)	+= via82cxxx_audio.o ac97_codec.o
+obj-$(CONFIG_SOUND_YMFPCI)	+= ymfpci.o ac97_codec.o
 
 ifeq ($(CONFIG_SOUND_EMU10K1),y)
   obj-y				+= emu10k1/emu10k1.o

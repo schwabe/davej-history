@@ -351,6 +351,7 @@ typedef struct orc_scb {	/* Scsi_Ctrl_Blk                */
 #define ORC_EXECSCSI	0x00	/* SCSI initiator command with residual */
 #define ORC_BUSDEVRST	0x01	/* SCSI Bus Device Reset  */
 
+#ifndef HOSTS_C
 /* Status of ORCSCB_Status */
 #define SCB_COMPLETE	0x00	/* SCB request completed  */
 #define SCB_POST	0x01	/* SCB is posted by the HOST      */
@@ -401,6 +402,7 @@ typedef struct orc_scb {	/* Scsi_Ctrl_Blk                */
 #define	MSG_DEVRST	0x0C
 #define	MSG_STAG	0x20
 
+#endif
 /***********************************************************************
 		Target Device Control Structure
 **********************************************************************/

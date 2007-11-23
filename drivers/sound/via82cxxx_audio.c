@@ -2249,7 +2249,7 @@ static int __init via_init_one (struct pci_dev *pdev)
 	if (printed_version++ == 0)
 		printk (KERN_INFO "Via 686a audio driver " VIA_VERSION "\n");
 
-	if (!check_region (pci_resource_start (pdev, 0),
+	if (check_region (pci_resource_start (pdev, 0),
 	    		     pci_resource_len (pdev, 0))) {
 		printk (KERN_ERR PFX "unable to obtain I/O resources, aborting\n");
 		rc = -EBUSY;

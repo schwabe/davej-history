@@ -39,7 +39,7 @@
 #include <linux/init.h>
 #include <linux/pagemap.h>
 #include <linux/miscdevice.h>
-#include "agp_backend.h"
+#include <linux/agp_backend.h>
 #include "agpgart.h"
 #include <asm/system.h>
 #include <asm/uaccess.h>

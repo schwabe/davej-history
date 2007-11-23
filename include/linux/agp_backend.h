@@ -50,8 +50,9 @@ enum chipset_type {
 	VIA_VP3,
 	VIA_MVP3,
 	VIA_MVP4,
-	VIA_APOLLO_SUPER,
 	VIA_APOLLO_PRO,
+	VIA_APOLLO_KT133,
+	VIA_APOLLO_KX133,
 	SIS_GENERIC,
 	AMD_GENERIC,
 	AMD_IRONGATE,
@@ -224,5 +225,8 @@ extern void agp_backend_release(void);
  * it bound is unbound.)
  * 
  */
+
+/* Don't call this directly!! used in initialization */
+extern int agp_init(void);
 
 #endif				/* _AGP_BACKEND_H */

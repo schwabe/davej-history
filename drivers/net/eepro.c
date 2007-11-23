@@ -23,6 +23,8 @@
 	This is a compatibility hardware problem.
 
 	Versions:
+	0.12c	fixed other multiple cards bug and other cleanups
+		(aris, 08/21/2000)
 	0.12b	added reset when the tx interrupt is called and TX isn't done
 		and other minor fixes. this may fix a problem found after
 		initialization that delays tx until a transmit timeout is 
@@ -212,6 +214,12 @@ struct eepro_local {
 				   version of the 82595 chip. */
 	int stepping;
 	spinlock_t lock; /* Serializing lock  */ 
+	unsigned rcv_ram;
+	unsigned rcv_start;
+	unsigned xmt_bar;
+	unsigned xmt_lower_limit_reg;
+	unsigned xmt_upper_limit_reg;
+	unsigned eeprom_reg;
 };
 
 /* The station (ethernet) address prefix, used for IDing the board. */
@@ -356,24 +364,20 @@ buffer (transmit-buffer = 32K - receive-buffer).
 
 #define	RCV_HEADER	8
 #define RCV_DEFAULT_RAM	0x6000
-#define RCV_RAM 	rcv_ram
-
-static unsigned rcv_ram = RCV_DEFAULT_RAM;
+#define RCV_RAM 	lp->rcv_ram
 
 #define XMT_HEADER	8
 #define XMT_RAM		(RAM_SIZE - RCV_RAM)
 
-#define XMT_START	((rcv_start + RCV_RAM) % RAM_SIZE)
+#define XMT_START	((lp->rcv_start + RCV_RAM) % RAM_SIZE)
 
-#define RCV_LOWER_LIMIT	(rcv_start >> 8)
-#define RCV_UPPER_LIMIT	(((rcv_start + RCV_RAM) - 2) >> 8)
+#define RCV_LOWER_LIMIT	(lp->rcv_start >> 8)
+#define RCV_UPPER_LIMIT	(((lp->rcv_start + RCV_RAM) - 2) >> 8)
 #define XMT_LOWER_LIMIT	(XMT_START >> 8)
 #define XMT_UPPER_LIMIT	(((XMT_START + XMT_RAM) - 2) >> 8)
 
 #define RCV_START_PRO	0x00
 #define RCV_START_10	XMT_RAM
-					/* by default the old driver */
-static unsigned rcv_start = RCV_START_PRO;
 
 #define	RCV_DONE	0x0008
 #define	RX_OK		0x2000
@@ -422,7 +426,6 @@ static unsigned rcv_start = RCV_START_PRO;
 
 #define	XMT_BAR_PRO	0x0a
 #define	XMT_BAR_10	0x0b
-static unsigned xmt_bar = XMT_BAR_PRO;
 
 #define	HOST_ADDRESS_REG	0x0c
 #define	IO_PORT		0x0e
@@ -440,8 +443,6 @@ static unsigned xmt_bar = XMT_BAR_PRO;
 #define	XMT_UPPER_LIMIT_REG_PRO	0x0b
 #define	XMT_LOWER_LIMIT_REG_10	0x0b
 #define	XMT_UPPER_LIMIT_REG_10	0x0a
-static unsigned xmt_lower_limit_reg = XMT_LOWER_LIMIT_REG_PRO;
-static unsigned xmt_upper_limit_reg = XMT_UPPER_LIMIT_REG_PRO;
 
 /* Bank 2 registers */
 #define	XMT_Chain_Int	0x20	/* Interrupt at the end of the transmit chain */
@@ -466,7 +467,6 @@ static unsigned xmt_upper_limit_reg = XMT_UPPER_LIMIT_REG_PRO;
 
 #define EEPROM_REG_PRO	0x0a
 #define EEPROM_REG_10	0x0b
-static unsigned eeprom_reg = EEPROM_REG_PRO;
 
 #define EESK 0x01
 #define EECS 0x02
@@ -528,7 +528,8 @@ static unsigned eeprom_reg = EEPROM_REG_PRO;
 #define eepro_ack_tx(ioaddr) outb (TX_INT, ioaddr + STATUS_REG)
 
 /* a complete sel reset */
-#define eepro_complete_selreset(ioaddr) { 	eepro_dis_int(ioaddr);\
+#define eepro_complete_selreset(ioaddr) { 	\
+						/* eepro_dis_int(ioaddr); */ \
 						lp->stats.tx_errors++;\
 						eepro_sel_reset(ioaddr);\
 						lp->tx_end = \
@@ -537,7 +538,7 @@ static unsigned eeprom_reg = EEPROM_REG_PRO;
 						lp->tx_last = 0;\
 						dev->tbusy=0;\
 						dev->trans_start = jiffies;\
-						eepro_en_int(ioaddr);\
+						/*eepro_en_int(ioaddr); */ \
 						eepro_en_rx(ioaddr);\
 					}
 
@@ -670,7 +671,15 @@ int eepro_probe1(struct device *dev, short ioaddr)
 
 			lp = (struct eepro_local *)dev->priv;
 
-			/* Now, get the ethernet hardware address from
+			/* default values */
+			lp->rcv_start = RCV_START_PRO;
+			lp->xmt_bar = XMT_BAR_PRO;
+			lp->xmt_lower_limit_reg = XMT_LOWER_LIMIT_REG_PRO;
+			lp->xmt_upper_limit_reg = XMT_UPPER_LIMIT_REG_PRO;
+			lp->eeprom_reg = EEPROM_REG_PRO;
+			lp->rcv_ram = RCV_DEFAULT_RAM;
+
+		/* Now, get the ethernet hardware address from
 			   the EEPROM */
 
 			station_addr[0] = read_eeprom(ioaddr, 2, dev);
@@ -682,17 +691,17 @@ int eepro_probe1(struct device *dev, short ioaddr)
 			    station_addr[0] == 0xffff) {
 				eepro = 3;
 				lp->eepro = LAN595FX_10ISA;
-				eeprom_reg = EEPROM_REG_10;
-				rcv_start = RCV_START_10;
-				xmt_lower_limit_reg = XMT_LOWER_LIMIT_REG_10;
-				xmt_upper_limit_reg = XMT_UPPER_LIMIT_REG_10;
+				lp->eeprom_reg = EEPROM_REG_10;
+				lp->rcv_start = RCV_START_10;
+				lp->xmt_lower_limit_reg = XMT_LOWER_LIMIT_REG_10;
+				lp->xmt_upper_limit_reg = XMT_UPPER_LIMIT_REG_10;
+				lp->xmt_bar = XMT_BAR_10;
 
 				station_addr[0] = read_eeprom(ioaddr, 2, dev);
 			}
-			
+
 			station_addr[1] = read_eeprom(ioaddr, 3, dev);
 			station_addr[2] = read_eeprom(ioaddr, 4, dev);
-
 
 			if (eepro) {
 				printk("%s: Intel EtherExpress 10 ISA\n at %#x,",
@@ -729,7 +738,7 @@ int eepro_probe1(struct device *dev, short ioaddr)
 			else {
 				dev->mem_end = (dev->mem_end * 1024) +
 							(RCV_LOWER_LIMIT << 8);
-				rcv_ram = dev->mem_end - (RCV_LOWER_LIMIT << 8);
+				lp->rcv_ram = dev->mem_end - (RCV_LOWER_LIMIT << 8);
 			}
 
 			/* From now on, dev->mem_end - dev->mem_start contains 
@@ -939,7 +948,7 @@ static int eepro_open(struct device *dev)
 	/* Initialize the 82595. */
 
 	eepro_sw2bank2(ioaddr); /* be CAREFUL, BANK 2 now */
-	temp_reg = inb(ioaddr + eeprom_reg);
+	temp_reg = inb(ioaddr + lp->eeprom_reg);
 
 	lp->stepping = temp_reg >> 5;	/* Get the stepping number of the 595 */
 	/* Get the stepping number of the 595 */
@@ -948,7 +957,7 @@ static int eepro_open(struct device *dev)
 		printk(KERN_DEBUG "The stepping of the 82595 is %d\n", lp->stepping);
 
 	if (temp_reg & 0x10) /* Check the TurnOff Enable bit */
-		outb(temp_reg & 0xef, ioaddr + eeprom_reg);
+		outb(temp_reg & 0xef, ioaddr + lp->eeprom_reg);
 	for (i=0; i < 6; i++) /* Fill the mac address */
 		outb(dev->dev_addr[i] , ioaddr + I_ADD_REG0 + i);
 			
@@ -983,8 +992,8 @@ static int eepro_open(struct device *dev)
 	/* Initialize the RCV and XMT upper and lower limits */
 	outb(RCV_LOWER_LIMIT, ioaddr + RCV_LOWER_LIMIT_REG); 
 	outb(RCV_UPPER_LIMIT, ioaddr + RCV_UPPER_LIMIT_REG); 
-	outb(XMT_LOWER_LIMIT, ioaddr + xmt_lower_limit_reg); 
-	outb(XMT_UPPER_LIMIT, ioaddr + xmt_upper_limit_reg); 
+	outb(XMT_LOWER_LIMIT, ioaddr + lp->xmt_lower_limit_reg); 
+	outb(XMT_UPPER_LIMIT, ioaddr + lp->xmt_upper_limit_reg); 
 
 	/* Enable the interrupt line. */
 	eepro_en_intline(ioaddr);
@@ -1003,7 +1012,7 @@ static int eepro_open(struct device *dev)
 	outw(((RCV_UPPER_LIMIT << 8) | 0xfe), ioaddr + RCV_STOP); 
 
 	/* Initialize XMT */
-	outw((XMT_LOWER_LIMIT << 8), ioaddr + xmt_bar); 
+	outw((XMT_LOWER_LIMIT << 8), ioaddr + lp->xmt_bar); 
 
 	/* Check for the i82595TX and i82595FX */
 	old8 = inb(ioaddr + 8);
@@ -1174,7 +1183,6 @@ eepro_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				break;
 			case TX_INT:
 				eepro_ack_tx(ioaddr);
-				break;
 		}
 		if (status & RX_INT) {
 			if (net_debug > 4)
@@ -1330,7 +1338,7 @@ set_multicast_list(struct device *dev)
 		outw(eaddrs[0], ioaddr + IO_PORT);
 		outw(eaddrs[1], ioaddr + IO_PORT);
 		outw(eaddrs[2], ioaddr + IO_PORT);
-		outw(lp->tx_end, ioaddr + xmt_bar);
+		outw(lp->tx_end, ioaddr + lp->xmt_bar);
 		outb(MC_SETUP, ioaddr);
 
 		/* Update the transmit queue */
@@ -1392,8 +1400,8 @@ read_eeprom(int ioaddr, int location, struct device *dev)
 {
 	int i;
 	unsigned short retval = 0;
-	short ee_addr = ioaddr + eeprom_reg;
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
+	short ee_addr = ioaddr + lp->eeprom_reg;
 	int read_cmd = location | EE_READ_CMD;
 	short ctrl_val = EECS ;
 	
@@ -1512,7 +1520,7 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 		status = inw(ioaddr + IO_PORT); 
 
 		if (lp->tx_start == lp->tx_end) {
-			outw(last, ioaddr + xmt_bar);
+			outw(last, ioaddr + lp->xmt_bar);
 			outb(XMT_CMD, ioaddr);			
 			lp->tx_start = last;   /* I don't like to change tx_start here */
 		}

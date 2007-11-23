@@ -77,15 +77,13 @@ MODULE_PARM(ports, "1-" __MODULE_STRING(MAX_MASQ_APP_PORTS) "i");
  * List of supported DCC protocols
  */
 
-#define NUM_DCCPROTO 5
-
 struct dccproto 
 {
   char *match;
   int matchlen;
 };
 
-struct dccproto dccprotos[NUM_DCCPROTO] = {
+struct dccproto dccprotos[] = {
  { "SEND ", 5 },
  { "CHAT ", 5 },
  { "MOVE ", 5 },
@@ -93,6 +91,9 @@ struct dccproto dccprotos[NUM_DCCPROTO] = {
  { "SCHAT ", 6 },
  { "ACCEPT ", 7 },
 };
+
+#define NUM_DCCPROTO (sizeof dccprotos / sizeof dccprotos[0])
+
 #define MAXMATCHLEN 7
 
 static int
@@ -225,7 +226,7 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 				 * Replace the old "address port" with the new one
 				 */
 
-				buf_len = sprintf(buf,"%lu %u",
+				buf_len = sprintf(buf,"%u %u",
 						ntohl(n_ms->maddr),ntohs(n_ms->mport));
 
 				/*
@@ -347,7 +348,7 @@ masq_irc_in (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_
 		 * Replace the outside address with the inside address
 		 */
 
-		buf_len = sprintf(buf,"%lu %u",
+		buf_len = sprintf(buf,"%u %u",
 			ntohl(n_ms->saddr),ntohs(n_ms->sport));
 
 		/*

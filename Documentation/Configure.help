@@ -663,6 +663,13 @@ CMD646 chipset support (EXPERIMENTAL)
 CONFIG_BLK_DEV_CMD646
   Say Y here if you have an IDE controller like this.
 
+Cyrix CS5530 MediaGX chipset support
+CONFIG_BLK_DEV_CS5530
+  Include support for UDMA on the Cyrix MediaGX 5530 chipset. This
+  will automatically be detected and configured if found.
+
+  It is safe to say Y to this question.
+
 QDI QD6580 support
 CONFIG_BLK_DEV_QD6580
   This driver is enabled at runtime using the "ide0=qd6580" kernel
@@ -1460,6 +1467,61 @@ CONFIG_VISWS
 SGI Visual Workstation framebuffer support
 CONFIG_FB_SGIVW
   SGI Visual Workstation support for framebuffer graphics.
+
+I2O support
+CONFIG_I2O
+  The Intelligent Input/Output (I2O) architecture allows hardware
+  drivers to be split into two parts: an operating system specific
+  module called the OSM and an hardware specific module called the
+  HDM. The OSM can talk to a whole range of HDM's, and ideally the
+  HDM's are not OS dependent. This allows for the same HDM driver to
+  be used under different operating systems if the relevant OSM is in
+  place. In order for this to work, you need to have an I2O interface
+  adapter card in your computer. This card contains a special I/O
+  processor (IOP), thus allowing high speeds since the CPU does not
+  have to deal with I/O.
+
+  If you say Y here, you will get a choice of interface adapter
+  drivers and OSM's with the following questions.
+
+  This support is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. You will get modules called i2o_core.o
+  and i20_config.o. 
+
+  If unsure, say N.
+
+I2O PCI support
+CONFIG_I2O_PCI
+  Say Y for support of PCI bus I2O interface adapters. Currently this
+  is the only variety supported, so you should say Y.
+
+  This support is also available as a module called i2o_pci.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
+I2O Block OSM
+CONFIG_I2O_BLOCK
+  Include support for the I2O Block OSM. The Block OSM presents disk
+  and other structured block devices to the operating system.
+
+  This support is also available as a module called i2o_block.o ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
+I2O SCSI OSM
+CONFIG_I2O_SCSI
+  Allows direct SCSI access to SCSI devices on a SCSI or FibreChannel
+  I2O controller. You can use both the SCSI and Block OSM together if
+  you wish.
+
+  This support is also available as a module called i2o_scsi.o ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
 
 System V IPC
 CONFIG_SYSVIPC
@@ -9942,6 +10004,33 @@ CONFIG_FT_FDC_MAX_RATE
   speed. If unsure, leave this disabled, i.e. leave it at 2000
   bits/sec.
 
+Direct Rendering Manager (XFree86 DRI support)
+CONFIG_DRM
+  Kernel-level support for the Direct Rendering Infrastructure (DRI)
+  introduced in XFree86 4.x. These modules provide support for
+  synchronization, security, and DMA transfers. Select the module that
+  provides support for your graphics card.
+
+3dfx Banshee/Voodoo3+
+CONFIG_DRM_TDFX
+  Choose M here if you have a 3dfx Banshee/Voodoo3 graphics card.
+
+3dlabs GMX 2000
+CONFIG_DRM_GAMMA
+  Choose M here if you have a 3dlabs GMX 2000 graphics card.
+
+ATI Rage 128
+CONFIG_DRM_R128
+  Choose M here if you have a ATI Rage 128 graphics card.
+
+Intel I810
+CONFIG_DRM_I810
+  Choose M here if you have an Intel I810 AGP graphics card.
+
+Matrox g200/g400
+CONFIG_DRM_MGA
+  Choose M here if you have a Matrox g200/g400 AGP graphics card.
+
 MTRR control and configuration
 CONFIG_MTRR
   On Intel P6 family processors (Pentium Pro, Pentium II and later)
@@ -10309,6 +10398,60 @@ CONFIG_AGP
   You will also have to indicate support for your specific chipset.
   Consult the output of lspci, your motherboard manual, or the inside
   of your computer if unsure what to choose. Multiple selections are ok.
+
+Intel 440LX/BX/GX support
+CONFIG_AGP_INTEL
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on Intel 440LX/BX/GX chipsets.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
+
+Intel I810/I810 DC100/I810e support
+CONFIG_AGP_I810
+  This option give you AGP support for the Xserver for the intel
+  810 chipset boards. This is required to do any useful video
+  modes.
+
+VIA VP3/MVP3/Apollo Pro support
+CONFIG_AGP_VIA
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on VIA MPV3/Apollo Pro chipsets.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
+
+AMD Irongate support
+CONFIG_AGP_AMD
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on Intel AMD Irongate chipset.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
+
+Generic SiS support
+CONFIG_AGP_SIS
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on Silicon Integrated Systems [SiS]
+  chipsets.
+
+  Note than 5591/5592 AGP chipsets are NOT supported.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
+
+ALI M1541 support
+CONFIG_AGP_ALI
+  This option give you AGP support for the GLX component of the
+  "soon to be released" XFree86-4 on ALI M1541 chipset.
+
+  For the moment, most people should say no, unless you want to
+  test the GLX component which can be downloaded from
+       http://glx.on.openprojects.net/
 
 Tadpole ANA H8 Support
 CONFIG_H8

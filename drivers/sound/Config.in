@@ -35,10 +35,7 @@ if [ "$CONFIG_SOUND_ES1371" = "y" ]; then
 fi
 
 dep_tristate 'ESS Maestro' CONFIG_SOUND_MAESTRO $CONFIG_SOUND
-
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   dep_tristate 'ESS Solo1 (Experimental)' CONFIG_SOUND_ESSSOLO1 $CONFIG_SOUND
-fi
+dep_tristate 'ESS Solo1' CONFIG_SOUND_ESSSOLO1 $CONFIG_SOUND
 
 dep_tristate 'Intel ICH (810, 820, 440MX...)' CONFIG_SOUND_ICH $CONFIG_SOUND
 
@@ -315,6 +312,9 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
   
   dep_tristate 'NM256AV/NM256ZX audio support' CONFIG_SOUND_NM256 $CONFIG_SOUND_OSS
   dep_tristate 'Yamaha PCI legacy mode support' CONFIG_SOUND_YMPCI $CONFIG_SOUND_OSS
+  if [ "$CONFIG_SOUND_YMPCI" = "n" ]; then
+    dep_tristate 'Yamaha PCI native mode support (EXPERIMENTAL)' CONFIG_SOUND_YMFPCI $CONFIG_SOUND_OSS
+  fi
 
   # Additional low level drivers.
   

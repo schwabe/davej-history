@@ -130,7 +130,7 @@ struct __xchg_dummy { unsigned long a[100]; };
 /*
  * Note: no "lock" prefix even on SMP: xchg always implies lock anyway
  */
-static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
+static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
 	switch (size) {
 		case 1:

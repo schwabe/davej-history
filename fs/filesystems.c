@@ -49,6 +49,9 @@ extern int init_coda(void);
 extern int init_devpts_fs(void);
 #endif
 
+extern int init_adfs_fs(void);
+
+
 void __init filesystem_setup(void)
 {
 #ifdef CONFIG_EXT2_FS

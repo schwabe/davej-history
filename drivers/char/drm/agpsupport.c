@@ -298,7 +298,8 @@ drm_agp_head_t *drm_agp_init(void)
 		case VIA_VP3:          head->chipset = "VIA VP3";          break;
 		case VIA_MVP3:         head->chipset = "VIA MVP3";         break;
 		case VIA_APOLLO_PRO:   head->chipset = "VIA Apollo Pro";   break;
-		case VIA_APOLLO_SUPER: head->chipset = "VIA Apollo Super"; break;
+		case VIA_APOLLO_KX133: head->chipset = "VIA Apollo KX133"; break;
+		case VIA_APOLLO_KT133: head->chipset = "VIA Apollo KT133"; break;
 		case SIS_GENERIC:      head->chipset = "SiS";              break;
 		case AMD_GENERIC:      head->chipset = "AMD";              break;
 		case AMD_IRONGATE:     head->chipset = "AMD Irongate";     break;
