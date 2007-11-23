@@ -14,10 +14,6 @@
  *	Asynchronous mode dropped for 2.2. For 2.3 we will attempt the
  *	unification of all the Z85x30 asynchronous drivers for real.
  *
- *	To Do:
- *	
- *	Finish DMA mode support.
- *
  *	Performance
  *
  *	Z85230:
@@ -169,7 +165,7 @@ EXPORT_SYMBOL(z8530_hdlc_kilostream);
 /*
  *	As above but for enhanced chips.
  */
-
+ 
 u8 z8530_hdlc_kilostream_85230[]=
 {
 	4,	SYNC_ENAB|SDLC|X1CLK,
@@ -354,13 +350,15 @@ static void z8530_status(struct z8530_channel *chan)
 		z8530_tx_done(chan);
 	}
 		
-	if(altered&DCD)
+	if(altered&chan->dcdcheck)
 	{
-		if(status&DCD)
+		if(status&chan->dcdcheck)
 		{
 			printk(KERN_INFO "%s: DCD raised\n", chan->dev->name);
 			write_zsreg(chan, R3, chan->regs[3]|RxENABLE);
-			if(chan->netdevice)
+			if(chan->netdevice &&
+			    ((chan->netdevice->type == ARPHRD_HDLC) ||
+			    (chan->netdevice->type == ARPHRD_PPP)))
 				sppp_reopen(chan->netdevice);
 		}
 		else
@@ -440,7 +438,6 @@ static void z8530_dma_status(struct z8530_channel *chan)
 		if(status&TxEOM)
 		{
 			flags=claim_dma_lock();
-			/* Transmit underrun */
 			disable_dma(chan->txdma);
 			clear_dma_ff(chan->txdma);	
 			chan->txdma_on=0;
@@ -448,13 +445,15 @@ static void z8530_dma_status(struct z8530_channel *chan)
 			z8530_tx_done(chan);
 		}
 	}
-	if(altered&DCD)
+	if(altered&chan->dcdcheck)
 	{
-		if(status&DCD)
+		if(status&chan->dcdcheck)
 		{
 			printk(KERN_INFO "%s: DCD raised\n", chan->dev->name);
 			write_zsreg(chan, R3, chan->regs[3]|RxENABLE);
-			if(chan->netdevice)
+			if(chan->netdevice &&
+			    ((chan->netdevice->type == ARPHRD_HDLC) ||
+			    (chan->netdevice->type == ARPHRD_PPP)))
 				sppp_reopen(chan->netdevice);
 		}
 		else
@@ -1012,6 +1011,8 @@ int z8530_init(struct z8530_dev *dev)
 	   floating IRQ transition when we reset the chip */
 	dev->chanA.irqs=&z8530_nop;
 	dev->chanB.irqs=&z8530_nop;
+	dev->chanA.dcdcheck=DCD;
+	dev->chanB.dcdcheck=DCD;
 	/* Reset the chip */
 	write_zsreg(&dev->chanA, R9, 0xC0);
 	udelay(200);
@@ -1104,7 +1105,7 @@ int z8530_channel_load(struct z8530_channel *c, u8 *rtable)
 	c->mtu=1500;
 	c->max=0;
 	c->count=0;
-	c->status=0;	/* Fixme - check DCD now */
+	c->status=read_zsreg(c, R0);
 	c->sync=1;
 	write_zsreg(c, R3, c->regs[R3]|RxENABLE);
 	return 0;
@@ -1251,7 +1252,7 @@ static void z8530_rx_done(struct z8530_channel *c)
 		 *	Save the ready state and the buffer currently
 		 *	being used as the DMA target
 		 */
-
+		 
 		int ready=c->dma_ready;
 		unsigned char *rxb=c->rx_buf[c->dma_num];
 		unsigned long flags;

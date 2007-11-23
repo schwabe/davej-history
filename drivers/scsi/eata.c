@@ -1,6 +1,13 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      16 Sep 1999 Rev. 5.11 for linux 2.2.12 and 2.3.18
+ *        + Updated to the new __setup interface for boot command line options.
+ *        + When loaded as a module, accepts the new parameter boot_options
+ *          which value is a string with the same format of the kernel boot
+ *          command line options. A valid example is:
+ *          modprobe eata 'boot_options=\"0x7410,0x230,lc:y,tc:n,mq:4\"'
+ *
  *       9 Sep 1999 Rev. 5.10 for linux 2.2.12 and 2.3.17
  *        + 64bit cleanup for Linux/Alpha platform support
  *          (contribution from H.J. Lu).
@@ -368,6 +375,7 @@
 #if defined(MODULE)
 #include <linux/module.h>
 
+MODULE_PARM(boot_options, "s");
 MODULE_PARM(io_port, "1-" __MODULE_STRING(MAX_INT_PARAM) "i");
 MODULE_PARM(linked_comm, "i");
 MODULE_PARM(tagged_comm, "i");
@@ -401,7 +409,13 @@ MODULE_AUTHOR("Dario Ballabio");
 #include <linux/config.h>
 #include <linux/pci.h>
 #include <linux/init.h>
+#include <linux/ctype.h>
+
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,18)
 #include <asm/spinlock.h>
+#else
+#include <linux/spinlock.h>
+#endif
 
 #define SPIN_FLAGS unsigned long spin_flags;
 #define SPIN_LOCK spin_lock_irq(&io_request_lock);
@@ -409,8 +423,6 @@ MODULE_AUTHOR("Dario Ballabio");
 #define SPIN_UNLOCK spin_unlock_irq(&io_request_lock);
 #define SPIN_UNLOCK_RESTORE \
                   spin_unlock_irqrestore(&io_request_lock, spin_flags);
-
-static int use_new_eh_code = TRUE;
 
 struct proc_dir_entry proc_scsi_eata2x = {
     PROC_SCSI_EATA2X, 6, "eata2x",
@@ -494,7 +506,7 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #define ASOK              0x00
 #define ASST              0x01
 
-#if !defined(ARRAY_SIZE)
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,18)
 #define ARRAY_SIZE(x) (sizeof (x) / sizeof((x)[0]))
 #endif
 
@@ -646,7 +658,7 @@ static char sha[MAX_BOARDS];
 /* Initialize num_boards so that ihdlr can work while detect is in progress */
 static unsigned int num_boards = MAX_BOARDS;
 
-static unsigned long io_port[] __initdata = {
+static unsigned long io_port[] = {
 
    /* Space for MAX_INT_PARAM ports usable while loading as a module */
    SKIP,    SKIP,   SKIP,   SKIP,   SKIP,   SKIP,   SKIP,   SKIP,
@@ -686,6 +698,8 @@ static int link_statistics = 0;
 static int tag_mode = TAG_MIXED;
 static int ext_tran = FALSE;
 static int rev_scan = TRUE;
+static int use_new_eh_code = TRUE;
+static char *boot_options = NULL;
 
 #if defined(CONFIG_SCSI_EATA_TAGGED_QUEUE)
 static int tagged_comm = TRUE;
@@ -820,12 +834,6 @@ static inline void tune_pci_port(unsigned long port_base) {
 
       if (!(dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) break;
 
-#if 0
-      /* Don't bother if PCI vendor and/or device don't match. */
-      if (dev->vendor != PCI_VENDOR_ID_DPT || dev->device != PCI_DEVICE_ID_DPT)
-		continue;
-#endif
-
       if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
 
 #if defined(DEBUG_PCI_DETECT)
@@ -856,12 +864,6 @@ static inline int
    if (!pci_present()) return FALSE;
 
    while((dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) {
-
-#if 0
-      /* Don't bother if PCI vendor and/or device don't match. */
-      if (dev->vendor != PCI_VENDOR_ID_DPT || dev->device != PCI_DEVICE_ID_DPT)
-		continue;
-#endif
 
       if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
 
@@ -913,7 +915,7 @@ static inline int port_detect \
    if (info.sign != EATA_SIGNATURE) return FALSE;
 
    if (DEV2H(info.data_len) < EATA_2_0A_SIZE) {
-      printk("%s: config structure size (%d bytes) too short, detaching.\n",
+      printk("%s: config structure size (%ld bytes) too short, detaching.\n",
              name, DEV2H(info.data_len));
       return FALSE;
       }
@@ -1166,7 +1168,7 @@ static inline int port_detect \
    return TRUE;
 }
 
-void eata2x_setup(char *str, int *ints) {
+static void internal_setup(char *str, int *ints) {
    int i, argc = ints[0];
    char *cur = str, *pc;
 
@@ -1202,6 +1204,22 @@ void eata2x_setup(char *str, int *ints) {
    return;
 }
 
+static int option_setup(char *str) {
+   int ints[MAX_INT_PARAM];
+   char *cur = str;
+   int i = 1;
+
+   while (cur && isdigit(*cur) && i <= MAX_INT_PARAM) {
+      ints[i++] = simple_strtoul(cur, NULL, 0);
+
+      if ((cur = strchr(cur, ',')) != NULL) cur++;
+   }
+
+   ints[0] = i - 1;
+   internal_setup(cur, ints);
+   return 0;
+}
+
 static void add_pci_ports(void) {
 
 #if defined(CONFIG_PCI)
@@ -1215,12 +1233,6 @@ static void add_pci_ports(void) {
    for (k = 0; k < MAX_PCI; k++) {
 
       if (!(dev = pci_find_class(PCI_CLASS_STORAGE_SCSI << 8, dev))) break;
-
-#if 0
-      /* Don't bother if PCI vendor and/or device don't match. */
-      if (dev->vendor != PCI_VENDOR_ID_DPT || dev->device != PCI_DEVICE_ID_DPT)
-		continue;
-#endif
 
       if (pci_read_config_dword(dev, PCI_BASE_ADDRESS_0, &addr)) continue;
 
@@ -1246,6 +1258,8 @@ int eata2x_detect(Scsi_Host_Template *tpnt) {
    unsigned int j = 0, k;
 
    tpnt->proc_dir = &proc_scsi_eata2x;
+
+   if(boot_options) option_setup(boot_options);
 
 #if defined(MODULE)
    /* io_port could have been modified when loading as a module */
@@ -2281,4 +2295,15 @@ int eata2x_release(struct Scsi_Host *shpnt) {
 Scsi_Host_Template driver_template = EATA;
 
 #include "scsi_module.c"
+
+#else
+
+#if LINUX_VERSION_CODE < LinuxVersionCode(2,3,18)
+void eata2x_setup(char *str, int *ints) {
+   internal_setup(str, ints);
+}
+#else
+__setup("eata=", option_setup);
 #endif
+
+#endif /* end MODULE */

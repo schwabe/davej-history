@@ -657,12 +657,12 @@ static inline int expand_files(struct files_struct *files, int nr)
 	
 	if (nr >= files->max_fdset) {
 		expand = 1;
-		if ((err = expand_fdset(files, nr)))
+		if ((err = expand_fdset(files, nr + 1)))
 			goto out;
 	}
 	if (nr >= files->max_fds) {
 		expand = 1;
-		if ((err = expand_fd_array(files, nr)))
+		if ((err = expand_fd_array(files, nr + 1)))
 			goto out;
 	}
 	err = expand;

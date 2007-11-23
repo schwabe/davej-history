@@ -836,14 +836,66 @@ else
   endif
 endif
 
-# If anything built-in uses syncppp, then build it into the kernel also.
-# If not, but a module uses it, build as a module.
+#
+# COMX drivers
+#
+ifeq ($(CONFIG_COMX),y)
+LX_OBJS += comx.o
+else 
+  ifeq ($(CONFIG_COMX),m)
+  MX_OBJS += comx.o
+  endif
+endif
 
-ifdef CONFIG_SYNCPPP_BUILTIN
-LX_OBJS += syncppp.o
-else
-  ifdef CONFIG_SYNCPPP_MODULE
-  MX_OBJS += syncppp.o
+ifeq ($(CONFIG_COMX_HW_COMX),y)
+L_OBJS += comx-hw-comx.o
+else 
+  ifeq ($(CONFIG_COMX_HW_COMX),m)
+  M_OBJS += comx-hw-comx.o
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_HW_LOCOMX),y)
+L_OBJS += comx-hw-locomx.o
+CONFIG_85230_BUILTIN=y
+else 
+  ifeq ($(CONFIG_COMX_HW_LOCOMX),m)
+  M_OBJS += comx-hw-locomx.o
+  CONFIG_85230_MODULE=y
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_HW_MIXCOM),y)
+L_OBJS += comx-hw-mixcom.o
+else 
+  ifeq ($(CONFIG_COMX_HW_MIXCOM),m)
+  M_OBJS += comx-hw-mixcom.o
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_PROTO_PPP),y)
+L_OBJS += comx-proto-ppp.o
+CONFIG_SYNCPPP_BUILTIN = y
+else 
+  ifeq ($(CONFIG_COMX_PROTO_PPP),m)
+  M_OBJS += comx-proto-ppp.o
+  CONFIG_SYNCPPP_MODULE = y
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_PROTO_LAPB),y)
+L_OBJS += comx-proto-lapb.o
+else 
+  ifeq ($(CONFIG_COMX_PROTO_LAPB),m)
+  M_OBJS += comx-proto-lapb.o
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_PROTO_FR),y)
+L_OBJS += comx-proto-fr.o
+else 
+  ifeq ($(CONFIG_COMX_PROTO_FR),m)
+  M_OBJS += comx-proto-fr.o
   endif
 endif
 
@@ -852,9 +904,22 @@ endif
 
 ifdef CONFIG_85230_BUILTIN
 LX_OBJS += z85230.o
+CONFIG_SYNCPPP_BUILTIN=y
 else
   ifdef CONFIG_85230_MODULE
   MX_OBJS += z85230.o
+  CONFIG_SYNCPPP_MODULE=y
+  endif
+endif
+
+# If anything built-in uses syncppp, then build it into the kernel also.
+# If not, but a module uses it, build as a module.
+
+ifdef CONFIG_SYNCPPP_BUILTIN
+LX_OBJS += syncppp.o
+else
+  ifdef CONFIG_SYNCPPP_MODULE
+  MX_OBJS += syncppp.o
   endif
 endif
 

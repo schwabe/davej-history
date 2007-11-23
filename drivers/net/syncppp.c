@@ -151,7 +151,9 @@ static int debug = 0;
 
 static void if_down(struct device *dev)
 {
-	;
+	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
+
+	sp->pp_link_state=SPPP_LINK_DOWN;
 }
 
 /*
@@ -192,7 +194,7 @@ void sppp_input (struct device *dev, struct sk_buff *skb)
 	skb->dev=dev;
 	skb->mac.raw=skb->data;
 	
-	if (dev->flags & IFF_UP)
+	if (dev->flags & IFF_RUNNING)
 	{
 		/* Count received bytes, add FCS and one flag */
 		sp->ibytes+= skb->len + 3;
@@ -368,7 +370,7 @@ static void sppp_keepalive (unsigned long dummy)
 
 		/* Keepalive mode disabled or channel down? */
 		if (! (sp->pp_flags & PP_KEEPALIVE) ||
-		    ! (dev->flags & IFF_RUNNING))
+		    ! (dev->flags & IFF_UP))
 			continue;
 
 		/* No keepalive in PPP mode if LCP not opened yet. */
@@ -528,10 +530,10 @@ badreq:
 		if (h->ident != sp->lcp.confid)
 			break;
 		sppp_clear_timeout (sp);
-		if (! (dev->flags & IFF_UP) &&
-		    (dev->flags & IFF_RUNNING)) {
+		if ((sp->pp_link_state != SPPP_LINK_UP) &&
+		    (dev->flags & IFF_UP)) {
 			/* Coming out of loopback mode. */
-			dev->flags |= IFF_UP;
+			sp->pp_link_state=SPPP_LINK_UP;
 			printk (KERN_INFO "%s: up\n", dev->name);
 		}
 		switch (sp->lcp.state) {
@@ -696,9 +698,9 @@ static void sppp_cisco_input (struct sppp *sp, struct sk_buff *skb)
 			break;
 		}
 		sp->pp_loopcnt = 0;
-		if (! (dev->flags & IFF_UP) &&
-		    (dev->flags & IFF_RUNNING)) {
-			dev->flags |= IFF_UP;
+		if (sp->pp_link_state==SPPP_LINK_DOWN &&
+		    (dev->flags & IFF_UP)) {
+			sp->pp_link_state=SPPP_LINK_UP;
 			printk (KERN_INFO "%s: up\n", dev->name);
 		}
 		break;
@@ -823,7 +825,7 @@ static void sppp_cisco_send (struct sppp *sp, int type, long par1, long par2)
 int sppp_close (struct device *dev)
 {
 	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
-	dev->flags &= ~IFF_RUNNING;
+	sp->pp_link_state = SPPP_LINK_DOWN;
 	sp->lcp.state = LCP_STATE_CLOSED;
 	sp->ipcp.state = IPCP_STATE_CLOSED;
 	sppp_clear_timeout (sp);
@@ -837,9 +839,10 @@ int sppp_open (struct device *dev)
 {
 	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
 	sppp_close(dev);
-	dev->flags |= IFF_RUNNING;
-	if (!(sp->pp_flags & PP_CISCO))
+	if (!(sp->pp_flags & PP_CISCO)) {
 		sppp_lcp_open (sp);
+	}
+	sp->pp_link_state = SPPP_LINK_DOWN;
 	return 0;
 }
 
@@ -849,7 +852,6 @@ int sppp_reopen (struct device *dev)
 {
 	struct sppp *sp = &((struct ppp_device *)dev)->sppp;
 	sppp_close(dev);
-	dev->flags |= IFF_RUNNING;
 	if (!(sp->pp_flags & PP_CISCO))
 	{
 		sp->lcp.magic = jiffies;
@@ -858,7 +860,8 @@ int sppp_reopen (struct device *dev)
 		sp->ipcp.state = IPCP_STATE_CLOSED;
 		/* Give it a moment for the line to settle then go */
 		sppp_set_timeout (sp, 1);
-	}
+	} 
+	sp->pp_link_state=SPPP_LINK_DOWN;
 	return 0;
 }
 
@@ -1176,7 +1179,7 @@ static void sppp_cp_timeout (unsigned long arg)
 	cli();
 
 	sp->pp_flags &= ~PP_TIMO;
-	if (! (sp->pp_if->flags & IFF_RUNNING) || (sp->pp_flags & PP_CISCO)) {
+	if (! (sp->pp_if->flags & IFF_UP) || (sp->pp_flags & PP_CISCO)) {
 		restore_flags(flags);
 		return;
 	}

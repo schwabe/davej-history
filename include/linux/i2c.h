@@ -38,9 +38,9 @@ struct i2c_device;
 
 #define I2C_BUSID_BT848		1	/* I2C bus on a BT848 */
 	/* 2 is used in 2.3.x */
-#define I2C_BUSID_SGIVWFB	1	/* From the SGI official patch */
 #define I2C_BUSID_BUZ		3	/* I2C bus on a BUZ */
 #define I2C_BUSID_ZORAN		4	/* I2C bus on a Zoran */
+#define I2C_BUSID_SGIVWFB	5	/* Moved to be unique */
 
 /*
  * struct for a driver for a i2c chip (tuner, soundprocessor,

@@ -23,6 +23,11 @@
 # define NFSDBG_FACILITY	NFSDBG_ROOT
 #endif
 
+#ifndef MAX
+# define MAX(a, b)	(((a) > (b))? (a) : (b))
+#endif
+
+
 /*
 #define MOUNT_PROGRAM		100005
 #define MOUNT_VERSION		1
@@ -119,7 +124,7 @@ static struct rpc_procinfo	mnt_procedures[2] = {
 	{ "mnt_mount",
 		(kxdrproc_t) xdr_encode_dirpath,	
 		(kxdrproc_t) xdr_decode_fhstatus,
-		MNT_dirpath_sz, MNT_fhstatus_sz },
+		MAX(MNT_dirpath_sz, MNT_fhstatus_sz)<<2, 0},
 };
 
 static struct rpc_version	mnt_version1 = {

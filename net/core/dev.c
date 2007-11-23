@@ -1278,8 +1278,9 @@ static int sprintf_wireless_stats(char *buffer, struct device *dev)
 	int size;
 
 	if(stats != (struct iw_statistics *) NULL)
+	{
 		size = sprintf(buffer,
-			       "%6s: %02x  %3d%c %3d%c  %3d%c %5d %5d %5d\n",
+			       "%6s: %04x  %3d%c  %3d%c  %3d%c  %6d %6d %6d\n",
 			       dev->name,
 			       stats->status,
 			       stats->qual.qual,
@@ -1291,6 +1292,8 @@ static int sprintf_wireless_stats(char *buffer, struct device *dev)
 			       stats->discard.nwid,
 			       stats->discard.code,
 			       stats->discard.misc);
+		stats->qual.updated = 0;
+	}
 	else
 		size = 0;
 
@@ -1312,8 +1315,9 @@ int dev_get_wireless_info(char * buffer, char **start, off_t offset,
 	struct device *	dev;
 
 	size = sprintf(buffer,
-		       "Inter-|sta|  Quality       |  Discarded packets\n"
-		       " face |tus|link level noise| nwid crypt  misc\n");
+		       "Inter-| sta-|   Quality        |   Discarded packets\n"
+		       " face | tus | link level noise |  nwid  crypt   misc\n"
+			);
 	
 	pos+=size;
 	len+=size;
@@ -1858,6 +1862,7 @@ extern int baycom_ser_hdx_init(void);
 extern int baycom_par_init(void);
 
 extern int lapbeth_init(void);
+extern int comx_init(void);
 extern void arcnet_init(void);
 extern void ip_auto_config(void);
 #ifdef CONFIG_8xx
@@ -1950,6 +1955,9 @@ __initfunc(int net_dev_init(void))
 #endif
 #if defined(CONFIG_8xx)
         cpm_enet_init();
+#endif
+#if defined(CONFIG_COMX)
+	comx_init();
 #endif
 	/*
 	 *	SLHC if present needs attaching so other people see it

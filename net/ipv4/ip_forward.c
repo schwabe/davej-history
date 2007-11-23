@@ -176,8 +176,7 @@ int ip_forward(struct sk_buff *skb)
 			    (icmph->type==ICMP_TIME_EXCEEDED))
 			{
 #endif
-				u32 maddr = rt->rt_src;
-				fw_res = ip_fw_masq_icmp(&skb, maddr);
+				fw_res = ip_fw_masquerade(&skb, 0);
 			        if (fw_res < 0) {
 					kfree_skb(skb);
 					return -1;
@@ -219,15 +218,11 @@ skip_call_fw_firewall:
 	 */
 	if (!(IPCB(skb)->flags&IPSKB_MASQUERADED) &&
 	    (fw_res==FW_MASQUERADE || rt->rt_flags&RTCF_MASQ)) {
-		u32 maddr;
+		u32 maddr = 0;
 
 #ifdef CONFIG_IP_ROUTE_NAT
 		maddr = (rt->rt_flags&RTCF_MASQ) ? rt->rt_src_map : 0;
-
-		if (maddr == 0)
 #endif
-			maddr = rt->rt_src;
-
 			if (ip_fw_masquerade(&skb, maddr) < 0) {
 				kfree_skb(skb);
 				return -1;

@@ -270,6 +270,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MIXCOMWD),y)
+L_OBJS += mixcomwd.o
+else
+  ifeq ($(CONFIG_MIXCOMWD),m)
+  M_OBJS += mixcomwd.o
+  endif
+endif
+
 ifeq ($(CONFIG_AMIGAMOUSE),y)
 L_OBJS += amigamouse.o
 else

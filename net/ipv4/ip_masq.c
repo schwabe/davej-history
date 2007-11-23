@@ -1152,6 +1152,7 @@ int ip_fw_masquerade(struct sk_buff **skb_p, __u32 maddr)
 
 		if (ip_route_output(&rt, iph->daddr, 0, RT_TOS(iph->tos)|RTO_CONN, skb_dev?skb_dev->ifindex:0)) {
 			/* Fallback on old method */
+			/* This really shouldn't happen... */
 			maddr = inet_select_addr(skb_dev, skb_rt->rt_gateway, RT_SCOPE_UNIVERSE);
 		} else {
 			/* Route lookup succeeded */

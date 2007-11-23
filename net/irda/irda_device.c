@@ -526,13 +526,13 @@ static int irda_device_net_ioctl(struct device *dev, /* ioctl device */
 		break;
 	case SIOCSIWNWID:
 		/* Set domain */
-		if (wrq->u.nwid.on) {
+		if (!wrq->u.nwid.disabled) {
 			
 		} break;
 	case SIOCGIWNWID:
 		/* Read domain*/
 /* 		wrq->u.nwid.nwid = domain; */
-/* 		wrq->u.nwid.on = 1; */
+/* 		wrq->u.nwid.disabled = 0; */
 		break;
 	case SIOCGIWENCODE:
 		/* Get scramble key */

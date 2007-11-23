@@ -44,6 +44,8 @@ void __init signals_init(void)
 
 /*
  * Flush all pending signals for a task.
+ * Callers must hold the sigmask_lock so that we do not race
+ * with dequeue_signal or send_sig_info.
  */
 
 void
@@ -270,12 +272,16 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 		goto out_nolock;
 
 	/* The null signal is a permissions and process existance probe.
-	   No signal is actually delivered.  Same goes for zombies. */
+	   No signal is actually delivered.  Same goes for zombies.
+	   We have to grab the spinlock now so that we do not race
+	   with flush_signals. */
 	ret = 0;
-	if (!sig || !t->sig)
-		goto out_nolock;
-
 	spin_lock_irqsave(&t->sigmask_lock, flags);
+	if (!sig || !t->sig) {
+		spin_unlock_irqrestore(&t->sigmask_lock, flags);
+		goto out_nolock;
+	}
+
 	switch (sig) {
 	case SIGKILL: case SIGCONT:
 		/* Wake up the process if stopped.  */

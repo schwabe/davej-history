@@ -12,10 +12,17 @@ Original driver (sg.h):
 *       Copyright (C) 1998, 1999 Douglas Gilbert
 
 
-    Version: 2.1.34 (990603)
-    This version for later 2.1.x and 2.2.x series kernels
+    Version: 2.1.36 (991008)
+    This version for 2.2.x series kernels
     D. P. Gilbert (dgilbert@interlog.com, dougg@triode.net.au)
 
+    Changes since 2.1.34 (990603)
+        - skipped 2.1.35 (never fully released)
+        - add queuing info into struct sg_scsi_id
+        - block negative timeout and reply_len values
+        - protect scsi_allocate_device() call
+        - fix pack_id input to sg_read()
+        - add wake_up to mid-level on command release
     Changes since 2.1.33 (990521)
         - implement SG_SET_RESERVED_SIZE and associated memory re-org.
         - add SG_NEXT_CMD_LEN to override SCSI command lengths
@@ -144,9 +151,10 @@ typedef struct sg_scsi_id {
     int scsi_id;        /* scsi id of target device */
     int lun;
     int scsi_type;      /* TYPE_... defined in scsi/scsi.h */
+    short h_cmd_per_lun;/* host (adapter) maximum commands per lun */
+    short d_queue_depth;/* device (or adapter) maximum queue length */
     int unused1;        /* probably find a good use, set 0 for now */
     int unused2;        /* ditto */
-    int unused3;  
 } Sg_scsi_id;
 
 /* IOCTLs: ( _GET_s yield result via 'int *' 3rd argument unless 
@@ -204,6 +212,10 @@ typedef struct sg_scsi_id {
 #define SG_GET_VERSION_NUM 0x2282 /* Example: version 2.1.34 yields 20134 */
 #define SG_NEXT_CMD_LEN 0x2283  /* override SCSI command length with given
                    number on the next write() on this file descriptor */
+
+/* Returns -EBUSY if occupied else takes as input: 0 -> do nothing,
+   1 -> device reset or  2 -> bus reset (not operational yet) */
+#define SG_SCSI_RESET 0x2284
 
 
 #define SG_SCATTER_SZ (8 * 4096)  /* PAGE_SIZE not available to user */

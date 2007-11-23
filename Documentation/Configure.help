@@ -3498,8 +3498,9 @@ CONFIG_PACKET
   to work, choose Y. This driver is also available as a module called
   af_packet.o ( = code which can be inserted in and removed from the
   running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt. If unsure,
-  say Y.
+  module, say M here and read Documentation/modules.txt.  You will
+  need to add 'alias net-pf-17 af_packet' to your /etc/conf.modules
+  file for the module version to function automatically.  If unsure, say Y.
 
 Kernel/User network link driver
 CONFIG_NETLINK
@@ -5573,6 +5574,77 @@ CONFIG_WANPIPE_PPP
   then also have said Y to "PPP (point-to-point) support", above. If
   you say N, the PPP support will not be included in the driver (saves
   about 16 KB of kernel memory).
+
+MultiGate/COMX support
+CONFIG_COMX
+  Say Y if you want to use any board from the MultiGate (COMX) family. 
+  These boards are synchronous serial adapters for the PC, manufactured 
+  by ITConsult-Pro Co, Hungary. 
+
+  Read linux/Documentation/networking/comx.txt  for help on configuring 
+  and using COMX interfaces. Further info on these cards can be found at 
+  http://www.itc.hu or <info@itc.hu>.
+
+  If you want to compile this as a module, say M and read
+  Documentation/modules.txt. The module will be called comx.o.
+
+COMX/CMX/HiCOMX board support
+CONFIG_COMX_HW_COMX
+  Hardware driver for the 'CMX', 'COMX' and 'HiCOMX' boards from the
+  MultiGate family. Say Y if you have one of these. 
+
+  You will need additional firmware to use these cards, which are
+  downloadable from ftp://ftp.itc.hu/.
+
+  If you want to compile this as a module, say M and read
+  Documentation/modules.txt. The module will be called comx-hw-comx.o.
+
+LoCOMX board support
+CONFIG_COMX_HW_LOCOMX
+  Hardware driver for the 'LoCOMX' board from the MultiGate family. Say Y
+  if you have a board like this. 
+
+  If you want to compile this as a module, say M and read
+  Documentation/modules.txt. The module will be called comx-hw-locomx.o.
+
+MixCOM board support
+CONFIG_COMX_HW_MIXCOM
+  Hardware driver for the 'MixCOM' board from the MultiGate family. Say Y
+  if you have a board like this.
+
+  If you want to use the watchdog device on this card, you should
+  select it in the Watchdog Cards section of the Character Devices
+  configuration. The ISDN interface of this card is Teles 16.3 compatible,
+  you should enable it in the ISDN configuration menu. The driver for the 
+  flash ROM of this card is available separately on ftp://ftp.itc.hu/.
+
+  If you want to compile this as a module, say M and read
+  Documentation/modules.txt. The module will be called comx-hw-mixcom.o.
+
+MultiGate Cisco-HDLC and synchronous PPP protocol support
+CONFIG_COMX_PROTO_PPP
+  Cisco-HDLC and synchronous PPP protocol driver for all MultiGate boards. 
+  Say Y if you want to use either protocol on your MultiGate boards.
+
+  If you want to compile this as a module, say M and read
+  Documentation/modules.txt. The module will be called 
+  comx-proto-ppp.o.
+
+MultiGate LAPB protocol support
+CONFIG_COMX_PROTO_LAPB
+  LAPB protocol driver for all MultiGate boards. Say Y if you 
+  want to use this protocol on your MultiGate boards.
+
+  If you want to compile this as a module, say M and read
+  Documentation/modules.txt. The module will be called comx-proto-lapb.o.
+
+MultiGate Frame Relay protocol support
+CONFIG_COMX_PROTO_FR
+  Frame Relay protocol driver for all MultiGate boards. Say Y if you 
+  want to use this protocol on your MultiGate boards.
+
+  If you want to compile this as a module, say M and read
+  Documentation/modules.txt. The module will be called comx-proto-fr.o.
 
 Ethernet (10 or 100Mbit)
 CONFIG_NET_ETHERNET

@@ -1258,7 +1258,7 @@ static struct sk_buff *alloc_bridge_skb(int port_no, int pdu_size, char *pdu_nam
   	memcpy(eth->h_source, dev->dev_addr, ETH_ALEN);
  
   	if (br_stats.flags & BR_DEBUG)
- 		printk("send_%s_bpdu: port %i src %02x:%02x:%02x:%02x:%02x:%02x\n",
+ 		printk(KERN_DEBUG "send_%s_bpdu: port %i src %02x:%02x:%02x:%02x:%02x:%02x\n",
  			pdu_name,
   			port_no,
   			eth->h_source[0],
@@ -1693,7 +1693,7 @@ int br_tx_frame(struct sk_buff *skb)	/* 3.5 */
 	eth = skb->mac.ethernet;
 	port = 0;	/* an impossible port (locally generated) */	
 	if (br_stats.flags & BR_DEBUG)
-		printk("br_tx_fr : port %i src %02x:%02x:%02x:%02x:%02x:%02x"
+		printk(KERN_DEBUG "br_tx_fr : port %i src %02x:%02x:%02x:%02x:%02x:%02x"
 	  		" dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
 			port,
 			eth->h_source[0],
@@ -1935,7 +1935,7 @@ static int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 				/* timer expired, invalidate entry */
 				f->flags &= ~FDB_ENT_VALID;
 				if (br_stats.flags & BR_DEBUG)
-					printk("fdb entry expired...\n");
+					printk(KERN_DEBUG "fdb entry expired...\n");
 				/*
 				 *	Send flood and drop original
 				 */
@@ -1977,7 +1977,7 @@ static int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 				/* timer expired, invalidate entry */
 				f->flags &= ~FDB_ENT_VALID;
 				if (br_stats.flags & BR_DEBUG)
-					printk("fdb entry expired...\n");
+					printk(KERN_DEBUG "fdb entry expired...\n");
 				++br_stats_cnt.drop_same_port_aged;
 			}
 			else ++br_stats_cnt.drop_same_port;
@@ -2019,7 +2019,7 @@ static int br_flood(struct sk_buff *skb, int port)
 			/* To get here we must have done ARP already,
 			   or have a received valid MAC header */
 			
-/*			printk("Flood to port %d\n",i);*/
+/*			printk(KERN_DEBUG "Flood to port %d\n",i);*/
 			nskb->nh.raw = nskb->data + ETH_HLEN;
 			nskb->priority = 1;
 			dev_queue_xmit(nskb);
@@ -2578,7 +2578,7 @@ static int brg_start_xmit(struct sk_buff *skb, struct device *dev)
 	port = 0;	/* an impossible port (locally generated) */	
 
 	 if (br_stats.flags & BR_DEBUG)
-		printk("%s: brg_start_xmit - src %02x:%02x:%02x:%02x:%02x:%02x"
+		printk(KERN_DEBUG "%s: brg_start_xmit - src %02x:%02x:%02x:%02x:%02x:%02x"
 	  		" dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
 		       dev->name,
 		       eth->h_source[0],
@@ -2679,7 +2679,7 @@ static int brg_rx(struct sk_buff *skb, int port)
 	}
 
 	if (br_stats.flags & BR_DEBUG)
-	  printk("%s: brg_rx - src %02x:%02x:%02x:%02x:%02x:%02x"
+	  printk(KERN_DEBUG "%s: brg_rx - src %02x:%02x:%02x:%02x:%02x:%02x"
 		 " dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
 		 dev->name,
 		 eth->h_source[0],

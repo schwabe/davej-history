@@ -40,11 +40,13 @@
  * 23-Jul-1999: Fixed small fragment security exposure opened on 15-May-1998.
  *              John McDonald <jm@dataprotect.com>
  *              Thomas Lopatic <tl@dataprotect.com>
+ * 21-Oct-1999: Use bh, not interrupt locking. --RR
+ *              Applied count fix by Emanuele Caratti <wiz@iol.it>
  */
 
 /*
  *
- * The origina Linux port was done Alan Cox, with changes/fixes from
+ * The original Linux port was done Alan Cox, with changes/fixes from
  * Pauline Middlelink, Jos Vos, Thomas Quinot, Wouter Gadeyne, Juan
  * Jose Ciarlante, Bernd Eckenfels, Keith Owens and others.
  * 
@@ -86,6 +88,7 @@
 #include <net/udp.h>
 #include <net/sock.h>
 #include <net/icmp.h>
+#include <net/ip_masq.h>
 #include <linux/netlink.h>
 #include <linux/init.h>
 #include <linux/firewall.h>
@@ -150,6 +153,7 @@
 static struct sock *ipfwsk;
 #endif
 
+/* Don't call SLOT_NUMBER when you have a write lock. */
 #ifdef __SMP__
 #define SLOT_NUMBER() (cpu_number_map[smp_processor_id()]*2 + !in_interrupt())
 #else
@@ -190,21 +194,26 @@ do {							\
 	       __FILE__, __LINE__, SLOT_NUMBER());	\
 } while (0)
 
+#define FWC_NOINT()							    \
+do {									    \
+	if (in_interrupt())						    \
+		printk("Rusty, you promised! %s %u\n", __FILE__, __LINE__); \
+} while(0)
 #else
 #define FWC_DEBUG_LOCK(d) do { } while(0)
 #define FWC_DEBUG_UNLOCK(d) do { } while(0)
 #define FWC_DONT_HAVE_LOCK(d) do { } while(0)
 #define FWC_HAVE_LOCK(d) do { } while(0)
+#define FWC_NOINT() do { } while(0)
 #endif /*DEBUG_IP_FIRWALL_LOCKING*/
 
+/* We never to a write lock in bh, so we only need write_lock_bh */
 #define FWC_READ_LOCK(l) do { FWC_DEBUG_LOCK(fwc_rlocks); read_lock(l); } while (0)
-#define FWC_WRITE_LOCK(l) do { FWC_DEBUG_LOCK(fwc_wlocks); write_lock(l); } while (0)
-#define FWC_READ_LOCK_IRQ(l,f) do { FWC_DEBUG_LOCK(fwc_rlocks); read_lock_irqsave(l,f); } while (0)
-#define FWC_WRITE_LOCK_IRQ(l,f) do { FWC_DEBUG_LOCK(fwc_wlocks); write_lock_irqsave(l,f); } while (0)
+/* Debug after lock obtained, (in_interrupt() will be true there), so
+   SLOT_NUMBER consistent. */
+#define FWC_WRITE_LOCK(l) do { FWC_NOINT(); write_lock_bh(l); FWC_DEBUG_LOCK(fwc_wlocks); } while (0)
 #define FWC_READ_UNLOCK(l) do { FWC_DEBUG_UNLOCK(fwc_rlocks); read_unlock(l); } while (0)
-#define FWC_WRITE_UNLOCK(l) do { FWC_DEBUG_UNLOCK(fwc_wlocks); write_unlock(l); } while (0)
-#define FWC_READ_UNLOCK_IRQ(l,f) do { FWC_DEBUG_UNLOCK(fwc_rlocks); read_unlock_irqrestore(l,f); } while (0)
-#define FWC_WRITE_UNLOCK_IRQ(l,f) do { FWC_DEBUG_UNLOCK(fwc_wlocks); write_unlock_irqrestore(l,f); } while (0)
+#define FWC_WRITE_UNLOCK(l) do { FWC_DEBUG_UNLOCK(fwc_wlocks); write_unlock_bh(l); } while (0)
 
 struct ip_chain;
 
@@ -228,6 +237,7 @@ struct ip_reent
 {
 	struct ip_chain *prevchain;	/* Pointer to referencing chain */
 	struct ip_fwkernel *prevrule;	/* Pointer to referencing rule */
+	unsigned int count;
 	struct ip_counters counters;
 };
 
@@ -732,8 +742,8 @@ ip_fw_check(struct iphdr *ip,
 	else FWC_HAVE_LOCK(fwc_rlocks);
 
 	f = chain->chain;
+	count = 0;
 	do {
-		count = 0;
 		for (; f; f = f->next) {
 			count++;
 			if (ip_rule_match(f,rif,ip,
@@ -771,10 +781,12 @@ ip_fw_check(struct iphdr *ip,
 				else {
 					f->branch->reent[slot].prevchain 
 						= chain;
+					f->branch->reent[slot].count = count;
 					f->branch->reent[slot].prevrule 
 						= f->next;
 					chain = f->branch;
 					f = chain->chain;
+					count = 0;
 				}
 			}
 			else if (f->simplebranch == FW_SKIP) 
@@ -793,6 +805,7 @@ ip_fw_check(struct iphdr *ip,
 			if (chain->reent[slot].prevchain) {
 				struct ip_chain *tmp = chain;
 				f = chain->reent[slot].prevrule;
+				count = chain->reent[slot].count;
 				chain = chain->reent[slot].prevchain;
 				tmp->reent[slot].prevchain = NULL;
 			}
@@ -1303,9 +1316,8 @@ int ip_fw_ctl(int cmd, void *m, int len)
 {
 	int ret;
 	struct ip_chain *chain;
-	unsigned long flags;
 
-	FWC_WRITE_LOCK_IRQ(&ip_fw_lock, flags);
+	FWC_WRITE_LOCK(&ip_fw_lock);
 
 	switch (cmd) {
 	case IP_FW_FLUSH:
@@ -1329,7 +1341,7 @@ int ip_fw_ctl(int cmd, void *m, int len)
 		struct iphdr *ip;
 
 		/* Don't need write lock. */
-		FWC_WRITE_UNLOCK_IRQ(&ip_fw_lock, flags);
+		FWC_WRITE_UNLOCK(&ip_fw_lock);
 		
 		if (len != sizeof(struct ip_fwtest) || !check_label(m))
 			return EINVAL;
@@ -1524,7 +1536,7 @@ int ip_fw_ctl(int cmd, void *m, int len)
 		ret = EINVAL;
 	}
 
-	FWC_WRITE_UNLOCK_IRQ(&ip_fw_lock, flags);
+	FWC_WRITE_UNLOCK(&ip_fw_lock);
 	return ret;
 }
 
@@ -1585,7 +1597,6 @@ static int ip_chain_procinfo(char *buffer, char **start,
 {
 	struct ip_chain *i;
 	struct ip_fwkernel *j = ip_fw_chains->chain;
-	unsigned long flags;
 	int len = 0;
 	int last_len = 0;
 	off_t upto = 0;
@@ -1594,7 +1605,7 @@ static int ip_chain_procinfo(char *buffer, char **start,
 	duprintf("ip_fw_chains is 0x%0lX\n", (unsigned long int)ip_fw_chains);
 
 	/* Need a write lock to lock out ``readers'' which update counters. */
-	FWC_WRITE_LOCK_IRQ(&ip_fw_lock, flags);
+	FWC_WRITE_LOCK(&ip_fw_lock);
 
 	for (i = ip_fw_chains; i; i = i->next) {
 	    for (j = i->chain; j; j = j->next) {
@@ -1625,7 +1636,7 @@ static int ip_chain_procinfo(char *buffer, char **start,
 		}
 	}
 outside:
-	FWC_WRITE_UNLOCK_IRQ(&ip_fw_lock, flags);
+	FWC_WRITE_UNLOCK(&ip_fw_lock);
 	buffer[len] = '\0';
 
 	duprintf("ip_chain_procinfo: Length = %i (of %i).  Offset = %li.\n",
@@ -1641,10 +1652,9 @@ static int ip_chain_name_procinfo(char *buffer, char **start,
 	struct ip_chain *i;
 	int len = 0,last_len = 0;
 	off_t pos = 0,begin = 0;
-	unsigned long flags;
 
 	/* Need a write lock to lock out ``readers'' which update counters. */
-	FWC_WRITE_LOCK_IRQ(&ip_fw_lock, flags);
+	FWC_WRITE_LOCK(&ip_fw_lock);
 
 	for (i = ip_fw_chains; i; i = i->next)
 	{
@@ -1676,7 +1686,7 @@ static int ip_chain_name_procinfo(char *buffer, char **start,
 		
 		last_len = len;
 	}
-	FWC_WRITE_UNLOCK_IRQ(&ip_fw_lock, flags);
+	FWC_WRITE_UNLOCK(&ip_fw_lock);
 
 	*start = buffer+(offset-begin);
 	len-=(offset-begin);

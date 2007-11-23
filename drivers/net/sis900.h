@@ -78,11 +78,11 @@ enum sis900_interrupt_enable_reigster_bits {
 #define RX_DMA_BURST    	0
 
 /* transmit FIFO threshholds */
-#define TX_FILL_THRESH   16
+#define TX_FILL_THRESH   16	/* 1/4 FIFO size */
 #define TxFILLT_shift   	8
 #define TxDRNT_shift    	0
-#define TxDRNT_100      (1536>>5)
-#define TxDRNT_10		16 
+#define TxDRNT_100      	48	/* 3/4 FIFO size */
+#define TxDRNT_10		16 	/* 1/2 FIFO size */
 
 enum sis900_transmit_config_register_bits {
 	TxCSI = 0x80000000, TxHBI = 0x40000000, TxMLB = 0x20000000,
@@ -90,13 +90,13 @@ enum sis900_transmit_config_register_bits {
 	TxDRNT = 0x0000003F
 };
 
-/* recevie FFIFO thresholds */
+/* recevie FIFO thresholds */
 #define RxDRNT_shift     1
-#define RxDRNT_100	8
-#define RxDRNT_10		8 
+#define RxDRNT_100	24	/* 3/4 FIFO size */
+#define RxDRNT_10		16 	/* 1/2 FIFO size */
 
 enum sis900_reveive_config_register_bits {
-	RxAEP  = 0x80000000, RxARP = 0x40000000, RxATP   = 0x10000000,
+	RxAEP  = 0x80000000, RxARP = 0x40000000, RxATX = 0x10000000,
 	RxAJAB = 0x08000000, RxDRNT = 0x0000007F
 };
 
@@ -158,68 +158,73 @@ enum sis900_rx_bufer_status {
 enum mii_registers {
 	MII_CONTROL = 0x0000, MII_STATUS = 0x0001, MII_PHY_ID0 = 0x0002,
 	MII_PHY_ID1 = 0x0003, MII_ANADV  = 0x0004, MII_ANLPAR  = 0x0005,
+	MII_ANEXT   = 0x0006
+};
+
+/* mii registers specific to SiS 900 */
+enum sis_mii_registers {
 	MII_CONFIG1 = 0x0010, MII_CONFIG2 = 0x0011, MII_STSOUT = 0x0012,
 	MII_MASK    = 0x0013
 };
 
+/* mii registers specific to AMD 79C901 */
+enum amd_mii_registers {
+	MII_STATUS_SUMMARY = 0x0018
+};
+
 /* MII Control register bit definitions. */
-#define MIICNTL_FDX             0x0100
-#define MIICNTL_RST_AUTO        0x0200
-#define MIICNTL_ISOLATE         0x0400
-#define MIICNTL_PWRDWN          0x0800
-#define MIICNTL_AUTO            0x1000
-#define MIICNTL_SPEED           0x2000
-#define MIICNTL_LPBK            0x4000
-#define MIICNTL_RESET           0x8000
-/* MII Status register bit significance. */
-#define MIISTAT_EXT             0x0001
-#define MIISTAT_JAB             0x0002
-#define MIISTAT_LINK            0x0004
-#define MIISTAT_CAN_AUTO        0x0008
-#define MIISTAT_FAULT           0x0010
-#define MIISTAT_AUTO_DONE       0x0020
-#define MIISTAT_CAN_T           0x0800
-#define MIISTAT_CAN_T_FDX       0x1000
-#define MIISTAT_CAN_TX          0x2000
-#define MIISTAT_CAN_TX_FDX      0x4000
-#define MIISTAT_CAN_T4          0x8000
+enum mii_control_register_bits {
+	MII_CNTL_FDX     = 0x0100, MII_CNTL_RST_AUTO = 0x0200, 
+	MII_CNTL_ISOLATE = 0x0400, MII_CNTL_PWRDWN   = 0x0800,
+	MII_CNTL_AUTO    = 0x1000, MII_CNTL_SPEED    = 0x2000,
+	MII_CNTL_LPBK    = 0x4000, MII_CNTL_RESET    = 0x8000
+};
+
+/* MII Status register bit  */
+enum mii_status_register_bits {
+	MII_STAT_EXT    = 0x0001, MII_STAT_JAB        = 0x0002, 
+	MII_STAT_LINK   = 0x0004, MII_STAT_CAN_AUTO   = 0x0008, 
+	MII_STAT_FAULT  = 0x0010, MII_STAT_AUTO_DONE  = 0x0020,
+	MII_STAT_CAN_T  = 0x0800, MII_STAT_CAN_T_FDX  = 0x1000,
+	MII_STAT_CAN_TX = 0x2000, MII_STAT_CAN_TX_FDX = 0x4000,
+	MII_STAT_CAN_T4 = 0x8000
+};
+
+#define		MII_ID1_OUI_LO		0xFC00	/* low bits of OUI mask */
+#define		MII_ID1_MODEL		0x03F0	/* model number */
+#define		MII_ID1_REV		0x000F	/* model number */
+
 /* MII NWAY Register Bits ...
-** valid for the ANAR (Auto-Negotiation Advertisement) and
-** ANLPAR (Auto-Negotiation Link Partner) registers */
-#define MII_NWAY_NODE_SEL       0x001f
-#define MII_NWAY_CSMA_CD        0x0001
-#define MII_NWAY_T              0x0020
-#define MII_NWAY_T_FDX          0x0040
-#define MII_NWAY_TX             0x0080
-#define MII_NWAY_TX_FDX         0x0100
-#define MII_NWAY_T4             0x0200
-#define MII_NWAY_RF             0x2000
-#define MII_NWAY_ACK            0x4000
-#define MII_NWAY_NP             0x8000
+   valid for the ANAR (Auto-Negotiation Advertisement) and
+   ANLPAR (Auto-Negotiation Link Partner) registers */
+enum mii_nway_register_bits {
+	MII_NWAY_NODE_SEL = 0x001f, MII_NWAY_CSMA_CD = 0x0001,
+	MII_NWAY_T	  = 0x0020, MII_NWAY_T_FDX   = 0x0040,
+	MII_NWAY_TX       = 0x0080, MII_NWAY_TX_FDX  = 0x0100,
+	MII_NWAY_T4       = 0x0200, MII_NWAY_PAUSE   = 0x0400,
+	MII_NWAY_RF       = 0x2000, MII_NWAY_ACK     = 0x4000,
+	MII_NWAY_NP       = 0x8000
+};
 
-/* MII Auto-Negotiation Expansion Register Bits */
-#define MII_ANER_PDF            0x0010
-#define MII_ANER_LP_NP_ABLE     0x0008
-#define MII_ANER_NP_ABLE        0x0004
-#define MII_ANER_RX_PAGE        0x0002
-#define MII_ANER_LP_AN_ABLE     0x0001
-#define HALF_DUPLEX                     1
-#define FDX_CAPABLE_DUPLEX_UNKNOWN      2
-#define FDX_CAPABLE_HALF_SELECTED       3
-#define FDX_CAPABLE_FULL_SELECTED       4
-#define HW_SPEED_UNCONFIG       0
-#define HW_SPEED_10_MBPS        10
-#define HW_SPEED_100_MBPS       100
-#define HW_SPEED_DEFAULT        (HW_SPEED_10_MBPS)
+enum mii_stsout_register_bits {
+	MII_STSOUT_LINK_FAIL = 0x4000,
+	MII_STSOUT_SPD       = 0x0080, MII_STSOUT_DPLX = 0x0040
+};
 
-#define ACCEPT_ALL_PHYS         0x01
-#define ACCEPT_ALL_MCASTS       0x02
-#define ACCEPT_ALL_BCASTS       0x04
+enum mii_stssum_register_bits {
+	MII_STSSUM_LINK = 0x0008, MII_STSSUM_DPLX = 0x0004,
+	MII_STSSUM_AUTO = 0x0002, MII_STSSUM_SPD  = 0x0001
+};
 
-#define ACCEPT_ALL_ERRORS       0x08
-#define ACCEPT_CAM_QUALIFIED    0x10
+#define FDX_CAPABLE_DUPLEX_UNKNOWN      0
+#define FDX_CAPABLE_HALF_SELECTED       1
+#define FDX_CAPABLE_FULL_SELECTED       2
 
-#define MAC_LOOPBACK            0x20
+#define HW_SPEED_UNCONFIG		0
+#define HW_SPEED_HOME		1
+#define HW_SPEED_10_MBPS        	10
+#define HW_SPEED_100_MBPS       	100
+#define HW_SPEED_DEFAULT        	(HW_SPEED_100_MBPS)
 
 #define CRC_SIZE                4
 #define MAC_HEADER_SIZE         14

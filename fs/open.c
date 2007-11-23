@@ -712,7 +712,7 @@ repeat:
 
 	/* Do we need to expand the fdset array? */
 	if (fd >= current->files->max_fdset) {
-		error = expand_fdset(files, 0);
+		error = expand_fdset(files, fd + 1);
 		if (!error)
 			goto repeat;
 		goto out;
@@ -722,7 +722,7 @@ repeat:
 	 * Check whether we need to expand the fd array.
 	 */
 	if (fd >= files->max_fds) {
-		error = expand_fd_array(files, 0);
+		error = expand_fd_array(files, fd + 1);
 		if (!error)
 			goto repeat;
 		goto out;
