@@ -260,7 +260,7 @@ setup_idt:
 	movw %dx,%ax		/* selector = 0x0010 = cs */
 	movw $0x8E00,%dx	/* interrupt gate - dpl=0, present */
 
-	lea SYMBOL_NAME(__idt),%edi
+	lea SYMBOL_NAME(idt),%edi
 	mov $256,%ecx
 rp_sidt:
 	movl %eax,(%edi)
@@ -342,6 +342,11 @@ stack_start:
 	.long SYMBOL_NAME(init_user_stack)+4096
 	.long KERNEL_DS
 
+/* NOTE: keep the idt short behind the above '.org 0x6000'
+	 It must fit completely within _one_ page */
+ENTRY(idt)
+	.fill 256,8,0		# idt is uninitialized
+
 /* This is the default interrupt "handler" :-) */
 int_msg:
 	.asciz "Unknown interrupt\n"
@@ -376,10 +381,7 @@ ignore_int:
 .word 0
 idt_descr:
 	.word 256*8-1		# idt contains 256 entries
-	.long 0xc0000000+SYMBOL_NAME(__idt)
-
-ENTRY(__idt)
-	.fill 256,8,0		# idt is uninitialized
+	.long 0xc0000000+SYMBOL_NAME(idt)
 
 	ALIGN
 .word 0

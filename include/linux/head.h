@@ -5,8 +5,7 @@ typedef struct desc_struct {
 	unsigned long a,b;
 } desc_table[256];
 
-extern desc_table __idt,gdt;
-extern struct desc_struct *idt;
+extern desc_table idt,gdt;
 
 #define GDT_NUL 0
 #define GDT_CODE 1

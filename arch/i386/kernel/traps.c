@@ -337,7 +337,6 @@ asmlinkage void math_emulate(long arg)
 
 #endif /* CONFIG_MATH_EMULATION */
 
-struct desc_struct *idt = __idt+0;
 struct {
 	unsigned short limit;
 	unsigned long addr __attribute__((packed));
@@ -348,33 +347,35 @@ void trap_init_f00f_bug(void)
 	pgd_t * pgd;
 	pmd_t * pmd;
 	pte_t * pte;
-	unsigned long twopage;
-	struct desc_struct *new_idt;
+	unsigned long page;
+	unsigned long idtpage = (unsigned long)idt;
+	struct desc_struct *alias_idt;
 
-	printk("moving IDT ... ");
+	printk("alias mapping IDT readonly ... ");
 
-	twopage = (unsigned long) vmalloc (2*PAGE_SIZE);
+		/* just to get free address space */
+	page = (unsigned long) vmalloc (PAGE_SIZE);
 
-	new_idt = (void *)(twopage + 4096-7*8);
-
-	memcpy(new_idt,idt,256*8);
-
+	alias_idt = (void *)(page + (idtpage & ~PAGE_MASK));
 	idt_descriptor.limit = 256*8-1;
-	idt_descriptor.addr = VMALLOC_VMADDR(new_idt);
-
-	 __asm__ __volatile__("\tlidt %0": "=m" (idt_descriptor));
-	 idt = new_idt;
+	idt_descriptor.addr = VMALLOC_VMADDR(alias_idt);
 
 	/*
-	 * Unmap lower page:
+	 * alias map the original idt to the alias page:
 	 */
-	twopage = VMALLOC_VMADDR(twopage);
-	pgd = pgd_offset(current->mm, twopage);
-	pmd = pmd_offset(pgd, twopage);
-	pte = pte_offset(pmd, twopage);
-
-	pte_clear(pte);
+	page = VMALLOC_VMADDR(page);
+	pgd = pgd_offset(&init_mm, page);
+	pmd = pmd_offset(pgd, page);
+	pte = pte_offset(pmd, page);
+		/* give memory back to the pool, don't need it */
+	free_page(pte_page(*pte));
+		/* ... and set the readonly alias */
+	set_pte(pte, mk_pte(idtpage  & PAGE_MASK, PAGE_KERNEL));
+	*pte = pte_wrprotect(*pte);
 	flush_tlb_all();
+
+		/* now we have the mapping ok, we can do LIDT */
+	 __asm__ __volatile__("\tlidt %0": "=m" (idt_descriptor));
 
 	printk(" ... done\n");
 }

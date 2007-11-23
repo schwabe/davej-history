@@ -42,11 +42,28 @@
 #define __flush_tlb() \
 do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3":"=r" (tmpreg) : :"memory"); } while (0)
 
+/*
+ * NOTE! The intel "invlpg" semantics are extremely strange. The
+ * chip will add the segment base to the memory address, even though
+ * no segment checking is done. We correct for this by using an
+ * offset of 0x40000000 that will wrap around the kernel segment base
+ * of 0xC0000000 to get the correct address (it will always be outside
+ * the kernel segment, but we're only interested in the final linear
+ * address.
+ */
+#define __invlpg_mem(addr) \
+	(((char *)(addr))[0x40000000])
+#define __invlpg(addr) \
+	__asm__ __volatile__("invlpg %0": :"m" (__invlpg_mem(addr)))
+
+/*
+ * The i386 doesn't have a page-granular invalidate. Invalidate
+ * everything for it.
+ */
 #ifdef CONFIG_M386
-#define __flush_tlb_one(addr) flush_tlb()
+  #define __flush_tlb_one(addr) __flush_tlb()
 #else
-#define __flush_tlb_one(addr) \
-__asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
+  #define __flush_tlb_one(addr) __invlpg(addr)
 #endif
  
 #ifndef __SMP__
