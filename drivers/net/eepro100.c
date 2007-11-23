@@ -53,7 +53,7 @@ static int rxdmacount = 0;
 
 /* Set the copy breakpoint for the copy-only-tiny-buffer Rx method.
    Lower values use more memory, but are faster. */
-#ifdef __alpha__
+#if defined(__alpha__) || defined(__sparc__)
 /* force copying of all packets to avoid unaligned accesses on Alpha */
 static int rx_copybreak = 1518;
 #else
@@ -611,10 +611,17 @@ int eepro100_init(void)
 				ioaddr = pciaddr & ~3UL;
 				if (check_region(ioaddr, 32))
 					continue;
-			} else if ((ioaddr = (long)ioremap(pciaddr & ~0xfUL, 0x1000)) == 0) {
-				printk(KERN_INFO "Failed to map PCI address %#lx.\n",
-					   pciaddr);
-				continue;
+			} else {
+#ifdef __sparc__
+				/* ioremap is hosed in 2.2.x on Sparc. */
+				ioaddr = pciaddr & ~0xfUL;
+#else
+				if ((ioaddr = (long)ioremap(pciaddr & ~0xfUL, 0x1000)) == 0) {
+					printk(KERN_INFO "Failed to map PCI address %#lx.\n",
+						   pciaddr);
+					continue;
+				}
+#endif
 			}
 			if (speedo_debug > 2)
 				printk("Found Intel i82557 PCI Speedo at I/O %#lx, IRQ %d.\n",

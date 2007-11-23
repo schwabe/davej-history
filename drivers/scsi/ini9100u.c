@@ -545,8 +545,6 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 		pHCB->pSRB_lock = SPIN_LOCK_UNLOCKED;	/* SRB save queue lock */
 #endif
-		request_region(pHCB->HCS_Base, 0x100, "i91u");	/* Register */
-
 		get_tulipPCIConfig(pHCB, i);
 
 		dBiosAdr = pHCB->HCS_BIOS;
@@ -557,6 +555,8 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 #endif
 
 		init_tulip(pHCB, tul_scb + (i * tul_num_scb), tul_num_scb, pbBiosAdr, 10);
+		request_region(pHCB->HCS_Base, 256, "i91u"); /* Register */ 
+
 		pHCB->HCS_Index = i;	/* 7/29/98 */
 		hreg = scsi_register(tpnt, sizeof(HCS));
 		hreg->io_port = pHCB->HCS_Base;
@@ -1086,4 +1086,14 @@ static void i91u_panic(char *msg)
 {
 	printk("\ni91u_panic: %s\n", msg);
 	panic("i91u panic");
+}
+
+/*
+ * Release ressources
+ */
+int i91u_release(struct Scsi_Host *hreg)
+{
+	free_irq(hreg->irq, hreg);
+	release_region(hreg->io_port, 256);
+	return 0;
 }

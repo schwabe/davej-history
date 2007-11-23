@@ -54,6 +54,7 @@ extern int init_nls_cp865(void);
 extern int init_nls_cp866(void);
 extern int init_nls_cp869(void);
 extern int init_nls_cp874(void);
+extern int init_nls_euc_jp(void);
 extern int init_nls_cp932(void);
 extern int init_nls_cp936(void);
 extern int init_nls_cp949(void);

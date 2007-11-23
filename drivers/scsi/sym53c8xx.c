@@ -4180,7 +4180,7 @@ static int ncr_prepare_setting(ncb_p np, ncr_nvram *nvram)
 	**	64 bit (53C896) ?
 	*/
 	if (np->features & FE_64BIT)
-#if BITS_PER_LONG > 32
+#ifdef SCSI_NCR_USE_64BIT_DAC
 		np->rv_ccntl1	|= (XTIMOD | EXTIBMV);
 #else
 		np->rv_ccntl1	|= (DDAC);
@@ -9021,7 +9021,7 @@ fail:
 **	code will get more complex later).
 */
 
-#if BITS_PER_LONG > 32
+#ifdef SCSI_NCR_USE_64BIT_DAC
 #define SCATTER_ONE(data, badd, len)					\
 	(data)->addr = cpu_to_scr(badd);				\
 	(data)->size = cpu_to_scr((((badd) >> 8) & 0xff000000) + len);

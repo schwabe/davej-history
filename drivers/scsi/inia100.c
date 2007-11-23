@@ -466,7 +466,6 @@ int inia100_detect(Scsi_Host_Template * tpnt)
 		memset((unsigned char *) pHCB->HCS_virEscbArray, 0, sz);
 		pHCB->HCS_physEscbArray = (U32) VIRT_TO_BUS(pHCB->HCS_virEscbArray);
 
-		request_region(pHCB->HCS_Base, 0x100, "inia100");	/* Register */
 		get_orcPCIConfig(pHCB, i);
 
 		dBiosAdr = pHCB->HCS_BIOS;
@@ -480,6 +479,8 @@ int inia100_detect(Scsi_Host_Template * tpnt)
 			printk("inia100: initial orchid fail!!\n");
 			return (0);
 		}
+		request_region(pHCB->HCS_Base, 256, "inia100");	/* Register */
+
 		hreg = scsi_register(tpnt, sizeof(ORC_HCS));
 		if (hreg == NULL) {
 			printk("Invalid scsi_register pointer.\n");
@@ -512,28 +513,28 @@ int inia100_detect(Scsi_Host_Template * tpnt)
 		switch (i) {
 #if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 		case 0:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr0, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr0, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 1:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr1, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr1, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 2:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr2, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr2, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 3:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr3, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr3, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 4:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr4, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr4, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 5:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr5, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr5, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 6:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr6, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr6, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		case 7:
-			ok = request_irq(pHCB->HCS_Intr, inia100_intr7, SA_INTERRUPT | SA_SHIRQ, "inia100", NULL);
+			ok = request_irq(pHCB->HCS_Intr, inia100_intr7, SA_INTERRUPT | SA_SHIRQ, "inia100", hreg);
 			break;
 		default:
 			inia100_panic("inia100: Too many host adapters\n");
@@ -936,5 +937,15 @@ static void inia100_panic(char *msg)
 	printk("\ninia100_panic: %s\n", msg);
 	panic("inia100 panic");
 }
+
+/*
+ * Release ressources
+ */
+int inia100_release(struct Scsi_Host *hreg)
+{
+        free_irq(hreg->irq, hreg);
+        release_region(hreg->io_port, 256);
+        return 0;
+} 
 
 /*#include "inia100scsi.c" */

@@ -1041,8 +1041,8 @@ static void tcp_v4_send_ack(struct sk_buff *skb, __u32 seq, __u32 ack, __u16 win
 	rth.source = th->dest; 
 	rth.doff = sizeof(struct tcphdr)/4;
 
-	rth.seq = seq;
-	rth.ack_seq = ack; 
+	rth.seq = htonl(seq);
+	rth.ack_seq = htonl(ack); 
 	rth.ack = 1;
 
 	rth.window = htons(window);

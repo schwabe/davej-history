@@ -579,12 +579,6 @@ M:	kaos@ocs.com.au
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
-MOUSE AND MISC DEVICES [GENERAL]
-P:	Alessandro Rubini
-M:	rubini@ipvvis.unipv.it
-L:	linux-kernel@vger.rutgers.edu
-S:	Maintained
-
 MTRR AND SIMILAR SUPPORT [i386]
 P:	Richard Gooch
 M:	rgooch@atnf.csiro.au

@@ -182,6 +182,7 @@
 #define CT5880REV_CT5880_C  0x02
 #define ES1371REV_ES1371_B  0x09
 #define EV1938REV_EV1938_A  0x00
+#define ES1371REV_ES1373_8  0x08
 
 #define ES1371_MAGIC  ((PCI_VENDOR_ID_ENSONIQ<<16)|PCI_DEVICE_ID_ENSONIQ_ES1371)
 
@@ -3166,7 +3167,8 @@ __initfunc(static int probe_chip(struct pci_dev *pcidev, int index))
 	/* if we are a 5880 turn on the AC97 */
 	if (s->vendor == PCI_VENDOR_ID_ENSONIQ &&
 	    ((s->device == PCI_DEVICE_ID_ENSONIQ_CT5880 && s->rev == CT5880REV_CT5880_C) || 
-	     (s->device == PCI_DEVICE_ID_ENSONIQ_ES1371 && s->rev == ES1371REV_CT5880_A))) { 
+	     (s->device == PCI_DEVICE_ID_ENSONIQ_ES1371 && s->rev == ES1371REV_CT5880_A) || 
+	     (s->device == PCI_DEVICE_ID_ENSONIQ_ES1371 && s->rev == ES1371REV_ES1373_8))) { 
 		cssr |= CSTAT_5880_AC97_RST;
 		outl(cssr, s->io+ES1371_REG_STATUS);
 		/* need to delay around 20ms(bleech) to give

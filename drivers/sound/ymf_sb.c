@@ -822,7 +822,7 @@ static void free_iomaps( void )
 	return;
 }
 
-static int __init init_ymf7xxsb_module(void)
+int __init init_ymf7xxsb_module(void)
 {
 	if ( master_vol < 0 ) master_vol  = 50;
 	if ( master_vol > 100 ) master_vol = 100;

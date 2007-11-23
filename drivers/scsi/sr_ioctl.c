@@ -365,6 +365,98 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	
         break;
     }
+	case CDROMVOLCTRL: {
+		char * buffer, * mask;
+		struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
+	
+	/* First we get the current params so we can just twiddle the volume */
+		sr_cmd[0] = MODE_SENSE;
+		sr_cmd[1] = (scsi_CDs[target].device -> lun) << 5;
+		sr_cmd[2] = 0xe;    /* Want mode page 0xe, CDROM audio params */
+		sr_cmd[3] = 0;
+		sr_cmd[4] = 28;
+		sr_cmd[5] = 0;
+	
+		if ((buffer = (unsigned char *) scsi_malloc(512)) == NULL)
+			return -ENOMEM;
+	
+		if ((result = sr_do_ioctl(target, sr_cmd, buffer, 28, 0))) {
+			printk ("Hosed while obtaining audio mode page\n");
+			scsi_free(buffer, 512);
+			break;
+		}
+	
+		sr_cmd[0] = MODE_SENSE;
+		sr_cmd[1] = (scsi_CDs[target].device -> lun) << 5;
+		sr_cmd[2] = 0x4e;   /* Want the mask for mode page 0xe */
+		sr_cmd[3] = 0;
+		sr_cmd[4] = 28;
+		sr_cmd[5] = 0;
+	
+		mask = (unsigned char *) scsi_malloc(512);
+		if(!mask) {
+			scsi_free(buffer, 512);
+			result = -ENOMEM;
+			break;
+		}
+
+		if ((result = sr_do_ioctl (target, sr_cmd, mask, 28, 0))) {
+			printk("Hosed obtaining mask for audio mode page\n");
+			scsi_free(buffer, 512);
+			scsi_free(mask, 512);
+			break;
+		}
+	
+		/* Now mask and substitute our own volume and reuse the rest */
+		buffer[0] = 0;  /* Clear reserved field */
+	
+		buffer[21] = volctrl->channel0 & mask[21];
+		buffer[23] = volctrl->channel1 & mask[23];
+		buffer[25] = volctrl->channel2 & mask[25];
+		buffer[27] = volctrl->channel3 & mask[27];
+	
+		sr_cmd[0] = MODE_SELECT;
+		sr_cmd[1] = ((scsi_CDs[target].device -> lun) << 5) | 0x10;    /* Params are SCSI-2 */
+		sr_cmd[2] = sr_cmd[3] = 0;
+		sr_cmd[4] = 28;
+		sr_cmd[5] = 0;
+	
+		result = sr_do_ioctl (target, sr_cmd, buffer, 28, 0);
+		scsi_free(buffer, 512);
+		scsi_free(mask, 512);
+		break;
+	}
+	
+	case CDROMVOLREAD: {
+		char * buffer;
+		struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
+	
+		/* Get the current params */
+	
+		sr_cmd[0] = MODE_SENSE;
+		sr_cmd[1] = (scsi_CDs[target].device -> lun) << 5;
+		sr_cmd[2] = 0xe;    /* Want mode page 0xe, CDROM audio params */
+		sr_cmd[3] = 0;
+		sr_cmd[4] = 28;
+		sr_cmd[5] = 0;
+	
+		if ((buffer = (unsigned char *) scsi_malloc(512)) == NULL)
+			return -ENOMEM;
+	
+		if ((result = sr_do_ioctl (target, sr_cmd, buffer, 28, 0))) {
+			printk("(CDROMVOLREAD) Hosed while obtaining audio mode page\n");
+			scsi_free(buffer, 512);
+			break;
+		}
+
+		volctrl->channel0 = buffer[21];
+		volctrl->channel1 = buffer[23];
+		volctrl->channel2 = buffer[25];
+		volctrl->channel3 = buffer[27];
+
+		scsi_free(buffer, 512);
+		break;
+	}
 
     default:
         return -EINVAL;

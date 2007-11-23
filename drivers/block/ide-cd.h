@@ -1,11 +1,11 @@
+/*
+ *  linux/drivers/ide/ide_cd.h
+ *
+ *  Copyright (C) 1996-98  Erik Andersen
+ *  Copyright (C) 1998-2000 Jens Axboe
+ */
 #ifndef _IDE_CD_H
 #define _IDE_CD_H
-/*
- *  linux/drivers/block/ide_cd.h
- *
- *  Copyright (C) 1996, 1997, 1998  Erik Andersen
- *  Copyright (C) 1998, 1999, 2000  Jens Axboe
- */
 
 #include <linux/cdrom.h>
 #include <asm/byteorder.h>
@@ -42,6 +42,8 @@
 #define SECTORS_PER_FRAME	(CD_FRAMESIZE / SECTOR_SIZE)
 #define SECTOR_BUFFER_SIZE	(CD_FRAMESIZE * 32)
 #define SECTORS_BUFFER		(SECTOR_BUFFER_SIZE / SECTOR_SIZE)
+
+#define BLOCKS_PER_FRAME	(CD_FRAMESIZE / BLOCK_SIZE)
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
@@ -101,6 +103,7 @@ struct packet_command {
 	char *buffer;
 	int buflen;
 	int stat;
+	int quiet;
 	struct request_sense *sense;
 	unsigned char c[12];
 };
@@ -397,7 +400,6 @@ struct atapi_capabilities_page {
 	unsigned short buffer_size;
 	/* Current speed (in kB/s). */
 	unsigned short curspeed;
-
 	char pad[4];
 };
 
@@ -624,9 +626,7 @@ const struct {
 	  "Logical unit not ready - in progress [sic] of becoming ready" },
 	{ 0x020402, "Logical unit not ready - initializing command required" },
 	{ 0x020403, "Logical unit not ready - manual intervention required" },
-	{ 0x020404, "Logical unit not ready - format in progress" },
-	{ 0x020407, "Logical unit not ready - operation in progress" },
-	{ 0x020408, "Logical unit not ready - long write in progress" },
+	{ 0x020404, "In process of becoming ready - writing" },
 	{ 0x020600, "No reference position found (media may be upside down)" },
 	{ 0x023000, "Incompatible medium installed" },
 	{ 0x023a00, "Medium not present" },
@@ -676,6 +676,7 @@ const struct {
 	{ 0x04b600, "Media load mechanism failed" },
 	{ 0x051a00, "Parameter list length error" },
 	{ 0x052000, "Invalid command operation code" },
+	{ 0x052c00, "Command sequence error" },
 	{ 0x052100, "Logical block address out of range" },
 	{ 0x052102, "Invalid address for write" },
 	{ 0x052400, "Invalid field in command packet" },

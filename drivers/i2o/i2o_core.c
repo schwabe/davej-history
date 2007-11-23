@@ -3021,7 +3021,6 @@ extern int i2o_config_init(void);
 extern int i2o_lan_init(void);
 extern int i2o_pci_init(void);
 extern int i2o_proc_init(void);
-extern int i2o_scsi_init(void);
 
 int __init i2o_init(void)
 {
@@ -3063,10 +3062,6 @@ int __init i2o_init(void)
 
 #ifdef CONFIG_I2O_BLOCK
 	i2o_block_init();
-#endif
-
-#ifdef CONFIG_I2O_SCSI
-	i2o_scsi_init();
 #endif
 
 #ifdef CONFIG_I2O_LAN

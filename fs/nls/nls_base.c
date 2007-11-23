@@ -514,6 +514,7 @@ int __init init_nls(void)
 	init_nls_cp874();
 #endif
 #ifdef CONFIG_NLS_CODEPAGE_932
+	init_nls_euc_jp();
 	init_nls_cp932();
 #endif
 #ifdef CONFIG_NLS_CODEPAGE_936
