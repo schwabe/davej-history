@@ -2550,6 +2550,20 @@ CONFIG_IP_MASQUERADE
   kernel whenever you want; read Documentation/modules.txt for
   details.
 
+IP: UDP masquerading loose checking
+CONFIG_IP_MASQUERADE_UDP_LOOSE
+  Whether UDP masquerading does address checking in a loose fashion.
+
+  If you say Y here, then UDP masqueraded connections will allow
+  any external system to be connect back through the firewall to the
+  port on the internal machine.  However it will allow the more
+  efficient use of masqueraded ports, and may be required for some
+  gaming uses.
+
+  You should only say Y here if you understand the consequences since
+  it will open your internal network to external probing and potential
+  attacks.  In all other cases choose N
+
 IP: ICMP masquerading
 CONFIG_IP_MASQUERADE_ICMP
   The basic masquerade code described for "IP: masquerading" above
@@ -6549,8 +6563,8 @@ CONFIG_DEC_ELCP_OLD
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
-  The module will be called tulip.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt as well as
+  The module will be called old_tulip.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
 Digi Intl. RightSwitch support

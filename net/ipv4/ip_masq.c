@@ -412,12 +412,6 @@ struct ip_fw_masq *ip_masq_expire = &ip_masq_dummy;
 #define MASQ_DPORT_PASS	(IP_MASQ_F_NO_DPORT|IP_MASQ_F_DLOOSE)
 
 /*
- *	By default enable dest loose semantics
- */
-#define CONFIG_IP_MASQ_LOOSE_DEFAULT 1
-
-
-/*
  * 	Set masq expiration (deletion) and adds timer,
  *	if timeout==0 cancel expiration.
  *	Warning: it does not check/delete previous timer!
@@ -937,7 +931,7 @@ struct ip_masq * ip_masq_new(int proto, __u32 maddr, __u16 mport, __u32 saddr, _
 	atomic_set(&ms->refcnt,0);
 
         if (proto == IPPROTO_UDP && !mport)
-#ifdef CONFIG_IP_MASQ_LOOSE_DEFAULT
+#ifdef CONFIG_IP_MASQUERADE_UDP_LOOSE
 		/*
 		 *	Flag this tunnel as "dest loose"
 		 *	
