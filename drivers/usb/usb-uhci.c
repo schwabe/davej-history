@@ -2863,6 +2863,8 @@ static int __init uhci_init (void)
 		if (pci_enable_device (dev) < 0)
 			continue;
 
+		pci_set_master(dev);
+		
 		if(!dev->irq)
 		{
 			err("Found UHCI device with no IRQ assigned. Check BIOS settings!");

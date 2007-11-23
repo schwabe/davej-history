@@ -440,7 +440,7 @@ EXPORT_SYMBOL(strnicmp);
 EXPORT_SYMBOL(init_task_union);
 
 /* Support for external backtracer */ 
-extern char _stext[], _etext[];
+extern char _stext, _etext;
 EXPORT_SYMBOL(_stext);
 EXPORT_SYMBOL(_etext); 
 EXPORT_SYMBOL(module_list); 

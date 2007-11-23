@@ -435,7 +435,7 @@ enum
 enum {
 	DEV_CDROM=1,
 	DEV_HWMON=2,
-	DEV_MAC_HID=3
+	DEV_MAC_HID=5
 };
 
 /* /proc/sys/dev/cdrom */

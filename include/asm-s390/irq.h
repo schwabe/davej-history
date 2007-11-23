@@ -809,7 +809,7 @@ static inline void s390_do_profile (unsigned long addr)
 {
         if (prof_buffer && current->pid) {
                 addr &= 0x7fffffff;
-                addr -= (unsigned long)&_stext[0];
+                addr -= (unsigned long)&_stext;
                 addr >>= prof_shift;
                 /*
                  * Don't ignore out-of-bounds EIP values silently,

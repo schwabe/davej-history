@@ -139,6 +139,9 @@ Digi AccelePort Driver
   (plus a parallel port) and 4 port USB serial converters.  The driver
   does NOT yet support the Digi AccelePort USB 8.
 
+  This driver works under SMP with the usb-uhci driver.  It does not work
+  under SMP with the uhci driver.
+
   The driver is generally working, though we still have a few more ioctls
   to implement and final testing and debugging to do.  The paralled port
   on the USB 2 is supported as a serial to parallel converter; in other

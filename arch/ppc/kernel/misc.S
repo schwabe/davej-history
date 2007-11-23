@@ -1062,4 +1062,6 @@ sys_call_table:
 	.long sys_pciconfig_write 	/* 199 */
 	.long sys_pciconfig_iobase 	/* 200 */
 	.long sys_ni_syscall		/* 201 - reserved - MacOnLinux - new */
-	.space (NR_syscalls-201)*4
+	.rept NR_syscalls-201
+		.long sys_ni_syscall
+	.endr

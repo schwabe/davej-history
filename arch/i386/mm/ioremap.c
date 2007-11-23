@@ -117,7 +117,7 @@ void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flag
 		temp_addr = __va(phys_addr);
 		temp_end = temp_addr + (size - 1);
 	      
-		for(i = MAP_NR(temp_addr); i < MAP_NR(temp_end); i++) {
+		for(i = MAP_NR(temp_addr); i <= MAP_NR(temp_end); i++) {
 			if(!PageReserved(mem_map + i))
 				return NULL;
 		}

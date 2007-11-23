@@ -29,7 +29,7 @@
 #include <linux/compatmac.h>
 #include <linux/generic_serial.h>
 
-#define DEBUG 
+#define DEBUG 1
 
 static char *                  tmp_buf; 
 static DECLARE_MUTEX(tmp_buf_sem);
@@ -575,7 +575,7 @@ void gs_hangup(struct tty_struct *tty)
 	port->flags &= ~(ASYNC_NORMAL_ACTIVE|ASYNC_CALLOUT_ACTIVE |GS_ACTIVE);
 	port->tty = NULL;
 	port->count = 0;
-
+	port->event = 0;
 	wake_up_interruptible(&port->open_wait);
 	func_exit ();
 }
@@ -750,9 +750,13 @@ void gs_close(struct tty_struct * tty, struct file * filp)
 	if (!port) return;
 
 	if (!port->tty) {
+		port->rd->hungup (port);
+		return;
+#if 0
 		/* This seems to happen when this is called from vhangup. */
 		gs_dprintk (GS_DEBUG_CLOSE, "gs: Odd: port->tty is NULL\n");
 		port->tty = tty;
+#endif
 	}
 
 	save_flags(flags); cli();

@@ -38,16 +38,6 @@ static crwe_t            *crw_buffer_anchor = NULL;
 static spinlock_t         mchchk_queue_lock = SPIN_LOCK_UNLOCKED;
 static spinlock_t         crw_queue_lock    = SPIN_LOCK_UNLOCKED;
 
-static inline void init_MUTEX (struct semaphore *sem)
-{
-	sema_init(sem, 1);
-}
-
-static inline void init_MUTEX_LOCKED (struct semaphore *sem)
-{
-	sema_init(sem, 0);
-}
-
 /*
  * s390_init_machine_check
  *

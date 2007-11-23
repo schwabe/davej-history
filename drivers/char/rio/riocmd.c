@@ -536,7 +536,7 @@ PKT *PacketP;
 				     PortP->ModemState, ReportedModemStatus);
 				PortP->ModemState = ReportedModemStatus;
 #ifdef MODEM_SUPPORT
-				if ( PortP->Mapped ) {
+				if ( PortP->Mapped && (PortP->PortState & PORT_ISOPEN) && !(PortP->PortState & RIO_CLOSING))  {
 				/***********************************************************\
 				*************************************************************
 				***													   ***
@@ -548,12 +548,15 @@ PKT *PacketP;
 				** If the device is a modem, then check the modem
 				** carrier.
 				*/
+				
 				if (PortP->gs.tty == NULL)
 					break;
-			  
-				if (!(PortP->gs.tty->termios->c_cflag & CLOCAL) &&
-				((PortP->State & (RIO_MOPEN|RIO_WOPEN)))) {
 
+  				if (PortP->gs.tty->termios == NULL)
+  					break;
+			  
+ 				if (!(PortP->gs.tty->termios->c_cflag & CLOCAL) &&
+ 				    ((PortP->State & (RIO_MOPEN|RIO_WOPEN)))) {
 					rio_dprintk (RIO_DEBUG_CMD, "Is there a Carrier?\n");
 			/*
 			** Is there a carrier?
@@ -579,8 +582,9 @@ PKT *PacketP;
 			** Has carrier just dropped?
 			*/
 						if (PortP->State & RIO_CARR_ON) {
-							if (PortP->State & (PORT_ISOPEN|RIO_WOPEN|RIO_MOPEN))
-								tty_hangup (PortP->gs.tty);
+						  if (PortP->State & (PORT_ISOPEN|RIO_WOPEN|RIO_MOPEN)) 
+							  tty_hangup (PortP->gs.tty);
+
 							PortP->State &= ~RIO_CARR_ON;
 							rio_dprintk (RIO_DEBUG_CMD, "Carrirer just went down\n");
 #ifdef STATS

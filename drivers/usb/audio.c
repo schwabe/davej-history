@@ -89,6 +89,9 @@
  *              Somewhat peculiar due to OSS interface limitations. Only works
  *              for channels where a "slider" is already in front of it (i.e.
  *              a MIXER unit or a FEATURE unit with volume capability).
+ * 2000-11-26:  Thomas Sailer
+ *              Workaround for Dallas DS4201. The DS4201 uses PCM8 as format tag for
+ *              its 8 bit modes, but expects signed data (and should therefore have used PCM).
  *
  */
 
@@ -1559,6 +1562,7 @@ static int set_format_in(struct usb_audiodev *as)
 		       dev->devnum, u->interface, fmt->altsetting, d->srate, data[0] | (data[1] << 8) | (data[2] << 16)));
 		d->srate = data[0] | (data[1] << 8) | (data[2] << 16);
 	}
+	dprintk((KERN_DEBUG "usbaudio: set_format_in: USB format 0x%x, DMA format 0x%x srate %u\n", u->format, d->format, d->srate));
 	return 0;
 }
 
@@ -1655,6 +1659,7 @@ static int set_format_out(struct usb_audiodev *as)
 		       dev->devnum, u->interface, fmt->altsetting, d->srate, data[0] | (data[1] << 8) | (data[2] << 16)));
 		d->srate = data[0] | (data[1] << 8) | (data[2] << 16);
 	}
+	dprintk((KERN_DEBUG "usbaudio: set_format_out: USB format 0x%x, DMA format 0x%x srate %u\n", u->format, d->format, d->srate));
 	return 0;
 }
 
@@ -2867,6 +2872,9 @@ static void usb_audio_parsestreaming(struct usb_audio_state *s, unsigned char *b
 				continue;
 			}
 			format = (fmt[5] == 2) ? (AFMT_U16_LE | AFMT_U8) : (AFMT_S16_LE | AFMT_S8);
+			/* Dallas DS4201 workaround */
+			if (dev->descriptor.idVendor == 0x04fa && dev->descriptor.idProduct == 0x4201)
+				format = (AFMT_S16_LE | AFMT_S8);
 			fmt = find_csinterface_descriptor(buffer, buflen, NULL, FORMAT_TYPE, asifout, i);
 			if (!fmt) {
 				printk(KERN_ERR "usbaudio: device %u interface %u altsetting %u FORMAT_TYPE descriptor not found\n", 

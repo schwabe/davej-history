@@ -276,6 +276,7 @@ D: Linux CD and Support Giveaway List
 N: Al Borchers
 E: alborchers@steinerpoint.com
 D: Author/maintainer of Digi AccelePort USB driver
+D: work on usbserial and keyspan_pda drivers
 S: 4912 Zenith Ave. S.
 S: Minneapolis, MN  55410
 S: USA

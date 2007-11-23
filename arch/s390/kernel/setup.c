@@ -332,8 +332,8 @@ int get_cpuinfo(char * buffer)
         p += sprintf(p,"vendor_id       : IBM/S390\n"
                        "# processors    : %i\n"
                        "bogomips per cpu: %lu.%02lu\n",
-                       smp_num_cpus, loops_per_sec/500000,
-                       (loops_per_sec/5000)%100);
+                       smp_num_cpus, loops_per_jiffy/(500000/HZ),
+                       (loops_per_jiffy/(5000/HZ)) % 100);
         for (i = 0; i < smp_num_cpus; i++) {
                 cpuinfo = &safe_get_cpu_lowcore(i).cpu_data;
                 p += sprintf(p,"processor %i: "

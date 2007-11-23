@@ -220,8 +220,10 @@ int shrink_mmap(int priority, int gfp_mask)
 			 * throttling.
 			 */
 
-			if (!try_to_free_buffers(page, wait))
+			if (!try_to_free_buffers(page, wait)) { 
+				if(--count < 0) break;
 				goto refresh_clock;
+			}
 			return 1;
 		}
 

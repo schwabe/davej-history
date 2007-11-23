@@ -1044,7 +1044,7 @@ M:	pberger@brimson.com
 M:	alborchers@steinerpoint.com
 L:	linux-usb-users@lists.sourceforge.net
 L:	linux-usb-devel@lists.sourceforge.net
-S:	Supported
+S:	Maintained
 
 USB SERIAL KEYSPAN DRIVER
 P:	Hugh Blemings

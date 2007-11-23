@@ -11,7 +11,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) rio ftape joystick
+ALL_SUB_DIRS := $(SUB_DIRS) rio ftape hfmodem joystick agp drm
 
 #
 # This file contains the font map for the default (hardware) font
@@ -377,23 +377,19 @@ endif
 
 ifeq ($(CONFIG_AGP),y)
 O_OBJS += agp/agp.o
-ALL_SUB_DIRS += agp
 SUB_DIRS += agp
 else
   ifeq ($(CONFIG_AGP),m)
-  ALL_SUB_DIRS += agp
   MOD_SUB_DIRS += agp
   endif
 endif
 
 ifeq ($(CONFIG_DRM),y)
 O_OBJS += drm/drm.o
-ALL_SUB_DIRS += drm
 MOD_SUB_DIRS += drm
 SUB_DIRS += drm
 else
   ifeq ($(CONFIG_DRM),m)
-  ALL_SUB_DIRS += drm
   MOD_SUB_DIRS += drm
   endif
 endif
@@ -664,15 +660,12 @@ endif
 
 
 ifeq ($(CONFIG_HFMODEM),y)
-ALL_SUB_DIRS += hfmodem
 SUB_DIRS += hfmodem
 O_OBJS += hfmodem/hfmodem.o
 else
   ifeq ($(CONFIG_HFMODEM),m)
-  ALL_SUB_DIRS += hfmodem
   MOD_SUB_DIRS += hfmodem
   endif
-
 endif
 
 ifeq ($(CONFIG_DZ),y)

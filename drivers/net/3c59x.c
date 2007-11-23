@@ -60,11 +60,14 @@
     - In vortex_open(), set vp->tx_full to zero (else we get errors if the device was
       closed with a full Tx ring).
 
+	15Sep00 <2.2.18-pre3> andrewm
+	- Added support for the 3c556B Laptop Hurricane (Louis Gerbarg)
+
     - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.2 for more details.
 */
 
 static char version[] =
-"3c59x.c 16Aug00 Donald Becker and others http://www.scyld.com/network/vortex.html\n";
+"3c59x.c 15Sep00 Donald Becker and others http://www.scyld.com/network/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -336,6 +339,8 @@ static struct pci_id_info pci_tbl[] = {
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
 	{"3c556 10/100 Mini PCI Adapter",	0x10B7, 0x6055, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_CB_FNS, 128, vortex_probe1},
+	{"3c556B Laptop Hurricane",	0x10B7, 0x6056, 0xffff,
+	 PCI_USES_IO|PCI_USES_MASTER, IS_TORNADO|HAS_CB_FNS, 128, vortex_probe1},
 	{"3c575 Boomerang CardBus",		0x10B7, 0x5057, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, vortex_probe1},
 	{"3CCFE575 Cyclone CardBus",	0x10B7, 0x5157, 0xffff,
@@ -932,6 +937,8 @@ static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 #else
 		if (pci_tbl[chip_idx].device_id == 0x6055) {
 			outw(0x230 + i, ioaddr + Wn0EepromCmd);
+		} else if (pci_tbl[chip_idx].device_id == 0x6056) {
+			outw(EEPROM_Read + 0x30 + i, ioaddr + Wn0EepromCmd);
 		} else {
 			outw(EEPROM_Read + i, ioaddr + Wn0EepromCmd);
 		}

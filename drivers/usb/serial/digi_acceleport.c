@@ -1,5 +1,5 @@
 /*
-*  Digi AccelePort USB-4 Serial Converter
+*  Digi AccelePort USB-4 and USB-2 Serial Converters
 *
 *  Copyright 2000 by Digi International
 *
@@ -14,6 +14,17 @@
 *  Peter Berger (pberger@brimson.com)
 *  Al Borchers (borchers@steinerpoint.com)
 *
+* (11/01/2000) pberger and borchers
+*    -- Turned off the USB_DISABLE_SPD flag for write bulk urbs--it caused
+*       USB 4 ports to hang on startup.
+*    -- Serialized access to write urbs by adding the dp_write_urb_in_use
+*       flag; otherwise, the driver caused SMP system hangs.  Watching the
+*       urb status is not sufficient.
+*
+* (10/05/2000) gkh
+*    -- Fixed bug with urb->dev not being set properly, now that the usb
+*       core needs it.
+* 
 *  (8/8/2000) pberger and borchers
 *    -- Fixed close so that 
 *       - it can timeout while waiting for transmit idle, if needed;
@@ -209,7 +220,7 @@
 *  - Following Documentation/DocBook/kernel-locking.pdf no spin locks
 *    are held when calling copy_to/from_user or printk.
 *    
-*  $Id: digi_acceleport.c,v 1.80 2000/08/09 06:36:18 root Exp $
+*  $Id: digi_acceleport.c,v 1.80.1.2 2000/11/02 05:45:08 root Exp $
 */
 
 #include <linux/config.h>
@@ -407,6 +418,7 @@ typedef struct digi_port {
 	int dp_in_buf_len;
 	unsigned char dp_in_buf[DIGI_IN_BUF_SIZE];
 	unsigned char dp_in_flag_buf[DIGI_IN_BUF_SIZE];
+	int dp_write_urb_in_use;
 	unsigned int dp_modem_signals;
 	wait_queue_head_t dp_modem_change_wait;
 	int dp_open_count;			/* inc on open, dec on close */
@@ -592,7 +604,7 @@ static void digi_wakeup_write( struct usb_serial_port *port )
 
 	/* wake up other tty processes */
 	wake_up_interruptible( &tty->write_wait );
-	/* For 2.2.16 backport -- wake_up_interruptible( &tty->poll_wait ); */
+	wake_up_interruptible( &tty->poll_wait ); /* For 2.2.x backport */
 
 }
 
@@ -625,7 +637,8 @@ dbg( "digi_write_oob_command: TOP: port=%d, count=%d", oob_priv->dp_port_num, co
 
 	while( count > 0 ) {
 
-		while( oob_port->write_urb->status == -EINPROGRESS ) {
+		while( oob_port->write_urb->status == -EINPROGRESS
+		|| oob_priv->dp_write_urb_in_use ) {
 			cond_wait_interruptible_timeout_irqrestore(
 				&oob_port->write_wait, DIGI_RETRY_TIMEOUT,
 				&oob_priv->dp_port_lock, flags );
@@ -642,8 +655,10 @@ dbg( "digi_write_oob_command: TOP: port=%d, count=%d", oob_priv->dp_port_num, co
 
 		memcpy( oob_port->write_urb->transfer_buffer, buf, len );
 		oob_port->write_urb->transfer_buffer_length = len;
+		oob_port->write_urb->dev = port->serial->dev;
 
 		if( (ret=usb_submit_urb(oob_port->write_urb)) == 0 ) {
+			oob_priv->dp_write_urb_in_use = 1;
 			count -= len;
 			buf += len;
 		}
@@ -697,8 +712,8 @@ count );
 
 	while( count > 0 && ret == 0 ) {
 
-		while( port->write_urb->status == -EINPROGRESS
-		&& jiffies < timeout ) {
+		while( (port->write_urb->status == -EINPROGRESS
+		|| priv->dp_write_urb_in_use) && jiffies < timeout ) {
 			cond_wait_interruptible_timeout_irqrestore(
 				&port->write_wait, DIGI_RETRY_TIMEOUT,
 				&priv->dp_port_lock, flags );
@@ -728,8 +743,10 @@ count );
 			memcpy( data, buf, len );
 			port->write_urb->transfer_buffer_length = len;
 		}
+		port->write_urb->dev = port->serial->dev;
 
 		if( (ret=usb_submit_urb(port->write_urb)) == 0 ) {
+			priv->dp_write_urb_in_use = 1;
 			priv->dp_out_buf_len = 0;
 			count -= len;
 			buf += len;
@@ -777,7 +794,8 @@ port_priv->dp_port_num, modem_signals );
 	spin_lock_irqsave( &oob_priv->dp_port_lock, flags );
 	spin_lock( &port_priv->dp_port_lock );
 
-	while( oob_port->write_urb->status == -EINPROGRESS ) {
+	while( oob_port->write_urb->status == -EINPROGRESS
+	|| oob_priv->dp_write_urb_in_use ) {
 		spin_unlock( &port_priv->dp_port_lock );
 		cond_wait_interruptible_timeout_irqrestore(
 			&oob_port->write_wait, DIGI_RETRY_TIMEOUT,
@@ -802,8 +820,10 @@ port_priv->dp_port_num, modem_signals );
 	data[7] = 0;
 
 	oob_port->write_urb->transfer_buffer_length = 8;
+	oob_port->write_urb->dev = port->serial->dev;
 
 	if( (ret=usb_submit_urb(oob_port->write_urb)) == 0 ) {
+		oob_priv->dp_write_urb_in_use = 1;
 		port_priv->dp_modem_signals =
 			(port_priv->dp_modem_signals&~(TIOCM_DTR|TIOCM_RTS))
 			| (modem_signals&(TIOCM_DTR|TIOCM_RTS));
@@ -921,8 +941,10 @@ dbg( "digi_rx_unthrottle: TOP: port=%d", priv->dp_port_num );
 	}
 
 	/* restart read chain */
-	if( priv->dp_throttle_restart )
+	if( priv->dp_throttle_restart ) {
+		port->read_urb->dev = port->serial->dev;
 		ret = usb_submit_urb( port->read_urb );
+	}
 
 	/* turn throttle off */
 	priv->dp_throttled = 0;
@@ -1240,7 +1262,8 @@ priv->dp_port_num, count, from_user, in_interrupt() );
 	spin_lock_irqsave( &priv->dp_port_lock, flags );
 
 	/* wait for urb status clear to submit another urb */
-	if( port->write_urb->status == -EINPROGRESS ) {
+	if( port->write_urb->status == -EINPROGRESS
+	|| priv->dp_write_urb_in_use ) {
 
 		/* buffer data if count is 1 (probably put_char) if possible */
 		if( count == 1 ) {
@@ -1270,6 +1293,7 @@ priv->dp_port_num, count, from_user, in_interrupt() );
 	}
 
 	port->write_urb->transfer_buffer_length = data_len+2;
+	port->write_urb->dev = port->serial->dev;
 
 	*data++ = DIGI_CMD_SEND_DATA;
 	*data++ = data_len;
@@ -1282,6 +1306,7 @@ priv->dp_port_num, count, from_user, in_interrupt() );
 	memcpy( data, from_user ? user_buf : buf, new_len );
 
 	if( (ret=usb_submit_urb(port->write_urb)) == 0 ) {
+		priv->dp_write_urb_in_use = 1;
 		ret = new_len;
 		priv->dp_out_buf_len = 0;
 	}
@@ -1327,6 +1352,7 @@ dbg( "digi_write_bulk_callback: TOP, urb->status=%d", urb->status );
 	== ((digi_serial_t *)(serial->private))->ds_oob_port_num ) {
 		dbg( "digi_write_bulk_callback: oob callback" );
 		spin_lock( &priv->dp_port_lock );
+		priv->dp_write_urb_in_use = 0;
 		wake_up_interruptible( &port->write_wait );
 		spin_unlock( &priv->dp_port_lock );
 		return;
@@ -1339,6 +1365,7 @@ dbg( "digi_write_bulk_callback: TOP, urb->status=%d", urb->status );
 
 	/* try to send any buffered data on this port, if it is open */
 	spin_lock( &priv->dp_port_lock );
+	priv->dp_write_urb_in_use = 0;
 	if( priv->dp_open_count && port->write_urb->status != -EINPROGRESS
 	&& priv->dp_out_buf_len > 0 ) {
 
@@ -1349,11 +1376,13 @@ dbg( "digi_write_bulk_callback: TOP, urb->status=%d", urb->status );
 
 		port->write_urb->transfer_buffer_length
 			= priv->dp_out_buf_len+2;
+		port->write_urb->dev = serial->dev;
 
 		memcpy( port->write_urb->transfer_buffer+2, priv->dp_out_buf,
 			priv->dp_out_buf_len );
 
 		if( (ret=usb_submit_urb(port->write_urb)) == 0 ) {
+			priv->dp_write_urb_in_use = 1;
 			priv->dp_out_buf_len = 0;
 		}
 
@@ -1386,7 +1415,8 @@ static int digi_write_room( struct usb_serial_port *port )
 
 	spin_lock_irqsave( &priv->dp_port_lock, flags );
 
-	if( port->write_urb->status == -EINPROGRESS )
+	if( port->write_urb->status == -EINPROGRESS
+	|| priv->dp_write_urb_in_use )
 		room = 0;
 	else
 		room = port->bulk_out_size - 2 - priv->dp_out_buf_len;
@@ -1405,7 +1435,8 @@ static int digi_chars_in_buffer( struct usb_serial_port *port )
 	digi_port_t *priv = (digi_port_t *)(port->private);
 
 
-	if( port->write_urb->status == -EINPROGRESS ) {
+	if( port->write_urb->status == -EINPROGRESS
+	|| priv->dp_write_urb_in_use ) {
 dbg( "digi_chars_in_buffer: port=%d, chars=%d", priv->dp_port_num, port->bulk_out_size - 2 );
 		/* return( port->bulk_out_size - 2 ); */
 		return( 256 );
@@ -1590,6 +1621,7 @@ dbg( "digi_close: TOP: port=%d, active=%d, open_count=%d", priv->dp_port_num, po
 
 	spin_lock_irqsave( &priv->dp_port_lock, flags );
 	port->active = 0;
+	priv->dp_write_urb_in_use = 0;
 	priv->dp_in_close = 0;
 	--priv->dp_open_count;
 	MOD_DEC_USE_COUNT;
@@ -1630,7 +1662,7 @@ static int digi_startup_device( struct usb_serial *serial )
 
 		port = &serial->port[i];
 
-		port->write_urb->transfer_flags |= USB_DISABLE_SPD;
+		port->write_urb->dev = port->serial->dev;
 
 		if( (ret=usb_submit_urb(port->read_urb)) != 0 ) {
 			err(
@@ -1677,6 +1709,7 @@ dbg( "digi_startup: TOP" );
 		priv->dp_port_num = i;
 		priv->dp_out_buf_len = 0;
 		priv->dp_in_buf_len = 0;
+		priv->dp_write_urb_in_use = 0;
 		priv->dp_modem_signals = 0;
 		init_waitqueue_head( &priv->dp_modem_change_wait );
 		priv->dp_open_count = 0;
@@ -1794,6 +1827,7 @@ dbg( "digi_read_bulk_callback: TOP" );
 	}
 
 	/* continue read */
+	urb->dev = port->serial->dev;
 	if( (ret=usb_submit_urb(urb)) != 0 ) {
 		err( __FUNCTION__ ": failed resubmitting urb, ret=%d, port=%d",
 			ret, priv->dp_port_num );
@@ -2034,5 +2068,5 @@ module_exit(digi_exit);
 
 
 MODULE_AUTHOR("Peter Berger <pberger@brimson.com>, Al Borchers <borchers@steinerpoint.com>");
-MODULE_DESCRIPTION("Digi AccelePort USB-4 Serial Converter driver");
+MODULE_DESCRIPTION("Digi AccelePort USB-2/USB-4 Serial Converter driver");
 

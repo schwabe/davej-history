@@ -2387,6 +2387,8 @@ static int found_uhci(struct pci_dev *dev)
 	if (pci_enable_device(dev) < 0)
 		return -1;
 
+	pci_set_master(dev);
+
 	if (!dev->irq) {
 		err("found UHCI device with no IRQ assigned. check BIOS settings!");
 		return -1;

@@ -1930,8 +1930,8 @@ struct ccb {
 	**	a SDTR or WDTR message is appended.
 	**----------------------------------------------------------------
 	*/
-	u_char		scsi_smsg [8];
-	u_char		scsi_smsg2[8];
+	u_char		scsi_smsg [12];
+	u_char		scsi_smsg2[12];
 
 	/*----------------------------------------------------------------
 	**	Miscellaneous status'.

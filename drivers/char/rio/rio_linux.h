@@ -165,7 +165,7 @@ static inline void *rio_memcpy_fromio (void *dest, void *source, int n)
 #define rio_memcpy_fromio                      memcpy_fromio
 #endif
 
-#define DEBUG
+#define DEBUG 1
 
 
 /* 

@@ -28,20 +28,23 @@ static char * __init dmi_string(struct dmi_header *dm, u8 s)
 
 static int __init dmi_table(u32 base, int len, int num, void (*decode)(struct dmi_header *))
 {
-	char *buf;
+	u8 *buf;
 	struct dmi_header *dm;
 	u8 *data;
 	int i=1;
-		
+	int last = 0;		
 		
 	buf = ioremap(base, len);
 	if(buf==NULL)
 		return -1;
 
 	data = buf;
-	while(i<num)
+	while(i<num && (data-buf) < len)
 	{
 		dm=(struct dmi_header *)data;
+		if(dm->type < last)
+			break;
+		last = dm->type;
 		decode(dm);		
 		data+=dm->length;
 		while(*data || data[1])
@@ -69,7 +72,7 @@ int __init dmi_iterate(void (*decode)(struct dmi_header *))
 			u16 num=buf[13]<<8|buf[12];
 			u16 len=buf[7]<<8|buf[6];
 			u32 base=buf[11]<<24|buf[10]<<16|buf[9]<<8|buf[8];
-
+#ifdef DUMP_DMI
 			printk(KERN_INFO "DMI %d.%d present.\n",
 				buf[14]>>4, buf[14]&0x0F);
 			printk(KERN_INFO "%d structures occupying %d bytes.\n",
@@ -77,6 +80,7 @@ int __init dmi_iterate(void (*decode)(struct dmi_header *))
 				buf[7]<<8|buf[6]);
 			printk(KERN_INFO "DMI table at 0x%08X.\n",
 				buf[11]<<24|buf[10]<<16|buf[9]<<8|buf[8]);
+#endif				
 			if(dmi_table(base,len, num, decode)==0)
 				return 0;
 		}
@@ -98,9 +102,9 @@ static void __init dmi_decode(struct dmi_header *dm)
 	
 	switch(dm->type)
 	{
-		case  0:
+		case  0:		
+#ifdef DUMP_DMI
 			p=dmi_string(dm,data[4]);
-
 			if(*p && *p!=' ')
 			{
 				printk("BIOS Vendor: %s\n", p);
@@ -109,7 +113,7 @@ static void __init dmi_decode(struct dmi_header *dm)
 				printk("BIOS Release: %s\n",
 					dmi_string(dm, data[8]));
 			}
-				
+#endif				
 			/*
 			 *  Check for clue free BIOS implementations who use
 			 *  the following QA technique
@@ -134,6 +138,7 @@ static void __init dmi_decode(struct dmi_header *dm)
 #endif			   	
 			}
 			break;
+#ifdef DUMP_DMI
 		case 1:
 			p=dmi_string(dm,data[4]);
 
@@ -165,6 +170,7 @@ static void __init dmi_decode(struct dmi_header *dm)
 			if(*p && *p!=' ')
 				printk("Asset Tag: %s.\n", p);
 			break;
+#endif			
 	}
 }
 

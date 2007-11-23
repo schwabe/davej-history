@@ -52,9 +52,7 @@
 #include <linux/sched.h>
 #include <linux/smp_lock.h>	/* For (un)lock_kernel */
 #include <linux/mm.h>
-#ifdef __alpha__
 #include <asm/pgtable.h> /* For pte_wrprotect */
-#endif
 #include <asm/io.h>
 #include <asm/mman.h>
 #include <asm/uaccess.h>

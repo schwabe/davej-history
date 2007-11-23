@@ -35,7 +35,7 @@ struct cpuinfo_S390
         cpuid_t  cpu_id;
         __u16    cpu_addr;
         __u16    cpu_nr;
-        unsigned long loops_per_sec;
+        unsigned long loops_per_jiffy;
         unsigned long *pgd_quick;
         unsigned long *pte_quick;
         unsigned long pgtable_cache_sz;

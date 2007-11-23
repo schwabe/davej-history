@@ -637,13 +637,17 @@ static int proc_control(struct dev_state *ps, void *arg)
 		i = my_usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), ctrl.request, ctrl.requesttype,
 				       ctrl.value, ctrl.index, tbuf, ctrl.length, tmo);
 		if ((i > 0) && ctrl.length) {
-			if (copy_to_user(ctrl.data, tbuf, ctrl.length))
+			if (copy_to_user(ctrl.data, tbuf, ctrl.length)) {
+				free_page((unsigned long)tbuf);
 				return -EFAULT;
+			}
 		}
 	} else {
 		if (ctrl.length) {
-			if (copy_from_user(tbuf, ctrl.data, ctrl.length))
+			if (copy_from_user(tbuf, ctrl.data, ctrl.length)) {
+				free_page((unsigned long)tbuf);
 				return -EFAULT;
+			}
 		}
 		i = my_usb_control_msg(dev, usb_sndctrlpipe(dev, 0), ctrl.request, ctrl.requesttype,
 				       ctrl.value, ctrl.index, tbuf, ctrl.length, tmo);
@@ -690,13 +694,17 @@ static int proc_bulk(struct dev_state *ps, void *arg)
 		}
 		i = my_usb_bulk_msg(dev, pipe, tbuf, len1, &len2, tmo);
 		if (!i && len2) {
-			if (copy_to_user(bulk.data, tbuf, len2))
+			if (copy_to_user(bulk.data, tbuf, len2)) {
+				free_page((unsigned long)tbuf);
 				return -EFAULT;
+			}
 		}
 	} else {
 		if (len1) {
-			if (copy_from_user(tbuf, bulk.data, len1))
+			if (copy_from_user(tbuf, bulk.data, len1)) {
+				free_page((unsigned long)tbuf);
 				return -EFAULT;
+			}
 		}
 		i = my_usb_bulk_msg(dev, pipe, tbuf, len1, &len2, tmo);
 	}
