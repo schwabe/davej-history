@@ -11,7 +11,6 @@
  *
  *	History
  *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_out.c
- *	ROSE 003	Jonathan(G4KLX)	Removed M bit processing.
  */
 
 #include <linux/config.h>
@@ -55,39 +54,56 @@ static void rose_send_iframe(struct sock *sk, struct sk_buff *skb)
 
 void rose_kick(struct sock *sk)
 {
-	struct sk_buff *skb;
-	unsigned short end;
+	struct sk_buff *skb, *skbn;
+	unsigned short start, end;
 
-	del_timer(&sk->timer);
+	if (sk->protinfo.rose->state != ROSE_STATE_3)
+		return;
 
-	end = (sk->protinfo.rose->va + sysctl_rose_window_size) % ROSE_MODULUS;
+	if (sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY)
+		return;
 
-	if (!(sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) &&
-	    sk->protinfo.rose->vs != end                             &&
-	    skb_peek(&sk->write_queue) != NULL) {
+	if (skb_peek(&sk->write_queue) == NULL)
+		return;
+
+	start = (skb_peek(&sk->protinfo.rose->ack_queue) == NULL) ? sk->protinfo.rose->va : sk->protinfo.rose->vs;
+	end   = (sk->protinfo.rose->va + sysctl_rose_window_size) % ROSE_MODULUS;
+
+	if (start == end)
+		return;
+
+	sk->protinfo.rose->vs = start;
+
+	/*
+	 * Transmit data until either we're out of data to send or
+	 * the window is full.
+	 */
+
+	skb  = skb_dequeue(&sk->write_queue);
+
+	do {
+		if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
+			skb_queue_head(&sk->write_queue, skb);
+			break;
+		}
+
 		/*
-		 * Transmit data until either we're out of data to send or
-		 * the window is full.
+		 * Transmit the frame copy.
 		 */
+		rose_send_iframe(sk, skbn);
 
-		skb  = skb_dequeue(&sk->write_queue);
+		sk->protinfo.rose->vs = (sk->protinfo.rose->vs + 1) % ROSE_MODULUS;
 
-		do {
-			/*
-			 * Transmit the frame.
-			 */
-			rose_send_iframe(sk, skb);
+		/*
+		 * Requeue the original data frame.
+		 */
+		skb_queue_tail(&sk->protinfo.rose->ack_queue, skb);
 
-			sk->protinfo.rose->vs = (sk->protinfo.rose->vs + 1) % ROSE_MODULUS;
+	} while (sk->protinfo.rose->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
 
-		} while (sk->protinfo.rose->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
-
-		sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
-		sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
-		sk->protinfo.rose->timer      = 0;
-	}
-
-	rose_set_timer(sk);
+	sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
+	sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
+	sk->protinfo.rose->timer      = 0;
 }
 
 /*
@@ -105,16 +121,6 @@ void rose_enquiry_response(struct sock *sk)
 	sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
 	sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
 	sk->protinfo.rose->timer      = 0;
-}
-
-void rose_check_iframes_acked(struct sock *sk, unsigned short nr)
-{
-	if (sk->protinfo.rose->vs == nr) {
-		sk->protinfo.rose->va = nr;
-	} else {
-		if (sk->protinfo.rose->va != nr)
-			sk->protinfo.rose->va = nr;
-	}
 }
 
 #endif

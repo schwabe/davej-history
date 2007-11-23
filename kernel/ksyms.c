@@ -298,6 +298,7 @@ struct symbol_table symbol_table = {
 	X(kill_proc),
 	X(kill_pg),
 	X(kill_sl),
+	X(force_sig),
 
 	/* misc */
 	X(panic),

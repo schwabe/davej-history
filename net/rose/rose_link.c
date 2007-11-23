@@ -101,7 +101,7 @@ static int rose_send_frame(struct sk_buff *skb, struct rose_neigh *neigh)
 	else
 		rose_call = &rose_callsign;
 
-	neigh->ax25 = ax25_send_frame(skb, 0, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
+	neigh->ax25 = ax25_send_frame(skb, 260, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
 
 	return (neigh->ax25 != NULL);
 }
@@ -134,6 +134,8 @@ void rose_link_rx_restart(struct sk_buff *skb, struct rose_neigh *neigh, unsigne
 
 	switch (frametype) {
 		case ROSE_RESTART_REQUEST:
+			/* Stop all existing routes on this link - F6FBB */
+			rose_clean_neighbour(neigh);
 			neigh->t0timer   = 0;
 			neigh->restarted = 1;
 			neigh->dce_mode  = (skb->data[3] == ROSE_DTE_ORIGINATED);
@@ -261,10 +263,17 @@ void rose_transmit_clear_request(struct rose_neigh *neigh, unsigned int lci, uns
 {
 	struct sk_buff *skb;
 	unsigned char *dptr;
+	struct device *first;
 	int len;
 
 	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + ROSE_MIN_LEN + 3;
-
+	
+	first = rose_dev_first();
+	if (first) {	
+		/* F6FBB - Adding facilities */
+		len += 6 + AX25_ADDR_LEN + 3 + ROSE_ADDR_LEN;
+	}
+	
 	if ((skb = alloc_skb(len, GFP_ATOMIC)) == NULL)
 		return;
 
@@ -272,7 +281,7 @@ void rose_transmit_clear_request(struct rose_neigh *neigh, unsigned int lci, uns
 
 	skb_reserve(skb, AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN);
 
-	dptr = skb_put(skb, ROSE_MIN_LEN + 3);
+	dptr = skb_put(skb, skb_tailroom(skb));
 
 	*dptr++ = AX25_P_ROSE;
 	*dptr++ = ((lci >> 8) & 0x0F) | ROSE_GFI;
@@ -281,18 +290,47 @@ void rose_transmit_clear_request(struct rose_neigh *neigh, unsigned int lci, uns
 	*dptr++ = cause;
 	*dptr++ = diagnostic;
 
+	if (first) {	
+		/* F6FBB - Adding facilities */
+		*dptr++ = 0x00;		/* Address length */
+		*dptr++ = 4 + AX25_ADDR_LEN + 3 + ROSE_ADDR_LEN; /* Facilities length */
+		*dptr++ = 0;
+		*dptr++ = FAC_NATIONAL;
+		*dptr++ = FAC_NATIONAL_FAIL_CALL;
+		*dptr++ = AX25_ADDR_LEN;
+		memcpy(dptr, &rose_callsign, AX25_ADDR_LEN);
+		dptr += AX25_ADDR_LEN;
+		*dptr++ = FAC_NATIONAL_FAIL_ADD;
+		*dptr++ = ROSE_ADDR_LEN + 1;
+		*dptr++ = ROSE_ADDR_LEN * 2;
+		memcpy(dptr, first->dev_addr, ROSE_ADDR_LEN);
+	}
+	
 	if (!rose_send_frame(skb, neigh))
 		kfree_skb(skb, FREE_WRITE);
 }
 
 void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 {
+	rose_address *dest_addr;
 	unsigned char *dptr;
 
 #ifdef CONFIG_FIREWALL
 	if (call_fw_firewall(PF_ROSE, skb->dev, skb->data, NULL) != FW_ACCEPT)
 		return;
 #endif
+
+	/*
+	 * Check to see if its for us, if it is put it onto the loopback
+	 * queue.
+	 */
+        dest_addr = (rose_address *)(skb->data + 4);
+  
+	if ((neigh->dce_mode == -1) || (rose_dev_get(dest_addr) != NULL)) {
+		neigh->dce_mode = -1;
+		rose_loopback_queue(skb, neigh);
+		return;
+	}
 
 	if (!rose_link_up(neigh))
 		neigh->restarted = 0;

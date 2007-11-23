@@ -6,6 +6,7 @@
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
+#include <asm/ptrace.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
@@ -16,6 +17,7 @@ static struct symbol_table arch_symbol_table = {
 	X(x86_capability),
 	X(dump_thread),
 	X(dump_fpu),
+	X(get_pt_regs_for_task),
 	XNOVERS(__do_delay),
 	XNOVERS(down_failed),
 	XNOVERS(down_failed_interruptible),

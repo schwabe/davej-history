@@ -943,7 +943,7 @@ static int tcp_select(struct sock *sk, int sel_type, select_table *wait)
 		return 1;
 
 	case SEL_EX:
-		if (sk->urg_data)
+		if (sk->urg_data & URG_VALID)
 			return 1;
 		break;
 	}

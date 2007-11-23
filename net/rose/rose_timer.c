@@ -66,6 +66,7 @@ void rose_set_timer(struct sock *sk)
 static void rose_timer(unsigned long param)
 {
 	struct sock *sk = (struct sock *)param;
+	struct device *first;
 
 	switch (sk->protinfo.rose->state) {
 		case ROSE_STATE_0:
@@ -82,7 +83,7 @@ static void rose_timer(unsigned long param)
 			/*
 			 * Check for the state of the receive buffer.
 			 */
-			if (sk->rmem_alloc < (sk->rcvbuf / 2) && (sk->protinfo.rose->condition & ROSE_COND_OWN_RX_BUSY)) {
+			if (sk->rmem_alloc < ((sk->rcvbuf - ROSE_MAX_WINDOW_LEN) / 2) && (sk->protinfo.rose->condition & ROSE_COND_OWN_RX_BUSY)) {
 				sk->protinfo.rose->condition &= ~ROSE_COND_OWN_RX_BUSY;
 				sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
 				sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
@@ -120,11 +121,25 @@ static void rose_timer(unsigned long param)
 		case ROSE_STATE_1:	/* T1 */
 		case ROSE_STATE_4:	/* T2 */
 			rose_write_internal(sk, ROSE_CLEAR_REQUEST);
+			/* F6FBB - Disconnect the calling station
 			sk->protinfo.rose->state = ROSE_STATE_2;
 			sk->protinfo.rose->timer = sk->protinfo.rose->t3;
-			break;
+			break; */
+			
+			/* Falls to next case */
 
 		case ROSE_STATE_2:	/* T3 */
+			/* F6FBB - Added Cause and diagnostic */
+			sk->protinfo.rose->cause = ROSE_DTE_ORIGINATED;
+			sk->protinfo.rose->diagnostic = 0x30;
+			
+			/* F6FBB - Added Facilities */
+			first = rose_dev_first();
+			if (first) {	
+				sk->protinfo.rose->facilities.fail_call = rose_callsign;
+				memcpy(&sk->protinfo.rose->facilities.fail_addr, first->dev_addr, ROSE_ADDR_LEN);
+			}
+	
 			rose_clear_queues(sk);
 			sk->protinfo.rose->neighbour->use--;
 			sk->protinfo.rose->state = ROSE_STATE_0;

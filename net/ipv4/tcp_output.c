@@ -858,7 +858,7 @@ void tcp_send_fin(struct sock *sk)
 	struct tcphdr *th =(struct tcphdr *)&sk->dummy_th;
 	struct tcphdr *t1;
 	struct sk_buff *buff;
-	struct device *dev=NULL;
+	struct device *dev=sk->bound_device;
 	int tmp;
 		
 	buff = sock_wmalloc(sk, MAX_RESET_SIZE,1 , GFP_KERNEL);
@@ -962,7 +962,7 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 	struct tcphdr *t1;
 	unsigned char *ptr;
 	struct sk_buff * buff;
-	struct device *ndev=NULL;
+	struct device *ndev=newsk->bound_device;
 	int tmp;
 
 	buff = sock_wmalloc(newsk, MAX_SYN_SIZE, 1, GFP_ATOMIC);
@@ -1121,7 +1121,7 @@ void tcp_send_ack(struct sock *sk)
 {
 	struct sk_buff *buff;
 	struct tcphdr *t1;
-	struct device *dev = NULL;
+	struct device *dev = sk->bound_device;
 	int tmp;
 
 	if(sk->zapped)
@@ -1216,7 +1216,7 @@ void tcp_write_wakeup(struct sock *sk)
 {
 	struct sk_buff *buff,*skb;
 	struct tcphdr *t1;
-	struct device *dev=NULL;
+	struct device *dev=sk->bound_device;
 	int tmp;
 
 	if (sk->zapped)

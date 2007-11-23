@@ -53,6 +53,8 @@ struct pt_regs {
 #define user_mode(regs) ((VM_MASK & (regs)->eflags) || (3 & (regs)->cs))
 #define instruction_pointer(regs) ((regs)->eip)
 extern void show_regs(struct pt_regs *);
+struct task_struct;
+extern void get_pt_regs_for_task(struct pt_regs *, struct task_struct *p);
 #endif
 
 #endif

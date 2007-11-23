@@ -18,6 +18,7 @@
 #define	ROSE_Q_BIT			0x80
 #define	ROSE_D_BIT			0x40
 #define	ROSE_M_BIT			0x10
+#define	M_BIT				0x10
 
 #define	ROSE_CALL_REQUEST		0x0B
 #define	ROSE_CALL_ACCEPTED		0x0F
@@ -55,25 +56,30 @@
 #define	ROSE_DEFAULT_ROUTING		1			/* Default routing flag */
 #define	ROSE_DEFAULT_FAIL_TIMEOUT	(120 * ROSE_SLOWHZ)	/* Time until link considered usable */
 #define	ROSE_DEFAULT_MAXVC		50			/* Maximum number of VCs per neighbour */
-#define ROSE_DEFAULT_WINDOW_SIZE	3			/* Default window value */
+#define ROSE_DEFAULT_WINDOW_SIZE	7			/* Default window value */
 
 #define ROSE_MODULUS 			8
 #define	ROSE_MAX_PACKET_SIZE		251			/* Maximum Packet Size */
+
+#define ROSE_MAX_WINDOW_LEN		((AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + ROSE_MIN_LEN + 300) * 7)
 
 #define	ROSE_COND_ACK_PENDING		0x01
 #define	ROSE_COND_PEER_RX_BUSY		0x02
 #define	ROSE_COND_OWN_RX_BUSY		0x04
 
-#define	FAC_NATIONAL			0x00
-#define	FAC_CCITT			0x0F
+#define	FAC_NATIONAL				0x00
+#define	FAC_CCITT					0x0F
 
-#define	FAC_NATIONAL_RAND		0x7F
-#define	FAC_NATIONAL_FLAGS		0x3F
+#define	FAC_NATIONAL_RAND			0x7F
+#define	FAC_NATIONAL_FLAGS			0x3F
 #define	FAC_NATIONAL_DEST_DIGI		0xE9
 #define	FAC_NATIONAL_SRC_DIGI		0xEB
+#define	FAC_NATIONAL_FAIL_CALL		0xED
+#define	FAC_NATIONAL_FAIL_ADD		0xEE
+#define	FAC_NATIONAL_DIGIS			0xEF
 
-#define	FAC_CCITT_DEST_NSAP		0xC9
-#define	FAC_CCITT_SRC_NSAP		0xCB
+#define	FAC_CCITT_DEST_NSAP			0xC9
+#define	FAC_CCITT_SRC_NSAP			0xCB
 
 struct rose_neigh {
 	struct rose_neigh	*next;
@@ -91,28 +97,29 @@ struct rose_neigh {
 	struct timer_list	timer;
 };
 
+#define ROSE_MAX_ALTERNATE 3
 struct rose_node {
 	struct rose_node	*next;
 	rose_address		address;
 	unsigned short		mask;
 	unsigned char		count;
-	struct rose_neigh	*neighbour[3];
+	struct rose_neigh	*neighbour[ROSE_MAX_ALTERNATE];
 };
+
+typedef struct {
+	unsigned int 		lci;
+	struct rose_neigh	*neigh;
+	unsigned short		vs, vr, va, vl;
+	unsigned short		pending;
+	unsigned char		state, condition;
+	struct timer_list	timer;
+} rose_tr;
 
 struct rose_route {
 	struct rose_route	*next;
 	rose_address		src_addr, dest_addr;
 	ax25_address		src_call, dest_call;
-	unsigned int		lci1, lci2;
-	struct rose_neigh	*neigh1, *neigh2;
-	unsigned int		rand;
-};
-
-struct rose_facilities {
-	rose_address		source_addr,   dest_addr;
-	ax25_address		source_call,   dest_call;
-	unsigned char		source_ndigis, dest_ndigis;
-	ax25_address		source_digi,   dest_digi;
+	rose_tr				tr1, tr2;
 	unsigned int		rand;
 };
 
@@ -120,7 +127,8 @@ typedef struct {
 	rose_address		source_addr,   dest_addr;
 	ax25_address		source_call,   dest_call;
 	unsigned char		source_ndigis, dest_ndigis;
-	ax25_address		source_digi,   dest_digi;
+	ax25_address		source_digis[ROSE_MAX_DIGIS];
+	ax25_address		dest_digis[ROSE_MAX_DIGIS];
 	struct rose_neigh	*neighbour;
 	struct device		*device;
 	unsigned int		lci, rand;
@@ -129,6 +137,12 @@ typedef struct {
 	unsigned short		vs, vr, va, vl;
 	unsigned short		timer;
 	unsigned short		t1, t2, t3, hb;
+#ifdef M_BIT
+	unsigned short		fraglen;
+	struct sk_buff_head	frag_queue;
+#endif
+	struct sk_buff_head	ack_queue;
+	struct rose_facilities_struct facilities;
 	struct sock		*sk;		/* Backlink to socket */
 } rose_cb;
 
@@ -170,14 +184,19 @@ extern void rose_transmit_diagnostic(struct rose_neigh *, unsigned char);
 extern void rose_transmit_clear_request(struct rose_neigh *, unsigned int, unsigned char, unsigned char);
 extern void rose_transmit_link(struct sk_buff *, struct rose_neigh *);
 
+/* rose_loopback.c */
+extern void rose_loopback_init(void);
+extern void rose_loopback_clear(void);
+extern int rose_loopback_queue(struct sk_buff *, struct rose_neigh *);
+
 /* rose_out.c */
 extern void rose_kick(struct sock *);
 extern void rose_enquiry_response(struct sock *);
-extern void rose_check_iframes_acked(struct sock *, unsigned short);
 
 /* rose_route.c */
 extern void rose_rt_device_down(struct device *);
 extern void rose_link_device_down(struct device *);
+extern void rose_clean_neighbour(struct rose_neigh *);
 extern struct device *rose_dev_first(void);
 extern struct device *rose_dev_get(rose_address *);
 extern struct rose_route *rose_route_free_lci(unsigned int, struct rose_neigh *);
@@ -193,10 +212,11 @@ extern void rose_rt_free(void);
 
 /* rose_subr.c */
 extern void rose_clear_queues(struct sock *);
+extern void rose_frames_acked(struct sock *, unsigned short);
 extern int  rose_validate_nr(struct sock *, unsigned short);
 extern void rose_write_internal(struct sock *, int);
 extern int  rose_decode(struct sk_buff *, int *, int *, int *, int *, int *);
-extern int  rose_parse_facilities(struct sk_buff *, struct rose_facilities *);
+extern int  rose_parse_facilities(unsigned char *, struct rose_facilities_struct *);
 extern int  rose_create_facilities(unsigned char *, rose_cb *);
 
 /* rose_timer.c */
@@ -205,5 +225,9 @@ extern void rose_set_timer(struct sock *);
 /* sysctl_net_rose.c */
 extern void rose_register_sysctl(void);
 extern void rose_unregister_sysctl(void);
+
+/* rose_transit.c */
+void rose_transit(struct sk_buff *, rose_tr *, rose_tr *);
+void rose_init_transit(rose_tr *, unsigned int, struct rose_neigh *);
 
 #endif

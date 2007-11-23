@@ -1,0 +1,10 @@
+Changes information in rose driver by F6FBB
+
+980728 : Added link add and route add from remote application
+         An adjacent is not removed if no node. It points to the
+		 dummy node (0000000000)
+		 
+980728 : Routing algorithm was falling to the next route if no choice
+         available for the selected address. Corrected.
+		 
+980728 : Connect did not report cause and diagnostic. Added.
