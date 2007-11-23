@@ -895,6 +895,14 @@ int ip_autofw_add(struct ip_autofw * af)
 	struct ip_autofw * newaf;
 	init_timer(&af->timer);
 	newaf = kmalloc( sizeof(struct ip_autofw), GFP_ATOMIC );
+	if ( newaf == NULL ) 
+	{
+#ifdef DEBUG_IP_FIREWALL
+		printk("ip_autofw_add:  malloc said no\n");
+#endif
+		return( ENOMEM );
+	}
+
 	memcpy(newaf, af, sizeof(struct ip_autofw));
 	newaf->timer.data = (unsigned long) newaf;
 	newaf->timer.function = ip_autofw_expire;

@@ -15,6 +15,7 @@
  * Fixes:
  *	JJC			: Implemented also input pkt hook
  *	Miquel van Smoorenburg	: Copy more stuff when resizing skb
+ *	Harald Hoyer/James R. Leu: Additional ipautofw support
  *
  *
  * FIXME:
@@ -186,7 +187,11 @@ static __inline__ int ip_masq_app_bind_chg(struct ip_masq_app *mapp, int delta)
 struct ip_masq_app * ip_masq_bind_app(struct ip_masq *ms)
 {
         struct ip_masq_app * mapp;
-        mapp = ip_masq_app_get(ms->protocol, ms->dport);
+	mapp = ip_masq_app_get(ms->protocol, ms->dport);
+#ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
+	if (mapp == NULL)
+		mapp = ip_masq_app_get(ms->protocol, ms->sport);
+#endif
         if (mapp != NULL) {
                 /*
                  *	don't allow binding if already bound

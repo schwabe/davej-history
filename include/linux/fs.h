@@ -73,6 +73,7 @@ extern int max_files, nr_files;
 #define S_WRITE		128	/* Write on file/directory/symlink */
 #define S_APPEND	256	/* Append-only file */
 #define S_IMMUTABLE	512	/* Immutable file */
+#define MS_NOATIME	1024	/* Do not update access times. */
 
 /*
  * Flags that can be altered by MS_REMOUNT
@@ -103,6 +104,13 @@ extern int max_files, nr_files;
 #define IS_WRITABLE(inode) ((inode)->i_flags & S_WRITE)
 #define IS_APPEND(inode) ((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode) ((inode)->i_flags & S_IMMUTABLE)
+#define IS_NOATIME(inode) ((inode)->i_flags & MS_NOATIME)
+
+#define UPDATE_ATIME(inode) \
+	if (!IS_NOATIME(inode) && !IS_RDONLY(inode)) { \
+		inode->i_atime = CURRENT_TIME; \
+		inode->i_dirt = 1; \
+	}
 
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */

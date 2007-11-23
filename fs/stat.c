@@ -235,5 +235,6 @@ asmlinkage int sys_readlink(const char * path, char * buf, int bufsiz)
 		iput(inode);
 		return -EINVAL;
 	}
+	UPDATE_ATIME(inode);
 	return inode->i_op->readlink(inode,buf,bufsiz);
 }

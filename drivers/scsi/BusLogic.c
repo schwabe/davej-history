@@ -27,8 +27,8 @@
 */
 
 
-#define BusLogic_DriverVersion		"2.0.9"
-#define BusLogic_DriverDate		"29 March 1997"
+#define BusLogic_DriverVersion		"2.0.10"
+#define BusLogic_DriverDate		"11 August 1997"
 
 
 #include <linux/module.h>
@@ -505,13 +505,14 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
     Wait for the Host Adapter Ready bit to be set and the Command/Parameter
     Register Busy bit to be reset in the Status Register.
   */
-  TimeoutCounter = loops_per_sec >> 3;
+  TimeoutCounter = 10000;
   while (--TimeoutCounter >= 0)
     {
       StatusRegister.All = BusLogic_ReadStatusRegister(HostAdapter);
       if (StatusRegister.Bits.HostAdapterReady &&
 	  !StatusRegister.Bits.CommandParameterRegisterBusy)
 	break;
+      udelay(100);
     }
   if (TimeoutCounter < 0)
     {
@@ -587,11 +588,11 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
     case BusLogic_InquireInstalledDevicesID8to15:
     case BusLogic_InquireTargetDevices:
       /* Approximately 60 seconds. */
-      TimeoutCounter = loops_per_sec << 2;
+      TimeoutCounter = 60*10000;
       break;
     default:
       /* Approximately 1 second. */
-      TimeoutCounter = loops_per_sec >> 4;
+      TimeoutCounter = 10000;
       break;
     }
   /*
@@ -611,6 +612,7 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
 	else BusLogic_ReadDataInRegister(HostAdapter);
       if (OperationCode == BusLogic_FetchHostAdapterLocalRAM &&
 	  StatusRegister.Bits.HostAdapterReady) break;
+      udelay(100);
     }
   if (TimeoutCounter < 0)
     {
@@ -786,7 +788,7 @@ static int BusLogic_InitializeMultiMasterProbeInfo(void)
   boolean StandardAddressSeen[BusLogic_ISA_StandardAddressesCount];
   BusLogic_ProbeInfo_T *PrimaryProbeInfo =
     &BusLogic_ProbeInfoList[BusLogic_ProbeInfoCount];
-  int NonPrimaryPCIMultiMasterIndex = BusLogic_ProbeInfoCount;
+  int NonPrimaryPCIMultiMasterIndex = BusLogic_ProbeInfoCount + 1;
   int NonPrimaryPCIMultiMasterCount = 0, PCIMultiMasterCount = 0;
   boolean ForceBusDeviceScanningOrder = false;
   boolean ForceBusDeviceScanningOrderChecked = false;
@@ -1240,13 +1242,16 @@ static boolean BusLogic_ProbeHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
     {
       FlashPoint_Info_T *FlashPointInfo = (FlashPoint_Info_T *)
 	scsi_init_malloc(sizeof(FlashPoint_Info_T), GFP_ATOMIC);
+      int Retries = 10;
       if (FlashPointInfo == NULL)
 	return BusLogic_Failure(HostAdapter, "ALLOCATING FLASHPOINT INFO");
       FlashPointInfo->BaseAddress = HostAdapter->IO_Address;
       FlashPointInfo->IRQ_Channel = HostAdapter->IRQ_Channel;
       FlashPointInfo->Present = false;
-      if (!(FlashPoint_ProbeHostAdapter(FlashPointInfo) == 0 &&
-	    FlashPointInfo->Present))
+      while (!(FlashPoint_ProbeHostAdapter(FlashPointInfo) == 0 &&
+	       FlashPointInfo->Present) &&
+	     --Retries >= 0) ;
+      if (!FlashPointInfo->Present)
 	{
 	  scsi_init_free((char *) FlashPointInfo, sizeof(FlashPoint_Info_T));
 	  BusLogic_Error("BusLogic: FlashPoint Host Adapter detected at "
@@ -1321,7 +1326,7 @@ static boolean BusLogic_HardResetHostAdapter(BusLogic_HostAdapter_T
 					     *HostAdapter)
 {
   BusLogic_StatusRegister_T StatusRegister;
-  int TimeoutCounter = loops_per_sec;
+  int TimeoutCounter;
   /*
     FlashPoint Host Adapters are Hard Reset by the FlashPoint SCCB Manager.
   */
@@ -1344,10 +1349,12 @@ static boolean BusLogic_HardResetHostAdapter(BusLogic_HostAdapter_T
   /*
     Wait until Diagnostic Active is set in the Status Register.
   */
+  TimeoutCounter = 5*10000;
   while (--TimeoutCounter >= 0)
     {
       StatusRegister.All = BusLogic_ReadStatusRegister(HostAdapter);
       if (StatusRegister.Bits.DiagnosticActive) break;
+      udelay(100);
     }
   if (BusLogic_GlobalOptions.Bits.TraceHardReset)
     BusLogic_Notice("BusLogic_HardReset(0x%X): Diagnostic Active, "
@@ -1363,10 +1370,12 @@ static boolean BusLogic_HardResetHostAdapter(BusLogic_HostAdapter_T
   /*
     Wait until Diagnostic Active is reset in the Status Register.
   */
+  TimeoutCounter = 10*10000;
   while (--TimeoutCounter >= 0)
     {
       StatusRegister.All = BusLogic_ReadStatusRegister(HostAdapter);
       if (!StatusRegister.Bits.DiagnosticActive) break;
+      udelay(100);
     }
   if (BusLogic_GlobalOptions.Bits.TraceHardReset)
     BusLogic_Notice("BusLogic_HardReset(0x%X): Diagnostic Completed, "
@@ -1377,6 +1386,7 @@ static boolean BusLogic_HardResetHostAdapter(BusLogic_HostAdapter_T
     Wait until at least one of the Diagnostic Failure, Host Adapter Ready,
     or Data In Register Ready bits is set in the Status Register.
   */
+  TimeoutCounter = 10000;
   while (--TimeoutCounter >= 0)
     {
       StatusRegister.All = BusLogic_ReadStatusRegister(HostAdapter);
@@ -1384,6 +1394,7 @@ static boolean BusLogic_HardResetHostAdapter(BusLogic_HostAdapter_T
 	  StatusRegister.Bits.HostAdapterReady ||
 	  StatusRegister.Bits.DataInRegisterReady)
 	break;
+      udelay(100);
     }
   if (BusLogic_GlobalOptions.Bits.TraceHardReset)
     BusLogic_Notice("BusLogic_HardReset(0x%X): Host Adapter Ready, "
@@ -2998,8 +3009,6 @@ static void BusLogic_ScanIncomingMailboxes(BusLogic_HostAdapter_T *HostAdapter)
 			     "Incoming Mailbox\n", HostAdapter,
 			     CCB->SerialNumber, CCB->Status);
 	  }
-      else BusLogic_Warning("Aborted CCB #%ld to Target %d Not Found\n",
-			    HostAdapter, CCB->SerialNumber, CCB->TargetID);
       NextIncomingMailbox->CompletionCode = BusLogic_IncomingMailboxFree;
       if (++NextIncomingMailbox > HostAdapter->LastIncomingMailbox)
 	NextIncomingMailbox = HostAdapter->FirstIncomingMailbox;

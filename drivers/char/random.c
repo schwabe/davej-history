@@ -1071,10 +1071,8 @@ random_read(struct inode * inode, struct file * file, char * buf, int nbytes)
 	 * If we gave the user some bytes and we have an inode pointer,
 	 * update the access time.
 	 */
-	if (inode && count != 0) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
+	if (inode && count != 0)
+		UPDATE_ATIME(inode);
 	
 	return (count ? count : retval);
 }

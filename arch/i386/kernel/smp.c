@@ -1202,3 +1202,15 @@ void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs)
 	apic_read(APIC_SPIV);		/* Dummy read */
 	apic_write(APIC_EOI, 0);	/* Docs say use 0 for future compatibility */
 }
+
+void irq_deadlock_detected(void)
+{
+  printk("IRQ DEADLOCK DETECTED BY CPU %d\n", smp_processor_id());
+  __asm__("hlt");
+}
+
+void non_irq_deadlock_detected(void)
+{
+  printk("NON-IRQ DEADLOCK DETECTED BY CPU %d\n", smp_processor_id());
+  __asm__("hlt");
+}

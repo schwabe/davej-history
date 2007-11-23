@@ -8,6 +8,8 @@
 #ifndef __LINUX_ATALK_H__
 #define __LINUX_ATALK_H__
 
+#define SIOCATALKDIFADDR      (SIOCPROTOPRIVATE + 0)
+
 #define ATPORT_FIRST	1
 #define ATPORT_RESERVED	128
 #define ATPORT_LAST	255

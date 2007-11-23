@@ -260,10 +260,8 @@ endif
 
 ifeq ($(CONFIG_SCSI_GENERIC_NCR5380),y)
 L_OBJS += g_NCR5380.o
-EXTRA_CFLAGS = -DGENERIC_NCR5380_OVERRIDE="{{(NCR5380_map_type)0x350,5,0, BOARD_NCR53C400}};"
 else
   ifeq ($(CONFIG_SCSI_GENERIC_NCR5380),m)
-  EXTRA_CFLAGS = -DGENERIC_NCR5380_OVERRIDE="{{(NCR5380_map_type)0x350,5,0, BOARD_NCR53C400}};"
   M_OBJS += g_NCR5380.o
   endif
 endif
@@ -382,10 +380,6 @@ aic7xxx.o: aic7xxx.c aic7xxx_seq.h aic7xxx_reg.h
 seagate.o: seagate.c
 	$(CC) $(CFLAGS) -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -c seagate.c 
 
-# For debugging, use the -g flag
-53c7,8xx.o : 53c7,8xx.c
-	$(CC) $(CFLAGS) -g -c 53c7,8xx.c
-
 53c8xx_d.h 53c8xx_u.h : 53c7,8xx.scr script_asm.pl
 	ln -sf 53c7,8xx.scr fake.c
 	$(CPP) -traditional -DCHIP=810 fake.c | grep -v '^#' | perl script_asm.pl 
@@ -393,8 +387,8 @@ seagate.o: seagate.c
 	mv scriptu.h 53c8xx_u.h
 	rm fake.c
 
-ncr53c8xx.o : ncr53c8xx.c
-	$(CC) $(CFLAGS) -c ncr53c8xx.c
+g_NCR5380.o: g_NCR5380.c
+	$(CC) $(CFLAGS) -DGENERIC_NCR5380_OVERRIDE="{{(NCR5380_map_type)0x350,5,0, BOARD_NCR53C400}};" -c g_NCR5380.c
 
 scsi_mod.o: $(MX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o

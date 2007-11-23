@@ -132,7 +132,10 @@ ENOSYS = 38
 	decl SYMBOL_NAME(syscall_count); \
 	decl SYMBOL_NAME(kernel_counter); \
 	jnz 1f;	\
-	movb $(NO_PROC_ID), SYMBOL_NAME(active_kernel_processor); \
+	movb SYMBOL_NAME(saved_active_kernel_processor), %al; \
+	movb %al, SYMBOL_NAME(active_kernel_processor); \
+	cmpb $(NO_PROC_ID), %al; \
+	jnz 1f; \
 	lock; \
 	btrl $0, SYMBOL_NAME(kernel_flag); \
 1:	popfl;
@@ -163,9 +166,13 @@ ENOSYS = 38
 
 #define	ENTER_KERNEL \
 	pushl %eax; \
+	pushl %ebx; \
+	pushl %ecx; \
 	pushl %edx; \
 	pushfl; \
 	cli; \
+	movl $6000, %ebx; \
+	movl SYMBOL_NAME(smp_loops_per_tick), %ecx; \
 	GET_PROCESSOR_ID \
 	btsl $ SMP_FROM_SYSCALL,SYMBOL_NAME(smp_proc_in_lock)(,%eax,4); \
 	SMP_PROF_A \
@@ -182,7 +189,18 @@ ENOSYS = 38
 	jnc 5f; \
 	movl %cr3,%edx; \
 	movl %edx,%cr3; \
-5:	btl $0, SYMBOL_NAME(kernel_flag); \
+5:	sti; \
+	decl %ecx; \
+	cli; \
+	jne 7f; \
+	decl %ebx; \
+	jne 6f; \
+	call SYMBOL_NAME(non_irq_deadlock_detected); \
+6:	movl SYMBOL_NAME(smp_loops_per_tick), %ecx; \
+	cmpb SYMBOL_NAME(boot_cpu_id), %al; \
+	jne 7f; \
+	incl SYMBOL_NAME(jiffies);  \
+7:	btl $0, SYMBOL_NAME(kernel_flag); \
 	jc 2b; \
 	jmp 1b; \
 3:	movb %al, SYMBOL_NAME(active_kernel_processor); \
@@ -190,6 +208,8 @@ ENOSYS = 38
 	incl SYMBOL_NAME(syscall_count); \
 	popfl; \
 	popl %edx; \
+	popl %ecx; \
+	popl %ebx; \
 	popl %eax;
 
 
@@ -325,6 +345,10 @@ ret_from_sys_call:
 9:	movl SYMBOL_NAME(bh_mask),%eax
 	andl SYMBOL_NAME(bh_active),%eax
 	jne handle_bottom_half
+#ifdef __SMP__
+	cmpb $(NO_PROC_ID), SYMBOL_NAME(saved_active_kernel_processor)
+	jne 2f
+#endif
 	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
 	testl $(VM_MASK),%eax		# different then
 	jne 1f

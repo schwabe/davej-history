@@ -68,7 +68,7 @@ static int pipe_read(struct inode * inode, struct file * filp, char * buf, int c
 	PIPE_LOCK(*inode)--;
 	wake_up_interruptible(&PIPE_WAIT(*inode));
 	if (read) {
-	        inode->i_atime = CURRENT_TIME;
+		UPDATE_ATIME(inode);
 		return read;
 	}
 	if (PIPE_WRITERS(*inode))

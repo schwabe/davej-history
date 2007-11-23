@@ -19,7 +19,7 @@
  *	Keith Owens		:	Keep control channels alive if any related data entries.
  *	Delian Delchev		:	Added support for ICMP requests and replys
  *	Nigel Metheringham	:	ICMP in ICMP handling, tidy ups, bug fixes, made ICMP optional
- *
+ *	Juan Jose Ciarlante	:	re-assign maddr if no packet received from outside
  *	
  */
 
@@ -632,13 +632,21 @@ struct ip_masq * ip_masq_new_enh(struct device *dev, int proto, __u32 saddr, __u
         ms->app_data	   = NULL;
 	ms->control	   = NULL;
 
-        if (proto == IPPROTO_UDP)
+        if (proto == IPPROTO_UDP && !matchport)
                 ms->flags |= IP_MASQ_F_NO_DADDR;
         
         /* get masq address from rif */
         ms->maddr	   = dev->pa_addr;
+        /*
+         *	Setup new entry as not replied yet.
+         *	This flag will allow masq. addr (ms->maddr)
+         *	to follow forwarding interface address.
+         */
+        ms->flags         |= IP_MASQ_F_NO_REPLY;
 
-        for (ports_tried = 0; ports_tried < *free_ports_p; ports_tried++){
+        for (ports_tried = 0; 
+	     (*free_ports_p && (ports_tried <= (PORT_MASQ_END - PORT_MASQ_BEGIN)));
+	     ports_tried++){
                 save_flags(flags);
                 cli();
                 
@@ -659,7 +667,7 @@ struct ip_masq * ip_masq_new_enh(struct device *dev, int proto, __u32 saddr, __u
                  */
                 
                 mst = ip_masq_getbym(proto, ms->maddr, ms->mport);
-                if (mst == NULL) {
+                if (mst == NULL || matchport) {
                         save_flags(flags);
                         cli();
                 
@@ -752,7 +760,27 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
         ms = ip_masq_out_get(iph);
 	if (ms!=NULL) {
                 ip_masq_set_expire(ms,0);
-
+                
+                /*
+                 *	If sysctl !=0 and no pkt has been received yet
+                 *	in this tunnel and routing iface address has changed...
+                 *	 "You are welcome, diald".
+                 */
+                if ( sysctl_ip_dynaddr && ms->flags & IP_MASQ_F_NO_REPLY && dev->pa_addr != ms->maddr) {
+                        unsigned long flags;
+                        if (sysctl_ip_dynaddr > 1) {
+                                printk(KERN_INFO "ip_fw_masquerade(): change maddr from %s",
+                                       in_ntoa(ms->maddr));
+                                printk(" to %s\n", in_ntoa(dev->pa_addr));
+                        }
+                        save_flags(flags);
+                        cli();
+                        ip_masq_unhash(ms);
+                        ms->maddr = dev->pa_addr;
+                        ip_masq_hash(ms);
+                        restore_flags(flags);
+                }
+                
 		/*
 		 *      Set sport if not defined yet (e.g. ftp PASV).  Because
 		 *	masq entries are hashed on sport, unhash with old value
@@ -784,7 +812,6 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 	/*
 	 *	Nope, not found, create a new entry for it
 	 */
-	
 	if (ms==NULL)
 	{
 #ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
@@ -942,6 +969,27 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 		}
 		ip_masq_set_expire(ms, 0);
 		/* Rewrite source address */
+                
+                /*
+                 *	If sysctl !=0 and no pkt has been received yet
+                 *	in this tunnel and routing iface address has changed...
+                 *	 "You are welcome, diald".
+                 */
+                if ( sysctl_ip_dynaddr && ms->flags & IP_MASQ_F_NO_REPLY && dev->pa_addr != ms->maddr) {
+                        unsigned long flags;
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+                        printk(KERN_INFO "ip_fw_masq_icmp(): change masq.addr %s",
+                               in_ntoa(ms->maddr));
+                        printk("-> %s\n", in_ntoa(dev->pa_addr));
+#endif
+                        save_flags(flags);
+                        cli();
+                        ip_masq_unhash(ms);
+                        ms->maddr = dev->pa_addr;
+                        ip_masq_hash(ms);
+                        restore_flags(flags);
+                }
+                
 		iph->saddr = ms->maddr;
 		ip_send_check(iph);
 		/* Rewrite port (id) */
@@ -1042,7 +1090,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
 	if (ip_compute_csum((unsigned char *) icmph, len)) 
 	{
 		/* Failed checksum! */
-		printk(KERN_INFO "MASQ: forward ICMP: failed checksum from %s!\n", 
+		printk(KERN_DEBUG "MASQ: forward ICMP: failed checksum from %s!\n", 
 		       in_ntoa(iph->saddr));
 		return(-1);
 	}
@@ -1133,6 +1181,11 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
 			return 0;
 
 		ip_masq_set_expire(ms,0);
+                
+                /*
+                 *	got reply, so clear flag
+                 */
+                ms->flags &= ~IP_MASQ_F_NO_REPLY;
 
 		/* Reset source address */
 		iph->daddr = ms->saddr;
@@ -1238,7 +1291,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
 	if (ip_compute_csum((unsigned char *) icmph, len)) 
 	{
 		/* Failed checksum! */
-		printk(KERN_INFO "MASQ: reverse ICMP: failed checksum from %s!\n", 
+		printk(KERN_DEBUG "MASQ: reverse ICMP: failed checksum from %s!\n", 
 		       in_ntoa(iph->saddr));
 		return(-1);
 	}
@@ -1338,7 +1391,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 				if (csum_tcpudp_magic(iph->saddr, iph->daddr, len,
 						      iph->protocol, skb->csum))
 				{
-					printk(KERN_INFO "MASQ: failed TCP/UDP checksum from %s!\n", 
+					printk(KERN_DEBUG "MASQ: failed TCP/UDP checksum from %s!\n", 
 					       in_ntoa(iph->saddr));
 					return -1;
 				}
@@ -1364,20 +1417,27 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
         ms = ip_masq_in_get(iph);
 
 #ifdef CONFIG_IP_MASQUERADE_IPAUTOFW 
-        if (ms == NULL && (af=ip_autofw_check_range(iph->saddr, portptr[1],
-						    iph->protocol, 0))) {
+
+        if (ms == NULL && (af=ip_autofw_check_range(iph->saddr, portptr[1], iph->protocol, 0))) 
+	{
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+		printk("ip_autofw_check_range\n");
+#endif
         	ms = ip_masq_new_enh(dev, iph->protocol,
         			     af->where, portptr[1],
         			     iph->saddr, portptr[0],
         			     0,
         			     portptr[1]);
         }
-        if ( ms == NULL && (af=ip_autofw_check_port(portptr[1], 
-						    iph->protocol)) ) {
+        if ( ms == NULL && (af=ip_autofw_check_port(portptr[1], iph->protocol)) ) 
+	{
+#ifdef DEBUG_CONFIG_IP_MASQUERADE
+		printk("ip_autofw_check_port\n");
+#endif
         	ms = ip_masq_new_enh(dev, iph->protocol,
         			     af->where, htons(af->hidden),
         			     iph->saddr, portptr[0],
-        			     0,
+        			     IP_MASQ_F_AFW_PORT,
         			     htons(af->visible));
         }
 #endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
@@ -1391,6 +1451,11 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 		/* Stop the timer ticking.... */
 		ip_masq_set_expire(ms,0);
 
+                /*
+                 *	got reply, so clear flag
+                 */
+                ms->flags &= ~IP_MASQ_F_NO_REPLY;
+                
                 /*
                  *	Set dport if not defined yet.
                  */
@@ -1543,9 +1608,15 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 	
 	if (offset < 128) 
 	{
+#ifdef CONFIG_IP_MASQUERADE_ICMP
+		sprintf(temp,
+			"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq  Delta PDelta Expires (free=%d,%d,%d)",
+			ip_masq_free_ports[0], ip_masq_free_ports[1], ip_masq_free_ports[2]); 
+#else /* !defined(CONFIG_IP_MASQUERADE_ICMP) */
 		sprintf(temp,
 			"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq  Delta PDelta Expires (free=%d,%d)",
 			ip_masq_free_ports[0], ip_masq_free_ports[1]); 
+#endif /* CONFIG_IP_MASQUERADE_ICMP */
 		len = sprintf(buffer, "%-127s\n", temp);
 	}
 	pos = 128;

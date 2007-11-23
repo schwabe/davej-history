@@ -86,10 +86,7 @@ static int ext2_follow_link(struct inode * dir, struct inode * inode,
 		link = bh->b_data;
 	} else
 		link = (char *) inode->u.ext2_i.i_data;
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
+	UPDATE_ATIME(inode);
 	current->link_count++;
 	error = open_namei (link, flag, mode, res_inode, dir);
 	current->link_count--;
@@ -127,10 +124,7 @@ static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
 		i++;
 		put_user (c, buffer++);
 	}
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
+	UPDATE_ATIME(inode);
 	iput (inode);
 	if (bh)
 		brelse (bh);

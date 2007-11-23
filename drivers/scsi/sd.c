@@ -966,7 +966,14 @@ static int check_scsidisk_media_change(kdev_t full_dev){
     if(!rscsi_disks[target].device->removable) return 0;
     
     inode.i_rdev = full_dev;  /* This is all we really need here */
-    retval = sd_ioctl(&inode, NULL, SCSI_IOCTL_TEST_UNIT_READY, 0);
+
+    /* Using Start/Stop enables differentiation between drive with
+     * no cartridge loaded - NOT READY, drive with changed cartridge -
+     * UNIT ATTENTION, or with same cartridge - GOOD STATUS.
+     * This also handles drives that auto spin down. eg iomega jaz 1GB
+     * as this will spin up the drive.
+     */
+    retval = sd_ioctl(&inode, NULL, SCSI_IOCTL_START_UNIT, 0);
     
     if(retval){ /* Unable to test, unit probably not ready.  This usually
 		 * means there is no disc in the drive.  Mark as changed,
@@ -1023,7 +1030,7 @@ static int sd_init_onedisk(int i)
     spintime = 0;
     
     /* Spin up drives, as required.  Only do this at boot time */
-    if (!MODULE_FLAG){
+    /* Spinup needs to be done for module loads too. */
 	do{
 	    retries = 0;
 	    while(retries < 3)
@@ -1096,7 +1103,6 @@ static int sd_init_onedisk(int i)
 	    else
 		printk( "ready\n" );
 	}
-    }  /* !MODULE_FLAG */
     
     retries = 3;
     do {

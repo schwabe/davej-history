@@ -504,6 +504,8 @@ void ext2_read_inode (struct inode * inode)
 		inode->i_flags |= S_APPEND;
 	if (inode->u.ext2_i.i_flags & EXT2_IMMUTABLE_FL)
 		inode->i_flags |= S_IMMUTABLE;
+	if (inode->u.ext2_i.i_flags & EXT2_NOATIME_FL)
+		inode->i_flags |= MS_NOATIME;
 }
 
 static int ext2_update_inode(struct inode * inode, int do_sync)

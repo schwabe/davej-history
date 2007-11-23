@@ -266,7 +266,6 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 		if(sk->daddr		== saddr		&& /* remote address */
 		   sk->dummy_th.dest	== sport		&& /* remote port    */
 		   sk->num		== hnum			&& /* local port     */
-		   sk->state 		!= TCP_CLOSE		&& /* comment above is false */
 		   sk->rcv_saddr	== daddr)		   /* local address  */
 			goto hit; /* You sunk my battleship! */
 	sk = tcp_v4_lookup_longway(daddr, hnum);
@@ -589,7 +588,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 		if (!tcp_clearance(saddr)) {
 #endif
 			/* Only let this warning get printed once a minute. */
-			if (jiffies - warning_time > HZ) {
+			if (jiffies - warning_time > HZ*60) {
 				warning_time = jiffies;
 				printk(KERN_INFO "Warning: possible SYN flooding. Sending cookies.\n");
 			}
@@ -2262,6 +2261,12 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		}
 #ifdef CONFIG_SYN_COOKIES
 retry_search:
+#endif
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+		if (skb->redirport)
+			sk = tcp_v4_proxy_lookup(th->dest, saddr, th->source, daddr,
+						 dev->pa_addr, skb->redirport);
+		else
 #endif
 		sk = __tcp_v4_lookup(th, saddr, th->source, daddr, th->dest);
 		if (!sk)

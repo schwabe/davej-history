@@ -308,7 +308,7 @@ hscx_interrupt(struct IsdnCardState *sp, u_char val, u_char hscx)
 
 		r = HscxReadReg(sp->hscx[hsp->hscx], hscx, HSCX_RSTA);
 		if ((r & 0xf0) != 0xa0) {
-			if (!r & 0x80)
+			if (!(r & 0x80))
 				if (sp->debug & L1_DEB_WARN)
 					debugl1(sp, "HSCX invalid frame");
 			if ((r & 0x40) && hsp->mode)
@@ -317,7 +317,7 @@ hscx_interrupt(struct IsdnCardState *sp, u_char val, u_char hscx)
 						hsp->mode);
 					debugl1(sp, tmp);
 				}
-			if (!r & 0x20)
+			if (!(r & 0x20))
 				if (sp->debug & L1_DEB_WARN)
 					debugl1(sp, "HSCX CRC error");
 			writehscxCMDR(sp->hscx[hsp->hscx], hsp->hscx, 0x80);
@@ -488,7 +488,7 @@ isac_interrupt(struct IsdnCardState *sp, u_char val)
 			if (exval & 0x40)
 				if (sp->debug & L1_DEB_WARN)
 					debugl1(sp, "ISAC RDO");
-			if (!exval & 0x20)
+			if (!(exval & 0x20))
 				if (sp->debug & L1_DEB_WARN)
 					debugl1(sp, "ISAC CRC error");
 			IsacWriteReg(sp->isac, ISAC_CMDR, 0x80);

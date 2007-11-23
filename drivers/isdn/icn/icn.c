@@ -1385,7 +1385,7 @@ icn_command(isdn_ctrl * c, icn_card * card)
 							}
 							current->timeout = jiffies + ICN_BOOT_TIMEOUT1;
 							schedule();
-							sprintf(cbuf, "00;FV2ON\n01;EAZ%c\n)02;EAZ%c\n",
+							sprintf(cbuf, "00;FV2ON\n01;EAZ%c\n02;EAZ%c\n",
 								(a & 1)?'1':'C', (a & 2)?'2':'C');
 							i = icn_writecmd(cbuf, strlen(cbuf), 0, card);
 							printk(KERN_INFO

@@ -1838,7 +1838,10 @@ static int tcp_close_state(struct sock *sk, int dead)
 		case TCP_CLOSE:
 		case TCP_LISTEN:
 			break;
-		case TCP_LAST_ACK:	/* Could have shutdown() then close()!*/
+		case TCP_LAST_ACK:	/* Could have shutdown() then close().
+					   Be careful not to send double fin. */
+			ns=TCP_LAST_ACK;
+			break;
 		case TCP_CLOSE_WAIT:	/* They have FIN'd us. We send our FIN and
 					   wait only for the ACK */
 			ns=TCP_LAST_ACK;

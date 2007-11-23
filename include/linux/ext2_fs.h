@@ -189,6 +189,7 @@ struct ext2_group_desc
 #define EXT2_IMMUTABLE_FL		0x00000010 /* Immutable file */
 #define EXT2_APPEND_FL			0x00000020 /* writes to file may only append */
 #define EXT2_NODUMP_FL			0x00000040 /* do not dump file */
+#define EXT2_NOATIME_FL			0x00000080 /* do not update atime */
 #define EXT2_RESERVED_FL		0x80000000 /* reserved for ext2 lib */
 	
 /*

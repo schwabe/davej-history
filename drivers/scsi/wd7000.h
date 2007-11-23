@@ -8,17 +8,20 @@
  * This file has been reduced to only the definitions needed for the
  * WD7000 host structure.
  *
+ * Revision by Miroslav Zagorac <zaga@fly.cc.fer.hr>  Jun 1997.
  */
 
 #include <linux/types.h>
 #include <linux/kdev_t.h>
 
-int wd7000_detect(Scsi_Host_Template *);
-int wd7000_command(Scsi_Cmnd *);
-int wd7000_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
-int wd7000_abort(Scsi_Cmnd *);
-int wd7000_reset(Scsi_Cmnd *);
-int wd7000_biosparam(Disk *, kdev_t, int *);
+int wd7000_set_info (char *buffer, int length, struct Scsi_Host *host);
+int wd7000_proc_info (char *buffer, char **start, off_t offset, int length, int hostno, int inout);
+int wd7000_detect (Scsi_Host_Template *);
+int wd7000_command (Scsi_Cmnd *);
+int wd7000_queuecommand (Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
+int wd7000_abort (Scsi_Cmnd *);
+int wd7000_reset (Scsi_Cmnd *);
+int wd7000_biosparam (Disk *, kdev_t, int *);
 
 #ifndef NULL
 #define NULL 0L

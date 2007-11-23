@@ -54,6 +54,8 @@
 #define IP_MASQ_F_CONTROL		0x100 	/* this is a control channel */
 #define IP_MASQ_F_NO_SPORT    		0x200	/* no sport set yet */
 #define IP_MASQ_F_FTP_PASV	    	0x400	/* ftp PASV command just issued */
+#define IP_MASQ_F_NO_REPLY		0x800 	/* no reply yet from outside */
+#define IP_MASQ_F_AFW_PORT	       0x1000
 
 #ifdef __KERNEL__
 

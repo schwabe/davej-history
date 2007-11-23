@@ -41,6 +41,7 @@
 extern int tulip_probe(struct device *dev);
 extern int hp100_probe(struct device *dev);
 extern int ultra_probe(struct device *dev);
+extern int ultra32_probe(struct device *dev);
 extern int wd_probe(struct device *dev);
 extern int el2_probe(struct device *dev);
 extern int ne_probe(struct device *dev);
@@ -110,6 +111,9 @@ ethif_probe(struct device *dev)
 #endif	
 #if defined(CONFIG_ULTRA)
 	&& ultra_probe(dev)
+#endif
+#if defined(CONFIG_ULTRA32)
+	&& ultra32_probe(dev)
 #endif
 #if defined(CONFIG_SMC9194)
 	&& smc_init(dev)

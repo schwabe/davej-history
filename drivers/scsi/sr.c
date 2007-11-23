@@ -545,6 +545,7 @@ void sr_photocd(struct inode *inode)
 
     case SCSI_MAN_SONY: /* Thomas QUINOT <thomas@melchior.cuivre.fdn.fr> */
     case SCSI_MAN_PIONEER:
+    case SCSI_MAN_UNKNOWN:
 #ifdef DEBUG
 	printk(KERN_DEBUG "sr_photocd: use SONY/PIONEER code\n");
 #endif
@@ -563,7 +564,7 @@ void sr_photocd(struct inode *inode)
                 printk(KERN_WARNING "sr_photocd: ioctl error (SONY/PIONEER): 0x%x\n",rc);
 	    break;
 	}
-	if ((rec[0] << 8) + rec[1] != 0x0a) {
+	if ((rec[0] << 8) + rec[1] < 0x0a) {
 	    printk(KERN_INFO "sr_photocd: (SONY/PIONEER) Hmm, seems the CDROM doesn't support multisession CD's\n");
 	    no_multi = 1;
 	    break;
@@ -577,7 +578,6 @@ void sr_photocd(struct inode *inode)
 	break;
 		
     case SCSI_MAN_NEC_OLDCDR:
-    case SCSI_MAN_UNKNOWN:
     default:
 	sector = 0;
 	no_multi = 1;
@@ -601,6 +601,7 @@ static int sr_open(struct inode * inode, struct file * filp)
     if (filp->f_mode & 2)  
 	return -EROFS;
 
+    sr_ioctl(inode,filp,CDROMCLOSETRAY,0);
     check_disk_change(inode->i_rdev);
     
     if(!scsi_CDs[MINOR(inode->i_rdev)].device->access_count++)

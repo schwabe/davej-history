@@ -1,4 +1,34 @@
 
+UPDATE NEWS: version 1.31 - 6 Jul 97
+
+   Fixed a bug that caused incorrect SCSI status bytes to be
+   returned from commands sent to LUN's greater than 0. This
+   means that CDROM changers work now! Fixed a bug in the
+   handling of command-line arguments when loaded as a module.
+   Also put all the header data in in2000.h where it belongs.
+   There are no longer any differences between this driver in
+   the 2.1.xx source tree and the 2.0.xx tree, as of 2.0.31
+   and 2.1.45 (or is it .46?) - this makes things much easier
+   for me...
+
+UPDATE NEWS: version 1.30 - 14 Oct 96
+
+   Fixed a bug in the code that sets the transfer direction
+   bit (DESTID_DPD in the WD_DESTINATION_ID register). There
+   are quite a few SCSI commands that do a write-to-device;
+   now we deal with all of them correctly. Thanks to Joerg
+   Dorchain for catching this one.
+
+UPDATE NEWS: version 1.29 - 24 Sep 96
+
+   The memory-mapped hardware on the card is now accessed via
+   the 'readb()' and 'readl()' macros - required by the new
+   memory management scheme in the 2.1.x kernel series.
+   As suggested by Andries Brouwer, 'bios_param()' no longer
+   forces an artificial 1023 track limit on drives. Also
+   removed some kludge-code left over from struggles with
+   older (buggy) compilers.
+
 UPDATE NEWS: version 1.28 - 07 May 96
 
    Tightened up the "interrupts enabled/disabled" discipline
@@ -87,15 +117,10 @@ to see what happens: my tests showed little difference either way.
 There's also a define called 'DEFAULT_SX_PER'; this sets the data
 transfer speed for the asynchronous mode. I've put it at 500 ns
 despite the fact that the card could handle settings of 376 or
-252, because I'm not really sure if certain devices or maybe bad
-cables might have trouble at higher speeds. I couldn't find any
-info in my various SCSI references that talk about this in language
-I could understand, so decided to compromise with 500. This is still
-faster than the old driver was set at (I think). Can someone explain
-the significance of the bus transfer speed setting? Do devices on
-the bus ever care what it is? Is cable quality a factor here?
-Regardless, you can choose your own default through the command-
-line with the 'period' keyword.
+252, because higher speeds may be a problem with poor quality
+cables or improper termination; 500 ns is a compromise. You can
+choose your own default through the command-line with the
+'period' keyword.
 
 
 ------------------------------------------------
@@ -130,7 +155,7 @@ line with the 'period' keyword.
       on  = enabled
    In later ROMs (starting with 01.3 in April 1994) sw1-8 controls
    the "greater than 2 disk drive" feature that first appeared in
-   MSDOS 5.0 (ignored by linux):
+   MSDOS 5.0 (ignored by Linux):
       off = 2 drives maximum
       on  = 7 drives maximum
 

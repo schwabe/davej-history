@@ -31,6 +31,18 @@
 #endif
 
 
+/*
+  FlashPoint support is only available for the Intel x86 Architecture.
+*/
+
+#ifndef __i386__
+
+#undef CONFIG_SCSI_OMIT_FLASHPOINT
+#define CONFIG_SCSI_OMIT_FLASHPOINT
+
+#endif
+
+
 #ifndef CONFIG_SCSI_OMIT_FLASHPOINT
 
 

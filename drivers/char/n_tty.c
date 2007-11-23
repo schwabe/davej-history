@@ -89,6 +89,13 @@ void n_tty_flush_buffer(struct tty_struct * tty)
  */
 int n_tty_chars_in_buffer(struct tty_struct *tty)
 {
+	if (tty->icanon) {
+		if (!tty->canon_data) return 0;
+
+		return (tty->canon_head > tty->read_tail) ?
+			tty->canon_head - tty->read_tail :
+			tty->canon_head + (N_TTY_BUF_SIZE - tty->read_tail);
+	}
 	return tty->read_cnt;
 }
 

@@ -127,6 +127,10 @@
  *
  *  Thanks to Roger Scott for driver debugging.
  *
+ *  06/07/1997
+ *
+ *  Added support for /proc file system (/proc/scsi/wd7000/[0...] files).
+ *  Now, driver can handle hard disks with capacity >1GB.
  */
 
 #ifdef MODULE
@@ -149,17 +153,23 @@
 #include "scsi.h"
 #include "hosts.h"
 #include "sd.h"
+#include <scsi/scsicam.h>
 
 #define ANY2SCSI_INLINE		/* undef this to use old macros */
-#undef DEBUG
+#undef BIOSPARAM_DEBUG
+#undef DEBUG                    /* general debug */
 
 #include "wd7000.h"
-
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_wd7000 = {
-    PROC_SCSI_7000FASST, 6, "wd7000",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
+
+struct proc_dir_entry proc_scsi_wd7000 =
+{
+    PROC_SCSI_7000FASST,
+    6,
+    "wd7000",
+    S_IFDIR | S_IRUGO | S_IXUGO,
+    2
 };
 
 
@@ -210,12 +220,19 @@ typedef struct adapter {
 } Adapter;
 
 /*
+ * possible irq range
+ */
+#define IRQ_MIN   3
+#define IRQ_MAX   15
+#define IRQS      (IRQ_MAX-IRQ_MIN + 1)
+
+/*
  * The following is set up by wd7000_detect, and used thereafter by
  * wd7000_intr_handle to map the irq level to the corresponding Adapter.
  * Note that if SA_INTERRUPT is not used, wd7000_intr_handle must be
  * changed to pick up the IRQ level correctly.
  */
-Adapter *irq2host[16] = {NULL};	/* Possible IRQs are 0-15 */
+static struct Scsi_Host *wd7000_host[IRQS];
 
 /*
  * (linear) base address for ROM BIOS
@@ -828,7 +845,8 @@ static inline void free_scb( Scb *scb )
     cli();
 
     memset(scb, 0, sizeof(Scb));
-    scb->next = scbfree;  scbfree = scb;
+    scb->next = scbfree;
+    scbfree = scb;
     freescbs++;
 
     restore_flags(flags);
@@ -969,6 +987,7 @@ static void wd7000_scsi_done(Scsi_Cmnd * SCpnt)
 #ifdef DEBUG
     printk ("wd7000_scsi_done: 0x%06lx\n", (long) SCpnt);
 #endif
+
     SCpnt->SCp.phase = 0;
 }
 
@@ -982,7 +1001,7 @@ void wd7000_intr_handle(int irq, void *dev_id, struct pt_regs * regs)
     register Scb *scb;             /* for SCSI commands */
     register IcbAny *icb;          /* for host commands */
     register Scsi_Cmnd *SCpnt;
-    Adapter *host = irq2host[irq];  /* This MUST be set!!! */
+    Adapter *host = (Adapter *) wd7000_host[irq - IRQ_MIN]->hostdata; /* This MUST be set!!! */
     Mailbox *icmbs = host->mb.icmb;
 
 #ifdef DEBUG
@@ -990,6 +1009,7 @@ void wd7000_intr_handle(int irq, void *dev_id, struct pt_regs * regs)
 #endif
 
     flag = inb(host->iobase+ASC_INTR_STAT);
+
 #ifdef DEBUG
     printk("wd7000_intr_handle: intr stat = 0x%02x\n",flag);
 #endif
@@ -1264,6 +1284,144 @@ void wd7000_revision(Adapter *host)
 }
 
 
+#undef SPRINTF
+#define SPRINTF(args...) { if (pos < (buffer + length)) pos += sprintf (pos, ## args); }
+
+int wd7000_set_info (char *buffer, int length, struct Scsi_Host *host)
+{
+    unsigned long flags;
+
+    save_flags (flags);
+    cli ();
+
+#ifdef DEBUG
+    printk ("Buffer = <%.*s>, length = %d\n", length, buffer, length);
+#endif
+
+    /*
+     * Currently this is a no-op
+     */
+    printk ("Sorry, this function is currently out of order...\n");
+
+    restore_flags (flags);
+
+    return (length);
+}
+
+
+int wd7000_proc_info (char *buffer, char **start, off_t offset, int length, int hostno, int inout)
+{
+    struct Scsi_Host *host = NULL;
+    Scsi_Device *scd = scsi_devices;
+    Adapter *adapter;
+    Mailbox *ogmbs, *icmbs;
+    unsigned long flags;
+    char *pos = buffer;
+    short i;
+
+#ifdef DEBUG
+    short count;
+#endif
+
+    /*
+     * Find the specified host board.
+     */
+    for (i = 0; i < IRQS; i++)
+        if (wd7000_host[i] && (wd7000_host[i]->host_no == hostno)) {
+            host = wd7000_host[i];
+
+	    break;
+	}
+
+    /*
+     * Host not found!
+     */
+    if (! host)
+        return (-ESRCH);
+
+    /*
+     * Has data been written to the file ?
+     */ 
+    if (inout)
+        return (wd7000_set_info (buffer, length, host));
+
+    adapter = (Adapter *) host->hostdata;
+    ogmbs = adapter->mb.ogmb;
+    icmbs = adapter->mb.icmb;
+
+    save_flags (flags);
+    cli ();
+
+    SPRINTF ("Host scsi%d: Western Digital WD-7000 (rev %d.%d)\n", hostno, adapter->rev1, adapter->rev2);
+    SPRINTF ("  IO base:     0x%x\n", adapter->iobase);
+    SPRINTF ("  IRQ:         %d\n", adapter->irq);
+    SPRINTF ("  DMA channel: %d\n", adapter->dma);
+
+#ifdef DEBUG
+    SPRINTF ("Control port value: 0x%x\n", adapter->control);
+    SPRINTF ("Incoming mailbox:\n");
+    SPRINTF ("  size: %d\n", ICMB_CNT);
+    SPRINTF ("  queued messages: ");
+
+    for (i = count = 0; i < ICMB_CNT; i++)
+        if (icmbs[i].status) {
+	    count++;
+	    SPRINTF ("0x%x ", i);
+	}
+
+    SPRINTF (count ? "\n" : "none\n");
+
+    SPRINTF ("Outgoing mailbox:\n");
+    SPRINTF ("  size: %d\n", OGMB_CNT);
+    SPRINTF ("  next message: 0x%x\n", adapter->next_ogmb);
+    SPRINTF ("  queued messages: ");
+
+    for (i = count = 0; i < OGMB_CNT; i++)
+        if (ogmbs[i].status) {
+	    count++;
+	    SPRINTF ("0x%x ", i);
+	}
+
+    SPRINTF (count ? "\n" : "none\n");
+#endif
+
+    /*
+     * Display driver information for each device attached to the board.
+     */
+    SPRINTF ("Attached devices: %s\n", scd ? "" : "none");
+
+    for ( ; scd; scd = scd->next)
+        if (scd->host->host_no == hostno) {
+	    SPRINTF ("  [Channel: %02d, Id: %02d, Lun: %02d]  ",
+		     scd->channel, scd->id, scd->lun);
+	    SPRINTF ("%s ", (scd->type < MAX_SCSI_DEVICE_CODE) ?
+		     scsi_device_types[(short) scd->type] : "Unknown device");
+
+	    for (i = 0; (i < 8) && (scd->vendor[i] >= 0x20); i++)
+	        SPRINTF ("%c", scd->vendor[i]);
+	    SPRINTF (" ");
+
+	    for (i = 0; (i < 16) && (scd->model[i] >= 0x20); i++)
+	        SPRINTF ("%c", scd->model[i]);
+	    SPRINTF ("\n");
+        }
+
+    restore_flags (flags);
+
+    /*
+     * Calculate start of next buffer, and return value.
+     */
+    *start = buffer + offset;
+
+    if ((pos - buffer) < offset)
+        return (0);
+    else if ((pos - buffer - offset) < length)
+        return (pos - buffer - offset);
+    else
+        return (length);
+}
+
+
 /*
  *  Returns the number of adapters this driver is supporting.
  *
@@ -1282,9 +1440,11 @@ int wd7000_detect (Scsi_Host_Template *tpnt)
     Adapter *host = NULL;
     struct Scsi_Host *sh;
 
+    for (i = 0; i < IRQS; wd7000_host[i++] = NULL);
     for (i = 0; i < NUM_CONFIGS; biosptr[i++] = -1);
 
     tpnt->proc_dir = &proc_scsi_wd7000;
+    tpnt->proc_info = &wd7000_proc_info;
 
     /*
      * Set up SCB free list, which is shared by all adapters
@@ -1292,6 +1452,9 @@ int wd7000_detect (Scsi_Host_Template *tpnt)
     init_scbs ();
 
     for (pass = 0, cfg_ptr = 0; pass < NUM_CONFIGS; pass++) {
+        /*
+	 * First, search for BIOS SIGNATURE...
+	 */
         for (biosaddr_ptr = 0; biosaddr_ptr < NUM_ADDRS; biosaddr_ptr++)
 	    for (sig_ptr = 0; sig_ptr < NUM_SIGNATURES; sig_ptr++) {
 	        for (i = 0; i < pass; i++)
@@ -1306,7 +1469,9 @@ int wd7000_detect (Scsi_Host_Template *tpnt)
 	    }
 
 bios_matched:
-
+	/*
+	 * BIOS SIGNATURE has been found.
+	 */
 #ifdef DEBUG
 	printk ("wd7000_detect: pass %d\n", pass + 1);
 
@@ -1335,7 +1500,6 @@ bios_matched:
 #ifdef DEBUG
  	    printk ("wd7000_detect: ASC reset (IO 0x%x) ...", iobase);
 #endif
-
  	    /*
   	     * ASC reset...
  	     */
@@ -1367,8 +1531,7 @@ bios_matched:
 		host = (Adapter *) sh->hostdata;
 
 #ifdef DEBUG
-		printk ("wd7000_detect: adapter allocated at 0x%x\n",
-			(int) host);
+		printk ("wd7000_detect: adapter allocated at 0x%x\n", (int) host);
 #endif
 
 		memset (host, 0, sizeof (Adapter));
@@ -1382,9 +1545,8 @@ bios_matched:
 		    host->dma = configs[cfg_ptr - 1].dma;
 		}
 
-	    	host->sh = sh;
+	    	host->sh = wd7000_host[host->irq - IRQ_MIN] = sh;
     		host->iobase = iobase;
-		irq2host[host->irq] = host;
 
 #ifdef DEBUG
 		printk ("wd7000_detect: Trying init WD-7000 card at IO "
@@ -1409,8 +1571,7 @@ bios_matched:
 		request_region (host->iobase, 4, "wd7000");
 
 		/*
-		 *  For boards before rev 6.0, scatter/gather
-		 *  isn't supported.
+		 *  For boards before rev 6.0, scatter/gather isn't supported.
 		 */
 		if (host->rev1 < 6)
 		    sh->sg_tablesize = SG_NONE;
@@ -1429,8 +1590,7 @@ bios_matched:
 
 #ifdef DEBUG
 	else
- 	    printk ("wd7000_detect: IO 0x%x region already allocated!\n",
-		    iobase);
+ 	    printk ("wd7000_detect: IO 0x%x region already allocated!\n", iobase);
 #endif
 
     }
@@ -1469,18 +1629,55 @@ int wd7000_reset(Scsi_Cmnd * SCpnt)
 
 
 /*
- *  This was borrowed directly from aha1542.c, but my disks are organized
- *  this way, so I think it will work OK.  Someone who is ambitious can
- *  borrow a newer or more complete version from another driver.
+ *  This was borrowed directly from aha1542.c. (Zaga)
  */
-int wd7000_biosparam(Disk * disk, kdev_t dev, int* ip)
+int wd7000_biosparam (Disk *disk, kdev_t dev, int *ip)
 {
-  int size = disk->capacity;
-  ip[0] = 64;
-  ip[1] = 32;
-  ip[2] = size >> 11;
-/*  if (ip[2] >= 1024) ip[2] = 1024; */
-  return 0;
+#ifdef BIOSPARAM_DEBUG
+    printk("wd7000_biosparam: dev=%s, size=%d, ", kdevname (dev), disk->capacity);
+#endif
+
+    /*
+     * try default translation
+     */
+    ip[0] = 64;
+    ip[1] = 32;
+    ip[2] = disk->capacity / (64 * 32);
+
+    /*
+     * for disks >1GB do some guessing
+     */
+    if (ip[2] >= 1024) {
+	int info[3];
+
+	/*
+	 * try to figure out the geometry from the partition table
+	 */
+	if ((scsicam_bios_param (disk, dev, info) < 0) ||
+	    !(((info[0] == 64) && (info[1] == 32)) ||
+	    ((info[0] == 255) && (info[1] == 63)))) {
+	    printk ("wd7000_biosparam: unable to verify geometry for disk with >1GB.\n"
+		    "                  using extended translation.\n");
+
+	    ip[0] = 255;
+	    ip[1] = 63;
+	    ip[2] = disk->capacity / (255 * 63);
+	} else {
+	    ip[0] = info[0];
+	    ip[1] = info[1];
+	    ip[2] = info[2];
+
+	    if (info[0] == 255)
+		printk ("wd7000_biosparam: current partition table is using extended translation.\n");
+	}
+    }
+
+#ifdef BIOSPARAM_DEBUG
+    printk ("bios geometry: head=%d, sec=%d, cyl=%d\n", ip[0], ip[1], ip[2]);
+    printk ("WARNING: check, if the bios geometry is correct.\n");
+#endif
+
+    return (0);
 }
 
 #ifdef MODULE

@@ -39,11 +39,12 @@ extern void scsi_make_blocked_list(void);
 extern volatile int in_scan_scsis;
 extern const unsigned char scsi_command_size[8];
 #define COMMAND_SIZE(opcode) scsi_command_size[((opcode) >> 5) & 7]
-
 #define IDENTIFY_BASE       0x80
 #define IDENTIFY(can_disconnect, lun)   (IDENTIFY_BASE |\
 		     ((can_disconnect) ?  0x40 : 0) |\
 		     ((lun) & 0x07)) 
+#define MAX_SCSI_DEVICE_CODE 10
+extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
 
 		 
     
@@ -217,6 +218,12 @@ typedef struct scsi_device {
  */
 
 extern Scsi_Device * scsi_devices;
+
+extern struct hd_struct * sd;
+
+#if defined(MAJOR_NR) && (MAJOR_NR == SCSI_DISK_MAJOR)
+extern struct hd_struct * sd;
+#endif
 
 /*
  *  Initializes all SCSI devices.  This scans all scsi busses.
@@ -498,8 +505,14 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
     req = &SCpnt->request;
     req->errors = 0;
     if (!uptodate) {
+#if defined(MAJOR_NR) && (MAJOR_NR == SCSI_DISK_MAJOR)
+	printk(DEVICE_NAME " I/O error: dev %s, sector %lu, absolute sector %lu\n",
+	       kdevname(req->rq_dev), req->sector, 
+	       req->sector + sd[MINOR(SCpnt->request.rq_dev)].start_sect);
+#else
 	printk(DEVICE_NAME " I/O error: dev %s, sector %lu\n",
 	       kdevname(req->rq_dev), req->sector);
+#endif
     }
     
     do {

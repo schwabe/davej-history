@@ -128,6 +128,12 @@ M:	jsn@cs.nott.ac.uk
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
+IP MASQUERADING (IPV4)
+P:	Nigel Metheringham
+M:	Nigel.Metheringham@ThePLAnet.net
+L:	masq@indyramp.com
+S:	Maintained
+
 BUSLOGIC SCSI DRIVER
 P:	Leonard N. Zubkoff
 M:	Leonard N. Zubkoff <lnz@dandelion.com>

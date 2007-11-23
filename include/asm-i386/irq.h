@@ -144,12 +144,16 @@ extern void enable_irq(unsigned int);
 	"movl 32(%edx), %eax\n\t" \
 	"shrl $24,%eax\n\t" \
 	"andb $0x0F,%al\n"
-	
+
 #define	ENTER_KERNEL \
 	"pushl %eax\n\t" \
+	"pushl %ebx\n\t" \
+	"pushl %ecx\n\t" \
 	"pushl %edx\n\t" \
 	"pushfl\n\t" \
 	"cli\n\t" \
+	"movl $6000, %ebx\n\t" \
+	"movl "SYMBOL_NAME_STR(smp_loops_per_tick)", %ecx\n\t" \
 	GET_PROCESSOR_ID \
 	"btsl $" STR(SMP_FROM_INT) ","SYMBOL_NAME_STR(smp_proc_in_lock)"(,%eax,4)\n\t" \
 	"1: " \
@@ -158,6 +162,7 @@ extern void enable_irq(unsigned int);
 	"jnc 3f\n\t" \
 	"cmpb "SYMBOL_NAME_STR(active_kernel_processor)", %al\n\t" \
 	"je 4f\n\t" \
+	"movb $1, "SYMBOL_NAME_STR(smp_blocked_interrupt_pending)"\n\t" \
 	"2: " \
         SMP_PROF_INT_SPINS \
 	"btl %al, "SYMBOL_NAME_STR(smp_invalidate_needed)"\n\t" \
@@ -168,14 +173,28 @@ extern void enable_irq(unsigned int);
 	"movl %cr3,%edx\n\t" \
 	"movl %edx,%cr3\n" \
 	"5: btl $0, "SYMBOL_NAME_STR(kernel_flag)"\n\t" \
-	"jc 2b\n\t" \
-	"jmp 1b\n\t" \
+	"jnc 1b\n\t" \
+	"cmpb "SYMBOL_NAME_STR(active_kernel_processor)", %al\n\t" \
+	"je 4f\n\t" \
+	"decl %ecx\n\t" \
+	"jne 2b\n\t" \
+	"decl %ebx\n\t" \
+	"jne 6f\n\t" \
+	"call "SYMBOL_NAME_STR(irq_deadlock_detected)"\n\t" \
+	"6: movl "SYMBOL_NAME_STR(smp_loops_per_tick)", %ecx\n\t" \
+	"cmpb "SYMBOL_NAME_STR(boot_cpu_id)", %al\n\t" \
+	"jne 2b\n\t" \
+	"incl "SYMBOL_NAME_STR(jiffies)"\n\t" \
+	"jmp 2b\n\t" \
 	"3: " \
 	"movb %al, "SYMBOL_NAME_STR(active_kernel_processor)"\n\t" \
 	"4: " \
 	"incl "SYMBOL_NAME_STR(kernel_counter)"\n\t" \
+	"movb $0, "SYMBOL_NAME_STR(smp_blocked_interrupt_pending)"\n\t" \
 	"popfl\n\t" \
 	"popl %edx\n\t" \
+	"popl %ecx\n\t" \
+	"popl %ebx\n\t" \
 	"popl %eax\n\t"
 
 #define	LEAVE_KERNEL \
@@ -185,7 +204,10 @@ extern void enable_irq(unsigned int);
 	"cli\n\t" \
 	"decl "SYMBOL_NAME_STR(kernel_counter)"\n\t" \
 	"jnz 1f\n\t" \
-	"movb $" STR (NO_PROC_ID) ", "SYMBOL_NAME_STR(active_kernel_processor)"\n\t" \
+	"movb "SYMBOL_NAME_STR(saved_active_kernel_processor)",%al\n\t" \
+	"movb %al,"SYMBOL_NAME_STR(active_kernel_processor)"\n\t" \
+	"cmpb $" STR (NO_PROC_ID) ",%al\n\t" \
+	"jne 1f\n\t" \
 	"lock\n\t" \
 	"btrl $0, "SYMBOL_NAME_STR(kernel_flag)"\n\t" \
 	"1: " \

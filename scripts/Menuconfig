@@ -1144,17 +1144,17 @@ CONFIG_IN="${1:-./config.in}"
 
 _CONFIG="${2:-.config}"
 
-if [ ! -f "$_CONFIG" ]; then
-  _CONFIG=$DEFAULTS
+if [ -f "$_CONFIG" ]; then
+  DEFAULTS=$_CONFIG
 fi
 
 AUTOCONF_H="${3:-include/linux/autoconf.h}"
 
-if [ -f $_CONFIG ]
+if [ -f $DEFAULTS ]
 then
   echo
-  echo "Using defaults found in" $_CONFIG
-  load_config_file $_CONFIG
+  echo "Using defaults found in" $DEFAULTS
+  load_config_file $DEFAULTS
 else
   echo
   echo "No defaults found"

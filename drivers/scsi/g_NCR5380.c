@@ -606,21 +606,6 @@ static int sprint_Scsi_Cmnd (char* buffer, int len, Scsi_Cmnd *cmd) {
     return len-start;
 }
 
-const char *const private_scsi_device_types[] =
-{
-    "Direct-Access    ",
-    "Sequential-Access",
-    "Printer          ",
-    "Processor        ",
-    "WORM             ",
-    "CD-ROM           ",
-    "Scanner          ",
-    "Optical Device   ",
-    "Medium Changer   ",
-    "Communications   "
-};
-#define MAX_SCSI_DEVICE_CODE sizeof(private_scsi_device_types)/sizeof(char*)
-
 int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int length, int hostno, int inout)
 {
     int len = 0;
@@ -628,7 +613,6 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
     unsigned char status;
     int i;
     struct Scsi_Host *scsi_ptr;
-	Scsi_Device *dev;
     Scsi_Cmnd *ptr;
     struct NCR5380_hostdata *hostdata;
 
@@ -674,7 +658,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 	    long tr = hostdata->time_read[dev->id] / HZ;
 	    long tw = hostdata->time_write[dev->id] / HZ;
 
-	    PRINTP("  T:%d %s " ANDP dev->id ANDP (dev->type < MAX_SCSI_DEVICE_CODE) ? private_scsi_device_types[(int)dev->type] : "Unknown");
+	    PRINTP("  T:%d %s " ANDP dev->id ANDP (dev->type < MAX_SCSI_DEVICE_CODE) ? scsi_device_types[(int)dev->type] : "Unknown");
 	    for (i=0; i<8; i++)
 		if (dev->vendor[i] >= 0x20)
 		    *(buffer+(len++)) = dev->vendor[i];

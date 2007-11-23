@@ -153,14 +153,32 @@ static int pty_write_room(struct tty_struct *tty)
 	return to->ldisc.receive_room(to);
 }
 
+/*
+ * Modified for asymmetric master/slave behavior
+ * The chars_in_buffer() value is used by the ldisc select() function 
+ * to hold off writing when chars_in_buffer > WAKEUP_CHARS (== 256).
+ * To allow typed-ahead commands to accumulate, the master side returns 0
+ * until the buffer is half full. The slave side returns the true count.
+ */
 static int pty_chars_in_buffer(struct tty_struct *tty)
 {
 	struct tty_struct *to = tty->link;
+	int count;
 
 	if (!to || !to->ldisc.chars_in_buffer)
 		return 0;
 
-	return to->ldisc.chars_in_buffer(to);
+	/* The ldisc must report 0 if no characters available to be read */
+	count = to->ldisc.chars_in_buffer(to);
+
+	if (tty->driver.subtype == PTY_TYPE_SLAVE) return count;
+
+	/* 
+	 * Master side driver ... return 0 if the other side's read buffer 
+	 * is less than half full.  This allows room for typed-ahead commands
+	 * with a reasonable margin to avoid overflow. 
+	 */
+	return ((count < N_TTY_BUF_SIZE/2) ? 0 : count);
 }
 
 static void pty_flush_buffer(struct tty_struct *tty)

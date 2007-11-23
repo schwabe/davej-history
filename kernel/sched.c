@@ -283,6 +283,87 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 	return weight;
 }
 
+
+/*
+  The following allow_interrupts function is used to workaround a rare but
+  nasty deadlock situation that is possible for 2.0.x Intel SMP because it uses
+  a single kernel lock and interrupts are only routed to the boot CPU.  There
+  are two deadlock scenarios this code protects against.
+
+  The first scenario is that if a CPU other than the boot CPU holds the kernel
+  lock and needs to wait for an operation to complete that itself requires an
+  interrupt, there is a deadlock since the boot CPU may be able to accept the
+  interrupt but will not be able to acquire the kernel lock to process it.
+
+  The workaround for this deadlock requires adding calls to allow_interrupts to
+  places where this deadlock is possible.  These places are known to be present
+  in buffer.c and keyboard.c.  It is also possible that there are other such
+  places which have not been identified yet.  In order to break the deadlock,
+  the code in allow_interrupts temporarily yields the kernel lock directly to
+  the boot CPU to allow the interrupt to be processed.  The boot CPU interrupt
+  entry code indicates that it is spinning waiting for the kernel lock by
+  setting the smp_blocked_interrupt_pending variable.  This code notices that
+  and manipulates the active_kernel_processor variable to yield the kernel lock
+  without ever clearing it.  When the interrupt has been processed, the
+  saved_active_kernel_processor variable contains the value for the interrupt
+  exit code to restore, either the APICID of the CPU that granted it the kernel
+  lock, or NO_PROC_ID in the normal case where no yielding occurred.  Restoring
+  active_kernel_processor from saved_active_kernel_processor returns the kernel
+  lock back to the CPU that yielded it.
+
+  The second form of deadlock is even more insidious.  Suppose the boot CPU
+  takes a page fault and then the previous scenario ensues.  In this case, the
+  boot CPU would spin with interrupts disabled waiting to acquire the kernel
+  lock.  To resolve this deadlock, the kernel lock acquisition code must enable
+  interrupts briefly so that the pending interrupt can be handled as in the
+  case above.
+
+  An additional form of deadlock is where kernel code running on a non-boot CPU
+  waits for the jiffies variable to be incremented.  This deadlock is avoided
+  by having the spin loops in ENTER_KERNEL increment jiffies approximately
+  every 10 milliseconds.  Finally, if approximately 60 seconds elapse waiting
+  for the kernel lock, a message will be printed if possible to indicate that a
+  deadlock has been detected.
+
+		Leonard N. Zubkoff
+		   4 August 1997
+*/
+
+#if defined(__SMP__) && defined(__i386__)
+
+volatile unsigned char smp_blocked_interrupt_pending = 0;
+
+volatile unsigned char saved_active_kernel_processor = NO_PROC_ID;
+
+void allow_interrupts(void)
+{
+  if (smp_processor_id() == boot_cpu_id) return;
+  if (smp_blocked_interrupt_pending)
+    {
+      long timeout_counter = loops_per_sec;
+      unsigned long saved_kernel_counter;
+      saved_active_kernel_processor = active_kernel_processor;
+      saved_kernel_counter = kernel_counter;
+      kernel_counter = 0;
+      active_kernel_processor = boot_cpu_id;
+      while (active_kernel_processor != saved_active_kernel_processor &&
+	     --timeout_counter >= 0)
+	barrier();
+      if (timeout_counter < 0)
+	panic("FORWARDED INTERRUPT TIMEOUT (AKP = %d, Saved AKP = %d)\n",
+	      active_kernel_processor, saved_active_kernel_processor);
+      kernel_counter = saved_kernel_counter;
+      saved_active_kernel_processor = NO_PROC_ID;
+    }
+}
+
+#else
+
+void allow_interrupts(void) {}
+
+#endif
+
+
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
  * scheduler: it's not perfect, but certainly works for most things.
@@ -302,6 +383,8 @@ asmlinkage void schedule(void)
 	int this_cpu=smp_processor_id();
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
+
+	allow_interrupts();
 
 	if (intr_count)
 		goto scheduling_in_interrupt;
@@ -1500,10 +1583,10 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 	error = verify_area(VERIFY_WRITE, interval, sizeof(struct timespec));
 	if (error)
 		return error;
-	
+
+	/* Values taken from 2.1.38 */	
 	t.tv_sec = 0;
-	t.tv_nsec = 0;   /* <-- Linus, please fill correct value in here */
-	return -ENOSYS;  /* and then delete this line. Thanks!           */
+	t.tv_nsec = 150000;   /* is this right for non-intel architecture too?*/
 	memcpy_tofs(interval, &t, sizeof(struct timespec));
 
 	return 0;

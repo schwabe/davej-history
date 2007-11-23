@@ -854,6 +854,16 @@ int atif_ioctl(int cmd, void *arg)
 			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr.s_net=atif->address.s_net;
 			((struct sockaddr_at *)(&atreq.ifr_addr))->sat_addr.s_node=ATADDR_BCAST;
 			break;
+	        case SIOCATALKDIFADDR:
+			if(!suser())
+				return -EPERM;
+			if(sa->sat_family!=AF_APPLETALK)
+				return -EINVAL;
+			if(atif==NULL)
+				return -EADDRNOTAVAIL;
+			atrtr_device_down(atif->dev);
+			atif_drop_device(atif->dev);
+			break;			
 	}
 	memcpy_tofs(arg,&atreq,sizeof(atreq));
 	return 0;
@@ -1995,6 +2005,7 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		case SIOCGIFADDR:
 		case SIOCSIFADDR:
 		case SIOCGIFBRDADDR:
+		case SIOCATALKDIFADDR:		  
 			return atif_ioctl(cmd,(void *)arg);
 		/*
 		 *	Physical layer ioctl calls

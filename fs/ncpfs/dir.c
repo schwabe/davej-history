@@ -1067,7 +1067,6 @@ ncp_rmdir(struct inode *dir, const char *name, int len)
 	}
         if (ncp_find_dir_inode(dir, name) != NULL)
 	{
-		iput(dir);
                 error = -EBUSY;
         }
 	else
@@ -1115,7 +1114,6 @@ ncp_unlink(struct inode *dir, const char *name, int len)
 	}
         if (ncp_find_dir_inode(dir, name) != NULL)
 	{
-		iput(dir);
                 error = -EBUSY;
         }
 	else

@@ -1212,6 +1212,9 @@ void tcp_write_wakeup(struct sock *sk)
 		win_size = skb->len - (((unsigned char *) th) - skb->data);
 		win_size -= th->doff * 4;
 
+		/* Don't send more than the offered window! */
+		win_size = min(win_size, sk->window_seq - sk->sent_seq);
+
 		/*
 		 *	Grab the data for a temporary frame
 		 */

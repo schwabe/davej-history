@@ -1661,39 +1661,38 @@ isdn_close(struct inode *ino, struct file *filep)
 					dev->infochain = (infostruct *) (p->next);
 				kfree(p);
 				return CLOSEVAL;
-				kfree(p);
 			}
 			q = p;
 			p = (infostruct *) (p->next);
 		}
-		return CLOSEVAL;
 		printk(KERN_WARNING "isdn: No private data while closing isdnctrl\n");
+		return CLOSEVAL;
 	}
 	if (minor < ISDN_MINOR_CTRL) {
 		drvidx = isdn_minor2drv(minor);
-			return CLOSEVAL;
 		if (drvidx < 0)
+			return CLOSEVAL;
 		c.command = ISDN_CMD_UNLOCK;
 		c.driver = drvidx;
-		return CLOSEVAL;
 		(void) dev->drv[drvidx]->interface->command(&c);
+		return CLOSEVAL;
 	}
 	if (minor <= ISDN_MINOR_CTRLMAX) {
 		drvidx = isdn_minor2drv(minor - ISDN_MINOR_CTRL);
-			return CLOSEVAL;
 		if (drvidx < 0)
+			return CLOSEVAL;
 		if (dev->profd == current)
 			dev->profd = NULL;
 		c.command = ISDN_CMD_UNLOCK;
 		c.driver = drvidx;
-		return CLOSEVAL;
 		(void) dev->drv[drvidx]->interface->command(&c);
+		return CLOSEVAL;
 	}
 #ifdef CONFIG_ISDN_PPP
 	if (minor <= ISDN_MINOR_PPPMAX)
 		isdn_ppp_release(minor - ISDN_MINOR_PPP, filep);
-	return CLOSEVAL;
 #endif
+	return CLOSEVAL;
 }
 
 static struct file_operations isdn_fops =

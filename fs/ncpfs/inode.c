@@ -125,27 +125,36 @@ ncp_read_inode(struct inode *inode)
 	}
 }
 
+/*
+ * Defer release of inode_info and file_info structures until the inode
+ * has been cleared.  This avoids a race condition allowing the inode to 
+ * be put back in use before being cleared. Also, temporarily increment
+ * i_count after clear_inode() so that the inode can't be reused.
+ */
 static void
 ncp_put_inode(struct inode *inode)
 {
-        struct nw_file_info *finfo = NCP_FINFO(inode);
-	struct super_block *sb = inode->i_sb;
+	struct super_block	*sb	= inode->i_sb;
+	struct ncp_server	*server	= NCP_SERVER(inode);
+	struct ncp_inode_info	*iinfo	= NCP_INOP(inode);
+        struct nw_file_info	*finfo	= NCP_FINFO(inode);
 
+	/*
+	 * This operation may block, so we lock before checking the count.
+	 */
 	lock_super(sb);
-        if (finfo->opened != 0)
-	{
-                if (ncp_close_file(NCP_SERVER(inode), finfo->file_handle)!=0)
-		{
-                        /* We can't do anything but complain. */
-                        printk("ncp_put_inode: could not close\n");
-                }
-        }
 
+	if (inode->i_count > 1) {
+printk("ncp_put_inode: inode in use device %s, inode %ld, count=%d\n", 
+kdevname(inode->i_dev), inode->i_ino, inode->i_count);
+		goto unlock;
+	}
+	
 	DDPRINTK("ncp_put_inode: put %s\n",
-		finfo->i.entryName);
-
-        ncp_free_inode_info(NCP_INOP(inode));
-
+		 finfo->i.entryName);
+	/*
+	 * This operation should never block.
+	 */
         if (S_ISDIR(inode->i_mode))
 	{
                 DDPRINTK("ncp_put_inode: put directory %ld\n",
@@ -154,6 +163,28 @@ ncp_put_inode(struct inode *inode)
         }                
 
 	clear_inode(inode);
+
+	/*
+	 * After clearing the inode i_count will be 0 in 2.0.xx kernels.
+	 * To keep the inode from being reused as free if we block while
+	 * closing the file, increment i_count temporarily.
+	 */
+	inode->i_count++;
+
+	if (finfo->opened != 0)
+	{
+		if (ncp_close_file(server, finfo->file_handle) != 0)
+		{
+			/* We can't do anything but complain. */
+			printk("ncp_put_inode: could not close %s\n",
+		 		finfo->i.entryName);
+		}
+	}
+
+	ncp_free_inode_info(iinfo);
+	inode->i_count--;
+		
+unlock:
 	unlock_super(sb);
 }
 

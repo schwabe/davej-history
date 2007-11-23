@@ -1120,7 +1120,8 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
     }
 
     if (STm->do_async_writes &&
-	((STp->buffer)->buffer_bytes >= STp->write_threshold ||
+	(((STp->buffer)->buffer_bytes >= STp->write_threshold &&
+	  (STp->buffer)->buffer_bytes >= STp->block_size) ||
 	 STp->block_size == 0) ) {
       /* Schedule an asynchronous write */
       if (!SCpnt) {

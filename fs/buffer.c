@@ -593,6 +593,8 @@ static struct buffer_head *find_candidate(struct buffer_head *list,int *list_len
 	return NULL;
 }
 
+extern void allow_interrupts(void);
+
 static void refill_freelist(int size)
 {
 	struct buffer_head * bh;
@@ -616,6 +618,7 @@ static void refill_freelist(int size)
 	}
 
 repeat:
+	allow_interrupts();
 	if(needed <= 0)
 		return;
 
@@ -669,6 +672,13 @@ repeat:
 		};
 	}
 
+	/*
+	 * In order to protect our reserved pages, 
+	 * return now if we got any buffers.
+	 */
+	if (free_list[BUFSIZE_INDEX(size)])
+		return;
+
 	/* and repeat until we find something good */
 	if (!grow_buffers(GFP_ATOMIC, size))
 		wakeup_bdflush(1);
@@ -697,6 +707,7 @@ struct buffer_head * getblk(kdev_t dev, int block, int size)
 	   now so as to ensure that there are still clean buffers available
 	   for user processes to use (and dirty) */
 repeat:
+	allow_interrupts();
 	bh = get_hash_table(dev, block, size);
 	if (bh) {
 		if (!buffer_dirty(bh)) {
@@ -709,6 +720,7 @@ repeat:
 	}
 
 	while(!free_list[isize]) {
+		allow_interrupts();
 		refill_freelist(size);
 	}
 	
@@ -1506,6 +1518,7 @@ asmlinkage int sync_old_buffers(void)
 		ndirty = 0;
 		nwritten = 0;
 	repeat:
+		allow_interrupts();
 
 		bh = lru_list[nlist];
 		if(bh) 
@@ -1646,6 +1659,7 @@ int bdflush(void * unused)
 			 ndirty = 0;
 			 refilled = 0;
 		 repeat:
+			 allow_interrupts();
 
 			 bh = lru_list[nlist];
 			 if(bh) 

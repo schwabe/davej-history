@@ -5,6 +5,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/stddef.h>
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/mm.h>
@@ -129,11 +130,12 @@ struct file * get_empty_filp(void)
 	do {
 		for (f = first_file, i=0; i < nr_files; i++, f = f->f_next)
 			if (!f->f_count) {
-				remove_file_free(f);
-				memset(f,0,sizeof(*f));
-				put_last_free(f);
+				/* The f_next pointer is followed by the f_prev pointer */
+				memset(f, 0, offsetof(struct file, f_next));
+				memset(&f->f_prev + 1, 0, sizeof(*f) - sizeof(f->f_prev) - offsetof(struct file, f_prev));
 				f->f_count = 1;
 				f->f_version = ++event;
+				first_file = f->f_next;
 				return f;
 			}
 	} while (nr_files < max && grow_files());

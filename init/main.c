@@ -486,6 +486,10 @@ static int checksetup(char *line)
    still work even if initially too large, it will just take slightly longer */
 unsigned long loops_per_sec = (1<<12);
 
+#if defined(__SMP__) && defined(__i386__)
+unsigned long smp_loops_per_tick = 1000000;
+#endif
+
 /* This is the number of bits of precision for the loops_per_second.  Each
    bit takes on average 1.5/HZ seconds.  This (like the original) is a little
    better than 1% */
@@ -533,6 +537,10 @@ void calibrate_delay(void)
 	printk("ok - %lu.%02lu BogoMIPS\n",
 		(loops_per_sec+2500)/500000,
 		((loops_per_sec+2500)/5000) % 100);
+
+#if defined(__SMP__) && defined(__i386__)
+	smp_loops_per_tick = loops_per_sec / 400;
+#endif
 }
 
 static void parse_root_dev(char * line)

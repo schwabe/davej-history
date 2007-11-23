@@ -971,12 +971,14 @@ CONFIG_IP_MASQUERADE
   If you want this, say Y.
 
 IP: ipautofw masquerade support
-CONFIG_IP_MASQUERADE_IPAUTOFW
+CONFIG_IP_MASQUERADE_IPAUTOFW (Experimental)
   ipautofw is a program by Richard Lynch allowing additional
   support for masquerading protocols which do not (as yet)
   have additional protocol helpers.  
   Information and source for ipautofw is available from
   ftp://ftp.netis.com/pub/members/rlynch/
+  The ipautofw code is still under development and so is currently
+  marked EXPERIMENTAL.
   If you want this, say Y.
 
 IP: ICMP masquerading
@@ -2128,6 +2130,20 @@ CONFIG_ULTRA
   Important: There have been many reports that, with some motherboards
   mixing an SMC Ultra and an Adaptec AHA1542 SCSI card causes corruption
   problems with many operating systems.
+
+SMC Ultra32 support
+CONFIG_ULTRA32
+  This is support for the SMC Ultra32 EISA card in shared memory mode.
+  If you have a network (ethernet) card of this type, say Y and read
+  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt as
+  well as Documentation/networking/net-modules.txt. If you plan to use
+  more than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
 SMC 9194 Support
 CONFIG_SMC9194

@@ -114,7 +114,6 @@ static volatile struct Scsi_Host * host_active = NULL;
 #define SCSI_BLOCK(HOST) ((HOST->block && host_active && HOST != host_active) \
 			  || (HOST->can_queue && HOST->host_busy >= HOST->can_queue))
 
-#define MAX_SCSI_DEVICE_CODE 10
 const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
 {
     "Direct-Access    ",
@@ -289,6 +288,7 @@ static struct dev_info device_list[] =
 {"MATSHITA","PD","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"YAMAHA","CDR100","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
+{"nCipher","Fastness Crypto","*", BLIST_FORCELUN},
 /*
  * Must be at end of list...
  */
