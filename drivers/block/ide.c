@@ -1146,7 +1146,7 @@ repeat:
  * the driver.  This makes the driver much more friendlier to shared IRQs
  * than previous designs, while remaining 100% (?) SMP safe and capable.
  */
-static void ide_do_request (ide_hwgroup_t *hwgroup)
+static void ide_do_request (ide_hwgroup_t *hwgroup, int masked_irq)
 {
 	struct blk_dev_struct *bdev;
 	ide_drive_t	*drive;
@@ -1204,11 +1204,15 @@ static void ide_do_request (ide_hwgroup_t *hwgroup)
 		if (bdev->current_request == &bdev->plug)	/* FIXME: paranoia */
 			printk("%s: Huh? nuking plugged queue\n", drive->name);
 		bdev->current_request = hwgroup->rq = drive->queue;
+		if (hwif->irq != masked_irq)
+			disable_irq_nosync(hwif->irq);
 		spin_unlock(&io_request_lock);
 		if (!hwif->serialized)	/* play it safe with buggy hardware */
 			ide__sti();
 		startstop = start_request(drive);
 		spin_lock_irq(&io_request_lock);
+		if (hwif->irq != masked_irq)
+			enable_irq(hwif->irq);
 		if (startstop == ide_stopped)
 			hwgroup->busy = 0;
 	}
@@ -1226,41 +1230,41 @@ struct request **ide_get_queue (kdev_t dev)
 
 void do_ide0_request (void)
 {
-	ide_do_request (ide_hwifs[0].hwgroup);
+	ide_do_request (ide_hwifs[0].hwgroup, 0);
 }
 
 #if MAX_HWIFS > 1
 void do_ide1_request (void)
 {
-	ide_do_request (ide_hwifs[1].hwgroup);
+	ide_do_request (ide_hwifs[1].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 1 */
 
 #if MAX_HWIFS > 2
 void do_ide2_request (void)
 {
-	ide_do_request (ide_hwifs[2].hwgroup);
+	ide_do_request (ide_hwifs[2].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 2 */
 
 #if MAX_HWIFS > 3
 void do_ide3_request (void)
 {
-	ide_do_request (ide_hwifs[3].hwgroup);
+	ide_do_request (ide_hwifs[3].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 3 */
 
 #if MAX_HWIFS > 4
 void do_ide4_request (void)
 {
-	ide_do_request (ide_hwifs[4].hwgroup);
+	ide_do_request (ide_hwifs[4].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 4 */
 
 #if MAX_HWIFS > 5
 void do_ide5_request (void)
 {
-	ide_do_request (ide_hwifs[5].hwgroup);
+	ide_do_request (ide_hwifs[5].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 5 */
 
@@ -1328,7 +1332,7 @@ void ide_timer_expiry (unsigned long data)
 				hwgroup->busy = 0;
 		}
 	}
-	ide_do_request(hwgroup);
+	ide_do_request(hwgroup, 0);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
@@ -1471,7 +1475,7 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 	if (startstop == ide_stopped) {
 		if (hwgroup->handler == NULL) {	/* paranoia */
 			hwgroup->busy = 0;
-			ide_do_request(hwgroup);
+			ide_do_request(hwgroup, hwif->irq);
 		} else {
 			printk("%s: ide_intr: huh? expected NULL handler on exit\n", drive->name);
 		}
@@ -1574,7 +1578,7 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 		rq->next = cur_rq->next;
 		cur_rq->next = rq;
 	}
-	ide_do_request(hwgroup);
+	ide_do_request(hwgroup, 0);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	if (action == ide_wait) {
 		down(&sem);			/* wait for it to be serviced */

@@ -88,6 +88,7 @@
 #include <linux/rtnetlink.h>
 #include <net/br.h>
 #include <linux/proc_fs.h>
+#include <linux/delay.h>
 
 #ifndef min
 #define min(a, b) (((a) <= (b)) ? (a) : (b))
@@ -2438,65 +2439,63 @@ struct net_local
  
 __initfunc(int brg_probe(struct device *dev))
 {
-  unsigned int bogomips;
-  struct timeval utime;
+	unsigned int bogomips;
+	struct timeval utime;
 
-  printk(KERN_INFO "%s: network interface for Ethernet Bridge 007/NET4.0\n", dev->name);
+	printk(KERN_INFO "%s: network interface for Ethernet Bridge 007/NET4.0\n", dev->name);
 
-  /*
-   *	Initialize the device structure.
-   */
+	/*
+	 *	Initialize the device structure.
+	 */
   
-  dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
-  if (dev->priv == NULL)
-    return -ENOMEM;
-  memset(dev->priv, 0, sizeof(struct net_local));
+	dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+	if (dev->priv == NULL)
+		return -ENOMEM;
+	memset(dev->priv, 0, sizeof(struct net_local));
 
-  /* Set up MAC address based on BogoMIPs figure for first CPU and time
-   */ 
-  bogomips = (boot_cpu_data.loops_per_sec+2500)/500000 ;
-  get_fast_time(&utime);
+	/* Set up MAC address based on BogoMIPs figure for first CPU and time
+	 */ 
+	bogomips = (loops_per_sec+2500)/500000 ;
+	get_fast_time(&utime);
 
-  /* Ummmm....  YES! */
-  dev->dev_addr[0] = '\xFE';
-  dev->dev_addr[1] = '\xFD';
-  dev->dev_addr[2] = (bridge_info.instance & 0x0F) << 4;
-  dev->dev_addr[2] |= ((utime.tv_sec & 0x000F0000) >> 16);
-  dev->dev_addr[3] = bogomips & 0xFF;
-  dev->dev_addr[4] = (utime.tv_sec & 0x0000FF00) >> 8;
-  dev->dev_addr[5] = (utime.tv_sec & 0x000000FF);
+	/* Ummmm....  YES! */
+	dev->dev_addr[0] = '\xFE';
+	dev->dev_addr[1] = '\xFD';
+	dev->dev_addr[2] = (bridge_info.instance & 0x0F) << 4;
+	dev->dev_addr[2] |= ((utime.tv_sec & 0x000F0000) >> 16);
+	dev->dev_addr[3] = bogomips & 0xFF;
+	dev->dev_addr[4] = (utime.tv_sec & 0x0000FF00) >> 8;
+	dev->dev_addr[5] = (utime.tv_sec & 0x000000FF);
   
-  printk(KERN_INFO "%s: generated MAC address %2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X\n", 
-	 dev->name,
-	 dev->dev_addr[0],
-	 dev->dev_addr[1],
-	 dev->dev_addr[2],
-	 dev->dev_addr[3],
-	 dev->dev_addr[4],
-	 dev->dev_addr[5]);
+	printk(KERN_INFO "%s: generated MAC address %2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X\n", 
+		dev->name,
+		dev->dev_addr[0],
+		dev->dev_addr[1],
+		dev->dev_addr[2],
+		dev->dev_addr[3],
+		dev->dev_addr[4],
+		dev->dev_addr[5]);
 
   
-  printk(KERN_INFO "%s: attached to bridge instance %lu\n", dev->name, dev->base_addr);
+	printk(KERN_INFO "%s: attached to bridge instance %lu\n", dev->name, dev->base_addr);
 
-  /*
-   *	The brg specific entries in the device structure.
-   */
+	/*
+	 *	The brg specific entries in the device structure.
+	 */
 
-  dev->open = brg_open;
-  dev->hard_start_xmit = brg_start_xmit;
-  dev->stop = brg_close;
-  dev->get_stats = brg_get_stats;
-  dev->set_multicast_list = brg_set_multicast_list;
+	dev->open = brg_open;
+	dev->hard_start_xmit = brg_start_xmit;
+	dev->stop = brg_close;
+	dev->get_stats = brg_get_stats;
+	dev->set_multicast_list = brg_set_multicast_list;
 
-  /*
-   *	Setup the generic properties
-   */
+	/*
+	 *	Setup the generic properties
+	 */
 
-  ether_setup(dev);
-
-  dev->tx_queue_len = 0;
-
-  return 0;
+	ether_setup(dev);
+	dev->tx_queue_len = 0;
+	return 0;
 }
 
 /*

@@ -2746,9 +2746,7 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			oi++;
 		}
 		if (tx > maxtx || rx > maxrx || oi > maxoi) {
-#if 0
 			if (tulip_debug > 1)
-#endif
 				printk(KERN_WARNING "%s: Too much work during an interrupt, "
 					   "csr5=0x%8.8x. (%lu) (%d,%d,%d)\n", dev->name, csr5, tp->nir, tx, rx, oi);
 			/* Acknowledge all interrupt sources. */
@@ -2768,9 +2766,11 @@ static void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 	/* check if we card is in suspend mode */
 	entry = tp->dirty_rx % RX_RING_SIZE;
 	if (tp->rx_skbuff[entry] == NULL) {
-		printk(KERN_WARNING "%s: in rx suspend mode: (%lu) (tp->cur_rx = %u, ttimer = %d, rx = %d) go/stay in suspend mode\n", dev->name, tp->nir, tp->cur_rx, tp->ttimer, rx);
+		if (tulip_debug > 1)
+			printk(KERN_WARNING "%s: in rx suspend mode: (%lu) (tp->cur_rx = %u, ttimer = %d, rx = %d) go/stay in suspend mode\n", dev->name, tp->nir, tp->cur_rx, tp->ttimer, rx);
 		if (tp->ttimer == 0 || (inl(ioaddr + CSR11) & 0xffff) == 0) {
-			printk(KERN_WARNING "%s: in rx suspend mode: (%lu) set timer\n", dev->name, tp->nir);
+			if (tulip_debug > 1)
+				printk(KERN_WARNING "%s: in rx suspend mode: (%lu) set timer\n", dev->name, tp->nir);
 			outl(tulip_tbl[tp->chip_id].valid_intrs | TimerInt,
 				ioaddr + CSR7);
 			outl(TimerInt, ioaddr + CSR5);

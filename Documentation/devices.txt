@@ -1,8 +1,7 @@
-
 		       LINUX ALLOCATED DEVICES
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		   Last revised: December 16, 1999
+		   Last revised: December 21, 1999
 
 This list is the Linux Device List, the official registry of allocated
 device numbers and /dev directory nodes for the Linux operating
@@ -15,7 +14,7 @@ ftp://ftp.kernel.org/pub/linux/docs/device-list/.  The LaTeX version
 of this document is no longer maintained.
 
 This document is included by reference into the Filesystem Hierarchy
-Standard (FHS).  The FHS is available from http://www.pathname.com/fhs/.
+Standard (FHS).	 The FHS is available from http://www.pathname.com/fhs/.
 
 Allocations marked (68k/Amiga) apply to Linux/68k on the Amiga
 platform only.	Allocations marked (68k/Atari) apply to Linux/68k on
@@ -199,7 +198,7 @@ Your cooperation is appreciated.
 
 		Older versions of the Linux kernel used this major
 		number for BSD PTY devices.  As of Linux 2.1.115, this
-		is no longer supported.  Use major numbers 2 and 3.
+		is no longer supported.	 Use major numbers 2 and 3.
 
   5 char	Alternate TTY devices
 		  0 = /dev/tty		Current TTY device
@@ -305,6 +304,8 @@ Your cooperation is appreciated.
 		  7 = /dev/amigamouse1	Second Amiga mouse
 		  8 = /dev/smouse	Simple serial mouse driver
 		  9 = /dev/pc110pad	IBM PC-110 digitizer pad
+		 10 = /dev/adbmouse	Apple Desktop Bus mouse
+		 11 = /dev/vrtpanel	Vr41xx embedded touch panel
 		128 = /dev/beep		Fancy beep device
 		129 = /dev/modreq	Kernel module load request
 		130 = /dev/watchdog	Watchdog timer port
@@ -353,6 +354,7 @@ Your cooperation is appreciated.
 		177 = /dev/cbm		Serial CBM bus
 		178 = /dev/jsflash	JavaStation OS flash SIMM
 		179 = /dev/xsvc		High-speed shared-mem/semaphore service
+		180 = /dev/vrbuttons	Vr41xx button input device
 		240-255			Reserved for local use
 
  11 char	Raw keyboard device
@@ -570,7 +572,7 @@ Your cooperation is appreciated.
 		 16 = /dev/zqft0	Unit 0, rewind-on-close, compression
 		 17 = /dev/zqft1	Unit 1, rewind-on-close, compression
 		 18 = /dev/zqft2	Unit 2, rewind-on-close, compression
-		 19 = /dev/zqtf3	Unit 3, rewind-on-close, compression
+		 19 = /dev/zqft3	Unit 3, rewind-on-close, compression
 		 20 = /dev/nzqft0	Unit 0, no rewind-on-close, compression
 		 21 = /dev/nzqft1	Unit 1, no rewind-on-close, compression
 		 22 = /dev/nzqft2	Unit 2, no rewind-on-close, compression
@@ -1356,8 +1358,8 @@ Your cooperation is appreciated.
 
 
  89 char	I2C bus interface
-		  0 = /dev/i2c0		First I2C adapter
-		  1 = /dev/i2c1		Second I2C adapter
+		  0 = /dev/i2c-0	First I2C adapter
+		  1 = /dev/i2c-1	Second I2C adapter
 		    ...
 
     block	Eighth IDE hard disk/CD-ROM interface
@@ -1735,9 +1737,9 @@ Your cooperation is appreciated.
 		 63 = /dev/ttyCH63	AT/PCI-Fast board 3, port 15
 
 165 char	Chase Research AT/PCI-Fast serial card - alternate devices
-		  0 = /dev/cuch0	Callout device corresponding to ttyCH0
+		  0 = /dev/cuch0	Callout device for ttyCH0
 		    ...
-		 63 = /dev/cuch63	Callout device corresponding to ttyCH63
+		 63 = /dev/cuch63	Callout device for ttyCH63
 
 166 char	ACM USB modems
 		  0 = /dev/ttyACM0	First ACM modem
@@ -1796,13 +1798,13 @@ Your cooperation is appreciated.
 		    ...
 
 177 char	TI PCILynx memory spaces
-		  0 = /dev/pcilynx/aux0  AUX space of first PCILynx card
+		  0 = /dev/pcilynx/aux0	 AUX space of first PCILynx card
 		    ...
 		 15 = /dev/pcilynx/aux15 AUX space of 16th PCILynx card
-		 16 = /dev/pcilynx/rom0  ROM space of first PCILynx card
+		 16 = /dev/pcilynx/rom0	 ROM space of first PCILynx card
 		    ...
 		 31 = /dev/pcilynx/rom15 ROM space of 16th PCILynx card
-		 32 = /dev/pcilynx/ram0  RAM space of first PCILynx card
+		 32 = /dev/pcilynx/ram0	 RAM space of first PCILynx card
 		    ...
 		 47 = /dev/pcilynx/ram15 RAM space of 16th PCILynx card
 
@@ -1836,7 +1838,7 @@ Your cooperation is appreciated.
 		    ...
 
 182 char	Picture Elements THR2 binarizer
-		  0 = /dev/pethr0       First THR2 board
+		  0 = /dev/pethr0	First THR2 board
 		  1 = /dev/pethr1	Second THR2 board
 		    ...
 
@@ -1870,11 +1872,16 @@ Your cooperation is appreciated.
 		    ...
 
 189 char	USB serial converters - alternate devices
-		  0 = /dev/cuusb0	Callout device corresponding to ttyUSB0
-		  1 = /dev/cuusb1	Callout device corresponding to ttyUSB1
+		  0 = /dev/cuusb0	Callout device for ttyUSB0
+		  1 = /dev/cuusb1	Callout device for ttyUSB1
 		    ...
 
-190-239		UNALLOCATED
+190 char	Kansas City tracker/tuner card
+		  0 = /dev/kctt0	First KCT/T card
+		  1 = /dev/kctt1	Second KCT/T card
+		    ...
+
+191-239		UNALLOCATED
 
 240-254		LOCAL/EXPERIMENTAL USE
 
@@ -1983,7 +1990,7 @@ monitor.  Virtual consoles are named /dev/tty#, with numbering
 starting at /dev/tty1; /dev/tty0 is the current virtual console.
 /dev/tty0 is the device that should be used to access the system video
 card on those architectures for which the frame buffer devices
-(/dev/fb*) are not applicable.  Do not use /dev/console
+(/dev/fb*) are not applicable.	Do not use /dev/console
 for this purpose.
 
 The console device, /dev/console, is the device to which system
@@ -2000,10 +2007,10 @@ Serial ports are RS-232 serial ports and any device which simulates
 one, either in hardware (such as internal modems) or in software (such
 as the ISDN driver.)  Under Linux, each serial ports has two device
 names, the primary or callin device and the alternate or callout one.
-Each kind of device is indicated by a different letter.  For any
+Each kind of device is indicated by a different letter.	 For any
 letter X, the names of the devices are /dev/ttyX# and /dev/cux#,
 respectively; for historical reasons, /dev/ttyS# and /dev/ttyC#
-correspond to /dev/cua# and /dev/cub#.  In the future, it should be
+correspond to /dev/cua# and /dev/cub#.	In the future, it should be
 expected that multiple letters will be used; all letters will be upper
 case for the "tty" device (e.g. /dev/ttyDP#) and lower case for the
 "cu" device (e.g. /dev/cudp#).
@@ -2017,7 +2024,7 @@ support for serial ports.  Their use is deprecated, and they may be
 removed from a future version of Linux.
 
 Arbitration of serial ports is provided by the use of lock files with
-the names /var/lock/LCK..ttyX#.  The contents of the lock file should
+the names /var/lock/LCK..ttyX#.	 The contents of the lock file should
 be the PID of the locking process as an ASCII number.
 
 It is common practice to install links such as /dev/modem
@@ -2025,7 +2032,7 @@ which point to serial ports.  In order to ensure proper locking in the
 presence of these links, it is recommended that software chase
 symlinks and lock all possible names; additionally, it is recommended
 that a lock file be installed with the corresponding alternate
-device.  In order to avoid deadlocks, it is recommended that the locks
+device.	 In order to avoid deadlocks, it is recommended that the locks
 are acquired in the following order, and released in the reverse:
 
 	1. The symbolic link name, if any (/var/lock/LCK..modem)
@@ -2045,7 +2052,7 @@ port TTY, for which no alternate device would exist.
 
 Pseudoterminals, or PTYs, are used to create login sessions or provide
 other capabilities requiring a TTY line dicipline (including SLIP or
-PPP capability) to arbitrary data-generation processes.  Each PTY has
+PPP capability) to arbitrary data-generation processes.	 Each PTY has
 a master side, named /dev/pty[p-za-e][0-9a-f], and a slave side, named
 /dev/tty[p-za-e][0-9a-f].  The kernel arbitrates the use of PTYs by
 allowing each master side to be opened only once.

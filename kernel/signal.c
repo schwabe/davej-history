@@ -680,7 +680,8 @@ sys_rt_sigprocmask(int how, sigset_t *set, sigset_t *oset, size_t sigsetsize)
 			break;
 		}
 
-		current->blocked = new_set;
+		if (!error)
+		    current->blocked = new_set;
 		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 		if (error)

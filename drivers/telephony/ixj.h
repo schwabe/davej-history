@@ -29,7 +29,7 @@ static char ixj_h_rcsid[] = "$Id: ixj.h,v 3.4 1999/12/16 22:18:36 root Exp root 
 #include <asm/types.h>
 #endif
 
-#include "ixjuser.h"
+#include <linux/ixjuser.h>
 #include <linux/phonedev.h>
 
 typedef __u16 WORD;

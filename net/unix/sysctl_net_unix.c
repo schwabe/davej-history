@@ -30,7 +30,7 @@ ctl_table unix_table[] = {
 	 &proc_dointvec_jiffies},
 	{NET_UNIX_MAX_DGRAM_QLEN, "max_dgram_qlen",
 	&sysctl_unix_max_dgram_qlen, sizeof(int), 0600, NULL, 
-	 &proc_dointvec_jiffies},
+	 &proc_dointvec},
 	{0}
 };
 

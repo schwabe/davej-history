@@ -399,7 +399,7 @@ static void probe_cmos_for_drives (ide_hwif_t *hwif)
 				drive->present = 1;
 			} else
 				printk("hd%d: C/H/S=%d/%d/%d from BIOS ignored\n",
-				       cyl, head, sect);
+				       unit, cyl, head, sect);
 		}
 		BIOS += 16;
 	}

@@ -661,7 +661,7 @@ xlate_to_uni(const char *name, int len, char *outname, int *outlen,
 		op = outname;
 		if (nls) {
 			for (i = 0, ip = name, op = outname, *outlen = 0;
-			     i < len && *outlen <= 260; i++, *outlen += 1)
+			     i < len && *outlen <= 260; *outlen += 1)
 			{
 				if (escape && (*ip == ':')) {
 					if (i > len - 4) return -EINVAL;
@@ -673,10 +673,12 @@ xlate_to_uni(const char *name, int len, char *outname, int *outlen,
 					*op++ = (c1 << 4) + (c2 >> 2);
 					*op++ = ((c2 & 0x3) << 6) + c3;
 					ip += 4;
+					i += 4;
 				} else {
 					*op++ = nls->charset2uni[*ip].uni1;
 					*op++ = nls->charset2uni[*ip].uni2;
 					ip++;
+					i++;
 				}
 			}
 		} else {
