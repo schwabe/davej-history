@@ -17,6 +17,7 @@
 
 #include <asm/uaccess.h>
 
+
 int
 smb_ioctl(struct inode *inode, struct file *filp,
 	  unsigned int cmd, unsigned long arg)
@@ -34,24 +35,18 @@ smb_ioctl(struct inode *inode, struct file *filp,
 	{
 		struct smb_conn_opt opt;
 
-		if (arg)
-		{
-			result = -EFAULT;
-			if (!copy_from_user(&opt, (void *)arg, sizeof(opt)))
-				result = smb_newconn(server, &opt);
-		}
-		else
-		{
-#if 0
-			/* obsolete option ... print a warning */
-			printk("SMBFS: ioctl deprecated, please upgrade "
-				"smbfs package\n");
-#endif
-			result = 0;
-		}
+		/* require an argument == the mount data, else it is EINVAL */
+		if (!arg)
+			goto out;
+
+		result = -EFAULT;
+		if (!copy_from_user(&opt, (void *)arg, sizeof(opt)))
+			result = smb_newconn(server, &opt);
 		break;
 	}
 	default:
 	}
+
+out:
 	return result;
 }

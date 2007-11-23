@@ -23,6 +23,10 @@
 	This is a compatibility hardware problem.
 
 	Versions:
+	0.12b	added reset when the tx interrupt is called and TX isn't done
+		and other minor fixes. this may fix a problem found after
+		initialization that delays tx until a transmit timeout is 
+		reported and the board is reset.
 	0.12a	fixed bug that would make impossible have ee10 boards and
 		other previous supported boards. (aris, 05/19/2000)
 	0.12    added support to 82595FX etherexpress 10 based cards
@@ -97,7 +101,7 @@
 */
 
 static const char *version =
-	"eepro.c: v0.12b 04/26/2000 aris@conectiva.com.br\n";
+	"eepro.c: v0.12b 06/20/2000 aris@conectiva.com.br\n";
 
 #include <linux/module.h>
 
@@ -470,7 +474,7 @@ static unsigned eeprom_reg = EEPROM_REG_PRO;
 #define EEDO 0x08
 
 /* do a full reset */
-#define eepro_reset(ioaddr) outb(RESET_CMD, ioaddr)
+#define eepro_reset(ioaddr) outb(RESET_CMD, ioaddr); udelay(40);
 
 /* do a nice reset */
 #define eepro_sel_reset(ioaddr) 	{ \
@@ -531,8 +535,8 @@ static unsigned eeprom_reg = EEPROM_REG_PRO;
 							(XMT_LOWER_LIMIT << 8);\
 						lp->tx_start = lp->tx_end;\
 						lp->tx_last = 0;\
+						dev->tbusy=0;\
 						dev->trans_start = jiffies;\
-						netif_wake_queue(dev);\
 						eepro_en_int(ioaddr);\
 						eepro_en_rx(ioaddr);\
 					}
@@ -1078,10 +1082,6 @@ static int eepro_send_packet(struct sk_buff *skb, struct device *dev)
 		if (tickssofar < 40)
 			return 1;
 		
-		/* let's disable interrupts so we can avoid confusion on SMP
-		 */
-		eepro_dis_int(ioaddr);
-		
 		/* if (net_debug > 1) */
 		printk(KERN_ERR "%s: transmit timed out, %s?\n", dev->name, 
 			"network cable problem");
@@ -1089,25 +1089,9 @@ static int eepro_send_packet(struct sk_buff *skb, struct device *dev)
 		   one for the the log file  */
 		printk(KERN_DEBUG "%s: transmit timed out, %s?\n", dev->name,
 			"network cable problem");
-		lp->stats.tx_errors++;
-
-		/* Try to restart the adaptor. */
-		/* We are supposed to wait for 2 us after a SEL_RESET */
-		eepro_sel_reset(ioaddr);
-
-		/* Do I also need to flush the transmit buffers here? YES? */
-		lp->tx_start = lp->tx_end = (XMT_LOWER_LIMIT << 8); 
-		lp->tx_last = 0;
-	
-		dev->tbusy=0;
-		dev->trans_start = jiffies;
-
-
-		/* re-enabling all interrupts */
-		eepro_en_int(ioaddr);
-
-		/* enable rx */
-		eepro_en_rx(ioaddr);
+		
+		/* let's do a complete sel reset */
+		eepro_complete_selreset(ioaddr);
 	}
 	spin_lock_irqsave(&lp->lock, flags);
 
@@ -1393,8 +1377,7 @@ set_multicast_list(struct device *dev)
 		eepro_en_int(ioaddr);
 	
 	}
-	/* enabling rx */
-	eepro_en_rx(ioaddr);
+	eepro_complete_selreset(ioaddr);
 }
 
 /* The horrible routine to read a word from the serial EEPROM. */
@@ -1506,7 +1489,8 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 				last = (XMT_LOWER_LIMIT << 8);
 				end = last + (((length + 3) >> 1) << 1) + XMT_HEADER;
 			}
-			else end = (XMT_LOWER_LIMIT << 8) + (end - XMT_RAM);
+			else end = (XMT_LOWER_LIMIT << 8) + (end - 
+						(XMT_UPPER_LIMIT << 8));
 		}
 
 		outw(last, ioaddr + HOST_ADDRESS_REG);
@@ -1568,7 +1552,6 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 		return;
 	}
 
-	eepro_en_int(ioaddr);
 	dev->tbusy = 1;
 
 	if (net_debug > 5)

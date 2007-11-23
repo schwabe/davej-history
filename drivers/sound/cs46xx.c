@@ -1247,16 +1247,12 @@ static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 			if (file->f_mode & FMODE_WRITE) {
 				stop_dac(state);
 				dmabuf->ready = 0;
-				spin_lock_irqsave(&state->card->lock, flags);
 				cs_set_dac_rate(state, val);
-				spin_unlock_irqrestore(&state->card->lock, flags);
 			}
 			if (file->f_mode & FMODE_READ) {
 				stop_adc(state);
 				dmabuf->ready = 0;
-				spin_lock_irqsave(&state->card->lock, flags);
 				cs_set_adc_rate(state, val);
-				spin_unlock_irqrestore(&state->card->lock, flags);
 			}
 		}
 		return put_user(dmabuf->rate, (int *)arg);
@@ -1342,7 +1338,7 @@ static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		if (dmabuf->subdivision)
 			return -EINVAL;
 		get_user_ret(val, (int *)arg, -EFAULT);
-		if (val != 1 && val != 2 && val != 4)
+		if (val != 1 && val != 2)
 			return -EINVAL;
 		dmabuf->subdivision = val;
 		return 0;
@@ -1352,10 +1348,16 @@ static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 
 		dmabuf->ossfragshift = val & 0xffff;
 		dmabuf->ossmaxfrags = (val >> 16) & 0xffff;
-		/* Fragments must be 2K long */
-		dmabuf->ossfragshift = 9;
-		if (dmabuf->ossmaxfrags < 4)
-			dmabuf->ossmaxfrags = 4;
+		switch(dmabuf->ossmaxfrags)
+		{
+			case 1:
+				dmabuf->ossfragshift=12;
+				return 0;
+			default:
+				/* Fragments must be 2K long */
+				dmabuf->ossfragshift = 11;
+				dmabuf->ossmaxfrags=2;
+		}
 		return 0;
 
 	case SNDCTL_DSP_GETOSPACE:

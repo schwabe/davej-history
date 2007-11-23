@@ -118,8 +118,6 @@
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
-struct linux_mib net_statistics;
-
 extern int raw_get_info(char *, char **, off_t, int, int);
 extern int snmp_get_info(char *, char **, off_t, int, int);
 extern int netstat_get_info(char *, char **, off_t, int, int);

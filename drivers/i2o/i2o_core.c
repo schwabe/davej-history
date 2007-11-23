@@ -260,7 +260,7 @@ void i2o_core_reply(struct i2o_handler *h, struct i2o_controller *c,
 	{
 		if (msg[4] >> 24)
 		{
-			i2o_report_status(KERN_WARNING, "i2o_core: post_wait reply", msg);
+			i2o_report_status(KERN_INFO, "i2o_core: post_wait reply", msg);
 			status = -(msg[4] & 0xFFFF);
 		}
 		else
@@ -352,6 +352,9 @@ int i2o_install_device(struct i2o_controller *c, struct i2o_device *d)
 	d->controller=c;
 	d->owner=NULL;
 	d->next=c->devices;
+	d->prev=NULL;
+	if (c->devices != NULL)
+		c->devices->prev=d;
 	c->devices=d;
 	*d->dev_name = 0;
 
@@ -2981,7 +2984,6 @@ int init_module(void)
 void cleanup_module(void)
 {
 	 int stat;
-
 	 unregister_reboot_notifier(&i2o_reboot_notifier);
 
 	if(i2o_num_controllers)

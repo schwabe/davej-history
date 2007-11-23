@@ -1190,68 +1190,121 @@ static int i2ob_install_device(struct i2o_controller *c, struct i2o_device *d, i
 	return 0;
 }
 
-static void i2ob_probe(void)
+static int i2ob_scan(int bios)
 {
 	int i;
 	int unit = 0;
 	int warned = 0;
+	struct i2o_device *d, *b;
+	struct i2o_controller *c;
+	struct i2ob_device *dev;
 		
 	for(i=0; i< MAX_I2O_CONTROLLERS; i++)
 	{
-		struct i2o_controller *c=i2o_find_controller(i);
-		struct i2o_device *d;
-	
+		c=i2o_find_controller(i);
+
 		if(c==NULL)
 			continue;
 
-		for(d=c->devices;d!=NULL;d=d->next)
-		{
-		if(d->lct_data.class_id!=I2O_CLASS_RANDOM_BLOCK_STORAGE)
-				continue;
+		/* 
+		 * 	The device list connected to the I2O Controller is doubly linked
+		 *	Here we traverse the end of the list , and start claiming devices
+		 *	from that end. This assures that within an I2O controller atleast
+		 *	the newly created volumes get claimed after the older ones, thus
+		 *	mapping to same major/minor (and hence device file name) after 
+		 *	every reboot.
+		 *	The exception being: 
+		 *	1. If there was a TID reuse.
+		 *	2. There was more than one I2O controller. 
+		 */
 
+		if(!bios)
+		{
+			for (d=c->devices;d!=NULL;d=d->next)
+				if(d->next == NULL)
+					b = d;
+		}
+		else
+			b = c->devices;
+		
+		for (d=b;d!=NULL;d=d->next)
+		{
+			if(d->lct_data.class_id!=I2O_CLASS_RANDOM_BLOCK_STORAGE)
+				continue;
 			if(d->lct_data.user_tid != 0xFFF)
 				continue;
-
-			   if(i2o_claim_device(d, &i2o_block_handler))
-			   {
-				    printk(KERN_WARNING "i2o_block: Controller %d, TID %d\n", c->unit,
-					     d->lct_data.tid);
-				    printk(KERN_WARNING "\tDevice refused claim! Skipping installation\n");
-				    continue;
-			   }
-
-			if(unit<MAX_I2OB<<4)
+			if(bios)
 			{
- 				/*
-				 * Get the device and fill in the
-				 * Tid and controller.
-				 */
-				struct i2ob_device *dev=&i2ob_dev[unit];
-				dev->i2odev = d; 
-				dev->controller = c;
-				    dev->unit = c->unit;
-				dev->tid = d->lct_data.tid;
- 
-				    if(i2ob_install_device(c,d,unit))
-					     printk(KERN_WARNING "Could not install I2O block device\n");
-				    else
-				    {
-					     unit+=16;
-					     i2ob_dev_count++;
-
-					  /* We want to know when device goes away */
-					 i2o_device_notify_on(d, &i2o_block_handler);
-				    }
+				if(d->lct_data.bios_info != 0x80)
+					continue;
+				printk(KERN_INFO "Claiming as Boot device: Controller %d, TID %d\n", c->unit, d->lct_data.tid);
 			}
 			else
 			{
-			if(!warned++)
-				printk(KERN_WARNING "i2o_block: too many device, registering only %d.\n", unit>>4);
+				if(d->lct_data.bios_info == 0x80)
+					continue;	/* Already claimed on pass 1 */
 			}
-			   i2o_release_device(d, &i2o_block_handler);
+			if(i2o_claim_device(d, &i2o_block_handler))
+			{
+				printk(KERN_WARNING "i2o_block: Controller %d, TID %d\n", c->unit, d->lct_data.tid);
+				printk(KERN_WARNING "\t%sevice refused claim! Skipping installation\n",
+					bios?"Boot d":"D");
+				continue;
+			}
+			if(unit<MAX_I2OB<<4)
+			{
+				/*
+				 * Get the device and fill in the
+				 * Tid and controller.
+				 */
+				dev=&i2ob_dev[unit];
+				dev->i2odev = d;
+				dev->controller = c;
+				dev->unit = c->unit;
+				dev->tid = d->lct_data.tid;
+				if(i2ob_install_device(c,d,unit))
+					printk(KERN_WARNING "Could not install I2O block device\n");
+				else
+				{
+					unit+=16;
+					i2ob_dev_count++;
+					/* We want to know when device goes away */
+					i2o_device_notify_on(d, &i2o_block_handler);
+				}
+			}
+			else
+			{
+				if(!warned++)
+					printk(KERN_WARNING "i2o_block: too many device, registering only %d.\n", unit>>4);
+			}
+			i2o_release_device(d, &i2o_block_handler);
 		}
 		i2o_unlock_controller(c);
 	}
+}
+
+static void i2ob_probe(void)
+{
+	/* 
+	 *	Some overhead/redundancy involved here, while trying to
+	 *	claim the first boot volume encountered as /dev/i2o/hda
+	 *	everytime. All the i2o_controllers are searched and the
+	 *	first i2o block device marked as bootable is claimed
+	 *	If an I2O block device was booted off , the bios sets
+	 *	its bios_info field to 0x80, this what we search for.
+ 	 *	Assuming that the bootable volume is /dev/i2o/hda
+	 *	everytime will prevent any kernel panic while mounting
+	 *	root partition
+	 */ 
+
+	printk(KERN_INFO "i2o_block: Checking for Boot device...\n");
+	i2ob_scan(1);
+	
+	/*
+	 *	Now the remainder.
+	 */
+	 
+	i2ob_scan(0);
 }
 
 /*
@@ -1282,14 +1335,6 @@ void i2ob_new_device(struct i2o_controller *c, struct i2o_device *d)
 		  if(!i2ob_dev[unit].i2odev)
 			   break;
 	 }
-
-	 /*
-	  * Creating a RAID 5 volume takes a little while and the UTIL_CLAIM
-	  * will fail if we don't give the card enough time to do it's magic,
-	  * so we just sleep for a little while and let it do it's thing
-	  */
-	 current->state = TASK_INTERRUPTIBLE;
-	 schedule_timeout(5*HZ);
 
 	 if(i2o_claim_device(d, &i2o_block_handler))
 	 {

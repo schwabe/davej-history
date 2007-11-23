@@ -132,6 +132,8 @@
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
+struct linux_mib net_statistics;
+
 /* Run time adjustable parameters. */
 __u32 sysctl_wmem_max = SK_WMEM_MAX;
 __u32 sysctl_rmem_max = SK_RMEM_MAX;

@@ -15,7 +15,9 @@
 
 #define SMBFS_PARANOIA 1
 /* #define SMBFS_DEBUG_VERBOSE 1 */
-/* #define pr_debug printk */
+
+#include "smb_debug.h"
+
 #define SMBFS_MAX_AGE 5*HZ
 
 static ssize_t smb_dir_read(struct file *, char *, size_t, loff_t *);
@@ -83,10 +85,9 @@ smb_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct cache_head *cachep = NULL;
 	int result;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-	printk("smb_readdir: reading %s/%s, f_pos=%d\n",
-	       dentry->d_parent->d_name.name, dentry->d_name.name, (int) filp->f_pos);
-#endif
+	VERBOSE("smb_readdir: reading %s/%s, f_pos=%d\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		(int) filp->f_pos);
 
 	result = 0;
 	switch ((unsigned int) filp->f_pos)
@@ -174,11 +175,9 @@ smb_dir_open(struct inode *dir, struct file *file)
 	struct dentry *dentry = file->f_dentry;
 	struct smb_sb_info *server = server_from_dentry(dentry);
 	int error = 0;
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_dir_open: (%s/%s)\n", dentry->d_parent->d_name.name, 
-file->f_dentry->d_name.name);
-#endif
 
+	VERBOSE("smb_dir_open: (%s/%s)\n", dentry->d_parent->d_name.name, 
+		file->f_dentry->d_name.name);
 	if (server->conn_pid)
 		error = smb_revalidate_inode(dentry);
 	return error;
@@ -217,19 +216,19 @@ smb_lookup_validate(struct dentry * dentry, int flags)
 	 */
 	valid = (age <= SMBFS_MAX_AGE);
 #ifdef SMBFS_DEBUG_VERBOSE
-if (!valid)
-printk("smb_lookup_validate: %s/%s not valid, age=%lu\n", 
-dentry->d_parent->d_name.name, dentry->d_name.name, age);
+	if (!valid)
+		VERBOSE("smb_lookup_validate: %s/%s not valid, age=%lu\n", 
+			dentry->d_parent->d_name.name, dentry->d_name.name,
+			age);
 #endif
 
 	if (inode)
 	{
 		if (is_bad_inode(inode))
 		{
-#ifdef SMBFS_PARANOIA
-			printk(KERN_DEBUG "smb_lookup_validate: %s/%s has dud inode\n", 
-			       dentry->d_parent->d_name.name, dentry->d_name.name);
-#endif
+			PARANOIA("smb_lookup_validate: %s/%s has dud inode\n", 
+				 dentry->d_parent->d_name.name,
+				 dentry->d_name.name);
 			valid = 0;
 		} else if (!valid)
 			valid = (smb_revalidate_inode(dentry) == 0);
@@ -290,10 +289,9 @@ smb_delete_dentry(struct dentry * dentry)
 	{
 		if (is_bad_inode(dentry->d_inode))
 		{
-#ifdef SMBFS_PARANOIA
-			printk(KERN_DEBUG "smb_delete_dentry: bad inode, unhashing %s/%s\n", 
-			       dentry->d_parent->d_name.name, dentry->d_name.name);
-#endif
+			PARANOIA("smb_delete_dentry: bad inode, unhashing %s/%s\n", 
+				 dentry->d_parent->d_name.name,
+				 dentry->d_name.name);
 			d_drop(dentry);
 		}
 		smb_close_dentry(dentry);
@@ -334,8 +332,9 @@ smb_lookup(struct inode *dir, struct dentry *dentry)
 	error = smb_proc_getattr(dentry, &finfo);
 #ifdef SMBFS_PARANOIA
 	if (error && error != -ENOENT)
-		printk(KERN_DEBUG "smb_lookup: find %s/%s failed, error=%d\n",
-		       dentry->d_parent->d_name.name, dentry->d_name.name, error);
+		PARANOIA("smb_lookup: find %s/%s failed, error=%d\n",
+			 dentry->d_parent->d_name.name, dentry->d_name.name,
+			 error);
 #endif
 
 	inode = NULL;
@@ -370,10 +369,8 @@ smb_instantiate(struct dentry *dentry, __u16 fileid, int have_id)
 	int error;
 	struct smb_fattr fattr;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_instantiate: file %s/%s, fileid=%u\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, fileid);
-#endif
+	VERBOSE("smb_instantiate: file %s/%s, fileid=%u\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name, fileid);
 	error = smb_proc_getattr(dentry, &fattr);
 	if (error)
 		goto out_close;
@@ -399,10 +396,9 @@ out_no_inode:
 out_close:
 	if (have_id)
 	{
-#ifdef SMBFS_PARANOIA
-		printk(KERN_DEBUG "smb_instantiate: %s/%s failed, error=%d, closing %u\n",
-		       dentry->d_parent->d_name.name, dentry->d_name.name, error, fileid);
-#endif
+		PARANOIA("smb_instantiate: %s/%s failed, error=%d, closing %u\n",
+			 dentry->d_parent->d_name.name, dentry->d_name.name,
+			 error, fileid);
 		smb_close_fileid(dentry, fileid);
 	}
 	goto out;
@@ -415,10 +411,8 @@ smb_create(struct inode *dir, struct dentry *dentry, int mode)
 	__u16 fileid;
 	int error;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_create: creating %s/%s, mode=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, mode);
-#endif
+	VERBOSE("smb_create: creating %s/%s, mode=%d\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 
 	error = smb_proc_create(dentry, 0, CURRENT_TIME, &fileid);
 	if (!error)
@@ -426,10 +420,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 		error = smb_instantiate(dentry, fileid, 1);
 	} else
 	{
-#ifdef SMBFS_PARANOIA
-		printk(KERN_DEBUG "smb_create: %s/%s failed, error=%d\n",
-		       dentry->d_parent->d_name.name, dentry->d_name.name, error);
-#endif
+		PARANOIA("smb_create: %s/%s failed, error=%d\n",
+			 dentry->d_parent->d_name.name, dentry->d_name.name,
+			 error);
 	}
 	return error;
 }
@@ -509,10 +502,9 @@ smb_rename(struct inode *old_dir, struct dentry *old_dentry,
 		error = smb_proc_unlink(new_dentry);
 		if (error)
 		{
-#ifdef SMBFS_DEBUG_VERBOSE
-			printk(KERN_DEBUG "smb_rename: unlink %s/%s, error=%d\n",
-			       new_dentry->d_parent->d_name.name, new_dentry->d_name.name, error);
-#endif
+			VERBOSE("smb_rename: unlink %s/%s, error=%d\n",
+				new_dentry->d_parent->d_name.name,
+				new_dentry->d_name.name, error);
 			goto out;
 		}
 		/* FIXME */

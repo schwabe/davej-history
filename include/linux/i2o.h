@@ -91,6 +91,7 @@ struct i2o_device
 
 	struct i2o_controller *controller;	/* Controlling IOP */
 	struct i2o_device *next;	/* Chain */
+	struct i2o_device *prev;
 	char dev_name[8];		/* linux /dev name if available */
 };
 

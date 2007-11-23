@@ -24,7 +24,8 @@
 
 #define SMBFS_PARANOIA 1
 /* #define SMBFS_DEBUG_VERBOSE 1 */
-/* #define pr_debug printk */
+
+#include "smb_debug.h"
 
 static inline int
 min(int a, int b)
@@ -42,10 +43,8 @@ smb_unlock_page(struct page *page)
 static int
 smb_fsync(struct file *file, struct dentry * dentry)
 {
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_fsync: sync file %s/%s\n", 
-dentry->d_parent->d_name.name, dentry->d_name.name);
-#endif
+	VERBOSE("smb_fsync: sync file %s/%s\n", 
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 	return 0;
 }
 
@@ -63,17 +62,15 @@ smb_readpage_sync(struct dentry *dentry, struct page *page)
 
 	clear_bit(PG_error, &page->flags);
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_readpage_sync: file %s/%s, count=%d@%ld, rsize=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, count, offset, rsize);
-#endif
+	VERBOSE("smb_readpage_sync: file %s/%s, count=%d@%ld, rsize=%d\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name, count,
+		offset, rsize);
 	result = smb_open(dentry, SMB_O_RDONLY);
 	if (result < 0)
 	{
-#ifdef SMBFS_PARANOIA
-printk(KERN_DEBUG "smb_readpage_sync: %s/%s open failed, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, result);
-#endif
+		PARANOIA("smb_readpage_sync: %s/%s open failed, error=%d\n",
+			 dentry->d_parent->d_name.name, dentry->d_name.name,
+			 result);
 		goto io_error;
 	}
 
@@ -109,10 +106,10 @@ smb_readpage(struct file *file, struct page *page)
 	struct dentry *dentry = file->f_dentry;
 	int		error;
 
-	pr_debug("SMB: smb_readpage %08lx\n", page_address(page));
+	DEBUG1("SMB: smb_readpage %08lx\n", page_address(page));
 #ifdef SMBFS_PARANOIA
 	if (test_bit(PG_locked, &page->flags))
-		printk(KERN_DEBUG "smb_readpage: page already locked!\n");
+		DEBUG1("smb_readpage: page already locked!\n");
 #endif
 	set_bit(PG_locked, &page->flags);
 	atomic_inc(&page->count);
@@ -135,10 +132,9 @@ smb_writepage_sync(struct dentry *dentry, struct page *page,
 	int result, written = 0;
 
 	offset += page->offset;
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_writepage_sync: file %s/%s, count=%d@%ld, wsize=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, count, offset, wsize);
-#endif
+	VERBOSE("smb_writepage_sync: file %s/%s, count=%d@%ld, wsize=%d\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		count, offset, wsize);
 
 	do {
 		if (count < wsize)
@@ -149,8 +145,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name, count, offset, wsize);
 			break;
 		/* N.B. what if result < wsize?? */
 #ifdef SMBFS_PARANOIA
-if (result < wsize)
-printk(KERN_DEBUG "smb_writepage_sync: short write, wsize=%d, result=%d\n", wsize, result);
+		if (result < wsize)
+			printk(KERN_DEBUG "smb_writepage_sync: short write, wsize=%d, result=%d\n", wsize, result);
 #endif
 		buffer += wsize;
 		offset += wsize;
@@ -179,7 +175,7 @@ smb_writepage(struct file *file, struct page *page)
 
 #ifdef SMBFS_PARANOIA
 	if (test_bit(PG_locked, &page->flags))
-		printk(KERN_DEBUG "smb_writepage: page already locked!\n");
+		DEBUG1("smb_writepage: page already locked!\n");
 #endif
 	set_bit(PG_locked, &page->flags);
 	atomic_inc(&page->count);
@@ -194,9 +190,9 @@ smb_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 {
 	struct dentry *dentry = file->f_dentry;
 
-	pr_debug("SMBFS: smb_updatepage(%s/%s %d@%ld, sync=%d)\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name,
-	 	count, page->offset+offset, sync);
+	DEBUG1("SMBFS: smb_updatepage(%s/%s %d@%ld, sync=%d)\n",
+	       dentry->d_parent->d_name.name, dentry->d_name.name,
+	       count, page->offset+offset, sync);
 
 	return smb_writepage_sync(dentry, page, offset, count);
 }
@@ -207,27 +203,23 @@ smb_file_read(struct file * file, char * buf, size_t count, loff_t *ppos)
 	struct dentry * dentry = file->f_dentry;
 	ssize_t	status;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_file_read: file %s/%s, count=%lu@%lu\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-(unsigned long) count, (unsigned long) *ppos);
-#endif
+	VERBOSE("smb_file_read: file %s/%s, count=%lu@%lu\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		(unsigned long) count, (unsigned long) *ppos);
 
 	status = smb_revalidate_inode(dentry);
 	if (status)
 	{
-#ifdef SMBFS_PARANOIA
-printk(KERN_DEBUG "smb_file_read: %s/%s validation failed, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, status);
-#endif
+		PARANOIA("smb_file_read: %s/%s validation failed, error=%d\n",
+			 dentry->d_parent->d_name.name, dentry->d_name.name,
+			 status);
 		goto out;
 	}
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_file_read: before read, size=%ld, pages=%ld, flags=%x, atime=%ld\n",
-dentry->d_inode->i_size, dentry->d_inode->i_nrpages, dentry->d_inode->i_flags,
-dentry->d_inode->i_atime);
-#endif
+	VERBOSE("smb_file_read: before read, size=%ld, pages=%ld, flags=%x, atime=%ld\n",
+		dentry->d_inode->i_size, dentry->d_inode->i_nrpages,
+		dentry->d_inode->i_flags,
+		dentry->d_inode->i_atime);
 	status = generic_file_read(file, buf, count, ppos);
 out:
 	return status;
@@ -239,18 +231,16 @@ smb_file_mmap(struct file * file, struct vm_area_struct * vma)
 	struct dentry * dentry = file->f_dentry;
 	int	status;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_file_mmap: file %s/%s, address %lu - %lu\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, vma->vm_start, vma->vm_end);
-#endif
+	VERBOSE("smb_file_mmap: file %s/%s, address %lu - %lu\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		vma->vm_start, vma->vm_end);
 
 	status = smb_revalidate_inode(dentry);
 	if (status)
 	{
-#ifdef SMBFS_PARANOIA
-printk(KERN_DEBUG "smb_file_mmap: %s/%s validation failed, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, status);
-#endif
+		PARANOIA("smb_file_mmap: %s/%s validation failed, error=%d\n",
+			 dentry->d_parent->d_name.name, dentry->d_name.name,
+			 status);
 		goto out;
 	}
 	status = generic_file_mmap(file, vma);
@@ -267,19 +257,17 @@ smb_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	struct dentry * dentry = file->f_dentry;
 	ssize_t	result;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_file_write: file %s/%s, count=%lu@%lu, pages=%ld\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-(unsigned long) count, (unsigned long) *ppos, dentry->d_inode->i_nrpages);
-#endif
+	VERBOSE("smb_file_write: file %s/%s, count=%lu@%lu, pages=%ld\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		(unsigned long) count, (unsigned long) *ppos,
+		dentry->d_inode->i_nrpages);
 
 	result = smb_revalidate_inode(dentry);
 	if (result)
 	{
-#ifdef SMBFS_PARANOIA
-printk(KERN_DEBUG "smb_file_write: %s/%s validation failed, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, result);
-#endif
+		PARANOIA("smb_file_write: %s/%s validation failed, error=%d\n",
+			 dentry->d_parent->d_name.name, dentry->d_name.name,
+			 result);
 			goto out;
 	}
 
@@ -290,11 +278,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name, result);
 	if (count > 0)
 	{
 		result = generic_file_write(file, buf, count, ppos);
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_file_write: pos=%ld, size=%ld, mtime=%ld, atime=%ld\n",
-(long) file->f_pos, dentry->d_inode->i_size, dentry->d_inode->i_mtime,
-dentry->d_inode->i_atime);
-#endif
+		VERBOSE("smb_file_write: pos=%ld, size=%ld, mtime=%ld, atime=%ld\n",
+			(long) file->f_pos, dentry->d_inode->i_size,
+			dentry->d_inode->i_mtime, dentry->d_inode->i_atime);
 	}
 out:
 	return result;
@@ -303,11 +289,9 @@ out:
 static int
 smb_file_open(struct inode *inode, struct file * file)
 {
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_file_open: opening %s/%s, d_count=%d\n",
-file->f_dentry->d_parent->d_name.name, file->f_dentry->d_name.name,
-file->f_dentry->d_count);
-#endif
+	VERBOSE("smb_file_open: opening %s/%s, d_count=%d\n",
+		file->f_dentry->d_parent->d_name.name,
+		file->f_dentry->d_name.name, file->f_dentry->d_count);
 	return 0;
 }
 
@@ -316,10 +300,9 @@ smb_file_release(struct inode *inode, struct file * file)
 {
 	struct dentry * dentry = file->f_dentry;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_file_release: closing %s/%s, d_count=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
-#endif
+	VERBOSE("smb_file_release: closing %s/%s, d_count=%d\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name,
+		dentry->d_count);
 	
 	if (dentry->d_count == 1)
 	{
@@ -339,9 +322,8 @@ smb_file_permission(struct inode *inode, int mask)
 	int mode = inode->i_mode;
 	int error = 0;
 
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_file_permission: mode=%x, mask=%x\n", mode, mask);
-#endif
+	VERBOSE("smb_file_permission: mode=%x, mask=%x\n", mode, mask);
+
 	/* Look at user permissions */
 	mode >>= 6;
 	if ((mode & 7 & mask) != mask)

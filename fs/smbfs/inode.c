@@ -31,6 +31,8 @@
 #define SMBFS_PARANOIA 1
 /* #define SMBFS_DEBUG_VERBOSE 1 */
 
+#include "smb_debug.h"
+
 static void smb_read_inode(struct inode *);
 static void smb_put_inode(struct inode *);
 static void smb_delete_inode(struct inode *);
@@ -74,7 +76,7 @@ smb_iget(struct super_block *sb, struct smb_fattr *fattr)
 {
 	struct inode *result;
 
-	pr_debug("smb_iget: %p\n", fattr);
+	DEBUG1("smb_iget: %p\n", fattr);
 
 	result = get_empty_inode();
 	result->i_sb = sb;
@@ -155,7 +157,8 @@ static void
 smb_read_inode(struct inode *inode)
 {
 	/* Now it can be called only by NFS */
-	printk("smb_read_inode called from invalid point\n");
+	/* FIXME! what does that comment mean!? */
+	PARANOIA("smb_read_inode called from invalid point\n");
 	return;
 }
 
@@ -166,9 +169,7 @@ smb_read_inode(struct inode *inode)
 void
 smb_invalidate_inodes(struct smb_sb_info *server)
 {
-#ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_invalidate_inodes\n");
-#endif
+	VERBOSE("smb_invalidate_inodes\n");
 	shrink_dcache_sb(SB_of(server));
 	invalidate_inodes(SB_of(server));
 }
@@ -203,11 +204,11 @@ smb_refresh_inode(struct dentry *dentry)
 			 * To limit damage, mark the inode as bad so that
 			 * subsequent lookup validations will fail.
 			 */
-#ifdef SMBFS_PARANOIA
-printk(KERN_DEBUG "smb_refresh_inode: %s/%s changed mode, %07o to %07o\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-inode->i_mode, fattr.f_mode);
-#endif
+			PARANOIA("smb_refresh_inode: %s/%s changed mode, %07o to %07o\n",
+				 dentry->d_parent->d_name.name,
+				 dentry->d_name.name,
+				 inode->i_mode, fattr.f_mode);
+
 			fattr.f_mode = inode->i_mode; /* save mode */
 			make_bad_inode(inode);
 			inode->i_mode = fattr.f_mode; /* restore mode */
@@ -238,7 +239,8 @@ smb_revalidate_inode(struct dentry *dentry)
 	time_t last_time;
 	int error = 0;
 
-	pr_debug("smb_revalidate_inode\n");
+	DEBUG1("smb_revalidate_inode\n");
+
 	/*
 	 * If this is a file opened with write permissions,
 	 * the inode will be up-to-date.
@@ -254,10 +256,8 @@ smb_revalidate_inode(struct dentry *dentry)
 	 */
 	if (time_before(jiffies, inode->u.smbfs_i.oldmtime + HZ/10))
 	{
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_revalidate_inode: up-to-date, jiffies=%lu, oldtime=%lu\n",
-jiffies, inode->u.smbfs_i.oldmtime);
-#endif
+		VERBOSE("smb_revalidate_inode: up-to-date, jiffies=%lu, oldtime=%lu\n",
+			jiffies, inode->u.smbfs_i.oldmtime);
 		goto out;
 	}
 
@@ -269,11 +269,9 @@ jiffies, inode->u.smbfs_i.oldmtime);
 	error = smb_refresh_inode(dentry);
 	if (error || inode->i_mtime != last_time)
 	{
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_revalidate: %s/%s changed, old=%ld, new=%ld\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-(long) last_time, (long) inode->i_mtime);
-#endif
+		VERBOSE("smb_revalidate: %s/%s changed, old=%ld, new=%ld\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name,
+			(long) last_time, (long) inode->i_mtime);
 		if (!S_ISDIR(inode->i_mode))
 			invalidate_inode_pages(inode);
 	}
@@ -288,7 +286,7 @@ out:
 static void
 smb_put_inode(struct inode *ino)
 {
-	pr_debug("smb_put_inode: count = %d\n", ino->i_count);
+	DEBUG1("smb_put_inode: count = %d\n", ino->i_count);
 	if (ino->i_count == 1)
 		ino->i_nlink = 0;
 }
@@ -300,10 +298,10 @@ smb_put_inode(struct inode *ino)
 static void
 smb_delete_inode(struct inode *ino)
 {
-	pr_debug("smb_delete_inode\n");
+	DEBUG1("smb_delete_inode\n");
 	if (smb_close(ino))
-		printk(KERN_DEBUG "smb_delete_inode: could not close inode %ld\n",
-			ino->i_ino);
+		PARANOIA("smb_delete_inode: could not close inode %ld\n",
+			 ino->i_ino);
 	clear_inode(ino);
 }
 
@@ -461,11 +459,9 @@ smb_notify_change(struct dentry *dentry, struct iattr *attr)
 
 	if ((attr->ia_valid & ATTR_SIZE) != 0)
 	{
-#ifdef SMBFS_DEBUG_VERBOSE
-printk(KERN_DEBUG "smb_notify_change: changing %s/%s, old size=%ld, new size=%ld\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-(long) inode->i_size, (long) attr->ia_size);
-#endif
+		VERBOSE("smb_notify_change: changing %s/%s, old size=%ld, new size=%ld\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name,
+			(long) inode->i_size, (long) attr->ia_size);
 		error = smb_open(dentry, O_WRONLY);
 		if (error)
 			goto out;
@@ -517,10 +513,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 	 */
 	if ((attr->ia_valid & ATTR_MODE) != 0)
 	{
-#ifdef SMBFS_DEBUG_VERBOSE
-		printk(KERN_DEBUG "smb_notify_change: %s/%s mode change, old=%x, new=%lx\n",
-		       dentry->d_parent->d_name.name, dentry->d_name.name, fattr.f_mode,attr->ia_mode);
-#endif
+		VERBOSE("smb_notify_change: %s/%s mode change, old=%x, new=%lx\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name,
+			fattr.f_mode,attr->ia_mode);
 		changed = 0;
 		if (attr->ia_mode & S_IWUSR)
 		{
@@ -577,7 +572,7 @@ EXPORT_NO_SYMBOLS;
 int
 init_module(void)
 {
-	pr_debug("smbfs: init_module called\n");
+	DEBUG1("smbfs: init_module called\n");
 
 #ifdef DEBUG_SMB_MALLOC
 	smb_malloced = 0;
@@ -591,7 +586,7 @@ init_module(void)
 void
 cleanup_module(void)
 {
-	pr_debug("smbfs: cleanup_module called\n");
+	DEBUG1("smbfs: cleanup_module called\n");
 	unregister_filesystem(&smb_fs_type);
 #ifdef DEBUG_SMB_MALLOC
 	printk(KERN_DEBUG "smb_malloced: %d\n", smb_malloced);
