@@ -431,6 +431,7 @@ unsigned short	tmp;
 		pci_set_master(pdev);
 
 		base_address = pdev->base_address[0];
+		base_address &= PCI_BASE_ADDRESS_MEM_MASK;
 
 #ifdef __sparc_v9__
 		/* SPARC machines do not initialize the chache line size */

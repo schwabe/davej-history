@@ -30,6 +30,8 @@
  *   Pierrick Pinasseau (CERN): For lending me an Ultra 5 to test the
  *                              driver under Linux/Sparc64
  *   Matt Domsch <Matt_Domsch@dell.com>: Detect 1000baseT cards
+ *   Chip Salzenberg <chip@valinux.com>: Fix race condition between tx
+ *                                       handler and close() cleanup.
  */
 
 #include <linux/config.h>
@@ -389,7 +391,7 @@ static int tx_ratio[ACE_MAX_MOD_PARMS] = {0, };
 static int dis_pci_mem_inval[ACE_MAX_MOD_PARMS] = {1, 1, 1, 1, 1, 1, 1, 1};
 
 static const char __initdata *version = 
-  "acenic.c: v0.44 05/11/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
+  "acenic.c: v0.45 05/31/2000  Jes Sorensen, linux-acenic@SunSITE.auc.dk\n"
   "                            http://home.cern.ch/~jes/gige/acenic.html\n";
 
 static struct net_device *root_dev = NULL;
@@ -606,7 +608,6 @@ MODULE_PARM(tx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_tx_desc, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_rx_desc, "1-" __MODULE_STRING(8) "i");
-#endif
 
 
 void __exit ace_module_cleanup(void)
@@ -696,6 +697,7 @@ void __exit ace_module_cleanup(void)
 		root_dev = next;
 	}
 }
+#endif
 
 
 int __init ace_module_init(void)
@@ -1010,7 +1012,7 @@ static int __init ace_init(struct net_device *dev)
 	pci_read_config_byte(ap->pdev, PCI_CACHE_LINE_SIZE, &cache);
 	if ((cache << 2) != SMP_CACHE_BYTES) {
 		printk(KERN_INFO "  PCI cache line size set incorrectly "
-		       "(%i bytes) by BIOS/FW, corring to %i\n",
+		       "(%i bytes) by BIOS/FW, correcting to %i\n",
 		       (cache << 2), SMP_CACHE_BYTES);
 		pci_write_config_byte(ap->pdev, PCI_CACHE_LINE_SIZE,
 				      SMP_CACHE_BYTES >> 2);
@@ -1996,6 +1998,19 @@ static void ace_interrupt(int irq, void *dev_id, struct pt_regs *ptregs)
 			struct sk_buff *skb;
 
 			skb = ap->skb->tx_skbuff[idx].skb;
+			/*
+			 * Race condition between the code cleaning
+			 * the tx queue in the interrupt handler and the
+			 * interface close,
+			 *
+			 * This is a kludge that really should be fixed 
+			 * by preventing the driver from generating a tx
+			 * interrupt when the packet has already been
+			 * removed from the tx queue.
+			 *
+			 * Nailed by Don Dugger and Chip Salzenberg of
+			 * VA Linux.
+			 */
 			if (skb) {
 				dma_addr_t mapping;
 

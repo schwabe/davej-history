@@ -3,10 +3,9 @@
  *
  * Supports CPiA based parallel port Video Camera's.
  *
- * (C) 1999 Bas Huisman <bhuism@cs.utwente.nl>
- *          Scott J. Bertin <sbertin@mindspring.com>,
- *          Peter Pregler <Peter_Pregler@email.com>
- *          Johannes Erdfelt
+ * (C) Copyright 1999 Bas Huisman <bhuism@cs.utwente.nl>
+ * (C) Copyright 1999-2000 Scott J. Bertin <sbertin@mindspring.com>,
+ * (C) Copyright 1999-2000 Peter Pregler <Peter_Pregler@email.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +23,11 @@
  */
 
 #include <linux/config.h>
+#include <linux/version.h>
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0))
+#undef CONFIG_VIDEO_CPIA_PP_DMA
+#endif
 
 #include <linux/module.h>
 #include <linux/init.h>
@@ -32,6 +36,8 @@
 #include <linux/parport.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/smp_lock.h>
+
 #ifdef CONFIG_VIDEO_CPIA_PP_DMA
 #include <asm/dma.h>
 #endif
@@ -41,6 +47,7 @@
 #endif
 
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 /* If this is a module and parport_pc is not, some parport_pc_* functions
  * are not directly availbale.  parport.h messes this up.
  * This fixes what we need.
@@ -67,11 +74,12 @@
 #define parport_disable_irq(p) parport_pc_disable_irq(p)
 #endif				/* parport_enable_irq */
 #endif				/* !PARPORT_NEED_GENERIC_OPS */
+#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)) */
 
-#undef _CPIA_DEBUG_		/* define for verbose debug output */
-#include <linux/cpia.h>
+/* #define _CPIA_DEBUG_		define for verbose debug output */
+#include "cpia.h"
 
-static int cpia_pp_open(int camnr, void **privdata);
+static int cpia_pp_open(void *privdata);
 static int cpia_pp_registerCallback(void *privdata, void (*cb) (void *cbdata),
                                     void *cbdata);
 static int cpia_pp_transferCmd(void *privdata, u8 *command, u8 *data);
@@ -126,6 +134,8 @@ static int cpia_pp_close(void *privdata);
 #define ECP_FIFO_SIZE	16
 #define DMA_BUFFER_SIZE               PAGE_SIZE
 	/* for 16bit DMA make sure DMA_BUFFER_SIZE is 16 bit aligned */
+#define PARPORT_CHUNK_SIZE	PAGE_SIZE/* >=2.3.x */
+				/* we read this many bytes at once */
 
 #define GetECRMasked(port,mask)	(parport_read_econtrol(port) & (mask))
 #define GetStatus(port)		((parport_read_status(port)^STATUS_INVERSION_MASK)&(0xf8))
@@ -139,7 +149,6 @@ static int cpia_pp_close(void *privdata);
 #define ClearControlMasked(port,mask)	SetControl(port,GetControl(port)&~(mask));
 #define FrobControlBit(port,mask,value)	SetControl(port,(GetControl(port)&~(mask))|((value)&(mask)));
 
-#define PP_MAXCAMS	(PARPORT_MAX<CPIA_MAXCAMS?PARPORT_MAX:CPIA_MAXCAMS)
 #define PACKET_LENGTH 	8
 
 /* Magic numbers for defining port-device mappings */
@@ -149,18 +158,20 @@ static int cpia_pp_close(void *privdata);
 #define PPCPIA_PARPORT_NONE -1
 
 #ifdef MODULE
-static int parport_nr[PP_MAXCAMS] = {[0 ... PP_MAXCAMS - 1] = PPCPIA_PARPORT_UNSPEC};
-static char *parport[PP_MAXCAMS] = {NULL,};
+static int parport_nr[PARPORT_MAX] = {[0 ... PARPORT_MAX - 1] = PPCPIA_PARPORT_UNSPEC};
+static char *parport[PARPORT_MAX] = {NULL,};
 
+MODULE_AUTHOR("B. Huisman <bhuism@cs.utwente.nl> & Peter Pregler <Peter_Pregler@email.com>");
 MODULE_DESCRIPTION("Parallel port driver for Vision CPiA based cameras");
-MODULE_PARM(parport, "1-" __MODULE_STRING(PP_MAXCAMS) "s");
+MODULE_PARM(parport, "1-" __MODULE_STRING(PARPORT_MAX) "s");
 MODULE_PARM_DESC(parport, "'auto' or a list of parallel port numbers. Just like lp.");
 #else
-static int parport_nr[PP_MAXCAMS] __initdata =
-	{[0 ... PP_MAXCAMS - 1] = PPCPIA_PARPORT_UNSPEC};
+static int parport_nr[PARPORT_MAX] __initdata =
+	{[0 ... PARPORT_MAX - 1] = PPCPIA_PARPORT_UNSPEC};
 static int parport_ptr = 0;
 #endif
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 enum comstates { CPIA_FORWARD, CPIA_REVERSE };	//fixme
 enum camstates {
 	CPIA_PHASE_idle = 0,
@@ -187,16 +198,22 @@ static char camstatesstr[12][40] =
 	"CPIA_PHASE_secpwrite",
 };
 #endif
+#endif
+
 struct pp_cam_entry {
 	struct pardevice *pdev;
 	struct parport *port;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	enum comstates state;
 	enum camstates camstate;
+#endif
 	struct tq_struct cb_task;
 	int open_count;
-	int camnr;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	struct wait_queue *wq_stream;
-	
+#else
+	wait_queue_head_t wq_stream;
+#endif	
 	/* image state flags */
 	int image_ready;	/* we got an interrupt */
 	int image_complete;	/* we have seen 4 EOI */
@@ -220,8 +237,6 @@ struct pp_cam_entry {
 #endif
 };
 
-static struct pp_cam_entry *camera[PP_MAXCAMS] = {[0 ... PP_MAXCAMS - 1] = NULL};
-
 static struct cpia_camera_ops cpia_pp_ops = 
 {
 	cpia_pp_open,
@@ -230,8 +245,11 @@ static struct cpia_camera_ops cpia_pp_ops =
 	cpia_pp_streamStart,
 	cpia_pp_streamStop,
 	cpia_pp_streamRead,
-	cpia_pp_close
+	cpia_pp_close,
+	1
 };
+
+static struct cam_data *cam_list;
 
 #ifdef _CPIA_DEBUG_
 #define DEB_PORT(port) { \
@@ -258,17 +276,18 @@ DBG("nsel %c per %c naut %c nstrob %c nak %c busy %c nfaul %c sel %c init %c dir
 
 /* FIXME */
 static void cpia_parport_enable_irq( struct parport *port ) {
-  parport_enable_irq(port);
-  mdelay(10);
-  return;
+	parport_enable_irq(port);
+	mdelay(10);
+	return;
 }
 
 static void cpia_parport_disable_irq( struct parport *port ) {
-  parport_disable_irq(port);
-  mdelay(10);
-  return;
+	parport_disable_irq(port);
+	mdelay(10);
+	return;
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 static int while_out(struct pp_cam_entry *cam)
 {
 	struct parport *port = cam->port;
@@ -709,7 +728,7 @@ int ECPReadBuffer_DMA(struct pp_cam_entry *cam, u8 *buf, int bytes)
 	release_dma_lock(flags);
 	return cam->readbytes;
 }
-#endif
+#endif /* CONFIG_VIDEO_CPIA_PP_DMA */
 
 /****************************************************************************
  *
@@ -779,6 +798,7 @@ static int SimECPWriteBuffer(struct pp_cam_entry *cam, const u8 *buf, int size)
 
 	return written;
 }
+#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)) */
 
 /****************************************************************************
  *
@@ -787,10 +807,13 @@ static int SimECPWriteBuffer(struct pp_cam_entry *cam, const u8 *buf, int size)
  ***************************************************************************/
 static void EndTransferMode(struct pp_cam_entry *cam)
 {
-	if (!cam) return;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	if (cam->state == CPIA_REVERSE)  Reverse2Forward(cam);
 	Valid1284Termination(cam);
 	if(cam->stream_irq) cpia_parport_enable_irq(cam->port);
+#else
+	parport_negotiate(cam->port, IEEE1284_MODE_COMPAT);
+#endif
 }
 
 /****************************************************************************
@@ -800,6 +823,7 @@ static void EndTransferMode(struct pp_cam_entry *cam)
  ***************************************************************************/
 static int ForwardSetup(struct pp_cam_entry *cam)
 {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	if(cam->stream_irq) cpia_parport_disable_irq(cam->port);
 	if (!Negotiate2SetupPhase(cam, 0)) {
 		if (!ECPSetupPhase(cam)) {
@@ -812,6 +836,22 @@ static int ForwardSetup(struct pp_cam_entry *cam)
 	}
 	EndTransferMode(cam);
 	return -1;
+#else
+	int retry;
+	
+	/* After some commands the camera needs extra time before
+	 * it will respond again, so we try up to 3 times */
+	for(retry=0; retry<3; ++retry) {
+		if(!parport_negotiate(cam->port, IEEE1284_MODE_ECP)) {
+			break;
+		}
+	}
+	if(retry == 3) {
+		DBG("Unable to negotiate ECP mode\n");
+		return -1;
+	}
+	return 0;
+#endif
 }
 
 /****************************************************************************
@@ -821,6 +861,7 @@ static int ForwardSetup(struct pp_cam_entry *cam)
  ***************************************************************************/
 static int ReverseSetup(struct pp_cam_entry *cam, int extensibility)
 {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	if(cam->stream_irq) cpia_parport_disable_irq(cam->port);
 	if (!Negotiate2SetupPhase(cam, extensibility)) {
 		if (!ECPSetupPhase(cam)) {
@@ -837,6 +878,28 @@ static int ReverseSetup(struct pp_cam_entry *cam, int extensibility)
 	}
 	EndTransferMode(cam);
 	return -1;
+#else
+	int retry;
+	int mode = IEEE1284_MODE_ECP;
+	if(extensibility) mode = 8|3|IEEE1284_EXT_LINK;
+
+	/* After some commands the camera needs extra time before
+	 * it will respond again, so we try up to 3 times */
+	for(retry=0; retry<3; ++retry) {
+		if(!parport_negotiate(cam->port, mode)) {
+			break;
+		}
+	}
+	if(retry == 3) {
+		if(extensibility)
+			DBG("Unable to negotiate extensibility mode\n");
+		else
+			DBG("Unable to negotiate ECP mode\n");
+		return -1;
+	}
+	if(extensibility) cam->port->ieee1284.mode = IEEE1284_MODE_ECP;
+	return 0;
+#endif
 }
 
 #ifdef CONFIG_VIDEO_CPIA_PP_DMA
@@ -967,7 +1030,7 @@ static void dma_handler(void *handle)
         }
 	return;
 }
-#endif
+#endif /* CONFIG_VIDEO_CPIA_PP_DMA */
 
 /****************************************************************************
  *
@@ -975,6 +1038,7 @@ static void dma_handler(void *handle)
  *
  ***************************************************************************/
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 static void cpia_pp_irq_handler(int irq, void *handle, struct pt_regs *b)
 {
 	struct pp_cam_entry *cam = handle;
@@ -992,7 +1056,7 @@ static void cpia_pp_irq_handler(int irq, void *handle, struct pt_regs *b)
 		}
 		return;
 	}
-#endif
+#endif /* CONFIG_VIDEO_CPIA_PP_DMA */
 	if (cam->camstate == CPIA_PHASE_ecpread) return;
 	if( cam->camstate != CPIA_PHASE_idle )
 		DBG("got IRQ(%d) when in %s\n",
@@ -1012,6 +1076,7 @@ static void cpia_pp_irq_handler(int irq, void *handle, struct pt_regs *b)
         }
 	return;
 }
+#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)) */
 
 /****************************************************************************
  *
@@ -1021,15 +1086,27 @@ static void cpia_pp_irq_handler(int irq, void *handle, struct pt_regs *b)
 static int WritePacket(struct pp_cam_entry *cam, const u8 *packet, size_t size)
 {
 	int retval=0;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0))
+	int size_written;
+#endif
 	if (packet == NULL) {
 		return -EINVAL;
 	}
 	if (ForwardSetup(cam)) {
+		DBG("Write failed in setup\n");
 		return -EIO;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	if (SimECPWriteBuffer(cam, packet, size) != size) {
 		retval = -EIO;
 	}
+#else
+	size_written = parport_write(cam->port, packet, size);
+	if(size_written != size) {
+		DBG("Write failed, wrote %d/%d\n", size_written, size);
+		retval = -EIO;
+	}
+#endif
 	EndTransferMode(cam);
 	return retval;
 }
@@ -1048,9 +1125,15 @@ static int ReadPacket(struct pp_cam_entry *cam, u8 *packet, size_t size)
 	if (ReverseSetup(cam, 0)) {
 		return -EIO;
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	if (SimECPReadBuffer(cam, packet, size) != size) {
 		retval = -EIO;
 	}
+#else
+	if(parport_read(cam->port, packet, size) != size) {
+		retval = -EIO;
+	}
+#endif
 	EndTransferMode(cam);
 	return retval;
 }
@@ -1068,7 +1151,6 @@ static int cpia_pp_streamStart(void *privdata)
 	cam->image_ready=0;
 	//if (ReverseSetup(cam,1)) return -EIO;
 	if(cam->stream_irq) cpia_parport_enable_irq(cam->port);
-
 	return 0;
 }
 
@@ -1089,6 +1171,20 @@ static int cpia_pp_streamStop(void *privdata)
 	return 0;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0))
+static int cpia_pp_read(struct parport *port, u8 *buffer, int len)
+{
+	int bytes_read, new_bytes;
+	for(bytes_read=0; bytes_read<len; bytes_read += new_bytes) {
+		new_bytes = parport_read(port, buffer+bytes_read,
+			                 len-bytes_read);
+		if(new_bytes < 0) break;
+	}
+	return bytes_read;
+}
+
+#endif
+
 /****************************************************************************
  *
  *  cpia_pp_streamRead
@@ -1098,6 +1194,10 @@ static int cpia_pp_streamRead(void *privdata, u8 *buffer, int noblock)
 {
 	struct pp_cam_entry *cam = privdata;
 	int read_bytes = 0;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0))
+	int i, endseen, block_size, new_bytes;
+#endif
+
 	if(cam == NULL) {
 		DBG("Internal driver error: cam is NULL\n");
 		return -EINVAL;
@@ -1120,8 +1220,12 @@ static int cpia_pp_streamRead(void *privdata, u8 *buffer, int noblock)
 			DBG("%d\n", cam->image_ready);
 		}
 	} else {
-		if (ReverseSetup(cam, 1)) return -EIO;
+		if (ReverseSetup(cam, 1)) {
+			DBG("unable to ReverseSetup\n");
+			return -EIO;
+		}
 	}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	read_bytes = ECPReadBuffer(cam, buffer, CPIA_MAX_IMAGE_SIZE);
 	if( 1/*!cam->streaming*/) {
 		EndTransferMode(cam);
@@ -1131,6 +1235,36 @@ static int cpia_pp_streamRead(void *privdata, u8 *buffer, int noblock)
 			DBG("incomplete image: %ld / %d / %d\n",
 			    jiffies, cam->image_complete, read_bytes);
 	}
+#else /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)) */
+	endseen = 0;
+	block_size = PARPORT_CHUNK_SIZE;
+	while( !cam->image_complete ) {
+		if(current->need_resched)  schedule();
+		
+		new_bytes = cpia_pp_read(cam->port, buffer, block_size );
+		if( new_bytes <= 0 ) {
+			break;
+		}
+		i=-1;
+		while(++i<new_bytes && endseen<4) {
+	        	if(*buffer==EOI) {
+	                	endseen++;
+	                } else {
+	                	endseen=0;
+	                }
+			buffer++;
+		}
+		read_bytes += i;
+		if( endseen==4 ) {
+			cam->image_complete=1;
+			break;
+		}
+		if( CPIA_MAX_IMAGE_SIZE-read_bytes <= PARPORT_CHUNK_SIZE ) {
+			block_size=CPIA_MAX_IMAGE_SIZE-read_bytes;
+		}
+	}
+	EndTransferMode(cam);
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)) */
 	return cam->image_complete ? read_bytes : -EIO;
 }
 
@@ -1145,6 +1279,7 @@ static int cpia_pp_transferCmd(void *privdata, u8 *command, u8 *data)
 	int retval=0;
 	int databytes;
 	struct pp_cam_entry *cam = privdata;
+
 	if(cam == NULL) {
 		DBG("Internal driver error: cam is NULL\n");
 		return -EINVAL;
@@ -1155,6 +1290,7 @@ static int cpia_pp_transferCmd(void *privdata, u8 *command, u8 *data)
 	}
 	databytes = (((int)command[7])<<8) | command[6];
 	if ((err = WritePacket(cam, command, PACKET_LENGTH)) < 0) {
+		DBG("Error writing command\n");
 		return err;
 	}
 	if(command[0] == DATA_IN) {
@@ -1163,9 +1299,9 @@ static int cpia_pp_transferCmd(void *privdata, u8 *command, u8 *data)
 			DBG("Internal driver error: data is NULL\n");
 			return -EINVAL;
 		}
-		err = ReadPacket(cam, buffer, 8);
-		if(err < 0) {
+		if((err = ReadPacket(cam, buffer, 8)) < 0) {
 			return err;
+			DBG("Error reading command result\n");
 		}
 		memcpy(data, buffer, databytes);
 	} else if(command[0] == DATA_OUT) {
@@ -1174,7 +1310,10 @@ static int cpia_pp_transferCmd(void *privdata, u8 *command, u8 *data)
 				DBG("Internal driver error: data is NULL\n");
 				retval = -EINVAL;
 			} else {
-				WritePacket(cam, data, databytes);
+				if((err=WritePacket(cam, data, databytes)) < 0){
+					DBG("Error writing command data\n");
+					return err;
+				}
 			}
 		}
 	} else {
@@ -1189,29 +1328,19 @@ static int cpia_pp_transferCmd(void *privdata, u8 *command, u8 *data)
  *  cpia_pp_open
  *
  ***************************************************************************/
-static int cpia_pp_open(int camnr, void **privdata)
+static int cpia_pp_open(void *privdata)
 {
-	struct pp_cam_entry *cam=NULL;
-	int i;
-	for(i=0; i<PP_MAXCAMS; ++i) {
-		cam=camera[i];
-		if(cam == NULL) {
-			DBG("Trying to open non-existent camera[%d]\n", camnr);
-			return -ENXIO;
-		}
-		if(cam->camnr == camnr) {
-			DBG("Found camera[%d]\n", camnr);
-			break;
-		}
-	}
+	struct pp_cam_entry *cam = (struct pp_cam_entry *)privdata;
 	
-	*privdata = cam;
+	if (cam == NULL)
+		return -EINVAL;
 	
 	if(cam->open_count == 0) {
 		if (parport_claim(cam->pdev)) {
 			DBG("failed to claim the port\n");
 			return -EBUSY;
 		}
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 		parport_write_econtrol(cam->port, PARPORT_MODE_PCECR);
 		parport_frob_econtrol(cam->port,
 		                      ECR_serviceIntr|ECR_dmaEn|ECR_nErrIntrEn,
@@ -1222,6 +1351,15 @@ static int cpia_pp_open(int camnr, void **privdata)
 #endif
 		cam->stream_irq=0;
 		cpia_parport_disable_irq(cam->port);
+#else
+		parport_negotiate(cam->port, IEEE1284_MODE_COMPAT);
+		parport_data_forward(cam->port);
+		parport_write_control(cam->port, PARPORT_CONTROL_SELECT);
+		udelay(50);
+		parport_write_control(cam->port,
+		                      PARPORT_CONTROL_SELECT
+		                      | PARPORT_CONTROL_INIT);
+#endif
 	}
 	
 	++cam->open_count;
@@ -1266,6 +1404,7 @@ static int cpia_pp_close(void *privdata)
 	MOD_DEC_USE_COUNT;
 #endif
 	if (--cam->open_count == 0) {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 		if (cam->port->irq != PARPORT_IRQ_NONE) {
 			cpia_parport_disable_irq(cam->port);
 		}
@@ -1278,11 +1417,12 @@ static int cpia_pp_close(void *privdata)
 			interruptible_sleep_on(&cam->wq_dma);
 		}
 		restore_flags(flags);
-#endif
+#endif /* CONFIG_VIDEO_CPIA_PP_DMA */
 		if (waitqueue_active(&cam->wq_stream)) { /* FIXME */
 			wake_up(&cam->wq_stream);
 		}
 		
+#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)) */
 		parport_release(cam->pdev);
 	}
 	return 0;
@@ -1293,47 +1433,55 @@ static int cpia_pp_close(void *privdata)
  *  cpia_pp_register
  *
  ***************************************************************************/
-static int cpia_pp_register(int nr, struct parport *port)
+static int cpia_pp_register(struct parport *port)
 {
 	struct pardevice *pdev = NULL;
-	int camnr;
+	struct pp_cam_entry *cam;
+	struct cam_data *cpia;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	if (!(port->modes & PARPORT_MODE_PCECP)) {
+#else
+	if (!(port->modes & PARPORT_MODE_ECP) &&
+	    !(port->modes & PARPORT_MODE_TRISTATE)) {
+#endif
 		LOG("port is not ECP capable\n");
 		return -ENXIO;
 	}
 
-	if((camnr = cpia_register_camera(&cpia_pp_ops)) < 0) {
-		LOG("failed to cpia_register_camera\n");
-		return -ENXIO;
-	}
-	camera[nr] = kmalloc(sizeof(struct pp_cam_entry), GFP_KERNEL);
-	if (camera[nr] == NULL) {
+	cam = kmalloc(sizeof(struct pp_cam_entry), GFP_KERNEL);
+	if (cam == NULL) {
 		LOG("failed to allocate camera structure\n");
-		cpia_unregister_camera(camnr);
 		return -ENOMEM;
 	}
-	memset(camera[nr],0,sizeof(struct pp_cam_entry));
+	memset(cam,0,sizeof(struct pp_cam_entry));
 	
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	pdev = parport_register_device(port, "cpia_pp", NULL, NULL,
-	                               cpia_pp_irq_handler, 0, camera[nr]);
+	                               cpia_pp_irq_handler, 0, cam);
+#else
+	pdev = parport_register_device(port, "cpia_pp", NULL, NULL,
+	                               NULL, 0, cam);
+#endif
 
 	if (!pdev) {
 		LOG("failed to parport_register_device\n");
-		cpia_unregister_camera(camnr);
-		kfree(camera[nr]);
+		kfree(cam);
 		return -ENXIO;
 	}
 
-	camera[nr]->pdev = pdev;
-	camera[nr]->port = port;
-	camera[nr]->state = CPIA_FORWARD;
-	camera[nr]->camstate = CPIA_PHASE_idle;
-	camera[nr]->camnr = camnr;
-	init_waitqueue(&camera[nr]->wq_stream);
+	cam->pdev = pdev;
+	cam->port = port;
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
+	cam->state = CPIA_FORWARD;
+	cam->camstate = CPIA_PHASE_idle;
+	init_waitqueue(&cam->wq_stream);
+#else
+	init_waitqueue_head(&cam->wq_stream);
+#endif
 
-	camera[nr]->streaming = 0;
-	camera[nr]->stream_irq = 0;
+	cam->streaming = 0;
+	cam->stream_irq = 0;
 
 #ifdef CONFIG_VIDEO_CPIA_PP_DMA
 	if (pdev->port->irq != PARPORT_IRQ_NONE &&
@@ -1341,66 +1489,151 @@ static int cpia_pp_register(int nr, struct parport *port)
 		if(request_dma(pdev->port->dma, "cpia_pp")) {
 			LOG("failed to register dma %d\n", pdev->port->dma);
 			parport_unregister_device(pdev);
-			cpia_unregister_camera(camnr);
-			kfree(camera[nr]);
+			kfree(cam);
 			return -ENXIO;
 		}
-		camera[nr]->dma_buf=kmalloc(DMA_BUFFER_SIZE, GFP_DMA);
-		if(camera[nr]->dma_buf == NULL) {
-			free_dma(camera[nr]->pdev->port->dma);
-			LOG("failed to allocate dma buffer, using FIFO mode\n");
+		cam->dma_buf=kmalloc(DMA_BUFFER_SIZE, GFP_DMA);
+		if(cam->dma_buf == NULL) {
+			free_dma(cam->pdev->port->dma);
+			LOG("failed to allocate dma buffer, using PIO mode\n");
 		} else {
-			init_waitqueue(&camera[nr]->wq_dma);
+			init_waitqueue(&cam->wq_dma);
 			printk(KERN_INFO "  using DMA mode (irq %d, DMA %d)\n", pdev->port->irq, pdev->port->dma);
 		}
-		memset(camera[nr]->dma_buf, 0, DMA_BUFFER_SIZE);
+		memset(cam->dma_buf, 0, DMA_BUFFER_SIZE);
 	} else {
 		printk(KERN_INFO "  using PIO mode\n");
 	}
 #endif
 
+	if((cpia = cpia_register_camera(&cpia_pp_ops, cam)) == NULL) {
+		LOG("failed to cpia_register_camera\n");
+#ifdef CONFIG_VIDEO_CPIA_PP_DMA
+		if (cam->dma_buf) {
+			free_dma(cam->pdev->port->dma);
+			kfree(cam->dma_buf);
+		}
+#endif
+		parport_unregister_device(pdev);
+		kfree(cam);
+		return -ENXIO;
+	}
+	ADD_TO_LIST(cam_list, cpia);
+
 	return 0;
 }
 
+static void cpia_pp_detach (struct parport *port)
+{
+	struct cam_data *cpia;
+
+	for(cpia = cam_list; cpia != NULL; cpia = cpia->next) {
+		struct pp_cam_entry *cam = cpia->lowlevel_data;
+		if (cam && cam->port->number == port->number) {
+			REMOVE_FROM_LIST(cpia);
+			
+#ifdef CONFIG_VIDEO_CPIA_PP_DMA
+	                if (cam->dma_buf) {
+	                        free_dma(cam->pdev->port->dma);
+        	                kfree(cam->dma_buf);
+                	}
+#endif
+
+			cpia_unregister_camera(cpia);
+			
+			if(cam->open_count > 0) {
+				cpia_pp_close(cam);
+			}
+
+			parport_unregister_device(cam->pdev);
+		
+			kfree(cam);
+			cpia->lowlevel_data = NULL;
+			break;
+		}
+	}
+}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0))
+static void cpia_pp_attach (struct parport *port)
+{
+	unsigned int i;
+
+	switch (parport_nr[0])
+	{
+	case PPCPIA_PARPORT_UNSPEC:
+	case PPCPIA_PARPORT_AUTO:
+		if (port->probe_info[0].class != PARPORT_CLASS_MEDIA ||
+		    port->probe_info[0].cmdset == NULL ||
+		    strncmp(port->probe_info[0].cmdset, "CPIA_1", 6) != 0)
+			return;
+
+		cpia_pp_register(port);
+
+		break;
+
+	default:
+		for (i = 0; i < PARPORT_MAX; ++i) {
+			if (port->number == parport_nr[i]) {
+				cpia_pp_register(port);
+				break;
+			}
+		}
+		break;
+	}
+}
+
+static struct parport_driver cpia_pp_driver = {
+	"cpia_pp",
+	cpia_pp_attach,
+	cpia_pp_detach,
+	NULL
+};
+#endif
+
 int cpia_pp_init(void)
 {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 	struct parport *port;
 	int i, count = 0;
+#endif
 
 	printk(KERN_INFO "%s v%d.%d.%d\n",ABOUT, 
 	       CPIA_PP_MAJ_VER,CPIA_PP_MIN_VER,CPIA_PP_PATCH_VER);
 
-	switch (parport_nr[0]) {
-	case PPCPIA_PARPORT_OFF:
+	if(parport_nr[0] == PPCPIA_PARPORT_OFF) {
 		printk("  disabled\n");
 		return 0;
-
+	}
+	
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
+	switch (parport_nr[0]) {
 	case PPCPIA_PARPORT_UNSPEC:
 	case PPCPIA_PARPORT_AUTO:
 		for (port = parport_enumerate(); port; port = port->next) {
 
 #if defined(CONFIG_PNP_PARPORT) || \
     (defined(MODULE) && defined(CONFIG_PNP_PARPORT_MODULE))
-			if (port->probe_info.class != PARPORT_CLASS_MEDIA ||
-			    port->probe_info.cmdset == NULL ||
-			    strncmp(port->probe_info.cmdset, "CPIA_1", 6) != 0){
-				continue;
+			if(port->probe_info.model) {
+				if (port->probe_info.class != PARPORT_CLASS_MEDIA ||
+				    port->probe_info.cmdset == NULL ||
+				    strncmp(port->probe_info.cmdset, "CPIA_1", 6) != 0){
+					continue;
+				}
 			}
 #endif
-
-			if (cpia_pp_register(count, port) == 0 &&
-			    ++count == PP_MAXCAMS) {
-				break;
+			if (!cpia_pp_register(port)) {
+				++count;
 			}
 		}
 		break;
 
 	default:
-		for (i = 0; i < PP_MAXCAMS; i++) {
+		for (i = 0; i < PARPORT_MAX; i++) {
 			for (port = parport_enumerate(); port;
 			     port = port->next) {
 				if (port->number == parport_nr[i]) {
-					if (!cpia_pp_register(i, port)) {
+					if (!cpia_pp_register(port)) {
 						count++;
 					}
 					break;
@@ -1414,6 +1647,13 @@ int cpia_pp_init(void)
 	if (count == 0) {
 		return -ENODEV;
 	}
+#else /* kernel version >= 2.3.0 */
+	if (parport_register_driver (&cpia_pp_driver)) {
+		LOG ("unable to register with parport\n");
+		return -EIO;
+	}
+#endif /* kernel version >= 2.3.0 */
+
 	return 0;
 }
 
@@ -1426,7 +1666,7 @@ int init_module(void)
 			parport_nr[0] = PPCPIA_PARPORT_AUTO;
 		} else {
 			int n;
-			for (n = 0; n < PP_MAXCAMS && parport[n]; n++) {
+			for (n = 0; n < PARPORT_MAX && parport[n]; n++) {
 				if (!strncmp(parport[n], "none", 4)) {
 					parport_nr[n] = PPCPIA_PARPORT_NONE;
 				} else {
@@ -1443,31 +1683,23 @@ int init_module(void)
 		}
 	}
 #if defined(CONFIG_KMOD) && defined(CONFIG_PNP_PARPORT_MODULE)
-	request_module("parport_probe");
+	if(parport_enumerate() && !parport_enumerate()->probe_info.model) {
+		request_module("parport_probe");
+	}
 #endif
 	return cpia_pp_init();
 }
 
 void cleanup_module(void)
 {
-	int i;
-	for (i = 0; camera[i] != NULL && i < PP_MAXCAMS; i++) {
-		while(camera[i]->open_count > 0) {
-			LOG("You forgot to close camera %d, will do it for you\n", camera[i]->camnr);
-			cpia_pp_close(camera[i]);
-		}
-		
-#ifdef CONFIG_VIDEO_CPIA_PP_DMA
-		if (camera[i]->dma_buf) {
-			free_dma(camera[i]->pdev->port->dma);
-			kfree(camera[i]->dma_buf);
-		}
-#endif
-
-		cpia_unregister_camera(camera[i]->camnr);
-		parport_unregister_device(camera[i]->pdev);
-		kfree(camera[i]);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0))
+	parport_unregister_driver (&cpia_pp_driver);
+#else
+	while(cam_list != NULL) {
+		struct pp_cam_entry *cam = cam_list->lowlevel_data;
+		cpia_pp_detach(cam->port);
 	}
+#endif
 	return;
 }
 
@@ -1482,7 +1714,7 @@ __initfunc(void cpia_pp_setup(char *str, int *ints))
 		}
 	} else if (!strncmp(str, "parport", 7)) {
 		int n = simple_strtoul(str + 7, NULL, 10);
-		if (parport_ptr < PP_MAXCAMS) {
+		if (parport_ptr < PARPORT_MAX) {
 			parport_nr[parport_ptr++] = n;
 		} else {
 			LOG("too many ports, %s ignored.\n", str);
@@ -1493,5 +1725,8 @@ __initfunc(void cpia_pp_setup(char *str, int *ints))
 		parport_nr[parport_ptr++] = PPCPIA_PARPORT_NONE;
 	}
 }
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0))
+__setup("cpia_pp=", cpia_pp_setup);
+#endif
 
 #endif /* !MODULE */

@@ -138,6 +138,10 @@ fi
 if [ "$CONFIG_PCI" = "y" ]; then
   tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA
 fi
+if [ "$CONFIG_PCI" = "y" ]; then
+  tristate 'Compaq CISS Array support' CONFIG_BLK_CPQ_CISS_DA
+fi
+
 
 if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then
   define_bool CONFIG_BLK_DEV_HD y

@@ -5,7 +5,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc sk98lin lmc
+ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc sk98lin lmc skfp
 
 L_TARGET := net.a
 L_OBJS   :=
@@ -620,6 +620,16 @@ ifeq ($(CONFIG_SK98LIN),y)
 else
   ifeq ($(CONFIG_SK98LIN),m)
     MOD_IN_SUB_DIRS += sk98lin
+  endif
+endif
+
+ifeq ($(CONFIG_SKFP),y)
+  SUB_DIRS += skfp
+  MOD_IN_SUB_DIRS += skfp
+  L_OBJS += skfp/skfp.o
+else
+  ifeq ($(CONFIG_SKFP),m)
+    MOD_IN_SUB_DIRS += skfp
   endif
 endif
 

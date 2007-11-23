@@ -66,7 +66,7 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
     bool '  Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
   fi
 fi
-
+     
 bool 'Mouse Support (not serial mice)' CONFIG_MOUSE
 if [ "$CONFIG_MOUSE" = "y" ]; then
 	mainmenu_option next_comment
@@ -121,6 +121,19 @@ if [ "$CONFIG_ALPHA_BOOK1" = "y" ]; then
   bool 'Tadpole ANA H8 Support'  CONFIG_H8
 fi
 
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   tristate '/dev/agpgart (AGP Support) (EXPERIMENTAL)' CONFIG_AGP n
+   if [ "$CONFIG_AGP" != "n" ]; then
+      bool '   Intel 440LX/BX/GX support' CONFIG_AGP_INTEL
+      bool '   Intel I810/I810 DC100/I810e support' CONFIG_AGP_I810
+      bool '   VIA VP3/MVP3/Apollo Pro support' CONFIG_AGP_VIA
+      bool '   AMD Irongate support' CONFIG_AGP_AMD
+      bool '   Generic SiS support' CONFIG_AGP_SIS
+      bool '   ALI M1541 support' CONFIG_AGP_ALI
+   fi
+   source drivers/char/drm/Config.in
+fi
+      
 mainmenu_option next_comment
 comment 'Video For Linux'
 
@@ -160,13 +173,13 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
     dep_tristate 'Colour QuickCam Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    dep_tristate 'CPiA Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CPIA $CONFIG_VIDEO_DEV
+    dep_tristate 'CPiA Video For Linux' CONFIG_VIDEO_CPIA $CONFIG_VIDEO_DEV
     if [ "$CONFIG_VIDEO_CPIA" != "n" ]; then
-      if [ "$CONFIG_PARPORT" != "n" ]; then
-        dep_tristate 'CPiA Parallel Port Lowlevel Support (EXPERIMENTAL)' CONFIG_VIDEO_CPIA_PP $CONFIG_VIDEO_CPIA $CONFIG_PARPORT
-        if [ "$CONFIG_VIDEO_CPIA_PP" != "n" ]; then
-          bool 'CPiA Parallel Port DMA Support (EXPERIMENTAL)' CONFIG_VIDEO_CPIA_PP_DMA
-        fi
+      if [ "CONFIG_PARPORT_1284" != "n" ]; then
+        dep_tristate '  CPiA Parallel Port Lowlevel Support' CONFIG_VIDEO_CPIA_PP $CONFIG_VIDEO_CPIA $CONFIG_PARPORT
+      fi
+      if [ "$CONFIG_USB" != "n" ]; then
+        dep_tristate '  CPiA USB Lowlevel Support' CONFIG_VIDEO_CPIA_USB $CONFIG_VIDEO_CPIA $CONFIG_USB
       fi
     fi
   fi

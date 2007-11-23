@@ -1,7 +1,0 @@
-#!/bin/sh
-
-killall ohci-control
-
-sleep 2
-
-rmmod usb-ohci

@@ -1,0 +1,164 @@
+INTRODUCTION
+
+  The USB serial driver currently supports a number of different USB to
+  serial converter products, as well as some devices that use a serial
+  interface from userspace to talk to the device.
+
+  See the individual product section below for specific information about
+  the different devices.
+
+
+CONFIGURATION
+
+  Currently the driver can handle up to 256 different serial interfaces at
+  one time. 
+
+  If you are not using devfs:
+    The major number that the driver uses is 188 so to use the driver,
+    create the following nodes:
+	mknod /dev/ttyUSB0 c 188 0
+	mknod /dev/ttyUSB1 c 188 1
+	mknod /dev/ttyUSB2 c 188 2
+	mknod /dev/ttyUSB3 c 188 3
+		.
+		.
+		.
+	mknod /dev/ttyUSB254 c 188 254
+	mknod /dev/ttyUSB255 c 188 255
+
+  If you are using devfs:
+    The devices supported by this driver will show up as
+    /dev/usb/tts/{0,1,...}
+
+  When the device is connected and recognized by the driver, the driver
+  will print to the system log, which node(s) the device has been bound
+  to.
+  
+
+SPECIFIC DEVICES SUPPORTED
+
+
+ConnectTech WhiteHEAT 4 port converter
+
+  ConnectTech has been very forthcoming with information about their
+  device, including providing a unit to test with. This driver will end up
+  being fully supported.
+
+Current status:
+  The device's firmware is downloaded on connection, the new firmware 
+  runs properly and all four ports are successfuly recognized and connected.
+  Now data flow needs to be implemented properly.
+  This driver is not fully operational.
+
+
+HandSpring Visor USB docking station
+
+Current status:
+  Only when the Visor tries to connect to the host, does the docking
+  station show up as a valid USB device. When this happens, the device is
+  properly enumerated, assigned a port, and then communication _should_ be
+  possible. The driver cleans up properly when the device is removed, or
+  the connection is canceled on the Visor.
+
+  NOTE:
+    This means that in order to talk to the Visor, the sync button must be
+    pressed BEFORE trying to get any program to communicate to the Visor.
+    This goes against the current documentation for pilot-xfer and other
+    packages, but is the only way that it will work due to the hardware
+    in the Visor.
+  
+  When the device is connected, try talking to it on the second port
+  (this is usually /dev/ttyUSB1 if you do not have any other usb-serial
+  devices in the system.) The system log should tell you which port is
+  the port to use for the HotSync transfer. The "Generic" port can be used
+  for other device communication, such as a PPP link.
+
+  There is a webpage and mailing lists for this portion of the driver at: 
+  http://usbvisor.sourceforge.net/
+
+
+Keyspan PDA Serial Adapter
+
+  Single port DB-9 serial adapter, pushed as a PDA adapter for iMacs (mostly
+  sold in Macintosh catalogs, comes in a translucent white/green dongle).
+  Fairly simple device. Firmware is homebrew.
+
+Current status:
+ Things that work:
+   basic input/output (tested with 'cu')
+   blocking write when serial line can't keep up
+   changing baud rates (up to 115200)
+   getting/setting modem control pins (TIOCM{GET,SET,BIS,BIC})
+   sending break (although duration looks suspect)
+ Things that don't:
+   device strings (as logged by kernel) have trailing binary garbage
+   device ID isn't right, might collide with other Keyspan products
+   changing baud rates ought to flush tx/rx to avoid mangled half characters
+ Big Things on the todo list:
+   parity, 7 vs 8 bits per char, 1 or 2 stop bits
+   HW flow control
+   not all of the standard USB descriptors are handled: Get_Status, Set_Feature
+   O_NONBLOCK, select()
+
+
+FTDI Single Port Serial Driver
+
+  This is a single port DB-25 serial adapter. More information about this
+  device and the Linux driver can be found at:
+	http://reality.sgi.com/bryder_wellington/ftdi_sio/
+
+
+ZyXEL omni.net lcd plus ISDN TA
+
+  This is an ISDN TA. Please report both successes and troubles to the
+  author at omninet@kroah.com
+
+
+Digi AccelePort Driver
+
+  This driver supports the Digi AccelePort USB 4 device, a 4 port
+  USB serial converter.  The driver does NOT yet support the Digi
+  AccelePort USB 2 or 8.
+
+  The driver supports open, close, read, write, termios settings (baud
+  rate, word size, parity, stop bits, hardware/software flow control,
+  CREAD), DTR/RTS, and TIOCMGET/SET/BIS/BIC ioctls.  It has not been
+  thoroughly tested, but it seems to be working reasonable well.  There
+  is more work to do, including flow control, ioctls, and support for
+  the Digi AccelePort USB 2 and 8.
+
+  Please contact Peter Berger (pberger@brimson.com) or Al Borchers
+  (alborchers@steinerpoint.com) for questions or problems with this
+  driver.
+
+
+Generic Serial driver
+
+  If your device is not one of the above listed devices, compatible with
+  the above models, you can try out the "generic" interface. This
+  interface does not provide any type of control messages sent to the
+  device, and does not support any kind of device flow control. All that
+  is required of your device is that it has at least one bulk in endpoint,
+  or one bulk out endpoint. 
+  
+  To enable the generic driver to recognize your device, build the driver
+  as a module and load it by the following invocation:
+	insmod usb-serial vendor=0x#### product=0x####
+  where the #### is replaced with the hex representation of your device's
+  vendor id and product id.
+
+  This driver has been successfully used to connect to the NetChip USB
+  development board, providing a way to develop USB firmware without
+  having to write a custom driver.
+
+
+CONTACT:
+
+  If anyone has any problems using this driver, with any of the above
+  specified products, please contact me, or join the Linux-USB mailing
+  list (information on joining the mailing list, as well as a link to its
+  searchable archive is at http://www.linux-usb.org/ )
+
+
+Greg Kroah-Hartman
+greg@kroah.com

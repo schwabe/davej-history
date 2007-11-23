@@ -2,8 +2,37 @@
 #define __LINUX_UHCI_H
 
 #include <linux/list.h>
+#include <linux/usb.h>
 
-#include "usb.h"
+/*
+ * This nested spinlock code is courtesy of Davide Libenzi <dlibenzi@maticad.it>
+ */
+struct s_nested_lock {
+	spinlock_t lock;
+	void *uniq;
+	short int count;
+};
+
+#define nested_init(snl) \
+	spin_lock_init(&(snl)->lock); \
+	(snl)->uniq = NULL; \
+	(snl)->count = 0;
+
+#define nested_lock(snl, flags) \
+	if ((snl)->uniq == current) { \
+		(snl)->count++; \
+		flags = 0; /* No warnings */ \
+	} else { \
+		spin_lock_irqsave(&(snl)->lock, flags); \
+		(snl)->count++; \
+		(snl)->uniq = current; \
+	}
+
+#define nested_unlock(snl, flags) \
+	if (!--(snl)->count) { \
+		(snl)->uniq = NULL; \
+		spin_unlock_irqrestore(&(snl)->lock, flags); \
+	}
 
 /*
  * Universal Host Controller Interface data structures and defines
@@ -53,16 +82,82 @@
 #define   USBPORTSC_PR		0x0200	/* Port Reset */
 #define   USBPORTSC_SUSP	0x1000	/* Suspend */
 
-struct uhci_qh {
-	unsigned int link;	/* Next queue */
-	unsigned int element;	/* Queue element pointer */
-	int inuse;		/* Inuse? */
-	struct uhci_qh *skel;	/* Skeleton head */
-} __attribute__((aligned(16)));
+/* Legacy support register */
+#define USBLEGSUP 0xc0
+#define USBLEGSUP_DEFAULT	0x2000	/* only PIRQ enable set */
+
+#define UHCI_NULL_DATA_SIZE	0x7FF	/* for UHCI controller TD */
+
+#define UHCI_PTR_BITS		0x000F
+#define UHCI_PTR_TERM		0x0001
+#define UHCI_PTR_QH		0x0002
+#define UHCI_PTR_DEPTH		0x0004
+
+#define UHCI_NUMFRAMES		1024	/* in the frame list [array] */
+#define UHCI_MAX_SOF_NUMBER	2047	/* in an SOF packet */
+#define CAN_SCHEDULE_FRAMES	1000	/* how far future frames can be scheduled */
 
 struct uhci_framelist {
-	unsigned int frame[1024];
+	__u32 frame[UHCI_NUMFRAMES];
 } __attribute__((aligned(4096)));
+
+struct uhci_td;
+
+struct uhci_qh {
+	/* Hardware fields */
+	__u32 link;				/* Next queue */
+	__u32 element;				/* Queue element pointer */
+
+	/* Software fields */
+	/* Can't use list_head since we want a specific order */
+	struct usb_device *dev;			/* The owning device */
+
+	struct uhci_qh *prevqh, *nextqh;
+
+	struct list_head remove_list;
+} __attribute__((aligned(16)));
+
+/*
+ * for TD <status>:
+ */
+#define TD_CTRL_SPD		(1 << 29)	/* Short Packet Detect */
+#define TD_CTRL_C_ERR_MASK	(3 << 27)	/* Error Counter bits */
+#define TD_CTRL_C_ERR_SHIFT	27
+#define TD_CTRL_LS		(1 << 26)	/* Low Speed Device */
+#define TD_CTRL_IOS		(1 << 25)	/* Isochronous Select */
+#define TD_CTRL_IOC		(1 << 24)	/* Interrupt on Complete */
+#define TD_CTRL_ACTIVE		(1 << 23)	/* TD Active */
+#define TD_CTRL_STALLED		(1 << 22)	/* TD Stalled */
+#define TD_CTRL_DBUFERR		(1 << 21)	/* Data Buffer Error */
+#define TD_CTRL_BABBLE		(1 << 20)	/* Babble Detected */
+#define TD_CTRL_NAK		(1 << 19)	/* NAK Received */
+#define TD_CTRL_CRCTIMEO	(1 << 18)	/* CRC/Time Out Error */
+#define TD_CTRL_BITSTUFF	(1 << 17)	/* Bit Stuff Error */
+#define TD_CTRL_ACTLEN_MASK	0x7FF		/* actual length, encoded as n - 1 */
+
+#define TD_CTRL_ANY_ERROR	(TD_CTRL_STALLED | TD_CTRL_DBUFERR | \
+				 TD_CTRL_BABBLE | TD_CTRL_CRCTIME | TD_CTRL_BITSTUFF)
+
+#define uhci_status_bits(ctrl_sts)	(ctrl_sts & 0xFE0000)
+#define uhci_actual_length(ctrl_sts)	((ctrl_sts + 1) & TD_CTRL_ACTLEN_MASK) /* 1-based */
+
+#define uhci_ptr_to_virt(x)	bus_to_virt(x & ~UHCI_PTR_BITS)
+
+/*
+ * for TD <info>: (a.k.a. Token)
+ */
+#define TD_TOKEN_TOGGLE		19
+#define TD_PID			0xFF
+
+#define uhci_maxlen(token)	((token) >> 21)
+#define uhci_expected_length(info) (((info >> 21) + 1) & TD_CTRL_ACTLEN_MASK) /* 1-based */
+#define uhci_toggle(token)	(((token) >> TD_TOKEN_TOGGLE) & 1)
+#define uhci_endpoint(token)	(((token) >> 15) & 0xf)
+#define uhci_devaddr(token)	(((token) >> 8) & 0x7f)
+#define uhci_devep(token)	(((token) >> 8) & 0x7ff)
+#define uhci_packetid(token)	((token) & 0xff)
+#define uhci_packetout(token)	(uhci_packetid(token) != USB_PID_IN)
+#define uhci_packetin(token)	(uhci_packetid(token) == USB_PID_IN)
 
 /*
  * The documentation says "4 words for hardware, 4 words for software".
@@ -75,7 +170,7 @@ struct uhci_framelist {
  * On 64-bit machines we probably want to take advantage of the fact that
  * hw doesn't really care about the size of the sw-only area.
  *
- * Alas, not anymore, we have more than 4 words of software, woops
+ * Alas, not anymore, we have more than 4 words for software, woops
  */
 struct uhci_td {
 	/* Hardware fields */
@@ -85,48 +180,14 @@ struct uhci_td {
 	__u32 buffer;
 
 	/* Software fields */
-	struct list_head irq_list;	/* Active interrupt list.. */
-	usb_device_irq completed;	/* Completion handler routine */
-	unsigned int *backptr;		/* Where to remove this from.. */
-	void *dev_id;
-	int inuse;			/* Inuse? */
-	struct uhci_qh *qh;
-} __attribute__((aligned(32)));
+	unsigned int *frameptr;		/* Frame list pointer */
+	struct uhci_td *prevtd, *nexttd; /* Previous and next TD in queue */
 
-/*
- * Note the alignment requirements of the entries
- *
- * Each UHCI device has pre-allocated QH and TD entries.
- * You can use more than the pre-allocated ones, but I
- * don't see you usually needing to.
- */
-struct uhci;
+	struct usb_device *dev;
+	struct urb *urb;		/* URB this TD belongs to */
 
-#define UHCI_MAXTD 64
-
-#define UHCI_MAXQH	16
-
-/* The usb device part must be first! */
-struct uhci_device {
-	struct usb_device	*usb;
-
-	struct uhci		*uhci;
-	struct uhci_qh		qh[UHCI_MAXQH];		/* These are the "common" qh's for each device */
-	struct uhci_td		td[UHCI_MAXTD];
-
-	unsigned long		data[16];
-};
-
-#define uhci_to_usb(uhci)	((uhci)->usb)
-#define usb_to_uhci(usb)	((struct uhci_device *)(usb)->hcpriv)
-
-/*
- * The root hub pre-allocated QH's and TD's have
- * some special global uses..
- */
-#define control_td	td		/* Td's 0-30 */
-/* This is only for the root hub's TD list */
-#define tick_td		td[31]
+	struct list_head list;
+} __attribute__((aligned(16)));
 
 /*
  * There are various standard queues. We set up several different
@@ -151,49 +212,92 @@ struct uhci_device {
  * be scared, it kinda makes sense. Look at this wonderful picture care of
  * Linus:
  *
- *  generic-iso-QH  ->  dev1-iso-QH  ->  generic-irq-QH  ->  dev1-irq-QH  -> ...
- *       |                       |                  |                   |
- *      End          dev1-iso-TD1          End            dev1-irq-TD1
- *                       |
- *                   dev1-iso-TD2
- *                       |
- *                      ....
+ *  generic-  ->  dev1-  ->  generic-  ->  dev1-  ->  control-  ->  bulk- -> ...
+ *   iso-QH      iso-QH       irq-QH      irq-QH        QH           QH
+ *      |           |            |           |           |            |
+ *     End     dev1-iso-TD1     End     dev1-irq-TD1    ...          ... 
+ *                  |
+ *             dev1-iso-TD2
+ *                  |
+ *                ....
  *
  * This may vary a bit (the UHCI docs don't explicitly say you can put iso
  * transfers in QH's and all of their pictures don't have that either) but
  * other than that, that is what we're doing now
  *
- * To keep with Linus' nomenclature, this is called the qh skeleton. These
- * labels (below) are only signficant to the root hub's qh's
+ * And now we don't put Iso transfers in QH's, so we don't waste one on it
+ * --jerdfelt
+ *
+ * To keep with Linus' nomenclature, this is called the QH skeleton. These
+ * labels (below) are only signficant to the root hub's QH's
  */
-#define skel_iso_qh		qh[0]
 
-#define skel_int2_qh		qh[1]
-#define skel_int4_qh		qh[2]
-#define skel_int8_qh		qh[3]
-#define skel_int16_qh		qh[4]
-#define skel_int32_qh		qh[5]
-#define skel_int64_qh		qh[6]
-#define skel_int128_qh		qh[7]
-#define skel_int256_qh		qh[8]
+#define UHCI_NUM_SKELTD		10
+#define skel_int1_td		skeltd[0]
+#define skel_int2_td		skeltd[1]
+#define skel_int4_td		skeltd[2]
+#define skel_int8_td		skeltd[3]
+#define skel_int16_td		skeltd[4]
+#define skel_int32_td		skeltd[5]
+#define skel_int64_td		skeltd[6]
+#define skel_int128_td		skeltd[7]
+#define skel_int256_td		skeltd[8]
+#define skel_term_td		skeltd[9]	/* To work around PIIX UHCI bug */
 
-#define skel_control_qh		qh[9]
-
-#define skel_bulk0_qh		qh[10]
-#define skel_bulk1_qh		qh[11]
-#define skel_bulk2_qh		qh[12]
-#define skel_bulk3_qh		qh[13]
+#define UHCI_NUM_SKELQH		4
+#define skel_ls_control_qh	skelqh[0]
+#define skel_hs_control_qh	skelqh[1]
+#define skel_bulk_qh		skelqh[2]
+#define skel_term_qh		skelqh[3]
 
 /*
- * These are significant to the devices allocation of QH's
+ * Search tree for determining where <interval> fits in the
+ * skelqh[] skeleton.
+ *
+ * An interrupt request should be placed into the slowest skelqh[]
+ * which meets the interval/period/frequency requirement.
+ * An interrupt request is allowed to be faster than <interval> but not slower.
+ *
+ * For a given <interval>, this function returns the appropriate/matching
+ * skelqh[] index value.
+ *
+ * NOTE: For UHCI, we don't really need int256_qh since the maximum interval
+ * is 255 ms.  However, we do need an int1_qh since 1 is a valid interval
+ * and we should meet that frequency when requested to do so.
+ * This will require some change(s) to the UHCI skeleton.
  */
-#if 0
-#define iso_qh			qh[0]
-#define int_qh			qh[1]	/* We have 2 "common" interrupt QH's */
-#define control_qh		qh[3]
-#define bulk_qh			qh[4]	/* We have 4 "common" bulk QH's */
-#define extra_qh		qh[8]	/* The rest, anything goes */
-#endif
+static inline int __interval_to_skel(int interval)
+{
+	if (interval < 16) {
+		if (interval < 4) {
+			if (interval < 2)
+				return 0;	/* int1 for 0-1 ms */
+			return 1;		/* int2 for 2-3 ms */
+		}
+		if (interval < 8)
+			return 2;		/* int4 for 4-7 ms */
+		return 3;			/* int8 for 8-15 ms */
+	}
+	if (interval < 64) {
+		if (interval < 32)
+			return 4;		/* int16 for 16-31 ms */
+		return 5;			/* int32 for 32-63 ms */
+	}
+	if (interval < 128)
+		return 6;			/* int64 for 64-127 ms */
+	return 7;				/* int128 for 128-255 ms (Max.) */
+}
+
+struct virt_root_hub {
+	int devnum;		/* Address of Root Hub endpoint */
+	void *urb;
+	void *int_addr;
+	int send;
+	int interval;
+	int numports;
+	int c_p_r[8];
+	struct timer_list rh_int_timer;
+};
 
 /*
  * This describes the full uhci information.
@@ -202,28 +306,117 @@ struct uhci_device {
  * a subset of what the full implementation needs.
  */
 struct uhci {
+	/* Grabbed from PCI */
 	int irq;
 	unsigned int io_addr;
+	unsigned int io_size;
+
+	struct list_head uhci_list;
 
 	struct usb_bus *bus;
 
-#if 0
-	/* These are "standard" QH's for the entire bus */
-	struct uhci_qh qh[UHCI_MAXQH];
-#endif
-	struct uhci_device *root_hub;		/* Root hub device descriptor.. */
+	struct uhci_td skeltd[UHCI_NUM_SKELTD];	/* Skeleton TD's */
+	struct uhci_qh skelqh[UHCI_NUM_SKELQH];	/* Skeleton QH's */
 
+	spinlock_t framelist_lock;
 	struct uhci_framelist *fl;		/* Frame list */
-	struct list_head interrupt_list;	/* List of interrupt-active TD's for this uhci */
+	int fsbr;				/* Full speed bandwidth reclamation */
+
+	spinlock_t qh_remove_lock;
+	struct list_head qh_remove_list;
+
+	spinlock_t urb_remove_lock;
+	struct list_head urb_remove_list;
+
+	struct s_nested_lock urblist_lock;
+	struct list_head urb_list;
+
+	struct virt_root_hub rh;	/* private data of the virtual root hub */
 };
+
+struct urb_priv {
+	struct urb *urb;
+
+	struct uhci_qh *qh;		/* QH for this URB */
+
+	int fsbr : 1;			/* URB turned on FSBR */
+	int fsbr_timeout : 1;		/* URB timed out on FSBR */
+	int queued : 1;			/* QH was queued (not linked in) */
+	int short_control_packet : 1;	/* If we get a short packet during */
+					/*  a control transfer, retrigger */
+					/*  the status phase */
+
+	unsigned long inserttime;	/* In jiffies */
+
+	struct list_head list;
+
+	struct list_head urb_queue_list;	/* URB's linked together */
+};
+
+/* -------------------------------------------------------------------------
+   Virtual Root HUB
+   ------------------------------------------------------------------------- */
+/* destination of request */
+#define RH_DEVICE		0x00
+#define RH_INTERFACE		0x01
+#define RH_ENDPOINT		0x02
+#define RH_OTHER		0x03
+
+#define RH_CLASS		0x20
+#define RH_VENDOR		0x40
+
+/* Requests: bRequest << 8 | bmRequestType */
+#define RH_GET_STATUS		0x0080
+#define RH_CLEAR_FEATURE	0x0100
+#define RH_SET_FEATURE		0x0300
+#define RH_SET_ADDRESS		0x0500
+#define RH_GET_DESCRIPTOR	0x0680
+#define RH_SET_DESCRIPTOR	0x0700
+#define RH_GET_CONFIGURATION	0x0880
+#define RH_SET_CONFIGURATION	0x0900
+#define RH_GET_STATE		0x0280
+#define RH_GET_INTERFACE	0x0A80
+#define RH_SET_INTERFACE	0x0B00
+#define RH_SYNC_FRAME		0x0C80
+/* Our Vendor Specific Request */
+#define RH_SET_EP		0x2000
+
+/* Hub port features */
+#define RH_PORT_CONNECTION	0x00
+#define RH_PORT_ENABLE		0x01
+#define RH_PORT_SUSPEND		0x02
+#define RH_PORT_OVER_CURRENT	0x03
+#define RH_PORT_RESET		0x04
+#define RH_PORT_POWER		0x08
+#define RH_PORT_LOW_SPEED	0x09
+#define RH_C_PORT_CONNECTION	0x10
+#define RH_C_PORT_ENABLE	0x11
+#define RH_C_PORT_SUSPEND	0x12
+#define RH_C_PORT_OVER_CURRENT	0x13
+#define RH_C_PORT_RESET		0x14
+
+/* Hub features */
+#define RH_C_HUB_LOCAL_POWER	0x00
+#define RH_C_HUB_OVER_CURRENT	0x01
+#define RH_DEVICE_REMOTE_WAKEUP	0x00
+#define RH_ENDPOINT_STALL	0x01
+
+/* Our Vendor Specific feature */
+#define RH_REMOVE_EP		0x00
+
+#define RH_ACK			0x01
+#define RH_REQ_ERR		-1
+#define RH_NACK			0x00
 
 /* needed for the debugging code */
 struct uhci_td *uhci_link_to_td(unsigned int element);
 
 /* Debugging code */
-void show_td(struct uhci_td * td);
-void show_status(struct uhci *uhci);
-void show_queues(struct uhci *uhci);
+void uhci_show_td(struct uhci_td *td);
+void uhci_show_status(struct uhci *uhci);
+void uhci_show_urb_queue(struct urb *urb);
+void uhci_show_queue(struct uhci_qh *qh);
+void uhci_show_queues(struct uhci *uhci);
 
 #endif
 

@@ -301,6 +301,13 @@ L:	compaqandlinux@cpqlin.van-dijk.net
 W:	ftp.compaq.com/pub/products/drivers/linux
 S:	Supported
 
+COMPAQ SMART CISS RAID DRIVER 
+P:      Charles White
+M:      Charles White <arrays@compaq.com>
+L:      compaqandlinux@cpqlin.van-dijk.net
+W:	ftp.compaq.com/pub/products/drivers/linux	
+S:     	Supported 
+
 DAC960 RAID DRIVER
 P:	Leonard N. Zubkoff
 M:	Leonard N. Zubkoff <lnz@dandelion.com>

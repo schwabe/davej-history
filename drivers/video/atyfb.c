@@ -394,7 +394,7 @@ static int read_aty_sense(const struct fb_info_aty *info);
      *  Interface used by the world
      */
 
-void atyfb_init(void);
+int atyfb_init(void);
 #ifdef CONFIG_FB_OF
 void atyfb_of_init(struct device_node *dp);
 #endif
@@ -2880,7 +2880,7 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     return 1;
 }
 
-__initfunc(void atyfb_init(void))
+int __init atyfb_init(void)
 {
 #if defined(CONFIG_FB_OF)
     /* We don't want to be called like this. */
@@ -2900,7 +2900,7 @@ __initfunc(void atyfb_init(void))
 
     /* Do not attach when we have a serial console. */
     if (!con_is_present())
-	return;
+	return 0;
 #else
     u16 tmp;
 #endif
@@ -2912,7 +2912,7 @@ __initfunc(void atyfb_init(void))
 	    info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
 	    if (!info) {
 		printk("atyfb_init: can't alloc fb_info_aty\n");
-		return;
+		return 0;
 	    }
 	    memset(info, 0, sizeof(struct fb_info_aty));
 
@@ -2948,7 +2948,7 @@ __initfunc(void atyfb_init(void))
 	    if (!info->mmap_map) {
 		printk("atyfb_init: can't alloc mmap_map\n");
 		kfree(info);
-		return;
+		return 0;
 	    }
 	    memset(info->mmap_map, 0, j * sizeof(*info->mmap_map));
 
@@ -3133,7 +3133,7 @@ __initfunc(void atyfb_init(void))
 
 	    if(!info->ati_regbase) {
 		    kfree(info);
-		    return;
+		    return 0;
 	    }
 
 	    info->ati_regbase_phys += 0xc00;
@@ -3160,7 +3160,7 @@ __initfunc(void atyfb_init(void))
 
 	    if(!info->frame_buffer) {
 		    kfree(info);
-		    return;
+		    return 0;
 	    }
 
 #endif /* __sparc__ */
@@ -3169,7 +3169,7 @@ __initfunc(void atyfb_init(void))
 		if (info->mmap_map)
 		    kfree(info->mmap_map);
 		kfree(info);
-		return;
+		return 0;
 	    }
 
 #ifdef __sparc__
@@ -3207,7 +3207,7 @@ __initfunc(void atyfb_init(void))
 	info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
 	if (!info) {
 	    printk("atyfb_init: can't alloc fb_info_aty\n");
-	    return;
+	    return 0;
 	}
 	memset(info, 0, sizeof(struct fb_info_aty));
 
@@ -3223,10 +3223,11 @@ __initfunc(void atyfb_init(void))
 	if (!aty_init(info, "ISA bus")) {
 	    kfree(info);
 	    /* This is insufficient! kernel_map has added two large chunks!! */
-	    return;
+	    return 0;
 	}
     }
 #endif
+    return 1;
 }
 
 #ifdef CONFIG_FB_OF
@@ -4213,3 +4214,46 @@ aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
 	return result;
 }
 #endif /* CONFIG_PMAC_PBOOK */
+
+#ifdef MODULE
+
+int blink = 1;
+static u32 vram = 0;
+static int pll = 0;
+static int mclk = 0;
+#if defined(CONFIG_PPC)
+static int vmode = VMODE_NVRAM;
+static int cmode = CMODE_NVRAM;
+#endif
+
+MODULE_PARM(noaccel, "i");
+MODULE_PARM_DESC(noaccel, "Do not use accelerating engine (0 or 1=disabled) (default=0)");
+MODULE_PARM(blink, "i");
+MODULE_PARM_DESC(blink, "Enables hardware cursor blinking (0 or 1) (default=1)");
+#ifdef CONFIG_PPC
+MODULE_PARM(vmode, "i");
+MODULE_PARM_DESC(vmode, "Specify the vmode mode number that should be used (640x480 default)");
+MODULE_PARM(cmode, "i");
+MODULE_PARM_DESC(cmode, "Specify the video depth that should be used (8bit default)");
+#endif
+
+int init_module(void)
+{
+	curblink = blink;
+	default_vram = vram;
+	default_pll = pll;
+	default_mclk = mclk;
+#ifdef CONFIG_PPC
+	default_vmode = vmode;
+	default_cmode = cmode;
+#endif
+	if (!atyfb_init())
+		return -ENXIO;
+	MOD_INC_USE_COUNT;
+	return 0;
+}
+
+void cleanup_module(void)
+{
+}
+#endif	/* MODULE */

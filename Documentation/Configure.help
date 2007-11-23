@@ -6942,6 +6942,35 @@ CONFIG_DEFXX
   This is support for the DIGITAL series of EISA (DEFEA) and PCI
   (DEFPA) controllers which can connect you to a local FDDI network.
 
+SysKonnect FDDI PCI support
+CONFIG_SKFP
+  Say Y here if you have a SysKonnect FDDI PCI adapter.
+  The following adapters are supported by this driver:
+  - SK-5521 (SK-NET FDDI-UP)
+  - SK-5522 (SK-NET FDDI-UP DAS)
+  - SK-5541 (SK-NET FDDI-FP)
+  - SK-5543 (SK-NET FDDI-LP)
+  - SK-5544 (SK-NET FDDI-LP DAS)
+  - SK-5821 (SK-NET FDDI-UP64)
+  - SK-5822 (SK-NET FDDI-UP64 DAS)
+  - SK-5841 (SK-NET FDDI-FP64)
+  - SK-5843 (SK-NET FDDI-LP64)
+  - SK-5844 (SK-NET FDDI-LP64 DAS)
+  - Netelligent 100 FDDI DAS Fibre SC
+  - Netelligent 100 FDDI SAS Fibre SC
+  - Netelligent 100 FDDI DAS UTP
+  - Netelligent 100 FDDI SAS UTP
+  - Netelligent 100 FDDI SAS Fibre MIC
+  Read Documentation/networking/skfp.txt for information about
+  the driver.
+  Questions concerning this driver can be addressed to:
+    linux@syskonnect.de
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
+  The module will be called skfp.o.
+
 HIgh Performance Parallel Interface support (EXPERIMENTAL)
 CONFIG_HIPPI
   HIgh Performance Parallel Interface (HIPPI) is a 800Mbit/sec and
@@ -9548,6 +9577,20 @@ CONFIG_RTC
   If you think you have a use for such a device (such as periodic data
   sampling), then say Y here, and read Documentation/rtc.txt for
   details.
+
+AGP/GART support
+CONFIG_AGP
+  This provides a kernel interface (/dev/agpgart) for programming AGP
+  transfers on motherboards that support them. Primarily, this is used
+  for hardware-accelerated 3d graphics, though any other AGP device
+  could take advantage of it.
+
+  If you have a 3d-capable AGP video card say 'M' or 'Y' here.
+  Otherwise, say 'N'.
+
+  You will also have to indicate support for your specific chipset.
+  Consult the output of lspci, your motherboard manual, or the inside
+  of your computer if unsure what to choose. Multiple selections are ok.
 
 Tadpole ANA H8 Support
 CONFIG_H8
@@ -12362,6 +12405,14 @@ CONFIG_BLK_CPQ_DA
    boards supported by this driver, and for further information 
    on the use of this driver. 
 
+Compaq Smart Array support
+CONFIG_BLK_CPQ_CISS_DA
+   This is the driver for Compaq Smart Array controllers.
+   Everyone using these boards should say Y here.
+   See "linux/Documentation/cciss.txt" for the current list of
+   boards supported by this driver, and for further information
+   on the use of this driver.
+
 QuickNet Internet LineJack/PhoneJack support
 CONFIG_PHONE_IXJ
   Say M if you have a telephony card manufactured by Quicknet
@@ -12380,6 +12431,17 @@ CONFIG_PHONE_IXJ
   If you do not have any Quicknet telephony cards, you can safely
   ignore this option.
 
+Kawasaki USB ethernet controller support
+CONFIG_USB_KAWETH
+  Say Y here if you want support for devices based on the Kawasaki
+  LSI KL5KUSB100 USB to Ethernet 1-Chip Controller, such as the
+  NetGear EA101 USB to Ethernet Adapter.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called kaweth.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+ 
 Toshiba Laptop support
 CONFIG_TOSHIBA	
   If you intend to run this the kernel on a Toshiba portable say yes

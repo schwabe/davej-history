@@ -246,6 +246,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BLK_CPQ_CISS_DA),y)
+L_OBJS += cciss.o
+else
+  ifeq ($(CONFIG_BLK_CPQ_CISS_DA),m)
+  M_OBJS += cciss.o
+  endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_DAC960),y)
 LX_OBJS += DAC960.o
 else

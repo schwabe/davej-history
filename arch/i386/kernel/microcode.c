@@ -39,24 +39,12 @@
 #include <linux/vmalloc.h>
 #include <linux/smp_lock.h>
 #include <linux/miscdevice.h>
-#include <linux/devfs_fs_kernel.h>
+#include <linux/smp.h>
 
 #include <asm/msr.h>
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#include <linux/version.h>
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
-#ifdef devfs_register
-#undef devfs_register
-#define devfs_register(a,b,c,d,e,f,g,h) NULL
-#endif
-#ifndef devfs_set_file_size
-#define devfs_set_file_size(a,b)
-#endif
-#ifndef __exit
-#define __exit
-#endif
 #define MICROCODE_MINOR 184
 #define MICROCODE_IOCFREE _IO('6',0)
 struct microcode {
@@ -70,7 +58,6 @@ struct microcode {
 	unsigned int reserved[5];
 	unsigned int bits[500];
 };
-#endif
 
 #define MICROCODE_VERSION 	"1.05"
 
@@ -104,9 +91,6 @@ static char *mc_applied; /* holds an array of applied microcode blocks */
 static unsigned int mc_fsize;
 
 static struct file_operations microcode_fops = {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
-	owner:		THIS_MODULE,
-#endif
 	read:		microcode_read,
 	write:		microcode_write,
 	ioctl:		microcode_ioctl,
@@ -120,13 +104,7 @@ static struct miscdevice microcode_dev = {
 	fops:	&microcode_fops,
 };
 
-static devfs_handle_t devfs_handle;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
-static int __init microcode_init(void)
-#else
 int __init microcode_init(void)
-#endif
 {
 	int error = 0;
 
@@ -136,32 +114,20 @@ int __init microcode_init(void)
 			MICROCODE_MINOR);
 		error = 1;
 	}
-	devfs_handle = devfs_register(NULL, "cpu/microcode",
-			DEVFS_FL_DEFAULT, 0, 0, S_IFREG | S_IRUSR | S_IWUSR, 
-			&microcode_fops, NULL);
-	if (devfs_handle == NULL && error) {
-		printk(KERN_ERR "microcode: failed to devfs_register()\n");
-		return -EINVAL;
-	}
 	printk(KERN_INFO "P6 Microcode Update Driver v%s registered\n", 
 			MICROCODE_VERSION);
 	return 0;
 }
 
-static void __exit microcode_exit(void)
+static void microcode_exit(void)
 {
 	misc_deregister(&microcode_dev);
-	devfs_unregister(devfs_handle);
 	if (mc_applied)
 		kfree(mc_applied);
 	printk(KERN_INFO "P6 Microcode Update Driver v%s unregistered\n", 
 			MICROCODE_VERSION);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
-module_init(microcode_init);
-module_exit(microcode_exit);
-#else
 #ifdef MODULE
 int init_module(void)
 {
@@ -171,7 +137,6 @@ void cleanup_module(void)
 {
 	microcode_exit();
 }
-#endif
 #endif
 
 /*
@@ -209,8 +174,13 @@ static int do_microcode_update(void)
 	int i, error = 0, err;
 	struct microcode *m;
 
+#ifdef __SMP__
 	if (smp_call_function(do_update_one, (void *)update_req, 1, 1) != 0)
 		panic("do_microcode_update(): timed out waiting for other CPUs\n");
+#else
+	smp_call_function(do_update_one, (void *)update_req, 1, 1);
+#endif
+
 	do_update_one((void *)update_req);
 
 	for (i=0; i<smp_num_cpus; i++) {
@@ -338,7 +308,6 @@ static ssize_t microcode_write(struct file *file, const char *buf, size_t len, l
 		ret = (ssize_t)len;
 	}
 out_fsize:
-	devfs_set_file_size(devfs_handle, mc_fsize);
 	vfree(microcode);
 out_unlock:
 	unlock_kernel();
@@ -351,7 +320,6 @@ static int microcode_ioctl(struct inode *inode, struct file *file,
 	switch(cmd) {
 		case MICROCODE_IOCFREE:
 			if (mc_applied) {
-				devfs_set_file_size(devfs_handle, 0);
 				memset(mc_applied, 0, mc_fsize);
 				kfree(mc_applied);
 				mc_applied = NULL;

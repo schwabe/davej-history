@@ -90,6 +90,7 @@ EXPORT_SYMBOL(exit_mm);
 EXPORT_SYMBOL(exit_files);
 EXPORT_SYMBOL(exit_fs);
 EXPORT_SYMBOL(exit_sighand);
+EXPORT_SYMBOL(daemonize);
 
 /* internal kernel memory management */
 EXPORT_SYMBOL(__get_free_pages);
@@ -98,6 +99,7 @@ EXPORT_SYMBOL(__free_pages);
 EXPORT_SYMBOL(kmem_find_general_cachep);
 EXPORT_SYMBOL(kmem_cache_create);
 EXPORT_SYMBOL(kmem_cache_shrink);
+EXPORT_SYMBOL(kmem_cache_destroy);
 EXPORT_SYMBOL(kmem_cache_alloc);
 EXPORT_SYMBOL(kmem_cache_free);
 EXPORT_SYMBOL(kmalloc);

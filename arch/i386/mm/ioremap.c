@@ -110,7 +110,18 @@ void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flag
 	 * Don't allow anybody to remap normal RAM that we're using..
 	 */
 	if (phys_addr < virt_to_phys(high_memory))
-		return NULL;
+           {
+		char *temp_addr, *temp_end;
+		int i;
+
+		temp_addr = __va(phys_addr);
+		temp_end = temp_addr + (size - 1);
+	      
+		for(i = MAP_NR(temp_addr); i < MAP_NR(temp_end); i++) {
+			if(!PageReserved(mem_map + i))
+				return NULL;
+		}
+	   }
 
 	/*
 	 * Mappings have to be page-aligned

@@ -279,6 +279,7 @@ static inline int buffer_protected(struct buffer_head * bh)
 #include <linux/hfs_fs_i.h>
 #include <linux/adfs_fs_i.h>
 #include <linux/qnx4_fs_i.h>
+#include <linux/usbdev_fs_i.h>
 
 /*
  * Attribute flags.  These should be or-ed together to figure out what
@@ -392,6 +393,7 @@ struct inode {
 		struct hfs_inode_info		hfs_i;
 		struct adfs_inode_info		adfs_i;
 		struct qnx4_inode_info		qnx4_i;
+		struct usbdev_inode_info	usbdev_i;
 		struct socket			socket_i;
 		void				*generic_ip;
 	} u;
@@ -514,6 +516,7 @@ extern int fasync_helper(int, struct file *, int, struct fasync_struct **);
 #include <linux/hfs_fs_sb.h>
 #include <linux/adfs_fs_sb.h>
 #include <linux/qnx4_fs_sb.h>
+#include <linux/usbdev_fs_sb.h>
 
 extern struct list_head super_blocks;
 
@@ -557,6 +560,7 @@ struct super_block {
 		struct hfs_sb_info	hfs_sb;
 		struct adfs_sb_info	adfs_sb;
 		struct qnx4_sb_info	qnx4_sb;	   
+		struct usbdev_sb_info	usbdevfs_sb;
 		void			*generic_sbp;
 	} u;
 	/*

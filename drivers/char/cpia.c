@@ -3,9 +3,9 @@
  *
  * Supports CPiA based Video Camera's.
  *
- * (C) 1999 Peter Pregler,
- *          Scott J. Bertin,
- *          Johannes Erdfelt
+ * (C) Copyright 1999-2000 Peter Pregler,
+ * (C) Copyright 1999-2000 Scott J. Bertin,
+ * (C) Copyright 1999-2000 Johannes Erdfelt, jerdfelt@valinux.com
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,28 +22,28 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+/* #define _CPIA_DEBUG_		define for verbose debug output */
 #include <linux/config.h>
 
 #include <linux/module.h>
+#include <linux/version.h>
 #include <linux/init.h>
-#include <linux/wrapper.h>
 #include <linux/fs.h>
 #include <linux/vmalloc.h>
-#include <linux/slab.h>
 #include <linux/delay.h>
-#include <linux/smp_lock.h>
+#include <linux/slab.h>
 #include <linux/proc_fs.h>
 #include <linux/ctype.h>
-#include <linux/videodev.h>
+#include <linux/pagemap.h>
 #include <asm/io.h>
 #include <asm/semaphore.h>
+#include <linux/wrapper.h>
 
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
 
-#undef _CPIA_DEBUG_		/* define for verbose debug output */
-#include <linux/cpia.h>
+#include "cpia.h"
 
 #ifdef CONFIG_VIDEO_CPIA_PP
 extern int cpia_pp_init(void);
@@ -52,8 +52,12 @@ extern int cpia_pp_init(void);
 extern int cpia_usb_init(void);
 #endif
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
+#define init_MUTEX(x) (*(x) = MUTEX)
+#endif
+
 #ifdef MODULE
-MODULE_AUTHOR("Scott J. Bertin <sbertin@mindspring.com> & Peter Pregler <Peter_Pregler@email.com>");
+MODULE_AUTHOR("Scott J. Bertin <sbertin@mindspring.com> & Peter Pregler <Peter_Pregler@email.com> & Johannes Erdfelt <jerdfelt@valinux.com>");
 MODULE_DESCRIPTION("V4L-driver for Vision CPiA based cameras");
 MODULE_SUPPORTED_DEVICE("video");
 #endif
@@ -97,6 +101,7 @@ MODULE_SUPPORTED_DEVICE("video");
 #define CPIA_COMMAND_I2CRead		(INPUT | CPIA_MODULE_SYSTEM | 13)
 
 #define CPIA_COMMAND_GetVPVersion	(INPUT | CPIA_MODULE_VP_CTRL | 1)
+#define CPIA_COMMAND_ResetFrameCounter	(INPUT | CPIA_MODULE_VP_CTRL | 2)
 #define CPIA_COMMAND_SetColourParams	(OUTPUT | CPIA_MODULE_VP_CTRL | 3)
 #define CPIA_COMMAND_SetExposure	(OUTPUT | CPIA_MODULE_VP_CTRL | 4)
 #define CPIA_COMMAND_SetColourBalance	(OUTPUT | CPIA_MODULE_VP_CTRL | 6)
@@ -127,6 +132,7 @@ MODULE_SUPPORTED_DEVICE("video");
 #define CPIA_COMMAND_SetYUVThresh	(OUTPUT | CPIA_MODULE_CAPTURE | 12)
 #define CPIA_COMMAND_SetCompressionParams (OUTPUT | CPIA_MODULE_CAPTURE | 13)
 #define CPIA_COMMAND_DiscardFrame	(OUTPUT | CPIA_MODULE_CAPTURE | 14)
+#define CPIA_COMMAND_GrabReset		(OUTPUT | CPIA_MODULE_CAPTURE | 15)
 
 #define CPIA_COMMAND_OutputRS232	(OUTPUT | CPIA_MODULE_DEBUG | 1)
 #define CPIA_COMMAND_AbortProcess	(OUTPUT | CPIA_MODULE_DEBUG | 4)
@@ -135,141 +141,13 @@ MODULE_SUPPORTED_DEVICE("video");
 #define CPIA_COMMAND_StartDummyDtream	(OUTPUT | CPIA_MODULE_DEBUG | 8)
 #define CPIA_COMMAND_AbortStream	(OUTPUT | CPIA_MODULE_DEBUG | 9)
 #define CPIA_COMMAND_DownloadDRAM	(OUTPUT | CPIA_MODULE_DEBUG | 10)
-
-struct cam_params {
-	struct {
-		u8 firmwareVersion;
-		u8 firmwareRevision;
-		u8 vcVersion;
-		u8 vcRevision;
-	} version;
-	struct {
-		u16 vendor;
-		u16 product;
-		u16 deviceRevision;
-	} pnpID;
-	struct {
-		u8 vpVersion;
-		u8 vpRevision;
-		u16 cameraHeadID;
-	} vpVersion;
-	struct {
-		u8 systemState;
-		u8 grabState;
-		u8 streamState;
-		u8 fatalError;
-		u8 cmdError;
-		u8 debugFlags;
-		u8 vpStatus;
-		u8 errorCode;
-	} status;
-	struct {
-		u8 brightness;
-		u8 contrast;
-		u8 saturation;
-	} colourParams;
-	struct {
-		u8 gainMode;
-		u8 expMode;
-		u8 compMode;
-		u8 centreWeight;
-		u8 gain;
-		u8 fineExp;
-		u8 coarseExpLo;
-		u8 coarseExpHi;
-		u8 redComp;
-		u8 green1Comp;
-		u8 green2Comp;
-		u8 blueComp;
-	} exposure;
-	struct {
-		u8 balanceMode;
-		u8 redGain;
-		u8 greenGain;
-		u8 blueGain;
-	} colourBalance;
-	struct {
-		u8 divisor;
-		u8 baserate;
-	} sensorFps;
-	struct {
-		u8 gain1;
-		u8 gain2;
-		u8 gain4;
-		u8 gain8;
-	} apcor;
-	struct {
-		u8 flickerMode;
-		u8 coarseJump;
-		u8 allowableOverExposure;
-	} flickerControl;
-	struct {
-		u8 gain1;
-		u8 gain2;
-		u8 gain4;
-		u8 gain8;
-	} vlOffset;
-	struct {
-		u8 mode;
-		u8 decimation;
-	} compression;
-	struct {
-		u8 frTargeting;
-		u8 targetFR;
-		u8 targetQ;
-	} compressionTarget;
-	struct {
-		u8 yThreshold;
-		u8 uvThreshold;
-	} yuvThreshold;
-	struct {
-		u8 hysteresis;
-		u8 threshMax;
-		u8 smallStep;
-		u8 largeStep;
-		u8 decimationHysteresis;
-		u8 frDiffStepThresh;
-		u8 qDiffStepThresh;
-		u8 decimationThreshMod;
-	} compressionParams;
-	struct {
-		u8 videoSize;		/* CIF/QCIF */
-		u8 subSample;
-		u8 yuvOrder;
-	} format;
-	struct {
-		u8 colStart;		/* skip first 8*colStart pixels */
-		u8 colEnd;		/* finish at 8*colEnd pixels */
-		u8 rowStart;		/* skip first 4*rowStart lines */
-		u8 rowEnd;		/* finish at 4*rowEnd lines */
-	} roi;
-	u8 ecpTiming;
-	u8 streamStartLine;
-};
+#define CPIA_COMMAND_Null		(OUTPUT | CPIA_MODULE_DEBUG | 11)
 
 enum {
 	FRAME_READY,		/* Ready to grab into */
 	FRAME_GRABBING,		/* In the process of being grabbed into */
 	FRAME_DONE,		/* Finished grabbing, but not been synced yet */
 	FRAME_UNUSED,		/* Unused (no MCAPTURE) */
-};
-
-#define FRAME_NUM	2	/* double buffering for now */
-struct cpia_frame {
-	u8 *data;
-	int count;
-	int width;
-	int height;
-	volatile int state;
-};
-
-enum v4l_camstates {
-	CPIA_V4L_IDLE = 0,
-	CPIA_V4L_ERROR,
-	CPIA_V4L_COMMAND,
-	CPIA_V4L_GRABBING,
-	CPIA_V4L_STREAMING,
-	CPIA_V4L_STREAMING_PAUSED,
 };
 
 #define COMMAND_NONE			0x0000
@@ -288,45 +166,7 @@ enum v4l_camstates {
 #define COMMAND_SETAPCOR		0x1000
 #define COMMAND_SETFLICKERCTRL		0x2000
 #define COMMAND_SETVLOFFSET		0x4000
-
-struct cam_data {
-	int index;			/* which camera is this */
-        struct semaphore busy_lock;     /* guard against SMP multithreading */
-	struct cpia_camera_ops *ops;	/* lowlevel driver operations */
-	void *lowlevel_data;		/* private data for lowlevel driver */
-	u8 *raw_image;			/* buffer for raw image data */
-	struct cpia_frame decompressed_frame;
-                                        /* buffer to hold decompressed frame */
-	int image_size;		        /* sizeof last decompressed image */
-	int open_count;			/* # of process that have camera open */
-				/* camera status */
-	int fps;			/* actual fps reported by the camera */
-	int transfer_rate;		/* transfer rate from camera in kB/s */
-	u8 mainsFreq;			/* for flicker control */
-
-				/* proc interface */
-	struct semaphore param_lock;	/* params lock for this camera */
-	struct cam_params params;	/* camera settings */
-	struct proc_dir_entry *proc_entry;	/* /proc/cpia/videoX */
-	
-					/* v4l */
-	int video_size;			/* VIDEO_SIZE_ */
-	volatile enum v4l_camstates camstate;	/* v4l layer status */
-	struct video_device vdev;	/* v4l videodev */
-	struct video_picture vp;	/* v4l camera settings */
-	struct video_window vw;		/* v4l capture area */
-
-				/* mmap interface */
-	int curframe;			/* the current frame to grab into */
-	u8 *frame_buf;			/* frame buffer data */
-        struct cpia_frame frame[FRAME_NUM];
-				/* FRAME_NUM-buffering, so we need a array */
-
-        int first_frame;
-	volatile u32 cmd_queue;		/* queued commands */
-};
-
-static struct cam_data *camera[CPIA_MAXCAMS] ={ [0 ... CPIA_MAXCAMS-1] = NULL };
+#define COMMAND_SETLIGHTS               0x8000 /* GA 04/14/00 */
 
 /* Developer's Guide Table 5 p 3-34
  * indexed by [mains][sensorFps.baserate][sensorFps.divisor]*/
@@ -338,6 +178,7 @@ static u8 flicker_jumps[2][2][4] =
 /* forward declaration of local function */
 static void reset_camera_struct(struct cam_data *cam);
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
 /**********************************************************************
  *
  * Memory management
@@ -357,64 +198,134 @@ static inline unsigned long uvirt_to_phys(unsigned long adr)
 	pte_t *ptep, pte;
 
 	pgd = pgd_offset(current->mm, adr);
-	if (pgd_none(*pgd)) return 0;
+	if (pgd_none(*pgd))
+		return 0;
 	pmd = pmd_offset(pgd, adr);
-	if (pmd_none(*pmd)) return 0;
+	if (pmd_none(*pmd))
+		return 0;
 	ptep = pte_offset(pmd, adr/*&(~PGDIR_MASK)*/);
 	pte = *ptep;
-	if(pte_present(pte))
-		return 
-		  virt_to_phys((void *)(pte_page(pte)|(adr&(PAGE_SIZE-1))));
+	if (pte_present(pte))
+		return virt_to_phys((void *)(pte_page(pte)|(adr&(PAGE_SIZE-1))));
 	return 0;
 }
 
-static inline unsigned long kvirt_to_phys(unsigned long adr) 
+static inline unsigned long kvirt_to_pa(unsigned long adr) 
 {
 	return uvirt_to_phys(VMALLOC_VMADDR(adr));
 }
 
-static void * rvmalloc(unsigned long size)
+#else /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)) */
+
+/**********************************************************************
+ *
+ * Memory management
+ *
+ * This is a shameless copy from the USB-cpia driver (linux kernel
+ * version 2.3.29 or so, I have no idea what this code actually does ;).
+ * Actually it seems to be a copy of a shameless copy of the bttv-driver.
+ * Or that is a copy of a shameless copy of ... (To the powers: is there
+ * no generic kernel-function to do this sort of stuff?)
+ *
+ * Yes, it was a shameless copy from the bttv-driver. IIRC, Alan says
+ * there will be one, but apparentely not yet - jerdfelt
+ *
+ **********************************************************************/
+
+/* Given PGD from the address space's page table, return the kernel
+ * virtual mapping of the physical memory mapped at ADR.
+ */
+static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
 {
-	void * mem;
+	unsigned long ret = 0UL;
+	pmd_t *pmd;
+	pte_t *ptep, pte;
+
+	if (!pgd_none(*pgd)) {
+		pmd = pmd_offset(pgd, adr);
+		if (!pmd_none(*pmd)) {
+			ptep = pte_offset(pmd, adr);
+			pte = *ptep;
+			if (pte_present(pte))
+				ret = page_address(pte_page(pte)) |
+				      (adr & (PAGE_SIZE-1));
+		}
+	}
+	return ret;
+}
+
+/* Here we want the physical address of the memory.
+ * This is used when initializing the contents of the
+ * area and marking the pages as reserved.
+ */
+static inline unsigned long kvirt_to_pa(unsigned long adr)
+{
+	unsigned long va, kva, ret;
+
+	va = VMALLOC_VMADDR(adr);
+	kva = uvirt_to_kva(pgd_offset_k(va), va);
+	ret = __pa(kva);
+	return ret;
+}
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)) */
+
+static void *rvmalloc(unsigned long size)
+{
+	void *mem;
 	unsigned long adr, page;
 
+	/* Round it off to PAGE_SIZE */
 	size += (PAGE_SIZE - 1);
 	size &= ~(PAGE_SIZE - 1);
 
-	mem=vmalloc(size);
-	if (mem) {
-		/* Clear the ram out, no junk to the user */
-		memset(mem, 0, size);
-		adr=(unsigned long) mem;
-		while (size > 0) {
-			page = kvirt_to_phys(adr);
-			mem_map_reserve(MAP_NR(phys_to_virt(page)));
-			adr+=PAGE_SIZE;
-			if (size > PAGE_SIZE) size-=PAGE_SIZE;
-			else  size=0;
-		}
+	mem = vmalloc(size);
+	if (!mem)
+		return NULL;
+
+	memset(mem, 0, size); /* Clear the ram out, no junk to the user */
+	adr = (unsigned long) mem;
+	while (size > 0) {
+		page = kvirt_to_pa(adr);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
+		mem_map_reserve(MAP_NR(phys_to_virt(page)));
+#else
+		mem_map_reserve(MAP_NR(__va(page)));
+#endif
+		adr += PAGE_SIZE;
+		if (size > PAGE_SIZE)
+			size -= PAGE_SIZE;
+		else
+			size = 0;
 	}
+
 	return mem;
 }
 
-static void rvfree(void * mem, unsigned long size)
+static void rvfree(void *mem, unsigned long size)
 {
 	unsigned long adr, page;
-        
+
+	if (!mem)
+		return;
+
 	size += (PAGE_SIZE - 1);
 	size &= ~(PAGE_SIZE - 1);
 
-	if (mem) {
-		adr=(unsigned long) mem;
-		while (size > 0) {
-			page = kvirt_to_phys(adr);
-			mem_map_unreserve(MAP_NR(phys_to_virt(page)));
-			adr+=PAGE_SIZE;
-			if (size > PAGE_SIZE) size-=PAGE_SIZE;
-			else size=0;
-		}
-		vfree(mem);
+	adr = (unsigned long) mem;
+	while (size > 0) {
+		page = kvirt_to_pa(adr);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
+		mem_map_unreserve(MAP_NR(phys_to_virt(page)));
+#else
+		mem_map_unreserve(MAP_NR(__va(page)));
+#endif
+		adr += PAGE_SIZE;
+		if (size > PAGE_SIZE)
+			size -= PAGE_SIZE;
+		else
+			size = 0;
 	}
+	vfree(mem);
 }
 
 /**********************************************************************
@@ -422,6 +333,7 @@ static void rvfree(void * mem, unsigned long size)
  * /proc interface
  *
  **********************************************************************/
+#ifdef CONFIG_PROC_FS
 static struct proc_dir_entry *cpia_proc_root=NULL;
 
 static int cpia_read_proc(char *page, char **start, off_t off,
@@ -432,7 +344,7 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 	struct cam_data *cam = data;
 	char tmpstr[20];
 
-	/* IMPORTANT: This output MUST be kept under 4k (FIXME: PAGE_SIZE?)
+	/* IMPORTANT: This output MUST be kept under PAGE_SIZE
 	 *            or we need to get more sophisticated. */
 
 	out += sprintf(out, "read-only\n-----------------------\n");
@@ -467,22 +379,23 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 	               cam->params.status.vpStatus);
 	out += sprintf(out, "error_code:               %#04x\n",
 	               cam->params.status.errorCode);
+	/* GA 04/14/00 - QX3 specific entries */
+	if (cam->params.qx3.qx3_detected) {
+		out += sprintf(out, "button:                   %4d\n",
+		               cam->params.qx3.button);
+		out += sprintf(out, "cradled:                  %4d\n",
+		               cam->params.qx3.cradled);
+	}
 	out += sprintf(out, "video_size:               %s\n",
 	               cam->params.format.videoSize == VIDEOSIZE_CIF ?
 		       "CIF " : "QCIF");
-	out += sprintf(out, "sub_sample:               %s\n",
-	               cam->params.format.subSample == SUBSAMPLE_420 ?
-		       "420" : "422");
-	out += sprintf(out, "yuv_order:                %s\n",
-	               cam->params.format.yuvOrder == YUVORDER_YUYV ?
-		       "YUYV" : "UYVY");
 	out += sprintf(out, "roi:                      (%3d, %3d) to (%3d, %3d)\n",
 	               cam->params.roi.colStart*8,
 	               cam->params.roi.rowStart*4,
 	               cam->params.roi.colEnd*8,
 	               cam->params.roi.rowEnd*4);
-	out += sprintf(out, "actual_fps:               %d\n", cam->fps);
-	out += sprintf(out, "transfer_rate:            %dkB/s\n",
+	out += sprintf(out, "actual_fps:               %3d\n", cam->fps);
+	out += sprintf(out, "transfer_rate:            %4dkB/s\n",
 	               cam->transfer_rate);
 	
 	out += sprintf(out, "\nread-write\n");
@@ -490,13 +403,13 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 	               "       max   default  comment\n");
 	out += sprintf(out, "brightness:             %8d  %8d  %8d  %8d\n",
 	               cam->params.colourParams.brightness, 0, 100, 50);
-	if(cam->params.version.firmwareVersion == 1 &&
-	   cam->params.version.firmwareRevision == 2) {
+	if (cam->params.version.firmwareVersion == 1 &&
+	   cam->params.version.firmwareRevision == 2)
 		/* 1-02 firmware limits contrast to 80 */
 		tmp = 80;
-	} else {
+	else
 		tmp = 96;
-	}
+
 	out += sprintf(out, "contrast:               %8d  %8d  %8d  %8d"
 	               "  steps of 8\n",
 	               cam->params.colourParams.contrast, 0, tmp, 48);
@@ -510,21 +423,20 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 	               2*cam->params.streamStartLine, 0,
 		       cam->params.format.videoSize == VIDEOSIZE_CIF ? 288:144,
 		       cam->params.format.videoSize == VIDEOSIZE_CIF ? 240:120);
+	out += sprintf(out, "sub_sample:             %8s  %8s  %8s  %8s\n",
+	               cam->params.format.subSample == SUBSAMPLE_420 ?
+		       "420" : "422", "420", "422", "422");
+	out += sprintf(out, "yuv_order:              %8s  %8s  %8s  %8s\n",
+	               cam->params.format.yuvOrder == YUVORDER_YUYV ?
+		       "YUYV" : "UYVY", "YUYV" , "UYVY", "YUYV");
 	out += sprintf(out, "ecp_timing:             %8s  %8s  %8s  %8s\n",
 	               cam->params.ecpTiming ? "slow" : "normal", "slow",
 		       "normal", "normal");
 
-	switch(cam->params.colourBalance.balanceMode) {
-	case 1:
-	  // FIXME case 3:
-		sprintf(tmpstr, "manual");
-		break;
-	case 2:
+	if (cam->params.colourBalance.balanceModeIsAuto) {
 		sprintf(tmpstr, "auto");
-		break;
-	default:
-		sprintf(tmpstr, "unknown");
-		break;
+	} else {
+		sprintf(tmpstr, "manual");
 	}
 	out += sprintf(out, "color_balance_mode:     %8s  %8s  %8s"
 		       "  %8s\n",  tmpstr, "manual", "auto", "auto");
@@ -535,20 +447,20 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 	out += sprintf(out, "blue_gain:              %8d  %8d  %8d  %8d\n",
 	               cam->params.colourBalance.blueGain, 0, 212, 92);
 
-	if(cam->params.version.firmwareVersion == 1 &&
-	   cam->params.version.firmwareRevision == 2) {
+	if (cam->params.version.firmwareVersion == 1 &&
+	   cam->params.version.firmwareRevision == 2)
 		/* 1-02 firmware limits gain to 2 */
 		sprintf(tmpstr, "%8d  %8d", 1, 2);
-	} else {
+	else
 		sprintf(tmpstr, "%8d  %8d", 1, 8);
-	}
-	if(cam->params.exposure.gainMode == 0) {
+
+	if (cam->params.exposure.gainMode == 0)
 		out += sprintf(out, "max_gain:                unknown  %18s"
 		               "  %8d  powers of 2\n", tmpstr, 2); 
-	} else {
+	else
 		out += sprintf(out, "max_gain:               %8d  %18s  %8d  powers of 2\n", 
 		               1<<(cam->params.exposure.gainMode-1), tmpstr, 2);
-	}
+
 	switch(cam->params.exposure.expMode) {
 	case 1:
 	case 3:
@@ -568,22 +480,22 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 	               "off", "on", "on");
 	out += sprintf(out, "gain:                   %8d  %8d  max_gain  %8d  1,2,4,8 possible\n",
 	               1<<cam->params.exposure.gain, 1, 1);
-	if(cam->params.version.firmwareVersion == 1 &&
-	   cam->params.version.firmwareRevision == 2) {
+	if (cam->params.version.firmwareVersion == 1 &&
+	   cam->params.version.firmwareRevision == 2)
 		/* 1-02 firmware limits fineExp to 127 */
 		tmp = 255;
-	} else {
+	else
 		tmp = 511;
-	}
+
 	out += sprintf(out, "fine_exp:               %8d  %8d  %8d  %8d\n",
 	               cam->params.exposure.fineExp*2, 0, tmp, 0);
-	if(cam->params.version.firmwareVersion == 1 &&
-	   cam->params.version.firmwareRevision == 2) {
+	if (cam->params.version.firmwareVersion == 1 &&
+	   cam->params.version.firmwareRevision == 2)
 		/* 1-02 firmware limits coarseExpHi to 0 */
 		tmp = 255;
-	} else {
+	else
 		tmp = 65535;
-	}
+
 	out += sprintf(out, "coarse_exp:             %8d  %8d  %8d"
 		       "  %8d\n", cam->params.exposure.coarseExpLo+
 		       256*cam->params.exposure.coarseExpHi, 0, tmp, 185);
@@ -637,9 +549,9 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 		break;
 	}
 	out += sprintf(out, "    none,auto,manual      auto\n");
-	out += sprintf(out, "decimation:             %8s  %8s  %8s  %8s\n",
+	out += sprintf(out, "decimation_enable:      %8s  %8s  %8s  %8s\n",
         	       cam->params.compression.decimation == 
-		       DECIMATION_ENAB ? "on":"off", "off", "off",
+		       DECIMATION_ENAB ? "on":"off", "off", "on",
 		       "off");
 	out += sprintf(out, "compression_target:    %9s %9s %9s %9s\n",
 	               cam->params.compressionTarget.frTargeting  == 
@@ -647,13 +559,13 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 		       "framerate":"quality",
 		       "framerate", "quality", "quality");
 	out += sprintf(out, "target_framerate:       %8d  %8d  %8d  %8d\n",
-	               cam->params.compressionTarget.targetFR, 0, 30, 7);
+	               cam->params.compressionTarget.targetFR, 1, 30, 15);
 	out += sprintf(out, "target_quality:         %8d  %8d  %8d  %8d\n",
-	               cam->params.compressionTarget.targetQ, 0, 255, 10);
+	               cam->params.compressionTarget.targetQ, 1, 64, 5);
 	out += sprintf(out, "y_threshold:            %8d  %8d  %8d  %8d\n",
-	               cam->params.yuvThreshold.yThreshold, 0, 31, 15);
+	               cam->params.yuvThreshold.yThreshold, 0, 31, 6);
 	out += sprintf(out, "uv_threshold:           %8d  %8d  %8d  %8d\n",
-	               cam->params.yuvThreshold.uvThreshold, 0, 31, 15);
+	               cam->params.yuvThreshold.uvThreshold, 0, 31, 6);
 	out += sprintf(out, "hysteresis:             %8d  %8d  %8d  %8d\n",
 	               cam->params.compressionParams.hysteresis, 0, 255, 3);
 	out += sprintf(out, "threshold_max:          %8d  %8d  %8d  %8d\n",
@@ -674,15 +586,25 @@ static int cpia_read_proc(char *page, char **start, off_t off,
 	out += sprintf(out, "decimation_thresh_mod:  %8d  %8d  %8d  %8d\n",
 	               cam->params.compressionParams.decimationThreshMod,
 		       0, 255, 2);
-	
+
+	/* GA 04/14/00 - QX3 specific entries */
+	if (cam->params.qx3.qx3_detected) {
+		out += sprintf(out, "toplight:               %8s  %8s  %8s  %8s\n", 
+		               cam->params.qx3.toplight ? "on" : "off",
+			       "off", "on", "off");
+		out += sprintf(out, "bottomlight:            %8s  %8s  %8s  %8s\n", 
+		               cam->params.qx3.bottomlight ? "on" : "off",
+			       "off", "on", "off");
+	}
+
 	len = out - page;
 	len -= off;
 	if (len < count) {
 		*eof = 1;
 		if (len <= 0) return 0;
-	} else {
+	} else
 		len = count;
-	}
+
 	*start = page + off;
 	return len;
 }
@@ -692,16 +614,14 @@ static int cpia_write_proc(struct file *file, const char *buffer,
 {
 	struct cam_data *cam = data;
 	struct cam_params new_params;
-	int retval, len, colon_found;
+	int retval, find_colon;
 	int size = count;
-	char *p;
 	unsigned long val;
 	u32 command_flags = 0;
 	u8 new_mains;
 	
-	if(down_interruptible(&cam->param_lock)) {
+	if (down_interruptible(&cam->param_lock))
 		return -ERESTARTSYS;
-	}
 	
 	/*
 	 * Skip over leading whitespace
@@ -714,106 +634,112 @@ static int cpia_write_proc(struct file *file, const char *buffer,
 	memcpy(&new_params, &cam->params, sizeof(struct cam_params));
 	new_mains = cam->mainsFreq;
 	
-#define MATCH(x) (len=strlen(x), len <= count && strncmp(buffer, x, len) == 0)
+#define MATCH(x) \
+	({ \
+		int _len = strlen(x), _ret, _colon_found; \
+		_ret = (_len <= count && strncmp(buffer, x, _len) == 0); \
+		if (_ret) { \
+			buffer += _len; \
+			count -= _len; \
+			if (find_colon) { \
+				_colon_found = 0; \
+				while (count && (*buffer == ' ' || *buffer == '\t' || \
+				       (!_colon_found && *buffer == ':'))) { \
+					if (*buffer == ':')  \
+						_colon_found = 1; \
+					--count; \
+					++buffer; \
+				} \
+				if (!count || !_colon_found) \
+					retval = -EINVAL; \
+				find_colon = 0; \
+			} \
+		} \
+		_ret; \
+	})
 #define FIRMWARE_VERSION(x,y) (new_params.version.firmwareVersion == (x) && \
                                new_params.version.firmwareRevision == (y))
 #define VALUE \
-	simple_strtoul(buffer, &p, 0); \
-	if(p == buffer) { \
-		retval = -EINVAL; \
-	} else { \
-		count -= p-buffer; \
-		buffer = p; \
-	}
-#define FIND_VALUE \
-	buffer += len;\
-	count -= len; \
-	colon_found=0; \
-	while(count && (*buffer == ' ' || *buffer == '\t' || \
-	                (!colon_found && *buffer == ':'))) { \
-		if(*buffer == ':') colon_found = 1; \
-		--count; \
-		++buffer; \
-	} \
-	if(!count || !colon_found) { \
-		retval = -EINVAL; \
-	}
-#define FIND_END \
-	if(retval == 0) { \
-		while(count && isspace(*buffer) && *buffer != '\n'){ \
-			--count; \
-			++buffer; \
+	({ \
+		char *_p; \
+		unsigned long int _ret; \
+		_ret = simple_strtoul(buffer, &_p, 0); \
+		if (_p == buffer) \
+			retval = -EINVAL; \
+		else { \
+			count -= _p - buffer; \
+			buffer = _p; \
 		} \
-		if(count) { \
-			if(*buffer != '\n' && *buffer != ';') { \
-				retval = -EINVAL; \
-			} else { \
-				--count; \
-				++buffer; \
-			} \
-		} \
-	}
+		_ret; \
+	})
+
 	retval = 0;
-	while(count && !retval) {
-		if(MATCH("brightness")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 100)
-					new_params.colourParams.brightness=val;
-				else retval = -EINVAL;
+	while (count && !retval) {
+		find_colon = 1;
+		if (MATCH("brightness")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 100)
+					new_params.colourParams.brightness = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOLOURPARAMS;
-			FIND_END
-		} else if(MATCH("contrast")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 100) {
+		} else if (MATCH("contrast")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 100) {
 					/* contrast is in steps of 8, so round*/
 					val = ((val + 3) / 8) * 8;
 					/* 1-02 firmware limits contrast to 80*/
-					if(FIRMWARE_VERSION(1,2) && val > 80)
+					if (FIRMWARE_VERSION(1,2) && val > 80)
 						val = 80;
+
 					new_params.colourParams.contrast = val;
-				} else retval = -EINVAL;
+				} else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOLOURPARAMS;
-			FIND_END
-		} else if(MATCH("saturation")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 100)
-					new_params.colourParams.saturation=val;
-				else retval = -EINVAL;
+		} else if (MATCH("saturation")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 100)
+					new_params.colourParams.saturation = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOLOURPARAMS;
-			FIND_END
-		} else if(MATCH("sensor_fps")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
+		} else if (MATCH("sensor_fps")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
 				/* find values so that sensorFPS is minimized,
 				 * but >= val */
-				if(val > 30) {
+				if (val > 30)
 					retval = -EINVAL;
-				} else if(val > 25) {
+				else if (val > 25) {
 					new_params.sensorFps.divisor = 0;
 					new_params.sensorFps.baserate = 1;
-				} else if(val > 15) {
+				} else if (val > 15) {
 					new_params.sensorFps.divisor = 0;
 					new_params.sensorFps.baserate = 0;
-				} else if(val > 12) {
+				} else if (val > 12) {
 					new_params.sensorFps.divisor = 1;
 					new_params.sensorFps.baserate = 1;
-				} else if(val > 7) {
+				} else if (val > 7) {
 					new_params.sensorFps.divisor = 1;
 					new_params.sensorFps.baserate = 0;
-				} else if(val > 6) {
+				} else if (val > 6) {
 					new_params.sensorFps.divisor = 2;
 					new_params.sensorFps.baserate = 1;
-				} else if(val > 3) {
+				} else if (val > 3) {
 					new_params.sensorFps.divisor = 2;
 					new_params.sensorFps.baserate = 0;
 				} else {
@@ -825,89 +751,100 @@ static int cpia_write_proc(struct file *file, const char *buffer,
 					flicker_jumps[new_mains]
 					[new_params.sensorFps.baserate]
 					[new_params.sensorFps.divisor];
-				if(new_params.flickerControl.flickerMode)
+				if (new_params.flickerControl.flickerMode)
 					command_flags |= COMMAND_SETFLICKERCTRL;
 			}
 			command_flags |= COMMAND_SETSENSORFPS;
-			FIND_END
-		} else if(MATCH("stream_start_line")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
+		} else if (MATCH("stream_start_line")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
 				int max_line = 288;
-				if(new_params.format.videoSize==VIDEOSIZE_QCIF)
+
+				if (new_params.format.videoSize == VIDEOSIZE_QCIF)
 					max_line = 144;
-				if(val <= max_line)
+				if (val <= max_line)
 					new_params.streamStartLine = val/2;
-				else retval = -EINVAL;
+				else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("ecp_timing")) {
-			FIND_VALUE
-			if(!retval && MATCH("normal")) {
-				buffer += len;
-				count -= len;
+		} else if (MATCH("sub_sample")) {
+			if (!retval && MATCH("420"))
+				new_params.format.subSample = SUBSAMPLE_420;
+			else if (!retval && MATCH("422"))
+				new_params.format.subSample = SUBSAMPLE_422;
+			else
+				retval = -EINVAL;
+
+			command_flags |= COMMAND_SETFORMAT;
+		} else if (MATCH("yuv_order")) {
+			if (!retval && MATCH("YUYV"))
+				new_params.format.yuvOrder = YUVORDER_YUYV;
+			else if (!retval && MATCH("UYVY"))
+				new_params.format.yuvOrder = YUVORDER_UYVY;
+			else
+				retval = -EINVAL;
+
+			command_flags |= COMMAND_SETFORMAT;
+		} else if (MATCH("ecp_timing")) {
+			if (!retval && MATCH("normal"))
 				new_params.ecpTiming = 0;
-			} else if(!retval && MATCH("slow")) {
-				buffer += len;
-				count -= len;
+			else if (!retval && MATCH("slow"))
 				new_params.ecpTiming = 1;
-			} else {
+			else
 				retval = -EINVAL;
-			}
+
 			command_flags |= COMMAND_SETECPTIMING;
-			FIND_END
-		} else if(MATCH("color_balance_mode")) {
-			FIND_VALUE
-			if(!retval && MATCH("manual")) {
-				buffer += len;
-				count -= len;
-				new_params.colourBalance.balanceMode=1;
-			} else if(!retval && MATCH("auto")) {
-				buffer += len;
-				count -= len;
-				new_params.colourBalance.balanceMode=2;
-			} else {
+		} else if (MATCH("color_balance_mode")) {
+			if (!retval && MATCH("manual"))
+				new_params.colourBalance.balanceModeIsAuto = 0;
+			else if (!retval && MATCH("auto"))
+				new_params.colourBalance.balanceModeIsAuto = 1;
+			else
 				retval = -EINVAL;
-			}
+
 			command_flags |= COMMAND_SETCOLOURBALANCE;
-			FIND_END
-		} else if(MATCH("red_gain")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 212)
+		} else if (MATCH("red_gain")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 212)
 					new_params.colourBalance.redGain = val;
-				else retval = -EINVAL;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOLOURBALANCE;
-			FIND_END
-		} else if(MATCH("green_gain")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 212)
-					new_params.colourBalance.greenGain=val;
-				else retval = -EINVAL;
+		} else if (MATCH("green_gain")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 212)
+					new_params.colourBalance.greenGain = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOLOURBALANCE;
-			FIND_END
-		} else if(MATCH("blue_gain")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 212)
+		} else if (MATCH("blue_gain")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 212)
 					new_params.colourBalance.blueGain = val;
-				else retval = -EINVAL;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOLOURBALANCE;
-			FIND_END
-		} else if(MATCH("max_gain")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
+		} else if (MATCH("max_gain")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
 				/* 1-02 firmware limits gain to 2 */
-				if(FIRMWARE_VERSION(1,2) && val > 2)
+				if (FIRMWARE_VERSION(1,2) && val > 2)
 					val = 2;
 				switch(val) {
 				case 1:
@@ -928,44 +865,32 @@ static int cpia_write_proc(struct file *file, const char *buffer,
 				}
 			}
 			command_flags |= COMMAND_SETEXPOSURE;
-			FIND_END
-		} else if(MATCH("exposure_mode")) {
-			FIND_VALUE
-			if(!retval && MATCH("auto")) {
-				buffer += len;
-				count -= len;
+		} else if (MATCH("exposure_mode")) {
+			if (!retval && MATCH("auto"))
 				new_params.exposure.expMode = 2;
-			} else if(!retval && MATCH("manual")) {
-				buffer += len;
-				count -= len;
-				if(new_params.exposure.expMode == 2)
+			else if (!retval && MATCH("manual")) {
+				if (new_params.exposure.expMode == 2)
 					new_params.exposure.expMode = 3;
 				new_params.flickerControl.flickerMode = 0;
 				command_flags |= COMMAND_SETFLICKERCTRL;
-			} else {
+			} else
 				retval = -EINVAL;
-			}
+
 			command_flags |= COMMAND_SETEXPOSURE;
-			FIND_END
-		} else if(MATCH("centre_weight")) {
-			FIND_VALUE
-			if(!retval && MATCH("on")) {
-				buffer += len;
-				count -= len;
+		} else if (MATCH("centre_weight")) {
+			if (!retval && MATCH("on"))
 				new_params.exposure.centreWeight = 1;
-			} else if(!retval && MATCH("off")) {
-				buffer += len;
-				count -= len;
+			else if (!retval && MATCH("off"))
 				new_params.exposure.centreWeight = 2;
-			} else {
+			else
 				retval = -EINVAL;
-			}
+
 			command_flags |= COMMAND_SETEXPOSURE;
-			FIND_END
-		} else if(MATCH("gain")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
+		} else if (MATCH("gain")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
 				switch(val) {
 				case 1:
 					new_params.exposure.gain = 0;
@@ -996,35 +921,36 @@ static int cpia_write_proc(struct file *file, const char *buffer,
 					break;
 				}
 				command_flags |= COMMAND_SETEXPOSURE;
-				if(new_params.exposure.gain >
-				   new_params.exposure.gainMode-1)
+				if (new_params.exposure.gain >
+				    new_params.exposure.gainMode-1)
 					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("fine_exp")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val < 256) {
+		} else if (MATCH("fine_exp")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val < 256) {
 					/* 1-02 firmware limits fineExp to 127*/
-					if(FIRMWARE_VERSION(1,2) && val > 127)
+					if (FIRMWARE_VERSION(1,2) && val > 127)
 						val = 127;
 					new_params.exposure.fineExp = val;
 					new_params.exposure.expMode = 1;
 					command_flags |= COMMAND_SETEXPOSURE;
 					new_params.flickerControl.flickerMode = 0;
 					command_flags |= COMMAND_SETFLICKERCTRL;
-				} else retval = -EINVAL;
+				} else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("coarse_exp")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val < 65536) {
+		} else if (MATCH("coarse_exp")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val < 65536) {
 					/* 1-02 firmware limits
 					 * coarseExp to 255 */
-					if(FIRMWARE_VERSION(1,2) && val > 255)
+					if (FIRMWARE_VERSION(1,2) && val > 255)
 						val = 255;
 					new_params.exposure.coarseExpLo =
 						val & 0xff;
@@ -1034,344 +960,389 @@ static int cpia_write_proc(struct file *file, const char *buffer,
 					command_flags |= COMMAND_SETEXPOSURE;
 					new_params.flickerControl.flickerMode = 0;
 					command_flags |= COMMAND_SETFLICKERCTRL;
-				} else retval = -EINVAL;
+				} else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("red_comp")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val >= 220 && val <= 255) {
+		} else if (MATCH("red_comp")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val >= 220 && val <= 255) {
 					new_params.exposure.redComp = val;
 					command_flags |= COMMAND_SETEXPOSURE;
-				} else retval = -EINVAL;
+				} else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("green1_comp")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val >= 214 && val <= 255) {
+		} else if (MATCH("green1_comp")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val >= 214 && val <= 255) {
 					new_params.exposure.green1Comp = val;
 					command_flags |= COMMAND_SETEXPOSURE;
-				} else retval = -EINVAL;
+				} else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("green2_comp")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val >= 214 && val <= 255) {
+		} else if (MATCH("green2_comp")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val >= 214 && val <= 255) {
 					new_params.exposure.green2Comp = val;
 					command_flags |= COMMAND_SETEXPOSURE;
-				} else retval = -EINVAL;
+				} else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("blue_comp")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val >= 230 && val <= 255) {
+		} else if (MATCH("blue_comp")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val >= 230 && val <= 255) {
 					new_params.exposure.blueComp = val;
 					command_flags |= COMMAND_SETEXPOSURE;
-				} else retval = -EINVAL;
+				} else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("apcor_gain1")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
+		} else if (MATCH("apcor_gain1")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
 				command_flags |= COMMAND_SETAPCOR;
-				if(val <= 0xff) new_params.apcor.gain1 = val;
-				else retval = -EINVAL;
+				if (val <= 0xff)
+					new_params.apcor.gain1 = val;
+				else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("apcor_gain2")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
+		} else if (MATCH("apcor_gain2")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
 				command_flags |= COMMAND_SETAPCOR;
-				if(val <= 0xff) new_params.apcor.gain2 = val;
-				else retval = -EINVAL;
+				if (val <= 0xff)
+					new_params.apcor.gain2 = val;
+				else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("apcor_gain4")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
+		} else if (MATCH("apcor_gain4")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
 				command_flags |= COMMAND_SETAPCOR;
-				if(val <= 0xff) new_params.apcor.gain4 = val;
-				else retval = -EINVAL;
+				if (val <= 0xff)
+					new_params.apcor.gain4 = val;
+				else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("apcor_gain8")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
+		} else if (MATCH("apcor_gain8")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
 				command_flags |= COMMAND_SETAPCOR;
-				if(val <= 0xff) new_params.apcor.gain8 = val;
-				else retval = -EINVAL;
+				if (val <= 0xff)
+					new_params.apcor.gain8 = val;
+				else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("vl_offset_gain1")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 0xff) new_params.vlOffset.gain1 = val;
-				else retval = -EINVAL;
+		} else if (MATCH("vl_offset_gain1")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.vlOffset.gain1 = val;
+				else
+					retval = -EINVAL;
 			}
-			FIND_END
 			command_flags |= COMMAND_SETVLOFFSET;
-		} else if(MATCH("vl_offset_gain2")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 0xff) new_params.vlOffset.gain2 = val;
-				else retval = -EINVAL;
+		} else if (MATCH("vl_offset_gain2")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.vlOffset.gain2 = val;
+				else
+					retval = -EINVAL;
 			}
-			FIND_END
 			command_flags |= COMMAND_SETVLOFFSET;
-		} else if(MATCH("vl_offset_gain4")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 0xff) new_params.vlOffset.gain4 = val;
-				else retval = -EINVAL;
+		} else if (MATCH("vl_offset_gain4")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.vlOffset.gain4 = val;
+				else
+					retval = -EINVAL;
 			}
-			FIND_END
 			command_flags |= COMMAND_SETVLOFFSET;
-		} else if(MATCH("vl_offset_gain8")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 0xff) new_params.vlOffset.gain8 = val;
-				else retval = -EINVAL;
+		} else if (MATCH("vl_offset_gain8")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.vlOffset.gain8 = val;
+				else
+					retval = -EINVAL;
 			}
-			FIND_END
 			command_flags |= COMMAND_SETVLOFFSET;
-		} else if(MATCH("flicker_control")) {
-			FIND_VALUE
-			if(!retval && MATCH("on")) {
-				buffer += len;
-				count -= len;
+		} else if (MATCH("flicker_control")) {
+			if (!retval && MATCH("on")) {
 				new_params.flickerControl.flickerMode = 1;
 				new_params.exposure.expMode = 2;
 				command_flags |= COMMAND_SETEXPOSURE;
-			} else if(!retval && MATCH("off")) {
-				buffer += len;
-				count -= len;
+			} else if (!retval && MATCH("off"))
 				new_params.flickerControl.flickerMode = 0;
-			} else {
+			else
 				retval = -EINVAL;
-			}
+
 			command_flags |= COMMAND_SETFLICKERCTRL;
-			FIND_END
-		} else if(MATCH("mains_frequency")) {
-			FIND_VALUE
-			if(!retval && MATCH("50")) {
-				buffer += len;
-				count -= len;
+		} else if (MATCH("mains_frequency")) {
+			if (!retval && MATCH("50")) {
 				new_mains = 0;
 				new_params.flickerControl.coarseJump = 
 					flicker_jumps[new_mains]
 					[new_params.sensorFps.baserate]
 					[new_params.sensorFps.divisor];
-				if(new_params.flickerControl.flickerMode)
+				if (new_params.flickerControl.flickerMode)
 					command_flags |= COMMAND_SETFLICKERCTRL;
-			} else if(!retval && MATCH("60")) {
-				buffer += len;
-				count -= len;
+			} else if (!retval && MATCH("60")) {
 				new_mains = 1;
 				new_params.flickerControl.coarseJump = 
 					flicker_jumps[new_mains]
 					[new_params.sensorFps.baserate]
 					[new_params.sensorFps.divisor];
-				if(new_params.flickerControl.flickerMode)
+				if (new_params.flickerControl.flickerMode)
 					command_flags |= COMMAND_SETFLICKERCTRL;
-			} else {
+			} else
 				retval = -EINVAL;
-			}
-			FIND_END
-		} else if(MATCH("allowable_overexposure")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val <= 0xff) {
+		} else if (MATCH("allowable_overexposure")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff) {
 					new_params.flickerControl.
 						allowableOverExposure = val;
 					command_flags |= COMMAND_SETFLICKERCTRL;
-				} else retval = -EINVAL;
+				} else
+					retval = -EINVAL;
 			}
-			FIND_END
-		} else if(MATCH("compression_mode")) {
-			FIND_VALUE
-			if(!retval && MATCH("none")) {
-				buffer += len;
-				count -= len;
+		} else if (MATCH("compression_mode")) {
+			if (!retval && MATCH("none"))
 				new_params.compression.mode =
 					CPIA_COMPRESSION_NONE;
-			} else if(!retval && MATCH("auto")) {
-				buffer += len;
-				count -= len;
+			else if (!retval && MATCH("auto"))
 				new_params.compression.mode =
 					CPIA_COMPRESSION_AUTO;
-			} else if(!retval && MATCH("manual")) {
-				buffer += len;
-				count -= len;
+			else if (!retval && MATCH("manual"))
 				new_params.compression.mode =
 					CPIA_COMPRESSION_MANUAL;
-			} else {
+			else
 				retval = -EINVAL;
-			}
+
 			command_flags |= COMMAND_SETCOMPRESSION;
-			FIND_END
-		} else if(MATCH("decimation")) {
-			FIND_VALUE
-			if(!retval && MATCH("off")) {
-				buffer += len;
-				count -= len;
+		} else if (MATCH("decimation_enable")) {
+			if (!retval && MATCH("off"))
 				new_params.compression.decimation = 0;
-			} else {
+			else if (!retval && MATCH("on"))
+				new_params.compression.decimation = 1;
+			else
 				retval = -EINVAL;
-			}
+
 			command_flags |= COMMAND_SETCOMPRESSION;
-			FIND_END
-		} else if(MATCH("compression_target")) {
-			FIND_VALUE
-			if(!retval && MATCH("quality")) {
-				buffer += len;
-				count -= len;
+		} else if (MATCH("compression_target")) {
+			if (!retval && MATCH("quality"))
 				new_params.compressionTarget.frTargeting = 
 					CPIA_COMPRESSION_TARGET_QUALITY;
-			} else if(!retval && MATCH("framerate")) {
-				buffer += len;
-				count -= len;
+			else if (!retval && MATCH("framerate"))
 				new_params.compressionTarget.frTargeting = 
 					CPIA_COMPRESSION_TARGET_FRAMERATE;
-			} else {
+			else
 				retval = -EINVAL;
+
+			command_flags |= COMMAND_SETCOMPRESSIONTARGET;
+		} else if (MATCH("target_framerate")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if(val > 0 && val <= 30)
+					new_params.compressionTarget.targetFR = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOMPRESSIONTARGET;
-			FIND_END
-		} else if(MATCH("target_framerate")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval)
-				new_params.compressionTarget.targetFR = val;
+		} else if (MATCH("target_quality")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if(val > 0 && val <= 64)
+					new_params.compressionTarget.targetQ = val;
+				else 
+					retval = -EINVAL;
+			}
 			command_flags |= COMMAND_SETCOMPRESSIONTARGET;
-			FIND_END
-		} else if(MATCH("target_quality")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) new_params.compressionTarget.targetQ = val;
-			command_flags |= COMMAND_SETCOMPRESSIONTARGET;
-			FIND_END
-		} else if(MATCH("y_threshold")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val < 32)
-					new_params.yuvThreshold.yThreshold=val;
-				else retval = -EINVAL;
+		} else if (MATCH("y_threshold")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val < 32)
+					new_params.yuvThreshold.yThreshold = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETYUVTHRESH;
-			FIND_END
-		} else if(MATCH("uv_threshold")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(val < 32)
-					new_params.yuvThreshold.uvThreshold=val;
-				else retval = -EINVAL;
+		} else if (MATCH("uv_threshold")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val < 32)
+					new_params.yuvThreshold.uvThreshold = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETYUVTHRESH;
-			FIND_END
-		} else if(MATCH("hysteresis")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(retval <= 0xff)
-				    new_params.compressionParams.hysteresis=val;
-				else retval = -EINVAL;
+		} else if (MATCH("hysteresis")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.compressionParams.hysteresis = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOMPRESSIONPARAMS;
-			FIND_END
-		} else if(MATCH("threshold_max")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(retval <= 0xff)
-				    new_params.compressionParams.threshMax=val;
-				else retval = -EINVAL;
+		} else if (MATCH("threshold_max")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.compressionParams.threshMax = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOMPRESSIONPARAMS;
-			FIND_END
-		} else if(MATCH("small_step")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(retval <= 0xff)
-				    new_params.compressionParams.smallStep=val;
-				else retval = -EINVAL;
+		} else if (MATCH("small_step")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.compressionParams.smallStep = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOMPRESSIONPARAMS;
-			FIND_END
-		} else if(MATCH("large_step")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(retval <= 0xff)
-				    new_params.compressionParams.largeStep=val;
-				else retval = -EINVAL;
+		} else if (MATCH("large_step")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.compressionParams.largeStep = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOMPRESSIONPARAMS;
-			FIND_END
-		} else if(MATCH("decimation_hysteresis")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(retval <= 0xff)
-				    new_params.compressionParams.
-				        decimationHysteresis = val;
-				else retval = -EINVAL;
+		} else if (MATCH("decimation_hysteresis")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.compressionParams.decimationHysteresis = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOMPRESSIONPARAMS;
-			FIND_END
-		} else if(MATCH("fr_diff_step_thresh")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(retval <= 0xff)
-				    new_params.compressionParams.
-				        frDiffStepThresh = val;
-				else retval = -EINVAL;
+		} else if (MATCH("fr_diff_step_thresh")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.compressionParams.frDiffStepThresh = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOMPRESSIONPARAMS;
-			FIND_END
-		} else if(MATCH("q_diff_step_thresh")) {
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(retval <= 0xff)
-				    new_params.compressionParams.
-				        qDiffStepThresh = val;
-				else retval = -EINVAL;
-			command_flags |= COMMAND_SETCOMPRESSIONPARAMS;
-			FIND_END
-		} else if(MATCH("decimation_thresh_mod")) {
-			}
-			FIND_VALUE
-			if(!retval) { val = VALUE }
-			if(!retval) {
-				if(retval <= 0xff)
-				    new_params.compressionParams.
-				        decimationThreshMod = val;
-				else retval = -EINVAL;
+		} else if (MATCH("q_diff_step_thresh")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.compressionParams.qDiffStepThresh = val;
+				else
+					retval = -EINVAL;
 			}
 			command_flags |= COMMAND_SETCOMPRESSIONPARAMS;
-			FIND_END
+		} else if (MATCH("decimation_thresh_mod")) {
+			if (!retval)
+				val = VALUE;
+
+			if (!retval) {
+				if (val <= 0xff)
+					new_params.compressionParams.decimationThreshMod = val;
+				else
+					retval = -EINVAL;
+			}
+			command_flags |= COMMAND_SETCOMPRESSIONPARAMS;
+		} else if (MATCH("toplight")) { /* GA 4/14/00 */
+		        if (!retval && MATCH("on"))
+			  new_params.qx3.toplight = 1;
+
+			else if (!retval && MATCH("off")) 
+			  new_params.qx3.toplight = 0;
+
+			else 
+			  retval = -EINVAL;
+                        command_flags |= COMMAND_SETLIGHTS;
+                        
+		} else if (MATCH("bottomlight")) { /* GA 4/14/00 */
+		        if (!retval && MATCH("on"))
+			  new_params.qx3.bottomlight = 1;
+
+			else if (!retval && MATCH("off")) 
+			  new_params.qx3.bottomlight = 0;
+
+			else 
+			  retval = -EINVAL;
+                        command_flags |= COMMAND_SETLIGHTS;
+                        
 		} else {
+			DBG("No match found\n");
 			retval = -EINVAL;
+		}
+
+		if (!retval) {
+			while (count && isspace(*buffer) && *buffer != '\n') {
+				--count;
+				++buffer;
+			}
+			if (count) {
+				if (*buffer != '\n' && *buffer != ';')
+					retval = -EINVAL;
+				else {
+					--count;
+					++buffer;
+				}
+			}
 		}
 	}
 #undef MATCH	
@@ -1379,8 +1350,8 @@ static int cpia_write_proc(struct file *file, const char *buffer,
 #undef VALUE
 #undef FIND_VALUE
 #undef FIND_END
-	if(retval == 0) {
-		if(command_flags & COMMAND_SETCOLOURPARAMS) {
+	if (!retval) {
+		if (command_flags & COMMAND_SETCOLOURPARAMS) {
 			/* Adjust cam->vp to reflect these changes */
 			cam->vp.brightness =
 				new_params.colourParams.brightness*65535/100;
@@ -1394,9 +1365,8 @@ static int cpia_write_proc(struct file *file, const char *buffer,
 		cam->mainsFreq = new_mains;
 		cam->cmd_queue |= command_flags;
 		retval = size;
-	} else {
+	} else
 		DBG("error: %d\n", retval);
-	}
 	
 	up(&cam->param_lock);
 	
@@ -1408,17 +1378,21 @@ static void create_proc_cpia_cam(struct cam_data *cam)
 	char name[7];
 	struct proc_dir_entry *ent;
 	
-	if(cpia_proc_root == NULL || cam == NULL) {
+	if (!cpia_proc_root || !cam)
 		return;
-	}
+
 	sprintf(name, "video%d", cam->vdev.minor);
 	
 	ent = create_proc_entry(name, S_IFREG|S_IRUGO|S_IWUSR, cpia_proc_root);
-	if (!ent) return;
+	if (!ent)
+		return;
+
 	ent->data = cam;
 	ent->read_proc = cpia_read_proc;
 	ent->write_proc = cpia_write_proc;
-	ent->size = 3623;
+	ent->size = 3736;
+	if (cam->params.qx3.qx3_detected)
+		ent->size += 188;
 	cam->proc_entry = ent;
 }
 
@@ -1426,16 +1400,43 @@ static void destroy_proc_cpia_cam(struct cam_data *cam)
 {
 	char name[7];
 	
-	if(cam == NULL || cam->proc_entry == NULL) return;
+	if (!cam || !cam->proc_entry)
+		return;
 	
 	sprintf(name, "video%d", cam->vdev.minor);
 	remove_proc_entry(name, cpia_proc_root);
 	cam->proc_entry = NULL;
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
+/*
+ * This is called as the fill_inode function when an inode
+ * is going into (fill = 1) or out of service (fill = 0).
+ * We use it here to manage the module use counts.
+ */
+static void proc_cpia_modcount(struct inode *inode, int fill)
+{
+#ifdef MODULE
+	if (fill)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
+#endif
+}
+#endif
+
 static void proc_cpia_create(void)
 {
 	cpia_proc_root = create_proc_entry("cpia", S_IFDIR, 0);
+
+	if (cpia_proc_root) {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0))
+		cpia_proc_root->fill_inode = &proc_cpia_modcount;
+#else
+		cpia_proc_root->owner = THIS_MODULE;
+#endif
+	} else
+		LOG("Unable to initialise /proc/cpia\n");
 }
 
 #ifdef MODULE
@@ -1444,6 +1445,7 @@ static void proc_cpia_destroy(void)
 	remove_proc_entry("cpia", 0);
 }
 #endif
+#endif /* CONFIG_PROC_FS */
 
 /* ----------------------- debug functions ---------------------- */
 
@@ -1473,39 +1475,41 @@ static int match_videosize( int width, int height )
 {
 	/* return the best match, where 'best' is as always
 	 * the largest that is not bigger than what is requested. */
-	if(width>=352 && height>=288) {
+	if (width>=352 && height>=288)
 		return VIDEOSIZE_352_288; /* CIF */
-	}
-	if(width>=320 && height>=240) {
+
+	if (width>=320 && height>=240)
 		return VIDEOSIZE_320_240; /* SIF */
-	}
-	if(width>=288 && height>=216) {
+
+	if (width>=288 && height>=216)
 		return VIDEOSIZE_288_216;
-	}
-	if(width>=256 && height>=192) {
+
+	if (width>=256 && height>=192)
 		return VIDEOSIZE_256_192;
-	}
-	if(width>=224 && height>=168) {
+
+	if (width>=224 && height>=168)
 		return VIDEOSIZE_224_168;
-	}
-	if(width>=192 && height>=144) {
+
+	if (width>=192 && height>=144)
 		return VIDEOSIZE_192_144;
-	}
-	if(width>=176 && height>=144) {
+
+	if (width>=176 && height>=144)
 		return VIDEOSIZE_176_144; /* QCIF */
-	}
-	if(width>=160 && height>=120) {
+
+	if (width>=160 && height>=120)
 		return VIDEOSIZE_160_120; /* QSIF */
-	}
-	if(width>=128 && height>=96) {
+
+	if (width>=128 && height>=96)
 		return VIDEOSIZE_128_96;
-	}
-	if(width>=64 && height>=48) {
+
+	if (width>=88 && height>=72)
+		return VIDEOSIZE_88_72;
+
+	if (width>=64 && height>=48)
 		return VIDEOSIZE_64_48;
-	}
-	if(width>=48 && height>=48) {
+
+	if (width>=48 && height>=48)
 		return VIDEOSIZE_48_48;
-	}
 
 	return -1;
 }
@@ -1608,6 +1612,16 @@ static void set_vw_size(struct cam_data *cam)
 		cam->params.roi.rowEnd=30;
 		cam->params.streamStartLine = 60;
 		break;
+	case VIDEOSIZE_88_72:
+		cam->vw.width = 88;
+		cam->vw.height = 72;
+		cam->params.format.videoSize=VIDEOSIZE_QCIF;
+		cam->params.roi.colStart=5;
+		cam->params.roi.colEnd=16;
+		cam->params.roi.rowStart=9;
+		cam->params.roi.rowEnd=27;
+		cam->params.streamStartLine = 60;
+		break;
 	case VIDEOSIZE_64_48:
 		cam->vw.width = 64;
 		cam->vw.height = 48;
@@ -1635,27 +1649,29 @@ static void set_vw_size(struct cam_data *cam)
 	return;
 }
 
-static int allocate_frame_buf(struct cam_data *cam) {
+static int allocate_frame_buf(struct cam_data *cam)
+{
 	int i;
 
-	cam->frame_buf = rvmalloc(FRAME_NUM*CPIA_MAX_FRAME_SIZE);
-	if (!cam->frame_buf) {
+	cam->frame_buf = rvmalloc(FRAME_NUM * CPIA_MAX_FRAME_SIZE);
+	if (!cam->frame_buf)
 		return -ENOBUFS;
-	}
-	for( i=0; i<FRAME_NUM; i++ ) {
-		cam->frame[i].data = cam->frame_buf + i*CPIA_MAX_FRAME_SIZE;
-	}
+
+	for (i = 0; i < FRAME_NUM; i++)
+		cam->frame[i].data = cam->frame_buf + i * CPIA_MAX_FRAME_SIZE;
+
 	return 0;
 }
 
-static int free_frame_buf(struct cam_data *cam) {
+static int free_frame_buf(struct cam_data *cam)
+{
 	int i;
 	
 	rvfree(cam->frame_buf, FRAME_NUM*CPIA_MAX_FRAME_SIZE);
-	cam->frame_buf=0;
-	for( i=0; i<FRAME_NUM; i++ ) {
+	cam->frame_buf = 0;
+	for (i=0; i < FRAME_NUM; i++)
 		cam->frame[i].data = NULL;
-	}
+
 	return 0;
 }
 
@@ -1663,9 +1679,9 @@ static int free_frame_buf(struct cam_data *cam) {
 static void inline free_frames(struct cpia_frame frame[FRAME_NUM])
 {
 	int i;
-	for( i=0; i<FRAME_NUM; i++ ) {
-		frame[i].state=FRAME_UNUSED;
-	}
+
+	for (i=0; i < FRAME_NUM; i++)
+		frame[i].state = FRAME_UNUSED;
 	return;
 }
 
@@ -1693,6 +1709,10 @@ static int do_command(struct cam_data *cam, u16 command, u8 a, u8 b, u8 c, u8 d)
 		down(&cam->param_lock);
 		datasize=8;
 		break;
+        case CPIA_COMMAND_ReadMCPorts: /* GA 4/14/00 */
+        case CPIA_COMMAND_ReadVCRegs:
+                datasize = 4;
+                break;
 	default:
 		datasize=0;
 		break;
@@ -1708,12 +1728,12 @@ static int do_command(struct cam_data *cam, u16 command, u8 a, u8 b, u8 c, u8 d)
 	cmd[7] = 0;
 
 	retval = cam->ops->transferCmd(cam->lowlevel_data, cmd, data);
-	if(retval) {
-		LOG("%x - failed\n", command);
+	if (retval) {
+		DBG("%x - failed, retval=%d\n", command, retval);
 		if (command == CPIA_COMMAND_GetColourParams ||
 		    command == CPIA_COMMAND_GetColourBalance ||
 		    command == CPIA_COMMAND_GetExposure)
-                	up(&cam->param_lock);
+			up(&cam->param_lock);
 	} else {
 		switch(command) {
 		case CPIA_COMMAND_GetCPIAVersion:
@@ -1765,9 +1785,48 @@ static int do_command(struct cam_data *cam, u16 command, u8 a, u8 b, u8 c, u8 d)
 			cam->params.exposure.green1Comp = data[5];
 			cam->params.exposure.green2Comp = data[6];
 			cam->params.exposure.blueComp = data[7];
+			/* If the *Comp parameters are wacko, generate
+			 * a warning, and reset them back to default
+			 * values.             - rich@annexia.org
+			 */
+			if (cam->params.exposure.redComp < 220 ||
+			    cam->params.exposure.redComp > 255 ||
+			    cam->params.exposure.green1Comp < 214 ||
+			    cam->params.exposure.green1Comp > 255 ||
+			    cam->params.exposure.green2Comp < 214 ||
+			    cam->params.exposure.green2Comp > 255 ||
+			    cam->params.exposure.blueComp < 230 ||
+			    cam->params.exposure.blueComp > 255)
+			  {
+			    printk (KERN_WARNING "*_comp parameters have gone AWOL (%d/%d/%d/%d) - reseting them\n",
+				    cam->params.exposure.redComp,
+				    cam->params.exposure.green1Comp,
+				    cam->params.exposure.green2Comp,
+				    cam->params.exposure.blueComp);
+			    cam->params.exposure.redComp = 220;
+			    cam->params.exposure.green1Comp = 214;
+			    cam->params.exposure.green2Comp = 214;
+			    cam->params.exposure.blueComp = 230;
+			  }
 			up(&cam->param_lock);
 			break;
-		default:
+
+                case CPIA_COMMAND_ReadMCPorts: /* GA 04/14/00 */
+                  if (!cam->params.qx3.qx3_detected) break;
+
+		  /* test button press */ 
+		  cam->params.qx3.button = ((data[1] & 0x02) == 0);
+		  if (cam->params.qx3.button) {
+		    /* button pressed - unlock the latch */
+		    do_command(cam,CPIA_COMMAND_WriteMCPort,3,0xDF,0xDF,0);
+		    do_command(cam,CPIA_COMMAND_WriteMCPort,3,0xFF,0xFF,0);
+		  }
+
+		  /* test whether microscope is cradled */
+		  cam->params.qx3.cradled = ((data[2] & 0x40) == 0);
+		  break;
+
+ 		default:
 			break;
 		}
 	}
@@ -1782,6 +1841,7 @@ static int do_command_extended(struct cam_data *cam, u16 command,
 {
 	int retval;
 	u8 cmd[8], data[8];
+
 	cmd[0] = command>>8;
 	cmd[1] = command&0xff;
 	cmd[2] = a;
@@ -1800,9 +1860,9 @@ static int do_command_extended(struct cam_data *cam, u16 command,
 	data[7] = l;
 
 	retval = cam->ops->transferCmd(cam->lowlevel_data, cmd, data);
-	if(retval) {
+	if (retval)
 		LOG("%x - failed\n", command);
-	}
+
 	return retval;
 }
 
@@ -1813,16 +1873,173 @@ static int do_command_extended(struct cam_data *cam, u16 command,
  **********************************************************************/
 #define LIMIT(x) ((((x)>0xffffff)?0xff0000:(((x)<=0xffff)?0:(x)&0xff0000))>>16)
 
-static int yuvconvert(unsigned char *yuv, unsigned char *rgb, int out_fmt,
-                      int in_uyvy)
+static int convert420(unsigned char *yuv, unsigned char *rgb, int out_fmt,
+                      int linesize, int mmap_kludge)
 {
 	int y, u, v, r, g, b, y1;
+
+	switch(out_fmt) {
+	case VIDEO_PALETTE_RGB555:
+		y = (*yuv++ - 16) * 76310;
+		y1 = (*yuv - 16) * 76310;
+		r = ((*(rgb+1-linesize)) & 0x7c) << 1;
+		g = ((*(rgb-linesize)) & 0xe0) >> 4 |
+		    ((*(rgb+1-linesize)) & 0x03) << 6;
+		b = ((*(rgb-linesize)) & 0x1f) << 3;
+		u = (-53294 * r - 104635 * g + 157929 * b) / 5756495;
+		v = (157968 * r - 132278 * g - 25690 * b) / 5366159;
+		r = 104635 * v;
+		g = -25690 * u - 53294 * v;
+		b = 132278 * u;
+		break;
+	case VIDEO_PALETTE_RGB565:
+		y = (*yuv++ - 16) * 76310;
+		y1 = (*yuv - 16) * 76310;
+		r = (*(rgb+1-linesize)) & 0xf8;
+		g = ((*(rgb-linesize)) & 0xe0) >> 3 |
+		    ((*(rgb+1-linesize)) & 0x07) << 5;
+		b = ((*(rgb-linesize)) & 0x1f) << 3;
+		u = (-53294 * r - 104635 * g + 157929 * b) / 5756495;
+		v = (157968 * r - 132278 * g - 25690 * b) / 5366159;
+		r = 104635 * v;
+		g = -25690 * u - 53294 * v;
+		b = 132278 * u;
+		break;
+	case VIDEO_PALETTE_RGB24:
+	case VIDEO_PALETTE_RGB32:
+		y = (*yuv++ - 16) * 76310;
+		y1 = (*yuv - 16) * 76310;
+		if (mmap_kludge) {
+			r = *(rgb+2-linesize);
+			g = *(rgb+1-linesize);
+			b = *(rgb-linesize);
+		} else {
+			r = *(rgb-linesize);
+			g = *(rgb+1-linesize);
+			b = *(rgb+2-linesize);
+		}
+		u = (-53294 * r - 104635 * g + 157929 * b) / 5756495;
+		v = (157968 * r - 132278 * g - 25690 * b) / 5366159;
+		r = 104635 * v;
+		g = -25690 * u + -53294 * v;
+		b = 132278 * u;
+		break;
+	case VIDEO_PALETTE_YUV422:
+	case VIDEO_PALETTE_YUYV:
+		y = *yuv++;
+		u = *(rgb+1-linesize);
+		y1 = *yuv;
+		v = *(rgb+3-linesize);
+		/* Just to avoid compiler warnings */
+		r = 0;
+		g = 0;
+		b = 0;
+		break;
+	case VIDEO_PALETTE_UYVY:
+		u = *(rgb-linesize);
+		y = *yuv++;
+		v = *(rgb+2-linesize);
+		y1 = *yuv;
+		/* Just to avoid compiler warnings */
+		r = 0;
+		g = 0;
+		b = 0;
+		break;
+	case VIDEO_PALETTE_GREY:
+	default:
+		y = *yuv++;
+		y1 = *yuv;
+		/* Just to avoid compiler warnings */
+		u = 0;
+		v = 0;
+		r = 0;
+		g = 0;
+		b = 0;
+		break;
+	}
+	switch(out_fmt) {
+	case VIDEO_PALETTE_RGB555:
+		*rgb++ = ((LIMIT(g+y) & 0xf8) << 2) | (LIMIT(b+y) >> 3);
+		*rgb++ = ((LIMIT(r+y) & 0xf8) >> 1) | (LIMIT(g+y) >> 6);
+		*rgb++ = ((LIMIT(g+y1) & 0xf8) << 2) | (LIMIT(b+y1) >> 3);
+		*rgb = ((LIMIT(r+y1) & 0xf8) >> 1) | (LIMIT(g+y1) >> 6);
+		return 4;
+	case VIDEO_PALETTE_RGB565:
+		*rgb++ = ((LIMIT(g+y) & 0xfc) << 3) | (LIMIT(b+y) >> 3);
+		*rgb++ = (LIMIT(r+y) & 0xf8) | (LIMIT(g+y) >> 5);
+		*rgb++ = ((LIMIT(g+y1) & 0xfc) << 3) | (LIMIT(b+y1) >> 3);
+		*rgb = (LIMIT(r+y1) & 0xf8) | (LIMIT(g+y1) >> 5);
+		return 4;
+	case VIDEO_PALETTE_RGB24:
+		if (mmap_kludge) {
+			*rgb++ = LIMIT(b+y);
+			*rgb++ = LIMIT(g+y);
+			*rgb++ = LIMIT(r+y);
+			*rgb++ = LIMIT(b+y1);
+			*rgb++ = LIMIT(g+y1);
+			*rgb = LIMIT(r+y1);
+		} else {
+			*rgb++ = LIMIT(r+y);
+			*rgb++ = LIMIT(g+y);
+			*rgb++ = LIMIT(b+y);
+			*rgb++ = LIMIT(r+y1);
+			*rgb++ = LIMIT(g+y1);
+			*rgb = LIMIT(b+y1);
+		}
+		return 6;
+	case VIDEO_PALETTE_RGB32:
+		if (mmap_kludge) {
+			*rgb++ = LIMIT(b+y);
+			*rgb++ = LIMIT(g+y);
+			*rgb++ = LIMIT(r+y);
+			rgb++;
+			*rgb++ = LIMIT(b+y1);
+			*rgb++ = LIMIT(g+y1);
+			*rgb = LIMIT(r+y1);
+		} else {
+			*rgb++ = LIMIT(r+y);
+			*rgb++ = LIMIT(g+y);
+			*rgb++ = LIMIT(b+y);
+			rgb++;
+			*rgb++ = LIMIT(r+y1);
+			*rgb++ = LIMIT(g+y1);
+			*rgb = LIMIT(b+y1);
+		}
+		return 8;
+	case VIDEO_PALETTE_GREY:
+		*rgb++ = y;
+		*rgb = y1;
+		return 2;
+	case VIDEO_PALETTE_YUV422:
+	case VIDEO_PALETTE_YUYV:
+		*rgb++ = y;
+		*rgb++ = u;
+		*rgb++ = y1;
+		*rgb = v;
+		return 4;
+	case VIDEO_PALETTE_UYVY:
+		*rgb++ = u;
+		*rgb++ = y;
+		*rgb++ = v;
+		*rgb = y1;
+		return 4;
+	default:
+		DBG("Empty: %d\n", out_fmt);
+		return 0;
+	}
+}
+
+static int yuvconvert(unsigned char *yuv, unsigned char *rgb, int out_fmt,
+                      int in_uyvy, int mmap_kludge)
+{
+	int y, u, v, r, g, b, y1;
+
 	switch(out_fmt) {
 	case VIDEO_PALETTE_RGB555:
 	case VIDEO_PALETTE_RGB565:
 	case VIDEO_PALETTE_RGB24:
 	case VIDEO_PALETTE_RGB32:
-		if(in_uyvy) {
+		if (in_uyvy) {
 			u = *yuv++ - 128;
 			y = (*yuv++ - 16) * 76310;
 			v = *yuv++ - 128;
@@ -1862,21 +2079,40 @@ static int yuvconvert(unsigned char *yuv, unsigned char *rgb, int out_fmt,
 		*rgb = (LIMIT(r+y1) & 0xf8) | (LIMIT(g+y1) >> 5);
 		return 4;
 	case VIDEO_PALETTE_RGB24:
-		*rgb++ = LIMIT(b+y);
-		*rgb++ = LIMIT(g+y);
-		*rgb++ = LIMIT(r+y);
-		*rgb++ = LIMIT(b+y1);
-		*rgb++ = LIMIT(g+y1);
-		*rgb = LIMIT(r+y1);
+		if (mmap_kludge) {
+			*rgb++ = LIMIT(b+y);
+			*rgb++ = LIMIT(g+y);
+			*rgb++ = LIMIT(r+y);
+			*rgb++ = LIMIT(b+y1);
+			*rgb++ = LIMIT(g+y1);
+			*rgb = LIMIT(r+y1);
+		} else {
+			*rgb++ = LIMIT(r+y);
+			*rgb++ = LIMIT(g+y);
+			*rgb++ = LIMIT(b+y);
+			*rgb++ = LIMIT(r+y1);
+			*rgb++ = LIMIT(g+y1);
+			*rgb = LIMIT(b+y1);
+		}
 		return 6;
 	case VIDEO_PALETTE_RGB32:
-		*rgb++ = LIMIT(b+y);
-		*rgb++ = LIMIT(g+y);
-		*rgb++ = LIMIT(r+y);
-		rgb++;
-		*rgb++ = LIMIT(b+y1);
-		*rgb++ = LIMIT(g+y1);
-		*rgb = LIMIT(r+y1);
+		if (mmap_kludge) {
+			*rgb++ = LIMIT(b+y);
+			*rgb++ = LIMIT(g+y);
+			*rgb++ = LIMIT(r+y);
+			rgb++;
+			*rgb++ = LIMIT(b+y1);
+			*rgb++ = LIMIT(g+y1);
+			*rgb = LIMIT(r+y1);
+		} else {
+			*rgb++ = LIMIT(r+y);
+			*rgb++ = LIMIT(g+y);
+			*rgb++ = LIMIT(b+y);
+			rgb++;
+			*rgb++ = LIMIT(r+y1);
+			*rgb++ = LIMIT(g+y1);
+			*rgb = LIMIT(b+y1);
+		}
 		return 8;
 	case VIDEO_PALETTE_GREY:
 		*rgb++ = y;
@@ -1896,11 +2132,13 @@ static int yuvconvert(unsigned char *yuv, unsigned char *rgb, int out_fmt,
 		*rgb = y1;
 		return 4;
 	default:
+		DBG("Empty: %d\n", out_fmt);
 		return 0;
 	}
 }
 
-static int skipcount(int count, int fmt) {
+static int skipcount(int count, int fmt)
+{
 	switch(fmt) {
 	case VIDEO_PALETTE_GREY:
 		return count;
@@ -1922,66 +2160,68 @@ static int skipcount(int count, int fmt) {
 static int parse_picture(struct cam_data *cam, int size)
 {
 	u8 *obuf, *ibuf, *end_obuf;
-	int ll, in_uyvy, compressed, origsize, out_fmt;
+	int ll, in_uyvy, compressed, decimation, even_line, origsize, out_fmt;
+	int rows, cols, linesize, subsample_422;
 
 	/* make sure params don't change while we are decoding */
 	down(&cam->param_lock);
-	
+
 	obuf = cam->decompressed_frame.data;
 	end_obuf = obuf+CPIA_MAX_FRAME_SIZE;
 	ibuf = cam->raw_image;
 	origsize = size;
 	out_fmt = cam->vp.palette;
-	
-	if((ibuf[0] != MAGIC_0) || (ibuf[1] != MAGIC_1)) {
+
+	if ((ibuf[0] != MAGIC_0) || (ibuf[1] != MAGIC_1)) {
 		LOG("header not found\n");
 		up(&cam->param_lock);
 		return -1;
 	}
 
-	if((ibuf[16] != VIDEOSIZE_QCIF) && (ibuf[16] != VIDEOSIZE_CIF)) {
+	if ((ibuf[16] != VIDEOSIZE_QCIF) && (ibuf[16] != VIDEOSIZE_CIF)) {
 		LOG("wrong video size\n");
 		up(&cam->param_lock);
 		return -1;
 	}
 	
-	if(ibuf[17] != SUBSAMPLE_422) {
+	if (ibuf[17] != SUBSAMPLE_420 && ibuf[17] != SUBSAMPLE_422) {
 		LOG("illegal subtype %d\n",ibuf[17]);
 		up(&cam->param_lock);
 		return -1;
 	}
+	subsample_422 = ibuf[17] == SUBSAMPLE_422;
 	
-	if(ibuf[18] != YUVORDER_YUYV && ibuf[18] != YUVORDER_UYVY) {
+	if (ibuf[18] != YUVORDER_YUYV && ibuf[18] != YUVORDER_UYVY) {
 		LOG("illegal yuvorder %d\n",ibuf[18]);
 		up(&cam->param_lock);
 		return -1;
 	}
 	in_uyvy = ibuf[18] == YUVORDER_UYVY;
 	
-#if 0
-	/* FIXME: ROI mismatch occurs when switching capture sizes */
-	if((ibuf[24] != cam->params.roi.colStart) ||
-	   (ibuf[25] != cam->params.roi.colEnd) ||
-	   (ibuf[26] != cam->params.roi.rowStart) ||
-	   (ibuf[27] != cam->params.roi.rowEnd)) {
+	if ((ibuf[24] != cam->params.roi.colStart) ||
+	    (ibuf[25] != cam->params.roi.colEnd) ||
+	    (ibuf[26] != cam->params.roi.rowStart) ||
+	    (ibuf[27] != cam->params.roi.rowEnd)) {
 		LOG("ROI mismatch\n");
 		up(&cam->param_lock);
 		return -1;
 	}
-#endif
+	cols = 8*(ibuf[25] - ibuf[24]);
+	rows = 4*(ibuf[27] - ibuf[26]);
 	
-	if((ibuf[28] != NOT_COMPRESSED) && (ibuf[28] != COMPRESSED)) {
+	if ((ibuf[28] != NOT_COMPRESSED) && (ibuf[28] != COMPRESSED)) {
 		LOG("illegal compression %d\n",ibuf[28]);
 		up(&cam->param_lock);
 		return -1;
 	}
 	compressed = (ibuf[28] == COMPRESSED);
 	
-	if(ibuf[29] != NO_DECIMATION) {
-		LOG("decimation not supported\n");
+	if (ibuf[29] != NO_DECIMATION && ibuf[29] != DECIMATION_ENAB) {
+		LOG("illegal decimation %d\n",ibuf[29]);
 		up(&cam->param_lock);
 		return -1;
 	}
+	decimation = (ibuf[29] == DECIMATION_ENAB);
 	
 	cam->params.yuvThreshold.yThreshold = ibuf[30];
 	cam->params.yuvThreshold.uvThreshold = ibuf[31];
@@ -1994,98 +2234,135 @@ static int parse_picture(struct cam_data *cam, int size)
 	cam->params.status.vpStatus = ibuf[38];
 	cam->params.status.errorCode = ibuf[39];
 	cam->fps = ibuf[41];
+	up(&cam->param_lock);
 	
-	ibuf += 64;
-	size -= 64;
+	linesize = skipcount(cols, out_fmt);
+	ibuf += FRAME_HEADER_SIZE;
+	size -= FRAME_HEADER_SIZE;
 	ll = ibuf[0] | (ibuf[1] << 8);
 	ibuf += 2;
-	while(size > 0) {
+	even_line = 1;
+
+	while (size > 0) {
 		size -= (ll+2);
-		if(size < 0) {
+		if (size < 0) {
 			LOG("Insufficient data in buffer\n");
-			up(&cam->param_lock);
 			return -1;
 		}
-		while(ll > 1) {
-			if(!compressed || (compressed && !(*ibuf & 1))) {
-				obuf += yuvconvert(ibuf,obuf,out_fmt,in_uyvy);
-				ibuf += 4;
-				ll -= 4;
+
+		while (ll > 1) {
+			if (!compressed || (compressed && !(*ibuf & 1))) {
+				if(subsample_422 || even_line) {
+					obuf += yuvconvert(ibuf, obuf, out_fmt,
+			                	   in_uyvy, cam->mmap_kludge);
+					ibuf += 4;
+					ll -= 4;
+				} else {
+					/* SUBSAMPLE_420 on an odd line */
+					obuf += convert420(ibuf, obuf,
+					                   out_fmt, linesize,
+			                		   cam->mmap_kludge);
+					ibuf += 2;
+					ll -= 2;
+				}
 			} else {
 				/*skip compressed interval from previous frame*/
-				int skipsize = skipcount(*ibuf >> 1, out_fmt);
-				obuf += skipsize;
-				if( obuf > end_obuf ) {
-					LOG("Insufficient data in buffer\n");
-					up(&cam->param_lock);
+				obuf += skipcount(*ibuf >> 1, out_fmt);
+				if (obuf > end_obuf) {
+					LOG("Insufficient buffer size\n");
 					return -1;
 				}
 				++ibuf;
 				ll--;
 			}
 		}
-		if(ll == 1) {
-			if(*ibuf != EOL) {
+		if (ll == 1) {
+			if (*ibuf != EOL) {
 				LOG("EOL not found giving up after %d/%d"
 				    " bytes\n", origsize-size, origsize);
-				up(&cam->param_lock);
 				return -1;
 			}
 
-			ibuf++; /* skip over EOL */
+			++ibuf; /* skip over EOL */
 
-			if((size > 3) && (ibuf[0] == EOI) && (ibuf[1] == EOI) &&
+			if ((size > 3) && (ibuf[0] == EOI) && (ibuf[1] == EOI) &&
 			   (ibuf[2] == EOI) && (ibuf[3] == EOI)) {
 			 	size -= 4;
 				break;
 			}
 
-			if(size > 1) {
+			if(decimation) {
+				/* skip the odd lines for now */
+				obuf += linesize;
+			}
+			
+			if (size > 1) {
 				ll = ibuf[0] | (ibuf[1] << 8);
 				ibuf += 2; /* skip over line length */
 			}
+			
+			if(!decimation)
+				even_line = !even_line;
 		} else {
 			LOG("line length was not 1 but %d after %d/%d bytes\n",
 			    ll, origsize-size, origsize);
-			up(&cam->param_lock);
 			return -1;
 		}
 	}
 	
+	if(decimation) {
+		/* interpolate odd rows */
+		int i, j;
+		u8 *prev, *next;
+		prev = cam->decompressed_frame.data;
+		obuf = prev+linesize;
+		next = obuf+linesize;
+		for(i=1; i<rows-1; i+=2) {
+			for(j=0; j<linesize; ++j) {
+				*obuf++ = ((int)*prev++ + *next++) / 2;
+			}
+			prev += linesize;
+			obuf += linesize;
+			next += linesize;
+		}
+		/* last row is odd, just copy previous row */
+		memcpy(obuf, prev, linesize);
+	}
+	
 	cam->decompressed_frame.count = obuf-cam->decompressed_frame.data;
 
-	up(&cam->param_lock);
-	
 	return cam->decompressed_frame.count;
 }
 
 /* InitStreamCap wrapper to select correct start line */
-static inline int init_stream_cap(struct cam_data *cam) {
+static inline int init_stream_cap(struct cam_data *cam)
+{
 	return do_command(cam, CPIA_COMMAND_InitStreamCap,
 	                  0, cam->params.streamStartLine, 0, 0);
 }
 
 /* update various camera modes and settings */
-static void dispatch_commands(struct cam_data *cam ) {
+static void dispatch_commands(struct cam_data *cam)
+{
 	down(&cam->param_lock);
-	if( cam->cmd_queue==COMMAND_NONE ) {
+	if (cam->cmd_queue==COMMAND_NONE) {
 		up(&cam->param_lock);
 		return;
 	}
 	DEB_BYTE(cam->cmd_queue);
 	DEB_BYTE(cam->cmd_queue>>8);
-	if( cam->cmd_queue & COMMAND_SETCOLOURPARAMS ) {
+	if (cam->cmd_queue & COMMAND_SETCOLOURPARAMS)
 		do_command(cam, CPIA_COMMAND_SetColourParams,
 		           cam->params.colourParams.brightness,
 		           cam->params.colourParams.contrast,
 		           cam->params.colourParams.saturation, 0);
-	}
-	if( cam->cmd_queue & COMMAND_SETCOMPRESSION ) {
+
+	if (cam->cmd_queue & COMMAND_SETCOMPRESSION)
 		do_command(cam, CPIA_COMMAND_SetCompression,
 		           cam->params.compression.mode,
 			   cam->params.compression.decimation, 0, 0);
-	}
-	if( cam->cmd_queue & COMMAND_SETFORMAT ) {
+
+	if (cam->cmd_queue & COMMAND_SETFORMAT) {
 		do_command(cam, CPIA_COMMAND_SetFormat,
 	        	   cam->params.format.videoSize,
 	        	   cam->params.format.subSample,
@@ -2095,22 +2372,23 @@ static void dispatch_commands(struct cam_data *cam ) {
 	        	   cam->params.roi.rowStart, cam->params.roi.rowEnd);
 		cam->first_frame = 1;
 	}
-	if( cam->cmd_queue & COMMAND_SETCOMPRESSIONTARGET ) {
+
+	if (cam->cmd_queue & COMMAND_SETCOMPRESSIONTARGET)
 		do_command(cam, CPIA_COMMAND_SetCompressionTarget,
 		           cam->params.compressionTarget.frTargeting,
 		           cam->params.compressionTarget.targetFR,
 		           cam->params.compressionTarget.targetQ, 0);
-	}
-	if( cam->cmd_queue & COMMAND_SETYUVTHRESH ) {
+
+	if (cam->cmd_queue & COMMAND_SETYUVTHRESH)
 		do_command(cam, CPIA_COMMAND_SetYUVThresh,
 		           cam->params.yuvThreshold.yThreshold,
 		           cam->params.yuvThreshold.uvThreshold, 0, 0);
-	}
-	if( cam->cmd_queue & COMMAND_SETECPTIMING ) {
+
+	if (cam->cmd_queue & COMMAND_SETECPTIMING)
 		do_command(cam, CPIA_COMMAND_SetECPTiming,
 		           cam->params.ecpTiming, 0, 0, 0);
-	}
-	if( cam->cmd_queue & COMMAND_SETCOMPRESSIONPARAMS ) {
+
+	if (cam->cmd_queue & COMMAND_SETCOMPRESSIONPARAMS)
 		do_command_extended(cam, CPIA_COMMAND_SetCompressionParams,
 		            0, 0, 0, 0,
 		            cam->params.compressionParams.hysteresis,
@@ -2121,8 +2399,8 @@ static void dispatch_commands(struct cam_data *cam ) {
 		            cam->params.compressionParams.frDiffStepThresh,
 		            cam->params.compressionParams.qDiffStepThresh,
 		            cam->params.compressionParams.decimationThreshMod);
-	}
-	if( cam->cmd_queue & COMMAND_SETEXPOSURE ) {
+
+	if (cam->cmd_queue & COMMAND_SETEXPOSURE)
 		do_command_extended(cam, CPIA_COMMAND_SetExposure,
 		                    cam->params.exposure.gainMode,
 		                    cam->params.exposure.expMode,
@@ -2136,150 +2414,191 @@ static void dispatch_commands(struct cam_data *cam ) {
 		                    cam->params.exposure.green1Comp,
 		                    cam->params.exposure.green2Comp,
 		                    cam->params.exposure.blueComp);
+
+	if (cam->cmd_queue & COMMAND_SETCOLOURBALANCE) {
+		if (cam->params.colourBalance.balanceModeIsAuto) {
+			do_command(cam, CPIA_COMMAND_SetColourBalance,
+				   2, 0, 0, 0);
+		} else {
+			do_command(cam, CPIA_COMMAND_SetColourBalance,
+				   1,
+				   cam->params.colourBalance.redGain,
+				   cam->params.colourBalance.greenGain,
+				   cam->params.colourBalance.blueGain);
+			do_command(cam, CPIA_COMMAND_SetColourBalance,
+				   3, 0, 0, 0);
+		}
 	}
-	if( cam->cmd_queue & COMMAND_SETCOLOURBALANCE ) {
-		do_command(cam, CPIA_COMMAND_SetColourBalance,
-		           cam->params.colourBalance.balanceMode,
-		           cam->params.colourBalance.redGain,
-		           cam->params.colourBalance.greenGain,
-		           cam->params.colourBalance.blueGain);
-	}
-	if( cam->cmd_queue & COMMAND_SETSENSORFPS ) {
+
+	if (cam->cmd_queue & COMMAND_SETSENSORFPS)
 		do_command(cam, CPIA_COMMAND_SetSensorFPS,
 		           cam->params.sensorFps.divisor,
 		           cam->params.sensorFps.baserate, 0, 0);
-	}
-	if( cam->cmd_queue & COMMAND_SETAPCOR ) {
+
+	if (cam->cmd_queue & COMMAND_SETAPCOR)
 		do_command(cam, CPIA_COMMAND_SetApcor,
 		           cam->params.apcor.gain1,
 		           cam->params.apcor.gain2,
 		           cam->params.apcor.gain4,
 		           cam->params.apcor.gain8);
-	}
-	if( cam->cmd_queue & COMMAND_SETFLICKERCTRL ) {
+
+	if (cam->cmd_queue & COMMAND_SETFLICKERCTRL)
 		do_command(cam, CPIA_COMMAND_SetFlickerCtrl,
 		           cam->params.flickerControl.flickerMode,
 		           cam->params.flickerControl.coarseJump,
 		           cam->params.flickerControl.allowableOverExposure, 0);
-	}
-	if( cam->cmd_queue & COMMAND_SETVLOFFSET ) {
+
+	if (cam->cmd_queue & COMMAND_SETVLOFFSET)
 		do_command(cam, CPIA_COMMAND_SetVLOffset,
 		           cam->params.vlOffset.gain1,
 		           cam->params.vlOffset.gain2,
 		           cam->params.vlOffset.gain4,
 		           cam->params.vlOffset.gain8);
-	}
-	if( cam->cmd_queue & COMMAND_PAUSE ) {
+
+	if (cam->cmd_queue & COMMAND_PAUSE)
 		do_command(cam, CPIA_COMMAND_EndStreamCap, 0, 0, 0, 0);
-	}
-	if( cam->cmd_queue & COMMAND_RESUME ) {
-		init_stream_cap( cam );
-	}
+
+	if (cam->cmd_queue & COMMAND_RESUME)
+		init_stream_cap(cam);
+
+	/* GA 04/14/00 */
+	if (cam->cmd_queue & COMMAND_SETLIGHTS && cam->params.qx3.qx3_detected)
+	  {
+	    int p1 = (cam->params.qx3.bottomlight == 0) << 1;
+            int p2 = (cam->params.qx3.toplight == 0) << 3;
+            do_command(cam, CPIA_COMMAND_WriteVCReg,  0x90, 0x8F, 0x50, 0);
+            do_command(cam, CPIA_COMMAND_WriteMCPort, 2, 0, (p1|p2|0xE0), 0);
+	  }
+
 	up(&cam->param_lock);
-	cam->cmd_queue=COMMAND_NONE;
+	cam->cmd_queue = COMMAND_NONE;
 	return;
 }
 
 /* kernel thread function to read image from camera */
 static void fetch_frame(void *data)
 {
-	int image_size;
+	int image_size, retry;
 	struct cam_data *cam = (struct cam_data *)data;
 	unsigned long oldjif, rate, diff;
 
-        /* load first frame always uncompressed */
-        if( cam->first_frame &&
-            cam->params.compression.mode != CPIA_COMPRESSION_NONE ) {
-                do_command(cam, CPIA_COMMAND_SetCompression,
-                           CPIA_COMPRESSION_NONE,
-                           NO_DECIMATION, 0, 0);
-        }
+	/* Allow up to two bad images in a row to be read and
+	 * ignored before an error is reported */
+	for (retry = 0; retry < 3; ++retry) {
+		if (retry)
+			DBG("retry=%d\n", retry);
 
-        /* init camera upload */
-        if(do_command(cam, CPIA_COMMAND_SetGrabMode, CPIA_GRAB_CONTINUOUS,
-                      0, 0, 0)) goto end;
-        if(do_command(cam, CPIA_COMMAND_GrabFrame, 0,
-                      cam->params.streamStartLine, 0, 0)) goto end;
+		if (!cam->ops)
+			continue;
 
-	/* loop until image ready */
-	do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0);
-	while(cam->params.status.streamState != STREAM_READY) {
-		if(current->need_resched) {schedule();}
-		current->state=TASK_INTERRUPTIBLE;
-		schedule_timeout(10*HZ/1000); /* 10 ms, hopefully ;) */
-		if(signal_pending(current)) {
-			goto end;
+		/* load first frame always uncompressed */
+		if (cam->first_frame &&
+		    cam->params.compression.mode != CPIA_COMPRESSION_NONE)
+			do_command(cam, CPIA_COMMAND_SetCompression,
+				   CPIA_COMPRESSION_NONE,
+				   NO_DECIMATION, 0, 0);
+
+		/* init camera upload */
+		if (do_command(cam, CPIA_COMMAND_SetGrabMode,
+			       CPIA_GRAB_CONTINUOUS, 0, 0, 0))
+			continue;
+
+		if (do_command(cam, CPIA_COMMAND_GrabFrame, 0,
+			       cam->params.streamStartLine, 0, 0))
+			continue;
+
+		if (cam->ops->wait_for_stream_ready) {
+			/* loop until image ready */
+			do_command(cam, CPIA_COMMAND_GetCameraStatus,0,0,0,0);
+			while (cam->params.status.streamState != STREAM_READY) {
+				if (current->need_resched)
+					schedule();
+
+				current->state = TASK_INTERRUPTIBLE;
+
+				/* sleep for 10 ms, hopefully ;) */
+				schedule_timeout(10*HZ/1000);
+				if (signal_pending(current))
+					return;
+
+				do_command(cam, CPIA_COMMAND_GetCameraStatus,
+				           0, 0, 0, 0);
+			}
 		}
-		do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0);
+
+		/* grab image from camera */
+		if (current->need_resched)
+			schedule();
+
+		oldjif = jiffies;
+		image_size = cam->ops->streamRead(cam->lowlevel_data,
+						  cam->raw_image, 0);
+		if (image_size <= 0) {
+			DBG("streamRead failed: %d\n", image_size);
+			continue;
+		}
+
+		rate = image_size * HZ / 1024;
+		diff = jiffies-oldjif;
+		cam->transfer_rate = diff==0 ? rate : rate/diff;
+			/* diff==0 ? unlikely but possible */
+
+		/* camera idle now so dispatch queued commands */
+		dispatch_commands(cam);
+
+		/* Update our knowledge of the camera state - FIXME: necessary? */
+		do_command(cam, CPIA_COMMAND_GetColourBalance, 0, 0, 0, 0);
+		do_command(cam, CPIA_COMMAND_GetExposure, 0, 0, 0, 0);
+		do_command(cam, CPIA_COMMAND_ReadMCPorts, 0, 0, 0, 0); /* GA */
+
+
+		/* decompress and convert image to by copying it from
+		 * raw_image to decompressed_frame
+		 */
+		if (current->need_resched)
+			schedule();
+
+		cam->image_size = parse_picture(cam, image_size);
+		if (cam->image_size <= 0)
+			DBG("parse_picture failed %d\n", cam->image_size);
+		else
+			break;
 	}
 
-	/* grab image from camera */
-	if(current->need_resched) {schedule();}
-	oldjif = jiffies;
-	image_size=cam->ops->streamRead(cam->lowlevel_data, cam->raw_image, 0);
-	if(image_size<=0) {
-		DBG("read frame failed\n");
-		goto end;
-	}
-	rate = image_size * HZ / 1024;
-	diff = jiffies-oldjif;
-	rate = diff==0 ? rate : rate/diff; /* unlikely but possible */
-	/* Keep track of transfer_rate as a runnung average over 3 frames
-	 * to smooth out any inconsistencies */
-	cam->transfer_rate = (2*cam->transfer_rate + rate) / 3;
-
-	/* camera idle now so dispatch queued commands */
-	dispatch_commands( cam );
-
-	/* Update our knowledge of the camera state - FIXME: necessary? */
-	do_command(cam, CPIA_COMMAND_GetColourBalance, 0, 0, 0, 0);
-	do_command(cam, CPIA_COMMAND_GetExposure, 0, 0, 0, 0);
-	
-	/* decompress and convert image to by copying it from
-	*  raw_image to decompressed_frame
-	*/
-	if(current->need_resched) {schedule();}
-	cam->image_size = parse_picture(cam, image_size);
-	if( cam->image_size <= 0 ) {
-		DBG("parse frame failed\n");
-		goto end;
-	}
-
-	/* FIXME: this only works for double buffering */
-	if( cam->frame[cam->curframe].state == FRAME_READY ) {
-		memcpy(cam->frame[cam->curframe].data,
-		       cam->decompressed_frame.data,
-		       cam->decompressed_frame.count);
-		cam->frame[cam->curframe].state = FRAME_DONE;
-	} else {
-		cam->decompressed_frame.state = FRAME_DONE;
-	}
+	if (retry < 3) {
+		/* FIXME: this only works for double buffering */
+		if (cam->frame[cam->curframe].state == FRAME_READY) {
+			memcpy(cam->frame[cam->curframe].data,
+			       cam->decompressed_frame.data,
+			       cam->decompressed_frame.count);
+			cam->frame[cam->curframe].state = FRAME_DONE;
+		} else
+			cam->decompressed_frame.state = FRAME_DONE;
 
 #if 0
-	if( cam->first_frame &&
-	    cam->params.compression.mode != CPIA_COMPRESSION_NONE ) {
-		cam->first_frame = 0;
-		cam->cmd_queue |= COMMAND_SETCOMPRESSION;
-	}
+		if (cam->first_frame &&
+		    cam->params.compression.mode != CPIA_COMPRESSION_NONE) {
+			cam->first_frame = 0;
+			cam->cmd_queue |= COMMAND_SETCOMPRESSION;
+		}
 #else
-	if( cam->first_frame ) {
-		cam->first_frame = 0;
-		cam->cmd_queue |= COMMAND_SETCOMPRESSION;
-		cam->cmd_queue |= COMMAND_SETEXPOSURE;
-	}
+		if (cam->first_frame) {
+			cam->first_frame = 0;
+			cam->cmd_queue |= COMMAND_SETCOMPRESSION;
+			cam->cmd_queue |= COMMAND_SETEXPOSURE;
+		}
 #endif
-end:
-	return;
+	}
 }
 
 static int capture_frame(struct cam_data *cam, struct video_mmap *vm)
 {
 	int retval = 0;
 
-	if( cam->frame_buf == NULL ) { /* we do lazy allocation */
-		if( (retval = allocate_frame_buf(cam)) ) {
+	if (!cam->frame_buf) {
+		/* we do lazy allocation */
+		if ((retval = allocate_frame_buf(cam)))
 			return retval;
-		}
 	}
 	
 	/* FIXME: the first frame seems to be captured by the camera
@@ -2287,25 +2606,30 @@ static int capture_frame(struct cam_data *cam, struct video_mmap *vm)
 	   that one, the next one is generated with our settings
 	   (exposure, color balance, ...)
 	*/
-	if(cam->first_frame) {
-	  cam->curframe = vm->frame;
-	  cam->frame[cam->curframe].state = FRAME_READY;
-	  fetch_frame(cam);
-	  if(cam->frame[cam->curframe].state != FRAME_DONE) retval=-EIO;
+	if (cam->first_frame) {
+		cam->curframe = vm->frame;
+		cam->frame[cam->curframe].state = FRAME_READY;
+		fetch_frame(cam);
+		if (cam->frame[cam->curframe].state != FRAME_DONE)
+			retval = -EIO;
 	}
 	cam->curframe = vm->frame;
-        cam->frame[cam->curframe].state = FRAME_READY;
-        fetch_frame(cam);
-        if(cam->frame[cam->curframe].state != FRAME_DONE) retval=-EIO;
+	cam->frame[cam->curframe].state = FRAME_READY;
+	fetch_frame(cam);
+	if (cam->frame[cam->curframe].state != FRAME_DONE)
+		retval=-EIO;
 
 	return retval;
 }
   
 static int goto_high_power(struct cam_data *cam)
 {
-	if(do_command(cam, CPIA_COMMAND_GotoHiPower, 0, 0, 0, 0)) return -1;
-	if(do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0)) return -1;
-	if(cam->params.status.systemState == HI_POWER_STATE) {
+	if (do_command(cam, CPIA_COMMAND_GotoHiPower, 0, 0, 0, 0))
+		return -1;
+	mdelay(100);		/* windows driver does it too */
+	if (do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0))
+		return -1;
+	if (cam->params.status.systemState == HI_POWER_STATE) {
 		DBG("camera now in HIGH power state\n");
 		return 0;
 	}
@@ -2315,14 +2639,15 @@ static int goto_high_power(struct cam_data *cam)
 
 static int goto_low_power(struct cam_data *cam)
 {
-	if(do_command(cam, CPIA_COMMAND_GotoLoPower, 0, 0, 0, 0)) return -1;
-	if(do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0)) return -1;
-	if(cam->params.status.systemState == LO_POWER_STATE) {
+	if (do_command(cam, CPIA_COMMAND_GotoLoPower, 0, 0, 0, 0))
+		return -1;
+	if (do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0))
+		return -1;
+	if (cam->params.status.systemState == LO_POWER_STATE) {
 		DBG("camera now in LOW power state\n");
 		return 0;
 	}
 	printstatus(cam);
-	mdelay(100);		/* windows driver does it too */
 	return -1;
 }
 
@@ -2344,21 +2669,23 @@ static void save_camera_state(struct cam_data *cam)
 	     cam->params.colourBalance.redGain,
 	     cam->params.colourBalance.greenGain,
 	     cam->params.colourBalance.blueGain);
-
-	return;
 }
 
 static void set_camera_state(struct cam_data *cam)
 {
-	if(cam->params.colourBalance.balanceMode != 1) {
+	if(cam->params.colourBalance.balanceModeIsAuto) {
+		do_command(cam, CPIA_COMMAND_SetColourBalance, 
+	        	   2, 0, 0, 0);
+	} else {
 		do_command(cam, CPIA_COMMAND_SetColourBalance, 
 	        	   1,
 	        	   cam->params.colourBalance.redGain,
 	        	   cam->params.colourBalance.greenGain,
 	        	   cam->params.colourBalance.blueGain);
+		do_command(cam, CPIA_COMMAND_SetColourBalance, 
+	        	   3, 0, 0, 0);
 	}
-	if(cam->params.colourBalance.balanceMode == 0)
-		cam->params.colourBalance.balanceMode = 2;
+
 
 	do_command_extended(cam, CPIA_COMMAND_SetExposure,
 			    cam->params.exposure.gainMode, 1, 1,
@@ -2367,19 +2694,19 @@ static void set_camera_state(struct cam_data *cam)
 	                    cam->params.exposure.fineExp,
 	                    cam->params.exposure.coarseExpLo,
 	                    cam->params.exposure.coarseExpHi,
-	                    cam->params.exposure.redComp,
-	                    cam->params.exposure.green1Comp,
-	                    cam->params.exposure.green2Comp,
-	                    cam->params.exposure.blueComp);
+			    cam->params.exposure.redComp,
+			    cam->params.exposure.green1Comp,
+			    cam->params.exposure.green2Comp,
+			    cam->params.exposure.blueComp);
 	do_command_extended(cam, CPIA_COMMAND_SetExposure,
 			    0, 3, 0, 0,
 			    0, 0, 0, 0, 0, 0, 0, 0);
 
-	if(cam->params.exposure.gainMode == 0)
+	if (!cam->params.exposure.gainMode)
 		cam->params.exposure.gainMode = 2;
-	if(cam->params.exposure.expMode == 0)
+	if (!cam->params.exposure.expMode)
 		cam->params.exposure.expMode = 2;
-	if(cam->params.exposure.centreWeight == 0)
+	if (!cam->params.exposure.centreWeight)
 		cam->params.exposure.centreWeight = 1;
 	
 	cam->cmd_queue = COMMAND_SETCOMPRESSION |
@@ -2407,32 +2734,25 @@ static void get_version_information(struct cam_data *cam)
 {
 	/* GetCPIAVersion */
 	do_command(cam, CPIA_COMMAND_GetCPIAVersion, 0, 0, 0, 0);
-	printk(KERN_INFO "  CPIA Version: %d.%02d (%d.%d)\n",
-	       cam->params.version.firmwareVersion,
-	       cam->params.version.firmwareRevision,
-	       cam->params.version.vcVersion,
-	       cam->params.version.vcRevision);
 
 	/* GetPnPID */
 	do_command(cam, CPIA_COMMAND_GetPnPID, 0, 0, 0, 0);
-	printk(KERN_INFO "  CPIA PnP-ID: %04x:%04x:%04x\n",
-	       cam->params.pnpID.vendor, cam->params.pnpID.product,
-	       cam->params.pnpID.deviceRevision);
 }
 
 /* initialize camera */
 static int reset_camera(struct cam_data *cam)
 {
 	/* Start the camera in low power mode */
-	if(goto_low_power(cam)) {
-		if( cam->params.status.systemState != 0x4 ) {
+	if (goto_low_power(cam)) {
+		if (cam->params.status.systemState != WARM_BOOT_STATE)
 			return -ENODEV;
-		}
+
 		/* FIXME: this is just dirty trial and error */
 		reset_camera_struct(cam);
 		goto_high_power(cam);
 		do_command(cam, CPIA_COMMAND_DiscardFrame, 0, 0, 0, 0);
-		if(goto_low_power(cam)) return -NODEV;
+		if (goto_low_power(cam))
+			return -NODEV;
 	}
 	
 	/* procedure described in developer's guide p3-28 */
@@ -2440,11 +2760,15 @@ static int reset_camera(struct cam_data *cam)
 	/* Check the firmware version FIXME: should we check PNPID? */
 	cam->params.version.firmwareVersion = 0;
 	get_version_information(cam);
-	if(cam->params.version.firmwareVersion != 1) {
+	if (cam->params.version.firmwareVersion != 1)
 		return -ENODEV;
-	}
+	
+	/* GA 04/14/00 - set QX3 detected flag */
+	cam->params.qx3.qx3_detected = (cam->params.pnpID.vendor == 0x0813 &&
+					cam->params.pnpID.product == 0x0001);
 
-	/* The fatal error checking should be done after the camera powers up (developer's guide p 3-38) */
+	/* The fatal error checking should be done after
+	 * the camera powers up (developer's guide p 3-38) */
 
 	/* Set streamState before transition to high power to avoid bug
 	 * in firmware 1-02 */
@@ -2452,40 +2776,38 @@ static int reset_camera(struct cam_data *cam)
 	           STREAM_NOT_READY, 0);
 	
 	/* GotoHiPower */
-	if(goto_high_power(cam))
+	if (goto_high_power(cam))
 		return -ENODEV;
 
-	
 	/* Check the camera status */
-	if(do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0))
+	if (do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0))
 		return -EIO;
-	if(cam->params.status.fatalError) {
-		DBG("fatal_error:              %#04x\n",cam->params.status.fatalError);
-		DBG("vp_status:                %#04x\n",cam->params.status.vpStatus);
-		if(cam->params.status.fatalError & ~(COM_FLAG|CPIA_FLAG)) {
+
+	if (cam->params.status.fatalError) {
+		DBG("fatal_error:              %#04x\n",
+		    cam->params.status.fatalError);
+		DBG("vp_status:                %#04x\n",
+		    cam->params.status.vpStatus);
+		if (cam->params.status.fatalError & ~(COM_FLAG|CPIA_FLAG)) {
 			/* Fatal error in camera */
 			return -EIO;
-		} else if(cam->params.status.fatalError & (COM_FLAG|CPIA_FLAG)){
+		} else if (cam->params.status.fatalError & (COM_FLAG|CPIA_FLAG)) {
 			/* Firmware 1-02 may do this for parallel port cameras,
 			 * just clear the flags (developer's guide p 3-38) */
 			do_command(cam, CPIA_COMMAND_ModifyCameraStatus,
 			           FATALERROR, ~(COM_FLAG|CPIA_FLAG), 0, 0);
 		}
 	}
-		
+	
 	/* Check the camera status again */
-	if(cam->params.status.fatalError) {
-		if(cam->params.status.fatalError)
+	if (cam->params.status.fatalError) {
+		if (cam->params.status.fatalError)
 			return -EIO;
 	}
 	
 	/* VPVersion can't be retrieved before the camera is in HiPower,
 	 * so get it here instead of in get_version_information. */
 	do_command(cam, CPIA_COMMAND_GetVPVersion, 0, 0, 0, 0);
-	printk(KERN_INFO "  VP-Version: %d.%d %04x\n",
-	       cam->params.vpVersion.vpVersion,
-	       cam->params.vpVersion.vpRevision,
-	       cam->params.vpVersion.cameraHeadID);
 
 	/* set camera to a known state */
 	set_camera_state(cam);
@@ -2499,54 +2821,60 @@ static int cpia_open(struct video_device *dev, int flags)
 	int i;
 	struct cam_data *cam = dev->priv;
 
-	DBG("cpia_open\n");
-
-	if(cam->open_count > 0) {
-		DBG("Camera[%d] already open\n",cam->index);
+	if (!cam) {
+		DBG("Internal error, cam_data not found!\n");
+		return -EBUSY;
+	}
+	    
+	if (cam->open_count > 0) {
+		DBG("Camera already open\n");
 		return -EBUSY;
 	}
 	
-	if(cam->raw_image == NULL) {
-		if((cam->raw_image=rvmalloc(CPIA_MAX_IMAGE_SIZE)) == NULL){
+	if (!cam->raw_image) {
+		cam->raw_image = rvmalloc(CPIA_MAX_IMAGE_SIZE);
+		if (!cam->raw_image)
 			return -ENOMEM;
-		}
 	}
-	if(cam->decompressed_frame.data == NULL) {
-		cam->decompressed_frame.data=rvmalloc(CPIA_MAX_FRAME_SIZE);
-		if(cam->decompressed_frame.data == NULL){
+
+	if (!cam->decompressed_frame.data) {
+		cam->decompressed_frame.data = rvmalloc(CPIA_MAX_FRAME_SIZE);
+		if (!cam->decompressed_frame.data) {
 			rvfree(cam->raw_image, CPIA_MAX_IMAGE_SIZE);
-			cam->raw_image=NULL;
+			cam->raw_image = NULL;
 			return -ENOMEM;
 		}
 	}
 	
 	/* open cpia */
-	if (cam->ops->open(cam->index, &cam->lowlevel_data)) {
+	if (cam->ops->open(cam->lowlevel_data)) {
 		rvfree(cam->decompressed_frame.data, CPIA_MAX_FRAME_SIZE);
-		cam->decompressed_frame.data=NULL;
+		cam->decompressed_frame.data = NULL;
 		rvfree(cam->raw_image, CPIA_MAX_IMAGE_SIZE);
-		cam->raw_image=NULL;
+		cam->raw_image = NULL;
 		return -ENODEV;
 	}
 	
 	/* reset the camera */
-	if((i = reset_camera(cam)) != 0) {
+	if ((i = reset_camera(cam)) != 0) {
 		cam->ops->close(cam->lowlevel_data);
 		rvfree(cam->decompressed_frame.data, CPIA_MAX_FRAME_SIZE);
-		cam->decompressed_frame.data=NULL;
+		cam->decompressed_frame.data = NULL;
 		rvfree(cam->raw_image, CPIA_MAX_IMAGE_SIZE);
-		cam->raw_image=NULL;
+		cam->raw_image = NULL;
 		return i;
 	}
 	
 	/* Set ownership of /proc/cpia/videoX to current user */
-	if(cam->proc_entry != NULL)
+	if(cam->proc_entry)
 		cam->proc_entry->uid = current->uid;
-	
+
 	/* set mark for loading first frame uncompressed */
 	cam->first_frame = 1;
-	cam->busy_lock = MUTEX;
-        
+
+	/* init it to something */
+	cam->mmap_kludge = 0;
+	
 	++cam->open_count;
 #ifdef MODULE
 	MOD_INC_USE_COUNT;
@@ -2554,78 +2882,51 @@ static int cpia_open(struct video_device *dev, int flags)
 	return 0;
 }
 
-/* FIXME */
 static void cpia_close(struct video_device *dev)
 {
 	struct cam_data *cam;
 
-	DBG("cpia_close\n");
 	cam = dev->priv;
 
-	if(cam->ops == NULL) {
-		if(--cam->open_count == 0) {
-			int i;
-			video_unregister_device(dev);
-			/* Need a lock when adding/removing cameras */
-			lock_kernel();
-			if(cam->raw_image) {
-				rvfree(cam->raw_image, CPIA_MAX_IMAGE_SIZE);
-				cam->raw_image=0;
-			}
-			if(cam->decompressed_frame.data) {
-				rvfree(cam->decompressed_frame.data,
-				       CPIA_MAX_FRAME_SIZE);
-				cam->decompressed_frame.data=0;
-			}
-			if(cam->frame_buf) {
-				free_frame_buf(cam);
-			}
-			for(i=0; i<CPIA_MAXCAMS; ++i) {
-				if(camera[i] == cam) break;
-			}
-			kfree(cam);
-			if(i != CPIA_MAXCAMS) { /* should always be true */
-				camera[i] = NULL;
-			}
-			unlock_kernel();
-		}
-#ifdef MODULE
-		MOD_DEC_USE_COUNT;
-#endif
-		return;
+	if (cam->ops) {
+	        /* Return ownership of /proc/cpia/videoX to root */
+		if(cam->proc_entry)
+			cam->proc_entry->uid = 0;
+	
+		/* save camera state for later open (developers guide ch 3.5.3) */
+		save_camera_state(cam);
+
+		/* GotoLoPower */
+		goto_low_power(cam);
+
+		/* Update the camera ststus */
+		do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0);
+
+		/* cleanup internal state stuff */
+		free_frames(cam->frame);
+
+		/* close cpia */
+		cam->ops->close(cam->lowlevel_data);
 	}
-	
-	/* Return ownership of /proc/cpia/videoX to root */
-	if(cam->proc_entry != NULL)
-		cam->proc_entry->uid = 0;
-	
-	/* save camera state for later open (developers guide ch 3.5.3) */
-	save_camera_state(cam);
 
-	/* GotoLoPower */
-	goto_low_power(cam);
-
-	/* cleanup internal state stuff */
-	free_frames(cam->frame);
-
-	/* Update the camera ststus */
-	do_command(cam, CPIA_COMMAND_GetCameraStatus, 0, 0, 0, 0);
-
-	/* close cpia */
-	cam->ops->close(cam->lowlevel_data);
-
-	if(--cam->open_count == 0) {
+	if (--cam->open_count == 0) {
 		/* clean up capture-buffers */
-		if(cam->raw_image) {
+		if (cam->raw_image) {
 			rvfree(cam->raw_image, CPIA_MAX_IMAGE_SIZE);
-			cam->raw_image = 0;
+			cam->raw_image = NULL;
 		}
-		if(cam->decompressed_frame.data) {
+
+		if (cam->decompressed_frame.data) {
 			rvfree(cam->decompressed_frame.data, CPIA_MAX_FRAME_SIZE);
-			cam->decompressed_frame.data = 0;
+			cam->decompressed_frame.data = NULL;
 		}
-		if(cam->frame_buf) {
+
+		if (cam->frame_buf)
 			free_frame_buf(cam);
+
+		if (!cam->ops) {
+			video_unregister_device(dev);
+			kfree(cam);
 		}
 	}
 	
@@ -2637,26 +2938,27 @@ static void cpia_close(struct video_device *dev)
 }
 
 static long cpia_read(struct video_device *dev, char *buf,
-                     unsigned long count, int noblock)
+                      unsigned long count, int noblock)
 {
 	struct cam_data *cam = dev->priv;
 
 	/* make this _really_ smp and multithredi-safe */
-	if( down_interruptible(&cam->busy_lock) ) {
+	if (down_interruptible(&cam->busy_lock))
 		return -EINTR;
-	}
 
 	if (!buf) {
 		DBG("buf NULL\n");
 		up(&cam->busy_lock);
 		return -EINVAL;
 	}
-	if(count == 0) {
+
+	if (!count) {
 		DBG("count 0\n");
 		up(&cam->busy_lock);
 		return 0;
 	}
-	if(!cam->ops) {
+
+	if (!cam->ops) {
 		DBG("ops NULL\n");
 		up(&cam->busy_lock);
 		return -ENODEV;
@@ -2664,8 +2966,9 @@ static long cpia_read(struct video_device *dev, char *buf,
 
 	/* upload frame */
 	cam->decompressed_frame.state = FRAME_READY;
+	cam->mmap_kludge=0;
 	fetch_frame(cam);
-	if( cam->decompressed_frame.state != FRAME_DONE ) {
+	if (cam->decompressed_frame.state != FRAME_DONE) {
 		DBG("upload failed %d/%d\n", cam->decompressed_frame.count,
 		    cam->decompressed_frame.state);
 		up(&cam->busy_lock);
@@ -2674,12 +2977,13 @@ static long cpia_read(struct video_device *dev, char *buf,
 	cam->decompressed_frame.state = FRAME_UNUSED;
 
 	/* copy data to user space */
-	if(cam->decompressed_frame.count > count) {
-		DBG("count wrong\n");
+	if (cam->decompressed_frame.count > count) {
+		DBG("count wrong: %d, %lu\n", cam->decompressed_frame.count,
+		    count);
 		up(&cam->busy_lock);
 		return -EFAULT;
 	}
-	if(copy_to_user(buf, cam->decompressed_frame.data,
+	if (copy_to_user(buf, cam->decompressed_frame.data,
 	                cam->decompressed_frame.count)) {
 		DBG("copy_to_user failed\n");
 		up(&cam->busy_lock);
@@ -2695,31 +2999,34 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 	struct cam_data *cam = dev->priv;
 	int retval = 0;
 
+	if (!cam || !cam->ops)
+		return -ENODEV;
+	
 	/* make this _really_ smp-safe */
-	if( down_interruptible(&cam->busy_lock) ) {
+	if (down_interruptible(&cam->busy_lock))
 		return -EINTR;
-	}
+
 	//DBG("cpia_ioctl: %u\n", ioctlnr);
 
 	switch (ioctlnr) {
-
 	/* query capabilites */
 	case VIDIOCGCAP:
 	{
 		struct video_capability b;
 
 		DBG("VIDIOCGCAP\n");
-		strcpy(b.name, "CPiA Parport Camera");
+		strcpy(b.name, "CPiA Camera");
 		b.type = VID_TYPE_CAPTURE;
 		b.channels = 1;
 		b.audios = 0;
-		b.maxwidth = 352;         /* VIDEOSIZE_CIF */
+		b.maxwidth = 352;	/* VIDEOSIZE_CIF */
 		b.maxheight = 288;
-		b.minwidth = 48;         /* VIDEOSIZE_48_48 */
+		b.minwidth = 48;	/* VIDEOSIZE_48_48 */
 		b.minheight = 48;
 
 		if (copy_to_user(arg, &b, sizeof(b)))
 			retval = -EFAULT;
+
 		break;
 	}
 
@@ -2782,13 +3089,15 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 			retval = -EFAULT;
 			break;
 		}
+
 		/* check validity */
 		DBG("palette: %d\n", vp.palette);
 		DBG("depth: %d\n", vp.depth);
-		if ( !valid_mode(vp.palette, vp.depth) ) {
+		if (!valid_mode(vp.palette, vp.depth)) {
 			retval = -EINVAL;
 			break;
 		}
+
 		down(&cam->param_lock);
 		/* brightness, colour, contrast need no check 0-65535 */
 		memcpy( &cam->vp, &vp, sizeof(vp) );
@@ -2799,12 +3108,13 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 		/* contrast is in steps of 8, so round */
 		cam->params.colourParams.contrast =
 			((cam->params.colourParams.contrast + 3) / 8) * 8;
-		if(cam->params.version.firmwareVersion == 1 &&
-		   cam->params.version.firmwareRevision == 2 &&
-		   cam->params.colourParams.contrast > 80) {
+		if (cam->params.version.firmwareVersion == 1 &&
+		    cam->params.version.firmwareRevision == 2 &&
+		    cam->params.colourParams.contrast > 80) {
 			/* 1-02 firmware limits contrast to 80 */
 			cam->params.colourParams.contrast = 80;
 		}
+
 		/* queue command to update camera */
 		cam->cmd_queue |= COMMAND_SETCOLOURPARAMS;
 		up(&cam->param_lock);
@@ -2845,9 +3155,10 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 		* is requested by the user???
 		*/
 		down(&cam->param_lock);
-		if(vw.width!=cam->vw.width || vw.height!=cam->vw.height) {
+		if (vw.width != cam->vw.width || vw.height != cam->vw.height) {
 			int video_size = match_videosize(vw.width, vw.height);
-			if(video_size < 0) {
+
+			if (video_size < 0) {
 				retval = -EINVAL;
 				up(&cam->param_lock);
 				break;
@@ -2863,7 +3174,7 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 
 		/* setformat ignored by camera during streaming,
 		 * so stop/dispatch/start */
-		if(cam->cmd_queue & COMMAND_SETFORMAT) {
+		if (cam->cmd_queue & COMMAND_SETFORMAT) {
 			DBG("\n");
 			dispatch_commands(cam);
 		}
@@ -2882,10 +3193,10 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 		memset(&vm, 0, sizeof(vm));
 		vm.size = CPIA_MAX_FRAME_SIZE*FRAME_NUM;
 		vm.frames = FRAME_NUM;
-		for( i=0; i<FRAME_NUM; i++ ) {
-			vm.offsets[i] = CPIA_MAX_FRAME_SIZE*i;
-		}
-		if(copy_to_user((void *)arg, (void *)&vm, sizeof(vm)))
+		for (i = 0; i < FRAME_NUM; i++)
+			vm.offsets[i] = CPIA_MAX_FRAME_SIZE * i;
+
+		if (copy_to_user((void *)arg, (void *)&vm, sizeof(vm)))
 			retval = -EFAULT;
 
 		break;
@@ -2900,7 +3211,7 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 			retval = -EFAULT;
 			break;
 		}
-#if 0
+#if 1
 		DBG("VIDIOCMCAPTURE: %d / %d / %dx%d\n", vm.format, vm.frame,
 		    vm.width, vm.height);
 #endif
@@ -2913,6 +3224,8 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 		cam->vp.palette = vm.format;
 		switch(vm.format) {
 		case VIDEO_PALETTE_GREY:
+			cam->vp.depth = 8;
+			break;
 		case VIDEO_PALETTE_RGB555:
 		case VIDEO_PALETTE_RGB565:
 		case VIDEO_PALETTE_YUV422:
@@ -2930,15 +3243,16 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 			retval = -EINVAL;
 			break;
 		}
-		if(retval != 0) break;
+		if (retval)
+			break;
 
 		/* set video size */
 		video_size = match_videosize(vm.width, vm.height);
-		if(cam->video_size<0) {
+		if (cam->video_size < 0) {
 			retval = -EINVAL;
 			break;
 		}
-		if( video_size != cam->video_size ) {
+		if (video_size != cam->video_size) {
 			cam->video_size = video_size;
 			set_vw_size(cam);
 			cam->cmd_queue |= COMMAND_SETFORMAT;
@@ -2949,6 +3263,7 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 		    cam->vw.width, cam->vw.height);
 #endif
 		/* according to v4l-spec we must start streaming here */
+		cam->mmap_kludge = 1;
 		retval = capture_frame(cam, &vm);
 
 		break;
@@ -2964,7 +3279,7 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 		}
 		//DBG("VIDIOCSYNC: %d\n", frame);
 
-		if (frame<0||frame>=FRAME_NUM) {
+		if (frame<0 || frame >= FRAME_NUM) {
 			retval = -EINVAL;
 			break;
 		}
@@ -2982,7 +3297,7 @@ static int cpia_ioctl(struct video_device *dev, unsigned int ioctlnr, void *arg)
 			//DBG("VIDIOCSYNC: %d synced\n", frame);
 			break;
 		}
-		if(retval == -EINTR) {
+		if (retval == -EINTR) {
 			/* FIXME - xawtv does not handle this nice */
 			retval = 0;
 		}
@@ -3040,49 +3355,57 @@ static int cpia_mmap(struct video_device *dev, const char *adr,
 {
 	unsigned long start = (unsigned long)adr;
 	unsigned long page, pos;
-	struct cam_data *cam;
+	struct cam_data *cam = dev->priv;
 	int retval;
 
+	if (!cam || !cam->ops)
+		return -ENODEV;
+	
 	DBG("cpia_mmap: %ld\n", size);
 
-	if(size > FRAME_NUM*CPIA_MAX_FRAME_SIZE){
+	if (size > FRAME_NUM*CPIA_MAX_FRAME_SIZE)
 		return -EINVAL;
-	}
 
-	cam = dev->priv;
-
+	if (!cam || !cam->ops)
+		return -ENODEV;
+	
 	/* make this _really_ smp-safe */
-	if( down_interruptible(&cam->busy_lock) ) {
+	if (down_interruptible(&cam->busy_lock))
 		return -EINTR;
-	}
 
-	if( cam->frame_buf == NULL ) { /* we do lazy allocation */
-		if( (retval = allocate_frame_buf(cam)) ) {
+	if (!cam->frame_buf) {	/* we do lazy allocation */
+		if ((retval = allocate_frame_buf(cam))) {
 			up(&cam->busy_lock);
 			return retval;
 		}
 	}
+
 	pos = (unsigned long)(cam->frame_buf);
 	while (size > 0) {
-		page = kvirt_to_phys(pos);
+		page = kvirt_to_pa(pos);
 		if (remap_page_range(start, page, PAGE_SIZE, PAGE_SHARED)) {
 			up(&cam->busy_lock);
 			return -EAGAIN;
 		}
-		start+=PAGE_SIZE;
-		pos+=PAGE_SIZE;
-		if (size > PAGE_SIZE) size-=PAGE_SIZE;
-		else size=0;
+		start += PAGE_SIZE;
+		pos += PAGE_SIZE;
+		if (size > PAGE_SIZE)
+			size -= PAGE_SIZE;
+		else
+			size = 0;
 	}
 
 	DBG("cpia_mmap: %ld\n", size);
 	up(&cam->busy_lock);
+
 	return 0;
 }
 
 int cpia_video_init(struct video_device *vdev)
 {
+#ifdef CONFIG_PROC_FS
 	create_proc_cpia_cam(vdev->priv);
+#endif
 	return 0;
 }
 
@@ -3124,7 +3447,7 @@ static void reset_camera_struct(struct cam_data *cam)
 	cam->params.exposure.green1Comp = 214;
 	cam->params.exposure.green2Comp = 214;
 	cam->params.exposure.blueComp = 230;
-	cam->params.colourBalance.balanceMode = 2;	/* auto color balance */
+	cam->params.colourBalance.balanceModeIsAuto = 1;
 	cam->params.colourBalance.redGain = 32;
 	cam->params.colourBalance.greenGain = 6;
 	cam->params.colourBalance.blueGain = 92;
@@ -3151,16 +3474,15 @@ static void reset_camera_struct(struct cam_data *cam)
 	cam->params.compressionParams.decimationThreshMod = 2;
 	/* End of default values from Software Developer's Guide */
 	
-	/* Start with a reasonable transfer rate */
-	cam->transfer_rate = 500;
+	cam->transfer_rate = 0;
 	
 	/* Set Sensor FPS to 15fps. This seems better than 30fps
 	 * for indoor lighting. */
 	cam->params.sensorFps.divisor = 1;
 	cam->params.sensorFps.baserate = 1;
 	
-	cam->params.yuvThreshold.yThreshold = 15; /* FIXME? */
-	cam->params.yuvThreshold.uvThreshold = 15; /* FIXME? */
+	cam->params.yuvThreshold.yThreshold = 6; /* From windows driver */
+	cam->params.yuvThreshold.uvThreshold = 6; /* From windows driver */
 	
 	cam->params.format.subSample = SUBSAMPLE_422;
 	cam->params.format.yuvOrder = YUVORDER_YUYV;
@@ -3168,8 +3490,14 @@ static void reset_camera_struct(struct cam_data *cam)
 	cam->params.compression.mode = CPIA_COMPRESSION_AUTO;
 	cam->params.compressionTarget.frTargeting =
 		CPIA_COMPRESSION_TARGET_QUALITY;
-	cam->params.compressionTarget.targetFR = 7; /* FIXME? */
-	cam->params.compressionTarget.targetQ = 10; /* FIXME? */
+	cam->params.compressionTarget.targetFR = 15; /* From windows driver */
+	cam->params.compressionTarget.targetQ = 5; /* From windows driver */
+	
+	cam->params.qx3.qx3_detected = 0;
+	cam->params.qx3.toplight = 0;
+	cam->params.qx3.bottomlight = 0;
+	cam->params.qx3.button = 0;
+	cam->params.qx3.cradled = 0;
 
 	cam->video_size = VIDEOSIZE_CIF;
 	
@@ -3179,7 +3507,7 @@ static void reset_camera_struct(struct cam_data *cam)
 	cam->vp.contrast = 32768;    /* 50% */
 	cam->vp.whiteness = 0;       /* not used -> grayscale only */
 	cam->vp.depth = 0;           /* FIXME: to be set by user? */
-	cam->vp.palette = 0;         /* FIXME: to be set by user? */
+	cam->vp.palette = VIDEO_PALETTE_RGB24;         /* FIXME: to be set by user? */
 
 	cam->vw.x = 0;
 	cam->vw.y = 0;
@@ -3201,11 +3529,13 @@ static void init_camera_struct(struct cam_data *cam,
                                struct cpia_camera_ops *ops )
 {
 	int i;
+
 	/* Default everything to 0 */
 	memset(cam, 0, sizeof(struct cam_data));
 
 	cam->ops = ops;
-	cam->param_lock = MUTEX;
+	init_MUTEX(&cam->param_lock);
+	init_MUTEX(&cam->busy_lock);
 
 	reset_camera_struct(cam);
 
@@ -3215,7 +3545,7 @@ static void init_camera_struct(struct cam_data *cam,
 	cam->vdev.priv = cam;
 	
 	cam->curframe = 0;
-	for( i=0; i<FRAME_NUM; i++) {
+	for (i = 0; i < FRAME_NUM; i++) {
 		cam->frame[i].width = 0;
 		cam->frame[i].height = 0;
 		cam->frame[i].state = FRAME_UNUSED;
@@ -3225,95 +3555,84 @@ static void init_camera_struct(struct cam_data *cam,
 	cam->decompressed_frame.height = 0;
 	cam->decompressed_frame.state = FRAME_UNUSED;
 	cam->decompressed_frame.data = NULL;
-
-	return;
 }
 
-int cpia_register_camera(struct cpia_camera_ops *ops)
+struct cam_data *cpia_register_camera(struct cpia_camera_ops *ops, void *lowlevel)
 {
-	int i;
-	struct cam_data *cam;
+        struct cam_data *camera;
+	
 	/* Need a lock when adding/removing cameras.  This doesn't happen
 	 * often and doesn't take very long, so grabbing the kernel lock
 	 * should be OK. */
-	lock_kernel();
-	for(i=0; i < CPIA_MAXCAMS && camera[i] != NULL; ++i); /* no loop body */
-	if(i == CPIA_MAXCAMS) {
+	
+	if ((camera = kmalloc(sizeof(struct cam_data), GFP_KERNEL)) == NULL) {
 		unlock_kernel();
-		return -ENODEV;
+		return NULL;
 	}
 	
-	if((camera[i] = kmalloc(sizeof(struct cam_data), GFP_KERNEL)) == NULL) {
-		unlock_kernel();
-		return -ENOMEM;
-	}
+	init_camera_struct( camera, ops );
+	camera->lowlevel_data = lowlevel;
 	
-	init_camera_struct( camera[i], ops );
-	camera[i]->index = i;
-
 	/* register v4l device */
-	if (video_register_device(&camera[i]->vdev, VFL_TYPE_GRABBER) == -1) {
-		kfree(camera[i]);
-		camera[i] = NULL;
+	if (video_register_device(&camera->vdev, VFL_TYPE_GRABBER) == -1) {
+		kfree(camera);
 		unlock_kernel();
 		printk(KERN_DEBUG "video_register_device failed\n");
-		return -ENODEV;
+		return NULL;
 	}
 
-	unlock_kernel();
-	
-	/* FIXME */
-#if 0
-	cam = camera[i];
+	/* get version information from camera: open/reset/close */
+
 	/* open cpia */
-	if (cam->ops->open(cam->index, &cam->lowlevel_data)) {
-		rvfree(cam->decompressed_frame.data, CPIA_MAX_FRAME_SIZE);
-		cam->decompressed_frame.data=NULL;
-		rvfree(cam->raw_image, CPIA_MAX_IMAGE_SIZE);
-		cam->raw_image=NULL;
-		return -ENODEV;
-	}
+	if (camera->ops->open(camera->lowlevel_data))
+		return camera;
 	
 	/* reset the camera */
-	if((i = reset_camera(cam)) != 0) {
-		cam->ops->close(cam->lowlevel_data);
-		rvfree(cam->decompressed_frame.data, CPIA_MAX_FRAME_SIZE);
-		cam->decompressed_frame.data=NULL;
-		rvfree(cam->raw_image, CPIA_MAX_IMAGE_SIZE);
-		cam->raw_image=NULL;
-		return i;
+	if (reset_camera(camera) != 0) {
+		camera->ops->close(camera->lowlevel_data);
+		return camera;
 	}
-#endif	
-	return i;
+
+	/* close cpia */
+	camera->ops->close(camera->lowlevel_data);
+
+	printk(KERN_INFO "  CPiA Version: %d.%02d (%d.%d)\n",
+	       camera->params.version.firmwareVersion,
+	       camera->params.version.firmwareRevision,
+	       camera->params.version.vcVersion,
+	       camera->params.version.vcRevision);
+	printk(KERN_INFO "  CPiA PnP-ID: %04x:%04x:%04x\n",
+	       camera->params.pnpID.vendor,
+	       camera->params.pnpID.product,
+	       camera->params.pnpID.deviceRevision);
+	printk(KERN_INFO "  VP-Version: %d.%d %04x\n",
+	       camera->params.vpVersion.vpVersion,
+	       camera->params.vpVersion.vpRevision,
+	       camera->params.vpVersion.cameraHeadID);
+
+	return camera;
 }
 
-void cpia_unregister_camera(int camnr)
+void cpia_unregister_camera(struct cam_data *cam)
 {
-	struct cam_data *cam;
-	if(camnr >= CPIA_MAXCAMS || camera[camnr] == NULL) return;
-	cam = camera[camnr];
-	
-	DBG("unregistering video\n");
-	/* FIXME: Is this safe if the device is open? */
-	video_unregister_device(&cam->vdev);
-	
-	/* Need a lock when adding/removing cameras.  This doesn't happen
-	 * often and doesn't take very long, so grabbing the kernel lock
-	 * should be OK. */
-	lock_kernel();
-	
-	DBG("destroying /proc/cpia/video%d\n", cam->vdev.minor);
-	destroy_proc_cpia_cam(cam);
-	
-	if(cam->open_count == 0) {
-		DBG("freeing camera\n");
-		kfree(camera[camnr]);
-		camera[camnr] = NULL;
+	if (!cam->open_count) {
+		DBG("unregistering video\n");
+		video_unregister_device(&cam->vdev);
 	} else {
+		LOG("/dev/video%d removed while open, "
+		    "deferring video_unregister_device\n", cam->vdev.minor);
 		DBG("camera open -- setting ops to NULL\n");
 		cam->ops = NULL;
 	}
-	unlock_kernel();
+	
+#ifdef CONFIG_PROC_FS
+	DBG("destroying /proc/cpia/video%d\n", cam->vdev.minor);
+	destroy_proc_cpia_cam(cam);
+#endif	
+	if (!cam->open_count) {
+		DBG("freeing camera\n");
+		kfree(cam);
+	}
 }
 
 /****************************************************************************
@@ -3327,7 +3646,9 @@ int init_module(void)
 {
 	printk(KERN_INFO "%s v%d.%d.%d\n", ABOUT,
 	       CPIA_MAJ_VER, CPIA_MIN_VER, CPIA_PATCH_VER);
+#ifdef CONFIG_PROC_FS
 	proc_cpia_create();
+#endif
 #ifdef CONFIG_KMOD
 #ifdef CONFIG_VIDEO_CPIA_PP_MODULE
 	request_module("cpia_pp");
@@ -3341,14 +3662,9 @@ return 0;
 
 void cleanup_module(void)
 {
-	int i;
-	for(i=0; i<CPIA_MAXCAMS; ++i) {
-		if(camera[i]) {
-			video_unregister_device(&camera[i]->vdev);
-		}
-	}
-	
+#ifdef CONFIG_PROC_FS
 	proc_cpia_destroy();
+#endif
 }
 
 #else
@@ -3357,25 +3673,25 @@ int cpia_init(struct video_init *unused)
 {
 	printk(KERN_INFO "%s v%d.%d.%d\n", ABOUT,
 	       CPIA_MAJ_VER, CPIA_MIN_VER, CPIA_PATCH_VER);
+#ifdef CONFIG_PROC_FS
 	proc_cpia_create();
+#endif
 
-#ifdef MODULE
+#ifdef CONFIG_VIDEO_CPIA_PP
+	cpia_pp_init();
+#endif
 #ifdef CONFIG_KMOD
 #ifdef CONFIG_VIDEO_CPIA_PP_MODULE
 	request_module("cpia_pp");
 #endif
+
 #ifdef CONFIG_VIDEO_CPIA_USB_MODULE
 	request_module("cpia_usb");
 #endif
 #endif	/* CONFIG_KMOD */
-#else	/* !MODULE */
-#ifdef CONFIG_VIDEO_CPIA_PP
-	cpia_pp_init();
-#endif
 #ifdef CONFIG_VIDEO_CPIA_USB
 	cpia_usb_init();
 #endif
-#endif	/* !MODULE */
 	return 0;
 }
 

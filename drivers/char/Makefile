@@ -11,7 +11,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) rio ftape joystick
+ALL_SUB_DIRS := $(SUB_DIRS) rio ftape joystick drm
 
 #
 # This file contains the font map for the default (hardware) font
@@ -371,6 +371,17 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_AGP),y)
+L_OBJS += agp/agpgart.o
+ALL_SUB_DIRS += agp
+SUB_DIRS += agp
+else
+  ifeq ($(CONFIG_AGP),m)
+  ALL_SUB_DIRS += agp
+  MOD_SUB_DIRS += agp
+  endif
+endif
+    
 ifeq ($(CONFIG_VIDEO_DEV),y)
 LX_OBJS += videodev.o
 else
@@ -499,6 +510,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_VIDEO_CPIA_USB),y)
+L_OBJS += cpia_usb.o
+else
+  ifeq ($(CONFIG_VIDEO_CPIA_USB),m)
+    M_OBJS += cpia_usb.o
+  endif
+endif
+
 ifeq ($(CONFIG_RADIO_AZTECH),y)
 L_OBJS += radio-aztech.o
 else
@@ -602,6 +621,17 @@ endif
 ifdef CONFIG_H8
 LX_OBJS += h8.o
 endif
+
+
+ifeq ($(CONFIG_DRM),y)
+SUB_DIRS += drm
+MOD_SUB_DIRS += drm
+else
+  ifeq ($(CONFIG_DRM),m)
+  MOD_SUB_DIRS += drm
+  endif
+endif
+
 
 ifeq ($(L_I2C),y)
 LX_OBJS += i2c.o

@@ -137,6 +137,14 @@ struct JS_DATA_SAVE_TYPE {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
 #include <asm/spinlock.h>
 typedef struct wait_queue *wait_queue_head_t;
+#define __exit
+#ifdef MODULE
+#define module_init(x)		int init_module(void) { return x(); }
+#define module_exit(x)		void cleanup_module(void) { x(); }
+#else
+#define module_init(x)		int x##_module(void) { return x(); }
+#define module_exit(x)		void x##_module(void) { x(); }
+#endif
 #define __setup(a,b)
 #define BASE_ADDRESS(x,i)	((x)->base_address[i])
 #define DECLARE_WAITQUEUE(x,y)	struct wait_queue x = { y, NULL }

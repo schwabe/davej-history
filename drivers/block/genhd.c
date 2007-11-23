@@ -131,6 +131,10 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 			return buf;
 		}
 	}
+	if (hd->major >= COMPAQ_CISS_MAJOR && hd->major <=
+            COMPAQ_CISS_MAJOR+7) {
+          return raid_name (hd, minor, COMPAQ_CISS_MAJOR, buf);
+        }
 	if (hd->major >= COMPAQ_SMART2_MAJOR && hd->major <=
             COMPAQ_SMART2_MAJOR+7) {
           return raid_name (hd, minor, COMPAQ_SMART2_MAJOR, buf);
@@ -1622,6 +1626,9 @@ __initfunc(void device_setup(void))
 {
 	extern void console_map_init(void);
 	extern void cpqarray_init(void);
+#ifdef CONFIG_BLK_CPQ_CISS_DA
+	extern int  cciss_init(void);
+#endif 
 #ifdef CONFIG_PARPORT
 	extern int parport_init(void);
 #endif
@@ -1654,6 +1661,9 @@ __initfunc(void device_setup(void))
 #endif
 #ifdef CONFIG_BLK_CPQ_DA
 	cpqarray_init();
+#endif
+#ifdef CONFIG_BLK_CPQ_CISS_DA
+        cciss_init();
 #endif
 #ifdef CONFIG_NET
 	net_dev_init();

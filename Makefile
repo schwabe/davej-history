@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 18
-EXTRAVERSION = pre1
+EXTRAVERSION = pre2
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -191,7 +191,7 @@ DRIVERS := $(DRIVERS) drivers/tc/tc.a
 endif
 
 ifeq ($(CONFIG_USB),y)
-DRIVERS := $(DRIVERS) drivers/usb/usb.a
+DRIVERS := $(DRIVERS) drivers/usb/usbdrv.o
 endif
 
 ifeq ($(CONFIG_I2O),y)
@@ -348,7 +348,10 @@ modules_install:
 	if [ -f VIDEO_MODULES ]; then inst_mod VIDEO_MODULES video; fi; \
 	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
 	if [ -f IRDA_MODULES  ]; then inst_mod IRDA_MODULES  net;   fi; \
+	if [ -f USB_MODULES   ]; then inst_mod USB_MODULES   usb;   fi; \
+	if [ -f USB_SERIAL_MODULES ]; then inst_mod USB_SERIAL_MODULES usb; fi; \
 	if [ -f SK98LIN_MODULES ]; then inst_mod SK98LIN_MODULES  net;   fi; \
+	if [ -f SKFP_MODULES ]; then inst_mod SKFP_MODULES   net;   fi; \
 	\
 	for f in *.o; do [ -r $$f ] && echo $$f; done | sort > $$MODLIB/.allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \

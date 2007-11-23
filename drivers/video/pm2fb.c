@@ -2041,12 +2041,12 @@ void pm2fb_cleanup(struct fb_info* info) {
 		board_table[i->board].cleanup(i);
 }
 
-__initfunc(void pm2fb_init(void)) {
+int __init pm2fb_init(void) {
 
 	memset(&fb_info, 0, sizeof(fb_info));
 	memcpy(&fb_info.current_par, &pm2fb_options.user_mode, sizeof(fb_info.current_par));
 	if (!pm2fb_conf(&fb_info))
-		return;
+		return 0;
 	pm2fb_reset(&fb_info);
 	fb_info.disp.scrollmode=SCROLL_YNOMOVE;
 	fb_info.gen.parsize=sizeof(struct pm2fb_par);
@@ -2065,7 +2065,7 @@ __initfunc(void pm2fb_init(void)) {
 	fbgen_install_cmap(0, &fb_info.gen);
 	if (register_framebuffer(&fb_info.gen.info)<0) {
 		printk("pm2fb: unable to register.\n");
-		return;
+		return 0;
 	}
 	printk("fb%d: %s (%s), using %uK of video memory.\n",
 				GET_FB_IDX(fb_info.gen.info.node),
@@ -2073,6 +2073,7 @@ __initfunc(void pm2fb_init(void)) {
 				permedia2_name,
 				(u32 )(fb_info.regions.fb_size>>10));
 	MOD_INC_USE_COUNT;
+	return 1;
 }
 
 static void __init pm2fb_mode_setup(char* options) {
@@ -2127,7 +2128,8 @@ MODULE_PARM(mode, "s");
 
 int init_module(void) {
 	if (mode) pm2fb_mode_setup(mode);
-  	pm2fb_init();
+	if (!pm2fb_init())
+		return -ENXIO;
 }
 
 void cleanup_module(void) {

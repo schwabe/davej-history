@@ -428,6 +428,8 @@ static inline void handle_mouse_event(unsigned char scancode)
 #endif
 }
 
+static unsigned char kbd_exists = 1;
+
 /*
  * This reads the keyboard status port, and does the
  * appropriate action.
@@ -450,6 +452,7 @@ static unsigned char handle_kbd_event(void)
 		if (status & KBD_STAT_MOUSE_OBF) {
 			handle_mouse_event(scancode);
 		} else {
+			kbd_exists = 1;
 			if (do_acknowledge(scancode))
 				handle_scancode(scancode, !(scancode & 0x80));
 			mark_bh(KEYBOARD_BH);
@@ -506,7 +509,7 @@ static int send_data(unsigned char data)
 			mdelay(1);
 			if (!--timeout) {
 #ifdef KBD_REPORT_TIMEOUTS
-				printk(KERN_WARNING "Keyboard timeout[2]\n");
+				printk(KERN_WARNING "keyboard: Timeout - AT keyboard not present?\n");
 #endif
 				return 0;
 			}
@@ -520,8 +523,10 @@ static int send_data(unsigned char data)
 
 void pckbd_leds(unsigned char leds)
 {
-	if (!send_data(KBD_CMD_SET_LEDS) || !send_data(leds))
-	    send_data(KBD_CMD_ENABLE);	/* re-enable kbd if any errors */
+	if (kbd_exists && (!send_data(KBD_CMD_SET_LEDS) || !send_data(leds))) {
+		send_data(KBD_CMD_ENABLE);	/* re-enable kbd if any errors */
+		kbd_exists = 0;
+	}
 }
 
 /*

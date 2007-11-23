@@ -50,7 +50,9 @@
 #include "sound_config.h"
 #include "sound_firmware.h"
 #ifdef MSND_CLASSIC
+# ifndef __alpha__
 #  define SLOWIO
+# endif
 #endif
 #include "msnd.h"
 #ifdef MSND_CLASSIC

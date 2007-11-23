@@ -421,7 +421,15 @@ static inline int seek_to_not_starving_chunk(struct request ** req, int * lat)
 	     case COMPAQ_SMART2_MAJOR+4:	\
 	     case COMPAQ_SMART2_MAJOR+5:	\
 	     case COMPAQ_SMART2_MAJOR+6:	\
-	     case COMPAQ_SMART2_MAJOR+7:
+	     case COMPAQ_SMART2_MAJOR+7:	\
+	     case COMPAQ_CISS_MAJOR+0:        \
+             case COMPAQ_CISS_MAJOR+1:        \
+             case COMPAQ_CISS_MAJOR+2:        \
+             case COMPAQ_CISS_MAJOR+3:        \
+             case COMPAQ_CISS_MAJOR+4:        \
+             case COMPAQ_CISS_MAJOR+5:        \
+             case COMPAQ_CISS_MAJOR+6:        \
+             case COMPAQ_CISS_MAJOR+7:
 
 #define elevator_starve_rest_of_queue(req)			\
 do {								\
@@ -568,7 +576,9 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	if (scsi_blk_major(major) ||
             (major >= DAC960_MAJOR+0 && major <= DAC960_MAJOR+7) ||
             (major >= COMPAQ_SMART2_MAJOR+0 &&
-             major <= COMPAQ_SMART2_MAJOR+7))
+             major <= COMPAQ_SMART2_MAJOR+7) ||
+	     (major >= COMPAQ_CISS_MAJOR+0 &&
+             major <= COMPAQ_CISS_MAJOR+7))
 		queue_new_request = 1;
 
 out:

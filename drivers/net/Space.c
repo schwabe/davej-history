@@ -140,6 +140,7 @@ extern int de620_probe(struct device *);
 /* FDDI adapters */
 extern int dfx_probe(struct device *dev);
 extern int apfddi_init(struct device *dev);
+extern int skfp_probe(struct device *dev);
 
 /* HIPPI boards */
 extern int rr_hippi_probe(struct device *);
@@ -583,6 +584,9 @@ __initfunc(static int fddiif_probe(struct device *dev))
 #endif
 #ifdef CONFIG_APFDDI
 	&& apfddi_init(dev)
+#endif
+#ifdef CONFIG_SKFP
+	&& skfp_probe(dev)
 #endif
 	&& 1 ) {
 	    return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
