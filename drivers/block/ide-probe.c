@@ -37,6 +37,7 @@
 #include <linux/genhd.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
+#include <linux/mc146818rtc.h> /* CMOS defines */
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>

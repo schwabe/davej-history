@@ -142,6 +142,11 @@ typedef struct {
 typedef struct { unsigned long a[100]; } __dummy_lock_t;
 #define __dummy_lock(lock) (*(__dummy_lock_t *)(lock))
 
+/*
+ *	Intel PIV would benefit from using 'rep nop' here but on older
+ *	processors and non intel it is listed as 'undefined' so cannot be
+ *	blindly used. On 2.4 we should add a PIV CPU type for this one.
+ */
 #define spin_lock_string \
 	"\n1:\t" \
 	"lock ; btsl $0,%0\n\t" \

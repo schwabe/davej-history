@@ -1,5 +1,11 @@
 ChangeLog for smbfs.
 
+2000-11-04 Urban Widmark <urban@svenskatest.se>
+
+	* proc.c, sock.c: adjust max parameters & max data to follow max_xmit
+	  lots of servers were having find_next trouble with this.
+	* proc.c: use documented write method of truncating (NetApp fix)
+
 2000-09-01 Urban Widmark <urban@svenskatest.se>
 
 	* proc.c: add back lanman2 support (OS/2 and others)

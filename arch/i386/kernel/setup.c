@@ -35,6 +35,10 @@
  *
  *	Added Cyrix III initial detection code
  *	Alan Cox <alan@redhat.com>, Septembr 2000
+ *
+ *      Improve cache size calculation
+ *      Asit Mallick <asit.k.mallick@intel.com>, October 2000
+ *      Andrew Ip <aip@turbolinux.com>, October 2000
  */
 
 /*
@@ -914,7 +918,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 	int i;
 	char *p = NULL;
 	extern void mcheck_init(void);
-
+	
 	c->loops_per_jiffy = loops_per_jiffy;
 	c->x86_cache_size = -1;
 
@@ -961,55 +965,97 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 
 	if (c->cpuid_level > 1) {
 		/* supports eax=2  call */
-		int edx, dummy;
-			
-		cpuid(2, &dummy, &dummy, &dummy, &edx);
+		int regs[4];
+		int l1c=0, l1d=0, l2=0, l3=0;	/* Cache sizes */
 
-		/* We need only the LSB */
-		edx &= 0xff;
+		cpuid(2, &regs[0], &regs[1], &regs[2], &regs[3]);
+		/* Least significant byte of eax says how many times
+		 * to call cpuid with value 2 to get cache and TLB
+		 * info.
+		 */
+		if ((regs[0] & 0xFF) != 1 )
+			printk(KERN_WARNING "Multiple cache reports are not supported yet\n");
 
-		switch (edx) {
-			case 0x40:
-				c->x86_cache_size = 0;
-				break;
+		c->x86_cache_size = 0;
 
-			case 0x41: /* 4-way 128 */
-				c->x86_cache_size = 128;
-				break;
+		for ( i = 0 ; i < 4 ; i++ ) 
+		{
+			int j;
 
-			case 0x42: /* 4-way 256 */
-			case 0x82: /* 8-way 256 */
-				c->x86_cache_size = 256;
-				break;
+	                 if ( regs[i] < 0 )
+	                         continue; /* no useful data */
 
-			case 0x43: /* 4-way 512 */
-				c->x86_cache_size = 512;
-				break;
+	                 /* look at all the bytes returned */
 
-			case 0x44: /* 4-way 1024 */
-			case 0x84: /* 8-way 1024 */
-				c->x86_cache_size = 1024;
-				break;
-
-			case 0x45: /* 4-way 2048 */
-			case 0x85: /* 8-way 2048 */
-				c->x86_cache_size = 2048;
-				break;
-
-			default:
-				c->x86_cache_size = 0;
-				break;
+	                 for ( j = ( i == 0 ? 8:0 ) ; j < 25 ; j+=8 )
+	                 {
+				unsigned char rh = regs[i]>>j;
+				unsigned char rl;
+				
+				rl = rh & 0x0F;
+				rh >>=4;
+				
+				switch(rh)
+				{
+					case 2:
+						if(rl)
+						{
+							printk("%dK L3 cache\n", (rl-1)*512);
+							l3 += (rl-1)*512;
+						}
+						break;
+					case 4:
+					case 8:
+						if(rl)
+						{
+							printk("%dK L2 cache (%d way)\n",128<<(rl-1), rh);
+							l2 += 128<<(rl-1);
+						}
+						break;
+					
+					/*
+					 *	L1 caches do not count for SMP switching weights,
+					 *	they are shadowed by L2.
+					 */
+					 
+					case 6:
+		                 		if(rh==6 && rl > 5)
+		                 		{
+							printk("%dK L1 data cache\n", 8<<(rl - 6));
+							l1d+=8<<(rl-6);
+						}
+						break;
+					case 7:
+		                 		printk("%dK L1 instruction cache\n",
+		                 			rl?(16<<(rl-1)):12);
+		                 		l1c+=rl?(16<<(rl-1)):12;
+		                 		break;
+				}	              
+			}   			
 		}
+		if(l1c && l1d)
+			printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
+				l1c, l1d);
+		if(l2)
+			printk("CPU: L2 Cache: %dK\n", l2);
+		if(l3)
+			printk("CPU: L3 Cache: %dK\n", l3);
+			
+		/*
+		 *	Assuming L3 is shared. The L1 cache is shadowed by L2
+		 *	so doesn't need to be included.
+		 */
+		 
+		c->x86_cache_size += l2;
 	}
 	
 	/*
 	 *	Intel finally adopted the AMD/Cyrix extended id naming
-	 *	stuff
+	 *	stuff for the 'Pentium IV'
 	 */
 	 
 	if(c->x86_vendor ==X86_VENDOR_INTEL && c->x86 == 15)
 	{
-		c->x86 = 6;
 		intel_model(c);
 		return;
 	}
@@ -1158,12 +1204,12 @@ int get_cpuinfo(char * buffer)
 #endif
 		p += sprintf(p,"processor\t: %d\n"
 			       "vendor_id\t: %s\n"
-			       "cpu family\t: %c\n"
+			       "cpu family\t: %d\n"
 			       "model\t\t: %d\n"
 			       "model name\t: %s\n",
 			       n,
 			       c->x86_vendor_id[0] ? c->x86_vendor_id : "unknown",
-			       c->x86 + '0',
+			       c->x86,
 			       c->x86_model,
 			       c->x86_model_id[0] ? c->x86_model_id : "unknown");
 

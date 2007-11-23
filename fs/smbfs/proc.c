@@ -385,22 +385,16 @@ fail:
 }
 
 /*
- * Returns the maximum read or write size for the current packet size
- * and max_xmit value.
+ * Returns the maximum read or write size for the "payload". Making all of the
+ * packet fit within the negotiated max_xmit size.
+ *
  * N.B. Since this value is usually computed before locking the server,
  * the server's packet size must never be decreased!
  */
-static int
+static inline int
 smb_get_xmitsize(struct smb_sb_info *server, int overhead)
 {
-	int size = server->packet_size;
-
-	/*
-	 * Start with the smaller of packet size and max_xmit ...
-	 */
-	if (size > server->opt.max_xmit)
-		size = server->opt.max_xmit;
-	return size - overhead;
+	return server->opt.max_xmit - overhead;
 }
 
 /*
@@ -750,6 +744,23 @@ smb_newconn(struct smb_sb_info *server, struct smb_conn_opt *opt)
 	VERBOSE("protocol=%d, max_xmit=%d, pid=%d capabilities=0x%x\n",
 		server->opt.protocol, server->opt.max_xmit, server->conn_pid,
 		server->opt.capabilities);
+
+	/* Make sure we can fit a message of the negotiated size in our
+	   packet buffer. */
+	if (server->opt.max_xmit > server->packet_size) {
+		int len = smb_round_length(server->opt.max_xmit);
+		char *buf = smb_vmalloc(len);
+		if (buf) {
+			server->packet = buf;
+			server->packet_size = len;
+		} else {
+			/* else continue with the too small buffer? */
+			PARANOIA("Failed to allocate new packet buffer: "
+				 "max_xmit=%d, packet_size=%d\n",
+				 server->opt.max_xmit, server->packet_size);
+			server->opt.max_xmit = server->packet_size;
+		}
+	}
 
 out:
 #ifdef SMB_RETRY_INTR
@@ -1348,17 +1359,16 @@ smb_proc_trunc(struct smb_sb_info *server, __u16 fid, __u32 length)
 	smb_lock_server(server);
 
       retry:
-	p = smb_setup_header(server, SMBwrite, 5, 0);
+	p = smb_setup_header(server, SMBwrite, 5, 3);
 	WSET(server->packet, smb_vwv0, fid);
 	WSET(server->packet, smb_vwv1, 0);
 	DSET(server->packet, smb_vwv2, length);
 	WSET(server->packet, smb_vwv4, 0);
-	*p++ = 4;
-	*p++ = 0;
-	smb_setup_bcc(server, p);
 
-	if ((result = smb_request_ok(server, SMBwrite, 1, 0)) < 0)
-	{
+	*p++ = 1;
+	WSET(p, 0, 0);
+
+	if ((result = smb_request_ok(server, SMBwrite, 1, 0)) < 0) {
 		if (smb_retry(server))
 			goto retry;
 		goto out;
@@ -1487,8 +1497,8 @@ static int
 smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		      void *cachep)
 {
-	unsigned char *p;
-	char *mask, *lastname, *param = server->temp_buf;
+	unsigned char *p, *lastname;
+	char *mask, *param = server->temp_buf;
 	__u16 command;
 	int first, entries, entries_seen;
 
@@ -1521,7 +1531,7 @@ retry:
 	 * Encode the initial path
 	 */
 	mask = param + 12;
-	mask_len = smb_encode_path(server, mask, dir, &star);
+	mask_len = smb_encode_path(server, mask, dir, &star) - 1;
 	if (mask_len < 0) {
 		entries = mask_len;
 		goto unlock_return;
@@ -1613,31 +1623,41 @@ retry:
 		if (ff_searchcount == 0)
 			break;
 
-		/* we might need the lastname for continuations */
+		/*
+		 * We might need the lastname for continuations.
+		 *
+		 * Note that some servers (win95) point to the filename and
+		 * others (NT4, Samba using NT1) to the dir entry. We assume
+		 * here that those who do not point to a filename do not need
+		 * this info to continue the listing.
+		 */
 		mask_len = 0;
-		if (ff_lastname > 0) {
+		if (ff_lastname > 0 && ff_lastname < resp_data_len) {
 			lastname = resp_data + ff_lastname;
 			switch (info_level) {
 			case 260:
-				if (ff_lastname < resp_data_len)
-					mask_len = resp_data_len - ff_lastname;
+				mask_len = resp_data_len - ff_lastname;
 				break;
 			case 1:
-				/* Win NT 4.0 doesn't set the length byte */
-				lastname++;
-				if (ff_lastname + 2 < resp_data_len)
-					mask_len = strlen(lastname);
+				/* lastname points to a length byte */
+				mask_len = *lastname++;
+				if (ff_lastname + 1 + mask_len > resp_data_len)
+					mask_len = resp_data_len - ff_lastname - 1;
 				break;
 			}
 			/*
 			 * Update the mask string for the next message.
 			 */
+			if (mask_len < 0)
+				mask_len = 0;
 			if (mask_len > 255)
 				mask_len = 255;
 			if (mask_len)
 				strncpy(mask, lastname, mask_len);
 		}
 		mask[mask_len] = 0;
+		mask_len = strlen(mask);	/* find the actual string len */
+
 
 		/* Now we are ready to parse smb directory entries. */
 

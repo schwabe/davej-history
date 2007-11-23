@@ -2083,22 +2083,6 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		case SIOCDARP:	/* proxy AARP */
 			return (atif_ioctl(cmd,(void *)arg));
 
-		/*
-		 * Physical layer ioctl calls
-		 */
-		case SIOCSIFLINK:
-		case SIOCGIFHWADDR:
-		case SIOCSIFHWADDR:
-		case SIOCGIFFLAGS:
-		case SIOCSIFFLAGS:
-		case SIOCGIFMTU:
-		case SIOCGIFCONF:
-		case SIOCADDMULTI:
-		case SIOCDELMULTI:
-		case SIOCGIFCOUNT:
-		case SIOCGIFINDEX:
-		case SIOCGIFNAME:
-			return ((dev_ioctl(cmd,(void *) arg)));
 
 		case SIOCSIFMETRIC:
 		case SIOCSIFBRDADDR:
@@ -2111,7 +2095,7 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 			return (-EINVAL);
 
 		default:
-			return (-EINVAL);
+			return dev_ioctl(cmd, (void *) arg); 
 	}
 
 	return (put_user(amount, (int *)arg));

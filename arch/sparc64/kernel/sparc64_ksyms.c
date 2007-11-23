@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.58.2.9 2000/09/05 00:10:54 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.58.2.11 2000/10/25 21:17:44 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -47,6 +47,7 @@
 #endif
 #include <asm/a.out.h>
 #include <asm/svr4.h>
+#include <asm/elf.h>
 
 struct poll {
 	int fd;
@@ -89,6 +90,7 @@ extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
 
 extern void dump_thread(struct pt_regs *, struct user *);
+extern int dump_fpu (struct pt_regs * regs, elf_fpregset_t * fpregs);
 
 #ifdef __SMP__
 extern spinlock_t kernel_flag;
@@ -206,6 +208,7 @@ EXPORT_SYMBOL(_sigpause_common);
 
 /* Should really be in linux/kernel/ksyms.c */
 EXPORT_SYMBOL(dump_thread);
+EXPORT_SYMBOL(dump_fpu);
 
 /* math-emu wants this */
 EXPORT_SYMBOL(die_if_kernel);
@@ -244,6 +247,7 @@ EXPORT_SYMBOL(__strlen);
 #if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 91)
 EXPORT_SYMBOL(strlen);
 #endif
+EXPORT_SYMBOL(__strlen_user);
 EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strcpy);
 EXPORT_SYMBOL(strncpy);

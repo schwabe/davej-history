@@ -1984,10 +1984,10 @@ static int mixer_ioctl(struct ess_card *card, unsigned int cmd, unsigned long ar
 	if (cmd == OSS_GETVERSION)
 		return put_user(SOUND_VERSION, (int *)arg);
 
-	if (_IOC_TYPE(cmd) != 'M' || _IOC_SIZE(cmd) != sizeof(int))
+	if (_IOC_TYPE(cmd) != 'M' || _SIOC_SIZE(cmd) != sizeof(int))
                 return -EINVAL;
 
-        if (_IOC_DIR(cmd) == _IOC_READ) {
+        if (_SIOC_DIR(cmd) == _SIOC_READ) {
                 switch (_IOC_NR(cmd)) {
                 case SOUND_MIXER_RECSRC: /* give them the current record source */
 
@@ -2035,7 +2035,7 @@ static int mixer_ioctl(struct ess_card *card, unsigned int cmd, unsigned long ar
 		return put_user(val,(int *)arg);
 	}
 	
-        if (_IOC_DIR(cmd) != (_IOC_WRITE|_IOC_READ))
+        if (_SIOC_DIR(cmd) != (_SIOC_WRITE|_SIOC_READ))
 		return -EINVAL;
 	
 	card->mix.modcnt++;

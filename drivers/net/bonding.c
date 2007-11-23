@@ -176,6 +176,9 @@ static int bond_ioctl(struct device *master, struct ifreq *ifr, int cmd)
 {
 	struct device *slave = dev_get(ifr->ifr_slave);
 
+	if (!capable(CAP_NET_ADMIN))
+		return -EPERM;
+
 #ifdef BONDING_DEBUG
 	printk("master=%s, slave=%s\n", master->name, slave->name);
 #endif

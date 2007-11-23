@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.68.2.1 1999/09/22 11:37:34 jj Exp $
+# $Id: config.in,v 1.68.2.7 2000/10/24 21:00:53 davem Exp $
 # For a description of the syntax of this configuration file,
 # see Documentation/kbuild/config-language.txt.
 #
@@ -23,6 +23,9 @@ comment 'General setup'
 
 define_bool CONFIG_VT y
 define_bool CONFIG_VT_CONSOLE y
+
+# Identify this as a Sparc32 build
+define_bool CONFIG_SPARC32 y
 
 bool 'Support for AP1000 multicomputer' CONFIG_AP1000
 bool 'Symmetric multi-processing support (does not work on sun4/sun4c)' CONFIG_SMP

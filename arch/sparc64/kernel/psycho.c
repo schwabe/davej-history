@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.85.2.10 2000/06/14 07:41:19 davem Exp $
+/* $Id: psycho.c,v 1.85.2.11 2000/10/24 21:00:53 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -29,13 +29,6 @@
 #else
 #define dprintf printk
 #endif
-
-unsigned long pci_dvma_offset = 0x00000000UL;
-unsigned long pci_dvma_mask = 0xffffffffUL;
-
-#define PCI_DVMA_HASH_NONE	0xffffffffffffffffUL
-unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
-unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
 
 /* If this is non-NULL it points to Sabre's DMA write-sync register
  * which is used by drivers of devices behind bridges other than APB
@@ -69,6 +62,13 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 }
 
 #else
+
+unsigned long pci_dvma_offset = 0x00000000UL;
+unsigned long pci_dvma_mask = 0xffffffffUL;
+
+#define PCI_DVMA_HASH_NONE	0xffffffffffffffffUL
+unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
+unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
 
 #include <linux/smp.h>
 #include <linux/smp_lock.h>

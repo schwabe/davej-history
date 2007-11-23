@@ -157,8 +157,13 @@ struct vm_struct * get_vm_area(unsigned long size)
 	area = (struct vm_struct *) kmalloc(sizeof(*area), GFP_KERNEL);
 	if (!area)
 		return NULL;
+	size += PAGE_SIZE;
 	addr = VMALLOC_START;
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
+		if ((size + addr) < addr) {
+			kfree(area);
+			return NULL;
+		}
 		if (size + addr < (unsigned long) tmp->addr)
 			break;
 		addr = tmp->size + (unsigned long) tmp->addr;
@@ -168,7 +173,7 @@ struct vm_struct * get_vm_area(unsigned long size)
 		}
 	}
 	area->addr = (void *)addr;
-	area->size = size + PAGE_SIZE;
+	area->size = size;
 	area->next = *p;
 	*p = area;
 	return area;

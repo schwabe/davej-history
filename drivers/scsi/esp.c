@@ -396,7 +396,7 @@ extern inline void esp_cmd(struct Sparc_ESP *esp, struct Sparc_ESP_regs *eregs,
  *
  * struct scsi_cmnd:
  *
- *   We keep track of the syncronous capabilities of a target
+ *   We keep track of the synchronous capabilities of a target
  *   in the device member, using sync_min_period and
  *   sync_max_offset.  These are the values we directly write
  *   into the ESP registers while running a command.  If offset
@@ -2521,7 +2521,7 @@ static int esp_do_data_finale(struct Sparc_ESP *esp,
 	 * on HME broken adapters because we skip the HME fifo
 	 * workaround code in esp_handle() if we are doing data
 	 * phase things.  We don't want to fuck directly with
-	 * the fifo like that, especially if doing syncronous
+	 * the fifo like that, especially if doing synchronous
 	 * transfers!  Also, will need to double the count on
 	 * HME if we are doing wide transfers, as the HME fifo
 	 * will move and count 16-bit quantities during wide data.

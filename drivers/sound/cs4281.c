@@ -1064,12 +1064,12 @@ static int mixer_ioctl(struct cs4281_state *s, unsigned int cmd, unsigned long a
         if (cmd == OSS_GETVERSION)
                 return put_user(SOUND_VERSION, (int *)arg);
         
-        if (_IOC_TYPE(cmd) != 'M' || _IOC_SIZE(cmd) != sizeof(int))
+        if (_IOC_TYPE(cmd) != 'M' || _SIOC_SIZE(cmd) != sizeof(int))
                 return -EINVAL;
         
              // If ioctl has only the IOC_READ bit(bit 31)
              // on, process the only-read commands. 
-        if (_IOC_DIR(cmd) == _IOC_READ) {
+        if (_SIOC_DIR(cmd) == _SIOC_READ) {
                 switch (_IOC_NR(cmd)) {
                 case SOUND_MIXER_RECSRC: // Arg contains a bit for each recording source 
                     cs4281_read_ac97(s, BA0_AC97_RECORD_SELECT, &temp1);
@@ -1103,7 +1103,7 @@ static int mixer_ioctl(struct cs4281_state *s, unsigned int cmd, unsigned long a
         
              // If ioctl doesn't have both the IOC_READ and 
              // the IOC_WRITE bit set, return invalid.
-        if (_IOC_DIR(cmd) != (_IOC_READ|_IOC_WRITE))
+        if (_SIOC_DIR(cmd) != (_SIOC_READ|_SIOC_WRITE))
                 return -EINVAL;
         
              // Increment the count of volume writes.

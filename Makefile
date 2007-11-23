@@ -1,7 +1,7 @@
 VERSION = 2
 PATCHLEVEL = 2
 SUBLEVEL = 18
-EXTRAVERSION = pre19
+EXTRAVERSION = pre20
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -335,6 +335,7 @@ modules_install:
 	MODLIB=$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE); \
 	mkdir -p $$MODLIB; \
 	rm -f $$MODLIB/build; \
+	[ `/sbin/insmod -V 2>&1 | head -1 | awk '/^insmod version /{split("$3", a, /\./); printf "%d%03d%03d\n", a[1], a[2], a[3];}'`0 -ge 20030140 ] && \
 	ln -s `pwd` $$MODLIB/build; \
 	cd modules; \
 	MODULES=""; \

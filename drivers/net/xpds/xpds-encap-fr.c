@@ -740,7 +740,7 @@ xpds_dlci_transmit(struct sk_buff *skb, struct net_device *dev)
 	kfree (buffer);
 
 	if (rc) {
-		xpds_data[card_num].stats.tx_errors++;
+		if (rc != -EBUSY) xpds_data[card_num].stats.tx_errors++;
 	} else {
 		xpds_data[card_num].stats.tx_packets++;
 		dev_kfree_skb(skb);

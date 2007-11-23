@@ -284,6 +284,7 @@ EXPORT_SYMBOL(unregister_exec_domain);
 EXPORT_SYMBOL(register_sysctl_table);
 EXPORT_SYMBOL(unregister_sysctl_table);
 EXPORT_SYMBOL(sysctl_string);
+EXPORT_SYMBOL(sysctl_jiffies);
 EXPORT_SYMBOL(sysctl_intvec);
 EXPORT_SYMBOL(proc_dostring);
 EXPORT_SYMBOL(proc_dointvec);

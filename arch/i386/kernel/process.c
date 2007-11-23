@@ -31,6 +31,7 @@
 #include <linux/smp.h>
 #include <linux/reboot.h>
 #include <linux/init.h>
+#include <linux/mc146818rtc.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -253,8 +254,10 @@ static inline void kb_wait(void)
  */
 void machine_real_restart(unsigned char *code, int length)
 {
+	unsigned long flags;
+	
 	cli();
-
+	
 	/* Write zero to CMOS register number 0x0f, which the BIOS POST
 	   routine will recognize as telling it to do a proper reboot.  (Well
 	   that's what this book in front of me says -- it may only apply to
@@ -264,8 +267,9 @@ void machine_real_restart(unsigned char *code, int length)
 	   `outb_p' is needed instead of just `outb'.  Use it to be on the
 	   safe side. */
 
-	outb_p (0x8f, 0x70);
-	outb_p (0x00, 0x71);
+	spin_lock_irqsave(&rtc_lock, flags);
+	CMOS_WRITE(0x00, 0x8f);
+	spin_unlock_irqrestore(&rtc_lock, flags);
 
 	/* Remap the kernel at virtual address zero, as well as offset zero
 	   from the kernel segment.  This assumes the kernel segment starts at

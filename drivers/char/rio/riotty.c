@@ -452,7 +452,7 @@ bombout:
 				*/
 				PortP->State |= RIO_WOPEN;
 				rio_spin_unlock_irqrestore(&PortP->portSem, flags);
-				if (RIODelay (&PortP, HUNDRED_MS) == RIO_FAIL)
+				if (RIODelay (PortP, HUNDRED_MS) == RIO_FAIL)
 #if 0
 				if ( sleep((caddr_t)&tp->tm.c_canqo, TTIPRI|PCATCH))
 #endif

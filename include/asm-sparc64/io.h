@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.19.2.2 2000/09/17 05:11:47 davem Exp $ */
+/* $Id: io.h,v 1.19.2.5 2000/10/25 18:14:47 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -13,6 +13,20 @@
 #define __SLOW_DOWN_IO	do { } while (0)
 #define SLOW_DOWN_IO	do { } while (0)
 
+
+#ifndef CONFIG_PCI
+
+/* In builds without PCI these should not be called.
+ *
+ * XXX Unfortunately they are, this is how the scsi
+ * XXX disk driver determines whether kernel buffers
+ * XXX are physically contiguous :-(
+ */
+#define virt_to_phys(addr)	__pa(addr)
+#define phys_to_virt(addr)	__va(addr)
+#define bus_dvma_to_mem(vaddr)	(__builtin_trap(), 0)
+
+#else
 
 #define PCI_DVMA_HASHSZ	256
 
@@ -46,14 +60,15 @@ extern __inline__ void *phys_to_virt(unsigned long addr)
 	return (void *)(paddr + off);
 }
 
-#define virt_to_bus virt_to_phys
-#define bus_to_virt phys_to_virt
-
 extern __inline__ unsigned long bus_dvma_to_mem(unsigned long vaddr)
 {
 	return vaddr & pci_dvma_mask;
 }
 
+#endif /* CONFIG_PCI */
+
+#define virt_to_bus virt_to_phys
+#define bus_to_virt phys_to_virt
 
 extern __inline__ unsigned int inb(unsigned long addr)
 {

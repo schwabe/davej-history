@@ -4,7 +4,7 @@
  * License to copy and distribute is GNU General Public License, version 2.
  */
 #ifndef VERSION_STRING
-#define VERSION_STRING	"$Revision: 1.33 $"
+#define VERSION_STRING	"release-20001009k"
 #endif
 
 #define LT_IND_AI	0xc
