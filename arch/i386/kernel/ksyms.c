@@ -5,6 +5,7 @@
 #include <linux/delay.h>
 
 #include <asm/semaphore.h>
+#include <asm/processor.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
@@ -12,6 +13,7 @@ extern int dump_fpu(elf_fpregset_t *);
 static struct symbol_table arch_symbol_table = {
 #include <linux/symtab_begin.h>
 	/* platform dependent support */
+	X(x86_capability),
 	X(dump_thread),
 	X(dump_fpu),
 	XNOVERS(__do_delay),

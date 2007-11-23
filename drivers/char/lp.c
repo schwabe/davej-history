@@ -89,7 +89,14 @@ static inline int lp_char_polled(char lpchar, int minor)
 	while(wait != LP_WAIT(minor)) wait++;
 	/* control port takes strobe high */
 	outb_p(( LP_PSELECP | LP_PINITP | LP_PSTROBE ), ( LP_C( minor )));
-	while(wait) wait--;
+	/* Wait until NBUSY line goes high */
+	count = 0;
+	do {
+		status = LP_S(minor);
+		count++;
+		if (need_resched)
+			schedule();
+	} while (LP_READY(minor, status) && (count<LP_CHAR(minor)));
 	/* take strobe low */
 	outb_p(( LP_PSELECP | LP_PINITP ), ( LP_C( minor )));
 	/* update waittime statistics */
