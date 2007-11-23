@@ -50,7 +50,7 @@ be entered as an environment variable, whereas its absence indicates that
 it will appear as a kernel argument readable via /proc/cmdline by programs
 running once the system is up.
 
-    53c7xx=		[HW,SCSI]
+    53c7xx=		[HW,SCSI] Amiga SCSI controllers
 
     adb_buttons=	[HW,MOUSE]
 
@@ -67,6 +67,8 @@ running once the system is up.
     apm=		[APM] Automatic Power Management.
 
     arcrimi=		[HW,NET]
+
+	ataflop=		[HW, M68k]
 
     atamouse=		[HW,MOUSE] Atari Mouse.
 
@@ -96,22 +98,22 @@ running once the system is up.
 
     com90xx=		[HW,NET]
 
-    console=		
+    console=		[KNL] output console + comm spec (speed, control, parity)
 
     cyclades=		[HW,SERIAL] Cyclades multi-serial port adapter.
 
-    debug		[KNL] Enable kernel debugging.
+    debug		[KNL] Enable kernel debugging (events log level).
 
     decnet=		[HW,NET]
 
-    digi=		[HW,SERIAL]
+    digi=		[HW,SERIAL] io parameters + enable/disable command
 
     digiepca=		[HW,SERIAL]
 
     dmascc=		[HW,AX25,SERIAL] AX.25 Z80SCC driver with DMA
 			support available.
 
-    dmasound=		[HW,SOUND]
+    dmasound=		[HW,SOUND] (sound subsystem buffers)
 
     dtc3181e=		[HW,SCSI]
 
@@ -121,7 +123,7 @@ running once the system is up.
 
     edb=		[HW,PS2]
 
-    ether=		[HW,NET] Ethernet.
+    ether=		[HW,NET] Ethernet cards parameters (iomem,irq,dev_name).
 
     fd_mcs=		[HW,SCSI]
 
@@ -129,7 +131,7 @@ running once the system is up.
 
     floppy=		[HW]
 
-    ftape=		[HW] Floppy Tape subsystem.
+    ftape=		[HW] Floppy Tape subsystem debugging options.
 
     gdth=		[HW,SCSI]
 
@@ -137,7 +139,8 @@ running once the system is up.
 
     gvp11=		[HW,SCSI]
 
-    hd= 		[EIDE] IDE and EIDE hard drive subsystem.
+    hd= 		[EIDE] (E)IDE hard drive subsystem
+                geometry (Cyl/heads/sectors) or tune parameters.
 
     hfmodem=		[HW,AX25]
 
@@ -149,9 +152,17 @@ running once the system is up.
 
     icn=		[HW,ISDN]
 
+	ide?=		[HW] (E)IDE subsystem : config (iomem/irq), tuning or
+                     debugging (serialize,reset,no{dma,tune,probe}) or
+					chipset specific parameters
+
+	idebus=		[HW] (E)IDE subsystem : VLB/PCI bus speed
+
     in2000=		[HW,SCSI]
 
     init=		[KNL]
+
+	initrd=		[KNL] initial ramdisk path
 
     ip= 		[PNP]
 
@@ -185,7 +196,7 @@ running once the system is up.
 
     kbd-reset		[VT]
 
-    load_ramdisk=	[RAM]
+    load_ramdisk=	[RAM] initrd loading boolean
 
     lp= 		[LPT] Parallel Printer.
 
@@ -204,7 +215,7 @@ running once the system is up.
 
     mcdx=		[HW,CD]
 
-    md= 		[HW]
+    md= 		[HW] RAID subsystems devices and level
 
     mdacon=		[MDA]
 
@@ -224,12 +235,18 @@ running once the system is up.
 
     nfsroot=		[NFS]
 
+	nmi_watchdog=	[KNL, BUGS=ix86] debugging features for SMP kernels
+
     no387		[BUGS=ix86] Tells the kernel to use the 387 maths
 			emulation library even if a 387 maths coprocessor
 			is present.
 
     noapic		[SMP,APIC] Tells the kernel not to make use of any
 			APIC that may be present on the system.
+
+    noasync		[HW, M68K] Disables async and sync negotiation for all devices.
+
+    nodisconnect	[HW,SCSI, M68K] Disables SCSI disconnects.
 
     no-halt		[BUGS=ix86]
 
@@ -239,6 +256,8 @@ running once the system is up.
     no-scroll		[VGA]
 
     nosmp		[SMP] Tells an SMP kernel to act as a UP kernel.
+
+    nosync		[HW, M68K] Disables sync negotiation for all devices.
 
     optcd=		[HW,CD]
 
@@ -260,7 +279,7 @@ running once the system is up.
 
     pg. 		[PARIDE]
 
-    pirq=		[SMP,APIC]
+    pirq=		[SMP,APIC] mp-table
 
     plip=		[LP,NET] Parallel port network link.
 
@@ -275,13 +294,14 @@ running once the system is up.
 
     ramdisk_size=	[RAM]
 
-    ramdisk_start=	[RAM]
+    ramdisk_start=	[RAM] offset of the initrd image when cohabiting with
+					a kernel image on a floppy
 
     reboot=		[BUGS=ix86]
 
     reserve=
 
-    riscom8=		[HW,SERIAL]
+    riscom8=		[HW,SERIAL] multi-port serial driver (io parameters)
 
     ro			[KNL] Mount root device read-only on boot.
 
@@ -303,11 +323,13 @@ running once the system is up.
 
     specialix=		[HW,SERIAL] Specialix multi-serial port adapter.
 
-    st= 		[HW]
+    st= 		[HW] SCSI tape parameters (buffers, ..)
 
     st0x=		[HW,SCSI]
 
     stram_swap= 	[HW]
+
+    switches=		[HW, M68K]
 
     sym53c416=		[HW,SCSI]
 
@@ -331,6 +353,6 @@ running once the system is up.
 
     wdt=		[HW]
 
-    xd= 		[HW,XT]
+    xd= 		[HW,XT] Original XT 8bit disk controllers
 
     xd_geo=		[HW,XT]

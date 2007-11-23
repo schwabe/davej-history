@@ -249,8 +249,10 @@
 #define HIGH_PRI        0x08
 
 /* data directions */
+#ifndef HOSTS_C
 #define DATA_IN         0x01000000L             /* data from target */
 #define DATA_OUT        0x00000000L             /* data to target */
+#endif
 
 /* BMIC registers (EISA controllers) */
 #define ID0REG          0x0c80                  /* board ID */

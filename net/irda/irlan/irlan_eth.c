@@ -345,6 +345,7 @@ void irlan_eth_send_gratuitous_arp(struct device *dev)
 	 * is useful if we have changed access points on the same
 	 * subnet.  
 	 */
+#ifdef CONFIG_INET	 
 	DEBUG(4, "IrLAN: Sending gratuitous ARP\n");
 	in_dev = dev->ip_ptr;
 	arp_send(ARPOP_REQUEST, ETH_P_ARP, 
@@ -352,6 +353,7 @@ void irlan_eth_send_gratuitous_arp(struct device *dev)
 		 dev, 
 		 in_dev->ifa_list->ifa_address,
 		 NULL, dev->dev_addr, NULL);
+#endif /* CONFIG_INET */		 
 }
 
 /*

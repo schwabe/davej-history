@@ -261,6 +261,8 @@ static inline void iounmap(void *addr)
 {
 }
 
+#define ioremap_nocache(offset, size) ioremap((offset),(size))
+
 #ifndef readb
 # define readb(a)	_readb((unsigned long)(a))
 #endif

@@ -94,6 +94,12 @@ int media_bay_count = 0;
  */
 #define MB_IDE_WAIT	1500
 
+/*
+ * Wait at least this many ticks after resetting an IDE device before
+ * believing its ready bit.
+ */
+#define MB_IDE_MINWAIT	250
+
 static void poll_media_bay(int which);
 static void set_media_bay(int which, int id);
 static int media_bay_task(void *);
@@ -285,7 +291,10 @@ media_bay_task(void *x)
 #endif
 			}
 #ifdef CONFIG_BLK_DEV_IDE
-		} else if (bay->cd_timer && (--bay->cd_timer == 0 || MB_IDE_READY(i))
+		} else if (bay->cd_timer
+			   && (--bay->cd_timer == 0
+			       || (bay->cd_timer < MB_IDE_WAIT - MB_IDE_MINWAIT
+				   && MB_IDE_READY(i)))
 			   && bay->cd_index < 0) {
 			bay->cd_timer = 0;
 			printk(KERN_DEBUG "Registering IDE, base:0x%08lx, irq:%d\n", bay->cd_base, bay->cd_irq);
@@ -299,11 +308,13 @@ media_bay_task(void *x)
 		}
 
 		bay->previous_id = bay->content_id;
-		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(1);
-		if (signal_pending(current))
-			return 0;
-		i = (i+1)%media_bay_count;
+		if (++i >= media_bay_count) {
+			i = 0;
+			current->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(1);
+			if (signal_pending(current))
+				return 0;
+		}
 	}
 }
 
@@ -405,25 +416,25 @@ mb_notify_sleep(struct pmu_sleep_notifier *self, int when)
 			feature_set(bay->dev_node, FEATURE_Mediabay_enable);
 			/* I suppose this is enough delay to stabilize MB_CONTENT ... */
 			mdelay(10);
-			/* We re-enable the bay using it's previous content only if
-			   it did not change */
-			if (MB_CONTENTS(i) == bay->content_id) {
-				set_media_bay(i, bay->content_id);
-				if (bay->content_id != MB_NO) {
-					mdelay(400);
-					/* Clear the bay reset */
-					feature_clear(bay->dev_node, FEATURE_Mediabay_reset);
-					/* This small delay makes sure the device has time
-					   to assert the BUSY bit (used by IDE sleep) */
-					udelay(100);
-					/* We reset the state machine timers in case we were in the
-					   middle of a wait loop */
-					if (bay->reset_timer)
-						bay->reset_timer = MB_RESET_COUNT;
-					if (bay->cd_timer)
-						bay->cd_timer = MB_IDE_WAIT;
-				}
-			}
+			/* We re-enable the bay using it's previous content
+			   only if it did not change */
+			if (MB_CONTENTS(i) != bay->content_id)
+				continue;
+			set_media_bay(i, bay->content_id);
+			if (bay->content_id == MB_NO)
+				continue;
+			mdelay(400);
+			/* Clear the bay reset */
+			feature_clear(bay->dev_node, FEATURE_Mediabay_reset);
+			/* This small delay makes sure the device has time
+			   to assert the BUSY bit (used by IDE sleep) */
+			udelay(100);
+			/* We reset the state machine timers in case we were
+			   in the middle of a wait loop */
+			if (bay->reset_timer)
+				bay->reset_timer = MB_RESET_COUNT;
+			if (bay->cd_timer)
+				bay->cd_timer = MB_IDE_WAIT;
 		}
 		break;
 	}

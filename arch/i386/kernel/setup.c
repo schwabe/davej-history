@@ -366,7 +366,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 			/* Zero is valid according to the BIOS weenies */
 			if(i386_endbase)
 			{
-				printk(KERN_NOTICE "Ignoring bogus EBDA pointer %X\n", 
+				printk(KERN_NOTICE "Ignoring bogus EBDA pointer %lX\n", 
 					i386_endbase);
 			}
 			i386_endbase = BIOS_ENDBASE;
@@ -755,8 +755,8 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	{ X86_VENDOR_INTEL,	6,
 	  { "Pentium Pro A-step", "Pentium Pro", NULL, "Pentium II (Klamath)", 
 	    NULL, "Pentium II (Deschutes)", "Mobile Pentium II", 
-            "Pentium III (Katmai)", "Pentium III (Coppermine)", NULL, NULL, 
-            NULL, NULL, NULL, NULL }},
+	    "Pentium III (Katmai)", "Pentium III (Coppermine)", NULL, NULL, 
+	    NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_AMD,	4,
 	  { NULL, NULL, NULL, "486 DX/2", NULL, NULL, NULL, "486 DX/2-WB",
 	    "486 DX/4", "486 DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT",
@@ -1019,8 +1019,9 @@ int get_cpuinfo(char * buffer)
 			x86_cap_flags[14] = "mca";
 			x86_cap_flags[16] = "pat";
 			x86_cap_flags[17] = "pse36";
-			x86_cap_flags[18] = "psn";
-			x86_cap_flags[24] = "osfxsr";
+			x86_cap_flags[18] = "pn";
+			x86_cap_flags[24] = "fxsr";
+			x86_cap_flags[25] = "xmm";
 			break;
 
 		    case X86_VENDOR_CENTAUR:

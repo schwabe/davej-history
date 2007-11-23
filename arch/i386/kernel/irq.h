@@ -112,6 +112,11 @@ extern unsigned long io_apic_irqs;
 
 extern char _stext, _etext;
 
+/*
+ * IF YOU CHANGE THIS, PLEASE ALSO CHANGE
+ * FIX_IO_APIC_BASE_* in fixmap.h
+ */
+#define MAX_IO_APICS 4
 #define MAX_IRQ_SOURCES 128
 #define MAX_MP_BUSSES 32
 enum mp_bustype {

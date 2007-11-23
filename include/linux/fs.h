@@ -837,6 +837,7 @@ extern void iput(struct inode *);
 extern struct inode * igrab(struct inode *inode);
 extern ino_t iunique(struct super_block *, ino_t);
 extern struct inode * iget(struct super_block *, unsigned long);
+extern struct inode * iget_in_use (struct super_block *, unsigned long);
 extern void clear_inode(struct inode *);
 extern struct inode * get_empty_inode(void);
 

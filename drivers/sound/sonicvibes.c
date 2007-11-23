@@ -71,6 +71,14 @@
  *    15.06.99   0.15  Fix bad allocation bug.
  *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
  *    28.06.99   0.16  Add pci_set_master
+ *    03.08.99   0.17  adapt to Linus' new __setup/__initcall
+ *                     added kernel command line options "sonicvibes=reverb" and "sonicvibesdmaio=dmaioaddr"
+ *    12.08.99   0.18  module_init/__setup fixes
+ *    24.08.99   0.19  get rid of the dmaio kludge, replace with allocate_resource
+ *    31.08.99   0.20  add spin_lock_init
+ *                     __initlocaldata to fix gcc 2.7.x problems
+ *    03.09.99   0.21  change read semantics for MIDI to match
+ *                     OSS more closely; remove possible wakeup race
  *
  */
 
@@ -1265,9 +1273,9 @@ static int drain_dac(struct sv_state *s, int nonblock)
                         current->state = TASK_RUNNING;
                         return -EBUSY;
                 }
-		tmo = (count * HZ) / s->ratedac;
+		tmo = 3 * HZ * (count + s->dma_dac.fragsize) / 2 / s->ratedac;
 		tmo >>= sample_shift[(s->fmt >> SV_CFMT_ASHIFT) & SV_CFMT_MASK];
-		if (!schedule_timeout(tmo ? : 1) && tmo)
+		if (!schedule_timeout(tmo + 1))
 			printk(KERN_DEBUG "sv: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac.wait, &wait);
@@ -1870,6 +1878,7 @@ static /*const*/ struct file_operations sv_audio_fops = {
 static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct sv_state *s = (struct sv_state *)file->private_data;
+	struct wait_queue wait = { current, NULL };
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1880,7 +1889,10 @@ static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_
 		return -ESPIPE;
 	if (!access_ok(VERIFY_WRITE, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+	add_wait_queue(&s->midi.iwait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.ird;
@@ -1891,15 +1903,25 @@ static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.iwait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+                      if (file->f_flags & O_NONBLOCK) {
+                              if (!ret)
+                                      ret = -EAGAIN;
+                              break;
+                      }
+                      current->state = TASK_INTERRUPTIBLE;
+                      schedule();
+                      if (signal_pending(current)) {
+                              if (!ret)
+                                      ret = -ERESTARTSYS;
+                              break;
+                      }
 			continue;
 		}
-		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIINBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.ird = ptr;
@@ -1908,13 +1930,17 @@ static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_
 		count -= cnt;
 		buffer += cnt;
 		ret += cnt;
+		break;
 	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&s->midi.iwait, &wait);
 	return ret;
 }
 
 static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct sv_state *s = (struct sv_state *)file->private_data;
+	struct wait_queue wait = { current, NULL };
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1925,7 +1951,10 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 		return -ESPIPE;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+        add_wait_queue(&s->midi.owait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.owr;
@@ -1938,15 +1967,25 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.owait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			current->state = TASK_INTERRUPTIBLE;
+			schedule();
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIOUTBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.owr = ptr;
@@ -1959,6 +1998,8 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 		sv_handle_midi(s);
 		spin_unlock_irqrestore(&s->lock, flags);
 	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&s->midi.owait, &wait);
 	return ret;
 }
 
@@ -2324,7 +2365,7 @@ __initfunc(int init_sonicvibes(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.16 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.21 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
@@ -2353,6 +2394,7 @@ __initfunc(int init_sonicvibes(void))
 		init_waitqueue(&s->midi.iwait);
 		init_waitqueue(&s->midi.owait);
 		s->open_sem = MUTEX;
+		spin_lock_init(&s->lock);
 		s->magic = SV_MAGIC;
 		s->iosb = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
 		s->ioenh = pcidev->base_address[1] & PCI_BASE_ADDRESS_IO_MASK;
@@ -2423,8 +2465,8 @@ __initfunc(int init_sonicvibes(void))
 		wrindir(s, SV_CIDRIVECONTROL, 0);  /* drive current 16mA */
 		wrindir(s, SV_CIENABLE, s->enable = 0);  /* disable DMAA and DMAC */
 		outb(~(SV_CINTMASK_DMAA | SV_CINTMASK_DMAC), s->ioenh + SV_CODEC_INTMASK);
-		//outb(0xff, s->iodmaa + SV_DMA_RESET);
-		//outb(0xff, s->iodmac + SV_DMA_RESET);
+		/* outb(0xff, s->iodmaa + SV_DMA_RESET); */
+		/* outb(0xff, s->iodmac + SV_DMA_RESET); */
 		inb(s->ioenh + SV_CODEC_STATUS); /* ack interrupts */
 		wrindir(s, SV_CIADCCLKSOURCE, 0); /* use pll as ADC clock source */
 		wrindir(s, SV_CIANALOGPWRDOWN, 0); /* power up the analog parts of the device */
@@ -2524,8 +2566,8 @@ void cleanup_module(void)
 		synchronize_irq();
 		inb(s->ioenh + SV_CODEC_STATUS); /* ack interrupts */
 		wrindir(s, SV_CIENABLE, 0);     /* disable DMAA and DMAC */
-		//outb(0, s->iodmaa + SV_DMA_RESET);
-		//outb(0, s->iodmac + SV_DMA_RESET);
+		/*outb(0, s->iodmaa + SV_DMA_RESET);*/
+		/*outb(0, s->iodmac + SV_DMA_RESET);*/
 		free_irq(s->irq, s);
 		release_region(s->iodmac, SV_EXTENT_DMA);
 		release_region(s->iodmaa, SV_EXTENT_DMA);

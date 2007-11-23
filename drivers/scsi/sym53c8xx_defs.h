@@ -66,8 +66,9 @@
 #endif
 #include <linux/config.h>
 
+#ifndef LinuxVersionCode
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
-
+#endif
 /*
  * NCR PQS/PDS special device support.
  */

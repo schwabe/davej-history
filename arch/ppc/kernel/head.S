@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.130.2.3 1999/08/10 21:36:48 cort Exp $
+ *  $Id: head.S,v 1.130.2.6 1999/10/12 01:03:34 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -112,6 +112,10 @@ LG_CACHE_LINE_SIZE = 4
 	
 /* 601 only have IBAT cr0.eq is set on 601 when using this macro */ 
 #define LOAD_BAT(n, offset, reg, RA, RB) \
+	/* see the comment for clear_bats() -- Cort */ \
+	li	RA,0;			\
+	mtspr	IBAT##n##U,RA;		\
+	mtspr	DBAT##n##U,RA;		\
 	lwz	RA,offset+0(reg);	\
 	lwz	RB,offset+4(reg);	\
 	mtspr	IBAT##n##U,RA;		\
@@ -285,6 +289,14 @@ __secondary_start:
 	clrldi	r16,r16,63
 	mtsdr1	r16
 #else /* CONFIG_PPC64 */
+	/*
+	 * If the MMU is off clear the bats.  See clear_bat() -- Cort
+	 */
+	mfmsr	r20
+	andi.	r20,r20,MSR_DR
+	bne	100f
+	bl	clear_bats
+100:
 	/* 
 	 * allow secondary cpus to get at all of ram in early bootup
 	 * since their init_task may be up there -- Cort
@@ -1312,7 +1324,6 @@ hash_page:
 #else
 	bnelr-
 #endif
-
 	ori	r6,r6,0x100		/* set _PAGE_ACCESSED in pte */
 	rlwinm	r5,r4,5,24,24		/* _PAGE_RW access -> _PAGE_DIRTY */
 	rlwimi	r5,r4,7,22,22		/* _PAGE_RW -> _PAGE_HWWRITE */
@@ -2733,3 +2744,36 @@ swapper_pg_dir:
 	.globl	cmd_line
 cmd_line:
 	.space	512
+
+/* 
+ * An undocumented "feature" of 604e requires that the v bit
+ * be cleared before changing BAT values.
+ *
+ * Also, newer IBM firmware does not clear bat3 and 4 so
+ * this makes sure it's done.
+ *  -- Cort 
+ */
+clear_bats:
+	li	r20,0
+	
+	mtspr	DBAT0U,r20
+	mtspr	DBAT0L,r20
+	mtspr	IBAT0U,r20
+	mtspr	IBAT0L,r20
+	
+	mtspr	DBAT1U,r20
+	mtspr	DBAT1L,r20
+	mtspr	IBAT1U,r20
+	mtspr	IBAT1L,r20
+	
+	mtspr	DBAT2U,r20
+	mtspr	DBAT2L,r20
+	mtspr	IBAT2U,r20
+	mtspr	IBAT2L,r20
+	
+	mtspr	DBAT3U,r20
+	mtspr	DBAT3L,r20
+	mtspr	IBAT3U,r20
+	mtspr	IBAT3L,r20
+
+	blr

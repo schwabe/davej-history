@@ -58,11 +58,12 @@ static char buffersize_index[65] =
 /*
  * Hash table mask..
  */
-static unsigned long bh_hash_mask = 0;
+static unsigned int bh_hash_mask = 0;
+static unsigned int bh_hash_shift = 0;
+static struct buffer_head ** hash_table = NULL;
 
 static int grow_buffers(int size);
 
-static struct buffer_head ** hash_table;
 static struct buffer_head * lru_list[NR_LIST] = {NULL, };
 static struct buffer_head * free_list[NR_SIZES] = {NULL, };
 
@@ -420,8 +421,13 @@ void invalidate_buffers(kdev_t dev)
 	}
 }
 
-#define _hashfn(dev,block) (((unsigned)(HASHDEV(dev)^block)) & bh_hash_mask)
-#define hash(dev,block) hash_table[_hashfn(dev,block)]
+/* After several hours of tedious analysis, the following hash
+ * function won.  Do not mess with it... -DaveM
+ */
+#define _hashfn(dev,block)	\
+	((((dev)<<(bh_hash_shift - 6)) ^ ((dev)<<(bh_hash_shift - 9))) ^ \
+	 (((block)<<(bh_hash_shift - 6)) ^ ((block) >> 13) ^ ((block) << (bh_hash_shift - 12))))
+#define hash(dev,block) hash_table[_hashfn(dev,block) & bh_hash_mask]
 
 static inline void remove_from_hash_queue(struct buffer_head * bh)
 {
@@ -1512,16 +1518,26 @@ void __init buffer_init(unsigned long memory_size)
            for something that is really too small */
 
 	do {
+		unsigned long tmp;
+
 		nr_hash = (1UL << order) * PAGE_SIZE /
 		    sizeof(struct buffer_head *);
+		bh_hash_mask = (nr_hash - 1);
+
+		tmp = nr_hash;
+		bh_hash_shift = 0;
+		while((tmp >>= 1UL) != 0UL)
+			bh_hash_shift++;
+
 		hash_table = (struct buffer_head **)
 		    __get_free_pages(GFP_ATOMIC, order);
-	} while (hash_table == NULL && --order > 4);
+	} while (hash_table == NULL && --order >= 0);
+	printk("Buffer-cache hash table entries: %d (order: %d, %ld bytes)\n",
+	       nr_hash, order, (1UL<<order) * PAGE_SIZE);
 	
 	if (!hash_table)
 		panic("Failed to allocate buffer hash table\n");
 	memset(hash_table, 0, nr_hash * sizeof(struct buffer_head *));
-	bh_hash_mask = nr_hash-1;
 
 	bh_cachep = kmem_cache_create("buffer_head",
 				      sizeof(struct buffer_head),

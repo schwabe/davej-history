@@ -516,8 +516,10 @@ int proc_ide_read_geometry
 	char		*out = page;
 	int		len;
 
-	out += sprintf(out,"physical     %hi/%hi/%hi\n", drive->cyl, drive->head, drive->sect);
-	out += sprintf(out,"logical      %hi/%hi/%hi\n", drive->bios_cyl, drive->bios_head, drive->bios_sect);
+	out += sprintf(out,"physical     %d/%d/%d\n",
+		       drive->cyl, drive->head, drive->sect);
+	out += sprintf(out,"logical      %d/%d/%d\n",
+		       drive->bios_cyl, drive->bios_head, drive->bios_sect);
 	len = out - page;
 	PROC_IDE_READ_RETURN(page,start,off,count,eof,len);
 }

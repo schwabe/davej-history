@@ -277,9 +277,11 @@ EXPORT_SYMBOL(inet_sendmsg);
 EXPORT_SYMBOL(inet_recvmsg);
 
 /* Socket demultiplexing. */
-EXPORT_SYMBOL(tcp_established_hash);
+EXPORT_SYMBOL(tcp_ehash_size);
+EXPORT_SYMBOL(tcp_ehash);
 EXPORT_SYMBOL(tcp_listening_hash);
-EXPORT_SYMBOL(tcp_bound_hash);
+EXPORT_SYMBOL(tcp_bhash_size);
+EXPORT_SYMBOL(tcp_bhash);
 EXPORT_SYMBOL(udp_hash);
 
 EXPORT_SYMBOL(destroy_sock);
@@ -496,8 +498,10 @@ EXPORT_SYMBOL(init_hippi_dev);
 EXPORT_SYMBOL(unregister_hipdev);
 #endif
 
+#ifdef CONFIG_INET
 EXPORT_SYMBOL(sysctl_wmem_max);
 EXPORT_SYMBOL(sysctl_rmem_max);
+#endif
 
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE) 
 #include<linux/if_ltalk.h>

@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.164.2.5 1999/09/07 00:59:22 paulus Exp $
+ *  $Id: init.c,v 1.164.2.7 1999/10/19 04:32:39 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -148,6 +148,9 @@ unsigned long inline p_mapped_by_bats(unsigned long);
  * -- Cort
  */
 int __map_without_bats = 0;
+
+/* max amount of RAM to use */
+unsigned long __max_memory;
 
 /* optimization for 603 to load the tlb directly from the linux table -- Cort */
 #define NO_RELOAD_HTAB 1 /* change in kernel/head.S too! */
@@ -1296,7 +1299,7 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	int i;
 	
 	/* max amount of RAM we allow -- Cort */
-#define RAM_LIMIT (256<<20)
+#define RAM_LIMIT (768<<20)
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {
@@ -1329,8 +1332,12 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	 * to our nearest IO area.
 	 * -- Cort
 	 */
-	if ( phys_mem.regions[0].size >= RAM_LIMIT )
-		phys_mem.regions[0].size = RAM_LIMIT;
+	if (__max_memory == 0 || __max_memory > RAM_LIMIT)
+		__max_memory = RAM_LIMIT;
+	if (phys_mem.regions[0].size >= __max_memory) {
+		phys_mem.regions[0].size = __max_memory;
+		phys_mem.n_regions = 1;
+	}
 	total = phys_mem.regions[0].size;
 	
 	if (phys_mem.n_regions > 1) {
@@ -1343,20 +1350,15 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	if (boot_infos == 0) {
 		/* record which bits the prom is using */
 		get_mem_prop("available", &phys_avail);
+		prom_mem = phys_mem;
+		for (i = 0; i < phys_avail.n_regions; ++i)
+			remove_mem_piece(&prom_mem,
+					 phys_avail.regions[i].address,
+					 phys_avail.regions[i].size, 0);
 	} else {
 		/* booted from BootX - it's all available (after klimit) */
 		phys_avail = phys_mem;
-	}
-	prom_mem = phys_mem;
-	for (i = 0; i < phys_avail.n_regions; ++i)
-	{
-		if ( phys_avail.regions[i].address >= RAM_LIMIT )
-			continue;
-		if ( (phys_avail.regions[i].address+phys_avail.regions[i].size)
-		     >= RAM_LIMIT )
-			phys_avail.regions[i].size = RAM_LIMIT - phys_avail.regions[i].address;
-		remove_mem_piece(&prom_mem, phys_avail.regions[i].address,
-				 phys_avail.regions[i].size, 1);
+		prom_mem.n_regions = 0;
 	}
 
 	/*

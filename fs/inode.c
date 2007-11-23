@@ -10,6 +10,7 @@
 #include <linux/dcache.h>
 #include <linux/init.h>
 #include <linux/quotaops.h>
+#include <linux/random.h>
 
 /*
  * New inode.c implementation.
@@ -47,6 +48,8 @@
 LIST_HEAD(inode_in_use);
 static LIST_HEAD(inode_unused);
 static struct list_head inode_hashtable[HASH_SIZE];
+
+__u32 inode_generation_count = 0;
 
 /*
  * A simple spinlock to protect the list manipulations.
@@ -809,6 +812,10 @@ void __init inode_init(void)
 	if (max > MAX_INODE)
 		max = MAX_INODE;
 	max_inodes = max;
+
+	/* Get a random number. */
+	get_random_bytes (&inode_generation_count,
+			  sizeof (inode_generation_count));
 }
 
 /* This belongs in file_table.c, not here... */
@@ -844,3 +851,48 @@ void update_atime (struct inode *inode)
     inode->i_atime = CURRENT_TIME;
     mark_inode_dirty (inode);
 }   /*  End Function update_atime  */
+
+/* This function is called by nfsd. */
+struct inode *iget_in_use(struct super_block *sb, unsigned long ino)
+{
+	struct list_head * head = inode_hashtable + hash(sb,ino);
+	struct inode * inode;
+
+	spin_lock(&inode_lock);
+	inode = find_inode(sb, ino, head);
+	if (inode) {
+		spin_unlock(&inode_lock);
+		wait_on_inode(inode);
+	}
+	else
+		inode = get_new_inode (sb, ino, head);
+
+	/* When we get the inode, we have to check if it is in use. We
+	   have to release it if it is not. */
+	if (inode) {
+		spin_lock(&inode_lock);
+		if (inode->i_nlink == 0 && inode->i_count == 1) {
+			--inode->i_count;
+			list_del(&inode->i_hash);
+			INIT_LIST_HEAD(&inode->i_hash);
+			list_del(&inode->i_list);
+			INIT_LIST_HEAD(&inode->i_list);
+			if (list_empty(&inode->i_hash)) {
+				list_del(&inode->i_list);
+				INIT_LIST_HEAD(&inode->i_list);
+				spin_unlock(&inode_lock);
+				clear_inode(inode);
+				spin_lock(&inode_lock);
+				list_add(&inode->i_list, &inode_unused);
+				inodes_stat.nr_free_inodes++;
+			}
+			else if (!(inode->i_state & I_DIRTY)) {
+				list_del(&inode->i_list);
+				list_add(&inode->i_list, &inode_in_use);
+			}
+			inode = NULL;
+		}
+		spin_unlock(&inode_lock);
+	}
+	return inode;
+}

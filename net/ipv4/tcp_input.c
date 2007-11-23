@@ -1043,7 +1043,7 @@ static __inline__ void tcp_tw_hashdance(struct sock *sk, struct tcp_tw_bucket *t
 	sk->prot->inuse--;
 
 	/* Step 4: Hash TW into TIMEWAIT half of established hash table. */
-	head = &tcp_established_hash[sk->hashent + (TCP_HTABLE_SIZE/2)];
+	head = &tcp_ehash[sk->hashent + (tcp_ehash_size/2)];
 	sktw = (struct sock *)tw;
 	if((sktw->next = *head) != NULL)
 		(*head)->pprev = &sktw->next;

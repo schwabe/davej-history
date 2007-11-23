@@ -1262,6 +1262,13 @@ static int isp1020_init(struct Scsi_Host *sh)
 		pci_write_config_byte(pdev, PCI_LATENCY_TIMER, latency_timer);
 	}
 #endif
+#ifdef __alpha__
+	/* Force ALPHA to use bus I/O and not bus MEM. 
+	   This is to avoid having to use HAE_MEM registers,
+	   which is broken on some platforms and with SMP.
+	*/
+	command &= ~PCI_COMMAND_MEMORY;
+#endif
 
 	if ((command & PCI_COMMAND_MEMORY) &&
 	    ((mem_base & 1) == 0)) {

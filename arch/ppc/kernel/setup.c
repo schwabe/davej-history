@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.132.2.5 1999/09/11 03:32:50 paulus Exp $
+ * $Id: setup.c,v 1.132.2.6 1999/10/19 04:32:33 paulus Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -497,6 +497,28 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		extern int __map_without_bats;
 		__map_without_bats = 1;
 	}
+
+	/* Look for mem= option on command line */
+	if (strstr(cmd_line, "mem=")) {
+		char *p, *q;
+		unsigned long maxmem = 0;
+		extern unsigned long __max_memory;
+
+		for (q = cmd_line; (p = strstr(q, "mem=")) != 0; ) {
+			q = p + 4;
+			if (p > cmd_line && p[-1] != ' ')
+				continue;
+			maxmem = simple_strtoul(q, &q, 0);
+			if (*q == 'k' || *q == 'K') {
+				maxmem <<= 10;
+				++q;
+			} else if (*q == 'm' || *q == 'M') {
+				maxmem <<= 20;
+				++q;
+			}
+		}
+		__max_memory = maxmem;
+	}
 	
 	return 0;
 }
@@ -522,7 +544,7 @@ __initfunc(void
 }
 
 __initfunc(void setup_arch(char **cmdline_p,
-			   unsigned long * memory_start_p, unsigned long * memory_end_p))
+		unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	extern int panic_timeout;
 	extern char _etext[], _edata[];
@@ -532,8 +554,11 @@ __initfunc(void setup_arch(char **cmdline_p,
 
 #ifdef CONFIG_XMON
 	extern void xmon_map_scc(void);
+	char *p;
+
 	xmon_map_scc();
-	if (strstr(cmd_line, "xmon"))
+	p = strstr(cmd_line, "xmon");
+	if (p != NULL && (p == cmd_line || p[-1] == ' '))
 		xmon(0);
 #endif /* CONFIG_XMON */
  
@@ -547,6 +572,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 
 	/* Save unparsed command line copy for /proc/cmdline */
 	strcpy(saved_command_line, cmd_line);
+
 	*cmdline_p = cmd_line;
 
 	*memory_start_p = find_available_memory();

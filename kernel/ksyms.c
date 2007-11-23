@@ -54,6 +54,9 @@ extern int blkdev_release(struct inode * inode);
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 extern int (*do_nfsservctl)(int, void *, void *);
 #endif
+#if !defined(CONFIG_LOCKD) && defined(CONFIG_LOCKD_MODULE)
+extern int (*do_lockdctl)(int, void *, void *);
+#endif
 
 extern void *sys_call_table;
 
@@ -121,6 +124,7 @@ EXPORT_SYMBOL(__fput);
 EXPORT_SYMBOL(igrab);
 EXPORT_SYMBOL(iunique);
 EXPORT_SYMBOL(iget);
+EXPORT_SYMBOL(iget_in_use);
 EXPORT_SYMBOL(iput);
 EXPORT_SYMBOL(__namei);
 EXPORT_SYMBOL(lookup_dentry);
@@ -192,6 +196,9 @@ EXPORT_SYMBOL(ROOT_DEV);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);
+#endif
+#if !defined(CONFIG_LOCKD) && defined(CONFIG_LOCKD_MODULE)
+EXPORT_SYMBOL(do_lockdctl);
 #endif
 
 /* device registration */

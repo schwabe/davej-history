@@ -9422,20 +9422,6 @@ CONFIG_SOUND_SB
   You can say M here to compile this driver as a module; the module is
   called sb.o.
 
-Generic OPL2/OPL3 FM synthesizer support
-CONFIG_SOUND_ADLIB
-  Answer Y if your card has a FM chip made by Yamaha (OPL2/OPL3/OPL4).
-  Answering Y is usually a safe and recommended choice, however some
-  cards may have software (TSR) FM emulation. Enabling FM support with
-  these cards may cause trouble (I don't currently know of any such
-  cards, however). 
-
-  Please read the file Documentation/sound/OPL3 if your card has an
-  OPL3 chip.
-
-  If unsure, say Y.
-  
-
 #Loopback MIDI device support
 #CONFIG_SOUND_VMIDI
 ###
@@ -9715,7 +9701,15 @@ CONFIG_SOUND_MIDI
 
 FM synthesizer (YM3812/OPL-3) support
 CONFIG_SOUND_YM3812
-  Answer Y here, unless you know you will not need the option.
+  Answer Y if your card has a FM chip made by Yamaha (OPL2/OPL3/OPL4).
+  Answering Y is usually a safe and recommended choice, however some
+  cards may have software (TSR) FM emulation. Enabling FM support with
+  these cards may cause trouble (I don't currently know of any such
+  cards, however).
+  Please read the file Documentation/sound/OPL3 if your card has an
+  OPL3 chip.
+
+  If unsure, say Y.
 
 Sun Audio support
 CONFIG_SUN_AUDIO

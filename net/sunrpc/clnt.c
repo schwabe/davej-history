@@ -467,6 +467,9 @@ call_encode(struct rpc_task *task)
 		return;
 	}
 
+	/* Zero buffer so we have automatic zero-padding of opaque & string */
+	memset(task->tk_buffer, 0, bufsiz);
+
 	/* Encode header and provided arguments */
 	encode = rpcproc_encode(clnt, task->tk_proc);
 	if (!(p = call_header(task))) {

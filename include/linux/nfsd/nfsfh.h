@@ -107,6 +107,7 @@ void	fh_update(struct svc_fh *);
 void	fh_put(struct svc_fh *);
 void	nfsd_fh_flush(kdev_t);
 void	nfsd_fh_init(void);
+void	nfsd_fh_shutdown(void);
 void	nfsd_fh_free(void);
 
 void	expire_all(void);
@@ -181,6 +182,11 @@ fh_unlock(struct svc_fh *fhp)
 		up(&inode->i_sem);
 	}
 }
+
+/*
+ * This is a long term cache to help find renamed files.
+ */
+void add_to_rename_cache(ino_t new_dirino, kdev_t dev, ino_t dirino, ino_t ino);
 
 #endif /* __KERNEL__ */
 

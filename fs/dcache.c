@@ -22,6 +22,7 @@
 #include <linux/init.h>
 
 #include <asm/uaccess.h>
+#include <asm/cache.h>
 
 #define DCACHE_PARANOIA 1
 /* #define DCACHE_DEBUG 1 */
@@ -41,11 +42,12 @@ kmem_cache_t *dentry_cache;
  * This hash-function tries to avoid losing too many bits of hash
  * information, yet avoid using a prime hash-size or similar.
  */
-#define D_HASHBITS     10
-#define D_HASHSIZE     (1UL << D_HASHBITS)
-#define D_HASHMASK     (D_HASHSIZE-1)
+#define D_HASHBITS     d_hash_shift
+#define D_HASHMASK     d_hash_mask
 
-static struct list_head dentry_hashtable[D_HASHSIZE];
+static unsigned int d_hash_mask = 0;
+static unsigned int d_hash_shift = 0;
+static struct list_head *dentry_hashtable = NULL;
 static LIST_HEAD(dentry_unused);
 
 struct {
@@ -563,7 +565,7 @@ struct dentry * d_alloc_root(struct inode * root_inode, struct dentry *old_root)
 
 static inline struct list_head * d_hash(struct dentry * parent, unsigned long hash)
 {
-	hash += (unsigned long) parent;
+	hash += (unsigned long) parent / L1_CACHE_BYTES;
 	hash = hash ^ (hash >> D_HASHBITS) ^ (hash >> D_HASHBITS*2);
 	return dentry_hashtable + (hash & D_HASHMASK);
 }
@@ -902,8 +904,10 @@ out:
 
 void __init dcache_init(void)
 {
-	int i;
-	struct list_head *d = dentry_hashtable;
+	int i, order;
+	struct list_head *d;
+	unsigned int nr_hash;
+	unsigned long memory_size;
 
 	/* 
 	 * A constructor could be added for stable state like the lists,
@@ -921,7 +925,33 @@ void __init dcache_init(void)
 	if (!dentry_cache)
 		panic("Cannot create dentry cache");
 
-	i = D_HASHSIZE;
+	memory_size = num_physpages << PAGE_SHIFT;
+	for (order = 5; (1UL << order) < memory_size; order++)
+		;
+
+	do {
+		unsigned long tmp;
+
+		nr_hash = (1UL << order) * PAGE_SIZE /
+			sizeof(struct list_head);
+		d_hash_mask = (nr_hash - 1);
+
+		tmp = nr_hash;
+		d_hash_shift = 0;
+		while((tmp >>= 1UL) != 0UL)
+			d_hash_shift++;
+
+		dentry_hashtable = (struct list_head *)
+			__get_free_pages(GFP_ATOMIC, order);
+	} while(dentry_hashtable == NULL && --order >= 0);
+	printk("DENTRY hash table entries: %d (order: %d, %ld bytes)\n",
+	       nr_hash, order, (1UL<<order) * PAGE_SIZE);
+
+	if (!dentry_hashtable)
+		panic("Failed to allocate dcache hash table\n");
+
+	d = dentry_hashtable;
+	i = nr_hash;
 	do {
 		INIT_LIST_HEAD(d);
 		d++;

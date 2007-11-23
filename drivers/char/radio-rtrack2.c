@@ -89,7 +89,7 @@ static int rt_setfreq(struct rt_device *dev, unsigned long freq)
 	return 0;
 }
 
-int rt_getsigstr(struct rt_device *dev)
+static int rt_getsigstr(struct rt_device *dev)
 {
 	if (inb(io) & 2)	/* bit set = no signal present	*/
 		return 0;

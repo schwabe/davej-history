@@ -38,7 +38,7 @@ svc_create(struct svc_program *prog, unsigned int bufsize, unsigned int xdrsize)
 
 	memset(serv, 0, sizeof(*serv));
 	serv->sv_program   = prog;
-	serv->sv_nrthreads = 1;
+	atomic_set(&serv->sv_nrthreads, 1);
 	serv->sv_stats     = prog->pg_stats;
 	serv->sv_bufsz	   = bufsize? bufsize : 4096;
 	serv->sv_xdrsize   = xdrsize;
@@ -61,10 +61,10 @@ svc_destroy(struct svc_serv *serv)
 
 	dprintk("RPC: svc_destroy(%s, %d)\n",
 				serv->sv_program->pg_name,
-				serv->sv_nrthreads);
+				atomic_read (&serv->sv_nrthreads));
 
-	if (serv->sv_nrthreads) {
-		if (--(serv->sv_nrthreads) != 0)
+	if (atomic_read (&serv->sv_nrthreads)) {
+		if (!atomic_dec_and_test (&serv->sv_nrthreads))
 			return;
 	} else
 		printk("svc_destroy: no threads for serv=%p!\n", serv);
@@ -128,7 +128,7 @@ svc_create_thread(svc_thread_fn func, struct svc_serv *serv)
 	 || !svc_init_buffer(&rqstp->rq_defbuf, serv->sv_bufsz))
 		goto out_thread;
 
-	serv->sv_nrthreads++;
+	atomic_inc(&serv->sv_nrthreads);
 	rqstp->rq_server = serv;
 	error = kernel_thread((int (*)(void *)) func, rqstp, 0);
 	if (error < 0)

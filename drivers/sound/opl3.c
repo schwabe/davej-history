@@ -32,8 +32,6 @@
 #include "sound_config.h"
 #include "soundmodule.h"
 
-#ifdef CONFIG_YM3812
-
 #include "opl3.h"
 
 #define MAX_VOICE	18
@@ -1223,5 +1221,3 @@ void cleanup_module(void)
 EXPORT_SYMBOL(opl3_init);
 EXPORT_SYMBOL(opl3_detect);
 MODULE_PARM(io, "i");
-
-#endif

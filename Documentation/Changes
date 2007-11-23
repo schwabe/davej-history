@@ -43,7 +43,7 @@ obtener la traducción al español de este documento.
 
    for all your Linux kernel needs.
 
-Last updated: July 13, 1999
+Last updated: October 13, 1999
 Current Author: Chris Ricker (kaboom@gatech.edu or
 	chris.ricker@genetics.utah.edu).
 
@@ -61,19 +61,19 @@ running, the suggested command should tell you.
 - Linux libc6 C Library  2.0.7pre6               ; ls -l /lib/libc*
 - Dynamic Linker (ld.so) 1.9.9                   ; ldd --version or ldd -v
 - Linux C++ Library	 2.7.2.8                 ; ls -l /usr/lib/libg++.so.*
-- Procps		 1.2.9                   ; ps --version
+- Procps		 2.0.3                   ; ps --version
 - Procinfo               16                      ; procinfo -v
 - Psmisc		 17			 ; pstree -V
 - Net-tools              1.52                    ; hostname -V
 - Loadlin                1.6a
 - Sh-utils               1.16                    ; basename --v
-- Autofs                 3.1.1                   ; automount --version
+- Autofs                 3.1.3                   ; automount --version
 - NFS                    2.2beta40               ; showmount --version
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.2.0                   ; ncpmount -v
-- Pcmcia-cs              3.0.13                  ; cardmgr -V
-- PPP                    2.3.8                   ; pppd --version
-- Util-linux             2.9t                    ; chsh -v
+- Pcmcia-cs              3.0.14                  ; cardmgr -V
+- PPP                    2.3.10                  ; pppd --version
+- Util-linux             2.9z                    ; chsh -v
 
 Upgrade notes
 *************
@@ -226,7 +226,7 @@ your system, you don't have to upgrade just so the kernel will work
    Note that the latest compilers (egcs, pgcc, gcc 2.8) may do Bad
 Things while compiling your kernel, particularly if absurd
 optimizations (like -O9) are used.  Caveat emptor.  Currently, the only
-C compiler available in a binary distribution is egcs.  Version 1.0.3
+C compiler available in a binary distribution is egcs.  Version 1.1.2
 seems okay; if you have to have a binary, you may be successful using
 that.  In general, however, gcc-2.7.2.3 is known to be stable, while
 egcs and others have not been as thoroughly tested yet.
@@ -284,8 +284,8 @@ Memory
 ======
 
    As of 2.1.41, the format of /proc/meminfo has changed.  This broke
-many memory utils, which have to be upgraded.  Get the new procps-1.2
-and you should be set.
+many memory utils, which have to be upgraded.  Get the new procps and
+you should be set.
 
 Network File System
 ===================
@@ -519,23 +519,15 @@ Where to get the files
 Binutils
 ========
 
-The 2.8.1.0.23 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.8.1.0.23.bin.tar.gz
-ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.8.1.0.23.bin.tar.gz
+The 2.9.1.0.25 release:
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.8.1.0.23
-ftp://metalab.unc.edu/pub/Linux/GCC/release.binutils-2.8.1.0.23
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/release.binutils-2.9.1.0.25
 
-The 2.9.1.0.15 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.15-glibc.x86.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.15-libc5.x86.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.15.tar.gz
-ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.15-glibc.x86.tar.gz
-ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.15-libc5.x86.tar.gz
-ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.15.tar.gz
+The 2.9.5.0.16 release:
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.16.tar.bz2
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.9.1.0.15
-ftp://metalab.unc.edu/pub/Linux/GCC/release.binutils-2.9.1.0.15
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/release.binutils-2.9.5.0.16
 
 Bin86
 =====
@@ -547,14 +539,12 @@ ftp://tsx-11.mit.edu/pub/linux/packages/GCC/bin86-0.4.tar.gz
 Gnu C
 =====
 
-The egcs-1.0.3 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/egcs-1.0.3-glibc.x86.tar.bz2
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/egcs-1.0.3-libc5.x86.tar.bz2
-ftp://metalab.unc.edu/pub/Linux/GCC/egcs-1.0.3-glibc.x86.tar.bz2
-ftp://metalab.unc.edu/pub/Linux/GCC/egcs-1.0.3-libc5.x86.tar.bz2
+The egcs-1.1.2 release:
+ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-glibc.x86.tar.bz2
+ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-libc5.x86.tar.bz2
+ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/egcs-1.1.2-alpha.x86.tar.bz2
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.egcs-1.0.3
-ftp://metalab.unc.edu/pub/Linux/GCC/release.egcs-1.0.3
+ftp://ftp.varesearch.com/pub/support/hjl/gcc/egcs-1.1.2/release.egcs-1.1.2
 
 Gnu C 2.7.2.3 source:
 ftp://ftp.gnu.org/gnu/gcc/gcc-2.7.2.3.tar.gz
@@ -596,15 +586,14 @@ ftp://ftp.kernel.org/pub/linux/kernel/v2.1/modutils-2.1.121.tar.gz
 Procps utilities
 ================
 
-The 1.2 release:
-ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/procps-1.2.9.tar.gz
-ftp://metalab.unc.edu/pub/Linux/system/status/ps/procps-1.2.9.tgz
+The 2.0.3 release:
+ftp://tsx-11.mit.edu/pub/linux/sources/usr.bin/procps-2.0.3.tar.gz
 
 Procinfo utilities
 ==================
 
-The 16 release:
-ftp://ftp.cistron.nl/pub/people/svm/procinfo-16.tar.gz
+The 17 release:
+ftp://ftp.cistron.nl/pub/people/svm/procinfo-17.tar.gz
 
 Psmisc utilities
 ================
@@ -624,7 +613,6 @@ DOSEMU
 ======
 
 The 0.98.6 release:
-ftp://tsx-11.mit.edu/pub/linux/ALPHA/dosemu/dosemu-0.98.6.tgz
 ftp://ftp.dosemu.org/dosemu/dosemu-0.98.6.tgz
 
 Loadlin
@@ -645,7 +633,7 @@ Util-linux
 ==========
 
 The 2.9 release:
-ftp://ftp.win.tue.nl/pub/linux/utils/util-linux/util-linux-2.9t.tar.gz
+ftp://ftp.win.tue.nl/pub/linux/utils/util-linux/util-linux-2.9z.tar.gz
 
 Autofs
 ======
@@ -660,9 +648,9 @@ The user-land 2.2beta40 release:
 ftp://ftp.mathematik.th-darmstadt.de/pub/linux/okir/dontuse/nfs-server-2.2beta40.tar.gz
 ftp://linux.nrao.edu/mirrors/fb0429.mathematik.th-darmstadt.de/pub/linux/okir/dontuse/nfs-server-2.2beta40.tar.gz
 
-The kernel-level 1.4.4 release:
-ftp://ftp.varesearch.com/pub/support/hjl/knfsd/knfsd-1.4.4.tar.gz
-ftp://ftp.kernel.org/pub/linux/devel/gcc/knfsd-1.4.4.tar.gz
+The kernel-level 1.4.7 release:
+ftp://ftp.varesearch.com/pub/support/hjl/knfsd/knfsd-1.4.7.tar.gz
+ftp://ftp.kernel.org/pub/linux/devel/gcc/knfsd-1.4.7.tar.gz
 
 Net-tools
 =========
@@ -707,8 +695,8 @@ ftp://ftp.samba.org/pub/samba/samba-2.0.5a.tar.gz
 Pcmcia-cs
 =========
 
-The 3.0.13 release:
-ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs.3.0.13.tar.gz
+The 3.0.14 release:
+ftp://sourceforge.org/pcmcia/pcmcia-cs.3.0.14.tar.gz
 
 Setserial
 =========
@@ -720,15 +708,15 @@ ftp://metalab.unc.edu/pub/Linux/system/serial/setserial-2.15.tar.gz
 PPP
 ===
 
-The 2.3.8 release:
-ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.8.tar.gz
+The 2.3.10 release:
+ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.10.tar.gz
 
 IP Chains
 =========
 
-The 1.3.8 release:
-ftp://ftp.rustcorp.com/ipchains/ipchains-1.3.8.tar.gz
-ftp://ftp.rustcorp.com/ipchains/ipchains-1.3.8.tar.bz2
+The 1.3.9 release:
+ftp://ftp.rustcorp.com/ipchains/ipchains-1.3.9.tar.gz
+ftp://ftp.rustcorp.com/ipchains/ipchains-1.3.9.tar.bz2
 
 IP Masq Adm
 ===========
@@ -739,11 +727,11 @@ http://juanjox.linuxhq.com/ipmasqadm-0.4.2.tar.gz
 DHCP clients
 ============
 
-The 2.0b1pl27 ISC dhcpclient release:
-ftp://ftp.isc.org/isc/dhcp/test/dhcp-2.0b1pl27.tar.gz
+The 2.0 ISC dhcpclient release:
+ftp://ftp.isc.org/isc/dhcp/test/dhcp-2.0.tar.gz
 
-The 1.3.17-pl2 PhysTech dhcpcd release:
-ftp://ftp.phystech.com/pub/dhcpcd-1.3.17-pl2.tar.gz
+The 1.3.18-pl1 PhysTech dhcpcd release:
+ftp://ftp.phystech.com/pub/dhcpcd-1.3.18-pl1.tar.gz
 
 iBCS
 ====
@@ -754,8 +742,8 @@ ftp://tsx-11.mit.edu/pub/linux/BETA/ibcs2/ibcs-2.1-981105-ALPHA.tar.gz
 Asun netatalk
 =============
 
-The 2.0a18.2 release:
-ftp://ftp.u.washington.edu/pub/user-supported/asun/netatalk-1.4b2+asun2.0a18.2.tar.gz
+The 2.1.3 release:
+ftp://ftp.u.washington.edu/pub/user-supported/asun/netatalk-1.4b2+asun2.1.3.tar.gz
 
 Fbset
 =====
@@ -792,9 +780,9 @@ ftp://ftp.uk.linux.org/pub/linux/sct/quota/quota-1.55-10.src.rpm
 IP utils
 ========
 
-The June 1999 release:
-ftp://ftp.inr.ac.ru/ip-routing/iproute2-2.2.4-now-ss990630.tar.gz
-ftp://ftp.inr.ac.ru/ip-routing/iputils-ss990610.tar.gz
+The latest releases:
+ftp://ftp.inr.ac.ru/ip-routing/iproute2-2.2.4-now-ss990824.tar.gz
+ftp://ftp.inr.ac.ru/ip-routing/iputils-ss990915.tar.gz
 
 Patch
 =====

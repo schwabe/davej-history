@@ -76,6 +76,7 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 			return -EROFS;
 		if (get_user(inode->u.ext2_i.i_version, (int *) arg))
 			return -EFAULT;	
+		inode->i_generation = inode->u.ext2_i.i_version;
 		inode->i_ctime = CURRENT_TIME;
 		mark_inode_dirty(inode);
 		return 0;

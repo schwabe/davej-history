@@ -54,12 +54,17 @@
  *                     The fun part is that the Windows Solo1 driver doesn't
  *                     seem to do these tricks.
  *                     Bugs remaining: plops and clicks when starting/stopping playback
+ *    31.08.99   0.7   add spin_lock_init
+ *                     replaced current->state = x with set_current_state(x)
+ *    03.09.99   0.8   change read semantics for MIDI to match
+ *                     OSS more closely; remove possible wakeup race
+ *    07.10.99   0.9   Fix initialization; complain if sequencer writes time out
+ *                     Revised resource grabbing for the FM synthesizer
  *
  */
 
 /*****************************************************************************/
       
-#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/string.h>
@@ -96,7 +101,7 @@
 
 #define SOLO1_MAGIC  ((PCI_VENDOR_ID_ESS<<16)|PCI_DEVICE_ID_ESS_SOLO1)
 
-#define DDMABASE_OFFSET           0x10    /* chip bug workaround kludge */
+#define DDMABASE_OFFSET           0    /* chip bug workaround kludge */
 #define DDMABASE_EXTENT           16
 
 #define IOBASE_EXTENT             16
@@ -105,6 +110,7 @@
 #define MPUBASE_EXTENT            4
 #define GPBASE_EXTENT             4
 
+#define FMSYNTH_EXTENT            4
 
 /* MIDI buffer sizes */
 
@@ -137,6 +143,8 @@
 #define wait_queue_head_t struct wait_queue *
 #define init_waitqueue_head(w) *(w) = 0
 #define init_MUTEX(m) *(m) = MUTEX
+#define __set_current_state(x) do { current->state = (x); } while (0)
+#define set_current_state(x) __set_current_state(x)
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -226,7 +234,7 @@ extern inline void write_seq(struct solo1_state *s, unsigned char data)
 {
         int i;
 	unsigned long flags;
-        
+
 	/* the __cli stunt is to send the data within the command window */
         for (i = 0; i < 0xffff; i++) {
 		__save_flags(flags);
@@ -238,6 +246,8 @@ extern inline void write_seq(struct solo1_state *s, unsigned char data)
                 }
 		__restore_flags(flags);
 	}
+	printk(KERN_ERR "esssolo1: write_seq timeout\n");
+	outb(data, s->sbbase+0xc);
 }
 
 extern inline int read_seq(struct solo1_state *s, unsigned char *data)
@@ -251,6 +261,7 @@ extern inline int read_seq(struct solo1_state *s, unsigned char *data)
                         *data = inb(s->sbbase+0xa);
                         return 1;
                 }
+	printk(KERN_ERR "esssolo1: read_seq timeout\n");
         return 0;
 }
 
@@ -952,7 +963,7 @@ static int drain_dac(struct solo1_state *s, int nonblock)
 	
 	if (s->dma_dac.mapped)
 		return 0;
-        current->state = TASK_INTERRUPTIBLE;
+        __set_current_state(TASK_INTERRUPTIBLE);
         add_wait_queue(&s->dma_dac.wait, &wait);
         for (;;) {
                 spin_lock_irqsave(&s->lock, flags);
@@ -964,7 +975,7 @@ static int drain_dac(struct solo1_state *s, int nonblock)
                         break;
                 if (nonblock) {
                         remove_wait_queue(&s->dma_dac.wait, &wait);
-                        current->state = TASK_RUNNING;
+                        set_current_state(TASK_RUNNING);
                         return -EBUSY;
                 }
 		tmo = 3 * HZ * (count + s->dma_dac.fragsize) / 2 / s->rate;
@@ -976,7 +987,7 @@ static int drain_dac(struct solo1_state *s, int nonblock)
                         printk(KERN_DEBUG "solo1: dma timed out??\n");
         }
         remove_wait_queue(&s->dma_dac.wait, &wait);
-        current->state = TASK_RUNNING;
+        set_current_state(TASK_RUNNING);
         if (signal_pending(current))
                 return -ERESTARTSYS;
         return 0;
@@ -1622,6 +1633,7 @@ static void solo1_midi_timer(unsigned long data)
 static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 {
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1632,7 +1644,10 @@ static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, lo
 		return -ESPIPE;
 	if (!access_ok(VERIFY_WRITE, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+	add_wait_queue(&s->midi.iwait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.ird;
@@ -1643,15 +1658,25 @@ static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, lo
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.iwait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			__set_current_state(TASK_INTERRUPTIBLE);
+			schedule();
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_to_user(buffer, s->midi.ibuf + ptr, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIINBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.ird = ptr;
@@ -1660,13 +1685,17 @@ static ssize_t solo1_midi_read(struct file *file, char *buffer, size_t count, lo
 		count -= cnt;
 		buffer += cnt;
 		ret += cnt;
+		break;
 	}
+	__set_current_state(TASK_RUNNING);
+	remove_wait_queue(&s->midi.iwait, &wait);
 	return ret;
 }
 
 static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 {
 	struct solo1_state *s = (struct solo1_state *)file->private_data;
+	DECLARE_WAITQUEUE(wait, current);
 	ssize_t ret;
 	unsigned long flags;
 	unsigned ptr;
@@ -1677,7 +1706,10 @@ static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t co
 		return -ESPIPE;
 	if (!access_ok(VERIFY_READ, buffer, count))
 		return -EFAULT;
+	if (count == 0)
+		return 0;
 	ret = 0;
+        add_wait_queue(&s->midi.owait, &wait);
 	while (count > 0) {
 		spin_lock_irqsave(&s->lock, flags);
 		ptr = s->midi.owr;
@@ -1690,15 +1722,25 @@ static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t co
 		if (cnt > count)
 			cnt = count;
 		if (cnt <= 0) {
-			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EAGAIN;
-			interruptible_sleep_on(&s->midi.owait);
-			if (signal_pending(current))
-				return ret ? ret : -ERESTARTSYS;
+			if (file->f_flags & O_NONBLOCK) {
+				if (!ret)
+					ret = -EAGAIN;
+				break;
+			}
+			__set_current_state(TASK_INTERRUPTIBLE);
+			schedule();
+			if (signal_pending(current)) {
+				if (!ret)
+					ret = -ERESTARTSYS;
+				break;
+			}
 			continue;
 		}
-		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt))
-			return ret ? ret : -EFAULT;
+		if (copy_from_user(s->midi.obuf + ptr, buffer, cnt)) {
+			if (!ret)
+				ret = -EFAULT;
+			break;
+		}
 		ptr = (ptr + cnt) % MIDIOUTBUF;
 		spin_lock_irqsave(&s->lock, flags);
 		s->midi.owr = ptr;
@@ -1711,6 +1753,8 @@ static ssize_t solo1_midi_write(struct file *file, const char *buffer, size_t co
 		solo1_handle_midi(s);
 		spin_unlock_irqrestore(&s->lock, flags);
 	}
+	__set_current_state(TASK_RUNNING);
+	remove_wait_queue(&s->midi.owait, &wait);
 	return ret;
 }
 
@@ -1979,6 +2023,12 @@ static int solo1_dmfm_open(struct inode *inode, struct file *file)
 			return -ERESTARTSYS;
 		down(&s->open_sem);
 	}
+	if (check_region(s->sbbase, FMSYNTH_EXTENT)) {
+		up(&s->open_sem);
+		printk(KERN_ERR "solo1: FM synth io ports in use, opl3 loaded?\n");
+		return -EBUSY;
+	}
+	request_region(s->sbbase, FMSYNTH_EXTENT, "ESS Solo1");
 	/* init the stuff */
 	outb(1, s->sbbase);
 	outb(0x20, s->sbbase+1); /* enable waveforms */
@@ -2006,6 +2056,7 @@ static int solo1_dmfm_release(struct inode *inode, struct file *file)
 		outb(regb, s->sbbase+2);
 		outb(0, s->sbbase+3);
 	}
+	release_region(s->sbbase, FMSYNTH_EXTENT);
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
 	MOD_DEC_USE_COUNT;
@@ -2062,7 +2113,7 @@ static struct initvol {
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.6 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.9 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, pcidev))) {
 		if (pcidev->base_address[0] == 0 ||
@@ -2087,6 +2138,7 @@ static struct initvol {
 		init_waitqueue_head(&s->midi.iwait);
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);
+		spin_lock_init(&s->lock);
 		s->magic = SOLO1_MAGIC;
 		s->pcidev = pcidev;
 		s->iobase = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
@@ -2097,14 +2149,14 @@ static struct initvol {
 		s->gpbase = pcidev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
 		s->irq = pcidev->irq;
 		if (check_region(s->iobase, IOBASE_EXTENT) ||
-		    check_region(s->sbbase+4, SBBASE_EXTENT-4) ||
+		    check_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT) ||
 		    check_region(s->ddmabase, DDMABASE_EXTENT) ||
 		    check_region(s->mpubase, MPUBASE_EXTENT)) {
 			printk(KERN_ERR "solo1: io ports in use\n");
 			goto err_region;
 		}
 		request_region(s->iobase, IOBASE_EXTENT, "ESS Solo1");
-		request_region(s->sbbase+4, SBBASE_EXTENT-4, "ESS Solo1");  /* allow OPL3 synth module */
+		request_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT, "ESS Solo1");  /* allow OPL3 synth module */
 		request_region(s->ddmabase, DDMABASE_EXTENT, "ESS Solo1");
 		request_region(s->mpubase, MPUBASE_EXTENT, "ESS Solo1");
 		if (request_irq(s->irq, solo1_interrupt, SA_SHIRQ, "ESS Solo1", s)) {
@@ -2131,6 +2183,10 @@ static struct initvol {
 		if ((s->dev_dmfm = register_sound_special(&solo1_dmfm_fops, 15 /* ?? */)) < 0)
 			goto err_dev4;
 		/* initialize the chips */
+		if (!reset_ctrl(s)) {
+			printk(KERN_ERR "esssolo1: cannot reset controller\n");
+			goto err;
+		}
 		outb(0xb0, s->iobase+7); /* enable A1, A2, MPU irq's */
 
 		/* initialize mixer regs */
@@ -2165,6 +2221,8 @@ static struct initvol {
 		index++;
 		continue;
 
+	err:
+		unregister_sound_dsp(s->dev_dmfm);
 	err_dev4:
 		unregister_sound_dsp(s->dev_midi);
 	err_dev3:
@@ -2176,7 +2234,7 @@ static struct initvol {
 		free_irq(s->irq, s);
 	err_irq:
 		release_region(s->iobase, IOBASE_EXTENT);
-		release_region(s->sbbase+4, SBBASE_EXTENT-4);
+		release_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT);
 		release_region(s->ddmabase, DDMABASE_EXTENT);
 		release_region(s->mpubase, MPUBASE_EXTENT);
 	err_region:
@@ -2206,7 +2264,7 @@ static void __exit cleanup_solo1(void)
 		pci_write_config_word(s->pcidev, 0x60, 0); /* turn off DDMA controller address space */
 		free_irq(s->irq, s);
 		release_region(s->iobase, IOBASE_EXTENT);
-		release_region(s->sbbase+4, SBBASE_EXTENT-4);
+		release_region(s->sbbase+FMSYNTH_EXTENT, SBBASE_EXTENT-FMSYNTH_EXTENT);
 		release_region(s->ddmabase, DDMABASE_EXTENT);
 		release_region(s->mpubase, MPUBASE_EXTENT);
 		unregister_sound_dsp(s->dev_audio);
@@ -2222,5 +2280,4 @@ static void __exit cleanup_solo1(void)
 
 module_init(init_solo1);
 module_exit(cleanup_solo1);
-
 

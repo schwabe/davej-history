@@ -21,7 +21,6 @@
 #include <linux/locks.h>
 #include <linux/fs.h>
 #include <linux/major.h>
-#include <linux/ext2_fs.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
@@ -48,8 +47,14 @@
 
 /* Hack until we have a macro check for mandatory locks. */
 #ifndef IS_ISMNDLK
-#define IS_ISMNDLK(i)	(((i)->i_mode & (S_ISGID|S_IXGRP)) == S_ISGID)
+#define IS_ISMNDLK(i)	(((i)->i_mode & (S_ISGID|S_IXGRP|S_IFMT)) \
+			 == (S_ISGID|S_IFREG))
 #endif
+
+/* Time difference margin in seconds for comparison. It is a
+   dynamically-tunable parameter via /proc/fs/nfs/time-diff-margin.
+ */
+extern long nfsd_time_diff_margin;
 
 /* Check for dir entries '.' and '..' */
 #define isdotent(n, l)	(l < 3 && n[0] == '.' && (l == 1 || n[1] == '.'))
@@ -236,8 +241,30 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	inode = dentry->d_inode;
 
 	err = inode_change_ok(inode, iap);
-	if (err)
+	if (err) {
+		/* It is very tricky. When you are not the file owner,
+		   but have the write permission, you should be allowed
+		   to set atime and mtime to the current time on the
+		   server. However, the NFS V2 protocol doesn't support
+		   it. It has been fixed in V3. Here we do this: if the
+		   current server time and atime/mtime are close enough,
+		   we use the current server time. */
+#define CURRENT_TIME_SET	(ATTR_ATIME_SET | ATTR_MTIME_SET)
+		if (iap->ia_mtime == iap->ia_atime
+		    && ((iap->ia_valid & (CURRENT_TIME_SET))
+			== CURRENT_TIME_SET)) {
+			time_t now = CURRENT_TIME;
+			time_t delta = iap->ia_atime - now;
+			if (delta < 0) delta = -delta;
+			if (delta <= nfsd_time_diff_margin) {
+				iap->ia_valid &= ~CURRENT_TIME_SET;
+				goto current_time_ok;
+			}
+		}
 		goto out_nfserr;
+	}
+
+current_time_ok:
 
 	/* The size case is special... */
 	if (iap->ia_valid & ATTR_SIZE) {
@@ -248,15 +275,19 @@ printk("nfsd_setattr: size change??\n");
 			if (err)
 				goto out;
 		}
+		DQUOT_INIT(inode);
 		err = get_write_access(inode);
-		if (err)
+		if (err) {
+			DQUOT_DROP(inode);
 			goto out_nfserr;
+		}
 		/* N.B. Should we update the inode cache here? */
 		inode->i_size = iap->ia_size;
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
 		mark_inode_dirty(inode);
 		put_write_access(inode);
+		DQUOT_DROP(inode);
 		iap->ia_valid &= ~ATTR_SIZE;
 		iap->ia_valid |= ATTR_MTIME;
 		iap->ia_mtime = CURRENT_TIME;
@@ -554,7 +585,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	/* clear setuid/setgid flag after write */
 	if (err >= 0 && (inode->i_mode & (S_ISUID | S_ISGID))) {
 		struct iattr	ia;
-		kernel_cap_t	saved_cap;
+		kernel_cap_t	saved_cap = 0;
 
 		ia.ia_valid = ATTR_MODE;
 		ia.ia_mode  = inode->i_mode & ~(S_ISUID | S_ISGID);
@@ -658,10 +689,6 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		if (IS_ERR(dchild))
 			goto out_nfserr;
 		fh_compose(resfhp, fhp->fh_export, dchild);
-		/* Lock the parent and check for errors ... */
-		err = fh_lock_parent(fhp, dchild);
-		if (err)
-			goto out;
 	} else {
 		dchild = resfhp->fh_dentry;
 		if (!fhp->fh_locked)
@@ -669,6 +696,15 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 				"nfsd_create: parent %s/%s not locked!\n",
 				dentry->d_parent->d_name.name,
 				dentry->d_name.name);
+	}
+	err = nfserr_exist;
+	if (dchild->d_inode)
+		goto out;
+	if (!fhp->fh_locked) {
+		/* Lock the parent and check for errors ... */
+		err = fh_lock_parent(fhp, dchild);
+		if (err)
+			goto out;
 	}
 	/*
 	 * Make sure the child dentry is still negative ...
@@ -695,8 +731,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	case S_IFCHR:
 	case S_IFBLK:
 		/* The client is _NOT_ required to do security enforcement */
-		if(!capable(CAP_SYS_ADMIN))
-		{
+		if(!capable(CAP_SYS_ADMIN)) {
 			err = -EPERM;
 			goto out;
 		}
@@ -759,7 +794,7 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 	struct inode	*inode;
 	struct iattr	newattrs;
 	int		err;
-	kernel_cap_t	saved_cap;
+	kernel_cap_t	saved_cap = 0;
 
 	err = fh_verify(rqstp, fhp, S_IFREG, MAY_WRITE | MAY_TRUNC);
 	if (err)
@@ -899,6 +934,7 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	/* Compose the fh so the dentry will be freed ... */
 out_compose:
 	fh_compose(resfhp, fhp->fh_export, dnew);
+
 out:
 	return err;
 
@@ -1091,6 +1127,15 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	DQUOT_DROP(tdir);
 
 	nfsd_double_up(&tdir->i_sem, &fdir->i_sem);
+
+	if (!err && odentry->d_inode) {
+		add_to_rename_cache(tdir->i_ino,
+				    odentry->d_inode->i_dev,
+				    fdir->i_ino,
+				    odentry->d_inode->i_ino);
+	} else {
+		printk(": no inode in rename or err: %d.\n", err);
+	}
 	dput(ndentry);
 
 out_dput_old:
@@ -1132,7 +1177,6 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	err = PTR_ERR(rdentry);
 	if (IS_ERR(rdentry))
 		goto out_nfserr;
-
 	if (!rdentry->d_inode) {
 		dput(rdentry);
 		err = nfserr_noent;
@@ -1154,7 +1198,7 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		fh_unlock(fhp);
 
 		dput(rdentry);
-
+		expire_by_dentry(rdentry);
 	} else {
 		/* It's RMDIR */
 		/* See comments in fs/namei.c:do_rmdir */
@@ -1183,6 +1227,7 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		goto out_nfserr;
 	if (EX_ISSYNC(fhp->fh_export))
 		write_inode_now(dirp);
+
 out:
 	return err;
 
@@ -1314,7 +1359,7 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 {
 	struct inode	*inode = dentry->d_inode;
 	int		err;
-	kernel_cap_t	saved_cap;
+	kernel_cap_t	saved_cap = 0;
 
 	if (acc == MAY_NOP)
 		return 0;
@@ -1334,7 +1379,7 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 		inode->i_uid, inode->i_gid, current->fsuid, current->fsgid);
 #endif
 #ifndef CONFIG_NFSD_SUN
-        if (dentry->d_mounts != dentry) {
+	if (dentry->d_mounts != dentry) {
 		return nfserr_perm;
 	}
 #endif

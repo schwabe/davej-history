@@ -688,8 +688,11 @@ static int posix_make_lock(struct file *filp, struct file_lock *fl,
 
 	if (((start += l->l_start) < 0) || (l->l_len < 0))
 		return (0);
+	fl->fl_end = start + l->l_len - 1;
+	if (l->l_len > 0 && fl->fl_end < 0)
+		return (0);
 	fl->fl_start = start;	/* we record the absolute position */
-	if ((l->l_len == 0) || ((fl->fl_end = start + l->l_len - 1) < 0))
+	if (l->l_len == 0)
 		fl->fl_end = OFFSET_MAX;
 	
 	fl->fl_file = filp;

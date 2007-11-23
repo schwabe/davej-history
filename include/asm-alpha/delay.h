@@ -9,12 +9,18 @@
  * Delay routines, using a pre-computed "loops_per_second" value.
  */
 
+/* We can make the delay loop inline, but we have to be very careful
+ * WRT scheduling for EV6 machines, to keep it consistent for all locations
+ * of invocations. This is a reasonable compromise.
+ */
+
 extern __inline__ void
 __delay(unsigned long loops)
 {
-	__asm__ __volatile__(".align 3\n"
-		"1:\tsubq %0,1,%0\n\t"
-		"bge %0,1b": "=r" (loops) : "0" (loops));
+	__asm__ __volatile__(".align 4\n"
+		     "1:\tsubq %0,1,%0\n\t"
+		     "bge %0,1b\n\t"
+		     "nop": "=r" (loops) : "0" (loops));
 }
 
 /*

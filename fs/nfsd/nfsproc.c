@@ -270,7 +270,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		rdev = (dev_t) size;
 		if (type != S_IFBLK && type != S_IFCHR) {
 			rdev = 0;
-		} else if (type == S_IFCHR && size == ~(u32) 0) {
+		} else if (type == S_IFCHR && !(attr->ia_valid & ATTR_SIZE)) {
 			/* If you think you've seen the worst, grok this. */
 			attr->ia_mode = S_IFIFO | mode;
 			type = S_IFIFO;
@@ -288,6 +288,10 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		if (inode && (type != (inode->i_mode & S_IFMT) || 
 		    (is_borc && inode->i_rdev != rdev)))
 			goto out_unlock;
+
+		/* invalidate size because only (type == S_IFREG) has
+		   size. */
+		attr->ia_valid &= ~ATTR_SIZE;
 	}
 	
 	nfserr = 0;

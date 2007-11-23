@@ -1,11 +1,11 @@
 #include <linux/config.h>
 #include "arlan.h"
+#include <linux/sysctl.h>
+#include <linux/version.h>
 
 #ifdef CONFIG_PROC_FS
 
 
-#include <linux/sysctl.h>
-#include <linux/version.h>
 
 /* void enableReceive(struct device* dev);
 */
@@ -1001,6 +1001,11 @@ static ctl_table arlan_table[MAX_ARLANS + 1] =
 	{0}
 };
 #endif
+#else
+static ctl_table arlan_table[MAX_ARLANS + 1] =
+{
+	{0}
+};
 #endif
 
 static int mmtu = 1234;

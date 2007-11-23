@@ -784,8 +784,11 @@ static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 	label = (struct sun_disklabel *) bh->b_data;
 	p = label->partitions;
 	if (be16_to_cpu(label->magic) != SUN_LABEL_MAGIC) {
+#if 0
+		/* There is no error here - it is just not a sunlabel. */
 		printk("Dev %s Sun disklabel: bad magic %04x\n",
 		       kdevname(dev), be16_to_cpu(label->magic));
+#endif
 		brelse(bh);
 		return 0;
 	}
@@ -856,8 +859,11 @@ static int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 	p = &label->partitions[0];
 	magic = label->magic_mushroom;
 	if(be32_to_cpu(magic) != SGI_LABEL_MAGIC) {
+#if 0
+		/* There is no error here - it is just not an sgilabel. */
 		printk("Dev %s SGI disklabel: bad magic %08x\n",
 		       kdevname(dev), magic);
+#endif
 		brelse(bh);
 		return 0;
 	}

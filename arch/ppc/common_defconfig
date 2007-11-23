@@ -91,8 +91,10 @@ CONFIG_BLK_DEV_LOOP=y
 CONFIG_BLK_DEV_RAM=y
 CONFIG_BLK_DEV_INITRD=y
 # CONFIG_BLK_DEV_XD is not set
+# CONFIG_BLK_DEV_DAC960 is not set
 CONFIG_PARIDE_PARPORT=y
 # CONFIG_PARIDE is not set
+# CONFIG_BLK_CPQ_DA is not set
 # CONFIG_BLK_DEV_HD is not set
 
 #
@@ -155,7 +157,7 @@ CONFIG_BLK_DEV_SD=y
 CONFIG_CHR_DEV_ST=y
 CONFIG_BLK_DEV_SR=y
 CONFIG_BLK_DEV_SR_VENDOR=y
-# CONFIG_CHR_DEV_SG is not set
+CONFIG_CHR_DEV_SG=y
 
 #
 # Some SCSI devices (e.g. CD jukebox) support multiple LUNs
@@ -226,10 +228,19 @@ CONFIG_SCSI_MAC53C94=y
 # Network device support
 #
 CONFIG_NETDEVICES=y
+
+#
+# ARCnet devices
+#
 # CONFIG_ARCNET is not set
 # CONFIG_DUMMY is not set
 # CONFIG_EQUALIZER is not set
 # CONFIG_ETHERTAP is not set
+# CONFIG_NET_SB1000 is not set
+
+#
+# Ethernet (10 or 100Mbit)
+#
 CONFIG_NET_ETHERNET=y
 CONFIG_MACE=y
 CONFIG_BMAC=y
@@ -238,11 +249,12 @@ CONFIG_BMAC=y
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_RTL8139 is not set
+# CONFIG_SIS900 is not set
 # CONFIG_YELLOWFIN is not set
-# CONFIG_ACENIC is not set
 # CONFIG_NET_ISA is not set
 CONFIG_NET_EISA=y
 CONFIG_PCNET32=y
+# CONFIG_ACENIC is not set
 # CONFIG_AC3200 is not set
 # CONFIG_APRICOT is not set
 # CONFIG_CS89x0 is not set
@@ -261,7 +273,10 @@ CONFIG_DE4X5=y
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_HIPPI is not set
-# CONFIG_DLCI is not set
+
+#
+# Appletalk devices
+#
 # CONFIG_LTPC is not set
 # CONFIG_COPS is not set
 # CONFIG_IPDDP is not set
@@ -272,11 +287,22 @@ CONFIG_PPP=y
 #
 # CONFIG_SLIP is not set
 # CONFIG_NET_RADIO is not set
+
+#
+# Token ring devices
+#
 # CONFIG_TR is not set
+# CONFIG_NET_FC is not set
+# CONFIG_RCPCI is not set
 # CONFIG_SHAPER is not set
+
+#
+# Wan interfaces
+#
 # CONFIG_HOSTESS_SV11 is not set
 # CONFIG_COSA is not set
-# CONFIG_RCPCI is not set
+# CONFIG_SEALEVEL_4021 is not set
+# CONFIG_DLCI is not set
 
 #
 # Amateur Radio support
@@ -311,7 +337,6 @@ CONFIG_FB_MATROX=y
 CONFIG_FB_MATROX_MYSTIQUE=y
 CONFIG_FB_MATROX_G100=y
 # CONFIG_FB_MATROX_MULTIHEAD is not set
-# CONFIG_FB_ATY is not set
 # CONFIG_FB_VIRTUAL is not set
 # CONFIG_FBCON_ADVANCED is not set
 CONFIG_FBCON_CFB8=y
@@ -407,6 +432,7 @@ CONFIG_DEVPTS_FS=y
 CONFIG_EXT2_FS=y
 # CONFIG_SYSV_FS is not set
 # CONFIG_UFS_FS is not set
+# CONFIG_EFS_FS is not set
 
 #
 # Network File Systems
@@ -458,6 +484,7 @@ CONFIG_NLS_CODEPAGE_437=y
 # CONFIG_NLS_ISO8859_7 is not set
 # CONFIG_NLS_ISO8859_8 is not set
 # CONFIG_NLS_ISO8859_9 is not set
+# CONFIG_NLS_ISO8859_14 is not set
 # CONFIG_NLS_ISO8859_15 is not set
 # CONFIG_NLS_KOI8_R is not set
 
@@ -468,6 +495,7 @@ CONFIG_SOUND=y
 CONFIG_DMASOUND=y
 # CONFIG_SOUND_ES1370 is not set
 # CONFIG_SOUND_ES1371 is not set
+# CONFIG_SOUND_ESSSOLO1 is not set
 # CONFIG_SOUND_SONICVIBES is not set
 # CONFIG_SOUND_MSNDCLAS is not set
 # CONFIG_SOUND_MSNDPIN is not set

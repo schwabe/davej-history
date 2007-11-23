@@ -266,6 +266,9 @@ struct device
 	struct Qdisc		*qdisc_list;
 	unsigned long		tx_queue_len;	/* Max frames per queue allowed */
 
+	/* Bridge stuff */
+	int			bridge_port_id;		
+	
 	/* Pointers to interface service routines.	*/
 	int			(*open)(struct device *dev);
 	int			(*stop)(struct device *dev);

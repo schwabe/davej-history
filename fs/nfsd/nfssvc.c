@@ -5,7 +5,7 @@
  *
  * Authors:	Olaf Kirch (okir@monad.swb.de)
  *
- * Copyright (C) 1995, 1996, 1997 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1999 Olaf Kirch <okir@monad.swb.de>
  */
 
 #define __NO_VERSION__
@@ -64,6 +64,11 @@ nfsd_svc(unsigned short port, int nrservs)
 	nfsd_nservers = nrservs;
 
 	error = -ENOMEM;
+	nfsd_fh_init();		/* NFS dentry cache */
+	if (nfsd_nservers == 0)
+		goto out;
+	  
+	error = -ENOMEM;
 	nfsd_racache_init();     /* Readahead param cache */
 	if (nfsd_nservers == 0)
 		goto out;
@@ -119,7 +124,9 @@ nfsd(struct svc_rqst *rqstp)
 		nfssvc_boot = xtime;		/* record boot time */
 		first = 1;
 	}
+#if 0
 	lockd_up();				/* start lockd */
+#endif
 
 	/*
 	 * The main request loop
@@ -177,12 +184,16 @@ nfsd(struct svc_rqst *rqstp)
 		printk(KERN_WARNING "nfsd: terminating on signal %d\n", signo);
 	}
 
+#if 0
 	/* Release lockd */
 	lockd_down();
+#endif
 	if (!--nfsd_active) {
 		printk("nfsd: last server exiting\n");
 		/* revoke all exports */
 		nfsd_export_shutdown();
+		/* release fhcache */
+		nfsd_fh_shutdown ();
 		/* release read-ahead cache */
 	        nfsd_racache_shutdown();
 	}

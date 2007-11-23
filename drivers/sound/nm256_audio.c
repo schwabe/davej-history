@@ -14,6 +14,8 @@
 #include <linux/config.h>
 #include <linux/pci.h>
 #include <linux/module.h>
+#include <linux/delay.h>
+
 #include "sound_config.h"
 #include "soundmodule.h"
 #include "nm256.h"

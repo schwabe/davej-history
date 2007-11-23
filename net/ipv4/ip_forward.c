@@ -176,7 +176,7 @@ int ip_forward(struct sk_buff *skb)
 			    (icmph->type==ICMP_TIME_EXCEEDED))
 			{
 #endif
-				maddr = inet_select_addr(dev2, rt->rt_gateway, RT_SCOPE_UNIVERSE);
+				maddr = rt->rt_src;
 				fw_res = ip_fw_masq_icmp(&skb, maddr);
 			        if (fw_res < 0) {
 					kfree_skb(skb);
@@ -226,7 +226,7 @@ skip_call_fw_firewall:
 
 		if (maddr == 0)
 #endif
-			maddr = inet_select_addr(dev2, rt->rt_gateway, RT_SCOPE_UNIVERSE);
+			maddr = rt->rt_src;
 
 			if (ip_fw_masquerade(&skb, maddr) < 0) {
 				kfree_skb(skb);

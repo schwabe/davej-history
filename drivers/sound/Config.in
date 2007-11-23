@@ -115,8 +115,6 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       int 'SB MPU401 IRQ (Jazz16, SM Wave and ES1688) Check from manual of the card' CONFIG_SB_MPU_IRQ -1
   fi
   
-  dep_tristate 'Generic OPL2/OPL3 FM synthesizer support' CONFIG_SOUND_ADLIB $CONFIG_SOUND_OSS
-  
   dep_tristate 'Gravis Ultrasound support' CONFIG_SOUND_GUS $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_GUS" = "y" -o "$CONFIG_SOUND_GUS" = "m" ]; then
       bool '16 bit sampling option of GUS (_NOT_ GUS MAX)' CONFIG_GUS16 

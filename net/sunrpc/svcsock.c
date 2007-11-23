@@ -124,7 +124,7 @@ svc_sock_enqueue(struct svc_sock *svsk)
 				"svc_sock_enqueue: server %p, rq_sock=%p!\n",
 				rqstp, rqstp->rq_sock);
 		rqstp->rq_sock = svsk;
-		svsk->sk_inuse++;
+		atomic_inc(&svsk->sk_inuse);
 		wake_up(&rqstp->rq_wait);
 	} else {
 		dprintk("svc: socket %p put into queue\n", svsk->sk_sk);
@@ -148,7 +148,7 @@ svc_sock_dequeue(struct svc_serv *serv)
 
 	if (svsk) {
 		dprintk("svc: socket %p dequeued, inuse=%d\n",
-			svsk->sk_sk, svsk->sk_inuse);
+			svsk->sk_sk, atomic_read(&svsk->sk_inuse));
 		svsk->sk_qued = 0;
 	}
 
@@ -206,7 +206,7 @@ svc_sock_release(struct svc_rqst *rqstp)
 		return;
 	svc_release_skb(rqstp);
 	rqstp->rq_sock = NULL;
-	if (!--(svsk->sk_inuse) && svsk->sk_dead) {
+	if (atomic_dec_and_test(&svsk->sk_inuse) && svsk->sk_dead) {
 		dprintk("svc: releasing dead socket\n");
 		sock_release(svsk->sk_sock);
 		kfree(svsk);
@@ -766,7 +766,7 @@ again:
 	start_bh_atomic();
 	if ((svsk = svc_sock_dequeue(serv)) != NULL) {
 		rqstp->rq_sock = svsk;
-		svsk->sk_inuse++;
+		atomic_inc(&svsk->sk_inuse);
 	} else {
 		/* No data pending. Go to sleep */
 		svc_serv_enqueue(serv, rqstp);
@@ -793,7 +793,7 @@ again:
 	end_bh_atomic();
 
 	dprintk("svc: server %p, socket %p, inuse=%d\n",
-		 rqstp, svsk, svsk->sk_inuse);
+		 rqstp, svsk, atomic_read(&svsk->sk_inuse));
 	len = svsk->sk_recvfrom(rqstp);
 	dprintk("svc: got len=%d\n", len);
 
@@ -988,11 +988,12 @@ svc_delete_socket(struct svc_sock *svsk)
 		rpc_remove_list(&serv->sv_sockets, svsk);
 	svsk->sk_dead = 1;
 
-	if (!svsk->sk_inuse) {
+	if (!atomic_read(&svsk->sk_inuse)) {
 		sock_release(svsk->sk_sock);
 		kfree(svsk);
 	} else {
-		printk(KERN_NOTICE "svc: server socket destroy delayed\n");
+		printk(KERN_NOTICE "svc: server socket destroy delayed (sk_inuse: %d)\n",
+		       atomic_read(&svsk->sk_inuse));
 		/* svsk->sk_server = NULL; */
 	}
 }

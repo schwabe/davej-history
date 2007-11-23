@@ -694,7 +694,7 @@ asmlinkage int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
                 interruptible_sleep_on(&queue.sleeper);
 
                 /*
-                 * If queue.status == 1 we where woken up and
+                 * If queue.status == 1 we were woken up and
                  * have to retry else we simply return.
                  * If an interrupt occurred we have to clean up the
                  * queue

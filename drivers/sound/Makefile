@@ -43,7 +43,6 @@ obj-		:=
 obj-$(CONFIG_SOUND)		+= soundcore.o
 obj-$(CONFIG_DMASOUND)		+= dmasound.o
 obj-$(CONFIG_SOUND_OSS)		+= sound.o
-obj-$(CONFIG_SOUND_ADLIB)	+= adlib_card.o opl3.o
 obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o 
 
 # In theory, there's probably no reason to include the uart401 code

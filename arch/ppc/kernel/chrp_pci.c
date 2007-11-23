@@ -287,9 +287,6 @@ chrp_pcibios_fixup(void)
 	{
 		if ( dev->irq )
 			dev->irq = openpic_to_irq( dev->irq );
-		/* adjust the io_port for the NCR cards for busses other than 0 -- Cort */
-		if ( (dev->bus->number > 0) && (dev->vendor == PCI_VENDOR_ID_NCR) )
-			dev->base_address[0] += (dev->bus->number*0x08000000);
 		/* these need to be absolute addrs for OF and Matrox FB -- Cort */
 		if ( dev->vendor == PCI_VENDOR_ID_MATROX )
 		{
@@ -306,6 +303,10 @@ chrp_pcibios_fixup(void)
 			pcibios_write_config_word(dev->bus->number,
 			  dev->devfn, PCI_VENDOR_ID, PCI_VENDOR_ID_AMD);
 		}
+		if ( (dev->bus->number > 0) &&
+		     ((dev->vendor == PCI_VENDOR_ID_NCR) ||
+		      (dev->vendor == PCI_VENDOR_ID_AMD)))
+			dev->base_address[0] += (dev->bus->number*0x08000000);
 	}
 }
 

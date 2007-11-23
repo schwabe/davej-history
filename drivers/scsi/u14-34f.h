@@ -18,7 +18,9 @@ int u14_34f_biosparam(Disk *, kdev_t, int *);
 
 #define U14_34F_VERSION "4.33.00"
 
+#ifndef LinuxVersionCode
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
+#endif
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,101)
 

@@ -85,15 +85,15 @@ void cleanup_module(void)
 
 /* For 128-bit division.  */
 
-__complex__ unsigned long
+void
 udiv128(unsigned long divisor_f0, unsigned long divisor_f1,
-	unsigned long dividend_f0, unsigned long dividend_f1)
+	unsigned long dividend_f0, unsigned long dividend_f1,
+	unsigned long *quot, unsigned long *remd)
 {
 	_FP_FRAC_DECL_2(quo);
 	_FP_FRAC_DECL_2(rem);
 	_FP_FRAC_DECL_2(tmp);
 	unsigned long i, num_bits, bit;
-	__complex__ unsigned long ret;
 
 	_FP_FRAC_SET_2(rem, _FP_ZEROFRAC_2);
 	_FP_FRAC_SET_2(quo, _FP_ZEROFRAC_2);
@@ -139,9 +139,9 @@ udiv128(unsigned long divisor_f0, unsigned long divisor_f1,
 	}
 
 out:
-	__real__ ret = quo_f1;
-	__imag__ ret = rem_f1;
-	return ret;
+	*quot = quo_f1;
+	*remd = rem_f1;
+	return;
 }
 
 /*

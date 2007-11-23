@@ -29,4 +29,4 @@ if [ "$CONFIG_SOUNDMODEM" != "n" ]; then
   bool '   soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
 fi
 
-tristate 'YAM driver for AX.25' CONFIG_YAM
+dep_tristate 'YAM driver for AX.25' CONFIG_YAM $CONFIG_AX25

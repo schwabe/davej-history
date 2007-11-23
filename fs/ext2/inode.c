@@ -51,6 +51,10 @@ void ext2_delete_inode (struct inode * inode)
 	    inode->i_ino == EXT2_ACL_DATA_INO)
 		return;
 	inode->u.ext2_i.i_dtime	= CURRENT_TIME;
+	/* When we delete an inode, we increment its i_version. If it
+	   is ever read in from disk again, it will have a different
+	   i_version. */
+	inode->u.ext2_i.i_version++;
 	mark_inode_dirty(inode);
 	ext2_update_inode(inode, IS_SYNC(inode));
 	inode->i_size = 0;
@@ -538,6 +542,7 @@ void ext2_read_inode (struct inode * inode)
 #endif
 	}
 	inode->u.ext2_i.i_version = le32_to_cpu(raw_inode->i_version);
+	inode->i_generation = inode->u.ext2_i.i_version;
 	inode->u.ext2_i.i_block_group = block_group;
 	inode->u.ext2_i.i_next_alloc_block = 0;
 	inode->u.ext2_i.i_next_alloc_goal = 0;

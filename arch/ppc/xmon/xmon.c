@@ -115,9 +115,13 @@ xmon(struct pt_regs *excp)
 {
 	struct pt_regs regs;
 	int msr, cmd;
+	static int entered = 0;
 
-	printk("Entering xmon kernel debugger.\n");
-	
+	if (!entered) {
+		entered = 1;
+		printk("Entering xmon kernel debugger.\n");
+	}
+
 	if (excp == NULL) {
 		asm volatile ("stw	0,0(%0)\n\
 			lwz	0,0(1)\n\
@@ -230,7 +234,7 @@ at_breakpoint(unsigned pc)
 
 	if (dabr.enabled && pc == dabr.instr)
 		return &dabr;
-	if (iabr.enabled && pc == iabr.address)
+	if (iabr.enabled && ((pc ^ iabr.address) & ~3) == 0)
 		return &iabr;
 	bp = bpts;
 	for (i = 0; i < NBPTS; ++i, ++bp)
@@ -254,7 +258,9 @@ insert_bpts()
 			printf("Couldn't insert breakpoint at %x, disabling\n",
 			       bp->address);
 			bp->enabled = 0;
+			continue;
 		}
+		store_inst((void *) bp->address);
 	}
 	if (dabr.enabled)
 		set_dabr(dabr.address);
@@ -277,9 +283,12 @@ remove_bpts()
 			continue;
 		if (mread(bp->address, &instr, 4) == 4
 		    && instr == bpinstr
-		    && mwrite(bp->address, &bp->instr, 4) != 4)
+		    && mwrite(bp->address, &bp->instr, 4) != 4) {
 			printf("Couldn't remove breakpoint at %x\n",
 			       bp->address);
+			continue;
+		}
+		store_inst((void *) bp->address);
 	}
 }
 

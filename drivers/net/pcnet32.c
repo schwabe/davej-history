@@ -13,7 +13,7 @@
  * 	This driver is for PCnet32 and PCnetPCI based ethercards
  */
 
-static const char *version = "pcnet32.c:v1.23 6.7.1999 tsbogend@alpha.franken.de\n";
+static const char *version = "pcnet32.c:v1.25kf 26.9.1999 tsbogend@alpha.franken.de\n";
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -39,16 +39,18 @@ static const char *version = "pcnet32.c:v1.23 6.7.1999 tsbogend@alpha.franken.de
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <asm/spinlock.h>
 
 static unsigned int pcnet32_portlist[] __initdata = {0x300, 0x320, 0x340, 0x360, 0};
 
 static int pcnet32_debug = 1;
+static int tx_start = 1; /* Mapping -- 0:20, 1:64, 2:128, 3:~220 (depends on chip vers) */
 
 #ifdef MODULE
 static struct device *pcnet32_dev = NULL;
 #endif
 
-static const int max_interrupt_work = 20;
+static const int max_interrupt_work = 80;
 static const int rx_copybreak = 200;
 
 #define PORT_AUI      0x00
@@ -156,6 +158,12 @@ static int full_duplex[MAX_UNITS] = {0, };
  *	   Michael Richard <mcr@solidum.com>)
  *         added chip id for 79c973/975 (thanks to Zach Brown <zab@zabbo.net>)
  * v1.23   fixed small bug, when manual selecting MII speed/duplex
+ * v1.24   Applied Thomas' patch to use TxStartPoint and thus decrease TxFIFO
+ *         underflows.  Added tx_start_pt module parameter. Increased
+ *         TX_RING_SIZE from 16 to 32.  Added #ifdef'd code to use DXSUFLO
+ *         for FAST[+] chipsets. <kaf@fc.hp.com>
+ * v1.24ac Added SMP spinlocking - Alan Cox <alan@redhat.com>
+ * v1.25kf Added No Interrupt on successful Tx for some Tx's <kaf@fc.hp.com>
  */
 
 
@@ -166,7 +174,7 @@ static int full_duplex[MAX_UNITS] = {0, };
  */
 #ifndef PCNET32_LOG_TX_BUFFERS
 #define PCNET32_LOG_TX_BUFFERS 4
-#define PCNET32_LOG_RX_BUFFERS 4
+#define PCNET32_LOG_RX_BUFFERS 5
 #endif
 
 #define TX_RING_SIZE			(1 << (PCNET32_LOG_TX_BUFFERS))
@@ -255,12 +263,17 @@ struct pcnet32_private {
     struct sk_buff *rx_skbuff[RX_RING_SIZE];
     struct pcnet32_access a;
     void *origmem;
-    int cur_rx, cur_tx;			/* The next free ring entry */
-    int dirty_rx, dirty_tx;		        /* The ring entries to be free()ed. */
+    spinlock_t lock;				/* Guard lock */
+    unsigned int cur_rx, cur_tx;		/* The next free ring entry */
+    unsigned int dirty_rx, dirty_tx;		/* The ring entries to be free()ed. */
     struct net_device_stats stats;
     char tx_full;
     int  options;
     int  shared_irq:1,                      /* shared irq possible */
+	 ltint:1,
+#ifdef DO_DXSUFLO
+	 dxsuflo:1,			    /* disable transmit stop on uflo */
+#endif
          full_duplex:1,                     /* full duplex possible */
          mii:1;                             /* mii port available */
 #ifdef MODULE
@@ -297,6 +310,10 @@ struct pcnet32_pci_id_info {
 static struct pcnet32_pci_id_info pcnet32_tbl[] = {
     { "AMD PCnetPCI series",
 	PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, 0, 0,
+	PCI_USES_IO|PCI_USES_MASTER, PCNET32_TOTAL_SIZE,
+	pcnet32_probe1},
+    { "AMD PCnetPCI series (IBM)",
+	PCI_VENDOR_ID_AMD, PCI_DEVICE_ID_AMD_LANCE, 0x1014, 0x2000,
 	PCI_USES_IO|PCI_USES_MASTER, PCNET32_TOTAL_SIZE,
 	pcnet32_probe1},
     { "AMD PCnetHome series",
@@ -448,8 +465,8 @@ int __init pcnet32_probe (struct device *dev)
 	    int chip_idx;
 	    u16 sdid,svid;
 
-	    pci_read_config_word(pdev, PCI_SUBSYSTEM_VENDOR_ID, &sdid);
-	    pci_read_config_word(pdev, PCI_SUBSYSTEM_ID, &svid);
+	    pci_read_config_word(pdev, PCI_SUBSYSTEM_VENDOR_ID, &svid);
+	    pci_read_config_word(pdev, PCI_SUBSYSTEM_ID, &sdid);
 	    for (chip_idx = 0; pcnet32_tbl[chip_idx].vendor_id; chip_idx++)
 		if ((pdev->vendor == pcnet32_tbl[chip_idx].vendor_id) &&
 		    (pdev->device == pcnet32_tbl[chip_idx].device_id) &&
@@ -514,6 +531,10 @@ pcnet32_probe1(struct device *dev, unsigned long ioaddr, unsigned char irq_line,
 {
     struct pcnet32_private *lp;
     int i,media,fdx = 0, mii = 0;
+#ifdef DO_DXSUFLO
+    int dxsuflo = 0;
+#endif
+    int ltint = 0;
     int chip_version;
     char *chipname;
     char *priv;
@@ -532,12 +553,14 @@ pcnet32_probe1(struct device *dev, unsigned long ioaddr, unsigned char irq_line,
 	    return ENODEV;
     }
 
+
     chip_version = a->read_csr (ioaddr, 88) | (a->read_csr (ioaddr,89) << 16);
     if (pcnet32_debug > 2)
 	printk("  PCnet chip version is %#x.\n", chip_version);
     if ((chip_version & 0xfff) != 0x003)
 	return ENODEV;
     chip_version = (chip_version >> 12) & 0xffff;
+
     switch (chip_version) {
      case 0x2420:
 	chipname = "PCnet/PCI 79C970";
@@ -554,11 +577,33 @@ pcnet32_probe1(struct device *dev, unsigned long ioaddr, unsigned char irq_line,
 	break;
      case 0x2623:
 	chipname = "PCnet/FAST 79C971";
+	/* To prevent Tx FIFO underflows ... (may increase Tx latency) */
+	/* Set BCR18:NOUFLO to not start Tx until reach Tx start point */
+	/* Looks like EEPROM sets BCR18:5/6 for BurstWrite/Read */
+        a->write_bcr(ioaddr, 18, (a->read_bcr(ioaddr, 18) | 0x0800));
+	/* Set CSR80:XMTSP, Tx start point = 20|64|128|248 bytes or size of frame */
+        i = a->read_csr(ioaddr, 80) & ~0x0C00; /* Clear bits we are touching */
+        a->write_csr(ioaddr, 80, i | (tx_start << 10));
 	fdx = 1; mii = 1;
+#ifdef DO_DXSUFLO
+	dxsuflo = 1;
+#endif
+	ltint = 1;
 	break;
      case 0x2624:
 	chipname = "PCnet/FAST+ 79C972";
+	/* To prevent Tx FIFO underflows ... (may increase Tx latency) */
+	/* Set BCR18:NOUFLO to not start Tx until reach Tx start point */
+	/* Looks like EEPROM sets BCR18:5/6 for BurstWrite/Read */
+        a->write_bcr(ioaddr, 18, (a->read_bcr(ioaddr, 18) | 0x0800));
+	/* Set CSR80:XMTSP, Tx start point = 20|64|128|220 bytes or size of frame */
+        i = a->read_csr(ioaddr, 80) & ~0x0C00; /* Clear bits we are touching */
+        a->write_csr(ioaddr, 80, i | (tx_start << 10));
 	fdx = 1; mii = 1;
+#ifdef DO_DXSUFLO
+	dxsuflo = 1;
+#endif
+	ltint = 1;
 	break;
      case 0x2625:
 	chipname = "PCnet/FAST III 79C973";
@@ -602,6 +647,29 @@ pcnet32_probe1(struct device *dev, unsigned long ioaddr, unsigned char irq_line,
     for (i = 0; i < 6; i++)
       printk(" %2.2x", dev->dev_addr[i] = inb(ioaddr + i));
 
+    if (((chip_version + 1) & 0xfffe) == 0x2624) { /* Version 0x2623 or 0x2624 */
+        i = a->read_csr(ioaddr, 80) & 0x0C00;  /* Check tx_start_pt */
+	printk("\n    tx_start_pt(0x%04x):",i);
+	switch(i>>10) {
+	    case 0: printk("  20 bytes,"); break;
+	    case 1: printk("  64 bytes,"); break;
+	    case 2: printk(" 128 bytes,"); break;
+	    case 3: printk("~220 bytes,"); break;
+	}
+        i = a->read_bcr(ioaddr, 18);  /* Check Burst/Bus control */
+        printk(" BCR18(%x):",i&0xffff);
+	if (i & (1<<5)) printk("BurstWrEn ");
+	if (i & (1<<6)) printk("BurstRdEn ");
+	if (i & (1<<7)) printk("DWordIO ");
+	if (i & (1<<11)) printk("NoUFlow ");
+        i = a->read_bcr(ioaddr, 25);
+        printk("\n    SRAMSIZE=0x%04x,",i<<8);
+        i = a->read_bcr(ioaddr, 26);
+        printk(" SRAM_BND=0x%04x,",i<<8);
+        i = a->read_bcr(ioaddr, 27);
+	if (i & (1<<14)) printk("LowLatRx,");
+    }
+
     dev->base_addr = ioaddr;
     request_region(ioaddr, PCNET32_TOTAL_SIZE, chipname);
     
@@ -615,10 +683,17 @@ pcnet32_probe1(struct device *dev, unsigned long ioaddr, unsigned char irq_line,
     lp = (struct pcnet32_private *)(((unsigned long)priv+15) & ~15);
       
     memset(lp, 0, sizeof(*lp));
+    
+    spin_lock_init(&lp->lock);
+    
     dev->priv = lp;
     lp->name = chipname;
     lp->shared_irq = shared;
     lp->full_duplex = fdx;
+#ifdef DO_DXSUFLO
+    lp->dxsuflo = dxsuflo;
+#endif
+    lp->ltint = ltint;
     lp->mii = mii;
     if (options[card_idx] > sizeof (options_mapping))
 	lp->options = PORT_ASEL;
@@ -746,7 +821,7 @@ pcnet32_open(struct device *dev)
 	lp->a.write_bcr (ioaddr, 9, val);
     }
     
-    /* set/reset GPSI bit in test register */
+    /* NOOP ??? set/reset GPSI bit in test register */
     val = lp->a.read_csr (ioaddr, 124) & ~0x10;
     if ((lp->options & PORT_PORTSEL) == PORT_GPSI)
 	val |= 0x10;
@@ -759,6 +834,19 @@ pcnet32_open(struct device *dev)
 	if (lp->options & PORT_100)
 	    val |= 0x08;
 	lp->a.write_bcr (ioaddr, 32, val);
+    }
+
+#ifdef DO_DXSUFLO 
+    if (lp->dxsuflo) { /* Disable transmit stop on underflow */
+        val = lp->a.read_csr (ioaddr, 3);
+	val |= 0x40;
+        lp->a.write_csr (ioaddr, 3, val);
+    }
+#endif
+    if (lp->ltint) { /* Enable TxDone-intr inhibitor */
+        val = lp->a.read_csr (ioaddr, 5);
+	val |= (1<<14);
+        lp->a.write_csr (ioaddr, 5, val);
     }
     
     lp->init_block.mode = le16_to_cpu((lp->options & PORT_PORTSEL) << 7);
@@ -890,6 +978,7 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 {
     struct pcnet32_private *lp = (struct pcnet32_private *)dev->priv;
     unsigned int ioaddr = dev->base_addr;
+    u16 status;
     int entry;
     unsigned long flags;
 
@@ -937,8 +1026,23 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 	return 1;
     }
 
-    save_flags (flags);
-    cli ();
+    spin_lock_irqsave(&lp->lock, flags);
+
+    /* Default status -- will not enable Successful-TxDone
+     * interrupt when that option is available to us.
+     */
+    status = 0x8300;
+    if ((lp->ltint) &&
+	((lp->cur_tx - lp->dirty_tx == TX_RING_SIZE/2) ||
+	 (lp->cur_tx - lp->dirty_tx >= TX_RING_SIZE-2)))
+    {
+	/* Enable Successful-TxDone interrupt if we have
+	 * 1/2 of, or nearly all of, our ring buffer Tx'd
+	 * but not yet cleaned up.  Thus, most of the time,
+	 * we will not enable Successful-TxDone interrupts.
+	 */
+	status = 0x9300;
+    }
 
     /* Fill in a Tx ring entry */
 
@@ -954,7 +1058,8 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 
     lp->tx_skbuff[entry] = skb;
     lp->tx_ring[entry].base = (u32)le32_to_cpu(virt_to_bus(skb->data));
-    lp->tx_ring[entry].status = le16_to_cpu(0x8300);
+
+    lp->tx_ring[entry].status = le16_to_cpu(status);
 
     lp->cur_tx++;
     lp->stats.tx_bytes += skb->len;
@@ -968,7 +1073,7 @@ pcnet32_start_xmit(struct sk_buff *skb, struct device *dev)
 	clear_bit (0, (void *)&dev->tbusy);
     else
 	lp->tx_full = 1;
-    restore_flags(flags);
+    spin_unlock_irqrestore(&lp->lock, flags);
     return 0;
 }
 
@@ -990,6 +1095,9 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
     ioaddr = dev->base_addr;
     lp = (struct pcnet32_private *)dev->priv;
+
+    spin_lock(&lp->lock);
+
     if (dev->interrupt)
 	printk("%s: Re-entering the interrupt handler.\n", dev->name);
 
@@ -1010,7 +1118,7 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	    pcnet32_rx(dev);
 
 	if (csr0 & 0x0200) {		/* Tx-done interrupt */
-	    int dirty_tx = lp->dirty_tx;
+	    unsigned int dirty_tx = lp->dirty_tx;
 
 	    while (dirty_tx < lp->cur_tx) {
 		int entry = dirty_tx & TX_RING_MOD_MASK;
@@ -1028,14 +1136,27 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		    if (err_status & 0x04000000) lp->stats.tx_aborted_errors++;
 		    if (err_status & 0x08000000) lp->stats.tx_carrier_errors++;
 		    if (err_status & 0x10000000) lp->stats.tx_window_errors++;
+#ifndef DO_DXSUFLO
 		    if (err_status & 0x40000000) {
-			/* Ackk!  On FIFO errors the Tx unit is turned off! */
 			lp->stats.tx_fifo_errors++;
+			/* Ackk!  On FIFO errors the Tx unit is turned off! */
 			/* Remove this verbosity later! */
-			printk("%s: Tx FIFO error! Status %4.4x.\n",
-			       dev->name, csr0);
+			printk("%s: Tx FIFO error! CSR0=%4.4x\n",
+					    dev->name, csr0);
 			must_restart = 1;
 					}
+#else
+		    if (err_status & 0x40000000) {
+			lp->stats.tx_fifo_errors++;
+			if (! lp->dxsuflo) {  /* If controller doesn't recover ... */
+			    /* Ackk!  On FIFO errors the Tx unit is turned off! */
+			    /* Remove this verbosity later! */
+			    printk("%s: Tx FIFO error! CSR0=%4.4x\n",
+					   	dev->name, csr0);
+			    must_restart = 1;
+			}
+		    }
+#endif
 		} else {
 		    if (status & 0x1800)
 			lp->stats.collisions++;
@@ -1104,6 +1225,8 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	       dev->name, lp->a.read_csr (ioaddr, 0));
 
     dev->interrupt = 0;
+
+    spin_unlock(&lp->lock);
     return;
 }
 
@@ -1252,12 +1375,11 @@ pcnet32_get_stats(struct device *dev)
     u16 saved_addr;
     unsigned long flags;
 
-    save_flags(flags);
-    cli();
+    spin_lock_irqsave(&lp->lock, flags);
     saved_addr = lp->a.read_rap(ioaddr);
     lp->stats.rx_missed_errors = lp->a.read_csr (ioaddr, 112);
     lp->a.write_rap(ioaddr, saved_addr);
-    restore_flags(flags);
+    spin_unlock_irqrestore(&lp->lock, flags);
 
     return &lp->stats;
 }
@@ -1371,18 +1493,22 @@ static int pcnet32_mii_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 MODULE_PARM(debug, "i");
 MODULE_PARM(max_interrupt_work, "i");
 MODULE_PARM(rx_copybreak, "i");
+MODULE_PARM(tx_start_pt, "i");
 MODULE_PARM(options, "1-" __MODULE_STRING(MAX_UNITS) "i");
 MODULE_PARM(full_duplex, "1-" __MODULE_STRING(MAX_UNITS) "i");
 					     
 
 /* An additional parameter that may be passed in... */
 static int debug = -1;
+static int tx_start_pt = -1;
 
 int
 init_module(void)
 {
     if (debug > 0)
 	pcnet32_debug = debug;
+    if ((tx_start_pt >= 0) && (tx_start_pt <= 3))
+	tx_start = tx_start_pt;
     
     pcnet32_dev = NULL;
     return pcnet32_probe(NULL);

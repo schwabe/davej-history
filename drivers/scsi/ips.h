@@ -233,6 +233,7 @@
 /*
  * DCDB Table Equates
  */
+#ifndef HOSTS_C 
    #define NO_DISCONNECT                0x00
    #define DISCONNECT_ALLOWED           0x80
    #define NO_AUTO_REQUEST_SENSE        0x40
@@ -243,7 +244,6 @@
    #define TIMEOUT10                    0x10
    #define TIMEOUT60                    0x20
    #define TIMEOUT20M                   0x30
-
 /*
  * Host adapter Flags (bit numbers)
  */
@@ -256,7 +256,7 @@
  */
    #define SCB_ACTIVE                   0x00001
    #define SCB_WAITING                  0x00002
-
+#endif /* HOSTS_C */
 /*
  * Passthru stuff
  */
@@ -590,6 +590,8 @@ typedef struct _SUBSYS_PARAM {
 /*
  * Inquiry Data Format
  */
+#ifndef HOSTS_C
+
 typedef struct {
    u8        DeviceType:5;
    u8        DeviceTypeQualifier:3;
@@ -614,6 +616,7 @@ typedef struct {
    u8        Reserved3[40];
 } INQUIRYDATA, *PINQUIRYDATA;
 
+#endif
 /*
  * Read Capacity Data Format
  */

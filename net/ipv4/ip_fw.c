@@ -488,7 +488,10 @@ static int find_special(ip_chainlabel label, int *answer)
                 static int enabled = 0;
 
                 if(!enabled)
+                {
+                	enabled=1;
                         sysctl_ip_always_defrag++;
+                }
 		*answer = FW_REDIRECT;
 		return 1;
 #endif

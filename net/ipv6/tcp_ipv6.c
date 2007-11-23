@@ -67,7 +67,7 @@ static __inline__ int tcp_v6_hashfn(struct in6_addr *laddr, u16 lport,
 	int hashent = (lport ^ fport);
 
 	hashent ^= (laddr->s6_addr32[3] ^ faddr->s6_addr32[3]);
-	return (hashent & ((TCP_HTABLE_SIZE/2) - 1));
+	return (hashent & ((tcp_ehash_size/2) - 1));
 }
 
 static __inline__ int tcp_v6_sk_hashfn(struct sock *sk)
@@ -98,7 +98,7 @@ static int tcp_v6_get_port(struct sock *sk, unsigned short snum)
 		do {	rover++;
 			if ((rover < low) || (rover > high))
 				rover = low;
-			tb = tcp_bound_hash[tcp_bhashfn(rover)];
+			tb = tcp_bhash[tcp_bhashfn(rover)];
 			for ( ; tb; tb = tb->next)
 				if (tb->port == rover)
 					goto next;
@@ -115,7 +115,7 @@ static int tcp_v6_get_port(struct sock *sk, unsigned short snum)
 		snum = rover;
 		tb = NULL;
 	} else {
-		for (tb = tcp_bound_hash[tcp_bhashfn(snum)];
+		for (tb = tcp_bhash[tcp_bhashfn(snum)];
 		     tb != NULL;
 		     tb = tb->next)
 			if (tb->port == snum)
@@ -194,7 +194,7 @@ static void tcp_v6_hash(struct sock *sk)
 		if(sk->state == TCP_LISTEN)
 			skp = &tcp_listening_hash[tcp_sk_listen_hashfn(sk)];
 		else
-			skp = &tcp_established_hash[(sk->hashent = tcp_v6_sk_hashfn(sk))];
+			skp = &tcp_ehash[(sk->hashent = tcp_v6_sk_hashfn(sk))];
 
 		SOCKHASH_LOCK();
 		if((sk->next = *skp) != NULL)
@@ -276,7 +276,7 @@ static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 	 * have wildcards anyways.
 	 */
 	hash = tcp_v6_hashfn(daddr, hnum, saddr, sport);
-	for(sk = tcp_established_hash[hash]; sk; sk = sk->next) {
+	for(sk = tcp_ehash[hash]; sk; sk = sk->next) {
 		/* For IPV6 do the cheaper port and family tests first. */
 		if(TCP_IPV6_MATCH(sk, saddr, daddr, ports, dif)) {
 			if (sk->state == TCP_ESTABLISHED)
@@ -285,7 +285,7 @@ static inline struct sock *__tcp_v6_lookup(struct tcphdr *th,
 		}
 	}
 	/* Must check for a TIME_WAIT'er before going to listener hash. */
-	for(sk = tcp_established_hash[hash+(TCP_HTABLE_SIZE/2)]; sk; sk = sk->next) {
+	for(sk = tcp_ehash[hash+(tcp_ehash_size/2)]; sk; sk = sk->next) {
 		if(*((__u32 *)&(sk->dport))	== ports	&&
 		   sk->family			== PF_INET6) {
 			struct tcp_tw_bucket *tw = (struct tcp_tw_bucket *)sk;
@@ -336,7 +336,7 @@ static int tcp_v6_unique_address(struct sock *sk)
 
 	/* Freeze the hash while we snoop around. */
 	SOCKHASH_LOCK();
-	tb = tcp_bound_hash[tcp_bhashfn(snum)];
+	tb = tcp_bhash[tcp_bhashfn(snum)];
 	for(; tb; tb = tb->next) {
 		if(tb->port == snum && tb->owners != NULL) {
 			/* Almost certainly the re-use port case, search the real hashes

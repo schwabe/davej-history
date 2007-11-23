@@ -35,6 +35,9 @@
 #define NFSCTL_GETFH		6	/* get an fh by ino (used by mountd) */
 #define NFSCTL_GETFD		7	/* get an fh by path (used by mountd) */
 
+/* Above this is for lockd. */
+#define NFSCTL_LOCKD		0x10000
+
 /* SVC */
 struct nfsctl_svc {
 	unsigned short		svc_port;
@@ -121,11 +124,7 @@ union nfsctl_res {
 /*
  * Kernel syscall implementation.
  */
-#if defined(CONFIG_NFSD) || defined(CONFIG_NFSD_MODULE)
 extern asmlinkage int	sys_nfsservctl(int, void *, void *);
-#else
-#define sys_nfsservctl		sys_ni_syscall
-#endif
 extern int		exp_addclient(struct nfsctl_client *ncp);
 extern int		exp_delclient(struct nfsctl_client *ncp);
 extern int		exp_export(struct nfsctl_export *nxp);

@@ -32,6 +32,7 @@
 #include <linux/sunrpc/svc.h>
 #include <linux/sunrpc/svcsock.h>
 #include <linux/lockd/lockd.h>
+#include <linux/lockd/syscall.h>
 #include <linux/nfs.h>
 
 #define NLMDBG_FACILITY		NLMDBG_SVC
@@ -315,6 +316,9 @@ out:
   MODULE_PARM(nlm_grace_period, "10-240l");
   MODULE_PARM(nlm_timeout, "3-20l");
 #endif
+
+extern int (*do_lockdctl)(int, void *, void *);
+
 int
 init_module(void)
 {
@@ -324,6 +328,7 @@ init_module(void)
 	nlmsvc_pid = 0;
 	lockd_exit = NULL;
 	nlmxdr_init();
+	do_lockdctl = lockdctl;
 	return 0;
 }
 
@@ -332,6 +337,7 @@ cleanup_module(void)
 {
 	/* FIXME: delete all NLM clients */
 	nlm_shutdown_hosts();
+	do_lockdctl = NULL;
 }
 #endif
 
@@ -370,3 +376,23 @@ struct svc_program		nlmsvc_program = {
 	"lockd",		/* service name */
 	&nlmsvc_stats,		/* stats table */
 };
+
+int
+lockdctl(int cmd, void *opaque_argp, void *opaque_resp)
+{
+	int err;
+
+	MOD_INC_USE_COUNT;
+
+	switch(cmd) {
+	case LOCKDCTL_SVC:
+		err = lockd_up ();
+		break;
+	default:
+		err = -EINVAL;
+	}
+
+	MOD_DEC_USE_COUNT;
+
+	return err;
+}

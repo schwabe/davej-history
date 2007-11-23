@@ -403,7 +403,7 @@ static void writeee(struct i2c_bus *bus, unsigned char *eedata)
 	}
 }
 
-void attach_inform(struct i2c_bus *bus, int id)
+static void attach_inform(struct i2c_bus *bus, int id)
 {
         struct bttv *btv = (struct bttv*)bus->data;
         
@@ -422,7 +422,7 @@ void attach_inform(struct i2c_bus *bus, int id)
 	}
 }
 
-void detach_inform(struct i2c_bus *bus, int id)
+static void detach_inform(struct i2c_bus *bus, int id)
 {
         struct bttv *btv = (struct bttv*)bus->data;
 

@@ -45,7 +45,10 @@ enum fixed_addresses {
 	FIX_APIC_BASE,	/* local (CPU) APIC) -- required for SMP or not */
 #endif
 #ifdef CONFIG_X86_IO_APIC
-	FIX_IO_APIC_BASE,
+	FIX_IO_APIC_BASE_0,	/* IF YOU CHANGE THIS, PLEASE ALSO CHANGE */
+	FIX_IO_APIC_BASE_1,     /* MAX_IO_APICS in arch/i386/irq.h        */
+	FIX_IO_APIC_BASE_2,
+	FIX_IO_APIC_BASE_3,
 #endif
 #ifdef CONFIG_X86_VISWS_APIC
 	FIX_CO_CPU,	/* Cobalt timer */

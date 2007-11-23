@@ -1855,7 +1855,7 @@ static int isp2x00_get_nvram_defaults(struct Scsi_Host *host, struct init_cb *co
 
 static int isp2x00_init(struct Scsi_Host *sh)
 {
-	u_int io_base;
+	u_long io_base;
 	struct isp2x00_hostdata *hostdata;
 	u_char revision;
 	u_int irq;
