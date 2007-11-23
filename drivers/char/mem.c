@@ -24,13 +24,7 @@
 #include <asm/pgtable.h>
 
 #ifdef CONFIG_SOUND
-void soundcore_init(void);
-#ifdef CONFIG_SOUND_OSS
 void soundcard_init(void);
-#endif
-#ifdef CONFIG_DMASOUND
-void dmasound_init(void);
-#endif
 #endif
 #ifdef CONFIG_ISDN
 void isdn_init(void);
@@ -411,13 +405,7 @@ int chr_dev_init(void)
 	misc_init();
 #endif
 #ifdef CONFIG_SOUND
-	soundcore_init();
-#ifdef CONFIG_SOUND_OSS	
 	soundcard_init();
-#endif	
-#ifdef CONFIG_DMASOUND
-	dmasound_init();
-#endif	
 #endif
 #if CONFIG_QIC02_TAPE
 	qic02_tape_init();

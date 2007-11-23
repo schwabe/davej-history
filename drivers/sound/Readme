@@ -1,38 +1,41 @@
-OSS/Free version 3.8 release notes
-----------------------------------
+USS Lite version 3.5.4 release notes
+------------------------------------
 
 Most up to date information about this driver is available from 
-http://www.opensound.com/ossfree.
+http://www.4front-tech.com/ossfree.
 
 
 
 Please read the SOUND-HOWTO (available from sunsite.unc.edu and other Linux FTP 
 sites). It gives instructions about using sound with Linux. It's bit out of
 date but still very useful. Information about bug fixes and such things
-is available from the web page (see above).
+is available from the web page (see below).
 
-Please check http://www.opensound.com/pguide for more info about programming
-with OSS API.
+New Programmer's Guide is currently under work (June/July 96). Please
+check http://www.4front-tech.com/pguide for more info.
 
    ====================================================
--  THIS VERSION ____REQUIRES____ Linux 2.1.57 OR LATER.
+-  THIS VERSION ____REQUIRES____ Linux 1.3.70 OR LATER.
    ====================================================
 
-Packages "snd-util-3.8.tar.gz" and "snd-data-0.1.tar.Z"
+It's very likely that this driver version is incompatible with
+Linux versions later than 2.0.x.
+
+Packages "snd-util-3.5.tar.gz" and "snd-data-0.1.tar.Z"
 contain useful utilities to be used with this driver.
-See http://www.opensound.com/ossfree/getting.html for
+See http://www.4front-tech.com/ossfree/getting.html for
 download instructions.
 
 If you are looking for the installation instructions, please
 look at Readme.linux.
 
-Supported sound cards
----------------------
+Supported soundcards
+--------------------
 
 See Readme.cards.
 
-Please check http://www.opensound.com/ossfree if you don't find
-your sound card there.
+Please check http://www.4front-tech.com/ossfree if you don't find
+your soundcard there.
 
 Contributors
 ------------
@@ -69,25 +72,11 @@ contributors. (I could have forgotten some names.)
 	Gregor Hoffleit	Mozart support (initial version)
 	Riccardo Facchetti Audio Excel DSP 16 (aedsp16) support
 	James Hightower Spotting a tiny but important bug in CS423x support.
-	Denis Sablic	OPTi 82C924 spesific enhancements (non PnP mode)
-	Tim MacKenzie	Full duplex support for OPTi 82C930.
 	
 	Please look at lowlevel/README for more contributors.
 
 There are probably many other names missing. If you have sent me some
 patches and your name is not in the above list, please inform me.
-
-Sending your contributions or patches
--------------------------------------
-
-First of all it's highly recommended to contact me before sending anything
-or before even starting to do any work. Tell me what you suggest to be
-changed or what you have planned to do. Also ensure you are using the
-very latest (development) version of OSS/Free since the change may already be
-implemented there. In general it's major waste of time to try to improve
-several months old version. Information about the latest version can be found
-from http://www.opensound.com/ossfree. In general there is no point in
-sending me patches relative to production kernels.
 
 Sponsors etc.
 -------------
@@ -123,13 +112,13 @@ If you have some problems
 =========================
 
 Read the sound HOWTO (sunsite.unc.edu:/pub/Linux/docs/...?).
-Also look at the home page (http://www.opensound.com/ossfree). It may
+Also look at the home page (http://www.4front-tech.com/ossfree). It may
 contain info about some recent bug fixes.
 
 It's likely that you have some problems when trying to use the sound driver
-first time. Sound cards don't have standard configuration so there are no
+first time. Soundcards don't have standard configuration so there are no
 good default configuration to use. Please try to use same I/O, DMA and IRQ
-values for the sound card than with DOS.
+values for the soundcard than with DOS.
 
 If you get an error message when trying to use the driver, please look
 at /var/adm/messages for more verbose error message.
@@ -159,7 +148,7 @@ The following errors are likely with /dev/dsp and /dev/audio.
 	work if "digitized voice support" was not enabled during "make config".
 	
 	- "Device or resource busy". Probably the IRQ (or DMA) channel 
-	required by the sound card is in use by some other device/driver.
+	required by the soundcard is in use by some other device/driver.
 
 	- "I/O error". Almost certainly (99%) it's an IRQ or DMA conflict.
 	Look at the kernel messages in /var/adm/notice for more info.
@@ -177,8 +166,8 @@ Best regards,
 Hannu
 
 Hannu Savolainen
-hannu@opensound.com	
-(Please check http://www.opensound.com/ossfree before mailing me).
+hannu@4front-tech.com	
+(Please check http://www.4front-tech.com/ossfree before mailing me).
 
 Snail mail:	Hannu Savolainen
 		Hiekkalaiturintie 3 A 8

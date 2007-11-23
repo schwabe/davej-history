@@ -1,12 +1,13 @@
-/* tulip.c: A DEC 21040-family ethernet driver for linux. */
+/* tulip.c: A DEC 21040-family ethernet driver for Linux. */
 /*
 	Written 1994-1998 by Donald Becker.
 
 	This software may be used and distributed according to the terms
 	of the GNU Public License, incorporated herein by reference.
 
-	This driver is for the SMC EtherPower PCI ethernet adapter.
-	It should work with most other DEC 21*40-based ethercards.
+	This driver is for the Digital "Tulip" ethernet adapter interface.
+	It should work with most DEC 21*4*-based chips/ethercards, as well as
+	PNIC and MXIC chips.
 
 	The author may be reached as becker@CESDIS.gsfc.nasa.gov, or C/O
 	Center of Excellence in Space Data and Information Sciences
@@ -17,7 +18,7 @@
 */
 
 #define SMP_CHECK
-static const char version[] = "tulip.c:v0.88 4/7/98 becker@cesdis.gsfc.nasa.gov\n";
+static const char version[] = "tulip.c:v0.89H 5/23/98 becker@cesdis.gsfc.nasa.gov\n";
 
 /* A few user-configurable values. */
 
@@ -29,6 +30,14 @@ static int max_interrupt_work = 25;
 static int full_duplex[MAX_UNITS] = {0, };
 static int options[MAX_UNITS] = {0, };
 static int mtu[MAX_UNITS] = {0, };			/* Jumbo MTU for interfaces. */
+
+/*  The possible media types that can be set in options[] are: */
+static const char * const medianame[] = {
+	"10baseT", "10base2", "AUI", "100baseTx",
+	"10baseT-FD", "100baseTx-FD", "100baseT4", "100baseFx",
+	"100baseFx-FD", "MII 10baseT", "MII 10baseT-FD", "MII",
+	"10baseT(forced)", "MII 100baseTx", "MII 100baseTx-FD", "MII 100baseT4",
+};
 
 /* Set if the PCI BIOS detects the chips on a multiport board backwards. */
 #ifdef REVERSE_PROBE_ORDER
@@ -51,18 +60,9 @@ static int rx_copybreak = 1518;
 static int rx_copybreak = 100;
 #endif
 
-/* The following example shows how to always use the 10base2 port. */
-#ifdef notdef
-#define TULIP_DEFAULT_MEDIA 1		/* 1 == 10base2 */
-#define TULIP_NO_MEDIA_SWITCH		/* Don't switch from this port */
-#endif
-
-/* Define to force full-duplex operation on all Tulip interfaces. */
-/* #define  TULIP_FULL_DUPLEX 1 */
-
 /* Operational parameters that usually are not changed. */
 /* Time in jiffies before concluding the transmitter is hung. */
-#define TX_TIMEOUT  ((2000*HZ)/1000)
+#define TX_TIMEOUT  (4*HZ)
 
 #include <linux/config.h>
 #ifdef MODULE
@@ -272,8 +272,6 @@ register of the set CSR12-15 written.  Hmmm, now how is that possible?  */
 #ifndef PCI_VENDOR_ID_LITEON
 #define PCI_VENDOR_ID_LITEON	0x11AD
 #endif
-#define PCI_DEVICE_ID_PNIC		0x0002
-#define PCI_DEVICE_ID_PNIC_X	0x0168
 
 #ifndef PCI_VENDOR_ID_MXIC
 #define	PCI_VENDOR_ID_MXIC		0x10d9
@@ -290,44 +288,44 @@ static void mxic_timer(unsigned long data);
 static void pnic_timer(unsigned long data);
 
 /* A table describing the chip types. */
-enum tbl_flag { HAS_MII=1, HAS_MEDIA_TABLE = 2};
+enum tbl_flag { HAS_MII=1, HAS_MEDIA_TABLE = 2, CSR12_IN_SROM = 4,};
 static struct tulip_chip_table {
-	int device_id;
+	int vendor_id, device_id;
 	char *chip_name;
 	int io_size;
 	int valid_intrs;			/* CSR7 interrupt enable settings */
 	int flags;
 	void (*media_timer)(unsigned long data);
 } tulip_tbl[] = {
-  { PCI_DEVICE_ID_DEC_TULIP, "Digital DC21040 Tulip", 128, 0x0001ebef,
-	0, tulip_timer },
-  { PCI_DEVICE_ID_DEC_TULIP_PLUS, "Digital DC21041 Tulip", 128, 0x0001ebef,
-	HAS_MEDIA_TABLE, tulip_timer },
-  { PCI_DEVICE_ID_DEC_TULIP_FAST, "Digital DS21140 Tulip", 128, 0x0001ebef,
-	HAS_MII | HAS_MEDIA_TABLE, tulip_timer },
-  { PCI_DEVICE_ID_DEC_TULIP_21142, "Digital DS21142/3 Tulip", 256, 0x0801fbff,
+  { PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TULIP,
+	"Digital DC21040 Tulip", 128, 0x0001ebef, 0, tulip_timer },
+  { PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TULIP_PLUS,
+	"Digital DC21041 Tulip", 128, 0x0001ebef, HAS_MEDIA_TABLE, tulip_timer },
+  { PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TULIP_FAST,
+	"Digital DS21140 Tulip", 128, 0x0001ebef,
+	HAS_MII | HAS_MEDIA_TABLE | CSR12_IN_SROM,
+	tulip_timer },
+  { PCI_VENDOR_ID_DEC, PCI_DEVICE_ID_DEC_TULIP_21142,
+	"Digital DS21142/3 Tulip", 256, 0x0801fbff,
 	HAS_MII | HAS_MEDIA_TABLE, t21142_timer },
-  { PCI_DEVICE_ID_PNIC_X, "Lite-On 82c168 PNIC", 256, 0x0001ebef,
-	0, pnic_timer },
-  { PCI_DEVICE_ID_MX98713, "Macronix 98713 PMAC", 128, 0x0001ebef,
-	HAS_MII | HAS_MEDIA_TABLE, tulip_timer /* Tulip-like! */ },
-  { PCI_DEVICE_ID_MX98715, "Macronix 98715 PMAC", 256, 0x0001ebef,
-	HAS_MEDIA_TABLE, mxic_timer },
-  { PCI_DEVICE_ID_MX98725, "Macronix 98725 PMAC", 256, 0x0001ebef,
-	HAS_MEDIA_TABLE, mxic_timer },
+  { PCI_VENDOR_ID_LITEON, 0x0002,
+	"Lite-On 82c168 PNIC", 256, 0x0001ebef, HAS_MII, pnic_timer },
+  { PCI_VENDOR_ID_MXIC, PCI_DEVICE_ID_MX98713,
+	"Macronix 98713 PMAC", 128, 0x0001ebef,
+	HAS_MII | HAS_MEDIA_TABLE | CSR12_IN_SROM, tulip_timer /* Tulip-like! */ },
+  { PCI_VENDOR_ID_MXIC, PCI_DEVICE_ID_MX98715,
+	"Macronix 98715 PMAC", 256, 0x0001ebef, HAS_MEDIA_TABLE, mxic_timer },
+  { PCI_VENDOR_ID_MXIC, PCI_DEVICE_ID_MX98725,
+	"Macronix 98725 PMAC", 256, 0x0001ebef, HAS_MEDIA_TABLE, mxic_timer },
+  { 0x125B, 0x1400, "ASIX AX88140", 128, 0x0001fbff,
+	HAS_MII | HAS_MEDIA_TABLE | CSR12_IN_SROM, tulip_timer },
   {0, 0, 0, 0},
 };
 /* This matches the table above. */
 enum chips { DC21040=0, DC21041=1, DC21140=2, DC21142=3, DC21143=3,
 			 LC82C168, MX98713, MX98715, MX98725};
 
-static const char * const medianame[] = {
-  "10baseT", "10base2", "AUI", "100baseTx",
-  "10baseT-FD", "100baseTx-FD", "100baseT4", "100baseFx",
-  "100baseFx-FD", "MII 10baseT", "MII 10baseT-FD", "MII",
-  "10baseT(forced)", "MII 100baseTx", "MII 100baseTx-FD", "MII 100baseT4",
-};
-/* A full-duplex map for above. */
+/* A full-duplex map for media types. */
 enum MediaIs {MediaIsFD = 1, MediaAlwaysFD=2, MediaIsMII=4, MediaIsFx=8,
 		  MediaIs100=16};
 static const char media_cap[] =
@@ -378,7 +376,7 @@ struct medialeaf {
 struct mediatable {
 	u16 defaultmedia;
 	u8 leafcount, csr12dir;				/* General purpose pin directions. */
-	unsigned has_mii:1;
+	unsigned has_mii:1, has_nonmii:1;
 	struct medialeaf mleaf[0];
 };
 
@@ -418,6 +416,7 @@ struct tulip_private {
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Full-duplex operation requested. */
 	unsigned int full_duplex_lock:1;
+	unsigned int fake_addr:1;			/* Multiport board faked address. */
 	unsigned int default_port:4;		/* Last dev->if_port value. */
 	unsigned int media2:4;				/* Secondary monitored media port. */
 	unsigned int medialock:1;			/* Don't sense media type. */
@@ -434,12 +433,12 @@ struct tulip_private {
 };
 
 static struct device *tulip_probe1(int pci_bus, int pci_devfn,
-								   struct device *dev, int ioaddr,
+								   struct device *dev,
 								   int chip_id, int options);
 static void parse_eeprom(struct device *dev);
-static int read_eeprom(int ioaddr, int location);
-static int mdio_read(int ioaddr, int phy_id, int location);
-static void mdio_write(int ioaddr, int phy_id, int location, int value);
+static int read_eeprom(long ioaddr, int location);
+static int mdio_read(struct device *dev, int phy_id, int location);
+static void mdio_write(struct device *dev, int phy_id, int location, int value);
 static void select_media(struct device *dev, int startup);
 static int tulip_open(struct device *dev);
 static void tulip_timer(unsigned long data);
@@ -474,98 +473,100 @@ int tulip_probe(struct device *dev)
 {
 	int cards_found = 0;
 	static int pci_index = 0;	/* Static, for multiple probe calls. */
+	unsigned char pci_bus, pci_device_fn;
 
 	/* Ideally we would detect all network cards in slot order.  That would
 	   be best done a central PCI probe dispatch, which wouldn't work
 	   well with the current structure.  So instead we detect just the
 	   Tulip cards in slot order. */
 
-	if (pcibios_present()) {
-		unsigned char pci_bus, pci_device_fn;
+#if LINUX_VERSION_CODE >= 0x20155
+	if (! pci_present())
+		return -ENODEV;
+#else
+	if (! pcibios_present())
+		return -ENODEV;
+#endif
+	for (;pci_index < 0xff; pci_index++) {
+		u16 vendor, device, pci_command, new_command;
+		u32 pci_ioaddr;
+		int chip_idx = 0;
 
-		for (;pci_index < 0xff; pci_index++) {
-			u16 vendor, device, pci_command, new_command;
-			u32 pci_ioaddr;
-			int chip_idx = 0;
-
-			if (pcibios_find_class
-				(PCI_CLASS_NETWORK_ETHERNET << 8,
-				 reverse_probe ? 0xfe - pci_index : pci_index,
-				 &pci_bus, &pci_device_fn) != PCIBIOS_SUCCESSFUL)
-				if (reverse_probe)
-					continue;
-				else
-					break;
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-									 PCI_VENDOR_ID, &vendor);
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-									 PCI_DEVICE_ID, &device);
-			pcibios_read_config_dword(pci_bus, pci_device_fn,
-									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-			/* Remove I/O space marker in bit 0. */
-			pci_ioaddr &= ~3;
-
-			if (vendor != PCI_VENDOR_ID_DEC
-				&& vendor != PCI_VENDOR_ID_LITEON
-				&& vendor != PCI_VENDOR_ID_MXIC)
+		if (pcibios_find_class
+			(PCI_CLASS_NETWORK_ETHERNET << 8,
+			 reverse_probe ? 0xfe - pci_index : pci_index,
+			 &pci_bus, &pci_device_fn) != PCIBIOS_SUCCESSFUL)
+			if (reverse_probe)
 				continue;
-			if (vendor == PCI_VENDOR_ID_LITEON)
-				device = PCI_DEVICE_ID_PNIC_X;
-			else if (vendor == PCI_VENDOR_ID_MXIC)
-				device = PCI_DEVICE_ID_MX98713;
+			else
+				break;
+		pcibios_read_config_word(pci_bus, pci_device_fn,
+								 PCI_VENDOR_ID, &vendor);
+		pcibios_read_config_word(pci_bus, pci_device_fn,
+								 PCI_DEVICE_ID, &device);
 
-			for (chip_idx = 0; tulip_tbl[chip_idx].chip_name; chip_idx++)
-				if (device == tulip_tbl[chip_idx].device_id)
-					break;
-			if (tulip_tbl[chip_idx].chip_name == 0) {
+		for (chip_idx = 0; tulip_tbl[chip_idx].chip_name; chip_idx++)
+			if (vendor == tulip_tbl[chip_idx].vendor_id  &&
+				device == tulip_tbl[chip_idx].device_id)
+				break;
+		if (tulip_tbl[chip_idx].chip_name == 0) {
+			if (vendor == PCI_VENDOR_ID_DEC  ||
+				vendor == PCI_VENDOR_ID_LITEON)
 				printk(KERN_INFO "Unknown Tulip-style PCI ethernet chip type"
 					   " %4.4x %4.4x"" detected: not configured.\n",
 					   vendor, device);
-				continue;
-			}
-			if (tulip_debug > 2)
-				printk(KERN_DEBUG "Found %s at I/O %#x.\n",
-					   tulip_tbl[chip_idx].chip_name, pci_ioaddr);
+			continue;
+		}
+#if LINUX_VERSION_CODE >= 0x20155
+		pci_ioaddr = pci_find_slot(pci_bus, pci_device_fn)->base_address[0];
+#else
+		pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_0,
+								  &pci_ioaddr);
+#endif
+		/* Remove I/O space marker in bit 0. */
+		pci_ioaddr &= ~3;
 
-			if (check_region(pci_ioaddr, tulip_tbl[chip_idx].io_size))
-				continue;
+		if (tulip_debug > 2)
+			printk(KERN_DEBUG "Found %s at I/O %#x.\n",
+				   tulip_tbl[chip_idx].chip_name, pci_ioaddr);
 
-			pcibios_read_config_word(pci_bus, pci_device_fn,
-									 PCI_COMMAND, &pci_command);
-			new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
-			if (pci_command != new_command) {
-				printk(KERN_INFO "  The PCI BIOS has not enabled this"
-					   " device!  Updating PCI command %4.4x->%4.4x.\n",
-					   pci_command, new_command);
-				pcibios_write_config_word(pci_bus, pci_device_fn,
-										  PCI_COMMAND, new_command);
-			}
+		if (check_region(pci_ioaddr, tulip_tbl[chip_idx].io_size))
+			continue;
 
-			dev = tulip_probe1(pci_bus, pci_device_fn, dev,
-							   pci_ioaddr, chip_idx, cards_found);
+		pcibios_read_config_word(pci_bus, pci_device_fn,
+								 PCI_COMMAND, &pci_command);
+		new_command = pci_command | PCI_COMMAND_MASTER|PCI_COMMAND_IO;
+		if (pci_command != new_command) {
+			printk(KERN_INFO "  The PCI BIOS has not enabled this"
+				   " device!  Updating PCI command %4.4x->%4.4x.\n",
+				   pci_command, new_command);
+			pcibios_write_config_word(pci_bus, pci_device_fn,
+									  PCI_COMMAND, new_command);
+		}
 
-			/* Get and check the bus-master and latency values. */
-			if (dev) {
-				unsigned char pci_latency;
-				pcibios_read_config_byte(pci_bus, pci_device_fn,
-										 PCI_LATENCY_TIMER, &pci_latency);
-				if (pci_latency < 10) {
-					printk(KERN_INFO "  PCI latency timer (CFLT) is "
-						   "unreasonably low at %d.  Setting to 64 clocks.\n",
-						   pci_latency);
-					pcibios_write_config_byte(pci_bus, pci_device_fn,
-											  PCI_LATENCY_TIMER, 64);
-				} else if (tulip_debug > 1)
-					printk(KERN_INFO "  PCI latency timer (CFLT) is %#x, "
-						   " PCI command is %4.4x.\n",
-						   pci_latency, new_command);
-				/* Bring the 21143 out power-down mode. */
-				if (device == PCI_DEVICE_ID_DEC_TULIP_21142)
-					pcibios_write_config_dword(pci_bus, pci_device_fn,
-											   0x40, 0x40000000);
-				dev = 0;
-				cards_found++;
-			}
+		dev = tulip_probe1(pci_bus, pci_device_fn, dev, chip_idx, cards_found);
+
+		/* Get and check the bus-master and latency values. */
+		if (dev) {
+			unsigned char pci_latency;
+			pcibios_read_config_byte(pci_bus, pci_device_fn,
+									 PCI_LATENCY_TIMER, &pci_latency);
+			if (pci_latency < 10) {
+				printk(KERN_INFO "  PCI latency timer (CFLT) is "
+					   "unreasonably low at %d.  Setting to 64 clocks.\n",
+					   pci_latency);
+				pcibios_write_config_byte(pci_bus, pci_device_fn,
+										  PCI_LATENCY_TIMER, 64);
+			} else if (tulip_debug > 1)
+				printk(KERN_INFO "  PCI latency timer (CFLT) is %#x, "
+					   " PCI command is %4.4x.\n",
+					   pci_latency, new_command);
+			/* Bring the 21143 out power-down mode. */
+			if (device == PCI_DEVICE_ID_DEC_TULIP_21142)
+				pcibios_write_config_dword(pci_bus, pci_device_fn,
+										   0x40, 0x40000000);
+			dev = 0;
+			cards_found++;
 		}
 	}
 
@@ -573,15 +574,17 @@ int tulip_probe(struct device *dev)
 }
 
 static struct device *tulip_probe1(int pci_bus, int pci_device_fn,
-								   struct device *dev, int ioaddr,
+								   struct device *dev,
 								   int chip_id, int board_idx)
 {
 	static int did_version = 0;			/* Already printed version info. */
 	struct tulip_private *tp;
+	long ioaddr;
+	int irq;
 	/* See note below on the multiport cards. */
 	static unsigned char last_phys_addr[6] = {0x00, 'L', 'i', 'n', 'u', 'x'};
 	static int last_irq = 0;
-	u8 pci_irq_line;
+	static int multiport_cnt = 0;		/* For four-port boards w/one EEPROM */
 	int i;
 	unsigned short sum;
 
@@ -590,9 +593,25 @@ static struct device *tulip_probe1(int pci_bus, int pci_device_fn,
 
 	dev = init_etherdev(dev, 0);
 
-	pcibios_read_config_byte(pci_bus, pci_device_fn,
-							 PCI_INTERRUPT_LINE, &pci_irq_line);
-	printk(KERN_INFO "%s: %s at %#3x,",
+#if LINUX_VERSION_CODE >= 0x20155
+	irq = pci_find_slot(pci_bus, pci_device_fn)->irq;
+	ioaddr = pci_find_slot(pci_bus, pci_device_fn)->base_address[0];
+#else
+	{
+		u8 pci_irq_line;
+		u32 pci_ioaddr;
+		pcibios_read_config_byte(pci_bus, pci_device_fn,
+								 PCI_INTERRUPT_LINE, &pci_irq_line);
+		pcibios_read_config_dword(pci_bus, pci_device_fn, PCI_BASE_ADDRESS_0,
+								  &pci_ioaddr);
+		irq = pci_irq_line;
+		ioaddr = pci_ioaddr;
+	}
+#endif
+	/* Remove I/O space marker in bit 0. */
+	ioaddr &= ~3;
+
+	printk(KERN_INFO "%s: %s at %#3lx,",
 		   dev->name, tulip_tbl[chip_id].chip_name, ioaddr);
 
 	/* Stop the chip's Tx and Rx processes. */
@@ -649,6 +668,10 @@ static struct device *tulip_probe1(int pci_bus, int pci_device_fn,
 		for (i = 0; i < 8; i ++)
 			if (ee_data[i] != ee_data[16+i])
 				sa_offset = 20;
+		if (ee_data[0] == 0xff  &&  ee_data[1] == 0xff &&  ee_data[2] == 0) {
+			sa_offset = 2;		/* Grrr, damn Matrox boards. */
+			multiport_cnt = 4;
+		}
 		for (i = 0; i < 6; i ++) {
 			dev->dev_addr[i] = ee_data[i + sa_offset];
 			sum += ee_data[i + sa_offset];
@@ -672,20 +695,21 @@ static struct device *tulip_probe1(int pci_bus, int pci_device_fn,
 			dev->dev_addr[i] = last_phys_addr[i];
 		dev->dev_addr[i] = last_phys_addr[i] + 1;
 #if defined(__i386__)		/* This BIOS bug doesn't exist on Alphas. */
-		pci_irq_line = last_irq;
+		irq = last_irq;
 #endif
 	}
+
 	for (i = 0; i < 6; i++)
 		printk(" %2.2x", last_phys_addr[i] = dev->dev_addr[i]);
-	printk(", IRQ %d.\n", pci_irq_line);
-	last_irq = pci_irq_line;
+	printk(", IRQ %d.\n", irq);
+	last_irq = irq;
 
 	/* We do a request_region() only to register /proc/ioports info. */
 	/* Note that proper size is tulip_tbl[chip_id].chip_name, but... */
-	request_region(ioaddr, TULIP_TOTAL_SIZE, tulip_tbl[chip_id].chip_name);
+	request_region(ioaddr, TULIP_TOTAL_SIZE, dev->name);
 
 	dev->base_addr = ioaddr;
-	dev->irq = pci_irq_line;
+	dev->irq = irq;
 
 	/* Make certain the data structures are quadword aligned. */
 	tp = (void *)(((long)kmalloc(sizeof(*tp), GFP_KERNEL | GFP_DMA) + 7) & ~7);
@@ -746,9 +770,9 @@ static struct device *tulip_probe1(int pci_bus, int pci_device_fn,
 		   but takes much time. */
 		for (phy = 0, phy_idx = 0; phy < 32 && phy_idx < sizeof(tp->phys);
 			 phy++) {
-			int mii_status = mdio_read(ioaddr, phy, 1);
+			int mii_status = mdio_read(dev, phy, 1);
 			if (mii_status != 0xffff  &&  mii_status != 0x0000) {
-				int mii_reg0 = mdio_read(ioaddr, phy, 0);
+				int mii_reg0 = mdio_read(dev, phy, 0);
 				int reg4 = ((mii_status>>6) & tp->to_advertise) | 1;
 				tp->phys[phy_idx] = phy;
 				tp->advertising[phy_idx++] = reg4;
@@ -758,11 +782,11 @@ static struct device *tulip_probe1(int pci_bus, int pci_device_fn,
 				if (1 || (media_cap[tp->default_port] & MediaIsMII)) {
 					printk(KERN_DEBUG "%s:  Advertising %4.4x on PHY %d,"
 						   " previously advertising %4.4x.\n",
-						   dev->name, reg4, phy, mdio_read(ioaddr, phy, 4));
-					mdio_write(ioaddr, phy, 4, reg4);
+						   dev->name, reg4, phy, mdio_read(dev, phy, 4));
+					mdio_write(dev, phy, 4, reg4);
 				}
 				/* Enable autonegotiation: some boards default to off. */
-				mdio_write(ioaddr, phy, 0, mii_reg0 |
+				mdio_write(dev, phy, 0, mii_reg0 |
 						   (tp->full_duplex ? 0x1100 : 0x1000) |
 						   (media_cap[tp->default_port]&MediaIs100 ? 0x2000:0));
 			}
@@ -813,10 +837,12 @@ static struct device *tulip_probe1(int pci_bus, int pci_device_fn,
 		outl(0x1301, ioaddr + CSR12); /* Start NWay. */
 		break;
 	case LC82C168:
-		outl(0x00420000, ioaddr + CSR6);
-		outl(0x30, ioaddr + CSR12);
-		outl(0x0001F078, ioaddr + 0xB8);
-		outl(0x0201F078, ioaddr + 0xB8); /* Turn on autonegotiation. */
+		if ( ! tp->mii_cnt) {
+			outl(0x00420000, ioaddr + CSR6);
+			outl(0x30, ioaddr + CSR12);
+			outl(0x0001F078, ioaddr + 0xB8);
+			outl(0x0201F078, ioaddr + 0xB8); /* Turn on autonegotiation. */
+		}
 		break;
 	case MX98713: case MX98715: case MX98725:
 		outl(0x00000000, ioaddr + CSR6);
@@ -846,7 +872,9 @@ static struct fixups {
   {"SMC9332DST", 0, 0, 0xC0, { 0x1e00, 0x0000, 0x0800, 0x021f,
 							   0x0000, 0x009E, /* 10baseT */
 							   0x0903, 0x006D, /* 100baseTx */ }},
-  {"Cogent EM100", 0, 0, 0x92, { 0x1e00, 0x0000, 0x0800, 0x013f,
+  {"Cogent EM100", 0, 0, 0x92, { 0x1e00, 0x0000, 0x0800, 0x033f,
+								 0x0107, 0x8021, /* 100baseFx */
+								 0x0108, 0x8021, /* 100baseFx-FD */
 								 0x0103, 0x006D, /* 100baseTx */ }},
   {"Maxtech NX-110", 0, 0, 0xE8, { 0x1e00, 0x0000, 0x0800, 0x0313,
 							   0x1001, 0x009E, /* 10base2, CSR12 0x10*/
@@ -876,7 +904,7 @@ static void parse_eeprom(struct device *dev)
 	static unsigned char *last_ee_data = NULL;
 	static int controller_index = 0;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	unsigned char *ee_data = tp->eeprom;
 	int i;
 
@@ -956,8 +984,9 @@ subsequent_board:
 		for (i = 0; i < count; i++) {
 			unsigned char media_code = *p++;
 			u16 csrvals[3];
-			for (i = 0; i < 3; i++) {
-				csrvals[i] = get_u16(p);
+			int idx;
+			for (idx = 0; idx < 3; idx++) {
+				csrvals[idx] = get_u16(p);
 				p += 2;
 			}
 			if (media_code & 0x40) {
@@ -977,7 +1006,7 @@ subsequent_board:
 		u16 media = get_u16(p);
 
 		p += 2;
-		if (tp->chip_id == DC21140  ||  tp->chip_id == MX98713)
+		if (tulip_tbl[tp->chip_id].flags & CSR12_IN_SROM)
 			csr12dir = *p++;
 		count = *p++;
 		mtable = (struct mediatable *)
@@ -989,7 +1018,7 @@ subsequent_board:
 		mtable->defaultmedia = media;
 		mtable->leafcount = count;
 		mtable->csr12dir = csr12dir;
-		mtable->has_mii = 0;
+		mtable->has_nonmii = mtable->has_mii = 0;
 
 		printk(KERN_INFO "%s:  EEPROM default media type %s.\n", dev->name,
 			   media & 0x0800 ? "Autosense" : medianame[media & 15]);
@@ -1008,8 +1037,10 @@ subsequent_board:
 				if (p[1] & 1) {
 					mtable->has_mii = 1;
 					leaf->media = 11;
-				} else
+				} else {
+					mtable->has_nonmii = 1;
 					leaf->media = p[2] & 0x0f;
+				}
 				leaf->leafdata = p + 2;
 				p += (p[0] & 0x3f) + 1;
 			}
@@ -1052,11 +1083,11 @@ subsequent_board:
 #define EE_READ_CMD		(6 << 6)
 #define EE_ERASE_CMD	(7 << 6)
 
-static int read_eeprom(int ioaddr, int location)
+static int read_eeprom(long ioaddr, int location)
 {
 	int i;
 	unsigned short retval = 0;
-	int ee_addr = ioaddr + CSR9;
+	long ee_addr = ioaddr + CSR9;
 	int read_cmd = location | EE_READ_CMD;
 	
 	outl(EE_ENB & ~EE_CS, ee_addr);
@@ -1107,12 +1138,23 @@ static int read_eeprom(int ioaddr, int location)
 #define MDIO_ENB_IN		0x40000
 #define MDIO_DATA_READ	0x80000
 
-static int mdio_read(int ioaddr, int phy_id, int location)
+static int mdio_read(struct device *dev, int phy_id, int location)
 {
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int i;
 	int read_cmd = (0xf6 << 10) | (phy_id << 5) | location;
 	int retval = 0;
-	int mdio_addr = ioaddr + CSR9;
+	long mdio_addr = dev->base_addr + CSR9;
+
+	if (tp->chip_id == LC82C168) {
+		long ioaddr = dev->base_addr;
+		int i = 1000;
+		outl(0x60020000 + (phy_id<<23) + (location<<18), ioaddr + 0xA0);
+		while (--i > 0)
+			if ( ! ((retval = inl(ioaddr + 0xA0)) & 0x80000000))
+				return retval & 0xffff;
+		return 0xffff;
+	}
 
 	/* Establish sync by sending at least 32 logic ones. */ 
 	for (i = 32; i >= 0; i--) {
@@ -1141,11 +1183,23 @@ static int mdio_read(int ioaddr, int phy_id, int location)
 	return (retval>>1) & 0xffff;
 }
 
-static void mdio_write(int ioaddr, int phy_id, int location, int value)
+static void mdio_write(struct device *dev, int phy_id, int location, int value)
 {
+	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int i;
 	int cmd = (0x5002 << 16) | (phy_id << 23) | (location<<18) | value;
-	int mdio_addr = ioaddr + CSR9;
+	long mdio_addr = dev->base_addr + CSR9;
+
+	if (tp->chip_id == LC82C168) {
+		long ioaddr = dev->base_addr;
+		int i = 1000;
+		outl(cmd, ioaddr + 0xA0);
+		do
+			if ( ! (inl(ioaddr + 0xA0) & 0x80000000))
+				break;
+		while (--i > 0);
+		return;
+	}
 
 	/* Establish sync by sending 32 logic ones. */ 
 	for (i = 32; i >= 0; i--) {
@@ -1177,7 +1231,7 @@ static int
 tulip_open(struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	int i = 0;
 
 	/* On some chip revs we must set the MII/SYM port before the reset!? */
@@ -1286,11 +1340,11 @@ tulip_open(struct device *dev)
 		int looking_for = media_cap[dev->if_port] & MediaIsMII ? 11 :
 			(dev->if_port == 12 ? 0 : dev->if_port);
 		for (i = 0; i < tp->mtable->leafcount; i++)
-		  if (tp->mtable->mleaf[i].media == looking_for) {
-			printk(KERN_INFO "%s: Using user-specified media %s.\n",
-				   dev->name, medianame[dev->if_port]);
-			goto media_picked;
-		  }
+			if (tp->mtable->mleaf[i].media == looking_for) {
+				printk(KERN_INFO "%s: Using user-specified media %s.\n",
+					   dev->name, medianame[dev->if_port]);
+				goto media_picked;
+			}
 	}
 	if ((tp->mtable->defaultmedia & 0x0800) == 0)
 		for (i = 0; i < tp->mtable->leafcount; i++)
@@ -1313,6 +1367,10 @@ media_picked:
 		outl(0x0008, ioaddr + CSR15);
 		outl(0x0001, ioaddr + CSR13);
 		outl(0x1301, ioaddr + CSR12);
+	} else if (tp->chip_id == LC82C168  &&  tp->mii_cnt && ! tp->medialock) {
+		dev->if_port = 11;
+		tp->csr6 = 0x816C0000 | (tp->full_duplex ? 0x0200 : 0);
+		outl(0x0001, ioaddr + CSR15);
 	} else
 		select_media(dev, 1);
 
@@ -1325,14 +1383,15 @@ media_picked:
 	dev->start = 1;
 
 	/* Enable interrupts by setting the interrupt mask. */
+	outl(tulip_tbl[tp->chip_id].valid_intrs, ioaddr + CSR5);
 	outl(tulip_tbl[tp->chip_id].valid_intrs, ioaddr + CSR7);
 	outl(tp->csr6 | 0x2002, ioaddr + CSR6);
 	outl(0, ioaddr + CSR2);		/* Rx poll demand */
 
 	if (tulip_debug > 2) {
-		printk(KERN_DEBUG "%s: Done tulip_open(), CSR0 %8.8x, CSR5 %8.8x CSR13 %8.8x.\n",
+		printk(KERN_DEBUG "%s: Done tulip_open(), CSR0 %8.8x, CSR5 %8.8x CSR6 %8.8x.\n",
 			   dev->name, inl(ioaddr + CSR0), inl(ioaddr + CSR5),
-			   inl(ioaddr + CSR13));
+			   inl(ioaddr + CSR6));
 	}
 	/* Set the timer to switch to check for link beat and perhaps switch
 	   to an alternate media type. */
@@ -1348,7 +1407,7 @@ media_picked:
 /* Set up the transceiver control registers for the selected media type. */
 static void select_media(struct device *dev, int startup)
 {
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	struct mediatable *mtable = tp->mtable;
 	u32 new_csr6;
@@ -1441,7 +1500,7 @@ static void select_media(struct device *dev, int startup)
 				printk(KERN_DEBUG "%s:  Advertising %4.4x on PHY %d (%d).\n",
 					   dev->name, to_advertise, phy_num, tp->phys[phy_num]);
 			/* Bogus: put in by a committee?  */
-			mdio_write(ioaddr, tp->phys[phy_num], 4, to_advertise);
+			mdio_write(dev, tp->phys[phy_num], 4, to_advertise);
 			break;
 		}
 		default:
@@ -1462,14 +1521,18 @@ static void select_media(struct device *dev, int startup)
 		outl(t21041_csr13[dev->if_port], ioaddr + CSR13);
 		new_csr6 = 0x80020000;
 	} else if (tp->chip_id == LC82C168) {
-		if (startup)
-			dev->if_port = 0;
+		if (startup && ! tp->medialock)
+			dev->if_port = tp->mii_cnt ? 11 : 0;
 		if (tulip_debug > 1)
-			printk(KERN_DEBUG "%s: LiteOn PHY status is %3.3x, CSR12 %4.4x,"
+			printk(KERN_DEBUG "%s: PNIC PHY status is %3.3x, CSR12 %4.4x,"
 				   " media %s.\n",
 				   dev->name, inl(ioaddr + 0xB8), inl(ioaddr + CSR12),
 				   medianame[dev->if_port]);
-		if (startup) {
+		if (tp->mii_cnt) {
+			new_csr6 = 0x812C0000;
+			outl(0x0001, ioaddr + CSR15);
+			outl(0x0201B07A, ioaddr + 0xB8);
+		} else if (startup) {
 			/* Start with 10mbps to do autonegotiation. */
 			outl(0x32, ioaddr + CSR12);
 			new_csr6 = 0x00420000;
@@ -1525,7 +1588,7 @@ static void tulip_timer(unsigned long data)
 {
 	struct device *dev = (struct device *)data;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	u32 csr12 = inl(ioaddr + CSR12);
 	int next_tick = 0;
 
@@ -1661,22 +1724,22 @@ static void tulip_timer(unsigned long data)
 		case 1:  case 3: {		/* 21140, 21142 MII */
 			int mii_reg1, mii_reg5;
 		actually_mii:
-			mii_reg1 = mdio_read(ioaddr, tp->phys[0], 1);
-			mii_reg5 = mdio_read(ioaddr, tp->phys[0], 5);
+			mii_reg1 = mdio_read(dev, tp->phys[0], 1);
+			mii_reg5 = mdio_read(dev, tp->phys[0], 5);
 			if (tulip_debug > 1)
 				printk(KERN_INFO "%s: MII status %4.4x, Link partner report "
 					   "%4.4x, CSR12 %2.2x, %cD.\n",
 					   dev->name, mii_reg1, mii_reg5, csr12,
 					   tp->full_duplex ? 'F' : 'H');
 			if (mii_reg1 != 0xffff  &&  (mii_reg1 & 0x0004) == 0) {
-				int new_reg1 = mdio_read(ioaddr, tp->phys[0], 1);
-				if ((new_reg1 & 0x0004) == 0)
+				int new_reg1 = mdio_read(dev, tp->phys[0], 1);
+				if ((new_reg1 & 0x0004) == 0) {
 					printk(KERN_INFO "%s: No link beat on the MII interface,"
 						   " status then %4.4x now %4.4x.\n",
 						   dev->name, mii_reg1, new_reg1);
-#ifdef notyet
-				goto select_next_media;
-#endif
+					if (tp->mtable  &&  tp->mtable->has_nonmii)
+						goto select_next_media;
+				}
 			}
 			if (mii_reg5 == 0xffff  ||  mii_reg5 == 0x0000)
 				;				/* No MII device or no link partner report */
@@ -1724,7 +1787,7 @@ static void t21142_timer(unsigned long data)
 {
 	struct device *dev = (struct device *)data;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	int csr12 = inl(ioaddr + CSR12);
 	int next_tick = 60*HZ;
 	int new_csr6 = 0;
@@ -1788,7 +1851,7 @@ static void t21142_timer(unsigned long data)
 static void t21142_lnk_change( struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	int csr12 = inl(ioaddr + CSR12);
 
 	if (tulip_debug > 1)
@@ -1839,7 +1902,7 @@ static void mxic_timer(unsigned long data)
 {
 	struct device *dev = (struct device *)data;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	int next_tick = 60*HZ;
 
 	if (tulip_debug > 3) {
@@ -1856,50 +1919,82 @@ static void pnic_timer(unsigned long data)
 {
 	struct device *dev = (struct device *)data;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	int csr12 = inl(ioaddr + CSR12);
-	int phy_reg = inl(ioaddr + 0xB8);
 	int next_tick = 60*HZ;
-	int duplex;
+	int new_csr6 = tp->csr6 & ~0x40C40200;
 
-	if (tulip_debug > 1)
-		printk(KERN_DEBUG "%s: LC82C168 phy status %8.8x, CSR5 %8.8x.\n",
-			   dev->name, phy_reg, inl(ioaddr + CSR5));
-	if (tp->full_duplex_lock)
-		return;				/* Do not bother to set timer. */
-	duplex = phy_reg & 0x30000000 ? 1 : 0;
-	if (tp->full_duplex != duplex) {
-		tp->full_duplex = duplex;
-		if (tp->full_duplex)
-			tp->csr6 |= 0x0200;
-		else
-			tp->csr6 &= ~0x0200;
-		outl(tp->csr6 | 0x0002, ioaddr + CSR6);
-		outl(tp->csr6 | 0x2002, ioaddr + CSR6);
-		if (tulip_debug > 0) /* Gurppp, should be >1 */
-			printk(KERN_INFO "%s: Setting %s-duplex based on"
-				   " PNIC PHY report of %8.8x.\n",
-				   dev->name, tp->full_duplex ? "full" : "half", phy_reg);
-	}
-	if (phy_reg & 0x04000000) {	/* Remote link fault */
-		/*outl(0x0201F078, ioaddr + 0xB8);*/
-		next_tick = 3*HZ;
-	}
-	if (inl(ioaddr + CSR5) & TPLnkFail) { /* 100baseTx link beat */
+	if (media_cap[dev->if_port] & MediaIsMII) {
+		int negotiated = mdio_read(dev, tp->phys[0], 5) & tp->advertising[0];
+
 		if (tulip_debug > 1)
-			printk(KERN_DEBUG "%s: %s link beat failed, CSR12 %4.4x, "
-				   "CSR5 %8.8x, PHY %3.3x.\n",
-				   dev->name, medianame[dev->if_port], csr12,
-				   inl(ioaddr + CSR5), inl(ioaddr + 0xB8));
-		if (dev->if_port == 0) {
-			dev->if_port = 3;
+			printk(KERN_DEBUG "%s: LC82C168 negotiated capability %8.8x, "
+				   "CSR5 %8.8x.\n",
+				   dev->name, negotiated, inl(ioaddr + CSR5));
+
+		if (negotiated & 0x0380) 				/* 10 vs 100mbps */
+			new_csr6 |= 0x812E0000;
+		else
+			new_csr6 |= 0x816E0000;
+		if (((negotiated & 0x0300) == 0x0100)			/* Duplex */
+			|| (negotiated & 0x00C0) == 0x0040
+			|| tp->full_duplex_lock) {
+			tp->full_duplex = 1;
+			new_csr6 |= 0x0200;
+		}
+		if (tulip_debug > 1)
+			printk(KERN_DEBUG "%s: LC82C168 MII PHY status %4.4x, Link "
+				   "partner report %4.4x, csr6 %8.8x/%8.8x.\n",
+			   dev->name, mdio_read(dev, tp->phys[0], 1), negotiated,
+				   tp->csr6, inl(ioaddr + CSR6));
+	} else {
+		int phy_reg = inl(ioaddr + 0xB8);
+		int csr5 = inl(ioaddr + CSR5);
+
+		if (tulip_debug > 1)
+			printk(KERN_DEBUG "%s: LC82C168 phy status %8.8x, CSR5 %8.8x.\n",
+				   dev->name, phy_reg, csr5);
+
+		if (phy_reg & 0x04000000) {	/* Remote link fault */
+			/*outl(0x0201F078, ioaddr + 0xB8);*/
+			next_tick = 3*HZ;
+		}
+		if (inl(ioaddr + CSR5) & TPLnkFail) { /* 100baseTx link beat */
+			if (tulip_debug > 1)
+				printk(KERN_DEBUG "%s: %s link beat failed, CSR12 %4.4x, "
+					   "CSR5 %8.8x, PHY %3.3x.\n",
+					   dev->name, medianame[dev->if_port], csr12,
+					   inl(ioaddr + CSR5), inl(ioaddr + 0xB8));
+			if (tp->medialock) {
+			} else if (dev->if_port == 0) {
+				dev->if_port = 3;
+				outl(0x33, ioaddr + CSR12);
+				new_csr6 = 0x01860000;
+				outl(0x1F868, ioaddr + 0xB8);
+			} else {
+				dev->if_port = 0;
+				outl(0x32, ioaddr + CSR12);
+				new_csr6 = 0x00420000;
+				outl(0x1F078, ioaddr + 0xB8);
+			}
+			new_csr6 |= (tp->csr6 & 0xfdff);
+			next_tick = 3*HZ;
 		} else
-			dev->if_port = 0;
-		next_tick = 3*HZ;
-		select_media(dev, 0);
-		outl(tp->csr6 | 0x0002, ioaddr + CSR6);
+			new_csr6 = tp->csr6;
+		if (tp->full_duplex_lock  ||  (phy_reg & 0x30000000) != 0) {
+			tp->full_duplex = 1;
+			new_csr6 |= 0x00000200;
+		}
+	}
+	if (tp->csr6 != new_csr6) {
+		tp->csr6 = new_csr6;
+		outl(tp->csr6 | 0x0002, ioaddr + CSR6);	/* Restart Tx */
 		outl(tp->csr6 | 0x2002, ioaddr + CSR6);
 		dev->trans_start = jiffies;
+		if (tulip_debug > 0) /* Gurppp, should be >1 */
+			printk(KERN_INFO "%s: Changing PNIC configuration to %s-duplex, "
+				   "CSR6 %8.8x.\n",
+				   dev->name, tp->full_duplex ? "full" : "half", new_csr6);
 	}
 	tp->timer.expires = RUN_AT(next_tick);
 	add_timer(&tp->timer);
@@ -1908,13 +2003,15 @@ static void pnic_timer(unsigned long data)
 static void tulip_tx_timeout(struct device *dev)
 {
   struct tulip_private *tp = (struct tulip_private *)dev->priv;
-  int ioaddr = dev->base_addr;
+  long ioaddr = dev->base_addr;
 
-  if (tp->mtable && tp->mtable->has_mii) {
-	/* Do nothing -- the media monitor should handle this. */
-	if (tulip_debug > 1)
-	  printk(KERN_WARNING "%s: Transmit timeout using MII device.\n",
-			 dev->name);
+  if (media_cap[dev->if_port] & MediaIsMII) {
+	  /* Do nothing -- the media monitor should handle this. */
+	  if (tulip_debug > 1)
+		  printk(KERN_WARNING "%s: Transmit timeout using MII device.\n",
+				 dev->name);
+	  dev->trans_start = jiffies;
+	  return;
   } else if (tp->chip_id == DC21040) {
 	  if (inl(ioaddr + CSR12) & 0x0002) {
 		  printk(KERN_INFO "%s: transmit timed out, switching to %s media.\n",
@@ -2102,7 +2199,8 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 #endif
 
 	struct tulip_private *tp;
-	int csr5, ioaddr, work_budget = max_interrupt_work;
+	long ioaddr;
+	int csr5, work_budget = max_interrupt_work;
 
 	if (dev == NULL) {
 		printk (KERN_ERR" tulip_interrupt(): irq %d for unknown device.\n",
@@ -2119,8 +2217,8 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 			   tp->smp_proc_id, hard_smp_processor_id());
 #else
 		printk(KERN_ERR "%s: Re-entering the interrupt handler.\n", dev->name);
-		return;
 #endif
+		return;
 	}
 	dev->interrupt = 1;
 #ifdef SMP_CHECK
@@ -2210,6 +2308,14 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 			}
 
 			tp->dirty_tx = dirty_tx;
+			if (csr5 & TxDied) {
+				if (tulip_debug > 1)
+					printk(KERN_WARNING "%s: The transmitter stopped!"
+						   "  CSR5 is %x, CSR6 %x.\n",
+						   dev->name, csr5, inl(ioaddr + CSR6));
+				outl(tp->csr6 | 0x0002, ioaddr + CSR6);
+				outl(tp->csr6 | 0x2002, ioaddr + CSR6);
+			}
 		}
 
 		/* Log errors. */
@@ -2261,24 +2367,6 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 		printk(KERN_DEBUG "%s: exiting interrupt, csr5=%#4.4x.\n",
 			   dev->name, inl(ioaddr + CSR5));
 
-#ifdef notdef
-	/* Code that should never be run!  Perhaps remove after testing.. */
-	{
-		static int stopit = 10;
-		if (dev->start == 0  &&  --stopit < 0) {
-			printk(KERN_ERR "%s: Emergency stop, looping startup interrupt.\n"
-				   KERN_ERR "%s: Disabling interrupt handler %d to avoid "
-				   "locking up the machine.\n",
-				   dev->name, dev->name, dev->irq);
-#ifdef SA_SHIRQ
-			free_irq(irq, dev);
-#else
-			free_irq(irq);
-#endif
-		}
-	}
-#endif
-
 	dev->interrupt = 0;
 	clear_bit(0, (void*)&tp->interrupt);
 	return;
@@ -2311,6 +2399,9 @@ tulip_rx(struct device *dev)
 			}
 		} else if (status & 0x8000) {
 			/* There was a fatal error. */
+			if (tulip_debug > 2)
+				printk(KERN_DEBUG "%s: Receive error, Rx status %8.8x.\n",
+					   dev->name, status);
 			tp->stats.rx_errors++; /* end of a packet.*/
 			if (status & 0x0890) tp->stats.rx_length_errors++;
 			if (status & 0x0004) tp->stats.rx_frame_errors++;
@@ -2396,7 +2487,7 @@ tulip_rx(struct device *dev)
 static int
 tulip_close(struct device *dev)
 {
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 	int i;
 
@@ -2464,7 +2555,7 @@ static struct enet_statistics *
 tulip_get_stats(struct device *dev)
 {
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 
 	if (dev->start)
 		tp->stats.rx_missed_errors += inl(ioaddr + CSR8) & 0xffff;
@@ -2514,7 +2605,7 @@ static int private_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		} else {
 			save_flags(flags);
 			cli();
-			data[3] = mdio_read(ioaddr, data[0] & 0x1f, data[1] & 0x1f);
+			data[3] = mdio_read(dev, data[0] & 0x1f, data[1] & 0x1f);
 			restore_flags(flags);
 		}
 		return 0;
@@ -2525,7 +2616,7 @@ static int private_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 		} else {
 			save_flags(flags);
 			cli();
-			mdio_write(ioaddr, data[0] & 0x1f, data[1] & 0x1f, data[2]);
+			mdio_write(dev, data[0] & 0x1f, data[1] & 0x1f, data[2]);
 			restore_flags(flags);
 		}
 		return 0;
@@ -2569,7 +2660,7 @@ static void set_rx_mode(struct device *dev)
 static void set_rx_mode(struct device *dev, int num_addrs, void *addrs)
 #endif
 {
-	int ioaddr = dev->base_addr;
+	long ioaddr = dev->base_addr;
 	int csr6 = inl(ioaddr + CSR6) & ~0x00D5;
 	struct tulip_private *tp = (struct tulip_private *)dev->priv;
 
@@ -2686,7 +2777,7 @@ static dev_node_t *tulip_attach(dev_locator_t *loc)
 	pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &io);
 	pcibios_read_config_word(bus, devfn, PCI_DEVICE_ID, &dev_id);
 	io &= ~3;
-	dev = tulip_probe1(bus, devfn, NULL, io, DC21142, -1);
+	dev = tulip_probe1(bus, devfn, NULL, DC21142, -1);
 	if (dev) {
 		dev_node_t *node = kmalloc(sizeof(dev_node_t), GFP_KERNEL);
 		strcpy(node->dev_name, dev->name);

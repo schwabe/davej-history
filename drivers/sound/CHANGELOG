@@ -1,47 +1,5 @@
-Note these changes relate to Hannu's code and don't include the changes
-made outside of this for modularising the sound
-
-Changelog for version 3.8o
---------------------------
-
-Since 3.8h
-- Included support for OPL3-SA1 and SoftOSS
-
-Since 3.8
-- Fixed SNDCTL_DSP_GETOSPACE
-- Compatibility fixes for Linux 2.1.47
-
-Since 3.8-beta21
-- Fixed all known bugs (I think).
-
-Since 3.8-beta8
-- Lot of fixes to audio playback code in dmabuf.c
-
-Since 3.8-beta6
-- Fixed the famous Quake delay bug.
-
-Since 3.8-beta5
-- Fixed many bugs in audio playback.
-
-Since 3.8-beta4
-- Just minor changes.
-
-Since 3.8-beta1
-- Major rewrite of audio playback handling.
-- Added AWE32 support by Takashi Iwai (in ./lowlevel/).
-
-Since 3.7-beta#
-- Passing of ioctl() parameters between soundcard.c and other modules has been
-changed so that arg always points to kernel space.
-- Some bugfixes.
-
-Since 3.7-beta5
-- Disabled MIDI input with GUS PnP (Interwave). There seems to be constant
-stream of received 0x00 bytes when the MIDI receiver is enabled.
-
-Since 3.5
-- Changes almost everywhere.
-- Support for OPTi 82C924-based sound cards.
+Changelog for version 3.5.4
+---------------------------
 
 Since 3.5.4-beta8
 - Fixed a bug in handling of non-fragment sized writes in 16 bit/stereo mode
@@ -79,7 +37,7 @@ Since 3.5.4-beta2
 - Added the "lowlevel" subdirectory for additional low level drivers that
   are not part of USS core. See lowlevel/README for more info.
 - Included support for ACI mixer (by Markus Kuhn). ACI is a mixer used in
-  miroPCM sound cards. See lowlevel/aci.readme for more info.
+  miroPCM soundcards. See lowlevel/aci.readme for more info.
 - Support for Aztech Washington chipset (AZT2316 ASIC).
 
 Since 3.5.4-beta1
@@ -271,7 +229,7 @@ Since pre-3.0-940712
   GUS MAX, but it doesn't work yet.
 Since pre-3.0-940426
 - AD1848/CS4248/CS4231 codec support (MSS, GUS MAX, Aztec, Orchid etc).
-This codec chip is used in various sound cards. This version is developed
+This codec chip is used in various soundcards. This version is developed
 for the 16 bit daughtercard of GUS. It should work with other cards also
 if the following requirements are met:
 	- The I/O, IRQ and DMA settings are jumper selectable or
@@ -336,7 +294,7 @@ Since 2.2b
 - Support for the MPU emulation of the SB16.
 - Some big arrays are now allocated boot time. This makes the BSS segment
   smaller which makes it possible to use the full driver with
-  NetBSD. These arrays are not allocated if no suitable sound card is available.
+  NetBSD. These arrays are not allocated if no suitable soundcard is available.
 - Fixed a bug in the compute_and_set_volume in gus_wave.c
 - Fixed the too fast mono playback problem of SB Pro and PAS16.
 

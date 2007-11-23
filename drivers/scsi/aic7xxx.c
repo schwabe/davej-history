@@ -1620,7 +1620,7 @@ aic7xxx_loadseq(struct aic7xxx_host *p)
 static void
 aic7xxx_delay(int seconds)
 {
-  mdelay(seconds*1000);
+  udelay(seconds*1000000);
 }
 
 /*+F*************************************************************************
@@ -3170,12 +3170,12 @@ aic7xxx_reset_current_bus(struct aic7xxx_host *p)
   scsiseq = aic_inb(p, SCSISEQ);
   aic_outb(p, scsiseq | SCSIRSTO, SCSISEQ);
 
-  mdelay(5);
+  udelay(5000);
 
   /* Turn off the bus reset. */
   aic_outb(p, scsiseq & ~SCSIRSTO, SCSISEQ);
 
-  mdelay(2);
+  udelay(2000);
 
   aic7xxx_clear_intstat(p);
   /* Re-enable reset interrupts. */
@@ -5678,7 +5678,7 @@ acquire_seeprom(struct aic7xxx_host *p)
   while ((wait > 0) && ((aic_inb(p, SEECTL) & SEERDY) == 0))
   {
     wait--;
-    mdelay(1);  /* 1 msec */
+    udelay(1000);  /* 1 msec */
   }
   if ((aic_inb(p, SEECTL) & SEERDY) == 0)
   {
@@ -6710,7 +6710,7 @@ aic7xxx_chip_reset(struct aic7xxx_host *p)
   wait = 1000;  /* 1 second (1000 * 1000 usec) */
   while ((wait > 0) && ((aic_inb(p, HCNTRL) & CHIPRSTACK) == 0))
   {
-    mdelay(1);  /* 1 msec = 1000 usec */
+    udelay(1000);  /* 1 msec = 1000 usec */
     wait = wait - 1;
   }
 

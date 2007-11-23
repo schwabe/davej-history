@@ -16,6 +16,7 @@ if [ "$CONFIG_FIREWALL" = "y" ]; then
         comment 'Protocol-specific masquerading support will be built as modules.'
         if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then	
           bool 'IP: ipautofw masquerading (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_IPAUTOFW
+          bool 'IP: ipportfw masq & virtual server support' CONFIG_IP_MASQUERADE_IPPFVS
         fi
         bool 'IP: ICMP masquerading' CONFIG_IP_MASQUERADE_ICMP
       fi

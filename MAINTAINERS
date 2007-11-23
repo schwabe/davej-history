@@ -267,11 +267,6 @@ M:	layes@loran.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
-MULTISOUND SOUND DRIVER
-P:	Andrew Veliath
-M:	andrewtv@usa.net
-S:	Maintained
-
 NCP FILESYSTEM:
 P:	Volker Lendecke
 M:	lendecke@namu01.Num.Math.Uni-Goettingen.de
@@ -289,13 +284,6 @@ P:	Alan Cox
 M:	net-patches@lxorguk.ukuu.org.uk
 L:	linux-net@vger.rutgers.edu
 S:	Odd Fixes <-> Maintained subject to workloads
-
-PCI SOUND DRIVERS (ES1370, ES1371 and SONICVIBES)
-P:      Thomas Sailer
-M:      sailer@ife.ee.ethz.ch
-L:      linux-sound@vger.rutgers.edu
-W:      http://www.ife.ee.ethz.ch/~sailer/linux/pciaudio.html
-S:      Maintained
 
 PPP PROTOCOL DRIVERS AND COMPRESSORS
 P:	Al Longyear

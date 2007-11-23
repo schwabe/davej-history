@@ -84,6 +84,9 @@ struct ip_masq {
 	void		*app_data;	/* Application private data */
 	unsigned  flags;        	/* status flags */
 	struct ip_masq	*control;	/* Corresponding control connection */
+#ifdef CONFIG_IP_MASQUERADE_IPPFVS
+        struct server   *real_server;   /* Which real server is chosen? */
+#endif /* CONFIG_IP_MASQUERADE_IPPFVS */
 };
 
 /*

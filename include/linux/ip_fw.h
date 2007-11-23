@@ -131,6 +131,9 @@ struct ip_fw
 #ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
 #define IP_FW_AUTOFW		5
 #endif
+#ifdef CONFIG_IP_MASQUERADE_IPPFVS
+#define IP_FW_PORTFW		6
+#endif
 
 #define IP_FW_INSERT		(IP_FW_BASE_CTL)
 #define IP_FW_APPEND		(IP_FW_BASE_CTL+1)
@@ -177,6 +180,12 @@ struct ip_fw
 #define IP_AUTOFW_FLUSH  	(IP_FW_FLUSH  | (IP_FW_AUTOFW << IP_FW_SHIFT))
 #endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
 
+#ifdef CONFIG_IP_MASQUERADE_IPPFVS
+#define IP_PORTFW_ADD		(IP_FW_APPEND | (IP_FW_PORTFW << IP_FW_SHIFT))
+#define IP_PORTFW_DEL		(IP_FW_DELETE | (IP_FW_PORTFW << IP_FW_SHIFT))
+#define IP_PORTFW_FLUSH  	(IP_FW_FLUSH  | (IP_FW_PORTFW << IP_FW_SHIFT))
+#endif /* CONFIG_IP_MASQUERADE_IPPFVS */
+
 struct ip_fwpkt
 {
 	struct iphdr fwp_iph;			/* IP header */
@@ -219,6 +228,9 @@ extern int ip_fw_ctl(int, void *, int);
 #ifdef CONFIG_IP_MASQUERADE_IPAUTOFW
 extern int ip_autofw_ctl(int, void *, int);
 #endif
+#ifdef CONFIG_IP_MASQUERADE_IPPFVS
+extern int ip_portfw_ctl(int, void *, int);
+#endif
 #ifdef CONFIG_IP_ACCT
 extern struct ip_fw *ip_acct_chain;
 extern int ip_acct_ctl(int, void *, int);
@@ -253,4 +265,42 @@ struct ip_autofw {
 	struct timer_list timer;
 };
 #endif /* CONFIG_IP_MASQUERADE_IPAUTOFW */
+
+#ifdef CONFIG_IP_MASQUERADE_IPPFVS
+
+#define IP_PORTFW_PORT_MIN 1
+#define IP_PORTFW_PORT_MAX 60999
+#define SERVER_WEIGHT_MIN   1
+#define SERVER_WEIGHT_MAX   1000
+
+/* contains info about a real server */
+struct server {
+        struct server *next;     /* next real server for the virtual server */
+        __u32  ip;               /* ip address of the real server */
+        __u16  port;             /* port number of service on the real server */
+        int connections;         /* number of alive connections (TCP only) */
+        short weight;            /* to indicate server's processing capacity */
+};
+
+
+struct ip_portfw {
+        struct ip_portfw *next;
+        __u32           laddr;
+        __u16           lport;
+        struct server   *sr_lst;       /* server list */
+        struct server   *curr_sr;      /* current server used in simple round-robbin scheduling algorithm */
+};
+
+struct ip_portfw_edits {
+       __u16           protocol;       /* Which protocol are we talking? */
+       __u32           laddr, raddr;   /* Local and remote address */
+       __u16           lport, rport;   /* Local and remote port */
+       short           weight;         /* Server weight */
+};
+#endif /* CONFIG_IP_MASQUERADE_IPPFVS */
 #endif /* _IP_FW_H */
+
+
+
+
+

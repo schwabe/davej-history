@@ -1194,6 +1194,22 @@ CONFIG_IP_MASQUERADE_IPAUTOFW
   and other information, is available at
   ftp://ftp.netis.com/pub/members/rlynch/.
 
+IP: ipportfw masquerade and virtual server support
+CONFIG_IP_MASQUERADE_IPPFVS
+  ippfvs is port forwarding & virtual server program in Linux kernel
+  by Wensong Zhang, based on IP masquerading and Steven Clarke's
+  port forwarding codes. It can dynamically forward a connection on
+  given ports from outside to one server in a cluster of servers 
+  inside a firewall, the round-robin secheduling or weighted 
+  round-robin scheduling algorithm is used to choose which server 
+  the connection is redirected to. This function can be used to build 
+  a virtual internet server on a cluster of servers, such as scalable
+  web server.
+  For information and source of ippfvsadm administration program, 
+  please visit the following URL: 
+        http://proxy.iinchina.net/~wensong/ippfvs/
+  If you want this, say Y.
+
 IP: ICMP masquerading
 CONFIG_IP_MASQUERADE_ICMP
   The basic masquerade code described for CONFIG_IP_MASQUERADE only
@@ -4250,14 +4266,14 @@ CONFIG_SOUND
   to be extracted with "tar xzvf filename".
 
 ProAudioSpectrum 16 support
-CONFIG_SOUND_PAS
+CONFIG_PAS
   Answer Y only if you have a Pro Audio Spectrum 16, ProAudio Studio
   16 or Logitech SoundMan 16.  Don't answer 'y' if you have some other
   card made by Media Vision or Logitech since they are not PAS16
   compatible.
 
 SoundBlaster (SB, SBPro, SB16, clones) support
-CONFIG_SOUND_SB
+CONFIG_SB
   Answer "y" if you have an original SoundBlaster card made by
   Creative Labs or a 100% hardware compatible clone (like the
   Thunderboard or SM Games). If your card was in the list of supported
@@ -4267,7 +4283,7 @@ CONFIG_SOUND_SB
   SoundBlaster compatible.
 
 Generic OPL2/OPL3 FM synthesizer support
-CONFIG_SOUND_ADLIB
+CONFIG_ADLIB
   Answer Y if your card has a FM chip made by Yamaha (OPL2/OPL3/OPL4).
   Answering Y is usually a safe and recommended choice, however some
   cards may have software (TSR) FM emulation. Enabling FM support with
@@ -4275,12 +4291,12 @@ CONFIG_SOUND_ADLIB
   cards, however).
 
 Gravis Ultrasound support
-CONFIG_SOUND_GUS
+CONFIG_GUS
   Enable this option for any type of Gravis Ultrasound card, including
   the GUS or GUS MAX.
 
 MPU-401 support (NOT for SB16)
-CONFIG_SOUND_MPU401
+CONFIG_MPU401
   Be careful with this question. The MPU401 interface is supported by
   all soundcards. However, some natively supported cards have their
   own driver for MPU401. Enabling the MPU401 option with these cards
@@ -4291,29 +4307,29 @@ CONFIG_SOUND_MPU401
   answer Y if you have a true MPU401 MIDI interface card.
 
 6850 UART Midi support
-CONFIG_SOUND_UART6850
+CONFIG_UART6850
   This option enables support for MIDI interfaces based on the 6850
   UART chip. This interface is rarely found on sound cards.  It's safe
   to answer N to this question.
 
 PSS (ECHO-ADI2111) support
-CONFIG_SOUND_PSS
+CONFIG_PSS
   Answer Y only if you have Orchid SW32, Cardinal DSP16 or some other
   card based on the PSS chipset (AD1848 codec + ADSP-2115 DSP chip +
   Echo ESC614 ASIC CHIP).
 
 16 bit sampling option of GUS (_NOT_ GUS MAX)
-CONFIG_SOUND_GUS16
+CONFIG_GUS16
   Answer Y if you have installed the 16 bit sampling daughtercard on
   your GUS.  Answer N if you have a GUS MAX, since enabling this
   option disables GUS MAX support.
 
 GUS MAX support
-CONFIG_SOUND_GUSMAX
+CONFIG_GUSMAX
   Answer Y only if you have a Gravis Ultrasound MAX.
 
 Microsoft Sound System support
-CONFIG_SOUND_MSS
+CONFIG_MSS
   Again think carefully before answering Y to this question.  It's
   safe to answer Y if you have the original Windows Sound System card
   made by Microsoft or Aztech SG 16 Pro (or NX16 Pro).  Also you may
@@ -4337,18 +4353,18 @@ CONFIG_SOUND_MSS
   conflict.
 
 Ensoniq Soundscape support
-CONFIG_SOUND_SSCAPE
+CONFIG_SSCAPE
   Answer Y if you have a soundcard based on the Ensoniq SoundScape
   chipset. Such cards are being manufactured at least by Ensoniq, Spea
   and Reveal (Reveal makes also other cards).
 
 MediaTriX AudioTriX Pro support
-CONFIG_SOUND_TRIX
+CONFIG_TRIX
   Answer Y if you have the AudioTriX Pro sound card manufactured
   by MediaTrix.
 
 Support for MAD16 and/or Mozart based cards
-CONFIG_SOUND_MAD16
+CONFIG_MAD16
   Answer Y if your card has a Mozart (OAK OTI-601) or MAD16
   (OPTi 82C928 or 82C929) audio interface chip. These chips are
   currently quite common so it's possible that many no-name cards
@@ -4357,62 +4373,29 @@ CONFIG_SOUND_MAD16
   Reveal (some models) and Diamond (latest ones).
 
 Support for Crystal CS4232 based (PnP) cards
-CONFIG_SOUND_CS4232
+CONFIG_CS4232
   Enable this if you have a card based on the Crystal CS4232 chip set.
 
 Support for Turtle Beach Wave Front (Maui, Tropez) synthesizers
-CONFIG_SOUND_MAUI
+CONFIG_MAUI
   Enable this option if you have a Turtle Beach Wave Front, Maui, or
   Tropez sound card.
 
-Support for Turtle Beach MultiSound Classic, Tahiti, Monterey
-CONFIG_SOUND_MSNDCLAS
-  Say M here if you have a Turtle Beach MultiSound Classic, Tahiti or
-  Monterey (not for the Pinnacle or Fiji).  This driver requires that
-  you have some firmware files located in /etc/sound. See
-  Documentation/sound/MultiSound for important information about this
-  driver.
+/dev/dsp and /dev/audio support
+CONFIG_AUDIO
+  Answering N disables /dev/dsp and /dev/audio, the A/D and D/A
+  converter devices.  Answer N only if you know you will not need
+  the option.  They are usually required.  Answer Y.
 
-Support for Turtle Beach MultiSound Pinnacle, Fiji
-CONFIG_SOUND_MSNDPIN
-  Say M here if you have a Turtle Beach MultiSound Pinnacle or Fiji.
-  This driver requires that you have some firmware files located in
-  /etc/sound. See Documentation/sound/MultiSound for important
-  information about this driver.
+MIDI interface support
+CONFIG_MIDI
+  Answering N disables /dev/midixx devices and access to any MIDI
+  ports using /dev/sequencer and /dev/music. This option also affects
+  any MPU401 and/or General MIDI compatible devices.  Answer Y.
 
 FM synthesizer (YM3812/OPL-3) support
-CONFIG_SOUND_YM3812
+CONFIG_YM3812
   Answer Y here, unless you know you will not need the option.
-
-Ensoniq ES1370 based PCI soundcards
-CONFIG_SOUND_ES1370
-  Say Y or M if you have a PCI soundcard utilizing the Ensoniq
-  ES1370 chipset, such as Ensoniq's AudioPCI (non-97). To find
-  out if your soundcard uses an ES1370 without removing your
-  computer's cover, use cat /proc/pci and look for the PCI ID 
-  1274:5000. Since Ensoniq was bought by Creative Labs,
-  SoundBlaster 64/PCI models are either ES1370 or ES1371 based.
-  This driver differs slightly from OSS/Free, so PLEASE READ
-  Documentation/sound/es1370.
-
-Ensoniq ES1371 based PCI soundcards
-CONFIG_SOUND_ES1371
-  Say Y or M if you have a PCI soundcard utilizing the Ensoniq
-  ES1371 chipset, such as Ensoniq's AudioPCI97. To find out if
-  your soundcard uses an ES1371 without removing your computer's
-  cover, use cat /proc/pci and look for the PCI ID 1274:1371. Since
-  Ensoniq was bought by Creative Labs, SoundBlaster 64/PCI
-  models are either ES1370 or ES1371 based. This driver differs
-  slightly from OSS/Free, so PLEASE READ Documentation/sound/es1371.
-
-S3 SonicVibes based PCI soundcards
-CONFIG_SOUND_SONICVIBES
-  Say Y or M if you have a PCI soundcard utilizing the S3
-  SonicVibes chipset. To find out if your soundcard uses a
-  SonicVibes chip without removing your computer's cover, use
-  cat /proc/pci and look for the PCI ID 5333:CA00. This driver 
-  differs slightly from OSS/Free, so PLEASE READ
-  Documentation/sound/sonicvibes.
 
 Sun Audio support
 CONFIG_SUN_AUDIO

@@ -408,7 +408,7 @@ static const char * get_cpu_mkt_name(void)
 	return mktbuf;
 }
 
-static const char * getmodel()
+static const char * getmodel(void)
 /* Default is Intel. We disregard Nexgen and UMC processors. */
 {
         const char *p = NULL;

@@ -1074,7 +1074,7 @@ static int process_unauthorized(int type, int pid)
 		case PROC_PID_CMDLINE:
 			return 0;	
 	}
-	if(current->fsuid == (*p)->euid)
+	if(suser() || current->fsuid == (*p)->euid)
 		return 0;
 	return 1;
 }
