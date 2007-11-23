@@ -2413,9 +2413,10 @@ D: ARCnet stuff, Applicom board driver, SO_BINDTODEVICE,
 D: some Alpha platform porting from 2.0, Memory Technology Devices,
 D: Acquire watchdog timer, PC speaker driver maintenance,
 D: various other stuff that annoyed me by not working.
-S: c/o Red Hat UK Limited
-S: 35-36 Cambridge Place
-S: Cambridge. CB2 1NS
+S: c/o Red Hat Engineering
+S: Rustat House
+S: 60 Clifton Road
+S: Cambridge. CB1 7EG
 S: England
 
 N: Frank Xia

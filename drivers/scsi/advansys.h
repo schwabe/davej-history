@@ -1,9 +1,8 @@
-/* $Id: advansys.h,v 1.18 1999/11/29 21:47:16 bobf Exp bobf $ */
-
 /*
  * advansys.h - Linux Host Driver for AdvanSys SCSI Adapters
  * 
- * Copyright (c) 1995-1998 Advanced System Products, Inc.
+ * Copyright (c) 1995-2000 Advanced System Products, Inc.
+ * Copyright (c) 2000 ConnectCom Solutions, Inc.
  * All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -11,14 +10,19 @@
  * code retain the above copyright notice and this comment without
  * modification.
  *
+ * As of March 8, 2000 Advanced System Products, Inc. (AdvanSys)
+ * changed its name to name to ConnectCom Solutions, Inc.
+ *
  * There is an AdvanSys Linux WWW page at:
+ *  http://www.connectcom.net/downloads/software/os/linux.html
  *  http://www.advansys.com/linux.html
  *
- * The latest version of the AdvanSys driver is available at:
- *  ftp://ftp.advansys.com/pub/linux
+ * The latest released version of the AdvanSys driver is available at:
+ *  ftp://ftp.advansys.com/pub/linux/linux.tgz
+ *  ftp://ftp.connectcom.net/pub/linux/linux.tgz
  *
  * Please send questions, comments, bug reports to:
- *  bobf@advansys.com (Bob Frey)
+ *  linux@connectcom.net or bfrey@turbolinux.com.cn
  */
 
 #ifndef _ADVANSYS_H
@@ -37,14 +41,20 @@
 int advansys_detect(Scsi_Host_Template *);
 int advansys_release(struct Scsi_Host *);
 const char *advansys_info(struct Scsi_Host *);
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,3,28)
 int advansys_command(Scsi_Cmnd *);
+#endif /* version < v2.3.28 */
 int advansys_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,3,28)
 int advansys_abort(Scsi_Cmnd *);
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,89)
 int advansys_reset(Scsi_Cmnd *);
 #else /* version >= v1.3.89 */
 int advansys_reset(Scsi_Cmnd *, unsigned int);
 #endif /* version >= v1.3.89 */
+#else /* version >= v2.3.28 */
+int advansys_eh_bus_reset(Scsi_Cmnd *);
+#endif /* version >= v2.3.28 */
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,0)
 int advansys_biosparam(Disk *, int, int[]);
 #else /* version >= v1.3.0 */
@@ -174,23 +184,22 @@ void advansys_setup(char *, int *);
 }
 #else /* version >= v2.3.28 */
 #define ADVANSYS { \
-    proc_name:    "advansys", \
-    proc_info:    advansys_proc_info, \
-    name:         "advansys", \
-    detect:       advansys_detect, \
-    release:      advansys_release, \
-    info:         advansys_info, \
-    command:      advansys_command, \
-    queuecommand: advansys_queuecommand, \
-    abort:        advansys_abort, \
-    reset:        advansys_reset, \
-    bios_param:   advansys_biosparam, \
+    proc_name:                  "advansys", \
+    proc_info:                  advansys_proc_info, \
+    name:                       "advansys", \
+    detect:                     advansys_detect, \
+    release:                    advansys_release, \
+    info:                       advansys_info, \
+    queuecommand:               advansys_queuecommand, \
+    use_new_eh_code:		1, \
+    eh_bus_reset_handler:	advansys_eh_bus_reset, \
+    bios_param:                 advansys_biosparam, \
     /* \
      * Because the driver may control an ISA adapter 'unchecked_isa_dma' \
      * must be set. The flag will be cleared in advansys_detect for non-ISA \
      * adapters. Refer to the comment in scsi_module.c for more information. \
      */ \
-    unchecked_isa_dma: 1, \
+    unchecked_isa_dma:          1, \
     /* \
      * All adapters controlled by this driver are capable of large \
      * scatter-gather lists. According to the mid-level SCSI documentation \
@@ -198,7 +207,7 @@ void advansys_setup(char *, int *);
      * 'use_clustering'. But empirically while CPU utilization is increased \
      * by enabling clustering, I/O throughput increases as well. \
      */ \
-    use_clustering: ENABLE_CLUSTERING, \
+    use_clustering:             ENABLE_CLUSTERING, \
 }
 #endif /* version >= v2.3.28 */
 #endif /* _ADVANSYS_H */

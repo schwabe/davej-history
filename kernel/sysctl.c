@@ -1173,6 +1173,13 @@ int sysctl_intvec(ctl_table *table, int *name, int nlen,
 	return -ENOSYS;
 }
 
+int sysctl_jiffies(ctl_table *table, int *name, int nlen,
+		void *oldval, size_t *oldlenp,
+		void *newval, size_t newlen, void **context)
+{
+	return -ENOSYS;
+}
+
 int proc_dostring(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
 {

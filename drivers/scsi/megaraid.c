@@ -226,6 +226,7 @@ MODULE_DESCRIPTION ("AMI MegaRAID driver");
 #include <linux/tqueue.h>
 #include <linux/interrupt.h>
 #include <linux/mm.h>
+#include <linux/kcomp.h>
 #include <asm/pgtable.h>
 
 #include <linux/sched.h>

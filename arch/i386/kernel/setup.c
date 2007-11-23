@@ -969,6 +969,7 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 		int l1c=0, l1d=0, l2=0, l3=0;	/* Cache sizes */
 
 		cpuid(2, &regs[0], &regs[1], &regs[2], &regs[3]);
+
 		/* Least significant byte of eax says how many times
 		 * to call cpuid with value 2 to get cache and TLB
 		 * info.
@@ -978,96 +979,95 @@ __initfunc(void identify_cpu(struct cpuinfo_x86 *c))
 
 		c->x86_cache_size = 0;
 
-		for ( i = 0 ; i < 4 ; i++ ) 
-		{
+		for ( i = 0 ; i < 4 ; i++ ) {
+
 			int j;
 
-	                 if ( regs[i] < 0 )
-	                         continue; /* no useful data */
+			if ( regs[i] < 0 )
+				continue; /* no useful data */
 
-	                 /* look at all the bytes returned */
+			/* look at all the bytes returned */
 
-	                 for ( j = ( i == 0 ? 8:0 ) ; j < 25 ; j+=8 )
-	                 {
+			for ( j = ( i == 0 ? 8:0 ) ; j < 25 ; j+=8 ) {
+
 				unsigned char rh = regs[i]>>j;
 				unsigned char rl;
-				
+
 				rl = rh & 0x0F;
 				rh >>=4;
-				
-				switch(rh)
-				{
+
+				switch(rh) {
+
 					case 2:
-						if(rl)
-						{
+						if(rl) {
 							printk("%dK L3 cache\n", (rl-1)*512);
 							l3 += (rl-1)*512;
 						}
 						break;
+
 					case 4:
 					case 8:
-						if(rl)
-						{
+						if(rl) {
 							printk("%dK L2 cache (%d way)\n",128<<(rl-1), rh);
 							l2 += 128<<(rl-1);
 						}
 						break;
-					
+
 					/*
 					 *	L1 caches do not count for SMP switching weights,
 					 *	they are shadowed by L2.
 					 */
-					 
+
 					case 6:
-		                 		if(rh==6 && rl > 5)
-		                 		{
+						if(rh==6 && rl > 5) {
 							printk("%dK L1 data cache\n", 8<<(rl - 6));
 							l1d+=8<<(rl-6);
 						}
 						break;
+
 					case 7:
-		                 		printk("%dK L1 instruction cache\n",
-		                 			rl?(16<<(rl-1)):12);
-		                 		l1c+=rl?(16<<(rl-1)):12;
-		                 		break;
+						printk("%dK L1 instruction cache\n",
+						rl?(16<<(rl-1)):12);
+						l1c+=rl?(16<<(rl-1)):12;
+						break;
 				}	              
 			}   			
 		}
+
 		if(l1c && l1d)
-			printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n",
-				l1c, l1d);
+			printk("CPU: L1 I Cache: %dK  L1 D Cache: %dK\n", l1c, l1d);
 		if(l2)
 			printk("CPU: L2 Cache: %dK\n", l2);
 		if(l3)
 			printk("CPU: L3 Cache: %dK\n", l3);
-			
+
 		/*
 		 *	Assuming L3 is shared. The L1 cache is shadowed by L2
 		 *	so doesn't need to be included.
 		 */
-		 
+
 		c->x86_cache_size += l2;
 	}
-	
+
 	/*
 	 *	Intel finally adopted the AMD/Cyrix extended id naming
 	 *	stuff for the 'Pentium IV'
 	 */
-	 
+
 	if(c->x86_vendor ==X86_VENDOR_INTEL && c->x86 == 15)
 	{
 		intel_model(c);
 		return;
 	}
-	
+
 	for (i = 0; i < sizeof(cpu_models)/sizeof(struct cpu_model_info); i++) {
 		if (cpu_models[i].vendor == c->x86_vendor &&
 		    cpu_models[i].x86 == c->x86) {
 			if (c->x86_model <= 16)
 				p = cpu_models[i].model_names[c->x86_model];
 
-			/* Names for the Pentium II Celeron processors 
-                           detectable only by also checking the cache size */
+			/* Names for the Pentium II Celeron processors
+			   detectable only by also checking the cache size */
 			if ((cpu_models[i].vendor == X86_VENDOR_INTEL)
 			    && (cpu_models[i].x86 == 6)){ 
 				if(c->x86_model == 6 && c->x86_cache_size == 128) {

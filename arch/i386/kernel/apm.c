@@ -129,6 +129,7 @@
  *   1.13: Fix the Thinkpad (again) :-( (CONFIG_APM_IGNORE_MULTIPLE_SUSPENDS
  *         is now the way life works). 
  *         Fix thinko in suspend() (wrong return).
+ *   1.13ac: Added apm_battery_horked() for Compal boards (Dell 5000e etc)
  *
  * APM 1.1 Reference:
  *
@@ -325,6 +326,7 @@ static int			power_off_enabled = 0;
 #else
 static int			power_off_enabled = 1;
 #endif
+static int 			dell_crap = 0;	/*Set if we find a 5000e */
 
 static DECLARE_WAIT_QUEUE_HEAD(apm_waitqueue);
 static DECLARE_WAIT_QUEUE_HEAD(apm_suspend_waitqueue);
@@ -1242,6 +1244,18 @@ static int do_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
+/*
+ *	This is called by the DMI code when it finds an Inspiron 5000e
+ *	(aka compal reference board). We actually do the check by the BIOS
+ *	vendor name, version and serial so we can extend it to try and catch
+ *	non Dell stuff later.
+ */
+ 
+void apm_battery_horked(void)
+{
+	dell_crap = 1;
+}
+
 static int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 {
 	char *		p;
@@ -1258,7 +1272,7 @@ static int apm_get_info(char *buf, char **start, off_t fpos, int length, int dum
 
 	p = buf;
 
-	if ((smp_num_cpus == 1) &&
+	if ((smp_num_cpus == 1) && (!dell_crap) && 
 	    !(error = apm_get_power_status(&bx, &cx, &dx))) {
 		ac_line_status = (bx >> 8) & 0xff;
 		battery_status = bx & 0xff;

@@ -1,6 +1,7 @@
 #ifndef __ALPHA_DELAY_H
 #define __ALPHA_DELAY_H
 
+#include <asm/param.h>
 #include <asm/smp.h>
 
 /*

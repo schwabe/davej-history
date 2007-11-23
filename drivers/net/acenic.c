@@ -37,9 +37,8 @@
  *                                       make the driver work on RS/6000.
  *   Stephen Hack <stephen_hack@hp.com>: Fixed ace_set_mac_addr for little
  *                                       endian systems.
- *   Val Hensson <vhenson@esscom.com>:   Reset Jumbo skb producer and
- *                                       rx producer index when
- *                                       flushing the Jumbo ring.
+ *   Val Henson <val@nmt.edu>: Reset Jumbo skb producer and rx producer
+ *                             index when flushing the Jumbo ring.
  */
 
 #include <linux/config.h>

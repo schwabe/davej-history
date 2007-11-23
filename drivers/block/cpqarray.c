@@ -41,8 +41,8 @@
 
 #define SMART2_DRIVER_VERSION(maj,min,submin) ((maj<<16)|(min<<8)|(submin))
 
-#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0.10)"
-#define DRIVER_VERSION SMART2_DRIVER_VERSION(1,0,10)
+#define DRIVER_NAME "Compaq SMART2 Driver (v 1.0.11)"
+#define DRIVER_VERSION SMART2_DRIVER_VERSION(1,0,11)
 
 /* Embedded module documentation macros - see modules.h */
 /* Original author Chris Frantz - Compaq Computer Corporation */
@@ -1650,6 +1650,7 @@ static void getgeometry(int ctlr)
 	int ret_code, size;
 	drv_info_t *drv;
 	ctlr_info_t *info_p = hba[ctlr];
+	int i;
 
 	info_p->log_drv_map = 0;	
 	
@@ -1714,7 +1715,8 @@ static void getgeometry(int ctlr)
         }
 
 	info_p->log_drives = id_ctlr_buf->nr_drvs;;
-	*(__u32*)(info_p->firm_rev) = *(__u32*)(id_ctlr_buf->firm_rev);
+	for(i=0;i<4;i++)
+		info_p->firm_rev[i] = id_ctlr_buf->firm_rev[i];
 	info_p->ctlr_sig = id_ctlr_buf->cfg_sig;
 
 	printk(" (%s)\n", info_p->product_name);

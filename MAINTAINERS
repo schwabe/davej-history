@@ -109,8 +109,10 @@ S:	Maintained
 
 ADVANSYS SCSI DRIVER
 P:	Bob Frey
-M:	linux@advansys.com
+M:	bfrey@turbolinux.com.cn
+M:	linux@connectcom.net
 W:	http://www.advansys.com/linux.html
+W:      http://www.connectcom.net/downloads/software/os/linux.html
 L:	linux-scsi@vger.kernel.org
 S:	Maintained
 
