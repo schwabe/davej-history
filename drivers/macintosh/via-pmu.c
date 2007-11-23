@@ -1,4 +1,3 @@
-
 /*
  * Device driver for the via-pmu on Apple Powermacs.
  *
@@ -107,7 +106,6 @@ static int pmu_fully_inited = 0;
 static int pmu_has_adb, pmu_has_backlight;
 static unsigned char *gpio_reg = NULL;
 static int gpio_irq = -1;
-static int irq_flag = 0;
 
 int asleep;
 
@@ -345,6 +343,13 @@ init_pmu()
 		udelay(10);
 	}
 
+	/* Tell PMU we are ready. Which PMU support this ? */
+	if (pmu_kind == PMU_KEYLARGO_BASED) {
+		pmu_request(&req, NULL, 2, PMU_SYSTEM_READY, 2);
+		while (!req.complete)
+			pmu_poll();
+	}
+
 	return 1;
 }
 
@@ -564,6 +569,19 @@ pmu_queue_request(struct adb_request *req)
 	return 0;
 }
 
+static void __openfirmware
+wait_for_ack(void)
+{
+	int timeout = 3200;
+	while ((in_8(&via[B]) & TACK) == 0) {
+		if (--timeout < 0) {
+			printk(KERN_ERR "PMU not responding (!ack)\n");
+			return;
+		}
+		udelay(10);
+	}
+}
+
 /* New PMU seems to be very sensitive to those timings, so we make sure
  * PCI is flushed immediately */
 static void __openfirmware
@@ -610,6 +628,7 @@ pmu_start()
 
 	/* set the shift register to shift out and send a byte */
 	++disable_poll;
+	wait_for_ack();
 	send_byte(req->data[0]);
 	--disable_poll;
 
@@ -631,6 +650,26 @@ pmu_poll()
 	_enable_interrupts(ie);
 }
 
+/* This function loops until the PMU is idle, to avoid spurrious shutdowns
+ * when prom.c scrollscreen or xmon spends too much time without interupts
+ * while some PMU communication is going on
+ */
+void __openfirmware
+pmu_safe_poll(void)
+{
+	int ie;
+
+	if (!via || disable_poll)
+		return;
+	do {
+		ie = _disable_interrupts();
+		if ((via[IFR] & (SR_INT | CB1_INT)) ||
+			(gpio_reg && (in_8(gpio_reg + 0x9) & 0x02) == 0))
+			via_pmu_interrupt(0, 0, 0);
+		_enable_interrupts(ie);
+	} while (adb_int_pending || pmu_state != idle);
+}
+
 static void __openfirmware
 via_pmu_interrupt(int irq, void *arg, struct pt_regs *regs)
 {
@@ -638,47 +677,43 @@ via_pmu_interrupt(int irq, void *arg, struct pt_regs *regs)
 	int nloop = 0;
 	unsigned long flags;
 
-	/* This is my 2 cents brain dead synchronisation mecanism */
-	if (test_and_set_bit(0, &irq_flag))
-		return;
-
-	while(test_and_clear_bit(0, &irq_flag)) {
-		++disable_poll;
-		while ((intr = in_8(&via[IFR])) != 0) {
-			if (++nloop > 1000) {
-				printk(KERN_DEBUG "PMU: stuck in intr loop, "
-				       "intr=%x pmu_state=%d\n", intr, pmu_state);
-				break;
-			}
-			if (intr & SR_INT)
-				pmu_sr_intr(regs);
-			else if (intr & CB1_INT) {
-				adb_int_pending = 1;
-				out_8(&via[IFR], CB1_INT);
-			}
-			intr &= ~(SR_INT | CB1_INT);
-			if (intr != 0) {
-				out_8(&via[IFR], intr);
-			}
+	/* Currently, we use brute-force cli() for syncing with GPIO
+	 * interrupt. I'll make this smarter later, along with some
+	 * spinlocks for SMP */
+	save_flags(flags);cli();
+	++disable_poll;
+	while ((intr = in_8(&via[IFR])) != 0) {
+		if (++nloop > 1000) {
+			printk(KERN_DEBUG "PMU: stuck in intr loop, "
+			       "intr=%x pmu_state=%d\n", intr, pmu_state);
+			break;
 		}
-		if (gpio_reg && (in_8(gpio_reg + 0x9) & 0x02) == 0)
+		if (intr & SR_INT)
+			pmu_sr_intr(regs);
+		else if (intr & CB1_INT) {
 			adb_int_pending = 1;
-
-		/* A spinlock would be nicer ... */
-		save_flags(flags);
-		cli();
-		if (pmu_state == idle) {
-			if (adb_int_pending) {
-				pmu_state = intack;
-				send_byte(PMU_INT_ACK);
-				adb_int_pending = 0;
-			} else if (current_req) {
-				pmu_start();
-			}
+			out_8(&via[IFR], CB1_INT);
 		}
-		restore_flags(flags);
-		--disable_poll;
+		intr &= ~(SR_INT | CB1_INT);
+		if (intr != 0) {
+			out_8(&via[IFR], intr);
+		}
 	}
+	if (gpio_reg && (in_8(gpio_reg + 0x9) & 0x02) == 0)
+		adb_int_pending = 1;
+
+	if (pmu_state == idle) {
+		if (adb_int_pending) {
+			pmu_state = intack;
+			wait_for_ack();
+			send_byte(PMU_INT_ACK);
+			adb_int_pending = 0;
+		} else if (current_req) {
+			pmu_start();
+		}
+	}
+	--disable_poll;
+	restore_flags(flags);
 }
 
 
@@ -686,13 +721,13 @@ static void __openfirmware
 gpio1_interrupt(int irq, void *arg, struct pt_regs *regs)
 {
 	via_pmu_interrupt(0, 0, 0);
- }
- 
+}
+
 static void __openfirmware
 pmu_sr_intr(struct pt_regs *regs)
 {
 	struct adb_request *req;
-	int bite, timeout;
+	int bite;
 
 	if (via[B] & TREQ) {
 		printk(KERN_ERR "PMU: spurious SR intr (%x)\n", via[B]);
@@ -705,26 +740,16 @@ pmu_sr_intr(struct pt_regs *regs)
 	if (via[B] & TACK) {
 		while ((in_8(&via[B]) & TACK) != 0)
 			;
-#if 0
-		printk(KERN_ERR "PMU: sr_intr but ack still high! (%x)\n",
-		       via[B]);
-#endif
 	}
 
 	/* reset TREQ and wait for TACK to go high */
 	out_8(&via[B], in_8(&via[B]) | TREQ);
-	timeout = 3200;
-	while ((in_8(&via[B]) & TACK) == 0) {
-		if (--timeout < 0) {
-			printk(KERN_ERR "PMU not responding (!ack)\n");
-			return;
-		}
-		udelay(10);
-	}
+	wait_for_ack();
 
 	/* if reading grab the byte, and reset the interrupt */
 	if (pmu_state == reading || pmu_state == reading_intr)
 		bite = in_8(&via[SR]);
+
 	out_8(&via[IFR], SR_INT);
 
 	switch (pmu_state) {
@@ -951,6 +976,8 @@ pmu_enable_irled(int on)
 	struct adb_request req;
 
 	if (vias == NULL)
+		return ;
+	if (pmu_kind == PMU_KEYLARGO_BASED)
 		return ;
 
 	pmu_request(&req, NULL, 2, PMU_POWER_CTRL, PMU_POW_IRLED |

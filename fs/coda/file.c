@@ -115,7 +115,6 @@ static int coda_file_mmap(struct file * file, struct vm_area_struct * vma)
 
         ENTRY;
 	cii = ITOC(file->f_dentry->d_inode);
-	cii->c_mmcount++;
   
 	res =generic_file_mmap(file, vma);
 	EXIT;
@@ -136,7 +135,6 @@ static ssize_t coda_file_read(struct file *coda_file, char *buff,
 	coda_vfs_stat.file_read++;
 
         cnp = ITOC(coda_inode);
-        CHECK_CNODE(cnp);
 	
         cont_inode = cnp->c_ovp;
         if ( cont_inode == NULL ) {
@@ -177,7 +175,6 @@ static ssize_t coda_file_write(struct file *coda_file, const char *buff,
 	coda_vfs_stat.file_write++;
 
         cnp = ITOC(coda_inode);
-        CHECK_CNODE(cnp);
 
         cont_inode = cnp->c_ovp;
         if ( cont_inode == NULL ) {
@@ -221,7 +218,6 @@ int coda_fsync(struct file *coda_file, struct dentry *coda_dentry)
 		return -EINVAL;
 
         cnp = ITOC(coda_inode);
-        CHECK_CNODE(cnp);
 
         cont_inode = cnp->c_ovp;
         if ( cont_inode == NULL ) {

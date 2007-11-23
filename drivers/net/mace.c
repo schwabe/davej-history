@@ -926,9 +926,9 @@ void cleanup_module(void)
     struct mace_data *mp = (struct mace_data *) mace_devs->priv;
     unregister_netdev(mace_devs);
 
-    free_irq(mace_devs->irq, dev);
-    free_irq(mp->tx_dma_intr, dev);
-    free_irq(mp->rx_dma_intr, dev);
+    free_irq(mace_devs->irq, mace_devs);
+    free_irq(mp->tx_dma_intr, mace_devs);
+    free_irq(mp->rx_dma_intr, mace_devs);
 
     kfree(mace_devs);
     mace_devs = NULL;

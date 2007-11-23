@@ -26,8 +26,6 @@
 
 /* pioctl ops */
 static int coda_ioctl_permission(struct inode *inode, int mask);
-static int coda_ioctl_open(struct inode *i, struct file *f);
-static int coda_ioctl_release(struct inode *i, struct file *f);
 static int coda_pioctl(struct inode * inode, struct file * filp, 
                        unsigned int cmd, unsigned long arg);
 
@@ -64,9 +62,9 @@ struct file_operations coda_ioctl_operations = {
 	NULL,			/* select - default */
 	coda_pioctl,	        /* ioctl */
 	NULL,                   /* mmap */
-	coda_ioctl_open,        /* open */
+	NULL,			/* open */
 	NULL,
-	coda_ioctl_release,     /* release */
+	NULL,			/* release */
 	NULL,		        /* fsync */
 };
 
@@ -77,25 +75,6 @@ static int coda_ioctl_permission(struct inode *inode, int mask)
 
         return 0;
 }
-
-/* The pioctl file ops*/
-int coda_ioctl_open(struct inode *i, struct file *f)
-{
-
-        ENTRY;
-
-        CDEBUG(D_PIOCTL, "File inode number: %ld\n", 
-	       f->f_dentry->d_inode->i_ino);
-
-	EXIT;
-        return 0;
-}
-
-int coda_ioctl_release(struct inode *i, struct file *f) 
-{
-        return 0;
-}
-
 
 static int coda_pioctl(struct inode * inode, struct file * filp, 
 		       unsigned int cmd, unsigned long user_data)

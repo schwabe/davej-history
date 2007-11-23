@@ -179,8 +179,6 @@ int shrink_mmap(int priority, int gfp_mask)
 		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
 			continue;
 
-		count--;
-
 		/*
 		 * Is it a page swap page? If so, we want to
 		 * drop it if it is no longer used, even if it
@@ -226,7 +224,7 @@ int shrink_mmap(int priority, int gfp_mask)
 			return 1;
 		}
 
-	} while (count > 0);
+	} while (--count > 0);
 	return 0;
 }
 

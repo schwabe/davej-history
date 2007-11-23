@@ -11465,6 +11465,17 @@ CONFIG_BMAC
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
 
+GMAC (Core99 ethernet) support
+CONFIG_GMAC
+  Say Y for support of the GMAC Ethernet interfaces. This interface
+  is used on some Apple G4 PowerMacs (recent ones), new iMacs, iBooks
+  and PowerBook 2000 (aka "Pismo").
+
+  This driver is also available as a module called gmac.o ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M
+  here and read Documentation/modules.txt.
+
 Video For Linux
 CONFIG_VIDEO_DEV
   Support for audio/video capture and overlay devices and FM radio

@@ -57,9 +57,6 @@ void pmac_time_init(void)
 {
 	s32 delta = 0;
 	int dst;
-	int i;
-	char tmp[1024];
-	char *p = tmp;
 	
 	delta = ((s32)pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0x9)) << 16;
 	delta |= ((s32)pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 0xa)) << 8;
@@ -116,6 +113,7 @@ unsigned long pmac_get_rtc_time(void)
 int pmac_set_rtc_time(unsigned long nowtime)
 {
 	struct adb_request req;
+	int dst, delta;
 
 	nowtime += RTC_OFFSET - sys_tz.tz_minuteswest * 60;
 
@@ -134,7 +132,7 @@ int pmac_set_rtc_time(unsigned long nowtime)
 //		if (req.reply_len != 7)
 			printk(KERN_ERR "pmac_set_rtc_time: got %d byte reply\n",
 			       req.reply_len);
-		return 1;
+		break;
 	case ADB_VIAPMU:
 		if (pmu_request(&req, NULL, 5, PMU_SET_RTC,
 				nowtime >> 24, nowtime >> 16, nowtime >> 8, nowtime) < 0)
@@ -144,10 +142,21 @@ int pmac_set_rtc_time(unsigned long nowtime)
 		if (req.reply_len != 5)
 			printk(KERN_ERR "pmac_set_rtc_time: got %d byte reply\n",
 			       req.reply_len);
-		return 1;
+		break;
 	default:
 		return 0;
 	}
+
+	/* write the timezone offset back into the xpram */
+	delta = sys_tz.tz_minuteswest * -60;
+	pmac_xpram_write(PMAC_XPRAM_MACHINE_LOC + 0x9, delta >> 16);
+	pmac_xpram_write(PMAC_XPRAM_MACHINE_LOC + 0xa, delta >> 8);
+	pmac_xpram_write(PMAC_XPRAM_MACHINE_LOC + 0xb, delta);
+	dst = pmac_xpram_read(PMAC_XPRAM_MACHINE_LOC + 8);
+	dst = sys_tz.tz_dsttime? (dst | 0x80): (dst & ~0x80);
+	pmac_xpram_write(PMAC_XPRAM_MACHINE_LOC + 8, dst);
+
+	return 1;
 }
 
 /*

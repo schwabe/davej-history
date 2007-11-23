@@ -3,6 +3,7 @@
    */
 
 #include <linux/types.h>
+#include <linux/string.h>
 #include <linux/time.h>
 
 #include <linux/coda.h>
@@ -96,6 +97,8 @@ int coda_cnode_make(struct inode **inode, ViceFid *fid, struct super_block *sb)
 	cnp = ITOC(*inode);
 	/* see if we've got it already */
 	if  ( cnp->c_magic != 0 && coda_fideq(fid, &cnp->c_fid)) {
+		/* replace the attributes, type might have changed */
+		coda_fill_inode(*inode, &attr);
 		return 0;
 	}
 
@@ -117,19 +120,26 @@ int coda_cnode_make(struct inode **inode, ViceFid *fid, struct super_block *sb)
        INIT_LIST_HEAD(&(cnp->c_volrootlist));
 
 	/* fill in the inode attributes */
-	if ( coda_f2i(fid) != ino ) {
-	        if ( !coda_fid_is_weird(fid) ) 
-		        printk("Coda: unknown weird fid: ino %ld, fid %s."
-			       "Tell Peter.\n", (long)ino, coda_f2s(&cnp->c_fid));
-		list_add(&cnp->c_volrootlist, &sbi->sbi_volroothead);
-		CDEBUG(D_UPCALL, "Added %ld ,%s to volroothead\n",
-		       (long)ino, coda_f2s(&cnp->c_fid));
+        coda_fill_inode(*inode, &attr);
+
+	if ( coda_f2i(fid) == ino )
+		goto out;
+
+	/* check if we expected this weird fid */
+	if ( !coda_fid_is_weird(fid) ) {
+		printk("Coda: unknown weird fid: ino %ld, fid %s."
+				"Tell Peter.\n", (long)ino, coda_f2s(&cnp->c_fid));
+		goto out;
 	}
 
-        coda_fill_inode(*inode, &attr);
-	CDEBUG(D_DOWNCALL, "Done making inode: ino %ld,  count %d with %s\n",
-	        (*inode)->i_ino, (*inode)->i_count, 
-	       coda_f2s(&cnp->c_fid));
+	/* add the inode to a global list so we can find it back later */
+	list_add(&cnp->c_volrootlist, &sbi->sbi_volroothead);
+	CDEBUG(D_UPCALL, "Added %ld ,%s to volroothead\n",
+	       (long)ino, coda_f2s(&cnp->c_fid));
+
+out:
+	CDEBUG(D_DOWNCALL, "Done making inode: ino %ld, count %d with %s\n",
+	        (*inode)->i_ino, (*inode)->i_count, coda_f2s(&cnp->c_fid));
 
         EXIT;
         return 0;
@@ -150,7 +160,8 @@ void coda_replace_fid(struct inode *inode, struct ViceFid *oldfid,
 	cnp->c_fid = *newfid;
 
 	list_del(&cnp->c_volrootlist);
-	if ( !coda_fid_is_weird(newfid) ) 
+	INIT_LIST_HEAD(&cnp->c_volrootlist);
+	if ( coda_fid_is_weird(newfid) ) 
 		list_add(&cnp->c_volrootlist, &sbi->sbi_volroothead);
 
 	return;

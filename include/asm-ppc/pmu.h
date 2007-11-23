@@ -26,9 +26,11 @@
 #define PMU_INT_ACK		0x78	/* read interrupt bits */
 #define PMU_SHUTDOWN		0x7e	/* turn power off */
 #define PMU_SLEEP		0x7f	/* put CPU to sleep */
+#define PMU_POWER_EVENTS	0x8f	/* Send power-event commands to PMU */
 #define PMU_RESET		0xd0	/* reset CPU */
 #define PMU_GET_BRIGHTBUTTON	0xd9	/* report brightness up/down pos */
 #define PMU_GET_COVER		0xdc	/* report cover open/closed */
+#define PMU_SYSTEM_READY	0xdf	/* tell PMU we are awake */
 
 /* Bits to use with the PMU_POWER_CTRL command */
 #define PMU_POW_ON		0x80	/* OR this to power ON the device */
@@ -54,6 +56,25 @@ enum {
 	PMU_KEYLARGO_BASED,	/* Core99 motherboard (PMU99) */
 };
 
+/* PMU PMU_POWER_EVENTS commands */
+enum {
+	PMU_PWR_GET_POWERUP_EVENTS	= 0x00,
+	PMU_PWR_SET_POWERUP_EVENTS	= 0x01,
+	PMU_PWR_CLR_POWERUP_EVENTS	= 0x02,
+	PMU_PWR_GET_WAKEUP_EVENTS	= 0x03,
+	PMU_PWR_SET_WAKEUP_EVENTS	= 0x04,
+	PMU_PWR_CLR_WAKEUP_EVENTS	= 0x05,
+};
+
+/* Power events wakeup bits */
+enum {
+	PMU_PWR_WAKEUP_KEY		= 0x01,	/* Wake on key press */
+	PMU_PWR_WAKEUP_AC_INSERT	= 0x02, /* Wake on AC adapter plug */
+	PMU_PWR_WAKEUP_AC_CHANGE	= 0x04,
+	PMU_PWR_WAKEUP_LID_OPEN		= 0x08,
+	PMU_PWR_WAKEUP_RING		= 0x10,
+};
+	
 /*
  * Ioctl commands for the /dev/pmu device
  */
@@ -65,7 +86,7 @@ enum {
 #define PMU_IOC_GET_BACKLIGHT	_IOR('B', 1, sizeof(__u32*))
 /* in param: u32	backlight value: 0 to 31 */
 #define PMU_IOC_SET_BACKLIGHT	_IOW('B', 2, sizeof(__u32))
-/* out param: u32*	backlight value: 0 to 31 */
+/* out param: u32*	PMU model */
 #define PMU_IOC_GET_MODEL	_IOR('B', 3, sizeof(__u32*))
 /* out param: u32*	has_adb: 0 or 1 */
 #define PMU_IOC_HAS_ADB		_IOR('B', 4, sizeof(__u32*)) 

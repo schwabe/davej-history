@@ -1,3 +1,5 @@
+#define USE_IO
+
 /* drivers/net/eepro100.c: An Intel i82557-559 Ethernet driver for Linux. */
 /*
    NOTICE: this version of the driver is supposed to work with 2.2 kernels.

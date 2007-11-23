@@ -51,11 +51,14 @@
     - Fixed crash under OOM during vortex_open() (Mark Hemment)
     - Fix Rx cessation problem during OOM (help from Mark Hemment)
 
+    01Aug00 <2.2.17-pre14> andrewm
+    - Added 3c556 support (Fred Maciel)
+
     - See http://www.uow.edu.au/~andrewm/linux/#3c59x-2.2 for more details.
 */
 
 static char *version =
-"3c59x.c:v0.99H 24Jun00 Donald Becker and others http://www.scyld.com/network/vortex.html\n";
+"3c59x.c:v0.99H 01Aug00 Donald Becker and others http://www.scyld.com/network/vortex.html\n";
 
 /* "Knobs" that adjust features and parameters. */
 /* Set the copy breakpoint for the copy-only-tiny-frames scheme.
@@ -325,6 +328,8 @@ static struct pci_id_info pci_tbl[] = {
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
 	{"3c555 Laptop Hurricane",	0x10B7, 0x5055, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE, 128, vortex_probe1},
+	{"3c556 10/100 Mini PCI Adapter",	0x10B7, 0x6055, 0xffff,
+	 PCI_USES_IO|PCI_USES_MASTER, IS_CYCLONE|HAS_CB_FNS, 128, vortex_probe1},
 	{"3c575 Boomerang CardBus",		0x10B7, 0x5057, 0xffff,
 	 PCI_USES_IO|PCI_USES_MASTER, IS_BOOMERANG|HAS_MII, 64, vortex_probe1},
 	{"3CCFE575 Cyclone CardBus",	0x10B7, 0x5157, 0xffff,
@@ -915,7 +920,11 @@ static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 #ifdef CARDBUS
 		outw(0x230 + i, ioaddr + Wn0EepromCmd);
 #else
-		outw(EEPROM_Read + i, ioaddr + Wn0EepromCmd);
+		if (pci_tbl[chip_idx].device_id == 0x6055) {
+			outw(0x230 + i, ioaddr + Wn0EepromCmd);
+		} else {
+			outw(EEPROM_Read + i, ioaddr + Wn0EepromCmd);
+		}
 #endif
 		/* Pause for at least 162 us. for the read to take place. */
 		for (timer = 10; timer >= 0; timer--) {
@@ -959,7 +968,11 @@ static struct device *vortex_probe1(int pci_bus, int pci_devfn,
 		printk("%s: CardBus functions mapped %8.8x->%p (PCMCIA committee"
 			   " brain-damage).\n", dev->name, fn_st_addr, vp->cb_fn_base);
 		EL3WINDOW(2);
-		outw(0x10 | inw(ioaddr + Wn2_ResetOptions), ioaddr + Wn2_ResetOptions);
+		if (pci_tbl[chip_idx].device_id == 0x6055) {
+			outw(0x4010 | inw(ioaddr + Wn2_ResetOptions), ioaddr + Wn2_ResetOptions);
+		} else {
+			outw(0x10 | inw(ioaddr + Wn2_ResetOptions), ioaddr + Wn2_ResetOptions);
+		}
 	}
 
 	/* Extract our information from the EEPROM data. */

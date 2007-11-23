@@ -62,6 +62,7 @@ static struct {
 	{0x43525903, "Cirrus Logic CS4297"  ,	NULL},
 	{0x43525913, "Cirrus Logic CS4297A"   , NULL},
 	{0x43525923, "Cirrus Logic CS4298"    , NULL},
+	{0x4352592B, "Cirrus Logic CS4294"    , NULL},
 	{0x43525931, "Cirrus Logic CS4299"    , NULL},
 	{0x4e534331, "National Semiconductor LM4549" ,	NULL},
 	{0x53494c22, "Silicon Laboratory Si3036"     ,	NULL},

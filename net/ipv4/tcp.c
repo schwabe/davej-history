@@ -703,12 +703,12 @@ static inline int tcp_memory_free(struct sock *sk)
  */
 static void wait_for_tcp_memory(struct sock * sk, int err)
 {
-	release_sock(sk);
-	if (!tcp_memory_free(sk)) {
+	if (1) { 
 		struct wait_queue wait = { current, NULL };
-
+	
 		sk->socket->flags &= ~SO_NOSPACE;
 		add_wait_queue(sk->sleep, &wait);
+		release_sock(sk);
 		for (;;) {
 			if (signal_pending(current))
 				break;
@@ -722,14 +722,14 @@ static void wait_for_tcp_memory(struct sock * sk, int err)
 			if (!err) 
 				schedule();
 			else {
-				schedule_timeout(1); 
+				schedule_timeout(net_random()%(HZ/5) + 1); 
 				break;
 			} 	
 		}
+		lock_sock(sk);
 		current->state = TASK_RUNNING;
 		remove_wait_queue(sk->sleep, &wait);
 	}
-	lock_sock(sk);
 }
 
 /*
@@ -927,7 +927,7 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 			/* If we didn't get any memory, we need to sleep. */
 			if (skb == NULL) {
 				sk->socket->flags |= SO_NOSPACE;
-				if (flags&MSG_DONTWAIT) {
+				if ((flags&MSG_DONTWAIT) && !err) {
 					err = -EAGAIN;
 					goto do_interrupted;
 				}
@@ -935,6 +935,7 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 					err = -ERESTARTSYS;
 					goto do_interrupted;
 				}
+
 				/* In OOM that would fail anyways so do not bother. */ 
 				if (!err) 
 					tcp_push_pending_frames(sk, tp);

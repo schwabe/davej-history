@@ -65,7 +65,11 @@
 
 #define GOF_PER_SEC	200
 
-/* an instance of the 4610 channel */
+static int external_amp = 0;
+static int thinkpad = 0;
+
+
+/* An instance of the 4610 channel */
 
 struct cs_channel 
 {
@@ -74,7 +78,7 @@ struct cs_channel
 	void *state;
 };
 
-#define DRIVER_VERSION "0.01"
+#define DRIVER_VERSION "0.09"
 
 /* magic numbers to protect our data structures */
 #define CS_CARD_MAGIC		0x46524F4D /* "FROM" */
@@ -175,6 +179,12 @@ struct cs_card {
 	struct cs_state *states[NR_HW_CH];
 
 	u16 ac97_features;
+	
+	int amplifier;			/* Amplifier control */
+	void (*amplifier_ctrl)(struct cs_card *, int);
+	
+	int active;			/* Active clocking */
+	void (*active_ctrl)(struct cs_card *, int);
 	
 	/* hardware resources */
 	unsigned long ba0_addr;
@@ -471,7 +481,6 @@ static void cs_play_setup(struct cs_state *state)
 	if(!(dmabuf->fmt & CS_FMT_STEREO))
 	{
 		tmp|=0x00002000;
-		tmp|=0x00008000;	/* unsigned */
 	}
 	cs461x_poke(card, BA1_PFIE, tmp);
 
@@ -729,42 +738,8 @@ static int prog_dmabuf(struct cs_state *state, unsigned rec)
 	return 0;
 }
 
-/* we are doing quantum mechanics here, the buffer can only be empty, half or full filled i.e.
-   |------------|------------|   or   |xxxxxxxxxxxx|------------|   or   |xxxxxxxxxxxx|xxxxxxxxxxxx|
-   but we almost always get this
-   |xxxxxx------|------------|   or   |xxxxxxxxxxxx|xxxxx-------|
-   so we have to clear the tail space to "silence"
-   |xxxxxx000000|------------|   or   |xxxxxxxxxxxx|xxxxxx000000|
-*/
 static void cs_clear_tail(struct cs_state *state)
 {
-	struct dmabuf *dmabuf = &state->dmabuf;
-	unsigned swptr;
-	unsigned char silence = (dmabuf->fmt & CS_FMT_16BIT) ? 0 : 0x80;
-	unsigned int len;
-	unsigned long flags;
-
-	spin_lock_irqsave(&state->card->lock, flags);
-	swptr = dmabuf->swptr;
-	spin_unlock_irqrestore(&state->card->lock, flags);
-
-	if (swptr == 0 || swptr == dmabuf->dmasize / 2 || swptr == dmabuf->dmasize)
-		return;
-
-	if (swptr < dmabuf->dmasize/2)
-		len = dmabuf->dmasize/2 - swptr;
-	else
-		len = dmabuf->dmasize - swptr;
-
-	memset(dmabuf->rawbuf + swptr, silence, len);
-
-	spin_lock_irqsave(&state->card->lock, flags);
-	dmabuf->swptr += len;
-	dmabuf->count += len;
-	spin_unlock_irqrestore(&state->card->lock, flags);
-
-	/* restart the dma machine in case it is halted */
-	start_dac(state);
 }
 
 static int drain_dac(struct cs_state *state, int nonblock)
@@ -800,10 +775,12 @@ static int drain_dac(struct cs_state *state, int nonblock)
 			return -EBUSY;
 		}
 
-		tmo = (dmabuf->dmasize + 4096 * HZ) / dmabuf->rate;
+		tmo = (dmabuf->dmasize * HZ) / dmabuf->rate;
 		tmo >>= sample_shift[dmabuf->fmt];
+		tmo += (4096*HZ)/dmabuf->rate;
+		
 		if (!schedule_timeout(tmo ? tmo : 1) && tmo){
-			printk(KERN_ERR "cs461x: drain_dac, dma timeout?\n");
+			printk(KERN_ERR "cs461x: drain_dac, dma timeout? %d\n", count);
 			break;
 		}
 	}
@@ -1271,7 +1248,10 @@ static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 			stop_adc(state);
 			dmabuf->ready = 0;
 			if(val)
+			{
 				dmabuf->fmt |= CS_FMT_STEREO;
+				return put_user(1, (int *)arg);
+			}
 #if 0				
 			/* Needs extra work to support this */				
 			else
@@ -1490,6 +1470,106 @@ static int cs_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 	return -EINVAL;
 }
 
+
+/*
+ *	AMP control - null AMP
+ */
+ 
+static void amp_none(struct cs_card *card, int change)
+{	
+}
+
+/*
+ *	Crystal EAPD mode
+ */
+ 
+static void amp_voyetra(struct cs_card *card, int change)
+{
+	/* Manage the EAPD bit on the Crystal 4297 */
+	int old=card->amplifier;
+	
+	card->amplifier+=change;
+	if(card->amplifier && !old)
+	{
+		/* Turn the EAPD amp on */
+		cs_ac97_set(card->ac97_codec[0],  AC97_POWER_CONTROL, 
+			cs_ac97_get(card->ac97_codec[0], AC97_POWER_CONTROL) |
+				0x8000);
+	}
+	else if(old && !card->amplifier)
+	{
+		/* Turn the EAPD amp off */
+		cs_ac97_set(card->ac97_codec[0],  AC97_POWER_CONTROL, 
+			cs_ac97_get(card->ac97_codec[0], AC97_POWER_CONTROL) &
+				~0x8000);
+	}
+}
+
+
+
+/*
+ *	Untested
+ */
+ 
+static void amp_voyetra_4294(struct cs_card *card, int change)
+{
+	struct ac97_codec *c=card->ac97_codec[0];
+	int old = card->amplifier;
+	
+	card->amplifier+=change;
+
+	if(card->amplifier)
+	{
+		/* Switch the GPIO pins 7 and 8 to open drain */
+		cs_ac97_set(c, 0x4C, cs_ac97_get(c, 0x4C) & 0xFE7F);
+		cs_ac97_set(c, 0x4E, cs_ac97_get(c, 0x4E) | 0x0180);
+		/* Now wake the AMP (this might be backwards) */
+		cs_ac97_set(c, 0x54, cs_ac97_get(c, 0x54) & ~0x0180);
+	}
+	else
+	{
+		cs_ac97_set(c, 0x54, cs_ac97_get(c, 0x54) | 0x0180);
+	}
+}
+
+/*
+ *	Handle the CLKRUN on a thinkpad. We must disable CLKRUN support
+ *	whenever we need to beat on the chip.
+ *
+ *	The original idea and code for this hack comes from David Kaiser at
+ *	Linuxcare. Perhaps one day Crystal will document their chips well
+ *	enough to make them useful.
+ */
+ 
+static void clkrun_hack(struct cs_card *card, int change)
+{
+	struct pci_dev *acpi_dev;
+	u16 control;
+	u8 pp;
+	unsigned long port;
+	int old=card->amplifier;
+	
+	card->amplifier+=change;
+	
+	acpi_dev = pci_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_3, NULL);
+	if(acpi_dev == NULL)
+		return;		/* Not a thinkpad thats for sure */
+
+	/* Find the control port */		
+	pci_read_config_byte(acpi_dev, 0x41, &pp);
+	port=pp<<8;
+
+	/* Read ACPI port */	
+	control=inw(port+0x10);
+
+	/* Flip CLKRUN off while running */
+	if(!card->amplifier && old)
+		outw(control|0x2000, port+0x10);
+	else if(card->amplifier && !old)
+		outw(control&~0x2000, port+0x10);
+}
+
+	
 static int cs_open(struct inode *inode, struct file *file)
 {
 	int i = 0;
@@ -1536,10 +1616,14 @@ static int cs_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 	}
 
+	/* Now turn on external AMP if needed */
+	state->card = card;
+	state->card->active_ctrl(state->card,1);
+	state->card->amplifier_ctrl(state->card,1);
+	
 	dmabuf->channel->state = state;
 	/* initialize the virtual channel */
 	state->virt = i;
-	state->card = card;
 	state->magic = CS_STATE_MAGIC;
 	dmabuf->wait = NULL;
 	state->open_sem = MUTEX;
@@ -1572,6 +1656,7 @@ static int cs_open(struct inode *inode, struct file *file)
 
 	state->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&state->open_sem);
+	
 
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -1603,14 +1688,17 @@ static int cs_release(struct inode *inode, struct file *file)
 	}
 
 	free_page((unsigned long)state->dmabuf.pbuf);
-	kfree(state->card->states[state->virt]);
 
 	/* we're covered by the open_sem */
 	up(&state->open_sem);
-
 	state->card->states[state->virt] = NULL;
 	state->open_mode &= (~file->f_mode) & (FMODE_READ|FMODE_WRITE);
 
+	/* Now turn off external AMP if needed */
+	state->card->amplifier_ctrl(state->card, -1);
+	state->card->active_ctrl(state->card, -1);
+
+	kfree(state);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -1793,12 +1881,27 @@ static int cs_open_mixdev(struct inode *inode, struct file *file)
  match:
 	file->private_data = card->ac97_codec[i];
 
+	card->active_ctrl(card,1);
 	MOD_INC_USE_COUNT;
 	return 0;
 }
 
 static int cs_release_mixdev(struct inode *inode, struct file *file)
 {
+	int minor = MINOR(inode->i_rdev);
+	struct cs_card *card = devs;
+	int i;
+	
+	for (card = devs; card != NULL; card = card->next)
+		for (i = 0; i < NR_AC97; i++)
+			if (card->ac97_codec[i] != NULL &&
+			    card->ac97_codec[i]->dev_mixer == minor)
+				goto match;
+
+	if (!card)
+		return -ENODEV;
+match:
+	card->active_ctrl(card, -1);
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
@@ -2222,7 +2325,7 @@ static int cs_hardware_init(struct cs_card *card)
 			break;
 		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout(1);
-	} while (time_before(end_time, jiffies));
+	} while (time_before(jiffies, end_time));
 
 	/*
 	 *  Make sure CODEC is READY.
@@ -2253,7 +2356,7 @@ static int cs_hardware_init(struct cs_card *card)
 			break;
 		current->state = TASK_UNINTERRUPTIBLE;
 		schedule_timeout(1);
-	} while (time_before(end_time, jiffies));
+	} while (time_before(jiffies, end_time));
 
 	/*
 	 *  Make sure input slots 3 and 4 are valid.  If not, then return
@@ -2338,9 +2441,39 @@ static int cs_hardware_init(struct cs_card *card)
 /* install the driver, we do not allocate hardware channel nor DMA buffer now, they are defered 
    untill "ACCESS" time (in prog_dmabuf called by open/read/write/ioctl/mmap) */
    
+   
+/*
+ *	Card subid table
+ */
+ 
+struct cs_card_type
+{
+	u16 vendor;
+	u16 id;
+	char *name;
+	void (*amp)(struct cs_card *, int);
+	void (*active)(struct cs_card *, int);
+};
+
+static struct cs_card_type __init cards[]={
+	{0x1489, 0x7001, "Genius Soundmaker 128 value", amp_none, NULL},
+	{0x5053, 0x3357, "Voyetra", amp_voyetra, NULL},
+	/* Not sure if the 570 needs the clkrun hack */
+	{PCI_VENDOR_ID_IBM, 0x0132, "Thinkpad 570", amp_none, clkrun_hack},
+	{PCI_VENDOR_ID_IBM, 0x0153, "Thinkpad 600X/A20/T20", amp_none, clkrun_hack},
+	{PCI_VENDOR_ID_IBM, 0x1010, "Thinkpad 600E (unsupported)", NULL, NULL},
+	{0, 0, NULL, NULL}
+};
+
 static int __init cs_install(struct pci_dev *pci_dev)
 {
 	struct cs_card *card;
+	struct cs_card_type *cp = &cards[0];
+	u16 ss_card, ss_vendor;
+	
+	
+	pci_read_config_word(pci_dev, PCI_SUBSYSTEM_VENDOR_ID, &ss_vendor);
+	pci_read_config_word(pci_dev, PCI_SUBSYSTEM_ID, &ss_card);
 
 	if ((card = kmalloc(sizeof(struct cs_card), GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "cs461x: out of memory\n");
@@ -2357,13 +2490,58 @@ static int __init cs_install(struct pci_dev *pci_dev)
 
 	pci_set_master(pci_dev);
 
-	printk(KERN_INFO "cs461x: Card found at  0x%08lx and 0x%08lx, IRQ %d\n",
+	printk(KERN_INFO "cs461x: Card found at 0x%08lx and 0x%08lx, IRQ %d\n",
 	       card->ba0_addr, card->ba1_addr, card->irq);
 
 	card->alloc_pcm_channel = cs_alloc_pcm_channel;
 	card->alloc_rec_pcm_channel = cs_alloc_rec_pcm_channel;
 	card->free_pcm_channel = cs_free_pcm_channel;
+	card->amplifier_ctrl = amp_none;
+	card->active_ctrl = amp_none;
+	
+	while(cp->name)
+	{
+		if(cp->vendor == ss_vendor && cp->id == ss_card)
+		{
+			card->amplifier_ctrl = cp->amp;
+			if(cp->active)
+				card->active_ctrl = cp->active;
+			break;
+		}
+		cp++;
+	}
+	if(cp->name==NULL)
+	{
+		printk(KERN_INFO "cs461x: Unknown card (%04X:%04X) at 0x%08lx/0x%08lx, IRQ %d\n",
+			ss_vendor, ss_card, card->ba0_addr, card->ba1_addr,  card->irq);
+	}
+	else
+	{
+		printk(KERN_INFO "cs461x: %s at 0x%08lx/0x%08lx, IRQ %d\n",
+			cp->name, card->ba0_addr, card->ba1_addr, card->irq);
+	}
+	
+	if(card->amplifier_ctrl==NULL)
+	{
+		printk(KERN_ERR "cs461x: Unsupported configuration due to lack of documentation.\n");
+		kfree(card);
+		return -EINVAL;
+	}		
+		       
+	if(external_amp == 1)
+	{
+		printk(KERN_INFO "cs461x: Crystal EAPD support forced on.\n");
+		card->amplifier_ctrl = amp_voyetra;
+	}
 
+	if(thinkpad == 1)
+	{
+		card->active_ctrl = clkrun_hack;
+		printk(KERN_INFO "cs461x: Activating CLKRUN hack for Thinkpad.\n");
+	}
+	
+	card->active_ctrl(card, 1);
+	
 	/* claim our iospace and irq */
 	
 	card->ba0 = ioremap(card->ba0_addr, CS461X_BA0_SIZE);
@@ -2395,6 +2573,7 @@ static int __init cs_install(struct pci_dev *pci_dev)
 	card->next = devs;
 	devs = card;
 	
+	card->active_ctrl(card, -1);
 	return 0;
 	
 fail:
@@ -2419,6 +2598,8 @@ static void cs_remove(struct cs_card *card)
 {
 	int i;
 	unsigned int tmp;
+	
+	card->active_ctrl(card,1);
 	
 	tmp = cs461x_peek(card, BA1_PFIE);
 	tmp &= ~0x0000f03f;
@@ -2467,6 +2648,7 @@ static void cs_remove(struct cs_card *card)
 	tmp = cs461x_peekBA0(card, BA0_CLKCR1) & ~CLKCR1_SWCE;
 	cs461x_pokeBA0(card, BA0_CLKCR1, tmp);
 
+	card->active_ctrl(card,-1);
 
 	/* free hardware resources */
 	free_irq(card->irq, card);
@@ -2537,5 +2719,8 @@ void cleanup_module (void)
 		devs=next;
 	}
 }
+
+MODULE_PARM(external_amp, "i");
+MODULE_PARM(thinkpad, "i");
 
 #endif

@@ -568,7 +568,9 @@ struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int
 			skb->sk = sk;
 			return skb;
 		}
+#ifdef CONFIG_INET
 		net_statistics.SockMallocOOM++; 
+#endif
 	}
 	return NULL;
 }
@@ -592,7 +594,9 @@ struct sk_buff *sock_wmalloc_err(struct sock *sk, unsigned long size, int force,
 			skb->sk = sk;
 			return skb;
 		}
+#ifdef CONFIG_INET
 		net_statistics.SockMallocOOM++; 
+#endif
 	}
 	return NULL;
 }
@@ -610,7 +614,9 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 			skb->sk = sk;
 			return skb;
 		}
-		net_statistics.SockMallocOOM++; 
+#ifdef CONFIG_INET
+		net_statistics.SockMallocOOM++;
+#endif 
 	}
 	return NULL;
 }
@@ -630,7 +636,9 @@ void *sock_kmalloc(struct sock *sk, int size, int priority)
 		if (mem)
 			return mem;
 		atomic_sub(size, &sk->omem_alloc);
+#ifdef CONFIG_INET
 		net_statistics.SockMallocOOM++; 
+#endif
 	}
 	return NULL;
 }

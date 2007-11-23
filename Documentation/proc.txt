@@ -459,12 +459,6 @@ file-nr and file-max
    encountered a peak in your usage of file handles and you don't need
    to increase the maximum.
 
-   However, there is still a per process limit of open files, which
-   unfortunatly can't be changed that easily. It is set to 1024 by
-   default. To change this you have to edit the files limits.h and
-   fs.h in the directory /usr/src/linux/include/linux. Change the
-   definition of NR_OPEN and recompile the kernel.
-
 inode-state, inode-nr and inode-max
    As with file handles, the kernel allocates the inode structures
    dynamically, but can't free them yet.

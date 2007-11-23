@@ -20,6 +20,8 @@
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License. See the file COPYING in the main directory of this archive for
  *  more details.
+ *
+ *  Many thanks to Nitya from ATI devrel for support and patience !
  */
 
 /******************************************************************************
@@ -479,11 +481,15 @@ static const char *aty_ct_ram[8] __initdata = {
 };
 
 
-static inline u32 aty_ld_le32(volatile unsigned int regindex,
+static inline u32 aty_ld_le32(volatile int regindex,
 			      const struct fb_info_aty *info)
 {
     unsigned long temp;
     u32 val;
+
+    /* Hack for bloc 1, should be cleanly optimized by compiler */
+    if (regindex >= 0x400)
+    	regindex -= 0x800;
 
 #if defined(__powerpc__)
     temp = info->ati_regbase;
@@ -498,10 +504,14 @@ static inline u32 aty_ld_le32(volatile unsigned int regindex,
     return val;
 }
 
-static inline void aty_st_le32(volatile unsigned int regindex, u32 val,
+static inline void aty_st_le32(volatile int regindex, u32 val,
 			       const struct fb_info_aty *info)
 {
     unsigned long temp;
+
+    /* Hack for bloc 1, should be cleanly optimized by compiler */
+    if (regindex >= 0x400)
+    	regindex -= 0x800;
 
 #if defined(__powerpc__)
     temp = info->ati_regbase;
@@ -516,19 +526,29 @@ static inline void aty_st_le32(volatile unsigned int regindex, u32 val,
 #endif
 }
 
-static inline u8 aty_ld_8(volatile unsigned int regindex,
+static inline u8 aty_ld_8(volatile int regindex,
 			  const struct fb_info_aty *info)
 {
-    u8 val = *(volatile u8 *)(info->ati_regbase+regindex);
+    u8 val;
+
+    /* Hack for bloc 1, should be cleanly optimized by compiler */
+    if (regindex >= 0x400)
+    	regindex -= 0x800;
+
+    val = *(volatile u8 *)(info->ati_regbase+regindex);
 #if defined(__powerpc__)
     eieio();
 #endif
     return val;
 }
 
-static inline void aty_st_8(volatile unsigned int regindex, u8 val,
+static inline void aty_st_8(volatile int regindex, u8 val,
 			    const struct fb_info_aty *info)
 {
+    /* Hack for bloc 1, should be cleanly optimized by compiler */
+    if (regindex >= 0x400)
+    	regindex -= 0x800;
+
     *(volatile u8 *)(info->ati_regbase+regindex) = val;
 #if defined(__powerpc__)
     eieio();
@@ -596,6 +616,16 @@ static void reset_engine(const struct fb_info_aty *info)
 			  BUS_FIFO_ERR_ACK, info);
 }
 
+static void reset_GTC_3D_engine(const struct fb_info_aty *info)
+{
+	aty_st_le32(SCALE_3D_CNTL, 0xc0, info);
+	mdelay(GTC_3D_RESET_DELAY);
+	aty_st_le32(SETUP_CNTL, 0x00, info);
+	mdelay(GTC_3D_RESET_DELAY);
+	aty_st_le32(SCALE_3D_CNTL, 0x00, info);
+	mdelay(GTC_3D_RESET_DELAY);
+}
+
 static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info)
 {
     u32 pitch_value;
@@ -609,8 +639,16 @@ static void init_engine(const struct atyfb_par *par, struct fb_info_aty *info)
 	pitch_value = pitch_value * 3;
     }
 
+    /* On GTC (RagePro), we need to reset the 3D engine first */
+    if (Gx == LB_CHIP_ID || Gx == LD_CHIP_ID || Gx == LI_CHIP_ID ||
+    	Gx == LP_CHIP_ID || Gx == GB_CHIP_ID || Gx == GD_CHIP_ID ||
+    	Gx == GI_CHIP_ID || Gx == GP_CHIP_ID || Gx == GQ_CHIP_ID ||
+    	Gx == LM_CHIP_ID || Gx == LN_CHIP_ID)
+    	reset_GTC_3D_engine(info);
+
     /* Reset engine, enable, and clear any engine errors */
     reset_engine(info);
+
     /* Ensure that vga page pointers are set to zero - the upper */
     /* page pointers are set to 1 to handle overflows in the */
     /* lower page */

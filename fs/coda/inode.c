@@ -37,8 +37,7 @@
 static struct super_block *coda_read_super(struct super_block *, void *, int);
 static void coda_read_inode(struct inode *);
 static int  coda_notify_change(struct dentry *dentry, struct iattr *attr);
-static void coda_put_inode(struct inode *);
-static void coda_delete_inode(struct inode *);
+static void coda_clear_inode(struct inode *);
 static void coda_put_super(struct super_block *);
 static int coda_statfs(struct super_block *sb, struct statfs *buf, 
 		       int bufsiz);
@@ -48,13 +47,14 @@ struct super_operations coda_super_operations =
 {
 	coda_read_inode,        /* read_inode */
 	NULL,                   /* write_inode */
-	coda_put_inode,	        /* put_inode */
-	coda_delete_inode,      /* delete_inode */
+	NULL,			/* put_inode */
+	NULL,			/* delete_inode */
 	coda_notify_change,	/* notify_change */
 	coda_put_super,	        /* put_super */
 	NULL,			/* write_super */
 	coda_statfs,   		/* statfs */
-	NULL			/* remount_fs */
+	NULL,			/* remount_fs */
+	coda_clear_inode	/* clear_inode */
 };
 
 static struct super_block * coda_read_super(struct super_block *sb, 
@@ -165,35 +165,22 @@ static void coda_read_inode(struct inode *inode)
 	return;
 }
 
-static void coda_put_inode(struct inode *in) 
+static void coda_clear_inode(struct inode *inode) 
 {
-	ENTRY;
-
-        CDEBUG(D_INODE,"ino: %ld, count %d\n", in->i_ino, in->i_count);
-
-	if ( in->i_count == 1 ) 
-		in->i_nlink = 0;
-		
-}
-
-static void coda_delete_inode(struct inode *inode)
-{
-        struct coda_inode_info *cii;
+	struct coda_inode_info *cii = ITOC(inode);
         struct inode *open_inode;
 
         ENTRY;
         CDEBUG(D_SUPER, " inode->ino: %ld, count: %d\n", 
 	       inode->i_ino, inode->i_count);        
 
-        cii = ITOC(inode);
-	if ( inode->i_ino == CTL_INO || cii->c_magic != CODA_CNODE_MAGIC ) {
-	        clear_inode(inode);
-		return;
-	}
-
-
-	if ( ! list_empty(&cii->c_volrootlist) )
+	if ( inode->i_ino == CTL_INO || cii->c_magic != CODA_CNODE_MAGIC )
+		goto out;
+	
+	if ( !list_empty(&cii->c_volrootlist) ) {
 		list_del(&cii->c_volrootlist);
+		INIT_LIST_HEAD(&cii->c_volrootlist);
+	}
 
         open_inode = cii->c_ovp;
         if ( open_inode ) {
@@ -202,11 +189,12 @@ static void coda_delete_inode(struct inode *inode)
                 cii->c_ovp = NULL;
                 iput(open_inode);
         }
-	
+
 	coda_cache_clear_inode(inode);
+
 	CDEBUG(D_DOWNCALL, "clearing inode: %ld, %x\n", inode->i_ino, cii->c_flags);
+out:
 	inode->u.coda_i.c_magic = 0;
-        clear_inode(inode);
 	EXIT;
 }
 
@@ -220,7 +208,6 @@ static int coda_notify_change(struct dentry *de, struct iattr *iattr)
 	ENTRY;
         memset(&vattr, 0, sizeof(vattr)); 
         cii = ITOC(inode);
-        CHECK_CNODE(cii);
 
         coda_iattr_to_vattr(iattr, &vattr);
         vattr.va_type = C_VNON; /* cannot set type */

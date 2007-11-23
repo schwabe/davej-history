@@ -1215,6 +1215,12 @@ FKS_test (devc);
 	/* FKS: sb_dsp_reset to enable extended mode???? */
 	sb_dsp_reset(devc); /* Turn on extended mode */
 
+	/* Disable audio 2 data if boot from another OS w/o HW reset */
+	if (devc->submodel == SUBMDL_ES1879)
+	{
+		ess_setmixer(devc, 0x71, 0x00);
+	}   
+                       
 	/*
 	 *  Enable joystick and OPL3
 	 */

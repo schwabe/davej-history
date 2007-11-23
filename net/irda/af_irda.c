@@ -1073,7 +1073,8 @@ static int irda_release(struct socket *sock, struct socket *peer)
 
         sock->sk   = NULL;      
         sk->socket = NULL;      /* Not used, but we should do this. */
-
+	sk->protinfo.irda = NULL;
+	sock_put(sk);
         return 0;
 }
 

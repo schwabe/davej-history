@@ -181,7 +181,7 @@ enum {
 #define INT_MASK (INT_SEC|INT_PRI|INT_MC|INT_PO|INT_PI|INT_MO|INT_NI|INT_GPI)
 
 
-#define DRIVER_VERSION "0.02"
+#define DRIVER_VERSION "0.17"
 
 /* magic numbers to protect our data structures */
 #define I810_CARD_MAGIC		0x5072696E /* "Prin" */
@@ -744,44 +744,6 @@ static int prog_dmabuf(struct i810_state *state, unsigned rec)
 	return 0;
 }
 
-/* we are doing quantum mechanics here, the buffer can only be empty, half or full filled i.e.
-   |------------|------------|   or   |xxxxxxxxxxxx|------------|   or   |xxxxxxxxxxxx|xxxxxxxxxxxx|
-   but we almost always get this
-   |xxxxxx------|------------|   or   |xxxxxxxxxxxx|xxxxx-------|
-   so we have to clear the tail space to "silence"
-   |xxxxxx000000|------------|   or   |xxxxxxxxxxxx|xxxxxx000000|
-*/
-static void i810_clear_tail(struct i810_state *state)
-{
-	struct dmabuf *dmabuf = &state->dmabuf;
-	unsigned swptr;
-	unsigned char silence = (dmabuf->fmt & I810_FMT_16BIT) ? 0 : 0x80;
-	unsigned int len;
-	unsigned long flags;
-
-	spin_lock_irqsave(&state->card->lock, flags);
-	swptr = dmabuf->swptr;
-	spin_unlock_irqrestore(&state->card->lock, flags);
-
-	if (swptr == 0 || swptr == dmabuf->dmasize / 2 || swptr == dmabuf->dmasize)
-		return;
-
-	if (swptr < dmabuf->dmasize/2)
-		len = dmabuf->dmasize/2 - swptr;
-	else
-		len = dmabuf->dmasize - swptr;
-
-	memset(dmabuf->rawbuf + swptr, silence, len);
-
-	spin_lock_irqsave(&state->card->lock, flags);
-	dmabuf->swptr += len;
-	dmabuf->count += len;
-	spin_unlock_irqrestore(&state->card->lock, flags);
-
-	/* restart the dma machine in case it is halted */
-	start_dac(state);
-}
-
 static int drain_dac(struct i810_state *state, int nonblock)
 {
 	struct wait_queue wait = {current, NULL};
@@ -1299,8 +1261,6 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 
 	case SNDCTL_DSP_STEREO: /* set stereo or mono channel */
 		get_user_ret(val, (int *)arg, -EFAULT);
-		if(val==0)
-			return -EINVAL;
 		if (file->f_mode & FMODE_WRITE) {
 			stop_dac(state);
 			dmabuf->ready = 0;
@@ -1311,6 +1271,7 @@ static int i810_ioctl(struct inode *inode, struct file *file, unsigned int cmd, 
 			dmabuf->ready = 0;
 			dmabuf->fmt = I810_FMT_STEREO;
 		}
+		put_user(1, (int *)arg);
 		return 0;
 
 	case SNDCTL_DSP_GETBLKSIZE:
@@ -1588,12 +1549,6 @@ static int i810_release(struct inode *inode, struct file *file)
 	struct i810_state *state = (struct i810_state *)file->private_data;
 	struct dmabuf *dmabuf = &state->dmabuf;
 
-	if (file->f_mode & FMODE_WRITE) {
-		/* FIXME :.. */
-		i810_clear_tail(state);
-		drain_dac(state, file->f_flags & O_NONBLOCK);
-	}
-
 	/* stop DMA state machine and free DMA buffers/channels */
 	down(&state->open_sem);
 
@@ -1737,8 +1692,9 @@ static int __init i810_ac97_init(struct i810_card *card)
 		return 0;
 	}
 	
-	udelay(500);
-	
+	current->state = TASK_UNINTERRUPTIBLE;
+	schedule_timeout(HZ/5);
+		
 	inw(card->ac97base);
 
 	for (num_ac97 = 0; num_ac97 < NR_AC97; num_ac97++) {
