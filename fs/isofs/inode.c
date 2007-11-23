@@ -976,6 +976,7 @@ static int isofs_read_level3_size(struct inode * inode)
 	struct buffer_head * bh = NULL;
 	int block = 0;
 	int i = 0;
+	int more_entries = 0;
 	void *cpnt;
 	struct iso_directory_record * raw_inode;
 
@@ -996,7 +997,6 @@ static int isofs_read_level3_size(struct inode * inode)
 				goto out_noread;
 		}
 		pnt = ((unsigned char *) bh->b_data + offset);
-		raw_inode = ((struct iso_directory_record *) pnt);
 		/*
 		 * Note: this is invariant even if the record
 		 * spans buffers and must be copied ...
@@ -1008,6 +1008,7 @@ static int isofs_read_level3_size(struct inode * inode)
 			ino = (ino & ~(ISOFS_BLOCK_SIZE - 1)) + ISOFS_BLOCK_SIZE;
 			continue;
 		}
+		raw_inode = ((struct iso_directory_record *) pnt);
 
 		/* Check whether the raw inode spans the buffer ... */	
 		if (offset + reclen > bufsize){
@@ -1029,13 +1030,15 @@ static int isofs_read_level3_size(struct inode * inode)
 		inode->i_size += isonum_733 (raw_inode->size);
 		if(i == 1) inode->u.isofs_i.i_next_section_ino = ino;
 
+		more_entries = raw_inode->flags[-high_sierra] & 0x80;
+		
 		ino += reclen;
 		if (cpnt)
 			kfree (cpnt);
 		i++;
 		if(i > 100)
 			goto out_toomany;
-	} while(raw_inode->flags[-high_sierra] & 0x80);
+	} while(more_entries);
 out:
 	brelse(bh);
 	return 0;

@@ -215,6 +215,11 @@ struct devprobe pci_probes[] __initdata = {
 #ifdef CONFIG_SIS900
 	{sis900_probe, 0},
 #endif
+
+#ifdef CONFIG_DM9102
+	{dmfe_reg_board, 0}, 
+#endif
+
 #ifdef CONFIG_YELLOWFIN
 	{yellowfin_probe, 0},
 #endif

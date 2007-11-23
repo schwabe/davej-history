@@ -2782,7 +2782,7 @@ int rs_read_proc(char *page, char **start, off_t off, int count,
 	off_t	begin = 0;
 
 	len += sprintf(page, "serinfo:1.0 driver:%s\n", serial_version);
-	for (i = 0; i < NR_PORTS && len < 4000; i++) {
+	for (i = 0; i < NR_PORTS && len < 3900; i++) {
 		l = line_info(page + len, &rs_table[i]);
 		len += l;
 		if (len+begin > off+count)

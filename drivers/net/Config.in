@@ -131,6 +131,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
 
     tristate 'Apricot Xen-II on board Ethernet' CONFIG_APRICOT
     tristate 'CS89x0 support' CONFIG_CS89x0
+    tristate 'DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
     tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
     tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
     tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS

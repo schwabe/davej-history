@@ -574,6 +574,15 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DM9102),y) 
+L_OBJS += dmfe.o
+else
+  ifeq ($(CONFIG_DM9102),m)
+  M_OBJS += dmfe.o
+  endif
+endif
+
+
 ifeq ($(CONFIG_YELLOWFIN),y)
 L_OBJS += yellowfin.o
 else

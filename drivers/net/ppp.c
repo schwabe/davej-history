@@ -371,6 +371,9 @@ static int
 ppp_tty_open (struct tty_struct *tty)
 {
 	struct ppp *ppp;
+	
+	if(!capable(CAP_NET_ADMIN))
+		return -EPERM;
 
 	/*
 	 * Allocate a ppp structure to use.

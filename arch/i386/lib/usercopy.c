@@ -123,7 +123,7 @@ __clear_user(void *to, unsigned long n)
 long strnlen_user(const char *s, long n)
 {
 	unsigned long mask = -__addr_ok(s);
-	unsigned long res;
+	unsigned long res, tmp;
 
 	__asm__ __volatile__(
 		"	andl %0,%%ecx\n"
@@ -140,8 +140,8 @@ long strnlen_user(const char *s, long n)
 		"	.align 4\n"
 		"	.long 0b,2b\n"
 		".previous"
-		:"=r" (n), "=D" (s), "=a" (res)
-		:"0" (n), "1" (s), "2" (0), "c" (mask)
-		:"cx", "cc");
+		:"=r" (n), "=D" (s), "=a" (res), "=c" (tmp)
+		:"0" (n), "1" (s), "2" (0), "3" (mask)
+		:"cc");
 	return res & mask;
 }

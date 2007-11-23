@@ -140,22 +140,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_LITELINK_DONGLE),y)
-L_OBJS += litelink.o
-else
-  ifeq ($(CONFIG_LITELINK_DONGLE),m)
-  M_OBJS += litelink.o
-  endif
-endif
-
-ifeq ($(CONFIG_LITELINK_DONGLE),y)
-L_OBJS += litelink.o
-else
-  ifeq ($(CONFIG_LITELINK_DONGLE),m)
-  M_OBJS += litelink.o
-  endif
-endif
-
 include $(TOPDIR)/Rules.make
 
 clean:

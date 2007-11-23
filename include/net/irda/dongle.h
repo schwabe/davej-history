@@ -35,6 +35,7 @@ typedef enum {
 	ACTISYS_PLUS_DONGLE,
 	GIRBIL_DONGLE,
 	LITELINK_DONGLE,
+	AIRPORT_DONGLE,
 } IRDA_DONGLE;
 
 struct irda_device;

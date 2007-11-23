@@ -277,7 +277,7 @@ void exit_mm(struct task_struct *tsk)
  */
 static void exit_notify(void)
 {
-	struct task_struct * p;
+	struct task_struct * p, *t;
 
 	forget_original_parent(current);
 	/*
@@ -289,15 +289,30 @@ static void exit_notify(void)
 	 * and we were the only connection outside, so our pgrp
 	 * is about to become orphaned.
 	 */
-	if ((current->p_pptr->pgrp != current->pgrp) &&
-	    (current->p_pptr->session == current->session) &&
+	 
+	t = current->p_pptr;
+	
+	if ((t->pgrp != current->pgrp) &&
+	    (t->session == current->session) &&
 	    will_become_orphaned_pgrp(current->pgrp, current) &&
 	    has_stopped_jobs(current->pgrp)) {
 		kill_pg(current->pgrp,SIGHUP,1);
 		kill_pg(current->pgrp,SIGCONT,1);
 	}
 
-	/* Let father know we died */
+	/* Let father know we died 
+	 *
+	 * Thread signals are configurable, but you aren't going to use
+	 * that to send signals to arbitary processes. 
+	 * That stops right now.
+	 */
+	
+	if(current->exit_signal != SIGCHLD &&
+	    (current->euid ^ t->suid) && (current->euid ^ t->uid)
+	    && (current->uid ^ t->suid) && (current->uid ^ t->uid)
+	    && !capable(CAP_KILL))
+		current->exit_signal = SIGCHLD;
+
 	notify_parent(current, current->exit_signal);
 
 	/*

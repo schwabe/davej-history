@@ -47,6 +47,8 @@ extern int sg_big_buff;
 #endif
 #ifdef CONFIG_SYSVIPC
 extern int shmmax;
+extern int shmall;
+extern int shmall_max;
 #endif
 
 #ifdef __sparc__
@@ -137,6 +139,8 @@ static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
 extern int inodes_stat[];
 extern int dentry_stat[];
 
+static int zero_value = 0;
+
 /* The default sysctl tables: */
 
 static ctl_table root_table[] = {
@@ -214,6 +218,9 @@ static ctl_table kern_table[] = {
 #ifdef CONFIG_SYSVIPC
 	{KERN_SHMMAX, "shmmax", &shmmax, sizeof (int),
 	 0644, NULL, &proc_dointvec},
+	{KERN_SHMALL, "shmall", &shmall, sizeof (int),
+	 0644, NULL, &proc_dointvec_minmax, &sysctl_intvec,
+	 NULL, &zero_value, &shmall_max},
 #endif
 #ifdef CONFIG_MAGIC_SYSRQ
 	{KERN_SYSRQ, "sysrq", &sysrq_enabled, sizeof (int),

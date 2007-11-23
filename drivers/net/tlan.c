@@ -359,7 +359,7 @@ extern int init_module(void)
 	
 	/* printk( "TLAN:  Found %d device(s).\n", TLanDevicesInstalled ); */
 
-    return ( ( TLanDevicesInstalled >= 0 ) ? 0 : -ENODEV );
+	return ( ( TLanDevicesInstalled > 0 ) ? 0 : -ENODEV );
 
 } /* init_module */
 

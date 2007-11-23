@@ -5729,6 +5729,18 @@ CONFIG_NE2K_PCI
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
+PCI DM9102 support
+CONFIG_DM9102
+  This driver is for DM9102 compatible PCI cards from Davicom 
+  (http://www.davicom.com.tw) 
+  If you have a PCI DM9102 network (Ethernet) card, say Y.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called dmfe.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt.
+
 Racal-Interlan (Micom) NI cards
 CONFIG_NET_VENDOR_RACAL
   If you have a network (Ethernet) card belonging to this class, such

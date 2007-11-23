@@ -68,6 +68,9 @@ static int findkey (key_t key)
 	return -1;
 }
 
+int shmall = SHMALL;
+int shmall_max = SHMALL;
+
 /*
  * allocate new shmid_kernel and pgtable. protected by shm_segs[id] = NOID.
  */
@@ -79,7 +82,7 @@ static int newseg (key_t key, int shmflg, int size)
 
 	if (size < SHMMIN)
 		return -EINVAL;
-	if (shm_tot + numpages >= SHMALL)
+	if (shm_tot + numpages >= shmall)
 		return -ENOSPC;
 	for (id = 0; id < SHMMNI; id++)
 		if (shm_segs[id] == IPC_UNUSED) {
@@ -233,7 +236,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		shminfo.shmmni = SHMMNI;
 		shminfo.shmmax = shmmax;
 		shminfo.shmmin = SHMMIN;
-		shminfo.shmall = SHMALL;
+		shminfo.shmall = shmall;
 		shminfo.shmseg = SHMSEG;
 		if(copy_to_user (buf, &shminfo, sizeof(struct shminfo)))
 			goto out;
