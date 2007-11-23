@@ -497,6 +497,13 @@ extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 #define wake_up(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE)
 #define wake_up_interruptible(x)	__wake_up((x),TASK_INTERRUPTIBLE)
 
+#define __set_current_state(state_value)	do { current->state = state_value; } while (0)
+#ifdef __SMP__
+#define set_current_state(state_value)		do { mb(); __set_current_state(state_value); } while (0)
+#else
+#define set_current_state(state_value)		__set_current_state(state_value)
+#endif
+
 extern int in_group_p(gid_t grp);
 extern int in_egroup_p(gid_t grp);
 

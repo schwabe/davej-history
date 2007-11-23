@@ -130,6 +130,19 @@ extern inline void *__va(unsigned long physaddr)
 }
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
 
+extern __inline__ int get_order(unsigned long size)
+{
+        int order;
+
+        size = (size-1) >> (PAGE_SHIFT-1);
+        order = -1;
+        do {
+                size >>= 1;
+                order++;
+        } while (size);
+        return order;
+}
+
 #endif /* __KERNEL__ */
 
 #endif /* _M68K_PAGE_H */

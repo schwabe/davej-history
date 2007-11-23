@@ -553,20 +553,21 @@ got_block:
 	 * Do block preallocation now if required.
 	 */
 #ifdef EXT2_PREALLOCATE
-	if (prealloc_block) {
+	if (prealloc_count && !*prealloc_count) {
 		int	prealloc_goal;
+		unsigned long	next_block = tmp + 1;
 
 		prealloc_goal = es->s_prealloc_blocks ?
 			es->s_prealloc_blocks : EXT2_DEFAULT_PREALLOC_BLOCKS;
 
-		*prealloc_count = 0;
-		*prealloc_block = tmp + 1;
+		*prealloc_block = next_block;
 		for (k = 1;
 		     k < prealloc_goal && (j + k) < EXT2_BLOCKS_PER_GROUP(sb);
-		     k++) {
+		     k++, next_block++) {
 			if (DQUOT_PREALLOC_BLOCK(sb, inode, 1))
 				break;
-			if (ext2_set_bit (j + k, bh->b_data)) {
+			if (*prealloc_block + *prealloc_count != next_block ||
+			    ext2_set_bit (j + k, bh->b_data)) {
 				DQUOT_FREE_BLOCK(sb, inode, 1);
  				break;
 			}
@@ -574,12 +575,12 @@ got_block:
 		}	
 		gdp->bg_free_blocks_count =
 			cpu_to_le16(le16_to_cpu(gdp->bg_free_blocks_count) -
-			       *prealloc_count);
+			       (k - 1));
 		es->s_free_blocks_count =
 			cpu_to_le32(le32_to_cpu(es->s_free_blocks_count) -
-			       *prealloc_count);
+			       (k - 1));
 		ext2_debug ("Preallocated a further %lu bits.\n",
-			    *prealloc_count);
+			       (k - 1));
 	}
 #endif
 

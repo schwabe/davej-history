@@ -342,7 +342,7 @@ int __init sbni_probe(struct device *dev)
 	if(base_addr > 0x1ff)	/* Check a single specified location. */
 		return sbni_probe1(dev, base_addr);
 	else if(base_addr != 0)	/* Don't probe at all. */
-		return ENXIO;
+		return -ENXIO;
 	for(i = 0; (base_addr = netcard_portlist[i]); i++)
 	{ 
 		if(!check_region(base_addr, SBNI_IO_EXTENT) && base_addr != 1)
@@ -353,7 +353,7 @@ int __init sbni_probe(struct device *dev)
 				return 0;
 		}
 	}
-	return ENODEV;
+	return -ENODEV;
 }
 
 #endif /* have devlist*/
@@ -416,7 +416,7 @@ static int __init sbni_probe1(struct device *dev, int ioaddr)
 	}
 
 	if(bad_card)
-		return ENODEV;
+		return -ENODEV;
 	else
 		outb(0, ioaddr + CSR0); 
 	if(dev->irq < 2)
@@ -429,8 +429,8 @@ static int __init sbni_probe1(struct device *dev, int ioaddr)
 
 		if(autoirq == 0)
 		{
-			printk("sbni probe at %#x failed to detect IRQ line\n", ioaddr);
-			return EAGAIN;
+			printk(KERN_ERR "sbni probe at %#x failed to detect IRQ line\n", ioaddr);
+			return -EAGAIN;
 		}
 	}
 	/* clear FIFO buffer */
@@ -444,7 +444,7 @@ static int __init sbni_probe1(struct device *dev, int ioaddr)
 		if (irqval) 
 		{
 			printk (" unable to get IRQ %d (irqval=%d).\n", dev->irq, irqval);
-			return EAGAIN;
+			return -EAGAIN;
 		}
 	}
      

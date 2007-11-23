@@ -1818,6 +1818,11 @@ ATI Mach64 display support
 CONFIG_FB_ATY
   This driver supports graphics boards with the ATI Mach64 chips.
 
+  This driver is also available as a module ( = code which can be
+  inserted and removed from the running kernel whenever you want).
+  The module will be called atyfb.o. If you want to compile it as
+  a module, say M here and read Documentation/modules.txt.
+
 PowerMac "control" frame buffer device support
 CONFIG_FB_CONTROL
   This driver supports a frame buffer for the graphics adapter in the
@@ -7932,6 +7937,13 @@ CONFIG_SMB_FS
   can be inserted in and removed from the running kernel whenever you
   want), say M here and read Documentation/modules.txt. The module
   will be called smbfs.o. Most people say N, however.
+
+nls support setting
+CONFIG_SMB_NLS_REMOTE
+  This setting allows you to specify a default value for which
+  codepage the server uses. If this field is left blank no
+  translations will be done. The local codepage/charset default to
+  CONFIG_NLS_DEFAULT, you need to set that value in the NLS menu.
 
 Coda filesystem support
 CONFIG_CODA_FS

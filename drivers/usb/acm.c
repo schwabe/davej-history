@@ -51,6 +51,7 @@
 #include <linux/module.h>
 //#define DEBUG
 #include <linux/usb.h>
+#include <linux/devfs_fs_kernel.h>
 
 /*
  * CMSPAR, some architectures can't have space and mark parity.

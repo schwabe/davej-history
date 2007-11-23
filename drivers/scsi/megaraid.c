@@ -1323,7 +1323,7 @@ static int megaIssueCmd (mega_host_config * megaCfg,
 
   /* Wait until mailbox is free */
   if (mega_busyWaitMbox (megaCfg)) {
-    printk("Blocked mailbox......!!\n");
+    printk(KERN_ERR "megaraid: Blocked mailbox......!!\n");
     udelay(1000);
 
 #if DEBUG
@@ -1333,7 +1333,7 @@ static int megaIssueCmd (mega_host_config * megaCfg,
     /* Abort command */
     if (pScb == NULL) {
 	TRACE(("NULL pScb in megaIssue\n"));
-	printk("NULL pScb in megaIssue\n");
+	printk(KERN_WARNING "megaraid: NULL pScb in megaIssue\n");
     }
     mega_cmd_done (megaCfg, pScb, 0x08);
     return -1;
@@ -1410,7 +1410,7 @@ static int megaIssueCmd (mega_host_config * megaCfg,
   }
 #if DEBUG
   while (mega_busyWaitMbox (megaCfg)) {
-    printk("Blocked mailbox on exit......!\n");
+    printk(KERN_ERR "megaraid: Blocked mailbox on exit......!\n");
     udelay(1000);
   }
 #endif

@@ -141,13 +141,6 @@
 #define module_init(x) /* nothing */
 #endif
 
-#define DECLARE_WAIT_QUEUE_HEAD(w) struct wait_queue *w = NULL
-#define DECLARE_WAITQUEUE(w,c) struct wait_queue w = {(c), NULL}
-#define wait_queue_head_t struct wait_queue *
-#define init_waitqueue_head(w) *(w) = 0
-#define init_MUTEX(m) *(m) = MUTEX
-#define __set_current_state(x) do { current->state = (x); } while (0)
-#define set_current_state(x) __set_current_state(x)
 #endif
 
 /* --------------------------------------------------------------------- */
@@ -229,7 +222,7 @@ struct solo1_state {
 
 /* --------------------------------------------------------------------- */
 
-struct solo1_state *devs = NULL;
+static struct solo1_state *devs = NULL;
 
 /* --------------------------------------------------------------------- */
 

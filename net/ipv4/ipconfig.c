@@ -74,8 +74,9 @@
 #define CONF_POST_OPEN		(1*HZ)	/* After opening: 1 second */
 
 /* Define the timeout for waiting for a DHCP/BOOTP/RARP reply */
-#define CONF_OPEN_RETRIES 	3	/* (Re)open devices three times */
-#define CONF_SEND_RETRIES 	3	/* Send requests three times */
+#define CONF_OPEN_RETRIES 	2	/* (Re)open devices twice */
+#define CONF_SEND_RETRIES 	6	/* Send six requests per open */
+#define CONF_INTER_TIMEOUT	(HZ/2)	/* Inter-device timeout: 1/2 second */
 #define CONF_BASE_TIMEOUT	(HZ*2)	/* Initial timeout: 2 seconds */
 #define CONF_TIMEOUT_RANDOM	(HZ)	/* Maximum amount of randomization */
 #define CONF_TIMEOUT_MULT	*7/4	/* Rate of timeout growth */
@@ -86,7 +87,7 @@
  * Public IP configuration
  */
 
-int ic_enable __initdata = 1;			/* Automatic IP cfg enabled? */
+int ic_enable __initdata = 0;			/* IP config enabled? */
 
 /* Protocol choice */
 static int ic_proto_enabled __initdata = 0
@@ -129,10 +130,11 @@ static char user_dev_name[IFNAMSIZ] __initdata = { 0, };
 static int ic_proto_have_if __initdata = 0;
 
 #ifdef IPCONFIG_DYNAMIC
-static volatile int ic_got_reply = 0;	    /* Protocol(s) we got reply from */
+static spinlock_t ic_recv_lock = SPIN_LOCK_UNLOCKED;
+static volatile int ic_got_reply __initdata = 0;    /* Proto(s) that replied */
 #endif
 #ifdef IPCONFIG_DHCP
-static int ic_dhcp_msgtype __initdata = 0;	/* Last incoming msg type */
+static int ic_dhcp_msgtype __initdata = 0;	/* DHCP msg type received */
 #endif
 
 
@@ -144,11 +146,12 @@ struct ic_device {
 	struct ic_device *next;
 	struct device *dev;
 	unsigned short flags;
-	int able;
+	short able;
+	u32 xid;
 };
 
-static struct ic_device *ic_first_dev __initdata = NULL;/* List of open device */
-static struct device *ic_dev __initdata = NULL;		/* Selected device */
+static struct ic_device *ic_first_dev __initdata = NULL; /* Open devices */
+static struct device *ic_dev __initdata = NULL;		 /* Selected device */
 
 static int __init ic_open_devs(void)
 {
@@ -185,8 +188,13 @@ static int __init ic_open_devs(void)
 			last = &d->next;
 			d->flags = oflags;
 			d->able = able;
+			if (able & IC_BOOTP)
+				get_random_bytes(&d->xid, sizeof(u32));
+			else
+				d->xid = 0;
 			ic_proto_have_if |= able;
-			DBG((SELF "%s UP (able=%d)\n", dev->name, able));
+			DBG((SELF "%s UP (able=%d, xid=%08x)\n",
+			     dev->name, able, d->xid));
 		}
 	*last = NULL;
 
@@ -386,10 +394,21 @@ ic_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	unsigned char *rarp_ptr = (unsigned char *) (rarp + 1);
 	unsigned long sip, tip;
 	unsigned char *sha, *tha;		/* s for "source", t for "target" */
+	struct ic_device *d;
+
+	/* One reply at a time, please. */
+	spin_lock(&ic_recv_lock);
 
 	/* If we already have a reply, just drop the packet */
 	if (ic_got_reply)
 		goto drop;
+
+	/* Find the ic_device that the packet arrived on */
+	d = ic_first_dev;
+	while (d && d->dev != dev)
+		d = d->next;
+	if (!d)
+		goto drop;	/* should never happen */
 
 	/* If this test doesn't pass, it's not IP, or we should ignore it anyway */
 	if (rarp->ar_hln != dev->addr_len || dev->type != ntohs(rarp->ar_hrd))
@@ -420,7 +439,7 @@ ic_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	if (ic_servaddr != INADDR_NONE && ic_servaddr != sip)
 		goto drop;
 
-	/* Victory! The packet is what we were looking for! */
+	/* We have a winner! */
 	ic_dev = dev;
 	if (ic_myaddr == INADDR_NONE)
 		ic_myaddr = tip;
@@ -428,8 +447,12 @@ ic_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	ic_got_reply = IC_RARP;
 
 drop:
-	/* and throw the packet out */
+	/* Show's over.  Nothing to see here.  */
+	spin_unlock(&ic_recv_lock);
+
+	/* Throw the packet out. */
 	kfree_skb(skb);
+
 	return 0;
 }
 
@@ -437,16 +460,23 @@ drop:
 /*
  *  Send RARP request packet over all devices which allow RARP.
  */
+static void __init ic_rarp_send_if(struct ic_device *d)
+{
+	struct device *dev = d->dev;
+	arp_send(ARPOP_RREQUEST, ETH_P_RARP, 0, dev, 0, NULL,
+		 dev->dev_addr, dev->dev_addr);
+}
+
+/*
+ *  Send RARP request package over a single interface.
+ */
 static void __init ic_rarp_send(void)
 {
 	struct ic_device *d;
 
 	for (d=ic_first_dev; d; d=d->next)
-		if (d->able & IC_RARP) {
-			struct device *dev = d->dev;
-			arp_send(ARPOP_RREQUEST, ETH_P_RARP, 0, dev, 0, NULL,
-				 dev->dev_addr, dev->dev_addr);
-		}
+		if (d->able & IC_RARP)
+			ic_rarp_send_if(d);
 }
 
 #endif
@@ -491,8 +521,6 @@ struct bootp_pkt {		/* BOOTP packet format */
 #define DHCPRELEASE	7
 #define DHCPINFORM	8
 
-static u32 ic_bootp_xid;
-
 static int ic_bootp_recv(struct sk_buff *skb, struct device *dev,
 			 struct packet_type *pt);
 
@@ -516,12 +544,12 @@ static const u8 ic_bootp_cookie[4] = { 99, 130, 83, 99 };
 static void __init
 ic_dhcp_init_options(u8 *options)
 {
-	u8 msgtype = ((ic_dhcp_msgtype == DHCPOFFER)
-		      ? DHCPREQUEST : DHCPDISCOVER);
+	u8 mt = ((ic_servaddr == INADDR_NONE)
+		 ? DHCPDISCOVER : DHCPREQUEST);
 	u8 *e = options;
 
 #ifdef IPCONFIG_DEBUG
-	printk("DHCP: Sending message type %d\n", msgtype);
+	printk("DHCP: Sending message type %d\n", mt);
 #endif
 
 	memcpy(e, ic_bootp_cookie, 4);	/* RFC1048 Magic Cookie */
@@ -529,9 +557,14 @@ ic_dhcp_init_options(u8 *options)
 
 	*e++ = 53;		/* DHCP message type */
 	*e++ = 1;
-	*e++ = msgtype;
+	*e++ = mt;
 
-	if (msgtype == DHCPREQUEST) {
+	if (mt == DHCPREQUEST) {
+		*e++ = 54;	/* Server ID (IP address) */
+		*e++ = 4;
+		memcpy(e, &ic_servaddr, 4);
+		e += 4;
+
 		*e++ = 50;	/* Requested IP address */
 		*e++ = 4;
 		memcpy(e, &ic_myaddr, 4);
@@ -595,8 +628,6 @@ ic_bootp_init_ext(u8 *ext)
 static inline void
 ic_bootp_init(void)
 {
-	get_random_bytes(&ic_bootp_xid, sizeof(u32));
-	DBG(("DHCP/BOOTP: XID=%08x\n", ic_bootp_xid));
 	dev_add_pack(&bootp_packet_type);
 }
 
@@ -656,7 +687,7 @@ ic_bootp_send_if(struct ic_device *d, u32 jiffies)
 	b->server_ip = INADDR_NONE;
 	memcpy(b->hw_addr, dev->dev_addr, dev->addr_len);
 	b->secs = htons(jiffies / HZ);
-	b->xid = ic_bootp_xid;
+	b->xid = d->xid;
 
 	/* add DHCP options or BOOTP extensions */
 #ifdef IPCONFIG_DHCP
@@ -756,11 +787,22 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 {
 	struct bootp_pkt *b = (struct bootp_pkt *) skb->nh.iph;
 	struct iphdr *h = &b->iph;
+	struct ic_device *d;
 	int len;
+
+	/* One reply at a time, please. */
+	spin_lock(&ic_recv_lock);
 
 	/* If we already have a reply, just drop the packet */
 	if (ic_got_reply)
 		goto drop;
+
+	/* Find the ic_device that the packet arrived on */
+	d = ic_first_dev;
+	while (d && d->dev != dev)
+		d = d->next;
+	if (!d)
+		goto drop;  /* should never happen */
 
 	/* Check whether it's a BOOTP packet */
 	if (skb->pkt_type == PACKET_OTHERHOST ||
@@ -783,9 +825,9 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 
 	/* Is it a reply to our BOOTP request? */
 	len = ntohs(b->udph.len) - sizeof(struct udphdr);
-	if (len < 300 ||				    /* See RFC 951:2.1 */
+	if (len < 300 ||		/* See RFC 951:2.1 */
 	    b->op != BOOTP_REPLY ||
-	    b->xid != ic_bootp_xid) {
+	    b->xid != d->xid) {
 		printk("?");
 		goto drop;
 	}
@@ -798,7 +840,7 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 #ifdef IPCONFIG_DHCP
 
 		u32 server_id = INADDR_NONE;
-		ic_dhcp_msgtype = 0;
+		int mt = 0;
 
 		ext = &b->exten[4];
 		while (ext < end && *ext != 0xff) {
@@ -811,7 +853,7 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 			switch (*opt) {
 			    case 53:	/* Message type */
 				if (opt[1])
-					ic_dhcp_msgtype = opt[2];
+					mt = opt[2];
 				break;
 			    case 54:	/* Server ID (IP address) */
 				if (opt[1] >= 4)
@@ -821,11 +863,15 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 		}
 
 #ifdef IPCONFIG_DEBUG
-		printk("DHCP: Got message type %d\n", ic_dhcp_msgtype);
+		printk("DHCP: Got message type %d\n", mt);
 #endif
 
-		switch (ic_dhcp_msgtype) {
+		switch (mt) {
 		    case DHCPOFFER:
+			/* While in the process of accepting one offer,
+			   ignore all others. */
+			if (ic_myaddr != INADDR_NONE)
+				goto drop;
 			/* Let's accept that offer. */
 			ic_myaddr = b->your_ip;
 			ic_servaddr = server_id;
@@ -833,7 +879,7 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 			printk("DHCP: Offered address %s", in_ntoa(ic_myaddr));
 			printk(" by server %s\n", in_ntoa(ic_servaddr));
 #endif
-			goto drop;
+			break;
 
 		    case DHCPACK:
 			/* Yeah! */
@@ -845,6 +891,8 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 			ic_servaddr = INADDR_NONE;
 			goto drop;
 		}
+
+		ic_dhcp_msgtype = mt;
 
 #endif /* IPCONFIG_DHCP */
 
@@ -859,6 +907,7 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 		}
 	}
 
+	/* We have a winner! */
 	ic_dev = dev;
 	ic_myaddr = b->your_ip;
 	ic_servaddr = b->server_ip;
@@ -869,8 +918,12 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct device *dev, struct 
 	ic_got_reply = IC_BOOTP;
 
 drop:
-	/* and throw the packet out */
+	/* Show's over.  Nothing to see here.  */
+	spin_unlock(&ic_recv_lock);
+
+	/* Throw the packet out. */
 	kfree_skb(skb);
+
 	return 0;
 }	
 
@@ -887,8 +940,8 @@ drop:
 static int __init ic_dynamic(void)
 {
 	int retries;
-	unsigned long timeout, jiff;
-	unsigned long start_jiffies;
+	struct ic_device *d;
+	unsigned long start_jiffies, timeout, jiff;
 	int do_bootp = ic_proto_have_if & IC_BOOTP;
 	int do_rarp = ic_proto_have_if & IC_RARP;
 
@@ -936,36 +989,39 @@ static int __init ic_dynamic(void)
 	 * [Actually we could now, but the nothing else running note still 
 	 *  applies.. - AC]
 	 */
-	printk(KERN_NOTICE "Sending %s%s%s requests ",
+	printk(KERN_NOTICE "Sending %s%s%s requests .",
 	       do_bootp
 		? ((ic_proto_enabled & IC_USE_DHCP) ? "DHCP" : "BOOTP") : "",
 	       (do_bootp && do_rarp) ? " and " : "",
 	       do_rarp ? "RARP" : "");
+
 	start_jiffies = jiffies;
+	d = ic_first_dev;
 	retries = CONF_SEND_RETRIES;
 	get_random_bytes(&timeout, sizeof(timeout));
 	timeout = CONF_BASE_TIMEOUT + (timeout % (unsigned) CONF_TIMEOUT_RANDOM);
 	for(;;) {
 #ifdef IPCONFIG_BOOTP
-		if (do_bootp)
-			ic_bootp_send(jiffies - start_jiffies);
+		if (do_bootp && (d->able & IC_BOOTP))
+			ic_bootp_send_if(d, jiffies - start_jiffies);
 #endif
 #ifdef IPCONFIG_RARP
-		if (do_rarp)
-			ic_rarp_send();
+		if (do_rarp && (d->able & IC_RARP))
+			ic_rarp_send_if(d);
 #endif
-		printk(".");
 
-		jiff = jiffies + timeout;
+		jiff = jiffies + (d->next ? CONF_INTER_TIMEOUT : timeout);
 		while (jiffies < jiff && !ic_got_reply)
 			;
+
 #ifdef IPCONFIG_DHCP
+		/* DHCP isn't done until we get a DHCPACK. */
 		if ((ic_got_reply & IC_BOOTP)
 		    && (ic_proto_enabled & IC_USE_DHCP)
 		    && ic_dhcp_msgtype != DHCPACK)
 		{
-			printk(",");
 			ic_got_reply = 0;
+			printk(",");
 			continue;
 		}
 #endif /* IPCONFIG_DHCP */
@@ -975,14 +1031,21 @@ static int __init ic_dynamic(void)
 			break;
 		}
 
+		if ((d = d->next))
+			continue;
+
 		if (! --retries) {
 			printk(" timed out!\n");
 			break;
 		}
 
+		d = ic_first_dev;
+
 		timeout = timeout CONF_TIMEOUT_MULT;
 		if (timeout > CONF_TIMEOUT_MAX)
 			timeout = CONF_TIMEOUT_MAX;
+
+		printk(".");
 	}
 
 #ifdef IPCONFIG_BOOTP
@@ -997,7 +1060,8 @@ static int __init ic_dynamic(void)
 	if (!ic_got_reply)
 		return -1;
 
-	printk(SELF "Got %s answer from %s\n",
+	printk(SELF "%s: Got %s answer from %s\n",
+	       ic_dev->name, 
 	       ((ic_got_reply & IC_RARP) ? "RARP"
 		: (ic_proto_enabled & IC_USE_DHCP) ? "DHCP" : "BOOTP"),
 	       in_ntoa(ic_servaddr));
@@ -1167,7 +1231,7 @@ int __init ip_auto_config(void)
 	 * Clue in the operator.
 	 */
 	printk(SELF "Complete:");
-	printk("\n      device=%s", ic_dev->name);
+	printk( "\n     if=%s", ic_dev->name);
 	printk(", addr=%s", in_ntoa(ic_myaddr));
 	printk(", mask=%s", in_ntoa(ic_netmask));
 	printk(", gw=%s", in_ntoa(ic_gateway));
@@ -1199,14 +1263,14 @@ int __init ip_auto_config(void)
  *			  by BOOTP
  *	<device>	- use all available devices
  *	<PROTO>:
- *	   dhcp|bootp|rarp  - use given protocol
- *	   both or empty    - use both BOOTP and RARP (not DHCP)
- *	   off or none	    - don't do autoconfig at all
+ *	   off|none	    - don't do autoconfig at all (DEFAULT)
+ *	   on|any           - use any configured protocol
+ *	   dhcp|bootp|rarp  - use only the specified protocol
+ *	   both             - use both BOOTP and RARP (not DHCP)
  */
 static int __init ic_proto_name(char *name)
 {
-	if (!strcmp(name, "off") || !strcmp(name, "none")) {
-		ic_proto_enabled = 0;
+	if (!strcmp(name, "on") || !strcmp(name, "any")) {
 		return 1;
 	}
 #ifdef CONFIG_IP_PNP_DHCP
@@ -1241,10 +1305,10 @@ void __init ip_auto_config_setup(char *addrs, int *ints)
 	char *cp, *ip, *dp;
 	int num = 0;
 
-	if (!strcmp(addrs, "off") || !strcmp(addrs, "none")) {
-		ic_enable = 0;
+	ic_enable = (*addrs && strcmp(addrs, "off") && strcmp(addrs, "none"));
+	if (!ic_enable)
 		return;
-	}
+
 	if (ic_proto_name(addrs))
 		return;
 

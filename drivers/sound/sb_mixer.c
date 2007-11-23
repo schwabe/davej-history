@@ -109,7 +109,7 @@ MIX_ENT(SOUND_MIXER_SPEAKER,	0x3b, 7, 2, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_LINE,	0x38, 7, 5, 0x39, 7, 5),
 MIX_ENT(SOUND_MIXER_MIC,	0x3a, 7, 5, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_CD,		0x36, 7, 5, 0x37, 7, 5),
-MIX_ENT(SOUND_MIXER_IMIX,	0x3c, 4, 5, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_IMIX,	0x3c, 0, 1, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_ALTPCM,	0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_RECLEV,	0x3f, 7, 2, 0x40, 7, 2), /* Obsolete. Use IGAIN */
 MIX_ENT(SOUND_MIXER_IGAIN,	0x3f, 7, 2, 0x40, 7, 2),
@@ -597,13 +597,6 @@ static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 
 				case SOUND_MIXER_OUTSRC:
 					ret = set_outmask(devc, val);
-					break;
-
-				case SOUND_MIXER_IMIX:
-					val = *(int *) arg;
-					devc->levels[SOUND_MIXER_IMIX] = val & 0x1f;
-					sb_setmixer (devc, 0x3c, val);
-					return val;
 					break;
 
 				default:

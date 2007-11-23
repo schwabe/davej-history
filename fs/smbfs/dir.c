@@ -167,7 +167,7 @@ out:
 }
 
 /*
- * Note: in order to allow the smbclient process to open the
+ * Note: in order to allow the smbmount process to open the
  * mount point, we don't revalidate if conn_pid is NULL.
  */
 static int
@@ -194,10 +194,10 @@ static void smb_delete_dentry(struct dentry *);
 
 static struct dentry_operations smbfs_dentry_operations =
 {
-	smb_lookup_validate,	/* d_revalidate(struct dentry *) */
-	smb_hash_dentry,	/* d_hash */
-	smb_compare_dentry,	/* d_compare */
-	smb_delete_dentry	/* d_delete(struct dentry *) */
+	d_revalidate:	smb_lookup_validate,
+	d_hash:		smb_hash_dentry,
+	d_compare:	smb_compare_dentry,
+	d_delete:	smb_delete_dentry
 };
 
 /*
@@ -256,8 +256,7 @@ smb_compare_dentry(struct dentry *dir, struct qstr *a, struct qstr *b)
 
 	if (a->len != b->len)
 		goto out;
-	for (i=0; i < a->len; i++)
-	{
+	for (i=0; i < a->len; i++) {
 		if (tolower(a->name[i]) != tolower(b->name[i]))
 			goto out;
 	}

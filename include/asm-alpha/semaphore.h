@@ -26,6 +26,11 @@ struct semaphore {
 
 #define sema_init(sem, val)	atomic_set(&((sem)->count), val)
 
+#define init_MUTEX(x)				*(x)=MUTEX
+#define init_MUTEX_LOCKED(x)			*(x)=MUTEX_LOCKED
+#define DECLARE_MUTEX(name)			struct semaphore name=MUTEX
+#define DECLARE_MUTEX_LOCKED(name)		struct semaphore name=MUTEX_LOCKED
+
 extern void __down(struct semaphore * sem);
 extern int  __down_interruptible(struct semaphore * sem);
 extern int  __down_trylock(struct semaphore * sem);

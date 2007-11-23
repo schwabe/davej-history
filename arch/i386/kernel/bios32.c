@@ -1055,7 +1055,6 @@ static void __init pci_fixup_serverworks(struct pci_dev *d)
 	/*
 	 * Find and scan busses behind ServerWorks north bridge chips
 	 */
-	struct pci_bus *bus;
 	unsigned char busno, busmax;
 	pci_probe |= PCI_NO_PEER_FIXUP;
 	pci_read_config_byte(d, 0x44, &busno);
@@ -1070,7 +1069,6 @@ static void __init pci_fixup_compaq(struct pci_dev *d)
 	/*
 	 * Find and scan busses behind RCC LE north bridge chips
 	 */
-	struct pci_bus *bus;
 	unsigned char busno, busmax;
 	pci_probe |= PCI_NO_PEER_FIXUP;
 	pci_read_config_byte(d, 0xc8, &busno);

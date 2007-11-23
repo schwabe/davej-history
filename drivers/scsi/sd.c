@@ -150,36 +150,43 @@ static int sd_open(struct inode * inode, struct file * filp)
      * This is also used to lock out further access when the partition table
      * is being re-read.
      */
-
     while (rscsi_disks[target].device->busy)
         barrier();
-    if(rscsi_disks[target].device->removable) {
+
+    /*
+     * When opening removable disks, we check media...
+     * ... unless media don't matter, due to O_NONBLOCK.
+     */
+    if ( rscsi_disks[target].device->removable
+         && !(filp->f_flags & O_NONBLOCK) )
+    {
+        /*
+         * Note disk change and/or removal.
+         * Also try to read new partition table (if any).
+         */
 	check_disk_change(inode->i_rdev);
 
-	/*
-	 * If the drive is empty, just let the open fail.
-	 */
+        /*
+         * If the drive is empty, let the open fail.
+         */
 	if ( !rscsi_disks[target].ready )
-	    return -ENXIO;
+            return -ENXIO;
 
-	/*
-	 * Similarly, if the device has the write protect tab set,
-	 * have the open fail if the user expects to be able to write
-	 * to the thing.
-	 */
-	if ( (rscsi_disks[target].write_prot) && (filp->f_mode & 2) )
-	    return -EROFS;
+        /*
+         * If the device has the write protect tab set,
+         * let the open fail if the user expects to be able to write.
+         */
+        if ( (rscsi_disks[target].write_prot) && (filp->f_mode & 2) )
+            return -EROFS;
     }
 
     /*
-     * It is possible that the disk changing stuff resulted in the device being taken
-     * offline.  If this is the case, report this to the user, and don't pretend that
-     * the open actually succeeded.
+     * It is possible that the disk changing stuff (or something
+     * else?) resulted in the device being taken offline.
+     * If so, let the open fail.
      */
-    if( !rscsi_disks[target].device->online )
-    {
+    if ( !rscsi_disks[target].device->online )
         return -ENXIO;
-    }
 
     /*
      * See if we are requesting a non-existent partition.  Do this
@@ -1068,7 +1075,6 @@ static int check_scsidisk_media_change(kdev_t full_dev){
     int retval;
     int target;
     struct inode inode;
-    int flag = 0;
 
     target =  DEVICE_NR(full_dev);
 
@@ -1120,11 +1126,11 @@ static int check_scsidisk_media_change(kdev_t full_dev){
      * presence of disk in the drive. This is kept in the Scsi_Disk
      * struct and tested at open !  Daniel Roche ( dan@lectra.fr )
      */
-
     rscsi_disks[target].ready = 1;	/* FLOPTICAL */
 
     retval = rscsi_disks[target].device->changed;
-    if(!flag) rscsi_disks[target].device->changed = 0;
+    rscsi_disks[target].device->changed = 0;
+
     return retval;
 }
 

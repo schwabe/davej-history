@@ -102,14 +102,6 @@
 #include <linux/termios.h>
 #include <linux/tqueue.h>
 
-#if LINUX_VERSION_CODE < VERSION(2,3,0) 
-typedef struct wait_queue *wait_queue_head_t;
-#define DECLARE_WAITQUEUE(name,task) struct wait_queue (name) = {(task),NULL}
-#define init_waitqueue_head(head) *(head) = NULL
-#define DECLARE_MUTEX(name) struct semaphore (name) = MUTEX
-#define set_current_state(a) current->state = (a)
-#endif
-
 #ifdef CONFIG_SYNCLINK_SYNCPPP_MODULE
 #define CONFIG_SYNCLINK_SYNCPPP 1
 #endif

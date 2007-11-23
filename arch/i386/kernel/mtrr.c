@@ -305,7 +305,7 @@ static char *ascii_buffer = NULL;
 static unsigned int ascii_buf_bytes = 0;
 #endif
 static unsigned int *usage_table = NULL;
-static spinlock_t main_lock = SPIN_LOCK_UNLOCKED;
+static spinlock_t main_lock  __attribute((unused)) = SPIN_LOCK_UNLOCKED;
 
 /*  Private functions  */
 #ifdef CONFIG_PROC_FS

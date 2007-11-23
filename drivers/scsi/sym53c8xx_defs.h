@@ -180,12 +180,16 @@
 #endif
 
 /*
- * Use normal IO if configured. Forced for alpha and ppc.
+ * Use normal IO if configured. Forced for alpha and powerpc.
+ * Powerpc fails copying to on-chip RAM using memcpy_toio().
  */
-#if defined(CONFIG_SCSI_NCR53C8XX_IOMAPPED) || defined(SCSI_NCR_PCI_MEM_NOT_SUPPORTED)
+#if defined(CONFIG_SCSI_NCR53C8XX_IOMAPPED)
 #define	SCSI_NCR_IOMAPPED
-#elif defined(__alpha__) || defined(__powerpc__)
+#elif defined(__alpha__)
 #define	SCSI_NCR_IOMAPPED
+#elif defined(__powerpc__)
+#define	SCSI_NCR_IOMAPPED
+#define SCSI_NCR_PCI_MEM_NOT_SUPPORTED
 #elif defined(__sparc__)
 #undef SCSI_NCR_IOMAPPED
 #endif

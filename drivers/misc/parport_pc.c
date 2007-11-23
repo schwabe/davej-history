@@ -902,11 +902,13 @@ static int parport_pc_init_pci (int irq, int dma)
 		  { { 0, -1 }, } },
 		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_DUAL_PAR_B, 1,
 		  { { 0, -1 }, } },
+		{ PCI_VENDOR_ID_LAVA, PCI_DEVICE_ID_LAVA_BOCA_IOPPAR, 1,
+		  { { 0, -1 }, } },
 		{ PCI_VENDOR_ID_AFAVLAB, PCI_DEVICE_ID_AFAVLAB_TK9902, 1,
 		  { { 0, 1 }, } },
-		{ PCI_VENDOR_ID_TIMEDIA, PCI_DEVICE_ID_TIMEDIA_1889, 1,
-		  { { 2, -1 }, } },
-		{ PCI_VENDOR_ID_TIMEDIA, PCI_DEVICE_ID_TIMEDIA_4008A, 1,
+		{ PCI_VENDOR_ID_OXSEMI, PCI_DEVICE_ID_OXSEMI_16PCI954PP, 1,
+		  { { 0, -1 }, } },
+		{ PCI_VENDOR_ID_OXSEMI, PCI_DEVICE_ID_OXSEMI_12PCI840, 1,
 		  { { 0, 1 }, } },
 		{ 0, }
 	};

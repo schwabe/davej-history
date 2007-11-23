@@ -93,6 +93,12 @@ M:	p_gortmaker@yahoo.com
 L:	linux-net@vger.kernel.org
 S:	Maintained
 
+AACRAID ADAPTEC RAID DRIVER
+P:	Brian M. Boerner
+M:	aacraid@ntc.adaptec.com
+L:	To Be Announced
+S:	Maintained
+
 AD1816 SOUND DRIVER
 P:	Thorsten Knabe
 M:	Thorsten Knabe <tek@rbg.informatik.tu-darmstadt.de>

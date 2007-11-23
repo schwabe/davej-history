@@ -65,17 +65,6 @@ void ext2_delete_inode (struct inode * inode)
 
 #define inode_bmap(inode, nr) ((inode)->u.ext2_i.i_data[(nr)])
 
-static inline int block_bmap (struct buffer_head * bh, int nr)
-{
-	int tmp;
-
-	if (!bh)
-		return 0;
-	tmp = le32_to_cpu(((u32 *) bh->b_data)[nr]);
-	brelse (bh);
-	return tmp;
-}
-
 /* 
  * ext2_discard_prealloc and ext2_alloc_block are atomic wrt. the
  * superblock in the same manner as are ext2_free_blocks and
@@ -149,61 +138,89 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal, int * err
 	return result;
 }
 
+/**
+ *	ext2_block_to_path - parse the block number into array of offsets
+ *	@inode: inode in question (we are only interested in its superblock)
+ *	@i_block: block number to be parsed
+ *	@offsets: array to store the offsets in
+ *
+ *	To store the locations of file's data ext2 uses a data structure common
+ *	for UNIX filesystems - tree of pointers anchored in the inode, with
+ *	data blocks at leaves and indirect blocks in intermediate nodes.
+ *	This function translates the block number into path in that tree -
+ *	return value is the path length and @offsets[n] is the offset of
+ *	pointer to (n+1)th node in the nth one. If @block is out of range
+ *	(negative or too large) warning is printed and zero returned.
+ *
+ *	Note: function doesn't find node addresses, so no IO is needed. All
+ *	we need to know is the capacity of indirect blocks (taken from the
+ *	inode->i_sb).
+ */
+
+/*
+ * Portability note: the last comparison (check that we fit into triple
+ * indirect block) is spelled differently, because otherwise on an
+ * architecture with 32-bit longs and 8Kb pages we might get into trouble
+ * if our filesystem had 8Kb blocks. We might use long long, but that would
+ * kill us on x86. Oh, well, at least the sign propagation does not matter -
+ * i_block would have to be negative in the very beginning, so we would not
+ * get there at all.
+ */
+
+static int ext2_block_to_path(struct inode *inode, long i_block, int offsets[4])
+{
+	int ptrs = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	int ptrs_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
+	const long direct_blocks = EXT2_NDIR_BLOCKS,
+		indirect_blocks = ptrs,
+		double_blocks = (1 << (ptrs_bits * 2));
+	int n = 0;
+
+	if (i_block < 0) {
+		ext2_warning (inode->i_sb, "ext2_block_to_path", "block < 0");
+	} else if (i_block < direct_blocks) {
+		offsets[n++] = i_block;
+	} else if ( (i_block -= direct_blocks) < indirect_blocks) {
+		offsets[n++] = EXT2_IND_BLOCK;
+		offsets[n++] = i_block;
+	} else if ((i_block -= indirect_blocks) < double_blocks) {
+		offsets[n++] = EXT2_DIND_BLOCK;
+		offsets[n++] = i_block >> ptrs_bits;
+		offsets[n++] = i_block & (ptrs - 1);
+	} else if (((i_block -= double_blocks) >> (ptrs_bits * 2)) < ptrs) {
+		offsets[n++] = EXT2_TIND_BLOCK;
+		offsets[n++] = i_block >> (ptrs_bits * 2);
+		offsets[n++] = (i_block >> ptrs_bits) & (ptrs - 1);
+		offsets[n++] = i_block & (ptrs - 1);
+	} else {
+		ext2_warning (inode->i_sb, "ext2_block_to_path", "block > big");
+	}
+	return n;
+}
+
 
 int ext2_bmap (struct inode * inode, int block)
 {
+	int offsets[4], *p;
+	int depth = ext2_block_to_path(inode, block, offsets);
+	struct buffer_head *bh;
 	int i;
-	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
-	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
 
-	if (block < 0) {
-		ext2_warning (inode->i_sb, "ext2_bmap", "block < 0");
-		return 0;
-	}
-	if (block >= EXT2_NDIR_BLOCKS + addr_per_block +
-		(1 << (addr_per_block_bits * 2)) +
-		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
-		ext2_warning (inode->i_sb, "ext2_bmap", "block > big");
-		return 0;
-	}
-	if (block < EXT2_NDIR_BLOCKS)
-		return inode_bmap (inode, block);
-	block -= EXT2_NDIR_BLOCKS;
-	if (block < addr_per_block) {
-		i = inode_bmap (inode, EXT2_IND_BLOCK);
+	if (depth == 0)
+		goto fail;
+	i = inode_bmap (inode, *(p=offsets));
+	while (--depth) {
 		if (!i)
-			return 0;
-		return block_bmap (bread (inode->i_dev, i,
-					  inode->i_sb->s_blocksize), block);
+			break;
+		bh = bread (inode->i_dev, i, inode->i_sb->s_blocksize);
+		if (!bh)
+			goto fail;
+		i = le32_to_cpu(((u32 *) bh->b_data)[*++p]);
+		brelse (bh);
 	}
-	block -= addr_per_block;
-	if (block < (1 << (addr_per_block_bits * 2))) {
-		i = inode_bmap (inode, EXT2_DIND_BLOCK);
-		if (!i)
-			return 0;
-		i = block_bmap (bread (inode->i_dev, i,
-				       inode->i_sb->s_blocksize),
-				block >> addr_per_block_bits);
-		if (!i)
-			return 0;
-		return block_bmap (bread (inode->i_dev, i,
-					  inode->i_sb->s_blocksize),
-				   block & (addr_per_block - 1));
-	}
-	block -= (1 << (addr_per_block_bits * 2));
-	i = inode_bmap (inode, EXT2_TIND_BLOCK);
-	if (!i)
-		return 0;
-	i = block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
-			block >> (addr_per_block_bits * 2));
-	if (!i)
-		return 0;
-	i = block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
-			(block >> addr_per_block_bits) & (addr_per_block - 1));
-	if (!i)
-		return 0;
-	return block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
-			   block & (addr_per_block - 1));
+	return i;
+fail:
+	return 0;
 }
 
 static struct buffer_head * inode_getblk (struct inode * inode, int nr,
@@ -349,21 +366,12 @@ struct buffer_head * ext2_getblk (struct inode * inode, long block,
 				  int create, int * err)
 {
 	struct buffer_head * bh;
-	unsigned long b;
-	unsigned long addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
-	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
+	int offsets[4], *p;
+	int depth = ext2_block_to_path(inode, block, offsets);
 
 	*err = -EIO;
-	if (block < 0) {
-		ext2_warning (inode->i_sb, "ext2_getblk", "block < 0");
-		return NULL;
-	}
-	if (block > EXT2_NDIR_BLOCKS + addr_per_block +
-		(1 << (addr_per_block_bits * 2)) +
-		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
-		ext2_warning (inode->i_sb, "ext2_getblk", "block > big");
-		return NULL;
-	}
+	if (depth == 0)
+		goto fail;
 	/*
 	 * If this is a sequential block allocation, set the next_alloc_block
 	 * to this block now so that all the indblock and data block
@@ -380,31 +388,14 @@ struct buffer_head * ext2_getblk (struct inode * inode, long block,
 	}
 
 	*err = -ENOSPC;
-	b = block;
-	if (block < EXT2_NDIR_BLOCKS)
-		return inode_getblk (inode, block, create, b, err);
-	block -= EXT2_NDIR_BLOCKS;
-	if (block < addr_per_block) {
-		bh = inode_getblk (inode, EXT2_IND_BLOCK, create, b, err);
-		return block_getblk (inode, bh, block, create,
-				     inode->i_sb->s_blocksize, b, err);
+	bh = inode_getblk (inode, *(p=offsets), create, block, err);
+	while (--depth) {
+		bh = block_getblk (inode, bh, *++p, create,
+				     inode->i_sb->s_blocksize, block, err);
 	}
-	block -= addr_per_block;
-	if (block < (1 << (addr_per_block_bits * 2))) {
-		bh = inode_getblk (inode, EXT2_DIND_BLOCK, create, b, err);
-		bh = block_getblk (inode, bh, block >> addr_per_block_bits,
-				   create, inode->i_sb->s_blocksize, b, err);
-		return block_getblk (inode, bh, block & (addr_per_block - 1),
-				     create, inode->i_sb->s_blocksize, b, err);
-	}
-	block -= (1 << (addr_per_block_bits * 2));
-	bh = inode_getblk (inode, EXT2_TIND_BLOCK, create, b, err);
-	bh = block_getblk (inode, bh, block >> (addr_per_block_bits * 2),
-			   create, inode->i_sb->s_blocksize, b, err);
-	bh = block_getblk (inode, bh, (block >> addr_per_block_bits) & (addr_per_block - 1),
-			   create, inode->i_sb->s_blocksize, b, err);
-	return block_getblk (inode, bh, block & (addr_per_block - 1), create,
-			     inode->i_sb->s_blocksize, b, err);
+	return bh;
+fail:
+	return NULL;
 }
 
 struct buffer_head * ext2_bread (struct inode * inode, int block, 

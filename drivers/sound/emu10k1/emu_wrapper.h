@@ -14,11 +14,6 @@
 #include <linux/tqueue.h>
 
 #define vma_get_pgoff(v)	vma_get_offset(v)
-#define wait_queue_head_t	struct wait_queue *
-#define DECLARE_WAITQUEUE(a, b)	struct wait_queue a = {b, NULL};
-#define init_waitqueue_head(a)	init_waitqueue(a)
-
-#define init_MUTEX(a)		*(a) = MUTEX
 
 #define UP_INODE_SEM(a)		up(a)
 #define DOWN_INODE_SEM(a)	down(a)
@@ -59,14 +54,6 @@
 #endif
 
 #define MODULE_DEVICE_TABLE(foo,bar)
-
-static __inline__ void list_add_tail(struct list_head *new, struct list_head *head)
-{
-        __list_add(new, head->prev, head);
-}
-
-#define list_for_each(pos, head) \
-        for (pos = (head)->next; pos != (head); pos = pos->next)
 
 #define pci_dma_supported(dev, mask) 1
 
@@ -117,21 +104,6 @@ void *compat_request_region (unsigned long start, unsigned long n, const char *n
 void * pci_compat_get_driver_data (struct pci_dev *dev);
 void pci_compat_set_driver_data (struct pci_dev *dev, void *driver_data);
 
-typedef u32 dma_addr_t;
-
-extern __inline__ int __compat_get_order(unsigned long size)
-{
-        int order;
-
-        size = (size-1) >> (PAGE_SHIFT-1);
-        order = -1;
-        do {
-                size >>= 1;
-                order++;
-        } while (size);
-        return order;
-}
-
 extern __inline__ void *
 pci_alloc_consistent(struct pci_dev *hwdev,
                      size_t size, dma_addr_t *dma_handle) {
@@ -169,10 +141,5 @@ static inline int pci_module_init(struct pci_driver *drv)
         
         return -ENODEV;
 }
-
-#define BUG() do { \
-        printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
-        __asm__ __volatile__(".byte 0x0f,0x0b"); \
-} while (0)
 
 #endif

@@ -25,6 +25,21 @@
 extern void (*clear_page)(unsigned long page);
 extern void (*copy_page)(unsigned long to, unsigned long from);
 
+extern __inline__ int get_order(unsigned long size)
+{
+        int order;
+
+        size = (size-1) >> (PAGE_SHIFT-1);
+        order = -1;
+        do {
+                size >>= 1;
+                order++;
+        } while (size);
+        return order;
+}
+
+#endif /* defined (__KERNEL__) */
+
 #ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..
@@ -79,6 +94,5 @@ typedef unsigned long pgprot_t;
 #define __va(x)		((void *)((unsigned long) (x) + PAGE_OFFSET))
 #define MAP_NR(addr)	(__pa(addr) >> PAGE_SHIFT)
 
-#endif /* defined (__KERNEL__) */
 
 #endif /* __ASM_MIPS_PAGE_H */

@@ -210,11 +210,8 @@
 #include <linux/version.h>
 #include <linux/module.h>
 
-#define DECLARE_WAITQUEUE(QUEUE,INIT) struct wait_queue QUEUE = {INIT, NULL}
-#define wait_queue_head_t struct wait_queue *
 #define SILLY_PCI_BASE_ADDRESS(PCIDEV) (PCIDEV->base_address[0] & PCI_BASE_ADDRESS_IO_MASK)
 #define SILLY_INIT_SEM(SEM) SEM=MUTEX;
-#define init_waitqueue_head init_waitqueue
 #define SILLY_MAKE_INIT(FUNC) __initfunc(FUNC)
 #define SILLY_OFFSET(VMA) ((VMA)->vm_offset)
 

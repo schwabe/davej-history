@@ -314,6 +314,8 @@ static struct dev_info device_list[] =
 {"DGC",  "DISK",      "*", BLIST_SPARSELUN}, /* Dell PV 650F (no tgt @ LUN 0) */
 {"DELL", "PV530F",    "*", BLIST_SPARSELUN}, /* Dell PV 530F */
 {"SONY", "TSL",       "*", BLIST_FORCELUN},  /* DDS3 & DDS4 autoloaders */
+{"DELL", "PERCRAID", "*", BLIST_FORCELUN},
+{"HP", "NetRAID-4M", "*", BLIST_FORCELUN},
 /*
  * Must be at end of list...
  */

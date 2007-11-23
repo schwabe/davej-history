@@ -638,12 +638,6 @@ extern const char *i2o_get_class_name(int);
 #define I2O_POST_WAIT_OK	0
 #define I2O_POST_WAIT_TIMEOUT	-ETIMEDOUT
 
-#define DECLARE_MUTEX(name) struct semaphore name=MUTEX
-
-typedef struct wait_queue *wait_queue_head_t;
-#define DECLARE_WAIT_QUEUE_HEAD(wait)\
-        wait_queue_head_t wait
-
 #endif /* __KERNEL__ */
 
 #endif /* _I2O_H */

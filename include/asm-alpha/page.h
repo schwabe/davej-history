@@ -68,6 +68,19 @@ static inline void copy_page(unsigned long _to, unsigned long _from)
 	} while (count);
 }
 
+extern __inline__ int get_order(unsigned long size)
+{
+        int order;
+
+        size = (size-1) >> (PAGE_SHIFT-1);
+        order = -1;
+        do {
+                size >>= 1;
+                order++;
+        } while (size);
+        return order;
+}
+
 #ifdef STRICT_MM_TYPECHECKS
 /*
  * These are used to make use of C type-checking..

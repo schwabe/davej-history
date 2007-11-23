@@ -69,6 +69,8 @@ typedef unsigned long u64;
 #endif
 #define BITS_PER_LONG _MIPS_SZLONG
 
+typedef u32 dma_addr_t;
+
 #endif /* __KERNEL__ */
 
 #endif /* __ASM_MIPS_TYPES_H */

@@ -1,0 +1,170 @@
+#
+# Makefile aacraid Raid Controller
+#
+
+###############################################################################
+### SOURCE FILES DEFINES
+###############################################################################
+
+CFILES_DRIVER=\
+	./aachba.c \
+	./aacid.c \
+	./commctrl.c \
+	./comminit.c \
+	./commsup.c \
+	./dpcsup.c \
+	./linit.c \
+	./osddi.c \
+	./osfuncs.c \
+	./ossup.c \
+	./port.c \
+	./rx.c \
+	./sap1sup.c
+
+IFILES_DRIVER=\
+	./include/AacGenericTypes.h \
+	./include/aac_unix_defs.h \
+	./include/adapter.h \
+	./include/afacomm.h \
+	./include/aifstruc.h \
+	./include/build_number.h \
+	./include/commdata.h \
+	./include/commerr.h \
+	./include/commfibcontext.h \
+	./include/comprocs.h \
+	./include/comproto.h \
+	./include/comstruc.h \
+	./include/comsup.h \
+	./include/fsact.h \
+	./include/fsafs.h  \
+	./include/fsaioctl.h \
+	./include/fsaport.h \
+	./include/fsatypes.h \
+	./include/linit.h \
+	./include/monkerapi.h \
+	./include/nodetype.h \
+	./include/nvramioctl.h \
+	./include/osheaders.h \
+	./include/ostypes.h \
+	./include/pcisup.h \
+	./include/perfpack.h \
+	./include/port.h \
+	./include/protocol.h \
+	./include/revision.h \
+	./include/rxcommon.h \
+	./include/rx.h \
+	./include/sap1common.h \
+	./include/sap1.h \
+	./include/version.h
+
+ALL_SOURCE=\
+	${CFILES_DRIVER} \
+	${IFILES_DRIVER} 
+
+###############################################################################
+### OBJECT FILES DEFINES
+###############################################################################
+
+
+OFILES_DRIVER=\
+	linit.o \
+	osfuncs.o \
+	osddi.o \
+	aachba.o \
+	commctrl.o \
+	comminit.o \
+	commsup.o \
+	dpcsup.o \
+	ossup.o \
+	port.o \
+	rx.o \
+	sap1sup.o
+
+TARGET_OFILES= ${OFILES_DRIVER} aacid.o
+
+###############################################################################
+### GENERAL DEFINES
+###############################################################################
+
+#  Remember that we're doing a chdir one level lower, so we need an extra ../
+INCS= \
+	-I./include \
+	-I/usr/src/linux/include -I/usr/src/linux/drivers/scsi 
+
+WARNINGS= -w -Wall -Wno-unused -Wno-switch -Wno-missing-prototypes -Wno-implicit
+
+COMMON_FLAGS=\
+	-D__KERNEL__=1 -DUNIX -DCVLOCK_USE_SPINLOCK -DLINUX \
+	-Wall -Wstrict-prototypes \
+	${INCS} \
+	${WARNINGS} \
+	-O2 -fomit-frame-pointer
+
+CFLAGS=${COMMON_FLAGS} ${EXTRA_FLAGS}
+
+###############################################################################
+### DO GENERAL STUFF
+###############################################################################
+
+.SUFFIXES:
+.SUFFIXES: .c .o .h .a
+
+all: source ${TARGET_OFILES} aacraid.o
+
+source: ${ALL_SOURCE}
+
+clean:
+	rm *.o
+
+###############################################################################
+### DRIVER LINKS
+###############################################################################
+
+aacraid.o: source ${TARGET_OFILES}
+	ld -r -o $@ $(TARGET_OFILES)
+	cp -r aacraid.o ../
+
+###############################################################################
+### SIMPLE COMPILES
+###############################################################################
+
+linit.o: ./linit.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o linit.o ./linit.c
+
+aachba.o: ./aachba.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o aachba.o ./aachba.c
+
+osddi.o: ./osddi.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o osddi.o ./osddi.c
+
+osfuncs.o: ./osfuncs.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o osfuncs.o ./osfuncs.c
+
+commctrl.o:  ./commctrl.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o commctrl.o ./commctrl.c
+
+comminit.o:  ./comminit.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o comminit.o ./comminit.c
+
+commsup.o:  ./commsup.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o commsup.o ./commsup.c
+
+dpcsup.o:  ./dpcsup.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o dpcsup.o ./dpcsup.c
+
+aacid.o:  ./aacid.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o aacid.o ./aacid.c
+
+port.o:  ./port.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o port.o ./port.c
+
+ossup.o:  ./ossup.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o ossup.o ./ossup.c
+
+rx.o:  ./rx.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o rx.o ./rx.c
+
+sap1sup.o: ./sap1sup.c
+	$(CC) $(COMMON_FLAGS) $(CFLAGS) -c -o sap1sup.o ./sap1sup.c
+
+

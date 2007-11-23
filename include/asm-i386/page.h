@@ -53,6 +53,25 @@ typedef unsigned long pgprot_t;
 #define __pgprot(x)	(x)
 
 #endif
+
+#define BUG() do { \
+        printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); \
+        __asm__ __volatile__(".byte 0x0f,0x0b"); \
+} while (0)
+
+extern __inline__ int get_order(unsigned long size)
+{
+        int order;
+
+        size = (size-1) >> (PAGE_SHIFT-1);
+        order = -1;
+        do {
+                size >>= 1;
+                order++;
+        } while (size);
+        return order;
+}
+
 #endif /* !__ASSEMBLY__ */
 
 /* to align the pointer to the (next) page boundary */
@@ -88,6 +107,7 @@ typedef unsigned long pgprot_t;
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
+
 
 #endif /* __KERNEL__ */
 

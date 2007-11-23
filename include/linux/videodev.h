@@ -279,6 +279,8 @@ struct video_unit
 #define VID_HARDWARE_VINO	20	/* Reserved for SGI Indy Vino */
 #define VID_HARDWARE_CADET	21	/* Cadet radio */
 #define VID_HARDWARE_TRUST	22	/* Trust FM Radio */
+#define VID_HARDWARE_CPIA	24
+#define VID_HARDWARE_OV511	27
 
 /*
  *	Initialiser list

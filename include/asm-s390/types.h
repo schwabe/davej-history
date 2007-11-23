@@ -60,5 +60,7 @@ typedef unsigned long long u64;
 #define FALSE 0
 #endif
 
+typedef u32 dma_addr_t;
+
 #endif                                 /* __KERNEL__                       */
 #endif

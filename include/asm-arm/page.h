@@ -19,4 +19,17 @@
 /* void *__va(unsigned long x) */
 #define __va(x)			((void *)(__phys_to_virt((unsigned long)(x))))
 
+extern __inline__ int get_order(unsigned long size)
+{
+        int order;
+
+        size = (size-1) >> (PAGE_SHIFT-1);
+        order = -1;
+        do {
+                size >>= 1;
+                order++;
+        } while (size);
+        return order;
+}
+
 #endif

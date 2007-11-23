@@ -126,7 +126,6 @@
 #endif
 
 #if (LINUX_VERSION_CODE < 0x02032a)
-typedef u32 dma_addr_t;
 
 static inline void *pci_alloc_consistent(struct pci_dev *hwdev, size_t size,
 					 dma_addr_t *dma_handle)
@@ -608,6 +607,7 @@ MODULE_PARM(tx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_tx_desc, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(rx_coal_tick, "1-" __MODULE_STRING(8) "i");
 MODULE_PARM(max_rx_desc, "1-" __MODULE_STRING(8) "i");
+#endif
 
 
 void __exit ace_module_cleanup(void)
@@ -697,7 +697,6 @@ void __exit ace_module_cleanup(void)
 		root_dev = next;
 	}
 }
-#endif
 
 
 int __init ace_module_init(void)

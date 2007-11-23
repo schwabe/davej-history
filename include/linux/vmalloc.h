@@ -19,6 +19,9 @@ void * vmalloc(unsigned long size);
 long vread(char *buf, char *addr, unsigned long count);
 void vmfree_area_pages(unsigned long address, unsigned long size);
 int vmalloc_area_pages(unsigned long address, unsigned long size);
-
+extern inline void * vmalloc_32(unsigned long size)
+{
+	return vmalloc(size);
+}
 #endif
 

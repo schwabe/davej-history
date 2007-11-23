@@ -119,6 +119,7 @@ int __init microcode_init(void)
 	return 0;
 }
 
+#ifdef MODULE
 static void microcode_exit(void)
 {
 	misc_deregister(&microcode_dev);
@@ -128,7 +129,6 @@ static void microcode_exit(void)
 			MICROCODE_VERSION);
 }
 
-#ifdef MODULE
 int init_module(void)
 {
 	return microcode_init();

@@ -134,9 +134,9 @@ struct JS_DATA_SAVE_TYPE {
 #error "You need to use at least v2.2 Linux kernel."
 #endif
 
+#include <linux/spinlock.h>
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
-#include <asm/spinlock.h>
-typedef struct wait_queue *wait_queue_head_t;
 #define __exit
 #ifdef MODULE
 #define module_init(x)		int init_module(void) { return x(); }
@@ -147,13 +147,9 @@ typedef struct wait_queue *wait_queue_head_t;
 #endif
 #define __setup(a,b)
 #define BASE_ADDRESS(x,i)	((x)->base_address[i])
-#define DECLARE_WAITQUEUE(x,y)	struct wait_queue x = { y, NULL }
-#define init_waitqueue_head(x)	do { *(x) = NULL; } while (0)
-#define __set_current_state(x)	current->state = x
 #define SETUP_PARAM		char *str, int *ints
 #define SETUP_PARSE(x)		do {} while (0)
 #else
-#include <linux/spinlock.h>
 #define BASE_ADDRESS(x,i)	((x)->resource[i].start)
 #define SETUP_PARAM		char *str
 #define SETUP_PARSE(x)		int ints[x]; get_options(str, x, ints)

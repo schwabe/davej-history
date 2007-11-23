@@ -25,6 +25,11 @@ struct semaphore {
 #define MUTEX ((struct semaphore) { ATOMIC_INIT(1), ATOMIC_INIT(0), NULL })
 #define MUTEX_LOCKED ((struct semaphore) { ATOMIC_INIT(0), ATOMIC_INIT(0), NULL })
 
+#define init_MUTEX(x)				*(x)=MUTEX
+#define init_MUTEX_LOCKED(x)			*(x)=MUTEX_LOCKED
+#define DECLARE_MUTEX(name)			struct semaphore name=MUTEX
+#define DECLARE_MUTEX_LOCKED(name)		struct semaphore name=MUTEX_LOCKED
+
 asmlinkage void __down(struct semaphore * sem);
 asmlinkage int  __down_interruptible(struct semaphore * sem);
 asmlinkage int __down_trylock(struct semaphore * sem);

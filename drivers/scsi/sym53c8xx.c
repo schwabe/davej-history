@@ -85,7 +85,7 @@
 /*
 **	Name and version of the driver
 */
-#define SCSI_NCR_DRIVER_NAME	"sym53c8xx-1.7.0-20000709"
+#define SCSI_NCR_DRIVER_NAME	"sym53c8xx-1.7.1-20000726"
 
 #define SCSI_NCR_DEBUG_FLAGS	(0)
 
@@ -128,6 +128,10 @@
 
 #include <linux/version.h>
 #include <linux/blk.h>
+
+#ifdef CONFIG_ALL_PPC
+#include <asm/prom.h>
+#endif
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,35)
 #include <linux/init.h>
@@ -14108,6 +14112,9 @@ static int copy_info(struct info_str *info, char *fmt, ...)
 static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
 {
 	struct info_str info;
+#ifdef CONFIG_ALL_PPC
+	struct device_node* of_node;
+#endif
 
 	info.buffer	= ptr;
 	info.length	= len;
@@ -14129,6 +14136,11 @@ static int ncr_host_info(ncb_p np, char *ptr, off_t offset, int len)
 		__irq_itoa(np->irq));
 #else
 		(int) np->irq);
+#endif
+#ifdef CONFIG_ALL_PPC
+	of_node = find_pci_device_OFnode(np->bus, np->device_fn);
+	if (of_node && of_node->full_name)
+	    copy_info(&info, "PPC OpenFirmware path : %s\n", of_node->full_name);
 #endif
 	copy_info(&info, "  Synchronous period factor %d, "
 			 "max commands per lun %d\n",
@@ -14413,10 +14425,10 @@ out:
 	return retv;
 }
 
-#undef SET_BIT 0
-#undef CLR_BIT 1
-#undef SET_CLK 2
-#undef CLR_CLK 3
+#undef SET_BIT
+#undef CLR_BIT
+#undef SET_CLK
+#undef CLR_CLK
 
 /*
  *  Try reading Symbios NVRAM.

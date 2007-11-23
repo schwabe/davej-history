@@ -21,6 +21,7 @@
 #include <linux/init.h>
 #include <linux/file.h>
 #include <linux/dcache.h>
+#include <linux/nls.h>
 
 #include <linux/smb_fs.h>
 #include <linux/smbno.h>
@@ -320,13 +321,22 @@ smb_put_super(struct super_block *sb)
 	if (server->packet)
 		smb_vfree(server->packet);
 
+	if(sb->u.smbfs_sb.remote_nls) {
+		unload_nls(sb->u.smbfs_sb.remote_nls);
+		sb->u.smbfs_sb.remote_nls = NULL;
+	}
+	if(sb->u.smbfs_sb.local_nls) {
+		unload_nls(sb->u.smbfs_sb.local_nls);
+		sb->u.smbfs_sb.local_nls = NULL;
+	}
+
 	MOD_DEC_USE_COUNT;
 }
 
 struct super_block *
 smb_read_super(struct super_block *sb, void *raw_data, int silent)
 {
-	struct smb_mount_data *mnt;
+	struct smb_mount_data_kernel *mnt;
 	struct inode *root_inode;
 	struct smb_fattr root;
 
@@ -357,22 +367,36 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 		goto out_no_mem;
 
 	/* Allocate the global temp buffer */
-	sb->u.smbfs_sb.temp_buf = kmalloc(SMB_MAXPATHLEN + 20, GFP_KERNEL);
+	sb->u.smbfs_sb.temp_buf = kmalloc(2*SMB_MAXPATHLEN + 20, GFP_KERNEL);
 	if (!sb->u.smbfs_sb.temp_buf)
 		goto out_no_temp;
 
+	/* Setup NLS stuff */
+	sb->u.smbfs_sb.remote_nls = NULL;
+	sb->u.smbfs_sb.local_nls = NULL;
+	sb->u.smbfs_sb.name_buf = sb->u.smbfs_sb.temp_buf + SMB_MAXPATHLEN + 20;
+
 	/* Allocate the mount data structure */
-	mnt = kmalloc(sizeof(struct smb_mount_data), GFP_KERNEL);
+	mnt = kmalloc(sizeof(struct smb_mount_data_kernel), GFP_KERNEL);
 	if (!mnt)
 		goto out_no_mount;
-	*mnt = *((struct smb_mount_data *) raw_data);
+	memcpy(mnt, raw_data, sizeof(struct smb_mount_data));
+	strncpy(mnt->codepage.local_name, CONFIG_NLS_DEFAULT,
+		SMB_NLS_MAXNAMELEN);
+	strncpy(mnt->codepage.remote_name, CONFIG_SMB_NLS_REMOTE,
+		SMB_NLS_MAXNAMELEN);
+
 	/* FIXME: ** temp ** pass config flags in file mode */
-	mnt->version = (mnt->file_mode >> 9);
+	mnt->flags = (mnt->file_mode >> 9);
 	mnt->file_mode &= (S_IRWXU | S_IRWXG | S_IRWXO);
 	mnt->file_mode |= S_IFREG;
 	mnt->dir_mode  &= (S_IRWXU | S_IRWXG | S_IRWXO);
 	mnt->dir_mode  |= S_IFDIR;
 	sb->u.smbfs_sb.mnt = mnt;
+
+	smb_setcodepage(&sb->u.smbfs_sb, &mnt->codepage);
+	if (!sb->u.smbfs_sb.convert)
+		PARANOIA("convert funcptr was NULL!\n");
 
 	/*
 	 * Keep the super block locked while we get the root inode.

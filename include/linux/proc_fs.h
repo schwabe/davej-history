@@ -436,6 +436,12 @@ struct proc_dir_entry *create_proc_entry(const char *name, mode_t mode,
 					 struct proc_dir_entry *parent);
 void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
 
+#define create_proc_info_entry(n, m, b, g) \
+	{ \
+		struct proc_dir_entry *r = create_proc_entry(n, m, b); \
+		if (r) r->get_info = g; \
+	}
+
 /*
  * proc_tty.c
  */
@@ -463,6 +469,13 @@ extern inline struct proc_dir_entry *create_proc_entry(const char *name, mode_t 
 	return NULL;
 }
 
+#define create_proc_info_entry(n, m, b, g) \
+	{ \
+		struct proc_dir_entry *r = create_proc_entry(n, m, b); \
+		if (r) r->get_info = g; \
+	}
+
+
 extern inline void remove_proc_entry(const char *name, struct proc_dir_entry *parent) {};
 
 extern inline void proc_tty_register_driver(struct tty_driver *driver) {};
@@ -471,4 +484,7 @@ extern inline void proc_tty_unregister_driver(struct tty_driver *driver) {};
 extern struct proc_dir_entry proc_root;
 
 #endif /* CONFIG_PROC_FS */
+
+#define proc_mkdir(buf, usbdir)	create_proc_entry(buf, S_IFDIR, usbdir)
+
 #endif /* _LINUX_PROC_FS_H */

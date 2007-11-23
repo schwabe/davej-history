@@ -182,7 +182,7 @@ struct cs4281_state {
 };
 
 
-struct cs4281_state *devs = NULL;
+static struct cs4281_state *devs = NULL;
 // --------------------------------------------------------------------- 
 //
 //		Hardware Interfaces For the CS4281

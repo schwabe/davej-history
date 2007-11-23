@@ -658,6 +658,13 @@ struct file_system_type {
 	struct file_system_type * next;
 };
 
+#define DECLARE_FSTYPE(var,type,read,flags) \
+struct file_system_type var = { \
+        name:           type, \
+        read_super:     read, \
+        fs_flags:       flags, \
+}
+
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
 

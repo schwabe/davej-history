@@ -131,6 +131,10 @@
 #include "aha1740.h"
 #endif
 
+#ifdef CONFIG_SCSI_AACRAID
+#include "aacraid/include/linit.h"
+#endif
+
 #ifdef CONFIG_SCSI_AIC7XXX
 #include "aic7xxx.h"
 #endif
@@ -483,6 +487,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_AHA1740
     AHA1740,
+#endif
+#ifdef CONFIG_SCSI_AACRAID
+    AAC_HOST_TEMPLATE_ENTRY,
 #endif
 #ifdef CONFIG_SCSI_AIC7XXX
     AIC7XXX,

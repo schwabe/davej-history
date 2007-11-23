@@ -799,12 +799,13 @@ static inline void irq_exit(int cpu, unsigned int irq)
  * x86 profiling function, SMP safe. We might want to do this in
  * assembly totally?
  */
-extern char _stext;
+extern char _stext[];
+
 static inline void s390_do_profile (unsigned long addr)
 {
         if (prof_buffer && current->pid) {
                 addr &= 0x7fffffff;
-                addr -= (unsigned long) &_stext;
+                addr -= (unsigned long)&_stext[0];
                 addr >>= prof_shift;
                 /*
                  * Don't ignore out-of-bounds EIP values silently,

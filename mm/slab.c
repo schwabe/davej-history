@@ -1047,7 +1047,7 @@ found:
 
 int kmem_cache_shrink(kmem_cache_t *cachep)
 {
-	__kmem_cache_shrink(cachep,0);
+	return __kmem_cache_shrink(cachep,0);
 }
 
 /*

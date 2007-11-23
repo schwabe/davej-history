@@ -66,6 +66,7 @@ static struct {
 	{0x43525923, "Cirrus Logic CS4298"    , NULL},
 	{0x4352592B, "Cirrus Logic CS4294"    , NULL},
 	{0x43525931, "Cirrus Logic CS4299"    , NULL},
+	{0x43525934, "Cirrus Logic CS4299"    , NULL},
 	{0x4e534331, "National Semiconductor LM4549" ,	NULL},
 	{0x53494c22, "Silicon Laboratory Si3036"     ,	NULL},
 	{0x53494c23, "Silicon Laboratory Si3038"     ,  NULL},
@@ -648,6 +649,7 @@ static int enable_eapd(struct ac97_codec * codec)
 {
 	codec->codec_write(codec, AC97_POWER_CONTROL,
 		codec->codec_read(codec, AC97_POWER_CONTROL)|0x8000);
+	return 0;
 }
 	
 

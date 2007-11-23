@@ -171,16 +171,8 @@
 #include <asm/softirq.h>
 
 /* 2.2-2.3 Compatability defines */
-#define DECLARE_WAIT_QUEUE_HEAD(w) struct wait_queue *w = NULL
-#define DECLARE_WAITQUEUE(w,c) struct wait_queue w = {(c), NULL}
 #define __setup(x, y)
 #define module_init(x)
-#define set_current_state(a) current->state = (a)
-#define create_proc_info_entry(n, m, b, g) \
-	{ \
-		struct proc_dir_entry *r = create_proc_entry(n, m, b); \
-		if (r) r->get_info = g; \
-	}
 
 EXPORT_SYMBOL(apm_register_callback);
 EXPORT_SYMBOL(apm_unregister_callback);
