@@ -429,10 +429,10 @@ int fat_dir_ioctl(struct inode * inode, struct file * filp,
 	}
 	case VFAT_IOCTL_READDIR_SHORT: {
 		struct dirent *d1 = (struct dirent *)arg;
-		put_user(0, &d1->d_reclen);
 		err = verify_area(VERIFY_WRITE, d1, sizeof(struct dirent[2]));
 		if (err)
 			return err;
+		put_user(0, &d1->d_reclen);
 		return fat_readdirx(inode,filp,(void *)arg,
 				    vfat_ioctl_fill, NULL, 1, 0, 1);
 	}

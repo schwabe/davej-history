@@ -1088,7 +1088,7 @@ static int idefloppy_get_flexible_disk_page (ide_drive_t *drive)
 	lba_capacity = floppy->blocks * floppy->block_size;
 	if (capacity != lba_capacity) {
 		if (!lba_capacity)
-			printk(KERN_NOTICE "%s: no media in the drive\n");
+			printk(KERN_NOTICE "%s: no media in the drive\n", drive->name);
 		else printk (KERN_NOTICE "%s: The drive reports both %d and %d bytes as its capacity\n",
 			     drive->name, capacity, lba_capacity);
 		capacity = IDEFLOPPY_MIN(capacity, lba_capacity);
