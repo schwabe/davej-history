@@ -92,10 +92,35 @@ static char *tw_aen_string[] = {
 	"Verify failed: Port #",                // 0x02A
 	"Verify complete: Unit #",              // 0x02B
 	"Overwrote bad sector during rebuild: Port #",  //0x2C
-	"Encountered bad sector during rebuild: Port #" //0x2D
+	"Encountered bad sector during rebuild: Port #", //0x2D
+	"Replacement drive is too small: Port #" //0x2E
 };
 
-#define TW_AEN_STRING_MAX                      0x02E
+#define TW_AEN_STRING_MAX                      0x02F
+
+/*
+   Sense key lookup table
+   Format: ESDC/flags,SenseKey,AdditionalSenseCode,AdditionalSenseCodeQualifier
+*/
+static unsigned char tw_sense_table[][4] =
+{
+  /* Codes for newer firmware */
+                            // ATA Error                    SCSI Error
+  {0x01, 0x03, 0x13, 0x00}, // Address mark not found       Address mark not found for data field
+  {0x04, 0x0b, 0x00, 0x00}, // Aborted command              Aborted command
+  {0x10, 0x0b, 0x14, 0x00}, // ID not found                 Recorded entity not found
+  {0x40, 0x03, 0x11, 0x00}, // Uncorrectable ECC error      Unrecovered read error
+  {0x61, 0x04, 0x00, 0x00}, // Device fault                 Hardware error
+  {0x84, 0x0b, 0x47, 0x00}, // Data CRC error               SCSI parity error
+  {0xd0, 0x0b, 0x00, 0x00}, // Device busy                  Aborted command
+  {0xd1, 0x0b, 0x00, 0x00}, // Device busy                  Aborted command
+
+  /* Codes for older firmware */
+                            // 3ware Error                  SCSI Error
+  {0x09, 0x0b, 0x00, 0x00}, // Unrecovered disk error       Aborted command
+  {0x37, 0x0b, 0x04, 0x00}, // Unit offline                 Logical unit not ready
+  {0x51, 0x0b, 0x00, 0x00}  // Unspecified                  Aborted command
+};
 
 /* Control register bit definitions */
 #define TW_CONTROL_CLEAR_HOST_INTERRUPT	       0x00080000
@@ -110,7 +135,9 @@ static char *tw_aen_string[] = {
 #define TW_CONTROL_DISABLE_INTERRUPTS	       0x00000040
 #define TW_CONTROL_ISSUE_HOST_INTERRUPT	       0x00000020
 #define TW_CONTROL_CLEAR_PARITY_ERROR          0x00800000
+#define TW_CONTROL_CLEAR_QUEUE_ERROR           0x00400000
 #define TW_CONTROL_CLEAR_PCI_ABORT             0x00100000
+#define TW_CONTROL_CLEAR_SBUF_WRITE_ERROR      0x00000008
 
 /* Status register bit definitions */
 #define TW_STATUS_MAJOR_VERSION_MASK	       0xF0000000
@@ -130,7 +157,9 @@ static char *tw_aen_string[] = {
 #define TW_STATUS_ALL_INTERRUPTS	       0x000F0000
 #define TW_STATUS_CLEARABLE_BITS	       0x00D00000
 #define TW_STATUS_EXPECTED_BITS		       0x00002000
-#define TW_STATUS_UNEXPECTED_BITS	       0x00F80000
+#define TW_STATUS_UNEXPECTED_BITS	       0x00F00008
+#define TW_STATUS_SBUF_WRITE_ERROR             0x00000008
+#define TW_STATUS_VALID_INTERRUPT              0x00DF0008
 
 /* RESPONSE QUEUE BIT DEFINITIONS */
 #define TW_RESPONSE_ID_MASK		       0x00000FF0
@@ -174,7 +203,8 @@ static char *tw_aen_string[] = {
 #define TW_AEN_SBUF_FAIL         0x0024
 
 /* Misc defines */
-#define TW_ALIGNMENT			      0x200 /* 16 D-WORDS */
+#define TW_ALIGNMENT_6000                     64 /* 64 bytes */
+#define TW_ALIGNMENT_7000                     4  /* 4 bytes */
 #define TW_MAX_UNITS			      16
 #define TW_COMMAND_ALIGNMENT_MASK	      0x1ff
 #define TW_INIT_MESSAGE_CREDITS		      0x100
@@ -190,7 +220,7 @@ static char *tw_aen_string[] = {
 #define TW_MAX_PCI_BUSES		      255
 #define TW_MAX_RESET_TRIES		      3
 #define TW_UNIT_INFORMATION_TABLE_BASE	      0x300
-#define TW_MAX_CMDS_PER_LUN		      (TW_Q_LENGTH-2)/TW_MAX_UNITS
+#define TW_MAX_CMDS_PER_LUN		      255
 #define TW_BLOCK_SIZE			      0x200 /* 512-byte blocks */
 #define TW_IOCTL                              0x80
 #define TW_MAX_AEN_TRIES                      100
@@ -199,6 +229,8 @@ static char *tw_aen_string[] = {
 #define TW_MAX_SECTORS                        128
 #define TW_AEN_WAIT_TIME                      1000
 #define TW_IOCTL_WAIT_TIME                    (1 * HZ) /* 1 second */
+#define TW_ISR_DONT_COMPLETE                  2
+#define TW_ISR_DONT_RESULT                    3
 
 /* Macros */
 #define TW_STATUS_ERRORS(x) \
@@ -211,7 +243,7 @@ static char *tw_aen_string[] = {
 #ifdef TW_DEBUG
 #define dprintk(msg...) printk(msg)
 #else
-#define dprintk(msg...) do { } while(0);
+#define dprintk(msg...) do { } while(0)
 #endif
 
 extern struct proc_dir_entry tw_scsi_proc_entry;
@@ -384,8 +416,9 @@ typedef struct TAG_TW_Device_Extension {
 	unsigned short		aen_queue[TW_Q_LENGTH];
 	unsigned char		aen_head;
 	unsigned char		aen_tail;
-	u32			flags;
+	volatile long		flags;
 	char                    *ioctl_data[TW_Q_LENGTH];
+	int			reset_print;
 } TW_Device_Extension;
 
 /* Function prototypes */
@@ -395,12 +428,13 @@ int tw_aen_read_queue(TW_Device_Extension *tw_dev, int request_id);
 int tw_allocate_memory(TW_Device_Extension *tw_dev, int request_id, int size, int which);
 int tw_check_bits(u32 status_reg_value);
 int tw_check_errors(TW_Device_Extension *tw_dev);
+void tw_clear_all_interrupts(TW_Device_Extension *tw_dev);
 void tw_clear_attention_interrupt(TW_Device_Extension *tw_dev);
 void tw_clear_host_interrupt(TW_Device_Extension *tw_dev);
-void tw_decode_bits(TW_Device_Extension *tw_dev, u32 status_reg_value);
-void tw_decode_error(TW_Device_Extension *tw_dev, unsigned char status, unsigned char flags, unsigned char unit);
+int tw_decode_bits(TW_Device_Extension *tw_dev, u32 status_reg_value, int print_host);
+int tw_decode_sense(TW_Device_Extension *tw_dev, int request_id, int fill_sense);
 void tw_disable_interrupts(TW_Device_Extension *tw_dev);
-int tw_empty_response_que(TW_Device_Extension *tw_dev);
+void tw_empty_response_que(TW_Device_Extension *tw_dev);
 void tw_enable_interrupts(TW_Device_Extension *tw_dev);
 void tw_enable_and_clear_interrupts(TW_Device_Extension *tw_dev);
 int tw_findcards(Scsi_Host_Template *tw_host);
@@ -460,7 +494,7 @@ void tw_unmask_command_interrupt(TW_Device_Extension *tw_dev);
 	reset : NULL,					\
 	slave_attach : NULL,				\
 	bios_param : tw_scsi_biosparam,			\
-	can_queue : TW_Q_LENGTH,			\
+	can_queue : TW_Q_LENGTH-1,			\
 	this_id: -1,					\
 	sg_tablesize : TW_MAX_SGL_LENGTH,		\
 	cmd_per_lun: TW_MAX_CMDS_PER_LUN,		\

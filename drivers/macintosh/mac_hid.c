@@ -480,13 +480,13 @@ void __init mac_hid_init_hw(void)
 
 	if (!keyboard_sends_linux_keycodes) {
 #ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.ppc_kbd_sysrq_xlate   = mac_hid_kbd_sysrq_xlate;
+		ppc_md.sysrq_xlate   = mac_hid_kbd_sysrq_xlate;
 		SYSRQ_KEY                = 0x69;
 #endif
 		memcpy(key_maps, mac_key_maps_save, sizeof(key_maps));
 	} else {
 #ifdef CONFIG_MAGIC_SYSRQ
-		ppc_md.ppc_kbd_sysrq_xlate   = pckbd_sysrq_xlate;
+		ppc_md.sysrq_xlate   = pckbd_sysrq_xlate;
 		SYSRQ_KEY                = 0x54;
 #endif
 	}

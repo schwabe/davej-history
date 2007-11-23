@@ -30,8 +30,6 @@
  * Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#define __NO_VERSION__
-
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
@@ -330,7 +328,7 @@ static int ov511_read_proc(char *page, char **start, off_t off,
 	/* IMPORTANT: This output MUST be kept under PAGE_SIZE
 	 *            or we need to get more sophisticated. */
 
-	out += sprintf (out, "driver_version  : %s\n", version);
+	out += sprintf (out, "driver_version  : %s\n", DRIVER_VERSION);
 	out += sprintf (out, "custom_id       : %d\n", ov511->customid);
 	out += sprintf (out, "model           : %s\n", ov511->desc ?
 		clist[ov511->desc].description : "unknown");
