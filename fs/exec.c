@@ -20,9 +20,6 @@
  * table to check for several different types  of binary formats.  We keep
  * trying until we recognize the file or we run out of supported binary
  * formats. 
- *
- * (current->executable doesn't exist anymore, procfs searches for the vma
- * that corresponds to the executable and uses its dentry.)
  */
 
 #include <linux/config.h>
@@ -520,7 +517,6 @@ int flush_old_exec(struct linux_binprm * bprm)
 
 	current->sas_ss_sp = current->sas_ss_size = 0;
 
-	current->dumpable = 0;
 	bprm->dumpable = 0;
 	if (current->euid == current->uid && current->egid == current->gid)
 		bprm->dumpable = !bprm->priv_change;
@@ -829,6 +825,7 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 {
 	struct linux_binprm bprm;
 	struct dentry * dentry;
+	int was_dumpable;
 	int retval;
 	int i;
 
@@ -857,6 +854,9 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 		return bprm.envc;
 	}
 
+	was_dumpable = current->dumpable;
+	current->dumpable = 0;
+
 	retval = prepare_binprm(&bprm);
 	
 	if (retval >= 0) {
@@ -871,11 +871,11 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	if (retval >= 0)
 		retval = search_binary_handler(&bprm,regs);
 
-	current->dumpable = bprm.dumpable;
-
-	if (retval >= 0)
+	if (retval >= 0) {
 		/* execve success */
+		current->dumpable = bprm.dumpable;
 		return retval;
+	}
 
 	/* Something went wrong, return the inode and free the argument pages*/
 	if (bprm.dentry)
@@ -883,6 +883,8 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(bprm.page[i]);
+
+	current->dumpable = was_dumpable;
 
 	return retval;
 }

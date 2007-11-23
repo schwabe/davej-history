@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1999-2000 by David Brownell <david-b@pacbell.net>
+ * Copyright (C) 1999-2000 by David Brownell <dbrownell@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -59,13 +59,17 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/module.h>
-#undef DEBUG
+#ifdef CONFIG_USB_DEBUG
+	#define DEBUG
+#else
+	#undef DEBUG
+#endif
 #include <linux/usb.h>
 
 
 
 /* current USB framework handles max of 16 USB devices per driver */
-#define	MAX_CAMERAS		8
+#define	MAX_CAMERAS		16
 
 /* USB char devs use USB_MAJOR and from USB_CAMERA_MINOR_BASE up */
 #define	USB_CAMERA_MINOR_BASE	80
@@ -90,6 +94,8 @@ static const struct camera {
 	/* These have the same application level protocol */  
     { 0x040a, 0x0120 },		// Kodak DC-240
     { 0x040a, 0x0130 },		// Kodak DC-280
+    { 0x040a, 0x0131 },		// Kodak DC-5000
+    { 0x040a, 0x0132 },		// Kodak DC-3400
 
 	/* These have a different application level protocol which
 	 * is part of the Flashpoint "DigitaOS".  That supports some
@@ -435,7 +441,8 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 		goto error;
 	}
 
-	info ("USB Camera #%d connected", camera->subminor);
+	info ("USB Camera #%d connected, major/minor %d/%d", camera->subminor,
+		USB_MAJOR, USB_CAMERA_MINOR_BASE + camera->subminor);
 
 	camera->dev = dev;
 	usb_inc_dev_use (dev);
@@ -475,12 +482,13 @@ static void camera_disconnect(struct usb_device *dev, void *ptr)
 }
 
 static /* const */ struct usb_driver camera_driver = {
-	"dc2xx",
-	camera_probe,
-	camera_disconnect,
-	{ NULL, NULL },
-	&usb_camera_fops,
-	USB_CAMERA_MINOR_BASE
+	name:		"dc2xx",
+
+	probe:		camera_probe,
+	disconnect:	camera_disconnect,
+
+	fops:		&usb_camera_fops,
+	minor:		USB_CAMERA_MINOR_BASE
 };
 
 
@@ -497,7 +505,7 @@ void __exit usb_dc2xx_cleanup(void)
 }
 
 
-MODULE_AUTHOR("David Brownell, david-b@pacbell.net");
+MODULE_AUTHOR("David Brownell, dbrownell@users.sourceforge.net");
 MODULE_DESCRIPTION("USB Camera Driver for Kodak DC-2xx series cameras");
 
 module_init (usb_dc2xx_init);

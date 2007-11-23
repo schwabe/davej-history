@@ -54,9 +54,9 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
-#include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 
@@ -836,9 +836,6 @@ static int keyspan_open (struct usb_serial_port *port, struct file *filp)
 	p_priv = (struct keyspan_port_private *)(port->private);
 
 	/* Set some sane defaults */
-	p_priv->baud = 9600;
-	p_priv->cflag = CREAD | CLOCAL;
-	p_priv->flow_control = flow_none;
 	p_priv->rts_state = 1;
 	p_priv->dtr_state = 1;
 
@@ -851,16 +848,8 @@ static int keyspan_open (struct usb_serial_port *port, struct file *filp)
 			dbg(__FUNCTION__ " submit urb %d failed (%d)", i, err);
 		}
 	}
-/*    Now done in startup routine
-	if (atomic_inc_return(&s_priv->active_count) == 1) {
-		s_priv->instat_urb->dev = serial->dev;
-		if ((err = usb_submit_urb(s_priv->instat_urb)) != 0) {
-			dbg(__FUNCTION__ " submit instat urb failed %d", err);
-		}
-	}
-*/
 
-	keyspan_send_setup(port);
+	keyspan_set_termios(port, NULL);
 
 	return (0);
 }

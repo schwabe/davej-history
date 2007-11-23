@@ -10,11 +10,26 @@
  *	(at your option) any later version.
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
+ *
+ * (01/21/2000) gkh
+ *	Added write_room and chars_in_buffer, as they were previously using the
+ *	generic driver versions which is all wrong now that we are using an urb
+ *	pool.  Thanks to Wolfgang Grandegger for pointing this out to me.
+ *	Removed count assignment in the write function, which was not needed anymore
+ *	either.  Thanks to Al Borchers for pointing this out.
+ *
+ * (12/12/2000) gkh
+ *	Moved MOD_DEC to end of visor_close to be nicer, as the final write 
+ *	message can sleep.
  * 
  * (11/12/2000) gkh
  *	Fixed bug with data being dropped on the floor by forcing tty->low_latency
  *	to be on.  This fixes the OHCI issue!
  *
+ * (10/05/2000) gkh
+ *	Fixed bug with urb->dev not being set properly, now that the usb
+ *	core needs it.
+ * 
  * (09/11/2000) gkh
  *	Got rid of always calling kmalloc for every urb we wrote out to the
  *	device.
@@ -69,9 +84,9 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
-#include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 
@@ -92,6 +107,8 @@
 static int  visor_open		(struct usb_serial_port *port, struct file *filp);
 static void visor_close		(struct usb_serial_port *port, struct file *filp);
 static int  visor_write		(struct usb_serial_port *port, int from_user, const unsigned char *buf, int count);
+static int  visor_write_room		(struct usb_serial_port *port);
+static int  visor_chars_in_buffer	(struct usb_serial_port *port);
 static void visor_throttle	(struct usb_serial_port *port);
 static void visor_unthrottle	(struct usb_serial_port *port);
 static int  visor_startup	(struct usb_serial *serial);
@@ -124,6 +141,8 @@ struct usb_serial_device_type handspring_device = {
 	ioctl:			visor_ioctl,
 	set_termios:		visor_set_termios,
 	write:			visor_write,
+	write_room:		visor_write_room,
+	chars_in_buffer:	visor_chars_in_buffer,
 	write_bulk_callback:	visor_write_bulk_callback,
 	read_bulk_callback:	visor_read_bulk_callback,
 };
@@ -142,7 +161,9 @@ static int		bytes_out;
  ******************************************************************************/
 static int visor_open (struct usb_serial_port *port, struct file *filp)
 {
+	struct usb_serial *serial = port->serial;
 	unsigned long flags;
+	int result;
 
 	if (port_paranoia_check (port, __FUNCTION__))
 		return -ENODEV;
@@ -160,13 +181,18 @@ static int visor_open (struct usb_serial_port *port, struct file *filp)
 		bytes_out = 0;
 
 		/* force low_latency on so that our tty_push actually forces the data through, 
-		  otherwise it is scheduled, and with high data rates (like with OHCI) data
-		  can get lost. */
+		   otherwise it is scheduled, and with high data rates (like with OHCI) data
+		   can get lost. */
 		port->tty->low_latency = 1;
-
-		/*Start reading from the device*/
-		if (usb_submit_urb(port->read_urb))
-			dbg(__FUNCTION__  " - usb_submit_urb(read bulk) failed");
+		
+		/* Start reading from the device */
+		FILL_BULK_URB(port->read_urb, serial->dev, 
+			      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+			      port->read_urb->transfer_buffer, port->read_urb->transfer_buffer_length,
+			      visor_read_bulk_callback, port);
+		result = usb_submit_urb(port->read_urb);
+		if (result)
+			err(__FUNCTION__ " - failed submitting read urb, error %d", result);
 	}
 	
 	spin_unlock_irqrestore (&port->port_lock, flags);
@@ -193,7 +219,6 @@ static void visor_close (struct usb_serial_port *port, struct file * filp)
 	spin_lock_irqsave (&port->port_lock, flags);
 
 	--port->open_count;
-	MOD_DEC_USE_COUNT;
 
 	if (port->open_count <= 0) {
 		transfer_buffer =  kmalloc (0x12, GFP_KERNEL);
@@ -216,6 +241,8 @@ static void visor_close (struct usb_serial_port *port, struct file * filp)
 
 	/* Uncomment the following line if you want to see some statistics in your syslog */
 	/* info ("Bytes In = %d  Bytes Out = %d", bytes_in, bytes_out); */
+
+	MOD_DEC_USE_COUNT;
 }
 
 
@@ -263,8 +290,6 @@ static int visor_write (struct usb_serial_port *port, int from_user, const unsig
 		else
 			memcpy (urb->transfer_buffer, current_position, transfer_size);
 		
-		count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
-
 		/* build up our urb */
 		FILL_BULK_URB (urb, serial->dev, usb_sndbulkpipe(serial->dev, port->bulk_out_endpointAddress), 
 				urb->transfer_buffer, transfer_size, visor_write_bulk_callback, port);
@@ -284,6 +309,52 @@ static int visor_write (struct usb_serial_port *port, int from_user, const unsig
 exit:
 	return bytes_sent;
 } 
+
+
+static int visor_write_room (struct usb_serial_port *port)
+{
+	unsigned long flags;
+	int i;
+	int room = 0;
+
+	dbg(__FUNCTION__ " - port %d", port->number);
+	
+	spin_lock_irqsave (&port->port_lock, flags);
+
+	for (i = 0; i < NUM_URBS; ++i) {
+		if (write_urb_pool[i]->status != -EINPROGRESS) {
+			room += URB_TRANSFER_BUFFER_SIZE;
+		}
+	}
+	
+	spin_unlock_irqrestore (&port->port_lock, flags);
+	
+	dbg(__FUNCTION__ " - returns %d", room);
+	return (room);
+}
+
+
+static int visor_chars_in_buffer (struct usb_serial_port *port)
+{
+	unsigned long flags;
+	int i;
+	int chars = 0;
+
+	dbg(__FUNCTION__ " - port %d", port->number);
+	
+	spin_lock_irqsave (&port->port_lock, flags);
+
+	for (i = 0; i < NUM_URBS; ++i) {
+		if (write_urb_pool[i]->status == -EINPROGRESS) {
+			chars += URB_TRANSFER_BUFFER_SIZE;
+		}
+	}
+	
+	spin_unlock_irqrestore (&port->port_lock, flags);
+
+	dbg (__FUNCTION__ " - returns %d", chars);
+	return (chars);
+}
 
 
 static void visor_write_bulk_callback (struct urb *urb)
@@ -310,14 +381,21 @@ static void visor_write_bulk_callback (struct urb *urb)
 static void visor_read_bulk_callback (struct urb *urb)
 {
 	struct usb_serial_port *port = (struct usb_serial_port *)urb->context;
+	struct usb_serial *serial = get_usb_serial (port, __FUNCTION__);
 	struct tty_struct *tty;
 	unsigned char *data = urb->transfer_buffer;
 	int i;
+	int result;
 
 	if (port_paranoia_check (port, __FUNCTION__))
 		return;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
+
+	if (!serial) {
+		dbg(__FUNCTION__ " - bad serial pointer, exiting");
+		return;
+	}
 
 	if (urb->status) {
 		dbg(__FUNCTION__ " - nonzero read bulk status received: %d", urb->status);
@@ -341,8 +419,13 @@ static void visor_read_bulk_callback (struct urb *urb)
 	}
 
 	/* Continue trying to always read  */
-	if (usb_submit_urb(urb))
-		dbg(__FUNCTION__ " - failed resubmitting read urb");
+	FILL_BULK_URB(port->read_urb, serial->dev, 
+		      usb_rcvbulkpipe(serial->dev, port->bulk_in_endpointAddress),
+		      port->read_urb->transfer_buffer, port->read_urb->transfer_buffer_length,
+		      visor_read_bulk_callback, port);
+	result = usb_submit_urb(port->read_urb);
+	if (result)
+		err(__FUNCTION__ " - failed resubmitting read urb, error %d", result);
 	return;
 }
 
@@ -366,13 +449,16 @@ static void visor_throttle (struct usb_serial_port *port)
 static void visor_unthrottle (struct usb_serial_port *port)
 {
 	unsigned long flags;
+	int result;
 
 	dbg(__FUNCTION__ " - port %d", port->number);
 
 	spin_lock_irqsave (&port->port_lock, flags);
 
-	if (usb_submit_urb (port->read_urb))
-		dbg(__FUNCTION__ " - usb_submit_urb(read bulk) failed");
+	port->read_urb->dev = port->serial->dev;
+	result = usb_submit_urb(port->read_urb);
+	if (result)
+		err(__FUNCTION__ " - failed submitting read urb, error %d", result);
 
 	spin_unlock_irqrestore (&port->port_lock, flags);
 

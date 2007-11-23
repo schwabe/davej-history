@@ -27,6 +27,10 @@
 
 #define HOST_RAMPAGE		8
 
+#define RX_HALTED (1<<0)
+#define TX_HALTED (1<<1)  
+#define HALTED (RX_HALTED | TX_HALTED)
+#define RUNNING 0
 
 struct mc32_mailbox
 {
@@ -53,7 +57,7 @@ struct mc32_stats
 	u32     rx_toolong_errors   __attribute((packed));
 	u32     rx_outofresource_errors  __attribute((packed)); 
 
-	u32     rx_discarded   __attribute((packed));  // via card pattern match filter
+	u32     rx_discarded   __attribute((packed));  /* via card pattern match filter */ 
 
 	/* TX Errors */
 	u32     tx_max_collisions __attribute((packed)); 

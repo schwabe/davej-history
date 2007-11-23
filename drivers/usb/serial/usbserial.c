@@ -14,7 +14,17 @@
  * based on a driver by Brad Keryan)
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
- * 
+ *
+ * 2001_02_05 gkh
+ *	Fixed buffer overflows bug with the generic serial driver.  Thanks to
+ *	Todd Squires <squirest@ct0.com> for fixing this.
+ *
+ * (12/12/2000) gkh
+ *	Removed MOD_INC and MOD_DEC from poll and disconnect functions, and
+ *	moved them to the serial_open and serial_close functions.
+ *	Also fixed bug with there not being a MOD_DEC for the generic driver
+ *	(thanks to Gary Brubaker for finding this.)
+ *
  * (12/29/2000) gkh
  *	Small NULL pointer initialization cleanup which saves a bit of disk image
  *
@@ -246,9 +256,9 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
-#include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/list.h>
@@ -456,6 +466,8 @@ static int serial_open (struct tty_struct *tty, struct file * filp)
 		return -ENODEV;
 	}
 
+	MOD_INC_USE_COUNT;
+	
 	/* set up our port structure making the tty driver remember our port object, and us it */
 	portNumber = MINOR(tty->device) - serial->minor;
 	port = &serial->port[portNumber];
@@ -493,6 +505,8 @@ static void serial_close(struct tty_struct *tty, struct file * filp)
 	} else {
 		generic_close(port, filp);
 	}
+
+	MOD_DEC_USE_COUNT;
 }	
 
 
@@ -706,16 +720,22 @@ static int generic_open (struct usb_serial_port *port, struct file *filp)
 	if (port_paranoia_check (port, __FUNCTION__))
 		return -ENODEV;
 
+	MOD_INC_USE_COUNT;
+
 	dbg(__FUNCTION__ " - port %d", port->number);
 
 	spin_lock_irqsave (&port->port_lock, flags);
 	
 	++port->open_count;
-	MOD_INC_USE_COUNT;
 	
 	if (!port->active) {
 		port->active = 1;
 
+		/* force low_latency on so that our tty_push actually forces the data through, 
+		   otherwise it is scheduled, and with high data rates (like with OHCI) data
+		   can get lost. */
+		port->tty->low_latency = 1;
+		
 		/* if we have a bulk interrupt, start reading from it */
 		if (serial->num_bulk_in) {
 			/* Start reading from the device */
@@ -761,6 +781,7 @@ static void generic_close (struct usb_serial_port *port, struct file * filp)
 	}
 
 	spin_unlock_irqrestore (&port->port_lock, flags);
+	MOD_DEC_USE_COUNT;
 }
 
 
@@ -880,8 +901,13 @@ static void generic_read_bulk_callback (struct urb *urb)
 	tty = port->tty;
 	if (urb->actual_length) {
 		for (i = 0; i < urb->actual_length ; ++i) {
-			 tty_insert_flip_char(tty, data[i], 0);
-	  	}
+			/* if we insert more than TTY_FLIPBUF_SIZE characters, we drop them. */
+			if(tty->flip.count >= TTY_FLIPBUF_SIZE) {
+				tty_flip_buffer_push(tty);
+			}
+			/* this doesn't actually push the data through unless tty->low_latency is set */
+			tty_insert_flip_char(tty, data[i], 0);
+		}
 	  	tty_flip_buffer_push(tty);
 	}
 
@@ -1056,7 +1082,6 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	}
 
 	/* found all that we need */
-	MOD_INC_USE_COUNT;
 	info("%s converter detected", type->name);
 
 #ifdef CONFIG_USB_SERIAL_GENERIC
@@ -1064,7 +1089,6 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 		num_ports = num_bulk_out;
 		if (num_ports == 0) {
 			err("Generic device with no bulk out, not allowed.");
-			MOD_DEC_USE_COUNT;
 			return NULL;
 		}
 	} else
@@ -1074,7 +1098,6 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 	serial = get_free_serial (num_ports, &minor);
 	if (serial == NULL) {
 		err("No more free serial devices");
-		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
 	
@@ -1220,7 +1243,6 @@ probe_error:
 
 	/* free up any memory that we allocated */
 	kfree (serial);
-	MOD_DEC_USE_COUNT;
 	return NULL;
 }
 
@@ -1287,7 +1309,6 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 		info("device disconnected");
 	}
 	
-	MOD_DEC_USE_COUNT;
 }
 
 

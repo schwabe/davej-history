@@ -13,6 +13,17 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (01/22/2001) gb
+ *	Added write_room() and chars_in_buffer() support. 
+ * 
+ * (12/21/2000) gb
+ *	Moved termio stuff inside the port->active check.
+ *	Moved MOD_DEC_USE_COUNT to end of empeg_close().
+ * 
+ * (12/03/2000) gb
+ *	Added port->tty->ldisc.set_termios(port->tty, NULL) to empeg_open()
+ *	This notifies the tty driver that the termios have changed.
+ * 
  * (11/13/2000) gb
  *	Moved tty->low_latency = 1 from empeg_read_bulk_callback() to empeg_open()
  *	(It only needs to be set once - Doh!)
@@ -39,9 +50,9 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/fcntl.h>
+#include <linux/tty.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
-#include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #ifdef CONFIG_USB_SERIAL_DEBUG
@@ -53,21 +64,29 @@
 
 #include "usb-serial.h"
 
-#define EMPEG_VENDOR_ID                 0x084f
-#define EMPEG_PRODUCT_ID                0x0001
+#define EMPEG_VENDOR_ID			0x084f
+#define EMPEG_PRODUCT_ID		0x0001
 
 #define MIN(a,b)		(((a)<(b))?(a):(b))
 
 /* function prototypes for an empeg-car player */
-static int  empeg_open		(struct usb_serial_port *port, struct file *filp);
-static void empeg_close		(struct usb_serial_port *port, struct file *filp);
-static int  empeg_write		(struct usb_serial_port *port, int from_user, const unsigned char *buf, int count);
-static void empeg_throttle	(struct usb_serial_port *port);
-static void empeg_unthrottle	(struct usb_serial_port *port);
-static int  empeg_startup	(struct usb_serial *serial);
-static void empeg_shutdown	(struct usb_serial *serial);
-static int  empeg_ioctl		(struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg);
-static void empeg_set_termios	(struct usb_serial_port *port, struct termios *old_termios);
+static int  empeg_open			(struct usb_serial_port *port, struct file *filp);
+static void empeg_close			(struct usb_serial_port *port, struct file *filp);
+static int  empeg_write			(struct usb_serial_port *port,
+					int from_user,
+					const unsigned char *buf,
+					int count);
+static int  empeg_write_room		(struct usb_serial_port *port);
+static int  empeg_chars_in_buffer	(struct usb_serial_port *port);
+static void empeg_throttle		(struct usb_serial_port *port);
+static void empeg_unthrottle		(struct usb_serial_port *port);
+static int  empeg_startup		(struct usb_serial *serial);
+static void empeg_shutdown		(struct usb_serial *serial);
+static int  empeg_ioctl			(struct usb_serial_port *port,
+					struct file * file,
+					unsigned int cmd,
+					unsigned long arg);
+static void empeg_set_termios		(struct usb_serial_port *port, struct termios *old_termios);
 static void empeg_write_bulk_callback	(struct urb *urb);
 static void empeg_read_bulk_callback	(struct urb *urb);
 
@@ -93,6 +112,8 @@ struct usb_serial_device_type empeg_device = {
 	ioctl:			empeg_ioctl,
 	set_termios:		empeg_set_termios,
 	write:			empeg_write,
+	write_room:		empeg_write_room,
+	chars_in_buffer:	empeg_chars_in_buffer,
 	write_bulk_callback:	empeg_write_bulk_callback,
 	read_bulk_callback:	empeg_read_bulk_callback,
 };
@@ -110,6 +131,7 @@ static int		bytes_out;
  ******************************************************************************/
 static int empeg_open (struct usb_serial_port *port, struct file *filp)
 {
+	struct usb_serial *serial = port->serial;
 	unsigned long flags;
 	int result;
 
@@ -123,60 +145,73 @@ static int empeg_open (struct usb_serial_port *port, struct file *filp)
 	++port->open_count;
 	MOD_INC_USE_COUNT;
 
-	/* gb - 2000/11/05
-	 *
-	 * personally, I think these termios should be set in
-	 * empeg_startup(), but it appears doing so leads to one
-	 * of those chicken/egg problems. :)
-	 *
-	 */
-	port->tty->termios->c_iflag
-		&= ~(IGNBRK
-		| BRKINT
-		| PARMRK
-		| ISTRIP
-		| INLCR
-		| IGNCR
-		| ICRNL
-		| IXON);
-
-	port->tty->termios->c_oflag
-		&= ~OPOST;
-
-	port->tty->termios->c_lflag
-		&= ~(ECHO
-		| ECHONL
-		| ICANON
-		| ISIG
-		| IEXTEN);
-
-	port->tty->termios->c_cflag
-		&= ~(CSIZE
-		| PARENB);
-
-	port->tty->termios->c_cflag
-		|= CS8;
-
-	/* gb - 2000/11/05
-	 *
-	 * force low_latency on
-	 *
-	 * The tty_flip_buffer_push()'s in empeg_read_bulk_callback() will actually
-	 * force the data through if low_latency is set.  Otherwise the pushes are
-	 * scheduled; this is bad as it opens up the possibility of dropping bytes
-	 * on the floor.  We are trying to sustain high data transfer rates; and
-	 * don't want to drop bytes on the floor.
-	 * Moral: use low_latency - drop no bytes - life is good. :)
-	 *
-	 */
-	port->tty->low_latency = 1;
-
 	if (!port->active) {
+
+		/* gb - 2000/11/05
+		 * personally, I think these termios should be set in
+		 * empeg_startup(), but it appears doing so leads to one
+		 * of those chicken/egg problems. :)
+		 */
+		port->tty->termios->c_iflag
+			&= ~(IGNBRK
+			| BRKINT
+			| PARMRK
+			| ISTRIP
+			| INLCR
+			| IGNCR
+			| ICRNL
+			| IXON);
+
+		port->tty->termios->c_oflag
+			&= ~OPOST;
+
+		port->tty->termios->c_lflag
+			&= ~(ECHO
+			| ECHONL
+			| ICANON
+			| ISIG
+			| IEXTEN);
+
+		port->tty->termios->c_cflag
+			&= ~(CSIZE
+			| PARENB);
+
+		port->tty->termios->c_cflag
+			|= CS8;
+
+		/* gb - 2000/12/03
+		 * Contributed by Borislav Deianov
+		 * Notify the tty driver that the termios have changed!!
+		 */
+		port->tty->ldisc.set_termios(port->tty, NULL);
+
+		/* gb - 2000/11/05
+		 * force low_latency on
+		 *
+		 * The tty_flip_buffer_push()'s in empeg_read_bulk_callback() will actually
+		 * force the data through if low_latency is set.  Otherwise the pushes are
+		 * scheduled; this is bad as it opens up the possibility of dropping bytes
+		 * on the floor.  We are trying to sustain high data transfer rates; and
+		 * don't want to drop bytes on the floor.
+		 * Moral: use low_latency - drop no bytes - life is good. :)
+		 */
+		port->tty->low_latency = 1;
+
 		port->active = 1;
 		bytes_in = 0;
 		bytes_out = 0;
 
 		/* Start reading from the device */
+		FILL_BULK_URB(
+			port->read_urb,
+			serial->dev, 
+			usb_rcvbulkpipe(serial->dev,
+				port->bulk_in_endpointAddress),
+			port->read_urb->transfer_buffer,
+			port->read_urb->transfer_buffer_length,
+			empeg_read_bulk_callback,
+			port);
+
 		port->read_urb->transfer_flags |= USB_QUEUE_BULK;
 
 		result = usb_submit_urb(port->read_urb);
@@ -210,7 +245,6 @@ static void empeg_close (struct usb_serial_port *port, struct file * filp)
 	spin_lock_irqsave (&port->port_lock, flags);
 
 	--port->open_count;
-	MOD_DEC_USE_COUNT;
 
 	if (port->open_count <= 0) {
 		transfer_buffer =  kmalloc (0x12, GFP_KERNEL);
@@ -231,6 +265,8 @@ static void empeg_close (struct usb_serial_port *port, struct file * filp)
 
 	/* Uncomment the following line if you want to see some statistics in your syslog */
 	/* info ("Bytes In = %d  Bytes Out = %d", bytes_in, bytes_out); */
+
+	MOD_DEC_USE_COUNT;
 
 }
 
@@ -287,8 +323,6 @@ static int empeg_write (struct usb_serial_port *port, int from_user, const unsig
 			memcpy (urb->transfer_buffer, current_position, transfer_size);
 		}
 
-		count = (count > port->bulk_out_size) ? port->bulk_out_size : count;
-
 		/* build up our urb */
 		FILL_BULK_URB (
 			urb,
@@ -318,6 +352,58 @@ exit:
 	return bytes_sent;
 
 } 
+
+
+static int empeg_write_room (struct usb_serial_port *port)
+{
+	unsigned long flags;
+	int i;
+	int room = 0;
+
+	dbg(__FUNCTION__ " - port %d", port->number);
+
+	spin_lock_irqsave (&port->port_lock, flags);
+
+	/* tally up the number of bytes available */
+	for (i = 0; i < NUM_URBS; ++i) {
+		if (write_urb_pool[i]->status != -EINPROGRESS) {
+			room += URB_TRANSFER_BUFFER_SIZE;
+		}
+	} 
+
+	spin_unlock_irqrestore (&port->port_lock, flags);
+
+	dbg(__FUNCTION__ " - returns %d", room);
+
+	return (room);
+
+}
+
+
+static int empeg_chars_in_buffer (struct usb_serial_port *port)
+{
+	unsigned long flags;
+	int i;
+	int chars = 0;
+
+	dbg(__FUNCTION__ " - port %d", port->number);
+
+	spin_lock_irqsave (&port->port_lock, flags);
+
+	/* tally up the number of bytes waiting */
+	for (i = 0; i < NUM_URBS; ++i) {
+		if (write_urb_pool[i]->status == -EINPROGRESS) {
+			chars += URB_TRANSFER_BUFFER_SIZE;
+		}
+	}
+
+	spin_unlock_irqrestore (&port->port_lock, flags);
+
+	dbg (__FUNCTION__ " - returns %d", chars);
+
+	return (chars);
+
+}
 
 
 static void empeg_write_bulk_callback (struct urb *urb)
@@ -379,9 +465,6 @@ static void empeg_read_bulk_callback (struct urb *urb)
 			if(tty->flip.count >= TTY_FLIPBUF_SIZE) {
 				tty_flip_buffer_push(tty);
 				}
-			/* gb - 2000/11/13
-			 * This doesn't push the data through unless tty->low_latency is set.
-			 */
 			tty_insert_flip_char(tty, data[i], 0);
 		}
 		/* gb - 2000/11/13
@@ -392,7 +475,18 @@ static void empeg_read_bulk_callback (struct urb *urb)
 	}
 
 	/* Continue trying to always read  */
+	FILL_BULK_URB(
+		port->read_urb,
+		serial->dev, 
+		usb_rcvbulkpipe(serial->dev,
+			port->bulk_in_endpointAddress),
+		port->read_urb->transfer_buffer,
+		port->read_urb->transfer_buffer_length,
+		empeg_read_bulk_callback,
+		port);
+
 	port->read_urb->transfer_flags |= USB_QUEUE_BULK;
+
 	result = usb_submit_urb(port->read_urb);
 
 	if (result)

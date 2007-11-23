@@ -282,6 +282,11 @@ static void irtty_close(struct tty_struct *tty)
 	tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 	tty->disc_data = 0;
 	
+	/* We are not using any dongle anymore! */
+	if (self->dongle)
+		irda_device_dongle_cleanup(self->dongle);
+	self->dongle = NULL;
+
 	/* Remove netdevice */
 	if (self->netdev) {
 		rtnl_lock();
@@ -291,11 +296,6 @@ static void irtty_close(struct tty_struct *tty)
 		kfree(self->netdev);
 	}
 	
-	/* We are not using any dongle anymore! */
-	if (self->dongle)
-		irda_device_dongle_cleanup(self->dongle);
-	self->dongle = NULL;
-
 	/* Remove speed changing task if any */
 	if (self->task)
 		irda_task_delete(self->task);

@@ -200,7 +200,13 @@ else
   endif
 endif
 
-obj-$(CONFIG_SX) += sx.o generic_serial.o
+ifeq ($(CONFIG_SX),y)
+O_OBJS += sx.o generic_serial.o
+else
+  ifeq ($(CONFIG_SX),m)
+  M_OBJS += sx.o generic_serial.o
+  endif
+endif
 
 ifeq ($(CONFIG_RIO),y)
 O_OBJS += rio/rio.o generic_serial.o

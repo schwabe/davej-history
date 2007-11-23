@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.164.2.20 2001/02/23 20:20:22 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.164.2.21 2001/03/06 05:39:39 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -2215,6 +2215,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			tp->snd_wnd = htons(th->window);
 			tp->snd_wl1 = TCP_SKB_CB(skb)->seq;
 			tp->snd_wl2 = TCP_SKB_CB(skb)->ack_seq;
+			tp->syn_seq = TCP_SKB_CB(skb)->seq;
 			tp->fin_seq = TCP_SKB_CB(skb)->seq;
 
 			tcp_set_state(sk, TCP_ESTABLISHED);

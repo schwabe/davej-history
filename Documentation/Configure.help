@@ -11910,7 +11910,7 @@ CONFIG_ISDN_DRV_SC
   called sc.o. See Documentation/isdn/README.sc and
   http://www.spellcast.com for more information.
 
-Eicon.Diehl active card support
+Eicon active card support
 CONFIG_ISDN_DRV_EICON
   Say Y here if you have an Eicon active ISDN card. In order to use
   this card, additional firmware is necessary, which has to be loaded
@@ -11918,6 +11918,16 @@ CONFIG_ISDN_DRV_EICON
   latest isdn4k-utils package. Please read the file
   Documentation/isdn/README.eicon for more information.
   
+Eicon legacy driver
+CONFIG_ISDN_DRV_EICON_OLD
+  Say Y here to use your Eicon active ISDN card with ISDN4Linux
+  isdn module.
+
+Eicon Diva Server card support
+CONFIG_ISDN_DRV_EICON_PCI
+  Say Y here if you have an Eicon Diva Server (BRI/PRI/4BRI) ISDN card.
+  Please read Documentation/isdn/README.eicon for more information.
+
 Eicon old-type card support
 CONFIG_ISDN_DRV_EICON_ISA
   Say Y here if you have an old-type Eicon active ISDN card. In order
@@ -11925,6 +11935,14 @@ CONFIG_ISDN_DRV_EICON_ISA
   loaded into the card using the eiconctrl utility which is part of
   the latest isdn4k-utils package. Please read the file
   Documentation/isdn/README.eicon for more information.
+
+Eicon driver type standalone
+CONFIG_ISDN_DRV_EICON_DIVAS
+  Enable this option if you want the eicon driver as standalone
+  version with no interface to the ISDN4Linux isdn module. If you
+  say Y here, the eicon module only supports the Diva Server PCI
+  cards and will provide its own IDI interface. You should say N
+  here.
 
 Support AT-Fax Class 2 commands
 CONFIG_ISDN_TTY_FAX

@@ -905,7 +905,8 @@ static void idepmac_wake_device(ide_drive_t *drive, int used_dma)
 	 * Problem: This can schedule. I moved the block device
 	 * wakeup almost late by priority because of that.
 	 */
-	DRIVER(drive)->media_change(drive);
+	if (DRIVER(drive))
+		DRIVER(drive)->media_change(drive);
 
 	/* We kick the VFS too (see fix in ide.c revalidate) */
 	check_disk_change(MKDEV(HWIF(drive)->major, (drive->select.b.unit) << PARTN_BITS));

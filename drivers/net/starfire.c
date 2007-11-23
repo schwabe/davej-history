@@ -59,6 +59,10 @@
 	- Removed unused code
 	- Made more functions static and __init
 
+	LK1.2.8 (Ion Badulescu)
+	- Quell bogus error messages, inform about the Tx threshold
+	- Removed #ifdef CONFIG_PCI, this driver is PCI only
+
 TODO:
 	- implement tx_timeout() properly
 	- support ethtool
@@ -71,7 +75,7 @@ static const char version2[] =
 " Updates and info at http://www.scyld.com/network/starfire.html\n";
 
 static const char version3[] =
-" (unofficial 2.2.x kernel port, version 1.2.7, February 26, 2001)\n";
+" (unofficial 2.2.x kernel port, version 1.2.8, March 7, 2001)\n";
 
 /* The user-configurable values.
    These may be modified when a driver module is loaded.*/
@@ -420,7 +424,6 @@ pci_register_driver(struct pci_driver *drv)
 {
 	struct pci_dev *dev;
 	int count = 0, found, i;
-#ifdef CONFIG_PCI
 	list_add_tail(&drv->node, &pci_drivers);
 	for (dev = pci_devices; dev; dev = dev->next) {
 		found = 0;
@@ -430,7 +433,6 @@ pci_register_driver(struct pci_driver *drv)
 		if (!found)
 			count += pci_announce_device(drv, dev);
 	}
-#endif
 	return count;
 }
 
@@ -439,7 +441,6 @@ pci_unregister_driver(struct pci_driver *drv)
 {
 	struct pci_dev *dev;
 	int i, found;
-#ifdef CONFIG_PCI
 	list_del(&drv->node);
 	for (dev = pci_devices; dev; dev = dev->next) {
 		found = 0;
@@ -454,7 +455,6 @@ pci_unregister_driver(struct pci_driver *drv)
 			drvmap[i].dev = NULL;
 		}
 	}
-#endif
 }
 
 static inline int pci_module_init(struct pci_driver *drv)
@@ -579,6 +579,7 @@ enum intr_status_bits {
 	/* not quite bits */
 	IntrRxDone=IntrRxQ2Done | IntrRxQ1Done,
 	IntrRxEmpty=IntrRxDescQ1Low | IntrRxDescQ2Low,
+	IntrNormalMask=0xf0, IntrAbnormalMask=0x3f0e,
 };
 
 /* Bits in the RxFilterMode register. */
@@ -1557,9 +1558,12 @@ static void netdev_error(struct net_device *dev, int intr_status)
 		get_stats(dev);
 	}
 	/* Came close to underrunning the Tx FIFO, increase threshold. */
-	if (intr_status & IntrTxDataLow)
+	if (intr_status & IntrTxDataLow) {
 		writel(++np->tx_threshold, dev->base_addr + TxThreshold);
-	if ((intr_status & ~(IntrAbnormalSummary|IntrLinkChange|IntrStatsMax|IntrTxDataLow|1)) && debug)
+		printk(KERN_NOTICE "%s: Increasing Tx FIFO threshold to %d bytes\n",
+		       np->tx_threshold * 16);
+	}
+	if ((intr_status & ~(IntrNormalMask | IntrAbnormalSummary | IntrLinkChange | IntrStatsMax | IntrTxDataLow | IntrPCIPad)) && debug)
 		printk(KERN_ERR "%s: Something Wicked happened! %4.4x.\n",
 		       dev->name, intr_status);
 	/* Hmmmmm, it's not clear how to recover from DMA faults. */
