@@ -295,6 +295,7 @@ static struct dev_info device_list[] =
 {"YAMAHA","CDR100","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"YAMAHA","CDR102","1.00", BLIST_NOLUN},	/* Locks up if polled for lun != 0 */
 {"nCipher","Fastness Crypto","*", BLIST_FORCELUN},
+{"iomega","jaz 1GB","J.86", BLIST_NOTQ | BLIST_NOLUN},
 /*
  * Must be at end of list...
  */

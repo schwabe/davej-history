@@ -27,9 +27,9 @@ endif
 CFLAGS := $(CFLAGS) -mno-fp-regs
 
 # determine if we can use the BWX instructions with GAS
-$(shell rm -f /tmp/GAS_VER)
+dummy=$(shell rm -f /tmp/GAS_VER)
 #$(shell $(AS) --version >& /tmp/GAS_VER)
-$(shell $(AS) --version > /tmp/GAS_VER 2>&1)
+dummy=$(shell $(AS) --version > /tmp/GAS_VER 2>&1)
 OLD_GAS := $(shell if cat /tmp/GAS_VER | grep 'version 2.7' > /dev/null; then echo yes; else echo no; fi)
 
 ifneq ($(OLD_GAS),yes)

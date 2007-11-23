@@ -1646,6 +1646,7 @@ N: Leonard N. Zubkoff
 E: lnz@dandelion.com
 W: http://www.dandelion.com/Linux/
 D: BusLogic SCSI driver
+D: Mylex DAC960 PCI RAID driver
 D: Miscellaneous kernel fixes
 S: 3078 Sulphur Spring Court
 S: San Jose, California 95148

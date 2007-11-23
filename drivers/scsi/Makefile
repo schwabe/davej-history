@@ -412,6 +412,30 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_PCI2000),y)
+L_OBJS += pci2000.o
+else
+    ifeq ($(CONFIG_SCSI_PCI2000),m)
+    M_OBJS += pci2000.o
+    endif
+endif
+
+ifeq ($(CONFIG_SCSI_PCI2220I),y)
+L_OBJS += pci2220i.o
+else
+    ifeq ($(CONFIG_SCSI_PCI2220I),m)
+    M_OBJS += pci2220i.o
+    endif
+endif
+
+ifeq ($(CONFIG_SCSI_PSI240I),y)
+L_OBJS += psi240i.o
+else
+    ifeq ($(CONFIG_SCSI_PSI240I),m)
+    M_OBJS += psi240i.o
+    endif
+endif
+
 ifeq ($(CONFIG_BLK_DEV_IDESCSI),y)
 L_OBJS += ide-scsi.o
 endif

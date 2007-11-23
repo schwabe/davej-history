@@ -620,7 +620,7 @@ static PRISC_SRB search(PAdapter);
 u32 insert_bit(u32, short int);
 static void Get_Base(Adapter *);
 
-void tc2550_intr(int, struct pt_regs *);
+void tc2550_intr(int, void *, struct pt_regs *);
 
 static void internal_done(Scsi_Cmnd *);
 
@@ -1314,7 +1314,7 @@ const char *tc2550_info(struct Scsi_Host *ignore)
 	return 0;
 }
 
-void tc2550_intr(int irq, struct pt_regs *regs)
+void tc2550_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
 	void (*my_done) (Scsi_Cmnd *) = NULL;
 

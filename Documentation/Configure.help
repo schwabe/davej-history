@@ -337,6 +337,12 @@ CONFIG_BLK_DEV_XD
   Documentation/modules.txt.
   It's pretty unlikely that you have one of these: say N.
 
+Mylex DAC960/DAC1100 PCI RAID Controller support
+CONFIG_BLK_DEV_DAC960
+  This driver adds support for the Mylex DAC960, AcceleRAID, and
+  eXtremeRAID PCI RAID controllers.  See README.DAC960 for further
+  information about this driver.
+
 Parallel port IDE device support
 CONFIG_PARIDE
   There are many external CD-ROM and disk devices that connect through
@@ -1726,66 +1732,102 @@ CONFIG_SCSI_AHA1740
 Adaptec AIC7xxx chipset SCSI controller support
 CONFIG_SCSI_AIC7XXX
   This is support for the various aic7xxx based Adaptec SCSI
-  controllers.  These include the 274x EISA cards, 284x VLB cards,
-  294x PCI cards, 394x PCI cards, 3985 PCI card, and several versions
-  of the Adaptec built-in SCSI controllers on various PC motherboards.
+  controllers. These include the 274x EISA cards; 284x VLB cards; 2902,
+  2910, 293x, 294x, 394x, 3985 and several other PCI and motherboard based
+  SCSI controllers from Adaptec.  It does not support the AAA-13x RAID
+  controllers from Adaptec, nor will it likely ever support them.  It
+  does not support the 2920 cards from Adaptec that use the Future Domain
+  SCSI controller chip.  For those cards, you need the "Future Domain
+  16xx SCSI support" driver.
+
+  In general, if the controller is based on an Adaptec SCSI controller
+  chip from the aic777x series or the aic78xx series, it should work.  The
+  only exception is the 7810 which is specifically not supported (that's the
+  RAID controller chip on the AAA-13x cards).
+
   Information on the configuration options for this controller can be
-  found by checking the README.aic7xxx file, usually in
-  /usr/src/linux/drivers/scsi.
+  found by checking the help file for each of the available
+  configuration options. You should read drivers/scsi/README.aic7xxx
+  at a minimum before contacting the maintainer with any questions.  
+  The SCSI-HOWTO, available via FTP (user: anonymous) at
+  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO can also be of great help.
 
-Override driver defaults for commands per LUN
-CONFIG_OVERRIDE_CMDS
-  Use this option to allow you to override the default maximum number
-  of commands that a single device on the aic7xxx controller is
-  allowed to have active at one time.  This option only effects tagged
-  queueing capable devices.  The driver uses a "failsafe" value of 8
-  by default.  This is much lower than many devices can handle, but
-  left in place for safety sake.
-  NOTE:  This does not actually enabled tagged queueing on any
-  particular device.  The driver has changed in this respect.  Please
-  see the file README.aic7xxx in /usr/src/linux/drivers/scsi for more
-  information on how to get particular devices to use tagged command
-  queueing.
-  Default: N
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called aic7xxx.o.
 
-Maximum number of commands per LUN
-CONFIG_AIC7XXX_CMDS_PER_LUN
-  Specify the maximum number of commands per lun you would like to
-  allocate per device.  Reasonable figures are in the range of 14 to
-  32 commands per device, but depending on hardware could be increased
-  or decreased from that figure.  If the number is too high for any
-  particular device, the driver will automatically compensate usually
-  after only 10 minutes of uptime and will issue a message to alert
-  you to the fact that the number of commands for that device has been
-  reduced.  It will not hinder performance if a portion of your
-  devices eventually have their commands per lun reduced, but is a
-  waste of memory if all of your devices end up reducing this number
-  down to a more reasonable figure.  Default: 24
+Enable or Disable Tagged Command Queueing by default
+CONFIG_AIC7XXX_TCQ_ON_BY_DEFAULT
+  This option causes the aic7xxx driver to attempt to use tagged command
+  queueing on any devices that claim to support it.  If this is set to yes,
+  you can still turn off TCQ on troublesome devices with the use of the
+  tag_info boot parameter.  See /usr/src/linux/drivers/scsi/README.aic7xxx
+  for more information on that and other aic7xxx setup commands.  If this
+  option is turned off, you may still enable TCQ on known good devices by
+  use of the tag_info boot parameter.
+  
+  If you are unsure about your devices then it is safest to say N here.
+  
+  However, TCQ can increase performance on some hard drives by as much
+  as 50% or more, so I would recommend that if you say N here, that you
+  at least read the README.aic7xxx file so you will know how to enable
+  this option manually should your drives prove to be safe in regards
+  to TCQ.
+
+  Conversely, certain drives are known to lock up or cause bus resets when
+  TCQ is enabled on them.  If you have a Western Digital Enterprise SCSI
+  drive for instance, then don't even bother to enable TCQ on it as the
+  drive will become unreliable, and it will actually reduce performance.
+
+Default number of TCQ commands per device
+CONFIG_AIC7XXX_CMDS_PER_DEVICE
+  Specify the number of commands you would like to allocate per SCSI
+  device when Tagged Command Queueing (TCQ) is enabled on that device.
+
+  Reasonable figures are in the range of 8 to 24 commands per device,
+  but depending on hardware could be increased or decreased from that
+  figure. If the number is too high for any particular device, the
+  driver will automatically compensate usually after only 10 minutes
+  of uptime. It will not hinder performance if some of your devices
+  eventually have their command depth reduced, but is a waste of memory
+  if all of your devices end up reducing this number down to a more
+  reasonable figure.
+  
+  NOTE: Certain very broken drives are known to lock up when given more
+  commands than they like to deal with.  Quantum Fireball drives are the
+  most common in this category.  For the Quantum Fireball drives I would
+  suggest no more than 8 commands per device.
+
+  Default: 8
 
 Collect statistics to report in /proc
 CONFIG_AIC7XXX_PROC_STATS
   This option tells the driver to keep track of how many commands have
   been sent to each particular device and report that information to
-  the user via the /proc/scsi/aic7xxx/x file, where x is the number
-  of the aic7xxx controller you want the information on.  This adds
-  a small amount of overhead to each and every SCSI command the
-  aic7xxx driver handles, so if you aren't really interested in this
-  information, it is best to leave it disabled.  Default: N
+  the user via the /proc/scsi/aic7xxx/n file, where n is the number of
+  the aic7xxx controller you want the information on. This adds a
+  small amount of overhead to each and every SCSI command the aic7xxx
+  driver handles, so if you aren't really interested in this
+  information, it is best to leave it disabled. This will only work if
+  you also say Y to "/proc filesystem support", below. 
+
+  If unsure, say N.
 
 Delay in seconds after SCSI bus reset
 CONFIG_AIC7XXX_RESET_DELAY
   This sets how long the driver will wait after resetting the SCSI bus
   before attempting to communicate with the devices on the SCSI bus
-  again.  This delay will be used during the reset phase at bootup
-  time as well as after any reset that might occur during normal
-  operation.  Reasonable numbers range anywhere from 5 to 15 seconds
-  depending on your devices. DAT tape drives are notorious for needing
-  more time after a bus reset to be ready for the next command, but
-  most hard drives and CD-ROM devices are ready in only a few seconds.
-  This option has a maximum upper limit of 20 seconds to avoid bad
-  interactions between the aic7xxx driver and the rest of the Linux
-  kernel.  The default value has been reduced.  If this doesn't work
-  with your hardware, try increasing this value.  Default: 5
+  again. This delay will be used during the reset phase at bootup time
+  as well as after any reset that might occur during normal operation.
+  Reasonable numbers range anywhere from 5 to 15 seconds depending on
+  your devices. DAT tape drives are notorious for needing more time
+  after a bus reset to be ready for the next command, but most hard
+  drives and CD-ROM devices are ready in only a few seconds. This
+  option has a maximum upper limit of 20 seconds to avoid bad
+  interactions between the aic7xxx driver and the rest of the linux
+  kernel. The default value has been reduced to 5 seconds. If this
+  doesn't work with your hardware, try increasing this value.
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC

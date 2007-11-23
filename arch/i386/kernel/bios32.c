@@ -730,7 +730,7 @@ static struct pci_access *check_direct_pci(void)
     outb (0x00, 0xCFB);
     outb (0x00, 0xCF8);
     outb (0x00, 0xCFA);
-    if (inb (0xCF8) == 0x00 && inb (0xCFB) == 0x00) {
+    if (inb (0xCF8) == 0x00 && inb (0xCFA) == 0x00) {
 	restore_flags(flags);
 	printk("pcibios_init: Using configuration type 2\n");
 	return &pci_direct_conf2;

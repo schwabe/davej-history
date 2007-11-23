@@ -549,12 +549,18 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 		  	if(err)
   				return err;
   			
-  			dev=dev_get(sk->ip_mc_name);
-  			/* Someone ran off with the interface, its probably
-  			   been downed. */
-  			if(dev==NULL)
-  				return -ENODEV;
-  			ia.s_addr = dev->pa_addr;
+  			if(*sk->ip_mc_name)
+  			{
+	  			dev=dev_get(sk->ip_mc_name);
+  				/* Someone ran off with the interface, its probably
+  				   been downed. */
+  				if(dev==NULL)
+  					return -ENODEV;
+	  			ia.s_addr = dev->pa_addr;
+	  		}
+	  		else
+	  			ia.s_addr = 0L;
+	 
   			put_user(sizeof(ia),(int *) optlen);
 			memcpy_tofs((void *)optval, &ia, sizeof(ia));
 			return 0;

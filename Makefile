@@ -2,7 +2,7 @@ VERSION = 2
 PATCHLEVEL = 0
 SUBLEVEL = 37
 
-ARCH = i386
+ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
 #
 # For SMP kernels, set this. We don't want to have this in the config file

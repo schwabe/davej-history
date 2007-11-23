@@ -140,7 +140,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 		 */
 		if (!smp_scan_config(639*0x400,0x400))	/* Scan the top 1K of base RAM */
 		{
-			if(!(smp_scan_config(0xF0000,0x10000)) /* Scan the 64K of bios */
+			if(!smp_scan_config(0xF0000,0x10000)) /* Scan the 64K of bios */
 			{
 				/*
 				 * If it is an SMP machine we should know now, unless the

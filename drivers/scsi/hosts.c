@@ -201,6 +201,18 @@
 #include "inia100.h"
 #endif
 
+#ifdef CONFIG_SCSI_PCI2000
+#include "pci2000.h"
+#endif
+
+#ifdef CONFIG_SCSI_PCI2220I
+#include "pci2220i.h"
+#endif
+
+#ifdef CONFIG_SCSI_PSI240I
+#include "psi240i.h"
+#endif
+
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
@@ -359,6 +371,15 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_INITIO
     INI9100U,
+#endif
+#ifdef CONFIG_SCSI_PCI2000
+    PCI2000,
+#endif
+#ifdef CONFIG_SCSI_PCI2220I
+    PCI2220I,
+#endif
+#ifdef CONFIG_SCSI_PSI240I
+    PSI240I,
 #endif
 #ifdef CONFIG_BLK_DEV_IDESCSI
     IDESCSI,

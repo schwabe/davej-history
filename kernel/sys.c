@@ -226,6 +226,9 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 void ctrl_alt_del(void)
 {
 	if (C_A_D) {
+#ifdef CONFIG_BLK_DEV_DAC960
+		DAC960_Finalize();
+#endif
 #ifdef CONFIG_SCSI_GDTH
 		gdth_halt();
 #endif

@@ -86,7 +86,6 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 			maj = "hd";
 	}
 #endif
-#ifdef CONFIG_BLK_DEV_DAC960
 	if (hd->major >= DAC960_MAJOR+0 && hd->major <= DAC960_MAJOR+7)
 	  {
 	    int controller = hd->major - DAC960_MAJOR;
@@ -98,7 +97,6 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 			 maj, controller, minor >> hd->minor_shift, partition);
 	    return buf;
 	  }
-#endif
 #if defined(CONFIG_BLK_CPQ_DA) || defined(CONFIG_BLK_CPQ_DA_MODULE)
 	if (hd->major >= COMPAQ_SMART2_MAJOR && hd->major <= COMPAQ_SMART2_MAJOR+7) {
 		int ctlr = hd->major - COMPAQ_SMART2_MAJOR;
@@ -124,11 +122,9 @@ static void add_partition (struct gendisk *hd, int minor, int start, int size)
 	char buf[40];
 	hd->part[minor].start_sect = start;
 	hd->part[minor].nr_sects   = size;
-#ifdef CONFIG_BLK_DEV_DAC960
 	if (hd->major >= DAC960_MAJOR+0 && hd->major <= DAC960_MAJOR+7)
 		printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
 	else
-#endif
 #if defined(CONFIG_BLK_CPQ_DA) || defined(CONFIG_BLK_CPQ_DA_MODULE)
 	if (hd->major >= COMPAQ_SMART2_MAJOR && hd->major <= COMPAQ_SMART2_MAJOR+7) 
 		printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
