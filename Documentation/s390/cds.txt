@@ -10,7 +10,7 @@ Copyright, IBM Corp. 1999
 Introduction
 
 This document describes the common device support routines for Linux/390.
-Different than other hardware architectures, ESA/390 hasdefined a unified
+Different than other hardware architectures, ESA/390 has defined a unified
 I/O access method. This gives relief to the device drivers as they don't
 have to deal with different bus types, polling versus interrupt
 processing, shared versus non-shared interrupt processing, DMA versus port

@@ -11926,9 +11926,9 @@ CONFIG_IPLABLE
   IPL device on another question, that pops up, when you select
   CONFIG_IPLABE.
 
-IPL from a /390 tape unit
+IPL from a S/390 tape unit
 CONFIG_IPL_TAPE
-  Select this option if you want to IPL the image from a Tape.
+  Select this option if you want to IPL the image from a tape.
 
 IPL from a virtual card reader emulated by VM/ESA
 CONFIG_IPL_RDR_VM
@@ -11981,6 +11981,24 @@ CONFIG_BLK_CPQ_DA
    See "linux/Documentation/cpqarray.txt" for the current list of 
    boards supported by this driver, and for further information 
    on the use of this driver. 
+
+QuickNet Internet LineJack/PhoneJack support
+CONFIG_PHONE_IXJ
+  Say M if you have a telephony card manufactured by Quicknet
+  Technologies, Inc.  These include the Internet PhoneJACK and
+  Internet LineJACK Telephony Cards.
+
+  For the ISA versions of these products, you can configure the
+  cards using the isapnp tools (pnpdump/isapnp) or you can use the
+  backported isapnp module.  Please read:
+
+  /usr/src/linux/Documentation/telephony/ixj.txt.
+
+  For more information on these cards, see Quicknet's website at:
+  http://www.quicknet.net/
+
+  If you do not have any Quicknet telephony cards, you can safely
+  ignore this option.
  
 #
 # A couple of things I keep forgetting:

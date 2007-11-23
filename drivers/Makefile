@@ -10,7 +10,7 @@
 SUB_DIRS     := block char net misc sound
 MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS) pci sgi scsi sbus cdrom isdn pnp \
-				macintosh video dio zorro fc4 usb
+				macintosh video dio zorro fc4 usb telephony
 
 ifdef CONFIG_DIO
 SUB_DIRS += dio
@@ -109,6 +109,16 @@ else
   MOD_SUB_DIRS += fc4
   endif
 endif
+
+ifeq ($(CONFIG_PHONE),y)
+SUB_DIRS += telephony
+MOD_SUB_DIRS += telephony
+else
+  ifeq ($(CONFIG_PHONE),m)
+  MOD_SUB_DIRS += telephony
+  endif
+endif
+
 
 # When MOD_LIST_NAME is set, make will try to add $(MOD_SUB_DIRS).o to
 # modules/MOD_LIST_NAME.  We don't have hamradio.o and Linus

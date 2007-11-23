@@ -440,13 +440,13 @@ static int setup (wan_device_t* wandev, wandev_conf_t* conf)
 #ifdef CONFIG_WANPIPE_CHDLC
 	case SFID_CHDLC508:
 	case SFID_CHDLC514:
-		if (conf->ft1){		
-			printk(KERN_INFO "%s: Starting FT1 Configurator\n",
-				card->devname);
-			err = wpft1_init(card, conf);
-		}else{
+//		if (conf->ft1){		
+//			printk(KERN_INFO "%s: Starting FT1 Configurator\n",
+//				card->devname);
+//			err = wpft1_init(card, conf);
+//		}else{
 			err = wpc_init(card, conf);
-		}
+//		}
 		break;
 #endif
 

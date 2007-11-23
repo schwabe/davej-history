@@ -67,39 +67,50 @@ ssize_t block_write(struct file * filp, const char * buf,
 			if (chars != blocksize)
 				fn = bread;
 			bh = fn(dev, block, blocksize);
+			if (!bh)
+				return written ? written : -EIO;
+			if (!buffer_uptodate(bh))
+				wait_on_buffer(bh);
 		}
 #else
 		bh = getblk(dev, block, blocksize);
-
-		if (chars != blocksize && !buffer_uptodate(bh)) {
-		  if(!filp->f_reada ||
-		     !read_ahead[MAJOR(dev)]) {
-		    /* We do this to force the read of a single buffer */
-		    brelse(bh);
-		    bh = bread(dev,block,blocksize);
-		  } else {
-		    /* Read-ahead before write */
-		    blocks = read_ahead[MAJOR(dev)] / (blocksize >> 9) / 2;
-		    if (block + blocks > size) blocks = size - block;
-		    if (blocks > NBUF) blocks=NBUF;
-		    bhlist[0] = bh;
-		    for(i=1; i<blocks; i++){
-		      bhlist[i] = getblk (dev, block+i, blocksize);
-		      if(!bhlist[i]){
-			while(i >= 0) brelse(bhlist[i--]);
+		if (!bh)
 			return written ? written : -EIO;
-		      };
-		    };
+
+		if (!buffer_uptodate(bh))
+		{
+		  if (chars == blocksize)
+		    wait_on_buffer(bh);
+		  else
+		  {
+		    bhlist[0] = bh;
+		    if (!filp->f_reada || !read_ahead[MAJOR(dev)]) {
+		      /* We do this to force the read of a single buffer */
+		      blocks = 1;
+		    } else {
+		      /* Read-ahead before write */
+		      blocks = read_ahead[MAJOR(dev)] / (blocksize >> 9) / 2;
+		      if (block + blocks > size) blocks = size - block;
+		      if (blocks > NBUF) blocks=NBUF;
+		      for(i=1; i<blocks; i++)
+		      {
+		        bhlist[i] = getblk (dev, block+i, blocksize);
+		        if (!bhlist[i])
+			{
+			  while(i >= 0) brelse(bhlist[i--]);
+			  return written ? written : -EIO;
+		        }
+		      }
+		    }
 		    ll_rw_block(READ, blocks, bhlist);
 		    for(i=1; i<blocks; i++) brelse(bhlist[i]);
 		    wait_on_buffer(bh);
-		      
+		    if (!buffer_uptodate(bh))
+			  return written ? written : -EIO;
 		  };
 		};
 #endif
 		block++;
-		if (!bh)
-			return written ? written : -EIO;
 		p = offset + bh->b_data;
 		offset = 0;
 		*ppos += chars;

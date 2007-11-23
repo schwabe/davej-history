@@ -1,0 +1,106 @@
+***************
+*** 812,847 ****
+      return 0;
+  }
+  
+- /* See if the signature left by the NM256 BIOS is intact; if so, we use
+-    the associated address as the end of our buffer. */
+  static void
+- nm256_peek_for_sig (struct nm256_info *card, u32 port1addr)
+  {
+-     char *temp = ioremap_nocache (port1addr + card->port1_end - 0x0400, 16);
+      u32 sig;
+  
+      if (temp == NULL) {
+  	printk (KERN_ERR "NM256: Unable to scan for card signature in video RAM\n");
+  	return;
+      }
+-     memcpy_fromio (&sig, temp, sizeof (u32));
+-     if ((sig & 0xffff0000) == 0x4e4d0000) {
+- 	memcpy_fromio (&(card->bufend), temp + 4, sizeof (u32));
+  	printk (KERN_INFO "NM256: Found card signature in video RAM: 0x%x\n",
+- 		card->bufend);
+      }
+  
+      release_region ((unsigned long) temp, 16);
+  }
+  
+- /* Install a driver for the soundcard referenced by PCIDEV. */
+  
+  static int
+  nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
+  {
+      struct nm256_info *card;
+-     u32 port1addr = pcidev->resource[0].start;
+-     u32 port2addr = pcidev->resource[1].start;
+      int x;
+  
+      card = kmalloc (sizeof (struct nm256_info), GFP_KERNEL);
+--- 982,1048 ----
+      return 0;
+  }
+  
++ /* Perform a full reset on the hardware; this is invoked when an APM
++    resume event occurs.  */
++ static void
++ nm256_full_reset (struct nm256_info *card)
++ {
++     nm256_initHw (card);
++     ac97_reset (&(card->mdev));
++ }
++ 
++ /* 
++  * See if the signature left by the NM256 BIOS is intact; if so, we use
++  * the associated address as the end of our audio buffer in the video
++  * RAM.
++  */
++ 
+  static void
++ nm256_peek_for_sig (struct nm256_info *card)
+  {
++     u32 port1offset 
++ 	= card->port[0].physaddr + card->port[0].end_offset - 0x0400;
++     /* The signature is located 1K below the end of video RAM.  */
++     char *temp = ioremap_nocache (port1offset, 16);
++     /* Default buffer end is 5120 bytes below the top of RAM.  */
++     u32 default_value = card->port[0].end_offset - 0x1400;
+      u32 sig;
+  
++     /* Install the default value first, so we don't have to repeatedly
++        do it if there is a problem.  */
++     card->port[0].end_offset = default_value;
++ 
+      if (temp == NULL) {
+  	printk (KERN_ERR "NM256: Unable to scan for card signature in video RAM\n");
+  	return;
+      }
++     sig = readl (temp);
++     if ((sig & NM_SIG_MASK) == NM_SIGNATURE) {
++ 	u32 pointer = readl (temp + 4);
++ 
++ 	/*
++ 	 * If it's obviously invalid, don't use it (the port already has a
++ 	 * suitable default value set).
++ 	 */
++ 	if (pointer != 0xffffffff)
++ 	    card->port[0].end_offset = pointer;
++ 
+  	printk (KERN_INFO "NM256: Found card signature in video RAM: 0x%x\n",
++ 		pointer);
+      }
+  
+      release_region ((unsigned long) temp, 16);
+  }
+  
++ /* 
++  * Install a driver for the PCI device referenced by PCIDEV.
++  * VERSTR is a human-readable version string.
++  */
+  
+  static int
+  nm256_install(struct pci_dev *pcidev, enum nm256rev rev, char *verstr)
+  {
+      struct nm256_info *card;
+      int x;
+  
+      card = kmalloc (sizeof (struct nm256_info), GFP_KERNEL);

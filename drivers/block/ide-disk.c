@@ -210,6 +210,17 @@ static ide_startstop_t write_intr (ide_drive_t *drive)
 int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 {
 	ide_hwgroup_t	*hwgroup= HWGROUP(drive);
+	
+	/*
+	 *	This may look a bit odd, but remember wrq is a copy of the 
+	 *	request not the original. The pointers are real however so the
+	 *	bh's are not copies. Remember that or bad stuff will happen
+	 *
+	 *	At the point we are called the drive has asked us for the
+	 *	data, and its our job to feed it, walking across bh boundaries
+	 *	if need be.
+	 */
+	 
 	struct request *rq = &hwgroup->wrq;
 
 	do {
@@ -226,22 +237,42 @@ int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 			nsect, rq->nr_sectors - nsect);
 #endif
 		spin_lock_irqsave(&io_request_lock, flags);	/* Is this really necessary? */
+		
+		/*
+		 *	Completed ?
+		 */
+		 
 		if ((rq->nr_sectors -= nsect) <= 0)
 		{
 			spin_unlock_irqrestore(&io_request_lock, flags);
 			break;
 		}
+		
+		/*
+		 *	Take off the sectors transferred
+		 */
+		 
 		if ((rq->current_nr_sectors -= nsect) == 0) {
+			/*
+			 *	If there are no sectors left then move on to
+			 *	the next buffer.
+			 */
 			if ((rq->bh = rq->bh->b_reqnext) != NULL) {
 				rq->current_nr_sectors = rq->bh->b_size>>9;
 				rq->buffer             = rq->bh->b_data;
 			} else {
+				/*
+				 *	Excuse me boss.. nr_sectors doesnt tally
+				 *	deep crap
+				 */
 				spin_unlock_irqrestore(&io_request_lock, flags);
-				printk("%s: buffer list corrupted\n", drive->name);
+				printk("%s: buffer list corrupted (%d, %d, %d)\n", drive->name,
+					rq->current_nr_sectors, rq->nr_sectors, nsect);
 				ide_end_request(0, hwgroup);
 				return 1;
 			}
 		} else {
+			/* Fix the pointer.. we ate data */
 			rq->buffer += nsect << 9;
 		}
 		spin_unlock_irqrestore(&io_request_lock, flags);
@@ -261,6 +292,10 @@ static ide_startstop_t multwrite_intr (ide_drive_t *drive)
 
 	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
 		if (stat & DRQ_STAT) {
+			/*
+			 *	The drive wants data. Remember rq is the copy
+			 *	of the request
+			 */
 			if (rq->nr_sectors) {
 				if (ide_multwrite(drive, drive->mult_count))
 					return ide_stopped;
@@ -268,6 +303,10 @@ static ide_startstop_t multwrite_intr (ide_drive_t *drive)
 				return ide_started;
 			}
 		} else {
+			/*
+			 *	If the copy has all the blocks completed then
+			 *	we can end the original request.
+			 */
 			if (!rq->nr_sectors) {	/* all done? */
 				rq = hwgroup->rq;
 				for (i = rq->nr_sectors; i > 0;){
@@ -408,6 +447,8 @@ static ide_startstop_t do_rw_disk (ide_drive_t *drive, struct request *rq, unsig
 			 * of data to be written.  If we hit an error (corrupted buffer list)
 			 * in ide_multwrite(), then we need to remove the handler/timer
 			 * before returning.  Fortunately, this NEVER happens (right?).
+			 *
+			 * Except when you get an error it seems...
 			 */
 			hwgroup->wrq = *rq; /* scratchpad */
 			ide_set_handler (drive, &multwrite_intr, WAIT_CMD);

@@ -37,6 +37,9 @@ extern int sparcaudio_init(void);
 #ifdef CONFIG_ISDN
 int isdn_init(void);
 #endif
+#ifdef CONFIG_PHONE
+extern int telephony_init(void);
+#endif
 #ifdef CONFIG_VIDEO_DEV
 extern int videodev_init(void);
 #endif
@@ -681,6 +684,9 @@ __initfunc(int chr_dev_init(void))
 #endif
 #ifdef CONFIG_VIDEO_DEV
 	videodev_init();
+#endif
+#ifdef CONFIG_PHONE
+	telephony_init();
 #endif
 	return 0;
 }
