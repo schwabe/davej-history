@@ -96,6 +96,7 @@ archclean:
 	@$(MAKEBOOT) clean
 
 archmrproper:
+	rm -f arch/i386/vmlinux.lds
 
 archdep:
 	@$(MAKEBOOT) dep

@@ -361,11 +361,8 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 
 	if (len > TASK_SIZE)
 		return 0;
-	if (!addr) {
-		addr = current->rlim[RLIMIT_DATA].rlim_cur;
-		if (addr >= RLIM_INFINITY)
-			addr = TASK_UNMAPPED_BASE;
-	}
+	if (!addr)
+		addr = TASK_UNMAPPED_BASE;
 	addr = PAGE_ALIGN(addr);
 
 	for (vmm = find_vma(current->mm, addr); ; vmm = vmm->vm_next) {

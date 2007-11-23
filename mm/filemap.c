@@ -215,8 +215,25 @@ int shrink_mmap(int priority, int gfp_mask)
 /*
  * Update a page cache copy, when we're doing a "write()" system call
  * See also "update_vm_cache()".
+ *
+ * This function is conditional in that it checks whether the original
+ * source of the data is the same as the ultimate destination, and
+ * aborts the update if so.  
+ *
+ * The "source_address" is the virtual address of the original location
+ * of the data we are injecting.  For writes from user mode, it is the
+ * user VA.  However, for filemap_sync writes, "source_address", it is
+ * the page cache address.  In both cases, "buf" points to the copy we
+ * have already made in kernel space and we use that pointer for the
+ * transfer.  source_address just allows us to detect an update_vm_cache
+ * which is being sourced from the copy of the data already in the page
+ * cache.  
+ * 
+ * This prevents munmap() and msync() from stomping all over shared
+ * memory maps.  --sct
  */
-void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, int count)
+
+void update_vm_cache_conditional(struct inode * inode, unsigned long pos, const char * buf, int count, unsigned long source_address)
 {
 	unsigned long offset, len;
 
@@ -230,8 +247,12 @@ void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, 
 			len = count;
 		page = find_page(inode, pos);
 		if (page) {
-			wait_on_page(page);
-			memcpy((void *) (offset + page_address(page)), buf, len);
+			char *dest = (char*) (offset + page_address(page));
+
+			if (dest != source_address) {
+				wait_on_page(page);
+				memcpy(dest, buf, len);
+			}
 			page_cache_release(page);
 		}
 		count -= len;
@@ -241,6 +262,12 @@ void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, 
 		pos += PAGE_CACHE_SIZE;
 	} while (count);
 }
+
+void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, int count)
+{
+	update_vm_cache_conditional(inode, pos, buf, count, 0);
+}
+
 
 static inline void add_to_page_cache(struct page * page,
 	struct inode * inode, unsigned long offset,
@@ -1482,6 +1509,8 @@ generic_file_write(struct file *file, const char *buf,
 
 	while (count) {
 		unsigned long bytes, pgpos, offset;
+		char * dest;
+
 		/*
 		 * Try to find the page in the cache. If it isn't there,
 		 * allocate a free page.
@@ -1516,7 +1545,9 @@ generic_file_write(struct file *file, const char *buf,
 		 * the writer needs to increment the page use counts until he
 		 * is done with the page.
 		 */
-		bytes -= copy_from_user((u8*)page_address(page) + offset, buf, bytes);
+		dest = (char *) page_address(page) + offset;
+		if (dest != buf) /* See comment in update_vm_cache_cond. */
+			bytes -= copy_from_user(dest, buf, bytes);
 		status = -EFAULT;
 		if (bytes)
 			status = inode->i_op->updatepage(file, page, offset, bytes, sync);

@@ -271,7 +271,7 @@ unsigned long copy_strings(int argc,char ** argv,unsigned long *page,
 		}
 		p -= len;
 		pos = p;
-		while (len) {
+		while (len>0) {
 			char *pag;
 			int offset, bytes_to_copy;
 

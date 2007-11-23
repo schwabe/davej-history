@@ -3289,6 +3289,7 @@ void cleanup_module(void)
 	unsigned long flags;
 	int e1, e2;
 	int i;
+	struct async_struct *info;
 
 	/* printk("Unloading %s: version %s\n", serial_name, serial_version); */
 	save_flags(flags);
@@ -3308,6 +3309,11 @@ void cleanup_module(void)
 	for (i = 0; i < NR_PORTS; i++) {
 		if (rs_table[i].type != PORT_UNKNOWN)
 			release_region(rs_table[i].port, 8);
+		info = rs_table[i].info;
+		if (info) {
+			rs_table[i].info = NULL;
+			kfree_s(info, sizeof(struct async_struct));
+		}
 	}
 	if (tmp_buf) {
 		free_page((unsigned long) tmp_buf);

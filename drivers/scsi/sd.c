@@ -1358,14 +1358,15 @@ static int sd_init_onedisk(int i)
 		rscsi_disks[i].capacity = 0;
 	    } else {
 		printk ("scsi : deleting disk entry.\n");
+		sd_detach(rscsi_disks[i].device);
 		rscsi_disks[i].device = NULL;
-		sd_template.nr_dev--;
-		SD_GENDISK(i).nr_real--;
 
                 /* Wake up a process waiting for device */
                 wake_up(&SCpnt->device->device_wait);
                 scsi_release_command(SCpnt);
                 SCpnt = NULL;
+		scsi_free(buffer, 512);
+		spin_unlock_irq(&io_request_lock);
                 
 		return i;
 	    }
@@ -1715,6 +1716,7 @@ int revalidate_scsidisk(kdev_t dev, int maxusage) {
 #endif
 
     sd_gendisks->part[start].nr_sects = CAPACITY;
+    if (!rscsi_disks[target].device) return -EBUSY;
     resetup_one_dev(&SD_GENDISK(target),
 		    target % SCSI_DISKS_PER_MAJOR);
 

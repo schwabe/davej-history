@@ -249,7 +249,8 @@ static __inline__ void lp_schedule(int minor, long timeout)
 		lp_table[minor].irq_missed = 1;
 		schedule_timeout(timeout);
 		lp_parport_claim(minor);
-	} else
+	} 
+	else
 		schedule_timeout(timeout);
 }
 
@@ -412,6 +413,7 @@ static void lp_error(int minor)
 	if (LP_POLLED(minor) || LP_PREEMPTED(minor)) {
 		current->state = TASK_INTERRUPTIBLE;
 		lp_parport_release(minor);
+		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(LP_TIMEOUT_POLLED);
 		lp_parport_claim(minor);
 		lp_table[minor].irq_missed = 1;
@@ -641,6 +643,7 @@ static ssize_t lp_read(struct file * file, char * buf,
 		/* Data available. */
 
 		/* Hack: Wait 10ms (between events 6 and 7) */
+		current->state = TASK_INTERRUPTIBLE;
                 schedule_timeout((HZ+99)/100);
                 break;
 	}

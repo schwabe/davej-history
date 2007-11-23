@@ -178,10 +178,8 @@ __initfunc(unsigned int pci_scan_bus(struct pci_bus *bus))
 
 		if (pcibios_read_config_dword(bus->number, devfn, PCI_VENDOR_ID, &l) ||
 		    /* some broken boards return 0 if a slot is empty: */
-		    l == 0xffffffff || l == 0x00000000 || l == 0x0000ffff || l == 0xffff0000) {
-			is_multi = 0;
+		    l == 0xffffffff || l == 0x00000000 || l == 0x0000ffff || l == 0xffff0000)
 			continue;
-		}
 
 		dev = kmalloc(sizeof(*dev), GFP_ATOMIC);
 		if(dev==NULL)

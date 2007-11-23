@@ -408,6 +408,8 @@ restart:
 	unhashed = 0;
 	while ((tmp = tmp->next) != head) {
 		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
+		if (!list_empty(&dentry->d_subdirs))
+			shrink_dcache_parent(dentry);
 		dprintk("nfs_free_dentries: found %s/%s, d_count=%d, hashed=%d\n",
 			dentry->d_parent->d_name.name, dentry->d_name.name,
 			dentry->d_count, !list_empty(&dentry->d_hash));
@@ -417,7 +419,7 @@ restart:
 			dput(dentry);
 			goto restart;
 		}
-		if (!list_empty(&dentry->d_hash))
+		if (list_empty(&dentry->d_hash))
 			unhashed++;
 	}
 	return unhashed;

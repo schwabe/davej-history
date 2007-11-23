@@ -106,6 +106,7 @@ EXPORT_SYMBOL(remap_page_range);
 EXPORT_SYMBOL(max_mapnr);
 EXPORT_SYMBOL(high_memory);
 EXPORT_SYMBOL(update_vm_cache);
+EXPORT_SYMBOL(update_vm_cache_conditional);
 EXPORT_SYMBOL(vmtruncate);
 EXPORT_SYMBOL(find_vma);
 EXPORT_SYMBOL(get_unmapped_area);

@@ -1024,12 +1024,6 @@ static int init_mediavision(void)
 	return 0;
 }
 
-static void shutdown_mediavision(void)
-{
-	release_region(io_port,3);
-	release_region(0x9A01, 1);
-}
-
 /*
  *	Module stuff
  */
@@ -1061,6 +1055,12 @@ int init_pms_cards(struct video_init *v)
 
 MODULE_PARM(io_port,"i");
 MODULE_PARM(mem_base,"i");
+
+static void shutdown_mediavision(void)
+{
+	release_region(io_port,3);
+	release_region(0x9A01, 1);
+}
 
 void cleanup_module(void)
 {

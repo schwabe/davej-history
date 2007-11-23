@@ -1979,7 +1979,8 @@ int tty_unregister_driver(struct tty_driver *driver)
 {
 	int	retval;
 	struct tty_driver *p;
-	int	found = 0;
+	int	i, found = 0;
+	struct termios *tp;
 	const char *othername = NULL;
 	
 	if (*driver->refcount)
@@ -2010,6 +2011,23 @@ int tty_unregister_driver(struct tty_driver *driver)
 	if (driver->next)
 		driver->next->prev = driver->prev;
 
+	/*
+	 * Free the termios and termios_locked structures because
+	 * we don't want to get memory leaks when modular tty
+	 * drivers are removed from the kernel.
+	 */
+	for (i = 0; i < driver->num; i++) {
+		tp = driver->termios[i];
+		if (tp) {
+			driver->termios[i] = NULL;
+			kfree_s(tp, sizeof(struct termios));
+		}
+		tp = driver->termios_locked[i];
+		if (tp) {
+			driver->termios_locked[i] = NULL;
+			kfree_s(tp, sizeof(struct termios));
+		}
+	}
 	proc_tty_unregister_driver(driver);
 	return 0;
 }

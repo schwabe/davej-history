@@ -2528,13 +2528,13 @@ void TLan_MiiSendData( u16 base_port, u32 data, unsigned num_bits )
 
 	for ( i = ( 0x1 << ( num_bits - 1 ) ); i; i >>= 1 ) {
 		TLan_ClearBit( TLAN_NET_SIO_MCLK, sio );
-		TLan_GetBit( TLAN_NET_SIO_MCLK, sio );
+		(void) TLan_GetBit( TLAN_NET_SIO_MCLK, sio );
 		if ( data & i )
 			TLan_SetBit( TLAN_NET_SIO_MDATA, sio );
 		else
 			TLan_ClearBit( TLAN_NET_SIO_MDATA, sio );
 		TLan_SetBit( TLAN_NET_SIO_MCLK, sio );
-		TLan_GetBit( TLAN_NET_SIO_MCLK, sio );
+		(void) TLan_GetBit( TLAN_NET_SIO_MCLK, sio );
 	}
 
 } /* TLan_MiiSendData */

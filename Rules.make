@@ -203,6 +203,18 @@ else
 	genksyms_smp_prefix := 
 endif
 
+#
+#	Differ 1 and 2Gig kernels to avoid module misload errors
+#
+
+ifdef CONFIG_2GB
+ifdef CONFIG_SMP
+	genksyms_smp_prefix := -p smp2gig_
+else
+	genksyms_smp_prefix := -p 2gig_
+endif
+endif
+
 $(MODINCL)/%.ver: %.c
 	@if [ ! -r $(MODINCL)/$*.stamp -o $(MODINCL)/$*.stamp -ot $< ]; then \
 		echo '$(CC) $(CFLAGS) -E -D__GENKSYMS__ $<'; \

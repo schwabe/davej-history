@@ -324,7 +324,8 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 			break;
 		}
 		mark_buffer_dirty(bh, 0);
-		update_vm_cache(inode, pos, bh->b_data + offset, c);
+		update_vm_cache_conditional(inode, pos, bh->b_data + offset, c,
+					    (unsigned long) buf);
 		pos += c;
 		written += c;
 		buf += c;
