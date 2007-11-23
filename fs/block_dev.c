@@ -197,6 +197,9 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 
 	if (offset > size)
 		left = 0;
+	/* size - offset might not fit into left, so check explicitly. */
+	else if (size - offset > INT_MAX)
+		left = INT_MAX;
 	else
 		left = size - offset;
 	if (left > count)
